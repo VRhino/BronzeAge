@@ -345,7 +345,8 @@ presencia con las sesiones y las cuentas de bot (paso 3, Doc 1.10.6). Falta:
 - **Cerebro «sin plaza»** (paso 4, D53-D59): hecho el arranque en los campamentos (`src/bots/cerebro/sinPlaza.ts`,
   llegadas en `src/bots/llegadas.ts`, batch nuevo). Falta medirlo con batch cuando la ración en minutos esté en el
   motor (decisión del usuario 2026-10-04: con 60 de trigo fijos nadie llega a los bandidos del anillo).
-- **Adaptador remoto** (proceso aparte por HTTP + tiempo real) para el servidor.
+- **Desplegar el proceso de bots** en Render como Background Worker (`npm run bots`, doc 12 §13), con su disco para el
+  registro de cuentas. El adaptador remoto está hecho; falta el servicio, cuando el bloque vaya a Render.
 - **Calibrar con batch** el ritmo (cada 5 ticks), las prudencias heredadas de la gobernanza y el margen sobre la
   defensa inspeccionada antes de una campaña.
 

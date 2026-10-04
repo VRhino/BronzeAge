@@ -9,7 +9,7 @@ import { RunnerDeBots } from '../runner';
 import { cerebroDeBot } from '../cerebro';
 
 /** Tres Facciones de bots con el andamio del batch, y su runner. Con la semilla 7, dos nacen a la vista una de otra. */
-function mundo(ticks: number, horario: 'siempre' | 'por-semilla' = 'siempre') {
+async function mundo(ticks: number, horario: 'siempre' | 'por-semilla' = 'siempre') {
   const sesion = GameSession.crear('bots', { seed: 7 });
   for (const nombre of ['Alfa', 'Beta', 'Gamma']) sesion.ejecutar(faccionAsentadaDePrueba, { nombre });
   const bots = new RunnerDeBots(puertoEnProceso(sesion), cerebroDeBot, { semilla: 7, horario });
@@ -17,16 +17,16 @@ function mundo(ticks: number, horario: 'siempre' | 'por-semilla' = 'siempre') {
   const eventos: EventoDominio[] = [];
   for (let tick = 1; tick <= ticks; tick++) {
     const r = sesion.avanzarTick();
-    bots.trasTick(tick, r.eventos);
+    await bots.trasTick(tick, r.eventos);
     eventos.push(...sesion.getState().eventosDominio.filter((e) => e.version >= r.version).reverse());
   }
   return { sesion, eventos };
 }
 
 describe('bots: juegan con los comandos de un jugador', () => {
-  it('el Rey nombra Gobernador, el Gobernador se hace Tesorero y el Tesorero aparta la madera', () => {
+  it('el Rey nombra Gobernador, el Gobernador se hace Tesorero y el Tesorero aparta la madera', async () => {
     // Un turno cada uno (cada 5 ticks): cada bot decide con la vista con la que empezó a pensar.
-    const { sesion } = mundo(20);
+    const { sesion } = await mundo(20);
 
     for (const plaza of sesion.getState().asentamientos) {
       expect(plaza.cargos.gobernadorId, plaza.id).toBeTruthy();
@@ -35,28 +35,28 @@ describe('bots: juegan con los comandos de un jugador', () => {
     }
   });
 
-  it('salen a cazar el campamento de bandidos de su plaza, lo atacan con `atacar` y vuelven', () => {
-    const { sesion, eventos } = mundo(600);
+  it('salen a cazar el campamento de bandidos de su plaza, lo atacan con `atacar` y vuelven', async () => {
+    const { sesion, eventos } = await mundo(600);
 
     expect(eventos.some((e) => e.codigo === 'combate.campamento_destruido')).toBe(true);
     expect(eventos.some((e) => e.codigo === 'ejercito.repliegue')).toBe(true);
     expect(sesion.getState().ejercitos.every((e) => e.estado !== 'estacionado'), 'nadie se queda plantado').toBe(true);
   });
 
-  it('el explorador inspecciona plazas ajenas desde cerca: lo que sabe, lo ha ido a mirar', () => {
-    const { eventos } = mundo(300);
+  it('el explorador inspecciona plazas ajenas desde cerca: lo que sabe, lo ha ido a mirar', async () => {
+    const { eventos } = await mundo(300);
 
     expect(eventos.some((e) => e.codigo === 'asentamiento.observado')).toBe(true);
   });
 
-  it('misma semilla, misma partida: los bots piensan en orden de id, cada uno con su RNG', () => {
-    expect(JSON.stringify(mundo(200).sesion.exportar())).toBe(JSON.stringify(mundo(200).sesion.exportar()));
+  it('misma semilla, misma partida: los bots piensan en orden de id, cada uno con su RNG', async () => {
+    expect(JSON.stringify((await mundo(200)).sesion.exportar())).toBe(JSON.stringify((await mundo(200)).sesion.exportar()));
   });
 });
 
 describe('sesiones de los bots (D55)', () => {
-  it('cada bot juega unas horas al día: fuera de su sesión se desconecta y sale del mundo como un humano', () => {
-    const { sesion, eventos } = mundo(24 * 60, 'por-semilla');
+  it('cada bot juega unas horas al día: fuera de su sesión se desconecta y sale del mundo como un humano', async () => {
+    const { sesion, eventos } = await mundo(24 * 60, 'por-semilla');
     const heroes = sesion.getState().heroes.map((h) => h.id);
     const salen = new Set(eventos.filter((e) => e.codigo === 'jugador.sale_del_mundo').map((e) => (e.payload as { heroeId: string }).heroeId));
     const vuelven = new Set(eventos.filter((e) => e.codigo === 'jugador.vuelve_al_mundo').map((e) => (e.payload as { heroeId: string }).heroeId));
@@ -69,13 +69,13 @@ describe('sesiones de los bots (D55)', () => {
 });
 
 describe('puerto en proceso', () => {
-  it('pasa por la autorización de un jugador: un bot no puede hacer lo que su cargo no le permite', () => {
+  it('pasa por la autorización de un jugador: un bot no puede hacer lo que su cargo no le permite', async () => {
     const sesion = GameSession.crear('bots', { seed: 7 });
     sesion.ejecutar(faccionAsentadaDePrueba, { nombre: 'Alfa' });
     const plaza = sesion.getState().asentamientos[0]!;
     const noRey = plaza.heroesFundadoresIds[1]!;
 
-    const r = puertoEnProceso(sesion).actuar(noRey, 'asignarCargoLocal', { asentamientoId: plaza.id, cargo: 'gobernador', heroeId: noRey });
+    const r = await puertoEnProceso(sesion).actuar(noRey, 'asignarCargoLocal', { asentamientoId: plaza.id, cargo: 'gobernador', heroeId: noRey });
 
     expect(r.ok).toBe(false);
     expect(r.noAutorizado).toBeDefined();

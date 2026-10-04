@@ -11,7 +11,7 @@ Nace de dos decisiones del usuario (`Consideraciones/Campamentos_Entrada_Fundaci
 
 > **Estado (2026-10-04):** decidido el bot como cliente (§3), auto-comercio, ritmo y alta de bots (§8) y el orden
 > de trabajo (§9). **Hechos los pasos 1 (diario, §5.1), 2 (runner de bots, §10.3), 3 (presencia e identidad,
-> §11) y 4 (cerebro «sin plaza» y batch nuevo, §12).** Queda el adaptador remoto y medir con batch.
+> §11) y 4 (cerebro «sin plaza» y batch nuevo, §12) y el adaptador remoto (§13).** Queda desplegarlo y medir con batch.
 
 ## 1. Cómo es hoy (medido en el código)
 
@@ -411,4 +411,31 @@ llegaba al anillo con el coste real del terreno (D81, `c192ed8`).
 **Medido a mano (3 días, 3 amigos, semillas 1, 3 y 7)**: forman la Facción, exploran y abren alijos, y cazan poco. Hay
 anillos con bandidos de nivel 3 (hacen falta 5 héroes) o en terreno caro (un nivel 1 a 199 pide 183 de trigo de ida y vuelta,
 con 124 de ración). En 3 días el fondo no llega. Es calibración del bloque (D51), para el batch.
+
+## 13. El adaptador remoto (hecho 2026-10-04)
+
+Los bots juegan desde otro proceso por la misma superficie que BronzeAgeClient. Código: `src/bots/remoto/`.
+
+- **El puerto es asíncrono** (`observar`, `actuar`, `conectar`, `desconectar` y `llegar` devuelven promesas), y con él el
+  runner y los cerebros. Los bots siguen pensando uno tras otro, así que el batch da la misma partida con la misma semilla.
+- **`PuertoRemoto`** (`puertoRemoto.ts`): una cuenta por bot, dada de alta con `POST /v1/registro` y `CODIGO_REGISTRO_BOTS`.
+  La proyección es `GET /v1/jugador/partidas/:gameId`, los comandos `POST …/comandos` (un 403 es el `noAutorizado` del
+  puerto) y el mapa `GET …/mapa/:mapaId`, una vez, con el estado de sus nodos de la última vista. Estar conectado es tener
+  abierto el WebSocket de tiempo real (Doc 1.10.6): `conectar` lo abre (y el servidor manda `conectarse`) y `desconectar` lo
+  cierra; a un bot que no lo tenía abierto se le manda `desconectarse` por HTTP. Por el socket escucha `mapa/general` y el
+  canal de su plaza, y esos eventos son los que despiertan a los bots. Si la sesión caduca (401), vuelve a entrar.
+- **`ProcesoDeBots`** (`procesoDeBots.ts`): el runner sobre el puerto remoto. Guarda un **registro** en JSON con las cuentas
+  de sus bots, su perfil, cuántas llegadas lleva y el tick en que empezó, para volver a entrar con los mismos héroes tras un
+  reinicio. Las llegadas cuentan desde ese tick (D56). Lee el tick con una cuenta sin héroe (el «reloj»). Cada `cadaMs`, si
+  el mundo avanzó, da de alta las llegadas que tocan y hace pensar a los bots, recuperando como mucho los últimos 5 ticks. Un
+  fallo de un bot se avisa y no para a los demás (`alFallar` del runner).
+- **Arranque**: `npm run bots` (`main.ts`), configurado por entorno (`BOTS_SERVIDOR`, `BOTS_PARTIDA`, `CODIGO_REGISTRO_BOTS`,
+  `BOTS_REGISTRO`, `BOTS_TOTAL`, `BOTS_DIAS_LLEGADA`, `BOTS_SEMILLA`, `BOTS_CADA_MS`, `BOTS_HORARIO`). Al apagarlo cierra las
+  conexiones: sus bots se desconectan como quien cierra el cliente.
+- **El alta, compartida**: `darDeAlta` (`llegadas.ts`) la usan el batch, los tests y el proceso remoto. El grupo va al
+  campamento que elige el primero.
+- **Probado**: test de integración con servidor real por red (`__tests__/puertoRemoto.test.ts`: alta, Facción, presencia por
+  el socket, reinicio con las mismas cuentas) y en vivo con `npm run server` + `npm run bots` (6 bots, 90 ticks).
+
+Pendiente: el servicio en Render (Background Worker con disco para el registro), cuando el bloque vaya a Render.
 

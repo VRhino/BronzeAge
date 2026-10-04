@@ -8,6 +8,7 @@
   },
   "scripts": {
     "server": "tsx src/server/index.ts",
+    "bots": "tsx src/bots/remoto/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
