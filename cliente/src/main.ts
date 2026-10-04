@@ -314,14 +314,6 @@ app.innerHTML = `
     </div>
 
     <div class="tab-panel" id="tab-facciones" hidden>
-      <form id="faccion-npc-form" class="detail-section">
-        <h3>Nueva Facción NPC</h3>
-        <input name="nombre" placeholder="Nombre" required />
-        <input name="x" type="number" placeholder="x (opcional)" />
-        <input name="y" type="number" placeholder="y (opcional)" />
-        <button type="submit">Crear</button>
-        <p class="legend-note">Nace ya asentada, con 5 héroes bot (el primero, Rey), y la gobierna el NPC hasta que se destruya. Sin x/y se funda en el mejor sitio libre.</p>
-      </form>
       <div id="facciones-tab"></div>
     </div>
 
@@ -1337,13 +1329,10 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
     ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
     : '<p class="legend-note">Sin títulos.</p>';
 
-  // Las Facciones NPC las crea el admin (formulario de arriba de la pestaña) y así siguen hasta destruirse.
-  const esNpc = state.faccionesNpcIds.includes(faccion.id);
-
   return `
     <div class="settlement-detail">
       <div class="detail-section">
-        <h3>${faccion.nombre}${esNpc ? ' <span class="chip">NPC</span>' : ''}</h3>
+        <h3>${faccion.nombre}</h3>
         <div class="kv-grid">
           <div class="kv-row"><span>Nivel</span><span>${faccion.nivel}</span></div>
           <div class="kv-row"><span>Rey</span><span>${faccion.reyId ?? '—'}</span></div>
@@ -1409,9 +1398,7 @@ function renderFaccionesTab(state: GameState): void {
   const botones = state.facciones
     .map(
       (f) =>
-        `<button type="button" class="settlement-tab-btn${f.id === faccionSeleccionadaId ? ' active' : ''}" data-faccion="${f.id}">${f.nombre}${
-          state.faccionesNpcIds.includes(f.id) ? ' · NPC' : ''
-        }</button>`
+        `<button type="button" class="settlement-tab-btn${f.id === faccionSeleccionadaId ? ' active' : ''}" data-faccion="${f.id}">${f.nombre}</button>`
     )
     .join('');
   const seleccionada = state.facciones.find((f) => f.id === faccionSeleccionadaId)!;
@@ -1464,7 +1451,7 @@ function renderDetalleJugador(heroeId: string, state: GameState): string {
 
   // Escuadrones del héroe (Doc 5.16.2): viven en él, y `contenedor` dice dónde están.
   const escuadronesJugador = (state.heroes.find((h) => h.id === heroeId)?.escuadrones ?? []).map((e) => ({
-    donde: e.contenedor.tipo === 'campamento' ? 'campamento' : e.contenedor.tipo === 'ejercito' ? e.contenedor.ejercitoId : `escolta ${e.contenedor.caravanaId}`,
+    donde: e.contenedor.tipo === 'campamento' ? 'campamento' : e.contenedor.tipo === 'ejercito' ? e.contenedor.ejercitoId : e.contenedor.tipo === 'escolta' ? `escolta ${e.contenedor.caravanaId}` : 'fuera del mundo',
     escuadron: e,
   }));
   const escuadronesJugadorHtml = escuadronesJugador.length
@@ -2119,17 +2106,6 @@ document.getElementById('exportar-btn')!.addEventListener('click', () => {
   enlace.download = `bronze-age-sim-${new Date(gameStore.getState().instante).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
   enlace.click();
   URL.revokeObjectURL(url);
-});
-
-// Crear una Facción NPC (admin). El formulario vive fuera de `#facciones-tab`, que se repinta en cada refresco
-// y borraría lo que se está escribiendo.
-const faccionNpcForm = document.getElementById('faccion-npc-form') as HTMLFormElement;
-faccionNpcForm.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const datos = new FormData(faccionNpcForm);
-  const x = String(datos.get('x') ?? '');
-  const y = String(datos.get('y') ?? '');
-  await gameStore.crearFaccionNpc(String(datos.get('nombre')), x && y ? { x: Number(x), y: Number(y) } : undefined);
 });
 
 render();

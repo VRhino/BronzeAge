@@ -156,7 +156,6 @@ export interface SimulacionExportada {
   titulos: Titulo[];
   red?: RedCaminos;
   campamentosBandidos?: CampamentoBandido[];
-  faccionesNpcIds?: string[];
   log: EventoLog[];
   historialHeroes: Record<string, EventoLog[]>;
 }
@@ -659,16 +658,6 @@ export class GameStore {
 
   // --- Acciones (una por intención de usuario) ---
 
-  /**
-   * Funda un asentamiento. El fundador es siempre EL ACTOR que ejecuta el comando (Fase C2/C3): el backend
-   * ya no acepta una lista de cofundadores — ver `session/comandos/fundarAsentamiento.ts` para el porqué.
-   * La posición tampoco la elige el cliente: se funda DONDE SE ESTÁ (Doc 1.3), el backend la deriva de la
-   * columna del fundador.
-   */
-  async fundarAsentamiento(faccionId: string): Promise<void> {
-    await this.despachar('fundarAsentamiento', { faccionId }, 'Fundación rechazada');
-  }
-
   async lanzarCaravanaFundacion(origenAsentamientoId: string, destino: { x: number; y: number }, numJugadores: number): Promise<void> {
     await this.despachar('lanzarCaravanaFundacion', { origenAsentamientoId, destino, numJugadores }, 'Caravana de Fundación rechazada');
   }
@@ -681,12 +670,6 @@ export class GameStore {
     await this.despachar('crearFaccion', { nombre }, 'Facción rechazada');
   }
 
-  /** Facción NPC ya asentada, con sus héroes bot (comando de admin). Sin `posicion`, el sitio lo busca la
-   * gobernanza NPC. */
-  async crearFaccionNpc(nombre: string, posicion?: { x: number; y: number }): Promise<void> {
-    await this.despachar('crearFaccionNpc', posicion ? { nombre, posicion } : { nombre }, 'Facción NPC rechazada');
-  }
-
   async asignarRey(faccionId: string, heroeId: string): Promise<void> {
     await this.despachar('asignarRey', { faccionId, heroeId }, 'Rey rechazado');
   }
@@ -697,10 +680,6 @@ export class GameStore {
 
   async asignarCargoLocal(asentamientoId: string, cargo: CargoTipo, heroeId: string): Promise<void> {
     await this.despachar('asignarCargoLocal', { asentamientoId, cargo, heroeId }, 'Cargo rechazado');
-  }
-
-  async comprarCasa(asentamientoId: string, heroeId: string): Promise<void> {
-    await this.despachar('comprarCasa', { asentamientoId, heroeId }, 'Compra de casa rechazada');
   }
 
   async activarPolitica(asentamientoId: string, cargo: CargoTipo, politicaId: string): Promise<void> {
@@ -903,7 +882,6 @@ export class GameStore {
       titulos: this.state.titulos,
       red: this.state.red,
       campamentosBandidos: this.state.campamentosBandidos,
-      faccionesNpcIds: this.state.faccionesNpcIds,
       // El formato de archivo v2 guarda el log en texto (es anterior a `eventosDominio`): se proyecta al
       // exportar en vez de arrastrarlo en el estado.
       log: proyectarLog(this.eventos),
