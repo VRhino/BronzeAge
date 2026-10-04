@@ -462,7 +462,8 @@ export const entrarEnCampamento = comando<ParamsCampamentoMercenarios, void>((es
   const sinColumna = { ...estado, ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) };
   const conTropa = r.columna ? conColumnas(estado, [r.columna], r.tropa) : { ...sinColumna, heroes: conEscuadrones(sinColumna.heroes, r.tropa) };
   const heroes = conTropa.heroes.map((h) => (h.id === heroe.id ? { ...r.heroe, escuadrones: h.escuadrones } : h));
-  return exito(conHistorialDeJugador({ ...conTropa, heroes }, heroe.id, `Entra en ${campamento.id}.`), [
+  const campamentosMercenarios = conTropa.campamentosMercenarios.map((c) => (c.id === campamento.id ? r.campamento : c));
+  return exito(conHistorialDeJugador({ ...conTropa, heroes, campamentosMercenarios }, heroe.id, `Entra en ${campamento.id}.`), [
     evento(ctx, { codigo: 'jugador.entra_en_campamento', mensaje: `${heroe.displayName} entra en ${campamento.id}.`, payload: { campamentoId: campamento.id, heroeId: heroe.id } }),
   ]);
 });
@@ -475,7 +476,7 @@ export const salirDelCampamento = comando<ParamsSalirDelCampamento, { ejercitoId
   const faccionId = estado.facciones.find((f) => esCiudadano(f, heroe.id))?.id ?? '';
   const r = salirDelCampamentoEngine(campamento, heroe, aparcada, params.escuadronIds, params.carga, faccionId, `ejercito-${ctx.ids.siguiente()}`, ctx.instante);
   const conColumna = conColumnas(estado, [r.columna]);
-  const heroes = conColumna.heroes.map((h) => (h.id === heroe.id ? { ...h, ubicacion: r.heroe.ubicacion, almacenPersonal: r.heroe.almacenPersonal } : h));
+  const heroes = conColumna.heroes.map((h) => (h.id === heroe.id ? { ...h, ubicacion: r.heroe.ubicacion, almacenPersonal: r.heroe.almacenPersonal, racionEn: r.heroe.racionEn } : h));
   return exito(
     conHistorialDeJugador({ ...conColumna, heroes }, heroe.id, `Sale de ${campamento.id}.`),
     [evento(ctx, { codigo: 'jugador.sale_de_campamento', mensaje: `${heroe.displayName} sale de ${campamento.id}.`, payload: { campamentoId: campamento.id, heroeId: heroe.id, ejercitoId: r.columna.id } })],

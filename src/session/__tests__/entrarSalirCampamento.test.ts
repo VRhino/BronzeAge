@@ -1,7 +1,8 @@
 // Estar dentro de un campamento de mercenarios (D74-D77): nacer dentro, salir eligiendo tropa y carga, volver y entrar en otro.
 import { describe, expect, it } from 'vitest';
 import type { Heroe } from '../../domain/types';
-import { ALMACEN_PERSONAL } from '../../constants';
+import { ALMACEN_PERSONAL, MERCENARIOS } from '../../constants';
+import { guardarEnAlmacenPersonal } from '../comandos/heroe';
 import { GameSession } from '../gameSession';
 import { crearHeroe } from '../comandos/crearHeroe';
 import { entrarEnCampamento, salirDelCampamento } from '../comandos/presencia';
@@ -32,14 +33,17 @@ describe('su campamento de residencia', () => {
 
     const salida = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: ['esc-1'], carga: { trigo: 60 } }, opc);
     expect(salida.ok).toBe(true);
-    expect(columna()).toMatchObject({ suministro: { trigo: 60 }, escuadronIds: ['esc-1'], posicionActual: campamento(sesion, 'mercenarios-0').posicion });
+    // Lo cargado (60) más la ración gratis del residente (D24).
+    expect(columna()).toMatchObject({ suministro: { trigo: 60 + MERCENARIOS.racion.trigo }, racion: MERCENARIOS.racion.trigo, escuadronIds: ['esc-1'], posicionActual: campamento(sesion, 'mercenarios-0').posicion });
     expect(heroe().ubicacion).toEqual({ tipo: 'columna', ejercitoId: columna()!.id });
     expect(heroe().almacenPersonal).toEqual({ trigo: 40, oro: 20 });
 
     expect(sesion.ejecutar(entrarEnCampamento, { campamentoId: 'mercenarios-0', heroeId }, opc).ok).toBe(true);
     expect(columna()).toBeUndefined();
     expect(heroe().ubicacion).toEqual({ tipo: 'mercenarios', campamentoId: 'mercenarios-0' });
+    // Lo suyo vuelve al almacén; la ración, al campamento (D50).
     expect(heroe().almacenPersonal).toEqual({ trigo: 100, oro: 20 });
+    expect(campamento(sesion, 'mercenarios-0').mercado['trigo']).toBe(MERCENARIOS.mercado.pilas['trigo']! + MERCENARIOS.racion.trigo);
     expect(heroe().escuadrones[0]!.contenedor).toEqual({ tipo: 'campamento' });
   });
 
@@ -82,7 +86,7 @@ describe('otro campamento (enclave neutral, D77)', () => {
 
     expect(alli.ejecutar(entrarEnCampamento, { campamentoId: otro.id, heroeId }, opc).ok).toBe(true);
     const columna = alli.getState().ejercitos.find((e) => e.liderId === heroeId)!;
-    expect(columna.suministro).toEqual({ trigo: 30 });
+    expect(columna.suministro).toEqual({ trigo: 30 + MERCENARIOS.racion.trigo });
     expect(alli.getState().heroes.find((h) => h.id === heroeId)!.ubicacion).toEqual({ tipo: 'mercenarios', campamentoId: otro.id });
 
     expect(alli.ejecutar(salirDelCampamento, { campamentoId: otro.id, heroeId, escuadronIds: [], carga: {} }, opc).datos!.ejercitoId).toBe(columna.id);
@@ -107,5 +111,19 @@ describe('protección del campamento (M4/D78)', () => {
     const r = sesion.ejecutar(atacar, { heroeId, objetivo: { tipo: 'ejercito', id: suya.id } }, opc);
     expect(r.codigoError).toBe('campamento.proteccion');
     expect(columna()).toBeDefined();
+  });
+});
+
+describe('la ración gratis del residente (D24, D50)', () => {
+  it('se da al salir una vez por plazo, se come la primera y no se puede guardar', () => {
+    const { sesion, heroeId, columna, opc } = nacido();
+    sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);
+    expect(columna()!.suministro).toEqual({ trigo: MERCENARIOS.racion.trigo });
+    expect(sesion.ejecutar(guardarEnAlmacenPersonal, { recurso: 'trigo', cantidad: 10 }, opc).ok, 'la ración no se guarda').toBe(false);
+
+    // Vuelve y sale enseguida: dentro del plazo no hay otra.
+    sesion.ejecutar(entrarEnCampamento, { campamentoId: 'mercenarios-0', heroeId }, opc);
+    sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);
+    expect(columna()!.suministro['trigo'] ?? 0).toBe(0);
   });
 });

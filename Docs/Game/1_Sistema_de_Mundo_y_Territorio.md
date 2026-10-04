@@ -185,6 +185,7 @@ Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ningun
   - en **otro**, entra con su columna, que queda en la puerta intacta.
   Al salir (`salirDelCampamento`), en el suyo elige la tropa y lo que carga desde el almacén personal; en otro, retoma la columna con la que entró. Residir no exige estar allí.
 - **Las acciones del campamento** (reclutar, comprar, el fondo de refundación) se hacen dentro o con la columna en su puerta.
+- **Ración gratis del residente.** Al salir de su campamento, el residente recibe en el carro **60 de trigo** (`MERCENARIOS.racion`), una vez cada 30 minutos de mundo; no se acumula. La columna se come la ración la primera. Lo que queda de ella **vuelve al campamento** al entrar y no se puede guardar en el almacén personal: sirve para moverse, no para ahorrar.
 - **Protección.** A menos de `MERCENARIOS.radioProteccion` (60) de un campamento nadie inicia un combate: ni jugadores (`atacar` se rechaza desde allí y contra lo que está allí) ni bandidos.
 - **Residencia** (paso 2): cualquier héroe puede residir en él, y es la casa de quien se queda sin asentamiento; se acaba el huérfano (Doc 2.5, 5.15.5). Almacén personal de cada héroe: Doc 2.5.
 - **Reclutamiento** (paso 3): reclutar y reponer las tropas de sus edificios, con tecnología propia, pagando oro y gastando la población del campamento (Doc 5.8, 6.5b). Población: viviendas × 50, recupera 10 por hora.

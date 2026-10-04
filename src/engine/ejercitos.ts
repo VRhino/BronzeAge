@@ -12,7 +12,7 @@ import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, CampamentoMercena
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
-import { ALMACEN_PERSONAL, BATALLA, LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { ALMACEN_PERSONAL, BATALLA, LOGISTICA, MERCENARIOS, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import {
   alCampamento,
@@ -490,6 +490,9 @@ export function enLaPuertaDelCampamento(ejercito: Ejercito, campamento: Campamen
 
 const totalDe = (r: Readonly<Record<string, number>> | undefined): number => Object.values(r ?? {}).reduce((a, b) => a + b, 0);
 
+/** El trigo del carro que aún es ración gratis (D50): se come primero, así que es como mucho lo que lleva. */
+export const racionQueQueda = (columna: Pick<Ejercito, 'suministro' | 'racion'>): number => Math.min(columna.suministro['trigo'] ?? 0, columna.racion ?? 0);
+
 /**
  * Entrar en un campamento de mercenarios con la columna personal en su puerta (D76, D77).
  *
@@ -504,23 +507,27 @@ export function entrarEnCampamento(
   campamento: CampamentoMercenarios,
   heroe: Heroe,
   columna: EjercitoConTropa
-): { heroe: Heroe; columna: EjercitoConTropa | undefined; tropa: Escuadron[] } {
+): { heroe: Heroe; columna: EjercitoConTropa | undefined; tropa: Escuadron[]; campamento: CampamentoMercenarios } {
   if (columna.tipo !== 'personal' || columna.liderId !== heroe.id) throw new MovilizacionInvalidaError('Se entra en un campamento con la columna personal.');
   if (!enLaPuertaDelCampamento(columna, campamento)) throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} del campamento.`);
   const dentro: UbicacionHeroe = { tipo: 'mercenarios', campamentoId: campamento.id };
-  if (!campamento.residentesIds.includes(heroe.id)) return { heroe: { ...heroe, ubicacion: dentro }, columna, tropa: [] };
+  if (!campamento.residentesIds.includes(heroe.id)) return { heroe: { ...heroe, ubicacion: dentro }, columna, tropa: [], campamento };
 
+  // Lo que queda de la ración gratis vuelve al campamento, no al almacén (D50).
+  const devuelto = racionQueQueda(columna);
+  const suministro = { ...columna.suministro, ...(devuelto > 0 ? { trigo: columna.suministro['trigo']! - devuelto } : {}) };
+  const conDevuelto = devuelto > 0 ? { ...campamento, mercado: { ...campamento.mercado, trigo: (campamento.mercado['trigo'] ?? 0) + devuelto } } : campamento;
   let libre = ALMACEN_PERSONAL.capacidad - totalDe(heroe.almacenPersonal);
   const almacenPersonal = { ...heroe.almacenPersonal };
   const resto: Record<string, number> = {};
-  for (const [recurso, cantidad] of Object.entries(columna.suministro)) {
+  for (const [recurso, cantidad] of Object.entries(suministro)) {
     const cabe = Math.max(0, Math.min(cantidad, libre));
     if (cabe > 0) almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cabe;
     if (cantidad - cabe > 0) resto[recurso] = cantidad - cabe;
     libre -= cabe;
   }
-  const queda = totalDe(resto) > 0 ? { ...columna, escuadronIds: [], escuadrones: [], suministro: resto } : undefined;
-  return { heroe: { ...heroe, ubicacion: dentro, almacenPersonal }, columna: queda, tropa: alCampamento(columna.escuadrones) };
+  const queda = totalDe(resto) > 0 ? { ...columna, escuadronIds: [], escuadrones: [], suministro: resto, racion: undefined } : undefined;
+  return { heroe: { ...heroe, ubicacion: dentro, almacenPersonal }, columna: queda, tropa: alCampamento(columna.escuadrones), campamento: conDevuelto };
 }
 
 /**
@@ -565,6 +572,10 @@ export function salirDelCampamento(
     suministro[recurso] = (suministro[recurso] ?? 0) + pedido;
     hueco -= pedido;
   }
+  // La ración gratis del residente (D24): al salir, si ya pasó el plazo desde la última. No se acumula: sobra y vuelve al entrar.
+  const toca = heroe.racionEn === undefined || instante - heroe.racionEn >= MERCENARIOS.racion.cadaMinutos * 60_000;
+  const racion = toca ? Math.min(MERCENARIOS.racion.trigo, Math.max(0, hueco)) : 0;
+  if (racion > 0) suministro['trigo'] = (suministro['trigo'] ?? 0) + racion;
   const columnaId = aparcada?.id ?? id;
   const columna: EjercitoConTropa = {
     id: columnaId,
@@ -577,6 +588,7 @@ export function salirDelCampamento(
     escuadronIds: escuadrones.map((e) => e.id),
     escuadrones,
     suministro,
+    ...(racion > 0 ? { racion } : {}),
     caravanasAdjuntasIds: [],
     objetivo: { tipo: 'punto', punto: campamento.posicion },
     ruta: [],
@@ -584,7 +596,7 @@ export function salirDelCampamento(
     posicionActual: campamento.posicion,
     estado: 'estacionado',
   };
-  return { heroe: { ...enColumna(columnaId), almacenPersonal }, columna };
+  return { heroe: { ...enColumna(columnaId), almacenPersonal, ...(racion > 0 ? { racionEn: instante } : {}) }, columna };
 }
 
 /**
@@ -1641,6 +1653,8 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       ...original,
       escuadrones: racion.escuadrones,
       suministro: { ...original.suministro, trigo: trigoEnCarro - racion.trigoConsumido },
+      // La ración gratis se come la primera (D50).
+      ...(original.racion ? { racion: Math.max(0, original.racion - racion.trigoConsumido) } : {}),
     };
 
     // 2. ¿Se quedó sin nadie DENTRO? Se disuelve y las identidades vacías vuelven a casa a poder rellenarse.

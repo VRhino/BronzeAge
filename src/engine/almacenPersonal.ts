@@ -38,8 +38,12 @@ export function guardarEnAlmacenPersonal(
   exigirLider(ejercito, heroe);
   exigirCantidad(cantidad);
   const enElCarro = ejercito.suministro[recurso] ?? 0;
-  const movido = Math.min(cantidad, enElCarro, ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(heroe));
-  if (movido <= 0) throw new HeroeInvalidoError(enElCarro <= 0 ? `El carro no lleva ${recurso}.` : 'El almacén personal está lleno.');
+  // La ración gratis del campamento no se guarda (D50): solo el trigo que no es ración.
+  const guardable = recurso === 'trigo' ? enElCarro - Math.min(enElCarro, ejercito.racion ?? 0) : enElCarro;
+  const movido = Math.min(cantidad, guardable, ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(heroe));
+  if (movido <= 0) {
+    throw new HeroeInvalidoError(guardable <= 0 ? (enElCarro > 0 ? 'Ese trigo es la ración del campamento: no se guarda.' : `El carro no lleva ${recurso}.`) : 'El almacén personal está lleno.');
+  }
   return {
     heroe: { ...heroe, almacenPersonal: sin0(heroe.almacenPersonal ?? {}, recurso, (heroe.almacenPersonal?.[recurso] ?? 0) + movido) },
     ejercito: { ...ejercito, suministro: sin0(ejercito.suministro, recurso, enElCarro - movido) },

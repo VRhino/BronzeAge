@@ -387,6 +387,8 @@ export interface Heroe {
   almacenPersonal?: Record<string, number>;
   /** Lo comprado hoy en el mercado de su campamento, para el cupo diario (D41). `dia` = día de mundo; de otro día, no cuenta. */
   cupoCampamento?: { dia: number; comprado: Record<string, number> };
+  /** Cuándo recogió la última ración gratis de su campamento (D24): se rellena cada `MERCENARIOS.racion.cadaMinutos`. */
+  racionEn?: Instante;
   /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
    * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un id sin registro en
    * `GameSessionState.heroes` (los fundadores de los escenarios de batch) usa `LIDERAZGO.base`. */
@@ -975,6 +977,9 @@ export interface Ejercito {
   /** El carro: los de todos sus jugadores, ya sumados. Solo trigo en Fase 0. En marcha se come de AQUÍ, no
    * del almacén (Doc 5.13) — misma regla del hambre vía `avanzarRacion`, distinta despensa. */
   suministro: Record<string, number>;
+  /** Trigo de la ración gratis del campamento que aún lleva el carro (D24/D50). Se come primero; lo que quede no puede ir a ningún
+   * almacén: vuelve al campamento al entrar. */
+  racion?: number;
   /**
    * A quien persigue, si persigue a alguien (Doc 5.12.3). Un objetivo MOVIL en vez de un punto: la ruta se
    * recalcula cada tick hacia donde este. Ausente = marcha normal contra `objetivo`.
