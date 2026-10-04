@@ -279,11 +279,11 @@ Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; e
 |---|---|
 | Ejército o columna ajena | **Inspeccionar** · **Perseguir** |
 | Caravana ajena o neutral | **Inspeccionar** · **Interceptar** |
-| Asentamiento | En su puerta (10): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). A distancia de ataque (15), si es de otra Facción: **Atacar**, que es asediarla (5.12.4) |
+| Asentamiento | En su puerta (10): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 40, **Inspeccionar** su defensa; a distancia de ataque (15), **Atacar**, que es asediarla (5.12.4) |
 | Campamento de bandidos | **Atacar** |
 | Batalla en curso de tu Facción | **Unirse**, mientras quede sitio en su bando (5.15.1) |
 
-*Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Los NPC siguen atacando caravanas por su cuenta — su intención es su política. Por lo mismo, una columna de héroes bot asedia al llegar a la plaza enemiga que tenía por destino y ataca al alcanzar a quien persigue: para el NPC, marchar contra una plaza o perseguir ya es la orden.*
+*Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Siguen atacando caravanas por su cuenta — su intención es su política. Los héroes bot no lo son: juegan con las mismas reglas que un jugador, así que al llegar a la plaza enemiga o al alcanzar a quien persiguen se les ofrece atacar, y atacan si lo piden.*
 
 #### Los tres anillos
 
@@ -292,7 +292,7 @@ Cada distancia significa una cosa distinta, y las tres juntas son el corazón de
 | Distancia | Qué habilita | Quién se entera |
 |---|---|---|
 | **150 / 80** (columna con tropas / jugador solo) | Ves que hay algo y de quién es | Nadie |
-| **40 — inspección** | Ver la composición: qué tropas, de quién. De una caravana, si lleva escolta y **qué** recursos carga, nunca cuántos | **El inspeccionado recibe aviso** |
+| **40 — inspección** | Ver la composición: qué tropas, de quién. De una caravana, si lleva escolta y **qué** recursos carga, nunca cuántos. De una plaza ajena, **su defensa**: la guarnición (qué tropa y cuánta) y los héroes que hay dentro; su almacén no | **El inspeccionado recibe aviso** (de una plaza, su Facción) |
 | **15 — encuentro** | Se cierra una persecución y se ofrece atacar | Los dos |
 
 **El anillo de inspección es lo que convierte el reconocimiento en un juego de dos.** Mirar cuesta ser visto mirando; y el que mira puede huir, porque va más rápido que una columna entera y porque no ha tenido que meterse hasta los 15. De lejos, un ejército ajeno sigue siendo lo que siempre fue: una bandera y unos estandartes, sin composición ni poder (5.12.7).
@@ -410,7 +410,7 @@ De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 
 El **nivel** de una plaza sí se ve porque una ciudad grande se ve grande desde fuera; no dice cuánta tropa tiene dentro, que es lo que decidiría un ataque.
 
-**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (40)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son— y de una caravana, si lleva escolta y qué recursos carga, nunca cuántos (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá.
+**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (40)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son—, de una caravana, si lleva escolta y qué recursos carga, nunca cuántos, y de una plaza ajena su defensa: la guarnición y los héroes que hay dentro, nunca su almacén (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá.
 
 **Las caravanas ajenas y neutrales solo se ven dentro del radio de visión.** Fuera de él están ocultas, y **sin memoria**: a diferencia de una ciudad, una caravana se mueve, así que una foto vieja no diría "aquí hubo una" — diría una mentira sobre dónde está ahora.
 

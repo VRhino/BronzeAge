@@ -258,3 +258,72 @@ por HTTP, proceso matado con `taskkill /F` (snapshot en v3, diario hasta v5) →
 2. **Puerto + adaptador en proceso**, con la gobernanza actual pasada a comandos (inventario acción por acción).
 3. **Presencia e identidad de bot** (D33, §8.3).
 4. **Cerebro «sin plaza»** de los bots-héroe sobre los campamentos (depende del diseño de campamentos).
+
+## 10. Paso 2: la gobernanza acción por acción (inventario 2026-10-04)
+
+Medido sobre `session/npcGobernanza.ts` (2358 líneas). Hoy la gobernanza piensa **por plaza** y escribe el estado
+directamente; como jugador, cada acción la hace **un héroe** con el cargo que la autoriza (`autorizacion.ts`). La
+columna «ve» dice si la información que usa la decisión está en la proyección del héroe que actúa (recordando que
+un jugador solo ve el interior de la plaza donde está, Doc 1.10.1).
+
+| # | Acción de hoy | Comando | Quién | ¿Ve lo que necesita? |
+|---|---|---|---|---|
+| 1 | Gobernador y Tesorero al primer fundador (`asegurarGobernanzaBase`) | `asignarCargoLocal` | Rey (gobernador); Gobernador (resto) | Sí |
+| 2 | Reserva manual de madera y de la caravana de fundación | `calibrarReservaManual` | Tesorero | Sí (dentro) |
+| 3 | 2 granjas, mercado, barracón, galería, caballerizas, palacio, sala de consejo | `anadirEdificioManualmente` | Gobernador | Sí (dentro) |
+| 4 | Caravanas comerciales hasta el cupo (`construirCaravanaComercial`) | `crearCaravana` + `agregarCarroCaravana` + `comprarAnimalCaravana` | Residente | Sí (dentro) |
+| 5 | Primer recinto y mejora a piedra | `comprometerRecinto`, `mejorarRecinto` | Gobernador | Sí (dentro) |
+| 6 | Pedir la subida de nivel | `solicitarAscenso` | Gobernador | Sí (`ascensoDeAsentamiento`) |
+| 7 | Trueque de supervivencia y para crecer: busca socio **leyendo el almacén de plazas ajenas** | `proponerTrueque` | Residente del lado A | **No**: el almacén ajeno no se ve, y las órdenes ajenas solo en su mostrador |
+| 8 | Contestar trueques recibidos | `aceptarTrueque` / `rechazarTrueque` | Residente del lado B | Sí (su almacén) |
+| 9 | Trueque de especialización (`avanzarAutoComercioSimulado`) | — | — | Se borra (§8.1) |
+| 10 | Adoptar tecnología con la capital | `adoptarTecnologia` | Rey | Sí |
+| 11 | Reclutar la mejor escuadra posible | `reclutarTropa` | Cada residente, para sí | Sí |
+| 12 | Guarnecer todo menos la última escuadra | `asignarGuarnicion` | Cada héroe, lo suyo | Sí |
+| 13 | Loadout de defensa en casa | `guardarLoadout` | Cada héroe | Sí |
+| 14 | Cazar el campamento de bandidos de la plaza y atacarlo al llegar | `movilizarEjercito` + `atacar` | Héroe sin cargo | Sí, si el campamento se ve (`campamentosBandidos` trae su poder) |
+| 15 | Campaña contra la plaza rival más cercana que **pueda ganar**, con la defensa prevista (héroes y escuadras ajenas) | `movilizarEjercito` + `unirseAEjercito` | Héroes sin cargo | **No**: la guarnición y los héroes de una plaza ajena no se ven |
+| 16 | Quedarse en lo conquistado | `cambiarResidencia` + `guarnecer` | Héroes de la columna | Sí |
+| 17 | Repartir héroes entre plazas de la Facción | `salirAlMundo` + `cambiarResidencia` | Héroe sin cargo | Con la pizarra (residentes por plaza) |
+| 18 | Volver a casa / replegar las columnas acampadas | `entrarEnAsentamiento` / `replegarEjercito` | Líder | Sí |
+| 19 | Órdenes de compra/venta por excedente o escasez | `colocarOrdenMercado` | Residente | Sí (dentro) |
+| 20 | Perseguir columnas y caravanas enemigas a la vista | `perseguir` | Líder | Sí (`ejercitosAvistados`, `caravanasAvistadas`) |
+| 21 | Expandir con caravana de fundación **con 5 héroes nuevos** (`materializarFundadoresNpc`) | `lanzarCaravanaFundacion` | Ciudadano | Poder solo-NPC: crear héroes desaparece (§7) |
+| 22 | Fundación inicial de Facciones NPC (`fundarAsentamientosIniciales`, `crearFaccionNpc`) | — | — | Se queda **solo como andamio del batch** hasta el paso 4 (D53/D58) |
+
+**Lo que cambia por el camino aunque las decisiones sean las mismas:** los ids los da la sesión (no
+`ejercito-npc-N`), cada comando se valida y aplica por separado, y el orden pasa a ser por héroe en vez de por
+plaza. El batch actual (estado crudo + `avanzarNpcGobernanza`) no sirve para esto: pasa a correr sobre
+`GameSession` con el adaptador en proceso. Las cifras de los diarios de batch anteriores dejan de ser comparables
+(ya cerradas por D58).
+
+### 10.1 Decisiones del usuario sobre el inventario (2026-10-04)
+
+- **Trueques (fila 7)**: lo urgente, con órdenes de compra en el mercado propio; trueques solo con plazas de las
+  que la Facción sabe algo. Para saberlo, un héroe bot de la Facción hace de **explorador**: recorre el mapa,
+  mira el mostrador de las plazas (sus órdenes en pie, que es lo que un jugador ve en la puerta) y lo apunta en
+  la pizarra. Nada de omnisciencia.
+- **Campañas (fila 15)**: solo contra plazas **inspeccionadas** antes. Inspeccionar una plaza es regla nueva
+  (Doc 5.12.3): desde el anillo de 40, revela guarnición y héroes dentro, no el almacén, y avisa a su Facción. El
+  explorador es quien inspecciona.
+- **Expansión (fila 21)**: la caravana de fundación la llevan héroes que ya existen en la plaza de origen, dejando
+  al menos uno en casa. El número de héroes no crece hasta el paso 4.
+- **Render**: nada se despliega hasta terminar el bloque entero (pasos 2-4). Tampoco se lanzan batch ni pruebas de
+  comportamiento hasta entonces: el servidor puede quedarse sin bots mientras tanto.
+- **Asimetrías del motor que caen con D52** (no hace falta decisión nueva: «un bot no puede hacer nada que un
+  jugador no pueda hacer»): el asedio automático al llegar y el combate automático al alcanzar a la presa de las
+  columnas sin humanos (`engine/ejercitos.ts`), y las reglas solo-NPC de derrota (`session/derrotas.ts`, D59). Lo
+  que se queda: un combate sin humanos se resuelve con números y no en Unity (`hayHumano`), porque eso decide
+  *dónde* se juega, no *quién* puede hacerlo.
+
+### 10.2 Cómo se implementa
+
+1. **Motor y sesión**: fuera las asimetrías de §10.1; `inspeccionar` acepta una plaza.
+2. **`src/bots/`** (cliente, no motor): puerto (`observar` = `proyectarParaJugador`, `actuar` = autorización +
+   comando), adaptador en proceso sobre `GameSession`, runner (orden por id de héroe, RNG por bot, cada 5 ticks
+   con desfase + despertar por eventos), pizarra por Facción y cerebros por rol: Rey, Gobernador, Tesorero,
+   residente (reclutar, guarnecer, defender), cazador, campaña, explorador.
+3. **El tick sin NPC**: `unTickCompleto` se queda en el tick. Se borran `avanzarFaccionesNpc`,
+   `avanzarAutoComercio`, `simulacionAutoComercio` y `npcGobernanza`.
+4. **Batch sobre `GameSession`** con el adaptador en proceso. La fundación inicial de Facciones de bots queda como
+   andamio hasta el paso 4.
