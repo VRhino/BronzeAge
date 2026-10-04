@@ -97,6 +97,16 @@ describe('comprar la Caravana de Fundación', () => {
     expect(sobra, 'solo queda lo que sobraba').toBe(3 * Object.keys(costo).length);
   });
 
+  it('gasta lo mismo que cuenta: el aporte de quien se mudó se descuenta, y el de otra Facción no se toca', () => {
+    const c = fondoCompleto();
+    // h2 aportó y ya no reside aquí; un residente de otra Facción tiene un aporte que va primero en la lista.
+    const r = compra({ ...c, residentesIds: ['ajeno', 'h1'], fondos: { ...c.fondos, ajeno: { ...costo } } });
+    const fondos = r.campamentos[0]!.fondos;
+    expect(fondos['ajeno'], 'lo ajeno, intacto').toEqual(costo);
+    const sobra = Object.values(fondos['h1'] ?? {}).concat(Object.values(fondos['h2'] ?? {})).reduce((a, b) => a + b, 0);
+    expect(sobra, 'de la Facción solo queda el sobrante').toBe(3 * Object.keys(costo).length);
+  });
+
   it('rechaza si el fondo no cubre el coste, si la Facción tiene plaza, si ya hay una caravana en camino o el destino está reclamado', () => {
     expect(() => compra(campamento({ fondos: { h1: { madera: 1 } } }))).toThrow(MercenariosInvalidoError);
     expect(() => compra(fondoCompleto(), { asentamientos: [plaza('f')] })).toThrow(MercenariosInvalidoError);

@@ -102,7 +102,7 @@ export function retirarDeRefundacion(
 
 /**
  * Comprar la Caravana de Fundación (Doc 1.9b): el fondo de la Facción en el campamento tiene que cubrir `costoRefundacion`. Se gasta de los
- * héroes por orden de residencia hasta cubrirlo; lo que sobre de cada uno se queda en el fondo. La caravana sale del campamento hacia
+ * aportes de sus ciudadanos por orden de ciudadanía hasta cubrirlo; lo que sobre de cada uno se queda en el fondo. La caravana sale del campamento hacia
  * `destino` con el que compra como fundador, y viaja y funda como cualquier otra (Doc 1.8): no deja el cupo hasta llegar, y se pierde si no
  * puede fundar al llegar. Lleva la Facción en sí misma porque no tiene asentamiento de origen del que sacarla.
  */
@@ -136,12 +136,13 @@ export function comprarCaravanaDeRefundacion(
     throw new MercenariosInvalidoError(`El fondo no cubre el coste: faltan ${falta.map(([r, n]) => `${Math.ceil(n - (fondo[r] ?? 0))} ${r}`).join(', ')}.`);
   }
 
-  // Se gasta de los aportes por orden de residencia hasta cubrir cada recurso.
+  // Se gasta sobre el MISMO conjunto que cuenta `fondoDeFaccion` —los aportes de sus ciudadanos, residan o no—, por orden de
+  // ciudadanía. Gastar por residentes dejaba sin descontar a quien aportó y se mudó, y tocaba aportes de otras Facciones.
   const fondos: Record<string, Record<string, number>> = {};
   for (const [id, aporte] of Object.entries(campamento.fondos)) fondos[id] = { ...aporte };
   for (const [recurso, necesario] of Object.entries(costo)) {
     let pendiente = necesario;
-    for (const id of campamento.residentesIds) {
+    for (const id of faccion.ciudadanosIds) {
       const tiene = fondos[id]?.[recurso] ?? 0;
       if (tiene <= 0 || pendiente <= 0) continue;
       const toma = Math.min(tiene, pendiente);
