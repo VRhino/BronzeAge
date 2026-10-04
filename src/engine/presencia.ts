@@ -76,7 +76,8 @@ export function salirDelMundo(mundo: MundoPresencia, heroeId: string, mapa: Mapa
     carro = partido.columna.suministro;
   } else {
     carro = columna.suministro;
-    for (const caravana of caravanas.filter((c) => columna.caravanasAdjuntasIds.includes(c.id))) {
+    // La Caravana de Fundación de un campamento se queda: el tick la ve sin columna y la vuelve a SU campamento (D40, D68).
+    for (const caravana of caravanas.filter((c) => columna.caravanasAdjuntasIds.includes(c.id) && !c.titularId)) {
       caravanas = caravanas.filter((c) => c.id !== caravana.id);
       const origen = mundo.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
       const ruta = origen && calcularRuta(mapa, columna.posicionActual, origen.posicion);

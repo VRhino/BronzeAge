@@ -252,7 +252,7 @@ describe('refundar desde el campamento', () => {
     const { sesion, faccionId, fundador, opc, costo } = sinPlazas();
 
     for (const [recurso, cantidad] of Object.entries(costo)) {
-      expect(sesion.ejecutar(aportarARefundacion, { recurso: recurso as never, cantidad }, opc).ok).toBe(true);
+      expect(sesion.ejecutar(aportarARefundacion, { recurso, cantidad, lado: 'almacen' }, opc).ok).toBe(true);
     }
     expect(campamentoDe(sesion, 'merc-1').fondos[fundador]).toEqual(costo);
 

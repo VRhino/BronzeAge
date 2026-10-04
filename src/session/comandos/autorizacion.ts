@@ -334,7 +334,7 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   abrirAlijo: { rolesPermitidos: ['jugador'] },
   // Comprar en el mercado del campamento donde reside el actor: la residencia y el pago los comprueba el motor.
   comprarEnCampamento: { rolesPermitidos: ['jugador'] },
-  // La refundación desde un campamento: la residencia, la Facción sin plazas y el fondo los comprueba el motor.
+  // La refundación desde un campamento: dónde está, la Facción sin plazas y el fondo los comprueban el comando y el motor.
   aportarARefundacion: { rolesPermitidos: ['jugador'] },
   retirarDeRefundacion: { rolesPermitidos: ['jugador'] },
   comprarCaravanaDeRefundacion: { rolesPermitidos: ['jugador'] },

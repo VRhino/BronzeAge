@@ -9,9 +9,13 @@ import {
 } from '../../engine/reclutamientoMercenario';
 import { esCiudadano } from '../../engine/faccion';
 import { comprarEnCampamento as comprarEngine } from '../../engine/mercadoMercenario';
-import { aportarARefundacion as aportarEngine, comprarCaravanaDeRefundacion as comprarCaravanaEngine, retirarDeRefundacion as retirarEngine } from '../../engine/refundacion';
-import { ALMACEN_PERSONAL } from '../../constants';
-import type { CampamentoMercenarios } from '../../domain/types';
+import {
+  aportarARefundacion as aportarEngine,
+  comprarCaravanaDeRefundacion as comprarCaravanaEngine,
+  retirarDeRefundacion as retirarEngine,
+  type LadoDelFondo,
+} from '../../engine/refundacion';
+import type { CampamentoMercenarios, Ejercito, Heroe } from '../../domain/types';
 import { exito } from './tipos';
 import { comando, exigirFaccion, exigirJugador, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
@@ -142,6 +146,8 @@ export const comprarEnCampamento = comando<ParamsComprarEnCampamento, { cantidad
 export interface ParamsFondoRefundacion {
   recurso: string;
   cantidad: number;
+  /** Desde dónde se aporta o adónde se retira (D39): el almacén personal (en el campamento donde reside) o el carro de su columna. */
+  lado: LadoDelFondo;
 }
 
 export interface PayloadFondoRefundacion {
@@ -160,44 +166,55 @@ function faccionDelActor(estado: GameSessionState, heroeId: string) {
   return faccion;
 }
 
-/** Aporta del almacén personal al fondo de refundación del campamento donde reside (Doc 1.9b). Solo una Facción sin asentamientos. */
+/** El campamento donde está el héroe (D39, D75): dentro de él, o con la columna en su puerta. */
+function campamentoDondeEsta(estado: GameSessionState, heroeId: string): CampamentoMercenarios {
+  const heroe = estado.heroes.find((h) => h.id === heroeId);
+  const columna = columnaDe(estado.ejercitos, heroeId);
+  const campamento = estado.campamentosMercenarios.find(
+    (c) => (heroe?.ubicacion.tipo === 'mercenarios' && heroe.ubicacion.campamentoId === c.id) || (columna && enLaPuertaDelCampamento(columna, c))
+  );
+  if (!campamento) rechazar(CODIGOS_ERROR.campamentoLejos);
+  return campamento;
+}
+
+/** Con el campamento, el héroe y su columna sustituidos. */
+function conFondo(estado: GameSessionState, r: { campamento: CampamentoMercenarios; heroe: Heroe; columna: Ejercito | undefined }): GameSessionState {
+  return {
+    ...estado,
+    campamentosMercenarios: estado.campamentosMercenarios.map((c) => (c.id === r.campamento.id ? r.campamento : c)),
+    heroes: estado.heroes.map((h) => (h.id === r.heroe.id ? r.heroe : h)),
+    ejercitos: r.columna ? estado.ejercitos.map((e) => (e.id === r.columna!.id ? r.columna! : e)) : estado.ejercitos,
+  };
+}
+
+/** Aporta al fondo de refundación de su Facción en el campamento donde está (Doc 1.9b, D39). Solo una Facción sin asentamientos. */
 export const aportarARefundacion = comando<ParamsFondoRefundacion, { movido: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
-  exigirEnSuCampamento(estado, heroe.id);
+  const campamento = campamentoDondeEsta(estado, heroe.id);
   const faccion = faccionDelActor(estado, heroe.id);
-  const r = aportarEngine(estado.campamentosMercenarios, estado.heroes, faccion, estado.asentamientos, heroe.id, params.recurso, params.cantidad);
-  const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
-  return exito(
-    { ...estado, campamentosMercenarios: r.campamentos, heroes: r.heroes },
-    [
-      evento(ctx, {
-        codigo: 'mercenarios.fondo_refundacion',
-        mensaje: `${heroe.displayName} aporta ${r.movido} ${params.recurso} al fondo de refundación de ${faccion.nombre}.`,
-        payload: { campamentoId, heroeId: heroe.id, faccionId: faccion.id, recurso: params.recurso, cantidad: r.movido, sentido: 'aporta' } satisfies PayloadFondoRefundacion,
-      }),
-    ],
-    { movido: r.movido }
-  );
+  const r = aportarEngine(campamento, heroe, columnaDe(estado.ejercitos, heroe.id), faccion, estado.asentamientos, params.recurso, params.cantidad, params.lado);
+  return exito(conFondo(estado, r), [
+    evento(ctx, {
+      codigo: 'mercenarios.fondo_refundacion',
+      mensaje: `${heroe.displayName} aporta ${r.movido} ${params.recurso} al fondo de refundación de ${faccion.nombre}.`,
+      payload: { campamentoId: campamento.id, heroeId: heroe.id, faccionId: faccion.id, recurso: params.recurso, cantidad: r.movido, sentido: 'aporta' } satisfies PayloadFondoRefundacion,
+    }),
+  ], { movido: r.movido });
 });
 
-/** Retira lo aportado por el actor del fondo, de vuelta a su almacén personal. */
+/** Retira lo aportado por el actor al fondo del campamento donde está, a su almacén personal o a su carro. */
 export const retirarDeRefundacion = comando<ParamsFondoRefundacion, { movido: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
-  exigirEnSuCampamento(estado, heroe.id);
+  const campamento = campamentoDondeEsta(estado, heroe.id);
   const faccion = faccionDelActor(estado, heroe.id);
-  const r = retirarEngine(estado.campamentosMercenarios, estado.heroes, heroe.id, params.recurso, params.cantidad, ALMACEN_PERSONAL.capacidad);
-  const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
-  return exito(
-    { ...estado, campamentosMercenarios: r.campamentos, heroes: r.heroes },
-    [
-      evento(ctx, {
-        codigo: 'mercenarios.fondo_refundacion',
-        mensaje: `${heroe.displayName} retira ${r.movido} ${params.recurso} del fondo de refundación.`,
-        payload: { campamentoId, heroeId: heroe.id, faccionId: faccion.id, recurso: params.recurso, cantidad: r.movido, sentido: 'retira' } satisfies PayloadFondoRefundacion,
-      }),
-    ],
-    { movido: r.movido }
-  );
+  const r = retirarEngine(campamento, heroe, columnaDe(estado.ejercitos, heroe.id), params.recurso, params.cantidad, params.lado);
+  return exito(conFondo(estado, r), [
+    evento(ctx, {
+      codigo: 'mercenarios.fondo_refundacion',
+      mensaje: `${heroe.displayName} retira ${r.movido} ${params.recurso} del fondo de refundación.`,
+      payload: { campamentoId: campamento.id, heroeId: heroe.id, faccionId: faccion.id, recurso: params.recurso, cantidad: r.movido, sentido: 'retira' } satisfies PayloadFondoRefundacion,
+    }),
+  ], { movido: r.movido });
 });
 
 export interface PayloadCaravanaDeRefundacion {
@@ -207,27 +224,24 @@ export interface PayloadCaravanaDeRefundacion {
   titularId: string;
 }
 
-/** Compra la Caravana de Fundación al 75 % con el fondo del campamento (Doc 1.9b): nace parada en él, sin destino, con el actor de titular (D10, D11). */
+/** Compra la Caravana de Fundación al 75 % con el fondo de su Facción en el campamento donde está (Doc 1.9b, D39): nace parada en él, sin
+ * destino, con el actor de titular (D10, D11). */
 export const comprarCaravanaDeRefundacion = comando<Record<string, never>, { caravanaId: string }>((estado, _mapa, ctx) => {
   const heroe = exigirJugador(estado, ctx.actor);
-  exigirEnSuCampamento(estado, heroe.id);
+  const campamento = campamentoDondeEsta(estado, heroe.id);
   const faccion = exigirFaccion(estado, faccionDelActor(estado, heroe.id).id);
-  const r = comprarCaravanaEngine(
-    estado.campamentosMercenarios,
-    faccion,
-    estado.asentamientos,
-    estado.caravanas,
-    heroe.id,
-    ctx.instante,
-    ctx.ids.siguiente()
-  );
+  const r = comprarCaravanaEngine(campamento, faccion, estado.asentamientos, estado.caravanas, heroe.id, ctx.instante, ctx.ids.siguiente());
   return exito(
-    { ...estado, campamentosMercenarios: r.campamentos, caravanas: [...estado.caravanas, r.caravana] },
+    {
+      ...estado,
+      campamentosMercenarios: estado.campamentosMercenarios.map((c) => (c.id === campamento.id ? r.campamento : c)),
+      caravanas: [...estado.caravanas, r.caravana],
+    },
     [
       evento(ctx, {
         codigo: 'mercenarios.caravana_refundacion',
-        mensaje: `${faccion.nombre} compra una Caravana de Fundación en ${r.caravana.origenCampamentoId}.`,
-        payload: { caravanaId: r.caravana.id, campamentoId: r.caravana.origenCampamentoId!, faccionId: faccion.id, titularId: heroe.id } satisfies PayloadCaravanaDeRefundacion,
+        mensaje: `${faccion.nombre} compra una Caravana de Fundación en ${campamento.id}.`,
+        payload: { caravanaId: r.caravana.id, campamentoId: campamento.id, faccionId: faccion.id, titularId: heroe.id } satisfies PayloadCaravanaDeRefundacion,
       }),
     ],
     { caravanaId: r.caravana.id }

@@ -26,6 +26,7 @@ import { avanzarEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
 import { sinPrestamosAjenos } from './reclutamientoMercenario';
+import { avanzarCaravanasDeCampamento } from './refundacion';
 import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
 import { cerrarDependientesDeRuina } from './ruina';
@@ -385,8 +386,20 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   });
   eventosDominio.push(...comoEventosDominio(trasTecnologia.eventos, contexto));
 
+  // La Caravana de Fundación de un campamento: sin su titular vuelve sola, al llegar se desarma, y suelta caduca (D13, D14, D40, D68).
+  const trasCaravanasDeCampamento = avanzarCaravanasDeCampamento(
+    trasEjercitos.caravanas,
+    trasEjercitos.ejercitos,
+    heroes,
+    faccionesFinal,
+    trasReposicion.campamentos,
+    mapa,
+    instante
+  );
+  heroes = trasCaravanasDeCampamento.heroes;
+  eventosDominio.push(...comoEventosDominio(trasCaravanasDeCampamento.eventos, contexto));
   // La tropa prestada de un campamento donde ya no reside, fuera (D45).
-  const sinPrestamos = sinPrestamosAjenos(heroes, trasEjercitos.ejercitos, trasEjercitos.caravanas, trasReposicion.campamentos);
+  const sinPrestamos = sinPrestamosAjenos(heroes, trasCaravanasDeCampamento.ejercitos, trasCaravanasDeCampamento.caravanas, trasReposicion.campamentos);
   heroes = sinPrestamos.heroes;
 
   return {

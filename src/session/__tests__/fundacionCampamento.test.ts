@@ -11,6 +11,9 @@ import { salirDelCampamento } from '../comandos/presencia';
 import { aportarARefundacion, comprarCaravanaDeRefundacion } from '../comandos/mercenarios';
 import { adjuntarCaravana } from '../comandos/ejercitos';
 import { fundar } from '../comandos/expansion';
+import { desconectarse } from '../comandos/presencia';
+import { responderSolicitud, solicitarIngreso } from '../comandos/ingresoEnFaccion';
+import { PRESENCIA } from '../../constants';
 
 const AVATAR = { cabezaId: '', peloId: '', barbaId: '', cejasId: '' };
 
@@ -22,7 +25,7 @@ function conCaravanaComprada() {
   const faccionId = sesion0.ejecutar(crearFaccion, { nombre: 'Micenas' }, opc).datos!.faccionId;
   const p = sesion0.exportar();
   const sesion = GameSession.importar({ ...p, state: { ...p.state, heroes: p.state.heroes.map((h) => (h.id === heroeId ? { ...h, almacenPersonal: costoRefundacion() } : h)) } });
-  for (const [recurso, cantidad] of Object.entries(costoRefundacion())) sesion.ejecutar(aportarARefundacion, { recurso, cantidad }, opc);
+  for (const [recurso, cantidad] of Object.entries(costoRefundacion())) sesion.ejecutar(aportarARefundacion, { recurso, cantidad, lado: 'almacen' }, opc);
   const caravanaId = sesion.ejecutar(comprarCaravanaDeRefundacion, {}, opc).datos!.caravanaId;
   const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc).datos!.ejercitoId;
   return { sesion, heroeId, faccionId, caravanaId, ejercitoId, opc };
@@ -71,5 +74,30 @@ describe('fundar con la caravana de un campamento', () => {
     sesion.ejecutar(adjuntarCaravana, { ejercitoId, caravanaId, heroeId }, opc);
     const cerca = aDistancia(sesion, ejercitoId, MERCENARIOS.radioExclusionFundar - 20);
     expect(cerca.ejecutar(fundar, {}, opc).ok).toBe(false);
+  });
+});
+
+describe('sin su titular (D13, D40)', () => {
+  it('si el titular sale del mundo, vuelve sola, y otro ciudadano de su Facción la reclama por el camino', () => {
+    const base = conCaravanaComprada();
+    base.sesion.ejecutar(adjuntarCaravana, { ejercitoId: base.ejercitoId, caravanaId: base.caravanaId, heroeId: base.heroeId }, base.opc);
+    const sesion = aDistancia(base.sesion, base.ejercitoId, 300);
+    // Un segundo ciudadano, aceptado por el Rey (el titular), con su columna fuera.
+    const otro = sesion.ejecutar(crearHeroe, { displayName: 'Bea', campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar: AVATAR }, { actor: 'j2' }).datos!.heroeId;
+    sesion.ejecutar(solicitarIngreso, { faccionId: base.faccionId }, { actor: otro });
+    sesion.ejecutar(responderSolicitud, { faccionId: base.faccionId, heroeId: otro, aceptar: true }, base.opc);
+    const suEjercito = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: otro, escuadronIds: [], carga: {} }, { actor: otro }).datos!.ejercitoId;
+    expect(sesion.ejecutar(adjuntarCaravana, { ejercitoId: suEjercito, caravanaId: base.caravanaId, heroeId: otro }, { actor: otro }).ok, 'la lleva su titular').toBe(false);
+
+    sesion.ejecutar(desconectarse, { heroeId: base.heroeId }, base.opc);
+    for (let i = 0; i <= Math.ceil(PRESENCIA.retardoDesconexionMs / 60_000) + 1; i++) sesion.avanzarTick();
+    const caravana = sesion.getState().caravanas.find((c) => c.id === base.caravanaId)!;
+    expect(caravana.estado).toBe('retornando');
+
+    // Lleva su columna adonde va la caravana y la reclama.
+    const p = sesion.exportar();
+    const alli = GameSession.importar({ ...p, state: { ...p.state, ejercitos: p.state.ejercitos.map((e) => (e.id === suEjercito ? { ...e, posicionActual: caravana.posicionActual } : e)) } });
+    expect(alli.ejecutar(adjuntarCaravana, { ejercitoId: suEjercito, caravanaId: base.caravanaId, heroeId: otro }, { actor: otro }).ok).toBe(true);
+    expect(alli.getState().caravanas.find((c) => c.id === base.caravanaId)).toMatchObject({ estado: 'adjunta', titularId: otro });
   });
 });
