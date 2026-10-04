@@ -389,8 +389,6 @@ export interface Heroe {
   cupoCampamento?: { dia: number; comprado: Record<string, number> };
   /** Cuándo recogió la última ración gratis de su campamento (D24): se rellena cada `MERCENARIOS.racion.cadaMinutos`. */
   racionEn?: Instante;
-  /** Lo que debe al campamento por reponer su tropa prestada (D25b): se cobra del botín. */
-  deudaPrestamo?: number;
   /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
    * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un id sin registro en
    * `GameSessionState.heroes` (los fundadores de los escenarios de batch) usa `LIDERAZGO.base`. */

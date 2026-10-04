@@ -170,6 +170,7 @@ la desconexión: se hace **inútil para huir**.
 | D76 | **Salir de su campamento de residencia**: elige la tropa (la suya y la prestada) y lo que carga en el carro desde su almacén personal; la columna aparece en la puerta. **Entrar en él**: la columna se deshace, la tropa queda en el campamento y el carro se vacía en el almacén personal; **lo que pase del tope se queda en el carro**. |
 | D77 | **Cualquier héroe puede entrar en cualquier campamento** (enclave neutral), como en un asentamiento que no es el suyo: entra **con su columna**, y al salir elige solo entre las unidades que trajo y lo que lleva en el carro. |
 | D78 | **Protección (M4)**: a menos de 60 de un campamento nadie inicia un combate, ni jugadores ni bandidos. |
+| D80 | **El préstamo es gratis, al pedirlo y al reponerlo, y sin deuda** (corrige D25b y el préstamo del §8.1). El residente elige **una, dos o las tres** tropas de leva comunal (milicia de lanceros, leñadores, granjeros), una escuadra de cada. Es la forma fácil de tener tropa al principio y aprender a usarla antes de tener la propia. |
 | D79 | **Contador doble (M3)**: cada campamento guarda cuántos lo eligieron como inicial, además de sus residentes actuales; la pantalla de elección muestra los dos. |
 
 ## 3. Lo que ya existe y se reutiliza (medido en el código)
@@ -299,8 +300,8 @@ una décima parte acampada (Doc 5.13). Consecuencias:
 3. ~~**Economía del residente**~~ **Hecho** (`db99a45`, `2b71510` y el del préstamo): pilas de madera, piedra y trigo
    que se reponen solas (el comercio del mundo es cero al empezar) y cupo diario; trigo para repostar en cualquier
    campamento; ración de 60 al salir cada 30 min, que vuelve al campamento y no se guarda; préstamo de una escuadra de
-   leva comunal con reposición a deuda, retirada por el tick al dejar de residir. **Falta**: cobrar la deuda del botín
-   (paso 4) y que la pila de trigo (300) se calibre.
+   leva comunal por tropa, hasta las tres, gratis al pedir y al reponer (D80), retirada por el tick al dejar de residir.
+   **Falta**: que la pila de trigo (300) se calibre.
 4. **Bandidos unificados por niveles** (D21, D22, D26-D28, D37, D42) y **alijos** (D29).
 5. **Ingreso con lista de solicitantes del Rey** (sustituye `unirseAFaccion`); **eliminar `comprarCasa`**.
 6. **Fundación única** (D30): caravana de campamento sin destino, origen = campamento (atacable, D36; vuelve a él,
@@ -385,7 +386,7 @@ Propuesta:
 - **Rendimientos decrecientes (D26)**: botín completo en las **8 primeras** destrucciones de las últimas 24 h; luego
   −15 % por cada una; **a partir de la 14ª, solo experiencia.** Las 8 h de D38 repartidas en 2 días (≈ 4 h/día,
   8 salidas) quedan dentro del tramo completo; el que juega 12 h seguidas no va 3 veces más rápido.
-- **Tropa prestada (D25, D45)**: **15 milicias de lanceros** (poder ≈ 30) contra un nivel 1 de 20: gana casi
+- **Tropa prestada (D25, D45)** — *corregido por D80: gratis, sin deuda, hasta una escuadra de cada tropa de leva*: **15 milicias de lanceros** (poder ≈ 30) contra un nivel 1 de 20: gana casi
   siempre, con bajas. **Reposición: 1 oro por unidad** (lo mismo que un escalón 1 de `RECLUTAMIENTO_ORO_POR_ESCALON`).
   **Deuda**: el préstamo en sí no cuesta; solo las reposiciones, descontadas del botín. Tope de deuda **30 oro**:
   por encima, el campamento no repone hasta que se salde.

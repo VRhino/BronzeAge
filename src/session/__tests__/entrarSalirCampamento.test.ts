@@ -131,45 +131,45 @@ describe('la ración gratis del residente (D24, D50)', () => {
   });
 });
 
-describe('la tropa prestada (D25, D45)', () => {
-  const prestadaDe = (h: Heroe) => h.escuadrones.find((e) => e.prestada);
+describe('la tropa prestada (D25, D45, D80)', () => {
+  const prestadas = (h: Heroe) => h.escuadrones.filter((e) => e.prestada);
 
-  it('se pide dentro: leva comunal, una a la vez, y no gana experiencia', () => {
-    const { sesion, heroe, opc } = nacido();
-    expect(sesion.ejecutar(pedirPrestamo, { tropaId: 'hoplitas_ciudadanos' }, opc).ok, 'solo leva comunal').toBe(false);
-    expect(sesion.ejecutar(pedirPrestamo, { tropaId: 'milicia_lanceros' }, opc).ok).toBe(true);
-    expect(prestadaDe(heroe())).toMatchObject({ tropaId: 'milicia_lanceros', cantidad: MERCENARIOS.prestamo.unidades, prestada: { campamentoId: 'mercenarios-0' } });
-    expect(sesion.ejecutar(pedirPrestamo, { tropaId: 'granjeros' }, opc).ok, 'una a la vez').toBe(false);
-    expect(conExperiencia(prestadaDe(heroe())!, 100)).toEqual(prestadaDe(heroe()));
+  it('se piden dentro, gratis, una, dos o las tres de leva comunal; no ganan experiencia', () => {
+    const { sesion, heroe, opc } = nacido(() => ({ almacenPersonal: { oro: 7 } }));
+    expect(sesion.ejecutar(pedirPrestamo, { tropaIds: ['hoplitas_ciudadanos'] }, opc).ok, 'solo leva comunal').toBe(false);
+    expect(sesion.ejecutar(pedirPrestamo, { tropaIds: ['milicia_lanceros', 'lenadores', 'granjeros'] }, opc).ok).toBe(true);
+    expect(prestadas(heroe()).map((e) => [e.tropaId, e.cantidad])).toEqual([
+      ['milicia_lanceros', MERCENARIOS.prestamo.unidades],
+      ['lenadores', MERCENARIOS.prestamo.unidades],
+      ['granjeros', MERCENARIOS.prestamo.unidades],
+    ]);
+    expect(heroe().almacenPersonal, 'no cuesta nada').toEqual({ oro: 7 });
+    expect(sesion.ejecutar(pedirPrestamo, { tropaIds: ['granjeros'] }, opc).ok, 'la misma tropa, una vez').toBe(false);
+    expect(conExperiencia(prestadas(heroe())[0]!, 100)).toEqual(prestadas(heroe())[0]);
   });
 
-  it('se repone a deuda, hasta la deuda máxima', () => {
+  it('se reponen gratis hasta su tamaño', () => {
     const { sesion, heroeId, opc } = nacido();
-    sesion.ejecutar(pedirPrestamo, { tropaId: 'milicia_lanceros' }, opc);
-    const mermada = (s: GameSession, cantidad: number, deuda = 0) => {
-      const p = s.exportar();
-      return GameSession.importar({
-        ...p,
-        state: {
-          ...p.state,
-          heroes: p.state.heroes.map((h) => (h.id === heroeId ? { ...h, deudaPrestamo: deuda, escuadrones: h.escuadrones.map((e) => (e.prestada ? { ...e, cantidad } : e)) } : h)),
-        },
-      });
-    };
-    const tras = mermada(sesion, 5);
-    expect(tras.ejecutar(reponerPrestamo, {}, opc).datos).toEqual({ repuestas: 10, deuda: 10 * MERCENARIOS.prestamo.oroPorUnidad });
-    expect(mermada(sesion, 5, MERCENARIOS.prestamo.deudaMaxima - 1).ejecutar(reponerPrestamo, {}, opc).ok, 'por encima del tope').toBe(false);
+    sesion.ejecutar(pedirPrestamo, { tropaIds: ['milicia_lanceros', 'granjeros'] }, opc);
+    const p = sesion.exportar();
+    const mermada = GameSession.importar({
+      ...p,
+      state: { ...p.state, heroes: p.state.heroes.map((h) => (h.id === heroeId ? { ...h, escuadrones: h.escuadrones.map((e) => (e.prestada ? { ...e, cantidad: 5 } : e)) } : h)) },
+    });
+    expect(mermada.ejecutar(reponerPrestamo, {}, opc).datos).toEqual({ repuestas: 2 * (MERCENARIOS.prestamo.unidades - 5) });
+    expect(mermada.ejecutar(reponerPrestamo, {}, opc).ok, 'ya completas').toBe(false);
   });
 
-  it('al dejar de residir el campamento la retira, también de la columna', () => {
+  it('al dejar de residir el campamento las retira, también de la columna', () => {
     const { sesion, heroeId, heroe, columna, opc } = nacido();
-    sesion.ejecutar(pedirPrestamo, { tropaId: 'milicia_lanceros' }, opc);
-    sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [`prestada-${heroeId}`], carga: {} }, opc);
-    expect(columna()!.escuadronIds).toEqual([`prestada-${heroeId}`]);
+    sesion.ejecutar(pedirPrestamo, { tropaIds: ['milicia_lanceros'] }, opc);
+    const id = `prestada-${heroeId}-milicia_lanceros`;
+    sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [id], carga: {} }, opc);
+    expect(columna()!.escuadronIds).toEqual([id]);
 
     sesion.ejecutar(residirEnCampamento, { heroeId, campamentoId: 'mercenarios-1' }, opc);
     sesion.avanzarTick();
-    expect(prestadaDe(heroe())).toBeUndefined();
+    expect(prestadas(heroe())).toEqual([]);
     expect(columna()!.escuadronIds).toEqual([]);
   });
 });

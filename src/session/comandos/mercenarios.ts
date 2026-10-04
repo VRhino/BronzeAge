@@ -238,37 +238,32 @@ export const comprarCaravanaDeRefundacion = comando<ParamsComprarCaravanaDeRefun
   );
 });
 
-/** Pedir la tropa prestada del campamento donde reside (D25, D45), estando en él. */
-export const pedirPrestamo = comando<{ tropaId: string }, { escuadronId: string }>((estado, _mapa, ctx, params) => {
+/** Pedir tropa prestada al campamento donde reside (D25, D45, D80), estando en él: una, dos o las tres de leva comunal, gratis. */
+export const pedirPrestamo = comando<{ tropaIds: string[] }, { escuadronIds: string[] }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
   exigirEnSuCampamento(estado, heroe.id);
-  const prestada = pedirPrestamoEngine(estado.campamentosMercenarios, heroe, params.tropaId);
+  const prestadas = pedirPrestamoEngine(estado.campamentosMercenarios, heroe, params.tropaIds);
+  const campamentoId = prestadas[0]!.prestada!.campamentoId;
   return exito(
-    { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? { ...h, escuadrones: [...h.escuadrones, prestada] } : h)) },
+    { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? { ...h, escuadrones: [...h.escuadrones, ...prestadas] } : h)) },
     [
       evento(ctx, {
         codigo: 'mercenarios.prestamo',
-        mensaje: `${prestada.prestada!.campamentoId} presta ${prestada.cantidad} de ${params.tropaId} a ${heroe.displayName}.`,
-        payload: { campamentoId: prestada.prestada!.campamentoId, heroeId: heroe.id, escuadronId: prestada.id, tropaId: params.tropaId },
+        mensaje: `${campamentoId} presta ${prestadas.map((e) => e.tropaId).join(', ')} a ${heroe.displayName}.`,
+        payload: { campamentoId, heroeId: heroe.id, escuadronIds: prestadas.map((e) => e.id), tropaIds: prestadas.map((e) => e.tropaId) },
       }),
     ],
-    { escuadronId: prestada.id }
+    { escuadronIds: prestadas.map((e) => e.id) }
   );
 });
 
-/** Reponer la tropa prestada (D25b): en el campamento o con la columna a su puerta; se debe y se cobra del botín. */
-export const reponerPrestamo = comando<Record<string, never>, { repuestas: number; deuda: number }>((estado, _mapa, ctx) => {
+/** Reponer gratis la tropa prestada (D80): en el campamento o con la columna a su puerta. */
+export const reponerPrestamo = comando<Record<string, never>, { repuestas: number }>((estado, _mapa, ctx) => {
   const heroe = exigirJugador(estado, ctx.actor);
   const r = reponerPrestamoEngine(estado.campamentosMercenarios, heroe, estado.ejercitos);
   return exito(
     { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? r.heroe : h)) },
-    [
-      evento(ctx, {
-        codigo: 'mercenarios.prestamo_repuesto',
-        mensaje: `${heroe.displayName} repone ${r.repuestas} de su tropa prestada; debe ${r.deuda} de oro.`,
-        payload: { heroeId: heroe.id, repuestas: r.repuestas, deuda: r.deuda },
-      }),
-    ],
-    { repuestas: r.repuestas, deuda: r.deuda }
+    [evento(ctx, { codigo: 'mercenarios.prestamo_repuesto', mensaje: `${heroe.displayName} repone ${r.repuestas} de su tropa prestada.`, payload: { heroeId: heroe.id, repuestas: r.repuestas } })],
+    { repuestas: r.repuestas }
   );
 });

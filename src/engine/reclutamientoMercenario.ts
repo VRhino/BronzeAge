@@ -157,52 +157,43 @@ function reponibleAqui(e: Escuadron, campamento: CampamentoMercenarios, ejercito
 }
 
 /**
- * Pedir la tropa prestada del campamento donde reside (D25, D45): una escuadra de leva comunal, gratis, en su campamento. Una a la vez.
+ * Pedir tropa prestada al campamento donde reside (D25, D45, D80): una escuadra de 15 por cada tropa de leva comunal que elija —milicia de
+ * lanceros, leñadores, granjeros; una, dos o las tres—, gratis, en su campamento. Sirve para aprender a usar tropa antes de tener la suya.
  * No es reclutar: la escuadra no es del héroe aunque la mande, y deja de estar disponible si deja de residir aquí.
  */
-export function pedirPrestamo(campamentos: readonly CampamentoMercenarios[], heroe: Heroe, tropaId: string): Escuadron {
+export function pedirPrestamo(campamentos: readonly CampamentoMercenarios[], heroe: Heroe, tropaIds: readonly string[]): Escuadron[] {
   const campamento = campamentoDeResidente(campamentos, heroe.id);
   if (!campamento) throw new MercenariosInvalidoError('Solo se presta tropa a quien reside en el campamento.');
-  const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
-  if (!tropa || tropa.tecnologia !== 'leva_comunal') throw new MercenariosInvalidoError('Solo se presta leva comunal.');
-  if (heroe.escuadrones.some((e) => e.prestada)) throw new MercenariosInvalidoError('Ya tienes tropa prestada.');
-  return {
-    id: `prestada-${heroe.id}`,
-    nombre: `${tropa.nombre} (prestada por ${campamento.id})`,
-    heroeId: heroe.id,
-    origen: poblacionDeTropa(tropa),
-    cantidad: MERCENARIOS.prestamo.unidades,
-    ...PROGRESION_INICIAL,
-    moral: 100,
-    tropaId,
-    contenedor: { tipo: 'campamento' },
-    enGuarnicion: false,
-    prestada: { campamentoId: campamento.id },
-  };
+  if (tropaIds.length === 0) throw new MercenariosInvalidoError('Elige al menos una tropa.');
+  return [...new Set(tropaIds)].map((tropaId) => {
+    const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
+    if (!tropa || tropa.tecnologia !== 'leva_comunal') throw new MercenariosInvalidoError('Solo se presta leva comunal.');
+    if (heroe.escuadrones.some((e) => e.prestada && e.tropaId === tropaId)) throw new MercenariosInvalidoError(`Ya tienes ${tropa.nombre} prestada.`);
+    return {
+      id: `prestada-${heroe.id}-${tropaId}`,
+      nombre: `${tropa.nombre} (prestada por ${campamento.id})`,
+      heroeId: heroe.id,
+      origen: poblacionDeTropa(tropa),
+      cantidad: MERCENARIOS.prestamo.unidades,
+      ...PROGRESION_INICIAL,
+      moral: 100,
+      tropaId,
+      contenedor: { tipo: 'campamento' },
+      enGuarnicion: false,
+      prestada: { campamentoId: campamento.id },
+    };
+  });
 }
 
-/**
- * Reponer la tropa prestada hasta su tamaño (D25b), allí donde está: en el campamento o en la columna a su puerta. Cuesta poco y no se
- * paga ahora: se debe al campamento y se cobra del botín. Por encima de la deuda máxima no repone.
- */
-export function reponerPrestamo(
-  campamentos: readonly CampamentoMercenarios[],
-  heroe: Heroe,
-  ejercitos: readonly Ejercito[]
-): { heroe: Heroe; repuestas: number; deuda: number } {
-  const prestada = heroe.escuadrones.find((e) => e.prestada);
-  if (!prestada) throw new MercenariosInvalidoError('No tienes tropa prestada.');
-  const campamento = campamentos.find((c) => c.id === prestada.prestada!.campamentoId);
-  if (!campamento || !reponibleAqui(prestada, campamento, ejercitos)) throw new MercenariosInvalidoError('Se repone en el campamento, o con la columna a su puerta.');
-  const repuestas = MERCENARIOS.prestamo.unidades - prestada.cantidad;
-  if (repuestas <= 0) throw new MercenariosInvalidoError('La tropa prestada ya está completa.');
-  const deuda = (heroe.deudaPrestamo ?? 0) + repuestas * MERCENARIOS.prestamo.oroPorUnidad;
-  if (deuda > MERCENARIOS.prestamo.deudaMaxima) throw new MercenariosInvalidoError('Debes demasiado al campamento: no repone hasta que lo saldes.');
-  return {
-    heroe: { ...heroe, deudaPrestamo: deuda, escuadrones: heroe.escuadrones.map((e) => (e.id === prestada.id ? { ...e, cantidad: MERCENARIOS.prestamo.unidades } : e)) },
-    repuestas,
-    deuda,
+/** Reponer gratis la tropa prestada hasta su tamaño (D80), la que esté en el campamento o en la columna a su puerta. */
+export function reponerPrestamo(campamentos: readonly CampamentoMercenarios[], heroe: Heroe, ejercitos: readonly Ejercito[]): { heroe: Heroe; repuestas: number } {
+  const aqui = (e: Escuadron) => {
+    const campamento = e.prestada && campamentos.find((c) => c.id === e.prestada!.campamentoId);
+    return !!campamento && reponibleAqui(e, campamento, ejercitos) && e.cantidad < MERCENARIOS.prestamo.unidades;
   };
+  const repuestas = heroe.escuadrones.filter(aqui).reduce((n, e) => n + MERCENARIOS.prestamo.unidades - e.cantidad, 0);
+  if (repuestas === 0) throw new MercenariosInvalidoError('No hay tropa prestada que reponer aquí.');
+  return { heroe: { ...heroe, escuadrones: heroe.escuadrones.map((e) => (aqui(e) ? { ...e, cantidad: MERCENARIOS.prestamo.unidades } : e)) }, repuestas };
 }
 
 /**
