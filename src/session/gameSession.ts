@@ -19,6 +19,7 @@ import { GeneradorIds } from './idGenerator';
 import { anteponerEventos, eventoAdministrativo, instanteDeTick, isoDeInstante, type GameSessionState } from './estado';
 import { avanzarTick } from './comandos/avanzarTick';
 import { mercadoMercenarioInicial } from '../engine/mercadoMercenario';
+import { colocarCampamentosIniciales } from '../engine/mercenarios';
 import {
   ACTOR_SISTEMA,
   type ActorId,
@@ -81,9 +82,10 @@ export class GameSession {
   }
 
   static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesSesion = {}): GameSession {
+    const mapa = generarMapa({ ...MAPA_DEFAULT, seed: config.seed, region: config.region });
     const estado: GameSessionState = {
       gameId,
-      mapa: generarMapa({ ...MAPA_DEFAULT, seed: config.seed, region: config.region }),
+      mapa,
       estadoMapa: crearEstadoMapa(),
       asentamientos: [],
       facciones: [],
@@ -96,7 +98,7 @@ export class GameSession {
       relaciones: [],
       titulos: [],
       campamentosBandidos: [],
-      campamentosMercenarios: [],
+      campamentosMercenarios: colocarCampamentosIniciales(crearMapa(mapa, crearEstadoMapa()), instanteDeTick(0)),
       mercadoMercenario: mercadoMercenarioInicial(instanteDeTick(0)),
       memoriaPorFaccion: {},
       tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),

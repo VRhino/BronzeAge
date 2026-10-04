@@ -1921,14 +1921,15 @@ export const LOGISTICA = {
  * sin calibrar por simulación.
  */
 export const MERCENARIOS = {
-  /** Aparecen donde hay zonas de al menos este número de Facciones distintas a menos de `radioZonas` del punto. */
-  facciones: 2,
-  radioZonas: 150,
-  topePorServidor: 6,
-  /** Entre campamentos. */
-  distanciaMinima: 400,
-  /** Cada cuántos minutos de mundo se busca sitio para uno nuevo (la búsqueda recorre todos los pares de plazas). */
-  cadaMinutos: 60,
+  /** Distancia mínima entre campamentos (D1, §8.2 de Campamentos_Entrada_Fundacion_Definicion): 900 da unos 4 en un
+   * mapa de 2000 —el playtest—; 600, de 6 a 9 para más gente. PLACEHOLDER. */
+  separacion: 900,
+  /** Ningún campamento a menos de esto del borde del mapa: deja sitio a su anillo de bandidos. */
+  margenBorde: 150,
+  /** Puntos al azar que se prueban al colocarlos; caben los que caben. */
+  intentosColocacion: 2000,
+  /** Se mezcla con la seed del mapa: semilla derivada (D35), no consume el RNG de la partida. */
+  salSemilla: 0x6d657263,
   /** Variantes de aspecto, elegidas al nacer: no cambian nada de lo que hace. */
   origenes: 3,
   /** Siempre los tiene; el militar se elige al azar entre `edificiosMilitares`. */
@@ -1937,9 +1938,6 @@ export const MERCENARIOS = {
   /** Preferencia por un bosque: si hay uno a menos de esto del punto, el campamento se pega a su borde. */
   margenBosque: 100,
   pegadoAlBorde: 10,
-  /** Búsqueda de un punto válido (tierra firme) alrededor del ancla, en anillos. */
-  radioBusqueda: 400,
-  pasoBusqueda: 20,
   // --- Reclutamiento (paso 3) ---
   /** Reclutas que da cada vivienda: el tope es viviendas × esto, así que añadir viviendas al layout lo sube solo. */
   poblacionPorVivienda: 50,

@@ -24,7 +24,7 @@ import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
-import { avanzarAparicionMercenarios, reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
+import { reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
 import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
 import { cerrarDependientesDeRuina } from './ruina';
@@ -294,9 +294,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // ya actualizadas.
   const trasSpawnBandidos = avanzarSpawnBandidos(dependientes.campamentosBandidos, zonas, trasExpansion.asentamientos, mapa, instante);
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
-  // Campamentos de mercenarios (Doc 1.9b): el del día 1 y los que aparecen entre Facciones.
-  const trasMercenarios = avanzarAparicionMercenarios(campamentosActuales, trasExpansion.asentamientos, zonas, mapa, instante);
-  eventosDominio.push(...comoEventosDominio(trasMercenarios.eventos, contexto));
   // Los ejércitos entran aquí solo como ESCOLTA: una caravana enganchada se defiende con el poder de su
   // columna y no con la defensa base fija (Doc 5.13.3). El movimiento de los ejércitos sigue después.
   // Con la tropa puesta (`engine/tropa.ts`): la escolta sin héroe y la columna que escolta defienden con su poder.
@@ -330,7 +327,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     zonas,
     red: trasComercio.red,
     heroes,
-    campamentosMercenarios: trasMercenarios.campamentos,
+    campamentosMercenarios: campamentosActuales,
   });
   eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
   heroes = trasEjercitos.heroes;
