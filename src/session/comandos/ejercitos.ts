@@ -6,10 +6,12 @@
 // Llegar no es combatir (Doc 5.12.3-5.12.4): un ejército que llega acampa, y el combate se ordena con `atacar`
 // (`interaccion.ts`) a distancia de choque, también contra una plaza. `iniciarAsedio` sigue vivo como vía directa
 // entre dos asentamientos vecinos, que no exige movilizar.
-import { LOGISTICA } from '../../constants';
+import { LOGISTICA, MERCENARIOS } from '../../constants';
+import { minutos, sumar } from '../../domain/tiempo';
+import { faccionDeCaravana } from '../../engine/expansion';
 import { distancia as distanciaEntre } from '../../world/geometria';
 import { aplicarAjustesReputacion } from '../../engine/reputacion';
-import { aplicarExperiencia } from '../../engine/faccion';
+import { aplicarExperiencia, esCiudadano } from '../../engine/faccion';
 import { EntregaInvalidaError, entregarDesdeCaravanaAdjunta } from '../../engine/trade';
 import {
   cargarCaravanaAdjunta as cargarCaravanaEngine,
@@ -266,9 +268,14 @@ export interface ParamsAdjuntarCaravana {
 export const adjuntarCaravana = comando<ParamsAdjuntarCaravana, void>((estado, _mapa, ctx, params) => {
   const ejercito = exigirEjercito(estado, params.ejercitoId);
   const caravana = exigirCaravana(estado, params.caravanaId);
-  const origen = estado.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
+  // La Caravana de Fundación de un campamento la lleva su titular mientras pueda: es ciudadano de su Facción, está en el mundo y no la
+  // ha dejado volverse sola (D11, D13, D40).
+  const faccionCaravana = faccionDeCaravana(caravana, estado.asentamientos);
+  const titular = caravana.titularId ? estado.heroes.find((h) => h.id === caravana.titularId) : undefined;
+  const vigente =
+    !!titular && !titular.fuera && caravana.estado !== 'retornando' && estado.facciones.some((f) => f.id === faccionCaravana && esCiudadano(f, titular.id));
 
-  const r = adjuntarCaravanaEngine(ejercito, caravana, origen);
+  const r = adjuntarCaravanaEngine(ejercito, caravana, faccionCaravana, { heroeId: params.heroeId, vigente });
   return exito(conCaravana(conEjercito(estado, r.ejercito), r.caravana), [
     evento(ctx, {
       codigo: 'ejercito.caravana_adjuntada',
@@ -291,7 +298,9 @@ export const soltarCaravana = comando<ParamsSoltarCaravana, void>((estado, _mapa
 
   const caravana = exigirCaravana(estado, params.caravanaId);
   const r = soltarCaravanaEngine(ejercito, caravana);
-  return exito(conCaravana(conEjercito(estado, r.ejercito), r.caravana), [
+  // La de un campamento, suelta, vuelve a contar su caducidad (D14).
+  const suelta = r.caravana.titularId ? { ...r.caravana, caducaEn: sumar(ctx.instante, minutos(60 * MERCENARIOS.caducidadCaravanaHoras)) } : r.caravana;
+  return exito(conCaravana(conEjercito(estado, r.ejercito), suelta), [
     evento(ctx, {
       codigo: 'ejercito.caravana_soltada',
       mensaje: `La caravana ${params.caravanaId} se desengancha del ejército ${ejercito.id}.`,

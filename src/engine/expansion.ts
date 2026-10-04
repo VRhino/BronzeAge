@@ -1,4 +1,4 @@
-import type { Asentamiento, Caravana, Faccion, Point } from '../domain/types';
+import type { Asentamiento, CampamentoMercenarios, Caravana, Faccion, Point } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 
@@ -16,7 +16,7 @@ export interface PayloadFundacionFallida {
 }
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
-import { CARAVANA_CATALOGO, EDIFICIO_CATALOGO, FUNDACION } from '../constants';
+import { CARAVANA_CATALOGO, EDIFICIO_CATALOGO, FUNDACION, MERCENARIOS } from '../constants';
 import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { posicionLibreParaFundar } from './zones';
@@ -41,9 +41,9 @@ export function costoCaravanaFundacion(): Partial<Record<string, number>> {
   return costo;
 }
 
-/** Facción dueña de la caravana, resuelta a través de su asentamiento de origen (la propia Caravana no
- * guarda faccionId). Undefined si el origen ya no existe (asentamiento colapsado en tránsito). */
-function faccionDeCaravana(caravana: Caravana, asentamientos: Asentamiento[]): string | undefined {
+/** Facción dueña de la caravana (D48): la que lleva puesta o, si no, la de su asentamiento de origen. Undefined si no lleva y el
+ * origen ya no existe (asentamiento colapsado en tránsito). */
+export function faccionDeCaravana(caravana: Caravana, asentamientos: readonly Asentamiento[]): string | undefined {
   // La comprada en un campamento de mercenarios (Doc 1.9b) no tiene asentamiento de origen: lleva su Facción.
   return caravana.faccionId ?? asentamientos.find((a) => a.id === caravana.origenAsentamientoId)?.faccionId;
 }
@@ -182,6 +182,28 @@ export function desarmarCaravanaFundacion(origen: Asentamiento, caravana: Carava
 }
 
 /**
+ * El único mecanismo de fundación (D30): fundar con una caravana en un punto. Lo llaman el comando `fundar` del titular de una caravana de
+ * campamento y la llegada de la caravana de una plaza a su destino. Además de lo que exige `fundarAsentamiento` (zonas, cima, cupo), el
+ * punto no puede ser agua ni caer a menos de `MERCENARIOS.radioExclusionFundar` de un campamento de mercenarios (D16).
+ */
+export function fundarConCaravana(
+  mapa: Mapa,
+  facciones: Faccion[],
+  faccionId: string,
+  posicion: Point,
+  fundadores: string[],
+  asentamientos: Asentamiento[],
+  campamentos: readonly CampamentoMercenarios[],
+  instante: Instante
+): ReturnType<typeof fundarAsentamiento> {
+  if (mapa.terrenoEn(posicion) === 'agua') throw new FundacionInvalidaError('No se funda sobre el agua.');
+  if (campamentos.some((c) => Math.hypot(c.posicion.x - posicion.x, c.posicion.y - posicion.y) < MERCENARIOS.radioExclusionFundar)) {
+    throw new FundacionInvalidaError('Demasiado cerca de un campamento de mercenarios.');
+  }
+  return fundarAsentamiento(mapa, facciones, faccionId, posicion, fundadores, asentamientos, instante);
+}
+
+/**
  * Avanza las Caravanas de Fundación en tránsito (Doc 1.8): mismo cálculo de movimiento que las caravanas
  * comerciales (`avanzarCaravanas`, engine/trade.ts), pero hacia un punto del mapa en vez de un asentamiento
  * existente. Al llegar, funda el nuevo asentamiento — si por un caso de borde no previsto por el diseño
@@ -193,7 +215,8 @@ export function avanzarCaravanasFundacion(
   mapa: Mapa,
   facciones: Faccion[],
   asentamientos: Asentamiento[],
-  instante: Instante
+  instante: Instante,
+  campamentos: readonly CampamentoMercenarios[] = []
 ): { caravanas: Caravana[]; asentamientos: Asentamiento[]; facciones: Faccion[]; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   const restantes: Caravana[] = [];
@@ -231,13 +254,14 @@ export function avanzarCaravanasFundacion(
     }
 
     try {
-      const resultado = fundarAsentamiento(
+      const resultado = fundarConCaravana(
         mapa,
         faccionesActuales,
         faccionId,
         caravana.destinoPosicion,
         caravana.heroesFundadoresIds ?? [],
         asentamientosActuales,
+        campamentos,
         instante
       );
       asentamientosActuales = [...asentamientosActuales, resultado.asentamiento];

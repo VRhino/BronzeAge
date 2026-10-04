@@ -45,7 +45,7 @@ import {
   quitarDeCola,
   renombrarAsentamiento,
 } from './construccion';
-import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from './expansion';
+import { desarmarCaravanaFundacion, fundar, lanzarCaravanaFundacion } from './expansion';
 import { abandonarRecinto, comprometerRecinto, mejorarRecinto } from './murallas';
 import { solicitarAscenso } from './ascenso';
 import { adoptarTecnologia } from './tecnologia';
@@ -158,6 +158,7 @@ const MANEJADORES = {
   renombrarAsentamiento,
   desarmarCaravanaFundacion,
   lanzarCaravanaFundacion,
+  fundar,
   comprometerRecinto,
   abandonarRecinto,
   solicitarAscenso,

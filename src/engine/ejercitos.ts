@@ -737,25 +737,35 @@ export function unirseAEjercito(
 export function adjuntarCaravana(
   ejercito: Ejercito,
   caravana: Caravana,
-  origen: Asentamiento | undefined
+  /** La Facción de la caravana (`faccionDeCaravana`, D48): solo la engancha un ejército de esa Facción. */
+  faccionCaravana: string | undefined,
+  /** Para la Caravana de Fundación de un campamento (D11, D13): quién engancha y si su titular sigue pudiendo llevarla. */
+  titular?: { heroeId: string; vigente: boolean }
 ): { ejercito: Ejercito; caravana: Caravana } {
   if (ejercito.caravanasAdjuntasIds.includes(caravana.id)) {
     throw new MovilizacionInvalidaError('Esa caravana ya va con este ejército.');
   }
-  if (!origen || origen.faccionId !== ejercito.faccionId) {
+  if (!faccionCaravana || faccionCaravana !== ejercito.faccionId) {
     throw new MovilizacionInvalidaError('La caravana no es de la Facción de este ejército.');
+  }
+  // La de un campamento la lleva su titular; otro ciudadano solo la reclama si la abandonó (D11, D13), también mientras vuelve sola.
+  const deCampamento = caravana.titularId !== undefined;
+  if (deCampamento && titular && titular.heroeId !== caravana.titularId && titular.vigente) {
+    throw new MovilizacionInvalidaError('Esa Caravana de Fundación la lleva su titular.');
   }
   // 'aparcada' (Ocupacion §2.3d): una adjunta que otro ejército dejó en una plaza de la Facción al guarnecer.
   // Cualquier ejército de la Facción puede recogerla — sigue siendo de su origen, no de la plaza anfitriona.
-  if (caravana.estado !== 'disponible' && caravana.estado !== 'aparcada') {
+  const enganchable = caravana.estado === 'disponible' || caravana.estado === 'aparcada' || (deCampamento && caravana.estado === 'retornando');
+  if (!enganchable) {
     throw new MovilizacionInvalidaError('Solo se puede enganchar una caravana disponible o aparcada, no una ya despachada.');
   }
   if (distancia(caravana.posicionActual, ejercito.posicionActual) > LOGISTICA.radioReabastecimiento) {
     throw new MovilizacionInvalidaError('La caravana está demasiado lejos del ejército.');
   }
+  const reclamada = deCampamento && titular ? { titularId: titular.heroeId, caducaEn: undefined, ruta: undefined, progreso: 0 } : {};
   return {
     ejercito: { ...ejercito, caravanasAdjuntasIds: [...ejercito.caravanasAdjuntasIds, caravana.id] },
-    caravana: { ...caravana, estado: 'adjunta', posicionActual: ejercito.posicionActual },
+    caravana: { ...caravana, ...reclamada, estado: 'adjunta', posicionActual: ejercito.posicionActual },
   };
 }
 

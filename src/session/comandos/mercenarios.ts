@@ -11,7 +11,7 @@ import { esCiudadano } from '../../engine/faccion';
 import { comprarEnCampamento as comprarEngine } from '../../engine/mercadoMercenario';
 import { aportarARefundacion as aportarEngine, comprarCaravanaDeRefundacion as comprarCaravanaEngine, retirarDeRefundacion as retirarEngine } from '../../engine/refundacion';
 import { ALMACEN_PERSONAL } from '../../constants';
-import type { CampamentoMercenarios, Point } from '../../domain/types';
+import type { CampamentoMercenarios } from '../../domain/types';
 import { exito } from './tipos';
 import { comando, exigirFaccion, exigirJugador, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
@@ -200,19 +200,15 @@ export const retirarDeRefundacion = comando<ParamsFondoRefundacion, { movido: nu
   );
 });
 
-export interface ParamsComprarCaravanaDeRefundacion {
-  destino: Point;
-}
-
 export interface PayloadCaravanaDeRefundacion {
   caravanaId: string;
   campamentoId: string;
   faccionId: string;
-  destino: Point;
+  titularId: string;
 }
 
-/** Compra la Caravana de Fundación al 75 % con el fondo del campamento (Doc 1.9b): sale de él hacia `destino`, con el actor de fundador. */
-export const comprarCaravanaDeRefundacion = comando<ParamsComprarCaravanaDeRefundacion, { caravanaId: string }>((estado, mapa, ctx, params) => {
+/** Compra la Caravana de Fundación al 75 % con el fondo del campamento (Doc 1.9b): nace parada en él, sin destino, con el actor de titular (D10, D11). */
+export const comprarCaravanaDeRefundacion = comando<Record<string, never>, { caravanaId: string }>((estado, _mapa, ctx) => {
   const heroe = exigirJugador(estado, ctx.actor);
   exigirEnSuCampamento(estado, heroe.id);
   const faccion = exigirFaccion(estado, faccionDelActor(estado, heroe.id).id);
@@ -221,9 +217,8 @@ export const comprarCaravanaDeRefundacion = comando<ParamsComprarCaravanaDeRefun
     faccion,
     estado.asentamientos,
     estado.caravanas,
-    mapa,
     heroe.id,
-    params.destino,
+    ctx.instante,
     ctx.ids.siguiente()
   );
   return exito(
@@ -231,8 +226,8 @@ export const comprarCaravanaDeRefundacion = comando<ParamsComprarCaravanaDeRefun
     [
       evento(ctx, {
         codigo: 'mercenarios.caravana_refundacion',
-        mensaje: `${faccion.nombre} compra una Caravana de Fundación en ${r.caravana.origenCampamentoId} hacia (${Math.round(params.destino.x)}, ${Math.round(params.destino.y)}).`,
-        payload: { caravanaId: r.caravana.id, campamentoId: r.caravana.origenCampamentoId!, faccionId: faccion.id, destino: params.destino } satisfies PayloadCaravanaDeRefundacion,
+        mensaje: `${faccion.nombre} compra una Caravana de Fundación en ${r.caravana.origenCampamentoId}.`,
+        payload: { caravanaId: r.caravana.id, campamentoId: r.caravana.origenCampamentoId!, faccionId: faccion.id, titularId: heroe.id } satisfies PayloadCaravanaDeRefundacion,
       }),
     ],
     { caravanaId: r.caravana.id }

@@ -885,6 +885,12 @@ export interface Caravana {
   destinoPosicion?: Point;
   /** Caravana de Fundación: ciudadanos ya existentes de la Facción que fundarán el nuevo asentamiento al llegar. */
   heroesFundadoresIds?: string[];
+  /** Caravana de Fundación comprada en un campamento (D10-D14, D34): quien la conduce y funda (el titular; otro ciudadano de su Facción
+   * la reclama si la abandona), lo que gastó del fondo cada aportante (para devolvérselo si caduca o vuelve sin nadie) y cuándo caduca
+   * si nadie la lleva enganchada. */
+  titularId?: string;
+  aportes?: Record<string, Record<string, number>>;
+  caducaEn?: Instante;
   /** Flota de caravanas propias (ampliación de comercio, a petición del usuario): solo para `tipo: 'comercial'`
    * construidas vía Mercado (ver `construirCaravanaComercial`, engine/trade.ts) — un activo persistente y con
    * costo, no un objeto efímero. 'disponible' = construida, parada en `origenAsentamientoId`, sin asignar.

@@ -164,7 +164,7 @@ describe('la caravana aparcada — intercambio con el almacén y las dos salidas
 
   it('una caravana aparcada puede engancharse a CUALQUIER ejército de la Facción', () => {
     const ej = ejercitoDe('faccion-1', anfitriona.posicion, [esc('j9')]);
-    const r = adjuntarCaravana(ej, aparcada(), origen);
+    const r = adjuntarCaravana(ej, aparcada(), origen.faccionId);
     expect(r.caravana.estado).toBe('adjunta');
     expect(r.ejercito.caravanasAdjuntasIds).toContain('car-x');
   });

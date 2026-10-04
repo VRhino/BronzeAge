@@ -725,7 +725,7 @@ describe('caravanas adjuntas', () => {
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
 
     expect(capacidadCargaDe(e, [])).toBe(LOGISTICA.capacidadCarroPorJugador);
-    const conCaravana = adjuntarCaravana(e, c, asentamiento).ejercito;
+    const conCaravana = adjuntarCaravana(e, c, asentamiento.faccionId).ejercito;
     expect(capacidadCargaDe(conCaravana, [c])).toBe(LOGISTICA.capacidadCarroPorJugador + capacidadCaravana(c));
   });
 
@@ -735,7 +735,7 @@ describe('caravanas adjuntas', () => {
     expect(velocidadDeEjercito(ligero)).toBe(20);
 
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
-    const conCaravana = { ...ligero, ...adjuntarCaravana(ligero, c, asentamiento).ejercito };
+    const conCaravana = { ...ligero, ...adjuntarCaravana(ligero, c, asentamiento.faccionId).ejercito };
     expect(velocidadDeEjercito(conCaravana, [c])).toBe(velocidadCaravana(c));
     expect(velocidadDeEjercito(conCaravana, [c]), 'y eso le quita la capacidad de cazar una comercial').toBeLessThan(20);
   });
@@ -746,20 +746,20 @@ describe('caravanas adjuntas', () => {
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
     const ajeno: Asentamiento = { ...asentamiento, faccionId: 'faccion-2' };
 
-    expect(() => adjuntarCaravana(e, c, ajeno)).toThrow(MovilizacionInvalidaError);
+    expect(() => adjuntarCaravana(e, c, ajeno.faccionId)).toThrow(MovilizacionInvalidaError);
     expect(() => adjuntarCaravana(e, c, undefined)).toThrow(MovilizacionInvalidaError);
-    expect(() => adjuntarCaravana(e, { ...c, estado: 'en_transito' }, asentamiento)).toThrow(MovilizacionInvalidaError);
+    expect(() => adjuntarCaravana(e, { ...c, estado: 'en_transito' }, asentamiento.faccionId)).toThrow(MovilizacionInvalidaError);
     const lejos = { x: asentamiento.posicion.x + LOGISTICA.radioReabastecimiento * 3, y: asentamiento.posicion.y };
-    expect(() => adjuntarCaravana(e, { ...c, posicionActual: lejos }, asentamiento)).toThrow(MovilizacionInvalidaError);
+    expect(() => adjuntarCaravana(e, { ...c, posicionActual: lejos }, asentamiento.faccionId)).toThrow(MovilizacionInvalidaError);
 
-    const yaEnganchada = adjuntarCaravana(e, c, asentamiento).ejercito;
-    expect(() => adjuntarCaravana(yaEnganchada, c, asentamiento)).toThrow(MovilizacionInvalidaError);
+    const yaEnganchada = adjuntarCaravana(e, c, asentamiento.faccionId).ejercito;
+    expect(() => adjuntarCaravana(yaEnganchada, c, asentamiento.faccionId)).toThrow(MovilizacionInvalidaError);
   });
 
   it('soltarla la deja donde está la columna, y rechaza soltar la que no lleva', () => {
     const { asentamiento } = base();
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
-    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0), c, asentamiento).ejercito;
+    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0), c, asentamiento.faccionId).ejercito;
 
     expect(soltarCaravana(e, c).ejercito.caravanasAdjuntasIds).toEqual([]);
     expect(() => soltarCaravana(e, { ...c, id: 'no-existe' })).toThrow(MovilizacionInvalidaError);
@@ -768,7 +768,7 @@ describe('caravanas adjuntas', () => {
   it('viajan CON el ejército: su posición sigue a la columna', () => {
     const { asentamiento } = base();
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
-    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 500), c, asentamiento).ejercito;
+    const e = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 500), c, asentamiento.faccionId).ejercito;
 
     const r = avanzar([e], [asentamiento], { caravanas: [c] });
 
@@ -785,7 +785,7 @@ describe('caravanas adjuntas', () => {
       almacen: { ...asentamiento.almacen, trigo: { cantidad: 100000, capacidad: 100000 } },
     };
     const c = caravanaDe('c1', rico.id, rico.posicion);
-    const e = adjuntarCaravana({ ...ejercitoDe(rico, [escuadron('a', 'milicia_lanceros')], 0), estado: 'estacionado' as const }, c, rico).ejercito;
+    const e = adjuntarCaravana({ ...ejercitoDe(rico, [escuadron('a', 'milicia_lanceros')], 0), estado: 'estacionado' as const }, c, rico.faccionId).ejercito;
 
     const r = avanzar([e], [rico], { caravanas: [c] });
 
@@ -798,7 +798,7 @@ describe('caravanas adjuntas', () => {
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
     // Sin nadie dentro: la columna se disuelve en este tick (Doc 5.13.4). Antes bastaba con que sus
     // escuadrones estuvieran a cero, y eso borraba del mapa a un jugador que seguía ahí.
-    const conCaravana = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), c, asentamiento).ejercito;
+    const conCaravana = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros', 0)], 0), c, asentamiento.faccionId).ejercito;
     const e = { ...conCaravana, participantes: [] };
 
     const r = avanzar([e], [asentamiento], { caravanas: [c] });
@@ -829,7 +829,7 @@ describe('escolta: cargar y entregar a mano', () => {
     // debajo del ejército que la lleva.
     const { asentamiento } = base();
     const c = caravanaDe('c1', asentamiento.id, asentamiento.posicion);
-    const r = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0), c, asentamiento);
+    const r = adjuntarCaravana(ejercitoDe(asentamiento, [escuadron('a', 'milicia_lanceros')], 0), c, asentamiento.faccionId);
 
     expect(r.caravana.estado).toBe('adjunta');
     expect(soltarCaravana(r.ejercito, r.caravana).caravana.estado, 'soltarla la devuelve al pool').toBe('disponible');
@@ -842,7 +842,7 @@ describe('escolta: cargar y entregar a mano', () => {
       almacen: { ...asentamiento.almacen, piedra: { cantidad: 300, capacidad: 1000 } },
     };
     const c = caravanaDe('c1', rico.id, rico.posicion);
-    const { ejercito, caravana } = adjuntarCaravana(ejercitoDe(rico, [escuadron('a', 'milicia_lanceros')], 0), c, rico);
+    const { ejercito, caravana } = adjuntarCaravana(ejercitoDe(rico, [escuadron('a', 'milicia_lanceros')], 0), c, rico.faccionId);
 
     const r = cargarCaravanaAdjunta(ejercito, caravana, rico, 'piedra', 120, []);
 
@@ -858,7 +858,7 @@ describe('escolta: cargar y entregar a mano', () => {
       almacen: { ...asentamiento.almacen, piedra: { cantidad: 10, capacidad: 1000 } },
     };
     const c = caravanaDe('c1', conPoco.id, conPoco.posicion);
-    const { ejercito, caravana } = adjuntarCaravana(ejercitoDe(conPoco, [escuadron('a', 'milicia_lanceros')], 0), c, conPoco);
+    const { ejercito, caravana } = adjuntarCaravana(ejercitoDe(conPoco, [escuadron('a', 'milicia_lanceros')], 0), c, conPoco.faccionId);
 
     expect(cargarCaravanaAdjunta(ejercito, caravana, conPoco, 'piedra', 999, []).cargado, 'tope por stock').toBe(10);
 

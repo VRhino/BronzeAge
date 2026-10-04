@@ -239,6 +239,8 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => puedeFundarEn(estado, heroeId, params.faccionId),
   },
+  // Fundar con la caravana de un campamento: el titular, por sí mismo; quién es el titular lo mira el comando (D11).
+  fundar: { rolesPermitidos: ['jugador'] },
   lanzarCaravanaFundacion: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => esFaccionDelAsentamiento(estado, heroeId, params.origenAsentamientoId),

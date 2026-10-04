@@ -1933,6 +1933,10 @@ export const MERCENARIOS = {
   racion: { trigo: 60, cadaMinutos: 30 },
   /** Tropa prestada al residente (D25, D45, D80): escuadras de leva comunal de estas unidades, gratis al pedirlas y al reponerlas. PLACEHOLDER. */
   prestamo: { unidades: 15 },
+  /** Ningún asentamiento se funda a menos de esto de un campamento (D16, §8.2): protección (60) + zona inicial (30) + margen. */
+  radioExclusionFundar: 100,
+  /** Horas que aguanta la Caravana de Fundación de un campamento sin que nadie la lleve enganchada antes de caducar (D14). PLACEHOLDER. */
+  caducidadCaravanaHoras: 48,
   /** A menos de esto de un campamento nadie inicia un combate, ni jugadores ni bandidos (M4/D78, §8.2). PLACEHOLDER. */
   radioProteccion: 60,
   /** Variantes de aspecto, elegidas al nacer: no cambian nada de lo que hace. */

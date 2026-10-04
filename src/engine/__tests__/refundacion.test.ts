@@ -2,13 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, CampamentoMercenarios, Caravana, Faccion, Heroe } from '../../domain/types';
 import { MERCENARIOS } from '../../constants';
-import { avanzarCaravanasFundacion, costoCaravanaFundacion } from '../expansion';
+import { costoCaravanaFundacion } from '../expansion';
 import { MercenariosInvalidoError } from '../mercenarios';
 import { aportarARefundacion, comprarCaravanaDeRefundacion, costoRefundacion, fondoDeFaccion, retirarDeRefundacion } from '../refundacion';
-import { crearFacciones, crearMapaDeterminista, heroeDePrueba, instanteDeTest } from './fixtures';
+import { crearFacciones, heroeDePrueba, instanteDeTest } from './fixtures';
 
-const mapa = crearMapaDeterminista(42);
-const DESTINO = { x: 430, y: 430 };
 
 const campamento = (extra: Partial<CampamentoMercenarios> = {}): CampamentoMercenarios =>
   ({
@@ -79,20 +77,23 @@ describe('comprar la Caravana de Fundación', () => {
     }
     return campamento({ fondos: { h1, h2 } });
   };
-  const compra = (c: CampamentoMercenarios, extra: { f?: Faccion; asentamientos?: Asentamiento[]; caravanas?: Caravana[]; destino?: { x: number; y: number } } = {}) =>
-    comprarCaravanaDeRefundacion([c], extra.f ?? faccion(), extra.asentamientos ?? [], extra.caravanas ?? [], mapa, 'h1', extra.destino ?? DESTINO, 0);
+  const compra = (c: CampamentoMercenarios, extra: { f?: Faccion; asentamientos?: Asentamiento[]; caravanas?: Caravana[] } = {}) =>
+    comprarCaravanaDeRefundacion([c], extra.f ?? faccion(), extra.asentamientos ?? [], extra.caravanas ?? [], 'h1', instanteDeTest(0), 0);
 
-  it('sale del campamento con la Facción en sí misma, gasta el fondo y deja el sobrante', () => {
+  it('nace parada en el campamento, sin destino, con su titular, su Facción y quién aportó qué; deja el sobrante (D10, D11, D34)', () => {
     const r = compra(fondoCompleto());
     const c = r.caravana;
 
     expect(c.tipo).toBe('construccion');
     expect(c.origenCampamentoId).toBe('merc-1');
     expect(c.faccionId).toBe('f');
-    expect(c.destinoPosicion).toEqual(DESTINO);
-    expect(c.heroesFundadoresIds).toEqual(['h1']);
+    expect(c.destinoPosicion).toBeUndefined();
+    expect(c.estado).toBe('disponible');
+    expect(c.titularId).toBe('h1');
     expect(c.posicionActual).toEqual({ x: 400, y: 400 });
-    expect(c.ruta?.length).toBeGreaterThan(1);
+    expect(c.caducaEn).toBe(instanteDeTest(MERCENARIOS.caducidadCaravanaHoras * 60));
+    // Lo gastado, por aportante: entre los dos, el coste exacto.
+    for (const [recurso, n] of Object.entries(costo)) expect((c.aportes!['h1']?.[recurso] ?? 0) + (c.aportes!['h2']?.[recurso] ?? 0)).toBe(n);
     const sobra = Object.values(r.campamentos[0]!.fondos).flatMap((f) => Object.values(f)).reduce((a, b) => a + b, 0);
     expect(sobra, 'solo queda lo que sobraba').toBe(3 * Object.keys(costo).length);
   });
@@ -107,24 +108,10 @@ describe('comprar la Caravana de Fundación', () => {
     expect(sobra, 'de la Facción solo queda el sobrante').toBe(3 * Object.keys(costo).length);
   });
 
-  it('rechaza si el fondo no cubre el coste, si la Facción tiene plaza, si ya hay una caravana en camino o el destino está reclamado', () => {
+  it('rechaza si el fondo no cubre el coste, si la Facción tiene plaza o si ya tiene una Caravana de Fundación', () => {
     expect(() => compra(campamento({ fondos: { h1: { madera: 1 } } }))).toThrow(MercenariosInvalidoError);
     expect(() => compra(fondoCompleto(), { asentamientos: [plaza('f')] })).toThrow(MercenariosInvalidoError);
     const enCamino = { tipo: 'construccion', faccionId: 'f' } as unknown as Caravana;
     expect(() => compra(fondoCompleto(), { caravanas: [enCamino] })).toThrow(MercenariosInvalidoError);
-    const reclamado = { ...plaza('g'), posicion: DESTINO, radioPotencial: 100 } as Asentamiento;
-    expect(() => compra(fondoCompleto(), { asentamientos: [reclamado] })).toThrow(MercenariosInvalidoError);
-  });
-
-  it('viaja y funda como cualquier otra: la Facción sale de la propia caravana, sin asentamiento de origen', () => {
-    const { caravana } = compra(fondoCompleto());
-    let r = { caravanas: [{ ...caravana, progreso: 0.999999 }] as Caravana[], asentamientos: [] as Asentamiento[], facciones: [faccion({ ciudadanosIds: ['h1'] })], eventos: [] as unknown[] };
-    for (let t = 1; t < 400 && r.asentamientos.length === 0; t++) {
-      r = avanzarCaravanasFundacion(r.caravanas, mapa, r.facciones, r.asentamientos, instanteDeTest(t));
-    }
-    expect(r.asentamientos).toHaveLength(1);
-    expect(r.asentamientos[0]!.faccionId).toBe('f');
-    expect(r.asentamientos[0]!.heroesFundadoresIds).toEqual(['h1']);
-    expect(r.caravanas).toEqual([]);
   });
 });

@@ -277,7 +277,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
 
   // Caravanas de Fundación (Doc 1.8): expanden una Facción más allá de su primer asentamiento — se avanzan
   // aparte de las comerciales (destino es un punto del mapa, no un asentamiento existente).
-  const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, instante);
+  const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, instante, campamentosActuales);
   eventosDominio.push(...comoEventosDominio(trasExpansion.eventos, contexto));
   // Quien funda una plaza pasa a residir en ella: deja el campamento de mercenarios donde residiera (Doc 1.9b, 2.5).
   const yaExistian = new Set(trasComercio.asentamientos.map((a) => a.id));

@@ -256,11 +256,11 @@ describe('refundar desde el campamento', () => {
     }
     expect(campamentoDe(sesion, 'merc-1').fondos[fundador]).toEqual(costo);
 
-    const r = sesion.ejecutar(comprarCaravanaDeRefundacion, { destino: { x: 430, y: 430 } }, opc);
+    const r = sesion.ejecutar(comprarCaravanaDeRefundacion, {}, opc);
 
     expect(r.ok).toBe(true);
     const caravana = sesion.getState().caravanas.find((c) => c.id === r.datos!.caravanaId)!;
-    expect(caravana).toMatchObject({ tipo: 'construccion', faccionId, origenCampamentoId: 'merc-1' });
+    expect(caravana).toMatchObject({ tipo: 'construccion', faccionId, origenCampamentoId: 'merc-1', titularId: fundador, estado: 'disponible' });
     expect(campamentoDe(sesion, 'merc-1').fondos[fundador] ?? {}).toEqual({});
   });
 
@@ -268,7 +268,7 @@ describe('refundar desde el campamento', () => {
     const { sesion, opc } = sinPlazas();
     const antes = sesion.getState();
 
-    const r = sesion.ejecutar(comprarCaravanaDeRefundacion, { destino: { x: 430, y: 430 } }, opc);
+    const r = sesion.ejecutar(comprarCaravanaDeRefundacion, {}, opc);
 
     expect(r.ok).toBe(false);
     expect(r.codigoError).toBe('mercenarios.invalido');

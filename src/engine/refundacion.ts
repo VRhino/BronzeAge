@@ -1,16 +1,13 @@
 // Refundar desde un campamento de mercenarios (Doc 1.9b, `Docs/Mecanicas a desarrollar.md` §40, paso 5): una Facción que se quedó sin
 // asentamientos compra en el campamento una CARAVANA DE FUNDACIÓN al 75 % de lo que cuesta una normal, y la paga entre sus héroes: cada uno
-// aporta lo que quiere desde su almacén personal a un fondo del campamento. La caravana sale del campamento y viaja y funda como cualquier otra
-// (Doc 1.8). Fundar a pie en campo abierto no cambia: esto es la forma de recomponerse sin una plaza de la que partir.
-import type { Asentamiento, CampamentoMercenarios, Caravana, Faccion, Heroe, Point } from '../domain/types';
-import { FUNDACION, MERCENARIOS } from '../constants';
-import type { Mapa } from '../world/mapa';
-import { calcularRuta } from '../world/rutas';
+// aporta lo que quiere a un fondo del campamento. La caravana nace sin destino; su titular la lleva enganchada y funda con `fundar` (D10).
+import type { Asentamiento, CampamentoMercenarios, Caravana, Faccion, Heroe } from '../domain/types';
+import { minutos, sumar, type Instante } from '../domain/tiempo';
+import { MERCENARIOS } from '../constants';
 import { totalAlmacenPersonal } from './almacenPersonal';
 import { costoCaravanaFundacion } from './expansion';
 import { calcularCapFundacion, esCiudadano } from './faccion';
 import { MercenariosInvalidoError, campamentoDeResidente } from './mercenarios';
-import { posicionLibreParaFundar } from './zones';
 
 /** Lo que cuesta la caravana en el campamento: el coste normal de una Caravana de Fundación por `MERCENARIOS.refundacion.porcentajeCoste`. */
 export function costoRefundacion(): Record<string, number> {
@@ -116,19 +113,19 @@ export function retirarDeRefundacion(
 }
 
 /**
- * Comprar la Caravana de Fundación (Doc 1.9b): el fondo de la Facción en el campamento tiene que cubrir `costoRefundacion`. Se gasta de los
- * aportes de sus ciudadanos por orden de ciudadanía hasta cubrirlo; lo que sobre de cada uno se queda en el fondo. La caravana sale del campamento hacia
- * `destino` con el que compra como fundador, y viaja y funda como cualquier otra (Doc 1.8): no deja el cupo hasta llegar, y se pierde si no
- * puede fundar al llegar. Lleva la Facción en sí misma porque no tiene asentamiento de origen del que sacarla.
+ * Comprar la Caravana de Fundación (Doc 1.9b, D9-D12, D34): el fondo de la Facción en el campamento tiene que cubrir `costoRefundacion`. Se
+ * gasta de los aportes de sus ciudadanos por orden de ciudadanía hasta cubrirlo; lo que sobre de cada uno se queda en el fondo, y lo gastado
+ * a cada uno queda apuntado en la caravana (`aportes`) para devolvérselo si caduca. Nace **sin destino**, parada en el campamento: su
+ * titular (el que compra) la engancha a su columna y funda con `fundar` donde esté (D10, D11). Si nadie la lleva, caduca en
+ * `MERCENARIOS.caducidadCaravanaHoras` (D14). Lleva la Facción en sí misma (D48): su origen es el campamento (D36).
  */
 export function comprarCaravanaDeRefundacion(
   campamentos: readonly CampamentoMercenarios[],
   faccion: Faccion,
   asentamientos: readonly Asentamiento[],
   caravanasExistentes: readonly Caravana[],
-  mapa: Mapa,
   heroeId: string,
-  destino: Point,
+  instante: Instante,
   contador = 0
 ): { campamentos: CampamentoMercenarios[]; caravana: Caravana } {
   const campamento = campamentoDeResidente(campamentos, heroeId);
@@ -136,13 +133,10 @@ export function comprarCaravanaDeRefundacion(
   if (!esCiudadano(faccion, heroeId)) throw new MercenariosInvalidoError('Solo compra un ciudadano de la Facción que refunda.');
   exigirFaccionSinAsentamientos(faccion, asentamientos);
   if (caravanasExistentes.some((c) => c.tipo === 'construccion' && c.faccionId === faccion.id)) {
-    throw new MercenariosInvalidoError('La Facción ya tiene una Caravana de Fundación en camino.');
+    throw new MercenariosInvalidoError('La Facción ya tiene una Caravana de Fundación.');
   }
   const cap = calcularCapFundacion(faccion.nivel);
   if (cap < 1) throw new MercenariosInvalidoError(`Cap de fundación alcanzado (0/${cap} en nivel ${faccion.nivel}).`);
-  if (!posicionLibreParaFundar(destino, [...asentamientos])) throw new MercenariosInvalidoError('El destino cae dentro de una zona de influencia existente.');
-  const ruta = calcularRuta(mapa, campamento.posicion, destino, { pasosRio: asentamientos.map((a) => a.posicion) });
-  if (!ruta) throw new MercenariosInvalidoError('No hay ruta por tierra hasta ese punto de fundación: el agua no se cruza.');
 
   const costo = costoRefundacion();
   const fondo = fondoDeFaccion(campamento, faccion);
@@ -154,6 +148,7 @@ export function comprarCaravanaDeRefundacion(
   // Se gasta sobre el MISMO conjunto que cuenta `fondoDeFaccion` —los aportes de sus ciudadanos, residan o no—, por orden de
   // ciudadanía. Gastar por residentes dejaba sin descontar a quien aportó y se mudó, y tocaba aportes de otras Facciones.
   const fondos: Record<string, Record<string, number>> = {};
+  const aportes: Record<string, Record<string, number>> = {};
   for (const [id, aporte] of Object.entries(campamento.fondos)) fondos[id] = { ...aporte };
   for (const [recurso, necesario] of Object.entries(costo)) {
     let pendiente = necesario;
@@ -162,6 +157,7 @@ export function comprarCaravanaDeRefundacion(
       if (tiene <= 0 || pendiente <= 0) continue;
       const toma = Math.min(tiene, pendiente);
       fondos[id]![recurso] = tiene - toma;
+      aportes[id] = { ...aportes[id], [recurso]: (aportes[id]?.[recurso] ?? 0) + toma };
       pendiente -= toma;
     }
   }
@@ -176,9 +172,10 @@ export function comprarCaravanaDeRefundacion(
     contenido: costo,
     posicionActual: campamento.posicion,
     progreso: 0,
-    destinoPosicion: destino,
-    heroesFundadoresIds: [heroeId].slice(0, FUNDACION.maxJugadoresFundacionGrupal),
-    ruta,
+    estado: 'disponible',
+    titularId: heroeId,
+    aportes,
+    caducaEn: sumar(instante, minutos(60 * MERCENARIOS.caducidadCaravanaHoras)),
   };
   return { campamentos: campamentos.map((c) => (c.id === campamento.id ? { ...c, fondos } : c)), caravana };
 }
