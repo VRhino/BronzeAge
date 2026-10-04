@@ -22,7 +22,7 @@ import { avanzarAscenso } from './ascenso';
 import { avanzarReputacion } from './reputacion';
 import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
-import { avanzarEjercitos, type CombatePorAbrir, type ContextoAvanceEjercitos } from './ejercitos';
+import { avanzarEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { avanzarAparicionMercenarios, reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
 import { reponerMercados } from './mercadoMercenario';
@@ -87,8 +87,6 @@ export interface ContextoSimulacion {
   momento: string;
   /** Fuente de aleatoriedad de la simulación (población, combate, bandidos). */
   rng: RandomFn;
-  /** Batallas de Unity (`ContextoAvanceEjercitos.batallas`). Ausente = todo con números, como en el batch. */
-  batallas?: ContextoAvanceEjercitos['batallas'];
 }
 
 export interface ResultadoTick extends EstadoSimulacion {
@@ -102,8 +100,6 @@ export interface ResultadoTick extends EstadoSimulacion {
    * decide adoptarlo (ver `session/comandos/avanzarTick.ts`).
    */
   estadoMapa: EstadoMapa;
-  /** Combates que el tick no resolvió porque se juegan en Unity: los abre la partida (`session/batallas.ts`). */
-  combatesPorAbrir: CombatePorAbrir[];
   /** Eventos del tick en forma estructurada (Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase A5 — 13/13
    * subsistemas migrados). Único contrato de salida del tick: el log en texto que muestra la interfaz sale
    * de `mensaje` (ver `exito()` en `session/comandos/tipos.ts`), así que no hace falta un array paralelo. */
@@ -333,9 +329,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     instante,
     zonas,
     red: trasComercio.red,
-    rng,
     heroes,
-    batallas: contexto.batallas,
     campamentosMercenarios: trasMercenarios.campamentos,
   });
   eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
@@ -410,7 +404,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     heroes: grabarExploracionPersonal(heroes, trasEjercitos.ejercitos, mapa.limites),
     tecnologia: trasTecnologia.tecnologia,
     estadoMapa: mapa.estadoActual(),
-    combatesPorAbrir: trasEjercitos.combatesPorAbrir,
     eventosDominio,
   };
 }

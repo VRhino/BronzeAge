@@ -6,7 +6,6 @@ import { performance } from 'node:perf_hooks';
 import type { EstadoSimulacion } from '../src/engine/simulation';
 import { avanzarSimulacion } from '../src/engine/simulation';
 import { avanzarNpcGobernanza, type ConfigNpcGobernanza } from '../src/session/npcGobernanza';
-import { derrotasEntre, esNpcSegun, resolverDerrotasNpc } from '../src/session/derrotas';
 import { instanteDeTick, isoDeInstante } from '../src/session/estado';
 import { EDIFICIO_CATALOGO, PERFILES_TRAZADO, TRAZADO, type PerfilTrazado } from '../src/constants';
 import { crearMapa, type EstadoMapa } from '../src/world/mapa';
@@ -59,8 +58,7 @@ for (let tick = cp.tick + 1; tick <= cp.tick + ticks; tick++) {
   const contexto = { instante, momento: isoDeInstante(instante), rng };
   const t0 = performance.now();
   const trasMotorCrudo = avanzarSimulacion(estado, mapa, contexto);
-  // Las derrotas se resuelven en el acto, entre el motor y el NPC (`session/derrotas.ts`), como en `avanzarTick`.
-  const trasMotor = resolverDerrotasNpc(trasMotorCrudo, derrotasEntre(estado, trasMotorCrudo), esNpcSegun(cp.configNpc.faccionesIds)).estado;
+  const trasMotor = trasMotorCrudo;
   const t1 = performance.now();
   const trasNpc = avanzarNpcGobernanza(trasMotor, mapa, contexto, { ...cp.configNpc, contadorInicial: contadorNpc });
   const t2 = performance.now();

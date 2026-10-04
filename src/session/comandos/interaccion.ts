@@ -21,6 +21,7 @@ import {
   dejarDePerseguir as dejarDePerseguirEngine,
   inspeccionarCaravana as inspeccionarCaravanaEngine,
   inspeccionarColumna,
+  inspeccionarPlaza,
   interceptar,
   MovilizacionInvalidaError,
   perseguir as perseguirEngine,
@@ -29,6 +30,7 @@ import {
   validarAtaqueAColumna,
   type ComposicionColumna,
   type ContenidoCaravana,
+  type DefensaPlaza,
 } from '../../engine/ejercitos';
 import {
   abrirBatalla,
@@ -48,7 +50,6 @@ import type { Asentamiento, Ejercito } from '../../domain/types';
 import type { Instante } from '../../domain/tiempo';
 import { agendarReaparicionBandidos } from '../../engine/bandidos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
-import { conDerrotasResueltas } from '../derrotas';
 import { exito } from './tipos';
 import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
 import { desdeCrudos, evento } from './eventos';
@@ -58,20 +59,24 @@ import { computeTodasLasZonas } from '../../engine/zones';
  * la persecución, y no por casualidad — se persigue lo que se puede mirar. */
 export type ObjetivoDeInteraccion = { tipo: 'ejercito'; id: string } | { tipo: 'caravana'; id: string };
 
+/** Lo que se puede mirar de cerca: lo que se persigue, y además una plaza ajena (su defensa, Doc 5.12.3). */
+export type ObjetivoDeInspeccion = ObjetivoDeInteraccion | { tipo: 'asentamiento'; id: string };
+
 export interface ParamsInspeccionar {
   heroeId: string;
-  objetivo: ObjetivoDeInteraccion;
+  objetivo: ObjetivoDeInspeccion;
 }
 
 export interface PayloadObservado {
   /** Quién mira. Va en el payload porque el aviso es la mitad de la mecánica: el observado tiene derecho a
    * saber que lo miran, y a poder decidir algo al respecto. */
   observadorId: string;
-  objetivo: ObjetivoDeInteraccion;
+  objetivo: ObjetivoDeInspeccion;
 }
 
 /**
- * Mirar de cerca (Doc 5.12.3): qué tropas lleva esa columna y de quién son, o qué carga esa caravana.
+ * Mirar de cerca (Doc 5.12.3): qué tropas lleva esa columna y de quién son, qué carga esa caravana, o con qué se
+ * defiende esa plaza ajena (su guarnición y quién está dentro).
  *
  * **No es gratis, y ahí está el diseño.** Hay que meterse en el anillo de 40 —dentro del alcance de una
  * columna que quiera cazarte— y el observado **recibe aviso**. La información que la proyección no regala a
@@ -80,8 +85,26 @@ export interface PayloadObservado {
  * El aviso se emite atribuido a la plaza de origen del observado, que es como esta partida decide audiencias:
  * le llega a su Facción, no al mundo.
  */
-export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | ContenidoCaravana>((estado, _mapa, ctx, params) => {
+export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | ContenidoCaravana | DefensaPlaza>((estado, _mapa, ctx, params) => {
   const observador = exigirColumnaDe(estado, params.heroeId);
+
+  if (params.objetivo.tipo === 'asentamiento') {
+    const plaza = exigirAsentamiento(estado, params.objetivo.id);
+    const defensa = inspeccionarPlaza(observador, plaza, estado.heroes);
+    return exito(
+      conHistorialDeJugador(estado, params.heroeId, `Inspecciona la plaza ${plaza.id}.`),
+      [
+        evento(ctx, {
+          codigo: 'asentamiento.observado',
+          mensaje: `Alguien se ha acercado a mirar la defensa de ${plaza.nombre ?? plaza.id}.`,
+          payload: { observadorId: params.heroeId, objetivo: params.objetivo } satisfies PayloadObservado,
+          // A la plaza mirada: el aviso es para su Facción.
+          asentamientoId: plaza.id,
+        }),
+      ],
+      defensa
+    );
+  }
 
   if (params.objetivo.tipo === 'ejercito') {
     const objetivo = exigirEjercito(estado, params.objetivo.id);
@@ -204,11 +227,9 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
       { ...estado, asentamientos: asedio.asentamientos, heroes: asedio.heroes, facciones: asedio.facciones, campamentosMercenarios: asedio.campamentosMercenarios },
       [asedio.ejercito, ...asedio.columnas]
     );
-    // Si cayó la última plaza de una Facción NPC, se anexiona o se disuelve en el acto (`session/derrotas.ts`).
-    const trasDerrotas = conDerrotasResueltas(estado, siguiente);
     return exito(
-      conHistorialDeJugador(trasDerrotas.estado, params.heroeId, `Asedia ${plaza.id}.`),
-      [...asedio.eventos, ...trasDerrotas.eventos].map((e) => evento(ctx, typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e))
+      conHistorialDeJugador(siguiente, params.heroeId, `Asedia ${plaza.id}.`),
+      asedio.eventos.map((e) => evento(ctx, typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e))
     );
   }
 

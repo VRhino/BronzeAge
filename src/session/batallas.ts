@@ -2,7 +2,7 @@
 // congelado, bloquear lo que interviene, dejar que se una quien llega y cerrarlas sin castigo si vence un plazo o se
 // cancelan. Aplicar el resultado vive en `resultadoBatalla.ts`.
 //
-// No es estado del motor: el motor solo devuelve los combates que no resuelve (`CombatePorAbrir`), y lo que está en
+// No es estado del motor: una batalla la abre un comando (`atacar`, `iniciarAsedio`), y lo que está en
 // una batalla activa ni siquiera entra en el tick. Todo lo que viaja a Conquest tiene la forma del contrato
 // (`contratos/v1/dto.ts`).
 import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Heroe, Point } from '../domain/types';
@@ -26,7 +26,7 @@ import { VERSION_CATALOGO_TROPAS } from '../contratos/v1/catalogoTropas';
 import { BALANCE_VERSION, BATALLA, LAYOUT_VERSION, LOGISTICA, REJILLA_ASENTAMIENTO } from '../constants';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { distancia } from '../world/geometria';
-import { columnaDe, type CombatePorAbrir } from '../engine/ejercitos';
+import { columnaDe } from '../engine/ejercitos';
 import { esCiudadano } from '../engine/faccion';
 import { heridosEn } from '../engine/heroe';
 import { edificiosInternos, tamanoDeEdificio } from '../engine/trazado';
@@ -406,41 +406,6 @@ export function abrirBatalla(estado: GameSessionState, apertura: Apertura, ahora
     estado: { ...estado, batallas: [...estado.batallas, batalla], heroes: conReserva(estado.heroes, escuadrasConDueno(batalla), id) },
     batalla,
   };
-}
-
-/** Abre las batallas de los combates que el tick no resolvió, con el estado ya avanzado. */
-export function abrirCombatesDelTick(
-  estado: GameSessionState,
-  combates: readonly CombatePorAbrir[],
-  ahora: Instante,
-  nuevoId: () => number
-): { estado: GameSessionState; abiertas: Batalla[] } {
-  const heridos = heridosEn(estado.heroes, ahora);
-  let actual = estado;
-  const abiertas: Batalla[] = [];
-  for (const c of combates) {
-    const apertura = aperturaDelTick(actual, c, heridos);
-    if (!apertura) continue;
-    const r = abrirBatalla(actual, apertura, ahora, idDeBatalla(estado.gameId, nuevoId()));
-    actual = r.estado;
-    abiertas.push(r.batalla);
-  }
-  return { estado: actual, abiertas };
-}
-
-function aperturaDelTick(estado: GameSessionState, c: CombatePorAbrir, heridos: ReadonlySet<string>): Apertura | undefined {
-  const ejercito = estado.ejercitos.find((e) => e.id === c.ejercitoId);
-  if (!ejercito) return undefined;
-  if (c.tipo === 'asedio') {
-    const plaza = estado.asentamientos.find((a) => a.id === c.asentamientoId);
-    return plaza && aperturaDeAsedio(estado, ejercito, plaza, ejercito.liderId, heridos);
-  }
-  if (c.tipo === 'columna') {
-    const rival = estado.ejercitos.find((e) => e.id === c.rivalId);
-    return rival && aperturaContraColumna(estado, ejercito, rival, ejercito.liderId, heridos);
-  }
-  const caravana = estado.caravanas.find((x) => x.id === c.caravanaId);
-  return caravana && aperturaContraCaravana(estado, ejercito, caravana, ejercito.liderId, heridos);
 }
 
 /**

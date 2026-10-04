@@ -13,7 +13,6 @@ import {
   type Batalla,
 } from '../batallas';
 import { aplicarResultado as aplicar } from '../resultadoBatalla';
-import { conDerrotasResueltas } from '../derrotas';
 import type { BattleResult, BattleServerAssignment, InicioBatalla, TokensBatalla } from '../../contratos/v1/dto';
 import type { Instante } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
@@ -103,14 +102,12 @@ export const aplicarResultado = comando<ParamsDeServidor<BattleResult>, void>((e
   const aplicado = aplicar(estado, batalla, params.mensaje, params.servidorId, ctx.instante);
   if (aplicado === estado) return sinCambios(estado);
   const { ganador } = params.mensaje;
-  // Un asedio ganado puede dejar a una Facción NPC sin plazas: se anexiona o se disuelve en el acto (`session/derrotas.ts`).
-  const { estado: siguiente, eventos: deDerrotas } = conDerrotasResueltas(estado, aplicado);
-  return exito(siguiente, [
-    ...eventosDeBatalla(estado, batalla, 'batalla.aplicada', `Termina la batalla ${batalla.id}: gana el ${ganador}.`).map((e) =>
+  return exito(
+    aplicado,
+    eventosDeBatalla(estado, batalla, 'batalla.aplicada', `Termina la batalla ${batalla.id}: gana el ${ganador}.`).map((e) =>
       evento(ctx, { ...e, payload: { ...e.payload, ganador } })
-    ),
-    ...deDerrotas.map((e) => evento(ctx, typeof e === 'string' ? { codigo: 'legado', mensaje: e } : e)),
-  ]);
+    )
+  );
 });
 
 /** Pone el candado de batalla (Doc 5.15.1) a todos los comandos salvo `libres`, que actúan sobre la propia batalla. */

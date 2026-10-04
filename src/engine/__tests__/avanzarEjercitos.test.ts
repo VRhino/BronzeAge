@@ -16,14 +16,17 @@ import { entregarDesdeCaravanaAdjunta } from '../trade';
 import {
   adjuntarCaravana,
   atacarColumna,
+  asediarPlaza,
   cargarCaravanaAdjunta,
+  inspeccionarPlaza,
+  interceptar,
   ladoPendienteParaEjercito,
   avanzarEjercitos,
   capacidadCargaDe,
   MovilizacionInvalidaError,
   soltarCaravana,
+  validarAsedio,
   velocidadDeEjercito,
-  type ContextoAvanceEjercitos,
 } from '../ejercitos';
 import { esResidente, resideEnOtroAsentamiento } from '../pertenencia';
 import { reservaDeTrigo } from '../tropas';
@@ -109,27 +112,11 @@ function avanzar(
     heroes?: Heroe[];
     /** Héroes heridos durante todo el tick (Doc 5.16.4). */
     heridos?: string[];
-    /** Batallas de Unity (doc 01 §15). Sin ellas, todo con números. */
-    batallas?: ContextoAvanceEjercitos['batallas'];
-    /** Los héroes humanos, y dónde está dentro cada uno si no está en su columna. El resto son bot: solo una columna de
-     * héroes bot asedia al llegar y combate al alcanzar a su presa (Doc 5.12.3), que es lo que mide casi todo este archivo. */
-    humanos?: string[];
-    dentro?: Record<string, string>;
   } = {}
 ) {
   // Una vista que pasó por `adjuntarCaravana` sigue llevando su tropa aunque el tipo la pierda.
   const enColumnas = ejercitos.flatMap((e) => ('escuadrones' in e ? sinTropa(e as EjercitoConTropa).tropa : []));
-  const nuevos = () =>
-    heroesCon([...enColumnas, ...(opciones.campamento ?? [])], [...new Set(asentamientos.flatMap((a) => a.heroesFundadoresIds))]).map(
-      (h): Heroe => {
-        const plaza = opciones.dentro?.[h.id];
-        return {
-          ...h,
-          controlador: opciones.humanos?.includes(h.id) ? 'humano' : 'bot',
-          ...(plaza ? { ubicacion: { tipo: 'asentamiento', asentamientoId: plaza } } : {}),
-        };
-      }
-    );
+  const nuevos = () => heroesCon([...enColumnas, ...(opciones.campamento ?? [])], [...new Set(asentamientos.flatMap((a) => a.heroesFundadoresIds))]);
   const heroes = (opciones.heroes ?? nuevos()).map((h) => (opciones.heridos?.includes(h.id) ? { ...h, heridoHasta: instanteDeTest(9999) } : h));
   const r = avanzarEjercitos(ejercitos, {
     asentamientos,
@@ -138,9 +125,7 @@ function avanzar(
     relaciones: opciones.relaciones ?? [],
     mapa,
     instante: instanteDeTest(1),
-    rng: opciones.rng ?? createRng(1),
     heroes,
-    batallas: opciones.batallas,
   });
   const indice = indiceTropa(r.heroes);
   return {
@@ -403,8 +388,61 @@ function frenteDeGuerra(defensores: Escuadron[], atacantes = [escuadron('a1', 'm
   return { facciones: enemigoBase.facciones, propio: propio.asentamiento, enemigo, ejercito, campamento };
 }
 
-describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
-  it('una plaza SIN defensores cae sin combate, y sin consumir aleatoriedad (Doc 5.12.4)', () => {
+/** El asedio que pide `atacar` (Doc 5.12.4), con la columna ya a la puerta. Mismos héroes que `avanzar`. */
+function asediar(
+  ejercito: EjercitoConTropa,
+  plaza: Asentamiento,
+  asentamientos: Asentamiento[],
+  opciones: { facciones: Faccion[]; campamento?: Escuadron[]; rng?: RandomFn; ejercitos?: Ejercito[] }
+) {
+  const heroes = heroesCon(
+    [...ejercito.escuadrones, ...(opciones.ejercitos ?? []).flatMap((e) => ('escuadrones' in e ? (e as EjercitoConTropa).escuadrones : [])), ...(opciones.campamento ?? [])],
+    [...new Set(asentamientos.flatMap((a) => a.heroesFundadoresIds))]
+  );
+  const r = asediarPlaza(
+    ejercito,
+    plaza,
+    { asentamientos, ejercitos: opciones.ejercitos ?? [], heroes, facciones: opciones.facciones, relaciones: [] },
+    new Set(),
+    instanteDeTest(1),
+    opciones.rng ?? createRng(1)
+  );
+  return { ...r, campamento: (id: string) => campamentoDe(r.asentamientos.find((a) => a.id === id)!, r.heroes) };
+}
+
+describe('llegar a un asentamiento ajeno solo acampa, también un bot (Doc 5.12.3)', () => {
+  it('ni asedia ni combate: asediar se ordena con `atacar`', () => {
+    const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
+
+    const r = avanzar([ejercito], [propio, enemigo], { facciones, campamento });
+
+    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId).toBe(enemigo.faccionId);
+    expect(r.ejercitos[0]!.estado).toBe('estacionado');
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.llega')).toBe(true);
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+
+  it('llegar a un asentamiento PROPIO tampoco dispara nada', () => {
+    // El segundo se re-etiqueta en vez de fundarse: el cap de fundación en nivel 1 es UNO por Facción
+    // (`CAP_FUNDACION_POR_NIVEL`), y lo que aquí importa es el destino, no cómo llegó a ser propio.
+    const { facciones, propio, enemigo, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 200)]);
+    const otroPropio: Asentamiento = { ...enemigo, faccionId: 'faccion-1' };
+    const e: EjercitoConTropa = {
+      ...ejercitoDe(propio, [escuadron('a1', 'milicia_lanceros', 50)], 5000),
+      objetivo: { tipo: 'asentamiento', id: otroPropio.id },
+      ruta: [propio.posicion, otroPropio.posicion],
+      progreso: 0.999,
+    };
+
+    const r = avanzar([e], [propio, otroPropio], { facciones, campamento });
+
+    expect(r.campamento(otroPropio.id).map((x) => x.cantidad), 'ni un rasguño a la guarnición amiga').toEqual([200]);
+    expect(r.eventos.some((ev) => typeof ev !== 'string' && ev.codigo.startsWith('combate.'))).toBe(false);
+  });
+});
+
+describe('asediarPlaza: el asedio que pide `atacar` (Doc 5.12.4)', () => {
+  it('una plaza SIN defensores cae sin combate, y sin consumir aleatoriedad', () => {
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
     // Envuelve un RNG real para CONTAR llamadas sin perder su marca de tipo ni su `estado`.
     const base = createRng(1);
@@ -417,70 +455,18 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
       { estado: base.estado }
     );
 
-    const r = avanzar([ejercito], [propio, enemigo], { facciones, rng });
+    const r = asediar(ejercito, enemigo, [propio, enemigo], { facciones, rng });
 
-    const despues = r.asentamientos.find((a) => a.id === enemigo.id)!;
-    expect(despues.faccionId).toBe('faccion-1');
+    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId).toBe('faccion-1');
     expect(tiradas, 'conquistar una plaza desguarnecida no debe tocar el RNG').toBe(0);
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.asedio_conquista')).toBe(true);
-  });
-
-  it('con todos sus héroes heridos, el ejército espera a la puerta en vez de asediar (Doc 5.16.4)', () => {
-    const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
-
-    const r = avanzar([ejercito], [propio, enemigo], { facciones, heridos: ejercito.participantes.map((p) => p.heroeId) });
-
-    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId, 'la plaza no cae').toBe(enemigo.faccionId);
-    expect(r.ejercitos[0]!.estado, 'no acampa: la llegada se vuelve a mirar el tick siguiente').toBe('marchando');
-  });
-
-  it('un ejército de héroes HUMANOS que llega a una plaza enemiga solo acampa: asediar se ordena (Doc 5.12.4)', () => {
-    const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
-
-    const r = avanzar([ejercito], [propio, enemigo], { facciones, campamento, humanos: [RESIDENTE] });
-
-    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId).toBe(enemigo.faccionId);
-    expect(r.ejercitos[0]!.estado).toBe('estacionado');
-    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.llega')).toBe(true);
-    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
-  });
-
-  it('con batallas de Unity, un ejército bot contra una plaza con algún humano dentro no la asedia aquí: acampa y se devuelve para abrirlo (Doc 5.10)', () => {
-    const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
-
-    const r = avanzar([ejercito], [propio, enemigo], {
-      facciones,
-      campamento,
-      humanos: [RIVAL],
-      dentro: { [RIVAL]: enemigo.id },
-      batallas: { abrirEnUnity: true, asentamientosEnBatalla: new Set() },
-    });
-
-    expect(r.combatesPorAbrir).toEqual([{ tipo: 'asedio', ejercitoId: ejercito.id, asentamientoId: enemigo.id }]);
-    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId, 'la plaza no cae con números').toBe(enemigo.faccionId);
-    expect(r.ejercitos[0]!.estado).toBe('estacionado');
-    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
-  });
-
-  it('a una plaza que ya está en una batalla no se la asedia: se espera a la puerta (Doc 5.15.1)', () => {
-    const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 1)]);
-
-    const r = avanzar([ejercito], [propio, enemigo], {
-      facciones,
-      campamento,
-      batallas: { abrirEnUnity: true, asentamientosEnBatalla: new Set([enemigo.id]) },
-    });
-
-    expect(r.combatesPorAbrir).toEqual([]);
-    expect(r.asentamientos.find((a) => a.id === enemigo.id)!.faccionId).toBe(enemigo.faccionId);
-    expect(r.ejercitos[0]!.estado, 'sigue a la puerta, y la llegada se vuelve a mirar cada tick').toBe('marchando');
   });
 
   it('conquistar deja la plaza SIN guarnición y al vencido con su campamento a 0, pero suyo (Doc 5.15.5)', () => {
     const veterano: Escuadron = { ...escuadron('d1', 'milicia_lanceros', 1), experiencia: 3 };
     const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([veterano]);
 
-    const r = avanzar([ejercito], [propio, enemigo], { facciones, campamento });
+    const r = asediar(ejercito, enemigo, [propio, enemigo], { facciones, campamento });
 
     const despues = r.asentamientos.find((a) => a.id === enemigo.id)!;
     expect(despues.faccionId, 'con 50 atacantes contra 1 defensor la plaza cae').toBe('faccion-1');
@@ -495,8 +481,7 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
     expect(enemigo.heroesFundadoresIds.length, 'la plaza arranca con residentes').toBeGreaterThan(0);
 
-    const r = avanzar([ejercito], [propio, enemigo], { facciones });
-    const despues = r.asentamientos.find((a) => a.id === enemigo.id)!;
+    const despues = asediar(ejercito, enemigo, [propio, enemigo], { facciones }).asentamientos.find((a) => a.id === enemigo.id)!;
 
     expect(despues.heroesFundadoresIds).toEqual([]);
     expect(despues.casasCompradas).toEqual([]);
@@ -507,151 +492,66 @@ describe('llegada a un asentamiento ajeno = asedio (Paso 7)', () => {
     expect(despues.poblacion.nobleza, 'la nobleza no se saquea').toBe(enemigo.poblacion.nobleza);
   });
 
-  it('el ejército conquistador NO se vuelve guarnición: acampa a la puerta con su tropa (Doc 5.15.5)', () => {
+  it('el ejército conquistador NO se vuelve guarnición: sigue fuera con su tropa (Doc 5.15.5)', () => {
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
 
-    const r = avanzar([ejercito], [propio, enemigo], { facciones });
+    const r = asediar(ejercito, enemigo, [propio, enemigo], { facciones });
 
-    expect(r.ejercitos).toHaveLength(1);
-    expect(r.ejercitos[0]!.estado).toBe('estacionado');
-    expect(r.ejercitos[0]!.escuadronIds).toEqual(['a1']);
+    expect(r.ejercito.escuadronIds).toEqual(['a1']);
     expect(r.campamento(enemigo.id)).toEqual([]);
   });
 
-  it('una plaza recién conquistada es INMUNE a un segundo ejército el mismo tick (Ocupacion §2.4)', () => {
+  it('una plaza recién conquistada es INMUNE a otro asedio (Ocupacion §2.4)', () => {
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
-    // La Facción desalojada manda un ejército a recuperar su plaza en el mismo tick — y rebota.
-    const segundo: EjercitoConTropa = {
-      ...ejercitoDe(propio, [escuadron('b1', 'milicia_lanceros', 80)], 5000),
-      id: 'ejercito-segundo',
-      faccionId: 'faccion-2',
-      origenAsentamientoId: propio.id,
-      objetivo: { tipo: 'asentamiento', id: enemigo.id },
-      ruta: [propio.posicion, enemigo.posicion],
-      progreso: 0.999,
-    };
+    const conquistada = asediar(ejercito, enemigo, [propio, enemigo], { facciones }).asentamientos.find((a) => a.id === enemigo.id)!;
+    const segundo: EjercitoConTropa = { ...ejercitoDe(propio, [escuadron('b1', 'milicia_lanceros', 80)], 5000), id: 'ejercito-segundo', faccionId: 'faccion-2', posicionActual: conquistada.posicion };
 
-    const r = avanzar([ejercito, segundo], [propio, enemigo], { facciones });
-
-    const plaza = r.asentamientos.find((a) => a.id === enemigo.id)!;
-    expect(plaza.faccionId, 'la conquistó el primero; el segundo rebota').toBe('faccion-1');
-    expect(r.ejercitos.find((e) => e.id === 'ejercito-1')!.escuadrones[0]!.cantidad, 'el primero, intacto a la puerta').toBe(50);
-    const segundoDespues = r.ejercitos.find((e) => e.id === 'ejercito-segundo')!;
-    expect(segundoDespues.escuadrones[0]!.cantidad, 'rebotó sin combatir: ni una baja').toBe(80);
-  });
-
-  it('el asedio se resuelve UNA vez: acampado junto a la plaza ya no vuelve a atacar', () => {
-    const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 200)]);
-
-    const primero = avanzar([ejercito], [propio, enemigo], { facciones, campamento });
-    const defensorTrasPrimero = primero.campamento(enemigo.id);
-    expect(primero.ejercitos[0]!.estado, 'resistió, y el atacante queda acampado').toBe('estacionado');
-
-    const segundo = avanzar(primero.ejercitos, primero.asentamientos, { facciones: primero.facciones, heroes: primero.heroes });
-
-    expect(segundo.campamento(enemigo.id).map((e) => e.cantidad)).toEqual(defensorTrasPrimero.map((e) => e.cantidad));
-    expect(segundo.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
-  });
-
-  it('llegar a un asentamiento PROPIO no dispara nada: solo acampa', () => {
-    // El segundo se re-etiqueta en vez de fundarse: el cap de fundación en nivel 1 es UNO por Facción
-    // (`CAP_FUNDACION_POR_NIVEL`), y lo que aquí importa es el destino, no cómo llegó a ser propio.
-    const { facciones, propio, enemigo, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 200)]);
-    const otroPropio: Asentamiento = { ...enemigo, faccionId: 'faccion-1' };
-    const e: EjercitoConTropa = {
-      ...ejercitoDe(propio, [escuadron('a1', 'milicia_lanceros', 50)], 5000),
-      objetivo: { tipo: 'asentamiento', id: otroPropio.id },
-      ruta: [propio.posicion, otroPropio.posicion],
-      progreso: 0.999,
-    };
-
-    const r = avanzar([e], [propio, otroPropio], { facciones, campamento });
-
-    expect(r.asentamientos.find((a) => a.id === otroPropio.id)!.faccionId).toBe('faccion-1');
-    expect(r.campamento(otroPropio.id).map((x) => x.cantidad), 'ni un rasguño a la guarnición amiga').toEqual([200]);
-    expect(r.eventos.some((ev) => typeof ev !== 'string' && ev.codigo === 'ejercito.llega')).toBe(true);
-    expect(r.eventos.some((ev) => typeof ev !== 'string' && ev.codigo.startsWith('combate.'))).toBe(false);
+    expect(() => validarAsedio(segundo, conquistada, new Set(), instanteDeTest(1))).toThrow('protegida');
   });
 
   it('un asedio RESISTIDO se narra a los dos lados: al hogar del atacante y a la plaza que aguantó', () => {
     const { facciones, propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 200)]);
 
-    const r = avanzar([ejercito], [propio, enemigo], { facciones, campamento });
-    const resistido = r.eventos.filter((e) => typeof e !== 'string' && e.codigo === 'combate.asedio_resistido');
-
-    expect(resistido).toHaveLength(2);
-    expect(resistido.map((e) => (typeof e !== 'string' ? e.asentamientoId : undefined)).sort()).toEqual(
-      [propio.id, enemigo.id].sort()
+    const resistido = asediar(ejercito, enemigo, [propio, enemigo], { facciones, campamento }).eventos.filter(
+      (e) => typeof e !== 'string' && e.codigo === 'combate.asedio_resistido'
     );
+
+    expect(resistido.map((e) => (typeof e !== 'string' ? e.asentamientoId : undefined)).sort()).toEqual([propio.id, enemigo.id].sort());
   });
 
   it('una CONQUISTA se narra una sola vez: la plaza ya es del atacante y se la contaría dos veces', () => {
     const { facciones, propio, enemigo, ejercito } = frenteDeGuerra([]);
 
-    const r = avanzar([ejercito], [propio, enemigo], { facciones });
-    const conquista = r.eventos.filter((e) => typeof e !== 'string' && e.codigo === 'combate.asedio_conquista');
+    const conquista = asediar(ejercito, enemigo, [propio, enemigo], { facciones }).eventos.filter((e) => typeof e !== 'string' && e.codigo === 'combate.asedio_conquista');
 
     expect(conquista).toHaveLength(1);
     expect(typeof conquista[0] !== 'string' && conquista[0]!.asentamientoId).toBe(propio.id);
   });
 
-  it('el jugador que estaba de campaña queda HUÉRFANO: sin residencia, pero con su tropa (Doc 5.4)', () => {
-    // El caso completo de la regla: mientras la columna de faccion-1 asedia, la SUYA cae. No hace falta
-    // guardar "huérfano" en ninguna parte — es no residir en ningún asentamiento, y sale solo de que la
+  it('el jugador que estaba de campaña queda HUÉRFANO: sin residencia (Doc 5.4)', () => {
+    // No hace falta guardar "huérfano" en ninguna parte — es no residir en ningún asentamiento, y sale solo de que la
     // conquista vacíe las listas de residencia.
     const { facciones, propio, enemigo } = frenteDeGuerra([]);
     const suDueno = propio.heroesFundadoresIds[0]!;
     const enCampana: EjercitoConTropa = {
       ...ejercitoDe(propio, [{ ...escuadron('a1', 'milicia_lanceros', 40), heroeId: suDueno }], 5000),
       id: 'ejercito-suyo',
-      objetivo: { tipo: 'asentamiento', id: enemigo.id },
-      ruta: [propio.posicion, enemigo.posicion],
-      progreso: 0.5, // sigue de marcha: no llega ni conquista nada este tick
+      progreso: 0.5,
     };
-    // Y a la vez, una columna enemiga se planta en SU ciudad, que quedó desguarnecida.
     const invasor: EjercitoConTropa = {
       ...ejercitoDe(enemigo, [{ ...escuadron('inv', 'milicia_lanceros', 40), heroeId: RIVAL }], 5000),
       id: 'ejercito-invasor',
       faccionId: 'faccion-2',
       origenAsentamientoId: enemigo.id,
-      objetivo: { tipo: 'asentamiento', id: propio.id },
-      ruta: [enemigo.posicion, propio.posicion],
-      progreso: 0.999,
+      posicionActual: propio.posicion,
     };
 
-    const r = avanzar([enCampana, invasor], [propio, enemigo], { facciones });
+    const r = asediar(invasor, propio, [propio, enemigo], { facciones, ejercitos: [enCampana] });
 
     const casa = r.asentamientos.find((a) => a.id === propio.id)!;
     expect(casa.faccionId, 'su ciudad cambió de dueño').toBe('faccion-2');
     expect(esResidente(casa, suDueno), 'ya no reside ahí').toBe(false);
     expect(resideEnOtroAsentamiento(r.asentamientos, 'ninguno', suDueno), 'ni en ningún otro sitio').toBe(false);
-
-    const suya = r.ejercitos.find((e) => e.id === 'ejercito-suyo')!;
-    expect(suya.escuadrones[0]!.cantidad, 'conserva intacto lo que llevaba encima').toBe(40);
-  });
-
-  it('los ejércitos se recorren en orden canónico por id, no en el del array', () => {
-    // Dos ejércitos que asedian consumen RNG; si el orden dependiera del array, la misma partida con los
-    // ejércitos guardados al revés divergiría.
-    const { facciones, propio, enemigo, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 30)]);
-    const uno: EjercitoConTropa = {
-      ...ejercitoDe(propio, [escuadron('a1', 'milicia_lanceros', 20)], 5000),
-      id: 'ejercito-aaa',
-      objetivo: { tipo: 'asentamiento', id: enemigo.id },
-      ruta: [propio.posicion, enemigo.posicion],
-      progreso: 0.999,
-    };
-    const dos: EjercitoConTropa = { ...uno, id: 'ejercito-bbb', escuadronIds: ['a2'], escuadrones: [escuadron('a2', 'honderos', 20)] };
-
-    const enOrden = avanzar([uno, dos], [propio, enemigo], { facciones, rng: createRng(7), campamento });
-    const alReves = avanzar([dos, uno], [propio, enemigo], { facciones, rng: createRng(7), campamento });
-
-    const resumen = (r: ReturnType<typeof avanzar>) =>
-      JSON.stringify({
-        ejercitos: [...r.ejercitos].sort((a, b) => (a.id < b.id ? -1 : 1)).map((e) => e.escuadrones.map((x) => x.cantidad)),
-        defensor: r.heroes.find((h) => h.id === RIVAL)!.escuadrones.map((x) => x.cantidad),
-      });
-    expect(resumen(enOrden)).toBe(resumen(alReves));
   });
 });
 
@@ -1028,7 +928,7 @@ describe('escolta: cargar y entregar a mano', () => {
 // Encuentros: **ya no salen de la geometria** (paso 8, Doc 5.12.3). Acercarse abre opciones; pelear hay que
 // pedirlo. Lo que esta funcion resuelve es el final de una PERSECUCION — elegir ir detras de alguien es
 // elegir el combate—, y lo que desaparece es pelear por haber pasado cerca.
-describe('encuentros: solo se resuelve lo que se persigue', () => {
+describe('persecuciones: alcanzar a la presa no es atacarla', () => {
   /** Dos ejércitos de Facciones distintas, a `separacion` uno de otro y sin nada más alrededor. */
   // El carro sale con 100 y no con miles: la capacidad de un carro son 500, y llenarlo por encima en el
   // fixture dejaba sitio 0 para el botín — que es exactamente lo que descubrió el test de la emboscada.
@@ -1063,36 +963,16 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     expect(r.ejercitos.every((e) => e.escuadrones[0]!.cantidad === 30), 'ni un rasguño').toBe(true);
   });
 
-  it('pero si uno PERSIGUE al otro y lo alcanza, hay combate', () => {
+  it('quien alcanza a su presa no combate, humano o bot: la persecución termina y se le ofrece atacar (Doc 5.12.3)', () => {
     const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1);
     const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
 
     const r = avanzar([cazador, b], asentamientos, { facciones });
-
-    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'combate.encuentro')).toBe(true);
-    const totalDespues = r.ejercitos.reduce((n, e) => n + e.escuadrones.reduce((m, x) => m + x.cantidad, 0), 0);
-    expect(totalDespues, 'los dos bandos sufren bajas').toBeLessThan(60);
-  });
-
-  it('un héroe HUMANO que alcanza a su presa no combate: la persecución termina y se le ofrece atacar (Doc 5.12.3)', () => {
-    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1);
-    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
-
-    const r = avanzar([cazador, b], asentamientos, { facciones, humanos: [RESIDENTE] });
 
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
     expect(r.ejercitos.find((e) => e.id === a.id)!.persiguiendo).toBeUndefined();
     const avisos = r.eventos.filter((e) => typeof e !== 'string' && e.codigo === 'columna.presa_alcanzada');
     expect(avisos.map((e) => (typeof e !== 'string' ? e.asentamientoId : '')).sort(), 'se enteran los dos').toEqual([a.origenAsentamientoId, b.origenAsentamientoId].sort());
-  });
-
-  it('y al alcanzarla suelta la presa: se persigue para pelear, y ya se peleo', () => {
-    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1);
-    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
-
-    const r = avanzar([cazador, b], asentamientos, { facciones });
-
-    expect(r.ejercitos.find((e) => e.id === a.id)!.persiguiendo).toBeUndefined();
   });
 
   it('a quien NO persigue nadie no se le toca, aunque este pegado al que si', () => {
@@ -1103,26 +983,6 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     const r = avanzar([cazador, b, tercero], asentamientos, { facciones });
 
     expect(r.ejercitos.find((e) => e.id === 'ejercito-c')!.escuadrones[0]!.cantidad, 'el tercero ni se entera').toBe(30);
-  });
-
-  it('quien cae al ser alcanzado entrega la mitad del carro al que lo persiguió, igual que en un ataque (Doc 5.12.3)', () => {
-    // Un soldado contra trescientos cae entero: en el tick solo cuenta como derrota quedarse sin nadie en pie.
-    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1, 300, 1);
-    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
-    // El mismo tick sin combate da lo que queda en cada carro después de comer, que va antes de los encuentros.
-    const sinChoque = avanzar([a, b], asentamientos, { facciones }).ejercitos;
-    const carroA = sinChoque.find((e) => e.id === a.id)!.suministro['trigo'] ?? 0;
-    const carroB = sinChoque.find((e) => e.id === b.id)!.suministro['trigo'] ?? 0;
-
-    const tras = avanzar([cazador, b], asentamientos, { facciones });
-    const r = tras.ejercitos;
-    const presa = r.find((e) => e.id === b.id)!;
-
-    expect(presa.escuadrones.every((e) => e.cantidad === 0), 'la presa cae entera').toBe(true);
-    expect(tras.heroes.find((h) => h.id === RIVAL)!.heridoHasta, 'su héroe queda herido (Doc 5.16.4)').toBeDefined();
-    expect(tras.heroes.find((h) => h.id === RESIDENTE)!.heridoHasta, 'el que gana, no').toBeUndefined();
-    expect(presa.suministro['trigo'], 'se queda con la mitad').toBe(carroB / 2);
-    expect(r.find((e) => e.id === a.id)!.suministro['trigo'], 'y el cazador carga la otra mitad').toBe(carroA + carroB / 2);
   });
 
   it('una columna con todos sus héroes HERIDOS no se puede alcanzar, aunque la persigas y la tengas encima', () => {
@@ -1223,50 +1083,19 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
   });
 
-  it('un ejército choca UNA vez por tick, aunque dos le persigan a la vez', () => {
-    const { facciones, asentamientos, a, b } = dosColumnas(1);
-    const tercero: Ejercito = { ...b, id: 'ejercito-c', posicionActual: { ...a.posicionActual }, persiguiendo: { tipo: 'ejercito' as const, id: a.id } };
-    const cazador: Ejercito = { ...b, persiguiendo: { tipo: 'ejercito' as const, id: a.id } };
-
-    const r = avanzar([a, cazador, tercero], asentamientos, { facciones });
-
-    // Se cuentan PAREJAS y no eventos: cada encuentro se narra dos veces, una a cada hogar (ver la doble
-    // atribución en `avanzarEjercitos`), así que contar eventos contaría el doble.
-    const parejas = new Set(
-      r.eventos
-        .filter((e) => typeof e !== 'string' && e.codigo === 'combate.encuentro')
-        .map((e) => JSON.stringify((e as { payload: { ejercitoAId: string; ejercitoBId: string } }).payload))
-    );
-    expect(parejas.size, 'un solo encuentro: sin cascada dentro del mismo minuto').toBe(1);
-  });
-
-  it('el orden es canónico por id, no el del array', () => {
-    const { facciones, asentamientos, a, b } = dosColumnas(1);
-    const resumen = (r: ReturnType<typeof avanzar>) =>
-      JSON.stringify([...r.ejercitos].sort((x, y) => (x.id < y.id ? -1 : 1)).map((e) => e.escuadrones.map((s) => s.cantidad)));
-
-    expect(resumen(avanzar([a, b], asentamientos, { facciones, rng: createRng(9) }))).toBe(
-      resumen(avanzar([b, a], asentamientos, { facciones, rng: createRng(9) }))
-    );
-  });
-
-  it('embosca una caravana enemiga en ruta y se queda con parte de la carga', () => {
+  it('alcanzar una caravana enemiga en ruta la deja a tiro, y `interceptar` se queda con parte de la carga', () => {
     const { facciones, asentamientos, a } = dosColumnas(1);
     const suya = asentamientos[1]!; // la de faccion-2
-    const presa: Caravana = {
-      ...caravanaDe('c-presa', suya.id, { ...a.posicionActual }),
-      estado: 'en_transito',
-      contenido: { piedra: 100 },
-    };
-
+    const presa: Caravana = { ...caravanaDe('c-presa', suya.id, { ...a.posicionActual }), estado: 'en_transito', contenido: { piedra: 100 } };
     const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'caravana' as const, id: presa.id } };
 
-    const r = avanzar([cazador], asentamientos, { facciones, caravanas: [presa], rng: createRng(3) });
+    const r = avanzar([cazador], asentamientos, { facciones, caravanas: [presa] });
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'columna.presa_alcanzada')).toBe(true);
+    expect(r.caravanas, 'alcanzarla no la captura').toHaveLength(1);
 
-    const ev = r.eventos.find((e) => typeof e !== 'string' && e.codigo === 'combate.caravana_interceptada_por_ejercito');
-    expect(ev, 'hubo emboscada').toBeDefined();
-    expect(r.caravanas, 'la caravana capturada se elimina').toHaveLength(0);
-    expect(r.ejercitos[0]!.suministro['piedra'], 'el botín viaja en el carro').toBe(100 * MILITAR.umbralCapturaCaravana);
+    const emboscada = interceptar(a, presa, capacidadCargaDe(a, []), new Set(), createRng(3));
+    expect(emboscada.capturada).toBe(true);
+    expect(emboscada.ejercito.suministro['piedra'], 'el botín viaja en el carro').toBe(100 * MILITAR.umbralCapturaCaravana);
   });
 
   it('una caravana ESCOLTADA no es un objetivo blando: perseguirla no la alcanza', () => {
@@ -1298,5 +1127,29 @@ describe('encuentros: solo se resuelve lo que se persigue', () => {
 
     expect(r.caravanas).toHaveLength(1);
     expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo.startsWith('combate.'))).toBe(false);
+  });
+});
+
+describe('inspeccionarPlaza: la defensa de una plaza ajena se mira desde el anillo de 40 (Doc 5.12.3)', () => {
+  it('devuelve su guarnición y quién está dentro, y nada de su almacén', () => {
+    const { propio, enemigo, ejercito, campamento } = frenteDeGuerra([escuadron('d1', 'milicia_lanceros', 12)]);
+    const aLaPuerta: EjercitoConTropa = { ...ejercito, posicionActual: enemigo.posicion };
+    const heroes = heroesCon(campamento, [...propio.heroesFundadoresIds, ...enemigo.heroesFundadoresIds]).map((h) =>
+      h.id === RIVAL ? { ...h, ubicacion: { tipo: 'asentamiento' as const, asentamientoId: enemigo.id } } : h
+    );
+
+    const defensa = inspeccionarPlaza(aLaPuerta, enemigo, heroes);
+
+    expect(defensa.guarnicion).toEqual([{ tropaId: 'milicia_lanceros', cantidad: 12, heroeId: RIVAL }]);
+    expect(defensa.heroesIds).toEqual([RIVAL]);
+    expect(Object.keys(defensa).sort()).toEqual(['asentamientoId', 'faccionId', 'guarnicion', 'heroesIds']);
+  });
+
+  it('de más lejos no se puede, ni mirar una plaza propia', () => {
+    const { propio, enemigo, ejercito } = frenteDeGuerra([]);
+    const lejos: EjercitoConTropa = { ...ejercito, posicionActual: { x: enemigo.posicion.x + MOVIMIENTO.radioInspeccion + 1, y: enemigo.posicion.y } };
+
+    expect(() => inspeccionarPlaza(lejos, enemigo, [])).toThrow('acercarse');
+    expect(() => inspeccionarPlaza({ ...ejercito, posicionActual: propio.posicion }, propio, [])).toThrow('tu Facción');
   });
 });

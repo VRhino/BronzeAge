@@ -354,7 +354,18 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   separarseDelEjercito: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   // El menú de interacción (Doc 5.12.3). `objetivo` distingue columna de caravana: son entidades distintas
   // con anillos y consecuencias distintas, y mezclarlas en un id suelto obligaría al motor a adivinar.
-  inspeccionar: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
+  inspeccionar: objeto(
+    {
+      heroeId: IDENTIFICADOR,
+      objetivo: {
+        oneOf: [
+          ...OBJETIVO_DE_INTERACCION.oneOf,
+          { type: 'object', properties: { tipo: { type: 'string', enum: ['asentamiento'] }, id: IDENTIFICADOR }, required: ['tipo', 'id'], additionalProperties: false },
+        ],
+      },
+    },
+    ['heroeId', 'objetivo']
+  ),
   atacar: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_ATAQUE }, ['heroeId', 'objetivo']),
   perseguir: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
   dejarDePerseguir: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),

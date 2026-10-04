@@ -21,7 +21,6 @@ import { campamentoDe } from '../src/engine/tropa';
 import { NECESIDADES } from '../src/constants';
 const NECESIDADES_UMBRAL_AMPLIACION = NECESIDADES.umbralAlmacenAmpliacion;
 import { avanzarNpcGobernanza, heroeBot, type ConfigNpcGobernanza, MINERALES_BONUS_FUNDACION } from '../src/session/npcGobernanza';
-import { derrotasEntre, esNpcSegun, resolverDerrotasNpc } from '../src/session/derrotas';
 import {
   CATEGORIA_POR_TIPO,
   celdaMinimaDeEdificio,
@@ -1235,9 +1234,7 @@ async function main() {
       const trasMotorCrudo = avanzarSimulacion(estado, mapa, contexto);
       // Los logros que salen de eventos los cuenta `exito` en la partida real; aquí no hay comandos, así que se cuentan a mano.
       const trasMotorContado = { ...trasMotorCrudo, tecnologia: sumarContadores(trasMotorCrudo.tecnologia, contadoresDeEventos(trasMotorCrudo.eventosDominio)) };
-      // Una Facción que perdió su última plaza en este tick se anexiona o se disuelve en el acto (`session/derrotas.ts`),
-      // como hace `avanzarTick` en la partida real: el NPC ya no lo barre en su turno.
-      const trasMotor = resolverDerrotasNpc(trasMotorContado, derrotasEntre(estado, trasMotorContado), esNpcSegun(config.faccionesIds)).estado;
+      const trasMotor = trasMotorContado;
       if (diagFundacion) {
         for (const ev of trasMotor.eventosDominio) {
           if (ev.codigo === 'expansion.asentamiento_fundado') {

@@ -22,7 +22,7 @@ import {
   conEscuadrones,
   conTropa,
   defensaDe,
-  heroesQueDefienden,
+  guarnicionDe,
   heroesQueEntranADefender,
   indiceTropa,
   sinEscolta,
@@ -57,6 +57,15 @@ export interface ComposicionColumna {
   faccionId: string;
   heroesIds: string[];
   escuadrones: { tropaId: string; cantidad: number; heroeId: string }[];
+}
+
+/** Lo que se saca de mirar de cerca una plaza ajena (Doc 5.12.3): su defensa —la guarnición y quién está dentro—,
+ * nunca su almacén. */
+export interface DefensaPlaza {
+  asentamientoId: string;
+  faccionId: string;
+  heroesIds: string[];
+  guarnicion: { tropaId: string; cantidad: number; heroeId: string }[];
 }
 
 /** Lo que se saca de mirar de cerca una caravana (Doc 5.12.3): QUE lleva y si va escoltada, nunca CUANTO. */
@@ -1012,6 +1021,23 @@ export function inspeccionarColumna(observador: Ejercito, objetivo: EjercitoConT
   };
 }
 
+/** La defensa de una plaza ajena, mirada desde el anillo de inspección (Doc 5.12.3): la guarnición de sus residentes y
+ * los héroes que hay dentro. El almacén no: para eso hay que entrar. */
+export function inspeccionarPlaza(observador: Ejercito, plaza: Asentamiento, heroes: readonly Heroe[]): DefensaPlaza {
+  if (plaza.faccionId === observador.faccionId) throw new MovilizacionInvalidaError('Esa plaza es de tu Facción.');
+  if (distancia(observador.posicionActual, plaza.posicion) > MOVIMIENTO.radioInspeccion) {
+    throw new MovilizacionInvalidaError(`Hay que acercarse a menos de ${MOVIMIENTO.radioInspeccion} para inspeccionar.`);
+  }
+  return {
+    asentamientoId: plaza.id,
+    faccionId: plaza.faccionId,
+    heroesIds: heroes.filter((h) => h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === plaza.id).map((h) => h.id),
+    guarnicion: guarnicionDe(plaza, heroes)
+      .filter((e) => e.cantidad > 0)
+      .map((e) => ({ tropaId: e.tropaId, cantidad: e.cantidad, heroeId: e.heroeId })),
+  };
+}
+
 /** Lo que se distingue de una caravana al acercarse: si lleva escolta y QUE carga, nunca cuanto (Doc 5.12.3).
  * Es lo mismo que ya se ve de lejos — inspeccionar una caravana no anade nada salvo certeza, y por eso
  * tampoco cuesta mas que acercarse. */
@@ -1386,9 +1412,9 @@ function sinNadieDentro(ejercito: Ejercito): boolean {
 }
 
 /**
- * Todo lo que el tick de ejércitos necesita del mundo. Es un objeto y no siete parámetros sueltos porque a
- * partir del Paso 9 lo son: `mapa` para moverse, `facciones`/`relaciones`/`instante`/`rng` para el asedio, y
- * `caravanas` para las adjuntas. Con esa lista, el orden posicional dejaba de decir nada en la llamada.
+ * Todo lo que el tick de ejércitos necesita del mundo. Es un objeto y no siete parámetros sueltos: `mapa` para
+ * moverse, `relaciones` para las persecuciones, `instante` para el hambre y los heridos, y `caravanas` para las
+ * adjuntas. Con esa lista, el orden posicional dejaba de decir nada en la llamada.
  */
 export interface ContextoAvanceEjercitos {
   asentamientos: readonly Asentamiento[];
@@ -1397,26 +1423,15 @@ export interface ContextoAvanceEjercitos {
   relaciones: readonly RelacionPolitica[];
   mapa: Mapa;
   instante: Instante;
-  rng: RandomFn;
   /** Zonas de influencia: una caravana dentro de una que no es del atacante no se puede interceptar (Doc 1.6). */
   zonas?: readonly ZonaInfluencia[];
   /** Red de caminos: sobre sus aristas se marcha más rápido (Doc 1.6, decisión 9). Ausente = vacía. */
   red?: RedCaminos;
   /** Dueños de las escuadras (`engine/tropa.ts`), y dónde queda cada uno al volver a casa. */
   heroes: readonly Heroe[];
-  /** Batallas de Unity (doc 01 §15). Con `abrirEnUnity`, un combate donde entra algún héroe humano sano no se resuelve
-   * aquí: se devuelve en `combatesPorAbrir` para que la partida abra la batalla. A una plaza de
-   * `asentamientosEnBatalla` no se la asedia: se espera a la puerta (Doc 5.15.1). Ausente = todo con números. */
-  batallas?: { abrirEnUnity: boolean; asentamientosEnBatalla: ReadonlySet<string> };
   /** Campamentos de mercenarios (Doc 1.9b): donde van los residentes de una plaza conquistada si su Facción se queda sin ninguna. */
   campamentosMercenarios?: readonly CampamentoMercenarios[];
 }
-
-/** Un combate que el tick no resuelve porque se juega en Unity: lo abre la partida (`session/batallas.ts`). */
-export type CombatePorAbrir =
-  | { tipo: 'asedio'; ejercitoId: string; asentamientoId: string }
-  | { tipo: 'columna'; ejercitoId: string; rivalId: string }
-  | { tipo: 'caravana'; ejercitoId: string; caravanaId: string };
 
 export interface ResultadoAvanceEjercitos {
   ejercitos: Ejercito[];
@@ -1431,21 +1446,13 @@ export interface ResultadoAvanceEjercitos {
   /** Los campamentos de mercenarios con los residentes acogidos por una conquista de este tick. */
   campamentosMercenarios: CampamentoMercenarios[];
   eventos: EventoCrudo[];
-  combatesPorAbrir: CombatePorAbrir[];
 }
 
 /**
  * Un tick de todos los ejércitos en campaña: comer, moverse, llegar (Doc 5.12/5.13).
  *
- * Consume aleatoriedad SOLO cuando un asedio llega a resolverse contra una plaza defendida (Paso 7). Todo lo
- * demás —hambre, movimiento, disolución, y la conquista de una plaza desguarnecida— es mudo de RNG, así que
- * una partida sin asedios hace exactamente las mismas llamadas que antes de que existiera esta mecánica y el
- * guardián de determinismo sigue verde SIN tocarlo.
- *
- * Y como el RNG ya entra aquí, los ejércitos se recorren en **orden canónico por id**: el orden del array es
- * determinista pero arbitrario, y dos estados equivalentes con los ejércitos en distinto orden consumirían la
- * secuencia aleatoria de forma distinta. Ordenar por id lo ancla al DATO y no a cómo quedó el array (§9,
- * hallazgo de la revisión cruzada; el Paso 10 lo necesitará igual para los encuentros).
+ * No consume aleatoriedad: los combates los piden los comandos (`atacar`), no el tick. Los ejércitos se recorren en
+ * **orden canónico por id**, para que el resultado dependa del DATO y no de cómo quedó el array.
  *
  * Orden dentro de cada ejército, y por qué:
  *  1. **Comer primero.** Un ejército que se queda sin suministro este tick pierde moral este tick, avance
@@ -1453,10 +1460,10 @@ export interface ResultadoAvanceEjercitos {
  *  2. **Disolver si se quedó sin nadie** (Doc 5.13.4), antes de moverlo: si no, marcharía como fantasma.
  *  3. **Mover**, salvo estacionado (que acampa pero sigue comiendo, a `factorConsumoEstacionado`).
  *  4. **Llegar**: `regresando` reintegra la tropa y el sobrante en casa; cualquier otro destino deja el
- *     ejército acampado donde llegó. Solo una columna de héroes bot asedia al llegar a una plaza enemiga.
+ *     ejército acampado donde llegó: llegar no es asediar, ni para un bot (Doc 5.12.3).
  */
 export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: ContextoAvanceEjercitos): ResultadoAvanceEjercitos {
-  const { asentamientos, caravanas, facciones, relaciones, mapa, instante, rng } = contexto;
+  const { asentamientos, caravanas, facciones, relaciones, mapa, instante } = contexto;
   const caminos = aristasDeRed(contexto.red ?? RED_VACIA);
   if (ejercitos.length === 0) {
     return {
@@ -1467,7 +1474,6 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       heroes: [...contexto.heroes],
       campamentosMercenarios: [...(contexto.campamentosMercenarios ?? [])],
       eventos: [],
-      combatesPorAbrir: [],
     };
   }
 
@@ -1480,16 +1486,7 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   // tropa que vuelve a casa— se aplica en el momento, porque el siguiente asedio o reposte tiene que verlo.
   let heroes = [...contexto.heroes];
   let campamentosMercenarios: CampamentoMercenarios[] = [...(contexto.campamentosMercenarios ?? [])];
-  /** Heridos al empezar el tick (Doc 5.16.4): sus escuadras no asedian, y un ejército de solo heridos espera. */
-  const heridos = heridosEn(heroes, instante);
   const indice = indiceTropa(heroes);
-  // Batallas de Unity (doc 01 §15): un combate donde entra algún héroe humano sano no se resuelve aquí, se devuelve
-  // para que la partida abra la batalla. `enCombate` es lo que ya va a una batalla este tick.
-  const abrirEnUnity = contexto.batallas?.abrirEnUnity ?? false;
-  const humanos = new Set(heroes.filter((h) => h.controlador === 'humano').map((h) => h.id));
-  const conHumano = (e: Ejercito) => e.participantes.some((p) => humanos.has(p.heroeId));
-  const combatesPorAbrir: CombatePorAbrir[] = [];
-  const enCombate = new Set<string>();
   let caravanasActuales: CaravanaConEscolta[] = caravanas.map((c) => conEscolta(c, indice));
   const consumoTropasDe = (plaza: Asentamiento): number => consumoRacionDeEscuadrones(campamentoDe(plaza, heroes));
   const situar = (ids: readonly string[], ubicacion: UbicacionHeroe): void => {
@@ -1623,42 +1620,13 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
         });
         continue;
       }
-      // Llegó a su destino y acampa: llegar no es asediar, asediar se ordena (Doc 5.12.4, `atacar`). Solo una columna de
-      // héroes bot asedia al llegar a la plaza enemiga que tenía por destino: su intención es su política (Doc 5.12.3).
-      // Y lo hace UNA vez, al cruzar el final de la ruta: acampada ahí ya no vuelve a asaltar.
-      const objetivo = ejercito.objetivo.tipo === 'asentamiento' ? porId.get(ejercito.objetivo.id) : undefined;
-      const enemiga = objetivo && objetivo.faccionId !== ejercito.faccionId && !conHumano(ejercito) ? objetivo : undefined;
-      if (enemiga && (contexto.batallas?.asentamientosEnBatalla.has(enemiga.id) || !tieneHeroeSano(ejercito, heridos))) {
-        // Espera a la puerta: la plaza ya está en una batalla (Doc 5.15.1), o todos sus héroes están heridos y asedia
-        // cuando alguno sane (Doc 5.16.4; decisión del usuario, 2026-09-14). Sigue `marchando` con la ruta acabada,
-        // así la llegada se vuelve a mirar cada tick.
-        supervivientes.push(ejercito);
-        continue;
-      }
-      if (enemiga && abrirEnUnity && !estaProtegida(enemiga, instante) && heroesQueDefienden(enemiga, heroes, heridos).some((h) => humanos.has(h.id))) {
-        // Con algún humano dentro el asedio se juega en Unity (Doc 5.10): acampa a la puerta y la partida abre la batalla.
-        combatesPorAbrir.push({ tipo: 'asedio', ejercitoId: ejercito.id, asentamientoId: enemiga.id });
-        enCombate.add(ejercito.id);
-        supervivientes.push({ ...ejercito, estado: 'estacionado' });
-        continue;
-      }
-      if (enemiga) {
-        const asedio = asediarPlaza(ejercito, enemiga, { asentamientos: [...porId.values()], ejercitos, heroes, facciones: faccionesActuales, relaciones, campamentosMercenarios }, heridos, instante, rng);
-        ejercito = asedio.ejercito;
-        campamentosMercenarios = asedio.campamentosMercenarios;
-        for (const a of asedio.asentamientos) porId.set(a.id, a);
-        heroes = asedio.heroes;
-        faccionesActuales = asedio.facciones;
-        supervivientes.push(...asedio.columnas);
-        eventos.push(...asedio.eventos);
-      } else {
-        eventos.push({
-          codigo: 'ejercito.llega',
-          asentamientoId: ejercito.origenAsentamientoId,
-          mensaje: `El ejército ${ejercito.id} llega a su destino y acampa.`,
-          payload: { ejercitoId: ejercito.id, objetivo: ejercito.objetivo },
-        });
-      }
+      // Llegó a su destino y acampa: llegar no es asediar, asediar se ordena (Doc 5.12.4, `atacar`), sea humano o bot.
+      eventos.push({
+        codigo: 'ejercito.llega',
+        asentamientoId: ejercito.origenAsentamientoId,
+        mensaje: `El ejército ${ejercito.id} llega a su destino y acampa.`,
+        payload: { ejercitoId: ejercito.id, objetivo: ejercito.objetivo },
+      });
       ejercito = { ...ejercito, estado: 'estacionado' };
     }
 
@@ -1671,30 +1639,18 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   // TODOS: resolverlo mientras la mitad de las columnas aún no se ha movido daría choques con posiciones de
   // dos momentos distintos, y el resultado dependería del orden del array.
   // Los heridos de nuevo, no los del principio: quien perdió un asedio en este tick ya no persigue a nadie.
-  const conEncuentros = resolverEncuentros(
-    supervivientes,
-    caravanasActuales,
-    faccionesActuales,
-    relaciones,
-    porId,
-    heridosEn(heroes, instante),
-    rng,
-    humanos,
-    abrirEnUnity ? { enCombate } : undefined,
-    heroes,
-    contexto.zonas ?? []
-  );
+  const conEncuentros = cerrarPersecuciones(supervivientes, caravanasActuales, relaciones, porId, heridosEn(heroes, instante), contexto.zonas ?? []);
   eventos.push(...conEncuentros.eventos);
 
   // Se deshacen las vistas: cada escuadra vuelve a su héroe, marcada donde acabó. La escolta de una caravana
   // capturada ya viene a 0 y al campamento (Doc 5.15.4).
-  const tropaFinal: Escuadron[] = [...conEncuentros.escoltasPerdidas];
+  const tropaFinal: Escuadron[] = [];
   const ejercitosFinal = conEncuentros.ejercitos.map((vista) => {
     const { ejercito, tropa } = sinTropa(vista);
     tropaFinal.push(...tropa);
     return ejercito;
   });
-  const caravanasFinal = conEncuentros.caravanas.map((vista) => {
+  const caravanasFinal = caravanasActuales.map((vista) => {
     const { caravana, tropa } = sinEscolta(vista);
     tropaFinal.push(...tropa);
     return caravana;
@@ -1704,197 +1660,60 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     ejercitos: ejercitosFinal,
     asentamientos: [...porId.values()],
     caravanas: caravanasFinal,
-    facciones: conEncuentros.facciones,
-    heroes: herir(conEscuadrones(heroes, tropaFinal), conEncuentros.vencidos, instante),
+    facciones: faccionesActuales,
+    heroes: conEscuadrones(heroes, tropaFinal),
     campamentosMercenarios,
     eventos,
-    combatesPorAbrir: [...combatesPorAbrir, ...conEncuentros.combatesPorAbrir],
   };
 }
 
 /**
- * Los encuentros de un tick (Doc 5.12.3) — **y ya no salen de la geometría**.
+ * Las persecuciones de un tick (Doc 5.12.3). Un encuentro exige que alguien lo PIDA con `atacar`, que se resuelve en
+ * su comando y no aquí: esta función solo cierra la persecución cuando el perseguidor alcanza a su presa (a 15), y a
+ * su dueño, humano o bot, se le ofrece atacar.
  *
- * Antes, dos columnas enemigas que pasaban a menos de 15 se masacraban solas dentro del tick. Ahora un
- * encuentro exige que alguien lo haya PEDIDO con `atacar`, que se resuelve en su comando y no aquí. Esta función
- * cierra las persecuciones cuando el perseguidor alcanza a su presa: a un héroe humano se le ofrece atacar (Doc
- * 5.12.3), y una columna de héroes bot combate, porque para el NPC perseguir ya es su orden de ataque.
- *
- * Las reglas que lo acotan siguen siendo las mismas, y siguen haciendo falta:
- *
- *  - **Orden canónico por id.** Cada encuentro consume RNG, así que el orden decide el resultado. Ordenar por
- *    id lo ancla al DATO y no a cómo quedara el array (§9 de la revisión por consejo: sin esto el determinismo
- *    se rompe aunque la secuencia global del tick sea correcta).
- *  - **Un encuentro por ejército y tick.** Sin eso, tres columnas juntas se trituran en cascada dentro del
- *    mismo minuto y el resultado depende de a quién se mire primero.
- *  - **Los aliados no se cruzan.** Dos columnas amigas compartiendo ruta se masacrarían solas cada tick, que
- *    es lo contrario de lo que una alianza significa. Tampoco las de la misma Facción, claro.
- *  - **Una caravana escoltada no es un objetivo blando**: el que se topa con ella se topa con su ejército, y
- *    eso ya es un encuentro entre ejércitos. Por eso las 'adjunta' se saltan al buscar caravanas.
- *  - **El más cercano primero.** Entre varios al alcance, el que se cruza de verdad es el que tienes encima;
- *    a igual distancia decide el id, para que no lo decida el orden de la lista.
+ * Una presa no se alcanza si es aliada o de la propia Facción, ni una caravana escoltada (su ejército es la presa),
+ * ni una caravana en un refugio (Doc 1.6). Sin héroe sano o sin soldados en pie no se persigue (Doc 5.16.4).
  */
-function resolverEncuentros(
+function cerrarPersecuciones(
   ejercitos: readonly EjercitoConTropa[],
   caravanas: readonly CaravanaConEscolta[],
-  facciones: readonly Faccion[],
   relaciones: readonly RelacionPolitica[],
   /** `asentamientoId -> Asentamiento` del tick ya avanzado: de aquí sale de qué Facción es cada caravana. */
   asentamientosPorId: ReadonlyMap<string, Asentamiento>,
-  /** Los héroes heridos ahora: ni persiguen, ni se les alcanza, ni sus escuadras combaten (Doc 5.16.4). */
   heridos: ReadonlySet<string>,
-  rng: RandomFn,
-  /** Los héroes humanos: su persecución no combate sola, y con Unity un combate donde entran se juega allí. */
-  humanos: ReadonlySet<string>,
-  /** Con batallas de Unity: lo que ya va a una batalla este tick. */
-  unity: { enCombate: ReadonlySet<string> } | undefined,
-  /** Para el tope de héroes por bando (`enBatalla`). */
-  heroes: readonly Heroe[],
-  /** Inmunidad (Doc 1.6): dentro de una zona que no es del atacante, una caravana no se intercepta. */
   zonas: readonly ZonaInfluencia[]
-): {
-  ejercitos: EjercitoConTropa[];
-  caravanas: CaravanaConEscolta[];
-  facciones: Faccion[];
-  eventos: EventoCrudo[];
-  escoltasPerdidas: Escuadron[];
-  /** Los héroes de los bandos que perdieron: los hiere quien tiene los héroes. */
-  vencidos: string[];
-  /** Los que alcanzaron a su presa con algún humano sano dentro: se juegan en Unity, no aquí. */
-  combatesPorAbrir: CombatePorAbrir[];
-} {
+): { ejercitos: EjercitoConTropa[]; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
-  const combatesPorAbrir: CombatePorAbrir[] = [];
-  if (ejercitos.length === 0) {
-    return { ejercitos: [...ejercitos], caravanas: [...caravanas], facciones: [...facciones], eventos, escoltasPerdidas: [], vencidos: [], combatesPorAbrir };
-  }
-  const conHumanoSano = (participantes: readonly { heroeId: string }[]) =>
-    unity !== undefined && participantes.some((p) => humanos.has(p.heroeId) && !heridos.has(p.heroeId));
-
   const porId = new Map(ejercitos.map((e) => [e.id, e]));
-  const escoltasPerdidas: Escuadron[] = [];
-  const vencidos: string[] = [];
-  let caravanasVivas = [...caravanas];
-  let faccionesActuales = [...facciones];
-  const yaChocaron = new Set<string>();
-
   const enemiga = (a: string, b: string) => a !== b && !estanAliadas(relaciones, a, b);
-  const porIdAsc = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
   for (const id of [...porId.keys()].sort()) {
-    if (yaChocaron.has(id) || unity?.enCombate.has(id)) continue;
     const ejercito = porId.get(id)!;
-    // Pelea lo que no está herido (Doc 5.16.4): sin héroe sano no se persigue, y sin soldados sanos no se choca.
-    if (!tieneHeroeSano(ejercito, heridos) || sinSoldados(enBatalla(ejercito, heridos))) continue;
-
-    // **Solo se resuelve lo que se persigue.** Sin presa fijada no hay encuentro, por muy cerca que se pase.
     const presaFijada = ejercito.persiguiendo;
-    if (!presaFijada) continue;
+    if (!presaFijada || !tieneHeroeSano(ejercito, heridos) || sinSoldados(enBatalla(ejercito, heridos))) continue;
 
-    const rivales =
+    const cerca = (p: Point) => distancia(p, ejercito.posicionActual) <= LOGISTICA.radioEncuentro;
+    const alcanzada =
       presaFijada.tipo === 'ejercito'
-        ? [...porId.values()]
-            .filter((o) => o.id === presaFijada.id)
-            .filter((o) => !yaChocaron.has(o.id) && !unity?.enCombate.has(o.id) && !sinSoldados(enBatalla(o, heridos)) && enemiga(ejercito.faccionId, o.faccionId))
-            .filter((o) => tieneHeroeSano(o, heridos))
-            .filter((o) => distancia(o.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro)
-        : [];
-    const presas =
-      presaFijada.tipo === 'caravana'
-        ? caravanasVivas
-            .filter((c) => c.id === presaFijada.id)
-            .filter((c) => c.estado !== 'adjunta' && c.estado !== 'disponible')
-            .filter((c) => {
-              const duena = asentamientosPorId.get(c.origenAsentamientoId)?.faccionId;
-              // Sin dueño identificable no se puede decidir si es enemiga, así que no se toca.
-              return duena !== undefined && enemiga(ejercito.faccionId, duena);
-            })
-            .filter((c) => !enRefugio(c.posicionActual, zonas, [...asentamientosPorId.values()], ejercito.faccionId))
-            .filter((c) => distancia(c.posicionActual, ejercito.posicionActual) <= LOGISTICA.radioEncuentro)
-        : [];
+        ? [...porId.values()].find(
+            (o) => o.id === presaFijada.id && enemiga(ejercito.faccionId, o.faccionId) && tieneHeroeSano(o, heridos) && !sinSoldados(enBatalla(o, heridos)) && cerca(o.posicionActual)
+          )
+        : caravanas.find((c) => {
+            if (c.id !== presaFijada.id || c.estado === 'adjunta' || c.estado === 'disponible' || !cerca(c.posicionActual)) return false;
+            const duena = asentamientosPorId.get(c.origenAsentamientoId)?.faccionId;
+            return duena !== undefined && enemiga(ejercito.faccionId, duena) && !enRefugio(c.posicionActual, zonas, [...asentamientosPorId.values()], ejercito.faccionId);
+          });
+    if (!alcanzada) continue;
 
-    const masCerca = <T extends { id: string; posicionActual: Point }>(lista: T[]): T | undefined =>
-      [...lista].sort((x, y) => {
-        const dx = distancia(x.posicionActual, ejercito.posicionActual);
-        const dy = distancia(y.posicionActual, ejercito.posicionActual);
-        return dx !== dy ? dx - dy : porIdAsc(x, y);
-      })[0];
-
-    const rival = masCerca(rivales);
-    const alcanzada = rival ?? masCerca(presas);
-    if (alcanzada && ejercito.participantes.some((p) => humanos.has(p.heroeId))) {
-      // Un héroe humano no combate por alcanzar a su presa: la persecución termina a 15 y se le ofrece atacar (Doc
-      // 5.12.3). Se enteran los dos, como en todo el anillo de 15.
-      porId.set(ejercito.id, { ...ejercito, persiguiendo: undefined });
-      const payload: PayloadPresaAlcanzada = { ejercitoId: ejercito.id, objetivo: presaFijada };
-      const mensaje = `La columna ${ejercito.id} alcanza a ${alcanzada.id}: puede atacarla.`;
-      for (const asentamientoId of new Set([ejercito.origenAsentamientoId, alcanzada.origenAsentamientoId])) {
-        eventos.push({ codigo: 'columna.presa_alcanzada', mensaje, payload, asentamientoId });
-      }
-      continue;
-    }
-    if (rival && conHumanoSano([...ejercito.participantes, ...rival.participantes])) {
-      // Con algún humano se juega en Unity (Doc 5.10): la persecución acaba aquí y la partida abre la batalla.
-      combatesPorAbrir.push({ tipo: 'columna', ejercitoId: ejercito.id, rivalId: rival.id });
-      porId.set(ejercito.id, { ...ejercito, persiguiendo: undefined });
-      yaChocaron.add(ejercito.id);
-      yaChocaron.add(rival.id);
-      continue;
-    }
-    if (rival) {
-      const choque = encuentroEntreEjercitos(enBatalla(ejercito, heridos, heroes), enBatalla(rival, heridos, heroes), faccionesActuales, rng);
-      // Alcanzada la presa, la persecución termina: se persigue para pelear, y ya se peleo. Al que cae le
-      // toca lo mismo que en un ataque (`trasDerrota`): sus héroes heridos, que impide rematarlo en cadena el
-      // minuto siguiente, y la mitad del carro para el otro.
-      const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
-      const perdio = choque.b.escuadrones.some((e) => e.cantidad > 0) && !choque.a.escuadrones.some((e) => e.cantidad > 0);
-      let cazador = conApartadas(choque.a, ejercito);
-      let alcanzado = conApartadas(choque.b, rival);
-      if (gano) {
-        const secuela = trasDerrota(alcanzado);
-        alcanzado = secuela.perdedor;
-        cazador = cargarBotin(cazador, secuela.botin, capacidadCargaDe(cazador, caravanasVivas));
-        vencidos.push(...secuela.vencidos);
-      } else if (perdio) {
-        const secuela = trasDerrota(cazador);
-        cazador = secuela.perdedor;
-        alcanzado = cargarBotin(alcanzado, secuela.botin, capacidadCargaDe(alcanzado, caravanasVivas));
-        vencidos.push(...secuela.vencidos);
-      }
-      porId.set(ejercito.id, { ...cazador, persiguiendo: undefined });
-      porId.set(rival.id, alcanzado);
-      faccionesActuales = choque.facciones;
-      for (const e of choque.eventos) {
-        eventos.push(atribuir(e, ejercito.origenAsentamientoId));
-        eventos.push(atribuir(e, rival.origenAsentamientoId));
-      }
-      yaChocaron.add(ejercito.id);
-      yaChocaron.add(rival.id);
-      continue;
-    }
-
-    const presa = masCerca(presas);
-    if (presa && conHumanoSano(ejercito.participantes)) {
-      combatesPorAbrir.push({ tipo: 'caravana', ejercitoId: ejercito.id, caravanaId: presa.id });
-      porId.set(ejercito.id, { ...ejercito, persiguiendo: undefined });
-      yaChocaron.add(ejercito.id);
-      continue;
-    }
-    if (presa) {
-      const emboscada = interceptarCaravanaConEjercito(enBatalla(ejercito, heridos, heroes), presa, capacidadCargaDe(ejercito, caravanasVivas), rng);
-      porId.set(ejercito.id, { ...conApartadas(emboscada.ejercito, ejercito), persiguiendo: undefined });
-      // Si la caravana se zafa, perdió el que la perseguía (Doc 5.16.4).
-      if (!emboscada.capturada) vencidos.push(...ejercito.participantes.map((p) => p.heroeId));
-      caravanasVivas = emboscada.caravana
-        ? caravanasVivas.map((c) => (c.id === presa.id ? emboscada.caravana! : c))
-        : caravanasVivas.filter((c) => c.id !== presa.id);
-      // Escolta sin héroe (Doc 3.13.4) que vuelve a 0 al campamento tras perder la caravana (Doc 5.15.4).
-      escoltasPerdidas.push(...emboscada.escoltaPerdida);
-      for (const e of emboscada.eventos) eventos.push(atribuir(e, ejercito.origenAsentamientoId));
-      yaChocaron.add(ejercito.id);
+    porId.set(ejercito.id, { ...ejercito, persiguiendo: undefined });
+    const payload: PayloadPresaAlcanzada = { ejercitoId: ejercito.id, objetivo: presaFijada };
+    const mensaje = `La columna ${ejercito.id} alcanza a ${alcanzada.id}: puede atacarla.`;
+    for (const asentamientoId of new Set([ejercito.origenAsentamientoId, alcanzada.origenAsentamientoId])) {
+      eventos.push({ codigo: 'columna.presa_alcanzada', mensaje, payload, asentamientoId });
     }
   }
 
-  return { ejercitos: [...porId.values()], caravanas: caravanasVivas, facciones: faccionesActuales, eventos, escoltasPerdidas, vencidos, combatesPorAbrir };
+  return { ejercitos: [...porId.values()], eventos };
 }
 

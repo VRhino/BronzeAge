@@ -15,7 +15,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Ejercito, RecursoTipo } from '../../domain/types';
 import { createRng } from '../../worldgen';
-import { avanzarSimulacion } from '../../engine/simulation';
 import { comerciarEnPlaza } from '../../engine/market';
 import { avanzarNpcGobernanza } from '../npcGobernanza';
 import {
@@ -237,15 +236,6 @@ describe('el NPC persigue: sin esto el batch se queda sin combates y nadie se en
 
     const cazador = r.estado.ejercitos.find((e) => e.id === 'col-a')!;
     expect(cazador.persiguiendo, 'sin presa fijada no habria combate nunca').toEqual({ tipo: 'ejercito', id: 'col-b' });
-  });
-
-  it('y en el tick siguiente eso PRODUCE combate: el laboratorio no se queda en paz', () => {
-    const { estado, mapa } = dosColumnasNpc();
-    const conPresas = avanzarNpcGobernanza(estado, mapa, contextoDeTest(1, createRng(5)), {}).estado;
-
-    const sim = avanzarSimulacion(conPresas, mapa, contextoDeTest(2, createRng(5)));
-
-    expect(sim.eventosDominio.some((e) => e.codigo === 'combate.encuentro'), 'hubo combate').toBe(true);
   });
 
   it('no persigue a los suyos: solo a enemigos', () => {

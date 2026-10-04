@@ -12,6 +12,7 @@ import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseE
 import { marcharA, salirAlMundo } from '../comandos/presencia';
 import { movilizarEjercito, replegarEjercito } from '../comandos/ejercitos';
 import { inspeccionar } from '../comandos/interaccion';
+import { crearFaccionNpc } from '../comandos/crearFaccionNpc';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { LOGISTICA, MOVIMIENTO, SIMULACION, VISION } from '../../constants';
 import { conEscuadrones } from '../../engine/tropa';
@@ -346,5 +347,29 @@ describe('inspeccionar — la informacion se compra acercandose', () => {
   it('y ese anillo esta ENTRE ver y chocar, que es lo que lo hace un juego de dos', () => {
     expect(MOVIMIENTO.radioInspeccion).toBeGreaterThan(LOGISTICA.radioEncuentro);
     expect(MOVIMIENTO.radioInspeccion).toBeLessThan(VISION.ejercito);
+  });
+});
+
+describe('inspeccionar una plaza ajena (Doc 5.12.3)', () => {
+  it('desde el anillo de 40 devuelve su defensa, y su Facción recibe el aviso', () => {
+    const s = GameSession.crear('inspeccion-plaza', { seed: 7 });
+    s.ejecutar(crearFaccionNpc, { nombre: 'Alfa' });
+    s.ejecutar(crearFaccionNpc, { nombre: 'Beta' });
+    const e0 = s.getState();
+    const [alfa, beta] = ['Alfa', 'Beta'].map((n) => e0.asentamientos.find((a) => a.faccionId === e0.facciones.find((f) => f.nombre === n)!.id)!);
+    const mirón = alfa!.heroesFundadoresIds[0]!;
+    expect(s.ejecutar(salirAlMundo, { asentamientoId: alfa!.id, heroeId: mirón, escuadronIds: [], carga: {} }, opcDe(mirón)).ok).toBe(true);
+    const payload = s.exportar();
+    const cerca = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, ejercitos: payload.state.ejercitos.map((c) => (c.liderId === mirón ? { ...c, posicionActual: { x: beta!.posicion.x + 30, y: beta!.posicion.y } } : c)) },
+    });
+
+    const r = cerca.ejecutar(inspeccionar, { heroeId: mirón, objetivo: { tipo: 'asentamiento', id: beta!.id } }, opcDe(mirón));
+
+    expect(r.ok).toBe(true);
+    expect((r.datos as { heroesIds: string[] }).heroesIds.sort()).toEqual([...beta!.heroesFundadoresIds].sort());
+    const aviso = r.eventos.find((ev) => ev.codigo === 'asentamiento.observado');
+    expect(aviso?.asentamientoId, 'el aviso va a la plaza mirada').toBe(beta!.id);
   });
 });
