@@ -5,6 +5,9 @@
 // id, y además se despierta con lo que le toca —su columna llega o alcanza a su presa, le proponen un trueque—.
 // Tras cada tick piensan **en orden de id**, cada uno con su RNG: con el adaptador en proceso, misma semilla → mismo
 // resultado.
+//
+// Sesiones (D55): cada bot juega unas horas al día, en uno o dos bloques sacados de su semilla. Al empezar su sesión se
+// conecta y al acabar se desconecta, como un humano que abre y cierra el cliente (Doc 1.10.6); fuera de ella no piensa.
 import type { EventoDominio } from '../domain/eventos';
 import { instante, type Instante } from '../domain/tiempo';
 import { createRng, type RandomFn } from '../worldgen';
@@ -65,6 +68,30 @@ interface Bot {
   memoria: MemoriaBot;
   rng: RandomFn;
   desfase: number;
+  /** Minutos del día [inicio, fin) en que juega; `fin` puede pasar de 1440 (la sesión cruza la medianoche). */
+  sesiones: [number, number][];
+  /** Lo último que se le dijo al mundo; ausente hasta su primer tick. */
+  conectado?: boolean;
+}
+
+const MINUTOS_DIA = 24 * 60;
+/** Horas de juego al día de un bot (D55, placeholder a calibrar con batch). */
+const HORAS_AL_DIA = { min: 2, max: 6 };
+
+/** Uno o dos bloques al día, de 2 a 6 horas en total, a horas sacadas de su RNG (D55). */
+function horarioDe(rng: RandomFn): [number, number][] {
+  const total = Math.round((HORAS_AL_DIA.min + rng() * (HORAS_AL_DIA.max - HORAS_AL_DIA.min)) * 60);
+  const bloques = rng() < 0.5 ? 1 : 2;
+  const duracion = Math.round(total / bloques);
+  const primero = Math.floor(rng() * MINUTOS_DIA);
+  // El segundo bloque, al menos 4 horas después de que acabe el primero: dos sesiones del día, no una partida en dos.
+  const segundo = (primero + duracion + 240 + Math.floor(rng() * (MINUTOS_DIA - 2 * duracion - 240))) % MINUTOS_DIA;
+  return (bloques === 1 ? [primero] : [primero, segundo]).map((inicio) => [inicio, inicio + duracion]);
+}
+
+function enSesion(bot: Bot, tick: number): boolean {
+  const minuto = tick % MINUTOS_DIA;
+  return bot.sesiones.some(([inicio, fin]) => (minuto >= inicio && minuto < fin) || minuto + MINUTOS_DIA < fin);
 }
 
 export class RunnerDeBots {
@@ -72,20 +99,24 @@ export class RunnerDeBots {
   private readonly pizarras = new Map<string, Pizarra>();
   private readonly cadaTicks: number;
   private readonly semilla: number;
+  private readonly siempre: boolean;
 
   constructor(
     private readonly puerto: PuertoBot,
     private readonly cerebro: Cerebro,
-    opciones: { semilla: number; cadaTicks?: number }
+    opciones: { semilla: number; cadaTicks?: number; /** `siempre`: sin sesiones, conectados todo el día (tests). */ horario?: 'por-semilla' | 'siempre' }
   ) {
     this.cadaTicks = opciones.cadaTicks ?? 5;
     this.semilla = opciones.semilla;
+    this.siempre = opciones.horario === 'siempre';
   }
 
   alta(heroeId: string): void {
     if (this.bots.has(heroeId)) return;
     const h = hash(heroeId);
-    this.bots.set(heroeId, { heroeId, memoria: { esperas: new Map() }, rng: createRng((this.semilla ^ h) >>> 0), desfase: h % this.cadaTicks });
+    const rng = createRng((this.semilla ^ h) >>> 0);
+    const sesiones: [number, number][] = this.siempre ? [[0, MINUTOS_DIA]] : horarioDe(rng);
+    this.bots.set(heroeId, { heroeId, memoria: { esperas: new Map() }, rng, desfase: h % this.cadaTicks, sesiones });
   }
 
   /** Después de cada tick: piensan los que tocan, en orden de id. Devuelve cuántos pensaron. */
@@ -101,6 +132,12 @@ export class RunnerDeBots {
     let pensaron = 0;
     for (const id of [...this.bots.keys()].sort()) {
       const bot = this.bots.get(id)!;
+      const debe = enSesion(bot, tick);
+      if (debe !== bot.conectado) {
+        this.puerto.actuar(id, debe ? 'conectarse' : 'desconectarse', { heroeId: id });
+        bot.conectado = debe;
+      }
+      if (!debe) continue;
       const { columnaId, residenciaId } = bot.memoria;
       const leToca =
         (tick + bot.desfase) % this.cadaTicks === 0 ||

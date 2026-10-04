@@ -39,6 +39,11 @@ export class HubDeDifusion {
     this.partidas.get(gameId)?.get(socket)?.canales.delete(canal);
   }
 
+  /** ¿Le queda a este jugador algún socket abierto en la partida? Con varias pestañas, cerrar una no lo desconecta. */
+  sigueConectado(gameId: string, jugadorId: string): boolean {
+    return [...(this.partidas.get(gameId)?.values() ?? [])].some((c) => c.jugadorId === jugadorId);
+  }
+
   /** Cuántas conexiones tiene abiertas esta partida ahora mismo — para tests y, más adelante, métricas
    * (doc 4, Fase E3: "clientes conectados"). */
   conexionesAbiertas(gameId: string): number {

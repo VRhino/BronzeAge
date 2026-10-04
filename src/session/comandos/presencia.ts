@@ -19,9 +19,12 @@ import { conFotoTomadaPor, cruzarLaPuerta, retomarColumna, situarHeroes } from '
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conEscuadrones } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
-import { exito } from './tipos';
+import { exito, sinCambios } from './tipos';
 import { campamentoEn, comando, conColumnas, conTropaDe, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento } from './ayudas';
-import { evento } from './eventos';
+import { conMomento, evento } from './eventos';
+import { volverAlMundo } from '../../engine/presencia';
+import { PRESENCIA } from '../../constants';
+import { instante } from '../../domain/tiempo';
 
 export interface ParamsSalirAlMundo {
   asentamientoId: string;
@@ -387,4 +390,35 @@ export const vetarJugador = comando<ParamsVetarJugador, void>((estado, _mapa, ct
       }),
     ]
   );
+});
+
+export interface ParamsPresenciaEnElMundo {
+  heroeId: string;
+}
+
+/**
+ * Desconectarse (Doc 1.10.6): el héroe sigue en el mundo 2:30 —moviéndose como iba— y después sale con su tropa y su
+ * carro (`salirDelMundo`, lo aplica el tick). Lo pide el cliente al cerrarse, o el runner de bots al acabar su sesión.
+ */
+export const desconectarse = comando<ParamsPresenciaEnElMundo, void>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, params.heroeId);
+  if (heroe.fuera || heroe.desconectaEn !== undefined) return sinCambios(estado);
+  const desconectaEn = instante(ctx.instante + PRESENCIA.retardoDesconexionMs);
+  return exito({ ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? { ...h, desconectaEn } : h)) }, [
+    evento(ctx, { codigo: 'jugador.se_desconecta', mensaje: `${heroe.displayName} se desconecta.`, payload: { heroeId: heroe.id, desconectaEn } }),
+  ]);
+});
+
+/**
+ * Conectarse (Doc 1.10.6): si aún no había salido, se queda; si estaba fuera, reaparece donde quedó —en su plaza, o en
+ * su punto con su columna, sus escuadras y su carro (`volverAlMundo`)—.
+ */
+export const conectarse = comando<ParamsPresenciaEnElMundo, void>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, params.heroeId);
+  if (!heroe.fuera) {
+    if (heroe.desconectaEn === undefined) return sinCambios(estado);
+    return exito({ ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? { ...h, desconectaEn: undefined } : h)) }, []);
+  }
+  const r = volverAlMundo(estado, heroe.id, `ejercito-${ctx.ids.siguiente()}`, ctx.instante);
+  return exito({ ...estado, heroes: r.heroes, ejercitos: r.ejercitos }, conMomento(ctx, r.eventos));
 });

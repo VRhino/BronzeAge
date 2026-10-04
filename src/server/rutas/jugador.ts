@@ -15,6 +15,7 @@ import { eventosVisiblesParaJugador, proyectarParaJugador } from '../../session/
 import type { RunnerDePartida } from '../runnerDePartida';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
+import { esCuentaDeBot } from '../identidad/proveedorClave';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE } from './esquemas';
 import {
@@ -210,7 +211,12 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       const jugadorId = resuelto.actor.membresia!.jugadorId!;
       const heroe = heroeDe(runner, jugadorId);
       const actor: ActorDeComando = { rol: 'jugador', heroeId: heroe?.id ?? null };
-      return ejecutarComandoHttp(reply, runner, request.body, actor, heroe?.id ?? jugadorId, jugadorId, deps.hub, deps.auditoria, (r) => ({
+      // El héroe de una cuenta de bot nace bot (doc 12 §8.3). Lo decide la cuenta, no lo que mande el cliente.
+      const cuerpo =
+        request.body.tipo === 'crearHeroe' && esCuentaDeBot(deps.identidad.repositorio, resuelto.usuario.id)
+          ? { ...request.body, params: { ...(request.body.params as object), controlador: 'bot' } }
+          : request.body;
+      return ejecutarComandoHttp(reply, runner, cuerpo, actor, heroe?.id ?? jugadorId, jugadorId, deps.hub, deps.auditoria, (r) => ({
         proyeccion: proyeccionDe(r, jugadorId),
       }));
     }

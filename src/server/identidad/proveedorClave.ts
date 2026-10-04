@@ -51,7 +51,8 @@ export function registrarCredencial(
   repositorio: RepositorioIdentidad,
   nick: string,
   clave: string,
-  ahora: string
+  ahora: string,
+  opciones: { bot?: boolean } = {}
 ): string {
   const nickNormalizado = normalizarNick(nick);
   if (nickNormalizado.length === 0 || nickNormalizado.length > NICK_MAX) {
@@ -63,7 +64,7 @@ export function registrarCredencial(
   if (repositorio.buscarCredencialLocal(nickNormalizado)) throw new NickYaRegistradoError(nickNormalizado);
 
   const salt = randomBytes(16).toString('hex');
-  repositorio.guardarCredencialLocal({ nick: nickNormalizado, salt, hash: hashDeClave(clave, salt), creadaEn: ahora });
+  repositorio.guardarCredencialLocal({ nick: nickNormalizado, salt, hash: hashDeClave(clave, salt), creadaEn: ahora, ...(opciones.bot ? { bot: true as const } : {}) });
   return nickNormalizado;
 }
 
@@ -88,4 +89,10 @@ export function crearProveedorClave(repositorio: RepositorioIdentidad): Proveedo
       return { proveedor: ESQUEMA_CLAVE, sujetoId: nick };
     },
   };
+}
+
+/** ¿Es una cuenta de bot? (doc 12 §8.3): entró con el proveedor `clave` y su credencial se registró como bot. */
+export function esCuentaDeBot(repositorio: RepositorioIdentidad, usuarioId: string): boolean {
+  const identidad = repositorio.buscarIdentidadDeUsuario(usuarioId);
+  return identidad?.proveedor === ESQUEMA_CLAVE && repositorio.buscarCredencialLocal(identidad.sujetoId)?.bot === true;
 }

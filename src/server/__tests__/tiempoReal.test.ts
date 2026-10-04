@@ -5,7 +5,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type WebSocket from 'ws';
 import { crearServidor } from '../api';
@@ -261,5 +261,38 @@ describe('difusion de eventos tras un comando', () => {
     await cerrado;
 
     expect(hub.conexionesAbiertas('g1')).toBe(0);
+  });
+});
+
+describe('presencia: estar conectado es tener el cliente abierto (Doc 1.10.6)', () => {
+  async function heroeDe(jugadorId: string) {
+    const admin = await sesionDe('jefa');
+    const estado = (await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin })).json();
+    return (estado.heroes as { jugadorId: string; desconectaEn?: number }[]).find((h) => h.jugadorId === jugadorId)!;
+  }
+
+  it('cerrar el último socket pide la desconexión; con otra pestaña abierta, no', async () => {
+    await partidaCreada('g1');
+    const { auth, jugadorId } = await jugadorEn('g1', 'ana');
+    const uno = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const dos = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
+
+    uno.terminate();
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await heroeDe(jugadorId)).desconectaEn, 'le queda otra pestaña').toBeUndefined();
+
+    dos.terminate();
+    await vi.waitFor(async () => expect((await heroeDe(jugadorId)).desconectaEn).toBeDefined());
+  });
+
+  it('volver a abrir el cliente antes de que salga cancela la desconexión', async () => {
+    await partidaCreada('g1');
+    const { auth, jugadorId } = await jugadorEn('g1', 'ana');
+    (await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth })).terminate();
+    await vi.waitFor(async () => expect((await heroeDe(jugadorId)).desconectaEn).toBeDefined());
+
+    const otra = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
+    await vi.waitFor(async () => expect((await heroeDe(jugadorId)).desconectaEn).toBeUndefined());
+    otra.terminate();
   });
 });

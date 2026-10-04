@@ -450,6 +450,14 @@ export interface Heroe {
    * combaten sin él. Se comprueba al leer (`estaHerido`, engine/heroe.ts); ausente o vencido = sano. Sustituye a la
    * Tregua que antes tenía la columna. */
   heridoHasta?: Instante;
+  /** Desconexión pedida (Doc 1.10.6): sale del mundo en este instante, si no vuelve antes. */
+  desconectaEn?: Instante;
+  /**
+   * Fuera del mundo (Doc 1.10.6, D33): de dónde salió —la plaza, si estaba dentro— y el carro que se llevó. Sus escuadras
+   * libres van con él (`contenedor: 'fuera'`); la guarnición y la escolta se quedan donde están prestadas (D40b).
+   * Ausente = está en el mundo.
+   */
+  fuera?: { asentamientoId?: string; carro: Record<string, number> };
 }
 
 export const ATRIBUTOS_HEROE = ['fuerza', 'destreza', 'armadura', 'vitalidad'] as const;
@@ -520,7 +528,9 @@ export type OrigenTropa = 'pesants' | 'artesanos' | 'nobleza';
 export type ContenedorEscuadron =
   | { tipo: 'campamento' }
   | { tipo: 'ejercito'; ejercitoId: string }
-  | { tipo: 'escolta'; caravanaId: string };
+  | { tipo: 'escolta'; caravanaId: string }
+  /** Fuera del mundo con su héroe desconectado (Doc 1.10.6): no come, no defiende, no se ve. */
+  | { tipo: 'fuera' };
 
 /**
  * Escuadrón (Doc 5.16.2, `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §13): una tropa de unidades NPC

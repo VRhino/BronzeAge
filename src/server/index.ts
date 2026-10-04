@@ -8,7 +8,8 @@
 // `ADMINISTRADORES` es una lista `proveedor:sujetoId` separada por comas, ej. `dev:jefa,oauth:1234`.
 //
 // `CODIGO_REGISTRO` protege el alta de cuentas locales (`POST /v1/registro`). Sin declararlo, el registro
-// queda abierto. Con él, el cliente debe mandarlo en el cuerpo del alta.
+// queda abierto. Con él, el cliente debe mandarlo en el cuerpo del alta. `CODIGO_REGISTRO_BOTS` da de alta cuentas de
+// bot (las del runner de bots): sin él, no se puede registrar ninguna.
 //
 // `ORIGENES_PERMITIDOS` (Fase C6, CORS) es una lista de orígenes separada por comas, ej.
 // `https://jugador.ejemplo.com,https://admin.ejemplo.com`. Vacía por defecto: sin ella, ningún origen
@@ -46,6 +47,8 @@ const ADMINISTRADORES = parsearAdministradores(process.env.ADMINISTRADORES);
 // registro queda ABIERTO — mismo criterio de "opt-in explícito" que el resto: para un playtest privado va,
 // para un servidor público conviene ponerlo y pasárselo a los jugadores.
 const CODIGO_REGISTRO = process.env.CODIGO_REGISTRO?.trim() || undefined;
+// Código con el que el runner de bots da de alta sus cuentas (doc 12 §8.3): las marca como bot, sin ningún poder extra.
+const CODIGO_REGISTRO_BOTS = process.env.CODIGO_REGISTRO_BOTS?.trim() || undefined;
 const ORIGENES_PERMITIDOS = (process.env.ORIGENES_PERMITIDOS ?? '')
   .split(',')
   .map((o) => o.trim())
@@ -86,6 +89,7 @@ async function arrancar(): Promise<void> {
       repositorio: identidad.repositorio,
     },
     codigoRegistro: CODIGO_REGISTRO,
+    codigoRegistroBots: CODIGO_REGISTRO_BOTS,
     servidoresBatalla: SERVIDORES_BATALLA,
     // Cerrar el servidor drena las escrituras de identidad pendientes (ver `alCerrar` en `api.ts`).
     alCerrar: () => identidad.esperarEscrituras(),

@@ -32,6 +32,8 @@ export interface DependenciasDeRutas {
   auditoria: RegistroDeAuditoria;
   /** Código de invitación exigido en `POST /v1/registro`. `undefined` = registro abierto. */
   codigoRegistro?: string;
+  /** Código con el que `POST /v1/registro` da de alta una cuenta de BOT (doc 12 §8.3). `undefined` = no hay altas de bot. */
+  codigoRegistroBots?: string;
   /** Servidores de batalla de Conquest que pueden hablar por `/v1/batallas/*` (doc 02 §3.3). Vacío = ninguno. */
   servidoresBatalla: readonly ServidorDeBatalla[];
 }

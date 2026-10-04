@@ -602,6 +602,15 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
+  // --- Presencia (Doc 1.10.6): cada uno entra y sale del mundo por sí mismo. ---
+  conectarse: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  desconectarse: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
   salirDeAsentamiento: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
@@ -715,7 +724,7 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // simplificación del comando en sí (Fase 0: el combate se resuelve en una sola llamada), no de esta matriz.
 };
 
-export type MotivoDenegacion = 'rol_insuficiente' | 'condicion_dominio';
+export type MotivoDenegacion = 'rol_insuficiente' | 'condicion_dominio' | 'fuera_del_mundo';
 
 export type ResultadoAutorizacion = { autorizado: true } | { autorizado: false; motivo: MotivoDenegacion };
 
@@ -734,6 +743,9 @@ export function verificarAutorizacion<T extends TipoComando>(
     // rol siempre lo trae); si llegara, denegar es lo correcto: no hay a quién atribuir la acción.
     // Sin héroe todavía, lo único que puede hacer es crearlo (doc 02 §4.2).
     if (actor.heroeId === null) return tipo === 'crearHeroe' ? { autorizado: true } : { autorizado: false, motivo: 'condicion_dominio' };
+    // Fuera del mundo no se da ninguna orden (Doc 1.10.6): lo único que se puede hacer es volver.
+    const heroeId = actor.heroeId;
+    if (tipo !== 'conectarse' && estado.heroes.find((h) => h.id === heroeId)?.fuera) return { autorizado: false, motivo: 'fuera_del_mundo' };
     if (entrada.condicionJugador && !entrada.condicionJugador(estado, actor.heroeId, params)) {
       return { autorizado: false, motivo: 'condicion_dominio' };
     }

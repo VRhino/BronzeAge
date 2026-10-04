@@ -581,6 +581,13 @@ Heroe
                          todos los héroes del bando perdedor de cualquier batalla; mientras dura no puede
                          ser perseguido, perseguir ni entrar en batallas. Sustituye a
                          `Ejercito.enTreguaHasta` (la Tregua desaparece, Doc 5.16.4).
+  desconectaEn?          Instante — nuevo (2026-10-04). Desconexión pedida: sale del mundo en este instante (2:30
+                         después de pedirla, Doc 1.10.6) si no vuelve antes. Si está en una batalla, espera a
+                         que termine.
+  fuera?                 { asentamientoId?, carro } — nuevo (2026-10-04). Fuera del mundo: la plaza de la que
+                         salió si estaba dentro, y el carro que se llevó. Sus escuadras libres van con él
+                         (contenedor 'fuera', §13); la guarnición y la escolta se quedan (D40b). Ausente = en el
+                         mundo. Al volver reaparece en esa plaza o, si salió del campo, en su punto con su columna.
   escuadrones: Escuadron[]   TODAS sus escuadras, estén donde estén (§13) — nuevo
   almacenPersonal?: Record<recurso, number>   lo que guarda para sí, hasta 1000 en total; viaja con él — NUEVO 2026-10-02
   loadouts: Loadout[]     nuevo
@@ -644,7 +651,8 @@ Escuadron
                         Conquest (`SquadInstanceData`): habilidades por id de texto; formaciones como índices
                         en la lista de la definición de escuadra (`permittedFormationIndexes`,
                         `selectedFormationIndex`)
-  contenedor: { tipo: 'campamento' } | { tipo: 'ejercito'; ejercitoId } | { tipo: 'escolta'; caravanaId }
+  contenedor: { tipo: 'campamento' } | { tipo: 'ejercito'; ejercitoId } | { tipo: 'escolta'; caravanaId } | { tipo: 'fuera' }
+                        ('fuera', 2026-10-04: con su héroe desconectado, Doc 1.10.6 — no come, no defiende, no se ve)
                         nuevo — dónde está FÍSICAMENTE. `'campamento'` = en el campamento del héroe (su
                         residencia —asentamiento o campamento de mercenarios—, §12), o en ninguna parte si aún no tiene Facción.
   enGuarnicion: boolean   nuevo — solo con contenedor `'campamento'` y héroe residente: asignada a la

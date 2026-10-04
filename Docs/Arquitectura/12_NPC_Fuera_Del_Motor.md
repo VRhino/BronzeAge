@@ -10,7 +10,8 @@ Nace de dos decisiones del usuario (`Consideraciones/Campamentos_Entrada_Fundaci
   escalonada, tres perfiles), con esa lógica fuera del motor.
 
 > **Estado (2026-10-04):** decidido el bot como cliente (§3), auto-comercio, ritmo y alta de bots (§8) y el orden
-> de trabajo (§9). **Hechos el paso 1 (diario, §5.1) y el paso 2 (runner de bots, §10.3).** Siguiente: paso 3.
+> de trabajo (§9). **Hechos los pasos 1 (diario, §5.1), 2 (runner de bots, §10.3) y 3 (presencia e identidad,
+> §11).** Siguiente: paso 4 (cerebro «sin plaza», depende del diseño de campamentos).
 
 ## 1. Cómo es hoy (medido en el código)
 
@@ -346,3 +347,24 @@ plaza. El batch actual (estado crudo + `avanzarNpcGobernanza`) no sirve para est
   vista con la que empezó a pensar (encadenar Rey → Gobernador → Tesorero cuesta un turno por paso); el Rey adopta
   tecnología solo desde dentro de una plaza y con lo que ve en su almacén; el destino de fundación se busca con las
   fichas de las plazas que ve, no con las completas; el reparto de héroes se cuenta con la pizarra.
+
+## 11. Paso 3: presencia e identidad de bot (hecho 2026-10-04)
+
+**Decisiones del usuario:** desde dentro de la plaza, las escuadras libres del campamento salen con el héroe (D33
+literal); la guarnición se queda (D40b). Mientras D33b no exista con Conquest, quien está en una batalla no sale del
+mundo hasta que termina. Reglas en el canon, Doc 1.10.6.
+
+- **Motor** (`engine/presencia.ts`): `salirDelMundo` (plaza, columna sola —con sus caravanas adjuntas de vuelta al
+  origen, D40—, o ejército con más gente —se separa y el mando pasa al de más antigüedad—) y `volverAlMundo` (a su
+  plaza si sigue residiendo, si no a su punto con su columna). Contenedor de escuadra `fuera` y campos
+  `Heroe.desconectaEn` / `Heroe.fuera`, también en el contrato v1 y en el modelo de datos compartido (aditivo).
+- **Sesión**: comandos `conectarse` / `desconectarse` (cada uno el suyo); el tick saca a quien cumplió los 2:30 y no
+  está en batalla; fuera del mundo la autorización solo deja `conectarse` (`fuera_del_mundo`).
+- **Servidor**: abrir el WebSocket de tiempo real conecta; cerrar el último socket del jugador desconecta; apagar el
+  servidor no desconecta a nadie.
+- **Bots** (`src/bots/runner.ts`, D55): cada bot tiene su horario por semilla, uno o dos bloques que suman de 2 a 6 horas
+  al día (placeholder). Al empezar su sesión manda `conectarse`, al acabarla `desconectarse`, y fuera no piensa. Los
+  tests de comportamiento usan `horario: 'siempre'`; el batch, el de semilla.
+- **Identidad** (§8.3): `POST /v1/registro` con `CODIGO_REGISTRO_BOTS` da de alta una cuenta de bot (la credencial
+  local lleva `bot: true`). Su héroe nace con `controlador: 'bot'`, que pone el servidor y no el cliente. Ningún otro
+  poder. El runner en proceso no usa cuentas (actúa con los héroes directamente); las usará el adaptador remoto.

@@ -60,7 +60,7 @@ import {
   soltarCaravana,
   unirseAEjercito,
 } from './ejercitos';
-import { entrarEnAsentamiento, fijarPuerta, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
+import { conectarse, desconectarse, entrarEnAsentamiento, fijarPuerta, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
 import { aplicarResultado, cancelarBatalla, conCandadoDeBatalla, confirmarInicio, registrarAsignacion, registrarTokens, unirseABatalla } from './batalla';
@@ -118,6 +118,8 @@ const MANEJADORES = {
   salirAlMundo,
   marcharA,
   entrarEnAsentamiento,
+  conectarse,
+  desconectarse,
   salirDeAsentamiento,
   guarnecer,
   fijarPuerta,

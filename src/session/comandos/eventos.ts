@@ -50,3 +50,8 @@ export function desdeCrudos(ctx: ContextoComando, crudos: EventoCrudo[], asentam
     return { ...base, momento: ctx.momento, asentamientoId };
   });
 }
+
+/** Como `desdeCrudos`, pero cada evento conserva la plaza a la que ya venía atribuido. */
+export function conMomento(ctx: Pick<ContextoComando, 'momento'>, crudos: readonly EventoCrudo[]): EventoDominio[] {
+  return crudos.map((crudo) => ({ ...(typeof crudo === 'string' ? { codigo: 'legado', mensaje: crudo } : crudo), momento: ctx.momento }));
+}

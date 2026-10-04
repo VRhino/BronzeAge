@@ -116,11 +116,14 @@ export function registrarRutasDeSesion(app: FastifyInstance, deps: DependenciasD
     { schema: ESQUEMA_REGISTRO },
     async (request, reply) => {
       const { nick, clave, codigo } = request.body;
-      if (deps.codigoRegistro !== undefined && codigo !== deps.codigoRegistro) {
+      // El código de bots (doc 12 §8.3) da de alta una cuenta de bot; el humano, o ninguno si el registro está abierto,
+      // una humana.
+      const bot = deps.codigoRegistroBots !== undefined && codigo === deps.codigoRegistroBots;
+      if (!bot && deps.codigoRegistro !== undefined && codigo !== deps.codigoRegistro) {
         return reply.code(403).send({ error: 'código de invitación ausente o incorrecto' });
       }
       try {
-        const nickNormalizado = registrarCredencial(deps.identidad.repositorio, nick, clave, deps.ahora());
+        const nickNormalizado = registrarCredencial(deps.identidad.repositorio, nick, clave, deps.ahora(), { bot });
         return reply.code(201).send({ nick: nickNormalizado });
       } catch (err) {
         if (err instanceof DatosDeRegistroInvalidosError) return reply.code(400).send({ error: mensajeDe(err) });

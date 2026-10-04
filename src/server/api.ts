@@ -96,6 +96,8 @@ export interface OpcionesServidor {
   /** Código de invitación exigido en `POST /v1/registro` (alta de cuenta local). `undefined` = registro
    * abierto. */
   codigoRegistro?: string;
+  /** Código de `POST /v1/registro` que da de alta cuentas de bot (doc 12 §8.3). `undefined` = sin altas de bot. */
+  codigoRegistroBots?: string;
   /**
    * Servidores de batalla de Conquest (doc 02 §3.3). **Vacío por defecto**, y es también el interruptor: sin ninguno,
    * ninguna batalla llega a Unity y todas se resuelven con números (decisión del usuario, 2026-09-15).
@@ -145,6 +147,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     // forma determinista en vez de depender de la hora del sistema.
     auditoria: new RegistroDeAuditoria(almacen, ahora),
     codigoRegistro: opciones.codigoRegistro,
+    codigoRegistroBots: opciones.codigoRegistroBots,
     servidoresBatalla,
   };
 

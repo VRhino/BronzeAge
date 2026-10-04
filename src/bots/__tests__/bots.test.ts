@@ -9,10 +9,10 @@ import { RunnerDeBots } from '../runner';
 import { cerebroDeBot } from '../cerebro';
 
 /** Tres Facciones de bots con el andamio del batch, y su runner. Con la semilla 7, dos nacen a la vista una de otra. */
-function mundo(ticks: number) {
+function mundo(ticks: number, horario: 'siempre' | 'por-semilla' = 'siempre') {
   const sesion = GameSession.crear('bots', { seed: 7 });
   for (const nombre of ['Alfa', 'Beta', 'Gamma']) sesion.ejecutar(crearFaccionNpc, { nombre });
-  const bots = new RunnerDeBots(puertoEnProceso(sesion), cerebroDeBot, { semilla: 7 });
+  const bots = new RunnerDeBots(puertoEnProceso(sesion), cerebroDeBot, { semilla: 7, horario });
   for (const h of sesion.getState().heroes) bots.alta(h.id);
   const eventos: EventoDominio[] = [];
   for (let tick = 1; tick <= ticks; tick++) {
@@ -51,6 +51,20 @@ describe('bots: juegan con los comandos de un jugador', () => {
 
   it('misma semilla, misma partida: los bots piensan en orden de id, cada uno con su RNG', () => {
     expect(JSON.stringify(mundo(200).sesion.exportar())).toBe(JSON.stringify(mundo(200).sesion.exportar()));
+  });
+});
+
+describe('sesiones de los bots (D55)', () => {
+  it('cada bot juega unas horas al día: fuera de su sesión se desconecta y sale del mundo como un humano', () => {
+    const { sesion, eventos } = mundo(24 * 60, 'por-semilla');
+    const heroes = sesion.getState().heroes.map((h) => h.id);
+    const salen = new Set(eventos.filter((e) => e.codigo === 'jugador.sale_del_mundo').map((e) => (e.payload as { heroeId: string }).heroeId));
+    const vuelven = new Set(eventos.filter((e) => e.codigo === 'jugador.vuelve_al_mundo').map((e) => (e.payload as { heroeId: string }).heroeId));
+
+    expect(salen.size, 'todos salen del mundo en algún momento del día').toBe(heroes.length);
+    expect(vuelven.size, 'y vuelven al empezar su sesión').toBeGreaterThan(0);
+    const fuera = sesion.getState().heroes.filter((h) => h.fuera).length;
+    expect(fuera, 'a cualquier hora, la mayoría está fuera').toBeGreaterThan(heroes.length / 2);
   });
 });
 

@@ -69,7 +69,9 @@ export type Equipamiento = Record<SlotEquipo, ItemInstancia | null>;
 export type ContenedorEscuadron =
   | { tipo: 'campamento' }
   | { tipo: 'ejercito'; ejercitoId: string }
-  | { tipo: 'escolta'; caravanaId: string };
+  | { tipo: 'escolta'; caravanaId: string }
+  /** Fuera del mundo con su héroe desconectado (Doc 1.10.6). */
+  | { tipo: 'fuera' };
 
 export interface EscuadronDto {
   id: string;
@@ -130,6 +132,10 @@ export interface HeroeDto {
   liderazgoBase: number;
   ubicacion: UbicacionHeroe;
   heridoHasta?: Instante;
+  /** Desconexión pedida: sale del mundo en este instante (Doc 1.10.6). */
+  desconectaEn?: Instante;
+  /** Fuera del mundo: de qué plaza salió, si estaba dentro, y el carro que se llevó (Doc 1.10.6). */
+  fuera?: { asentamientoId?: string; carro: Record<string, number> };
   escuadrones: EscuadronDto[];
   loadouts: LoadoutDto[];
   inventario: ItemInstancia[];

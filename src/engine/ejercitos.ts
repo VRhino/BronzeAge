@@ -905,7 +905,7 @@ export function separarseDelEjercito(
  * Sin validar: separarse (arriba) y volver a una casa en la que no se reside (`avanzarEjercitos`) ponen cada
  * uno sus condiciones.
  */
-function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string): { ejercito: EjercitoConTropa; columna: EjercitoConTropa } {
+export function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string): { ejercito: EjercitoConTropa; columna: EjercitoConTropa } {
   const dentro = ejercito.participantes.find((p) => p.heroeId === heroeId)!;
   const suyos = ejercito.escuadrones.filter((e) => e.heroeId === heroeId);
   // Se lleva COMO MUCHO un carro, que es lo que aportó (Doc 5.13). Se reparte a prorrata sobre lo que haya:

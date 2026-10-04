@@ -30,7 +30,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
 | 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
-| 36 | HÉROE | Héroes bot que juegan como jugadores (NPC fuera del motor) | ◐ pasos 1-2 hechos; faltan presencia, sin plaza, remoto |
+| 36 | HÉROE | Héroes bot que juegan como jugadores (NPC fuera del motor) | ◐ pasos 1-3 hechos; faltan sin plaza, remoto, D33b |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 | 39 | MILITAR | Escala de la experiencia de escuadra de Unity | ✘ espera a CQ-001 |
 | 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ◐ hecho; quedan cabos (ver entrada) |
@@ -336,10 +336,12 @@ producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las 
 ## 36. Héroes bot que juegan como jugadores (NPC fuera del motor)
 
 Plan y orden: `Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md` (§9 orden, §10 inventario de la gobernanza). Hechos el
-diario de comandos (paso 1) y el runner de bots con la gobernanza pasada a comandos (paso 2, `src/bots/`). Falta:
+diario de comandos (paso 1), el runner de bots con la gobernanza pasada a comandos (paso 2, `src/bots/`) y la
+presencia con las sesiones y las cuentas de bot (paso 3, Doc 1.10.6). Falta:
 
-- **Presencia e identidad de bot** (paso 3, D33/D55): entrar y salir del mundo con horario; cuentas de bot con
-  `CODIGO_REGISTRO_BOTS`, alta por `POST /v1/registro` + `crearHeroe`.
+- **D33b con Conquest**: reentrar en una batalla al reconectar, «abandonar batalla» con derrota, y el resultado del
+  bando para quien se cayó. Hoy quien está en una batalla no sale del mundo hasta que termina.
+- **Retirar las cuentas de bot** (D54) cuando lleguen jugadores: el servidor ya sabe cuáles son; falta la operación.
 - **Cerebro «sin plaza»** (paso 4, D53-D59): bots-héroe que llegan escalonados a los campamentos, con los tres
   perfiles; un bot sin residencia hoy no hace nada. Con él se borra el andamio `crearFaccionNpc` y
   `faccionesNpcIds`.

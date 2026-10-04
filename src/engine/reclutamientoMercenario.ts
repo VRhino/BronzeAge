@@ -151,7 +151,7 @@ export function reclutarEnCampamento(
 function reponibleAqui(e: Escuadron, campamento: CampamentoMercenarios, ejercitos: readonly Ejercito[]): boolean {
   const contenedor = e.contenedor;
   if (contenedor.tipo === 'campamento') return true;
-  if (contenedor.tipo === 'escolta') return false;
+  if (contenedor.tipo !== 'ejercito') return false;
   const columna = ejercitos.find((x) => x.id === contenedor.ejercitoId);
   return !!columna && distancia(columna.posicionActual, campamento.posicion) <= MOVIMIENTO.radioPuerta;
 }

@@ -12,6 +12,8 @@ export interface ParamsCrearHeroe {
   classDefinitionId: string;
   genero: Heroe['genero'];
   avatar: Heroe['avatar'];
+  /** Lo pone el SERVIDOR, nunca el cliente (el esquema HTTP no lo admite): `'bot'` si la cuenta es de bot (doc 12 §8.3). */
+  controlador?: Heroe['controlador'];
 }
 
 /**
@@ -31,7 +33,7 @@ export const crearHeroe = comando<ParamsCrearHeroe, { heroeId: string }>((estado
   const heroe: Heroe = {
     id: heroeId,
     jugadorId: ctx.actor,
-    controlador: 'humano',
+    controlador: params.controlador ?? 'humano',
     displayName,
     classDefinitionId: params.classDefinitionId,
     genero: params.genero,

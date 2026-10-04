@@ -334,6 +334,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // Presencia del jugador (Doc 1.10). `carga` es un mapa recurso -> cantidad: el jugador elige QUÉ se lleva,
   // no solo cuánto, así que no vale una lista de ids ni un número suelto. Las cantidades se validan en el
   // motor (capacidad del carro, almacén, reserva); aquí solo que sean números.
+  conectarse: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
+  desconectarse: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   salirAlMundo: objeto(
     {
       asentamientoId: IDENTIFICADOR,

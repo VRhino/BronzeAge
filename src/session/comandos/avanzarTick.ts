@@ -3,6 +3,9 @@ import { avanzarSimulacion, type ContextoSimulacion } from '../../engine/simulat
 import { bloqueosDe, eventosDeBatalla, vencerBatallas } from '../batallas';
 import { conResultadoDeSimulacion, estadoSimulacionDe, instanteDeTick, isoDeInstante, type GameSessionState } from '../estado';
 import { exito, type ContextoComando, type TransicionComando } from './tipos';
+import { salirDelMundo } from '../../engine/presencia';
+import type { EventoCrudo } from '../../domain/eventos';
+import { conMomento } from './eventos';
 
 /**
  * Avanza un tick de simulación.
@@ -69,5 +72,31 @@ export function avanzarTick(
   const eventosDeBatallas = trasVencer.vencidas
     .flatMap((b) => eventosDeBatalla(trasTick, b, 'batalla.fallida', `La batalla ${b.id} no llegó a jugarse: nadie pierde nada.`))
     .map((e) => ({ ...e, momento }));
-  return exito(trasTick, [...resultado.eventosDominio, ...eventosDeBatallas]);
+  const presencia = conSalidasDelMundo(trasTick, mapa, instante, bloqueos.heroes);
+  return exito(presencia.estado, [...resultado.eventosDominio, ...eventosDeBatallas, ...conMomento({ ...ctx, momento }, presencia.eventos)]);
+}
+
+/**
+ * Los que pidieron desconectarse y ya cumplieron su espera salen del mundo (Doc 1.10.6), en orden de id. Quien está en
+ * una batalla de Unity espera a que termine (D33b, decisión del usuario 2026-10-04: hasta que exista el abandono de
+ * batalla con Conquest).
+ */
+function conSalidasDelMundo(
+  estado: GameSessionState,
+  mapa: Mapa,
+  instante: number,
+  enBatalla: ReadonlySet<string>
+): { estado: GameSessionState; eventos: EventoCrudo[] } {
+  const salen = estado.heroes
+    .filter((h) => h.desconectaEn !== undefined && h.desconectaEn <= instante && !h.fuera && !enBatalla.has(h.id))
+    .map((h) => h.id)
+    .sort();
+  let actual = estado;
+  const eventos: EventoCrudo[] = [];
+  for (const heroeId of salen) {
+    const r = salirDelMundo(actual, heroeId, mapa);
+    actual = { ...actual, heroes: r.heroes, ejercitos: r.ejercitos, caravanas: r.caravanas };
+    eventos.push(...r.eventos);
+  }
+  return { estado: actual, eventos };
 }

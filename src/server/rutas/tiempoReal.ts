@@ -54,6 +54,24 @@ function conCredencialDeQuery(request: FastifyRequest): FastifyRequest {
 
 export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: DependenciasDeRutas): void {
   const { hub } = deps;
+  // Apagar el servidor (un despliegue) cierra todos los sockets, y eso no es que los jugadores cierren el cliente: no se
+  // desconecta a nadie. Sin esto, cada despliegue los sacaría del mundo, y la escritura llegaría con la partida cerrada.
+  let cerrando = false;
+  app.addHook('preClose', async () => {
+    cerrando = true;
+  });
+  /** Manda el comando de presencia del héroe de ese jugador, si tiene héroe. Un fallo al anotarlo se grita y no tumba el
+   * socket: la presencia se corrige sola en la siguiente conexión. */
+  const presencia = (gameId: string, jugadorId: string, tipo: 'conectarse' | 'desconectarse') => {
+    if (cerrando) return;
+    const runner = deps.partidas.obtener(gameId);
+    const heroe = runner?.getState().heroes.find((h) => h.jugadorId === jugadorId);
+    if (!runner || !heroe) return;
+    runner
+      .ejecutar(tipo, { heroeId: heroe.id }, heroe.id)
+      .then((r) => hub.difundir(gameId, r.eventos))
+      .catch((err) => console.error(`[presencia] ${tipo} de ${heroe.id} en '${gameId}':`, err));
+  };
   app.register(async (scoped) => {
     scoped.addHook('preValidation', async (request, reply) => {
       const { gameId } = request.params as ParametrosGameId;
@@ -75,6 +93,9 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
         const jugadorId = resuelto.actor.membresia!.jugadorId!;
 
         hub.conectar(gameId, jugadorId, socket);
+        // Presencia (Doc 1.10.6, D33): estar conectado es tener el cliente abierto. Abrirlo trae al héroe de vuelta al
+        // mundo; cerrar el último socket lo desconecta, y sale del mundo 2:30 después si no vuelve antes.
+        presencia(gameId, jugadorId, 'conectarse');
 
         socket.on('message', (data: Buffer) => {
           let mensaje: unknown;
@@ -107,7 +128,10 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
           socket.send(JSON.stringify({ tipo: 'suscrito', canal: mensaje.canal }));
         });
 
-        socket.on('close', () => hub.desconectar(gameId, socket));
+        socket.on('close', () => {
+          hub.desconectar(gameId, socket);
+          if (!hub.sigueConectado(gameId, jugadorId)) presencia(gameId, jugadorId, 'desconectarse');
+        });
       }
     );
   });

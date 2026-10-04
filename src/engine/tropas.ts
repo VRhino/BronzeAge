@@ -34,6 +34,8 @@ function dondeEsta(e: Escuadron): string {
       return `el ejército ${e.contenedor.ejercitoId}`;
     case 'escolta':
       return `la escolta de la caravana ${e.contenedor.caravanaId}`;
+    case 'fuera':
+      return 'fuera del mundo, con su héroe';
   }
 }
 
@@ -42,7 +44,7 @@ function dondeEsta(e: Escuadron): string {
 function reponibleAqui(e: Escuadron, asentamiento: Asentamiento, ejercitos: readonly Ejercito[]): boolean {
   const contenedor = e.contenedor;
   if (contenedor.tipo === 'campamento') return esResidente(asentamiento, e.heroeId);
-  if (contenedor.tipo === 'escolta') return false;
+  if (contenedor.tipo !== 'ejercito') return false;
   const columna = ejercitos.find((x) => x.id === contenedor.ejercitoId);
   return !!columna && distancia(columna.posicionActual, asentamiento.posicion) <= MOVIMIENTO.radioPuerta;
 }

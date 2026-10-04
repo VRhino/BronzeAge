@@ -139,6 +139,12 @@
               "properties": { "tipo": { "const": "escolta" }, "caravanaId": { "$ref": "#/definitions/Id" } },
               "required": ["tipo", "caravanaId"],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": { "tipo": { "const": "fuera" } },
+              "required": ["tipo"],
+              "additionalProperties": false
             }
           ]
         },
@@ -212,6 +218,16 @@
           ]
         },
         "heridoHasta": { "$ref": "#/definitions/Instante" },
+        "desconectaEn": { "$ref": "#/definitions/Instante" },
+        "fuera": {
+          "type": "object",
+          "properties": {
+            "asentamientoId": { "$ref": "#/definitions/Id" },
+            "carro": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } }
+          },
+          "required": ["carro"],
+          "additionalProperties": false
+        },
         "escuadrones": { "type": "array", "items": { "$ref": "#/definitions/Escuadron" } },
         "loadouts": { "type": "array", "items": { "$ref": "#/definitions/Loadout" } },
         "inventario": { "type": "array", "items": { "$ref": "#/definitions/ItemInstancia" } },

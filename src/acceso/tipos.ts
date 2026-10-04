@@ -57,6 +57,9 @@ export interface CredencialLocal {
   hash: string;
   salt: string;
   creadaEn: string;
+  /** Cuenta de bot (doc 12 §8.3): dada de alta con `CODIGO_REGISTRO_BOTS`. No da ningún poder: solo sirve para saber qué
+   * cuentas retirar y para que su héroe nazca con `controlador: 'bot'`. Ausente = humana. */
+  bot?: true;
 }
 
 // `Jugador` (identidad DENTRO de una partida) está diseñado en el doc 5 pero NO se declara aquí: hoy nada

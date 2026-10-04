@@ -1988,6 +1988,12 @@ export const CAPITAL = {
   cooldownDias: 14,
 } as const;
 
+/** Presencia (Doc 1.10.6). */
+export const PRESENCIA = {
+  /** Lo que tarda en salir del mundo quien se desconecta: alcanza a quien ya tenía a tiro, no a quien iba lejos. */
+  retardoDesconexionMs: 150_000,
+} as const;
+
 export const MOVIMIENTO = {
   /**
    * Velocidad de una columna SIN escuadrones — un jugador viajando solo. Por encima de la tropa ligera (20)

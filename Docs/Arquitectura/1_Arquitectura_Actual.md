@@ -238,7 +238,8 @@ ruta, sin alias sin versión). En total 30 rutas HTTP:
 
 - **`/v1/sesiones`** — `POST /sesiones` (login: `Authorization: <esquema> <credencial>` — hoy `clave
   <nick>:<contraseña>` para jugadores, `dev <sujeto>` para el cliente de administración en local),
-  `POST /registro` (alta de cuenta local: `{nick, clave, codigo?}`, opcionalmente tras un `CODIGO_REGISTRO`),
+  `POST /registro` (alta de cuenta local: `{nick, clave, codigo?}`, opcionalmente tras un `CODIGO_REGISTRO`; con
+  `CODIGO_REGISTRO_BOTS` la cuenta queda marcada como bot y su héroe nace `controlador: 'bot'`, doc 12 §11),
   `GET /sesiones/actual` (whoami). La puerta a las otras dos.
 - **`/v1/admin/*`** (`rutas/admin.ts`) — gobierno de la partida como objeto: `GET`/`POST /admin/partidas`
   (descubrir/crear), `POST .../:id/tick`, `GET .../:id` (estado completo), `.../eventos?desde=` (cursor C13),
