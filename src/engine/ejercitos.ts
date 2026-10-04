@@ -596,6 +596,7 @@ export function salirDelCampamento(
     origenAsentamientoId: '',
     participantes: [{ heroeId: heroe.id, unidoEn: instante }],
     tipo: comoEjercito ? 'ejercito' : 'personal',
+    ...(comoEjercito ? { origenCampamentoId: campamento.id } : {}),
     liderId: heroe.id,
     politicaDeUnion,
     escuadronIds: escuadrones.map((e) => e.id),
@@ -892,15 +893,18 @@ export function replegarEjercito(
   /** Quién lo pide. Cancelar es del Líder y solo suyo (Doc 5.14.3): el rumbo lo acordaron varios y deshacerlo
    * no puede ser cosa de uno cualquiera. No atrapa a nadie — el que no quiera seguir se separa. Omitirlo es
    * el camino del sistema (llegar, disolverse), que no tiene actor. */
-  quienLoPide?: string
+  quienLoPide?: string,
+  /** El campamento de mercenarios del que salió, si no salió de una plaza: vuelve a su puerta. */
+  campamento?: CampamentoMercenarios
 ): Ejercito {
   if (ejercito.estado === 'regresando') throw new MovilizacionInvalidaError('El ejército ya está regresando.');
   if (quienLoPide !== undefined && ejercito.liderId !== quienLoPide) {
     throw new MovilizacionInvalidaError('Cancelar la marcha es del Líder; el que no quiera seguir puede separarse.');
   }
-  if (!origen) throw new MovilizacionInvalidaError('El ejército no tiene asentamiento al que volver.');
+  const casa = origen?.posicion ?? campamento?.posicion;
+  if (!casa) throw new MovilizacionInvalidaError('El ejército no tiene asentamiento al que volver.');
 
-  const objetivo: ObjetivoEjercito = { tipo: 'asentamiento', id: origen.id };
+  const objetivo: ObjetivoEjercito = origen ? { tipo: 'asentamiento', id: origen.id } : { tipo: 'punto', punto: casa };
 
   if (ejercito.estado === 'marchando') {
     return {
@@ -912,7 +916,7 @@ export function replegarEjercito(
     };
   }
 
-  const vuelta = calcularRuta(mapa, ejercito.posicionActual, origen.posicion, { pasosRio: [origen.posicion] });
+  const vuelta = calcularRuta(mapa, ejercito.posicionActual, casa, { pasosRio: [casa] });
   if (!vuelta) throw new MovilizacionInvalidaError('No hay ruta por tierra de vuelta a casa desde aquí.');
 
   return { ...ejercito, estado: 'regresando', objetivo, ruta: vuelta, progreso: 0 };
@@ -1756,6 +1760,14 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
 
     // 4. Llegar.
     if (ejercito.estado !== 'estacionado' && ejercito.progreso >= 1) {
+      // El de un campamento no se disuelve en ninguna guarnición: se para en su puerta, y cada uno entra por su cuenta (solo).
+      if (ejercito.estado === 'regresando' && ejercito.origenCampamentoId && !porId.has(ejercito.origenAsentamientoId)) {
+        const solo = ejercito.participantes.length === 1;
+        ejercito = { ...ejercito, estado: 'estacionado', ...(solo ? { tipo: 'personal' as const, politicaDeUnion: 'rechazar' as const } : {}) };
+        eventos.push({ codigo: 'ejercito.regresa', mensaje: `El ejército ${ejercito.id} vuelve a la puerta de ${ejercito.origenCampamentoId}.`, payload: { ejercitoId: ejercito.id, origenAsentamientoId: '', reintegrado: false } });
+        supervivientes.push(ejercito);
+        continue;
+      }
       if (ejercito.estado === 'regresando') {
         const volvieron = reintegrar(ejercito);
         eventos.push({

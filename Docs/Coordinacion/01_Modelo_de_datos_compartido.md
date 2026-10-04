@@ -360,6 +360,7 @@ Ejercito
   id                      ejercitoId — existente
   faccionId                 existente
   origenAsentamientoId       de dónde salió y a dónde vuelve — existente
+  origenCampamentoId?        si salió de un campamento de mercenarios como ejército (2026-10-04): se repliega a su puerta
   participantes: { jugadorId: string; unidoEn: Instante }[]   existente. Tras este modelo, heroeId. Orden =
                             antigüedad, determina sucesión de liderazgo
   tipo: 'personal' | 'ejercito'   fijado al crear, nunca cambia — existente. NO se deriva de

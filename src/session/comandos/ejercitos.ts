@@ -184,7 +184,8 @@ export const replegarEjercito = comando<ParamsReplegarEjercito, void>((estado, m
   const origen = estado.asentamientos.find((a) => a.id === ejercitoActual.origenAsentamientoId);
   const desdeEstado = ejercitoActual.estado;
 
-  const ejercito = replegarEngine(ejercitoActual, origen, mapa, ctx.actor);
+  const campamento = estado.campamentosMercenarios.find((c) => c.id === ejercitoActual.origenCampamentoId);
+  const ejercito = replegarEngine(ejercitoActual, origen, mapa, ctx.actor, campamento);
 
   return exito(conEjercito(estado, ejercito), [
     evento(ctx, {

@@ -955,6 +955,8 @@ export interface Ejercito {
   /** De dónde salió y a dónde vuelve. Se reasigna al asentamiento propio más cercano si este cae; si la
    * Facción no conserva ninguno, el ejército queda sin hogar y sus jugadores huérfanos (Doc 5.4). */
   origenAsentamientoId: string;
+  /** El que salió de un campamento de mercenarios (sin plaza de origen): adónde se repliega, a su puerta (D76). */
+  origenCampamentoId?: string;
   /**
    * Quién va DENTRO, con independencia de si aporta escuadrones (Doc 5.12.1). Antes se derivaba de los
    * escuadrones, y por eso un jugador sin tropas no existía como participante y una columna cuyos soldados

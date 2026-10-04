@@ -7,9 +7,9 @@ import { crearMapa } from '../../world/mapa';
 import { GameSession } from '../gameSession';
 import { crearHeroe } from '../comandos/crearHeroe';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { salirDelCampamento } from '../comandos/presencia';
+import { entrarEnCampamento, salirDelCampamento } from '../comandos/presencia';
 import { aportarARefundacion, comprarCaravanaDeRefundacion } from '../comandos/mercenarios';
-import { adjuntarCaravana } from '../comandos/ejercitos';
+import { adjuntarCaravana, replegarEjercito } from '../comandos/ejercitos';
 import { fundar } from '../comandos/expansion';
 import { unirseEnCampo } from '../comandos/columna';
 import { desconectarse } from '../comandos/presencia';
@@ -132,5 +132,25 @@ describe('fundar en grupo desde el campamento (M2, D21)', () => {
     const r = lejos.ejecutar(fundar, {}, { actor: ana });
     expect(r.ok).toBe(true);
     expect(lejos.getState().asentamientos.find((a) => a.id === r.datos!.asentamientoId)!.heroesFundadoresIds.sort()).toEqual([ana, bea].sort());
+  });
+});
+
+describe('un ejército salido del campamento vuelve a él', () => {
+  it('se repliega a su puerta, se queda como columna propia si va solo, y entra', () => {
+    const { sesion, heroeId, opc } = conCaravanaComprada();
+    // conCaravanaComprada sale como columna personal: entra y sale otra vez como ejército con rumbo.
+    sesion.ejecutar(entrarEnCampamento, { campamentoId: 'mercenarios-0', heroeId }, opc);
+    const ejercitoId = sesion.ejecutar(
+      salirDelCampamento,
+      { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar', objetivo: { tipo: 'punto', punto: { x: 1000, y: 1000 } } },
+      opc
+    ).datos!.ejercitoId;
+    for (let i = 0; i < 3; i++) sesion.avanzarTick();
+    expect(sesion.ejecutar(replegarEjercito, { ejercitoId }, opc).ok).toBe(true);
+    for (let i = 0; i < 20 && sesion.getState().ejercitos.find((e) => e.id === ejercitoId)?.estado !== 'estacionado'; i++) sesion.avanzarTick();
+
+    const ejercito = sesion.getState().ejercitos.find((e) => e.id === ejercitoId)!;
+    expect(ejercito).toMatchObject({ estado: 'estacionado', tipo: 'personal' });
+    expect(sesion.ejecutar(entrarEnCampamento, { campamentoId: 'mercenarios-0', heroeId }, opc).ok).toBe(true);
   });
 });
