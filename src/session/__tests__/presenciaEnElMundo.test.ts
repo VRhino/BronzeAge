@@ -1,13 +1,15 @@
-// Desconectarse y volver (Doc 1.10.6, D33/D40/D40b): el héroe sale del mundo 2:30 después de pedirlo, con su tropa y
-// su carro, y reaparece donde quedó. La guarnición y la escolta se quedan; un ejército sigue sin él; las caravanas que
-// iban con el último vuelven solas a su origen.
+// Desconectarse y volver (Doc 1.10.6, D64-D71): desconectarse quita el control, no el sitio. Dentro de la plaza no se mueve
+// nada y no defiende en persona; en el campo, 2:30 después de pedirlo sale del mundo con su tropa y su carro —antes no, si le
+// persiguen— y reaparece donde quedó. Un ejército sigue sin él, con el mando para un conectado; las caravanas que iban con el
+// último vuelven solas a su origen.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { conectarse, desconectarse, salirAlMundo } from '../comandos/presencia';
 import { movilizarEjercito, unirseAEjercito } from '../comandos/ejercitos';
 import { verificarAutorizacion } from '../comandos/autorizacion';
 import { OPC, partidaConAsentamiento } from './fixtures';
-import { conEscuadrones } from '../../engine/tropa';
+import { instanteDeTick } from '../estado';
+import { conEscuadrones, heroesQueDefienden } from '../../engine/tropa';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import type { Caravana } from '../../domain/types';
 
@@ -41,21 +43,23 @@ const ticks = (s: GameSession, n: number) => {
 };
 
 describe('desconectarse desde dentro de la plaza', () => {
-  it('sigue dentro 2:30 y luego sale con sus escuadras libres; la guarnición se queda (D40b)', () => {
-    const { sesion, fundador } = partida();
+  it('a los 2:30 queda desconectado sin moverse: sigue dentro, sus escuadras también, y no defiende en persona (D64)', () => {
+    const { sesion, fundador, asentamientoId } = partida();
     expect(sesion.ejecutar(desconectarse, { heroeId: fundador }, opcDe(fundador)).ok).toBe(true);
 
     ticks(sesion, 2);
     expect(heroe(sesion, fundador).fuera, 'a los 2 minutos todavía está').toBeUndefined();
     ticks(sesion, 1);
 
-    expect(heroe(sesion, fundador).ubicacion.tipo).toBe('desconectado');
-    expect(heroe(sesion, fundador).fuera?.asentamientoId).toBe(sesion.getState().asentamientos[0]!.id);
-    expect(escuadra(sesion, 'esc-libre').contenedor).toEqual({ tipo: 'fuera' });
+    expect(heroe(sesion, fundador).fuera).toBeDefined();
+    expect(heroe(sesion, fundador).ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId });
+    expect(escuadra(sesion, 'esc-libre').contenedor).toEqual({ tipo: 'campamento' });
     expect(escuadra(sesion, 'esc-guardia').contenedor, 'la guarnición sigue en la plaza').toEqual({ tipo: 'campamento' });
+    const plaza = sesion.getState().asentamientos[0]!;
+    expect(heroesQueDefienden(plaza, sesion.getState().heroes, new Set()).map((h) => h.id)).not.toContain(fundador);
   });
 
-  it('fuera no puede dar órdenes; al volver aparece dentro con sus escuadras en el campamento', () => {
+  it('desconectado no puede dar órdenes; al volver sigue dentro con sus escuadras en el campamento', () => {
     const { sesion, fundador, asentamientoId } = partida();
     sesion.ejecutar(desconectarse, { heroeId: fundador }, opcDe(fundador));
     ticks(sesion, 3);
@@ -102,7 +106,36 @@ describe('desconectarse en el campo', () => {
     expect(nueva.origenAsentamientoId, 'vuelve a tener casa a la que replegarse').toBe(asentamientoId);
   });
 
-  it('si el Líder de un ejército se va, el mando pasa al de más antigüedad y el ejército sigue sin él', () => {
+  it('si le persiguen, la salida se aplaza, y como mucho hasta el tope (D66)', () => {
+    const { sesion: base, fundador, vecino, asentamientoId } = partida();
+    base.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, opcDe(fundador));
+    base.ejecutar(salirAlMundo, { asentamientoId, heroeId: vecino, escuadronIds: [], carga: {} }, opcDe(vecino));
+    const p = base.exportar();
+    const suya = p.state.ejercitos.find((e) => e.liderId === fundador)!;
+    const ahora = instanteDeTick(p.state.tick);
+    // La salida le toca dentro de un minuto (no en un minuto exacto del tope); la columna del vecino le persigue o no.
+    const conDesconexion = (persigue: boolean) =>
+      GameSession.importar({
+        ...p,
+        state: {
+          ...p.state,
+          heroes: p.state.heroes.map((h) => (h.id === fundador ? { ...h, desconectaEn: (ahora + 60_000) as typeof ahora } : h)),
+          ejercitos: p.state.ejercitos.map((e) => (e.liderId === vecino && persigue ? { ...e, persiguiendo: { tipo: 'ejercito' as const, id: suya.id } } : e)),
+        },
+      });
+
+    const libre = conDesconexion(false);
+    ticks(libre, 1);
+    expect(heroe(libre, fundador).fuera, 'sin peligro, sale a su hora').toBeDefined();
+
+    const perseguido = conDesconexion(true);
+    ticks(perseguido, 1);
+    expect(heroe(perseguido, fundador).fuera, 'perseguido: todavía en el mundo').toBeUndefined();
+    ticks(perseguido, 1);
+    expect(heroe(perseguido, fundador).fuera, 'pasado el tope, sale igual').toBeDefined();
+  });
+
+  it('si el Líder de un ejército se va, el mando pasa al conectado de más antigüedad y el ejército sigue sin él (D67)', () => {
     const { sesion, fundador, vecino, asentamientoId } = partida();
     sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-libre'], objetivo: PUNTO_LEJOS, politicaDeUnion: 'aceptar' }, opcDe(fundador));
     const ejercitoId = sesion.getState().ejercitos[0]!.id;

@@ -101,12 +101,13 @@ export function alTopeDeBatalla<H extends { id: string; nivel: number }>(heroes:
   return [...heroes].sort((a, b) => b.nivel - a.nivel || poderDe(b) - poderDe(a) || (a.id < b.id ? -1 : 1)).slice(0, tope);
 }
 
-/** Los héroes que defienden una plaza en persona: residentes que están DENTRO y sanos (Doc 5.12.4, 5.16.4). */
+/** Los héroes que defienden una plaza en persona: residentes que están DENTRO, conectados (D64) y sanos (Doc 5.12.4, 5.16.4). */
 export function heroesQueDefienden(asentamiento: Asentamiento, heroes: readonly Heroe[], heridos: ReadonlySet<string>): Heroe[] {
   return heroes.filter(
     (h) =>
       esResidente(asentamiento, h.id) &&
       !heridos.has(h.id) &&
+      !h.fuera &&
       h.ubicacion.tipo === 'asentamiento' &&
       h.ubicacion.asentamientoId === asentamiento.id
   );

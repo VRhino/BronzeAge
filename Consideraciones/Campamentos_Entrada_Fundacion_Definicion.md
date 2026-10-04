@@ -319,7 +319,10 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    devolución; fundar a pie fuera del juego (su código queda solo como fixture de tests, `fundarDePrueba`). **No hecho**:
    D44b (la caravana del campamento lleva justo el coste, no hay excedente que comer). **Pendiente del canon**: Doc 1.3
    sigue diciendo que el servidor arranca con Facciones NPC (D53), que va con el NPC fuera del motor.
-7. **Presencia**: base hecha en `b40af3d` (§3.2), **a corregir con D64-D71**: dentro de plaza o campamento solo una
+7. ~~**Presencia**~~ **Hecho** (D64-D71 en `engine/presencia.ts`, el tick y la defensa; canon Doc 1.10.6). **Ojo**: con
+   ticks de 1 minuto, 2:30 y el tope de 3 minutos caen en el mismo tick si la desconexión se pide en un minuto exacto, así
+   que el aplazamiento de D66 casi nunca cambia nada; pendiente de decidir (subir el tope o bajar el retardo). D33b sigue
+   con Conquest. Lo que era: base hecha en `b40af3d` (§3.2), a corregir con D64-D71: dentro de plaza o campamento solo una
    marca (sin contenedor `fuera`, sin defender en persona); aplazar la salida si le persiguen (máx. 3 min); mando al
    conectado más antiguo; caravana de fundación que vuelve se desarma y devuelve. Lo hace esta línea de trabajo (la
    sesión NPC queda parada hasta que los pasos 0-6 estén en `main`). Piezas: `engine/presencia.ts` (salir/volver,

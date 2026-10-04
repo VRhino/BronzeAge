@@ -2004,6 +2004,9 @@ export const CAPITAL = {
 export const PRESENCIA = {
   /** Lo que tarda en salir del mundo quien se desconecta: alcanza a quien ya tenía a tiro, no a quien iba lejos. */
   retardoDesconexionMs: 150_000,
+  /** Si al cumplirse el retardo una columna hostil le está persiguiendo, la salida se aplaza mientras dure, y como mucho hasta
+   * esto desde que pidió desconectarse (D66): quien huye desconectándose no gana nada. */
+  topeAplazamientoMs: 180_000,
 } as const;
 
 export const MOVIMIENTO = {

@@ -468,11 +468,12 @@ export interface Heroe {
   /** Desconexión pedida (Doc 1.10.6): sale del mundo en este instante, si no vuelve antes. */
   desconectaEn?: Instante;
   /**
-   * Fuera del mundo (Doc 1.10.6, D33): de dónde salió —la plaza, si estaba dentro— y el carro que se llevó. Sus escuadras
-   * libres van con él (`contenedor: 'fuera'`); la guarnición y la escolta se quedan donde están prestadas (D40b).
-   * Ausente = está en el mundo.
+   * Desconectado (Doc 1.10.6, D64-D71): no da órdenes ni participa en nada. Dentro de una plaza o de un campamento no se mueve
+   * nada —sigue en su `ubicacion`, no defiende en persona—; con la columna en el mapa, sale del mundo con ella (`ubicacion`
+   * pasa a `desconectado`, sus escuadras a `contenedor: 'fuera'` y `carro` es lo que llevaba). La guarnición y la escolta
+   * se quedan donde están prestadas (D40b). Ausente = conectado.
    */
-  fuera?: { asentamientoId?: string; carro: Record<string, number> };
+  fuera?: { carro: Record<string, number> };
 }
 
 export const ATRIBUTOS_HEROE = ['fuerza', 'destreza', 'armadura', 'vitalidad'] as const;

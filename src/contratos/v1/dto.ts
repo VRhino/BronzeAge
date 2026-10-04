@@ -136,8 +136,9 @@ export interface HeroeDto {
   heridoHasta?: Instante;
   /** Desconexión pedida: sale del mundo en este instante (Doc 1.10.6). */
   desconectaEn?: Instante;
-  /** Fuera del mundo: de qué plaza salió, si estaba dentro, y el carro que se llevó (Doc 1.10.6). */
-  fuera?: { asentamientoId?: string; carro: Record<string, number> };
+  /** Desconectado (Doc 1.10.6): no da órdenes. Dentro de una plaza o campamento no se mueve; en el mapa sale del mundo con su
+   * columna y `carro` es lo que llevaba. */
+  fuera?: { carro: Record<string, number> };
   escuadrones: EscuadronDto[];
   loadouts: LoadoutDto[];
   inventario: ItemInstancia[];

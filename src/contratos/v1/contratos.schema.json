@@ -228,7 +228,6 @@
         "fuera": {
           "type": "object",
           "properties": {
-            "asentamientoId": { "$ref": "#/definitions/Id" },
             "carro": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } }
           },
           "required": ["carro"],

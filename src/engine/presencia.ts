@@ -1,6 +1,7 @@
-// Presencia (Doc 1.10.6, D33/D40/D40b): al desconectarse, el héroe sale del mundo en el punto donde quedó, con su
-// tropa y su carro, y reaparece ahí al volver. Funciones puras sobre el mundo; cuándo se aplican (2:30 después de
-// pedirlo, nunca en mitad de una batalla) lo decide la partida (`session/comandos/avanzarTick.ts`).
+// Presencia (Doc 1.10.6, D64-D71): desconectarse quita el control, no el sitio. Dentro de una plaza o de un campamento no se
+// mueve nada; con la columna en el mapa, el héroe sale del mundo con ella y reaparece ahí al volver —a un jugador que no está
+// no se le puede cazar—. Funciones puras sobre el mundo; cuándo se aplican (2:30 después de pedirlo, aplazado si le
+// persiguen, nunca en mitad de una batalla) lo decide la partida (`session/comandos/avanzarTick.ts`).
 import type { Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Heroe } from '../domain/types';
 import type { Instante } from '../domain/tiempo';
 import type { EventoCrudo } from '../domain/eventos';
@@ -29,13 +30,14 @@ export interface ResultadoPresencia {
 const aFuera = (e: Escuadron): Escuadron => ({ ...e, contenedor: { tipo: 'fuera' } });
 
 /**
- * Saca del mundo a un héroe (Doc 1.10.6):
+ * Desconecta a un héroe (Doc 1.10.6):
  *
- * - **Dentro de una plaza**: sale él con las escuadras libres de su campamento; la guarnición se queda (D40b).
+ * - **Dentro de una plaza o de un campamento** (D64): no se mueve nada. Queda marcado (`fuera`) y no defiende en persona; la
+ *   guarnición defiende como siempre.
  * - **En su columna, solo**: la columna deja de existir y él se lleva escuadras y carro. Si llevaba caravanas adjuntas,
  *   vuelven solas a su origen haciendo el camino (D40); sin origen o sin camino por tierra, se pierden.
  * - **En un ejército con más gente**: se separa con lo suyo y, como mucho, un carro (Doc 5.14.2), y el ejército sigue
- *   sin él. Si era el Líder, el mando pasa al de más antigüedad (Doc 5.14.3).
+ *   sin él. Si era el Líder, el mando pasa al CONECTADO de más antigüedad (D67, Doc 5.14.3).
  *
  * La escolta que tenía cedida a una caravana se queda con ella (D40b).
  */
@@ -46,15 +48,9 @@ export function salirDelMundo(mundo: MundoPresencia, heroeId: string, mapa: Mapa
   const ubicacion = heroe.ubicacion;
 
   if (ubicacion.tipo !== 'columna') {
-    const plaza = ubicacion.tipo === 'asentamiento' ? mundo.asentamientos.find((a) => a.id === ubicacion.asentamientoId) : undefined;
-    const fuera: Heroe = {
-      ...heroe,
-      desconectaEn: undefined,
-      fuera: { ...(plaza ? { asentamientoId: plaza.id } : {}), carro: {} },
-      ubicacion: { tipo: 'desconectado', punto: plaza?.posicion ?? (ubicacion.tipo === 'desconectado' ? ubicacion.punto : { x: 0, y: 0 }) },
-      escuadrones: heroe.escuadrones.map((e) => (e.contenedor.tipo === 'campamento' && !e.enGuarnicion ? aFuera(e) : e)),
-    };
-    return { ...sinCambios, heroes: mundo.heroes.map((h) => (h.id === heroeId ? fuera : h)), eventos: [salida(heroe, plaza?.id)] };
+    const marcado: Heroe = { ...heroe, desconectaEn: undefined, fuera: { carro: {} } };
+    const plazaId = ubicacion.tipo === 'asentamiento' ? ubicacion.asentamientoId : undefined;
+    return { ...sinCambios, heroes: mundo.heroes.map((h) => (h.id === heroeId ? marcado : h)), eventos: [salida(heroe, plazaId)] };
   }
 
   const original = mundo.ejercitos.find((e) => e.id === ubicacion.ejercitoId);
@@ -66,10 +62,16 @@ export function salirDelMundo(mundo: MundoPresencia, heroeId: string, mapa: Mapa
   let carro: Record<string, number>;
 
   if (columna.participantes.length > 1) {
-    // El mando pasa al de más antigüedad antes de separarse: el Líder no puede irse dejando la columna sin cabeza.
-    const sucesor = [...columna.participantes]
+    // El mando pasa al conectado de más antigüedad antes de separarse (D67): el Líder no puede irse dejando la columna sin
+    // cabeza, ni dársela a otro que tampoco está. Si no queda ninguno conectado, al de más antigüedad.
+    const conectado = (id: string) => {
+      const h = mundo.heroes.find((x) => x.id === id);
+      return !!h && !h.fuera && h.desconectaEn === undefined;
+    };
+    const porAntiguedad = [...columna.participantes]
       .filter((p) => p.heroeId !== heroeId)
-      .sort((a, b) => a.unidoEn - b.unidoEn || (a.heroeId < b.heroeId ? -1 : 1))[0]!;
+      .sort((a, b) => a.unidoEn - b.unidoEn || (a.heroeId < b.heroeId ? -1 : 1));
+    const sucesor = porAntiguedad.find((p) => conectado(p.heroeId)) ?? porAntiguedad[0]!;
     const conMando = columna.liderId === heroeId ? { ...columna, liderId: sucesor.heroeId } : columna;
     const partido = desgajar(conMando, heroeId, `${original.id}-fuera`);
     ejercitos = [...ejercitos, sinTropa(partido.ejercito).ejercito];
@@ -112,35 +114,28 @@ function salida(heroe: Heroe, asentamientoId: string | undefined): EventoCrudo {
 }
 
 /**
- * Devuelve al mundo a un héroe que estaba fuera, donde quedó (Doc 1.10.6): dentro de la plaza de la que salió si sigue
- * residiendo en ella, y si no, en su punto con su columna personal, sus escuadras y su carro.
+ * Reconecta a un héroe (Doc 1.10.6). Si estaba dentro de una plaza o de un campamento, sigue ahí: solo vuelve a tener el control
+ * (D64). Si salió del mundo con su columna, reaparece en su punto con su columna personal, sus escuadras y su carro.
  */
 export function volverAlMundo(mundo: MundoPresencia, heroeId: string, ejercitoId: string, instante: Instante): ResultadoPresencia {
   const heroe = mundo.heroes.find((h) => h.id === heroeId);
   const sinCambios = { ejercitos: [...mundo.ejercitos], caravanas: [...mundo.caravanas], heroes: [...mundo.heroes], eventos: [] };
-  if (!heroe?.fuera || heroe.ubicacion.tipo !== 'desconectado') return sinCambios;
-  const { fuera } = heroe;
-  const punto = heroe.ubicacion.punto;
-  const plaza = fuera.asentamientoId ? mundo.asentamientos.find((a) => a.id === fuera.asentamientoId) : undefined;
+  if (!heroe?.fuera) return sinCambios;
   const vuelta = (h: Heroe): Heroe => ({ ...h, fuera: undefined, desconectaEn: undefined });
+  const residencia = mundo.asentamientos.find((a) => esResidente(a, heroeId));
   const evento: EventoCrudo = {
     codigo: 'jugador.vuelve_al_mundo',
-    ...(plaza ? { asentamientoId: plaza.id } : {}),
+    ...(residencia ? { asentamientoId: residencia.id } : {}),
     mensaje: `${heroe.displayName} vuelve al mundo.`,
     payload: { heroeId },
   };
-
-  if (plaza && esResidente(plaza, heroeId)) {
-    const dentro: Heroe = {
-      ...vuelta(heroe),
-      ubicacion: { tipo: 'asentamiento', asentamientoId: plaza.id },
-      escuadrones: heroe.escuadrones.map((e) => (e.contenedor.tipo === 'fuera' ? { ...e, contenedor: { tipo: 'campamento' } } : e)),
-    };
-    return { ...sinCambios, heroes: mundo.heroes.map((h) => (h.id === heroeId ? dentro : h)), eventos: [evento] };
+  if (heroe.ubicacion.tipo !== 'desconectado') {
+    return { ...sinCambios, heroes: mundo.heroes.map((h) => (h.id === heroeId ? vuelta(h) : h)), eventos: [evento] };
   }
+  const { fuera } = heroe;
+  const punto = heroe.ubicacion.punto;
 
   const traidas = heroe.escuadrones.filter((e) => e.contenedor.tipo === 'fuera');
-  const residencia = mundo.asentamientos.find((a) => esResidente(a, heroeId));
   const columna: Ejercito = {
     id: ejercitoId,
     faccionId: mundo.facciones.find((f) => esCiudadano(f, heroeId))?.id ?? '',
@@ -167,6 +162,6 @@ export function volverAlMundo(mundo: MundoPresencia, heroeId: string, ejercitoId
     ...sinCambios,
     ejercitos: [...mundo.ejercitos, columna],
     heroes: mundo.heroes.map((h) => (h.id === heroeId ? enColumna : h)),
-    eventos: [{ ...evento, asentamientoId: residencia?.id }],
+    eventos: [evento],
   };
 }

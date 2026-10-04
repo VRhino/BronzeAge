@@ -4,6 +4,8 @@ import { bloqueosDe, eventosDeBatalla, vencerBatallas } from '../batallas';
 import { conResultadoDeSimulacion, estadoSimulacionDe, instanteDeTick, isoDeInstante, type GameSessionState } from '../estado';
 import { exito, type ContextoComando, type TransicionComando } from './tipos';
 import { salirDelMundo } from '../../engine/presencia';
+import { PRESENCIA } from '../../constants';
+import { columnaDe } from '../../engine/ejercitos';
 import type { EventoCrudo } from '../../domain/eventos';
 import { conMomento } from './eventos';
 
@@ -77,7 +79,8 @@ export function avanzarTick(
 }
 
 /**
- * Los que pidieron desconectarse y ya cumplieron su espera salen del mundo (Doc 1.10.6), en orden de id. Quien está en
+ * Los que pidieron desconectarse y ya cumplieron su espera quedan desconectados (Doc 1.10.6), en orden de id; quien va en
+ * columna y está perseguido espera un poco más (D66). Quien está en
  * una batalla de Unity espera a que termine (D33b, decisión del usuario 2026-10-04: hasta que exista el abandono de
  * batalla con Conquest).
  */
@@ -87,8 +90,15 @@ function conSalidasDelMundo(
   instante: number,
   enBatalla: ReadonlySet<string>
 ): { estado: GameSessionState; eventos: EventoCrudo[] } {
+  // En peligro no se sale (D66): si una columna le persigue, espera mientras dure y como mucho hasta el tope.
+  const extra = PRESENCIA.topeAplazamientoMs - PRESENCIA.retardoDesconexionMs;
+  const perseguido = (heroeId: string) => {
+    const suya = columnaDe(estado.ejercitos, heroeId);
+    return !!suya && estado.ejercitos.some((e) => e.id !== suya.id && e.persiguiendo?.tipo === 'ejercito' && e.persiguiendo.id === suya.id);
+  };
   const salen = estado.heroes
     .filter((h) => h.desconectaEn !== undefined && h.desconectaEn <= instante && !h.fuera && !enBatalla.has(h.id))
+    .filter((h) => instante >= h.desconectaEn! + extra || !perseguido(h.id))
     .map((h) => h.id)
     .sort();
   let actual = estado;
