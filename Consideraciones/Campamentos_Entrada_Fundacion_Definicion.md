@@ -296,8 +296,11 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    lista de campamentos en la proyección sin héroe. Quedan para después: la visión del mapa alrededor del campamento
    estando dentro, y retirar `columnaDeAparicion`/`puntoDeAparicion` (solo los usa la fixture de tests de fundar a pie;
    se van con el paso 6).
-3. **Economía del residente**: ración de trigo + reposte comprando en cualquier campamento; préstamo de
-   `leva_comunal` (D45) con reposición barata y deuda; piedra y madera en el mercado con pila + cupo (D41).
+3. ~~**Economía del residente**~~ **Hecho** (`db99a45`, `2b71510` y el del préstamo): pilas de madera, piedra y trigo
+   que se reponen solas (el comercio del mundo es cero al empezar) y cupo diario; trigo para repostar en cualquier
+   campamento; ración de 60 al salir cada 30 min, que vuelve al campamento y no se guarda; préstamo de una escuadra de
+   leva comunal con reposición a deuda, retirada por el tick al dejar de residir. **Falta**: cobrar la deuda del botín
+   (paso 4) y que la pila de trigo (300) se calibre.
 4. **Bandidos unificados por niveles** (D21, D22, D26-D28, D37, D42) y **alijos** (D29).
 5. **Ingreso con lista de solicitantes del Rey** (sustituye `unirseAFaccion`); **eliminar `comprarCasa`**.
 6. **Fundación única** (D30): caravana de campamento sin destino, origen = campamento (atacable, D36; vuelve a él,

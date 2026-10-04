@@ -1,6 +1,12 @@
 // Comandos de los campamentos de mercenarios (Doc 1.9b). Residir en uno está con el resto de cambios de residencia
 // (`cargos.ts`); aquí, lo que se hace en él: reclutar, comprar y el fondo de refundación.
-import { reclutarEnCampamento as reclutarEngine, tecnologiasDelCampamento, type PagarCon } from '../../engine/reclutamientoMercenario';
+import {
+  pedirPrestamo as pedirPrestamoEngine,
+  reclutarEnCampamento as reclutarEngine,
+  reponerPrestamo as reponerPrestamoEngine,
+  tecnologiasDelCampamento,
+  type PagarCon,
+} from '../../engine/reclutamientoMercenario';
 import { esCiudadano } from '../../engine/faccion';
 import { comprarEnCampamento as comprarEngine } from '../../engine/mercadoMercenario';
 import { aportarARefundacion as aportarEngine, comprarCaravanaDeRefundacion as comprarCaravanaEngine, retirarDeRefundacion as retirarEngine } from '../../engine/refundacion';
@@ -229,5 +235,40 @@ export const comprarCaravanaDeRefundacion = comando<ParamsComprarCaravanaDeRefun
       }),
     ],
     { caravanaId: r.caravana.id }
+  );
+});
+
+/** Pedir la tropa prestada del campamento donde reside (D25, D45), estando en él. */
+export const pedirPrestamo = comando<{ tropaId: string }, { escuadronId: string }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  exigirEnSuCampamento(estado, heroe.id);
+  const prestada = pedirPrestamoEngine(estado.campamentosMercenarios, heroe, params.tropaId);
+  return exito(
+    { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? { ...h, escuadrones: [...h.escuadrones, prestada] } : h)) },
+    [
+      evento(ctx, {
+        codigo: 'mercenarios.prestamo',
+        mensaje: `${prestada.prestada!.campamentoId} presta ${prestada.cantidad} de ${params.tropaId} a ${heroe.displayName}.`,
+        payload: { campamentoId: prestada.prestada!.campamentoId, heroeId: heroe.id, escuadronId: prestada.id, tropaId: params.tropaId },
+      }),
+    ],
+    { escuadronId: prestada.id }
+  );
+});
+
+/** Reponer la tropa prestada (D25b): en el campamento o con la columna a su puerta; se debe y se cobra del botín. */
+export const reponerPrestamo = comando<Record<string, never>, { repuestas: number; deuda: number }>((estado, _mapa, ctx) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const r = reponerPrestamoEngine(estado.campamentosMercenarios, heroe, estado.ejercitos);
+  return exito(
+    { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? r.heroe : h)) },
+    [
+      evento(ctx, {
+        codigo: 'mercenarios.prestamo_repuesto',
+        mensaje: `${heroe.displayName} repone ${r.repuestas} de su tropa prestada; debe ${r.deuda} de oro.`,
+        payload: { heroeId: heroe.id, repuestas: r.repuestas, deuda: r.deuda },
+      }),
+    ],
+    { repuestas: r.repuestas, deuda: r.deuda }
   );
 });

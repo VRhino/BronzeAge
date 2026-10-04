@@ -25,6 +25,7 @@ import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
+import { sinPrestamosAjenos } from './reclutamientoMercenario';
 import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
 import { cerrarDependientesDeRuina } from './ruina';
@@ -374,11 +375,15 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   });
   eventosDominio.push(...comoEventosDominio(trasTecnologia.eventos, contexto));
 
+  // La tropa prestada de un campamento donde ya no reside, fuera (D45).
+  const sinPrestamos = sinPrestamosAjenos(heroes, trasEjercitos.ejercitos, trasEjercitos.caravanas, trasReposicion.campamentos);
+  heroes = sinPrestamos.heroes;
+
   return {
     asentamientos: trasTributos.asentamientos,
     facciones: faccionesFinal,
-    caravanas: trasEjercitos.caravanas,
-    ejercitos: trasEjercitos.ejercitos,
+    caravanas: sinPrestamos.caravanas,
+    ejercitos: sinPrestamos.ejercitos,
     acuerdos: podarAcuerdosTerminados(trasComercio.acuerdos, trasEjercitos.caravanas, instante),
     ordenes: trasMercado.ordenes,
     historialOrdenes: anexarAlHistorialDeOrdenes(estado.historialOrdenes, trasMercado.cerradas),
@@ -393,13 +398,13 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.
     memoriaPorFaccion: grabarLoVisto(estado.memoriaPorFaccion, {
       asentamientos: trasTributos.asentamientos,
-      ejercitos: trasEjercitos.ejercitos,
+      ejercitos: sinPrestamos.ejercitos,
       tropa: indiceTropa(heroes),
       facciones: faccionesFinal,
       limites: mapa.limites,
       instante,
     }),
-    heroes: grabarExploracionPersonal(heroes, trasEjercitos.ejercitos, mapa.limites),
+    heroes: grabarExploracionPersonal(heroes, sinPrestamos.ejercitos, mapa.limites),
     tecnologia: trasTecnologia.tecnologia,
     estadoMapa: mapa.estadoActual(),
     eventosDominio,

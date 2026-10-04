@@ -1932,6 +1932,9 @@ export const MERCENARIOS = {
   salSemilla: 0x6d657263,
   /** Ración gratis del residente (D24, §8.1): este trigo al salir de su campamento, una vez cada tanto; no se acumula. PLACEHOLDER. */
   racion: { trigo: 60, cadaMinutos: 30 },
+  /** Tropa prestada al residente (D25, D45, §8.1): una escuadra de leva comunal de estas unidades; reponerla cuesta este oro por unidad,
+   * que se debe al campamento, y por encima de la deuda máxima no repone. PLACEHOLDER. */
+  prestamo: { unidades: 15, oroPorUnidad: 1, deudaMaxima: 30 },
   /** A menos de esto de un campamento nadie inicia un combate, ni jugadores ni bandidos (M4/D78, §8.2). PLACEHOLDER. */
   radioProteccion: 60,
   /** Variantes de aspecto, elegidas al nacer: no cambian nada de lo que hace. */

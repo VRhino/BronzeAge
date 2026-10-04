@@ -341,6 +341,9 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // condiciones (hueco de vivienda, permiso, no residir ya ahí) las valida `cambiarResidencia`.
   // Reclutar en el campamento donde reside el actor: la residencia y el pago los comprueba el motor.
   reclutarEnCampamento: { rolesPermitidos: ['jugador'] },
+  // La tropa prestada (D25, D45): residencia, presencia y deuda las comprueban el comando y el motor.
+  pedirPrestamo: { rolesPermitidos: ['jugador'] },
+  reponerPrestamo: { rolesPermitidos: ['jugador'] },
   // Comprar en el mercado del campamento donde reside el actor: la residencia y el pago los comprueba el motor.
   comprarEnCampamento: { rolesPermitidos: ['jugador'] },
   // La refundación desde un campamento: la residencia, la Facción sin plazas y el fondo los comprueba el motor.

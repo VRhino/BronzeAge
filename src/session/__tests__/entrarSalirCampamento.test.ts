@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { Heroe } from '../../domain/types';
 import { ALMACEN_PERSONAL, MERCENARIOS } from '../../constants';
 import { guardarEnAlmacenPersonal } from '../comandos/heroe';
+import { pedirPrestamo, reponerPrestamo } from '../comandos/mercenarios';
+import { residirEnCampamento } from '../comandos/cargos';
+import { conExperiencia } from '../../engine/tropa';
 import { GameSession } from '../gameSession';
 import { crearHeroe } from '../comandos/crearHeroe';
 import { entrarEnCampamento, salirDelCampamento } from '../comandos/presencia';
@@ -125,5 +128,48 @@ describe('la ración gratis del residente (D24, D50)', () => {
     sesion.ejecutar(entrarEnCampamento, { campamentoId: 'mercenarios-0', heroeId }, opc);
     sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);
     expect(columna()!.suministro['trigo'] ?? 0).toBe(0);
+  });
+});
+
+describe('la tropa prestada (D25, D45)', () => {
+  const prestadaDe = (h: Heroe) => h.escuadrones.find((e) => e.prestada);
+
+  it('se pide dentro: leva comunal, una a la vez, y no gana experiencia', () => {
+    const { sesion, heroe, opc } = nacido();
+    expect(sesion.ejecutar(pedirPrestamo, { tropaId: 'hoplitas_ciudadanos' }, opc).ok, 'solo leva comunal').toBe(false);
+    expect(sesion.ejecutar(pedirPrestamo, { tropaId: 'milicia_lanceros' }, opc).ok).toBe(true);
+    expect(prestadaDe(heroe())).toMatchObject({ tropaId: 'milicia_lanceros', cantidad: MERCENARIOS.prestamo.unidades, prestada: { campamentoId: 'mercenarios-0' } });
+    expect(sesion.ejecutar(pedirPrestamo, { tropaId: 'granjeros' }, opc).ok, 'una a la vez').toBe(false);
+    expect(conExperiencia(prestadaDe(heroe())!, 100)).toEqual(prestadaDe(heroe()));
+  });
+
+  it('se repone a deuda, hasta la deuda máxima', () => {
+    const { sesion, heroeId, opc } = nacido();
+    sesion.ejecutar(pedirPrestamo, { tropaId: 'milicia_lanceros' }, opc);
+    const mermada = (s: GameSession, cantidad: number, deuda = 0) => {
+      const p = s.exportar();
+      return GameSession.importar({
+        ...p,
+        state: {
+          ...p.state,
+          heroes: p.state.heroes.map((h) => (h.id === heroeId ? { ...h, deudaPrestamo: deuda, escuadrones: h.escuadrones.map((e) => (e.prestada ? { ...e, cantidad } : e)) } : h)),
+        },
+      });
+    };
+    const tras = mermada(sesion, 5);
+    expect(tras.ejecutar(reponerPrestamo, {}, opc).datos).toEqual({ repuestas: 10, deuda: 10 * MERCENARIOS.prestamo.oroPorUnidad });
+    expect(mermada(sesion, 5, MERCENARIOS.prestamo.deudaMaxima - 1).ejecutar(reponerPrestamo, {}, opc).ok, 'por encima del tope').toBe(false);
+  });
+
+  it('al dejar de residir el campamento la retira, también de la columna', () => {
+    const { sesion, heroeId, heroe, columna, opc } = nacido();
+    sesion.ejecutar(pedirPrestamo, { tropaId: 'milicia_lanceros' }, opc);
+    sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [`prestada-${heroeId}`], carga: {} }, opc);
+    expect(columna()!.escuadronIds).toEqual([`prestada-${heroeId}`]);
+
+    sesion.ejecutar(residirEnCampamento, { heroeId, campamentoId: 'mercenarios-1' }, opc);
+    sesion.avanzarTick();
+    expect(prestadaDe(heroe())).toBeUndefined();
+    expect(columna()!.escuadronIds).toEqual([]);
   });
 });

@@ -961,7 +961,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `reclutarEnCampamento` (Doc 1.9b): reclutar en un campamento de mercenarios.
       // +1 con `comprarEnCampamento` (Doc 1.9b): el mercado del campamento.
       // +2 con `conectarse`/`desconectarse` (Doc 1.10.6): entrar y salir del mundo.
-      expect(cuerpo.oneOf.length).toBe(95);
+      expect(cuerpo.oneOf.length).toBe(97);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

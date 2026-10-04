@@ -92,7 +92,7 @@ export function reclutarEnCampamento(
   const tropa = tropasDelCampamento(campamento, adoptadas).find((t) => t.id === tropaId);
   if (!tropa) throw new MercenariosInvalidoError('Este campamento no ofrece esa tropa: le falta el edificio o la tecnología.');
 
-  const existente = heroe.escuadrones.find((e) => e.tropaId === tropaId);
+  const existente = heroe.escuadrones.find((e) => e.tropaId === tropaId && !e.prestada);
   if (existente && !reponibleAqui(existente, campamento, ejercitos)) {
     throw new MercenariosInvalidoError(`Ya tienes una escuadra de ${tropa.nombre}: solo puedes reponerla donde está.`);
   }
@@ -154,4 +154,73 @@ function reponibleAqui(e: Escuadron, campamento: CampamentoMercenarios, ejercito
   if (contenedor.tipo !== 'ejercito') return false;
   const columna = ejercitos.find((x) => x.id === contenedor.ejercitoId);
   return !!columna && distancia(columna.posicionActual, campamento.posicion) <= MOVIMIENTO.radioPuerta;
+}
+
+/**
+ * Pedir la tropa prestada del campamento donde reside (D25, D45): una escuadra de leva comunal, gratis, en su campamento. Una a la vez.
+ * No es reclutar: la escuadra no es del héroe aunque la mande, y deja de estar disponible si deja de residir aquí.
+ */
+export function pedirPrestamo(campamentos: readonly CampamentoMercenarios[], heroe: Heroe, tropaId: string): Escuadron {
+  const campamento = campamentoDeResidente(campamentos, heroe.id);
+  if (!campamento) throw new MercenariosInvalidoError('Solo se presta tropa a quien reside en el campamento.');
+  const tropa = TROPAS_RECLUTABLES.find((t) => t.id === tropaId);
+  if (!tropa || tropa.tecnologia !== 'leva_comunal') throw new MercenariosInvalidoError('Solo se presta leva comunal.');
+  if (heroe.escuadrones.some((e) => e.prestada)) throw new MercenariosInvalidoError('Ya tienes tropa prestada.');
+  return {
+    id: `prestada-${heroe.id}`,
+    nombre: `${tropa.nombre} (prestada por ${campamento.id})`,
+    heroeId: heroe.id,
+    origen: poblacionDeTropa(tropa),
+    cantidad: MERCENARIOS.prestamo.unidades,
+    ...PROGRESION_INICIAL,
+    moral: 100,
+    tropaId,
+    contenedor: { tipo: 'campamento' },
+    enGuarnicion: false,
+    prestada: { campamentoId: campamento.id },
+  };
+}
+
+/**
+ * Reponer la tropa prestada hasta su tamaño (D25b), allí donde está: en el campamento o en la columna a su puerta. Cuesta poco y no se
+ * paga ahora: se debe al campamento y se cobra del botín. Por encima de la deuda máxima no repone.
+ */
+export function reponerPrestamo(
+  campamentos: readonly CampamentoMercenarios[],
+  heroe: Heroe,
+  ejercitos: readonly Ejercito[]
+): { heroe: Heroe; repuestas: number; deuda: number } {
+  const prestada = heroe.escuadrones.find((e) => e.prestada);
+  if (!prestada) throw new MercenariosInvalidoError('No tienes tropa prestada.');
+  const campamento = campamentos.find((c) => c.id === prestada.prestada!.campamentoId);
+  if (!campamento || !reponibleAqui(prestada, campamento, ejercitos)) throw new MercenariosInvalidoError('Se repone en el campamento, o con la columna a su puerta.');
+  const repuestas = MERCENARIOS.prestamo.unidades - prestada.cantidad;
+  if (repuestas <= 0) throw new MercenariosInvalidoError('La tropa prestada ya está completa.');
+  const deuda = (heroe.deudaPrestamo ?? 0) + repuestas * MERCENARIOS.prestamo.oroPorUnidad;
+  if (deuda > MERCENARIOS.prestamo.deudaMaxima) throw new MercenariosInvalidoError('Debes demasiado al campamento: no repone hasta que lo saldes.');
+  return {
+    heroe: { ...heroe, deudaPrestamo: deuda, escuadrones: heroe.escuadrones.map((e) => (e.id === prestada.id ? { ...e, cantidad: MERCENARIOS.prestamo.unidades } : e)) },
+    repuestas,
+    deuda,
+  };
+}
+
+/**
+ * El campamento retira la tropa prestada a quien ya no reside en él (D45), esté donde esté: también de la columna o de la escolta donde
+ * iba. Lo aplica el tick, que es por donde pasan todos los caminos de dejar de residir. Sin nada que retirar devuelve lo mismo.
+ */
+export function sinPrestamosAjenos<E extends { escuadronIds: string[] }, C extends { escoltaIds?: string[] }>(
+  heroes: readonly Heroe[],
+  ejercitos: readonly E[],
+  caravanas: readonly C[],
+  campamentos: readonly CampamentoMercenarios[]
+): { heroes: Heroe[]; ejercitos: E[]; caravanas: C[] } {
+  const caducada = (h: Heroe, e: Escuadron) => !!e.prestada && !campamentos.some((c) => c.id === e.prestada!.campamentoId && c.residentesIds.includes(h.id));
+  const retiradas = new Set(heroes.flatMap((h) => h.escuadrones.filter((e) => caducada(h, e)).map((e) => e.id)));
+  if (retiradas.size === 0) return { heroes: heroes as Heroe[], ejercitos: ejercitos as E[], caravanas: caravanas as C[] };
+  return {
+    heroes: heroes.map((h) => (h.escuadrones.some((e) => retiradas.has(e.id)) ? { ...h, escuadrones: h.escuadrones.filter((e) => !retiradas.has(e.id)) } : h)),
+    ejercitos: ejercitos.map((e) => (e.escuadronIds.some((id) => retiradas.has(id)) ? { ...e, escuadronIds: e.escuadronIds.filter((id) => !retiradas.has(id)) } : e)),
+    caravanas: caravanas.map((c) => (c.escoltaIds?.some((id) => retiradas.has(id)) ? { ...c, escoltaIds: c.escoltaIds.filter((id) => !retiradas.has(id)) } : c)),
+  };
 }

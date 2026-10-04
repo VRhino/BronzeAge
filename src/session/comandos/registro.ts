@@ -13,7 +13,7 @@ import { crearFaccion } from './crearFaccion';
 import { unirseAFaccion } from './unirseAFaccion';
 import { dejarFaccion } from './dejarFaccion';
 import { crearHeroe } from './crearHeroe';
-import { aportarARefundacion, comprarCaravanaDeRefundacion, comprarEnCampamento, reclutarEnCampamento, retirarDeRefundacion } from './mercenarios';
+import { aportarARefundacion, comprarCaravanaDeRefundacion, comprarEnCampamento, pedirPrestamo, reclutarEnCampamento, reponerPrestamo, retirarDeRefundacion } from './mercenarios';
 import { asignarGuarnicion, borrarLoadout, guardarEnAlmacenPersonal, guardarLoadout, repartirPuntos, retirarGuarnicion, sacarDelAlmacenPersonal } from './heroe';
 import { crearFaccionNpc } from './crearFaccionNpc';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa, dejarResidencia, designarCapital, residirEnCampamento } from './cargos';
@@ -90,6 +90,8 @@ const MANEJADORES = {
   dejarResidencia,
   residirEnCampamento,
   reclutarEnCampamento,
+  pedirPrestamo,
+  reponerPrestamo,
   comprarEnCampamento,
   aportarARefundacion,
   retirarDeRefundacion,

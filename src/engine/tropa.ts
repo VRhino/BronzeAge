@@ -86,6 +86,8 @@ export function nivelDeEscuadra(experiencia: number): number {
 
 /** La escuadra con experiencia ganada, y su nivel al día. */
 export function conExperiencia(e: Escuadron, ganada: number): Escuadron {
+  // La tropa prestada por un campamento no gana experiencia (D45).
+  if (e.prestada) return e;
   const experiencia = e.experiencia + ganada;
   return { ...e, experiencia, nivel: nivelDeEscuadra(experiencia) };
 }
