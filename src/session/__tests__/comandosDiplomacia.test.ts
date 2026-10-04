@@ -5,7 +5,6 @@
 // `DiplomaciaInvalidaError` del motor llegaba crudo a la interfaz) están unificados en
 // `comandosContratoIds.test.ts`, no repetidos aquí.
 import { describe, expect, it } from 'vitest';
-import { instanteDeTest } from '../../engine/__tests__/fixtures';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { anexionar, declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
@@ -88,37 +87,6 @@ describe('anexionar / fusionar', () => {
     expect(resultado.codigoError).toBe('fusion.invalida');
   });
 
-  it('una anexión con éxito limpia de faccionesNpcIds la Facción que desaparece', () => {
-    // Se construye el estado con ambas Facciones cedidas al NPC y una relación de vasallaje ya activa, que es
-    // lo que `anexionar` exige. Vía `importar()` porque no hay comando para fabricar la relación directamente.
-    const { sesion, a, b } = partidaConDosFacciones();
-    const payload = sesion.exportar();
-    const conVasallaje = GameSession.importar({
-      ...payload,
-      state: {
-        ...payload.state,
-        faccionesNpcIds: [a, b],
-        relaciones: [
-          {
-            id: 'rel-1',
-            tipo: 'vasallaje',
-            faccionAId: a,
-            faccionBId: b,
-            estado: 'activa',
-            creadoEn: instanteDeTest(0),
-            tributo: { recurso: 'trigo', cantidadPorMinuto: 1 },
-          },
-        ],
-      },
-    });
-
-    const resultado = conVasallaje.ejecutar(anexionar, { faccionAId: a, faccionBId: b }, OPC);
-
-    expect(resultado.ok).toBe(true);
-    const idsVivos = conVasallaje.getState().facciones.map((f) => f.id);
-    // Ninguna id de faccionesNpcIds puede referirse a una Facción que ya no existe.
-    for (const id of conVasallaje.getState().faccionesNpcIds) expect(idsVivos).toContain(id);
-  });
 });
 
 describe('declararGuerra y proponerPaz (Doc 2.4.1)', () => {

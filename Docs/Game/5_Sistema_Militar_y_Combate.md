@@ -679,9 +679,15 @@ Si los atacantes conquistan un asentamiento:
 - **No hay captura**: la guarnición no pasa al conquistador. Cae a 0 y sigue siendo de su héroe.
 - **El asentamiento conquistado queda sin guarnición**. Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La protección tras la conquista (5.12.9) le da un día de inmunidad; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.
 
-### 5.15.6 Facciones NPC
+### 5.15.6 Héroes bot
 
-Las Facciones NPC las crea el admin, ya asentadas, y así siguen hasta que se destruyen: una Facción de jugador nunca pasa a la IA. Tienen **héroes bot**, manejados por la IA del juego: nacen como los fundadores de su primer asentamiento (5, el primero como Rey) y viven en el servidor como un héroe más. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se resuelve con números, sin partida en Unity. Los héroes bot no usan la guarnición: defienden su plaza con su loadout activo mientras están en ella.
+Un **héroe bot** es un héroe más (`controlador: 'bot'`) que juega desde fuera del servidor como un jugador (D52): ve lo que
+ve su héroe y actúa con los mismos comandos y la misma autorización, sin ningún poder ni información de más. Llega por un
+campamento como cualquiera (1.3), con su sesión de unas horas al día (1.10.6, D55), y según su perfil (D57) crea una
+Facción, pide entrar en una o llega tarde a una que ya existe; el Rey bot acepta las solicitudes. No hay Facciones «NPC»:
+una Facción de bots es una Facción cuyos ciudadanos son bots, con las reglas de todas. Si pierde su última plaza no se
+disuelve: sus héroes vuelven a un campamento y repiten el ciclo (D59). Un humano que ataca a una Facción de bots combate
+contra sus héroes bot y su guarnición; bot contra bot se resuelve con números, sin partida en Unity.
 
 **Un héroe que ataca un campamento de bandidos también combate en Unity**: su columna contra las tropas del campamento, manejadas por la IA del juego (Doc 1.9).
 

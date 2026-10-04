@@ -85,7 +85,7 @@ Era se reparten por su tramo en el orden de adopción, y el último cae una sema
 
 **La adopta el Rey, estando en la capital, y la paga el almacén de la capital.** La adopción es instantánea. La capital
 la designa el Rey (Doc 2.2); mientras no designe ninguna, es el asentamiento vivo más antiguo de la Facción.
-Las Facciones NPC siguen la misma regla.
+Las Facciones de bots siguen la misma regla (5.15.6).
 
 | Era de la tecnología | Oro | Bien de la Era |
 |---|---|---|

@@ -122,16 +122,6 @@ describe('RunnerDePartida — aplicar -> anotar -> confirmar', () => {
   });
 });
 
-describe('RunnerDePartida.avanzarTick — el tick no gobierna a nadie (doc 12 §2)', () => {
-  it('una Facción de bots no recibe decisiones dentro del tick: los bots juegan desde fuera, con comandos', async () => {
-    const r = runner('g-npc');
-    await r.ejecutar('crearFaccionNpc', { nombre: 'Micenas' });
-
-    await r.avanzarTick();
-
-    expect(r.getState().asentamientos[0]!.cargos.gobernadorId).toBeNull();
-  });
-});
 
 describe('RunnerDePartida.cargarOCrear', () => {
   it('sin snapshot previo, crea una partida nueva', async () => {

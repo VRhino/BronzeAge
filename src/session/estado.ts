@@ -100,7 +100,6 @@ export interface GameSessionState {
   /** Facciones que gobierna el NPC en vez de un jugador humano. Vive en la partida y no en el runner
    * (doc 7 §7.2): cambia el resultado del tick, así que un reinicio con otra configuración divergiría de lo
    * que el snapshot dice haber pasado. En partida real no cambia en caliente una vez elegida. */
-  faccionesNpcIds: string[];
   /** Contador de avances del motor — su unidad interna PROVISIONAL (doc 10). Se guarda porque el instante de
    * mundo se DERIVA de él (`instanteDeTick`), no al revés. Para cualquier contrato hacia afuera (DTOs,
    * eventos) la referencia temporal es el `instante`/`momento`, nunca este número — ver `EstadoAdmin.instante`,
@@ -148,7 +147,7 @@ export interface GameSessionState {
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,
- * logs ni `faccionesNpcIds` — y no debe. */
+ * ni logs — y no debe. */
 export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
   return {
     asentamientos: estado.asentamientos,

@@ -5,7 +5,7 @@ import { registrarDerrota } from '../../engine/faccion';
 import { esResidente } from '../../engine/pertenencia';
 import { crearFacciones, escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import { GameSession } from '../gameSession';
-import { crearFaccionNpc } from '../comandos/crearFaccionNpc';
+import { faccionAsentadaDePrueba } from './faccionAsentadaDePrueba';
 import { iniciarAsedio } from '../comandos/militar';
 import type { GameSessionState } from '../estado';
 
@@ -23,8 +23,8 @@ describe('registrarDerrota', () => {
 /** Dos Facciones NPC con su plaza, un tick corrido para que exista el campamento de mercenarios del día 1. */
 function partidaNpc() {
   const s = GameSession.crear('derrotas', { seed: 7 });
-  s.ejecutar(crearFaccionNpc, { nombre: 'Alfa' });
-  s.ejecutar(crearFaccionNpc, { nombre: 'Beta' });
+  s.ejecutar(faccionAsentadaDePrueba, { nombre: 'Alfa' });
+  s.ejecutar(faccionAsentadaDePrueba, { nombre: 'Beta' });
   s.avanzarTick();
   const e = s.getState();
   const [alfa, beta] = ['Alfa', 'Beta'].map((n) => e.facciones.find((f) => f.nombre === n)!);

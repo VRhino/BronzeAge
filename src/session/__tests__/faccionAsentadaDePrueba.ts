@@ -1,6 +1,6 @@
-// ANDAMIO hasta el paso 4 de Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md (§9): crea una Facción de bots ya asentada
-// para que el batch tenga a quién mover mientras los bots-héroe no lleguen por los campamentos. Se borra con D53/D58,
-// junto con el héroe bot que crea (crear héroes es un poder que ningún jugador tiene, §7).
+// FIXTURE DE TESTS, no es del juego. Una Facción ya asentada con sus héroes bot: muchos tests necesitan plazas con gente
+// para empezar y no son tests de cómo se llega a tenerlas. En el juego no hay Facciones que nazcan asentadas (D53): todo nace
+// en los campamentos, y crear héroes es un poder que ningún jugador tiene (Docs/Arquitectura/12 §7, D58).
 import type { Heroe, Point, RecursoTipo, UbicacionHeroe } from '../../domain/types';
 import { LIDERAZGO } from '../../constants';
 import { crearFaccion as crearFaccionEngine } from '../../engine/faccion';
@@ -10,12 +10,12 @@ import { evaluarViabilidadFundacion, fundarAsentamiento } from '../../engine/set
 import { situarHeroes } from '../../engine/ubicacion';
 import type { Mapa } from '../../world/mapa';
 import type { Asentamiento } from '../../domain/types';
-import { exito } from './tipos';
-import { comando, rechazar } from './ayudas';
-import { CODIGOS_ERROR } from './codigosDeError';
-import { evento } from './eventos';
+import { exito } from '../comandos/tipos';
+import { comando, rechazar } from '../comandos/ayudas';
+import { CODIGOS_ERROR } from '../comandos/codigosDeError';
+import { evento } from '../comandos/eventos';
 
-export interface ParamsCrearFaccionNpc {
+export interface ParamsFaccionDePrueba {
   nombre: string;
   /** Dónde se funda su primer asentamiento. Sin ella, el mejor sitio del mapa (`mejorSitioInicial`). */
   posicion?: Point;
@@ -63,14 +63,13 @@ function mejorSitioInicial(mapa: Mapa, asentamientos: Asentamiento[]): Point | u
 
 /**
  * Crea una Facción de bots y funda en el acto su primer asentamiento con cinco héroes bot; el primero queda como Rey.
- * Comando de admin.
  */
-export const crearFaccionNpc = comando<ParamsCrearFaccionNpc, { faccionId: string; asentamientoId: string }>((estado, mapa, ctx, params) => {
+export const faccionAsentadaDePrueba = comando<ParamsFaccionDePrueba, { faccionId: string; asentamientoId: string }>((estado, mapa, ctx, params) => {
   const nombre = params.nombre.trim();
   if (!nombre) rechazar(CODIGOS_ERROR.faccionNombreVacio);
   if (estado.facciones.some((f) => f.nombre.toLowerCase() === nombre.toLowerCase())) rechazar(CODIGOS_ERROR.faccionNombreDuplicado);
 
-  const faccion = crearFaccionEngine(`faccion-npc-${ctx.ids.siguiente()}`, nombre);
+  const faccion = crearFaccionEngine(`faccion-bots-${ctx.ids.siguiente()}`, nombre);
   const posicion = params.posicion ?? mejorSitioInicial(mapa, estado.asentamientos);
   if (!posicion) rechazar(CODIGOS_ERROR.fundacionInvalida);
   const heroesIds = Array.from({ length: HEROES_POR_FUNDACION }, (_, i) => `heroe-${faccion.id}-${i + 1}`);
@@ -85,12 +84,11 @@ export const crearFaccionNpc = comando<ParamsCrearFaccionNpc, { faccionId: strin
       asentamientos: [...estado.asentamientos, asentamiento],
       facciones: fundada.facciones.map((f) => (f.id === faccion.id ? asignarRey(f, heroesIds[0]!) : f)),
       heroes,
-      faccionesNpcIds: [...estado.faccionesNpcIds, faccion.id],
     },
     [
       evento(ctx, {
-        codigo: 'faccion.npc_creada',
-        mensaje: `Se crea la Facción NPC "${nombre}", asentada en ${asentamiento.id}.`,
+        codigo: 'faccion.creada',
+        mensaje: `Se crea la Facción "${nombre}", asentada en ${asentamiento.id}.`,
         payload: { faccionId: faccion.id, asentamientoId: asentamiento.id },
         asentamientoId: asentamiento.id,
       }),

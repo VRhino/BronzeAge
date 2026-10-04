@@ -45,6 +45,9 @@ function rey(ctx: ContextoBot): void {
   const faccion = vista.facciones.find((f) => f.id === vista.faccionId);
   if (!faccion || faccion.reyId !== yo) return;
 
+  // El Rey bot acepta a quien pide entrar (D57).
+  for (const heroeId of faccion.solicitudesIds ?? []) ctx.intentar(`solicitud:${heroeId}`, 'responderSolicitud', { faccionId: faccion.id, heroeId, aceptar: true });
+
   // Un Gobernador para cada plaza que no lo tenga: el residente de id más bajo que la pizarra conozca.
   for (const plaza of plazasPropias(vista)) {
     if (!plaza.cargos || plaza.cargos.gobernadorId) continue;

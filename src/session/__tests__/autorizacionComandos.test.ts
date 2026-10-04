@@ -195,7 +195,7 @@ describe('el cargo local se comprueba sobre el titular, no sobre si el puesto es
   });
 });
 
-describe('héroe y Facciones NPC', () => {
+describe('héroe sin héroe', () => {
   it('sin héroe, un jugador solo puede crearlo (doc 02 §4.2)', () => {
     const { sesion } = partidaConAsentamiento();
     const sinHeroe: ActorDeComando = { rol: 'jugador', heroeId: null };
@@ -204,16 +204,17 @@ describe('héroe y Facciones NPC', () => {
     expect(verificarAutorizacion('crearHeroe', heroe, sesion.getState(), sinHeroe)).toEqual(AUTORIZADO);
     expect(verificarAutorizacion('crearFaccion', { nombre: 'Troya' }, sesion.getState(), sinHeroe)).toEqual(POR_DOMINIO);
   });
+});
 
-  it('crearFaccionNpc es solo de administración: ningún jugador, ni siendo Rey', () => {
-    const { sesion, fundador } = partidaConAsentamiento();
-    const params = { nombre: 'Tirinto' };
+describe('ir en un ejército', () => {
+  it('el viajero solo, sin escuadras, va en su columna: engancha y suelta caravanas (Doc 5.12.1)', () => {
+    const { sesion, fundador, vecino, asentamientoId } = partidaConAsentamiento();
+    sesion.ejecutar(salirAlMundo, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} }, { ...OPC, actor: fundador });
+    const ejercitoId = sesion.getState().ejercitos.find((e) => e.liderId === fundador)!.id;
+    const params = { ejercitoId, caravanaId: 'caravana-x', heroeId: fundador };
 
-    expect(verificarAutorizacion('crearFaccionNpc', params, sesion.getState(), { rol: 'administrador_partida', heroeId: null })).toEqual(AUTORIZADO);
-    expect(verificarAutorizacion('crearFaccionNpc', params, sesion.getState(), jugador(fundador))).toEqual({
-      autorizado: false,
-      motivo: 'rol_insuficiente',
-    });
+    expect(verificarAutorizacion('adjuntarCaravana', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('adjuntarCaravana', { ...params, heroeId: vecino }, sesion.getState(), jugador(vecino))).toEqual(POR_DOMINIO);
   });
 });
 

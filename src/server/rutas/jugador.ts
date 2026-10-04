@@ -11,7 +11,7 @@
 import type { FastifyInstance } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
-import { eventosVisiblesParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
+import { campamentosParaElegir, eventosVisiblesParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
 import type { RunnerDePartida } from '../runnerDePartida';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
@@ -60,15 +60,7 @@ function heroeDe(runner: RunnerDePartida, jugadorId: string) {
 function proyeccionDe(runner: RunnerDePartida, jugadorId: string): Record<string, unknown> {
   const heroe = heroeDe(runner, jugadorId);
   if (heroe) return conImpuros(runner, heroe.id);
-  // La pantalla de elección (D3, D79): todos los campamentos, con dónde están y el contador doble. Es lo único que se ve sin héroe.
-  const campamentos = runner.getState().campamentosMercenarios.map((c) => ({
-    id: c.id,
-    posicion: c.posicion,
-    origen: c.origen,
-    eligieronComoInicial: c.eligieronComoInicial,
-    residentes: c.residentesIds.length,
-  }));
-  return { ...resumenDe(runner), sinHeroe: true, campamentos };
+  return { ...resumenDe(runner), sinHeroe: true, campamentos: campamentosParaElegir(runner.getState()) };
 }
 
 const ESQUEMA_MEMBRESIA = {

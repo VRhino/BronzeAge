@@ -307,7 +307,8 @@ si es humano o bot.
 - Sin héroe, `GET /jugador/partidas/:gameId` responde `{ ...resumen, sinHeroe: true }` en vez de la proyección,
   y cualquier comando que no sea `crearHeroe` responde 403. La auditoría sigue registrando al jugador de la
   membresía, no al héroe.
-- **Las Facciones NPC y sus héroes bot los crea el admin** (`POST /admin/partidas/:gameId/comandos`, o el
+- ~~**Las Facciones NPC y sus héroes bot los crea el admin**~~ **Retirado el 2026-10-04 (D58)**: los bots llegan por los
+  campamentos como jugadores, con `crearHeroe` desde una cuenta de bot (doc 12). Lo que sigue es histórico. (`POST /admin/partidas/:gameId/comandos`, o el
   formulario del cliente de administración). `crearFaccionNpc` (`nombre`, `posicion?`) crea la Facción ya
   asentada: funda su primer asentamiento (en `posicion`, o donde la gobernanza NPC ve el mejor sitio) con 5
   héroes bot (`controlador: 'bot'`, `jugadorId: null`) como fundadores, y el primero queda como Rey. La

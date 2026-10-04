@@ -12,7 +12,7 @@ import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseE
 import { marcharA, salirAlMundo } from '../comandos/presencia';
 import { movilizarEjercito, replegarEjercito } from '../comandos/ejercitos';
 import { inspeccionar } from '../comandos/interaccion';
-import { crearFaccionNpc } from '../comandos/crearFaccionNpc';
+import { faccionAsentadaDePrueba } from './faccionAsentadaDePrueba';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { LOGISTICA, MOVIMIENTO, SIMULACION, VISION } from '../../constants';
 import { conEscuadrones } from '../../engine/tropa';
@@ -353,8 +353,8 @@ describe('inspeccionar — la informacion se compra acercandose', () => {
 describe('inspeccionar una plaza ajena (Doc 5.12.3)', () => {
   it('desde el anillo de 40 devuelve su defensa, y su Facción recibe el aviso', () => {
     const s = GameSession.crear('inspeccion-plaza', { seed: 7 });
-    s.ejecutar(crearFaccionNpc, { nombre: 'Alfa' });
-    s.ejecutar(crearFaccionNpc, { nombre: 'Beta' });
+    s.ejecutar(faccionAsentadaDePrueba, { nombre: 'Alfa' });
+    s.ejecutar(faccionAsentadaDePrueba, { nombre: 'Beta' });
     const e0 = s.getState();
     const [alfa, beta] = ['Alfa', 'Beta'].map((n) => e0.asentamientos.find((a) => a.faccionId === e0.facciones.find((f) => f.nombre === n)!.id)!);
     const mirón = alfa!.heroesFundadoresIds[0]!;

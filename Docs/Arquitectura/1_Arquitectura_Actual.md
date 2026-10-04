@@ -50,8 +50,8 @@ pérdida. Cualquier referencia a un directorio `cliente-jugador/` dentro de este
 Cuánto de esta superficie tiene hoy consumidor está medido en `docs/Analisis_Brecha_Backend.md` de ese
 repositorio (2026-09-06, cifra pendiente de re-medir): consumía entonces 5 de los 9 endpoints y una fracción
 de los comandos, y no usaba todavía el WebSocket, el cursor de eventos ni `GET /v1/balance`. Es brecha de
-interfaz, no de backend — la matriz de `autorizacion.ts` ya admite al rol `jugador` en **75 de los 76** comandos
-(el que falta, `crearFaccionNpc`, es del admin).
+interfaz, no de backend — la matriz de `autorizacion.ts` admite al rol `jugador` en todos los comandos de juego
+(`crearFaccionNpc`, el único de admin, se borró con D58 el 2026-10-04: ninguna Facción nace asentada).
 
 Por el lado del BACKEND, la Fase C está **completa** (C0–C13) y la Fase D **estructuralmente completa**
 (reloj de mundo + catch-up, contrato en `instante`/`momento`, `tick` retirado del contrato — solo queda como
@@ -492,7 +492,7 @@ descubre qué partidas existen en disco, incluidas las que nadie ha reabierto to
   partida — así que `alternarFaccionNpc` (la única acción que la matriz permite a un admin,
   `['jugador', 'administrador_partida']`) devolvía 403 siempre. Se invirtió el orden: la `Membresia` manda
   sobre `esAdministradorGlobal`, no al revés. Ver doc 5 y doc 3 hito C8. (`alternarFaccionNpc` se retiró el
-  2026-09-14: las Facciones NPC las crea el admin con `crearFaccionNpc`, y ninguna Facción de jugador pasa a la IA.)
+  2026-09-14, y `crearFaccionNpc` el 2026-10-04 (D58): los bots llegan por los campamentos como jugadores.)
 - **Resuelto (hito C9, 2026-08-26):** `ESQUEMA_EJECUTAR_COMANDO` tiene ahora un esquema por comando
   (`session/comandos/esquemas.ts`, `oneOf` discriminado por `tipo`) — un `params` malformado responde 400
   antes de tocar el manejador, en vez de 409 tras un `TypeError` sin capturar.

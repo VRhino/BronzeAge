@@ -41,7 +41,6 @@ async function heroe(r: RunnerDePartida, jugadorId: string): Promise<string> {
 /** Guion intercalado de varios actores, ticks (con el turno del NPC, que tira dados) y rechazos. Deja el
  * diario con comandos posteriores al último tick, que es lo que hay que recuperar. */
 async function guion(r: RunnerDePartida): Promise<void> {
-  await r.ejecutar('crearFaccionNpc', { nombre: 'Hatti' });
   const ana = await heroe(r, 'ana');
   const bea = await heroe(r, 'bea');
   const micenas = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, ana);

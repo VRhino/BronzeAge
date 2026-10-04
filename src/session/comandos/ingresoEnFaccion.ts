@@ -31,7 +31,7 @@ export interface ParamsResponderSolicitud {
 export const solicitarIngreso = comando<ParamsSolicitarIngreso, void>((estado, _mapa, ctx, params) => {
   const faccion = exigirFaccion(estado, params.faccionId);
   if (estado.facciones.some((f) => esCiudadano(f, ctx.actor))) rechazar(CODIGOS_ERROR.faccionYaPerteneces);
-  const actualizada = solicitarEngine(faccion, estado.facciones, ctx.actor, estado.faccionesNpcIds.includes(faccion.id));
+  const actualizada = solicitarEngine(faccion, estado.facciones, ctx.actor);
   return exito(conFaccion(estado, actualizada), [
     evento(ctx, {
       codigo: 'faccion.solicitud_ingreso',

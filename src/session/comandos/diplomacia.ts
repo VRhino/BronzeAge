@@ -31,16 +31,6 @@ export interface PayloadRelacionRota {
   iniciadorFaccionId: string;
 }
 
-/**
- * Quita de `faccionesNpcIds` las Facciones que ya no existen. Anexionar y fusionar pueden hacer desaparecer
- * una Facción, y dejar su id colgando ahí significaría que si alguien creara después otra con el mismo id,
- * arrancaría gobernada por el NPC sin haberlo pedido. Mismo criterio que `GameStore.sincronizarFaccionesNpc`.
- */
-function sincronizarFaccionesNpc(estado: GameSessionState): GameSessionState {
-  const vigentes = estado.faccionesNpcIds.filter((id) => estado.facciones.some((f) => f.id === id));
-  return vigentes.length === estado.faccionesNpcIds.length ? estado : { ...estado, faccionesNpcIds: vigentes };
-}
-
 export interface ParamsProponerRelacion {
   tipo: 'vasallaje' | 'alianza';
   faccionAId: string;
@@ -194,11 +184,11 @@ export interface ParamsAnexionar {
 
 export const anexionar = comando<ParamsAnexionar, void>((estado, _mapa, ctx, params) => {
   const resultado = anexionarEngine(estado.facciones, estado.asentamientos, params.faccionAId, params.faccionBId);
-  const siguiente = sincronizarFaccionesNpc({
+  const siguiente: GameSessionState = {
     ...estado,
     facciones: resultado.facciones,
     asentamientos: resultado.asentamientos,
-  });
+  };
   return exito(siguiente, desdeCrudos(ctx, resultado.eventos));
 });
 
@@ -219,10 +209,10 @@ export const fusionar = comando<ParamsFusionar, void>((estado, _mapa, ctx, param
     params.nuevoReyId,
     ctx.instante
   );
-  const siguiente = sincronizarFaccionesNpc({
+  const siguiente: GameSessionState = {
     ...estado,
     facciones: resultado.facciones,
     asentamientos: resultado.asentamientos,
-  });
+  };
   return exito(siguiente, desdeCrudos(ctx, resultado.eventos));
 });

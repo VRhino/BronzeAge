@@ -2,7 +2,7 @@
 // actúan con comandos y su autorización, y con el adaptador en proceso la misma semilla da la misma partida.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../../session/gameSession';
-import { crearFaccionNpc } from '../../session/comandos/crearFaccionNpc';
+import { faccionAsentadaDePrueba } from '../../session/__tests__/faccionAsentadaDePrueba';
 import type { EventoDominio } from '../../domain/eventos';
 import { puertoEnProceso } from '../puerto';
 import { RunnerDeBots } from '../runner';
@@ -11,7 +11,7 @@ import { cerebroDeBot } from '../cerebro';
 /** Tres Facciones de bots con el andamio del batch, y su runner. Con la semilla 7, dos nacen a la vista una de otra. */
 function mundo(ticks: number, horario: 'siempre' | 'por-semilla' = 'siempre') {
   const sesion = GameSession.crear('bots', { seed: 7 });
-  for (const nombre of ['Alfa', 'Beta', 'Gamma']) sesion.ejecutar(crearFaccionNpc, { nombre });
+  for (const nombre of ['Alfa', 'Beta', 'Gamma']) sesion.ejecutar(faccionAsentadaDePrueba, { nombre });
   const bots = new RunnerDeBots(puertoEnProceso(sesion), cerebroDeBot, { semilla: 7, horario });
   for (const h of sesion.getState().heroes) bots.alta(h.id);
   const eventos: EventoDominio[] = [];
@@ -71,7 +71,7 @@ describe('sesiones de los bots (D55)', () => {
 describe('puerto en proceso', () => {
   it('pasa por la autorización de un jugador: un bot no puede hacer lo que su cargo no le permite', () => {
     const sesion = GameSession.crear('bots', { seed: 7 });
-    sesion.ejecutar(crearFaccionNpc, { nombre: 'Alfa' });
+    sesion.ejecutar(faccionAsentadaDePrueba, { nombre: 'Alfa' });
     const plaza = sesion.getState().asentamientos[0]!;
     const noRey = plaza.heroesFundadoresIds[1]!;
 

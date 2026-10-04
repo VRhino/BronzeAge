@@ -21,7 +21,21 @@ export type Plan =
   | { tipo: 'cazar'; campamentoId: string }
   | { tipo: 'campana'; plazaId: string }
   | { tipo: 'explorar'; plazaId: string }
-  | { tipo: 'mudarse'; plazaId: string };
+  | { tipo: 'mudarse'; plazaId: string }
+  /** Sin plaza: recorrer el anillo de bandidos de su campamento (y abrir los alijos que vea por el camino). `salio`: ya se alejó
+   * de la puerta, así que volver a ella es volver a casa. */
+  | { tipo: 'anillo'; campamentoId: string; salio?: boolean; /** Sale sin tropa a buscar (no come) y vuelve al ver presa. */ explorar?: { desde: Instante; paso: number; giro: number } }
+  /** Sin plaza: llevar la caravana de fundación a `sitio` y fundar; `descartados`, los sitios donde `fundar` ya dijo que no. */
+  | { tipo: 'fundar'; caravanaId: string; sitio?: { x: number; y: number }; descartados: { x: number; y: number }[] }
+  /** Sin plaza: va en la columna de un compañero (la caza en grupo o la de fundación). `salio`, como en `anillo`. */
+  | { tipo: 'unirse'; ejercitoId: string; para: 'cazar' | 'fundar'; salio?: boolean };
+
+/**
+ * Cómo llega y con quién juega (D57): un grupo de amigos (llegan juntos; el `lider` crea la Facción y los demás le piden
+ * entrar), un solitario (crea la suya) o uno que llega tarde (pide entrar en una que ya exista). No cambia las reglas, solo las
+ * prioridades.
+ */
+export type Perfil = { tipo: 'amigos'; lider: string } | { tipo: 'solitario' } | { tipo: 'tardio' };
 
 export interface MemoriaBot {
   plan?: Plan;
@@ -30,11 +44,19 @@ export interface MemoriaBot {
   residenciaId?: string;
   /** Acciones rechazadas que no se reintentan hasta ese instante: el rechazo es información (§3). */
   esperas: Map<string, Instante>;
+  /** La solicitud de ingreso pendiente y desde cuándo: quien no recibe respuesta, al rato funda la suya. */
+  solicitud?: { faccionId: string; desde: Instante };
+  /** Desde cuándo espera, con la caravana comprada, a que vuelvan los compañeros para salir a fundar juntos. */
+  esperaFundar?: Instante;
+  /** El campamento en el que estaba dentro y su pizarra, en la última vista: con ellos el runner sabe si un compañero lo llama. */
+  dentroDe?: string;
+  pizarra?: string;
 }
 
 /** Lo que recibe un cerebro al pensar. */
 export interface ContextoBot {
   yo: string;
+  perfil: Perfil;
   vista: Vista;
   memoria: MemoriaBot;
   pizarra: Pizarra;
@@ -65,6 +87,7 @@ function hash(texto: string): number {
 
 interface Bot {
   heroeId: string;
+  perfil: Perfil;
   memoria: MemoriaBot;
   rng: RandomFn;
   desfase: number;
@@ -100,6 +123,8 @@ export class RunnerDeBots {
   private readonly cadaTicks: number;
   private readonly semilla: number;
   private readonly siempre: boolean;
+  /** El instante de la última vista: el del tick en curso. */
+  private instanteActual?: Instante;
 
   constructor(
     private readonly puerto: PuertoBot,
@@ -111,12 +136,12 @@ export class RunnerDeBots {
     this.siempre = opciones.horario === 'siempre';
   }
 
-  alta(heroeId: string): void {
+  alta(heroeId: string, perfil: Perfil = { tipo: 'solitario' }): void {
     if (this.bots.has(heroeId)) return;
     const h = hash(heroeId);
     const rng = createRng((this.semilla ^ h) >>> 0);
     const sesiones: [number, number][] = this.siempre ? [[0, MINUTOS_DIA]] : horarioDe(rng);
-    this.bots.set(heroeId, { heroeId, memoria: { esperas: new Map() }, rng, desfase: h % this.cadaTicks, sesiones });
+    this.bots.set(heroeId, { heroeId, perfil, memoria: { esperas: new Map() }, rng, desfase: h % this.cadaTicks, sesiones });
   }
 
   /** Después de cada tick: piensan los que tocan, en orden de id. Devuelve cuántos pensaron. */
@@ -147,17 +172,34 @@ export class RunnerDeBots {
       this.pensar(bot);
       pensaron++;
     }
+    // Segunda pasada: los que siguen dentro de un campamento del que acaba de salir un compañero a esperarlos se le unen en
+    // este mismo tick, antes de que la columna se mueva. En orden de id, como la primera.
+    for (const id of [...this.bots.keys()].sort()) {
+      const bot = this.bots.get(id)!;
+      if (!bot.conectado || !this.leLlaman(bot)) continue;
+      this.pensar(bot);
+      pensaron++;
+    }
     return pensaron;
+  }
+
+  private leLlaman(bot: Bot): boolean {
+    const { dentroDe, pizarra } = bot.memoria;
+    const salida = dentroDe && pizarra ? this.pizarras.get(pizarra)?.salidas.get(dentroDe) : undefined;
+    return !!salida && salida.liderId !== bot.heroeId && salida.hasta > (this.instanteActual ?? -Infinity);
   }
 
   private pensar(bot: Bot): void {
     const vista = this.puerto.observar(bot.heroeId);
     if (!vista.heroe) return; // sin héroe no hay quien juegue
+    this.instanteActual = vista.instante;
     const memoria = bot.memoria;
+    memoria.dentroDe = vista.heroe.ubicacion.tipo === 'mercenarios' ? vista.heroe.ubicacion.campamentoId : undefined;
     memoria.columnaId = vista.ejercitos.find((e) => e.participantes.some((p) => p.heroeId === bot.heroeId))?.id;
     memoria.residenciaId = vista.heroe.residenciaId ?? undefined;
 
     const clavePizarra = vista.faccionId ?? `sin-faccion:${bot.heroeId}`;
+    memoria.pizarra = clavePizarra;
     let pizarra = this.pizarras.get(clavePizarra);
     if (!pizarra) this.pizarras.set(clavePizarra, (pizarra = pizarraVacia()));
     if (memoria.residenciaId) pizarra.residencias.set(bot.heroeId, memoria.residenciaId);
@@ -166,6 +208,7 @@ export class RunnerDeBots {
     const actuar = <T extends TipoComando>(tipo: T, params: ParamsDe<T>) => this.puerto.actuar(bot.heroeId, tipo, params);
     this.cerebro({
       yo: bot.heroeId,
+      perfil: bot.perfil,
       vista,
       memoria,
       pizarra,

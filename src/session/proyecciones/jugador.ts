@@ -682,6 +682,17 @@ function caravanasAvistadas(
     }));
 }
 
+/** Lo único que se ve sin héroe (D3, D79): todos los campamentos, con dónde están y el contador doble, para elegir dónde nacer. */
+export function campamentosParaElegir(estado: GameSessionState) {
+  return estado.campamentosMercenarios.map((c) => ({
+    id: c.id,
+    posicion: c.posicion,
+    origen: c.origen,
+    eligieronComoInicial: c.eligieronComoInicial,
+    residentes: c.residentesIds.length,
+  }));
+}
+
 export function proyectarParaJugador(
   estado: GameSessionState,
   heroeId: string,

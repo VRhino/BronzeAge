@@ -122,8 +122,6 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   sacarDelAlmacenPersonal: objeto({ recurso: RECURSO, cantidad: NUMERO }, ['recurso', 'cantidad']),
   asignarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),
   retirarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),
-  // Admin. Sin `posicion`, la gobernanza NPC busca el sitio (`buscarPosicionFundacionInicialPorDefecto`).
-  crearFaccionNpc: objeto({ nombre: { type: 'string' }, posicion: PUNTO }, ['nombre']),
   solicitarIngreso: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),
   responderSolicitud: objeto({ faccionId: IDENTIFICADOR, heroeId: IDENTIFICADOR, aceptar: { type: 'boolean' } }, ['faccionId', 'heroeId', 'aceptar']),
   // Sin parámetros: el actor solo puede dejar SU PROPIA Facción — `objeto({}, [])` solo admite `{}`.
