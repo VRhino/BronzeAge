@@ -157,7 +157,8 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 
 | Comando (`GameStore.*`) | Rol técnico mínimo | Condición de dominio adicional |
 |---|---|---|
-| `fundarAsentamiento`, `lanzarCaravanaFundacion`, `desarmarCaravanaFundacion` | jugador | Facción propia |
+| `lanzarCaravanaFundacion`, `desarmarCaravanaFundacion` | jugador | Facción propia |
+| `fundar` | jugador | titular de la Caravana de Fundación de campamento que lleva enganchada (lo mira el comando, D11) |
 | `crearFaccion` | jugador | **RESUELTO 2026-08-27** (antes "abierto"): no ser ya ciudadano de ninguna Facción, y no haber abandonado una hace menos de `CIUDADANIA.cooldownCreacionFaccionDias` (7 días) — ambas son rechazo de DOMINIO dentro del propio comando (`faccion.ya_pertenece`/`faccion.cooldown_creacion`), no de esta matriz: cualquier `jugador` puede intentarlo, igual que nombre vacío/duplicado. Otorga ciudadanía inmediata a quien la crea |
 | `solicitarIngreso` | jugador | no ser ya ciudadano de ninguna Facción (`faccion.ya_pertenece`); no en una Facción NPC (D49). Pedir otra vez no cambia nada. Sin cooldown — solo `crearFaccion` lo tiene |
 | `responderSolicitud` | jugador | ser el Rey de esa Facción (D31, D46) |

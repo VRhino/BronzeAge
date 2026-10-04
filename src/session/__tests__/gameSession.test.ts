@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { BALANCE_VERSION } from '../../constants';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { fundarAsentamiento } from './fundarDePrueba';
 import { instanteDeTick, isoDeInstante } from '../estado';
 import { exito, type ManejadorComando } from '../comandos/tipos';
 import { conHeroe } from './fixtures';

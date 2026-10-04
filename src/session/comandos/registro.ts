@@ -8,7 +8,6 @@
 // que ya no los necesita) y en `server/api.ts` (que sí). El cliente solo importa `TipoComando` (tipo, sin
 // coste en tiempo de ejecución), nunca los manejadores en sí.
 import type { ManejadorComando } from './tipos';
-import { fundarAsentamiento } from './fundarAsentamiento';
 import { crearFaccion } from './crearFaccion';
 import { responderSolicitud, solicitarIngreso } from './ingresoEnFaccion';
 import { dejarFaccion } from './dejarFaccion';
@@ -67,7 +66,6 @@ import { aplicarResultado, cancelarBatalla, conCandadoDeBatalla, confirmarInicio
 import { avanzarTick } from './avanzarTick';
 
 const MANEJADORES = {
-  fundarAsentamiento,
   crearFaccion,
   solicitarIngreso,
   responderSolicitud,

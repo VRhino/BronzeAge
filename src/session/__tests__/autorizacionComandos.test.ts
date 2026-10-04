@@ -8,10 +8,9 @@
 import { describe, expect, it } from 'vitest';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import { instanteDeTick } from '../estado';
-import { GameSession } from '../gameSession';
-import { conHeroe, partidaConAsentamiento, ACTOR, OPC } from './fixtures';
+import { conHeroe, partidaConAsentamiento, OPC } from './fixtures';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { fundarAsentamiento } from './fundarDePrueba';
 import { asignarCargoLocal, asignarRey } from '../comandos/cargos';
 import { entrarEnAsentamiento, salirAlMundo } from '../comandos/presencia';
 import { REGISTRO_COMANDOS } from '../comandos/registro';
@@ -49,91 +48,37 @@ describe('exhaustividad de la matriz', () => {
   });
 });
 
+/** Lanzar la Caravana de Fundación de una plaza: la condición de dominio es ser ciudadano de su Facción. */
+const lanzarDesde = (origenAsentamientoId: string) => ({ origenAsentamientoId, destino: { x: 0, y: 0 }, numJugadores: 1 });
+
 describe('filtro de rol técnico', () => {
   it('un rol no listado se rechaza sin llegar a evaluar la condición de dominio', () => {
-    const { sesion, faccionId } = partidaConAsentamiento();
-    const resultado = verificarAutorizacion(
-      'fundarAsentamiento',
-      { faccionId },
-      sesion.getState(),
-      { rol: 'observador', heroeId: null }
-    );
+    const { sesion, asentamientoId } = partidaConAsentamiento();
+    const resultado = verificarAutorizacion('lanzarCaravanaFundacion', lanzarDesde(asentamientoId), sesion.getState(), { rol: 'observador', heroeId: null });
     expect(resultado).toEqual({ autorizado: false, motivo: 'rol_insuficiente' });
   });
 
   it('el rol jugador sin heroeId se deniega: no hay a quién atribuir la acción', () => {
-    const { sesion, faccionId } = partidaConAsentamiento();
-    const resultado = verificarAutorizacion(
-      'fundarAsentamiento',
-      { faccionId },
-      sesion.getState(),
-      { rol: 'jugador', heroeId: null }
-    );
+    const { sesion, asentamientoId } = partidaConAsentamiento();
+    const resultado = verificarAutorizacion('lanzarCaravanaFundacion', lanzarDesde(asentamientoId), sesion.getState(), { rol: 'jugador', heroeId: null });
     expect(resultado).toEqual(POR_DOMINIO);
   });
 });
 
 describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía', () => {
   it('autoriza a un ciudadano de esa Facción', () => {
-    const { sesion, faccionId, fundador } = partidaConAsentamiento();
-    const resultado = verificarAutorizacion(
-      'fundarAsentamiento',
-      { faccionId },
-      sesion.getState(),
-      jugador(fundador)
-    );
-    expect(resultado).toEqual(AUTORIZADO);
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    expect(verificarAutorizacion('lanzarCaravanaFundacion', lanzarDesde(asentamientoId), sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
   });
 
-  it('rechaza a un forastero: fundar consume el cap de fundación de la Facción', () => {
-    const { sesion, faccionId } = partidaConAsentamiento();
-    const resultado = verificarAutorizacion(
-      'fundarAsentamiento',
-      { faccionId },
-      sesion.getState(),
-      jugador('forastero')
-    );
-    expect(resultado).toEqual(POR_DOMINIO);
-  });
-
-  it('ARRANQUE: en una Facción recién creada, sin ciudadanos, sí puede fundar quien no tiene Facción', () => {
-    // Sin esta excepción `crearFaccion` -> `fundarAsentamiento` sería imposible y toda Facción nacería
-    // muerta: es fundar lo que otorga la primera ciudadanía.
-    const sesion = GameSession.crear('arranque', { seed: 42 });
-    const rf = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
-
-    const resultado = verificarAutorizacion(
-      'fundarAsentamiento',
-      { faccionId: rf.datos!.faccionId },
-      sesion.getState(),
-      jugador(ACTOR)
-    );
-    expect(resultado).toEqual(AUTORIZADO);
-  });
-
-  it('...pero NO quien ya es ciudadano de otra Facción: un jugador pertenece solo a una', () => {
-    const { sesion, fundador } = partidaConAsentamiento();
-    const rf = sesion.ejecutar(crearFaccion, { nombre: 'Vacia' }, { ...OPC, actor: 'otro' });
-
-    const resultado = verificarAutorizacion(
-      'fundarAsentamiento',
-      { faccionId: rf.datos!.faccionId },
-      sesion.getState(),
-      jugador(fundador)
-    );
-    expect(resultado).toEqual(POR_DOMINIO);
+  it('rechaza a un forastero', () => {
+    const { sesion, asentamientoId } = partidaConAsentamiento();
+    expect(verificarAutorizacion('lanzarCaravanaFundacion', lanzarDesde(asentamientoId), sesion.getState(), jugador('forastero'))).toEqual(POR_DOMINIO);
   });
 
   it('un ciudadano de la Facción rival tampoco pasa', () => {
-    const { sesion, faccionId, ciudadanoRival } = partidaConFaccionRival();
-
-    const resultado = verificarAutorizacion(
-      'fundarAsentamiento',
-      { faccionId },
-      sesion.getState(),
-      jugador(ciudadanoRival)
-    );
-    expect(resultado).toEqual(POR_DOMINIO);
+    const { sesion, asentamientoId, ciudadanoRival } = partidaConFaccionRival();
+    expect(verificarAutorizacion('lanzarCaravanaFundacion', lanzarDesde(asentamientoId), sesion.getState(), jugador(ciudadanoRival))).toEqual(POR_DOMINIO);
   });
 });
 

@@ -10,7 +10,7 @@ import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { GameSession } from '../../session/gameSession';
 import { instanteDeTick } from '../../session/estado';
 import { crearFaccion } from '../../session/comandos/crearFaccion';
-import { fundarAsentamiento } from '../../session/comandos/fundarAsentamiento';
+import { fundarAsentamiento } from '../../session/__tests__/fundarDePrueba';
 import { conHeroe } from '../../session/__tests__/fixtures';
 import {
   cargarPartida,

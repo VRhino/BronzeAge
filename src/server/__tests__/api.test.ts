@@ -15,22 +15,42 @@ import { proveedoresPorDefecto } from '../identidad/proveedoresActivos';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { crearRepositorioIdentidadPersistente } from '../identidad/repositorioPersistente';
 import { instanteDeTick } from '../../session/estado';
+import { crearRepositorioIdentidadEnMemoria } from '../identidad/repositorioEnMemoria';
+import { fundarParaTest } from './fundarParaTest';
 
 /** El operador declara administradores por identidad externa; `dev jefa` es la de las pruebas. */
 const ADMINS = [{ proveedor: 'dev', sujetoId: 'jefa' }];
 
 let directorio: string;
 let app: FastifyInstance;
+/** Fuera del servidor para que sobreviva a reabrirlo (`fundarEn`): sesiones y membresías siguen valiendo. */
+let identidad: Parameters<typeof crearServidor>[0]['identidad'];
 
 beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-api-'));
-  app = crearServidor({ directorio, administradoresGlobales: ADMINS });
+  identidad = { proveedores: crearRegistroProveedores(proveedoresPorDefecto()), repositorio: crearRepositorioIdentidadEnMemoria() };
+  app = crearServidor({ directorio, administradoresGlobales: ADMINS, identidad });
 });
 
 afterEach(async () => {
   await app.close();
   await rm(directorio, { recursive: true, force: true });
 });
+
+/** Una plaza para el héroe de `auth` en `punto` (`fundarParaTest`); devuelve su id y deja `app` apuntando al servidor reabierto. */
+async function fundarEn(gameId: string, auth: { authorization: string }, faccionId: string, punto: { x: number; y: number }): Promise<string> {
+  const r = await fundarParaTest({
+    app,
+    reabrir: async () => crearServidor({ directorio, administradoresGlobales: ADMINS, identidad }),
+    directorio,
+    gameId,
+    auth,
+    faccionId,
+    punto,
+  });
+  app = r.app;
+  return r.asentamientoId;
+}
 
 /** Login con el proveedor de desarrollo; devuelve la cabecera lista para el resto de peticiones. */
 async function sesionDe(sujetoId: string) {
@@ -60,7 +80,7 @@ async function jugadorEn(gameId: string, sujetoId = 'ana', campamentoId = 'merce
     headers: auth,
     payload: { tipo: 'crearHeroe', params: heroeDe(sujetoId, campamentoId) },
   });
-  // ponytail: sale del campamento para tener columna y fundar a pie; se va con fundar a pie (paso 6).
+  // Sale del campamento: los tests que fundan (`fundarEn`) lo hacen con su columna, en el mundo.
   const heroeId = (await app.inject({ method: 'GET', url: `/v1/jugador/partidas/${gameId}`, headers: auth })).json().heroeId;
   await app.inject({
     method: 'POST',
@@ -456,7 +476,7 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     expect(fuera.json().produccionDeAsentamiento).toBeUndefined();
 
     const f = await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } } });
-    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'fundarAsentamiento', params: { faccionId: f.json().resultado.datos.faccionId, posicion: { x: 500, y: 500 } } } });
+    await fundarEn('g1', ana, f.json().resultado.datos.faccionId, { x: 400, y: 400 });
 
     // Dentro de la plaza recién fundada: viaja (array — vacío mientras solo esté el Centro Urbano).
     const dentro = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: ana });
@@ -473,8 +493,7 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     expect(fuera.json().ascensoDeAsentamiento).toBeUndefined();
 
     const f = await comando('crearFaccion', { nombre: 'Micenas' });
-    const a = await comando('fundarAsentamiento', { faccionId: f.json().resultado.datos.faccionId, posicion: { x: 500, y: 500 } });
-    const asentamientoId = a.json().resultado.datos.asentamientoId;
+    const asentamientoId = await fundarEn('g1', ana, f.json().resultado.datos.faccionId, { x: 400, y: 400 });
 
     // Recién fundada: se ve a dónde subiría y todo lo que le falta, sin tener que intentarlo.
     const dentro = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: ana })).json();
@@ -528,13 +547,7 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
       headers: ana,
       payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
     });
-    const fundadaAna = await app.inject({
-      method: 'POST',
-      url: '/v1/jugador/partidas/g1/comandos',
-      headers: ana,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: creadaAna.json().resultado.datos.faccionId, posicion: { x: 500, y: 500 } } },
-    });
-    const asentamientoAna = fundadaAna.json().resultado.datos.asentamientoId;
+    const asentamientoAna = await fundarEn('g1', ana, creadaAna.json().resultado.datos.faccionId, { x: 400, y: 400 });
 
     const luis = await jugadorEn('g1', 'luis', 'mercenarios-1');
     const creadaLuis = await app.inject({
@@ -543,13 +556,7 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
       headers: luis,
       payload: { tipo: 'crearFaccion', params: { nombre: 'Troya' } },
     });
-    const fundadaLuis = await app.inject({
-      method: 'POST',
-      url: '/v1/jugador/partidas/g1/comandos',
-      headers: luis,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: creadaLuis.json().resultado.datos.faccionId, posicion: { x: 1200, y: 1200 } } },
-    });
-    const asentamientoLuis = fundadaLuis.json().resultado.datos.asentamientoId;
+    const asentamientoLuis = await fundarEn('g1', luis, creadaLuis.json().resultado.datos.faccionId, { x: 1200, y: 1200 });
 
     const proyeccionAna = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: ana })).json();
     expect(proyeccionAna.zonas.map((z: { asentamientoId: string }) => z.asentamientoId)).toEqual([asentamientoAna]);
@@ -634,13 +641,7 @@ describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
       headers: ana,
       payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
     });
-    const fundadaAna = await app.inject({
-      method: 'POST',
-      url: '/v1/jugador/partidas/g1/comandos',
-      headers: ana,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: fAna.json().resultado.datos.faccionId, posicion: { x: 500, y: 500 } } },
-    });
-    const asentamientoAna = fundadaAna.json().resultado.datos.asentamientoId;
+    const asentamientoAna = await fundarEn('g1', ana, fAna.json().resultado.datos.faccionId, { x: 400, y: 400 });
 
     const luis = await jugadorEn('g1', 'luis', 'mercenarios-1');
     const fLuis = await app.inject({
@@ -649,13 +650,12 @@ describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
       headers: luis,
       payload: { tipo: 'crearFaccion', params: { nombre: 'Troya' } },
     });
-    const fundadaLuis = await app.inject({
-      method: 'POST',
-      url: '/v1/jugador/partidas/g1/comandos',
-      headers: luis,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: fLuis.json().resultado.datos.faccionId, posicion: { x: 1200, y: 1200 } } },
-    });
-    const asentamientoLuis = fundadaLuis.json().resultado.datos.asentamientoId;
+    const asentamientoLuis = await fundarEn('g1', luis, fLuis.json().resultado.datos.faccionId, { x: 1200, y: 1200 });
+    // Lo que hace cada uno en su plaza queda atribuido a ella (la fundación de prueba no pasa por el registro de eventos).
+    for (const [auth, asentamientoId] of [[ana, asentamientoAna], [luis, asentamientoLuis]] as const) {
+      const heroeId = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).json().heroeId;
+      await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: auth, payload: { tipo: 'asignarCargoLocal', params: { asentamientoId, cargo: 'gobernador', heroeId } } });
+    }
 
     const eventosAna = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1/eventos?desde=0', headers: ana })).json().eventos;
     // Los eventos de Facción (`crearFaccion`, sin `asentamientoId`) son públicos para cualquiera — mismo
@@ -829,8 +829,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
         method: 'POST',
         url: '/v1/jugador/partidas/g1/comandos',
         headers: auth,
-        // `fundarAsentamiento` exige `faccionId` — este cuerpo no trae ninguno.
-        payload: { tipo: 'fundarAsentamiento', params: {} },
+        // `solicitarIngreso` exige `faccionId` — este cuerpo no trae ninguno.
+        payload: { tipo: 'solicitarIngreso', params: {} },
       });
 
       expect(res.statusCode).toBe(400);
@@ -853,20 +853,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
     it('400, no un crash del motor: EdificioTipo fuera del catálogo (antes reventaba en `EDIFICIO_CATALOGO[tipo].costo`)', async () => {
       await partidaCreada('g1');
       const auth = await jugadorEn('g1');
-      const creada = await app.inject({
-        method: 'POST',
-        url: '/v1/jugador/partidas/g1/comandos',
-        headers: auth,
-        payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
-      });
-      const faccionId = creada.json().resultado.datos.faccionId;
-      const fundada = await app.inject({
-        method: 'POST',
-        url: '/v1/jugador/partidas/g1/comandos',
-        headers: auth,
-        payload: { tipo: 'fundarAsentamiento', params: { faccionId, posicion: { x: 500, y: 500 } } },
-      });
-      const asentamientoId = fundada.json().resultado.datos.asentamientoId;
+      // El esquema rechaza antes de mirar si la plaza existe: basta un id cualquiera.
+      const asentamientoId = 'cualquiera';
 
       // `tipo: 'noExiste'` no pasa el esquema (400) antes de que importe si `cargo`/autorización son
       // correctos — por eso este `cargo` no necesita ser el del Gobernador real de este asentamiento.
@@ -961,7 +949,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `reclutarEnCampamento` (Doc 1.9b): reclutar en un campamento de mercenarios.
       // +1 con `comprarEnCampamento` (Doc 1.9b): el mercado del campamento.
       // +2 con `conectarse`/`desconectarse` (Doc 1.10.6): entrar y salir del mundo.
-      expect(cuerpo.oneOf.length).toBe(99);
+      expect(cuerpo.oneOf.length).toBe(98);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });
@@ -979,21 +967,14 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
     });
     const faccionId = creada.json().resultado.datos.faccionId;
-    await app.inject({
-      method: 'POST',
-      url: '/v1/jugador/partidas/g1/comandos',
-      headers: primero,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId, posicion: { x: 500, y: 500 } } },
-    });
 
-    // `luis`, otro jugador sin Facción, intenta fundar en la Facción de `ana` — ya no está vacía, así que la
-    // excepción de arranque no aplica y se rechaza igual que a cualquier forastero.
+    // `luis`, otro jugador, intenta responder a las solicitudes de la Facción de `ana`: solo su Rey puede (D46).
     const segundo = await jugadorEn('g1', 'luis');
     const res = await app.inject({
       method: 'POST',
       url: '/v1/jugador/partidas/g1/comandos',
       headers: segundo,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId, posicion: { x: 900, y: 900 } } },
+      payload: { tipo: 'responderSolicitud', params: { faccionId, heroeId: 'quien-sea', aceptar: true } },
     });
 
     expect(res.statusCode).toBe(403);
@@ -1003,25 +984,15 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
   it('una entidad inexistente NO es 403: la existencia la juzga el comando, con su codigo de error', async () => {
     await partidaCreada('g1');
     const auth = await jugadorEn('g1');
-    // Se funda donde se está (Doc 1.3): hace falta existir ya en el mundo, con columna, antes de poder
-    // fundar — un comando cualquiera de alta sirve, para que esta prueba mida lo que dice medir (una
-    // Facción inexistente) y no un jugador sin registrar.
-    await app.inject({
-      method: 'POST',
-      url: '/v1/jugador/partidas/g1/comandos',
-      headers: auth,
-      payload: { tipo: 'crearFaccion', params: { nombre: 'Placeholder' } },
-    });
-
     const res = await app.inject({
       method: 'POST',
       url: '/v1/jugador/partidas/g1/comandos',
       headers: auth,
-      payload: { tipo: 'fundarAsentamiento', params: { faccionId: 'no-existe' } },
+      payload: { tipo: 'solicitarIngreso', params: { faccionId: 'no-existe' } },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().resultado).toMatchObject({ ok: false, codigoError: 'fundacion.invalida' });
+    expect(res.json().resultado).toMatchObject({ ok: false, codigoError: 'faccion.no_existe' });
   });
 
   it('un comando rechazado por el dominio responde 200 con `ok: false`, no un error HTTP', async () => {

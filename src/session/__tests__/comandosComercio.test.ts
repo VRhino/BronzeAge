@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { fundarAsentamiento } from './fundarDePrueba';
 import { aceptarTrueque, colocarOrdenMercado, crearCaravana, proponerTrueque, rechazarTrueque } from '../comandos/comercio';
 import { conHeroe, enPie } from './fixtures';
 

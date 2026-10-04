@@ -28,7 +28,7 @@ function relojDesde(...momentos: string[]): () => string {
   return () => momentos[Math.min(i++, momentos.length - 1)]!;
 }
 
-const BASE = { gameId: 'g1', actor: 'jugador-1', comando: 'fundarAsentamiento', resultado: 'aceptado' as const };
+const BASE = { gameId: 'g1', actor: 'jugador-1', comando: 'fundar', resultado: 'aceptado' as const };
 
 describe('RegistroDeAuditoria', () => {
   it('escribe una linea JSON por entrada, con formato y momento', async () => {
@@ -44,7 +44,7 @@ describe('RegistroDeAuditoria', () => {
         momento: '2026-09-05T10:00:00.000Z',
         gameId: 'g1',
         actor: 'jugador-1',
-        comando: 'fundarAsentamiento',
+        comando: 'fundar',
         resultado: 'aceptado',
         version: 3,
         instante: 1_234_000,

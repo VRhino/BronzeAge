@@ -313,10 +313,12 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    sesión, la autorización y el canon. Quien vive en un campamento entra a vivir en una plaza de su Facción con
    `cambiarResidencia`, que ya no exige residir antes en otra plaza. Sin invitaciones: D46 deja solo la lista del Rey.
    **Falta**: el Rey bot que acepta (paso 8).
-6. **Fundación única** (D30): caravana de campamento sin destino, origen = campamento (atacable, D36; vuelve a él,
-   D40); fondo por Facción y campamento, aportado desde el carro (D39); enganche y reclamo; caducidad con registro
-   (D34, D43); la caravana de plaza llama al mismo mecanismo; cofundadores (M2); D16 en el motor; **eliminar fundar
-   a pie** (D19).
+6. ~~**Fundación única**~~ **Hecho** (`a274311`, `98e3da3` y el de fundar a pie): caravana de campamento sin destino con
+   titular, `fundar` como mecanismo único (también para la caravana de plaza), D16 con exclusión de 100, cofundadores de la
+   columna; fondo en el campamento donde se está, desde almacén o carro; vuelta sola, reclamo, desarme y caducidad con
+   devolución; fundar a pie fuera del juego (su código queda solo como fixture de tests, `fundarDePrueba`). **No hecho**:
+   D44b (la caravana del campamento lleva justo el coste, no hay excedente que comer). **Pendiente del canon**: Doc 1.3
+   sigue diciendo que el servidor arranca con Facciones NPC (D53), que va con el NPC fuera del motor.
 7. **Presencia**: base hecha en `b40af3d` (§3.2), **a corregir con D64-D71**: dentro de plaza o campamento solo una
    marca (sin contenedor `fuera`, sin defender en persona); aplazar la salida si le persiguen (máx. 3 min); mando al
    conectado más antiguo; caravana de fundación que vuelve se desarma y devuelve. Lo hace esta línea de trabajo (la

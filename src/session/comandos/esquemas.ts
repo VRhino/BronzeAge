@@ -81,7 +81,6 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // --- Fundación y expansión ---
   // Sin `posicion`: se funda donde se está (Doc 1.3), y ese punto sale de la columna del fundador, no de un
   // parámetro que el cliente pueda elegir.
-  fundarAsentamiento: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),
   lanzarCaravanaFundacion: objeto(
     { origenAsentamientoId: IDENTIFICADOR, destino: PUNTO, numJugadores: NUMERO },
     ['origenAsentamientoId', 'destino', 'numJugadores']

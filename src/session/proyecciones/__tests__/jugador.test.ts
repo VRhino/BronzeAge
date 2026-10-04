@@ -8,7 +8,7 @@ import { escuadronDePrueba, heroesCon, instanteDeTest } from '../../../engine/__
 import { conEscuadrones, sinTropa, type EjercitoConTropa } from '../../../engine/tropa';
 import { conHeroe, enPie, partidaConAsentamiento, MOMENTO, OPC } from '../../__tests__/fixtures';
 import { crearFaccion } from '../../comandos/crearFaccion';
-import { fundarAsentamiento } from '../../comandos/fundarAsentamiento';
+import { fundarAsentamiento } from '../../__tests__/fundarDePrueba';
 import { entrarEnAsentamiento, salirAlMundo } from '../../comandos/presencia';
 import { idDeMapa, type GameSessionState, type GeometriaAsentamientos } from '../../estado';
 import { computeTodasLasZonas } from '../../../engine/zones';

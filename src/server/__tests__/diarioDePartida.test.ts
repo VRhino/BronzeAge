@@ -33,7 +33,7 @@ const bytes = (r: RunnerDePartida) => JSON.stringify(r.exportar());
 async function heroe(r: RunnerDePartida, jugadorId: string): Promise<string> {
   const avatar = { cabezaId: '', peloId: '', barbaId: '', cejasId: '' };
   const creado = await r.ejecutar('crearHeroe', { displayName: jugadorId, campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar }, jugadorId);
-  // ponytail: sale del campamento para tener columna y fundar a pie; se va con fundar a pie (paso 6).
+  // Sale del campamento: el guion también mueve columnas.
   await r.ejecutar('salirDelCampamento', { campamentoId: 'mercenarios-0', heroeId: creado.datos!.heroeId, escuadronIds: [], carga: {} }, creado.datos!.heroeId);
   return creado.datos!.heroeId;
 }
@@ -45,11 +45,12 @@ async function guion(r: RunnerDePartida): Promise<void> {
   const ana = await heroe(r, 'ana');
   const bea = await heroe(r, 'bea');
   const micenas = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, ana);
-  await r.ejecutar('fundarAsentamiento', { faccionId: micenas.datos!.faccionId }, ana);
+  await r.ejecutar('solicitarIngreso', { faccionId: micenas.datos!.faccionId }, bea);
+  await r.ejecutar('pedirPrestamo', { tropaIds: ['milicia_lanceros'] }, ana);
+  await r.ejecutar('marcharA', { heroeId: ana, objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } }, ana);
   for (let i = 0; i < 10; i++) await r.avanzarTick();
-  expect((await r.ejecutar('fundarAsentamiento', { faccionId: 'no-existe' }, bea)).ok).toBe(false);
-  const troya = await r.ejecutar('crearFaccion', { nombre: 'Troya' }, bea);
-  await r.ejecutar('fundarAsentamiento', { faccionId: troya.datos!.faccionId }, bea);
+  expect((await r.ejecutar('solicitarIngreso', { faccionId: 'no-existe' }, 'cai')).ok).toBe(false);
+  await r.ejecutar('responderSolicitud', { faccionId: micenas.datos!.faccionId, heroeId: bea, aceptar: true }, ana);
   for (let i = 0; i < 5; i++) await r.avanzarTick();
   await heroe(r, 'cai');
   await r.ejecutar('crearFaccion', { nombre: 'Ugarit' }, 'cai'); // sin héroe propio como actor: lo que diga el dominio

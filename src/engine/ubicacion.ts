@@ -5,15 +5,10 @@
 // jugador actúa por primera vez y cuando se carga una partida anterior a esta mecánica— y en los dos hay que
 // DEDUCIRLA de lo que el mundo ya sabe. Una sola función para los dos casos, o la partida migrada acabaría
 // colocando a la gente en un sitio distinto del que la coloca el juego en marcha.
-import type { Asentamiento, Ejercito, Escuadron, InteriorRecordado, Heroe, Point, RelacionPolitica, UbicacionHeroe } from '../domain/types';
+import type { Asentamiento, Ejercito, Escuadron, InteriorRecordado, Heroe, RelacionPolitica, UbicacionHeroe } from '../domain/types';
 import { guarnicionDe, indiceTropa, type EjercitoConTropa } from './tropa';
 import type { Instante } from '../domain/tiempo';
-import { FUNDACION, MOVIMIENTO } from '../constants';
-import { calcularRuta } from '../world/rutas';
-import { evaluarViabilidadFundacion } from './settlement';
-import { distancia } from '../world/geometria';
-import type { Mapa } from '../world/mapa';
-import type { RandomFn } from '../worldgen';
+import { MOVIMIENTO } from '../constants';
 import { absorberColumna, alcanceDeVista, enLaPuertaDe, MovilizacionInvalidaError } from './ejercitos';
 import { esResidente, puedeEntrarEn } from './pertenencia';
 import { marcarVisto, rejillaDe, SIN_EXPLORAR } from './exploracion';
@@ -41,47 +36,6 @@ export function ubicacionDeducida(
   if (residencia) return { tipo: 'asentamiento', asentamientoId: residencia.id };
 
   return { tipo: 'desconectado', punto: { x: 0, y: 0 } };
-}
-
-/**
- * La columna con la que APARECE en el mundo un héroe recién creado (Doc 1.3), en un punto de aparición: sin
- * tropas, sin carga y **SIN CASA**. Aparecer es nacer CON COLUMNA, no en un punto suelto: los tres sitios
- * donde un héroe puede estar son dentro de una plaza, dentro de una columna o fuera del mundo (Doc 1.10), y
- * sin ella no podría ni moverse ni fundar donde se para.
- *
- * `origenAsentamientoId` va vacio a proposito y no es un hueco mal tapado: un recien llegado no tiene a donde
- * replegarse, que es exactamente la condicion de HUERFANO que el motor ya sabe manejar (Doc 5.4 — si el
- * origen no existe, no hay donde reintegrar). Deja de serlo al fundar o al entrar en una Faccion.
- *
- * `politicaDeUnion: 'rechazar'` no es prudencia: una columna sin bandera no tiene Faccion a la que sumar a
- * quien se una, asi que aceptar compañia no significaria nada todavia.
- */
-export function columnaDeAparicion(
-  id: string,
-  heroeId: string,
-  mapa: Mapa,
-  asentamientos: readonly Asentamiento[],
-  rng: RandomFn,
-  instante: Instante
-): Ejercito {
-  const punto = puntoDeAparicion(mapa, asentamientos, rng);
-  return {
-    id,
-    faccionId: '',
-    origenAsentamientoId: '',
-    participantes: [{ heroeId, unidoEn: instante }],
-    tipo: 'personal',
-    liderId: heroeId,
-    politicaDeUnion: 'rechazar',
-    escuadronIds: [],
-    suministro: {},
-    caravanasAdjuntasIds: [],
-    objetivo: { tipo: 'punto', punto },
-    ruta: [],
-    progreso: 0,
-    posicionActual: punto,
-    estado: 'estacionado',
-  };
 }
 
 /** Coloca a varios héroes en el mismo sitio, dejando intacto a quien no esté en la lista. Se usa al fundar
@@ -186,74 +140,6 @@ export function estaEnAsentamiento(
   const registrada = heroes.find((j) => j.id === heroeId)?.ubicacion;
   const ubicacion = registrada ?? ubicacionDeducida(heroeId, asentamientos, ejercitos);
   return ubicacion.tipo === 'asentamiento' && ubicacion.asentamientoId === asentamientoId;
-}
-
-/**
- * Donde aparece un jugador que entra en la partida (Doc 1.3): un punto ALEATORIO del mundo, en tierra firme
- * y lejos de lo ya fundado.
- *
- * Aparecer ahi es literal: no se elige un punto sobre el mapa desde fuera, se nace en campo abierto y se
- * camina. Esa caminata es la primera decision del juego y es lo que da sentido a explorar antes de
- * asentarse.
- *
- * **Es una costura a proposito.** Cuando el vestibulo pase a ser "apareces a las puertas de una ciudad que ya
- * funciona" (`Consideraciones/Entrada_Al_Mundo_Definicion.md`, decision 1), se cambia el cuerpo de esta
- * funcion y nada mas.
- *
- * Si el mundo esta tan lleno que ningun punto cumple la distancia minima, se AFLOJA esa exigencia antes que
- * dejar a alguien sin poder entrar: quedarse fuera de la partida es peor que aparecer cerca de un vecino.
- */
-export function puntoDeAparicion(
-  mapa: Mapa,
-  asentamientos: readonly Asentamiento[],
-  rng: RandomFn
-): Point {
-  const lejosDeTodo = (p: Point): boolean =>
-    asentamientos.every((a) => distancia(p, a.posicion) >= FUNDACION.distanciaMinimaAparicion);
-
-  let fundable: Point | undefined;
-  for (let intento = 0; intento < FUNDACION.intentosDeAparicion; intento++) {
-    const punto = { x: rng() * mapa.limites.ancho, y: rng() * mapa.limites.alto };
-    // Se aparece donde se PODRIA fundar, aunque no sea buen sitio. No es una comodidad: aparecer en un lugar
-    // donde fundar es imposible —agua, cima, dentro de la zona de otro— dejaria al recien llegado obligado a
-    // caminar sin saberlo, y el juego no le habria dicho por que.
-    //
-    // Y la caminata NO pierde sentido, porque el liston es `fundable`, no `recomendable`: un sitio legal no
-    // es un sitio bueno. Sin bosque al alcance, fundar ahi es una sentencia (ver `evaluarViabilidadFundacion`),
-    // asi que sigue habiendo todas las razones para andar y mirar antes de plantar la primera piedra.
-    if (!evaluarViabilidadFundacion(mapa, punto, asentamientos as Asentamiento[]).fundable) continue;
-    if (!calcularRuta(mapa, punto, punto)) continue;
-    if (lejosDeTodo(punto)) return punto;
-    fundable ??= punto;
-  }
-  // Ninguno lejos: vale el primero fundable que salio. Y si tampoco hubo, el centro del mapa — un mundo sin
-  // un solo punto habitable no es un mundo, pero devolver algo es mejor que romper la entrada.
-  return fundable ?? { x: mapa.limites.ancho / 2, y: mapa.limites.alto / 2 };
-}
-
-/**
- * Desde donde funda este jugador (Doc 1.3): **se funda DONDE SE ESTA**, no en un punto elegido sobre el mapa.
- *
- * Solo se puede desde una columna, que es la unica forma de estar en el campo. Desde dentro de una plaza no
- * —ya estas en una ciudad— y desconectado tampoco.
- *
- * Devuelve tambien la columna entera, y no solo el punto: fundar es ENTRAR en la plaza que se acaba de
- * levantar, y quien llama necesita la columna completa para hacerla entrar (`cruzarLaPuerta`) — si llevaba
- * tropas o carga (nunca las lleva la de aparicion, pero SI puede llevarlas la de un ciudadano que funda una
- * plaza nueva para su propia Faccion en marcha), pasan a la guarnicion y al almacen igual que en cualquier
- * otra entrada.
- */
-export function puntoDeFundacionDe(jugador: Heroe, ejercitos: readonly Ejercito[]): { posicion: Point; columna: Ejercito } {
-  if (jugador.ubicacion.tipo === 'asentamiento' || jugador.ubicacion.tipo === 'mercenarios') {
-    throw new MovilizacionInvalidaError('Se funda en campo abierto: hay que salir de la plaza primero.');
-  }
-  if (jugador.ubicacion.tipo === 'desconectado') {
-    throw new MovilizacionInvalidaError('No estas en el mundo.');
-  }
-  const ubicacion = jugador.ubicacion;
-  const columna = ejercitos.find((e) => e.id === ubicacion.ejercitoId);
-  if (!columna) throw new MovilizacionInvalidaError('Tu columna ya no existe.');
-  return { posicion: columna.posicionActual, columna };
 }
 
 /**

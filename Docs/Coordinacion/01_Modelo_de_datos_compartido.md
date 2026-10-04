@@ -399,6 +399,9 @@ Caravana
   origenAcuerdoId?, ladoAcuerdo?: 'A' | 'B'   si nace de un AcuerdoTrueque — existente
   origenCampamentoId?, faccionId?   solo la Caravana de Fundación comprada en un campamento de mercenarios (Doc 1.9b):
                          no tiene asentamiento de origen, así que lleva su Facción; `origenAsentamientoId` es el id del campamento — NUEVO 2026-10-02
+  titularId?, aportes?, caducaEn?   solo esa misma (2026-10-04, D10-D14, D34): nace sin destino; la lleva y funda su titular; `aportes`
+                         = Record<heroeId, Record<recurso, number>>, lo gastado del fondo a cada uno, para devolvérselo si se
+                         desarma o caduca; `caducaEn` = Instante en que caduca si sigue suelta
   destinoPosicion?              caravana de Fundación: punto donde fundará al llegar — existente
   jugadoresFundadoresIds?        caravana de Fundación — existente. Tras este modelo, heroeId[]
   estado?: 'disponible' | 'preparando' | 'adjunta' | 'aparcada' | 'en_transito' | 'retornando'   existente

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { partidaConAsentamiento, OPC } from './fixtures';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { fundarAsentamiento } from './fundarDePrueba';
 import { CANAL_GENERAL, canalDeAsentamiento, canalDeEvento, puedeSuscribirseA } from '../canales';
 
 describe('canalDeEvento', () => {

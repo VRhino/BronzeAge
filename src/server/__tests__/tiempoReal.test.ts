@@ -10,19 +10,37 @@ import type { FastifyInstance } from 'fastify';
 import type WebSocket from 'ws';
 import { crearServidor } from '../api';
 import { HubDeDifusion } from '../difusion/hub';
+import { crearRegistroProveedores } from '../../acceso/proveedorIdentidad';
+import { proveedoresPorDefecto } from '../identidad/proveedoresActivos';
+import { crearRepositorioIdentidadEnMemoria } from '../identidad/repositorioEnMemoria';
+import { fundarParaTest } from './fundarParaTest';
 
 const ADMINS = [{ proveedor: 'dev', sujetoId: 'jefa' }];
 
 let directorio: string;
 let app: FastifyInstance;
 let hub: HubDeDifusion;
+let identidad: Parameters<typeof crearServidor>[0]['identidad'];
+
+async function abrirServidor(): Promise<FastifyInstance> {
+  const nuevo = crearServidor({ directorio, administradoresGlobales: ADMINS, hub, identidad });
+  await nuevo.ready(); // injectWS lo exige (README: "fastify.ready() needs to be awaited")
+  return nuevo;
+}
 
 beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-ws-'));
   hub = new HubDeDifusion();
-  app = crearServidor({ directorio, administradoresGlobales: ADMINS, hub });
-  await app.ready(); // injectWS lo exige (README: "fastify.ready() needs to be awaited")
+  identidad = { proveedores: crearRegistroProveedores(proveedoresPorDefecto()), repositorio: crearRepositorioIdentidadEnMemoria() };
+  app = await abrirServidor();
 });
+
+/** Una plaza para el héroe de `auth` (`fundarParaTest`); deja `app` apuntando al servidor reabierto. */
+async function fundarEn(auth: { authorization: string }, faccionId: string): Promise<string> {
+  const r = await fundarParaTest({ app, reabrir: abrirServidor, directorio, gameId: 'g1', auth, faccionId, punto: { x: 400, y: 400 } });
+  app = r.app;
+  return r.asentamientoId;
+}
 
 afterEach(async () => {
   await app.close();
@@ -50,7 +68,7 @@ async function jugadorEn(gameId: string, sujetoId: string) {
     genero: 'femenino',
     avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
   });
-  // ponytail: sale del campamento para tener columna y fundar a pie; se va con fundar a pie (paso 6).
+  // Sale del campamento: los tests que fundan (`fundarEn`) lo hacen con su columna, en el mundo.
   const heroeId = creado.json().resultado.datos.heroeId as string;
   await ejecutar(gameId, auth, 'salirDelCampamento', { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} });
   return { auth, jugadorId: res.json().jugadorId as string };
@@ -124,11 +142,7 @@ describe('protocolo de suscripcion', () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');
     const faccion = await ejecutar('g1', ana.auth, 'crearFaccion', { nombre: 'Micenas' });
-    const fundacion = await ejecutar('g1', ana.auth, 'fundarAsentamiento', {
-      faccionId: faccion.json().resultado.datos.faccionId,
-      posicion: { x: 500, y: 500 },
-    });
-    const asentamientoId = fundacion.json().resultado.datos.asentamientoId as string;
+    const asentamientoId = await fundarEn(ana.auth, faccion.json().resultado.datos.faccionId);
 
     const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
 
@@ -190,8 +204,7 @@ describe('difusion de eventos tras un comando', () => {
     const ana = await jugadorEn('g1', 'ana');
     const faccion = await ejecutar('g1', ana.auth, 'crearFaccion', { nombre: 'Micenas' });
     const faccionId = faccion.json().resultado.datos.faccionId;
-    const fundacion = await ejecutar('g1', ana.auth, 'fundarAsentamiento', { faccionId, posicion: { x: 500, y: 500 } });
-    const asentamientoId = fundacion.json().resultado.datos.asentamientoId as string;
+    const asentamientoId = await fundarEn(ana.auth, faccionId);
 
     const wsGeneral = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
     await suscribir(wsGeneral, 'mapa/general');

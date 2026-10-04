@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RunnerDePartida } from '../runnerDePartida';
 import { MAX_EVENTOS_EN_MEMORIA } from '../../session/estado';
-import { cargarPartida, type SnapshotPartida } from '../persistenciaPartida';
+import { cargarPartida, guardarPartida, type SnapshotPartida } from '../persistenciaPartida';
+import { partidaConAsentamiento } from '../../session/__tests__/fixtures';
 
 const MOMENTO = '2026-01-01T00:00:00.000Z';
 
@@ -23,6 +24,14 @@ afterEach(async () => {
   await rm(directorio, { recursive: true, force: true });
 });
 
+/** Un runner sobre una partida guardada que ya tiene una plaza (la de `partidaConAsentamiento`): fundar a pie no existe (D19), y
+ * fundar de verdad pide la caravana de un campamento con su fondo, que estos tests no miden. */
+async function runnerConPlaza(gameId: string, ahora: () => string = () => MOMENTO): Promise<{ r: RunnerDePartida; asentamientoId: string; faccionId: string }> {
+  const { sesion, asentamientoId, faccionId } = partidaConAsentamiento(gameId);
+  await guardarPartida(almacen, sesion, MOMENTO);
+  return { r: await RunnerDePartida.cargarOCrear(gameId, { seed: 42 }, { almacen, ahora }), asentamientoId, faccionId };
+}
+
 function runner(gameId = 'partida-runner', seed = 7): RunnerDePartida {
   return RunnerDePartida.crear(gameId, { seed }, { almacen, ahora: () => MOMENTO });
 }
@@ -37,15 +46,6 @@ function runnerConDiarioQueFalla(gameId: string) {
       fallo.diario && clave.endsWith('.diario.jsonl') ? Promise.reject(new Error('disco lleno')) : almacen.anexar(clave, contenido),
   };
   return { r: RunnerDePartida.crear(gameId, { seed: 7 }, { almacen: conFallo, ahora: () => MOMENTO }), fallo };
-}
-
-/** Crea el héroe del jugador y devuelve su id, que es con el que actúa a partir de ahí (como hace la ruta). */
-async function heroeEn(r: RunnerDePartida, jugadorId: string): Promise<string> {
-  const avatar = { cabezaId: '', peloId: '', barbaId: '', cejasId: '' };
-  const creado = await r.ejecutar('crearHeroe', { displayName: jugadorId, campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar }, jugadorId);
-  // ponytail: sale del campamento para tener columna y fundar a pie; se va con fundar a pie (paso 6).
-  await r.ejecutar('salirDelCampamento', { campamentoId: 'mercenarios-0', heroeId: creado.datos!.heroeId, escuadronIds: [], carga: {} }, creado.datos!.heroeId);
-  return creado.datos!.heroeId;
 }
 
 describe('RunnerDePartida — cola serial', () => {
@@ -69,8 +69,8 @@ describe('RunnerDePartida — cola serial', () => {
   it('un comando rechazado no bloquea ni desordena los que vienen después', async () => {
     const r = runner();
     const p1 = r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1');
-    // `fundarAsentamiento` con una facción inexistente se rechaza (error de dominio) sin lanzar.
-    const p2 = r.ejecutar('fundarAsentamiento', { faccionId: 'no-existe' });
+    // Pedir el ingreso en una Facción inexistente se rechaza (error de dominio) sin lanzar.
+    const p2 = r.ejecutar('solicitarIngreso', { faccionId: 'no-existe' });
     const p3 = r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-2');
 
     const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
@@ -364,8 +364,8 @@ describe('RunnerDePartida.ejecutar — idempotencia (Fase C5)', () => {
 
   it('una clave reutilizada tras un RECHAZO de dominio también devuelve el mismo rechazo, sin reintentar de verdad', async () => {
     const r = runner('g-idem-rechazo');
-    const primero = await r.ejecutar('fundarAsentamiento', { faccionId: 'no-existe' }, 'jugador-1', 'clave-1');
-    const segundo = await r.ejecutar('fundarAsentamiento', { faccionId: 'no-existe' }, 'jugador-1', 'clave-1');
+    const primero = await r.ejecutar('solicitarIngreso', { faccionId: 'no-existe' }, 'jugador-1', 'clave-1');
+    const segundo = await r.ejecutar('solicitarIngreso', { faccionId: 'no-existe' }, 'jugador-1', 'clave-1');
 
     expect(primero.ok).toBe(false);
     expect(segundo).toEqual(primero);
@@ -395,6 +395,11 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
     const r = RunnerDePartida.crear('partida-precios', { seed: 1 }, { almacen, ahora: () => momento });
     return { r, avanzarMs: (ms: number) => (momento = new Date(new Date(momento).getTime() + ms).toISOString()) };
   }
+  async function conPlazaYReloj(momentoInicial: string) {
+    let momento = momentoInicial;
+    const { r } = await runnerConPlaza('partida-precios-plaza', () => momento);
+    return { r, avanzarMs: (ms: number) => (momento = new Date(new Date(momento).getTime() + ms).toISOString()) };
+  }
 
   it('sin asentamientos, el stock global es 0 y el factor se clampa al máximo (Doc 3.4)', () => {
     const { r } = runnerConReloj(MOMENTO);
@@ -415,13 +420,9 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
   });
 
   it('pasado el minuto de TTL, la siguiente lectura recalcula', async () => {
-    const { r, avanzarMs } = runnerConReloj(MOMENTO);
-    const heroe = await heroeEn(r, 'jugador-1');
-    const creada = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, heroe);
-    const rf = await r.ejecutar('fundarAsentamiento', { faccionId: creada.datos!.faccionId }, heroe);
-    expect(rf.ok).toBe(true);
+    const { r, avanzarMs } = await conPlazaYReloj(MOMENTO);
 
-    const primera = r.preciosReferencia(); // con un asentamiento recién fundado (stock inicial > 0)
+    const primera = r.preciosReferencia(); // con un asentamiento (stock inicial > 0)
     avanzarMs(60_000); // exactamente el TTL: >= dispara recálculo
     const segunda = r.preciosReferencia();
 
@@ -432,10 +433,7 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
   it('el stock de un asentamiento baja el precio frente al caso sin asentamientos', async () => {
     const sinAsentamientos = runnerConReloj(MOMENTO).r.preciosReferencia().madera!;
 
-    const { r } = runnerConReloj(MOMENTO);
-    const heroe = await heroeEn(r, 'jugador-1');
-    const creada = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, heroe);
-    await r.ejecutar('fundarAsentamiento', { faccionId: creada.datos!.faccionId }, heroe);
+    const { r } = await conPlazaYReloj(MOMENTO);
 
     expect(r.preciosReferencia().madera).toBeLessThanOrEqual(sinAsentamientos);
   });
@@ -453,21 +451,12 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
     expect(r.geometriaAsentamientos()).toBe(primera);
   });
 
-  it('tras fundar un asentamiento, se recalcula y trae su zona y su trazado', async () => {
-    const r = runner();
-    const antes = r.geometriaAsentamientos();
-
-    const heroe = await heroeEn(r, 'jugador-1');
-    const creada = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, heroe);
-    const fundada = await r.ejecutar('fundarAsentamiento', { faccionId: creada.datos!.faccionId }, heroe);
-    expect(fundada.ok).toBe(true);
-    const asentamientoId = fundada.datos!.asentamientoId;
-
-    const despues = r.geometriaAsentamientos();
-    expect(despues).not.toBe(antes); // la referencia de `asentamientos` cambió: no es el mismo objeto cacheado
-    expect(despues.zonas.map((z) => z.asentamientoId)).toEqual([asentamientoId]);
-    expect(despues.zonasFusionadas).toEqual([{ faccionId: creada.datos!.faccionId, contornos: expect.any(Array) }]);
-    expect(despues.trazadoPorAsentamiento[asentamientoId]).toBeDefined();
+  it('con un asentamiento, trae su zona y su trazado', async () => {
+    const { r, asentamientoId, faccionId } = await runnerConPlaza('partida-geometria');
+    const geometria = r.geometriaAsentamientos();
+    expect(geometria.zonas.map((z) => z.asentamientoId)).toEqual([asentamientoId]);
+    expect(geometria.zonasFusionadas).toEqual([{ faccionId, contornos: expect.any(Array) }]);
+    expect(geometria.trazadoPorAsentamiento[asentamientoId]).toBeDefined();
   });
 
   it('un comando que NO toca asentamientos deja la misma referencia cacheada (crearFaccion sola)', async () => {
@@ -486,8 +475,11 @@ describe('RunnerDePartida — el reloj de pared NO entra en el estado (Fase D / 
     const dir = await mkdtemp(join(tmpdir(), 'bronzeage-reloj-'));
     try {
       const r = RunnerDePartida.crear('g', { seed: 7 }, { almacen: crearAlmacenEnDisco(dir), ahora });
-      const creada = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'ana');
-      await r.ejecutar('fundarAsentamiento', { faccionId: creada.datos!.faccionId }, 'ana');
+      const creado = await r.ejecutar('crearHeroe', { displayName: 'ana', campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } }, 'ana');
+      const heroe = creado.datos!.heroeId;
+      await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, heroe);
+      await r.ejecutar('salirDelCampamento', { campamentoId: 'mercenarios-0', heroeId: heroe, escuadronIds: [], carga: {} }, heroe);
+      await r.ejecutar('marcharA', { heroeId: heroe, objetivo: { tipo: 'punto', punto: { x: 900, y: 900 } } }, heroe);
       await r.avanzarTick();
       await r.avanzarTick();
       const { partida } = JSON.parse(await readFile(join(dir, 'g.json'), 'utf-8')) as SnapshotPartida;

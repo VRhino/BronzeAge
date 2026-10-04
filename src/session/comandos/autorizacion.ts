@@ -78,28 +78,6 @@ function esFaccionPropia(estado: GameSessionState, heroeId: string, faccionId: s
   return faccion === undefined || esCiudadano(faccion, heroeId);
 }
 
-function sinFaccionTodavia(estado: GameSessionState, heroeId: string): boolean {
-  return !estado.facciones.some((f) => esCiudadano(f, heroeId));
-}
-
-/**
- * Puede fundar para esa Facción: ser ya ciudadano suyo, o —caso de arranque— que la Facción no tenga NINGÚN
- * ciudadano todavía y el actor no pertenezca a ninguna otra.
- *
- * La excepción es estrecha a propósito. Hace falta porque `crearFaccion` deja la Facción con
- * `ciudadanosIds: []` (`engine/faccion.ts`) y fundar es lo que otorga la primera ciudadanía: sin ella, quien
- * crea una Facción no podría fundar en ella y la Facción nacería muerta. Pero no puede ser más ancha: fundar
- * consume el CAP DE FUNDACIÓN de la Facción (limitado por su nivel, Doc 1.7), así que dejar que un
- * desconocido funde en una Facción ajena sería regalarle una vía para agotarle el cupo. Para entrar en una Facción
- * ajena está la solicitud al Rey (`solicitarIngreso`).
- */
-function puedeFundarEn(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
-  const faccion = buscarFaccion(estado, faccionId);
-  if (faccion === undefined) return true; // no existe: lo rechaza el comando, no la autorización
-  if (esCiudadano(faccion, heroeId)) return true;
-  return faccion.ciudadanosIds.length === 0 && sinFaccionTodavia(estado, heroeId);
-}
-
 /** Ciudadano de la Facción dueña de ese asentamiento. */
 function esFaccionDelAsentamiento(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
@@ -232,13 +210,7 @@ function esReyDelAsentamiento(estado: GameSessionState, heroeId: string, asentam
 }
 
 export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
-  // --- Fundación y expansión: Facción propia (con el caso de arranque, ver `puedeFundarEn`) ---
-  // El fundador es el propio actor: el comando ya no acepta una lista de fundadores (ver
-  // `fundarAsentamiento.ts`), así que fundar otorga ciudadanía a quien ejecuta, y a nadie más.
-  fundarAsentamiento: {
-    rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, heroeId, params) => puedeFundarEn(estado, heroeId, params.faccionId),
-  },
+  // --- Fundación y expansión (D30): con la caravana de un campamento (`fundar`) o la de una plaza ---
   // Fundar con la caravana de un campamento: el titular, por sí mismo; quién es el titular lo mira el comando (D11).
   fundar: { rolesPermitidos: ['jugador'] },
   lanzarCaravanaFundacion: {

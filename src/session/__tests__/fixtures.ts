@@ -4,13 +4,14 @@
 // el `gameId` (cosmético, para distinguir sesiones en un log si hiciera falta depurar).
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
+import { fundarAsentamiento } from './fundarDePrueba';
 import { cambiarResidencia } from '../comandos/cargos';
 import { responderSolicitud, solicitarIngreso } from '../comandos/ingresoEnFaccion';
 import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { campamentoDe } from '../../engine/tropa';
 import { instanteDeTick, isoDeInstante } from '../estado';
-import { columnaDeAparicion, ubicacionDeducida } from '../../engine/ubicacion';
+import { ubicacionDeducida } from '../../engine/ubicacion';
+import { columnaDeAparicion } from './fundarDePrueba';
 import { heroeDePrueba } from '../../engine/__tests__/fixtures';
 import { crearMapa } from '../../world/mapa';
 import { createRng, restaurarRng } from '../../worldgen';
