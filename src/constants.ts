@@ -1963,6 +1963,11 @@ export const MERCENARIOS = {
     /** Stock máximo por bien en un campamento, y con el que nace (los bienes con precio de referencia). */
     topePorBien: 300,
     stockInicial: 100,
+    /** Pila propia (D41, §8.1): estos bienes no dependen del comercio del mundo —en un mundo recién creado no lo hay—; nacen con
+     * ella y vuelven a ella en cada reposición. Compiten por ella todos los que compran. PLACEHOLDER (el trigo no está calibrado). */
+    pilas: { madera: 300, piedra: 60, trigo: 300 } as Readonly<Record<string, number>>,
+    /** Cupo por héroe y día de mundo (D41): corta el acaparamiento. El trigo no tiene: es para repostar (D44). */
+    cupoDiario: { madera: 60, piedra: 10 } as Readonly<Record<string, number>>,
     /** Se vende a este múltiplo del precio de referencia (+30 %): una válvula, no una competencia. El oro cobrado se destruye. */
     margen: 1.3,
   },

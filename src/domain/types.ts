@@ -385,6 +385,8 @@ export interface Heroe {
    * él en cada cambio de residencia —es lo único que se mueve sin caravana— y lo gasta quien lo tiene. Ausente = vacío.
    */
   almacenPersonal?: Record<string, number>;
+  /** Lo comprado hoy en el mercado de su campamento, para el cupo diario (D41). `dia` = día de mundo; de otro día, no cuenta. */
+  cupoCampamento?: { dia: number; comprado: Record<string, number> };
   /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
    * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un id sin registro en
    * `GameSessionState.heroes` (los fundadores de los escenarios de batch) usa `LIDERAZGO.base`. */

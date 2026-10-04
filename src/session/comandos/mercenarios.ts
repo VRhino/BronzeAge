@@ -5,7 +5,7 @@ import { esCiudadano } from '../../engine/faccion';
 import { comprarEnCampamento as comprarEngine } from '../../engine/mercadoMercenario';
 import { aportarARefundacion as aportarEngine, comprarCaravanaDeRefundacion as comprarCaravanaEngine, retirarDeRefundacion as retirarEngine } from '../../engine/refundacion';
 import { ALMACEN_PERSONAL } from '../../constants';
-import type { Point } from '../../domain/types';
+import type { CampamentoMercenarios, Point } from '../../domain/types';
 import { exito } from './tipos';
 import { comando, exigirFaccion, exigirJugador, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
@@ -14,18 +14,22 @@ import { evento } from './eventos';
 import { campamentoDeResidente } from '../../engine/mercenarios';
 import { columnaDe, enLaPuertaDelCampamento } from '../../engine/ejercitos';
 
+/** ¿Está el héroe en ese campamento (D75)? Dentro, o con su columna en la puerta. */
+function exigirEn(estado: GameSessionState, heroeId: string, campamento: CampamentoMercenarios): void {
+  const heroe = estado.heroes.find((h) => h.id === heroeId);
+  if (heroe?.ubicacion.tipo === 'mercenarios' && heroe.ubicacion.campamentoId === campamento.id) return;
+  const columna = columnaDe(estado.ejercitos, heroeId);
+  if (columna && enLaPuertaDelCampamento(columna, campamento)) return;
+  rechazar(CODIGOS_ERROR.campamentoLejos);
+}
+
 /**
  * Las acciones del campamento se hacen en él (D75): dentro, o con la columna en su puerta. Su campamento es donde reside; si no
  * reside en ninguno, el motor ya rechaza con su motivo.
  */
 function exigirEnSuCampamento(estado: GameSessionState, heroeId: string): void {
   const campamento = campamentoDeResidente(estado.campamentosMercenarios, heroeId);
-  const heroe = estado.heroes.find((h) => h.id === heroeId);
-  if (!campamento || !heroe) return;
-  if (heroe.ubicacion.tipo === 'mercenarios' && heroe.ubicacion.campamentoId === campamento.id) return;
-  const columna = columnaDe(estado.ejercitos, heroeId);
-  if (columna && enLaPuertaDelCampamento(columna, campamento)) return;
-  rechazar(CODIGOS_ERROR.campamentoLejos);
+  if (campamento) exigirEn(estado, heroeId, campamento);
 }
 
 export interface ParamsReclutarEnCampamento {
@@ -85,6 +89,8 @@ export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantid
 export interface ParamsComprarEnCampamento {
   recurso: string;
   cantidad: number;
+  /** Dónde compra: por defecto, donde reside. Cualquier otro campamento solo le vende trigo para repostar (D44). */
+  campamentoId?: string;
 }
 
 export interface PayloadCompradoEnCampamento {
@@ -101,16 +107,25 @@ export interface PayloadCompradoEnCampamento {
  */
 export const comprarEnCampamento = comando<ParamsComprarEnCampamento, { cantidad: number; oro: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
-  exigirEnSuCampamento(estado, heroe.id);
-  const r = comprarEngine(estado.campamentosMercenarios, estado.heroes, estado.asentamientos, heroe.id, params.recurso, params.cantidad);
-  const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
+  const campamento = params.campamentoId
+    ? estado.campamentosMercenarios.find((c) => c.id === params.campamentoId)
+    : campamentoDeResidente(estado.campamentosMercenarios, heroe.id);
+  if (!campamento) rechazar(params.campamentoId ? CODIGOS_ERROR.campamentoDesconocido : CODIGOS_ERROR.mercenariosInvalido);
+  exigirEn(estado, heroe.id, campamento);
+  const columna = columnaDe(estado.ejercitos, heroe.id);
+  const r = comprarEngine(campamento, heroe, columna, estado.asentamientos, params.recurso, params.cantidad, ctx.instante);
   return exito(
-    { ...estado, campamentosMercenarios: r.campamentos, heroes: r.heroes },
+    {
+      ...estado,
+      campamentosMercenarios: estado.campamentosMercenarios.map((c) => (c.id === campamento.id ? r.campamento : c)),
+      heroes: estado.heroes.map((h) => (h.id === heroe.id ? r.heroe : h)),
+      ejercitos: r.columna ? estado.ejercitos.map((e) => (e.id === r.columna!.id ? r.columna! : e)) : estado.ejercitos,
+    },
     [
       evento(ctx, {
         codigo: 'mercenarios.comprado',
-        mensaje: `${heroe.displayName} compra ${r.cantidad} ${params.recurso} en ${campamentoId} por ${r.oro} de oro.`,
-        payload: { campamentoId, heroeId: heroe.id, recurso: params.recurso, cantidad: r.cantidad, oro: r.oro } satisfies PayloadCompradoEnCampamento,
+        mensaje: `${heroe.displayName} compra ${r.cantidad} ${params.recurso} en ${campamento.id} por ${r.oro} de oro.`,
+        payload: { campamentoId: campamento.id, heroeId: heroe.id, recurso: params.recurso, cantidad: r.cantidad, oro: r.oro } satisfies PayloadCompradoEnCampamento,
       }),
     ],
     { cantidad: r.cantidad, oro: r.oro }
