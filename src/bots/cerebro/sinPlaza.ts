@@ -41,37 +41,37 @@ const SITIO = { radioMin: 130, radioMax: 450, paso: 40, angulos: 12, lejosDePlaz
 const VELOCIDAD_A_PIE = 20;
 const ORDEN_DEL_FONDO = ['madera', 'piedra', 'trigo', 'oro'];
 
-export function sinPlaza(ctx: ContextoBot): void {
+export async function sinPlaza(ctx: ContextoBot): Promise<void> {
   const { vista, yo } = ctx;
   const heroe = vista.heroe!;
   const casa = vista.campamentosMercenarios.find((c) => c.residentesIds.includes(yo));
   const dentro = heroe.ubicacion.tipo === 'mercenarios';
   const faccion = vista.facciones.find((f) => f.id === vista.faccionId);
   if (!faccion) {
-    if (dentro) buscarFaccion(ctx);
+    if (dentro) await buscarFaccion(ctx);
     return;
   }
-  if (irAVivirConLosSuyos(ctx, faccion)) return;
+  if (await irAVivirConLosSuyos(ctx, faccion)) return;
   if (!casa) return;
-  if (dentro) return enElCampamento(ctx, casa, faccion);
+  if (dentro) return await enElCampamento(ctx, casa, faccion);
   const columna = columnaPropia(vista, yo);
-  if (columna) enCampo(ctx, casa);
+  if (columna) await enCampo(ctx, casa);
 }
 
 // --- La Facción ---
 
 /** D57: el líder de los amigos y el solitario crean la suya; los demás piden entrar, y sin respuesta al rato, la crean. */
-function buscarFaccion(ctx: ContextoBot): void {
+async function buscarFaccion(ctx: ContextoBot): Promise<void> {
   const { vista, yo, perfil, memoria } = ctx;
   const crear = () => ctx.intentar('crearFaccion', 'crearFaccion', { nombre: `Casa de ${vista.heroe!.displayName}` });
   if (memoria.solicitud) {
     if (vista.instante - memoria.solicitud.desde < ESPERA_SOLICITUD_MS) return;
     delete memoria.solicitud;
-    crear();
+    await crear();
     return;
   }
   if (perfil.tipo === 'solitario' || (perfil.tipo === 'amigos' && perfil.lider === yo)) {
-    crear();
+    await crear();
     return;
   }
   const destino =
@@ -79,7 +79,7 @@ function buscarFaccion(ctx: ContextoBot): void {
       ? vista.facciones.find((f) => f.reyId === perfil.lider)
       : elegir(ctx, vista.facciones.filter((f) => f.reyId));
   if (!destino) return; // el líder aún no la ha creado
-  if (ctx.actuar('solicitarIngreso', { faccionId: destino.id }).ok) memoria.solicitud = { faccionId: destino.id, desde: vista.instante };
+  if ((await ctx.actuar('solicitarIngreso', { faccionId: destino.id })).ok) memoria.solicitud = { faccionId: destino.id, desde: vista.instante };
 }
 
 function elegir<T>(ctx: ContextoBot, lista: readonly T[]): T | undefined {
@@ -87,7 +87,7 @@ function elegir<T>(ctx: ContextoBot, lista: readonly T[]): T | undefined {
 }
 
 /** Si su Facción tiene una plaza que conoce, se muda a ella (Doc 2: `cambiarResidencia`): sale, cambia de casa y va. */
-function irAVivirConLosSuyos(ctx: ContextoBot, faccion: Faccion): boolean {
+async function irAVivirConLosSuyos(ctx: ContextoBot, faccion: Faccion): Promise<boolean> {
   const { vista, yo } = ctx;
   delete ctx.memoria.solicitud;
   const desde = columnaPropia(vista, yo)?.posicionActual ?? vista.campamentosMercenarios.find((c) => c.residentesIds.includes(yo))?.posicion;
@@ -99,29 +99,29 @@ function irAVivirConLosSuyos(ctx: ContextoBot, faccion: Faccion): boolean {
   const heroe = vista.heroe!;
   if (heroe.ubicacion.tipo === 'mercenarios') {
     const propias = heroe.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && !e.prestada).map((e) => e.id);
-    if (!ctx.intentar(`salir:${heroe.ubicacion.campamentoId}`, 'salirDelCampamento', { campamentoId: heroe.ubicacion.campamentoId, heroeId: yo, escuadronIds: propias, carga: {} }, 10 * 60_000)?.ok) return false;
+    if (!(await ctx.intentar(`salir:${heroe.ubicacion.campamentoId}`, 'salirDelCampamento', { campamentoId: heroe.ubicacion.campamentoId, heroeId: yo, escuadronIds: propias, carga: {} }, 10 * 60_000))?.ok) return false;
   }
-  if (!ctx.intentar(`mudarse:${plaza.id}`, 'cambiarResidencia', { destinoId: plaza.id, heroeId: yo })?.ok) return false;
+  if (!(await ctx.intentar(`mudarse:${plaza.id}`, 'cambiarResidencia', { destinoId: plaza.id, heroeId: yo }))?.ok) return false;
   ctx.memoria.plan = { tipo: 'mudarse', plazaId: plaza.id };
-  ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'asentamiento', id: plaza.id } });
+  await ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'asentamiento', id: plaza.id } });
   return true;
 }
 
 // --- Dentro del campamento ---
 
-function enElCampamento(ctx: ContextoBot, casa: CampamentoMercenarios, faccion: Faccion): void {
+async function enElCampamento(ctx: ContextoBot, casa: CampamentoMercenarios, faccion: Faccion): Promise<void> {
   const { vista, yo, pizarra } = ctx;
   const heroe = vista.heroe!;
-  pedirTropa(ctx);
+  await pedirTropa(ctx);
 
   // Un compañero acaba de salir y le espera en la puerta: se le une, en este mismo tick (el runner le llama).
   const salida = pizarra.salidas.get(casa.id);
   if (salida && salida.liderId !== yo && salida.hasta > vista.instante) {
     // A cazar y a fundar, con su leva: a fundar va de escolta de la caravana (los bandidos atacan una caravana sin ella).
   const escuadras = tropaEnCampamento(heroe.escuadrones).map((e) => e.id);
-    if (!ctx.intentar(`salir:${casa.id}`, 'salirDelCampamento', { campamentoId: casa.id, heroeId: yo, escuadronIds: escuadras, carga: {} }, 10 * 60_000)?.ok) return;
+    if (!(await ctx.intentar(`salir:${casa.id}`, 'salirDelCampamento', { campamentoId: casa.id, heroeId: yo, escuadronIds: escuadras, carga: {} }, 10 * 60_000))?.ok) return;
     pizarra.listos.delete(yo);
-    ctx.memoria.plan = ctx.actuar('unirseEnCampo', { ejercitoId: salida.ejercitoId, heroeId: yo }).ok
+    ctx.memoria.plan = (await ctx.actuar('unirseEnCampo', { ejercitoId: salida.ejercitoId, heroeId: yo })).ok
       ? { tipo: 'unirse', ejercitoId: salida.ejercitoId, para: salida.para }
       : { tipo: 'anillo', campamentoId: casa.id };
     return;
@@ -139,22 +139,22 @@ function enElCampamento(ctx: ContextoBot, casa: CampamentoMercenarios, faccion: 
   if (caravana) {
     // Antes de sacarla, que alguien haya mirado el anillo hace poco: por dónde andan los bandidos decide el sitio y el camino.
     const explorado = pizarra.explorados.get(casa.id);
-    if (explorado === undefined || vista.instante - explorado > VIGENCIA_BANDIDO_MS) return explorarElAnillo(ctx, casa, listos);
+    if (explorado === undefined || vista.instante - explorado > VIGENCIA_BANDIDO_MS) return await explorarElAnillo(ctx, casa, listos);
     const companeros = casa.residentesIds.filter((id) => id !== yo && faccion.ciudadanosIds.includes(id)).length;
     ctx.memoria.esperaFundar ??= vista.instante;
     if (listos.length - 1 < companeros && vista.instante - ctx.memoria.esperaFundar < ESPERA_COFUNDADORES_MS) return;
     delete ctx.memoria.esperaFundar;
-    return salirAFundar(ctx, casa, caravana.id, listos.length - 1);
+    return await salirAFundar(ctx, casa, caravana.id, listos.length - 1);
   }
   // La de un compañero: se queda dentro, listo para salir con él.
   if (vista.caravanas.some((c) => c.tipo === 'construccion' && c.faccionId === faccion.id && distancia(c.posicionActual, casa.posicion) <= MOVIMIENTO.radioPuerta)) return;
 
-  if (aportarYComprar(ctx, casa, faccion)) return;
+  if (await aportarYComprar(ctx, casa, faccion)) return;
 
   // Sin un bandido conocido que puedan los que viven aquí, uno sale a buscar sin tropa: no come, y la ración (D24) solo da
   // para ir y volver del anillo, no para recorrerlo.
   const residentes = casa.residentesIds.filter((id) => faccion.ciudadanosIds.includes(id)).length;
-  if (!presaConocida(ctx, casa.posicion, residentes)) return explorarElAnillo(ctx, casa, listos);
+  if (!presaConocida(ctx, casa.posicion, residentes)) return await explorarElAnillo(ctx, casa, listos);
   if (!conRacion) return;
 
   // A cazar: el bandido conocido más cercano que puedan los que están listos, derecho a él. El de menor id lleva al grupo.
@@ -164,12 +164,12 @@ function enElCampamento(ctx: ContextoBot, casa: CampamentoMercenarios, faccion: 
   const necesarios = heroesPara(presa.poder);
   if (necesarios > 1 && enGrupo[0] !== yo) return; // le llamará el que lleva al grupo
   if (necesarios === 1) {
-    if (!salirSolo(ctx, casa, escuadras.map((e) => e.id))) return;
+    if (!await salirSolo(ctx, casa, escuadras.map((e) => e.id))) return;
     ctx.memoria.plan = { tipo: 'anillo', campamentoId: casa.id };
-    ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: presa.posicion } });
+    await ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: presa.posicion } });
     return;
   }
-  const r = ctx.intentar(`salir:${casa.id}`, 'salirDelCampamento', {
+  const r = await ctx.intentar(`salir:${casa.id}`, 'salirDelCampamento', {
     campamentoId: casa.id,
     heroeId: yo,
     escuadronIds: escuadras.map((e) => e.id),
@@ -204,27 +204,27 @@ function presaConocida(ctx: ContextoBot, desde: Point, listos: number): { posici
 }
 
 /** La leva comunal prestada (D80), y repuesta cuando ha perdido gente. */
-function pedirTropa(ctx: ContextoBot): void {
+async function pedirTropa(ctx: ContextoBot): Promise<void> {
   const heroe = ctx.vista.heroe!;
   const prestadas = heroe.escuadrones.filter((e) => e.prestada);
   const faltan = PRESTAMO.filter((t) => !prestadas.some((e) => e.tropaId === t));
-  if (faltan.length > 0) ctx.intentar('prestamo', 'pedirPrestamo', { tropaIds: faltan });
-  else if (prestadas.some((e) => e.cantidad < MERCENARIOS.prestamo.unidades)) ctx.intentar('reponer', 'reponerPrestamo', {});
+  if (faltan.length > 0) await ctx.intentar('prestamo', 'pedirPrestamo', { tropaIds: faltan });
+  else if (prestadas.some((e) => e.cantidad < MERCENARIOS.prestamo.unidades)) await ctx.intentar('reponer', 'reponerPrestamo', {});
 }
 
 /** Sale sin tropa a recorrer el anillo, si no hay ya otro fuera haciéndolo. */
-function explorarElAnillo(ctx: ContextoBot, casa: CampamentoMercenarios, listos: readonly [string, unknown][]): void {
+async function explorarElAnillo(ctx: ContextoBot, casa: CampamentoMercenarios, listos: readonly [string, unknown][]): Promise<void> {
   const { pizarra, yo, vista } = ctx;
   const explorador = pizarra.encargos.get(`explorar:${casa.id}`);
   if (explorador && explorador !== yo && listos.every(([id]) => id !== explorador)) return; // ya hay uno fuera
-  if (!salirSolo(ctx, casa, [])) return;
+  if (!await salirSolo(ctx, casa, [])) return;
   pizarra.encargos.set(`explorar:${casa.id}`, yo);
   ctx.memoria.plan = { tipo: 'anillo', campamentoId: casa.id, explorar: { desde: vista.instante, paso: 0, giro: ctx.rng() * 2 * Math.PI } };
 }
 
 /** Sale solo, con su columna personal: rectifica el rumbo cuando quiere (Doc 5.12.1). */
-function salirSolo(ctx: ContextoBot, casa: CampamentoMercenarios, escuadronIds: string[]): boolean {
-  const r = ctx.intentar(`salir:${casa.id}`, 'salirDelCampamento', { campamentoId: casa.id, heroeId: ctx.yo, escuadronIds, carga: {} }, 10 * 60_000);
+async function salirSolo(ctx: ContextoBot, casa: CampamentoMercenarios, escuadronIds: string[]): Promise<boolean> {
+  const r = await ctx.intentar(`salir:${casa.id}`, 'salirDelCampamento', { campamentoId: casa.id, heroeId: ctx.yo, escuadronIds, carga: {} }, 10 * 60_000);
   if (r?.ok) ctx.pizarra.listos.delete(ctx.yo);
   return r?.ok === true;
 }
@@ -234,11 +234,11 @@ function salirSolo(ctx: ContextoBot, casa: CampamentoMercenarios, escuadronIds: 
  * ese rumbo y ellos se le unen en este mismo tick (cofundadores, M2); solo, con su columna personal. La engancha en la puerta,
  * antes de que la columna se mueva.
  */
-function salirAFundar(ctx: ContextoBot, casa: CampamentoMercenarios, caravanaId: string, companeros: number): void {
+async function salirAFundar(ctx: ContextoBot, casa: CampamentoMercenarios, caravanaId: string, companeros: number): Promise<void> {
   const { vista, yo, pizarra } = ctx;
   const sitio = sitioParaFundar(ctx, casa.posicion, []);
   if (!sitio) return;
-  const r = ctx.intentar(`salir:${casa.id}`, 'salirDelCampamento', {
+  const r = await ctx.intentar(`salir:${casa.id}`, 'salirDelCampamento', {
     campamentoId: casa.id,
     heroeId: yo,
     escuadronIds: tropaEnCampamento(vista.heroe!.escuadrones).map((e) => e.id),
@@ -247,7 +247,7 @@ function salirAFundar(ctx: ContextoBot, casa: CampamentoMercenarios, caravanaId:
   }, 10 * 60_000);
   if (!r?.ok || !r.datos) return;
   pizarra.listos.delete(yo);
-  ctx.actuar('adjuntarCaravana', { ejercitoId: r.datos.ejercitoId, caravanaId, heroeId: yo });
+  await ctx.actuar('adjuntarCaravana', { ejercitoId: r.datos.ejercitoId, caravanaId, heroeId: yo });
   if (companeros > 0) pizarra.salidas.set(casa.id, { ejercitoId: r.datos.ejercitoId, liderId: yo, hasta: instante(vista.instante + 1), para: 'fundar' });
   ctx.memoria.plan = { tipo: 'fundar', caravanaId, sitio, descartados: [] };
 }
@@ -256,13 +256,13 @@ function salirAFundar(ctx: ContextoBot, casa: CampamentoMercenarios, caravanaId:
  * El fondo de su Facción en este campamento (D39): si ya alcanza, compra la caravana; si no, pone lo que falta de lo que tiene,
  * comprando en el mercado con su oro de botín lo que no tenga, y el oro al final. Devuelve si compró la caravana.
  */
-function aportarYComprar(ctx: ContextoBot, casa: CampamentoMercenarios, faccion: Faccion): boolean {
+async function aportarYComprar(ctx: ContextoBot, casa: CampamentoMercenarios, faccion: Faccion): Promise<boolean> {
   const heroe = ctx.vista.heroe!;
   const coste = costoRefundacion();
   const fondo = fondoDeFaccion(casa, faccion);
   const falta = (r: string) => Math.max(0, (coste[r] ?? 0) - (fondo[r] ?? 0));
   if (ORDEN_DEL_FONDO.every((r) => falta(r) === 0)) {
-    return ctx.intentar(`caravana:${casa.id}`, 'comprarCaravanaDeRefundacion', {}, 10 * 60_000)?.ok === true;
+    return (await ctx.intentar(`caravana:${casa.id}`, 'comprarCaravanaDeRefundacion', {}, 10 * 60_000))?.ok === true;
   }
   for (const recurso of ORDEN_DEL_FONDO) {
     const pide = falta(recurso);
@@ -271,30 +271,30 @@ function aportarYComprar(ctx: ContextoBot, casa: CampamentoMercenarios, faccion:
     if (recurso === 'oro' && ORDEN_DEL_FONDO.some((r) => r !== 'oro' && falta(r) > 0)) break;
     let tiene = recurso === 'oro' ? (heroe.oroDeBotin ?? 0) : (heroe.almacenPersonal?.[recurso] ?? 0);
     if (recurso !== 'oro' && tiene < pide) {
-      const compra = ctx.intentar(`comprar:${recurso}`, 'comprarEnCampamento', { recurso, cantidad: pide - tiene }, 60 * 60_000);
+      const compra = await ctx.intentar(`comprar:${recurso}`, 'comprarEnCampamento', { recurso, cantidad: pide - tiene }, 60 * 60_000);
       tiene += compra?.ok && compra.datos ? compra.datos.cantidad : 0;
     }
-    if (tiene > 0) ctx.intentar(`aportar:${recurso}`, 'aportarARefundacion', { recurso, cantidad: Math.min(pide, tiene), lado: 'almacen' }, 10 * 60_000);
+    if (tiene > 0) await ctx.intentar(`aportar:${recurso}`, 'aportarARefundacion', { recurso, cantidad: Math.min(pide, tiene), lado: 'almacen' }, 10 * 60_000);
   }
   return false;
 }
 
 // --- Fuera ---
 
-function enCampo(ctx: ContextoBot, casa: CampamentoMercenarios): void {
+async function enCampo(ctx: ContextoBot, casa: CampamentoMercenarios): Promise<void> {
   const { vista, yo, memoria } = ctx;
   const columna = columnaPropia(vista, yo)!;
   const enLaPuerta = distancia(columna.posicionActual, casa.posicion) <= MOVIMIENTO.radioPuerta;
   const plan = memoria.plan;
   if ((plan?.tipo === 'anillo' || plan?.tipo === 'unirse') && !enLaPuerta) plan.salio = true;
   apuntarBandidos(ctx, columna.posicionActual);
-  abrirAlijoCercano(ctx, columna.posicionActual);
+  await abrirAlijoCercano(ctx, columna.posicionActual);
 
   // Un compañero ha comprado la caravana: vuelve para ir a fundar con él (M2).
   const caravanaEnCasa = vista.caravanas.some(
     (c) => c.tipo === 'construccion' && c.faccionId === vista.faccionId && c.titularId !== yo && distancia(c.posicionActual, casa.posicion) <= MOVIMIENTO.radioPuerta
   );
-  if (caravanaEnCasa && columna.tipo === 'personal' && plan?.tipo !== 'fundar') return volverACasa(ctx, columna, casa, enLaPuerta);
+  if (caravanaEnCasa && columna.tipo === 'personal' && plan?.tipo !== 'fundar') return await volverACasa(ctx, columna, casa, enLaPuerta);
 
   if (columna.liderId !== yo) {
     // Va donde va su líder. En una caza, cuando ya no queda presa al alcance, se separa y vuelve por su cuenta; de vuelta en
@@ -302,37 +302,37 @@ function enCampo(ctx: ContextoBot, casa: CampamentoMercenarios): void {
     // Si la fundación no salió y el ejército volvió a la puerta, también se separa.
     if (plan?.tipo !== 'unirse' || columna.estado !== 'estacionado' || !plan.salio) return;
     if (plan.para === 'fundar' ? !enLaPuerta : presaAlAlcance(ctx, columna.posicionActual, Infinity)) return;
-    if (!ctx.actuar('separarseDelEjercito', { heroeId: yo }).ok) return;
-    if (enLaPuerta) ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: yo });
+    if (!(await ctx.actuar('separarseDelEjercito', { heroeId: yo })).ok) return;
+    if (enLaPuerta) await ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: yo });
     memoria.plan = { tipo: 'anillo', campamentoId: casa.id, salio: true };
     return;
   }
-  if (plan?.tipo === 'fundar') return conducirCaravana(ctx, casa, columna, plan);
+  if (plan?.tipo === 'fundar') return await conducirCaravana(ctx, casa, columna, plan);
 
   const escuadras = escuadrasDeLaColumna(ctx, columna.escuadronIds, columna.participantes.map((p) => p.heroeId));
   const poder = poderTotal(escuadras, false);
   const presa = presaAlAlcance(ctx, columna.posicionActual, poder);
   if (presa && distancia(presa.posicion, columna.posicionActual) <= LOGISTICA.radioEncuentro) {
-    ctx.actuar('atacar', { heroeId: yo, objetivo: { tipo: 'campamento', id: presa.id } });
+    await ctx.actuar('atacar', { heroeId: yo, objetivo: { tipo: 'campamento', id: presa.id } });
     return;
   }
 
   // Un ejército lleva el rumbo fijo (Doc 5.12.1): llega, ataca y, sin más que hacer allí, se repliega cuando se van los demás.
-  if (plan?.tipo === 'anillo' && plan.explorar) return explorando(ctx, columna, casa, enLaPuerta, plan.explorar);
+  if (plan?.tipo === 'anillo' && plan.explorar) return await explorando(ctx, columna, casa, enLaPuerta, plan.explorar);
   if (columna.tipo === 'ejercito') {
-    if (columna.estado === 'estacionado' && columna.participantes.length === 1) ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
+    if (columna.estado === 'estacionado' && columna.participantes.length === 1) await ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
     if (enLaPuerta && columna.estado === 'estacionado' && plan?.tipo === 'anillo' && plan.salio && columna.participantes.length === 1) {
-      ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: yo });
+      await ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: yo });
     }
     return;
   }
 
   if (debeVolver(ctx, columna.posicionActual, columna.suministro['trigo'] ?? 0, escuadras, casa)) {
     delete memoria.plan;
-    return volverACasa(ctx, columna, casa, enLaPuerta);
+    return await volverACasa(ctx, columna, casa, enLaPuerta);
   }
   // Con tropa va derecho a lo que sabe; sin presa a la vista, vuelve (no le da la ración para recorrer el anillo).
-  if (escuadras.length > 0 && !presa && columna.estado === 'estacionado') return volverACasa(ctx, columna, casa, enLaPuerta);
+  if (escuadras.length > 0 && !presa && columna.estado === 'estacionado') return await volverACasa(ctx, columna, casa, enLaPuerta);
 
   // Lo que ve —un bandido que puede vencer, un alijo— le desvía aunque vaya de camino; si no ve nada, recorre el anillo.
   const alijo = [...vista.alijos].sort((a, b) => distancia(a.posicion, columna.posicionActual) - distancia(b.posicion, columna.posicionActual))[0];
@@ -340,17 +340,17 @@ function enCampo(ctx: ContextoBot, casa: CampamentoMercenarios): void {
   const yaVa = columna.objetivo.tipo === 'punto' && visto !== undefined && distancia(columna.objetivo.punto, visto) < 1;
   if (columna.estado !== 'estacionado' && (visto === undefined || yaVa)) return;
   memoria.plan = plan?.tipo === 'anillo' ? plan : { tipo: 'anillo', campamentoId: casa.id };
-  ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: visto ?? puntoDelAnillo(ctx, casa.posicion) } });
+  await ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: visto ?? puntoDelAnillo(ctx, casa.posicion) } });
 }
 
 /** A casa: en la puerta, entra; si no, marcha a ella (si no va ya). */
-function volverACasa(ctx: ContextoBot, columna: Ejercito, casa: CampamentoMercenarios, enLaPuerta: boolean): void {
+async function volverACasa(ctx: ContextoBot, columna: Ejercito, casa: CampamentoMercenarios, enLaPuerta: boolean): Promise<void> {
   if (enLaPuerta) {
-    if (columna.estado === 'estacionado') ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: ctx.yo });
+    if (columna.estado === 'estacionado') await ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: ctx.yo });
     return;
   }
   if (columna.estado === 'estacionado' || columna.objetivo.tipo !== 'punto' || distancia(columna.objetivo.punto, casa.posicion) > MOVIMIENTO.radioPuerta) {
-    ctx.intentar(`volver:${casa.id}`, 'marcharA', { heroeId: ctx.yo, objetivo: { tipo: 'punto', punto: casa.posicion } }, 5 * 60_000);
+    await ctx.intentar(`volver:${casa.id}`, 'marcharA', { heroeId: ctx.yo, objetivo: { tipo: 'punto', punto: casa.posicion } }, 5 * 60_000);
   }
 }
 
@@ -374,9 +374,9 @@ function apuntarBandidos(ctx: ContextoBot, donde: Point): void {
   for (const b of vista.campamentosBandidos) pizarra.bandidos.set(b.id, { posicion: b.posicion, poder: b.poder, vistoEn: vista.instante });
 }
 
-function abrirAlijoCercano(ctx: ContextoBot, donde: Point): void {
+async function abrirAlijoCercano(ctx: ContextoBot, donde: Point): Promise<void> {
   for (const alijo of ctx.vista.alijos) {
-    if (distancia(alijo.posicion, donde) <= MOVIMIENTO.radioPuerta) ctx.intentar(`alijo:${alijo.id}`, 'abrirAlijo', { alijoId: alijo.id });
+    if (distancia(alijo.posicion, donde) <= MOVIMIENTO.radioPuerta) await ctx.intentar(`alijo:${alijo.id}`, 'abrirAlijo', { alijoId: alijo.id });
   }
 }
 
@@ -430,7 +430,7 @@ function salud(escuadras: readonly Escuadron[]): number {
  * entero. Se desvía a los alijos que ve. Al acabar la vuelta, el anillo queda explorado para la pizarra y vuelve; si antes
  * ve presa y no lleva caravana que guardar, vuelve a por la tropa.
  */
-function explorando(ctx: ContextoBot, columna: Ejercito, casa: CampamentoMercenarios, enLaPuerta: boolean, explorar: { desde: Instante; paso: number; giro: number }): void {
+async function explorando(ctx: ContextoBot, columna: Ejercito, casa: CampamentoMercenarios, enLaPuerta: boolean, explorar: { desde: Instante; paso: number; giro: number }): Promise<void> {
   const { vista, yo, pizarra } = ctx;
   const residentes = casa.residentesIds.filter((id) => vista.facciones.find((f) => f.id === vista.faccionId)?.ciudadanosIds.includes(id)).length;
   const titular = vista.caravanas.some((c) => c.tipo === 'construccion' && c.titularId === yo);
@@ -438,12 +438,12 @@ function explorando(ctx: ContextoBot, columna: Ejercito, casa: CampamentoMercena
   if (acabada || (!titular && presaConocida(ctx, casa.posicion, residentes))) {
     pizarra.encargos.delete(`explorar:${casa.id}`);
     if (acabada) pizarra.explorados.set(casa.id, vista.instante);
-    return volverACasa(ctx, columna, casa, enLaPuerta);
+    return await volverACasa(ctx, columna, casa, enLaPuerta);
   }
   const alijo = [...vista.alijos].sort((a, b) => distancia(a.posicion, columna.posicionActual) - distancia(b.posicion, columna.posicionActual))[0];
   const yaVa = columna.objetivo.tipo === 'punto' && alijo !== undefined && distancia(columna.objetivo.punto, alijo.posicion) < 1;
   if (alijo && !yaVa) {
-    ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: alijo.posicion } });
+    await ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: alijo.posicion } });
     return;
   }
   if (columna.estado !== 'estacionado') return;
@@ -452,7 +452,7 @@ function explorando(ctx: ContextoBot, columna: Ejercito, casa: CampamentoMercena
     const a = explorar.giro + (explorar.paso++ * 2 * Math.PI) / VUELTA_ANILLO;
     const p = { x: Math.round(casa.posicion.x + radio * Math.cos(a)), y: Math.round(casa.posicion.y + radio * Math.sin(a)) };
     if (!ctx.mapa.dentroDelMapa(p) || ctx.mapa.terrenoEn(p) === 'agua') continue;
-    if (ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: p } }).ok) return;
+    if ((await ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: p } })).ok) return;
   }
 }
 
@@ -474,30 +474,30 @@ function puntoDelAnillo(ctx: ContextoBot, centro: Point): Point {
  * El titular lleva la caravana al sitio y funda. Solo, rectifica si `fundar` dice que no; en ejército el rumbo es fijo, y si
  * el sitio no vale, se repliega al campamento a intentarlo de nuevo.
  */
-function conducirCaravana(ctx: ContextoBot, casa: CampamentoMercenarios, columna: Ejercito, plan: Extract<Plan, { tipo: 'fundar' }>): void {
+async function conducirCaravana(ctx: ContextoBot, casa: CampamentoMercenarios, columna: Ejercito, plan: Extract<Plan, { tipo: 'fundar' }>): Promise<void> {
   const { vista, yo } = ctx;
   if (!columna.caravanasAdjuntasIds.includes(plan.caravanaId)) {
     if (!vista.caravanas.some((c) => c.id === plan.caravanaId)) {
       delete ctx.memoria.plan;
       return;
     }
-    ctx.intentar(`adjuntar:${plan.caravanaId}`, 'adjuntarCaravana', { ejercitoId: columna.id, caravanaId: plan.caravanaId, heroeId: yo }, 5 * 60_000);
+    await ctx.intentar(`adjuntar:${plan.caravanaId}`, 'adjuntarCaravana', { ejercitoId: columna.id, caravanaId: plan.caravanaId, heroeId: yo }, 5 * 60_000);
     return;
   }
   plan.sitio ??= sitioParaFundar(ctx, casa.posicion, plan.descartados);
   if (!plan.sitio || columna.estado !== 'estacionado') return;
   if (distancia(columna.posicionActual, plan.sitio) > MOVIMIENTO.radioPuerta) {
-    if (columna.tipo === 'personal') ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: plan.sitio } });
-    else ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
+    if (columna.tipo === 'personal') await ctx.actuar('marcharA', { heroeId: yo, objetivo: { tipo: 'punto', punto: plan.sitio } });
+    else await ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
     return;
   }
-  if (ctx.actuar('fundar', {}).ok) {
+  if ((await ctx.actuar('fundar', {})).ok) {
     delete ctx.memoria.plan;
     return;
   }
   plan.descartados.push(plan.sitio);
   delete plan.sitio;
-  if (columna.tipo === 'ejercito') ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
+  if (columna.tipo === 'ejercito') await ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
 }
 
 /** Distancia de un punto al segmento a-b. */

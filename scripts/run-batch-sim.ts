@@ -19,8 +19,8 @@ import { NECESIDADES } from '../src/constants';
 const NECESIDADES_UMBRAL_AMPLIACION = NECESIDADES.umbralAlmacenAmpliacion;
 import { GameSession, type PartidaExportada } from '../src/session/gameSession';
 import { puertoEnProceso } from '../src/bots/puerto';
-import { RunnerDeBots, type Perfil } from '../src/bots/runner';
-import { planDeLlegadas } from '../src/bots/llegadas';
+import { RunnerDeBots } from '../src/bots/runner';
+import { darDeAlta, planDeLlegadas } from '../src/bots/llegadas';
 import { cerebroDeBot } from '../src/bots/cerebro';
 import {
   CATEGORIA_POR_TIPO,
@@ -933,27 +933,8 @@ async function main() {
   for (const h of sesion.getState().heroes) if (h.controlador === 'bot') bots.alta(h.id);
   const llegadas = planDeLlegadas(SEED, NUM_BOTS, DIAS_LLEGADA).filter((l) => l.tick > TICK_INICIAL);
   let creados = sesion.getState().heroes.filter((h) => h.controlador === 'bot').length;
-  const llegarEn = (tick: number) => {
-    while (llegadas[0]?.tick === tick) {
-      const llegada = llegadas.shift()!;
-      const campamento = [...puerto.campamentos()].sort((a, b) => a.residentes - b.residentes || (a.id < b.id ? -1 : 1))[0];
-      if (!campamento) continue;
-      let lider: string | undefined;
-      for (let i = 0; i < llegada.cuantos; i++) {
-        const n = ++creados;
-        const id = puerto.crearHeroe(`bot-${n}`, {
-          displayName: `Bot ${n}`,
-          campamentoId: campamento.id,
-          classDefinitionId: 'Spear',
-          genero: n % 2 === 0 ? 'femenino' : 'masculino',
-          avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
-        });
-        if (!id) continue;
-        lider ??= id;
-        const perfil: Perfil = llegada.perfil === 'amigos' ? { tipo: 'amigos', lider } : { tipo: llegada.perfil };
-        bots.alta(id, perfil);
-      }
-    }
+  const llegarEn = async (tick: number) => {
+    while (llegadas[0]?.tick === tick) await darDeAlta(puerto, bots, llegadas.shift()!, () => `Bot ${++creados}`);
   };
 
   // `BATCH_RUINAS_DIAG=1`: bosques alcanzables al fundar, medidos al RADIO INICIAL (30) y al techo de nivel 1
@@ -1115,8 +1096,8 @@ async function main() {
           }
         }
       }
-      llegarEn(tick);
-      bots.trasTick(tick, tickR.eventos);
+      await llegarEn(tick);
+      await bots.trasTick(tick, tickR.eventos);
       estado = sesion.getState();
       // Lo que hicieron los bots este tick, por sus eventos (los de sus comandos, posteriores al del tick).
       const deBots = sesion.getState().eventosDominio.filter((e) => e.version > tickR.version);

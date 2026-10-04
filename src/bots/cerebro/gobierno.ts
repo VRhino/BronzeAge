@@ -30,29 +30,29 @@ const CARGA_CARAVANA = CARRO_CATALOGO.basico.capacidadBase * ANIMAL_CATALOGO.bue
 /** Héroes que viajan en una caravana de fundación: los que ya existen (§10.1), dejando al menos uno en casa. */
 const HEROES_POR_FUNDACION = 2;
 
-export function gobernar(ctx: ContextoBot): void {
-  rey(ctx);
+export async function gobernar(ctx: ContextoBot): Promise<void> {
+  await rey(ctx);
   const plaza = plazaDentro(ctx.vista);
   if (!plaza) return;
-  if (plaza.cargos.gobernadorId === ctx.yo) gobernador(ctx, plaza);
-  if (plaza.cargos.tesoreroId === ctx.yo) tesorero(ctx, plaza);
+  if (plaza.cargos.gobernadorId === ctx.yo) await gobernador(ctx, plaza);
+  if (plaza.cargos.tesoreroId === ctx.yo) await tesorero(ctx, plaza);
 }
 
 // --- Rey ---
 
-function rey(ctx: ContextoBot): void {
+async function rey(ctx: ContextoBot): Promise<void> {
   const { vista, yo, pizarra } = ctx;
   const faccion = vista.facciones.find((f) => f.id === vista.faccionId);
   if (!faccion || faccion.reyId !== yo) return;
 
   // El Rey bot acepta a quien pide entrar (D57).
-  for (const heroeId of faccion.solicitudesIds ?? []) ctx.intentar(`solicitud:${heroeId}`, 'responderSolicitud', { faccionId: faccion.id, heroeId, aceptar: true });
+  for (const heroeId of faccion.solicitudesIds ?? []) await ctx.intentar(`solicitud:${heroeId}`, 'responderSolicitud', { faccionId: faccion.id, heroeId, aceptar: true });
 
   // Un Gobernador para cada plaza que no lo tenga: el residente de id más bajo que la pizarra conozca.
   for (const plaza of plazasPropias(vista)) {
     if (!plaza.cargos || plaza.cargos.gobernadorId) continue;
     const candidato = [...pizarra.residencias].filter(([, p]) => p === plaza.id).map(([h]) => h).sort()[0];
-    if (candidato) ctx.intentar(`gobernador:${plaza.id}`, 'asignarCargoLocal', { asentamientoId: plaza.id, cargo: 'gobernador', heroeId: candidato });
+    if (candidato) await ctx.intentar(`gobernador:${plaza.id}`, 'asignarCargoLocal', { asentamientoId: plaza.id, cargo: 'gobernador', heroeId: candidato });
   }
 
   // Adopta lo que le aparece, en orden, mientras la plaza que pisa guarde el doble de la tarifa (la otra mitad es margen
@@ -65,7 +65,7 @@ function rey(ctx: ContextoBot): void {
     const tarifa = TARIFA_ADOPCION[TECNOLOGIAS[id].era];
     const doble = Object.fromEntries(Object.entries(tarifa).map(([r, n]) => [r, 2 * (n ?? 0)]));
     if (!tieneRecursos(dentro.almacen, doble)) return;
-    if (!ctx.intentar(`tecnologia:${id}`, 'adoptarTecnologia', { faccionId: faccion.id, tecnologiaId: id })?.ok) return;
+    if (!(await ctx.intentar(`tecnologia:${id}`, 'adoptarTecnologia', { faccionId: faccion.id, tecnologiaId: id }))?.ok) return;
   }
 }
 
@@ -75,19 +75,19 @@ function tieneOEnCurso(plaza: Asentamiento, tipo: EdificioTipo): boolean {
   return edificiosPorTipoYEstado(plaza, tipo).length > 0 || hayProyectoPendiente(plaza, tipo);
 }
 
-function gobernador(ctx: ContextoBot, plaza: Asentamiento): void {
+async function gobernador(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
   const { vista, yo } = ctx;
   const construir = (tipo: EdificioTipo) =>
     ctx.intentar(`edificio:${plaza.id}:${tipo}`, 'anadirEdificioManualmente', { asentamientoId: plaza.id, cargo: 'gobernador', tipo }, 10 * 60_000);
 
-  if (!plaza.cargos.tesoreroId) ctx.intentar(`tesorero:${plaza.id}`, 'asignarCargoLocal', { asentamientoId: plaza.id, cargo: 'tesorero', heroeId: yo });
+  if (!plaza.cargos.tesoreroId) await ctx.intentar(`tesorero:${plaza.id}`, 'asignarCargoLocal', { asentamientoId: plaza.id, cargo: 'tesorero', heroeId: yo });
 
   // Comida antes que comercio o guarnición: sin las granjas mínimas no se construye nada más este turno.
   if (plaza.edificios.filter((e) => e.tipo === 'granja').length < GRANJAS_MINIMAS) {
-    construir('granja');
+    await construir('granja');
     return;
   }
-  if (!tieneMercadoActivo(plaza) && !tieneOEnCurso(plaza, 'mercado')) construir('mercado');
+  if (!tieneMercadoActivo(plaza) && !tieneOEnCurso(plaza, 'mercado')) await construir('mercado');
 
   const adoptadas = vista.tecnologia.propias?.adoptadas ?? [];
   const nivel = nivelActualDe(plaza);
@@ -102,26 +102,26 @@ function gobernador(ctx: ContextoBot, plaza: Asentamiento): void {
           : !tieneOEnCurso(plaza, 'salaConsejo') && nivel >= 3 && adoptadas.includes('instituciones_civicas')
             ? 'salaConsejo'
             : undefined;
-  if (militar) construir(militar);
+  if (militar) await construir(militar);
 
   // El primer recinto, y la mejora a piedra cuando la subida a nivel 4 ya está al alcance (Doc 4.5).
   const recinto = (plaza.recintos ?? [])[0];
-  if (!recinto) ctx.intentar(`recinto:${plaza.id}`, 'comprometerRecinto', { asentamientoId: plaza.id, cargo: 'gobernador', nivel: 1 });
+  if (!recinto) await ctx.intentar(`recinto:${plaza.id}`, 'comprometerRecinto', { asentamientoId: plaza.id, cargo: 'gobernador', nivel: 1 });
   else if (recinto.nivel === 1 && recinto.mejorandoA === undefined && recinto.avance >= recinto.celdas.length - 1 && nivel >= 3 && adoptadas.includes('instituciones_civicas')) {
-    ctx.intentar(`recinto-mejora:${plaza.id}`, 'mejorarRecinto', { asentamientoId: plaza.id, cargo: 'gobernador', recintoId: recinto.id });
+    await ctx.intentar(`recinto-mejora:${plaza.id}`, 'mejorarRecinto', { asentamientoId: plaza.id, cargo: 'gobernador', recintoId: recinto.id });
   }
 
   // Subir de nivel en cuanto cumple los gates: el motor decide cupo, coste y solvencia.
-  if (!plaza.ascenso && calcularNivelAsentamiento(plaza) > plaza.nivel) ctx.intentar(`ascenso:${plaza.id}`, 'solicitarAscenso', { asentamientoId: plaza.id });
+  if (!plaza.ascenso && calcularNivelAsentamiento(plaza) > plaza.nivel) await ctx.intentar(`ascenso:${plaza.id}`, 'solicitarAscenso', { asentamientoId: plaza.id });
 
-  expandir(ctx, plaza);
+  await expandir(ctx, plaza);
 }
 
 /**
  * Caravana de fundación desde una plaza de nivel 2 con lo que cuesta, hacia el primer punto que le parezca viable con
  * lo que sabe del mundo (la geografía y las plazas que ve). Si el motor no lo acepta, espera y prueba otro.
  */
-function expandir(ctx: ContextoBot, plaza: Asentamiento): void {
+async function expandir(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
   const { vista } = ctx;
   if (nivelActualDe(plaza) < 2 || !tieneRecursos(plaza.almacen, costoCaravanaFundacion())) return;
   if (residentesDe(plaza).length <= HEROES_POR_FUNDACION) return;
@@ -136,7 +136,7 @@ function expandir(ctx: ContextoBot, plaza: Asentamiento): void {
       const clave = `fundar:${Math.round(destino.x)}:${Math.round(destino.y)}`;
       if ((ctx.memoria.esperas.get(clave) ?? -Infinity) > vista.instante) continue;
       if (!esRecomendableParaFundar(ctx.mapa, destino, conocidas, plaza.faccionId, ocupadas)) continue;
-      ctx.intentar(clave, 'lanzarCaravanaFundacion', { origenAsentamientoId: plaza.id, destino, numJugadores: HEROES_POR_FUNDACION }, 24 * 60 * 60_000);
+      await ctx.intentar(clave, 'lanzarCaravanaFundacion', { origenAsentamientoId: plaza.id, destino, numJugadores: HEROES_POR_FUNDACION }, 24 * 60 * 60_000);
       return;
     }
   }
@@ -144,46 +144,46 @@ function expandir(ctx: ContextoBot, plaza: Asentamiento): void {
 
 // --- Tesorero ---
 
-function tesorero(ctx: ContextoBot, plaza: Asentamiento): void {
-  reservar(ctx, plaza);
-  caravanasComerciales(ctx, plaza);
-  contestarTrueques(ctx, plaza);
-  pedirLoQueFalta(ctx, plaza);
-  publicarOrdenes(ctx, plaza);
+async function tesorero(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
+  await reservar(ctx, plaza);
+  await caravanasComerciales(ctx, plaza);
+  await contestarTrueques(ctx, plaza);
+  await pedirLoQueFalta(ctx, plaza);
+  await publicarOrdenes(ctx, plaza);
 }
 
 /** La madera de Mantenimiento y, desde nivel 2, lo que cuesta la caravana de fundación. */
-function reservar(ctx: ContextoBot, plaza: Asentamiento): void {
+async function reservar(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
   const objetivo: Partial<Record<string, number>> = { madera: RESERVA_MADERA };
   if (nivelActualDe(plaza) >= 2) for (const [r, n] of Object.entries(costoCaravanaFundacion())) objetivo[r] = Math.max(objetivo[r] ?? 0, n ?? 0);
   for (const [recurso, valor] of Object.entries(objetivo)) {
     if ((plaza.reservaManual?.[recurso as RecursoTipo] ?? 0) >= (valor ?? 0)) continue;
-    ctx.intentar(`reserva:${plaza.id}:${recurso}`, 'calibrarReservaManual', { asentamientoId: plaza.id, recurso: recurso as RecursoTipo, valor: valor ?? 0 });
+    await ctx.intentar(`reserva:${plaza.id}:${recurso}`, 'calibrarReservaManual', { asentamientoId: plaza.id, recurso: recurso as RecursoTipo, valor: valor ?? 0 });
   }
 }
 
 /** Todas las caravanas comerciales que le quepan (carro básico con buey), completando antes las que quedaron a medias. */
-function caravanasComerciales(ctx: ContextoBot, plaza: Asentamiento): void {
+async function caravanasComerciales(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
   if (!tieneMercadoActivo(plaza)) return;
   const propias = ctx.vista.caravanas.filter((c) => c.tipo === 'comercial' && c.origenAsentamientoId === plaza.id);
   for (const c of propias) {
-    if ((c.carros ?? []).length === 0) ctx.intentar(`carro:${c.id}`, 'agregarCarroCaravana', { caravanaId: c.id, tipoCarro: 'basico' });
-    else if (!c.carros![0]!.animal) ctx.intentar(`animal:${c.id}`, 'comprarAnimalCaravana', { caravanaId: c.id, carroIndice: 0, tipoAnimal: 'buey' });
+    if ((c.carros ?? []).length === 0) await ctx.intentar(`carro:${c.id}`, 'agregarCarroCaravana', { caravanaId: c.id, tipoCarro: 'basico' });
+    else if (!c.carros![0]!.animal) await ctx.intentar(`animal:${c.id}`, 'comprarAnimalCaravana', { caravanaId: c.id, carroIndice: 0, tipoAnimal: 'buey' });
   }
   if (propias.length >= cupoCaravanas(plaza) || propias.some((c) => (c.carros ?? []).length === 0 || !c.carros![0]!.animal)) return;
-  const nueva = ctx.intentar(`caravana:${plaza.id}`, 'crearCaravana', { asentamientoId: plaza.id });
+  const nueva = await ctx.intentar(`caravana:${plaza.id}`, 'crearCaravana', { asentamientoId: plaza.id });
   if (!nueva?.ok || !nueva.datos) return;
-  if (ctx.actuar('agregarCarroCaravana', { caravanaId: nueva.datos.caravanaId, tipoCarro: 'basico' }).ok) {
-    ctx.actuar('comprarAnimalCaravana', { caravanaId: nueva.datos.caravanaId, carroIndice: 0, tipoAnimal: 'buey' });
+  if ((await ctx.actuar('agregarCarroCaravana', { caravanaId: nueva.datos.caravanaId, tipoCarro: 'basico' })).ok) {
+    await ctx.actuar('comprarAnimalCaravana', { caravanaId: nueva.datos.caravanaId, carroIndice: 0, tipoAnimal: 'buey' });
   }
 }
 
 /** Acepta los trueques que le proponen si le sobra lo que tendría que entregar; si no, los rechaza. */
-function contestarTrueques(ctx: ContextoBot, plaza: Asentamiento): void {
+async function contestarTrueques(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
   for (const acuerdo of ctx.vista.acuerdos) {
     if (acuerdo.estado !== 'propuesto' || acuerdo.asentamientoBId !== plaza.id) continue;
     const leSobra = acuerdo.lineasB.every((l) => fraccionDe(plaza, l.recurso as RecursoTipo) > COLCHON && cantidadDisponible(plaza.almacen, l.recurso) > 0);
-    ctx.actuar(leSobra ? 'aceptarTrueque' : 'rechazarTrueque', { acuerdoId: acuerdo.id });
+    await ctx.actuar(leSobra ? 'aceptarTrueque' : 'rechazarTrueque', { acuerdoId: acuerdo.id });
   }
 }
 
@@ -195,7 +195,7 @@ const ordenActiva = (ctx: ContextoBot, plaza: Asentamiento, recurso: string) =>
  * no produce): primero por trueque con una plaza que su Facción sabe que lo vende (la pizarra, por el explorador), y si
  * no, con una orden de compra en su propio mercado (§10.1). Nada de leer almacenes ajenos.
  */
-function pedirLoQueFalta(ctx: ContextoBot, plaza: Asentamiento): void {
+async function pedirLoQueFalta(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
   if (!tieneMercadoActivo(plaza)) return;
   const costo = calcularCostoMantenimiento(plaza, undefined);
   const falta = new Map<RecursoTipo, number>();
@@ -207,8 +207,8 @@ function pedirLoQueFalta(ctx: ContextoBot, plaza: Asentamiento): void {
 
   for (const [recurso, cantidad] of falta) {
     if (ordenActiva(ctx, plaza, recurso) || yaPedido(ctx, plaza, recurso)) continue;
-    if (truequeConQuienVende(ctx, plaza, recurso, cantidad, [...falta.keys()])) continue;
-    ctx.intentar(`compra:${plaza.id}:${recurso}`, 'colocarOrdenMercado', { asentamientoId: plaza.id, tipo: 'compra', recurso, cantidad });
+    if (await truequeConQuienVende(ctx, plaza, recurso, cantidad, [...falta.keys()])) continue;
+    await ctx.intentar(`compra:${plaza.id}:${recurso}`, 'colocarOrdenMercado', { asentamientoId: plaza.id, tipo: 'compra', recurso, cantidad });
   }
 }
 
@@ -240,7 +240,7 @@ function necesidadesParaCrecer(plaza: Asentamiento): { recurso: RecursoTipo; can
 }
 
 /** Propone un trueque a una plaza que la pizarra sabe que vende `recurso`, pagando con lo que más le sobra. */
-function truequeConQuienVende(ctx: ContextoBot, plaza: Asentamiento, recurso: RecursoTipo, cantidad: number, noPagarCon: RecursoTipo[]): boolean {
+async function truequeConQuienVende(ctx: ContextoBot, plaza: Asentamiento, recurso: RecursoTipo, cantidad: number, noPagarCon: RecursoTipo[]): Promise<boolean> {
   const vendedora = [...ctx.pizarra.mostradores].find(
     ([id, m]) => id !== plaza.id && m.ordenes.some((o) => o.tipo === 'venta' && o.recurso === recurso && o.estado === 'activa')
   )?.[0];
@@ -253,17 +253,17 @@ function truequeConQuienVende(ctx: ContextoBot, plaza: Asentamiento, recurso: Re
   const pactada = Math.min(cantidad, sobra);
   if (pactada <= 0) return false;
   return (
-    ctx.intentar(`trueque:${plaza.id}:${vendedora}:${recurso}`, 'proponerTrueque', {
+    (await ctx.intentar(`trueque:${plaza.id}:${vendedora}:${recurso}`, 'proponerTrueque', {
       asentamientoAId: plaza.id,
       lineasA: [{ recurso: pago, cantidad: pactada }],
       asentamientoBId: vendedora,
       lineasB: [{ recurso, cantidad: pactada }],
-    })?.ok === true
+    }))?.ok === true
   );
 }
 
 /** Vende lo que le sobra y compra lo que le escasea, sin duplicar órdenes. */
-function publicarOrdenes(ctx: ContextoBot, plaza: Asentamiento): void {
+async function publicarOrdenes(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
   if (!tieneMercadoActivo(plaza)) return;
   for (const recurso of RECURSOS_TIPO) {
     const item = plaza.almacen[recurso];
@@ -271,10 +271,10 @@ function publicarOrdenes(ctx: ContextoBot, plaza: Asentamiento): void {
     const fraccion = fraccionDe(plaza, recurso as RecursoTipo);
     if (fraccion >= UMBRAL_EXCEDENTE) {
       const cantidad = Math.floor((item.cantidad - item.capacidad * UMBRAL_EXCEDENTE) * FRACCION_EXCEDENTE_A_VENDER);
-      if (cantidad > 0) ctx.intentar(`venta:${plaza.id}:${recurso}`, 'colocarOrdenMercado', { asentamientoId: plaza.id, tipo: 'venta', recurso: recurso as RecursoTipo, cantidad });
+      if (cantidad > 0) await ctx.intentar(`venta:${plaza.id}:${recurso}`, 'colocarOrdenMercado', { asentamientoId: plaza.id, tipo: 'venta', recurso: recurso as RecursoTipo, cantidad });
     } else if (fraccion <= UMBRAL_ESCASEZ) {
       const hueco = Math.floor(item.capacidad * UMBRAL_ESCASEZ - item.cantidad);
-      if (hueco > 0) ctx.intentar(`compra:${plaza.id}:${recurso}`, 'colocarOrdenMercado', { asentamientoId: plaza.id, tipo: 'compra', recurso: recurso as RecursoTipo, cantidad: hueco });
+      if (hueco > 0) await ctx.intentar(`compra:${plaza.id}:${recurso}`, 'colocarOrdenMercado', { asentamientoId: plaza.id, tipo: 'compra', recurso: recurso as RecursoTipo, cantidad: hueco });
     }
   }
 }

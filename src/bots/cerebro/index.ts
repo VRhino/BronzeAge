@@ -7,14 +7,14 @@ import { enColumna, residir, salir } from './militar';
 import { plazaDentro } from './comun';
 import { sinPlaza } from './sinPlaza';
 
-export const cerebroDeBot: Cerebro = (ctx) => {
-  gobernar(ctx);
+export const cerebroDeBot: Cerebro = async (ctx) => {
+  await gobernar(ctx);
   if (!ctx.vista.heroe?.residenciaId) {
-    sinPlaza(ctx);
+    await sinPlaza(ctx);
   } else if (plazaDentro(ctx.vista)) {
-    residir(ctx);
-    salir(ctx);
+    await residir(ctx);
+    await salir(ctx);
   } else {
-    enColumna(ctx);
+    await enColumna(ctx);
   }
 };

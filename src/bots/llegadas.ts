@@ -2,6 +2,8 @@
 // tres amigos que llegan juntos, solitarios y, en la segunda mitad, los que llegan tarde. Fuera del motor: lo usa quien da de
 // alta a los bots (el batch, y el runner remoto cuando exista), que crea cada héroe por el puerto en su minuto.
 import { createRng } from '../worldgen';
+import type { CampamentoElegible, PuertoBot } from './puerto';
+import type { Perfil, RunnerDeBots } from './runner';
 
 /** Reparto de perfiles (D57). ponytail: placeholder hasta medir con batch. */
 const REPARTO = { amigos: 0.5, solitario: 0.3 };
@@ -33,3 +35,34 @@ export function planDeLlegadas(semilla: number, total: number, dias: number): Ll
   }
   return llegadas.sort((a, b) => a.tick - b.tick || a.grupo - b.grupo);
 }
+
+/** Como elegiría quien llega (§3.1): el campamento con menos residentes. */
+export const campamentoConMenosResidentes = (campamentos: readonly CampamentoElegible[]): string | undefined =>
+  [...campamentos].sort((a, b) => a.residentes - b.residentes || (a.id < b.id ? -1 : 1))[0]?.id;
+
+/**
+ * Da de alta una llegada: crea sus héroes por el puerto (`nombres` da el nombre de cada uno), todos en el mismo campamento, y
+ * los pone a jugar con su perfil; el primero de unos amigos es su líder. Devuelve los creados, con su perfil.
+ */
+export async function darDeAlta(puerto: PuertoBot, bots: RunnerDeBots, llegada: Llegada, nombres: () => string): Promise<{ heroeId: string; perfil: Perfil }[]> {
+  const creados: { heroeId: string; perfil: Perfil }[] = [];
+  // Los que llegan juntos van al mismo campamento: el que elige el primero.
+  let campamentoId: string | undefined;
+  const elegir = (campamentos: CampamentoElegible[]) => (campamentoId ??= campamentoConMenosResidentes(campamentos));
+  for (let i = 0; i < llegada.cuantos; i++) {
+    const nombre = nombres();
+    const id = await puerto.llegar(nombre, DATOS_DE_BOT(nombre), elegir);
+    if (!id) continue;
+    const perfil: Perfil = llegada.perfil === 'amigos' ? { tipo: 'amigos', lider: creados[0]?.heroeId ?? id } : { tipo: llegada.perfil };
+    creados.push({ heroeId: id, perfil });
+    bots.alta(id, perfil);
+  }
+  return creados;
+}
+
+const DATOS_DE_BOT = (nombre: string) => ({
+  displayName: nombre,
+  classDefinitionId: 'Spear',
+  genero: 'masculino' as const,
+  avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
+});

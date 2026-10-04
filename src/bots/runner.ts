@@ -62,15 +62,15 @@ export interface ContextoBot {
   pizarra: Pizarra;
   rng: RandomFn;
   mapa: Mapa;
-  actuar<T extends TipoComando>(tipo: T, params: ParamsDe<T>): Respuesta<DatosDe<T>>;
+  actuar<T extends TipoComando>(tipo: T, params: ParamsDe<T>): Promise<Respuesta<DatosDe<T>>>;
   /**
    * Como `actuar`, pero si el motor lo rechaza no se reintenta la misma `clave` hasta pasados `esperaMs` de mundo. Es lo
    * que evita que un bot pida cada 5 minutos lo que ya sabe que no puede tener.
    */
-  intentar<T extends TipoComando>(clave: string, tipo: T, params: ParamsDe<T>, esperaMs?: number): Respuesta<DatosDe<T>> | undefined;
+  intentar<T extends TipoComando>(clave: string, tipo: T, params: ParamsDe<T>, esperaMs?: number): Promise<Respuesta<DatosDe<T>> | undefined>;
 }
 
-export type Cerebro = (ctx: ContextoBot) => void;
+export type Cerebro = (ctx: ContextoBot) => Promise<void>;
 
 /** Lo que espera un bot tras un rechazo, por defecto: media hora de mundo. */
 const ESPERA_TRAS_RECHAZO_MS = 30 * 60_000;
@@ -123,14 +123,26 @@ export class RunnerDeBots {
   private readonly cadaTicks: number;
   private readonly semilla: number;
   private readonly siempre: boolean;
+  private readonly alFallar?: (heroeId: string, err: unknown) => void;
   /** El instante de la última vista: el del tick en curso. */
   private instanteActual?: Instante;
 
   constructor(
     private readonly puerto: PuertoBot,
     private readonly cerebro: Cerebro,
-    opciones: { semilla: number; cadaTicks?: number; /** `siempre`: sin sesiones, conectados todo el día (tests). */ horario?: 'por-semilla' | 'siempre' }
+    opciones: {
+      semilla: number;
+      cadaTicks?: number;
+      /** `siempre`: sin sesiones, conectados todo el día (tests). */
+      horario?: 'por-semilla' | 'siempre';
+      /**
+       * Con el puerto remoto, un fallo de un bot (la red, una respuesta que no se esperaba) no tumba a los demás: se avisa y
+       * sigue. Sin él, el fallo sube: en proceso es un error del cerebro y tiene que verse.
+       */
+      alFallar?: (heroeId: string, err: unknown) => void;
+    }
   ) {
+    this.alFallar = opciones.alFallar;
     this.cadaTicks = opciones.cadaTicks ?? 5;
     this.semilla = opciones.semilla;
     this.siempre = opciones.horario === 'siempre';
@@ -144,8 +156,8 @@ export class RunnerDeBots {
     this.bots.set(heroeId, { heroeId, perfil, memoria: { esperas: new Map() }, rng, desfase: h % this.cadaTicks, sesiones });
   }
 
-  /** Después de cada tick: piensan los que tocan, en orden de id. Devuelve cuántos pensaron. */
-  trasTick(tick: number, eventos: readonly EventoDominio[]): number {
+  /** Después de cada tick: piensan los que tocan, uno tras otro y en orden de id. Devuelve cuántos pensaron. */
+  async trasTick(tick: number, eventos: readonly EventoDominio[]): Promise<number> {
     const columnasTocadas = new Set<string>();
     const plazasTocadas = new Set<string>();
     for (const e of eventos) {
@@ -159,7 +171,7 @@ export class RunnerDeBots {
       const bot = this.bots.get(id)!;
       const debe = enSesion(bot, tick);
       if (debe !== bot.conectado) {
-        this.puerto.actuar(id, debe ? 'conectarse' : 'desconectarse', { heroeId: id });
+        if (!(await this.aSalvo(id, () => (debe ? this.puerto.conectar(id) : this.puerto.desconectar(id))))) continue;
         bot.conectado = debe;
       }
       if (!debe) continue;
@@ -169,7 +181,7 @@ export class RunnerDeBots {
         (columnaId !== undefined && columnasTocadas.has(columnaId)) ||
         (residenciaId !== undefined && plazasTocadas.has(residenciaId));
       if (!leToca) continue;
-      this.pensar(bot);
+      await this.aSalvo(id, () => this.pensar(bot));
       pensaron++;
     }
     // Segunda pasada: los que siguen dentro de un campamento del que acaba de salir un compañero a esperarlos se le unen en
@@ -177,10 +189,25 @@ export class RunnerDeBots {
     for (const id of [...this.bots.keys()].sort()) {
       const bot = this.bots.get(id)!;
       if (!bot.conectado || !this.leLlaman(bot)) continue;
-      this.pensar(bot);
+      await this.aSalvo(id, () => this.pensar(bot));
       pensaron++;
     }
     return pensaron;
+  }
+
+  /** Corre `paso`; con `alFallar`, un fallo se avisa y devuelve `false` en vez de subir. */
+  private async aSalvo(heroeId: string, paso: () => Promise<void>): Promise<boolean> {
+    if (!this.alFallar) {
+      await paso();
+      return true;
+    }
+    try {
+      await paso();
+      return true;
+    } catch (err) {
+      this.alFallar(heroeId, err);
+      return false;
+    }
   }
 
   private leLlaman(bot: Bot): boolean {
@@ -189,8 +216,8 @@ export class RunnerDeBots {
     return !!salida && salida.liderId !== bot.heroeId && salida.hasta > (this.instanteActual ?? -Infinity);
   }
 
-  private pensar(bot: Bot): void {
-    const vista = this.puerto.observar(bot.heroeId);
+  private async pensar(bot: Bot): Promise<void> {
+    const vista = await this.puerto.observar(bot.heroeId);
     if (!vista.heroe) return; // sin héroe no hay quien juegue
     this.instanteActual = vista.instante;
     const memoria = bot.memoria;
@@ -206,7 +233,7 @@ export class RunnerDeBots {
     else pizarra.residencias.delete(bot.heroeId);
 
     const actuar = <T extends TipoComando>(tipo: T, params: ParamsDe<T>) => this.puerto.actuar(bot.heroeId, tipo, params);
-    this.cerebro({
+    await this.cerebro({
       yo: bot.heroeId,
       perfil: bot.perfil,
       vista,
@@ -215,10 +242,10 @@ export class RunnerDeBots {
       rng: bot.rng,
       mapa: this.puerto.mapa(),
       actuar,
-      intentar: (clave, tipo, params, esperaMs = ESPERA_TRAS_RECHAZO_MS) => {
+      intentar: async (clave, tipo, params, esperaMs = ESPERA_TRAS_RECHAZO_MS) => {
         const hasta = memoria.esperas.get(clave);
         if (hasta !== undefined && hasta > vista.instante) return undefined;
-        const r = actuar(tipo, params);
+        const r = await actuar(tipo, params);
         if (r.ok) memoria.esperas.delete(clave);
         else memoria.esperas.set(clave, instante(vista.instante + esperaMs));
         return r;
