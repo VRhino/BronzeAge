@@ -1,7 +1,8 @@
 # Campamentos como puerta de entrada y fundación por Caravana — decisiones y plan
 
-> **Estado (2026-10-03): diseño en revisión, sin código. Consejo pasado; tres rondas de decisiones cerradas;
-> calibración aceptada (§8). Quedan bots-héroe y alijos (§7).**
+> **Estado (2026-10-04): diseño cerrado, sin código. Consejo pasado; seis rondas de decisiones; calibración
+> aceptada (§8); alijos cerrados (D60-D63). Revisado contra los pasos 1-3 del NPC fuera del motor (`b40af3d`, §3.2).
+> Desconexión redefinida (D64-D71). Sin puntos abiertos (§7).**
 > Cambia cómo se entra al mundo, cómo nace una Facción nueva, de dónde saca recursos un héroe sin plaza y qué pasa
 > con un jugador que no está conectado. Sustituye la «fundación a pie» (`Consideraciones/Entrada_Al_Mundo_Definicion.md`
 > §6.5, `Jugador_Situado_Definicion.md` §5.9), amplía la refundación del paso 5 de mercenarios (Doc 1.9b) y rehace
@@ -78,7 +79,7 @@
 | D26 | **Rendimientos decrecientes por héroe**: el botín baja con cada campamento de bandidos destruido en las últimas 24 h. |
 | D27 | **Botín de destino restringido**: el oro del botín solo puede ir al fondo de refundación o al mercado del campamento, nunca a la economía de una plaza. |
 | D28 | **Reaparición de bandidos por demanda**: alrededor de un campamento, en proporción a sus residentes de Facciones sin asentamiento. |
-| D29 | **Alijos de exploración**: escondites colocados al generar el mundo, ocultos por la niebla, de un solo uso y sin reaparición. **Mecánica aparte**: se define cuando esté cerrado todo lo demás, antes de la primera línea de código (D48). |
+| D29 | **Alijos de exploración**: escondites colocados al generar el mundo, ocultos por la niebla, de un solo uso y sin reaparición. **Mecánica aparte**: se define cuando esté cerrado todo lo demás, antes de la primera línea de código (D48). **Cerrado por D60-D63.** |
 | D37 | **Bandidos unificados**: los de los asentamientos (Doc 1.9) pasan a ser **la misma entidad con niveles**, que salen **aleatorios**. |
 | D38 | **Ritmo objetivo**: los **2 primeros días** son para aprender el combate del mundo. Pagar la caravana debe costar **unas 8 horas de juego a un grupo de 3 héroes**. Con esa cifra se calibra todo lo de P1 (§8). |
 
@@ -129,6 +130,35 @@
 | D58 | **Batch nuevo**: N bots-héroe llegando escalonados en vez de 100 Facciones fundadas en el tick 0. La línea base y los diarios de batch anteriores quedan cerrados. **Se borra la estructura que no se use en el formato nuevo** (inventario en `Docs/Arquitectura/12` §7). |
 | D59 | **Una Facción de bots que pierde su última plaza no se disuelve**: sus héroes vuelven a residir en un campamento y repiten el ciclo, como un jugador. |
 
+### 2.6 Sexta ronda: alijos (2026-10-04)
+
+Cierra D29.
+
+| # | Decisión |
+|---|---|
+| D60 | **Los alijos son por héroe**: cada héroe abre cada alijo **una sola vez** y no reaparecen. Nadie le quita un alijo a otro, así que quien llega tarde encuentra lo mismo que quien llegó primero y los bots no compiten con los humanos. *(Lectura de «un solo uso» de D29: por héroe, no por mundo.)* |
+| D61 | **Solo dan oro**, por el mismo canal restringido que el botín de bandidos (D27): solo puede ir al fondo de refundación o al mercado del campamento. |
+| D62 | **Cantidad y valor (placeholder, D51)**: 6 por zona de campamento, unos 30 de oro por héroe en total. Por distancia al campamento más cercano: 3 cerca (100-200, 3 de oro), 2 a media distancia (200-300, 5 de oro) y 1 lejos (más de 300, en los huecos entre campamentos, 11 de oro). Recorrerlos todos con el héroe solo cuesta unas 2 h y unos 6 de trigo por cada 40 min, es decir, unos 15 de oro por hora, por debajo de los bandidos (unos 17). Se colocan con semilla derivada (D35), nunca sobre agua ni dentro del radio de protección, y pueden caer dentro del anillo de bandidos. Un alijo **se ve** cuando entra en la vista del héroe (80) y él no lo ha abierto todavía; **se abre** estando en el sitio. |
+| D63 | **Solo los abren héroes de Facciones sin asentamiento** (el mismo criterio que la demanda de bandidos, D42). Las cuentas secundarias suman 30 de oro cada una; es el mismo techo que ya tienen con los bandidos y se acepta sin más reglas. |
+
+### 2.7 Séptima ronda: qué significa desconectarse (2026-10-04)
+
+Corrige D33, D40 y D40b tal como se implementaron en `b40af3d` (§3.2). Principio: **desconectarse quita el
+control, no el sitio.** El héroe desconectado no da órdenes ni participa en nada; **a un jugador que no está no se le
+puede cazar**; y como el servidor no distingue una desconexión a propósito de una caída de red o de luz, no se castiga
+la desconexión: se hace **inútil para huir**.
+
+| # | Decisión |
+|---|---|
+| D64 | **Dentro de una plaza o del campamento de mercenarios, desconectarse no mueve nada.** El héroe sigue en su ubicación con una marca de desconectado: no da órdenes y **no defiende en persona**. Sus escuadras no se mueven (desaparece el contenedor `fuera` para la tropa de la plaza). La defensa no cambia: la guarnición defiende siempre con la IA; las escuadras libres no defienden; un héroe conectado, dentro y sano entra a defender con su loadout, dentro de su Liderazgo y del tope de héroes por bando (ya es así en `engine/tropa.ts`, `defensaDe`). |
+| D65 | **Con la columna en el mapa, el héroe y su columna salen del mundo** (B2), como en `b40af3d`, a los **2:30** de desconectarse. No se le puede cazar mientras no esté. |
+| D66 | **En peligro no se sale.** Si al cumplirse los 2:30 una columna hostil **le está persiguiendo** (`perseguir` con él como objetivo), la salida se aplaza: la columna sigue en el mundo con la última orden que llevaba y, si la alcanzan, combate con la IA como una escolta sin héroe. Sale en cuanto deja de estar perseguida, y **como mucho a los 3 minutos de la desconexión**, pase lo que pase. Si se reconecta antes, recupera el control al instante. Así quien huye desconectándose no gana nada y a quien se le cae la red le pasa, como mucho, lo mismo que si se hubiera quedado quieto un momento. |
+| D67 | **En un ejército compartido**: se separa con lo suyo y sale, y el mando pasa al **conectado** más antiguo (si está en peligro, D66 vale para todo el ejército). |
+| D68 | **La caravana de fundación sin nadie que la lleve vuelve a su origen** (el campamento). Si llega sin que la haya reclamado otro ciudadano de su Facción, **se desarma y devuelve los materiales a cada donante** con el registro de D34 (lo que no pueda recibir se pierde, como en D43). **Sin cooldown**: se puede volver a comprar en cuanto los jugadores vuelvan. |
+| D69 | **La columna dentro de la ventana de D66 sigue dando visión** a su Facción: físicamente sigue allí. |
+| D70 | **Un Rey desconectado no delega**: las solicitudes de ingreso esperan en la lista y lo automático de la plaza (autoconstrucción, recetas) sigue funcionando. |
+| D71 | **La milicia prestada (D45) sale del mundo con el héroe**, como el resto de su columna, y vuelve con él (cierra §7.3). |
+
 ## 3. Lo que ya existe y se reutiliza (medido en el código)
 
 - `crearFaccion` (`session/comandos/crearFaccion.ts`): sin condiciones, el creador queda Rey. Cubre D5.
@@ -151,16 +181,46 @@
 
 ### 3.1 Hallazgos del consejo en el código
 
-- **La caravana de campamento no tiene dueño para el motor.** `resolverEncuentros` (`ejercitos.ts:1800`) y
-  `adjuntarCaravana` (`ejercitos.ts:614`) lo deducen de `origenAsentamientoId`; con el campamento como origen no
-  encuentran plaza, así que nadie puede interceptarla ni engancharla. Hay que revisar **cada sitio que deduce la
+- **La caravana de campamento no tiene dueño para el motor.** `adjuntarCaravana` (`ejercitos.ts:621`) lo deduce de
+  `origenAsentamientoId`; con el campamento como origen no encuentra plaza, así que nadie puede engancharla.
+  (`resolverEncuentros` ya no existe desde `f916d39`: ver §3.2.) Hay que revisar **cada sitio que deduce la
   Facción de una caravana por su origen** y pasar a `faccionDeCaravana` (hoy privada en `expansion.ts`: exportarla).
   D36 y D48 lo exigen. «Volver al origen» (D40) también tiene que saber ir a un campamento.
-- **M4 no es un solo guard.** Un combate se abre por cuatro vías: `encuentroEntreEjercitos`,
-  `interceptarCaravanaConEjercito`, el ataque de bandidos y `abrirBatalla`.
-- **El batch no tiene bots-héroe que pasen por `crearHeroe`.** Solo lo llaman la sesión y el servidor (§7).
+- ~~**M4 no es un solo guard.**~~ Superado por `f916d39` (§3.2): el tick ya no abre combates entre ejércitos.
+- ~~**El batch no tiene bots-héroe que pasen por `crearHeroe`.**~~ El batch ya corre sobre `GameSession` con el runner
+  de bots (`10019e4`); falta su fase «sin plaza» (§3.2).
 - **`engine/refundacion.ts` tiene cambios sin commit** (el gasto pasa a ir por ciudadanos, no por residentes).
-  Cerrar antes de reabrir.
+  Sus tests pasan sobre `b40af3d`. Cerrar antes de reabrir.
+
+### 3.2 Qué cambian los pasos 1-3 del NPC fuera del motor (revisado sobre `b40af3d`, 2026-10-04)
+
+- **Presencia (paso 7) está hecha casi entera** (`engine/presencia.ts`, Doc 1.10.6): D33, D40 (las caravanas
+  adjuntas vuelven solas a su origen) y D40b (la guarnición y la escolta cedida se quedan). Faltan dos cosas:
+  - **D33b** (batalla de Unity): sigue con Conquest. Hoy quien está en batalla no sale del mundo hasta que termina.
+  - **Salir y volver desde el campamento de mercenarios.** `salirDelMundo` solo conoce «dentro de una plaza» (un
+    asentamiento) y «en columna». `crearHeroe` hace nacer al héroe en una columna (`columnaDeAparicion`) y no hay
+    ubicación «dentro del campamento». El paso 2 la tiene que crear (es la que protege M4), y presencia tiene que
+    volver a ella. Además, «volver al origen» (D40) tiene que saber ir a un campamento.
+- **M4 es más sencillo.** Desde `f916d39` el tick ya no combate solo: los combates entre jugadores los abren
+  comandos (`atacarColumna`, `interceptar`, `atacarCampamento`, `asediarPlaza`, con sus `validar*`) más
+  `abrirBatalla` de Unity. El único combate automático que queda es el ataque de bandidos (`avanzarAtaquesBandidos`).
+  La protección va en los validadores y en `bandidos.ts`.
+- **D48 sigue pendiente**: `adjuntarCaravana` aún deduce la Facción por el origen, y `faccionDeCaravana` sigue
+  privada en `expansion.ts`.
+- **Las reglas solo-NPC de derrota ya no existen** (`session/derrotas.ts` borrado). D59 queda cubierto por el motor:
+  quien pierde la casa pasa a un campamento.
+- **Diario de comandos** (`408e5b0`): cada comando nuevo de este trabajo (elegir campamento, solicitar ingreso,
+  préstamo, comprar en el mercado del campamento, abrir alijo, reclamar caravana…) tiene que entrar en
+  `REGISTRO_DIARIO` y ser determinista, o el repaso al cargar no reproduce la versión.
+- **Los bots dependen de este trabajo, no al revés.** El paso 4 del doc 12 (cerebro «sin plaza») es nuestro paso 8 y
+  necesita los pasos 1-6. Mientras tanto el batch sigue con `crearFaccionNpc` como andamio, así que **eliminar
+  fundar a pie (paso 6) no puede romper ese andamio**: o se retiran juntos, o el andamio funda por el mecanismo
+  único (D30).
+- **El cerebro cazador de los bots** (`bots/cerebro/militar.ts`) busca el campamento de bandidos de SU plaza
+  (`asentamientoId === plaza.id`). Los bandidos unificados (paso 4) lo rompen: hay que actualizarlo en el mismo paso.
+- **`crearHeroe`** ya admite `controlador` (lo pone el servidor). Añadir `campamentoId` es compatible.
+- **Los bots se mudan con `cambiarResidencia`** entre plazas de su Facción, no con `comprarCasa`, así que eliminar
+  `comprarCasa` (paso 5) no los toca. `HeroeProyectado.residenciaId` ya existe y sirve para el contador.
 
 ## 4. Revisión propia: contradicciones, puntos ciegos y mejoras
 
@@ -226,9 +286,14 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    D40); fondo por Facción y campamento, aportado desde el carro (D39); enganche y reclamo; caducidad con registro
    (D34, D43); la caravana de plaza llama al mismo mecanismo; cofundadores (M2); D16 en el motor; **eliminar fundar
    a pie** (D19).
-7. **Presencia** (D33, D40b): salir del mundo al desconectar y reaparecer al reconectar; las unidades prestadas se
-   quedan. En batalla (D33b): reentrada, «abandonar batalla» y resultado del bando, **con Conquest** (protocolo
-   BA/CQ).
+7. **Presencia**: base hecha en `b40af3d` (§3.2), **a corregir con D64-D71**: dentro de plaza o campamento solo una
+   marca (sin contenedor `fuera`, sin defender en persona); aplazar la salida si le persiguen (máx. 3 min); mando al
+   conectado más antiguo; caravana de fundación que vuelve se desarma y devuelve. Lo hace esta línea de trabajo (la
+   sesión NPC queda parada hasta que los pasos 0-6 estén en `main`). Piezas: `engine/presencia.ts` (salir/volver,
+   sucesión filtrando conectados), `avanzarTick.ts` (`conSalidasDelMundo`: aplazamiento con tope), comandos
+   `conectarse`/`desconectarse`, la autorización (hoy mira `heroe.fuera`; con D64 hace falta otra marca), contrato v1
+   (`dto.ts`, schema, `Docs/Coordinacion/01`), Doc 1.10.6 y los tests `presenciaEnElMundo` y `tiempoReal`. El runner
+   de bots y el hub WS no cambian. D33b en batalla, **con Conquest** (protocolo BA/CQ).
 8. **Bots-héroe** que arranquen como los jugadores y calibración en batch con D38.
 9. Canon (`Docs/Game`), contrato, clientes. En el canon, además: quitar `comprarCasa` y el ingreso en Facciones NPC
    (Doc 2, «Cambiar de residencia»: «usa comprar casa o unirse a una Facción»; `Docs/Arquitectura/5` fila de
@@ -251,7 +316,8 @@ elegía campamento y se quedaba sin salida).
 ## 7. Puntos abiertos
 
 1. **Arquitectura de NPC fuera del motor (D52)**: `Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md`.
-2. **Alijos (D29)**: contenido, cantidad y ubicación. Después de los bots-héroe.
+2. ~~**Alijos (D29)**~~: cerrado por D60-D63.
+3. ~~**El préstamo al salir del mundo**~~: cerrado por D71.
 
 ## 8. Calibración (2026-10-03, aceptada como punto de partida — D51)
 
