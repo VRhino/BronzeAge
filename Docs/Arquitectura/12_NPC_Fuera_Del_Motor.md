@@ -9,8 +9,8 @@ Nace de dos decisiones del usuario (`Consideraciones/Campamentos_Entrada_Fundaci
 - **D53-D59**: los bots-héroe nacen en los campamentos y siguen el mismo flujo que un humano (sesiones, llegada
   escalonada, tres perfiles), con esa lógica fuera del motor.
 
-> **Estado (2026-10-04): plan, sin código.** Decidido: el bot es un cliente (§3), persistencia con diario (§5).
-> Decidido también: auto-comercio, ritmo y alta de bots (§8). Abierto: §9.
+> **Estado (2026-10-04): plan, sin código.** Decidido: el bot es un cliente (§3), persistencia con diario (§5,
+> diseño en §5.1), auto-comercio, ritmo y alta de bots (§8), orden de trabajo (§9). Siguiente: implementar §5.1.
 
 ## 1. Cómo es hoy (medido en el código)
 
@@ -114,6 +114,88 @@ Hoy cada comando guarda la partida entera. Con bots no escala. **Decisión del u
 
 Beneficia también a los humanos: un comando deja de costar un guardado completo.
 
+### 5.1 Diseño en detalle (propuesta 2026-10-04, sin código)
+
+Hoy hay **tres puertas** que mutan una partida, todas por `RunnerDePartida`: `ejecutar` desde
+`rutas/comandos.ts` (comandos de jugador/admin), `ejecutar` desde `rutas/batallas.ts` (los 4 mensajes del
+servidor de batalla) y `avanzarTick` (reloj de mundo y `POST .../tick` de admin). El diario se engancha ahí y en
+ningún otro sitio.
+
+**Archivo y línea.** `<gameId>.diario.jsonl`, hermano de `.json` y `.eventos.jsonl`, en el mismo
+`AlmacenDeObjetos`. Una línea por mutación que **subió la versión**:
+
+```json
+{"v":1234,"t":"marcharA","a":"heroe-17","p":{"destino":{"x":40,"y":12}}}
+```
+
+- `v`: versión **resultante**. Sirve para saltar lo que ya está en el guardado y para verificar el repaso.
+- `t`: nombre en un registro único de lo que puede aparecer en el diario: `REGISTRO_COMANDOS` + los 4 manejadores
+  del servidor de batalla + las operaciones del sistema (`avanzarTick`, y mientras existan `avanzarAutoComercio`
+  y `avanzarFaccionesNpc`). `RunnerDePartida.ejecutar` pasa a recibir el **nombre**, no la función.
+- `a`: actor tal cual llegó a `GameSession.ejecutar`. `p`: params (se omite si es `undefined`).
+
+**Invariante nuevo en `GameSession.ejecutar`: lo que no sube la versión no deja rastro.** Si el resultado no
+cambió la versión (rechazo o `sinCambios`), se restauran el RNG y el generador de ids a como estaban. Sin esto, un
+comando rechazado que hubiera tirado un dado antes de rechazar movería el RNG sin dejar línea, y el repaso
+divergiría en silencio. Es lo que permite que el diario solo lleve lo aceptado.
+
+**Ciclo de un comando** (sustituye a `aplicarYPersistir`):
+
+1. Aplicar. Si la versión no cambió → responder; no hay nada que escribir (como hoy).
+2. **Anexar la línea al diario.** Si falla → revertir a `previo` y lanzar (mismo contrato que hoy con el
+   guardado: aceptado = durable).
+3. Anexar sus eventos al JSONL de eventos (como hoy, best effort). Se mantiene por comando y no por tick porque la
+   memoria guarda solo los últimos 5 000 eventos: con cientos de bots, un tick podría generar más y el tramo se
+   perdería del historial.
+
+**Ciclo de un tick:** el tick completo (tick + auto-comercio + NPC mientras existan) anexa sus 1-3 líneas en
+**una** escritura, después `guardarPartida`, y si el guardado fue bien, **vacía el diario**
+(`almacen.escribir(clave, '')`). Si el guardado falla, se grita y no se revierte nada: el tick ya es durable por
+el diario, y el siguiente tick reintenta el guardado (el diario crece mientras tanto).
+
+**Truncado sin carrera.** Un corte entre «guardar» y «vaciar» deja en el diario líneas que el guardado ya
+contiene; al recuperar se saltan las de `v ≤ versión del guardado`. Por eso no hace falta que guardar y vaciar
+sean atómicos juntos.
+
+**Recuperación** (`cargarOCrear` cuando hay guardado):
+
+1. `cargarPartida` como hoy (guardado + eventos `≤ versión`).
+2. Leer el diario y repasar en orden las líneas con `v >` versión del guardado: `ejecutar(REGISTRO[t], p,
+   {actor: a})`. Cada una **debe** salir `ok` con versión exactamente `v`; si no, la partida **no arranca** (error
+   fuerte: es no-determinismo o un diario corrupto, y servir otro mundo sería peor). Una última línea ilegible
+   (corte a mitad de escritura) se descarta, como en los otros JSONL; una ilegible en medio es error.
+3. Cursor del JSONL de eventos = la última versión que ya tiene el archivo (no la del guardado): el repaso
+   regenera en memoria los mismos eventos y no se vuelven a anexar los que ya estaban.
+4. Guardar y vaciar el diario, para que el siguiente arranque no repase de nuevo.
+
+**Bordes que tocan otros módulos:**
+
+- `crearYPersistir` (y por tanto `descartarYCrear`) **vacía el diario**: si no, las líneas de la partida
+  descartada se repasarían sobre la nueva.
+- **Apagado limpio** (`RegistroDePartidas.cerrar`, SIGTERM de un despliegue): guardar y vaciar. Así un
+  despliegue normal arranca con el diario vacío.
+- **Respaldos** (`respaldos.ts`): crear un respaldo guarda antes (por la cola) para que el snapshot esté al día;
+  **restaurar vacía el diario** (sus líneas son de la partida viva, no del respaldo).
+- **Opciones del proceso** (`OpcionesSesion.batallasEnUnity`, de `SERVIDORES_BATALLA`): cambian el resultado de
+  algunos comandos. Si cambian entre una caída y el arranque, el repaso podría divergir sin que la versión lo
+  delate. Techo aceptado: con el apagado limpio, solo afecta a una caída dura seguida de un cambio de config.
+- **libSQL**: `anexar` es `contenido || nuevo`, que reescribe la fila; con el diario vaciado cada tick, la fila
+  nunca pasa de un tick de comandos.
+
+**Coste.** Por comando: un append de ~200 bytes en vez de leer el snapshot entero (la comprobación de
+concurrencia) y reescribirlo. Por tick: el guardado de hoy, una vez.
+
+**Test de reconstrucción** (`src/server/__tests__/diarioDePartida.test.ts`), almacén en disco temporal:
+
+1. Partida con semilla fija; un guion intercalado de comandos de varios héroes y ticks (incluido un rechazo).
+   «Caída»: se abandona el runner sin apagado limpio y se abre otro con `cargarOCrear` sobre el mismo almacén.
+   El snapshot serializado (la misma forma que escribe `guardarPartida`) y el estado del RNG/ids deben ser
+   **idénticos byte a byte** a los del runner original, y la partida debe seguir igual con los mismos comandos
+   siguientes.
+2. Caída entre guardar y vaciar: líneas viejas en el diario → se saltan, mismo resultado.
+3. Última línea a medias → se descarta; línea con `v` que no cuadra → la carga falla.
+4. Un rechazo que consume RNG no desincroniza (cubre el invariante nuevo).
+
 ## 6. Lo que necesita el motor y la sesión
 
 1. **Presencia (D33)**: comandos de entrar y salir del mundo; el héroe y su tropa salen y vuelven; las unidades
@@ -160,11 +242,11 @@ Beneficia también a los humanos: un comando deja de costar un guardado completo
      campamento).
    Para poder retirarlos sin fricción (D54), el servidor debe **saber qué cuentas son de bot** sin darles ningún
    poder extra. Propuesta: un código de registro propio para bots (`CODIGO_REGISTRO_BOTS`, junto al
-   `CODIGO_REGISTRO` humano) que marca la cuenta como bot. *(A confirmar.)*
+   `CODIGO_REGISTRO` humano) que marca la cuenta como bot. **Confirmado por el usuario (2026-10-04).**
 
-## 9. Abierto
+## 9. Orden de trabajo (confirmado 2026-10-04)
 
-1. **Orden de trabajo frente a los campamentos.** Propuesta: primero el diario (§5, vale ya para humanos), luego el
-   puerto con el adaptador en proceso y la gobernanza actual pasada a comandos, luego presencia e identidad de bot, y
-   solo entonces el cerebro «sin plaza» de los bots-héroe sobre los campamentos.
-2. **Marca de cuenta bot** (§8.3): confirmar el código de registro propio.
+1. **Diario de comandos** (§5.1). Vale ya para humanos.
+2. **Puerto + adaptador en proceso**, con la gobernanza actual pasada a comandos (inventario acción por acción).
+3. **Presencia e identidad de bot** (D33, §8.3).
+4. **Cerebro «sin plaza»** de los bots-héroe sobre los campamentos (depende del diseño de campamentos).
