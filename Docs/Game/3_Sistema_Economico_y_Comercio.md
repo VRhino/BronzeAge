@@ -9,13 +9,12 @@
 
 ## 3.2 Trueque de materiales (acuerdos entre Facciones)
 - Contrato MARCO abierto en el tiempo: `proponerTrueque` crea el acuerdo (lo pactado por cada lado, plazo por defecto de **un día de mundo**: lo que hace falta para que las caravanas vayan y vuelvan).
-- **Trueque compuesto** (2026-10-02): cada lado ofrece **una o varias líneas**, cada una un recurso con su cantidad (`lineasA` / `lineasB`); un lado no repite recurso. Cada línea lleva su propio progreso. El acuerdo se **cumple cuando están saldadas todas las líneas de los dos lados**. Las líneas de un lado salen en **un solo cargamento**: la caravana carga las líneas en el orden del acuerdo hasta llenarse (y hasta donde llega el stock de cada una), y lo que no cabe va en el siguiente viaje. Al vencer sin cumplir, cada lado recibe la penalización de reputación (Doc 2.7) **en proporción a lo que dejó sin entregar** de lo pactado; lo ya entregado no se devuelve. La IA de las Facciones NPC sigue proponiendo una línea por lado, pero acepta o rechaza propuestas compuestas (le tiene que sobrar cada línea que entrega).
+- **Trueque compuesto** (2026-10-02): cada lado ofrece **una o varias líneas**, cada una un recurso con su cantidad (`lineasA` / `lineasB`); un lado no repite recurso. Cada línea lleva su propio progreso. El acuerdo se **cumple cuando están saldadas todas las líneas de los dos lados**. Las líneas de un lado salen en **un solo cargamento**: la caravana carga las líneas en el orden del acuerdo hasta llenarse (y hasta donde llega el stock de cada una), y lo que no cabe va en el siguiente viaje. Al vencer sin cumplir, cada lado recibe la penalización de reputación (Doc 2.7) **en proporción a lo que dejó sin entregar** de lo pactado; lo ya entregado no se devuelve.
 - **PROPUESTA → ACEPTACIÓN**: el acuerdo nace `'propuesto'` y **no obliga a nadie** hasta que el lado receptor (B) contesta con `aceptarTrueque` o `rechazarTrueque`. Ninguna caravana lo mira mientras siga propuesto.
   - **El plazo se cuenta desde el sí**: una propuesta contestada al filo no puede nacer ya sin tiempo material de cumplirse, porque entonces el que acepta de buena fe se comería la penalización por incumplir (Doc 2.7).
   - Una propuesta **sin contestar caduca sin penalizar a nadie** (no hubo promesa que romper); una **rechazada** queda como `'rechazado'` y no se borra: una respuesta es información, y es distinta de un silencio.
   - Aceptar no traza ningún camino: los caminos los hacen las caravanas que viajan (red de caminos, Doc 1.6).
-  - **Quién contesta cuando no hay jugador**: las plazas NPC contestan en el mismo minuto, con el mismo colchón de excedente que el NPC exige cuando es él quien pide.
-  - El NPC contesta también a las propuestas de un jugador. Lo que no hace es proponerle un trueque de SUPERVIVENCIA a un humano: un salvavidas no puede quedarse esperando a que alguien se conecte.
+  - **Contesta siempre un jugador** —humano o bot, con el cargo que toca (2026-10-04, D52)—: no hay plazas NPC que contesten solas.
 - **Cada envío sale en una caravana propia**: exige tener una caravana PROPIA **'disponible'** en el asentamiento origen (ver 3.12). `asignarCaravanasATrueque` la asigna automáticamente al envío pendiente; si no hay ninguna disponible, el envío espera al siguiente minuto. Para entregar a mano en un trueque, se engancha la caravana a un ejército y se entrega al llegar (Doc 5.13.3); el lanzamiento manual de 3.13.3 no se vincula a trueques.
 - Cuando hay menos caravanas disponibles que envíos pendientes en un mismo asentamiento (varios acuerdos compitiendo a la vez), se prioriza por un SCORE ponderado (ver 3.12: urgencia por expiración del acuerdo, urgencia por volumen pendiente, cercanía del destino) — no por orden de llegada.
 - La caravana viaja de verdad por el mapa, sobre una RUTA calculada por pathfinding (rodea terreno costoso, ver Doc 1.6/3.6), con la velocidad modulada por el coste del terreno que cruza en cada momento — y entrega al llegar. Al entregar, la caravana vuelve a estar 'disponible' en el origen: es un activo persistente y con coste (3.12), no un objeto de un solo uso.
@@ -204,11 +203,11 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
 
 ### 3.13.5 Reparto automático vs preparación manual
 
-- `asignarCaravanasATrueque` (3.2) reparte para trueque y NPC las caravanas **no reservadas**.
+- `asignarCaravanasATrueque` (3.2) reparte para trueque las caravanas **no reservadas**.
 - Una caravana con `reservadaManual = true` sale del pool automático **sea cual sea su tamaño**. Una de 1
   carro se puede reservar; una de 5 puede seguir en automático. La señal es explícita, no se infiere de la
   composición.
-- El **NPC no compone** caravanas multi-carro ni asigna escolta: es cosa del jugador.
+- El reparto automático **no compone** caravanas multi-carro ni asigna escolta: es cosa del jugador.
 - La caravana es **persistente y se reconfigura**: entre viajes el jugador le añade carros y animales, y
   **mueve carros entre dos caravanas suyas** (`moverCarroCaravana`) — libre, sin coste ni tiempo, mientras
   ambas estén `'disponible'` en el mismo asentamiento. Un carro no se quita suelto: se mueve a otra caravana.

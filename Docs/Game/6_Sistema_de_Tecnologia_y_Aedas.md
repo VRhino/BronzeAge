@@ -61,7 +61,7 @@ La season (12 meses) se divide en cinco Eras, de ~1300 a 323 a. C. (hasta Alejan
 
 Para que una tecnología aparezca por desarrollo propio hacen falta dos cosas:
 
-- **El logro del servidor**: algo que ha pasado en todo el mundo entre todas las Facciones, NPC incluidas (por
+- **El logro del servidor**: algo que ha pasado en todo el mundo entre todas las Facciones, las de bots incluidas (por
   ejemplo, "X de estaño extraído en el mundo"). **Se fija para siempre** en cuanto se cumple.
   **Es público**: lo canta un Aeda en la crónica, **sin decir qué tecnología desbloquea**.
 - **El hito de la Facción**: condiciones de la propia Facción (edificios, niveles, otras tecnologías adoptadas…).

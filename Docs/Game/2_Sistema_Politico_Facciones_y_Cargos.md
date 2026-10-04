@@ -68,7 +68,7 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 - Se liga a la FACCIÓN del héroe (NO a la Liga completa — los vasallos mantienen ciudadanía separada de su señor).
 - Obtención, TRES vías (2026-10-04, D31: no hay compra de casa):
   1. **Crear la Facción** — quien la crea queda como su primer ciudadano **y su primer Rey** de inmediato, sin necesidad de fundar todavía (ver 2.2, "una Facción SIEMPRE tiene Rey").
-  2. **Pedir el ingreso** en una existente (`solicitarIngreso`, D46): el héroe entra en su **lista de solicitantes** y **solo el Rey** acepta o deniega (`responderSolicitud`). Aceptado, es ciudadano y sus solicitudes en otras Facciones caen; denegado, sale de la lista. Solo da ciudadanía, no residencia. **En una Facción NPC no se entra** (D49).
+  2. **Pedir el ingreso** en una existente (`solicitarIngreso`, D46): el héroe entra en su **lista de solicitantes** y **solo el Rey** acepta o deniega (`responderSolicitud`). Aceptado, es ciudadano y sus solicitudes en otras Facciones caen; denegado, sale de la lista. Solo da ciudadanía, no residencia.
   3. **Fundar un asentamiento** — cada fundador recibe automáticamente una casa en el asentamiento recién fundado, y con ella ciudadanía inmediata.
 - **No hay tope de residentes** por asentamiento: el tope que cuenta es el de héroes que entran en una batalla (Doc 5.15.1).
 - **Abandonar** (el héroe solo puede dejar SU PROPIA Facción): quita la ciudadanía **y la casa**: deja su residencia y sus cargos LOCALES (2026-10-02). Sigue siendo suyo lo que lleva. Si el que se va era Rey, el trono pasa al siguiente ciudadano (queda vacío solo si era el último); si era Embajador, la embajada se libera. 

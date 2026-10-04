@@ -14,7 +14,7 @@ Es el dueño de sus escuadrones: **los escuadrones son del Héroe, no del asenta
 **Combate por sí mismo**, como un personaje de Conquest: clase, nivel y experiencia, atributos, perks, equipo e inventario (Doc 5.1 y 5.16). No muere: al perder una batalla queda **Herido** (abajo) y, si fue en mundo abierto, entrega la mitad de su carro.
 
 ## Héroe bot
-Héroe de una Facción NPC, manejado por la IA del juego. Nace como fundador del primer asentamiento de su Facción cuando el admin la crea (Doc 5.15.6), y vive en el servidor como un héroe más. Combate contra los héroes humanos en las partidas de Unity; NPC contra NPC se resuelve con números (Doc 5.15.6).
+Héroe que maneja un programa en vez de una persona (2026-10-04, D52-D58). Nace como cualquiera, dentro de un campamento de mercenarios (Doc 1.9b), y juega por los mismos comandos que un humano; ninguna Facción nace asentada ni es «NPC» (Doc 1.3, 5.15.6). En batalla lo maneja la IA de Conquest.
 
 ## Columna personal
 Un Héroe solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella — dos viajeros que se cruzan no forman un ejército (Doc 5.12.1).
@@ -64,10 +64,10 @@ Estado de un Héroe tras perder una batalla. Lo sufren **todos los héroes del b
 Los escuadrones nunca quedan heridos: sus bajas son siempre permanentes.
 
 ## Batalla
-Un combate en el que interviene algún héroe humano se juega como una partida aparte en Unity; NPC contra NPC se resuelve con números (Doc 5.10). Mientras dura, **el mundo sigue**: solo queda bloqueado lo que interviene —la plaza asediada, o las columnas y la caravana que combaten, que en el mapa se ven como la batalla en su punto— y los héroes que combaten. Los héroes de la Facción de un bando pueden **unirse** a él mientras quede sitio. Quien la inició puede cancelarla antes de que empiece la partida (Doc 5.15.1). Los héroes del bando que pierde quedan **Heridos**.
+Un combate en el que interviene algún héroe humano se juega como una partida aparte en Unity; bot contra bot se resuelve con números (Doc 5.10). Mientras dura, **el mundo sigue**: solo queda bloqueado lo que interviene —la plaza asediada, o las columnas y la caravana que combaten, que en el mapa se ven como la batalla en su punto— y los héroes que combaten. Los héroes de la Facción de un bando pueden **unirse** a él mientras quede sitio. Quien la inició puede cancelarla antes de que empiece la partida (Doc 5.15.1). Los héroes del bando que pierde quedan **Heridos**.
 
 ## Huérfano
-**Ya no existe** (2026-10-02). Era el héroe sin residencia ni campamento. Ahora quien pierde su casa —por conquista, ruina o dejándola— pasa en el acto a residir en el campamento de mercenarios más cercano al sitio que perdió (Doc 1.9b, 5.15.5), con sus escuadrones. Solo quedan sin campamento los héroes aún sin Facción. Los héroes bot de una Facción NPC que pierde su última plaza no llegan a quedarse sin casa: si la derrotó otra Facción NPC, se unen a ella y se reparten entre sus plazas; si no, la Facción se disuelve con ellos (2026-10-02).
+**Ya no existe** (2026-10-02). Era el héroe sin residencia ni campamento. Ahora quien pierde su casa —por conquista, ruina o dejándola— pasa en el acto a residir en el campamento de mercenarios más cercano al sitio que perdió (Doc 1.9b, 5.15.5), con sus escuadrones. Solo quedan sin campamento los héroes aún sin Facción.
 
 ## Almacén personal
 Lo que un Héroe guarda para sí: hasta 1000 unidades en total, de cualquier recurso (`ALMACEN_PERSONAL`, placeholder). Viaja con él en cada cambio de residencia —es lo único que se mueve sin caravana— y lo gasta quien lo tiene. Se llena y se vacía con el carro de su columna (Doc 2.5); nunca toca el almacén de una plaza.

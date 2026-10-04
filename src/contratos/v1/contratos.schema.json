@@ -154,6 +154,12 @@
           "properties": { "battleId": { "$ref": "#/definitions/Uuid" } },
           "required": ["battleId"],
           "additionalProperties": false
+        },
+        "prestada": {
+          "type": "object",
+          "properties": { "campamentoId": { "$ref": "#/definitions/Id" } },
+          "required": ["campamentoId"],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -223,6 +229,20 @@
             }
           ]
         },
+        "almacenPersonal": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } },
+        "oroDeBotin": { "type": "number", "minimum": 0 },
+        "cupoCampamento": {
+          "type": "object",
+          "properties": {
+            "dia": { "$ref": "#/definitions/Entero" },
+            "comprado": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } }
+          },
+          "required": ["dia", "comprado"],
+          "additionalProperties": false
+        },
+        "racionEn": { "$ref": "#/definitions/Instante" },
+        "bandidosDestruidosEn": { "type": "array", "items": { "$ref": "#/definitions/Instante" } },
+        "alijosAbiertos": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
         "heridoHasta": { "$ref": "#/definitions/Instante" },
         "desconectaEn": { "$ref": "#/definitions/Instante" },
         "fuera": {

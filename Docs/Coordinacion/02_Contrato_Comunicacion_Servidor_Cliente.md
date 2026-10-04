@@ -294,7 +294,7 @@ si es humano o bot.
 
 | Comando | Parámetros | Devuelve (`resultado.datos`) | Rechazos de dominio |
 |---|---|---|---|
-| `crearHeroe` | `displayName`, `classDefinitionId`, `genero`, `avatar` | `{ heroeId }` | ya tiene héroe en esta partida; clase inexistente |
+| `crearHeroe` | `displayName`, `classDefinitionId`, `genero`, `avatar`, `campamentoId` (2026-10-04: nace DENTRO de ese campamento de mercenarios, como residente, Doc 1.3/1.9b) | `{ heroeId }` | ya tiene héroe en esta partida; clase inexistente; campamento desconocido |
 | `repartirPuntos` | `atributos?` (atributo → puntos), `perks?` (ids) | — | sin puntos suficientes en esa bolsa; perk no disponible |
 | `equipar` | `slot`, `itemInstanceId` de un objeto de su inventario, o `null` para desequipar | — | objeto que no es suyo; hueco no válido; el objeto no va en ese hueco; sin casilla libre para lo que sale del hueco |
 | `guardarLoadout` | `loadoutId?`, `displayName`, `squadIds[]`, `perksSeleccionados[]`, `activo?` | `{ loadoutId, liderazgoTotal }` | escuadra que no es suya; supera su Liderazgo |
@@ -304,7 +304,9 @@ si es humano o bot.
 
 - Una `Membresia` sin héroe no puede hacer nada más en la partida hasta crearlo. Crear el héroe es un
   comando aparte de `POST .../membresia` porque necesita datos del jugador (nombre, clase, aspecto).
-- Sin héroe, `GET /jugador/partidas/:gameId` responde `{ ...resumen, sinHeroe: true }` en vez de la proyección,
+- Sin héroe, `GET /jugador/partidas/:gameId` responde `{ ...resumen, sinHeroe: true, campamentos }` en vez de la proyección,
+  donde `campamentos[]` = `{ id, posicion, origen, eligieronComoInicial, residentes }` es la pantalla de elección de
+  `crearHeroe` (2026-10-04; las dos cifras solo informan, sin tope),
   y cualquier comando que no sea `crearHeroe` responde 403. La auditoría sigue registrando al jugador de la
   membresía, no al héroe.
 - ~~**Las Facciones NPC y sus héroes bot los crea el admin**~~ **Retirado el 2026-10-04 (D58)**: los bots llegan por los
@@ -324,6 +326,30 @@ si es humano o bot.
 - Como el resto de comandos de `/jugador/*`, todos devuelven en la misma respuesta la proyección propia
   actualizada, y los rechazos de dominio salen como `resultado.ok: false` con su `codigoError`.
 
+### 4.2b Comandos del campamento de mercenarios (2026-10-04, Doc 1.9b; plan en `Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md`)
+
+Todos van por `POST .../comandos` como el resto. «En el campamento» = dentro (`ubicacion.tipo === 'mercenarios'`) o con su
+columna a la puerta (`MOVIMIENTO.radioPuerta`).
+
+| Comando | Parámetros | Devuelve | Notas |
+|---|---|---|---|
+| `entrarEnCampamento` | `campamentoId`, `heroeId` | — | Con la columna a la puerta, siendo su Líder y sin nadie más. En el suyo la columna se deshace (tropa al campamento, carro al almacén personal; la ración sobrante vuelve al campamento); en otro, queda en la puerta intacta |
+| `salirDelCampamento` | `campamentoId`, `heroeId`, `escuadronIds[]`, `carga` (recurso → cantidad desde el almacén personal), `politicaDeUnion?`, `objetivo?` | `{ ejercitoId }` | `objetivo` obligatorio si `politicaDeUnion` no es `rechazar` (sale como ejército). El residente recibe la ración gratis (Doc 1.9b). En otro campamento retoma la columna con la que entró |
+| `residirEnCampamento` | `heroeId`, `campamentoId` | — | Cambiar de casa (Doc 2.5), con su cooldown |
+| `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `recurso`, `cantidad` | `{ movido }` | Entre el carro de su columna y su almacén personal; la ración gratis no se guarda |
+| `comprarEnCampamento` | `recurso`, `cantidad`, `campamentoId?` | `{ cantidad, oro }` | Paga primero con `oroDeBotin`. Quien no reside ahí solo compra trigo, al carro. Cupo diario en madera y piedra |
+| `reclutarEnCampamento` | `tropaId`, `pagarCon?` | `{ cantidad, oro }` | Solo el residente |
+| `pedirPrestamo` | `tropaIds[]` (de 1 a 3 tropas de leva comunal) | `{ escuadronIds }` | Gratis; una escuadra de 15 por tropa (`EscuadronDto.prestada`) |
+| `reponerPrestamo` | — | `{ repuestas }` | Gratis |
+| `abrirAlijo` | `alijoId` | `{ oro }` | Estando en el sitio; el oro va a `oroDeBotin`. La proyección trae los `alijos` a la vista |
+| `aportarARefundacion` / `retirarDeRefundacion` | `recurso`, `cantidad`, `lado` (`almacen` \| `carro`) | `{ movido }` | Fondo de su Facción sin asentamientos en ese campamento |
+| `comprarCaravanaDeRefundacion` | — | `{ caravanaId }` | Con el fondo cubierto; quien la compra es su titular. Se engancha a la columna con `adjuntarCaravana` |
+| `fundar` | — | `{ asentamientoId }` | El titular, con la caravana enganchada, DONDE ESTÁ (no en agua, no a menos de 100 de un campamento). Es el único modo de fundar: `fundarAsentamiento` ya no existe |
+| `solicitarIngreso` | `faccionId` | — | Sustituye a `unirseAFaccion`: entra en la lista de solicitantes |
+| `responderSolicitud` | `faccionId`, `heroeId`, `aceptar` | — | Solo el Rey |
+
+`comprarCasa` y `unirseAFaccion` ya no existen. En la proyección: `campamentosMercenarios` (los conocidos, con `mercado`
+y `fondos`), `alijos` y, del héroe propio, `almacenPersonal`, `oroDeBotin`, `cupoCampamento`, `racionEn` y `alijosAbiertos`.
 ### 4.3 Subida de nivel del asentamiento (añadido 2026-09-26)
 
 El nivel de un asentamiento ya no sube solo: lo pide el Gobernador y se hace con una obra de ascenso (canon Doc

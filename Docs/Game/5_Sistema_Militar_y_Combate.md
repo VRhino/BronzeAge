@@ -3,7 +3,7 @@
 ## 5.1 Principio general: héroe-comandante liderando tropa (heredado de Iberia)
 Cada Jugador está en el mundo como su **Héroe** (5.16), un comandante que lidera escuadrones de unidades NPC. Regla de oro: **Tropa > Héroe**. Puede llevar más de un regimiento a una batalla pero solo despliega uno a la vez, intercambiables en puntos tácticos de reabastecimiento dentro del combate.
 
-**El héroe combate por sí mismo.** En las batallas jugadas en Unity lo hace como un personaje de Conquest: clase, nivel, atributos, perks y equipo (5.16). En las que se resuelven con números (NPC contra NPC, 5.15.6) la regla de oro la hace cumplir esta cifra:
+**El héroe combate por sí mismo.** En las batallas jugadas en Unity lo hace como un personaje de Conquest: clase, nivel, atributos, perks y equipo (5.16). En las que se resuelven con números (bot contra bot, 5.15.6) la regla de oro la hace cumplir esta cifra:
 
 > **Un héroe solo vale lo que UNA unidad de la tropa de élite.**
 
@@ -180,7 +180,7 @@ Consolidar una plaza —reclutar escuadrones nuevos ahí, asignar guarnición, e
 Bloquear la puerta de un asentamiento a neutrales, aliados o enemigos (Doc 2.8), sin coste. No confundir con la reubicación al perder la casa por conquista (5.15.5).
 
 ## 5.10 Dónde se resuelve el combate
-Las batallas con algún héroe humano se juegan como partidas reales en Unity (5.15). Las que no tienen ninguno —NPC contra NPC, bandidos contra una caravana— se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien decide atacar (5.12.3): a una columna, a una caravana, a un campamento de bandidos o a una plaza. Qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.
+Las batallas con algún héroe humano se juegan como partidas reales en Unity (5.15). Las que no tienen ninguno —bot contra bot, bandidos contra una caravana— se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien decide atacar (5.12.3): a una columna, a una caravana, a un campamento de bandidos o a una plaza. Qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.
 
 ## 5.11 Liderazgo
 
@@ -627,7 +627,7 @@ Las batallas se juegan como partidas reales en Unity. Los datos que se intercamb
 
 ### 5.15.1 Una escuadra combate con su héroe
 
-Las batallas no son automáticas, salvo NPC contra NPC, que se resuelve con números. **Una escuadra solo combate si su héroe entra en la batalla y la usa**, y cuántas lleva lo limita su Liderazgo (5.11). En un asedio atacan héroes con sus escuadras y defienden los héroes presentes en el asentamiento, cada uno con las escuadras que le permite su Liderazgo. El Liderazgo equilibra los dos bandos.
+Las batallas no son automáticas, salvo bot contra bot, que se resuelve con números. **Una escuadra solo combate si su héroe entra en la batalla y la usa**, y cuántas lleva lo limita su Liderazgo (5.11). En un asedio atacan héroes con sus escuadras y defienden los héroes presentes en el asentamiento, cada uno con las escuadras que le permite su Liderazgo. El Liderazgo equilibra los dos bandos.
 
 Las escuadras de un héroe que no está en la batalla no combaten, estén donde estén. Solo hay dos excepciones, en las que una escuadra combate sin su héroe, manejada por la IA del juego: la **guarnición** de un asentamiento (5.15.3) y la **escolta** de una caravana (5.15.4).
 
@@ -675,7 +675,7 @@ Si los atacantes conquistan un asentamiento:
 
 - **Cada héroe defensor queda fuera**, en el mundo, junto al asentamiento, con las escuadras que usó en la batalla (las que sobrevivieron), en su propia columna y **con el carro vacío**.
 - **Nadie se queda dentro de un asentamiento enemigo** (decisión del usuario, 2026-09-14): los que estaban dentro sin defender también salen. Un visitante vuelve a la columna que dejó aparcada; un residente herido sale solo, y sus escuadras, que no combatieron, corren la suerte del resto del campamento.
-- **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y **se van con su héroe al campamento de mercenarios más cercano a la plaza perdida**, donde pasa a residir (Doc 1.9b, 2.5); siguen siendo suyas, con su experiencia y su nivel. Los héroes de una Facción NPC que se queda sin plazas desaparecerán (pendiente).
+- **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y **se van con su héroe al campamento de mercenarios más cercano a la plaza perdida**, donde pasa a residir (Doc 1.9b, 2.5); siguen siendo suyas, con su experiencia y su nivel.
 - **No hay captura**: la guarnición no pasa al conquistador. Cae a 0 y sigue siendo de su héroe.
 - **El asentamiento conquistado queda sin guarnición**. Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La protección tras la conquista (5.12.9) le da un día de inmunidad; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.
 

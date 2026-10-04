@@ -91,6 +91,9 @@ export interface EscuadronDto {
   contenedor: ContenedorEscuadron;
   enGuarnicion: boolean;
   reservaBatalla?: { battleId: string };
+  /** Tropa prestada por un campamento de mercenarios (Doc 1.9b, D80): no gana experiencia ni cuenta para «una escuadra por
+   * tropa»; el campamento la retira si su héroe deja de residir en él. */
+  prestada?: { campamentoId: string };
 }
 
 export interface LoadoutDto {
@@ -133,6 +136,18 @@ export interface HeroeDto {
   perksDesbloqueados: number[];
   liderazgoBase: number;
   ubicacion: UbicacionHeroe;
+  /** Lo que guarda en su campamento de residencia (Doc 2.5). */
+  almacenPersonal?: Record<string, number>;
+  /** Oro de bandidos y alijos (Doc 1.9, D27): solo se gasta en el mercado de un campamento o en el fondo de refundación. */
+  oroDeBotin?: number;
+  /** Lo comprado hoy en el mercado de su campamento, contra el cupo diario (Doc 3.3b). */
+  cupoCampamento?: { dia: number; comprado: Record<string, number> };
+  /** Cuándo recogió la última ración gratis de su campamento (Doc 1.9b). */
+  racionEn?: Instante;
+  /** Cuándo destruyó cada campamento de bandidos de las últimas 24 h: el botín decrece con ellas (Doc 1.9, D26). */
+  bandidosDestruidosEn?: Instante[];
+  /** Los alijos de exploración que ya abrió: cada uno, una vez por héroe (Doc 1.9b, D60). */
+  alijosAbiertos?: string[];
   heridoHasta?: Instante;
   /** Desconexión pedida: sale del mundo en este instante (Doc 1.10.6). */
   desconectaEn?: Instante;

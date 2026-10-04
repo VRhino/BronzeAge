@@ -176,7 +176,7 @@ export function dejarResidencia(asentamientos: readonly Asentamiento[], heroeId:
 
 /**
  * Pedir el ingreso en una Facción (D5, D6, D46): entra en su lista de solicitantes, y el Rey acepta o deniega. Quien ya es ciudadano de
- * una no pide (Doc 0: 1 y solo 1 Facción), y en una Facción NPC no se entra (D49). Pedir otra vez es pedir lo mismo: no cambia nada.
+ * una no pide (Doc 0: 1 y solo 1 Facción). Pedir otra vez es pedir lo mismo: no cambia nada.
  */
 export function solicitarIngreso(faccion: Faccion, facciones: readonly Faccion[], heroeId: string): Faccion {
   if (facciones.some((f) => esCiudadano(f, heroeId))) throw new FaccionInvalidaError('Ya eres ciudadano de una Facción (Doc 0: 1 y solo 1).');
