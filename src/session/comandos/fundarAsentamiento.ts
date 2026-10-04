@@ -31,7 +31,7 @@ export interface ParamsFundarAsentamiento {
  * un ciudadano que funda de campaña con su propia columna sí puede llegar con algo.
  *
  * Autorización (`comandos/autorizacion.ts`): rol `jugador`, y ser ya ciudadano de esa Facción — salvo que no
- * sea ciudadano de ninguna, porque fundar es una de las dos vías de ENTRAR en una (la otra es `comprarCasa`).
+ * sea ciudadano de ninguna, porque fundar es una de las vías de ENTRAR en una (la otra es pedirlo al Rey, `solicitarIngreso`).
  *
  * **Fundación grupal diferida.** El Doc 1.2/1.3 admite hasta 5 fundadores juntos, y el motor lo soporta
  * (`fundarAsentamiento` de `engine/settlement.ts` recibe una lista). No se expone aquí porque falta lo que la

@@ -83,16 +83,6 @@ function sinFaccionTodavia(estado: GameSessionState, heroeId: string): boolean {
 }
 
 /**
- * Es su Facción, o todavía no tiene ninguna. Lo segundo importa para `comprarCasa`: comprar casa es una de
- * las dos vías de ENTRAR en una Facción (Doc 2.5) y está abierta a cualquiera —el motor solo exige no ser ya
- * ciudadano de otra, y el cupo de vivienda la limita—, así que exigir ciudadanía previa la volvería
- * inalcanzable.
- */
-function esFaccionPropiaOSinFaccion(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
-  return sinFaccionTodavia(estado, heroeId) || esFaccionPropia(estado, heroeId, faccionId);
-}
-
-/**
  * Puede fundar para esa Facción: ser ya ciudadano suyo, o —caso de arranque— que la Facción no tenga NINGÚN
  * ciudadano todavía y el actor no pertenezca a ninguna otra.
  *
@@ -100,8 +90,8 @@ function esFaccionPropiaOSinFaccion(estado: GameSessionState, heroeId: string, f
  * `ciudadanosIds: []` (`engine/faccion.ts`) y fundar es lo que otorga la primera ciudadanía: sin ella, quien
  * crea una Facción no podría fundar en ella y la Facción nacería muerta. Pero no puede ser más ancha: fundar
  * consume el CAP DE FUNDACIÓN de la Facción (limitado por su nivel, Doc 1.7), así que dejar que un
- * desconocido funde en una Facción ajena sería regalarle una vía para agotarle el cupo. Comprar casa, que sí
- * está abierta, no consume nada de eso.
+ * desconocido funde en una Facción ajena sería regalarle una vía para agotarle el cupo. Para entrar en una Facción
+ * ajena está la solicitud al Rey (`solicitarIngreso`).
  */
 function puedeFundarEn(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
   const faccion = buscarFaccion(estado, faccionId);
@@ -261,7 +251,7 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     },
   },
 
-  // --- crearFaccion/unirseAFaccion/dejarFaccion: sin condición de dominio adicional aquí — a diferencia del
+  // --- crearFaccion/solicitarIngreso/dejarFaccion: sin condición de dominio adicional aquí — a diferencia del
   // resto de la matriz, "1 jugador, 1 Facción" y el cooldown de creación son reglas de NEGOCIO de la partida
   // (qué transición es válida), no de AUTORIZACIÓN (quién puede intentarla): cualquier `jugador` puede
   // intentar los tres, y el propio comando rechaza con su código si no toca (`faccion.ya_pertenece`,
@@ -270,7 +260,12 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // Ninguno de los tres acepta un `heroeId`/`faccionId` de OTRO en `params` con el que suplantar: el actor
   // siempre es `ctx.actor`, nunca algo que el cliente pueda mandar.
   crearFaccion: { rolesPermitidos: ['jugador'] },
-  unirseAFaccion: { rolesPermitidos: ['jugador'] },
+  solicitarIngreso: { rolesPermitidos: ['jugador'] },
+  // Responder a una solicitud de ingreso es del Rey de esa Facción, y solo suyo (D31, D46).
+  responderSolicitud: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => estado.facciones.find((f) => f.id === params.faccionId)?.reyId === heroeId,
+  },
   dejarFaccion: { rolesPermitidos: ['jugador'] },
 
   // --- Cargos de Facción ---
@@ -325,19 +320,8 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
         : residenteConCargo(estado, heroeId, params.asentamientoId, 'gobernador'),
   },
 
-  // --- comprarCasa: nadie compra en nombre de otro. La Facción del asentamiento debe ser la propia, O el
-  // jugador no ser ciudadano de ninguna todavía — comprar casa es una de las dos vías de UNIRSE a una
-  // (junto a fundar), y `engine/faccion.ts` solo bloquea ser ciudadano de OTRA distinta. ---
-  comprarCasa: {
-    rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, heroeId, params) => {
-      if (heroeId !== params.heroeId) return false;
-      const asentamiento = buscarAsentamiento(estado, params.asentamientoId);
-      return asentamiento === undefined || esFaccionPropiaOSinFaccion(estado, heroeId, asentamiento.faccionId);
-    },
-  },
-  // Cambiar de residencia: nadie a nombre de otro; y el destino tiene que ser de la propia Facción (a
-  // diferencia de comprarCasa, aquí el jugador YA es ciudadano de una — el motor lo exige). El resto de
+  // Cambiar de residencia: nadie a nombre de otro; y el destino tiene que ser de la propia Facción (el
+  // jugador YA es ciudadano de una — el motor lo exige). El resto de
   // condiciones (hueco de vivienda, permiso, no residir ya ahí) las valida `cambiarResidencia`.
   // Reclutar en el campamento donde reside el actor: la residencia y el pago los comprueba el motor.
   reclutarEnCampamento: { rolesPermitidos: ['jugador'] },

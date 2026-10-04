@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { CIUDADANIA, SIMULACION } from '../../constants';
 import { GameSession } from '../gameSession';
-import { asignarCargoLocal, cambiarResidencia, comprarCasa, dejarResidencia } from '../comandos/cargos';
+import { asignarCargoLocal, cambiarResidencia, dejarResidencia } from '../comandos/cargos';
 import { dejarFaccion } from '../comandos/dejarFaccion';
 import { partidaConAsentamiento } from './fixtures';
 
@@ -70,13 +70,13 @@ describe('dejarResidencia', () => {
     expect(sesion.getState()).toBe(antes);
   });
 
-  it('cuenta para el cooldown: no se compra casa nueva enseguida, sí pasado el plazo', () => {
+  it('cuenta para el cooldown: no se muda a otra plaza enseguida, sí pasado el plazo', () => {
     const { sesion, fundador, opc } = conSegundaPlaza();
     sesion.ejecutar(dejarResidencia, { heroeId: fundador }, opc);
 
-    expect(sesion.ejecutar(comprarCasa, { asentamientoId: 'otra-plaza', heroeId: fundador }, opc).ok).toBe(false);
+    expect(sesion.ejecutar(cambiarResidencia, { destinoId: 'otra-plaza', heroeId: fundador }, opc).ok).toBe(false);
     const despues = adelantarDias(sesion, CIUDADANIA.cooldownCambioResidenciaDias);
-    expect(despues.ejecutar(comprarCasa, { asentamientoId: 'otra-plaza', heroeId: fundador }, opc).ok).toBe(true);
+    expect(despues.ejecutar(cambiarResidencia, { destinoId: 'otra-plaza', heroeId: fundador }, opc).ok).toBe(true);
   });
 });
 

@@ -137,28 +137,12 @@ describe('la Facción del actor se deriva de ciudadanosIds, no de la membresía'
   });
 });
 
-describe('comprarCasa', () => {
-  it('rechaza comprar en nombre de otro jugador', () => {
-    const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = verificarAutorizacion('comprarCasa', { asentamientoId, heroeId: 'otro' }, sesion.getState(), jugador('yo'));
-    expect(resultado).toEqual(POR_DOMINIO);
-  });
-
-  it('autoriza a quien no es ciudadano de ninguna Facción todavía: comprar casa es una vía de unirse', () => {
-    const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = verificarAutorizacion('comprarCasa', { asentamientoId, heroeId: 'recien-llegado' }, sesion.getState(), jugador('recien-llegado'));
-    expect(resultado).toEqual(AUTORIZADO);
-  });
-
-  it('rechaza a un ciudadano de otra Facción (un jugador solo pertenece a una)', () => {
-    const { sesion, asentamientoRivalId, fundador } = partidaConFaccionRival();
-    const resultado = verificarAutorizacion(
-      'comprarCasa',
-      { asentamientoId: asentamientoRivalId, heroeId: fundador },
-      sesion.getState(),
-      jugador(fundador)
-    );
-    expect(resultado).toEqual(POR_DOMINIO);
+describe('responderSolicitud (D31, D46)', () => {
+  it('solo el Rey de esa Facción responde a sus solicitudes', () => {
+    const { sesion, faccionId, fundador } = partidaConAsentamiento();
+    const params = { faccionId, heroeId: 'recien-llegado', aceptar: true };
+    expect(verificarAutorizacion('responderSolicitud', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('responderSolicitud', params, sesion.getState(), jugador('otro'))).toEqual(POR_DOMINIO);
   });
 });
 

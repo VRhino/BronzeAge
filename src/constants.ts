@@ -1543,10 +1543,10 @@ export const CUPO_NIVEL_ASENTAMIENTO = {
 export const CIUDADANIA = {
   // Resuelve la pregunta abierta que dejaba `crearFaccion.ts` (a petición del usuario, 2026-08-27): tras
   // abandonar una Facción (`dejarFaccion`), cuánto hay que esperar para poder crear otra — anti-abuso contra
-  // "crear, abandonar, crear" en bucle. Solo aplica a CREAR: unirse a una Facción existente (`unirseAFaccion`)
+  // "crear, abandonar, crear" en bucle. Solo aplica a CREAR: entrar en una Facción existente (`solicitarIngreso`)
   // no tiene cooldown, solo la regla de siempre (no estar ya en otra).
   cooldownCreacionFaccionDias: 7,
-  /** Días de mundo entre un cambio de residencia (`cambiarResidencia`, `dejarResidencia`) y comprar casa o mudarse otra vez
+  /** Días de mundo entre un cambio de residencia (`cambiarResidencia`, `dejarResidencia`) y mudarse otra vez
    * (Doc 2.5, decidido el 2026-10-02). Frena mudarse en cada conquista para exprimir la recaudación. PLACEHOLDER. */
   cooldownCambioResidenciaDias: 3,
 };

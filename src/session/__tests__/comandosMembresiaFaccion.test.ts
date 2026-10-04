@@ -1,11 +1,11 @@
 // Membresía de Facción (a petición del usuario, 2026-08-27): crear una Facción asigna ciudadanía automática
 // a quien la crea; un jugador con Facción no puede crear otra hasta que pase el cooldown de
 // `CIUDADANIA.cooldownCreacionFaccionDias` desde su ÚLTIMA salida, y solo si no pertenece ya a ninguna;
-// `unirseAFaccion`/`dejarFaccion` cubren entrar en una Facción existente y abandonar la propia.
+// `solicitarIngreso` + `responderSolicitud` (el Rey decide, D46) y `dejarFaccion` cubren entrar en una Facción existente y abandonar la propia.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion, type PayloadFaccionCreada } from '../comandos/crearFaccion';
-import { unirseAFaccion, type PayloadFaccionUnion } from '../comandos/unirseAFaccion';
+import { responderSolicitud, solicitarIngreso, type PayloadSolicitudRespondida } from '../comandos/ingresoEnFaccion';
 import { dejarFaccion, type PayloadFaccionAbandonada } from '../comandos/dejarFaccion';
 import { CIUDADANIA, SIMULACION } from '../../constants';
 
@@ -96,47 +96,59 @@ describe('crearFaccion — cooldown tras abandonar', () => {
   });
 });
 
-describe('unirseAFaccion', () => {
-  it('otorga ciudadanía de una Facción existente sin necesidad de comprar casa', () => {
+/** `heroeId` pide entrar y el Rey (`jugador-a`, que la creó) responde. */
+function entra(sesion: GameSession, faccionId: string, heroeId: string, aceptar = true) {
+  sesion.ejecutar(solicitarIngreso, { faccionId }, { actor: heroeId });
+  return sesion.ejecutar(responderSolicitud, { faccionId, heroeId, aceptar }, OPC);
+}
+
+describe('ingreso por solicitud (D46)', () => {
+  it('pedir entra en la lista; el Rey acepta y es ciudadano', () => {
     const sesion = GameSession.crear('t', { seed: 1 });
     const faccionId = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
 
-    const r = sesion.ejecutar(unirseAFaccion, { faccionId }, { ...OPC, actor: 'jugador-b' });
-    expect(r.ok).toBe(true);
-    const faccion = sesion.getState().facciones.find((f) => f.id === faccionId)!;
-    expect(faccion.ciudadanosIds).toContain('jugador-b');
+    expect(sesion.ejecutar(solicitarIngreso, { faccionId }, { actor: 'jugador-b' }).ok).toBe(true);
+    expect(sesion.getState().facciones[0]!.solicitudesIds).toEqual(['jugador-b']);
+    expect(sesion.getState().facciones[0]!.ciudadanosIds, 'pedir no da ciudadanía').not.toContain('jugador-b');
 
-    const e = r.eventos[0]!;
-    expect(e.codigo).toBe('faccion.ciudadania_union');
-    expect(e.payload as PayloadFaccionUnion).toEqual({ faccionId, heroeId: 'jugador-b' });
+    const r = sesion.ejecutar(responderSolicitud, { faccionId, heroeId: 'jugador-b', aceptar: true }, OPC);
+    expect(r.ok).toBe(true);
+    const faccion = sesion.getState().facciones[0]!;
+    expect(faccion.ciudadanosIds).toContain('jugador-b');
+    expect(faccion.solicitudesIds).toEqual([]);
+    expect(r.eventos[0]!.codigo).toBe('faccion.ciudadania_union');
+    expect(r.eventos[0]!.payload as PayloadSolicitudRespondida).toEqual({ faccionId, heroeId: 'jugador-b', aceptada: true });
   });
 
-  it('rechaza unirse si ya es ciudadano de OTRA Facción', () => {
+  it('denegada, sale de la lista y no entra', () => {
+    const sesion = GameSession.crear('t', { seed: 1 });
+    const faccionId = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
+    expect(entra(sesion, faccionId, 'jugador-b', false).ok).toBe(true);
+    expect(sesion.getState().facciones[0]).toMatchObject({ solicitudesIds: [] });
+    expect(sesion.getState().facciones[0]!.ciudadanosIds).not.toContain('jugador-b');
+  });
+
+  it('aceptado en una, sus solicitudes en otras caen', () => {
+    const sesion = GameSession.crear('t', { seed: 1 });
+    const micenas = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
+    const troya = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { actor: 'jugador-c' }).datos!.faccionId;
+    sesion.ejecutar(solicitarIngreso, { faccionId: troya }, { actor: 'jugador-b' });
+    entra(sesion, micenas, 'jugador-b');
+    expect(sesion.getState().facciones.find((f) => f.id === troya)!.solicitudesIds).toEqual([]);
+  });
+
+  it('rechaza pedir siendo ya ciudadano, y una Facción que no existe', () => {
     const sesion = GameSession.crear('t', { seed: 1 });
     sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC);
     const otraId = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { ...OPC, actor: 'jugador-b' }).datos!.faccionId;
-
-    const r = sesion.ejecutar(unirseAFaccion, { faccionId: otraId }, OPC); // jugador-a ya es de Micenas
-    expect(r.ok).toBe(false);
-    expect(r.codigoError).toBe('faccion.ya_pertenece');
+    expect(sesion.ejecutar(solicitarIngreso, { faccionId: otraId }, OPC).codigoError).toBe('faccion.ya_pertenece');
+    expect(sesion.ejecutar(solicitarIngreso, { faccionId: 'no-existe' }, { actor: 'jugador-z' }).codigoError).toBe('faccion.no_existe');
   });
 
-  it('unirse a la Facción de la que ya se es ciudadano es idempotente: no versiona', () => {
+  it('no se responde a quien no ha pedido', () => {
     const sesion = GameSession.crear('t', { seed: 1 });
     const faccionId = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
-    const antes = sesion.getState().version;
-
-    const r = sesion.ejecutar(unirseAFaccion, { faccionId }, OPC);
-    expect(r.ok).toBe(true);
-    expect(r.version).toBe(antes);
-    expect(r.eventos).toHaveLength(0);
-  });
-
-  it('Facción inexistente: rechazo estándar `faccion.no_existe`', () => {
-    const sesion = GameSession.crear('t', { seed: 1 });
-    const r = sesion.ejecutar(unirseAFaccion, { faccionId: 'no-existe' }, OPC);
-    expect(r.ok).toBe(false);
-    expect(r.codigoError).toBe('faccion.no_existe');
+    expect(sesion.ejecutar(responderSolicitud, { faccionId, heroeId: 'jugador-b', aceptar: true }, OPC).ok).toBe(false);
   });
 });
 
@@ -155,8 +167,7 @@ describe('dejarFaccion', () => {
     expect(e.payload as PayloadFaccionAbandonada).toEqual({ faccionId, heroeId: OPC.actor });
 
     const otraId = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { ...OPC, actor: 'jugador-b' }).datos!.faccionId;
-    const union = sesion.ejecutar(unirseAFaccion, { faccionId: otraId }, OPC); // sin cooldown: unirse no lo tiene
-    expect(union.ok).toBe(true);
+    expect(entra(sesion, otraId, OPC.actor).ok, 'sin cooldown: entrar no lo tiene').toBe(true);
   });
 
   it('el trono queda vacío solo si se va el último ciudadano', () => {
@@ -171,7 +182,7 @@ describe('dejarFaccion', () => {
   it('sucesión: si se va el Rey y quedan ciudadanos, el trono pasa al siguiente', () => {
     const sesion = GameSession.crear('t', { seed: 1 });
     const faccionId = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
-    sesion.ejecutar(unirseAFaccion, { faccionId }, { ...OPC, actor: 'jugador-b' });
+    entra(sesion, faccionId, 'jugador-b');
 
     sesion.ejecutar(dejarFaccion, {}, OPC); // se va el Rey (el creador)
     expect(sesion.getState().facciones.find((f) => f.id === faccionId)!.reyId).toBe('jugador-b');

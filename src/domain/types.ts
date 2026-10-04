@@ -103,6 +103,8 @@ export interface Faccion {
   experiencia: number;
   /** Ciudadanía (Doc 2.5): jugadores con ciudadanía en ESTA Facción (no se extiende a toda la Liga). */
   ciudadanosIds: string[];
+  /** Héroes que han pedido entrar (D46): el Rey acepta o deniega. Solo en Facciones de jugadores (D49). */
+  solicitudesIds?: string[];
   /** Score de confiabilidad PÚBLICO -100..+100 (Doc 2.7), decae hacia 0 sin eventos nuevos. */
   reputacion: number;
   /** La Facción que conquistó su último asentamiento (Doc 5.15.5): presente solo mientras no tiene ninguno. Con ella

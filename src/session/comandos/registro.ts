@@ -10,13 +10,13 @@
 import type { ManejadorComando } from './tipos';
 import { fundarAsentamiento } from './fundarAsentamiento';
 import { crearFaccion } from './crearFaccion';
-import { unirseAFaccion } from './unirseAFaccion';
+import { responderSolicitud, solicitarIngreso } from './ingresoEnFaccion';
 import { dejarFaccion } from './dejarFaccion';
 import { crearHeroe } from './crearHeroe';
 import { abrirAlijo, aportarARefundacion, comprarCaravanaDeRefundacion, comprarEnCampamento, pedirPrestamo, reclutarEnCampamento, reponerPrestamo, retirarDeRefundacion } from './mercenarios';
 import { asignarGuarnicion, borrarLoadout, guardarEnAlmacenPersonal, guardarLoadout, repartirPuntos, retirarGuarnicion, sacarDelAlmacenPersonal } from './heroe';
 import { crearFaccionNpc } from './crearFaccionNpc';
-import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, comprarCasa, dejarResidencia, designarCapital, residirEnCampamento } from './cargos';
+import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, dejarResidencia, designarCapital, residirEnCampamento } from './cargos';
 import { anexionar, declararGuerra, fusionar, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
 import {
   aceptarTrueque,
@@ -69,7 +69,8 @@ import { avanzarTick } from './avanzarTick';
 const MANEJADORES = {
   fundarAsentamiento,
   crearFaccion,
-  unirseAFaccion,
+  solicitarIngreso,
+  responderSolicitud,
   dejarFaccion,
   crearHeroe,
   repartirPuntos,
@@ -85,7 +86,6 @@ const MANEJADORES = {
   asignarEmbajador,
   designarCapital,
   asignarRey,
-  comprarCasa,
   cambiarResidencia,
   dejarResidencia,
   residirEnCampamento,

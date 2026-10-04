@@ -114,12 +114,12 @@ export interface GameSessionState {
    * `heroeId` -> momento (ISO 8601) en que abandonó su última Facción (`dejarFaccion`, a petición del
    * usuario 2026-08-27). Única razón de ser: `crearFaccion` lo consulta para el cooldown de
    * `CIUDADANIA.cooldownCreacionFaccionDias` — anti-abuso contra "crear, abandonar, crear" en bucle. No es
-   * historial (no guarda TODAS las salidas, solo la última) ni afecta a `unirseAFaccion`, que no tiene cooldown.
+   * historial (no guarda TODAS las salidas, solo la última) ni afecta a `solicitarIngreso`, que no tiene cooldown.
    */
   salidasFaccionPorHeroe: Record<string, Instante>;
   /**
    * `heroeId` -> cuándo cambió de residencia por última vez (`cambiarResidencia`, `dejarResidencia`). Lo consultan esos dos
-   * comandos y `comprarCasa` para el cooldown `CIUDADANIA.cooldownCambioResidenciaDias` (Doc 2.5). Opcional porque un
+   * comandos para el cooldown `CIUDADANIA.cooldownCambioResidenciaDias` (Doc 2.5). Opcional porque un
    * snapshot anterior no lo trae; la reubicación por conquista no lo escribe.
    */
   cambiosResidenciaPorHeroe?: Record<string, Instante>;

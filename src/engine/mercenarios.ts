@@ -121,7 +121,7 @@ export function residirEnCampamento(
   };
 }
 
-/** Deja el campamento donde residiera (al comprar casa o mudarse a un asentamiento). */
+/** Deja el campamento donde residiera (al mudarse a un asentamiento o fundar). */
 export const salirDeCampamentos = sinResidente;
 
 /** Dónde está un héroe en el mapa, si se sabe: su columna o la plaza donde está. */

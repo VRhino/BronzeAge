@@ -1,4 +1,4 @@
-// Comandos de cargos y ciudadanía: Rey y Embajador (Facción), cargos locales de asentamiento, compra de casa
+// Comandos de cargos y ciudadanía: Rey y Embajador (Facción), cargos locales de asentamiento, residencia
 // y activación de políticas. Agrupados en un archivo porque comparten la misma forma —localizar la entidad,
 // delegar en el motor, registrar— y separarlos en cinco archivos de 25 líneas sería ruido sin beneficio.
 //
@@ -9,7 +9,6 @@ import { designarCapital as designarCapitalEngine } from '../../engine/capital';
 import { acogerEnCampamentoMasCercano, posicionDeHeroe, residirEnCampamento as residirEnCampamentoEngine, salirDeCampamentos } from '../../engine/mercenarios';
 import { asignarCargoLocal as asignarCargoLocalEngine, asignarEmbajador as asignarEmbajadorEngine, asignarRey as asignarReyEngine } from '../../engine/cargos';
 import {
-  comprarCasa as comprarCasaEngine,
   cambiarResidencia as cambiarResidenciaEngine,
   dejarResidencia as dejarResidenciaEngine,
   exigirSinCooldownDeResidencia,
@@ -31,13 +30,10 @@ export interface PayloadCargoLocal {
   heroeId: string;
   cargo: CargoTipo;
 }
-export interface PayloadCasaComprada {
-  asentamientoId: string;
-  heroeId: string;
-}
 export interface PayloadResidenciaCambiada {
   heroeId: string;
-  origenId: string;
+  /** Ausente si no residía en ninguna plaza (vivía en un campamento de mercenarios). */
+  origenId?: string;
   destinoId: string;
 }
 export interface PayloadPoliticaActivada {
@@ -111,37 +107,6 @@ export const asignarCargoLocal = comando<ParamsAsignarCargoLocal, void>((estado,
   ]);
 });
 
-export interface ParamsComprarCasa {
-  asentamientoId: string;
-  heroeId: string;
-}
-
-export const comprarCasa = comando<ParamsComprarCasa, void>((estado, _mapa, ctx, params) => {
-  // A diferencia del resto, este comando del motor resuelve el asentamiento por su cuenta y lanza
-  // `FaccionInvalidaError` si no existe — no hace falta comprobarlo antes.
-  exigirSinCooldownDeResidencia(estado.cambiosResidenciaPorHeroe?.[params.heroeId], ctx.instante);
-  const resultado = comprarCasaEngine(estado.facciones, estado.asentamientos, params.asentamientoId, params.heroeId);
-  const siguiente = conHistorialDeJugador(
-    {
-      ...conAsentamiento(estado, resultado.asentamiento),
-      facciones: resultado.facciones,
-      // Quien compra casa deja el campamento de mercenarios donde residiera: se reside en un solo sitio.
-      campamentosMercenarios: salirDeCampamentos(estado.campamentosMercenarios, params.heroeId),
-      cambiosResidenciaPorHeroe: { ...estado.cambiosResidenciaPorHeroe, [params.heroeId]: ctx.instante },
-    },
-    params.heroeId,
-    `Compra casa en ${params.asentamientoId} y obtiene ciudadanía.`
-  );
-  return exito(siguiente, [
-    evento(ctx, {
-      codigo: 'ciudadania.casa_comprada',
-      mensaje: `${params.heroeId} compra casa en ${params.asentamientoId} y obtiene ciudadanía.`,
-      payload: { asentamientoId: resultado.asentamiento.id, heroeId: params.heroeId } satisfies PayloadCasaComprada,
-      asentamientoId: resultado.asentamiento.id,
-    }),
-  ]);
-});
-
 export interface ParamsCambiarResidencia {
   destinoId: string;
   heroeId: string;
@@ -150,21 +115,24 @@ export interface ParamsCambiarResidencia {
 export const cambiarResidencia = comando<ParamsCambiarResidencia, void>((estado, _mapa, ctx, params) => {
   exigirSinCooldownDeResidencia(estado.cambiosResidenciaPorHeroe?.[params.heroeId], ctx.instante);
   const { origen, destino } = cambiarResidenciaEngine(estado.facciones, estado.asentamientos, params.destinoId, params.heroeId);
-  // El campamento se muda con él, pero la guarnición era de la plaza que deja (Doc 5.15.3).
+  const desde = origen ? origen.id : 'su campamento';
+  // El campamento se muda con él, pero la guarnición era de la plaza que deja (Doc 5.15.3). Se reside en un solo sitio: deja el
+  // campamento de mercenarios donde viviera.
   const siguiente = conHistorialDeJugador(
     {
-      ...conAsentamientos(estado, [origen, destino]),
+      ...conAsentamientos(estado, origen ? [origen, destino] : [destino]),
+      campamentosMercenarios: salirDeCampamentos(estado.campamentosMercenarios, params.heroeId),
       heroes: sinGuarnicion(estado.heroes, params.heroeId),
       cambiosResidenciaPorHeroe: { ...estado.cambiosResidenciaPorHeroe, [params.heroeId]: ctx.instante },
     },
     params.heroeId,
-    `Cambia su residencia de ${origen.id} a ${destino.id}.`
+    `Cambia su residencia de ${desde} a ${destino.id}.`
   );
   return exito(siguiente, [
     evento(ctx, {
       codigo: 'ciudadania.residencia_cambiada',
-      mensaje: `${params.heroeId} deja de residir en ${origen.id} y se muda a ${destino.id}.`,
-      payload: { heroeId: params.heroeId, origenId: origen.id, destinoId: destino.id } satisfies PayloadResidenciaCambiada,
+      mensaje: `${params.heroeId} deja de residir en ${desde} y se muda a ${destino.id}.`,
+      payload: { heroeId: params.heroeId, ...(origen ? { origenId: origen.id } : {}), destinoId: destino.id } satisfies PayloadResidenciaCambiada,
       asentamientoId: destino.id,
     }),
   ]);

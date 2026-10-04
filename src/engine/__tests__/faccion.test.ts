@@ -1,13 +1,10 @@
-// Regresión del rediseño "escuadrón por jugador" (Doc 2.1/2.5, a petición del usuario): un jugador reside
-// en UN solo asentamiento — es lo que le permite tener como mucho un escuadrón de cada tropa (ver
-// `Escuadron.heroeId`, domain/types.ts, y `reclutarTropa`, engine/tropas.ts). Antes de este cambio,
-// `comprarCasa` solo impedía ciudadanía cruzada entre Facciones, no residencia cruzada entre asentamientos
-// de la MISMA Facción.
+// Residencia y membresía (Doc 2.1/2.5): un jugador reside en UN solo asentamiento —es lo que le permite tener como mucho un
+// escuadrón de cada tropa (`Escuadron.heroeId`, `reclutarTropa`)—, y entra en una Facción pidiéndolo al Rey (D46).
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Faccion } from '../../domain/types';
 import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, heroeDePrueba, posicionRecomendable, instanteDeTest } from './fixtures';
 import { fundarAsentamiento } from '../settlement';
-import { cambiarResidencia, comprarCasa, FaccionInvalidaError } from '../faccion';
+import { cambiarResidencia, FaccionInvalidaError, otorgarCiudadania, responderSolicitud, solicitarIngreso } from '../faccion';
 import { campamentoDe } from '../tropa';
 
 /** El cap de fundación en nivel 1 es 1 asentamiento por Facción (`CAP_FUNDACION_POR_NIVEL`, constants.ts) —
@@ -40,20 +37,24 @@ function fundarDosAsentamientosDeFaccion(): { asentamientoA: Asentamiento; asent
   return { asentamientoA, asentamientoB, facciones: faccionesTrasB };
 }
 
-describe('comprarCasa — residencia única (Doc 2.1)', () => {
-  it('un jugador que ya reside en otro asentamiento no puede comprar casa en uno nuevo', () => {
-    const { asentamientoA, asentamientoB, facciones } = fundarDosAsentamientosDeFaccion();
+describe('solicitudes de ingreso (D46, D49)', () => {
+  const [faccion] = crearFacciones();
 
-    expect(() => comprarCasa(facciones, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-a')).toThrow(
-      FaccionInvalidaError
-    );
+  it('pedir entra en la lista una vez; en una Facción NPC no se entra; un ciudadano no pide', () => {
+    const pedida = solicitarIngreso(faccion!, [faccion!], 'nuevo', false);
+    expect(pedida.solicitudesIds).toEqual(['nuevo']);
+    expect(solicitarIngreso(pedida, [pedida], 'nuevo', false)).toBe(pedida);
+    expect(() => solicitarIngreso(faccion!, [faccion!], 'nuevo', true)).toThrow(FaccionInvalidaError);
+    const conCiudadano = otorgarCiudadania(faccion!, 'ya');
+    expect(() => solicitarIngreso(conCiudadano, [conCiudadano], 'ya', false)).toThrow(FaccionInvalidaError);
   });
 
-  it('un jugador nuevo de la misma Facción sí puede comprar casa en otro asentamiento', () => {
-    const { asentamientoA, asentamientoB, facciones } = fundarDosAsentamientosDeFaccion();
-
-    const resultado = comprarCasa(facciones, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-c');
-    expect(resultado.asentamiento.casasCompradas).toContain('jugador-c');
+  it('aceptada da ciudadanía y quita la solicitud; denegada solo la quita', () => {
+    const pedida = solicitarIngreso(faccion!, [faccion!], 'nuevo', false);
+    expect(responderSolicitud([pedida], pedida.id, 'nuevo', true)[0]).toMatchObject({ solicitudesIds: [], ciudadanosIds: expect.arrayContaining(['nuevo']) });
+    const denegada = responderSolicitud([pedida], pedida.id, 'nuevo', false)[0]!;
+    expect(denegada.solicitudesIds).toEqual([]);
+    expect(denegada.ciudadanosIds).not.toContain('nuevo');
   });
 });
 
@@ -64,9 +65,9 @@ describe('cambiarResidencia (Doc 2.5/2.6, comando nuevo)', () => {
 
     const { origen, destino } = cambiarResidencia(facciones, [conCargo, asentamientoB], asentamientoB.id, 'jugador-a');
 
-    expect(origen.heroesFundadoresIds).not.toContain('jugador-a');
-    expect(origen.casasCompradas).not.toContain('jugador-a');
-    expect(origen.cargos.gobernadorId).toBeNull(); // cargo local vacío al mudarse
+    expect(origen!.heroesFundadoresIds).not.toContain('jugador-a');
+    expect(origen!.casasCompradas).not.toContain('jugador-a');
+    expect(origen!.cargos.gobernadorId).toBeNull(); // cargo local vacío al mudarse
     expect(destino.casasCompradas).toContain('jugador-a');
   });
 
@@ -79,18 +80,16 @@ describe('cambiarResidencia (Doc 2.5/2.6, comando nuevo)', () => {
 
     const { origen, destino } = cambiarResidencia(facciones, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-a');
 
-    expect(campamentoDe(origen, heroes)).toEqual([]);
+    expect(campamentoDe(origen!, heroes)).toEqual([]);
     expect(campamentoDe(destino, heroes).map((e) => e.id)).toEqual(['e1']);
   });
 
-  it('un huérfano (sin residencia de la que salir) es rechazado', () => {
+  it('un ciudadano sin plaza (vive en un campamento) entra sin dejar ninguna', () => {
     const { asentamientoA, asentamientoB, facciones } = fundarDosAsentamientosDeFaccion();
-    // jugador-c es ciudadano tras comprar casa en B; luego se le quita la casa (simulando conquista) → huérfano.
-    const conC = comprarCasa(facciones, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-c');
-    const bSinC: Asentamiento = { ...conC.asentamiento, casasCompradas: [] };
-    expect(() => cambiarResidencia(conC.facciones, [asentamientoA, bSinC], asentamientoA.id, 'jugador-c')).toThrow(
-      FaccionInvalidaError
-    );
+    const conC = facciones.map((f) => (f.id === asentamientoB.faccionId ? otorgarCiudadania(f, 'jugador-c') : f));
+    const { origen, destino } = cambiarResidencia(conC, [asentamientoA, asentamientoB], asentamientoB.id, 'jugador-c');
+    expect(origen).toBeUndefined();
+    expect(destino.casasCompradas).toContain('jugador-c');
   });
 
   it('un jugador de otra Facción no puede residir aquí', () => {

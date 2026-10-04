@@ -23,15 +23,10 @@ export const CAMPO_CARGO: Record<CargoTipo, keyof Asentamiento['cargos']> = {
   sacerdote: 'sacerdoteId',
 };
 
-/** Residencia (Doc 2.5): fundar el asentamiento o comprar casa en él son las dos vías, equivalentes a
+/** Residencia (Doc 2.5): haberlo fundado o haberse mudado a él (`casasCompradas`) son las dos vías, equivalentes a
  * efectos de qué puede hacer el jugador ahí. */
 export function esResidente(asentamiento: Asentamiento, heroeId: string): boolean {
   return asentamiento.heroesFundadoresIds.includes(heroeId) || asentamiento.casasCompradas.includes(heroeId);
-}
-
-/** Reside en ALGÚN asentamiento distinto del indicado — un jugador solo puede residir en uno (Doc 2.1). */
-export function resideEnOtroAsentamiento(asentamientos: Asentamiento[], asentamientoId: string, heroeId: string): boolean {
-  return asentamientos.some((a) => a.id !== asentamientoId && esResidente(a, heroeId));
 }
 
 /**

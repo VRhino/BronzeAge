@@ -774,7 +774,7 @@ export function proyectarParaJugador(
   // El jugador ve SIEMPRE por donde ha andado él, tenga bandera o no. El tick graba ese rastro en
   // `Jugador.exploracionPersonal` mientras su columna sea huérfana (`grabarExploracionPersonal`), y hay que
   // fundirlo con la memoria de la Facción: un ciudadano cuya columna de aparición nunca se marcó con su
-  // bandera —`unirseAFaccion` funde lo andado ANTES de unirse, pero lo de después queda solo aquí— caminaría
+  // bandera —`responderSolicitud` funde lo andado ANTES de entrar, pero lo de después queda solo aquí— caminaría
   // si no por un mapa que se cierra de nuevo tras cada paso (niebla de guerra, los tres niveles).
   const exploradoDelJugador = fundirExploraciones(memoria.exploracion, jugador?.exploracionPersonal ?? SIN_EXPLORAR);
   // La niebla se calcula ANTES del objeto porque además de viajar es el filtro de los caminos: la misma

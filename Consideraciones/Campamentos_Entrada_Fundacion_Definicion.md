@@ -308,7 +308,11 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    héroe, quien recorre todas las zonas abre 6 × campamentos (120-150 de oro en un mundo de 4-5), no los 30 de D62.
    **Falta**: el bot cazador sigue buscando solo los bandidos de su plaza; los del anillo los cazará el cerebro «sin
    plaza» (paso 8).
-5. **Ingreso con lista de solicitantes del Rey** (sustituye `unirseAFaccion`); **eliminar `comprarCasa`**.
+5. ~~**Ingreso con lista de solicitantes del Rey** (sustituye `unirseAFaccion`); **eliminar `comprarCasa`**.~~ **Hecho**:
+   `solicitarIngreso` / `responderSolicitud` (solo el Rey) con `Faccion.solicitudesIds`; `comprarCasa` borrado del motor, la
+   sesión, la autorización y el canon. Quien vive en un campamento entra a vivir en una plaza de su Facción con
+   `cambiarResidencia`, que ya no exige residir antes en otra plaza. Sin invitaciones: D46 deja solo la lista del Rey.
+   **Falta**: el Rey bot que acepta (paso 8).
 6. **Fundación única** (D30): caravana de campamento sin destino, origen = campamento (atacable, D36; vuelve a él,
    D40); fondo por Facción y campamento, aportado desde el carro (D39); enganche y reclamo; caducidad con registro
    (D34, D43); la caravana de plaza llama al mismo mecanismo; cofundadores (M2); D16 en el motor; **eliminar fundar

@@ -2,7 +2,7 @@ import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
 import { dias, transcurrido, type Instante } from '../domain/tiempo';
-import { CAMPO_CARGO, esResidente, resideEnOtroAsentamiento } from './pertenencia';
+import { CAMPO_CARGO, esResidente } from './pertenencia';
 import { ReglaInvalidaError } from './errores';
 
 /** Fase A5 — payload de `faccion.nivel_subio` (ver `avanzarNivelesFaccion`). */
@@ -139,7 +139,7 @@ export function registrarDerrota(
 }
 
 /**
- * Doc 2.5: no se cambia de residencia ni se compra casa hasta pasado `CIUDADANIA.cooldownCambioResidenciaDias` desde el
+ * Doc 2.5: no se cambia de residencia hasta pasado `CIUDADANIA.cooldownCambioResidenciaDias` desde el
  * último cambio (`cambiarResidencia` o `dejarResidencia`). Quien nunca ha cambiado (`undefined`) está libre, y la
  * reubicación forzosa por conquista no cuenta. Lo llaman los comandos, que son quienes guardan el instante.
  */
@@ -149,7 +149,7 @@ export function exigirSinCooldownDeResidencia(ultimoCambioEn: Instante | undefin
   }
 }
 
-/** El asentamiento sin ese héroe como residente (ni por fundar ni por comprar casa) y sin sus cargos locales: no se gobierna donde no se vive. */
+/** El asentamiento sin ese héroe como residente (ni por fundar ni por haberse mudado) y sin sus cargos locales: no se gobierna donde no se vive. */
 function sinResidente(asentamiento: Asentamiento, heroeId: string): Asentamiento {
   const cargos = { ...asentamiento.cargos };
   for (const campo of Object.values(CAMPO_CARGO)) {
@@ -166,7 +166,7 @@ function sinResidente(asentamiento: Asentamiento, heroeId: string): Asentamiento
 /**
  * Dejar la residencia (Doc 2.5, 2026-10-02): libera la vivienda y vacía los cargos locales ahí, sin tomar otra casa. El
  * héroe sigue siendo ciudadano, y el comando lo lleva en el acto al campamento de mercenarios más cercano
- * (`acogerEnCampamentoMasCercano`) hasta que compre casa o se mude. No hay reembolso.
+ * (`acogerEnCampamentoMasCercano`) hasta que se mude a otra plaza (`cambiarResidencia`). No hay reembolso.
  */
 export function dejarResidencia(asentamientos: readonly Asentamiento[], heroeId: string): Asentamiento {
   const actual = asentamientos.find((a) => esResidente(a, heroeId));
@@ -175,40 +175,30 @@ export function dejarResidencia(asentamientos: readonly Asentamiento[], heroeId:
 }
 
 /**
- * Compra de casa (Doc 2.5): segunda vía de ciudadanía, dentro de un asentamiento de la PROPIA Facción del jugador.
- * En Fase 0 no existe todavía un registro global de "a qué Facción pertenece cada jugador" fuera de las listas
- * de ciudadanos, así que la única validación de "un jugador, una Facción" es no estar ya en OTRA lista.
- *
- * Un jugador reside en UN solo asentamiento (Doc 2.1, a petición del usuario: es lo que le permite tener como
- * mucho un escuadrón de cada tropa — ver `Escuadron.heroeId`, domain/types.ts) — por eso necesita la lista
- * COMPLETA de asentamientos, no solo el de destino, para comprobar que el jugador no reside ya en otro.
+ * Pedir el ingreso en una Facción (D5, D6, D46): entra en su lista de solicitantes, y el Rey acepta o deniega. Quien ya es ciudadano de
+ * una no pide (Doc 0: 1 y solo 1 Facción), y en una Facción NPC no se entra (D49). Pedir otra vez es pedir lo mismo: no cambia nada.
  */
-export function comprarCasa(
-  facciones: Faccion[],
-  asentamientos: Asentamiento[],
-  asentamientoId: string,
-  heroeId: string
-): { facciones: Faccion[]; asentamiento: Asentamiento } {
-  const asentamiento = asentamientos.find((a) => a.id === asentamientoId);
-  if (!asentamiento) throw new FaccionInvalidaError('El asentamiento no existe.');
-  const faccion = facciones.find((f) => f.id === asentamiento.faccionId);
-  if (!faccion) throw new FaccionInvalidaError('La Facción del asentamiento no existe.');
+export function solicitarIngreso(faccion: Faccion, facciones: readonly Faccion[], heroeId: string, esNpc: boolean): Faccion {
+  if (esNpc) throw new FaccionInvalidaError('En una Facción NPC no se entra.');
+  if (facciones.some((f) => esCiudadano(f, heroeId))) throw new FaccionInvalidaError('Ya eres ciudadano de una Facción (Doc 0: 1 y solo 1).');
+  if (faccion.solicitudesIds?.includes(heroeId)) return faccion;
+  return { ...faccion, solicitudesIds: [...(faccion.solicitudesIds ?? []), heroeId] };
+}
 
-  const yaCiudadanoDeOtra = facciones.some((f) => f.id !== faccion.id && esCiudadano(f, heroeId));
-  if (yaCiudadanoDeOtra) {
-    throw new FaccionInvalidaError('El jugador ya es ciudadano de otra Facción (Doc 0: 1 y solo 1 Facción).');
-  }
-  if (asentamiento.casasCompradas.includes(heroeId)) {
-    throw new FaccionInvalidaError('El jugador ya tiene casa en este asentamiento.');
-  }
-  if (resideEnOtroAsentamiento(asentamientos, asentamiento.id, heroeId)) {
-    throw new FaccionInvalidaError('El jugador ya reside en otro asentamiento (Doc 2.1: 1 jugador, 1 asentamiento).');
-  }
-
-  return {
-    facciones: facciones.map((f) => (f.id === faccion.id ? otorgarCiudadania(f, heroeId) : f)),
-    asentamiento: { ...asentamiento, casasCompradas: [...asentamiento.casasCompradas, heroeId] },
-  };
+/**
+ * El Rey responde a una solicitud (D46): aceptada, el héroe es ciudadano y sus solicitudes en otras Facciones caen; denegada, sale de la
+ * lista y nada más. Devuelve TODAS las Facciones porque aceptar toca las listas de las demás.
+ */
+export function responderSolicitud(facciones: readonly Faccion[], faccionId: string, heroeId: string, aceptar: boolean): Faccion[] {
+  const faccion = facciones.find((f) => f.id === faccionId);
+  if (!faccion?.solicitudesIds?.includes(heroeId)) throw new FaccionInvalidaError('Ese héroe no ha pedido entrar.');
+  if (aceptar && facciones.some((f) => esCiudadano(f, heroeId))) throw new FaccionInvalidaError('Ese héroe ya es ciudadano de otra Facción.');
+  const sinSolicitud = (f: Faccion): Faccion =>
+    f.solicitudesIds?.includes(heroeId) ? { ...f, solicitudesIds: f.solicitudesIds.filter((id) => id !== heroeId) } : f;
+  return facciones.map((f) => {
+    if (f.id === faccionId) return aceptar ? otorgarCiudadania(sinSolicitud(f), heroeId) : sinSolicitud(f);
+    return aceptar ? sinSolicitud(f) : f;
+  });
 }
 
 /**
@@ -220,8 +210,9 @@ export function comprarCasa(
  * se traslada con él (Doc 2.5/5.15.2) sin mover nada: las escuadras viven en el héroe y el campamento es su
  * residencia.
  *
- * La ciudadanía de Facción no cambia (es la misma Facción). Un HUÉRFANO —sin residencia de la que salir— usa
- * `comprarCasa`/`unirseAFaccion`, no este comando.
+ * La ciudadanía de Facción no cambia (es la misma Facción). Quien no reside en ninguna plaza —vive en un campamento de mercenarios, por
+ * ejemplo el ciudadano recién aceptado— entra sin dejar ninguna (`origen` ausente): es la única puerta a la residencia en una plaza
+ * que no es fundarla (D31: no hay compra de casa).
  *
  * Tiene cooldown (`exigirSinCooldownDeResidencia`), que comprueba el comando; sin coste.
  */
@@ -230,7 +221,7 @@ export function cambiarResidencia(
   asentamientos: Asentamiento[],
   destinoId: string,
   heroeId: string
-): { origen: Asentamiento; destino: Asentamiento } {
+): { origen: Asentamiento | undefined; destino: Asentamiento } {
   const destino = asentamientos.find((a) => a.id === destinoId);
   if (!destino) throw new FaccionInvalidaError('El asentamiento de destino no existe.');
   const faccion = facciones.find((f) => f.id === destino.faccionId);
@@ -238,9 +229,6 @@ export function cambiarResidencia(
     throw new FaccionInvalidaError('Solo se reside en un asentamiento de la propia Facción.');
   }
   const origen = asentamientos.find((a) => a.id !== destinoId && esResidente(a, heroeId));
-  if (!origen) {
-    throw new FaccionInvalidaError('El jugador no reside en ningún asentamiento: usa comprarCasa, no cambiarResidencia.');
-  }
   if (destino.casasCompradas.includes(heroeId) || destino.heroesFundadoresIds.includes(heroeId)) {
     throw new FaccionInvalidaError('El jugador ya reside en el destino.');
   }
@@ -249,7 +237,7 @@ export function cambiarResidencia(
   }
 
   return {
-    origen: sinResidente(origen, heroeId),
+    origen: origen && sinResidente(origen, heroeId),
     destino: { ...destino, casasCompradas: [...destino.casasCompradas, heroeId] },
   };
 }

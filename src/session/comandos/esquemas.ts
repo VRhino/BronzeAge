@@ -125,7 +125,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   retirarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),
   // Admin. Sin `posicion`, la gobernanza NPC busca el sitio (`buscarPosicionFundacionInicialPorDefecto`).
   crearFaccionNpc: objeto({ nombre: { type: 'string' }, posicion: PUNTO }, ['nombre']),
-  unirseAFaccion: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),
+  solicitarIngreso: objeto({ faccionId: IDENTIFICADOR }, ['faccionId']),
+  responderSolicitud: objeto({ faccionId: IDENTIFICADOR, heroeId: IDENTIFICADOR, aceptar: { type: 'boolean' } }, ['faccionId', 'heroeId', 'aceptar']),
   // Sin parámetros: el actor solo puede dejar SU PROPIA Facción — `objeto({}, [])` solo admite `{}`.
   dejarFaccion: objeto({}, []),
 
@@ -136,7 +137,6 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     { asentamientoId: IDENTIFICADOR, cargo: CARGO_FACCION, heroeId: IDENTIFICADOR },
     ['asentamientoId', 'cargo', 'heroeId']
   ),
-  comprarCasa: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
   aportarARefundacion: objeto({ recurso: RECURSO, cantidad: NUMERO }, ['recurso', 'cantidad']),
   retirarDeRefundacion: objeto({ recurso: RECURSO, cantidad: NUMERO }, ['recurso', 'cantidad']),
   comprarCaravanaDeRefundacion: objeto({ destino: objeto({ x: NUMERO, y: NUMERO }, ['x', 'y']) }, ['destino']),

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CampamentoMercenarios } from '../../domain/types';
 import { CIUDADANIA, SIMULACION } from '../../constants';
 import { GameSession } from '../gameSession';
-import { comprarCasa, dejarResidencia, residirEnCampamento } from '../comandos/cargos';
+import { cambiarResidencia, dejarResidencia, residirEnCampamento } from '../comandos/cargos';
 import { guardarEnAlmacenPersonal, sacarDelAlmacenPersonal } from '../comandos/heroe';
 import { comprarEnCampamento, reclutarEnCampamento } from '../comandos/mercenarios';
 import { exito } from '../comandos/tipos';
@@ -68,14 +68,14 @@ describe('residirEnCampamento', () => {
     expect(sesion.getState()).toBe(antes);
   });
 
-  it('cuenta para el cooldown de residencia: no se compra casa enseguida, sí pasado el plazo, y al comprarla deja el campamento', () => {
+  it('cuenta para el cooldown de residencia: no se muda a una plaza enseguida, sí pasado el plazo, y al mudarse deja el campamento', () => {
     const { sesion, asentamientoId, fundador, opc } = conCampamentos();
     sesion.ejecutar(residirEnCampamento, { heroeId: fundador, campamentoId: 'merc-1' }, opc);
 
-    expect(sesion.ejecutar(comprarCasa, { asentamientoId, heroeId: fundador }, opc).ok).toBe(false);
+    expect(sesion.ejecutar(cambiarResidencia, { destinoId: asentamientoId, heroeId: fundador }, opc).ok).toBe(false);
 
     const despues = adelantarDias(sesion, CIUDADANIA.cooldownCambioResidenciaDias);
-    expect(despues.ejecutar(comprarCasa, { asentamientoId, heroeId: fundador }, opc).ok).toBe(true);
+    expect(despues.ejecutar(cambiarResidencia, { destinoId: asentamientoId, heroeId: fundador }, opc).ok).toBe(true);
     expect(campamentoDe(despues, 'merc-1').residentesIds).toEqual([]);
   });
 });

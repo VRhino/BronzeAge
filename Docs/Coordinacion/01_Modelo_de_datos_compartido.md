@@ -125,6 +125,7 @@ Faccion
   experiencia            MONÓTONA, nunca baja (combate digno/conquista/construcción/crecer en paz/bandidos) — existente
   ciudadanosIds[]         quién tiene ciudadanía en ESTA facción, no toda la Liga — existente. Tras este
                          modelo, lista de heroeId
+  solicitudesIds?[]       heroeId que han pedido entrar; el Rey acepta o deniega (2026-10-04, D46). Solo Facciones de jugadores
   reputacion              score público -100..+100, decae hacia 0 — existente
   derrotadaPor?: string | null   faccionId que conquistó su último asentamiento, o null si colapsó sin
                                  ganador; solo mientras no tiene ninguno.

@@ -11,7 +11,8 @@
 // aquí no añadiría cobertura real.
 import { describe, expect, it } from 'vitest';
 import type { ResultadoComando } from '../comandos/tipos';
-import { activarPolitica, asignarCargoLocal, asignarRey, comprarCasa } from '../comandos/cargos';
+import { activarPolitica, asignarCargoLocal, asignarRey } from '../comandos/cargos';
+import { solicitarIngreso } from '../comandos/ingresoEnFaccion';
 import {
   alternarAutoConstruccion,
   anadirEdificioManualmente,
@@ -45,12 +46,9 @@ const CASOS: CasoIdInexistente[] = [
       sesion.ejecutar(asignarCargoLocal, { asentamientoId: 'no-existe', cargo: 'gobernador', heroeId: fundador }, OPC),
   },
   {
-    // Caso real: comprarCasa resuelve la Facción a partir del asentamiento, así que un asentamiento
-    // inexistente se traduce como Facción inválida, no como "asentamiento.no_existe" — no es un error de
-    // la tabla, es el código que de verdad devuelve el comando.
-    etiqueta: 'comprarCasa: asentamientoId',
-    codigoEsperado: 'faccion.invalida',
-    ejecutar: ({ sesion }) => sesion.ejecutar(comprarCasa, { asentamientoId: 'no-existe', heroeId: 'nuevo' }, OPC),
+    etiqueta: 'solicitarIngreso: faccionId',
+    codigoEsperado: 'faccion.no_existe',
+    ejecutar: ({ sesion }) => sesion.ejecutar(solicitarIngreso, { faccionId: 'no-existe' }, { actor: 'nuevo' }),
   },
   {
     etiqueta: 'activarPolitica: asentamientoId',

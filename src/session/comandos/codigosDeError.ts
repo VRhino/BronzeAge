@@ -49,7 +49,7 @@ export const CODIGOS_ERROR = {
   diplomaciaRelacionNoIndicada: 'diplomacia.relacion_no_indicada',
   faccionNombreVacio: 'faccion.nombre_vacio',
   faccionNombreDuplicado: 'faccion.nombre_duplicado',
-  // Membresía de Facción (a petición del usuario, 2026-08-27): `crearFaccion` y `unirseAFaccion` comparten el
+  // Membresía de Facción (a petición del usuario, 2026-08-27): `crearFaccion` y `solicitarIngreso` comparten el
   // primero (1 jugador, 1 Facción, Doc 2 "Entidades"); el segundo solo lo dispara `crearFaccion`, ver
   // `CIUDADANIA.cooldownCreacionFaccionDias`; el tercero lo dispara `dejarFaccion` cuando el actor no es
   // ciudadano de ninguna.

@@ -28,7 +28,7 @@ import {
   validarAsedio,
   velocidadDeEjercito,
 } from '../ejercitos';
-import { esResidente, resideEnOtroAsentamiento } from '../pertenencia';
+import { esResidente } from '../pertenencia';
 import { reservaDeTrigo } from '../tropas';
 import { campamentoDe, conTropa, indiceTropa, sinTropa, type EjercitoConTropa } from '../tropa';
 import {
@@ -551,7 +551,7 @@ describe('asediarPlaza: el asedio que pide `atacar` (Doc 5.12.4)', () => {
     const casa = r.asentamientos.find((a) => a.id === propio.id)!;
     expect(casa.faccionId, 'su ciudad cambió de dueño').toBe('faccion-2');
     expect(esResidente(casa, suDueno), 'ya no reside ahí').toBe(false);
-    expect(resideEnOtroAsentamiento(r.asentamientos, 'ninguno', suDueno), 'ni en ningún otro sitio').toBe(false);
+    expect(r.asentamientos.some((a) => esResidente(a, suDueno)), 'ni en ningún otro sitio').toBe(false);
   });
 });
 

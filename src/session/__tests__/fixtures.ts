@@ -5,7 +5,8 @@
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from '../comandos/fundarAsentamiento';
-import { comprarCasa } from '../comandos/cargos';
+import { cambiarResidencia } from '../comandos/cargos';
+import { responderSolicitud, solicitarIngreso } from '../comandos/ingresoEnFaccion';
 import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { campamentoDe } from '../../engine/tropa';
 import { instanteDeTick, isoDeInstante } from '../estado';
@@ -21,7 +22,7 @@ export const MOMENTO = isoDeInstante(instanteDeTick(0));
 export const ACTOR = 'jugador-test';
 export const OPC = { actor: ACTOR };
 
-/** Segundo residente del asentamiento de la fixture, que entra comprando casa. */
+/** Segundo residente del asentamiento de la fixture: pide entrar, el Rey (el fundador) acepta y se muda a la plaza (D46). */
 export const VECINO = 'jugador-vecino';
 
 /**
@@ -100,7 +101,7 @@ export function partidaConAsentamiento(gameId = 'test'): {
   const ra = sesion.ejecutar(fundarAsentamiento, { faccionId }, OPC);
   const asentamientoId = ra.datos!.asentamientoId;
   const fundador = sesion.getState().asentamientos[0]!.heroesFundadoresIds[0]!;
-  sesion.ejecutar(comprarCasa, { asentamientoId, heroeId: VECINO }, OPC);
+  entraDeVecino(sesion, faccionId, asentamientoId, fundador, VECINO);
   return { sesion: conHeroe(sesion, VECINO), faccionId, asentamientoId, fundador, vecino: VECINO };
 }
 
@@ -155,4 +156,11 @@ export function frenteACampamento(unity = true) {
     { batallasEnUnity: unity }
   );
   return { sesion: conCampamento, fundador, vecino, columna: columnaDe(fundador).id, columnaVecino: columnaDe(vecino).id };
+}
+
+/** Un héroe entra en la Facción por la única puerta que hay (D46: pide, el Rey acepta) y se muda a esa plaza (`cambiarResidencia`). */
+export function entraDeVecino(sesion: GameSession, faccionId: string, asentamientoId: string, rey: string, heroeId: string): void {
+  sesion.ejecutar(solicitarIngreso, { faccionId }, { actor: heroeId });
+  sesion.ejecutar(responderSolicitud, { faccionId, heroeId, aceptar: true }, { actor: rey });
+  sesion.ejecutar(cambiarResidencia, { destinoId: asentamientoId, heroeId }, { actor: heroeId });
 }
