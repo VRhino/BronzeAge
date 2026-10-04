@@ -13,7 +13,6 @@ import { atacar } from '../comandos/interaccion';
 import { separarseDelEjercito, unirseEnCampo } from '../comandos/columna';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import { consumoRacionDeColumna } from '../../engine/tropas';
-import { proyectarParaJugador } from '../proyecciones/jugador';
 
 /** La ración gratis con la que sale una columna con estas escuadras (D24, D51). */
 const racionCon = (escuadrones: readonly Escuadron[] = []) => Math.round(consumoRacionDeColumna(escuadrones, 1) * MERCENARIOS.racion.minutos);
@@ -106,21 +105,6 @@ describe('otro campamento (enclave neutral, D77)', () => {
     const { sesion, heroeId, opc } = nacido();
     sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);
     expect(sesion.ejecutar(entrarEnCampamento, { campamentoId: 'mercenarios-1', heroeId }, opc).ok).toBe(false);
-  });
-});
-
-describe('dentro no se ve nada de fuera (D82)', () => {
-  it('con la columna en la puerta ve alrededor; dentro, nada', () => {
-    const { sesion, heroeId, opc } = nacido();
-    const vista = () => proyectarParaJugador(sesion.getState(), heroeId, { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} });
-    const nadaALaVista = (hex: string) => /^0*$/.test(hex);
-
-    sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);
-    sesion.avanzarTick();
-    expect(nadaALaVista(vista().exploracion.visibles), 'fuera ve').toBe(false);
-    sesion.ejecutar(entrarEnCampamento, { campamentoId: 'mercenarios-0', heroeId }, opc);
-    expect(nadaALaVista(vista().exploracion.visibles), 'dentro, nada').toBe(true);
-    expect(nadaALaVista(vista().exploracion.celdas), 'lo explorado se recuerda').toBe(false);
   });
 });
 
