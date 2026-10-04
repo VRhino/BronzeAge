@@ -106,7 +106,11 @@ son de nadie. Queda un reparto limpio:
 - **Facciones NPC:** los vecinos. Con quien comerciar, y de quien aprender.
 - **Otros jugadores:** la guerra de verdad.
 
-## 5. Abierto: qué HACE un huésped
+## 5. ~~Abierto: qué HACE un huésped~~ — DESCARTADO (2026-10-03)
+
+> **Descartado por decisión del usuario.** No se puede entrar en una Facción NPC, así que no hay vida de huésped
+> dentro de ella. El vestíbulo es ahora el campamento de mercenarios: ver
+> `Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md` (D49). Se conserva el texto como historia.
 
 Idea del usuario, y no es un adorno: **es el contenido del vestíbulo**. Sin ella la fase de huésped es
 "espera a poder fundar", que es la peor versión de esto.
@@ -143,4 +147,4 @@ y porque decide si el vestíbulo es un sitio donde se juega o una sala de espera
    columna, el contrato de fundación sin `posicion`, y la columna que se disuelve al fundar reutilizando
    `cruzarLaPuerta`. Ver `Jugador_Situado_Definicion.md` §5.9 para el detalle y lo que cambió del plan
    original.
-6. **Aparte, sin fecha:** qué hace un huésped (§5).
+6. ~~**Aparte, sin fecha:** qué hace un huésped (§5).~~ Descartado (2026-10-03).

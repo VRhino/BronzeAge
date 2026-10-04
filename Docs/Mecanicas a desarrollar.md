@@ -16,7 +16,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
 | 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
 | 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
-| 16 | JUGADOR | Qué hace un huésped: vida dentro de una Facción NPC | ✘ nada |
 | 18 | INTEL | Taberna + intel como asset con revelado temporal | ✘ nada |
 | 19 | POLÍTICA | El mapa político como entidad | ✘ nada |
 | 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
@@ -117,27 +116,6 @@ Falta decidir qué hace subir el liderazgo (combatir, ganar, tiempo al mando, ca
 Los **escuadrones** progresan por nivel y experiencia (Doc 5.16.3), sin cambiar nunca de tropa (Doc 5.8); el
 motor aún usa veteranía (§31). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
 fuente.
-
-## 16. Qué hace un huésped: vida dentro de una Facción NPC
-
-**Estado: idea, sin diseñar.** Sale de la entrada al mundo
-(`Consideraciones/Entrada_Al_Mundo_Definicion.md` §5) y no es un adorno: **es el contenido del vestíbulo**.
-Sin ella, la fase de huésped —antes de poder fundar— se reduce a "espera", que es la peor versión de esto.
-
-La idea del usuario: **ganar posición dentro de una Facción IA haciendo cosas para ella** — escoltar sus
-caravanas, explorar, buscar cosas en el mapa de campaña. Acciones que sirven de tutorial y que dan recompensa
-dentro de esa misma Facción.
-
-**Lo que ya existe y reutilizaría:** la escolta de caravanas (`Caravana.escolta` / `adjuntarCaravana`, Doc
-5.13.3), la exploración (`engine/exploracion.ts`), la reputación de Facción y la experiencia (`REPUTACION`,
-`aplicarAjustesExperiencia`).
-
-**Lo que no existe, y es el corazón de la mecánica:** *standing por jugador dentro de una Facción*. Hoy la
-reputación y la experiencia son de la Facción entera, no de cada uno de sus miembros. Sin eso no hay nada que
-subir ni nada que recompensar.
-
-**Lo que hay que decidir:** qué encargos existen y quién los publica; qué se gana (¿acceso a reclutar? ¿casa?
-¿aval para fundar?); y si ese standing sobrevive a marcharse de la Facción.
 
 ## 18. Taberna + intel como asset
 
