@@ -90,9 +90,11 @@ juego reciben `heroeId`; auditoría y autorización conservan también `usuarioI
 la IA de juego. Se llaman "héroes bot" para no confundirlos con los humanos. Un héroe bot es un `Heroe` con
 `controlador: 'bot'`: no tiene `Usuario` ni `Membresia` (su `jugadorId` es `null`) y su dueño es la Facción
 NPC, que ya actúa como `servicio_npc`. La unicidad "un héroe por jugador y mundo" solo aplica a los humanos.
-Los crea el admin al crear una Facción NPC (`crearFaccionNpc`, doc 02 §4.2): nacen como los fundadores de su
-primer asentamiento y viven en la partida como cualquier otro héroe, con `controlador: 'bot'`. En el mundo de BronzeAge los mueve la gobernanza NPC
-(`Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §4.9); en batalla los maneja la IA de Conquest (CQ-002).
+**Actualizado 2026-10-04 (D52-D58):** un héroe bot nace como cualquiera, con `crearHeroe` en un campamento, desde una
+cuenta de bot (`CODIGO_REGISTRO_BOTS`, que el servidor marca y que da `controlador: 'bot'`; su `jugadorId` es el de esa
+cuenta). En el mundo de BronzeAge lo mueve el runner de bots desde fuera, por los comandos de jugador
+(`Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md`); en batalla lo maneja la IA de Conquest (CQ-002). Ya no hay Facciones
+NPC ni `faccionesNpcIds`.
 
 ### Tabla de identidad y ámbito
 

@@ -68,14 +68,13 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 ## 1.3 Onboarding de nuevos jugadores
 - **El héroe nace DENTRO de un campamento de mercenarios (1.9b) que elige**, como residente, sin columna en el mapa. La pantalla de elección muestra todos los campamentos con dos cifras: cuántos lo eligieron al nacer y cuántos residen ahora (solo informativas, sin tope). Desde allí sale al mundo cuando quiere.
 - **Fundar (2026-10-04, D7, D19, D30)**: **solo con una Caravana de Fundación**; no se funda a pie. Una Facción sin asentamientos la compra en un campamento de mercenarios con el fondo de sus héroes (1.8, 1.9b); quien ya tiene plaza la lanza desde ella (1.8). La del campamento se lleva enganchada a la columna y **se funda DONDE SE ESTÁ** (`fundar`): caminar hasta un buen emplazamiento es la primera decisión de la Facción, y es lo que da sentido a explorar antes de asentarse.
-- **SE LLEGA A UN MUNDO HABITADO, no a un vacío.** El servidor arranca con Facciones NPC ya asentadas, y son
-  **vecinos, no depredadores**: se defienden si las tocan, pero no dan caza a los recién llegados, y ofrecen
-  con qué comerciar. Un novato no es aliado de nadie, así que unas Facciones que cazaran a todo lo no aliado
-  lo matarían antes de que tuviera con qué defenderse.
+- **Nadie nace asentado (D53, 2026-10-04).** El servidor arranca sin Facciones: todas nacen por el mismo camino,
+  campamento → caravana → `fundar`. Los **héroes bot** (5.15.6) llegan escalonados a los campamentos como llegarían
+  los jugadores, conviven con ellos y cuentan como residentes (D54, D56); un mundo con Facciones ya puestas falsearía
+  lo que pasa de verdad en el servidor.
 
-  El mundo no es por eso inofensivo: el peligro de base lo dan los **bandidos** (1.9), que atacan por su
-  cuenta y no son de nadie. El reparto es **bandidos la amenaza, Facciones NPC los vecinos, otros jugadores la
-  guerra**.
+  El peligro de base lo dan los **bandidos** (1.9), que atacan por su cuenta y no son de nadie. El reparto es
+  **bandidos la amenaza, los demás héroes —humanos o bots— los vecinos y la guerra**.
 - **FUNDAR NO ES EL PRIMER ACTO.** Para fundar una Facción nueva hacen falta **varios ciudadanos** y **haber
   sido ciudadano de alguna antes** — fundar es un **cisma**, gente que ya vivía en algún sitio y se marcha a
   hacer el suyo. Sin esto, mil jugadores que entran son mil Facciones y mil aldeas en el primer minuto; la

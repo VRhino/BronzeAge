@@ -169,10 +169,13 @@ function comandaEscuadrones(estado: GameSessionState, heroeId: string, escuadron
   });
 }
 
-/** ¿El jugador tiene algún escuadrón dentro de ese ejército? Un ejército inexistente se deja pasar — lo
- * rechaza el propio comando, mismo criterio fail-open que el resto de resolutores de este archivo. */
+/** ¿El jugador va en ese ejército, con escuadrones o sin ellos (un viajero solo también va, Doc 5.12.1)? Un ejército
+ * inexistente se deja pasar — lo rechaza el propio comando, mismo criterio fail-open que el resto de resolutores de este
+ * archivo. */
 function participaEnEjercito(estado: GameSessionState, heroeId: string, ejercitoId: string): boolean {
-  if (!estado.ejercitos.some((e) => e.id === ejercitoId)) return true;
+  const ejercito = estado.ejercitos.find((e) => e.id === ejercitoId);
+  if (!ejercito) return true;
+  if (ejercito.participantes.some((p) => p.heroeId === heroeId)) return true;
   const heroe = estado.heroes.find((h) => h.id === heroeId);
   return (heroe?.escuadrones ?? []).some((e) => e.contenedor.tipo === 'ejercito' && e.contenedor.ejercitoId === ejercitoId);
 }
@@ -256,7 +259,6 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   sacarDelAlmacenPersonal: { rolesPermitidos: ['jugador'] },
   retirarGuarnicion: { rolesPermitidos: ['jugador'] },
   // Las Facciones NPC las crea el admin, ya asentadas; ninguna Facción de jugador pasa a la IA.
-  crearFaccionNpc: { rolesPermitidos: ['administrador_partida', 'administrador_global'] },
   asignarRey: {
     rolesPermitidos: ['jugador'],
     // Primera asignación abierta a cualquier ciudadano (el motor ya exige que el designado lo sea); una vez

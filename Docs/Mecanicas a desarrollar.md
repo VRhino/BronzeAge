@@ -342,9 +342,9 @@ presencia con las sesiones y las cuentas de bot (paso 3, Doc 1.10.6). Falta:
 - **D33b con Conquest**: reentrar en una batalla al reconectar, «abandonar batalla» con derrota, y el resultado del
   bando para quien se cayó. Hoy quien está en una batalla no sale del mundo hasta que termina.
 - **Retirar las cuentas de bot** (D54) cuando lleguen jugadores: el servidor ya sabe cuáles son; falta la operación.
-- **Cerebro «sin plaza»** (paso 4, D53-D59): bots-héroe que llegan escalonados a los campamentos, con los tres
-  perfiles; un bot sin residencia hoy no hace nada. Con él se borra el andamio `crearFaccionNpc` y
-  `faccionesNpcIds`.
+- **Cerebro «sin plaza»** (paso 4, D53-D59): hecho el arranque en los campamentos (`src/bots/cerebro/sinPlaza.ts`,
+  llegadas en `src/bots/llegadas.ts`, batch nuevo). Falta medirlo con batch cuando la ración en minutos esté en el
+  motor (decisión del usuario 2026-10-04: con 60 de trigo fijos nadie llega a los bandidos del anillo).
 - **Adaptador remoto** (proceso aparte por HTTP + tiempo real) para el servidor.
 - **Calibrar con batch** el ritmo (cada 5 ticks), las prudencias heredadas de la gobernanza y el margen sobre la
   defensa inspeccionada antes de una campaña.

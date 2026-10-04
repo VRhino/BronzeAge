@@ -21,8 +21,8 @@ comandos que `GameStore` ya expone hoy. Contexto y motivación: [2_Estudio_Evolu
 > cargos, ciudadanía, escuadrones, mando— es ahora de su `Heroe` (`domain/types.ts`), uno por jugador y partida
 > (`Docs/Coordinacion/01` §1). Donde este documento dice `jugadorId` como dueño en el juego, hoy es `heroeId`. La
 > matriz viva es `session/comandos/autorizacion.ts` (76 comandos, exhaustiva en compilación); la tabla de abajo
-> es la de diseño, sobre `GameStore`. Cambios que la tabla no recoge: `alternarFaccionNpc` se retiró (las
-> Facciones NPC las crea el admin con `crearFaccionNpc`); los combates se dan desde la columna (`atacar`,
+> es la de diseño, sobre `GameStore`. Cambios que la tabla no recoge: `alternarFaccionNpc` y `crearFaccionNpc` se
+> retiraron (D58: los bots llegan por los campamentos como jugadores, doc 12); los combates se dan desde la columna (`atacar`,
 > `perseguir`), no desde una plaza; `cancelarBatalla` lo puede el héroe que la inició o el admin; y los
 > servidores de batalla de Conquest tienen su propia credencial, fuera de esta matriz (`SERVIDORES_BATALLA`).
 
@@ -163,7 +163,7 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | `solicitarIngreso` | jugador | no ser ya ciudadano de ninguna Facción (`faccion.ya_pertenece`); no en una Facción NPC (D49). Pedir otra vez no cambia nada. Sin cooldown — solo `crearFaccion` lo tiene |
 | `responderSolicitud` | jugador | ser el Rey de esa Facción (D31, D46) |
 | `dejarFaccion` | jugador | ser ciudadano de alguna (`faccion.no_pertenece` si no); sin parámetros, solo puede dejar la PROPIA. Si era Rey, el trono pasa al siguiente ciudadano (queda vacío solo si era el último — Doc 2.2); si era Embajador, libera la embajada. NO libera residencia ni cargos locales (limitación documentada en Doc 2.5) |
-| ~~`alternarFaccionNpc`~~ (retirado 2026-09-14) | — | Sustituido por `crearFaccionNpc`, solo del admin |
+| ~~`alternarFaccionNpc`~~ (retirado 2026-09-14) | — | Sustituido por `crearFaccionNpc`, retirado a su vez el 2026-10-04 (D58) |
 | `asignarRey` | jugador | ciudadano de la Facción y (trono vacío **o** ser el Rey vigente). Nota: `crearFaccion` ya deja Rey, así que "trono vacío" solo se da tras una conquista/fusión |
 | `asignarEmbajador` | jugador | ciudadano de la Facción y ser su Rey |
 | `asignarCargoLocal` (Gobernador) | jugador | **ser el REY de la Facción dueña del asentamiento** (2026-09-10 — antes: cualquier residente). Acto de nivel Facción: no exige residir ni estar presente |

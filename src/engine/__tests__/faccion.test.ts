@@ -41,16 +41,15 @@ describe('solicitudes de ingreso (D46, D49)', () => {
   const [faccion] = crearFacciones();
 
   it('pedir entra en la lista una vez; en una Facción NPC no se entra; un ciudadano no pide', () => {
-    const pedida = solicitarIngreso(faccion!, [faccion!], 'nuevo', false);
+    const pedida = solicitarIngreso(faccion!, [faccion!], 'nuevo');
     expect(pedida.solicitudesIds).toEqual(['nuevo']);
-    expect(solicitarIngreso(pedida, [pedida], 'nuevo', false)).toBe(pedida);
-    expect(() => solicitarIngreso(faccion!, [faccion!], 'nuevo', true)).toThrow(FaccionInvalidaError);
+    expect(solicitarIngreso(pedida, [pedida], 'nuevo')).toBe(pedida);
     const conCiudadano = otorgarCiudadania(faccion!, 'ya');
-    expect(() => solicitarIngreso(conCiudadano, [conCiudadano], 'ya', false)).toThrow(FaccionInvalidaError);
+    expect(() => solicitarIngreso(conCiudadano, [conCiudadano], 'ya')).toThrow(FaccionInvalidaError);
   });
 
   it('aceptada da ciudadanía y quita la solicitud; denegada solo la quita', () => {
-    const pedida = solicitarIngreso(faccion!, [faccion!], 'nuevo', false);
+    const pedida = solicitarIngreso(faccion!, [faccion!], 'nuevo');
     expect(responderSolicitud([pedida], pedida.id, 'nuevo', true)[0]).toMatchObject({ solicitudesIds: [], ciudadanosIds: expect.arrayContaining(['nuevo']) });
     const denegada = responderSolicitud([pedida], pedida.id, 'nuevo', false)[0]!;
     expect(denegada.solicitudesIds).toEqual([]);

@@ -325,9 +325,9 @@ partida — lo que simplifica el diseño: no hace falta prever recálculos ni in
 cambiarla, y el comando administrativo que la modifica puede ser de uso excepcional (corrección/moderación),
 no una palanca de juego.
 
-> **Actualizado 2026-09-14:** ese comando (`alternarFaccionNpc`) se retiró. Las Facciones NPC las crea el admin
-> ya asentadas (`crearFaccionNpc`) y siguen siéndolo hasta que se destruyen; ninguna Facción de jugador pasa a
-> la IA. `faccionesNpcIds` sigue en `GameSessionState` por el mismo criterio de arriba.
+> **Actualizado 2026-09-14:** ese comando (`alternarFaccionNpc`) se retiró. **Actualizado 2026-10-04 (D52, D58):**
+> `faccionesNpcIds` ya no existe. Los bots juegan desde fuera como jugadores (doc 12) y ninguna Facción es «NPC»: no
+> hay dato de partida que lo marque. El criterio de arriba sigue valiendo para lo que sí cambia el tick.
 
 ### 7.3 Mutación de `Mapa`: resuelta (2026-08-25)
 

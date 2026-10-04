@@ -8,7 +8,8 @@ import type { GameSession } from '../session/gameSession';
 import type { ResultadoComando } from '../session/comandos/tipos';
 import { REGISTRO_COMANDOS, type DatosDe, type ParamsDe, type TipoComando } from '../session/comandos/registro';
 import { verificarAutorizacion } from '../session/comandos/autorizacion';
-import { proyectarParaJugador } from '../session/proyecciones/jugador';
+import { campamentosParaElegir, proyectarParaJugador } from '../session/proyecciones/jugador';
+import { crearHeroe, type ParamsCrearHeroe } from '../session/comandos/crearHeroe';
 import type { GeometriaAsentamientos } from '../session/estado';
 import type { Asentamiento } from '../domain/types';
 import type { Mapa } from '../world/mapa';
@@ -18,6 +19,9 @@ import { trazadoParaAsentamiento } from '../engine/trazado';
 /** Lo que ve un héroe: su proyección de jugador. */
 export type Vista = ReturnType<typeof proyectarParaJugador>;
 
+/** Lo que ve quien todavía no tiene héroe: los campamentos donde puede nacer (D3, D79). */
+export type CampamentoElegible = ReturnType<typeof campamentosParaElegir>[number];
+
 /** La respuesta a un comando. `noAutorizado` es el 403 de la API: el comando ni se intentó. */
 export type Respuesta<R> = ResultadoComando<R> & { noAutorizado?: string };
 
@@ -26,6 +30,13 @@ export interface PuertoBot {
   actuar<T extends TipoComando>(heroeId: string, tipo: T, params: ParamsDe<T>): Respuesta<DatosDe<T>>;
   /** La geografía del mundo: pública y la misma para todos (un cliente la pide una vez por `mapaId`). */
   mapa(): Mapa;
+  /** La pantalla de elección de quien llega (D3, D79). */
+  campamentos(): CampamentoElegible[];
+  /**
+   * Llega un bot (§8.3): como un humano, crea su héroe en el campamento que eligió. Su cuenta es de bot, así que el héroe nace
+   * `controlador: 'bot'`. Devuelve su id, o `undefined` si se rechaza.
+   */
+  crearHeroe(jugadorId: string, params: Omit<ParamsCrearHeroe, 'controlador'>): string | undefined;
 }
 
 /**
@@ -54,6 +65,8 @@ export function puertoEnProceso(sesion: GameSession): PuertoBot {
   return {
     observar: (heroeId) => proyectarParaJugador(sesion.getState(), heroeId, geometria()),
     mapa: () => sesion.getMapa(),
+    campamentos: () => campamentosParaElegir(sesion.getState()),
+    crearHeroe: (jugadorId, params) => sesion.ejecutar(crearHeroe, { ...params, controlador: 'bot' }, { actor: jugadorId }).datos?.heroeId,
     actuar: (heroeId, tipo, params) => {
       const chequeo = verificarAutorizacion(tipo, params, sesion.getState(), { rol: 'jugador', heroeId });
       if (!chequeo.autorizado) return { ok: false, eventos: [], version: sesion.getState().version, noAutorizado: chequeo.motivo };

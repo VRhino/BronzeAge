@@ -1,10 +1,8 @@
-// El héroe como personaje: su alta (`crearHeroe`), la de las Facciones NPC con sus héroes bot (`crearFaccionNpc`),
-// y los comandos que hace sobre sí mismo (puntos y loadouts, doc 02 §4.2).
+// El héroe como personaje: su alta (`crearHeroe`) y los comandos que hace sobre sí mismo (puntos y loadouts, doc 02 §4.2).
 import { describe, expect, it } from 'vitest';
 import type { Heroe } from '../../domain/types';
 import { GameSession } from '../gameSession';
 import { crearHeroe } from '../comandos/crearHeroe';
-import { crearFaccionNpc } from '../comandos/crearFaccionNpc';
 import { asignarGuarnicion, borrarLoadout, guardarLoadout, repartirPuntos, retirarGuarnicion } from '../comandos/heroe';
 import { cambiarResidencia } from '../comandos/cargos';
 import { HEROE, LIDERAZGO } from '../../constants';
@@ -189,24 +187,3 @@ describe('guarnición (Doc 5.15.3)', () => {
   });
 });
 
-describe('crearFaccionNpc', () => {
-  it('crea la Facción ya asentada y gobernada por el NPC, con sus héroes bot y el primero como Rey', () => {
-    const sesion = GameSession.crear('npc', { seed: 1 });
-    const r = sesion.ejecutar(crearFaccionNpc, { nombre: 'Tirinto' });
-
-    expect(r.ok).toBe(true);
-    const estado = sesion.getState();
-    const faccion = estado.facciones.find((f) => f.id === r.datos!.faccionId)!;
-    const asentamiento = estado.asentamientos.find((a) => a.id === r.datos!.asentamientoId)!;
-    const bots = estado.heroes.filter((h) => asentamiento.heroesFundadoresIds.includes(h.id));
-
-    expect(estado.faccionesNpcIds).toEqual([faccion.id]);
-    expect(asentamiento.faccionId).toBe(faccion.id);
-    expect(bots).toHaveLength(5);
-    expect(bots.every((h) => h.controlador === 'bot' && h.jugadorId === null && faccion.ciudadanosIds.includes(h.id))).toBe(true);
-    expect(bots.every((h) => h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === asentamiento.id)).toBe(true);
-    expect(faccion.reyId).toBe(bots[0]!.id);
-
-    expect(sesion.ejecutar(crearFaccionNpc, { nombre: 'tirinto' }).codigoError).toBe('faccion.nombre_duplicado');
-  });
-});

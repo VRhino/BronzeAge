@@ -14,7 +14,6 @@ import { dejarFaccion } from './dejarFaccion';
 import { crearHeroe } from './crearHeroe';
 import { abrirAlijo, aportarARefundacion, comprarCaravanaDeRefundacion, comprarEnCampamento, pedirPrestamo, reclutarEnCampamento, reponerPrestamo, retirarDeRefundacion } from './mercenarios';
 import { asignarGuarnicion, borrarLoadout, guardarEnAlmacenPersonal, guardarLoadout, repartirPuntos, retirarGuarnicion, sacarDelAlmacenPersonal } from './heroe';
-import { crearFaccionNpc } from './crearFaccionNpc';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, dejarResidencia, designarCapital, residirEnCampamento } from './cargos';
 import { anexionar, declararGuerra, fusionar, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
 import {
@@ -78,7 +77,6 @@ const MANEJADORES = {
   guardarEnAlmacenPersonal,
   sacarDelAlmacenPersonal,
   retirarGuarnicion,
-  crearFaccionNpc,
   activarPolitica,
   asignarCargoLocal,
   asignarEmbajador,

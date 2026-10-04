@@ -106,7 +106,6 @@ export class GameSession {
       mercadoMercenario: mercadoMercenarioInicial(instanteDeTick(0)),
       memoriaPorFaccion: {},
       tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),
-      faccionesNpcIds: [],
       tick: 0,
       version: 0,
       historialHeroes: {},

@@ -379,7 +379,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    *
    * Al crearla, otorga a quien la crea `Membresia` de `administrador_partida` sobre ella. Sin eso, un
    * administrador global no podría ejecutar ni siquiera los comandos que la matriz le reserva
-   * (`crearFaccionNpc`), porque esa matriz razona sobre roles DE PARTIDA.
+   * (`cancelarBatalla`), porque esa matriz razona sobre roles DE PARTIDA.
    */
   app.post<{ Body: CrearPartidaBody }>('/admin/partidas', { schema: ESQUEMA_CREAR_PARTIDA }, async (request, reply) => {
     const { gameId, seed, region, forzar, intervaloTickMs } = request.body;
@@ -477,7 +477,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
   /**
    * Comandos ejecutados como administrador. La matriz sigue mandando: casi todos los comandos son de rol
    * `jugador` y aquí se rechazarán con `rol_insuficiente`, que es lo correcto — tener acceso técnico no
-   * concede autoridad dentro del juego (doc 5). Hoy solo `crearFaccionNpc` admite administración.
+   * concede autoridad dentro del juego (doc 5). Hoy solo `cancelarBatalla` admite administración.
    */
   app.post<{ Params: ParametrosGameId; Body: EjecutarComandoBody }>(
     '/admin/partidas/:gameId/comandos',

@@ -10,8 +10,8 @@ Nace de dos decisiones del usuario (`Consideraciones/Campamentos_Entrada_Fundaci
   escalonada, tres perfiles), con esa lógica fuera del motor.
 
 > **Estado (2026-10-04):** decidido el bot como cliente (§3), auto-comercio, ritmo y alta de bots (§8) y el orden
-> de trabajo (§9). **Hechos los pasos 1 (diario, §5.1), 2 (runner de bots, §10.3) y 3 (presencia e identidad,
-> §11).** Siguiente: paso 4 (cerebro «sin plaza», depende del diseño de campamentos).
+> de trabajo (§9). **Hechos los pasos 1 (diario, §5.1), 2 (runner de bots, §10.3), 3 (presencia e identidad,
+> §11) y 4 (cerebro «sin plaza» y batch nuevo, §12).** Queda el adaptador remoto y medir con batch.
 
 ## 1. Cómo es hoy (medido en el código)
 
@@ -368,3 +368,47 @@ mundo hasta que termina. Reglas en el canon, Doc 1.10.6.
 - **Identidad** (§8.3): `POST /v1/registro` con `CODIGO_REGISTRO_BOTS` da de alta una cuenta de bot (la credencial
   local lleva `bot: true`). Su héroe nace con `controlador: 'bot'`, que pone el servidor y no el cliente. Ningún otro
   poder. El runner en proceso no usa cuentas (actúa con los héroes directamente); las usará el adaptador remoto.
+
+## 12. Paso 4: el bot sin plaza (hecho 2026-10-04)
+
+Sobre los campamentos ya implementados (pasos 0-7 del plan de campamentos). Código: `src/bots/cerebro/sinPlaza.ts`,
+`src/bots/llegadas.ts`; el cerebro manda a un bot a `sinPlaza` mientras no reside en ninguna plaza.
+
+- **Llegada (D56, D57)**: `planDeLlegadas(semilla, total, días)` reparte grupos de tres amigos (50 %), solitarios (30 %) y
+  tardíos (20 %, en la segunda mitad). Quien da de alta (el batch, y el runner remoto cuando exista) crea el héroe por el
+  puerto (`puerto.crearHeroe`, que en el servidor es el registro con `CODIGO_REGISTRO_BOTS` + `crearHeroe`) en el campamento
+  con menos residentes de la pantalla de elección (`puerto.campamentos()`, la misma lista que ve un humano sin héroe).
+- **Facción**: el líder de los amigos y el solitario la crean; los demás piden entrar (los amigos, a la de su líder; el
+  tardío, a una al azar) y, sin respuesta en 2 h, crean la suya. El Rey bot acepta toda solicitud.
+- **Su Facción ya tiene plaza** (tardío aceptado, o compañero que fundó sin él): sale, `cambiarResidencia` y marcha a ella.
+- **Economía del campamento**: pide la leva prestada (solo los lanceros: con las tres comería el triple) y la repone; con el
+  oro de botín compra lo que falta del coste de la caravana y lo aporta al fondo, el oro al final; con el fondo completo,
+  compra la caravana.
+- **Explorar sin tropa**: sin un bandido conocido al alcance, uno sale solo (sin tropa no come) a dar la vuelta al anillo
+  (8 puntos a 200, que su vista de 80 cubre) y abre los alijos que ve. Lo que ve de los bandidos va a la pizarra, porque
+  los campamentos de bandidos no tienen memoria en la proyección.
+- **Cazar**: sale con tropa solo a un bandido apuntado al que le llegue la ración (D81) de ida y vuelta, con el coste del
+  terreno (`mapa.costeEnPunto`, público). Uno de nivel 1 lo caza solo; para más, hacen falta `poder / 30 + 1` héroes
+  listos dentro: el de menor id sale como ejército con el bandido de rumbo y los demás se le unen en el mismo tick (el
+  runner hace una segunda pasada para los que llama la pizarra). Tras el combate, los invitados se separan y el líder se
+  repliega a la puerta.
+- **Fundar**: el titular no saca la caravana sin el anillo explorado en las últimas 3 h. Espera hasta 40 min a que estén
+  dentro los compañeros que viven allí, elige el sitio más cercano que el mapa público da por bueno (no agua, recomendable,
+  a la exclusión de los campamentos, lejos de las plazas que conoce y con el camino lejos de los bandidos que conoce) y sale
+  con todos como ejército hacia él, cada uno con su leva de escolta; engancha la caravana en la puerta. Si `fundar` dice que
+  no, descarta el sitio y se repliegan.
+- **Batch (D58)**: `scripts/run-batch-sim.ts` ya no funda Facciones en el tick 0: llegan `BATCH_BOTS` bots (30 por
+  defecto) a lo largo de `BATCH_DIAS_LLEGADA` días (3). Checkpoint con `bots` y `diasLlegada`.
+- **Borrado (D58)**: `crearFaccionNpc` (queda como fixture de tests, `session/__tests__/faccionAsentadaDePrueba.ts`) y
+  `faccionesNpcIds`. «En una Facción NPC no se entra» (D49) deja de tener objeto.
+- **Arreglos de paso**: la autorización de `adjuntarCaravana`/`soltarCaravana` (y el resto de comandos «de quien va en el
+  ejército») cuenta a quien va sin escuadras; antes un viajero solo no podía enganchar su propia caravana.
+
+Huecos de campamentos que destapó y que arregló la otra línea de trabajo: la ración se filtraba al unirse y separarse
+(`f84297f`), el ejército de campamento salía sin rumbo (`dbdd464`) y no podía volver (`bca66af`), y la ración fija de 60 no
+llegaba al anillo con el coste real del terreno (D81, `c192ed8`).
+
+**Medido a mano (3 días, 3 amigos, semillas 1, 3 y 7)**: forman la Facción, exploran y abren alijos, y cazan poco. Hay
+anillos con bandidos de nivel 3 (hacen falta 5 héroes) o en terreno caro (un nivel 1 a 199 pide 183 de trigo de ida y vuelta,
+con 124 de ración). En 3 días el fondo no llega. Es calibración del bloque (D51), para el batch.
+

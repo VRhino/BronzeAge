@@ -5,7 +5,6 @@ import { WORLDGEN_VERSION } from '../src/worldgen';
 import type { Mapa } from '../src/world/mapa';
 import type { EstadoSimulacion } from '../src/engine/simulation';
 import { tecnologiasDe } from '../src/engine/tecnologia';
-import { evaluarViabilidadFundacion } from '../src/engine/settlement';
 import { nivelActualDe, tieneMercadoActivo, edificiosPorTipoYEstado, nutricionPoblacionDe } from '../src/engine/asentamientoQuery';
 import { alcanzoTopeDeViviendas, reclamosDeFuentes } from '../src/engine/construction';
 import { esResidente } from '../src/engine/pertenencia';
@@ -19,13 +18,10 @@ import { campamentoDe } from '../src/engine/tropa';
 import { NECESIDADES } from '../src/constants';
 const NECESIDADES_UMBRAL_AMPLIACION = NECESIDADES.umbralAlmacenAmpliacion;
 import { GameSession, type PartidaExportada } from '../src/session/gameSession';
-import { crearFaccionNpc } from '../src/session/comandos/crearFaccionNpc';
 import { puertoEnProceso } from '../src/bots/puerto';
-import { RunnerDeBots } from '../src/bots/runner';
+import { RunnerDeBots, type Perfil } from '../src/bots/runner';
+import { planDeLlegadas } from '../src/bots/llegadas';
 import { cerebroDeBot } from '../src/bots/cerebro';
-import type { RecursoTipo } from '../src/domain/types';
-/** Minerales que desempatan el sitio inicial de cada Facción (los mismos que usa `crearFaccionNpc`). */
-const MINERALES_BONUS_FUNDACION: RecursoTipo[] = ['cobre', 'estano', 'oro', 'livestock'];
 import {
   CATEGORIA_POR_TIPO,
   celdaMinimaDeEdificio,
@@ -74,7 +70,9 @@ if (DESDE && (process.env['BATCH_SEED'] || process.env['BATCH_FACCIONES'] || pro
   throw new Error('Con BATCH_DESDE, semilla, Facciones, perfil y trigo vienen del checkpoint: quita BATCH_SEED/BATCH_FACCIONES/BATCH_PERFIL/BATCH_TRIGO_X.');
 }
 const SEED = DESDE?.seed ?? num('BATCH_SEED', 7);
-const NUM_FACCIONES = DESDE?.facciones ?? num('BATCH_FACCIONES', 100);
+/** Bots-héroe que llegan a lo largo de `DIAS_LLEGADA` días (D56, D58), en vez de Facciones fundadas en el tick 0. */
+const NUM_BOTS = DESDE?.bots ?? num('BATCH_BOTS', 30);
+const DIAS_LLEGADA = DESDE?.diasLlegada ?? num('BATCH_DIAS_LLEGADA', 3);
 const TICKS = num('BATCH_TICKS', 3000);
 /** Primer y último tick ABSOLUTOS de esta corrida: al reanudar, el reloj sigue donde lo dejó el checkpoint. */
 const TICK_INICIAL = DESDE?.tick ?? 0;
@@ -92,9 +90,6 @@ if (CHECKPOINT_TICKS.size > 0 && !CHECKPOINT_DIR) {
   throw new Error('BATCH_CHECKPOINT_DIR es obligatorio si se usa BATCH_CHECKPOINT_TICKS.');
 }
 // Separación mínima entre las capitales iniciales. 400 (2026-09-28, decisión del usuario; antes 100): en un mapa de
-// 2000×2000, 12 Facciones a 100 nacían apiñadas (vecino más cercano entre 175 y 280 para la mitad) y a las dos
-// semanas no les quedaba sitio donde fundar.
-const MIN_SEPARACION = 400;
 
 /**
  * `BATCH_PERFIL=<nucleos|caminera|compacta|gremial>`: fuerza el perfil de trazado (doc trazado §E6.23) en
@@ -140,7 +135,8 @@ interface CheckpointBatch {
   worldgenVersion?: number;
   layoutVersion?: number;
   seed: number;
-  facciones: number;
+  bots: number;
+  diasLlegada: number;
   tick: number;
   partida: PartidaExportada;
   perfilForzado: string | null;
@@ -173,52 +169,8 @@ function distancia(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-interface CandidatoFundacion {
-  posicion: Point;
-  tienePiedra: boolean;
-  tieneOtroMineral: boolean;
-  /** Leñeras que admite el bosque a su alcance — ver `MIN_CAPACIDAD_LENERAS`. */
-  capacidadLeneras: number;
-  score: number;
-}
-
-/**
- * Selección de posiciones para la fundación INICIAL del batch — alineada con el sitio inicial de `crearFaccionNpc`
- * (`src/session/comandos/crearFaccionNpc.ts`), que ya resolvió las mismas dos decisiones para la partida real. La divergencia previa entre ambas (piedra como puntuación blanda en vez de
- * requisito, y un barrido que arrancaba en paso 100) hacía que el 76% de los asentamientos del batch fundaran
- * sin piedra alcanzable — sin Cantera, el gate de nivel 2 (Doc Fase_0_6: 3 de 6 extractores) es inalcanzable
- * sin importar cuánto avance la simulación (ver `issues/granjas_no_escalan_con_poblacion.md`, que arrancó
- * investigando por qué el batch nunca alcanzaba nivel 2).
- *
- * - **Piedra es requisito, no puntuación**: un candidato sin ningún nodo de piedra en el radio inicial NO
- *   entra en el pool. Mismo criterio que el NPC, misma razón: sin Cantera, ese asentamiento ya nació sin
- *   poder cumplir el gate.
- * - **El barrido no pasa de paso 25** — más grueso que eso se salta clusters de recursos enteros entre dos
- *   puntos consecutivos, el mismo hallazgo que documenta `PASO_BUSQUEDA_FUNDACION_INICIAL` en el NPC. Un paso
- *   más fino (10) sigue disponible como refuerzo SOLO si 25 no basta para separar `cantidad` posiciones — el
- *   batch, a diferencia del NPC, tiene que colocar muchas a la vez y necesita más candidatos que el NPC
- *   (que solo busca una).
- * - **El desempate usa `MINERALES_BONUS_FUNDACION`** (la misma lista que `crearFaccionNpc`): cuenta
- *   de 0 a 4 según cuántos de esos minerales tiene alcanzables, igual que el NPC — antes el batch usaba su
- *   propia lista de 3 sin oro, que además es uno de los 6 tipos del gate de nivel 2 (`mina`).
- */
-/**
- * Cuántas Leñeras da de sí el bosque que un asentamiento tendría a su alcance, sumando la capacidad de todos
- * los bosques cuyo borde entra en el radio indicado (`Mapa.capacidadLeneras`, 1-3 según el tamaño del disco).
- *
- * Existe porque `evaluarViabilidadFundacion` solo responde SÍ/NO (`bosqueAlcanzable`: hay al menos un bosque
- * tocando el radio inicial), y eso resultó ser una garantía mucho más débil de lo que parecía — ver
- * `MIN_CAPACIDAD_LENERAS`.
- */
-function capacidadLenerasEnRadio(mapa: Mapa, centro: Point, radio: number): number {
-  return mapa
-    .listarBosques()
-    .filter((b) => Math.hypot(b.centro.x - centro.x, b.centro.y - centro.y) < radio + b.radio)
-    .reduce((suma: number, b) => suma + mapa.capacidadLeneras(b.id), 0);
-}
-
 /** `BATCH_RUINAS_DIAG`: bosques cuyo borde entra en el círculo (centro, radio) y su capacidad de Leñeras
- * sumada. Igual criterio que `capacidadLenerasEnRadio`/`mapa.hayBosqueEnRadio`, pero devuelve también el
+ * sumada. Igual criterio que `mapa.hayBosqueEnRadio`, pero devuelve también el
  * conteo — para separar "0 bosques alcanzables" de "1 bosque pero da poco". */
 function bosquesEnRadio(mapa: Mapa, centro: Point, radio: number): { n: number; capacidad: number } {
   const alcanzables = mapa
@@ -247,68 +199,6 @@ function pctSueloOcupado(mapa: Mapa, asentamientos: Asentamiento[]): number {
     }
   }
   return habitables === 0 ? 0 : Math.round((ocupadas / habitables) * 1000) / 10;
-}
-
-/**
- * Capacidad mínima de Leñeras que se le exige a un emplazamiento del batch (a petición del usuario,
- * 2026-09-04): **un asentamiento del laboratorio tiene que poder farmear madera desde que se funda, y no
- * pararse por no tener de dónde sacarla.**
- *
- * Por qué hacía falta, medido: el filtro anterior era `viabilidad.recomendable`, que solo exige UN bosque
- * tocando el radio inicial. Con eso, los asentamientos del batch se quedaban en **5,5 Leñeras de media
- * contra un tope de 10** (`EXTRACCION_MAXIMOS.porTipo`) — o sea limitados por el bosque de su zona, no por
- * la regla. Y esa media era el cuello de botella real de todo lo demás: con la madera racionada, el
- * Almacén (50 de madera) nunca llegaba a pagarse —CERO almacenes en 600 ticks— y sin capacidad de
- * almacenaje el excedente de trigo se perdía contra el techo, que es lo que hacía imposible medir la
- * logística de campaña (ver `Consideraciones/Movimiento_Ejercitos_Definicion.md` §10.1).
- *
- * Se mide sobre el radio de nivel 2 y no sobre el inicial: la zona CRECE, y lo que interesa es si el sitio da
- * madera durante la vida del asentamiento, no solo el primer minuto.
- */
-const MIN_CAPACIDAD_LENERAS = 8;
-
-function recolectarCandidatos(mapa: Mapa, paso: number): CandidatoFundacion[] {
-  const candidatos: CandidatoFundacion[] = [];
-  const radioMaduro = ZONA_INFLUENCIA.radioMaximoPorNivel[2] ?? ZONA_INFLUENCIA.radioInicial;
-  for (let x = paso; x < mapa.limites.ancho; x += paso) {
-    for (let y = paso; y < mapa.limites.alto; y += paso) {
-      const posicion = { x, y };
-      const viabilidad = evaluarViabilidadFundacion(mapa, posicion, []);
-      if (!viabilidad.recomendable) continue;
-      const tienePiedra = viabilidad.recursosEnRadio.some((r) => r.tipo === 'piedra' && r.nodos > 0);
-      if (!tienePiedra) continue;
-      const capacidadLeneras = capacidadLenerasEnRadio(mapa, posicion, radioMaduro);
-      if (capacidadLeneras < MIN_CAPACIDAD_LENERAS) continue;
-      const bonusMinerales = MINERALES_BONUS_FUNDACION.filter((tipo) =>
-        viabilidad.recursosEnRadio.some((r) => r.tipo === tipo && r.nodos > 0)
-      ).length;
-      candidatos.push({
-        posicion,
-        tienePiedra,
-        tieneOtroMineral: bonusMinerales > 0,
-        capacidadLeneras,
-        // La madera manda en el desempate por encima de los minerales: sin ella no se construye NADA, y los
-        // minerales solo deciden qué se puede construir después.
-        score: capacidadLeneras * 10 + bonusMinerales,
-      });
-    }
-  }
-  return candidatos;
-}
-
-function elegirPosicionesFundacion(mapa: Mapa, cantidad: number): CandidatoFundacion[] {
-  const elegidas: CandidatoFundacion[] = [];
-  for (const paso of [25, 10]) {
-    if (elegidas.length >= cantidad) break;
-    const pool = recolectarCandidatos(mapa, paso).sort((a, b) => b.score - a.score);
-    for (const candidato of pool) {
-      if (elegidas.length >= cantidad) break;
-      if (elegidas.every((p) => distancia(p.posicion, candidato.posicion) >= MIN_SEPARACION)) {
-        elegidas.push(candidato);
-      }
-    }
-  }
-  return elegidas;
 }
 
 // --- Métricas de TRAZADO URBANO (Etapa 0 del rediseño "anclas y satélites") ---
@@ -1033,27 +923,38 @@ async function main() {
   // por el puerto, con comandos (doc 12 §10). Reanudando, la partida entera viene del checkpoint.
   const sesion = DESDE ? GameSession.importar(DESDE.partida) : GameSession.crear('batch', { seed: SEED });
   let mapa: Mapa = sesion.getMapa();
-  if (DESDE) console.log(`[reanudado] ${process.env['BATCH_DESDE']} · seed ${SEED} · ${NUM_FACCIONES} Facciones · ticks ${TICK_INICIAL + 1}-${TICK_FINAL}`);
+  if (DESDE) console.log(`[reanudado] ${process.env['BATCH_DESDE']} · seed ${SEED} · ${NUM_BOTS} bots · ticks ${TICK_INICIAL + 1}-${TICK_FINAL}`);
 
-  const candidatos = DESDE ? [] : elegirPosicionesFundacion(mapa, NUM_FACCIONES);
-  if (!DESDE) {
-    const conPiedra = candidatos.filter((c) => c.tienePiedra).length;
-    const conOtroMineral = candidatos.filter((c) => c.tieneOtroMineral).length;
-    console.log(`Posiciones con piedra alcanzable: ${conPiedra}/${candidatos.length}`);
-    console.log(`Posiciones con algún otro mineral alcanzable: ${conOtroMineral}/${candidatos.length}`);
-  }
-
-  // Andamio hasta el paso 4 (doc 12 §9): las Facciones de bots nacen ya asentadas, cada una con sus cinco héroes bot.
-  const idsFundados: string[] = [];
-  for (let i = 0; i < candidatos.length; i++) {
-    const r = sesion.ejecutar(crearFaccionNpc, { nombre: `Faccion ${i + 1}`, posicion: candidatos[i]!.posicion });
-    if (r.ok && r.datos) idsFundados.push(r.datos.asentamientoId);
-  }
-  const bots = new RunnerDeBots(puertoEnProceso(sesion), cerebroDeBot, { semilla: SEED });
-  const darDeAltaBots = () => {
-    for (const h of sesion.getState().heroes) if (h.controlador === 'bot') bots.alta(h.id);
+  // Los bots llegan escalonados por los campamentos, como llegarían los jugadores (D56, D57): cada uno crea su héroe en el
+  // campamento con menos residentes. Al reanudar, los que ya estaban vuelven a jugar (sin perfil: su memoria es desechable) y
+  // siguen llegando los que faltan.
+  const puerto = puertoEnProceso(sesion);
+  const bots = new RunnerDeBots(puerto, cerebroDeBot, { semilla: SEED });
+  for (const h of sesion.getState().heroes) if (h.controlador === 'bot') bots.alta(h.id);
+  const llegadas = planDeLlegadas(SEED, NUM_BOTS, DIAS_LLEGADA).filter((l) => l.tick > TICK_INICIAL);
+  let creados = sesion.getState().heroes.filter((h) => h.controlador === 'bot').length;
+  const llegarEn = (tick: number) => {
+    while (llegadas[0]?.tick === tick) {
+      const llegada = llegadas.shift()!;
+      const campamento = [...puerto.campamentos()].sort((a, b) => a.residentes - b.residentes || (a.id < b.id ? -1 : 1))[0];
+      if (!campamento) continue;
+      let lider: string | undefined;
+      for (let i = 0; i < llegada.cuantos; i++) {
+        const n = ++creados;
+        const id = puerto.crearHeroe(`bot-${n}`, {
+          displayName: `Bot ${n}`,
+          campamentoId: campamento.id,
+          classDefinitionId: 'Spear',
+          genero: n % 2 === 0 ? 'femenino' : 'masculino',
+          avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
+        });
+        if (!id) continue;
+        lider ??= id;
+        const perfil: Perfil = llegada.perfil === 'amigos' ? { tipo: 'amigos', lider } : { tipo: llegada.perfil };
+        bots.alta(id, perfil);
+      }
+    }
   };
-  darDeAltaBots();
 
   // `BATCH_RUINAS_DIAG=1`: bosques alcanzables al fundar, medidos al RADIO INICIAL (30) y al techo de nivel 1
   // (60) — no al radio maduro de nivel 2 (90) que usa el filtro de fundación. La hipótesis: un sitio se funda
@@ -1070,20 +971,6 @@ async function main() {
       hijo,
     });
   };
-  if (diagFundacion && candidatos.length > 0) {
-    for (let i = 0; i < candidatos.length; i++) registrarBosquesAlFundar(idsFundados[i]!, candidatos[i]!.posicion, false);
-    // ¿Los 40 iniciales están pegados? Caja envolvente como % del mapa + distancia media al vecino más cercano.
-    const ps = candidatos.map((c) => c.posicion);
-    const minX = Math.min(...ps.map((p) => p.x)), maxX = Math.max(...ps.map((p) => p.x));
-    const minY = Math.min(...ps.map((p) => p.y)), maxY = Math.max(...ps.map((p) => p.y));
-    const cajaPct = (((maxX - minX) * (maxY - minY)) / (mapa.limites.ancho * mapa.limites.alto)) * 100;
-    const vecinoMasCercano = ps.map((p) => Math.min(...ps.filter((q) => q !== p).map((q) => Math.hypot(p.x - q.x, p.y - q.y))));
-    const nnMedia = vecinoMasCercano.reduce((a, b) => a + b, 0) / vecinoMasCercano.length;
-    console.log(
-      `\n[FUNDACIÓN INICIAL] ${ps.length} asentamientos · caja envolvente = ${cajaPct.toFixed(0)}% del mapa · ` +
-        `distancia media al vecino más cercano = ${nnMedia.toFixed(0)} (separación mínima exigida ${MIN_SEPARACION})`
-    );
-  }
 
   let estado: EstadoSimulacion = sesion.getState();
 
@@ -1228,8 +1115,8 @@ async function main() {
           }
         }
       }
+      llegarEn(tick);
       bots.trasTick(tick, tickR.eventos);
-      darDeAltaBots();
       estado = sesion.getState();
       // Lo que hicieron los bots este tick, por sus eventos (los de sus comandos, posteriores al del tick).
       const deBots = sesion.getState().eventosDominio.filter((e) => e.version > tickR.version);
@@ -1306,14 +1193,15 @@ async function main() {
     }
 
     if (CHECKPOINT_TICKS.has(tick)) {
-      const destino = resolve(CHECKPOINT_DIR!, `batch-seed${SEED}-f${NUM_FACCIONES}-tick${tick}.json`);
+      const destino = resolve(CHECKPOINT_DIR!, `batch-seed${SEED}-b${NUM_BOTS}-tick${tick}.json`);
       mkdirSync(dirname(destino), { recursive: true });
       writeFileSync(destino, JSON.stringify({
         version: 2,
         worldgenVersion: WORLDGEN_VERSION,
         layoutVersion: LAYOUT_VERSION,
         seed: SEED,
-        facciones: NUM_FACCIONES,
+        bots: NUM_BOTS,
+        diasLlegada: DIAS_LLEGADA,
         tick,
         partida: sesion.exportar(),
         perfilForzado: PERFIL_FORZADO ?? null,

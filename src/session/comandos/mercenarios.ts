@@ -67,7 +67,7 @@ export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantid
   exigirEnSuCampamento(estado, heroe.id);
   const faccion = estado.facciones.find((f) => esCiudadano(f, heroe.id));
   const tieneAsentamientos = (faccionId: string) => estado.asentamientos.some((a) => a.faccionId === faccionId);
-  const humanasVivas = estado.facciones.filter((f) => !estado.faccionesNpcIds.includes(f.id) && tieneAsentamientos(f.id));
+  const humanasVivas = estado.facciones.filter((f) => tieneAsentamientos(f.id));
   const adoptadas = tecnologiasDelCampamento(estado.tecnologia, humanasVivas, ctx.instante);
 
   const r = reclutarEngine(

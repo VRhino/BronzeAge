@@ -724,33 +724,17 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       method: 'POST',
       url: '/v1/admin/partidas/g1/comandos',
       headers: admin,
-      payload: { tipo: 'crearFaccionNpc', params: { nombre: ' ' } },
+      payload: { tipo: 'cancelarBatalla', params: { battleId: 'no-existe' } },
     });
 
     // 200, no 403: quien crea la partida recibe Membresia `administrador_partida` (`otorgarAdministracion`),
-    // así que SÍ pasa la matriz de autorización — lo que rechaza esta petición es el nombre vacío, no el rol.
+    // así que SÍ pasa la matriz de autorización — lo que rechaza esta petición es que la batalla no existe, no el rol.
     // Un cuerpo `{error}` de un 403 también carecería de `proyeccion`: por eso se mira el 200 primero.
     expect(res.statusCode).toBe(200);
     expect(res.json().resultado.ok).toBe(false);
     expect(res.json().proyeccion).toBeUndefined();
   });
 
-  it('crearFaccionNpc: el administrador que crea la partida la crea ya asentada, con sus héroes bot', async () => {
-    const { admin } = await partidaCreada('g1');
-    const res = await app.inject({
-      method: 'POST',
-      url: '/v1/admin/partidas/g1/comandos',
-      headers: admin,
-      payload: { tipo: 'crearFaccionNpc', params: { nombre: 'Tirinto' } },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json().resultado.ok).toBe(true);
-
-    const estado = (await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin })).json();
-    expect(estado.faccionesNpcIds).toEqual([res.json().resultado.datos.faccionId]);
-    expect(estado.heroes.filter((h: { controlador: string }) => h.controlador === 'bot')).toHaveLength(5);
-  });
 
   it('sin héroe, la proyección lo dice y solo se acepta crearHeroe (doc 02 §4.2)', async () => {
     await partidaCreada('g1');
@@ -949,7 +933,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `reclutarEnCampamento` (Doc 1.9b): reclutar en un campamento de mercenarios.
       // +1 con `comprarEnCampamento` (Doc 1.9b): el mercado del campamento.
       // +2 con `conectarse`/`desconectarse` (Doc 1.10.6): entrar y salir del mundo.
-      expect(cuerpo.oneOf.length).toBe(98);
+      // -1 sin `crearFaccionNpc` (D53, D58): ninguna Facción nace asentada.
+      expect(cuerpo.oneOf.length).toBe(97);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });
