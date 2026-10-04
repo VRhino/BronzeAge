@@ -12,7 +12,7 @@ import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import { conEscuadrones } from '../../engine/tropa';
 import { conHeroe, partidaConAsentamiento } from './fixtures';
 
-const PARAMS = { displayName: 'Ana', classDefinitionId: 'Spear', genero: 'femenino' as const, avatar: { cabezaId: 'c1', peloId: 'p1', barbaId: '', cejasId: 'e1' } };
+const PARAMS = { displayName: 'Ana', campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino' as const, avatar: { cabezaId: 'c1', peloId: 'p1', barbaId: '', cejasId: 'e1' } };
 
 /** Partida con el héroe de `jugador-1`, retocado vía `importar` (hoy nada da puntos de atributo, como en Conquest;
  * decisión del usuario 2026-09-14). */
@@ -31,19 +31,23 @@ function heroeCon(cambios: (heroeId: string) => Partial<Heroe>) {
 const dosDeLeva = (heroeId: string) => [escuadronDePrueba('esc-1', heroeId, 'lenadores'), escuadronDePrueba('esc-2', heroeId, 'granjeros')];
 
 describe('crearHeroe', () => {
-  it('crea el héroe del jugador, lo hace aparecer con su columna, y solo uno por partida', () => {
+  it('crea el héroe del jugador DENTRO del campamento que elige, como residente, y solo uno por partida (D74, D79)', () => {
     const sesion = GameSession.crear('heroe', { seed: 42 });
     const r = sesion.ejecutar(crearHeroe, PARAMS, { actor: 'jugador-1' });
 
     expect(r.ok).toBe(true);
     const heroe = sesion.getState().heroes.find((h) => h.id === r.datos!.heroeId)!;
-    expect(heroe).toMatchObject({ jugadorId: 'jugador-1', controlador: 'humano', displayName: 'Ana', ubicacion: { tipo: 'columna' } });
-    expect(sesion.getState().ejercitos.find((e) => e.liderId === heroe.id)?.origenAsentamientoId).toBe('');
+    expect(heroe).toMatchObject({ jugadorId: 'jugador-1', controlador: 'humano', displayName: 'Ana', ubicacion: { tipo: 'mercenarios', campamentoId: 'mercenarios-0' } });
+    expect(sesion.getState().ejercitos.some((e) => e.liderId === heroe.id), 'sin columna en el mapa').toBe(false);
+    const campamento = sesion.getState().campamentosMercenarios.find((c) => c.id === 'mercenarios-0')!;
+    expect(campamento.residentesIds).toEqual([heroe.id]);
+    expect(campamento.eligieronComoInicial).toBe(1);
 
     // Otra vez, como jugador o ya como su héroe: rechazado.
     expect(sesion.ejecutar(crearHeroe, PARAMS, { actor: 'jugador-1' }).codigoError).toBe('heroe.ya_existe');
     expect(sesion.ejecutar(crearHeroe, PARAMS, { actor: heroe.id }).codigoError).toBe('heroe.ya_existe');
     expect(sesion.ejecutar(crearHeroe, { ...PARAMS, displayName: '  ' }, { actor: 'jugador-2' }).codigoError).toBe('heroe.nombre_vacio');
+    expect(sesion.ejecutar(crearHeroe, { ...PARAMS, campamentoId: 'no-existe' }, { actor: 'jugador-2' }).codigoError).toBe('heroe.campamento_desconocido');
   });
 
   it('nace como en Conquest: nivel 1, sin puntos, 500 de bronce y el loadout "Default" vacío y activo', () => {

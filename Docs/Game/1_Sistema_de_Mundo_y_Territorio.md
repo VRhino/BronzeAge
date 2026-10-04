@@ -66,8 +66,8 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 - FRONTERAS: al chocar dos zonas en expansión se genera un LÍMITE DURO — ninguna zona sigue creciendo en esa dirección. Solo se rompe si el asentamiento rival cae o su zona se debilita/reduce (guerra u otros medios). Las fronteras son "vivas", reflejan el poder relativo de cada bando en cada momento.
 
 ## 1.3 Onboarding de nuevos jugadores
-- Jugador nuevo aparece en un punto ALEATORIO del mapa con una "caravana de asentamiento" para fundar donde decida.
-- **Aparecer ahí es literal (ver 1.10)**: el héroe nace situado en mundo abierto, con su columna, y se mueve por el mapa hasta el sitio donde quiera fundar. **Se funda DONDE SE ESTÁ** — no se elige un punto cualquiera sobre el mapa desde fuera. Caminar hasta un buen emplazamiento es la primera decisión del juego, y es lo que da sentido a explorar antes de asentarse.
+- **El héroe nace DENTRO de un campamento de mercenarios (1.9b) que elige**, como residente, sin columna en el mapa. La pantalla de elección muestra todos los campamentos con dos cifras: cuántos lo eligieron al nacer y cuántos residen ahora (solo informativas, sin tope). Desde allí sale al mundo cuando quiere.
+- **Fundar (ver 1.10)**: hoy el héroe sale del campamento con su columna y se mueve por el mapa hasta el sitio donde quiera fundar. **Se funda DONDE SE ESTÁ** — no se elige un punto cualquiera sobre el mapa desde fuera. Caminar hasta un buen emplazamiento es la primera decisión del juego, y es lo que da sentido a explorar antes de asentarse.
 - **SE LLEGA A UN MUNDO HABITADO, no a un vacío.** El servidor arranca con Facciones NPC ya asentadas, y son
   **vecinos, no depredadores**: se defienden si las tocan, pero no dan caza a los recién llegados, y ofrecen
   con qué comerciar. Un novato no es aliado de nadie, así que unas Facciones que cazaran a todo lo no aliado
@@ -179,7 +179,13 @@ Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ningun
 
 - **Colocación.** Todos existen **desde que se crea el mundo** y no aparecen más (`colocarCampamentosIniciales`): puntos al azar en tierra firme, pegados a un bosque si lo hay a menos de `MERCENARIOS.margenBosque`, a una **distancia mínima** entre ellos (`MERCENARIOS.separacion`: 900 en el playtest, unos 4 en un mapa de 2000; 600 para más gente, de 6 a 9) y a `margenBorde` del borde. El azar sale de una semilla derivada de la del mapa: misma seed, mismos campamentos.
 - **Forma.** Layout fijo, que no cambia: taberna, dos viviendas y mercado, más **un edificio militar** (barracón, galería de tiro o caballeriza) que se elige al nacer. Hay **3 variantes de aspecto** (el *origen*), sin efecto sobre lo que hace. Aspecto y edificio militar salen de la posición, no del azar de la partida.
-- **Niebla.** Se conoce **como un camino**: si la Facción ha explorado alguna vez el terreno donde está, lo recuerda; no hace falta verlo ahora, porque un campamento no se mueve ni desaparece.
+- **Niebla.** Se conoce **como un camino**: si la Facción ha explorado alguna vez el terreno donde está, lo recuerda; no hace falta verlo ahora, porque un campamento no se mueve ni desaparece. El campamento donde reside o donde está dentro lo conoce siempre.
+- **Dentro.** El campamento tiene un «dentro», como una plaza: el héroe está en su vista de asentamiento (edificios y layout). Dentro no se come ni hay combate. **Cualquier héroe puede entrar en cualquier campamento**, con su columna en la puerta (`entrarEnCampamento`, a `MOVIMIENTO.radioPuerta`):
+  - en **el suyo**, la columna se deshace: la tropa queda en el campamento y el carro se vacía en el almacén personal; lo que no cabe se queda en el carro, aparcado en la puerta;
+  - en **otro**, entra con su columna, que queda en la puerta intacta.
+  Al salir (`salirDelCampamento`), en el suyo elige la tropa y lo que carga desde el almacén personal; en otro, retoma la columna con la que entró. Residir no exige estar allí.
+- **Las acciones del campamento** (reclutar, comprar, el fondo de refundación) se hacen dentro o con la columna en su puerta.
+- **Protección.** A menos de `MERCENARIOS.radioProteccion` (60) de un campamento nadie inicia un combate: ni jugadores (`atacar` se rechaza desde allí y contra lo que está allí) ni bandidos.
 - **Residencia** (paso 2): cualquier héroe puede residir en él, y es la casa de quien se queda sin asentamiento; se acaba el huérfano (Doc 2.5, 5.15.5). Almacén personal de cada héroe: Doc 2.5.
 - **Reclutamiento** (paso 3): reclutar y reponer las tropas de sus edificios, con tecnología propia, pagando oro y gastando la población del campamento (Doc 5.8, 6.5b). Población: viviendas × 50, recupera 10 por hora.
 - **Mercado** (paso 4): solo vende, con stock limitado, y el oro cobrado se destruye (Doc 3.3b).

@@ -146,7 +146,7 @@ describe('reclutarEnCampamento', () => {
       ...payload,
       state: {
         ...state,
-        heroes: state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: { oro } } : h)),
+        heroes: state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: { oro }, ubicacion: { tipo: 'mercenarios' as const, campamentoId: 'merc-1' } } : h)),
         tecnologia: {
           ...state.tecnologia,
           primeros: { ...state.tecnologia.primeros, escudos_ligeros: { faccionId: base.faccionId, en: 0 as never } },
@@ -189,7 +189,7 @@ describe('comprarEnCampamento', () => {
     const payload = base.sesion.exportar();
     const sesion = GameSession.importar({
       ...payload,
-      state: { ...payload.state, heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: { oro: 500 } } : h)) },
+      state: { ...payload.state, heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: { oro: 500 }, ubicacion: { tipo: 'mercenarios' as const, campamentoId: 'merc-1' } } : h)) },
     });
 
     const r = sesion.ejecutar(comprarEnCampamento, { recurso: 'madera', cantidad: 10 }, base.opc);
@@ -199,6 +199,13 @@ describe('comprarEnCampamento', () => {
     expect(heroe.almacenPersonal?.['madera']).toBe(10);
     expect(heroe.almacenPersonal?.['oro']).toBe(500 - r.datos!.oro);
     expect(campamentoDe(sesion, 'merc-1').mercado['madera']).toBe(90);
+  });
+
+  it('rechazo: residiendo pero lejos del campamento (D75: dentro o con la columna en su puerta)', () => {
+    const base = conCampamentos();
+    base.sesion.ejecutar(residirEnCampamento, { heroeId: base.fundador, campamentoId: 'merc-1' }, base.opc);
+    const r = base.sesion.ejecutar(comprarEnCampamento, { recurso: 'madera', cantidad: 1 }, base.opc);
+    expect(r.codigoError).toBe('campamento.lejos');
   });
 
   it('rechazo: sin residir en un campamento, y no versiona', () => {
@@ -235,7 +242,7 @@ describe('refundar desde el campamento', () => {
         ...payload.state,
         asentamientos: [],
         campamentosMercenarios: payload.state.campamentosMercenarios.map((c) => (c.id === 'merc-1' ? { ...c, residentesIds: [base.fundador] } : c)),
-        heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: costo } : h)),
+        heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: costo, ubicacion: { tipo: 'mercenarios' as const, campamentoId: 'merc-1' } } : h)),
       },
     });
     return { ...base, sesion, costo };

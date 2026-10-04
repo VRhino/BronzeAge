@@ -45,19 +45,28 @@ async function partidaCreada(gameId = 'g1', seed = 42) {
   return { admin, res };
 }
 
-function heroeDe(nombre: string) {
-  return { displayName: nombre, classDefinitionId: 'Spear', genero: 'femenino', avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } };
+function heroeDe(nombre: string, campamentoId = 'mercenarios-0') {
+  return { displayName: nombre, campamentoId, classDefinitionId: 'Spear', genero: 'femenino', avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } };
 }
 
 /** Usuario corriente unido a la partida como jugador, ya con su héroe: sin él no puede hacer nada más. */
-async function jugadorEn(gameId: string, sujetoId = 'ana') {
+/** `campamentoId`: dos que fundan a pie necesitan salir de campamentos distintos, o fundarían en el mismo sitio. */
+async function jugadorEn(gameId: string, sujetoId = 'ana', campamentoId = 'mercenarios-0') {
   const auth = await sesionDe(sujetoId);
   await app.inject({ method: 'POST', url: `/v1/jugador/partidas/${gameId}/membresia`, headers: auth });
   await app.inject({
     method: 'POST',
     url: `/v1/jugador/partidas/${gameId}/comandos`,
     headers: auth,
-    payload: { tipo: 'crearHeroe', params: heroeDe(sujetoId) },
+    payload: { tipo: 'crearHeroe', params: heroeDe(sujetoId, campamentoId) },
+  });
+  // ponytail: sale del campamento para tener columna y fundar a pie; se va con fundar a pie (paso 6).
+  const heroeId = (await app.inject({ method: 'GET', url: `/v1/jugador/partidas/${gameId}`, headers: auth })).json().heroeId;
+  await app.inject({
+    method: 'POST',
+    url: `/v1/jugador/partidas/${gameId}/comandos`,
+    headers: auth,
+    payload: { tipo: 'salirDelCampamento', params: { campamentoId, heroeId, escuadronIds: [], carga: {} } },
   });
   return auth;
 }
@@ -494,7 +503,7 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     });
     // El admin creador de la partida no es ciudadano de ninguna Facción del juego, así que "fundar" con su
     // usuario no pertenece a este escenario — se usa un segundo jugador para tener una Facción rival real.
-    const luis = await jugadorEn('g1', 'luis');
+    const luis = await jugadorEn('g1', 'luis', 'mercenarios-1');
     await app.inject({
       method: 'POST',
       url: '/v1/jugador/partidas/g1/comandos',
@@ -527,7 +536,7 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     });
     const asentamientoAna = fundadaAna.json().resultado.datos.asentamientoId;
 
-    const luis = await jugadorEn('g1', 'luis');
+    const luis = await jugadorEn('g1', 'luis', 'mercenarios-1');
     const creadaLuis = await app.inject({
       method: 'POST',
       url: '/v1/jugador/partidas/g1/comandos',
@@ -586,13 +595,13 @@ describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
       payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } },
     });
 
-    // Dos: el alta del héroe (versión 1, dentro de `jugadorEn`) y la Facción (versión 2). Vienen de más nuevo a
+    // Tres: el alta del héroe (versiones 1 y 2, dentro de `jugadorEn`) y la Facción (versión 3). Vienen de más nuevo a
     // más viejo, como los guarda `exito()`.
     const desdeCero = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=0', headers: admin });
     expect(desdeCero.statusCode).toBe(200);
-    expect(desdeCero.json().eventos.map((e: { version: number }) => e.version).sort()).toEqual([1, 2]);
+    expect(desdeCero.json().eventos.map((e: { version: number }) => e.version).sort()).toEqual([1, 2, 3]);
 
-    const desdeActual = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=2', headers: admin });
+    const desdeActual = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos?desde=3', headers: admin });
     expect(desdeActual.json().eventos).toEqual([]);
   });
 
@@ -607,7 +616,7 @@ describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
     });
 
     const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos', headers: admin });
-    expect(res.json().eventos).toHaveLength(2); // el alta del héroe y la Facción
+    expect(res.json().eventos).toHaveLength(3); // el alta del héroe (crearlo y salir del campamento) y la Facción
   });
 
   it('400 si `desde` no es un entero no negativo', async () => {
@@ -633,7 +642,7 @@ describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
     });
     const asentamientoAna = fundadaAna.json().resultado.datos.asentamientoId;
 
-    const luis = await jugadorEn('g1', 'luis');
+    const luis = await jugadorEn('g1', 'luis', 'mercenarios-1');
     const fLuis = await app.inject({
       method: 'POST',
       url: '/v1/jugador/partidas/g1/comandos',
@@ -676,7 +685,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().version).toBe(2); // la 1 es el alta del héroe
+    expect(res.json().version).toBe(3); // la 1 y la 2 son el alta del héroe (crearlo y salir del campamento)
     expect(res.json().resultado.ok).toBe(true);
   });
 
@@ -750,7 +759,11 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
     const comando = (tipo: string, params: unknown) =>
       app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: auth, payload: { tipo, params } });
 
-    expect((await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).json().sinHeroe).toBe(true);
+    const sinHeroe = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).json();
+    expect(sinHeroe.sinHeroe).toBe(true);
+    // La pantalla de elección (D3, D79): los campamentos con el contador doble.
+    expect(sinHeroe.campamentos.length).toBeGreaterThan(0);
+    expect(sinHeroe.campamentos[0]).toMatchObject({ id: 'mercenarios-0', eligieronComoInicial: 0, residentes: 0 });
     expect((await comando('crearFaccion', { nombre: 'Troya' })).statusCode).toBe(403);
 
     const creado = await comando('crearHeroe', heroeDe('Bruno'));
@@ -768,7 +781,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
     const segundo = await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: auth, payload });
 
     expect(primero.json().resultado).toEqual(segundo.json().resultado);
-    expect(segundo.json().version).toBe(2); // no subió a 3: el segundo POST no se aplicó de verdad
+    expect(segundo.json().version).toBe(3); // no subió a 4: el segundo POST no se aplicó de verdad
   });
 
   it('401 sin sesion, 403 con sesion pero sin membresia de jugador', async () => {
@@ -948,7 +961,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `reclutarEnCampamento` (Doc 1.9b): reclutar en un campamento de mercenarios.
       // +1 con `comprarEnCampamento` (Doc 1.9b): el mercado del campamento.
       // +2 con `conectarse`/`desconectarse` (Doc 1.10.6): entrar y salir del mundo.
-      expect(cuerpo.oneOf.length).toBe(93);
+      expect(cuerpo.oneOf.length).toBe(95);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });
@@ -1024,7 +1037,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().resultado.ok).toBe(false);
-    expect(res.json().version).toBe(1); // un rechazo no versiona: sigue en la del alta del héroe
+    expect(res.json().version).toBe(2); // un rechazo no versiona: sigue en la del alta del héroe
   });
 });
 
@@ -1222,7 +1235,7 @@ describe('auditoría de comandos (E2)', () => {
   }
 
   /** Sin la línea del alta del héroe, que `jugadorEn` ya ha dejado y de la que no trata ningún test de aquí. */
-  const trasElAlta = <T extends { comando: string }>(entradas: T[]) => entradas.filter((e) => e.comando !== 'crearHeroe');
+  const trasElAlta = <T extends { comando: string }>(entradas: T[]) => entradas.filter((e) => e.comando !== 'crearHeroe' && e.comando !== 'salirDelCampamento');
 
   it('un comando ACEPTADO deja linea con actor, version e instante de mundo', async () => {
     await partidaCreada('g1');
@@ -1320,7 +1333,7 @@ describe('auditoría de comandos (E2)', () => {
 
     const todo = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria', headers: admin });
     expect(todo.statusCode).toBe(200);
-    expect(todo.json().entradas).toHaveLength(3); // el alta del héroe, la Facción y el 403
+    expect(todo.json().entradas).toHaveLength(4); // el alta del héroe (dos comandos), la Facción y el 403
     // `corruptas` viaja siempre, no solo cuando es > 0: quien lee tiene que poder distinguir un registro
     // completo de uno con agujeros.
     expect(todo.json().corruptas).toBe(0);

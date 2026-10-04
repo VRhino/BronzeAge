@@ -244,7 +244,7 @@ export function puntoDeAparicion(
  * otra entrada.
  */
 export function puntoDeFundacionDe(jugador: Heroe, ejercitos: readonly Ejercito[]): { posicion: Point; columna: Ejercito } {
-  if (jugador.ubicacion.tipo === 'asentamiento') {
+  if (jugador.ubicacion.tipo === 'asentamiento' || jugador.ubicacion.tipo === 'mercenarios') {
     throw new MovilizacionInvalidaError('Se funda en campo abierto: hay que salir de la plaza primero.');
   }
   if (jugador.ubicacion.tipo === 'desconectado') {

@@ -32,7 +32,9 @@ const bytes = (r: RunnerDePartida) => JSON.stringify(r.exportar());
 
 async function heroe(r: RunnerDePartida, jugadorId: string): Promise<string> {
   const avatar = { cabezaId: '', peloId: '', barbaId: '', cejasId: '' };
-  const creado = await r.ejecutar('crearHeroe', { displayName: jugadorId, classDefinitionId: 'Spear', genero: 'femenino', avatar }, jugadorId);
+  const creado = await r.ejecutar('crearHeroe', { displayName: jugadorId, campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar }, jugadorId);
+  // ponytail: sale del campamento para tener columna y fundar a pie; se va con fundar a pie (paso 6).
+  await r.ejecutar('salirDelCampamento', { campamentoId: 'mercenarios-0', heroeId: creado.datos!.heroeId, escuadronIds: [], carga: {} }, creado.datos!.heroeId);
   return creado.datos!.heroeId;
 }
 

@@ -4,7 +4,8 @@
 // cada tick dentro de `avanzarSimulacion`); el ataque contra un campamento, con una columna que llegue a él, vive en
 // `engine/combate.ts` (`atacarCampamentoConColumna`), junto al resto de resolución de combate.
 
-import type { Asentamiento, CampamentoBandido, Escuadron, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, CampamentoBandido, CampamentoMercenarios, Escuadron, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import { enProteccionDeCampamento } from './mercenarios';
 import { alCampamento, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
 import type { EventoCrudo } from '../domain/eventos';
 
@@ -111,7 +112,9 @@ export function avanzarAtaquesBandidos(
    * único que hoy ataca caravanas en el mundo. */
   ejercitos: readonly EjercitoConTropa[] = [],
   /** Zonas de influencia: dentro de cualquiera, una caravana no es presa de bandidos (inmunidad, Doc 1.6). */
-  zonas: readonly ZonaInfluencia[] = []
+  zonas: readonly ZonaInfluencia[] = [],
+  /** Campamentos de mercenarios: junto a uno, nadie inicia un combate (M4/D78). */
+  campamentosMercenarios: readonly CampamentoMercenarios[] = []
 ): { caravanas: CaravanaConEscolta[]; eventos: EventoCrudo[]; escoltasPerdidas: Escuadron[] } {
   if (campamentos.length === 0) return { caravanas, eventos: [], escoltasPerdidas: [] };
   const eventos: EventoCrudo[] = [];
@@ -131,7 +134,7 @@ export function avanzarAtaquesBandidos(
     const campamentoCercano = campamentos.find(
       (c) => distancia(c.posicion, caravana.posicionActual) <= CAMPAMENTOS_BANDIDOS.radioAtaqueCaravana
     );
-    if (!campamentoCercano || enRefugio(caravana.posicionActual, zonas, [])) {
+    if (!campamentoCercano || enRefugio(caravana.posicionActual, zonas, []) || enProteccionDeCampamento(caravana.posicionActual, campamentosMercenarios)) {
       resultado.push(caravana);
       continue;
     }

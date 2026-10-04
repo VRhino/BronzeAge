@@ -43,12 +43,16 @@ async function partidaCreada(gameId = 'g1') {
 async function jugadorEn(gameId: string, sujetoId: string) {
   const auth = await sesionDe(sujetoId);
   const res = await app.inject({ method: 'POST', url: `/v1/jugador/partidas/${gameId}/membresia`, headers: auth });
-  await ejecutar(gameId, auth, 'crearHeroe', {
+  const creado = await ejecutar(gameId, auth, 'crearHeroe', {
     displayName: sujetoId,
+    campamentoId: 'mercenarios-0',
     classDefinitionId: 'Spear',
     genero: 'femenino',
     avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' },
   });
+  // ponytail: sale del campamento para tener columna y fundar a pie; se va con fundar a pie (paso 6).
+  const heroeId = creado.json().resultado.datos.heroeId as string;
+  await ejecutar(gameId, auth, 'salirDelCampamento', { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} });
   return { auth, jugadorId: res.json().jugadorId as string };
 }
 

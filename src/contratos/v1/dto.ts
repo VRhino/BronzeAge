@@ -107,6 +107,8 @@ export interface LoadoutDto {
 export type UbicacionHeroe =
   | { tipo: 'asentamiento'; asentamientoId: string }
   | { tipo: 'columna'; ejercitoId: string }
+  /** Dentro de un campamento de mercenarios: su vista de asentamiento (D73). */
+  | { tipo: 'mercenarios'; campamentoId: string }
   | { tipo: 'desconectado'; punto: Punto };
 
 /**

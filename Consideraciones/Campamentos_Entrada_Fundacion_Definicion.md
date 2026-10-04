@@ -159,6 +159,19 @@ la desconexión: se hace **inútil para huir**.
 | D70 | **Un Rey desconectado no delega**: las solicitudes de ingreso esperan en la lista y lo automático de la plaza (autoconstrucción, recetas) sigue funcionando. |
 | D71 | **La milicia prestada (D45) sale del mundo con el héroe**, como el resto de su columna, y vuelve con él (cierra §7.3). |
 
+### 2.8 Octava ronda: estar dentro del campamento (2026-10-04)
+
+| # | Decisión |
+|---|---|
+| D72 | **Residir no exige estar allí**: es tener ese campamento como casa. |
+| D73 | **El campamento tiene un «dentro»**, como una plaza: una ubicación propia del héroe, que en el cliente es la **vista de asentamiento del campamento** (sus edificios y su layout; caminable en Unity como está previsto para los asentamientos). Dentro no se come y no hay combate. |
+| D74 | **El héroe nace DENTRO del campamento que elige** (D3), como residente, sin columna en el mapa. |
+| D75 | **Las acciones del campamento se hacen desde dentro o desde fuera con la columna junto al campamento**, a la misma distancia de interacción que ya se usa con los asentamientos. |
+| D76 | **Salir de su campamento de residencia**: elige la tropa (la suya y la prestada) y lo que carga en el carro desde su almacén personal; la columna aparece en la puerta. **Entrar en él**: la columna se deshace, la tropa queda en el campamento y el carro se vacía en el almacén personal; **lo que pase del tope se queda en el carro**. |
+| D77 | **Cualquier héroe puede entrar en cualquier campamento** (enclave neutral), como en un asentamiento que no es el suyo: entra **con su columna**, y al salir elige solo entre las unidades que trajo y lo que lleva en el carro. |
+| D78 | **Protección (M4)**: a menos de 60 de un campamento nadie inicia un combate, ni jugadores ni bandidos. |
+| D79 | **Contador doble (M3)**: cada campamento guarda cuántos lo eligieron como inicial, además de sus residentes actuales; la pantalla de elección muestra los dos. |
+
 ## 3. Lo que ya existe y se reutiliza (medido en el código)
 
 - `crearFaccion` (`session/comandos/crearFaccion.ts`): sin condiciones, el creador queda Rey. Cubre D5.
@@ -274,10 +287,15 @@ una décima parte acampada (Doc 5.13). Consecuencias:
 
 **Diseño pendiente antes del código:** §7 y §8 cerrados → bots-héroe (§7) → alijos (D29).
 
-0. Cerrar los cambios sin commit de `engine/refundacion.ts`.
-1. **Campamentos iniciales** por separación mínima, con semilla derivada; eliminar la aparición gradual.
-2. **`crearHeroe` con `campamentoId`**, contador doble y proyección para la pantalla de elección; **protección
-   dentro del campamento** (M4, las cuatro vías) en el mismo paso.
+0. ~~Cerrar los cambios sin commit de `engine/refundacion.ts`.~~ **Hecho** (`c10e454`).
+1. ~~**Campamentos iniciales** por separación mínima, con semilla derivada; eliminar la aparición gradual.~~ **Hecho**
+   (`3b52ae6`): 4-5 campamentos con separación 900.
+2. ~~**`crearHeroe` con `campamentoId`**, contador doble y proyección para la pantalla de elección; **protección
+   dentro del campamento** (M4).~~ **Hecho** (D72-D79): ubicación `mercenarios`, nacer dentro, `entrarEnCampamento` /
+   `salirDelCampamento`, acciones del campamento dentro o en la puerta, protección de 60 en `atacar` y en los bandidos,
+   lista de campamentos en la proyección sin héroe. Quedan para después: la visión del mapa alrededor del campamento
+   estando dentro, y retirar `columnaDeAparicion`/`puntoDeAparicion` (solo los usa la fixture de tests de fundar a pie;
+   se van con el paso 6).
 3. **Economía del residente**: ración de trigo + reposte comprando en cualquier campamento; préstamo de
    `leva_comunal` (D45) con reposición barata y deuda; piedra y madera en el mercado con pila + cupo (D41).
 4. **Bandidos unificados por niveles** (D21, D22, D26-D28, D37, D42) y **alijos** (D29).

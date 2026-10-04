@@ -675,4 +675,12 @@ describe('escolta sin héroe (Doc 3.13.4)', () => {
     // La escuadra no desaparece: queda a 0 en el campamento de su héroe, con la experiencia de la derrota.
     expect(r.escoltasPerdidas[0]).toMatchObject({ id: 'e1', cantidad: 0, contenedor: { tipo: 'campamento' }, experiencia: 0.5 });
   });
+
+  it('junto a un campamento de mercenarios el bandido no ataca (M4/D78)', () => {
+    const indefensa: CaravanaConEscolta = { ...caravana1Carro(), estado: 'en_transito', posicionActual: { x: 500, y: 500 } };
+    const campamento = { id: 'camp', posicion: { x: 500, y: 500 }, poder: 9999, bosqueId: 'b', proximoSpawnEn: instanteDeTest(999) } as any;
+    const mercenarios = { id: 'merc', posicion: { x: 500, y: 540 } } as any;
+    const r = avanzarAtaquesBandidos([campamento], [indefensa], createRng(1), [], [], [mercenarios]);
+    expect(r.caravanas).toEqual([indefensa]);
+  });
 });

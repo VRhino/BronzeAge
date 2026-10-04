@@ -1930,6 +1930,8 @@ export const MERCENARIOS = {
   intentosColocacion: 2000,
   /** Se mezcla con la seed del mapa: semilla derivada (D35), no consume el RNG de la partida. */
   salSemilla: 0x6d657263,
+  /** A menos de esto de un campamento nadie inicia un combate, ni jugadores ni bandidos (M4/D78, §8.2). PLACEHOLDER. */
+  radioProteccion: 60,
   /** Variantes de aspecto, elegidas al nacer: no cambian nada de lo que hace. */
   origenes: 3,
   /** Siempre los tiene; el militar se elige al azar entre `edificiosMilitares`. */

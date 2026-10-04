@@ -492,6 +492,7 @@ CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en e
   origen: number          variante de aspecto, 0..2: solo cambia cómo se ve
   edificios[]             'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas' — layout fijo
   residentesIds[]         heroeId: héroes que residen aquí, de cualquier Facción y sin límite; sin guarnición ni cargos
+  eligieronComoInicial    cuántos héroes nacieron aquí (2026-10-04): solo crece; con residentesIds, el contador doble de la elección
   mercado: Record<bien, number>   stock en venta (solo vende, Doc 3.3b); se repone con `GameSessionState.mercadoMercenario`
   fondos: Record<heroeId, Record<recurso, number>>   lo que cada héroe ha aportado al fondo de refundación de su Facción
                          (Doc 1.9b); voluntario y retirable
@@ -572,7 +573,8 @@ Heroe
                                   BronzeAge; el adaptador de Unity lo deriva del catálogo reclutable del
                                   asentamiento donde está.)
   liderazgoBase          migra desde el actual domain.Jugador.liderazgoBase — existente, cambia de dueño
-  ubicacion               migra desde domain.Jugador.ubicacion (asentamiento | columna | desconectado) —
+  ubicacion               migra desde domain.Jugador.ubicacion (asentamiento | columna | mercenarios | desconectado) —
+                         `mercenarios` (2026-10-04): dentro de un campamento de mercenarios, su vista de asentamiento —
                          existente, cambia de dueño
   plazasRecordadas?       migra desde domain.Jugador.plazasRecordadas — existente, cambia de dueño
   exploracionPersonal?    migra desde domain.Jugador.exploracionPersonal — existente, cambia de dueño

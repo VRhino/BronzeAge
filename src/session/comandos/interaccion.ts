@@ -51,7 +51,9 @@ import type { Instante } from '../../domain/tiempo';
 import { agendarReaparicionBandidos } from '../../engine/bandidos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito } from './ayudas';
+import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito, rechazar } from './ayudas';
+import { CODIGOS_ERROR } from './codigosDeError';
+import { enProteccionDeCampamento } from '../../engine/mercenarios';
 import { desdeCrudos, evento } from './eventos';
 import { computeTodasLasZonas } from '../../engine/zones';
 
@@ -193,6 +195,7 @@ function exigirSano(estado: GameSessionState, heroeId: string, ahora: Instante):
 export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((estado, _mapa, ctx, params) => {
   const heridos = exigirSano(estado, params.heroeId, ctx.instante);
   const atacante = exigirColumnaDe(estado, params.heroeId);
+  exigirFueraDeProteccion(estado, atacante, params.objetivo);
 
   if (ctx.batallasEnUnity) {
     const apertura = aperturaDeAtaque(estado, atacante, params, heridos, ctx.instante);
@@ -311,6 +314,22 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     ]
   );
 });
+
+/** Junto a un campamento de mercenarios nadie inicia un combate (M4/D78): ni desde allí ni contra lo que está allí. */
+function exigirFueraDeProteccion(estado: GameSessionState, atacante: Ejercito, objetivo: ParamsAtacar['objetivo']): void {
+  const donde =
+    objetivo.tipo === 'asentamiento'
+      ? estado.asentamientos.find((a) => a.id === objetivo.id)?.posicion
+      : objetivo.tipo === 'campamento'
+        ? estado.campamentosBandidos.find((c) => c.id === objetivo.id)?.posicion
+        : objetivo.tipo === 'ejercito'
+          ? estado.ejercitos.find((e) => e.id === objetivo.id)?.posicionActual
+          : estado.caravanas.find((c) => c.id === objetivo.id)?.posicionActual;
+  const campamentos = estado.campamentosMercenarios;
+  if (enProteccionDeCampamento(atacante.posicionActual, campamentos) || (donde && enProteccionDeCampamento(donde, campamentos))) {
+    rechazar(CODIGOS_ERROR.campamentoProteccion);
+  }
+}
 
 /** La batalla que abriría este ataque, validado igual que el combate con números. */
 function aperturaDeAtaque(estado: GameSessionState, atacante: Ejercito, params: ParamsAtacar, heridos: ReadonlySet<string>, ahora: Instante): Apertura {

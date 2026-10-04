@@ -581,9 +581,14 @@ function caminosConocidos(red: RedCaminos, niebla: NieblaProyectada): CaminoProy
  * diferencia de los de bandidos, un campamento de mercenarios no aparece ni desaparece una vez nace —es un enclave fijo—,
  * así que recordarlo no miente: el sitio donde lo viste sigue siendo suyo. Se mide contra la máscara que ya viaja.
  */
-function campamentosMercenariosConocidos(campamentos: readonly CampamentoMercenarios[], niebla: NieblaProyectada): CampamentoMercenarios[] {
+function campamentosMercenariosConocidos(
+  campamentos: readonly CampamentoMercenarios[],
+  niebla: NieblaProyectada,
+  /** Su casa y donde está dentro: los conoce aunque no haya explorado nada (nace dentro, D74). */
+  suyos: ReadonlySet<string>
+): CampamentoMercenarios[] {
   const rejilla: Rejilla = { columnas: niebla.columnas, filas: niebla.filas, tamanoCelda: niebla.tamanoCelda };
-  return campamentos.filter((c) => estaExplorado(niebla.celdas, rejilla, c.posicion));
+  return campamentos.filter((c) => suyos.has(c.id) || estaExplorado(niebla.celdas, rejilla, c.posicion));
 }
 
 /**
@@ -833,7 +838,14 @@ export function proyectarParaJugador(
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.red ?? RED_VACIA, exploracion),
     campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito, tropa),
-    campamentosMercenarios: campamentosMercenariosConocidos(estado.campamentosMercenarios, exploracion),
+    campamentosMercenarios: campamentosMercenariosConocidos(
+      estado.campamentosMercenarios,
+      exploracion,
+      new Set([
+        ...estado.campamentosMercenarios.filter((c) => c.residentesIds.includes(heroeId)).map((c) => c.id),
+        ...(ubicacion.tipo === 'mercenarios' ? [ubicacion.campamentoId] : []),
+      ])
+    ),
     historial: estado.historialHeroes[heroeId] ?? [],
     zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),

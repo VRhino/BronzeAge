@@ -59,6 +59,12 @@ export const CODIGOS_ERROR = {
   // `crearHeroe` (doc 02 §4.2): un héroe por jugador y partida, con nombre.
   heroeYaExiste: 'heroe.ya_existe',
   heroeNombreVacio: 'heroe.nombre_vacio',
+  heroeCampamentoDesconocido: 'heroe.campamento_desconocido',
+  campamentoDesconocido: 'campamento.desconocido',
+  // D75: las acciones del campamento se hacen dentro o con la columna en su puerta.
+  campamentoLejos: 'campamento.lejos',
+  // M4/D78: junto a un campamento de mercenarios nadie inicia un combate.
+  campamentoProteccion: 'campamento.proteccion',
   // Batallas de Unity (doc 02 §3.1): lo que está en una batalla activa no se toca (Doc 5.15.1), y unirse o cancelar
   // tienen sus propias reglas.
   batallaNoExiste: 'batalla.no_existe',

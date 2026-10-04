@@ -59,7 +59,16 @@ function heroeDe(runner: RunnerDePartida, jugadorId: string) {
 /** Sin héroe no hay a quién proyectar: el cliente ofrece crearlo (comando `crearHeroe`, doc 02 §4.2). */
 function proyeccionDe(runner: RunnerDePartida, jugadorId: string): Record<string, unknown> {
   const heroe = heroeDe(runner, jugadorId);
-  return heroe ? conImpuros(runner, heroe.id) : { ...resumenDe(runner), sinHeroe: true };
+  if (heroe) return conImpuros(runner, heroe.id);
+  // La pantalla de elección (D3, D79): todos los campamentos, con dónde están y el contador doble. Es lo único que se ve sin héroe.
+  const campamentos = runner.getState().campamentosMercenarios.map((c) => ({
+    id: c.id,
+    posicion: c.posicion,
+    origen: c.origen,
+    eligieronComoInicial: c.eligieronComoInicial,
+    residentes: c.residentesIds.length,
+  }));
+  return { ...resumenDe(runner), sinHeroe: true, campamentos };
 }
 
 const ESQUEMA_MEMBRESIA = {

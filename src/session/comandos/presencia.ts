@@ -13,14 +13,24 @@
 // No hay un cuarto: salir de tu propia residencia SIEMPRE es `salirAlMundo`, porque ahí tienes tu roster
 // entero delante y hay algo que elegir.
 import type { GrupoPuerta } from '../../domain/types';
-import { guarnecer as guarnecerEngine, marcharA as marcharAEngine, salirAlMundo as salirAlMundoEngine, type ObjetivoEjercito } from '../../engine/ejercitos';
+import {
+  entrarEnCampamento as entrarEnCampamentoEngine,
+  guarnecer as guarnecerEngine,
+  marcharA as marcharAEngine,
+  salirAlMundo as salirAlMundoEngine,
+  salirDelCampamento as salirDelCampamentoEngine,
+  type ObjetivoEjercito,
+} from '../../engine/ejercitos';
+import { esCiudadano } from '../../engine/faccion';
 import { conVeto } from '../../engine/pertenencia';
 import { conFotoTomadaPor, cruzarLaPuerta, retomarColumna, situarHeroes } from '../../engine/ubicacion';
 import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conEscuadrones } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, sinCambios } from './tipos';
-import { campamentoEn, comando, conColumnas, conTropaDe, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento } from './ayudas';
+import { campamentoEn, comando, conColumnas, conTropaDe, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento, rechazar } from './ayudas';
+import { CODIGOS_ERROR } from './codigosDeError';
+import { columnaDe } from '../../engine/ejercitos';
 import { conMomento, evento } from './eventos';
 import { volverAlMundo } from '../../engine/presencia';
 import { PRESENCIA } from '../../constants';
@@ -421,4 +431,54 @@ export const conectarse = comando<ParamsPresenciaEnElMundo, void>((estado, _mapa
   }
   const r = volverAlMundo(estado, heroe.id, `ejercito-${ctx.ids.siguiente()}`, ctx.instante);
   return exito({ ...estado, heroes: r.heroes, ejercitos: r.ejercitos }, conMomento(ctx, r.eventos));
+});
+
+export interface ParamsCampamentoMercenarios {
+  campamentoId: string;
+  heroeId: string;
+}
+
+export interface ParamsSalirDelCampamento extends ParamsCampamentoMercenarios {
+  /** Solo para quien reside: la tropa de su campamento que se lleva y lo que carga desde su almacén personal (D76). */
+  escuadronIds: string[];
+  carga: Record<string, number>;
+}
+
+function exigirCampamentoMercenarios(estado: GameSessionState, campamentoId: string) {
+  const campamento = estado.campamentosMercenarios.find((c) => c.id === campamentoId);
+  if (!campamento) rechazar(CODIGOS_ERROR.campamentoDesconocido);
+  return campamento;
+}
+
+/**
+ * Entrar en un campamento de mercenarios con la columna en su puerta (D76, D77): en el propio, la columna se deshace —tropa
+ * al campamento, carro al almacén personal, lo que no quepa sigue en el carro aparcado—; en otro, entra con su columna.
+ */
+export const entrarEnCampamento = comando<ParamsCampamentoMercenarios, void>((estado, _mapa, ctx, params) => {
+  const campamento = exigirCampamentoMercenarios(estado, params.campamentoId);
+  const heroe = exigirJugador(estado, params.heroeId);
+  const columna = exigirColumnaDe(estado, params.heroeId);
+  const r = entrarEnCampamentoEngine(campamento, heroe, conTropaDe(estado, columna));
+  const sinColumna = { ...estado, ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) };
+  const conTropa = r.columna ? conColumnas(estado, [r.columna], r.tropa) : { ...sinColumna, heroes: conEscuadrones(sinColumna.heroes, r.tropa) };
+  const heroes = conTropa.heroes.map((h) => (h.id === heroe.id ? { ...r.heroe, escuadrones: h.escuadrones } : h));
+  return exito(conHistorialDeJugador({ ...conTropa, heroes }, heroe.id, `Entra en ${campamento.id}.`), [
+    evento(ctx, { codigo: 'jugador.entra_en_campamento', mensaje: `${heroe.displayName} entra en ${campamento.id}.`, payload: { campamentoId: campamento.id, heroeId: heroe.id } }),
+  ]);
+});
+
+/** Salir de un campamento de mercenarios (D76, D77): su columna aparece en la puerta. */
+export const salirDelCampamento = comando<ParamsSalirDelCampamento, { ejercitoId: string }>((estado, _mapa, ctx, params) => {
+  const campamento = exigirCampamentoMercenarios(estado, params.campamentoId);
+  const heroe = exigirJugador(estado, params.heroeId);
+  const aparcada = columnaDe(estado.ejercitos, heroe.id);
+  const faccionId = estado.facciones.find((f) => esCiudadano(f, heroe.id))?.id ?? '';
+  const r = salirDelCampamentoEngine(campamento, heroe, aparcada, params.escuadronIds, params.carga, faccionId, `ejercito-${ctx.ids.siguiente()}`, ctx.instante);
+  const conColumna = conColumnas(estado, [r.columna]);
+  const heroes = conColumna.heroes.map((h) => (h.id === heroe.id ? { ...h, ubicacion: r.heroe.ubicacion, almacenPersonal: r.heroe.almacenPersonal } : h));
+  return exito(
+    conHistorialDeJugador({ ...conColumna, heroes }, heroe.id, `Sale de ${campamento.id}.`),
+    [evento(ctx, { codigo: 'jugador.sale_de_campamento', mensaje: `${heroe.displayName} sale de ${campamento.id}.`, payload: { campamentoId: campamento.id, heroeId: heroe.id, ejercitoId: r.columna.id } })],
+    { ejercitoId: r.columna.id }
+  );
 });

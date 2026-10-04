@@ -112,7 +112,7 @@ describe('cuentas de bot (CODIGO_REGISTRO_BOTS, doc 12 §8.3)', () => {
       method: 'POST',
       url: '/v1/jugador/partidas/g/comandos',
       headers: auth,
-      payload: { tipo: 'crearHeroe', params: { displayName: nick, classDefinitionId: 'Spear', genero: 'femenino', avatar: AVATAR, ...extra } },
+      payload: { tipo: 'crearHeroe', params: { displayName: nick, campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar: AVATAR, ...extra } },
     });
     return r;
   }

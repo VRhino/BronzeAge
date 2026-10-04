@@ -1,5 +1,5 @@
 // Comandos de los campamentos de mercenarios (Doc 1.9b). Residir en uno está con el resto de cambios de residencia
-// (`cargos.ts`); aquí, lo que se hace dentro: reclutar.
+// (`cargos.ts`); aquí, lo que se hace en él: reclutar, comprar y el fondo de refundación.
 import { reclutarEnCampamento as reclutarEngine, tecnologiasDelCampamento, type PagarCon } from '../../engine/reclutamientoMercenario';
 import { esCiudadano } from '../../engine/faccion';
 import { comprarEnCampamento as comprarEngine } from '../../engine/mercadoMercenario';
@@ -11,6 +11,22 @@ import { comando, exigirFaccion, exigirJugador, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import type { GameSessionState } from '../estado';
 import { evento } from './eventos';
+import { campamentoDeResidente } from '../../engine/mercenarios';
+import { columnaDe, enLaPuertaDelCampamento } from '../../engine/ejercitos';
+
+/**
+ * Las acciones del campamento se hacen en él (D75): dentro, o con la columna en su puerta. Su campamento es donde reside; si no
+ * reside en ninguno, el motor ya rechaza con su motivo.
+ */
+function exigirEnSuCampamento(estado: GameSessionState, heroeId: string): void {
+  const campamento = campamentoDeResidente(estado.campamentosMercenarios, heroeId);
+  const heroe = estado.heroes.find((h) => h.id === heroeId);
+  if (!campamento || !heroe) return;
+  if (heroe.ubicacion.tipo === 'mercenarios' && heroe.ubicacion.campamentoId === campamento.id) return;
+  const columna = columnaDe(estado.ejercitos, heroeId);
+  if (columna && enLaPuertaDelCampamento(columna, campamento)) return;
+  rechazar(CODIGOS_ERROR.campamentoLejos);
+}
 
 export interface ParamsReclutarEnCampamento {
   tropaId: string;
@@ -33,6 +49,7 @@ export interface PayloadReclutadoEnCampamento {
  */
 export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantidad: number; oro: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
+  exigirEnSuCampamento(estado, heroe.id);
   const faccion = estado.facciones.find((f) => esCiudadano(f, heroe.id));
   const tieneAsentamientos = (faccionId: string) => estado.asentamientos.some((a) => a.faccionId === faccionId);
   const humanasVivas = estado.facciones.filter((f) => !estado.faccionesNpcIds.includes(f.id) && tieneAsentamientos(f.id));
@@ -84,6 +101,7 @@ export interface PayloadCompradoEnCampamento {
  */
 export const comprarEnCampamento = comando<ParamsComprarEnCampamento, { cantidad: number; oro: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
+  exigirEnSuCampamento(estado, heroe.id);
   const r = comprarEngine(estado.campamentosMercenarios, estado.heroes, estado.asentamientos, heroe.id, params.recurso, params.cantidad);
   const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
   return exito(
@@ -123,6 +141,7 @@ function faccionDelActor(estado: GameSessionState, heroeId: string) {
 /** Aporta del almacén personal al fondo de refundación del campamento donde reside (Doc 1.9b). Solo una Facción sin asentamientos. */
 export const aportarARefundacion = comando<ParamsFondoRefundacion, { movido: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
+  exigirEnSuCampamento(estado, heroe.id);
   const faccion = faccionDelActor(estado, heroe.id);
   const r = aportarEngine(estado.campamentosMercenarios, estado.heroes, faccion, estado.asentamientos, heroe.id, params.recurso, params.cantidad);
   const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
@@ -142,6 +161,7 @@ export const aportarARefundacion = comando<ParamsFondoRefundacion, { movido: num
 /** Retira lo aportado por el actor del fondo, de vuelta a su almacén personal. */
 export const retirarDeRefundacion = comando<ParamsFondoRefundacion, { movido: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
+  exigirEnSuCampamento(estado, heroe.id);
   const faccion = faccionDelActor(estado, heroe.id);
   const r = retirarEngine(estado.campamentosMercenarios, estado.heroes, heroe.id, params.recurso, params.cantidad, ALMACEN_PERSONAL.capacidad);
   const campamentoId = r.campamentos.find((c) => c.residentesIds.includes(heroe.id))!.id;
@@ -172,6 +192,7 @@ export interface PayloadCaravanaDeRefundacion {
 /** Compra la Caravana de Fundación al 75 % con el fondo del campamento (Doc 1.9b): sale de él hacia `destino`, con el actor de fundador. */
 export const comprarCaravanaDeRefundacion = comando<ParamsComprarCaravanaDeRefundacion, { caravanaId: string }>((estado, mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
+  exigirEnSuCampamento(estado, heroe.id);
   const faccion = exigirFaccion(estado, faccionDelActor(estado, heroe.id).id);
   const r = comprarCaravanaEngine(
     estado.campamentosMercenarios,

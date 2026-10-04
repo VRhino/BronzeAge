@@ -359,6 +359,8 @@ export interface CargosAsentamiento {
 export type UbicacionHeroe =
   | { tipo: 'asentamiento'; asentamientoId: string }
   | { tipo: 'columna'; ejercitoId: string }
+  /** Dentro de un campamento de mercenarios (D73): su vista de asentamiento. No come ni combate. */
+  | { tipo: 'mercenarios'; campamentoId: string }
   | { tipo: 'desconectado'; punto: Point };
 
 /**
@@ -1035,6 +1037,8 @@ export interface CampamentoMercenarios {
    * Sin guarnición ni cargos. Es la casa de quien se queda sin asentamiento (`acogerHeroesSinCasa`).
    */
   residentesIds: string[];
+  /** Cuántos héroes lo eligieron al nacer (M3/D79): solo crece. Junto a `residentesIds` es el contador doble de la elección. */
+  eligieronComoInicial: number;
   /**
    * Reclutas disponibles en `poblacionEn` (Doc 1.9b). Crece sola hasta el tope de sus viviendas, sin mantenimiento ni comida: lo guardado
    * es el valor y el instante, y la cantidad de ahora se calcula al mirar (`poblacionActual`), no se escribe cada tick.

@@ -1023,7 +1023,7 @@ describe('caminos: solo los que la Faccion ha PISADO', () => {
 
 describe('campamentosMercenarios: los que la Facción ha explorado, como un camino', () => {
   const mercenarios = (posicion: { x: number; y: number }) =>
-    ({ id: `mercenarios-${posicion.x}`, posicion, origen: 0, edificios: ['taberna'], creadoEn: 0 }) as unknown as GameSessionState['campamentosMercenarios'][number];
+    ({ id: `mercenarios-${posicion.x}`, posicion, origen: 0, edificios: ['taberna'], residentesIds: [], creadoEn: 0 }) as unknown as GameSessionState['campamentosMercenarios'][number];
 
   it('uno en terreno que la Facción ha visto viaja; uno en terreno sin explorar no', () => {
     const { sesion, fundador } = partidaConAsentamiento();
@@ -1038,6 +1038,14 @@ describe('campamentosMercenarios: los que la Facción ha explorado, como un cami
     const estado = { ...sesion.getState(), campamentosMercenarios: [mercenarios({ x: 440, y: 400 })] };
 
     expect(proyectarParaJugador(estado, 'forastero', SIN_GEOMETRIA).campamentosMercenarios).toEqual([]);
+  });
+
+  it('el suyo lo conoce sin haber explorado nada: nace dentro (D74)', () => {
+    const { sesion } = partidaConAsentamiento();
+    const suyo = { ...mercenarios(LEJOS), residentesIds: ['forastero'] };
+    const estado = { ...sesion.getState(), campamentosMercenarios: [suyo, mercenarios({ x: 440, y: 400 })] };
+
+    expect(proyectarParaJugador(estado, 'forastero', SIN_GEOMETRIA).campamentosMercenarios).toEqual([suyo]);
   });
 });
 

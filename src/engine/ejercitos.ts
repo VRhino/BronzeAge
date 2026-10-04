@@ -12,7 +12,7 @@ import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, CampamentoMercena
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
-import { BATALLA, LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { ALMACEN_PERSONAL, BATALLA, LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import {
   alCampamento,
@@ -481,6 +481,110 @@ export function salirAlMundo(
       estado: 'estacionado',
     },
   };
+}
+
+/** ¿Está la columna en la puerta de este campamento de mercenarios? La misma distancia que en una plaza (D75). */
+export function enLaPuertaDelCampamento(ejercito: Ejercito, campamento: CampamentoMercenarios): boolean {
+  return distancia(ejercito.posicionActual, campamento.posicion) <= MOVIMIENTO.radioPuerta;
+}
+
+const totalDe = (r: Readonly<Record<string, number>> | undefined): number => Object.values(r ?? {}).reduce((a, b) => a + b, 0);
+
+/**
+ * Entrar en un campamento de mercenarios con la columna personal en su puerta (D76, D77).
+ *
+ * - **Su residencia**: la tropa queda en el campamento y el carro se vacía en el almacén personal hasta el tope. Lo que no
+ *   cabe se queda en el carro: la columna sigue aparcada en la puerta con ese resto y sin tropa; sin resto, desaparece.
+ * - **Otro campamento** (enclave neutral): entra con su columna, que queda aparcada en la puerta intacta.
+ *
+ * Aparcada en la puerta está dentro del radio de protección (D78). Devuelve la columna que queda (o `undefined`) y la tropa
+ * que pasa al campamento, para que el llamador la devuelva a su héroe.
+ */
+export function entrarEnCampamento(
+  campamento: CampamentoMercenarios,
+  heroe: Heroe,
+  columna: EjercitoConTropa
+): { heroe: Heroe; columna: EjercitoConTropa | undefined; tropa: Escuadron[] } {
+  if (columna.tipo !== 'personal' || columna.liderId !== heroe.id) throw new MovilizacionInvalidaError('Se entra en un campamento con la columna personal.');
+  if (!enLaPuertaDelCampamento(columna, campamento)) throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} del campamento.`);
+  const dentro: UbicacionHeroe = { tipo: 'mercenarios', campamentoId: campamento.id };
+  if (!campamento.residentesIds.includes(heroe.id)) return { heroe: { ...heroe, ubicacion: dentro }, columna, tropa: [] };
+
+  let libre = ALMACEN_PERSONAL.capacidad - totalDe(heroe.almacenPersonal);
+  const almacenPersonal = { ...heroe.almacenPersonal };
+  const resto: Record<string, number> = {};
+  for (const [recurso, cantidad] of Object.entries(columna.suministro)) {
+    const cabe = Math.max(0, Math.min(cantidad, libre));
+    if (cabe > 0) almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cabe;
+    if (cantidad - cabe > 0) resto[recurso] = cantidad - cabe;
+    libre -= cabe;
+  }
+  const queda = totalDe(resto) > 0 ? { ...columna, escuadronIds: [], escuadrones: [], suministro: resto } : undefined;
+  return { heroe: { ...heroe, ubicacion: dentro, almacenPersonal }, columna: queda, tropa: alCampamento(columna.escuadrones) };
+}
+
+/**
+ * Salir de un campamento de mercenarios (D76, D77). Quien reside en él elige la tropa de su campamento y lo que carga en el
+ * carro desde su almacén personal, como al salir de su plaza; si había dejado un resto en el carro (`entrarEnCampamento`),
+ * sale con esa misma columna. Quien no reside retoma la columna con la que entró, tal cual.
+ */
+export function salirDelCampamento(
+  campamento: CampamentoMercenarios,
+  heroe: Heroe,
+  /** La columna aparcada en la puerta, si la tiene. */
+  aparcada: Ejercito | undefined,
+  escuadronIds: readonly string[],
+  carga: Readonly<Record<string, number>>,
+  faccionId: string,
+  id: string,
+  instante: Instante
+): { heroe: Heroe; columna: EjercitoConTropa } {
+  if (heroe.ubicacion.tipo !== 'mercenarios' || heroe.ubicacion.campamentoId !== campamento.id) {
+    throw new MovilizacionInvalidaError('No estás dentro de ese campamento.');
+  }
+  const enColumna = (columnaId: string): Heroe => ({ ...heroe, ubicacion: { tipo: 'columna', ejercitoId: columnaId } });
+  if (!campamento.residentesIds.includes(heroe.id)) {
+    if (!aparcada) throw new MovilizacionInvalidaError('Tu columna ya no está en la puerta.');
+    const escuadrones = heroe.escuadrones.filter((e) => aparcada.escuadronIds.includes(e.id));
+    return { heroe: enColumna(aparcada.id), columna: { ...aparcada, escuadrones } };
+  }
+
+  const enCampamento = heroe.escuadrones.filter((e) => e.contenedor.tipo === 'campamento');
+  const escuadrones = seleccionarParaCampana(enCampamento, heroe.id, escuadronIds, true);
+  exigirLiderazgo(heroe, escuadrones);
+
+  const suministro = { ...aparcada?.suministro };
+  const almacenPersonal = { ...heroe.almacenPersonal };
+  let hueco = capacidadCarrosDe(1) - totalDe(suministro);
+  for (const [recurso, pedido] of Object.entries(carga)) {
+    if (!(pedido > 0)) continue;
+    if ((almacenPersonal[recurso] ?? 0) < pedido) throw new MovilizacionInvalidaError(`No hay ${pedido} de ${recurso} en el almacén personal.`);
+    if (pedido > hueco) throw new MovilizacionInvalidaError('No cabe tanto en el carro.');
+    almacenPersonal[recurso] = almacenPersonal[recurso]! - pedido;
+    if (almacenPersonal[recurso] === 0) delete almacenPersonal[recurso];
+    suministro[recurso] = (suministro[recurso] ?? 0) + pedido;
+    hueco -= pedido;
+  }
+  const columnaId = aparcada?.id ?? id;
+  const columna: EjercitoConTropa = {
+    id: columnaId,
+    faccionId,
+    origenAsentamientoId: '',
+    participantes: [{ heroeId: heroe.id, unidoEn: instante }],
+    tipo: 'personal',
+    liderId: heroe.id,
+    politicaDeUnion: 'rechazar',
+    escuadronIds: escuadrones.map((e) => e.id),
+    escuadrones,
+    suministro,
+    caravanasAdjuntasIds: [],
+    objetivo: { tipo: 'punto', punto: campamento.posicion },
+    ruta: [],
+    progreso: 0,
+    posicionActual: campamento.posicion,
+    estado: 'estacionado',
+  };
+  return { heroe: { ...enColumna(columnaId), almacenPersonal }, columna };
 }
 
 /**

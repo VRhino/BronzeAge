@@ -615,6 +615,15 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
+  // Campamentos de mercenarios (D76, D77): cualquiera entra y sale por sí mismo; la puerta la mira el motor.
+  entrarEnCampamento: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  salirDelCampamento: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
   // `guarnecer` (Ocupacion §2.3): como `entrarEnAsentamiento` — la geometría (ejército en la puerta de una
   // plaza de su Facción) la valida el motor, que sabe dónde está la columna. Aquí solo que no actúe por otro.
   guarnecer: {

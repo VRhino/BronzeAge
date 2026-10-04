@@ -211,6 +211,12 @@
             },
             {
               "type": "object",
+              "properties": { "tipo": { "const": "mercenarios" }, "campamentoId": { "$ref": "#/definitions/Id" } },
+              "required": ["tipo", "campamentoId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
               "properties": { "tipo": { "const": "desconectado" }, "punto": { "$ref": "#/definitions/Punto" } },
               "required": ["tipo", "punto"],
               "additionalProperties": false

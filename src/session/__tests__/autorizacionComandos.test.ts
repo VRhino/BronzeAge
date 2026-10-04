@@ -270,7 +270,7 @@ describe('héroe y Facciones NPC', () => {
   it('sin héroe, un jugador solo puede crearlo (doc 02 §4.2)', () => {
     const { sesion } = partidaConAsentamiento();
     const sinHeroe: ActorDeComando = { rol: 'jugador', heroeId: null };
-    const heroe = { displayName: 'Ana', classDefinitionId: 'Spear', genero: 'femenino' as const, avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } };
+    const heroe = { displayName: 'Ana', campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino' as const, avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } };
 
     expect(verificarAutorizacion('crearHeroe', heroe, sesion.getState(), sinHeroe)).toEqual(AUTORIZADO);
     expect(verificarAutorizacion('crearFaccion', { nombre: 'Troya' }, sesion.getState(), sinHeroe)).toEqual(POR_DOMINIO);

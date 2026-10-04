@@ -303,7 +303,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     trasExpansion.caravanas.map((c) => conEscolta(c, tropaTrasComercio)),
     rng,
     estado.ejercitos.map((e) => conTropa(e, tropaTrasComercio)),
-    zonas
+    zonas,
+    campamentosActuales
   );
   eventosDominio.push(...comoEventosDominio(trasAtaquesBandidos.eventos, contexto));
   // La escolta vuelve a su héroe; la de una caravana destruida, a 0 y al campamento (Doc 5.15.4).

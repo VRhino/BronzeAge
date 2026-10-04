@@ -51,6 +51,7 @@ function nuevoCampamento(indice: number, posicion: Point, instante: Instante): C
     origen: Math.floor(huella / MERCENARIOS.edificiosMilitares.length) % MERCENARIOS.origenes,
     edificios,
     residentesIds: [],
+    eligieronComoInicial: 0,
     // Nace lleno: el tope son sus viviendas.
     poblacion: edificios.filter((e) => e === 'vivienda').length * MERCENARIOS.poblacionPorVivienda,
     poblacionEn: instante,
@@ -79,6 +80,10 @@ export function colocarCampamentosIniciales(mapa: Mapa, instante: Instante): Cam
 }
 
 export class MercenariosInvalidoError extends ReglaInvalidaError {}
+
+/** ¿Está `p` bajo la protección de algún campamento (M4/D78)? Ahí nadie inicia un combate. */
+export const enProteccionDeCampamento = (p: Point, campamentos: readonly CampamentoMercenarios[]): boolean =>
+  campamentos.some((c) => distancia(p, c.posicion) <= MERCENARIOS.radioProteccion);
 
 /** El campamento donde reside un héroe, si reside en alguno. */
 export const campamentoDeResidente = (campamentos: readonly CampamentoMercenarios[], heroeId: string): CampamentoMercenarios | undefined =>
