@@ -334,9 +334,13 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    (`dto.ts`, schema, `Docs/Coordinacion/01`), Doc 1.10.6 y los tests `presenciaEnElMundo` y `tiempoReal`. El runner
    de bots y el hub WS no cambian. D33b en batalla, **con Conquest** (protocolo BA/CQ).
 8. **Bots-héroe** que arranquen como los jugadores y calibración en batch con D38.
-9. Canon (`Docs/Game`), contrato, clientes. En el canon, además: quitar `comprarCasa` y el ingreso en Facciones NPC
-   (Doc 2, «Cambiar de residencia»: «usa comprar casa o unirse a una Facción»; `Docs/Arquitectura/5` fila de
-   `unirseAFaccion`).
+9. ~~**Canon, contrato, clientes**~~ **Hecho** (2026-10-04). Canon sin Facciones NPC (glosario, Doc 2, 3, 5, 6) —
+   `comprarCasa` y `unirseAFaccion` ya estaban fuera—; contrato v1 con los campos de campamento del héroe y
+   `EscuadronDto.prestada`; doc 02 con `crearHeroe(campamentoId)`, la pantalla `sinHeroe.campamentos` y §4.2b (comandos
+   del campamento); cliente de admin sin los comandos borrados; cliente de jugador 0.8.0 (`BronzeAgeClient@7529161`):
+   nacer en un campamento, pantalla Campamento, campamentos y alijos en el mapa, pedir ingreso y fundar con la
+   caravana. Verificado en vivo hasta salir y volver a entrar; la compra y el enganche de la caravana, solo con tipos.
+   **Pendiente**: los rechazos llegan solo con el código (`mercenarios.invalido`), sin el motivo.
 
 ## 6. Revisión por consejo (2026-10-03)
 
