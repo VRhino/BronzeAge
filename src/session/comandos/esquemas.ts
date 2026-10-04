@@ -403,6 +403,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
       escuadronIds: LISTA_DE_IDENTIFICADORES,
       carga: { type: 'object', additionalProperties: NUMERO },
       politicaDeUnion: { type: 'string', enum: ['rechazar', 'aceptar', 'preguntar'] },
+      objetivo: OBJETIVO_EJERCITO,
     },
     ['campamentoId', 'heroeId', 'escuadronIds', 'carga']
   ),

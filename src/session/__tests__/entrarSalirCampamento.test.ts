@@ -122,7 +122,7 @@ describe('la ración gratis del residente (D24, D50)', () => {
   it('unirse y separarse en campo no la convierte en trigo guardable (bug del cerebro sin plaza)', () => {
     const { sesion, heroeId, heroe, opc } = nacido();
     const otro = sesion.ejecutar(crearHeroe, { ...PARAMS, displayName: 'Bea', campamentoId: 'mercenarios-0' }, { actor: 'jugador-2' }).datos!.heroeId;
-    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: otro, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar' }, { actor: otro }).datos!.ejercitoId;
+    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: otro, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar', objetivo: { tipo: 'punto', punto: { x: 1000, y: 1000 } } }, { actor: otro }).datos!.ejercitoId;
     sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);
     expect(sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId }, opc).ok).toBe(true);
     expect(sesion.ejecutar(separarseDelEjercito, { heroeId }, opc).ok).toBe(true);

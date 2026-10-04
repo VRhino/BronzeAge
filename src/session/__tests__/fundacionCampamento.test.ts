@@ -118,7 +118,12 @@ describe('fundar en grupo desde el campamento (M2, D21)', () => {
     for (const [recurso, cantidad] of Object.entries(costoRefundacion())) sesion.ejecutar(aportarARefundacion, { recurso, cantidad, lado: 'almacen' }, { actor: ana });
     const caravanaId = sesion.ejecutar(comprarCaravanaDeRefundacion, {}, { actor: ana }).datos!.caravanaId;
 
-    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: ana, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar' }, { actor: ana }).datos!.ejercitoId;
+    expect(
+      sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: ana, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar' }, { actor: ana }).ok,
+      'un ejército sale con rumbo'
+    ).toBe(false);
+    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: ana, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar', objetivo: { tipo: 'punto', punto: { x: 1000, y: 1000 } } }, { actor: ana }).datos!.ejercitoId;
+    expect(sesion.getState().ejercitos.find((e) => e.id === ejercitoId)).toMatchObject({ tipo: 'ejercito', estado: 'marchando' });
     sesion.ejecutar(adjuntarCaravana, { ejercitoId, caravanaId, heroeId: ana }, { actor: ana });
     sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: bea, escuadronIds: [], carga: {} }, { actor: bea });
     expect(sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: bea }, { actor: bea }).ok).toBe(true);

@@ -548,7 +548,9 @@ export function salirDelCampamento(
   instante: Instante,
   /** Como en `movilizarEjercito`: si admite compañía, sale como ejército y otros ciudadanos de su Facción se le unen en campo
    * (cazar en grupo, D21; cofundar, M2). Por defecto, columna personal. */
-  politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar'
+  politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar',
+  /** El rumbo, obligatorio si sale como ejército: el de un ejército se fija al salir y no se cambia (Doc 5.12.1). */
+  rumbo?: { objetivo: ObjetivoEjercito; asentamientos: readonly Asentamiento[]; mapa: Mapa }
 ): { heroe: Heroe; columna: EjercitoConTropa } {
   if (heroe.ubicacion.tipo !== 'mercenarios' || heroe.ubicacion.campamentoId !== campamento.id) {
     throw new MovilizacionInvalidaError('No estás dentro de ese campamento.');
@@ -581,12 +583,19 @@ export function salirDelCampamento(
   const racion = toca ? Math.min(MERCENARIOS.racion.trigo, Math.max(0, hueco)) : 0;
   if (racion > 0) suministro['trigo'] = (suministro['trigo'] ?? 0) + racion;
   const columnaId = aparcada?.id ?? id;
+  const comoEjercito = politicaDeUnion !== 'rechazar';
+  if (comoEjercito && !rumbo) throw new MovilizacionInvalidaError('Un ejército sale contra un destino: hay que darle rumbo.');
+  const ruta =
+    comoEjercito && rumbo
+      ? calcularRuta(rumbo.mapa, campamento.posicion, puntoDeObjetivo(rumbo.objetivo, rumbo.asentamientos), { pasosRio: rumbo.asentamientos.map((a) => a.posicion) })
+      : [];
+  if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const columna: EjercitoConTropa = {
     id: columnaId,
     faccionId,
     origenAsentamientoId: '',
     participantes: [{ heroeId: heroe.id, unidoEn: instante }],
-    tipo: politicaDeUnion === 'rechazar' ? 'personal' : 'ejercito',
+    tipo: comoEjercito ? 'ejercito' : 'personal',
     liderId: heroe.id,
     politicaDeUnion,
     escuadronIds: escuadrones.map((e) => e.id),
@@ -594,11 +603,11 @@ export function salirDelCampamento(
     suministro,
     ...(racion > 0 ? { racion } : {}),
     caravanasAdjuntasIds: [],
-    objetivo: { tipo: 'punto', punto: campamento.posicion },
-    ruta: [],
+    objetivo: comoEjercito && rumbo ? rumbo.objetivo : { tipo: 'punto', punto: campamento.posicion },
+    ruta,
     progreso: 0,
     posicionActual: campamento.posicion,
-    estado: 'estacionado',
+    estado: comoEjercito ? 'marchando' : 'estacionado',
   };
   return { heroe: { ...enColumna(columnaId), almacenPersonal, ...(racion > 0 ? { racionEn: instante } : {}) }, columna };
 }
