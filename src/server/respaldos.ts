@@ -28,6 +28,7 @@ import { crearAlmacenEnDisco } from './almacen/enDisco';
 import { cargarPartida } from './persistenciaPartida';
 import { claveDeAuditoria } from './auditoria';
 import { claveDeEventos } from './eventosDePartida';
+import { claveDeDiario } from './diarioDePartida';
 
 /** Subdirectorio de respaldos, hermano de los snapshots. Aparte y no mezclado con ellos para que
  * `listarPartidas` —que lee el directorio de datos— no confunda un respaldo con una partida viva. */
@@ -62,6 +63,7 @@ function momentoDeArchivo(sello: string): string {
 const SUFIJO_PARTIDA = '.json';
 const SUFIJO_AUDITORIA = '.auditoria.jsonl';
 const SUFIJO_EVENTOS = '.eventos.jsonl';
+const SUFIJO_DIARIO = '.diario.jsonl';
 
 function nombreDeRespaldo(gameId: string, momento: string, sufijo: string): string {
   return `${gameId}--${momentoParaArchivo(momento)}${sufijo}`;
@@ -94,10 +96,16 @@ export async function respaldarPartida(directorio: string, gameId: string, momen
   await copyFile(origen, join(destinoDir, archivo));
 
   // La auditoría y el historial de eventos acompañan al snapshot: restaurar la partida sin ellos dejaría el
-  // registro y el log contando una historia que ya no corresponde al estado. Que no existan es normal
-  // (partida sin comandos todavía).
-  for (const sufijo of [SUFIJO_AUDITORIA, SUFIJO_EVENTOS]) {
-    const origenHermano = join(directorio, sufijo === SUFIJO_AUDITORIA ? claveDeAuditoria(gameId) : claveDeEventos(gameId));
+  // registro y el log contando una historia que ya no corresponde al estado. El diario de comandos también: es
+  // lo aceptado desde el último guardado (doc 12 §5.1), y sin él el respaldo volvería al último tick. Que no
+  // existan es normal (partida sin comandos todavía).
+  const hermanos: [string, string][] = [
+    [SUFIJO_AUDITORIA, claveDeAuditoria(gameId)],
+    [SUFIJO_EVENTOS, claveDeEventos(gameId)],
+    [SUFIJO_DIARIO, claveDeDiario(gameId)],
+  ];
+  for (const [sufijo, clave] of hermanos) {
+    const origenHermano = join(directorio, clave);
     try {
       await copyFile(origenHermano, join(destinoDir, nombreDeRespaldo(gameId, momento, sufijo)));
     } catch (err) {
@@ -129,7 +137,8 @@ export async function listarRespaldos(directorio: string, gameId: string): Promi
       !archivo.startsWith(prefijo) ||
       !archivo.endsWith(SUFIJO_PARTIDA) ||
       archivo.endsWith(SUFIJO_AUDITORIA) ||
-      archivo.endsWith(SUFIJO_EVENTOS)
+      archivo.endsWith(SUFIJO_EVENTOS) ||
+      archivo.endsWith(SUFIJO_DIARIO)
     )
       continue;
     const sello = archivo.slice(prefijo.length, archivo.length - SUFIJO_PARTIDA.length);
@@ -159,9 +168,10 @@ export class RespaldoInservibleError extends Error {
  * rechaza aquí), y solo entonces se sustituye el snapshot vigente con un `rename` atómico. Nunca hay un
  * instante en que la partida esté medio restaurada: o sigue la vieja, o está la nueva entera.
  *
- * El historial de eventos (`<gameId>.eventos.jsonl`) se restaura junto al snapshot: se pone el del respaldo,
- * o —si el respaldo no lo trae— se BORRA el vigente, porque tras volver a una versión anterior el historial
- * de después ya no corresponde y `cargarPartida` lo filtra igualmente por `<= version`.
+ * El historial de eventos (`<gameId>.eventos.jsonl`) y el diario de comandos (`<gameId>.diario.jsonl`) se
+ * restauran junto al snapshot: se pone el del respaldo, o —si el respaldo no lo trae— se BORRA el vigente. El
+ * historial de después ya no corresponde, y el diario vigente es de la partida viva: repasado sobre el
+ * respaldo, la haría avanzar hacia donde estaba.
  *
  * **NO reabre la partida.** Si el proceso la tiene abierta, su `RunnerDePartida` sigue con el estado viejo en
  * memoria y lo escribiría encima al siguiente comando. Quien llame a esto es responsable de que la partida
@@ -183,18 +193,21 @@ export async function restaurarPartida(directorio: string, gameId: string, archi
   const pruebas = join(directorio, DIRECTORIO_RESPALDOS, `.verificacion-${gameId}`);
   await mkdir(pruebas, { recursive: true });
   const candidato = join(pruebas, `${gameId}${SUFIJO_PARTIDA}`);
-  const origenEventos = origen.slice(0, -SUFIJO_PARTIDA.length) + SUFIJO_EVENTOS;
-  try {
-    await copyFile(origen, candidato);
-    // El historial del respaldo, si lo trae, junto al candidato — así la verificación (`cargarPartida`) lo
-    // rehidrata y comprueba que también carga.
-    const tieneEventos = await copyFile(origenEventos, join(pruebas, `${gameId}${SUFIJO_EVENTOS}`)).then(
+  const base = origen.slice(0, -SUFIJO_PARTIDA.length);
+  const copiarSiExiste = (sufijo: string) =>
+    copyFile(base + sufijo, join(pruebas, `${gameId}${sufijo}`)).then(
       () => true,
       (err: NodeJS.ErrnoException) => {
         if (err.code === 'ENOENT') return false;
         throw err;
       }
     );
+  try {
+    await copyFile(origen, candidato);
+    // El historial y el diario del respaldo, si los trae, junto al candidato — así la verificación
+    // (`cargarPartida`) los rehidrata/repasa y comprueba que también cargan.
+    const tieneEventos = await copiarSiExiste(SUFIJO_EVENTOS);
+    const tieneDiario = await copiarSiExiste(SUFIJO_DIARIO);
 
     const cargada = await cargarPartida(crearAlmacenEnDisco(pruebas), gameId);
     if (!cargada) throw new RespaldoInservibleError(archivo, 'no contiene una partida legible');
@@ -204,6 +217,8 @@ export async function restaurarPartida(directorio: string, gameId: string, archi
     await rename(candidato, join(directorio, `${gameId}${SUFIJO_PARTIDA}`));
     if (tieneEventos) await rename(join(pruebas, `${gameId}${SUFIJO_EVENTOS}`), join(directorio, claveDeEventos(gameId)));
     else await rm(join(directorio, claveDeEventos(gameId)), { force: true });
+    if (tieneDiario) await rename(join(pruebas, `${gameId}${SUFIJO_DIARIO}`), join(directorio, claveDeDiario(gameId)));
+    else await rm(join(directorio, claveDeDiario(gameId)), { force: true });
     return version;
   } catch (err) {
     if (err instanceof RespaldoInservibleError) throw err;
@@ -231,6 +246,7 @@ export async function podarRespaldos(directorio: string, gameId: string, conserv
     // Y sus adjuntos (auditoría, historial de eventos), que si no quedarían huérfanos ocupando sitio para siempre.
     await rm(join(destinoDir, nombreDeRespaldo(gameId, respaldo.momento, SUFIJO_AUDITORIA)), { force: true });
     await rm(join(destinoDir, nombreDeRespaldo(gameId, respaldo.momento, SUFIJO_EVENTOS)), { force: true });
+    await rm(join(destinoDir, nombreDeRespaldo(gameId, respaldo.momento, SUFIJO_DIARIO)), { force: true });
   }
   return sobrantes.length;
 }

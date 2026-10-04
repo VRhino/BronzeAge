@@ -23,6 +23,7 @@ import type { Instante } from '../domain/tiempo';
 import { generarMapa, WORLDGEN_VERSION, type MapaGenerado } from '../worldgen';
 import { LAYOUT_VERSION } from '../constants';
 import { leerEventos } from './eventosDePartida';
+import { repasarDiario } from './diarioDePartida';
 
 /**
  * Versión del ENVOLTORIO del archivo de snapshot. NO es `PartidaExportada.state.version` (versión de LA
@@ -181,8 +182,8 @@ export async function guardarPartida(almacen: AlmacenDeObjetos, sesion: GameSess
         // que sale idéntico al guardado.
         mapa: { version: partida.state.mapa.version, config: partida.state.mapa.config } as MapaGenerado,
         // El historial vive en `<gameId>.eventos.jsonl` (append-only, ver `eventosDePartida.ts`), no aquí —
-        // el snapshot se reescribe entero en cada comando y `eventosDominio` solo crece. Lo anexa
-        // `RunnerDePartida` tras cada guardado; `cargarPartida` lo rehidrata.
+        // el snapshot se reescribe entero en cada guardado y `eventosDominio` solo crece. Lo anexa
+        // `RunnerDePartida` tras cada comando; `cargarPartida` lo rehidrata.
         eventosDominio: [],
       },
     },
@@ -199,10 +200,14 @@ export async function guardarPartida(almacen: AlmacenDeObjetos, sesion: GameSess
  * del archivo) y `ResumenPartidaEnDisco` (lo sirve `GET /admin/partidas`). */
 export interface PartidaCargada {
   sesion: GameSession;
+  /** Última versión cuyos eventos ya están en el JSONL: la del snapshot, o más si el diario repasado ya los
+   * había anexado antes de la caída. Es el cursor de `RunnerDePartida`. */
+  versionEventosAnexados: number;
 }
 
 /**
- * Reconstruye la `GameSession` guardada bajo la clave `<gameId>.json`.
+ * Reconstruye la `GameSession` guardada bajo la clave `<gameId>.json` y le repasa el diario de comandos
+ * (`diarioDePartida.ts`), así que devuelve la partida tal y como estaba tras el último comando aceptado.
  * `null` si no existe ningún snapshot para ese `gameId` — no es un error, es el caso "partida nueva".
  */
 export async function cargarPartida(almacen: AlmacenDeObjetos, gameId: string, opciones: OpcionesSesion = {}): Promise<PartidaCargada | null> {
@@ -226,9 +231,18 @@ export async function cargarPartida(almacen: AlmacenDeObjetos, gameId: string, o
   //  - el historial de eventos, desde el JSONL hermano (filtrado a `<= version` por si un append quedó por
   //    delante de un snapshot revertido).
   partida.state.mapa = generarMapa(partida.state.mapa.config);
+  const versionGuardada = partida.state.version;
+  const historial = await leerEventos(almacen, gameId); // más nuevo primero
   // Solo los últimos en memoria (`MAX_EVENTOS_EN_MEMORIA`); el resto se sigue leyendo del JSONL cuando un cursor los pide.
-  partida.state.eventosDominio = anteponerEventos(await leerEventos(almacen, gameId, partida.state.version), []);
-  return { sesion: GameSession.importar(partida, opciones) };
+  partida.state.eventosDominio = anteponerEventos(historial.filter((e) => e.version <= versionGuardada), []);
+  const sesion = GameSession.importar(partida, opciones);
+
+  // Lo aceptado desde el último guardado (doc 12 §5.1). El repaso regenera en memoria sus eventos; los que ya
+  // llegaron al JSONL antes de la caída no se vuelven a anexar.
+  await repasarDiario(almacen, sesion);
+  const version = sesion.getState().version;
+  const ultimaEnHistorial = historial.find((e) => e.version <= version)?.version ?? 0;
+  return { sesion, versionEventosAnexados: Math.max(versionGuardada, ultimaEnHistorial) };
 }
 
 export interface ResumenPartidaEnDisco {

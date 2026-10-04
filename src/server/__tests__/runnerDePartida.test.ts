@@ -1,13 +1,9 @@
 // Contrato de RunnerDePartida (Docs/Arquitectura/7_Diseno_GameSession.md §4, §8.4): cola serial, ciclo
-// "aplicar -> persistir -> confirmar" con descarte en fallo, y el reloj de mundo con catch-up (D5, doc 10).
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+// "aplicar -> anotar en el diario -> confirmar" con descarte en fallo (doc 12 §5.1), y el reloj de mundo con catch-up (D5, doc 10).
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { crearFaccion } from '../../session/comandos/crearFaccion';
-import { fundarAsentamiento } from '../../session/comandos/fundarAsentamiento';
-import { crearFaccionNpc } from '../../session/comandos/crearFaccionNpc';
-import { crearHeroe } from '../../session/comandos/crearHeroe';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RunnerDePartida } from '../runnerDePartida';
 import { MAX_EVENTOS_EN_MEMORIA } from '../../session/estado';
@@ -31,10 +27,22 @@ function runner(gameId = 'partida-runner', seed = 7): RunnerDePartida {
   return RunnerDePartida.crear(gameId, { seed }, { almacen, ahora: () => MOMENTO });
 }
 
+/** Runner sobre un almacén cuyo diario falla mientras `fallo.diario` sea `true` — el fallo de escritura que
+ * descarta un comando (doc 12 §5.1). */
+function runnerConDiarioQueFalla(gameId: string) {
+  const fallo = { diario: false };
+  const conFallo: typeof almacen = {
+    ...almacen,
+    anexar: (clave, contenido) =>
+      fallo.diario && clave.endsWith('.diario.jsonl') ? Promise.reject(new Error('disco lleno')) : almacen.anexar(clave, contenido),
+  };
+  return { r: RunnerDePartida.crear(gameId, { seed: 7 }, { almacen: conFallo, ahora: () => MOMENTO }), fallo };
+}
+
 /** Crea el héroe del jugador y devuelve su id, que es con el que actúa a partir de ahí (como hace la ruta). */
 async function heroeEn(r: RunnerDePartida, jugadorId: string): Promise<string> {
   const avatar = { cabezaId: '', peloId: '', barbaId: '', cejasId: '' };
-  const creado = await r.ejecutar(crearHeroe, { displayName: jugadorId, classDefinitionId: 'Spear', genero: 'femenino', avatar }, jugadorId);
+  const creado = await r.ejecutar('crearHeroe', { displayName: jugadorId, classDefinitionId: 'Spear', genero: 'femenino', avatar }, jugadorId);
   return creado.datos!.heroeId;
 }
 
@@ -45,9 +53,9 @@ describe('RunnerDePartida — cola serial', () => {
     // Sin `await` entre medias: las tres promesas se lanzan "a la vez" desde la perspectiva del llamador.
     // Tres actores distintos: un jugador solo puede crear una Facción (Doc 2 "Entidades"), así que el mismo
     // actor para las tres habría rechazado la segunda y la tercera por `faccion.ya_pertenece`.
-    const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
-    const p2 = r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2');
-    const p3 = r.ejecutar(crearFaccion, { nombre: 'Ugarit' }, 'jugador-3');
+    const p1 = r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1');
+    const p2 = r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-2');
+    const p3 = r.ejecutar('crearFaccion', { nombre: 'Ugarit' }, 'jugador-3');
     await Promise.all([p1, p2, p3]);
 
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Troya', 'Ugarit']);
@@ -58,10 +66,10 @@ describe('RunnerDePartida — cola serial', () => {
 
   it('un comando rechazado no bloquea ni desordena los que vienen después', async () => {
     const r = runner();
-    const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    const p1 = r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1');
     // `fundarAsentamiento` con una facción inexistente se rechaza (error de dominio) sin lanzar.
-    const p2 = r.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 } });
-    const p3 = r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2');
+    const p2 = r.ejecutar('fundarAsentamiento', { faccionId: 'no-existe' });
+    const p3 = r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-2');
 
     const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
     expect(r1.ok).toBe(true);
@@ -71,52 +79,41 @@ describe('RunnerDePartida — cola serial', () => {
   });
 });
 
-describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
-  it('cada comando aceptado queda guardado en disco antes de resolver', async () => {
-    const r = runner('g-persistido');
-    await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+describe('RunnerDePartida — aplicar -> anotar -> confirmar', () => {
+  it('cada comando aceptado queda en el diario antes de resolver, y la carga lo recupera', async () => {
+    const r = await RunnerDePartida.crearYPersistir('g-persistido', { seed: 7 }, { almacen, ahora: () => MOMENTO });
+    await r.ejecutar('crearFaccion', { nombre: 'Micenas' });
 
     const cargada = await cargarPartida(almacen, 'g-persistido');
     expect(cargada!.sesion.getState().facciones).toHaveLength(1);
   });
 
-  it('si la persistencia falla, el comando se descarta: GameSession vuelve a como estaba antes', async () => {
-    const r = runner('g-conflicto');
-    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }); // versión 1, guardada
+  it('si el diario falla, el comando se descarta: GameSession vuelve a como estaba antes', async () => {
+    const { r, fallo } = runnerConDiarioQueFalla('g-conflicto');
+    await r.ejecutar('crearFaccion', { nombre: 'Micenas' }); // versión 1, anotada
 
-    // Se fuerza el conflicto de versión a mano: alguien (un bug, otro proceso) deja en disco una versión más
-    // avanzada de la que el runner cree tener.
-    const ruta = join(directorio, 'g-conflicto.json');
-    const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
-    snapshot.partida.state.version = 999;
-    await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
-
+    fallo.diario = true;
     const estadoAntes = r.getState();
     // Actor distinto del de Micenas: si reutilizara el mismo, el rechazo de dominio (`faccion.ya_pertenece`)
-    // llegaría antes que el de persistencia que este test quiere ejercitar, y nunca lanzaría.
-    await expect(r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2')).rejects.toThrow();
+    // llegaría antes que el de escritura que este test quiere ejercitar, y nunca lanzaría.
+    await expect(r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-2')).rejects.toThrow();
 
     // El comando se descartó: ni la facción nueva ni la versión avanzada quedaron en memoria.
     expect(r.getState().version).toBe(estadoAntes.version);
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas']);
   });
 
-  it('tras un fallo de persistencia, el runner sigue operable para el siguiente comando', async () => {
-    const r = runner('g-recupera');
-    await r.ejecutar(crearFaccion, { nombre: 'Micenas' });
+  it('tras un fallo del diario, el runner sigue operable para el siguiente comando', async () => {
+    const { r, fallo } = runnerConDiarioQueFalla('g-recupera');
+    await r.ejecutar('crearFaccion', { nombre: 'Micenas' });
 
-    const ruta = join(directorio, 'g-recupera.json');
-    const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
-    snapshot.partida.state.version = 999;
-    await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
-    // Actor distinto del de Micenas, mismo motivo que el test anterior.
-    await expect(r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2')).rejects.toThrow();
+    fallo.diario = true;
+    await expect(r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-2')).rejects.toThrow();
 
-    // El "atacante" deja de escribir versiones adelantadas: el siguiente comando legítimo debe volver a
-    // funcionar con normalidad, sin arrastrar nada del intento fallido. Tercer actor: ni el de Micenas ni el
-    // de Troya (ambos ya tienen Facción).
-    await writeFile(ruta, JSON.stringify({ ...snapshot, partida: { ...snapshot.partida, state: { ...snapshot.partida.state, version: 1 } } }), 'utf-8');
-    const resultado = await r.ejecutar(crearFaccion, { nombre: 'Ugarit' }, 'jugador-3');
+    // El disco vuelve: el siguiente comando legítimo funciona con normalidad, sin arrastrar nada del intento
+    // fallido. Tercer actor: ni el de Micenas ni el de Troya.
+    fallo.diario = false;
+    const resultado = await r.ejecutar('crearFaccion', { nombre: 'Ugarit' }, 'jugador-3');
 
     expect(resultado.ok).toBe(true);
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Ugarit']);
@@ -126,7 +123,7 @@ describe('RunnerDePartida — aplicar -> persistir -> confirmar', () => {
 describe('RunnerDePartida.avanzarTick — bundlea auto-comercio y turno NPC', () => {
   it('el turno del NPC de gobernanza ocurre DENTRO de avanzarTick, sin un comando aparte', async () => {
     const r = runner('g-npc');
-    await r.ejecutar(crearFaccionNpc, { nombre: 'Micenas' });
+    await r.ejecutar('crearFaccionNpc', { nombre: 'Micenas' });
 
     // Antes de este fix, `avanzarTick()` del runner solo aplicaba el tick puro — la primera decisión de
     // gobernanza del NPC (asignar Gobernador, determinista, no depende de ticks previos) no llegaba a
@@ -155,7 +152,7 @@ describe('RunnerDePartida.cargarOCrear', () => {
 
   it('con snapshot previo, retoma la partida guardada — incluida la continuidad de RNG', async () => {
     const original = runner('g-retomada');
-    await original.ejecutar(crearFaccion, { nombre: 'Micenas' });
+    await original.ejecutar('crearFaccion', { nombre: 'Micenas' });
     await original.avanzarTick();
 
     const retomado = await RunnerDePartida.cargarOCrear('g-retomada', { seed: 1 }, { almacen, ahora: () => MOMENTO });
@@ -332,16 +329,16 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
 describe('RunnerDePartida.ejecutar — idempotencia (Fase C5)', () => {
   it('sin idempotencyKey, dos llamadas se aplican dos veces (comportamiento de siempre)', async () => {
     const r = runner('g-sin-clave');
-    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1');
+    await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1');
     // Actor distinto: un jugador ya no puede crear una segunda Facción (`faccion.ya_pertenece`).
-    await r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2');
+    await r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-2');
     expect(r.getState().facciones).toHaveLength(2);
   });
 
   it('la misma idempotencyKey y el mismo actor: el segundo ejecutar NO vuelve a aplicar el comando', async () => {
     const r = runner('g-idem');
-    const primero = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
-    const segundo = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    const primero = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    const segundo = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
 
     expect(r.getState().facciones).toHaveLength(1); // no dos
     expect(r.getState().version).toBe(1); // la segunda llamada no subió la versión
@@ -351,8 +348,8 @@ describe('RunnerDePartida.ejecutar — idempotencia (Fase C5)', () => {
   it('deduplica también si el reintento llega ANTES de que el primero termine (misma promesa)', async () => {
     const r = runner('g-idem-concurrente');
     // Sin `await` entre medias: el segundo `ejecutar` llega mientras el primero sigue en la cola.
-    const p1 = r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
-    const p2 = r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    const p1 = r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    const p2 = r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
     await Promise.all([p1, p2]);
 
     expect(r.getState().facciones).toHaveLength(1);
@@ -360,39 +357,32 @@ describe('RunnerDePartida.ejecutar — idempotencia (Fase C5)', () => {
 
   it('la misma clave con actores distintos NO colisiona: cada actor tiene su propio espacio de claves', async () => {
     const r = runner('g-idem-actores');
-    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
-    await r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-2', 'clave-1');
+    await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'jugador-1', 'clave-1');
+    await r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-2', 'clave-1');
 
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Troya']);
   });
 
   it('una clave reutilizada tras un RECHAZO de dominio también devuelve el mismo rechazo, sin reintentar de verdad', async () => {
     const r = runner('g-idem-rechazo');
-    const primero = await r.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 } }, 'jugador-1', 'clave-1');
-    const segundo = await r.ejecutar(fundarAsentamiento, { faccionId: 'no-existe', posicion: { x: 0, y: 0 } }, 'jugador-1', 'clave-1');
+    const primero = await r.ejecutar('fundarAsentamiento', { faccionId: 'no-existe' }, 'jugador-1', 'clave-1');
+    const segundo = await r.ejecutar('fundarAsentamiento', { faccionId: 'no-existe' }, 'jugador-1', 'clave-1');
 
     expect(primero.ok).toBe(false);
     expect(segundo).toEqual(primero);
   });
 
-  it('si la persistencia falla, la clave NO queda cacheada: un reintento legítimo puede volver a intentarlo', async () => {
-    const r = runner('g-idem-fallo');
-    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }); // versión 1, guardada
+  it('si el diario falla, la clave NO queda cacheada: un reintento legítimo puede volver a intentarlo', async () => {
+    const { r, fallo } = runnerConDiarioQueFalla('g-idem-fallo');
+    await r.ejecutar('crearFaccion', { nombre: 'Micenas' }); // versión 1, anotada
 
-    const ruta = join(directorio, 'g-idem-fallo.json');
-    const snapshot = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
-    snapshot.partida.state.version = 999;
-    await writeFile(ruta, JSON.stringify(snapshot), 'utf-8');
+    fallo.diario = true;
+    await expect(r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-1', 'clave-1')).rejects.toThrow();
 
-    await expect(r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-1', 'clave-1')).rejects.toThrow();
-
-    // Se arregla el conflicto y se reintenta con la MISMA clave: si hubiera quedado cacheado el fallo, esto
+    // Se arregla el disco y se reintenta con la MISMA clave: si hubiera quedado cacheado el fallo, esto
     // devolvería el mismo rechazo en vez de aplicar de verdad.
-    const snapshotArreglado = JSON.parse(await readFile(ruta, 'utf-8')) as SnapshotPartida;
-    snapshotArreglado.partida.state.version = 1;
-    await writeFile(ruta, JSON.stringify(snapshotArreglado), 'utf-8');
-
-    const resultado = await r.ejecutar(crearFaccion, { nombre: 'Troya' }, 'jugador-1', 'clave-1');
+    fallo.diario = false;
+    const resultado = await r.ejecutar('crearFaccion', { nombre: 'Troya' }, 'jugador-1', 'clave-1');
     expect(resultado.ok).toBe(true);
     expect(r.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas', 'Troya']);
   });
@@ -428,8 +418,8 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
   it('pasado el minuto de TTL, la siguiente lectura recalcula', async () => {
     const { r, avanzarMs } = runnerConReloj(MOMENTO);
     const heroe = await heroeEn(r, 'jugador-1');
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, heroe);
-    const rf = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId }, heroe);
+    const creada = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, heroe);
+    const rf = await r.ejecutar('fundarAsentamiento', { faccionId: creada.datos!.faccionId }, heroe);
     expect(rf.ok).toBe(true);
 
     const primera = r.preciosReferencia(); // con un asentamiento recién fundado (stock inicial > 0)
@@ -445,8 +435,8 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
 
     const { r } = runnerConReloj(MOMENTO);
     const heroe = await heroeEn(r, 'jugador-1');
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, heroe);
-    await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId }, heroe);
+    const creada = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, heroe);
+    await r.ejecutar('fundarAsentamiento', { faccionId: creada.datos!.faccionId }, heroe);
 
     expect(r.preciosReferencia().madera).toBeLessThanOrEqual(sinAsentamientos);
   });
@@ -469,8 +459,8 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
     const antes = r.geometriaAsentamientos();
 
     const heroe = await heroeEn(r, 'jugador-1');
-    const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, heroe);
-    const fundada = await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId }, heroe);
+    const creada = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, heroe);
+    const fundada = await r.ejecutar('fundarAsentamiento', { faccionId: creada.datos!.faccionId }, heroe);
     expect(fundada.ok).toBe(true);
     const asentamientoId = fundada.datos!.asentamientoId;
 
@@ -484,7 +474,7 @@ describe('RunnerDePartida — geometriaAsentamientos (Fase C10: zonas/trazado po
   it('un comando que NO toca asentamientos deja la misma referencia cacheada (crearFaccion sola)', async () => {
     const r = runner();
     const primera = r.geometriaAsentamientos();
-    await r.ejecutar(crearFaccion, { nombre: 'Micenas' }); // no funda: `estado.asentamientos` sigue siendo el mismo array
+    await r.ejecutar('crearFaccion', { nombre: 'Micenas' }); // no funda: `estado.asentamientos` sigue siendo el mismo array
     expect(r.geometriaAsentamientos()).toBe(primera);
   });
 });
@@ -497,8 +487,8 @@ describe('RunnerDePartida — el reloj de pared NO entra en el estado (Fase D / 
     const dir = await mkdtemp(join(tmpdir(), 'bronzeage-reloj-'));
     try {
       const r = RunnerDePartida.crear('g', { seed: 7 }, { almacen: crearAlmacenEnDisco(dir), ahora });
-      const creada = await r.ejecutar(crearFaccion, { nombre: 'Micenas' }, 'ana');
-      await r.ejecutar(fundarAsentamiento, { faccionId: creada.datos!.faccionId, posicion: { x: 500, y: 500 } }, 'ana');
+      const creada = await r.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'ana');
+      await r.ejecutar('fundarAsentamiento', { faccionId: creada.datos!.faccionId }, 'ana');
       await r.avanzarTick();
       await r.avanzarTick();
       const { partida } = JSON.parse(await readFile(join(dir, 'g.json'), 'utf-8')) as SnapshotPartida;

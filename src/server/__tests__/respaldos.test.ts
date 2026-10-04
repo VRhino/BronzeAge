@@ -10,6 +10,7 @@ import { crearFaccion } from '../../session/comandos/crearFaccion';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { cargarPartida, guardarPartida } from '../persistenciaPartida';
 import { RegistroDeAuditoria } from '../auditoria';
+import { RunnerDePartida } from '../runnerDePartida';
 import { anexarEventos, leerEventos } from '../eventosDePartida';
 import {
   DIRECTORIO_RESPALDOS,
@@ -88,6 +89,17 @@ describe('respaldarPartida', () => {
 
     // ...y la restauración deja el historial como estaba: solo el evento de la versión 1.
     expect((await leerEventos(almacen, 'g1')).map((e) => e.version)).toEqual([1]);
+  });
+
+  it('se lleva el diario de comandos consigo: el respaldo incluye lo aceptado desde el último guardado', async () => {
+    const runner = await RunnerDePartida.crearYPersistir('g1', { seed: 42 }, { almacen, ahora: () => '2026-09-05T10:00:00.000Z' });
+    await runner.ejecutar('crearFaccion', { nombre: 'Micenas' }, 'ana'); // solo en el diario: no ha habido tick
+    await respaldarPartida(directorio, 'g1', '2026-09-05T11:22:33.444Z');
+
+    await runner.ejecutar('crearFaccion', { nombre: 'Troya' }, 'bea'); // posterior al respaldo
+    const { archivo } = (await listarRespaldos(directorio, 'g1'))[0]!;
+    expect(await restaurarPartida(directorio, 'g1', archivo)).toBe(1);
+    expect((await cargarPartida(almacen, 'g1'))!.sesion.getState().facciones.map((f) => f.nombre)).toEqual(['Micenas']);
   });
 
   it('el nombre del archivo no lleva ":" — inservible en Windows — y conserva el momento exacto', async () => {

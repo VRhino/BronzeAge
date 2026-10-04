@@ -17,7 +17,6 @@ import { createRng, generarMapa, MAPA_DEFAULT, restaurarRng, WORLDGEN_VERSION, t
 import { crearEstadoMapa, crearMapa, type EstadoMapa, type Mapa } from '../world/mapa';
 import { GeneradorIds } from './idGenerator';
 import { anteponerEventos, eventoAdministrativo, instanteDeTick, isoDeInstante, type GameSessionState } from './estado';
-import { avanzarAutoComercio } from './comandos/avanzarAutoComercio';
 import { avanzarFaccionesNpc } from './comandos/avanzarFaccionesNpc';
 import { avanzarTick } from './comandos/avanzarTick';
 import { mercadoMercenarioInicial } from '../engine/mercadoMercenario';
@@ -205,6 +204,8 @@ export class GameSession {
       batallasEnUnity: this.opciones.batallasEnUnity ?? false,
     };
     const anterior = this.estado;
+    const estadoRng = this.rng.estado();
+    const siguienteId = this.ids.actual();
     const mapa = crearMapa(anterior.mapa, anterior.estadoMapa);
     const transicion = manejador(anterior, mapa, ctx, params);
 
@@ -217,6 +218,13 @@ export class GameSession {
     }
 
     this.estado = transicion.estado;
+    // Lo que no sube la versión no deja rastro (doc 12 §5.1): un rechazo o un `sinCambios` que hubiera tirado
+    // un dado o pedido un id no puede mover el RNG ni los ids, porque el diario de comandos no lo anota y el
+    // repaso al recuperar divergiría en silencio.
+    if (transicion.resultado.version === anterior.version) {
+      this.rng = restaurarRng(estadoRng);
+      this.ids.fijar(siguienteId);
+    }
     return transicion.resultado;
   }
 
@@ -229,12 +237,6 @@ export class GameSession {
 
   avanzarTick(): ResultadoComando<void> {
     return this.ejecutar(avanzarTick, undefined, { actor: ACTOR_SISTEMA });
-  }
-
-  /** Trueque automático de simulación (apagado por defecto). Va DESPUÉS del tick y ANTES del NPC de
-   * gobernanza — mismo orden que tenía en `GameStore`. */
-  avanzarAutoComercio(): ResultadoComando<void> {
-    return this.ejecutar(avanzarAutoComercio, undefined, { actor: ACTOR_SISTEMA });
   }
 
   avanzarFaccionesNpc(): ResultadoComando<void> {

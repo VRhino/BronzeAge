@@ -3,8 +3,9 @@
 //
 //  - La COLA SERIAL por partida que exige el doc 2 (principio 5): dos llamadas a `ejecutar`/`avanzarTick`
 //    lanzadas sin esperar la primera se aplican en el orden en que llegaron, nunca intercaladas.
-//  - El ciclo "aplicar -> persistir -> confirmar" del doc 7 §2(a): si la escritura a disco falla, el comando
-//    se descarta — `GameSession` vuelve a como estaba antes de aplicarlo, no se queda a medias.
+//  - El ciclo "aplicar -> anotar en el diario -> confirmar" (doc 12 §5.1, antes doc 7 §2(a) con un guardado
+//    completo por comando): si la línea del diario no se escribe, el comando se descarta — `GameSession` vuelve
+//    a como estaba antes de aplicarlo, no se queda a medias. La partida entera se guarda una vez por tick.
 //  - El scheduler de ticks automáticos (opcional: nada obliga a usarlo, `avanzarTick()` sigue invocable a
 //    mano igual que hoy).
 //
@@ -16,7 +17,8 @@
 // ver doc 7 §8.3) es, por diseño, un cambio DENTRO de este archivo — invisible para quien lo llama.
 import type { Asentamiento, RegionId } from '../domain/types';
 import { GameSession, type OpcionesSesion, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
-import type { ActorId, ManejadorComando } from '../session/comandos/tipos';
+import { ACTOR_SISTEMA, type ActorId, type ManejadorComando } from '../session/comandos/tipos';
+import { REGISTRO_DIARIO, type DatosDeDiario, type ParamsDeDiario, type TipoDiario } from '../session/comandos/registro';
 import { eventosDesde, eventosRecortados, instanteDeTick, versionMasVieja, type EventoDominioConVersion, type GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
@@ -26,7 +28,8 @@ import { evaluarAscenso, type EvaluacionAscenso } from '../engine/ascenso';
 import { PRECIO_BASE } from '../constants';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
-import { anexarEventos, leerEventos } from './eventosDePartida';
+import { anexarEventos, claveDeEventos, leerEventos } from './eventosDePartida';
+import { anexarAlDiario, vaciarDiario, type LineaDiario } from './diarioDePartida';
 import { tecnologiasDe } from '../engine/tecnologia';
 
 /**
@@ -184,20 +187,20 @@ export class RunnerDePartida {
   private cacheGeometria: { sobre: readonly Asentamiento[]; valor: GeometriaAsentamientos } | null = null;
 
   /**
-   * Última `version` cuyos eventos ya están en `<gameId>.eventos.jsonl` (`eventosDePartida.ts`). Arranca en la
-   * versión cargada: para una partida en disco, el JSONL ya tiene su historial hasta ahí (lo rehidrató
-   * `cargarPartida`); para una nueva, es 0. Solo avanza cuando un `anexarEventos` termina bien — si falla, el
-   * próximo guardado reintenta ese tramo (los eventos siguen en memoria hasta un reinicio).
+   * Última `version` cuyos eventos ya están en `<gameId>.eventos.jsonl` (`eventosDePartida.ts`). Para una
+   * partida en disco lo calcula `cargarPartida` (el diario repasado puede haber anexado ya parte de los suyos);
+   * para una nueva, es 0. Solo avanza cuando un `anexarEventos` termina bien — si falla, el próximo comando
+   * reintenta ese tramo (los eventos siguen en memoria hasta un reinicio).
    */
   private versionEventosAnexados: number;
 
-  private constructor(sesion: GameSession, opciones: OpcionesRunner) {
+  private constructor(sesion: GameSession, opciones: OpcionesRunner, versionEventosAnexados = sesion.getState().version) {
     this.sesion = sesion;
     this.almacen = opciones.almacen;
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
     this.opcionesSesion = opciones.sesion ?? {};
     this.alEmitir = opciones.alEmitir;
-    this.versionEventosAnexados = sesion.getState().version;
+    this.versionEventosAnexados = versionEventosAnexados;
   }
 
   static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): RunnerDePartida {
@@ -209,7 +212,10 @@ export class RunnerDePartida {
    * partida recién creada hasta su primer comando o tick — y si el proceso muriera antes de que alguien
    * ejecutara uno, se perdería del todo pese a que la creación ya había respondido 201/200. Seguro fuera de
    * la cola serial: nadie más tiene todavía una referencia a este `runner`, no hay otro mutador con quien
-   * pisarse. Usado por `cargarOCrear` (rama "no existe todavía") y `RegistroDePartidas.descartarYCrear`. */
+   * pisarse. Usado por `cargarOCrear` (rama "no existe todavía") y `RegistroDePartidas.descartarYCrear`.
+   *
+   * Vacía también el diario y el historial de eventos: lo que haya bajo este `gameId` es de una partida
+   * descartada, y sus líneas se repasarían (o sus eventos se leerían) sobre la nueva. */
   static async crearYPersistir(
     gameId: string,
     config: { seed: number; region?: RegionId },
@@ -218,6 +224,8 @@ export class RunnerDePartida {
   ): Promise<RunnerDePartida> {
     const runner = RunnerDePartida.crear(gameId, config, opciones);
     await guardarPartida(opciones.almacen, runner.sesion, runner.ahora(), persistencia);
+    await vaciarDiario(opciones.almacen, gameId);
+    await opciones.almacen.escribir(claveDeEventos(gameId), '');
     return runner;
   }
 
@@ -228,7 +236,7 @@ export class RunnerDePartida {
   static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
     const existente = await cargarPartida(opciones.almacen, gameId, opciones.sesion);
     return existente
-      ? new RunnerDePartida(existente.sesion, opciones)
+      ? new RunnerDePartida(existente.sesion, opciones, existente.versionEventosAnexados)
       : RunnerDePartida.crearYPersistir(gameId, config, opciones);
   }
 
@@ -254,7 +262,7 @@ export class RunnerDePartida {
 
   /** Snapshot exportable de la partida (Fase C12: descarga administrativa). En memoria, siempre al día —
    * `exportarSimulacion` ya no necesita reconstruir un formato aparte (el v2 de `GameStore` quedó retirado
-   * junto con `importarSimulacion`, doc 4): el snapshot real que ya se persiste en cada comando ES el
+   * junto con `importarSimulacion`, doc 4): el snapshot real que se persiste ES el
    * formato de exportación. */
   exportar(): PartidaExportada {
     return this.sesion.exportar();
@@ -322,9 +330,9 @@ export class RunnerDePartida {
   }
 
   /**
-   * Ejecuta un comando de jugador y espera su turno en la cola. Rechaza con lo que lance la persistencia si
-   * la escritura falla — el comando en sí no se pierde en silencio, pero tampoco queda aplicado sin estar
-   * guardado.
+   * Ejecuta un comando por su NOMBRE (`REGISTRO_DIARIO`: el nombre es lo que se anota en el diario) y espera su
+   * turno en la cola. Rechaza con lo que lance el diario si la escritura falla — el comando en sí no se pierde
+   * en silencio, pero tampoco queda aplicado sin estar anotado.
    *
    * `idempotencyKey` (Fase C5): si se pasa, un segundo `ejecutar` con la misma clave para el mismo `actor` —
    * ya esté el primero en curso o ya haya resuelto — devuelve el MISMO resultado sin volver a aplicar el
@@ -337,11 +345,17 @@ export class RunnerDePartida {
    * entre dos llamadas equivalentes y daría falsos positivos), y no es lo que este mecanismo existe para
    * resolver — es protección contra la reconexión, no contra un cliente que genera mal sus claves.
    */
-  ejecutar<P, R>(manejador: ManejadorComando<P, R>, params: P, actor?: ActorId, idempotencyKey?: string): Promise<ResultadoComando<R>> {
+  ejecutar<T extends TipoDiario>(
+    tipo: T,
+    params: ParamsDeDiario<T>,
+    actor?: ActorId,
+    idempotencyKey?: string
+  ): Promise<ResultadoComando<DatosDeDiario<T>>> {
     // Sin `momento`: `GameSession` lo deriva del tick (`instanteDeTick`, Fase D / doc 10). `this.ahora()`
     // —el reloj de pared— se reserva para lo que NO es estado de partida: `guardarPartida` (abajo), el TTL de
     // `preciosReferencia`, y el catch-up del reloj de mundo (`sincronizarConReloj`, D5).
-    const operacion = () => this.aplicarYPersistir((sesion) => sesion.ejecutar(manejador, params, { actor }));
+    type R = DatosDeDiario<T>;
+    const operacion = () => this.aplicarYAnotar((lineas) => this.aplicar<R>(lineas, tipo, params, actor), false);
     if (idempotencyKey === undefined) return this.encolar(operacion);
 
     const clave = `${actor ?? ''}:${idempotencyKey}`;
@@ -363,23 +377,22 @@ export class RunnerDePartida {
    * §8.1: "el estado solo admite un mutador a la vez"), así que comparten la misma cola.
    *
    * Encadena tick → auto-comercio (apagado por defecto) → turno del NPC de gobernanza, mismo orden que tenía
-   * `GameStore.avanzarTick` antes de que existiera este runner — es UN solo persist para las tres, no tres
-   * comandos sueltos: si se guardaran por separado, un fallo de escritura a mitad podría dejar el tick
-   * aplicado pero el turno NPC no, con la partida y el disco de acuerdo en un estado que nadie pidió.
+   * `GameStore.avanzarTick` antes de que existiera este runner. Las tres líneas van al diario en UNA escritura,
+   * y después se guarda la partida entera y se vacía el diario (doc 12 §5.1).
    */
   avanzarTick(): Promise<ResultadoComando<void>> {
-    return this.encolar(() => this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion)));
+    return this.encolar(() => this.aplicarYAnotar((lineas) => this.unTickCompleto(lineas), true));
   }
 
-  /** Un tick "completo" tal y como lo entiende este runner: tick puro + auto-comercio + turno del NPC, un
-   * solo persist para los tres. Sin encolar — lo llaman `avanzarTick` (una entrada de cola) y el reloj de
-   * mundo (`sincronizarConReloj`, también una sola entrada por pasada). */
-  private unTickCompleto(sesion: GameSession): ResultadoComando<void> {
+  /** Un tick "completo" tal y como lo entiende este runner: tick puro + auto-comercio + turno del NPC. Sin
+   * encolar — lo llaman `avanzarTick` (una entrada de cola) y el reloj de mundo (`sincronizarConReloj`, también
+   * una sola entrada por pasada). */
+  private unTickCompleto(lineas: LineaDiario[]): ResultadoComando<void> {
     const t0 = performance.now();
-    const resultado = sesion.avanzarTick();
+    const resultado = this.aplicar<void>(lineas, 'avanzarTick', undefined, ACTOR_SISTEMA);
     if (!resultado.ok) return resultado;
-    const trasAuto = sesion.avanzarAutoComercio();
-    const trasNpc = sesion.avanzarFaccionesNpc();
+    const trasAuto = this.aplicar<void>(lineas, 'avanzarAutoComercio', undefined, ACTOR_SISTEMA);
+    const trasNpc = this.aplicar<void>(lineas, 'avanzarFaccionesNpc', undefined, ACTOR_SISTEMA);
     this.eventosDelUltimoTick = [...resultado.eventos, ...trasAuto.eventos, ...trasNpc.eventos];
     // Se cronometra el tick COMPLETO (puro + auto-comercio + turno NPC), que es la unidad que ocupa la cola,
     // no el `avanzarSimulacion` puro que mide `scripts/medicion-escala.ts`. Los dos números no son
@@ -458,7 +471,7 @@ export class RunnerDePartida {
     if (adeudados > this.instrumentos.mayorRafaga) this.instrumentos.mayorRafaga = adeudados;
     return this.encolar(async () => {
       for (let i = 0; i < adeudados && this.relojDeMundo; i++) {
-        const r = await this.aplicarYPersistir((sesion) => this.unTickCompleto(sesion));
+        const r = await this.aplicarYAnotar((lineas) => this.unTickCompleto(lineas), true);
         if (r.ok && this.alEmitir) this.alEmitir(this.gameId, this.eventosDelUltimoTick);
       }
     });
@@ -525,38 +538,70 @@ export class RunnerDePartida {
     return resultado;
   }
 
-  /** El ciclo "aplicar -> persistir -> confirmar" del doc 7 §2(a). `GameSession` ya adoptó el estado nuevo
-   * dentro de `operacion` cuando esta función se entera de si hubo error — por eso, si la persistencia
-   * falla, no basta con "no aplicar": hay que reconstruir `GameSession` desde el snapshot previo a la
-   * operación. `previo` es barato de capturar (`exportar()` solo copia referencias, no clona, ver
-   * `GameSession.exportar`), así que capturarlo en cada operación no es un coste real. */
-  private async aplicarYPersistir<R>(operacion: (sesion: GameSession) => ResultadoComando<R>): Promise<ResultadoComando<R>> {
-    const previo: PartidaExportada = this.sesion.exportar();
-    const resultado = operacion(this.sesion);
+  /** Aplica una mutación por nombre y, si subió la versión, apunta su línea en `lineas` (aún sin escribir). */
+  private aplicar<R>(lineas: LineaDiario[], tipo: TipoDiario, params: unknown, actor: ActorId | undefined): ResultadoComando<R> {
+    const a = actor ?? ACTOR_SISTEMA;
+    const manejador = REGISTRO_DIARIO[tipo] as ManejadorComando<unknown, R>;
+    const versionAntes = this.sesion.getState().version;
+    const resultado = this.sesion.ejecutar(manejador, params, { actor: a });
+    if (resultado.version !== versionAntes) lineas.push({ v: resultado.version, t: tipo, a, ...(params === undefined ? {} : { p: params }) });
+    return resultado;
+  }
 
-    if (!resultado.ok) return resultado; // rechazado: GameSession no cambió nada, no hay nada que persistir
+  /**
+   * El ciclo "aplicar -> anotar -> confirmar" (doc 12 §5.1). Lo aceptado es durable en cuanto su línea está en el
+   * diario; si esa escritura falla, se reconstruye `GameSession` desde `previo` (barato: `exportar()` solo copia
+   * referencias) y se lanza. Con `guardar` (los ticks), después se guarda la partida entera y se vacía el diario.
+   */
+  private async aplicarYAnotar<R>(operacion: (lineas: LineaDiario[]) => ResultadoComando<R>, guardar: boolean): Promise<ResultadoComando<R>> {
+    const previo: PartidaExportada = this.sesion.exportar();
+    const lineas: LineaDiario[] = [];
+    const resultado = operacion(lineas);
+    if (lineas.length === 0) return resultado; // rechazado o sin cambios: no hay nada que anotar
 
     try {
-      await guardarPartida(this.almacen, this.sesion, this.ahora());
+      await anexarAlDiario(this.almacen, this.gameId, lineas);
     } catch (err) {
       this.sesion = GameSession.importar(previo, this.opcionesSesion);
       throw err;
     }
 
     await this.anexarEventosNuevos();
+    if (guardar) await this.guardarYVaciarDiario();
     return resultado;
   }
 
   /**
-   * Anexa al JSONL de eventos (`eventosDePartida.ts`) lo emitido desde el último guardado. El corte se hace
+   * Guarda la partida entera y vacía el diario. Su fallo NO revierte nada: lo que hay en memoria ya está en el
+   * diario, así que se grita y el diario sigue creciendo hasta que un guardado posterior salga bien. Un corte
+   * entre las dos escrituras deja en el diario líneas que el guardado ya contiene; `repasarDiario` las salta.
+   */
+  private async guardarYVaciarDiario(): Promise<void> {
+    try {
+      await guardarPartida(this.almacen, this.sesion, this.ahora());
+      await vaciarDiario(this.almacen, this.gameId);
+    } catch (err) {
+      console.error(`[diario] no se pudo guardar '${this.gameId}' (versión ${this.sesion.getState().version}); el diario la conserva:`, err);
+    }
+  }
+
+  /** Guarda la partida y vacía el diario por la cola serial — para el apagado limpio (`RegistroDePartidas.cerrar`),
+   * así un despliegue normal arranca sin nada que repasar. */
+  guardar(): Promise<void> {
+    return this.encolar(() => this.guardarYVaciarDiario());
+  }
+
+  /**
+   * Anexa al JSONL de eventos (`eventosDePartida.ts`) lo emitido desde el último anexado. El corte se hace
    * por `version` y no por `ResultadoComando.eventos` porque un tick completo son hasta tres mutaciones (tick
    * + auto-comercio + turno del NPC) y solo la primera vuelve en el resultado — `eventosDesde` las recoge las
    * tres.
    *
-   * Va DESPUÉS de `guardarPartida`, y su fallo NO revierte el comando: el snapshot es la fuente de verdad del
+   * Va DESPUÉS del diario, y su fallo NO revierte el comando: diario y snapshot son la fuente de verdad del
    * estado, este archivo es el historial derivado (mismo trato que `auditoria.ts`). Si el append falla se
-   * grita y el cursor NO avanza, así que el próximo guardado reintenta ese tramo — los eventos siguen en
-   * memoria hasta un reinicio.
+   * grita y el cursor NO avanza, así que el próximo comando reintenta ese tramo — los eventos siguen en
+   * memoria hasta un reinicio. Va por comando y no por tick porque la memoria solo guarda los últimos
+   * `MAX_EVENTOS_EN_MEMORIA`: un tick con muchos comandos podría recortarlos antes de llegar aquí.
    */
   private async anexarEventosNuevos(): Promise<void> {
     const estado = this.sesion.getState();

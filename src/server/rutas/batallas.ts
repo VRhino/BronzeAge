@@ -11,9 +11,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
 import { SCHEMA_VERSION, type BattleResult, type BattleServerAssignment, type InicioBatalla, type TokensBatalla } from '../../contratos/v1/dto';
 import { batallasActivas, participacionesDe, type Batalla } from '../../session/batallas';
-import { aplicarResultado, confirmarInicio, registrarAsignacion, registrarTokens, type ParamsDeServidor } from '../../session/comandos/batalla';
 import { CODIGOS_ERROR } from '../../session/comandos/codigosDeError';
-import type { ManejadorComando } from '../../session/comandos/tipos';
 import { instanteDeTick } from '../../session/estado';
 import { ESQUEMA_SERVIDOR_BATALLA, servidorDeCabecera } from '../identidad/servidoresDeBatalla';
 import type { RunnerDePartida } from '../runnerDePartida';
@@ -137,7 +135,7 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
 
   /** Comprueba forma y versión del mensaje contra el contrato y lo aplica en la cola de su partida. */
   const recibir =
-    <M extends { schemaVersion: number; battleId: string }>(definicion: string, manejador: ManejadorComando<ParamsDeServidor<M>, void>) =>
+    <M extends { schemaVersion: number; battleId: string }>(definicion: string, tipo: 'registrarAsignacion' | 'confirmarInicio' | 'registrarTokens' | 'aplicarResultado') =>
     async (request: FastifyRequest<{ Params: ParamsBatalla }>, reply: FastifyReply) => {
       const servidorId = servidor(request, reply);
       if (!servidorId) return reply;
@@ -152,7 +150,7 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
       const hallada = buscar(request.params.battleId);
       if (!hallada) return noExiste(reply, request.params.battleId);
       try {
-        const resultado = await hallada.runner.ejecutar(manejador, { servidorId, mensaje: cuerpo as M }, `${ESQUEMA_SERVIDOR_BATALLA}:${servidorId}`);
+        const resultado = await hallada.runner.ejecutar(tipo, { servidorId, mensaje: cuerpo as never }, `${ESQUEMA_SERVIDOR_BATALLA}:${servidorId}`);
         deps.hub.difundir(hallada.runner.gameId, resultado.eventos);
         if (!resultado.ok) {
           return reply.code(resultado.codigoError === CODIGOS_ERROR.batallaNoExiste ? 404 : 409).send({ error: resultado.codigoError ?? 'rechazado' });
@@ -160,7 +158,7 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
         const estado = hallada.runner.getState().batallas.find((b) => b.id === hallada.batalla.id)!.estado;
         return reply.send({ battleId: hallada.batalla.id, estado });
       } catch (err) {
-        // Solo un fallo al persistir llega aquí, y entonces no se aplicó nada (`RunnerDePartida.aplicarYPersistir`).
+        // Solo un fallo al anotar en el diario llega aquí, y entonces no se aplicó nada (`RunnerDePartida.aplicarYAnotar`).
         return reply.code(409).send({ error: mensajeDe(err) });
       }
     };
@@ -168,22 +166,22 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
   app.post(
     '/batallas/:battleId/asignacion',
     { schema: esquemaDeServidor('Conquest reporta su BattleServerAssignment (doc 02 §3.3). Gana la primera; repetirla es idempotente.') },
-    recibir<BattleServerAssignment>('BattleServerAssignment', registrarAsignacion)
+    recibir<BattleServerAssignment>('BattleServerAssignment', 'registrarAsignacion')
   );
   app.post(
     '/batallas/:battleId/inicio',
     { schema: esquemaDeServidor('Conquest confirma que la partida real empezó (InicioBatalla, doc 02 §3.3).') },
-    recibir<InicioBatalla>('InicioBatalla', confirmarInicio)
+    recibir<InicioBatalla>('InicioBatalla', 'confirmarInicio')
   );
   app.post(
     '/batallas/:battleId/tokens',
     { schema: esquemaDeServidor('Tokens de los humanos que se unieron después de la asignación (TokensBatalla, doc 02 §3.3).') },
-    recibir<TokensBatalla>('TokensBatalla', registrarTokens)
+    recibir<TokensBatalla>('TokensBatalla', 'registrarTokens')
   );
   app.post(
     '/batallas/:battleId/resultado',
     { schema: esquemaDeServidor('Conquest reporta el BattleResult (doc 02 §3.3): el checklist entero o nada. Repetir el mismo es idempotente.') },
-    recibir<BattleResult>('BattleResult', aplicarResultado)
+    recibir<BattleResult>('BattleResult', 'aplicarResultado')
   );
 
   app.get<{ Params: { gameId: string; battleId: string } }>(

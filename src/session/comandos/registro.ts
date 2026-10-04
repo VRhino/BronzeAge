@@ -63,7 +63,10 @@ import {
 import { entrarEnAsentamiento, fijarPuerta, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, vetarJugador } from './presencia';
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
-import { cancelarBatalla, conCandadoDeBatalla, unirseABatalla } from './batalla';
+import { aplicarResultado, cancelarBatalla, conCandadoDeBatalla, confirmarInicio, registrarAsignacion, registrarTokens, unirseABatalla } from './batalla';
+import { avanzarTick } from './avanzarTick';
+import { avanzarAutoComercio } from './avanzarAutoComercio';
+import { avanzarFaccionesNpc } from './avanzarFaccionesNpc';
 
 const MANEJADORES = {
   fundarAsentamiento,
@@ -172,3 +175,24 @@ export type ParamsDe<T extends TipoComando> = Parameters<(typeof REGISTRO_COMAND
 
 /** Datos que devuelve el manejador de `tipo` en `ResultadoComando.datos` cuando acepta el comando. */
 export type DatosDe<T extends TipoComando> = ReturnType<(typeof REGISTRO_COMANDOS)[T]>['resultado']['datos'];
+
+/**
+ * Todo lo que puede mutar una partida, por NOMBRE: los comandos de jugador, los mensajes del servidor de batalla
+ * y las operaciones del sistema. Es lo que el diario de comandos (`server/diarioDePartida.ts`, doc 12 §5.1) anota
+ * en cada línea y lo que usa para repasarla al recuperar.
+ */
+export const REGISTRO_DIARIO = {
+  ...REGISTRO_COMANDOS,
+  registrarAsignacion,
+  confirmarInicio,
+  registrarTokens,
+  aplicarResultado,
+  avanzarTick,
+  avanzarAutoComercio,
+  avanzarFaccionesNpc,
+} satisfies Record<string, ManejadorComando<any, any>>;
+
+export type TipoDiario = keyof typeof REGISTRO_DIARIO;
+
+export type ParamsDeDiario<T extends TipoDiario> = Parameters<(typeof REGISTRO_DIARIO)[T]>[3];
+export type DatosDeDiario<T extends TipoDiario> = ReturnType<(typeof REGISTRO_DIARIO)[T]>['resultado']['datos'];

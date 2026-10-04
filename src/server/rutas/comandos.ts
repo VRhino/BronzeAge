@@ -3,7 +3,6 @@
 // filtro de superficie antes de llamar aquí.
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { REGISTRO_COMANDOS, type TipoComando } from '../../session/comandos/registro';
-import type { ManejadorComando } from '../../session/comandos/tipos';
 import { verificarAutorizacion, type ActorDeComando } from '../../session/comandos/autorizacion';
 import { ESQUEMAS_PARAMS } from '../../session/comandos/esquemas';
 import type { RunnerDePartida } from '../runnerDePartida';
@@ -140,14 +139,13 @@ export async function ejecutarComandoHttp(
     return reply.code(403).send({ error: `no autorizado (${chequeo.motivo})` });
   }
 
-  // Dispatch genérico por nombre: el tipo específico de cada manejador (`P`/`R`) se pierde a propósito aquí
-  // — es la frontera entre "comando serializado sin validar" y "comando tipado", igual que en cualquier
+  // Dispatch genérico por nombre (el nombre es también lo que anota el diario): el tipo específico de cada
+  // manejador (`P`/`R`) se pierde a propósito aquí — es la frontera entre "comando serializado sin validar" y "comando tipado", igual que en cualquier
   // deserialización de un body HTTP. Sin esquema por comando todavía (doc 4, pendiente): un `params` con la
   // forma equivocada puede lanzar dentro del manejador en vez de devolver un rechazo limpio — cae en el
   // `catch` como cualquier otro fallo y responde 409, no un crash del proceso.
-  const manejador = REGISTRO_COMANDOS[tipo] as ManejadorComando<unknown, unknown>;
   try {
-    const resultado = await runner.ejecutar(manejador, params, actorId, cuerpo.idempotencyKey);
+    const resultado = await runner.ejecutar(tipo, params as never, actorId, cuerpo.idempotencyKey);
     hub.difundir(runner.gameId, resultado.eventos);
     // `ok: false` aquí NO es un error: es el dominio diciendo que no (sin recursos, plaza ocupada...). Se
     // audita igual, y con su `codigoError` — es lo que convierte un "no me deja construir" en algo

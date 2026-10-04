@@ -133,7 +133,7 @@ export class RegistroDePartidas {
     await Promise.all(
       [...this.runners.values()].map(async (runner) => {
         runner.detenerRelojDeMundo();
-        await runner.esperarColaVacia();
+        await runner.guardar(); // por la cola: tras lo pendiente; deja el diario vacío para el próximo arranque
       })
     );
   }

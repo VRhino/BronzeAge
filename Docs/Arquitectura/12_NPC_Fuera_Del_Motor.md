@@ -9,8 +9,8 @@ Nace de dos decisiones del usuario (`Consideraciones/Campamentos_Entrada_Fundaci
 - **D53-D59**: los bots-héroe nacen en los campamentos y siguen el mismo flujo que un humano (sesiones, llegada
   escalonada, tres perfiles), con esa lógica fuera del motor.
 
-> **Estado (2026-10-04): plan, sin código.** Decidido: el bot es un cliente (§3), persistencia con diario (§5,
-> diseño en §5.1), auto-comercio, ritmo y alta de bots (§8), orden de trabajo (§9). Siguiente: implementar §5.1.
+> **Estado (2026-10-04):** decidido el bot como cliente (§3), auto-comercio, ritmo y alta de bots (§8) y el orden
+> de trabajo (§9). **Paso 1 hecho: diario de comandos implementado (§5.1).** Siguiente: paso 2 del §9.
 
 ## 1. Cómo es hoy (medido en el código)
 
@@ -19,8 +19,8 @@ Nace de dos decisiones del usuario (`Consideraciones/Campamentos_Entrada_Fundaci
 - El NPC (`session/npcGobernanza.ts`, ~2400 líneas) **no usa comandos**: recibe el estado entero, sin niebla, y llama
   a funciones del motor directamente. Además hace cosas que ningún jugador puede hacer: crear héroes, anexionar
   Facciones, fundar a pie.
-- **Cada comando persiste la partida entera**: `aplicarYPersistir` hace `exportar()` + `guardarPartida` por comando.
-  Con cientos de bots mandando comandos, eso pesaría más que el propio NPC (§5).
+- ~~**Cada comando persiste la partida entera**~~ (resuelto con el diario, §5.1): `aplicarYPersistir` hacía
+  `exportar()` + `guardarPartida` por comando. Con cientos de bots, eso pesaría más que el propio NPC.
 - Los héroes bot tienen `jugadorId = null`: no tienen identidad con la que pasar por `autorizacion.ts`.
 - Los comandos ya son deterministas dado el estado: `ContextoComando` trae `instante` (derivado del tick), `rng` e
   `ids` de la sesión; ni el motor ni la sesión leen `Date.now()` ni `Math.random()`. Es lo que permite el diario
@@ -114,7 +114,7 @@ Hoy cada comando guarda la partida entera. Con bots no escala. **Decisión del u
 
 Beneficia también a los humanos: un comando deja de costar un guardado completo.
 
-### 5.1 Diseño en detalle (propuesta 2026-10-04, sin código)
+### 5.1 Diseño en detalle (implementado 2026-10-04)
 
 Hoy hay **tres puertas** que mutan una partida, todas por `RunnerDePartida`: `ejecutar` desde
 `rutas/comandos.ts` (comandos de jugador/admin), `ejecutar` desde `rutas/batallas.ts` (los 4 mensajes del
@@ -166,7 +166,11 @@ sean atómicos juntos.
    (corte a mitad de escritura) se descarta, como en los otros JSONL; una ilegible en medio es error.
 3. Cursor del JSONL de eventos = la última versión que ya tiene el archivo (no la del guardado): el repaso
    regenera en memoria los mismos eventos y no se vuelven a anexar los que ya estaban.
-4. Guardar y vaciar el diario, para que el siguiente arranque no repase de nuevo.
+
+Todo esto vive en `cargarPartida` (`server/persistenciaPartida.ts` → `repasarDiario` de
+`server/diarioDePartida.ts`), así que cualquier carga —el runner, la verificación de un respaldo, un test— ve la
+partida tal y como estaba tras el último comando aceptado. No se guarda al acabar de repasar: lo hace el primer
+tick.
 
 **Bordes que tocan otros módulos:**
 
@@ -174,8 +178,10 @@ sean atómicos juntos.
   descartada se repasarían sobre la nueva.
 - **Apagado limpio** (`RegistroDePartidas.cerrar`, SIGTERM de un despliegue): guardar y vaciar. Así un
   despliegue normal arranca con el diario vacío.
-- **Respaldos** (`respaldos.ts`): crear un respaldo guarda antes (por la cola) para que el snapshot esté al día;
-  **restaurar vacía el diario** (sus líneas son de la partida viva, no del respaldo).
+- **Respaldos** (`respaldos.ts`): el diario viaja como hermano del snapshot, igual que eventos y auditoría, así
+  que un respaldo incluye lo aceptado desde el último tick sin forzar un guardado. Restaurar pone el diario del
+  respaldo o **borra el vigente** (sus líneas son de la partida viva: repasadas sobre el respaldo, la harían
+  avanzar hacia donde estaba).
 - **Opciones del proceso** (`OpcionesSesion.batallasEnUnity`, de `SERVIDORES_BATALLA`): cambian el resultado de
   algunos comandos. Si cambian entre una caída y el arranque, el repaso podría divergir sin que la versión lo
   delate. Techo aceptado: con el apagado limpio, solo afecta a una caída dura seguida de un cambio de config.
@@ -185,7 +191,9 @@ sean atómicos juntos.
 **Coste.** Por comando: un append de ~200 bytes en vez de leer el snapshot entero (la comprobación de
 concurrencia) y reescribirlo. Por tick: el guardado de hoy, una vez.
 
-**Test de reconstrucción** (`src/server/__tests__/diarioDePartida.test.ts`), almacén en disco temporal:
+**Test de reconstrucción** (`src/server/__tests__/diarioDePartida.test.ts`), almacén en disco temporal. El guion
+incluye una Facción NPC, cuyo turno tira dados en cada tick. Verificado también en vivo: servidor real, comandos
+por HTTP, proceso matado con `taskkill /F` (snapshot en v3, diario hasta v5) → al reabrir, v5 con todo.
 
 1. Partida con semilla fija; un guion intercalado de comandos de varios héroes y ticks (incluido un rechazo).
    «Caída»: se abandona el runner sin apagado limpio y se abre otro con `cargarOCrear` sobre el mismo almacén.
