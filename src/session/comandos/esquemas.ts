@@ -397,7 +397,13 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   salirDeAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),
   entrarEnCampamento: objeto({ campamentoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['campamentoId', 'heroeId']),
   salirDelCampamento: objeto(
-    { campamentoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, carga: { type: 'object', additionalProperties: NUMERO } },
+    {
+      campamentoId: IDENTIFICADOR,
+      heroeId: IDENTIFICADOR,
+      escuadronIds: LISTA_DE_IDENTIFICADORES,
+      carga: { type: 'object', additionalProperties: NUMERO },
+      politicaDeUnion: { type: 'string', enum: ['rechazar', 'aceptar', 'preguntar'] },
+    },
     ['campamentoId', 'heroeId', 'escuadronIds', 'carga']
   ),
   // `guarnecer` (Ocupacion §2.3): marchar un ejército a una plaza propia y volcar la tropa en su guarnición.

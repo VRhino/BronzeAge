@@ -442,6 +442,8 @@ export interface ParamsSalirDelCampamento extends ParamsCampamentoMercenarios {
   /** Solo para quien reside: la tropa de su campamento que se lleva y lo que carga desde su almacén personal (D76). */
   escuadronIds: string[];
   carga: Record<string, number>;
+  /** Si admite compañía, sale como ejército al que otros se unen en campo. Por defecto, columna personal. */
+  politicaDeUnion?: 'rechazar' | 'aceptar' | 'preguntar';
 }
 
 function exigirCampamentoMercenarios(estado: GameSessionState, campamentoId: string) {
@@ -474,7 +476,7 @@ export const salirDelCampamento = comando<ParamsSalirDelCampamento, { ejercitoId
   const heroe = exigirJugador(estado, params.heroeId);
   const aparcada = columnaDe(estado.ejercitos, heroe.id);
   const faccionId = estado.facciones.find((f) => esCiudadano(f, heroe.id))?.id ?? '';
-  const r = salirDelCampamentoEngine(campamento, heroe, aparcada, params.escuadronIds, params.carga, faccionId, `ejercito-${ctx.ids.siguiente()}`, ctx.instante);
+  const r = salirDelCampamentoEngine(campamento, heroe, aparcada, params.escuadronIds, params.carga, faccionId, `ejercito-${ctx.ids.siguiente()}`, ctx.instante, params.politicaDeUnion);
   const conColumna = conColumnas(estado, [r.columna]);
   const heroes = conColumna.heroes.map((h) => (h.id === heroe.id ? { ...h, ubicacion: r.heroe.ubicacion, almacenPersonal: r.heroe.almacenPersonal, racionEn: r.heroe.racionEn } : h));
   return exito(

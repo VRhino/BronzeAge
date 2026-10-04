@@ -11,6 +11,7 @@ import { salirDelCampamento } from '../comandos/presencia';
 import { aportarARefundacion, comprarCaravanaDeRefundacion } from '../comandos/mercenarios';
 import { adjuntarCaravana } from '../comandos/ejercitos';
 import { fundar } from '../comandos/expansion';
+import { unirseEnCampo } from '../comandos/columna';
 import { desconectarse } from '../comandos/presencia';
 import { responderSolicitud, solicitarIngreso } from '../comandos/ingresoEnFaccion';
 import { PRESENCIA } from '../../constants';
@@ -99,5 +100,32 @@ describe('sin su titular (D13, D40)', () => {
     const alli = GameSession.importar({ ...p, state: { ...p.state, ejercitos: p.state.ejercitos.map((e) => (e.id === suEjercito ? { ...e, posicionActual: caravana.posicionActual } : e)) } });
     expect(alli.ejecutar(adjuntarCaravana, { ejercitoId: suEjercito, caravanaId: base.caravanaId, heroeId: otro }, { actor: otro }).ok).toBe(true);
     expect(alli.getState().caravanas.find((c) => c.id === base.caravanaId)).toMatchObject({ estado: 'adjunta', titularId: otro });
+  });
+});
+
+describe('fundar en grupo desde el campamento (M2, D21)', () => {
+  it('el titular sale como ejército, otro ciudadano se le une en campo y los dos cofundan', () => {
+    const sesion0 = GameSession.crear('grupo', { seed: 42 });
+    const crear = (actor: string, nombre: string) =>
+      sesion0.ejecutar(crearHeroe, { displayName: nombre, campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar: AVATAR }, { actor }).datos!.heroeId;
+    const ana = crear('j1', 'Ana');
+    const bea = crear('j2', 'Bea');
+    const faccionId = sesion0.ejecutar(crearFaccion, { nombre: 'Micenas' }, { actor: ana }).datos!.faccionId;
+    sesion0.ejecutar(solicitarIngreso, { faccionId }, { actor: bea });
+    sesion0.ejecutar(responderSolicitud, { faccionId, heroeId: bea, aceptar: true }, { actor: ana });
+    const p = sesion0.exportar();
+    const sesion = GameSession.importar({ ...p, state: { ...p.state, heroes: p.state.heroes.map((h) => (h.id === ana ? { ...h, almacenPersonal: costoRefundacion() } : h)) } });
+    for (const [recurso, cantidad] of Object.entries(costoRefundacion())) sesion.ejecutar(aportarARefundacion, { recurso, cantidad, lado: 'almacen' }, { actor: ana });
+    const caravanaId = sesion.ejecutar(comprarCaravanaDeRefundacion, {}, { actor: ana }).datos!.caravanaId;
+
+    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: ana, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar' }, { actor: ana }).datos!.ejercitoId;
+    sesion.ejecutar(adjuntarCaravana, { ejercitoId, caravanaId, heroeId: ana }, { actor: ana });
+    sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: bea, escuadronIds: [], carga: {} }, { actor: bea });
+    expect(sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId: bea }, { actor: bea }).ok).toBe(true);
+
+    const lejos = aDistancia(sesion, ejercitoId, 300);
+    const r = lejos.ejecutar(fundar, {}, { actor: ana });
+    expect(r.ok).toBe(true);
+    expect(lejos.getState().asentamientos.find((a) => a.id === r.datos!.asentamientoId)!.heroesFundadoresIds.sort()).toEqual([ana, bea].sort());
   });
 });

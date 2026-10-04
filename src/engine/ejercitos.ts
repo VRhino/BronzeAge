@@ -508,7 +508,8 @@ export function entrarEnCampamento(
   heroe: Heroe,
   columna: EjercitoConTropa
 ): { heroe: Heroe; columna: EjercitoConTropa | undefined; tropa: Escuadron[]; campamento: CampamentoMercenarios } {
-  if (columna.tipo !== 'personal' || columna.liderId !== heroe.id) throw new MovilizacionInvalidaError('Se entra en un campamento con la columna personal.');
+  // Se entra solo: un ejército con más gente se separa antes (`separarseDelEjercito`), cada uno con lo suyo.
+  if (columna.liderId !== heroe.id || columna.participantes.length > 1) throw new MovilizacionInvalidaError('Se entra en un campamento con la columna propia, sin nadie más.');
   if (!enLaPuertaDelCampamento(columna, campamento)) throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} del campamento.`);
   const dentro: UbicacionHeroe = { tipo: 'mercenarios', campamentoId: campamento.id };
   if (!campamento.residentesIds.includes(heroe.id)) return { heroe: { ...heroe, ubicacion: dentro }, columna, tropa: [], campamento };
@@ -544,7 +545,10 @@ export function salirDelCampamento(
   carga: Readonly<Record<string, number>>,
   faccionId: string,
   id: string,
-  instante: Instante
+  instante: Instante,
+  /** Como en `movilizarEjercito`: si admite compañía, sale como ejército y otros ciudadanos de su Facción se le unen en campo
+   * (cazar en grupo, D21; cofundar, M2). Por defecto, columna personal. */
+  politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar'
 ): { heroe: Heroe; columna: EjercitoConTropa } {
   if (heroe.ubicacion.tipo !== 'mercenarios' || heroe.ubicacion.campamentoId !== campamento.id) {
     throw new MovilizacionInvalidaError('No estás dentro de ese campamento.');
@@ -582,9 +586,9 @@ export function salirDelCampamento(
     faccionId,
     origenAsentamientoId: '',
     participantes: [{ heroeId: heroe.id, unidoEn: instante }],
-    tipo: 'personal',
+    tipo: politicaDeUnion === 'rechazar' ? 'personal' : 'ejercito',
     liderId: heroe.id,
-    politicaDeUnion: 'rechazar',
+    politicaDeUnion,
     escuadronIds: escuadrones.map((e) => e.id),
     escuadrones,
     suministro,
