@@ -23,7 +23,7 @@ import {
   type TokensBatalla,
 } from '../contratos/v1/dto';
 import { VERSION_CATALOGO_TROPAS } from '../contratos/v1/catalogoTropas';
-import { BALANCE_VERSION, BATALLA, LAYOUT_VERSION, LOGISTICA, REJILLA_ASENTAMIENTO } from '../constants';
+import { BALANCE_VERSION, BATALLA, CAMPAMENTOS_BANDIDOS, LAYOUT_VERSION, LOGISTICA, REJILLA_ASENTAMIENTO } from '../constants';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { distancia } from '../world/geometria';
 import { columnaDe } from '../engine/ejercitos';
@@ -312,7 +312,7 @@ export function aperturaContraCampamento(estado: GameSessionState, atacante: Eje
     punto,
     iniciadaPor,
     atacante: bandoDeColumna(estado, atacante, heridos),
-    defensor: { faccionId: null, participantes: [], escuadrasSinHeroe: [tropaSinDueno(`${campamento.id}-tropa`, BATALLA.tropaBandidos)] },
+    defensor: { faccionId: null, participantes: [], escuadrasSinHeroe: [tropaSinDueno(`${campamento.id}-tropa`, { tropaId: 'milicia_lanceros', unidades: CAMPAMENTOS_BANDIDOS.niveles[campamento.nivel].unidades })] },
     bloqueo: { ejercitoIds: [atacante.id], caravanaIds: [], campamentoId: campamento.id },
     mapa: enElMapa(estado, punto),
   };

@@ -370,6 +370,7 @@ Ejercito
                             'preguntar' — existente. Tras este modelo, heroeId
   escuadrones: Escuadron[]    movidos aquí desde Asentamiento.escuadrones — existente
   suministro: Record<string, number>   solo trigo en Fase 0 — existente
+  racion?: number          trigo de la ración gratis del campamento que aún lleva (2026-10-04, D24/D50): se come primero y no se guarda
   persiguiendo?: { tipo: 'ejercito' | 'caravana'; id: string }   objetivo móvil — existente
   (enTreguaHasta)             RETIRADO 2026-09-14: lo sustituye `Heroe.heridoHasta` (§12, Doc 5.16.4)
   caravanasAdjuntasIds[]        existente
@@ -483,8 +484,10 @@ CampamentoBandido
   id
   posicion: Point
   bosqueId              bosque que ocupa
-  asentamientoId          a qué asentamiento "atiende" — como mucho uno por asentamiento
-  poder                  poder de combate fijo (placeholder), sin escuadrones propios
+  asentamientoId?         a qué asentamiento "atiende" — como mucho uno por asentamiento
+  campamentoMercenariosId?  o en el anillo de qué campamento de mercenarios vive (2026-10-04, D42)
+  nivel: 1 | 2 | 3        sale al azar al aparecer; fija poder, tropa en Unity y oro del botín (2026-10-04)
+  poder                  poder de combate del nivel, sin escuadrones propios
 
 CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en el estado, `campamentosMercenarios[]`
   id
@@ -493,6 +496,7 @@ CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en e
   edificios[]             'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas' — layout fijo
   residentesIds[]         heroeId: héroes que residen aquí, de cualquier Facción y sin límite; sin guarnición ni cargos
   eligieronComoInicial    cuántos héroes nacieron aquí (2026-10-04): solo crece; con residentesIds, el contador doble de la elección
+  bandidosEn?: Instante   desde cuándo puede aparecer el siguiente bandido de su anillo (2026-10-04, D28)
   mercado: Record<bien, number>   stock en venta (solo vende, Doc 3.3b); se repone con `GameSessionState.mercadoMercenario`
   fondos: Record<heroeId, Record<recurso, number>>   lo que cada héroe ha aportado al fondo de refundación de su Facción
                          (Doc 1.9b); voluntario y retirable
@@ -592,6 +596,11 @@ Heroe
                          mundo. Al volver reaparece en esa plaza o, si salió del campo, en su punto con su columna.
   escuadrones: Escuadron[]   TODAS sus escuadras, estén donde estén (§13) — nuevo
   almacenPersonal?: Record<recurso, number>   lo que guarda para sí, hasta 1000 en total; viaja con él — NUEVO 2026-10-02
+  oroDeBotin?: number     oro de bandidos y alijos (2026-10-04, D27): solo se gasta en el mercado de un campamento o en
+                         el fondo de refundación; no ocupa sitio en el almacén
+  bandidosDestruidosEn?: Instante[]   los de las últimas 24 h, para los rendimientos decrecientes (D26)
+  cupoCampamento?: { dia, comprado }   lo comprado hoy en el mercado de su campamento (cupo diario, D41)
+  racionEn?: Instante     cuándo recogió la última ración gratis de su campamento (D24)
   loadouts: Loadout[]     nuevo
   inventario: ItemInstancia[]     lo que lleva y NO tiene puesto (§12.1) — nuevo
   equipamiento: Record<SlotEquipo, ItemInstancia | null>   lo que tiene puesto (§12.1) — nuevo. Equipar SACA
@@ -660,6 +669,8 @@ Escuadron
   enGuarnicion: boolean   nuevo — solo con contenedor `'campamento'` y héroe residente: asignada a la
                         guarnición de su asentamiento. La maneja la IA de juego y el héroe no puede usarla
                         mientras siga asignada (Doc 5.15).
+  prestada?: { campamentoId }   2026-10-04 (D45, D80): tropa prestada por un campamento de mercenarios; no gana experiencia,
+                         no cuenta para «una escuadra por tropa» y se retira si su héroe deja de residir allí
   reservaBatalla?: { battleId }   nuevo — candado: presente solo mientras la escuadra está en una
                         `Batalla` (§15). Una batalla nunca cambia de sitio una escuadra (el atacante la lleva
                         en su columna, el defensor la tiene donde está, la guarnición en su asentamiento, la

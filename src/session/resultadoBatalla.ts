@@ -4,9 +4,9 @@
 // campamento, y la XP de Facción.
 import type { Ejercito, Heroe, ItemInstancia } from '../domain/types';
 import type { BattleResult, Botin, LadoId } from '../contratos/v1/dto';
-import { BATALLA, CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, REPUTACION } from '../constants';
+import { BATALLA, MILITAR, NIVEL_FACCION, REPUTACION } from '../constants';
 import type { Instante } from '../domain/tiempo';
-import { agendarReaparicionBandidos } from '../engine/bandidos';
+import { agendarReaparicionBandidos, botinDeBandidos } from '../engine/bandidos';
 import { aplicarConquista, desalojarResidentes } from '../engine/combate';
 import { capacidadCargaDe, cargarBotin, trasDerrota } from '../engine/ejercitos';
 import { aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from '../engine/faccion';
@@ -221,20 +221,17 @@ function capturarCaravana(estado: GameSessionState, b: Batalla, caravanaId: stri
   );
 }
 
-/** El campamento cae (Doc 1.9): su recompensa va al carro de quien lo atacó, lo que quepa, y se agenda su reaparición. */
+/** El campamento cae (Doc 1.9): oro para cada héroe del bando atacante (D22, D26, D27), y se agenda su reaparición. */
 function destruirCampamento(estado: GameSessionState, b: Batalla, campamentoId: string, ahora: Instante): GameSessionState {
   const campamento = estado.campamentosBandidos.find((c) => c.id === campamentoId);
-  const recompensa = Object.fromEntries(Object.entries(CAMPAMENTOS_BANDIDOS.recompensa).filter((e): e is [string, number] => (e[1] ?? 0) > 0));
-  return alCarroDe(
-    {
-      ...estado,
-      campamentosBandidos: estado.campamentosBandidos.filter((c) => c.id !== campamentoId),
-      asentamientos: campamento ? agendarReaparicionBandidos(estado.asentamientos, campamento, ahora) : estado.asentamientos,
-    },
-    b,
-    'atacante',
-    recompensa
-  );
+  if (!campamento) return estado;
+  const heroeIds = b.ticket.bandos.atacante.participantes.map((p) => p.heroeId);
+  return {
+    ...estado,
+    heroes: botinDeBandidos(estado.heroes, heroeIds, campamento.nivel, ahora).heroes,
+    campamentosBandidos: estado.campamentosBandidos.filter((c) => c.id !== campamentoId),
+    asentamientos: agendarReaparicionBandidos(estado.asentamientos, campamento, ahora),
+  };
 }
 
 /** Asedio que gana el atacante (Doc 5.15.5): la plaza pasa a su Facción con el saqueo de siempre (Doc 5.12.9), y quien

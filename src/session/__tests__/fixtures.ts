@@ -151,7 +151,7 @@ export function frenteACampamento(unity = true) {
   const columnaDe = (heroeId: string) => payload.state.ejercitos.find((e) => e.participantes.some((p) => p.heroeId === heroeId))!;
   const posicion = columnaDe(fundador).posicionActual;
   const conCampamento = GameSession.importar(
-    { ...payload, state: { ...payload.state, campamentosBandidos: [{ id: 'camp-1', posicion, bosqueId: 'b1', asentamientoId, poder: 30 }] } },
+    { ...payload, state: { ...payload.state, campamentosBandidos: [{ id: 'camp-1', posicion, bosqueId: 'b1', asentamientoId, nivel: 1, poder: 30 }] } },
     { batallasEnUnity: unity }
   );
   return { sesion: conCampamento, fundador, vecino, columna: columnaDe(fundador).id, columnaVecino: columnaDe(vecino).id };

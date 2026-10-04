@@ -107,7 +107,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "estano",
           },
           {
-            "cantidad": 101.11,
+            "cantidad": 101.12,
             "recurso": "oro",
           },
           {
@@ -176,7 +176,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "estano",
           },
           {
-            "cantidad": 116.9,
+            "cantidad": 116.93,
             "recurso": "oro",
           },
           {
@@ -241,7 +241,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "estano",
           },
           {
-            "cantidad": 103.51,
+            "cantidad": 103.52,
             "recurso": "oro",
           },
           {
@@ -306,7 +306,7 @@ exports[`snapshot de regresión general > resumen del estado en ticks de referen
             "recurso": "estano",
           },
           {
-            "cantidad": 107.9,
+            "cantidad": 107.93,
             "recurso": "oro",
           },
           {

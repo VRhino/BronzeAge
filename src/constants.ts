@@ -1833,7 +1833,6 @@ export const BATALLA = {
   margenMinutos: 5,
   /** Tropa sin dueño: la de un campamento (su poder 30 de hoy, Doc 1.9) y los carreteros de una caravana sin escolta
    * (Doc 3.10). No persisten entre batallas. */
-  tropaBandidos: { tropaId: 'milicia_lanceros', unidades: 15 },
   tropaCarreteros: { tropaId: 'milicia_lanceros', unidades: 13 },
   /** Casillas del inventario de Conquest (`InventoryStorageService.InventoryLimit`): lo que cabe de botín. */
   casillasInventario: 72,
@@ -2120,16 +2119,25 @@ export const EXPLORACION = {
  * calibrar por simulación todavía (ver `Preguntas_Abiertas.md` #14c) — mismo criterio que el resto del proyecto.
  */
 export const CAMPAMENTOS_BANDIDOS = {
-  // Poder de combate fijo del campamento — referencia: una Milicia de lanceros recién reclutada (25 unidades,
-  // poderBase 2) ronda 50 de poder sin veteranía, así que este valor la deja en desventaja pero no indefensa.
-  poder: 30,
+  /** Niveles (D21, D37, §8.1): salen al azar con su `peso`. `poder` es contra lo que se tira con números; `unidades`, la milicia
+   * de lanceros que pone en una batalla de Unity (poderBase 2: la mitad del poder); `oroPorHeroe`, el botín de cada héroe de la
+   * columna que lo destruye (D22: solo oro). PLACEHOLDER. */
+  niveles: {
+    1: { poder: 20, unidades: 10, oroPorHeroe: 9, peso: 0.5 },
+    2: { poder: 60, unidades: 30, oroPorHeroe: 10, peso: 0.3 },
+    3: { poder: 120, unidades: 60, oroPorHeroe: 11, peso: 0.2 },
+  } as const,
+  /** Rendimientos decrecientes por héroe (D26, §8.1): en una ventana de 24 h, botín completo en las primeras `completas`
+   * destrucciones, luego `caidaPorCada` menos por cada una, y desde la `soloExperienciaDesde`ª nada de oro. */
+  rendimientos: { ventanaHoras: 24, completas: 8, caidaPorCada: 0.15, soloExperienciaDesde: 14 },
+  /** Los del anillo de un campamento de mercenarios (D42, D28, §8.2): a esta distancia, uno por cada `residentesPorBandido`
+   * residentes de Facciones sin asentamiento, entre `minimo` y `maximo`, y aparece uno cada `reaparicionMinutos` mientras falten. */
+  anillo: { radioMin: 150, radioMax: 250, residentesPorBandido: 2, minimo: 1, maximo: 6, reaparicionMinutos: 10 },
   // Radio (unidades del mapa) dentro del cual un campamento ataca a una caravana que pase cerca.
   radioAtaqueCaravana: 40,
   // Minutos de mundo tras destruirse un campamento hasta que reaparece el de ese asentamiento (Doc 1.9). Vuelve a 60
   // (2026-09-28, decisión del usuario): se bajó a 10 cuando los tiempos del servidor eran más cortos.
   respawnMinutos: 60,
-  // Recompensa fija al destruirlo (botín).
-  recompensa: { madera: 40, piedra: 20, oro: 15 } as Partial<Record<string, number>>,
 };
 
 /**

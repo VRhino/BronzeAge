@@ -2,11 +2,13 @@
 // separados (revisión de duplicación 2026-08-25: mismo subsistema, `avanzarSpawnBandidos`), uno por cada
 // bug/revisión real que motivó su prueba.
 import { describe, expect, it } from 'vitest';
+import { createRng } from '../../worldgen';
 import { computeTodasLasZonas } from '../zones';
-import { agendarReaparicionBandidos, avanzarSpawnBandidos } from '../bandidos';
+import { agendarReaparicionBandidos, avanzarSpawnBandidos, botinDeBandidos } from '../bandidos';
+import { colocarCampamentosIniciales } from '../mercenarios';
 import { evaluarViabilidadFundacion } from '../settlement';
 import { CAMPAMENTOS_BANDIDOS } from '../../constants';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, heroeDePrueba, instanteDeTest } from './fixtures';
 
 const SEED = 42;
 
@@ -21,13 +23,13 @@ describe('reaparición de campamentos de bandidos', () => {
     const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', [], 0);
     const zonas = computeTodasLasZonas([asentamiento]);
 
-    expect(avanzarSpawnBandidos([], zonas, [asentamiento], mapa, instanteDeTest(1)).campamentos, 'sin plazo, lo recibe ya').toHaveLength(1);
+    expect(avanzarSpawnBandidos([], zonas, [asentamiento], mapa, instanteDeTest(1), createRng(1)).campamentos, 'sin plazo, lo recibe ya').toHaveLength(1);
 
-    const destruido = avanzarSpawnBandidos([], zonas, [asentamiento], mapa, instanteDeTest(1)).campamentos[0]!;
+    const destruido = avanzarSpawnBandidos([], zonas, [asentamiento], mapa, instanteDeTest(1), createRng(1)).campamentos[0]!;
     const conPlazo = agendarReaparicionBandidos([asentamiento], destruido, instanteDeTest(10));
     const plazo = 10 + CAMPAMENTOS_BANDIDOS.respawnMinutos;
-    expect(avanzarSpawnBandidos([], zonas, conPlazo, mapa, instanteDeTest(plazo - 1)).campamentos).toHaveLength(0);
-    const repuesto = avanzarSpawnBandidos([], zonas, conPlazo, mapa, instanteDeTest(plazo)).campamentos;
+    expect(avanzarSpawnBandidos([], zonas, conPlazo, mapa, instanteDeTest(plazo - 1), createRng(1)).campamentos).toHaveLength(0);
+    const repuesto = avanzarSpawnBandidos([], zonas, conPlazo, mapa, instanteDeTest(plazo), createRng(1)).campamentos;
     expect(repuesto).toHaveLength(1);
     expect(repuesto[0]?.asentamientoId).toBe(asentamiento.id);
   });
@@ -82,7 +84,7 @@ describe('spawn de campamentos de bandidos: uno por asentamiento, siempre', () =
     let campamentos: ReturnType<typeof avanzarSpawnBandidos>['campamentos'] = [];
     for (let tick = 1; tick <= TICKS_MAXIMOS && campamentos.length < asentamientos.length; tick++) {
       const zonas = computeTodasLasZonas(asentamientos);
-      const resultado = avanzarSpawnBandidos(campamentos, zonas, asentamientos, mapa, instanteDeTest(tick));
+      const resultado = avanzarSpawnBandidos(campamentos, zonas, asentamientos, mapa, instanteDeTest(tick), createRng(1));
       campamentos = resultado.campamentos;
     }
 
@@ -93,5 +95,67 @@ describe('spawn de campamentos de bandidos: uno por asentamiento, siempre', () =
     }
     // Ningún asentamiento recibe un segundo campamento mientras otro se queda sin ninguno.
     expect(asentamientosCubiertos.size).toBe(asentamientos.length);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Bandidos de los campamentos de mercenarios (D21, D37, D42, D28) y su botín (D22, D26, D27).
+// ---------------------------------------------------------------------------------------------------------
+describe('el anillo de un campamento de mercenarios', () => {
+  const mapa = crearMapaDeterminista(SEED);
+  const [mercenarios] = colocarCampamentosIniciales(mapa, instanteDeTest(0));
+  const conResidentes = (n: number) => ({ ...mercenarios!, residentesIds: Array.from({ length: n }, (_, i) => `h${i}`) });
+
+  it('aparecen según los residentes sin asentamiento, uno cada plazo, con nivel y a la distancia del anillo', () => {
+    const rng = createRng(1);
+    const m = conResidentes(3); // 3 sin Facción → 2 campamentos
+    const primero = avanzarSpawnBandidos([], [], [], mapa, instanteDeTest(0), rng, [m], []);
+    expect(primero.campamentos).toHaveLength(1);
+    const c = primero.campamentos[0]!;
+    expect(c.campamentoMercenariosId).toBe(m.id);
+    expect([1, 2, 3]).toContain(c.nivel);
+    expect(c.poder).toBe(CAMPAMENTOS_BANDIDOS.niveles[c.nivel].poder);
+    const d = Math.hypot(c.posicion.x - m.posicion.x, c.posicion.y - m.posicion.y);
+    expect(d).toBeGreaterThanOrEqual(CAMPAMENTOS_BANDIDOS.anillo.radioMin);
+    expect(d).toBeLessThanOrEqual(CAMPAMENTOS_BANDIDOS.anillo.radioMax);
+
+    const plazo = CAMPAMENTOS_BANDIDOS.anillo.reaparicionMinutos;
+    const antes = avanzarSpawnBandidos(primero.campamentos, [], [], mapa, instanteDeTest(plazo - 1), rng, primero.mercenarios, []);
+    expect(antes.campamentos, 'antes del plazo, no').toHaveLength(1);
+    const segundo = avanzarSpawnBandidos(primero.campamentos, [], [], mapa, instanteDeTest(plazo), rng, primero.mercenarios, []);
+    expect(segundo.campamentos).toHaveLength(2);
+    const tercero = avanzarSpawnBandidos(segundo.campamentos, [], [], mapa, instanteDeTest(2 * plazo), rng, segundo.mercenarios, []);
+    expect(tercero.campamentos, 'ya están los que tocan').toHaveLength(2);
+  });
+
+  it('siempre al menos uno, aunque no haya nadie', () => {
+    expect(avanzarSpawnBandidos([], [], [], mapa, instanteDeTest(0), createRng(1), [conResidentes(0)], []).campamentos).toHaveLength(1);
+  });
+});
+
+describe('el botín de bandidos', () => {
+  const t = (minutos: number) => instanteDeTest(minutos);
+  const oroDe = (destruidos: number, nivel: 1 | 2 | 3 = 1) => {
+    const previas = Array.from({ length: destruidos }, (_, i) => t(i));
+    const heroe = heroeDePrueba('h1', { tipo: 'columna', ejercitoId: 'c' }, { bandidosDestruidosEn: previas });
+    return botinDeBandidos([heroe], ['h1'], nivel, t(60)).oro['h1'];
+  };
+
+  it('oro del nivel por héroe, a su oro de botín, para cada héroe de la columna', () => {
+    const heroes = ['h1', 'h2'].map((id) => heroeDePrueba(id, { tipo: 'columna', ejercitoId: 'c' }));
+    const r = botinDeBandidos(heroes, ['h1', 'h2'], 2, t(0));
+    expect(r.heroes.map((h) => h.oroDeBotin)).toEqual([CAMPAMENTOS_BANDIDOS.niveles[2].oroPorHeroe, CAMPAMENTOS_BANDIDOS.niveles[2].oroPorHeroe]);
+    expect(r.heroes[0]!.almacenPersonal?.['oro'], 'no al almacén').toBeUndefined();
+  });
+
+  it('rendimientos decrecientes en 24 h (D26): completo, luego a menos, luego solo experiencia', () => {
+    const { completas, caidaPorCada, soloExperienciaDesde } = CAMPAMENTOS_BANDIDOS.rendimientos;
+    const base = CAMPAMENTOS_BANDIDOS.niveles[1].oroPorHeroe;
+    expect(oroDe(completas - 1)).toBe(base);
+    expect(oroDe(completas)).toBe(Math.round(base * (1 - caidaPorCada)));
+    expect(oroDe(soloExperienciaDesde - 1)).toBe(0);
+    // Lo de hace más de 24 h no cuenta.
+    const viejo = heroeDePrueba('h1', { tipo: 'columna', ejercitoId: 'c' }, { bandidosDestruidosEn: Array.from({ length: 20 }, () => t(0)) });
+    expect(botinDeBandidos([viejo], ['h1'], 1, t(25 * 60)).oro['h1']).toBe(base);
   });
 });

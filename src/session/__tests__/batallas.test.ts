@@ -17,7 +17,7 @@ import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
 import { conHeroe, enPie, frenteACampamento } from './fixtures';
 import { heridosEn } from '../../engine/heroe';
 import { SCHEMA_VERSION, type BattleResult } from '../../contratos/v1/dto';
-import { BATALLA, MOVIMIENTO } from '../../constants';
+import { BATALLA, CAMPAMENTOS_BANDIDOS, MOVIMIENTO } from '../../constants';
 
 const SCHEMA = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../contratos/v1/contratos.schema.json'), 'utf8'));
 const ajv = new Ajv({ allErrors: true, strict: true, strictRequired: false, allowUnionTypes: true });
@@ -63,7 +63,7 @@ describe('abrir una batalla de Unity (doc 01 §15)', () => {
     expect(batalla!.estado).toBe('convocando');
     expect(erroresDe('BattleTicket', batalla!.ticket)).toEqual([]);
     expect(batalla!.ticket.bandos.atacante.participantes.map((p) => p.heroeId)).toEqual([fundador]);
-    expect(batalla!.ticket.bandos.defensor.escuadrasSinHeroe).toMatchObject([{ heroeId: null, tropaId: 'milicia_lanceros', efectivosAutorizados: 15 }]);
+    expect(batalla!.ticket.bandos.defensor.escuadrasSinHeroe).toMatchObject([{ heroeId: null, tropaId: 'milicia_lanceros', efectivosAutorizados: CAMPAMENTOS_BANDIDOS.niveles[1].unidades }]);
     expect(reservadas(sesion, fundador).map((e) => e.reservaBatalla!.battleId)).toEqual([batalla!.id]);
     expect(sesion.getState().campamentosBandidos, 'no se resuelve aquí: el campamento sigue en pie').toHaveLength(1);
   });

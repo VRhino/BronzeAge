@@ -955,7 +955,7 @@ function redPor(...puntos: Point[]): RedCaminos {
 }
 
 function campamentoEn(posicion: Point): CampamentoBandido {
-  return { id: 'camp-1', posicion, bosqueId: 'b-1', asentamientoId: 'a-1', poder: 50 };
+  return { id: 'camp-1', posicion, bosqueId: 'b-1', asentamientoId: 'a-1', nivel: 1, poder: 50 };
 }
 
 /** Estado con memoria de haber explorado `LEJOS` en su dia, donde hoy la Faccion no tiene ni ojos ni nada. */

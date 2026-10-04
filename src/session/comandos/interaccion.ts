@@ -48,7 +48,7 @@ import { heridosEn, herir } from '../../engine/heroe';
 import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
 import type { Asentamiento, Ejercito } from '../../domain/types';
 import type { Instante } from '../../domain/tiempo';
-import { agendarReaparicionBandidos } from '../../engine/bandidos';
+import { agendarReaparicionBandidos, botinDeBandidos } from '../../engine/bandidos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito, rechazar } from './ayudas';
@@ -238,12 +238,16 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
 
   if (params.objetivo.tipo === 'campamento') {
     const campamento = exigirCampamento(estado, params.objetivo.id);
-    const asalto = atacarCampamento(conTropaDe(estado, atacante), campamento, [...estado.facciones], capacidadCargaDe(atacante, estado.caravanas), heridos, ctx.rng, estado.heroes);
+    const asalto = atacarCampamento(conTropaDe(estado, atacante), campamento, [...estado.facciones], heridos, ctx.rng, estado.heroes);
     const trasAsalto = conColumnas(estado, [asalto.ejercito]);
+    // El botín (D22, D26, D27): oro para cada héroe de la columna, a su oro de botín.
+    const conBotin = asalto.destruido
+      ? botinDeBandidos(trasAsalto.heroes, atacante.participantes.map((p) => p.heroeId), campamento.nivel, ctx.instante).heroes
+      : trasAsalto.heroes;
     const siguiente: GameSessionState = {
       ...trasAsalto,
       facciones: asalto.facciones,
-      heroes: herir(trasAsalto.heroes, asalto.vencidos, ctx.instante),
+      heroes: herir(conBotin, asalto.vencidos, ctx.instante),
       // Al destruirlo, su asentamiento agenda la reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).
       ...(asalto.destruido
         ? {

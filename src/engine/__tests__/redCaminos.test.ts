@@ -196,7 +196,7 @@ describe('inmunidad dentro de las zonas', () => {
 
   it('los bandidos no atacan una caravana dentro de cualquier zona', () => {
     const caravana = { ...caravanaComercialCasiLlegando(propia, ajena), posicionActual: ajena.posicion };
-    const campamento = { id: 'c', posicion: ajena.posicion, bosqueId: 'b', asentamientoId: 'Q', poder: 10_000 };
+    const campamento = { id: 'c', posicion: ajena.posicion, bosqueId: 'b', asentamientoId: 'Q', nivel: 1 as const, poder: 10_000 };
     const r = avanzarAtaquesBandidos([campamento], [caravana], createRng(1), [], zonas);
     expect(r.caravanas.map((c) => c.id)).toEqual([caravana.id]);
     expect(r.eventos).toEqual([]);

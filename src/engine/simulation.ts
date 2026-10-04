@@ -293,7 +293,17 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Campamentos de bandidos (Doc 1.9): spawn/respawn primero, después atacan cualquier caravana ya movida
   // este tick (comercial o de fundación) que pase cerca — mismo orden que el resto del tick, sobre posiciones
   // ya actualizadas.
-  const trasSpawnBandidos = avanzarSpawnBandidos(dependientes.campamentosBandidos, zonas, trasExpansion.asentamientos, mapa, instante);
+  const trasSpawnBandidos = avanzarSpawnBandidos(
+    dependientes.campamentosBandidos,
+    zonas,
+    trasExpansion.asentamientos,
+    mapa,
+    instante,
+    rng,
+    campamentosActuales,
+    facciones
+  );
+  campamentosActuales = trasSpawnBandidos.mercenarios;
   eventosDominio.push(...comoEventosDominio(trasSpawnBandidos.eventos, contexto));
   // Los ejércitos entran aquí solo como ESCOLTA: una caravana enganchada se defiende con el poder de su
   // columna y no con la defensa base fija (Doc 5.13.3). El movimiento de los ejércitos sigue después.

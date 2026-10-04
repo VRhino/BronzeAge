@@ -60,15 +60,22 @@ export function aportarARefundacion(
   if (!esCiudadano(faccion, heroeId)) throw new MercenariosInvalidoError('Solo aportan los ciudadanos de la Facción que refunda.');
   exigirFaccionSinAsentamientos(faccion, asentamientos);
   if (!(cantidad > 0)) throw new MercenariosInvalidoError('La cantidad tiene que ser positiva.');
+  // El oro sale primero del oro de botín (D27: el fondo es uno de sus dos destinos) y luego del almacén personal.
+  const botin = recurso === 'oro' ? (heroe.oroDeBotin ?? 0) : 0;
   const guardado = heroe.almacenPersonal?.[recurso] ?? 0;
-  const movido = Math.min(cantidad, guardado);
+  const movido = Math.min(cantidad, botin + guardado);
   if (movido <= 0) throw new MercenariosInvalidoError(`No hay ${recurso} en el almacén personal.`);
+  const deBotin = Math.min(botin, movido);
 
   return {
     campamentos: campamentos.map((c) =>
       c.id === campamento.id ? { ...c, fondos: { ...c.fondos, [heroeId]: { ...c.fondos[heroeId], [recurso]: (c.fondos[heroeId]?.[recurso] ?? 0) + movido } } } : c
     ),
-    heroes: heroes.map((h) => (h.id === heroeId ? { ...h, almacenPersonal: sinCeros({ ...h.almacenPersonal, [recurso]: guardado - movido }) } : h)),
+    heroes: heroes.map((h) =>
+      h.id === heroeId
+        ? { ...h, ...(deBotin > 0 ? { oroDeBotin: botin - deBotin } : {}), almacenPersonal: sinCeros({ ...h.almacenPersonal, [recurso]: guardado - (movido - deBotin) }) }
+        : h
+    ),
     movido,
   };
 }
@@ -88,14 +95,22 @@ export function retirarDeRefundacion(
   if (!heroe) throw new MercenariosInvalidoError('Ese héroe no existe.');
   if (!(cantidad > 0)) throw new MercenariosInvalidoError('La cantidad tiene que ser positiva.');
   const aportado = campamento.fondos[heroeId]?.[recurso] ?? 0;
-  const movido = Math.min(cantidad, aportado, Math.max(0, capacidadAlmacen - totalAlmacenPersonal(heroe)));
+  // El oro vuelve como oro de botín (D27): si no, aportar y retirar lavaría el botín hacia la economía de una plaza.
+  const esOro = recurso === 'oro';
+  const movido = Math.min(cantidad, aportado, esOro ? Infinity : Math.max(0, capacidadAlmacen - totalAlmacenPersonal(heroe)));
   if (movido <= 0) throw new MercenariosInvalidoError(aportado <= 0 ? `No has aportado ${recurso}.` : 'El almacén personal está lleno.');
 
   return {
     campamentos: campamentos.map((c) =>
       c.id === campamento.id ? { ...c, fondos: { ...c.fondos, [heroeId]: sinCeros({ ...c.fondos[heroeId], [recurso]: aportado - movido }) } } : c
     ),
-    heroes: heroes.map((h) => (h.id === heroeId ? { ...h, almacenPersonal: { ...h.almacenPersonal, [recurso]: (h.almacenPersonal?.[recurso] ?? 0) + movido } } : h)),
+    heroes: heroes.map((h) =>
+      h.id !== heroeId
+        ? h
+        : esOro
+          ? { ...h, oroDeBotin: (h.oroDeBotin ?? 0) + movido }
+          : { ...h, almacenPersonal: { ...h.almacenPersonal, [recurso]: (h.almacenPersonal?.[recurso] ?? 0) + movido } }
+    ),
     movido,
   };
 }

@@ -389,6 +389,11 @@ export interface Heroe {
   cupoCampamento?: { dia: number; comprado: Record<string, number> };
   /** Cuándo recogió la última ración gratis de su campamento (D24): se rellena cada `MERCENARIOS.racion.cadaMinutos`. */
   racionEn?: Instante;
+  /** Oro de botín de bandidos y alijos (D22, D27, D61): solo se gasta en el mercado de un campamento o en el fondo de refundación,
+   * nunca en la economía de una plaza. Va aparte del almacén personal y no ocupa sitio en él. */
+  oroDeBotin?: number;
+  /** Cuándo destruyó cada campamento de bandidos de las últimas 24 h: los rendimientos decrecientes (D26) se cuentan con esto. */
+  bandidosDestruidosEn?: Instante[];
   /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
    * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un id sin registro en
    * `GameSessionState.heroes` (los fundadores de los escenarios de batch) usa `LIDERAZGO.base`. */
@@ -1012,6 +1017,8 @@ export interface Ejercito {
  * Ataca caravanas que pasen cerca mientras sigue en pie (`engine/bandidos.ts`); un jugador puede destruirlo
  * con una columna que llegue a él para obtener recompensa (`atacarCampamentoConColumna`, engine/combate.ts).
  */
+export type NivelBandidos = 1 | 2 | 3;
+
 export interface CampamentoBandido {
   id: string;
   posicion: Point;
@@ -1021,9 +1028,13 @@ export interface CampamentoBandido {
    * por asentamiento SIEMPRE, con independencia de si otro asentamiento cercano ya tiene el suyo (ver
    * `engine/bandidos.ts`). Reemplaza a un criterio anterior por distancia que dejaba asentamientos vecinos
    * sin campamento propio para siempre si compartían radio de cobertura con otro. */
-  asentamientoId: string;
-  /** Poder de combate fijo (placeholder, ver `CAMPAMENTOS_BANDIDOS` en constants.ts) — mismo tipo de
-   * resolución que el resto del combate (Doc 5.2/5.10), sin escuadrones propios que sufran bajas graduales. */
+  asentamientoId?: string;
+  /** O el campamento de mercenarios en cuyo anillo vive (D42): los que aparecen por la demanda de sus residentes. */
+  campamentoMercenariosId?: string;
+  /** Nivel, que sale al azar al aparecer (D21, D37): fija su poder y el oro de su botín (`CAMPAMENTOS_BANDIDOS.niveles`). */
+  nivel: NivelBandidos;
+  /** Poder de combate (del nivel) — mismo tipo de resolución que el resto del combate (Doc 5.2/5.10), sin escuadrones
+   * propios que sufran bajas graduales. */
   poder: number;
 }
 
@@ -1049,6 +1060,8 @@ export interface CampamentoMercenarios {
   residentesIds: string[];
   /** Cuántos héroes lo eligieron al nacer (M3/D79): solo crece. Junto a `residentesIds` es el contador doble de la elección. */
   eligieronComoInicial: number;
+  /** Desde cuándo puede aparecer el siguiente campamento de bandidos de su anillo (D28): uno cada `reaparicionMinutos`. */
+  bandidosEn?: Instante;
   /**
    * Reclutas disponibles en `poblacionEn` (Doc 1.9b). Crece sola hasta el tope de sus viviendas, sin mantenimiento ni comida: lo guardado
    * es el valor y el instante, y la cantidad de ahora se calcula al mirar (`poblacionActual`), no se escribe cada tick.

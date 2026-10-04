@@ -1342,13 +1342,12 @@ export function atacarCampamento(
   ejercito: EjercitoConTropa,
   campamento: CampamentoBandido,
   facciones: Faccion[],
-  capacidadCarga: number,
   heridos: ReadonlySet<string>,
   rng: RandomFn,
   heroes: readonly Heroe[] = []
 ): { ejercito: EjercitoConTropa; destruido: boolean; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[] } {
   validarAlcance(ejercito, campamento.posicion, heridos, 'atacar');
-  const r = atacarCampamentoConColumna(enBatalla(ejercito, heridos, heroes), campamento, facciones, capacidadCarga, rng);
+  const r = atacarCampamentoConColumna(enBatalla(ejercito, heridos, heroes), campamento, facciones, rng);
   const tras = conApartadas(r.ejercito, ejercito);
   if (r.destruido) return { ...r, ejercito: tras, vencidos: [] };
   const secuela = trasDerrota(tras);

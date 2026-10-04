@@ -4,7 +4,7 @@ import { distancia } from '../world/geometria';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
-import { CAMPAMENTOS_BANDIDOS, MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION } from '../constants';
+import { MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION } from '../constants';
 import { aplicarCapacidadDeEdificio } from './almacen';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarExperiencia, type AjusteExperiencia } from './faccion';
@@ -501,15 +501,14 @@ function choqueContraCampamento(
 
 /**
  * Una columna ataca el campamento de bandidos que tiene delante (Doc 1.9). Con números hasta que exista la batalla de
- * Unity (Doc 5.15.6): los soldados que lleva contra el `poder` fijo del campamento. Si gana, el campamento cae y su
- * recompensa va al carro, hasta donde quepa; lo que no cabe se pierde, como el botín de una caravana. Recibe solo lo
+ * Unity (Doc 5.15.6): los soldados que lleva contra el `poder` del campamento (su nivel). Si gana, el campamento cae; el botín, oro
+ * para cada héroe (`botinDeBandidos`), lo reparte quien llama. Recibe solo lo
  * que combate: sin las escuadras de los heridos, que aparta quien llama.
  */
 export function atacarCampamentoConColumna(
   ejercito: EjercitoConTropa,
   campamento: CampamentoBandido,
   facciones: Faccion[],
-  capacidadCarga: number,
   rng: RandomFn
 ): { ejercito: EjercitoConTropa; destruido: boolean; facciones: Faccion[]; eventos: EventoCrudo[] } {
   const vivos = ejercito.escuadrones.filter((e) => e.cantidad > 0);
@@ -517,23 +516,12 @@ export function atacarCampamentoConColumna(
   const choque = choqueContraCampamento(vivos, campamento, rng);
   const porId = new Map(choque.escuadrones.map((e) => [e.id, e]));
 
-  let suministro = ejercito.suministro;
-  if (choque.gana) {
-    let libre = Math.max(0, capacidadCarga - Object.values(suministro).reduce((x, y) => x + y, 0));
-    for (const [recurso, cantidad] of Object.entries(CAMPAMENTOS_BANDIDOS.recompensa)) {
-      const cabe = Math.min(cantidad ?? 0, libre);
-      if (cabe <= 0) continue;
-      suministro = { ...suministro, [recurso]: (suministro[recurso] ?? 0) + cabe };
-      libre -= cabe;
-    }
-  }
-
   const payload: PayloadAtaqueCampamento = { atacanteId: ejercito.id, campamentoId: campamento.id };
   const trasXp = aplicarExperiencia(facciones, [
     { faccionId: ejercito.faccionId, delta: xpDeBandidos(facciones, ejercito.faccionId, choque.gana), razon: 'campamento de bandidos' },
   ]);
   return {
-    ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => porId.get(e.id) ?? e), suministro },
+    ejercito: { ...ejercito, escuadrones: ejercito.escuadrones.map((e) => porId.get(e.id) ?? e) },
     destruido: choque.gana,
     facciones: trasXp.facciones,
     eventos: [

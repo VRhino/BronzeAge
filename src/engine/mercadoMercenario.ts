@@ -114,19 +114,22 @@ export function comprarEnCampamento(
   if (!reside && !columna) throw new MercenariosInvalidoError('Hace falta la columna para llevarse el trigo.');
   const precio = precioDeVenta(recurso, asentamientos);
   if (precio <= 0) throw new MercenariosInvalidoError('Ese bien no se vende en el campamento.');
+  const coste = (n: number) => Math.ceil(n * precio);
 
   const dia = diaDe(instante);
   const comprado = heroe.cupoCampamento?.dia === dia ? heroe.cupoCampamento.comprado : {};
   const cupo = reside && recurso in MERCENARIOS.mercado.cupoDiario ? MERCENARIOS.mercado.cupoDiario[recurso]! - (comprado[recurso] ?? 0) : Infinity;
   const stock = Math.floor(campamento.mercado[recurso] ?? 0);
-  const guardadoOro = heroe.almacenPersonal?.['oro'] ?? 0;
+  // Se paga primero con el oro de botín (D27: el mercado del campamento es uno de sus dos destinos), luego con el del almacén.
+  const botin = heroe.oroDeBotin ?? 0;
+  const guardadoOro = botin + (heroe.almacenPersonal?.['oro'] ?? 0);
+  const delAlmacen = (n: number) => Math.max(0, coste(n) - botin);
   // Sitio: en el almacén cada unidad ocupa 1 y libera lo que cuesta en oro; en el carro, lo que quede libre.
   const enCarro = !reside;
   const libreCarro = columna ? capacidadCargaDe(columna) - Object.values(columna.suministro).reduce((a, b) => a + b, 0) : 0;
   const libre = enCarro ? libreCarro : ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(heroe);
-  const coste = (n: number) => Math.ceil(n * precio);
   let cantidad = Math.min(Math.floor(cantidadPedida), stock, cupo, Math.floor(guardadoOro / precio));
-  while (cantidad > 0 && (enCarro ? cantidad : cantidad - coste(cantidad)) > libre) cantidad--;
+  while (cantidad > 0 && (enCarro ? cantidad : cantidad - delAlmacen(cantidad)) > libre) cantidad--;
   while (cantidad > 0 && coste(cantidad) > guardadoOro) cantidad--;
   if (cantidad <= 0) {
     throw new MercenariosInvalidoError(
@@ -143,13 +146,13 @@ export function comprarEnCampamento(
   }
 
   const oro = coste(cantidad);
-  const almacenPersonal: Record<string, number> = { ...heroe.almacenPersonal, oro: guardadoOro - oro };
+  const almacenPersonal: Record<string, number> = { ...heroe.almacenPersonal, oro: (heroe.almacenPersonal?.['oro'] ?? 0) - delAlmacen(cantidad) };
   if (!enCarro) almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cantidad;
   if (almacenPersonal['oro'] === 0) delete almacenPersonal['oro'];
   const cupoCampamento = reside && recurso in MERCENARIOS.mercado.cupoDiario ? { dia, comprado: { ...comprado, [recurso]: (comprado[recurso] ?? 0) + cantidad } } : heroe.cupoCampamento;
   return {
     campamento: { ...campamento, mercado: { ...campamento.mercado, [recurso]: (campamento.mercado[recurso] ?? 0) - cantidad } },
-    heroe: { ...heroe, almacenPersonal, ...(cupoCampamento ? { cupoCampamento } : {}) },
+    heroe: { ...heroe, almacenPersonal, oroDeBotin: Math.max(0, botin - oro), ...(cupoCampamento ? { cupoCampamento } : {}) },
     columna: enCarro && columna ? { ...columna, suministro: { ...columna.suministro, [recurso]: (columna.suministro[recurso] ?? 0) + cantidad } } : columna,
     cantidad,
     oro,

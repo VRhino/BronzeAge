@@ -136,6 +136,12 @@ describe('comprarEnCampamento', () => {
     expect(() => compra(forastero, heroe({ oro: 500 }), 'trigo', 5)).toThrow(MercenariosInvalidoError);
   });
 
+  it('paga primero con el oro de botín (D27), que no ocupa sitio en el almacén', () => {
+    const r = compra(campamento(), { ...heroe({ oro: 100 }), oroDeBotin: 5 }, 'madera', 10);
+    expect(r.heroe.oroDeBotin).toBe(Math.max(0, 5 - r.oro));
+    expect(r.heroe.almacenPersonal!['oro']).toBe(100 - Math.max(0, r.oro - 5));
+  });
+
   it('rechaza: sin stock, sin oro, el oro, bienes sin precio y cantidades menores que 1', () => {
     expect(() => compra(campamento({ madera: 0 }), heroe({ oro: 500 }), 'madera', 5)).toThrow(MercenariosInvalidoError);
     expect(() => compra(campamento(), heroe({ oro: 0 }), 'madera', 5)).toThrow(MercenariosInvalidoError);

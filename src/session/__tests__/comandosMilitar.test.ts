@@ -6,6 +6,7 @@
 // lo que mantiene la partida reproducible.
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
+import { CAMPAMENTOS_BANDIDOS } from '../../constants';
 import { reclutarTropa } from '../comandos/militar';
 import { movilizarEjercito } from '../comandos/ejercitos';
 import { salirAlMundo } from '../comandos/presencia';
@@ -72,7 +73,7 @@ function columnaFrenteACampamento(poder: number, distancia = 0) {
   const posicion = { x: columna.posicionActual.x + distancia, y: columna.posicionActual.y };
   const conCampamento = GameSession.importar({
     ...payload,
-    state: { ...payload.state, campamentosBandidos: [{ id: 'camp-1', posicion, bosqueId: 'b1', asentamientoId, poder }] },
+    state: { ...payload.state, campamentosBandidos: [{ id: 'camp-1', posicion, bosqueId: 'b1', asentamientoId, nivel: 1, poder }] },
   });
   return { sesion: conCampamento, fundador, columnaId: columna.id };
 }
@@ -92,7 +93,7 @@ describe('atacar un campamento de bandidos con la columna (Doc 1.9)', () => {
     expect(correr()).toEqual(a);
   });
 
-  it('si cae, la recompensa va al carro y se agenda su reaparición', () => {
+  it('si cae, su botín es oro de botín para el héroe (D22, D27) y se agenda su reaparición', () => {
     const { sesion, fundador, columnaId } = columnaFrenteACampamento(1);
 
     expect(atacarElCampamento(sesion, fundador).ok).toBe(true);
@@ -100,7 +101,8 @@ describe('atacar un campamento de bandidos con la columna (Doc 1.9)', () => {
     const estado = sesion.getState();
     expect(estado.campamentosBandidos).toEqual([]);
     expect(estado.asentamientos.some((a) => a.bandidosReaparecenEn !== undefined), 'su plaza agenda la reaparición').toBe(true);
-    expect(estado.ejercitos.find((e) => e.id === columnaId)!.suministro['madera'], 'la madera del botín, en el carro').toBeGreaterThan(0);
+    expect(estado.heroes.find((h) => h.id === fundador)!.oroDeBotin, 'el oro del nivel 1').toBe(CAMPAMENTOS_BANDIDOS.niveles[1].oroPorHeroe);
+    expect(estado.ejercitos.find((e) => e.id === columnaId)!.suministro['madera'] ?? 0, 'nada al carro').toBe(0);
   });
 
   it('si aguanta, sus héroes quedan heridos y la columna pierde la mitad del carro (Doc 5.16.4, 5.16.6)', () => {

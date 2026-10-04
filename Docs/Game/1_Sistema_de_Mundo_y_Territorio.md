@@ -158,18 +158,27 @@ Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se s
 
 ## 1.9 Campamentos de bandidos (inspirado en Travian)
 
-- Aparecen únicamente en BOSQUES (ver 1.4) que NO se solapan con ninguna zona de influencia existente — territorio no reclamado por ninguna Facción. Se comprueba el CENTRO del bosque contra los polígonos de zona, no el círculo completo.
-- **UNO por asentamiento, SIEMPRE**: cada asentamiento vivo tiene el suyo, en SU bosque no reclamado MÁS CERCANO, y queda ASIGNADO a él. Así nunca aparece en la otra punta del mapa sin ningún asentamiento cerca, ni pegado a una zona de influencia. Un asentamiento sin campamento propio siempre puede recibir el suyo, sin importar lo cerca que esté de otro ya atendido.
-- Mientras el campamento sigue en pie, ATACA CARAVANAS (Doc 3.10) que pasen dentro de un radio fijo de su posición, cada minuto — se resuelve con números, contra la defensa de la caravana. Si gana, la caravana se pierde por completo (nadie la recibe: el bandido no tiene almacén propio).
-- **Se ataca con una columna que llegue a él** (Doc 5.12.3), y la batalla se juega en Unity: los héroes de la columna contra las tropas del campamento, manejadas por la IA del juego (Doc 5.15.6). SIN gate de cargo: a diferencia de un asedio, un campamento bandido es una amenaza de mundo abierto, no una acción de guerra entre Facciones. Al ser DESTRUIDO entrega una RECOMPENSA (loot) fija a quien lo destruye y se agenda el plazo de reaparición. La recompensa va al carro de la columna, hasta donde quepa; lo que no cabe se pierde, como el botín de una caravana (decisión del usuario, 2026-09-15). Si pierde, sus héroes quedan heridos (5.16.4) y la columna pierde la mitad del carro, que no se lleva nadie. Si el servidor no tiene conectado ningún servidor de batalla de Conquest, el choque se resuelve con números: los soldados de los héroes sanos contra el poder fijo del campamento.
-- REAPARICIÓN: **cada asentamiento lleva su propio plazo**. Tras destruirse su campamento, le reaparece uno junto a él cuando vence el plazo, sea quien sea quien lo destruyó.
+Una sola entidad con **tres niveles**, que sale **al azar** al aparecer (2026-10-04, D21, D37). Aparecen por dos vías:
+
+- **Uno por asentamiento, SIEMPRE**: cada asentamiento vivo tiene el suyo, en SU bosque no reclamado MÁS CERCANO (un bosque que NO se solapa con ninguna zona de influencia; se comprueba el CENTRO del bosque contra los polígonos de zona), y queda ASIGNADO a él. Así nunca aparece en la otra punta del mapa sin ningún asentamiento cerca, ni pegado a una zona de influencia. **Cada asentamiento lleva su propio plazo** de reaparición: tras destruirse el suyo, le reaparece uno cuando vence, sea quien sea quien lo destruyó.
+- **En el anillo de cada campamento de mercenarios, según la demanda** (D42, D28): a la misma distancia en todos (entre 150 y 250), en tierra firme, fuera de toda zona y de la protección de cualquier campamento. Hay **uno por cada 2 residentes de Facciones sin asentamiento** (o sin Facción), entre 1 y 6; mientras falten, aparece uno cada 10 minutos.
+
+- Mientras el campamento sigue en pie, ATACA CARAVANAS (Doc 3.10) que pasen dentro de un radio fijo de su posición, cada minuto — se resuelve con números, contra la defensa de la caravana. Si gana, la caravana se pierde por completo (nadie la recibe: el bandido no tiene almacén propio). Junto a un campamento de mercenarios no ataca (1.9b).
+- **Se ataca con una columna que llegue a él** (Doc 5.12.3), y la batalla se juega en Unity: los héroes de la columna contra las tropas del campamento, manejadas por la IA del juego (Doc 5.15.6). SIN gate de cargo: a diferencia de un asedio, un campamento bandido es una amenaza de mundo abierto, no una acción de guerra entre Facciones. Si pierde, sus héroes quedan heridos (5.16.4) y la columna pierde la mitad del carro, que no se lleva nadie. Si el servidor no tiene conectado ningún servidor de batalla de Conquest, el choque se resuelve con números: los soldados de los héroes sanos contra el poder del campamento.
+- **El botín es solo oro** (D22): al destruirlo, **cada héroe de la columna** recibe el oro de su nivel. Va a su **oro de botín**, aparte del almacén personal, que **solo se gasta en el mercado de un campamento o en el fondo de refundación** (D27): nunca llega a la economía de una plaza. Lo que se retira del fondo vuelve como oro de botín.
+- **Rendimientos decrecientes por héroe** (D26): en las últimas 24 h, botín completo en las 8 primeras destrucciones, luego un 15 % menos por cada una, y desde la 14.ª solo experiencia.
 - En el mapa se marca como un diamante rojo.
 
 Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
-- Tropas: una escuadra de milicia de lanceros con 15 unidades, sin dueño y manejada por la IA (poder 30, fijo, sin escalado por región). Es lo que combate en Unity contra un héroe, y lo que pesa en el cálculo cuando el campamento ataca una caravana.
+
+| Nivel | Sale | Poder | Tropa en Unity | Oro por héroe |
+|---|---|---|---|---|
+| 1 | 50 % | 20 | 10 milicias de lanceros | 9 |
+| 2 | 30 % | 60 | 30 | 10 |
+| 3 | 20 % | 120 | 60 | 11 |
+
 - Radio de ataque a caravanas: 40 unidades del mapa.
-- Recompensa: 40 madera + 20 piedra + 15 oro.
-- Reaparición: 60 minutos tras destruirse.
+- Reaparición del de un asentamiento: 60 minutos tras destruirse.
 
 El campamento no bloquea la explotación del bosque que ocupa: solo amenaza a las caravanas de paso.
 

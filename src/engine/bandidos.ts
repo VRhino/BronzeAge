@@ -4,7 +4,8 @@
 // cada tick dentro de `avanzarSimulacion`); el ataque contra un campamento, con una columna que llegue a él, vive en
 // `engine/combate.ts` (`atacarCampamentoConColumna`), junto al resto de resolución de combate.
 
-import type { Asentamiento, CampamentoBandido, CampamentoMercenarios, Escuadron, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import type { Asentamiento, CampamentoBandido, CampamentoMercenarios, Escuadron, Faccion, Heroe, NivelBandidos, Point, ZonaBosque, ZonaInfluencia } from '../domain/types';
+import { esCiudadano } from './faccion';
 import { enProteccionDeCampamento } from './mercenarios';
 import { alCampamento, type CaravanaConEscolta, type EjercitoConTropa } from './tropa';
 import type { EventoCrudo } from '../domain/eventos';
@@ -12,7 +13,10 @@ import type { EventoCrudo } from '../domain/eventos';
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarSpawnBandidos`/`avanzarAtaquesBandidos`). */
 export interface PayloadCampamentoAparece {
   campamentoId: string;
-  asentamientoObjetivoId: string;
+  nivel: NivelBandidos;
+  /** El asentamiento al que acosa, o el campamento de mercenarios en cuyo anillo aparece (D42). */
+  asentamientoObjetivoId?: string;
+  campamentoMercenariosId?: string;
 }
 export interface PayloadCaravanaInterceptada {
   campamentoId: string;
@@ -45,52 +49,133 @@ function bosqueNoReclamadoMasCercano(mapa: Mapa, zonas: ZonaInfluencia[], ocupad
   return candidatos.reduce((mejor, b) => (distancia(b.centro, cercaDe) < distancia(mejor.centro, cercaDe) ? b : mejor));
 }
 
+/** Un nivel al azar, con los pesos de `CAMPAMENTOS_BANDIDOS.niveles` (D21, D37). */
+function nivelAlAzar(rng: RandomFn): NivelBandidos {
+  let tirada = rng();
+  for (const [nivel, { peso }] of Object.entries(CAMPAMENTOS_BANDIDOS.niveles)) {
+    if ((tirada -= peso) < 0) return Number(nivel) as NivelBandidos;
+  }
+  return 1;
+}
+
+const conNivel = (nivel: NivelBandidos) => ({ nivel, poder: CAMPAMENTOS_BANDIDOS.niveles[nivel].poder });
+
+/** Cuántos residentes del campamento son de una Facción sin asentamiento, o de ninguna: los que necesitan bandidos (D42). */
+function residentesSinPlaza(campamento: CampamentoMercenarios, facciones: readonly Faccion[], asentamientos: readonly Asentamiento[]): number {
+  return campamento.residentesIds.filter((id) => {
+    const faccion = facciones.find((f) => esCiudadano(f, id));
+    return !faccion || !asentamientos.some((a) => a.faccionId === faccion.id);
+  }).length;
+}
+
+/** Un punto del anillo de un campamento de mercenarios donde pueden acampar bandidos: tierra firme, fuera de toda zona y fuera de la
+ * protección de cualquier campamento. Unos cuantos intentos al azar; sin sitio, nada (se reintenta en la próxima cita). */
+function puntoDelAnillo(centro: Point, mapa: Mapa, zonas: readonly ZonaInfluencia[], mercenarios: readonly CampamentoMercenarios[], rng: RandomFn): Point | undefined {
+  const { radioMin, radioMax } = CAMPAMENTOS_BANDIDOS.anillo;
+  for (let intento = 0; intento < 20; intento++) {
+    const angulo = rng() * 2 * Math.PI;
+    const radio = radioMin + rng() * (radioMax - radioMin);
+    const p = { x: centro.x + radio * Math.cos(angulo), y: centro.y + radio * Math.sin(angulo) };
+    if (!mapa.dentroDelMapa(p) || !mapa.esTransitable(p) || mapa.terrenoEn(p) === 'agua') continue;
+    if (zonas.some((z) => pointInPolygon(p, z.poligono)) || enProteccionDeCampamento(p, mercenarios)) continue;
+    return p;
+  }
+  return undefined;
+}
+
 /**
- * Spawn/respawn de campamentos de bandidos (Doc 1.9) — UNO por asentamiento, en SU bosque no reclamado más cercano:
- * ni en la otra punta del mapa sin nadie cerca para atacarlo, ni dentro de una zona de influencia (ya excluido por
- * `bosqueNoReclamadoMasCercano`).
+ * Aparición de campamentos de bandidos (Doc 1.9), con nivel al azar (D21, D37). Dos fuentes de la misma entidad:
  *
- * **Cada asentamiento lleva su propio plazo** (`Asentamiento.bandidosReaparecenEn`, 2026-09-28, decisión del usuario):
- * el suyo reaparece junto a él cuando vence, y uno sin plazo lo recibe ya. Antes el plazo era uno para todo el mundo
- * y el campamento nuevo iba al PRIMER asentamiento de la lista sin cubrir: en la Era I medida era siempre la capital
- * de la Facción 1, que lo destruía al minuto y se quedaba con la experiencia de todos los bandidos del mapa.
- *
- * Si no queda un bosque libre para alguno, ese no recibe nada y se reintenta el tick siguiente.
+ * - **Uno por asentamiento, SIEMPRE**, en SU bosque no reclamado más cercano: ni en la otra punta del mapa sin nadie cerca, ni dentro
+ *   de una zona de influencia. **Cada asentamiento lleva su propio plazo** (`Asentamiento.bandidosReaparecenEn`, 2026-09-28): el suyo
+ *   reaparece junto a él cuando vence, y uno sin plazo lo recibe ya.
+ * - **En el anillo de cada campamento de mercenarios, según la demanda** (D42, D28): uno por cada `residentesPorBandido` residentes de
+ *   Facciones sin asentamiento, entre `minimo` y `maximo`, a la misma distancia en todos; mientras falten, aparece uno cada
+ *   `reaparicionMinutos` (`CampamentoMercenarios.bandidosEn`).
  */
 export function avanzarSpawnBandidos(
   campamentos: CampamentoBandido[],
   zonas: ZonaInfluencia[],
   asentamientos: Asentamiento[],
   mapa: Mapa,
-  instante: Instante
-): { campamentos: CampamentoBandido[]; eventos: EventoCrudo[] } {
+  instante: Instante,
+  rng: RandomFn,
+  mercenarios: readonly CampamentoMercenarios[] = [],
+  facciones: readonly Faccion[] = []
+): { campamentos: CampamentoBandido[]; mercenarios: CampamentoMercenarios[]; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
   const actuales = [...campamentos];
+  const aparece = (nuevo: CampamentoBandido, donde: string) => {
+    actuales.push(nuevo);
+    eventos.push({
+      codigo: 'bandidos.campamento_aparece',
+      mensaje: `Aparece un campamento de bandidos de nivel ${nuevo.nivel} ${donde} (${nuevo.id}).`,
+      payload: {
+        campamentoId: nuevo.id,
+        nivel: nuevo.nivel,
+        ...(nuevo.asentamientoId ? { asentamientoObjetivoId: nuevo.asentamientoId } : {}),
+        ...(nuevo.campamentoMercenariosId ? { campamentoMercenariosId: nuevo.campamentoMercenariosId } : {}),
+      } satisfies PayloadCampamentoAparece,
+    });
+  };
+
   for (const asentamiento of asentamientos) {
     if (actuales.some((c) => c.asentamientoId === asentamiento.id)) continue;
     if (asentamiento.bandidosReaparecenEn !== undefined && instante < asentamiento.bandidosReaparecenEn) continue;
     const bosque = bosqueNoReclamadoMasCercano(mapa, zonas, new Set(actuales.map((c) => c.bosqueId)), asentamiento.posicion);
     if (!bosque) continue;
     // Uno por asentamiento a la vez: su id basta para que no se repita.
-    const nuevo: CampamentoBandido = {
-      id: `campamento-${asentamiento.id}`,
-      posicion: bosque.centro,
-      bosqueId: bosque.id,
-      asentamientoId: asentamiento.id,
-      poder: CAMPAMENTOS_BANDIDOS.poder,
-    };
-    actuales.push(nuevo);
-    eventos.push({
-      codigo: 'bandidos.campamento_aparece',
-      mensaje: `Aparece un campamento de bandidos cerca de ${asentamiento.id}, en su bosque no reclamado más cercano (${nuevo.id}).`,
-      payload: { campamentoId: nuevo.id, asentamientoObjetivoId: asentamiento.id } satisfies PayloadCampamentoAparece,
-    });
+    aparece(
+      { id: `campamento-${asentamiento.id}`, posicion: bosque.centro, bosqueId: bosque.id, asentamientoId: asentamiento.id, ...conNivel(nivelAlAzar(rng)) },
+      `cerca de ${asentamiento.id}, en su bosque no reclamado más cercano`
+    );
   }
-  return { campamentos: actuales, eventos };
+
+  const { residentesPorBandido, minimo, maximo, reaparicionMinutos } = CAMPAMENTOS_BANDIDOS.anillo;
+  const mercenariosTras = mercenarios.map((m) => {
+    if (m.bandidosEn !== undefined && instante < m.bandidosEn) return m;
+    const tocan = Math.min(maximo, Math.max(minimo, Math.ceil(residentesSinPlaza(m, facciones, asentamientos) / residentesPorBandido)));
+    if (actuales.filter((c) => c.campamentoMercenariosId === m.id).length >= tocan) return m;
+    const punto = puntoDelAnillo(m.posicion, mapa, zonas, mercenarios, rng);
+    if (!punto) return m;
+    aparece(
+      { id: `bandidos-${m.id}-${instante}`, posicion: punto, bosqueId: '', campamentoMercenariosId: m.id, ...conNivel(nivelAlAzar(rng)) },
+      `en el anillo de ${m.id}`
+    );
+    return { ...m, bandidosEn: sumar(instante, minutos(reaparicionMinutos)) };
+  });
+  return { campamentos: actuales, mercenarios: mercenariosTras, eventos };
+}
+
+/**
+ * El botín de un campamento de bandidos destruido (D22, D26, D27): oro, el del nivel para cada héroe de la columna que lo destruye,
+ * a su oro de botín —que solo se gasta en un campamento—. Con rendimientos decrecientes por héroe: en las últimas 24 h, completo las
+ * primeras veces, luego cada vez menos, y al final solo experiencia.
+ */
+export function botinDeBandidos(
+  heroes: readonly Heroe[],
+  heroeIds: readonly string[],
+  nivel: NivelBandidos,
+  instante: Instante
+): { heroes: Heroe[]; oro: Record<string, number> } {
+  const { ventanaHoras, completas, caidaPorCada, soloExperienciaDesde } = CAMPAMENTOS_BANDIDOS.rendimientos;
+  const desde = instante - ventanaHoras * 3_600_000;
+  const oro: Record<string, number> = {};
+  const tras = heroes.map((h) => {
+    if (!heroeIds.includes(h.id)) return h;
+    const recientes = (h.bandidosDestruidosEn ?? []).filter((t) => t > desde);
+    const n = recientes.length + 1;
+    const factor = n <= completas ? 1 : n >= soloExperienciaDesde ? 0 : Math.max(0, 1 - caidaPorCada * (n - completas));
+    const ganado = Math.round(CAMPAMENTOS_BANDIDOS.niveles[nivel].oroPorHeroe * factor);
+    oro[h.id] = ganado;
+    return { ...h, bandidosDestruidosEn: [...recientes, instante], ...(ganado > 0 ? { oroDeBotin: (h.oroDeBotin ?? 0) + ganado } : {}) };
+  });
+  return { heroes: tras, oro };
 }
 
 /** Destruido un campamento, su asentamiento agenda la reaparición del suyo (Doc 1.9). */
 export function agendarReaparicionBandidos(asentamientos: readonly Asentamiento[], campamento: CampamentoBandido, instante: Instante): Asentamiento[] {
+  if (!campamento.asentamientoId) return asentamientos as Asentamiento[];
   const cuando = sumar(instante, minutos(CAMPAMENTOS_BANDIDOS.respawnMinutos));
   return asentamientos.map((a) => (a.id === campamento.asentamientoId ? { ...a, bandidosReaparecenEn: cuando } : a));
 }

@@ -8,7 +8,7 @@ import type { PayloadCampamentoAparece, PayloadCaravanaEscapa, PayloadCaravanaIn
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest } from './fixtures';
 
 function campamento(poder: number, posicion = { x: 0, y: 0 }): CampamentoBandido {
-  return { id: 'campamento-1', posicion, bosqueId: 'bosque-1', asentamientoId: 'asentamiento-x', poder };
+  return { id: 'campamento-1', posicion, bosqueId: 'bosque-1', asentamientoId: 'asentamiento-x', nivel: 1, poder };
 }
 
 function caravanaEnTransito(posicion = { x: 0, y: 0 }): Caravana {
@@ -29,7 +29,7 @@ describe('eventos de dominio — bandidos.ts', () => {
     const mapa = crearMapaDeterminista(7);
     const { asentamiento } = fundarAsentamientoDeTest(mapa, crearFacciones(), 'faccion-1', []);
 
-    const resultado = avanzarSpawnBandidos([], [], [asentamiento], mapa, instanteDeTest(1));
+    const resultado = avanzarSpawnBandidos([], [], [asentamiento], mapa, instanteDeTest(1), createRng(1));
 
     expect(resultado.campamentos).toHaveLength(1);
     expect(resultado.eventos).toHaveLength(1);

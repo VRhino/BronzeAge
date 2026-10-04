@@ -51,7 +51,7 @@ describe('campamentos de bandidos', () => {
       poder: poderTotal(tropa, false) * poderRelativoDelCampamento,
     } as CampamentoBandido;
     const columna = { id: 'col-1', faccionId: 'faccion-1', escuadrones: tropa, suministro: {} } as unknown as EjercitoConTropa;
-    const r = atacarCampamentoConColumna(columna, campamento, facciones, 500, createRng(1));
+    const r = atacarCampamentoConColumna(columna, campamento, facciones, createRng(1));
     return xpDe(r.facciones) - xpDe(facciones);
   }
 
