@@ -20,6 +20,7 @@ import { anteponerEventos, eventoAdministrativo, instanteDeTick, isoDeInstante, 
 import { avanzarTick } from './comandos/avanzarTick';
 import { mercadoMercenarioInicial } from '../engine/mercadoMercenario';
 import { colocarCampamentosIniciales } from '../engine/mercenarios';
+import { colocarAlijos } from '../engine/alijos';
 import {
   ACTOR_SISTEMA,
   type ActorId,
@@ -83,6 +84,8 @@ export class GameSession {
 
   static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesSesion = {}): GameSession {
     const mapa = generarMapa({ ...MAPA_DEFAULT, seed: config.seed, region: config.region });
+    const consulta = crearMapa(mapa, crearEstadoMapa());
+    const campamentosMercenarios = colocarCampamentosIniciales(consulta, instanteDeTick(0));
     const estado: GameSessionState = {
       gameId,
       mapa,
@@ -98,7 +101,8 @@ export class GameSession {
       relaciones: [],
       titulos: [],
       campamentosBandidos: [],
-      campamentosMercenarios: colocarCampamentosIniciales(crearMapa(mapa, crearEstadoMapa()), instanteDeTick(0)),
+      campamentosMercenarios,
+      alijos: colocarAlijos(consulta, campamentosMercenarios),
       mercadoMercenario: mercadoMercenarioInicial(instanteDeTick(0)),
       memoriaPorFaccion: {},
       tecnologia: estadoTecnologiaInicial(instanteDeTick(0)),

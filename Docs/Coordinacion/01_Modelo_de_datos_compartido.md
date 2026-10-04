@@ -489,6 +489,11 @@ CampamentoBandido
   nivel: 1 | 2 | 3        sale al azar al aparecer; fija poder, tropa en Unity y oro del botín (2026-10-04)
   poder                  poder de combate del nivel, sin escuadrones propios
 
+Alijo                      alijo de exploración (2026-10-04, D60-D63); en el estado, `alijos[]`, colocados al crear la partida
+  id
+  posicion: Point
+  oro: number             lo que da a cada héroe que lo abre, a su oro de botín
+
 CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en el estado, `campamentosMercenarios[]`
   id
   posicion: Point
@@ -599,6 +604,7 @@ Heroe
   oroDeBotin?: number     oro de bandidos y alijos (2026-10-04, D27): solo se gasta en el mercado de un campamento o en
                          el fondo de refundación; no ocupa sitio en el almacén
   bandidosDestruidosEn?: Instante[]   los de las últimas 24 h, para los rendimientos decrecientes (D26)
+  alijosAbiertos?: string[]   los alijos de exploración que ya abrió: cada uno, una vez por héroe (D60)
   cupoCampamento?: { dia, comprado }   lo comprado hoy en el mercado de su campamento (cupo diario, D41)
   racionEn?: Instante     cuándo recogió la última ración gratis de su campamento (D24)
   loadouts: Loadout[]     nuevo

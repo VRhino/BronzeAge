@@ -19,6 +19,7 @@ import type { GameSessionState } from '../estado';
 import { evento } from './eventos';
 import { campamentoDeResidente } from '../../engine/mercenarios';
 import { columnaDe, enLaPuertaDelCampamento } from '../../engine/ejercitos';
+import { abrirAlijo as abrirAlijoEngine, buscaAlijos } from '../../engine/alijos';
 
 /** ¿Está el héroe en ese campamento (D75)? Dentro, o con su columna en la puerta. */
 function exigirEn(estado: GameSessionState, heroeId: string, campamento: CampamentoMercenarios): void {
@@ -265,5 +266,18 @@ export const reponerPrestamo = comando<Record<string, never>, { repuestas: numbe
     { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? r.heroe : h)) },
     [evento(ctx, { codigo: 'mercenarios.prestamo_repuesto', mensaje: `${heroe.displayName} repone ${r.repuestas} de su tropa prestada.`, payload: { heroeId: heroe.id, repuestas: r.repuestas } })],
     { repuestas: r.repuestas }
+  );
+});
+
+/** Abrir un alijo de exploración estando en el sitio (D60-D63): su oro, al oro de botín. */
+export const abrirAlijo = comando<{ alijoId: string }, { oro: number }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const alijo = (estado.alijos ?? []).find((a) => a.id === params.alijoId);
+  if (!alijo) rechazar(CODIGOS_ERROR.alijoDesconocido);
+  const tras = abrirAlijoEngine(alijo, heroe, columnaDe(estado.ejercitos, heroe.id), buscaAlijos(heroe.id, estado.facciones, estado.asentamientos));
+  return exito(
+    { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? tras : h)) },
+    [evento(ctx, { codigo: 'alijo.abierto', mensaje: `${heroe.displayName} encuentra un alijo con ${alijo.oro} de oro.`, payload: { heroeId: heroe.id, alijoId: alijo.id, oro: alijo.oro } })],
+    { oro: alijo.oro }
   );
 });

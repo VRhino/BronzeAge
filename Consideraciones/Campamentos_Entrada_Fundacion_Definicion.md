@@ -302,7 +302,12 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    campamento; ración de 60 al salir cada 30 min, que vuelve al campamento y no se guarda; préstamo de una escuadra de
    leva comunal por tropa, hasta las tres, gratis al pedir y al reponer (D80), retirada por el tick al dejar de residir.
    **Falta**: que la pila de trigo (300) se calibre.
-4. **Bandidos unificados por niveles** (D21, D22, D26-D28, D37, D42) y **alijos** (D29).
+4. ~~**Bandidos unificados por niveles** (D21, D22, D26-D28, D37, D42) y **alijos** (D29).~~ **Hecho** (`b32f8a0` y el de
+   alijos): niveles al azar, anillo por demanda, botín de oro a `oroDeBotin` (solo mercado del campamento y fondo; lo
+   retirado del fondo vuelve como oro de botín), rendimientos decrecientes, alijos por héroe. **Abierto**: con alijos por
+   héroe, quien recorre todas las zonas abre 6 × campamentos (120-150 de oro en un mundo de 4-5), no los 30 de D62.
+   **Falta**: el bot cazador sigue buscando solo los bandidos de su plaza; los del anillo los cazará el cerebro «sin
+   plaza» (paso 8).
 5. **Ingreso con lista de solicitantes del Rey** (sustituye `unirseAFaccion`); **eliminar `comprarCasa`**.
 6. **Fundación única** (D30): caravana de campamento sin destino, origen = campamento (atacable, D36; vuelve a él,
    D40); fondo por Facción y campamento, aportado desde el carro (D39); enganche y reclamo; caducidad con registro

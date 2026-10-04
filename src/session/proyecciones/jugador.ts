@@ -48,6 +48,7 @@ import { costeLiderazgo } from '../../engine/liderazgo';
 import { RED_VACIA, tramosDeRed } from '../../engine/redCaminos';
 import type {
   AcuerdoTrueque,
+  Alijo,
   Asentamiento,
   RedCaminos,
   CampamentoBandido,
@@ -80,8 +81,9 @@ import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
 import { compartenVision, esResidente } from '../../engine/pertenencia';
 import { ubicacionDeducida } from '../../engine/ubicacion';
+import { alijosALaVista, buscaAlijos } from '../../engine/alijos';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
-import { alcanceDeVista, enLaPuertaDe, participantesDe } from '../../engine/ejercitos';
+import { alcanceDeVista, columnaDe, enLaPuertaDe, participantesDe } from '../../engine/ejercitos';
 import { indiceTropa, type IndiceTropa } from '../../engine/tropa';
 import {
   estaExplorado,
@@ -409,6 +411,8 @@ export interface ProyeccionJugador {
   /** Campamentos de mercenarios (Doc 1.9b) que la Facción CONOCE: como un camino, los que ha explorado alguna vez, no solo los
    * que ve ahora — ver `campamentosMercenariosConocidos`. */
   campamentosMercenarios: CampamentoMercenarios[];
+  /** Los alijos de exploración a la vista de su columna que aún no abrió (D62); solo para quien puede abrirlos (D63). */
+  alijos: Alijo[];
   /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
    * fuga que el doc 7 §7.1 señalaba en el log administrativo: el log global narra TODO el mundo. */
   /* `eventosDominio` NO viaja aquí (follow-up de C13, cerrado el 2026-09-05) — ver la nota de cabecera. */
@@ -838,6 +842,10 @@ export function proyectarParaJugador(
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.red ?? RED_VACIA, exploracion),
     campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito, tropa),
+    alijos:
+      jugador && buscaAlijos(heroeId, estado.facciones, estado.asentamientos)
+        ? alijosALaVista(estado.alijos ?? [], jugador, columnaDe(estado.ejercitos, heroeId))
+        : [],
     campamentosMercenarios: campamentosMercenariosConocidos(
       estado.campamentosMercenarios,
       exploracion,

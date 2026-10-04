@@ -18,7 +18,7 @@ import type {
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
-  ZonaInfluencia, Ejercito, EstadoTecnologia, Heroe } from '../domain/types';
+  ZonaInfluencia, Ejercito, EstadoTecnologia, Heroe, Alijo } from '../domain/types';
 import type { TrazadoAsentamiento } from '../engine/trazado';
 import type { MemoriaFaccion } from '../engine/memoria';
 import type { EventoDominio } from '../domain/eventos';
@@ -91,8 +91,10 @@ export interface GameSessionState {
    * `caminos` (uno por par), que se ignora — la red se rehace sola con las próximas caravanas. */
   red?: RedCaminos;
   campamentosBandidos: CampamentoBandido[];
-  /** Campamentos de mercenarios (Doc 1.9b): enclaves neutrales. El del día 1 lo crea el primer tick (`engine/mercenarios.ts`). */
+  /** Campamentos de mercenarios (Doc 1.9b): enclaves neutrales, colocados al crear la partida (`colocarCampamentosIniciales`). */
   campamentosMercenarios: CampamentoMercenarios[];
+  /** Alijos de exploración (D60-D63), colocados al crear la partida (`colocarAlijos`). Ausente = ninguno. */
+  alijos?: Alijo[];
   /** Lo comerciado en el mundo y cuándo se repone el mercado de los campamentos (`engine/mercadoMercenario.ts`). Los contadores los suma `exito`. */
   mercadoMercenario: MercadoMercenario;
   /** Facciones que gobierna el NPC en vez de un jugador humano. Vive en la partida y no en el runner

@@ -2118,6 +2118,21 @@ export const EXPLORACION = {
  * amenaza NPC en bosques no reclamados que ataca caravanas cercanas. Todas las cifras son PLACEHOLDER, sin
  * calibrar por simulación todavía (ver `Preguntas_Abiertas.md` #14c) — mismo criterio que el resto del proyecto.
  */
+/**
+ * Alijos de exploración (D29, D60-D63): por cada campamento de mercenarios, `cuantos` alijos de cada banda de distancia al campamento,
+ * con su oro (≈30 por héroe en total, D62). La banda lejana llega hasta la mitad de la separación entre campamentos: cae en los
+ * huecos. PLACEHOLDER.
+ */
+export const ALIJOS = {
+  bandas: [
+    { desde: 100, hasta: 200, cuantos: 3, oro: 3 },
+    { desde: 200, hasta: 300, cuantos: 2, oro: 5 },
+    { desde: 300, hasta: 450, cuantos: 1, oro: 11 },
+  ],
+  /** Se mezcla con la seed del mapa: semilla derivada (D35). */
+  salSemilla: 0x616c696a,
+};
+
 export const CAMPAMENTOS_BANDIDOS = {
   /** Niveles (D21, D37, §8.1): salen al azar con su `peso`. `poder` es contra lo que se tira con números; `unidades`, la milicia
    * de lanceros que pone en una batalla de Unity (poderBase 2: la mitad del poder); `oroPorHeroe`, el botín de cada héroe de la

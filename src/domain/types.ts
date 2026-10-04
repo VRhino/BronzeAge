@@ -394,6 +394,8 @@ export interface Heroe {
   oroDeBotin?: number;
   /** Cuándo destruyó cada campamento de bandidos de las últimas 24 h: los rendimientos decrecientes (D26) se cuentan con esto. */
   bandidosDestruidosEn?: Instante[];
+  /** Los alijos que ya abrió (D60): cada héroe abre cada uno una vez. */
+  alijosAbiertos?: string[];
   /** Liderazgo BASE (Doc 5.11). El efectivo es base + progresión, pero la progresión todavía no está
    * diseñada (`Docs/Mecanicas a desarrollar.md` §11), así que hoy coinciden. Un id sin registro en
    * `GameSessionState.heroes` (los fundadores de los escenarios de batch) usa `LIDERAZGO.base`. */
@@ -1017,6 +1019,13 @@ export interface Ejercito {
  * Ataca caravanas que pasen cerca mientras sigue en pie (`engine/bandidos.ts`); un jugador puede destruirlo
  * con una columna que llegue a él para obtener recompensa (`atacarCampamentoConColumna`, engine/combate.ts).
  */
+/** Alijo de exploración (D29, D60-D63): un escondite de oro que cada héroe abre una vez. Se colocan al crear el mundo. */
+export interface Alijo {
+  id: string;
+  posicion: Point;
+  oro: number;
+}
+
 export type NivelBandidos = 1 | 2 | 3;
 
 export interface CampamentoBandido {

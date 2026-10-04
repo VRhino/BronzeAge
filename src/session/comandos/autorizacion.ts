@@ -344,6 +344,8 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // La tropa prestada (D25, D45, D80): residencia y presencia las comprueban el comando y el motor.
   pedirPrestamo: { rolesPermitidos: ['jugador'] },
   reponerPrestamo: { rolesPermitidos: ['jugador'] },
+  // Alijos (D60-D63): quién puede abrirlos y dónde hay que estar, lo comprueba el motor.
+  abrirAlijo: { rolesPermitidos: ['jugador'] },
   // Comprar en el mercado del campamento donde reside el actor: la residencia y el pago los comprueba el motor.
   comprarEnCampamento: { rolesPermitidos: ['jugador'] },
   // La refundación desde un campamento: la residencia, la Facción sin plazas y el fondo los comprueba el motor.

@@ -65,6 +65,8 @@ export const CODIGOS_ERROR = {
   campamentoLejos: 'campamento.lejos',
   // M4/D78: junto a un campamento de mercenarios nadie inicia un combate.
   campamentoProteccion: 'campamento.proteccion',
+  alijoDesconocido: 'alijo.desconocido',
+  alijoInvalido: 'alijo.invalido',
   // Batallas de Unity (doc 02 §3.1): lo que está en una batalla activa no se toca (Doc 5.15.1), y unirse o cancelar
   // tienen sus propias reglas.
   batallaNoExiste: 'batalla.no_existe',
