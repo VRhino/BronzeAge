@@ -2008,7 +2008,7 @@ export const PRESENCIA = {
   retardoDesconexionMs: 150_000,
   /** Si al cumplirse el retardo una columna hostil le está persiguiendo, la salida se aplaza mientras dure, y como mucho hasta
    * esto desde que pidió desconectarse (D66): quien huye desconectándose no gana nada. */
-  topeAplazamientoMs: 180_000,
+  topeAplazamientoMs: 300_000,
 } as const;
 
 export const MOVIMIENTO = {

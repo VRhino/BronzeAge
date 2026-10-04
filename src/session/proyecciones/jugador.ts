@@ -745,8 +745,11 @@ export function proyectarParaJugador(
   const ejercitosAliados = estado.ejercitos.filter((e) => faccionesQueComparten.has(e.faccionId));
   // Los ojos que cuentan para "ver ahora" = propios + aliados. Se reutiliza el mismo array cuando no hay
   // aliados para no reasignar nada en el caso normal.
-  const ojosAsent = asentamientosAliados.length > 0 ? [...asentamientosPropios, ...asentamientosAliados] : asentamientosPropios;
-  const ojosEjercito = ejercitosAliados.length > 0 ? [...ejercitosPropios, ...ejercitosAliados] : ejercitosPropios;
+  // Dentro de un campamento de mercenarios no se ve nada de fuera (D82): es un espacio lógico aparte del mapa de campaña. Ni
+  // lo suyo ni lo de los aliados cuenta para "ver ahora"; lo explorado sí se conserva —es memoria, no vista—.
+  const enCampamento = ubicacion.tipo === 'mercenarios';
+  const ojosAsent = enCampamento ? [] : asentamientosAliados.length > 0 ? [...asentamientosPropios, ...asentamientosAliados] : asentamientosPropios;
+  const ojosEjercito = enCampamento ? [] : ejercitosAliados.length > 0 ? [...ejercitosPropios, ...ejercitosAliados] : ejercitosPropios;
   const tropa = indiceTropa(estado.heroes);
 
   // La zona sale de `geometria`, que el runner ya calculó y cachea para TODOS los asentamientos: adjuntarla
@@ -779,7 +782,8 @@ export function proyectarParaJugador(
   const exploradoDelJugador = fundirExploraciones(memoria.exploracion, jugador?.exploracionPersonal ?? SIN_EXPLORAR);
   // La niebla se calcula ANTES del objeto porque además de viajar es el filtro de los caminos: la misma
   // máscara que tapa el terreno decide qué calzadas existen para este jugador.
-  const exploracion = nieblaDe(exploradoDelJugador, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados);
+  const niebla = nieblaDe(exploradoDelJugador, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados);
+  const exploracion = enCampamento ? { ...niebla, visibles: SIN_EXPLORAR } : niebla;
 
   const ahora = instanteDeTick(estado.tick);
   const bloqueos = bloqueosDe(estado, ahora);

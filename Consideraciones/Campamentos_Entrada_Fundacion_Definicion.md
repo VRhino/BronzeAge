@@ -152,7 +152,7 @@ la desconexión: se hace **inútil para huir**.
 |---|---|
 | D64 | **Dentro de una plaza o del campamento de mercenarios, desconectarse no mueve nada.** El héroe sigue en su ubicación con una marca de desconectado: no da órdenes y **no defiende en persona**. Sus escuadras no se mueven (desaparece el contenedor `fuera` para la tropa de la plaza). La defensa no cambia: la guarnición defiende siempre con la IA; las escuadras libres no defienden; un héroe conectado, dentro y sano entra a defender con su loadout, dentro de su Liderazgo y del tope de héroes por bando (ya es así en `engine/tropa.ts`, `defensaDe`). |
 | D65 | **Con la columna en el mapa, el héroe y su columna salen del mundo** (B2), como en `b40af3d`, a los **2:30** de desconectarse. No se le puede cazar mientras no esté. |
-| D66 | **En peligro no se sale.** Si al cumplirse los 2:30 una columna hostil **le está persiguiendo** (`perseguir` con él como objetivo), la salida se aplaza: la columna sigue en el mundo con la última orden que llevaba y, si la alcanzan, combate con la IA como una escolta sin héroe. Sale en cuanto deja de estar perseguida, y **como mucho a los 3 minutos de la desconexión**, pase lo que pase. Si se reconecta antes, recupera el control al instante. Así quien huye desconectándose no gana nada y a quien se le cae la red le pasa, como mucho, lo mismo que si se hubiera quedado quieto un momento. |
+| D66 | **En peligro no se sale.** Si al cumplirse los 2:30 una columna hostil **le está persiguiendo** (`perseguir` con él como objetivo), la salida se aplaza: la columna sigue en el mundo con la última orden que llevaba y, si la alcanzan, combate con la IA como una escolta sin héroe. Sale en cuanto deja de estar perseguida, y **como mucho a los 5 minutos de la desconexión** (D83), pase lo que pase. Si se reconecta antes, recupera el control al instante. Así quien huye desconectándose no gana nada y a quien se le cae la red le pasa, como mucho, lo mismo que si se hubiera quedado quieto un momento. |
 | D67 | **En un ejército compartido**: se separa con lo suyo y sale, y el mando pasa al **conectado** más antiguo (si está en peligro, D66 vale para todo el ejército). |
 | D68 | **La caravana de fundación sin nadie que la lleve vuelve a su origen** (el campamento). Si llega sin que la haya reclamado otro ciudadano de su Facción, **se desarma y devuelve los materiales a cada donante** con el registro de D34 (lo que no pueda recibir se pierde, como en D43). **Sin cooldown**: se puede volver a comprar en cuanto los jugadores vuelvan. |
 | D69 | **La columna dentro de la ventana de D66 sigue dando visión** a su Facción: físicamente sigue allí. |
@@ -172,6 +172,9 @@ la desconexión: se hace **inútil para huir**.
 | D78 | **Protección (M4)**: a menos de 60 de un campamento nadie inicia un combate, ni jugadores ni bandidos. |
 | D80 | **El préstamo es gratis, al pedirlo y al reponerlo, y sin deuda** (corrige D25b y el préstamo del §8.1). El residente elige **una, dos o las tres** tropas de leva comunal (milicia de lanceros, leñadores, granjeros), una escuadra de cada. Es la forma fácil de tener tropa al principio y aprender a usarla antes de tener la propia. |
 | D81 | **La ración gratis se mide en minutos de marcha de la columna con la que se sale, no en trigo fijo** (corrige la cifra de D24 y el §8.1; 2026-10-04). Con el coste de terreno real (`mapa.costeEnPunto`, ≈2× en bosque o colina), ir y volver del anillo (150-250) con 15 lanceros cuesta de 41 a 650 de trigo según semilla y dirección, casi siempre más de 100: con 60 no cazaba nadie. Ahora: `consumo de la columna por minuto × 45` (15 lanceros + héroe ≈ 124), cada 30 min, sin acumular y hasta el hueco del carro. PLACEHOLDER. |
+| D82 | **Dentro de un campamento no se ve nada de fuera** (2026-10-04): es un espacio lógico aparte del mapa de campaña. Ni la vista de sus columnas ni la de su Facción o aliados cuenta mientras está dentro; lo explorado sí se conserva (es memoria, no vista). |
+| D83 | **El tope del aplazamiento de D66 son 5 minutos** desde la desconexión (antes 3, que con ticks de 1 minuto caía en el mismo tick que los 2:30). |
+| D84 | **Los alijos se quedan como están**: cada héroe puede abrir todos los suyos, en cualquier zona (cierra la duda de limitarlos a la zona de su campamento). |
 | D79 | **Contador doble (M3)**: cada campamento guarda cuántos lo eligieron como inicial, además de sus residentes actuales; la pantalla de elección muestra los dos. |
 
 ## 3. Lo que ya existe y se reutiliza (medido en el código)
@@ -321,8 +324,7 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    D44b (la caravana del campamento lleva justo el coste, no hay excedente que comer). **Pendiente del canon**: Doc 1.3
    sigue diciendo que el servidor arranca con Facciones NPC (D53), que va con el NPC fuera del motor.
 7. ~~**Presencia**~~ **Hecho** (D64-D71 en `engine/presencia.ts`, el tick y la defensa; canon Doc 1.10.6). **Ojo**: con
-   ticks de 1 minuto, 2:30 y el tope de 3 minutos caen en el mismo tick si la desconexión se pide en un minuto exacto, así
-   que el aplazamiento de D66 casi nunca cambia nada; pendiente de decidir (subir el tope o bajar el retardo). D33b sigue
+   ticks de 1 minuto, 2:30 y el tope de 3 minutos caían en el mismo tick; resuelto subiendo el tope a 5 minutos (D83). D33b sigue
    con Conquest. Lo que era: base hecha en `b40af3d` (§3.2), a corregir con D64-D71: dentro de plaza o campamento solo una
    marca (sin contenedor `fuera`, sin defender en persona); aplazar la salida si le persiguen (máx. 3 min); mando al
    conectado más antiguo; caravana de fundación que vuelve se desarma y devuelve. Lo hace esta línea de trabajo (la

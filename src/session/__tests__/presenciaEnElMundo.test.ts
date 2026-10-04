@@ -12,6 +12,7 @@ import { instanteDeTick } from '../estado';
 import { conEscuadrones, heroesQueDefienden } from '../../engine/tropa';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import type { Caravana } from '../../domain/types';
+import { PRESENCIA } from '../../constants';
 
 const opcDe = (heroeId: string) => ({ ...OPC, actor: heroeId });
 const PUNTO_LEJOS = { tipo: 'punto', punto: { x: 900, y: 900 } } as const;
@@ -131,6 +132,8 @@ describe('desconectarse en el campo', () => {
     const perseguido = conDesconexion(true);
     ticks(perseguido, 1);
     expect(heroe(perseguido, fundador).fuera, 'perseguido: todavía en el mundo').toBeUndefined();
+    ticks(perseguido, Math.ceil((PRESENCIA.topeAplazamientoMs - PRESENCIA.retardoDesconexionMs) / 60_000) - 1);
+    expect(heroe(perseguido, fundador).fuera, 'antes del tope sigue').toBeUndefined();
     ticks(perseguido, 1);
     expect(heroe(perseguido, fundador).fuera, 'pasado el tope, sale igual').toBeDefined();
   });
