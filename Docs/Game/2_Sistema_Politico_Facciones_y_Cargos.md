@@ -111,7 +111,7 @@ Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).
 El score es PÚBLICO y total (no hay sistema de rumores/espionaje que lo oculte parcialmente).
 
 ## 2.8 Mecánicas heredadas de Iberia (política local)
-- **Exilio**: la puerta de cada asentamiento se puede cerrar por grupo —neutrales, aliados o vasallos, enemigos en guerra (2.4.1)—; nunca a la propia Facción. Lo cambia el Gobernador de ese asentamiento o el Rey, sin coste (decidido e implementado el 2026-10-02, Doc 1.10.5). La pérdida de materiales y tropas al perder la casa es la reubicación por conquista (Doc 5.15.5), no el exilio.
+- **Exilio**: la puerta de cada asentamiento se puede cerrar por grupo —neutrales, aliados o vasallos, enemigos en guerra (2.4.1) y los Aedas (6.7)—; nunca a la propia Facción. Lo cambia el Gobernador de ese asentamiento o el Rey, sin coste (decidido e implementado el 2026-10-02, Doc 1.10.5). La pérdida de materiales y tropas al perder la casa es la reubicación por conquista (Doc 5.15.5), no el exilio.
 - **Identidad visual**: cada Facción tiene su propio sigilo/estandarte; una Liga puede tener uno colectivo.
 
 ## 2.9 Progresión sin condición de victoria

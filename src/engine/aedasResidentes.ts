@@ -12,7 +12,7 @@ import type { PayloadCaravanaLlega } from './trade';
 import { ReglaInvalidaError } from './errores';
 import { hacerAparecer, tecnologiasDe } from './tecnologia';
 
-export const RESIDENTES_VACIOS: EstadoAedasResidentes = { aedas: [], siguiente: 1, llegadaEn: {}, cumplidas: {} };
+export const RESIDENTES_VACIOS: EstadoAedasResidentes = { aedas: [], siguiente: 1, esperaDesde: {}, cumplidas: {} };
 
 const NOMBRES = [
   'Femio', 'Demódoco', 'Orfeo', 'Lino', 'Tamiris', 'Museo', 'Eumolpo', 'Filamón', 'Arión', 'Hesíodo', 'Terpandro', 'Alcmán',
@@ -64,7 +64,7 @@ function minutosDeLlegada(faccion: Faccion | undefined): number {
  */
 export function avanzarResidentes(estado: EstadoAedasResidentes, ctx: ContextoResidentes): { estado: EstadoAedasResidentes; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
-  const llegadaEn = { ...estado.llegadaEn };
+  const esperaDesde = { ...estado.esperaDesde };
   let siguiente = estado.siguiente;
   let aedas = estado.aedas.filter((a) => ctx.asentamientos.some((p) => p.id === a.asentamientoId));
 
@@ -94,16 +94,16 @@ export function avanzarResidentes(estado: EstadoAedasResidentes, ctx: ContextoRe
       aedas = aedas.filter((a) => !salen.has(a.id));
     }
     if (propios.length >= cupo) {
-      delete llegadaEn[plaza.id];
+      delete esperaDesde[plaza.id];
       continue;
     }
     const faccion = ctx.facciones.find((f) => f.id === plaza.faccionId);
-    llegadaEn[plaza.id] ??= sumar(ctx.instante, minutos(minutosDeLlegada(faccion)));
-    if (ctx.instante < llegadaEn[plaza.id]!) continue;
+    esperaDesde[plaza.id] ??= ctx.instante;
+    if (ctx.instante < sumar(esperaDesde[plaza.id]!, minutos(minutosDeLlegada(faccion)))) continue;
     const nuevo: AedaResidente = { id: `aeda-r${siguiente}`, nombre: NOMBRES[(siguiente - 1) % NOMBRES.length]!, asentamientoId: plaza.id, faccionId: plaza.faccionId, llegadaEn: ctx.instante };
     siguiente++;
     aedas = [...aedas, nuevo];
-    delete llegadaEn[plaza.id];
+    delete esperaDesde[plaza.id];
     eventos.push({
       codigo: 'aedas.residente_llega',
       mensaje: `${nuevo.nombre}, un Aeda, se asienta en ${nombreDePlaza(plaza)}.`,
@@ -111,7 +111,7 @@ export function avanzarResidentes(estado: EstadoAedasResidentes, ctx: ContextoRe
       asentamientoId: plaza.id,
     });
   }
-  return { estado: { ...estado, aedas, siguiente, llegadaEn }, eventos };
+  return { estado: { ...estado, aedas, siguiente, esperaDesde }, eventos };
 }
 
 // --- Épicas ---
@@ -142,6 +142,7 @@ export function empezarEpica(
   const aeda = aedaDeLaPlaza(estado, plaza, aedaId);
   const definicion = EPICAS[id];
   if (!definicion) throw new EpicaInvalidaError('Esa tecnología no tiene épica.');
+  if (aeda.faccionId !== plaza.faccionId) throw new EpicaInvalidaError(`${aeda.nombre} aún no se ha asentado con el nuevo dueño de la plaza.`);
   if (aeda.epica) throw new EpicaInvalidaError(`${aeda.nombre} ya canta una épica: hay que abandonarla antes.`);
   if (tecnologia.logros[id] === undefined) throw new EpicaInvalidaError(`El logro del servidor de ${TECNOLOGIAS[id].nombre} aún no se ha cumplido.`);
   if (ERAS[TECNOLOGIAS[id].era].orden > ERAS[tecnologia.era].orden) throw new EpicaInvalidaError(`La Era de ${TECNOLOGIAS[id].nombre} aún no ha empezado.`);
@@ -265,14 +266,15 @@ export function avanzarEpicas(
   const salida: EventoCrudo[] = [];
   for (const aeda of estado.aedas) {
     const epica = aeda.epica;
-    if (!epica) continue;
+    const plaza = ctx.asentamientos.find((p) => p.id === aeda.asentamientoId);
+    // Una plaza que cambió de dueño este tick aún no ha soltado la épica (`avanzarResidentes`): no acredita hechos a la Facción vieja.
+    if (!epica || !plaza || plaza.faccionId !== aeda.faccionId) continue;
     const definicion = EPICAS[epica.tecnologiaId]!;
     const capitulo = definicion.capitulos[epica.capitulo]!;
     if (epica.ultimoHechoEn !== undefined && transcurrido(epica.ultimoHechoEn, ctx.instante) < minutos(AEDAS.epica.enfriamientoMinutos)) continue;
     const hecho = hechos.find((h) => !epica.claves.includes(h.clave) && inspira(h, aeda, capitulo));
     if (!hecho) continue;
 
-    const plaza = ctx.asentamientos.find((p) => p.id === aeda.asentamientoId);
     const claves = [...epica.claves, hecho.clave].slice(-AEDAS.epica.clavesRecordadas);
     const hechosContados = epica.hechos + 1;
     if (hechosContados < capitulo.cantidad) {
@@ -282,7 +284,7 @@ export function avanzarEpicas(
     const payload = { aedaId: aeda.id, faccionId: aeda.faccionId, tecnologiaId: epica.tecnologiaId, capitulo: epica.capitulo + 1, capitulos: definicion.capitulos.length } satisfies PayloadEpica;
     if (epica.capitulo + 1 < definicion.capitulos.length) {
       actual = reemplazar(actual, { ...aeda, epica: { ...epica, capitulo: epica.capitulo + 1, hechos: 0, ultimoHechoEn: ctx.instante, claves } });
-      salida.push({ codigo: 'aedas.epica_capitulo', mensaje: `${aeda.nombre} canta un capítulo del ${definicion.nombre}: ${TITULO_CAPITULO[capitulo.hecho].toLowerCase()}.`, payload, asentamientoId: plaza?.id });
+      salida.push({ codigo: 'aedas.epica_capitulo', mensaje: `${aeda.nombre} canta un capítulo del ${definicion.nombre}: ${TITULO_CAPITULO[capitulo.hecho].toLowerCase()}.`, payload, asentamientoId: aeda.asentamientoId });
       continue;
     }
     const { epica: _cumplida, ...sinEpica } = aeda;
@@ -290,7 +292,7 @@ export function avanzarEpicas(
     tecnologia = hacerAparecer(tecnologia, aeda.faccionId, epica.tecnologiaId);
     const faccion = ctx.facciones.find((f) => f.id === aeda.faccionId);
     salida.push(
-      { codigo: 'aedas.epica_tecnologia', mensaje: `${aeda.nombre} completa el ${definicion.nombre}: ${TECNOLOGIAS[epica.tecnologiaId].nombre} aparece, sin pasar por su hito.`, payload, asentamientoId: plaza?.id },
+      { codigo: 'aedas.epica_tecnologia', mensaje: `${aeda.nombre} completa el ${definicion.nombre}: ${TECNOLOGIAS[epica.tecnologiaId].nombre} aparece, sin pasar por su hito.`, payload, asentamientoId: aeda.asentamientoId },
       // Pública y sin nombrar la tecnología: la épica se canta, no su premio (Doc 6.3).
       { codigo: 'aedas.epica_cumplida', mensaje: `Los Aedas cantan que ${aeda.nombre}, de ${faccion?.nombre ?? aeda.faccionId}, ha completado una épica.`, payload: { aedaId: aeda.id, faccionId: aeda.faccionId } satisfies PayloadAedaResidente }
     );

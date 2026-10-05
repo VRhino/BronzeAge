@@ -19,6 +19,7 @@ import { esCuentaDeBot } from '../identidad/proveedorClave';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE } from './esquemas';
 import { esDeCronica } from '../../engine/cronica';
+import { eventosDesde } from '../../session/estado';
 import {
   partidaNoAbierta,
   resolverActor,
@@ -107,7 +108,8 @@ const ESQUEMA_CRONICA = {
   description:
     'Crónica de los Aedas (Doc 6.7): los hechos públicos del servidor —logros, Eras, títulos, descubrimientos, caídas, ' +
     'fundaciones y guerras— con version > `desde`. Es la misma para todos los jugadores. Devuelve las `limite` más recientes ' +
-    '(200 por defecto, máximo 1000), en orden cronológico.',
+    '(200 por defecto, máximo 1000), en orden cronológico. Sin `desde` solo mira los eventos que el servidor guarda en memoria; con `desde` ' +
+    'lee el historial completo desde esa versión.',
   tags: ['jugador'],
   security: SEGURIDAD_JUGADOR,
   params: PARAMS_GAME_ID,
@@ -212,7 +214,9 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
       const desde = Number(request.query.desde ?? '0');
       const limite = Math.max(1, Math.min(Number(request.query.limite ?? '200'), 1000));
       if (!Number.isInteger(desde) || desde < 0) return reply.code(400).send({ error: '`desde` debe ser un entero no negativo.' });
-      return reply.send({ entradas: (await runner.eventosDesde(desde)).filter(esDeCronica).slice(-limite) });
+      // Sin `desde`, las de memoria (los últimos eventos): leer el historial entero del disco en cada consulta no escala.
+      const eventos = request.query.desde === undefined ? eventosDesde(runner.getState(), 0) : await runner.eventosDesde(desde);
+      return reply.send({ entradas: eventos.filter(esDeCronica).slice(-limite) });
     }
   );
 

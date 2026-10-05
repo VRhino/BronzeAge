@@ -76,13 +76,21 @@ describe('ciclo de vida', () => {
     // Con el cupo lleno no llega otro ni queda plazo pendiente.
     const lleno = avanzarResidentes(llega.estado, ctx(LLEGADA * 3));
     expect(lleno.estado.aedas).toHaveLength(1);
-    expect(lleno.estado.llegadaEn).toEqual({});
+    expect(lleno.estado.esperaDesde).toEqual({});
   });
 
   it('con la reputación por los suelos tardan tres veces más', () => {
     const baja = facciones.map((f) => (f.id === plaza.faccionId ? { ...f, reputacion: AEDAS.residentes.umbralReputacionBaja } : f));
     const espera = avanzarResidentes(RESIDENTES_VACIOS, ctx(0, [plaza], tecnologia, baja)).estado;
     expect(avanzarResidentes(espera, ctx(LLEGADA * 3 - 1, [plaza], tecnologia, baja)).estado.aedas).toHaveLength(0);
+    expect(avanzarResidentes(espera, ctx(LLEGADA * 3, [plaza], tecnologia, baja)).estado.aedas).toHaveLength(1);
+  });
+
+  it('el plazo se mide con la reputación de cuando se compara: si baja durante la espera, tarda más', () => {
+    const conRep = (reputacion: number) => facciones.map((f) => (f.id === plaza.faccionId ? { ...f, reputacion } : f));
+    const espera = avanzarResidentes(RESIDENTES_VACIOS, ctx(0)).estado;
+    const baja = conRep(AEDAS.residentes.umbralReputacionBaja);
+    expect(avanzarResidentes(espera, ctx(LLEGADA, [plaza], tecnologia, baja)).estado.aedas).toHaveLength(0);
     expect(avanzarResidentes(espera, ctx(LLEGADA * 3, [plaza], tecnologia, baja)).estado.aedas).toHaveLength(1);
   });
 
@@ -144,6 +152,10 @@ describe('empezar y abandonar una épica', () => {
     const fuera = abandonarEpica(r.estado, plaza, 'aeda-r1');
     expect(fuera.estado.aedas[0]!.epica).toBeUndefined();
     expect(() => abandonarEpica(fuera.estado, plaza, 'aeda-r1')).toThrow(EpicaInvalidaError);
+  });
+
+  it('rechazo: el Aeda aún no ha pasado al nuevo dueño de una plaza conquistada', () => {
+    expect(() => empezarEpica(conResidente({ faccionId: 'faccion-2' }), tecnologia, plaza, 'aeda-r1', 'metalurgia_cobre')).toThrow(EpicaInvalidaError);
   });
 
   it('rechazo: sin logro, Era cerrada, ya aparecida, sin épica, Aeda ajeno, ya con épica o repetida por otro Aeda', () => {
@@ -216,6 +228,12 @@ describe('avance de una épica', () => {
     expect(estado.aedas[0]!.epica).toMatchObject({ capitulo: 2, hechos: 0 });
   });
 
+  it('no acredita hechos a la Facción vieja mientras la plaza ha cambiado de dueño', () => {
+    const e0 = conResidente({ epica: epicaCobre });
+    const conquistada = { ...plaza, faccionId: 'faccion-2' };
+    expect(avanzarEpicas(e0, [obra('x')], ctx(10, [conquistada])).estado).toBe(e0);
+  });
+
   it('al cerrar el último capítulo la tecnología aparece sin hito, la Facción suma una épica y la crónica canta sin nombrarla', () => {
     const ultimo = { ...epicaCobre, capitulo: EPICAS.metalurgia_cobre!.capitulos.length - 1 };
     const ascenso: EventoDominio = { codigo: 'asentamiento.nivel_subio', mensaje: '', momento: 'n', payload: { asentamientoId: plaza.id, nivelNuevo: 3 } };
@@ -228,5 +246,7 @@ describe('avance de una épica', () => {
     expect(publico).toBeDefined();
     expect(typeof publico !== 'string' && publico!.mensaje).not.toMatch(/cobre/i);
     expect(typeof publico !== 'string' && publico!.asentamientoId).toBeUndefined();
+    // La que nombra la tecnología es privada de la plaza.
+    expect(r.eventos.find((e) => typeof e !== 'string' && e.codigo === 'aedas.epica_tecnologia')).toMatchObject({ asentamientoId: plaza.id });
   });
 });

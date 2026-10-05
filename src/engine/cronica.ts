@@ -6,19 +6,9 @@ import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoDominio } from '../domain/eventos';
 import type { PayloadAsedio } from './combate';
 import type { PayloadAnexion, PayloadFusion } from './fusion';
-import type { PayloadRebelionVasallo } from './diplomacia';
+import type { PayloadGuerraDeclarada, PayloadRebelionVasallo } from './diplomacia';
+import type { PayloadFundado } from './expansion';
 import type { PayloadAsentamientoRuinas, PayloadNivelSubio } from './mantenimiento';
-
-// Lo que la crónica lee de dos payloads que viven en la capa de sesión (`PayloadFundado`, `PayloadGuerraDeclarada`): el motor
-// no puede importarlos, así que declara solo los campos que usa.
-interface PayloadFundado {
-  asentamientoId: string;
-  faccionId: string;
-}
-interface PayloadGuerraDeclarada {
-  faccionAId: string;
-  faccionesEnemigasIds: string[];
-}
 
 /** Código del evento derivado. */
 export const CODIGO_CRONICA = 'cronica.entrada';
@@ -62,12 +52,12 @@ export function entradasDeCronica(eventos: readonly EventoDominio[], mundo: Mund
   const faccion = (id: string) => mundo.facciones.find((f) => f.id === id)?.nombre ?? id;
   const plaza = (id: string) => mundo.asentamientos.find((a) => a.id === id)?.nombre ?? id;
   const salida: EventoDominio[] = [];
+  const nivelesCantados = new Set<number>();
   for (const e of eventos) {
-    const clave = `${e.codigo}${e.momento}${e.mensaje}`;
     switch (e.codigo) {
       case 'combate.asedio_conquista': {
         const p = e.payload as PayloadAsedio;
-        salida.push(entrada(e, e.codigo, variante(clave, [
+        salida.push(entrada(e, e.codigo, variante(`${e.momento}${e.mensaje}`, [
           `Los Aedas cantan la caída de ${plaza(p.defensorId)}: ${faccion(p.faccionAtacanteId)} la arranca de las manos de ${faccion(p.faccionDefensoraId)}.`,
           `Los Aedas cantan que ${plaza(p.defensorId)} ha caído, y que ${faccion(p.faccionAtacanteId)} manda donde mandaba ${faccion(p.faccionDefensoraId)}.`,
         ]), [p.faccionAtacanteId, p.faccionDefensoraId]));
@@ -106,8 +96,13 @@ export function entradasDeCronica(eventos: readonly EventoDominio[], mundo: Mund
       case 'asentamiento.nivel_subio': {
         const p = e.payload as PayloadNivelSubio;
         const plazaNueva = mundo.asentamientos.find((a) => a.id === p.asentamientoId);
-        const primera = plazaNueva && p.nivelNuevo >= NIVEL_MINIMO_CANTADO && !mundo.asentamientos.some((a) => a.id !== plazaNueva.id && a.nivel >= p.nivelNuevo);
-        if (primera) salida.push(entrada(e, e.codigo, `Los Aedas cantan: ${plaza(plazaNueva.id)}, de ${faccion(plazaNueva.faccionId)}, es la primera ciudad del mundo en alcanzar el nivel ${p.nivelNuevo}.`, [plazaNueva.faccionId]));
+        // Primera = ninguna otra tenía ya ese nivel antes de este lote de eventos; si dos suben a la vez, se canta solo la primera.
+        const suben = new Set(eventos.filter((x) => x.codigo === e.codigo && (x.payload as PayloadNivelSubio).nivelNuevo === p.nivelNuevo).map((x) => (x.payload as PayloadNivelSubio).asentamientoId));
+        const primera = plazaNueva && p.nivelNuevo >= NIVEL_MINIMO_CANTADO && !nivelesCantados.has(p.nivelNuevo) && !mundo.asentamientos.some((a) => !suben.has(a.id) && a.nivel >= p.nivelNuevo);
+        if (primera) {
+          nivelesCantados.add(p.nivelNuevo);
+          salida.push(entrada(e, e.codigo, `Los Aedas cantan: ${plaza(plazaNueva.id)}, de ${faccion(plazaNueva.faccionId)}, es la primera ciudad del mundo en alcanzar el nivel ${p.nivelNuevo}.`, [plazaNueva.faccionId]));
+        }
         break;
       }
     }

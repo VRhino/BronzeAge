@@ -6,8 +6,8 @@ import {
   ExpansionInvalidaError,
   fundarConCaravana,
   lanzarCaravanaFundacion as lanzarCaravanaFundacionEngine,
+  type PayloadFundado,
 } from '../../engine/expansion';
-import type { Point } from '../../domain/types';
 import { FUNDACION } from '../../constants';
 import { absorberColumna } from '../../engine/ejercitos';
 import { esCiudadano } from '../../engine/faccion';
@@ -91,14 +91,6 @@ export const desarmarCaravanaFundacion = comando<ParamsDesarmarCaravanaFundacion
     }),
   ]);
 });
-
-export interface PayloadFundado {
-  asentamientoId: string;
-  faccionId: string;
-  caravanaId: string;
-  posicion: Point;
-  heroesIds: string[];
-}
 
 /**
  * Fundar con la Caravana de Fundación, la de un campamento o la de una plaza, donde esté (D10, D30): la lleva enganchada a su columna su titular, y funda él. Los

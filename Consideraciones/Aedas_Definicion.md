@@ -56,8 +56,8 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 - Proyección del jugador: `aedasAvistados` (posición y plaza, con la regla de avistamiento de los ejércitos) y
   `tecnologia.reveladas` (quién la desbloqueó y el **hito completo**; los requisitos que faltan, ya filtrados, solo van en
   el mensaje del evento de revelación porque la proyección no tiene el mapa para evaluarlos).
-- Puerta: el Aeda solo respeta un cierre **explícito** a neutrales (`puertaCerradaA` presente): el cierre por defecto
-  dejaría fuera a todos los asentamientos ajenos.
+- Puerta: nuevo grupo `aedas` en `GrupoPuerta` (el cierre por defecto no lo incluye). Primera versión: solo respetaba un cierre
+  explícito a neutrales; la revisión de código lo cambió porque el resultado dependía de si el campo existía.
 - Fuera del contrato v1: `ProyeccionJugador` no está en él y los Aedas no llegan a Conquest.
 - Sin hacer: cliente de administración y NPC de bots (no compran).
 

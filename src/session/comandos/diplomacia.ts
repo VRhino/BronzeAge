@@ -12,6 +12,7 @@ import {
   rebelionVasallo as rebelionVasalloEngine,
   declararGuerra as declararGuerraEngine,
   proponerPaz as proponerPazEngine,
+  type PayloadGuerraDeclarada,
 } from '../../engine/diplomacia';
 import { anexionar as anexionarEngine, fusionar as fusionarEngine } from '../../engine/fusion';
 import type { GameSessionState } from '../estado';
@@ -122,13 +123,6 @@ export interface ParamsDeclararGuerra {
   /** Quien declara. */
   faccionAId: string;
   faccionBId: string;
-}
-
-export interface PayloadGuerraDeclarada {
-  relacionIds: string[];
-  faccionAId: string;
-  /** El objetivo directo y, por vasallaje, su bando (Doc 2.4). */
-  faccionesEnemigasIds: string[];
 }
 
 export const declararGuerra = comando<ParamsDeclararGuerra, { relacionIds: string[] }>((estado, _mapa, ctx, params) => {

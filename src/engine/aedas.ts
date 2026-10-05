@@ -2,7 +2,7 @@
 // en cada uno y, mientras están, le revelan a su Facción lo que conocen (`revelarTecnologias`, `engine/tecnologia.ts`) y
 // le venden tecnología (`venderTecnologia`). Sin RNG: el reparto inicial y el siguiente destino salen del orden de ids y de
 // la distancia, así que añadirlos no cambia ninguna otra tirada del mundo.
-import { AEDAS } from '../constants';
+import { AEDAS, PUERTA } from '../constants';
 import type { AedaItinerante, Asentamiento, Point, RedCaminos } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
@@ -29,9 +29,9 @@ export function aedaEn(aedas: readonly AedaItinerante[], asentamientoId: string)
   return aedas.find((a) => a.enAsentamientoId === asentamientoId);
 }
 
-/** Una plaza lo deja pasar salvo que su Facción le haya cerrado la puerta a los neutrales a propósito (Doc 2.8): el cierre por defecto no cuenta. */
+/** Una plaza los deja pasar salvo que su Facción les haya cerrado la puerta con el grupo `aedas` (Doc 2.8). El cierre por defecto no los incluye. */
 function recibeAedas(plaza: Asentamiento): boolean {
-  return !plaza.puertaCerradaA?.includes('neutrales');
+  return !(plaza.puertaCerradaA ?? PUERTA.cerradaAPorDefecto).includes('aedas');
 }
 
 /** Detenido en la plaza, el tiempo de su estancia. */
@@ -76,7 +76,8 @@ function avanzarAeda(aeda: AedaItinerante, ctx: ContextoAedas): AedaItinerante {
     return partir({ id: aeda.id, posicion: aeda.posicion, progreso: 0, recientes: aeda.recientes }, plazas, ctx);
   }
   const plazaActual = aeda.enAsentamientoId ? plazas.find((p) => p.id === aeda.enAsentamientoId) : undefined;
-  if (plazaActual && aeda.hasta !== undefined && ctx.instante < aeda.hasta) return aeda;
+  // Detenido en su plaza, o sin plaza ni destino alcanzable (varado): espera lo que dura una estancia antes de volver a buscar ruta.
+  if (aeda.hasta !== undefined && ctx.instante < aeda.hasta && (plazaActual || aeda.enAsentamientoId === undefined)) return aeda;
   return partir(plazaActual ? aeda : { id: aeda.id, posicion: aeda.posicion, progreso: 0, recientes: aeda.recientes }, plazas, ctx);
 }
 

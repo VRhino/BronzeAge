@@ -384,7 +384,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     {
       asentamientoId: IDENTIFICADOR,
       heroeId: IDENTIFICADOR,
-      cerradaA: { type: 'array', items: { type: 'string', enum: ['neutrales', 'aliados', 'enemigos'] } },
+      cerradaA: { type: 'array', items: { type: 'string', enum: ['neutrales', 'aliados', 'enemigos', 'aedas'] } },
     },
     ['asentamientoId', 'heroeId', 'cerradaA']
   ),

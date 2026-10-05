@@ -133,6 +133,15 @@ export function devolverCaravana(caravana: Caravana, mundo: MundoDeDevolucion, f
  * su puerta: si no, desarmarla sería llevarse el coste de un sitio a otro sin recorrer el camino (la que anda sola o caduca ya lo
  * devuelve donde le toca).
  */
+/** Payload de `fundacion.asentamiento_fundado`. */
+export interface PayloadFundado {
+  asentamientoId: string;
+  faccionId: string;
+  caravanaId: string;
+  posicion: Point;
+  heroesIds: string[];
+}
+
 export function desarmarCaravanaFundacion(caravana: Caravana, posicionOrigen: Point | undefined, mundo: MundoDeDevolucion, facciones: readonly Faccion[]): MundoDeDevolucion {
   if (caravana.tipo !== 'construccion') throw new ExpansionInvalidaError('Esa caravana no es una Caravana de Fundación.');
   if (caravana.estado !== 'disponible') throw new ExpansionInvalidaError('Solo se desarma una Caravana de Fundación suelta: desengánchala primero.');

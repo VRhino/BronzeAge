@@ -66,12 +66,14 @@ describe('recorrido', () => {
     for (const a of aedas) expect(vistas.get(a.id)!.size, a.id).toBe(2);
   });
 
-  it('una plaza que le cerró la puerta a los neutrales a propósito no recibe Aedas, pero el cierre por defecto no cuenta', () => {
-    const cerrada = { ...f2.asentamiento, puertaCerradaA: ['neutrales' as const] };
+  it('una plaza que les cerró la puerta a los Aedas no los recibe, pero el cierre por defecto (neutrales y enemigos) no cuenta', () => {
+    const cerrada = { ...f2.asentamiento, puertaCerradaA: ['neutrales' as const, 'enemigos' as const, 'aedas' as const] };
     const r = avanzarAedas([], estadoTecnologiaInicial(instanteDeTest(0)), contexto(0, [f1.asentamiento, cerrada]));
     expect(r.aedas.every((a) => a.enAsentamientoId === f1.asentamiento.id)).toBe(true);
     expect(aedaEn(r.aedas, cerrada.id)).toBeUndefined();
     expect(f2.asentamiento.puertaCerradaA).toBeUndefined();
+    const porDefecto = { ...f2.asentamiento, puertaCerradaA: ['neutrales' as const, 'enemigos' as const] };
+    expect(avanzarAedas([], estadoTecnologiaInicial(instanteDeTest(0)), contexto(0, [f1.asentamiento, porDefecto])).aedas.some((a) => a.enAsentamientoId === porDefecto.id)).toBe(true);
   });
 });
 

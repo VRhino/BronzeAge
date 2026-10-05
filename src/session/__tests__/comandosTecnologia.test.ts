@@ -6,6 +6,7 @@ import { instante } from '../../domain/tiempo';
 import { precioDeVenta } from '../../engine/tecnologia';
 import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
 import { abandonarEpica, adoptarTecnologia, comprarTecnologiaAeda, empezarEpica } from '../comandos/tecnologia';
+import { conCargoLocal } from '../../engine/pertenencia';
 import { MATRIZ_AUTORIZACION, verificarAutorizacion } from '../comandos/autorizacion';
 import { GameSession } from '../gameSession';
 import { proyectarParaJugador } from '../proyecciones/jugador';
@@ -149,7 +150,7 @@ describe('épica de un Aeda residente (Doc 6.7), por la ruta real', () => {
     const aedasResidentes = {
       aedas: [{ id: 'aeda-r1', nombre: 'Femio', asentamientoId, faccionId, llegadaEn: instanteDeTick(0), ...(epica ? { epica } : {}) }],
       siguiente: 2,
-      llegadaEn: {},
+      esperaDesde: {},
       cumplidas: {},
     };
     return { sesion: GameSession.importar({ ...payload, state: { ...payload.state, tecnologia, aedasResidentes } }), faccionId, asentamientoId };
@@ -169,6 +170,20 @@ describe('épica de un Aeda residente (Doc 6.7), por la ruta real', () => {
     const antes = sesion.getState();
     expect(sesion.ejecutar(empezarEpica, { asentamientoId, aedaId: 'nadie', tecnologiaId: 'canteria' }, OPC).codigoError).toBe('aedas.epica_invalida');
     expect(sesion.getState()).toBe(antes);
+  });
+
+  it('el Gobernador y el Sacerdote de la plaza también la dirigen, y compran a los Aedas el Rey y el Gobernador pero no el Sacerdote', () => {
+    const { sesion: base, asentamientoId, vecino } = partidaConAsentamiento();
+    const conCargo = (cargo: 'sacerdote' | 'gobernador') => {
+      const payload = base.exportar();
+      const asentamientos = payload.state.asentamientos.map((a) => conCargoLocal(a, cargo, vecino));
+      return GameSession.importar({ ...payload, state: { ...payload.state, asentamientos } }).getState();
+    };
+    const dirige = (estado: ReturnType<typeof conCargo>) => verificarAutorizacion('empezarEpica', { asentamientoId, aedaId: 'a', tecnologiaId: 'canteria' }, estado, { rol: 'jugador', heroeId: vecino }).autorizado;
+    const compra = (estado: ReturnType<typeof conCargo>) => verificarAutorizacion('comprarTecnologiaAeda', { asentamientoId, tecnologiaId: 'canteria' }, estado, { rol: 'jugador', heroeId: vecino }).autorizado;
+    expect(dirige(base.getState())).toBe(false);
+    expect([dirige(conCargo('sacerdote')), compra(conCargo('sacerdote'))]).toEqual([true, false]);
+    expect([dirige(conCargo('gobernador')), compra(conCargo('gobernador'))]).toEqual([true, true]);
   });
 
   it('solo la dirige el Rey, el Gobernador o el Sacerdote de la plaza, presente', () => {

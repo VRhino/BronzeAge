@@ -68,6 +68,10 @@ describe('entradas derivadas', () => {
     expect(sube(3, 2)).toHaveLength(1);
     expect(sube(3, 3)).toHaveLength(0);
     expect(sube(2, 1)).toHaveLength(0);
+    // Dos que suben a la vez: la primera se canta una sola vez.
+    const a = evento('asentamiento.nivel_subio', { asentamientoId: plazas[0]!.id, nivelNuevo: 3 });
+    const b = evento('asentamiento.nivel_subio', { asentamientoId: plazas[1]!.id, nivelNuevo: 3 });
+    expect(entradasDeCronica([a, b], { facciones, asentamientos: plazas.map((p) => ({ ...p, nivel: 3 })) })).toHaveLength(1);
   });
 
   it('es determinista: el mismo evento produce siempre la misma frase', () => {

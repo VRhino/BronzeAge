@@ -602,7 +602,7 @@ export interface AscensoEnCurso {
 
 /** Grupos de héroes a los que se puede cerrar la puerta de un asentamiento (Doc 1.10.5): según la relación entre
  * su Facción y la del asentamiento. `aliados` incluye a vasallos y señores; `enemigos`, a quien está en guerra (Doc 2.4.1). */
-export type GrupoPuerta = 'neutrales' | 'aliados' | 'enemigos';
+export type GrupoPuerta = 'neutrales' | 'aliados' | 'enemigos' | 'aedas';
 
 export interface Asentamiento {
   id: string;
@@ -1348,8 +1348,8 @@ export interface EstadoAedasResidentes {
   aedas: AedaResidente[];
   /** Número del siguiente Aeda residente (ids y nombres): solo crece. */
   siguiente: number;
-  /** Por asentamiento con cupo libre: cuándo llega el siguiente. */
-  llegadaEn: Record<string, Instante>;
+  /** Por asentamiento con cupo libre: desde cuándo espera al siguiente. El plazo se calcula al comparar, con la reputación de ese momento. */
+  esperaDesde: Record<string, Instante>;
   /** Épicas cumplidas por Facción: alimenta el título de prestigio «Mecenas de los Aedas» (Doc 2.9). */
   cumplidas: Record<string, number>;
 }

@@ -21,6 +21,14 @@ export interface PayloadRebelionVasallo {
   faccionVasallaId: string;
 }
 
+/** Payload de `diplomacia.guerra_declarada`. */
+export interface PayloadGuerraDeclarada {
+  relacionIds: string[];
+  faccionAId: string;
+  /** El objetivo directo y, por vasallaje, su bando (Doc 2.4). */
+  faccionesEnemigasIds: string[];
+}
+
 export class DiplomaciaInvalidaError extends ReglaInvalidaError {}
 
 function existeRelacionActiva(relaciones: RelacionPolitica[], aId: string, bId: string): boolean {

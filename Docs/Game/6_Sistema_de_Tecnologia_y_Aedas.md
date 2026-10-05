@@ -162,8 +162,9 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
 - **Cuántos**: uno por cada 3 Facciones vivas, con un mínimo de 3 (`AEDAS.itinerantes`, placeholder).
 - **Cómo se mueven**: recorren los asentamientos por la **red de caminos** (el grafo de navegación, Doc 1.6): sobre
   camino van más rápido. Eligen el asentamiento más cercano que no han pisado hace poco y se detienen unas horas en
-  cada uno (`AEDAS.itinerantes.estanciaMinutos`) antes de seguir. Una plaza que **le ha cerrado la puerta a los
-  neutrales a propósito** (el exilio, Doc 2.8) los deja fuera; el cierre por defecto no cuenta.
+  cada uno (`AEDAS.itinerantes.estanciaMinutos`) antes de seguir. Una plaza que **les ha cerrado la puerta con el
+  grupo `aedas`** (el exilio, Doc 2.8, que ahora distingue ese cuarto grupo) los deja fuera; el cierre por defecto, a
+  neutrales y enemigos, no los incluye.
 - **Se ven** como cualquier columna ajena, solo dentro del radio de visión de la Facción (Doc 5.12.7); no son
   atacables ni retenibles.
 - **Difunden** (6.4): mientras están detenidos en un asentamiento le revelan a su Facción lo que conocen y aún no tiene
