@@ -59,7 +59,8 @@ describe('comando fundarAsentamiento', () => {
     const { sesion, faccionId } = partidaConFaccion();
     const resultado = sesion.ejecutar(fundarAsentamiento, { faccionId }, { actor: ACTOR });
 
-    expect(resultado.eventos).toHaveLength(1);
+    // Más el que deriva la crónica (`cronica.entrada`, Doc 6.7): público y sin atribución a la plaza.
+    expect(resultado.eventos.map((e) => e.codigo)).toEqual(['fundacion.asentamiento_fundado', 'cronica.entrada']);
     expect(resultado.eventos[0]!.momento).toBe(isoDeInstante(instanteDeTick(0))); // comando a tick 0 → instante = época
     expect(resultado.eventos[0]!.asentamientoId).toBe(resultado.datos!.asentamientoId);
     // Código estable, ya no `'legado'`: los eventos de comando se migraron junto a los 13 subsistemas del

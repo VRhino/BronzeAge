@@ -76,6 +76,11 @@ export interface PayloadTecnologiaAparece {
   tecnologiaId: TecnologiaId;
   primera: boolean;
 }
+/** Payload de `aedas.canta_descubrimiento` (público: la crónica nombra a la descubridora, Doc 6.7). */
+export interface PayloadAedasDescubrimiento {
+  tecnologiaId: TecnologiaId;
+  faccionId: string;
+}
 /** Payload de `era.comienza` (público). */
 export interface PayloadEraComienza {
   era: EraId;
@@ -297,7 +302,21 @@ export function avanzarTecnologia(estado: EstadoTecnologia, ctx: ContextoTecnolo
     if (cambio) porFaccion[faccion.id] = tecnologias;
   }
 
-  return { tecnologia: { era, eraDesde, contadores, logros, primeros, porFaccion }, eventos };
+  // 4. Crónica (Doc 6.7): cuando el retraso se cumple, los Aedas cantan quién desbloqueó cada tecnología.
+  const cantadas = [...(estado.cantadas ?? [])];
+  const conocimiento = { ...estado, era, logros, primeros };
+  for (const id of IDS_TECNOLOGIA) {
+    if (cantadas.includes(id) || !conocidaPorAedas(conocimiento, id, ctx.instante)) continue;
+    cantadas.push(id);
+    const descubridor = primeros[id]!.faccionId;
+    eventos.push({
+      codigo: 'aedas.canta_descubrimiento',
+      mensaje: `Los Aedas cantan que ${ctx.facciones.find((f) => f.id === descubridor)?.nombre ?? descubridor} desbloqueó ${TECNOLOGIAS[id].nombre}.`,
+      payload: { tecnologiaId: id, faccionId: descubridor } satisfies PayloadAedasDescubrimiento,
+    });
+  }
+
+  return { tecnologia: { era, eraDesde, contadores, logros, primeros, ...(cantadas.length > 0 ? { cantadas } : {}), porFaccion }, eventos };
 }
 
 /** La tecnología pasa a aparecida (Doc 6.4): deja de estar solo revelada. */

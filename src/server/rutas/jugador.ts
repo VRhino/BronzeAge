@@ -18,6 +18,7 @@ import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO,
 import { esCuentaDeBot } from '../identidad/proveedorClave';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE } from './esquemas';
+import { esDeCronica } from '../../engine/cronica';
 import {
   partidaNoAbierta,
   resolverActor,
@@ -102,6 +103,18 @@ const ESQUEMA_EVENTOS = {
   response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
 } as const;
 
+const ESQUEMA_CRONICA = {
+  description:
+    'Crónica de los Aedas (Doc 6.7): los hechos públicos del servidor —logros, Eras, títulos, descubrimientos, caídas, ' +
+    'fundaciones y guerras— con version > `desde`. Es la misma para todos los jugadores. Devuelve las `limite` más recientes ' +
+    '(200 por defecto, máximo 1000), en orden cronológico.',
+  tags: ['jugador'],
+  security: SEGURIDAD_JUGADOR,
+  params: PARAMS_GAME_ID,
+  querystring: { ...QUERY_DESDE, properties: { ...QUERY_DESDE.properties, limite: { type: 'string', pattern: '^[0-9]+$' } } },
+  response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA },
+} as const;
+
 const ESQUEMA_COMANDOS_JUGADOR = {
   ...ESQUEMA_EJECUTAR_COMANDO,
   description:
@@ -180,6 +193,26 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
 
       const heroe = heroeDe(runner, resuelto.actor.membresia!.jugadorId!);
       return reply.send({ eventos: heroe ? eventosVisiblesParaJugador(runner.getState(), heroe.id, await runner.eventosDesde(desde)) : [] });
+    }
+  );
+
+  /** Crónica de los Aedas — ver `ESQUEMA_CRONICA`. Pública: solo trae eventos sin atribución a una plaza. */
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; limite?: string } }>(
+    '/jugador/partidas/:gameId/cronica',
+    { schema: ESQUEMA_CRONICA },
+    async (request, reply) => {
+      const { gameId } = request.params;
+      const resuelto = resolverActor(request, deps, gameId);
+      if (!resuelto) return sinSesion(reply);
+      if (!puedeJugar(resuelto.actor)) return sinPermiso(reply, 'sin membresia de jugador en esta partida');
+
+      const runner = deps.partidas.obtener(gameId);
+      if (!runner) return partidaNoAbierta(reply, gameId);
+
+      const desde = Number(request.query.desde ?? '0');
+      const limite = Math.max(1, Math.min(Number(request.query.limite ?? '200'), 1000));
+      if (!Number.isInteger(desde) || desde < 0) return reply.code(400).send({ error: '`desde` debe ser un entero no negativo.' });
+      return reply.send({ entradas: (await runner.eventosDesde(desde)).filter(esDeCronica).slice(-limite) });
     }
   );
 

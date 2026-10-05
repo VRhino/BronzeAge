@@ -682,6 +682,25 @@ describe('GET .../eventos?desde= (Fase C13: cursor incremental)', () => {
     expect(eventosAna.some((e: { asentamientoId?: string }) => e.asentamientoId === asentamientoLuis)).toBe(false);
   });
 
+  it('crónica: una guerra declarada la ve cualquier jugador, también el que no es parte, y nunca eventos atribuidos a una plaza', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+    const fAna = (await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } } })).json().resultado.datos.faccionId;
+    await fundarEn('g1', ana, fAna, { x: 400, y: 400 });
+    const luis = await jugadorEn('g1', 'luis', 'mercenarios-1');
+    const fLuis = (await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: luis, payload: { tipo: 'crearFaccion', params: { nombre: 'Troya' } } })).json().resultado.datos.faccionId;
+    await fundarEn('g1', luis, fLuis, { x: 1200, y: 1200 });
+    const guerra = await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'declararGuerra', params: { faccionAId: fAna, faccionBId: fLuis } } });
+    expect(guerra.statusCode).toBe(200);
+
+    const tercero = await jugadorEn('g1', 'marta', 'mercenarios-2');
+    const cronica = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1/cronica', headers: tercero })).json().entradas;
+    expect(cronica.map((e: { mensaje: string }) => e.mensaje)).toContain('Los Aedas cantan que Micenas declara la guerra a Troya.');
+    expect(cronica.every((e: { asentamientoId?: string }) => e.asentamientoId === undefined)).toBe(true);
+    expect((await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1/cronica?limite=1', headers: tercero })).json().entradas).toHaveLength(1);
+    expect((await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1/cronica?desde=-1', headers: tercero })).statusCode).toBe(400);
+  });
+
   it('401 sin sesion', async () => {
     await partidaCreada('g1');
     const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/eventos' });

@@ -1349,6 +1349,8 @@ export interface EstadoTecnologia {
   logros: Partial<Record<TecnologiaId, Instante>>;
   /** Primera Facción que desbloqueó cada tecnología (crónica; el retraso de los Aedas parte de aquí, Doc 6.4). */
   primeros: Partial<Record<TecnologiaId, { faccionId: string; en: Instante }>>;
+  /** Descubrimientos que los Aedas ya han cantado en la crónica (Doc 6.7), una vez cumplido su retraso. Ausente = ninguno. */
+  cantadas?: TecnologiaId[];
   /** Por `faccionId`. Una Facción ausente solo tiene las tecnologías de arranque (`tecnologiasDe`). */
   porFaccion: Record<string, TecnologiasFaccion>;
 }

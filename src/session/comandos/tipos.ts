@@ -13,6 +13,7 @@ import type { RandomFn } from '../../worldgen';
 import { anteponerEventos, type EventoDominioConVersion, type GameSessionState } from '../estado';
 import type { GeneradorIds } from '../idGenerator';
 import { codigoDeErrorDominio } from '../erroresDeDominio';
+import { entradasDeCronica } from '../../engine/cronica';
 import { contadoresDeEventos, sumarContadores } from '../../engine/tecnologia';
 import { comerciadoDeEventos, sumarComerciado } from '../../engine/mercadoMercenario';
 import type { CodigoError } from './codigosDeError';
@@ -94,7 +95,7 @@ export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], dat
   const version = estado.version + 1;
   // Estampa `version` aquí y solo aquí (Fase C13) — mismo motivo que estampar la versión misma: es el único
   // punto que la conoce, y `eventos` llega desde el comando sin saber todavía a qué versión pertenece.
-  const eventosConVersion: EventoDominioConVersion[] = eventos.map((e) => ({ ...e, version }));
+  const eventosConVersion: EventoDominioConVersion[] = [...eventos, ...entradasDeCronica(eventos, estado)].map((e) => ({ ...e, version }));
   const estadoFinal: GameSessionState = {
     ...estado,
     version,

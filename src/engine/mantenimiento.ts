@@ -24,6 +24,9 @@ export interface FaltanteMantenimiento {
   cantidad: number;
 }
 export interface PayloadAsentamientoRuinas {
+  /** De quién era y cómo se llamaba: la crónica (Doc 6.7) canta su caída cuando la plaza ya no está en el estado. */
+  faccionId: string;
+  nombre: string;
   razon: string;
   faltantes: FaltanteMantenimiento[];
   fundadoEn: Instante;
@@ -285,6 +288,8 @@ export function avanzarMantenimiento(
       codigo: 'asentamiento.ruinas',
       mensaje: `${asentamiento.id} cae en ruinas por abandono/mal mantenimiento (${razon}; duró ~${Math.round(duro / 60_000)} min de mundo) — la zona queda libre.`,
       payload: {
+        faccionId: asentamiento.faccionId,
+        nombre: asentamiento.nombre ?? asentamiento.id,
         razon,
         faltantes: faltantesEstructurados,
         fundadoEn: asentamiento.fundadoEn,
