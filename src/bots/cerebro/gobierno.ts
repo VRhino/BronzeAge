@@ -1,10 +1,13 @@
 // El bot con cargo (Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md §10, filas 1-10 y 19-21): lo que hacía la gobernanza
 // NPC, ahora hecho por el héroe que tiene el cargo, con sus comandos y con lo que ve. El Rey reparte gobiernos y adopta
 // tecnología; el Gobernador construye, amuralla y pide subir de nivel; el Tesorero reserva, comercia y contesta
-// trueques. Las cifras son las que la gobernanza tenía calibradas (placeholders hasta medir con batch, §10.1).
+// trueques. Con Aedas (Doc 6.7), el Rey y el Gobernador compran a los itinerantes lo que les revelan y quien dirige la plaza
+// pone a sus residentes a cantar épicas. Las cifras son las que la gobernanza tenía calibradas (placeholders hasta medir con batch, §10.1).
 import type { Asentamiento, EdificioTipo, RecursoTipo } from '../../domain/types';
 import { RECURSOS_TIPO } from '../../domain/types';
-import { ANIMAL_CATALOGO, CARRO_CATALOGO, EDIFICIO_CATALOGO, NIVEL_ASENTAMIENTO, TARIFA_ADOPCION, TECNOLOGIAS } from '../../constants';
+import { AEDAS, ANIMAL_CATALOGO, CARRO_CATALOGO, EDIFICIO_CATALOGO, EPICAS, ERAS, NIVEL_ASENTAMIENTO, TARIFA_ADOPCION, TECNOLOGIAS } from '../../constants';
+import type { TecnologiaId } from '../../domain/types';
+import { precioDeVenta } from '../../engine/tecnologia';
 import { cupoCaravanas, edificiosPorTipoYEstado, hayProyectoPendiente, nivelActualDe, tieneMercadoActivo } from '../../engine/asentamientoQuery';
 import { cantidadDisponible, tieneRecursos } from '../../engine/almacen';
 import { calcularCostoMantenimiento, calcularNivelAsentamiento } from '../../engine/mantenimiento';
@@ -31,8 +34,58 @@ export async function gobernar(ctx: ContextoBot): Promise<void> {
   await rey(ctx);
   const plaza = plazaDentro(ctx.vista);
   if (!plaza) return;
+  const esRey = ctx.vista.facciones.find((f) => f.id === ctx.vista.faccionId)?.reyId === ctx.yo;
   if (plaza.cargos.gobernadorId === ctx.yo) await gobernador(ctx, plaza);
   if (plaza.cargos.tesoreroId === ctx.yo) await tesorero(ctx, plaza);
+  if (esRey || plaza.cargos.gobernadorId === ctx.yo) await comprarAAedas(ctx, plaza);
+  if (esRey || plaza.cargos.gobernadorId === ctx.yo || plaza.cargos.sacerdoteId === ctx.yo) await epicas(ctx, plaza);
+}
+
+// --- Aedas (Doc 6.7) ---
+
+/**
+ * Compra una tecnología revelada al Aeda itinerante que está en la plaza, si la plaza guarda además el doble de la tarifa para
+ * adoptarla (la compra salta el hito, no la adopción). Una por turno.
+ */
+async function comprarAAedas(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
+  const { vista } = ctx;
+  if (!vista.aedasAvistados.some((a) => a.enAsentamientoId === plaza.id)) return;
+  for (const { tecnologiaId: id } of vista.tecnologia.reveladas) {
+    if (ERAS[TECNOLOGIAS[id].era].orden > AEDAS.venta.ordenEraMaximo) continue;
+    const tarifa = TARIFA_ADOPCION[TECNOLOGIAS[id].era];
+    const necesita = Object.fromEntries(Object.entries(tarifa).map(([r, n]) => [r, 2 * (n ?? 0)]));
+    necesita['oro'] = precioDeVenta(id) + 2 * (tarifa.oro ?? 0);
+    if (!tieneRecursos(plaza.almacen, necesita)) continue;
+    await ctx.intentar(`aeda:${id}`, 'comprarTecnologiaAeda', { asentamientoId: plaza.id, tecnologiaId: id }, 60 * 60_000);
+    return;
+  }
+}
+
+/** Cada Aeda residente de la plaza sin épica empieza la de la primera tecnología que pueda (Era más baja primero), sin repetir las que ya canta otro. */
+async function epicas(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
+  const { vista } = ctx;
+  const propias = vista.tecnologia.propias;
+  const libres = vista.aedasResidentes.filter((a) => a.asentamientoId === plaza.id && !a.epica);
+  if (!propias || libres.length === 0) return;
+  const enMarcha = new Set<TecnologiaId>(vista.aedasResidentes.flatMap((a) => (a.epica ? [a.epica.tecnologiaId] : [])));
+  const candidatas = (Object.keys(EPICAS) as TecnologiaId[]).filter((id) => {
+    const logro = TECNOLOGIAS[id].logro;
+    return (
+      logro !== undefined &&
+      vista.tecnologia.logros.some((l) => l.contador === logro.contador && l.umbral === logro.umbral) &&
+      ERAS[TECNOLOGIAS[id].era].orden <= ERAS[vista.tecnologia.era].orden &&
+      !propias.aparecidas.includes(id) &&
+      !enMarcha.has(id)
+    );
+  });
+  // Lo revelado se puede comprar a un itinerante: las épicas, para lo demás.
+  const reveladas = new Set(vista.tecnologia.reveladas.map((r) => r.tecnologiaId));
+  candidatas.sort((a, b) => Number(reveladas.has(a)) - Number(reveladas.has(b)));
+  for (const aeda of libres) {
+    const id = candidatas.shift();
+    if (!id) return;
+    await ctx.intentar(`epica:${aeda.id}`, 'empezarEpica', { asentamientoId: plaza.id, aedaId: aeda.id, tecnologiaId: id }, 60 * 60_000);
+  }
 }
 
 // --- Rey ---
