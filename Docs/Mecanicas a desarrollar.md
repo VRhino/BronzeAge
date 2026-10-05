@@ -336,44 +336,9 @@ constante y el canon, y avisar a Conquest, que abre la instancia con esa capacid
 
 ## 42. Aedas: difusión y venta de tecnología, residentes y lore
 
-**Estado: diseño parcial (canon Doc 6.2-6.5; `Consideraciones/BA-006_Revision_Tecnologia_Eras.md` D31 y D55),
-`código: ✘`.** Lo único que existe es la narración de cambios de título (`engine/titulos.ts`, Doc 2.9). Aquí se reúne
-todo lo decidido sobre ellos hasta el 2026-09-29.
+**Estado: diseño cerrado el 2026-10-05, `código: ✘`** (solo existe la narración de cambios de título,
+`engine/titulos.ts`, Doc 2.9). Reglas en el canon, Doc 6.1, 6.4 y 6.7; decisiones, modelo y pasos en
+`Consideraciones/Aedas_Definicion.md`.
 
-**Qué son.** NPCs viajantes, de dos clases, itinerantes y residentes, que dan acceso a tecnología y además narran el
-lore del servidor (Doc 6.2, 6.3, Glosario: Aedas y Poetas son el mismo rol).
-
-**Itinerantes:**
-- **Difunden la tecnología (D55).** Toda tecnología está oculta hasta que se cumplen sus condiciones de aparición; a
-  la Facción que cumple su hito le aparece sola, y para el resto sigue oculta. Los Aedas **conocen una tecnología
-  desde que alguien la desbloquea, pero con un retraso**, que es la ventaja del primero. Al llegar a un asentamiento
-  de otra Facción, le revelan la tecnología, los requisitos que le faltan y quién la desbloqueó.
-- **La venden (D31, Doc 6.2).** Pagándole oro, la Facción se salta su hito, **nunca el logro del servidor**. El pago
-  de adopción (tarifa por Era, D32) se paga igual.
-- **Cantan los logros del servidor (D31):** son públicos y quedan en la crónica, pero no dicen qué tecnología
-  desbloquean.
-
-**Residentes (Doc 6.2):**
-- Se quedan en un asentamiento con **Nobleza** y se van si la pierde; su número depende del tamaño o nivel del
-  asentamiento, o de políticas. Con el Palacio desde el nivel 2 (Doc 4.2.1), puede haberlos desde el nivel 2.
-- Desbloquean tecnología con una **épica por capítulos** que avanza con eventos inspiradores (por ejemplo,
-  batallas). Ejemplo de la propuesta BA-006 original: "Canto de las lanzas largas" (conocer una formación, fabricar
-  armas de asta, instrucción, combatir en formación, armas combinadas → `reforma_macedonica`). Los eventos no pueden
-  ser acciones repetibles para farmear: hechos relevantes con límites por batalla o periodo.
-- Dan felicidad, crecimiento de nobleza, desbloqueo de tecnologías y prestigio.
-- Una Facción con reputación muy baja los atrae peor (Doc 2.7, 6.4).
-
-**Lore (Doc 6.3):** narran títulos (ya en el código), asentamientos que caen, tecnologías descubiertas y guerras,
-consultable en una interfaz propia y como eventos. No afecta al balance. El gremio de Comerciantes puede dar "rutas o
-Aedas comerciales especiales" (Doc 2.10).
-
-**Sin decidir:**
-- Cuánto dura el retraso de la ventaja del primero.
-- Cuántos Aedas itinerantes hay por servidor, cómo se mueven (caminos, rutas de caravana, al azar), si se ven en el
-  mapa y si se les puede atacar o retener.
-- Precio en oro de la venta; qué tecnologías vende un itinerante (Doc 6.2 dice "básicas") y cuáles solo llegan por la
-  épica de un residente; cómo encaja la épica con el modelo de logro + hito (D30).
-- Cupo de residentes por nivel.
-
-**Qué toca del canon al implementarlo:** Doc 6.2 (reescrito con D55 y la venta), Doc 6.5 ("Fase 0 sin Aedas") fuera,
-Glosario (Aedas / Poetas).
+Pasos pendientes (cada uno se fusiona por separado): **1.** itinerantes difusores + venta; **2.** residentes con épica;
+**3.** crónica y lore. Se borra esta entrada entera cuando se cierre el paso 3.

@@ -127,7 +127,7 @@ Las 3 clases de población NPC de un asentamiento (distintas de los Héroes).
 - **Nobleza:** crecimiento lento; aparece con Palacio y un mínimo de ciudadanos (Héroes) en el asentamiento. Es la clase que más oro recauda y se recluta como tropa de escalón 4-5 (Doc 5.8).
 
 ## Aedas / Poetas
-Mismo rol: los NPCs viajantes que esparcen y venden tecnología (itinerantes, o residentes si hay nobleza) Y narran el lore/histórico del servidor (títulos de prestigio, hazañas, logros del servidor). Ver Doc 6.7.
+Mismo rol: NPCs de dos clases que dan acceso a la tecnología y narran el lore del servidor. **Itinerantes** (recorren los caminos): difunden y venden tecnología. **Residentes** (viven en un asentamiento con Palacio y Nobleza): desbloquean tecnología con una épica por capítulos. Ambos cantan la crónica: títulos de prestigio, descubrimientos, caídas, guerras y logros del servidor. Ver Doc 6.7.
 
 ## Era
 Cada uno de los cinco tramos de la season (Reinos palaciales, Crisis y adaptación, Polis e imperios, Profesionalización, Hegemonía macedónica; de ~1300 a 323 a. C.). Una Era termina al cumplirse todos sus logros del servidor o al agotarse su plazo (Doc 6.2).

@@ -20,17 +20,18 @@ Lo mismo vale para construir un edificio, mejorar un nivel interno o producir un
 aspecto. La tecnología dice qué existe; el equipo dice con qué se hace (una tropa puede depender de una tecnología
 y su arma de otra).
 
-Una tecnología pasa por tres estados para cada Facción: **oculta**, **aparecida** (la ve y puede adoptarla) y
-**adoptada**.
+Una tecnología pasa por cuatro estados para cada Facción: **oculta**, **revelada** (un Aeda se la ha mostrado: sabe que
+existe, qué le falta y quién la desbloqueó, pero aún no puede adoptarla), **aparecida** (cumplidas sus condiciones o
+comprada a un Aeda: puede adoptarla) y **adoptada**.
 
 **Cuatro vías para conseguirla:**
 1. **Desarrollo propio**: cumplir su logro del servidor y el hito de la Facción (6.3) y pagarla (6.5).
 2. **Comercio**: pagar a una Facción que ya la tiene adoptada.
-3. **Aedas**: pagar oro a un Aeda que la conoce (6.7).
+3. **Aedas**: pagar oro a un Aeda itinerante que la conoce (6.7), o completar la épica de un Aeda residente (6.7).
 4. **Conquista**: al conquistar un asentamiento que ya reclutaba con una tecnología, esa tecnología le aparece al
    conquistador.
 
-Comercio, Aedas y conquista **se saltan el hito de la Facción, nunca el logro del servidor**. En todas las vías la
+Comercio, Aedas (venta y épica) y conquista **se saltan el hito de la Facción, nunca el logro del servidor**. En todas las vías la
 adopción se paga igual (6.5).
 
 ## 6.2 Eras
@@ -76,10 +77,11 @@ Era se reparten por su tramo en el orden de adopción, y el último cae una sema
 
 - **Toda tecnología está oculta** hasta que se cumplen sus condiciones de aparición.
 - Cuando una Facción la desbloquea, le aparece solo a ella; **para el resto del servidor sigue oculta**.
-- Los **Aedas itinerantes** esparcen el conocimiento (6.7): al llegar a un asentamiento de otra Facción, le revelan
-  la tecnología, los requisitos que le faltan y quién la desbloqueó.
-- **La ventaja del primero** es ese tiempo: los Aedas conocen una tecnología desde que alguien la desbloquea, pero con
-  un retraso. No hay descuento: todos pagan la misma tarifa.
+- Los **Aedas itinerantes** esparcen el conocimiento (6.7): al llegar a un asentamiento, le **revelan** las
+  tecnologías que conocen y la Facción aún no tiene aparecidas: cuáles son, qué requisitos de hito le faltan y quién
+  las desbloqueó.
+- **La ventaja del primero** es ese tiempo: los Aedas conocen una tecnología **24 horas** después de que alguien la
+  desbloquea (`AEDAS.retrasoConocimientoHoras`, placeholder), no antes. No hay descuento: todos pagan la misma tarifa.
 
 ## 6.5 Adopción
 
@@ -152,15 +154,46 @@ tecnología se adopta y su equipo llega con la mecánica de asedio.
 
 ## 6.7 Aedas
 
-- Los Aedas son los NPCs viajantes que dan acceso a tecnología y narran el lore del servidor.
-- **Itinerantes**: recorren el mundo. **Esparcen el conocimiento** (6.4) y **venden** la tecnología que conocen:
-  pagándoles oro, la Facción se salta su hito, nunca el logro del servidor.
-- **Residentes**: se quedan en un asentamiento con NOBLEZA (la presencia de nobles los atrae) y se van si la pierde.
-  Cuántos caben depende del tamaño o nivel del asentamiento, o de políticas. Desbloquean tecnología con una **épica
-  narrada por CAPÍTULOS** que avanza con **eventos inspiradores** (por ejemplo, batallas); los eventos son hechos
-  relevantes con límites por batalla o periodo, no acciones repetibles. Dan felicidad, crecimiento de nobleza,
-  desbloqueo de tecnologías y prestigio.
-- **Lore**: los Aedas (o Poetas, mismo rol) narran los logros reales de los jugadores —asentamientos que caen,
-  tecnologías descubiertas, guerras importantes, cambios de títulos de prestigio (Doc 2.9)— y cantan los logros del
-  servidor. No afecta al balance. Se consulta en una interfaz propia y como eventos en el juego.
-- Una Facción con score de confiabilidad muy bajo (Doc 2.7) atrae peor a los Aedas residentes.
+Los Aedas (o Poetas, mismo rol; Glosario) son NPCs que dan acceso a la tecnología y narran el lore del servidor. No
+atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos clases.
+
+### Itinerantes
+
+- **Cuántos**: uno por cada 3 Facciones vivas, con un mínimo de 3 (`AEDAS.itinerantes`, placeholder).
+- **Cómo se mueven**: recorren los asentamientos por la **red de caminos** (el grafo de navegación, Doc 1.6): sobre
+  camino van más rápido. Eligen el siguiente asentamiento entre los que no les cierran la puerta (el exilio, Doc 2.8,
+  los deja fuera) y se detienen unas horas en cada uno (`AEDAS.estanciaHoras`) antes de seguir.
+- **Se ven** como cualquier columna ajena, solo dentro del radio de visión de la Facción (Doc 5.12.7); no son
+  atacables ni retenibles.
+- **Difunden** (6.4): al llegar a un asentamiento le revelan lo que conocen y la Facción aún no tiene aparecida.
+- **Venden**: mientras están en un asentamiento, el Rey o el Gobernador de esa plaza puede comprarles una tecnología
+  que conocen, de las **Eras I-III**, con el **logro del servidor ya cumplido** y la Era ya abierta. Cuesta **2 × el oro
+  de la tarifa de adopción de su Era** (6.5; 200 / 600 / 1.200), que sale del almacén de esa plaza. La Facción se salta el
+  hito y la tecnología le **aparece**; la adopción se paga igual, por el Rey en la capital. Las Eras IV y V solo llegan
+  por hito propio, comercio, conquista o épica de un residente.
+- **Cantan** los logros del servidor (6.3) y los descubrimientos (crónica, abajo): hechos públicos, sin decir qué
+  tecnología abre cada logro.
+
+### Residentes
+
+- **Dónde**: en un asentamiento con **Palacio** y **Nobleza**; si pierde toda su nobleza, el Aeda se va. Con el Palacio
+  desde el nivel 2 (Doc 4.2.1), pueden vivir allí desde ese nivel.
+- **Cupo por asentamiento**: nivel 2, 1; nivel 3, 2; nivel 4, 3; nivel 5, 4 (`AEDAS.cupoResidentes`). Las políticas
+  podrán sumar uno (Doc 4.4).
+- **Llegada**: con cupo libre, llega uno cada `AEDAS.llegadaHoras` (placeholder). Una Facción con reputación de **−50 o
+  menos** (Doc 2.7) los atrae **tres veces más despacio**.
+- **Épica**: un residente desbloquea tecnología con una **épica por capítulos** que sustituye al **hito** de la Facción
+  —nunca al logro del servidor— para cualquier tecnología con logro cumplido y Era abierta. Eligen la tecnología al
+  empezar la épica; no cuesta oro (la adopción se paga igual, 6.5). Cada capítulo avanza con **eventos inspiradores**
+  (una batalla ganada, una conquista, un asedio resistido, un edificio de culto levantado…): hechos relevantes, **no
+  acciones repetibles**: cada hecho cuenta una vez, como máximo uno por batalla y uno por capítulo cada
+  `AEDAS.epica.enfriamientoHoras`, para que no se pueda farmear.
+- **Qué dan**: felicidad, crecimiento de nobleza y prestigio (sin efecto mecánico, como los títulos, Doc 2.9), además de
+  la épica.
+
+### Lore y crónica
+
+Los Aedas narran los hechos públicos del servidor: logros del servidor, descubrimientos (el nombre de la primera
+Facción en desbloquear una tecnología, **cuando el retraso de 24 horas ya ha pasado**), comienzo de Era, cambios de
+títulos de prestigio (Doc 2.9), asentamientos que caen y declaraciones de guerra y paz. Todo queda en una **crónica**
+persistente, consultable en una interfaz propia y emitida además como evento en el juego. **No afecta al balance.**
