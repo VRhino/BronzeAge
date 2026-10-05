@@ -476,6 +476,87 @@
       "required": ["tipo", "settlementId", "layoutVersion", "unidadesPorCelda", "edificios", "recintos"],
       "additionalProperties": false
     },
+    "EdificioCampamentoTipo": { "enum": ["taberna", "vivienda", "mercado", "barracon", "galeriaDeTiro", "caballerizas"] },
+    "ElementoCampamentoTipo": {
+      "enum": ["taberna", "vivienda", "mercado", "barracon", "galeriaDeTiro", "caballerizas", "puestoMercado", "plazaDeArmas", "plaza", "pozo", "parque"]
+    },
+    "CampamentoMercenarios": {
+      "description": "Campamento de mercenarios tal como viaja en campamentosMercenarios de la proyeccion (doc 01 §10).",
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/definitions/Id" },
+        "posicion": { "$ref": "#/definitions/Punto" },
+        "origen": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "edificios": { "type": "array", "items": { "$ref": "#/definitions/EdificioCampamentoTipo" } },
+        "residentesIds": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
+        "eligieronComoInicial": { "$ref": "#/definitions/Entero" },
+        "bandidosEn": { "$ref": "#/definitions/Instante" },
+        "poblacion": { "$ref": "#/definitions/Entero" },
+        "poblacionEn": { "$ref": "#/definitions/Instante" },
+        "mercado": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } },
+        "fondos": {
+          "type": "object",
+          "additionalProperties": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } }
+        },
+        "creadoEn": { "$ref": "#/definitions/Instante" }
+      },
+      "required": ["id", "posicion", "origen", "edificios", "residentesIds", "eligieronComoInicial", "poblacion", "poblacionEn", "mercado", "fondos", "creadoEn"],
+      "additionalProperties": false
+    },
+    "EscenaCampamento": {
+      "description": "Planta de un campamento de mercenarios (doc 01 §10). Coordenadas locales: origen en el centro de la taberna, y hacia abajo. La celda (col, row) ocupa de (col, row) a (col + 1, row + 1), por unidadesPorCelda.",
+      "type": "object",
+      "properties": {
+        "campamentoId": { "$ref": "#/definitions/Id" },
+        "origen": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "layoutVersion": { "$ref": "#/definitions/EnteroPositivo" },
+        "unidadesPorCelda": { "type": "number", "exclusiveMinimum": 0 },
+        "edificios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "edificioId": { "$ref": "#/definitions/Id" },
+              "tipo": { "$ref": "#/definitions/ElementoCampamentoTipo" },
+              "posicion": { "$ref": "#/definitions/Punto" },
+              "ancho": { "$ref": "#/definitions/EnteroPositivo" },
+              "alto": { "$ref": "#/definitions/EnteroPositivo" }
+            },
+            "required": ["edificioId", "tipo", "posicion", "ancho", "alto"],
+            "additionalProperties": false
+          }
+        },
+        "calles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "col": { "type": "integer" },
+              "row": { "type": "integer" },
+              "ancho": { "$ref": "#/definitions/EnteroPositivo" },
+              "alto": { "$ref": "#/definitions/EnteroPositivo" }
+            },
+            "required": ["col", "row", "ancho", "alto"],
+            "additionalProperties": false
+          }
+        },
+        "empalizada": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "col": { "type": "integer" },
+              "row": { "type": "integer" },
+              "clase": { "enum": ["muro", "puerta"] }
+            },
+            "required": ["col", "row", "clase"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["campamentoId", "origen", "layoutVersion", "unidadesPorCelda", "edificios", "calles", "empalizada"],
+      "additionalProperties": false
+    },
     "BattleRules": {
       "type": "object",
       "properties": {

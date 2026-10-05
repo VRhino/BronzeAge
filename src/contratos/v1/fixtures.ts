@@ -9,6 +9,7 @@ import {
   type BattleRules,
   type BattleServerAssignment,
   type BattleTicket,
+  type CampamentoMercenariosDto,
   type Equipamiento,
   type EscuadronDto,
   type HeroeDto,
@@ -494,4 +495,20 @@ export const RESULTADO_ASEDIO: BattleResult = {
     { heroeId: 'heroe-carla', participo: true, sobrevivioAlCierre: true, xpGanada: 120 },
   ],
   versionServidor: 'conquest-server-0.9.3',
+};
+
+/** Un campamento de mercenarios con un residente y algo gastado del mercado y del fondo (doc 01 §10). */
+export const CAMPAMENTO: CampamentoMercenariosDto = {
+  id: 'mercenarios-0',
+  posicion: { x: 912, y: 1304 },
+  origen: 1,
+  edificios: ['taberna', ...Array<'vivienda'>(10).fill('vivienda'), 'mercado', 'barracon'],
+  residentesIds: ['heroe-1'],
+  eligieronComoInicial: 3,
+  bandidosEn: 1_789_410_000_000,
+  poblacion: 80,
+  poblacionEn: 1_789_410_000_000,
+  mercado: { madera: 300, piedra: 60, trigo: 300, cobre: 100 },
+  fondos: { 'heroe-1': { madera: 40, oro: 20 } },
+  creadoEn: 1_789_000_000_000,
 };

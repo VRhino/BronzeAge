@@ -1,0 +1,670 @@
+{
+  "campamentoId": "mercenarios-0",
+  "origen": 1,
+  "layoutVersion": 2,
+  "unidadesPorCelda": 3,
+  "edificios": [
+    {
+      "edificioId": "mercenarios-0-0",
+      "tipo": "taberna",
+      "posicion": {
+        "x": 0,
+        "y": 0
+      },
+      "ancho": 4,
+      "alto": 4
+    },
+    {
+      "edificioId": "mercenarios-0-1",
+      "tipo": "mercado",
+      "posicion": {
+        "x": -9,
+        "y": -16.5
+      },
+      "ancho": 2,
+      "alto": 3
+    },
+    {
+      "edificioId": "mercenarios-0-2",
+      "tipo": "puestoMercado",
+      "posicion": {
+        "x": -1.5,
+        "y": -12
+      },
+      "ancho": 1,
+      "alto": 2
+    },
+    {
+      "edificioId": "mercenarios-0-3",
+      "tipo": "puestoMercado",
+      "posicion": {
+        "x": -1.5,
+        "y": -18
+      },
+      "ancho": 1,
+      "alto": 2
+    },
+    {
+      "edificioId": "mercenarios-0-4",
+      "tipo": "puestoMercado",
+      "posicion": {
+        "x": -16.5,
+        "y": -13.5
+      },
+      "ancho": 1,
+      "alto": 3
+    },
+    {
+      "edificioId": "mercenarios-0-5",
+      "tipo": "puestoMercado",
+      "posicion": {
+        "x": -7.5,
+        "y": -25.5
+      },
+      "ancho": 3,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-6",
+      "tipo": "puestoMercado",
+      "posicion": {
+        "x": -16.5,
+        "y": -19.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-ancla-7",
+      "tipo": "plazaDeArmas",
+      "posicion": {
+        "x": 18,
+        "y": 6
+      },
+      "ancho": 2,
+      "alto": 2
+    },
+    {
+      "edificioId": "mercenarios-0-8",
+      "tipo": "barracon",
+      "posicion": {
+        "x": 15,
+        "y": -3
+      },
+      "ancho": 2,
+      "alto": 2
+    },
+    {
+      "edificioId": "mercenarios-0-9",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": -10.5,
+        "y": -1.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-10",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": -10.5,
+        "y": 1.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-11",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": -1.5,
+        "y": 10.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-12",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": 1.5,
+        "y": 10.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-13",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": -4.5,
+        "y": 10.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-14",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": 4.5,
+        "y": 10.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-15",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": 7.5,
+        "y": 10.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-16",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": -7.5,
+        "y": 10.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-17",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": 1.5,
+        "y": -10.5
+      },
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "edificioId": "mercenarios-0-18",
+      "tipo": "vivienda",
+      "posicion": {
+        "x": 4.5,
+        "y": -10.5
+      },
+      "ancho": 1,
+      "alto": 1
+    }
+  ],
+  "calles": [
+    {
+      "col": -6,
+      "row": -8,
+      "ancho": 6,
+      "alto": 1
+    },
+    {
+      "col": -5,
+      "row": -7,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -2,
+      "row": -7,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -5,
+      "row": -6,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -2,
+      "row": -6,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -5,
+      "row": -5,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -2,
+      "row": -5,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -5,
+      "row": -4,
+      "ancho": 4,
+      "alto": 1
+    },
+    {
+      "col": -3,
+      "row": -3,
+      "ancho": 6,
+      "alto": 1
+    },
+    {
+      "col": -4,
+      "row": -2,
+      "ancho": 2,
+      "alto": 1
+    },
+    {
+      "col": 2,
+      "row": -2,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -3,
+      "row": -1,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": 2,
+      "row": -1,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -3,
+      "row": 0,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": 2,
+      "row": 0,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": 4,
+      "row": 0,
+      "ancho": 4,
+      "alto": 1
+    },
+    {
+      "col": -4,
+      "row": 1,
+      "ancho": 2,
+      "alto": 1
+    },
+    {
+      "col": 2,
+      "row": 1,
+      "ancho": 3,
+      "alto": 1
+    },
+    {
+      "col": 7,
+      "row": 1,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": -3,
+      "row": 2,
+      "ancho": 6,
+      "alto": 1
+    },
+    {
+      "col": 4,
+      "row": 2,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": 7,
+      "row": 2,
+      "ancho": 1,
+      "alto": 1
+    },
+    {
+      "col": 4,
+      "row": 3,
+      "ancho": 4,
+      "alto": 1
+    }
+  ],
+  "empalizada": [
+    {
+      "col": -8,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": -7,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": -6,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": -5,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": -4,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": -3,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": -2,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": -1,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 0,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 1,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 2,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 3,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 4,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 5,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 6,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 7,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 8,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -11,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -10,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -10,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -9,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -9,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -8,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -8,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -7,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -7,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -6,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -6,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -5,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -5,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -4,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -4,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -3,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -3,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -2,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -2,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": -1,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": -1,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": 0,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": 0,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": 1,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": 1,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": 2,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": 2,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": 3,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": 3,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": 4,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": 4,
+      "clase": "muro"
+    },
+    {
+      "col": -8,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": -7,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": -6,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": -5,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": -4,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": -3,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": -2,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": -1,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 2,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 3,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 4,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 5,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 6,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 7,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 8,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 9,
+      "row": 5,
+      "clase": "muro"
+    },
+    {
+      "col": 0,
+      "row": 5,
+      "clase": "puerta"
+    },
+    {
+      "col": 1,
+      "row": 5,
+      "clase": "puerta"
+    }
+  ]
+}

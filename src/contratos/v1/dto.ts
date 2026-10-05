@@ -365,3 +365,56 @@ export interface CatalogoTropas {
     tipo: 'cuerpo_a_cuerpo' | 'a_distancia';
   }[];
 }
+
+/** Los edificios que tiene un campamento de mercenarios (Doc 1.9b). */
+export type EdificioCampamentoTipo = 'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas';
+
+/** Lo que se ve en su planta: sus edificios y los de relleno del trazado (puestos del mercado, plazas que sirven de ancla). */
+export type ElementoCampamentoTipo = EdificioCampamentoTipo | 'puestoMercado' | 'plazaDeArmas' | 'plaza' | 'pozo' | 'parque';
+
+/**
+ * El campamento de mercenarios tal como viaja en `campamentosMercenarios` de la proyección (doc 01 §10): enclave neutral, sin Facción ni zona.
+ * `edificios` son los tipos que tiene (diez viviendas, taberna, mercado y uno militar); su planta es `EscenaCampamento`.
+ */
+export interface CampamentoMercenariosDto {
+  id: string;
+  posicion: Punto;
+  /** Variante de aspecto de los modelos, 0..2: solo cambia cómo se ve. */
+  origen: number;
+  edificios: EdificioCampamentoTipo[];
+  residentesIds: string[];
+  eligieronComoInicial: number;
+  bandidosEn?: Instante;
+  poblacion: number;
+  poblacionEn: Instante;
+  mercado: Record<string, number>;
+  fondos: Record<string, Record<string, number>>;
+  creadoEn: Instante;
+}
+
+/**
+ * La planta de un campamento de mercenarios, para montar su escena (D73). Misma convención que `SettlementBattleSnapshot`: coordenadas
+ * locales con el origen en el centro de la taberna —el ancla del trazado—, `y` hacia abajo, y la celda (col, row) ocupa de (col, row) a
+ * (col + 1, row + 1), por `unidadesPorCelda`. Viaja en la proyección solo estando dentro (`escenaCampamento`), y es DERIVADA del `id` y los
+ * `edificios`: dos llamadas con los mismos datos dan lo mismo mientras no cambie `layoutVersion`.
+ */
+export interface EscenaCampamento {
+  campamentoId: string;
+  /** El aspecto de los modelos (`CampamentoMercenariosDto.origen`); la planta no depende de él. */
+  origen: number;
+  layoutVersion: number;
+  unidadesPorCelda: number;
+  edificios: {
+    edificioId: string;
+    tipo: ElementoCampamentoTipo;
+    /** Centro de la huella, en unidades. */
+    posicion: Punto;
+    /** Huella en celdas. */
+    ancho: number;
+    alto: number;
+  }[];
+  /** Calles, en celdas (esquina superior izquierda y tamaño). Es suelo transitable. */
+  calles: { col: number; row: number; ancho: number; alto: number }[];
+  /** La empalizada, decorativa y sin efecto de juego (dentro no hay combate): sus celdas, y por cuál se entra y se sale (`puerta`). */
+  empalizada: { col: number; row: number; clase: 'muro' | 'puerta' }[];
+}

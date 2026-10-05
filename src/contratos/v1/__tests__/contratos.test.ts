@@ -4,9 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import Ajv from 'ajv';
 import { describe, expect, it } from 'vitest';
+import { escenaDeCampamento } from '../../../session/proyecciones/escenaCampamento';
 import { catalogoTropas } from '../catalogoTropas';
 import {
   ASIGNACION,
+  CAMPAMENTO,
   HEROE,
   HEROE_BOT,
   HEROE_PUBLICO,
@@ -46,6 +48,8 @@ const PUBLICADOS: [archivo: string, definicion: string, dato: unknown][] = [
   ['fixtures/tokensBatalla.json', 'TokensBatalla', TOKENS],
   ['fixtures/inicioBatalla.json', 'InicioBatalla', INICIO],
   ['fixtures/battleResult.json', 'BattleResult', RESULTADO_ASEDIO],
+  ['fixtures/campamentoMercenarios.json', 'CampamentoMercenarios', CAMPAMENTO],
+  ['fixtures/escenaCampamento.json', 'EscenaCampamento', escenaDeCampamento(CAMPAMENTO)],
 ];
 
 describe.each(PUBLICADOS)('%s', (archivo, definicion, dato) => {
@@ -68,6 +72,11 @@ describe.each(PUBLICADOS)('%s', (archivo, definicion, dato) => {
 });
 
 describe('el schema rechaza', () => {
+  it('una escena de campamento con una calle sin tamaño o una celda de empalizada de clase torre', () => {
+    expect(erroresDe('EscenaCampamento', { ...escenaDeCampamento(CAMPAMENTO), calles: [{ col: 0, row: 0, ancho: 0, alto: 1 }] })).not.toEqual([]);
+    expect(erroresDe('EscenaCampamento', { ...escenaDeCampamento(CAMPAMENTO), empalizada: [{ col: 0, row: 0, clase: 'torre' }] })).not.toEqual([]);
+  });
+
   it('campos que no existen', () => {
     expect(erroresDe('BattleTicket', { ...TICKET_ASEDIO, autorizacion: 'x' })).not.toEqual([]);
   });

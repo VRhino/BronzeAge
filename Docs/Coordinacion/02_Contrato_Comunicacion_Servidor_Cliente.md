@@ -343,6 +343,11 @@ columna a la puerta (`MOVIMIENTO.radioPuerta`).
 | `reponerPrestamo` | — | `{ repuestas }` | Gratis |
 | `abrirAlijo` | `alijoId` | `{ oro }` | Estando en el sitio; el oro va a `oroDeBotin`. La proyección trae los `alijos` a la vista |
 | `aportarARefundacion` / `retirarDeRefundacion` | `recurso`, `cantidad`, `lado` (`almacen` \| `carro`) | `{ movido }` | Fondo de su Facción sin asentamientos en ese campamento |
+
+**Proyección** (2026-10-05): `campamentosMercenarios` trae los que la Facción conoce (`CampamentoMercenarios`, doc 01 §10) y, **estando
+dentro de uno** (`ubicacion.tipo === 'mercenarios'`), `escenaCampamento` (`EscenaCampamento`): su planta para montar la escena (edificios,
+calles y empalizada, con la taberna en el origen). Fuera de un campamento el campo no viaja. Es derivada: dos llamadas dan lo mismo mientras
+no cambie `layoutVersion`, y el fixture `fixtures/escenaCampamento.json` cambia si cambia el trazado.
 | `comprarCaravanaDeRefundacion` | — | `{ caravanaId }` | Con el fondo cubierto; quien la compra es su titular. Se engancha a la columna con `adjuntarCaravana` |
 | `fundar` | — | `{ asentamientoId }` | El titular, con la caravana enganchada, DONDE ESTÁ (no en agua, no a menos de 100 de un campamento). Es el único modo de fundar: `fundarAsentamiento` ya no existe |
 | `solicitarIngreso` | `faccionId` | — | Sustituye a `unirseAFaccion`: entra en la lista de solicitantes |
@@ -400,11 +405,12 @@ C# vive en código, ubicación acordada en BA-004:
 src/contratos/v1/
   contratos.schema.json   JSON Schema draft-07, una entrada de `definitions` por entidad: Heroe (con
                           Escuadron, Loadout, ItemInstancia), HeroePublico, BattleTicket, IncorporacionBatalla,
-                          BattleServerAssignment, TokensBatalla, InicioBatalla, BattleResult y CatalogoTropas
+                          BattleServerAssignment, TokensBatalla, InicioBatalla, BattleResult, CatalogoTropas, CampamentoMercenarios y EscenaCampamento
   catalogoTropas.json     el catálogo de tropas de BronzeAge (doc 01 §13), generado desde constants.ts
   fixtures/*.json         un fixture de cada mensaje: heroe (humano), heroe.bot (herido tras perder el
                           asedio), heroePublico, battleTicket.asedio, battleTicket.bandidos,
-                          incorporacionBatalla, battleServerAssignment, tokensBatalla, inicioBatalla, battleResult
+                          incorporacionBatalla, battleServerAssignment, tokensBatalla, inicioBatalla, battleResult,
+                          campamentoMercenarios, escenaCampamento
   dto.ts                  los mismos tipos en TypeScript, para server/
   fixtures.ts             la fuente de fixtures/*.json
 ```

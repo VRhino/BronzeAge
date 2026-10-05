@@ -1090,6 +1090,24 @@ describe('campamentosMercenarios: los que la Facción ha explorado, como un cami
   });
 });
 
+describe('escenaCampamento: la planta solo viaja estando dentro (D73)', () => {
+  it('dentro de un campamento viaja su planta; fuera, no', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const campamento = { id: 'mercenarios-0', posicion: LEJOS, origen: 1, edificios: ['taberna', 'vivienda', 'mercado', 'barracon'], residentesIds: [], creadoEn: 0 } as unknown as GameSessionState['campamentosMercenarios'][number];
+    const base = sesion.getState();
+    const dentro = {
+      ...base,
+      campamentosMercenarios: [campamento],
+      heroes: base.heroes.map((h) => (h.id === fundador ? { ...h, ubicacion: { tipo: 'mercenarios' as const, campamentoId: campamento.id } } : h)),
+    };
+
+    const escena = proyectarParaJugador(dentro, fundador, SIN_GEOMETRIA).escenaCampamento;
+    expect(escena).toMatchObject({ campamentoId: 'mercenarios-0', origen: 1 });
+    expect(escena?.edificios.map((e) => e.tipo)).toEqual(expect.arrayContaining(['taberna', 'vivienda', 'mercado', 'barracon']));
+    expect(proyectarParaJugador({ ...base, campamentosMercenarios: [campamento] }, fundador, SIN_GEOMETRIA).escenaCampamento).toBeUndefined();
+  });
+});
+
 describe('campamentosBandidos: solo los que se ven AHORA', () => {
   it('un campamento lejos de todo lo propio no aparece por ningun lado', () => {
     const { sesion, fundador } = partidaConAsentamiento();

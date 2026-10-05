@@ -514,10 +514,20 @@ CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en e
                          recupera 10/h): no se escribe cada tick
   creadoEn: Instante
                         No es de ninguna Facción ni tiene zona. En la proyección del jugador viaja solo si la Facción
-                        ha explorado el sitio (como un camino). Fuera del contrato v1 a propósito
-                        (2026-10-05): el contrato solo lleva héroes y batallas, y en un campamento no hay combate (protección de 60, D78).
-                        La estructura interna (edificios, calles y empalizada) la calcula `engine/layoutCampamento.ts` a partir de `id` y `edificios` reutilizando el trazado de asentamientos, en las convenciones de `SettlementBattleSnapshot`; `origen` solo es el aspecto de los modelos. La entidad y su layout entrarán cuando Conquest haga caminable la vista de
-                        campamento (D73); `almacenPersonal` ya viaja en `HeroeDto`.
+                        ha explorado el sitio (como un camino).
+                        EN EL CONTRATO v1 (2026-10-05): `CampamentoMercenarios` (la entidad, tal como viaja) y `EscenaCampamento` (su planta),
+                        con fixtures `campamentoMercenarios.json` y `escenaCampamento.json`.
+
+EscenaCampamento       la planta, DERIVADA de `id` + `edificios` (`engine/layoutCampamento.ts` y `session/proyecciones/escenaCampamento.ts`, que reutiliza el trazado de asentamientos con
+                        la taberna como ancla — el campamento no crece, no se degrada ni sube de nivel, así que se coloca una sola vez).
+                        Solo viaja estando dentro (`escenaCampamento` en la proyección, doc 02 §4.2b), como el interior de la plaza que se pisa.
+  campamentoId, origen, layoutVersion, unidadesPorCelda    mismas convenciones que `SettlementBattleSnapshot` (§17): coordenadas locales,
+                        origen en el centro de la taberna, `y` hacia abajo, una celda = 3 unidades. `origen` es solo el aspecto de los modelos:
+                        la planta no depende de él, sale del `id`
+  edificios[]            { edificioId, tipo, posicion (centro, unidades), ancho, alto (celdas) }. `tipo` incluye los de relleno del trazado:
+                        'puestoMercado', 'plazaDeArmas', 'plaza', 'pozo', 'parque'. La taberna mide 4x4, las viviendas 1x1 (diez)
+  calles[]               { col, row, ancho, alto }, en celdas: suelo transitable
+  empalizada[]           { col, row, clase: 'muro' | 'puerta' }: decorativa, sin efecto de juego (dentro no hay combate); por la puerta se entra y sale
 ```
 
 ## 11. Mundo / worldgen

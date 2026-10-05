@@ -1,0 +1,43 @@
+{
+  "id": "mercenarios-0",
+  "posicion": {
+    "x": 912,
+    "y": 1304
+  },
+  "origen": 1,
+  "edificios": [
+    "taberna",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "mercado",
+    "barracon"
+  ],
+  "residentesIds": [
+    "heroe-1"
+  ],
+  "eligieronComoInicial": 3,
+  "bandidosEn": 1789410000000,
+  "poblacion": 80,
+  "poblacionEn": 1789410000000,
+  "mercado": {
+    "madera": 300,
+    "piedra": 60,
+    "trigo": 300,
+    "cobre": 100
+  },
+  "fondos": {
+    "heroe-1": {
+      "madera": 40,
+      "oro": 20
+    }
+  },
+  "creadoEn": 1789000000000
+}

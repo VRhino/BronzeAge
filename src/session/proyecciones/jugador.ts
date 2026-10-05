@@ -46,6 +46,8 @@ import { cupoGuarnicion } from '../../engine/asentamientoQuery';
 import { estaHerido, guarnicionOcupada, liderazgoDeLoadout } from '../../engine/heroe';
 import { costeLiderazgo } from '../../engine/liderazgo';
 import { RED_VACIA, tramosDeRed } from '../../engine/redCaminos';
+import { escenaDeCampamento } from './escenaCampamento';
+import type { EscenaCampamento } from '../../contratos/v1/dto';
 import type {
   AcuerdoTrueque,
   Alijo,
@@ -412,6 +414,8 @@ export interface ProyeccionJugador {
   /** Campamentos de mercenarios (Doc 1.9b) que la Facción CONOCE: como un camino, los que ha explorado alguna vez, no solo los
    * que ve ahora — ver `campamentosMercenariosConocidos`. */
   campamentosMercenarios: CampamentoMercenarios[];
+  /** La planta del campamento de mercenarios donde está dentro (D73): lo único cuyo interior viaja, como el de la plaza que pisa. Ausente fuera. */
+  escenaCampamento?: EscenaCampamento;
   /** Los alijos de exploración a la vista de su columna que aún no abrió (D62); solo para quien puede abrirlos (D63). */
   alijos: Alijo[];
   /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
@@ -877,6 +881,12 @@ export function proyectarParaJugador(
         ...(ubicacion.tipo === 'mercenarios' ? [ubicacion.campamentoId] : []),
       ])
     ),
+    ...(ubicacion.tipo === 'mercenarios'
+      ? (() => {
+          const dentro = estado.campamentosMercenarios.find((c) => c.id === ubicacion.campamentoId);
+          return dentro ? { escenaCampamento: escenaDeCampamento(dentro) } : {};
+        })()
+      : {}),
     historial: estado.historialHeroes[heroeId] ?? [],
     zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
