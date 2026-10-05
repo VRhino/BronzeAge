@@ -923,6 +923,7 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       expect(vista.miradasIntel).toEqual([]);
       expect(vista.informesPlaza).toEqual([]);
       expect(vista.tarifasIntel.mirada.radio).toBe(150);
+      expect(vista.tarifasIntel.cupoMiradas).toEqual({ porNivelDeTaberna: [1, 2, 3], campamento: 1 });
     });
 
     it('un `nombre` vacío SIGUE siendo un rechazo de dominio (200, ok:false), no un 400: el esquema no debe adelantarse a esa regla', async () => {

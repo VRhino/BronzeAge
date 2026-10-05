@@ -1357,6 +1357,7 @@ InformePlaza                    (MemoriaFaccion.informes[asentamientoId]; viaja 
 TarifasIntel                    (ProyeccionJugador.tarifasIntel = INTEL, para cotizar antes de comprar)
   mirada { radio, duracionMinutos, oroBase, oroPorUnidad, cooldownMinutos }
   informe { oroPorNivel, cooldownMinutos }
+  cupoMiradas { porNivelDeTaberna: number[] (índice 0 = nivel 1), campamento }   Miradas abiertas a la vez por taberna
 ```
 
 - **Edificio**: `EdificioTipo 'taberna'` (§3). `cupoMiradas` por nivel interno: 1 / 2 / 3. Una por asentamiento; nivel 2 de asentamiento.

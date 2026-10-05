@@ -73,7 +73,7 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import { EPICAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
+import { EDIFICIO_CATALOGO, EPICAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
 import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
 import { miradasActivasDe } from '../../engine/intel';
 import { esCaravanaGrande } from '../../engine/caravanas';
@@ -338,10 +338,20 @@ function tecnologiaParaJugador(estado: GameSessionState, faccionId: string | nul
   return { era: t.era, eraDesde: t.eraDesde, logros, propias, reveladas };
 }
 
+/** `cupoMiradas` de cada nivel de la Taberna, sacado del catálogo para que el cliente no lo copie. */
+const CUPO_MIRADAS: TarifasIntel['cupoMiradas'] = {
+  porNivelDeTaberna: Object.entries(EDIFICIO_CATALOGO.taberna.niveles)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, n]) => n.cupoMiradas ?? 0),
+  campamento: INTEL.campamento.cupoMiradas,
+};
+
 /** Las tarifas de la intel (`INTEL`, Doc 5.12.10): precio de una Mirada = `oroBase + oroPorUnidad × distancia` a los ojos propios más cercanos. */
 export interface TarifasIntel {
   mirada: { radio: number; duracionMinutos: number; oroBase: number; oroPorUnidad: number; cooldownMinutos: number };
   informe: { oroPorNivel: number; cooldownMinutos: number };
+  /** Cupo de Miradas abiertas a la vez: por nivel interno de la Taberna de plaza (índice 0 = nivel 1) y el fijo de la de un campamento. */
+  cupoMiradas: { porNivelDeTaberna: number[]; campamento: number };
 }
 
 export interface ProyeccionJugador {
@@ -916,7 +926,7 @@ export function proyectarParaJugador(
       .map((a) => ({ id: a.id, posicion: a.posicion, ...(a.enAsentamientoId ? { enAsentamientoId: a.enAsentamientoId } : {}) })),
     miradasIntel: (estado.miradasIntel ?? []).filter((m) => m.faccionId === faccionId && m.libreEn > ahora),
     informesPlaza: Object.values(memoria.informes ?? {}),
-    tarifasIntel: { mirada: INTEL.mirada, informe: INTEL.informe },
+    tarifasIntel: { mirada: INTEL.mirada, informe: INTEL.informe, cupoMiradas: CUPO_MIRADAS },
     aedasResidentes: (estado.aedasResidentes?.aedas ?? [])
       .filter((a) => esPropio(a.asentamientoId))
       .map((a): AedaResidenteProyectado => {
