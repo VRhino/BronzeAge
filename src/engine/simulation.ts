@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, CampamentoMercenarios, MercadoMercenario, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RedCaminos, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, AedaItinerante, Asentamiento, CampamentoBandido, CampamentoMercenarios, MercadoMercenario, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RedCaminos, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo, EventoDominio } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { EstadoMapa, Mapa } from '../world/mapa';
@@ -29,6 +29,7 @@ import { sinPrestamosAjenos } from './reclutamientoMercenario';
 import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
 import { cerrarDependientesDeRuina } from './ruina';
+import { avanzarAedas } from './aedas';
 import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
 
 export interface EstadoSimulacion {
@@ -64,6 +65,8 @@ export interface EstadoSimulacion {
   heroes: Heroe[];
   /** Eras, logros y tecnologías de cada Facción (Doc 6, `engine/tecnologia.ts`). */
   tecnologia: EstadoTecnologia;
+  /** Aedas itinerantes (Doc 6.7, `engine/aedas.ts`): nacen en el primer tick con asentamientos. Ausente = ninguno. */
+  aedas?: AedaItinerante[];
 }
 
 /**
@@ -376,6 +379,17 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   });
   eventosDominio.push(...comoEventosDominio(trasTecnologia.eventos, contexto));
 
+  // Aedas itinerantes (Doc 6.7): se mueven y, parados en una plaza, le revelan a su Facción lo que conocen.
+  const trasAedas = avanzarAedas(estado.aedas ?? [], trasTecnologia.tecnologia, {
+    asentamientos: trasTributos.asentamientos,
+    facciones: faccionesFinal,
+    zonas,
+    mapa,
+    instante,
+    red: trasComercio.red,
+  });
+  eventosDominio.push(...comoEventosDominio(trasAedas.eventos, contexto));
+
   // La Caravana de Fundación (de un campamento o de una plaza): sin su titular vuelve sola, al llegar se desarma, y suelta caduca (D13, D14, D40, D68).
   const trasCaravanasDeFundacion = avanzarCaravanasDeFundacion(
     trasEjercitos.caravanas,
@@ -418,7 +432,8 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
       instante,
     }),
     heroes: grabarExploracionPersonal(heroes, sinPrestamos.ejercitos, mapa.limites),
-    tecnologia: trasTecnologia.tecnologia,
+    tecnologia: trasAedas.tecnologia,
+    aedas: trasAedas.aedas,
     estadoMapa: mapa.estadoActual(),
     eventosDominio,
   };

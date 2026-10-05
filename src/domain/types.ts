@@ -1316,6 +1316,24 @@ export type ContadorLogro =
 export interface TecnologiasFaccion {
   aparecidas: TecnologiaId[];
   adoptadas: TecnologiaId[];
+  /** Las que un Aeda le ha mostrado y aún no le han aparecido (Doc 6.4). Ausente = ninguna. */
+  reveladas?: TecnologiaId[];
+}
+
+/** Un Aeda itinerante (Doc 6.7): neutral, recorre los asentamientos por la red de caminos. */
+export interface AedaItinerante {
+  id: string;
+  posicion: Point;
+  /** La plaza en que está detenido: ahí revela y vende. Ausente en camino. */
+  enAsentamientoId?: string;
+  /** Hasta cuándo se queda en ella. */
+  hasta?: Instante;
+  /** Adónde va, con la ruta calculada al salir. Ausentes si está detenido o sin destino. */
+  destinoId?: string;
+  ruta?: Point[];
+  progreso: number;
+  /** Los últimos asentamientos que ha pisado (el más reciente al final): no los repite enseguida. */
+  recientes: string[];
 }
 
 /**

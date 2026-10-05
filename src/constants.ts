@@ -2432,6 +2432,29 @@ export const TARIFA_ADOPCION: Record<EraId, Partial<Record<RecursoTipo, number>>
   polis_imperios: { oro: 600, lingoteHierro: 30 },
 };
 
+/** Los Aedas (Doc 6.7). Todo PLACEHOLDER, sin calibrar. Minutos de mundo. */
+export const AEDAS = {
+  /** Retraso con que conocen una tecnología desde que alguien la desbloquea: la ventaja del primero (Doc 6.4, A1). */
+  retrasoConocimientoMinutos: 24 * 60,
+  itinerantes: {
+    /** Uno por cada tanto de Facciones vivas, con un mínimo (Doc 6.7, A2). */
+    faccionesPorAeda: 3,
+    minimo: 3,
+    /** Lo que se detienen en cada asentamiento antes de seguir. */
+    estanciaMinutos: 360,
+    /** Unidades por minuto sobre llano; el camino lo acelera (`COSTE_MOVIMIENTO.factorCamino`). */
+    velocidad: 20,
+    /** Últimos asentamientos que no repiten al elegir el siguiente: lo que los hace recorrer el mundo en vez de rebotar. */
+    memoriaVisitas: 4,
+  },
+  venta: {
+    /** El oro que cobran, por el oro de la tarifa de adopción de la Era de la tecnología (Doc 6.7, A3). */
+    factorOro: 2,
+    /** Hasta qué Era (`ERAS[..].orden`) venden; las demás, solo hito propio, comercio, conquista o épica. */
+    ordenEraMaximo: 3,
+  },
+} as const;
+
 /** Una condición del hito de la Facción (Doc 6.3). "Edificio" = activo en cualquier asentamiento de la Facción;
  * `nivelInterno` es un mínimo. */
 export type CondicionHito =

@@ -13,9 +13,9 @@ import type {
   ZonaInfluencia,
 } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { minutos, type Instante } from '../domain/tiempo';
+import { minutos, sumar as despues, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
-import { ERAS, TARIFA_ADOPCION, TECNOLOGIAS, TROPAS_RECLUTABLES, type CondicionHito } from '../constants';
+import { AEDAS, ERAS, TARIFA_ADOPCION, TECNOLOGIAS, TROPAS_RECLUTABLES, type CondicionHito } from '../constants';
 import { descontarRecursos, tieneRecursos } from './almacen';
 import { estaEnAsentamiento } from './ubicacion';
 import { nivelActualDe } from './asentamientoQuery';
@@ -283,7 +283,7 @@ export function avanzarTecnologia(estado: EstadoTecnologia, ctx: ContextoTecnolo
       const t = TECNOLOGIAS[id];
       if (t.deArranque || tecnologias.aparecidas.includes(id) || logros[id] === undefined || ERAS[t.era].orden > ordenEra) continue;
       if (!t.hito.every((c) => cumpleCondicion(c, faccion.id, tecnologias, propios, ctx))) continue;
-      tecnologias = { ...tecnologias, aparecidas: [...tecnologias.aparecidas, id] };
+      tecnologias = conAparecida(tecnologias, id);
       cambio = true;
       const primera = primeros[id] === undefined;
       if (primera) primeros[id] = { faccionId: faccion.id, en: ctx.instante };
@@ -298,6 +298,15 @@ export function avanzarTecnologia(estado: EstadoTecnologia, ctx: ContextoTecnolo
   }
 
   return { tecnologia: { era, eraDesde, contadores, logros, primeros, porFaccion }, eventos };
+}
+
+/** La tecnología pasa a aparecida (Doc 6.4): deja de estar solo revelada. */
+function conAparecida(tecnologias: TecnologiasFaccion, id: TecnologiaId): TecnologiasFaccion {
+  return {
+    ...tecnologias,
+    aparecidas: [...tecnologias.aparecidas, id],
+    ...(tecnologias.reveladas ? { reveladas: tecnologias.reveladas.filter((r) => r !== id) } : {}),
+  };
 }
 
 export class AdopcionInvalidaError extends ReglaInvalidaError {}
@@ -344,6 +353,128 @@ export function adoptarTecnologia(
         mensaje: `${faccion.nombre} adopta ${definicion.nombre}.`,
         payload: { faccionId: faccion.id, tecnologiaId: id, capitalId: capital.id } satisfies PayloadTecnologiaAdoptada,
         asentamientoId: capital.id,
+      },
+    ],
+  };
+}
+
+// --- Aedas (Doc 6.4, 6.7): lo que conocen, lo que revelan y lo que venden ---
+
+/**
+ * ¿La conocen los Aedas ya? Con el logro cumplido, la Era abierta y alguien que la desbloqueó hace más que el retraso
+ * (la ventaja del primero, Doc 6.4).
+ */
+function conocidaPorAedas(estado: EstadoTecnologia, id: TecnologiaId, instante: Instante): boolean {
+  const primero = estado.primeros[id];
+  return (
+    estado.logros[id] !== undefined &&
+    primero !== undefined &&
+    despues(primero.en, minutos(AEDAS.retrasoConocimientoMinutos)) <= instante &&
+    ERAS[TECNOLOGIAS[id].era].orden <= ERAS[estado.era].orden
+  );
+}
+
+function describirCondicion(c: CondicionHito): string {
+  switch (c.tipo) {
+    case 'edificio':
+      return `${c.edificio}${c.nivelInterno ? ` de nivel ${c.nivelInterno}` : ''} activo`;
+    case 'tecnologia':
+      return `${TECNOLOGIAS[c.id].nombre} adoptada`;
+    case 'recursoEnCapital':
+      return `${c.recurso} en el almacén de la capital`;
+    case 'capitalEnNivel':
+      return `capital en nivel ${c.nivel} con ${c.conEdificio} activo`;
+    case 'yacimientoEnTerritorio':
+      return `un yacimiento de ${c.recurso} en su territorio`;
+  }
+}
+
+/** Payload de `aedas.revela` (privado de la Facción). */
+export interface PayloadAedasRevela {
+  faccionId: string;
+  tecnologiaId: TecnologiaId;
+  descubridorFaccionId: string;
+  /** Lo que le falta del hito, en texto. */
+  faltan: string[];
+}
+
+/**
+ * Un Aeda detenido en una plaza revela a su Facción lo que conoce y ella no tiene aparecido ni revelado: qué es, quién
+ * la desbloqueó y qué le falta del hito (Doc 6.4). Se llama cada tick por cada Aeda parado, así que lo que pasa a
+ * conocerse durante su estancia se revela cuando el retraso se cumple.
+ */
+export function revelarTecnologias(
+  estado: EstadoTecnologia,
+  faccion: Faccion,
+  plazaId: string,
+  ctx: ContextoTecnologia
+): { tecnologia: EstadoTecnologia; eventos: EventoCrudo[] } {
+  const propios = ctx.asentamientos.filter((a) => a.faccionId === faccion.id);
+  let tecnologias = tecnologiasDe(estado, faccion.id);
+  const eventos: EventoCrudo[] = [];
+  const reveladas = [...(tecnologias.reveladas ?? [])];
+  for (const id of IDS_TECNOLOGIA) {
+    if (tecnologias.aparecidas.includes(id) || reveladas.includes(id) || !conocidaPorAedas(estado, id, ctx.instante)) continue;
+    const descubridor = estado.primeros[id]!.faccionId;
+    const faltan = TECNOLOGIAS[id].hito.filter((c) => !cumpleCondicion(c, faccion.id, tecnologias, propios, ctx)).map(describirCondicion);
+    reveladas.push(id);
+    eventos.push({
+      codigo: 'aedas.revela',
+      mensaje: `Un Aeda revela a ${faccion.nombre} ${TECNOLOGIAS[id].nombre}, que desbloqueó ${ctx.facciones.find((f) => f.id === descubridor)?.nombre ?? descubridor}${faltan.length > 0 ? `; le falta: ${faltan.join(', ')}` : ''}.`,
+      payload: { faccionId: faccion.id, tecnologiaId: id, descubridorFaccionId: descubridor, faltan } satisfies PayloadAedasRevela,
+      asentamientoId: plazaId,
+    });
+  }
+  if (eventos.length === 0) return { tecnologia: estado, eventos };
+  tecnologias = { ...tecnologias, reveladas };
+  return { tecnologia: { ...estado, porFaccion: { ...estado.porFaccion, [faccion.id]: tecnologias } }, eventos };
+}
+
+export class VentaInvalidaError extends ReglaInvalidaError {}
+
+/** Lo que cobra un Aeda por una tecnología: el oro de la tarifa de adopción de su Era, multiplicado (Doc 6.7). */
+export function precioDeVenta(id: TecnologiaId): number {
+  return (TARIFA_ADOPCION[TECNOLOGIAS[id].era].oro ?? 0) * AEDAS.venta.factorOro;
+}
+
+/** Payload de `aedas.venta` (privado de la Facción). */
+export interface PayloadAedasVenta {
+  faccionId: string;
+  tecnologiaId: TecnologiaId;
+  aedaId: string;
+  precio: number;
+}
+
+/**
+ * Compra de una tecnología a un Aeda detenido en `plaza` (Doc 6.7): se salta el hito de la Facción, nunca el logro del
+ * servidor. Tiene que conocerla el Aeda, ser de una Era que vendan y no estar ya aparecida; paga el almacén de la plaza.
+ * La tecnología pasa a aparecida —no a adoptada: la adopción se paga igual (Doc 6.5)—.
+ */
+export function venderTecnologia(
+  estado: EstadoTecnologia,
+  faccion: Faccion,
+  plaza: Asentamiento,
+  aedaId: string,
+  id: TecnologiaId,
+  instante: Instante
+): { tecnologia: EstadoTecnologia; plaza: Asentamiento; eventos: EventoCrudo[] } {
+  const definicion = TECNOLOGIAS[id];
+  if (!definicion) throw new VentaInvalidaError('Esa tecnología no existe.');
+  if (ERAS[definicion.era].orden > AEDAS.venta.ordenEraMaximo) throw new VentaInvalidaError(`Los Aedas no venden ${definicion.nombre}: es de una Era que solo llega por hito, comercio, conquista o épica.`);
+  if (!conocidaPorAedas(estado, id, instante)) throw new VentaInvalidaError(`El Aeda aún no conoce ${definicion.nombre}.`);
+  const tecnologias = tecnologiasDe(estado, faccion.id);
+  if (tecnologias.aparecidas.includes(id)) throw new VentaInvalidaError(`${definicion.nombre} ya le ha aparecido a la Facción.`);
+  const precio = precioDeVenta(id);
+  if (!tieneRecursos(plaza.almacen, { oro: precio })) throw new VentaInvalidaError(`El almacén de ${plaza.nombre ?? plaza.id} no tiene los ${precio} de oro que pide el Aeda.`);
+  return {
+    tecnologia: { ...estado, porFaccion: { ...estado.porFaccion, [faccion.id]: conAparecida(tecnologias, id) } },
+    plaza: { ...plaza, almacen: descontarRecursos(plaza.almacen, { oro: precio }) },
+    eventos: [
+      {
+        codigo: 'aedas.venta',
+        mensaje: `${faccion.nombre} compra ${definicion.nombre} a un Aeda por ${precio} de oro.`,
+        payload: { faccionId: faccion.id, tecnologiaId: id, aedaId, precio } satisfies PayloadAedasVenta,
+        asentamientoId: plaza.id,
       },
     ],
   };

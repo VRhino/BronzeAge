@@ -336,9 +336,9 @@ constante y el canon, y avisar a Conquest, que abre la instancia con esa capacid
 
 ## 42. Aedas: difusión y venta de tecnología, residentes y lore
 
-**Estado: diseño cerrado el 2026-10-05, `código: ✘`** (solo existe la narración de cambios de título,
-`engine/titulos.ts`, Doc 2.9). Reglas en el canon, Doc 6.1, 6.4 y 6.7; decisiones, modelo y pasos en
+**Estado: diseño cerrado el 2026-10-05; paso 1 hecho (itinerantes), pasos 2 y 3 `código: ✘`** (de la crónica solo existe
+la narración de cambios de título, `engine/titulos.ts`, Doc 2.9). Reglas en el canon, Doc 6.1, 6.4 y 6.7; decisiones, modelo y pasos en
 `Consideraciones/Aedas_Definicion.md`.
 
-Pasos pendientes (cada uno se fusiona por separado): **1.** itinerantes difusores + venta; **2.** residentes con épica;
-**3.** crónica y lore. Se borra esta entrada entera cuando se cierre el paso 3.
+Pasos pendientes (cada uno se fusiona por separado): ~~**1.** itinerantes difusores + venta~~ (hecho); **2.** residentes
+con épica; **3.** crónica y lore. Se borra esta entrada entera cuando se cierre el paso 3.

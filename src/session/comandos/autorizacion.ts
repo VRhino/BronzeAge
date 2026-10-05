@@ -377,6 +377,15 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       return faccion === undefined || esReyDe(faccion, heroeId);
     },
   },
+  // Comprar a un Aeda es del Rey o del Gobernador de la plaza, estando en ella (Doc 6.7). Que haya un Aeda y el oro lo comprueba el motor.
+  comprarTecnologiaAeda: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const plaza = buscarAsentamiento(estado, params.asentamientoId);
+      const faccion = plaza && buscarFaccion(estado, plaza.faccionId);
+      return !plaza || !faccion || ((esReyDe(faccion, heroeId) || tieneCargoLocal(plaza, 'gobernador', heroeId)) && presente(estado, heroeId, plaza.id));
+    },
+  },
   // Sin `cargo` en `params`, a diferencia de los de arriba: autoridad sobre la cola de construcción es del
   // Gobernador o del Maestro de Obras (`CargoConstructor`, ver `construccion.ts`).
   /** Enganchar o soltar el tren de suministros lo decide quien va en la columna, igual que replegarla. */

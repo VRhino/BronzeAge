@@ -17,6 +17,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | 36 | HÉROE | Ritmo, prudencias y margen de los bots; cerebro «sin plaza» | batch; antes, ración en minutos en el motor |
 | 39 | MILITAR | Escala de XP de escuadra: Unity vs. números | espera a CQ-001 (Conquest) |
 | 40 | MUNDO | Cifras de `MERCENARIOS` (placeholder) | batch |
+| 42 | TECNOLOGÍA | Cifras de `AEDAS` (retraso, nº de itinerantes, estancia, velocidad, precio de venta) | batch / playtest |
 | 8 | CARAVANAS | Visibilidad por tamaño: umbral y radio (`VISION.caravanaGrande`) | batch / playtest |
 
 ## 20. Tecnología por Eras: calibrar los logros
@@ -56,3 +57,9 @@ Las cifras de `MERCENARIOS` (`constants.ts`) son placeholder, sin calibrar con b
 Una comercial con **3 o más carros con animal** se ve a **300** de cualquier plaza o columna ajena, también en `preparando`
 (`VISION.caravanaGrande` en `src/constants.ts`, Doc 5.12.7, D88): placeholder. Medir si el umbral y el radio generan
 intercepciones sin que todas las caravanas sean visibles. Hecho el 2026-10-05.
+
+## 42. Aedas: cifras
+
+Las cifras de `AEDAS` (`constants.ts`) son placeholder, sin calibrar: retraso de conocimiento (24 h), itinerantes por Facción
+(1 por cada 3, mínimo 3), estancia (6 h), velocidad (20) y precio de venta (2 × el oro de la tarifa). Medir con batch cuánto
+adelantan las adopciones (Era I: nivel 2 a 5,8 días) y si la venta hace irrelevante el hito. Plan: `Consideraciones/Aedas_Definicion.md`.

@@ -73,7 +73,7 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import { TECNOLOGIAS, VISION } from '../../constants';
+import { TECNOLOGIAS, VISION, type CondicionHito } from '../../constants';
 import type { ContadorLogro, EraId, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
 import { esCaravanaGrande } from '../../engine/caravanas';
 import { tecnologiasDe } from '../../engine/tecnologia';
@@ -295,6 +295,16 @@ export interface TecnologiaJugador {
   logros: { contador: ContadorLogro; umbral: number; en: Instante }[];
   /** `null` sin Facción. */
   propias: TecnologiasFaccion | null;
+  /** Lo que un Aeda le ha revelado y aún no le ha aparecido (Doc 6.4): quién la desbloqueó y el hito completo, para ver qué le falta. */
+  reveladas: { tecnologiaId: TecnologiaId; descubridorFaccionId: string; hito: CondicionHito[] }[];
+}
+
+/** Un Aeda itinerante a la vista (Doc 6.7), redactado a posición y plaza: no se ve qué sabe. */
+export interface AedaAvistado {
+  id: string;
+  posicion: Point;
+  /** La plaza en que está detenido, y por tanto donde se le puede comprar. */
+  enAsentamientoId?: string;
 }
 
 /** Lo que un jugador sabe de la tecnología del mundo (Doc 6.3-6.4). */
@@ -303,7 +313,9 @@ function tecnologiaParaJugador(estado: GameSessionState, faccionId: string | nul
   const logros = (Object.entries(t.logros) as [TecnologiaId, Instante][])
     .map(([id, en]) => ({ contador: TECNOLOGIAS[id].logro!.contador, umbral: TECNOLOGIAS[id].logro!.umbral, en }))
     .sort((a, b) => a.en - b.en);
-  return { era: t.era, eraDesde: t.eraDesde, logros, propias: faccionId ? tecnologiasDe(t, faccionId) : null };
+  const propias = faccionId ? tecnologiasDe(t, faccionId) : null;
+  const reveladas = (propias?.reveladas ?? []).map((id) => ({ tecnologiaId: id, descubridorFaccionId: t.primeros[id]!.faccionId, hito: TECNOLOGIAS[id].hito }));
+  return { era: t.era, eraDesde: t.eraDesde, logros, propias, reveladas };
 }
 
 export interface ProyeccionJugador {
@@ -383,6 +395,8 @@ export interface ProyeccionJugador {
    * Van en un array aparte y no mezclados con `ejercitos` a propósito: la diferencia entre "lo veo entero"
    * y "solo lo avisto" es de tipo, no de un campo opcional que el cliente pueda olvidarse de mirar. */
   ejercitosAvistados: EjercitoAvistado[];
+  /** Los Aedas itinerantes que se ven ahora mismo (Doc 6.7): neutrales, no atacables. */
+  aedasAvistados: AedaAvistado[];
   /** Las batallas de Unity que se ven en el mapa y aquellas en las que combate el jugador (doc 02 §4.1). Las columnas y
    * caravanas que están en una no viajan en `ejercitosAvistados`/`caravanasAvistadas`: la batalla las sustituye
    * (Doc 5.15.1). */
@@ -852,6 +866,9 @@ export function proyectarParaJugador(
       participantes: participantesDe(e),
       heroeIds: e.participantes.map((p) => p.heroeId),
     })),
+    aedasAvistados: (estado.aedas ?? [])
+      .filter((a) => seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa))
+      .map((a) => ({ id: a.id, posicion: a.posicion, ...(a.enAsentamientoId ? { enAsentamientoId: a.enAsentamientoId } : {}) })),
     batallas,
     heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
     heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map((h) => heroePublico(h, instanteDeTick(estado.tick))),

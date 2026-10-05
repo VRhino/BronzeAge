@@ -41,11 +41,26 @@ la crónica publica un descubrimiento cuando el retraso ha pasado.
 
 Cada paso deja los tests en verde y se puede fusionar por separado.
 
-1. **Itinerantes difusores + venta.** Entidad, movimiento, revelación, compra, proyección al jugador, comando en el
-   contrato, tests y verificación por comando real.
+1. **Itinerantes difusores + venta.** — **Hecho (2026-10-05).** Ver 3.1.
 2. **Residentes con épica.** Cupo, llegada, marcha por falta de nobleza, reputación, épicas por capítulos con eventos
    inspiradores no farmeables, efectos de felicidad y nobleza.
 3. **Crónica y lore.** Registro persistente, consulta, eventos en el juego, vista en el cliente.
+
+### 3.1 Paso 1, tal como quedó
+
+- `engine/aedas.ts` (movimiento, sin RNG) y, en `engine/tecnologia.ts`, `revelarTecnologias`, `venderTecnologia` y
+  `conocidaPorAedas`. `AedaItinerante` y `TecnologiasFaccion.reveladas?` en `domain/types.ts`. `AEDAS` en `constants.ts`.
+- `GameSessionState.aedas?` y `EstadoSimulacion.aedas?` **opcionales**: los crea el tick y no hace falta subir
+  `FORMATO_SNAPSHOT_VERSION` (el riesgo de checkpoints del §4 no se materializa en este paso).
+- Comando `comprarTecnologiaAeda { asentamientoId, tecnologiaId }` (Rey o Gobernador de la plaza, presente; código de error
+  `aedas.venta_invalida`). Eventos `aedas.revela` y `aedas.venta`, atribuidos a la plaza: solo los ve su Facción.
+- Proyección del jugador: `aedasAvistados` (posición y plaza, con la regla de avistamiento de los ejércitos) y
+  `tecnologia.reveladas` (quién la desbloqueó y el **hito completo**; los requisitos que faltan, ya filtrados, solo van en
+  el mensaje del evento de revelación porque la proyección no tiene el mapa para evaluarlos).
+- Puerta: el Aeda solo respeta un cierre **explícito** a neutrales (`puertaCerradaA` presente): el cierre por defecto
+  dejaría fuera a todos los asentamientos ajenos.
+- Fuera del contrato v1: `ProyeccionJugador` no está en él y los Aedas no llegan a Conquest.
+- Sin hacer: cliente de administración y NPC de bots (no compran).
 
 ## 4. Riesgos
 

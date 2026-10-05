@@ -161,11 +161,13 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
 
 - **Cuántos**: uno por cada 3 Facciones vivas, con un mínimo de 3 (`AEDAS.itinerantes`, placeholder).
 - **Cómo se mueven**: recorren los asentamientos por la **red de caminos** (el grafo de navegación, Doc 1.6): sobre
-  camino van más rápido. Eligen el siguiente asentamiento entre los que no les cierran la puerta (el exilio, Doc 2.8,
-  los deja fuera) y se detienen unas horas en cada uno (`AEDAS.estanciaHoras`) antes de seguir.
+  camino van más rápido. Eligen el asentamiento más cercano que no han pisado hace poco y se detienen unas horas en
+  cada uno (`AEDAS.itinerantes.estanciaMinutos`) antes de seguir. Una plaza que **le ha cerrado la puerta a los
+  neutrales a propósito** (el exilio, Doc 2.8) los deja fuera; el cierre por defecto no cuenta.
 - **Se ven** como cualquier columna ajena, solo dentro del radio de visión de la Facción (Doc 5.12.7); no son
   atacables ni retenibles.
-- **Difunden** (6.4): al llegar a un asentamiento le revelan lo que conocen y la Facción aún no tiene aparecida.
+- **Difunden** (6.4): mientras están detenidos en un asentamiento le revelan a su Facción lo que conocen y aún no tiene
+  aparecido; lo que pasa a conocerse durante su estancia se revela en cuanto el retraso se cumple.
 - **Venden**: mientras están en un asentamiento, el Rey o el Gobernador de esa plaza puede comprarles una tecnología
   que conocen, de las **Eras I-III**, con el **logro del servidor ya cumplido** y la Era ya abierta. Cuesta **2 × el oro
   de la tarifa de adopción de su Era** (6.5; 200 / 600 / 1.200), que sale del almacén de esa plaza. La Facción se salta el
