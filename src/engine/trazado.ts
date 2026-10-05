@@ -1259,7 +1259,7 @@ export interface TrazadoMuralla {
  * que permite que el servidor la sirva ya resuelta sin que el cliente necesite `engine/trazado` para nada.
  * `cliente/` sigue con su propia copia hasta que se reescriba sin `@motor/*`, fuera de alcance de este hito).
  */
-export function trazadoParaAsentamiento(asentamiento: Asentamiento): TrazadoAsentamiento {
+export function trazadoParaAsentamiento(asentamiento: Pick<Asentamiento, 'id' | 'edificios' | 'recintos'>): TrazadoAsentamiento {
   const { calles, caminos } = rectangulosDeRed(redDeCalles(asentamiento.id, asentamiento.edificios, asentamiento.recintos ?? []));
   const huellas: TrazadoAsentamiento['huellas'] = {};
   for (const edificio of edificiosInternos(asentamiento.edificios)) {

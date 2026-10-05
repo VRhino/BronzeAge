@@ -1,7 +1,7 @@
 // Campamentos de mercenarios, paso 2 (Doc 2.5, 2026-10-02): residir en uno, no quedar huérfano, y el almacén personal.
 import { describe, expect, it } from 'vitest';
 import type { CampamentoMercenarios } from '../../domain/types';
-import { CIUDADANIA, SIMULACION } from '../../constants';
+import { CIUDADANIA, MERCENARIOS, SIMULACION } from '../../constants';
 import { GameSession } from '../gameSession';
 import { cambiarResidencia, dejarResidencia, residirEnCampamento } from '../comandos/cargos';
 import { guardarEnAlmacenPersonal, sacarDelAlmacenPersonal } from '../comandos/heroe';
@@ -19,7 +19,7 @@ const campamentoEn = (id: string, x: number, y: number): CampamentoMercenarios =
     id,
     posicion: { x, y },
     origen: 0,
-    edificios: ['taberna', 'vivienda', 'vivienda', 'mercado', 'barracon'],
+    edificios: [...MERCENARIOS.edificiosFijos, 'barracon'],
     residentesIds: [],
     poblacion: 100,
     poblacionEn: 0,

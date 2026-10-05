@@ -502,21 +502,21 @@ Alijo                      alijo de exploración (2026-10-04, D60-D63); en el es
 CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en el estado, `campamentosMercenarios[]`
   id
   posicion: Point
-  origen: number          variante de aspecto, 0..2: solo cambia cómo se ve
-  edificios[]             'taberna' | 'vivienda' | 'mercado' | 'barracon' | 'galeriaDeTiro' | 'caballerizas' — layout fijo
+  origen: number          variante de aspecto, 0..2: solo cambia cómo se ve (la planta sale del `id`)
+  edificios[]             'taberna' | 'vivienda' ×10 | 'mercado' | uno militar ('barracon' | 'galeriaDeTiro' | 'caballerizas')
   residentesIds[]         heroeId: héroes que residen aquí, de cualquier Facción y sin límite; sin guarnición ni cargos
   eligieronComoInicial    cuántos héroes nacieron aquí (2026-10-04): solo crece; con residentesIds, el contador doble de la elección
   bandidosEn?: Instante   desde cuándo puede aparecer el siguiente bandido de su anillo (2026-10-04, D28)
   mercado: Record<bien, number>   stock en venta (solo vende, Doc 3.3b); se repone con `GameSessionState.mercadoMercenario`
   fondos: Record<heroeId, Record<recurso, number>>   lo que cada héroe ha aportado al fondo de refundación de su Facción
                          (Doc 1.9b); voluntario y retirable
-  poblacion, poblacionEn  reclutas disponibles en ese instante; la cantidad de ahora se calcula (tope = viviendas × 50,
+  poblacion, poblacionEn  reclutas disponibles en ese instante; la cantidad de ahora se calcula (tope = viviendas × 10,
                          recupera 10/h): no se escribe cada tick
   creadoEn: Instante
                         No es de ninguna Facción ni tiene zona. En la proyección del jugador viaja solo si la Facción
                         ha explorado el sitio (como un camino). Fuera del contrato v1 a propósito
                         (2026-10-05): el contrato solo lleva héroes y batallas, y en un campamento no hay combate (protección de 60, D78).
-                        La estructura interna (grid de edificios y empalizada) la calcula `engine/layoutCampamento.ts` a partir de `origen` y `edificios`, en las convenciones de `SettlementBattleSnapshot`. La entidad y su layout entrarán cuando Conquest haga caminable la vista de
+                        La estructura interna (edificios, calles y empalizada) la calcula `engine/layoutCampamento.ts` a partir de `id` y `edificios` reutilizando el trazado de asentamientos, en las convenciones de `SettlementBattleSnapshot`; `origen` solo es el aspecto de los modelos. La entidad y su layout entrarán cuando Conquest haga caminable la vista de
                         campamento (D73); `almacenPersonal` ya viaja en `HeroeDto`.
 ```
 

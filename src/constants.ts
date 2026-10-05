@@ -1945,41 +1945,21 @@ export const MERCENARIOS = {
   /** Variantes de aspecto, elegidas al nacer: no cambian nada de lo que hace. */
   origenes: 3,
   /** Siempre los tiene; el militar se elige al azar entre `edificiosMilitares`. */
-  edificiosFijos: ['taberna', 'vivienda', 'vivienda', 'mercado'] as readonly EdificioCampamentoTipo[],
+  edificiosFijos: ['taberna', ...Array<EdificioCampamentoTipo>(10).fill('vivienda'), 'mercado'] as readonly EdificioCampamentoTipo[],
   edificiosMilitares: ['barracon', 'galeriaDeTiro', 'caballerizas'] as readonly EdificioCampamentoTipo[],
   /**
-   * Estructura interna (Doc 1.9b): un grid abierto con empalizada decorativa, en celdas de `REJILLA_ASENTAMIENTO.tamanoCelda`, origen en
-   * el centro, `y` hacia abajo. Lo que sigue es PLACEHOLDER de presentación: ninguna cifra cambia lo que hace el campamento.
-   * - `huellas`: ancho x alto en celdas de cada edificio.
-   * - `disposiciones`: una por variante de aspecto (`origen`); cada hueco da la celda de la esquina superior izquierda. Los viviendas
-   *   usan `vivienda0` y `vivienda1` en el orden de `edificios`; el militar ocupa `militar` sea cual sea su tipo.
-   * - `interior`: celdas libres dentro de la empalizada; ésta las rodea con una puerta de dos celdas en el centro del lado sur.
+   * Estructura interna (Doc 1.9b): el motor de trazado de asentamientos (`engine/trazado.ts`) pone los edificios y las calles una sola vez, con la
+   * taberna como ancla principal, y una empalizada lo rodea. Es solo presentación: ninguna cifra cambia lo que hace el campamento. PLACEHOLDER.
+   * - `radioLocal`: el radio urbano que se le da al trazado (unidades locales), como `radioPotencial` en un asentamiento.
+   * - `nivelMercado`: de qué nivel son los puestos que acompañan al mercado (`MERCADO_PUESTOS_POR_NIVEL`); el campamento no sube de nivel.
    */
-  layout: {
-    huellas: {
-      taberna: { ancho: 4, alto: 3 },
-      vivienda: { ancho: 2, alto: 2 },
-      mercado: { ancho: 4, alto: 2 },
-      barracon: { ancho: 4, alto: 3 },
-      galeriaDeTiro: { ancho: 5, alto: 2 },
-      caballerizas: { ancho: 4, alto: 3 },
-    } as Record<EdificioCampamentoTipo, { ancho: number; alto: number }>,
-    interior: { colMin: -8, colMax: 7, rowMin: -7, rowMax: 6 },
-    disposiciones: [
-      // 0: la taberna al norte, el mercado y las viviendas en fila, el militar al sur del centro.
-      { taberna: [-2, -6], mercado: [-7, -2], vivienda0: [3, -2], vivienda1: [5, -2], militar: [-2, 1] },
-      // 1: el mercado y la taberna a un lado de la calle, las viviendas al otro, el militar a la derecha.
-      { taberna: [-7, -5], mercado: [3, -5], vivienda0: [-7, 0], vivienda1: [-5, 0], militar: [2, 0] },
-      // 2: el militar al norte, taberna y mercado a los lados, las viviendas junto a la puerta.
-      { taberna: [-7, -1], mercado: [3, -1], vivienda0: [-6, 3], vivienda1: [-3, 3], militar: [-2, -6] },
-    ] as Record<'taberna' | 'mercado' | 'vivienda0' | 'vivienda1' | 'militar', [number, number]>[],
-  },
+  layout: { radioLocal: 60, nivelMercado: 1 },
   /** Preferencia por un bosque: si hay uno a menos de esto del punto, el campamento se pega a su borde. */
   margenBosque: 100,
   pegadoAlBorde: 10,
   // --- Reclutamiento (paso 3) ---
-  /** Reclutas que da cada vivienda: el tope es viviendas × esto, así que añadir viviendas al layout lo sube solo. */
-  poblacionPorVivienda: 50,
+  /** Reclutas que da cada vivienda: el tope es viviendas × esto (diez viviendas × 10 = 100, lo mismo que cuando eran dos de 50). */
+  poblacionPorVivienda: 10,
   /** Reclutas que recupera por hora de mundo, hasta el tope. */
   poblacionPorHora: 10,
   /** Reclutar aquí cuesta esto veces el precio base (más caro que en casa: no sustituye a las plazas). */

@@ -18,7 +18,7 @@ const campamento = (extra: Partial<CampamentoMercenarios> = {}): CampamentoMerce
     id: 'merc-1',
     posicion: { x: 500, y: 500 },
     origen: 0,
-    edificios: ['taberna', 'vivienda', 'vivienda', 'mercado', 'barracon'],
+    edificios: [...MERCENARIOS.edificiosFijos, 'barracon'],
     residentesIds: ['h1'],
     poblacion: 100,
     poblacionEn: T0,
@@ -53,7 +53,7 @@ function recluta(opciones: Partial<{ campamentos: CampamentoMercenarios[]; heroe
 describe('población del campamento', () => {
   it('el tope son sus viviendas por lo que da cada una, y recupera por hora hasta ese tope', () => {
     const c = campamento({ poblacion: 20 });
-    expect(topePoblacion(c)).toBe(2 * MERCENARIOS.poblacionPorVivienda);
+    expect(topePoblacion(c)).toBe(10 * MERCENARIOS.poblacionPorVivienda);
     expect(poblacionActual(c, T0)).toBe(20);
     expect(poblacionActual(c, (T0 + minutos(60) * 3) as typeof T0)).toBe(20 + 3 * MERCENARIOS.poblacionPorHora);
     expect(poblacionActual(c, (T0 + minutos(60) * 1000) as typeof T0), 'no pasa del tope').toBe(topePoblacion(c));

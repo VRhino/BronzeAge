@@ -1,6 +1,6 @@
-import type { Asentamiento, BiomaTipo, CampamentoBandido, CampamentoMercenarios, Caravana, EdificioCampamentoTipo, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { Asentamiento, BiomaTipo, CampamentoBandido, CampamentoMercenarios, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
 import { MERCENARIOS } from '@motor/constants';
-import type { LayoutCampamento } from '@motor/engine/layoutCampamento';
+import type { ElementoCampamentoTipo, LayoutCampamento } from '@motor/engine/layoutCampamento';
 import type { TramoDeRed } from '@motor/engine/redCaminos';
 import type { Mapa } from '@motor/world/mapa';
 
@@ -857,29 +857,35 @@ export function drawAsentamiento(ctx: CanvasRenderingContext2D, canvas: HTMLCanv
 
 // --- Vista de un campamento de mercenarios (Doc 1.9b) ---
 //
-// Mismo espacio plano local que la Vista de Asentamiento. El layout lo calcula el motor (`engine/layoutCampamento.ts`); aquí solo se pinta.
+// Mismo espacio plano local que la Vista de Asentamiento. El trazado (edificios, calles, empalizada) lo calcula el motor
+// (`engine/layoutCampamento.ts`, que reutiliza el de asentamientos); aquí solo se pinta, ajustando el zoom al campamento.
 
 export interface DrawCampamentoState {
   campamento: CampamentoMercenarios;
   layout: LayoutCampamento;
 }
 
-const COLOR_EDIFICIO_CAMPAMENTO: Record<EdificioCampamentoTipo, string> = {
+const COLOR_ELEMENTO_CAMPAMENTO: Record<ElementoCampamentoTipo, string> = {
   taberna: '#a0672d',
   vivienda: '#c9b27c',
   mercado: '#d6a437',
+  puestoMercado: '#e0c070',
   barracon: '#7a2f2f',
   galeriaDeTiro: '#566b3a',
   caballerizas: '#6b5638',
+  plazaDeArmas: '#9a8f78',
+  plaza: '#b9ae94',
+  pozo: '#7d8f9a',
+  parque: '#8fb070',
 };
 
-const NOMBRE_EDIFICIO_CAMPAMENTO: Record<EdificioCampamentoTipo, string> = {
+const NOMBRE_ELEMENTO_CAMPAMENTO: Partial<Record<ElementoCampamentoTipo, string>> = {
   taberna: 'Taberna',
-  vivienda: 'Vivienda',
   mercado: 'Mercado',
   barracon: 'Barracón',
   galeriaDeTiro: 'Galería de tiro',
   caballerizas: 'Caballerizas',
+  plazaDeArmas: 'Plaza de armas',
 };
 
 export function drawCampamento(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawCampamentoState): void {
@@ -888,49 +894,50 @@ export function drawCampamento(ctx: CanvasRenderingContext2D, canvas: HTMLCanvas
   ctx.fillStyle = BIOMA_TIERRA_PLANA;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // El campamento es pequeño: el lienzo enseña ~11 celdas a cada lado del centro, no el espacio entero de un asentamiento.
-  const celda = (canvas.width * 0.92) / 22;
-  const cx = canvas.width / 2;
-  const cy = canvas.height / 2;
+  // Zoom al campamento: la empalizada ocupa el 80 % del lado menor del lienzo, centrada en su caja.
+  const rects = [...layout.empalizada.muro, ...layout.empalizada.puerta];
+  const x0 = Math.min(...rects.map((r) => r.x));
+  const x1 = Math.max(...rects.map((r) => r.x + r.ancho));
+  const y0 = Math.min(...rects.map((r) => r.y));
+  const y1 = Math.max(...rects.map((r) => r.y + r.alto));
+  const escala = (Math.min(canvas.width, canvas.height) * 0.8) / Math.max(x1 - x0, y1 - y0);
+  const aPantalla = (r: { x: number; y: number; ancho: number; alto: number }) => ({
+    x: canvas.width / 2 + (r.x - (x0 + x1) / 2) * escala,
+    y: canvas.height / 2 + (r.y - (y0 + y1) / 2) * escala,
+    ancho: r.ancho * escala,
+    alto: r.alto * escala,
+  });
+  const rellenar = (r: { x: number; y: number; ancho: number; alto: number }, color: string) => {
+    const p = aPantalla(r);
+    ctx.fillStyle = color;
+    ctx.fillRect(p.x, p.y, p.ancho, p.alto);
+    return p;
+  };
 
-  ctx.strokeStyle = 'rgba(27, 26, 23, 0.08)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let i = -Math.ceil(cx / celda); i <= Math.ceil(cx / celda); i++) {
-    ctx.moveTo(cx + i * celda, 0);
-    ctx.lineTo(cx + i * celda, canvas.height);
-  }
-  for (let j = -Math.ceil(cy / celda); j <= Math.ceil(cy / celda); j++) {
-    ctx.moveTo(0, cy + j * celda);
-    ctx.lineTo(canvas.width, cy + j * celda);
-  }
-  ctx.stroke();
-
-  for (const c of layout.empalizada) {
-    ctx.fillStyle = c.clase === 'puerta' ? '#e8dcb8' : '#6b4a2a';
-    ctx.fillRect(cx + c.col * celda, cy + c.row * celda, celda, celda);
-  }
+  for (const c of layout.calles) rellenar(c, 'rgba(120, 92, 58, 0.60)');
+  for (const m of layout.empalizada.muro) rellenar(m, '#6b4a2a');
+  for (const m of layout.empalizada.puerta) rellenar(m, '#e8dcb8');
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '11px system-ui, sans-serif';
-  for (const e of layout.edificios) {
-    const x = cx + e.col * celda;
-    const y = cy + e.row * celda;
-    ctx.fillStyle = COLOR_EDIFICIO_CAMPAMENTO[e.tipo];
-    ctx.fillRect(x, y, e.ancho * celda, e.alto * celda);
+  for (const e of layout.elementos) {
+    const p = rellenar(e.huella, COLOR_ELEMENTO_CAMPAMENTO[e.tipo]);
     ctx.strokeStyle = '#1b1a17';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x, y, e.ancho * celda, e.alto * celda);
-    ctx.fillStyle = '#fff';
-    ctx.fillText(NOMBRE_EDIFICIO_CAMPAMENTO[e.tipo], x + (e.ancho * celda) / 2, y + (e.alto * celda) / 2, e.ancho * celda - 4);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(p.x, p.y, p.ancho, p.alto);
+    const nombre = NOMBRE_ELEMENTO_CAMPAMENTO[e.tipo];
+    if (nombre) {
+      ctx.fillStyle = '#fff';
+      ctx.fillText(nombre, p.x + p.ancho / 2, p.y + p.alto / 2, p.ancho - 2);
+    }
   }
 
   ctx.fillStyle = '#1b1a17';
   ctx.font = 'bold 15px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(`Campamento ${campamento.id} · variante ${campamento.origen}`, 12, canvas.height - 24);
+  ctx.fillText(`Campamento ${campamento.id}`, 12, canvas.height - 24);
   ctx.font = '11px system-ui, sans-serif';
   ctx.fillStyle = '#4a4436';
   ctx.fillText('Vista de campamento de mercenarios · empalizada decorativa, sin combate dentro', 12, canvas.height - 8);
