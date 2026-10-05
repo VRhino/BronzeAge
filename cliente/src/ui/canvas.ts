@@ -1,4 +1,5 @@
-import type { Asentamiento, BiomaTipo, CampamentoBandido, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { Asentamiento, BiomaTipo, CampamentoBandido, CampamentoMercenarios, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import { MERCENARIOS } from '@motor/constants';
 import type { TramoDeRed } from '@motor/engine/redCaminos';
 import type { Mapa } from '@motor/world/mapa';
 
@@ -334,6 +335,8 @@ export interface DrawState {
   caminos: TramoDeRed[];
   /** Campamentos de bandidos (Doc 1.9) — estado de partida, se dibujan en vivo igual que las caravanas. */
   campamentosBandidos: CampamentoBandido[];
+  /** Campamentos de mercenarios (Doc 1.9b): enclaves neutrales, estado de partida. */
+  campamentosMercenarios: CampamentoMercenarios[];
   /** Ejércitos en campaña (Doc 5.12) — estado de partida, en vivo como las caravanas. */
   ejercitos: Ejercito[];
 }
@@ -660,6 +663,22 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.strokeStyle = '#1b1a17';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+  }
+
+  // Campamentos de mercenarios (Doc 1.9b): cuadrado azul con el anillo de protección (no se inicia combate dentro, D78), neutral.
+  for (const campamento of state.campamentosMercenarios) {
+    const x = campamento.posicion.x * scale;
+    const y = campamento.posicion.y * scale;
+    ctx.beginPath();
+    ctx.arc(x, y, MERCENARIOS.radioProteccion * scale, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(46, 94, 140, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#2e5e8c';
+    ctx.fillRect(x - 5, y - 5, 10, 10);
+    ctx.strokeStyle = '#1b1a17';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - 5, y - 5, 10, 10);
   }
 }
 

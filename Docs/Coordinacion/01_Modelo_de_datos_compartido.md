@@ -514,8 +514,10 @@ CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en e
                          recupera 10/h): no se escribe cada tick
   creadoEn: Instante
                         No es de ninguna Facción ni tiene zona. En la proyección del jugador viaja solo si la Facción
-                        ha explorado el sitio (como un camino). Conquest: entidad y escena con las 3 variantes de
-                        layout — pendiente de contrato en `src/contratos/v1/`.
+                        ha explorado el sitio (como un camino). Fuera del contrato v1 a propósito
+                        (2026-10-05): el contrato solo lleva héroes y batallas, y en un campamento no hay combate (protección de 60, D78).
+                        La entidad y la escena con las 3 variantes de layout entrarán cuando Conquest haga caminable la vista de
+                        campamento (D73); `almacenPersonal` ya viaja en `HeroeDto`.
 ```
 
 ## 11. Mundo / worldgen

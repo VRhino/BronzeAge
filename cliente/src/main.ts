@@ -1785,6 +1785,7 @@ function renderLeyenda(state: GameState): void {
       <div class="legend-row"><span class="swatch-rhombus" style="background:#c9a35a"></span>Ejército / columna (un rombo por participante; color = Facción, dorado = sin Facción aún)</div>
       <div class="legend-row"><span class="swatch-triangle"></span>Caravana en tránsito (color = Facción de origen)</div>
       <div class="legend-row"><span class="swatch-poly" style="background:#8b1a1a"></span>Campamento de bandidos</div>
+      <div class="legend-row"><span class="swatch-square" style="background:#2e5e8c"></span>Campamento de mercenarios (círculo = protección, sin combate)</div>
     </div>
   `;
 
@@ -1955,6 +1956,7 @@ function render(): void {
       caravanas: state.caravanas,
       caminos: tramosDeRed(state.red ?? RED_VACIA),
       campamentosBandidos: state.campamentosBandidos,
+      campamentosMercenarios: state.campamentosMercenarios ?? [],
       ejercitos: state.ejercitos,
     };
     draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
