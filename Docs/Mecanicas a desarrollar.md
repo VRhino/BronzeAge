@@ -17,7 +17,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
 | 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
 | 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
-| 18 | INTEL | Taberna + intel como asset con revelado temporal | ✘ nada |
 | 19 | POLÍTICA | El mapa político como entidad | ✘ nada |
 | 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
 | 21 | POLÍTICA | Los 4 gremios escasos a nivel de servidor | ✘ nada |
@@ -106,20 +105,6 @@ Falta decidir qué hace subir el liderazgo (combatir, ganar, tiempo al mando, ca
 Los **escuadrones** progresan por nivel y experiencia (Doc 5.16.3), sin cambiar nunca de tropa (Doc 5.8); el
 motor aún usa veteranía (§31). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
 fuente.
-
-## 18. Taberna + intel como asset
-
-**Estado: idea, sin diseñar (`Consideraciones/Taberna_Intel_Definicion.md`, aún vacío).** Con la niebla de
-guerra ya en el juego, saber qué pasa en otro sitio gana valor — y ese valor es el **sink recurrente de oro**
-que la calibración de la economía del oro asume que va a llegar
-(`Economia_Del_Oro_Definicion.md`, "Fuera de este plan").
-
-La idea del usuario: un edificio nuevo, la **taberna**, donde se compra **intel** o **mapas** — información
-con **revelado temporal**: qué está pasando en otro sitio durante un tiempo limitado, o la situación actual
-de una Facción. No solo lo visual del mapa: también información interna de asentamientos. El **layout de un
-asentamiento** se puede comprar como asset, para preparar asedios a futuro.
-
-*Estado en código:* la taberna existe solo como edificio del campamento de mercenarios (ancla de su trazado, Doc 1.9b), sin función. No hay concepto de "intel como asset".
 
 ## 19. El mapa político como entidad
 

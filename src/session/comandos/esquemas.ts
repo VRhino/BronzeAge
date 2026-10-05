@@ -67,6 +67,8 @@ const OBJETIVO_EJERCITO = {
     { type: 'object', properties: { tipo: { type: 'string', enum: ['punto'] }, punto: PUNTO }, required: ['tipo', 'punto'], additionalProperties: false },
   ],
 } as const;
+// Dónde se compra intel (Doc 5.12.10): la taberna de una plaza o la de un campamento de mercenarios.
+const ORIGEN_DE_INTEL = objeto({ tipo: { type: 'string', enum: ['asentamiento', 'campamento'] }, id: IDENTIFICADOR }, ['tipo', 'id']);
 const CARGO_FACCION = { type: 'string', enum: CARGOS_TIPO } as const;
 const TECNOLOGIA = { type: 'string', enum: Object.keys(TECNOLOGIAS) } as const;
 const CARGO_CONSTRUCTOR = { type: 'string', enum: CARGOS_CONSTRUCTOR } as const;
@@ -232,6 +234,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   adoptarTecnologia: objeto({ faccionId: IDENTIFICADOR, tecnologiaId: TECNOLOGIA }, ['faccionId', 'tecnologiaId']),
   empezarEpica: objeto({ asentamientoId: IDENTIFICADOR, aedaId: IDENTIFICADOR, tecnologiaId: TECNOLOGIA }, ['asentamientoId', 'aedaId', 'tecnologiaId']),
   abandonarEpica: objeto({ asentamientoId: IDENTIFICADOR, aedaId: IDENTIFICADOR }, ['asentamientoId', 'aedaId']),
+  comprarMirada: objeto({ origen: ORIGEN_DE_INTEL, centro: PUNTO }, ['origen', 'centro']),
+  comprarInformePlaza: objeto({ origen: ORIGEN_DE_INTEL, asentamientoId: IDENTIFICADOR }, ['origen', 'asentamientoId']),
   comprarTecnologiaAeda: objeto({ asentamientoId: IDENTIFICADOR, tecnologiaId: TECNOLOGIA }, ['asentamientoId', 'tecnologiaId']),
   mejorarRecinto: objeto(
     { asentamientoId: IDENTIFICADOR, cargo: CARGO_CONSTRUCTOR, recintoId: IDENTIFICADOR },

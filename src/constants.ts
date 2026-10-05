@@ -271,6 +271,8 @@ export interface NivelEdificioTransformacion {
    * este nivel — ver `cupoCaravanas`, engine/asentamientoQuery.ts. Mercado no fabrica nada (recetas: []),
    * así que este campo reemplaza al de producción como "qué desbloquea" cada nivel para ese edificio. */
   cupoCaravanas?: number;
+  /** Solo Taberna (Doc 5.12.10): cuántas Miradas activas a la vez admite este nivel, contando las de esa taberna. */
+  cupoMiradas?: number;
   /** Solo Granja (trazado urbano dinámico, a petición del usuario): rinde trigo en vez de ejecutar recetas
    * (recetas: []), así que su producción escala por nivel aquí — ver `produccionTrigoDeGranja`. */
   produccionBaseTrigo?: number;
@@ -683,6 +685,34 @@ export const EDIFICIO_CATALOGO = {
     requisitoNivelAsentamientoConstruccion: 3,
   },
 
+  // Taberna (Doc 4.2.1, 5.12.10): vende información sobre la niebla —Miradas e Informes de plaza—. Adición MANUAL de Gobernador/Maestro
+  // de Obras, única por asentamiento y sin tecnología: queda dentro de las Eras I-III. Sin recetas: su nivel interno solo sube el cupo
+  // de Miradas simultáneas (`cupoMiradas`). PLACEHOLDER de costes.
+  taberna: {
+    costo: { madera: 150, piedra: 60 },
+    tiempoConstruccionMinutos: 360,
+    requisitoNivelAsentamientoConstruccion: 2,
+    niveles: {
+      1: { trabajadoresRequeridos: 0, recetas: [], cupoMiradas: 1 },
+      2: {
+        requisitoNivelAsentamiento: 2,
+        costoMejora: { madera: 250, piedra: 120 },
+        obraMinutos: 720,
+        trabajadoresRequeridos: 0,
+        recetas: [],
+        cupoMiradas: 2,
+      },
+      3: {
+        requisitoNivelAsentamiento: 3,
+        costoMejora: { madera: 500, piedra: 250 },
+        obraMinutos: 1_440,
+        trabajadoresRequeridos: 0,
+        recetas: [],
+        cupoMiradas: 3,
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
+
   // Único tier — desbloquea la aparición de Nobleza (además del mínimo de ciudadanos ya existente, ver
   // engine/population.ts). requisitoNivelAsentamientoConstruccion gatea la construcción BASE (no hay mejoras).
   // Gate subido de nivel 3 a nivel 4 (Doc Fase_0_6): construirlo pasa a ser requisito para subir a nivel 5.
@@ -1052,6 +1082,7 @@ export const EDIFICIO_TAMANO: Record<string, { ancho: number; alto: number }> = 
   // Eras I-III (Doc 4.2.1): tipos nuevos, no cambian ninguna huella existente.
   caballerizas: { ancho: 3, alto: 2 },
   salaConsejo: { ancho: 3, alto: 3 },
+  taberna: { ancho: 2, alto: 2 },
   mercado: { ancho: 3, alto: 2 },
   palacio: { ancho: 4, alto: 4 },
   corral: { ancho: 4, alto: 3 },
@@ -2431,6 +2462,27 @@ export const TARIFA_ADOPCION: Record<EraId, Partial<Record<RecursoTipo, number>>
   crisis_adaptacion: { oro: 300, lingoteBronce: 30 },
   polis_imperios: { oro: 600, lingoteHierro: 30 },
 };
+
+/**
+ * La intel de las tabernas (Doc 5.12.10): información pagada sobre la niebla, en oro y con fecha de caducidad. Todo PLACEHOLDER,
+ * sin calibrar (`Docs/Mecanicas a balancear.md`). Minutos de mundo.
+ */
+export const INTEL = {
+  /** Mirada: un ojo prestado sobre un punto cualquiera del mapa. El radio es el de una columna (`VISION`). */
+  mirada: {
+    radio: 150,
+    duracionMinutos: 120,
+    /** Precio = base + `oroPorUnidad` por unidad de distancia a los ojos propios más cercanos (plazas, columnas y la taberna donde se compra). */
+    oroBase: 40,
+    oroPorUnidad: 0.1,
+    /** Tras caducar, esa zona no se puede volver a mirar hasta pasado esto. */
+    cooldownMinutos: 120,
+  },
+  /** Informe de plaza: oro por nivel de la plaza mirada, y cada cuánto se puede pedir de la misma. */
+  informe: { oroPorNivel: 60, cooldownMinutos: 360 },
+  /** Las tabernas de los campamentos de mercenarios no suben de nivel: cupo fijo por Facción y campamento. */
+  campamento: { cupoMiradas: 1 },
+} as const;
 
 /** Los Aedas (Doc 6.7). Todo PLACEHOLDER, sin calibrar. Minutos de mundo. */
 export const AEDAS = {

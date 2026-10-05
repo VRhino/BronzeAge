@@ -13,6 +13,7 @@ import type {
   CampamentoBandido,
   CampamentoMercenarios,
   MercadoMercenario,
+  MiradaIntel,
   Caravana,
   Faccion,
   OrdenMercado,
@@ -150,6 +151,8 @@ export interface GameSessionState {
   aedas?: AedaItinerante[];
   /** Aedas residentes y sus épicas (Doc 6.7): los crea el tick. Ausente = ninguno todavía. */
   aedasResidentes?: EstadoAedasResidentes;
+  /** Miradas compradas en las tabernas (Doc 5.12.10), vigentes o aún en cooldown. Las crean los comandos; ausente = ninguna. */
+  miradasIntel?: MiradaIntel[];
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,

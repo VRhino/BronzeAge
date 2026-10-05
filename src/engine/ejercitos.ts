@@ -1180,6 +1180,12 @@ export function inspeccionarPlaza(observador: Ejercito, plaza: Asentamiento, her
   if (distancia(observador.posicionActual, plaza.posicion) > MOVIMIENTO.radioInspeccion) {
     throw new MovilizacionInvalidaError(`Hay que acercarse a menos de ${MOVIMIENTO.radioInspeccion} para inspeccionar.`);
   }
+  return defensaDePlaza(plaza, heroes);
+}
+
+/** La defensa de una plaza tal como se ve desde fuera: guarnición y héroes dentro, sin almacén. La comparte el anillo de inspección
+ * y el Informe de plaza de la taberna (Doc 5.12.10). */
+export function defensaDePlaza(plaza: Asentamiento, heroes: readonly Heroe[]): DefensaPlaza {
   return {
     asentamientoId: plaza.id,
     faccionId: plaza.faccionId,

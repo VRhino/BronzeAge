@@ -36,6 +36,7 @@ export const EDIFICIO_ETIQUETA: Record<EdificioTipo, string> = {
   caballerizas: 'Caballerizas',
   minaHierro: 'Mina (hierro)',
   salaConsejo: 'Sala del Consejo',
+  taberna: 'Taberna',
   mercado: 'Mercado',
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',
@@ -69,6 +70,7 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   caballerizas: '#8a6a3a',
   minaHierro: '#5a5a66',
   salaConsejo: '#b89a5a',
+  taberna: '#a8743c',
   palacio: '#c9a227',
   mercado: '#2d9c8f',
   // Tono más claro del Mercado a propósito: los puestos son piezas de SU zona, y con la etiqueta de texto

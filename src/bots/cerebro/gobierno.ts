@@ -5,7 +5,7 @@
 // pone a sus residentes a cantar épicas. Las cifras son las que la gobernanza tenía calibradas (placeholders hasta medir con batch, §10.1).
 import type { Asentamiento, EdificioTipo, RecursoTipo } from '../../domain/types';
 import { RECURSOS_TIPO } from '../../domain/types';
-import { AEDAS, ANIMAL_CATALOGO, CARRO_CATALOGO, EDIFICIO_CATALOGO, EPICAS, ERAS, NIVEL_ASENTAMIENTO, TARIFA_ADOPCION, TECNOLOGIAS } from '../../constants';
+import { AEDAS, ANIMAL_CATALOGO, CARRO_CATALOGO, EDIFICIO_CATALOGO, EPICAS, ERAS, INTEL, NIVEL_ASENTAMIENTO, TARIFA_ADOPCION, TECNOLOGIAS } from '../../constants';
 import type { TecnologiaId } from '../../domain/types';
 import { precioDeVenta } from '../../engine/tecnologia';
 import { cupoCaravanas, edificiosPorTipoYEstado, hayProyectoPendiente, nivelActualDe, tieneMercadoActivo } from '../../engine/asentamientoQuery';
@@ -15,7 +15,9 @@ import { costoCaravanaFundacion } from '../../engine/expansion';
 import { tarifaDeAscenso } from '../../engine/ascenso';
 import { tieneInsumoDeArranque } from '../../engine/construction';
 import type { ContextoBot } from '../runner';
-import { fraccionDe, plazaDentro, plazasPropias } from './comun';
+import { estanAliadas } from '../../engine/pertenencia';
+import { distancia } from '../../world/geometria';
+import { fraccionDe, plazaDentro, plazasConocidas, plazasPropias } from './comun';
 
 /** La madera que el Tesorero aparta antes de dejar reclutar o construir: lo que Mantenimiento cobra a nivel 1. */
 export const RESERVA_MADERA = 150;
@@ -38,7 +40,32 @@ export async function gobernar(ctx: ContextoBot): Promise<void> {
   if (plaza.cargos.gobernadorId === ctx.yo) await gobernador(ctx, plaza);
   if (plaza.cargos.tesoreroId === ctx.yo) await tesorero(ctx, plaza);
   if (esRey || plaza.cargos.gobernadorId === ctx.yo) await comprarAAedas(ctx, plaza);
+  if (esRey || plaza.cargos.gobernadorId === ctx.yo) await comprarInformes(ctx, plaza);
   if (esRey || plaza.cargos.gobernadorId === ctx.yo || plaza.cargos.sacerdoteId === ctx.yo) await epicas(ctx, plaza);
+}
+
+// --- Intel de la taberna (Doc 5.12.10) ---
+
+/** Con la defensa de una plaza ajena vista hace menos que esto, no se vuelve a comprar su informe (la misma vigencia que la inspección del explorador). */
+const VIGENCIA_DEFENSA_MS = 2 * 60 * 60_000;
+
+/**
+ * Con taberna y oro de sobra, compra el informe de la plaza ajena conocida más cercana cuya defensa la pizarra no tiene o está vieja: lo que el
+ * explorador sacaba del anillo de inspección, comprado. Es el sink recurrente de oro de los bots, y el que decide si una campaña se monta.
+ */
+async function comprarInformes(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
+  const { vista, pizarra } = ctx;
+  if (edificiosPorTipoYEstado(plaza, 'taberna').length === 0 || cantidadDisponible(plaza.almacen, 'oro') < 3 * INTEL.informe.oroPorNivel) return;
+  const objetivo = plazasConocidas(vista)
+    .filter((a) => a.faccionId !== vista.faccionId && !estanAliadas(vista.relaciones, vista.faccionId ?? '', a.faccionId))
+    .filter((a) => {
+      const visto = pizarra.defensas.get(a.id);
+      return !visto || vista.instante - visto.vistoEn > VIGENCIA_DEFENSA_MS;
+    })
+    .sort((a, b) => distancia(a.posicion, plaza.posicion) - distancia(b.posicion, plaza.posicion) || (a.id < b.id ? -1 : 1))[0];
+  if (!objetivo) return;
+  const r = await ctx.intentar(`informe:${objetivo.id}`, 'comprarInformePlaza', { origen: { tipo: 'asentamiento', id: plaza.id }, asentamientoId: objetivo.id }, 60 * 60_000);
+  if (r?.ok && r.datos) pizarra.defensas.set(objetivo.id, { defensa: r.datos, vistoEn: vista.instante });
 }
 
 // --- Aedas (Doc 6.7) ---
@@ -147,11 +174,13 @@ async function gobernador(ctx: ContextoBot, plaza: Asentamiento): Promise<void> 
       ? 'galeriaDeTiro'
       : !tieneOEnCurso(plaza, 'caballerizas') && adoptadas.includes('cria_caballar')
         ? 'caballerizas'
-        : !tieneOEnCurso(plaza, 'palacio') && nivel >= 2
-          ? 'palacio'
-          : !tieneOEnCurso(plaza, 'salaConsejo') && nivel >= 3 && adoptadas.includes('instituciones_civicas')
-            ? 'salaConsejo'
-            : undefined;
+        : !tieneOEnCurso(plaza, 'taberna') && nivel >= 2 && tieneMercadoActivo(plaza)
+          ? 'taberna'
+          : !tieneOEnCurso(plaza, 'palacio') && nivel >= 2
+            ? 'palacio'
+            : !tieneOEnCurso(plaza, 'salaConsejo') && nivel >= 3 && adoptadas.includes('instituciones_civicas')
+              ? 'salaConsejo'
+              : undefined;
   if (militar) await construir(militar);
 
   // El primer recinto, y la mejora a piedra cuando la subida a nivel 4 ya está al alcance (Doc 4.5).

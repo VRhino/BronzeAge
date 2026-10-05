@@ -73,8 +73,9 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import { EPICAS, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
-import type { ContadorLogro, EraId, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
+import { EPICAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
+import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
+import { miradasActivasDe } from '../../engine/intel';
 import { esCaravanaGrande } from '../../engine/caravanas';
 import { tecnologiasDe } from '../../engine/tecnologia';
 import { distancia, pointInPolygon } from '../../world/geometria';
@@ -337,6 +338,12 @@ function tecnologiaParaJugador(estado: GameSessionState, faccionId: string | nul
   return { era: t.era, eraDesde: t.eraDesde, logros, propias, reveladas };
 }
 
+/** Las tarifas de la intel (`INTEL`, Doc 5.12.10): precio de una Mirada = `oroBase + oroPorUnidad × distancia` a los ojos propios más cercanos. */
+export interface TarifasIntel {
+  mirada: { radio: number; duracionMinutos: number; oroBase: number; oroPorUnidad: number; cooldownMinutos: number };
+  informe: { oroPorNivel: number; cooldownMinutos: number };
+}
+
 export interface ProyeccionJugador {
   gameId: string;
   /** Instante de MUNDO "ahora" de la partida (doc 10) — `instanteDeTick(estado.tick)`, derivado, no
@@ -416,6 +423,12 @@ export interface ProyeccionJugador {
   ejercitosAvistados: EjercitoAvistado[];
   /** Los Aedas itinerantes que se ven ahora mismo (Doc 6.7): neutrales, no atacables. */
   aedasAvistados: AedaAvistado[];
+  /** Las Miradas de la Facción propia, abiertas o aún en cooldown (Doc 5.12.10): dónde mira cada una, hasta cuándo y cuándo se puede repetir. Las de los aliados no viajan: solo lo que ven. */
+  miradasIntel: MiradaIntel[];
+  /** Los Informes de plaza de la Facción propia, el último de cada plaza, con su fecha (Doc 5.12.10). */
+  informesPlaza: InformePlaza[];
+  /** Lo que cuesta la intel y cuánto dura, para que el cliente cotice antes de comprar (Doc 5.12.10). */
+  tarifasIntel: TarifasIntel;
   /** Los Aedas residentes de las plazas de la Facción propia, con su épica. */
   aedasResidentes: AedaResidenteProyectado[];
   /** Las batallas de Unity que se ven en el mapa y aquellas en las que combate el jugador (doc 02 §4.1). Las columnas y
@@ -549,11 +562,14 @@ function seVeAhora(
   asentamientosPropios: readonly Asentamiento[],
   ejercitosPropios: readonly Ejercito[],
   /** Las escuadras de todos: una columna con soldados en pie ve más lejos (`alcanceDeVista`). */
-  tropa: IndiceTropa
+  tropa: IndiceTropa,
+  /** Los ojos prestados por las tabernas (Doc 5.12.10): un punto y un radio mientras duran. */
+  miradas: readonly MiradaIntel[] = []
 ): boolean {
   return (
     asentamientosPropios.some((a) => distancia(punto, a.posicion) <= a.radioPotencial + VISION.margenAsentamiento) ||
-    ejercitosPropios.some((e) => distancia(punto, e.posicionActual) <= alcanceDeVista(e, tropa))
+    ejercitosPropios.some((e) => distancia(punto, e.posicionActual) <= alcanceDeVista(e, tropa)) ||
+    miradas.some((m) => distancia(punto, m.centro) <= m.radio)
   );
 }
 
@@ -579,13 +595,16 @@ function nieblaDe(
    * nunca para lo explorado (`celdas`): la visión compartida es en vivo y no se graba — al romperse la
    * relación desaparece en la proyección siguiente. */
   asentamientosAliados: readonly Asentamiento[] = [],
-  ejercitosAliados: readonly Ejercito[] = []
+  ejercitosAliados: readonly Ejercito[] = [],
+  /** Miradas de la Facción y de sus aliados: como los ojos aliados, solo cuentan para lo VISIBLE, nunca para lo explorado. */
+  miradas: readonly MiradaIntel[] = []
 ): NieblaProyectada {
   const rejilla = rejillaDe(estado.mapa.config);
   const tropa = indiceTropa(estado.heroes);
   let visibles = SIN_EXPLORAR;
   for (const a of [...asentamientosPropios, ...asentamientosAliados]) visibles = marcarVisto(visibles, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
   for (const e of [...ejercitosPropios, ...ejercitosAliados]) visibles = marcarVisto(visibles, rejilla, e.posicionActual, alcanceDeVista(e, tropa));
+  for (const m of miradas) visibles = marcarVisto(visibles, rejilla, m.centro, m.radio);
 
   let celdas = grabada;
   for (const a of asentamientosPropios) celdas = marcarVisto(celdas, rejilla, a.posicion, a.radioPotencial + VISION.margenAsentamiento);
@@ -656,9 +675,10 @@ function campamentosAvistados(
   campamentos: readonly CampamentoBandido[],
   asentamientosPropios: readonly Asentamiento[],
   ejercitosPropios: readonly Ejercito[],
-  tropa: IndiceTropa
+  tropa: IndiceTropa,
+  miradas: readonly MiradaIntel[]
 ): CampamentoBandido[] {
-  return campamentos.filter((c) => seVeAhora(c.posicion, asentamientosPropios, ejercitosPropios, tropa));
+  return campamentos.filter((c) => seVeAhora(c.posicion, asentamientosPropios, ejercitosPropios, tropa, miradas));
 }
 
 /**
@@ -713,7 +733,8 @@ function caravanasAvistadas(
   esPropio: (asentamientoId: string) => boolean,
   asentamientosPropios: readonly Asentamiento[],
   ejercitosPropios: readonly Ejercito[],
-  tropa: IndiceTropa
+  tropa: IndiceTropa,
+  miradas: readonly MiradaIntel[]
 ): CaravanaAvistada[] {
   const faccionDePlaza = new Map(estado.asentamientos.map((a) => [a.id, a.faccionId]));
   const adjuntas = new Set(estado.ejercitos.flatMap((e) => e.caravanasAdjuntasIds));
@@ -721,7 +742,7 @@ function caravanasAvistadas(
   return estado.caravanas
     .filter((c) => !esPropio(c.origenAsentamientoId) && !(c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId)))
     .filter((c) => c.estado !== 'disponible')
-    .filter((c) => seVeAhora(c.posicionActual, asentamientosPropios, ejercitosPropios, tropa) || llamaLaAtencion(c, asentamientosPropios, ejercitosPropios))
+    .filter((c) => seVeAhora(c.posicionActual, asentamientosPropios, ejercitosPropios, tropa, miradas) || llamaLaAtencion(c, asentamientosPropios, ejercitosPropios))
     .map((c) => ({
       id: c.id,
       posicionActual: c.posicionActual,
@@ -810,6 +831,9 @@ export function proyectarParaJugador(
   const ojosAsent = asentamientosAliados.length > 0 ? [...asentamientosPropios, ...asentamientosAliados] : asentamientosPropios;
   const ojosEjercito = ejercitosAliados.length > 0 ? [...ejercitosPropios, ...ejercitosAliados] : ejercitosPropios;
   const tropa = indiceTropa(estado.heroes);
+  const ahora = instanteDeTick(estado.tick);
+  // Los ojos que prestan las tabernas (Doc 5.12.10): los de la Facción y los de quienes comparten su visión, en vivo y sin memoria.
+  const miradasVistas = miradasActivasDe(estado.miradasIntel ?? [], new Set(faccionId !== null ? [faccionId, ...faccionesQueComparten] : []), ahora);
 
   // La zona sale de `geometria`, que el runner ya calculó y cachea para TODOS los asentamientos: adjuntarla
   // aquí no cuesta un cálculo más. Una plaza sin zona en la geometría (no debería pasar) viaja con el
@@ -818,7 +842,7 @@ export function proyectarParaJugador(
   // Lo que se ve pero no se pisa. Los propios entran aquí igual que los ajenos: se excluye SOLO la plaza en
   // la que el jugador está, que es la única que viaja entera.
   const avistados = estado.asentamientos
-    .filter((a) => a.id !== dentroDe?.id && seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa))
+    .filter((a) => a.id !== dentroDe?.id && seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa, miradasVistas))
     .map((a) => ({
       id: a.id,
       nombre: a.nombre,
@@ -841,15 +865,14 @@ export function proyectarParaJugador(
   const exploradoDelJugador = fundirExploraciones(memoria.exploracion, jugador?.exploracionPersonal ?? SIN_EXPLORAR);
   // La niebla se calcula ANTES del objeto porque además de viajar es el filtro de los caminos: la misma
   // máscara que tapa el terreno decide qué calzadas existen para este jugador.
-  const exploracion = nieblaDe(exploradoDelJugador, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados);
+  const exploracion = nieblaDe(exploradoDelJugador, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados, miradasVistas);
 
-  const ahora = instanteDeTick(estado.tick);
   const bloqueos = bloqueosDe(estado, ahora);
   const batallas = batallasActivas(estado, ahora)
     .map((b) => batallaVisible(b, heroeId))
-    .filter((b) => b.ladoPropio !== undefined || seVeAhora(b.punto, ojosAsent, ojosEjercito, tropa));
+    .filter((b) => b.ladoPropio !== undefined || seVeAhora(b.punto, ojosAsent, ojosEjercito, tropa, miradasVistas));
   const ejercitosAvistados = estado.ejercitos.filter(
-    (e) => !propios.has(e.id) && !bloqueos.ejercitos.has(e.id) && seVeAhora(e.posicionActual, ojosAsent, ojosEjercito, tropa)
+    (e) => !propios.has(e.id) && !bloqueos.ejercitos.has(e.id) && seVeAhora(e.posicionActual, ojosAsent, ojosEjercito, tropa, miradasVistas)
   );
   // Los héroes ajenos que se ven (doc 02 §4.1): los que van en una columna propia o avistada, y los que están dentro
   // de la plaza que se pisa. De ellos solo viaja su parte pública.
@@ -878,7 +901,7 @@ export function proyectarParaJugador(
     territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || c.faccionId === faccionId || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
-    caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa).filter((c) => !bloqueos.caravanas.has(c.id)),
+    caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa, miradasVistas).filter((c) => !bloqueos.caravanas.has(c.id)),
     ejercitos: ejercitosPropios,
     ejercitosAvistados: ejercitosAvistados.map((e) => ({
       id: e.id,
@@ -888,8 +911,12 @@ export function proyectarParaJugador(
       heroeIds: e.participantes.map((p) => p.heroeId),
     })),
     aedasAvistados: (estado.aedas ?? [])
-      .filter((a) => seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa))
+      
+      .filter((a) => seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa, miradasVistas))
       .map((a) => ({ id: a.id, posicion: a.posicion, ...(a.enAsentamientoId ? { enAsentamientoId: a.enAsentamientoId } : {}) })),
+    miradasIntel: (estado.miradasIntel ?? []).filter((m) => m.faccionId === faccionId && m.libreEn > ahora),
+    informesPlaza: Object.values(memoria.informes ?? {}),
+    tarifasIntel: { mirada: INTEL.mirada, informe: INTEL.informe },
     aedasResidentes: (estado.aedasResidentes?.aedas ?? [])
       .filter((a) => esPropio(a.asentamientoId))
       .map((a): AedaResidenteProyectado => {
@@ -931,7 +958,7 @@ export function proyectarParaJugador(
     relaciones: estado.relaciones,
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.red ?? RED_VACIA, exploracion),
-    campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito, tropa),
+    campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito, tropa, miradasVistas),
     alijos:
       jugador && buscaAlijos(heroeId, estado.facciones, estado.asentamientos)
         ? alijosALaVista(estado.alijos ?? [], jugador, columnaDe(estado.ejercitos, heroeId))

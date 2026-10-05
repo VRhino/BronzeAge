@@ -903,6 +903,28 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       expect(res.json().resultado.ok).toBe(true);
     });
 
+    it('la intel de la taberna llega al motor por HTTP: esquema y autorización pasan, y sin Facción ni oro es un rechazo de dominio (200, ok:false), no un 400/403', async () => {
+      await partidaCreada('g1');
+      const auth = await jugadorEn('g1');
+      const origen = { tipo: 'campamento', id: 'mercenarios-0' };
+      const enviar = (tipo: string, params: object) => app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: auth, payload: { tipo, params } });
+
+      const mirada = await enviar('comprarMirada', { origen, centro: { x: 500, y: 500 } });
+      const informe = await enviar('comprarInformePlaza', { origen, asentamientoId: 'no-existe' });
+      const malFormado = await enviar('comprarMirada', { origen: { tipo: 'cuartel', id: 'x' }, centro: { x: 1, y: 1 } });
+
+      expect(mirada.statusCode).toBe(200);
+      expect(mirada.json().resultado).toMatchObject({ ok: false, codigoError: 'intel.invalida' });
+      expect(informe.statusCode).toBe(200);
+      expect(informe.json().resultado.ok).toBe(false);
+      expect(malFormado.statusCode).toBe(400);
+      // Y la proyección que sale por HTTP trae los campos nuevos (ningún esquema de respuesta los recorta).
+      const vista = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).json();
+      expect(vista.miradasIntel).toEqual([]);
+      expect(vista.informesPlaza).toEqual([]);
+      expect(vista.tarifasIntel.mirada.radio).toBe(150);
+    });
+
     it('un `nombre` vacío SIGUE siendo un rechazo de dominio (200, ok:false), no un 400: el esquema no debe adelantarse a esa regla', async () => {
       await partidaCreada('g1');
       const auth = await jugadorEn('g1');
@@ -970,8 +992,9 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `comprarEnCampamento` (Doc 1.9b): el mercado del campamento.
       // +2 con `conectarse`/`desconectarse` (Doc 1.10.6): entrar y salir del mundo.
       // +3 con los Aedas (Doc 6.7): `comprarTecnologiaAeda`, `empezarEpica` y `abandonarEpica`.
+      // +2 con la intel de las tabernas (Doc 5.12.10): `comprarMirada` y `comprarInformePlaza`.
       // -1 sin `crearFaccionNpc` (D53, D58): ninguna Facción nace asentada.
-      expect(cuerpo.oneOf.length).toBe(100);
+      expect(cuerpo.oneOf.length).toBe(102);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

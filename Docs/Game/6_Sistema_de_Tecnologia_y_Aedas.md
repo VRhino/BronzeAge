@@ -157,6 +157,8 @@ tecnología se adopta y su equipo llega con la mecánica de asedio.
 Los Aedas (o Poetas, mismo rol; Glosario) son NPCs que dan acceso a la tecnología y narran el lore del servidor. No
 atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos clases.
 
+**Frontera con la taberna** (Doc 5.12.10): los Aedas mueven tecnología y lore; la taberna vende inteligencia militar y de territorio (qué hay en una zona, cómo se defiende una plaza). Ninguno da lo del otro: un Aeda no dice dónde hay un ejército ni una taberna qué tecnología tiene un rival.
+
 ### Itinerantes
 
 - **Cuántos**: uno por cada 3 Facciones vivas, con un mínimo de 3 (`AEDAS.itinerantes`, placeholder).

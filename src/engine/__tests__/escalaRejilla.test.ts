@@ -37,6 +37,7 @@ const HUELLAS_BA005: Record<string, [number, number]> = {
   caballerizas: [3, 2],
   minaHierro: [1, 1],
   salaConsejo: [3, 3],
+  taberna: [2, 2],
   mercado: [3, 2],
   maravilla: [1, 1],
   plaza: [2, 2],
@@ -58,7 +59,7 @@ function nivelesDe(tipo: string): (number | undefined)[] {
 }
 
 describe('rejilla del asentamiento (BA-005)', () => {
-  it('las huellas de los 30 tipos (35 combinaciones) son las de la tabla BA-005 más las de las Eras I-III', () => {
+  it('las huellas de los 31 tipos (36 combinaciones) son las de la tabla BA-005 más las de las Eras I-III', () => {
     const obtenidas: Record<string, [number, number]> = {};
     for (const tipo of EDIFICIOS_TIPO) {
       for (const nivel of nivelesDe(tipo)) {

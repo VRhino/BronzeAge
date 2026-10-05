@@ -208,9 +208,14 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ **Paso 4 — visión compartida por alianza y vasallaje**, en vivo y no "último conocido" — `código: ✔` (2026-09-09). `compartenVision` (`engine/pertenencia.ts`) + ojos aliados solo en la capa "en vivo" de `proyectarParaJugador`; nunca en memoria. Sin migración. `Niebla_De_Guerra_Definicion.md` §5.6.
 - 🔶 Paso 6 — calibración del margen de asentamiento y del tamaño de celda — `código: ◐`
 
+## Intel de taberna *(mecánica nueva, 2026-10-05)*
+- ✅ **Taberna** (edificio de plaza, nivel 2, 3 niveles internos) y taberna de campamento venden **Miradas** (ojo prestado sobre un punto, en vivo, sin memoria, compartida con la visión compartida) e **Informes de plaza** (foto con fecha de layout y defensa, aviso anónimo a la víctima) — `código: ✔` (`engine/intel.ts`, `session/comandos/intel.ts`; reglas en Doc 5.12.10; decisiones en `Consideraciones/Taberna_Intel_Definicion.md`)
+- 🔶 Cifras de `INTEL` por calibrar con batch — `código: ◐` (`Docs/Mecanicas a balancear.md` §18)
+- 🔶 Rumores de campamento, Estado de Facción y compra por héroes sin Facción — `código: ✘` (fuera de la v1)
+
 ## Diplomacia
 - ✅ Score de confiabilidad de Facción (-100 a +100), con efecto sobre alianzas y comisiones — `código: ✔` (`engine/reputacion.ts`, `REPUTACION`)
-- ❌ Rumores / espionaje — descartado — `código: —`
+- ❌ Rumores / espionaje como sistema general — descartado — `código: —` (lo que hay es la intel pagada de la taberna, Doc 5.12.10: información militar y de territorio, con caducidad)
 
 ## Generación del mundo
 - ✅ Generación de Fase 0 resuelta y versionada (`WORLDGEN_VERSION` 15) — `código: ✔`

@@ -410,7 +410,7 @@ De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 
 El **nivel** de una plaza sí se ve porque una ciudad grande se ve grande desde fuera; no dice cuánta tropa tiene dentro, que es lo que decidiría un ataque.
 
-**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (40)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son—, de una caravana, si lleva escolta y qué recursos carga, nunca cuántos, y de una plaza ajena su defensa: la guarnición y los héroes que hay dentro, nunca su almacén (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá.
+**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (40)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son—, de una caravana, si lleva escolta y qué recursos carga, nunca cuántos, y de una plaza ajena su defensa: la guarnición y los héroes que hay dentro, nunca su almacén (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá. **O pagándola en una taberna** (5.12.10): una Mirada presta ojos sobre una zona durante un rato y un Informe da la foto, con fecha, del layout y la defensa de una plaza.
 
 **Las caravanas ajenas y neutrales solo se ven dentro del radio de visión**, con una excepción por tamaño. Fuera de él están ocultas, y **sin memoria**: a diferencia de una ciudad, una caravana se mueve, así que una foto vieja no diría "aquí hubo una" — diría una mentira sobre dónde está ahora.
 
@@ -482,6 +482,33 @@ Diseño en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras plac
 **Al vencer** cada reloj (tiempo fijo, nada los acorta) se limpia su campo y la plaza vuelve a las reglas normales. Pasada la protección, la defiende quien se haya instalado: los héroes conquistadores que trasladaron allí su campamento, con su guarnición y en persona. Sin nadie, un asedio se juega sin defensores (5.12.4). Consolidar la conquista —reclutar escuadrones nuevos ahí, asignar guarnición, ejercer cargos, recaudación al 100%— exige residir en la plaza tomada (`cambiarResidencia`, Doc 2.5).
 
 **Supervivencia:** el saqueo nunca toca el Centro Urbano ni deja al asentamiento sin una Granja y una Leñera activas, el mantenimiento queda suspendido toda la ventana y la reconstrucción es barata — para que un asentamiento pequeño saqueado no colapse por la penalización.
+
+### 5.12.10 Intel: lo que se compra en la taberna (2026-10-05)
+
+La niebla (5.12.7-8) tapa lo que queda fuera de tus ojos, y **saber qué pasa donde no ves vale oro**. La **taberna** vende esa información: no abre nada que la niebla no cierre para siempre, solo **presta ojos durante un rato** o **tira una foto** que luego envejece. Es el **sink recurrente de oro** del juego (Doc 3.1): una suscripción, no una compra de capital — se paga, caduca y se vuelve a pagar si todavía importa.
+
+Hay **dos productos**, los dos **exactos en el instante de la compra**: la información no lleva ruido ni miente, así que un bot y un jugador la usan igual.
+
+| | **Mirada** | **Informe de plaza** |
+|---|---|---|
+| Qué es | Un **ojo prestado** sobre un punto cualquiera del mapa, con el radio de una columna (`INTEL.mirada.radio`, 150) y una duración (`duracionMinutos`, 2 h) | La **foto con fecha** de una plaza ajena: sus **edificios** (tipo, sitio, nivel interno, si están en obra), sus **recintos** de muralla, su **guarnición** y los **héroes** que hay dentro |
+| Qué ves | Lo que verías con una columna ahí, **en vivo**: ejércitos, caravanas, campamentos de bandidos y fichas de plazas (nombre, Facción, posición y nivel, Doc 5.12.7). **Nunca interiores** | El layout y la defensa tal como estaban al comprarlo. **Nunca el almacén, las colas, los cargos ni las políticas** |
+| Memoria | **Ninguna**: entra en «lo que se ve ahora», no en lo explorado (igual que los ojos aliados, 5.12.8). Al caducar, lo que solo veías por ella vuelve a la niebla y no queda «último conocido» | Se **guarda en la memoria de la Facción**, el último de cada plaza, y **envejece a la vista**: viaja con su fecha, como una ficha conocida (5.12.8) |
+| Se comparte | **Con quienes comparten tu visión** (aliados y vasallaje, 5.12.8), en vivo y mientras dure la alianza. No viaja la compra, solo lo que ve | **No**: es memoria de la Facción compradora. Un aliado que lo quiera lo compra |
+| Precio | `oroBase` (40) más `oroPorUnidad` (0,1) por unidad de **distancia a tus ojos propios más cercanos** (tus plazas, tus columnas y la taberna donde compras): mirar lejos cuesta más | `oroPorNivel` (60) por **nivel de la plaza mirada**: una capital cuesta más que una aldea |
+| Freno | Un **cupo** de Miradas abiertas a la vez por taberna y, tras caducar, la **zona se enfría** (`cooldownMinutos`, 2 h): no se repite una Mirada con el centro a menos de un radio de otra reciente de la misma Facción | Un **cooldown** por plaza (`informe.cooldownMinutos`, 6 h): el mismo informe no se pide dos veces seguidas |
+
+**Cómo se mira.** El centro de una Mirada puede ser cualquier punto del mapa, explorado o no: comprar un ojo sobre tierra que nunca pisaste es justo para lo que sirve. Un Informe solo se pide de una plaza **que la Facción conoce** —tiene su ficha en la memoria o cae dentro de una Mirada abierta—, así que el camino natural es *mirar una zona, ver la plaza y pedir su informe*; no se puede recorrer el mundo probando identificadores. De la propia Facción no se pide.
+
+**Dónde y quién compra.**
+
+- **Taberna de plaza** (edificio, Doc 4.2.1). Compra el **Rey, el Embajador o el Gobernador** de esa plaza, **estando en ella**, y paga el **almacén de esa plaza**. El cupo de Miradas lo da su nivel interno: 1 / 2 / 3.
+- **Taberna de un campamento de mercenarios** (Doc 1.9b). Compra **cualquier héroe que pertenezca a una Facción**, dentro del campamento o con su columna a la puerta (como el resto de sus acciones), y paga con su **oro de botín**. Es la vía de las Facciones sin plaza. El cupo es fijo (`INTEL.campamento.cupoMiradas`, 1 por Facción y campamento). La intel que compra es **de su Facción**: lo que un ciudadano mira, lo saben los suyos.
+- Un héroe **sin Facción** no compra: la intel es de una Facción, y sin ella no hay memoria donde guardar un informe ni aliados con quienes compartir una Mirada.
+
+**La víctima.** Un Informe **avisa a la Facción espiada** (`asentamiento.informe_pedido`, atribuido a su plaza): *«alguien ha pedido el plano y la defensa de Troya»*, **sin decir quién**. Es el mismo principio que la inspección a 40 (5.12.3) —obtener información de un rival delata— pero la compra es remota, así que el aviso es **anónimo**. La Mirada **no avisa a nadie**: es solo ver, y mirar un trozo de mapa no toca a nadie.
+
+**Qué no es.** No es espionaje general ni vuelve el score público menos público (Doc 2.7): la taberna da información **militar y de territorio** —dónde hay columnas y caravanas, cómo es y cómo se defiende una plaza—, siempre pagada, siempre con caducidad o con fecha. No toca la **tecnología ni el lore**, que son de los Aedas (Doc 6.7), ni los **acuerdos de comercio y la información de caravanas ajenas** que da el gremio de Ladrones (Doc 2.10): ese es un beneficio pasivo y propio de una sede escasa, este es un servicio de pago abierto a cualquiera que tenga taberna. Todo dentro de las Eras I-III: la taberna no pide tecnología.
 
 ## 5.13 Suministro en campaña
 

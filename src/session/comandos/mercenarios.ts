@@ -26,7 +26,7 @@ import { columnaDe, enLaPuertaDelCampamento } from '../../engine/ejercitos';
 import { abrirAlijo as abrirAlijoEngine, buscaAlijos } from '../../engine/alijos';
 
 /** ¿Está el héroe en ese campamento (D75)? Dentro, o con su columna en la puerta. */
-function exigirEn(estado: GameSessionState, heroeId: string, campamento: CampamentoMercenarios): void {
+export function exigirEn(estado: GameSessionState, heroeId: string, campamento: CampamentoMercenarios): void {
   const heroe = estado.heroes.find((h) => h.id === heroeId);
   if (heroe?.ubicacion.tipo === 'mercenarios' && heroe.ubicacion.campamentoId === campamento.id) return;
   const columna = columnaDe(estado.ejercitos, heroeId);

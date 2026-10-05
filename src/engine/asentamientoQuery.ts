@@ -91,6 +91,14 @@ export function cupoCaravanas(asentamiento: Asentamiento): number {
   return base + cupoCaravanaExtra(asentamiento);
 }
 
+/** Cuántas Miradas activas a la vez admite la taberna de esta plaza (Doc 5.12.10): `cupoMiradas` de su nivel interno. 0 sin taberna activa. */
+export function cupoMiradas(asentamiento: Asentamiento): number {
+  const taberna = edificiosPorTipoYEstado(asentamiento, 'taberna')[0];
+  if (!taberna) return 0;
+  const niveles = (EDIFICIO_CATALOGO.taberna as { niveles?: Record<number, { cupoMiradas?: number }> }).niveles;
+  return niveles?.[nivelInternoActual(taberna)]?.cupoMiradas ?? 0;
+}
+
 /**
  * Cuántos escuadrones-escolta admite una caravana lanzada desde este asentamiento (Doc 3.13.4): según el
  * nivel interno de su Mercado (1/2/3 → `CARAVANA_ESCOLTA.cupoPorNivelMercado`). 0 sin Mercado activo.

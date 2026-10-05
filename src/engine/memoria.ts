@@ -12,7 +12,7 @@
 // **Por Facción y no por jugador**, por coherencia antes que por coste: la proyección ya enseña la Facción
 // propia COMPLETA a cualquiera de sus ciudadanos, así que un miembro que no supiera lo que otro ya exploró
 // sería incoherente con todo lo demás. Que además sea cinco veces más barato de guardar es un extra.
-import type { Asentamiento, Ejercito, Faccion, Point } from '../domain/types';
+import type { Asentamiento, Ejercito, Faccion, InformePlaza, Point } from '../domain/types';
 import type { Instante } from '../domain/tiempo';
 import { VISION } from '../constants';
 import { alcanceDeVista } from './ejercitos';
@@ -55,6 +55,8 @@ export interface MemoriaFaccion {
   /** Última ficha de cada plaza AJENA vista, por `asentamientoId`. Las propias no entran: viajan completas
    * en la proyección, y duplicarlas aquí sería guardar dos veces el mismo hecho. */
   asentamientos: Record<string, FichaConocida>;
+  /** Último Informe de plaza comprado en una taberna (Doc 5.12.10), por `asentamientoId`: layout y defensa con su fecha. Ausente = ninguno. */
+  informes?: Record<string, InformePlaza>;
 }
 
 export const MEMORIA_VACIA: MemoriaFaccion = { exploracion: SIN_EXPLORAR, asentamientos: {} };
@@ -135,7 +137,7 @@ export function grabarLoVisto(
     if (exploracion === previa.exploracion && asentamientos === previa.asentamientos) {
       if (salida[faccion.id] !== undefined) continue;
     }
-    salida[faccion.id] = { exploracion, asentamientos };
+    salida[faccion.id] = { ...previa, exploracion, asentamientos };
   }
 
   return salida;

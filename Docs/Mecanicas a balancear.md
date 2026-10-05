@@ -18,6 +18,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | 39 | MILITAR | Escala de XP de escuadra: Unity vs. números | espera a CQ-001 (Conquest) |
 | 40 | MUNDO | Cifras de `MERCENARIOS` (placeholder) | batch |
 | 42 | TECNOLOGÍA | Cifras de `AEDAS` (retraso, itinerantes, estancia, precio de venta, residentes, épicas) | batch / playtest |
+| 18 | INTEL | Cifras de `INTEL` (Mirada, Informe, cupos, coste de la Taberna) | batch / playtest |
 | 8 | CARAVANAS | Visibilidad por tamaño: umbral y radio (`VISION.caravanaGrande`) | batch / playtest |
 
 ## 20. Tecnología por Eras: calibrar los logros
@@ -63,3 +64,7 @@ intercepciones sin que todas las caravanas sean visibles. Hecho el 2026-10-05.
 Las cifras de `AEDAS` (`constants.ts`) son placeholder, sin calibrar: retraso de conocimiento (24 h), itinerantes por Facción
 (1 por cada 3, mínimo 3), estancia (6 h), velocidad (20), precio de venta (2 × el oro de la tarifa), llegada de residentes (24 h), bonos de felicidad (5 %) y de nobleza (25 %) por residente, y las épicas: cantidades de cada capítulo (`EPICAS`), enfriamiento (6 h) y carga mínima de caravana. Medir con batch cuánto
 adelantan las adopciones (Era I: nivel 2 a 5,8 días) y si la venta hace irrelevante el hito, cuánto tardan las épicas en cumplirse con un solo residente (objetivo: más que el hito, menos que esperar a la Era siguiente) y si algún hecho se farmea. Plan: `Consideraciones/Aedas_Definicion.md`.
+
+## 18. Taberna e intel: cifras
+
+Las cifras de `INTEL` y de `EDIFICIO_CATALOGO.taberna` (`constants.ts`) son placeholder, sin calibrar: Mirada (radio 150, 2 h, base 40 de oro + 0,1 por unidad de distancia, cooldown de zona 2 h), Informe (60 de oro por nivel de la plaza mirada, cooldown 6 h por plaza), cupo de Miradas (1 / 2 / 3 por nivel de taberna, 1 en campamento) y el coste del edificio (150 madera + 60 piedra, mejoras 250+120 y 500+250). Es el **sink recurrente de oro** que la economía del oro necesita (`Economia_Del_Oro_Definicion.md` §4.5): medir con batch (los bots ya construyen la taberna y compran informes) que `oroMedio` deje de subir sin techo y que el gasto en intel quede entre un tercio y la mitad del ingreso, sin impedir ninguna de las otras ambiciones; y si el precio por distancia basta para que mirar lejos sea una decisión. Plan: `Consideraciones/Taberna_Intel_Definicion.md`.

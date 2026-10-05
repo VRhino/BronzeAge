@@ -54,6 +54,7 @@ const NOMBRE: Record<EdificioTipo, string> = {
   caballerizas: 'Caballerizas',
   minaHierro: 'Mina de hierro',
   salaConsejo: 'Sala del Consejo',
+  taberna: 'Taberna',
   mercado: 'Mercado',
   puestoMercado: 'Puesto de mercado',
   maravilla: 'Maravilla',

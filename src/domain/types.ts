@@ -177,6 +177,8 @@ export type EdificioTipo =
   | 'minaHierro'
   // Requisito del nivel 4 y +1 ranura del Gobernador (pide `instituciones_civicas`).
   | 'salaConsejo'
+  // Información pagada sobre la niebla (Doc 5.12.10): miradas temporales e informes de plaza. Único por asentamiento, sube por nivel interno.
+  | 'taberna'
   // Ampliación de comercio (a petición del usuario): gatea las órdenes de Mercado (Doc 3.3) y aloja el cupo
   // de la flota de caravanas propias (`cupoCaravanas`, engine/asentamientoQuery.ts). Vía política del
   // Tesorero, mismo patrón que Barracón/Galería de tiro/Palacio — no auto-construcción.
@@ -232,6 +234,7 @@ const TODOS_LOS_EDIFICIOS: Record<EdificioTipo, true> = {
   caballerizas: true,
   minaHierro: true,
   salaConsejo: true,
+  taberna: true,
   mercado: true,
   puestoMercado: true,
   maravilla: true,
@@ -1378,6 +1381,47 @@ export interface EstadoAedasResidentes {
   esperaDesde: Record<string, Instante>;
   /** Épicas cumplidas por Facción: alimenta el título de prestigio «Mecenas de los Aedas» (Doc 2.9). */
   cumplidas: Record<string, number>;
+}
+
+/**
+ * Una Mirada comprada en una taberna (Doc 5.12.10): un ojo prestado a la Facción sobre un punto del mapa. Mientras dura (`expiraEn`)
+ * suma a «lo que se ve ahora» —no a lo explorado, igual que los ojos aliados—. `libreEn` es cuándo se puede volver a mirar esa zona.
+ */
+export interface MiradaIntel {
+  id: string;
+  faccionId: string;
+  /** La taberna donde se compró: el asentamiento o el campamento de mercenarios. El cupo se cuenta por origen. */
+  origenId: string;
+  centro: Point;
+  radio: number;
+  compradaEn: Instante;
+  expiraEn: Instante;
+  libreEn: Instante;
+}
+
+/** Un edificio tal como lo cuenta un informe: dónde está y qué es, sin colas ni trabajadores. */
+export interface EdificioInforme {
+  tipo: EdificioTipo;
+  posicion: Point;
+  estado: EstadoEdificio;
+  nivelInterno?: number;
+  ambito?: 'asentamiento' | 'mapa';
+}
+
+/**
+ * Informe de una plaza ajena (Doc 5.12.10): la foto, con su fecha, de su layout y su defensa en el instante de la compra. Nunca el
+ * almacén. Vive en la memoria de la Facción compradora y envejece a la vista, como una ficha conocida.
+ */
+export interface InformePlaza {
+  asentamientoId: string;
+  faccionId: string;
+  nombre?: string;
+  nivel: number;
+  conocidoEn: Instante;
+  edificios: EdificioInforme[];
+  recintos: { nivel: number; celdas: CeldaMuro[]; avance: number }[];
+  guarnicion: { tropaId: string; cantidad: number; heroeId: string }[];
+  heroesIds: string[];
 }
 
 /** Un Aeda itinerante (Doc 6.7): neutral, recorre los asentamientos por la red de caminos. */

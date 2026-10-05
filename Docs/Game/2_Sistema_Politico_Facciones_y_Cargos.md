@@ -108,7 +108,7 @@ Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).
 3. Restricciones del Embajador (cooldown/coste extra para proponer alianzas con score bajo).
 4. Dificultad para atraer Aedas residentes con score muy bajo.
 
-El score es PÚBLICO y total (no hay sistema de rumores/espionaje que lo oculte parcialmente).
+El score es PÚBLICO y total (no hay sistema de rumores/espionaje que lo oculte parcialmente). La taberna (Doc 5.12.10) vende información militar y de territorio pagada y con caducidad; no es un sistema de rumores sobre el score ni sobre la reputación.
 
 ## 2.8 Mecánicas heredadas de Iberia (política local)
 - **Exilio**: la puerta de cada asentamiento se puede cerrar por grupo —neutrales, aliados o vasallos, enemigos en guerra (2.4.1) y los Aedas (6.7)—; nunca a la propia Facción. Lo cambia el Gobernador de ese asentamiento o el Rey, sin coste (decidido e implementado el 2026-10-02, Doc 1.10.5). La pérdida de materiales y tropas al perder la casa es la reubicación por conquista (Doc 5.15.5), no el exilio.
@@ -144,4 +144,4 @@ No todos los asentamientos pueden tenerlos — solo las ciudades más importante
 - **Comerciantes:** comisiones aún más bajas y/o slot extra de órdenes de mercado y/o rutas/Aedas comerciales especiales.
 - **Artesanos:** recetas/equipo de tier superior exclusivo y/o bonus de producción en Fundición/Curtidor-Armero.
 - **Constructores:** bonus adicional de velocidad de auto-construcción y/o edificios únicos.
-- **Ladrones:** información sobre acuerdos de comercio de OTRAS Facciones, información general de caravanas, e información de otras Facciones no visible de otra forma. NO revive el sistema de rumores/espionaje general (sigue descartado como mecánica base) — es un beneficio específico y acotado, diseñado para no ser demasiado diferenciador.
+- **Ladrones:** información sobre acuerdos de comercio de OTRAS Facciones, información general de caravanas, e información de otras Facciones no visible de otra forma. NO revive el sistema de rumores/espionaje general (sigue descartado como mecánica base) — es un beneficio específico y acotado, diseñado para no ser demasiado diferenciador. **No se solapa con la taberna** (Doc 5.12.10): el gremio da, de forma pasiva y por tener su sede, acuerdos y caravanas ajenas; la taberna es un servicio de pago, abierto a cualquiera que la construya, para mirar zonas y pedir el layout y la defensa de una plaza.

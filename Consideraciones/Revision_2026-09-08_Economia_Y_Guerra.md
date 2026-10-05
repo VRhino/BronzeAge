@@ -140,7 +140,7 @@ al reponer guarniciones — puede ayudar de forma no trivial); Taberna/intel.
 | 1 | `oroMedio` no mesetea — falta calibración / sink recurrente | Economía §10 |
 | 2 | Todas las cifras `OCUPACION.*`, `CIUDADANIA.cooldownCambioResidenciaDias` | Ocupación §8 |
 | 3 | `cambiarResidencia`: ¿cooldown solo, o también coste? | Ocupación §8 |
-| 4 | Ficha `Taberna_Intel_Definicion.md` — sin diseñar (sink recurrente) | Economía §4.5 |
+| 4 | Ficha `Taberna_Intel_Definicion.md` — **hecha el 2026-10-05** (sink recurrente) | Economía §4.5 |
 | 5 | "Cómo se declara una guerra" / estado de guerra activa | Preguntas_Abiertas §1 |
 | 6 | Revuelta de un asentamiento ocupado con felicidad baja | Ocupación §8 |
 | 7 | Rotación de guarniciones del NPC (reforzar frontera con `guarnecer`) | Ocupación §8 |

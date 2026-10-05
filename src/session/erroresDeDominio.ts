@@ -7,6 +7,7 @@
 import { AscensoInvalidoError } from '../engine/ascenso';
 import { EpicaInvalidaError } from '../engine/aedasResidentes';
 import { AdopcionInvalidaError, VentaInvalidaError } from '../engine/tecnologia';
+import { IntelInvalidaError } from '../engine/intel';
 import { CapitalInvalidaError } from '../engine/capital';
 import { MercenariosInvalidoError } from '../engine/mercenarios';
 import { AlijoInvalidoError } from '../engine/alijos';
@@ -35,6 +36,7 @@ const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [AscensoInvalidoError, CODIGOS_ERROR.ascensoInvalido],
   [AdopcionInvalidaError, CODIGOS_ERROR.tecnologiaAdopcionInvalida],
   [VentaInvalidaError, CODIGOS_ERROR.aedasVentaInvalida],
+  [IntelInvalidaError, CODIGOS_ERROR.intelInvalida],
   [EpicaInvalidaError, CODIGOS_ERROR.aedasEpicaInvalida],
   [BatallaInvalidaError, CODIGOS_ERROR.batallaInvalida],
   [BatallaYaAsignadaError, CODIGOS_ERROR.batallaYaAsignada],

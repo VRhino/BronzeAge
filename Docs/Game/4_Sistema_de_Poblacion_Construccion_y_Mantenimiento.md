@@ -187,6 +187,11 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 - Por nivel interno (1 / 2 / 3): **cupo de flota** 2 / 4 / 6 caravanas (más el +1 de la política "Ampliación de Flota", ver 4.4) y **cupo de escolta** 1 / 2 / 3 escuadrones por caravana (Doc 3.13.4).
 - El Mercado no regala ninguna caravana al completarse (Doc 3.13.2).
 
+**Taberna** (Doc 5.12.10) — vende información sobre la niebla: **Miradas** (un ojo prestado sobre una zona) e **Informes** de plaza ajena. Sin recetas: no fabrica nada, su nivel interno solo sube el **cupo de Miradas abiertas a la vez**. Adición MANUAL de Gobernador/Maestro de Obras a la cola (ver 4.2), no auto-construcción. **Una por asentamiento.** Sin tecnología: queda dentro de las Eras I-III. Compran el Rey, el Embajador o el Gobernador de la plaza, presentes en ella, con el oro de su almacén.
+- Requisito: **asentamiento de nivel 2** (`requisitoNivelAsentamientoConstruccion`). Huella 2×2, sin barrio: pieza única junto al centro, como el Palacio.
+- **Coste: 150 madera + 60 piedra** (PLACEHOLDER). Obra: 6 horas; mejoras: 12 y 24 horas.
+- Por nivel interno (1 / 2 / 3): **cupo de Miradas** 1 / 2 / 3. Mejora 1: 250 madera + 120 piedra, pide asentamiento nivel 2; mejora 2: 500 madera + 250 piedra, pide asentamiento nivel 3.
+
 ### Trofeo
 
 **Maravilla** (`Roadmap_Escalado.md` Eje 4) — edificio único de coste extremo, sin recetas ni producción: es un trofeo, no un edificio productivo. Disponible vía control manual de cola (Gobernador/Maestro de Obras, ver 4.2), no auto-construcción. Completarla cierra el ciclo del servidor (Doc 2.9).

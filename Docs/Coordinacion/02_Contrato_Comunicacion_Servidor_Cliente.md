@@ -357,6 +357,21 @@ no cambie `layoutVersion`, y el fixture `fixtures/escenaCampamento.json` cambia 
 
 `comprarCasa` y `unirseAFaccion` ya no existen. En la proyección: `campamentosMercenarios` (los conocidos, con `mercado`
 y `fondos`), `alijos` y, del héroe propio, `almacenPersonal`, `oroDeBotin`, `cupoCampamento`, `racionEn` y `alijosAbiertos`.
+### 4.2c Intel de las tabernas (2026-10-05, Doc 5.12.10; modelo en doc 01 §24)
+
+Por `POST .../comandos` como el resto. `origen` es la taberna donde se compra: `{ tipo: 'asentamiento', id }` (la de una plaza propia) o
+`{ tipo: 'campamento', id }` (un campamento de mercenarios).
+
+| Comando | Parámetros | Devuelve (`resultado.datos`) | Notas |
+|---|---|---|---|
+| `comprarMirada` | `origen`, `centro: {x, y}` | `MiradaIntel` | Un ojo sobre cualquier punto del mapa (radio y duración en `tarifasIntel`). Plaza: Rey, Embajador o Gobernador, presente en ella; paga su almacén. Campamento: cualquier héroe **con Facción**, dentro o a la puerta; paga su `oroDeBotin`. Rechazos (`intel.invalida`): sin taberna, sin oro, cupo de Miradas lleno, zona enfriándose, centro fuera del mapa |
+| `comprarInformePlaza` | `origen`, `asentamientoId` | `InformePlaza` | De una plaza ajena que la Facción conoce (ficha en su memoria o dentro de una Mirada abierta). Rechazos (`intel.invalida`): plaza propia o desconocida, informe reciente (cooldown), sin oro. **Avisa, sin firma, a la Facción espiada** (`asentamiento.informe_pedido`) |
+
+**Proyección**: `miradasIntel[]` (las de la Facción, abiertas o enfriándose: dibujar el círculo con cuenta atrás hasta `expiraEn` y la zona vedada hasta
+`libreEn`), `informesPlaza[]` (el último de cada plaza, con su `conocidoEn`) y `tarifasIntel` (para cotizar: precio de Mirada = `ceil(oroBase +
+oroPorUnidad × distancia)` a los ojos propios más cercanos; de Informe = `oroPorNivel × nivel` de la plaza). Lo que una Mirada deja ver llega por las listas
+de avistados de siempre, con la regla de niebla de siempre (sin interiores).
+
 ### 4.3 Subida de nivel del asentamiento (añadido 2026-09-26)
 
 El nivel de un asentamiento ya no sube solo: lo pide el Gobernador y se hace con una obra de ascenso (canon Doc

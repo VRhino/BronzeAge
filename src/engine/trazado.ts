@@ -2083,8 +2083,9 @@ function calcularSitiosParaTipo(
   // la categoría 'almacenaje' significa —no tiene ancla propia ni de saturación—, más el Palacio, que es
   // pieza única y no pertenece a ningún barrio. El Granero entra aquí por lo mismo que el Almacén: sin esta
   // línea cae al camino de anclas, `tiposAnclaDe('almacenaje')` viene vacío y NUNCA encuentra sitio — que es
-  // exactamente lo que pasó al añadirlo (se proponía cada tick y `sitioEnBarrio` devolvía null siempre).
-  if (tipo === 'palacio' || tipo === 'almacen' || tipo === 'granero' || tipo === 'lenera') {
+  // exactamente lo que pasó al añadirlo (se proponía cada tick y `sitioEnBarrio` devolvía null siempre). La Taberna
+  // (Doc 5.12.10) es pieza única como el Palacio: junto al centro, sin barrio.
+  if (tipo === 'palacio' || tipo === 'almacen' || tipo === 'granero' || tipo === 'lenera' || tipo === 'taberna') {
     const candidatos = candidatosLibres(ORIGEN_RECT, radioUrbanoDe(asentamiento), tamano, ocupadas, red, 0);
     return conPreferenciaIntramuros(aPunto(porDistanciaAlOrigen(candidatos, false)), tipo, nivelInterno, ocupados, asentamiento.recintos ?? []);
   }

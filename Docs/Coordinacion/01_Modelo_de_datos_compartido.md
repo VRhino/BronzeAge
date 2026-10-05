@@ -66,6 +66,9 @@ campo distinto y explícitamente no comparable con ningún `Instante` de mundo �
 19. Visibilidad — qué ve Unity de todo esto
 20. Invariantes generales
 21. Tecnología por Eras (nuevo)
+22. Aedas
+23. Sigilo de Facción
+24. Intel de las tabernas (nuevo)
 
 ## 1. Cadena de identidad
 
@@ -256,7 +259,7 @@ Edificio
   visualSeed?                NUEVO — ver §17
 ```
 
-### `EdificioTipo` (30 valores, catálogo cerrado — existente, `constants.ts`)
+### `EdificioTipo` (31 valores, catálogo cerrado — existente, `constants.ts`)
 
 Generar este catálogo desde `EDIFICIOS_TIPO` (la fuente de verdad ya exhaustiva en tiempo de compilación) en
 vez de retranscribirlo a mano evita que este documento se desincronice del código — la lista de abajo es
@@ -267,7 +270,7 @@ centroUrbano · vivienda · granja · cantera · lenera · almacen · granero
 mina · minaCobre · minaEstano · fundicion · granFundicion
 corral · armeria · curtiduria · carpinteria
 palacio · barracon · galeriaDeTiro · caballerizas
-minaHierro · salaConsejo
+minaHierro · salaConsejo · taberna
 mercado · puestoMercado · maravilla
 plaza · plazaDeArmas · patioDeGremios
 pozo · parque
@@ -275,7 +278,7 @@ pozo · parque
 
 Nuevos con las Eras I-III (2026-09-29): `caballerizas` (3×2, militar, caballería y carros), `minaHierro` (extractor en el
 mapa general, como las otras minas) y `salaConsejo` (3×3, requisito del nivel 4). El `palacio` pasa a tener niveles
-internos 1-3 (misma huella 4×4).
+internos 1-3 (misma huella 4×4). `taberna` (2×2, sin barrio, junto al centro; 2026-10-05, §24): niveles internos 1-3 que suben el cupo de Miradas.
 
 Footprint (ancho×alto en celdas) por tipo/nivel: `EDIFICIO_TAMANO` / `EDIFICIO_CATALOGO[tipo].niveles[n].tamano`
 — fijo por tipo salvo Granja, la única cuya huella crece con `nivelInterno` (2×2→6×6). Tabla completa y escala
@@ -1327,3 +1330,41 @@ CatalogoSigilos             `src/contratos/v1/catalogoSigilos.json` (schema `Cat
 - **Cómo se dibuja** (forma, fondo, emblema, colores, orla, y los marcos derivados del Gran Rey y de la Liga) es de los clientes.
   El marco se calcula con `relaciones` y el `granReyFaccionId` de la Liga, públicos (§19): no hay campo.
 - **Visibilidad**: público, como el resto de `Faccion` (§19).
+
+## 24. Intel de las tabernas (nuevo, 2026-10-05)
+
+Canon: Doc 5 §5.12.10 (la intel), Doc 4 §4.2.1 (el edificio) y Doc 1 §1.9b (la taberna del campamento). Decisiones:
+`Consideraciones/Taberna_Intel_Definicion.md`. Información pagada sobre la niebla: **Miradas** (un ojo prestado sobre un punto) e **Informes de
+plaza** (foto con fecha). **No entran en una batalla**: `BattleTicket` y `BattleResult` no cambian.
+
+```text
+MiradaIntel                     (GameSessionState.miradasIntel; las propias viajan en ProyeccionJugador.miradasIntel)
+  id, faccionId
+  origenId                      la taberna donde se compró: asentamientoId o campamentoId (el cupo se cuenta por origen)
+  centro: Point, radio          el ojo (radio = INTEL.mirada.radio)
+  compradaEn, expiraEn: Instante     hasta expiraEn suma a «lo que se ve ahora» de la Facción y de quienes comparten su visión
+  libreEn: Instante             desde cuándo se puede volver a mirar esa zona (expiraEn + cooldown)
+
+InformePlaza                    (MemoriaFaccion.informes[asentamientoId]; viaja en ProyeccionJugador.informesPlaza)
+  asentamientoId, faccionId, nombre?, nivel
+  conocidoEn: Instante          la fecha de la foto: envejece a la vista, no caduca
+  edificios[]: EdificioInforme  { tipo, posicion (local al asentamiento), estado, nivelInterno?, ambito? } — sin los en_cola
+  recintos[]                    { nivel, celdas: CeldaMuro[], avance }
+  guarnicion[]                  { tropaId, cantidad, heroeId }
+  heroesIds[]                   los héroes que hay dentro
+  (nunca almacén, colas, cargos ni políticas)
+
+TarifasIntel                    (ProyeccionJugador.tarifasIntel = INTEL, para cotizar antes de comprar)
+  mirada { radio, duracionMinutos, oroBase, oroPorUnidad, cooldownMinutos }
+  informe { oroPorNivel, cooldownMinutos }
+```
+
+- **Edificio**: `EdificioTipo 'taberna'` (§3). `cupoMiradas` por nivel interno: 1 / 2 / 3. Una por asentamiento; nivel 2 de asentamiento.
+- **Precio**: Mirada = `ceil(oroBase + oroPorUnidad × distancia)` a los ojos propios más cercanos (plazas y columnas de la Facción y la taberna);
+  Informe = `oroPorNivel × nivel` de la plaza mirada. Paga el almacén de la plaza (taberna de plaza) o el `oroDeBotin` del héroe (campamento).
+- **Visibilidad**: la Mirada y el Informe son de la Facción compradora (`miradasIntel` e `informesPlaza` solo traen los suyos). Lo que una
+  Mirada deja ver se proyecta en las listas de siempre (`asentamientosAvistados`, `ejercitosAvistados`, `caravanasAvistadas`,
+  `campamentosBandidos`, `exploracion.visibles`), también a los aliados mientras dura la alianza. **No se graba en la memoria ni en lo explorado.**
+- **Aviso a la víctima**: `asentamiento.informe_pedido` (payload `{ asentamientoId }`), atribuido a la plaza espiada, **sin comprador**. La compra
+  no emite ningún evento propio (un evento sin plaza sería público).
+

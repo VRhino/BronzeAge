@@ -3,8 +3,8 @@
 > **DISEÑO CERRADO (2026-09-08). IMPLEMENTACIÓN: Pasos 1-5 hechos, falta el Paso 6 (campaña de calibración).**
 > Tres rondas de decisiones con el usuario. **Cierra la entrada que fue §1 (Impuestos) de
 > `Docs/Mecanicas a desarrollar.md`** y cubre el lado de la DEMANDA que la hace tener sentido (reclutamiento en
-> oro, animales de caravana en oro, intel de taberna). El sink recurrente de intel/taberna sigue siendo su
-> propia mecánica pendiente (`Docs/Mecanicas a desarrollar.md` §18). Plan técnico y estado por paso en §10. Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5,
+> oro, animales de caravana en oro, intel de taberna). El sink recurrente de intel/taberna se diseñó e
+> implementó después (2026-10-05, `Taberna_Intel_Definicion.md`, Doc 5.12.10). Plan técnico y estado por paso en §10. Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5,
 > Doc 5 §5.8. Tests: `recaudacionOro` · `presionFiscal` · `reclutamientoOro` (+ ajustes en `caravanas.test.ts`
 > por el buey en oro, y `snapshot_baseline` re-generado por la recaudación).
 >
@@ -38,7 +38,7 @@ Hoy el oro no hace casi nada de eso:
 | Animales de caravana | caballo 60, camello 40. **Buey = 30 madera**, no oro. | Marginal: casi todo el mundo usa buey. |
 | Maravilla | 500 oro | Trofeo de fin de partida, uno por Facción. |
 | Reclutamiento | **0 oro** — todo `costoEquipo` (cadenas de Armería). | Cero. |
-| Intel / tabernas | No existe. | — |
+| Intel / tabernas | **Existe desde 2026-10-05** (Doc 5.12.10), cifras sin calibrar; los bots la usan. | Por medir |
 
 Doc 3.1 lista como usos *previstos* la tecnología/Aedas, los mercenarios y los sueldos — **ninguno existe en
 Fase 0**. Doc 3.5 marca PENDIENTE explícito "en qué se usa la riqueza acumulada".
@@ -225,8 +225,7 @@ acumula** — sin él, `oroMedio` sube sin techo pase lo que pase con las compra
   tamaños de ejército, almacenes ajenos) que la niebla de guerra no da ni a distancia de contacto.
 - **Precio escala con el valor**: intel de una Facción lejana y poderosa cuesta más que la del vecino que ya
   ves. Recurrente = el peaje de jugar informado.
-- **Se diseña en su propia ficha** (`Taberna_Intel_Definicion.md`, por crear). Aquí solo se reserva el hueco y
-  se fija que es el sink recurrente del presupuesto.
+- **Diseñada e implementada el 2026-10-05** en su propia ficha (`Taberna_Intel_Definicion.md`, reglas en Doc 5.12.10): Mirada (40 de oro + 0,1 por unidad de distancia) e Informe de plaza (60 por nivel), con cupos y cooldowns. Cifras placeholder, a calibrar con batch (`Mecanicas a balancear.md` §18).
 
 ## 5. Política "Presión Fiscal"
 
@@ -287,7 +286,7 @@ acumula** — sin él, `oroMedio` sube sin techo pase lo que pase con las compra
   espiral, temático). Fuera del primer pase.
 - **Diferido — mercenarios** (Doc 3.1), **sueldos de tropa en oro** (upkeep continuo — segundo drenaje militar,
   palanca de reserva si la fricción del reclutamiento no basta).
-- **Ficha nueva:** `Taberna_Intel_Definicion.md` — el sink recurrente (§4.5), sin diseñar todavía.
+- **Ficha nueva:** `Taberna_Intel_Definicion.md` — el sink recurrente (§4.5), hecha el 2026-10-05.
 
 ## 9. Invariantes
 
@@ -541,6 +540,6 @@ intel a la vez.
 
 ### Fuera de este plan
 
-Taberna + intel (`Taberna_Intel_Definicion.md`, sin diseñar) — es el sink recurrente, pero es un edificio +
-un sistema de asset con revelado temporal, no cabe aquí. Se diseña y se implementa aparte; la calibración del
-Paso 6 se hace **sabiendo que va a llegar** (deja margen de oro para él).
+Taberna + intel (`Taberna_Intel_Definicion.md`, hecha el 2026-10-05) — es el sink recurrente, pero es un edificio +
+un sistema de información con caducidad, no cabía aquí. Se diseñó y se implementó aparte; la calibración del
+Paso 6 se hace **contando con él** (deja margen de oro; cifras en `Mecanicas a balancear.md` §18).

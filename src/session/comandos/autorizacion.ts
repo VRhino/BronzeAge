@@ -115,6 +115,15 @@ function dirigeAedas(estado: GameSessionState, heroeId: string, asentamientoId: 
   return (esReyDe(faccion, heroeId) || tieneCargoLocal(plaza, 'gobernador', heroeId) || tieneCargoLocal(plaza, 'sacerdote', heroeId)) && presente(estado, heroeId, plaza.id);
 }
 
+/** Comprar intel (Doc 5.12.10): en una taberna de plaza, el Rey, el Embajador o el Gobernador de esa plaza, presente en ella; en la de un campamento, cualquiera (el comando mira que esté en él). */
+function compraIntel(estado: GameSessionState, heroeId: string, origen: { tipo: 'asentamiento' | 'campamento'; id: string }): boolean {
+  if (origen.tipo === 'campamento') return true;
+  const plaza = buscarAsentamiento(estado, origen.id);
+  const faccion = plaza && buscarFaccion(estado, plaza.faccionId);
+  if (!plaza || !faccion) return true; // lo rechaza el comando con un código que dice más
+  return (esReyOEmbajadorDe(faccion, heroeId) || tieneCargoLocal(plaza, 'gobernador', heroeId)) && presente(estado, heroeId, plaza.id);
+}
+
 function reside(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   return asentamiento === undefined || (esResidente(asentamiento, heroeId) && presente(estado, heroeId, asentamientoId));
@@ -397,6 +406,8 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       return !plaza || !faccion || ((esReyDe(faccion, heroeId) || tieneCargoLocal(plaza, 'gobernador', heroeId)) && presente(estado, heroeId, plaza.id));
     },
   },
+  comprarMirada: { rolesPermitidos: ['jugador'], condicionJugador: (estado, heroeId, params) => compraIntel(estado, heroeId, params.origen) },
+  comprarInformePlaza: { rolesPermitidos: ['jugador'], condicionJugador: (estado, heroeId, params) => compraIntel(estado, heroeId, params.origen) },
   // Sin `cargo` en `params`, a diferencia de los de arriba: autoridad sobre la cola de construcción es del
   // Gobernador o del Maestro de Obras (`CargoConstructor`, ver `construccion.ts`).
   /** Enganchar o soltar el tren de suministros lo decide quien va en la columna, igual que replegarla. */
