@@ -544,7 +544,7 @@ function avanzarCaravanas(
       continue;
     }
     if (!caravana.destinoAsentamientoId) {
-      // Sin destino: una Caravana de Fundación (Doc 1.8, la avanza `avanzarCaravanasFundacion`), una comercial
+      // Sin destino: una Caravana de Fundación (Doc 1.8, la lleva su columna o vuelve sola en `avanzarCaravanasDeFundacion`), una comercial
       // propia 'disponible' sin asignar (Doc 3.2), una 'adjunta' (la mueve `avanzarEjercitos`), o una
       // 'aparcada' en una plaza tras guarnecer (Ocupacion §2.3d). Ninguna se mueve aquí: se dejan pasar.
       restantes.push(caravana);

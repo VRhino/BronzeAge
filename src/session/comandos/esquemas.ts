@@ -81,10 +81,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   // --- Fundación y expansión ---
   // Sin `posicion`: se funda donde se está (Doc 1.3), y ese punto sale de la columna del fundador, no de un
   // parámetro que el cliente pueda elegir.
-  lanzarCaravanaFundacion: objeto(
-    { origenAsentamientoId: IDENTIFICADOR, destino: PUNTO, numJugadores: NUMERO },
-    ['origenAsentamientoId', 'destino', 'numJugadores']
-  ),
+  lanzarCaravanaFundacion: objeto({ origenAsentamientoId: IDENTIFICADOR }, ['origenAsentamientoId']),
   desarmarCaravanaFundacion: objeto({ caravanaId: IDENTIFICADOR }, ['caravanaId']),
 
   // Sin `minLength` en `nombre`: vacío/solo-espacios ya es un rechazo de dominio con su propio código

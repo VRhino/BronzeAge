@@ -9,7 +9,7 @@ import { avanzarNutricionPoblacion, crecerPoblacion, recaudacionOro } from './po
 import { agregarRecurso } from './almacen';
 import { avanzarComercio, podarAcuerdosTerminados } from './trade';
 import { RED_VACIA } from './redCaminos';
-import { avanzarCaravanasFundacion } from './expansion';
+import { avanzarCaravanasDeFundacion } from './expansion';
 import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa, indiceTropa, sinEscolta } from './tropa';
 import { anexarAlHistorialDeOrdenes, caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
@@ -24,9 +24,8 @@ import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos } from './ejercitos';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
-import { reubicarResidentesDeRuina, salirDeCampamentos } from './mercenarios';
+import { reubicarResidentesDeRuina } from './mercenarios';
 import { sinPrestamosAjenos } from './reclutamientoMercenario';
-import { avanzarCaravanasDeCampamento } from './refundacion';
 import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
 import { cerrarDependientesDeRuina } from './ruina';
@@ -276,15 +275,6 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   eventosDominio.push(...comoEventosDominio(trasComercio.eventos, contexto));
   heroes = alCampamentoPorIds(heroes, trasComercio.escoltasLiberadas);
 
-  // Caravanas de Fundación (Doc 1.8): expanden una Facción más allá de su primer asentamiento — se avanzan
-  // aparte de las comerciales (destino es un punto del mapa, no un asentamiento existente).
-  const trasExpansion = avanzarCaravanasFundacion(trasComercio.caravanas, mapa, trasComercio.facciones, trasComercio.asentamientos, instante, campamentosActuales);
-  eventosDominio.push(...comoEventosDominio(trasExpansion.eventos, contexto));
-  // Quien funda una plaza pasa a residir en ella: deja el campamento de mercenarios donde residiera (Doc 1.9b, 2.5).
-  const yaExistian = new Set(trasComercio.asentamientos.map((a) => a.id));
-  const fundadores = trasExpansion.asentamientos.filter((a) => !yaExistian.has(a.id)).flatMap((a) => a.heroesFundadoresIds);
-  campamentosActuales = fundadores.length > 0 ? salirDeCampamentos(campamentosActuales, ...fundadores) : campamentosActuales;
-
   // Regeneración de yacimientos agotados (a petición del usuario): escribe en la fachada `mapa`, mismo patrón
   // que `mapa.extraer` dentro de `avanzarConstruccion` más arriba en este mismo tick. La fachada trabaja
   // sobre su propia copia del estado del mapa, que sale de aquí en `ResultadoTick.estadoMapa`.
@@ -297,7 +287,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const trasSpawnBandidos = avanzarSpawnBandidos(
     dependientes.campamentosBandidos,
     zonas,
-    trasExpansion.asentamientos,
+    trasComercio.asentamientos,
     mapa,
     instante,
     rng,
@@ -312,7 +302,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const tropaTrasComercio = indiceTropa(heroes);
   const trasAtaquesBandidos = avanzarAtaquesBandidos(
     trasSpawnBandidos.campamentos,
-    trasExpansion.caravanas.map((c) => conEscolta(c, tropaTrasComercio)),
+    trasComercio.caravanas.map((c) => conEscolta(c, tropaTrasComercio)),
     rng,
     estado.ejercitos.map((e) => conTropa(e, tropaTrasComercio)),
     zonas,
@@ -328,12 +318,12 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // (Paso 7): sin eso, una partida sin ejércitos hace exactamente las mismas llamadas al RNG, en el mismo
   // orden, que antes de existir la mecánica — y por eso el guardián de determinismo sigue verde sin tocarlo.
   //
-  // Recibe `trasAtaquesBandidos.caravanas` y NO `trasExpansion.caravanas`: los bandidos ya han podido
+  // Recibe `trasAtaquesBandidos.caravanas` y NO `trasComercio.caravanas`: los bandidos ya han podido
   // destruir alguna este tick, y partir de la lista anterior las habría resucitado al devolver la suya.
   const trasEjercitos = avanzarEjercitos(estado.ejercitos, {
-    asentamientos: trasExpansion.asentamientos,
+    asentamientos: trasComercio.asentamientos,
     caravanas: caravanasTrasBandidos.map((r) => r.caravana),
-    facciones: trasExpansion.facciones,
+    facciones: trasComercio.facciones,
     relaciones: estado.relaciones,
     mapa,
     instante,
@@ -356,7 +346,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
 
   // Doc Fase_0_5 §8: se aplica la XP de construcción acumulada arriba junto a la del resto del tick (combate/
   // caravanas, aplicadas ya directamente sobre `facciones` en `engine/combate.ts`) antes de recalcular nivel.
-  // `trasEjercitos.facciones` y no `trasExpansion.facciones`: un asedio ganado por un ejército otorga XP de
+  // `trasEjercitos.facciones` y no `trasComercio.facciones`: un asedio ganado por un ejército otorga XP de
   // combate/conquista y puede penalizar reputación, y ese resultado tiene que entrar en la cadena.
   // El XP que dan los comandos y los combates ya subió el nivel en el momento (`aplicarExperiencia`); este es solo el
   // del propio tick (construcción, ascensos).
@@ -386,24 +376,24 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   });
   eventosDominio.push(...comoEventosDominio(trasTecnologia.eventos, contexto));
 
-  // La Caravana de Fundación de un campamento: sin su titular vuelve sola, al llegar se desarma, y suelta caduca (D13, D14, D40, D68).
-  const trasCaravanasDeCampamento = avanzarCaravanasDeCampamento(
+  // La Caravana de Fundación (de un campamento o de una plaza): sin su titular vuelve sola, al llegar se desarma, y suelta caduca (D13, D14, D40, D68).
+  const trasCaravanasDeFundacion = avanzarCaravanasDeFundacion(
     trasEjercitos.caravanas,
     trasEjercitos.ejercitos,
-    heroes,
+    { asentamientos: trasTributos.asentamientos, heroes },
     faccionesFinal,
     trasReposicion.campamentos,
     mapa,
     instante
   );
-  heroes = trasCaravanasDeCampamento.heroes;
-  eventosDominio.push(...comoEventosDominio(trasCaravanasDeCampamento.eventos, contexto));
+  heroes = trasCaravanasDeFundacion.heroes;
+  eventosDominio.push(...comoEventosDominio(trasCaravanasDeFundacion.eventos, contexto));
   // La tropa prestada de un campamento donde ya no reside, fuera (D45).
-  const sinPrestamos = sinPrestamosAjenos(heroes, trasCaravanasDeCampamento.ejercitos, trasCaravanasDeCampamento.caravanas, trasReposicion.campamentos);
+  const sinPrestamos = sinPrestamosAjenos(heroes, trasCaravanasDeFundacion.ejercitos, trasCaravanasDeFundacion.caravanas, trasReposicion.campamentos);
   heroes = sinPrestamos.heroes;
 
   return {
-    asentamientos: trasTributos.asentamientos,
+    asentamientos: trasCaravanasDeFundacion.asentamientos,
     facciones: faccionesFinal,
     caravanas: sinPrestamos.caravanas,
     ejercitos: sinPrestamos.ejercitos,
@@ -420,7 +410,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     // Al FINAL, y con lo que ya se movió: lo que se graba es dónde acabaron las columnas este minuto, no de
     // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.
     memoriaPorFaccion: grabarLoVisto(estado.memoriaPorFaccion, {
-      asentamientos: trasTributos.asentamientos,
+      asentamientos: trasCaravanasDeFundacion.asentamientos,
       ejercitos: sinPrestamos.ejercitos,
       tropa: indiceTropa(heroes),
       facciones: faccionesFinal,

@@ -398,13 +398,13 @@ Caravana
   peajes?: { asentamientoId, progreso }[]   ciudades ajenas por las que pasa a la fuerza y aún no ha
                                 cruzado; deja el 2 % de cada recurso al alcanzar `progreso` — 2026-10-02
   origenAcuerdoId?, ladoAcuerdo?: 'A' | 'B'   si nace de un AcuerdoTrueque — existente
-  origenCampamentoId?, faccionId?   solo la Caravana de Fundación comprada en un campamento de mercenarios (Doc 1.9b):
-                         no tiene asentamiento de origen, así que lleva su Facción; `origenAsentamientoId` es el id del campamento — NUEVO 2026-10-02
-  titularId?, aportes?, caducaEn?   solo esa misma (2026-10-04, D10-D14, D34): nace sin destino; la lleva y funda su titular; `aportes`
-                         = Record<heroeId, Record<recurso, number>>, lo gastado del fondo a cada uno, para devolvérselo si se
-                         desarma o caduca; `caducaEn` = Instante en que caduca si sigue suelta
-  destinoPosicion?              caravana de Fundación: punto donde fundará al llegar — existente
-  jugadoresFundadoresIds?        caravana de Fundación — existente. Tras este modelo, heroeId[]
+  origenCampamentoId?          solo la Caravana de Fundación comprada en un campamento de mercenarios (Doc 1.9b): `origenAsentamientoId` es entonces el id del
+                         campamento — NUEVO 2026-10-02
+  faccionId?                   Facción dueña; SIEMPRE en la Caravana de Fundación (la de un campamento no tiene plaza de la que sacarla) — 2026-10-05
+  titularId?, caducaEn?        Caravana de Fundación, de un campamento o de una plaza (la misma entidad, Doc 1.8; 2026-10-05, D10-D14): nace sin destino,
+                         parada en su origen; la lleva enganchada y funda (`fundar`) su titular; `caducaEn` = Instante en que caduca si sigue suelta
+  aportes?                     solo la comprada en un campamento (2026-10-04, D34): Record<heroeId, Record<recurso, number>>, lo gastado del fondo a cada
+                         uno, para devolvérselo si se desarma o caduca; la de una plaza devuelve su `contenido` al almacén de su origen
   estado?: 'disponible' | 'preparando' | 'adjunta' | 'aparcada' | 'en_transito' | 'retornando'   existente
                                 (revamp de caravanas, ver Docs/Game/3 §3.13)
   carros?: CarroCaravana[]        SIEMPRE presente para tipo 'comercial' desde snapshot v12 — existente

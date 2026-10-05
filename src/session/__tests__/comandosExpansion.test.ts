@@ -11,7 +11,7 @@ describe('lanzarCaravanaFundacion', () => {
   it('rechazo: un asentamiento de nivel 1 todavía no puede expandir, y no muta nada', () => {
     const { sesion, asentamientoId } = partidaConAsentamiento();
     const antes = sesion.getState();
-    const r = sesion.ejecutar(lanzarCaravanaFundacion, { origenAsentamientoId: asentamientoId, destino: { x: 700, y: 700 }, numJugadores: 1 }, OPC);
+    const r = sesion.ejecutar(lanzarCaravanaFundacion, { origenAsentamientoId: asentamientoId }, OPC);
 
     expect(r.ok).toBe(false);
     expect(r.codigoError).toBe('expansion.invalida');
@@ -22,7 +22,7 @@ describe('lanzarCaravanaFundacion', () => {
 describe('desarmarCaravanaFundacion', () => {
   it('rechazo: una caravana que no es de Fundación se rechaza como error de dominio', () => {
     // Se inyecta una caravana comercial a mano: `desarmarCaravanaFundacion` solo acepta las de tipo
-    // 'construccion' con destino, y aquí interesa comprobar que ese rechazo del motor llega traducido.
+    // 'construccion', y aquí interesa comprobar que ese rechazo del motor llega traducido.
     const { sesion, asentamientoId } = partidaConAsentamiento();
     const payload = sesion.exportar();
     const conCaravana = GameSession.importar({

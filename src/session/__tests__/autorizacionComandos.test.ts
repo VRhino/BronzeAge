@@ -48,8 +48,8 @@ describe('exhaustividad de la matriz', () => {
   });
 });
 
-/** Lanzar la Caravana de Fundación de una plaza: la condición de dominio es ser ciudadano de su Facción. */
-const lanzarDesde = (origenAsentamientoId: string) => ({ origenAsentamientoId, destino: { x: 0, y: 0 }, numJugadores: 1 });
+/** Lanzar la Caravana de Fundación de una plaza: la condición de dominio es residir en ella y estar dentro. */
+const lanzarDesde = (origenAsentamientoId: string) => ({ origenAsentamientoId });
 
 describe('filtro de rol técnico', () => {
   it('un rol no listado se rechaza sin llegar a evaluar la condición de dominio', () => {

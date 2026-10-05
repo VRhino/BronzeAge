@@ -1,11 +1,11 @@
 // Refundar desde un campamento de mercenarios (Doc 1.9b, paso 5): el fondo de la Facción, la Caravana de Fundación al 75 % y su viaje.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion, Heroe } from '../../domain/types';
-import { MERCENARIOS } from '../../constants';
+import { FUNDACION, MERCENARIOS } from '../../constants';
 import { costoCaravanaFundacion } from '../expansion';
 import { MercenariosInvalidoError } from '../mercenarios';
-import { aportarARefundacion, avanzarCaravanasDeCampamento, comprarCaravanaDeRefundacion, costoRefundacion, devolverAportes, fondoDeFaccion, retirarDeRefundacion } from '../refundacion';
-import { crearFacciones, crearMapaDeterminista, heroeDePrueba, instanteDeTest } from './fixtures';
+import { aportarARefundacion, comprarCaravanaDeRefundacion, costoRefundacion, fondoDeFaccion, retirarDeRefundacion } from '../refundacion';
+import { crearFacciones, heroeDePrueba, instanteDeTest } from './fixtures';
 
 
 const campamento = (extra: Partial<CampamentoMercenarios> = {}): CampamentoMercenarios =>
@@ -104,11 +104,10 @@ describe('comprar la Caravana de Fundación', () => {
     expect(c.tipo).toBe('construccion');
     expect(c.origenCampamentoId).toBe('merc-1');
     expect(c.faccionId).toBe('f');
-    expect(c.destinoPosicion).toBeUndefined();
     expect(c.estado).toBe('disponible');
     expect(c.titularId).toBe('h1');
     expect(c.posicionActual).toEqual({ x: 400, y: 400 });
-    expect(c.caducaEn).toBe(instanteDeTest(MERCENARIOS.caducidadCaravanaHoras * 60));
+    expect(c.caducaEn).toBe(instanteDeTest(FUNDACION.caducidadCaravanaHoras * 60));
     // Lo gastado, por aportante: entre los dos, el coste exacto.
     for (const [recurso, n] of Object.entries(costo)) expect((c.aportes!['h1']?.[recurso] ?? 0) + (c.aportes!['h2']?.[recurso] ?? 0)).toBe(n);
     const sobra = Object.values(r.campamento.fondos).flatMap((f) => Object.values(f)).reduce((a, b) => a + b, 0);
@@ -130,53 +129,5 @@ describe('comprar la Caravana de Fundación', () => {
     expect(() => compra(fondoCompleto(), { asentamientos: [plaza('f')] })).toThrow(MercenariosInvalidoError);
     const enCamino = { tipo: 'construccion', faccionId: 'f' } as unknown as Caravana;
     expect(() => compra(fondoCompleto(), { caravanas: [enCamino] })).toThrow(MercenariosInvalidoError);
-  });
-});
-
-describe('la caravana de un campamento con el tiempo (D13, D14, D40, D43, D68)', () => {
-  const mapa = crearMapaDeterminista(42);
-  const campamentos = [campamento()];
-  const costo = costoRefundacion();
-  const caravana = (extra: Partial<Caravana> = {}): Caravana =>
-    ({ ...comprarCaravanaDeRefundacion(campamento({ fondos: { h1: { ...costo } } }), faccion(), [], [], 'h1', instanteDeTest(0)).caravana, ...extra }) as Caravana;
-  const tick = (cs: Caravana[], ejercitos: Ejercito[], heroes: Heroe[], t: number) =>
-    avanzarCaravanasDeCampamento(cs, ejercitos, heroes, [faccion()], campamentos, mapa, instanteDeTest(t));
-
-  it('devolver: a cada aportante lo suyo, el oro como oro de botín; quien ya no es ciudadano lo pierde', () => {
-    const c = caravana({ aportes: { h1: { madera: 10, oro: 5 }, ajeno: { madera: 7 } } });
-    const [h1, ajeno] = devolverAportes(c, [heroe('h1', {}), heroe('ajeno', {})], [faccion()]);
-    expect(h1!.almacenPersonal).toEqual({ madera: 10 });
-    expect(h1!.oroDeBotin).toBe(5);
-    expect(ajeno!.almacenPersonal).toEqual({});
-  });
-
-  it('suelta y sin nadie, caduca y devuelve', () => {
-    const c = caravana();
-    const antes = tick([c], [], [heroe('h1', {})], MERCENARIOS.caducidadCaravanaHoras * 60 - 1);
-    expect(antes.caravanas).toHaveLength(1);
-    const despues = tick([c], [], [heroe('h1', {})], MERCENARIOS.caducidadCaravanaHoras * 60);
-    expect(despues.caravanas).toEqual([]);
-    expect(despues.heroes[0]!.almacenPersonal).toEqual(Object.fromEntries(Object.entries(costo).filter(([r]) => r !== 'oro')));
-  });
-
-  it('enganchada sin su titular, se suelta y vuelve sola; al llegar se desarma y devuelve', () => {
-    const lejos = { x: 600, y: 400 };
-    const c = caravana({ estado: 'adjunta', posicionActual: lejos, caducaEn: undefined });
-    const ajena = { id: 'col', participantes: [{ heroeId: 'otro', unidoEn: 0 }], caravanasAdjuntasIds: [c.id], posicionActual: lejos } as unknown as Ejercito;
-    const r = tick([c], [ajena], [heroe('h1', {})], 1);
-    expect(r.caravanas[0]).toMatchObject({ estado: 'retornando', progreso: 0 });
-    expect(r.ejercitos[0]!.caravanasAdjuntasIds).toEqual([]);
-
-    let cs = r.caravanas;
-    let heroes = r.heroes;
-    for (let t = 2; t < 500 && cs.length > 0; t++) ({ caravanas: cs, heroes } = tick(cs, [], heroes, t));
-    expect(cs, 'llegó y se desarmó').toEqual([]);
-    expect(heroes[0]!.oroDeBotin).toBe(costo['oro']);
-  });
-
-  it('enganchada por su titular, sigue', () => {
-    const c = caravana({ estado: 'adjunta', caducaEn: undefined });
-    const suya = { id: 'col', participantes: [{ heroeId: 'h1', unidoEn: 0 }], caravanasAdjuntasIds: [c.id], posicionActual: c.posicionActual } as unknown as Ejercito;
-    expect(tick([c], [suya], [heroe('h1', {})], 1).caravanas).toEqual([c]);
   });
 });

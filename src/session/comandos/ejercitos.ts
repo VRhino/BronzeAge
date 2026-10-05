@@ -6,7 +6,7 @@
 // Llegar no es combatir (Doc 5.12.3-5.12.4): un ejército que llega acampa, y el combate se ordena con `atacar`
 // (`interaccion.ts`) a distancia de choque, también contra una plaza. `iniciarAsedio` sigue vivo como vía directa
 // entre dos asentamientos vecinos, que no exige movilizar.
-import { LOGISTICA, MERCENARIOS } from '../../constants';
+import { FUNDACION, LOGISTICA } from '../../constants';
 import { minutos, sumar } from '../../domain/tiempo';
 import { faccionDeCaravana } from '../../engine/expansion';
 import { distancia as distanciaEntre } from '../../world/geometria';
@@ -299,8 +299,8 @@ export const soltarCaravana = comando<ParamsSoltarCaravana, void>((estado, _mapa
 
   const caravana = exigirCaravana(estado, params.caravanaId);
   const r = soltarCaravanaEngine(ejercito, caravana);
-  // La de un campamento, suelta, vuelve a contar su caducidad (D14).
-  const suelta = r.caravana.titularId ? { ...r.caravana, caducaEn: sumar(ctx.instante, minutos(60 * MERCENARIOS.caducidadCaravanaHoras)) } : r.caravana;
+  // La Caravana de Fundación, suelta, vuelve a contar su caducidad (D14).
+  const suelta = r.caravana.titularId ? { ...r.caravana, caducaEn: sumar(ctx.instante, minutos(60 * FUNDACION.caducidadCaravanaHoras)) } : r.caravana;
   return exito(conCaravana(conEjercito(estado, r.ejercito), suelta), [
     evento(ctx, {
       codigo: 'ejercito.caravana_soltada',

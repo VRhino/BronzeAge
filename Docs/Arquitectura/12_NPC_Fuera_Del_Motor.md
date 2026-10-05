@@ -289,7 +289,7 @@ un jugador solo ve el interior de la plaza donde está, Doc 1.10.1).
 | 18 | Volver a casa / replegar las columnas acampadas | `entrarEnAsentamiento` / `replegarEjercito` | Líder | Sí |
 | 19 | Órdenes de compra/venta por excedente o escasez | `colocarOrdenMercado` | Residente | Sí (dentro) |
 | 20 | Perseguir columnas y caravanas enemigas a la vista | `perseguir` | Líder | Sí (`ejercitosAvistados`, `caravanasAvistadas`) |
-| 21 | Expandir con caravana de fundación **con 5 héroes nuevos** (`materializarFundadoresNpc`) | `lanzarCaravanaFundacion` | Ciudadano | Poder solo-NPC: crear héroes desaparece (§7) |
+| 21 | Expandir: lanzar la caravana de fundación desde la plaza, salir con ella enganchada, llevarla a un sitio y fundar (`src/bots/cerebro/fundar.ts`) | `lanzarCaravanaFundacion`, `movilizarEjercito`/`salirAlMundo`, `adjuntarCaravana`, `fundar` | Residente sin cargo (el titular) | Sí (`caravanas`, `asentamientosAvistados`) |
 | 22 | Fundación inicial de Facciones NPC (`fundarAsentamientosIniciales`, `crearFaccionNpc`) | — | — | Se queda **solo como andamio del batch** hasta el paso 4 (D53/D58) |
 
 **Lo que cambia por el camino aunque las decisiones sean las mismas:** los ids los da la sesión (no
@@ -307,8 +307,9 @@ plaza. El batch actual (estado crudo + `avanzarNpcGobernanza`) no sirve para est
 - **Campañas (fila 15)**: solo contra plazas **inspeccionadas** antes. Inspeccionar una plaza es regla nueva
   (Doc 5.12.3): desde el anillo de 40, revela guarnición y héroes dentro, no el almacén, y avisa a su Facción. El
   explorador es quien inspecciona.
-- **Expansión (fila 21)**: la caravana de fundación la llevan héroes que ya existen en la plaza de origen, dejando
-  al menos uno en casa. El número de héroes no crece hasta el paso 4.
+- **Expansión (fila 21)**: la caravana de fundación (Doc 1.8) es la misma que la de un campamento: nace parada en la plaza,
+  sin destino, con el residente sin cargo que la lanza como titular; este sale con su tropa, la engancha, la lleva a un
+  sitio y funda con `fundar`. Solo expande una plaza con al menos tres residentes, para dejar a alguien en casa.
 - **Render**: nada se despliega hasta terminar el bloque entero (pasos 2-4). Tampoco se lanzan batch ni pruebas de
   comportamiento hasta entonces: el servidor puede quedarse sin bots mientras tanto.
 - **Asimetrías del motor que caen con D52** (no hace falta decisión nueva: «un bot no puede hacer nada que un

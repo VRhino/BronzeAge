@@ -2,13 +2,9 @@
 // asentamientos compra en el campamento una CARAVANA DE FUNDACIÓN al 75 % de lo que cuesta una normal, y la paga entre sus héroes: cada uno
 // aporta lo que quiere a un fondo del campamento. La caravana nace sin destino; su titular la lleva enganchada y funda con `fundar` (D10).
 import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion, Heroe } from '../domain/types';
-import type { EventoCrudo } from '../domain/eventos';
-import type { Mapa } from '../world/mapa';
-import { calcularRuta } from '../world/rutas';
-import { avanzarPosicionEnRuta } from './movimiento';
 import { capacidadCargaDe, racionQueQueda } from './ejercitos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
-import { ALMACEN_PERSONAL, CARAVANA_CATALOGO, MERCENARIOS } from '../constants';
+import { ALMACEN_PERSONAL, FUNDACION, MERCENARIOS } from '../constants';
 import { totalAlmacenPersonal } from './almacenPersonal';
 import { costoCaravanaFundacion } from './expansion';
 import { calcularCapFundacion, esCiudadano } from './faccion';
@@ -129,7 +125,7 @@ export function retirarDeRefundacion(
  * gasta de los aportes de sus ciudadanos por orden de ciudadanía hasta cubrirlo; lo que sobre de cada uno se queda en el fondo, y lo gastado
  * a cada uno queda apuntado en la caravana (`aportes`) para devolvérselo si caduca. Nace **sin destino**, parada en el campamento: su
  * titular (el que compra) la engancha a su columna y funda con `fundar` donde esté (D10, D11). Si nadie la lleva, caduca en
- * `MERCENARIOS.caducidadCaravanaHoras` (D14). Lleva la Facción en sí misma (D48): su origen es el campamento (D36).
+ * `FUNDACION.caducidadCaravanaHoras` (D14). Lleva la Facción en sí misma (D48): su origen es el campamento (D36).
  */
 export function comprarCaravanaDeRefundacion(
   campamento: CampamentoMercenarios,
@@ -185,102 +181,7 @@ export function comprarCaravanaDeRefundacion(
     estado: 'disponible',
     titularId: heroeId,
     aportes,
-    caducaEn: sumar(instante, minutos(60 * MERCENARIOS.caducidadCaravanaHoras)),
+    caducaEn: sumar(instante, minutos(60 * FUNDACION.caducidadCaravanaHoras)),
   };
   return { campamento: { ...campamento, fondos }, caravana };
-}
-
-/**
- * Devuelve lo que costó la caravana a cada aportante, según su registro (D14, D34, D43, D68): a su almacén personal hasta donde quepa, el
- * oro como oro de botín. Lo que no se pueda recibir —no cabe, o el aportante ya no es ciudadano de esa Facción— se pierde.
- */
-export function devolverAportes(caravana: Caravana, heroes: readonly Heroe[], facciones: readonly Faccion[]): Heroe[] {
-  const faccion = facciones.find((f) => f.id === caravana.faccionId);
-  const aportes = caravana.aportes ?? {};
-  return heroes.map((h) => {
-    const suyo = aportes[h.id];
-    if (!suyo || !faccion || !esCiudadano(faccion, h.id)) return h;
-    let libre = ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(h);
-    const almacenPersonal = { ...h.almacenPersonal };
-    let oroDeBotin = h.oroDeBotin ?? 0;
-    for (const [recurso, n] of Object.entries(suyo)) {
-      if (recurso === 'oro') {
-        oroDeBotin += n;
-        continue;
-      }
-      const cabe = Math.max(0, Math.min(n, libre));
-      if (cabe > 0) almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cabe;
-      libre -= cabe;
-    }
-    return { ...h, almacenPersonal, oroDeBotin };
-  });
-}
-
-/**
- * Lo que le pasa con el tiempo a la Caravana de Fundación de un campamento (D13, D14, D40, D68):
- *
- * - **Enganchada sin su titular**: si quien la lleva ya no es su titular, o el titular dejó de ser ciudadano, se suelta y **vuelve sola
- *   a su campamento** (otro ciudadano puede reclamarla por el camino, `adjuntarCaravana`). Si la columna ya no existe (su titular salió
- *   del mundo, por ejemplo), lo mismo.
- * - **Volviendo**: avanza hacia el campamento; al llegar **se desarma y devuelve** lo aportado (`devolverAportes`).
- * - **Suelta, sin nadie**: al cumplirse `caducaEn`, **caduca y devuelve** lo aportado.
- *
- * Sin camino de vuelta por tierra, se pierde.
- */
-export function avanzarCaravanasDeCampamento<E extends Ejercito>(
-  caravanas: readonly Caravana[],
-  ejercitos: readonly E[],
-  heroes: readonly Heroe[],
-  facciones: readonly Faccion[],
-  campamentos: readonly CampamentoMercenarios[],
-  mapa: Mapa,
-  instante: Instante
-): { caravanas: Caravana[]; ejercitos: E[]; heroes: Heroe[]; eventos: EventoCrudo[] } {
-  if (!caravanas.some((c) => c.titularId)) return { caravanas: [...caravanas], ejercitos: [...ejercitos], heroes: [...heroes], eventos: [] };
-  const eventos: EventoCrudo[] = [];
-  let ejercitosTras = [...ejercitos];
-  let heroesTras = [...heroes];
-  const restantes: Caravana[] = [];
-  const devolver = (c: Caravana, porque: string) => {
-    heroesTras = devolverAportes(c, heroesTras, facciones);
-    eventos.push({ codigo: 'fundacion.caravana_devuelta', mensaje: `La Caravana de Fundación ${c.id} ${porque} y devuelve lo aportado.`, payload: { caravanaId: c.id, faccionId: c.faccionId } });
-  };
-
-  for (const c of caravanas) {
-    if (!c.titularId) {
-      restantes.push(c);
-      continue;
-    }
-    const campamento = campamentos.find((m) => m.id === c.origenCampamentoId);
-    if (c.estado === 'adjunta') {
-      const columna = ejercitosTras.find((e) => e.caravanasAdjuntasIds.includes(c.id));
-      const faccion = facciones.find((f) => f.id === c.faccionId);
-      const titularLaLleva = !!columna && columna.participantes.some((p) => p.heroeId === c.titularId) && !!faccion && esCiudadano(faccion, c.titularId);
-      if (titularLaLleva) {
-        restantes.push(c);
-        continue;
-      }
-      if (columna) ejercitosTras = ejercitosTras.map((e) => (e.id === columna.id ? { ...e, caravanasAdjuntasIds: e.caravanasAdjuntasIds.filter((id) => id !== c.id) } : e));
-      const ruta = campamento && calcularRuta(mapa, c.posicionActual, campamento.posicion);
-      if (!ruta) {
-        eventos.push({ codigo: 'fundacion.caravana_perdida', mensaje: `La Caravana de Fundación ${c.id} se queda sin nadie que la lleve y sin camino a casa: se pierde.`, payload: { caravanaId: c.id } });
-        continue;
-      }
-      restantes.push({ ...c, estado: 'retornando', ruta, progreso: 0 });
-      eventos.push({ codigo: 'fundacion.caravana_vuelve', mensaje: `La Caravana de Fundación ${c.id} se queda sin su titular y vuelve sola a ${campamento!.id}.`, payload: { caravanaId: c.id, faccionId: c.faccionId } });
-      continue;
-    }
-    if (c.estado === 'retornando' && c.ruta) {
-      const avance = avanzarPosicionEnRuta(mapa, c.ruta, c.progreso, CARAVANA_CATALOGO.construccion.velocidad);
-      if (avance.progreso < 1) restantes.push({ ...c, progreso: avance.progreso, posicionActual: avance.posicion });
-      else devolver(c, `llega sin nadie a ${campamento?.id ?? 'su campamento'}, se desarma`);
-      continue;
-    }
-    if (c.estado === 'disponible' && c.caducaEn !== undefined && instante >= c.caducaEn) {
-      devolver(c, 'caduca sin que nadie la lleve');
-      continue;
-    }
-    restantes.push(c);
-  }
-  return { caravanas: restantes, ejercitos: ejercitosTras, heroes: heroesTras, eventos };
 }

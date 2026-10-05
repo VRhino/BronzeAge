@@ -6,7 +6,7 @@
 // El motor NO sabe de jugadores ni de sesiones: aquí solo se hace aritmética sobre la caravana y los
 // catálogos. La validación de residencia / propiedad de escuadrones para la escolta vive en `session/`.
 
-import { ANIMAL_CATALOGO, CARRO_CATALOGO } from '../constants';
+import { ANIMAL_CATALOGO, CARRO_CATALOGO, VISION } from '../constants';
 import type { Caravana } from '../domain/types';
 
 /** Los carros que llevan animal — los únicos que viajan y cuentan capacidad (Doc 3.13.1). */
@@ -38,6 +38,15 @@ export function velocidadCaravana(caravana: Caravana): number {
   const conTraccion = carrosConTraccion(caravana);
   if (conTraccion.length === 0) return 0;
   return Math.min(...conTraccion.map((c) => ANIMAL_CATALOGO[c.animal!].velocidad));
+}
+
+/**
+ * ¿Llama la atención? (Doc 5.12.7): una caravana comercial con al menos `VISION.caravanaGrande.carros` carros con animal, o sea, de
+ * las que salen. Cuenta lo que viajaría y no el casco, así que sirve igual en `preparando` que en ruta. Una de Fundación no es grande
+ * por esto: es lo que sea su columna.
+ */
+export function esCaravanaGrande(caravana: Caravana): boolean {
+  return caravana.tipo === 'comercial' && carrosConTraccion(caravana).length >= VISION.caravanaGrande.carros;
 }
 
 /**

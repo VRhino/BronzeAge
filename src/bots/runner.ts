@@ -25,9 +25,9 @@ export type Plan =
   /** Sin plaza: recorrer el anillo de bandidos de su campamento (y abrir los alijos que vea por el camino). `salio`: ya se alejó
    * de la puerta, así que volver a ella es volver a casa. */
   | { tipo: 'anillo'; campamentoId: string; salio?: boolean; /** Sale sin tropa a buscar (no come) y vuelve al ver presa. */ explorar?: { desde: Instante; paso: number; giro: number } }
-  /** Sin plaza: llevar la caravana de fundación a `sitio` y fundar; `descartados`, los sitios donde `fundar` ya dijo que no. */
+  /** Llevar la caravana de fundación a `sitio` y fundar —sin plaza, comprada en el campamento; con ella, lanzada desde casa—; `descartados`, los sitios donde `fundar` ya dijo que no. */
   | { tipo: 'fundar'; caravanaId: string; sitio?: { x: number; y: number }; descartados: { x: number; y: number }[] }
-  /** Sin plaza: va en la columna de un compañero (la caza en grupo o la de fundación). `salio`, como en `anillo`. */
+  /** Va en la columna de un compañero (la caza en grupo o la de fundación). `salio`, como en `anillo`. */
   | { tipo: 'unirse'; ejercitoId: string; para: 'cazar' | 'fundar'; salio?: boolean };
 
 /**

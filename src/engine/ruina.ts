@@ -15,8 +15,8 @@
 //
 // Los residentes los reubica `reubicarResidentesDeRuina` (`engine/mercenarios.ts`) y la derrota de su Facción la marca
 // `registrarDerrota`; las rutas de la red de caminos se podan solas (`podarRutas`). Las Caravanas de Fundación que
-// salían de ella ya se pierden con su propio evento (`expansion.caravana_perdida`) y las adjuntas a un ejército siguen
-// con él.
+// salían de ella las cierra su propio subsistema (`avanzarCaravanasDeFundacion`: sin origen, se pierden con su evento) y las
+// adjuntas a un ejército siguen con él.
 import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import type { Mapa } from '../world/mapa';

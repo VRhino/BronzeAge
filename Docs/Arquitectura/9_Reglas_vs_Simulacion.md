@@ -168,7 +168,7 @@ Todo lo que empieza por `avanzar*`, más `engine/simulation.ts` como orquestador
 
 `avanzarSimulacion` · `avanzarConstruccion` · `avanzarMantenimiento` · `avanzarNivelAsentamiento` ·
 `avanzarNivelesFaccion` · `avanzarNutricionPoblacion` · `crecerPoblacion` · `avanzarComercio` ·
-`avanzarMercado` · `avanzarTributos` · `avanzarPoliticas` · `avanzarReputacion` · `avanzarCaravanasFundacion` ·
+`avanzarMercado` · `avanzarTributos` · `avanzarPoliticas` · `avanzarReputacion` · `avanzarCaravanasDeFundacion` ·
 `avanzarSpawnBandidos` · `avanzarAtaquesBandidos` · `avanzarMantenimientoTropas` · `avanzarPosicionEnRuta` ·
 `avanzarAutoComercioSimulado` · `Mapa.avanzarRegeneracion`
 

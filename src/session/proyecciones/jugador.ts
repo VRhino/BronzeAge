@@ -73,6 +73,7 @@ import type {
 } from '../../domain/types';
 import { TECNOLOGIAS, VISION } from '../../constants';
 import type { ContadorLogro, EraId, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
+import { esCaravanaGrande } from '../../engine/caravanas';
 import { tecnologiasDe } from '../../engine/tecnologia';
 import { distancia, pointInPolygon } from '../../world/geometria';
 import type { EstadoMapa } from '../../world/mapa';
@@ -651,11 +652,22 @@ function territorioDeCadaEjercito(
 }
 
 /**
+ * Una caravana GRANDE se ve a `VISION.caravanaGrande.radio` de cualquier plaza o columna propia, aunque no entre en su vista normal
+ * (Doc 5.12.7): desde que se prepara en su plaza y mientras viaja cargada. Una que vuelve vacía, o enganchada a una columna, ya no
+ * llama la atención por sí misma: lo que se ve de ella es lo que se ve de su columna.
+ */
+function llamaLaAtencion(c: Caravana, asentamientosPropios: readonly Asentamiento[], ejercitosPropios: readonly Ejercito[]): boolean {
+  if ((c.estado !== 'preparando' && c.estado !== 'en_transito') || !esCaravanaGrande(c)) return false;
+  const { radio } = VISION.caravanaGrande;
+  return asentamientosPropios.some((a) => distancia(c.posicionActual, a.posicion) <= radio) || ejercitosPropios.some((e) => distancia(c.posicionActual, e.posicionActual) <= radio);
+}
+
+/**
  * Las caravanas ajenas que se ven ahora mismo, redactadas (Doc 5.12.7 aplicado al comercio).
  *
  * Se excluyen las PROPIAS —ya viajan completas— y las `disponible`, que son flota aparcada dentro de una
  * plaza y no algo que cruce el campo. Una caravana en estado `adjunta` SI se ve, y marcada como escoltada:
- * es informacion que cambia la decision de quien la mira.
+ * es informacion que cambia la decision de quien la mira. Las GRANDES se ven desde más lejos (`llamaLaAtencion`).
  */
 function caravanasAvistadas(
   estado: GameSessionState,
@@ -670,7 +682,7 @@ function caravanasAvistadas(
   return estado.caravanas
     .filter((c) => !esPropio(c.origenAsentamientoId) && !(c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId)))
     .filter((c) => c.estado !== 'disponible')
-    .filter((c) => seVeAhora(c.posicionActual, asentamientosPropios, ejercitosPropios, tropa))
+    .filter((c) => seVeAhora(c.posicionActual, asentamientosPropios, ejercitosPropios, tropa) || llamaLaAtencion(c, asentamientosPropios, ejercitosPropios))
     .map((c) => ({
       id: c.id,
       posicionActual: c.posicionActual,

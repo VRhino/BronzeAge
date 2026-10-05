@@ -67,7 +67,7 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 
 ## 1.3 Onboarding de nuevos jugadores
 - **El héroe nace DENTRO de un campamento de mercenarios (1.9b) que elige**, como residente, sin columna en el mapa. La pantalla de elección muestra todos los campamentos con dos cifras: cuántos lo eligieron al nacer y cuántos residen ahora (solo informativas, sin tope). Desde allí sale al mundo cuando quiere.
-- **Fundar (2026-10-04, D7, D19, D30)**: **solo con una Caravana de Fundación**; no se funda a pie. Una Facción sin asentamientos la compra en un campamento de mercenarios con el fondo de sus héroes (1.8, 1.9b); quien ya tiene plaza la lanza desde ella (1.8). La del campamento se lleva enganchada a la columna y **se funda DONDE SE ESTÁ** (`fundar`): caminar hasta un buen emplazamiento es la primera decisión de la Facción, y es lo que da sentido a explorar antes de asentarse.
+- **Fundar (2026-10-04, D7, D19, D30)**: **solo con una Caravana de Fundación**; no se funda a pie. Una Facción sin asentamientos la compra en un campamento de mercenarios con el fondo de sus héroes (1.8, 1.9b); quien ya tiene plaza la lanza desde ella (1.8). Es la misma caravana: se lleva enganchada a la columna y **se funda DONDE SE ESTÁ** (`fundar`): caminar hasta un buen emplazamiento es la primera decisión de la Facción, y es lo que da sentido a explorar antes de asentarse.
 - **Nadie nace asentado (D53, 2026-10-04).** El servidor arranca sin Facciones: todas nacen por el mismo camino,
   campamento → caravana → `fundar`. Los **héroes bot** (5.15.6) llegan escalonados a los campamentos como llegarían
   los jugadores, conviven con ellos y cuentan como residentes (D54, D56); un mundo con Facciones ya puestas falsearía
@@ -131,33 +131,31 @@ Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `Cons
 - Da incentivo mecánico a preferir vasallaje/conquista sobre fundación directa una vez alcanzado el cap.
 - **Qué hace subir el nivel de Facción**: la experiencia acumulada (combate digno, conquista, edificio completado, subir de nivel un asentamiento, fundar, cerrar trueques y, mientras la Facción es joven, destruir campamentos de bandidos). Ver Doc 2.2.1 para el criterio completo, la curva de umbrales y el cupo de asentamientos nivel 2/3 que también depende de este nivel.
 
-## 1.8 Caravana de Fundación (mecanismo de expansión más allá del primer asentamiento)
+## 1.8 Caravana de Fundación (la única forma de fundar)
 
-Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se sustituyen. El objetivo es que fundar un asentamiento adicional cueste recursos reales y se sienta orgánico, evitando fundación en cadena sin fricción.
+Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se sustituyen. El objetivo es que fundar un asentamiento cueste recursos reales y se sienta orgánico, evitando fundación en cadena sin fricción.
+
+**Es una sola entidad** (2026-10-05): la que compra una Facción sin plazas en un campamento de mercenarios y la que lanza una plaza son la misma y funcionan igual. **Nace sin destino, parada en su origen**, con un **titular** —quien la compra o la lanza— que la engancha a su columna (Doc 5.13) y **funda con `fundar` DONDE SE ESTÁ**. Ya no existe una caravana que viaje sola hacia un punto elegido: caminar hasta un buen emplazamiento, con la columna y su escolta, es la primera decisión de quien funda.
 
 **COSTE** = suma de tres componentes:
 1. Los materiales iniciales que recibe todo asentamiento nuevo al fundar (ver 1.3).
 2. El coste de construcción de los edificios que nacen automáticamente con la fundación (Centro Urbano, Granja, 3 Viviendas — ver Doc 4.2.1).
 3. +50 de madera extra, representando el coste de fabricar la caravana en sí (placeholder).
 
-**Desde un campamento de mercenarios** (2026-10-02; rehecho el 2026-10-04, D9-D16, D30, D34, D39, D40, D68; 1.9b): una Facción sin asentamientos, que no tiene origen del que partir, la compra en un campamento al 75 % del coste, con el fondo que aportan sus héroes **en ese campamento** (lo traen en su almacén personal si residen allí, o en el carro). Los gates de origen de abajo no aplican; sí el Cap de Fundación.
-- **Nace sin destino**, parada en el campamento, y su **titular** (quien la compra) la engancha a su columna. Los demás escoltan uniéndose a esa columna.
-- **Se funda con `fundar`** donde esté la columna: fuera de toda zona de influencia, no sobre agua y a **100** o más de cualquier campamento (`MERCENARIOS.radioExclusionFundar`). Es el mismo mecanismo con que funda la caravana de una plaza al llegar (D30).
-- Lleva su Facción: solo un ciudadano de ella la engancha; los demás solo pueden atacarla, y su origen es el campamento. **Si el titular deja de llevarla** (sale del mundo, deja la Facción, o la lleva otro), se suelta y **vuelve sola** a su campamento; otro ciudadano puede **reclamarla** por el camino y pasa a ser el titular. Si llega sin nadie, **se desarma**.
-- **Suelta y sin nadie, caduca a las 48 h** (`MERCENARIOS.caducidadCaravanaHoras`). Al desarmarse o caducar **devuelve a cada aportante lo suyo** (la caravana apunta quién aportó qué): a su almacén personal, el oro como oro de botín; lo que no cabe, o lo de quien ya no es ciudadano, se pierde. Destruida, se pierde. No hay espera para comprar otra.
+**De dónde sale:**
+- **Desde una plaza**: la lanza (`lanzarCaravanaFundacion`) un residente de ella presente, que pasa a ser su titular. Gates de origen, todos a la vez: la plaza **paga el coste completo** de su almacén; está en **nivel 2** como mínimo (gate estructural, independiente del coste); y el **cooldown de creación** —tras lanzar una Caravana de Fundación o crear una comercial (Doc 3.12), mismo cooldown COMPARTIDO— no ha de estar corriendo: `CARAVANA_COOLDOWN` (10 minutos, parametrizable), para que no se spamee la creación cuando la recién lanzada es destruida (bandidos, 1.9; intercepción, Doc 3.10). El **cupo del Cap de Fundación** se reserva al lanzar: cuentan las plazas de la Facción más sus caravanas de fundación vivas.
+- **Desde un campamento de mercenarios** (2026-10-02; rehecho el 2026-10-04, D9-D16, D30, D34, D39, D40, D68; 1.9b): una Facción sin asentamientos, que no tiene origen del que partir, la compra en un campamento al 75 % del coste, con el fondo que aportan sus héroes **en ese campamento** (lo traen en su almacén personal si residen allí, o en el carro). Los gates de la plaza no aplican; sí el Cap de Fundación.
 
-**GATES DE ORIGEN (todos necesarios simultáneamente):**
-- Solo puede lanzarse desde un asentamiento que PUEDA PAGAR el coste completo.
-- Solo puede lanzarse desde un asentamiento en NIVEL 2 como mínimo — gate estructural independiente del coste, que no depende de números ajustables.
-- **Cooldown de creación**: tras lanzar una Caravana de Fundación —o crear una comercial (Doc 3.12), mismo cooldown COMPARTIDO entre las dos— el asentamiento de origen no puede crear otra hasta que pase `CARAVANA_COOLDOWN` (10 minutos, parametrizable). Evita el spam de creación cuando la caravana recién lanzada es destruida (bandidos, 1.9; intercepción, Doc 3.10) y el cap y los recursos vuelven a estar disponibles de inmediato. Es regla del motor: gatea igual el lanzamiento de un jugador que el de la gobernanza NPC.
+**Fundar** (`fundar`, D30): el titular, con la caravana enganchada a su columna, en un punto **fuera de toda zona de influencia**, no sobre agua y a **100** o más de **cualquier campamento de mercenarios** (`MERCENARIOS.radioExclusionFundar`, D16). Nunca encima de un campamento. Los ciudadanos de su Facción que van en esa columna son **cofundadores** (hasta `FUNDACION.maxJugadoresFundacionGrupal`): unirse a la columna es el consentimiento (D12). La caravana se gasta y la columna entra en la plaza nueva.
 
-**NATURALEZA:**
-- Se lanza por ACCIÓN MANUAL EXPLÍCITA del jugador (elige destino y confirma). Es la caravana donde la intencionalidad del jugador es el punto central del diseño.
-- INTERCEPTABLE Y ESCOLTABLE igual que cualquier otra caravana (Doc 3.10) — mismas reglas de combate y umbral de captura del 50%, sin regla especial.
+**Escoltarla**: la caravana viaja con la columna de su titular y se defiende con ella (Doc 5.13.3): los héroes de la Facción que se le unen (`unirseEnCampo`) la escoltan como a cualquier caravana. Interceptable igual que las demás (Doc 3.10), mismas reglas de combate y umbral de captura del 50 %.
 
-**CASOS:**
-- Si el punto de destino elegido deja de estar disponible en tránsito (ej. otra Facción funda ahí primero): en fases con movimiento libre de caravana por el mapa (Fase 1+), el jugador MUEVE la caravana ya en marcha hacia otro punto válido y funda allí — no se pierde el viaje ni el coste.
-- CANCELACIÓN: el jugador puede DESARMAR la caravana de fundación en el asentamiento de origen y recuperar el contenido COMPLETO — sin pérdida por cambiar de opinión antes de fundar.
+**Titular y Facción**: lleva su Facción; solo un ciudadano de ella la engancha, los demás solo pueden atacarla. **Si el titular deja de llevarla** (sale del mundo, deja la Facción, o la lleva otro), se suelta y **vuelve sola** a su origen; otro ciudadano puede **reclamarla** por el camino y pasa a ser el titular. Si llega sin nadie, **se desarma**.
+
+**Soltarla, caducar y desarmar** — la caravana siempre devuelve lo que costó:
+- **Suelta y sin nadie, caduca a las 48 h** (`FUNDACION.caducidadCaravanaHoras`); la que una columna deja aparcada al guarnecer cuenta como suelta. Destruida, se pierde. No hay espera para lanzar o comprar otra (salvo el cooldown de la plaza).
+- **Desarmar a mano** (`desarmarCaravanaFundacion`): solo su titular, con la caravana **suelta y en la puerta de su origen** (si no, sería llevarse el coste de un sitio a otro sin recorrer el camino). Cancelar no pierde nada.
+- **Qué devuelve**: la de una plaza, **todo el coste a su almacén** (hasta donde quepa). La de un campamento, **a cada aportante lo suyo** (la caravana apunta quién aportó qué): a su almacén personal, el oro como oro de botín; lo que no cabe, o lo de quien ya no es ciudadano, se pierde.
 
 ## 1.9 Campamentos de bandidos (inspirado en Travian)
 

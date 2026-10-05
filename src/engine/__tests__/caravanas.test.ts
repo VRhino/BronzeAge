@@ -24,9 +24,8 @@ import {
   proponerTrueque,
   CaravanaInvalidaError,
 } from '../trade';
-import { lanzarCaravanaFundacion, ExpansionInvalidaError } from '../expansion';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
-import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, escuadronDePrueba, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 import { RED_VACIA } from '../redCaminos';
 
 const SIN_TERRITORIO = { red: RED_VACIA, asentamientos: [], zonas: [] };
@@ -147,59 +146,6 @@ describe('cooldown de creación de caravanas', () => {
     it('un asentamiento que nunca creó ninguna no está en cooldown', () => {
       const asentamiento = asentamientoConMercado();
       expect(() => construirCaravanaComercial(asentamiento, [], instanteDeTest(0), 0)).not.toThrow();
-    });
-  });
-
-  describe('Caravana de Fundación (lanzarCaravanaFundacion)', () => {
-    function contextoNivel2() {
-      const mapa = crearMapaDeterminista(1);
-      const facciones = crearFacciones().map((f) => (f.id === 'faccion-1' ? { ...f, nivel: 3 } : f));
-      const { asentamiento, facciones: trasFundar } = fundarAsentamientoDeTest(mapa, facciones, 'faccion-1', []);
-      const abundante: Asentamiento = {
-        ...asentamiento,
-        nivel: 2,
-        nivelActual: 2,
-        almacen: Object.fromEntries(
-          Object.entries(asentamiento.almacen).map(([recurso, item]) => [recurso, { ...item, cantidad: 5000, capacidad: 5000 }])
-        ),
-      };
-      const faccion = trasFundar.find((f) => f.id === 'faccion-1')!;
-      const destino = posicionRecomendable(mapa, [abundante]);
-      return { mapa, asentamiento: abundante, faccion, destino };
-    }
-
-    it('quien lanza puede decidir quién funda; sin decirlo, los primeros ciudadanos de la Facción', () => {
-      const { mapa, asentamiento, faccion, destino } = contextoNivel2();
-      const porDefecto = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);
-      expect(porDefecto.caravana.heroesFundadoresIds).toEqual(faccion.ciudadanosIds.slice(0, 1));
-      const elegidos = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 2, instanteDeTest(0), 0, ['a', 'b', 'c']);
-      expect(elegidos.caravana.heroesFundadoresIds).toEqual(['a', 'b']);
-    });
-
-    it('rechaza lanzar una segunda Caravana de Fundación antes de que pase el cooldown', () => {
-      const { mapa, asentamiento, faccion, destino } = contextoNivel2();
-      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);
-      expect(() =>
-        lanzarCaravanaFundacion(mapa, r1.origenActualizado, faccion, destino, [asentamiento], [r1.caravana], 1, instanteDeTest(0), 1)
-      ).toThrow(ExpansionInvalidaError);
-    });
-
-    it('permite lanzar otra en cuanto pasa CARAVANA_COOLDOWN.cooldownMinutos ticks', () => {
-      const { mapa, asentamiento, faccion, destino } = contextoNivel2();
-      const r1 = lanzarCaravanaFundacion(mapa, asentamiento, faccion, destino, [asentamiento], [], 1, instanteDeTest(0), 0);
-      expect(() =>
-        lanzarCaravanaFundacion(
-          mapa,
-          r1.origenActualizado,
-          faccion,
-          destino,
-          [asentamiento],
-          [r1.caravana],
-          1,
-          instanteDeTest(CARAVANA_COOLDOWN.cooldownMinutos),
-          1
-        )
-      ).not.toThrow();
     });
   });
 });

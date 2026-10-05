@@ -51,7 +51,7 @@ y escolta sin héroe. Reglas en `Docs/Game/3` §3.13; decisiones, motor y plan e
 
 ### 8.1 Lo diferido — forma diseñada, implementación en un pase posterior
 
-El diseño de 2026-09-08 recortó seis piezas (la planificación horaria se hizo el 2026-10-02: `prepararCaravana.salirEn`, Doc 3.13.3) del enunciado original para no inflar el primer pase. Ninguna se
+El diseño de 2026-09-08 recortó seis piezas (la planificación horaria se hizo el 2026-10-02: `prepararCaravana.salirEn`, Doc 3.13.3; la visibilidad por tamaño, el 2026-10-05: Doc 5.12.7) del enunciado original para no inflar el primer pase. Ninguna se
 descartó: se decidió su forma y se aparcó. Aquí queda cada una con lo que falta para abordarla.
 
 **a) Cría de animales de arrastre.** Hoy los animales solo se compran con oro. El enunciado quiere obtenerlos
@@ -59,13 +59,6 @@ también por cría. El Corral (Doc 1.4/4.2.1) produce *livestock*, que es un rec
 bueyes/caballos/camellos necesitaría su propio edificio o una receta que consuma livestock + trigo y tarde
 ticks. Falta: decidir si es un edificio nuevo o una función del Corral, el coste y el ritmo, y si cada tipo
 de animal exige condiciones (el camello, un bioma; el caballo, quizá un nivel de asentamiento).
-
-**b) Visibilidad por tamaño.** Las caravanas pequeñas no deberían aparecer en el mapa general salvo que haya
-un jugador cerca (regla de niebla actual); las grandes deberían **llamar la atención desde que se preparan**,
-al punto de ser visibles para asentamientos hasta cierta distancia, para que salgan a interceptarlas. Es el
-gancho de conflicto del enunciado. Falta: un umbral de tamaño (nº de carros y/o carga) que decida si la
-caravana entra en la proyección de niebla de otras Facciones y a qué radio, y que eso aplique **durante el
-estado `preparando`**, no solo en ruta. Engancha con Doc 5.12 (niebla de guerra).
 
 **c) Inmunidad del camello al desierto — POSPUESTO a fase posterior a Fase 0** (decisión del usuario,
 2026-09-09). El camello "no se muere en los desiertos"; buey y caballo sí. Pero no existe un bioma `desierto`
@@ -373,15 +366,9 @@ misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o
   ejércitos, historial y la IA, y no se hizo.
 - **Entrega por caravana de lo que vende el mercado**: una Facción pide desde su asentamiento y la caravana vuelve con la compra
   (Doc 3.3b). Hoy solo compra el héroe residente, directo a su almacén personal.
-- **Escoltar la Caravana de Fundación**: el diseño dice que los héroes de la Facción la escoltan, como a todas; hoy ninguna Caravana
-  de Fundación se puede enganchar a un ejército, y la comprada en un campamento viaja sola. Tampoco se puede desarmar.
 - **«Lo que está dentro es intocable»** y entrar en un campamento como en una plaza (5.12.3): el héroe no tiene ubicación dentro de un
   campamento, así que no hay nada que proteger todavía. Tampoco hay nada que ataque a una caravana o columna en su puerta.
-- **Fundar encima de un campamento**: nada lo impide (`evaluarViabilidadFundacion` no mira los campamentos).
 - **La taberna** es solo un edificio del layout: sin rumores. La versión completa va con la entrada 18.
-- **El escuadrón recién reclutado no se une a la columna** si hay Liderazgo: siempre nace en el campamento del héroe.
-- **Fundar a pie sigue siendo gratis** para cualquier ciudadano (hasta el cupo), también para expandirse: el coste de la Caravana de
-  Fundación se puede esquivar. Cabo suelto de diseño, fuera de esta entrada.
 - **Contrato con Conquest** (`src/contratos/v1/`): entidad `CampamentoMercenarios` y `Heroe.almacenPersonal`, y la escena con las 3
   variantes de layout. Descripción en el modelo de datos §10.
 - **Cliente de administración**: no pinta los campamentos.

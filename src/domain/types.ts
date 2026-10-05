@@ -861,9 +861,9 @@ export interface Caravana {
   origenAsentamientoId: string;
   /** Solo la Caravana de Fundación comprada en un campamento de mercenarios: de dónde sale. */
   origenCampamentoId?: string;
-  /** Facción dueña cuando no se puede sacar del asentamiento de origen (la de un campamento de mercenarios). Ausente = la del origen. */
+  /** Facción dueña. Siempre en la Caravana de Fundación (la de un campamento no tiene plaza de la que sacarla); ausente en las demás = la del origen. */
   faccionId?: string;
-  /** Ausente en caravanas de fundación (Doc 1.8): el destino todavía no es un asentamiento, ver `destinoPosicion`. */
+  /** Ausente en la Caravana de Fundación (Doc 1.8): no tiene destino, funda donde esté su columna (`fundar`). */
   destinoAsentamientoId?: string;
   contenido: Record<string, number>;
   posicionActual: Point;
@@ -871,8 +871,8 @@ export interface Caravana {
   progreso: number;
   /** Polilínea calculada al lanzar la caravana (ver `world/rutas.ts` `calcularRuta` y `engine/movimiento.ts`)
    * — rodea terreno costoso en vez de ir en línea recta, y determina sobre qué longitud real se mide
-   * `progreso`. Toda caravana con `destinoAsentamientoId`/`destinoPosicion` (en movimiento) la trae puesta al
-   * despacharse. Ausente solo en estado `'disponible'` (flota propia sin asignar todavía, Doc 3.2): ahí no
+   * `progreso`. Toda caravana con `destinoAsentamientoId` (en movimiento), y la de Fundación que vuelve sola a su origen,
+   * la trae puesta. Ausente solo en estado `'disponible'` (flota propia sin asignar todavía, Doc 3.2): ahí no
    * hay trayecto que recorrer hasta la siguiente asignación. */
   ruta?: Point[];
   /** Pasos forzados por ciudades ajenas que aún no ha cruzado (decisión 6): al llegar al `progreso` de cada uno,
@@ -881,17 +881,13 @@ export interface Caravana {
   /** Acuerdo de trueque que generó esta caravana (Doc 3.2) — indica a qué lado del acuerdo pertenece. */
   origenAcuerdoId?: string;
   ladoAcuerdo?: 'A' | 'B';
-  /** Caravana de Fundación (Doc 1.8, tipo 'construccion'): punto del mapa donde fundará al llegar, en vez
-   * de un asentamiento ya existente — ver `engine/expansion.ts`. */
-  destinoPosicion?: Point;
-  /** Caravana de Fundación: ciudadanos ya existentes de la Facción que fundarán el nuevo asentamiento al llegar. */
-  heroesFundadoresIds?: string[];
-  /** Caravana de Fundación comprada en un campamento (D10-D14, D34): quien la conduce y funda (el titular; otro ciudadano de su Facción
-   * la reclama si la abandona), lo que gastó del fondo cada aportante (para devolvérselo si caduca o vuelve sin nadie) y cuándo caduca
-   * si nadie la lleva enganchada. */
+  /** Caravana de Fundación (Doc 1.8, tipo 'construccion'; la de un campamento y la de una plaza son la misma): quien la conduce y funda
+   * (el titular; otro ciudadano de su Facción la reclama si la abandona, D10-D14) y cuándo caduca si nadie la lleva enganchada. */
   titularId?: string;
-  aportes?: Record<string, Record<string, number>>;
   caducaEn?: Instante;
+  /** Solo la comprada en un campamento: lo que gastó del fondo cada aportante, para devolvérselo si caduca o vuelve sin nadie. La de una
+   * plaza devuelve su `contenido` al almacén de su origen. */
+  aportes?: Record<string, Record<string, number>>;
   /** Flota de caravanas propias (ampliación de comercio, a petición del usuario): solo para `tipo: 'comercial'`
    * construidas vía Mercado (ver `construirCaravanaComercial`, engine/trade.ts) — un activo persistente y con
    * costo, no un objeto efímero. 'disponible' = construida, parada en `origenAsentamientoId`, sin asignar.

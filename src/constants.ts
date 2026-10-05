@@ -160,6 +160,9 @@ export const FUNDACION = {
   // Caravana de Fundación (Doc 1.8): coste extra sobre materialesIniciales + costo de los edificios de
   // arranque, representando fabricar la caravana en sí — placeholder sin calibrar por simulación todavía.
   costoMaderaExtraCaravana: 50,
+  /** Horas que aguanta la Caravana de Fundación, de un campamento o de una plaza, sin que nadie la lleve enganchada antes de caducar y
+   * devolver lo que costó (D14, Doc 1.8). PLACEHOLDER. */
+  caducidadCaravanaHoras: 48,
 };
 
 // --- Sprint 2: Población, construcción automática y almacenamiento (Doc 4) ---
@@ -1937,8 +1940,6 @@ export const MERCENARIOS = {
   prestamo: { unidades: 15 },
   /** Ningún asentamiento se funda a menos de esto de un campamento (D16, §8.2): protección (60) + zona inicial (30) + margen. */
   radioExclusionFundar: 100,
-  /** Horas que aguanta la Caravana de Fundación de un campamento sin que nadie la lleve enganchada antes de caducar (D14). PLACEHOLDER. */
-  caducidadCaravanaHoras: 48,
   /** A menos de esto de un campamento nadie inicia un combate, ni jugadores ni bandidos (M4/D78, §8.2). PLACEHOLDER. */
   radioProteccion: 60,
   /** Variantes de aspecto, elegidas al nacer: no cambian nada de lo que hace. */
@@ -2103,6 +2104,13 @@ export const VISION = {
    * grandes ciudades.
    */
   margenAsentamiento: 60,
+  /**
+   * Las caravanas comerciales GRANDES llaman la atención (Doc 5.12.7, `Docs/Mecanicas a balancear.md`): con al menos `carros` carros con
+   * animal, ya se ven desde cualquier plaza o columna de otra Facción a `radio` de ellas, también mientras `preparando` en su plaza
+   * y en tránsito; las pequeñas siguen bajo la niebla normal. Es el gancho de conflicto de las caravanas: que otras Facciones salgan a
+   * interceptarlas. **300**: más que una columna (150) y menos que la cohesión de un reino (400). PLACEHOLDER sin calibrar.
+   */
+  caravanaGrande: { carros: 3, radio: 300 },
 };
 
 /**

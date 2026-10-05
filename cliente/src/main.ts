@@ -1653,8 +1653,8 @@ function renderPanelProgresion(state: GameState): void {
 /** Caravanas realmente en movimiento (a petición del usuario: punto de partida, destino, carga, % de viaje
  * completado y ahora también coordenadas exactas de `posicionActual`, para ubicarlas en el mapa sin ambigüedad
  * — ver el marcador triangular por Facción en `ui/canvas.ts`) — excluye las 'disponibles' paradas en su
- * asentamiento (nada que mostrar de un viaje) y las Caravanas de Fundación (`destinoPosicion`, no
- * `destinoAsentamientoId`: no son parte del comercio, ya tienen su propio bloque en la pestaña Acciones). No
+ * asentamiento (nada que mostrar de un viaje) y las Caravanas de Fundación (sin `destinoAsentamientoId`: no
+ * son parte del comercio, funda quien las lleva con `fundar`). No
  * incluye columna de "escolta": Fase 0 no modela escolta de jugadores en caravanas todavía (ver
  * `engine/bandidos.ts`) — se avisa en la nota al pie en vez de inventar un dato. */
 function caravanasEnRutaHtml(state: GameState): string {

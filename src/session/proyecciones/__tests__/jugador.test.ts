@@ -15,7 +15,7 @@ import { computeTodasLasZonas } from '../../../engine/zones';
 import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../../engine/memoria';
 import { eventosDominioParaJugador, proyectarParaJugador } from '../jugador';
-import type { Asentamiento, CampamentoBandido, Ejercito, Escuadron, Point } from '../../../domain/types';
+import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Point } from '../../../domain/types';
 import type { RedCaminos } from '../../../domain/types';
 import { aristasDeTrazado } from '../../../engine/redCaminos';
 import { EXPLORACION, VISION, ZONA_INFLUENCIA } from '../../../constants';
@@ -333,6 +333,47 @@ describe('caravanas, acuerdos y ordenes: solo los que tocan un asentamiento prop
 
     const proyeccion = proyectarParaJugador(estadoConCaravana, fundador, SIN_GEOMETRIA);
     expect(proyeccion.caravanas.map((c) => c.id)).toEqual(['c1']);
+  });
+});
+
+// Doc 5.12.7: las caravanas ajenas se ven dentro del radio de visión y sin memoria, salvo las GRANDES, que llaman la atención a más
+// distancia (`VISION.caravanaGrande`) desde que se preparan, para que otras Facciones salgan a interceptarlas.
+describe('caravanasAvistadas: las grandes llaman la atención', () => {
+  const { carros, radio } = VISION.caravanaGrande;
+  const conBuey = (n: number) => Array.from({ length: n }, () => ({ tipoCarro: 'basico' as const, animal: 'buey' as const }));
+  const caravana = (id: string, aDistancia: number, extra: Partial<Caravana> = {}): Caravana => ({
+    id,
+    tipo: 'comercial',
+    origenAsentamientoId: 'ajeno',
+    contenido: { madera: 50 },
+    posicionActual: { x: 400 + aDistancia, y: 400 },
+    progreso: 0.5,
+    estado: 'en_transito',
+    carros: conBuey(carros),
+    ...extra,
+  });
+  const avistadas = (...caravanas: Caravana[]) => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    return proyectarParaJugador({ ...sesion.getState(), caravanas }, fundador, SIN_GEOMETRIA).caravanasAvistadas.map((c) => c.id).sort();
+  };
+
+  it('una grande se ve hasta su radio de una plaza, y una pequeña solo dentro de la vista normal', () => {
+    expect(avistadas(caravana('grande', radio - 1), caravana('pequena', radio - 1, { carros: conBuey(carros - 1) }))).toEqual(['grande']);
+    expect(avistadas(caravana('grande', radio + 1)), 'más allá del radio, nada').toEqual([]);
+    expect(avistadas(caravana('pequena', 50, { carros: conBuey(1) })), 'la pequeña, cerca, sí').toEqual(['pequena']);
+  });
+
+  it('también mientras se prepara en su plaza, pero no vacía de vuelta, ni parada, ni si los carros no tienen animal', () => {
+    expect(avistadas(caravana('preparando', 200, { estado: 'preparando' }))).toEqual(['preparando']);
+    expect(avistadas(caravana('vuelve', 200, { estado: 'retornando', contenido: {} }))).toEqual([]);
+    expect(avistadas(caravana('parada', 200, { estado: 'disponible' }))).toEqual([]);
+    expect(avistadas(caravana('sin-animal', 200, { carros: [...conBuey(carros - 1), { tipoCarro: 'basico' }] }))).toEqual([]);
+  });
+
+  it('lo que se ve de ella sigue redactado: dónde está y de quién, no cuánto lleva', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const [c] = proyectarParaJugador({ ...sesion.getState(), caravanas: [caravana('g', 200)] }, fundador, SIN_GEOMETRIA).caravanasAvistadas;
+    expect(Object.keys(c!).sort()).toEqual(['escoltada', 'id', 'posicionActual', 'recursos']);
   });
 });
 

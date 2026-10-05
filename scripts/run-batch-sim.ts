@@ -10,7 +10,7 @@ import { alcanzoTopeDeViviendas, reclamosDeFuentes } from '../src/engine/constru
 import { esResidente } from '../src/engine/pertenencia';
 import { calcularNivelAsentamiento, evaluarGatesDeNivel, type PayloadAsentamientoRuinas } from '../src/engine/mantenimiento';
 import { evaluarAscenso } from '../src/engine/ascenso';
-import type { PayloadAsentamientoFundado } from '../src/engine/expansion';
+import type { PayloadFundado } from '../src/session/comandos/expansion';
 import { computeZonaInfluencia, computeTodasLasZonas, pointInPolygon } from '../src/engine/zones';
 
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../src/engine/tropas';
@@ -943,7 +943,7 @@ async function main() {
   // no puede levantar una Leñera en la ventana crítica (antes de agotar la madera de fundación) y muere.
   const diagFundacion = process.env['BATCH_RUINAS_DIAG'] === '1';
   // id -> bosques alcanzables al fundar, al radio inicial (30) y al techo de nivel 1 (60). Se llena con los
-  // 40 iniciales aquí y con cada asentamiento hijo (evento `expansion.asentamiento_fundado`) en el bucle.
+  // 40 iniciales aquí y con cada asentamiento hijo (evento `fundacion.asentamiento_fundado`) en el bucle.
   const bosquesAlFundar = new Map<string, { r30: { n: number; capacidad: number }; r60: { n: number; capacidad: number }; hijo: boolean }>();
   const registrarBosquesAlFundar = (id: string, pos: Point, hijo: boolean) => {
     bosquesAlFundar.set(id, {
@@ -1050,8 +1050,8 @@ async function main() {
       mapa = sesion.getMapa();
       if (diagFundacion) {
         for (const ev of trasMotor.eventosDominio) {
-          if (ev.codigo === 'expansion.asentamiento_fundado') {
-            const nuevoId = (ev.payload as PayloadAsentamientoFundado).asentamientoId;
+          if (ev.codigo === 'fundacion.asentamiento_fundado') {
+            const nuevoId = (ev.payload as PayloadFundado).asentamientoId;
             const nuevo = trasMotor.asentamientos.find((a) => a.id === nuevoId);
             if (nuevo) registrarBosquesAlFundar(nuevoId, nuevo.posicion, true);
             continue;

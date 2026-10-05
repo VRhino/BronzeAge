@@ -511,6 +511,23 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
     expect(pedida.json().resultado).toMatchObject({ ok: false, codigoError: 'ascenso.invalido' });
   });
 
+  it('Caravana de Fundación (Doc 1.8): se lanza con el origen —sin destino—, el residente presente llega al motor y quien no, se queda en la autorización', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+    const comando = (headers: { authorization: string }, tipo: string, params: Record<string, unknown>) =>
+      app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers, payload: { tipo, params } });
+    const f = await comando(ana, 'crearFaccion', { nombre: 'Micenas' });
+    const asentamientoId = await fundarEn('g1', ana, f.json().resultado.datos.faccionId, { x: 400, y: 400 });
+
+    // Residente y dentro: llega al motor, que dice que la plaza de nivel 1 todavía no expande.
+    const pedida = await comando(ana, 'lanzarCaravanaFundacion', { origenAsentamientoId: asentamientoId });
+    expect(pedida.statusCode).toBe(200);
+    expect(pedida.json().resultado).toMatchObject({ ok: false, codigoError: 'expansion.invalida' });
+    // Un forastero no pasa de la autorización.
+    const luis = await jugadorEn('g1', 'luis', 'mercenarios-1');
+    expect((await comando(luis, 'lanzarCaravanaFundacion', { origenAsentamientoId: asentamientoId })).statusCode).toBe(403);
+  });
+
   it('no incluye asentamientos de una Faccion rival, aunque el admin sí los vea', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');

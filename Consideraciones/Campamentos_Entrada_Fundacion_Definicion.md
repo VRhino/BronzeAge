@@ -177,6 +177,16 @@ la desconexión: se hace **inútil para huir**.
 | D84 | **Los alijos se quedan como están**: cada héroe puede abrir todos los suyos, en cualquier zona (cierra la duda de limitarlos a la zona de su campamento). |
 | D79 | **Contador doble (M3)**: cada campamento guarda cuántos lo eligieron como inicial, además de sus residentes actuales; la pantalla de elección muestra los dos. |
 
+### 2.9 Novena ronda: una sola Caravana de Fundación (2026-10-05)
+
+| # | Decisión |
+|---|---|
+| D85 | **La Caravana de Fundación es una sola** (decisión del usuario): la de un campamento y la de una plaza son la misma entidad y funcionan igual, tal como estaba definida la de campamento (D10-D14, D30, D40, D68). **La que iba con destino deja de existir**: la plaza la lanza sin destino, parada en ella, con un titular que la engancha a su columna y funda donde esté (`fundar`). Los héroes que se unen a la columna la escoltan y son cofundadores (D12). Sin titular vuelve sola a su origen, suelta caduca (`FUNDACION.caducidadCaravanaHoras`), y al desarmarse o caducar **devuelve lo que costó**: al almacén de la plaza, o a cada aportante si salió de un campamento. |
+| D86 | **Quien lanza desde una plaza es el titular** y tiene que ser residente presente en ella (como todo lo que sale de casa). **Desarmar a mano**: solo el titular, con la caravana suelta y en la puerta de su origen (si no, el coste viajaría sin recorrer el camino). El cupo del Cap de Fundación se reserva al lanzar contando las caravanas de fundación vivas. |
+| D87 | **Fundar encima de un campamento**: la regla es la de D16 —a menos de 100 de cualquier campamento no se funda—, y como `fundar` es el único mecanismo, no hay forma de saltársela. |
+| D88 | **Visibilidad de las caravanas por tamaño** (Doc 5.12.7, placeholder en `VISION.caravanaGrande`): una comercial con **3 o más carros con animal** se ve a **300** de cualquier plaza o columna de otra Facción, desde que se prepara y mientras viaja cargada; las pequeñas siguen bajo la niebla normal. |
+| D89 | **El escuadrón recién reclutado en un campamento se une a la columna** que su héroe lidera a la puerta si le cabe en el Liderazgo (contando lo que ya lleva fuera); si no, nace en el campamento. Reponer uno que ya tiene no lo mueve. |
+
 ## 3. Lo que ya existe y se reutiliza (medido en el código)
 
 - `crearFaccion` (`session/comandos/crearFaccion.ts`): sin condiciones, el creador queda Rey. Cubre D5.

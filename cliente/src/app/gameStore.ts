@@ -658,14 +658,6 @@ export class GameStore {
 
   // --- Acciones (una por intención de usuario) ---
 
-  async lanzarCaravanaFundacion(origenAsentamientoId: string, destino: { x: number; y: number }, numJugadores: number): Promise<void> {
-    await this.despachar('lanzarCaravanaFundacion', { origenAsentamientoId, destino, numJugadores }, 'Caravana de Fundación rechazada');
-  }
-
-  async desarmarCaravanaFundacion(caravanaId: string): Promise<void> {
-    await this.despachar('desarmarCaravanaFundacion', { caravanaId }, 'No se pudo desarmar la caravana');
-  }
-
   async crearFaccion(nombre: string): Promise<void> {
     await this.despachar('crearFaccion', { nombre }, 'Facción rechazada');
   }

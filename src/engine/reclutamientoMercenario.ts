@@ -6,6 +6,7 @@ import { MERCENARIOS, MOVIMIENTO, ORO_POR_CABALLO, RECLUTAMIENTO_ORO_POR_ESCALON
 import { minutos, transcurrido, type Instante } from '../domain/tiempo';
 import { distancia } from '../world/geometria';
 import { conEscuadrones } from './tropa';
+import { puedeLlevar } from './liderazgo';
 import { MercenariosInvalidoError, campamentoDeResidente } from './mercenarios';
 import { factorComisionPorReputacion } from './reputacion';
 import { poblacionDeTropa, PROGRESION_INICIAL } from './tropas';
@@ -70,7 +71,9 @@ export type PagarCon = 'almacenPersonal' | 'carro';
 /**
  * Reclutar o reponer una tropa en el campamento donde reside el héroe (Doc 1.9b). Un escuadrón por tropa en toda la partida (Doc
  * 5.8): si ya lo tiene, repone hasta el tope. Con `pagarCon: 'carro'` paga el Líder de la columna que está a la puerta, con el
- * oro del carro; si no, el héroe con su almacén personal. El escuadrón nuevo nace en su campamento.
+ * oro del carro; si no, el héroe con su almacén personal. El escuadrón nuevo nace en su campamento, **salvo que su Líder tenga la
+ * columna a la puerta y le quede Liderazgo** (Doc 5.11, contando lo que ya lleva fuera): entonces se une a ella, para no obligarle
+ * a entrar y volver a salir (`seUne`).
  */
 export function reclutarEnCampamento(
   campamentos: readonly CampamentoMercenarios[],
@@ -84,7 +87,7 @@ export function reclutarEnCampamento(
   pagarCon: PagarCon,
   instante: Instante,
   contador = 0
-): { campamentos: CampamentoMercenarios[]; heroes: Heroe[]; ejercitos: Ejercito[]; cantidad: number; oro: number } {
+): { campamentos: CampamentoMercenarios[]; heroes: Heroe[]; ejercitos: Ejercito[]; cantidad: number; oro: number; seUne: boolean } {
   const campamento = campamentoDeResidente(campamentos, heroeId);
   if (!campamento) throw new MercenariosInvalidoError('Solo se recluta en el campamento donde se reside.');
   const heroe = heroes.find((h) => h.id === heroeId);
@@ -123,8 +126,8 @@ export function reclutarEnCampamento(
     heroeTras = { ...heroe, almacenPersonal };
   }
 
-  const escuadron: Escuadron = existente
-    ? { ...existente, cantidad: existente.cantidad + cantidad }
+  const nuevo: Escuadron | undefined = existente
+    ? undefined
     : {
         id: `escuadron-${campamento.id}-${contador}`,
         nombre: `${tropa.nombre} de ${heroeId}`,
@@ -137,6 +140,12 @@ export function reclutarEnCampamento(
         contenedor: { tipo: 'campamento' },
         enGuarnicion: false,
       };
+  // Se une a la columna que lidera a la puerta si cabe en su Liderazgo, junto a lo que ya tiene fuera del campamento.
+  const aLaPuerta = ejercitosTras.find((e) => e.liderId === heroeId && distancia(e.posicionActual, campamento.posicion) <= MOVIMIENTO.radioPuerta);
+  const yaFuera = heroe.escuadrones.filter((e) => e.contenedor.tipo !== 'campamento');
+  const seUne = !!nuevo && !!aLaPuerta && puedeLlevar(heroe, [...yaFuera, nuevo]);
+  if (seUne) ejercitosTras = ejercitosTras.map((e) => (e.id === aLaPuerta!.id ? { ...e, escuadronIds: [...e.escuadronIds, nuevo!.id] } : e));
+  const escuadron: Escuadron = nuevo ? (seUne ? { ...nuevo, contenedor: { tipo: 'ejercito', ejercitoId: aLaPuerta!.id } } : nuevo) : { ...existente!, cantidad: existente!.cantidad + cantidad };
 
   return {
     campamentos: campamentos.map((c) => (c.id === campamento.id ? { ...c, poblacion: disponible - cantidad, poblacionEn: instante } : c)),
@@ -144,6 +153,7 @@ export function reclutarEnCampamento(
     ejercitos: ejercitosTras,
     cantidad,
     oro,
+    seUne,
   };
 }
 

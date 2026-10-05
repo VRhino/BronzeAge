@@ -1,6 +1,6 @@
 // El bot con cargo (Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md §10, filas 1-10 y 19-21): lo que hacía la gobernanza
 // NPC, ahora hecho por el héroe que tiene el cargo, con sus comandos y con lo que ve. El Rey reparte gobiernos y adopta
-// tecnología; el Gobernador construye, amuralla, pide subir de nivel y expande; el Tesorero reserva, comercia y contesta
+// tecnología; el Gobernador construye, amuralla y pide subir de nivel; el Tesorero reserva, comercia y contesta
 // trueques. Las cifras son las que la gobernanza tenía calibradas (placeholders hasta medir con batch, §10.1).
 import type { Asentamiento, EdificioTipo, RecursoTipo } from '../../domain/types';
 import { RECURSOS_TIPO } from '../../domain/types';
@@ -11,9 +11,8 @@ import { calcularCostoMantenimiento, calcularNivelAsentamiento } from '../../eng
 import { costoCaravanaFundacion } from '../../engine/expansion';
 import { tarifaDeAscenso } from '../../engine/ascenso';
 import { tieneInsumoDeArranque } from '../../engine/construction';
-import { esRecomendableParaFundar, fuentesOcupadas } from '../../engine/settlement';
 import type { ContextoBot } from '../runner';
-import { fraccionDe, plazaDentro, plazasPropias, residentesDe } from './comun';
+import { fraccionDe, plazaDentro, plazasPropias } from './comun';
 
 /** La madera que el Tesorero aparta antes de dejar reclutar o construir: lo que Mantenimiento cobra a nivel 1. */
 export const RESERVA_MADERA = 150;
@@ -27,8 +26,6 @@ const FRACCION_EXCEDENTE_A_VENDER = 0.25;
 const TICKS_ANTICIPACION = 240;
 const RECURSOS_MANTENIMIENTO: RecursoTipo[] = ['madera', 'piedra', 'oro'];
 const CARGA_CARAVANA = CARRO_CATALOGO.basico.capacidadBase * ANIMAL_CATALOGO.buey.factorCarga;
-/** Héroes que viajan en una caravana de fundación: los que ya existen (§10.1), dejando al menos uno en casa. */
-const HEROES_POR_FUNDACION = 2;
 
 export async function gobernar(ctx: ContextoBot): Promise<void> {
   await rey(ctx);
@@ -114,32 +111,6 @@ async function gobernador(ctx: ContextoBot, plaza: Asentamiento): Promise<void> 
   // Subir de nivel en cuanto cumple los gates: el motor decide cupo, coste y solvencia.
   if (!plaza.ascenso && calcularNivelAsentamiento(plaza) > plaza.nivel) await ctx.intentar(`ascenso:${plaza.id}`, 'solicitarAscenso', { asentamientoId: plaza.id });
 
-  await expandir(ctx, plaza);
-}
-
-/**
- * Caravana de fundación desde una plaza de nivel 2 con lo que cuesta, hacia el primer punto que le parezca viable con
- * lo que sabe del mundo (la geografía y las plazas que ve). Si el motor no lo acepta, espera y prueba otro.
- */
-async function expandir(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
-  const { vista } = ctx;
-  if (nivelActualDe(plaza) < 2 || !tieneRecursos(plaza.almacen, costoCaravanaFundacion())) return;
-  if (residentesDe(plaza).length <= HEROES_POR_FUNDACION) return;
-  // Lo que sabe de los vecinos: las plazas que ve, con su silueta y sus edificios en pie. ponytail: fichas en lugar de
-  // plazas completas; si el motor discrepa, el rechazo lo dice y se prueba otro punto.
-  const conocidas = [plaza, ...vista.asentamientosAvistados.filter((a) => a.id !== plaza.id)] as unknown as Asentamiento[];
-  const ocupadas = fuentesOcupadas(conocidas);
-  for (let radio = 150; radio <= 600; radio += 150) {
-    for (let angulo = 0; angulo < 360; angulo += 20) {
-      const rad = (angulo * Math.PI) / 180;
-      const destino = { x: plaza.posicion.x + Math.cos(rad) * radio, y: plaza.posicion.y + Math.sin(rad) * radio };
-      const clave = `fundar:${Math.round(destino.x)}:${Math.round(destino.y)}`;
-      if ((ctx.memoria.esperas.get(clave) ?? -Infinity) > vista.instante) continue;
-      if (!esRecomendableParaFundar(ctx.mapa, destino, conocidas, plaza.faccionId, ocupadas)) continue;
-      await ctx.intentar(clave, 'lanzarCaravanaFundacion', { origenAsentamientoId: plaza.id, destino, numJugadores: HEROES_POR_FUNDACION }, 24 * 60 * 60_000);
-      return;
-    }
-  }
 }
 
 // --- Tesorero ---

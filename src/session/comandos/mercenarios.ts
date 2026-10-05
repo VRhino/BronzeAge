@@ -55,6 +55,8 @@ export interface PayloadReclutadoEnCampamento {
   tropaId: string;
   cantidad: number;
   oro: number;
+  /** El escuadrón nuevo se unió a la columna que el héroe tiene a la puerta (cabe en su Liderazgo) en vez de quedarse en el campamento. */
+  seUne: boolean;
 }
 
 /**
@@ -62,7 +64,7 @@ export interface PayloadReclutadoEnCampamento {
  * qué Facciones cuentan como humanas vivas (las que no gobierna la IA y conservan algún asentamiento) para la tecnología del
  * campamento, y la Facción del héroe para el precio.
  */
-export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantidad: number; oro: number }>((estado, _mapa, ctx, params) => {
+export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantidad: number; oro: number; seUne: boolean }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
   exigirEnSuCampamento(estado, heroe.id);
   const faccion = estado.facciones.find((f) => esCiudadano(f, heroe.id));
@@ -89,11 +91,11 @@ export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantid
     [
       evento(ctx, {
         codigo: 'mercenarios.reclutado',
-        mensaje: `${heroe.displayName} recluta ${r.cantidad} de ${params.tropaId} en ${campamentoId} por ${r.oro} de oro.`,
-        payload: { campamentoId, heroeId: heroe.id, tropaId: params.tropaId, cantidad: r.cantidad, oro: r.oro } satisfies PayloadReclutadoEnCampamento,
+        mensaje: `${heroe.displayName} recluta ${r.cantidad} de ${params.tropaId} en ${campamentoId} por ${r.oro} de oro${r.seUne ? ' y se le unen en la puerta' : ''}.`,
+        payload: { campamentoId, heroeId: heroe.id, tropaId: params.tropaId, cantidad: r.cantidad, oro: r.oro, seUne: r.seUne } satisfies PayloadReclutadoEnCampamento,
       }),
     ],
-    { cantidad: r.cantidad, oro: r.oro }
+    { cantidad: r.cantidad, oro: r.oro, seUne: r.seUne }
   );
 });
 

@@ -54,6 +54,42 @@ describe('bots: juegan con los comandos de un jugador', () => {
   });
 });
 
+describe('bots: la Caravana de Fundación desde la plaza (Doc 1.8)', () => {
+  it('un residente sin cargo la lanza, sale con ella enganchada, la lleva a un sitio y funda una plaza nueva', async () => {
+    const sesion = GameSession.crear('bots', { seed: 7 });
+    sesion.ejecutar(faccionAsentadaDePrueba, { nombre: 'Alfa' });
+    const p = sesion.exportar();
+    // Nivel 2 con el almacén lleno y cupo de Facción para una segunda plaza.
+    const listo = GameSession.importar({
+      ...p,
+      state: {
+        ...p.state,
+        facciones: p.state.facciones.map((f) => ({ ...f, nivel: 3 })),
+        asentamientos: p.state.asentamientos.map((a) => ({
+          ...a,
+          nivel: 2,
+          nivelActual: 2,
+          almacen: Object.fromEntries(Object.entries(a.almacen).map(([r, item]) => [r, { ...item, cantidad: item.capacidad }])),
+        })),
+      },
+    });
+    const bots = new RunnerDeBots(puertoEnProceso(listo), cerebroDeBot, { semilla: 7, horario: 'siempre' });
+    for (const h of listo.getState().heroes) bots.alta(h.id);
+    const codigos = new Set<string>();
+    for (let tick = 1; tick <= 400 && listo.getState().asentamientos.length < 2; tick++) {
+      const r = listo.avanzarTick();
+      await bots.trasTick(tick, r.eventos);
+      for (const e of listo.getState().eventosDominio.filter((x) => x.version >= r.version)) codigos.add(e.codigo);
+    }
+
+    expect(codigos.has('expansion.caravana_lanzada')).toBe(true);
+    expect(codigos.has('ejercito.caravana_adjuntada')).toBe(true);
+    expect(codigos.has('fundacion.asentamiento_fundado')).toBe(true);
+    expect(listo.getState().asentamientos).toHaveLength(2);
+    expect(listo.getState().caravanas.filter((c) => c.tipo === 'construccion'), 'la caravana se gastó al fundar').toEqual([]);
+  });
+});
+
 describe('sesiones de los bots (D55)', () => {
   it('cada bot juega unas horas al día: fuera de su sesión se desconecta y sale del mundo como un humano', async () => {
     const { sesion, eventos } = await mundo(24 * 60, 'por-semilla');

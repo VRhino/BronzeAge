@@ -67,7 +67,7 @@ export const CODIGOS_ERROR = {
   campamentoProteccion: 'campamento.proteccion',
   alijoDesconocido: 'alijo.desconocido',
   alijoInvalido: 'alijo.invalido',
-  // D10, D30: fundar exige llevar enganchada, como titular, una Caravana de Fundación de campamento.
+  // D10, D30: fundar exige llevar enganchada, como titular, una Caravana de Fundación (de campamento o de plaza).
   fundacionSinCaravana: 'fundacion.sin_caravana',
   // Batallas de Unity (doc 02 §3.1): lo que está en una batalla activa no se toca (Doc 5.15.1), y unirse o cancelar
   // tienen sus propias reglas.

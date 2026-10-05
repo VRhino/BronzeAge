@@ -165,7 +165,7 @@ const CASOS: CasoIdInexistente[] = [
     etiqueta: 'lanzarCaravanaFundacion: origenAsentamientoId',
     codigoEsperado: 'asentamiento.no_existe',
     ejecutar: ({ sesion }) =>
-      sesion.ejecutar(lanzarCaravanaFundacion, { origenAsentamientoId: 'no-existe', destino: { x: 700, y: 700 }, numJugadores: 1 }, OPC),
+      sesion.ejecutar(lanzarCaravanaFundacion, { origenAsentamientoId: 'no-existe' }, OPC),
   },
   {
     etiqueta: 'desarmarCaravanaFundacion: caravanaId',

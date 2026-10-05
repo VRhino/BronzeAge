@@ -10,7 +10,7 @@ import type { EventoDominio } from '../../src/domain/eventos';
 import type { Heroe } from '../../src/domain/types';
 import type { EstadoSimulacion } from '../../src/engine/simulation';
 import type { PayloadAsedio, PayloadCombateResuelto } from '../../src/engine/combate';
-import type { PayloadAsentamientoFundado } from '../../src/engine/expansion';
+import type { PayloadFundado } from '../../src/session/comandos/expansion';
 import type { PayloadAsentamientoRuinas, PayloadNivelSubio } from '../../src/engine/mantenimiento';
 import type { PayloadTruequeCumplido } from '../../src/engine/trade';
 /** Lo que hicieron los bots en un tick, contado por los eventos de sus comandos (`run-batch-sim.ts`). */
@@ -158,8 +158,10 @@ export class MedidorGuerra {
         sumarCrecer(p.asentamientoId, NIVEL_FACCION.xp.ascensoPorNivel * p.nivelNuevo);
         continue;
       }
-      if (ev.codigo === 'expansion.asentamiento_fundado') {
-        sumarCrecer((ev.payload as PayloadAsentamientoFundado).asentamientoId, NIVEL_FACCION.xp.fundacion);
+      if (ev.codigo === 'fundacion.asentamiento_fundado') {
+        // Solo expandirse da experiencia: la primera plaza de una Facción (la de la caravana de un campamento) es nacer, no crecer.
+        const p = ev.payload as PayloadFundado;
+        if (antes.asentamientos.some((a) => a.faccionId === p.faccionId)) sumarCrecer(p.asentamientoId, NIVEL_FACCION.xp.fundacion);
         continue;
       }
       if (ev.codigo === 'comercio.trueque_cumplido') {

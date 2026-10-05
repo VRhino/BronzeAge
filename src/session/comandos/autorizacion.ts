@@ -17,6 +17,7 @@
 import type { Asentamiento, Caravana, Faccion } from '../../domain/types';
 import type { RolTecnico } from '../../acceso/tipos';
 import { esCiudadano } from '../../engine/faccion';
+import { faccionDeCaravana } from '../../engine/expansion';
 import { esResidente, esReyDe, esReyOEmbajadorDe, puedeReclutarEn, tieneCargoLocal } from '../../engine/pertenencia';
 import { estaEnAsentamiento } from '../../engine/ubicacion';
 import { indiceTropa } from '../../engine/tropa';
@@ -76,12 +77,6 @@ function buscarCaravana(estado: GameSessionState, id: string): Caravana | undefi
 function esFaccionPropia(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
   const faccion = buscarFaccion(estado, faccionId);
   return faccion === undefined || esCiudadano(faccion, heroeId);
-}
-
-/** Ciudadano de la Facción dueña de ese asentamiento. */
-function esFaccionDelAsentamiento(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
-  const asentamiento = buscarAsentamiento(estado, asentamientoId);
-  return asentamiento === undefined || esFaccionPropia(estado, heroeId, asentamiento.faccionId);
 }
 
 /**
@@ -216,15 +211,17 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // --- Fundación y expansión (D30): con la caravana de un campamento (`fundar`) o la de una plaza ---
   // Fundar con la caravana de un campamento: el titular, por sí mismo; quién es el titular lo mira el comando (D11).
   fundar: { rolesPermitidos: ['jugador'] },
+  // Lanzar la Caravana de Fundación desde una plaza: residente presente, como todo lo que sale de casa (el lanzador es el titular).
   lanzarCaravanaFundacion: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, heroeId, params) => esFaccionDelAsentamiento(estado, heroeId, params.origenAsentamientoId),
+    condicionJugador: (estado, heroeId, params) => reside(estado, heroeId, params.origenAsentamientoId),
   },
+  // Desarmarla: ciudadano de su Facción; que además sea el titular lo mira el comando.
   desarmarCaravanaFundacion: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => {
       const caravana = buscarCaravana(estado, params.caravanaId);
-      return caravana === undefined || esFaccionDelAsentamiento(estado, heroeId, caravana.origenAsentamientoId);
+      return caravana === undefined || esFaccionPropia(estado, heroeId, faccionDeCaravana(caravana, estado.asentamientos) ?? '');
     },
   },
 

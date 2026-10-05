@@ -5,7 +5,8 @@ import { MERCENARIOS, RECLUTAMIENTO_ORO_POR_ESCALON, ORO_POR_CABALLO, TROPAS_REC
 import { minutos } from '../../domain/tiempo';
 import { MercenariosInvalidoError } from '../mercenarios';
 import { poblacionActual, precioPorSoldado, reclutarEnCampamento, tecnologiasDelCampamento, topePoblacion, tropasDelCampamento } from '../reclutamientoMercenario';
-import { heroeDePrueba, instanteDeTest } from './fixtures';
+import { costeLiderazgo } from '../liderazgo';
+import { escuadronDePrueba, heroeDePrueba, instanteDeTest } from './fixtures';
 
 const T0 = instanteDeTest(0);
 const tropa = (id: string) => TROPAS_RECLUTABLES.find((t) => t.id === id)!;
@@ -28,7 +29,7 @@ const campamento = (extra: Partial<CampamentoMercenarios> = {}): CampamentoMerce
 const heroe = (extra: Partial<Heroe> = {}): Heroe => heroeDePrueba('h1', { tipo: 'asentamiento', asentamientoId: 'x' }, extra);
 const faccion = (extra: Partial<Faccion> = {}): Faccion => ({ id: 'f', reputacion: 0, ciudadanosIds: ['h1'], ...extra }) as unknown as Faccion;
 const columna = (extra: Partial<Ejercito> = {}): Ejercito =>
-  ({ id: 'e1', liderId: 'h1', posicionActual: { x: 510, y: 500 }, suministro: {}, ...extra }) as unknown as Ejercito;
+  ({ id: 'e1', liderId: 'h1', posicionActual: { x: 510, y: 500 }, suministro: {}, escuadronIds: [], ...extra }) as unknown as Ejercito;
 
 /** Precio del escuadrón entero de lanceros para una Facción con plazas y sin recargo por reputación. */
 const PRECIO = Math.ceil(precioPorSoldado(LANCEROS, faccion(), true) * LANCEROS.unidadesPorDefecto);
@@ -156,6 +157,42 @@ describe('reclutarEnCampamento', () => {
     // Lejos de la puerta o sin ser Líder, no.
     expect(() => recluta({ heroes: [heroe()], ejercitos: [columna({ suministro: { oro: PRECIO }, posicionActual: { x: 900, y: 900 } })], pagarCon: 'carro' })).toThrow(MercenariosInvalidoError);
     expect(() => recluta({ heroes: [heroe()], ejercitos: [columna({ suministro: { oro: PRECIO }, liderId: 'otro' })], pagarCon: 'carro' })).toThrow(MercenariosInvalidoError);
+  });
+
+  describe('con la columna a la puerta', () => {
+    const conColumna = (extra: Partial<Ejercito> = {}) => [columna(extra)];
+    const paga = { almacenPersonal: { oro: PRECIO } };
+
+    it('el escuadrón nuevo se une a ella si le cabe en el Liderazgo', () => {
+      const r = recluta({ heroes: [heroe(paga)], ejercitos: conColumna() });
+
+      expect(r.seUne).toBe(true);
+      const e = r.heroes[0]!.escuadrones.find((x) => x.tropaId === LANCEROS.id)!;
+      expect(e.contenedor).toEqual({ tipo: 'ejercito', ejercitoId: 'e1' });
+      expect(r.ejercitos[0]!.escuadronIds).toEqual([e.id]);
+    });
+
+    it('si no le cabe, nace en el campamento: el Liderazgo cuenta también lo que ya lleva fuera', () => {
+      expect(recluta({ heroes: [heroe({ ...paga, liderazgoBase: 0 })], ejercitos: conColumna() }).seUne, 'sin Liderazgo').toBe(false);
+
+      const fuera = { ...escuadronDePrueba('ya-fuera', 'h1', 'milicia_lanceros', 5), contenedor: { tipo: 'ejercito' as const, ejercitoId: 'e1' } };
+      const justo = costeLiderazgo(fuera.tropaId) + costeLiderazgo(LANCEROS.id) - 1;
+      const r = recluta({ heroes: [heroe({ ...paga, liderazgoBase: justo, escuadrones: [fuera] })], ejercitos: conColumna({ escuadronIds: ['ya-fuera'] }) });
+      expect(r.seUne).toBe(false);
+      expect(r.heroes[0]!.escuadrones.find((x) => x.tropaId === LANCEROS.id)!.contenedor).toEqual({ tipo: 'campamento' });
+      expect(r.ejercitos[0]!.escuadronIds).toEqual(['ya-fuera']);
+    });
+
+    it('solo si es su Líder y la tiene a la puerta; y reponer uno que ya tiene no lo mueve', () => {
+      expect(recluta({ heroes: [heroe(paga)], ejercitos: conColumna({ liderId: 'otro' }) }).seUne, 'no es su Líder').toBe(false);
+      expect(recluta({ heroes: [heroe(paga)], ejercitos: conColumna({ posicionActual: { x: 900, y: 900 } }) }).seUne, 'lejos de la puerta').toBe(false);
+
+      const primero = recluta();
+      const herido = { ...primero.heroes[0]!, escuadrones: primero.heroes[0]!.escuadrones.map((e) => ({ ...e, cantidad: 10 })), almacenPersonal: { oro: PRECIO } };
+      const r = recluta({ heroes: [herido], campamentos: primero.campamentos, ejercitos: conColumna() });
+      expect(r.seUne).toBe(false);
+      expect(r.heroes[0]!.escuadrones.find((e) => e.tropaId === LANCEROS.id)!.contenedor).toEqual({ tipo: 'campamento' });
+    });
   });
 
   it('rechaza: no reside allí, tropa que no ofrece, sin oro, sin reclutas, ya al tope', () => {

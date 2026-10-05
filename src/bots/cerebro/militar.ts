@@ -1,6 +1,6 @@
 // El bot como soldado (Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md §10, filas 11-20): cada héroe recluta, guarnece y
-// prepara su defensa para sí; el que no tiene cargo sale de casa —a explorar para su Facción, a cazar el campamento de
-// bandidos de su plaza, de campaña contra una plaza inspeccionada o a mudarse donde hace falta— y, ya fuera, ataca
+// prepara su defensa para sí; el que no tiene cargo sale de casa —a fundar una plaza nueva con la Caravana de Fundación, a explorar para su Facción, a cazar el
+// campamento de bandidos de su plaza, de campaña contra una plaza inspeccionada o a mudarse donde hace falta— y, ya fuera, ataca
 // cuando se le ofrece, se queda en lo que conquista y vuelve a casa al terminar.
 //
 // Las prudencias son las que la gobernanza tenía medidas en batch (placeholders hasta medir el bloque entero, §10.1).
@@ -16,6 +16,7 @@ import { estanAliadas } from '../../engine/pertenencia';
 import type { ContextoBot } from '../runner';
 import { soltarEncargos } from '../pizarra';
 import { RESERVA_MADERA } from './gobierno';
+import { conducirCaravana, fundarDesdeCasa } from './fundar';
 import { columnaPropia, escuadrasLibres, plazasConocidas, estaHerido, loQueLeCabe, plazaDentro, plazasPropias, residentesDe, tieneCargo, type HeroeVisto } from './comun';
 
 /** La mejor tropa primero; sin la leva de escalón 1, que ocuparía a 30 pesants por escuadra para casi nada. */
@@ -101,6 +102,7 @@ export async function salir(ctx: ContextoBot): Promise<void> {
   soltarEncargos(pizarra, yo);
 
   if (await unirseALaCampanaDeCasa(ctx, plaza, heroe)) return;
+  if (await fundarDesdeCasa(ctx, plaza, heroe)) return;
   if (await explorar(ctx, plaza)) return;
   if (await cazar(ctx, plaza, heroe)) return;
   if (await lanzarCampana(ctx, plaza, heroe)) return;
@@ -248,6 +250,8 @@ export async function enColumna(ctx: ContextoBot): Promise<void> {
   const plan = memoria.plan;
 
   if (plan?.tipo === 'explorar') return await enExploracion(ctx, columna, plan.plazaId);
+  // La caravana va enganchada: no se persigue nada por el camino (los bandidos la atacan, no la escolta que se desvía).
+  if (plan?.tipo === 'fundar') return await conducirCaravana(ctx, columna.posicionActual, columna, plan);
   if (columna.estado !== 'estacionado') return await perseguirLoQueVe(ctx, columna);
 
   if (plan?.tipo === 'cazar') {

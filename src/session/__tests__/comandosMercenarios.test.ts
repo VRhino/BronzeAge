@@ -9,7 +9,7 @@ import { comprarEnCampamento, reclutarEnCampamento } from '../comandos/mercenari
 import { exito } from '../comandos/tipos';
 import { aportarARefundacion, comprarCaravanaDeRefundacion } from '../comandos/mercenarios';
 import { costoRefundacion } from '../../engine/refundacion';
-import { salirAlMundo } from '../comandos/presencia';
+import { salirAlMundo, salirDelCampamento } from '../comandos/presencia';
 import { partidaConAsentamiento } from './fixtures';
 
 const TICKS_POR_DIA = (24 * 60 * 60 * 1000) / SIMULACION.duracionTickMs;
@@ -168,6 +168,19 @@ describe('reclutarEnCampamento', () => {
     expect(heroe.escuadrones.some((e) => e.tropaId === 'lanceros_mimbre' && e.cantidad === 25)).toBe(true);
     expect(heroe.almacenPersonal?.['oro']).toBe(5000 - r.datos!.oro);
     expect(campamentoDe(sesion, 'merc-1').poblacion).toBe(75);
+  });
+
+  it('con su columna a la puerta, el escuadrón nuevo se une a ella en vez de quedarse en el campamento', () => {
+    const { sesion, fundador, opc } = residenteConOro(5000);
+    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'merc-1', heroeId: fundador, escuadronIds: [], carga: {} }, opc).datos!.ejercitoId;
+
+    const r = sesion.ejecutar(reclutarEnCampamento, { tropaId: 'lanceros_mimbre' }, opc);
+
+    expect(r.ok).toBe(true);
+    expect(r.datos?.seUne).toBe(true);
+    const escuadron = sesion.getState().heroes.find((h) => h.id === fundador)!.escuadrones.find((e) => e.tropaId === 'lanceros_mimbre')!;
+    expect(escuadron.contenedor).toEqual({ tipo: 'ejercito', ejercitoId });
+    expect(sesion.getState().ejercitos.find((e) => e.id === ejercitoId)!.escuadronIds).toContain(escuadron.id);
   });
 
   it('rechazo: sin oro, y no versiona', () => {

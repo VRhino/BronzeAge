@@ -1,11 +1,13 @@
-// Comandos de expansión: lanzar una Caravana de Fundación hacia un punto del mapa, desarmarla para recuperar su contenido si se
-// cambia de idea antes de que llegue, y `fundar` con la de un campamento donde esté su titular (D10, D30).
-import type { Point } from '../../domain/types';
+// Comandos de expansión: la Caravana de Fundación es una sola (Doc 1.8, D30): se lanza desde una plaza (o se compra en un campamento, ver
+// `comandos/mercenarios`), nace sin destino con un titular, se desarma a mano en la puerta de su origen, y `fundar` funda con ella donde esté
+// la columna de su titular.
 import {
   desarmarCaravanaFundacion as desarmarCaravanaFundacionEngine,
+  ExpansionInvalidaError,
   fundarConCaravana,
   lanzarCaravanaFundacion as lanzarCaravanaFundacionEngine,
 } from '../../engine/expansion';
+import type { Point } from '../../domain/types';
 import { FUNDACION } from '../../constants';
 import { absorberColumna } from '../../engine/ejercitos';
 import { esCiudadano } from '../../engine/faccion';
@@ -26,35 +28,24 @@ export interface PayloadCaravanaFundacionLanzada {
   caravanaId: string;
   origenAsentamientoId: string;
   faccionId: string;
-  destino: Point;
-  numJugadores: number;
+  titularId: string;
 }
 export interface PayloadCaravanaFundacionDesarmada {
   caravanaId: string;
-  origenAsentamientoId: string;
+  faccionId: string;
 }
 
 export interface ParamsLanzarCaravanaFundacion {
   origenAsentamientoId: string;
-  destino: Point;
-  numJugadores: number;
 }
 
-export const lanzarCaravanaFundacion = comando<ParamsLanzarCaravanaFundacion, { caravanaId: string }>((estado, mapa, ctx, params) => {
+/** Quien lanza es el titular (Doc 1.8): la caravana nace parada en su plaza, y él la engancha a su columna y funda donde llegue. */
+export const lanzarCaravanaFundacion = comando<ParamsLanzarCaravanaFundacion, { caravanaId: string }>((estado, _mapa, ctx, params) => {
   const origen = exigirAsentamiento(estado, params.origenAsentamientoId);
   const faccion = exigirFaccionDe(estado, origen);
+  const titular = exigirJugador(estado, ctx.actor);
 
-  const resultado = lanzarCaravanaFundacionEngine(
-    mapa,
-    origen,
-    faccion,
-    params.destino,
-    estado.asentamientos,
-    estado.caravanas,
-    params.numJugadores,
-    ctx.instante,
-    ctx.ids.siguiente()
-  );
+  const resultado = lanzarCaravanaFundacionEngine(origen, faccion, titular.id, estado.asentamientos, estado.caravanas, ctx.instante, ctx.ids.siguiente());
   const siguiente: GameSessionState = {
     ...conAsentamiento(estado, resultado.origenActualizado),
     caravanas: [...estado.caravanas, resultado.caravana],
@@ -64,14 +55,8 @@ export const lanzarCaravanaFundacion = comando<ParamsLanzarCaravanaFundacion, { 
     [
       evento(ctx, {
         codigo: 'expansion.caravana_lanzada',
-        mensaje: `Lanza una Caravana de Fundación hacia (${Math.round(params.destino.x)}, ${Math.round(params.destino.y)}).`,
-        payload: {
-          caravanaId: resultado.caravana.id,
-          origenAsentamientoId: origen.id,
-          faccionId: faccion.id,
-          destino: params.destino,
-          numJugadores: params.numJugadores,
-        } satisfies PayloadCaravanaFundacionLanzada,
+        mensaje: `${titular.displayName} prepara una Caravana de Fundación en ${origen.id}.`,
+        payload: { caravanaId: resultado.caravana.id, origenAsentamientoId: origen.id, faccionId: faccion.id, titularId: titular.id } satisfies PayloadCaravanaFundacionLanzada,
         asentamientoId: origen.id,
       }),
     ],
@@ -83,21 +68,26 @@ export interface ParamsDesarmarCaravanaFundacion {
   caravanaId: string;
 }
 
+/** El titular desarma su Caravana de Fundación suelta, en la puerta de su origen, y recupera lo que costó (a la plaza, o a quien aportó). */
 export const desarmarCaravanaFundacion = comando<ParamsDesarmarCaravanaFundacion, void>((estado, _mapa, ctx, params) => {
   const caravana = exigirCaravana(estado, params.caravanaId);
-  const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId ?? '');
+  if (caravana.titularId !== ctx.actor) throw new ExpansionInvalidaError('Solo su titular desarma la Caravana de Fundación.');
+  const origen = caravana.origenCampamentoId
+    ? estado.campamentosMercenarios.find((c) => c.id === caravana.origenCampamentoId)
+    : estado.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
 
-  const actualizado = desarmarCaravanaFundacionEngine(origen, caravana);
+  const devuelto = desarmarCaravanaFundacionEngine(caravana, origen?.posicion, { asentamientos: estado.asentamientos, heroes: estado.heroes }, estado.facciones);
   const siguiente: GameSessionState = {
-    ...conAsentamiento(estado, actualizado),
+    ...estado,
+    ...devuelto,
     caravanas: estado.caravanas.filter((c) => c.id !== params.caravanaId),
   };
   return exito(siguiente, [
     evento(ctx, {
       codigo: 'expansion.caravana_desarmada',
-      mensaje: `Desarma la Caravana de Fundación ${params.caravanaId} y recupera su contenido.`,
-      payload: { caravanaId: params.caravanaId, origenAsentamientoId: origen.id } satisfies PayloadCaravanaFundacionDesarmada,
-      asentamientoId: origen.id,
+      mensaje: `Desarma la Caravana de Fundación ${params.caravanaId} y recupera lo que costó.`,
+      payload: { caravanaId: params.caravanaId, faccionId: caravana.faccionId ?? '' } satisfies PayloadCaravanaFundacionDesarmada,
+      ...(origen && !caravana.origenCampamentoId ? { asentamientoId: origen.id } : {}),
     }),
   ]);
 });
@@ -111,7 +101,7 @@ export interface PayloadFundado {
 }
 
 /**
- * Fundar con la Caravana de Fundación de un campamento, donde esté (D10, D30): la lleva enganchada a su columna su titular, y funda él. Los
+ * Fundar con la Caravana de Fundación, la de un campamento o la de una plaza, donde esté (D10, D30): la lleva enganchada a su columna su titular, y funda él. Los
  * cofundadores son los ciudadanos de su Facción que van en esa columna, hasta `FUNDACION.maxJugadoresFundacionGrupal` (M2: unirse a la
  * columna es el consentimiento, D12). La caravana se gasta y la columna entra en la plaza nueva: todos residen ya en ella.
  */

@@ -78,7 +78,7 @@ export function salirDelMundo(mundo: MundoPresencia, heroeId: string, mapa: Mapa
     carro = partido.columna.suministro;
   } else {
     carro = columna.suministro;
-    // La Caravana de Fundación de un campamento se queda: el tick la ve sin columna y la vuelve a SU campamento (D40, D68).
+    // La Caravana de Fundación se queda: el tick la ve sin columna y la vuelve a SU origen, campamento o plaza (D40, D68).
     for (const caravana of caravanas.filter((c) => columna.caravanasAdjuntasIds.includes(c.id) && !c.titularId)) {
       caravanas = caravanas.filter((c) => c.id !== caravana.id);
       const origen = mundo.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
