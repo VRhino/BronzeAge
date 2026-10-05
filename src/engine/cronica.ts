@@ -24,7 +24,7 @@ interface PayloadGuerraDeclarada {
 export const CODIGO_CRONICA = 'cronica.entrada';
 
 /** Eventos que ya son públicos (sin `asentamientoId`) y que cuentan en la crónica tal cual. */
-export const CODIGOS_CRONICA_PUBLICOS: readonly string[] = ['tecnologia.logro', 'era.comienza', 'titulo.nace', 'titulo.cambia_manos', 'aedas.canta_descubrimiento'];
+export const CODIGOS_CRONICA_PUBLICOS: readonly string[] = ['tecnologia.logro', 'era.comienza', 'titulo.nace', 'titulo.cambia_manos', 'aedas.canta_descubrimiento', 'aedas.epica_cumplida'];
 
 /** Payload de `cronica.entrada`. */
 export interface PayloadCronica {

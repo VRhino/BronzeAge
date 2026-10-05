@@ -969,9 +969,9 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `reclutarEnCampamento` (Doc 1.9b): reclutar en un campamento de mercenarios.
       // +1 con `comprarEnCampamento` (Doc 1.9b): el mercado del campamento.
       // +2 con `conectarse`/`desconectarse` (Doc 1.10.6): entrar y salir del mundo.
-      // +1 con `comprarTecnologiaAeda` (Doc 6.7): comprar tecnología a un Aeda itinerante.
+      // +3 con los Aedas (Doc 6.7): `comprarTecnologiaAeda`, `empezarEpica` y `abandonarEpica`.
       // -1 sin `crearFaccionNpc` (D53, D58): ninguna Facción nace asentada.
-      expect(cuerpo.oneOf.length).toBe(98);
+      expect(cuerpo.oneOf.length).toBe(100);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

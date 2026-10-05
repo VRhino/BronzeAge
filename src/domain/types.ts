@@ -1320,6 +1320,40 @@ export interface TecnologiasFaccion {
   reveladas?: TecnologiaId[];
 }
 
+/** La épica que un Aeda residente canta para una tecnología (Doc 6.7): avanza capítulo a capítulo con hechos inspiradores. */
+export interface EpicaEnCurso {
+  tecnologiaId: TecnologiaId;
+  /** Capítulo en curso (0 = el primero). */
+  capitulo: number;
+  /** Hechos ya contados en este capítulo. */
+  hechos: number;
+  ultimoHechoEn?: Instante;
+  /** Claves de los últimos hechos contados: el mismo hecho no cuenta dos veces. */
+  claves: string[];
+}
+
+/** Un Aeda residente (Doc 6.7): vive en un asentamiento con Palacio y Nobleza. */
+export interface AedaResidente {
+  id: string;
+  nombre: string;
+  asentamientoId: string;
+  /** La Facción dueña de la plaza cuando llegó: si la plaza cambia de manos, la épica en curso se pierde. */
+  faccionId: string;
+  llegadaEn: Instante;
+  epica?: EpicaEnCurso;
+}
+
+/** Los Aedas residentes del servidor y lo que se lleva de ellos (Doc 6.7, `engine/aedasResidentes.ts`). */
+export interface EstadoAedasResidentes {
+  aedas: AedaResidente[];
+  /** Número del siguiente Aeda residente (ids y nombres): solo crece. */
+  siguiente: number;
+  /** Por asentamiento con cupo libre: cuándo llega el siguiente. */
+  llegadaEn: Record<string, Instante>;
+  /** Épicas cumplidas por Facción: alimenta el título de prestigio «Mecenas de los Aedas» (Doc 2.9). */
+  cumplidas: Record<string, number>;
+}
+
 /** Un Aeda itinerante (Doc 6.7): neutral, recorre los asentamientos por la red de caminos. */
 export interface AedaItinerante {
   id: string;

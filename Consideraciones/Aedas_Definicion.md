@@ -2,7 +2,7 @@
 
 **Reglas:** `Docs/Game/6_Sistema_de_Tecnologia_y_Aedas.md` §6.1, 6.4 y 6.7 (canon). Este documento solo guarda las
 decisiones, el modelo propuesto y los pasos. Cerrado con el usuario el 2026-10-05; origen: `Docs/Mecanicas a
-desarrollar.md` §42, BA-006 (D31, D55).
+desarrollar.md` §42 (ya borrado al cerrarse), BA-006 (D31, D55).
 
 ## 1. Decisiones (2026-10-05)
 
@@ -42,9 +42,8 @@ la crónica publica un descubrimiento cuando el retraso ha pasado.
 Cada paso deja los tests en verde y se puede fusionar por separado.
 
 1. **Itinerantes difusores + venta.** — **Hecho (2026-10-05).** Ver 3.1.
-2. **Residentes con épica.** Cupo, llegada, marcha por falta de nobleza, reputación, épicas por capítulos con eventos
-   inspiradores no farmeables, efectos de felicidad y nobleza.
-3. **Crónica y lore.** Registro persistente, consulta, eventos en el juego, vista en el cliente.
+2. **Residentes con épica.** — **Hecho (2026-10-05).** Ver 3.2.
+3. **Crónica y lore.** — **Hecho (2026-10-05).** Ver 3.3.
 
 ### 3.1 Paso 1, tal como quedó
 
@@ -61,6 +60,30 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
   dejaría fuera a todos los asentamientos ajenos.
 - Fuera del contrato v1: `ProyeccionJugador` no está en él y los Aedas no llegan a Conquest.
 - Sin hacer: cliente de administración y NPC de bots (no compran).
+
+### 3.2 Paso 2, tal como quedó (residentes y épica)
+
+- `engine/aedasResidentes.ts`: ciclo de vida (`avanzarResidentes`, en el tick), épicas (`empezarEpica`, `abandonarEpica`,
+  `avanzarEpicas`) y `hechosDeEventos`. Estado opcional `GameSessionState.aedasResidentes` (residentes, plazos de llegada y
+  épicas cumplidas por Facción). Catálogo `EPICAS` en `constants.ts`: 24 épicas de plantilla (3/4/5 capítulos).
+- Las épicas avanzan en `exito()` (`session/comandos/tipos.ts`), junto a los contadores de los logros: por ahí pasan los
+  eventos del tick, de los comandos y del NPC. Los hechos salen de eventos que ya existían; no hizo falta enriquecer payloads.
+- Comandos `empezarEpica` y `abandonarEpica` (Rey, Gobernador o Sacerdote de la plaza, presente; error `aedas.epica_invalida`).
+  Eventos privados `aedas.residente_llega`, `_se_va`, `epica_empieza`, `_capitulo`, `_tecnologia`, `_abandonada`; público
+  `aedas.epica_cumplida`. La proyección trae `aedasResidentes` de la Facción propia.
+- Felicidad y nobleza: parámetro nuevo de `crecerPoblacion`. Título «Mecenas de los Aedas» en `calcularTitulos`.
+- **Cambios frente al diseño:** se descartó el tope de una batalla por Facción y periodo: basta el enfriamiento de 6 horas por
+  épica (con N residentes, N épicas a la vez). El Aeda de una plaza conquistada se queda con su Facción nueva sin épica. Las
+  batallas de Unity cuentan solo si emiten los mismos eventos que el motor (`combate.encuentro`/`asedio_*`).
+
+### 3.3 Paso 3, tal como quedó (crónica)
+
+- `engine/cronica.ts`: vista derivada de eventos. Los ya públicos (`CODIGOS_CRONICA_PUBLICOS`) cuentan tal cual; de los demás
+  (conquistas, ruinas, fundaciones, guerras, rebeliones, anexiones, fusiones, primera ciudad en nivel 3-5) se emite un
+  evento público `cronica.entrada` desde `exito()`. Sin estado nuevo. `PayloadAsentamientoRuinas` gana `faccionId` y `nombre`.
+- Nuevo `aedas.canta_descubrimiento` (tick de tecnología, con `EstadoTecnologia.cantadas?`) cuando pasa el retraso.
+- `GET /jugador/partidas/:gameId/cronica?desde=&limite=`: las más recientes, orden cronológico, igual para todos. Sin vista
+  en el cliente todavía (cliente de administración y BronzeAgeClient). Sin hecho de «paz» ni «guerra terminada»: no hay evento.
 
 ## 4. Riesgos
 

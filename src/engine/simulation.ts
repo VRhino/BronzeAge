@@ -1,4 +1,4 @@
-import type { AcuerdoTrueque, AedaItinerante, Asentamiento, CampamentoBandido, CampamentoMercenarios, MercadoMercenario, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RedCaminos, RelacionPolitica, Titulo } from '../domain/types';
+import type { AcuerdoTrueque, AedaItinerante, Asentamiento, EstadoAedasResidentes, CampamentoBandido, CampamentoMercenarios, MercadoMercenario, Caravana, Ejercito, EstadoTecnologia, Faccion, Heroe, OrdenMercado, RedCaminos, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo, EventoDominio } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { EstadoMapa, Mapa } from '../world/mapa';
@@ -30,6 +30,7 @@ import { reponerMercados } from './mercadoMercenario';
 import { grabarExploracionPersonal } from './ubicacion';
 import { cerrarDependientesDeRuina } from './ruina';
 import { avanzarAedas } from './aedas';
+import { avanzarResidentes, residentesPorPlaza, RESIDENTES_VACIOS } from './aedasResidentes';
 import { avanzarTecnologia, contadoresDeProduccion, sumarContadores, sumarDeltas, tecnologiasDe, type DeltaContadores } from './tecnologia';
 
 export interface EstadoSimulacion {
@@ -67,6 +68,8 @@ export interface EstadoSimulacion {
   tecnologia: EstadoTecnologia;
   /** Aedas itinerantes (Doc 6.7, `engine/aedas.ts`): nacen en el primer tick con asentamientos. Ausente = ninguno. */
   aedas?: AedaItinerante[];
+  /** Aedas residentes y sus épicas (Doc 6.7, `engine/aedasResidentes.ts`). Ausente = ninguno. */
+  aedasResidentes?: EstadoAedasResidentes;
 }
 
 /**
@@ -161,6 +164,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // `CUPO_NIVEL_ASENTAMIENTO` en constants.ts ya prometía esta liberación, el código no la cumplía). Se va
   // consumiendo/liberando según se conceden promociones dentro de este mismo tick (subir de 2 a 3 libera el
   // cupo de 2 que se abandona, disponible para otro asentamiento propio en la misma pasada).
+  const aedasPorPlaza = residentesPorPlaza(estado.aedasResidentes ?? RESIDENTES_VACIOS);
   const procesados = crecidos.map((asentamiento) => {
     const zona = zonas.find((z) => z.asentamientoId === asentamiento.id);
     // La guarnición es el campamento de sus residentes (`engine/tropa.ts`): las escuadras viven en sus héroes.
@@ -202,7 +206,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     // de tocar la que sí lo es. Ver `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §"Abierto".
     const { asentamiento: trasNutricion, eventos: eventosNutricion } = avanzarNutricionPoblacion(trasNivel);
     const { asentamiento: trasTropas, campamento: campamentoTrasTropas, eventos: eventosTropas } = avanzarMantenimientoTropas(trasNutricion, campamento);
-    const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasTropas, rng, instante);
+    const { poblacion, eventos: eventosPoblacion } = crecerPoblacion(trasTropas, rng, instante, aedasPorPlaza.get(asentamiento.id) ?? 0);
     // Recaudación de oro por población (Doc 4.1, bloque "economía del oro"): se suma DESPUÉS de crecer (recauda
     // sobre la población de este tick) y ANTES de `avanzarMantenimiento` (que el oro recién recaudado pueda
     // cubrir el mantenimiento del mismo tick). Respeta la capacidad de almacén, igual que la producción de mina.
@@ -361,7 +365,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // La reposición de los mercados de mercenarios es una cita agendada: cada tick solo compara un instante (Doc 1.9b).
   const trasReposicion = reponerMercados(trasEjercitos.campamentosMercenarios, estado.mercadoMercenario, instante);
 
-  const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones, heroes);
+  const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones, heroes, estado.aedasResidentes);
   const eventosTitulos = narrarCambiosDeTitulo(estado.titulos, titulosActuales, faccionesFinal);
   eventosDominio.push(...comoEventosDominio(eventosTitulos, contexto));
 
@@ -389,6 +393,13 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     red: trasComercio.red,
   });
   eventosDominio.push(...comoEventosDominio(trasAedas.eventos, contexto));
+  const trasResidentes = avanzarResidentes(estado.aedasResidentes ?? RESIDENTES_VACIOS, {
+    asentamientos: trasTributos.asentamientos,
+    facciones: faccionesFinal,
+    tecnologia: trasAedas.tecnologia,
+    instante,
+  });
+  eventosDominio.push(...comoEventosDominio(trasResidentes.eventos, contexto));
 
   // La Caravana de Fundación (de un campamento o de una plaza): sin su titular vuelve sola, al llegar se desarma, y suelta caduca (D13, D14, D40, D68).
   const trasCaravanasDeFundacion = avanzarCaravanasDeFundacion(
@@ -434,6 +445,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     heroes: grabarExploracionPersonal(heroes, sinPrestamos.ejercitos, mapa.limites),
     tecnologia: trasAedas.tecnologia,
     aedas: trasAedas.aedas,
+    aedasResidentes: trasResidentes.estado,
     estadoMapa: mapa.estadoActual(),
     eventosDominio,
   };

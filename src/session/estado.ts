@@ -9,6 +9,7 @@ import type {
   AcuerdoTrueque,
   Asentamiento,
   AedaItinerante,
+  EstadoAedasResidentes,
   CampamentoBandido,
   CampamentoMercenarios,
   MercadoMercenario,
@@ -147,6 +148,8 @@ export interface GameSessionState {
   tecnologia: EstadoTecnologia;
   /** Aedas itinerantes (Doc 6.7): los crea el tick. Ausente = ninguno todavía. */
   aedas?: AedaItinerante[];
+  /** Aedas residentes y sus épicas (Doc 6.7): los crea el tick. Ausente = ninguno todavía. */
+  aedasResidentes?: EstadoAedasResidentes;
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,
@@ -170,6 +173,7 @@ export function estadoSimulacionDe(estado: GameSessionState): EstadoSimulacion {
     heroes: estado.heroes,
     tecnologia: estado.tecnologia,
     aedas: estado.aedas,
+    aedasResidentes: estado.aedasResidentes,
   };
 }
 
@@ -195,6 +199,7 @@ export function conResultadoDeSimulacion(estado: GameSessionState, simulacion: E
     heroes: simulacion.heroes,
     tecnologia: simulacion.tecnologia,
     aedas: simulacion.aedas,
+    aedasResidentes: simulacion.aedasResidentes,
   };
 }
 

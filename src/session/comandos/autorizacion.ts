@@ -107,6 +107,14 @@ function puedeOperarCaravanaAparcada(estado: GameSessionState, heroeId: string, 
   return esResidente(origen, heroeId) && presente(estado, heroeId, asentamientoId);
 }
 
+/** Rey de la Facción de la plaza o su Gobernador o Sacerdote, presente en ella: quien dirige a los Aedas residentes. */
+function dirigeAedas(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
+  const plaza = buscarAsentamiento(estado, asentamientoId);
+  const faccion = plaza && buscarFaccion(estado, plaza.faccionId);
+  if (!plaza || !faccion) return true; // lo rechaza el comando con un código que dice más
+  return (esReyDe(faccion, heroeId) || tieneCargoLocal(plaza, 'gobernador', heroeId) || tieneCargoLocal(plaza, 'sacerdote', heroeId)) && presente(estado, heroeId, plaza.id);
+}
+
 function reside(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
   const asentamiento = buscarAsentamiento(estado, asentamientoId);
   return asentamiento === undefined || (esResidente(asentamiento, heroeId) && presente(estado, heroeId, asentamientoId));
@@ -377,6 +385,9 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       return faccion === undefined || esReyDe(faccion, heroeId);
     },
   },
+  // La épica de un Aeda residente la dirige el Rey, el Gobernador o el Sacerdote de la plaza, estando en ella (Doc 6.7).
+  empezarEpica: { rolesPermitidos: ['jugador'], condicionJugador: (estado, heroeId, params) => dirigeAedas(estado, heroeId, params.asentamientoId) },
+  abandonarEpica: { rolesPermitidos: ['jugador'], condicionJugador: (estado, heroeId, params) => dirigeAedas(estado, heroeId, params.asentamientoId) },
   // Comprar a un Aeda es del Rey o del Gobernador de la plaza, estando en ella (Doc 6.7). Que haya un Aeda y el oro lo comprueba el motor.
   comprarTecnologiaAeda: {
     rolesPermitidos: ['jugador'],

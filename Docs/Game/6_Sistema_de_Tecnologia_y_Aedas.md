@@ -178,24 +178,54 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
 
 ### Residentes
 
-- **Dónde**: en un asentamiento con **Palacio** y **Nobleza**; si pierde toda su nobleza, el Aeda se va. Con el Palacio
-  desde el nivel 2 (Doc 4.2.1), pueden vivir allí desde ese nivel.
-- **Cupo por asentamiento**: nivel 2, 1; nivel 3, 2; nivel 4, 3; nivel 5, 4 (`AEDAS.cupoResidentes`). Las políticas
-  podrán sumar uno (Doc 4.4).
-- **Llegada**: con cupo libre, llega uno cada `AEDAS.llegadaHoras` (placeholder). Una Facción con reputación de **−50 o
-  menos** (Doc 2.7) los atrae **tres veces más despacio**.
-- **Épica**: un residente desbloquea tecnología con una **épica por capítulos** que sustituye al **hito** de la Facción
-  —nunca al logro del servidor— para cualquier tecnología con logro cumplido y Era abierta. Eligen la tecnología al
-  empezar la épica; no cuesta oro (la adopción se paga igual, 6.5). Cada capítulo avanza con **eventos inspiradores**
-  (una batalla ganada, una conquista, un asedio resistido, un edificio de culto levantado…): hechos relevantes, **no
-  acciones repetibles**: cada hecho cuenta una vez, como máximo uno por batalla y uno por capítulo cada
-  `AEDAS.epica.enfriamientoHoras`, para que no se pueda farmear.
-- **Qué dan**: felicidad, crecimiento de nobleza y prestigio (sin efecto mecánico, como los títulos, Doc 2.9), además de
-  la épica.
+- **Dónde**: en un asentamiento con **Palacio** activo y **Nobleza**; si pierde toda su nobleza, los Aedas se van. Con el
+  Palacio desde el nivel 2 (Doc 4.2.1), pueden vivir allí desde ese nivel.
+- **Cupo por asentamiento** (por nivel actual): nivel 2, 1; nivel 3, 2; nivel 4, 3; nivel 5, 4
+  (`AEDAS.residentes.cupoPorNivel`). Si el nivel baja y sobran, se va el último en llegar. Las políticas podrán sumar uno
+  (Doc 4.4).
+- **Llegada**: con cupo libre, llega uno cada 24 horas (`AEDAS.residentes.llegadaMinutos`, placeholder). Una Facción con
+  reputación de **−50 o menos** (Doc 2.7) los atrae **tres veces más despacio**.
+- **Conquista**: si la plaza cambia de dueño, el Aeda se queda mientras haya nobleza, pero **pierde la épica en curso**.
+- **Qué dan**: cada residente suma un 5 % de crecimiento de población (la felicidad) y un 25 % de crecimiento de nobleza
+  (`AEDAS.residentes.bonoFelicidad` y `bonoNobleza`, placeholder), y cuenta para el título de prestigio **«Mecenas de los
+  Aedas»** (Doc 2.9): la Facción con más épicas cumplidas y, a igualdad, más Aedas residentes. Sin efecto mecánico.
+
+#### Épica
+
+Un residente desbloquea tecnología con una **épica por capítulos** que sustituye al **hito** de la Facción —nunca al
+logro del servidor—. El Rey, el Gobernador o el Sacerdote de la plaza, presente, elige una tecnología para un Aeda
+(`empezarEpica`) o la abandona perdiendo lo avanzado (`abandonarEpica`).
+
+- **Qué tecnologías**: las que tienen el logro del servidor cumplido, la Era abierta y aún no han aparecido a la Facción;
+  un Aeda por tecnología y Facción a la vez. Pueden estar solo reveladas (6.4).
+- **No cuesta oro**: al cumplirla la tecnología **le aparece** a la Facción y se adopta como siempre, pagando la tarifa
+  (6.5).
+- **Contenido**: cada tecnología con logro tiene su épica (`EPICAS`): **3 capítulos** en la Era I, **4** en la II y **5** en
+  la III, de cantidades placeholder. Cada capítulo pide un número de hechos de un tipo.
+
+| Hecho inspirador | Cuenta cuando | De quién |
+|---|---|---|
+| Defensa | se resiste un asedio **en combate** (no un rebote por protección ni una plaza sin defensores) | de **su plaza** |
+| Batalla | su Facción gana una batalla a campo abierto contra **otra Facción** | de su Facción |
+| Conquista | su Facción conquista una plaza **en combate** | de su Facción |
+| Obra | se completa o mejora en su plaza el **edificio** que pide el capítulo | de **su plaza** |
+| Ascenso | su plaza sube de nivel | de **su plaza** |
+| Adopción | su Facción adopta una tecnología | de su Facción |
+| Caravana | llega una caravana comercial de su plaza con al menos 100 de carga (`AEDAS.epica.cargaMinimaCaravana`) | de **su plaza** |
+
+- **Contra el farmeo**: cada hecho cuenta **una sola vez** por épica (tiene una clave irrepetible: una batalla, una obra de
+  ese edificio a ese nivel, una caravana), y entre un hecho y el siguiente de la misma épica pasan **6 horas**
+  (`AEDAS.epica.enfriamientoMinutos`). Un hecho de Facción avanza la épica de **cada** residente de la Facción; uno de
+  plaza, solo las de los residentes de esa plaza.
+- **Crónica**: al cumplirla, la crónica canta que el Aeda ha completado una épica, **sin decir qué tecnología abre**.
 
 ### Lore y crónica
 
-Los Aedas narran los hechos públicos del servidor: logros del servidor, descubrimientos (el nombre de la primera
-Facción en desbloquear una tecnología, **cuando el retraso de 24 horas ya ha pasado**), comienzo de Era, cambios de
-títulos de prestigio (Doc 2.9), asentamientos que caen y declaraciones de guerra y paz. Todo queda en una **crónica**
-persistente, consultable en una interfaz propia y emitida además como evento en el juego. **No afecta al balance.**
+Los Aedas narran los hechos públicos del servidor en una **crónica**: logros del servidor, comienzo de Era, cambios de
+títulos de prestigio (Doc 2.9), descubrimientos (el nombre de la primera Facción en desbloquear una tecnología, **cuando el
+retraso de 24 horas ya ha pasado**), épicas cumplidas, asentamientos fundados, caídos o conquistados, la primera ciudad del
+mundo en llegar a los niveles 3, 4 y 5, y guerras declaradas, rebeliones de vasallos, anexiones y fusiones.
+
+Es una **vista de los eventos**, no un registro aparte: cada entrada es un evento público (sin plaza atribuida), así que
+llega a todos los jugadores por el canal de eventos y se consulta en `GET /jugador/partidas/:gameId/cronica`. Lo privado
+se redacta: los rivales saben quién conquista qué plaza, no con qué ni desde dónde. **No afecta al balance.**

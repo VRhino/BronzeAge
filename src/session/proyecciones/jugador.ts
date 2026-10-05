@@ -73,7 +73,7 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import { TECNOLOGIAS, VISION, type CondicionHito } from '../../constants';
+import { EPICAS, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
 import type { ContadorLogro, EraId, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
 import { esCaravanaGrande } from '../../engine/caravanas';
 import { tecnologiasDe } from '../../engine/tecnologia';
@@ -299,6 +299,25 @@ export interface TecnologiaJugador {
   reveladas: { tecnologiaId: TecnologiaId; descubridorFaccionId: string; hito: CondicionHito[] }[];
 }
 
+/** Un Aeda residente de la Facción propia, con su épica (Doc 6.7). Los rivales no ven los suyos. */
+export interface AedaResidenteProyectado {
+  id: string;
+  nombre: string;
+  asentamientoId: string;
+  epica?: {
+    tecnologiaId: TecnologiaId;
+    nombre: string;
+    /** Capítulo en curso (desde 0), cuántos hay, cómo se llama y cuántos hechos lleva de los que pide. */
+    capitulo: number;
+    capitulos: number;
+    tituloCapitulo: string;
+    hechos: number;
+    hechosNecesarios: number;
+    /** Cuándo puede contar otro hecho (el enfriamiento): ausente si ya puede. */
+    ultimoHechoEn?: Instante;
+  };
+}
+
 /** Un Aeda itinerante a la vista (Doc 6.7), redactado a posición y plaza: no se ve qué sabe. */
 export interface AedaAvistado {
   id: string;
@@ -397,6 +416,8 @@ export interface ProyeccionJugador {
   ejercitosAvistados: EjercitoAvistado[];
   /** Los Aedas itinerantes que se ven ahora mismo (Doc 6.7): neutrales, no atacables. */
   aedasAvistados: AedaAvistado[];
+  /** Los Aedas residentes de las plazas de la Facción propia, con su épica. */
+  aedasResidentes: AedaResidenteProyectado[];
   /** Las batallas de Unity que se ven en el mapa y aquellas en las que combate el jugador (doc 02 §4.1). Las columnas y
    * caravanas que están en una no viajan en `ejercitosAvistados`/`caravanasAvistadas`: la batalla las sustituye
    * (Doc 5.15.1). */
@@ -869,6 +890,31 @@ export function proyectarParaJugador(
     aedasAvistados: (estado.aedas ?? [])
       .filter((a) => seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa))
       .map((a) => ({ id: a.id, posicion: a.posicion, ...(a.enAsentamientoId ? { enAsentamientoId: a.enAsentamientoId } : {}) })),
+    aedasResidentes: (estado.aedasResidentes?.aedas ?? [])
+      .filter((a) => esPropio(a.asentamientoId))
+      .map((a): AedaResidenteProyectado => {
+        const definicion = a.epica && EPICAS[a.epica.tecnologiaId];
+        const capitulo = a.epica && definicion?.capitulos[a.epica.capitulo];
+        return {
+          id: a.id,
+          nombre: a.nombre,
+          asentamientoId: a.asentamientoId,
+          ...(a.epica && definicion && capitulo
+            ? {
+                epica: {
+                  tecnologiaId: a.epica.tecnologiaId,
+                  nombre: definicion.nombre,
+                  capitulo: a.epica.capitulo,
+                  capitulos: definicion.capitulos.length,
+                  tituloCapitulo: TITULO_CAPITULO[capitulo.hecho],
+                  hechos: a.epica.hechos,
+                  hechosNecesarios: capitulo.cantidad,
+                  ...(a.epica.ultimoHechoEn !== undefined ? { ultimoHechoEn: a.epica.ultimoHechoEn } : {}),
+                },
+              }
+            : {}),
+        };
+      }),
     batallas,
     heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
     heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map((h) => heroePublico(h, instanteDeTick(estado.tick))),

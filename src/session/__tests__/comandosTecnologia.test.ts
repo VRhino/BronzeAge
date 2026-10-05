@@ -5,12 +5,12 @@ import { AEDAS, TARIFA_ADOPCION } from '../../constants';
 import { instante } from '../../domain/tiempo';
 import { precioDeVenta } from '../../engine/tecnologia';
 import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
-import { adoptarTecnologia, comprarTecnologiaAeda } from '../comandos/tecnologia';
+import { abandonarEpica, adoptarTecnologia, comprarTecnologiaAeda, empezarEpica } from '../comandos/tecnologia';
 import { MATRIZ_AUTORIZACION, verificarAutorizacion } from '../comandos/autorizacion';
 import { GameSession } from '../gameSession';
 import { proyectarParaJugador } from '../proyecciones/jugador';
 import { abastecer, ACTOR, OPC, partidaConAsentamiento } from './fixtures';
-import type { TecnologiaId } from '../../domain/types';
+import type { EpicaEnCurso, TecnologiaId } from '../../domain/types';
 
 const SIN_GEOMETRIA: GeometriaAsentamientos = { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} };
 
@@ -133,5 +133,85 @@ describe('comprarTecnologiaAeda (Doc 6.7)', () => {
     expect(quien(fundador)).toEqual({ autorizado: true });
     expect(quien(vecino)).toEqual({ autorizado: false, motivo: 'condicion_dominio' });
     expect(MATRIZ_AUTORIZACION.comprarTecnologiaAeda.rolesPermitidos).toEqual(['jugador']);
+  });
+});
+
+describe('épica de un Aeda residente (Doc 6.7), por la ruta real', () => {
+  /** Partida abastecida con cobre aparecido (para adoptar) y el logro de la cantería cumplido, y un Aeda residente en la plaza. */
+  function conResidente(epica?: EpicaEnCurso) {
+    const { sesion: base, faccionId, asentamientoId } = partidaConAsentamiento();
+    const payload = abastecer(base).exportar();
+    const tecnologia = {
+      ...payload.state.tecnologia,
+      logros: { canteria: instanteDeTick(0), metalurgia_cobre: instanteDeTick(0) },
+      porFaccion: { [faccionId]: { aparecidas: ['leva_comunal', 'hostigamiento_tribal', 'metalurgia_cobre'], adoptadas: ['leva_comunal', 'hostigamiento_tribal'] } },
+    } as typeof payload.state.tecnologia;
+    const aedasResidentes = {
+      aedas: [{ id: 'aeda-r1', nombre: 'Femio', asentamientoId, faccionId, llegadaEn: instanteDeTick(0), ...(epica ? { epica } : {}) }],
+      siguiente: 2,
+      llegadaEn: {},
+      cumplidas: {},
+    };
+    return { sesion: GameSession.importar({ ...payload, state: { ...payload.state, tecnologia, aedasResidentes } }), faccionId, asentamientoId };
+  }
+
+  it('empezarEpica la deja en marcha y el jugador la ve con su capítulo; abandonarla la borra', () => {
+    const { sesion, asentamientoId } = conResidente();
+    expect(sesion.ejecutar(empezarEpica, { asentamientoId, aedaId: 'aeda-r1', tecnologiaId: 'canteria' }, OPC).ok).toBe(true);
+    const vista = proyectarParaJugador(sesion.getState(), ACTOR, SIN_GEOMETRIA).aedasResidentes;
+    expect(vista).toEqual([expect.objectContaining({ id: 'aeda-r1', epica: expect.objectContaining({ tecnologiaId: 'canteria', capitulo: 0, capitulos: 3, tituloCapitulo: 'La obra de las manos' }) })]);
+    expect(sesion.ejecutar(abandonarEpica, { asentamientoId, aedaId: 'aeda-r1' }, OPC).ok).toBe(true);
+    expect(proyectarParaJugador(sesion.getState(), ACTOR, SIN_GEOMETRIA).aedasResidentes[0]!.epica).toBeUndefined();
+  });
+
+  it('rechazo: un Aeda que no existe sale `aedas.epica_invalida` y no muta', () => {
+    const { sesion, asentamientoId } = conResidente();
+    const antes = sesion.getState();
+    expect(sesion.ejecutar(empezarEpica, { asentamientoId, aedaId: 'nadie', tecnologiaId: 'canteria' }, OPC).codigoError).toBe('aedas.epica_invalida');
+    expect(sesion.getState()).toBe(antes);
+  });
+
+  it('solo la dirige el Rey, el Gobernador o el Sacerdote de la plaza, presente', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    const quien = (heroeId: string) => verificarAutorizacion('empezarEpica', { asentamientoId, aedaId: 'a', tecnologiaId: 'canteria' }, sesion.getState(), { rol: 'jugador', heroeId });
+    expect(quien(fundador)).toEqual({ autorizado: true });
+    expect(quien(vecino)).toEqual({ autorizado: false, motivo: 'condicion_dominio' });
+  });
+
+  it('un hecho de la partida (adoptar una tecnología) cierra el último capítulo: la cantería aparece sin hito y la crónica lo canta sin nombrarla', () => {
+    const { sesion, faccionId } = conResidente({ tecnologiaId: 'canteria', capitulo: 2, hechos: 0, claves: [] });
+    const r = sesion.ejecutar(adoptarTecnologia, { faccionId, tecnologiaId: 'metalurgia_cobre' }, OPC);
+
+    expect(r.ok).toBe(true);
+    expect(sesion.getState().tecnologia.porFaccion[faccionId]!.aparecidas).toContain('canteria');
+    expect(sesion.getState().aedasResidentes!.cumplidas[faccionId]).toBe(1);
+    const canto = r.eventos.find((e) => e.codigo === 'aedas.epica_cumplida');
+    expect(canto).toBeDefined();
+    expect(canto!.asentamientoId).toBeUndefined();
+    expect(canto!.mensaje).not.toMatch(/cantería/i);
+    expect(r.eventos.map((e) => e.codigo)).toContain('aedas.epica_tecnologia');
+  });
+});
+
+describe('Aedas residentes en el tick real', () => {
+  it('una plaza con Palacio y nobleza recibe a su primer Aeda tras el plazo, y la Facción lo ve', () => {
+    const { sesion: base, asentamientoId } = partidaConAsentamiento();
+    const payload = abastecer(base).exportar();
+    const plaza = payload.state.asentamientos[0]!;
+    const asentamientos = [
+      {
+        ...plaza,
+        nivel: 2,
+        nivelActual: 2,
+        poblacion: { ...plaza.poblacion, nobleza: 5 },
+        edificios: [...plaza.edificios, { ...plaza.edificios[0]!, id: 'palacio-test', tipo: 'palacio' as const, estado: 'activo' as const, nivelInterno: 1 }],
+      },
+    ];
+    const sesion = GameSession.importar({ ...payload, state: { ...payload.state, asentamientos } });
+    for (let i = 0; i < AEDAS.residentes.llegadaMinutos + 2; i++) sesion.avanzarTick();
+
+    const aedas = sesion.getState().aedasResidentes?.aedas ?? [];
+    expect(aedas.map((a) => a.asentamientoId)).toEqual([asentamientoId]);
+    expect(proyectarParaJugador(sesion.getState(), ACTOR, SIN_GEOMETRIA).aedasResidentes).toHaveLength(1);
   });
 });

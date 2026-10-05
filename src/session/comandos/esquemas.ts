@@ -210,6 +210,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   abandonarRecinto: objeto({ asentamientoId: IDENTIFICADOR, recintoId: IDENTIFICADOR }, ['asentamientoId', 'recintoId']),
   solicitarAscenso: objeto({ asentamientoId: IDENTIFICADOR }, ['asentamientoId']),
   adoptarTecnologia: objeto({ faccionId: IDENTIFICADOR, tecnologiaId: TECNOLOGIA }, ['faccionId', 'tecnologiaId']),
+  empezarEpica: objeto({ asentamientoId: IDENTIFICADOR, aedaId: IDENTIFICADOR, tecnologiaId: TECNOLOGIA }, ['asentamientoId', 'aedaId', 'tecnologiaId']),
+  abandonarEpica: objeto({ asentamientoId: IDENTIFICADOR, aedaId: IDENTIFICADOR }, ['asentamientoId', 'aedaId']),
   comprarTecnologiaAeda: objeto({ asentamientoId: IDENTIFICADOR, tecnologiaId: TECNOLOGIA }, ['asentamientoId', 'tecnologiaId']),
   mejorarRecinto: objeto(
     { asentamientoId: IDENTIFICADOR, cargo: CARGO_CONSTRUCTOR, recintoId: IDENTIFICADOR },

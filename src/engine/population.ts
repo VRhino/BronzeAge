@@ -1,6 +1,6 @@
 import type { Asentamiento, Poblacion } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { EDIFICIO_CATALOGO, IMPUESTOS, NIVEL_ASENTAMIENTO, OCUPACION, POBLACION } from '../constants';
+import { AEDAS, EDIFICIO_CATALOGO, IMPUESTOS, NIVEL_ASENTAMIENTO, OCUPACION, POBLACION } from '../constants';
 import type { Instante } from '../domain/tiempo';
 
 /** Fase A5 — payload de `poblacion.hambruna_muerte` (ver `avanzarNutricionPoblacion`). Los eventos de
@@ -51,7 +51,9 @@ export function crecerPoblacion(
   rng: RandomFn,
   /** Para la ventana de ocupación (Ocupacion §2.4): si el asentamiento está ocupado, el crecimiento se frena
    *  `× OCUPACION.factorCrecimiento`. Ausente = sin comprobación (comportamiento normal). */
-  instante?: Instante
+  instante?: Instante,
+  /** Aedas residentes de la plaza (Doc 6.7): cada uno suma felicidad y crecimiento de nobleza. */
+  aedasResidentes = 0
 ): { poblacion: Poblacion; eventos: EventoCrudo[] } {
   const eventos: EventoCrudo[] = [];
 
@@ -69,7 +71,8 @@ export function crecerPoblacion(
   // frena el crecimiento de las 3 clases. `factorCrecimientoPoblacion` es 1 sin ninguna política fiscal
   // activa, así que el comportamiento por defecto no cambia.
   const ocupado = instante !== undefined && estaOcupado(asentamiento, instante);
-  const felicidad = factorCrecimientoPoblacion(asentamiento) * (ocupado ? OCUPACION.factorCrecimiento : 1);
+  const felicidad =
+    factorCrecimientoPoblacion(asentamiento) * (ocupado ? OCUPACION.factorCrecimiento : 1) * (1 + AEDAS.residentes.bonoFelicidad * aedasResidentes);
 
   const capacidadPesants = capacidadViviendaPesants(asentamiento);
   const espacioPesantsFactor = capacidadPesants <= 0 ? 0 : Math.max(0, Math.min(1, 1 - asentamiento.poblacion.pesants / capacidadPesants));
@@ -117,7 +120,7 @@ export function crecerPoblacion(
       eventos.push({ codigo: 'poblacion.primeros_nobles', mensaje: 'Aparecen los primeros Nobles.' });
     } else {
       const tasaNobleza =
-        POBLACION.nobleza.tasaCrecimientoBase * comidaFactor * espacioPalacioFactor * estabilidad * felicidad * factorCrecimientoNobleza(asentamiento);
+        POBLACION.nobleza.tasaCrecimientoBase * comidaFactor * espacioPalacioFactor * estabilidad * felicidad * factorCrecimientoNobleza(asentamiento) * (1 + AEDAS.residentes.bonoNobleza * aedasResidentes);
       nuevaNobleza = crecimientoEstocastico(asentamiento.poblacion.nobleza, tasaNobleza, rng);
     }
   }

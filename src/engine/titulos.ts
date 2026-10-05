@@ -1,4 +1,4 @@
-import type { Asentamiento, Faccion, Heroe, RelacionPolitica, Titulo } from '../domain/types';
+import type { Asentamiento, EstadoAedasResidentes, Faccion, Heroe, RelacionPolitica, Titulo } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `narrarCambiosDeTitulo`). */
@@ -28,7 +28,9 @@ export function calcularTitulos(
   asentamientos: Asentamiento[],
   relaciones: RelacionPolitica[],
   /** Dueños de las escuadras: la tropa de una Facción es la de sus ciudadanos, esté donde esté. */
-  heroes: readonly Heroe[] = []
+  heroes: readonly Heroe[] = [],
+  /** Los Aedas residentes: de ellos sale el título «Mecenas de los Aedas». */
+  aedas?: EstadoAedasResidentes
 ): Titulo[] {
   if (facciones.length === 0) return [];
   const titulos: Titulo[] = [];
@@ -58,6 +60,13 @@ export function calcularTitulos(
 
   const granRey = computeLigas(relaciones, facciones).find((l) => l.granReyFaccionId)?.granReyFaccionId;
   if (granRey) titulos.push({ nombre: 'Gran Rey', poseedorId: granRey, valorMetrica: 1 });
+
+  // Mecenas de los Aedas: más épicas cumplidas, y a igualdad más Aedas residentes. Sin ninguna, nadie lo tiene.
+  if (aedas) {
+    const valor = (f: Faccion) => (aedas.cumplidas[f.id] ?? 0) * 10 + aedas.aedas.filter((a) => a.faccionId === f.id).length;
+    const mecenas = facciones.reduce((mejor, f) => (valor(f) > valor(mejor) ? f : mejor));
+    if (valor(mecenas) > 0) titulos.push({ nombre: 'Mecenas de los Aedas', poseedorId: mecenas.id, valorMetrica: valor(mecenas) });
+  }
 
   return titulos;
 }

@@ -32,7 +32,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
 | 36 | HÉROE | Héroes bot que juegan como jugadores (NPC fuera del motor) | ◐ pasos 1-4 y adaptador remoto hechos; faltan D33b, retirar cuentas y desplegar |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
-| 42 | TECNOLOGÍA | Aedas: difusión y venta de tecnología, residentes y lore | ◐ diseño parcial, sin código |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
 fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera del alcance de Fase 0 por
@@ -137,7 +136,7 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
   EV-1 a EV-7). La subida 4 → 5 la tiene que desbloquear una tecnología de la Era V (D54): hasta entonces el código
   mantiene un techo provisional en el nivel 4 (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`).
 - **Otras vías** (Doc 6.1): conquista (aparece al conquistar una plaza que reclutaba con ella) y comercio (pago a
-  otra Facción; ¿la vendedora acepta y fija el precio?). La de los Aedas va en §42.
+  otra Facción; ¿la vendedora acepta y fija el precio?). La de los Aedas (venta de tecnología) ya está en el juego, Doc 6.7.
 - **Logro de `logistica_campana`** (Era IV, D30): la condición ya existe como consulta pura,
   `caminoCompartidoAbierto` (`engine/redCaminos.ts`, red de caminos del Doc 1.6); falta engancharla al catálogo al
   escribir la Era IV. Prioridad: antes de que un servidor llegue a la Era V (semana 26).
@@ -333,12 +332,3 @@ presencia con las sesiones y las cuentas de bot (paso 3, Doc 1.10.6). Falta:
 Mientras se prueba con NPC, el asedio admite 5 héroes por bando como el resto de batallas (decisión del usuario,
 2026-09-27; `BATALLA.capacidad.asedio`, Doc 5.15.1). Cuando entren jugadores vuelve a **15 contra 15**: cambiar la
 constante y el canon, y avisar a Conquest, que abre la instancia con esa capacidad (`BattleSide.capacidadMaxima`).
-
-## 42. Aedas: difusión y venta de tecnología, residentes y lore
-
-**Estado: diseño cerrado el 2026-10-05; paso 1 hecho (itinerantes), pasos 2 y 3 `código: ✘`** (de la crónica solo existe
-la narración de cambios de título, `engine/titulos.ts`, Doc 2.9). Reglas en el canon, Doc 6.1, 6.4 y 6.7; decisiones, modelo y pasos en
-`Consideraciones/Aedas_Definicion.md`.
-
-Pasos pendientes (cada uno se fusiona por separado): ~~**1.** itinerantes difusores + venta~~ (hecho); **2.** residentes
-con épica; **3.** crónica y lore. Se borra esta entrada entera cuando se cierre el paso 3.

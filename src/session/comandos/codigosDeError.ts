@@ -28,6 +28,7 @@ export const CODIGOS_ERROR = {
   ascensoInvalido: 'ascenso.invalido',
   tecnologiaAdopcionInvalida: 'tecnologia.adopcion_invalida',
   aedasVentaInvalida: 'aedas.venta_invalida',
+  aedasEpicaInvalida: 'aedas.epica_invalida',
   movilizacionInvalida: 'movilizacion.invalida',
   heroeInvalido: 'heroe.invalido',
 

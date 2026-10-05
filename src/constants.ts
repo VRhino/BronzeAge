@@ -2447,6 +2447,26 @@ export const AEDAS = {
     /** Últimos asentamientos que no repiten al elegir el siguiente: lo que los hace recorrer el mundo en vez de rebotar. */
     memoriaVisitas: 4,
   },
+  residentes: {
+    /** Asentamiento por nivel actual → Aedas que caben (Doc 6.7). Sin Palacio o sin Nobleza no vive ninguno. */
+    cupoPorNivel: { 2: 1, 3: 2, 4: 3, 5: 4 } as Readonly<Record<number, number>>,
+    /** Lo que tarda en llegar el siguiente con cupo libre. */
+    llegadaMinutos: 24 * 60,
+    /** Con la reputación de la Facción en este umbral o menos (Doc 2.7) tardan `factorLlegadaReputacionBaja` veces más. */
+    umbralReputacionBaja: -50,
+    factorLlegadaReputacionBaja: 3,
+    /** Por Aeda residente: más crecimiento de población (la felicidad, `crecerPoblacion`) y de nobleza, en fracción. */
+    bonoFelicidad: 0.05,
+    bonoNobleza: 0.25,
+  },
+  epica: {
+    /** Entre un hecho y el siguiente de la misma épica: lo que impide acumular hechos en una sola batalla o jornada. */
+    enfriamientoMinutos: 6 * 60,
+    /** Una caravana cuenta como hecho si lleva al menos tanta carga. */
+    cargaMinimaCaravana: 100,
+    /** Cuántas claves de hechos recuerda cada épica para no contarlos dos veces. */
+    clavesRecordadas: 50,
+  },
   venta: {
     /** El oro que cobran, por el oro de la tarifa de adopción de la Era de la tecnología (Doc 6.7, A3). */
     factorOro: 2,
@@ -2454,6 +2474,68 @@ export const AEDAS = {
     ordenEraMaximo: 3,
   },
 } as const;
+
+/** Los hechos inspiradores que hacen avanzar una épica (Doc 6.7): relevantes y no repetibles (`engine/aedasResidentes.ts`). */
+export type HechoEpico = 'defensa' | 'batalla' | 'conquista' | 'obra' | 'ascenso' | 'adopcion' | 'caravana';
+
+/** Cómo se llama el capítulo según su hecho (la crónica y el cliente). */
+export const TITULO_CAPITULO: Record<HechoEpico, string> = {
+  defensa: 'Las murallas resisten',
+  batalla: 'La batalla en campo abierto',
+  conquista: 'La ciudad que cae',
+  obra: 'La obra de las manos',
+  ascenso: 'La ciudad crece',
+  adopcion: 'El saber se hace ley',
+  caravana: 'El camino y sus carretas',
+};
+
+export interface CapituloEpica {
+  hecho: HechoEpico;
+  /** Hechos que hacen falta para cerrar el capítulo. */
+  cantidad: number;
+  /** Solo para `obra`: el edificio que hay que completar o mejorar. */
+  edificio?: EdificioTipo;
+}
+export interface DefinicionEpica {
+  nombre: string;
+  capitulos: CapituloEpica[];
+}
+
+const cap = (hecho: HechoEpico, cantidad = 1, edificio?: EdificioTipo): CapituloEpica => ({ hecho, cantidad, ...(edificio ? { edificio } : {}) });
+
+/**
+ * Una épica por tecnología con logro (Doc 6.7): 3 capítulos en la Era I, 4 en la II y 5 en la III. PLACEHOLDER de contenido y
+ * de cantidades; cada una mezcla hechos afines al tema de su tecnología.
+ */
+export const EPICAS: Partial<Record<TecnologiaId, DefinicionEpica>> = {
+  // Era I
+  metalurgia_cobre: { nombre: 'Canto del fuego rojo', capitulos: [cap('obra', 1, 'fundicion'), cap('caravana', 2), cap('ascenso')] },
+  aleacion_bronce: { nombre: 'Canto de la aleación', capitulos: [cap('obra', 1, 'fundicion'), cap('caravana', 2), cap('batalla', 2)] },
+  escudos_ligeros: { nombre: 'Canto del mimbre trenzado', capitulos: [cap('obra', 1, 'barracon'), cap('defensa'), cap('batalla')] },
+  armamento_palacial: { nombre: 'Canto de los almacenes del palacio', capitulos: [cap('ascenso'), cap('obra', 1, 'armeria'), cap('defensa')] },
+  arqueria_palacial: { nombre: 'Canto de la cuerda tensa', capitulos: [cap('obra', 1, 'galeriaDeTiro'), cap('defensa'), cap('batalla', 2)] },
+  cria_caballar: { nombre: 'Canto de las yeguas', capitulos: [cap('obra', 1, 'corral'), cap('caravana', 2), cap('obra', 1, 'caballerizas')] },
+  carros_guerra: { nombre: 'Canto de los carros de Qadesh', capitulos: [cap('obra', 1, 'caballerizas'), cap('batalla', 2), cap('conquista')] },
+  canteria: { nombre: 'Canto de la piedra viva', capitulos: [cap('obra', 1, 'cantera'), cap('ascenso'), cap('adopcion')] },
+  // Era II
+  bronce_calidad_militar: { nombre: 'Canto del bronce de Dendra', capitulos: [cap('obra', 1, 'armeria'), cap('batalla', 2), cap('defensa'), cap('adopcion')] },
+  forja_hierro_temprana: { nombre: 'Canto del hierro que llega', capitulos: [cap('obra', 1, 'minaHierro'), cap('caravana', 2), cap('batalla', 2), cap('ascenso')] },
+  panoplia_bronce: { nombre: 'Canto del vaso de los guerreros', capitulos: [cap('obra', 1, 'barracon'), cap('batalla', 2), cap('defensa'), cap('conquista')] },
+  disciplina_formacion: { nombre: 'Canto de la batalla del Delta', capitulos: [cap('obra', 1, 'barracon'), cap('defensa', 2), cap('batalla', 2), cap('adopcion')] },
+  arco_compuesto: { nombre: 'Canto del arco de cuerno', capitulos: [cap('obra', 1, 'carpinteria'), cap('obra', 1, 'galeriaDeTiro'), cap('defensa'), cap('batalla', 2)] },
+  equitacion_militar: { nombre: 'Canto de los jinetes de Assur', capitulos: [cap('obra', 1, 'caballerizas'), cap('batalla', 3), cap('caravana', 2), cap('conquista')] },
+  carpinteria_militar: { nombre: 'Canto de las escalas de Dapur', capitulos: [cap('obra', 1, 'carpinteria'), cap('defensa'), cap('batalla', 2), cap('conquista')] },
+  // Era III
+  instituciones_civicas: { nombre: 'Canto de la asamblea', capitulos: [cap('ascenso'), cap('obra', 1, 'mercado'), cap('caravana', 3), cap('adopcion'), cap('ascenso')] },
+  ciudadania_militar: { nombre: 'Canto del ciudadano en armas', capitulos: [cap('obra', 1, 'barracon'), cap('defensa', 2), cap('batalla', 2), cap('adopcion'), cap('defensa')] },
+  falange_hoplita: { nombre: 'Canto de las lanzas largas', capitulos: [cap('obra', 1, 'barracon'), cap('batalla', 2), cap('defensa', 2), cap('batalla', 3), cap('conquista')] },
+  pantalla_escaramuzadores: { nombre: 'Canto de la jabalina ligera', capitulos: [cap('obra', 1, 'galeriaDeTiro'), cap('obra', 1, 'armeria'), cap('batalla', 2), cap('defensa'), cap('batalla', 2)] },
+  arqueria_especializada: { nombre: 'Canto de los arqueros de la estepa', capitulos: [cap('obra', 1, 'galeriaDeTiro'), cap('defensa'), cap('batalla', 3), cap('caravana', 2), cap('conquista')] },
+  forja_hierro_estandarizada: { nombre: 'Canto del acero templado', capitulos: [cap('obra', 1, 'fundicion'), cap('obra', 1, 'minaHierro'), cap('caravana', 3), cap('batalla', 2), cap('adopcion')] },
+  bronce_laminado: { nombre: 'Canto de la coraza musculada', capitulos: [cap('obra', 1, 'armeria'), cap('batalla', 2), cap('defensa', 2), cap('conquista'), cap('adopcion')] },
+  caballeria_organizada: { nombre: 'Canto de los jinetes de Tiglat-Pileser', capitulos: [cap('obra', 1, 'caballerizas'), cap('batalla', 3), cap('caravana', 2), cap('conquista'), cap('batalla', 3)] },
+  trabajos_asedio: { nombre: 'Canto de las rampas de Laquis', capitulos: [cap('obra', 1, 'carpinteria'), cap('defensa', 2), cap('conquista'), cap('batalla', 2), cap('conquista')] },
+};
 
 /** Una condición del hito de la Facción (Doc 6.3). "Edificio" = activo en cualquier asentamiento de la Facción;
  * `nivelInterno` es un mínimo. */

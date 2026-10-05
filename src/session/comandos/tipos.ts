@@ -10,9 +10,10 @@ import type { EventoDominio } from '../../domain/eventos';
 import type { Instante } from '../../domain/tiempo';
 import type { Mapa } from '../../world/mapa';
 import type { RandomFn } from '../../worldgen';
-import { anteponerEventos, type EventoDominioConVersion, type GameSessionState } from '../estado';
+import { anteponerEventos, instanteDeTick, isoDeInstante, type EventoDominioConVersion, type GameSessionState } from '../estado';
 import type { GeneradorIds } from '../idGenerator';
 import { codigoDeErrorDominio } from '../erroresDeDominio';
+import { avanzarEpicas, RESIDENTES_VACIOS } from '../../engine/aedasResidentes';
 import { entradasDeCronica } from '../../engine/cronica';
 import { contadoresDeEventos, sumarContadores } from '../../engine/tecnologia';
 import { comerciadoDeEventos, sumarComerciado } from '../../engine/mercadoMercenario';
@@ -95,14 +96,24 @@ export function exito<T>(estado: GameSessionState, eventos: EventoDominio[], dat
   const version = estado.version + 1;
   // Estampa `version` aquí y solo aquí (Fase C13) — mismo motivo que estampar la versión misma: es el único
   // punto que la conoce, y `eventos` llega desde el comando sin saber todavía a qué versión pertenece.
-  const eventosConVersion: EventoDominioConVersion[] = [...eventos, ...entradasDeCronica(eventos, estado)].map((e) => ({ ...e, version }));
+  // Las épicas de los Aedas residentes (Doc 6.7) avanzan con los hechos de la partida: por aquí pasan los del tick y los de los comandos.
+  const momento = isoDeInstante(instanteDeTick(estado.tick));
+  const epicas = avanzarEpicas(estado.aedasResidentes ?? RESIDENTES_VACIOS, eventos, {
+    asentamientos: estado.asentamientos,
+    facciones: estado.facciones,
+    tecnologia: estado.tecnologia,
+    instante: instanteDeTick(estado.tick),
+  });
+  const hechos = [...eventos, ...epicas.eventos.map((e): EventoDominio => (typeof e === 'string' ? { codigo: 'legado', mensaje: e, momento } : { ...e, momento }))];
+  const eventosConVersion: EventoDominioConVersion[] = [...hechos, ...entradasDeCronica(hechos, estado)].map((e) => ({ ...e, version }));
   const estadoFinal: GameSessionState = {
     ...estado,
     version,
     eventosDominio: anteponerEventos(eventosConVersion, estado.eventosDominio),
     // Los logros del servidor (Doc 6.3) se cuentan aquí, por donde pasa TODO hecho de la partida: el tick, los
     // comandos y el NPC. Lo que no deja evento (extracción, talleres) lo cuenta el propio tick.
-    tecnologia: sumarContadores(estado.tecnologia, contadoresDeEventos(eventos)),
+    tecnologia: sumarContadores(epicas.tecnologia, contadoresDeEventos(eventos)),
+    ...(estado.aedasResidentes ? { aedasResidentes: epicas.estado } : {}),
     // Lo comerciado entre Facciones alimenta la reposición de los mercados de mercenarios (Doc 1.9b).
     mercadoMercenario: sumarComerciado(estado.mercadoMercenario, comerciadoDeEventos(eventos)),
   };

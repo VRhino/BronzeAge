@@ -8,7 +8,7 @@ datos, archivos, pasos, pruebas y riesgos. Redactado el 2026-09-29.
 las Eras I, II y III: 25 tecnologías, 26 tropas (15 nuevas), edificios y recetas nuevas, P1/P2, §37 (población por
 escalón y Palacio) y §41 (recinto de piedra). Solo la **vía del desarrollo** (logro + hito + pago).
 
-**Fuera de alcance** (siguen en `Docs/Mecanicas a desarrollar.md`): Aedas y la venta de tecnología (§42), conquista
+**Fuera de alcance** (siguen en `Docs/Mecanicas a desarrollar.md`): Aedas y la venta de tecnología (`Aedas_Definicion.md`, ya hecho), conquista
 (D35) y comercio (D39) de tecnología, culturas (solo
 aspecto, D18), mercenarios (§40), el efecto del equipo de asedio (las tecnologías `carpinteria_militar` y
 `trabajos_asedio` existen y se adoptan, pero su equipo llega con la mecánica de asedio), Eras IV-V, D47.
@@ -52,7 +52,7 @@ export interface EstadoTecnologia {
   contadores: Partial<Record<ContadorLogro, number>>;
   /** Logro cumplido → cuándo. Fijado para siempre (D31). Público, sin decir qué tecnología abre (D55). */
   logros: Partial<Record<TecnologiaId, Instante>>;
-  /** Primera Facción que la desbloqueó (crónica; el retraso de los Aedas, §42, parte de aquí). */
+  /** Primera Facción que la desbloqueó (crónica; el retraso de los Aedas, `Aedas_Definicion.md`, parte de aquí). */
   primeros: Partial<Record<TecnologiaId, { faccionId: string; en: Instante }>>;
 }
 ```
@@ -88,7 +88,7 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 ### Paso 0 — Canon
 - [x] Doc 6 pasa a ser el documento de tecnología: Eras y calendario (D34, D44, D48), logro + hito (D30, D31),
   visibilidad (D55), adopción por el Rey en la capital (D32) con la tarifa por Era, catálogo de las Eras I-III con
-  logros e hitos. 6.5 ("Fase 0 sin Aedas") y "Planos de X" se retiran; los Aedas remiten a §42.
+  logros e hitos. 6.5 ("Fase 0 sin Aedas") y "Planos de X" se retiran; los Aedas remiten a `Aedas_Definicion.md`.
 - [x] Doc 5.7/5.8: roster de las Eras I-III con tecnología, edificio, equipo, escalón, población, unidades, poder y
   velocidad; clase montada (28, D8); caballo en oro (D5); Caballerizas (D28, D37).
 - [x] Doc 4.2.1: P1/P2, Caballerizas, Mina de hierro, Fundición 3, Sala del Consejo, recetas nuevas; Doc 4.4: +1

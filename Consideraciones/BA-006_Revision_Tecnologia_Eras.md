@@ -81,7 +81,7 @@ adopción" del primero en D31):
   de adopción.
 - **El Aeda también la vende** (D31): pagándole oro, la Facción se salta su hito, nunca el logro del servidor.
 - **El logro del servidor es público** (lo canta un Aeda, D31) **pero no dice qué tecnología desbloquea.**
-- Los Aedas son una mecánica aparte: `Docs/Mecanicas a desarrollar.md` §42. Sin ellos, cada Facción solo descubre una
+- Los Aedas son una mecánica aparte: `Consideraciones/Aedas_Definicion.md`. Sin ellos, cada Facción solo descubre una
   tecnología al cumplir su propio hito.
 
 **D32 — Adoptar una tecnología: la adopta el REY, estando en la CAPITAL, y paga el almacén de la capital.**

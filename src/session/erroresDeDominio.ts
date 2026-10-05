@@ -5,6 +5,7 @@
 // error nuevo del motor sin añadirlo a esta tabla hace que `codigoDeErrorDominio` devuelva `undefined` — el
 // llamador lo relanza como bug en vez de fallar en silencio (ver `rechazoDesdeError`, `comandos/tipos.ts`).
 import { AscensoInvalidoError } from '../engine/ascenso';
+import { EpicaInvalidaError } from '../engine/aedasResidentes';
 import { AdopcionInvalidaError, VentaInvalidaError } from '../engine/tecnologia';
 import { CapitalInvalidaError } from '../engine/capital';
 import { MercenariosInvalidoError } from '../engine/mercenarios';
@@ -34,6 +35,7 @@ const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [AscensoInvalidoError, CODIGOS_ERROR.ascensoInvalido],
   [AdopcionInvalidaError, CODIGOS_ERROR.tecnologiaAdopcionInvalida],
   [VentaInvalidaError, CODIGOS_ERROR.aedasVentaInvalida],
+  [EpicaInvalidaError, CODIGOS_ERROR.aedasEpicaInvalida],
   [BatallaInvalidaError, CODIGOS_ERROR.batallaInvalida],
   [BatallaYaAsignadaError, CODIGOS_ERROR.batallaYaAsignada],
   [CapitalInvalidaError, CODIGOS_ERROR.capitalInvalida],
