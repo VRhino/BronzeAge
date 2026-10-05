@@ -86,7 +86,27 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
 
   // Sin `minLength` en `nombre`: vacío/solo-espacios ya es un rechazo de dominio con su propio código
   // (`faccion.nombre_vacio`, `crearFaccion.ts`) — mismo motivo que `NUMERO` más arriba.
-  crearFaccion: objeto({ nombre: { type: 'string' } }, ['nombre']),
+  // `sigilo` es opcional: sin él, la Facción recibe uno libre (los bots). Valida la forma; que los ids existan y que
+  // no se repita lo decide el comando (`faccion.sigilo_invalido`/`faccion.sigilo_duplicado`).
+  crearFaccion: objeto(
+    {
+      nombre: { type: 'string' },
+      sigilo: objeto(
+        {
+          formaId: IDENTIFICADOR,
+          campoId: IDENTIFICADOR,
+          emblemaId: IDENTIFICADOR,
+          colorPrimarioId: IDENTIFICADOR,
+          colorSecundarioId: IDENTIFICADOR,
+          colorEmblemaId: IDENTIFICADOR,
+          orlaId: IDENTIFICADOR,
+          colorOrlaId: IDENTIFICADOR,
+        },
+        ['formaId', 'campoId', 'emblemaId', 'colorPrimarioId', 'colorSecundarioId', 'colorEmblemaId', 'orlaId', 'colorOrlaId']
+      ),
+    },
+    ['nombre']
+  ),
   // Sin `minLength` en `displayName`, mismo motivo que `nombre` de arriba (`heroe.nombre_vacio`).
   crearHeroe: objeto(
     {

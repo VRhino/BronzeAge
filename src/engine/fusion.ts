@@ -78,6 +78,9 @@ export function fusionar(
   const nuevaFaccion: Faccion = {
     id: `faccion-fusion-${tickActual}-${faccionAId}-${faccionBId}`,
     nombre: nuevoNombre,
+    // El sigilo es para siempre y no se cambia (Doc 2.8.1): la fusión hereda el de A, que desaparece con ella, así que
+    // no choca con ninguna otra Facción; el de B se pierde con B.
+    sigilo: a.sigilo,
     reyId: nuevoReyId,
     embajadorId: null,
     nivel: 1,

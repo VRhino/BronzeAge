@@ -8,6 +8,7 @@ import { RED_VACIA, tramosDeRed } from '@motor/engine/redCaminos';
 import { ApiError } from './app/apiCliente';
 import { CATALOGOS, crearGameStore, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { layoutCampamento } from '@motor/engine/layoutCampamento';
+import { CATALOGO_SIGILO } from '@motor/constants';
 import { draw, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
@@ -1265,6 +1266,15 @@ function renderAsentamientosTab(state: GameState): void {
 
 }
 
+/** Vista previa del sigilo (Doc 2.8.1): los dos colores y las piezas por nombre. El dibujo real es de los clientes de juego. */
+function htmlSigilo(faccion: Faccion): string {
+  const s = faccion.sigilo;
+  const hex = (id: string) => CATALOGO_SIGILO.colores.find((c) => c.id === id)?.hex ?? '#888888';
+  const insignia = `<span style="display:inline-block;width:22px;height:22px;border-radius:3px;border:1px solid #0004;vertical-align:middle;background:linear-gradient(135deg, ${hex(s.colorPrimarioId)} 50%, ${hex(s.colorSecundarioId)} 50%)"></span>`;
+  const detalle = `${s.formaId} · ${s.campoId} (${s.colorPrimarioId}/${s.colorSecundarioId}) · ${s.emblemaId} (${s.colorEmblemaId})${s.orlaId === 'ninguna' ? '' : ` · orla ${s.orlaId} (${s.colorOrlaId})`}`;
+  return `<div class="kv-row"><span>Sigilo</span><span>${insignia} ${detalle}</span></div>`;
+}
+
 function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
   const nivelFaccion = gameStore.nivelFaccionInfo(faccion);
   const cupo = gameStore.cupoAsentamientosFaccion(faccion);
@@ -1349,6 +1359,7 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
         <h3>${faccion.nombre}</h3>
         <div class="kv-grid">
           <div class="kv-row"><span>Nivel</span><span>${faccion.nivel}</span></div>
+          ${htmlSigilo(faccion)}
           <div class="kv-row"><span>Rey</span><span>${faccion.reyId ?? '—'}</span></div>
           <div class="kv-row"><span>Embajador</span><span>${faccion.embajadorId ?? '—'}</span></div>
           <div class="kv-row"><span>Ciudadanos</span><span>${faccion.ciudadanosIds.length}</span></div>

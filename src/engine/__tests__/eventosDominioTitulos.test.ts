@@ -9,7 +9,7 @@ describe('eventos de dominio — titulos.ts', () => {
   const facciones: Faccion[] = [crearFaccion('f1', 'Micenas'), crearFaccion('f2', 'Troya')];
 
   it('un título nuevo (sin previo) produce titulo.nace', () => {
-    const actuales: Titulo[] = [{ nombre: 'Facción más grande', poseedorId: 'f1', valorMetrica: 3 }];
+    const actuales: Titulo[] = [{ tituloId: 'faccionMasGrande', nombre: 'Facción más grande', poseedorId: 'f1', valorMetrica: 3 }];
 
     const eventos = narrarCambiosDeTitulo([], actuales, facciones);
 
@@ -18,14 +18,15 @@ describe('eventos de dominio — titulos.ts', () => {
     if (typeof evento === 'string') throw new Error('esperaba evento migrado');
     expect(evento.codigo).toBe('titulo.nace');
     const p = evento.payload as PayloadTituloNace;
+    expect(p.tituloId).toBe('faccionMasGrande');
     expect(p.tituloNombre).toBe('Facción más grande');
     expect(p.faccionId).toBe('f1');
     expect(p.valorMetrica).toBe(3);
   });
 
   it('un título que cambia de poseedor produce titulo.cambia_manos', () => {
-    const previos: Titulo[] = [{ nombre: 'Facción más grande', poseedorId: 'f1', valorMetrica: 3 }];
-    const actuales: Titulo[] = [{ nombre: 'Facción más grande', poseedorId: 'f2', valorMetrica: 5 }];
+    const previos: Titulo[] = [{ tituloId: 'faccionMasGrande', nombre: 'Facción más grande', poseedorId: 'f1', valorMetrica: 3 }];
+    const actuales: Titulo[] = [{ tituloId: 'faccionMasGrande', nombre: 'Facción más grande', poseedorId: 'f2', valorMetrica: 5 }];
 
     const eventos = narrarCambiosDeTitulo(previos, actuales, facciones);
 
@@ -34,14 +35,15 @@ describe('eventos de dominio — titulos.ts', () => {
     if (typeof evento === 'string') throw new Error('esperaba evento migrado');
     expect(evento.codigo).toBe('titulo.cambia_manos');
     const p = evento.payload as PayloadTituloCambiaManos;
+    expect(p.tituloId).toBe('faccionMasGrande');
     expect(p.tituloNombre).toBe('Facción más grande');
     expect(p.previoFaccionId).toBe('f1');
     expect(p.actualFaccionId).toBe('f2');
   });
 
   it('el mismo poseedor no produce ningún evento', () => {
-    const previos: Titulo[] = [{ nombre: 'Facción más grande', poseedorId: 'f1', valorMetrica: 3 }];
-    const actuales: Titulo[] = [{ nombre: 'Facción más grande', poseedorId: 'f1', valorMetrica: 4 }];
+    const previos: Titulo[] = [{ tituloId: 'faccionMasGrande', nombre: 'Facción más grande', poseedorId: 'f1', valorMetrica: 3 }];
+    const actuales: Titulo[] = [{ tituloId: 'faccionMasGrande', nombre: 'Facción más grande', poseedorId: 'f1', valorMetrica: 4 }];
 
     const eventos = narrarCambiosDeTitulo(previos, actuales, facciones);
 

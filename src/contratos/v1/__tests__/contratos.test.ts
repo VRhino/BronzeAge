@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import Ajv from 'ajv';
 import { describe, expect, it } from 'vitest';
 import { escenaDeCampamento } from '../../../session/proyecciones/escenaCampamento';
+import { catalogoSigilos } from '../catalogoSigilos';
 import { catalogoTropas } from '../catalogoTropas';
 import {
   ASIGNACION,
@@ -38,6 +39,7 @@ function erroresDe(definicion: string, dato: unknown) {
 /** Lo que se publica para Conquest: cada archivo es el dato de la derecha, serializado, y cumple su definición. */
 const PUBLICADOS: [archivo: string, definicion: string, dato: unknown][] = [
   ['catalogoTropas.json', 'CatalogoTropas', catalogoTropas()],
+  ['catalogoSigilos.json', 'CatalogoSigilos', catalogoSigilos()],
   ['fixtures/heroe.json', 'Heroe', HEROE],
   ['fixtures/heroe.bot.json', 'Heroe', HEROE_BOT],
   ['fixtures/heroePublico.json', 'HeroePublico', HEROE_PUBLICO],

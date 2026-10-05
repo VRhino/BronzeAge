@@ -3,11 +3,13 @@ import type { EventoCrudo } from '../domain/eventos';
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `narrarCambiosDeTitulo`). */
 export interface PayloadTituloCambiaManos {
+  tituloId: string;
   tituloNombre: string;
   previoFaccionId: string;
   actualFaccionId: string;
 }
 export interface PayloadTituloNace {
+  tituloId: string;
   tituloNombre: string;
   faccionId: string;
   valorMetrica: number;
@@ -42,11 +44,11 @@ export function calcularTitulos(
     if (diff !== 0) return diff;
     return porFaccion(b).reduce((acc, x) => acc + poblacionTotal(x), 0) - porFaccion(a).reduce((acc, x) => acc + poblacionTotal(x), 0);
   })[0]!;
-  titulos.push({ nombre: 'Facción más grande', poseedorId: masGrande.id, valorMetrica: porFaccion(masGrande).length });
+  titulos.push({ tituloId: 'faccionMasGrande', nombre: 'Facción más grande', poseedorId: masGrande.id, valorMetrica: porFaccion(masGrande).length });
 
   const oroPorFaccion = (f: Faccion) => porFaccion(f).reduce((acc, a) => acc + cantidadDisponible(a.almacen, 'oro'), 0);
   const masRica = [...facciones].sort((a, b) => oroPorFaccion(b) - oroPorFaccion(a))[0]!;
-  titulos.push({ nombre: 'Mayor poder económico', poseedorId: masRica.id, valorMetrica: oroPorFaccion(masRica) });
+  titulos.push({ tituloId: 'mayorPoderEconomico', nombre: 'Mayor poder económico', poseedorId: masRica.id, valorMetrica: oroPorFaccion(masRica) });
 
   // Toda la tropa de sus ciudadanos, esté donde esté (Doc 5.16.2): en el campamento, en campaña o de escolta.
   // Contar solo lo de casa haría que el título cambiara de manos cada vez que alguien marcha —y que los Aedas
@@ -56,16 +58,16 @@ export function calcularTitulos(
       .filter((h) => f.ciudadanosIds.includes(h.id))
       .reduce((acc, h) => acc + h.escuadrones.reduce((suma, e) => suma + e.cantidad, 0), 0);
   const mayorEjercito = [...facciones].sort((a, b) => tropasPorFaccion(b) - tropasPorFaccion(a))[0]!;
-  titulos.push({ nombre: 'Ejército más grande', poseedorId: mayorEjercito.id, valorMetrica: tropasPorFaccion(mayorEjercito) });
+  titulos.push({ tituloId: 'mayorEjercito', nombre: 'Ejército más grande', poseedorId: mayorEjercito.id, valorMetrica: tropasPorFaccion(mayorEjercito) });
 
   const granRey = computeLigas(relaciones, facciones).find((l) => l.granReyFaccionId)?.granReyFaccionId;
-  if (granRey) titulos.push({ nombre: 'Gran Rey', poseedorId: granRey, valorMetrica: 1 });
+  if (granRey) titulos.push({ tituloId: 'granRey', nombre: 'Gran Rey', poseedorId: granRey, valorMetrica: 1 });
 
   // Mecenas de los Aedas: más épicas cumplidas, y a igualdad más Aedas residentes. Sin ninguna, nadie lo tiene.
   if (aedas) {
     const valor = (f: Faccion) => (aedas.cumplidas[f.id] ?? 0) * 10 + aedas.aedas.filter((a) => a.faccionId === f.id).length;
     const mecenas = facciones.reduce((mejor, f) => (valor(f) > valor(mejor) ? f : mejor));
-    if (valor(mecenas) > 0) titulos.push({ nombre: 'Mecenas de los Aedas', poseedorId: mecenas.id, valorMetrica: valor(mecenas) });
+    if (valor(mecenas) > 0) titulos.push({ tituloId: 'mecenasAedas', nombre: 'Mecenas de los Aedas', poseedorId: mecenas.id, valorMetrica: valor(mecenas) });
   }
 
   return titulos;
@@ -82,6 +84,7 @@ export function narrarCambiosDeTitulo(anteriores: Titulo[], actuales: Titulo[], 
         codigo: 'titulo.cambia_manos',
         mensaje: `Los Aedas cantan: el título "${actual.nombre}" pasa de ${nombreFaccion(previo.poseedorId)} a ${nombreFaccion(actual.poseedorId)}.`,
         payload: {
+          tituloId: actual.tituloId,
           tituloNombre: actual.nombre,
           previoFaccionId: previo.poseedorId,
           actualFaccionId: actual.poseedorId,
@@ -92,6 +95,7 @@ export function narrarCambiosDeTitulo(anteriores: Titulo[], actuales: Titulo[], 
         codigo: 'titulo.nace',
         mensaje: `Los Aedas cantan: nace el título "${actual.nombre}", ostentado por ${nombreFaccion(actual.poseedorId)}.`,
         payload: {
+          tituloId: actual.tituloId,
           tituloNombre: actual.nombre,
           faccionId: actual.poseedorId,
           valorMetrica: actual.valorMetrica,

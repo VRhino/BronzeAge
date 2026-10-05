@@ -23,7 +23,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 21 | POLÍTICA | Los 4 gremios escasos a nivel de servidor | ✘ nada |
 | 23 | RECURSOS | Materiales exóticos | ✘ nada |
 | 24 | SERVIDOR | Ciclo de servidor de 12 meses + Maravilla + legado NPC | ◐ solo el edificio |
-| 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
 | 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
 | 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fases 1 y 2 (falta el canal de tiempo real) |
 | 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
@@ -32,6 +31,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
 | 36 | HÉROE | Héroes bot que juegan como jugadores (NPC fuera del motor) | ◐ pasos 1-4 y adaptador remoto hechos; faltan D33b, retirar cuentas y desplegar |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
+| 43 | AMBIENTACIÓN | Cultura del asentamiento (puntuación, estilo de edificios, audio) | ✘ solo decisiones en BA-006, sin código ni doc |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
 fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera del alcance de Fase 0 por
@@ -173,13 +173,6 @@ Maravilla, y la Facción ganadora persiste como Facción-legado NPC de solo mant
 Requiere infraestructura de servidor / multi-instancia (reset, generación del nuevo mapa, destino de las
 Facciones no ganadoras, si la legado es atacable). Nada de eso tiene código. Ver la lista completa en el
 Roadmap.
-
-## 27. Identidad visual y de audio
-
-**Estado: `código: ✘` — nada.** Sigilo / estandarte de Facción, identidad visual y de audio de imperios y
-títulos. Sin referencias estéticas concretas decididas (micénica, hitita, mesopotámica…). Preguntas_Abiertas
-§9. Es sobre todo trabajo de un repo de interfaz aparte, pero la *representación* (qué campo lleva el sigilo,
-dónde vive) toca este repo.
 
 ## 29. Curva de progresión inicial gradual
 
@@ -332,3 +325,50 @@ presencia con las sesiones y las cuentas de bot (paso 3, Doc 1.10.6). Falta:
 Mientras se prueba con NPC, el asedio admite 5 héroes por bando como el resto de batallas (decisión del usuario,
 2026-09-27; `BATALLA.capacidad.asedio`, Doc 5.15.1). Cuando entren jugadores vuelve a **15 contra 15**: cambiar la
 constante y el canon, y avisar a Conquest, que abre la instancia con esa capacidad (`BattleSide.capacidadMaxima`).
+
+## 43. Cultura del asentamiento
+
+**Estado: `código: ✘` — solo decisiones tomadas en BA-006, sin documento de canon ni una línea de código.** Hasta el
+2026-10-05 estaba repartida entre `Consideraciones/BA-006_Revision_Tecnologia_Eras.md` (sección «Culturas», D12-D27),
+Doc 4 (Sala del Consejo) y Doc 6.1 (roster universal) y no figuraba en esta lista. Se separó de la identidad visual del
+sigilo (`Consideraciones/Identidad_Visual_Definicion.md`, cerrada): **la cultura es del asentamiento y de sus edificios, y no afecta a los sigilos ni a los estandartes de la
+Facción.**
+
+**Lo ya decidido** (BA-006, que sigue siendo su fuente hasta que exista el documento propio):
+- **D12** — La cultura es del ASENTAMIENTO: una puntuación por cultura, por debajo, que el jugador no elige ni
+  modifica directamente; la moldean sus decisiones. **D27**: la Facción no tiene cultura de conjunto.
+- **D13 / Doc 6.1** — El roster es universal: la cultura no da ni quita tropas ni tecnologías, solo aspecto.
+- **D14** — Suman puntos a la cultura de un asentamiento: los soldados reclutados allí de tropas propias de una
+  cultura (las reposiciones cuentan; las neutras no suman); las tropas más usadas en batalla por los héroes
+  residentes (D20); políticas propias de cada cultura (con beneficio); las tecnologías que adopta la Facción. A
+  estudiar: marcadores del mapa (costa, bioma, cercanía a elementos del generador).
+- **D15** — Eras y cultura son independientes; el generador de mapas no asigna cultura.
+- **D16 / D21** — Cada edificio se construye con el estilo de la cultura dominante en ese momento y lo conserva;
+  mejorar un edificio (nivel interno) le da el estilo de la cultura dominante del momento. **D17**: manda la
+  cultura con más puntos.
+- **D18** — De momento la cultura es SOLO aspecto visual, sin efecto mecánico propio (las políticas culturales sí
+  dan su beneficio).
+- **D19** — Al fundar, el asentamiento es NEUTRO, sin puntos (neutro también tiene estilo visual). Al conquistarlo
+  no cambia: conserva sus puntos.
+- **D20** — «Miembros» de un asentamiento son sus héroes residentes. **D22** — Las escuadras no cambian de aspecto
+  por cultura: solo los edificios.
+- **Catálogo propuesto (sin confirmar):** Neutra, Micénica, Hitita/Anatolia, Egipcia, Mesopotámica,
+  Fenicia/Levantina, Helénica (incluye Macedonia y Tracia, 2026-09-16), Persa.
+- Las tropas llevan afinidad cultural (las de nombre histórico ya la llevan: roster de BA-006). La Sala del Consejo
+  (Doc 4) toma el aspecto de la cultura dominante; su nombre es neutro.
+- **Campamentos de mercenarios**: la nota D26 original (tropas con cultura propia, puntos a la plaza donde reside el
+  héroe) quedó superada el 2026-10-02 (§40 y canon Doc 1.9b/5.8/6.5b): sin roster ni cultura propios.
+
+**Pendiente de diseñar:**
+- **Documento de canon propio** (D23) y confirmar el catálogo.
+- Afinidad cultural de cada tecnología, y a qué asentamientos suman sus puntos al adoptarla la Facción.
+- Catálogo de políticas culturales y si las tiene cualquiera o se desbloquean con puntos.
+- Desempate cuando dos culturas tienen los mismos puntos; si los puntos decaen con el tiempo; si el estilo de un
+  edificio salta de golpe al cambiar la cultura dominante o hay histéresis (**salió del consejo**, 2026-10-05).
+- Qué pasa con los edificios ya construidos cuando la cultura dominante cambia (D16 dice que conservan el estilo).
+- **Contrato con Conquest**: cada `Edificio` llevaría su estilo (Doc 01 §17, `visualSeed`/`visualCatalogVersion`);
+  propuesta CQ para los modelos por cultura. Id de cultura dominante por asentamiento, estable en el contrato.
+- **Referencia estética concreta** de cada cultura (paleta, motivos de edificio) — antes `Preguntas_Abiertas` §9.
+- **Audio** (sacado de la identidad visual): música por cultura, música ambiental que refleje la cultura dominante del asentamiento y
+  sonidos por evento de juego. Es trabajo de los clientes; este repo solo garantizaría ids estables de cultura y de
+  evento, con una lista cerrada y un test de contrato.

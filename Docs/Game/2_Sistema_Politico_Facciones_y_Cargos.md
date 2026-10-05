@@ -112,7 +112,16 @@ El score es PÚBLICO y total (no hay sistema de rumores/espionaje que lo oculte 
 
 ## 2.8 Mecánicas heredadas de Iberia (política local)
 - **Exilio**: la puerta de cada asentamiento se puede cerrar por grupo —neutrales, aliados o vasallos, enemigos en guerra (2.4.1) y los Aedas (6.7)—; nunca a la propia Facción. Lo cambia el Gobernador de ese asentamiento o el Rey, sin coste (decidido e implementado el 2026-10-02, Doc 1.10.5). La pérdida de materiales y tropas al perder la casa es la reubicación por conquista (Doc 5.15.5), no el exilio.
-- **Identidad visual**: cada Facción tiene su propio sigilo/estandarte; una Liga puede tener uno colectivo.
+- **Identidad visual**: cada Facción tiene su propio sigilo/estandarte; una Liga puede tener uno colectivo (ver 2.8.1).
+
+### 2.8.1 Sigilo, estandarte e identidad de imperios (decidido el 2026-10-05; implementado en el backend y en BronzeAgeClient, ver Doc 01 §23; Conquest lo dibuja con su CQ-009)
+- **El sigilo es de la Facción** y lo compone su Rey con piezas de un catálogo cerrado: la forma del escudo, el fondo con dos colores, un emblema con su color y una orla opcional con su color. Es un identificador, nunca una imagen subida. Una Facción nueva nace con uno libre derivado de su id.
+- **Único por servidor**: no puede haber dos Facciones con el mismo sigilo exacto; los parecidos sí (solo se rechaza el duplicado exacto). Hay sigilos reservados del servidor (sin Facción, bandidos, campamentos de mercenarios) que ninguna Facción elige.
+- **Se elige al crear la Facción y no se cambia nunca**: queda guardado para toda la partida. Así los Aedas, la crónica y los ejércitos ya vistos no se confunden. Una Facción que se fusiona con otra (2.6) hereda el de la Facción A.
+- **La cultura no afecta al sigilo ni a los estandartes**: la Facción no tiene cultura (BA-006 D27). La cultura es del asentamiento y de sus edificios, y las escuadras no cambian de aspecto por ella.
+- **La Liga y el Gran Rey no guardan nada**: el Gran Rey añade un marco o corona al estandarte de su Facción; una Liga por vasallaje se muestra con el sigilo de la señora, y una por alianza, con la orla de los de sus miembros. Se derivan de las relaciones y del Gran Rey, como la propia Liga.
+- **Cada título de servidor (2.9) tiene una insignia fija**, no elegible, por id estable de título. Los Aedas cantan el traspaso con ella.
+- **Cultura y audio quedan fuera de este apartado**: el audio y la música por cultura entran con la cultura (`Docs/Mecanicas a desarrollar.md` §43). Decisiones y plan del sigilo: `Consideraciones/Identidad_Visual_Definicion.md`.
 
 ## 2.9 Progresión sin condición de victoria
 El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria PARA EL JUGADOR. En vez de victoria personal, existen TÍTULOS DINÁMICOS de PRESTIGIO (sin beneficio mecánico, solo prestigio) que cambian de mano según el poder relativo, recalculados PERIÓDICAMENTE (no en tiempo real). Ejemplos de referencia (lista abierta, no cerrada): imperio/Facción más grande, general con más victorias, Facción con mayor poder económico, ejército más grande, "Gran Rey", "Mecenas de los Aedas" (más épicas cumplidas, Doc 6.7). El histórico de títulos se narra por los AEDAS/POETAS (ver Doc 6), consultable vía interfaz dedicada Y eventos in-game.

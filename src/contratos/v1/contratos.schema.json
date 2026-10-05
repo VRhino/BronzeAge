@@ -789,6 +789,60 @@
       },
       "required": ["schemaVersion", "version", "tropas"],
       "additionalProperties": false
+    },
+    "Sigilo": {
+      "description": "Sigilo de una Facción (Doc 2.8.1): ids del CatalogoSigilos. Cosmético; se elige al crear la Facción y no cambia.",
+      "type": "object",
+      "properties": {
+        "formaId": { "$ref": "#/definitions/Id" },
+        "campoId": { "$ref": "#/definitions/Id" },
+        "emblemaId": { "$ref": "#/definitions/Id" },
+        "colorPrimarioId": { "$ref": "#/definitions/Id" },
+        "colorSecundarioId": { "$ref": "#/definitions/Id" },
+        "colorEmblemaId": { "$ref": "#/definitions/Id" },
+        "orlaId": { "$ref": "#/definitions/Id" },
+        "colorOrlaId": { "$ref": "#/definitions/Id" }
+      },
+      "required": ["formaId", "campoId", "emblemaId", "colorPrimarioId", "colorSecundarioId", "colorEmblemaId", "orlaId", "colorOrlaId"],
+      "additionalProperties": false
+    },
+    "CatalogoSigilos": {
+      "description": "Piezas con las que se compone el sigilo de una Facción (Doc 2.8.1). Los ids solo se añaden, nunca se retiran; la versión es informativa. Cómo se dibuja cada id es de los clientes.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "version": { "$ref": "#/definitions/EnteroPositivo" },
+        "formas": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
+        "campos": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
+        "orlas": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
+        "emblemas": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
+        "colores": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "$ref": "#/definitions/Id" },
+              "nombre": { "type": "string" },
+              "hex": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+            },
+            "required": ["id", "nombre", "hex"],
+            "additionalProperties": false
+          }
+        },
+        "reservados": {
+          "description": "Sigilos del servidor que ninguna Facción puede componer: sin Facción, bandidos y campamentos de mercenarios.",
+          "type": "object",
+          "properties": {
+            "neutro": { "$ref": "#/definitions/Sigilo" },
+            "bandidos": { "$ref": "#/definitions/Sigilo" },
+            "mercenarios": { "$ref": "#/definitions/Sigilo" }
+          },
+          "required": ["neutro", "bandidos", "mercenarios"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["schemaVersion", "version", "formas", "campos", "orlas", "emblemas", "colores", "reservados"],
+      "additionalProperties": false
     }
   }
 }

@@ -352,6 +352,28 @@ export interface BattleResult {
   versionServidor: string;
 }
 
+/** Sigilo de una Facción y piezas con las que se compone (Doc 2.8.1), generado desde `engine/sigilo.ts`. */
+export interface Sigilo {
+  formaId: string;
+  campoId: string;
+  emblemaId: string;
+  colorPrimarioId: string;
+  colorSecundarioId: string;
+  colorEmblemaId: string;
+  orlaId: string;
+  colorOrlaId: string;
+}
+export interface CatalogoSigilos {
+  schemaVersion: typeof SCHEMA_VERSION;
+  version: number;
+  formas: string[];
+  campos: string[];
+  orlas: string[];
+  emblemas: string[];
+  colores: { id: string; nombre: string; hex: string }[];
+  reservados: { neutro: Sigilo; bandidos: Sigilo; mercenarios: Sigilo };
+}
+
 /** Catálogo puente de tropas (doc 01 §13, CQ-003), generado desde `constants.ts`. */
 export interface CatalogoTropas {
   schemaVersion: typeof SCHEMA_VERSION;

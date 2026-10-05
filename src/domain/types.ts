@@ -84,10 +84,34 @@ export const RECURSOS_TIPO = Object.keys(TODOS_LOS_RECURSOS) as RecursoTipo[];
 
 export type Rareza = 'comun' | 'intermedio' | 'raro';
 
+/**
+ * Sigilo de una Facción (Doc 2.8.1): piezas de un catálogo cerrado (`CATALOGO_SIGILO` en `constants.ts`), solo ids. Cosmético: el motor
+ * no lo interpreta más allá de comprobar que existen y que no se repite.
+ */
+export interface Sigilo {
+  /** Silueta del escudo. */
+  formaId: string;
+  /** Reparto del fondo con los colores principal y secundario. */
+  campoId: string;
+  /** Icono central, con su propio color. */
+  emblemaId: string;
+  colorPrimarioId: string;
+  colorSecundarioId: string;
+  colorEmblemaId: string;
+  /** Marco opcional (`ninguna` = sin marco); `colorOrlaId` solo cuenta si hay marco. */
+  orlaId: string;
+  colorOrlaId: string;
+}
+
 /** Cargos de nivel Facción (Doc 2.2): Rey (vasallaje, políticas superiores) y Embajador (designado por el Rey). */
 export interface Faccion {
   id: string;
   nombre: string;
+  /**
+   * Se elige al crear la Facción y **no se cambia nunca** (decidido por el usuario, 2026-10-05); único entre las
+   * Facciones. Las partidas guardadas antes de este campo eran de prueba y se descartan: no hay migración.
+   */
+  sigilo: Sigilo;
   reyId: string | null;
   embajadorId: string | null;
   /** Cuándo designó el Rey su capital por última vez: el traslado tiene un cooldown (`CAPITAL`, Doc 2.2). */
@@ -1242,6 +1266,8 @@ export interface RelacionPolitica {
  * relativo. Se deriva bajo demanda (no se persiste como estado propio) — ver engine/titulos.ts.
  */
 export interface Titulo {
+  /** Id estable del título (`engine/titulos.ts`): con él pintan los clientes su insignia fija; `nombre` es solo texto. */
+  tituloId: string;
   nombre: string;
   /** Facción (o, según el título, jugador) que lo ostenta actualmente. */
   poseedorId: string;

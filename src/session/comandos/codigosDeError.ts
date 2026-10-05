@@ -51,6 +51,9 @@ export const CODIGOS_ERROR = {
   diplomaciaRelacionNoIndicada: 'diplomacia.relacion_no_indicada',
   faccionNombreVacio: 'faccion.nombre_vacio',
   faccionNombreDuplicado: 'faccion.nombre_duplicado',
+  // Sigilo (Doc 2.8.1): fuera del catálogo, o idéntico al de otra Facción.
+  faccionSigiloInvalido: 'faccion.sigilo_invalido',
+  faccionSigiloDuplicado: 'faccion.sigilo_duplicado',
   // Membresía de Facción (a petición del usuario, 2026-08-27): `crearFaccion` y `solicitarIngreso` comparten el
   // primero (1 jugador, 1 Facción, Doc 2 "Entidades"); el segundo solo lo dispara `crearFaccion`, ver
   // `CIUDADANIA.cooldownCreacionFaccionDias`; el tercero lo dispara `dejarFaccion` cuando el actor no es

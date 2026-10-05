@@ -139,7 +139,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Progresión: independiente → vasallaje/alianza → Liga → Gran Rey (prestigio) — `código: ✔` (`engine/liga.ts`, `engine/titulos.ts`)
 - ✅ Reglas de vasallaje completas (tributo, defensa mutua, 4 vías de ruptura) — `código: ✔` (`engine/diplomacia.ts`, comando `rebelionVasallo`)
 - ✅ Coste de gobernanza absorbido en Mantenimiento — `código: ✔`
-- 🔶 Identidad visual (sigilo / estandarte) — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §27)
+- ✅ Identidad visual (sigilo / estandarte de Facción; Liga, Gran Rey y títulos derivados) — `código: ✔` (Doc 2 §2.8.1, `Consideraciones/Identidad_Visual_Definicion.md`); Conquest lo dibuja con CQ-009
 
 ## Ciudadanía
 - ✅ Ligada a la Facción; obtención por fundación o compra de casa; cupo de casas por nivel; cooldown anti-abuso al crear Facción — `código: ✔` (`CIUDADANIA`, `engine/faccion.ts` `comprarCasa`)
@@ -221,7 +221,8 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 ## Progresión de imperio
 - ✅ Sandbox sin condición de victoria; títulos dinámicos de prestigio a nivel de servidor, narrados por los Aedas — `código: ✔` (`engine/titulos.ts`)
 - 🔶 Diferencia imperio vs alianza grande; fragmentación; catálogo completo de títulos — `código: ◐`
-- 🔶 Identidad visual y de audio — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §27)
+- ✅ Identidad visual (sigilo y estandarte) — `código: ✔` (`Consideraciones/Identidad_Visual_Definicion.md`); Conquest lo dibuja con CQ-009
+- 🔶 Cultura del asentamiento (puntuación, estilo de edificios) y audio — decisiones en BA-006 D12-D27, sin canon ni código — `código: ✘` (`Docs/Mecanicas a desarrollar.md` §43)
 
 ## Políticas
 - ✅ Duración, renovación, múltiples activas, no cancelables; conexión con auto-construcción — `código: ✔` (`engine/politicas.ts`, `POLITICAS`)

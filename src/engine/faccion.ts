@@ -1,9 +1,10 @@
-import type { Asentamiento, Faccion } from '../domain/types';
+import type { Asentamiento, Faccion, Sigilo } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { CAP_FUNDACION_POR_NIVEL, CIUDADANIA, CUPO_NIVEL_ASENTAMIENTO, NIVEL_FACCION } from '../constants';
 import { dias, transcurrido, type Instante } from '../domain/tiempo';
 import { CAMPO_CARGO, esResidente } from './pertenencia';
 import { ReglaInvalidaError } from './errores';
+import { sigiloLibre } from './sigilo';
 
 /** Fase A5 — payload de `faccion.nivel_subio` (ver `avanzarNivelesFaccion`). */
 export interface PayloadFaccionNivelSubio {
@@ -13,10 +14,11 @@ export interface PayloadFaccionNivelSubio {
 
 export class FaccionInvalidaError extends ReglaInvalidaError {}
 
-export function crearFaccion(id: string, nombre: string): Faccion {
+/** Sin `sigilo`, la Facción recibe uno derivado de su id (la partida pasa los ocupados para que no choque). */
+export function crearFaccion(id: string, nombre: string, sigilo: Sigilo = sigiloLibre(id, [])): Faccion {
   const nombreLimpio = nombre.trim();
   if (!nombreLimpio) throw new FaccionInvalidaError('El nombre de la Facción no puede estar vacío.');
-  return { id, nombre: nombreLimpio, reyId: null, embajadorId: null, nivel: 1, experiencia: 0, ciudadanosIds: [], reputacion: 0 };
+  return { id, nombre: nombreLimpio, sigilo, reyId: null, embajadorId: null, nivel: 1, experiencia: 0, ciudadanosIds: [], reputacion: 0 };
 }
 
 /**

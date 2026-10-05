@@ -44,7 +44,8 @@ describe('eventos de comando (códigos estables)', () => {
     expect(r.eventos).toHaveLength(1);
     const e = r.eventos[0]!;
     expect(e.codigo).toBe('faccion.creada');
-    expect(e.payload as PayloadFaccionCreada).toEqual({ faccionId: r.datos!.faccionId, nombre: 'Micenas', fundadorId: OPC.actor });
+    expect(e.payload as PayloadFaccionCreada).toMatchObject({ faccionId: r.datos!.faccionId, nombre: 'Micenas', fundadorId: OPC.actor });
+    expect((e.payload as PayloadFaccionCreada).sigilo).toBeDefined();
     // Alcance global: no se atribuye a ningún asentamiento.
     expect(e.asentamientoId).toBeUndefined();
   });

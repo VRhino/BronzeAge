@@ -120,6 +120,7 @@ NPC ni `faccionesNpcIds`.
 Faccion
   id                    faccionId — existente
   nombre                editable — existente
+  sigilo: Sigilo          NUEVO (2026-10-05, §23): se elige al crear y no cambia nunca
   reyId: string | null   vasallaje/políticas superiores — existente. Tras este modelo referencia heroeId
   embajadorId: string | null   designado por el Rey — existente. Referencia heroeId
   capitalDesignadaEn?: Instante   cuándo designó el Rey la capital por última vez (cooldown) — NUEVO (2026-10-02)
@@ -1298,3 +1299,31 @@ AedaResidente                   (GameSessionState.aedasResidentes.aedas)
   por el canal de eventos. Es lo único de los Aedas que Unity puede mostrar sin lógica propia.
 - Las épicas cuentan las batallas de Unity por `batalla.aplicada` (su payload lleva ahora `faccionAtacanteId` y `faccionDefensoraId`): sin
   cambios para Conquest, el resultado de la batalla basta.
+
+## 23. Sigilo de Facción (nuevo, 2026-10-05)
+
+Canon: Doc 2 §2.8.1. Decisiones: `Consideraciones/Identidad_Visual_Definicion.md`.
+
+```text
+Sigilo { formaId, campoId, emblemaId, colorPrimarioId, colorSecundarioId,      ids del catálogo, nada más
+         colorEmblemaId, orlaId, colorOrlaId }                          (orlaId `ninguna` = sin marco; entonces colorOrlaId no cuenta)
+Faccion.sigilo: Sigilo      se elige al crear la Facción (`crearFaccion { nombre, sigilo? }`; sin él, se asigna uno
+                            libre) y NO CAMBIA NUNCA. Único: se rechaza el duplicado exacto
+                            (`faccion.sigilo_duplicado`); los parecidos valen. Fuera del catálogo o con los dos
+                            colores del fondo iguales: `faccion.sigilo_invalido`. Sin orla, el color de la orla no
+                            distingue un sigilo de otro.
+Titulo.tituloId             id estable del título (faccionMasGrande, mayorPoderEconomico, mayorEjercito, granRey,
+                            mecenasAedas); `nombre` es solo texto. Lo llevan también los payloads de `titulo.nace`
+                            y `titulo.cambia_manos`.
+faccion.creada.payload.sigilo   el sigilo con el que nace la Facción.
+CatalogoSigilos             `src/contratos/v1/catalogoSigilos.json` (schema `CatalogoSigilos`): campos[], emblemas[],
+                            colores[{id,nombre,hex}], reservados{neutro,bandidos,mercenarios}. Los ids solo se
+                            añaden, nunca se retiran.
+```
+
+- **Reservados**: sin Facción (héroe suelto), bandidos y campamentos de mercenarios usan su sigilo del servidor; sus
+  emblemas no están en `emblemas`, así que ninguna Facción puede componerlos.
+- **Fusión** (Doc 2.6): la Facción nueva hereda el sigilo de A. La anexión conserva el de la absorbente.
+- **Cómo se dibuja** (forma, fondo, emblema, colores, orla, y los marcos derivados del Gran Rey y de la Liga) es de los clientes.
+  El marco se calcula con `relaciones` y el `granReyFaccionId` de la Liga, públicos (§19): no hay campo.
+- **Visibilidad**: público, como el resto de `Faccion` (§19).

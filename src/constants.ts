@@ -2720,3 +2720,62 @@ export const TECNOLOGIAS: Record<TecnologiaId, DefinicionTecnologia> = {
     hito: [hitoEdificio('carpinteria', 2)],
   },
 };
+
+/**
+ * Catálogo del sigilo de Facción (Doc 2.8.1, `Consideraciones/Identidad_Visual_Definicion.md`). Cosmético: el motor
+ * solo comprueba que los ids existen; cómo se dibuja cada uno es de los clientes. **Los ids solo se añaden, nunca se
+ * retiran**: un sigilo guardado no caduca, así que `version` es solo informativa para los clientes.
+ */
+export const CATALOGO_SIGILO = {
+  version: 4,
+  /** Silueta del escudo. */
+  formas: ['clasico', 'aspis', 'ocho', 'rombo', 'ovalo', 'torre'],
+  /** Reparto del fondo con los dos colores: heráldica sencilla y patrones de la época (greca, zigzag, ondas…). */
+  campos: [
+    'liso', 'partido', 'cortado', 'cuartelado', 'bandado', 'palado',
+    'jefe', 'cruz', 'aspa', 'chevron', 'bordura', 'losanjado',
+    'bandas', 'zigzag', 'ondas', 'greca', 'rombos', 'radiante',
+  ],
+  /** Marco opcional alrededor del escudo, con su propio color (`ninguna` = sin marco). */
+  orlas: ['ninguna', 'lisa', 'greca', 'cuerda', 'puntos', 'dentada'],
+  // Símbolos documentados de las civilizaciones del juego (Consideraciones/Identidad_Visual_Definicion.md §7), por cultura.
+  // Cada id tiene su icono en los clientes (BronzeAgeClient: game-icons.net, CC BY 3.0).
+  emblemas: [
+    // Micénica y minoica
+    'toro', 'minotauro', 'leon', 'grifo', 'caballo', 'jabali', 'cabra', 'serpiente', 'pulpo', 'delfin', 'espiral', 'doble_hacha',
+    'cuernos_consagracion', 'carro',
+    // Hitita, mesopotámica y persa
+    'aguila', 'ciervo', 'rayo', 'sol', 'estrella_ocho', 'roseta', 'creciente', 'disco_alado', 'escorpion', 'carnero',
+    // Fenicia y levante
+    'galera', 'murex', 'cedro', 'palma', 'ancora', 'anfora',
+    // Egipcia
+    'halcon', 'uraeus', 'escarabajo', 'anj', 'ojo_udyat', 'loto', 'papiro', 'esfinge', 'corona_doble', 'obelisco', 'piramide',
+    // Helénica
+    'columna', 'templo', 'trirreme', 'casco_corintio', 'aspis', 'lechuza', 'maza', 'lambda', 'olivo', 'corona_laurel', 'trigo',
+    'lanza', 'espada', 'arco', 'tridente',
+  ],
+  // `hex` es una sugerencia de referencia para los clientes, que pueden ajustarla a su paleta.
+  colores: [
+    { id: 'rojo', nombre: 'Rojo', hex: '#b3261e' },
+    { id: 'azul', nombre: 'Azul lapislázuli', hex: '#1f4e9c' },
+    { id: 'ocre', nombre: 'Ocre', hex: '#d9a21b' },
+    { id: 'verde', nombre: 'Verde', hex: '#2e7d32' },
+    { id: 'blanco', nombre: 'Blanco', hex: '#f4efe4' },
+    { id: 'negro', nombre: 'Negro', hex: '#1c1b1a' },
+    { id: 'purpura', nombre: 'Púrpura de Tiro', hex: '#6a1b6e' },
+    { id: 'naranja', nombre: 'Naranja', hex: '#e0661a' },
+    { id: 'turquesa', nombre: 'Turquesa', hex: '#1b9aa6' },
+    { id: 'marron', nombre: 'Marrón', hex: '#6d4426' },
+    { id: 'gris', nombre: 'Gris', hex: '#7a7a78' },
+    { id: 'oro', nombre: 'Oro', hex: '#c9a227' },
+  ],
+  /**
+   * Del servidor, no de ninguna Facción: su emblema no está en `emblemas`, así que ninguna Facción puede componerlos.
+   * `neutro` es el de quien no tiene Facción; los otros dos, los de los bandidos y los campamentos de mercenarios.
+   */
+  reservados: {
+    neutro: { formaId: 'clasico', campoId: 'liso', emblemaId: 'sin_bandera', colorPrimarioId: 'gris', colorSecundarioId: 'blanco', colorEmblemaId: 'blanco', orlaId: 'ninguna', colorOrlaId: 'gris' },
+    bandidos: { formaId: 'clasico', campoId: 'liso', emblemaId: 'bandidos', colorPrimarioId: 'negro', colorSecundarioId: 'rojo', colorEmblemaId: 'blanco', orlaId: 'ninguna', colorOrlaId: 'rojo' },
+    mercenarios: { formaId: 'clasico', campoId: 'liso', emblemaId: 'mercenarios', colorPrimarioId: 'marron', colorSecundarioId: 'ocre', colorEmblemaId: 'blanco', orlaId: 'ninguna', colorOrlaId: 'ocre' },
+  },
+} as const;
