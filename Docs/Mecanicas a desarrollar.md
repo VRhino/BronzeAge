@@ -2,7 +2,8 @@
 
 La **lista única de lo pendiente**. El estado completo de todas las mecánicas del juego —hechas, descartadas y
 estas— vive en `Consideraciones/Checklist_Mecanicas.md`, que para lo pendiente solo resume y apunta aquí.
-Re-contrastado contra `src/` el 2026-09-09.
+Re-contrastado contra `src/` el 2026-09-09. Lo que solo necesita calibración con números (batch, mediciones) vive en
+`Docs/Mecanicas a balancear.md`.
 
 Cuando una entrada se cierra (diseño **y** implementación), se **borra entera** de este archivo: lo útil que
 no esté ya en el canon (`Docs/Game/`) o en una ficha de `Consideraciones/` se mueve allí primero. Mientras una
@@ -12,7 +13,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 
 | # | Área | Mecánica | Código hoy |
 |---|---|---|---|
-| 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1 no |
+| 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1: solo (b) hecha |
 | 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
 | 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
 | 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
@@ -28,12 +29,9 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
 | 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
 | 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
-| 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
 | 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
-| 36 | HÉROE | Héroes bot que juegan como jugadores (NPC fuera del motor) | ◐ pasos 1-3 hechos; faltan sin plaza, remoto, D33b |
+| 36 | HÉROE | Héroes bot que juegan como jugadores (NPC fuera del motor) | ◐ pasos 1-4 y adaptador remoto hechos; faltan D33b, retirar cuentas y desplegar |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
-| 39 | MILITAR | Escala de la experiencia de escuadra de Unity | ✘ espera a CQ-001 |
-| 40 | MUNDO | Campamentos de mercenarios: enclave neutral, residencia, reclutamiento y mercado | ◐ hecho; quedan cabos (ver entrada) |
 | 42 | TECNOLOGÍA | Aedas: difusión y venta de tecnología, residentes y lore | ◐ diseño parcial, sin código |
 
 **Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
@@ -122,7 +120,7 @@ con **revelado temporal**: qué está pasando en otro sitio durante un tiempo li
 de una Facción. No solo lo visual del mapa: también información interna de asentamientos. El **layout de un
 asentamiento** se puede comprar como asset, para preparar asedios a futuro.
 
-*Estado en código:* nada. No hay edificio `taberna` ni concepto de "intel como asset".
+*Estado en código:* la taberna existe solo como edificio del campamento de mercenarios (ancla de su trazado, Doc 1.9b), sin función. No hay concepto de "intel como asset".
 
 ## 19. El mapa político como entidad
 
@@ -138,8 +136,6 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 - **Eras IV y V**: catálogo, roster y logros siguen en la revisión (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`,
   EV-1 a EV-7). La subida 4 → 5 la tiene que desbloquear una tecnología de la Era V (D54): hasta entonces el código
   mantiene un techo provisional en el nivel 4 (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`).
-- **Calibrar la X de cada logro** con el batch (`scripts/batch/medidorTecnologia.ts`): cada umbral, en lo que marque su
-  contador en su semana objetivo (Doc 6.3).
 - **Otras vías** (Doc 6.1): conquista (aparece al conquistar una plaza que reclutaba con ella) y comercio (pago a
   otra Facción; ¿la vendedora acepta y fija el precio?). La de los Aedas va en §42.
 - **Logro de `logistica_campana`** (Era IV, D30): la condición ya existe como consulta pura,
@@ -307,14 +303,6 @@ mecánica propia:
 - **Retirada del almacén al salir** (Doc 1.10.2): que el Tesorero pueda fijar cuánto material puede llevarse
   cada héroe.
 
-## 34. La economía no llena el carro de un ejército
-
-**Estado: medido el 2026-09-04, sin decidir.** La capacidad del carro (Doc 5.13.1) se derivó del radio
-operativo sin comprobar que hubiera trigo con el que llenarlo. En batch, ningún asentamiento llegaba a llenar un
-carro y 26 de 28 no podían aportar ni un grano sin bajar de su reserva de comida. Después se dobló la
-producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las cuatro palancas posibles en
-`Consideraciones/Movimiento_Ejercitos_Definicion.md` §10.
-
 ## 35. Cabos sueltos de mundo, población y militar
 
 - **Campamentos de bandidos** (Doc 1.9): si su poder debería escalar con la región o con la cercanía de
@@ -336,42 +324,15 @@ presencia con las sesiones y las cuentas de bot (paso 3, Doc 1.10.6). Falta:
   bando para quien se cayó. Hoy quien está en una batalla no sale del mundo hasta que termina.
 - **Retirar las cuentas de bot** (D54) cuando lleguen jugadores: el servidor ya sabe cuáles son; falta la operación.
 - **Cerebro «sin plaza»** (paso 4, D53-D59): hecho el arranque en los campamentos (`src/bots/cerebro/sinPlaza.ts`,
-  llegadas en `src/bots/llegadas.ts`, batch nuevo). Falta medirlo con batch cuando la ración en minutos esté en el
-  motor (decisión del usuario 2026-10-04: con 60 de trigo fijos nadie llega a los bandidos del anillo).
+  llegadas en `src/bots/llegadas.ts`, batch nuevo). Su medición va en `Mecanicas a balancear.md` §36.
 - **Desplegar el proceso de bots** en Render como Background Worker (`npm run bots`, doc 12 §13), con su disco para el
   registro de cuentas. El adaptador remoto está hecho; falta el servicio, cuando el bloque vaya a Render.
-- **Calibrar con batch** el ritmo (cada 5 ticks), las prudencias heredadas de la gobernanza y el margen sobre la
-  defensa inspeccionada antes de una campaña.
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
 
 Mientras se prueba con NPC, el asedio admite 5 héroes por bando como el resto de batallas (decisión del usuario,
 2026-09-27; `BATALLA.capacidad.asedio`, Doc 5.15.1). Cuando entren jugadores vuelve a **15 contra 15**: cambiar la
 constante y el canon, y avisar a Conquest, que abre la instancia con esa capacidad (`BattleSide.capacidadMaxima`).
-
-## 39. Escala de la experiencia de escuadra de Unity
-
-La curva de nivel de escuadra (Doc 5.16.3, `MILITAR.experienciaParaSubirEscuadra`) está calibrada para el combate con
-números, que da 1 de experiencia por victoria. La que trae una batalla de Unity (`xpGanada` por escuadra) entra en la
-misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o convertirla al entrar.
-
-## 40. Campamentos de mercenarios — lo que queda
-
-**Estado: implementados los 5 pasos (2026-10-02), `código: ◐`.** El canon ya recoge todo lo hecho: Doc 0 (glosario), 1.8 y 1.9b
-(entidad, aparición, forma, niebla, refundar), 2.5 (residencia, fin del huérfano, almacén personal), 3.3b (mercado), 5.8
-(reclutamiento) y 6.5b (tecnología propia); el motor, en `engine/mercenarios.ts`, `reclutamientoMercenario.ts`,
-`mercadoMercenario.ts` y `refundacion.ts`. Cifras en `MERCENARIOS` (placeholder, sin calibrar con batch). Falta:
-
-- **Los héroes bot de una Facción NPC que se queda sin plazas deben desaparecer** (Doc 5.15.6). Hoy siguen sin casa: borrarlos toca
-  ejércitos, historial y la IA, y no se hizo.
-- **Entrega por caravana de lo que vende el mercado**: una Facción pide desde su asentamiento y la caravana vuelve con la compra
-  (Doc 3.3b). Hoy solo compra el héroe residente, directo a su almacén personal.
-- **«Lo que está dentro es intocable»** y entrar en un campamento como en una plaza (5.12.3): el héroe no tiene ubicación dentro de un
-  campamento, así que no hay nada que proteger todavía. Tampoco hay nada que ataque a una caravana o columna en su puerta.
-- **La taberna** es solo un edificio del layout: sin rumores. La versión completa va con la entrada 18.
-- **Contrato con Conquest** (`src/contratos/v1/`): entidad `CampamentoMercenarios` y `Heroe.almacenPersonal`, y la escena con las 3
-  variantes de layout. Descripción en el modelo de datos §10.
-- **Cliente de administración**: no pinta los campamentos.
 
 ## 42. Aedas: difusión y venta de tecnología, residentes y lore
 

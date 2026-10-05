@@ -19,7 +19,7 @@ de cosas que ya no existen en el repo:
 
 Ver `Docs/Game/0_Glosario_de_Entidades_Politicas.md` para las definiciones centrales.
 Las mecánicas **pendientes** son la lista de `Docs/Mecanicas a desarrollar.md`; aquí solo aparecen el resumen
-y el estado, con un puntero a su sección allí.
+y el estado, con un puntero a su sección allí. Lo que solo falta calibrar está en `Docs/Mecanicas a balancear.md`.
 
 ---
 
@@ -242,6 +242,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 
 ## Bandidos y eventos del mundo
 - ✅ Campamentos de bandidos en bosques no reclamados: spawn / respawn automático, ataque a caravanas cada tick, ataque manual con recompensa, uno por asentamiento, marcador en el mapa — `código: ✔` (`engine/bandidos.ts`, `CAMPAMENTOS_BANDIDOS`)
+- ✅ Campamentos de mercenarios (2026-10-05): enclave neutral con residencia, almacén personal, reclutamiento con tecnología propia, mercado (pilas y cupo por héroe), tropa prestada, ración, alijos, protección de 60, refundación por Caravana de Fundación, estructura interna (taberna como ancla, 10 viviendas, mercado con puestos, calles y empalizada) y vista en el cliente de administración — `código: ✔` (`engine/mercenarios.ts`, `reclutamientoMercenario.ts`, `mercadoMercenario.ts`, `refundacion.ts`, `layoutCampamento.ts`). Cifras `MERCENARIOS` sin calibrar: `Mecanicas a balancear.md` §40. Taberna con rumores: entrada 18; contrato con Conquest: cuando la vista sea caminable.
 - 🔶 **Eventos de asentamiento**: asedio de bandidos con una ventana de horas para organizar y jugar la defensa, y otros por diseñar — **`código: ✘`**. Ficha en `Docs/Mecanicas a desarrollar.md` §9.
 
 ## El jugador como entidad en el mundo
