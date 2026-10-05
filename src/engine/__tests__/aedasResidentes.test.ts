@@ -186,6 +186,17 @@ describe('hechos', () => {
     expect(hechos([llegaCaravana(AEDAS.epica.cargaMinimaCaravana)]).map((h) => h.tipo)).toEqual(['caravana']);
   });
 
+  it('las batallas de Unity cuentan por `batalla.aplicada`: campo abierto, asedio resistido y asedio conquistado, una vez aunque lleguen varios eventos', () => {
+    const aplicada = (contexto: object, ganador: 'atacante' | 'defensor') =>
+      ev('batalla.aplicada', { battleId: 'b1', contexto, faccionAtacanteId: 'faccion-2', faccionDefensoraId: 'faccion-1', ganador }, plaza.id);
+    expect(hechos([aplicada({ tipo: 'campo_abierto' }, 'defensor')])[0]).toMatchObject({ tipo: 'batalla', faccionId: 'faccion-1', clave: 'batalla:b1' });
+    expect(hechos([aplicada({ tipo: 'asedio', asentamientoId: plaza.id }, 'defensor')])[0]).toMatchObject({ tipo: 'defensa', faccionId: 'faccion-1', plazaId: plaza.id });
+    expect(hechos([aplicada({ tipo: 'asedio', asentamientoId: plaza.id }, 'atacante')])[0]).toMatchObject({ tipo: 'conquista', faccionId: 'faccion-2' });
+    expect(hechos([aplicada({ tipo: 'caravana' }, 'atacante'), aplicada({ tipo: 'campamento_bandidos' }, 'atacante')])).toEqual([]);
+    // Sin ganador (batalla fallida) o sin Facción en un bando (bandidos), nada.
+    expect(hechos([ev('batalla.aplicada', { battleId: 'b1', contexto: { tipo: 'campo_abierto' }, faccionAtacanteId: null, faccionDefensoraId: 'faccion-1', ganador: 'defensor' })])).toEqual([]);
+  });
+
   it('lo que no: asedio sin combate, batalla contra la propia Facción, caravana ligera', () => {
     expect(hechos([ev('combate.asedio_resistido', asedio(false)), ev('combate.asedio_conquista', asedio(false))])).toEqual([]);
     expect(hechos([ev('combate.encuentro', { ejercitoAId: 'a', ejercitoBId: 'b', faccionAId: 'faccion-1', faccionBId: 'faccion-1', ganadorId: 'a' })])).toEqual([]);

@@ -1,4 +1,4 @@
-import type { Asentamiento, BiomaTipo, CampamentoBandido, CampamentoMercenarios, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { AedaItinerante, Asentamiento, BiomaTipo, CampamentoBandido, CampamentoMercenarios, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
 import { MERCENARIOS } from '@motor/constants';
 import type { ElementoCampamentoTipo, LayoutCampamento } from '@motor/engine/layoutCampamento';
 import type { TramoDeRed } from '@motor/engine/redCaminos';
@@ -340,6 +340,8 @@ export interface DrawState {
   campamentosMercenarios: CampamentoMercenarios[];
   /** Ejércitos en campaña (Doc 5.12) — estado de partida, en vivo como las caravanas. */
   ejercitos: Ejercito[];
+  /** Aedas itinerantes (Doc 6.7): neutrales, recorren los caminos entre asentamientos. */
+  aedas: AedaItinerante[];
 }
 
 /**
@@ -680,6 +682,25 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.strokeStyle = '#1b1a17';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(x - 5, y - 5, 10, 10);
+  }
+
+  // Aedas itinerantes (Doc 6.7): círculo violeta con borde claro, más pequeño que un asentamiento; relleno si van de camino, hueco si están detenidos.
+  for (const aeda of state.aedas) {
+    const x = aeda.posicion.x * scale;
+    const y = aeda.posicion.y * scale;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    if (aeda.enAsentamientoId) {
+      ctx.strokeStyle = '#7a4aa8';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#7a4aa8';
+      ctx.fill();
+      ctx.strokeStyle = '#f2ead7';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   }
 }
 

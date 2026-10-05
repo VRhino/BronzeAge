@@ -222,6 +222,8 @@ GET  /jugador/partidas/:gameId               proyección filtrada del estado (co
 GET  /jugador/partidas/:gameId/eventos?desde=<version>
                                              eventos con version > desde, filtrados como la proyección
                                              (cursor ya existente, Fase C13)
+GET  /jugador/partidas/:gameId/cronica?desde=&limite=
+                                             crónica de los Aedas: eventos públicos del servidor (doc 01 §22)
 GET  /jugador/partidas/:gameId/mapa/:mapaId   recursos de mapa (worldgen, doc 01 §11/§18)
 ```
 

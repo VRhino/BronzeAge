@@ -38,7 +38,7 @@ import type {
   TecnologiaId,
 } from '@motor/domain/types';
 import type { Instante } from '@motor/domain/tiempo';
-import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, OCUPACION, POLITICAS, POLITICA_CATALOGO, RECLUTAMIENTO_ORO_POR_ESCALON, REJILLA_ASENTAMIENTO, SIMULACION, TECNOLOGIAS, ERAS, TROPAS_RECLUTABLES } from '@motor/constants';
+import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, OCUPACION, POLITICAS, POLITICA_CATALOGO, RECLUTAMIENTO_ORO_POR_ESCALON, REJILLA_ASENTAMIENTO, SIMULACION, TECNOLOGIAS, EPICAS, ERAS, TITULO_CAPITULO, TROPAS_RECLUTABLES } from '@motor/constants';
 import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
 import {
   produccionPorMinuto,
@@ -68,6 +68,7 @@ import { slotsDisponibles } from '@motor/engine/politicas';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '@motor/engine/zones';
 import { calcularCapFundacion, calcularCupoNivel } from '@motor/engine/faccion';
 import { tecnologiasDe } from '@motor/engine/tecnologia';
+import { esDeCronica } from '@motor/engine/cronica';
 import { computeLigas, type LigaInfo } from '@motor/engine/liga';
 import { consumoRacionDeEscuadrones } from '@motor/engine/tropas';
 import { campamentoDe, defensaDe } from '@motor/engine/tropa';
@@ -460,19 +461,61 @@ export class GameStore {
   tecnologiaInfo(faccionId: string): {
     era: string;
     eraDesde: Instante;
-    tecnologias: { id: string; nombre: string; era: string; estado: 'adoptada' | 'aparecida' | 'oculta'; logro: { contador: string; umbral: number; actual: number; cumplidoEn: Instante | null } | null; primero: string | null }[];
+    tecnologias: { id: string; nombre: string; era: string; estado: 'adoptada' | 'aparecida' | 'revelada' | 'oculta'; logro: { contador: string; umbral: number; actual: number; cumplidoEn: Instante | null } | null; primero: string | null }[];
   } {
     const t = this.state.tecnologia;
-    const { aparecidas, adoptadas } = tecnologiasDe(t, faccionId);
+    const { aparecidas, adoptadas, reveladas = [] } = tecnologiasDe(t, faccionId);
     const tecnologias = (Object.entries(TECNOLOGIAS) as [TecnologiaId, (typeof TECNOLOGIAS)[TecnologiaId]][]).map(([id, def]) => ({
       id,
       nombre: def.nombre,
       era: ERAS[def.era].nombre,
-      estado: adoptadas.includes(id) ? ('adoptada' as const) : aparecidas.includes(id) ? ('aparecida' as const) : ('oculta' as const),
+      estado: adoptadas.includes(id) ? ('adoptada' as const) : aparecidas.includes(id) ? ('aparecida' as const) : reveladas.includes(id) ? ('revelada' as const) : ('oculta' as const),
       logro: def.logro ? { contador: def.logro.contador, umbral: def.logro.umbral, actual: t.contadores[def.logro.contador] ?? 0, cumplidoEn: t.logros[id] ?? null } : null,
       primero: t.primeros[id]?.faccionId ?? null,
     }));
     return { era: ERAS[t.era].nombre, eraDesde: t.eraDesde, tecnologias };
+  }
+
+  /**
+   * Los Aedas (Doc 6.7): los itinerantes, con dónde están, y los residentes de una Facción con su épica. Presentación pura: lo que
+   * sabe cada Aeda lo decide el motor.
+   */
+  aedasInfo(): { itinerantes: { id: string; donde: string }[] } {
+    const nombreDePlaza = (id: string) => this.state.asentamientos.find((a) => a.id === id)?.nombre ?? id;
+    return {
+      itinerantes: (this.state.aedas ?? []).map((a) => ({
+        id: a.id,
+        donde: a.enAsentamientoId
+          ? `en ${nombreDePlaza(a.enAsentamientoId)} hasta ${fmtTiempoMundo(a.hasta ?? 0)}`
+          : a.destinoId
+            ? `camino de ${nombreDePlaza(a.destinoId)} (${Math.round(a.progreso * 100)} %)`
+            : 'sin destino',
+      })),
+    };
+  }
+
+  /** Los Aedas residentes de las plazas de una Facción, con la épica en curso (capítulo y hechos). */
+  residentesDeFaccion(faccionId: string): { nombre: string; plaza: string; epica: string }[] {
+    const propias = new Set(this.state.asentamientos.filter((a) => a.faccionId === faccionId).map((a) => a.id));
+    return (this.state.aedasResidentes?.aedas ?? [])
+      .filter((r) => propias.has(r.asentamientoId))
+      .map((r) => {
+        const definicion = r.epica && EPICAS[r.epica.tecnologiaId];
+        const capitulo = r.epica && definicion?.capitulos[r.epica.capitulo];
+        return {
+          nombre: r.nombre,
+          plaza: this.state.asentamientos.find((a) => a.id === r.asentamientoId)?.nombre ?? r.asentamientoId,
+          epica:
+            r.epica && definicion && capitulo
+              ? `${definicion.nombre} · capítulo ${r.epica.capitulo + 1}/${definicion.capitulos.length} (${TITULO_CAPITULO[capitulo.hecho]}) · ${r.epica.hechos}/${capitulo.cantidad}`
+              : 'sin épica',
+        };
+      });
+  }
+
+  /** La crónica de los Aedas (Doc 6.7): lo que ya llegó por el log de eventos, lo más nuevo primero. */
+  cronica(limite = 100): { momento: string; mensaje: string }[] {
+    return this.eventos.filter(esDeCronica).slice(0, limite).map((e) => ({ momento: e.momento, mensaje: e.mensaje }));
   }
 
   nivelFaccionInfo(faccion: Faccion): { nivel: number; esMaximo: boolean; experiencia: number; umbralActual: number; umbralSiguiente: number | null } {

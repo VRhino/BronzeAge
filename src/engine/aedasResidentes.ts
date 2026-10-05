@@ -180,6 +180,18 @@ export function abandonarEpica(estado: EstadoAedasResidentes, plaza: Asentamient
   };
 }
 
+/**
+ * Lo que la épica lee de `batalla.aplicada` (`PayloadBatalla`, `session/batallas.ts`): las batallas de Unity no emiten los eventos
+ * de combate del motor, así que cuentan por aquí. Solo los campos que se usan: el motor no importa de la capa de sesión.
+ */
+interface PayloadBatallaAplicada {
+  battleId: string;
+  contexto: { tipo: string; asentamientoId?: string };
+  faccionAtacanteId: string | null;
+  faccionDefensoraId: string | null;
+  ganador?: 'atacante' | 'defensor';
+}
+
 /** Un hecho inspirador sacado de un evento: de qué tipo, de quién, dónde y con qué clave irrepetible. */
 interface Hecho {
   tipo: HechoEpico;
@@ -222,6 +234,19 @@ export function hechosDeEventos(eventos: readonly EventoDominio[], asentamientos
         const p = e.payload as { asentamientoId: string; nivelNuevo: number };
         const faccionId = faccionDe(p.asentamientoId);
         if (faccionId) hechos.push({ tipo: 'ascenso', faccionId, plazaId: p.asentamientoId, clave: `ascenso:${p.asentamientoId}:${p.nivelNuevo}` });
+        break;
+      }
+      case 'batalla.aplicada': {
+        // Una batalla de Unity: se canta una vez aunque llegue un evento por cada plaza implicada (la clave es la de la batalla).
+        const p = e.payload as PayloadBatallaAplicada;
+        const { contexto, ganador } = p;
+        if (!ganador) break;
+        if (contexto.tipo === 'campo_abierto' && p.faccionAtacanteId && p.faccionDefensoraId && p.faccionAtacanteId !== p.faccionDefensoraId) {
+          hechos.push({ tipo: 'batalla', faccionId: ganador === 'atacante' ? p.faccionAtacanteId : p.faccionDefensoraId, clave: `batalla:${p.battleId}` });
+        } else if (contexto.tipo === 'asedio' && contexto.asentamientoId) {
+          if (ganador === 'defensor' && p.faccionDefensoraId) hechos.push({ tipo: 'defensa', faccionId: p.faccionDefensoraId, plazaId: contexto.asentamientoId, clave: `defensa:${p.battleId}` });
+          if (ganador === 'atacante' && p.faccionAtacanteId) hechos.push({ tipo: 'conquista', faccionId: p.faccionAtacanteId, clave: `conquista:${p.battleId}` });
+        }
         break;
       }
       case 'tecnologia.adoptada': {

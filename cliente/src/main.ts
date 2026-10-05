@@ -379,6 +379,10 @@ app.innerHTML = `
           <h2>Progresión (Doc 2.9)</h2>
           <div class="log-panel" id="progresion-panel"></div>
         </div>
+        <div class="log-card registros-cronica-card">
+          <h2>Crónica de los Aedas (Doc 6.7)</h2>
+          <div class="log-panel" id="cronica-panel"></div>
+        </div>
         <div class="log-card registros-militar-card">
           <h2>Militar</h2>
           <div class="log-panel" id="militar-panel"></div>
@@ -471,6 +475,7 @@ const militarPanelEl = document.getElementById('militar-panel')!;
 const flotaAsentamientoSelect = document.getElementById('flota-asentamiento') as HTMLSelectElement;
 const flotaInfoEl = document.getElementById('flota-info')!;
 const progresionPanelEl = document.getElementById('progresion-panel')!;
+const cronicaPanelEl = document.getElementById('cronica-panel')!;
 
 // Docs/Arquitectura/4_Plan_Evolucion_Tareas.md, Fase B3 — migración de `main.ts`: el cliente de jugador ya no
 // posee una `GameSession` en memoria del navegador, se conecta al backend real (`npm run server`). El shell
@@ -1328,6 +1333,11 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
     })
     .join('')}</div>`;
 
+  const residentes = gameStore.residentesDeFaccion(faccion.id);
+  const residentesHtml = residentes.length
+    ? `<div class="kv-grid">${residentes.map((r) => `<div class="kv-row"><span>${r.nombre} <small>(${r.plaza})</small></span><span>${r.epica}</span></div>`).join('')}</div>`
+    : '<p class="legend-note">Sin Aedas residentes: hace falta Palacio y nobleza.</p>';
+
   const titulosDeLaFaccion = state.titulos.filter((t) => t.poseedorId === faccion.id);
   const titulosHtml = titulosDeLaFaccion.length
     ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
@@ -1376,6 +1386,11 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
       <div class="detail-section">
         <h3>Tecnología (Doc 6)</h3>
         ${tecnologiaHtml}
+      </div>
+
+      <div class="detail-section">
+        <h3>Aedas residentes (Doc 6.7)</h3>
+        ${residentesHtml}
       </div>
 
       <div class="detail-section">
@@ -1646,6 +1661,13 @@ function renderPanelMilitar(state: GameState): void {
   militarPanelEl.innerHTML += `<section class="registro-section-block"><h3>Campamentos de bandidos</h3><div class="registro-bandit-list">${campamentosHtml || '<p class="legend-note">Ninguno activo.</p>'}</div></section>`;
 }
 
+/** Crónica de los Aedas (Doc 6.7) y dónde están los itinerantes. Solo lo que ya ha llegado por el registro de eventos. */
+function renderPanelCronica(): void {
+  const itinerantes = gameStore.aedasInfo().itinerantes.map((a) => `<div class="registro-bandit"><strong>${a.id}</strong><span>${a.donde}</span></div>`).join('');
+  const entradas = gameStore.cronica().map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('');
+  cronicaPanelEl.innerHTML = `<section class="registro-section-block"><h3>Aedas itinerantes</h3>${itinerantes || '<p class="legend-note">Aún no hay.</p>'}</section><section class="registro-section-block"><h3>Crónica</h3>${entradas || '<p class="legend-note">Nada que cantar todavía.</p>'}</section>`;
+}
+
 function renderPanelProgresion(state: GameState): void {
   progresionPanelEl.innerHTML = state.titulos.length
     ? `<div class="registro-title-grid">${state.titulos
@@ -1790,6 +1812,7 @@ function renderLeyenda(state: GameState): void {
       <div class="legend-row"><span class="swatch-triangle"></span>Caravana en tránsito (color = Facción de origen)</div>
       <div class="legend-row"><span class="swatch-poly" style="background:#8b1a1a"></span>Campamento de bandidos</div>
       <div class="legend-row"><span class="swatch-square" style="background:#2e5e8c"></span>Campamento de mercenarios (círculo = protección, sin combate)</div>
+      <div class="legend-row"><span class="swatch-poly" style="background:#7a4aa8;border-radius:50%"></span>Aeda itinerante (aro = detenido en una plaza)</div>
     </div>
   `;
 
@@ -1973,6 +1996,7 @@ function render(): void {
       campamentosBandidos: state.campamentosBandidos,
       campamentosMercenarios: state.campamentosMercenarios ?? [],
       ejercitos: state.ejercitos,
+      aedas: state.aedas ?? [],
     };
     draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
     if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
@@ -1986,6 +2010,7 @@ function render(): void {
   renderJugadoresTab(state);
   renderPanelPolitica(state);
   renderPanelProgresion(state);
+  renderPanelCronica();
   renderPanelMilitar(state);
   renderPanelEconomia(state);
   renderLeyenda(state);

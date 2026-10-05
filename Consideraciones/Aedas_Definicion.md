@@ -85,6 +85,20 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 - `GET /jugador/partidas/:gameId/cronica?desde=&limite=`: las más recientes, orden cronológico, igual para todos. Sin vista
   en el cliente todavía (cliente de administración y BronzeAgeClient). Sin hecho de «paz» ni «guerra terminada»: no hay evento.
 
+### 3.4 Bots, cliente y Unity (2026-10-05)
+
+- **Bots** (`src/bots/cerebro/gobierno.ts`): el Rey y el Gobernador compran a un itinerante detenido en su plaza una tecnología
+  revelada (Eras I-III) si el almacén guarda además el doble de la tarifa para adoptarla; quien dirige la plaza (Rey, Gobernador
+  o Sacerdote) pone a cada residente sin épica a cantar la de la primera tecnología disponible, dejando para la compra las reveladas.
+  Sirve igual al adaptador remoto (`npm run bots`). El NPC viejo del motor ya no existe: todo bot va por aquí.
+- **Cliente de administración** (`cliente/`): Aedas itinerantes en el mapa (aro si están detenidos), estado «revelada» en la
+  tecnología de cada Facción, sus residentes con la épica, y un panel de crónica con dónde está cada itinerante.
+- **BronzeAgeClient:** no se toca; el modelo de cooperación lo deja sin funciones nuevas.
+- **Unity:** las batallas de Unity no emitían los eventos de combate del motor, así que no contaban para las épicas. Se arregla
+  en BronzeAge: `batalla.aplicada` lleva las Facciones de cada bando y `hechosDeEventos` lo lee (campo abierto, asedio resistido y
+  conquistado). Sin cambio de contrato. La presentación 3D va como `CQ-008` (Conquest, BORRADOR) y el modelo en
+  `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §22.
+
 ## 4. Riesgos
 
 - **Contratos y snapshots**: entidad nueva en el estado → `FORMATO_SNAPSHOT_VERSION` sube y los checkpoints de batch

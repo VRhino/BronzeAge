@@ -1269,3 +1269,32 @@ EstadoTecnologia                (GameSessionState.tecnologia)
 - Unity no la necesita: lo que una Facción puede reclutar ya lo decide BronzeAge antes de que exista la escuadra, y
   el `BattleTicket` lleva escuadras, no tecnologías.
 
+
+## 22. Aedas (nuevo, 2026-10-05)
+
+Reglas en Doc 6.7; decisiones y desvíos en `Consideraciones/Aedas_Definicion.md`. Dos clases de NPC que dan acceso a la tecnología y
+narran el lore. **No entran en una batalla**: no combaten ni se atacan, así que `BattleTicket` y `BattleResult` no cambian.
+
+```text
+AedaItinerante                  (GameSessionState.aedas)
+  id, posicion: Point
+  enAsentamientoId?             la plaza en que está detenido (donde revela y vende)
+  hasta?: Instante              hasta cuándo se queda en ella
+  destinoId?, ruta?: Point[], progreso   mientras viaja por la red de caminos
+  recientes: string[]           últimas plazas pisadas
+
+AedaResidente                   (GameSessionState.aedasResidentes.aedas)
+  id, nombre, asentamientoId, faccionId, llegadaEn
+  epica?: { tecnologiaId, capitulo, hechos, ultimoHechoEn?, claves[] }   épica en curso, por capítulos
+```
+
+- `TecnologiasFaccion.reveladas?`: lo que un Aeda ha mostrado a la Facción y aún no le ha aparecido.
+- **Lo que ve un jugador** (`ProyeccionJugador`): `aedasAvistados[] {id, posicion, enAsentamientoId?}` con la regla de avistamiento de los
+  ejércitos; `aedasResidentes[]` de su Facción con la épica y su progreso; `tecnologia.reveladas[] {tecnologiaId, descubridorFaccionId, hito}`.
+- **Comandos**: `comprarTecnologiaAeda {asentamientoId, tecnologiaId}` (Rey o Gobernador, presente), `empezarEpica {asentamientoId, aedaId,
+  tecnologiaId}` y `abandonarEpica {asentamientoId, aedaId}` (Rey, Gobernador o Sacerdote, presente).
+- **Crónica**: `GET /jugador/partidas/:gameId/cronica?desde=&limite=` devuelve los eventos públicos de los Aedas (`cronica.entrada`,
+  `tecnologia.logro`, `era.comienza`, `titulo.*`, `aedas.canta_descubrimiento`, `aedas.epica_cumplida`), iguales para todos; llegan además
+  por el canal de eventos. Es lo único de los Aedas que Unity puede mostrar sin lógica propia.
+- Las épicas cuentan las batallas de Unity por `batalla.aplicada` (su payload lleva ahora `faccionAtacanteId` y `faccionDefensoraId`): sin
+  cambios para Conquest, el resultado de la batalla basta.

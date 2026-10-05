@@ -547,6 +547,9 @@ export function registrarTokens(estado: GameSessionState, batalla: Batalla, toke
 export interface PayloadBatalla {
   battleId: string;
   contexto: ContextoEstrategico;
+  /** Las Facciones de cada bando al abrir la batalla (`null` si no tiene): con ellas se cuentan los hechos de las épicas de los Aedas (Doc 6.7). */
+  faccionAtacanteId: string | null;
+  faccionDefensoraId: string | null;
   /** Solo en `batalla.aplicada`. */
   ganador?: LadoId;
 }
@@ -563,7 +566,12 @@ export function eventosDeBatalla(
     ...estado.caravanas.filter((c) => batalla.bloqueo.caravanaIds.includes(c.id)).map((c) => c.origenAsentamientoId),
     ...(batalla.bloqueo.asentamientoId ? [batalla.bloqueo.asentamientoId] : []),
   ]);
-  const payload: PayloadBatalla = { battleId: batalla.id, contexto: batalla.ticket.contextoEstrategico };
+  const payload: PayloadBatalla = {
+    battleId: batalla.id,
+    contexto: batalla.ticket.contextoEstrategico,
+    faccionAtacanteId: batalla.ticket.bandos.atacante.faccionId,
+    faccionDefensoraId: batalla.ticket.bandos.defensor.faccionId,
+  };
   return [...plazas].map((asentamientoId) => ({ codigo, mensaje, payload, asentamientoId }));
 }
 
