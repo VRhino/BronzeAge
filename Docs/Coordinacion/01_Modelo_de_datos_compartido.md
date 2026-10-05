@@ -516,7 +516,7 @@ CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en e
                         No es de ninguna Facción ni tiene zona. En la proyección del jugador viaja solo si la Facción
                         ha explorado el sitio (como un camino). Fuera del contrato v1 a propósito
                         (2026-10-05): el contrato solo lleva héroes y batallas, y en un campamento no hay combate (protección de 60, D78).
-                        La entidad y la escena con las 3 variantes de layout entrarán cuando Conquest haga caminable la vista de
+                        La estructura interna (grid de edificios y empalizada) la calcula `engine/layoutCampamento.ts` a partir de `origen` y `edificios`, en las convenciones de `SettlementBattleSnapshot`. La entidad y su layout entrarán cuando Conquest haga caminable la vista de
                         campamento (D73); `almacenPersonal` ya viaja en `HeroeDto`.
 ```
 

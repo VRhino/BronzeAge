@@ -1,5 +1,6 @@
-import type { Asentamiento, BiomaTipo, CampamentoBandido, CampamentoMercenarios, Caravana, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
+import type { Asentamiento, BiomaTipo, CampamentoBandido, CampamentoMercenarios, Caravana, EdificioCampamentoTipo, Edificio, EdificioTipo, Ejercito, Faccion, Point, RecursoTipo, ZonaFaccion } from '@motor/domain/types';
 import { MERCENARIOS } from '@motor/constants';
+import type { LayoutCampamento } from '@motor/engine/layoutCampamento';
 import type { TramoDeRed } from '@motor/engine/redCaminos';
 import type { Mapa } from '@motor/world/mapa';
 
@@ -850,6 +851,89 @@ export function drawAsentamiento(ctx: CanvasRenderingContext2D, canvas: HTMLCanv
   ctx.font = '11px system-ui, sans-serif';
   ctx.fillStyle = '#4a4436';
   ctx.fillText('Vista de asentamiento (ciudad) · minas y cantera pertenecen a la región (mapa general)', 12, canvas.height - 8);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+// --- Vista de un campamento de mercenarios (Doc 1.9b) ---
+//
+// Mismo espacio plano local que la Vista de Asentamiento. El layout lo calcula el motor (`engine/layoutCampamento.ts`); aquí solo se pinta.
+
+export interface DrawCampamentoState {
+  campamento: CampamentoMercenarios;
+  layout: LayoutCampamento;
+}
+
+const COLOR_EDIFICIO_CAMPAMENTO: Record<EdificioCampamentoTipo, string> = {
+  taberna: '#a0672d',
+  vivienda: '#c9b27c',
+  mercado: '#d6a437',
+  barracon: '#7a2f2f',
+  galeriaDeTiro: '#566b3a',
+  caballerizas: '#6b5638',
+};
+
+const NOMBRE_EDIFICIO_CAMPAMENTO: Record<EdificioCampamentoTipo, string> = {
+  taberna: 'Taberna',
+  vivienda: 'Vivienda',
+  mercado: 'Mercado',
+  barracon: 'Barracón',
+  galeriaDeTiro: 'Galería de tiro',
+  caballerizas: 'Caballerizas',
+};
+
+export function drawCampamento(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawCampamentoState): void {
+  const { campamento, layout } = state;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = BIOMA_TIERRA_PLANA;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // El campamento es pequeño: el lienzo enseña ~11 celdas a cada lado del centro, no el espacio entero de un asentamiento.
+  const celda = (canvas.width * 0.92) / 22;
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  ctx.strokeStyle = 'rgba(27, 26, 23, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = -Math.ceil(cx / celda); i <= Math.ceil(cx / celda); i++) {
+    ctx.moveTo(cx + i * celda, 0);
+    ctx.lineTo(cx + i * celda, canvas.height);
+  }
+  for (let j = -Math.ceil(cy / celda); j <= Math.ceil(cy / celda); j++) {
+    ctx.moveTo(0, cy + j * celda);
+    ctx.lineTo(canvas.width, cy + j * celda);
+  }
+  ctx.stroke();
+
+  for (const c of layout.empalizada) {
+    ctx.fillStyle = c.clase === 'puerta' ? '#e8dcb8' : '#6b4a2a';
+    ctx.fillRect(cx + c.col * celda, cy + c.row * celda, celda, celda);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '11px system-ui, sans-serif';
+  for (const e of layout.edificios) {
+    const x = cx + e.col * celda;
+    const y = cy + e.row * celda;
+    ctx.fillStyle = COLOR_EDIFICIO_CAMPAMENTO[e.tipo];
+    ctx.fillRect(x, y, e.ancho * celda, e.alto * celda);
+    ctx.strokeStyle = '#1b1a17';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, e.ancho * celda, e.alto * celda);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(NOMBRE_EDIFICIO_CAMPAMENTO[e.tipo], x + (e.ancho * celda) / 2, y + (e.alto * celda) / 2, e.ancho * celda - 4);
+  }
+
+  ctx.fillStyle = '#1b1a17';
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`Campamento ${campamento.id} · variante ${campamento.origen}`, 12, canvas.height - 24);
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.fillStyle = '#4a4436';
+  ctx.fillText('Vista de campamento de mercenarios · empalizada decorativa, sin combate dentro', 12, canvas.height - 8);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 }

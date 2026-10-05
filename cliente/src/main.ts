@@ -7,7 +7,8 @@ import type { AcuerdoTrueque, Asentamiento, BiomaTipo, CargoTipo, Edificio, Facc
 import { RED_VACIA, tramosDeRed } from '@motor/engine/redCaminos';
 import { ApiError } from './app/apiCliente';
 import { CATALOGOS, crearGameStore, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
-import { draw, drawAsentamiento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
+import { layoutCampamento } from '@motor/engine/layoutCampamento';
+import { draw, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
 // resolución física para que la capa de terreno/ríos no perdiera nitidez.
@@ -205,6 +206,9 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 let tabActivo: 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo' = 'asentamientos';
 let comercioDetalleTab: 'acciones' | 'info' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
+/** Si la Vista de Asentamiento enseña un campamento de mercenarios en vez de un asentamiento (Doc 1.9b). */
+let campamentoSeleccionadoId: string | null = null;
+const PREFIJO_CAMPAMENTO = 'campamento:';
 let asentamientoDetalleTab: 'general' | 'edificios' | 'produccion' | 'militar' = 'general';
 let reservaProtegidaAbierta = false;
 let faccionSeleccionadaId: string | null = null;
@@ -1886,7 +1890,9 @@ document.getElementById('vista-mapa-toggle')!.addEventListener('click', (ev) => 
   render();
 });
 vistaAsentamientoSelectEl.addEventListener('change', () => {
-  asentamientoSeleccionadoId = vistaAsentamientoSelectEl.value || null;
+  const valor = vistaAsentamientoSelectEl.value;
+  campamentoSeleccionadoId = valor.startsWith(PREFIJO_CAMPAMENTO) ? valor.slice(PREFIJO_CAMPAMENTO.length) : null;
+  if (!campamentoSeleccionadoId) asentamientoSeleccionadoId = valor || null;
   ocultarTooltipEdificioAsentamiento();
   render();
 });
@@ -1906,8 +1912,14 @@ function actualizarControlesVista(state: GameState): void {
     const opciones = state.asentamientos
       .map((a) => `<option value="${a.id}">${etiquetaAsentamiento(a, state.facciones)}</option>`)
       .join('');
-    vistaAsentamientoSelectEl.innerHTML = opciones || '<option value="">— sin asentamientos —</option>';
-    if (asentamientoSeleccionadoId && state.asentamientos.some((a) => a.id === asentamientoSeleccionadoId)) {
+    const campamentos = (state.campamentosMercenarios ?? [])
+      .map((c) => `<option value="${PREFIJO_CAMPAMENTO}${c.id}">Campamento ${c.id}</option>`)
+      .join('');
+    vistaAsentamientoSelectEl.innerHTML =
+      (opciones || '<option value="">— sin asentamientos —</option>') + (campamentos ? `<optgroup label="Campamentos de mercenarios">${campamentos}</optgroup>` : '');
+    if (campamentoSeleccionadoId && state.campamentosMercenarios?.some((c) => c.id === campamentoSeleccionadoId)) {
+      vistaAsentamientoSelectEl.value = PREFIJO_CAMPAMENTO + campamentoSeleccionadoId;
+    } else if (asentamientoSeleccionadoId && state.asentamientos.some((a) => a.id === asentamientoSeleccionadoId)) {
       vistaAsentamientoSelectEl.value = asentamientoSeleccionadoId;
     }
   }
@@ -1935,7 +1947,10 @@ function render(): void {
   actualizarControlesVista(state);
   // Si el asentamiento en vista ya no existe (p. ej. cayó en ruinas o se importó otra partida), se vuelve al mapa general.
   const asentamientoEnVista = state.asentamientos.find((a) => a.id === asentamientoSeleccionadoId);
-  if (vistaMapa === 'asentamiento' && asentamientoEnVista) {
+  const campamentoEnVista = state.campamentosMercenarios?.find((c) => c.id === campamentoSeleccionadoId);
+  if (vistaMapa === 'asentamiento' && campamentoEnVista) {
+    drawCampamento(ctx, canvas, { campamento: campamentoEnVista, layout: layoutCampamento(campamentoEnVista) });
+  } else if (vistaMapa === 'asentamiento' && asentamientoEnVista) {
     const trazado = gameStore.getTrazadoAsentamiento(asentamientoEnVista);
     drawAsentamiento(ctx, canvas, {
       asentamiento: asentamientoEnVista,
