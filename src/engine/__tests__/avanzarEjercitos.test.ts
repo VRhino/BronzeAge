@@ -978,6 +978,16 @@ describe('persecuciones: alcanzar a la presa no es atacarla', () => {
     expect(avisos.map((e) => (typeof e !== 'string' ? e.asentamientoId : '')).sort(), 'se enteran los dos').toEqual([a.origenAsentamientoId, b.origenAsentamientoId].sort());
   });
 
+  it('un héroe suelto, sin soldados, también alcanza a su presa y se le ofrece atacar: la persecución no se queda abierta para siempre', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(LOGISTICA.radioEncuentro - 1, 0, 0);
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
+
+    const r = avanzar([cazador, b], asentamientos, { facciones });
+
+    expect(r.ejercitos.find((e) => e.id === a.id)!.persiguiendo).toBeUndefined();
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'columna.presa_alcanzada')).toBe(true);
+  });
+
   it('a quien NO persigue nadie no se le toca, aunque este pegado al que si', () => {
     const { facciones, asentamientos, a, b } = dosColumnas(1);
     const tercero: Ejercito = { ...b, id: 'ejercito-c', posicionActual: { ...a.posicionActual } };

@@ -15,6 +15,7 @@
 // Queda encerrado dentro de `comando()`, no escapa nunca de un manejador, y es exactamente lo que ya hacía
 // `rechazoDesdeError` con los errores del motor — así que el mecanismo es uno, no dos.
 import { columnaDe } from '../../engine/ejercitos';
+import { esCiudadano } from '../../engine/faccion';
 import { fundirExploraciones } from '../../engine/exploracion';
 import { MEMORIA_VACIA } from '../../engine/memoria';
 import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, Caravana, Escuadron, Faccion, Ejercito, Heroe } from '../../domain/types';
@@ -179,6 +180,18 @@ export function conColumnas(
  *
  * Sin nada que fundir (nunca anduvo solo, o ya se fundió antes) devuelve el estado tal cual.
  */
+/**
+ * La columna de un héroe que va solo lleva la Facción que tiene AHORA (`Ejercito.faccionId`): se escribe al salir al mundo, así que quien
+ * crea, entra o deja una Facción ya fuera de un campamento la dejaría desactualizada, y con ella la visión compartida, quién es enemigo y
+ * a quién se une en campo. Un ejército de varios no se toca: lo compone gente de una sola Facción y su Líder la fijó al formarlo.
+ */
+export function conFaccionEnSuColumna(estado: GameSessionState, heroeId: string): GameSessionState {
+  const columna = estado.ejercitos.find((e) => e.participantes.some((p) => p.heroeId === heroeId));
+  if (!columna || columna.participantes.length !== 1) return estado;
+  const faccionId = estado.facciones.find((f) => esCiudadano(f, heroeId))?.id ?? '';
+  return columna.faccionId === faccionId ? estado : { ...estado, ejercitos: estado.ejercitos.map((e) => (e.id === columna.id ? { ...e, faccionId } : e)) };
+}
+
 export function conExploracionFundida(estado: GameSessionState, heroeId: string, faccionId: string): GameSessionState {
   const jugador = estado.heroes.find((j) => j.id === heroeId);
   if (!jugador?.exploracionPersonal) return estado;

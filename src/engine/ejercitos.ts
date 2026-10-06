@@ -1012,7 +1012,8 @@ function validarUnionEnCampo(ejercito: Ejercito, columna: Ejercito): void {
   if (columna.tipo !== 'personal' || columna.formacion) {
     throw new MovilizacionInvalidaError('Solo una columna personal se une.');
   }
-  if (ejercito.faccionId !== columna.faccionId) {
+  // Sin Facción (`''`) no hay compañeros: dos columnas sin ella no son «de la misma Facción».
+  if (!ejercito.faccionId || ejercito.faccionId !== columna.faccionId) {
     throw new MovilizacionInvalidaError('Un ejército lo componen ciudadanos de una sola Facción.');
   }
   if (distancia(ejercito.posicionActual, columna.posicionActual) > LOGISTICA.radioEncuentro) {
@@ -1582,16 +1583,9 @@ export function velocidadDeEjercito(ejercito: EjercitoConTropa, caravanas: reado
   return Math.min(...velocidades);
 }
 
-/** ¿No le queda un solo soldado en pie? Un escuadrón persiste como identidad con `cantidad: 0` (Doc 5.4), así
- * que "sin soldados" es que NINGUNO tenga hombres, no que la lista esté vacía. Es lo que decide si puede
- * combatir, no si sigue existiendo: para eso está `sinNadieDentro`. */
-function sinSoldados(ejercito: EjercitoConTropa): boolean {
-  return ejercito.escuadrones.every((e) => e.cantidad <= 0);
-}
-
 /**
  * ¿Se quedó sin NADIE? Es la condición de disolución (Doc 5.13.4), y no es la misma que quedarse sin
- * soldados: una columna cuyos escuadrones caen todos sigue teniendo dentro a sus jugadores, que ahora viajan
+ * soldados (un escuadrón aniquilado persiste como identidad con `cantidad: 0`, Doc 5.4): una columna cuyos escuadrones caen todos sigue teniendo dentro a sus jugadores, que ahora viajan
  * a pie. Se disuelve cuando ya no va nadie — lo que hoy solo ocurre al replegarse.
  */
 function sinNadieDentro(ejercito: Ejercito): boolean {
@@ -1884,7 +1878,8 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
  * su dueño, humano o bot, se le ofrece atacar.
  *
  * Una presa no se alcanza si es aliada o de la propia Facción, ni una caravana escoltada (su ejército es la presa),
- * ni una caravana en un refugio (Doc 1.6). Sin héroe sano o sin soldados en pie no se persigue (Doc 5.16.4).
+ * ni una caravana en un refugio (Doc 1.6). Sin héroe sano no se persigue (Doc 5.16.4). Los soldados no cuentan: un héroe suelto
+ * combate por sí mismo en una batalla de Unity, y sin ellos la persecución se quedaba para siempre persiguiendo sin cerrarse.
  */
 function cerrarPersecuciones(
   ejercitos: readonly EjercitoConTropa[],
@@ -1902,13 +1897,13 @@ function cerrarPersecuciones(
   for (const id of [...porId.keys()].sort()) {
     const ejercito = porId.get(id)!;
     const presaFijada = ejercito.persiguiendo;
-    if (!presaFijada || !tieneHeroeSano(ejercito, heridos) || sinSoldados(enBatalla(ejercito, heridos))) continue;
+    if (!presaFijada || !tieneHeroeSano(ejercito, heridos)) continue;
 
     const cerca = (p: Point) => distancia(p, ejercito.posicionActual) <= LOGISTICA.radioEncuentro;
     const alcanzada =
       presaFijada.tipo === 'ejercito'
         ? [...porId.values()].find(
-            (o) => o.id === presaFijada.id && o.tipo === ejercito.tipo && enemiga(ejercito.faccionId, o.faccionId) && tieneHeroeSano(o, heridos) && !sinSoldados(enBatalla(o, heridos)) && cerca(o.posicionActual)
+            (o) => o.id === presaFijada.id && o.tipo === ejercito.tipo && enemiga(ejercito.faccionId, o.faccionId) && tieneHeroeSano(o, heridos) && cerca(o.posicionActual)
           )
         : caravanas.find((c) => {
             if (c.id !== presaFijada.id || c.estado === 'adjunta' || c.estado === 'disponible' || !cerca(c.posicionActual)) return false;

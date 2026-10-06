@@ -3,7 +3,7 @@
 // una Facción NPC no se entra (D49). Aceptado, solo es ciudadano: para vivir en una plaza de la Facción se muda con
 // `cambiarResidencia`.
 import { esCiudadano, responderSolicitud as responderEngine, solicitarIngreso as solicitarEngine } from '../../engine/faccion';
-import { comando, conExploracionFundida, conFaccion, exigirFaccion, rechazar } from './ayudas';
+import { comando, conExploracionFundida, conFaccionEnSuColumna, conFaccion, exigirFaccion, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { exito } from './tipos';
 import { evento } from './eventos';
@@ -46,7 +46,7 @@ export const responderSolicitud = comando<ParamsResponderSolicitud, void>((estad
   const faccion = exigirFaccion(estado, params.faccionId);
   const facciones = responderEngine(estado.facciones, faccion.id, params.heroeId, params.aceptar);
   const conRespuesta = { ...estado, facciones };
-  return exito(params.aceptar ? conExploracionFundida(conRespuesta, params.heroeId, faccion.id) : conRespuesta, [
+  return exito(params.aceptar ? conFaccionEnSuColumna(conExploracionFundida(conRespuesta, params.heroeId, faccion.id), params.heroeId) : conRespuesta, [
     evento(ctx, {
       codigo: params.aceptar ? 'faccion.ciudadania_union' : 'faccion.solicitud_denegada',
       mensaje: params.aceptar ? `${params.heroeId} entra en ${faccion.nombre}.` : `${faccion.nombre} deniega la entrada a ${params.heroeId}.`,

@@ -5,7 +5,7 @@ import { asignarRey } from '../../engine/cargos';
 import { CIUDADANIA } from '../../constants';
 import { dias, transcurrido } from '../../domain/tiempo';
 import { exito } from './tipos';
-import { comando, conExploracionFundida, rechazar } from './ayudas';
+import { comando, conExploracionFundida, conFaccionEnSuColumna, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento } from './eventos';
 
@@ -67,7 +67,7 @@ export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((
     ctx.actor
   );
   // Lo que anduvo sin bandera pasa a ser conocimiento de la Facción recién creada (Doc 1.3).
-  const siguiente = conExploracionFundida({ ...estado, facciones: [...estado.facciones, nueva] }, ctx.actor, nueva.id);
+  const siguiente = conFaccionEnSuColumna(conExploracionFundida({ ...estado, facciones: [...estado.facciones, nueva] }, ctx.actor, nueva.id), ctx.actor);
   return exito(
     siguiente,
     [

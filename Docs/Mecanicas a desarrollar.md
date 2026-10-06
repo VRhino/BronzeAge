@@ -115,12 +115,3 @@ queda en 1.
 Mientras se prueba con NPC, el asedio admite 5 héroes por bando como el resto de batallas (decisión del usuario,
 2026-09-27; `BATALLA.capacidad.asedio`, Doc 5.15.1). Cuando entren jugadores vuelve a **15 contra 15**: cambiar la
 constante y el canon, y avisar a Conquest, que abre la instancia con esa capacidad (`BattleSide.capacidadMaxima`).
-
-## 39. La Facción de una columna se fija al salir al mundo
-
-Descubierto el 2026-10-07 probando el cliente: `Ejercito.faccionId` se escribe al crear la columna (`engine/presencia.ts`) y no se actualiza. Un héroe que entra
-en una Facción **ya fuera del campamento** sigue con la columna sin Facción (`''`): el resto del juego mira `ciudadanosIds` y lo ve como de la Facción, pero lo que
-se calcula con `e.faccionId` (la visión compartida, qué columnas son «propias» en la proyección, quién es enemigo al atacar o perseguir, y a quién se une en campo)
-lo trata como a nadie. Y dos columnas sin Facción son iguales para `validarUnionEnCampo` (`'' === ''`), aunque sean de Facciones distintas. Decidir: o se
-reescribe `faccionId` de la columna al entrar o salir de una Facción (si va un solo héroe), o se deja de usar el campo y se deduce de `participantes`.
-

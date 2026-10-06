@@ -8,6 +8,8 @@ import { residirEnCampamento } from '../comandos/cargos';
 import { conExperiencia } from '../../engine/tropa';
 import { GameSession } from '../gameSession';
 import { crearHeroe } from '../comandos/crearHeroe';
+import { crearFaccion } from '../comandos/crearFaccion';
+import { responderSolicitud, solicitarIngreso } from '../comandos/ingresoEnFaccion';
 import { entrarEnCampamento, salirDelCampamento } from '../comandos/presencia';
 import { atacar } from '../comandos/interaccion';
 import { separarseDelEjercito, unirseEnCampo } from '../comandos/columna';
@@ -127,6 +129,10 @@ describe('la ración gratis del residente (D24, D50)', () => {
   it('unirse y separarse en campo no la convierte en trigo guardable (bug del cerebro sin plaza)', () => {
     const { sesion, heroeId, heroe, opc } = nacido();
     const otro = sesion.ejecutar(crearHeroe, { ...PARAMS, displayName: 'Bea', campamentoId: 'mercenarios-0' }, { actor: 'jugador-2' }).datos!.heroeId;
+    // Se unen en campo de la misma Facción: sin ella no hay compañeros (Doc 5.14.1).
+    const faccionId = sesion.ejecutar(crearFaccion, { nombre: 'Casa Bea' }, { actor: otro }).datos!.faccionId;
+    sesion.ejecutar(solicitarIngreso, { faccionId }, opc);
+    sesion.ejecutar(responderSolicitud, { faccionId, heroeId, aceptar: true }, { actor: otro });
     const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: otro, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar', objetivo: { tipo: 'punto', punto: { x: 1000, y: 1000 } } }, { actor: otro }).datos!.ejercitoId;
     sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId, escuadronIds: [], carga: {} }, opc);
     expect(sesion.ejecutar(unirseEnCampo, { ejercitoId, heroeId }, opc).ok).toBe(true);

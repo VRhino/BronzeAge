@@ -240,3 +240,7 @@ Y solo se persigue dentro de la misma clase (§1.2): ejército a ejército, soli
   no incluye sus escuadras). Si se echa en falta, que la salida traiga las bajas y se sumen.
 - El batch con la misma semilla (12 Facciones, 30 240 ticks) sale **idéntico** antes y después, pero no demuestra nada sobre guerra: en
   esas tres semanas no hay una sola campaña. La compatibilidad de los bots la cubren los tests; falta medir con un checkpoint de Era II.
+- **Dos fallos que salieron al probar el cliente contra el backend (2026-10-07), corregidos:** (1) `Ejercito.faccionId` se escribía al salir al mundo y no
+  seguía a la Facción del héroe que va solo (`conFaccionEnSuColumna`, al crear, entrar o dejar una Facción), y dos columnas sin Facción se tomaban por «de la
+  misma Facción» al unirse en campo (`'' === ''`); (2) una persecución sin soldados nunca se cerraba al alcanzar a la presa: ahora basta un héroe sano (un héroe suelto
+  combate por sí mismo en Unity).

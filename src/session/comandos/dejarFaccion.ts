@@ -9,7 +9,7 @@
 import { dejarResidencia, esCiudadano, quitarCiudadania } from '../../engine/faccion';
 import { esResidente } from '../../engine/pertenencia';
 import { sinGuarnicion } from '../../engine/tropa';
-import { comando, conAsentamiento, conFaccion, rechazar } from './ayudas';
+import { comando, conAsentamiento, conFaccion, conFaccionEnSuColumna, rechazar } from './ayudas';
 import { exito } from './tipos';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { evento } from './eventos';
@@ -29,10 +29,10 @@ export const dejarFaccion = comando<ParamsDejarFaccion, void>((estado, _mapa, ct
   // Se va con su casa: sin ciudadanía no se reside ni se gobierna (Doc 2.5, 2026-10-02). Sigue siendo suyo lo que lleva.
   const residencia = estado.asentamientos.some((a) => esResidente(a, ctx.actor)) ? dejarResidencia(estado.asentamientos, ctx.actor) : undefined;
   const sinCasa = residencia ? { ...conAsentamiento(estado, residencia), heroes: sinGuarnicion(estado.heroes, ctx.actor) } : estado;
-  const siguiente = {
+  const siguiente = conFaccionEnSuColumna({
     ...conFaccion(sinCasa, actualizada),
     salidasFaccionPorHeroe: { ...estado.salidasFaccionPorHeroe, [ctx.actor]: ctx.instante },
-  };
+  }, ctx.actor);
   return exito(siguiente, [
     evento(ctx, {
       codigo: 'faccion.abandonada',
