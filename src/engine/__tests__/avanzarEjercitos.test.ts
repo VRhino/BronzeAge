@@ -1017,6 +1017,20 @@ describe('persecuciones: alcanzar a la presa no es atacarla', () => {
     expect(r.vencidos, 'y sus héroes quedan heridos (Doc 5.16.4)').toEqual([RESIDENTE]);
   });
 
+  it('el vencedor se lleva en su carro la chatarra de las bajas de los DOS bandos (Doc 4.2.1)', () => {
+    // 5 contra 300 no depende del RNG: gana el defensor. Los dos bandos llevan espadachines de bronce, con equipo de metal.
+    const { facciones, a, b } = dosColumnas(1, 5, 300);
+    const conBronce = (e: EjercitoConTropa, id: string, n: number): EjercitoConTropa => ({
+      ...e,
+      escuadrones: [{ ...escuadron(id, 'espadachines_bronce', n), heroeId: e.escuadrones[0]!.heroeId }],
+    });
+
+    const r = atacarColumna(conBronce(a, 'a1', 5), conBronce(b, 'b1', 300), facciones, [], [], new Set(), createRng(1));
+
+    expect(r.defensor.suministro['chatarraBronce'], 'el vencedor la carga').toBeGreaterThan(0);
+    expect(r.atacante.suministro['chatarraBronce'], 'el vencido no se la queda').toBeUndefined();
+  });
+
   it('el DEFENSOR que gana carga el botín con sus caravanas adjuntas, igual que el atacante (Doc 5.13.2)', () => {
     // Antes solo contaban sus carros: con el carro por encima de 500 gracias a la adjunta, no le cabía nada.
     const { facciones, a, b } = dosColumnas(1, 5, 300);

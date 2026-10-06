@@ -118,7 +118,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ El jugador no elige ubicación ni tipo (excepto fundación y adición manual a la cola) — `código: ✔`
 - ✅ Algoritmo por reglas; crecimiento por necesidad con reevaluación continua; Maestro de Obras — `código: ✔` (`engine/construction.ts`)
 - ✅ Reemplazo automático de extractores cuando su fuente se agota, con tope por tipo — `código: ✔` (`EXTRACCION_MAXIMOS`, `EXTRACTOR_DESEMPATE`)
-- ✅ Catálogo ampliado (Corral, Armería, Curtiduría, Carpintería, Palacio, Barracón, Galería de tiro, Gran Fundición, Maravilla…) con recetas multi-nivel — `código: ✔` (`EDIFICIO_CATALOGO`)
+- ✅ Catálogo ampliado (Corral, Armería, Curtiduría, Carpintería, Palacio, Barracón, Galería de tiro, Gran Fundición —refundición de chatarra de batalla, 2026-10-06—, Maravilla…) con recetas multi-nivel — `código: ✔` (`EDIFICIO_CATALOGO`)
 - ✅ Cola de PRIORIDAD por categoría (supervivencia > extractores > general) al gastar recursos — `código: ✔`
 - ✅ Disparador de Granja por déficit real, hasta 3 a la vez; capacidad de Leñeras por tamaño de bosque — `código: ✔` (`LENERA_POR_BOSQUE`)
 - ✅ Reserva de construcción calibrable, y no buscar sitio para lo que no se puede pagar — `código: ✔` (`RESERVA_CONSTRUCCION`, `noBuscarSinMateriales.test.ts`)
@@ -143,7 +143,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 
 ## Ciudadanía
 - ✅ Ligada a la Facción; obtención por fundación o compra de casa; cupo de casas por nivel; cooldown anti-abuso al crear Facción — `código: ✔` (`CIUDADANIA`, `engine/faccion.ts` `comprarCasa`)
-- ✅ Cooldown de cambio de residencia (3 días), `dejarResidencia` y abandonar la Facción se lleva la casa y los cargos locales — `código: ✔` (2026-10-02, Doc 2.5). Los beneficios «protección militar explícita» y «voz en política exterior» se retiraron: ver `Docs/Mecanicas a desarrollar.md` §32
+- ✅ Cooldown de cambio de residencia (3 días), `dejarResidencia` y abandonar la Facción se lleva la casa y los cargos locales — `código: ✔` (2026-10-02, Doc 2.5). Los beneficios «protección militar explícita» y «voz en política exterior» se retiraron: la voz exterior está aparcada en `Docs/Ideas a diseñar.md` §32 y la protección ya la dan la guarnición y la defensa de la plaza
 
 ## Cargos
 - ✅ Nivel Facción (Rey, Embajador) y nivel asentamiento (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote) — `código: ✔` (`engine/cargos.ts`)
@@ -240,7 +240,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 
 ## Fusión y crecimiento de Facciones
 - ✅ Menú con 2 opciones (Anexión / Fusión), reglas de Rey y cargos resultantes — `código: ✔` (`engine/fusion.ts`, comandos `anexionar` / `fusionar`)
-- 🔶 Aceptación mutua obligatoria vs. anexión forzable unilateralmente — `código: ◐`
+- 🔶 Aceptación mutua obligatoria vs. anexión forzable unilateralmente — `código: ◐`: decidido que B acepta; falta el mecanismo (`Mecanicas a desarrollar.md` §32, junto al desarme del señor)
 
 ## Gremios
 - ✅ 4 gremios (Comerciantes, Artesanos, Constructores, Ladrones), escasos a nivel de servidor, con tirada periódica sujeta a 4 requisitos simultáneos (reputación >90, título de servidor específico, nivel de asentamiento en el máximo y mantenimiento >90%); mecanismo de pérdida resuelto — **`código: ✘`**. El `patioDeGremios` de `constants.ts` es una parcela decorativa del trazado urbano, sin relación con esta mecánica. (aparcado, `Docs/Ideas a diseñar.md` §21)

@@ -209,6 +209,22 @@ describe('aplicar el resultado (doc 02 §3.3, doc 01 §15-§16)', () => {
     expect(heridosEn(estado.heroes, instanteDeTick(estado.tick)).has(fundador)).toBe(false);
   });
 
+  it('el vencedor recoge la chatarra de los caídos en su carro (Doc 4.2.1)', () => {
+    const frente = frenteACampamento();
+    // Las escuadras de los héroes pasan a ser de espadachines de bronce, con equipo de metal, antes de abrir el ticket.
+    const payload = frente.sesion.exportar();
+    const heroes = payload.state.heroes.map((h) => ({ ...h, escuadrones: h.escuadrones.map((e) => ({ ...e, tropaId: 'espadachines_bronce' })) }));
+    const sesion = GameSession.importar({ ...payload, state: { ...payload.state, heroes } }, { batallasEnUnity: true });
+    const batalla = empezar(sesion, atacarCampamento(sesion, frente.fundador).datos!.battleId);
+    const escuadra = batalla().ticket.bandos.atacante.participantes[0]!.escuadras[0]!;
+    const r = resultado(batalla());
+    const enElCarro = () => sesion.getState().ejercitos.find((e) => e.id === frente.columna)!.suministro['chatarraBronce'] ?? 0;
+
+    expect(aplicar(sesion, { ...r, porEscuadra: r.porEscuadra.map((e) => (e.squadId === escuadra.squadId ? { ...e, muertos: 4, supervivientesAlCierre: e.desplegados - 4 } : e)) }).ok).toBe(true);
+
+    expect(enElCarro()).toBeGreaterThan(0);
+  });
+
   it('ganan los bandidos: quien atacó queda herido y pierde la mitad del carro', () => {
     const { sesion, fundador, columna } = frenteACampamento();
     const batalla = empezar(sesion, atacarCampamento(sesion, fundador).datos!.battleId);

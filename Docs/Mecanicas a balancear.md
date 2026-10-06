@@ -13,9 +13,13 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | # | Área | Qué se balancea | Cómo se mide |
 |---|---|---|---|
 | 20 | TECNOLOGÍA | X de cada logro de las Eras I-III | batch (`scripts/batch/medidorTecnologia.ts`) |
+| 32 | POLÍTICA | Reputación: valor de cada evento, decaimiento y umbrales (`REPUTACION`) | batch / playtest |
+| 33 | COMERCIO | Tasa de comisión intermedia entre Facciones aliadas o vasallas de la misma Liga | batch |
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | batch, tras el doble de la Granja |
 | 36 | HÉROE | Ritmo, prudencias y margen de los bots; cerebro «sin plaza» | batch; antes, ración en minutos en el motor |
 | 39 | MILITAR | Escala de XP de escuadra: Unity vs. números | espera a CQ-001 (Conquest) |
+| 35 | MUNDO | Poder de los campamentos de bandidos: si escala con la región o con la cercanía de Facciones fuertes | batch |
+| 35b | MILITAR | Gran Fundición: `CHATARRA.fraccion`, producción, coste y trabajadores | batch |
 | 40 | MUNDO | Cifras de `MERCENARIOS` (placeholder) | batch |
 | 42 | TECNOLOGÍA | Cifras de `AEDAS` (retraso, itinerantes, estancia, precio de venta, residentes, épicas) | batch / playtest |
 | 18 | INTEL | Cifras de `INTEL` (Mirada, Informe, cupos, coste de la Taberna) | batch / playtest |
@@ -68,3 +72,19 @@ adelantan las adopciones (Era I: nivel 2 a 5,8 días) y si la venta hace irrelev
 ## 18. Taberna e intel: cifras
 
 Las cifras de `INTEL` y de `EDIFICIO_CATALOGO.taberna` (`constants.ts`) son placeholder, sin calibrar: Mirada (radio 150, 2 h, base 40 de oro + 0,1 por unidad de distancia, cooldown de zona 2 h), Informe (60 de oro por nivel de la plaza mirada, cooldown 6 h por plaza), cupo de Miradas (1 / 2 / 3 por nivel de taberna, 1 en campamento) y el coste del edificio (150 madera + 60 piedra, mejoras 250+120 y 500+250). Es el **sink recurrente de oro** que la economía del oro necesita (`Economia_Del_Oro_Definicion.md` §4.5): medir con batch (los bots ya construyen la taberna y compran informes) que `oroMedio` deje de subir sin techo y que el gasto en intel quede entre un tercio y la mitad del ingreso, sin impedir ninguna de las otras ambiciones; y si el precio por distancia basta para que mirar lejos sea una decisión. Plan: `Consideraciones/Taberna_Intel_Definicion.md`.
+
+## 32. Reputación: cifras
+
+`REPUTACION` (`constants.ts`) es placeholder: bonus por trueque cumplido (+5) y por liberar a un vasallo (+6), penalizaciones por trueque incumplido (−8), rebelión (−10), romper alianza (−12) y atacar a un aliado (−25), bonus por minuto de alianza (0,05), decaimiento (0,2 por minuto) y umbrales (−40 para el Embajador y para la comisión, ×1,5). Medir con batch que el score no se sature en ±100 ni quede pegado a 0, y que los umbrales muerdan sin bloquear la diplomacia. Canon: Doc 2.7.
+
+## 33. Comisión intermedia entre aliadas y vasallas
+
+Hoy `COMISION` tiene dos tasas: 3 % dentro de la Facción y 8 % fuera (Doc 3.5). Decidir con números si las Facciones aliadas o vasallas de la misma Liga pagan una tasa intermedia, y cuál; ¿alcanza la diferencia para que merezca la pena comerciar dentro de la Liga? Es la tasa a medir, no una mecánica nueva.
+
+## 35. Campamentos de bandidos: escala del poder
+
+Cada campamento sale con uno de tres niveles al azar, con su poder (`CAMPAMENTOS_BANDIDOS.niveles`, D21/D37). Medir con batch si el poder debe escalar además con la región o con la cercanía de Facciones fuertes, o si el azar de niveles basta.
+
+## 35b. Gran Fundición: cifras
+
+Implementada el 2026-10-06 (Doc 4.2.1). Son placeholder: `CHATARRA.fraccion` (0,5 del lingote del equipo por baja), las tres recetas de `EDIFICIO_CATALOGO.granFundicion` (producción base 4, 12 artesanos), el coste (150 madera + 100 piedra + 50 oro, 2 días) y los requisitos (Facción nivel 6, capital de asentamiento 4). Medir con batch cuánta chatarra deja una batalla típica, si el estaño que devuelve cambia de verdad el techo de las tropas de bronce, y si los 12 artesanos diluyen demasiado el ratio de mano de obra de la capital. Los bots no la construyen (`bots/cerebro/gobierno.ts`); decidir si deben, antes de medir.

@@ -35,6 +35,7 @@ import { atribuir, type EventoCrudo } from '../domain/eventos';
 import type { Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { asediarConEjercito, atacarCampamentoConColumna, desalojarResidentes, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
+import { sumarChatarra } from './chatarra';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { aristasDeRed, RED_VACIA } from './redCaminos';
 import { enRefugio } from './zones';
@@ -1343,7 +1344,8 @@ export function atacarColumna(
   const ganador = gano ? conApartadas(choque.a, atacante) : conApartadas(choque.b, defensor);
   const secuela = trasDerrota(perdedor);
 
-  const conBotin = cargarBotin(ganador, secuela.botin, capacidadCargaDe(ganador, caravanas));
+  // La chatarra de las bajas de los dos bandos (Doc 4.2.1) se suma al botín: va al mismo carro, con el mismo tope.
+  const conBotin = cargarBotin(ganador, sumarChatarra(secuela.botin, choque.chatarra), capacidadCargaDe(ganador, caravanas));
 
   return {
     atacante: gano ? conBotin : secuela.perdedor,
@@ -1426,6 +1428,8 @@ export function asediarPlaza(
     relaciones: readonly RelacionPolitica[];
     /** Donde van los residentes de la plaza si cae y su Facción se queda sin ninguna (Doc 1.9b). Ausente = ninguno. */
     campamentosMercenarios?: readonly CampamentoMercenarios[];
+    /** Las del mundo: de aquí salen las adjuntas del ejército, para saber cuánta chatarra le cabe si conquista. */
+    caravanas?: readonly Caravana[];
   },
   heridos: ReadonlySet<string>,
   instante: Instante,
@@ -1448,7 +1452,12 @@ export function asediarPlaza(
   if (asedio.tropaDefensora.length > 0) {
     heroes = herir(heroes, asedio.conquistado ? defensores.map((h) => h.id) : ejercito.participantes.map((p) => p.heroeId), instante);
   }
-  let asentamientos = mundo.asentamientos.map((a) => (a.id === plaza.id ? asedio.defensor : a));
+  // La chatarra (Doc 4.2.1): al carro del ejército si conquista; si la plaza resiste, a su almacén.
+  const plazaTras = asedio.conquistado
+    ? asedio.defensor
+    : { ...asedio.defensor, almacen: Object.entries(asedio.chatarra).reduce((almacen, [recurso, cantidad]) => agregarRecurso(almacen, recurso, cantidad), asedio.defensor.almacen) };
+  const ejercitoTras = asedio.conquistado ? cargarBotin(asedio.ejercito, asedio.chatarra, capacidadCargaDe(asedio.ejercito, mundo.caravanas)) : asedio.ejercito;
+  let asentamientos = mundo.asentamientos.map((a) => (a.id === plaza.id ? plazaTras : a));
   let columnas: EjercitoConTropa[] = [];
   let campamentosMercenarios = [...(mundo.campamentosMercenarios ?? [])];
   let facciones = asedio.facciones;
@@ -1457,7 +1466,7 @@ export function asediarPlaza(
     facciones = registrarDerrota(facciones, asentamientos, plaza.faccionId, ejercito.faccionId);
   }
   return {
-    ejercito: conApartadas(asedio.ejercito, ejercito),
+    ejercito: conApartadas(ejercitoTras, ejercito),
     asentamientos,
     heroes,
     facciones,

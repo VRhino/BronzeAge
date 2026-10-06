@@ -6,7 +6,9 @@ import type { Ejercito, Heroe, ItemInstancia } from '../domain/types';
 import type { BattleResult, Botin, LadoId } from '../contratos/v1/dto';
 import { BATALLA, MILITAR, NIVEL_FACCION, REPUTACION } from '../constants';
 import type { Instante } from '../domain/tiempo';
+import { agregarRecurso } from '../engine/almacen';
 import { agendarReaparicionBandidos, botinDeBandidos } from '../engine/bandidos';
+import { chatarraDeMuertos, sumarChatarra } from '../engine/chatarra';
 import { aplicarConquista, desalojarResidentes } from '../engine/combate';
 import { capacidadCargaDe, cargarBotin, trasDerrota } from '../engine/ejercitos';
 import { aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from '../engine/faccion';
@@ -48,6 +50,7 @@ export function aplicarResultado(estado: GameSessionState, b: Batalla, r: Battle
   let siguiente: GameSessionState = { ...estado, heroes: herir(conLoQueTrajo(estado.heroes, b, r), perdedores, ahora) };
   siguiente = { ...siguiente, tecnologia: sumarContadores(siguiente.tecnologia, contadoresDeBatalla(estado, b, r.ganador)) };
   siguiente = consecuencias(siguiente, b, r.ganador, ahora);
+  siguiente = recogerChatarra(siguiente, b, r);
   siguiente = conXpDeFaccion(siguiente, b, r);
   return conBatalla(siguiente, { ...b, estado: 'aplicada', resultado: r, aplicadaEn: ahora });
 }
@@ -139,6 +142,28 @@ function consecuencias(estado: GameSessionState, b: Batalla, ganador: LadoId, ah
   if (contexto.tipo === 'caravana') return capturarCaravana(trasDerrotas, b, contexto.caravanaId);
   if (contexto.tipo === 'campamento_bandidos') return destruirCampamento(trasDerrotas, b, contexto.campamentoId, ahora);
   return trasDerrotas;
+}
+
+/**
+ * La chatarra de las bajas (Doc 4.2.1, Gran Fundición): el metal del equipo de TODOS los muertos, de los dos bandos, se
+ * la queda quien gana. Al carro de su primera columna, lo que quepa; si defiende una plaza y gana, a su almacén. Sin
+ * columna que la lleve (caravana o campamento de bandidos vencedores) se pierde.
+ */
+function recogerChatarra(estado: GameSessionState, b: Batalla, r: BattleResult): GameSessionState {
+  const tropaDe = new Map(escuadrasDe(b).map((e) => [e.squadId, e.tropaId]));
+  const chatarra = sumarChatarra(...r.porEscuadra.map((e) => chatarraDeMuertos(tropaDe.get(e.squadId) ?? '', e.muertos)));
+  if (Object.keys(chatarra).length === 0) return estado;
+  const contexto = b.ticket.contextoEstrategico;
+  if (contexto.tipo === 'asedio' && r.ganador === 'defensor') {
+    const plazaId = b.bloqueo.asentamientoId;
+    return {
+      ...estado,
+      asentamientos: estado.asentamientos.map((a) =>
+        a.id === plazaId ? { ...a, almacen: Object.entries(chatarra).reduce((almacen, [recurso, cantidad]) => agregarRecurso(almacen, recurso, cantidad), a.almacen) } : a
+      ),
+    };
+  }
+  return alCarroDe(estado, b, r.ganador, chatarra);
 }
 
 /** Lo que una batalla de Unity suma a los logros del servidor (Doc 6.3): lo mismo que un combate con números. */

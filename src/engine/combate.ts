@@ -6,6 +6,7 @@ import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { MILITAR, NIVEL_FACCION, OCUPACION, REPUTACION } from '../constants';
 import { aplicarCapacidadDeEdificio } from './almacen';
+import { chatarraDeBajas, sumarChatarra } from './chatarra';
 import { aplicarAjustesReputacion } from './reputacion';
 import { aplicarExperiencia, type AjusteExperiencia } from './faccion';
 import { multiplicadorDefensivoDeRecintos } from './muralla';
@@ -84,6 +85,8 @@ export interface ResultadoCombate {
   eventos: EventoCrudo[];
   /** Si el combate fue digno (`esCombateDigno`): solo entonces da experiencia de Facción. */
   digno: boolean;
+  /** La chatarra de las bajas de los dos bandos (Doc 4.2.1): se la queda quien gana, el llamador la reparte. */
+  chatarra: Record<string, number>;
 }
 
 /** ¿Combate DIGNO? El bando más débil tiene al menos `NIVEL_FACCION.ratioCombateDigno` del poder del más fuerte. */
@@ -140,6 +143,7 @@ export function resolverCombate(
     atacantes: atacantesResultado,
     defensores: defensoresResultado,
     digno: esCombateDigno(poderA, poderD),
+    chatarra: sumarChatarra(chatarraDeBajas(atacantes, atacantesResultado), chatarraDeBajas(defensores, defensoresResultado)),
     eventos: [
       {
         codigo: 'combate.resuelto',
@@ -565,6 +569,8 @@ export function asediarConEjercito(
   conquistado: boolean;
   /** El campamento del defensor tras el combate. */
   tropaDefensora: Escuadron[];
+  /** La chatarra de las bajas (Doc 4.2.1): al carro del ejército si conquista, al almacén de la plaza si resiste. */
+  chatarra: Record<string, number>;
 } {
   const defensores = tropaDefensora.filter((e) => e.cantidad > 0);
   const atacantes = ejercito.escuadrones.filter((e) => e.cantidad > 0);
@@ -593,6 +599,7 @@ export function asediarConEjercito(
       ],
       conquistado: false,
       tropaDefensora: [],
+      chatarra: {},
     };
   }
 
@@ -623,6 +630,7 @@ export function asediarConEjercito(
       eventos,
       conquistado: cae,
       tropaDefensora: [],
+      chatarra: {},
     };
   }
 
@@ -665,6 +673,7 @@ export function asediarConEjercito(
     eventos,
     conquistado,
     tropaDefensora: resultado.defensores,
+    chatarra: resultado.chatarra,
   };
 }
 
@@ -683,7 +692,7 @@ export function encuentroEntreEjercitos(
   b: EjercitoConTropa,
   facciones: Faccion[],
   rng: RandomFn
-): { a: EjercitoConTropa; b: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[] } {
+): { a: EjercitoConTropa; b: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[]; chatarra: Record<string, number> } {
   const vivosA = a.escuadrones.filter((e) => e.cantidad > 0);
   const vivosB = b.escuadrones.filter((e) => e.cantidad > 0);
   const resultado = resolverCombate(vivosA, vivosB, rng);
@@ -719,6 +728,7 @@ export function encuentroEntreEjercitos(
     b: { ...b, escuadrones: b.escuadrones.map((e) => actualizadosB.get(e.id) ?? e) },
     facciones: faccionesFinal,
     eventos,
+    chatarra: resultado.chatarra,
   };
 }
 

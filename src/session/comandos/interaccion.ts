@@ -221,6 +221,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
         facciones: [...estado.facciones],
         relaciones: estado.relaciones,
         campamentosMercenarios: estado.campamentosMercenarios,
+        caravanas: estado.caravanas,
       },
       heridos,
       ctx.instante,

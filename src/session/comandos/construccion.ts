@@ -71,7 +71,8 @@ export const anadirEdificioManualmente = comando<ParamsAnadirEdificio, void>((es
     
     tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas,
     ctx.ids.siguiente(),
-    consumoRacionDeEscuadrones(campamentoEn(estado, asentamiento))
+    consumoRacionDeEscuadrones(campamentoEn(estado, asentamiento)),
+    estado.asentamientos.some((a) => a.faccionId === asentamiento.faccionId && a.edificios.some((e) => e.tipo === 'granFundicion'))
   );
   return exito(conAsentamiento(estado, actualizado), [
     evento(ctx, {

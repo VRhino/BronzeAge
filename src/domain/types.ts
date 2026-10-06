@@ -41,7 +41,12 @@ export type RecursoTipo =
   | 'armaHierro'
   | 'armaHierroCalidad'
   | 'armaduraBronceCalidad'
-  | 'carroGuerra';
+  | 'carroGuerra'
+  // Chatarra de batalla (Doc 4.2.1, Gran Fundición): el metal de las bajas, un recurso por metal. No sale de ningún
+  // taller, solo de las batallas; la Gran Fundición la funde en lingote.
+  | 'chatarraCobre'
+  | 'chatarraBronce'
+  | 'chatarraHierro';
 
 /**
  * Los valores de `RecursoTipo`, en runtime — para validar por HTTP que un `recurso` recibido de un cliente es
@@ -79,6 +84,9 @@ const TODOS_LOS_RECURSOS: Record<RecursoTipo, true> = {
   armaHierroCalidad: true,
   armaduraBronceCalidad: true,
   carroGuerra: true,
+  chatarraCobre: true,
+  chatarraBronce: true,
+  chatarraHierro: true,
 };
 export const RECURSOS_TIPO = Object.keys(TODOS_LOS_RECURSOS) as RecursoTipo[];
 

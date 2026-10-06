@@ -85,7 +85,7 @@ El tipo de unidad reclutable depende de las **cuatro puertas** (Doc 6.1): la Era
 - Galería de tiro: reclutamiento de tropas a distancia (ver roster 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
 - Caballerizas: reclutamiento de caballería y carros de guerra (ver roster 5.8); pide `cria_caballar`. Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
 - Mina de cobre y Mina de hierro: extractores de cobre y de mineral de hierro (Doc 1.4/4.2.1), insumos de la Fundición. Extractores finitos con reemplazo automático al agotarse (mecanismo completo en Doc 4.2, incluye número fijo por tipo — NO ligado al nivel de asentamiento).
-- Gran Fundición: edificio de élite; requiere nivel de Facción 3 (Doc 4.2.1).
+- Gran Fundición: refundición, funde en lingotes la chatarra que dejan los soldados caídos en batalla; una por Facción, en su capital (Doc 4.2.1).
 
 **Materiales limitantes (clave anti-"ejército meta universal"):**
 - COBRE: relativamente abundante.
@@ -310,7 +310,7 @@ Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula h
 
 #### Derrota en campo abierto
 
-Quien pierde un choque en campo abierto entrega **la mitad de su carro** —igual una columna personal que un ejército, cuyo carro es el de todos sus miembros— y sus héroes quedan **heridos** 2 minutos (5.16.4). Con el carro vacío no hay botín: solo la herida.
+Quien pierde un choque en campo abierto entrega **la mitad de su carro** —igual una columna personal que un ejército, cuyo carro es el de todos sus miembros— y sus héroes quedan **heridos** 2 minutos (5.16.4). Con el carro vacío no hay botín: solo la herida. El vencedor se lleva además la **chatarra** de las bajas de los dos bandos, que no sale del carro del vencido sino de los caídos (Doc 4.2.1, Gran Fundición).
 
 Esa mitad pasa al carro del vencedor, gane quien gane, y **cabe solo lo que quepa**: sus carros más los de sus caravanas adjuntas. Lo que no cabe se pierde.
 

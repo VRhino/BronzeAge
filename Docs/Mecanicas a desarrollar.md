@@ -15,14 +15,11 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 |---|---|---|---|
 | 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1: solo (b) hecha |
 | 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
-| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fases 1 y 2 (falta el canal de tiempo real) |
-| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
-| 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
-| 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
-| 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
+| 30 | MILITAR | Batallas con héroes: lo que falta de este lado (canal de tiempo real, sustituir participante, botín, persecución) | ◐ ciclo de `Batalla` fases 1 y 2; falta el canal de tiempo real |
+| 32 | POLÍTICA | Anexión con aceptación de B y desarme del señor | ✘ sin código |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 
-**Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05) y la **curva de progresión inicial gradual** (antes §29, 2026-10-06).
+**Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06).
 
 **Pospuesto explícitamente, fuera de esta lista:** las **Eras IV y V** de tecnología con todo lo que cuelga de ellas (decisión del
 usuario, 2026-10-05; ver §20), el **ciclo de servidor de 12 meses + Maravilla + legado NPC** (antiguo §24, 2026-10-06; su texto está en `Docs/Ideas a diseñar.md`), el **Attack Timer** (Doc 5.6, decidido y aplazado a
@@ -89,126 +86,37 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 - **Clientes**: el panel de tecnología del cliente de administración está hecho (2026-10-02). Faltan, en BronzeAgeClient,
   el mismo panel, y en Conquest las definiciones de escuadra de las 15 tropas nuevas y los modelos de los edificios nuevos (CQ-006).
 
-## 30. Batallas con héroes: guarnición, campamento y héroes bot
+## 30. Batallas con héroes: lo que falta de este lado
 
-**Estado: reglas principales cerradas (canon Doc 5.15, 2026-09-13), `código: ◐`.** Desde la fase 2 del Héroe
-(rama `heroe-dominio`, 2026-09-14) las escuadras viven en su héroe y el campamento sigue el canon: se guarnece
-solo si todos los que van dentro residen ahí; conquistar deja la plaza sin guarnición, el ejército acampado a
-la puerta y a los residentes vencidos con su campamento a 0 en la plaza más cercana de su Facción (huérfanos si
-no queda ninguna); cambiar de residencia traslada el campamento; la escolta de una caravana perdida vuelve a 0
-al campamento; y el Liderazgo suma la escolta a lo que el héroe lleva en columna (Doc 3.13.4). Desde la fase 3,
-también la guarnición: cada residente asigna escuadras a la de su residencia dentro de su cupo, y un asedio lo
-defienden la guarnición y el loadout activo de los residentes que están dentro; el resto del campamento no
-defiende. Los héroes bot no usan la guarnición, defienden con su loadout.
+**Estado: canon cerrado (Doc 5.15 y 5.16), `código: ◐`.** El ciclo de `Batalla` con Unity (fases 1 y 2), el Héroe
+(fases 1-3 y Herido), la guarnición y el campamento están hechos; su historia vive en el checklist y en
+`Docs/Coordinacion/` (BA-001, BA-004). Sin servidores de batalla declarados (`SERVIDORES_BATALLA`) el asedio y el ataque
+a un campamento de bandidos se siguen resolviendo con números. Falta, **de este lado**:
 
-**Ciclo de `Batalla` con Unity (BA-001), fase 1 de 3 hecha en la rama `heroe-dominio` (2026-09-15).** Con
-servidores de batalla declarados (`SERVIDORES_BATALLA`; sin ellos todo sigue con números, decisión del usuario),
-un combate con algún héroe humano abre una `Batalla` en vez de resolverse: `atacar` (también contra una plaza, que es
-asediarla) y, contra un humano, el ejército bot que llega a su plaza o la columna bot que alcanza a su presa
-(`session/batallas.ts`). El ticket se congela con la forma
-del contrato, las escuadras quedan reservadas, y lo que interviene se bloquea sin parar el mundo (Doc 5.15.1: la
-plaza asediada no abre puertas ni da órdenes, las columnas y la caravana no se mueven ni se pueden atacar, y la
-batalla se ve en el mapa en su lugar). Se unen compañeros de Facción mientras quede sitio (`unirseABatalla`),
-quien la inició la cancela antes de empezar (`cancelarBatalla`), y si vence un plazo queda `fallida` sin castigo.
-Una Facción NPC con algo en batalla no gobierna mientras dura (`ponytail:`, por plaza si se nota). Conquest habla por
-`/v1/batallas/*` con su propia credencial (`server/rutas/batallas.ts`: pendientes, ticket, incorporaciones,
-asignación, inicio y tokens, validados contra `contratos.schema.json`), y cada jugador recoge su token por
-`GET /v1/jugador/partidas/:gameId/batallas/:battleId/asignacion`. Fase 2 hecha el mismo día
-(`session/resultadoBatalla.ts`, `POST /v1/batallas/:battleId/resultado`): el checklist de doc 02 §3.3 entero o nada;
-cada escuadra queda con sus supervivientes y suma su XP, cada héroe suma su XP y su botín, y el nivel no cambia
-hasta que Conquest publique su curva (CQ-001); el bando que pierde queda herido; en mundo abierto pierde la mitad
-del carro, que va a la primera columna del que gana; y según el contexto cae la plaza (con el saqueo de siempre),
-la caravana o el campamento. Repetir el mismo resultado no cambia nada. Los objetos del botín se aceptan sin
-catálogo, como `visual` y a precio 0 (decisión del usuario, 2026-09-15; CQ-004). Falta: el canal de tiempo real
-(fase 3); sustituir un participante con una revisión nueva del ticket, que no tiene aún quién la dispare; y el
-botín para los que se unieron al bando ganador, que hoy va entero a la primera columna.
+- **Canal de tiempo real de la batalla** (fase 3 del ciclo).
+- **Sustituir un participante** con una revisión nueva del ticket: hoy no hay quién la dispare.
+- **Botín para quien se unió al bando ganador**: hoy va entero a la primera columna.
+- **Persecución sin recalcular la ruta** hacia la presa, aunque el Doc 5.12.3 dice que sí: hoy solo marca a quién se
+  ataca (bot) o de quién avisar (humano) si se cruzan a 15.
 
-Sigue distinto del canon, mientras no haya servidores de batalla: el asedio se resuelve con números
-(`iniciarAsedio`, `engine/combate.ts`); lo mismo el ataque a un campamento de bandidos, que se hace con la columna
-que llega a él (`atacar`, Doc 1.9; los bots, con `cazarBandidos`). La persecución no recalcula la ruta hacia la presa, aunque Doc 5.12.3 dice que
-sí: hoy solo marca a quién se ataca (bot) o de quién avisar (humano) si se cruzan a 15. CQ-002 en Conquest para la
-IA de escuadras sin héroe y de héroes bot; CQ-005 para las incorporaciones a una batalla en curso.
+**Esperan a Conquest** (propuestas en `Conquest_prototype/Docs/Coordinacion/propuestas/`): XP y nivel de escuadra y de
+héroe, y de dónde salen los puntos de atributo (CQ-001); la IA de escuadras sin héroe y de héroes bot (CQ-002); el
+botín y el catálogo de objetos, y con ellos perks, `equipar` y las preguntas que deja el botín (consumibles, equipo
+perdido, compatibilidad arma/armadura, fuentes de objetos fuera de batalla) (CQ-004); y las incorporaciones a una
+batalla en curso (CQ-005). Mientras tanto, `experiencia` de escuadra suma lo que sumaba la veteranía y `nivel` se queda
+en 1. En el cliente de jugador, la pantalla definitiva de crear héroe, el equipo y la ficha de los héroes ajenos
+(`BronzeAgeClient`, `docs/Features_Pendientes.md` §0).
 
-Sin resolver:
+## 32. Anexión con aceptación y desarme del señor
 
-- La XP de las escuadras en batallas que se resuelven con números: hoy `experiencia` suma lo que sumaba la
-  veteranía (+1 al ganar, +0,5 al perder) y `nivel` se queda en 1; la curva se fija cuando Conquest publique
-  la suya (CQ-001).
+**Estado: acordado en el triaje del 2026-10-06, `código: ✘`.** Dos huecos entre el canon (Doc 2) y el código:
 
-## 31. Modelo de Héroe
-
-**Estado: reglas principales cerradas (canon Doc 5.16 y glosario, 2026-09-11 y 2026-09-13), `código: ◐`.**
-Datos y orden de implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004.
-Hecho: el contrato (`src/contratos/v1/`) y, en la rama `heroe-dominio` (2026-09-14), la fase 1 —`Heroe` en el
-dominio con su identidad, `heroeId` como dueño en todo el motor, `crearHeroe`, y Facciones NPC creadas por el
-admin con héroes bot— y la fase 2 —las escuadras viven en `Heroe.escuadrones` con su `contenedor` (campamento,
-ejército o escolta), nivel y experiencia en vez de veteranía, sin `heridoHasta`; ejércitos y caravanas guardan
-solo ids—. La fase 3 añade la progresión del héroe (nace como en Conquest: nivel 1, sin puntos, 500 de bronce y el
-loadout "Default"), `repartirPuntos` (solo atributos), `guardarLoadout`/`borrarLoadout`,
-`asignarGuarnicion`/`retirarGuarnicion`, y en la proyección `heroe` (con el coste de Liderazgo de cada escuadra y la guarnición ocupada), `heroesVisibles`
-(`HeroePublico`) y `nombresDeCompaneros`. Y el estado Herido (Doc 5.16.4, 2026-09-14), que sustituye a la Tregua de
-columna: 2 minutos para todos los héroes del bando que pierde cualquier batalla; mientras dura no persiguen, no se
-les persigue ni entran en batallas, y sus escuadras no combaten. Falta: los perks y `equipar`, que esperan a los
-catálogos de Conquest (CQ-004; decisión del usuario 2026-09-14); de dónde salen los puntos de atributo (en Conquest
-ningún nivel los da) y la subida de nivel (CQ-001); y en el cliente de jugador (`BronzeAgeClient`, que ya tiene el
-panel del héroe y enseña el Herido) la pantalla de crear héroe definitiva, el equipo y la ficha de los héroes
-ajenos (su `docs/Features_Pendientes.md` §0).
-
-Sin resolver:
-
-- Lo que el botín deja abierto (preguntado a Conquest en CQ-004): si en batalla se gastan consumibles o se
-  pierde equipo, quién aplica la compatibilidad arma/armadura al equipar, y si el héroe tiene fuentes de
-  objetos y monedas fuera de la batalla (tienda, recompensas).
-
-## 32. Cabos sueltos de diseño político
-
-**Estado: preguntas abiertas que el canon (Docs 2 y 4) no cierra, `código: ✘`.** Piezas pequeñas, sin
-mecánica propia:
-
-- **Sucesión con Liga** (Doc 2.2): si el Rey de una Liga abandona su Facción, ¿se hereda el vasallaje? ¿se
-  re-vota en una federación? Depende de la votación real.
-- **Desarme del señor** (Doc 2.4): la condición exacta por la que un señor cuenta como "desarmado" y sus
-  vasallos quedan libres.
-- **Fusión/anexión** (Doc 2.6): si requiere aceptación mutua explícita, o si la anexión se puede forzar con
-  suficiente diferencia de poder.
-- **Reputación** (Doc 2.7): el valor de cada evento, la velocidad de decaimiento y los umbrales de cada uso.
-- **Cupo de nivel 4 y 5** (Doc 2.2.1): hoy no tienen cupo por Facción; falta decidir si deben tenerlo y con
-  qué curva.
-- **Catálogo de políticas** (Doc 4.4): las políticas concretas de cada pool más allá de las que existen, y si
-  son excluyentes entre sí dentro de un slot.
-- **Voz en política exterior y protección militar explícita** (Doc 2.5, antes entrada 26): la «voz exterior» se reabrirá con la votación real; la «protección» es lo que ya hacen la guarnición y la defensa de la plaza.
-- **Redistribución de Vivienda** (idea): una política que cambie la proporción fija 15/5 de Pesants/Artesanos
-  de cada Vivienda. Falta si desplaza cupo de una clase a otra o añade cupo extra, sus valores y de qué cargo
-  es (Maestro de Obras o Sacerdote).
-
-## 33. Cabos sueltos de diseño comercial
-
-**Estado: preguntas abiertas que el canon (Docs 1 y 3) no cierra.**
-
-- **Caravanas militar y de contrabando** (Doc 3.6): existen en `CARAVANA_CATALOGO` con capacidad y velocidad,
-  pero el motor nunca las instancia. Falta conectarlas: la militar, a llevar equipo antes de un asedio; la de
-  contrabando, a una mecánica de detección reducida.
-- **Riqueza acumulada** (Doc 3.5): en qué se usa el oro que las plazas acumulan por comisiones.
-- **Comisión intermedia** para Facciones aliadas o vasallas de la misma Liga (Doc 3.5 y §26).
-- **Bonus por distancia en el mostrador** (Doc 3.8): solo aplica al trueque; aplicarlo a las órdenes de
-  mercado es una decisión de diseño abierta.
-- **Intercambio directo entre jugadores** (Doc 3.7): cara a cara en mitad del mapa, sin plaza ni acuerdo de
-  por medio. No existe.
-- **Cortar rutas como guerra económica** (Doc 3.9): que el combate de caravanas interactúe con los acuerdos en
-  curso.
-- **Retirada del almacén al salir** (Doc 1.10.2): que el Tesorero pueda fijar cuánto material puede llevarse
-  cada héroe.
-
-## 35. Cabos sueltos de mundo, población y militar
-
-- **Campamentos de bandidos** (Doc 1.9): si su poder debería escalar con la región o con la cercanía de
-  Facciones fuertes, y si deberían bloquear la explotación del bosque que ocupan.
-- **Cola de prioridad de reclutamiento** (Doc 4.1): con qué criterio se reparte el pool de población cuando la
-  demanda de reclutas lo supera.
-- **Gran Fundición** (Doc 4.2.1, 5.7): está en el catálogo (nivel de Facción 3) pero no tiene función desde que
-  la Nobleza dejó de reclutarse; falta decidir su papel junto a la Fundición.
-- **Armas de asedio** (Doc 4.2.1): la Carpintería está pensada para arietes y torres de asedio, que Fase 0 no
-  tiene.
+- **Anexión** (Doc 2.6): el canon la llama «voluntaria», pero el comando `anexionar` solo exige autoridad en la
+  Facción absorbente (`session/comandos/autorizacion.ts`): B no consiente nada. Debe haber **aceptación de B**; falta el
+  mecanismo (propuesta y respuesta, como las demás relaciones, o consentimiento firmado por su Rey o Embajador).
+- **Desarme del señor** (Doc 2.4, ruptura 4): un señor está «desarmado» cuando su Facción **se queda sin
+  asentamientos**; en ese momento sus vasallos quedan libres. Hoy no hay código ni para esa liberación ni para la
+  que llega por destrucción del señor.
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
 

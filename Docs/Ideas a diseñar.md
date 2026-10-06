@@ -2,7 +2,7 @@
 
 Ideas **aparcadas a propósito**: no se van a desarrollar ahora, pero no se quieren perder. No tienen plan ni código. Cuando
 una se retoma, pasa a `Docs/Mecanicas a desarrollar.md` (con su diseño) o se descarta aquí. Los números de entrada se conservan
-de `Mecanicas a desarrollar.md`. Aparcadas el 2026-10-05 (la cultura, el 2026-10-06).
+de `Mecanicas a desarrollar.md`. Aparcadas el 2026-10-05 (la cultura y las entradas 32 y 33, el 2026-10-06).
 
 | # | Idea |
 |---|---|
@@ -11,6 +11,8 @@ de `Mecanicas a desarrollar.md`. Aparcadas el 2026-10-05 (la cultura, el 2026-10
 | 19 | El mapa político como entidad |
 | 21 | Los 4 gremios escasos a nivel de servidor |
 | 23 | Materiales exóticos |
+| 32 | Cabos políticos aparcados: re-voto en federación, voz exterior, cupo de nivel 4-5, redistribución de Vivienda |
+| 33 | Comercio: caravanas militar y de contrabando, intercambio directo, retirada del almacén por el Tesorero |
 | 24 | Ciclo de servidor de 12 meses + Maravilla + legado NPC (pospuesto con las Eras IV-V) |
 | 43 | Cultura del asentamiento (y audio) |
 
@@ -34,7 +36,7 @@ Un jugador sin registro usa `LIDERAZGO.base`.
 
 Falta decidir qué hace subir el liderazgo (combatir, ganar, tiempo al mando, cargo militar…) y con qué curva.
 Los **escuadrones** progresan por nivel y experiencia (Doc 5.16.3), sin cambiar nunca de tropa (Doc 5.8); el
-motor aún usa veteranía (§31). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
+motor aún usa veteranía en las batallas con números (Doc 5.16). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
 fuente.
 
 ## 19. El mapa político como entidad
@@ -119,3 +121,30 @@ Maravilla, y la Facción ganadora persiste como Facción-legado NPC de solo mant
 Requiere infraestructura de servidor / multi-instancia (reset, generación del nuevo mapa, destino de las
 Facciones no ganadoras, si la legado es atacable). Nada de eso tiene código. Ver la lista completa en el
 Roadmap.
+
+## 32. Cabos políticos aparcados
+
+Salen del triaje de los cabos sueltos políticos (2026-10-06). Ninguno tiene código.
+
+- **Re-voto en federación** (Doc 2.2): si el Rey de una Liga formada por alianza abandona su Facción, ¿se re-vota?
+  (El vasallaje no se hereda ni se pierde: es una relación entre Facciones y el trono pasa al siguiente ciudadano.)
+  Depende de la votación real, que no existe.
+- **Voz en política exterior** (Doc 2.5): se reabre con la votación real. La «protección militar explícita» ya la
+  dan la guarnición y la defensa de la plaza.
+- **Cupo de nivel 4 y 5** (Doc 2.2.1): hoy no tienen cupo por Facción; falta decidir si deben tenerlo y con qué
+  curva. Pende de la Era V (pospuesta).
+- **Redistribución de Vivienda**: una política que cambie la proporción fija 15/5 de Pesants/Artesanos de cada
+  Vivienda. Falta si desplaza cupo de una clase a otra o añade cupo extra, sus valores y de qué cargo es (Maestro de
+  Obras o Sacerdote).
+
+## 33. Comercio aparcado
+
+Sale del triaje de los cabos sueltos comerciales (2026-10-06).
+
+- **Caravanas militar y de contrabando** (Doc 3.6): existen en `CARAVANA_CATALOGO` con capacidad y velocidad, pero el
+  motor nunca las instancia. Falta conectarlas: la militar, a llevar equipo antes de un asedio (depende del equipo
+  de asedio, §20); la de contrabando, a una mecánica de detección reducida.
+- **Intercambio directo entre jugadores** (Doc 3.7): cara a cara en mitad del mapa, sin plaza ni acuerdo de por
+  medio. No existe.
+- **Retirada del almacén al salir** (Doc 1.10.2): que el Tesorero pueda fijar cuánto material puede llevarse cada
+  héroe.

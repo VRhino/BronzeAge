@@ -1644,7 +1644,9 @@ export function anadirEdificioManualmente(
   adoptadas: readonly TecnologiaId[],
   contador = 0,
   /** Ración de la guarnición, para la reserva de trigo (ver `reservaDinamicaConstruccion`). */
-  consumoTropasPorMinuto = 0
+  consumoTropasPorMinuto = 0,
+  /** ¿Otro asentamiento de la Facción ya tiene (o está levantando) su Gran Fundición? Solo cabe una por Facción. */
+  faccionYaTieneGranFundicion = false
 ): Asentamiento {
   if (!cargoOcupado(asentamiento, cargo)) {
     throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para añadir edificios a la cola.`);
@@ -1684,10 +1686,15 @@ export function anadirEdificioManualmente(
       `Este asentamiento ya tiene el m\u00e1ximo de ${tipo} para su nivel (${MAXIMO_TRANSFORMACION_POR_NIVEL[nivelOperativo]}).`
     );
   }
-  if (tipo === 'granFundicion' && faccion.nivel < EDIFICIO_CATALOGO.granFundicion.nivelFaccionMinimo) {
-    throw new ConstruccionManualInvalidaError(
-      `Requiere nivel de Facción ${EDIFICIO_CATALOGO.granFundicion.nivelFaccionMinimo} (actual: ${faccion.nivel}).`
-    );
+  if (tipo === 'granFundicion') {
+    if (faccion.nivel < EDIFICIO_CATALOGO.granFundicion.nivelFaccionMinimo) {
+      throw new ConstruccionManualInvalidaError(
+        `Requiere nivel de Facción ${EDIFICIO_CATALOGO.granFundicion.nivelFaccionMinimo} (actual: ${faccion.nivel}).`
+      );
+    }
+    // Una por Facción y en su capital (Doc 4.2.1): la capital es donde el Rey concentra el poder, y la refundición es de ella.
+    if (capital?.id !== asentamiento.id) throw new ConstruccionManualInvalidaError('La Gran Fundición solo se construye en la capital de la Facción.');
+    if (faccionYaTieneGranFundicion) throw new ConstruccionManualInvalidaError('Tu Facción ya tiene (o está levantando) su Gran Fundición.');
   }
   const enColaActual = asentamiento.edificios.filter((e) => e.estado === 'en_cola').length;
   if (enColaActual >= NECESIDADES.maximoEnCola) {

@@ -415,10 +415,25 @@ export const EDIFICIO_CATALOGO = {
   // Corral (Doc 4.2.1, rediseño de progreso Fase 0): extractor de livestock, mismo patrón que cantera/minas —
   // liga a un nodo finito de livestock (Doc 1.4), con reemplazo automático al agotarse (ver EXTRACCION_MAXIMOS).
   corral: { costo: { madera: 30 }, tiempoConstruccionMinutos: 240, produccionBaseLivestock: 3, trabajadoresRequeridos: 4 },
-  // "Único edificio de tier élite, exclusivo de asentamientos/Facciones de mayor nivel" — gate por nivel de Facción.
-  // Se mantiene sin cambios (Doc 4.2, rediseño de progreso): queda para iteraciones posteriores la integración
-  // con la nueva Fundición.
-  granFundicion: { costo: { madera: 150, piedra: 100, oro: 50 }, tiempoConstruccionMinutos: 2880, nivelFaccionMinimo: 3 },
+  // Refundición (Doc 4.2.1, decidido 2026-10-06): funde la CHATARRA de las batallas (`CHATARRA`) en lingotes, 1 a 1 — la
+  // pérdida ya la pone `CHATARRA.fraccion` al recogerla. NO consume equipo de recluta: eso formaría un bucle con la
+  // Armería. Una por Facción y en su capital, de nivel de asentamiento 4; sin tecnología. Cifras PLACEHOLDER.
+  granFundicion: {
+    costo: { madera: 150, piedra: 100, oro: 50 },
+    tiempoConstruccionMinutos: 2880,
+    nivelFaccionMinimo: 6,
+    requisitoNivelAsentamientoConstruccion: 4,
+    niveles: {
+      1: {
+        trabajadoresRequeridos: 12,
+        recetas: [
+          { produce: 'lingoteCobre', produccionBase: 4, consumePorUnidad: { chatarraCobre: 1 } },
+          { produce: 'lingoteBronce', produccionBase: 4, consumePorUnidad: { chatarraBronce: 1 } },
+          { produce: 'lingoteHierro', produccionBase: 4, consumePorUnidad: { chatarraHierro: 1 } },
+        ],
+      },
+    } as Record<number, NivelEdificioTransformacion>,
+  },
 
   // --- Edificios de transformación (Doc 4.2.1, rediseño de progreso Fase 0): auto-construcción (sin gate de
   // nivel para la construcción BASE — solo las mejoras de nivel interno lo exigen), disparan Artesanos (Doc
@@ -1465,6 +1480,13 @@ export const COMISION = {
   tasaExterna: 0.08,
   bonusPorDistanciaMax: 1.5,
   distanciaParaBonusMax: 600,
+};
+
+/** Chatarra de batalla (Doc 4.2.1, Gran Fundición): por cada baja, esta fracción del lingote que costó su equipo
+ * (`engine/chatarra.ts`); el cuero y la madera no se recuperan. La recoge el vencedor, de las bajas de los dos bandos.
+ * PLACEHOLDER: a calibrar con batch (`Docs/Mecanicas a balancear.md`). */
+export const CHATARRA = {
+  fraccion: 0.5,
 };
 
 // Red de caminos (Doc 1.6, `Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`). Cifras PLACEHOLDER.
