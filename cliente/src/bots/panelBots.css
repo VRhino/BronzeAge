@@ -609,3 +609,14 @@
 
 .bots-cruce-dato.bots-aviso-txt strong { color: var(--bots-aviso); }
 .bots-cruce-dato.bots-ok-txt strong { color: var(--bots-ok); }
+
+.bots-memoria-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bots-mio {
+  border-color: var(--admin-accent);
+  background: var(--admin-accent-soft);
+}

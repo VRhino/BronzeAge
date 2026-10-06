@@ -4,7 +4,10 @@
 // El esqueleto se pinta una vez (para no perder el foco de los campos ni los filtros al llegar un estado nuevo) y cada sección
 // se repinta por separado, con un pequeño retardo si lo que llega es un flujo (la actividad en vivo).
 import type { AccionDeBot, BotInfo, ConfigBots, EstadoServicio, FaseBot, FaseServicio, ModoBot, PerfilBot, TipoPerfil } from '@motor/bots/control/contrato';
+import type { Sigilo } from '@motor/contratos/v1/dto';
 import { ClienteControl, type EstadoConexion } from './clienteControl';
+import { htmlSubpestanas } from '../ui/subpestanas';
+import { htmlNombreConSigilo } from '../sigilo/sigilo';
 import './panelBots.css';
 
 const CLAVE_URL = 'bots.url';
@@ -81,6 +84,8 @@ function numeroDe(nombre: string): number {
 /** Lo que el panel sabe del servidor del juego por el cliente admin (que ya lo lee): sus héroes bot, para cruzarlos con el registro. */
 export interface OrigenDeHeroes {
   heroesBot(): { gameId: string; heroes: { id: string; nombre: string }[] } | undefined;
+  /** Facciones y plazas de la partida, para poner nombre (y sigilo) a los ids de la memoria y las pizarras. */
+  nombres(): { facciones: { id: string; nombre: string; sigilo?: Sigilo }[]; plazas: { id: string; nombre: string }[] };
 }
 
 type Sub = 'servicio' | 'flota' | 'llegadas' | 'facciones' | 'actividad';
@@ -106,7 +111,7 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
   let registros: { nivel: 'info' | 'error'; texto: string; en: number }[] = [];
   let sub: Sub = SUBS.some((x) => x.id === guardado(sessionStorage, CLAVE_SUB)) ? (guardado(sessionStorage, CLAVE_SUB) as Sub) : 'servicio';
   let seleccionado: string | undefined;
-  let memoriaVolcada: { heroeId: string; json: string } | undefined;
+  let memoriaVolcada: { heroeId: string; datos: Memoria } | undefined;
   let armado: { clave: string; timer: ReturnType<typeof setTimeout> } | undefined;
   let aviso: { ok: boolean; texto: string; timer: ReturnType<typeof setTimeout> } | undefined;
   let primeraVez = true;
@@ -169,7 +174,7 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
     <div class="bots-root">
       <section class="detail-section bots-card" id="bots-conexion"></section>
       <div class="bots-aviso" id="bots-aviso" hidden></div>
-      <div class="settlement-detail-tabs" id="bots-subtabs" role="tablist"></div>
+      <div id="bots-subtabs"></div>
       <div class="bots-contenido" id="bots-contenido">
         <div class="bots-subpanel" data-sub="servicio" hidden>
           <div class="bots-kpis" id="bots-kpis"></div>
@@ -254,11 +259,14 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
   function pintarSubtabs(): void {
     const e = estado;
     const cuenta: Partial<Record<Sub, string>> = e
-      ? { flota: String(e.bots.length), llegadas: `${e.llegadas.hechas}/${e.llegadas.plan.length}`, facciones: String(e.pizarras.length) }
+      ? { flota: String(e.bots.length), llegadas: `${e.llegadas.hechas}/${e.llegadas.plan.length}`, facciones: String(agruparPizarras().facciones.length) }
       : {};
-    $('bots-subtabs').innerHTML = SUBS.map(
-      (x) => `<button type="button" role="tab" class="settlement-detail-tab ${x.id === sub ? 'active' : ''}" data-sub-tab="${x.id}" aria-selected="${x.id === sub}">${x.texto}${cuenta[x.id] ? ` <span class="badge">${cuenta[x.id]}</span>` : ''}</button>`
-    ).join('');
+    $('bots-subtabs').outerHTML = htmlSubpestanas(
+      SUBS.map((x) => ({ ...x, insignia: cuenta[x.id] ?? '' })),
+      sub,
+      'Secciones del panel de bots',
+      'bots-subtabs'
+    );
   }
 
   /** Un flujo (la actividad en vivo) no repinta a cada mensaje: se agrupa. */
@@ -550,8 +558,8 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
         <div class="kv-row"><span>Perfil</span><strong>${perfilTexto(b.perfil)}${lider}</strong></div>
         <div class="kv-row"><span>Fase</span><strong>${FASE_BOT[b.fase]}</strong></div>
         <div class="kv-row"><span>Plan</span><strong>${esc(b.plan ?? '—')}</strong></div>
-        <div class="kv-row"><span>Facción</span><strong>${esc(b.faccionId ?? '—')}</strong></div>
-        <div class="kv-row"><span>Residencia</span><strong>${esc(b.residenciaId ?? '—')}</strong></div>
+        <div class="kv-row"><span>Facción</span><strong>${b.faccionId ? mundo().faccion(b.faccionId) : '—'}</strong></div>
+        <div class="kv-row"><span>Residencia</span><strong>${b.residenciaId ? esc(mundo().nombre(b.residenciaId)) : '—'}</strong></div>
         <div class="kv-row"><span>Columna</span><strong>${esc(b.columnaId ?? '—')}</strong></div>
         <div class="kv-row"><span>Pensó</span><strong>${b.pensamientos} ${b.pensamientos === 1 ? 'vez' : 'veces'}</strong></div>
       </div>
@@ -571,27 +579,135 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
         <button type="button" data-accion="volcarMemoria" ${activo && conexion === 'conectado' ? '' : 'disabled'}>Ver memoria</button>
         ${manejable ? boton(`retirar:${b.heroeId}`, 'Retirar', '⚠ Confirmar retirada') : ''}
       </div>
-      ${memoriaVolcada?.heroeId === b.heroeId ? `<pre class="bots-memoria">${esc(memoriaVolcada.json)}</pre>` : ''}`;
+      ${memoriaVolcada?.heroeId === b.heroeId ? `<div class="detail-sub"><span class="bots-sub">Memoria</span>${htmlMemoria(memoriaVolcada.datos)}</div>` : ''}`;
+  }
+
+  // --- Nombres: lo que el servicio llama por id, el panel lo dice por nombre ---
+
+  const SIN_FACCION = 'sin-faccion:';
+
+  function mundo() {
+    const m = origen.nombres();
+    const bots = new Map((estado?.bots ?? []).map((b) => [b.heroeId, b.nombre]));
+    const facciones = new Map(m.facciones.map((f) => [f.id, f]));
+    const plazas = new Map(m.plazas.map((x) => [x.id, x.nombre]));
+    return {
+      facciones,
+      /** Nombre legible de un id de héroe, Facción o plaza; el resto (columnas, campamentos) se deja como viene. */
+      nombre: (id: string): string => bots.get(id) ?? facciones.get(id)?.nombre ?? plazas.get(id) ?? id,
+      faccion: (id: string): string => {
+        const f = facciones.get(id);
+        return f ? htmlNombreConSigilo({ nombre: esc(f.nombre), sigilo: f.sigilo }, 18) : esc(id);
+      },
+    };
+  }
+
+  /** Las pizarras de Facciones de verdad, aparte de los bots solitarios sin Facción (una pizarra por bot) y de las vacías. */
+  function agruparPizarras() {
+    const lista = estado?.pizarras ?? [];
+    const facciones = lista.filter((p) => !p.id.startsWith(SIN_FACCION) && p.bots.length > 0);
+    const solitarios = lista.filter((p) => p.id.startsWith(SIN_FACCION)).flatMap((p) => p.bots);
+    const vacias = lista.filter((p) => !p.id.startsWith(SIN_FACCION) && p.bots.length === 0).length;
+    return { facciones, solitarios, vacias };
   }
 
   function pintarPizarras(): void {
     const el = $('bots-pizarras');
-    const lista = estado?.pizarras ?? [];
-    const nombres = new Map((estado?.bots ?? []).map((b) => [b.heroeId, b.nombre]));
-    el.innerHTML = `<h3 data-i="📋">Pizarras de Facción <span class="badge">${lista.length}</span></h3>${
-      lista.length
-        ? lista
-            .map(
-              (p) => `<div class="bots-pizarra">
-        <div class="bots-pizarra-cab"><b>${p.id.startsWith('sin-faccion:') ? 'Sin Facción' : esc(p.id)}</b> <span class="badge">${p.bots.length} bot${p.bots.length === 1 ? '' : 's'}</span></div>
-        <div class="chip-row">${p.bots.map((id) => `<span class="chip">${esc(nombres.get(id) ?? id)}</span>`).join('')}</div>
+    const { facciones, solitarios, vacias } = agruparPizarras();
+    const m = mundo();
+    const chips = (ids: string[]) => `<div class="chip-row">${ids.map((id) => `<span class="chip" title="${esc(id)}">${esc(m.nombre(id))}</span>`).join('')}</div>`;
+    const tarjeta = (p: (typeof facciones)[number]) => `<div class="bots-pizarra">
+        <div class="bots-pizarra-cab"><b>${m.faccion(p.id)}</b> <span class="badge">${p.bots.length} bot${p.bots.length === 1 ? '' : 's'}</span></div>
+        ${chips(p.bots)}
         <div class="bots-pizarra-datos"><span>Bandidos vistos <b>${p.bandidos}</b></span><span>Salidas abiertas <b>${p.salidas}</b></span><span>Anillos explorados <b>${p.explorados}</b></span></div>
-        ${p.encargos.length ? `<div class="chip-row">${p.encargos.map((x) => `<span class="chip" title="encargo de ${esc(nombres.get(x.heroeId) ?? x.heroeId)}">${esc(x.clave)} → ${esc(nombres.get(x.heroeId) ?? x.heroeId)}</span>`).join('')}</div>` : ''}
-      </div>`
-            )
-            .join('')
-        : '<p class="legend-note">Los bots de una Facción se cuentan aquí lo que van viendo (bandidos, quién va a qué).</p>'
-    }`;
+        ${p.encargos.length ? `<div class="chip-row">${p.encargos.map((x) => `<span class="chip" title="encargo de ${esc(m.nombre(x.heroeId))}">${esc(x.clave)} → ${esc(m.nombre(x.heroeId))}</span>`).join('')}</div>` : ''}
+      </div>`;
+    el.innerHTML = `<h3 data-i="📋">Pizarras de Facción <span class="badge">${facciones.length}</span></h3>${
+      facciones.length
+        ? facciones.map(tarjeta).join('')
+        : '<p class="legend-note">Los bots de una Facción se cuentan aquí lo que van viendo (bandidos, quién va a qué). Aún no hay ninguna Facción con bots.</p>'
+    }${
+      solitarios.length
+        ? `<div class="bots-pizarra"><div class="bots-pizarra-cab"><b>Sin Facción</b> <span class="badge">${solitarios.length} bot${solitarios.length === 1 ? '' : 's'}</span></div>${chips(solitarios)}<p class="legend-note">Bots solitarios que aún no tienen Facción: cada uno lleva su propia pizarra hasta que funda o entra en una.</p></div>`
+        : ''
+    }${vacias ? `<p class="legend-note">${vacias} pizarra${vacias === 1 ? '' : 's'} sin bots, no se muestra${vacias === 1 ? '' : 'n'}.</p>` : ''}`;
+  }
+
+  // --- Memoria de un bot (la respuesta de `volcarMemoria`, pintada) ---
+
+  type Memoria = {
+    heroeId: string;
+    conectado?: boolean;
+    sesiones?: [number, number][];
+    diag?: { nombre?: string; fase?: FaseBot; modo?: ModoBot; retirado?: boolean; faccionId?: string; vistaEn?: number; pensamientos?: number };
+    memoria?: {
+      plan?: Record<string, unknown> & { tipo: string };
+      columnaId?: string;
+      residenciaId?: string;
+      esperas?: [string, number][];
+      solicitud?: { faccionId: string; desde: number };
+      esperaFundar?: number;
+      dentroDe?: string;
+      pizarra?: string;
+    };
+  };
+
+  function textoDePlan(plan: NonNullable<NonNullable<Memoria['memoria']>['plan']>, nombre: (id: string) => string): string {
+    const n = (v: unknown) => `<b>${esc(nombre(String(v)))}</b>`;
+    switch (plan.tipo) {
+      case 'cazar': return `Cazar el campamento de bandidos ${n(plan.campamentoId)}`;
+      case 'campana': return `Campaña contra la plaza ${n(plan.plazaId)}`;
+      case 'explorar': return `Explorar la plaza ${n(plan.plazaId)}`;
+      case 'mudarse': return `Mudarse a ${n(plan.plazaId)}`;
+      case 'anillo': return `Recorrer el anillo de bandidos de ${n(plan.campamentoId)}${plan.explorar ? ' (explorando sin tropa)' : ''}${plan.salio ? ' · ya salió de la puerta' : ''}`;
+      case 'fundar': {
+        const sitio = plan.sitio as { x: number; y: number } | undefined;
+        const descartados = (plan.descartados as unknown[] | undefined)?.length ?? 0;
+        return `Llevar la caravana ${n(plan.caravanaId)} a fundar${sitio ? ` en (${Math.round(sitio.x)}, ${Math.round(sitio.y)})` : ' (aún sin sitio)'}${descartados ? ` · ${descartados} sitio${descartados === 1 ? '' : 's'} descartado${descartados === 1 ? '' : 's'}` : ''}`;
+      }
+      case 'unirse': return `Unirse a la columna ${n(plan.ejercitoId)} para ${plan.para === 'fundar' ? 'fundar' : 'cazar'}${plan.salio ? ' · ya salió de la puerta' : ''}`;
+      default: return esc(plan.tipo);
+    }
+  }
+
+  function htmlMemoria(d: Memoria): string {
+    const m = mundo();
+    const mem = d.memoria ?? {};
+    const diag = d.diag ?? {};
+    // Referencia de tiempo: el último instante de mundo en que el bot miró (las esperas se cuentan contra él).
+    const ref = diag.vistaEn;
+    const falta = (hasta: number) => (ref === undefined ? '—' : hasta <= ref ? 'ya vencida' : `faltan ${duracion((hasta - ref) / 60_000)}`);
+    const desde = (en: number) => (ref === undefined ? '—' : `hace ${duracion(Math.max(0, ref - en) / 60_000)}`);
+    const fila = (k: string, v: string) => `<div class="kv-row"><span>${k}</span><strong>${v}</strong></div>`;
+    const faccionId = diag.faccionId ?? (mem.pizarra && !mem.pizarra.startsWith(SIN_FACCION) ? mem.pizarra : undefined);
+    const pizarra = (estado?.pizarras ?? []).find((p) => p.id === mem.pizarra);
+    const esperas = [...(mem.esperas ?? [])].sort((a, b) => a[1] - b[1]);
+
+    const pizarraHtml = pizarra
+      ? `<div class="bots-pizarra-datos"><span>Compañeros <b>${pizarra.bots.length}</b></span><span>Bandidos vistos <b>${pizarra.bandidos}</b></span><span>Salidas abiertas <b>${pizarra.salidas}</b></span><span>Anillos explorados <b>${pizarra.explorados}</b></span></div>${
+          pizarra.encargos.length
+            ? `<div class="chip-row">${pizarra.encargos.map((x) => `<span class="chip${x.heroeId === d.heroeId ? ' bots-mio' : ''}" title="encargo de ${esc(m.nombre(x.heroeId))}">${esc(x.clave)} → ${x.heroeId === d.heroeId ? 'él' : esc(m.nombre(x.heroeId))}</span>`).join('')}</div>`
+            : '<span class="legend-note">sin encargos repartidos</span>'
+        }`
+      : '<span class="legend-note">sin pizarra</span>';
+
+    return `<div class="bots-memoria-panel">
+      <div class="kv-grid bots-kv">
+        ${fila('Plan', mem.plan ? textoDePlan(mem.plan, m.nombre) : '— (nada en curso)')}
+        ${fila('Facción', faccionId ? m.faccion(faccionId) : 'sin Facción')}
+        ${fila('Residencia', mem.residenciaId ? esc(m.nombre(mem.residenciaId)) : 'sin plaza')}
+        ${fila('Columna', mem.columnaId ? esc(mem.columnaId) : '—')}
+        ${fila('Dentro de', mem.dentroDe ? esc(m.nombre(mem.dentroDe)) : '—')}
+        ${mem.solicitud ? fila('Solicitud pendiente', `entrar en ${m.faccion(mem.solicitud.faccionId)} · ${desde(mem.solicitud.desde)}`) : ''}
+        ${mem.esperaFundar !== undefined ? fila('Espera a los compañeros para fundar', desde(mem.esperaFundar)) : ''}
+      </div>
+      <div class="detail-sub"><span class="bots-sub">Esperas tras un rechazo (${esperas.length})</span>${
+        esperas.length
+          ? `<table class="mini-table"><thead><tr><th>Acción</th><th>Hasta</th></tr></thead><tbody>${esperas.map(([clave, hasta]) => `<tr><td>${esc(clave)}</td><td>${falta(hasta)}</td></tr>`).join('')}</tbody></table>`
+          : '<span class="legend-note">ninguna: puede intentarlo todo</span>'
+      }</div>
+      <div class="detail-sub"><span class="bots-sub">Pizarra de la Facción</span>${pizarraHtml}</div>
+    </div>`;
   }
 
   // --- Actividad y registro ---
@@ -709,7 +825,7 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
     if (accion === 'volcarMemoria') {
       const datos = await ordenar({ accion: 'volcarMemoria', heroeId: seleccionado }, 'Memoria leída');
       if (datos !== undefined) {
-        memoriaVolcada = { heroeId: seleccionado, json: JSON.stringify(datos, null, 2) };
+        memoriaVolcada = { heroeId: seleccionado, datos: datos as Memoria };
         pintarDetalle();
       }
     }

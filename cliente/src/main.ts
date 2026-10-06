@@ -1909,6 +1909,13 @@ const panelBots = montarPanelBots(document.getElementById('bots-tab')!, {
     const { gameId, heroes } = gameStore.getState();
     return { gameId, heroes: heroes.filter((h) => h.controlador === 'bot').map((h) => ({ id: h.id, nombre: h.displayName })) };
   },
+  nombres: () => {
+    const { facciones, asentamientos } = gameStore.getState();
+    return {
+      facciones: facciones.map((f) => ({ id: f.id, nombre: f.nombre, sigilo: f.sigilo })),
+      plazas: asentamientos.map((a) => ({ id: a.id, nombre: a.nombre ?? a.id })),
+    };
+  },
 });
 
 function actualizarTabs(): void {
