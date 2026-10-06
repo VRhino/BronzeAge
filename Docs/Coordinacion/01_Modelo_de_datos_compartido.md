@@ -1397,5 +1397,5 @@ Eventos    diplomacia.anexion_propuesta, diplomacia.anexion_rechazada, diplomaci
 - **La Facción absorbida desaparece**: un cliente que cachee `Faccion` o ids de Facción debe reescribir `absorbidaId` → `absorbenteId` al ver
   `diplomacia.anexion`. Pasan a la absorbente los asentamientos, ciudadanos, ejércitos, caravanas, rutas, Aedas residentes y miradas; sus vasallos
   pasan a ser vasallos de la absorbente; las alianzas y guerras de la absorbida se cancelan.
-- **Visibilidad**: la propuesta es de las dos Facciones implicadas (cada una ve las suyas); nadie más la ve. Las caducadas no viajan.
+- **Visibilidad**: la **propuesta pendiente** viaja solo a las dos Facciones implicadas (`ProyeccionJugador.propuestasAnexion`); las caducadas no viajan. Los **eventos** (`diplomacia.anexion_*`) no llevan `asentamientoId`, así que, como el resto de la diplomacia, los ve cualquier jugador por `GET .../eventos`.
 
