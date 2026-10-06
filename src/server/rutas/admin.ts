@@ -362,6 +362,27 @@ const ESQUEMA_COMANDOS_ADMIN = {
   response: { 400: ERROR_RESPUESTA, 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA, 409: ERROR_RESPUESTA },
 } as const;
 
+const ESQUEMA_CODIGO_REGISTRO = {
+  description: 'Código de invitación vigente del registro de jugadores (`null` = registro abierto). Exige administrador_global.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  response: {
+    200: { type: 'object', properties: { codigo: { type: ['string', 'null'] } }, required: ['codigo'] },
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+  },
+} as const;
+
+const ESQUEMA_CAMBIAR_CODIGO_REGISTRO = {
+  description:
+    'Cambia el código de invitación del registro de jugadores sin reiniciar (`null` o vacío = registro abierto). Solo en memoria: ' +
+    'un reinicio vuelve al de `CODIGO_REGISTRO`. Exige administrador_global.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  body: { type: 'object', properties: { codigo: { type: ['string', 'null'], maxLength: 100 } }, required: ['codigo'] },
+  response: { ...ESQUEMA_CODIGO_REGISTRO.response, 400: ERROR_RESPUESTA },
+} as const;
+
 export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDeRutas): void {
   /** Descubrimiento (Fase C12) — ver `ESQUEMA_LISTAR_PARTIDAS`. Sin `gameId` que resolver: `resolverActor`
    * sin tercer argumento solo comprueba sesión + `esAdministradorGlobal`, ninguna `Membresia`. */
@@ -371,6 +392,26 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     if (!puedeCrearPartida(resuelto.actor)) return sinPermiso(reply, 'listar partidas exige rol administrador_global');
 
     return reply.send({ partidas: await deps.partidas.listar() });
+  });
+
+  /**
+   * El código de invitación del registro de jugadores (`POST /v1/registro`): leerlo y cambiarlo sin reiniciar el servidor. Vive solo
+   * en memoria: un reinicio vuelve al valor de `CODIGO_REGISTRO` del entorno. `null` deja el registro abierto. No toca el código de
+   * los bots. Exige administrador_global, como crear una partida: es configuración de la instancia, no de una partida.
+   */
+  app.get('/admin/registro/codigo', { schema: ESQUEMA_CODIGO_REGISTRO }, async (request, reply) => {
+    const resuelto = resolverActor(request, deps);
+    if (!resuelto) return sinSesion(reply);
+    if (!puedeCrearPartida(resuelto.actor)) return sinPermiso(reply, 'ver el código de invitación exige rol administrador_global');
+    return reply.send({ codigo: deps.codigoRegistro ?? null });
+  });
+
+  app.put<{ Body: { codigo: string | null } }>('/admin/registro/codigo', { schema: ESQUEMA_CAMBIAR_CODIGO_REGISTRO }, async (request, reply) => {
+    const resuelto = resolverActor(request, deps);
+    if (!resuelto) return sinSesion(reply);
+    if (!puedeCrearPartida(resuelto.actor)) return sinPermiso(reply, 'cambiar el código de invitación exige rol administrador_global');
+    deps.codigoRegistro = request.body.codigo?.trim() || undefined;
+    return reply.send({ codigo: deps.codigoRegistro ?? null });
   });
 
   /**

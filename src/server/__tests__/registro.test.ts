@@ -150,3 +150,51 @@ describe('cuentas de bot (CODIGO_REGISTRO_BOTS, doc 12 §8.3)', () => {
     }
   });
 });
+
+describe('el código de invitación se cambia sin reiniciar (admin)', () => {
+  const ADMIN = { proveedor: 'dev', sujetoId: 'jefa' };
+
+  async function conAdmin(codigoRegistro?: string) {
+    const repositorio = crearRepositorioIdentidadEnMemoria();
+    const app = crearServidor({
+      directorio,
+      codigoRegistro,
+      administradoresGlobales: [ADMIN],
+      identidad: { proveedores: crearRegistroProveedores(proveedoresDeProceso(repositorio)), repositorio },
+    });
+    const login = await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: 'dev jefa' } });
+    return { app, admin: { authorization: `sesion ${login.json().sesionId}` } };
+  }
+  const alta = (app: FastifyInstance, nick: string, codigo?: string) => app.inject({ method: 'POST', url: '/v1/registro', payload: { nick, clave: 'secreto123', ...(codigo ? { codigo } : {}) } });
+
+  it('lo lee, lo cambia y el registro lo exige desde ese momento; null lo deja abierto', async () => {
+    const { app, admin } = await conAdmin('uno');
+    try {
+      expect((await app.inject({ method: 'GET', url: '/v1/admin/registro/codigo', headers: admin })).json()).toEqual({ codigo: 'uno' });
+
+      const cambio = await app.inject({ method: 'PUT', url: '/v1/admin/registro/codigo', headers: admin, payload: { codigo: 'dos' } });
+      expect(cambio.json()).toEqual({ codigo: 'dos' });
+      expect((await alta(app, 'ana', 'uno')).statusCode).toBe(403);
+      expect((await alta(app, 'ana', 'dos')).statusCode).toBe(201);
+
+      const abierto = await app.inject({ method: 'PUT', url: '/v1/admin/registro/codigo', headers: admin, payload: { codigo: null } });
+      expect(abierto.json()).toEqual({ codigo: null });
+      expect((await alta(app, 'bruno')).statusCode).toBe(201);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('solo un administrador global; sin sesión, 401', async () => {
+    const { app } = await conAdmin('uno');
+    try {
+      expect((await app.inject({ method: 'GET', url: '/v1/admin/registro/codigo' })).statusCode).toBe(401);
+      await alta(app, 'ana', 'uno');
+      const login = await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: 'clave ana:secreto123' } });
+      const jugador = { authorization: `sesion ${login.json().sesionId}` };
+      expect((await app.inject({ method: 'PUT', url: '/v1/admin/registro/codigo', headers: jugador, payload: { codigo: 'x' } })).statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+});
