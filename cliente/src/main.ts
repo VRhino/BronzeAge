@@ -9,7 +9,10 @@ import { ApiError, crearOResumirPartida, listarPartidas } from './app/apiCliente
 import { montarPanelBots } from './bots/panelBots';
 import { CATALOGOS, crearGameStore, elegirGameId, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { layoutCampamento } from '@motor/engine/layoutCampamento';
-import { CATALOGO_SIGILO } from '@motor/constants';
+import { ALMACEN_PERSONAL } from '@motor/constants';
+import { esc } from './ui/html';
+import { enlazarSubpestanas, htmlSubpaneles, htmlSubpestanas, type Subpestana } from './ui/subpestanas';
+import { htmlNombreConSigilo, svgSigilo } from './sigilo/sigilo';
 import { draw, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
@@ -211,9 +214,17 @@ let asentamientoSeleccionadoId: string | null = null;
 /** Si la Vista de Asentamiento enseña un campamento de mercenarios en vez de un asentamiento (Doc 1.9b). */
 let campamentoSeleccionadoId: string | null = null;
 const PREFIJO_CAMPAMENTO = 'campamento:';
+const SUBS_ASENTAMIENTO: Subpestana[] = [
+  { id: 'general', texto: 'General' },
+  { id: 'edificios', texto: 'Edificios' },
+  { id: 'produccion', texto: 'Producción' },
+  { id: 'militar', texto: 'Militar' },
+];
 let asentamientoDetalleTab: 'general' | 'edificios' | 'produccion' | 'militar' = 'general';
 let reservaProtegidaAbierta = false;
 let faccionSeleccionadaId: string | null = null;
+let faccionSub = 'general';
+let jugadorSub = 'general';
 let jugadorSeleccionadoId: string | null = null;
 /** Filtro de Facción (a petición del usuario): con muchas Facciones, listar el grupo de cada una a la vez
  * dejaba de caber en pantalla — las pestañas Asentamientos/Jugadores filtran a una Facción por combobox. */
@@ -1037,14 +1048,9 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
           <div class="storage-reserve-content">${reservaHtml}</div>
         </details>
       </div>
-      <div class="settlement-detail-tabs" role="tablist" aria-label="Información del asentamiento">
-        <button type="button" class="settlement-detail-tab${asentamientoDetalleTab === 'general' ? ' active' : ''}" data-settlement-detail-tab="general" role="tab" aria-selected="${asentamientoDetalleTab === 'general'}">General</button>
-        <button type="button" class="settlement-detail-tab${asentamientoDetalleTab === 'edificios' ? ' active' : ''}" data-settlement-detail-tab="edificios" role="tab" aria-selected="${asentamientoDetalleTab === 'edificios'}">Edificios</button>
-        <button type="button" class="settlement-detail-tab${asentamientoDetalleTab === 'produccion' ? ' active' : ''}" data-settlement-detail-tab="produccion" role="tab" aria-selected="${asentamientoDetalleTab === 'produccion'}">Producción</button>
-        <button type="button" class="settlement-detail-tab${asentamientoDetalleTab === 'militar' ? ' active' : ''}" data-settlement-detail-tab="militar" role="tab" aria-selected="${asentamientoDetalleTab === 'militar'}">Militar</button>
-      </div>
+      ${htmlSubpestanas(SUBS_ASENTAMIENTO, asentamientoDetalleTab, 'Información del asentamiento')}
 
-      <div class="settlement-detail-panel${asentamientoDetalleTab === 'general' ? ' active' : ''}" data-settlement-detail-panel="general" role="tabpanel">
+      <div class="subpanel${asentamientoDetalleTab === 'general' ? ' active' : ''}" data-subpanel="general" role="tabpanel">
       <div class="detail-section">
         <h3>${a.nombre ?? a.id}${a.nombre ? ` <span class="legend-note" style="font-weight:normal">(${a.id})</span>` : ''}</h3>
         <div class="kv-grid">
@@ -1122,7 +1128,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
       </div>
 
-      <div class="settlement-detail-panel${asentamientoDetalleTab === 'edificios' ? ' active' : ''}" data-settlement-detail-panel="edificios" role="tabpanel">
+      <div class="subpanel${asentamientoDetalleTab === 'edificios' ? ' active' : ''}" data-subpanel="edificios" role="tabpanel">
       <div class="detail-section">
         <h3>Edificios</h3>
         <div class="kv-row">
@@ -1160,7 +1166,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
 
       </div>
 
-      <div class="settlement-detail-panel${asentamientoDetalleTab === 'produccion' ? ' active' : ''}" data-settlement-detail-panel="produccion" role="tabpanel">
+      <div class="subpanel${asentamientoDetalleTab === 'produccion' ? ' active' : ''}" data-subpanel="produccion" role="tabpanel">
       <div class="detail-section">
         <h3>Producción — por minuto</h3>
         ${produccionHtml}
@@ -1172,7 +1178,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       </div>
       </div>
 
-      <div class="settlement-detail-panel${asentamientoDetalleTab === 'militar' ? ' active' : ''}" data-settlement-detail-panel="militar" role="tabpanel">
+      <div class="subpanel${asentamientoDetalleTab === 'militar' ? ' active' : ''}" data-subpanel="militar" role="tabpanel">
       <div class="detail-section">
         <h3>Escuadrones</h3>
         ${
@@ -1260,29 +1266,70 @@ function renderAsentamientosTab(state: GameState): void {
     });
   });
 
-  cont.querySelectorAll<HTMLButtonElement>('[data-settlement-detail-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      asentamientoDetalleTab = btn.dataset.settlementDetailTab as 'general' | 'edificios' | 'produccion' | 'militar';
-      cont.querySelectorAll<HTMLButtonElement>('[data-settlement-detail-tab]').forEach((tab) => {
-        const activa = tab === btn;
-        tab.classList.toggle('active', activa);
-        tab.setAttribute('aria-selected', String(activa));
-      });
-      cont.querySelectorAll<HTMLElement>('[data-settlement-detail-panel]').forEach((panel) => {
-        panel.classList.toggle('active', panel.dataset.settlementDetailPanel === asentamientoDetalleTab);
-      });
-    });
-  });
+  enlazarSubpestanas(cont, (id) => (asentamientoDetalleTab = id as typeof asentamientoDetalleTab));
 
 }
 
-/** Vista previa del sigilo (Doc 2.8.1): los dos colores y las piezas por nombre. El dibujo real es de los clientes de juego. */
-function htmlSigilo(faccion: Faccion): string {
+/** Nombre del héroe (el del jugador, no su id interno); el id queda de detalle. */
+function nombreHeroe(state: GameState, id: string | null | undefined): string {
+  if (!id) return '—';
+  const h = state.heroes.find((x) => x.id === id);
+  return h ? `${esc(h.displayName)} <small class="legend-note">${esc(id)}</small>` : esc(id);
+}
+
+/** Solo el nombre, sin el id (para chips y tablas estrechas). */
+function soloNombreHeroe(state: GameState, id: string): string {
+  return esc(state.heroes.find((x) => x.id === id)?.displayName ?? id);
+}
+
+/** El Rey de la Facción dueña de la Liga (Gran Rey). */
+function granReyDeLiga(state: GameState, granReyFaccionId: string | null | undefined): string {
+  return nombreHeroe(state, state.facciones.find((f) => f.id === granReyFaccionId)?.reyId);
+}
+
+/** Ficha del sigilo (Doc 2.8.1): el escudo dibujado y, de detalle, los ids del catálogo. */
+function htmlFichaSigilo(faccion: Faccion): string {
   const s = faccion.sigilo;
-  const hex = (id: string) => CATALOGO_SIGILO.colores.find((c) => c.id === id)?.hex ?? '#888888';
-  const insignia = `<span style="display:inline-block;width:22px;height:22px;border-radius:3px;border:1px solid #0004;vertical-align:middle;background:linear-gradient(135deg, ${hex(s.colorPrimarioId)} 50%, ${hex(s.colorSecundarioId)} 50%)"></span>`;
   const detalle = `${s.formaId} · ${s.campoId} (${s.colorPrimarioId}/${s.colorSecundarioId}) · ${s.emblemaId} (${s.colorEmblemaId})${s.orlaId === 'ninguna' ? '' : ` · orla ${s.orlaId} (${s.colorOrlaId})`}`;
-  return `<div class="kv-row"><span>Sigilo</span><span>${insignia} ${detalle}</span></div>`;
+  return `<span class="ficha-sigilo">${svgSigilo(s, 64)}<small class="legend-note">${detalle}</small></span>`;
+}
+
+const ESTADO_TECNOLOGIA: Record<string, { texto: string; tono: string }> = {
+  adoptada: { texto: 'Adoptada', tono: 'ok' },
+  aparecida: { texto: 'Aparecida', tono: 'aviso' },
+  revelada: { texto: 'Revelada', tono: 'info' },
+  oculta: { texto: 'Oculta', tono: 'off' },
+};
+
+/** Tecnologías de la Facción por Era: estado, avance del logro y hitos que pide cada una. */
+function htmlTecnologias(faccion: Faccion, state: GameState): string {
+  const tec = gameStore.tecnologiaInfo(faccion.id);
+  const adoptadas = tec.tecnologias.filter((t) => t.estado === 'adoptada').length;
+  const eras = [...new Set(tec.tecnologias.map((t) => t.eraOrden))].sort((x, y) => x - y);
+  const tarjeta = (t: (typeof tec.tecnologias)[number]): string => {
+    const e = ESTADO_TECNOLOGIA[t.estado]!;
+    let logro = '';
+    if (t.deArranque) logro = '<small class="legend-note">De arranque: la tiene toda Facción.</small>';
+    else if (t.logro) {
+      const pct = Math.min(100, Math.round((t.logro.actual / t.logro.umbral) * 100));
+      const hecho = t.logro.cumplidoEn !== null;
+      logro = `<div class="tec-logro"><span>Logro · ${t.logro.contador}</span><span>${Math.round(t.logro.actual).toLocaleString('es-ES')} / ${t.logro.umbral.toLocaleString('es-ES')}${hecho ? ` ✓ ${fmtTiempoMundo(t.logro.cumplidoEn!)}` : ` (${pct} %)`}</span></div>
+        <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${hecho ? 100 : pct}%"></div></div>`;
+    }
+    const primero = t.primero ? `<small class="legend-note">Primera en tenerla: ${esc(state.facciones.find((f) => f.id === t.primero)?.nombre ?? t.primero)}</small>` : '';
+    const hitos = t.hitos.length ? `<ul class="tec-hitos">${t.hitos.map((h) => `<li>${h}</li>`).join('')}</ul>` : '';
+    return `<div class="tec-card tec-${e.tono}"><header><strong>${t.nombre}</strong><span class="badge tec-estado">${e.texto}</span></header>${logro}${hitos}${primero}</div>`;
+  };
+  const porEra = eras
+    .map((orden) => {
+      const delaEra = tec.tecnologias.filter((t) => t.eraOrden === orden);
+      return `<div class="detail-section"><h3>Era ${orden} · ${delaEra[0]!.era}${delaEra[0]!.era === tec.era ? ' <span class="badge">vigente</span>' : ''} <small class="legend-note">${delaEra.filter((t) => t.estado === 'adoptada').length}/${delaEra.length} adoptadas</small></h3><div class="tec-grid">${delaEra.map(tarjeta).join('')}</div></div>`;
+    })
+    .join('');
+  return `<div class="detail-section"><h3>Resumen</h3><div class="kv-grid">
+      <div class="kv-row"><span>Era vigente</span><span>${tec.era} (desde ${fmtTiempoMundo(tec.eraDesde)})</span></div>
+      <div class="kv-row"><span>Adoptadas</span><span>${adoptadas}/${tec.tecnologias.length}</span></div></div>
+      <p class="legend-note">El logro es un contador del mundo; el hito, lo que la Facción debe tener construido. Con ambos, la tecnología aparece y se adopta pagando la tarifa de su Era.</p></div>${porEra}`;
 }
 
 function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
@@ -1321,10 +1368,10 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
             .map((r) => {
               const esA = r.faccionAId === faccion.id;
               const otraId = esA ? r.faccionBId : r.faccionAId;
-              const otraNombre = state.facciones.find((f) => f.id === otraId)?.nombre ?? otraId;
+              const otra = state.facciones.find((f) => f.id === otraId);
               const rol = r.tipo === 'vasallaje' ? (esA ? 'Señora' : 'Vasalla') : '—';
               const tributo = r.tributo ? `${r.tributo.cantidadPorMinuto}/min ${RECURSO_NOMBRE[r.tributo.recurso] ?? r.tributo.recurso}` : '—';
-              return `<tr><td>${r.tipo}</td><td>${otraNombre}</td><td>${rol}</td><td>${r.estado}</td><td>${tributo}</td></tr>`;
+              return `<tr><td>${r.tipo}</td><td>${otra ? htmlNombreConSigilo(otra, 16) : otraId}</td><td>${rol}</td><td>${r.estado}</td><td>${tributo}</td></tr>`;
             })
             .join('')}
         </tbody>
@@ -1334,24 +1381,14 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
   const ligas = gameStore.getLigas(state.relaciones, state.facciones);
   const ligaDeLaFaccion = ligas.find((l) => l.miembrosFaccionIds.includes(faccion.id));
   const ligaHtml = ligaDeLaFaccion
-    ? `<div class="kv-row"><span>Miembros</span><span>${ligaDeLaFaccion.miembrosFaccionIds.map((id) => state.facciones.find((f) => f.id === id)?.nombre ?? id).join(', ')}</span></div>
-       ${
-         ligaDeLaFaccion.tieneVasallaje
-           ? `<div class="kv-row"><span>Gran Rey</span><span>${state.facciones.find((f) => f.id === ligaDeLaFaccion.granReyFaccionId)?.reyId ?? '—'}</span></div>`
-           : ''
-       }`
+    ? `<div class="kv-row"><span>Miembros</span><span class="chip-row">${ligaDeLaFaccion.miembrosFaccionIds
+        .map((id) => {
+          const f = state.facciones.find((x) => x.id === id);
+          return `<span class="chip">${f ? htmlNombreConSigilo(f, 16, { granRey: ligaDeLaFaccion.tieneVasallaje && id === ligaDeLaFaccion.granReyFaccionId }) : id}</span>`;
+        })
+        .join('')}</span></div>
+       ${ligaDeLaFaccion.tieneVasallaje ? `<div class="kv-row"><span>Gran Rey</span><span>${granReyDeLiga(state, ligaDeLaFaccion.granReyFaccionId)}</span></div>` : ''}`
     : '<p class="legend-note">No pertenece a ninguna Liga.</p>';
-
-  const tec = gameStore.tecnologiaInfo(faccion.id);
-  const tecnologiaHtml = `<p class="legend-note">Era vigente: <b>${tec.era}</b> (desde ${fmtTiempoMundo(tec.eraDesde)}).</p><div class="kv-grid">${tec.tecnologias
-    .map((t) => {
-      const logro = t.logro
-        ? ` · logro ${t.logro.contador} ${Math.round(t.logro.actual)}/${t.logro.umbral}${t.logro.cumplidoEn !== null ? ` ✓ ${fmtTiempoMundo(t.logro.cumplidoEn)}` : ''}`
-        : ' · de arranque';
-      const primero = t.primero ? ` · primera: ${state.facciones.find((f) => f.id === t.primero)?.nombre ?? t.primero}` : '';
-      return `<div class="kv-row"><span>${t.nombre} <small>(${t.era})</small></span><span>${t.estado}${logro}${primero}</span></div>`;
-    })
-    .join('')}</div>`;
 
   const residentes = gameStore.residentesDeFaccion(faccion.id);
   const residentesHtml = residentes.length
@@ -1363,63 +1400,45 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
     ? `<div class="chip-row">${titulosDeLaFaccion.map((t) => `<span class="chip">${t.nombre}</span>`).join('')}</div>`
     : '<p class="legend-note">Sin títulos.</p>';
 
-  return `
-    <div class="settlement-detail">
-      <div class="detail-section">
-        <h3>${faccion.nombre}</h3>
-        <div class="kv-grid">
+  const seccion = (titulo: string, cuerpo: string): string => `<div class="detail-section"><h3>${titulo}</h3>${cuerpo}</div>`;
+  const subs: Subpestana[] = [
+    { id: 'general', texto: 'General' },
+    { id: 'asentamientos', texto: 'Asentamientos', insignia: propios.length },
+    { id: 'diplomacia', texto: 'Diplomacia', insignia: relacionesDeLaFaccion.length || '' },
+    { id: 'tecnologias', texto: 'Tecnologías' },
+    { id: 'aedas', texto: 'Aedas y títulos' },
+  ];
+  if (!subs.some((x) => x.id === faccionSub)) faccionSub = 'general';
+  const contenidos: Record<string, string> = {
+    general: `
+      ${seccion(
+        esc(faccion.nombre),
+        `<div class="kv-grid">
           <div class="kv-row"><span>Nivel</span><span>${faccion.nivel}</span></div>
-          ${htmlSigilo(faccion)}
-          <div class="kv-row"><span>Rey</span><span>${faccion.reyId ?? '—'}</span></div>
-          <div class="kv-row"><span>Embajador</span><span>${faccion.embajadorId ?? '—'}</span></div>
+          <div class="kv-row"><span>Sigilo</span>${htmlFichaSigilo(faccion)}</div>
+          <div class="kv-row"><span>Rey</span><span>${nombreHeroe(state, faccion.reyId)}</span></div>
+          <div class="kv-row"><span>Embajador</span><span>${nombreHeroe(state, faccion.embajadorId)}</span></div>
           <div class="kv-row"><span>Ciudadanos</span><span>${faccion.ciudadanosIds.length}</span></div>
           <div class="kv-row"><span>Reputación</span><span>${faccion.reputacion.toFixed(0)}</span></div>
         </div>
         <div class="kv-row" style="margin-top:6px"><span>Progreso de nivel de Facción</span><span>${xpTexto}</span></div>
-        <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${xpPorcentaje}%"></div></div>
-      </div>
-
-      <div class="detail-section">
-        <h3>Cupo de expansión (Doc 1.7/Fase_0_5 §5)</h3>
-        <div class="kv-grid">
+        <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${xpPorcentaje}%"></div></div>`
+      )}
+      ${seccion(
+        'Cupo de expansión (Doc 1.7/Fase_0_5 §5)',
+        `<div class="kv-grid">
           <div class="kv-row"><span>Cap de fundación</span><span>${propios.length}/${cap}</span></div>
           <div class="kv-row"><span>Cupo asentamientos nivel 2</span><span>${cupo.nivel2.ocupados}/${cupo.nivel2.total}</span></div>
           <div class="kv-row"><span>Cupo asentamientos nivel 3</span><span>${cupo.nivel3.ocupados}/${cupo.nivel3.total}</span></div>
         </div>
-        <p class="legend-note">El cupo de nivel 2/3 sube con el nivel de Facción (combate, conquista o edificios nuevos completados) — un asentamiento propio que ya cumple los gates pero no tiene cupo libre se queda "elegible" hasta que la Facción suba de nivel o se libere uno.</p>
-      </div>
-
-      <div class="detail-section">
-        <h3>Asentamientos (${propios.length})</h3>
-        ${asentamientosHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Relaciones diplomáticas</h3>
-        ${relacionesHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Liga</h3>
-        ${ligaHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Tecnología (Doc 6)</h3>
-        ${tecnologiaHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Aedas residentes (Doc 6.7)</h3>
-        ${residentesHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Títulos (Doc 2.9)</h3>
-        ${titulosHtml}
-      </div>
-    </div>
-  `;
+        <p class="legend-note">El cupo de nivel 2/3 sube con el nivel de Facción (combate, conquista o edificios nuevos completados) — un asentamiento propio que ya cumple los gates pero no tiene cupo libre se queda "elegible" hasta que la Facción suba de nivel o se libere uno.</p>`
+      )}`,
+    asentamientos: seccion(`Asentamientos (${propios.length})`, asentamientosHtml),
+    diplomacia: seccion('Relaciones diplomáticas', relacionesHtml) + seccion('Liga', ligaHtml),
+    tecnologias: htmlTecnologias(faccion, state),
+    aedas: seccion('Aedas residentes (Doc 6.7)', residentesHtml) + seccion('Títulos (Doc 2.9)', titulosHtml),
+  };
+  return `<div class="settlement-detail">${htmlSubpaneles(subs, faccionSub, contenidos, 'Información de la Facción')}</div>`;
 }
 
 function renderFaccionesTab(state: GameState): void {
@@ -1438,7 +1457,7 @@ function renderFaccionesTab(state: GameState): void {
   const botones = state.facciones
     .map(
       (f) =>
-        `<button type="button" class="settlement-tab-btn${f.id === faccionSeleccionadaId ? ' active' : ''}" data-faccion="${f.id}">${f.nombre}</button>`
+        `<button type="button" class="settlement-tab-btn${f.id === faccionSeleccionadaId ? ' active' : ''}" data-faccion="${f.id}">${htmlNombreConSigilo(f, 22)}</button>`
     )
     .join('');
   const seleccionada = state.facciones.find((f) => f.id === faccionSeleccionadaId)!;
@@ -1450,10 +1469,28 @@ function renderFaccionesTab(state: GameState): void {
       render();
     });
   });
+  enlazarSubpestanas(cont, (id) => (faccionSub = id));
+}
+
+type EstadoConexionHeroe = { tono: 'on' | 'espera' | 'off'; texto: string };
+
+/** Verde = conectado; amarillo = pidió salir y aún puede volver; gris = ya fuera del mundo (Doc 1.10.6). */
+function estadoConexionHeroe(h: GameState['heroes'][number] | undefined): EstadoConexionHeroe {
+  if (!h) return { tono: 'off', texto: 'Sin registro de héroe' };
+  if (h.fuera) return { tono: 'off', texto: 'Desconectado: fuera del mundo' };
+  if (h.desconectaEn !== undefined) return { tono: 'espera', texto: `Desconectado: sale del mundo ${fmtTiempoMundo(h.desconectaEn)} si no vuelve` };
+  return { tono: 'on', texto: 'Conectado' };
+}
+
+function htmlPuntoConexion(h: GameState['heroes'][number] | undefined): string {
+  const e = estadoConexionHeroe(h);
+  return `<span class="punto-conexion punto-${e.tono}" title="${e.texto}" aria-label="${e.texto}"></span>`;
 }
 
 function renderDetalleJugador(heroeId: string, state: GameState): string {
   const faccion = state.facciones.find((f) => f.ciudadanosIds.includes(heroeId));
+  const heroe = state.heroes.find((h) => h.id === heroeId);
+  const conexion = estadoConexionHeroe(heroe);
   const esRey = faccion?.reyId === heroeId;
   const esEmbajador = faccion?.embajadorId === heroeId;
 
@@ -1489,8 +1526,30 @@ function renderDetalleJugador(heroeId: string, state: GameState): string {
     ? `<div class="log-panel">${historial.map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('')}</div>`
     : '<p class="legend-note">Sin actividad registrada todavía.</p>';
 
+  // Almacén personal (Doc 2.5): lo que el héroe lleva consigo; el oro de botín va aparte y no ocupa sitio.
+  const almacen = Object.entries(heroe?.almacenPersonal ?? {}).filter(([, n]) => n > 0);
+  const ocupado = almacen.reduce((t, [, n]) => t + n, 0);
+  const pctAlmacen = Math.min(100, Math.round((ocupado / ALMACEN_PERSONAL.capacidad) * 100));
+  const tablaRecursos = (r: [string, number][]): string =>
+    `<table class="mini-table"><thead><tr><th>Recurso</th><th>Cantidad</th></tr></thead><tbody>${r
+      .map(([id, n]) => `<tr><td>${RECURSO_NOMBRE[id] ?? id}</td><td>${Math.round(n).toLocaleString('es-ES')}</td></tr>`)
+      .join('')}</tbody></table>`;
+  const carro = Object.entries(heroe?.fuera?.carro ?? {}).filter(([, n]) => n > 0);
+  const almacenHtml = `
+    <div class="detail-section"><h3>Almacén personal</h3>
+      <div class="kv-row"><span>Ocupado</span><span>${Math.round(ocupado)}/${ALMACEN_PERSONAL.capacidad}</span></div>
+      <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${pctAlmacen}%"></div></div>
+      ${almacen.length ? tablaRecursos(almacen) : '<p class="legend-note">Almacén vacío.</p>'}
+    </div>
+    <div class="detail-section"><h3>Botín y otros</h3><div class="kv-grid">
+      <div class="kv-row"><span>Oro de botín</span><span>${Math.round(heroe?.oroDeBotin ?? 0).toLocaleString('es-ES')}</span></div>
+      <div class="kv-row"><span>Última ración gratis</span><span>${heroe?.racionEn !== undefined ? fmtTiempoMundo(heroe.racionEn) : '—'}</span></div>
+      <div class="kv-row"><span>Alijos abiertos</span><span>${heroe?.alijosAbiertos?.length ?? 0}</span></div>
+    </div></div>
+    ${carro.length ? `<div class="detail-section"><h3>Carro (fuera del mundo)</h3>${tablaRecursos(carro)}</div>` : ''}`;
+
   // Escuadrones del héroe (Doc 5.16.2): viven en él, y `contenedor` dice dónde están.
-  const escuadronesJugador = (state.heroes.find((h) => h.id === heroeId)?.escuadrones ?? []).map((e) => ({
+  const escuadronesJugador = (heroe?.escuadrones ?? []).map((e) => ({
     donde: e.contenedor.tipo === 'campamento' ? 'campamento' : e.contenedor.tipo === 'ejercito' ? e.contenedor.ejercitoId : e.contenedor.tipo === 'escolta' ? `escolta ${e.contenedor.caravanaId}` : 'fuera del mundo',
     escuadron: e,
   }));
@@ -1508,39 +1567,30 @@ function renderDetalleJugador(heroeId: string, state: GameState): string {
       </table>`
     : '<p class="legend-note">Sin escuadrones reclutados.</p>';
 
-  return `
-    <div class="settlement-detail">
-      <div class="detail-section">
-        <h3>${heroeId}</h3>
-        <div class="kv-row"><span>Facción</span><span>${faccion?.nombre ?? '—'}</span></div>
-      </div>
-
-      <div class="detail-section">
-        <h3>Cargos de Facción</h3>
-        ${cargosFaccionHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Cargos locales</h3>
-        ${cargosLocalesHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Residencias</h3>
-        ${residenciasHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Escuadrones</h3>
-        ${escuadronesJugadorHtml}
-      </div>
-
-      <div class="detail-section">
-        <h3>Historial de actividad</h3>
-        ${historialHtml}
-      </div>
-    </div>
-  `;
+  const seccion = (titulo: string, cuerpo: string): string => `<div class="detail-section"><h3>${titulo}</h3>${cuerpo}</div>`;
+  const subs: Subpestana[] = [
+    { id: 'general', texto: 'General' },
+    { id: 'almacen', texto: 'Almacén personal', insignia: almacen.length || '' },
+    { id: 'escuadrones', texto: 'Escuadrones', insignia: escuadronesJugador.length || '' },
+    { id: 'historial', texto: 'Historial', insignia: historial.length || '' },
+  ];
+  if (!subs.some((x) => x.id === jugadorSub)) jugadorSub = 'general';
+  const contenidos: Record<string, string> = {
+    general:
+      seccion(
+        `${soloNombreHeroe(state, heroeId)} <small class="legend-note">${esc(heroeId)}</small>`,
+        `<div class="kv-row"><span>Conexión</span><span class="con-punto">${htmlPuntoConexion(heroe)} ${conexion.texto}</span></div>
+         <div class="kv-row"><span>Facción</span><span>${faccion ? htmlNombreConSigilo(faccion, 18) : '—'}</span></div>
+         <div class="kv-row"><span>Controlador</span><span>${heroe?.controlador ?? '—'}</span></div>`
+      ) +
+      seccion('Cargos de Facción', cargosFaccionHtml) +
+      seccion('Cargos locales', cargosLocalesHtml) +
+      seccion('Residencias', residenciasHtml),
+    almacen: almacenHtml,
+    escuadrones: seccion('Escuadrones', escuadronesJugadorHtml),
+    historial: seccion('Historial de actividad', historialHtml),
+  };
+  return `<div class="settlement-detail">${htmlSubpaneles(subs, jugadorSub, contenidos, 'Información del jugador')}</div>`;
 }
 
 function renderJugadoresTab(state: GameState): void {
@@ -1574,7 +1624,7 @@ function renderJugadoresTab(state: GameState): void {
   const botones = faccionFiltro.ciudadanosIds
     .map(
       (id) =>
-        `<button type="button" class="settlement-tab-btn${id === jugadorSeleccionadoId ? ' active' : ''}" data-jugador="${id}">${id}</button>`
+        `<button type="button" class="settlement-tab-btn${id === jugadorSeleccionadoId ? ' active' : ''}" data-jugador="${id}">${htmlPuntoConexion(state.heroes.find((h) => h.id === id))} ${soloNombreHeroe(state, id)}</button>`
     )
     .join('');
   const gruposHtml = `<div class="faccion-group">
@@ -1597,6 +1647,7 @@ function renderJugadoresTab(state: GameState): void {
       render();
     });
   });
+  enlazarSubpestanas(cont, (id) => (jugadorSub = id));
 }
 
 function renderPoliticasTab(): void {
@@ -1632,7 +1683,7 @@ function renderPanelPolitica(state: GameState): void {
       return `<article class="registro-politica-faccion">
         <header><strong>${f.nombre}</strong><span class="registro-level">Nivel ${f.nivel}</span></header>
         <div class="registro-mini-stats"><span>Asentamientos <b>${propios}/${cap}</b></span><span>Ciudadanos <b>${f.ciudadanosIds.length}</b></span><span>Reputación <b>${f.reputacion.toFixed(0)}</b></span></div>
-        <div class="registro-politica-leaders"><span>Rey <b>${f.reyId ?? '—'}</b></span><span>Embajador <b>${f.embajadorId ?? '—'}</b></span></div>
+        <div class="registro-politica-leaders"><span>Rey <b>${nombreHeroe(state, f.reyId)}</b></span><span>Embajador <b>${nombreHeroe(state, f.embajadorId)}</b></span></div>
       </article>`;
     })
     .join('');
@@ -1648,7 +1699,7 @@ function renderPanelPolitica(state: GameState): void {
   const ligasH = ligas
     .map((liga, i) => {
       const nombres = liga.miembrosFaccionIds.map((id) => state.facciones.find((f) => f.id === id)?.nombre ?? id).join(', ');
-      const granRey = liga.granReyFaccionId ? state.facciones.find((f) => f.id === liga.granReyFaccionId)?.reyId ?? '—' : '—';
+      const granRey = granReyDeLiga(state, liga.granReyFaccionId);
       return `<div class="registro-liga"><strong>Liga ${i + 1}</strong><span>${nombres}</span>${liga.tieneVasallaje ? `<small>Gran Rey: ${granRey}</small>` : '<small>Sin vasallaje</small>'}</div>`;
     })
     .join('');

@@ -461,7 +461,7 @@ export class GameStore {
   tecnologiaInfo(faccionId: string): {
     era: string;
     eraDesde: Instante;
-    tecnologias: { id: string; nombre: string; era: string; estado: 'adoptada' | 'aparecida' | 'revelada' | 'oculta'; logro: { contador: string; umbral: number; actual: number; cumplidoEn: Instante | null } | null; primero: string | null }[];
+    tecnologias: { id: string; nombre: string; era: string; eraOrden: number; hitos: string[]; deArranque: boolean; estado: 'adoptada' | 'aparecida' | 'revelada' | 'oculta'; logro: { contador: string; umbral: number; actual: number; cumplidoEn: Instante | null } | null; primero: string | null }[];
   } {
     const t = this.state.tecnologia;
     const { aparecidas, adoptadas, reveladas = [] } = tecnologiasDe(t, faccionId);
@@ -469,6 +469,9 @@ export class GameStore {
       id,
       nombre: def.nombre,
       era: ERAS[def.era].nombre,
+      eraOrden: ERAS[def.era].orden,
+      deArranque: def.deArranque === true,
+      hitos: def.hito.map(textoHito),
       estado: adoptadas.includes(id) ? ('adoptada' as const) : aparecidas.includes(id) ? ('aparecida' as const) : reveladas.includes(id) ? ('revelada' as const) : ('oculta' as const),
       logro: def.logro ? { contador: def.logro.contador, umbral: def.logro.umbral, actual: t.contadores[def.logro.contador] ?? 0, cumplidoEn: t.logros[id] ?? null } : null,
       primero: t.primeros[id]?.faccionId ?? null,
@@ -974,4 +977,20 @@ export function crearGameStore(
   descartar = false
 ): Promise<GameStore> {
   return GameStore.crear(gameId, seed, descartar);
+}
+
+/** Un hito de tecnología (Doc 6.3) en una línea legible. */
+function textoHito(h: (typeof TECNOLOGIAS)[TecnologiaId]['hito'][number]): string {
+  switch (h.tipo) {
+    case 'edificio':
+      return `Edificio ${h.edificio}${h.nivelInterno ? ` (nivel interno ≥ ${h.nivelInterno})` : ''}`;
+    case 'tecnologia':
+      return `Tecnología ${TECNOLOGIAS[h.id].nombre}`;
+    case 'recursoEnCapital':
+      return `${h.recurso} en el almacén de la capital`;
+    case 'capitalEnNivel':
+      return `Capital en nivel ${h.nivel} con ${h.conEdificio}`;
+    case 'yacimientoEnTerritorio':
+      return `Yacimiento de ${h.recurso} en su territorio`;
+  }
 }

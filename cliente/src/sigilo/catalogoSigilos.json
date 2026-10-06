@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "version": 4,
+  "formas": [
+    "clasico",
+    "aspis",
+    "ocho",
+    "rombo",
+    "ovalo",
+    "torre"
+  ],
+  "campos": [
+    "liso",
+    "partido",
+    "cortado",
+    "cuartelado",
+    "bandado",
+    "palado",
+    "jefe",
+    "cruz",
+    "aspa",
+    "chevron",
+    "bordura",
+    "losanjado",
+    "bandas",
+    "zigzag",
+    "ondas",
+    "greca",
+    "rombos",
+    "radiante"
+  ],
+  "orlas": [
+    "ninguna",
+    "lisa",
+    "greca",
+    "cuerda",
+    "puntos",
+    "dentada"
+  ],
+  "emblemas": [
+    "toro",
+    "minotauro",
+    "leon",
+    "grifo",
+    "caballo",
+    "jabali",
+    "cabra",
+    "serpiente",
+    "pulpo",
+    "delfin",
+    "espiral",
+    "doble_hacha",
+    "cuernos_consagracion",
+    "carro",
+    "aguila",
+    "ciervo",
+    "rayo",
+    "sol",
+    "estrella_ocho",
+    "roseta",
+    "creciente",
+    "disco_alado",
+    "escorpion",
+    "carnero",
+    "galera",
+    "murex",
+    "cedro",
+    "palma",
+    "ancora",
+    "anfora",
+    "halcon",
+    "uraeus",
+    "escarabajo",
+    "anj",
+    "ojo_udyat",
+    "loto",
+    "papiro",
+    "esfinge",
+    "corona_doble",
+    "obelisco",
+    "piramide",
+    "columna",
+    "templo",
+    "trirreme",
+    "casco_corintio",
+    "aspis",
+    "lechuza",
+    "maza",
+    "lambda",
+    "olivo",
+    "corona_laurel",
+    "trigo",
+    "lanza",
+    "espada",
+    "arco",
+    "tridente"
+  ],
+  "colores": [
+    {
+      "id": "rojo",
+      "nombre": "Rojo",
+      "hex": "#b3261e"
+    },
+    {
+      "id": "azul",
+      "nombre": "Azul lapislázuli",
+      "hex": "#1f4e9c"
+    },
+    {
+      "id": "ocre",
+      "nombre": "Ocre",
+      "hex": "#d9a21b"
+    },
+    {
+      "id": "verde",
+      "nombre": "Verde",
+      "hex": "#2e7d32"
+    },
+    {
+      "id": "blanco",
+      "nombre": "Blanco",
+      "hex": "#f4efe4"
+    },
+    {
+      "id": "negro",
+      "nombre": "Negro",
+      "hex": "#1c1b1a"
+    },
+    {
+      "id": "purpura",
+      "nombre": "Púrpura de Tiro",
+      "hex": "#6a1b6e"
+    },
+    {
+      "id": "naranja",
+      "nombre": "Naranja",
+      "hex": "#e0661a"
+    },
+    {
+      "id": "turquesa",
+      "nombre": "Turquesa",
+      "hex": "#1b9aa6"
+    },
+    {
+      "id": "marron",
+      "nombre": "Marrón",
+      "hex": "#6d4426"
+    },
+    {
+      "id": "gris",
+      "nombre": "Gris",
+      "hex": "#7a7a78"
+    },
+    {
+      "id": "oro",
+      "nombre": "Oro",
+      "hex": "#c9a227"
+    }
+  ],
+  "reservados": {
+    "neutro": {
+      "formaId": "clasico",
+      "campoId": "liso",
+      "emblemaId": "sin_bandera",
+      "colorPrimarioId": "gris",
+      "colorSecundarioId": "blanco",
+      "colorEmblemaId": "blanco",
+      "orlaId": "ninguna",
+      "colorOrlaId": "gris"
+    },
+    "bandidos": {
+      "formaId": "clasico",
+      "campoId": "liso",
+      "emblemaId": "bandidos",
+      "colorPrimarioId": "negro",
+      "colorSecundarioId": "rojo",
+      "colorEmblemaId": "blanco",
+      "orlaId": "ninguna",
+      "colorOrlaId": "rojo"
+    },
+    "mercenarios": {
+      "formaId": "clasico",
+      "campoId": "liso",
+      "emblemaId": "mercenarios",
+      "colorPrimarioId": "marron",
+      "colorSecundarioId": "ocre",
+      "colorEmblemaId": "blanco",
+      "orlaId": "ninguna",
+      "colorOrlaId": "ocre"
+    }
+  }
+}

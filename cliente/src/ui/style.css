@@ -465,31 +465,31 @@ body {
   font-weight: 600;
 }
 
-.settlement-detail-panel {
+.subpanel {
   display: none;
   flex-direction: column;
   gap: 10px;
 }
 
-.settlement-detail-panel.active {
+.subpanel.active {
   display: flex;
 }
 
 /* Orden de lectura de la pestaña General: el almacén queda junto al mantenimiento y
    ciudadanía/cargos/políticas se consultan al final del panel. */
-[data-settlement-detail-panel="general"] .detail-section:nth-child(1) { order: 1; }
-[data-settlement-detail-panel="general"] .detail-section:nth-child(2) { order: 2; }
-[data-settlement-detail-panel="general"] .detail-section:nth-child(3) { order: 6; }
-[data-settlement-detail-panel="general"] .detail-section:nth-child(4) { order: 7; }
-[data-settlement-detail-panel="general"] .detail-section:nth-child(5) { order: 3; }
-[data-settlement-detail-panel="general"] .detail-section:nth-child(6) { order: 4; }
-[data-settlement-detail-panel="general"] .detail-section:nth-child(7) { order: 5; }
-[data-settlement-detail-panel="general"] .detail-section:nth-child(8) { order: 8; }
+#asentamientos-tab [data-subpanel="general"] .detail-section:nth-child(1) { order: 1; }
+#asentamientos-tab [data-subpanel="general"] .detail-section:nth-child(2) { order: 2; }
+#asentamientos-tab [data-subpanel="general"] .detail-section:nth-child(3) { order: 6; }
+#asentamientos-tab [data-subpanel="general"] .detail-section:nth-child(4) { order: 7; }
+#asentamientos-tab [data-subpanel="general"] .detail-section:nth-child(5) { order: 3; }
+#asentamientos-tab [data-subpanel="general"] .detail-section:nth-child(6) { order: 4; }
+#asentamientos-tab [data-subpanel="general"] .detail-section:nth-child(7) { order: 5; }
+#asentamientos-tab [data-subpanel="general"] .detail-section:nth-child(8) { order: 8; }
 
 /* Orden de lectura de la pestaña Edificios: primero la cola, después las mejoras y al final el resumen. */
-[data-settlement-detail-panel="edificios"] .detail-section:nth-child(1) { order: 3; }
-[data-settlement-detail-panel="edificios"] .detail-section:nth-child(2) { order: 2; }
-[data-settlement-detail-panel="edificios"] .detail-section:nth-child(3) { order: 1; }
+#asentamientos-tab [data-subpanel="edificios"] .detail-section:nth-child(1) { order: 3; }
+#asentamientos-tab [data-subpanel="edificios"] .detail-section:nth-child(2) { order: 2; }
+#asentamientos-tab [data-subpanel="edificios"] .detail-section:nth-child(3) { order: 1; }
 
 .military-summary {
   display: flex;
@@ -2711,4 +2711,83 @@ button.btn-armado:hover {
     grid-column: 1 / -1;
     text-align: left;
   }
+}
+
+/* Sigilo de Facción (componente `sigilo/sigilo.ts`): el escudo junto al nombre. */
+.con-sigilo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.con-sigilo .sigilo {
+  flex: none;
+}
+
+.ficha-sigilo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+/* Conexión del héroe: verde conectado, ámbar esperando a que vuelva, gris fuera del mundo. */
+.punto-conexion {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  vertical-align: middle;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+}
+
+.punto-on { background: #5cb85c; }
+.punto-espera { background: #e0b83a; }
+.punto-off { background: #7a7a78; }
+
+/* Tecnologías por Era. */
+.tec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+
+.tec-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid var(--admin-border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.tec-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.tec-ok { border-left-color: #5cb85c; }
+.tec-aviso { border-left-color: #e0b83a; }
+.tec-info { border-left-color: #4a8fd1; }
+.tec-off { border-left-color: var(--admin-border); opacity: 0.8; }
+
+.tec-logro {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--admin-muted);
+}
+
+.tec-hitos {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--admin-muted);
 }

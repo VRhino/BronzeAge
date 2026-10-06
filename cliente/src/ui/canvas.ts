@@ -38,6 +38,9 @@ export const RECURSO_COLOR: Record<RecursoTipo, string> = {
   armaHierroCalidad: '#4a4a56',
   armaduraBronceCalidad: '#5a4a2e',
   carroGuerra: '#7a5a2e',
+  chatarraCobre: '#9a6a3a',
+  chatarraBronce: '#8a6a48',
+  chatarraHierro: '#6a6a72',
 };
 
 /** Tipos de recurso que SÍ se dibujan como punto en el mapa (para la leyenda) — trigo y madera no lo son. */
