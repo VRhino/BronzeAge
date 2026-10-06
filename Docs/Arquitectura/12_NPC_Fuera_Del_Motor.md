@@ -352,7 +352,7 @@ plaza. El batch actual (estado crudo + `avanzarNpcGobernanza`) no sirve para est
 ## 11. Paso 3: presencia e identidad de bot (hecho 2026-10-04)
 
 **Decisiones del usuario:** desde dentro de la plaza, las escuadras libres del campamento salen con el héroe (D33
-literal); la guarnición se queda (D40b). Mientras D33b no exista con Conquest, quien está en una batalla no sale del
+literal); la guarnición se queda (D40b). Mientras D33b no exista con Conquest (`CQ-010`), quien está en una batalla no sale del
 mundo hasta que termina. Reglas en el canon, Doc 1.10.6.
 
 - **Motor** (`engine/presencia.ts`): `salirDelMundo` (plaza, columna sola —con sus caravanas adjuntas de vuelta al

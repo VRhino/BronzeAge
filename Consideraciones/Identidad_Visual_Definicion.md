@@ -68,7 +68,7 @@ Titulo.tituloId               id estable: faccionMasGrande, mayorPoderEconomico,
 | Validación, unicidad, comando, evento | Hecho | — |
 | Contrato `Faccion.sigilo`, `Titulo.tituloId` | Hecho | Consumen |
 | Dibujo del estandarte, marcos de Gran Rey y Liga, insignias de título, editor de piezas | — | Sí |
-| Cultura y audio | **Fuera** (§43 de Mecánicas por desarrollar) | — |
+| Cultura y audio | **Fuera** (§43 de `Docs/Ideas a diseñar.md`) | — |
 
 ## 4. Plan por pasos
 

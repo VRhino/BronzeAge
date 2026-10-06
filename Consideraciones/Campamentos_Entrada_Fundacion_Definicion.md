@@ -224,7 +224,7 @@ la desconexión: se hace **inútil para huir**.
 
 - **Presencia (paso 7) está hecha casi entera** (`engine/presencia.ts`, Doc 1.10.6): D33, D40 (las caravanas
   adjuntas vuelven solas a su origen) y D40b (la guarnición y la escolta cedida se quedan). Faltan dos cosas:
-  - **D33b** (batalla de Unity): sigue con Conquest. Hoy quien está en batalla no sale del mundo hasta que termina.
+  - **D33b** (batalla de Unity): sigue con Conquest: propuesta `CQ-010` (2026-10-06). Hoy quien está en batalla no sale del mundo hasta que termina.
   - **Salir y volver desde el campamento de mercenarios.** `salirDelMundo` solo conoce «dentro de una plaza» (un
     asentamiento) y «en columna». `crearHeroe` hace nacer al héroe en una columna (`columnaDeAparicion`) y no hay
     ubicación «dentro del campamento». El paso 2 la tiene que crear (es la que protege M4), y presencia tiene que
@@ -342,7 +342,7 @@ una décima parte acampada (Doc 5.13). Consecuencias:
    sucesión filtrando conectados), `avanzarTick.ts` (`conSalidasDelMundo`: aplazamiento con tope), comandos
    `conectarse`/`desconectarse`, la autorización (hoy mira `heroe.fuera`; con D64 hace falta otra marca), contrato v1
    (`dto.ts`, schema, `Docs/Coordinacion/01`), Doc 1.10.6 y los tests `presenciaEnElMundo` y `tiempoReal`. El runner
-   de bots y el hub WS no cambian. D33b en batalla, **con Conquest** (protocolo BA/CQ).
+   de bots y el hub WS no cambian. D33b en batalla, **con Conquest** (protocolo BA/CQ; propuesta `CQ-010`).
 8. **Bots-héroe** que arranquen como los jugadores y calibración en batch con D38.
 9. ~~**Canon, contrato, clientes**~~ **Hecho** (2026-10-04). Canon sin Facciones NPC (glosario, Doc 2, 3, 5, 6) —
    `comprarCasa` y `unirseAFaccion` ya estaban fuera—; contrato v1 con los campos de campamento del héroe y
