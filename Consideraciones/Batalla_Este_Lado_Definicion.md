@@ -1,8 +1,8 @@
 # Batallas con héroes: lo que falta de este lado — Definición
 
-**Estado: BORRADOR para aprobación (2026-10-06).** Entrada §30 de `Docs/Mecanicas a desarrollar.md`. Cuando se apruebe,
-las reglas pasan al canon (`Docs/Game/5_Sistema_Militar_y_Combate.md` §5.12, §5.14, §5.15, §5.16.4) y el contrato a
-`Docs/Coordinacion/01` §15 y `02` §3, con una propuesta CQ-011 para Conquest.
+**Estado: APROBADO e IMPLEMENTADO en el backend (2026-10-06), sin push.** Era la entrada §30 de `Docs/Mecanicas a desarrollar.md`. Las
+reglas están en el canon (`Docs/Game/5_Sistema_Militar_y_Combate.md` §5.12, §5.14.4, §5.15.1b, §5.16.4 y `2_Sistema_Politico...` §2.2),
+el contrato en `Docs/Coordinacion/01` §15 y `02` §3, y la petición a Conquest en su `propuestas/CQ-011_tipos_de_batalla_y_salidas.md`.
 
 ## 0. El reparto con Unity
 
@@ -214,5 +214,29 @@ Y solo se persigue dentro de la misma clase (§1.2): ejército a ejército, soli
 
 ## 11. Cifras provisionales
 
-`BATALLA.convocatoriaSegundos` (30), `FORMACION_EJERCITO.plazoMinutos` (10) y `PERSECUCION.umbralRecalculo`, en `constants.ts`, con su calibración en
-`Docs/Mecanicas a balancear.md`.
+`BATALLA.convocatoriaSegundos` (30), `FORMACION_EJERCITO.plazoMinutos` (10) y `minimo` (3) y `PERSECUCION.umbralRecalculo` (30), en
+`constants.ts`, con su calibración en `Docs/Mecanicas a balancear.md` §36.
+
+## 12. Cómo quedó implementado, y dónde se apartó del borrador
+
+| Pieza | Dónde | Notas |
+|---|---|---|
+| Quién combate con quién | `engine/ejercitos.ts` (`exigirMismaClase`, `exigirCaravanaSuelta`, `validarAsedio`) | El bot ya no persigue a quien no es de su clase |
+| Persecución | `engine/persecucion.ts`, enganchado en `avanzarEjercitos` | Se persigue lo que se ve **desde la propia columna** (alcance de vista), también al ordenarlo. El destino se guarda en `persiguiendo.destino` |
+| Botín | `engine/repartoDeBotin.ts`, `session/resultadoBatalla.ts` | Ronda a ronda: parte igual y lo que sobra pasa a las columnas con sitio |
+| Entrada | `session/entradaEnBatalla.ts`, `unirseABatalla` | Vasallaje = alianza solo aquí (`sonAliadasEnBatalla`) |
+| Ajuste del Rey | comando `admitirOtrasFacciones`, `Faccion.admiteOtrasEnAtaques` | Solo el Rey; desactivado por defecto |
+| Convocatoria | `Batalla.convocatoriaHasta`, `enConvocatoria` | Mientras dura, el ticket no sale en `/pendientes` ni en `/ticket`, y `registrarAsignacion` rechaza. Un tick dura un minuto: en la práctica, hasta el siguiente |
+| Salidas | `session/salidasDeBatalla.ts`, `POST /v1/batallas/:id/salidas` | Idempotente. `no_conectado` solo en `asignada`; los demás motivos solo en `en_curso` |
+| Canal | `session/canales.ts`, `HubDeDifusion` | El permiso se pregunta a la propia proyección, para que no se separe del mapa. Quien tenga el hogar y la batalla suscritos recibe el evento dos veces, una por canal |
+| Formación | `engine/formacion.ts`, `session/comandos/formacion.ts` | `Ejercito.formacion` y `destinoPendiente`; `marcharA` fija el destino una vez |
+
+**Desviaciones del borrador**
+
+- `BattleResult.porHeroe[].derrotado` es **opcional** (sin él, hiere el bando perdedor): así el contrato actual de Conquest sigue valiendo.
+- Si se va el Líder de una **formación**, el mando pasa al más antiguo por `separarseDelEjercito`; además hay `cancelarFormacion`, que
+  deshace todo y solo es del Líder.
+- Las salidas **antes de empezar** no tienen sustituto, y la chatarra de las bajas de quien salió **en curso** no se recoge (el resultado ya
+  no incluye sus escuadras). Si se echa en falta, que la salida traiga las bajas y se sumen.
+- El batch con la misma semilla (12 Facciones, 30 240 ticks) sale **idéntico** antes y después, pero no demuestra nada sobre guerra: en
+  esas tres semanas no hay una sola campaña. La compatibilidad de los bots la cubren los tests; falta medir con un checkpoint de Era II.

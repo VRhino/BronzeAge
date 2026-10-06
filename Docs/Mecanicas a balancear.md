@@ -97,3 +97,16 @@ contestar. Con 5 jugadores en el playtest, mirar cuántas propuestas caducan sin
 no entran en la medida. La fusión (2026-10-06) tiene su propia constante, `FUSION.caducidadDias` = 3, con el mismo criterio y la misma medida; si salen
 distintas, que sean dos cifras.
 
+## 36. Batallas: convocatoria, persecución y formación en campo
+
+Implementadas el 2026-10-06; las tres cifras son placeholder (`constants.ts`):
+
+- `BATALLA.convocatoriaSegundos` = 30. El tiempo de mundo avanza por ticks de un minuto, así que la convocatoria de un asedio dura en la
+  práctica hasta el siguiente tick. Mirar con jugadores si da tiempo a que lleguen los que estaban cerca; si no, alargarla (y entonces
+  sí cuenta como segundos de verdad).
+- `PERSECUCION.umbralRecalculo` = 30 (unidades de mapa). Con el radio de encuentro en 15, una presa que se mueve menos que esto no obliga a
+  recalcular; contra una que va a 20 por tick se recalcula casi cada tick. Medir cuántos A* por tick cuesta con muchos perseguidores, y subirla
+  si pesa.
+- `FORMACION_EJERCITO.plazoMinutos` = 10 y `minimo` = 3. Con 5 jugadores en el playtest, ¿alcanzan a juntarse tres en diez minutos? Si no,
+  subir el plazo antes que bajar el mínimo (el mínimo es decisión de diseño).
+

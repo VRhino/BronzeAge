@@ -85,26 +85,30 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 - **Clientes**: el panel de tecnología del cliente de administración está hecho (2026-10-02). Faltan, en BronzeAgeClient,
   el mismo panel, y en Conquest las definiciones de escuadra de las 15 tropas nuevas y los modelos de los edificios nuevos (CQ-006).
 
-## 30. Batallas con héroes: lo que falta de este lado
+## 30. Batallas con héroes: lo que falta
 
-**Estado: canon cerrado (Doc 5.15 y 5.16), `código: ◐`.** El ciclo de `Batalla` con Unity (fases 1 y 2), el Héroe
-(fases 1-3 y Herido), la guarnición y el campamento están hechos; su historia vive en el checklist y en
-`Docs/Coordinacion/` (BA-001, BA-004). Sin servidores de batalla declarados (`SERVIDORES_BATALLA`) el asedio y el ataque
-a un campamento de bandidos se siguen resolviendo con números. Falta, **de este lado**:
+**Estado: hecho en el backend (2026-10-06), `código: ✔`.** Tipos de batalla y quién puede unirse (Doc 5.15.1b), convocatoria del
+asedio, salidas de héroe, canal `batalla/<id>`, persecución con recálculo de ruta, reparto del botín y formación de ejércitos en
+campo (Doc 5.14.4). Las decisiones y lo descartado, en `Consideraciones/Batalla_Este_Lado_Definicion.md`. Sin servidores de batalla
+(`SERVIDORES_BATALLA`) todo se sigue resolviendo con números.
 
-- **Canal de tiempo real de la batalla** (fase 3 del ciclo).
-- **Sustituir un participante** con una revisión nueva del ticket: hoy no hay quién la dispare.
-- **Botín para quien se unió al bando ganador**: hoy va entero a la primera columna.
-- **Persecución sin recalcular la ruta** hacia la presa, aunque el Doc 5.12.3 dice que sí: hoy solo marca a quién se
-  ataca (bot) o de quién avisar (humano) si se cruzan a 15.
+**Espera a Conquest** (propuestas en `Conquest_prototype/Docs/Coordinacion/propuestas/`): los tipos de batalla en Unity, la
+convocatoria de 30 s, las salidas y los bandos mixtos (**CQ-011**, que absorbe el abandono y la desconexión de CQ-010); y el asalto de
+caravanas, del que Conquest no tiene documentación. Además: XP y nivel de escuadra y de héroe (CQ-001); la IA de escuadras sin héroe y
+de héroes bot (CQ-002); el botín y el catálogo de objetos, y con ellos perks, `equipar` y las preguntas que deja (CQ-004); y las
+incorporaciones a una batalla en curso (CQ-005). Mientras tanto, `experiencia` de escuadra suma lo que sumaba la veteranía y `nivel` se
+queda en 1.
 
-**Esperan a Conquest** (propuestas en `Conquest_prototype/Docs/Coordinacion/propuestas/`): XP y nivel de escuadra y de
-héroe, y de dónde salen los puntos de atributo (CQ-001); la IA de escuadras sin héroe y de héroes bot (CQ-002); el
-botín y el catálogo de objetos, y con ellos perks, `equipar` y las preguntas que deja el botín (consumibles, equipo
-perdido, compatibilidad arma/armadura, fuentes de objetos fuera de batalla) (CQ-004); y las incorporaciones a una
-batalla en curso (CQ-005). Mientras tanto, `experiencia` de escuadra suma lo que sumaba la veteranía y `nivel` se queda
-en 1. En el cliente de jugador, la pantalla definitiva de crear héroe, el equipo y la ficha de los héroes ajenos
-(`BronzeAgeClient`, `docs/Features_Pendientes.md` §0).
+**Quedan de este lado, fuera del backend:**
+
+- **Clientes** (`BronzeAgeClient`, `docs/Features_Pendientes.md` §0): la miniatura de la batalla en el mapa con «unirse» y la elección de
+  bando en una persecución; el botón «organizar ejército» y la miniatura de la formación; el ajuste del Rey «admitir a otras Facciones en
+  nuestros ataques»; y la pantalla de crear héroe, el equipo y la ficha de los héroes ajenos.
+- **Los bots no usan la formación en campo** ni se unen a batallas ajenas: solo atacan y persiguen como hasta ahora. Decidirlo cuando haya
+  jugadores humanos que los necesiten.
+- **El batch no ejercita nada de esto**: en 30 000 ticks (3 semanas) no hay campañas, así que la corrida es idéntica antes y después. Medir
+  con un checkpoint de Era II en adelante (los guardados hoy son del formato 1 y no se pueden reanudar).
+- **Sync de Notion** de `Docs/Game` (5.12, 5.14.4, 5.15.1b, 5.16.4 y 2.2).
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
 
