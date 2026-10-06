@@ -16,6 +16,7 @@ import { estanAliadas } from '../../engine/pertenencia';
 import type { ContextoBot } from '../runner';
 import { soltarEncargos } from '../pizarra';
 import { RESERVA_MADERA } from './gobierno';
+import { acudirALosSuyos } from './acudir';
 import { conducirCaravana, fundarDesdeCasa } from './fundar';
 import { columnaPropia, escuadrasLibres, plazasConocidas, estaHerido, loQueLeCabe, plazaDentro, plazasPropias, residentesDe, tieneCargo, type HeroeVisto } from './comun';
 
@@ -253,6 +254,8 @@ export async function enColumna(ctx: ContextoBot): Promise<void> {
   // La caravana va enganchada: no se persigue nada por el camino (los bandidos la atacan, no la escolta que se desvía).
   if (plan?.tipo === 'fundar') return await conducirCaravana(ctx, columna.posicionActual, columna, plan);
   if (columna.estado !== 'estacionado') return await perseguirLoQueVe(ctx, columna);
+  // Parado y sin nada que hacer: acude a donde los suyos combaten o se juntan (batalla de su Facción, formación de un compañero).
+  if (!plan && (await acudirALosSuyos(ctx))) return;
 
   if (plan?.tipo === 'cazar') {
     const campamento = vista.campamentosBandidos.find((c) => c.id === plan.campamentoId);

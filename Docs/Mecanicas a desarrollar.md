@@ -104,8 +104,6 @@ queda en 1.
 - **Clientes** (`BronzeAgeClient`): hecho el 2026-10-07 en la 0.13.0 (sin push) la batalla en el mapa con «unirse» y elección de bando, organizar y
   unirse a una formación, y el ajuste del Rey; verificado contra este backend con tres cuentas. Falta que el cliente use el canal `batalla/<id>` (hoy
   sondea), un menú para atacar o perseguir columnas ajenas, y la pantalla de crear héroe, el equipo y la ficha de los héroes ajenos.
-- **Los bots no usan la formación en campo** ni se unen a batallas ajenas: solo atacan y persiguen como hasta ahora. Decidirlo cuando haya
-  jugadores humanos que los necesiten.
 - **El batch no ejercita nada de esto**: en 30 000 ticks (3 semanas) no hay campañas, así que la corrida es idéntica antes y después. Medir
   con un checkpoint de Era II en adelante (los guardados hoy son del formato 1 y no se pueden reanudar).
 - **Sync de Notion** de `Docs/Game` (5.12, 5.14.4, 5.15.1b, 5.16.4 y 2.2).

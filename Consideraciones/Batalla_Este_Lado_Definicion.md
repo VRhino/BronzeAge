@@ -244,3 +244,7 @@ Y solo se persigue dentro de la misma clase (§1.2): ejército a ejército, soli
   seguía a la Facción del héroe que va solo (`conFaccionEnSuColumna`, al crear, entrar o dejar una Facción), y dos columnas sin Facción se tomaban por «de la
   misma Facción» al unirse en campo (`'' === ''`); (2) una persecución sin soldados nunca se cerraba al alcanzar a la presa: ahora basta un héroe sano (un héroe suelto
   combate por sí mismo en Unity).
+- **Bots (2026-10-07):** una columna personal bot, parada, sola y sin plan acude a la batalla de su Facción (asedio, asalto de caravana o evento
+  contra bandidos) o a la formación de un compañero que ve a menos de su vista, y pide unirse (`bots/cerebro/acudir.ts`). No toma partido en
+  persecuciones ni en batallas campales, y **no organiza** formaciones: ayudan a completarlas, no las empiezan. Sin servidores de batalla ni formaciones no
+  hace nada, así que el batch y los bots de siempre juegan igual.
