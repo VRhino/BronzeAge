@@ -680,6 +680,34 @@
       "required": ["schemaVersion", "battleId", "ticketRevision", "intentoAsignacionId"],
       "additionalProperties": false
     },
+    "SalidaBatalla": {
+      "description": "POST /v1/batallas/:battleId/salidas (doc 02 §3.3, CQ-011): un heroe sale de la batalla.",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "$ref": "#/definitions/SchemaVersion" },
+        "battleId": { "$ref": "#/definitions/Uuid" },
+        "ticketRevision": { "$ref": "#/definitions/Entero" },
+        "intentoAsignacionId": { "$ref": "#/definitions/Id" },
+        "heroeId": { "$ref": "#/definitions/Id" },
+        "motivo": { "enum": ["no_conectado", "eliminado", "abandono", "desconexion"] },
+        "derrotado": { "type": "boolean" },
+        "escuadras": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "squadId": { "$ref": "#/definitions/Id" },
+              "supervivientes": { "$ref": "#/definitions/Entero" },
+              "muertos": { "$ref": "#/definitions/Entero" }
+            },
+            "required": ["squadId", "supervivientes", "muertos"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["schemaVersion", "battleId", "ticketRevision", "intentoAsignacionId", "heroeId", "motivo", "derrotado", "escuadras"],
+      "additionalProperties": false
+    },
     "Botin": {
       "type": "object",
       "properties": {
@@ -755,6 +783,7 @@
               "participo": { "type": "boolean" },
               "sobrevivioAlCierre": { "type": "boolean" },
               "xpGanada": { "$ref": "#/definitions/Entero" },
+              "derrotado": { "type": "boolean" },
               "botin": { "$ref": "#/definitions/Botin" }
             },
             "required": ["heroeId", "participo", "sobrevivioAlCierre", "xpGanada"],

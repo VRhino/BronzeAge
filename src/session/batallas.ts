@@ -17,6 +17,7 @@ import {
   type IncorporacionBatalla,
   type InicioBatalla,
   type LadoId,
+  type SalidaBatalla,
   type SettlementBattleSnapshot,
   type SquadSnapshot,
   type TokenParticipante,
@@ -47,6 +48,8 @@ export interface Batalla {
   /** Congelado al abrir. Quien se une después va en `incorporaciones`, que solo crece. */
   ticket: BattleTicket;
   incorporaciones: IncorporacionBatalla[];
+  /** Quienes han salido de la batalla (`SalidaBatalla`, doc 01 §15): ya no combaten, ni bloquean, ni entran en el resultado. */
+  salidas?: SalidaRegistrada[];
   /** Lo que se queda quieto mientras dura (Doc 5.15.1), además de sus héroes. */
   bloqueo: { ejercitoIds: string[]; caravanaIds: string[]; asentamientoId?: string; campamentoId?: string };
   /** Plazo del estado actual, en tiempo de mundo: que la asignen, que empiece o, en curso, la duración más un margen.
@@ -61,6 +64,13 @@ export interface Batalla {
   /** El resultado aplicado, entero: repetirlo igual no cambia nada, y otro distinto se rechaza (doc 01 §16). */
   resultado?: BattleResult;
   aplicadaEn?: Instante;
+}
+
+export interface SalidaRegistrada {
+  heroeId: string;
+  motivo: SalidaBatalla['motivo'];
+  derrotado: boolean;
+  en: Instante;
 }
 
 /** Unirse, cancelar o un mensaje de Conquest que no vale (Doc 5.15.1, doc 02 §3.3). Lo traduce `erroresDeDominio.ts` a
@@ -97,10 +107,19 @@ export interface Participacion {
   participante: BattleParticipantSnapshot;
 }
 
-/** Los héroes que combaten: los del ticket y los que se unieron después. */
+/** Los héroes que combaten: los del ticket y los que se unieron después, menos quienes ya salieron. */
 export function participacionesDe(b: Batalla): Participacion[] {
+  const fuera = new Set((b.salidas ?? []).map((s) => s.heroeId));
   const del = (lado: LadoId) => b.ticket.bandos[lado].participantes.map((participante) => ({ lado, participante }));
-  return [...del('atacante'), ...del('defensor'), ...b.incorporaciones.map(({ lado, participante }) => ({ lado, participante }))];
+  return [...del('atacante'), ...del('defensor'), ...b.incorporaciones.map(({ lado, participante }) => ({ lado, participante }))].filter(
+    (p) => !fuera.has(p.participante.heroeId)
+  );
+}
+
+/** Las incorporaciones que Conquest tiene que ver: sin las de quien salió antes de empezar. */
+export function incorporacionesVigentes(b: Batalla): IncorporacionBatalla[] {
+  const fuera = new Set((b.salidas ?? []).map((s) => s.heroeId));
+  return b.incorporaciones.filter((i) => !fuera.has(i.participante.heroeId));
 }
 
 /** Todas las escuadras de la batalla: las de sus héroes, las que se unieron y las que combaten sin héroe. */
@@ -492,7 +511,7 @@ export function unirseABatalla(
 }
 
 /** Cierra sin aplicar nada: suelta los candados y nadie gana ni pierde (doc 01 §15). */
-function cerrarSinResultado(estado: GameSessionState, batalla: Batalla, final: 'cancelada' | 'fallida'): GameSessionState {
+export function cerrarSinResultado(estado: GameSessionState, batalla: Batalla, final: 'cancelada' | 'fallida'): GameSessionState {
   return {
     ...estado,
     heroes: conReserva(estado.heroes, escuadrasConDueno(batalla), undefined),

@@ -44,10 +44,9 @@ export function aplicarResultado(estado: GameSessionState, b: Batalla, r: Battle
   if (b.estado !== 'en_curso' || ahora >= b.expiraEn) throw new BatallaInvalidaError('La batalla no está en curso: no admite resultado.');
   validar(estado, b, r, servidorId);
 
-  const perdedores = participacionesDe(b)
-    .filter((p) => p.lado !== r.ganador)
-    .map((p) => p.participante.heroeId);
-  // Todos los héroes del bando que pierde quedan heridos (Doc 5.16.4).
+  // Queda herido quien Unity da por derrotado (Doc 5.16.4); si no lo dice, quien está en el bando que pierde.
+  const ladoDe = new Map(participacionesDe(b).map((p) => [p.participante.heroeId, p.lado]));
+  const perdedores = r.porHeroe.filter((h) => h.derrotado ?? ladoDe.get(h.heroeId) !== r.ganador).map((h) => h.heroeId);
   let siguiente: GameSessionState = { ...estado, heroes: herir(conLoQueTrajo(estado.heroes, b, r), perdedores, ahora) };
   siguiente = { ...siguiente, tecnologia: sumarContadores(siguiente.tecnologia, contadoresDeBatalla(estado, b, r.ganador)) };
   siguiente = consecuencias(siguiente, b, r.ganador, ahora);

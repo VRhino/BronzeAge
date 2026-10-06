@@ -17,6 +17,7 @@ import {
   type IncorporacionBatalla,
   type InicioBatalla,
   type ProgresionEscuadra,
+  type SalidaBatalla,
   type SquadSnapshot,
   type TokensBatalla,
 } from './dto';
@@ -417,6 +418,18 @@ export const ASIGNACION: BattleServerAssignment = {
   intentoAsignacionId: INTENTO,
   instancia: { host: 'batalla-1.conquest.example', puerto: 7777, protocolo: 'udp' },
   tokensParticipante: [{ heroeId: 'heroe-ana', token: 'token-de-ejemplo', expiraEn: '2026-09-14T18:30:00Z' }],
+};
+
+/** Carla, la compañera que llegó al asedio, abandona la partida: queda derrotada con lo que le quedaba de la escuadra. */
+export const SALIDA: SalidaBatalla = {
+  schemaVersion: SCHEMA_VERSION,
+  battleId: BATALLA_ASEDIO,
+  ticketRevision: 0,
+  intentoAsignacionId: INTENTO,
+  heroeId: 'heroe-carla',
+  motivo: 'abandono',
+  derrotado: true,
+  escuadras: [{ squadId: 'escuadron-30', supervivientes: 12, muertos: 8 }],
 };
 
 export const INICIO: InicioBatalla = {

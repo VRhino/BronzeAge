@@ -64,7 +64,7 @@ import {
 import { conectarse, desconectarse, entrarEnAsentamiento, entrarEnCampamento, fijarPuerta, guarnecer, marcharA, salirAlMundo, salirDeAsentamiento, salirDelCampamento, vetarJugador } from './presencia';
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
-import { aplicarResultado, cancelarBatalla, conCandadoDeBatalla, confirmarInicio, registrarAsignacion, registrarTokens, unirseABatalla } from './batalla';
+import { aplicarResultado, cancelarBatalla, conCandadoDeBatalla, confirmarInicio, registrarAsignacion, registrarSalida, registrarTokens, unirseABatalla } from './batalla';
 import { avanzarTick } from './avanzarTick';
 
 const MANEJADORES = {
@@ -201,6 +201,7 @@ export const REGISTRO_DIARIO = {
   registrarAsignacion,
   confirmarInicio,
   registrarTokens,
+  registrarSalida,
   aplicarResultado,
   avanzarTick,
 } satisfies Record<string, ManejadorComando<any, any>>;

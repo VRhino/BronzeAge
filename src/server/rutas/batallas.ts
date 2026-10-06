@@ -9,8 +9,8 @@ import { readFileSync } from 'node:fs';
 import Ajv from 'ajv';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
-import { SCHEMA_VERSION, type BattleResult, type BattleServerAssignment, type InicioBatalla, type TokensBatalla } from '../../contratos/v1/dto';
-import { batallasActivas, enConvocatoria, participacionesDe, type Batalla } from '../../session/batallas';
+import { SCHEMA_VERSION, type BattleResult, type BattleServerAssignment, type InicioBatalla, type SalidaBatalla, type TokensBatalla } from '../../contratos/v1/dto';
+import { batallasActivas, enConvocatoria, incorporacionesVigentes, participacionesDe, type Batalla } from '../../session/batallas';
 import { CODIGOS_ERROR } from '../../session/comandos/codigosDeError';
 import { instanteDeTick } from '../../session/estado';
 import { ESQUEMA_SERVIDOR_BATALLA, servidorDeCabecera } from '../identidad/servidoresDeBatalla';
@@ -132,13 +132,13 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
     async (request, reply) => {
       if (!servidor(request, reply)) return reply;
       const hallada = buscar(request.params.battleId);
-      return hallada ? reply.send({ incorporaciones: hallada.batalla.incorporaciones }) : noExiste(reply, request.params.battleId);
+      return hallada ? reply.send({ incorporaciones: incorporacionesVigentes(hallada.batalla) }) : noExiste(reply, request.params.battleId);
     }
   );
 
   /** Comprueba forma y versión del mensaje contra el contrato y lo aplica en la cola de su partida. */
   const recibir =
-    <M extends { schemaVersion: number; battleId: string }>(definicion: string, tipo: 'registrarAsignacion' | 'confirmarInicio' | 'registrarTokens' | 'aplicarResultado') =>
+    <M extends { schemaVersion: number; battleId: string }>(definicion: string, tipo: 'registrarAsignacion' | 'confirmarInicio' | 'registrarTokens' | 'registrarSalida' | 'aplicarResultado') =>
     async (request: FastifyRequest<{ Params: ParamsBatalla }>, reply: FastifyReply) => {
       const servidorId = servidor(request, reply);
       if (!servidorId) return reply;
@@ -175,6 +175,11 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
     '/batallas/:battleId/inicio',
     { schema: esquemaDeServidor('Conquest confirma que la partida real empezó (InicioBatalla, doc 02 §3.3).') },
     recibir<InicioBatalla>('InicioBatalla', 'confirmarInicio')
+  );
+  app.post(
+    '/batallas/:battleId/salidas',
+    { schema: esquemaDeServidor('Conquest avisa de que un héroe sale de la batalla (SalidaBatalla, doc 02 §3.3, CQ-011).') },
+    recibir<SalidaBatalla>('SalidaBatalla', 'registrarSalida')
   );
   app.post(
     '/batallas/:battleId/tokens',

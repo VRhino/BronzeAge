@@ -12,7 +12,7 @@ import { verificarAutorizacion } from '../comandos/autorizacion';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { proyectarParaJugador } from '../proyecciones/jugador';
 import { enConvocatoria, escuadrasDe, faccionesEnBatalla, participacionesDe, type Batalla } from '../batallas';
-import { aplicarResultado, confirmarInicio, registrarAsignacion } from '../comandos/batalla';
+import { aplicarResultado, confirmarInicio, registrarAsignacion, registrarSalida } from '../comandos/batalla';
 import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
 import { conHeroe, enPie, frenteACampamento } from './fixtures';
 import { heridosEn } from '../../engine/heroe';
@@ -455,3 +455,158 @@ function conCapacidad(sesion: GameSession, capacidadMaxima: number): GameSession
   }));
   return GameSession.importar({ ...payload, state: { ...payload.state, batallas } });
 }
+
+describe('un héroe sale de la batalla (doc 02 §3.3, CQ-011, Doc 5.15.1)', () => {
+  const comoS1 = { actor: 'batalla-servidor:s1' };
+  const salida = (b: Batalla, heroeId: string, cambios: Record<string, unknown> = {}) => ({
+    schemaVersion: SCHEMA_VERSION,
+    battleId: b.id,
+    ticketRevision: b.ticket.ticketRevision,
+    intentoAsignacionId: 'intento-1',
+    heroeId,
+    motivo: 'abandono',
+    derrotado: true,
+    escuadras: [],
+    ...cambios,
+  });
+  const sale = (sesion: GameSession, mensaje: unknown) => sesion.ejecutar(registrarSalida, { servidorId: 's1', mensaje: mensaje as never }, comoS1);
+  const asignada = (sesion: GameSession, battleId: string) => {
+    const base = { schemaVersion: SCHEMA_VERSION, battleId, ticketRevision: 0, intentoAsignacionId: 'intento-1' } as const;
+    const instancia = { host: 'batalla-1.example', puerto: 7777, protocolo: 'udp' };
+    sesion.ejecutar(registrarAsignacion, { servidorId: 's1', mensaje: { ...base, instancia, tokensParticipante: [] } }, comoS1);
+    return () => sesion.getState().batallas.find((b) => b.id === battleId)!;
+  };
+  /** Dos héroes de la misma Facción contra el campamento: el fundador la abre y su vecino se une. */
+  function dosContraElCampamento() {
+    const frente = frenteACampamento();
+    const battleId = atacarCampamento(frente.sesion, frente.fundador).datos!.battleId;
+    expect(frente.sesion.ejecutar(REGISTRO_COMANDOS.unirseABatalla, { heroeId: frente.vecino, battleId }, { actor: frente.vecino }).ok).toBe(true);
+    return { ...frente, battleId };
+  }
+
+  it('antes de empezar, quien no se conecta sale sin castigo: sube la revisión, la asignación vale de nuevo y su columna queda libre', () => {
+    const { sesion, fundador, vecino, battleId, columnaVecino } = dosContraElCampamento();
+    const batalla = asignada(sesion, battleId);
+    expect(batalla().estado).toBe('asignada');
+
+    expect(sale(sesion, salida(batalla(), vecino, { motivo: 'no_conectado', derrotado: false })).ok).toBe(true);
+
+    const b = batalla();
+    expect(b.estado).toBe('convocando');
+    expect(b.ticket.ticketRevision).toBe(1);
+    expect(b.asignacion, 'la asignación anterior ya no vale').toBeUndefined();
+    expect(participacionesDe(b).map((p) => p.participante.heroeId)).toEqual([fundador]);
+    expect(reservadas(sesion, vecino), 'sus escuadras vuelven a ser suyas').toEqual([]);
+    expect(reservadas(sesion, fundador).length).toBeGreaterThan(0);
+    const estado = sesion.getState();
+    expect(heridosEn(estado.heroes, instanteDeTick(estado.tick)).has(vecino), 'sin castigo').toBe(false);
+    expect(b.bloqueo.ejercitoIds).not.toContain(columnaVecino);
+  });
+
+  it('con la revisión nueva se reasigna, y una asignación de la revisión vieja se rechaza', () => {
+    const { sesion, vecino, battleId } = dosContraElCampamento();
+    const batalla = asignada(sesion, battleId);
+    sale(sesion, salida(batalla(), vecino, { motivo: 'no_conectado', derrotado: false }));
+    const asignar = (ticketRevision: number, intentoAsignacionId: string) =>
+      sesion.ejecutar(
+        registrarAsignacion,
+        {
+          servidorId: 's1',
+          mensaje: {
+            schemaVersion: SCHEMA_VERSION,
+            battleId,
+            ticketRevision,
+            intentoAsignacionId,
+            instancia: { host: 'batalla-2.example', puerto: 7777, protocolo: 'udp' },
+            tokensParticipante: [],
+          },
+        },
+        comoS1
+      );
+
+    expect(asignar(0, 'intento-2').ok, 'la revisión vieja ya no vale').toBe(false);
+    expect(asignar(1, 'intento-2').ok).toBe(true);
+    expect(batalla().estado).toBe('asignada');
+  });
+
+  it('repetir la salida no cambia nada, y la de quien no combata en ella se rechaza', () => {
+    const { sesion, vecino, battleId } = dosContraElCampamento();
+    const batalla = asignada(sesion, battleId);
+    const mensaje = salida(batalla(), vecino, { motivo: 'no_conectado', derrotado: false });
+    sale(sesion, mensaje);
+    const antes = sesion.getState();
+
+    expect(sale(sesion, { ...mensaje, ticketRevision: 1 }).ok, 'ya está registrada').toBe(true);
+    expect(sesion.getState().batallas[0]).toEqual(antes.batallas[0]);
+    expect(sale(sesion, salida(batalla(), 'forastero', { motivo: 'no_conectado', derrotado: false })).ok).toBe(false);
+  });
+
+  it('no_conectado solo vale antes de empezar, y el resto de motivos solo con la partida en curso', () => {
+    const { sesion, vecino, battleId } = dosContraElCampamento();
+    const batalla = asignada(sesion, battleId);
+
+    expect(sale(sesion, salida(batalla(), vecino, { motivo: 'abandono' })).ok, 'asignada todavía no es en curso').toBe(false);
+
+    sesion.ejecutar(confirmarInicio, { servidorId: 's1', mensaje: { schemaVersion: SCHEMA_VERSION, battleId, ticketRevision: 0, intentoAsignacionId: 'intento-1' } }, comoS1);
+    expect(sale(sesion, salida(batalla(), vecino, { motivo: 'no_conectado', derrotado: false })).ok, 'ya empezó').toBe(false);
+  });
+
+  it('si se queda sin héroes humanos, la batalla se cancela sin castigo', () => {
+    const { sesion, fundador, vecino } = frenteACampamento();
+    const battleId = atacarCampamento(sesion, fundador).datos!.battleId;
+    const batalla = asignada(sesion, battleId);
+    expect(vecino).toBeDefined();
+
+    expect(sale(sesion, salida(batalla(), fundador, { motivo: 'no_conectado', derrotado: false })).ok).toBe(true);
+
+    expect(batalla().estado).toBe('cancelada');
+    expect(reservadas(sesion, fundador)).toEqual([]);
+  });
+
+  it('en curso, quien sale derrotado queda herido con lo que le quedó, su columna se libera y el resultado ya no lo repite', () => {
+    const { sesion, fundador, vecino, battleId, columnaVecino } = dosContraElCampamento();
+    const batalla = empezar(sesion, battleId);
+    const escuadra = batalla().incorporaciones[0]!.participante.escuadras[0]!;
+    const quedan = Math.floor(escuadra.efectivosAutorizados / 2);
+
+    const r = sale(sesion, salida(batalla(), vecino, { escuadras: [{ squadId: escuadra.squadId, supervivientes: quedan, muertos: escuadra.efectivosAutorizados - quedan }] }));
+
+    expect(r.ok).toBe(true);
+    const estado = sesion.getState();
+    expect(heridosEn(estado.heroes, instanteDeTick(estado.tick)).has(vecino)).toBe(true);
+    expect(estado.heroes.find((h) => h.id === vecino)!.escuadrones.find((e) => e.id === escuadra.squadId)!.cantidad).toBe(quedan);
+    expect(batalla().ticket.ticketRevision, 'el ticket no cambia en curso').toBe(0);
+    expect(batalla().bloqueo.ejercitoIds).not.toContain(columnaVecino);
+    expect(reservadas(sesion, vecino)).toEqual([]);
+
+    const final = resultado(batalla());
+    expect(final.porHeroe.map((h) => h.heroeId)).toEqual([fundador]);
+    expect(aplicar(sesion, final).ok).toBe(true);
+    expect(heridosEn(sesion.getState().heroes, instanteDeTick(sesion.getState().tick)).has(fundador), 'el ganador no queda herido').toBe(false);
+  });
+
+  it('en curso, una escuadra que no cierra sobre sus efectivos o que no es suya rechaza la salida entera', () => {
+    const { sesion, fundador, vecino, battleId } = dosContraElCampamento();
+    const batalla = empezar(sesion, battleId);
+    const suya = batalla().incorporaciones[0]!.participante.escuadras[0]!;
+    const ajena = batalla().ticket.bandos.atacante.participantes[0]!.escuadras[0]!;
+
+    expect(sale(sesion, salida(batalla(), vecino, { escuadras: [{ squadId: suya.squadId, supervivientes: 1, muertos: 1 }] })).ok).toBe(false);
+    expect(sale(sesion, salida(batalla(), vecino, { escuadras: [{ squadId: ajena.squadId, supervivientes: ajena.efectivosAutorizados, muertos: 0 }] })).ok).toBe(false);
+    expect(participacionesDe(batalla()).map((p) => p.participante.heroeId).sort(), 'nadie salió').toEqual([fundador, vecino].sort());
+  });
+
+  it('la herida sale de `derrotado`: en el resultado, el ganador puede quedar herido y el perdedor no', () => {
+    const { sesion, fundador, vecino, battleId } = dosContraElCampamento();
+    const batalla = empezar(sesion, battleId);
+    const r = resultado(batalla(), { ganador: 'defensor', razon: 'tiempo_agotado' });
+    const conHerida = { ...r, porHeroe: r.porHeroe.map((h) => ({ ...h, derrotado: h.heroeId === vecino })) };
+
+    expect(aplicar(sesion, conHerida).ok).toBe(true);
+
+    const estado = sesion.getState();
+    const heridos = heridosEn(estado.heroes, instanteDeTick(estado.tick));
+    expect(heridos.has(vecino)).toBe(true);
+    expect(heridos.has(fundador), 'perdió pero Unity no lo da por derrotado').toBe(false);
+  });
+});

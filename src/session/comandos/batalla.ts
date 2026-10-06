@@ -13,7 +13,8 @@ import {
   type Batalla,
 } from '../batallas';
 import { aplicarResultado as aplicar } from '../resultadoBatalla';
-import type { BattleResult, BattleServerAssignment, InicioBatalla, LadoId, TokensBatalla } from '../../contratos/v1/dto';
+import { registrarSalida as salir } from '../salidasDeBatalla';
+import type { BattleResult, BattleServerAssignment, InicioBatalla, LadoId, SalidaBatalla, TokensBatalla } from '../../contratos/v1/dto';
 import type { Instante } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { CODIGOS_ERROR } from './codigosDeError';
@@ -95,6 +96,27 @@ export const confirmarInicio = deServidor<InicioBatalla>((e, b, p, ahora) => ini
 
 /** Sin evento: que alguien tenga ya su token no es noticia para nadie más. */
 export const registrarTokens = deServidor<TokensBatalla>((e, b, p) => sumarTokens(e, b, p.mensaje, p.servidorId));
+
+/**
+ * Un héroe sale de la batalla (doc 02 §3.3, CQ-011). Se narra según lo que pase: la batalla se cancela si se queda sin
+ * humanos, se revisa si salió antes de empezar, o sale uno de la partida en curso.
+ */
+export const registrarSalida = comando<ParamsDeServidor<SalidaBatalla>, void>((estado, _mapa, ctx, params) => {
+  const batalla = exigirBatalla(estado, params.mensaje.battleId, ctx.instante);
+  const siguiente = salir(estado, batalla, params.mensaje, params.servidorId, ctx.instante);
+  if (siguiente === estado) return sinCambios(estado);
+  const { heroeId, motivo } = params.mensaje;
+  const cancelada = siguiente.batallas.find((b) => b.id === batalla.id)?.estado === 'cancelada';
+  const [codigo, mensaje] = cancelada
+    ? ['batalla.cancelada', `Se cancela la batalla ${batalla.id}: nadie pierde nada.`]
+    : motivo === 'no_conectado'
+      ? ['batalla.revisada', `Un héroe no llegó a conectarse a la batalla ${batalla.id}: se convoca de nuevo sin él.`]
+      : ['batalla.salida', `Un héroe sale de la batalla ${batalla.id}.`];
+  return exito(
+    conHistorialDeJugador(siguiente, heroeId, motivo === 'no_conectado' ? `No llega a conectarse a la batalla ${batalla.id}.` : `Sale de la batalla ${batalla.id}.`),
+    eventosDeBatalla(siguiente, batalla, codigo!, mensaje!).map((e) => evento(ctx, e))
+  );
+});
 
 /** El resultado de la partida (doc 02 §3.3). Busca también entre las ya cerradas: repetir el de una `aplicada` responde
  * bien sin cambiar nada, y lo narra a cada hogar implicado tal como estaban al empezar. */

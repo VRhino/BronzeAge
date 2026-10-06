@@ -336,6 +336,21 @@ export interface Botin {
   monedas: Monedas;
 }
 
+/** `POST /v1/batallas/:battleId/salidas` (Conquest → BronzeAge): un héroe sale de la batalla (Doc 5.15.1, CQ-011). */
+export interface SalidaBatalla {
+  schemaVersion: typeof SCHEMA_VERSION;
+  battleId: string;
+  ticketRevision: number;
+  intentoAsignacionId: string;
+  heroeId: string;
+  /** `no_conectado` solo antes de empezar (`asignada`): sale sin castigo y sube la revisión del ticket. Los demás, con la partida en curso. */
+  motivo: 'no_conectado' | 'eliminado' | 'abandono' | 'desconexion';
+  /** Queda herido (Doc 5.16.4). */
+  derrotado: boolean;
+  /** Cómo quedaron sus escuadras al salir. Vacío si no llegó a desplegarlas. */
+  escuadras: { squadId: string; supervivientes: number; muertos: number }[];
+}
+
 /** `POST /v1/batallas/:battleId/resultado` (Conquest → BronzeAge). */
 export interface BattleResult {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -350,7 +365,8 @@ export interface BattleResult {
   /** Informativo: BronzeAge no aplica nada a partir de los objetivos. */
   objetivos: { objetivoId: string; capturadoPor: LadoId | null }[];
   porEscuadra: { squadId: string; desplegados: number; supervivientesAlCierre: number; muertos: number; xpGanada: number }[];
-  porHeroe: { heroeId: string; participo: boolean; sobrevivioAlCierre: boolean; xpGanada: number; botin?: Botin }[];
+  /** `derrotado` dice quién queda herido (Doc 5.16.4); sin él, quien está en el bando perdedor. No repite a quien salió antes (`SalidaBatalla`). */
+  porHeroe: { heroeId: string; participo: boolean; sobrevivioAlCierre: boolean; xpGanada: number; derrotado?: boolean; botin?: Botin }[];
   versionServidor: string;
 }
 
