@@ -743,8 +743,17 @@ export class GameStore {
     await this.despachar('rebelionVasallo', { relacionId }, 'Rebelión rechazada');
   }
 
-  async anexionar(faccionAId: string, faccionBId: string): Promise<void> {
-    await this.despachar('anexionar', { faccionAId, faccionBId }, 'Anexión rechazada');
+  /** La anexión pide la aceptación del Rey de la absorbida (Doc 2.6): se propone, se contesta o se retira. */
+  async proponerAnexion(faccionAId: string, faccionBId: string): Promise<void> {
+    await this.despachar('proponerAnexion', { faccionAId, faccionBId }, 'Propuesta de anexión rechazada');
+  }
+
+  async responderAnexion(propuestaId: string, aceptar: boolean): Promise<void> {
+    await this.despachar('responderAnexion', { propuestaId, aceptar }, 'Respuesta a la anexión rechazada');
+  }
+
+  async retirarAnexion(propuestaId: string): Promise<void> {
+    await this.despachar('retirarAnexion', { propuestaId }, 'Retirada de la anexión rechazada');
   }
 
   async fusionar(faccionAId: string, faccionBId: string, nuevoNombre: string, nuevoReyId: string): Promise<void> {

@@ -7,6 +7,7 @@ import type { EventoDominio } from '../../domain/eventos';
 import { puertoEnProceso } from '../puerto';
 import { RunnerDeBots } from '../runner';
 import { cerebroDeBot } from '../cerebro';
+import { proponerAnexion } from '../../session/comandos/anexion';
 
 /** Tres Facciones de bots con el andamio del batch, y su runner. Con la semilla 7, dos nacen a la vista una de otra. */
 async function mundo(ticks: number, horario: 'siempre' | 'por-semilla' = 'siempre') {
@@ -51,6 +52,22 @@ describe('bots: juegan con los comandos de un jugador', () => {
 
   it('misma semilla, misma partida: los bots piensan en orden de id, cada uno con su RNG', async () => {
     expect(JSON.stringify((await mundo(200)).sesion.exportar())).toBe(JSON.stringify((await mundo(200)).sesion.exportar()));
+  });
+});
+
+describe('bots: anexión (Doc 2.6)', () => {
+  it('el Rey bot rechaza la propuesta de anexión que recibe: no entrega su Facción', async () => {
+    const sesion = GameSession.crear('bots', { seed: 7 });
+    const [a, b] = ['Alfa', 'Beta'].map((nombre) => sesion.ejecutar(faccionAsentadaDePrueba, { nombre }).datos!.faccionId);
+    sesion.ejecutar(proponerAnexion, { faccionAId: a!, faccionBId: b! }, { actor: 'cualquiera' });
+    expect(sesion.getState().propuestasAnexion).toHaveLength(1);
+    const bots = new RunnerDeBots(puertoEnProceso(sesion), cerebroDeBot, { semilla: 7, horario: 'siempre' });
+    for (const h of sesion.getState().heroes) bots.alta(h.id);
+    for (let tick = 1; tick <= 20; tick++) await bots.trasTick(tick, sesion.avanzarTick().eventos);
+
+    expect(sesion.getState().propuestasAnexion).toEqual([]);
+    expect(sesion.getState().facciones.some((f) => f.id === b)).toBe(true);
+    expect(sesion.getState().eventosDominio.some((e) => e.codigo === 'diplomacia.anexion_rechazada')).toBe(true);
   });
 });
 

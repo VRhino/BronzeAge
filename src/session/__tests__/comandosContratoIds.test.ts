@@ -21,7 +21,8 @@ import {
   quitarDeCola,
   renombrarAsentamiento,
 } from '../comandos/construccion';
-import { anexionar, fusionar, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
+import { proponerAnexion, responderAnexion } from '../comandos/anexion';
+import { fusionar, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
 import { iniciarAsedio, reclutarTropa } from '../comandos/militar';
 import { colocarOrdenMercado, crearCaravana, proponerTrueque } from '../comandos/comercio';
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from '../comandos/expansion';
@@ -100,9 +101,14 @@ const CASOS: CasoIdInexistente[] = [
     ejecutar: ({ sesion }) => sesion.ejecutar(rebelionVasallo, { relacionId: 'no-existe' }, OPC),
   },
   {
-    etiqueta: 'anexionar: faccionBId',
-    codigoEsperado: 'fusion.invalida',
-    ejecutar: ({ sesion, faccionId }) => sesion.ejecutar(anexionar, { faccionAId: faccionId, faccionBId: 'no-existe' }, OPC),
+    etiqueta: 'proponerAnexion: faccionBId',
+    codigoEsperado: 'faccion.no_existe',
+    ejecutar: ({ sesion, faccionId }) => sesion.ejecutar(proponerAnexion, { faccionAId: faccionId, faccionBId: 'no-existe' }, OPC),
+  },
+  {
+    etiqueta: 'responderAnexion: propuestaId',
+    codigoEsperado: 'anexion.no_existe',
+    ejecutar: ({ sesion }) => sesion.ejecutar(responderAnexion, { propuestaId: 'no-existe', aceptar: true }, OPC),
   },
   {
     etiqueta: 'fusionar: faccionBId',

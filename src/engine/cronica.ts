@@ -5,8 +5,9 @@
 import type { Asentamiento, Faccion } from '../domain/types';
 import type { EventoDominio } from '../domain/eventos';
 import type { PayloadAsedio } from './combate';
-import type { PayloadAnexion, PayloadFusion } from './fusion';
-import type { PayloadGuerraDeclarada, PayloadRebelionVasallo } from './diplomacia';
+import type { PayloadAnexion } from './anexion';
+import type { PayloadFusion } from './fusion';
+import type { PayloadGuerraDeclarada, PayloadRebelionVasallo, PayloadVasalloLiberado } from './diplomacia';
 import type { PayloadFundado } from './expansion';
 import type { PayloadAsentamientoRuinas, PayloadNivelSubio } from './mantenimiento';
 
@@ -81,6 +82,11 @@ export function entradasDeCronica(eventos: readonly EventoDominio[], mundo: Mund
       case 'diplomacia.rebelion_vasallo': {
         const p = e.payload as PayloadRebelionVasallo;
         salida.push(entrada(e, e.codigo, `Los Aedas cantan la rebelión de ${faccion(p.faccionVasallaId)} contra su señor ${faccion(p.faccionSenoraId)}.`, [p.faccionSenoraId, p.faccionVasallaId]));
+        break;
+      }
+      case 'diplomacia.vasallo_liberado': {
+        const p = e.payload as PayloadVasalloLiberado;
+        salida.push(entrada(e, e.codigo, `Los Aedas cantan que ${faccion(p.faccionVasallaId)} queda libre: ${faccion(p.faccionSenoraId)}, su señor, se quedó sin tierras.`, [p.faccionSenoraId, p.faccionVasallaId]));
         break;
       }
       case 'diplomacia.anexion': {

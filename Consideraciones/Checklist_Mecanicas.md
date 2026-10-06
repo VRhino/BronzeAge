@@ -137,7 +137,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 ## Escala social y política
 - ✅ Glosario central: Jugador → Facción → Asentamientos; Liga = red de Facciones — `código: ✔`
 - ✅ Progresión: independiente → vasallaje/alianza → Liga → Gran Rey (prestigio) — `código: ✔` (`engine/liga.ts`, `engine/titulos.ts`)
-- ✅ Reglas de vasallaje completas (tributo, defensa mutua, 4 vías de ruptura) — `código: ✔` (`engine/diplomacia.ts`, comando `rebelionVasallo`)
+- ✅ Reglas de vasallaje completas (tributo, defensa mutua, 4 vías de ruptura) — `código: ✔` (`engine/diplomacia.ts`, comando `rebelionVasallo`); la vía 4, el señor sin asentamientos, desde 2026-10-06 con `liberarVasallosDeSenoresDesarmados`
 - ✅ Coste de gobernanza absorbido en Mantenimiento — `código: ✔`
 - ✅ Identidad visual (sigilo / estandarte de Facción; Liga, Gran Rey y títulos derivados) — `código: ✔` (Doc 2 §2.8.1, `Consideraciones/Identidad_Visual_Definicion.md`); Conquest lo dibuja con CQ-009
 
@@ -239,8 +239,9 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Las ordenanzas de trazado llevan un beneficio propio (muralla, comisión externa, talleres, población) frente a Vía Rápida — `código: ✔` (2026-10-02, Doc 4.4; cifras placeholder)
 
 ## Fusión y crecimiento de Facciones
-- ✅ Menú con 2 opciones (Anexión / Fusión), reglas de Rey y cargos resultantes — `código: ✔` (`engine/fusion.ts`, comandos `anexionar` / `fusionar`)
-- 🔶 Aceptación mutua obligatoria vs. anexión forzable unilateralmente — `código: ◐`: decidido que B acepta; falta el mecanismo (`Mecanicas a desarrollar.md` §32, junto al desarme del señor)
+- ✅ Menú con 2 opciones (Anexión / Fusión), reglas de Rey y cargos resultantes — `código: ✔` (`engine/anexion.ts`, `engine/fusion.ts`, comandos `proponerAnexion` / `responderAnexion` / `retirarAnexion` / `fusionar`)
+- ✅ Anexión con aceptación del Rey de B, propuesta pendiente con caducidad, y qué pasa con lo que cuelga de B — `código: ✔` (2026-10-06, Doc 2.6; `Consideraciones/Anexion_Y_Desarme_Definicion.md`)
+- 🔶 Fusión: consentimiento de la otra Facción y traslado de lo que cuelga de ellas — `código: ✘` (`Mecanicas a desarrollar.md` §32)
 
 ## Gremios
 - ✅ 4 gremios (Comerciantes, Artesanos, Constructores, Ladrones), escasos a nivel de servidor, con tirada periódica sujeta a 4 requisitos simultáneos (reputación >90, título de servidor específico, nivel de asentamiento en el máximo y mantenimiento >90%); mecanismo de pérdida resuelto — **`código: ✘`**. El `patioDeGremios` de `constants.ts` es una parcela decorativa del trazado urbano, sin relación con esta mecánica. (aparcado, `Docs/Ideas a diseñar.md` §21)

@@ -171,7 +171,9 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | `asignarCargoLocal` (resto de cargos) | jugador | residente **y presente** en el asentamiento, y Gobernador vigente de él |
 | `activarPolitica`, `anadirEdificioManualmente`, `quitarDeCola`, `moverEnCola`, `mejorarEdificioAhora`, `pausarAutoConstruccion`, `reanudarAutoConstruccion`, `calibrarReservaManual` | jugador | residente + cargo exigido por el comando (`gobernador`/`maestroObras`, ya validado hoy por el motor) |
 | `renombrarAsentamiento` | jugador | residente (o cargo específico — abierto, hoy no lo exige el motor) |
-| `romperRelacion`, `rebelionVasallo`, `anexionar`, `fusionar` | jugador | Facción propia, cargo de rey/embajador según ya exige `engine/diplomacia.ts`/`faccion.ts` |
+| `romperRelacion`, `rebelionVasallo`, `fusionar` | jugador | Facción propia, cargo de rey/embajador según ya exige `engine/diplomacia.ts`/`faccion.ts` |
+| `proponerAnexion`, `retirarAnexion` | jugador | Rey o Embajador de la Facción absorbente (`faccionAId`, o la de la propuesta) — 2026-10-06, Doc 2.6 |
+| `responderAnexion` | jugador | **solo el Rey de la Facción absorbida** (la de la propuesta) — 2026-10-06, Doc 2.6 |
 | `proponerRelacion` | jugador | Facción propia de `faccionAId` (quien propone), cargo de rey/embajador — **fila añadida 2026-08-25**: no estaba en la versión original de esta tabla, aunque el comando ya existía; implementada en `server/autorizacion/matriz.ts` por analogía con `romperRelacion` |
 | `proponerTrueque` | jugador | residente de `asentamientoAId` (quien propone) — **fila añadida 2026-08-25**, mismo motivo que `proponerRelacion` |
 | `colocarOrdenMercado`, `crearCaravana`, `reclutarTropa` | jugador | residente del asentamiento objetivo |

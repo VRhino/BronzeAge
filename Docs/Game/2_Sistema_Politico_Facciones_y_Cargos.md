@@ -55,7 +55,7 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 1. Rebelión forzada del vasallo → declaración de guerra automática del vasallo hacia el señor (y resto de vasallos), Y cancelación inmediata de todos los acuerdos comerciales/tratados vigentes.
 2. Liberación voluntaria por el señor.
 3. Conquista por un tercero → destrucción total O anexión como vasalla del conquistador.
-4. Liberación automática si el señor es destruido o se "desarma".
+4. Liberación automática si el señor es destruido o se «desarma» (decidido e implementado el 2026-10-06): un señor está **desarmado** cuando su Facción **se queda sin ningún asentamiento**, sea por conquista, ruina o abandono — «destruido» y «desarmado» son el mismo estado, y una Facción sin plazas no desaparece del mundo (Doc 5.15.5). En ese momento sus vasallos quedan libres: el vasallaje pasa a `rota` y se cantan en la crónica de los Aedas. **No cambia la reputación de nadie** (el señor no decide nada: el bonus de 2.7 es por liberar *voluntariamente*) **ni declara guerra**. Se barre una vez por tick, así que la liberación llega en el tick siguiente al hecho. Si el señor vuelve a fundar, ya no tiene vasallos.
 
 ### 2.4.1 Guerra (decidido el 2026-10-02)
 - **Se declara libre**: sin frontera compartida ni casus belli. La declara el Rey o el Embajador de la Facción (comando `declararGuerra`), contra cualquier Facción con la que no tenga ya una relación activa: para atacar a una aliada o a un señor o vasallo propio hay que romper antes la relación.
@@ -86,10 +86,17 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 
 ## 2.6 Fusión/anexión voluntaria entre 2 Facciones
 Menú con 2 opciones al ejecutar la acción:
-1. **Anexión** (A absorbe a B): A mantiene nombre/Rey/Embajador sin voto. Todo lo de B pasa a A. Cargos de Facción de B se disuelven; cargos LOCALES de asentamiento de B se mantienen.
-2. **Fusión** (nace Facción C): A y B se disuelven, se VOTA Rey de C entre representantes de ambas (lógica de Liga-por-alianza). Cargos de Facción anteriores se disuelven y re-designan; cargos locales se mantienen.
+1. **Anexión** (A absorbe a B): A mantiene nombre/Rey/Embajador sin voto. Todo lo de B pasa a A. Cargos de Facción de B se disuelven; cargos LOCALES de asentamiento de B se mantienen. **Exige la aceptación de B** (decidido e implementado el 2026-10-06):
+   - **Propuesta y respuesta.** La propone el **Rey o el Embajador de A** (`proponerAnexion`) y queda pendiente; la contesta **solo el Rey de B** (`responderAnexion`, aceptar o rechazar). Aceptar la ejecuta en el acto. A puede retirarla mientras nadie la ha contestado (`retirarAnexion`).
+   - **Caduca** a los `ANEXION.caducidadDias` días de mundo (3, placeholder). Entre dos Facciones hay **una sola propuesta pendiente**, en cualquier sentido. B tiene que tener Rey (si no, nadie puede aceptar). No hay condición de poder, de proximidad ni de nivel: es voluntaria.
+   - **B vasalla de un tercero**: no se puede proponer ni aceptar mientras lo siga siendo; su señor la libera antes. Si el señor de B es la propia A, el vasallaje termina con la anexión.
+   - **Qué pasa a A**: los asentamientos de B (con sus cargos locales y su guarnición), sus ciudadanos (con su residencia), sus ejércitos, caravanas, rutas comerciales, Aedas residentes y épicas cumplidas, miradas de la taberna, y lo que B recordaba del mundo (la niebla se funde con la de A). **A conserva** su nombre, sigilo, Rey, Embajador, reputación, experiencia y tecnología; **de B se pierden** su sigilo, sus cargos de Facción, su reputación, su experiencia y su tecnología.
+   - **Relaciones de B**: sus alianzas y guerras se cancelan **sin penalización de reputación**; sus **vasallos pasan a ser vasallos de A** con el mismo tributo (si A ya tiene una relación activa con ese vasallo, queda libre). Las propuestas pendientes que colgaban de B desaparecen; las que otros hacen a A siguen en pie.
+   - **Batalla en curso**: mientras alguna de las dos Facciones tenga una batalla abierta, la anexión no se acepta.
+   - **Quién lo ve**: la propuesta pendiente viaja en la proyección de ambas Facciones (`propuestasAnexion`); el Rey bot rechaza las que recibe. La anexión consumada se canta en la crónica de los Aedas.
+2. **Fusión** (nace Facción C): A y B se disuelven, se VOTA Rey de C entre representantes de ambas (lógica de Liga-por-alianza). Cargos de Facción anteriores se disuelven y re-designan; cargos locales se mantienen. *(Hoy cualquiera de las dos Facciones puede ejecutarla sin que la otra acepte, y no traslada ejércitos, caravanas ni memoria: queda por hacer con el mismo criterio que la anexión, cuando se diseñe la votación real.)*
 
-No cuenta contra el Cap de Fundación (vía "pacífica" de crecimiento).
+No cuenta contra el Cap de Fundación (vía "pacífica" de crecimiento). Decisiones y alternativas descartadas: `Consideraciones/Anexion_Y_Desarme_Definicion.md`.
 
 ## 2.7 Sistema de reputación/confiabilidad de Facción
 Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).

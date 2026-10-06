@@ -995,7 +995,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +3 con los Aedas (Doc 6.7): `comprarTecnologiaAeda`, `empezarEpica` y `abandonarEpica`.
       // +2 con la intel de las tabernas (Doc 5.12.10): `comprarMirada` y `comprarInformePlaza`.
       // -1 sin `crearFaccionNpc` (D53, D58): ninguna Facción nace asentada.
-      expect(cuerpo.oneOf.length).toBe(102);
+      // +2 con la anexión con aceptación (Doc 2.6): `proponerAnexion`, `responderAnexion` y `retirarAnexion` sustituyen a `anexionar`.
+      expect(cuerpo.oneOf.length).toBe(104);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

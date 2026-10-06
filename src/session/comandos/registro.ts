@@ -15,7 +15,8 @@ import { crearHeroe } from './crearHeroe';
 import { abrirAlijo, aportarARefundacion, comprarCaravanaDeRefundacion, comprarEnCampamento, pedirPrestamo, reclutarEnCampamento, reponerPrestamo, retirarDeRefundacion } from './mercenarios';
 import { asignarGuarnicion, borrarLoadout, guardarEnAlmacenPersonal, guardarLoadout, repartirPuntos, retirarGuarnicion, sacarDelAlmacenPersonal } from './heroe';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, dejarResidencia, designarCapital, residirEnCampamento } from './cargos';
-import { anexionar, declararGuerra, fusionar, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
+import { proponerAnexion, responderAnexion, retirarAnexion } from './anexion';
+import { declararGuerra, fusionar, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
 import {
   aceptarTrueque,
   agregarCarroCaravana,
@@ -94,7 +95,9 @@ const MANEJADORES = {
   aportarARefundacion,
   retirarDeRefundacion,
   comprarCaravanaDeRefundacion,
-  anexionar,
+  proponerAnexion,
+  responderAnexion,
+  retirarAnexion,
   fusionar,
   proponerRelacion,
   rebelionVasallo,

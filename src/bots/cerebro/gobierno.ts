@@ -125,6 +125,11 @@ async function rey(ctx: ContextoBot): Promise<void> {
   // El Rey bot acepta a quien pide entrar (D57).
   for (const heroeId of faccion.solicitudesIds ?? []) await ctx.intentar(`solicitud:${heroeId}`, 'responderSolicitud', { faccionId: faccion.id, heroeId, aceptar: true });
 
+  // Un Rey bot no entrega su Facción (Doc 2.6): rechaza las anexiones que le proponen, para que quien las hizo no espere a que caduquen.
+  for (const p of vista.propuestasAnexion) {
+    if (p.absorbidaId === faccion.id) await ctx.intentar(`anexion:${p.id}`, 'responderAnexion', { propuestaId: p.id, aceptar: false });
+  }
+
   // Un Gobernador para cada plaza que no lo tenga: el residente de id más bajo que la pizarra conozca.
   for (const plaza of plazasPropias(vista)) {
     if (!plaza.cargos || plaza.cargos.gobernadorId) continue;

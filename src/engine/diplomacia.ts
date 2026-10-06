@@ -21,6 +21,13 @@ export interface PayloadRebelionVasallo {
   faccionVasallaId: string;
 }
 
+/** Payload de `diplomacia.vasallo_liberado` (el señor se quedó sin asentamientos, ver `liberarVasallosDeSenoresDesarmados`). */
+export interface PayloadVasalloLiberado {
+  relacionId: string;
+  faccionSenoraId: string;
+  faccionVasallaId: string;
+}
+
 /** Payload de `diplomacia.guerra_declarada`. */
 export interface PayloadGuerraDeclarada {
   relacionIds: string[];
@@ -225,6 +232,29 @@ export function rebelionVasallo(
         } satisfies PayloadRebelionVasallo,
       },
     ],
+  };
+}
+
+/**
+ * Ruptura vía 4 (Doc 2.4, decidido el 2026-10-06): un señor sin ningún asentamiento está «desarmado» —lo mismo si lo conquistaron, lo
+ * arruinaron o lo dejaron caer— y sus vasallos quedan libres. Sin cambio de reputación (el señor no decide nada) ni guerra. Se barre cada
+ * tick, así que la liberación llega en el siguiente a la caída de la última plaza; si no hay nada que liberar, devuelve la misma lista.
+ */
+export function liberarVasallosDeSenoresDesarmados(
+  relaciones: RelacionPolitica[],
+  asentamientos: readonly Asentamiento[]
+): { relaciones: RelacionPolitica[]; eventos: EventoCrudo[] } {
+  const conPlaza = new Set(asentamientos.map((a) => a.faccionId));
+  const liberadas = relaciones.filter((r) => r.estado === 'activa' && r.tipo === 'vasallaje' && !conPlaza.has(r.faccionAId));
+  if (liberadas.length === 0) return { relaciones, eventos: [] };
+  const ids = new Set(liberadas.map((r) => r.id));
+  return {
+    relaciones: relaciones.map((r) => (ids.has(r.id) ? { ...r, estado: 'rota' as const } : r)),
+    eventos: liberadas.map((r) => ({
+      codigo: 'diplomacia.vasallo_liberado',
+      mensaje: `El vasallaje ${r.id} termina: el señor se quedó sin asentamientos.`,
+      payload: { relacionId: r.id, faccionSenoraId: r.faccionAId, faccionVasallaId: r.faccionBId } satisfies PayloadVasalloLiberado,
+    })),
   };
 }
 

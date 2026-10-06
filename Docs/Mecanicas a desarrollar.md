@@ -16,7 +16,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1: solo (b) hecha |
 | 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
 | 30 | MILITAR | Batallas con héroes: lo que falta de este lado (canal de tiempo real, sustituir participante, botín, persecución) | ◐ ciclo de `Batalla` fases 1 y 2; falta el canal de tiempo real |
-| 32 | POLÍTICA | Anexión con aceptación de B y desarme del señor | ✘ sin código |
+| 32 | POLÍTICA | Fusión de Facciones: consentimiento de la otra y traslado de lo que cuelga de ellas | ✘ sin código |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 
 **Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06).
@@ -107,16 +107,14 @@ batalla en curso (CQ-005). Mientras tanto, `experiencia` de escuadra suma lo que
 en 1. En el cliente de jugador, la pantalla definitiva de crear héroe, el equipo y la ficha de los héroes ajenos
 (`BronzeAgeClient`, `docs/Features_Pendientes.md` §0).
 
-## 32. Anexión con aceptación y desarme del señor
+## 32. Fusión de Facciones: consentimiento y traslado
 
-**Estado: acordado en el triaje del 2026-10-06, `código: ✘`.** Dos huecos entre el canon (Doc 2) y el código:
-
-- **Anexión** (Doc 2.6): el canon la llama «voluntaria», pero el comando `anexionar` solo exige autoridad en la
-  Facción absorbente (`session/comandos/autorizacion.ts`): B no consiente nada. Debe haber **aceptación de B**; falta el
-  mecanismo (propuesta y respuesta, como las demás relaciones, o consentimiento firmado por su Rey o Embajador).
-- **Desarme del señor** (Doc 2.4, ruptura 4): un señor está «desarmado» cuando su Facción **se queda sin
-  asentamientos**; en ese momento sus vasallos quedan libres. Hoy no hay código ni para esa liberación ni para la
-  que llega por destrucción del señor.
+**Estado: detectado al cerrar la anexión (2026-10-06), `código: ✘`.** La fusión (Doc 2.6, opción 2) tiene los mismos huecos que tenía la
+anexión: **cualquiera de las dos Facciones la ejecuta** sin que la otra acepte (`autorizacion.ts`, `fusionar`), y `engine/fusion.ts` solo mueve
+asentamientos y ciudadanos: **ejércitos, caravanas, rutas, Aedas residentes, miradas, relaciones y memoria de niebla** quedan apuntando a las dos
+Facciones que desaparecen. Falta decidir con el usuario: el consentimiento (propuesta y respuesta, como la anexión), la votación real del Rey de la
+nueva Facción (hoy lo indica quien llama) y qué pasa con las relaciones, la tecnología y la reputación de las dos. `engine/anexion.ts` ya tiene el
+traslado de lo que cuelga de una Facción, que se puede generalizar.
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
 

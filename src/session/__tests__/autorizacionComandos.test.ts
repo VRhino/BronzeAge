@@ -305,12 +305,23 @@ describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {
     expect(resultado).toEqual(POR_DOMINIO);
   });
 
-  it('anexionar exige autoridad en la Facción absorbente', () => {
+  it('proponerAnexion exige autoridad en la Facción absorbente', () => {
     const { sesion, faccionId, faccionRivalId, fundador, vecino } = partidaConFaccionRival();
     const params = { faccionAId: faccionId, faccionBId: faccionRivalId };
 
-    expect(verificarAutorizacion('anexionar', params, sesion.getState(), jugador(vecino))).toEqual(POR_DOMINIO);
-    expect(verificarAutorizacion('anexionar', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('proponerAnexion', params, sesion.getState(), jugador(vecino))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('proponerAnexion', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+  });
+
+  it('responderAnexion la contesta solo el Rey de la absorbida; retirarla, la autoridad de la absorbente', () => {
+    const { sesion, faccionId, faccionRivalId, fundador, ciudadanoRival } = partidaConFaccionRival();
+    const propuesta = { id: 'p1', absorbenteId: faccionId, absorbidaId: faccionRivalId, propuestaPor: fundador, creadaEn: instanteDeTick(0), expiraEn: instanteDeTick(9) };
+    const estado = { ...sesion.getState(), propuestasAnexion: [propuesta] };
+
+    expect(verificarAutorizacion('responderAnexion', { propuestaId: 'p1', aceptar: true }, estado, jugador(fundador))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('responderAnexion', { propuestaId: 'p1', aceptar: true }, estado, jugador(ciudadanoRival))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('retirarAnexion', { propuestaId: 'p1' }, estado, jugador(ciudadanoRival))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('retirarAnexion', { propuestaId: 'p1' }, estado, jugador(fundador))).toEqual(AUTORIZADO);
   });
 });
 

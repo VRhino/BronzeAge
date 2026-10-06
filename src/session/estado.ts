@@ -14,6 +14,7 @@ import type {
   CampamentoMercenarios,
   MercadoMercenario,
   MiradaIntel,
+  PropuestaAnexion,
   Caravana,
   Faccion,
   OrdenMercado,
@@ -153,6 +154,8 @@ export interface GameSessionState {
   aedasResidentes?: EstadoAedasResidentes;
   /** Miradas compradas en las tabernas (Doc 5.12.10), vigentes o aún en cooldown. Las crean los comandos; ausente = ninguna. */
   miradasIntel?: MiradaIntel[];
+  /** Propuestas de anexión (Doc 2.6) pendientes de respuesta del Rey de la absorbida; las caducadas se barren al proponer. Ausente = ninguna. */
+  propuestasAnexion?: PropuestaAnexion[];
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,

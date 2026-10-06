@@ -1270,6 +1270,20 @@ export interface RelacionPolitica {
   pazPropuestaPor?: string;
 }
 
+/**
+ * Propuesta de anexión pendiente (Doc 2.6): `absorbenteId` ofrece absorber a `absorbidaId`, y solo el Rey de esta puede aceptarla.
+ * Una por par; caduca sola (`ANEXION.caducidadDias`) y se retira al contestarla, retirarla o cambiar el mundo bajo ella.
+ */
+export interface PropuestaAnexion {
+  id: string;
+  absorbenteId: string;
+  absorbidaId: string;
+  /** El Rey o Embajador de la absorbente que la hizo. */
+  propuestaPor: string;
+  creadaEn: Instante;
+  expiraEn: Instante;
+}
+
 // --- Sprint 6: Cierre (Doc 2.7/2.9, mantenimiento Doc 4.5) ---
 
 /**

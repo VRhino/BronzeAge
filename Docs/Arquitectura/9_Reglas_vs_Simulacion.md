@@ -184,7 +184,7 @@ resultado; nunca los ejecuta. Sus implementaciones de motor:
 `fundarAsentamiento` · `crearFaccion` · `otorgarCiudadania` · `comprarCasa` · `asignarRey` ·
 `asignarEmbajador` · `asignarCargoLocal` · `liberarCargoLocal` · `activarPolitica` ·
 `anadirEdificioManualmente` · `quitarDeCola` · `moverEnCola` · `mejorarEdificioManualmente` ·
-`proponerVasallaje` · `proponerAlianza` · `romperRelacion` · `rebelionVasallo` · `anexionar` · `fusionar` ·
+`proponerVasallaje` · `proponerAlianza` · `romperRelacion` · `rebelionVasallo` · `proponerAnexion` · `responderAnexion` · `retirarAnexion` · `fusionar` ·
 `proponerTrueque` · `colocarOrdenMercado` · `construirCaravanaComercial` · `lanzarCaravanaFundacion` ·
 `desarmarCaravanaFundacion` · `reclutarTropa` · `resolverCombate` · `iniciarAsedio` · `combateCampoAbierto` ·
 `interceptarCaravana` · `atacarCampamentoBandidos` · `descontarRecursos` / `agregarRecurso` ·

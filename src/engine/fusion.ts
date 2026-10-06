@@ -4,12 +4,8 @@ import { ReglaInvalidaError } from './errores';
 
 export class FusionInvalidaError extends ReglaInvalidaError {}
 
-/** Fase A5 — payloads de este subsistema. Ambos eventos hacen DESAPARECER una Facción, así que un consumidor
+/** Fase A5 — payload de la fusión (la anexión vive en `anexion.ts`). El evento hace DESAPARECER una Facción, así que un consumidor
  * necesita los ids para actualizar lo que tuviera cacheado, no solo el texto. */
-export interface PayloadAnexion {
-  faccionAbsorbenteId: string;
-  faccionAbsorbidaId: string;
-}
 export interface PayloadFusion {
   faccionAId: string;
   faccionBId: string;
@@ -18,7 +14,7 @@ export interface PayloadFusion {
 }
 
 function requerirFacciones(facciones: Faccion[], aId: string, bId: string): [Faccion, Faccion] {
-  if (aId === bId) throw new FusionInvalidaError('Una Facción no puede fusionarse/anexionar consigo misma.');
+  if (aId === bId) throw new FusionInvalidaError('Una Facción no puede fusionarse consigo misma.');
   const a = facciones.find((f) => f.id === aId);
   const b = facciones.find((f) => f.id === bId);
   if (!a || !b) throw new FusionInvalidaError('Alguna de las Facciones no existe.');
@@ -27,32 +23,6 @@ function requerirFacciones(facciones: Faccion[], aId: string, bId: string): [Fac
 
 function unionCiudadanos(a: Faccion, b: Faccion): string[] {
   return [...new Set([...a.ciudadanosIds, ...b.ciudadanosIds])];
-}
-
-/**
- * Anexión (Doc 2.6, opción 1): A absorbe a B. A mantiene nombre/Rey/Embajador. Los cargos de Facción de B se
- * disuelven (B desaparece); los cargos LOCALES de los asentamientos de B se mantienen intactos (no se tocan).
- */
-export function anexionar(
-  facciones: Faccion[],
-  asentamientos: Asentamiento[],
-  faccionAId: string,
-  faccionBId: string
-): { facciones: Faccion[]; asentamientos: Asentamiento[]; eventos: EventoCrudo[] } {
-  const [a, b] = requerirFacciones(facciones, faccionAId, faccionBId);
-  const aFusionada: Faccion = { ...a, ciudadanosIds: unionCiudadanos(a, b) };
-
-  return {
-    facciones: facciones.filter((f) => f.id !== faccionBId).map((f) => (f.id === faccionAId ? aFusionada : f)),
-    asentamientos: asentamientos.map((asent) => (asent.faccionId === faccionBId ? { ...asent, faccionId: faccionAId } : asent)),
-    eventos: [
-      {
-        codigo: 'diplomacia.anexion',
-        mensaje: `${a.nombre} anexiona a ${b.nombre}.`,
-        payload: { faccionAbsorbenteId: a.id, faccionAbsorbidaId: b.id } satisfies PayloadAnexion,
-      },
-    ],
-  };
 }
 
 /**

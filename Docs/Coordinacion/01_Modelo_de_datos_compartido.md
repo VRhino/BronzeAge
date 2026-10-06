@@ -467,12 +467,16 @@ CaminoProyectado        lo que viaja al cliente en `caminos` (no el estado): tra
 ```text
 RelacionPolitica
   id
-  tipo: 'vasallaje' | 'alianza'
-  faccionAId, faccionBId     en vasallaje, A es la señora y B la vasalla; en alianza es simétrica
+  tipo: 'vasallaje' | 'alianza' | 'guerra'
+  faccionAId, faccionBId     en vasallaje, A es la señora y B la vasalla; en alianza es simétrica; en guerra, A es quien la declaró
   tributo?: { recurso: string; cantidadPorMinuto: number }   solo vasallaje
   creadoEn: Instante
   estado: 'activa' | 'rota'
+  pazPropuestaPor?           solo guerra: la Facción que ya ofreció la paz (Doc 2.4.1)
 ```
+
+Un vasallaje pasa a `rota` también cuando su **señor se queda sin asentamientos** (Doc 2.4, ruptura 4): evento `diplomacia.vasallo_liberado`
+(`{ relacionId, faccionSenoraId, faccionVasallaId }`), público a través de la crónica.
 
 ## 9. `Titulo`
 
@@ -1368,4 +1372,30 @@ TarifasIntel                    (ProyeccionJugador.tarifasIntel = INTEL, para co
   `campamentosBandidos`, `exploracion.visibles`), también a los aliados mientras dura la alianza. **No se graba en la memoria ni en lo explorado.**
 - **Aviso a la víctima**: `asentamiento.informe_pedido` (payload `{ asentamientoId }`), atribuido a la plaza espiada, **sin comprador**. La compra
   no emite ningún evento propio (un evento sin plaza sería público).
+
+## 25. Anexión con aceptación (nuevo, 2026-10-06)
+
+Canon: Doc 2 §2.6. Decisiones: `Consideraciones/Anexion_Y_Desarme_Definicion.md`. La anexión necesita que el Rey de la absorbida la acepte: el comando
+`anexionar` desaparece y lo sustituyen tres.
+
+```text
+PropuestaAnexion                (GameSessionState.propuestasAnexion; las vigentes de la Facción propia, ofrecidas o recibidas, viajan en ProyeccionJugador.propuestasAnexion)
+  id
+  absorbenteId                  quien ofrece absorber (A)
+  absorbidaId                   a quien se ofrece (B)
+  propuestaPor                  heroeId del Rey o Embajador de A
+  creadaEn, expiraEn: Instante  expiraEn = creadaEn + ANEXION.caducidadDias (3 días de mundo, placeholder)
+
+Comandos   proponerAnexion { faccionAId (absorbente), faccionBId }   Rey o Embajador de A
+           responderAnexion { propuestaId, aceptar }                 solo el Rey de la absorbida; aceptar la ejecuta en el acto
+           retirarAnexion { propuestaId }                            Rey o Embajador de la absorbente
+Errores    anexion.invalida (regla del motor: B sin Rey, B vasalla de un tercero, ya hay propuesta, batalla abierta…), anexion.no_existe, anexion.caducada, faccion.no_existe
+Eventos    diplomacia.anexion_propuesta, diplomacia.anexion_rechazada, diplomacia.anexion_retirada  (payload { propuestaId, absorbenteId, absorbidaId[, aceptada] })
+           diplomacia.anexion  (payload { faccionAbsorbenteId, faccionAbsorbidaId }): la consumada; se canta en la crónica
+```
+
+- **La Facción absorbida desaparece**: un cliente que cachee `Faccion` o ids de Facción debe reescribir `absorbidaId` → `absorbenteId` al ver
+  `diplomacia.anexion`. Pasan a la absorbente los asentamientos, ciudadanos, ejércitos, caravanas, rutas, Aedas residentes y miradas; sus vasallos
+  pasan a ser vasallos de la absorbente; las alianzas y guerras de la absorbida se cancelan.
+- **Visibilidad**: la propuesta es de las dos Facciones implicadas (cada una ve las suyas); nadie más la ve. Las caducadas no viajan.
 

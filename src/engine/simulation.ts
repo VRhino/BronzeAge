@@ -13,7 +13,7 @@ import { avanzarCaravanasDeFundacion } from './expansion';
 import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa, indiceTropa, sinEscolta } from './tropa';
 import { anexarAlHistorialDeOrdenes, caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
-import { avanzarTributos } from './diplomacia';
+import { avanzarTributos, liberarVasallosDeSenoresDesarmados } from './diplomacia';
 import { aplicarExperiencia, registrarDerrota, type AjusteExperiencia } from './faccion';
 import { NIVEL_FACCION } from '../constants';
 import { avanzarMantenimientoTropas, consumoRacionDeEscuadrones } from './tropas';
@@ -348,7 +348,12 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const trasMercado = caducarOrdenes(estado.ordenes, instante);
   eventosDominio.push(...comoEventosDominio(trasMercado.eventos, contexto));
 
-  const trasTributos = avanzarTributos(estado.relaciones, trasEjercitos.asentamientos);
+  // Un señor sin asentamientos suelta a sus vasallos antes de que se les cobre tributo (Doc 2.4, ruptura 4).
+  const trasLiberacion = liberarVasallosDeSenoresDesarmados(estado.relaciones, trasEjercitos.asentamientos);
+  eventosDominio.push(...comoEventosDominio(trasLiberacion.eventos, contexto));
+  const relaciones = trasLiberacion.relaciones;
+
+  const trasTributos = avanzarTributos(relaciones, trasEjercitos.asentamientos);
   eventosDominio.push(...comoEventosDominio(trasTributos.eventos, contexto));
 
   // Doc Fase_0_5 §8: se aplica la XP de construcción acumulada arriba junto a la del resto del tick (combate/
@@ -360,12 +365,12 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const trasNivelFaccion = aplicarExperiencia(trasEjercitos.facciones, ajustesExperiencia);
   eventosDominio.push(...comoEventosDominio(trasNivelFaccion.eventos, contexto));
 
-  const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, estado.relaciones);
+  const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, relaciones);
 
   // La reposición de los mercados de mercenarios es una cita agendada: cada tick solo compara un instante (Doc 1.9b).
   const trasReposicion = reponerMercados(trasEjercitos.campamentosMercenarios, estado.mercadoMercenario, instante);
 
-  const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, estado.relaciones, heroes, estado.aedasResidentes);
+  const titulosActuales = calcularTitulos(faccionesFinal, trasTributos.asentamientos, relaciones, heroes, estado.aedasResidentes);
   const eventosTitulos = narrarCambiosDeTitulo(estado.titulos, titulosActuales, faccionesFinal);
   eventosDominio.push(...comoEventosDominio(eventosTitulos, contexto));
 
@@ -425,7 +430,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     acuerdos: podarAcuerdosTerminados(trasComercio.acuerdos, trasEjercitos.caravanas, instante),
     ordenes: trasMercado.ordenes,
     historialOrdenes: anexarAlHistorialDeOrdenes(estado.historialOrdenes, trasMercado.cerradas),
-    relaciones: estado.relaciones,
+    relaciones,
     titulos: titulosActuales,
     red: trasComercio.red,
     campamentosBandidos: trasSpawnBandidos.campamentos,

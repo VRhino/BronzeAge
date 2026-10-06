@@ -2063,6 +2063,12 @@ export const CAPITAL = {
   cooldownDias: 14,
 } as const;
 
+/** Anexión entre Facciones (Doc 2.6, decidido el 2026-10-06). */
+export const ANEXION = {
+  /** Días de mundo que una propuesta espera la respuesta del Rey de la absorbida. PLACEHOLDER. */
+  caducidadDias: 3,
+} as const;
+
 /** Presencia (Doc 1.10.6). */
 export const PRESENCIA = {
   /** Lo que tarda en salir del mundo quien se desconecta: alcanza a quien ya tenía a tiro, no a quien iba lejos. */

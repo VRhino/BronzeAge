@@ -19,6 +19,7 @@ export const CODIGOS_ERROR = {
   faccionInvalida: 'faccion.invalida',
   fundacionInvalida: 'fundacion.invalida',
   fusionInvalida: 'fusion.invalida',
+  anexionInvalida: 'anexion.invalida',
   mercadoOrdenInvalida: 'mercado.orden_invalida',
   politicaInvalida: 'politica.invalida',
   tropasReclutamientoInvalido: 'tropas.reclutamiento_invalido',
@@ -50,6 +51,9 @@ export const CODIGOS_ERROR = {
   puertaInvalida: 'puerta.invalida',
   reservaSinTesorero: 'reserva.sin_tesorero',
   diplomaciaRelacionNoIndicada: 'diplomacia.relacion_no_indicada',
+  // Anexión (Doc 2.6): la propuesta que se contesta o retira no existe, o ya caducó.
+  anexionNoExiste: 'anexion.no_existe',
+  anexionCaducada: 'anexion.caducada',
   faccionNombreVacio: 'faccion.nombre_vacio',
   faccionNombreDuplicado: 'faccion.nombre_duplicado',
   // Sigilo (Doc 2.8.1): fuera del catálogo, o idéntico al de otra Facción.

@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { anexionar, declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
+import { declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
 
 const OPC = { actor: 'jugador-test' };
 
@@ -76,17 +76,6 @@ describe('proponerRelacion', () => {
     expect(rota.ok).toBe(true);
     expect(sesion.getState().relaciones[0]!.estado).toBe('rota');
   });
-});
-
-describe('anexionar / fusionar', () => {
-  it('anexionar rechaza una Facción consigo misma', () => {
-    const { sesion, a } = partidaConDosFacciones();
-    const resultado = sesion.ejecutar(anexionar, { faccionAId: a, faccionBId: a }, OPC);
-
-    expect(resultado.ok).toBe(false);
-    expect(resultado.codigoError).toBe('fusion.invalida');
-  });
-
 });
 
 describe('declararGuerra y proponerPaz (Doc 2.4.1)', () => {

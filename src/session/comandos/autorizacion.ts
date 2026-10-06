@@ -486,10 +486,25 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       return relacion === undefined || conAutoridadDiplomatica(estado, heroeId, relacion.faccionBId);
     },
   },
-  anexionar: {
+  // La absorbente es `faccionAId` (`engine/anexion.ts`): propone su Rey o Embajador. Acepta o rechaza solo el Rey de la absorbida (Doc 2.6).
+  proponerAnexion: {
     rolesPermitidos: ['jugador'],
-    // La absorbente es `faccionAId` (`engine/fusion.ts`) — quien inicia la anexión.
     condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.faccionAId),
+  },
+  responderAnexion: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const propuesta = estado.propuestasAnexion?.find((p) => p.id === params.propuestaId);
+      const absorbida = propuesta && buscarFaccion(estado, propuesta.absorbidaId);
+      return !absorbida || esReyDe(absorbida, heroeId);
+    },
+  },
+  retirarAnexion: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const propuesta = estado.propuestasAnexion?.find((p) => p.id === params.propuestaId);
+      return !propuesta || conAutoridadDiplomatica(estado, heroeId, propuesta.absorbenteId);
+    },
   },
   fusionar: {
     rolesPermitidos: ['jugador'],
