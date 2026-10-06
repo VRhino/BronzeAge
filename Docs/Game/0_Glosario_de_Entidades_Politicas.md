@@ -17,9 +17,9 @@ Es el dueño de sus escuadrones: **los escuadrones son del Héroe, no del asenta
 Héroe que maneja un programa en vez de una persona (2026-10-04, D52-D58). Nace como cualquiera, dentro de un campamento de mercenarios (Doc 1.9b), y juega por los mismos comandos que un humano; ninguna Facción nace asentada ni es «NPC» (Doc 1.3, 5.15.6). En batalla lo maneja la IA de Conquest.
 
 ## Columna personal
-Un Héroe solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella — dos viajeros que se cruzan no forman un ejército (Doc 5.12.1).
+Un Héroe solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella: dos viajeros que se cruzan no forman un ejército por sí solos, aunque tres o más sí pueden organizar uno en campo (Doc 5.12.1, 5.14.4).
 
-Se disuelve al entrar en su residencia, o al fundirse en un Ejército que se cruce (Doc 5.14).
+Se disuelve al entrar en su residencia, o al unirse a un Ejército o a una formación en campo (Doc 5.14).
 
 ## Escuadrón / Tropa / Unidad
 Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de entidades es **Héroe → Escuadrón → Unidad**, y "tropa" es el TIPO, no la instancia:
@@ -41,7 +41,7 @@ Donde un Héroe guarda los escuadrones que no lleva consigo; está en el asentam
 ## Ejército
 Una columna nacida de **movilizarse contra un destino** desde un asentamiento, que se mueve por el mapa como **una sola entidad** (Doc 5.12). Lo que la hace un Ejército es cómo salió, no cuántos van dentro: puede empezar con uno solo y crecer según se le suman los demás. Cada uno sigue limitado por su propio Liderazgo, y **todos son de la misma Facción**: ni aliados ni neutrales pueden marchar dentro de una columna ajena (Doc 5.14.1).
 
-**Solo se origina en un asentamiento, nunca en campo abierto**, y **ser un Ejército es una identidad, no un recuento**: uno al que se le van separando miembros hasta quedar en uno solo **sigue siendo un Ejército** — conserva su ruta fija y sus caravanas. Lo contrario también: una Columna personal no se convierte en Ejército porque alguien se le sume. La diferencia práctica está en Doc 5.12.1.
+**Se origina en un asentamiento o se forma en campo con tres o más héroes** (Doc 5.14.4), y **ser un Ejército es una identidad, no un recuento**: uno al que se le van separando miembros hasta quedar en uno solo **sigue siendo un Ejército** — conserva su ruta fija y sus caravanas. Lo contrario también: una Columna personal no se convierte en Ejército porque alguien se le sume. La diferencia práctica está en Doc 5.12.1.
 
 Un Ejército **nunca se queda vacío en campo abierto**: el último miembro es siempre su Líder y el Líder no puede separarse, así que la salida es cancelar y volver (Doc 5.14).
 
@@ -59,7 +59,7 @@ Si se **desconecta**, el mando pasa solo al integrante con más antigüedad: no 
 Fija además la **política de unión** de su columna al formarla, responde las peticiones cuando esa política es *preguntar* —y si no contesta en 10 segundos, la petición se da por rechazada—, y es **el único que puede cancelar la marcha**: el resto, si no quiere seguir, se separa.
 
 ## Herido
-Estado de un Héroe tras perder una batalla. Lo sufren **todos los héroes del bando perdedor**, sea cual sea la batalla, y dura **2 minutos**. Mientras dura, nadie puede perseguirle ni atacarle, y él tampoco puede perseguir ni entrar en batallas: lo primero evita el acoso en cadena al mismo viajero; lo segundo, que la inmunidad se use de escudo para depredar sin riesgo. Como es por héroe, una columna se puede atacar mientras lleve algún héroe sano; si todos sus héroes están heridos, nadie puede tocarla (Doc 5.16.4).
+Estado de un Héroe tras perder una batalla. Lo sufre **todo héroe que Unity da por derrotado**, y dura **2 minutos**. Mientras dura, nadie puede perseguirle ni atacarle, y él tampoco puede perseguir ni entrar en batallas: lo primero evita el acoso en cadena al mismo viajero; lo segundo, que la inmunidad se use de escudo para depredar sin riesgo. Como es por héroe, una columna se puede atacar mientras lleve algún héroe sano; si todos sus héroes están heridos, nadie puede tocarla (Doc 5.16.4).
 
 Los escuadrones nunca quedan heridos: sus bajas son siempre permanentes.
 
