@@ -3,7 +3,7 @@
 // `session/canales.ts` (negocio) — este hub confía en que ya se comprobó antes de llamar a `suscribir`.
 import type WebSocket from 'ws';
 import type { EventoDominio } from '../../domain/eventos';
-import { canalDeEvento } from '../../session/canales';
+import { canalesDeEvento } from '../../session/canales';
 
 interface Conexion {
   jugadorId: string;
@@ -52,7 +52,7 @@ export class HubDeDifusion {
 
   /**
    * Manda cada evento a las conexiones de `gameId` suscritas a su canal (`canalDeEvento`). Serializa el
-   * mensaje UNA vez por evento, no una vez por conexión — con muchos suscriptores al mismo canal (doc 6:
+   * mensaje UNA vez por evento y canal, no una vez por conexión — con muchos suscriptores al mismo canal (doc 6:
    * hasta 500 jugadores por partida) evita repetir `JSON.stringify` para cada uno.
    */
   difundir(gameId: string, eventos: readonly EventoDominio[]): void {
@@ -60,10 +60,11 @@ export class HubDeDifusion {
     if (!conexiones || conexiones.size === 0 || eventos.length === 0) return;
 
     for (const evento of eventos) {
-      const canal = canalDeEvento(evento);
-      const mensaje = JSON.stringify({ tipo: 'evento', canal, evento });
-      for (const [socket, conexion] of conexiones) {
-        if (conexion.canales.has(canal) && socket.readyState === socket.OPEN) socket.send(mensaje);
+      for (const canal of canalesDeEvento(evento)) {
+        const mensaje = JSON.stringify({ tipo: 'evento', canal, evento });
+        for (const [socket, conexion] of conexiones) {
+          if (conexion.canales.has(canal) && socket.readyState === socket.OPEN) socket.send(mensaje);
+        }
       }
     }
   }

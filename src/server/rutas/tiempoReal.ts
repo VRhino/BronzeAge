@@ -7,7 +7,7 @@
 // como un socket que se abre y se cierra solo sin explicación.
 //
 // Protocolo (JSON sobre el socket):
-//   cliente -> {"accion":"suscribir"|"desuscribir","canal":"mapa/general"|"asentamiento/<id>"}
+//   cliente -> {"accion":"suscribir"|"desuscribir","canal":"mapa/general"|"asentamiento/<id>"|"batalla/<id>"}
 //   servidor -> {"tipo":"suscrito"|"desuscrito","canal":...}
 //             | {"tipo":"error","canal"?:...,"error":...}
 //             | {"tipo":"evento","canal":...,"evento": EventoDominio}

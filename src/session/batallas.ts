@@ -606,6 +606,10 @@ export interface PayloadBatalla {
   /** Las Facciones de cada bando al abrir la batalla (`null` si no tiene): con ellas se cuentan los hechos de las épicas de los Aedas (Doc 6.7). */
   faccionAtacanteId: string | null;
   faccionDefensoraId: string | null;
+  /** Dónde se ve en el mapa. */
+  punto: Point;
+  /** Héroes por bando y su capacidad: lo que hace falta para decidir si unirse. Nunca quiénes son ni qué llevan. */
+  bandos: BatallaVisible['bandos'];
   /** Solo en `batalla.aplicada`. */
   ganador?: LadoId;
 }
@@ -624,9 +628,12 @@ export function eventosDeBatalla(
   ]);
   // Un campamento de bandidos es un evento PvE, no una batalla entre Facciones (Doc 5.15.1b).
   if (batalla.ticket.contextoEstrategico.tipo === 'campamento_bandidos') codigo = codigo.replace(/^batalla\./, 'evento_pve.');
+  const actual = estado.batallas.find((b) => b.id === batalla.id) ?? batalla;
   const payload: PayloadBatalla = {
     battleId: batalla.id,
     contexto: batalla.ticket.contextoEstrategico,
+    punto: batalla.punto,
+    bandos: bandosVisibles(actual),
     faccionAtacanteId: batalla.ticket.bandos.atacante.faccionId,
     faccionDefensoraId: batalla.ticket.bandos.defensor.faccionId,
   };
@@ -644,20 +651,32 @@ export interface BatallaVisible {
   ladoPropio?: LadoId;
 }
 
-export function batallaVisible(b: Batalla, heroeId: string): BatallaVisible {
+/** Los dos bandos como los ve cualquiera que vea la batalla: su Facción, cuántos héroes lleva y cuántos admite. */
+export function bandosVisibles(b: Batalla): BatallaVisible['bandos'] {
   const participaciones = participacionesDe(b);
   const bando = (lado: LadoId) => ({
     faccionId: b.ticket.bandos[lado].faccionId,
     heroes: participaciones.filter((p) => p.lado === lado).length,
     capacidadMaxima: b.ticket.bandos[lado].capacidadMaxima,
   });
-  const propio = participaciones.find((p) => p.participante.heroeId === heroeId)?.lado;
+  return { atacante: bando('atacante'), defensor: bando('defensor') };
+}
+
+/** ¿Combate o combatió este héroe en la batalla? También quien salió: sigue pudiendo seguirla. */
+export function combateEn(b: Batalla, heroeId: string): boolean {
+  return (
+    participacionesDe(b).some((p) => p.participante.heroeId === heroeId) || (b.salidas ?? []).some((s) => s.heroeId === heroeId)
+  );
+}
+
+export function batallaVisible(b: Batalla, heroeId: string): BatallaVisible {
+  const propio = participacionesDe(b).find((p) => p.participante.heroeId === heroeId)?.lado;
   return {
     battleId: b.id,
     estado: b.estado,
     contexto: b.ticket.contextoEstrategico,
     punto: b.punto,
-    bandos: { atacante: bando('atacante'), defensor: bando('defensor') },
+    bandos: bandosVisibles(b),
     ...(propio ? { ladoPropio: propio } : {}),
   };
 }

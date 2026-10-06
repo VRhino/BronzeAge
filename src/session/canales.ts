@@ -17,12 +17,44 @@
 // atribuyen a su asentamiento de origen justamente por esto (ver `avanzarEjercitos`).
 import type { EventoDominio } from '../domain/eventos';
 import { esCiudadano } from '../engine/faccion';
+import { combateEn } from './batallas';
 import type { GameSessionState } from './estado';
+import { proyectarParaJugador } from './proyecciones/jugador';
+
+const SIN_GEOMETRIA = { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} };
+
+/**
+ * Sigue una batalla quien combate en ella o la ve ahora mismo bajo la niebla (doc 02 §3.5): el criterio exacto con el que la
+ * proyección la enseña en el mapa, que se pregunta a la propia proyección para que no puedan separarse. Solo se evalúa al
+ * suscribirse, y las geometrías no cambian si se ve o no una batalla.
+ */
+function puedeSeguirLaBatalla(estado: GameSessionState, heroeId: string, battleId: string): boolean {
+  const batalla = estado.batallas.find((b) => b.id === battleId);
+  if (!batalla) return false;
+  return combateEn(batalla, heroeId) || proyectarParaJugador(estado, heroeId, SIN_GEOMETRIA).batallas.some((b) => b.battleId === battleId);
+}
 
 export const CANAL_GENERAL = 'mapa/general';
 
 export function canalDeAsentamiento(asentamientoId: string): string {
   return `asentamiento/${asentamientoId}`;
+}
+
+export function canalDeBatalla(battleId: string): string {
+  return `batalla/${battleId}`;
+}
+
+/** La batalla de un evento `batalla.*` o `evento_pve.*`, si lo es (doc 02 §3.5). */
+function batallaDe(evento: EventoDominio): string | undefined {
+  if (!evento.codigo.startsWith('batalla.') && !evento.codigo.startsWith('evento_pve.')) return undefined;
+  const id = (evento.payload as { battleId?: unknown } | undefined)?.battleId;
+  return typeof id === 'string' ? id : undefined;
+}
+
+/** Todos los canales por los que va un evento: el de siempre y, si es de una batalla, el de la batalla (doc 02 §3.5). */
+export function canalesDeEvento(evento: EventoDominio): string[] {
+  const battleId = batallaDe(evento);
+  return battleId === undefined ? [canalDeEvento(evento)] : [canalDeEvento(evento), canalDeBatalla(battleId)];
 }
 
 /** Canal al que pertenece un evento — el mismo criterio de "propio" que usa la proyección de jugador
@@ -40,6 +72,7 @@ export function canalDeEvento(evento: EventoDominio): string {
  */
 export function puedeSuscribirseA(estado: GameSessionState, heroeId: string, canal: string): boolean {
   if (canal === CANAL_GENERAL) return true;
+  if (canal.startsWith('batalla/')) return puedeSeguirLaBatalla(estado, heroeId, canal.slice('batalla/'.length));
   const asentamientoId = canal.startsWith('asentamiento/') ? canal.slice('asentamiento/'.length) : undefined;
   if (asentamientoId === undefined) return false; // canal con forma desconocida: no autorizado, no un error
 
