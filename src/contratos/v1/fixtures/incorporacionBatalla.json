@@ -5,6 +5,7 @@
   "lado": "atacante",
   "participante": {
     "heroeId": "heroe-carla",
+    "faccionId": "faccion-1",
     "controlador": "humano",
     "heroe": {
       "displayName": "Carla",

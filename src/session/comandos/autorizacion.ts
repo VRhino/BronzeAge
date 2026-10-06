@@ -297,6 +297,14 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       return !faccion || (esCiudadano(faccion, heroeId) && esReyDe(faccion, heroeId));
     },
   },
+  // El ajuste de admisión en los ataques de la Facción es del Rey, como la capital (Doc 2.2, 5.15.1b).
+  admitirOtrasFacciones: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const faccion = buscarFaccion(estado, params.faccionId);
+      return !faccion || (esCiudadano(faccion, heroeId) && esReyDe(faccion, heroeId));
+    },
+  },
   asignarEmbajador: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => {

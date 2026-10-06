@@ -259,6 +259,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     additionalProperties: false,
   },
   romperRelacion: objeto({ relacionId: IDENTIFICADOR, iniciadorFaccionId: IDENTIFICADOR }, ['relacionId', 'iniciadorFaccionId']),
+  admitirOtrasFacciones: objeto({ faccionId: IDENTIFICADOR, admitir: { type: 'boolean' } }, ['faccionId', 'admitir']),
   designarCapital: objeto({ faccionId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR }, ['faccionId', 'asentamientoId']),
   rebelionVasallo: objeto({ relacionId: IDENTIFICADOR }, ['relacionId']),
   declararGuerra: objeto({ faccionAId: IDENTIFICADOR, faccionBId: IDENTIFICADOR }, ['faccionAId', 'faccionBId']),
@@ -401,7 +402,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   perseguir: objeto({ heroeId: IDENTIFICADOR, objetivo: OBJETIVO_DE_INTERACCION }, ['heroeId', 'objetivo']),
   dejarDePerseguir: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   // Batallas de Unity (doc 02 §3.1).
-  unirseABatalla: objeto({ heroeId: IDENTIFICADOR, battleId: IDENTIFICADOR }, ['heroeId', 'battleId']),
+  unirseABatalla: objeto({ heroeId: IDENTIFICADOR, battleId: IDENTIFICADOR, lado: { type: 'string', enum: ['atacante', 'defensor'] } }, ['heroeId', 'battleId']),
   cancelarBatalla: objeto({ battleId: IDENTIFICADOR }, ['battleId']),
   cederLiderazgo: objeto({ ejercitoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, sucesorId: IDENTIFICADOR }, ['ejercitoId', 'heroeId', 'sucesorId']),
   entrarEnAsentamiento: objeto({ asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR }, ['asentamientoId', 'heroeId']),

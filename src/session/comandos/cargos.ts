@@ -241,6 +241,31 @@ export interface PayloadCapitalDesignada {
   asentamientoId: string;
 }
 
+export interface ParamsAdmitirOtrasFacciones {
+  faccionId: string;
+  admitir: boolean;
+}
+
+/** El Rey decide si los ataques de su Facción admiten a héroes de otras (Doc 2.2, 5.15.1b): un ajuste permanente. */
+export const admitirOtrasFacciones = comando<ParamsAdmitirOtrasFacciones, void>((estado, _mapa, ctx, params) => {
+  const faccion = exigirFaccion(estado, params.faccionId);
+  const siguiente = conFaccion(estado, { ...faccion, admiteOtrasEnAtaques: params.admitir });
+  const plaza = estado.asentamientos.find((a) => a.faccionId === faccion.id);
+  return exito(
+    siguiente,
+    plaza
+      ? [
+          evento(ctx, {
+            codigo: 'faccion.admision_en_ataques',
+            mensaje: `${faccion.nombre} ${params.admitir ? 'admite' : 'ya no admite'} a otras Facciones en sus ataques.`,
+            payload: { faccionId: faccion.id, admitir: params.admitir },
+            asentamientoId: plaza.id,
+          }),
+        ]
+      : []
+  );
+});
+
 /** El Rey designa la capital de su Facción (Doc 2.2): Palacio activo y cooldown entre traslados. */
 export const designarCapital = comando<ParamsDesignarCapital, void>((estado, _mapa, ctx, params) => {
   const faccion = exigirFaccion(estado, params.faccionId);

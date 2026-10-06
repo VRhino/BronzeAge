@@ -11,7 +11,7 @@ import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { verificarAutorizacion } from '../comandos/autorizacion';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
 import { proyectarParaJugador } from '../proyecciones/jugador';
-import { escuadrasDe, faccionesEnBatalla, participacionesDe, type Batalla } from '../batallas';
+import { enConvocatoria, escuadrasDe, faccionesEnBatalla, participacionesDe, type Batalla } from '../batallas';
 import { aplicarResultado, confirmarInicio, registrarAsignacion } from '../comandos/batalla';
 import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
 import { conHeroe, enPie, frenteACampamento } from './fixtures';
@@ -113,6 +113,63 @@ describe('asediar es una orden, no una llegada (Doc 5.12.4)', () => {
   });
 });
 
+describe('la convocatoria de un asedio (Doc 5.15.1b)', () => {
+  const asignar = (sesion: GameSession, battleId: string) =>
+    sesion.ejecutar(
+      registrarAsignacion,
+      {
+        servidorId: 's1',
+        mensaje: {
+          schemaVersion: SCHEMA_VERSION,
+          battleId,
+          ticketRevision: 0,
+          intentoAsignacionId: 'intento-1',
+          instancia: { host: 'batalla-1.example', puerto: 7777, protocolo: 'udp' },
+          tokensParticipante: [],
+        },
+      },
+      { actor: 'batalla-servidor:s1' }
+    );
+  const unirse = (sesion: GameSession, heroeId: string, battleId: string) => sesion.ejecutar(REGISTRO_COMANDOS.unirseABatalla, { heroeId, battleId }, { actor: heroeId });
+
+  it('quien se une durante ella entra en el ticket, y la batalla no se asigna hasta que acaba', () => {
+    const { sesion, fundador, vecino, plazaId } = frenteAPlaza();
+    const battleId = asediar(sesion, fundador, plazaId).datos!.battleId;
+
+    expect(enConvocatoria(sesion.getState().batallas[0]!, instanteDeTick(sesion.getState().tick))).toBe(true);
+    expect(asignar(sesion, battleId).ok, 'Conquest todavía no puede asignarla').toBe(false);
+    expect(unirse(sesion, vecino, battleId).ok).toBe(true);
+
+    const durante = sesion.getState().batallas[0]!;
+    expect(durante.ticket.bandos.atacante.participantes.map((p) => p.heroeId).sort()).toEqual([fundador, vecino].sort());
+    expect(durante.incorporaciones, 'no es una incorporación').toEqual([]);
+    expect(durante.ticket.ticketRevision).toBe(0);
+
+    sesion.avanzarTick();
+    expect(enConvocatoria(sesion.getState().batallas[0]!, instanteDeTick(sesion.getState().tick))).toBe(false);
+    expect(asignar(sesion, battleId).ok).toBe(true);
+  });
+
+  it('quien llega después, ya con el ticket cerrado, entra como incorporación', () => {
+    const { sesion, fundador, vecino, plazaId } = frenteAPlaza();
+    const battleId = asediar(sesion, fundador, plazaId).datos!.battleId;
+    sesion.avanzarTick();
+
+    expect(unirse(sesion, vecino, battleId).ok).toBe(true);
+
+    const b = sesion.getState().batallas[0]!;
+    expect(b.ticket.bandos.atacante.participantes.map((p) => p.heroeId)).toEqual([fundador]);
+    expect(b.incorporaciones.map((i) => i.participante.heroeId)).toEqual([vecino]);
+  });
+
+  it('las demás batallas no tienen convocatoria: salen hacia Unity al abrirse', () => {
+    const { sesion, fundador } = frenteACampamento();
+    atacarCampamento(sesion, fundador);
+
+    expect(sesion.getState().batallas[0]!.convocatoriaHasta).toBeUndefined();
+  });
+});
+
 describe('mientras se juega (Doc 5.15.1)', () => {
   it('lo que combate no recibe órdenes ni se mueve, y nadie más ataca el campamento', () => {
     const { sesion, fundador, vecino, columna } = frenteACampamento();
@@ -173,14 +230,15 @@ describe('unirse a una batalla (Doc 5.15.1)', () => {
     expect(dejarDePerseguir(sesion, vecino).codigoError).toBe(CODIGOS_ERROR.batallaBloqueo);
   });
 
-  it('no entra en un bando lleno, ni quien no es de ninguno', () => {
+  it('no entra en un bando lleno; a un campamento de bandidos, que es un evento PvE, se une cualquiera, también sin Facción', () => {
     const { sesion, fundador, vecino } = frenteACampamento();
     const battleId = atacarCampamento(sesion, fundador).datos!.battleId;
     const unirse = (s: GameSession, heroeId: string) => s.ejecutar(REGISTRO_COMANDOS.unirseABatalla, { heroeId, battleId }, { actor: heroeId });
 
     expect(unirse(conCapacidad(sesion, 1), vecino).codigoError, 'el atacante ya está y el bando es de 1').toBe(CODIGOS_ERROR.batallaInvalida);
     const forastero = enPie(conHeroe(sesion, 'forastero'), 'forastero', sesion.getState().batallas[0]!.punto);
-    expect(unirse(forastero, 'forastero').codigoError, 'sin Facción no es de ningún bando').toBe(CODIGOS_ERROR.batallaInvalida);
+    expect(unirse(forastero, 'forastero').ok, 'contra los bandidos van todos juntos').toBe(true);
+    expect(forastero.getState().batallas[0]!.incorporaciones.map((i) => i.lado)).toEqual(['atacante']);
   });
 });
 
@@ -321,6 +379,8 @@ describe('aplicar el resultado (doc 02 §3.3, doc 01 §15-§16)', () => {
 /** Conquest la asigna y la empieza (doc 02 §3.3). Devuelve cómo leerla después. */
 function empezar(sesion: GameSession, battleId: string): () => Batalla {
   const comoS1 = { actor: 'batalla-servidor:s1' };
+  // Un asedio no se asigna hasta que acaba su convocatoria (Doc 5.15.1b): un tick basta.
+  if (enConvocatoria(sesion.getState().batallas.find((b) => b.id === battleId)!, instanteDeTick(sesion.getState().tick))) sesion.avanzarTick();
   const base = { schemaVersion: SCHEMA_VERSION, battleId, ticketRevision: 0, intentoAsignacionId: 'intento-1' } as const;
   const instancia = { host: 'batalla-1.example', puerto: 7777, protocolo: 'udp' };
   sesion.ejecutar(registrarAsignacion, { servidorId: 's1', mensaje: { ...base, instancia, tokensParticipante: [] } }, comoS1);

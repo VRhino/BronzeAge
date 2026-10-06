@@ -18,6 +18,7 @@
       "participantes": [
         {
           "heroeId": "heroe-bruno",
+          "faccionId": "faccion-1",
           "controlador": "humano",
           "heroe": {
             "displayName": "Bruno",

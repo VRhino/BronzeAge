@@ -5,7 +5,7 @@
 // del `TypeError` de `.find(...)!` que daba `GameStore`) están unificados en `comandosContratoIds.test.ts`,
 // no repetidos aquí. Lo que queda son las reglas de NEGOCIO propias de cada comando.
 import { describe, expect, it } from 'vitest';
-import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, designarCapital } from '../comandos/cargos';
+import { activarPolitica, admitirOtrasFacciones, asignarCargoLocal, asignarEmbajador, asignarRey, designarCapital } from '../comandos/cargos';
 import { GameSession } from '../gameSession';
 import { OPC, partidaConAsentamiento } from './fixtures';
 
@@ -60,6 +60,19 @@ describe('activarPolitica', () => {
 
     expect(resultado.ok).toBe(false);
     expect(resultado.codigoError).toBe('politica.invalida');
+  });
+});
+
+describe('admitirOtrasFacciones (Doc 2.2, 5.15.1b)', () => {
+  it('es un ajuste permanente de la Facción: desactivado de origen, se activa y se desactiva', () => {
+    const { sesion, faccionId } = partidaConAsentamiento();
+    expect(sesion.getState().facciones[0]!.admiteOtrasEnAtaques, 'desactivado por defecto').toBeUndefined();
+
+    expect(sesion.ejecutar(admitirOtrasFacciones, { faccionId, admitir: true }, OPC).ok).toBe(true);
+    expect(sesion.getState().facciones[0]!.admiteOtrasEnAtaques).toBe(true);
+
+    expect(sesion.ejecutar(admitirOtrasFacciones, { faccionId, admitir: false }, OPC).ok).toBe(true);
+    expect(sesion.getState().facciones[0]!.admiteOtrasEnAtaques).toBe(false);
   });
 });
 

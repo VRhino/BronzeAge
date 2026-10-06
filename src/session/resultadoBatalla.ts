@@ -251,7 +251,7 @@ function capturarCaravana(estado: GameSessionState, b: Batalla, caravanaId: stri
 function destruirCampamento(estado: GameSessionState, b: Batalla, campamentoId: string, ahora: Instante): GameSessionState {
   const campamento = estado.campamentosBandidos.find((c) => c.id === campamentoId);
   if (!campamento) return estado;
-  const heroeIds = b.ticket.bandos.atacante.participantes.map((p) => p.heroeId);
+  const heroeIds = participacionesDe(b).filter((p) => p.lado === 'atacante').map((p) => p.participante.heroeId);
   return {
     ...estado,
     heroes: botinDeBandidos(estado.heroes, heroeIds, campamento.nivel, ahora).heroes,
@@ -289,11 +289,12 @@ function conquistar(estado: GameSessionState, b: Batalla, ahora: Instante): Game
 function conXpDeFaccion(estado: GameSessionState, b: Batalla, r: BattleResult): GameSessionState {
   const participaron = new Set(r.porHeroe.filter((h) => h.participo).map((h) => h.heroeId));
   const { atacante, defensor } = b.ticket.bandos;
-  const ajustes: AjusteExperiencia[] = (['atacante', 'defensor'] as const).flatMap((lado) => {
-    const faccionId = b.ticket.bandos[lado].faccionId;
-    const heroes = participacionesDe(b).filter((p) => p.lado === lado && participaron.has(p.participante.heroeId)).length;
-    return faccionId && heroes > 0 ? [{ faccionId, delta: NIVEL_FACCION.xp.combate * heroes, razon: 'combate (batalla)' }] : [];
-  });
+  // A la Facción de CADA héroe, no a la del bando: un bando puede mezclar Facciones (Doc 5.15.1b).
+  const porFaccion = new Map<string, number>();
+  for (const { participante } of participacionesDe(b)) {
+    if (participante.faccionId && participaron.has(participante.heroeId)) porFaccion.set(participante.faccionId, (porFaccion.get(participante.faccionId) ?? 0) + 1);
+  }
+  const ajustes: AjusteExperiencia[] = [...porFaccion].map(([faccionId, heroes]) => ({ faccionId, delta: NIVEL_FACCION.xp.combate * heroes, razon: 'combate (batalla)' }));
   const asedio = b.ticket.contextoEstrategico.tipo === 'asedio';
   if (asedio && r.ganador === 'atacante' && atacante.faccionId) ajustes.push({ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
   const facciones = aplicarAjustesExperiencia(estado.facciones, ajustes);

@@ -10,7 +10,7 @@ import Ajv from 'ajv';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { puedeJugar } from '../../acceso/rolesDePartida';
 import { SCHEMA_VERSION, type BattleResult, type BattleServerAssignment, type InicioBatalla, type TokensBatalla } from '../../contratos/v1/dto';
-import { batallasActivas, participacionesDe, type Batalla } from '../../session/batallas';
+import { batallasActivas, enConvocatoria, participacionesDe, type Batalla } from '../../session/batallas';
 import { CODIGOS_ERROR } from '../../session/comandos/codigosDeError';
 import { instanteDeTick } from '../../session/estado';
 import { ESQUEMA_SERVIDOR_BATALLA, servidorDeCabecera } from '../identidad/servidoresDeBatalla';
@@ -106,8 +106,9 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
     if (!servidor(request, reply)) return reply;
     const batallas = deps.partidas.abiertas().flatMap((runner) => {
       const estado = runner.getState();
-      return batallasActivas(estado, instanteDeTick(estado.tick))
-        .filter((b) => b.estado === 'convocando')
+      const ahora = instanteDeTick(estado.tick);
+      return batallasActivas(estado, ahora)
+        .filter((b) => b.estado === 'convocando' && !enConvocatoria(b, ahora))
         .map((b) => ({ battleId: b.id, gameId: runner.gameId, ticketRevision: b.ticket.ticketRevision }));
     });
     return reply.send({ batallas });
@@ -119,7 +120,9 @@ export function registrarRutasDeBatalla(app: FastifyInstance, deps: Dependencias
     async (request, reply) => {
       if (!servidor(request, reply)) return reply;
       const hallada = buscar(request.params.battleId);
-      return hallada ? reply.send(hallada.batalla.ticket) : noExiste(reply, request.params.battleId);
+      // En convocatoria el ticket todavía admite gente: para Conquest no existe hasta que se cierre (Doc 5.15.1b).
+      const visible = hallada && !enConvocatoria(hallada.batalla, instanteDeTick(hallada.runner.getState().tick));
+      return visible ? reply.send(hallada.batalla.ticket) : noExiste(reply, request.params.battleId);
     }
   );
 

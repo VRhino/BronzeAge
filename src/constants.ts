@@ -1884,6 +1884,9 @@ export const BATALLA = {
   duracionMinutos: { asedio: 30, resto: 15 },
   /** Plazos de infraestructura, en minutos de mundo: si nadie la asigna o la empieza a tiempo, `fallida` sin
    * castigo. El margen se suma a la duración para no dar por perdido un resultado que llega tras una caída corta. */
+  /** Un asedio espera esto antes de salir hacia Unity: quien se une en ese tiempo entra como si estuviera desde el
+   * principio (Doc 5.15.1b). El tiempo de mundo avanza por ticks, así que en la práctica es hasta el siguiente. */
+  convocatoriaSegundos: 30,
   plazoAsignacionMinutos: 5,
   plazoInicioMinutos: 5,
   margenMinutos: 5,

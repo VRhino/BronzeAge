@@ -14,6 +14,7 @@
       "participantes": [
         {
           "heroeId": "heroe-ana",
+          "faccionId": "faccion-1",
           "controlador": "humano",
           "heroe": {
             "displayName": "Ana de Micenas",
@@ -115,6 +116,7 @@
       "participantes": [
         {
           "heroeId": "heroe-bot-1",
+          "faccionId": "faccion-npc-2",
           "controlador": "bot",
           "heroe": {
             "displayName": "Capitán de Tirinto",

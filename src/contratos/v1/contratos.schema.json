@@ -318,8 +318,12 @@
         },
         {
           "type": "object",
-          "properties": { "tipo": { "const": "campo_abierto" }, "punto": { "$ref": "#/definitions/Punto" } },
-          "required": ["tipo", "punto"],
+          "properties": {
+            "tipo": { "const": "campo_abierto" },
+            "punto": { "$ref": "#/definitions/Punto" },
+            "columnas": { "enum": ["ejercitos", "solitarios"] }
+          },
+          "required": ["tipo", "punto", "columnas"],
           "additionalProperties": false
         },
         {
@@ -392,11 +396,12 @@
       "type": "object",
       "properties": {
         "heroeId": { "$ref": "#/definitions/Id" },
+        "faccionId": { "type": ["string", "null"], "minLength": 1 },
         "controlador": { "$ref": "#/definitions/Controlador" },
         "heroe": { "$ref": "#/definitions/HeroSnapshot" },
         "escuadras": { "type": "array", "items": { "$ref": "#/definitions/SquadSnapshot" } }
       },
-      "required": ["heroeId", "controlador", "heroe", "escuadras"],
+      "required": ["heroeId", "faccionId", "controlador", "heroe", "escuadras"],
       "additionalProperties": false
     },
     "BattleSide": {

@@ -142,6 +142,9 @@ export interface Faccion {
   /** La Facción que conquistó su último asentamiento (Doc 5.15.5): presente solo mientras no tiene ninguno. Con ella
    * el NPC sabe a quién se unen sus héroes bot antes de que la Facción desaparezca (`registrarDerrota`). */
   derrotadaPor?: string | null;
+  /** Ajuste permanente del Rey (Doc 2.2, 5.15.1b): si es `true`, en los asedios y asaltos de caravana que abre esta Facción
+   * pueden unirse al ataque héroes de Facciones neutrales o enemigas del defensor. Ausente = no. */
+  admiteOtrasEnAtaques?: boolean;
 }
 
 /** 3 clases de población NPC — Doc 4.1. Los Jugadores son una categoría separada. */

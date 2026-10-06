@@ -134,6 +134,16 @@ describe('la capital (Doc 2.2)', () => {
   });
 });
 
+describe('admitir a otras Facciones en los ataques (Doc 2.2, 5.15.1b)', () => {
+  it('solo lo decide el Rey de la Facción', () => {
+    const { sesion, faccionId, fundador, vecino } = partidaConAsentamiento();
+    const params = { faccionId, admitir: true };
+
+    expect(verificarAutorizacion('admitirOtrasFacciones', params, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('admitirOtrasFacciones', params, sesion.getState(), jugador(vecino))).toEqual(POR_DOMINIO);
+  });
+});
+
 describe('subida de nivel del asentamiento (Doc 4.5)', () => {
   it('solicitarAscenso es solo del Gobernador: ni el fundador sin cargo ni otro residente', () => {
     const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();

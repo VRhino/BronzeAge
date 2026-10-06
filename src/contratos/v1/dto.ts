@@ -175,10 +175,10 @@ export interface HeroePublicoDto {
   equipamiento: Record<SlotEquipo, string | null>;
 }
 
-/** Qué se disputa (doc 01 §15). */
+/** Qué se disputa (doc 01 §15). `campo_abierto` es una batalla campal entre ejércitos o una persecución entre columnas personales (Doc 5.15.1b). */
 export type ContextoEstrategico =
   | { tipo: 'asedio'; asentamientoId: string }
-  | { tipo: 'campo_abierto'; punto: Punto }
+  | { tipo: 'campo_abierto'; punto: Punto; columnas: 'ejercitos' | 'solitarios' }
   | { tipo: 'caravana'; caravanaId: string; punto: Punto }
   | { tipo: 'campamento_bandidos'; campamentoId: string; punto: Punto };
 
@@ -209,6 +209,8 @@ export type SquadSnapshot = ProgresionEscuadra & {
 
 export interface BattleParticipantSnapshot {
   heroeId: string;
+  /** Su Facción: un bando puede mezclar Facciones (Doc 5.15.1b). null si no tiene. */
+  faccionId: string | null;
   controlador: Controlador;
   heroe: HeroSnapshot;
   /** Solo las que lleva consigo, dentro de su Liderazgo. */

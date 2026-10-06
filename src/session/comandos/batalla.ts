@@ -13,7 +13,7 @@ import {
   type Batalla,
 } from '../batallas';
 import { aplicarResultado as aplicar } from '../resultadoBatalla';
-import type { BattleResult, BattleServerAssignment, InicioBatalla, TokensBatalla } from '../../contratos/v1/dto';
+import type { BattleResult, BattleServerAssignment, InicioBatalla, LadoId, TokensBatalla } from '../../contratos/v1/dto';
 import type { Instante } from '../../domain/tiempo';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { CODIGOS_ERROR } from './codigosDeError';
@@ -24,6 +24,8 @@ import { exito, rechazo, sinCambios, type ManejadorComando } from './tipos';
 export interface ParamsUnirseABatalla {
   heroeId: string;
   battleId: string;
+  /** Obligatorio en una persecución, donde se elige bando; en el resto lo deduce el servidor (Doc 5.15.1b). */
+  lado?: LadoId;
 }
 
 export interface ParamsCancelarBatalla {
@@ -38,7 +40,7 @@ function exigirBatalla(estado: GameSessionState, battleId: string, ahora: Instan
 
 /** La columna del héroe entra en el bando de su Facción (Doc 5.15.1). Devuelve las secuencias de sus incorporaciones. */
 export const unirseABatalla = comando<ParamsUnirseABatalla, { secuencias: number[] }>((estado, _mapa, ctx, params) => {
-  const r = unirse(estado, exigirBatalla(estado, params.battleId, ctx.instante), params.heroeId, ctx.instante);
+  const r = unirse(estado, exigirBatalla(estado, params.battleId, ctx.instante), params.heroeId, ctx.instante, params.lado);
   const batalla = r.estado.batallas.find((b) => b.id === params.battleId)!;
   return exito(
     conHistorialDeJugador(r.estado, params.heroeId, `Se une a la batalla ${params.battleId}.`),

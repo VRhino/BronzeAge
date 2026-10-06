@@ -24,14 +24,14 @@ import {
 } from '../contratos/v1/dto';
 import { VERSION_CATALOGO_TROPAS } from '../contratos/v1/catalogoTropas';
 import { BALANCE_VERSION, BATALLA, CAMPAMENTOS_BANDIDOS, LAYOUT_VERSION, LOGISTICA, REJILLA_ASENTAMIENTO } from '../constants';
-import { minutos, sumar, type Instante } from '../domain/tiempo';
+import { minutos, segundos, sumar, type Instante } from '../domain/tiempo';
 import { distancia } from '../world/geometria';
 import { columnaDe } from '../engine/ejercitos';
-import { esCiudadano } from '../engine/faccion';
 import { heridosEn } from '../engine/heroe';
 import { edificiosInternos, tamanoDeEdificio } from '../engine/trazado';
 import { guarnicionDe, heroesQueDefienden, indiceTropa } from '../engine/tropa';
 import { idDeMapa, type GameSessionState } from './estado';
+import { faccionDe, ladoParaUnirse } from './entradaEnBatalla';
 
 export type EstadoBatalla = 'convocando' | 'asignada' | 'en_curso' | 'aplicada' | 'cancelada' | 'fallida';
 
@@ -52,6 +52,9 @@ export interface Batalla {
   /** Plazo del estado actual, en tiempo de mundo: que la asignen, que empiece o, en curso, la duración más un margen.
    * Si vence, `fallida` sin castigo (`vencerBatallas`). */
   expiraEn: Instante;
+  /** Solo un asedio: hasta cuándo se puede uno unir como si estuviera desde el principio (Doc 5.15.1b). Mientras dura,
+   * el ticket no se publica ni se asigna; al cerrarse, queda congelado. */
+  convocatoriaHasta?: Instante;
   iniciadaEn?: Instante;
   /** La asignación aceptada, con quién la registró y los tokens de los que se unen después. */
   asignacion?: BattleServerAssignment & { servidorId: string };
@@ -66,6 +69,11 @@ export class BatallaInvalidaError extends Error {}
 
 /** Otro servidor de batalla ya tiene esta batalla (doc 02 §3.3). Lo traduce `erroresDeDominio.ts` a `batalla.ya_asignada`. */
 export class BatallaYaAsignadaError extends Error {}
+
+/** ¿Sigue abierta la convocatoria de un asedio (Doc 5.15.1b)? Mientras dura, su ticket no se publica ni se asigna. */
+export function enConvocatoria(b: Pick<Batalla, 'convocatoriaHasta'>, ahora: Instante): boolean {
+  return b.convocatoriaHasta !== undefined && ahora < b.convocatoriaHasta;
+}
 
 const ACTIVAS: ReadonlySet<EstadoBatalla> = new Set(['convocando', 'asignada', 'en_curso']);
 
@@ -165,7 +173,7 @@ export function tocaLoBloqueado(estado: GameSessionState, ahora: Instante, actor
 export function faccionesEnBatalla(estado: Pick<GameSessionState, 'batallas'>, ahora: Instante): Set<string> {
   return new Set(
     batallasActivas(estado, ahora)
-      .flatMap((b) => [b.ticket.bandos.atacante.faccionId, b.ticket.bandos.defensor.faccionId])
+      .flatMap((b) => [b.ticket.bandos.atacante.faccionId, b.ticket.bandos.defensor.faccionId, ...participacionesDe(b).map((p) => p.participante.faccionId)])
       .filter((f): f is string => f !== null)
   );
 }
@@ -203,10 +211,11 @@ function tropaSinDueno(squadId: string, tropa: { tropaId: string; unidades: numb
   };
 }
 
-function enBatalla(h: Heroe, escuadras: readonly Escuadron[]): BattleParticipantSnapshot {
+function enBatalla(h: Heroe, escuadras: readonly Escuadron[], faccionId: string | null): BattleParticipantSnapshot {
   const ocupadas = h.inventario.filter((i) => i.casillaInventario >= 0).length;
   return {
     heroeId: h.id,
+    faccionId,
     controlador: h.controlador,
     heroe: {
       displayName: h.displayName,
@@ -230,7 +239,7 @@ function heroesDeColumna(estado: GameSessionState, columna: Ejercito, heridos: R
     .filter((p) => !heridos.has(p.heroeId))
     .flatMap((p) => {
       const h = estado.heroes.find((x) => x.id === p.heroeId);
-      return h ? [enBatalla(h, h.escuadrones.filter((e) => e.contenedor.tipo === 'ejercito' && e.contenedor.ejercitoId === columna.id))] : [];
+      return h ? [enBatalla(h, h.escuadrones.filter((e) => e.contenedor.tipo === 'ejercito' && e.contenedor.ejercitoId === columna.id), faccionDe(estado, h.id))] : [];
     });
 }
 
@@ -285,7 +294,7 @@ function bandoDeColumna(estado: GameSessionState, columna: Ejercito, heridos: Re
 export function aperturaContraColumna(estado: GameSessionState, atacante: Ejercito, defensor: Ejercito, iniciadaPor: string, heridos: ReadonlySet<string>): Apertura {
   const punto = defensor.posicionActual;
   return {
-    contexto: { tipo: 'campo_abierto', punto },
+    contexto: { tipo: 'campo_abierto', punto, columnas: atacante.tipo === 'ejercito' ? 'ejercitos' : 'solitarios' },
     punto,
     iniciadaPor,
     atacante: bandoDeColumna(estado, atacante, heridos),
@@ -333,7 +342,7 @@ export function aperturaContraCampamento(estado: GameSessionState, atacante: Eje
 export function aperturaDeAsedio(estado: GameSessionState, ejercito: Ejercito, plaza: Asentamiento, iniciadaPor: string, heridos: ReadonlySet<string>): Apertura {
   const defensores = heroesQueDefienden(plaza, estado.heroes, heridos).map((h) => {
     const loadout = new Set(h.loadouts.find((l) => l.activo)?.squadIds ?? []);
-    return enBatalla(h, h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && !e.enGuarnicion && loadout.has(e.id)));
+    return enBatalla(h, h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && !e.enGuarnicion && loadout.has(e.id)), faccionDe(estado, h.id));
   });
   return {
     contexto: { tipo: 'asedio', asentamientoId: plaza.id },
@@ -386,6 +395,8 @@ export function idDeBatalla(gameId: string, n: number): string {
  * asigne (doc 01 §15). */
 export function abrirBatalla(estado: GameSessionState, apertura: Apertura, ahora: Instante, id: string): { estado: GameSessionState; batalla: Batalla } {
   const asedio = apertura.contexto.tipo === 'asedio';
+  // Solo el asedio tiene convocatoria (Doc 5.15.1b); en el resto `convocatoriaHasta` es ya y no hace falta guardarla.
+  const convocatoriaHasta = asedio ? sumar(ahora, segundos(BATALLA.convocatoriaSegundos)) : ahora;
   const lado = (b: Bando): BattleSide => ({ ...b, capacidadMaxima: asedio ? BATALLA.capacidad.asedio : BATALLA.capacidad.resto });
   const batalla: Batalla = {
     id,
@@ -410,7 +421,8 @@ export function abrirBatalla(estado: GameSessionState, apertura: Apertura, ahora
     },
     incorporaciones: [],
     bloqueo: apertura.bloqueo,
-    expiraEn: sumar(ahora, minutos(BATALLA.plazoAsignacionMinutos)),
+    ...(asedio ? { convocatoriaHasta } : {}),
+    expiraEn: sumar(convocatoriaHasta, minutos(BATALLA.plazoAsignacionMinutos)),
   };
   return {
     estado: { ...estado, batallas: [...estado.batallas, batalla], heroes: conReserva(estado.heroes, escuadrasConDueno(batalla), id) },
@@ -423,7 +435,13 @@ export function abrirBatalla(estado: GameSessionState, apertura: Apertura, ahora
  * héroes sanos y lo que llevan, si está a distancia de ataque del punto y el bando no se pasa de su capacidad. Cada
  * héroe es una incorporación; el ticket no cambia.
  */
-export function unirseABatalla(estado: GameSessionState, batalla: Batalla, heroeId: string, ahora: Instante): { estado: GameSessionState; nuevas: IncorporacionBatalla[] } {
+export function unirseABatalla(
+  estado: GameSessionState,
+  batalla: Batalla,
+  heroeId: string,
+  ahora: Instante,
+  ladoPedido?: LadoId
+): { estado: GameSessionState; nuevas: IncorporacionBatalla[] } {
   const heridos = heridosEn(estado.heroes, ahora);
   if (heridos.has(heroeId)) throw new BatallaInvalidaError('Estás herido: no puedes entrar en batalla.');
   const bloqueos = bloqueosDe(estado, ahora);
@@ -434,27 +452,35 @@ export function unirseABatalla(estado: GameSessionState, batalla: Batalla, heroe
   if (distancia(columna.posicionActual, batalla.punto) > LOGISTICA.radioEncuentro) {
     throw new BatallaInvalidaError(`Hay que estar a menos de ${LOGISTICA.radioEncuentro} de la batalla.`);
   }
-  const faccionId = estado.facciones.find((f) => esCiudadano(f, heroeId))?.id;
-  const lado = (['atacante', 'defensor'] as const).find((l) => faccionId !== undefined && batalla.ticket.bandos[l].faccionId === faccionId);
-  if (!lado) throw new BatallaInvalidaError('Tu Facción no combate en esta batalla.');
+  const heroe = estado.heroes.find((h) => h.id === heroeId);
+  if (!heroe) throw new BatallaInvalidaError('Ese héroe no existe.');
+  const lado = ladoParaUnirse(estado, batalla, heroe, columna, ladoPedido);
 
   const entran = heroesDeColumna(estado, columna, heridos);
   const yaDentro = participacionesDe(batalla).filter((p) => p.lado === lado).length;
   if (yaDentro + entran.length > batalla.ticket.bandos[lado].capacidadMaxima) throw new BatallaInvalidaError('Ese bando está lleno.');
 
-  const nuevas: IncorporacionBatalla[] = entran.map((participante, i) => ({
-    schemaVersion: SCHEMA_VERSION,
-    battleId: batalla.id,
-    secuencia: batalla.incorporaciones.length + i + 1,
-    lado,
-    participante,
-  }));
+  // En la convocatoria de un asedio se entra en el ticket, como uno de los que estaban al empezar; después, como incorporación.
+  const enLaConvocatoria = enConvocatoria(batalla, ahora);
+  const nuevas: IncorporacionBatalla[] = enLaConvocatoria
+    ? []
+    : entran.map((participante, i) => ({
+        schemaVersion: SCHEMA_VERSION,
+        battleId: batalla.id,
+        secuencia: batalla.incorporaciones.length + i + 1,
+        lado,
+        participante,
+      }));
+  const bandos = enLaConvocatoria
+    ? { ...batalla.ticket.bandos, [lado]: { ...batalla.ticket.bandos[lado], participantes: [...batalla.ticket.bandos[lado].participantes, ...entran] } }
+    : batalla.ticket.bandos;
   const actualizada: Batalla = {
     ...batalla,
+    ticket: { ...batalla.ticket, bandos },
     incorporaciones: [...batalla.incorporaciones, ...nuevas],
     bloqueo: { ...batalla.bloqueo, ejercitoIds: [...batalla.bloqueo.ejercitoIds, columna.id] },
   };
-  const reservadas = nuevas.flatMap((n) => n.participante.escuadras.map((e) => e.squadId));
+  const reservadas = entran.flatMap((p) => p.escuadras.map((e) => e.squadId));
   return {
     estado: {
       ...estado,
@@ -524,6 +550,7 @@ export function registrarAsignacion(
 ): GameSessionState {
   if (batalla.asignacion?.intentoAsignacionId === asignacion.intentoAsignacionId && batalla.asignacion.servidorId === servidorId) return estado;
   if (batalla.estado !== 'convocando') throw new BatallaYaAsignadaError('La batalla ya tiene servidor.');
+  if (enConvocatoria(batalla, ahora)) throw new BatallaInvalidaError('La batalla sigue en convocatoria: todavía no se puede asignar.');
   exigirRevisionVigente(batalla, asignacion.ticketRevision);
   exigirTokensDeHumanos(batalla, asignacion.tokensParticipante);
   return conBatalla(estado, {
@@ -576,6 +603,8 @@ export function eventosDeBatalla(
     ...estado.caravanas.filter((c) => batalla.bloqueo.caravanaIds.includes(c.id)).map((c) => c.origenAsentamientoId),
     ...(batalla.bloqueo.asentamientoId ? [batalla.bloqueo.asentamientoId] : []),
   ]);
+  // Un campamento de bandidos es un evento PvE, no una batalla entre Facciones (Doc 5.15.1b).
+  if (batalla.ticket.contextoEstrategico.tipo === 'campamento_bandidos') codigo = codigo.replace(/^batalla\./, 'evento_pve.');
   const payload: PayloadBatalla = {
     battleId: batalla.id,
     contexto: batalla.ticket.contextoEstrategico,

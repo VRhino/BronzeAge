@@ -78,10 +78,12 @@ function enBatalla(
   casillasInventarioLibres: number,
   escuadras: SquadSnapshot[],
   atributosEfectivos: Atributos = h.atributosBase,
+  faccionId: string | null = 'faccion-1',
 ): BattleParticipantSnapshot {
   const { displayName, classDefinitionId, nivel, genero, avatar, perksDesbloqueados, equipamiento } = h;
   return {
     heroeId: h.id,
+    faccionId,
     controlador: h.controlador,
     heroe: {
       displayName,
@@ -315,7 +317,7 @@ export const TICKET_ASEDIO: BattleTicket = {
       faccionId: 'faccion-npc-2',
       capacidadMaxima: 15,
       participantes: [
-        enBatalla(HEROE_BOT, 24, [escuadra('escuadron-40', HEROE_BOT.id, 'lanceros_mimbre', 25, { nivel: 2, experiencia: 150 })]),
+        enBatalla(HEROE_BOT, 24, [escuadra('escuadron-40', HEROE_BOT.id, 'lanceros_mimbre', 25, { nivel: 2, experiencia: 150 })], undefined, 'faccion-npc-2'),
       ],
       escuadrasSinHeroe: [escuadra('escuadron-41', 'heroe-bot-2', 'milicia_lanceros', 25)],
     },
@@ -379,6 +381,7 @@ export const TICKET_BANDIDOS: BattleTicket = {
       participantes: [
         {
           heroeId: 'heroe-bruno',
+          faccionId: 'faccion-1',
           controlador: 'humano',
           heroe: {
             displayName: 'Bruno',
@@ -431,6 +434,7 @@ export const INCORPORACION: IncorporacionBatalla = {
   lado: 'atacante',
   participante: {
     heroeId: 'heroe-carla',
+    faccionId: 'faccion-1',
     controlador: 'humano',
     heroe: {
       displayName: 'Carla',

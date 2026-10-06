@@ -997,7 +997,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // -1 sin `crearFaccionNpc` (D53, D58): ninguna Facción nace asentada.
       // +2 con la anexión con aceptación (Doc 2.6): `proponerAnexion`, `responderAnexion` y `retirarAnexion` sustituyen a `anexionar`.
       // +2 con la fusión con aceptación (Doc 2.6): `proponerFusion`, `responderFusion` y `retirarFusion` sustituyen a `fusionar`.
-      expect(cuerpo.oneOf.length).toBe(106);
+      // +1 con `admitirOtrasFacciones` (Doc 2.2, 5.15.1b): el ajuste del Rey sobre sus ataques.
+      expect(cuerpo.oneOf.length).toBe(107);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });
