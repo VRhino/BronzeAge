@@ -1,13 +1,27 @@
 # Cliente de depuración / administración — Bronze Age Collapse
 
-> **v0.1.1 · último cambio 2026-09-10** — documentación reconciliada con el backend: la niebla de guerra ya
-> está implementada; este cliente sigue siendo solo de lectura y continúa acoplado al motor.
+> **v0.2.0 · último cambio 2026-10-06** — pasada de usabilidad del cliente admin. Sigue siendo de solo lectura
+> salvo las acciones de administración (Mundo, Bots, NPC de Facción) y sigue acoplado al motor por tipos/consultas.
 >
-> El cambio funcional anterior (2026-09-08) cableó el bloque "economía del oro" (coste de oro por soldado en
+> - **Subpestañas comunes** (`src/ui/subpestanas.ts`) en Bots, Facción, Jugadores, Asentamientos y Guerra.
+> - **Sigilo dibujado** (`src/sigilo/`, copia del dibujo del cliente jugador + `catalogoSigilos.json` del backend):
+>   antes solo se pintaba un cuadrado bicolor. Chip de Facción con su escudo; `htmlNombreConSigilo` para chips y cabeceras.
+> - **Facción**: General, Asentamientos, Diplomacia, Tecnologías (por Era, estado, logro y hitos) y Aedas/títulos.
+> - **Jugadores**: General, Almacén personal, Escuadrones, Historial; punto de conexión verde / amarillo / gris
+>   (`Heroe.desconectaEn` / `Heroe.fuera`). El Rey, Embajador y Gran Rey se muestran por nombre, con el id de detalle.
+> - **Bots**: Facciones por nombre y sigilo (los bots sin Facción, agrupados aparte; las pizarras vacías, ocultas) y
+>   «Ver memoria» como panel HTML (plan, residencia, esperas con tiempo restante, solicitud, pizarra).
+> - **Mundo**: código de invitación real del servidor (`GET/PUT /v1/admin/registro/codigo`), editable; ya no se lee de
+>   `VITE_CODIGO_INVITACION`.
+> - **Guerra**: pestaña con Panorama (guerras, ejércitos en campo, batallas) y Reclutamiento; estados vacíos explicados.
+>
+> Anterior (v0.1.1, 2026-09-10): documentación reconciliada con el backend; la niebla de guerra ya está implementada.
+>
+> El cambio funcional previo (2026-09-08) cableó el bloque "economía del oro" (coste de oro por soldado en
 > el catálogo de reclutamiento) y de la ocupación post-conquista (Doc 5.12.9): badge "ocupada" en la lista de
 > asentamientos, banner de ocupación + minutos restantes + factores en el detalle, nota en la pestaña Militar,
 > recaudación/mantenimiento anotados como reducido/congelado por ocupación, marca "(dañado)" en los edificios
-> de la cola y su tooltip. Todo es solo lectura: sigue sin despachar comandos de jugador.
+> de la cola y su tooltip.
 
 Interfaz de navegador que hablaba con el backend cuando ambos vivían en el mismo repositorio. Se separa aquí
 para poder inicializar con ella un repositorio propio (Fase C: este repo pasa a ser **solo servidor**, y los
@@ -74,7 +88,7 @@ npm run dev
 `vite.config.ts` proxya `/v1` entero hacia `:3000` para evitar CORS en desarrollo. `BACKEND_URL` lo repunta a
 otra instancia (`BACKEND_URL=https://…onrender.com npm run dev`). La pestaña **Mundo** de la consola muestra a
 qué partida está conectada: nombre (`VITE_GAME_ID`), Local/En la nube y backend (de `BACKEND_URL`), proveedor
-(`PROVEEDOR_AUTH`, por defecto `dev`) y código de invitación (`CODIGO_REGISTRO`, el mismo del backend).
+(`PROVEEDOR_AUTH`, por defecto `dev`). Debajo, el código de invitación del registro se lee del servidor y se cambia sin reiniciar (solo en memoria; `CODIGO_REGISTRO` es el valor de arranque).
 
 El sujeto se cambia con `VITE_USUARIO`; el que se use debe figurar en `ADMINISTRADORES` del servidor, o el
 backend responderá 403 al crear la partida. Sin `ADMINISTRADORES` no hay ningún administrador y nadie puede

@@ -5,8 +5,6 @@ import type { Sigilo } from '@motor/contratos/v1/dto';
 import { svgEmblema } from './emblemas';
 import insignias from './insignias.json';
 
-export const CATALOGO_SIGILO = catalogo;
-
 /** El sigilo de quien no tiene Facción, y el que se dibuja si una Facción viene sin él. */
 export const SIGILO_NEUTRO: Sigilo = catalogo.reservados.neutro;
 
@@ -121,32 +119,6 @@ export function svgSigilo(sigilo: Sigilo | undefined, ancho = 48, opciones: Opci
     + (emblema ? `<g transform="translate(${forma.cx - 50 * escala} ${forma.cy - 50 * escala}) scale(${escala})">${emblema}</g>` : '')
     + (opciones.granRey ? corona() : '')
     + '</svg>';
-}
-
-/** `doble_hacha` → `doble hacha`. */
-export function nombreDeId(id: string): string {
-  return id.replace(/_/g, ' ');
-}
-
-/** Los `<option>` de un selector: ids con su nombre. */
-export function opciones(ids: readonly string[], elegido: string, nombre: (id: string) => string = nombreDeId): string {
-  return ids.map((id) => `<option value="${id}"${id === elegido ? ' selected' : ''}>${nombre(id)}</option>`).join('');
-}
-
-/** Un sigilo al azar del catálogo (para ofrecer uno de partida al crear la Facción). */
-export function sigiloAleatorio(): Sigilo {
-  const al = <T>(lista: readonly T[]): T => lista[Math.floor(Math.random() * lista.length)]!;
-  const primario = al(catalogo.colores).id;
-  return {
-    formaId: al(catalogo.formas),
-    campoId: al(catalogo.campos),
-    emblemaId: al(catalogo.emblemas),
-    colorPrimarioId: primario,
-    colorSecundarioId: al(catalogo.colores.filter((c) => c.id !== primario)).id,
-    colorEmblemaId: al(catalogo.colores).id,
-    orlaId: al(catalogo.orlas),
-    colorOrlaId: al(catalogo.colores).id,
-  };
 }
 
 /** El sigilo junto al nombre de su dueño (chips, cabeceras, listas). El texto va sin escapar: es el nombre del dominio. */

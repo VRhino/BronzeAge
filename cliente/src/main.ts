@@ -214,6 +214,10 @@ let asentamientoSeleccionadoId: string | null = null;
 /** Si la Vista de Asentamiento enseña un campamento de mercenarios en vez de un asentamiento (Doc 1.9b). */
 let campamentoSeleccionadoId: string | null = null;
 const PREFIJO_CAMPAMENTO = 'campamento:';
+const SUBS_GUERRA: Subpestana[] = [
+  { id: 'panorama', texto: 'Panorama' },
+  { id: 'reclutamiento', texto: 'Reclutamiento' },
+];
 const SUBS_ASENTAMIENTO: Subpestana[] = [
   { id: 'general', texto: 'General' },
   { id: 'edificios', texto: 'Edificios' },
@@ -271,6 +275,9 @@ app.innerHTML = `
 
 
     <div class="tab-panel" id="tab-guerra" hidden>
+    ${htmlSubpestanas(SUBS_GUERRA, 'panorama', 'Secciones de guerra')}
+    <div class="subpanel active" data-subpanel="panorama" id="guerra-panorama"></div>
+    <div class="subpanel" data-subpanel="reclutamiento">
     <div class="controls-grid">
       <div class="controls">
         <h2>Catálogo de reclutamiento (Doc 5.7/5.8)</h2>
@@ -283,6 +290,7 @@ app.innerHTML = `
     <div class="detail-section roster-section">
       <h3>Roster de tropas (Doc 5.8)</h3>
       <div id="roster-tropas" class="table-scroll"></div>
+    </div>
     </div>
     </div>
 
@@ -502,6 +510,7 @@ const truequeBInfoEl = document.getElementById('trueque-b-info')!;
 const reclutarTropaSelect = document.getElementById('reclutar-tropa') as HTMLSelectElement;
 const reclutarTropaInfoEl = document.getElementById('reclutar-tropa-info')!;
 const rosterTropasEl = document.getElementById('roster-tropas')!;
+enlazarSubpestanas(document.getElementById('tab-guerra')!, () => {});
 const militarPanelEl = document.getElementById('militar-panel')!;
 const flotaAsentamientoSelect = document.getElementById('flota-asentamiento') as HTMLSelectElement;
 const flotaInfoEl = document.getElementById('flota-info')!;
@@ -1717,8 +1726,74 @@ function renderPanelPolitica(state: GameState): void {
     <section class="registro-section-block"><h3>Ligas</h3><div class="registro-politica-ligas">${ligasH || '<p class="legend-note">Sin Ligas formadas.</p>'}</div></section>`;
 }
 
+/** Panorama de guerra: guerras declaradas, ejércitos en campo y batallas. Vive de las Facciones, no de las plazas: un mundo recién
+ * creado, con solo campamentos y bots sin plaza, tiene Facciones y ejércitos aunque no tenga un asentamiento. */
+function renderPanoramaGuerra(state: GameState): void {
+  const nombreFaccion = (id: string): string => {
+    const f = state.facciones.find((x) => x.id === id);
+    return f ? htmlNombreConSigilo(f, 16) : esc(id);
+  };
+  const guerras = state.relaciones.filter((r) => r.tipo === 'guerra');
+  const activas = guerras.filter((r) => r.estado === 'activa');
+  const batallasAbiertas = state.batallas.filter((b) => b.estado === 'convocando' || b.estado === 'asignada' || b.estado === 'en_curso');
+  const kpi = (etiqueta: string, valor: number | string): string => `<div class="kv-row"><span>${etiqueta}</span><span>${valor}</span></div>`;
+
+  const aviso =
+    state.asentamientos.length === 0
+      ? `<p class="legend-note">Todavía no hay asentamientos (${state.facciones.length === 1 ? '1 Facción' : `${state.facciones.length} Facciones`}). Las guerras entre Facciones y los asedios se libran por las plazas, así que aquí no habrá guerras ni asedios hasta que alguien funde; sí puede haber ejércitos cazando bandidos.</p>`
+      : state.facciones.length < 2
+        ? '<p class="legend-note">Hace falta más de una Facción para que haya guerra.</p>'
+        : '';
+
+  const guerrasHtml = guerras.length
+    ? `<table class="mini-table"><thead><tr><th>Declara</th><th>Contra</th><th>Estado</th><th>Desde</th><th>Paz</th></tr></thead><tbody>${guerras
+        .map(
+          (r) =>
+            `<tr><td>${nombreFaccion(r.faccionAId)}</td><td>${nombreFaccion(r.faccionBId)}</td><td>${r.estado}</td><td>${fmtTiempoMundo(r.creadoEn)}</td><td>${r.pazPropuestaPor ? `ofrecida por ${nombreFaccion(r.pazPropuestaPor)}` : '—'}</td></tr>`
+        )
+        .join('')}</tbody></table>`
+    : '<p class="legend-note">Ninguna Facción ha declarado guerra a otra.</p>';
+
+  const destinoDe = (e: GameState['ejercitos'][number]): string => {
+    if (e.objetivo.tipo === 'asentamiento') {
+      const id = e.objetivo.id;
+      return esc(state.asentamientos.find((a) => a.id === id)?.nombre ?? id);
+    }
+    return `(${Math.round(e.objetivo.punto.x)}, ${Math.round(e.objetivo.punto.y)})`;
+  };
+  const ejercitosHtml = state.ejercitos.length
+    ? `<table class="mini-table"><thead><tr><th>Ejército</th><th>Facción</th><th>Tipo</th><th>Líder</th><th>Estado</th><th>Destino</th><th>Gente</th><th>Escuadrones</th></tr></thead><tbody>${state.ejercitos
+        .map(
+          (e) =>
+            `<tr><td>${esc(e.id)}</td><td>${nombreFaccion(e.faccionId)}</td><td>${e.tipo}</td><td>${soloNombreHeroe(state, e.liderId)}</td><td>${e.estado}${e.persiguiendo ? ` (persigue ${esc(e.persiguiendo.id)})` : ''}</td><td>${destinoDe(e)}</td><td>${e.participantes.length}</td><td>${e.escuadronIds.length}</td></tr>`
+        )
+        .join('')}</tbody></table>`
+    : '<p class="legend-note">Ningún ejército ni columna en campo.</p>';
+
+  const batallasHtml = state.batallas.length
+    ? `<table class="mini-table"><thead><tr><th>Batalla</th><th>Estado</th><th>Lugar</th><th>Iniciada por</th><th>Plazo</th></tr></thead><tbody>${[...state.batallas]
+        .reverse()
+        .slice(0, 20)
+        .map(
+          (b) =>
+            `<tr><td>${esc(b.id.slice(0, 8))}</td><td>${b.estado}</td><td>${Math.round(b.punto.x)}, ${Math.round(b.punto.y)}</td><td>${soloNombreHeroe(state, b.iniciadaPor)}</td><td>${fmtTiempoMundo(b.expiraEn)}</td></tr>`
+        )
+        .join('')}</tbody></table>`
+    : '<p class="legend-note">Ninguna batalla abierta ni cerrada todavía.</p>';
+
+  const seccion = (titulo: string, cuerpo: string): string => `<div class="detail-section"><h3>${titulo}</h3>${cuerpo}</div>`;
+  document.getElementById('guerra-panorama')!.innerHTML =
+    seccion(
+      'Resumen',
+      `<div class="kv-grid">${kpi('Guerras activas', activas.length)}${kpi('Ejércitos y columnas en campo', state.ejercitos.length)}${kpi('Batallas abiertas', batallasAbiertas.length)}${kpi('Campamentos de bandidos', state.campamentosBandidos.length)}${kpi('Asentamientos', state.asentamientos.length)}</div>${aviso}`
+    ) +
+    seccion('Guerras', guerrasHtml) +
+    seccion(`Ejércitos en campo (${state.ejercitos.length})`, ejercitosHtml) +
+    seccion(`Batallas (${state.batallas.length})`, batallasHtml);
+}
+
 function renderPanelMilitar(state: GameState): void {
-  militarPanelEl.innerHTML = state.asentamientos
+  militarPanelEl.innerHTML = (state.asentamientos.length ? '' : '<p class="legend-note">Sin asentamientos: no hay guarniciones que medir. Los ejércitos en campo están en la pestaña Guerra.</p>') + state.asentamientos
     .map((a) => {
       const tieneFundicion = a.edificios.some((e) => e.tipo === 'fundicion' && e.estado === 'activo');
       const tieneGranFundicion = a.edificios.some((e) => e.tipo === 'granFundicion' && e.estado === 'activo');
@@ -2115,6 +2190,7 @@ function render(): void {
   renderPanelProgresion(state);
   renderPanelCronica();
   renderPanelMilitar(state);
+  renderPanoramaGuerra(state);
   renderPanelEconomia(state);
   renderLeyenda(state);
   renderRegistro(state);

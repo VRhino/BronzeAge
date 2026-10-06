@@ -6,6 +6,7 @@
 import type { AccionDeBot, BotInfo, ConfigBots, EstadoServicio, FaseBot, FaseServicio, ModoBot, PerfilBot, TipoPerfil } from '@motor/bots/control/contrato';
 import type { Sigilo } from '@motor/contratos/v1/dto';
 import { ClienteControl, type EstadoConexion } from './clienteControl';
+import { esc } from '../ui/html';
 import { htmlSubpestanas } from '../ui/subpestanas';
 import { htmlNombreConSigilo } from '../sigilo/sigilo';
 import './panelBots.css';
@@ -41,7 +42,6 @@ type Orden = Parameters<ClienteControl['pedir']>[0];
 type FormularioConfig = Omit<ConfigBots, 'codigoRegistroBots'> & { codigoRegistroBots: string };
 type ColumnaOrden = 'nombre' | 'fase' | 'pensamientos' | 'errores' | 'ultima';
 
-const esc = (v: unknown): string => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const guardado = (almacen: Storage, clave: string): string => {
   try {
     return almacen.getItem(clave) ?? '';
