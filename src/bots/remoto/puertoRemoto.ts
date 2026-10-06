@@ -24,6 +24,8 @@ export interface OpcionesPuertoRemoto {
   servidor: string;
   gameId: string;
   codigoRegistroBots: string;
+  /** Cada petición HTTP y lo que tardó: para vigilar la salud del servicio. `ok` es falso con un fallo de red o un estado de error. */
+  alPeticion?: (p: { ms: number; ok: boolean }) => void;
 }
 
 const EPOCA_MS = new Date(SIMULACION.epocaInicial).getTime();
@@ -37,6 +39,7 @@ export class PuertoRemoto implements PuertoBot {
   private estadoMapa?: EstadoMapa;
   private mapaHecho?: { estado: EstadoMapa; mapa: Mapa };
   private pendientes: EventoDominio[] = [];
+  private renovadas = 0;
 
   constructor(private readonly opciones: OpcionesPuertoRemoto) {}
 
@@ -57,6 +60,11 @@ export class PuertoRemoto implements PuertoBot {
     const eventos = this.pendientes;
     this.pendientes = [];
     return eventos;
+  }
+
+  /** Para vigilar el servicio: sockets de tiempo real abiertos y sesiones que hubo que renovar. */
+  conexiones(): { sockets: number; sesionesRenovadas: number } {
+    return { sockets: this.sockets.size, sesionesRenovadas: this.renovadas };
   }
 
   /** El tick del mundo, leído con `cuenta` (cualquiera vale: el instante lo trae también quien no tiene héroe). */
@@ -195,6 +203,7 @@ export class PuertoRemoto implements PuertoBot {
     if (r.status !== 201) throw new Error(`login de ${cuenta.nick}: ${r.status} ${await r.text()}`);
     const { sesionId } = (await r.json()) as { sesionId: string };
     this.sesiones.set(cuenta.nick, sesionId);
+    if (renovar) this.renovadas++;
     return sesionId;
   }
 
@@ -202,11 +211,19 @@ export class PuertoRemoto implements PuertoBot {
   private async pedir<C>(cuenta: CuentaBot, metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown, admitidos: number[] = []): Promise<{ estado: number; cuerpo: C }> {
     for (const renovar of [false, true]) {
       const sesion = await this.sesionDe(cuenta, renovar);
-      const r = await fetch(this.url(ruta), {
-        method: metodo,
-        headers: { authorization: `sesion ${sesion}`, ...(cuerpo !== undefined ? { 'content-type': 'application/json' } : {}) },
-        ...(cuerpo !== undefined ? { body: JSON.stringify(cuerpo) } : {}),
-      });
+      const desde = Date.now();
+      let r: Response;
+      try {
+        r = await fetch(this.url(ruta), {
+          method: metodo,
+          headers: { authorization: `sesion ${sesion}`, ...(cuerpo !== undefined ? { 'content-type': 'application/json' } : {}) },
+          ...(cuerpo !== undefined ? { body: JSON.stringify(cuerpo) } : {}),
+        });
+      } catch (err) {
+        this.opciones.alPeticion?.({ ms: Date.now() - desde, ok: false });
+        throw err;
+      }
+      this.opciones.alPeticion?.({ ms: Date.now() - desde, ok: r.ok || admitidos.includes(r.status) });
       if (r.status === 401 && !renovar) continue;
       if (!r.ok && !admitidos.includes(r.status)) throw new Error(`${metodo} ${ruta} (${cuenta.nick}): ${r.status} ${await r.text()}`);
       return { estado: r.status, cuerpo: (await r.json()) as C };

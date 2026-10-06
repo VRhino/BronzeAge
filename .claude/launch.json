@@ -10,9 +10,25 @@
       ],
       "env": {
         "ADMINISTRADORES": "dev:jefa",
-        "INTERVALO_TICK_MS": "5000"
+        "INTERVALO_TICK_MS": "5000",
+        "CODIGO_REGISTRO_BOTS": "dev-bots"
       },
       "port": 3000
+    },
+    {
+      "name": "bronze-age-bots",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "bots"
+      ],
+      "env": {
+        "BOTS_TOKEN": "dev-token",
+        "CODIGO_REGISTRO_BOTS": "dev-bots",
+        "BOTS_SERVIDOR": "http://localhost:3000",
+        "BOTS_PUERTO": "4000"
+      },
+      "port": 4000
     },
     {
       "name": "bronze-age-cliente",

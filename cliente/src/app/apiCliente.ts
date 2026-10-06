@@ -117,6 +117,11 @@ export function crearOResumirPartida(
   });
 }
 
+/** Las partidas que el servidor conoce (las abiertas y las guardadas en disco): para elegir a cuál cambiar. */
+export function listarPartidas(): Promise<{ partidas: (ResumenPartida & { guardadoEn: string })[] }> {
+  return peticion(`${V1}/admin/partidas`);
+}
+
 /** `T` fija a la vez la forma de `params` (`ParamsDe<T>`) y la de `resultado.datos` (`DatosDe<T>`) contra el
  * propio `REGISTRO_COMANDOS` — un `params` con un campo de menos, de más o del tipo equivocado no compila,
  * en vez de viajar como `unknown` y reventar dentro del manejador.

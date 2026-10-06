@@ -948,8 +948,28 @@ export class GameStore {
  * usar. `main.ts` la llama una vez al arrancar, antes de montar el resto de la interfaz. `gameId`/`seed` salen
  * de `VITE_GAME_ID`/`VITE_SEED` (por defecto `local`/`1`) para poder apuntar a la partida que toque sin
  * recompilar. */
+const CLAVE_GAME_ID = 'admin.gameId';
+
+/** La partida a la que se conecta esta consola: la que se eligió en la pestaña Mundo (se recuerda en este navegador) o, si no, la del entorno. */
+export function gameIdElegido(): string {
+  const porDefecto = import.meta.env.VITE_GAME_ID ?? 'local';
+  try {
+    return localStorage.getItem(CLAVE_GAME_ID) || porDefecto;
+  } catch {
+    return porDefecto;
+  }
+}
+
+export function elegirGameId(gameId: string): void {
+  try {
+    localStorage.setItem(CLAVE_GAME_ID, gameId);
+  } catch {
+    // Sin almacenamiento: la elección no sobrevive a la recarga y la consola vuelve a la partida del entorno.
+  }
+}
+
 export function crearGameStore(
-  gameId = import.meta.env.VITE_GAME_ID ?? 'local',
+  gameId = gameIdElegido(),
   seed = Number(import.meta.env.VITE_SEED ?? 1),
   descartar = false
 ): Promise<GameStore> {

@@ -1,0 +1,611 @@
+
+/* --------------------------------------------------------------------------
+   Pestaña «Bots» (src/bots/panelBots.ts): administración del servicio de bots.
+   Reutiliza el sistema visual de arriba (detail-section, kv-grid, chip, badge,
+   mini-table, btn-armado); aquí solo lo que es propio de esta pestaña.
+   -------------------------------------------------------------------------- */
+.bots-root {
+  --bots-ok: #6fae5a;
+  --bots-aviso: #dba63c;
+  --bots-error: var(--admin-danger);
+  --bots-apagado: var(--admin-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bots-contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Sin conexión se conserva lo último que se supo, apagado: no es lo que está pasando ahora. */
+.bots-contenido.bots-obsoleto {
+  opacity: 0.45;
+  pointer-events: none;
+  filter: saturate(0.5);
+}
+
+.controls-panel .detail-section.bots-card > h3::before {
+  content: attr(data-i);
+}
+
+.bots-dos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.bots-dos > * {
+  min-width: 0;
+}
+
+/* Estado y conexión */
+.bots-conexion-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+  padding-top: 10px;
+}
+
+.bots-estado-grande {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.bots-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.bots-pill i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.bots-pill.bots-ok { color: var(--bots-ok); }
+.bots-pill.bots-ok i { animation: bots-latido 2s ease-out infinite; }
+.bots-pill.bots-aviso { color: var(--bots-aviso); }
+.bots-pill.bots-error { color: var(--bots-error); }
+.bots-pill.bots-apagado { color: var(--bots-apagado); }
+
+@keyframes bots-latido {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 7px transparent; }
+}
+
+.bots-dato {
+  font-size: 12px;
+  color: var(--admin-muted);
+}
+
+.bots-dato b {
+  color: var(--admin-text);
+}
+
+.bots-texto-error {
+  color: var(--bots-error);
+}
+
+.bots-conectar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bots-conectar input {
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.bots-conectar input[type='text'] { width: 250px; }
+.bots-conectar input[type='password'] { width: 160px; }
+
+.bots-aviso {
+  padding: 8px 12px;
+  border: 1px solid var(--admin-border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+  font-size: 12px;
+}
+
+.bots-aviso[hidden] { display: none; }
+.bots-aviso-ok { border-left-color: var(--bots-ok); }
+.bots-aviso-error { border-left-color: var(--bots-error); color: #ffd9d3; }
+
+/* Indicadores */
+.bots-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.bots-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: linear-gradient(145deg, var(--admin-surface-raised), var(--admin-surface));
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.12);
+}
+
+.bots-kpi span {
+  color: var(--admin-muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bots-kpi strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.bots-kpi strong em {
+  color: var(--admin-muted);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.bots-kpi small {
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+
+.bots-kpi.bots-aviso strong { color: var(--bots-aviso); }
+.bots-kpi.bots-error strong { color: var(--bots-error); }
+.bots-kpi.bots-ok strong { color: var(--bots-ok); }
+
+.bots-barra {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: #3a3529;
+  overflow: hidden;
+}
+
+.bots-barra b {
+  display: block;
+  height: 100%;
+  background: var(--bots-ok);
+}
+
+.bots-kpi.bots-aviso .bots-barra b { background: var(--bots-aviso); }
+.bots-kpi.bots-error .bots-barra b { background: var(--bots-error); }
+
+/* Configuración */
+.bots-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px 12px;
+  padding-top: 10px;
+}
+
+.bots-form label,
+.bots-modo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+
+.bots-form input,
+.bots-form select,
+.bots-modo select {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.bots-form input:disabled,
+.bots-form select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bots-botones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.bots-botones button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Flota */
+.bots-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.bots-filtros input[type='search'] {
+  flex: 1 1 180px;
+  min-width: 140px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.bots-filtros select {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.bots-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bots-tabla th {
+  position: sticky;
+  top: 0;
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bots-tabla th.bots-ordenable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.bots-tabla th.bots-ordenable:hover,
+.bots-tabla th.activo {
+  color: var(--admin-text);
+}
+
+.bots-tabla td {
+  vertical-align: middle;
+  padding: 5px 6px;
+  white-space: nowrap;
+}
+
+.bots-fila {
+  cursor: pointer;
+}
+
+.bots-fila:hover td {
+  background: var(--admin-accent-soft);
+}
+
+.bots-fila:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: -2px;
+}
+
+.bots-fila.seleccionada td {
+  background: rgba(208, 169, 78, 0.22);
+}
+
+.bots-fila.seleccionada td:first-child {
+  box-shadow: inset 3px 0 0 var(--admin-accent);
+}
+
+.bots-retirado td {
+  opacity: 0.5;
+}
+
+.bots-plan {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--admin-muted);
+}
+
+.bots-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bots-vacio {
+  padding: 18px 6px !important;
+  color: var(--admin-muted);
+  text-align: center;
+  white-space: normal !important;
+}
+
+.bots-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--bots-apagado);
+}
+
+.bots-dot-on { background: var(--bots-ok); }
+.bots-dot-retirado { background: transparent; border: 1px solid var(--bots-apagado); }
+
+.bots-ok-txt { color: var(--bots-ok); font-weight: 700; }
+.bots-rechazo-txt { color: var(--bots-aviso); font-weight: 700; }
+.bots-hace { color: var(--admin-muted); }
+
+/* Líneas de tiempo: llegadas y horario */
+.bots-pista {
+  position: relative;
+  height: 26px;
+  margin-top: 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.bots-pista-dia { height: 14px; margin-top: 6px; }
+
+.bots-pista-leyenda {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.bots-marca {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--admin-accent);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.bots-marca.hecha { background: var(--admin-accent); }
+.bots-marca.bots-perfil-solitario { border-color: #6aa6c9; }
+.bots-marca.bots-perfil-solitario.hecha { background: #6aa6c9; }
+.bots-marca.bots-perfil-tardio { border-color: #b58ad6; }
+.bots-marca.bots-perfil-tardio.hecha { background: #b58ad6; }
+
+.bots-cursor {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--bots-ok);
+  box-shadow: 0 0 6px var(--bots-ok);
+}
+
+.bots-sesion {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bots-ok) 55%, transparent);
+}
+
+.bots-forzar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.bots-forzar select {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.bots-lista-llegadas {
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.bots-pendiente td {
+  color: var(--admin-muted);
+}
+
+/* Detalle de un bot */
+.bots-kv {
+  padding-top: 10px;
+}
+
+.detail-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.bots-sub {
+  color: var(--admin-muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bots-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bots-memoria {
+  max-height: 260px;
+  margin: 12px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Pizarras */
+.bots-pizarra {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+  font-size: 12px;
+}
+
+.bots-pizarra-datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+
+.bots-pizarra-datos b {
+  color: var(--admin-text);
+}
+
+/* Actividad y registro */
+.bots-flujo {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px 8px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+  font-size: 11.5px;
+}
+
+.bots-linea {
+  display: grid;
+  grid-template-columns: 62px minmax(60px, 90px) minmax(0, 1fr) minmax(0, 1.2fr) 52px;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid #3e392e;
+}
+
+.bots-linea:last-child { border-bottom: none; }
+
+#bots-registro .bots-linea {
+  grid-template-columns: 62px minmax(0, 1fr);
+}
+
+.bots-linea span:not(.bots-hora) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#bots-registro .bots-linea span:not(.bots-hora) {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.bots-hora { color: var(--admin-muted); font-variant-numeric: tabular-nums; }
+.bots-ms { color: var(--admin-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.bots-linea-rechazo span:nth-child(4) { color: var(--bots-aviso); }
+.bots-linea-error { color: var(--bots-error); }
+
+@media (max-width: 760px) {
+  .bots-conectar input[type='text'],
+  .bots-conectar input[type='password'] {
+    width: 100%;
+  }
+
+  .bots-linea {
+    grid-template-columns: 56px 70px minmax(0, 1fr) 44px;
+  }
+
+  .bots-linea span:nth-child(4) { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bots-pill.bots-ok i { animation: none; }
+}
+
+/* Subpestañas (mismas clases que las del panel de asentamientos) */
+.bots-subpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bots-subpanel.bots-dos {
+  display: grid;
+}
+
+.bots-subpanel[hidden] {
+  display: none;
+}
+
+#bots-subtabs .badge {
+  margin-left: 4px;
+}
+
+/* Cruce del registro con el servidor */
+.bots-cruce {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.bots-cruce-dato {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+}
+
+.bots-cruce-dato strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bots-cruce-dato span {
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+
+.bots-cruce-dato.bots-aviso-txt strong { color: var(--bots-aviso); }
+.bots-cruce-dato.bots-ok-txt strong { color: var(--bots-ok); }

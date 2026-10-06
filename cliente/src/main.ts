@@ -5,8 +5,9 @@
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { AcuerdoTrueque, Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
 import { RED_VACIA, tramosDeRed } from '@motor/engine/redCaminos';
-import { ApiError } from './app/apiCliente';
-import { CATALOGOS, crearGameStore, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
+import { ApiError, crearOResumirPartida, listarPartidas } from './app/apiCliente';
+import { montarPanelBots } from './bots/panelBots';
+import { CATALOGOS, crearGameStore, elegirGameId, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { layoutCampamento } from '@motor/engine/layoutCampamento';
 import { CATALOGO_SIGILO } from '@motor/constants';
 import { draw, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
@@ -204,7 +205,7 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 }
 
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo' = 'asentamientos';
+let tabActivo: 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'bots' | 'registros' | 'generacionMundo' = 'asentamientos';
 let comercioDetalleTab: 'acciones' | 'info' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
 /** Si la Vista de Asentamiento enseña un campamento de mercenarios en vez de un asentamiento (Doc 1.9b). */
@@ -252,6 +253,7 @@ app.innerHTML = `
       <button class="tab-btn" data-tab="facciones">Facción</button>
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
       <button class="tab-btn" data-tab="politicas">Políticas</button>
+      <button class="tab-btn" data-tab="bots">Bots</button>
       <button class="tab-btn" data-tab="registros">Registros</button>
       <button class="tab-btn" data-tab="generacionMundo">Mundo</button>
     </div>
@@ -332,6 +334,10 @@ app.innerHTML = `
       <div id="politicas-tab" class="controls-grid"></div>
     </div>
 
+    <div class="tab-panel" id="tab-bots" hidden>
+      <div id="bots-tab"></div>
+    </div>
+
     <div class="tab-panel" id="tab-generacionMundo" hidden>
       <div class="section-title registros-heading">Mundo</div>
       <p class="legend-note registros-intro">Datos de la partida conectada y regeneración del mapa procedural.</p>
@@ -341,8 +347,12 @@ app.innerHTML = `
           <div class="kv-grid" id="info-partida"></div>
         </div>
         <div class="controls">
-          <h2>Regenerar mundo</h2>
-          <p class="legend-note">Descarta la partida actual y crea una nueva con la seed y región indicadas — acción destructiva, pide confirmación.</p>
+          <h2>Partida y mundo</h2>
+          <p class="legend-note" id="partida-nota"></p>
+          <label>ID de la partida
+            <input id="partida-id-input" list="partidas-existentes" autocomplete="off" spellcheck="false" />
+            <datalist id="partidas-existentes"></datalist>
+          </label>
           <label>Seed del mundo <input id="seed-input" type="number" value="1" /></label>
           <label>Región geográfica (Fase 0.2)
             <select id="region-select">
@@ -1841,6 +1851,15 @@ function renderRegistro(state: GameState): void {
   logEl.innerHTML = state.log.map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('');
 }
 
+// Servicio de bots: habla directo con su canal de control (WebSocket), no con el backend del juego.
+const panelBots = montarPanelBots(document.getElementById('bots-tab')!, {
+  heroesBot: () => {
+    if (!gameStore) return undefined;
+    const { gameId, heroes } = gameStore.getState();
+    return { gameId, heroes: heroes.filter((h) => h.controlador === 'bot').map((h) => ({ id: h.id, nombre: h.displayName })) };
+  },
+});
+
 function actualizarTabs(): void {
   document.querySelectorAll<HTMLButtonElement>('#main-tabs .tab-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tabActivo);
@@ -1852,15 +1871,18 @@ function actualizarTabs(): void {
   document.getElementById('tab-facciones')!.hidden = tabActivo !== 'facciones';
   document.getElementById('tab-jugadores')!.hidden = tabActivo !== 'jugadores';
   document.getElementById('tab-politicas')!.hidden = tabActivo !== 'politicas';
+  document.getElementById('tab-bots')!.hidden = tabActivo !== 'bots';
+  if (tabActivo === 'bots') panelBots.alMostrar();
   document.getElementById('tab-registros')!.hidden = tabActivo !== 'registros';
   document.getElementById('tab-generacionMundo')!.hidden = tabActivo !== 'generacionMundo';
   if (tabActivo === 'politicas') renderPoliticasTab();
+  if (tabActivo === 'generacionMundo') void cargarPartidasExistentes();
 }
 
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'registros' | 'generacionMundo';
+  tabActivo = btn.dataset.tab as 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'bots' | 'registros' | 'generacionMundo';
   actualizarTabs();
 });
 
@@ -2117,17 +2139,86 @@ setInterval(() => {
 // arma el botón (rojo, 5 s); el segundo regenera. `#regenerar-estado` da el resultado, éxito o error.
 const regenerarBtn = document.getElementById('regenerar-btn') as HTMLButtonElement;
 const regenerarEstado = document.getElementById('regenerar-estado')!;
+const partidaIdInput = document.getElementById('partida-id-input') as HTMLInputElement;
+const partidaNotaEl = document.getElementById('partida-nota')!;
+const partidasDatalist = document.getElementById('partidas-existentes')!;
+const ID_PARTIDA_VALIDO = /^[A-Za-z0-9_.-]+$/;
+let partidasExistentes: string[] = [];
+
+/** Qué hace el botón según el ID escrito: la partida actual se regenera (destructivo), una que ya existe se abre y una nueva se crea. */
+function modoPartida(): 'regenerar' | 'abrir' | 'crear' {
+  const id = partidaIdInput.value.trim();
+  if (id === gameStore.getState().gameId) return 'regenerar';
+  return partidasExistentes.includes(id) ? 'abrir' : 'crear';
+}
+
+function actualizarBotonPartida(): void {
+  const id = partidaIdInput.value.trim();
+  const valido = ID_PARTIDA_VALIDO.test(id);
+  const modo = modoPartida();
+  regenerarBtn.classList.remove('btn-armado');
+  regenerarBtn.disabled = !valido;
+  regenerarBtn.textContent = modo === 'regenerar' ? 'Regenerar mundo' : modo === 'abrir' ? `Abrir «${id}»` : `Crear «${id}»`;
+  partidaNotaEl.textContent = !valido
+    ? 'El ID solo admite letras, números, guion, guion bajo y punto.'
+    : modo === 'regenerar'
+      ? 'Es la partida actual: regenerar la descarta y crea otra con la seed, región y velocidad indicadas. Acción destructiva, pide confirmación.'
+      : modo === 'abrir'
+        ? 'Ya existe en el servidor: abrirla cambia esta consola a ella, sin tocarla. La seed, región y velocidad no se usan.'
+        : 'No existe todavía: se crea con la seed, región y velocidad indicadas y la consola cambia a ella. La actual no se toca.';
+  for (const campo of [seedInput, regionSelect, tickIntervaloSelect]) campo.disabled = modo === 'abrir';
+}
+
+async function cargarPartidasExistentes(): Promise<void> {
+  try {
+    partidasExistentes = (await listarPartidas()).partidas.map((p) => p.gameId);
+    partidasDatalist.innerHTML = partidasExistentes.map((id) => `<option value="${id}"></option>`).join('');
+  } catch {
+    // Sin la lista no se sabe cuáles existen: todo lo que no sea la actual se tratará como nueva, y `cambiarDePartida` lo recomprueba.
+  }
+  actualizarBotonPartida();
+}
+
+async function cambiarDePartida(modo: 'abrir' | 'crear'): Promise<void> {
+  const id = partidaIdInput.value.trim();
+  regenerarBtn.disabled = true;
+  regenerarEstado.hidden = false;
+  regenerarEstado.textContent = modo === 'crear' ? 'Creando partida…' : 'Abriendo partida…';
+  try {
+    if (modo === 'crear') {
+      // Antes de crear (con `forzar`, que descarta lo que hubiera con ese ID) se vuelve a mirar si existe: la lista pudo quedarse vieja.
+      await cargarPartidasExistentes();
+      if (partidasExistentes.includes(id)) throw new Error(`la partida '${id}' ya existe: se abre en vez de crearla`);
+      const region = regionSelect.value as RegionId | '';
+      await crearOResumirPartida(id, Number(seedInput.value) || 0, region || undefined, true, Number(tickIntervaloSelect.value) || undefined);
+    }
+    elegirGameId(id);
+    location.reload();
+  } catch (err) {
+    regenerarEstado.textContent = `✗ ${err instanceof Error ? err.message : err}`;
+    actualizarBotonPartida();
+  }
+}
+
+partidaIdInput.value = gameStore.getState().gameId;
+partidaIdInput.addEventListener('input', () => {
+  if (regenerarTimer) clearTimeout(regenerarTimer);
+  regenerarArmado = false;
+  actualizarBotonPartida();
+});
+void cargarPartidasExistentes();
 let regenerarArmado = false;
 let regenerarTimer: ReturnType<typeof setTimeout> | undefined;
 
 function desarmarRegenerar(): void {
   regenerarArmado = false;
-  regenerarBtn.classList.remove('btn-armado');
-  regenerarBtn.textContent = 'Regenerar mundo';
+  actualizarBotonPartida();
   if (regenerarTimer) clearTimeout(regenerarTimer);
 }
 
 regenerarBtn.addEventListener('click', async () => {
+  const modo = modoPartida();
+  if (modo !== 'regenerar') return cambiarDePartida(modo);
   if (!regenerarArmado) {
     regenerarArmado = true;
     regenerarBtn.classList.add('btn-armado');
@@ -2144,7 +2235,7 @@ regenerarBtn.addEventListener('click', async () => {
   regenerarEstado.hidden = false;
   regenerarEstado.textContent = 'Regenerando mundo…';
   const ok = await gameStore.regenerarMundo(seed, region || undefined, intervaloTick);
-  regenerarBtn.disabled = false;
+  actualizarBotonPartida();
   regenerarEstado.textContent = ok
     ? `✓ Partida nueva creada · seed ${seed}${region ? ` · ${REGION_NOMBRE[region as RegionId]}` : ' · región libre'}${intervaloTick ? ` · ${fmtIntervaloTick(intervaloTick)}` : ''}`
     : '✗ No se pudo regenerar — ver el Registro para el motivo';

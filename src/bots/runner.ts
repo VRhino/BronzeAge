@@ -15,6 +15,7 @@ import type { ParamsDe, TipoComando, DatosDe } from '../session/comandos/registr
 import type { PuertoBot, Respuesta, Vista } from './puerto';
 import { pizarraVacia, type Pizarra } from './pizarra';
 import type { Mapa } from '../world/mapa';
+import type { AccionDeBot, BotInfo, FaseBot, ModoBot, PizarraInfo } from './control/contrato';
 
 /** Lo que el bot está haciendo fuera de casa. Si se pierde (reinicio), lo rehace mirando el mundo (§3.3). */
 export type Plan =
@@ -79,15 +80,35 @@ const ESPERA_TRAS_RECHAZO_MS = 30 * 60_000;
 const DESPIERTAN_POR_COLUMNA = new Set(['ejercito.llega', 'columna.presa_alcanzada', 'columna.presa_perdida', 'columna.presa_a_cubierto', 'ejercito.regresa']);
 const DESPIERTAN_POR_PLAZA = new Set(['comercio.trueque_propuesto']);
 
+function resumenDePlan(plan: Plan): string {
+  const objetivo = 'campamentoId' in plan ? plan.campamentoId : 'plazaId' in plan ? plan.plazaId : 'ejercitoId' in plan ? plan.ejercitoId : plan.caravanaId;
+  return `${plan.tipo} ${objetivo}`;
+}
+
 function hash(texto: string): number {
   let h = 2166136261;
   for (let i = 0; i < texto.length; i++) h = Math.imul(h ^ texto.charCodeAt(i), 16777619);
   return h >>> 0;
 }
 
+/** Lo que el panel de administración quiere saber de un bot. No interviene en lo que decide. */
+interface Diagnostico {
+  nombre: string;
+  modo: ModoBot;
+  retirado: boolean;
+  fase: FaseBot;
+  faccionId?: string;
+  pensamientos: number;
+  vistaEn?: Instante;
+  ultimaAccion?: AccionDeBot;
+  errores: number;
+  ultimoError?: { mensaje: string; en: number };
+}
+
 interface Bot {
   heroeId: string;
   perfil: Perfil;
+  diag: Diagnostico;
   memoria: MemoriaBot;
   rng: RandomFn;
   desfase: number;
@@ -124,6 +145,7 @@ export class RunnerDeBots {
   private readonly semilla: number;
   private readonly siempre: boolean;
   private readonly alFallar?: (heroeId: string, err: unknown) => void;
+  private readonly alActuar?: (accion: AccionDeBot) => void;
   /** El instante de la última vista: el del tick en curso. */
   private instanteActual?: Instante;
 
@@ -140,20 +162,94 @@ export class RunnerDeBots {
        * sigue. Sin él, el fallo sube: en proceso es un error del cerebro y tiene que verse.
        */
       alFallar?: (heroeId: string, err: unknown) => void;
+      /** Cada comando que manda un bot, con su resultado: para vigilar a la flota. */
+      alActuar?: (accion: AccionDeBot) => void;
     }
   ) {
     this.alFallar = opciones.alFallar;
+    this.alActuar = opciones.alActuar;
     this.cadaTicks = opciones.cadaTicks ?? 5;
     this.semilla = opciones.semilla;
     this.siempre = opciones.horario === 'siempre';
   }
 
-  alta(heroeId: string, perfil: Perfil = { tipo: 'solitario' }): void {
+  /** `retirado`: de una vez anterior, ya no juega y no hay nada que desconectar. */
+  alta(heroeId: string, perfil: Perfil = { tipo: 'solitario' }, nombre = heroeId, retirado = false): void {
     if (this.bots.has(heroeId)) return;
     const h = hash(heroeId);
     const rng = createRng((this.semilla ^ h) >>> 0);
     const sesiones: [number, number][] = this.siempre ? [[0, MINUTOS_DIA]] : horarioDe(rng);
-    this.bots.set(heroeId, { heroeId, perfil, memoria: { esperas: new Map() }, rng, desfase: h % this.cadaTicks, sesiones });
+    const diag: Diagnostico = { nombre, modo: 'auto', retirado, fase: 'sin-datos', pensamientos: 0, errores: 0 };
+    this.bots.set(heroeId, { heroeId, perfil, diag, memoria: { esperas: new Map() }, rng, desfase: h % this.cadaTicks, sesiones, ...(retirado ? { conectado: false } : {}) });
+  }
+
+  // --- Administración (panel de bots) ---
+
+  /** Cómo se maneja a un bot: su horario, forzado conectado o desconectado, o congelado (conectado pero sin pensar). */
+  fijarModo(heroeId: string, modo: ModoBot): void {
+    this.botDe(heroeId).diag.modo = modo;
+  }
+
+  /** Lo deja de manejar: se desconecta y no vuelve a jugar. Su héroe sigue en el mundo, sin nadie que lo mueva. */
+  async retirar(heroeId: string): Promise<void> {
+    const bot = this.botDe(heroeId);
+    bot.diag.retirado = true;
+    if (bot.conectado !== false) await this.puerto.desconectar(heroeId);
+    bot.conectado = false;
+  }
+
+  /** Lo hace pensar ya, sin esperar su turno. */
+  async pensarYa(heroeId: string): Promise<void> {
+    const bot = this.botDe(heroeId);
+    if (bot.diag.retirado) throw new Error(`${heroeId} está retirado`);
+    if (!bot.conectado) throw new Error(`${heroeId} no está conectado`);
+    await this.pensar(bot);
+  }
+
+  /** Su memoria, tal cual, para mirarla. */
+  memoriaDe(heroeId: string): unknown {
+    const { memoria, rng: _rng, ...bot } = this.botDe(heroeId);
+    return { ...bot, memoria: { ...memoria, esperas: [...memoria.esperas] } };
+  }
+
+  info(): BotInfo[] {
+    return [...this.bots.values()].map(({ heroeId, perfil, diag, memoria, sesiones, conectado }) => ({
+      heroeId,
+      nombre: diag.nombre,
+      perfil,
+      fase: diag.fase,
+      conectado,
+      modo: diag.modo,
+      retirado: diag.retirado,
+      plan: memoria.plan ? resumenDePlan(memoria.plan) : undefined,
+      faccionId: diag.faccionId,
+      residenciaId: memoria.residenciaId,
+      columnaId: memoria.columnaId,
+      esperas: [...memoria.esperas].map(([clave, hasta]) => ({ clave, hasta })),
+      sesiones,
+      pensamientos: diag.pensamientos,
+      vistaEn: diag.vistaEn,
+      ultimaAccion: diag.ultimaAccion,
+      errores: diag.errores,
+      ultimoError: diag.ultimoError,
+    }));
+  }
+
+  pizarrasInfo(): PizarraInfo[] {
+    return [...this.pizarras].map(([id, p]) => ({
+      id,
+      bots: [...this.bots.values()].filter((b) => b.memoria.pizarra === id).map((b) => b.heroeId),
+      encargos: [...p.encargos].map(([clave, heroeId]) => ({ clave, heroeId })),
+      bandidos: p.bandidos.size,
+      salidas: p.salidas.size,
+      explorados: p.explorados.size,
+    }));
+  }
+
+  private botDe(heroeId: string): Bot {
+    const bot = this.bots.get(heroeId);
+    if (!bot) throw new Error(`no hay un bot ${heroeId}`);
+    return bot;
   }
 
   /** Después de cada tick: piensan los que tocan, uno tras otro y en orden de id. Devuelve cuántos pensaron. */
@@ -169,12 +265,14 @@ export class RunnerDeBots {
     let pensaron = 0;
     for (const id of [...this.bots.keys()].sort()) {
       const bot = this.bots.get(id)!;
-      const debe = enSesion(bot, tick);
+      if (bot.diag.retirado) continue;
+      const { modo } = bot.diag;
+      const debe = modo === 'conectado' ? true : modo === 'desconectado' ? false : enSesion(bot, tick);
       if (debe !== bot.conectado) {
         if (!(await this.aSalvo(id, () => (debe ? this.puerto.conectar(id) : this.puerto.desconectar(id))))) continue;
         bot.conectado = debe;
       }
-      if (!debe) continue;
+      if (!debe || modo === 'congelado') continue;
       const { columnaId, residenciaId } = bot.memoria;
       const leToca =
         (tick + bot.desfase) % this.cadaTicks === 0 ||
@@ -188,7 +286,7 @@ export class RunnerDeBots {
     // este mismo tick, antes de que la columna se mueva. En orden de id, como la primera.
     for (const id of [...this.bots.keys()].sort()) {
       const bot = this.bots.get(id)!;
-      if (!bot.conectado || !this.leLlaman(bot)) continue;
+      if (!bot.conectado || bot.diag.modo === 'congelado' || !this.leLlaman(bot)) continue;
       await this.aSalvo(id, () => this.pensar(bot));
       pensaron++;
     }
@@ -205,6 +303,9 @@ export class RunnerDeBots {
       await paso();
       return true;
     } catch (err) {
+      const { diag } = this.botDe(heroeId);
+      diag.errores++;
+      diag.ultimoError = { mensaje: err instanceof Error ? err.message : String(err), en: Date.now() };
       this.alFallar(heroeId, err);
       return false;
     }
@@ -221,9 +322,13 @@ export class RunnerDeBots {
     if (!vista.heroe) return; // sin héroe no hay quien juegue
     this.instanteActual = vista.instante;
     const memoria = bot.memoria;
+    bot.diag.pensamientos++;
+    bot.diag.vistaEn = vista.instante;
+    bot.diag.faccionId = vista.faccionId ?? undefined;
     memoria.dentroDe = vista.heroe.ubicacion.tipo === 'mercenarios' ? vista.heroe.ubicacion.campamentoId : undefined;
     memoria.columnaId = vista.ejercitos.find((e) => e.participantes.some((p) => p.heroeId === bot.heroeId))?.id;
     memoria.residenciaId = vista.heroe.residenciaId ?? undefined;
+    bot.diag.fase = !memoria.residenciaId ? 'sin-plaza' : memoria.columnaId ? 'en-columna' : 'en-casa';
 
     const clavePizarra = vista.faccionId ?? `sin-faccion:${bot.heroeId}`;
     memoria.pizarra = clavePizarra;
@@ -232,7 +337,14 @@ export class RunnerDeBots {
     if (memoria.residenciaId) pizarra.residencias.set(bot.heroeId, memoria.residenciaId);
     else pizarra.residencias.delete(bot.heroeId);
 
-    const actuar = <T extends TipoComando>(tipo: T, params: ParamsDe<T>) => this.puerto.actuar(bot.heroeId, tipo, params);
+    const actuar = async <T extends TipoComando>(tipo: T, params: ParamsDe<T>) => {
+      const desde = Date.now();
+      const r = await this.puerto.actuar(bot.heroeId, tipo, params);
+      const accion: AccionDeBot = { heroeId: bot.heroeId, tipo, ok: r.ok, motivo: r.ok ? undefined : (r.noAutorizado ?? r.codigoError), ms: Date.now() - desde, en: Date.now() };
+      bot.diag.ultimaAccion = accion;
+      this.alActuar?.(accion);
+      return r;
+    };
     await this.cerebro({
       yo: bot.heroeId,
       perfil: bot.perfil,

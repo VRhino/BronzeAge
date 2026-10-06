@@ -22,6 +22,8 @@ export default defineConfig({
     'import.meta.env.VITE_BACKEND_URL': JSON.stringify(process.env.BACKEND_URL ?? 'http://localhost:3000'),
     'import.meta.env.VITE_CODIGO_INVITACION': JSON.stringify(process.env.CODIGO_REGISTRO ?? ''),
     'import.meta.env.VITE_PROVEEDOR_AUTH': JSON.stringify(process.env.PROVEEDOR_AUTH ?? 'dev'),
+    // Dirección propuesta en la pestaña «Bots» (canal de control del servicio de bots). El token no se inyecta: se teclea.
+    'import.meta.env.VITE_BOTS_URL': JSON.stringify(process.env.BOTS_URL ?? 'ws://localhost:4000/control'),
   },
   server: {
     port: 5173,

@@ -440,3 +440,34 @@ Los bots juegan desde otro proceso por la misma superficie que BronzeAgeClient. 
 
 Pendiente: el servicio en Render (Background Worker con disco para el registro), cuando el bloque vaya a Render.
 
+## 14. El servicio administrable y la pestaña «Bots» (hecho 2026-10-06)
+
+El proceso de bots deja de ser un script que arranca jugando: con `BOTS_TOKEN` es un **servicio** que arranca inerte y se maneja
+desde el cliente admin por su propio canal (decidido: servicio siempre vivo, conexión directa del navegador, una partida por
+proceso). Código: `src/bots/control/`, `cliente/src/bots/`.
+
+- **Canal** (`servidorDeControl.ts`): WebSocket en `/control` (puerto `PORT` o `BOTS_PUERTO`, 4000) más `GET /salud`. La primera orden
+  es `autenticar` con `BOTS_TOKEN` (comparación en tiempo constante; sin ella, 5 s y se cierra). Protocolo tipado en
+  `control/contrato.ts`, sin imports: el cliente admin lo usa solo como tipos. Mensajes: `estado` (tras cada vuelta y cada orden),
+  `accion` (cada comando de un bot, en vivo), `registro`, `historial` (al conectar) y `respuesta`.
+- **Servicio** (`servicio.ts`): fases `inactivo → arrancando → corriendo ⇄ pausado → parando`, más `error`. Órdenes: `iniciar`,
+  `pausar`, `reanudar`, `parar`, `reiniciarRegistro`, `ajustar` (cadencia), `forzarLlegada`, `modoBot` (auto, conectado,
+  desconectado, congelado), `retirarBot`, `pensarYa`, `volcarMemoria`. La semilla y los días de llegada no se cambian en marcha: el
+  plan de llegadas se indexa por orden. Recuerda si estaba en marcha (`<BOTS_DIRECTORIO>/servicio-bots.json`) y al reiniciarse retoma
+  solo; apagar el proceso no cuenta como parar. El `CODIGO_REGISTRO_BOTS` del entorno solo viaja al `BOTS_SERVIDOR` configurado.
+- **Instrumentación** (no cambia lo que deciden los bots): `RunnerDeBots` expone `info()`, `pizarrasInfo()`, `alActuar` y el modo de
+  cada bot; `PuertoRemoto` cuenta latencia, errores, sesiones renovadas y sockets; `ProcesoDeBots` mide cada vuelta.
+- **Arreglado de paso**: un alta de amigos que fallaba a medias dejaba héroes fuera del registro y repetía la llegada entera;
+  ahora cada bot se apunta en cuanto nace y la llegada se da por hecha si nació alguno.
+- **Panel** (pestaña «Bots», solo red; subpestañas como las del panel de asentamientos): arriba, conexión y estado; **Servicio**
+  (indicadores de salud —vuelta frente a `cadaMs`, peticiones, errores, latencia p50/p95— y configuración), **Flota** (cruce con el
+  servidor, tabla filtrable y ordenable, detalle de un bot con memoria, horario, esperas y acciones), **Llegadas** (línea de tiempo y
+  «forzar»), **Facciones** (pizarras) y **Actividad** (comandos en vivo y registro del servicio).
+- **Huérfanos**: el registro de cuentas del servicio y los héroes del mundo son dos listas; si el registro se pierde o se borra, sus
+  héroes siguen en el mundo (`controlador: 'bot'`) sin nadie detrás. La subpestaña Flota los cruza con los héroes que el cliente admin
+  ya lee del servidor (solo si el admin está en la misma partida que los bots) y marca los que nadie maneja. En Render el servicio es un Web
+  Service (necesita puerto), no un Background Worker.
+- **Pendiente**: retirar de verdad las cuentas bot en el servidor (hoy «retirar» desconecta y deja de manejar al bot; su héroe sigue en
+  el mundo), retirar de verdad a los huérfanos (hoy solo se ven), y reconectar el socket de un bot cuya conexión se cae sin
+  que el runner lo sepa. Despliegue en Render con disco para `BOTS_DIRECTORIO`.
+

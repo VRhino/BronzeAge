@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_BACKEND_URL?: string;
   readonly VITE_CODIGO_INVITACION?: string;
   readonly VITE_PROVEEDOR_AUTH?: string;
+  /** Dirección del canal de control del servicio de bots que propone la pestaña «Bots» (`BOTS_URL` en el entorno de dev). */
+  readonly VITE_BOTS_URL?: string;
 }
 
 interface ImportMeta {

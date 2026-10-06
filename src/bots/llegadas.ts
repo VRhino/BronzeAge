@@ -43,8 +43,15 @@ export const campamentoConMenosResidentes = (campamentos: readonly CampamentoEle
 /**
  * Da de alta una llegada: crea sus héroes por el puerto (`nombres` da el nombre de cada uno), todos en el mismo campamento, y
  * los pone a jugar con su perfil; el primero de unos amigos es su líder. Devuelve los creados, con su perfil.
+ * `alCrear` avisa de cada uno en cuanto existe: si el siguiente falla, quien da de alta ya sabe de los que quedaron en el mundo.
  */
-export async function darDeAlta(puerto: PuertoBot, bots: RunnerDeBots, llegada: Llegada, nombres: () => string): Promise<{ heroeId: string; perfil: Perfil }[]> {
+export async function darDeAlta(
+  puerto: PuertoBot,
+  bots: RunnerDeBots,
+  llegada: Llegada,
+  nombres: () => string,
+  alCrear?: (creado: { heroeId: string; perfil: Perfil; nombre: string }) => void
+): Promise<{ heroeId: string; perfil: Perfil }[]> {
   const creados: { heroeId: string; perfil: Perfil }[] = [];
   // Los que llegan juntos van al mismo campamento: el que elige el primero.
   let campamentoId: string | undefined;
@@ -55,7 +62,8 @@ export async function darDeAlta(puerto: PuertoBot, bots: RunnerDeBots, llegada: 
     if (!id) continue;
     const perfil: Perfil = llegada.perfil === 'amigos' ? { tipo: 'amigos', lider: creados[0]?.heroeId ?? id } : { tipo: llegada.perfil };
     creados.push({ heroeId: id, perfil });
-    bots.alta(id, perfil);
+    bots.alta(id, perfil, nombre);
+    alCrear?.({ heroeId: id, perfil, nombre });
   }
   return creados;
 }
