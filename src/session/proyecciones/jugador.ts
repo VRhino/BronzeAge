@@ -142,6 +142,9 @@ export interface EjercitoAvistado {
   participantes: number;
   /** Quiénes van: un héroe que se ve es público (Doc 5.16.7). Su ficha viaja en `heroesVisibles`. */
   heroeIds: string[];
+  /** Esta columna va tras una de las tuyas. Es lo único de su intención que se revela, y solo a quien persigue: a quien se sigue se le
+   * nota. De ahí sale el «te están persiguiendo» del cliente. */
+  teSigue?: true;
 }
 
 /**
@@ -464,6 +467,9 @@ export interface ProyeccionJugador {
    * Doc 5.16.7): un compañero de Facción no es un desconocido. Solo el nombre; el resto de su ficha sigue la regla de
    * lo que se ve. Vacío sin Facción. */
   nombresDeCompaneros: Record<string, string>;
+  /** `heroeId` -> nombre del Rey y del Embajador de cada Facción: su identidad es pública (`Faccion.reyId` ya viaja en `facciones`), y sin el
+   * nombre un cliente solo podría mostrar un id. Los de tu Facción también están en `nombresDeCompaneros`. */
+  nombresDeDirigentes: Record<string, string>;
   acuerdos: AcuerdoTrueque[];
   ordenes: OrdenMercado[];
   /** Las relaciones diplomáticas son públicas por naturaleza — quién está aliado o es vasallo de quién no es
@@ -930,6 +936,7 @@ export function proyectarParaJugador(
       posicionActual: e.posicionActual,
       participantes: participantesDe(e),
       heroeIds: e.participantes.map((p) => p.heroeId),
+      ...(e.persiguiendo?.tipo === 'ejercito' && propios.has(e.persiguiendo.id) ? { teSigue: true as const } : {}),
     })),
     aedasAvistados: (estado.aedas ?? [])
       
@@ -968,6 +975,14 @@ export function proyectarParaJugador(
     batallas,
     heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
     heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map((h) => heroePublico(h, instanteDeTick(estado.tick))),
+    nombresDeDirigentes: Object.fromEntries(
+      estado.facciones
+        .flatMap((f) => [f.reyId, f.embajadorId])
+        .flatMap((id) => {
+          const nombre = id ? estado.heroes.find((h) => h.id === id)?.displayName : undefined;
+          return id && nombre ? [[id, nombre] as const] : [];
+        })
+    ),
     nombresDeCompaneros: Object.fromEntries(
       estado.heroes.filter((h) => faccionPropia && esCiudadano(faccionPropia, h.id)).map((h) => [h.id, h.displayName])
     ),

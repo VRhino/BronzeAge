@@ -540,6 +540,19 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     expect(proyeccion.ejercitosAvistados).toEqual([]);
   });
 
+  it('una columna que va tras una propia lo dice (`teSigue`); una que va a lo suyo, no', () => {
+    const { sesion, faccionId, fundador } = partidaConAsentamiento();
+    const mia = ejercito('e-mia', faccionId, { x: 410, y: 410 }, [escuadron('s0', fundador)]);
+    const sigue = { ...ejercito('e-sigue', 'faccion-rival', { x: 420, y: 420 }, [escuadron('s1', 'otro')]), persiguiendo: { tipo: 'ejercito' as const, id: 'e-mia' } };
+    const aLoSuyo = { ...ejercito('e-suyo', 'faccion-rival', { x: 430, y: 430 }, [escuadron('s2', 'otro2')]), persiguiendo: { tipo: 'ejercito' as const, id: 'e-de-otro' } };
+    const quieta = ejercito('e-quieta', 'faccion-rival', { x: 440, y: 440 }, [escuadron('s3', 'otro3')]);
+    const estado = conColumnas(sesion.getState(), mia, sigue, aLoSuyo, quieta);
+
+    const avistados = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA).ejercitosAvistados;
+    expect(avistados.filter((e) => e.teSigue).map((e) => e.id)).toEqual(['e-sigue']);
+    expect(avistados.map((e) => e.id).sort()).toEqual(['e-quieta', 'e-sigue', 'e-suyo']);
+  });
+
   it('un ejercito rival dentro de lo que vigila una plaza propia se avista', () => {
     const { sesion, fundador } = partidaConAsentamiento();
     const rival = ejercito('e-rival', 'faccion-rival', { x: 410, y: 410 }, [escuadron('s1', 'otro')]);
@@ -647,6 +660,15 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     const heroe = proyectarParaJugador(conGuarnicion, fundador, SIN_GEOMETRIA).heroe!;
     expect(heroe.escuadrones[0]!.costeLiderazgo).toBeGreaterThan(0);
     expect(heroe.guarnicionOcupada).toBe(heroe.escuadrones[0]!.costeLiderazgo);
+  });
+
+  it('el nombre del Rey de cada Facción viaja, la propia o no, porque su id ya es público', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    const reyes = estado.facciones.flatMap((f) => (f.reyId ? [f.reyId] : []));
+    expect(reyes.length).toBeGreaterThan(0);
+    const nombres = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA).nombresDeDirigentes;
+    for (const id of reyes) expect(nombres[id]).toBe(estado.heroes.find((h) => h.id === id)!.displayName);
   });
 
   it('el nombre de cada compañero de Facción viaja se le vea o no; sin Facción, ninguno (Doc 5.16.7)', () => {

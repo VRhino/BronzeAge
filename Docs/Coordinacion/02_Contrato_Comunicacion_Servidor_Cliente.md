@@ -291,10 +291,33 @@ HeroePublico
 Viajan en `heroesVisibles`, y cada ejército avistado lleva `heroeIds` para saber quién va en él (2026-09-14).
 Aparte, `nombresDeCompaneros` (`heroeId` → nombre) trae el nombre de todos los ciudadanos de la Facción del
 jugador, se les vea o no (decisión del usuario, 2026-09-14; Doc 5.16.7).
+`nombresDeDirigentes` (`heroeId` → nombre, 2026-10-06) trae además el del **Rey y el Embajador de cada Facción**, la propia o no:
+su id ya viaja en `facciones[].reyId`, y sin el nombre un cliente solo podría pintar un id (`heroe-59`).
+
+Un ejército avistado lleva `teSigue: true` cuando va tras una columna del jugador (2026-10-06): es lo único de su intención que se
+revela, y solo a quien persigue. De ahí sale el «te están persiguiendo».
 
 Nada más del héroe ajeno viaja al cliente: ni experiencia, puntos, atributos, perks o Liderazgo, ni su
 residencia, los escuadrones de su campamento, sus loadouts, su inventario o sus monedas, ni género, avatar o
 si es humano o bot.
+
+### 4.1b Informe de un combate (2026-10-06)
+
+Los eventos de resolución llevan el informe de cada bando, para que un cliente cuente la batalla sin parsear `mensaje`:
+
+```text
+BajaDeEscuadra     { escuadronId, tropaId, antes, despues }
+LadoDelInforme     { poder, heroesIds[], bajas: BajaDeEscuadra[] }
+
+combate.resuelto                 (asedios y encuentros en campo)
+  payload: { ganador: 'atacante'|'defensor', poderAtacante, poderDefensor, tropaIds[],
+             atacante: LadoDelInforme, defensor: LadoDelInforme }
+combate.campamento_destruido / combate.ataque_campamento_fallido      (columna contra bandidos)
+  payload: { atacanteId, campamentoId, nivelCampamento, poderCampamento, atacante: LadoDelInforme }
+```
+
+`heroesIds` dice de quién es cada lado: un cliente enseña el informe a quien está en él. Los eventos sin `asentamientoId` viajan a
+todos los clientes (no hay filtro de audiencia por combate todavía), así que el cliente filtra por `heroesIds`.
 
 ### 4.2 Comandos del héroe (nuevos, mismo mecanismo del §2)
 

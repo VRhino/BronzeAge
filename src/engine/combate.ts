@@ -44,12 +44,39 @@ export function aplicarBajas(escuadrones: readonly Escuadron[], fraccionBajas: n
 // eso el `payload` lleva los bandos como ids y no solo interpolados en `mensaje` — las proyecciones por
 // audiencia de Fase C filtran sobre eso, no parseando castellano.
 
+/** Cómo acabó cada escuadra de un bando: lo que un cliente necesita para contar la batalla sin parsear el `mensaje`. */
+export interface BajaDeEscuadra {
+  escuadronId: string;
+  tropaId: string;
+  antes: number;
+  despues: number;
+}
+
+/** Un bando de un combate: con qué poder entró, qué héroes había (de quién es el informe) y qué le pasó a cada escuadra. */
+export interface LadoDelInforme {
+  poder: number;
+  heroesIds: string[];
+  bajas: BajaDeEscuadra[];
+}
+
+export function ladoDelInforme(antes: readonly Escuadron[], despues: readonly Escuadron[], poder: number): LadoDelInforme {
+  const trasCombate = new Map(despues.map((e) => [e.id, e]));
+  return {
+    poder,
+    heroesIds: [...new Set(antes.map((e) => e.heroeId))],
+    bajas: antes.map((e) => ({ escuadronId: e.id, tropaId: e.tropaId, antes: e.cantidad, despues: trasCombate.get(e.id)?.cantidad ?? e.cantidad })),
+  };
+}
+
 export interface PayloadCombateResuelto {
   ganador: 'atacante' | 'defensor';
   poderAtacante: number;
   poderDefensor: number;
   /** Tropas que combatieron, de los dos bandos (logros del servidor, Doc 6.3). */
   tropaIds: string[];
+  /** El informe de cada bando: héroes implicados y bajas por escuadra. */
+  atacante: LadoDelInforme;
+  defensor: LadoDelInforme;
 }
 export interface PayloadAsedio {
   atacanteId: string;
@@ -76,6 +103,10 @@ function datosDeAsedio(defensor: Asentamiento, defensores: readonly Escuadron[],
 export interface PayloadAtaqueCampamento {
   atacanteId: string;
   campamentoId: string;
+  /** Nivel y poder del campamento atacado (D21, D37), y el informe de la columna que lo atacó. */
+  nivelCampamento: number;
+  poderCampamento: number;
+  atacante: LadoDelInforme;
 }
 
 export interface ResultadoCombate {
@@ -153,6 +184,8 @@ export function resolverCombate(
           poderAtacante: poderA,
           poderDefensor: poderD,
           tropaIds: [...new Set([...atacantes, ...defensores].map((e) => e.tropaId))],
+          atacante: ladoDelInforme(atacantes, atacantesResultado, poderA),
+          defensor: ladoDelInforme(defensores, defensoresResultado, poderD),
         } satisfies PayloadCombateResuelto,
       },
     ],
@@ -520,7 +553,13 @@ export function atacarCampamentoConColumna(
   const choque = choqueContraCampamento(vivos, campamento, rng);
   const porId = new Map(choque.escuadrones.map((e) => [e.id, e]));
 
-  const payload: PayloadAtaqueCampamento = { atacanteId: ejercito.id, campamentoId: campamento.id };
+  const payload: PayloadAtaqueCampamento = {
+    atacanteId: ejercito.id,
+    campamentoId: campamento.id,
+    nivelCampamento: campamento.nivel,
+    poderCampamento: campamento.poder,
+    atacante: ladoDelInforme(vivos, choque.escuadrones, poderTotal(vivos, false)),
+  };
   const trasXp = aplicarExperiencia(facciones, [
     { faccionId: ejercito.faccionId, delta: xpDeBandidos(facciones, ejercito.faccionId, choque.gana), razon: 'campamento de bandidos' },
   ]);
