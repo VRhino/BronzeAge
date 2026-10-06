@@ -16,7 +16,8 @@ import { abrirAlijo, aportarARefundacion, comprarCaravanaDeRefundacion, comprarE
 import { asignarGuarnicion, borrarLoadout, guardarEnAlmacenPersonal, guardarLoadout, repartirPuntos, retirarGuarnicion, sacarDelAlmacenPersonal } from './heroe';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, dejarResidencia, designarCapital, residirEnCampamento } from './cargos';
 import { proponerAnexion, responderAnexion, retirarAnexion } from './anexion';
-import { declararGuerra, fusionar, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
+import { proponerFusion, responderFusion, retirarFusion } from './fusion';
+import { declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
 import {
   aceptarTrueque,
   agregarCarroCaravana,
@@ -98,7 +99,9 @@ const MANEJADORES = {
   proponerAnexion,
   responderAnexion,
   retirarAnexion,
-  fusionar,
+  proponerFusion,
+  responderFusion,
+  retirarFusion,
   proponerRelacion,
   rebelionVasallo,
   romperRelacion,

@@ -1399,3 +1399,30 @@ Eventos    diplomacia.anexion_propuesta, diplomacia.anexion_rechazada, diplomaci
   pasan a ser vasallos de la absorbente; las alianzas y guerras de la absorbida se cancelan.
 - **Visibilidad**: la **propuesta pendiente** viaja solo a las dos Facciones implicadas (`ProyeccionJugador.propuestasAnexion`); las caducadas no viajan. Los **eventos** (`diplomacia.anexion_*`) no llevan `asentamientoId`, así que, como el resto de la diplomacia, los ve cualquier jugador por `GET .../eventos`.
 
+## 26. Fusión con aceptación (nuevo, 2026-10-06)
+
+Canon: Doc 2 §2.6, opción 2. Decisiones: `Consideraciones/Anexion_Y_Desarme_Definicion.md` §5. Como la anexión: la fusión necesita que el Rey de B la acepte.
+El comando `fusionar` desaparece y lo sustituyen tres.
+
+```text
+PropuestaFusion                 (GameSessionState.propuestasFusion; las vigentes de la Facción propia, hechas o recibidas, viajan en ProyeccionJugador.propuestasFusion)
+  id
+  faccionAId                    quien propone (A)
+  faccionBId                    a quien se propone (B)
+  nuevoNombre                   nombre de la Facción nueva (ya recortado)
+  nuevoReyId                    Rey de la nueva: el Rey de A o el de B
+  propuestaPor                  heroeId del Rey de A cuyo consentimiento recoge
+  creadaEn, expiraEn: Instante  expiraEn = creadaEn + FUSION.caducidadDias (3 días de mundo, placeholder)
+
+Comandos   proponerFusion { faccionAId, faccionBId, nuevoNombre, nuevoReyId }   solo el Rey de A
+           responderFusion { propuestaId, aceptar }                             solo el Rey de B; aceptar la ejecuta en el acto
+           retirarFusion { propuestaId }                                        solo el Rey de A
+Errores    fusion.invalida (regla del motor: sin Rey, Rey no válido, nombre vacío, vasalla de un tercero, ya hay propuesta, batalla abierta…), fusion.no_existe, fusion.caducada, faccion.no_existe
+Eventos    diplomacia.fusion_propuesta, diplomacia.fusion_rechazada, diplomacia.fusion_retirada  (payload { propuestaId, faccionAId, faccionBId[, aceptada] })
+           diplomacia.fusion  (payload { faccionAId, faccionBId, faccionNuevaId, nuevoReyId }): la consumada; se canta en la crónica
+```
+
+- **Desaparecen DOS Facciones**: un cliente que cachee `Faccion` o ids de Facción debe reescribir `faccionAId` y `faccionBId` → `faccionNuevaId` al ver
+  `diplomacia.fusion`. C hereda el sigilo de A, la experiencia y la reputación mayores de las dos y la unión de tecnologías; pasan a C los
+  asentamientos, ciudadanos, ejércitos, caravanas, rutas, Aedas residentes y miradas; los vasallos de las dos pasan a ser de C y las alianzas y guerras se cancelan.
+- **Visibilidad**: igual que la anexión (`ProyeccionJugador.propuestasFusion`; los eventos `diplomacia.fusion_*` son públicos como el resto de la diplomacia).

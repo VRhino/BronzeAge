@@ -14,7 +14,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 |---|---|---|---|
 | 20 | TECNOLOGÍA | X de cada logro de las Eras I-III | batch (`scripts/batch/medidorTecnologia.ts`) |
 | 32 | POLÍTICA | Reputación: valor de cada evento, decaimiento y umbrales (`REPUTACION`) | batch / playtest |
-| 32b | POLÍTICA | Caducidad de la propuesta de anexión (`ANEXION.caducidadDias`) | playtest |
+| 32b | POLÍTICA | Caducidad de las propuestas de anexión y de fusión (`ANEXION.caducidadDias`, `FUSION.caducidadDias`) | playtest |
 | 33 | COMERCIO | Tasa de comisión intermedia entre Facciones aliadas o vasallas de la misma Liga | batch |
 | 34 | SUMINISTRO | La economía no llena el carro de un ejército | batch, tras el doble de la Granja |
 | 36 | HÉROE | Ritmo, prudencias y margen de los bots; cerebro «sin plaza» | batch; antes, ración en minutos en el motor |
@@ -90,9 +90,10 @@ Cada campamento sale con uno de tres niveles al azar, con su poder (`CAMPAMENTOS
 
 Implementada el 2026-10-06 (Doc 4.2.1). Son placeholder: `CHATARRA.fraccion` (0,5 del lingote del equipo por baja), las tres recetas de `EDIFICIO_CATALOGO.granFundicion` (producción base 4, 12 artesanos), el coste (150 madera + 100 piedra + 50 oro, 2 días) y los requisitos (Facción nivel 6, capital de asentamiento 4). Medir con batch cuánta chatarra deja una batalla típica, si el estaño que devuelve cambia de verdad el techo de las tropas de bronce, y si los 12 artesanos diluyen demasiado el ratio de mano de obra de la capital. Los bots no la construyen (`bots/cerebro/gobierno.ts`); decidir si deben, antes de medir.
 
-## 32b. Anexión: caducidad de la propuesta
+## 32b. Anexión y fusión: caducidad de la propuesta
 
 Implementada el 2026-10-06 (Doc 2.6). `ANEXION.caducidadDias` = 3 días de mundo es un placeholder: lo que tarda el Rey de la absorbida en conectarse y
 contestar. Con 5 jugadores en el playtest, mirar cuántas propuestas caducan sin respuesta; si son muchas, subir. Los bots rechazan al instante, así que
-no entran en la medida.
+no entran en la medida. La fusión (2026-10-06) tiene su propia constante, `FUSION.caducidadDias` = 3, con el mismo criterio y la misma medida; si salen
+distintas, que sean dos cifras.
 

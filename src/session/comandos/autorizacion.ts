@@ -206,6 +206,12 @@ function esReyDeLaPlaza(estado: GameSessionState, heroeId: string, asentamientoI
   return !asentamiento || (!!faccion && esCiudadano(faccion, heroeId) && esReyDe(faccion, heroeId));
 }
 
+/** Ciudadano de esa Facción y además su Rey. Una Facción inexistente se deja pasar (fail-open, como el resto): lo rechaza el comando con su código. */
+function esReyDeFaccion(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
+  const faccion = buscarFaccion(estado, faccionId);
+  return !faccion || (esCiudadano(faccion, heroeId) && esReyDe(faccion, heroeId));
+}
+
 /** Ciudadano de esa Facción y además Rey o Embajador suyo — autoridad diplomática (Doc 2.2). */
 function conAutoridadDiplomatica(estado: GameSessionState, heroeId: string, faccionId: string): boolean {
   const faccion = buscarFaccion(estado, faccionId);
@@ -506,11 +512,24 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
       return !propuesta || conAutoridadDiplomatica(estado, heroeId, propuesta.absorbenteId);
     },
   },
-  fusionar: {
+  // Disolver la propia Facción es acto de Rey (Doc 2.6): propone y retira el Rey de A, acepta o rechaza el de B.
+  proponerFusion: {
     rolesPermitidos: ['jugador'],
-    // Fusión consentida por ambos lados: basta tener autoridad en cualquiera de las dos Facciones.
-    condicionJugador: (estado, heroeId, params) =>
-      conAutoridadDiplomatica(estado, heroeId, params.faccionAId) || conAutoridadDiplomatica(estado, heroeId, params.faccionBId),
+    condicionJugador: (estado, heroeId, params) => esReyDeFaccion(estado, heroeId, params.faccionAId),
+  },
+  responderFusion: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const propuesta = estado.propuestasFusion?.find((p) => p.id === params.propuestaId);
+      return !propuesta || esReyDeFaccion(estado, heroeId, propuesta.faccionBId);
+    },
+  },
+  retirarFusion: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const propuesta = estado.propuestasFusion?.find((p) => p.id === params.propuestaId);
+      return !propuesta || esReyDeFaccion(estado, heroeId, propuesta.faccionAId);
+    },
   },
 
   // --- Comercio: residente del asentamiento objetivo ---

@@ -2069,6 +2069,12 @@ export const ANEXION = {
   caducidadDias: 3,
 } as const;
 
+/** Fusión entre Facciones (Doc 2.6, decidido el 2026-10-06). */
+export const FUSION = {
+  /** Días de mundo que una propuesta espera la respuesta del Rey de B. PLACEHOLDER. */
+  caducidadDias: 3,
+} as const;
+
 /** Presencia (Doc 1.10.6). */
 export const PRESENCIA = {
   /** Lo que tarda en salir del mundo quien se desconecta: alcanza a quien ya tenía a tiro, no a quien iba lejos. */

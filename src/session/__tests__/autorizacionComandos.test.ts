@@ -323,6 +323,22 @@ describe('diplomacia: ciudadanía + autoridad de Rey/Embajador', () => {
     expect(verificarAutorizacion('retirarAnexion', { propuestaId: 'p1' }, estado, jugador(ciudadanoRival))).toEqual(POR_DOMINIO);
     expect(verificarAutorizacion('retirarAnexion', { propuestaId: 'p1' }, estado, jugador(fundador))).toEqual(AUTORIZADO);
   });
+
+  it('la fusión es cosa de Reyes: propone y retira el de A, contesta el de B', () => {
+    const { sesion, faccionId, faccionRivalId, fundador, vecino, ciudadanoRival } = partidaConFaccionRival();
+    sesion.ejecutar(asignarRey, { faccionId, heroeId: fundador }, OPC);
+    const params = { faccionAId: faccionId, faccionBId: faccionRivalId, nuevoNombre: 'Nueva', nuevoReyId: fundador };
+    const propuesta = { id: 'p1', faccionAId: faccionId, faccionBId: faccionRivalId, nuevoNombre: 'Nueva', nuevoReyId: fundador, propuestaPor: fundador, creadaEn: instanteDeTick(0), expiraEn: instanteDeTick(9) };
+    const estado = { ...sesion.getState(), propuestasFusion: [propuesta] };
+
+    expect(verificarAutorizacion('proponerFusion', params, estado, jugador(vecino))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('proponerFusion', params, estado, jugador(ciudadanoRival))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('proponerFusion', params, estado, jugador(fundador))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('responderFusion', { propuestaId: 'p1', aceptar: true }, estado, jugador(fundador))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('responderFusion', { propuestaId: 'p1', aceptar: true }, estado, jugador(ciudadanoRival))).toEqual(AUTORIZADO);
+    expect(verificarAutorizacion('retirarFusion', { propuestaId: 'p1' }, estado, jugador(ciudadanoRival))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('retirarFusion', { propuestaId: 'p1' }, estado, jugador(fundador))).toEqual(AUTORIZADO);
+  });
 });
 
 // La presencia (paso 7, Doc 2.5: "la ciudadania habilita, la presencia ejerce"). Hasta aqui un jugador

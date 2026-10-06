@@ -16,7 +16,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1: solo (b) hecha |
 | 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
 | 30 | MILITAR | Batallas con héroes: lo que falta de este lado (canal de tiempo real, sustituir participante, botín, persecución) | ◐ ciclo de `Batalla` fases 1 y 2; falta el canal de tiempo real |
-| 32 | POLÍTICA | Fusión de Facciones: consentimiento de la otra y traslado de lo que cuelga de ellas | ✘ sin código |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 
 **Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06), y también, de los cabos sueltos §33/§35 (2026-10-06): la **riqueza acumulada** por comisiones, el **bonus por distancia en el mostrador**, **cortar rutas como guerra económica**, la **cola de prioridad de reclutamiento** y las **armas de asedio** como mecánica aparte.
@@ -106,15 +105,6 @@ perdido, compatibilidad arma/armadura, fuentes de objetos fuera de batalla) (CQ-
 batalla en curso (CQ-005). Mientras tanto, `experiencia` de escuadra suma lo que sumaba la veteranía y `nivel` se queda
 en 1. En el cliente de jugador, la pantalla definitiva de crear héroe, el equipo y la ficha de los héroes ajenos
 (`BronzeAgeClient`, `docs/Features_Pendientes.md` §0).
-
-## 32. Fusión de Facciones: consentimiento y traslado
-
-**Estado: detectado al cerrar la anexión (2026-10-06), `código: ✘`.** La fusión (Doc 2.6, opción 2) tiene los mismos huecos que tenía la
-anexión: **cualquiera de las dos Facciones la ejecuta** sin que la otra acepte (`autorizacion.ts`, `fusionar`), y `engine/fusion.ts` solo mueve
-asentamientos y ciudadanos: **ejércitos, caravanas, rutas, Aedas residentes, miradas, relaciones y memoria de niebla** quedan apuntando a las dos
-Facciones que desaparecen. Falta decidir con el usuario: el consentimiento (propuesta y respuesta, como la anexión), la votación real del Rey de la
-nueva Facción (hoy lo indica quien llama) y qué pasa con las relaciones, la tecnología y la reputación de las dos. `engine/anexion.ts` ya tiene el
-traslado de lo que cuelga de una Facción, que se puede generalizar.
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
 

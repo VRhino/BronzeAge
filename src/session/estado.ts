@@ -15,6 +15,7 @@ import type {
   MercadoMercenario,
   MiradaIntel,
   PropuestaAnexion,
+  PropuestaFusion,
   Caravana,
   Faccion,
   OrdenMercado,
@@ -156,6 +157,8 @@ export interface GameSessionState {
   miradasIntel?: MiradaIntel[];
   /** Propuestas de anexión (Doc 2.6) pendientes de respuesta del Rey de la absorbida; las caducadas se barren al proponer. Ausente = ninguna. */
   propuestasAnexion?: PropuestaAnexion[];
+  /** Propuestas de fusión (Doc 2.6) pendientes de respuesta del Rey de B; las caducadas se barren al proponer. Ausente = ninguna. */
+  propuestasFusion?: PropuestaFusion[];
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,

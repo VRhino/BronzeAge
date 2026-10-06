@@ -54,6 +54,8 @@ export const CODIGOS_ERROR = {
   // Anexión (Doc 2.6): la propuesta que se contesta o retira no existe, o ya caducó.
   anexionNoExiste: 'anexion.no_existe',
   anexionCaducada: 'anexion.caducada',
+  fusionNoExiste: 'fusion.no_existe',
+  fusionCaducada: 'fusion.caducada',
   faccionNombreVacio: 'faccion.nombre_vacio',
   faccionNombreDuplicado: 'faccion.nombre_duplicado',
   // Sigilo (Doc 2.8.1): fuera del catálogo, o idéntico al de otra Facción.

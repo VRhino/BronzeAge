@@ -1,7 +1,7 @@
-# Anexión con aceptación y desarme del señor — decisiones y plan
+# Anexión y fusión con aceptación, y desarme del señor — decisiones y plan
 
 > **Estado (2026-10-06): diseño cerrado con el usuario e IMPLEMENTADO en el motor, la sesión, la proyección al jugador y los bots; sin push.**
-> Las **reglas de juego** viven en el canon: `Docs/Game/2` §2.4 (ruptura 4, el desarme) y §2.6 (la anexión). Este documento guarda **las
+> Las **reglas de juego** viven en el canon: `Docs/Game/2` §2.4 (ruptura 4, el desarme) y §2.6 (la anexión y, desde el mismo día, la fusión: ver §5). Este documento guarda **las
 > decisiones con sus alternativas descartadas**, la forma en el motor y lo que queda fuera. Enunciado original: `Docs/Mecanicas a desarrollar.md`
 > §32 (cerrada y retirada).
 
@@ -43,8 +43,50 @@ al instante; solo la paz es mutua). Y la ruptura 4 del vasallaje —la liberaci�
 
 ## 4. Fuera de esta pasada
 
-- **La fusión** (Doc 2.6, opción 2) tiene el mismo hueco de consentimiento (cualquiera de las dos Facciones la ejecuta) y no traslada ejércitos,
-  caravanas, rutas ni memoria. Se retoma con la votación real de Rey. Queda como entrada en `Docs/Mecanicas a desarrollar.md`.
+- **La fusión** se hizo después, ese mismo día: §5.
 - **Cliente de jugador**: `ProyeccionJugador.propuestasAnexion` ya viaja; las pantallas de proponer, aceptar, rechazar y retirar son de
   `BronzeAgeClient` (aviso a Coordinación: `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §25).
 - **Calibración**: `ANEXION.caducidadDias` entra en `Docs/Mecanicas a balancear.md`.
+
+## 5. Fusión con aceptación (2026-10-06)
+
+Mismo hueco que tenía la anexión (cualquiera de las dos Facciones la ejecutaba, sin consentimiento de la otra, y solo movía asentamientos y ciudadanos).
+Reglas de juego en `Docs/Game/2` §2.6, opción 2; contrato en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §26.
+
+### 5.1 Decisiones cerradas con el usuario
+
+| # | Decisión | Alternativas descartadas |
+|---|---|---|
+| F1 | **Propone solo el Rey de A; acepta el Rey de B** | Rey o Embajador de A como en la anexión (un Embajador podría proponer disolver una Facción cuyo Rey no ha dicho nada; habría que añadir una confirmación del Rey); que cada Rey acepte su lado sobre un borrador abierto por cualquiera (más estado y comandos) |
+| F2 | **La propuesta fija el nombre y el Rey de C (uno de los dos Reyes); aceptar es votar** | Votación de ciudadanos tras el sí de ambos (estado nuevo, plazo, qué pasa si nadie vota; la fusión quedaría días en el limbo); Rey por regla automática, p. ej. el de más asentamientos o XP (desplaza a un Rey sin que lo decida, aunque haya aceptado) |
+| F3 | **Relaciones como la anexión, en los dos lados**: alianzas y guerras de A y B se cancelan sin penalización, sus vasallos pasan a C con el mismo tributo, vasalla de un tercero bloquea | Heredar todo y resolver choques (alianza de una y guerra de la otra con un tercero: reglas de conflicto, y C arrastrada a guerras que no decidió); cancelarlo todo, vasallos incluidos (el señor que se fusiona regala su vasallaje) |
+| F4 | **C hereda la experiencia mayor y la reputación mayor, y la unión de tecnologías** | Nueva de cero salvo tecnología (el nivel de Facción fija el cupo de asentamientos de nivel 2-3: fusionar dos Facciones fuertes las dejaba sin cupo); suma de XP y reputación media (la reputación de la peor sí cuenta) |
+
+### 5.2 Decisiones de implementación (las tomé yo; se pueden revisar)
+
+- **Una sola ruta de traslado.** El cuerpo de `anexionar` pasó a `engine/trasladoDeFaccion.ts` (`trasladarFaccion(mundo, origen, destino)`). La
+  anexión lo llama una vez (B → A); la fusión crea C y lo llama dos veces (A → C, B → C). Así las alianzas y guerras de A **y** de B se cancelan
+  (las reglas son las del origen) y el vasallaje entre ellas termina solo en la segunda pasada. `senorAjeno` y `propuestasVigentes`, que eran de la
+  anexión, viven ahí también.
+- **El Rey y el nombre se validan al proponer y al aceptar.** El Rey de A ha de ser quien la propuso (`PropuestaFusion.propuestaPor`; si cambia
+  en los 3 días, el consentimiento ya no vale) y `nuevoReyId` ha de seguir siendo Rey de una de las dos. El motor no mira el actor: que proponga el Rey
+  de A lo exige la matriz de autorización (`autorizacion.ts`), como en el resto de comandos.
+- **Sigilo de A, sin reabrir el canon.** Doc 2.8.1 ya decía que la fusión hereda el de A; el de B se pierde y no choca con nadie (A y B desaparecen).
+  Se queda así (el sigilo es identidad para siempre, y el de A es el de quien propone).
+- **Experiencia y reputación**: el máximo de cada una por separado (leí «la mejor» así; si se quería la de una sola Facción, es un cambio de una línea en
+  `engine/fusion.ts`). El nivel se recalcula de la experiencia.
+- **Capital**: la marca `capitalDeFaccionId` de la plaza que el Rey de C había designado pasa a C (sin cooldown: C es nueva) y la de la otra se borra. Sin
+  designación, la regla de siempre (la plaza viva más antigua).
+- **Tecnología**: se une antes de trasladar (`aparecidas`, `adoptadas`, `reveladas` que aún no han aparecido); el traslado borra las entradas de A y B.
+  `primeros` y las épicas cumplidas de los Aedas se reescriben igual que en la anexión.
+- **Anexión y fusión pendientes a la vez** entre el mismo par pueden coexistir: la que se acepte primero borra la otra (el traslado limpia las dos listas).
+- **`fusionar` desaparece como comando**: lo sustituyen `proponerFusion`, `responderFusion` y `retirarFusion`. Ningún bot lo usaba. `cliente/src/app/gameStore.ts`
+  (cliente local) cambió sus métodos; no he comprobado si `BronzeAgeClient` llama a `fusionar`.
+- **El Rey bot rechaza** las fusiones que recibe, igual que las anexiones (`bots/cerebro/gobierno.ts`).
+- **La comprobación de batalla abierta** de ambos comandos es una (`faccionesConBatallaAbierta`, `session/batallas.ts`).
+- **Caducidad**: `FUSION.caducidadDias` = 3, constante propia (placeholder, `Docs/Mecanicas a balancear.md` §32b).
+
+### 5.3 Fuera de esta pasada
+
+- **Cliente de jugador**: `ProyeccionJugador.propuestasFusion` ya viaja; las pantallas de proponer (con nombre y Rey de C), aceptar, rechazar y retirar son de
+  `BronzeAgeClient`.

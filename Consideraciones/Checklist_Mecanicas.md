@@ -239,9 +239,9 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Las ordenanzas de trazado llevan un beneficio propio (muralla, comisión externa, talleres, población) frente a Vía Rápida — `código: ✔` (2026-10-02, Doc 4.4; cifras placeholder)
 
 ## Fusión y crecimiento de Facciones
-- ✅ Menú con 2 opciones (Anexión / Fusión), reglas de Rey y cargos resultantes — `código: ✔` (`engine/anexion.ts`, `engine/fusion.ts`, comandos `proponerAnexion` / `responderAnexion` / `retirarAnexion` / `fusionar`)
+- ✅ Menú con 2 opciones (Anexión / Fusión), reglas de Rey y cargos resultantes — `código: ✔` (`engine/anexion.ts`, `engine/fusion.ts`, comandos `proponerAnexion` / `responderAnexion` / `retirarAnexion` y `proponerFusion` / `responderFusion` / `retirarFusion`)
 - ✅ Anexión con aceptación del Rey de B, propuesta pendiente con caducidad, y qué pasa con lo que cuelga de B — `código: ✔` (2026-10-06, Doc 2.6; `Consideraciones/Anexion_Y_Desarme_Definicion.md`)
-- 🔶 Fusión: consentimiento de la otra Facción y traslado de lo que cuelga de ellas — `código: ✘` (`Mecanicas a desarrollar.md` §32)
+- ✅ Fusión con aceptación del Rey de B, Rey y nombre de la Facción nueva fijados en la propuesta, y traslado de todo lo que cuelga de las dos (ruta compartida con la anexión) — `código: ✔` (2026-10-06, Doc 2.6; `Consideraciones/Anexion_Y_Desarme_Definicion.md` §5)
 
 ## Gremios
 - ✅ 4 gremios (Comerciantes, Artesanos, Constructores, Ladrones), escasos a nivel de servidor, con tirada periódica sujeta a 4 requisitos simultáneos (reputación >90, título de servidor específico, nivel de asentamiento en el máximo y mantenimiento >90%); mecanismo de pérdida resuelto — **`código: ✘`**. El `patioDeGremios` de `constants.ts` es una parcela decorativa del trazado urbano, sin relación con esta mecánica. (aparcado, `Docs/Ideas a diseñar.md` §21)

@@ -1,7 +1,7 @@
 // Comandos de diplomacia entre Facciones: proponer vasallaje/alianza, romper una relación, rebelarse contra
-// un señor y fusionar (la anexión, que pide aceptación, vive en `anexion.ts`). Agrupados por la misma razón que `cargos.ts`: comparten forma y audiencia.
+// un señor (la anexión y la fusión, que piden aceptación, viven en `anexion.ts` y `fusion.ts`). Agrupados por la misma razón que `cargos.ts`: comparten forma y audiencia.
 //
-// Fusionar y la rebelión los narra el MOTOR (`engine/fusion.ts`, `engine/diplomacia.ts`), que ya
+// La rebelión la narra el MOTOR (`engine/diplomacia.ts`), que ya
 // emite `EventoCrudo` con código y payload; aquí solo se les añade el contexto temporal. Proponer y romper los
 // narra esta capa, que es donde se sabe qué relación se creó.
 import type { RecursoTipo } from '../../domain/types';
@@ -14,7 +14,6 @@ import {
   proponerPaz as proponerPazEngine,
   type PayloadGuerraDeclarada,
 } from '../../engine/diplomacia';
-import { fusionar as fusionarEngine } from '../../engine/fusion';
 import type { GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, rechazar } from './ayudas';
@@ -169,29 +168,4 @@ export const proponerPaz = comando<ParamsProponerPaz, { firmada: boolean }>((est
     ],
     { firmada }
   );
-});
-
-export interface ParamsFusionar {
-  faccionAId: string;
-  faccionBId: string;
-  nuevoNombre: string;
-  nuevoReyId: string;
-}
-
-export const fusionar = comando<ParamsFusionar, void>((estado, _mapa, ctx, params) => {
-  const resultado = fusionarEngine(
-    estado.facciones,
-    estado.asentamientos,
-    params.faccionAId,
-    params.faccionBId,
-    params.nuevoNombre || 'Facción Fusionada',
-    params.nuevoReyId,
-    ctx.instante
-  );
-  const siguiente: GameSessionState = {
-    ...estado,
-    facciones: resultado.facciones,
-    asentamientos: resultado.asentamientos,
-  };
-  return exito(siguiente, desdeCrudos(ctx, resultado.eventos));
 });

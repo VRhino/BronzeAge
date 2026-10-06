@@ -8,6 +8,7 @@ import { puertoEnProceso } from '../puerto';
 import { RunnerDeBots } from '../runner';
 import { cerebroDeBot } from '../cerebro';
 import { proponerAnexion } from '../../session/comandos/anexion';
+import { proponerFusion } from '../../session/comandos/fusion';
 
 /** Tres Facciones de bots con el andamio del batch, y su runner. Con la semilla 7, dos nacen a la vista una de otra. */
 async function mundo(ticks: number, horario: 'siempre' | 'por-semilla' = 'siempre') {
@@ -68,6 +69,23 @@ describe('bots: anexión (Doc 2.6)', () => {
     expect(sesion.getState().propuestasAnexion).toEqual([]);
     expect(sesion.getState().facciones.some((f) => f.id === b)).toBe(true);
     expect(sesion.getState().eventosDominio.some((e) => e.codigo === 'diplomacia.anexion_rechazada')).toBe(true);
+  });
+});
+
+describe('bots: fusión (Doc 2.6)', () => {
+  it('el Rey bot rechaza la propuesta de fusión que recibe: no disuelve su Facción', async () => {
+    const sesion = GameSession.crear('bots', { seed: 7 });
+    const [a, b] = ['Alfa', 'Beta'].map((nombre) => sesion.ejecutar(faccionAsentadaDePrueba, { nombre }).datos!.faccionId);
+    const reyA = sesion.getState().facciones.find((f) => f.id === a)!.reyId!;
+    sesion.ejecutar(proponerFusion, { faccionAId: a!, faccionBId: b!, nuevoNombre: 'Nueva', nuevoReyId: reyA }, { actor: 'cualquiera' });
+    expect(sesion.getState().propuestasFusion).toHaveLength(1);
+    const bots = new RunnerDeBots(puertoEnProceso(sesion), cerebroDeBot, { semilla: 7, horario: 'siempre' });
+    for (const h of sesion.getState().heroes) bots.alta(h.id);
+    for (let tick = 1; tick <= 20; tick++) await bots.trasTick(tick, sesion.avanzarTick().eventos);
+
+    expect(sesion.getState().propuestasFusion).toEqual([]);
+    expect(sesion.getState().facciones.map((f) => f.id)).toEqual(expect.arrayContaining([a, b]));
+    expect(sesion.getState().eventosDominio.some((e) => e.codigo === 'diplomacia.fusion_rechazada')).toBe(true);
   });
 });
 

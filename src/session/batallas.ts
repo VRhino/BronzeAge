@@ -74,6 +74,16 @@ export function batallasActivas(estado: Pick<GameSessionState, 'batallas'>, ahor
   return estado.batallas.filter((b) => ACTIVAS.has(b.estado) && ahora < b.expiraEn);
 }
 
+/** ¿Alguna de estas Facciones tiene una batalla abierta, con alguno de sus ejércitos o en una de sus plazas? Quien cambia de Facción a mitad de una no sabría de qué bando está. */
+export function faccionesConBatallaAbierta(estado: Pick<GameSessionState, 'batallas' | 'asentamientos' | 'ejercitos'>, faccionIds: readonly string[], ahora: Instante): boolean {
+  const de = new Set(faccionIds);
+  const plazas = new Set(estado.asentamientos.filter((a) => de.has(a.faccionId)).map((a) => a.id));
+  const ejercitos = new Set(estado.ejercitos.filter((e) => de.has(e.faccionId)).map((e) => e.id));
+  return batallasActivas(estado, ahora).some(
+    (b) => b.bloqueo.ejercitoIds.some((id) => ejercitos.has(id)) || (b.bloqueo.asentamientoId !== undefined && plazas.has(b.bloqueo.asentamientoId))
+  );
+}
+
 export interface Participacion {
   lado: LadoId;
   participante: BattleParticipantSnapshot;

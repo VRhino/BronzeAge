@@ -130,6 +130,11 @@ async function rey(ctx: ContextoBot): Promise<void> {
     if (p.absorbidaId === faccion.id) await ctx.intentar(`anexion:${p.id}`, 'responderAnexion', { propuestaId: p.id, aceptar: false });
   }
 
+  // Y tampoco se funde: rechaza las fusiones que le proponen.
+  for (const p of vista.propuestasFusion) {
+    if (p.faccionBId === faccion.id) await ctx.intentar(`fusion:${p.id}`, 'responderFusion', { propuestaId: p.id, aceptar: false });
+  }
+
   // Un Gobernador para cada plaza que no lo tenga: el residente de id más bajo que la pizarra conozca.
   for (const plaza of plazasPropias(vista)) {
     if (!plaza.cargos || plaza.cargos.gobernadorId) continue;

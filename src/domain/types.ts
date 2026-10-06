@@ -1284,6 +1284,24 @@ export interface PropuestaAnexion {
   expiraEn: Instante;
 }
 
+/**
+ * Propuesta de fusión pendiente (Doc 2.6, opción 2): el Rey de `faccionAId` ofrece disolver las dos Facciones en una nueva, con este
+ * nombre y este Rey (uno de los dos Reyes actuales). El `sí` del Rey de `faccionBId` es su voto; el de A está en la propuesta.
+ * Una por par; caduca sola (`FUSION.caducidadDias`) y se retira al contestarla, retirarla o cambiar el mundo bajo ella.
+ */
+export interface PropuestaFusion {
+  id: string;
+  faccionAId: string;
+  faccionBId: string;
+  nuevoNombre: string;
+  /** Rey de la Facción nueva: el Rey de A o el de B. */
+  nuevoReyId: string;
+  /** El Rey de A cuyo consentimiento recoge: si deja de serlo, ya no vale. */
+  propuestaPor: string;
+  creadaEn: Instante;
+  expiraEn: Instante;
+}
+
 // --- Sprint 6: Cierre (Doc 2.7/2.9, mantenimiento Doc 4.5) ---
 
 /**

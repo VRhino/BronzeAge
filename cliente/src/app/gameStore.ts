@@ -756,8 +756,16 @@ export class GameStore {
     await this.despachar('retirarAnexion', { propuestaId }, 'Retirada de la anexión rechazada');
   }
 
-  async fusionar(faccionAId: string, faccionBId: string, nuevoNombre: string, nuevoReyId: string): Promise<void> {
-    await this.despachar('fusionar', { faccionAId, faccionBId, nuevoNombre, nuevoReyId }, 'Fusión rechazada');
+  async proponerFusion(faccionAId: string, faccionBId: string, nuevoNombre: string, nuevoReyId: string): Promise<void> {
+    await this.despachar('proponerFusion', { faccionAId, faccionBId, nuevoNombre, nuevoReyId }, 'Propuesta de fusión rechazada');
+  }
+
+  async responderFusion(propuestaId: string, aceptar: boolean): Promise<void> {
+    await this.despachar('responderFusion', { propuestaId, aceptar }, 'Respuesta a la fusión rechazada');
+  }
+
+  async retirarFusion(propuestaId: string): Promise<void> {
+    await this.despachar('retirarFusion', { propuestaId }, 'Retirada de la fusión rechazada');
   }
 
   /** Cada lado ofrece una o varias líneas `{ recurso, cantidad }` (trueque compuesto, Doc 3.2). */

@@ -4,14 +4,14 @@ import {
   AnexionInvalidaError,
   anexionar as anexionarEngine,
   exigirAnexionPosible,
-  propuestasVigentes,
   proponerAnexion as proponerAnexionEngine,
   type PayloadAnexionPropuesta,
   type PayloadAnexionRespondida,
 } from '../../engine/anexion';
+import { propuestasVigentes } from '../../engine/trasladoDeFaccion';
 import type { Instante } from '../../domain/tiempo';
 import type { PropuestaAnexion } from '../../domain/types';
-import { batallasActivas } from '../batallas';
+import { faccionesConBatallaAbierta } from '../batallas';
 import type { GameSessionState } from '../estado';
 import { exigirFaccion, comando, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
@@ -87,13 +87,7 @@ export const responderAnexion = comando<ParamsResponderAnexion, void>((estado, _
 
   // El mundo cambió mientras esperaba: lo que valía al proponer se vuelve a mirar, y una batalla abierta de cualquiera de las dos no se mueve de bando.
   exigirAnexionPosible(estado.facciones, estado.relaciones, propuesta.absorbenteId, propuesta.absorbidaId);
-  const de = new Set([propuesta.absorbenteId, propuesta.absorbidaId]);
-  const plazas = new Set(estado.asentamientos.filter((a) => de.has(a.faccionId)).map((a) => a.id));
-  const ejercitos = new Set(estado.ejercitos.filter((e) => de.has(e.faccionId)).map((e) => e.id));
-  const enBatalla = batallasActivas(estado, ctx.instante).some(
-    (b) => b.bloqueo.ejercitoIds.some((id) => ejercitos.has(id)) || (b.bloqueo.asentamientoId !== undefined && plazas.has(b.bloqueo.asentamientoId))
-  );
-  if (enBatalla) throw new AnexionInvalidaError('Alguna de las dos Facciones tiene una batalla en curso: espera a que termine.');
+  if (faccionesConBatallaAbierta(estado, [propuesta.absorbenteId, propuesta.absorbidaId], ctx.instante)) throw new AnexionInvalidaError('Alguna de las dos Facciones tiene una batalla en curso: espera a que termine.');
 
   const resultado = anexionarEngine(estado, propuesta.absorbenteId, propuesta.absorbidaId);
   return exito({ ...estado, ...resultado.mundo }, desdeCrudos(ctx, resultado.eventos));

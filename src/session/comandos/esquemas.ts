@@ -266,12 +266,13 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   proponerAnexion: objeto({ faccionAId: IDENTIFICADOR, faccionBId: IDENTIFICADOR }, ['faccionAId', 'faccionBId']),
   responderAnexion: objeto({ propuestaId: IDENTIFICADOR, aceptar: { type: 'boolean' } }, ['propuestaId', 'aceptar']),
   retirarAnexion: objeto({ propuestaId: IDENTIFICADOR }, ['propuestaId']),
-  // Sin `minLength` en `nuevoNombre`: vacío cae a un nombre por defecto (`params.nuevoNombre || 'Facción
-  // Fusionada'`, `diplomacia.ts`) — uso soportado, no un error de forma.
-  fusionar: objeto(
+  // Sin `minLength` en `nuevoNombre`: un nombre vacío es un rechazo de dominio con su propio código (`fusion.invalida`).
+  proponerFusion: objeto(
     { faccionAId: IDENTIFICADOR, faccionBId: IDENTIFICADOR, nuevoNombre: { type: 'string' }, nuevoReyId: IDENTIFICADOR },
     ['faccionAId', 'faccionBId', 'nuevoNombre', 'nuevoReyId']
   ),
+  responderFusion: objeto({ propuestaId: IDENTIFICADOR, aceptar: { type: 'boolean' } }, ['propuestaId', 'aceptar']),
+  retirarFusion: objeto({ propuestaId: IDENTIFICADOR }, ['propuestaId']),
 
   // --- Comercio ---
   // Cada lado ofrece una o varias líneas (trueque compuesto, Doc 3.2).

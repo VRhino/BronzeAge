@@ -74,8 +74,8 @@ import type {
   ZonaInfluencia,
 } from '../../domain/types';
 import { EDIFICIO_CATALOGO, EPICAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
-import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, PropuestaAnexion, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
-import { propuestasVigentes } from '../../engine/anexion';
+import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, PropuestaAnexion, PropuestaFusion, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
+import { propuestasVigentes } from '../../engine/trasladoDeFaccion';
 import { miradasActivasDe } from '../../engine/intel';
 import { esCaravanaGrande } from '../../engine/caravanas';
 import { tecnologiasDe } from '../../engine/tecnologia';
@@ -438,6 +438,8 @@ export interface ProyeccionJugador {
   miradasIntel: MiradaIntel[];
   /** Las propuestas de anexión vigentes que ofrece o recibe la Facción propia (Doc 2.6): el Rey de la absorbida las acepta o rechaza, la absorbente las retira. */
   propuestasAnexion: PropuestaAnexion[];
+  /** Las propuestas de fusión vigentes que hace o recibe la Facción propia (Doc 2.6): el Rey de B las acepta o rechaza, el de A las retira. */
+  propuestasFusion: PropuestaFusion[];
   /** Los Informes de plaza de la Facción propia, el último de cada plaza, con su fecha (Doc 5.12.10). */
   informesPlaza: InformePlaza[];
   /** Lo que cuesta la intel y cuánto dura, para que el cliente cotice antes de comprar (Doc 5.12.10). */
@@ -929,6 +931,7 @@ export function proyectarParaJugador(
       .map((a) => ({ id: a.id, posicion: a.posicion, ...(a.enAsentamientoId ? { enAsentamientoId: a.enAsentamientoId } : {}) })),
     miradasIntel: (estado.miradasIntel ?? []).filter((m) => m.faccionId === faccionId && m.libreEn > ahora),
     propuestasAnexion: propuestasVigentes(estado.propuestasAnexion, ahora).filter((p) => p.absorbenteId === faccionId || p.absorbidaId === faccionId),
+    propuestasFusion: propuestasVigentes(estado.propuestasFusion, ahora).filter((p) => p.faccionAId === faccionId || p.faccionBId === faccionId),
     informesPlaza: Object.values(memoria.informes ?? {}),
     tarifasIntel: { mirada: INTEL.mirada, informe: INTEL.informe, cupoMiradas: CUPO_MIRADAS },
     aedasResidentes: (estado.aedasResidentes?.aedas ?? [])
