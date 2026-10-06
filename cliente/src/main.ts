@@ -5,7 +5,7 @@
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { AcuerdoTrueque, Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
 import { RED_VACIA, tramosDeRed } from '@motor/engine/redCaminos';
-import { ApiError, crearOResumirPartida, listarPartidas } from './app/apiCliente';
+import { ApiError, cambiarCodigoRegistro, crearOResumirPartida, leerCodigoRegistro, listarPartidas } from './app/apiCliente';
 import { montarPanelBots } from './bots/panelBots';
 import { CATALOGOS, crearGameStore, elegirGameId, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { layoutCampamento } from '@motor/engine/layoutCampamento';
@@ -358,6 +358,17 @@ app.innerHTML = `
           <div class="kv-grid" id="info-partida"></div>
         </div>
         <div class="controls">
+          <h2>Código de invitación</h2>
+          <p class="legend-note">Lo que piden a un jugador nuevo para registrarse. Es el valor real del servidor; se guarda solo en memoria, así que un reinicio vuelve al <code>CODIGO_REGISTRO</code> del entorno.</p>
+          <div class="kv-row"><span>Vigente</span><span id="codigo-vigente">…</span></div>
+          <label>Nuevo código <input id="codigo-input" maxlength="100" autocomplete="off" spellcheck="false" placeholder="vacío = registro abierto" /></label>
+          <div class="controls-row">
+            <button type="button" id="codigo-guardar">Guardar código</button>
+            <button type="button" id="codigo-abrir">Dejar el registro abierto</button>
+          </div>
+          <p class="legend-note" id="codigo-estado" aria-live="polite" hidden></p>
+        </div>
+        <div class="controls">
           <h2>Partida y mundo</h2>
           <p class="legend-note" id="partida-nota"></p>
           <label>ID de la partida
@@ -466,13 +477,11 @@ const infoPartidaEl = document.getElementById('info-partida')!;
 function renderInfoPartida(state: GameState): void {
   const backendUrl = import.meta.env.VITE_BACKEND_URL ?? '';
   const esLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?\/?$/i.test(backendUrl);
-  const codigo = import.meta.env.VITE_CODIGO_INVITACION ?? '';
   const filas: [string, string][] = [
     ['Nombre', state.gameId],
     ['Ubicación', backendUrl ? (esLocal ? 'Local' : 'En la nube') : '—'],
     ['Backend', backendUrl || '—'],
     ['Proveedor', import.meta.env.VITE_PROVEEDOR_AUTH || 'dev'],
-    ['Código de invitación', codigo || '— (registro abierto)'],
     ['Velocidad de tick', fmtIntervaloTick(state.relojDeMundoIntervaloMs)],
   ];
   infoPartidaEl.innerHTML = filas
@@ -1934,7 +1943,10 @@ function actualizarTabs(): void {
   document.getElementById('tab-registros')!.hidden = tabActivo !== 'registros';
   document.getElementById('tab-generacionMundo')!.hidden = tabActivo !== 'generacionMundo';
   if (tabActivo === 'politicas') renderPoliticasTab();
-  if (tabActivo === 'generacionMundo') void cargarPartidasExistentes();
+  if (tabActivo === 'generacionMundo') {
+    void cargarPartidasExistentes();
+    void cargarCodigoRegistro();
+  }
 }
 
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
@@ -2257,6 +2269,45 @@ async function cambiarDePartida(modo: 'abrir' | 'crear'): Promise<void> {
     actualizarBotonPartida();
   }
 }
+
+// Código de invitación del registro: se lee del servidor al abrir la pestaña y tras cada cambio.
+const codigoVigenteEl = document.getElementById('codigo-vigente')!;
+const codigoInput = document.getElementById('codigo-input') as HTMLInputElement;
+const codigoEstadoEl = document.getElementById('codigo-estado')!;
+
+function avisoCodigo(ok: boolean, texto: string): void {
+  codigoEstadoEl.hidden = false;
+  codigoEstadoEl.textContent = `${ok ? '✓' : '✗'} ${texto}`;
+}
+
+async function cargarCodigoRegistro(): Promise<void> {
+  try {
+    const { codigo } = await leerCodigoRegistro();
+    codigoVigenteEl.textContent = codigo ?? 'ninguno: registro abierto';
+    codigoInput.placeholder = codigo ? 'vacío = registro abierto' : 'sin código: escribe uno para cerrarlo';
+  } catch (err) {
+    codigoVigenteEl.textContent = 'no se pudo leer';
+    avisoCodigo(false, err instanceof Error ? err.message : String(err));
+  }
+}
+
+async function guardarCodigoRegistro(codigo: string | null): Promise<void> {
+  try {
+    const { codigo: vigente } = await cambiarCodigoRegistro(codigo);
+    codigoVigenteEl.textContent = vigente ?? 'ninguno: registro abierto';
+    codigoInput.value = '';
+    avisoCodigo(true, vigente ? `Código cambiado a «${vigente}»: lo piden los registros nuevos.` : 'Registro abierto: ya no se pide código.');
+  } catch (err) {
+    avisoCodigo(false, err instanceof Error ? err.message : String(err));
+  }
+}
+
+document.getElementById('codigo-guardar')!.addEventListener('click', () => {
+  const nuevo = codigoInput.value.trim();
+  if (!nuevo) return avisoCodigo(false, 'Escribe un código, o usa «Dejar el registro abierto».');
+  void guardarCodigoRegistro(nuevo);
+});
+document.getElementById('codigo-abrir')!.addEventListener('click', () => void guardarCodigoRegistro(null));
 
 partidaIdInput.value = gameStore.getState().gameId;
 partidaIdInput.addEventListener('input', () => {

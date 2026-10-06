@@ -163,3 +163,13 @@ export function consultarEventos(gameId: string, desde: number): Promise<{ event
 export function obtenerMapa(gameId: string, mapaId: string): Promise<MapaGenerado> {
   return peticion<MapaGenerado>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/mapa/${encodeURIComponent(mapaId)}`);
 }
+
+/** El código de invitación vigente del registro de jugadores (`null` = registro abierto): el valor real del servidor, no el del entorno de dev. */
+export function leerCodigoRegistro(): Promise<{ codigo: string | null }> {
+  return peticion(`${V1}/admin/registro/codigo`);
+}
+
+/** Cambia el código sin reiniciar (solo en memoria: un reinicio vuelve a `CODIGO_REGISTRO`). `null` deja el registro abierto. */
+export function cambiarCodigoRegistro(codigo: string | null): Promise<{ codigo: string | null }> {
+  return peticion(`${V1}/admin/registro/codigo`, { method: 'PUT', body: JSON.stringify({ codigo }) });
+}

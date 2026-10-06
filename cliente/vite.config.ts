@@ -17,10 +17,9 @@ export default defineConfig({
   build: { target: 'es2022' },
   // La pestaña "Mundo" muestra a qué partida está conectada la consola. Estas tres salen del entorno del
   // servidor de dev (mismas variables que ya usa `BACKEND_URL` arriba y `CODIGO_REGISTRO` en el backend), no
-  // de config duplicada: `BACKEND_URL=https://… CODIGO_REGISTRO=… npm run dev` y la pestaña lo refleja.
+  // de config duplicada: `BACKEND_URL=https://… npm run dev` y la pestaña lo refleja.
   define: {
     'import.meta.env.VITE_BACKEND_URL': JSON.stringify(process.env.BACKEND_URL ?? 'http://localhost:3000'),
-    'import.meta.env.VITE_CODIGO_INVITACION': JSON.stringify(process.env.CODIGO_REGISTRO ?? ''),
     'import.meta.env.VITE_PROVEEDOR_AUTH': JSON.stringify(process.env.PROVEEDOR_AUTH ?? 'dev'),
     // Dirección propuesta en la pestaña «Bots» (canal de control del servicio de bots). El token no se inyecta: se teclea.
     'import.meta.env.VITE_BOTS_URL': JSON.stringify(process.env.BOTS_URL ?? 'ws://localhost:4000/control'),

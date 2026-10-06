@@ -2791,3 +2791,10 @@ button.btn-armado:hover {
   font-size: 11px;
   color: var(--admin-muted);
 }
+
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
