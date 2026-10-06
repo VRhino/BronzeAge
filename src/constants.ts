@@ -1935,6 +1935,19 @@ export const ORO_POR_CABALLO = 5;
  * de ajustar este número a ojo — si no, el radio operativo se rompe en silencio. `autonomiaTicksObjetivo` es
  * el invariante de diseño del que cuelga todo lo demás.
  */
+/**
+ * Persecución (Doc 5.12.3). **Placeholder**, a calibrar (`Docs/Mecanicas a balancear.md`).
+ */
+export const PERSECUCION = {
+  /**
+   * Cuánto se tiene que haber movido la presa desde el último destino calculado para recalcular la ruta del
+   * perseguidor. Recalcular en cada tick sería un A* por perseguidor y tick; con este umbral, contra una presa que
+   * se mueve `v` por tick se recalcula cada `umbralRecalculo / v` ticks. Por encima del radio de encuentro (15): una
+   * presa quieta, o que apenas se mueve, no obliga a recalcular nada.
+   */
+  umbralRecalculo: 30,
+} as const;
+
 export const LOGISTICA = {
   capacidadCarroPorJugador: 500,
   autonomiaTicksObjetivo: 50,

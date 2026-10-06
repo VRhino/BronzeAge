@@ -76,7 +76,7 @@ export type Cerebro = (ctx: ContextoBot) => Promise<void>;
 const ESPERA_TRAS_RECHAZO_MS = 30 * 60_000;
 
 /** Eventos que despiertan a un bot si le tocan (§8.2). */
-const DESPIERTAN_POR_COLUMNA = new Set(['ejercito.llega', 'columna.presa_alcanzada', 'ejercito.regresa']);
+const DESPIERTAN_POR_COLUMNA = new Set(['ejercito.llega', 'columna.presa_alcanzada', 'columna.presa_perdida', 'columna.presa_a_cubierto', 'ejercito.regresa']);
 const DESPIERTAN_POR_PLAZA = new Set(['comercio.trueque_propuesto']);
 
 function hash(texto: string): number {

@@ -38,6 +38,7 @@ import { asediarConEjercito, atacarCampamentoConColumna, desalojarResidentes, en
 import { sumarChatarra } from './chatarra';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { aristasDeRed, RED_VACIA } from './redCaminos';
+import { seguirPresa } from './persecucion';
 import { enRefugio } from './zones';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, consumoRacionDeColumna, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
@@ -1754,6 +1755,19 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
       continue;
     }
 
+    // 2b. Seguir a la presa (Doc 5.12.3): recalcular la ruta si se ha movido, o soltarla si se perdió de vista o se puso
+    // a cubierto. Se lee dónde estaba al EMPEZAR el tick, no donde acabó, para que no dependa del orden de recorrido.
+    if (ejercito.persiguiendo) {
+      const { tipo, id } = ejercito.persiguiendo;
+      const donde =
+        tipo === 'ejercito'
+          ? ejercitos.find((o) => o.id === id)?.posicionActual
+          : caravanas.find((c) => c.id === id && (c.estado === 'en_transito' || c.estado === 'retornando'))?.posicionActual;
+      const seguimiento = seguirPresa(ejercito, donde, alcanceDeVista(ejercito, indice), mapa, asentamientos);
+      ejercito = seguimiento.ejercito;
+      if (seguimiento.evento) eventos.push(seguimiento.evento);
+    }
+
     // 3. Mover (estacionado acampa: no avanza, pero ya comió arriba).
     if (ejercito.estado !== 'estacionado') {
       const avance = avanzarPosicionEnRuta(mapa, ejercito.ruta, ejercito.progreso, velocidadDeEjercito(ejercito), caminos);
@@ -1789,7 +1803,8 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
     }
 
     // 4. Llegar.
-    if (ejercito.estado !== 'estacionado' && ejercito.progreso >= 1) {
+    // Quien persigue no acampa al llegar al último punto donde vio a su presa: recalcula, o la suelta.
+    if (ejercito.estado !== 'estacionado' && ejercito.progreso >= 1 && !ejercito.persiguiendo) {
       // El de un campamento no se disuelve en ninguna guarnición: se para en su puerta, y cada uno entra por su cuenta (solo).
       if (ejercito.estado === 'regresando' && ejercito.origenCampamentoId && !porId.has(ejercito.origenAsentamientoId)) {
         const solo = ejercito.participantes.length === 1;
@@ -1897,7 +1912,7 @@ function cerrarPersecuciones(
     if (!alcanzada) continue;
 
     porId.set(ejercito.id, { ...ejercito, persiguiendo: undefined });
-    const payload: PayloadPresaAlcanzada = { ejercitoId: ejercito.id, objetivo: presaFijada };
+    const payload: PayloadPresaAlcanzada = { ejercitoId: ejercito.id, objetivo: { tipo: presaFijada.tipo, id: presaFijada.id } };
     const mensaje = `La columna ${ejercito.id} alcanza a ${alcanzada.id}: puede atacarla.`;
     for (const asentamientoId of new Set([ejercito.origenAsentamientoId, alcanzada.origenAsentamientoId])) {
       eventos.push({ codigo: 'columna.presa_alcanzada', mensaje, payload, asentamientoId });

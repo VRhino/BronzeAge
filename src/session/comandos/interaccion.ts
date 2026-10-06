@@ -22,6 +22,7 @@ import {
   inspeccionarCaravana as inspeccionarCaravanaEngine,
   inspeccionarColumna,
   inspeccionarPlaza,
+  alcanceDeVista,
   exigirCaravanaSuelta,
   interceptar,
   MovilizacionInvalidaError,
@@ -47,7 +48,8 @@ import {
 } from '../batallas';
 import { heridosEn, herir } from '../../engine/heroe';
 import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
-import type { Asentamiento, Ejercito } from '../../domain/types';
+import type { Asentamiento, Ejercito, Point } from '../../domain/types';
+import { distancia } from '../../world/geometria';
 import type { Instante } from '../../domain/tiempo';
 import { agendarReaparicionBandidos, botinDeBandidos } from '../../engine/bandidos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
@@ -382,8 +384,17 @@ export const perseguir = comando<ParamsPerseguir, void>((estado, _mapa, ctx, par
   const columna = exigirColumnaDe(estado, params.heroeId);
   // Que el objetivo exista lo comprueba aquí y no el motor: es una entidad que buscar, no una regla.
   let presa: Ejercito | undefined;
-  if (params.objetivo.tipo === 'ejercito') presa = exigirEjercito(estado, params.objetivo.id);
-  else exigirCaravana(estado, params.objetivo.id);
+  let dondeEsta: Point;
+  if (params.objetivo.tipo === 'ejercito') {
+    presa = exigirEjercito(estado, params.objetivo.id);
+    dondeEsta = presa.posicionActual;
+  } else {
+    dondeEsta = exigirCaravana(estado, params.objetivo.id).posicionActual;
+  }
+  // Se persigue lo que se ve desde la propia columna: si no, la ruta delataría dónde está bajo la niebla (Doc 5.12.3).
+  if (distancia(columna.posicionActual, dondeEsta) > alcanceDeVista(columna, indiceTropa(estado.heroes))) {
+    throw new MovilizacionInvalidaError('No la ves desde tu columna: no se persigue lo que está fuera de tu vista.');
+  }
 
   const cazando = perseguirEngine(columna, params.objetivo, heridos, presa);
 

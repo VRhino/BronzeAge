@@ -1040,7 +1040,12 @@ export interface Ejercito {
    * haber decidido ir a por alguien. Termina al alcanzarlo —y entonces si hay combate, porque ya lo elegiste—
    * o al rectificar el rumbo.
    */
-  persiguiendo?: { tipo: 'ejercito' | 'caravana'; id: string };
+  persiguiendo?: {
+    tipo: 'ejercito' | 'caravana';
+    id: string;
+    /** Dónde estaba la presa al calcular la ruta por última vez (`engine/persecucion.ts`): solo se recalcula si se ha movido más de `PERSECUCION.umbralRecalculo`. */
+    destino?: Point;
+  };
   /** Caravanas que marchan con el ejército (Doc 5.13.2): amplían la carga, entran en el `min` de velocidad,
    * pueden ir cargadas de mercancía (escolta, Doc 5.13.3) y se pierden si el ejército es derrotado. */
   caravanasAdjuntasIds: string[];

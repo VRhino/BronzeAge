@@ -9,7 +9,7 @@
 // guardián de determinismo sigue verde sin tocarlo.
 import { describe, expect, it } from 'vitest';
 import type { AcuerdoTrueque, Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Heroe, RelacionPolitica } from '../../domain/types';
-import { LOGISTICA, MILITAR, MOVIMIENTO, TROPAS_RECLUTABLES } from '../../constants';
+import { LOGISTICA, MILITAR, MOVIMIENTO, PERSECUCION, TROPAS_RECLUTABLES, VISION } from '../../constants';
 import { instante } from '../../domain/tiempo';
 import { capacidadCaravana, velocidadCaravana } from '../caravanas';
 import { entregarDesdeCaravanaAdjunta } from '../trade';
@@ -986,6 +986,71 @@ describe('persecuciones: alcanzar a la presa no es atacarla', () => {
     const r = avanzar([cazador, b, tercero], asentamientos, { facciones });
 
     expect(r.ejercitos.find((e) => e.id === 'ejercito-c')!.escuadrones[0]!.cantidad, 'el tercero ni se entera').toBe(30);
+  });
+
+  it('perseguir pone en marcha una columna parada y la ruta acaba donde está la presa (Doc 5.12.3)', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(100);
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id } };
+
+    const r = avanzar([cazador, b], asentamientos, { facciones });
+
+    const tras = r.ejercitos.find((e) => e.id === a.id)!;
+    expect(tras.estado).toBe('marchando');
+    expect(tras.posicionActual.x, 'se ha movido hacia ella').toBeGreaterThan(a.posicionActual.x);
+    expect(tras.ruta[tras.ruta.length - 1]).toEqual(b.posicionActual);
+    expect(tras.persiguiendo).toEqual({ tipo: 'ejercito', id: b.id, destino: b.posicionActual });
+  });
+
+  it('no recalcula la ruta mientras la presa se mueve poco, y sí cuando se ha movido más del umbral', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(100);
+    const primero = avanzar([{ ...a, persiguiendo: { tipo: 'ejercito', id: b.id } }, b], asentamientos, { facciones });
+    const cazador = primero.ejercitos.find((e) => e.id === a.id)!;
+
+    const poco = { ...b, posicionActual: { x: b.posicionActual.x + PERSECUCION.umbralRecalculo - 1, y: b.posicionActual.y } };
+    const sinRecalcular = avanzar([cazador, poco], asentamientos, { facciones, heroes: primero.heroes });
+    expect(sinRecalcular.ejercitos.find((e) => e.id === a.id)!.ruta, 'misma ruta').toEqual(cazador.ruta);
+
+    const mucho = { ...b, posicionActual: { x: b.posicionActual.x, y: b.posicionActual.y + PERSECUCION.umbralRecalculo + 1 } };
+    const recalculada = avanzar([cazador, mucho], asentamientos, { facciones, heroes: primero.heroes });
+    const nueva = recalculada.ejercitos.find((e) => e.id === a.id)!;
+    expect(nueva.ruta[nueva.ruta.length - 1]).toEqual(mucho.posicionActual);
+    expect(nueva.persiguiendo?.destino).toEqual(mucho.posicionActual);
+  });
+
+  it('si la presa sale de su vista la suelta y avisa, sin delatar dónde está (Doc 5.12.3)', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(VISION.ejercito + 50);
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: b.id, destino: b.posicionActual } };
+
+    const r = avanzar([cazador, b], asentamientos, { facciones });
+
+    expect(r.ejercitos.find((e) => e.id === a.id)!.persiguiendo).toBeUndefined();
+    const aviso = r.eventos.find((e) => typeof e !== 'string' && e.codigo === 'columna.presa_perdida');
+    expect(aviso && typeof aviso !== 'string' && aviso.asentamientoId, 'solo se entera el perseguidor').toBe(a.origenAsentamientoId);
+  });
+
+  it('si la presa se pone a cubierto (ya no está en el mapa) la suelta y termina su rumbo (Doc 5.12.3)', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(100);
+    const enMarcha = avanzar([{ ...a, persiguiendo: { tipo: 'ejercito', id: b.id } }, b], asentamientos, { facciones });
+    const cazador = enMarcha.ejercitos.find((e) => e.id === a.id)!;
+
+    const r = avanzar([cazador], asentamientos, { facciones, heroes: enMarcha.heroes });
+
+    const tras = r.ejercitos.find((e) => e.id === a.id)!;
+    expect(tras.persiguiendo).toBeUndefined();
+    expect(tras.estado, 'sigue hasta donde la vio entrar').toBe('marchando');
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'columna.presa_a_cubierto')).toBe(true);
+  });
+
+  it('llegar al último punto donde vio a su presa no hace acampar a quien la persigue: recalcula', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(100);
+    const alFinal: Ejercito = { ...a, estado: 'marchando', posicionActual: b.posicionActual, ruta: [a.posicionActual, b.posicionActual], progreso: 1, persiguiendo: { tipo: 'ejercito', id: b.id, destino: b.posicionActual } };
+
+    const r = avanzar([alFinal, { ...b, posicionActual: { x: b.posicionActual.x + 80, y: b.posicionActual.y } }], asentamientos, { facciones });
+
+    const tras = r.ejercitos.find((e) => e.id === a.id)!;
+    expect(tras.estado).toBe('marchando');
+    expect(tras.persiguiendo).toBeDefined();
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'ejercito.llega')).toBe(false);
   });
 
   it('un ejército y una columna personal nunca combaten entre sí: ni se persiguen ni se atacan, en ninguna dirección (Doc 5.12.1)', () => {

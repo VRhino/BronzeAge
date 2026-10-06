@@ -300,7 +300,7 @@ Cada distancia significa una cosa distinta, y las tres juntas son el corazón de
 
 #### Persecución
 
-Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula hacia donde esté, **cuando la presa se ha movido más de `PERSECUCION.umbralRecalculo` desde el último destino calculado** (no en cada tick). Un ejército solo persigue a otro ejército; una Columna personal, a otra Columna personal o a una caravana suelta. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de seis formas:
+Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula hacia donde esté, **cuando la presa se ha movido más de `PERSECUCION.umbralRecalculo` desde el último destino calculado** (no en cada tick). Solo se persigue lo que se ve desde la propia columna. Un ejército solo persigue a otro ejército; una Columna personal, a otra Columna personal o a una caravana suelta. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de seis formas:
 
 - se llega a **15**, y ahí se ofrece atacar (quien persigue a un solitario abre una **persecución**; un ejército a otro, una **batalla campal**, 5.15.1);
 - el perseguidor **cambia de destino**;
