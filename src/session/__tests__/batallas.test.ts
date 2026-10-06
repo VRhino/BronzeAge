@@ -239,6 +239,28 @@ describe('aplicar el resultado (doc 02 §3.3, doc 01 §15-§16)', () => {
     expect(enElCarro()).toBeGreaterThan(0);
   });
 
+  it('la chatarra se reparte a partes iguales entre las columnas del bando que gana, también la que se unió (Doc 5.12.3)', () => {
+    const frente = frenteACampamento();
+    const payload = frente.sesion.exportar();
+    const heroes = payload.state.heroes.map((h) => ({ ...h, escuadrones: h.escuadrones.map((e) => ({ ...e, tropaId: 'espadachines_bronce' })) }));
+    const sesion = GameSession.importar({ ...payload, state: { ...payload.state, heroes } }, { batallasEnUnity: true });
+    const battleId = atacarCampamento(sesion, frente.fundador).datos!.battleId;
+    expect(sesion.ejecutar(REGISTRO_COMANDOS.unirseABatalla, { heroeId: frente.vecino, battleId }, { actor: frente.vecino }).ok).toBe(true);
+    const batalla = empezar(sesion, battleId);
+    const r = resultado(batalla());
+    const muertos = Object.fromEntries(batalla().ticket.bandos.atacante.participantes.map((p) => [p.escuadras[0]!.squadId, 4]));
+    const conBajas = {
+      ...r,
+      porEscuadra: r.porEscuadra.map((e) => (e.squadId in muertos ? { ...e, muertos: 4, supervivientesAlCierre: e.desplegados - 4 } : e)),
+    };
+    const chatarraEn = (id: string) => sesion.getState().ejercitos.find((e) => e.id === id)!.suministro['chatarraBronce'] ?? 0;
+
+    expect(aplicar(sesion, conBajas).ok).toBe(true);
+
+    expect(chatarraEn(frente.columna)).toBeGreaterThan(0);
+    expect(chatarraEn(frente.columnaVecino)).toBeCloseTo(chatarraEn(frente.columna));
+  });
+
   it('ganan los bandidos: quien atacó queda herido y pierde la mitad del carro', () => {
     const { sesion, fundador, columna } = frenteACampamento();
     const batalla = empezar(sesion, atacarCampamento(sesion, fundador).datos!.battleId);

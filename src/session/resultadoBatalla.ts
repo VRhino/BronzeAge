@@ -10,7 +10,8 @@ import { agregarRecurso } from '../engine/almacen';
 import { agendarReaparicionBandidos, botinDeBandidos } from '../engine/bandidos';
 import { chatarraDeMuertos, sumarChatarra } from '../engine/chatarra';
 import { aplicarConquista, desalojarResidentes } from '../engine/combate';
-import { capacidadCargaDe, cargarBotin, trasDerrota } from '../engine/ejercitos';
+import { capacidadCargaDe, trasDerrota } from '../engine/ejercitos';
+import { repartirBotin } from '../engine/repartoDeBotin';
 import { aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from '../engine/faccion';
 import { herir } from '../engine/heroe';
 import { estanAliadas } from '../engine/pertenencia';
@@ -146,7 +147,7 @@ function consecuencias(estado: GameSessionState, b: Batalla, ganador: LadoId, ah
 
 /**
  * La chatarra de las bajas (Doc 4.2.1, Gran Fundición): el metal del equipo de TODOS los muertos, de los dos bandos, se
- * la queda quien gana. Al carro de su primera columna, lo que quepa; si defiende una plaza y gana, a su almacén. Sin
+ * la queda quien gana. Entre los carros de sus columnas, lo que quepa; si defiende una plaza y gana, a su almacén. Sin
  * columna que la lleve (caravana o campamento de bandidos vencedores) se pierde.
  */
 function recogerChatarra(estado: GameSessionState, b: Batalla, r: BattleResult): GameSessionState {
@@ -203,16 +204,16 @@ function conEjercitos(estado: GameSessionState, actualizados: readonly Ejercito[
   return { ...estado, ejercitos: estado.ejercitos.map((e) => porId.get(e.id) ?? e) };
 }
 
-/** La primera columna del bando, con el botín cargado hasta donde le quepa. Sin columna, el botín se pierde. */
+/** El botín, a partes iguales entre las columnas del bando (Doc 5.12.3), hasta donde le quepa a cada una. Sin columna, o
+ * sin sitio, se pierde. */
 function alCarroDe(estado: GameSessionState, b: Batalla, lado: LadoId, botin: Record<string, number>): GameSessionState {
-  const columna = columnasDelBando(estado, b, lado)[0];
-  return columna ? conEjercitos(estado, [cargarBotin(columna, botin, capacidadCargaDe(columna, estado.caravanas))]) : estado;
+  const columnas = columnasDelBando(estado, b, lado);
+  return conEjercitos(estado, repartirBotin(columnas, botin, (c) => capacidadCargaDe(c, estado.caravanas)));
 }
 
 /**
- * Mundo abierto (Doc 5.12.3, 5.16.6): cada columna del bando que pierde entrega la mitad de su carro, y va a la primera
- * columna del que gana, lo que quepa. Contra una caravana o un campamento, esa mitad no se la lleva nadie.
- * `ponytail:` los que se unieron al bando ganador no cogen botín; repartirlo si se echa en falta.
+ * Mundo abierto (Doc 5.12.3, 5.16.6): cada columna del bando que pierde entrega la mitad de su carro, y se reparte entre
+ * las columnas del que gana, lo que quepa. Contra una caravana o un campamento, esa mitad no se la lleva nadie.
  */
 function derrotaEnCampo(estado: GameSessionState, b: Batalla, ganador: LadoId): GameSessionState {
   const tras = columnasDelBando(estado, b, ganador === 'atacante' ? 'defensor' : 'atacante').map((c) => trasDerrota(c));
