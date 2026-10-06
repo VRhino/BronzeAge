@@ -75,7 +75,7 @@ y el proceso tiene servidores de batalla (§3.3). Un héroe humano no abre ningu
 
 | Comando | Parámetros | Rechazos de dominio |
 |---|---|---|
-| `unirseABatalla` | `heroeId`, `battleId` | la batalla no existe o ya terminó; herido; sin columna a 15 del punto; su Facción no es la de ningún bando; el bando está lleno |
+| `unirseABatalla` | `heroeId`, `battleId`, `lado?` (obligatorio en una persecución, libre; en el resto lo deduce el servidor) | la batalla no existe o ya terminó; herido; sin columna a 15 del punto; su Facción o diplomacia no le dan sitio en ningún bando (Doc 5.15.1b); una batalla campal no admite a nadie; el bando está lleno |
 | `cancelarBatalla` | `battleId` | ya empezó la partida. Solo quien la inició, o el admin (`/admin/...`) |
 
 Mientras dura, un héroe que combate no puede ejecutar ningún otro comando, y ninguno puede apuntar a una
@@ -109,6 +109,7 @@ ningún aviso en memoria que se pierda al reiniciar.
 POST /v1/batallas/:battleId/asignacion    Conquest reporta BattleServerAssignment
 POST /v1/batallas/:battleId/inicio        Conquest confirma que la partida real EMPEZÓ — nuevo (R01)
 POST /v1/batallas/:battleId/resultado     Conquest reporta BattleResult
+POST /v1/batallas/:battleId/salidas       Conquest avisa de que un héroe sale de la batalla (`SalidaBatalla`, CQ-011)
 POST /v1/batallas/:battleId/tokens        Conquest entrega el token de los humanos que se unieron después
                                           de la asignación (`TokensBatalla`, mismo intentoAsignacionId)
 ```
@@ -204,10 +205,13 @@ conectarse al servidor de batalla real es, siempre, responsabilidad de Conquest.
 
 ### 3.5 Canal de tiempo real — solo estado PÚBLICO de batalla
 
-Canal WS `batalla/<battleId>`, mismo protocolo del §2. Lleva ÚNICAMENTE eventos sin secretos: `asignada`
-(avisa que ya hay instancia — el cliente entonces llama a §3.4 para el token), `en_curso`, `aplicada`,
-`cancelada`, `fallida`. Nunca lleva `tokensParticipante` ni ninguna credencial — eso es exclusivamente
-§3.4.
+Canal WS `batalla/<battleId>`, mismo protocolo del §2. Puede suscribirse quien **combate en la batalla o la ve ahora mismo
+bajo la niebla** (el mismo criterio con que la proyección la enseña en el mapa, §4.1), evaluado al suscribirse. Lleva
+ÚNICAMENTE eventos sin secretos: `abierta`, `refuerzos`, `asignada` (avisa que ya hay instancia — el cliente entonces
+llama a §3.4 para el token), `en_curso`, `salida`, `revisada` (subió `ticketRevision`: el token anterior ya no vale),
+`aplicada`, `cancelada`, `fallida`. Su payload es el estado público: contexto, punto, Facciones y número de héroes por
+bando, capacidad, y `ganador` en `aplicada`. Nunca lleva `tokensParticipante`, escuadras ni listas de héroes — eso es
+exclusivamente §3.4. Los hogares implicados reciben además los mismos eventos por su canal `asentamiento/<id>`.
 
 ## 4. Extensión de lectura estratégica (Unity como reemplazo de Vite) — nuevo, corrección R08
 

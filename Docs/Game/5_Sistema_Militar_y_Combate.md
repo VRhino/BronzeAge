@@ -256,7 +256,8 @@ El Héroe puede salir **solo** (con las tropas que quiera, incluidas ninguna) o 
 
 Dos reglas cierran el modelo:
 
-- **Un Ejército solo se origina en un asentamiento, nunca en campo abierto.** Dos viajeros que se cruzan en el camino no forman un ejército; lo que sí puede hacer uno es unirse a un ejército que ya existe.
+- **Un Ejército se origina en un asentamiento o se forma en campo abierto con tres o más héroes** (5.14.4). Dos viajeros que se cruzan en el camino no forman un ejército; lo que sí puede hacer uno es unirse a un ejército que ya existe o a una formación en curso.
+- **Un Ejército y una Columna personal nunca combaten entre sí** (5.12.3): ni se persiguen ni se atacan, en ninguna dirección. Es la línea que decide qué clase de batalla se abre.
 - **Ser un Ejército es una identidad, no un recuento.** Uno al que se le separan miembros hasta quedar en uno solo **sigue siendo un Ejército**: conserva su ruta fija y sus caravanas. No recupera la libertad de movimiento por haberse quedado corto.
 
 **Por qué el destino de un ejército no se toca.** Un jugador solo es libre de decidir porque decide por sí mismo; un ejército lleva a varios, así que su rumbo es un compromiso compartido y se fija al salir. Eso hace que **unirse a un ejército cueste la libertad de movimiento**, y que separarse la devuelva al instante — el precio de marchar acompañado, sin ninguna regla extra que lo imponga.
@@ -277,11 +278,11 @@ Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; e
 
 | Sobre qué | Qué se le ofrece |
 |---|---|
-| Ejército o columna ajena | **Inspeccionar** · **Perseguir** |
-| Caravana ajena o neutral | **Inspeccionar** · **Interceptar** |
-| Asentamiento | En su puerta (10): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 40, **Inspeccionar** su defensa; a distancia de ataque (15), **Atacar**, que es asediarla (5.12.4) |
-| Campamento de bandidos | **Atacar** |
-| Batalla en curso de tu Facción | **Unirse**, mientras quede sitio en su bando (5.15.1) |
+| Ejército ajeno (a un ejército) o Columna personal ajena (a una Columna personal) | **Inspeccionar** · **Perseguir** · **Atacar** a 15. Entre un ejército y una Columna personal solo se puede **Inspeccionar** |
+| Caravana ajena o neutral, suelta | **Inspeccionar** · **Interceptar**. Una caravana adjunta a un ejército es parte de él: solo otro ejército la ataca |
+| Asentamiento | En su puerta (10): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 40, **Inspeccionar** su defensa; a distancia de ataque (15), **Atacar**, que es asediarla (5.12.4) y **solo lo hace un ejército**; una Columna personal puede **Unirse** a un asedio ya abierto (5.15.1) |
+| Campamento de bandidos | **Atacar**, un ejército o una Columna personal (evento PvE, 5.15.1) |
+| Batalla en curso | **Unirse** al bando que te corresponda, mientras quede sitio (5.15.1) |
 
 *Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Siguen atacando caravanas por su cuenta — su intención es su política. Los héroes bot no lo son: juegan con las mismas reglas que un jugador, así que al llegar a la plaza enemiga o al alcanzar a quien persiguen se les ofrece atacar, y atacan si lo piden.*
 
@@ -299,18 +300,22 @@ Cada distancia significa una cosa distinta, y las tres juntas son el corazón de
 
 #### Persecución
 
-Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula hacia donde esté. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de cuatro formas:
+Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula hacia donde esté, **cuando la presa se ha movido más de `PERSECUCION.umbralRecalculo` desde el último destino calculado** (no en cada tick). Un ejército solo persigue a otro ejército; una Columna personal, a otra Columna personal o a una caravana suelta. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de seis formas:
 
-- se llega a **15**, y ahí se ofrece atacar;
+- se llega a **15**, y ahí se ofrece atacar (quien persigue a un solitario abre una **persecución**; un ejército a otro, una **batalla campal**, 5.15.1);
 - el perseguidor **cambia de destino**;
 - el objetivo queda **herido** por haber sido derrotado (5.16.4);
-- o no llega a empezar, porque todos los héroes del objetivo ya estaban heridos.
+- o no llega a empezar, porque todos los héroes del objetivo ya estaban heridos;
+- **la presa sale del alcance de vista** del perseguidor: se suelta (`columna.presa_perdida`), porque si no la trayectoria del perseguidor revelaría dónde está bajo la niebla;
+- **la presa entra en una plaza o campamento**: se suelta y el perseguidor va hasta su puerta y acampa, donde se le ofrece lo de una plaza (`columna.presa_a_cubierto`).
 
 **El consentimiento es de una sola parte, y así debe ser:** el agresor elige perseguir, el perseguido no elige nada. Escapar depende de ser más rápido — lo que convierte la velocidad de tropa (5.12.5) en la estadística que decide quién puede forzar un combate.
 
 #### Derrota en campo abierto
 
 Quien pierde un choque en campo abierto entrega **la mitad de su carro** —igual una columna personal que un ejército, cuyo carro es el de todos sus miembros— y sus héroes quedan **heridos** 2 minutos (5.16.4). Con el carro vacío no hay botín: solo la herida. El vencedor se lleva además la **chatarra** de las bajas de los dos bandos, que no sale del carro del vencido sino de los caídos (Doc 4.2.1, Gran Fundición).
+
+**El botín se reparte a partes iguales entre las columnas del bando ganador** (decisión del autor, 2026-10-06), también cuando varias se unieron a la batalla: la mitad de carro de cada columna vencida, la carga de una caravana capturada y la chatarra. Lo que no le cabe a una columna pasa a las que tengan sitio, y si no cabe en ninguna se pierde. La chatarra de un asedio que gana el defensor va al almacén de la plaza.
 
 Esa mitad pasa al carro del vencedor, gane quien gane, y **cabe solo lo que quepa**: sus carros más los de sus caravanas adjuntas. Lo que no cabe se pierde.
 
@@ -623,7 +628,7 @@ Sin esto, un desconocido podría engancharse a tu marcha sin que pudieras negart
 
 **Y ahí está el precio:** al unirte adoptas un destino que ya no puedes cambiar (5.12.1). Marchar acompañado cuesta la libertad de movimiento.
 
-**Solo se puede unir a un EJÉRCITO.** Dos Columnas personales que se cruzan no se fusionan — un ejército solo se origina en un asentamiento (5.12.1).
+**Solo se puede unir a un EJÉRCITO** (o a una formación en curso, 5.14.4). Dos Columnas personales que se cruzan no se fusionan por sí solas: para formar un ejército en campo hay que organizarlo (5.14.4).
 
 ### 5.14.2 Separarse
 
@@ -650,6 +655,17 @@ Es el Héroe que **formó** el Ejército. No es un cargo político (Doc 2.2): es
 
 Y como ser Ejército es una identidad y no un recuento (5.12.1), **el que se queda solo sigue en un Ejército**: mantiene la ruta fija y las caravanas. No hereda la libertad del viajero por quedarse sin compañía.
 
+### 5.14.4 Formar un ejército en campo
+
+Tres o más Columnas personales de la **misma Facción** pueden formar un ejército sin pasar por un asentamiento (decisión del autor, 2026-10-06):
+
+- **Empezar.** Un Héroe en Columna personal pulsa «organizar ejército». En su posición aparece una **formación**, quieta, de la que es Líder y cuya política de unión fija (aceptar o preguntar, 5.14.1).
+- **Unirse.** Otras Columnas personales de su Facción, junto a la formación, aportando lo que llevan encima (escuadras y carro), validado contra su propio Liderazgo.
+- **Con menos de 3** no se mueve, y **para el combate siguen siendo Columnas personales**: se les puede perseguir y atacar como a tales, así que formar no es un escudo.
+- **Si no llega a 3** en `FORMACION_EJERCITO.plazoMinutos` se deshace y cada uno vuelve a su Columna personal con lo suyo. Mientras tanto cualquiera puede salir; si sale el Líder, el mando pasa al más antiguo.
+- **Al llegar a 3** pasa a ser un Ejército: el Líder fija su destino, que ya no se toca (5.12.1). Si luego baja de 3 sigue siendo Ejército: el mínimo cuenta solo para formarlo.
+- **Origen:** la residencia del Líder al formarlo. Ahí vuelve si cancela la marcha, y lo conserva quien se separe (5.14.2). **Caravanas:** nace sin ellas y puede engancharlas después.
+
 ## 5.15 Batallas con héroes: quién combate, guarnición y campamento
 
 Las batallas se juegan como partidas reales en Unity. Los datos que se intercambian con Unity están en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md`.
@@ -669,7 +685,25 @@ Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si
 - **En un asedio, el asentamiento.** Nadie entra ni sale, y dentro no se dan órdenes (construir, reclutar, guarnición, residencia, mercado, caravanas). Su economía sigue produciendo. Un ejército que llega a una plaza asediada espera a la puerta.
 - **En mundo abierto** (contra una columna, una caravana o un campamento de bandidos), las columnas y la caravana que combaten se quedan quietas y sin órdenes, y nadie más puede atacarlas ni perseguirlas. En el mapa se ve la batalla en su punto, bajo la niebla de guerra, en lugar de ellas.
 - **Los héroes que combaten** no pueden hacer nada más hasta que acaba. Quien la inició puede cancelarla antes de que empiece la partida, sin que nadie pierda nada.
-- **Unirse.** Mientras no haya terminado, un héroe sano de la Facción de un bando puede unirse a él con su columna si está a distancia de ataque (15) del punto de la batalla o de la plaza asediada y ese bando no está lleno. Si está lleno, no entra: la cola de arriba es solo para los que ya estaban al empezar. Sus escuadras quedan bloqueadas como las demás.
+- **Unirse.** Mientras no haya terminado, un héroe sano puede unirse con su columna si está a distancia de ataque (15) del punto de la batalla o de la plaza asediada, ya no está en otra batalla y el bando que le corresponde (5.15.1b) no está lleno. Si está lleno, no entra: la cola de arriba es solo para los que ya estaban al empezar. Sus escuadras quedan bloqueadas como las demás.
+- **Salir.** Quien Unity saca de la partida (muere sin reaparición, abandona, se desconecta) vuelve al mundo: sus escuadras y su columna quedan libres, y queda herido si Unity lo da por derrotado (5.16.4). Quien no llega a conectarse antes de empezar sale sin castigo.
+
+### 5.15.1b Tipos de batalla y quién puede unirse
+
+**BronzeAge decide que la batalla ocurra, dónde, quién entra, quién sale y qué le queda a cada uno; Unity decide todo lo que pasa dentro** (banderas, reaparición, rendición, cómo se gana y cómo cambian de manos las caravanas). Lo que sigue es lo que cambia en el mundo según la clase de columna (5.12.1):
+
+| Tipo | Lo abre | Quién puede unirse |
+|---|---|---|
+| **Asedio** | Un **ejército** que ataca una plaza enemiga | **Atacante:** primero los del ejército que lo abre; si queda sitio, su Facción y, **si el Rey de esa Facción lo admite** (2.2), héroes de Facciones neutrales o enemigas del defensor, nunca un aliado suyo. **Defensor:** su Facción y sus aliados. Pueden unirse ejércitos y Columnas personales |
+| **Batalla campal** | Un ejército que ataca a otro ejército | **Nadie de fuera** |
+| **Persecución** | Una Columna personal que alcanza a otra Columna personal | **Libre:** cualquier Columna personal, de cualquier Facción, al bando que elija |
+| **Asalto de caravana** | Un ejército o una Columna personal que ataca una caravana suelta | **Atacante:** su Facción y, si el Rey lo admite, neutrales o enemigos del defensor. **Defensor:** la Facción dueña de la caravana y sus aliados |
+| **Campamento de bandidos** (evento PvE) | Un ejército o una Columna personal | Cualquier héroe, de cualquier Facción, **siempre en el bando atacante**. Nadie puede ayudar a los bandidos |
+
+- **Vasallo y señor cuentan como aliados para unirse a una batalla**: pueden defenderse entre sí, y ninguno puede unirse al ataque contra el otro.
+- **Solo un ejército abre un asedio.** Una Columna personal no puede asediar, pero sí unirse a un asedio abierto.
+- **Convocatoria del asedio.** Al abrirse hay **30 segundos** (`BATALLA.convocatoriaSegundos`) antes de que empiece la partida, en los que se une quien cumpla lo anterior y **entra como uno de los que estaban al empezar**. Quien la abrió puede cancelarla en ese tiempo. Quien llega después entra como refuerzo.
+- Si el ejército que abre un asedio ya llena el bando, no entra nadie más.
 
 ### 5.15.2 El campamento del héroe
 
@@ -751,7 +785,7 @@ El detalle de datos del héroe está en `Docs/Coordinacion/01_Modelo_de_datos_co
 
 "Herido" es un estado del **Héroe**, no de sus escuadrones ni de su columna:
 
-- Lo sufren **todos los héroes del bando que pierde una batalla**, sea cual sea: asedio, mundo abierto o caravana. No hace falta que nadie lo marque: sale del resultado.
+- Lo sufre **todo héroe que Unity da por derrotado**: lo trae el resultado de la batalla (`derrotado`), y también quien sale a mitad de partida sin reaparecer, sea del bando que sea. En el combate con números (bot contra bot) quedan heridos todos los del bando que pierde.
 - Dura **2 minutos** de tiempo de mundo.
 - Mientras dura, el héroe **no puede ser perseguido, no puede perseguir y no puede entrar en batallas**.
 - Como es por héroe, una columna se puede atacar mientras lleve algún héroe sano; los heridos no entran en esa batalla. Si todos los héroes de la columna están heridos, nadie puede tocarla.

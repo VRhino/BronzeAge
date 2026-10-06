@@ -878,6 +878,22 @@ pasa a `fallida`, sin penalizar a nadie.
 
 Los plazos (de asignación, de inicio y el margen) son constantes de configuración; no se fijan aquí.
 
+**Convocatoria del asedio (decisión del autor, 2026-10-06; Doc 5.15.1b).** Un asedio no se publica al abrirse: durante
+`BATALLA.convocatoriaSegundos` (30 s de mundo) se pueden unir héroes según las condiciones del Doc 5.15.1b, y entran **en
+el ticket** (revisión 0) como los que estaban al empezar. Al cerrarse la convocatoria se congela el ticket y solo
+entonces aparece en `GET /v1/batallas/pendientes`. El resto de batallas se publican al abrirse.
+
+**Salidas (CQ-011).** Mientras no hay resultado, Conquest puede avisar de que un héroe sale de la batalla
+(`SalidaBatalla`, `POST /v1/batallas/:battleId/salidas`): `heroeId`, `motivo` (`no_conectado` antes de empezar, `eliminado`,
+`abandono`, `desconexion` en curso), `derrotado` y cómo quedaron sus escuadras. BronzeAge libera sus candados y su columna,
+y lo deja herido si `derrotado`. Antes de empezar (`asignada`) la salida **sube `ticketRevision`** y la batalla vuelve a
+`convocando`; en curso **no cambia el ticket**: las salidas, como las incorporaciones, solo crecen. El resultado no repite
+a quien salió antes. `porHeroe[].derrotado` dice quién queda herido (Doc 5.16.4).
+
+**Bandos con varias Facciones.** `BattleSide.faccionId` es la titular; cada `BattleParticipantSnapshot` lleva su propio
+`faccionId`, porque un bando puede mezclar Facciones (Doc 5.15.1b). `ContextoEstrategico` `campo_abierto` añade
+`columnas: 'ejercitos' | 'solitarios'` (batalla campal o persecución) y el campamento de bandidos se declara PvE.
+
 - **Se elimina `propuesta`** — el lobby/convocatoria vive FUERA de `Batalla` (`Ejercito`/`participantes`,
   sin persistencia nueva); no hay una fase "propuesta pero sin reservar" dentro de `Batalla`, porque
   `Batalla` nace ya reservada. `convocando` es el primer estado real: creada y reservada, ticket publicado,
