@@ -104,8 +104,9 @@ queda en 1.
 - **Clientes** (`BronzeAgeClient`): hecho el 2026-10-07 en la 0.13.0 (sin push) la batalla en el mapa con «unirse» y elección de bando, organizar y
   unirse a una formación, y el ajuste del Rey; verificado contra este backend con tres cuentas. Falta que el cliente use el canal `batalla/<id>` (hoy
   sondea), un menú para atacar o perseguir columnas ajenas, y la pantalla de crear héroe, el equipo y la ficha de los héroes ajenos.
-- **El batch no ejercita nada de esto**: en 30 000 ticks (3 semanas) no hay campañas, así que la corrida es idéntica antes y después. Medir
-  con un checkpoint de Era II en adelante (los guardados hoy son del formato 1 y no se pueden reanudar).
+- **El batch no ejercita la guerra**: con 30 bots, semilla 7, 120 960 ticks (y 60 480 con trigo ×3) sale idéntico antes y después, con cero campañas;
+  los bots no hacen la guerra con este equilibrio. Lo nuevo lo cubren los tests. Para verlo en el batch haría falta un checkpoint de Era II en adelante
+  (los guardados hoy son del formato 1) o bots más belicosos.
 - **Sync de Notion** de `Docs/Game` (5.12, 5.14.4, 5.15.1b, 5.16.4 y 2.2).
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
