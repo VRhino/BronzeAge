@@ -13,6 +13,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | # | Área | Qué se balancea | Cómo se mide |
 |---|---|---|---|
 | 20 | TECNOLOGÍA | X de cada logro de las Eras I-III | batch (`scripts/batch/medidorTecnologia.ts`) |
+| 30 | MILITAR | El batch no ejercita la guerra: cero campañas con 30 bots | batch con checkpoint de Era II+ o bots más belicosos |
 | 32 | POLÍTICA | Reputación: valor de cada evento, decaimiento y umbrales (`REPUTACION`) | batch / playtest |
 | 32b | POLÍTICA | Caducidad de las propuestas de anexión y de fusión (`ANEXION.caducidadDias`, `FUSION.caducidadDias`) | playtest |
 | 33 | COMERCIO | Tasa de comisión intermedia entre Facciones aliadas o vasallas de la misma Liga | batch |
@@ -110,3 +111,6 @@ Implementadas el 2026-10-06; las tres cifras son placeholder (`constants.ts`):
 - `FORMACION_EJERCITO.plazoMinutos` = 10 y `minimo` = 3. Con 5 jugadores en el playtest, ¿alcanzan a juntarse tres en diez minutos? Si no,
   subir el plazo antes que bajar el mínimo (el mínimo es decisión de diseño).
 
+## 30. El batch no ejercita la guerra
+
+Con 30 bots, semilla 7, 120 960 ticks (y 60 480 con trigo ×3) el batch sale idéntico antes y después del trabajo de batallas del 2026-10-06, con cero campañas: los bots no hacen la guerra con este equilibrio, así que persecución, botín repartido, salidas y formación de ejércitos solo los cubren los tests. Para medirlos haría falta un checkpoint de Era II en adelante (los guardados hoy son del formato 1) o bots más belicosos. Ficha: `Consideraciones/Batalla_Este_Lado_Definicion.md`.

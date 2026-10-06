@@ -15,7 +15,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 |---|---|---|---|
 | 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1: solo (b) hecha |
 | 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
-| 30 | MILITAR | Batallas con héroes: lo que falta de este lado (canal de tiempo real, sustituir participante, botín, persecución) | ◐ ciclo de `Batalla` fases 1 y 2; falta el canal de tiempo real |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
 
 **Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06), y también, de los cabos sueltos §33/§35 (2026-10-06): la **riqueza acumulada** por comisiones, el **bonus por distancia en el mostrador**, **cortar rutas como guerra económica**, la **cola de prioridad de reclutamiento** y las **armas de asedio** como mecánica aparte.
@@ -84,30 +83,6 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 - **Equipo de asedio**: `carpinteria_militar` y `trabajos_asedio` se adoptan, pero su equipo no tiene efecto en combate.
 - **Clientes**: el panel de tecnología del cliente de administración está hecho (2026-10-02). Faltan, en BronzeAgeClient,
   el mismo panel, y en Conquest las definiciones de escuadra de las 15 tropas nuevas y los modelos de los edificios nuevos (CQ-006).
-
-## 30. Batallas con héroes: lo que falta
-
-**Estado: hecho en el backend (2026-10-06), `código: ✔`.** Tipos de batalla y quién puede unirse (Doc 5.15.1b), convocatoria del
-asedio, salidas de héroe, canal `batalla/<id>`, persecución con recálculo de ruta, reparto del botín y formación de ejércitos en
-campo (Doc 5.14.4). Las decisiones y lo descartado, en `Consideraciones/Batalla_Este_Lado_Definicion.md`. Sin servidores de batalla
-(`SERVIDORES_BATALLA`) todo se sigue resolviendo con números.
-
-**Espera a Conquest** (propuestas en `Conquest_prototype/Docs/Coordinacion/propuestas/`): los tipos de batalla en Unity, la
-convocatoria de 30 s, las salidas y los bandos mixtos (**CQ-011**, que absorbe el abandono y la desconexión de CQ-010); y el asalto de
-caravanas, del que Conquest no tiene documentación. Además: XP y nivel de escuadra y de héroe (CQ-001); la IA de escuadras sin héroe y
-de héroes bot (CQ-002); el botín y el catálogo de objetos, y con ellos perks, `equipar` y las preguntas que deja (CQ-004); y las
-incorporaciones a una batalla en curso (CQ-005). Mientras tanto, `experiencia` de escuadra suma lo que sumaba la veteranía y `nivel` se
-queda en 1.
-
-**Quedan de este lado, fuera del backend:**
-
-- **Clientes** (`BronzeAgeClient`): hecho el 2026-10-07 en la 0.13.0 (sin push) la batalla en el mapa con «unirse» y elección de bando, organizar y
-  unirse a una formación, y el ajuste del Rey; verificado contra este backend con tres cuentas. Falta que el cliente use el canal `batalla/<id>` (hoy
-  sondea), un menú para atacar o perseguir columnas ajenas, y la pantalla de crear héroe, el equipo y la ficha de los héroes ajenos.
-- **El batch no ejercita la guerra**: con 30 bots, semilla 7, 120 960 ticks (y 60 480 con trigo ×3) sale idéntico antes y después, con cero campañas;
-  los bots no hacen la guerra con este equilibrio. Lo nuevo lo cubren los tests. Para verlo en el batch haría falta un checkpoint de Era II en adelante
-  (los guardados hoy son del formato 1) o bots más belicosos.
-- **Sync de Notion** de `Docs/Game` (5.12, 5.14.4, 5.15.1b, 5.16.4 y 2.2).
 
 ## 38. Tope de héroes en asedio: volver a 15 cuando entren jugadores
 
