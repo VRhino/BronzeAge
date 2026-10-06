@@ -136,6 +136,8 @@ export interface EjercitoAvistado {
   tipo: 'personal' | 'ejercito';
   faccionId: string;
   posicionActual: Point;
+  /** Una formación en campo que espera a ser un ejército: se le puede unir una Columna personal de su Facción (Doc 5.14.4). */
+  enFormacion?: true;
   /** Jugadores distintos que marchan en él. Es el único dato de "tamaño" que viaja. */
   participantes: number;
   /** Quiénes van: un héroe que se ve es público (Doc 5.16.7). Su ficha viaja en `heroesVisibles`. */
@@ -923,6 +925,7 @@ export function proyectarParaJugador(
     ejercitosAvistados: ejercitosAvistados.map((e) => ({
       id: e.id,
       tipo: e.tipo,
+      ...(e.formacion ? { enFormacion: true as const } : {}),
       faccionId: e.faccionId,
       posicionActual: e.posicionActual,
       participantes: participantesDe(e),

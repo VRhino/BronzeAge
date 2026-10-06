@@ -1043,6 +1043,11 @@ export interface Ejercito {
    * haber decidido ir a por alguien. Termina al alcanzarlo —y entonces si hay combate, porque ya lo elegiste—
    * o al rectificar el rumbo.
    */
+  /** Una formación en campo (Doc 5.14.4): columna personal quieta que espera a ser tres. Pasado `expiraEn` sin lograrlo se deshace.
+   * Para el combate sigue siendo una Columna personal. Al llegar a tres pasa a `tipo: 'ejercito'` y esta marca desaparece. */
+  formacion?: { expiraEn: Instante };
+  /** Un ejército formado en campo que aún no tiene destino: su Líder lo fija una sola vez con `marcharA`, y desde entonces no se toca (Doc 5.12.1). */
+  destinoPendiente?: boolean;
   persiguiendo?: {
     tipo: 'ejercito' | 'caravana';
     id: string;

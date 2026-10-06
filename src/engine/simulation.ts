@@ -23,6 +23,7 @@ import { avanzarReputacion } from './reputacion';
 import { calcularTitulos, narrarCambiosDeTitulo } from './titulos';
 import { avanzarAtaquesBandidos, avanzarSpawnBandidos } from './bandidos';
 import { avanzarEjercitos } from './ejercitos';
+import { disolverFormacionesVencidas } from './formacion';
 import { grabarLoVisto, type MemoriaFaccion } from './memoria';
 import { reubicarResidentesDeRuina } from './mercenarios';
 import { sinPrestamosAjenos } from './reclutamientoMercenario';
@@ -339,8 +340,10 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     heroes,
     campamentosMercenarios: campamentosActuales,
   });
-  eventosDominio.push(...comoEventosDominio(trasEjercitos.eventos, contexto));
-  heroes = trasEjercitos.heroes;
+  // Una formación en campo que no llega a tres a tiempo se deshace (Doc 5.14.4).
+  const trasFormaciones = disolverFormacionesVencidas(trasEjercitos.ejercitos, trasEjercitos.heroes, instante);
+  eventosDominio.push(...comoEventosDominio([...trasEjercitos.eventos, ...trasFormaciones.eventos], contexto));
+  heroes = trasFormaciones.heroes;
 
   // El mercado ya no LIQUIDA nada en el tick: una orden es una oferta en pie en una plaza y se cumple en el
   // mostrador, con alguien que ha ido hasta alli (`comerciarEnPlaza`, `Comercio_Fisico_Definicion.md`). Lo
@@ -409,7 +412,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // La Caravana de Fundación (de un campamento o de una plaza): sin su titular vuelve sola, al llegar se desarma, y suelta caduca (D13, D14, D40, D68).
   const trasCaravanasDeFundacion = avanzarCaravanasDeFundacion(
     trasEjercitos.caravanas,
-    trasEjercitos.ejercitos,
+    trasFormaciones.ejercitos,
     { asentamientos: trasTributos.asentamientos, heroes },
     faccionesFinal,
     trasReposicion.campamentos,

@@ -1951,6 +1951,16 @@ export const PERSECUCION = {
   umbralRecalculo: 30,
 } as const;
 
+/**
+ * Formar un ejército en campo (Doc 5.14.4). **Placeholder**, a calibrar (`Docs/Mecanicas a balancear.md`).
+ */
+export const FORMACION_EJERCITO = {
+  /** Héroes que hacen falta para que una formación sea un ejército. */
+  minimo: 3,
+  /** Cuánto espera una formación a ser tres antes de deshacerse, en minutos de mundo. */
+  plazoMinutos: 10,
+} as const;
+
 export const LOGISTICA = {
   capacidadCarroPorJugador: 500,
   autonomiaTicksObjetivo: 50,

@@ -16,6 +16,7 @@ import {
   separarseDelEjercito as separarseEngine,
   unirseEnCampo as unirseEnCampoEngine,
 } from '../../engine/ejercitos';
+import { completarFormacion } from '../../engine/formacion';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, conColumnas, conTropaDe, exigirColumnaDe, exigirEjercito } from './ayudas';
@@ -104,7 +105,7 @@ export const unirseEnCampo = comando<ParamsUnirseEnCampo, { unido: boolean }>((e
     );
   }
 
-  const fundido = unirseEnCampoEngine(conTropaDe(estado, ejercito), conTropaDe(estado, columna), ctx.instante);
+  const fundido = completarFormacion(unirseEnCampoEngine(conTropaDe(estado, ejercito), conTropaDe(estado, columna), ctx.instante));
   const conFundido = conColumnas({ ...estado, ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) }, [fundido]);
   const siguiente: GameSessionState = {
     ...conFundido,
@@ -152,7 +153,7 @@ export const responderPeticionDeUnion = comando<ParamsResponderPeticion, { unido
   }
 
   const columna = exigirColumnaDe(estado, params.solicitanteId);
-  const fundido = unirseEnCampoEngine(conTropaDe(estado, sinLaPeticion), conTropaDe(estado, columna), ctx.instante);
+  const fundido = completarFormacion(unirseEnCampoEngine(conTropaDe(estado, sinLaPeticion), conTropaDe(estado, columna), ctx.instante));
 
   const conFundido = conColumnas({ ...estado, ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) }, [fundido]);
   const siguiente: GameSessionState = {

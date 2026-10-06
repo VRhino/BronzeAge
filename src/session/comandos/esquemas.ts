@@ -384,6 +384,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     ['ejercitoId', 'heroeId', 'solicitanteId', 'aceptar']
   ),
   separarseDelEjercito: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
+  organizarEjercito: objeto({ heroeId: IDENTIFICADOR, politicaDeUnion: { type: 'string', enum: ['aceptar', 'preguntar'] } }, ['heroeId', 'politicaDeUnion']),
+  cancelarFormacion: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   // El menú de interacción (Doc 5.12.3). `objetivo` distingue columna de caravana: son entidades distintas
   // con anillos y consecuencias distintas, y mezclarlas en un id suelto obligaría al motor a adivinar.
   inspeccionar: objeto(

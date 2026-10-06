@@ -39,6 +39,7 @@ import { sumarChatarra } from './chatarra';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { aristasDeRed, RED_VACIA } from './redCaminos';
 import { seguirPresa } from './persecucion';
+import { esperaDestino, sucesorEnFormacion } from './formacion';
 import { enRefugio } from './zones';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, consumoRacionDeColumna, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
@@ -946,9 +947,12 @@ export function marcharA(
   asentamientos: readonly Asentamiento[],
   mapa: Mapa
 ): Ejercito {
-  if (ejercito.tipo !== 'personal') {
+  // Un ejército recién formado en campo fija su destino una vez, y solo su Líder (Doc 5.14.4); después ya no se toca.
+  if (ejercito.tipo !== 'personal' && !esperaDestino(ejercito)) {
     throw new MovilizacionInvalidaError('El rumbo de un ejército no se cambia: se cancela y se vuelve.');
   }
+  if (esperaDestino(ejercito) && ejercito.liderId !== jugador.id) throw new MovilizacionInvalidaError('El destino de un ejército recién formado lo fija su Líder.');
+  if (ejercito.formacion) throw new MovilizacionInvalidaError('Una formación espera a ser un ejército: no se mueve.');
   // Su columna puede estar aparcada a la puerta de una plaza mientras él está DENTRO (Doc 1.10.3): la
   // columna no se mueve sola, hay que volver a ella primero.
   if (jugador.ubicacion.tipo !== 'columna') {
@@ -962,7 +966,7 @@ export function marcharA(
 
   // Elegir un destino nuevo es dejar de ir detras de alguien (Doc 5.12.3): no hay forma de marchar a un
   // punto Y perseguir a la vez, y dejar la presa puesta la haria reaparecer en el proximo tick.
-  return { ...ejercito, estado: 'marchando', objetivo, ruta, progreso: 0, persiguiendo: undefined };
+  return { ...ejercito, estado: 'marchando', objetivo, ruta, progreso: 0, persiguiendo: undefined, destinoPendiente: undefined };
 }
 
 /**
@@ -1002,11 +1006,11 @@ function validarUnionEnCampo(ejercito: Ejercito, columna: Ejercito): void {
   if (ejercito.politicaDeUnion === 'rechazar') {
     throw new MovilizacionInvalidaError('Esa columna no admite a nadie más.');
   }
-  if (ejercito.tipo !== 'ejercito') {
-    throw new MovilizacionInvalidaError('Dos viajeros que se cruzan no forman un ejército.');
+  if (ejercito.tipo !== 'ejercito' && !ejercito.formacion) {
+    throw new MovilizacionInvalidaError('Dos viajeros que se cruzan no forman un ejército: hay que organizarlo.');
   }
-  if (columna.tipo !== 'personal') {
-    throw new MovilizacionInvalidaError('Un ejército no se une a otro ejército.');
+  if (columna.tipo !== 'personal' || columna.formacion) {
+    throw new MovilizacionInvalidaError('Solo una columna personal se une.');
   }
   if (ejercito.faccionId !== columna.faccionId) {
     throw new MovilizacionInvalidaError('Un ejército lo componen ciudadanos de una sola Facción.');
@@ -1037,16 +1041,18 @@ export function separarseDelEjercito(
 ): { ejercito: EjercitoConTropa; columna: EjercitoConTropa } {
   const dentro = ejercito.participantes.find((p) => p.heroeId === heroeId);
   if (!dentro) throw new MovilizacionInvalidaError('No vas en ese ejército.');
-  if (ejercito.tipo !== 'ejercito') {
+  if (ejercito.tipo !== 'ejercito' && !ejercito.formacion) {
     throw new MovilizacionInvalidaError('De una columna personal no te separas: es tuya.');
   }
-  if (ejercito.liderId === heroeId) {
+  // En una formación el Líder sí se va, y el mando pasa al que lleva más tiempo (Doc 5.14.4).
+  if (ejercito.liderId === heroeId && !ejercito.formacion) {
     throw new MovilizacionInvalidaError('El Líder no puede separarse: primero tiene que ceder el liderazgo.');
   }
   if (ejercito.participantes.length <= 1) {
     throw new MovilizacionInvalidaError('Eres el último: hay que cancelar la marcha, no vaciar la columna.');
   }
-  return desgajar(ejercito, heroeId, id);
+  const resto = desgajar(ejercito, heroeId, id);
+  return ejercito.liderId === heroeId ? { ...resto, ejercito: { ...resto.ejercito, liderId: sucesorEnFormacion(ejercito, heroeId) } } : resto;
 }
 
 /**

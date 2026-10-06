@@ -728,6 +728,14 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
+  organizarEjercito: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  cancelarFormacion: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
   cederLiderazgo: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
