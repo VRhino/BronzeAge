@@ -132,6 +132,8 @@ import { batallasActivas, batallaVisible, bloqueosDe, type BatallaVisible } from
  */
 export interface EjercitoAvistado {
   id: string;
+  /** Ejército o Columna personal: decide qué se le puede hacer (Doc 5.12.3). */
+  tipo: 'personal' | 'ejercito';
   faccionId: string;
   posicionActual: Point;
   /** Jugadores distintos que marchan en él. Es el único dato de "tamaño" que viaja. */
@@ -920,6 +922,7 @@ export function proyectarParaJugador(
     ejercitos: ejercitosPropios,
     ejercitosAvistados: ejercitosAvistados.map((e) => ({
       id: e.id,
+      tipo: e.tipo,
       faccionId: e.faccionId,
       posicionActual: e.posicionActual,
       participantes: participantesDe(e),

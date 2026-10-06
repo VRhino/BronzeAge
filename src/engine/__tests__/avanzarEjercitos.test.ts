@@ -23,9 +23,12 @@ import {
   ladoPendienteParaEjercito,
   avanzarEjercitos,
   capacidadCargaDe,
+  exigirCaravanaSuelta,
   MovilizacionInvalidaError,
+  perseguir,
   soltarCaravana,
   validarAsedio,
+  validarAtaqueAColumna,
   velocidadDeEjercito,
 } from '../ejercitos';
 import { esResidente } from '../pertenencia';
@@ -983,6 +986,36 @@ describe('persecuciones: alcanzar a la presa no es atacarla', () => {
     const r = avanzar([cazador, b, tercero], asentamientos, { facciones });
 
     expect(r.ejercitos.find((e) => e.id === 'ejercito-c')!.escuadrones[0]!.cantidad, 'el tercero ni se entera').toBe(30);
+  });
+
+  it('un ejército y una columna personal nunca combaten entre sí: ni se persiguen ni se atacan, en ninguna dirección (Doc 5.12.1)', () => {
+    const { facciones, asentamientos, a, b } = dosColumnas(1);
+    const solitaria: Ejercito = { ...b, tipo: 'personal' };
+    const relaciones: RelacionPolitica[] = [];
+
+    expect(() => perseguir(a, { tipo: 'ejercito', id: solitaria.id }, new Set(), solitaria)).toThrow('no combaten entre sí');
+    expect(() => perseguir(solitaria, { tipo: 'ejercito', id: a.id }, new Set(), a)).toThrow('no combaten entre sí');
+    expect(() => validarAtaqueAColumna(a, solitaria, relaciones, new Set())).toThrow('no combaten entre sí');
+    expect(() => validarAtaqueAColumna(solitaria, a, relaciones, new Set())).toThrow('no combaten entre sí');
+    expect(() => validarAtaqueAColumna(a, b, relaciones, new Set()), 'la misma clase sí').not.toThrow();
+
+    // Y una persecución ya fijada no se cierra sobre una presa de otra clase.
+    const cazador: Ejercito = { ...a, persiguiendo: { tipo: 'ejercito', id: solitaria.id } };
+    const r = avanzar([cazador, solitaria], asentamientos, { facciones });
+    expect(r.eventos.some((e) => typeof e !== 'string' && e.codigo === 'columna.presa_alcanzada')).toBe(false);
+  });
+
+  it('una caravana adjunta a un ejército no se ataca por separado: se ataca al ejército (Doc 5.12.3)', () => {
+    expect(() => exigirCaravanaSuelta({ estado: 'adjunta' })).toThrow('adjunta');
+    expect(() => exigirCaravanaSuelta({ estado: 'en_transito' })).not.toThrow();
+  });
+
+  it('solo un ejército abre un asedio (Doc 5.15.1b)', () => {
+    const { asentamiento } = base();
+    const plaza = { ...asentamiento, faccionId: 'otra' };
+    const solitaria: Ejercito = { ...ejercitoDe(asentamiento, [escuadron('s1', 'milicia_lanceros')], 100), tipo: 'personal', posicionActual: plaza.posicion };
+
+    expect(() => validarAsedio(solitaria, plaza, new Set(), instanteDeTest(1))).toThrow('Solo un ejército');
   });
 
   it('una columna con todos sus héroes HERIDOS no se puede alcanzar, aunque la persigas y la tengas encima', () => {

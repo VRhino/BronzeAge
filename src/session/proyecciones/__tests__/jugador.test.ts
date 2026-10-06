@@ -603,6 +603,7 @@ describe('ejercitosAvistados: lo ajeno, solo si se ve y siempre redactado', () =
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
     expect(proyeccion.ejercitosAvistados[0]).toEqual({
       id: 'e-rival',
+      tipo: 'ejercito',
       faccionId: 'faccion-rival',
       posicionActual: { x: 1050, y: 1000 },
       participantes: 2,

@@ -328,7 +328,7 @@ async function perseguirLoQueVe(ctx: ContextoBot, columna: Ejercito): Promise<vo
   }
   if (columna.escuadronIds.length === 0) return;
   const cerca = (p: Point) => distancia(p, columna.posicionActual) <= VISION.ejercito;
-  const rival = vista.ejercitosAvistados.filter((e) => enemiga(e.faccionId) && cerca(e.posicionActual)).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+  const rival = vista.ejercitosAvistados.filter((e) => e.tipo === columna.tipo && enemiga(e.faccionId) && cerca(e.posicionActual)).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
   if (rival) {
     await ctx.intentar(`perseguir:${rival.id}`, 'perseguir', { heroeId: yo, objetivo: { tipo: 'ejercito', id: rival.id } });
     return;

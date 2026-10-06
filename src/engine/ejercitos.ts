@@ -1245,7 +1245,17 @@ function conApartadas(trasCombate: EjercitoConTropa, antes: EjercitoConTropa): E
   return { ...trasCombate, escuadrones: antes.escuadrones.map((e) => peleadas.get(e.id) ?? e) };
 }
 
-/** Lo que exige atacar a una columna (Doc 5.12.3, 5.16.4): que sea enemiga, esté a distancia de choque y las dos
+/** Una caravana adjunta es parte de su ejército: solo otro ejército la ataca, y lo hace atacando al ejército (Doc 5.12.3). */
+export function exigirCaravanaSuelta(caravana: Pick<Caravana, 'estado'>): void {
+  if (caravana.estado === 'adjunta') throw new MovilizacionInvalidaError('Esa caravana va adjunta a un ejército: se ataca al ejército.');
+}
+
+/** Un ejército y una Columna personal nunca combaten entre sí, ni para perseguirse ni para atacarse (Doc 5.12.1, 5.12.3). */
+export function exigirMismaClase(a: Pick<Ejercito, 'tipo'>, b: Pick<Ejercito, 'tipo'>): void {
+  if (a.tipo !== b.tipo) throw new MovilizacionInvalidaError('Un ejército y una columna personal no combaten entre sí.');
+}
+
+/** Lo que exige atacar a una columna (Doc 5.12.3, 5.16.4): que sea enemiga, de su misma clase, esté a distancia de choque y las dos
  * lleven algún héroe sano. Lo comparten el combate con números y la batalla de Unity (`session/batallas.ts`). */
 export function validarAtaqueAColumna(
   atacante: Ejercito,
@@ -1257,6 +1267,7 @@ export function validarAtaqueAColumna(
   if (atacante.faccionId === defensor.faccionId || estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)) {
     throw new MovilizacionInvalidaError('No se ataca a los tuyos ni a un aliado.');
   }
+  exigirMismaClase(atacante, defensor);
   validarAlcance(atacante, defensor.posicionActual, heridos, 'atacar');
   if (!tieneHeroeSano(defensor, heridos)) throw new MovilizacionInvalidaError('Esa columna solo lleva héroes heridos: no se la puede tocar.');
 }
@@ -1369,6 +1380,7 @@ export function interceptar(
   /** Inmunidad (Doc 1.6): zonas y asentamientos para saber si la caravana está en un refugio. */
   territorio: { zonas: readonly ZonaInfluencia[]; asentamientos: readonly Asentamiento[] } = { zonas: [], asentamientos: [] }
 ): ReturnType<typeof interceptarCaravanaConEjercito> & { vencidos: string[] } {
+  exigirCaravanaSuelta(caravana);
   validarAlcance(ejercito, caravana.posicionActual, heridos, 'interceptar');
   if (enRefugio(caravana.posicionActual, territorio.zonas, territorio.asentamientos, ejercito.faccionId)) {
     throw new MovilizacionInvalidaError('La caravana está dentro de una zona de influencia que no es tuya: ahí no se la puede atacar.');
@@ -1401,6 +1413,7 @@ export function atacarCampamento(
 /** Lo que exige asediar una plaza (Doc 5.12.4): que sea de otra Facción, estar a distancia de choque con algún héroe
  * sano y que no esté protegida tras su conquista (Doc 5.12.9). Lo comparten el asedio con números y la batalla de Unity. */
 export function validarAsedio(ejercito: Ejercito, plaza: Asentamiento, heridos: ReadonlySet<string>, instante: Instante): void {
+  if (ejercito.tipo !== 'ejercito') throw new MovilizacionInvalidaError('Solo un ejército abre un asedio: una columna personal puede unirse a uno abierto.');
   if (plaza.faccionId === ejercito.faccionId) throw new MovilizacionInvalidaError('No se asedia una plaza de tu Facción.');
   validarAlcance(ejercito, plaza.posicion, heridos, 'atacar');
   if (estaProtegida(plaza, instante)) throw new MovilizacionInvalidaError('Esa plaza está protegida tras su conquista: todavía no se la puede asediar.');
@@ -1501,6 +1514,7 @@ export function perseguir(
     throw new MovilizacionInvalidaError('No puedes perseguirte a ti mismo.');
   }
   if (!tieneHeroeSano(ejercito, heridos)) throw new MovilizacionInvalidaError('Todos los héroes de tu columna están heridos: no pueden perseguir.');
+  if (presa) exigirMismaClase(ejercito, presa);
   if (presa && !tieneHeroeSano(presa, heridos)) throw new MovilizacionInvalidaError('Esa columna solo lleva héroes heridos: no se la puede perseguir.');
   return { ...ejercito, persiguiendo: objetivo, estado: 'marchando' };
 }
@@ -1873,7 +1887,7 @@ function cerrarPersecuciones(
     const alcanzada =
       presaFijada.tipo === 'ejercito'
         ? [...porId.values()].find(
-            (o) => o.id === presaFijada.id && enemiga(ejercito.faccionId, o.faccionId) && tieneHeroeSano(o, heridos) && !sinSoldados(enBatalla(o, heridos)) && cerca(o.posicionActual)
+            (o) => o.id === presaFijada.id && o.tipo === ejercito.tipo && enemiga(ejercito.faccionId, o.faccionId) && tieneHeroeSano(o, heridos) && !sinSoldados(enBatalla(o, heridos)) && cerca(o.posicionActual)
           )
         : caravanas.find((c) => {
             if (c.id !== presaFijada.id || c.estado === 'adjunta' || c.estado === 'disponible' || !cerca(c.posicionActual)) return false;

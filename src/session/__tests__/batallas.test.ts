@@ -92,6 +92,20 @@ describe('asediar es una orden, no una llegada (Doc 5.12.4)', () => {
     expect(asediar(sesion, vecino, plazaId).ok, 'la plaza ya está en una batalla').toBe(false);
   });
 
+  it('una columna personal no abre un asedio (Doc 5.15.1b)', () => {
+    const { sesion, fundador, plazaId } = frenteAPlaza(false);
+    const payload = sesion.exportar();
+    const solitaria = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, ejercitos: payload.state.ejercitos.map((e) => ({ ...e, tipo: 'personal' as const })) },
+    });
+
+    expect(asediar(solitaria, fundador, plazaId).ok).toBe(false);
+    expect(solitaria.getState().asentamientos.find((a) => a.id === plazaId)!.faccionId, 'la plaza sigue siendo de quien era').not.toBe(
+      payload.state.asentamientos[0]!.faccionId
+    );
+  });
+
   it('una plaza propia no se asedia', () => {
     const { sesion, fundador } = frenteAPlaza(false);
 
@@ -335,7 +349,16 @@ function frenteAPlaza(unity = true) {
     protegidaHasta: undefined,
   };
   const sesion = GameSession.importar(
-    { ...payload, state: { ...state, facciones: [...state.facciones, rival], asentamientos: [...state.asentamientos, plaza] } },
+    {
+      ...payload,
+      // Solo un ejército abre un asedio (Doc 5.15.1b).
+      state: {
+        ...state,
+        ejercitos: state.ejercitos.map((e) => ({ ...e, tipo: 'ejercito' as const })),
+        facciones: [...state.facciones, rival],
+        asentamientos: [...state.asentamientos, plaza],
+      },
+    },
     { batallasEnUnity: unity }
   );
   return { ...frente, sesion, plazaId: plaza.id, faccionPropia: propia.faccionId };

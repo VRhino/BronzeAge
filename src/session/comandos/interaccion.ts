@@ -22,6 +22,7 @@ import {
   inspeccionarCaravana as inspeccionarCaravanaEngine,
   inspeccionarColumna,
   inspeccionarPlaza,
+  exigirCaravanaSuelta,
   interceptar,
   MovilizacionInvalidaError,
   perseguir as perseguirEngine,
@@ -353,6 +354,7 @@ function aperturaDeAtaque(estado: GameSessionState, atacante: Ejercito, params: 
     return aperturaContraColumna(estado, atacante, defensor, params.heroeId, heridos);
   }
   const caravana = exigirCaravana(estado, objetivo.id);
+  exigirCaravanaSuelta(caravana);
   validarAlcance(atacante, caravana.posicionActual, heridos, 'interceptar');
   return aperturaContraCaravana(estado, atacante, caravana, params.heroeId, heridos);
 }
