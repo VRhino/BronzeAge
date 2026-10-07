@@ -36,6 +36,9 @@ export interface AlmacenDeObjetos {
    */
   anexar(clave: string, contenido: string): Promise<void>;
 
+  /** Borra el objeto. Una clave que no existe no es un error (borrar dos veces deja lo mismo). */
+  borrar(clave: string): Promise<void>;
+
   /** Claves existentes que empiezan por `prefijo` (`""` = todas). Orden no garantizado. */
   listar(prefijo: string): Promise<string[]>;
 }

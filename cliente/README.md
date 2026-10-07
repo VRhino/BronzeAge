@@ -14,6 +14,7 @@
 > - **Mundo**: código de invitación real del servidor (`GET/PUT /v1/admin/registro/codigo`), editable; ya no se lee de
 >   `VITE_CODIGO_INVITACION`.
 > - **Mundo**: lista de las partidas del servidor (se refresca sola cada 5 s); un clic conecta esta consola a ella.
+> - **Mundo**: «Parar y borrar esta partida» (dos clics; `DELETE /v1/admin/partidas/:gameId`): detiene el reloj y borra guardado, diario e historial de eventos; auditoría y respaldos se conservan.
 > - **Guerra**: pestaña con Panorama (guerras, ejércitos en campo, batallas) y Reclutamiento; estados vacíos explicados.
 >
 > Anterior (v0.1.1, 2026-09-10): documentación reconciliada con el backend; la niebla de guerra ya está implementada.

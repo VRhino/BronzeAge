@@ -41,6 +41,10 @@ export async function crearAlmacenEnLibsql(config: Config): Promise<AlmacenDeObj
       });
     },
 
+    async borrar(clave) {
+      await cliente.execute({ sql: 'DELETE FROM objetos WHERE clave = ?', args: [clave] });
+    },
+
     async listar(prefijo) {
       const patron = `${prefijo.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       const r = await cliente.execute({ sql: "SELECT clave FROM objetos WHERE clave LIKE ? ESCAPE '\\'", args: [patron] });

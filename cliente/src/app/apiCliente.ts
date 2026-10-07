@@ -164,6 +164,11 @@ export function obtenerMapa(gameId: string, mapaId: string): Promise<MapaGenerad
   return peticion<MapaGenerado>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/mapa/${encodeURIComponent(mapaId)}`);
 }
 
+/** Para la partida por completo y la borra del servidor (reloj, guardado e historial). Irreversible; la auditoría y los respaldos quedan. */
+export function borrarPartida(gameId: string): Promise<{ gameId: string; borrada: boolean }> {
+  return peticion(`${V1}/admin/partidas/${encodeURIComponent(gameId)}`, { method: 'DELETE' });
+}
+
 /** El código de invitación vigente del registro de jugadores (`null` = registro abierto): el valor real del servidor, no el del entorno de dev. */
 export function leerCodigoRegistro(): Promise<{ codigo: string | null }> {
   return peticion(`${V1}/admin/registro/codigo`);

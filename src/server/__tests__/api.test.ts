@@ -176,6 +176,31 @@ describe('GET /admin/partidas (Fase C12: descubrimiento)', () => {
   });
 });
 
+describe('DELETE /admin/partidas/:gameId', () => {
+  it('para y borra la partida: ya no se lista ni se puede leer, y el disco queda sin ella', async () => {
+    await partidaCreada('g1');
+    const { admin } = await partidaCreada('g2');
+
+    const res = await app.inject({ method: 'DELETE', url: '/v1/admin/partidas/g1', headers: admin });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ gameId: 'g1', borrada: true });
+    const lista = await app.inject({ method: 'GET', url: '/v1/admin/partidas', headers: admin });
+    expect(lista.json().partidas.map((p: { gameId: string }) => p.gameId)).toEqual(['g2']);
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin })).statusCode).toBe(404);
+  });
+
+  it('404 si no existe, 401 sin sesión y 403 sin ser administrador global', async () => {
+    const { admin } = await partidaCreada('g1');
+
+    expect((await app.inject({ method: 'DELETE', url: '/v1/admin/partidas/nada', headers: admin })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/admin/partidas/g1' })).statusCode).toBe(401);
+    const ana = await sesionDe('ana');
+    expect((await app.inject({ method: 'DELETE', url: '/v1/admin/partidas/g1', headers: ana })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin })).statusCode).toBe(200);
+  });
+});
+
 describe('POST /admin/partidas', () => {
   it('un administrador global crea la partida', async () => {
     const { res } = await partidaCreada('g1');

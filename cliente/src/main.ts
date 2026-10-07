@@ -5,7 +5,7 @@
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { AcuerdoTrueque, Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
 import { RED_VACIA, tramosDeRed } from '@motor/engine/redCaminos';
-import { ApiError, cambiarCodigoRegistro, crearOResumirPartida, leerCodigoRegistro, listarPartidas } from './app/apiCliente';
+import { ApiError, borrarPartida, cambiarCodigoRegistro, crearOResumirPartida, leerCodigoRegistro, listarPartidas } from './app/apiCliente';
 import { montarPanelBots } from './bots/panelBots';
 import { CATALOGOS, crearGameStore, elegirGameId, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { layoutCampamento } from '@motor/engine/layoutCampamento';
@@ -364,6 +364,10 @@ app.innerHTML = `
         <div class="controls">
           <h2>Datos de la partida</h2>
           <div class="kv-grid" id="info-partida"></div>
+          <div class="controls-row">
+            <button type="button" id="borrar-partida-btn">Parar y borrar esta partida</button>
+          </div>
+          <p class="legend-note" id="borrar-partida-estado" aria-live="polite" hidden></p>
         </div>
         <div class="controls">
           <h2>Código de invitación</h2>
@@ -2414,6 +2418,43 @@ document.getElementById('codigo-guardar')!.addEventListener('click', () => {
   void guardarCodigoRegistro(nuevo);
 });
 document.getElementById('codigo-abrir')!.addEventListener('click', () => void guardarCodigoRegistro(null));
+
+// Parar y borrar la partida conectada: dos clics (como regenerar). Después la consola pasa a otra partida del servidor; si no queda
+// ninguna, vuelve a la del entorno, que se crea de nuevo al recargar.
+const borrarPartidaBtn = document.getElementById('borrar-partida-btn') as HTMLButtonElement;
+const borrarPartidaEstado = document.getElementById('borrar-partida-estado')!;
+let borrarArmado: ReturnType<typeof setTimeout> | undefined;
+
+function desarmarBorrar(): void {
+  if (borrarArmado) clearTimeout(borrarArmado);
+  borrarArmado = undefined;
+  borrarPartidaBtn.classList.remove('btn-armado');
+  borrarPartidaBtn.textContent = 'Parar y borrar esta partida';
+}
+
+borrarPartidaBtn.addEventListener('click', async () => {
+  const id = gameStore.getState().gameId;
+  if (!borrarArmado) {
+    borrarPartidaBtn.classList.add('btn-armado');
+    borrarPartidaBtn.textContent = `⚠ Confirmar — borra «${id}» para siempre`;
+    borrarPartidaEstado.hidden = true;
+    borrarArmado = setTimeout(desarmarBorrar, 5000);
+    return;
+  }
+  desarmarBorrar();
+  borrarPartidaBtn.disabled = true;
+  borrarPartidaEstado.hidden = false;
+  borrarPartidaEstado.textContent = 'Parando y borrando…';
+  try {
+    await borrarPartida(id);
+    const otra = (await listarPartidas()).partidas.find((p) => p.gameId !== id)?.gameId;
+    elegirGameId(otra ?? '');
+    location.reload();
+  } catch (err) {
+    borrarPartidaBtn.disabled = false;
+    borrarPartidaEstado.textContent = `✗ ${err instanceof Error ? err.message : err}`;
+  }
+});
 
 partidaIdInput.value = gameStore.getState().gameId;
 partidaIdInput.addEventListener('input', () => {

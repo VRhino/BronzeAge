@@ -119,6 +119,21 @@ const ESQUEMA_TICK = {
   response: { 401: ERROR_RESPUESTA, 403: ERROR_RESPUESTA, 404: ERROR_RESPUESTA, 409: ERROR_RESPUESTA },
 } as const;
 
+const ESQUEMA_BORRAR_PARTIDA = {
+  description:
+    'Para la partida por completo y la borra (reloj, snapshot, diario e historial de eventos); la auditoría y los respaldos ya hechos se conservan. ' +
+    'Irreversible. Exige administrador_global.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  response: {
+    200: { type: 'object', properties: { gameId: { type: 'string' }, borrada: { type: 'boolean' } }, required: ['gameId', 'borrada'] },
+    401: ERROR_RESPUESTA,
+    403: ERROR_RESPUESTA,
+    404: ERROR_RESPUESTA,
+  },
+} as const;
+
 const ESQUEMA_ESTADO_COMPLETO = {
   description:
     'Estado COMPLETO de la partida, sin proyectar por audiencia (todas las Facciones, log global). ' +
@@ -448,6 +463,17 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
 
     otorgarAdministracion(deps, resuelto.actor.usuarioId, gameId);
     return reply.code(201).send(resumenDe(runner));
+  });
+
+  app.delete<{ Params: ParametrosGameId }>('/admin/partidas/:gameId', { schema: ESQUEMA_BORRAR_PARTIDA }, async (request, reply) => {
+    const { gameId } = request.params;
+    const resuelto = resolverActor(request, deps, gameId);
+    if (!resuelto) return sinSesion(reply);
+    if (!puedeCrearPartida(resuelto.actor) || !puedeDescartarPartida(resuelto.actor)) {
+      return sinPermiso(reply, 'borrar una partida exige rol administrador_global');
+    }
+    if (!(await deps.partidas.eliminar(gameId))) return reply.code(404).send({ error: `la partida '${gameId}' no existe.` });
+    return reply.send({ gameId, borrada: true });
   });
 
   app.post<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/tick', { schema: ESQUEMA_TICK }, async (request, reply) => {

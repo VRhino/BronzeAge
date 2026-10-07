@@ -39,6 +39,15 @@ export function pruebasDeContrato(nombre: string, crear: () => Promise<AlmacenDe
       expect(await a.leer('g1.jsonl')).toBe('base\nmas\n');
     });
 
+    it('borrar quita la clave y borrar una que no existe no lanza', async () => {
+      const a = await crear();
+      await a.escribir('g1.json', '{}');
+      await a.borrar('g1.json');
+      await a.borrar('g1.json');
+      expect(await a.leer('g1.json')).toBeNull();
+      expect(await a.listar('')).toEqual([]);
+    });
+
     it('listar filtra por prefijo; "" devuelve todas las claves', async () => {
       const a = await crear();
       await a.escribir('g1.json', '{}');

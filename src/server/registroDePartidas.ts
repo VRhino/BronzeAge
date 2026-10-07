@@ -10,7 +10,9 @@ import type { RegionId } from '../domain/types';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { RunnerDePartida, type OpcionesRunner } from './runnerDePartida';
 import type { OpcionesSesion } from '../session/gameSession';
-import { listarPartidas, type ResumenPartidaEnDisco } from './persistenciaPartida';
+import { claveDeSnapshot, listarPartidas, type ResumenPartidaEnDisco } from './persistenciaPartida';
+import { claveDeDiario } from './diarioDePartida';
+import { claveDeEventos } from './eventosDePartida';
 
 export interface ConfiguracionPartida {
   seed: number;
@@ -116,6 +118,23 @@ export class RegistroDePartidas {
     this.runners.set(gameId, runner);
     this.arrancarRelojSiConfigurado(runner, intervaloTickMs);
     return runner;
+  }
+
+  /**
+   * Para la partida por completo y la borra: reloj, cola, snapshot, diario e historial de eventos. La auditoría se conserva (queda
+   * quién la borró) y los respaldos ya hechos también. `false` si no existía ni abierta ni en disco.
+   */
+  async eliminar(gameId: string): Promise<boolean> {
+    const abierta = this.runners.get(gameId);
+    const enDisco = (await listarPartidas(this.almacen)).some((p) => p.gameId === gameId);
+    if (!abierta && !enDisco) return false;
+    if (abierta) {
+      abierta.detenerRelojDeMundo();
+      await abierta.esperarColaVacia();
+      this.runners.delete(gameId);
+    }
+    for (const clave of [claveDeSnapshot(gameId), claveDeDiario(gameId), claveDeEventos(gameId)]) await this.almacen.borrar(clave);
+    return true;
   }
 
   /** `intervaloOverride` (Fase E, consola de administración): al regenerar, el operador puede fijar la

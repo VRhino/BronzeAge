@@ -6,7 +6,7 @@
 // Es el adaptador por defecto y el único que no necesita servicios externos. Para un host con disco efímero,
 // o para escalar, se escribe otro adaptador (object storage, SQLite sobre HTTP, Postgres) y se elige en
 // `server/index.ts` — nada más cambia.
-import { appendFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AlmacenDeObjetos } from './almacenDeObjetos';
 
@@ -37,6 +37,10 @@ export function crearAlmacenEnDisco(raiz: string): AlmacenDeObjetos {
     async anexar(clave, contenido) {
       await mkdir(raiz, { recursive: true });
       await appendFile(ruta(clave), contenido, 'utf-8');
+    },
+
+    async borrar(clave) {
+      await rm(ruta(clave), { force: true });
     },
 
     async listar(prefijo) {
