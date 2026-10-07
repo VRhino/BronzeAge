@@ -5,9 +5,12 @@
 // importan solo como `type` para tipar lo que se lee — no acoplan a ninguna lógica.
 import type { AcuerdoTrueque, Asentamiento, BiomaTipo, CargoTipo, Edificio, Faccion, RegionId } from '@motor/domain/types';
 import { RED_VACIA, tramosDeRed } from '@motor/engine/redCaminos';
-import { ApiError, borrarPartida, cambiarCodigoRegistro, crearOResumirPartida, leerCodigoRegistro, listarPartidas } from './app/apiCliente';
+import { ApiError, borrarPartida, crearOResumirPartida, listarPartidas } from './app/apiCliente';
+import { fmtIntervaloTick, htmlListaPartidas, ID_PARTIDA_VALIDO, OPCIONES_REGION, OPCIONES_TICK, REGION_NOMBRE } from './ui/opcionesPartida';
+import { montarCodigoInvitacion } from './ui/codigoInvitacion';
+import { montarPanelRespaldos } from './ui/panelRespaldos';
 import { montarPanelBots } from './bots/panelBots';
-import { CATALOGOS, crearGameStore, elegirGameId, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
+import { avisarTrasRecargar, CATALOGOS, crearGameStore, elegirGameId, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { layoutCampamento } from '@motor/engine/layoutCampamento';
 import { ALMACEN_PERSONAL } from '@motor/constants';
 import { esc } from './ui/html';
@@ -56,36 +59,6 @@ function porcentajeDeTrueque(acuerdo: AcuerdoTrueque): number {
     return total > 0 ? Math.min(1, lineas.reduce((a, l) => a + Math.min(l.cantidadEntregada, l.cantidadTotal), 0) / total) : 1;
   };
   return Math.round(((progreso(acuerdo.lineasA) + progreso(acuerdo.lineasB)) / 2) * 100);
-}
-
-/** Regiones geográficas disponibles (Fase 0.2, ver `worldgen/regiones.ts`) — nombre para el selector del
- * mundo. Mantenido a mano, igual que `BIOMA_NOMBRE`/`EDIFICIO_NOMBRE`: es presentación pura, no se deriva de
- * `worldgen/` (este archivo no puede importar de ahí, ver la nota de frontera arriba). */
-const REGION_NOMBRE: Record<RegionId, string> = {
-  greciaContinental: 'Grecia continental',
-  anatolia: 'Anatolia',
-  egeo: 'Egeo (archipiélago)',
-  nilo: 'Nilo',
-  mesopotamia: 'Mesopotamia',
-};
-
-/** Opciones del selector "Velocidad de tick" al regenerar (ms de reloj de PARED entre ticks). Un tick =
- * 1 minuto de mundo (`SIMULACION.duracionTickMs`), así que 1000 ms = 1 día de mundo cada 24 s reales. */
-const TICK_INTERVALOS: [number, string][] = [
-  [500, '2 ticks/s (rápido)'],
-  [1000, '1 tick/s'],
-  [2000, '1 tick cada 2 s'],
-  [5000, '1 tick cada 5 s'],
-  [10000, '1 tick cada 10 s'],
-  [30000, '1 tick cada 30 s'],
-  [60000, '1 tick por minuto (tiempo real)'],
-];
-
-function fmtIntervaloTick(ms: number | null | undefined): string {
-  if (ms == null) return 'reloj parado (solo tick manual)';
-  const conocido = TICK_INTERVALOS.find(([valor]) => valor === ms);
-  if (conocido) return conocido[1];
-  return ms % 1000 === 0 ? `1 tick cada ${ms / 1000} s` : `1 tick cada ${ms} ms`;
 }
 
 /** Biomas (Fase 0.1) en orden de elevación creciente — así la leyenda se lee como una escala de altura.
@@ -369,17 +342,7 @@ app.innerHTML = `
           </div>
           <p class="legend-note" id="borrar-partida-estado" aria-live="polite" hidden></p>
         </div>
-        <div class="controls">
-          <h2>Código de invitación</h2>
-          <p class="legend-note">Lo que piden a un jugador nuevo para registrarse. Es el valor real del servidor; se guarda solo en memoria, así que un reinicio vuelve al <code>CODIGO_REGISTRO</code> del entorno.</p>
-          <div class="kv-row"><span>Vigente</span><span id="codigo-vigente">…</span></div>
-          <label>Nuevo código <input id="codigo-input" maxlength="100" autocomplete="off" spellcheck="false" placeholder="vacío = registro abierto" /></label>
-          <div class="controls-row">
-            <button type="button" id="codigo-guardar">Guardar código</button>
-            <button type="button" id="codigo-abrir">Dejar el registro abierto</button>
-          </div>
-          <p class="legend-note" id="codigo-estado" aria-live="polite" hidden></p>
-        </div>
+        <div class="controls" id="codigo-invitacion"></div>
         <div class="controls">
           <h2>Partida y mundo</h2>
           <div class="detail-sub">
@@ -393,22 +356,15 @@ app.innerHTML = `
           </label>
           <label>Seed del mundo <input id="seed-input" type="number" value="1" /></label>
           <label>Región geográfica (Fase 0.2)
-            <select id="region-select">
-              <option value="">Libre (procedural, sin sesgo)</option>
-              ${Object.entries(REGION_NOMBRE)
-                .map(([id, nombre]) => `<option value="${id}">${nombre}</option>`)
-                .join('')}
-            </select>
+            <select id="region-select">${OPCIONES_REGION}</select>
           </label>
           <label>Velocidad de tick
-            <select id="tick-intervalo">
-              <option value="">Por defecto del servidor</option>
-              ${TICK_INTERVALOS.map(([ms, txt]) => `<option value="${ms}">${txt}</option>`).join('')}
-            </select>
+            <select id="tick-intervalo">${OPCIONES_TICK}</select>
           </label>
           <button type="button" id="regenerar-btn">Regenerar mundo</button>
           <p class="legend-note" id="regenerar-estado" hidden></p>
         </div>
+        <div class="controls" id="respaldos-card"></div>
       </div>
     </div>
 
@@ -2028,7 +1984,8 @@ function actualizarTabs(): void {
   if (tabActivo === 'politicas') renderPoliticasTab();
   if (tabActivo === 'generacionMundo') {
     void cargarPartidasExistentes();
-    void cargarCodigoRegistro();
+    void codigoInvitacion.cargar();
+    void respaldos.cargar();
   }
 }
 
@@ -2299,21 +2256,12 @@ const regenerarEstado = document.getElementById('regenerar-estado')!;
 const partidaIdInput = document.getElementById('partida-id-input') as HTMLInputElement;
 const partidaNotaEl = document.getElementById('partida-nota')!;
 const partidasDatalist = document.getElementById('partidas-existentes')!;
-const ID_PARTIDA_VALIDO = /^[A-Za-z0-9_.-]+$/;
 let partidasExistentes: string[] = [];
 const partidasListaEl = document.getElementById('partidas-lista')!;
 
 /** Las partidas que el servidor conoce, como botones: la actual marcada, el resto se abren de un clic. */
 function renderListaPartidas(partidas: { gameId: string; instante: number; version: number }[]): void {
-  const actual = gameStore.getState().gameId;
-  partidasListaEl.innerHTML = partidas.length
-    ? partidas
-        .map(
-          (p) =>
-            `<button type="button" role="listitem" class="partida-item${p.gameId === actual ? ' active' : ''}" data-partida="${esc(p.gameId)}" ${p.gameId === actual ? 'disabled aria-current="true"' : ''}><strong>${esc(p.gameId)}</strong><small>${p.gameId === actual ? 'conectada · ' : ''}${fmtTiempoMundo(p.instante)} · v${p.version}</small></button>`
-        )
-        .join('')
-    : '<p class="legend-note">No se pudo leer la lista de partidas del servidor.</p>';
+  partidasListaEl.innerHTML = htmlListaPartidas(partidas, gameStore.getState().gameId);
 }
 
 partidasListaEl.addEventListener('click', (ev) => {
@@ -2380,47 +2328,18 @@ async function cambiarDePartida(modo: 'abrir' | 'crear'): Promise<void> {
   }
 }
 
-// Código de invitación del registro: se lee del servidor al abrir la pestaña y tras cada cambio.
-const codigoVigenteEl = document.getElementById('codigo-vigente')!;
-const codigoInput = document.getElementById('codigo-input') as HTMLInputElement;
-const codigoEstadoEl = document.getElementById('codigo-estado')!;
-
-function avisoCodigo(ok: boolean, texto: string): void {
-  codigoEstadoEl.hidden = false;
-  codigoEstadoEl.textContent = `${ok ? '✓' : '✗'} ${texto}`;
-}
-
-async function cargarCodigoRegistro(): Promise<void> {
-  try {
-    const { codigo } = await leerCodigoRegistro();
-    codigoVigenteEl.textContent = codigo ?? 'ninguno: registro abierto';
-    codigoInput.placeholder = codigo ? 'vacío = registro abierto' : 'sin código: escribe uno para cerrarlo';
-  } catch (err) {
-    codigoVigenteEl.textContent = 'no se pudo leer';
-    avisoCodigo(false, err instanceof Error ? err.message : String(err));
-  }
-}
-
-async function guardarCodigoRegistro(codigo: string | null): Promise<void> {
-  try {
-    const { codigo: vigente } = await cambiarCodigoRegistro(codigo);
-    codigoVigenteEl.textContent = vigente ?? 'ninguno: registro abierto';
-    codigoInput.value = '';
-    avisoCodigo(true, vigente ? `Código cambiado a «${vigente}»: lo piden los registros nuevos.` : 'Registro abierto: ya no se pide código.');
-  } catch (err) {
-    avisoCodigo(false, err instanceof Error ? err.message : String(err));
-  }
-}
-
-document.getElementById('codigo-guardar')!.addEventListener('click', () => {
-  const nuevo = codigoInput.value.trim();
-  if (!nuevo) return avisoCodigo(false, 'Escribe un código, o usa «Dejar el registro abierto».');
-  void guardarCodigoRegistro(nuevo);
+const codigoInvitacion = montarCodigoInvitacion(document.getElementById('codigo-invitacion')!);
+const respaldos = montarPanelRespaldos(document.getElementById('respaldos-card')!, {
+  actual: gameStore.getState().gameId,
+  alRestaurar: (gameId) => {
+    elegirGameId(gameId);
+    location.reload();
+  },
 });
-document.getElementById('codigo-abrir')!.addEventListener('click', () => void guardarCodigoRegistro(null));
 
-// Parar y borrar la partida conectada: dos clics (como regenerar). Después la consola pasa a otra partida del servidor; si no queda
-// ninguna, vuelve a la del entorno, que se crea de nuevo al recargar.
+// Parar y borrar la partida conectada: dos clics (como regenerar). Antes, los bots que juegan en ella paran y su registro se borra (si
+// el panel de Bots está conectado); después el servidor borra la partida y la consola se queda sin partida (`sinPartida.ts`), que es
+// un estado válido: no se abre ni se crea otra por su cuenta.
 const borrarPartidaBtn = document.getElementById('borrar-partida-btn') as HTMLButtonElement;
 const borrarPartidaEstado = document.getElementById('borrar-partida-estado')!;
 let borrarArmado: ReturnType<typeof setTimeout> | undefined;
@@ -2446,9 +2365,12 @@ borrarPartidaBtn.addEventListener('click', async () => {
   borrarPartidaEstado.hidden = false;
   borrarPartidaEstado.textContent = 'Parando y borrando…';
   try {
-    await borrarPartida(id);
-    const otra = (await listarPartidas()).partidas.find((p) => p.gameId !== id)?.gameId;
-    elegirGameId(otra ?? '');
+    const bots = await panelBots.olvidarPartida(id);
+    const r = await borrarPartida(id);
+    avisarTrasRecargar(
+      `«${id}» borrada: ${r.conexionesCerradas} conexiones cerradas, ${r.membresiasRevocadas} membresías revocadas, ${r.cuentasDeBotBorradas} cuentas de bot borradas. ${bots} Sus respaldos siguen en «Respaldos».`
+    );
+    elegirGameId(null);
     location.reload();
   } catch (err) {
     borrarPartidaBtn.disabled = false;

@@ -51,6 +51,9 @@ export interface OpcionesServidor {
    * (`crearAlmacenEnDisco`). Se inyecta otro (object storage, base de datos) para desplegar en un proveedor
    * sin disco persistente — ver `server/almacen/almacenDeObjetos.ts`. */
   almacen?: AlmacenDeObjetos;
+  /** Si los respaldos viven en `directorio` (y se gestionan por `/admin/respaldos`). Por defecto, solo sin `almacen` inyectado; el
+   * proceso real lo declara según use disco o libSQL. */
+  respaldosEnDisco?: boolean;
   /** Contexto de autenticación (proveedores + repositorio). Por defecto, solo el proveedor de desarrollo
    * sobre un repositorio en memoria — inyectable para tests o para un proceso con otros proveedores. */
   identidad?: ContextoAutenticacion;
@@ -150,7 +153,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     codigoRegistro: opciones.codigoRegistro,
     codigoRegistroBots: opciones.codigoRegistroBots,
     almacen,
-    directorioRespaldos: opciones.almacen ? undefined : opciones.directorio,
+    directorioRespaldos: (opciones.respaldosEnDisco ?? !opciones.almacen) ? opciones.directorio : undefined,
     servidoresBatalla,
   };
 

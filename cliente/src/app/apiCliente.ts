@@ -164,9 +164,39 @@ export function obtenerMapa(gameId: string, mapaId: string): Promise<MapaGenerad
   return peticion<MapaGenerado>(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/mapa/${encodeURIComponent(mapaId)}`);
 }
 
-/** Para la partida por completo y la borra del servidor (reloj, guardado e historial). Irreversible; la auditoría y los respaldos quedan. */
-export function borrarPartida(gameId: string): Promise<{ gameId: string; borrada: boolean }> {
+/** Para la partida por completo y la borra del servidor: guardado, historial, auditoría, conexiones y cuentas de bot. Los respaldos
+ * quedan: restaurar uno la devuelve. */
+export function borrarPartida(gameId: string): Promise<{ gameId: string; borrada: boolean; conexionesCerradas: number; membresiasRevocadas: number; cuentasDeBotBorradas: number }> {
   return peticion(`${V1}/admin/partidas/${encodeURIComponent(gameId)}`, { method: 'DELETE' });
+}
+
+export interface RespaldoListado {
+  gameId: string;
+  /** Reloj de pared del respaldo (ISO 8601). */
+  momento: string;
+  /** Su nombre: lo que se pasa para restaurarlo o borrarlo. */
+  archivo: string;
+  bytes: number;
+  /** Si la partida sigue en el servidor (o ya se borró). */
+  partidaExiste: boolean;
+}
+
+/** Los respaldos de todas las partidas, también de las borradas, del más reciente al más antiguo. 501 si el servidor no los guarda. */
+export function listarRespaldos(): Promise<{ respaldos: RespaldoListado[] }> {
+  return peticion(`${V1}/admin/respaldos`);
+}
+
+export function respaldarAhora(gameId: string): Promise<Omit<RespaldoListado, 'partidaExiste'>> {
+  return peticion(`${V1}/admin/partidas/${encodeURIComponent(gameId)}/respaldos`, { method: 'POST' });
+}
+
+/** Restaura una partida (también una borrada): el servidor la cierra si estaba abierta, la restaura y la vuelve a abrir. */
+export function restaurarRespaldo(archivo: string): Promise<{ gameId: string; version: number; membresiasReactivadas: number }> {
+  return peticion(`${V1}/admin/respaldos/restaurar`, { method: 'POST', body: JSON.stringify({ archivo }) });
+}
+
+export function borrarRespaldo(archivo: string): Promise<{ archivo: string }> {
+  return peticion(`${V1}/admin/respaldos/${encodeURIComponent(archivo)}`, { method: 'DELETE' });
 }
 
 /** El código de invitación vigente del registro de jugadores (`null` = registro abierto): el valor real del servidor, no el del entorno de dev. */

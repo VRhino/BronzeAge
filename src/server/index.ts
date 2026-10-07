@@ -80,6 +80,7 @@ async function arrancar(): Promise<void> {
   const app = crearServidor({
     directorio: DIRECTORIO_PARTIDAS,
     almacen,
+    respaldosEnDisco: !ALMACEN_URL,
     administradoresGlobales: ADMINISTRADORES,
     origenesPermitidos: ORIGENES_PERMITIDOS,
     intervaloTickMs: INTERVALO_TICK_MS,

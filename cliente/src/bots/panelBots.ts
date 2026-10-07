@@ -101,6 +101,11 @@ const CLAVE_SUB = 'bots.sub';
 export interface PanelBots {
   /** Se llama al mostrar la pestaña: pinta lo que llegó mientras estaba oculta y, la primera vez, conecta si hay datos guardados. */
   alMostrar(): void;
+  /**
+   * Al borrar una partida: si los bots juegan en ella, paran, y su registro de cuentas se borra. Devuelve qué hizo, en una frase.
+   * Sin conexión con el servicio no puede hacer nada y lo dice (el registro queda y se borra luego desde esta pestaña).
+   */
+  olvidarPartida(gameId: string): Promise<string>;
 }
 
 export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): PanelBots {
@@ -954,6 +959,17 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
         const url = guardado(localStorage, CLAVE_URL);
         const token = guardado(sessionStorage, CLAVE_TOKEN);
         if (url && token && conexion === 'desconectado') cliente.conectar(url, token);
+      }
+    },
+    async olvidarPartida(gameId) {
+      if (conexion !== 'conectado') return `Servicio de bots sin conectar: su registro de «${gameId}», si lo hay, sigue ahí (bórralo desde la pestaña Bots).`;
+      const jugando = estado?.config?.partida === gameId && (estado.fase === 'corriendo' || estado.fase === 'pausado');
+      try {
+        if (jugando) await cliente.pedir({ accion: 'parar' });
+        await cliente.pedir({ accion: 'reiniciarRegistro', partida: gameId });
+        return jugando ? 'Los bots que jugaban en ella pararon y su registro se borró.' : 'El registro de bots de esa partida se borró.';
+      } catch (err) {
+        return `Servicio de bots: ${err instanceof Error ? err.message : err}.`;
       }
     },
   };

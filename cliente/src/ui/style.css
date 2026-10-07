@@ -2832,3 +2832,19 @@ button.btn-armado:hover {
   background: var(--admin-accent-soft);
   cursor: default;
 }
+
+.respaldo-acciones {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+#app.sin-partida {
+  grid-template-columns: 1fr;
+}
+
+/* Los respaldos ocupan la fila entera: tabla con dos botones por fila. */
+#respaldos-card,
+#sp-respaldos {
+  grid-column: 1 / -1;
+}

@@ -14,7 +14,14 @@
 > - **Mundo**: código de invitación real del servidor (`GET/PUT /v1/admin/registro/codigo`), editable; ya no se lee de
 >   `VITE_CODIGO_INVITACION`.
 > - **Mundo**: lista de las partidas del servidor (se refresca sola cada 5 s); un clic conecta esta consola a ella.
-> - **Mundo**: «Parar y borrar esta partida» (dos clics; `DELETE /v1/admin/partidas/:gameId`): detiene el reloj y borra guardado, diario e historial de eventos; auditoría y respaldos se conservan.
+> - **Mundo**: «Parar y borrar esta partida» (dos clics; `DELETE /v1/admin/partidas/:gameId`): para los bots que jueguen en ella y borra
+>   su registro (si el panel Bots está conectado); el servidor borra guardado, diario, historial, auditoría, conexiones y las cuentas de
+>   bot; las membresías humanas quedan revocadas. Solo se conservan los **respaldos**. La consola queda **sin partida**.
+> - **Sin partida** (`src/arranque.ts` → `src/sinPartida.ts`): estado válido de la consola. Lista de partidas, crear una nueva,
+>   código de invitación y respaldos. Sin elección guardada se arranca como siempre (la de `VITE_GAME_ID`, que se crea si no existe);
+>   una partida elegida que ya no existe no se recrea, se avisa.
+> - **Respaldos** (Mundo y «sin partida»): verlos por partida (también de las borradas), respaldar la conectada ahora, restaurar
+>   (devuelve la partida y las membresías humanas que cerró su borrado, y conecta la consola) y borrar.
 > - **Guerra**: pestaña con Panorama (guerras, ejércitos en campo, batallas) y Reclutamiento; estados vacíos explicados.
 >
 > Anterior (v0.1.1, 2026-09-10): documentación reconciliada con el backend; la niebla de guerra ya está implementada.

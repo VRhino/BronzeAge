@@ -953,19 +953,56 @@ export class GameStore {
  * recompilar. */
 const CLAVE_GAME_ID = 'admin.gameId';
 
-/** La partida a la que se conecta esta consola: la que se eligió en la pestaña Mundo (se recuerda en este navegador) o, si no, la del entorno. */
-export function gameIdElegido(): string {
+/**
+ * Qué partida eligió esta consola (se recuerda en este navegador). `porDefecto`: nunca eligió, y se usa la del entorno, que se crea si
+ * no existe (el arranque de siempre). `elegida`: la que se eligió en Mundo. `ninguna`: se eligió quedarse sin partida (tras borrarla).
+ */
+export type EleccionDePartida = { tipo: 'porDefecto'; gameId: string } | { tipo: 'elegida'; gameId: string } | { tipo: 'ninguna' };
+
+export function eleccionDePartida(): EleccionDePartida {
   const porDefecto = import.meta.env.VITE_GAME_ID ?? 'local';
+  let guardada: string | null = null;
   try {
-    return localStorage.getItem(CLAVE_GAME_ID) || porDefecto;
+    guardada = localStorage.getItem(CLAVE_GAME_ID);
   } catch {
-    return porDefecto;
+    // Sin almacenamiento: siempre la del entorno.
+  }
+  if (guardada === null) return { tipo: 'porDefecto', gameId: porDefecto };
+  return guardada === '' ? { tipo: 'ninguna' } : { tipo: 'elegida', gameId: guardada };
+}
+
+/** La partida a la que se conecta esta consola (la elegida o la del entorno). Sin partida, la del entorno: quien arranca la consola ya
+ * comprobó antes que hay una (`arranque.ts`). */
+export function gameIdElegido(): string {
+  const e = eleccionDePartida();
+  return e.tipo === 'ninguna' ? (import.meta.env.VITE_GAME_ID ?? 'local') : e.gameId;
+}
+
+const CLAVE_AVISO = 'admin.aviso';
+
+/** Un mensaje para después de recargar (lo enseña `arranque.ts` una vez). */
+export function avisarTrasRecargar(texto: string): void {
+  try {
+    sessionStorage.setItem(CLAVE_AVISO, texto);
+  } catch {
+    // Sin almacenamiento, sin aviso.
   }
 }
 
-export function elegirGameId(gameId: string): void {
+export function tomarAviso(): string | undefined {
   try {
-    localStorage.setItem(CLAVE_GAME_ID, gameId);
+    const texto = sessionStorage.getItem(CLAVE_AVISO) ?? undefined;
+    sessionStorage.removeItem(CLAVE_AVISO);
+    return texto;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `null`: quedarse sin partida (la consola arranca en la pantalla «sin partida»). */
+export function elegirGameId(gameId: string | null): void {
+  try {
+    localStorage.setItem(CLAVE_GAME_ID, gameId ?? '');
   } catch {
     // Sin almacenamiento: la elección no sobrevive a la recarga y la consola vuelve a la partida del entorno.
   }
