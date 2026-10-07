@@ -459,6 +459,18 @@ describe('POST /jugador/partidas/:gameId/membresia (unirse)', () => {
     expect(res.statusCode).toBe(409);
   });
 
+  it('una membresia TERMINADA (partida borrada y recreada con el mismo id) se reabre en vez de dar 409', async () => {
+    await partidaCreada('g1');
+    const auth = await jugadorEn('g1');
+    const usuarioId = identidad!.repositorio.listarMembresiasDePartida('g1').find((m) => m.rol === 'jugador')!.usuarioId;
+    identidad!.repositorio.revocarMembresia(usuarioId, 'g1', '1970-01-01T00:00:00.001Z');
+    expect((await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).statusCode).toBe(403);
+
+    const res = await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: auth });
+    expect(res.statusCode).toBe(201);
+    expect((await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).statusCode).toBe(200);
+  });
+
   it('401 sin sesion; 404 si la partida no esta abierta', async () => {
     await partidaCreada('g1');
     expect((await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia' })).statusCode).toBe(401);

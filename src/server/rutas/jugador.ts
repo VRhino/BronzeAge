@@ -9,7 +9,7 @@
 // Un administrador NO pasa este filtro aunque tenga acceso total a la partida: para jugar hace falta ser
 // jugador (doc 5, "Diferencia entre rol técnico y cargo de juego").
 import type { FastifyInstance } from 'fastify';
-import { puedeJugar } from '../../acceso/rolesDePartida';
+import { esVigente, puedeJugar } from '../../acceso/rolesDePartida';
 import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { campamentosParaElegir, eventosVisiblesParaJugador, proyectarParaJugador } from '../../session/proyecciones/jugador';
 import type { RunnerDePartida } from '../runnerDePartida';
@@ -146,7 +146,10 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
     if (!resuelto) return sinSesion(reply);
     if (!deps.partidas.obtener(gameId)) return partidaNoAbierta(reply, gameId);
 
-    if (deps.identidad.repositorio.obtenerMembresia(resuelto.usuario.id, gameId)) {
+    // Una membresía TERMINADA (`hasta` pasado: p. ej. la cerró el borrado de una partida y se ha vuelto a crear con el mismo id) no cuenta:
+    // se vuelve a abrir como una nueva. Solo la vigente es 409.
+    const previa = deps.identidad.repositorio.obtenerMembresia(resuelto.usuario.id, gameId);
+    if (previa && esVigente(previa, deps.ahora())) {
       return reply.code(409).send({ error: 'ya existe una membresia de este usuario en esta partida' });
     }
     const jugadorId = resuelto.usuario.id;
