@@ -243,6 +243,13 @@ export class RunnerDeBots {
       bandidos: p.bandidos.size,
       salidas: p.salidas.size,
       explorados: p.explorados.size,
+      detalle: {
+        bandidosVistos: [...p.bandidos].map(([bid, b]) => ({ id: bid, x: b.posicion.x, y: b.posicion.y, poder: b.poder, vistoEn: b.vistoEn })),
+        salidasAbiertas: [...p.salidas].map(([campamentoId, x]) => ({ campamentoId, ejercitoId: x.ejercitoId, liderId: x.liderId, hasta: x.hasta, para: x.para })),
+        exploradosEn: [...p.explorados].map(([campamentoId, en]) => ({ campamentoId, en })),
+        residencias: [...p.residencias].map(([heroeId, plazaId]) => ({ heroeId, plazaId })),
+        listos: [...p.listos].map(([heroeId, l]) => ({ heroeId, campamentoId: l.campamentoId, conRacion: l.conRacion, hasta: l.hasta })),
+      },
     }));
   }
 

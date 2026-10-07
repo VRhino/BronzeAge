@@ -92,6 +92,14 @@ export interface PizarraInfo {
   bandidos: number;
   salidas: number;
   explorados: number;
+  /** El detalle de lo anterior, para el panel (instantes en ms de mundo). */
+  detalle: {
+    bandidosVistos: { id: string; x: number; y: number; poder: number; vistoEn: number }[];
+    salidasAbiertas: { campamentoId: string; ejercitoId: string; liderId: string; hasta: number; para: 'cazar' | 'fundar' }[];
+    exploradosEn: { campamentoId: string; en: number }[];
+    residencias: { heroeId: string; plazaId: string }[];
+    listos: { heroeId: string; campamentoId: string; conRacion: boolean; hasta: number }[];
+  };
 }
 
 export interface Salud {

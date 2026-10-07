@@ -173,6 +173,12 @@ describe('canal de control', () => {
     const memoria = await c.pedir({ accion: 'volcarMemoria', heroeId: id });
     expect(memoria.ok).toBe(true);
     expect(memoria.datos).toHaveProperty('memoria');
+    // Las pizarras llevan el detalle además de los recuentos.
+    for (const p of c.estado()!.pizarras) {
+      expect(p.detalle.bandidosVistos).toHaveLength(p.bandidos);
+      expect(p.detalle.salidasAbiertas).toHaveLength(p.salidas);
+      expect(p.detalle.exploradosEn).toHaveLength(p.explorados);
+    }
 
     expect((await c.pedir({ accion: 'retirarBot', heroeId: id })).ok).toBe(true);
     expect(c.estado()?.bots.find((b) => b.heroeId === id)).toMatchObject({ retirado: true, conectado: false });

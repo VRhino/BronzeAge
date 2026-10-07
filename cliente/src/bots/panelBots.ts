@@ -3,7 +3,7 @@
 //
 // El esqueleto se pinta una vez (para no perder el foco de los campos ni los filtros al llegar un estado nuevo) y cada sección
 // se repinta por separado, con un pequeño retardo si lo que llega es un flujo (la actividad en vivo).
-import type { AccionDeBot, BotInfo, ConfigBots, EstadoServicio, FaseBot, FaseServicio, ModoBot, PerfilBot, TipoPerfil } from '@motor/bots/control/contrato';
+import type { AccionDeBot, BotInfo, PizarraInfo, ConfigBots, EstadoServicio, FaseBot, FaseServicio, ModoBot, PerfilBot, TipoPerfil } from '@motor/bots/control/contrato';
 import type { Sigilo } from '@motor/contratos/v1/dto';
 import { ClienteControl, type EstadoConexion } from './clienteControl';
 import { esc } from '../ui/html';
@@ -602,6 +602,26 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
     };
   }
 
+  /** El detalle de una pizarra (bandidos vistos, salidas, anillos explorados, listos y residencias), con nombres y tiempos legibles. */
+  function htmlDetallePizarra(p: PizarraInfo, m: ReturnType<typeof mundo>): string {
+    const d = p.detalle;
+    // Referencia de mundo: lo último que vio cualquier bot.
+    const ref = Math.max(0, ...(estado?.bots ?? []).map((b) => b.vistaEn ?? 0));
+    const hace = (en: number) => `hace ${duracion(Math.max(0, ref - en) / 60_000)}`;
+    const falta = (hasta: number) => (hasta <= ref ? 'vencida' : `faltan ${duracion((hasta - ref) / 60_000)}`);
+    const tabla = (titulo: string, cab: string[], filas: string[][]) =>
+      filas.length
+        ? `<div class="detail-sub"><span class="bots-sub">${titulo} (${filas.length})</span><table class="mini-table"><thead><tr>${cab.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>${filas.map((f) => `<tr>${f.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+        : '';
+    return (
+      tabla('Bandidos vistos', ['Campamento', 'Posición', 'Poder', 'Visto'], d.bandidosVistos.map((b) => [esc(b.id), `${Math.round(b.x)}, ${Math.round(b.y)}`, String(b.poder), hace(b.vistoEn)])) +
+      tabla('Salidas abiertas', ['Campamento', 'Columna', 'Líder', 'Para', 'Espera'], d.salidasAbiertas.map((x) => [esc(x.campamentoId), esc(x.ejercitoId), esc(m.nombre(x.liderId)), x.para === 'fundar' ? 'fundar' : 'cazar', falta(x.hasta)])) +
+      tabla('Listos para salir', ['Bot', 'Campamento', 'Ración', 'Vale'], d.listos.map((x) => [esc(m.nombre(x.heroeId)), esc(x.campamentoId), x.conRacion ? 'llena' : 'no', falta(x.hasta)])) +
+      tabla('Anillos explorados', ['Campamento', 'Último explorador'], d.exploradosEn.map((x) => [esc(x.campamentoId), hace(x.en)])) +
+      tabla('Residencias', ['Bot', 'Reside en'], d.residencias.map((x) => [esc(m.nombre(x.heroeId)), esc(m.nombre(x.plazaId))]))
+    );
+  }
+
   /** Las pizarras de Facciones de verdad, aparte de los bots solitarios sin Facción (una pizarra por bot) y de las vacías. */
   function agruparPizarras() {
     const lista = estado?.pizarras ?? [];
@@ -621,6 +641,7 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
         ${chips(p.bots)}
         <div class="bots-pizarra-datos"><span>Bandidos vistos <b>${p.bandidos}</b></span><span>Salidas abiertas <b>${p.salidas}</b></span><span>Anillos explorados <b>${p.explorados}</b></span></div>
         ${p.encargos.length ? `<div class="chip-row">${p.encargos.map((x) => `<span class="chip" title="encargo de ${esc(m.nombre(x.heroeId))}">${esc(x.clave)} → ${esc(m.nombre(x.heroeId))}</span>`).join('')}</div>` : ''}
+        ${htmlDetallePizarra(p, m)}
       </div>`;
     el.innerHTML = `<h3 data-i="📋">Pizarras de Facción <span class="badge">${facciones.length}</span></h3>${
       facciones.length
@@ -706,7 +727,7 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
           ? `<table class="mini-table"><thead><tr><th>Acción</th><th>Hasta</th></tr></thead><tbody>${esperas.map(([clave, hasta]) => `<tr><td>${esc(clave)}</td><td>${falta(hasta)}</td></tr>`).join('')}</tbody></table>`
           : '<span class="legend-note">ninguna: puede intentarlo todo</span>'
       }</div>
-      <div class="detail-sub"><span class="bots-sub">Pizarra de la Facción</span>${pizarraHtml}</div>
+      <div class="detail-sub"><span class="bots-sub">Pizarra de la Facción</span>${pizarraHtml}${pizarra ? `${htmlDetallePizarra(pizarra, m)}` : ''}</div>
     </div>`;
   }
 
