@@ -126,7 +126,7 @@
 | D54 | **Bots-héroe y humanos conviven en los campamentos y los bots cuentan como residentes** (pila del mercado, demanda de bandidos). De momento: así, retirarlos cuando lleguen los jugadores tiene poca fricción. |
 | D55 | **Los bots tienen sesiones** (presencia, D33): unas horas al día en uno o dos bloques, por semilla; fuera de ellas salen del mundo como un humano. **Lógica fuera del motor.** |
 | D56 | **Llegada escalonada** de bots a lo largo de los días, como llegarían los jugadores. **Fuera del motor.** |
-| D57 | **Tres perfiles**: grupo de amigos (3 que llegan juntos; uno crea la Facción, los otros solicitan), solitario, tardío. En una Facción de bots, el Rey bot acepta las solicitudes. |
+| D57 | **Tres perfiles**: grupo de amigos (5 que llegan juntos, desde 2026-10-07 —antes 3—; uno crea la Facción, los otros solicitan), solitario, tardío. En una Facción de bots, el Rey bot acepta las solicitudes. |
 | D58 | **Batch nuevo**: N bots-héroe llegando escalonados en vez de 100 Facciones fundadas en el tick 0. La línea base y los diarios de batch anteriores quedan cerrados. **Se borra la estructura que no se use en el formato nuevo** (inventario en `Docs/Arquitectura/12` §7). |
 | D59 | **Una Facción de bots que pierde su última plaza no se disuelve**: sus héroes vuelven a residir en un campamento y repiten el ciclo, como un jugador. |
 

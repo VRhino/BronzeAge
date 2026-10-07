@@ -1,13 +1,17 @@
 // Cuándo y cómo llegan los bots (D56, D57): escalonados a lo largo de los días, como llegarían los jugadores. Grupos de
-// tres amigos que llegan juntos, solitarios y, en la segunda mitad, los que llegan tarde. Fuera del motor: lo usa quien da de
+// cinco amigos que llegan juntos, solitarios y, en la segunda mitad, los que llegan tarde (piden entrar en una Facción que ya existe). Fuera del motor: lo usa quien da de
 // alta a los bots (el batch, y el runner remoto cuando exista), que crea cada héroe por el puerto en su minuto.
 import { createRng } from '../worldgen';
 import type { CampamentoElegible, PuertoBot } from './puerto';
 import type { Perfil, RunnerDeBots } from './runner';
 
-/** Reparto de perfiles (D57). ponytail: placeholder hasta medir con batch. */
-const REPARTO = { amigos: 0.5, solitario: 0.3 };
-const AMIGOS_POR_GRUPO = 3;
+/**
+ * Reparto de perfiles (D57), por GRUPO que llega y no por bot: unos amigos son cinco bots, así que por bots salen un 56 % de amigos, un 6 % de
+ * solitarios y un 39 % de tardíos. Pocos solitarios y muchos tardíos dan Facciones grandes y estables, y no una nube de Facciones de uno.
+ * ponytail: placeholder hasta medir con batch.
+ */
+const REPARTO = { amigos: 0.2, solitario: 0.1 };
+export const AMIGOS_POR_GRUPO = 5;
 
 /** Una llegada: en `tick`, los `cuantos` del grupo `grupo` (1 salvo los amigos), con ese perfil. */
 export interface Llegada {
@@ -25,7 +29,10 @@ export function planDeLlegadas(semilla: number, total: number, dias: number): Ll
   let quedan = total;
   for (let grupo = 0; quedan > 0; grupo++) {
     const r = rng();
-    const perfil = r < REPARTO.amigos && quedan >= AMIGOS_POR_GRUPO ? 'amigos' : r < REPARTO.amigos + REPARTO.solitario ? 'solitario' : 'tardio';
+    const sorteo = r < REPARTO.amigos ? 'amigos' : r < REPARTO.amigos + REPARTO.solitario ? 'solitario' : 'tardio';
+    // El primer grupo funda siempre —amigos, o un solitario si no cabe un grupo—: así hay una Facción a la que pedir entrar desde el principio.
+    // Y unos amigos que ya no caben, a tardíos.
+    const perfil = grupo === 0 ? (quedan >= AMIGOS_POR_GRUPO ? 'amigos' : 'solitario') : sorteo === 'amigos' && quedan < AMIGOS_POR_GRUPO ? 'tardio' : sorteo;
     // Los tardíos, en la segunda mitad: cuando ya hay Facciones a las que pedir entrar.
     const desde = perfil === 'tardio' ? minutos / 2 : 0;
     const tick = 1 + Math.floor(desde + rng() * (minutos - desde));

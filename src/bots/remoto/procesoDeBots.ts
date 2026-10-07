@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { RunnerDeBots, type Perfil } from '../runner';
 import { cerebroDeBot } from '../cerebro';
-import { darDeAlta, planDeLlegadas, type Llegada } from '../llegadas';
+import { AMIGOS_POR_GRUPO, darDeAlta, planDeLlegadas, type Llegada } from '../llegadas';
 import { PuertoRemoto, type CuentaBot } from './puertoRemoto';
 import type { AccionDeBot, LlegadaPlan } from '../control/contrato';
 
@@ -169,7 +169,7 @@ export class ProcesoDeBots {
     return this.exclusivo(async () => {
       const registro = this.registro!;
       const antes = registro.bots.length;
-      const llegada: Llegada = { tick: this.ultimoTick, grupo: -1, perfil, cuantos: perfil === 'amigos' ? 3 : 1 };
+      const llegada: Llegada = { tick: this.ultimoTick, grupo: -1, perfil, cuantos: perfil === 'amigos' ? AMIGOS_POR_GRUPO : 1 };
       registro.llegadasExtra = (registro.llegadasExtra ?? 0) + 1;
       try {
         await this.altaDe(llegada);

@@ -375,8 +375,10 @@ mundo hasta que termina. Reglas en el canon, Doc 1.10.6.
 Sobre los campamentos ya implementados (pasos 0-7 del plan de campamentos). Código: `src/bots/cerebro/sinPlaza.ts`,
 `src/bots/llegadas.ts`; el cerebro manda a un bot a `sinPlaza` mientras no reside en ninguna plaza.
 
-- **Llegada (D56, D57)**: `planDeLlegadas(semilla, total, días)` reparte grupos de tres amigos (50 %), solitarios (30 %) y
-  tardíos (20 %, en la segunda mitad). Quien da de alta (el batch, y el runner remoto cuando exista) crea el héroe por el
+- **Llegada (D56, D57)**: `planDeLlegadas(semilla, total, días)` reparte grupos de cinco amigos (20 % de los grupos), solitarios (10 %) y
+  tardíos (70 %, en la segunda mitad; piden entrar en una Facción que ya exista). Por bots son un 56 %, un 6 % y un 39 %. El primer grupo
+  son siempre amigos, para que los tardíos tengan una Facción a la que unirse (cambio del 2026-10-07: antes 3 amigos, 50/30/20 %, y salían
+  muchas Facciones pequeñas). Quien da de alta (el batch, y el runner remoto cuando exista) crea el héroe por el
   puerto (`puerto.crearHeroe`, que en el servidor es el registro con `CODIGO_REGISTRO_BOTS` + `crearHeroe`) en el campamento
   con menos residentes de la pantalla de elección (`puerto.campamentos()`, la misma lista que ve un humano sin héroe).
 - **Facción**: el líder de los amigos y el solitario la crean; los demás piden entrar (los amigos, a la de su líder; el

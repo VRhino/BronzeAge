@@ -155,7 +155,7 @@ describe('canal de control', () => {
     expect(e.salud.peticionesMin).toBeGreaterThan(0);
     expect(e.salud.socketsAbiertos).toBe(3);
     // La actividad llega en vivo, con el resultado de cada comando.
-    expect(c.mensajes.some((m) => m.tipo === 'accion')).toBe(true);
+    await esperar(() => c.mensajes.some((m) => m.tipo === 'accion'));
 
     expect((await c.pedir({ accion: 'pausar' })).ok).toBe(true);
     expect(c.estado()?.fase).toBe('pausado');
