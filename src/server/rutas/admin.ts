@@ -16,6 +16,8 @@ import type { ActorDeComando } from '../../session/comandos/autorizacion';
 import { PartidaYaAbiertaError } from '../registroDePartidas';
 import { FormatoSnapshotNoSoportadoError, LayoutVersionNoCoincideError, WorldgenVersionNoCoincideError } from '../persistenciaPartida';
 import { recogerMetricas } from '../metricas';
+import { claveDeAuditoria } from '../auditoria';
+import { olvidarPartida } from '../identidad/olvidarPartida';
 import { eventosDesde, vistaAdminDeEstado } from '../../session/estado';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
 import { auditarRechazoDeEsquema, ejecutarComandoHttp, ESQUEMA_EJECUTAR_COMANDO, type EjecutarComandoBody } from './comandos';
@@ -121,13 +123,24 @@ const ESQUEMA_TICK = {
 
 const ESQUEMA_BORRAR_PARTIDA = {
   description:
-    'Para la partida por completo y la borra (reloj, snapshot, diario e historial de eventos); la auditoría y los respaldos ya hechos se conservan. ' +
-    'Irreversible. Exige administrador_global.',
+    'Para la partida por completo y la borra: reloj, snapshot, diario, historial de eventos, auditoría y conexiones de tiempo real. ' +
+    'Las membresías humanas se revocan (restaurar un respaldo las devuelve); las de bot se borran, y la cuenta de bot que se queda sin partida también. ' +
+    'Los respaldos se conservan. Exige administrador_global.',
   tags: ['admin'],
   security: SEGURIDAD_ADMIN,
   params: PARAMS_GAME_ID,
   response: {
-    200: { type: 'object', properties: { gameId: { type: 'string' }, borrada: { type: 'boolean' } }, required: ['gameId', 'borrada'] },
+    200: {
+      type: 'object',
+      properties: {
+        gameId: { type: 'string' },
+        borrada: { type: 'boolean' },
+        conexionesCerradas: { type: 'integer' },
+        membresiasRevocadas: { type: 'integer' },
+        cuentasDeBotBorradas: { type: 'integer' },
+      },
+      required: ['gameId', 'borrada', 'conexionesCerradas', 'membresiasRevocadas', 'cuentasDeBotBorradas'],
+    },
     401: ERROR_RESPUESTA,
     403: ERROR_RESPUESTA,
     404: ERROR_RESPUESTA,
@@ -473,7 +486,13 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       return sinPermiso(reply, 'borrar una partida exige rol administrador_global');
     }
     if (!(await deps.partidas.eliminar(gameId))) return reply.code(404).send({ error: `la partida '${gameId}' no existe.` });
-    return reply.send({ gameId, borrada: true });
+    const conexionesCerradas = deps.hub.cerrarPartida(gameId);
+    const { revocadas, cuentasDeBotBorradas } = olvidarPartida(deps.identidad.repositorio, gameId, deps.ahora());
+    // La auditoría se escribe en cola: se drena antes de borrarla para que una línea pendiente no la vuelva a crear.
+    await deps.auditoria.drenar();
+    await deps.almacen.borrar(claveDeAuditoria(gameId));
+    console.log(`[partidas] '${gameId}' borrada por ${resuelto.actor.usuarioId}: ${conexionesCerradas} conexiones, ${revocadas} membresías revocadas, ${cuentasDeBotBorradas} cuentas de bot borradas`);
+    return reply.send({ gameId, borrada: true, conexionesCerradas, membresiasRevocadas: revocadas, cuentasDeBotBorradas });
   });
 
   app.post<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/tick', { schema: ESQUEMA_TICK }, async (request, reply) => {

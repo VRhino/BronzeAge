@@ -120,19 +120,24 @@ export class RegistroDePartidas {
     return runner;
   }
 
+  /** Cierra una partida abierta sin borrarla: para su reloj, deja drenar la cola y la suelta (restaurar un respaldo lo exige). */
+  async cerrarUna(gameId: string): Promise<void> {
+    const runner = this.runners.get(gameId);
+    if (!runner) return;
+    runner.detenerRelojDeMundo();
+    await runner.esperarColaVacia();
+    this.runners.delete(gameId);
+  }
+
   /**
-   * Para la partida por completo y la borra: reloj, cola, snapshot, diario e historial de eventos. La auditoría se conserva (queda
-   * quién la borró) y los respaldos ya hechos también. `false` si no existía ni abierta ni en disco.
+   * Para la partida por completo y la borra: reloj, cola, snapshot, diario e historial de eventos. La auditoría y el acceso los
+   * borra quien llama (la ruta, que los conoce); los respaldos se conservan como red de seguridad. `false` si no existía ni abierta ni en disco.
    */
   async eliminar(gameId: string): Promise<boolean> {
-    const abierta = this.runners.get(gameId);
+    const abierta = this.runners.has(gameId);
     const enDisco = (await listarPartidas(this.almacen)).some((p) => p.gameId === gameId);
     if (!abierta && !enDisco) return false;
-    if (abierta) {
-      abierta.detenerRelojDeMundo();
-      await abierta.esperarColaVacia();
-      this.runners.delete(gameId);
-    }
+    await this.cerrarUna(gameId);
     for (const clave of [claveDeSnapshot(gameId), claveDeDiario(gameId), claveDeEventos(gameId)]) await this.almacen.borrar(clave);
     return true;
   }

@@ -85,4 +85,7 @@ export interface Membresia {
   rol: RolTecnico;
   desde: string;
   hasta?: string;
+  /** Por qué terminó, si no fue una revocación normal: `partida_borrada` la pone el borrado de la partida, y restaurarla de un
+   * respaldo la reactiva (el jugador vuelve a su héroe). */
+  motivoFin?: 'partida_borrada';
 }

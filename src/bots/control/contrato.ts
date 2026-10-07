@@ -148,7 +148,8 @@ export type ComandoDeControl =
   | { accion: 'pausar' }
   | { accion: 'reanudar' }
   | { accion: 'parar' }
-  | { accion: 'reiniciarRegistro' }
+  /** Sin `partida`, la de la última configuración. Con ella, la de esa partida (la consola la borra al borrar la partida). */
+  | { accion: 'reiniciarRegistro'; partida?: string }
   | { accion: 'ajustar'; cadaMs: number }
   | { accion: 'forzarLlegada'; perfil: TipoPerfil }
   | { accion: 'modoBot'; heroeId: string; modo: ModoBot }

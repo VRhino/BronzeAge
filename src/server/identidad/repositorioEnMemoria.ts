@@ -125,5 +125,25 @@ export function crearRepositorioIdentidadEnMemoria(opciones: OpcionesRepositorio
       notificar();
       return true;
     },
+    borrarMembresia(usuarioId, gameId) {
+      if (membresias.delete(`${usuarioId}:${gameId}`)) notificar();
+    },
+    listarMembresiasDeUsuario(usuarioId) {
+      return [...membresias.values()].filter((m) => m.usuarioId === usuarioId);
+    },
+    borrarUsuario(usuarioId) {
+      usuarios.delete(usuarioId);
+      identidadesPorUsuario.delete(usuarioId);
+      for (let i = identidadesEnOrden.length - 1; i >= 0; i--) {
+        const v = identidadesEnOrden[i]!;
+        if (v.usuarioId !== usuarioId) continue;
+        identidadesEnOrden.splice(i, 1);
+        identidadesPorClave.delete(`${v.proveedor}:${v.sujetoId}`);
+        credencialesLocales.delete(v.sujetoId);
+      }
+      for (const [id, s] of sesiones) if (s.usuarioId === usuarioId) sesiones.delete(id);
+      for (const [clave, m] of membresias) if (m.usuarioId === usuarioId) membresias.delete(clave);
+      notificar();
+    },
   };
 }

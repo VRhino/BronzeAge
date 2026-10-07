@@ -99,7 +99,7 @@ export class ServicioDeBots {
       case 'parar':
         return this.parar();
       case 'reiniciarRegistro':
-        return this.reiniciarRegistro();
+        return this.reiniciarRegistro(orden.partida);
       case 'ajustar':
         this.enMarcha().ajustarCada(positivo(orden.cadaMs, 'cadaMs'));
         this.config = { ...this.config!, cadaMs: orden.cadaMs };
@@ -177,12 +177,16 @@ export class ServicioDeBots {
     await this.proceso?.parar();
   }
 
-  /** Borra el registro de cuentas de la última partida: los bots que tenía quedan en el mundo sin quien los maneje. */
-  reiniciarRegistro(): void {
-    this.exigir('inactivo', 'error');
-    if (!this.config) throw new Error('no hay una partida configurada');
-    rmSync(this.rutaRegistro(this.config.partida), { force: true });
-    this.registrar('info', `registro de '${this.config.partida}' borrado`);
+  /**
+   * Borra el registro de cuentas de una partida (por defecto, la de la última configuración): los bots que tenía quedan en el mundo
+   * sin quien los maneje. Mientras juega no se puede borrar el de la partida en la que juega.
+   */
+  reiniciarRegistro(partida = this.config?.partida): void {
+    if (!partida) throw new Error('no hay una partida configurada');
+    if (this.proceso && this.config?.partida === partida) throw new Error(`está jugando en '${partida}': hay que pararlo antes`);
+    if (!/^[A-Za-z0-9_.-]+$/.test(partida)) throw new Error(`'${partida}' no es un id de partida`);
+    rmSync(this.rutaRegistro(partida), { force: true });
+    this.registrar('info', `registro de '${partida}' borrado`);
   }
 
   /** Al arrancar el proceso: si estaba en marcha antes de caerse, vuelve a ponerse. */

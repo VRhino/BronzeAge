@@ -33,6 +33,7 @@ import { RegistroDeAuditoria } from './auditoria';
 import { TareaDeMantenimiento, type ConfiguracionMantenimiento } from './mantenimiento';
 import { registrarRutasDeSesion } from './rutas/sesiones';
 import { registrarRutasDeAdmin } from './rutas/admin';
+import { registrarRutasDeRespaldos } from './rutas/respaldos';
 import { registrarRutasDeJugador } from './rutas/jugador';
 import { registrarRutaDeTiempoReal } from './rutas/tiempoReal';
 import { registrarRutaDeBalance } from './rutas/balance';
@@ -148,6 +149,8 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     auditoria: new RegistroDeAuditoria(almacen, ahora),
     codigoRegistro: opciones.codigoRegistro,
     codigoRegistroBots: opciones.codigoRegistroBots,
+    almacen,
+    directorioRespaldos: opciones.almacen ? undefined : opciones.directorio,
     servidoresBatalla,
   };
 
@@ -178,6 +181,7 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     async (v1) => {
       registrarRutasDeSesion(v1, deps);
       registrarRutasDeAdmin(v1, deps);
+      registrarRutasDeRespaldos(v1, deps);
       registrarRutasDeJugador(v1, deps);
       registrarRutaDeTiempoReal(v1, deps);
       // El servidor de batalla de Conquest (doc 02 §3.2-§3.4): su propia credencial, ni de admin ni de jugador.

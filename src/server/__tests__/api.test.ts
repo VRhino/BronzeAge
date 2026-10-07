@@ -184,7 +184,7 @@ describe('DELETE /admin/partidas/:gameId', () => {
     const res = await app.inject({ method: 'DELETE', url: '/v1/admin/partidas/g1', headers: admin });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ gameId: 'g1', borrada: true });
+    expect(res.json()).toMatchObject({ gameId: 'g1', borrada: true });
     const lista = await app.inject({ method: 'GET', url: '/v1/admin/partidas', headers: admin });
     expect(lista.json().partidas.map((p: { gameId: string }) => p.gameId)).toEqual(['g2']);
     expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin })).statusCode).toBe(404);

@@ -148,6 +148,43 @@ export async function listarRespaldos(directorio: string, gameId: string): Promi
   return respaldos.sort((a, b) => (a.archivo < b.archivo ? 1 : -1));
 }
 
+/** Un nombre de respaldo válido (`<gameId>--<sello>.json`): sin rutas, así que no puede salir del directorio de respaldos. */
+const ARCHIVO_RESPALDO = /^([A-Za-z0-9_.-]+?)--(\d{4}-\d{2}-\d{2}T[\d.-]+Z)\.json$/;
+
+/** El `gameId` de un nombre de respaldo, o `undefined` si el nombre no es de un respaldo (o trae una ruta). */
+export function gameIdDeRespaldo(archivo: string): string | undefined {
+  return ARCHIVO_RESPALDO.exec(archivo)?.[1];
+}
+
+/** Los respaldos de TODAS las partidas, también de las ya borradas, del más reciente al más antiguo. */
+export async function listarTodosLosRespaldos(directorio: string): Promise<Respaldo[]> {
+  let archivos: string[];
+  try {
+    archivos = await readdir(join(directorio, DIRECTORIO_RESPALDOS));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+  const gameIds = new Set(archivos.map(gameIdDeRespaldo).filter((g): g is string => g !== undefined));
+  const porPartida = await Promise.all([...gameIds].map((g) => listarRespaldos(directorio, g)));
+  return porPartida.flat().sort((a, b) => (a.momento < b.momento ? 1 : -1));
+}
+
+/** Borra un respaldo con sus adjuntos. `false` si no existía. */
+export async function borrarRespaldo(directorio: string, archivo: string): Promise<boolean> {
+  const m = ARCHIVO_RESPALDO.exec(archivo);
+  if (!m) return false;
+  const destinoDir = join(directorio, DIRECTORIO_RESPALDOS);
+  try {
+    await stat(join(destinoDir, archivo));
+  } catch {
+    return false;
+  }
+  const base = archivo.slice(0, -SUFIJO_PARTIDA.length);
+  for (const sufijo of [SUFIJO_PARTIDA, SUFIJO_AUDITORIA, SUFIJO_EVENTOS, SUFIJO_DIARIO]) await rm(join(destinoDir, base + sufijo), { force: true });
+  return true;
+}
+
 /** Se lanza cuando el respaldo que se pide restaurar no existe, o existe pero no se puede cargar. En ambos
  * casos el snapshot vigente queda SIN TOCAR — es la garantía que hace segura la operación. */
 export class RespaldoInservibleError extends Error {

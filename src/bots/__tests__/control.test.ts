@@ -199,6 +199,9 @@ describe('canal de control', () => {
     const registro = join(directorio, 'registros', 'bots-g1.json');
     expect(existsSync(registro)).toBe(true);
     expect((await c.pedir({ accion: 'reiniciarRegistro' })).ok).toBe(false);
+    // El de otra partida sí, aunque esté jugando; y un id con ruta, no.
+    expect((await c.pedir({ accion: 'reiniciarRegistro', partida: 'otra' })).ok).toBe(true);
+    expect((await c.pedir({ accion: 'reiniciarRegistro', partida: '../g1' })).ok).toBe(false);
     await c.pedir({ accion: 'parar' });
     expect((await c.pedir({ accion: 'reiniciarRegistro' })).ok).toBe(true);
     expect(existsSync(registro)).toBe(false);

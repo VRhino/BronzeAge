@@ -19,6 +19,8 @@ import type { RegistroDeAuditoria } from '../auditoria';
 import { idDeMapa, instanteDeTick } from '../../session/estado';
 import type { Instante } from '../../domain/tiempo';
 
+import type { AlmacenDeObjetos } from '../almacen/almacenDeObjetos';
+
 export interface DependenciasDeRutas {
   identidad: ContextoAutenticacion;
   administradores: DirectorioDeAdministradores;
@@ -34,6 +36,11 @@ export interface DependenciasDeRutas {
   codigoRegistro?: string;
   /** Código con el que `POST /v1/registro` da de alta una cuenta de BOT (doc 12 §8.3). `undefined` = no hay altas de bot. */
   codigoRegistroBots?: string;
+  /** El almacén de la persistencia: lo usa el borrado de una partida para quitar su auditoría. */
+  almacen: AlmacenDeObjetos;
+  /** Directorio de datos en disco, para los respaldos (`respaldos.ts`, que son de archivos). `undefined` con un almacén remoto:
+   * ahí los respaldos son del proveedor y las rutas de respaldos responden que no hay. */
+  directorioRespaldos?: string;
   /** Servidores de batalla de Conquest que pueden hablar por `/v1/batallas/*` (doc 02 §3.3). Vacío = ninguno. */
   servidoresBatalla: readonly ServidorDeBatalla[];
 }

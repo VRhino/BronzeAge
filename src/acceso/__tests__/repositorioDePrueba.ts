@@ -45,5 +45,14 @@ export function repositorioDePrueba(): RepositorioIdentidad {
       membresias.set(`${usuarioId}:${gameId}`, { ...m, hasta });
       return true;
     },
+    borrarMembresia: (usuarioId, gameId) => void membresias.delete(`${usuarioId}:${gameId}`),
+    listarMembresiasDeUsuario: (usuarioId) => [...membresias.values()].filter((m) => m.usuarioId === usuarioId),
+    borrarUsuario: (usuarioId) => {
+      usuarios.delete(usuarioId);
+      identidadPorUsuario.delete(usuarioId);
+      for (const [clave, id] of identidades) if (id === usuarioId) identidades.delete(clave);
+      for (const [id, s] of sesiones) if (s.usuarioId === usuarioId) sesiones.delete(id);
+      for (const [clave, m] of membresias) if (m.usuarioId === usuarioId) membresias.delete(clave);
+    },
   };
 }

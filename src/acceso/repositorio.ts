@@ -32,4 +32,10 @@ export interface RepositorioIdentidad {
   /** Revoca una membresía poniéndole `hasta` (no la borra: el historial se conserva, doc 5). `false` si no
    * había ninguna para ese usuario+partida. */
   revocarMembresia(usuarioId: string, gameId: string, hasta: string): boolean;
+  /** Borra la membresía del todo (sin historial). Solo para cuentas de bot de una partida borrada. */
+  borrarMembresia(usuarioId: string, gameId: string): void;
+  /** Las membresías de un usuario, en cualquier partida. */
+  listarMembresiasDeUsuario(usuarioId: string): Membresia[];
+  /** Borra un usuario con sus identidades, su cuenta local y sus sesiones. Solo para cuentas de bot que se quedan sin partida. */
+  borrarUsuario(usuarioId: string): void;
 }

@@ -31,6 +31,15 @@ export class HubDeDifusion {
     if (conexiones.size === 0) this.partidas.delete(gameId);
   }
 
+  /** Cierra todos los sockets de una partida (se ha borrado). El código 4404 dice al cliente por qué, y que no reconecte. */
+  cerrarPartida(gameId: string): number {
+    const conexiones = this.partidas.get(gameId);
+    if (!conexiones) return 0;
+    this.partidas.delete(gameId);
+    for (const socket of conexiones.keys()) socket.close(4404, 'partida borrada');
+    return conexiones.size;
+  }
+
   suscribir(gameId: string, socket: WebSocket, canal: string): void {
     this.partidas.get(gameId)?.get(socket)?.canales.add(canal);
   }
