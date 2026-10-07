@@ -6,12 +6,13 @@ import {
   borrarLoadout as borrarDelHeroe,
   guardarLoadout as guardarEnHeroe,
   liderazgoDeLoadout,
+  ordenarEscuadras as ordenarEnHeroe,
   repartirAtributos,
   retirarGuarnicion as retirarEnHeroe,
 } from '../../engine/heroe';
 import { esResidente } from '../../engine/pertenencia';
 import { guardarEnAlmacenPersonal as guardarEngine, sacarDelAlmacenPersonal as sacarEngine } from '../../engine/almacenPersonal';
-import { capacidadCargaDe } from '../../engine/ejercitos';
+import { capacidadCargaDe, columnaDe } from '../../engine/ejercitos';
 import { exito } from './tipos';
 import { comando, exigirColumnaDe, exigirJugador } from './ayudas';
 import { evento } from './eventos';
@@ -123,4 +124,16 @@ export const sacarDelAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido: 
     ],
     { movido: r.movido }
   );
+});
+
+export interface ParamsOrdenarEscuadras {
+  escuadronIds: string[];
+}
+
+/** Ordena las escuadras propias (`ordenarEscuadras` del motor): el orden en que entran en combate, también en su columna si va en una. */
+export const ordenarEscuadras = comando<ParamsOrdenarEscuadras, undefined>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const r = ordenarEnHeroe(heroe, columnaDe(estado.ejercitos, heroe.id), params.escuadronIds);
+  const columna = r.columna;
+  return exito({ ...conHeroe(estado, r.heroe), ejercitos: columna ? estado.ejercitos.map((e) => (e.id === columna.id ? columna : e)) : estado.ejercitos }, []);
 });

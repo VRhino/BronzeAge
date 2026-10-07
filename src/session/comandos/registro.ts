@@ -13,7 +13,7 @@ import { responderSolicitud, solicitarIngreso } from './ingresoEnFaccion';
 import { dejarFaccion } from './dejarFaccion';
 import { crearHeroe } from './crearHeroe';
 import { abrirAlijo, aportarARefundacion, comprarCaravanaDeRefundacion, comprarEnCampamento, pedirPrestamo, reclutarEnCampamento, reponerPrestamo, retirarDeRefundacion } from './mercenarios';
-import { asignarGuarnicion, borrarLoadout, guardarEnAlmacenPersonal, guardarLoadout, repartirPuntos, retirarGuarnicion, sacarDelAlmacenPersonal } from './heroe';
+import { asignarGuarnicion, borrarLoadout, guardarEnAlmacenPersonal, guardarLoadout, ordenarEscuadras, repartirPuntos, retirarGuarnicion, sacarDelAlmacenPersonal } from './heroe';
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, dejarResidencia, admitirOtrasFacciones, designarCapital, residirEnCampamento } from './cargos';
 import { proponerAnexion, responderAnexion, retirarAnexion } from './anexion';
 import { proponerFusion, responderFusion, retirarFusion } from './fusion';
@@ -80,6 +80,7 @@ const MANEJADORES = {
   asignarGuarnicion,
   guardarEnAlmacenPersonal,
   sacarDelAlmacenPersonal,
+  ordenarEscuadras,
   retirarGuarnicion,
   activarPolitica,
   asignarCargoLocal,

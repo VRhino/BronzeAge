@@ -348,6 +348,7 @@ campamento retira la tropa prestada a quien deja de residir en él (D45), esté 
 | `borrarLoadout` | `loadoutId` | — | no existe |
 | `asignarGuarnicion` | `squadId` | — | no reside aquí; escuadra fuera de su campamento; supera el cupo |
 | `retirarGuarnicion` | `squadId` | — | no está en guarnición |
+| `ordenarEscuadras` | `escuadronIds` | — | escuadra ajena o repetida. Las pedidas primero, en ese orden; el resto detrás. Es el orden en que entran en combate (Unity: `heroe.escuadrones`; con números: `ejercito.escuadronIds`, donde las suyas ocupan sus mismos huecos). 2026-10-07 |
 
 - Una `Membresia` sin héroe no puede hacer nada más en la partida hasta crearlo. Crear el héroe es un
   comando aparte de `POST .../membresia` porque necesita datos del jugador (nombre, clase, aspecto).

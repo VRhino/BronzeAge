@@ -163,3 +163,23 @@ export function borrarLoadout(heroe: Heroe, loadoutId: string): Heroe {
   if (!heroe.loadouts.some((l) => l.id === loadoutId)) throw new HeroeInvalidoError(`El loadout ${loadoutId} no existe.`);
   return { ...heroe, loadouts: heroe.loadouts.filter((l) => l.id !== loadoutId) };
 }
+
+/**
+ * Pone las escuadras del héroe en el orden que elige (2026-10-07): las de `ids` primero, en ese orden, y el resto detrás como estaban. Es el
+ * orden en que entran en combate: la batalla de Unity las toma de `heroe.escuadrones` y el combate con números de `columna.escuadronIds`. En la
+ * columna, las suyas ocupan los mismos huecos que ya tenían, en el orden nuevo; las de otros héroes no se mueven.
+ */
+export function ordenarEscuadras<E extends { escuadronIds: string[] }>(heroe: Heroe, columna: E | undefined, ids: readonly string[]): { heroe: Heroe; columna: E | undefined } {
+  if (new Set(ids).size !== ids.length) throw new HeroeInvalidoError('Una escuadra aparece dos veces en el orden.');
+  const suyas = new Map(heroe.escuadrones.map((e) => [e.id, e]));
+  const ajena = ids.find((id) => !suyas.has(id));
+  if (ajena !== undefined) throw new HeroeInvalidoError(`La escuadra ${ajena} no es tuya.`);
+  const pedidas = new Set(ids);
+  const escuadrones = [...ids.map((id) => suyas.get(id)!), ...heroe.escuadrones.filter((e) => !pedidas.has(e.id))];
+  if (!columna) return { heroe: { ...heroe, escuadrones }, columna };
+  const enLaColumna = new Set(columna.escuadronIds);
+  const propias = escuadrones.filter((e) => enLaColumna.has(e.id)).map((e) => e.id);
+  let i = 0;
+  const escuadronIds = columna.escuadronIds.map((id) => (suyas.has(id) ? propias[i++]! : id));
+  return { heroe: { ...heroe, escuadrones }, columna: { ...columna, escuadronIds } };
+}
