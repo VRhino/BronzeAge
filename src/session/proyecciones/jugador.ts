@@ -47,6 +47,7 @@ import { estaHerido, guarnicionOcupada, liderazgoDeLoadout } from '../../engine/
 import { costeLiderazgo } from '../../engine/liderazgo';
 import { RED_VACIA, tramosDeRed } from '../../engine/redCaminos';
 import { escenaDeCampamento } from './escenaCampamento';
+import { cupoRestanteHoy, precioDeVenta } from '../../engine/mercadoMercenario';
 import type { EscenaCampamento } from '../../contratos/v1/dto';
 import { heroesNombrados } from '../../domain/eventos';
 import type {
@@ -164,6 +165,22 @@ export type HeroeProyectado = Omit<Heroe, 'plazasRecordadas' | 'exploracionPerso
   /** La plaza donde reside, o `null` si es huérfano o reside en un campamento: un dato suyo, esté donde esté. */
   residenciaId: string | null;
 };
+
+/** Precio unitario y cupo restante de cada bien que el campamento tiene en venta, para este héroe (quien no reside solo compra trigo). */
+function mercadoDelCampamento(campamento: CampamentoMercenarios, heroe: Heroe, asentamientos: Asentamiento[], instante: Instante): { precios: Record<string, number>; cupoRestante: Record<string, number> } {
+  const reside = campamento.residentesIds.includes(heroe.id);
+  const precios: Record<string, number> = {};
+  const cupoRestante: Record<string, number> = {};
+  for (const [recurso, stock] of Object.entries(campamento.mercado ?? {})) {
+    if (!(stock > 0) || recurso === 'oro' || (!reside && recurso !== 'trigo')) continue;
+    const precio = precioDeVenta(recurso, asentamientos);
+    if (precio <= 0) continue;
+    precios[recurso] = precio;
+    const cupo = cupoRestanteHoy(heroe, reside, recurso, instante);
+    if (Number.isFinite(cupo)) cupoRestante[recurso] = Math.max(0, cupo);
+  }
+  return { precios, cupoRestante };
+}
 
 function heroeProyectado(heroe: Heroe, asentamientos: readonly Asentamiento[]): HeroeProyectado {
   const { plazasRecordadas, exploracionPersonal, ...resto } = heroe;
@@ -494,6 +511,10 @@ export interface ProyeccionJugador {
   campamentosMercenarios: CampamentoMercenarios[];
   /** La planta del campamento de mercenarios donde está dentro (D73): lo único cuyo interior viaja, como el de la plaza que pisa. Ausente fuera. */
   escenaCampamento?: EscenaCampamento;
+  /** El mostrador del campamento donde está dentro (2026-10-07): lo que cuesta una unidad de cada bien en venta (`precioDeVenta`: el coste de n
+   * unidades es `ceil(n × precio)`) y lo que le queda del cupo de hoy (D41; ausente = sin cupo). Ausente fuera. Así el cliente enseña el total
+   * antes de comprar sin copiar la fórmula; quien cobra sigue siendo el comando. */
+  mercadoCampamento?: { precios: Record<string, number>; cupoRestante: Record<string, number> };
   /** Los alijos de exploración a la vista de su columna que aún no abrió (D62); solo para quien puede abrirlos (D63). */
   alijos: Alijo[];
   /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
@@ -1019,7 +1040,7 @@ export function proyectarParaJugador(
     ...(ubicacion.tipo === 'mercenarios'
       ? (() => {
           const dentro = estado.campamentosMercenarios.find((c) => c.id === ubicacion.campamentoId);
-          return dentro ? { escenaCampamento: escenaDeCampamento(dentro) } : {};
+          return dentro ? { escenaCampamento: escenaDeCampamento(dentro), ...(jugador ? { mercadoCampamento: mercadoDelCampamento(dentro, jugador, estado.asentamientos, instanteDeTick(estado.tick)) } : {}) } : {};
         })()
       : {}),
     historial: estado.historialHeroes[heroeId] ?? [],

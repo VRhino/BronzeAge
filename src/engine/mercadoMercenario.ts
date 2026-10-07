@@ -89,6 +89,13 @@ export const precioDeVenta = (recurso: string, asentamientos: Asentamiento[]): n
 /** El día de mundo de un instante: el cupo de compra (D41) se cuenta por día. */
 const diaDe = (instante: Instante): number => Math.floor(instante / 86_400_000);
 
+/** Lo que aún puede comprar hoy de un bien quien reside en el campamento (cupo diario de madera y piedra, D41). `Infinity` si no tiene cupo. */
+export function cupoRestanteHoy(heroe: Heroe, reside: boolean, recurso: string, instante: Instante): number {
+  if (!reside || !(recurso in MERCENARIOS.mercado.cupoDiario)) return Infinity;
+  const comprado = heroe.cupoCampamento?.dia === diaDe(instante) ? heroe.cupoCampamento.comprado : {};
+  return MERCENARIOS.mercado.cupoDiario[recurso]! - (comprado[recurso] ?? 0);
+}
+
 /**
  * Comprar en el mercado de un campamento (Doc 1.9b), pagando con el oro del almacén personal. Sirve lo que puede en vez de fallar cuando
  * se pide de más —el tope sale del stock, del cupo del día, del oro y del sitio donde va—, pero falla si no puede servir nada. El oro
@@ -116,9 +123,7 @@ export function comprarEnCampamento(
   if (precio <= 0) throw new MercenariosInvalidoError('Ese bien no se vende en el campamento.');
   const coste = (n: number) => Math.ceil(n * precio);
 
-  const dia = diaDe(instante);
-  const comprado = heroe.cupoCampamento?.dia === dia ? heroe.cupoCampamento.comprado : {};
-  const cupo = reside && recurso in MERCENARIOS.mercado.cupoDiario ? MERCENARIOS.mercado.cupoDiario[recurso]! - (comprado[recurso] ?? 0) : Infinity;
+  const cupo = cupoRestanteHoy(heroe, reside, recurso, instante);
   const stock = Math.floor(campamento.mercado[recurso] ?? 0);
   // Se paga primero con el oro de botín (D27: el mercado del campamento es uno de sus dos destinos), luego con el del almacén.
   const botin = heroe.oroDeBotin ?? 0;
@@ -149,6 +154,8 @@ export function comprarEnCampamento(
   const almacenPersonal: Record<string, number> = { ...heroe.almacenPersonal, oro: (heroe.almacenPersonal?.['oro'] ?? 0) - delAlmacen(cantidad) };
   if (!enCarro) almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cantidad;
   if (almacenPersonal['oro'] === 0) delete almacenPersonal['oro'];
+  const dia = diaDe(instante);
+  const comprado = heroe.cupoCampamento?.dia === dia ? heroe.cupoCampamento.comprado : {};
   const cupoCampamento = reside && recurso in MERCENARIOS.mercado.cupoDiario ? { dia, comprado: { ...comprado, [recurso]: (comprado[recurso] ?? 0) + cantidad } } : heroe.cupoCampamento;
   return {
     campamento: { ...campamento, mercado: { ...campamento.mercado, [recurso]: (campamento.mercado[recurso] ?? 0) - cantidad } },

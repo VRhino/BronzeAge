@@ -107,6 +107,10 @@ export interface PayloadAtaqueCampamento {
   nivelCampamento: number;
   poderCampamento: number;
   atacante: LadoDelInforme;
+  /** Si cae (2026-10-07): el oro de botín que gana cada héroe de la columna (`botinDeBandidos`, D22, D26). Lo pone el comando. */
+  oroPorHeroe?: Record<string, number>;
+  /** Si aguanta (2026-10-07): lo que la columna pierde de su carro (la mitad, `trasDerrota`). Lo pone el comando. */
+  carroPerdido?: Record<string, number>;
 }
 
 export interface ResultadoCombate {

@@ -51,6 +51,7 @@ import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
 import type { Asentamiento, Ejercito, Point } from '../../domain/types';
 import { distancia } from '../../world/geometria';
 import type { Instante } from '../../domain/tiempo';
+import type { PayloadAtaqueCampamento } from '../../engine/combate';
 import { agendarReaparicionBandidos, botinDeBandidos } from '../../engine/bandidos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
@@ -245,9 +246,14 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     const asalto = atacarCampamento(conTropaDe(estado, atacante), campamento, [...estado.facciones], heridos, ctx.rng, estado.heroes);
     const trasAsalto = conColumnas(estado, [asalto.ejercito]);
     // El botín (D22, D26, D27): oro para cada héroe de la columna, a su oro de botín.
-    const conBotin = asalto.destruido
-      ? botinDeBandidos(trasAsalto.heroes, atacante.participantes.map((p) => p.heroeId), campamento.nivel, ctx.instante).heroes
-      : trasAsalto.heroes;
+    const botin = asalto.destruido ? botinDeBandidos(trasAsalto.heroes, atacante.participantes.map((p) => p.heroeId), campamento.nivel, ctx.instante) : undefined;
+    const conBotin = botin ? botin.heroes : trasAsalto.heroes;
+    // El informe cuenta también lo que se gana o se pierde (2026-10-07): el oro de cada héroe si cae, la mitad del carro si aguanta.
+    const informados = asalto.eventos.map((e) =>
+      typeof e !== 'string' && (e.codigo === 'combate.campamento_destruido' || e.codigo === 'combate.ataque_campamento_fallido')
+        ? { ...e, payload: { ...(e.payload as PayloadAtaqueCampamento), ...(botin ? { oroPorHeroe: botin.oro } : { carroPerdido: asalto.carroPerdido }) } }
+        : e
+    );
     const siguiente: GameSessionState = {
       ...trasAsalto,
       facciones: asalto.facciones,
@@ -262,7 +268,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     };
     return exito(
       conHistorialDeJugador(siguiente, params.heroeId, `Ataca el campamento de bandidos ${campamento.id}.`),
-      desdeCrudos(ctx, asalto.eventos, atacante.origenAsentamientoId)
+      desdeCrudos(ctx, informados, atacante.origenAsentamientoId)
     );
   }
 

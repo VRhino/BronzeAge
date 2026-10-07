@@ -1409,13 +1409,13 @@ export function atacarCampamento(
   heridos: ReadonlySet<string>,
   rng: RandomFn,
   heroes: readonly Heroe[] = []
-): { ejercito: EjercitoConTropa; destruido: boolean; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[] } {
+): { ejercito: EjercitoConTropa; destruido: boolean; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[]; carroPerdido: Record<string, number> } {
   validarAlcance(ejercito, campamento.posicion, heridos, 'atacar');
   const r = atacarCampamentoConColumna(enBatalla(ejercito, heridos, heroes), campamento, facciones, rng);
   const tras = conApartadas(r.ejercito, ejercito);
-  if (r.destruido) return { ...r, ejercito: tras, vencidos: [] };
+  if (r.destruido) return { ...r, ejercito: tras, vencidos: [], carroPerdido: {} };
   const secuela = trasDerrota(tras);
-  return { ...r, ejercito: secuela.perdedor, vencidos: secuela.vencidos };
+  return { ...r, ejercito: secuela.perdedor, vencidos: secuela.vencidos, carroPerdido: secuela.botin };
 }
 
 /** Lo que exige asediar una plaza (Doc 5.12.4): que sea de otra Facción, estar a distancia de choque con algún héroe

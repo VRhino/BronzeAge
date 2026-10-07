@@ -321,7 +321,9 @@ combate.resuelto                 (asedios y encuentros en campo)
   payload: { ganador: 'atacante'|'defensor', poderAtacante, poderDefensor, tropaIds[],
              atacante: LadoDelInforme, defensor: LadoDelInforme }
 combate.campamento_destruido / combate.ataque_campamento_fallido      (columna contra bandidos)
-  payload: { atacanteId, campamentoId, nivelCampamento, poderCampamento, atacante: LadoDelInforme }
+  payload: { atacanteId, campamentoId, nivelCampamento, poderCampamento, atacante: LadoDelInforme,
+             oroPorHeroe?: { heroeId: oro }      (si cae: el oro de botín que gana cada héroe, 2026-10-07)
+             carroPerdido?: { recurso: n } }     (si aguanta: lo que la columna pierde de su carro, 2026-10-07)
 ```
 
 `heroesIds` dice de quién es cada lado: un cliente enseña el informe a quien está en él.
@@ -378,6 +380,11 @@ campamento retira la tropa prestada a quien deja de residir en él (D45), esté 
 
 Todos van por `POST .../comandos` como el resto. «En el campamento» = dentro (`ubicacion.tipo === 'mercenarios'`) o con su
 columna a la puerta (`MOVIMIENTO.radioPuerta`).
+
+Estando dentro, la proyección trae `mercadoCampamento: { precios, cupoRestante }` (2026-10-07): el precio de UNA unidad de cada bien que te
+venden (el coste de n es `ceil(n × precio)`; se paga primero con el oro de botín y luego con el oro del almacén personal) y lo que te queda
+hoy del cupo diario (D41; sin entrada = sin cupo). Es para enseñar el total antes de comprar: quien cobra es `comprarEnCampamento`, que
+devuelve `{ cantidad, oro }` con lo que sirvió de verdad.
 
 | Comando | Parámetros | Devuelve | Notas |
 |---|---|---|---|
