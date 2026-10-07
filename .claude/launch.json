@@ -62,6 +62,57 @@
         "lab"
       ],
       "port": 5180
+    },
+    {
+      "name": "pruebas-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "server"
+      ],
+      "env": {
+        "ADMINISTRADORES": "dev:jefa",
+        "INTERVALO_TICK_MS": "5000",
+        "CODIGO_REGISTRO_BOTS": "dev-bots",
+        "PUERTO": "3100",
+        "DIRECTORIO_PARTIDAS": "./partidas-pruebas"
+      },
+      "port": 3100
+    },
+    {
+      "name": "pruebas-cliente",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "cliente",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5190",
+        "--strictPort"
+      ],
+      "env": {
+        "BACKEND_URL": "http://localhost:3100",
+        "BOTS_URL": "ws://localhost:4100/control"
+      },
+      "port": 5190
+    },
+    {
+      "name": "pruebas-bots",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "bots"
+      ],
+      "env": {
+        "BOTS_TOKEN": "dev-token",
+        "CODIGO_REGISTRO_BOTS": "dev-bots",
+        "BOTS_SERVIDOR": "http://localhost:3100",
+        "BOTS_PUERTO": "4100",
+        "BOTS_DIRECTORIO": "./partidas-pruebas/bots"
+      },
+      "port": 4100
     }
   ]
 }

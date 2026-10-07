@@ -12,7 +12,7 @@ import { montarPanelRespaldos } from './ui/panelRespaldos';
 import { montarPanelBots } from './bots/panelBots';
 import { avisarTrasRecargar, CATALOGOS, crearGameStore, elegirGameId, fmtTiempoMundo, type GameState, type GameStore, type EstadoMejoraEdificio } from './app/gameStore';
 import { layoutCampamento } from '@motor/engine/layoutCampamento';
-import { ALMACEN_PERSONAL } from '@motor/constants';
+import { ALMACEN_PERSONAL, MERCENARIOS } from '@motor/constants';
 import { esc } from './ui/html';
 import { enlazarSubpestanas, htmlSubpaneles, htmlSubpestanas, type Subpestana } from './ui/subpestanas';
 import { htmlNombreConSigilo, svgSigilo } from './sigilo/sigilo';
@@ -181,7 +181,7 @@ function efectoPolitica(politica: (typeof CATALOGOS.politicas)[number]): string 
 }
 
 // --- Estado de vista (qué se muestra, no simulación): vive solo aquí, nunca en el store. ---
-let tabActivo: 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'bots' | 'registros' | 'generacionMundo' = 'asentamientos';
+let tabActivo: 'guerra' | 'comercio' | 'asentamientos' | 'campamentos' | 'facciones' | 'jugadores' | 'politicas' | 'bots' | 'registros' | 'generacionMundo' = 'asentamientos';
 let comercioDetalleTab: 'acciones' | 'info' = 'acciones';
 let asentamientoSeleccionadoId: string | null = null;
 /** Si la Vista de Asentamiento enseña un campamento de mercenarios en vez de un asentamiento (Doc 1.9b). */
@@ -201,6 +201,8 @@ let asentamientoDetalleTab: 'general' | 'edificios' | 'produccion' | 'militar' =
 let reservaProtegidaAbierta = false;
 let faccionSeleccionadaId: string | null = null;
 let faccionSub = 'general';
+let campamentoTabId: string | null = null;
+let campamentoSub = 'general';
 let jugadorSub = 'general';
 let jugadorSeleccionadoId: string | null = null;
 /** Filtro de Facción (a petición del usuario): con muchas Facciones, listar el grupo de cada una a la vez
@@ -238,6 +240,7 @@ app.innerHTML = `
       <button class="tab-btn" data-tab="guerra">Guerra</button>
       <button class="tab-btn" data-tab="comercio">Comercio</button>
       <button class="tab-btn" data-tab="asentamientos">Asentamientos</button>
+      <button class="tab-btn" data-tab="campamentos">Campamentos</button>
       <button class="tab-btn" data-tab="facciones">Facción</button>
       <button class="tab-btn" data-tab="jugadores">Jugadores</button>
       <button class="tab-btn" data-tab="politicas">Políticas</button>
@@ -306,6 +309,10 @@ app.innerHTML = `
       <div id="economia-panel" class="log-panel"></div>
     </div>
     </div>
+    </div>
+
+    <div class="tab-panel" id="tab-campamentos" hidden>
+      <div id="campamentos-tab"></div>
     </div>
 
     <div class="tab-panel" id="tab-asentamientos" hidden>
@@ -1406,6 +1413,7 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
         <div class="kv-row" style="margin-top:6px"><span>Progreso de nivel de Facción</span><span>${xpTexto}</span></div>
         <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${xpPorcentaje}%"></div></div>`
       )}
+      ${seccion(`Miembros (${faccion.ciudadanosIds.length})`, htmlMiembrosFaccion(faccion, state))}
       ${seccion(
         'Cupo de expansión (Doc 1.7/Fase_0_5 §5)',
         `<div class="kv-grid">
@@ -1421,6 +1429,166 @@ function renderDetalleFaccion(faccion: Faccion, state: GameState): string {
     aedas: seccion('Aedas residentes (Doc 6.7)', residentesHtml) + seccion('Títulos (Doc 2.9)', titulosHtml),
   };
   return `<div class="settlement-detail">${htmlSubpaneles(subs, faccionSub, contenidos, 'Información de la Facción')}</div>`;
+}
+
+/** Dónde reside un héroe: la plaza donde compró casa o el campamento de mercenarios que lo acoge. */
+function residenciaDe(state: GameState, heroeId: string): string {
+  const plaza = state.asentamientos.find((a) => a.casasCompradas.includes(heroeId));
+  if (plaza) return esc(plaza.nombre ?? plaza.id);
+  const campamento = (state.campamentosMercenarios ?? []).find((c) => c.residentesIds.includes(heroeId));
+  return campamento ? `campamento ${esc(campamento.id)}` : '—';
+}
+
+/** Dónde está ahora (Doc 1.10): en una plaza, en una columna, dentro de un campamento o fuera del mundo. */
+function ubicacionDe(state: GameState, heroe: GameState['heroes'][number] | undefined): string {
+  const u = heroe?.ubicacion;
+  if (!u) return '—';
+  switch (u.tipo) {
+    case 'asentamiento':
+      return esc(state.asentamientos.find((a) => a.id === u.asentamientoId)?.nombre ?? u.asentamientoId);
+    case 'columna':
+      return `en columna ${esc(u.ejercitoId)}`;
+    case 'mercenarios':
+      return `dentro de ${esc(u.campamentoId)}`;
+    case 'desconectado':
+      return 'fuera del mundo';
+  }
+}
+
+/** Los miembros de una Facción: nombre, conexión, cargo, residencia y dónde están. */
+function htmlMiembrosFaccion(faccion: Faccion, state: GameState): string {
+  if (faccion.ciudadanosIds.length === 0) return '<p class="legend-note">Sin ciudadanos.</p>';
+  const filas = faccion.ciudadanosIds.map((id) => {
+    const h = state.heroes.find((x) => x.id === id);
+    const cargo = [faccion.reyId === id ? 'Rey' : '', faccion.embajadorId === id ? 'Embajador' : ''].filter(Boolean).join(', ') || '—';
+    return `<tr><td>${htmlPuntoConexion(h)} ${soloNombreHeroe(state, id)} <small class="legend-note">${esc(id)}</small></td><td>${h?.controlador ?? '—'}</td><td>${cargo}</td><td>${residenciaDe(state, id)}</td><td>${ubicacionDe(state, h)}</td></tr>`;
+  });
+  return `<table class="mini-table"><thead><tr><th>Miembro</th><th>Controla</th><th>Cargo</th><th>Reside en</th><th>Ahora</th></tr></thead><tbody>${filas.join('')}</tbody></table>`;
+}
+
+const EDIFICIO_CAMPAMENTO_NOMBRE: Record<string, string> = {
+  taberna: 'Taberna',
+  vivienda: 'Vivienda',
+  mercado: 'Mercado',
+  barracon: 'Barracón',
+  galeriaDeTiro: 'Galería de tiro',
+  caballerizas: 'Caballerizas',
+};
+
+/** Detalle de un campamento de mercenarios (Doc 1.9b) con todo lo que guarda: población, edificios, residentes, quién está dentro,
+ * mercado, fondos de refundación, préstamos de tropa y su anillo de bandidos. Solo lectura. */
+function renderDetalleCampamento(c: NonNullable<GameState['campamentosMercenarios']>[number], state: GameState): string {
+  const seccion = (titulo: string, cuerpo: string): string => `<div class="detail-section"><h3>${titulo}</h3>${cuerpo}</div>`;
+  const tabla = (cab: string[], filas: string[][], vacio: string) =>
+    filas.length
+      ? `<table class="mini-table"><thead><tr>${cab.map((x) => `<th>${x}</th>`).join('')}</tr></thead><tbody>${filas.map((f) => `<tr>${f.map((x) => `<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+      : `<p class="legend-note">${vacio}</p>`;
+  const num = (n: number) => Math.round(n).toLocaleString('es-ES');
+  const recurso = (id: string) => RECURSO_NOMBRE[id] ?? id;
+
+  const viviendas = c.edificios.filter((e) => e === 'vivienda').length;
+  const tope = viviendas * MERCENARIOS.poblacionPorVivienda;
+  const edificios = Object.entries(c.edificios.reduce<Record<string, number>>((t, e) => ({ ...t, [e]: (t[e] ?? 0) + 1 }), {}));
+
+  const residentes = c.residentesIds.map((id) => {
+    const h = state.heroes.find((x) => x.id === id);
+    const faccion = state.facciones.find((f) => f.ciudadanosIds.includes(id));
+    const tropa = (h?.escuadrones ?? []).filter((e) => e.contenedor.tipo === 'campamento');
+    return [
+      `${htmlPuntoConexion(h)} ${soloNombreHeroe(state, id)} <small class="legend-note">${esc(id)}</small>`,
+      faccion ? htmlNombreConSigilo(faccion, 16) : '—',
+      ubicacionDe(state, h),
+      tropa.length ? `${tropa.length} (${num(tropa.reduce((t, e) => t + e.cantidad, 0))} uds.)` : '—',
+      num(h?.oroDeBotin ?? 0),
+      h?.racionEn !== undefined ? fmtTiempoMundo(h.racionEn) : '—',
+    ];
+  });
+  const dentro = state.heroes.filter((h) => h.ubicacion.tipo === 'mercenarios' && h.ubicacion.campamentoId === c.id);
+
+  const mercado = Object.entries(c.mercado).filter(([, n]) => n > 0).map(([id, n]) => [recurso(id), num(n)]);
+  const fondos = Object.entries(c.fondos).flatMap(([heroeId, aportes]) =>
+    Object.entries(aportes)
+      .filter(([, n]) => n > 0)
+      .map(([id, n]) => [soloNombreHeroe(state, heroeId), recurso(id), num(n)])
+  );
+  const totalFondos = Object.values(c.fondos).reduce<Record<string, number>>((t, aportes) => {
+    for (const [id, n] of Object.entries(aportes)) t[id] = (t[id] ?? 0) + n;
+    return t;
+  }, {});
+
+  const prestamos = state.heroes.flatMap((h) =>
+    h.escuadrones
+      .filter((e) => e.prestada?.campamentoId === c.id)
+      .map((e) => [soloNombreHeroe(state, h.id), esc(e.nombre), nivelTropaTxt(e.tropaId), num(e.cantidad), e.contenedor.tipo === 'ejercito' ? `columna ${esc(e.contenedor.ejercitoId)}` : e.contenedor.tipo])
+  );
+  const bandidos = state.campamentosBandidos
+    .filter((b) => b.campamentoMercenariosId === c.id)
+    .map((b) => [esc(b.id), `${Math.round(b.posicion.x)}, ${Math.round(b.posicion.y)}`, String(b.nivel), String(b.poder)]);
+  const columnas = state.ejercitos.filter((e) => e.origenCampamentoId === c.id);
+
+  const subs: Subpestana[] = [
+    { id: 'general', texto: 'General' },
+    { id: 'residentes', texto: 'Residentes', insignia: c.residentesIds.length || '' },
+    { id: 'mercado', texto: 'Mercado y fondos' },
+    { id: 'tropa', texto: 'Préstamos y bandidos', insignia: prestamos.length + bandidos.length || '' },
+  ];
+  if (!subs.some((x) => x.id === campamentoSub)) campamentoSub = 'general';
+  const contenidos: Record<string, string> = {
+    general:
+      seccion(
+        `Campamento ${esc(c.id)}`,
+        `<div class="kv-grid">
+          <div class="kv-row"><span>Posición</span><span>${Math.round(c.posicion.x)}, ${Math.round(c.posicion.y)}</span></div>
+          <div class="kv-row"><span>Aspecto (origen)</span><span>${c.origen}</span></div>
+          <div class="kv-row"><span>Nacido</span><span>${fmtTiempoMundo(c.creadoEn)}</span></div>
+          <div class="kv-row"><span>Lo eligieron al nacer</span><span>${c.eligieronComoInicial} héroe${c.eligieronComoInicial === 1 ? '' : 's'}</span></div>
+          <div class="kv-row"><span>Residentes</span><span>${c.residentesIds.length}</span></div>
+          <div class="kv-row"><span>Dentro ahora</span><span>${dentro.length ? dentro.map((h) => soloNombreHeroe(state, h.id)).join(', ') : 'nadie'}</span></div>
+          <div class="kv-row"><span>Reclutas</span><span>${num(c.poblacion)} el ${fmtTiempoMundo(c.poblacionEn)} · tope ${tope} (${viviendas} viviendas × ${MERCENARIOS.poblacionPorVivienda}, +${MERCENARIOS.poblacionPorHora}/h)</span></div>
+          <div class="kv-row"><span>Próximo campamento de bandidos</span><span>${c.bandidosEn !== undefined ? `desde ${fmtTiempoMundo(c.bandidosEn)}` : '—'}</span></div>
+          <div class="kv-row"><span>Columnas que salieron de aquí</span><span>${columnas.length ? columnas.map((e) => esc(e.id)).join(', ') : 'ninguna en campo'}</span></div>
+        </div>`
+      ) + seccion('Edificios', `<div class="chip-row">${edificios.map(([e, n]) => `<span class="chip">${EDIFICIO_CAMPAMENTO_NOMBRE[e] ?? e}${n > 1 ? ` ×${n}` : ''}</span>`).join('')}</div>`),
+    residentes: seccion(
+      `Residentes (${c.residentesIds.length})`,
+      tabla(['Héroe', 'Facción', 'Ahora', 'Tropa en casa', 'Oro de botín', 'Última ración'], residentes, 'Nadie reside aquí.')
+    ),
+    mercado:
+      seccion('Mercado (en venta)', tabla(['Bien', 'Unidades'], mercado, 'El mercado está vacío.')) +
+      seccion(
+        'Fondo de refundación',
+        tabla(['Aporta', 'Recurso', 'Cantidad'], fondos, 'Nadie ha aportado al fondo.') +
+          (fondos.length ? `<p class="legend-note">Total: ${Object.entries(totalFondos).map(([id, n]) => `${recurso(id)} ${num(n)}`).join(' · ')}</p>` : '')
+      ),
+    tropa:
+      seccion('Tropa prestada (sigue siendo de este campamento)', tabla(['Héroe', 'Escuadrón', 'Nivel', 'Uds.', 'Dónde'], prestamos, 'Nadie lleva tropa prestada de aquí.')) +
+      seccion('Bandidos de su anillo', tabla(['Campamento', 'Posición', 'Nivel', 'Poder'], bandidos, 'No hay bandidos en su anillo ahora.')),
+  };
+  return `<div class="settlement-detail">${htmlSubpaneles(subs, campamentoSub, contenidos, 'Información del campamento')}</div>`;
+}
+
+function renderCampamentosTab(state: GameState): void {
+  const cont = document.getElementById('campamentos-tab')!;
+  const campamentos = state.campamentosMercenarios ?? [];
+  if (campamentos.length === 0) {
+    cont.innerHTML = '<p class="legend-note">Esta partida no tiene campamentos de mercenarios.</p>';
+    return;
+  }
+  if (!campamentoTabId || !campamentos.some((c) => c.id === campamentoTabId)) campamentoTabId = campamentos[0]!.id;
+  const botones = campamentos
+    .map(
+      (c) =>
+        `<button type="button" class="settlement-tab-btn${c.id === campamentoTabId ? ' active' : ''}" data-campamento="${esc(c.id)}">${esc(c.id)} <span class="badge">${c.residentesIds.length}</span></button>`
+    )
+    .join('');
+  cont.innerHTML = `<div class="settlement-tab-row">${botones}</div>${renderDetalleCampamento(campamentos.find((c) => c.id === campamentoTabId)!, state)}`;
+  cont.querySelectorAll<HTMLElement>('[data-campamento]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      campamentoTabId = btn.dataset.campamento!;
+      render();
+    })
+  );
+  enlazarSubpestanas(cont, (id) => (campamentoSub = id));
 }
 
 function renderFaccionesTab(state: GameState): void {
@@ -1974,6 +2142,7 @@ function actualizarTabs(): void {
   if (tabActivo === 'guerra') renderRosterTropas();
   document.getElementById('tab-comercio')!.hidden = tabActivo !== 'comercio';
   document.getElementById('tab-asentamientos')!.hidden = tabActivo !== 'asentamientos';
+  document.getElementById('tab-campamentos')!.hidden = tabActivo !== 'campamentos';
   document.getElementById('tab-facciones')!.hidden = tabActivo !== 'facciones';
   document.getElementById('tab-jugadores')!.hidden = tabActivo !== 'jugadores';
   document.getElementById('tab-politicas')!.hidden = tabActivo !== 'politicas';
@@ -1992,7 +2161,7 @@ function actualizarTabs(): void {
 document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   const btn = (ev.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement | null;
   if (!btn) return;
-  tabActivo = btn.dataset.tab as 'guerra' | 'comercio' | 'asentamientos' | 'facciones' | 'jugadores' | 'politicas' | 'bots' | 'registros' | 'generacionMundo';
+  tabActivo = btn.dataset.tab as 'guerra' | 'comercio' | 'asentamientos' | 'campamentos' | 'facciones' | 'jugadores' | 'politicas' | 'bots' | 'registros' | 'generacionMundo';
   actualizarTabs();
 });
 
@@ -2150,6 +2319,7 @@ function render(): void {
   renderPanelAsentamientos(state);
   renderAsentamientosTab(state);
   renderFaccionesTab(state);
+  renderCampamentosTab(state);
   renderJugadoresTab(state);
   renderPanelPolitica(state);
   renderPanelProgresion(state);

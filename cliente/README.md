@@ -22,6 +22,9 @@
 >   una partida elegida que ya no existe no se recrea, se avisa.
 > - **Respaldos** (Mundo y «sin partida»): verlos por partida (también de las borradas), respaldar la conectada ahora, restaurar
 >   (devuelve la partida y las membresías humanas que cerró su borrado, y conecta la consola) y borrar.
+> - **Campamentos** (pestaña nueva): cada campamento de mercenarios con General (posición, reclutas y tope, edificios, quién está
+>   dentro), Residentes, Mercado y fondo de refundación, y Préstamos de tropa y bandidos de su anillo.
+> - **Facción › General**: lista de miembros (conexión, cargo, residencia y dónde están ahora).
 > - **Guerra**: pestaña con Panorama (guerras, ejércitos en campo, batallas) y Reclutamiento; estados vacíos explicados.
 >
 > Anterior (v0.1.1, 2026-09-10): documentación reconciliada con el backend; la niebla de guerra ya está implementada.
