@@ -61,7 +61,12 @@ export async function sinPlaza(ctx: ContextoBot): Promise<void> {
 /** D57: el líder de los amigos y el solitario crean la suya; los demás piden entrar, y sin respuesta al rato, la crean. */
 async function buscarFaccion(ctx: ContextoBot): Promise<void> {
   const { vista, yo, perfil, memoria } = ctx;
-  const crear = () => ctx.intentar('crearFaccion', 'crearFaccion', { nombre: `Casa de ${vista.heroe!.displayName}` });
+  const crear = async () => {
+    const nombre = `Casa de ${vista.heroe!.displayName}`;
+    const r = await ctx.intentar('crearFaccion', 'crearFaccion', { nombre });
+    // Otro héroe del mundo ya se llama como este (restos de una corrida anterior en la misma partida): se distingue por el id.
+    if (r && !r.ok && r.codigoError === 'faccion.nombre_duplicado') await ctx.actuar('crearFaccion', { nombre: `${nombre} (${yo})` });
+  };
   if (memoria.solicitud) {
     if (vista.instante - memoria.solicitud.desde < ESPERA_SOLICITUD_MS) return;
     delete memoria.solicitud;

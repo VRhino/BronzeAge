@@ -125,6 +125,10 @@ export class ServicioDeBots {
     this.fase = 'arrancando';
     this.error = undefined;
     this.config = publica;
+    // Los héroes de una partida regenerada vuelven a ser heroe-0, heroe-1…: sin esto, las acciones de la corrida anterior se
+    // atribuirían a los bots nuevos que reutilizan esos ids.
+    this.acciones.length = 0;
+    this.difundir({ tipo: 'historial', acciones: [], registros: [...this.registros] });
     this.difundirEstado();
     const proceso = new ProcesoDeBots(
       { servidor: config.servidor, gameId: config.partida, codigoRegistroBots: codigoRegistroBots!, registro: this.rutaRegistro(config.partida), ...pick(config) },

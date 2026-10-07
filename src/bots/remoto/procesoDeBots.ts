@@ -236,7 +236,8 @@ export class ProcesoDeBots {
    */
   private async altaDe(llegada: Llegada): Promise<void> {
     const registro = this.registro!;
-    let n = registro.bots.length;
+    // Siguiente número libre: contar los bots del registro repetiría un nombre si una llegada anterior saltó alguno (su héroe no llegó a nacer).
+    let n = Math.max(registro.bots.length, ...registro.bots.map((b) => Number(/(\d+)$/.exec(b.nombre ?? '')?.[1] ?? 0)));
     let nacidos = 0;
     try {
       await darDeAlta(this.puerto, this.runner, llegada, () => `Bot ${++n}`, ({ heroeId, perfil, nombre }) => {

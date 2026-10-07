@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../../session/gameSession';
 import type { EventoDominio } from '../../domain/eventos';
-import type { CampamentoMercenarios } from '../../domain/types';
+import type { CampamentoMercenarios, Faccion } from '../../domain/types';
+import { crearFaccion as crearFaccionEngine } from '../../engine/faccion';
 import { puertoEnProceso } from '../puerto';
 import { RunnerDeBots, type Perfil } from '../runner';
 import { darDeAlta } from '../llegadas';
@@ -11,9 +12,9 @@ import { cerebroDeBot } from '../cerebro';
 import { costoRefundacion } from '../../engine/refundacion';
 
 /** Llegan `grupos` (cada uno con sus perfiles) en el tick 1, al campamento con menos residentes, y juegan `ticks`. */
-async function mundo(ticks: number, grupos: Perfil['tipo'][][], campamento = (c: CampamentoMercenarios) => c) {
+async function mundo(ticks: number, grupos: Perfil['tipo'][][], campamento = (c: CampamentoMercenarios) => c, previas: Faccion[] = []) {
   const inicial = GameSession.crear('sin-plaza', { seed: 7 }).exportar();
-  const sesion = GameSession.importar({ ...inicial, state: { ...inicial.state, campamentosMercenarios: inicial.state.campamentosMercenarios.map(campamento) } });
+  const sesion = GameSession.importar({ ...inicial, state: { ...inicial.state, facciones: [...inicial.state.facciones, ...previas], campamentosMercenarios: inicial.state.campamentosMercenarios.map(campamento) } });
   const puerto = puertoEnProceso(sesion);
   const bots = new RunnerDeBots(puerto, cerebroDeBot, { semilla: 7, horario: 'siempre' });
   let n = 0;
@@ -39,6 +40,12 @@ describe('bots sin plaza', () => {
 
     expect(sesion.getState().facciones).toHaveLength(1);
     expect(faccion.ciudadanosIds).toHaveLength(3);
+  });
+
+  it('si ya hay una Facción con ese nombre (restos de una corrida anterior), crea la suya con el id al final en vez de quedarse sin ella', async () => {
+    const { sesion } = await mundo(30, [['solitario']], (c) => c, [crearFaccionEngine('faccion-vieja', 'Casa de Bot 1')]);
+
+    expect(sesion.getState().facciones.map((f) => f.nombre).sort()).toEqual(['Casa de Bot 1', 'Casa de Bot 1 (heroe-0)']);
   });
 
   it('salen a buscar sin tropa y abren los alijos que ven (D60-D63)', async () => {
