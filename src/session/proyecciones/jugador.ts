@@ -48,6 +48,7 @@ import { costeLiderazgo } from '../../engine/liderazgo';
 import { RED_VACIA, tramosDeRed } from '../../engine/redCaminos';
 import { escenaDeCampamento } from './escenaCampamento';
 import type { EscenaCampamento } from '../../contratos/v1/dto';
+import { heroesNombrados } from '../../domain/eventos';
 import type {
   AcuerdoTrueque,
   Alijo,
@@ -1039,22 +1040,11 @@ export function eventosDominioParaJugador(estado: GameSessionState, heroeId: str
   return eventosVisiblesParaJugador(estado, heroeId, eventosDesde(estado, desde));
 }
 
-/**
- * ¿Nombra el evento a este héroe como protagonista? Un informe de combate (doc 02 §4.1b) lleva `heroesIds` en cada lado, y un evento personal
- * su `heroeId`. Hace falta porque la atribución por plaza no lo cubre: una columna que salió de un campamento de mercenarios no tiene plaza de
- * origen (`origenAsentamientoId: ''`), así que sus eventos no eran ni globales ni propios de nadie y no le llegaban ni a su propio héroe; y en un
- * combate entre Facciones el evento va a la plaza de uno solo de los bandos.
- */
-function implicaAlHeroe(evento: EventoDominioConVersion, heroeId: string): boolean {
-  const p = evento.payload as { heroeId?: unknown; heroesIds?: unknown; atacante?: { heroesIds?: unknown }; defensor?: { heroesIds?: unknown } } | undefined;
-  if (!p || typeof p !== 'object') return false;
-  const incluye = (ids: unknown): boolean => Array.isArray(ids) && ids.includes(heroeId);
-  return p.heroeId === heroeId || incluye(p.heroesIds) || incluye(p.atacante?.heroesIds) || incluye(p.defensor?.heroesIds);
-}
-
 /** El filtro de audiencia sobre eventos ya elegidos (de memoria o del JSONL): el mismo criterio para los dos orígenes. Pasan los globales (sin
- * plaza), los de una plaza propia y los que nombran a este héroe. */
+ * plaza), los de una plaza propia y los que nombran a este héroe (`heroesNombrados`). Lo último hace falta porque la atribución por plaza no lo
+ * cubre: una columna que salió de un campamento de mercenarios no tiene plaza de origen (`asentamientoId: ''`), y en un combate entre Facciones
+ * el evento va a la plaza de uno solo de los bandos. */
 export function eventosVisiblesParaJugador(estado: GameSessionState, heroeId: string, eventos: readonly EventoDominioConVersion[]): EventoDominioConVersion[] {
   const { esPropio } = propioDeJugador(estado, heroeId);
-  return eventos.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId) || implicaAlHeroe(e, heroeId));
+  return eventos.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId) || heroesNombrados(e).includes(heroeId));
 }

@@ -328,8 +328,9 @@ combate.campamento_destruido / combate.ataque_campamento_fallido      (columna c
 plaza propia, o uno que **lo nombra**: `payload.heroeId`, `payload.heroesIds`, o `heroesIds` de `payload.atacante`/`payload.defensor`.
 Antes de esto, los eventos de las columnas que salen de un campamento de mercenarios (sin plaza de origen: `asentamientoId: ''`) no le
 llegaban a nadie, tampoco a su propio héroe, y por eso ningún informe de combate contra bandidos alcanzaba al cliente. `''` significa
-«de ninguna plaza»: no es global, solo lo ven sus implicados. El canal de tiempo real `mapa/general` NO los lleva (solo los `undefined`):
-quien los quiera los pide al cursor. El cliente sigue pudiendo filtrar por `heroesIds` para elegir de qué lado mostrar el informe.
+«de ninguna plaza»: no es global, solo lo ven sus implicados. En tiempo real van por el canal personal **`heroe/<heroeId>`** (2026-10-07), al
+que solo se suscribe ese héroe: lleva todo evento NO global que lo nombre (`heroesNombrados`, `domain/eventos.ts`, el mismo criterio que el
+cursor). Los globales siguen yendo solo por `mapa/general`, sin duplicarse. El cliente sigue pudiendo filtrar por `heroesIds` para elegir de qué lado mostrar el informe.
 
 `mercenarios.prestamo_retirado` (2026-10-07), personal: `{ heroeId, campamentoId, escuadras: [{ escuadronId, tropaId, cantidad }] }`. El
 campamento retira la tropa prestada a quien deja de residir en él (D45), esté donde esté; antes desaparecía sin ningún evento.

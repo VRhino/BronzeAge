@@ -15,7 +15,7 @@
 // De ahí que atribuir un evento importe más de lo que parece: lo que sale sin `asentamientoId` se difunde por
 // `mapa/general`, al que puede suscribirse CUALQUIER jugador de la partida. Los eventos de campaña se
 // atribuyen a su asentamiento de origen justamente por esto (ver `avanzarEjercitos`).
-import type { EventoDominio } from '../domain/eventos';
+import { heroesNombrados, type EventoDominio } from '../domain/eventos';
 import { esCiudadano } from '../engine/faccion';
 import { combateEn } from './batallas';
 import type { GameSessionState } from './estado';
@@ -44,6 +44,11 @@ export function canalDeBatalla(battleId: string): string {
   return `batalla/${battleId}`;
 }
 
+/** El canal personal de un héroe (2026-10-07): lo que le nombra (`heroesNombrados`) y no va ya por el canal general. Solo lo abre él. */
+export function canalDeHeroe(heroeId: string): string {
+  return `heroe/${heroeId}`;
+}
+
 /** La batalla de un evento `batalla.*` o `evento_pve.*`, si lo es (doc 02 §3.5). */
 function batallaDe(evento: EventoDominio): string | undefined {
   if (!evento.codigo.startsWith('batalla.') && !evento.codigo.startsWith('evento_pve.')) return undefined;
@@ -51,10 +56,13 @@ function batallaDe(evento: EventoDominio): string | undefined {
   return typeof id === 'string' ? id : undefined;
 }
 
-/** Todos los canales por los que va un evento: el de siempre y, si es de una batalla, el de la batalla (doc 02 §3.5). */
+/** Todos los canales por los que va un evento: el de siempre; si es de una batalla, el de la batalla (doc 02 §3.5); y si no es global, el
+ * personal de cada héroe que nombra (un global ya le llega por `mapa/general`). Sin esto, los eventos de «ninguna plaza» (`asentamientoId: ''`,
+ * columnas salidas de un campamento) no los recibía nadie en tiempo real. */
 export function canalesDeEvento(evento: EventoDominio): string[] {
   const battleId = batallaDe(evento);
-  return battleId === undefined ? [canalDeEvento(evento)] : [canalDeEvento(evento), canalDeBatalla(battleId)];
+  const personales = evento.asentamientoId === undefined ? [] : heroesNombrados(evento).map(canalDeHeroe);
+  return [canalDeEvento(evento), ...(battleId === undefined ? [] : [canalDeBatalla(battleId)]), ...personales];
 }
 
 /** Canal al que pertenece un evento — el mismo criterio de "propio" que usa la proyección de jugador
@@ -72,6 +80,7 @@ export function canalDeEvento(evento: EventoDominio): string {
  */
 export function puedeSuscribirseA(estado: GameSessionState, heroeId: string, canal: string): boolean {
   if (canal === CANAL_GENERAL) return true;
+  if (canal.startsWith('heroe/')) return canal === canalDeHeroe(heroeId);
   if (canal.startsWith('batalla/')) return puedeSeguirLaBatalla(estado, heroeId, canal.slice('batalla/'.length));
   const asentamientoId = canal.startsWith('asentamiento/') ? canal.slice('asentamiento/'.length) : undefined;
   if (asentamientoId === undefined) return false; // canal con forma desconocida: no autorizado, no un error

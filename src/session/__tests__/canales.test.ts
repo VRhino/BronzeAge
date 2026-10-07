@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { partidaConAsentamiento, OPC } from './fixtures';
 import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from './fundarDePrueba';
-import { CANAL_GENERAL, canalDeAsentamiento, canalDeEvento, puedeSuscribirseA } from '../canales';
+import { CANAL_GENERAL, canalDeAsentamiento, canalDeEvento, canalDeHeroe, canalesDeEvento, puedeSuscribirseA } from '../canales';
 
 describe('canalDeEvento', () => {
   it('sin asentamientoId va al canal general', () => {
@@ -51,5 +51,26 @@ describe('puedeSuscribirseA', () => {
   it('un canal con forma desconocida no autoriza', () => {
     const { sesion, fundador } = partidaConAsentamiento();
     expect(puedeSuscribirseA(sesion.getState(), fundador, 'faccion/x')).toBe(false);
+  });
+});
+
+describe('canal personal heroe/<id> (2026-10-07)', () => {
+  const lado = (heroesIds: string[]) => ({ poder: 1, heroesIds, bajas: [] });
+  const informe = { codigo: 'combate.campamento_destruido', mensaje: 'x', momento: '2026-01-01T00:00:00.000Z', asentamientoId: '', payload: { atacante: lado(['h1']) } };
+
+  it('un evento de ninguna plaza va al canal de cada héroe que nombra', () => {
+    expect(canalesDeEvento(informe)).toContain(canalDeHeroe('h1'));
+    expect(canalesDeEvento({ ...informe, payload: { heroeId: 'h2' } })).toContain(canalDeHeroe('h2'));
+  });
+
+  it('un evento global no se duplica en el canal personal: ya va por mapa/general', () => {
+    const { asentamientoId: _sin, ...global } = informe;
+    expect(canalesDeEvento(global)).toEqual([CANAL_GENERAL]);
+  });
+
+  it('solo su héroe se suscribe a su canal', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    expect(puedeSuscribirseA(sesion.getState(), fundador, canalDeHeroe(fundador))).toBe(true);
+    expect(puedeSuscribirseA(sesion.getState(), fundador, canalDeHeroe('otro'))).toBe(false);
   });
 });

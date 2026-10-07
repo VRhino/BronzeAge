@@ -88,3 +88,15 @@ export function atribuir(evento: EventoCrudo, asentamientoId: string): EventoCru
   if (typeof evento === 'string') return { codigo: 'legado', mensaje: evento, asentamientoId };
   return evento.asentamientoId === undefined ? { ...evento, asentamientoId } : evento;
 }
+
+/**
+ * Los héroes que un evento nombra como protagonistas: su `payload.heroeId`, sus `payload.heroesIds` y los `heroesIds` de cada lado de un
+ * informe de combate (doc 02 §4.1b). Es la audiencia personal de un evento, la misma para el cursor `GET .../eventos`
+ * (`eventosVisiblesParaJugador`) y para el canal de tiempo real `heroe/<id>` (`session/canales.ts`): así no pueden separarse.
+ */
+export function heroesNombrados(evento: Pick<EventoDominio, 'payload'>): string[] {
+  const p = evento.payload as { heroeId?: unknown; heroesIds?: unknown; atacante?: { heroesIds?: unknown }; defensor?: { heroesIds?: unknown } } | undefined;
+  if (!p || typeof p !== 'object') return [];
+  const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  return [...new Set([...(typeof p.heroeId === 'string' ? [p.heroeId] : []), ...ids(p.heroesIds), ...ids(p.atacante?.heroesIds), ...ids(p.defensor?.heroesIds)])];
+}
