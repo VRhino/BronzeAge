@@ -9,6 +9,7 @@
   "scripts": {
     "server": "tsx src/server/index.ts",
     "bots": "tsx src/bots/remoto/main.ts",
+    "panel": "node scripts/panel.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
