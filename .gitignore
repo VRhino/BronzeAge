@@ -35,6 +35,7 @@ issues/
 
 # Snapshots de partida de `npm run server` (src/server/persistenciaPartida.ts), directorio por defecto
 /partidas
+/partidas-pruebas
 /datos
 
 # Bundle del laboratorio visual (se regenera con `npm run lab`)
