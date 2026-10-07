@@ -12,6 +12,7 @@ import { comando, exigirAsentamiento } from '../comandos/ayudas';
 import { asignarCargoLocal } from '../comandos/cargos';
 import { renombrarAsentamiento } from '../comandos/construccion';
 import { OPC, partidaConAsentamiento } from './fixtures';
+import { CombateInvalidoError } from '../../engine/combate';
 
 describe('comando(): traducción uniforme de fallos a rechazo', () => {
   it('un id inexistente se rechaza con código estable, NO revienta con un TypeError', () => {
@@ -59,5 +60,22 @@ describe('comando(): traducción uniforme de fallos a rechazo', () => {
     });
 
     expect(sesion.ejecutar(leer, undefined, OPC).datos).toBe(asentamientoId);
+  });
+});
+
+describe('detalleError: el motivo concreto viaja con el código (2026-10-07)', () => {
+  it('un error del motor deja su mensaje en detalleError', () => {
+    const lanza = comando<Record<string, never>, void>(() => { throw new CombateInvalidoError('La columna no lleva soldados con los que atacar.'); });
+    const { sesion } = partidaConAsentamiento();
+    const r = lanza(sesion.getState(), undefined as never, undefined as never, {});
+    expect(r.resultado).toMatchObject({ ok: false, codigoError: 'combate.invalido', detalleError: 'La columna no lleva soldados con los que atacar.' });
+  });
+
+  it('un rechazo que solo tiene código no inventa detalle', () => {
+    const lanza = comando<Record<string, never>, void>((estado) => exigirAsentamiento(estado, 'no-existe') as never);
+    const { sesion } = partidaConAsentamiento();
+    const r = lanza(sesion.getState(), undefined as never, undefined as never, {});
+    expect(r.resultado.codigoError).toBe('asentamiento.no_existe');
+    expect(r.resultado).not.toHaveProperty('detalleError');
   });
 });

@@ -157,7 +157,7 @@ export async function ejecutarComandoHttp(
       version: resultado.version,
       ...(resultado.ok
         ? { resultado: 'aceptado' as const }
-        : { resultado: 'rechazado' as const, causa: 'dominio' as const, detalle: resultado.codigoError }),
+        : { resultado: 'rechazado' as const, causa: 'dominio' as const, detalle: resultado.detalleError ? `${resultado.codigoError}: ${resultado.detalleError}` : resultado.codigoError }),
     });
     return reply.send({ ...resumen, resultado, ...(camposExtra ? camposExtra(runner) : {}) });
   } catch (err) {

@@ -59,6 +59,10 @@ export interface ResultadoComando<T = void> {
   datos?: T;
   /** Código estable de dominio si `ok` es `false` (catálogo cerrado, ver `codigosDeError.ts`). */
   codigoError?: CodigoError;
+  /** El motivo concreto, en castellano, cuando el motor lo da (2026-10-07): un código como `combate.invalido` cubre media docena de causas
+   * («la columna no lleva soldados», «las escuadras de un héroe herido no combaten»…). Es para MOSTRARLO al jugador y anotarlo en la
+   * auditoría; un cliente decide por `codigoError`, nunca parseando esto (doc 2, punto 6). Ausente si no hay más que el código. */
+  detalleError?: string;
   /** Con `version` estampada (Fase C13) — el mismo valor que `version` de aquí abajo, repetido en cada
    * evento para que un cliente que escucha por WebSocket (`hub.difundir`, Fase C5) sepa desde qué cursor
    * seguir (`GET .../eventos?desde=`, `session/estado.ts` `eventosDesde`) sin tener que mirar el envoltorio. */
@@ -130,8 +134,8 @@ export function sinCambios<T>(estado: GameSessionState, datos?: T): TransicionCo
 }
 
 /** Comando rechazado: devuelve el estado SIN TOCAR (mismo objeto) y sin subir la versión. */
-export function rechazo<T>(estado: GameSessionState, codigoError: CodigoError): TransicionComando<T> {
-  return { estado, resultado: { ok: false, codigoError, eventos: [], version: estado.version } };
+export function rechazo<T>(estado: GameSessionState, codigoError: CodigoError, detalleError?: string): TransicionComando<T> {
+  return { estado, resultado: { ok: false, codigoError, ...(detalleError ? { detalleError } : {}), eventos: [], version: estado.version } };
 }
 
 /**
@@ -142,5 +146,7 @@ export function rechazo<T>(estado: GameSessionState, codigoError: CodigoError): 
 export function rechazoDesdeError<T>(estado: GameSessionState, err: unknown): TransicionComando<T> {
   const codigo = codigoDeErrorDominio(err);
   if (codigo === undefined) throw err;
-  return rechazo(estado, codigo);
+  // El mensaje del error del motor es el motivo concreto (`detalleError`); si no dice más que el código, no se repite.
+  const detalle = err instanceof Error && err.message && err.message !== codigo ? err.message : undefined;
+  return rechazo(estado, codigo, detalle);
 }

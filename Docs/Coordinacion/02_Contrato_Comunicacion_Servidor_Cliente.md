@@ -41,7 +41,9 @@ de entrada y recibe el `BattleResult` de salida, ambos por HTTP (§3).
 - **Comandos de partida:** `POST /jugador/partidas/:gameId/comandos` (y su equivalente `/admin/...` con más
   privilegio), body `{tipo, params, idempotencyKey?}`. Éxito de TRANSPORTE (`HTTP 200`) no es lo mismo que
   éxito de DOMINIO: la respuesta trae `{..., resultado: {ok, ...}}`, y `ok: false` es el dominio diciendo
-  que no (sin recursos, plaza ocupada...) — sigue siendo `HTTP 200`. Solo son error de transporte: `400`
+  que no (sin recursos, plaza ocupada...) — sigue siendo `HTTP 200`. Con `ok: false` viaja `codigoError` (estable, por él decide el
+  cliente) y, cuando el motor lo da, `detalleError` (2026-10-07): el motivo concreto en castellano para enseñarlo al jugador («La columna
+  no lleva soldados con los que atacar.»), porque un mismo código cubre varias causas. No se parsea. Solo son error de transporte: `400`
   (cuerpo con forma inválida), `401` (sin sesión), `403` (autenticado pero sin permiso), `409` (fallo al
   PERSISTIR el resultado del comando). **Corrección de Codex (minor, R-final):** un `409` no significa "se
   aplicó en memoria y se perdió" — `server/runnerDePartida.ts` revierte al snapshot anterior si guardar
