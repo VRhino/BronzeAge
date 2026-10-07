@@ -5,6 +5,8 @@ import { MILITAR, MOVIMIENTO, ORO_POR_CABALLO, RECLUTAMIENTO_ORO_POR_ESCALON, RE
 /** Fase A5 — payload de `tropas.desercion` (ver `avanzarMantenimientoTropas`). */
 export interface PayloadTropasDesercion {
   escuadronId: string;
+  /** El dueño de la escuadra (2026-10-07): con él el aviso le llega aunque su columna no tenga plaza de origen (`heroesNombrados`). */
+  heroeId: string;
   escuadronNombre: string;
   desertores: number;
 }
@@ -268,7 +270,7 @@ export function avanzarRacion(
         eventos.push({
           codigo: 'tropas.desercion',
           mensaje: `${e.nombre}: ${desertores} desertan por hambre (moral colapsada).`,
-          payload: { escuadronId: e.id, escuadronNombre: e.nombre, desertores } satisfies PayloadTropasDesercion,
+          payload: { escuadronId: e.id, heroeId: e.heroeId, escuadronNombre: e.nombre, desertores } satisfies PayloadTropasDesercion,
         });
       }
     }

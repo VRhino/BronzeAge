@@ -336,6 +336,9 @@ llegaban a nadie, tampoco a su propio héroe, y por eso ningún informe de comba
 que solo se suscribe ese héroe: lleva todo evento NO global que lo nombre (`heroesNombrados`, `domain/eventos.ts`, el mismo criterio que el
 cursor). Los globales siguen yendo solo por `mapa/general`, sin duplicarse. El cliente sigue pudiendo filtrar por `heroesIds` para elegir de qué lado mostrar el informe.
 
+`tropas.desercion` lleva el `heroeId` del dueño de la escuadra (2026-10-07): una columna sin ración pierde moral y, a 0, deserta un 5 % por minuto;
+sin ese campo el aviso de una columna salida de un campamento no le llegaba a nadie.
+
 `mercenarios.prestamo_retirado` (2026-10-07), personal: `{ heroeId, campamentoId, escuadras: [{ escuadronId, tropaId, cantidad }] }`. El
 campamento retira la tropa prestada a quien deja de residir en él (D45), esté donde esté; antes desaparecía sin ningún evento.
 

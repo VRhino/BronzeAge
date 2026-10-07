@@ -45,7 +45,7 @@ describe('avanzarRacion — el contrato de la despensa', () => {
 
     expect(r.escuadrones[0]!.cantidad).toBeLessThan(20);
     expect(r.eventos).toHaveLength(1);
-    expect(r.eventos[0]).toMatchObject({ codigo: 'tropas.desercion' });
+    expect(r.eventos[0]).toMatchObject({ codigo: 'tropas.desercion', payload: { heroeId: 'jugador-1' } });
   });
 
   it('un escuadrón aniquilado conserva su identidad y no genera evento (Doc 5.4)', () => {
