@@ -19,6 +19,9 @@ const MAX_FILAS_ACTIVIDAD = 120;
 const MAX_REGISTRO = 100;
 const ARMADO_MS = 5000;
 const MINUTOS_DIA = 1440;
+/** Cuántos llegan juntos en un grupo de amigos. Copia de `AMIGOS_POR_GRUPO` (`src/bots/llegadas.ts`): el panel solo habla por red, así que
+ * no importa la lógica del servicio; si cambia allí, cambia aquí. */
+const AMIGOS_POR_GRUPO = 5;
 
 const FASE_SERVICIO: Record<FaseServicio, { texto: string; tono: string }> = {
   inactivo: { texto: 'Inactivo', tono: 'apagado' },
@@ -423,7 +426,7 @@ export function montarPanelBots(raiz: HTMLElement, origen: OrigenDeHeroes): Pane
       <div class="bots-pista-leyenda"><span>0</span><span>${faltan}</span><span>${duracion(span)}</span></div>
       <div class="bots-forzar">
         <select id="bots-perfil-forzado" aria-label="Perfil de la llegada">
-          ${(Object.keys(PERFIL) as TipoPerfil[]).map((p) => `<option value="${p}" ${p === perfilForzado ? 'selected' : ''}>${PERFIL[p]}${p === 'amigos' ? ' (×3)' : ''}</option>`).join('')}
+          ${(Object.keys(PERFIL) as TipoPerfil[]).map((p) => `<option value="${p}" ${p === perfilForzado ? 'selected' : ''}>${PERFIL[p]}${p === 'amigos' ? ` (×${AMIGOS_POR_GRUPO})` : ''}</option>`).join('')}
         </select>
         <button type="button" data-accion="forzarLlegada" ${activo && conexion === 'conectado' ? '' : 'disabled'}>Forzar llegada ahora</button>
       </div>
