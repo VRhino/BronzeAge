@@ -378,6 +378,10 @@ app.innerHTML = `
         </div>
         <div class="controls">
           <h2>Partida y mundo</h2>
+          <div class="detail-sub">
+            <span class="bots-sub">Partidas en el servidor (clic para conectar esta consola)</span>
+            <div class="partidas-lista" id="partidas-lista" role="list"></div>
+          </div>
           <p class="legend-note" id="partida-nota"></p>
           <label>ID de la partida
             <input id="partida-id-input" list="partidas-existentes" autocomplete="off" spellcheck="false" />
@@ -2277,7 +2281,10 @@ document.getElementById('refrescar-btn')!.addEventListener('click', () => {
 // en vivo (ni WebSocket ni deltas), así que re-lee el estado cada 5 s mientras la pestaña esté visible —
 // suficiente para un panel de administración, sin martillear el servidor cuando nadie lo mira.
 setInterval(() => {
-  if (!document.hidden) void gameStore.refrescar();
+  if (document.hidden) return;
+  void gameStore.refrescar();
+  // En la pestaña Mundo, la lista de partidas se mantiene al día (otra consola puede abrir o crear partidas).
+  if (tabActivo === 'generacionMundo') void listarPartidas().then(({ partidas }) => renderListaPartidas(partidas)).catch(() => {});
 }, 5000);
 
 // Confirmación en dos clics en vez de `window.confirm`: el diálogo nativo lo bloquean navegadores embebidos y
@@ -2290,6 +2297,27 @@ const partidaNotaEl = document.getElementById('partida-nota')!;
 const partidasDatalist = document.getElementById('partidas-existentes')!;
 const ID_PARTIDA_VALIDO = /^[A-Za-z0-9_.-]+$/;
 let partidasExistentes: string[] = [];
+const partidasListaEl = document.getElementById('partidas-lista')!;
+
+/** Las partidas que el servidor conoce, como botones: la actual marcada, el resto se abren de un clic. */
+function renderListaPartidas(partidas: { gameId: string; instante: number; version: number }[]): void {
+  const actual = gameStore.getState().gameId;
+  partidasListaEl.innerHTML = partidas.length
+    ? partidas
+        .map(
+          (p) =>
+            `<button type="button" role="listitem" class="partida-item${p.gameId === actual ? ' active' : ''}" data-partida="${esc(p.gameId)}" ${p.gameId === actual ? 'disabled aria-current="true"' : ''}><strong>${esc(p.gameId)}</strong><small>${p.gameId === actual ? 'conectada · ' : ''}${fmtTiempoMundo(p.instante)} · v${p.version}</small></button>`
+        )
+        .join('')
+    : '<p class="legend-note">No se pudo leer la lista de partidas del servidor.</p>';
+}
+
+partidasListaEl.addEventListener('click', (ev) => {
+  const id = (ev.target as HTMLElement).closest<HTMLElement>('[data-partida]')?.dataset.partida;
+  if (!id || id === gameStore.getState().gameId) return;
+  partidaIdInput.value = id;
+  void cambiarDePartida('abrir');
+});
 
 /** Qué hace el botón según el ID escrito: la partida actual se regenera (destructivo), una que ya existe se abre y una nueva se crea. */
 function modoPartida(): 'regenerar' | 'abrir' | 'crear' {
@@ -2317,7 +2345,9 @@ function actualizarBotonPartida(): void {
 
 async function cargarPartidasExistentes(): Promise<void> {
   try {
-    partidasExistentes = (await listarPartidas()).partidas.map((p) => p.gameId);
+    const { partidas } = await listarPartidas();
+    partidasExistentes = partidas.map((p) => p.gameId);
+    renderListaPartidas(partidas);
     partidasDatalist.innerHTML = partidasExistentes.map((id) => `<option value="${id}"></option>`).join('');
   } catch {
     // Sin la lista no se sabe cuáles existen: todo lo que no sea la actual se tratará como nueva, y `cambiarDePartida` lo recomprueba.

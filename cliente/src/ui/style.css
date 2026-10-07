@@ -2798,3 +2798,37 @@ button.btn-armado:hover {
   gap: 8px;
   margin-top: 8px;
 }
+
+/* Lista de partidas del servidor (pestaña Mundo). */
+.partidas-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.partida-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface-deep);
+  color: var(--admin-text);
+  cursor: pointer;
+}
+
+.partida-item small {
+  color: var(--admin-muted);
+}
+
+.partida-item:hover:not(:disabled) {
+  border-color: var(--admin-border-strong);
+}
+
+.partida-item.active {
+  border-color: var(--admin-accent);
+  background: var(--admin-accent-soft);
+  cursor: default;
+}
