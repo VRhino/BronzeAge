@@ -290,12 +290,18 @@ HeroePublico
 
 Viajan en `heroesVisibles`, y cada ejército avistado lleva `heroeIds` para saber quién va en él (2026-09-14).
 Aparte, `nombresDeCompaneros` (`heroeId` → nombre) trae el nombre de todos los ciudadanos de la Facción del
-jugador, se les vea o no (decisión del usuario, 2026-09-14; Doc 5.16.7).
+jugador, se les vea o no (decisión del usuario, 2026-09-14; Doc 5.16.7), y desde el 2026-10-07 también el de quienes piden entrar
+en ella (`solicitudesIds`), para que el Rey sepa a quién acepta.
 `nombresDeDirigentes` (`heroeId` → nombre, 2026-10-06) trae además el del **Rey y el Embajador de cada Facción**, la propia o no:
 su id ya viaja en `facciones[].reyId`, y sin el nombre un cliente solo podría pintar un id (`heroe-59`).
 
 Un ejército avistado lleva `teSigue: true` cuando va tras una columna del jugador (2026-10-06): es lo único de su intención que se
 revela, y solo a quien persigue. De ahí sale el «te están persiguiendo».
+
+Capacidades DERIVADAS al servir (2026-10-07), para que el cliente no copie fórmulas: `heroe.capacidadAlmacenPersonal` (tope del almacén
+personal, Doc 2.5) y `ejercitos[].capacidadCarga` en cada ejército propio (lo que cabe en su carro con sus caravanas, `capacidadCargaDe`); el
+carro es `ejercitos[].suministro`, con `racion` el trigo gratis del campamento que no se puede guardar. `GET /v1/balance` publica además
+`MERCENARIOS` (préstamo de 15 unidades, ración, radios) y `ALMACEN_PERSONAL` en `mundoYMilitar`.
 
 Nada más del héroe ajeno viaja al cliente: ni experiencia, puntos, atributos, perks o Liderazgo, ni su
 residencia, los escuadrones de su campamento, sus loadouts, su inventario o sus monedas, ni género, avatar o
@@ -316,8 +322,17 @@ combate.campamento_destruido / combate.ataque_campamento_fallido      (columna c
   payload: { atacanteId, campamentoId, nivelCampamento, poderCampamento, atacante: LadoDelInforme }
 ```
 
-`heroesIds` dice de quién es cada lado: un cliente enseña el informe a quien está en él. Los eventos sin `asentamientoId` viajan a
-todos los clientes (no hay filtro de audiencia por combate todavía), así que el cliente filtra por `heroesIds`.
+`heroesIds` dice de quién es cada lado: un cliente enseña el informe a quien está en él.
+
+**Audiencia del cursor `GET .../eventos` (corregido 2026-10-07).** Le llega a un jugador un evento sin `asentamientoId` (global), uno de una
+plaza propia, o uno que **lo nombra**: `payload.heroeId`, `payload.heroesIds`, o `heroesIds` de `payload.atacante`/`payload.defensor`.
+Antes de esto, los eventos de las columnas que salen de un campamento de mercenarios (sin plaza de origen: `asentamientoId: ''`) no le
+llegaban a nadie, tampoco a su propio héroe, y por eso ningún informe de combate contra bandidos alcanzaba al cliente. `''` significa
+«de ninguna plaza»: no es global, solo lo ven sus implicados. El canal de tiempo real `mapa/general` NO los lleva (solo los `undefined`):
+quien los quiera los pide al cursor. El cliente sigue pudiendo filtrar por `heroesIds` para elegir de qué lado mostrar el informe.
+
+`mercenarios.prestamo_retirado` (2026-10-07), personal: `{ heroeId, campamentoId, escuadras: [{ escuadronId, tropaId, cantidad }] }`. El
+campamento retira la tropa prestada a quien deja de residir en él (D45), esté donde esté; antes desaparecía sin ningún evento.
 
 ### 4.2 Comandos del héroe (nuevos, mismo mecanismo del §2)
 

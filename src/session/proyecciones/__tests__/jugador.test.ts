@@ -14,7 +14,7 @@ import { idDeMapa, type GameSessionState, type GeometriaAsentamientos } from '..
 import { computeTodasLasZonas } from '../../../engine/zones';
 import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../../engine/memoria';
-import { eventosDominioParaJugador, proyectarParaJugador } from '../jugador';
+import { eventosDominioParaJugador, eventosVisiblesParaJugador, proyectarParaJugador } from '../jugador';
 import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Point } from '../../../domain/types';
 import type { RedCaminos } from '../../../domain/types';
 import { aristasDeTrazado } from '../../../engine/redCaminos';
@@ -399,6 +399,17 @@ describe('eventosDominioParaJugador: sin asentamientoId (globales) o con uno pro
     expect(eventos.some((e) => e.asentamientoId === ra.datos!.asentamientoId)).toBe(false);
   });
 
+  it('un evento que nombra al héroe le llega aunque no sea de una plaza suya (informe de combate, columna sin plaza)', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const lado = (heroesIds: string[]) => ({ poder: 10, heroesIds, bajas: [] });
+    const informe = { codigo: 'combate.campamento_destruido', mensaje: 'x', momento: '2026-01-01T00:00:00.000Z', version: 999, asentamientoId: '', payload: { atacante: lado([fundador]) } };
+    const deOtro = { ...informe, version: 1000, payload: { atacante: lado(['otro']) } };
+    const personal = { codigo: 'mercenarios.prestamo_retirado', mensaje: 'x', momento: informe.momento, version: 1001, asentamientoId: '', payload: { heroeId: fundador } };
+    const vistos = eventosVisiblesParaJugador(sesion.getState(), fundador, [informe, deOtro, personal]).map((e) => e.version);
+    expect(vistos).toEqual([999, 1001]);
+    expect(eventosVisiblesParaJugador(sesion.getState(), 'otro', [informe, personal])).toEqual([]);
+  });
+
   it('la proyección ya NO los lleva: se piden por el cursor, no en cada lectura de estado', () => {
     // Lo que cierra el follow-up de C13. `eventosDominio` era el 88 % de una lectura de estado y crecía sin
     // techo; ahora se pide una vez y se extiende con `?desde=<version>`.
@@ -505,7 +516,7 @@ describe('ejercitos: los propios, completos', () => {
     const estado = conColumnas(sesion.getState(), propio);
 
     const proyeccion = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA);
-    expect(proyeccion.ejercitos).toEqual([sinTropa(propio).ejercito]);
+    expect(proyeccion.ejercitos).toEqual([{ ...sinTropa(propio).ejercito, capacidadCarga: expect.any(Number) }]);
     expect(proyeccion.ejercitosAvistados).toEqual([]);
   });
 

@@ -424,6 +424,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // La tropa prestada de un campamento donde ya no reside, fuera (D45).
   const sinPrestamos = sinPrestamosAjenos(heroes, trasCaravanasDeFundacion.ejercitos, trasCaravanasDeFundacion.caravanas, trasReposicion.campamentos);
   heroes = sinPrestamos.heroes;
+  eventosDominio.push(...comoEventosDominio(sinPrestamos.eventos, contexto));
 
   return {
     asentamientos: trasCaravanasDeFundacion.asentamientos,

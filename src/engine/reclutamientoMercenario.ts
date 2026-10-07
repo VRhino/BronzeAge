@@ -11,6 +11,7 @@ import { MercenariosInvalidoError, campamentoDeResidente } from './mercenarios';
 import { factorComisionPorReputacion } from './reputacion';
 import { poblacionDeTropa, PROGRESION_INICIAL } from './tropas';
 import { tecnologiasDe } from './tecnologia';
+import type { EventoCrudo } from '../domain/eventos';
 
 /** Cuántos reclutas caben a la vez: lo que dan sus viviendas, así que añadir viviendas al layout sube el tope solo. */
 export const topePoblacion = (campamento: CampamentoMercenarios): number =>
@@ -206,20 +207,43 @@ export function reponerPrestamo(campamentos: readonly CampamentoMercenarios[], h
   return { heroe: { ...heroe, escuadrones: heroe.escuadrones.map((e) => (aqui(e) ? { ...e, cantidad: MERCENARIOS.prestamo.unidades } : e)) }, repuestas };
 }
 
+/** Payload de `mercenarios.prestamo_retirado`: de quién era la tropa, quién la prestó y qué escuadras (con los hombres que tenían) se retiran. */
+export interface PayloadPrestamoRetirado {
+  heroeId: string;
+  campamentoId: string;
+  escuadras: { escuadronId: string; tropaId: string; cantidad: number }[];
+}
+
 /**
  * El campamento retira la tropa prestada a quien ya no reside en él (D45), esté donde esté: también de la columna o de la escolta donde
  * iba. Lo aplica el tick, que es por donde pasan todos los caminos de dejar de residir. Sin nada que retirar devuelve lo mismo.
+ *
+ * Narra cada retirada (`mercenarios.prestamo_retirado`, con el `heroeId`): sin el evento, al jugador le desaparecían las escuadras sin
+ * explicación (se reportó como «volví a casa y tenía 0/0/0»).
  */
 export function sinPrestamosAjenos<E extends { escuadronIds: string[] }, C extends { escoltaIds?: string[] }>(
   heroes: readonly Heroe[],
   ejercitos: readonly E[],
   caravanas: readonly C[],
   campamentos: readonly CampamentoMercenarios[]
-): { heroes: Heroe[]; ejercitos: E[]; caravanas: C[] } {
+): { heroes: Heroe[]; ejercitos: E[]; caravanas: C[]; eventos: EventoCrudo[] } {
   const caducada = (h: Heroe, e: Escuadron) => !!e.prestada && !campamentos.some((c) => c.id === e.prestada!.campamentoId && c.residentesIds.includes(h.id));
   const retiradas = new Set(heroes.flatMap((h) => h.escuadrones.filter((e) => caducada(h, e)).map((e) => e.id)));
-  if (retiradas.size === 0) return { heroes: heroes as Heroe[], ejercitos: ejercitos as E[], caravanas: caravanas as C[] };
+  if (retiradas.size === 0) return { heroes: heroes as Heroe[], ejercitos: ejercitos as E[], caravanas: caravanas as C[], eventos: [] };
+  const eventos: EventoCrudo[] = heroes.flatMap((h) => {
+    const suyas = h.escuadrones.filter((e) => retiradas.has(e.id));
+    if (suyas.length === 0) return [];
+    const campamentoId = suyas[0]!.prestada!.campamentoId;
+    return [{
+      codigo: 'mercenarios.prestamo_retirado',
+      // Sin plaza, pero no global: `''` es «de nadie», y solo lo recibe el héroe que nombra el payload (`eventosVisiblesParaJugador`).
+      asentamientoId: '',
+      mensaje: `${campamentoId} retira a ${h.displayName} su tropa prestada: ya no reside allí.`,
+      payload: { heroeId: h.id, campamentoId, escuadras: suyas.map((e) => ({ escuadronId: e.id, tropaId: e.tropaId, cantidad: e.cantidad })) } satisfies PayloadPrestamoRetirado,
+    }];
+  });
   return {
+    eventos,
     heroes: heroes.map((h) => (h.escuadrones.some((e) => retiradas.has(e.id)) ? { ...h, escuadrones: h.escuadrones.filter((e) => !retiradas.has(e.id)) } : h)),
     ejercitos: ejercitos.map((e) => (e.escuadronIds.some((id) => retiradas.has(id)) ? { ...e, escuadronIds: e.escuadronIds.filter((id) => !retiradas.has(id)) } : e)),
     caravanas: caravanas.map((c) => (c.escoltaIds?.some((id) => retiradas.has(id)) ? { ...c, escoltaIds: c.escoltaIds.filter((id) => !retiradas.has(id)) } : c)),

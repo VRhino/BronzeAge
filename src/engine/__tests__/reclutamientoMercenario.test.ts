@@ -4,7 +4,7 @@ import type { CampamentoMercenarios, Ejercito, EstadoTecnologia, Faccion, Heroe,
 import { MERCENARIOS, RECLUTAMIENTO_ORO_POR_ESCALON, ORO_POR_CABALLO, TROPAS_RECLUTABLES } from '../../constants';
 import { minutos } from '../../domain/tiempo';
 import { MercenariosInvalidoError } from '../mercenarios';
-import { poblacionActual, precioPorSoldado, reclutarEnCampamento, tecnologiasDelCampamento, topePoblacion, tropasDelCampamento } from '../reclutamientoMercenario';
+import { poblacionActual, precioPorSoldado, reclutarEnCampamento, sinPrestamosAjenos, tecnologiasDelCampamento, topePoblacion, tropasDelCampamento } from '../reclutamientoMercenario';
 import { costeLiderazgo } from '../liderazgo';
 import { escuadronDePrueba, heroeDePrueba, instanteDeTest } from './fixtures';
 
@@ -213,5 +213,28 @@ describe('reclutarEnCampamento', () => {
     expect(poblacionActual(c, T0)).toBe(100 - LANCEROS.unidadesPorDefecto);
     expect(poblacionActual(c, (T0 + minutos(60)) as typeof T0)).toBe(100 - LANCEROS.unidadesPorDefecto + MERCENARIOS.poblacionPorHora);
     expect(poblacionActual(c, (T0 + minutos(60) * 10) as typeof T0), 'y no pasa del tope').toBe(100);
+  });
+});
+
+describe('sinPrestamosAjenos: retirar la tropa prestada se narra', () => {
+  it('quien deja de residir pierde la tropa prestada y recibe un evento que lo explica', () => {
+    const prestada = escuadronDePrueba('p1', 'h1', 'milicia_lanceros', 14, { prestada: { campamentoId: 'merc-1' }, contenedor: { tipo: 'ejercito', ejercitoId: 'e1' } });
+    const h = heroe({ escuadrones: [prestada] });
+    const r = sinPrestamosAjenos([h], [columna({ escuadronIds: ['p1'] })], [], [campamento({ residentesIds: [] })]);
+    expect(r.heroes[0]!.escuadrones).toEqual([]);
+    expect(r.ejercitos[0]!.escuadronIds).toEqual([]);
+    expect(r.eventos).toHaveLength(1);
+    expect(r.eventos[0]).toMatchObject({
+      codigo: 'mercenarios.prestamo_retirado',
+      asentamientoId: '',
+      payload: { heroeId: 'h1', campamentoId: 'merc-1', escuadras: [{ escuadronId: 'p1', tropaId: 'milicia_lanceros', cantidad: 14 }] },
+    });
+  });
+
+  it('quien sigue residiendo no pierde nada ni genera eventos', () => {
+    const prestada = escuadronDePrueba('p1', 'h1', 'milicia_lanceros', 15, { prestada: { campamentoId: 'merc-1' } });
+    const r = sinPrestamosAjenos([heroe({ escuadrones: [prestada] })], [], [], [campamento()]);
+    expect(r.heroes[0]!.escuadrones).toHaveLength(1);
+    expect(r.eventos).toEqual([]);
   });
 });

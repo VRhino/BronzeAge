@@ -73,7 +73,7 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import { EDIFICIO_CATALOGO, EPICAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
+import { ALMACEN_PERSONAL, EDIFICIO_CATALOGO, EPICAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
 import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, PropuestaAnexion, PropuestaFusion, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
 import { propuestasVigentes } from '../../engine/trasladoDeFaccion';
 import { miradasActivasDe } from '../../engine/intel';
@@ -88,7 +88,7 @@ import { compartenVision, esResidente } from '../../engine/pertenencia';
 import { ubicacionDeducida } from '../../engine/ubicacion';
 import { alijosALaVista, buscaAlijos } from '../../engine/alijos';
 // El mismo recuento que usa el motor para los carros (Doc 5.13): un participante es un carro Y un rombo.
-import { alcanceDeVista, columnaDe, enLaPuertaDe, participantesDe } from '../../engine/ejercitos';
+import { alcanceDeVista, capacidadCargaDe, columnaDe, enLaPuertaDe, participantesDe } from '../../engine/ejercitos';
 import { indiceTropa, type IndiceTropa } from '../../engine/tropa';
 import {
   estaExplorado,
@@ -158,6 +158,8 @@ export type HeroeProyectado = Omit<Heroe, 'plazasRecordadas' | 'exploracionPerso
   loadouts: (Loadout & { liderazgoTotal: number })[];
   cupoGuarnicion: number;
   guarnicionOcupada: number;
+  /** Tope del almacén personal (`ALMACEN_PERSONAL.capacidad`, Doc 2.5): lo que cabe en total, de cualquier recurso. */
+  capacidadAlmacenPersonal: number;
   /** La plaza donde reside, o `null` si es huérfano o reside en un campamento: un dato suyo, esté donde esté. */
   residenciaId: string | null;
 };
@@ -171,6 +173,7 @@ function heroeProyectado(heroe: Heroe, asentamientos: readonly Asentamiento[]): 
     loadouts: heroe.loadouts.map((l) => ({ ...l, liderazgoTotal: liderazgoDeLoadout(heroe, l) })),
     cupoGuarnicion: residencia ? cupoGuarnicion(residencia) : 0,
     guarnicionOcupada: guarnicionOcupada(heroe),
+    capacidadAlmacenPersonal: ALMACEN_PERSONAL.capacidad,
     residenciaId: residencia?.id ?? null,
   };
 }
@@ -433,8 +436,9 @@ export interface ProyeccionJugador {
   /** Las ajenas que se ven AHORA, redactadas (ver `CaravanaAvistada`). Fuera del radio de vision no existen
    * para el jugador — no hay lista de "caravanas del mundo" que consultar. */
   caravanasAvistadas: CaravanaAvistada[];
-  /** Los de la Facción propia, COMPLETOS — mismo criterio que `asentamientos`: de lo tuyo se ve todo. */
-  ejercitos: Ejercito[];
+  /** Los de la Facción propia, COMPLETOS — mismo criterio que `asentamientos`: de lo tuyo se ve todo. `capacidadCarga` es DERIVADO: lo que
+   * cabe en su carro con las caravanas que lleva (`capacidadCargaDe`), para que el cliente no copie la fórmula. */
+  ejercitos: (Ejercito & { capacidadCarga: number })[];
   /** Los de CUALQUIER otra Facción que se estén viendo ahora mismo, redactados (ver `EjercitoAvistado`).
    * Van en un array aparte y no mezclados con `ejercitos` a propósito: la diferencia entre "lo veo entero"
    * y "solo lo avisto" es de tipo, no de un campo opcional que el cliente pueda olvidarse de mirar. */
@@ -465,7 +469,7 @@ export interface ProyeccionJugador {
   heroesVisibles: HeroePublico[];
   /** `heroeId` -> nombre de cada ciudadano de tu Facción, tú incluido, se le vea o no (decisión del usuario, 2026-09-14,
    * Doc 5.16.7): un compañero de Facción no es un desconocido. Solo el nombre; el resto de su ficha sigue la regla de
-   * lo que se ve. Vacío sin Facción. */
+   * lo que se ve. Vacío sin Facción. Incluye a quienes piden entrar en ella (`solicitudesIds`): el Rey decide sobre ellos y necesita saber quiénes son. */
   nombresDeCompaneros: Record<string, string>;
   /** `heroeId` -> nombre del Rey y del Embajador de cada Facción: su identidad es pública (`Faccion.reyId` ya viaja en `facciones`), y sin el
    * nombre un cliente solo podría mostrar un id. Los de tu Facción también están en `nombresDeCompaneros`. */
@@ -927,7 +931,7 @@ export function proyectarParaJugador(
     exploracion,
     caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || c.faccionId === faccionId || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
     caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa, miradasVistas).filter((c) => !bloqueos.caravanas.has(c.id)),
-    ejercitos: ejercitosPropios,
+    ejercitos: ejercitosPropios.map((e) => ({ ...e, capacidadCarga: capacidadCargaDe(e, estado.caravanas) })),
     ejercitosAvistados: ejercitosAvistados.map((e) => ({
       id: e.id,
       tipo: e.tipo,
@@ -984,7 +988,9 @@ export function proyectarParaJugador(
         })
     ),
     nombresDeCompaneros: Object.fromEntries(
-      estado.heroes.filter((h) => faccionPropia && esCiudadano(faccionPropia, h.id)).map((h) => [h.id, h.displayName])
+      estado.heroes
+        .filter((h) => faccionPropia && (esCiudadano(faccionPropia, h.id) || (faccionPropia.solicitudesIds ?? []).includes(h.id)))
+        .map((h) => [h.id, h.displayName])
     ),
     acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
     // De las propias, todas —incluidas las cumplidas, que son el historial de tu mercado—. De una plaza ajena
@@ -1033,8 +1039,22 @@ export function eventosDominioParaJugador(estado: GameSessionState, heroeId: str
   return eventosVisiblesParaJugador(estado, heroeId, eventosDesde(estado, desde));
 }
 
-/** El filtro de audiencia sobre eventos ya elegidos (de memoria o del JSONL): el mismo criterio para los dos orígenes. */
+/**
+ * ¿Nombra el evento a este héroe como protagonista? Un informe de combate (doc 02 §4.1b) lleva `heroesIds` en cada lado, y un evento personal
+ * su `heroeId`. Hace falta porque la atribución por plaza no lo cubre: una columna que salió de un campamento de mercenarios no tiene plaza de
+ * origen (`origenAsentamientoId: ''`), así que sus eventos no eran ni globales ni propios de nadie y no le llegaban ni a su propio héroe; y en un
+ * combate entre Facciones el evento va a la plaza de uno solo de los bandos.
+ */
+function implicaAlHeroe(evento: EventoDominioConVersion, heroeId: string): boolean {
+  const p = evento.payload as { heroeId?: unknown; heroesIds?: unknown; atacante?: { heroesIds?: unknown }; defensor?: { heroesIds?: unknown } } | undefined;
+  if (!p || typeof p !== 'object') return false;
+  const incluye = (ids: unknown): boolean => Array.isArray(ids) && ids.includes(heroeId);
+  return p.heroeId === heroeId || incluye(p.heroesIds) || incluye(p.atacante?.heroesIds) || incluye(p.defensor?.heroesIds);
+}
+
+/** El filtro de audiencia sobre eventos ya elegidos (de memoria o del JSONL): el mismo criterio para los dos orígenes. Pasan los globales (sin
+ * plaza), los de una plaza propia y los que nombran a este héroe. */
 export function eventosVisiblesParaJugador(estado: GameSessionState, heroeId: string, eventos: readonly EventoDominioConVersion[]): EventoDominioConVersion[] {
   const { esPropio } = propioDeJugador(estado, heroeId);
-  return eventos.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId));
+  return eventos.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId) || implicaAlHeroe(e, heroeId));
 }
