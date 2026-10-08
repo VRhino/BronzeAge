@@ -38,7 +38,7 @@ import type {
   TecnologiaId,
 } from '@motor/domain/types';
 import type { Instante } from '@motor/domain/tiempo';
-import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, NECESIDADES, NIVEL_FACCION, OCUPACION, POLITICAS, POLITICA_CATALOGO, RECLUTAMIENTO_ORO_POR_ESCALON, REJILLA_ASENTAMIENTO, SIMULACION, TECNOLOGIAS, EPICAS, ERAS, TITULO_CAPITULO, TROPAS_RECLUTABLES } from '@motor/constants';
+import { EDIFICIO_CATALOGO, IMPUESTOS, MANTENIMIENTO, MILITAR, NECESIDADES, NIVEL_FACCION, OCUPACION, POLITICAS, POLITICA_CATALOGO, RECLUTAMIENTO_ORO_POR_ESCALON, REJILLA_ASENTAMIENTO, SIMULACION, TECNOLOGIAS, EPICAS, ERAS, TITULO_CAPITULO, TROPAS_RECLUTABLES } from '@motor/constants';
 import { crearMapa, type EstadoMapa, type Mapa } from '@motor/world/mapa';
 import {
   produccionPorMinuto,
@@ -80,7 +80,7 @@ import {
 } from '@motor/engine/construction';
 export type { EstadoMejoraEdificio } from '@motor/engine/construction';
 import { trazadoParaAsentamiento, type TrazadoAsentamiento } from '@motor/engine/trazado';
-import { poderEscuadron } from '@motor/engine/combate';
+import { poderEscuadron, poderTotal } from '@motor/engine/combate';
 
 // --- Capa de partida: vive en el servidor, se habla por HTTP ---
 import type { EstadoAdmin, EventoLogAdmin } from '@motor/session/estado';
@@ -679,6 +679,32 @@ export class GameStore {
       soldados: guarnicion.reduce((total, escuadron) => total + escuadron.cantidad, 0),
       poder: guarnicion.reduce((total, escuadron) => total + poderEscuadron(escuadron), 0),
     };
+  }
+
+  /**
+   * Quién defiende una caravana ahora (Doc 3.13.4, 5.13.3), con el orden con que la resuelve el bandido: la columna del ejército a la
+   * que va enganchada (`ejercito`), las escuadras que un residente cedió a la caravana (`escuadras`) o nada (`ninguna`, defensa base).
+   * `poder` es el que tiraría el bandido, con la cohesión entre escuadras.
+   */
+  escoltaDeCaravana(caravana: Caravana): {
+    tipo: 'ejercito' | 'escuadras' | 'ninguna';
+    poder: number;
+    escuadrones: { id: string; heroeId: string; nombre: string; tropaId: string; cantidad: number }[];
+    ejercito?: { id: string; liderId: string; participantes: string[] };
+  } {
+    const escuadronesDe = (ids: readonly string[]) =>
+      this.state.heroes.flatMap((h) => h.escuadrones.filter((e) => ids.includes(e.id)).map((e) => ({ heroeId: h.id, escuadron: e })));
+    const resumen = (xs: ReturnType<typeof escuadronesDe>) => ({
+      poder: poderTotal(xs.map((x) => x.escuadron), true),
+      escuadrones: xs.map(({ heroeId, escuadron: e }) => ({ id: e.id, heroeId, nombre: e.nombre, tropaId: e.tropaId, cantidad: e.cantidad })),
+    });
+    const ejercito = this.state.ejercitos.find((e) => e.caravanasAdjuntasIds.includes(caravana.id));
+    if (ejercito) {
+      return { tipo: 'ejercito', ...resumen(escuadronesDe(ejercito.escuadronIds)), ejercito: { id: ejercito.id, liderId: ejercito.liderId, participantes: ejercito.participantes.map((p) => p.heroeId) } };
+    }
+    const cedidas = escuadronesDe(caravana.escoltaIds ?? []);
+    if (cedidas.length > 0) return { tipo: 'escuadras', ...resumen(cedidas) };
+    return { tipo: 'ninguna', poder: MILITAR.defensaBaseCaravana, escuadrones: [] };
   }
 
   /** Demanda de mano de obra agregada (pesants) frente a lo que piden los edificios productores activos. */

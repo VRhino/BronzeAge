@@ -1964,33 +1964,41 @@ function renderPanelProgresion(state: GameState): void {
     : '<p class="legend-note registro-empty">Sin títulos calculados todavía (aparecen cuando el mundo avanza).</p>';
 }
 
-/** Caravanas realmente en movimiento (a petición del usuario: punto de partida, destino, carga, % de viaje
- * completado y ahora también coordenadas exactas de `posicionActual`, para ubicarlas en el mapa sin ambigüedad
- * — ver el marcador triangular por Facción en `ui/canvas.ts`) — excluye las 'disponibles' paradas en su
- * asentamiento (nada que mostrar de un viaje) y las Caravanas de Fundación (sin `destinoAsentamientoId`: no
- * son parte del comercio, funda quien las lleva con `fundar`). No
- * incluye columna de "escolta": Fase 0 no modela escolta de jugadores en caravanas todavía (ver
- * `engine/bandidos.ts`) — se avisa en la nota al pie en vez de inventar un dato. */
+/** Caravanas en tránsito: las que van (o vuelven) hacia un destino y las enganchadas a un ejército, con origen y destino por nombre, tipo,
+ * estado, carga, coordenadas, viaje completado y su ESCOLTA (`gameStore.escoltaDeCaravana`): la columna del ejército, las escuadras
+ * cedidas, o ninguna —que es lo que matan los campamentos de bandidos (defensa base). Excluye las 'disponibles' paradas y las de
+ * Fundación sin enganchar (nada que mostrar de un viaje). */
 function caravanasEnRutaHtml(state: GameState): string {
-  const enRuta = state.caravanas.filter((c) => c.destinoAsentamientoId);
+  const enRuta = state.caravanas.filter((c) => c.destinoAsentamientoId || c.estado === 'adjunta');
   if (enRuta.length === 0) return '<p class="legend-note">Ninguna caravana en ruta.</p>';
-  const nombreAsentamiento = (id: string) => state.asentamientos.find((a) => a.id === id)?.nombre ?? id;
+  const lugar = (id: string | undefined) => {
+    if (!id) return '—';
+    const plaza = state.asentamientos.find((a) => a.id === id);
+    return esc(plaza?.nombre ?? id);
+  };
+  const ESTADO: Record<string, string> = { en_transito: 'En tránsito', retornando: 'Volviendo a origen', adjunta: 'Enganchada a un ejército' };
   const filas = enRuta
     .map((c) => {
       const cargaTxt =
         Object.entries(c.contenido)
           .map(([r, cant]) => `${cant.toFixed(0)} ${RECURSO_NOMBRE[r] ?? r}`)
           .join(', ') || (c.estado === 'retornando' ? 'vacía' : '—');
-      const estadoTxt = c.estado === 'retornando' ? 'Volviendo a origen' : c.estado === 'en_transito' ? 'En tránsito' : (c.estado ?? '—');
       const coordsTxt = `(${Math.round(c.posicionActual.x)}, ${Math.round(c.posicionActual.y)})`;
-      return `<tr><td>${c.id}</td><td>${nombreAsentamiento(c.origenAsentamientoId!)}</td><td>${nombreAsentamiento(c.destinoAsentamientoId!)}</td><td>${estadoTxt}</td><td>${cargaTxt}</td><td>${coordsTxt}</td><td>${Math.round(c.progreso * 100)}%</td></tr>`;
+      const e = gameStore.escoltaDeCaravana(c);
+      const escolta =
+        e.tipo === 'ninguna'
+          ? `<span class="badge badge-modified" title="Los campamentos de bandidos la atacan contra la defensa base">⚠ sin escolta</span> <small class="legend-note">defensa base ${e.poder}</small>`
+          : `<b>${e.tipo === 'ejercito' ? `Columna ${esc(e.ejercito!.id)}` : 'Escuadras cedidas'}</b> · poder ≈ ${Math.round(e.poder)}<br><small class="legend-note">${
+              e.tipo === 'ejercito' ? `líder ${soloNombreHeroe(state, e.ejercito!.liderId)} · ${e.ejercito!.participantes.length} héroe${e.ejercito!.participantes.length === 1 ? '' : 's'} · ` : ''
+            }${e.escuadrones.length ? e.escuadrones.map((x) => `${esc(x.nombre)} ×${x.cantidad} (${soloNombreHeroe(state, x.heroeId)})`).join(', ') : 'sin escuadrones'}</small>`;
+      return `<tr><td>${esc(c.id)}</td><td>${c.tipo === 'construccion' ? 'Fundación' : c.tipo}</td><td>${lugar(c.origenCampamentoId ?? c.origenAsentamientoId)}</td><td>${c.destinoAsentamientoId ? lugar(c.destinoAsentamientoId) : 'sin destino'}</td><td>${ESTADO[c.estado ?? ''] ?? c.estado ?? '—'}</td><td>${cargaTxt}</td><td>${coordsTxt}</td><td>${Math.round(c.progreso * 100)}%</td><td>${escolta}</td></tr>`;
     })
     .join('');
   return `<table class="mini-table">
-      <thead><tr><th>Caravana</th><th>Origen</th><th>Destino</th><th>Estado</th><th>Carga</th><th>Coordenadas</th><th>Viaje completado</th></tr></thead>
+      <thead><tr><th>Caravana</th><th>Tipo</th><th>Origen</th><th>Destino</th><th>Estado</th><th>Carga</th><th>Coordenadas</th><th>Viaje</th><th>Escolta</th></tr></thead>
       <tbody>${filas}</tbody>
     </table>
-    <p class="legend-note">Escolta: no modelada todavía en Fase 0 (ver Doc 3.2/3.6 — el diseño objetivo la deja a elección del jugador).</p>`;
+    <p class="legend-note">Escolta: la columna del ejército al que va enganchada; si no, las escuadras que un residente cedió (de 1 a 3 según el nivel del Mercado); si no, ninguna. El poder es el que enfrentaría un campamento de bandidos.</p>`;
 }
 
 function renderPanelEconomia(state: GameState): void {
