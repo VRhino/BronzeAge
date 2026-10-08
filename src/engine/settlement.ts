@@ -6,7 +6,7 @@ import { ALMACEN, FUNDACION, MANTENIMIENTO, NIVEL_FACCION, OCUPACION, POBLACION,
 import type { Mapa } from '../world/mapa';
 import { posicionLibreParaFundar, zonaInicialDeFundacion } from './zones';
 import { sitioEnBarrio } from './construction';
-import { aplicarExperiencia, calcularCapFundacion, otorgarCiudadania } from './faccion';
+import { aplicarExperiencia, calcularCapFundacion, otorgarCiudadania, sinSolicitudesDe } from './faccion';
 import { ReglaInvalidaError } from './errores';
 
 export class FundacionInvalidaError extends ReglaInvalidaError {}
@@ -315,7 +315,7 @@ export function fundarAsentamiento(
   }
   // Fundar un asentamiento NUEVO da experiencia de Facción (decisión del usuario, 2026-09-27); el primero, no: es
   // nacer, no crecer.
-  const faccionesTrasFundar = facciones.map((f) => (f.id === faccionId ? faccionActualizada : f));
+  const faccionesTrasFundar = sinSolicitudesDe(facciones.map((f) => (f.id === faccionId ? faccionActualizada : f)), heroesFundadoresIds);
   // El nivel sube en el momento si esa experiencia cruza un umbral (`aplicarExperiencia`).
   const trasXp =
     asentamientosDeFaccion > 0

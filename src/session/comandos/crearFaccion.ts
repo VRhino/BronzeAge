@@ -1,4 +1,4 @@
-import { crearFaccion as crearFaccionEngine, esCiudadano, otorgarCiudadania } from '../../engine/faccion';
+import { crearFaccion as crearFaccionEngine, esCiudadano, otorgarCiudadania, sinSolicitudesDe } from '../../engine/faccion';
 import { motivoSigiloRechazado, sigiloLibre } from '../../engine/sigilo';
 import type { Sigilo } from '../../domain/types';
 import { asignarRey } from '../../engine/cargos';
@@ -67,7 +67,7 @@ export const crearFaccion = comando<ParamsCrearFaccion, { faccionId: string }>((
     ctx.actor
   );
   // Lo que anduvo sin bandera pasa a ser conocimiento de la Facción recién creada (Doc 1.3).
-  const siguiente = conFaccionEnSuColumna(conExploracionFundida({ ...estado, facciones: [...estado.facciones, nueva] }, ctx.actor, nueva.id), ctx.actor);
+  const siguiente = conFaccionEnSuColumna(conExploracionFundida({ ...estado, facciones: [...sinSolicitudesDe(estado.facciones, [ctx.actor]), nueva] }, ctx.actor, nueva.id), ctx.actor);
   return exito(
     siguiente,
     [

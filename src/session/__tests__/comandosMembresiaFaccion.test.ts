@@ -128,6 +128,33 @@ describe('ingreso por solicitud (D46)', () => {
     expect(sesion.getState().facciones[0]!.ciudadanosIds).not.toContain('jugador-b');
   });
 
+  it('quien crea su propia Facción cancela sus solicitudes vivas en las demás', () => {
+    const sesion = GameSession.crear('t', { seed: 1 });
+    const micenas = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
+    sesion.ejecutar(solicitarIngreso, { faccionId: micenas }, { actor: 'jugador-b' });
+    expect(sesion.getState().facciones[0]!.solicitudesIds).toEqual(['jugador-b']);
+
+    sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { actor: 'jugador-b' });
+
+    expect(sesion.getState().facciones.find((f) => f.id === micenas)!.solicitudesIds).toEqual([]);
+    // y el Rey ya no puede ni toparse con ella
+    expect(sesion.ejecutar(responderSolicitud, { faccionId: micenas, heroeId: 'jugador-b', aceptar: true }, OPC).ok).toBe(false);
+  });
+
+  it('el tick borra una solicitud caducada de un ciudadano (partida guardada antes de la regla)', () => {
+    const sesion = GameSession.crear('t', { seed: 1 });
+    const micenas = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;
+    const troya = sesion.ejecutar(crearFaccion, { nombre: 'Troya' }, { actor: 'jugador-b' }).datos!.faccionId;
+    const exportada = sesion.exportar();
+    const sucia = GameSession.importar({ ...exportada, state: { ...exportada.state, facciones: exportada.state.facciones.map((f) => (f.id === micenas ? { ...f, solicitudesIds: ['jugador-b'] } : f)) } });
+    expect(sucia.getState().facciones.find((f) => f.id === micenas)!.solicitudesIds).toEqual(['jugador-b']);
+
+    sucia.avanzarTick();
+
+    expect(sucia.getState().facciones.find((f) => f.id === micenas)!.solicitudesIds).toEqual([]);
+    expect(sucia.getState().facciones.find((f) => f.id === troya)!.ciudadanosIds).toContain('jugador-b');
+  });
+
   it('aceptado en una, sus solicitudes en otras caen', () => {
     const sesion = GameSession.crear('t', { seed: 1 });
     const micenas = sesion.ejecutar(crearFaccion, { nombre: 'Micenas' }, OPC).datos!.faccionId;

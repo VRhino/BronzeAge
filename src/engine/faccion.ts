@@ -97,6 +97,20 @@ export function esCiudadano(faccion: Faccion, heroeId: string): boolean {
   return faccion.ciudadanosIds.includes(heroeId);
 }
 
+/**
+ * Quien pasa a ser ciudadano de una Facción (la funda, la acepta el Rey, funda una plaza…) deja de pedir ingreso en TODAS: «1 y solo 1 Facción» (Doc 0) y una
+ * solicitud viva de un ciudadano no se puede aceptar (`faccion.invalida`). Se llama donde se otorga la ciudadanía y no se filtra al proyectar, para que
+ * ninguna lista (la del Rey, los bots, la proyección) vea nunca una solicitud de quien ya está dentro.
+ */
+export function sinSolicitudesDe(facciones: readonly Faccion[], heroeIds: readonly string[]): Faccion[] {
+  return facciones.map((f) => (f.solicitudesIds?.some((id) => heroeIds.includes(id)) ? { ...f, solicitudesIds: f.solicitudesIds.filter((id) => !heroeIds.includes(id)) } : f));
+}
+
+/** Red de seguridad por tick: borra de las listas de solicitantes a cualquier ciudadano (partidas guardadas antes de `sinSolicitudesDe`, o una ruta futura que se olvide de llamarlo). */
+export function sinSolicitudesCaducadas(facciones: readonly Faccion[]): Faccion[] {
+  return sinSolicitudesDe(facciones, facciones.flatMap((f) => f.ciudadanosIds));
+}
+
 export function otorgarCiudadania(faccion: Faccion, heroeId: string): Faccion {
   if (esCiudadano(faccion, heroeId)) return faccion;
   return { ...faccion, ciudadanosIds: [...faccion.ciudadanosIds, heroeId] };
@@ -194,12 +208,10 @@ export function responderSolicitud(facciones: readonly Faccion[], faccionId: str
   const faccion = facciones.find((f) => f.id === faccionId);
   if (!faccion?.solicitudesIds?.includes(heroeId)) throw new FaccionInvalidaError('Ese héroe no ha pedido entrar.');
   if (aceptar && facciones.some((f) => esCiudadano(f, heroeId))) throw new FaccionInvalidaError('Ese héroe ya es ciudadano de otra Facción.');
-  const sinSolicitud = (f: Faccion): Faccion =>
-    f.solicitudesIds?.includes(heroeId) ? { ...f, solicitudesIds: f.solicitudesIds.filter((id) => id !== heroeId) } : f;
-  return facciones.map((f) => {
-    if (f.id === faccionId) return aceptar ? otorgarCiudadania(sinSolicitud(f), heroeId) : sinSolicitud(f);
-    return aceptar ? sinSolicitud(f) : f;
-  });
+  // Aceptada: sale de TODAS las listas; denegada: solo de la de esta Facción.
+  const sinSolicitud = (f: Faccion): Faccion => (f.solicitudesIds?.includes(heroeId) ? { ...f, solicitudesIds: f.solicitudesIds.filter((id) => id !== heroeId) } : f);
+  if (aceptar) return sinSolicitudesDe(facciones, [heroeId]).map((f) => (f.id === faccionId ? otorgarCiudadania(f, heroeId) : f));
+  return facciones.map((f) => (f.id === faccionId ? sinSolicitud(f) : f));
 }
 
 /**

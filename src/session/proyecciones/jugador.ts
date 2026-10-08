@@ -944,8 +944,7 @@ export function proyectarParaJugador(
     faccionId,
     mapaId: idDeMapa(estado.mapa),
     estadoMapa: estado.estadoMapa,
-    // Una solicitud de quien ya es ciudadano de alguna Facción está caducada (entró por otra vía: fundó la suya, anexión, fusión): no se enseña, porque aceptarla da `faccion.invalida`.
-    facciones: estado.facciones.map((f) => (f.solicitudesIds?.some((id) => estado.facciones.some((o) => esCiudadano(o, id))) ? { ...f, solicitudesIds: f.solicitudesIds.filter((id) => !estado.facciones.some((o) => esCiudadano(o, id))) } : f)),
+    facciones: estado.facciones,
     asentamientos: dentroDe ? [dentroDe] : [],
     asentamientosAvistados: avistados,
     // Lo recordado MENOS lo que se ve ahora. Cada plaza aparece en una lista o en la otra, nunca en las dos.

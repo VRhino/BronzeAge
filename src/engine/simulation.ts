@@ -14,7 +14,7 @@ import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa,
 import { anexarAlHistorialDeOrdenes, caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
 import { avanzarTributos, liberarVasallosDeSenoresDesarmados } from './diplomacia';
-import { aplicarExperiencia, registrarDerrota, type AjusteExperiencia } from './faccion';
+import { aplicarExperiencia, registrarDerrota, sinSolicitudesCaducadas, type AjusteExperiencia } from './faccion';
 import { NIVEL_FACCION } from '../constants';
 import { avanzarMantenimientoTropas, consumoRacionDeEscuadrones } from './tropas';
 import { avanzarMantenimiento, encontrarCapital } from './mantenimiento';
@@ -368,7 +368,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const trasNivelFaccion = aplicarExperiencia(trasEjercitos.facciones, ajustesExperiencia);
   eventosDominio.push(...comoEventosDominio(trasNivelFaccion.eventos, contexto));
 
-  const faccionesFinal = avanzarReputacion(trasNivelFaccion.facciones, relaciones);
+  const faccionesFinal = sinSolicitudesCaducadas(avanzarReputacion(trasNivelFaccion.facciones, relaciones));
 
   // La reposición de los mercados de mercenarios es una cita agendada: cada tick solo compara un instante (Doc 1.9b).
   const trasReposicion = reponerMercados(trasEjercitos.campamentosMercenarios, estado.mercadoMercenario, instante);
