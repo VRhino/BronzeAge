@@ -19,6 +19,7 @@ import { esCuentaDeBot } from '../identidad/proveedorClave';
 import { enviarMapa, ESQUEMA_MAPA } from './mapa';
 import { ERROR_RESPUESTA, PARAMS_GAME_ID, QUERY_DESDE } from './esquemas';
 import { esDeCronica } from '../../engine/cronica';
+import { esCiudadano } from '../../engine/faccion';
 import { eventosDesde } from '../../session/estado';
 import {
   partidaNoAbierta,
@@ -64,6 +65,50 @@ function proyeccionDe(runner: RunnerDePartida, jugadorId: string): Record<string
   if (heroe) return conImpuros(runner, heroe.id);
   return { ...resumenDe(runner), sinHeroe: true, campamentos: campamentosParaElegir(runner.getState()) };
 }
+
+const ESQUEMA_LISTAR_PARTIDAS = {
+  description:
+    'Las partidas ABIERTAS en este proceso, con lo del propio usuario en cada una (2026-10-08): si ya es jugador (`membresia`, una ' +
+    'revocada o terminada cuenta como `null`) y, si tiene héroe, un resumen suyo con su Facción. Nada de otros jugadores. ' +
+    'Sirve a la pantalla «Partidas» tras el login: no hace falta conocer el `gameId`.',
+  tags: ['jugador'],
+  security: SEGURIDAD_JUGADOR,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        partidas: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              gameId: { type: 'string' },
+              estado: { type: 'string', enum: ['activa'] },
+              membresia: { type: ['object', 'null'], properties: { jugadorId: { type: 'string' } }, required: ['jugadorId'] },
+              heroe: {
+                type: ['object', 'null'],
+                properties: {
+                  id: { type: 'string' },
+                  nombre: { type: 'string' },
+                  nivel: { type: 'number' },
+                  faccion: {
+                    type: ['object', 'null'],
+                    properties: { id: { type: 'string' }, nombre: { type: 'string' }, emblemaId: { type: 'string' }, colorEmblemaId: { type: 'string' } },
+                    required: ['id', 'nombre', 'emblemaId', 'colorEmblemaId'],
+                  },
+                },
+                required: ['id', 'nombre', 'nivel', 'faccion'],
+              },
+            },
+            required: ['gameId', 'estado', 'membresia', 'heroe'],
+          },
+        },
+      },
+      required: ['partidas'],
+    },
+    401: ERROR_RESPUESTA,
+  },
+} as const;
 
 const ESQUEMA_MEMBRESIA = {
   description: 'Unirse a una partida como jugador: crea la Membresia (rol jugador) que exige el resto de esta superficie.',
@@ -129,6 +174,36 @@ const ESQUEMA_COMANDOS_JUGADOR = {
 } as const;
 
 export function registrarRutasDeJugador(app: FastifyInstance, deps: DependenciasDeRutas): void {
+  /** Las partidas abiertas y lo del propio usuario en ellas: pantalla «Partidas» (ver `ESQUEMA_LISTAR_PARTIDAS`). */
+  app.get('/jugador/partidas', { schema: ESQUEMA_LISTAR_PARTIDAS }, async (request, reply) => {
+    const resuelto = resolverActor(request, deps);
+    if (!resuelto) return sinSesion(reply);
+    const ahora = deps.ahora();
+    const partidas = deps.partidas
+      .abiertas()
+      .map((runner) => {
+        const previa = deps.identidad.repositorio.obtenerMembresia(resuelto.usuario.id, runner.gameId);
+        const jugadorId = previa && esVigente(previa, ahora) ? previa.jugadorId : undefined;
+        const heroe = jugadorId ? heroeDe(runner, jugadorId) : undefined;
+        const faccion = heroe ? runner.getState().facciones.find((f) => esCiudadano(f, heroe.id)) : undefined;
+        return {
+          gameId: runner.gameId,
+          estado: 'activa' as const,
+          membresia: jugadorId ? { jugadorId } : null,
+          heroe: heroe
+            ? {
+                id: heroe.id,
+                nombre: heroe.displayName,
+                nivel: heroe.nivel,
+                faccion: faccion ? { id: faccion.id, nombre: faccion.nombre, emblemaId: faccion.sigilo.emblemaId, colorEmblemaId: faccion.sigilo.colorEmblemaId } : null,
+              }
+            : null,
+        };
+      })
+      .sort((a, b) => a.gameId.localeCompare(b.gameId));
+    return reply.send({ partidas });
+  });
+
   /**
    * Unirse a una partida como jugador: crea la `Membresia` (rol `'jugador'`) que exige el resto de esta
    * superficie. Un `Usuario` solo puede tener una `Membresia` por partida (doc 5) — repetir la llamada es

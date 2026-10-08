@@ -223,6 +223,7 @@ estratégico ya consume una secuencia completa que este documento debe incluir e
 de `src/server/rutas/jugador.ts`, ya consumidas por `BronzeAgeClient/src/apiCliente.ts`):
 
 ```text
+GET  /jugador/partidas                       las partidas ABIERTAS y lo del propio usuario (2026-10-08, ver abajo)
 POST /jugador/partidas/:gameId/membresia    unirse a una partida (crea/recupera Membresia+jugadorId)
 GET  /jugador/partidas/:gameId               proyección filtrada del estado (con Heroe/heroeId cuando exista)
 GET  /jugador/partidas/:gameId/eventos?desde=<version>
@@ -414,6 +415,15 @@ no cambie `layoutVersion`, y el fixture `fixtures/escenaCampamento.json` cambia 
 
 `comprarCasa` y `unirseAFaccion` ya no existen. En la proyección: `campamentosMercenarios` (los conocidos, con `mercado`
 y `fondos`), `alijos` y, del héroe propio, `almacenPersonal`, `oroDeBotin`, `cupoCampamento`, `racionEn` y `alijosAbiertos`.
+**`GET /jugador/partidas`** (2026-10-08, pantalla «Partidas» tras el login; cualquier sesión). Devuelve `{ partidas: [...] }` ordenadas por `gameId`, una por
+partida abierta en el proceso: `{ gameId, estado: 'activa', membresia: { jugadorId } | null, heroe: { id, nombre, nivel, faccion: { id, nombre, emblemaId,
+colorEmblemaId } | null } | null }`. `membresia` es `null` si no es jugador de esa partida (una revocada o terminada también); `heroe` es `null` sin membresía
+o sin héroe. `nivel` es el nivel del héroe (Doc 5.16.1); `faccion` es aquella de la que es ciudadano. No hay nombre/etiqueta de partida (hoy solo `gameId`) ni
+más estados que `activa`. Nada de otros jugadores. Para unirse: `POST /jugador/partidas/:gameId/membresia`.
+
+**Tecnologías adoptadas de la Facción propia:** ya viajan en la proyección, `tecnologia.propias.adoptadas: TecnologiaId[]` (y `aparecidas`, `reveladas`);
+`propias` es `null` sin Facción.
+
 ### 4.2b-bis Ejército en preparación y ejército sin destino fijo (2026-10-08, Doc 5.12.1 y 5.14.5; modelo en doc 01 §13)
 
 **Sin destino fijo.** `movilizarEjercito` y `salirDelCampamento` ya **no exigen `objetivo`** (opcional, para quien lo tenga claro): el ejército sale

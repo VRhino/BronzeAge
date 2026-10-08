@@ -440,6 +440,47 @@ describe('GET /admin|jugador/partidas/:gameId/mapa/:mapaId (Fase C11)', () => {
   });
 });
 
+describe('GET /jugador/partidas (pantalla «Partidas»)', () => {
+  it('401 sin sesión', async () => {
+    expect((await app.inject({ method: 'GET', url: '/v1/jugador/partidas' })).statusCode).toBe(401);
+  });
+
+  it('lista las abiertas: sin membresía todo a null, con héroe su resumen, y nada de otros jugadores', async () => {
+    await partidaCreada('g1');
+    await partidaCreada('g2');
+    const ana = await jugadorEn('g1', 'ana');
+    await jugadorEn('g1', 'bruno', 'mercenarios-1');
+
+    const res = await app.inject({ method: 'GET', url: '/v1/jugador/partidas', headers: ana });
+
+    expect(res.statusCode).toBe(200);
+    const [g1, g2] = res.json().partidas;
+    expect(g1).toMatchObject({ gameId: 'g1', estado: 'activa', membresia: { jugadorId: expect.any(String) }, heroe: { nombre: 'ana', nivel: expect.any(Number), faccion: null } });
+    expect(g2).toEqual({ gameId: 'g2', estado: 'activa', membresia: null, heroe: null });
+    expect(JSON.stringify(res.json()), 'ni rastro de otro jugador').not.toContain('bruno');
+  });
+
+  it('con Facción trae su id, nombre y emblema', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+    const r = await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'crearFaccion', params: { nombre: 'Micenas' } } });
+    expect(r.statusCode).toBe(200);
+
+    const [g1] = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas', headers: ana })).json().partidas;
+    expect(g1.heroe.faccion).toMatchObject({ nombre: 'Micenas', emblemaId: expect.any(String), colorEmblemaId: expect.any(String) });
+  });
+
+  it('una membresía revocada cuenta como null', async () => {
+    await partidaCreada('g1');
+    const ana = await jugadorEn('g1', 'ana');
+    const usuarioId = identidad!.repositorio.listarMembresiasDePartida('g1').find((m) => m.rol === 'jugador')!.usuarioId;
+    identidad!.repositorio.revocarMembresia(usuarioId, 'g1', '1970-01-01T00:00:00.001Z');
+
+    const [g1] = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas', headers: ana })).json().partidas;
+    expect(g1).toMatchObject({ membresia: null, heroe: null });
+  });
+});
+
 describe('POST /jugador/partidas/:gameId/membresia (unirse)', () => {
   it('crea la membresia y devuelve el jugadorId', async () => {
     await partidaCreada('g1');
