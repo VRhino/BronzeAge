@@ -390,6 +390,27 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   separarseDelEjercito: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   organizarEjercito: objeto({ heroeId: IDENTIFICADOR, politicaDeUnion: { type: 'string', enum: ['aceptar', 'preguntar'] } }, ['heroeId', 'politicaDeUnion']),
   cancelarFormacion: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
+  // Ejército en preparación dentro de un lugar (Doc 5.14.5). Las escuadras y la carga son las de salir de una plaza o un campamento.
+  convocarEjercito: objeto(
+    {
+      heroeId: IDENTIFICADOR,
+      politicaDeUnion: { type: 'string', enum: ['aceptar', 'preguntar'] },
+      escuadronIds: LISTA_DE_IDENTIFICADORES,
+      carga: { type: 'object', additionalProperties: NUMERO },
+    },
+    ['heroeId', 'politicaDeUnion', 'escuadronIds', 'carga']
+  ),
+  unirseAConvocatoria: objeto(
+    { heroeId: IDENTIFICADOR, convocatoriaId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, carga: { type: 'object', additionalProperties: NUMERO } },
+    ['heroeId', 'convocatoriaId', 'escuadronIds', 'carga']
+  ),
+  responderPeticionDeConvocatoria: objeto(
+    { heroeId: IDENTIFICADOR, convocatoriaId: IDENTIFICADOR, solicitanteId: IDENTIFICADOR, aceptar: { type: 'boolean' } },
+    ['heroeId', 'convocatoriaId', 'solicitanteId', 'aceptar']
+  ),
+  separarseDeConvocatoria: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
+  cancelarConvocatoria: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
+  partirConvocatoria: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   // El menú de interacción (Doc 5.12.3). `objetivo` distingue columna de caravana: son entidades distintas
   // con anillos y consecuencias distintas, y mezclarlas en un id suelto obligaría al motor a adivinar.
   inspeccionar: objeto(
@@ -451,7 +472,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
       politicaDeUnion: { type: 'string', enum: ['rechazar', 'aceptar', 'preguntar'] },
       carga: { type: 'object', additionalProperties: NUMERO },
     },
-    ['asentamientoId', 'heroeId', 'escuadronIds', 'objetivo']
+    ['asentamientoId', 'heroeId', 'escuadronIds']
   ),
   unirseAEjercito: objeto(
     { ejercitoId: IDENTIFICADOR, asentamientoId: IDENTIFICADOR, heroeId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES },

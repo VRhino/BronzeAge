@@ -23,7 +23,7 @@ import type {
   RelacionPolitica,
   Titulo,
   ZonaFaccion,
-  ZonaInfluencia, Ejercito, EstadoTecnologia, Heroe, Alijo } from '../domain/types';
+  ZonaInfluencia, Convocatoria, Ejercito, EstadoTecnologia, Heroe, Alijo } from '../domain/types';
 import type { TrazadoAsentamiento } from '../engine/trazado';
 import type { MemoriaFaccion } from '../engine/memoria';
 import type { EventoDominio } from '../domain/eventos';
@@ -83,6 +83,8 @@ export interface GameSessionState {
   heroes: Heroe[];
   /** Ejércitos en campaña (Doc 5.12) — los mueve `avanzarEjercitos` al final de la cadena del tick. */
   ejercitos: Ejercito[];
+  /** Ejércitos en preparación dentro de una plaza o un campamento (Doc 5.14.5), sin caducidad. Ausente = ninguno. */
+  convocatorias?: Convocatoria[];
   /** Batallas jugadas en Unity (doc 01 §15, `session/batallas.ts`), abiertas o ya cerradas. No es estado del motor:
    * lo que está en una batalla activa ni siquiera entra en el tick. */
   batallas: Batalla[];

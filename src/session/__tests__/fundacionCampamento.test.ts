@@ -8,7 +8,7 @@ import { crearMapa } from '../../world/mapa';
 import { GameSession } from '../gameSession';
 import { crearHeroe } from '../comandos/crearHeroe';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { entrarEnCampamento, salirDelCampamento } from '../comandos/presencia';
+import { entrarEnCampamento, marcharA, salirDelCampamento } from '../comandos/presencia';
 import { aportarARefundacion, comprarCaravanaDeRefundacion } from '../comandos/mercenarios';
 import { adjuntarCaravana, replegarEjercito } from '../comandos/ejercitos';
 import { fundar } from '../comandos/expansion';
@@ -121,11 +121,9 @@ describe('fundar en grupo desde el campamento (M2, D21)', () => {
     for (const [recurso, cantidad] of Object.entries(costoRefundacion())) sesion.ejecutar(aportarARefundacion, { recurso, cantidad, lado: 'almacen' }, { actor: ana });
     const caravanaId = sesion.ejecutar(comprarCaravanaDeRefundacion, {}, { actor: ana }).datos!.caravanaId;
 
-    expect(
-      sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: ana, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar' }, { actor: ana }).ok,
-      'un ejército sale con rumbo'
-    ).toBe(false);
-    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: ana, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar', objetivo: { tipo: 'punto', punto: { x: 1000, y: 1000 } } }, { actor: ana }).datos!.ejercitoId;
+    const ejercitoId = sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: ana, escuadronIds: [], carga: {}, politicaDeUnion: 'aceptar' }, { actor: ana }).datos!.ejercitoId;
+    expect(sesion.getState().ejercitos.find((e) => e.id === ejercitoId), 'sin rumbo sale quieto en la puerta').toMatchObject({ tipo: 'ejercito', estado: 'estacionado' });
+    sesion.ejecutar(marcharA, { heroeId: ana, objetivo: { tipo: 'punto', punto: { x: 1000, y: 1000 } } }, { actor: ana });
     expect(sesion.getState().ejercitos.find((e) => e.id === ejercitoId)).toMatchObject({ tipo: 'ejercito', estado: 'marchando' });
     sesion.ejecutar(adjuntarCaravana, { ejercitoId, caravanaId, heroeId: ana }, { actor: ana });
     sesion.ejecutar(salirDelCampamento, { campamentoId: 'mercenarios-0', heroeId: bea, escuadronIds: [], carga: {} }, { actor: bea });

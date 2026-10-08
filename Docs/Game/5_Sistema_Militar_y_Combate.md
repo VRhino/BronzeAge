@@ -246,12 +246,12 @@ Los ejércitos se mueven por el mapa del mundo para atacar, igual que las carava
 
 El Héroe puede salir **solo** (con las tropas que quiera, incluidas ninguna) o **junto a otros héroes**. En el motor son **la misma entidad** y comparten movimiento, suministro y combate. En las REGLAS no son lo mismo, y la línea que los separa **no es cuánta gente va dentro: es cómo salió la columna**.
 
-**Lo decide el acto de salir, y no cambia nunca:** salir *a lo tuyo* —sin destino— hace una Columna personal; **movilizarse contra un destino** hace un Ejército, aunque en ese primer momento vayas solo. Por eso "salir juntos" no necesita ninguna ceremonia aparte: uno moviliza y los demás se suman, en su plaza o en el campo (5.14).
+**Lo decide el acto de salir, y no cambia nunca:** salir *a lo tuyo* hace una Columna personal; **movilizarse** (o partir una convocatoria, 5.14.5) hace un Ejército, aunque en ese primer momento vayas solo. Salir juntos se puede de tres maneras: uno moviliza y los demás se suman, en su plaza o en el campo (5.14); o se prepara el ejército dentro del lugar y parten todos a la vez (5.14.5).
 
 | | **Columna personal** | **Ejército** |
 |---|---|---|
-| Cómo nace | Se **sale al mundo** desde la residencia, **sin destino** | Se **moviliza** desde un asentamiento **contra un destino**, aunque salga uno solo |
-| Destino | **Se rectifica** en cualquier momento | Fijado al salir; cancelar es volver (5.12.6) |
+| Cómo nace | Se **sale al mundo** desde la residencia | Se **moviliza** desde un asentamiento, se **parte una convocatoria** (5.14.5) o se **forma en campo** (5.14.4), aunque salga uno solo |
+| Quién dirige el rumbo | Él mismo, con sus clics | **Su Líder**, con sus clics, las veces que quiera; los demás acompañan |
 | Caravanas adjuntas | **No puede llevarlas** | Sí, y las conserva aunque baje a un miembro |
 | Se le pueden unir otros | No | Sí, **solo de su misma Facción** (5.14) |
 | Separarse | No aplica: separarse es disolverla | Sí, **mientras quede alguien** (5.14) |
@@ -260,11 +260,9 @@ Dos reglas cierran el modelo:
 
 - **Un Ejército se origina en un asentamiento o se forma en campo abierto con tres o más héroes** (5.14.4). Dos viajeros que se cruzan en el camino no forman un ejército; lo que sí puede hacer uno es unirse a un ejército que ya existe o a una formación en curso.
 - **Un Ejército y una Columna personal nunca combaten entre sí** (5.12.3): ni se persiguen ni se atacan, en ninguna dirección. Es la línea que decide qué clase de batalla se abre.
-- **Ser un Ejército es una identidad, no un recuento.** Uno al que se le separan miembros hasta quedar en uno solo **sigue siendo un Ejército**: conserva su ruta fija y sus caravanas. No recupera la libertad de movimiento por haberse quedado corto.
+- **Ser un Ejército es una identidad, no un recuento.** Uno al que se le separan miembros hasta quedar en uno solo **sigue siendo un Ejército**: conserva sus caravanas y se dirige por su Líder. Se mueve igual que una columna personal, pero no se le unen sin permiso ni se le persigue como a una.
 
-**Por qué el destino de un ejército no se toca.** Un jugador solo es libre de decidir porque decide por sí mismo; un ejército lleva a varios, así que su rumbo es un compromiso compartido y se fija al salir. Eso hace que **unirse a un ejército cueste la libertad de movimiento**, y que separarse la devuelva al instante — el precio de marchar acompañado, sin ninguna regla extra que lo imponga.
-
-*(El compromiso es un compromiso, no una cárcel: un grupo que quiera cambiar de rumbo puede separarse, moverse y volver a unirse. Cambiar una decisión compartida exige que todos vuelvan a actuar, que es exactamente lo que debe costar.)*
+**Un ejército no tiene destino fijo** (decisión del autor, 2026-10-08): la niebla de guerra hace que su Líder no pueda decidir un único rumbo de antemano. Por eso **sale quieto en la puerta** y **lo dirige su Líder con sus clics**, tantas veces como quiera y en cualquier momento, también a mitad de marcha (`marcharA`). Los demás miembros no dirigen: si piden un rumbo se les rechaza. **Acompañar sigue costando libertad**: quien se une cede la dirección al Líder, y separarse se la devuelve al instante.
 
 **Un Héroe puede unirse a un ejército ya en campaña** de dos formas distintas, con geometrías distintas: pasando el ejército por **su asentamiento**, de donde saca tropas frescas; o **cruzándoselo en el campo**, aportando lo que ya lleva encima (5.14). En ambos casos sus escuadrones se validan contra su propio Liderazgo.
 
@@ -384,9 +382,9 @@ Consecuencias que salen del `min` sin escribir ninguna regla más:
 
 Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **dispara la vuelta**: el ejército pasa a `regresando` y desanda su ruta hacia el asentamiento de origen. No se teletransporta ni se desvanece — volver cuesta el mismo camino que costó ir, y sigue comiendo del carro durante el regreso.
 
-**Esto vale para un EJÉRCITO. Una Columna personal no cancela: rectifica** (5.12.1). Un jugador solo hace clic en otro punto y su ruta se recalcula desde donde esté, tantas veces como quiera. Un ejército no tiene esa opción, y por eso cancelar —volver a casa— es su única salida de una marcha empezada: el rumbo lo acordaron varios.
+**Esto vale para un EJÉRCITO. Una Columna personal no cancela: rectifica** (5.12.1). Un ejército también puede rectificar —su Líder hace clic en otro punto—; cancelar es la orden de **volver a casa**, que es distinta de cambiar de destino.
 
-**Cancelar es del Líder, y solo suyo** (5.14.3). El rumbo lo acordaron varios y deshacerlo no puede ser cosa de uno cualquiera. No atrapa a nadie: el que no quiera seguir **se separa**, que eso sí puede hacerlo cualquiera.
+**Cancelar es del Líder, y solo suyo** (5.14.3): como dirigir el rumbo, no puede ser cosa de uno cualquiera. No atrapa a nadie: el que no quiera seguir **se separa**, que eso sí puede hacerlo cualquiera.
 
 Y es la razón por la que **deshacer un ejército es replegarlo, no vaciarlo**: el último miembro no puede separarse (5.14), así que la vuelta es el camino.
 
@@ -639,7 +637,7 @@ Sin esto, un desconocido podría engancharse a tu marcha sin que pudieras negart
 
 **Y la distancia se comprueba al aceptar, no al pedir.** El que entra tiene que estar junto a la columna en ese momento, no donde estaba cuando lo pidió.
 
-**Y ahí está el precio:** al unirte adoptas un destino que ya no puedes cambiar (5.12.1). Marchar acompañado cuesta la libertad de movimiento.
+**Y ahí está el precio:** al unirte dejas de dirigir tu marcha (5.12.1): desde ese momento la dirige el Líder. Marchar acompañado cuesta la libertad de movimiento.
 
 **Solo se puede unir a un EJÉRCITO** (o a una formación en curso, 5.14.4). Dos Columnas personales que se cruzan no se fusionan por sí solas: para formar un ejército en campo hay que organizarlo (5.14.4).
 
@@ -676,8 +674,21 @@ Tres o más Columnas personales de la **misma Facción** pueden formar un ejérc
 - **Unirse.** Otras Columnas personales de su Facción, junto a la formación, aportando lo que llevan encima (escuadras y carro), validado contra su propio Liderazgo.
 - **Con menos de 3** no se mueve, y **para el combate siguen siendo Columnas personales**: se les puede perseguir y atacar como a tales, así que formar no es un escudo.
 - **Si no llega a 3** en `FORMACION_EJERCITO.plazoMinutos` se deshace y cada uno vuelve a su Columna personal con lo suyo. Mientras tanto cualquiera puede salir; si sale el Líder, el mando pasa al más antiguo.
-- **Al llegar a 3** pasa a ser un Ejército: el Líder fija su destino, que ya no se toca (5.12.1). Si luego baja de 3 sigue siendo Ejército: el mínimo cuenta solo para formarlo.
+- **Al llegar a 3** pasa a ser un Ejército: quieto, a la espera de que su Líder lo dirija (5.12.1). Si luego baja de 3 sigue siendo Ejército: el mínimo cuenta solo para formarlo.
 - **Origen:** la residencia del Líder al formarlo. Ahí vuelve si cancela la marcha, y lo conserva quien se separe (5.14.2). **Caravanas:** nace sin ellas y puede engancharlas después.
+
+### 5.14.5 Preparar un ejército dentro de un lugar (2026-10-08)
+
+Un ejército también se puede preparar **antes de salir**, dentro de una plaza o de un campamento de mercenarios (decisión del autor, 2026-10-08). Nadie sale hasta que el Líder lo decide:
+
+- **Convocar.** Un Héroe **dentro** del lugar convoca un ejército y fija su política de unión (aceptar o preguntar, 5.14.1). Queda en preparación: nadie ha salido y no se ha movido ninguna escuadra ni recurso.
+- **Unirse.** Pueden unirse **solo Héroes de la misma Facción que estén dentro del mismo lugar** (la misma plaza o el mismo campamento). Cada uno elige, como al salir de una plaza o un campamento, las tropas de su campamento y la carga de su almacén con las que saldría; se valida como si saliera ya (Liderazgo, almacén, reserva de trigo). Con *preguntar*, el Líder acepta o rechaza, con la misma petición breve que en campo (5.14.1).
+- **Esperar.** Sin caducidad: dura hasta que el Líder **parte** o **cancela**. Mientras tanto un integrante puede **separarse**: sigue dentro, sin nada que devolver. El Líder no se separa (no cede el mando mientras se prepara): cancela.
+- **Cancelar.** No mueve nada: todos siguen dentro del lugar.
+- **Partir.** Salen **todos juntos, como un único ejército**, en la puerta del lugar, con el Líder de la convocatoria y su política. Sale quieto y su Líder lo dirige (5.12.1). Es todo o nada: si alguien ya no puede salir con lo que eligió (el almacén ya no da, su Liderazgo no llega), no sale nadie y se dice quién y por qué. Quien ya no esté dentro del lugar al partir se queda fuera de la salida.
+- **Quien va en una convocatoria no sale por su cuenta**: tiene que separarse o cancelar antes.
+
+Lo de antes sigue valiendo: unirse pasando el ejército por tu plaza (5.12.1) y unirse en campo (5.14.1).
 
 ## 5.15 Batallas con héroes: quién combate, guarnición y campamento
 

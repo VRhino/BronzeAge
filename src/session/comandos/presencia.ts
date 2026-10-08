@@ -292,8 +292,7 @@ export interface PayloadMarchaFijada {
  * camino, tantas veces como quieras.
  *
  * Es la mitad que le faltaba a `salirAlMundo`: al salir apareces junto a la plaza SIN destino, y esto es lo
- * que te pone en marcha. Solo funciona yendo en columna personal — si vas en un ejército el rumbo se acordó
- * al salir y su única salida es cancelar (Doc 5.12.6).
+ * que te pone en marcha. Una columna personal se dirige sola; un ejército, solo su Líder (Doc 5.12.1), siempre que quiera.
  */
 export const marcharA = comando<ParamsMarcharA, { ejercitoId: string }>((estado, mapa, ctx, params) => {
   const columna = exigirColumnaDe(estado, params.heroeId);
@@ -445,7 +444,7 @@ export interface ParamsSalirDelCampamento extends ParamsCampamentoMercenarios {
   carga: Record<string, number>;
   /** Si admite compañía, sale como ejército al que otros se unen en campo. Por defecto, columna personal. */
   politicaDeUnion?: 'rechazar' | 'aceptar' | 'preguntar';
-  /** Obligatorio si sale como ejército: su rumbo se fija al salir (Doc 5.12.1). */
+  /** Rumbo opcional del ejército: sin él sale quieto en la puerta y su Líder lo dirige con `marcharA` (Doc 5.12.1). */
   objetivo?: ObjetivoEjercito;
 }
 

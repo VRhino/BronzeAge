@@ -52,7 +52,7 @@ export interface PayloadEjercitoMovilizado {
   heroeId: string;
   escuadronIds: string[];
   liderazgoUsado: number;
-  objetivo: ObjetivoEjercito;
+  objetivo?: ObjetivoEjercito;
   /** Trigo que sus víveres se llevaron del almacén (Doc 5.13). Puede ser 0: ya iban llenos, o la ciudad iba justa y se sale
    * con menos autonomía, que es lo que el diseño manda en vez de bloquear la salida. */
   trigoCargado: number;
@@ -62,7 +62,8 @@ export interface ParamsMovilizarEjercito {
   asentamientoId: string;
   heroeId: string;
   escuadronIds: string[];
-  objetivo: ObjetivoEjercito;
+  /** Opcional: sin él el ejército sale quieto en la puerta y su Líder lo dirige con `marcharA` (Doc 5.12.1). */
+  objetivo?: ObjetivoEjercito;
   /** Qué hacer con quien pida unirse por el camino (Doc 5.14.1). Se fija AQUÍ, al parir la columna, y no
    * cambia. Ausente = `rechazar`, que es lo prudente: la columna sale con quien salió. */
   politicaDeUnion?: 'rechazar' | 'aceptar' | 'preguntar';
@@ -96,7 +97,7 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
     params.carga
   );
 
-  const destino = params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
+  const destino = !params.objetivo ? 'la puerta, a la espera de órdenes' : params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
   // Quien sale de campaña va en su ejército, no en la plaza (Doc 5.12): mismo trato que `salirAlMundo`.
   const conEjercito = conColumnas(conAsentamiento(estado, origen), [ejercito]);
   const { estado: conViveres, cargado: trigoCargado } = conViveresLlenos(conEjercito, asentamiento.id, params.heroeId);

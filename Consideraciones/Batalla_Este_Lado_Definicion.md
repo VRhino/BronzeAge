@@ -70,7 +70,7 @@ personales no se fusionan» (Doc 5.14.1).
 | **Unirse** | Solitarios **de la misma Facción**, junto a la miniatura, con lo que llevan encima: escuadras y carro, validados contra su Liderazgo |
 | **Mientras haya menos de 3** | No se mueve, y **para el combate sigue contando como solitarios**: se le puede perseguir y atacar como a ellos (una persecución, con todos sus miembros de defensores). Formar no sirve de escudo |
 | **Si no llega a 3** | Pasado el plazo (`FORMACION_EJERCITO.plazoMinutos`, provisional 10) se deshace y cada uno vuelve a su columna personal con lo suyo. Mientras tanto cualquiera puede salir; si sale el Líder, el mando pasa al más antiguo, y si no queda nadie, desaparece |
-| **Al llegar a 3** | Pasa a ser un ejército normal: el Líder fija el destino, que ya no se toca (Doc 5.12.1), y desde ahí rige todo el canon. Si luego baja de 3 sigue siendo ejército: el mínimo cuenta solo para formarlo |
+| **Al llegar a 3** | Pasa a ser un ejército normal: queda quieto hasta que su Líder lo dirige (Doc 5.12.1), y desde ahí rige todo el canon. Si luego baja de 3 sigue siendo ejército: el mínimo cuenta solo para formarlo |
 | **Origen** | La residencia del Líder al formarlo (su plaza o su campamento de mercenarios). Ahí vuelve si cancela la marcha, y lo conserva quien se separe |
 | **Caravanas** | Nace sin ellas (un solitario no las lleva). Puede engancharlas después, como cualquier ejército |
 | **Bots** | No la usan por ahora |

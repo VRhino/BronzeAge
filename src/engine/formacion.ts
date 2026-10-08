@@ -31,15 +31,10 @@ export function organizarEjercito(columna: Ejercito, politicaDeUnion: 'aceptar' 
   };
 }
 
-/** Con tres o más, la formación pasa a ser un ejército que espera su destino (Doc 5.14.4). Sin ellos, sigue igual. */
+/** Con tres o más, la formación pasa a ser un ejército, quieto hasta que su Líder lo dirija (Doc 5.14.4). Sin ellos, sigue igual. */
 export function completarFormacion<E extends Ejercito>(ejercito: E): E {
   if (!ejercito.formacion || ejercito.participantes.length < FORMACION_EJERCITO.minimo) return ejercito;
-  return { ...ejercito, formacion: undefined, tipo: 'ejercito', destinoPendiente: true };
-}
-
-/** Un ejército recién formado, sin destino todavía: lo fija su Líder una sola vez (`marcharA`). */
-export function esperaDestino(ejercito: Pick<Ejercito, 'destinoPendiente'>): boolean {
-  return ejercito.destinoPendiente === true;
+  return { ...ejercito, formacion: undefined, tipo: 'ejercito' };
 }
 
 /** Quién manda tras irse el Líder de una formación: el que lleva más tiempo dentro. */

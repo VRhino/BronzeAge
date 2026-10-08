@@ -50,10 +50,12 @@ import { escenaDeCampamento } from './escenaCampamento';
 import { cupoRestanteHoy, precioDeVenta } from '../../engine/mercadoMercenario';
 import type { EscenaCampamento } from '../../contratos/v1/dto';
 import { heroesNombrados } from '../../domain/eventos';
+import { convocatoriaDe, integrantesDentro, lugarDe, mismoLugar } from '../../engine/convocatoria';
 import type {
   AcuerdoTrueque,
   Alijo,
   Asentamiento,
+  Convocatoria,
   RedCaminos,
   CampamentoBandido,
   CampamentoMercenarios,
@@ -133,6 +135,21 @@ import { batallasActivas, batallaVisible, bloqueosDe, type BatallaVisible } from
  *
  * Se redacta AQUÍ y no en el cliente: lo que no sale del servidor no se puede mirar en un DevTools.
  */
+/** Un ejército en preparación, tal como lo ve quien está dentro del mismo lugar (Doc 5.14.5). */
+export interface ConvocatoriaProyectada {
+  id: string;
+  lugar: Convocatoria['lugar'];
+  liderId: string;
+  politicaDeUnion: Convocatoria['politicaDeUnion'];
+  creadaEn: number;
+  /** Los que siguen dentro, el Líder el primero, con lo que sacarían: sus escuadras (con la tropa y los efectivos de cada una) y su carga. */
+  integrantes: { heroeId: string; unidoEn: number; escuadronIds: string[]; tropas: { escuadronId: string; tropaId: string; cantidad: number }[]; carga: Record<string, number> }[];
+  /** Peticiones vivas: el Líder las ve todas; cada solicitante, la suya. Con su expiración, para que el cliente cuente el tiempo. */
+  peticiones: { heroeId: string; pedidoEn: number; expiraEn: number; escuadronIds: string[]; carga: Record<string, number> }[];
+  soyLider: boolean;
+  soyIntegrante: boolean;
+}
+
 export interface EjercitoAvistado {
   id: string;
   /** Ejército o Columna personal: decide qué se le puede hacer (Doc 5.12.3). */
@@ -463,6 +480,10 @@ export interface ProyeccionJugador {
    * Van en un array aparte y no mezclados con `ejercitos` a propósito: la diferencia entre "lo veo entero"
    * y "solo lo avisto" es de tipo, no de un campo opcional que el cliente pueda olvidarse de mirar. */
   ejercitosAvistados: EjercitoAvistado[];
+  /** Los ejércitos en preparación del lugar donde estás (plaza o campamento) y de tu Facción, abiertos y sin partir (Doc 5.14.5). */
+  convocatorias: ConvocatoriaProyectada[];
+  /** La convocatoria en la que ya vas, si vas en alguna. */
+  miConvocatoriaId?: string;
   /** Los Aedas itinerantes que se ven ahora mismo (Doc 6.7): neutrales, no atacables. */
   aedasAvistados: AedaAvistado[];
   /** Las Miradas de la Facción propia, abiertas o aún en cooldown (Doc 5.12.10): dónde mira cada una, hasta cuándo y cuándo se puede repetir. Las de los aliados no viajan: solo lo que ven. */
@@ -734,6 +755,40 @@ function campamentosAvistados(
   return campamentos.filter((c) => seVeAhora(c.posicion, asentamientosPropios, ejercitosPropios, tropa, miradas));
 }
 
+/** Los ejércitos en preparación del lugar donde está este héroe y de su Facción (Doc 5.14.5), y cuál es la suya. Nada sale del lugar. */
+function convocatoriasDelLugar(
+  estado: GameSessionState,
+  heroeId: string,
+  jugador: Heroe | undefined,
+  faccionId: string | null
+): { convocatorias: ConvocatoriaProyectada[]; miConvocatoriaId?: string } {
+  const lugar = jugador ? lugarDe(jugador) : undefined;
+  const mia = convocatoriaDe(estado.convocatorias ?? [], heroeId);
+  const ahora = instanteDeTick(estado.tick);
+  const visibles = (estado.convocatorias ?? []).filter((c) => c.id === mia?.id || (faccionId !== null && c.faccionId === faccionId && mismoLugar(c.lugar, lugar)));
+  const convocatorias = visibles.map((c): ConvocatoriaProyectada => {
+    const soyLider = c.liderId === heroeId;
+    return {
+      id: c.id,
+      lugar: c.lugar,
+      liderId: c.liderId,
+      politicaDeUnion: c.politicaDeUnion,
+      creadaEn: c.creadaEn,
+      integrantes: integrantesDentro(c, estado.heroes).map((i) => ({
+        heroeId: i.heroeId,
+        unidoEn: i.unidoEn,
+        escuadronIds: i.escuadronIds,
+        tropas: estado.heroes.find((h) => h.id === i.heroeId)!.escuadrones.filter((e) => i.escuadronIds.includes(e.id)).map((e) => ({ escuadronId: e.id, tropaId: e.tropaId, cantidad: e.cantidad })),
+        carga: i.carga,
+      })),
+      peticiones: (c.peticiones ?? []).filter((p) => ahora < p.expiraEn && (soyLider || p.heroeId === heroeId)),
+      soyLider,
+      soyIntegrante: c.integrantes.some((i) => i.heroeId === heroeId),
+    };
+  });
+  return { convocatorias, ...(mia ? { miConvocatoriaId: mia.id } : {}) };
+}
+
 /**
  * De quién es el suelo que pisa cada ejército propio (a petición del usuario, 2026-09-05: "debería poder
  * saber si estoy en el territorio de otro cuando voy caminando").
@@ -961,6 +1016,7 @@ export function proyectarParaJugador(
       }),
     caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa, miradasVistas).filter((c) => !bloqueos.caravanas.has(c.id)),
     ejercitos: ejercitosPropios.map((e) => ({ ...e, capacidadCarga: capacidadCargaDe(e, estado.caravanas) })),
+    ...convocatoriasDelLugar(estado, heroeId, jugador, faccionId),
     ejercitosAvistados: ejercitosAvistados.map((e) => ({
       id: e.id,
       tipo: e.tipo,

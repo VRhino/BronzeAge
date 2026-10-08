@@ -386,7 +386,28 @@ Ejercito
   progreso: number             0-1 a lo largo de ruta — existente
   posicionActual: Point         existente
   estado: 'marchando' | 'estacionado' | 'regresando'   existente
+  formacion?: { expiraEn: Instante }   formación en campo (Doc 5.14.4)
+  (destinoPendiente)          RETIRADO 2026-10-08: un ejército lo dirige su Líder con `marcharA` las veces que quiera; sale quieto
+                            (`estado: 'estacionado'`, `ruta: []`) si no se le da `objetivo`
 ```
+
+### 5.1 `Convocatoria` — ejército en preparación (2026-10-08, Doc 5.14.5)
+
+Vive en `GameSessionState.convocatorias?` (ausente = ninguna). Sin caducidad: termina al partir o cancelar.
+
+```text
+Convocatoria
+  id                      convocatoria-<n>
+  faccionId               la de quien convoca; solo se unen ciudadanos de ella
+  lugar: { tipo: 'asentamiento' | 'campamento'; id: string }   donde está dentro quien convoca
+  liderId                 heroeId
+  politicaDeUnion: 'aceptar' | 'preguntar'   pasa tal cual al ejército que parte
+  integrantes: { heroeId; unidoEn: Instante; escuadronIds: string[]; carga: Record<string, number> }[]   el Líder el primero
+  peticiones?: { heroeId; pedidoEn; expiraEn; escuadronIds; carga }[]   solo con 'preguntar'; caducan al leerlas
+  creadaEn: Instante
+```
+
+Las escuadras y el almacén no se tocan hasta partir: lo elegido es lo que cada integrante sacaría por el camino de siempre.
 
 ## 6. `Caravana` / `CarroCaravana`
 

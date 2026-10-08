@@ -39,7 +39,7 @@ import { sumarChatarra } from './chatarra';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { aristasDeRed, RED_VACIA } from './redCaminos';
 import { seguirPresa } from './persecucion';
-import { esperaDestino, sucesorEnFormacion } from './formacion';
+import { sucesorEnFormacion } from './formacion';
 import { enRefugio } from './zones';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
@@ -318,7 +318,8 @@ export function movilizarEjercito(
   jugador: Heroe | undefined,
   heroeId: string,
   escuadronIds: readonly string[],
-  objetivo: ObjetivoEjercito,
+  /** Sin destino el ejército sale quieto en la puerta y espera la orden de su Líder (`marcharA`, Doc 5.12.1). */
+  objetivo: ObjetivoEjercito | undefined,
   asentamientos: readonly Asentamiento[],
   mapa: Mapa,
   id: string,
@@ -334,17 +335,16 @@ export function movilizarEjercito(
   if (!esResidente(asentamiento, heroeId)) {
     throw new MovilizacionInvalidaError('Solo se sale de campaña desde tu residencia: ahí está tu campamento.');
   }
-  if (objetivo.tipo === 'asentamiento' && objetivo.id === asentamiento.id) {
+  if (objetivo?.tipo === 'asentamiento' && objetivo.id === asentamiento.id) {
     throw new MovilizacionInvalidaError('El destino no puede ser el propio asentamiento de origen.');
   }
 
   const escuadrones = seleccionarParaCampana(campamento, heroeId, escuadronIds);
   exigirLiderazgo(jugador, escuadrones);
 
-  const destino = puntoDeObjetivo(objetivo, asentamientos);
   // El agua es infranqueable (`world/rutas.ts`): si no hay camino por tierra, no se sale. Un ejército no se
   // embarca — y una ruta recta de reserva sería precisamente una marcha por el mar.
-  const ruta = calcularRuta(mapa, asentamiento.posicion, destino, { pasosRio: asentamientos.map((a) => a.posicion) });
+  const ruta = objetivo ? calcularRuta(mapa, asentamiento.posicion, puntoDeObjetivo(objetivo, asentamientos), { pasosRio: asentamientos.map((a) => a.posicion) }) : [];
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
   const cargado = cargarCarroElegido(
@@ -370,11 +370,11 @@ export function movilizarEjercito(
       escuadrones,
       suministro: cargado.suministro,
       caravanasAdjuntasIds: [],
-      objetivo,
+      objetivo: objetivo ?? { tipo: 'punto', punto: asentamiento.posicion },
       ruta,
       progreso: 0,
       posicionActual: asentamiento.posicion,
-      estado: 'marchando',
+      estado: objetivo ? 'marchando' : 'estacionado',
     },
   };
 }
@@ -519,7 +519,7 @@ export function salirDelCampamento(
   /** Como en `movilizarEjercito`: si admite compañía, sale como ejército y otros ciudadanos de su Facción se le unen en campo
    * (cazar en grupo, D21; cofundar, M2). Por defecto, columna personal. */
   politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar',
-  /** El rumbo, obligatorio si sale como ejército: el de un ejército se fija al salir y no se cambia (Doc 5.12.1). */
+  /** El rumbo de un ejército, si ya lo tiene: sin él sale quieto en la puerta y su Líder lo dirige con `marcharA` (Doc 5.12.1). */
   rumbo?: { objetivo: ObjetivoEjercito; asentamientos: readonly Asentamiento[]; mapa: Mapa }
 ): { heroe: Heroe; columna: EjercitoConTropa } {
   if (heroe.ubicacion.tipo !== 'mercenarios' || heroe.ubicacion.campamentoId !== campamento.id) {
@@ -553,7 +553,6 @@ export function salirDelCampamento(
   const racion = toca ? huecoEnViveres(heroe) : 0;
   const columnaId = aparcada?.id ?? id;
   const comoEjercito = politicaDeUnion !== 'rechazar';
-  if (comoEjercito && !rumbo) throw new MovilizacionInvalidaError('Un ejército sale contra un destino: hay que darle rumbo.');
   const ruta =
     comoEjercito && rumbo
       ? calcularRuta(rumbo.mapa, campamento.posicion, puntoDeObjetivo(rumbo.objetivo, rumbo.asentamientos), { pasosRio: rumbo.asentamientos.map((a) => a.posicion) })
@@ -576,7 +575,7 @@ export function salirDelCampamento(
     ruta,
     progreso: 0,
     posicionActual: campamento.posicion,
-    estado: comoEjercito ? 'marchando' : 'estacionado',
+    estado: comoEjercito && rumbo ? 'marchando' : 'estacionado',
   };
   return { heroe: { ...enColumna(columnaId), almacenPersonal, ...(racion > 0 ? { racionEn: instante, viveres: LOGISTICA.capacidadViveresPorHeroe } : {}) }, columna };
 }
@@ -890,11 +889,8 @@ export function marcharA(
   asentamientos: readonly Asentamiento[],
   mapa: Mapa
 ): Ejercito {
-  // Un ejército recién formado en campo fija su destino una vez, y solo su Líder (Doc 5.14.4); después ya no se toca.
-  if (ejercito.tipo !== 'personal' && !esperaDestino(ejercito)) {
-    throw new MovilizacionInvalidaError('El rumbo de un ejército no se cambia: se cancela y se vuelve.');
-  }
-  if (esperaDestino(ejercito) && ejercito.liderId !== jugador.id) throw new MovilizacionInvalidaError('El destino de un ejército recién formado lo fija su Líder.');
+  // El rumbo de un ejército lo dirige su Líder con sus clics, las veces que quiera (Doc 5.12.1); los demás acompañan.
+  if (ejercito.tipo === 'ejercito' && ejercito.liderId !== jugador.id) throw new MovilizacionInvalidaError('Solo el Líder decide a dónde va el ejército.');
   if (ejercito.formacion) throw new MovilizacionInvalidaError('Una formación espera a ser un ejército: no se mueve.');
   // Su columna puede estar aparcada a la puerta de una plaza mientras él está DENTRO (Doc 1.10.3): la
   // columna no se mueve sola, hay que volver a ella primero.
@@ -909,7 +905,7 @@ export function marcharA(
 
   // Elegir un destino nuevo es dejar de ir detras de alguien (Doc 5.12.3): no hay forma de marchar a un
   // punto Y perseguir a la vez, y dejar la presa puesta la haria reaparecer en el proximo tick.
-  return { ...ejercito, estado: 'marchando', objetivo, ruta, progreso: 0, persiguiendo: undefined, destinoPendiente: undefined };
+  return { ...ejercito, estado: 'marchando', objetivo, ruta, progreso: 0, persiguiendo: undefined };
 }
 
 /**

@@ -748,6 +748,32 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
   },
+  // --- Ejército en preparación dentro de una plaza o un campamento (Doc 5.14.5): nadie convoca, se une, se separa, cancela ni parte a
+  // nombre de otro. Estar dentro del mismo lugar, ser de la misma Facción o ser el Líder lo comprueba el comando. ---
+  convocarEjercito: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  unirseAConvocatoria: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  responderPeticionDeConvocatoria: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  separarseDeConvocatoria: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  cancelarConvocatoria: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
+  partirConvocatoria: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,
+  },
   cederLiderazgo: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (_estado, heroeId, params) => heroeId === params.heroeId,

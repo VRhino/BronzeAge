@@ -64,12 +64,12 @@ describe('unirse y llegar a tres', () => {
     const ejercito = columnaDe(fundador);
     expect(ejercito.tipo).toBe('ejercito');
     expect(ejercito.formacion).toBeUndefined();
-    expect(ejercito.destinoPendiente).toBe(true);
+    expect(ejercito.estado, 'quieto hasta que su Líder lo dirija').toBe('estacionado');
     expect(ejercito.participantes).toHaveLength(FORMACION_EJERCITO.minimo);
     expect(ejercito.origenAsentamientoId, 'el origen es la residencia del Líder').toBeDefined();
   });
 
-  it('el Líder fija el destino una sola vez; otro integrante no, y después ya no se toca', () => {
+  it('el Líder dirige el ejército las veces que quiera; los demás integrantes no', () => {
     const { fundador, vecino, tercero, columnaDe, ejecutar } = tresSolitarios();
     ejecutar('organizarEjercito', fundador, { politicaDeUnion: 'aceptar' });
     const formacionId = columnaDe(fundador).id;
@@ -79,9 +79,11 @@ describe('unirse y llegar a tres', () => {
 
     expect(ejecutar('marcharA', vecino, { objetivo: destino }).ok, 'solo el Líder').toBe(false);
     expect(ejecutar('marcharA', fundador, { objetivo: destino }).ok).toBe(true);
-    expect(columnaDe(fundador).destinoPendiente).toBeUndefined();
     expect(columnaDe(fundador).estado).toBe('marchando');
-    expect(ejecutar('marcharA', fundador, { objetivo: { tipo: 'punto', punto: { x: 5, y: 5 } } }).ok, 'ya es un ejército: no se rectifica').toBe(false);
+    expect(ejecutar('marcharA', fundador, { objetivo: { tipo: 'punto', punto: { x: 5, y: 5 } } }).ok, 'el Líder rectifica').toBe(true);
+    expect(columnaDe(fundador).objetivo).toEqual({ tipo: 'punto', punto: { x: 5, y: 5 } });
+    const rechazo = ejecutar('marcharA', vecino, { objetivo: destino });
+    expect(rechazo.ok === false && rechazo.detalleError).toMatch(/Solo el Líder decide/);
   });
 
   it('una formación no se mueve', () => {

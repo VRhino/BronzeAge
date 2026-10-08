@@ -67,6 +67,7 @@ import { conectarse, desconectarse, entrarEnAsentamiento, entrarEnCampamento, fi
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
 import { cancelarFormacion, organizarEjercito } from './formacion';
+import { cancelarConvocatoria, convocarEjercito, partirConvocatoria, responderPeticionDeConvocatoria, separarseDeConvocatoria, sinConvocatoria, unirseAConvocatoria } from './convocatoria';
 import { aplicarResultado, cancelarBatalla, conCandadoDeBatalla, confirmarInicio, registrarAsignacion, registrarSalida, registrarTokens, unirseABatalla } from './batalla';
 import { avanzarTick } from './avanzarTick';
 
@@ -91,6 +92,12 @@ const MANEJADORES = {
   admitirOtrasFacciones,
   organizarEjercito,
   cancelarFormacion,
+  convocarEjercito,
+  unirseAConvocatoria,
+  responderPeticionDeConvocatoria,
+  separarseDeConvocatoria,
+  cancelarConvocatoria,
+  partirConvocatoria,
   designarCapital,
   asignarRey,
   cambiarResidencia,
@@ -131,14 +138,14 @@ const MANEJADORES = {
   comerciarEnPlaza,
   moverCargaCaravanaAparcada,
   enviarCaravanaAlOrigen,
-  salirAlMundo,
+  salirAlMundo: sinConvocatoria(salirAlMundo),
   marcharA,
   entrarEnAsentamiento,
   conectarse,
   desconectarse,
-  salirDeAsentamiento,
+  salirDeAsentamiento: sinConvocatoria(salirDeAsentamiento),
   entrarEnCampamento,
-  salirDelCampamento,
+  salirDelCampamento: sinConvocatoria(salirDelCampamento),
   guarnecer,
   fijarPuerta,
   vetarJugador,
@@ -150,8 +157,8 @@ const MANEJADORES = {
   responderPeticionDeUnion,
   separarseDelEjercito,
   cederLiderazgo,
-  movilizarEjercito,
-  unirseAEjercito,
+  movilizarEjercito: sinConvocatoria(movilizarEjercito),
+  unirseAEjercito: sinConvocatoria(unirseAEjercito),
   replegarEjercito,
   estacionarEjercito,
   alternarReabastecerAliados,

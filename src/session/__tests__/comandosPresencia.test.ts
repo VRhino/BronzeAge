@@ -364,8 +364,7 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
     expect(columna.progreso, 'y el progreso se reinicia sobre la ruta nueva').toBe(0);
   });
 
-  it('un EJÉRCITO no cambia de rumbo, aunque vaya uno solo dentro', () => {
-    // Es la regla que §1.1f corrigió: la línea no es cuánta gente va dentro, es cómo salió la columna.
+  it('un EJÉRCITO lo dirige su Líder, las veces que quiera (Doc 5.12.1)', () => {
     const { sesion, asentamientoId, fundador } = partidaLista();
     sesion.ejecutar(
       movilizarEjercito,
@@ -376,8 +375,18 @@ describe('marcharA — el destino de un viajero se rectifica (Doc 5.12.1)', () =
 
     const r = sesion.ejecutar(marcharA, { heroeId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador));
 
-    expect(r.ok, 'el rumbo se acordó al salir: su salida es cancelar y volver').toBe(false);
-    expect(sesion.getState().ejercitos[0]!.objetivo).toEqual({ tipo: 'punto', punto: { x: 900, y: 900 } });
+    expect(r.ok, 'el Líder rectifica').toBe(true);
+    expect(sesion.getState().ejercitos[0]!.objetivo).toEqual({ tipo: 'punto', punto: TIERRA_FIRME });
+  });
+
+  it('un ejército sin destino sale quieto en la puerta y espera la orden de su Líder', () => {
+    const { sesion, asentamientoId, fundador } = partidaLista();
+    const r = sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-1'] }, opcDe(fundador));
+    expect(r.ok).toBe(true);
+    expect(sesion.getState().ejercitos[0]).toMatchObject({ tipo: 'ejercito', estado: 'estacionado', ruta: [] });
+
+    expect(sesion.ejecutar(marcharA, { heroeId: fundador, objetivo: { tipo: 'punto', punto: TIERRA_FIRME } }, opcDe(fundador)).ok).toBe(true);
+    expect(sesion.getState().ejercitos[0]!.estado).toBe('marchando');
   });
 
   it('no se marcha desde dentro de una plaza: hay que salir antes', () => {

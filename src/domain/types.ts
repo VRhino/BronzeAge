@@ -977,6 +977,38 @@ export interface Caravana {
   preparaHasta?: Instante;
 }
 
+/** Dónde está dentro un héroe: una plaza o un campamento de mercenarios (`Heroe.ubicacion`). */
+export interface LugarConvocatoria {
+  tipo: 'asentamiento' | 'campamento';
+  id: string;
+}
+
+/** Lo que cada integrante saca de su lugar al partir: las escuadras de su campamento y la carga de su almacén (o personal). */
+export interface SeleccionDeSalida {
+  escuadronIds: string[];
+  carga: Record<string, number>;
+}
+
+/**
+ * Un ejército en preparación (Doc 5.14.5): un héroe DENTRO de una plaza o de un campamento lo convoca y otros de su Facción que
+ * están dentro del mismo lugar se le unen, cada uno con la tropa y la carga con las que saldría. Nadie ha salido todavía: las
+ * escuadras siguen en su campamento y el almacén intacto hasta que el Líder parte, así que cancelar o separarse no devuelve nada.
+ * Espera sin caducidad. Al partir salen todos juntos como un único ejército en la puerta, quieto, a la espera de la orden de su Líder.
+ */
+export interface Convocatoria {
+  id: string;
+  faccionId: string;
+  lugar: LugarConvocatoria;
+  liderId: string;
+  /** Qué hacer con quien pide unirse (aceptar o preguntar al Líder). Pasa tal cual al ejército que sale. */
+  politicaDeUnion: 'aceptar' | 'preguntar';
+  /** Los que van, el Líder el primero. */
+  integrantes: ({ heroeId: string; unidoEn: Instante } & SeleccionDeSalida)[];
+  /** Peticiones vivas con política `preguntar`; caducan al leerlas (`expiraEn`), igual que en campo (Doc 5.14.1). */
+  peticiones?: ({ heroeId: string; pedidoEn: Instante; expiraEn: Instante } & SeleccionDeSalida)[];
+  creadaEn: Instante;
+}
+
 /**
  * Ejército (Doc 5.12): uno o más escuadrones que salieron del asentamiento y se mueven por el mapa como UNA
  * sola entidad, con la misma maquinaria de rutas que las caravanas (`calcularRuta` + `avanzarPosicionEnRuta`).
@@ -1008,11 +1040,11 @@ export interface Ejercito {
   participantes: { heroeId: string; unidoEn: Instante }[];
   /**
    * Qué NACIÓ esta columna, fijado al crearla y jamás modificado (Doc 5.12.1). Lo decide EL COMANDO que la
-   * pare: `salirAlMundo` —sin destino— hace una columna `personal`; `movilizarEjercito` —contra un
-   * destino— hace un `ejercito`, aunque salga uno solo.
+   * pare: `salirAlMundo` hace una columna `personal` (que se dirige a sí misma); `movilizarEjercito` hace un
+   * `ejercito`, aunque salga uno solo, y a un ejército lo dirige su Líder (`marcharA`) mientras los demás acompañan.
    *
    * **No se deriva de `participantes.length`:** un ejército al que se le separan miembros hasta quedar en uno
-   * sigue siendo un ejército, con su ruta fija y sus caravanas.
+   * sigue siendo un ejército, con sus caravanas y solo su Líder al volante.
    */
   tipo: 'personal' | 'ejercito';
   /** Quién la formó (Doc 5.14.3). No puede separarse —para irse cede el liderazgo— y es el único que
@@ -1049,8 +1081,6 @@ export interface Ejercito {
   /** Una formación en campo (Doc 5.14.4): columna personal quieta que espera a ser tres. Pasado `expiraEn` sin lograrlo se deshace.
    * Para el combate sigue siendo una Columna personal. Al llegar a tres pasa a `tipo: 'ejercito'` y esta marca desaparece. */
   formacion?: { expiraEn: Instante };
-  /** Un ejército formado en campo que aún no tiene destino: su Líder lo fija una sola vez con `marcharA`, y desde entonces no se toca (Doc 5.12.1). */
-  destinoPendiente?: boolean;
   persiguiendo?: {
     tipo: 'ejercito' | 'caravana';
     id: string;
