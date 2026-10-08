@@ -10,6 +10,7 @@ import { RunnerDeBots, type Perfil } from '../runner';
 import { darDeAlta } from '../llegadas';
 import { cerebroDeBot } from '../cerebro';
 import { costoRefundacion } from '../../engine/refundacion';
+import { distancia } from '../../world/geometria';
 
 /** Llegan `grupos` (cada uno con sus perfiles) en el tick 1, al campamento con menos residentes, y juegan `ticks`. */
 async function mundo(ticks: number, grupos: Perfil['tipo'][][], campamento = (c: CampamentoMercenarios) => c, previas: Faccion[] = []) {
@@ -64,4 +65,13 @@ describe('bots sin plaza', () => {
     expect(plaza, 'funda').toBeDefined();
     expect(plaza!.heroesFundadoresIds).toHaveLength(3);
   });
+
+  it('ningún ejército se queda parado en el mapa: el que acaba o se queda sin tropa se repliega, y los grupos de cinco vuelven a casa', async () => {
+    const { sesion } = await mundo(3 * 1440, [Array(5).fill('amigos'), Array(5).fill('amigos'), Array(5).fill('amigos'), Array(5).fill('amigos'), ['solitario'], ['solitario']]);
+    const estado = sesion.getState();
+    const lugares = [...estado.asentamientos.map((a) => a.posicion), ...estado.campamentosMercenarios.map((c) => c.posicion)];
+    const parados = estado.ejercitos.filter((e) => e.estado === 'estacionado' && !lugares.some((l) => distancia(l, e.posicionActual) <= 10));
+
+    expect(parados.map((e) => e.id)).toEqual([]);
+  }, 120_000);
 });
