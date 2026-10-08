@@ -39,6 +39,18 @@ describe('faccionId se deriva de la ciudadanía, no de un campo guardado', () =>
   });
 });
 
+describe('solicitudes de ingreso caducadas', () => {
+  it('no enseña la solicitud de quien ya es ciudadano de alguna Facción (aceptarla daría faccion.invalida)', () => {
+    const { sesion, faccionId, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    const propia = estado.facciones.find((x) => x.id === faccionId)!;
+    const otra = { ...propia, id: 'otra', ciudadanosIds: ['ya-ciudadano'], reyId: 'ya-ciudadano', solicitudesIds: [] };
+    const conSolicitudes = { ...estado, facciones: [{ ...propia, solicitudesIds: ['ya-ciudadano', 'libre'] }, otra] };
+    const proyeccion = proyectarParaJugador(conSolicitudes, fundador, SIN_GEOMETRIA);
+    expect(proyeccion.facciones.find((x) => x.id === faccionId)!.solicitudesIds).toEqual(['libre']);
+  });
+});
+
 describe('asentamientos: SOLO el interior de la plaza que se pisa (Doc 1.10.1)', () => {
   it('el fundador ve su asentamiento porque está DENTRO de él', () => {
     const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
