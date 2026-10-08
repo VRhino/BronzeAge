@@ -8,6 +8,8 @@ import { crearFaccion } from '../comandos/crearFaccion';
 import { responderSolicitud, solicitarIngreso } from '../comandos/ingresoEnFaccion';
 import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { proyectarParaJugador } from '../proyecciones/jugador';
+import { conEscuadrones } from '../../engine/tropa';
+import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import { abastecer, partidaConAsentamiento } from './fixtures';
 
 const SIN_GEOMETRIA = { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} };
@@ -209,5 +211,60 @@ describe('en un campamento de mercenarios', () => {
     expect(e).toHaveLength(1);
     expect(e[0]).toMatchObject({ tipo: 'ejercito', liderId: ana, estado: 'estacionado', origenCampamentoId: 'mercenarios-0' });
     expect(e[0]!.participantes).toHaveLength(2);
+  });
+});
+
+describe('cambiar la selección en preparación', () => {
+  /** La plaza con dos escuadras en el campamento del fundador y del vecino. */
+  function conTropas() {
+    const { sesion, ...resto } = enLaPlaza();
+    const p = sesion.exportar();
+    const heroes = conEscuadrones(p.state.heroes, [
+      escuadronDePrueba('esc-a', resto.fundador, 'lenadores'),
+      escuadronDePrueba('esc-b', resto.fundador, 'granjeros'),
+      escuadronDePrueba('esc-v', resto.vecino, 'milicia_lanceros'),
+    ]);
+    const nueva = GameSession.importar({ ...p, state: { ...p.state, heroes } });
+    return { ...resto, sesion: nueva, ejecutar: ejecutarEn(nueva), estado: () => nueva.getState() };
+  }
+
+  it('cada uno cambia SU selección, y el orden de escuadronIds es el orden con el que sale su columna', () => {
+    const { fundador, vecino, ejecutar, estado } = conTropas();
+    ejecutar('convocarEjercito', fundador, { politicaDeUnion: 'aceptar', escuadronIds: ['esc-a'], carga: {} });
+    const id = estado().convocatorias![0]!.id;
+    ejecutar('unirseAConvocatoria', vecino, { convocatoriaId: id, escuadronIds: [], carga: {} });
+
+    expect(ejecutar('cambiarSeleccionDeConvocatoria', fundador, { escuadronIds: ['esc-b', 'esc-a'], carga: { trigo: 5 } }).ok).toBe(true);
+    expect(ejecutar('cambiarSeleccionDeConvocatoria', vecino, { escuadronIds: ['esc-v'], carga: {} }).ok).toBe(true);
+    expect(estado().convocatorias![0]!.integrantes.map((i) => [i.heroeId, i.escuadronIds])).toEqual([
+      [fundador, ['esc-b', 'esc-a']],
+      [vecino, ['esc-v']],
+    ]);
+
+    ejecutar('partirConvocatoria', fundador);
+    expect(estado().ejercitos[0]!.escuadronIds).toEqual(['esc-b', 'esc-a', 'esc-v']);
+    expect(estado().ejercitos[0]!.suministro['trigo']).toBe(5);
+  });
+
+  it('no se cambia la de otro, ni con algo que no podría sacar; el aviso llega a todos', () => {
+    const { fundador, vecino, ejecutar, estado } = conTropas();
+    ejecutar('convocarEjercito', fundador, { politicaDeUnion: 'aceptar', escuadronIds: [], carga: {} });
+    ejecutar('unirseAConvocatoria', vecino, { convocatoriaId: estado().convocatorias![0]!.id, escuadronIds: [], carga: {} });
+
+    expect(ejecutar('cambiarSeleccionDeConvocatoria', vecino, { escuadronIds: ['esc-a'], carga: {} }).ok, 'esc-a es del fundador').toBe(false);
+    expect(ejecutar('cambiarSeleccionDeConvocatoria', fundador, { escuadronIds: [], carga: { trigo: 10_000_000 } }).ok).toBe(false);
+    expect(ejecutar('cambiarSeleccionDeConvocatoria', 'forastero', { escuadronIds: [], carga: {} }).ok).toBe(false);
+
+    const r = ejecutar('cambiarSeleccionDeConvocatoria', fundador, { escuadronIds: ['esc-a'], carga: {} });
+    expect(heroesNombrados(r.eventos.find((e) => e.codigo === 'convocatoria.seleccion_cambiada')!).sort()).toEqual([fundador, vecino].sort());
+  });
+
+  it('la proyección enseña la tropa de cada integrante con nombre, nivel y moral, en el orden elegido', () => {
+    const { fundador, ejecutar, estado } = conTropas();
+    ejecutar('convocarEjercito', fundador, { politicaDeUnion: 'aceptar', escuadronIds: ['esc-b', 'esc-a'], carga: {} });
+
+    const tropas = proyectarParaJugador(estado(), fundador, SIN_GEOMETRIA).convocatorias[0]!.integrantes[0]!.tropas;
+    expect(tropas.map((t) => t.escuadronId)).toEqual(['esc-b', 'esc-a']);
+    expect(tropas[0]).toMatchObject({ nombre: expect.any(String), nivel: expect.any(Number), moral: expect.any(Number), cantidad: expect.any(Number) });
   });
 });

@@ -15,7 +15,10 @@
 import type { GrupoPuerta } from '../../domain/types';
 import {
   entrarEnCampamento as entrarEnCampamentoEngine,
-  guarnecer as guarnecerEngine,
+  caravanasAlEntrar,
+  enLaPuertaDelCampamento,
+  exigirPuedeGuarnecer,
+  MovilizacionInvalidaError,
   marcharA as marcharAEngine,
   salirAlMundo as salirAlMundoEngine,
   salirDelCampamento as salirDelCampamentoEngine,
@@ -31,9 +34,11 @@ import { exito, sinCambios } from './tipos';
 import { campamentoEn, comando, conColumnas, conTropaDe, conViveresLlenos, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { columnaDe } from '../../engine/ejercitos';
-import { conMomento, evento } from './eventos';
+import { conMomento, evento, type EventoDeComando } from './eventos';
+import { desarmarAlEntrar } from './desarmar';
 import { volverAlMundo } from '../../engine/presencia';
-import { PRESENCIA } from '../../constants';
+import { MOVIMIENTO, PRESENCIA } from '../../constants';
+import type { Asentamiento, CampamentoMercenarios } from '../../domain/types';
 import { instante } from '../../domain/tiempo';
 
 export interface ParamsSalirAlMundo {
@@ -151,10 +156,10 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
  * De la segunda salen gratis dos casos que si no habría que escribir aparte: si conquistan la plaza mientras
  * estás dentro, tu columna está fuera y la retomas; y si te la destruyen aparcada, sales a pie.
  */
-export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((estado, _mapa, ctx, params) => {
-  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
-  const columna = exigirColumnaDe(estado, params.heroeId);
-  const cruce = cruzarLaPuerta(conTropaDe(estado, columna), asentamiento, params.heroeId, estado.relaciones);
+/** La entrada de UN héroe con su columna personal en la puerta: en su residencia la columna se deshace, en otra queda a la puerta. */
+function entrarUnoEnAsentamiento(estado: GameSessionState, asentamiento: Asentamiento, heroeId: string): { estado: GameSessionState; evento: EventoDeComando } {
+  const columna = exigirColumnaDe(estado, heroeId);
+  const cruce = cruzarLaPuerta(conTropaDe(estado, columna), asentamiento, heroeId, estado.relaciones);
 
   const esSuResidencia = cruce.disuelveColumna;
   const siguiente: GameSessionState = esSuResidencia
@@ -165,32 +170,27 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
       }
     : estado;
 
-  return exito(
-    conHistorialDeJugador(
-      {
-        ...siguiente,
-        heroes: situarHeroes(siguiente.heroes, [params.heroeId], { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
-      },
-      params.heroeId,
-      esSuResidencia
-        ? `Vuelve a casa en ${asentamiento.id} y su columna se deshace.`
-        : `Entra en ${asentamiento.id}; su columna queda a la puerta.`
+  return {
+    estado: conHistorialDeJugador(
+      { ...siguiente, heroes: situarHeroes(siguiente.heroes, [heroeId], { tipo: 'asentamiento', asentamientoId: asentamiento.id }) },
+      heroeId,
+      esSuResidencia ? `Vuelve a casa en ${asentamiento.id} y su columna se deshace.` : `Entra en ${asentamiento.id}; su columna queda a la puerta.`
     ),
-    [
-      evento(ctx, {
-        codigo: 'jugador.entra_en_asentamiento',
-        mensaje: esSuResidencia
-          ? `Un jugador vuelve a ${asentamiento.id} y su columna se deshace.`
-          : `Un jugador entra en ${asentamiento.id} dejando su columna a la puerta.`,
-        payload: {
-          asentamientoId: asentamiento.id,
-          heroeId: params.heroeId,
-          ejercitoId: columna.id,
-        } satisfies PayloadPresencia,
-        asentamientoId: asentamiento.id,
-      }),
-    ]
-  );
+    evento: {
+      codigo: 'jugador.entra_en_asentamiento',
+      mensaje: esSuResidencia
+        ? `Un jugador vuelve a ${asentamiento.id} y su columna se deshace.`
+        : `Un jugador entra en ${asentamiento.id} dejando su columna a la puerta.`,
+      payload: { asentamientoId: asentamiento.id, heroeId, ejercitoId: columna.id } satisfies PayloadPresencia,
+      asentamientoId: asentamiento.id,
+    },
+  };
+}
+
+export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((estado, _mapa, ctx, params) => {
+  const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  const r = entrarUnoEnAsentamiento(estado, asentamiento, params.heroeId);
+  return exito(r.estado, [evento(ctx, r.evento)]);
 });
 
 /**
@@ -204,34 +204,32 @@ export const entrarEnAsentamiento = comando<ParamsEntrarEnAsentamiento, void>((e
 export const guarnecer = comando<ParamsGuarnecer, void>((estado, _mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const columna = exigirColumnaDe(estado, params.heroeId);
+  exigirPuedeGuarnecer(asentamiento, columna);
 
-  const r = guarnecerEngine(asentamiento, conTropaDe(estado, columna), estado.caravanas);
-  const aparcadasPorId = new Map(r.caravanasAparcadas.map((c) => [c.id, c]));
+  const lugar = { tipo: 'asentamiento' as const, id: asentamiento.id, posicion: asentamiento.posicion };
   const heroesDeLaColumna = columna.participantes.map((p) => p.heroeId);
+  const caravanasAparcadas = caravanasAlEntrar(columna, estado.caravanas, lugar).map((c) => c.id);
+  let actual = desarmarAlEntrar(estado, columna, params.heroeId, lugar);
+  const entradas: EventoDeComando[] = [];
+  for (const heroeId of heroesDeLaColumna) {
+    const r = entrarUnoEnAsentamiento(actual, asentamiento, heroeId);
+    actual = r.estado;
+    entradas.push(r.evento);
+  }
 
-  const siguiente: GameSessionState = {
-    ...conAsentamiento(estado, r.asentamiento),
-    ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id),
-    caravanas: estado.caravanas.map((c) => aparcadasPorId.get(c.id) ?? c),
-    heroes: situarHeroes(conEscuadrones(estado.heroes, r.tropa), heroesDeLaColumna, { tipo: 'asentamiento', asentamientoId: asentamiento.id }),
-  };
-
-  const conCaravanas = r.caravanasAparcadas.length > 0 ? ` y ${r.caravanasAparcadas.length} caravana(s) quedan aparcadas` : '';
+  const conCaravanas = caravanasAparcadas.length > 0 ? ` y ${caravanasAparcadas.length} caravana(s) quedan aparcadas` : '';
   return exito(
-    conHistorialDeJugador(
-      siguiente,
-      params.heroeId,
-      `Guarnece ${asentamiento.id}: ${columna.escuadronIds.length} escuadrón(es) vuelven a su campamento${conCaravanas}.`
-    ),
+    conHistorialDeJugador(actual, params.heroeId, `Guarnece ${asentamiento.id} con ${heroesDeLaColumna.length} héroe(s)${conCaravanas}.`),
     [
+      ...entradas.map((e) => evento(ctx, e)),
       evento(ctx, {
         codigo: 'ejercito.guarnece',
-        mensaje: `El ejército ${columna.id} guarnece ${asentamiento.id}: ${columna.escuadronIds.length} escuadrón(es) vuelven a su campamento.`,
+        mensaje: `El ejército ${columna.id} guarnece ${asentamiento.id}: ${columna.escuadronIds.length} escuadrón(es) entran con sus héroes.`,
         payload: {
           asentamientoId: asentamiento.id,
           ejercitoId: columna.id,
           escuadrones: columna.escuadronIds.length,
-          caravanasAparcadas: r.caravanasAparcadas.map((c) => c.id),
+          caravanasAparcadas,
         } satisfies PayloadGuarnecer,
         asentamientoId: asentamiento.id,
       }),
@@ -454,21 +452,51 @@ function exigirCampamentoMercenarios(estado: GameSessionState, campamentoId: str
   return campamento;
 }
 
-/**
- * Entrar en un campamento de mercenarios con la columna en su puerta (D76, D77): en el propio, la columna se deshace —tropa
- * al campamento, carro al almacén personal, lo que no quepa sigue en el carro aparcado—; en otro, entra con su columna.
- */
-export const entrarEnCampamento = comando<ParamsCampamentoMercenarios, void>((estado, _mapa, ctx, params) => {
-  const campamento = exigirCampamentoMercenarios(estado, params.campamentoId);
-  const heroe = exigirJugador(estado, params.heroeId);
-  const columna = exigirColumnaDe(estado, params.heroeId);
+function entrarUnoEnCampamento(estado: GameSessionState, campamento: CampamentoMercenarios, heroeId: string): { estado: GameSessionState; evento: EventoDeComando } {
+  const heroe = exigirJugador(estado, heroeId);
+  const columna = exigirColumnaDe(estado, heroeId);
   const r = entrarEnCampamentoEngine(campamento, heroe, conTropaDe(estado, columna));
   const sinColumna = { ...estado, ejercitos: estado.ejercitos.filter((e) => e.id !== columna.id) };
   const conTropa = r.columna ? conColumnas(estado, [r.columna], r.tropa) : { ...sinColumna, heroes: conEscuadrones(sinColumna.heroes, r.tropa) };
   const heroes = conTropa.heroes.map((h) => (h.id === heroe.id ? { ...r.heroe, escuadrones: h.escuadrones } : h));
   const campamentosMercenarios = conTropa.campamentosMercenarios.map((c) => (c.id === campamento.id ? r.campamento : c));
-  return exito(conHistorialDeJugador({ ...conTropa, heroes, campamentosMercenarios }, heroe.id, `Entra en ${campamento.id}.`), [
-    evento(ctx, { codigo: 'jugador.entra_en_campamento', mensaje: `${heroe.displayName} entra en ${campamento.id}.`, payload: { campamentoId: campamento.id, heroeId: heroe.id } }),
+  return {
+    estado: conHistorialDeJugador({ ...conTropa, heroes, campamentosMercenarios }, heroe.id, `Entra en ${campamento.id}.`),
+    evento: { codigo: 'jugador.entra_en_campamento', mensaje: `${heroe.displayName} entra en ${campamento.id}.`, payload: { campamentoId: campamento.id, heroeId: heroe.id } },
+  };
+}
+
+/**
+ * Entrar en un campamento de mercenarios con la columna en su puerta (D76, D77): en el propio, la columna se deshace —tropa
+ * al campamento, carro al almacén personal, lo que no quepa sigue en el carro aparcado—; en otro, entra con su columna.
+ *
+ * Un EJÉRCITO también entra (2026-10-08), ordenado por su Líder y en la puerta: se desarma y cada héroe entra como lo haría solo —el que
+ * reside aquí, normal; el que no, de visita—. Solo con caravanas adjuntas de este campamento.
+ */
+export const entrarEnCampamento = comando<ParamsCampamentoMercenarios, void>((estado, _mapa, ctx, params) => {
+  const campamento = exigirCampamentoMercenarios(estado, params.campamentoId);
+  const columna = exigirColumnaDe(estado, params.heroeId);
+  if (columna.tipo !== 'ejercito' && columna.participantes.length === 1) {
+    const r = entrarUnoEnCampamento(estado, campamento, params.heroeId);
+    return exito(r.estado, [evento(ctx, r.evento)]);
+  }
+
+  if (!enLaPuertaDelCampamento(columna, campamento)) throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} del campamento.`);
+  const heroesDeLaColumna = columna.participantes.map((p) => p.heroeId);
+  let actual = desarmarAlEntrar(estado, columna, params.heroeId, { tipo: 'campamento', id: campamento.id, posicion: campamento.posicion });
+  const entradas: EventoDeComando[] = [];
+  for (const heroeId of heroesDeLaColumna) {
+    const r = entrarUnoEnCampamento(actual, campamento, heroeId);
+    actual = r.estado;
+    entradas.push(r.evento);
+  }
+  return exito(actual, [
+    ...entradas.map((e) => evento(ctx, e)),
+    evento(ctx, {
+      codigo: 'ejercito.entra_en_campamento',
+      mensaje: `El ejército ${columna.id} entra en ${campamento.id} y se desarma.`,
+      payload: { campamentoId: campamento.id, ejercitoId: columna.id, heroesIds: heroesDeLaColumna, heroeId: params.heroeId },
+    }),
   ]);
 });
 

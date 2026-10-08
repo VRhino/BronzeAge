@@ -607,44 +607,36 @@ export function enLaPuertaDe(ejercito: Ejercito, asentamiento: Asentamiento): bo
 }
 
 /**
- * `guarnecer` (Ocupacion §2.3): un EJÉRCITO en la puerta de una plaza de su Facción entra y se deshace: su
- * tropa vuelve al campamento y su carro al almacén (`absorberColumna`).
- *
- * **Solo si todos los que van dentro residen ahí** (decisión del usuario, 2026-09-14): el campamento de un
- * héroe está en su residencia (Doc 5.15.2), así que volcar la tropa en una plaza ajena ya no tiene dónde
- * dejarla. Reforzar otra plaza es entrar y defenderla en persona.
- *
- * Las **caravanas adjuntas** (§2.3d) NO se pierden: pasan a `'aparcada'` en la plaza anfitriona — siguen
- * siendo de su origen, no las usa la anfitriona, y salen luego enganchadas a un ejército o enviadas a casa.
- *
- * Puro: no toca `session` ni decide dónde queda el jugador (eso es del comando, `situarHeroes`).
+ * Un ejército en la puerta de una plaza de su Facción puede entrar (`guarnecer`, Ocupacion §2.3) y un ejército en la puerta de un
+ * campamento de mercenarios también (`entrarEnCampamento`): se DESARMA (`disolverFormacion`) y cada héroe entra como lo haría solo —el
+ * residente deja tropa y carro, el que no reside entra de visita con su columna a la puerta—. Esto comprueba lo del ejército; lo de cada
+ * héroe lo comprueba su propia entrada.
  */
-export function guarnecer(
-  asentamiento: Asentamiento,
-  ejercito: EjercitoConTropa,
-  caravanas: readonly Caravana[]
-): { asentamiento: Asentamiento; tropa: Escuadron[]; caravanasAparcadas: Caravana[] } {
+export function exigirPuedeGuarnecer(asentamiento: Asentamiento, ejercito: Ejercito): void {
   if (ejercito.tipo !== 'ejercito') {
-    throw new MovilizacionInvalidaError('Solo un ejército guarnece: una columna personal no trae tropa que volcar en la guarnición.');
+    throw new MovilizacionInvalidaError('Solo un ejército guarnece: una columna personal entra con `entrarEnAsentamiento`.');
   }
   if (ejercito.faccionId !== asentamiento.faccionId) {
     throw new MovilizacionInvalidaError('Solo se guarnece una plaza de tu propia Facción.');
   }
-  if (!ejercito.participantes.every((p) => esResidente(asentamiento, p.heroeId))) {
-    throw new MovilizacionInvalidaError('Solo se guarnece la plaza donde residen todos los que van en el ejército: ahí está su campamento.');
-  }
   if (!enLaPuertaDe(ejercito, asentamiento)) {
     throw new MovilizacionInvalidaError(`Hay que estar a menos de ${MOVIMIENTO.radioPuerta} de la plaza para guarnecerla.`);
   }
-
-  const caravanasAparcadas = adjuntasDe(ejercito, caravanas).map((c) => ({
-    ...c,
-    estado: 'aparcada' as const,
-    posicionActual: asentamiento.posicion,
-  }));
-
-  return { ...absorberColumna(asentamiento, ejercito, true), caravanasAparcadas };
 }
+
+/**
+ * Las caravanas adjuntas de un ejército que entra en un lugar (2026-10-08): solo entra si TODAS son de ese lugar. En una plaza pasan a
+ * `'aparcada'` (§2.3d: no las usa la anfitriona, y salen enganchadas a un ejército o enviadas a su origen); en un campamento (la Caravana de
+ * Fundación) quedan sueltas, como al soltarlas, y empiezan a caducar. Devuelve las caravanas ya cambiadas.
+ */
+export function caravanasAlEntrar(ejercito: Ejercito, caravanas: readonly Caravana[], lugar: { tipo: 'asentamiento' | 'campamento'; id: string; posicion: Point }): Caravana[] {
+  const adjuntas = adjuntasDe(ejercito, caravanas);
+  const esDelLugar = (c: Caravana) => (lugar.tipo === 'campamento' ? c.origenCampamentoId === lugar.id : !c.origenCampamentoId && c.origenAsentamientoId === lugar.id);
+  const ajena = adjuntas.find((c) => !esDelLugar(c));
+  if (ajena) throw new MovilizacionInvalidaError(`La caravana ${ajena.id} no es de este lugar: hay que soltarla o llevarla a su origen antes de entrar.`);
+  return adjuntas.map((c) => ({ ...c, estado: lugar.tipo === 'asentamiento' ? ('aparcada' as const) : ('disponible' as const), posicionActual: lugar.posicion }));
+}
+
 
 export function unirseAEjercito(
   ejercito: EjercitoConTropa,

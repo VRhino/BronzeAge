@@ -67,7 +67,7 @@ import { conectarse, desconectarse, entrarEnAsentamiento, entrarEnCampamento, fi
 import { cederLiderazgo, responderPeticionDeUnion, separarseDelEjercito, unirseEnCampo } from './columna';
 import { atacar, dejarDePerseguir, inspeccionar, perseguir } from './interaccion';
 import { cancelarFormacion, organizarEjercito } from './formacion';
-import { cancelarConvocatoria, convocarEjercito, partirConvocatoria, responderPeticionDeConvocatoria, separarseDeConvocatoria, sinConvocatoria, unirseAConvocatoria } from './convocatoria';
+import { cambiarSeleccionDeConvocatoria, cancelarConvocatoria, convocarEjercito, partirConvocatoria, responderPeticionDeConvocatoria, separarseDeConvocatoria, sinConvocatoria, unirseAConvocatoria } from './convocatoria';
 import { aplicarResultado, cancelarBatalla, conCandadoDeBatalla, confirmarInicio, registrarAsignacion, registrarSalida, registrarTokens, unirseABatalla } from './batalla';
 import { avanzarTick } from './avanzarTick';
 
@@ -95,6 +95,7 @@ const MANEJADORES = {
   convocarEjercito,
   unirseAConvocatoria,
   responderPeticionDeConvocatoria,
+  cambiarSeleccionDeConvocatoria,
   separarseDeConvocatoria,
   cancelarConvocatoria,
   partirConvocatoria,

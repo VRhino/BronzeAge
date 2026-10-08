@@ -143,7 +143,7 @@ export interface ConvocatoriaProyectada {
   politicaDeUnion: Convocatoria['politicaDeUnion'];
   creadaEn: number;
   /** Los que siguen dentro, el Líder el primero, con lo que sacarían: sus escuadras (con la tropa y los efectivos de cada una) y su carga. */
-  integrantes: { heroeId: string; unidoEn: number; escuadronIds: string[]; tropas: { escuadronId: string; tropaId: string; cantidad: number }[]; carga: Record<string, number> }[];
+  integrantes: { heroeId: string; unidoEn: number; escuadronIds: string[]; tropas: { escuadronId: string; tropaId: string; nombre: string; nivel: number; moral: number; cantidad: number }[]; carga: Record<string, number> }[];
   /** Peticiones vivas: el Líder las ve todas; cada solicitante, la suya. Con su expiración, para que el cliente cuente el tiempo. */
   peticiones: { heroeId: string; pedidoEn: number; expiraEn: number; escuadronIds: string[]; carga: Record<string, number> }[];
   soyLider: boolean;
@@ -778,7 +778,7 @@ function convocatoriasDelLugar(
         heroeId: i.heroeId,
         unidoEn: i.unidoEn,
         escuadronIds: i.escuadronIds,
-        tropas: estado.heroes.find((h) => h.id === i.heroeId)!.escuadrones.filter((e) => i.escuadronIds.includes(e.id)).map((e) => ({ escuadronId: e.id, tropaId: e.tropaId, cantidad: e.cantidad })),
+        tropas: estado.heroes.find((h) => h.id === i.heroeId)!.escuadrones.filter((e) => i.escuadronIds.includes(e.id)).sort((a, b) => i.escuadronIds.indexOf(a.id) - i.escuadronIds.indexOf(b.id)).map((e) => ({ escuadronId: e.id, tropaId: e.tropaId, nombre: e.nombre, nivel: e.nivel, moral: e.moral, cantidad: e.cantidad })),
         carga: i.carga,
       })),
       peticiones: (c.peticiones ?? []).filter((p) => ahora < p.expiraEn && (soyLider || p.heroeId === heroeId)),

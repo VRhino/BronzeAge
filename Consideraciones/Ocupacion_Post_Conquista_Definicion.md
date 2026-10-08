@@ -127,6 +127,8 @@ que retomar.
 
 ### 2.3d Las caravanas adjuntas al guarnecer — quedan APARCADAS en la plaza
 
+> **CAMBIADO (2026-10-08, D96):** solo se entra con caravanas adjuntas **de esa plaza**; las de otro origen hay que soltarlas antes. Lo que sigue describe el caso de una caravana de la propia plaza (o el diseño anterior, con origen distinto).
+
 Escenario: asentamientos A y B son de la Facción 1. Un ejército sale de A con sus jugadores, sus escuadrones y
 **sus caravanas adjuntas**, y guarnece B. Los escuadrones y el carro del ejército se vuelcan en B (arriba).
 Cada **caravana adjunta** pasa a `estado: 'aparcada'` en B (`posicionActual = B.posicion`;

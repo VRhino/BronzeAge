@@ -686,9 +686,22 @@ Un ejército también se puede preparar **antes de salir**, dentro de una plaza 
 - **Esperar.** Sin caducidad: dura hasta que el Líder **parte** o **cancela**. Mientras tanto un integrante puede **separarse**: sigue dentro, sin nada que devolver. El Líder no se separa (no cede el mando mientras se prepara): cancela.
 - **Cancelar.** No mueve nada: todos siguen dentro del lugar.
 - **Partir.** Salen **todos juntos, como un único ejército**, en la puerta del lugar, con el Líder de la convocatoria y su política. Sale quieto y su Líder lo dirige (5.12.1). Es todo o nada: si alguien ya no puede salir con lo que eligió (el almacén ya no da, su Liderazgo no llega), no sale nadie y se dice quién y por qué. Quien ya no esté dentro del lugar al partir se queda fuera de la salida.
+- **Cambiar la selección.** Cada integrante, también el Líder, cambia **su** selección —las escuadras, **en el orden en que quiere que entren en combate**, y la carga— sin separarse, con las mismas comprobaciones que al unirse. Nunca la de otro: la de los demás solo se ve.
 - **Quien va en una convocatoria no sale por su cuenta**: tiene que separarse o cancelar antes.
 
 Lo de antes sigue valiendo: unirse pasando el ejército por tu plaza (5.12.1) y unirse en campo (5.14.1). **La política de unión del Líder rige en ambos sitios** (decisión del autor, 2026-10-08): con *rechazar* nadie más se suma tampoco desde su plaza; quien ya va en el ejército sí puede reforzarlo con más tropa.
+
+### 5.14.6 Un ejército entra en una plaza o en un campamento (2026-10-08)
+
+Un ejército en la puerta de **una plaza de su Facción** (`guarnecer`) o de **un campamento de mercenarios** (`entrarEnCampamento`) puede entrar (decisión del autor):
+
+- **Lo ordena su Líder** y se **desarma** en la puerta: cada héroe queda en una Columna personal con su parte del carro (a prorrata, como al separarse) y entra como lo haría solo.
+- **Los que residen allí entran normal**: la tropa vuelve al campamento y el carro al almacén (personal, en un campamento, hasta el tope; lo que no cabe queda en el carro aparcado).
+- **Los que no residen entran de visita**: dentro del lugar, con su columna aparcada intacta en la puerta. Una puerta cerrada o un veto les alcanza como a cualquiera.
+- **Caravanas adjuntas**: solo entra si **todas son de ese lugar**; si no, hay que soltarlas o llevarlas a su origen antes. Las de ese lugar quedan aparcadas en una plaza, o sueltas en un campamento (la Caravana de Fundación).
+- Los víveres son de cada héroe y se quedan con él.
+
+Esto sustituye la regla del 2026-09-14 de guarnecer solo si todos los del ejército residían en la plaza.
 
 ## 5.15 Batallas con héroes: quién combate, guarnición y campamento
 

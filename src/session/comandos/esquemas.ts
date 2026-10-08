@@ -408,6 +408,10 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     { heroeId: IDENTIFICADOR, convocatoriaId: IDENTIFICADOR, solicitanteId: IDENTIFICADOR, aceptar: { type: 'boolean' } },
     ['heroeId', 'convocatoriaId', 'solicitanteId', 'aceptar']
   ),
+  cambiarSeleccionDeConvocatoria: objeto(
+    { heroeId: IDENTIFICADOR, escuadronIds: LISTA_DE_IDENTIFICADORES, carga: { type: 'object', additionalProperties: NUMERO } },
+    ['heroeId', 'escuadronIds', 'carga']
+  ),
   separarseDeConvocatoria: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   cancelarConvocatoria: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),
   partirConvocatoria: objeto({ heroeId: IDENTIFICADOR }, ['heroeId']),

@@ -1,10 +1,10 @@
 // `guarnecer` (Ocupacion_Post_Conquista_Definicion.md §2.3): un ejército marcha a una plaza de su Facción y
-// vuelca la tropa en el campamento de sus héroes — solo si todos residen allí (decisión del usuario, 2026-09-14).
+// entra y se desarma: cada héroe entra como lo haría solo (2026-10-08).
 // Las caravanas adjuntas quedan 'aparcadas' (§2.3d): no las usa la anfitriona, intercambian con su almacén, y
 // salen solo enganchadas a un ejército o enviadas a su origen.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Caravana, Ejercito, Escuadron, Point } from '../../domain/types';
-import { guarnecer, MovilizacionInvalidaError, adjuntarCaravana } from '../ejercitos';
+import { caravanasAlEntrar, exigirPuedeGuarnecer, MovilizacionInvalidaError, adjuntarCaravana } from '../ejercitos';
 import { moverCargaCarroAparcada, enviarCaravanaAlOrigen, CaravanaInvalidaError, avanzarComercio } from '../trade';
 import { instante } from '../../domain/tiempo';
 import type { EjercitoConTropa } from '../tropa';
@@ -61,47 +61,49 @@ function caravanaAdjunta(id: string, origenId: string, posicion: Point): Caravan
   };
 }
 
-describe('guarnecer — la tropa al campamento, el ejército se consume', () => {
-  // j1 y j2 residen en b: es lo que les deja volcar la tropa aquí.
+describe('guarnecer — qué se comprueba del ejército (cada héroe entra después como lo haría solo)', () => {
   const b: Asentamiento = { ...plaza('faccion-1'), casasCompradas: ['j1', 'j2'] };
 
-  it('un ejército de residentes en la puerta vuelca sus escuadrones al campamento y su carro al almacén', () => {
-    const ej = ejercitoDe('faccion-1', b.posicion, [esc('j1'), esc('j2')]);
-    const r = guarnecer(b, ej, []);
-    expect(r.tropa.map((e) => e.id).sort()).toEqual(['esc-j1', 'esc-j2']);
-    expect(r.tropa.every((e) => e.contenedor.tipo === 'campamento')).toBe(true);
-    expect(r.asentamiento.almacen['trigo']?.cantidad).toBeGreaterThan(b.almacen['trigo']?.cantidad ?? 0);
-    expect(r.caravanasAparcadas).toEqual([]);
-  });
-
-  it('si alguno de dentro NO reside ahí, no guarnece: su campamento está en otra plaza', () => {
-    const ej = ejercitoDe('faccion-1', b.posicion, [esc('j1'), esc('forastero')]);
-    expect(() => guarnecer(b, ej, [])).toThrow(/residen todos/);
+  it('un ejército de su Facción en la puerta puede guarnecer, residan o no los que van dentro', () => {
+    expect(() => exigirPuedeGuarnecer(b, ejercitoDe('faccion-1', b.posicion, [esc('j1'), esc('forastero')]))).not.toThrow();
   });
 
   it('una columna PERSONAL no guarnece', () => {
-    const columna = ejercitoDe('faccion-1', b.posicion, [], { tipo: 'personal' });
-    expect(() => guarnecer(b, columna, [])).toThrow(MovilizacionInvalidaError);
+    expect(() => exigirPuedeGuarnecer(b, ejercitoDe('faccion-1', b.posicion, [], { tipo: 'personal' }))).toThrow(MovilizacionInvalidaError);
   });
 
   it('no se guarnece una plaza de OTRA Facción', () => {
-    const ej = ejercitoDe('faccion-2', b.posicion, [esc('j1')]); // b es de faccion-1
-    expect(() => guarnecer(b, ej, [])).toThrow(MovilizacionInvalidaError);
+    expect(() => exigirPuedeGuarnecer(b, ejercitoDe('faccion-2', b.posicion, [esc('j1')]))).toThrow(MovilizacionInvalidaError);
   });
 
   it('hay que estar EN LA PUERTA', () => {
-    const ej = ejercitoDe('faccion-1', { x: b.posicion.x + 5000, y: b.posicion.y }, [esc('j1')]);
-    expect(() => guarnecer(b, ej, [])).toThrow(MovilizacionInvalidaError);
+    expect(() => exigirPuedeGuarnecer(b, ejercitoDe('faccion-1', { x: b.posicion.x + 5000, y: b.posicion.y }, [esc('j1')]))).toThrow(MovilizacionInvalidaError);
+  });
+});
+
+describe('las caravanas adjuntas al entrar en un lugar (2026-10-08)', () => {
+  const b = plaza('faccion-1');
+  const lugar = { tipo: 'asentamiento' as const, id: b.id, posicion: b.posicion };
+
+  it('las de ese lugar quedan APARCADAS en una plaza, no se pierden', () => {
+    const car = caravanaAdjunta('car-1', b.id, b.posicion);
+    const ej = ejercitoDe('faccion-1', b.posicion, [esc('j1')], { caravanasAdjuntasIds: ['car-1'] });
+    const r = caravanasAlEntrar(ej, [car], lugar);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.estado).toBe('aparcada');
+    expect(r[0]!.posicionActual).toEqual(b.posicion);
   });
 
-  it('las caravanas adjuntas quedan APARCADAS en la plaza, no se pierden', () => {
-    const car = caravanaAdjunta('car-1', 'origen', b.posicion);
+  it('en un campamento quedan sueltas, como al soltarlas', () => {
+    const car = { ...caravanaAdjunta('car-1', '', b.posicion), origenCampamentoId: 'mercenarios-0' };
     const ej = ejercitoDe('faccion-1', b.posicion, [esc('j1')], { caravanasAdjuntasIds: ['car-1'] });
-    const r = guarnecer(b, ej, [car]);
-    expect(r.caravanasAparcadas).toHaveLength(1);
-    expect(r.caravanasAparcadas[0]!.estado).toBe('aparcada');
-    expect(r.caravanasAparcadas[0]!.posicionActual).toEqual(b.posicion);
-    expect(r.caravanasAparcadas[0]!.origenAsentamientoId).toBe('origen'); // sigue siendo de su origen
+    expect(caravanasAlEntrar(ej, [car], { tipo: 'campamento', id: 'mercenarios-0', posicion: b.posicion })[0]!.estado).toBe('disponible');
+  });
+
+  it('si alguna es de OTRO lugar, no se entra', () => {
+    const ej = ejercitoDe('faccion-1', b.posicion, [esc('j1')], { caravanasAdjuntasIds: ['car-1'] });
+    expect(() => caravanasAlEntrar(ej, [caravanaAdjunta('car-1', 'otra-plaza', b.posicion)], lugar)).toThrow(/no es de este lugar/);
+    expect(() => caravanasAlEntrar(ej, [caravanaAdjunta('car-1', b.id, b.posicion)], { tipo: 'campamento', id: 'mercenarios-0', posicion: b.posicion })).toThrow(/no es de este lugar/);
   });
 });
 

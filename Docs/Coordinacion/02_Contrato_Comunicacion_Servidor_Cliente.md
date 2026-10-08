@@ -391,7 +391,7 @@ devuelve `{ cantidad, oro }` con lo que sirvió de verdad.
 
 | Comando | Parámetros | Devuelve | Notas |
 |---|---|---|---|
-| `entrarEnCampamento` | `campamentoId`, `heroeId` | — | Con la columna a la puerta, siendo su Líder y sin nadie más. En el suyo la columna se deshace (tropa al campamento, carro al almacén personal; la ración sobrante vuelve al campamento); en otro, queda en la puerta intacta |
+| `entrarEnCampamento` | `campamentoId`, `heroeId` | — | Con la columna a la puerta. **Un ejército también entra** (2026-10-08, §4.2b-bis): lo ordena su Líder y cada héroe entra como lo haría solo. En el suyo la columna se deshace (tropa al campamento, carro al almacén personal; la ración sobrante vuelve al campamento); en otro, queda en la puerta intacta |
 | `salirDelCampamento` | `campamentoId`, `heroeId`, `escuadronIds[]`, `carga` (recurso → cantidad desde el almacén personal), `politicaDeUnion?`, `objetivo?` | `{ ejercitoId }` | Con `politicaDeUnion` distinta de `rechazar` sale como ejército; `objetivo` ya es **opcional** (2026-10-08): sin él sale quieto en la puerta y su Líder lo dirige con `marcharA`. El residente recibe la ración gratis (Doc 1.9b). En otro campamento retoma la columna con la que entró |
 | `residirEnCampamento` | `heroeId`, `campamentoId` | — | Cambiar de casa (Doc 2.5), con su cooldown |
 | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `recurso`, `cantidad` | `{ movido }` | Entre el carro de su columna y su almacén personal |
@@ -430,6 +430,7 @@ que estén dentro del MISMO lugar, cada uno con la tropa y la carga con las que 
 | `convocarEjercito` | `heroeId`, `politicaDeUnion` (`aceptar` \| `preguntar`), `escuadronIds[]`, `carga` | `{ convocatoriaId }` | Dentro de una plaza o un campamento, con Facción y sin ir ya en otra convocatoria. Se comprueba que saldría con lo elegido |
 | `unirseAConvocatoria` | `heroeId`, `convocatoriaId`, `escuadronIds[]`, `carga` | `{ unido }` | Con `aceptar` entra (`unido: true`); con `preguntar` deja una petición al Líder (`unido: false`, vive `MOVIMIENTO.vidaPeticionUnionSegundos`) |
 | `responderPeticionDeConvocatoria` | `heroeId` (el Líder), `convocatoriaId`, `solicitanteId`, `aceptar` | `{ unido }` | Al aceptar se revalida que siga dentro y pueda salir con lo ofrecido |
+| `cambiarSeleccionDeConvocatoria` | `heroeId`, `escuadronIds[]`, `carga` | — | Un integrante (también el Líder) cambia SU selección sin separarse; mismas validaciones que al unirse. El orden de `escuadronIds` es el orden con el que sale su columna y combate. Evento `convocatoria.seleccion_cambiada` |
 | `separarseDeConvocatoria` | `heroeId` | — | Un integrante no Líder; sigue dentro. El Líder no se separa: cancela (no cede el mando mientras se prepara) |
 | `cancelarConvocatoria` | `heroeId` | — | Solo el Líder. Nada que devolver: todos siguen dentro |
 | `partirConvocatoria` | `heroeId` | `{ ejercitoId }` | Solo el Líder. Salen juntos los que sigan dentro como UN ejército (`tipo: 'ejercito'`, quieto, con la política de la convocatoria). Todo o nada: si alguien ya no puede salir con lo elegido, nadie sale y `detalleError` dice quién y por qué |
@@ -439,12 +440,19 @@ Mientras alguien va en una convocatoria, **`salirAlMundo`, `salirDeAsentamiento`
 
 **Eventos** (todos con `payload { convocatoriaId, liderId, heroeId, heroesIds[], lugar: { tipo: 'asentamiento' \| 'campamento', id } }`, así que llegan por
 `heroe/<id>` al Líder y a cada integrante; `asentamientoId` = la plaza, o `''` en un campamento): `convocatoria.convocada`, `convocatoria.union_pedida`
-(+ `expiraEn`), `convocatoria.unido`, `convocatoria.union_rechazada`, `convocatoria.separado`, `convocatoria.cancelada`, `convocatoria.partio` (+ `ejercitoId`).
+(+ `expiraEn`), `convocatoria.unido`, `convocatoria.union_rechazada`, `convocatoria.seleccion_cambiada`, `convocatoria.separado`, `convocatoria.cancelada`, `convocatoria.partio` (+ `ejercitoId`).
 Partir emite además los hechos de la salida de cada integrante (`ejercito.…`/`jugador.sale_…`).
 
 **Proyección:** `convocatorias[]` —las abiertas del lugar donde estás y de tu Facción— y `miConvocatoriaId?`. Cada una: `id`, `lugar`, `liderId`,
-`politicaDeUnion`, `creadaEn`, `integrantes[]` (solo los que siguen dentro: `heroeId`, `unidoEn`, `escuadronIds`, `tropas[] { escuadronId, tropaId, cantidad }`, `carga`),
+`politicaDeUnion`, `creadaEn`, `integrantes[]` (solo los que siguen dentro: `heroeId`, `unidoEn`, `escuadronIds`, `tropas[] { escuadronId, tropaId, nombre, nivel, moral, cantidad }` en el orden elegido, `carga`),
 `peticiones[]` (vivas: el Líder las ve todas, cada solicitante la suya, con `expiraEn`), `soyLider`, `soyIntegrante`. Si vas en una, te llega aunque cambies de lugar.
+
+**Un ejército entra en un lugar** (2026-10-08, Doc 5.14.6). `entrarEnCampamento` y `guarnecer` (plaza de su Facción) aceptan un ejército: lo
+ordena su Líder (a otro: «Solo el Líder hace entrar al ejército»), en la puerta, y el ejército se DESARMA: cada héroe queda en una columna personal
+(el carro, a prorrata como al separarse) y entra como lo haría solo —el que reside allí, normal; el que no, de visita con su columna aparcada a la
+puerta—. Las caravanas adjuntas tienen que ser **de ese lugar**; si no, se rechaza («La caravana … no es de este lugar») y hay que soltarlas
+antes. Las de ese lugar quedan `aparcada` en una plaza y sueltas (`disponible`) en un campamento. Eventos: los `jugador.entra_en_*` de cada
+héroe y, de resumen, `ejercito.entra_en_campamento` (`{ campamentoId, ejercitoId, heroesIds[], heroeId }`) o `ejercito.guarnece`.
 
 ### 4.2c Intel de las tabernas (2026-10-05, Doc 5.12.10; modelo en doc 01 §24)
 

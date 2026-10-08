@@ -15,6 +15,7 @@ import {
   nuevaConvocatoria,
   pedirUnion,
   retirarPeticion,
+  cambiarSeleccion,
   separarseDeConvocatoria as separarseEngine,
   unirseAConvocatoria as unirseEngine,
 } from '../../engine/convocatoria';
@@ -60,6 +61,10 @@ export interface ParamsResponderPeticionDeConvocatoria {
   convocatoriaId: string;
   solicitanteId: string;
   aceptar: boolean;
+}
+
+export interface ParamsCambiarSeleccionDeConvocatoria extends SeleccionDeSalida {
+  heroeId: string;
 }
 
 export interface ParamsDeLaConvocatoria {
@@ -189,6 +194,22 @@ export const responderPeticionDeConvocatoria = comando<ParamsResponderPeticionDe
     conHistorialDeJugador(conConvocatorias(estado, sustituir(lista, unida)), solicitante.id, 'Es aceptado en un ejército en preparación.'),
     [aviso(ctx, 'convocatoria.unido', 'El Líder acepta a un jugador.', unida, solicitante.id)],
     { unido: true }
+  );
+});
+
+/**
+ * Un integrante (también el Líder) cambia SU PROPIA selección —escuadras, en el orden en que quiere que entren en combate, y carga— sin
+ * separarse. Se valida igual que al unirse: saldría con eso. Los demás lo ven al instante (`convocatoria.seleccion_cambiada`).
+ */
+export const cambiarSeleccionDeConvocatoria = comando<ParamsCambiarSeleccionDeConvocatoria, void>((estado, mapa, ctx, params) => {
+  const c = convocatoriaDe(convocatoriasDe(estado), params.heroeId);
+  if (!c) throw new MovilizacionInvalidaError('No estás en ningún ejército en preparación.');
+  const sel = { escuadronIds: params.escuadronIds, carga: params.carga };
+  exigirQuePuedeSalir(estado, mapa, ctx, c.lugar, params.heroeId, sel);
+  const cambiada = cambiarSeleccion(c, params.heroeId, sel);
+  return exito(
+    conHistorialDeJugador(conConvocatorias(estado, sustituir(convocatoriasDe(estado), cambiada)), params.heroeId, 'Cambia lo que saca su ejército en preparación.'),
+    [aviso(ctx, 'convocatoria.seleccion_cambiada', 'Un integrante cambia lo que saca el ejército.', cambiada, params.heroeId)]
   );
 });
 

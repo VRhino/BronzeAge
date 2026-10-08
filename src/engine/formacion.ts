@@ -44,7 +44,7 @@ export function sucesorEnFormacion(ejercito: Ejercito, saleId: string): string {
 }
 
 /**
- * Deshace una formación: el Líder se queda con la columna y cada uno de los demás nace como Columna personal donde
+ * Deshace una formación —o un ejército que va a entrar en un lugar (2026-10-08)—: el Líder se queda con la columna y cada uno de los demás nace como Columna personal donde
  * estaba, con lo que aportó (`desgajar`). Devuelve las columnas, con su tropa puesta, y el id de quien vuelve a cada una.
  */
 export function disolverFormacion(formacion: EjercitoConTropa): EjercitoConTropa[] {
@@ -57,7 +57,7 @@ export function disolverFormacion(formacion: EjercitoConTropa): EjercitoConTropa
     sueltos.push(separado.columna);
   }
   const { formacion: _, ...sinFormacion } = resto;
-  return [{ ...sinFormacion, politicaDeUnion: 'rechazar', peticionesDeUnion: undefined }, ...sueltos];
+  return [{ ...sinFormacion, tipo: 'personal', politicaDeUnion: 'rechazar', peticionesDeUnion: undefined, caravanasAdjuntasIds: [] }, ...sueltos];
 }
 
 /** Deshace las formaciones con esos ids: sus columnas vuelven a ser personales y los héroes se sitúan en la suya. */

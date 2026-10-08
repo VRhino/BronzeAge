@@ -77,6 +77,12 @@ export function retirarPeticion(convocatoria: Convocatoria, liderId: string, sol
   return { convocatoria: { ...convocatoria, peticiones: convocatoria.peticiones!.filter((p) => p !== peticion) }, peticion };
 }
 
+/** Cada integrante cambia SOLO su propia selección (el Líder también): el orden de `escuadronIds` es el orden con el que su columna sale y combate. */
+export function cambiarSeleccion(convocatoria: Convocatoria, heroeId: string, seleccion: SeleccionDeSalida): Convocatoria {
+  if (!convocatoria.integrantes.some((i) => i.heroeId === heroeId)) throw new MovilizacionInvalidaError('No estás en ese ejército.');
+  return { ...convocatoria, integrantes: convocatoria.integrantes.map((i) => (i.heroeId === heroeId ? { ...i, ...seleccion } : i)) };
+}
+
 /** Un integrante se va mientras el ejército se prepara: sigue dentro del lugar, no hay nada que devolver. El Líder cancela. */
 export function separarseDeConvocatoria(convocatoria: Convocatoria, heroeId: string): Convocatoria {
   if (!convocatoria.integrantes.some((i) => i.heroeId === heroeId)) throw new MovilizacionInvalidaError('No estás en ese ejército.');
