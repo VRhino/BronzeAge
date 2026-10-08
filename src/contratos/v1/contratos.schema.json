@@ -241,6 +241,7 @@
           "additionalProperties": false
         },
         "racionEn": { "$ref": "#/definitions/Instante" },
+        "viveres": { "type": "number", "minimum": 0 },
         "bandidosDestruidosEn": { "type": "array", "items": { "$ref": "#/definitions/Instante" } },
         "alijosAbiertos": { "type": "array", "items": { "$ref": "#/definitions/Id" } },
         "heridoHasta": { "$ref": "#/definitions/Instante" },

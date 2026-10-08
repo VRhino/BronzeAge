@@ -5,9 +5,9 @@
 //
 // Las prudencias son las que la gobernanza tenía medidas en batch (placeholders hasta medir el bloque entero, §10.1).
 import type { Asentamiento, Ejercito, Escuadron, Point } from '../../domain/types';
-import { LOGISTICA, MILITAR, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../../constants';
+import { LOGISTICA, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../../constants';
 import { edificiosPorTipoYEstado, nivelActualDe, nutricionPoblacionDe } from '../../engine/asentamientoQuery';
-import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../../engine/tropas';
+import { consumoRacionDeColumna, consumoRacionDeEscuadrones, reservaDeTrigo } from '../../engine/tropas';
 import { poderTotal } from '../../engine/combate';
 import { costeLiderazgo } from '../../engine/liderazgo';
 import { poderEscuadron } from '../../engine/tropa';
@@ -53,6 +53,8 @@ async function reclutar(ctx: ContextoBot, plaza: Asentamiento, heroe: HeroeVisto
   const adoptadas = ctx.vista.tecnologia.propias?.adoptadas ?? [];
   for (const tropa of TROPAS_POR_PREFERENCIA) {
     if (!adoptadas.includes(tropa.tecnologia)) continue;
+    // Una escuadra por tropa: la que está cedida a una escolta ocupa el sitio hasta que vuelva.
+    if (heroe.escuadrones.some((e) => e.tropaId === tropa.id && e.contenedor.tipo === 'escolta')) continue;
     const edificio = edificiosPorTipoYEstado(plaza, tropa.edificio)[0];
     if (!edificio || (edificio.nivelInterno ?? 1) < tropa.nivelRequerido) continue;
     if ((heroe.escuadrones.find((e) => e.tropaId === tropa.id)?.cantidad ?? 0) >= tropa.unidadesPorDefecto) continue;
@@ -100,11 +102,13 @@ async function prepararDefensa(ctx: ContextoBot): Promise<void> {
 
 // --- Salir de casa ---
 
+/** Los víveres con los que sale: los que lleva más lo que la plaza le da, hasta el tope (Doc 5.13). */
+const viveresAlSalir = (heroe: HeroeVisto, trigoDeLaPlaza: number): number => Math.min(LOGISTICA.capacidadViveresPorHeroe, (heroe.viveres ?? 0) + trigoDeLaPlaza);
+
 /** ¿Hasta dónde llega y vuelve con este trigo? (Doc 5.13.1). */
 function alcanceDeIdaYVuelta(escuadras: readonly Escuadron[], trigo: number): number {
-  const soldados = escuadras.reduce((n, e) => n + e.cantidad, 0);
-  if (soldados <= 0) return 0;
-  const ticks = trigo / (soldados * MILITAR.racionPorSoldadoPorMinuto);
+  if (escuadras.every((e) => e.cantidad <= 0)) return 0;
+  const ticks = trigo / consumoRacionDeColumna(escuadras, 1, LOGISTICA.factorConsumoEnMarcha);
   if (ticks < AUTONOMIA_MINIMA_TICKS) return 0;
   const velocidades = escuadras.map((e) => TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)?.velocidad).filter((v): v is number => v !== undefined);
   return velocidades.length === 0 ? 0 : (ticks * Math.min(...velocidades)) / 2;
@@ -178,7 +182,7 @@ async function cazar(ctx: ContextoBot, plaza: Asentamiento, heroe: HeroeVisto): 
   const escuadras = loQueLeCabe(heroe, escuadrasLibres(heroe));
   if (escuadras.length === 0 || salud(escuadras) < SALUD_PARA_SALIR || poderTotal(escuadras, false) <= campamento.poder) return false;
   const trigo = Math.max(0, (plaza.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo(plaza, consumoRacionDeEscuadrones(escuadras)));
-  if (distancia(plaza.posicion, campamento.posicion) > alcanceDeIdaYVuelta(escuadras, Math.min(trigo, LOGISTICA.capacidadCarroPorJugador))) return false;
+  if (distancia(plaza.posicion, campamento.posicion) > alcanceDeIdaYVuelta(escuadras, viveresAlSalir(heroe, trigo))) return false;
   const r = await ctx.intentar(`cazar:${campamento.id}`, 'movilizarEjercito', {
     asentamientoId: plaza.id,
     heroeId: yo,
@@ -203,7 +207,7 @@ async function lanzarCampana(ctx: ContextoBot, plaza: Asentamiento, heroe: Heroe
   const escuadras = loQueLeCabe(heroe, escuadrasLibres(heroe));
   if (escuadras.length < Math.min(ESCUADRAS_PARA_CAMPANA, escuadrasLibres(heroe).length) || escuadras.length === 0) return false;
   const trigo = Math.max(0, (plaza.almacen['trigo']?.cantidad ?? 0) - reservaDeTrigo(plaza, consumoRacionDeEscuadrones(escuadras)));
-  const alcance = alcanceDeIdaYVuelta(escuadras, Math.min(trigo, LOGISTICA.capacidadCarroPorJugador));
+  const alcance = alcanceDeIdaYVuelta(escuadras, viveresAlSalir(heroe, trigo));
   const poder = poderTotal(escuadras, false);
   const conocidas = plazasConocidas(vista);
   const plazasDe = (faccionId: string) => new Set(conocidas.filter((a) => a.faccionId === faccionId).map((a) => a.id)).size;
@@ -276,19 +280,23 @@ async function mudarse(ctx: ContextoBot, plaza: Asentamiento): Promise<void> {
 export async function enColumna(ctx: ContextoBot): Promise<void> {
   const { vista, yo, memoria } = ctx;
   const columna = columnaPropia(vista, yo);
-  if (!columna || columna.liderId !== yo) return; // quien no lidera va donde va su líder
+  if (!columna) return;
+  if (columna.liderId !== yo) return void (columna.estado === 'estacionado' && (await entrarSiEstaEnCasa(ctx))); // quien no lidera va donde va su líder
   const plan = memoria.plan;
 
+  if (columna.tipo === 'ejercito' && (plan?.tipo === 'explorar' || plan?.tipo === 'mudarse')) return await volverACasa(ctx, columna);
   if (plan?.tipo === 'explorar') return await enExploracion(ctx, columna, plan.plazaId);
   // La caravana va enganchada: no se persigue nada por el camino (los bandidos la atacan, no la escolta que se desvía).
   if (plan?.tipo === 'fundar') return await conducirCaravana(ctx, columna.posicionActual, columna, plan);
+  // Un ejército sin tropa propia no tiene nada que hacer fuera.
+  if (columna.tipo === 'ejercito' && !llevaTropa(ctx, columna)) return await volverACasa(ctx, columna);
   if (columna.estado !== 'estacionado') return await perseguirLoQueVe(ctx, columna);
   // Parado y sin nada que hacer: acude a donde los suyos combaten o se juntan (batalla de su Facción, formación de un compañero).
   if (!plan && (await acudirALosSuyos(ctx))) return;
 
   if (plan?.tipo === 'cazar') {
     const campamento = vista.campamentosBandidos.find((c) => c.id === plan.campamentoId);
-    if (campamento && distancia(columna.posicionActual, campamento.posicion) <= LOGISTICA.radioEncuentro) {
+    if (campamento && llevaTropa(ctx, columna) && distancia(columna.posicionActual, campamento.posicion) <= LOGISTICA.radioEncuentro) {
       await ctx.actuar('atacar', { heroeId: yo, objetivo: { tipo: 'campamento', id: campamento.id } });
     }
     return await volverACasa(ctx, columna);
@@ -296,7 +304,7 @@ export async function enColumna(ctx: ContextoBot): Promise<void> {
 
   if (plan?.tipo === 'campana') {
     const plaza = [...vista.asentamientosAvistados].find((a) => a.id === plan.plazaId);
-    if (plaza && plaza.faccionId !== vista.faccionId && distancia(columna.posicionActual, plaza.posicion) <= LOGISTICA.radioEncuentro) {
+    if (plaza && plaza.faccionId !== vista.faccionId && llevaTropa(ctx, columna) && distancia(columna.posicionActual, plaza.posicion) <= LOGISTICA.radioEncuentro) {
       const r = await ctx.actuar('atacar', { heroeId: yo, objetivo: { tipo: 'asentamiento', id: plaza.id } });
       if (r.ok) return; // el resultado se ve en el turno siguiente
     }
@@ -337,9 +345,29 @@ async function volverACasa(ctx: ContextoBot, columna: Ejercito): Promise<void> {
   delete memoria.plan;
   const casa = memoria.residenciaId;
   if (!casa) return;
+  if (columna.tipo === 'ejercito') {
+    // Un ejército no entra en una plaza: en su puerta se separa y entra; si no, se repliega entero.
+    if (await entrarSiEstaEnCasa(ctx)) return;
+    if (columna.estado !== 'regresando') await ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
+    return;
+  }
   if ((await ctx.actuar('entrarEnAsentamiento', { asentamientoId: casa, heroeId: yo })).ok) return;
-  if (columna.tipo === 'ejercito') await ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
-  else await ctx.intentar(`volver:${columna.id}`, 'marcharA', { heroeId: yo, objetivo: { tipo: 'asentamiento', id: casa } }, 10 * 60_000);
+  await ctx.intentar(`volver:${columna.id}`, 'marcharA', { heroeId: yo, objetivo: { tipo: 'asentamiento', id: casa } }, 10 * 60_000);
+}
+
+/** Parado a la puerta de su casa, dentro de un ejército: se separa de él y entra. */
+async function entrarSiEstaEnCasa(ctx: ContextoBot): Promise<boolean> {
+  const { vista, yo } = ctx;
+  const columna = columnaPropia(vista, yo);
+  const casa = plazasPropias(vista).find((p) => p.id === ctx.memoria.residenciaId);
+  if (!columna || columna.estado !== 'estacionado' || !casa || distancia(columna.posicionActual, casa.posicion) > MOVIMIENTO.radioPuerta) return false;
+  if (columna.tipo === 'ejercito' && !(await ctx.actuar('separarseDelEjercito', { heroeId: yo })).ok) return false;
+  return (await ctx.actuar('entrarEnAsentamiento', { asentamientoId: casa.id, heroeId: yo })).ok;
+}
+
+/** ¿Lleva soldados en su columna? Lo que se ataca con ella: sin ninguno, el motor rechaza el ataque. */
+function llevaTropa(ctx: ContextoBot, columna: Ejercito): boolean {
+  return (ctx.vista.heroe?.escuadrones ?? []).some((e) => columna.escuadronIds.includes(e.id) && e.cantidad > 0);
 }
 
 /**
@@ -355,7 +383,7 @@ async function perseguirLoQueVe(ctx: ContextoBot, columna: Ejercito): Promise<vo
   if (presa) {
     const donde =
       presa.tipo === 'ejercito' ? vista.ejercitosAvistados.find((e) => e.id === presa.id)?.posicionActual : vista.caravanasAvistadas.find((c) => c.id === presa.id)?.posicionActual;
-    if (donde && distancia(donde, columna.posicionActual) <= LOGISTICA.radioEncuentro) await ctx.actuar('atacar', { heroeId: yo, objetivo: presa });
+    if (donde && llevaTropa(ctx, columna) && distancia(donde, columna.posicionActual) <= LOGISTICA.radioEncuentro) await ctx.actuar('atacar', { heroeId: yo, objetivo: presa });
     return;
   }
   if (columna.escuadronIds.length === 0) return;

@@ -53,13 +53,12 @@ describe('fondo de refundación (D39)', () => {
     expect(r.heroe.almacenPersonal).toEqual({ madera: 65 });
   });
 
-  it('desde el carro en otro campamento: los materiales no viajan solos; la ración no se aporta', () => {
+  it('desde el carro en otro campamento: los materiales no viajan solos', () => {
     const ajeno = campamento({ residentesIds: [] });
     expect(() => aportarARefundacion(ajeno, heroe('h1', { madera: 100 }), undefined, faccion(), [], 'madera', 10, 'almacen')).toThrow(MercenariosInvalidoError);
-    const a = aportarARefundacion(ajeno, heroe('h1', {}), columna({ madera: 50, trigo: 70 }, { racion: 60 }), faccion(), [], 'madera', 30, 'carro');
+    const a = aportarARefundacion(ajeno, heroe('h1', {}), columna({ madera: 50, trigo: 70 }), faccion(), [], 'madera', 30, 'carro');
     expect(a.columna!.suministro).toEqual({ madera: 20, trigo: 70 });
     expect(a.campamento.fondos).toEqual({ h1: { madera: 30 } });
-    expect(aportarARefundacion(ajeno, heroe('h1', {}), columna({ trigo: 70 }, { racion: 60 }), faccion(), [], 'trigo', 70, 'carro').movido, 'solo lo que no es ración').toBe(10);
   });
 
   it('el oro retirado vuelve como oro de botín (D27)', () => {

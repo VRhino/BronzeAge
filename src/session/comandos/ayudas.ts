@@ -15,6 +15,8 @@
 // Queda encerrado dentro de `comando()`, no escapa nunca de un manejador, y es exactamente lo que ya hacía
 // `rechazoDesdeError` con los errores del motor — así que el mecanismo es uno, no dos.
 import { columnaDe } from '../../engine/ejercitos';
+import { consumoRacionDeEscuadrones } from '../../engine/tropas';
+import { llenarViveres } from '../../engine/viveres';
 import { esCiudadano } from '../../engine/faccion';
 import { fundirExploraciones } from '../../engine/exploracion';
 import { MEMORIA_VACIA } from '../../engine/memoria';
@@ -151,6 +153,19 @@ export function conTropaDe(estado: GameSessionState, ejercito: Ejercito): Ejerci
 /** El campamento de una plaza: su guarnición, en este estado. */
 export function campamentoEn(estado: GameSessionState, asentamiento: Asentamiento): Escuadron[] {
   return campamentoDe(asentamiento, estado.heroes);
+}
+
+/**
+ * Llena los víveres de quien sale de esta plaza (Doc 5.13), del almacén y sin bajar de su reserva: llamar con la tropa que sale YA
+ * fuera del campamento, para que la reserva no proteja bocas que se han ido.
+ */
+export function conViveresLlenos(estado: GameSessionState, asentamientoId: string, heroeId: string): { estado: GameSessionState; cargado: number } {
+  const plaza = exigirAsentamiento(estado, asentamientoId);
+  const heroe = exigirJugador(estado, heroeId);
+  const r = llenarViveres(plaza, consumoRacionDeEscuadrones(campamentoEn(estado, plaza)), heroe);
+  if (r.cargado <= 0) return { estado, cargado: 0 };
+  const conPlaza = conAsentamiento(estado, r.asentamiento);
+  return { estado: { ...conPlaza, heroes: conPlaza.heroes.map((h) => (h.id === heroeId ? r.heroe : h)) }, cargado: r.cargado };
 }
 
 /**

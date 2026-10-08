@@ -139,6 +139,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   borrarLoadout: objeto({ loadoutId: IDENTIFICADOR }, ['loadoutId']),
   guardarEnAlmacenPersonal: objeto({ recurso: RECURSO, cantidad: NUMERO }, ['recurso', 'cantidad']),
   sacarDelAlmacenPersonal: objeto({ recurso: RECURSO, cantidad: NUMERO }, ['recurso', 'cantidad']),
+  pasarAViveres: objeto({ cantidad: NUMERO }, ['cantidad']),
   ordenarEscuadras: objeto({ escuadronIds: LISTA_DE_IDENTIFICADORES }, ['escuadronIds']),
   asignarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),
   retirarGuarnicion: objeto({ squadId: IDENTIFICADOR }, ['squadId']),

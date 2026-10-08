@@ -195,8 +195,8 @@ export function reclutarTropa(
 }
 
 /** Ración de trigo/tick que exige un conjunto de escuadrones, mire quien lo mire (Doc 5.4) — la guarnición de
- * una plaza es su campamento (`campamentoDe`). El `factorConsumo` lo usa un ejército ESTACIONADO, que consume
- * reducido pero nunca 0 (Doc 5.12.3). */
+ * una plaza es su campamento (`campamentoDe`). El `factorConsumo` lo usa una columna: en marcha come a
+ * `LOGISTICA.factorConsumoEnMarcha` y acampada a una décima parte de eso (Doc 5.13). */
 export function consumoRacionDeEscuadrones(escuadrones: readonly Escuadron[], factorConsumo = 1): number {
   const totalSoldados = escuadrones.reduce((acc, e) => acc + e.cantidad, 0);
   return totalSoldados * MILITAR.racionPorSoldadoPorMinuto * factorConsumo;
@@ -232,10 +232,10 @@ export function reservaDeTrigo(asentamiento: Asentamiento, consumoTropasPorMinut
  *
  * Es deliberadamente ignorante de DÓNDE está la comida: recibe unos escuadrones y un montón de trigo. Eso es
  * lo que permite que la guarnición (que come del almacén del asentamiento) y un ejército en campaña (que come
- * de su carro de suministros, Doc 5.13) compartan curva, constantes y evento sin duplicar nada — el carro no
+ * de los víveres de sus héroes, Doc 5.13) compartan curva, constantes y evento sin duplicar nada — el carro no
  * es un subsistema paralelo, es un segundo llamador de esta función.
  *
- * `factorConsumo` < 1 para un ejército estacionado (Doc 5.12.3). No hay parámetro de "consecuencia": el
+ * `factorConsumo` < 1 para una columna (Doc 5.13): la mitad en marcha, una décima de eso acampada. No hay parámetro de "consecuencia": el
  * usuario cerró que dispersión y deserción son lo mismo, así que el resultado del hambre es idéntico en
  * ambos sitios.
  *
@@ -281,7 +281,7 @@ export function avanzarRacion(
 }
 
 /** Mantenimiento de la GUARNICIÓN (Doc 5.4): el campamento de la plaza come de su almacén. El ejército en campaña
- * usa la misma `avanzarRacion` con su carro (Doc 5.13). */
+ * usa la misma `avanzarRacion` con los víveres de sus héroes (Doc 5.13). */
 export function avanzarMantenimientoTropas(
   asentamiento: Asentamiento,
   campamento: readonly Escuadron[]

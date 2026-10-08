@@ -10,16 +10,17 @@ import { CAMPAMENTOS_BANDIDOS, LOGISTICA, MERCENARIOS, MOVIMIENTO, TROPAS_RECLUT
 import { costoRefundacion, fondoDeFaccion } from '../../engine/refundacion';
 import { poderTotal } from '../../engine/combate';
 import { consumoRacionDeColumna } from '../../engine/tropas';
+import { tamanoPrestada } from '../../engine/reclutamientoMercenario';
 import { distancia } from '../../world/geometria';
 import { instante, type Instante } from '../../domain/tiempo';
 import type { ContextoBot } from '../runner';
 import { columnaPropia, plazasConocidas } from './comun';
 import { conducirCaravana, sitioParaFundar } from './fundar';
 
-/** La tropa que pide prestada: la milicia de lanceros (poder 30 contra los 20 de un nivel 1). Con las tres comería el triple. */
+/** La tropa que pide prestada: la milicia de lanceros (poder 50 contra los 20 de un nivel 1). Con las tres comería el triple. */
 const PRESTAMO = ['milicia_lanceros'];
-/** Poder de la leva que pide prestada: 15 lanceros de poder 2. Fija cuántos hacen falta para cada nivel de bandido. */
-const PODER_PRESTADO = 30;
+/** Poder de la leva que pide prestada: 25 lanceros de poder 2, la escuadra completa (D80). Fija cuántos hacen falta para cada nivel de bandido. */
+const PODER_PRESTADO = 50;
 /** Lo que vale «estoy dentro y listo» en la pizarra: algo más que el ritmo con el que piensa un bot (cada 5 min). */
 const ESPERA_LISTO_MS = 6 * 60_000;
 /** Lo que el titular espera a sus compañeros antes de salir a fundar sin ellos. */
@@ -188,8 +189,8 @@ async function enElCampamento(ctx: ContextoBot, casa: CampamentoMercenarios, fac
 
 const tropaEnCampamento = (escuadrones: readonly Escuadron[]) => escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && e.cantidad > 0);
 
-/** La ración gratis con la que sale (D24, D90): la misma para todos, hasta lo que quepa en el carro. */
-const racionAlSalir = (): number => MERCENARIOS.racion.trigo;
+/** La ración gratis con la que sale (D24, D90): los víveres llenos. */
+const racionAlSalir = (): number => LOGISTICA.capacidadViveresPorHeroe;
 
 /** Cuántos héroes con su leva prestada hacen falta para vencer ese poder. */
 const heroesPara = (poder: number) => Math.floor(poder / PODER_PRESTADO) + 1;
@@ -212,7 +213,7 @@ async function pedirTropa(ctx: ContextoBot): Promise<void> {
   const prestadas = heroe.escuadrones.filter((e) => e.prestada);
   const faltan = PRESTAMO.filter((t) => !prestadas.some((e) => e.tropaId === t));
   if (faltan.length > 0) await ctx.intentar('prestamo', 'pedirPrestamo', { tropaIds: faltan });
-  else if (prestadas.some((e) => e.cantidad < MERCENARIOS.prestamo.unidades)) await ctx.intentar('reponer', 'reponerPrestamo', {});
+  else if (prestadas.some((e) => e.cantidad < tamanoPrestada(e))) await ctx.intentar('reponer', 'reponerPrestamo', {});
 }
 
 /** Sale sin tropa a recorrer el anillo, si no hay ya otro fuera haciéndolo. */
@@ -300,11 +301,9 @@ async function enCampo(ctx: ContextoBot, casa: CampamentoMercenarios): Promise<v
   if (caravanaEnCasa && columna.tipo === 'personal' && plan?.tipo !== 'fundar') return await volverACasa(ctx, columna, casa, enLaPuerta);
 
   if (columna.liderId !== yo) {
-    // Va donde va su líder. En una caza, cuando ya no queda presa al alcance, se separa y vuelve por su cuenta; de vuelta en
-    // la puerta, se separa para entrar (se entra solo). A fundar va hasta el final: es cofundador.
-    // Si la fundación no salió y el ejército volvió a la puerta, también se separa.
-    if (plan?.tipo !== 'unirse' || columna.estado !== 'estacionado' || !plan.salio) return;
-    if (plan.para === 'fundar' ? !enLaPuerta : presaAlAlcance(ctx, columna.posicionActual, Infinity)) return;
+    // Va donde va su líder, que es quien repliega el ejército. De vuelta en la puerta, se separa para entrar (se entra solo).
+    // A fundar va hasta el final: es cofundador. Si la fundación no salió y el ejército volvió a la puerta, también se separa.
+    if (plan?.tipo !== 'unirse' || columna.estado !== 'estacionado' || !plan.salio || !enLaPuerta) return;
     if (!(await ctx.actuar('separarseDelEjercito', { heroeId: yo })).ok) return;
     if (enLaPuerta) await ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: yo });
     memoria.plan = { tipo: 'anillo', campamentoId: casa.id, salio: true };
@@ -322,15 +321,20 @@ async function enCampo(ctx: ContextoBot, casa: CampamentoMercenarios): Promise<v
 
   // Un ejército lleva el rumbo fijo (Doc 5.12.1): llega, ataca y, sin más que hacer allí, se repliega cuando se van los demás.
   if (plan?.tipo === 'anillo' && plan.explorar) return await explorando(ctx, columna, casa, enLaPuerta, plan.explorar);
+  // El rumbo no se cambia: si ya atacó lo que había (o no puede) y sigue parado, o se queda sin tropa, se repliega entero; en la puerta,
+  // los demás se separan solos y el último entra.
   if (columna.tipo === 'ejercito') {
-    if (columna.estado === 'estacionado' && columna.participantes.length === 1) await ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
-    if (enLaPuerta && columna.estado === 'estacionado' && plan?.tipo === 'anillo' && plan.salio && columna.participantes.length === 1) {
-      await ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: yo });
+    if (enLaPuerta) {
+      if (columna.estado === 'estacionado' && plan?.tipo === 'anillo' && plan.salio && columna.participantes.length === 1) {
+        await ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: yo });
+      }
+    } else if (columna.estado === 'estacionado' || (columna.estado === 'marchando' && sinFuerza(escuadras))) {
+      await ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
     }
     return;
   }
 
-  if (debeVolver(ctx, columna.posicionActual, columna.suministro['trigo'] ?? 0, escuadras, casa)) {
+  if (debeVolver(ctx, columna.posicionActual, vista.heroe?.viveres ?? 0, escuadras, casa)) {
     delete memoria.plan;
     return await volverACasa(ctx, columna, casa, enLaPuerta);
   }
@@ -350,6 +354,10 @@ async function enCampo(ctx: ContextoBot, casa: CampamentoMercenarios): Promise<v
 async function volverACasa(ctx: ContextoBot, columna: Ejercito, casa: CampamentoMercenarios, enLaPuerta: boolean): Promise<void> {
   if (enLaPuerta) {
     if (columna.estado === 'estacionado') await ctx.actuar('entrarEnCampamento', { campamentoId: casa.id, heroeId: ctx.yo });
+    return;
+  }
+  if (columna.tipo === 'ejercito') {
+    if (columna.estado !== 'regresando') await ctx.intentar(`replegar:${columna.id}`, 'replegarEjercito', { ejercitoId: columna.id }, 10 * 60_000);
     return;
   }
   if (columna.estado === 'estacionado' || columna.objetivo.tipo !== 'punto' || distancia(columna.objetivo.punto, casa.posicion) > MOVIMIENTO.radioPuerta) {
@@ -392,6 +400,12 @@ function escuadrasDeLaColumna(ctx: ContextoBot, escuadronIds: readonly string[],
   return [...propias, ...ajenas];
 }
 
+/** Sin un soldado, o con menos de la mitad de los que salieron: no hay nada que hacer fuera. */
+function sinFuerza(escuadras: readonly Escuadron[]): boolean {
+  const suyas = escuadras.filter((e) => e.id !== undefined);
+  return escuadras.every((e) => e.cantidad === 0) || (suyas.length > 0 && salud(suyas) < SALUD_PARA_SEGUIR);
+}
+
 /** Vuelve si el trigo no le da para llegar a casa con margen, o si ha perdido demasiada gente. */
 function debeVolver(ctx: ContextoBot, desde: Point, trigo: number, escuadras: readonly Escuadron[], casa: CampamentoMercenarios): boolean {
   // La salud, de las suyas: de las de los compañeros solo se ve cuántos llevan.
@@ -415,7 +429,7 @@ function trigoDelViaje(ctx: ContextoBot, desde: Point, hasta: Point, escuadras: 
     coste += ctx.mapa.costeEnPunto({ x: desde.x + (hasta.x - desde.x) * t, y: desde.y + (hasta.y - desde.y) * t });
   }
   const minutos = (d * (coste / muestras)) / velocidad + minutosDeMas;
-  return consumoRacionDeColumna(escuadras, 1) * minutos;
+  return consumoRacionDeColumna(escuadras, 1, LOGISTICA.factorConsumoEnMarcha) * minutos;
 }
 
 function salud(escuadras: readonly Escuadron[]): number {
@@ -423,7 +437,7 @@ function salud(escuadras: readonly Escuadron[]): number {
   let nominal = 0;
   for (const e of escuadras) {
     cantidad += e.cantidad;
-    nominal += e.prestada ? MERCENARIOS.prestamo.unidades : (TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)?.unidadesPorDefecto ?? e.cantidad);
+    nominal += tamanoPrestada(e);
   }
   return nominal <= 0 ? 1 : cantidad / nominal;
 }

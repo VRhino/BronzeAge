@@ -336,9 +336,7 @@ En un choque en campo abierto **no hay atacante ni defensor**: los dos iban a lo
 
 Al emboscar una caravana, el botín —el 50% de su carga, 3.10— **viaja en el carro del ejército**, con dos consecuencias: cabe solo lo que quepa, y llega a casa como el resto del carro —el sobrante vuelve al almacén de origen al replegarse (5.13)—. El carro no puede descargarse en ruta, así que esto no lo convierte en un transporte de mercancías: para eso están las caravanas adjuntas.
 
-Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume **una décima parte** de lo que consume en marcha, pero **nunca cero**.
-
-La cifra es lo que hace que estacionar signifique algo: a una décima parte, un carro lleno sostiene una posición diez veces más de lo que dura en marcha, y aparcar pasa a ser una jugada de verdad en vez de un aplazamiento contra el hambre.
+Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume **una décima parte** de lo que consume en marcha, pero **nunca cero** (5.13): a una décima parte, unos víveres llenos sostienen una posición diez veces más de lo que duran en marcha, y aparcar es una jugada de verdad en vez de un aplazamiento contra el hambre.
 
 ### 5.12.4 Quién defiende un asentamiento
 
@@ -519,24 +517,37 @@ Hay **dos productos**, los dos **exactos en el instante de la compra**: la infor
 
 ## 5.13 Suministro en campaña
 
-**Un ejército en marcha NO come del almacén de su asentamiento.** Lleva su propio **carro de suministros** con la comida que consume mientras se mueve. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
+**Un ejército en marcha NO come del almacén de su asentamiento.** Come de los **víveres** de sus héroes. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
 
-- **Capacidad**: **FIJA e igual para todos los Héroes** — es un carro, no una abstracción proporcional a lo que llevas. Se **suma** al formar ejército: un ejército de cuatro lleva cuatro carros.
-- **Carga**: al salir o al unirse, cada Héroe **toma del asentamiento**. Si el almacén no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento.
+**En marcha se come media ración** (2026-10-08): una columna en movimiento come la mitad de lo que come esa tropa en guarnición (`LOGISTICA.factorConsumoEnMarcha`), sus soldados y sus héroes; **acampada, una décima parte de eso** (`LOGISTICA.factorConsumoEstacionado`). La guarnición sigue comiendo la ración entera del almacén.
+
+Cada héroe lleva tres cosas distintas, y no se mezclan:
+
+| | **Carro** | **Almacén personal** (Doc 2.5) | **Víveres** |
+|---|---|---|---|
+| Qué lleva | carga: botín, materiales, fondos | lo que guarda para sí | **solo trigo, para comer** |
+| Dónde está | con la columna | en su residencia; solo se usa desde dentro | **siempre con el héroe**, dentro o fuera |
+| Capacidad | fija por héroe; se suma en un ejército | fija | **fija por héroe** (`LOGISTICA.capacidadViveresPorHeroe`); en un ejército **se suman** — para llevar más están las caravanas (5.13.2) |
+
+- **Los víveres no son carga**: no se descargan nunca (ni al volver a casa ni en el almacén personal), no se venden y **no se roban** — quien derrota a una columna se lleva la mitad del carro (5.12.3), no sus víveres.
+- **Del carro a los víveres, nunca al revés.** El Líder de la columna puede pasar trigo del carro a sus víveres, hasta llenarlos (`pasarAViveres`): así se come el trigo saqueado o el que traen las caravanas adjuntas.
+- **En un ejército son comunes** mientras marchan juntos: se come del montón, a prorrata de lo que lleva cada uno, y quien se separa se lleva los suyos.
+- **Capacidad del carro**: **FIJA e igual para todos los Héroes** — es un carro, no una abstracción proporcional a lo que llevas. Se **suma** al formar ejército: un ejército de cuatro lleva cuatro carros.
+- **Llenar los víveres**: al salir o al unirse, cada Héroe **toma del asentamiento** hasta llenarlos. Si el almacén no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento. Quien sale de su campamento de mercenarios los llena con la ración gratis (Doc 1.9b).
 - **Reabastecimiento en ruta**: al pasar por un asentamiento **propio**, siempre. Por uno **aliado**, solo si ese asentamiento tiene la opción activada. Por uno neutral u hostil, nunca. "Al pasar" es estar dentro del **radio de reabastecimiento**, el mismo que decide dónde puede un ejército recoger refuerzos (5.12.1): por dónde puede pasar a recogerte y dónde puede repostar son la misma geografía.
 
-  Repostar rellena el carro con las **mismas dos reglas que cargarlo al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da. Abrir el almacén a un aliado **cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa — quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
+  Repostar rellena los víveres con las **mismas dos reglas que llenarlos al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da. Abrir el almacén a un aliado **cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa — quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
 
-  Sin límite de veces. Un ejército acampado junto a una plaza amiga repone cada tick, y **eso es lo que convierte "sostener un paso de montaña" en una posición** (5.12.3) en vez de una cuenta atrás.
-- **Regreso**: el sobrante **vuelve al almacén** del asentamiento de origen. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
+  Sin límite de veces.
+- **Regreso**: lo que lleva el carro **vuelve al almacén** del asentamiento de origen; los víveres siguen con el héroe. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
 
 ### 5.13.1 El radio operativo es la constante de diseño
 
-La capacidad del carro **no es un número elegido, es una consecuencia**. La regla que la fija:
+La capacidad de los víveres **no es un número elegido, es una consecuencia**. La regla que la fija:
 
-> **Un jugador solo, con su carro, tiene que poder recorrer al menos un cuarto del mapa ida y vuelta con la comida que carga.**
+> **Un jugador solo, con sus víveres, tiene que poder recorrer al menos un cuarto del mapa ida y vuelta con la comida que lleva.**
 
-Sobre el mapa de 2000×2000 eso son 1.000 unidades de recorrido. Una carga máxima de Liderazgo son ~70 soldados, que a velocidad ligera (20) tardan 50 ticks en ese trayecto y comen `70 × 0.15 × 50 = 525`. De ahí sale la capacidad del carro.
+Sobre el mapa de 2000×2000 eso son 1.000 unidades de recorrido, 50 minutos a velocidad ligera (20). La tropa prestada completa de un campamento (85 soldados, Doc 1.9b) más su héroe comen en marcha `(85 × 0.15 + 0.5) × 0.5 ≈ 6,6` por minuto: 331 en ese trayecto. De ahí los **350** de víveres por héroe.
 
 Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a ser también un atributo logístico**: un ejército rápido cubre más mapa con la misma comida. Un ejército pesado tiene la mitad de alcance con el mismo carro — y por eso necesita caravanas.
 

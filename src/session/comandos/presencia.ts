@@ -28,7 +28,7 @@ import { liderazgoComprometido } from '../../engine/liderazgo';
 import { conEscuadrones } from '../../engine/tropa';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, sinCambios } from './tipos';
-import { campamentoEn, comando, conColumnas, conTropaDe, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento, rechazar } from './ayudas';
+import { campamentoEn, comando, conColumnas, conTropaDe, conViveresLlenos, exigirAsentamiento, exigirColumnaDe, exigirJugador, conAsentamiento, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { columnaDe } from '../../engine/ejercitos';
 import { conMomento, evento } from './eventos';
@@ -103,7 +103,8 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
   );
 
   const cargaTotal = Object.values(ejercito.suministro).reduce((suma, cantidad) => suma + cantidad, 0);
-  const conColumna = conColumnas(conAsentamiento(estado, origen), [ejercito]);
+  // Los víveres se llenan solos al salir (Doc 5.13), después de la carga elegida y con la tropa ya fuera.
+  const conColumna = conViveresLlenos(conColumnas(conAsentamiento(estado, origen), [ejercito]), asentamiento.id, params.heroeId).estado;
   const siguiente: GameSessionState = {
     ...conColumna,
     // Al cruzar la puerta hacia fuera se congela lo que estaba viendo de dentro (Doc 1.10.1). La foto se toma
@@ -112,7 +113,7 @@ export const salirAlMundo = comando<ParamsSalirAlMundo, { ejercitoId: string }>(
     heroes: conFotoTomadaPor(
       situarHeroes(conColumna.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }),
       params.heroeId,
-      origen,
+      exigirAsentamiento(conColumna, asentamiento.id),
       ctx.instante
     ),
   };
@@ -481,7 +482,7 @@ export const salirDelCampamento = comando<ParamsSalirDelCampamento, { ejercitoId
   const r = salirDelCampamentoEngine(campamento, heroe, aparcada, params.escuadronIds, params.carga, faccionId, `ejercito-${ctx.ids.siguiente()}`, ctx.instante, params.politicaDeUnion,
     params.objetivo ? { objetivo: params.objetivo, asentamientos: estado.asentamientos, mapa } : undefined);
   const conColumna = conColumnas(estado, [r.columna]);
-  const heroes = conColumna.heroes.map((h) => (h.id === heroe.id ? { ...h, ubicacion: r.heroe.ubicacion, almacenPersonal: r.heroe.almacenPersonal, racionEn: r.heroe.racionEn } : h));
+  const heroes = conColumna.heroes.map((h) => (h.id === heroe.id ? { ...h, ubicacion: r.heroe.ubicacion, almacenPersonal: r.heroe.almacenPersonal, racionEn: r.heroe.racionEn, viveres: r.heroe.viveres } : h));
   return exito(
     conHistorialDeJugador({ ...conColumna, heroes }, heroe.id, `Sale de ${campamento.id}.`),
     [evento(ctx, { codigo: 'jugador.sale_de_campamento', mensaje: `${heroe.displayName} sale de ${campamento.id}.`, payload: { campamentoId: campamento.id, heroeId: heroe.id, ejercitoId: r.columna.id } })],

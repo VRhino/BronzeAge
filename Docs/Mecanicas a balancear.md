@@ -17,7 +17,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | 32 | POLÍTICA | Reputación: valor de cada evento, decaimiento y umbrales (`REPUTACION`) | batch / playtest |
 | 32b | POLÍTICA | Caducidad de las propuestas de anexión y de fusión (`ANEXION.caducidadDias`, `FUSION.caducidadDias`) | playtest |
 | 33 | COMERCIO | Tasa de comisión intermedia entre Facciones aliadas o vasallas de la misma Liga | batch |
-| 34 | SUMINISTRO | La economía no llena el carro de un ejército | batch, tras el doble de la Granja |
+| 34 | SUMINISTRO | La economía no llena los víveres de un ejército; los 350 por héroe | batch, tras el doble de la Granja y los víveres |
 | 36 | HÉROE | Ritmo, prudencias y margen de los bots; cerebro «sin plaza» | batch; antes, ración en minutos en el motor |
 | 39 | MILITAR | Escala de XP de escuadra: Unity vs. números | espera a CQ-001 (Conquest) |
 | 35 | MUNDO | Poder de los campamentos de bandidos: si escala con la región o con la cercanía de Facciones fuertes | batch |
@@ -32,7 +32,11 @@ referencias antiguas (§34, §39…) sigan valiendo.
 **Calibrar la X de cada logro** con el batch (`scripts/batch/medidorTecnologia.ts`): cada umbral, en lo que marque su
 contador en su semana objetivo (Doc 6.3). Plan y bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
 
-## 34. La economía no llena el carro de un ejército
+## 34. La economía no llena los víveres de un ejército
+
+**2026-10-08:** la columna ya no come del carro sino de los **víveres** (350 por héroe, a media ración en marcha y a una décima de eso acampada;
+Doc 5.13). Lo que hay que volver a medir es si las plazas llenan esos 350 sin bajar de su reserva, y si 350 sostiene el
+radio operativo con tropa propia (calculado con la prestada completa, 85 soldados).
 
 **Estado: medido el 2026-09-04, sin decidir.** La capacidad del carro (Doc 5.13.1) se derivó del radio
 operativo sin comprobar que hubiera trigo con el que llenarlo. En batch, ningún asentamiento llegaba a llenar un
@@ -57,7 +61,10 @@ misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o
 
 ## 40. Campamentos de mercenarios: cifras
 
-Las cifras de `MERCENARIOS` (`constants.ts`) son placeholder, sin calibrar con batch.
+Las cifras de `MERCENARIOS` (`constants.ts`) son placeholder, sin calibrar con batch. Desde el 2026-10-08 la tropa
+prestada sale **completa** (25-30 por escuadra, antes 15): el anillo de bandidos se calculó contra 15 lanceros
+(`Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md` §423) y el cerebro «sin plaza» ya cuenta 50 de poder
+(`PODER_PRESTADO`). Medir si los niveles de bandido siguen siendo un reto.
 
 ## 8. Caravanas: visibilidad por tamaño
 

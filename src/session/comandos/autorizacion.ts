@@ -277,6 +277,7 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
   // El almacén personal es del héroe del actor; que sea Líder de su columna lo comprueba el motor.
   guardarEnAlmacenPersonal: { rolesPermitidos: ['jugador'] },
   sacarDelAlmacenPersonal: { rolesPermitidos: ['jugador'] },
+  pasarAViveres: { rolesPermitidos: ['jugador'] },
   // El orden de las escuadras propias: el motor comprueba que sean del héroe del actor.
   ordenarEscuadras: { rolesPermitidos: ['jugador'] },
   retirarGuarnicion: { rolesPermitidos: ['jugador'] },

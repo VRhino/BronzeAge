@@ -429,6 +429,12 @@ export interface Heroe {
   cupoCampamento?: { dia: number; comprado: Record<string, number> };
   /** Cuándo recogió la última ración gratis de su campamento (D24): se rellena cada `MERCENARIOS.racion.cadaMinutos`. */
   racionEn?: Instante;
+  /**
+   * Víveres (Doc 5.13, 2026-10-08): el trigo que come su columna, hasta `LOGISTICA.capacidadViveresPorHeroe`. Ni carro ni almacén
+   * personal: va siempre con él, dentro o fuera, y nunca se descarga. Se llena al salir y al repostar, del carro (nunca al revés)
+   * y con la ración del campamento; no se roba. Ausente = 0.
+   */
+  viveres?: number;
   /** Oro de botín de bandidos y alijos (D22, D27, D61): solo se gasta en el mercado de un campamento o en el fondo de refundación,
    * nunca en la economía de una plaza. Va aparte del almacén personal y no ocupa sitio en él. */
   oroDeBotin?: number;
@@ -1029,12 +1035,9 @@ export interface Ejercito {
    * doc 01 §13). Salir de campaña los saca del campamento, y por eso la guarnición es lo único que defiende
    * (Doc 5.12.4). */
   escuadronIds: string[];
-  /** El carro: los de todos sus jugadores, ya sumados. Solo trigo en Fase 0. En marcha se come de AQUÍ, no
-   * del almacén (Doc 5.13) — misma regla del hambre vía `avanzarRacion`, distinta despensa. */
+  /** El carro: los de todos sus jugadores, ya sumados. Es carga: la columna come de los víveres de sus héroes (`Heroe.viveres`,
+   * Doc 5.13), no de aquí. */
   suministro: Record<string, number>;
-  /** Trigo de la ración gratis del campamento que aún lleva el carro (D24/D50). Se come primero; lo que quede no puede ir a ningún
-   * almacén: vuelve al campamento al entrar. */
-  racion?: number;
   /**
    * A quien persigue, si persigue a alguien (Doc 5.12.3). Un objetivo MOVIL en vez de un punto: la ruta se
    * recalcula cada tick hacia donde este. Ausente = marcha normal contra `objetivo`.

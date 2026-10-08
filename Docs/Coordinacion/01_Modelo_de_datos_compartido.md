@@ -375,8 +375,9 @@ Ejercito
   peticionesDeUnion?: { jugadorId: string; pedidoEn: Instante; expiraEn: Instante }[]   solo si política
                             'preguntar' — existente. Tras este modelo, heroeId
   escuadrones: Escuadron[]    movidos aquí desde Asentamiento.escuadrones — existente
-  suministro: Record<string, number>   solo trigo en Fase 0 — existente
-  racion?: number          trigo de la ración gratis del campamento que aún lleva (2026-10-04, D24/D50): se come primero y no se guarda
+  suministro: Record<string, number>   el carro: carga (botín, materiales, fondos). La columna NO come de aquí sino de
+                            `Heroe.viveres` (2026-10-08) — existente
+  (racion)                    RETIRADO 2026-10-08: la ración gratis del campamento llena `Heroe.viveres`
   persiguiendo?: { tipo: 'ejercito' | 'caravana'; id: string }   objetivo móvil — existente
   (enTreguaHasta)             RETIRADO 2026-09-14: lo sustituye `Heroe.heridoHasta` (§12, Doc 5.16.4)
   caravanasAdjuntasIds[]        existente
@@ -633,6 +634,9 @@ Heroe
   alijosAbiertos?: string[]   los alijos de exploración que ya abrió: cada uno, una vez por héroe (D60)
   cupoCampamento?: { dia, comprado }   lo comprado hoy en el mercado de su campamento (cupo diario, D41)
   racionEn?: Instante     cuándo recogió la última ración gratis de su campamento (D24)
+  viveres?: number        el trigo que come su columna, hasta `LOGISTICA.capacidadViveresPorHeroe` (350); siempre con él,
+                         nunca se descarga ni se roba; se llena al salir, al repostar, con la ración del campamento y del
+                         carro (nunca al revés). En un ejército se suman y se come a prorrata. Ausente = 0 — NUEVO 2026-10-08
   loadouts: Loadout[]     nuevo
   inventario: ItemInstancia[]     lo que lleva y NO tiene puesto (§12.1) — nuevo
   equipamiento: Record<SlotEquipo, ItemInstancia | null>   lo que tiene puesto (§12.1) — nuevo. Equipar SACA
@@ -701,7 +705,7 @@ Escuadron
   enGuarnicion: boolean   nuevo — solo con contenedor `'campamento'` y héroe residente: asignada a la
                         guarnición de su asentamiento. La maneja la IA de juego y el héroe no puede usarla
                         mientras siga asignada (Doc 5.15).
-  prestada?: { campamentoId }   2026-10-04 (D45, D80): tropa prestada por un campamento de mercenarios; no gana experiencia,
+  prestada?: { campamentoId }   2026-10-04 (D45, D80): tropa prestada por un campamento de mercenarios, completa (2026-10-08); no gana experiencia,
                          no cuenta para «una escuadra por tropa» y se retira si su héroe deja de residir allí
   reservaBatalla?: { battleId }   nuevo — candado: presente solo mientras la escuadra está en una
                         `Batalla` (§15). Una batalla nunca cambia de sitio una escuadra (el atacante la lleva

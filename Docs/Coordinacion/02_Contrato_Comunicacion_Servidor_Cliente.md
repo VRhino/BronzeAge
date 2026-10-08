@@ -303,7 +303,7 @@ revela, y solo a quien persigue. De ahí sale el «te están persiguiendo».
 Capacidades DERIVADAS al servir (2026-10-07), para que el cliente no copie fórmulas: `heroe.capacidadAlmacenPersonal` (tope del almacén
 personal, Doc 2.5) y `caravanas[].escoltaLiderazgo { usado, cupo }` en cada caravana comercial propia (Liderazgo que gasta su escolta y cupo del Mercado de su origen, Doc 3.13.4; cada escuadra cedida cuesta su coste de Liderazgo y no el del héroe que la presta) y `ejercitos[].capacidadCarga` en cada ejército propio (lo que cabe en su carro con sus caravanas, `capacidadCargaDe`); el
 carro es `ejercitos[].suministro`, con `racion` el trigo gratis del campamento que no se puede guardar. `GET /v1/balance` publica además
-`MERCENARIOS` (préstamo de 15 unidades, ración, radios) y `ALMACEN_PERSONAL` en `mundoYMilitar`.
+`MERCENARIOS` (ración, radios), `LOGISTICA` (carro, víveres, `factorConsumoEnMarcha`) y `ALMACEN_PERSONAL` en `mundoYMilitar`.
 
 Nada más del héroe ajeno viaja al cliente: ni experiencia, puntos, atributos, perks o Liderazgo, ni su
 residencia, los escuadrones de su campamento, sus loadouts, su inventario o sus monedas, ni género, avatar o
@@ -394,10 +394,11 @@ devuelve `{ cantidad, oro }` con lo que sirvió de verdad.
 | `entrarEnCampamento` | `campamentoId`, `heroeId` | — | Con la columna a la puerta, siendo su Líder y sin nadie más. En el suyo la columna se deshace (tropa al campamento, carro al almacén personal; la ración sobrante vuelve al campamento); en otro, queda en la puerta intacta |
 | `salirDelCampamento` | `campamentoId`, `heroeId`, `escuadronIds[]`, `carga` (recurso → cantidad desde el almacén personal), `politicaDeUnion?`, `objetivo?` | `{ ejercitoId }` | `objetivo` obligatorio si `politicaDeUnion` no es `rechazar` (sale como ejército). El residente recibe la ración gratis (Doc 1.9b). En otro campamento retoma la columna con la que entró |
 | `residirEnCampamento` | `heroeId`, `campamentoId` | — | Cambiar de casa (Doc 2.5), con su cooldown |
-| `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `recurso`, `cantidad` | `{ movido }` | Entre el carro de su columna y su almacén personal; la ración gratis no se guarda |
+| `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `recurso`, `cantidad` | `{ movido }` | Entre el carro de su columna y su almacén personal |
+| `pasarAViveres` | `cantidad` | `{ movido }` | Del carro de su columna a sus víveres (`HeroeDto.viveres`), lo que quepa; nunca al revés. Solo el Líder. Evento `heroe.viveres` (2026-10-08) |
 | `comprarEnCampamento` | `recurso`, `cantidad`, `campamentoId?` | `{ cantidad, oro }` | Paga primero con `oroDeBotin`. Quien no reside ahí solo compra trigo, al carro. Cupo diario en madera y piedra |
 | `reclutarEnCampamento` | `tropaId`, `pagarCon?` | `{ cantidad, oro }` | Solo el residente |
-| `pedirPrestamo` | `tropaIds[]` (de 1 a 3 tropas de leva comunal) | `{ escuadronIds }` | Gratis; una escuadra de 15 por tropa (`EscuadronDto.prestada`) |
+| `pedirPrestamo` | `tropaIds[]` (de 1 a 3 tropas de leva comunal) | `{ escuadronIds }` | Gratis; una escuadra completa por tropa (`EscuadronDto.prestada`) |
 | `reponerPrestamo` | — | `{ repuestas }` | Gratis |
 | `abrirAlijo` | `alijoId` | `{ oro }` | Estando en el sitio; el oro va a `oroDeBotin`. La proyección trae los `alijos` a la vista |
 | `aportarARefundacion` / `retirarDeRefundacion` | `recurso`, `cantidad`, `lado` (`almacen` \| `carro`) | `{ movido }` | Fondo de su Facción sin asentamientos en ese campamento |

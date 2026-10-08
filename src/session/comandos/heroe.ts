@@ -13,6 +13,7 @@ import {
 import { esResidente } from '../../engine/pertenencia';
 import { guardarEnAlmacenPersonal as guardarEngine, sacarDelAlmacenPersonal as sacarEngine } from '../../engine/almacenPersonal';
 import { capacidadCargaDe, columnaDe } from '../../engine/ejercitos';
+import { pasarAViveres as pasarAViveresEngine } from '../../engine/viveres';
 import { exito } from './tipos';
 import { comando, exigirColumnaDe, exigirJugador } from './ayudas';
 import { evento } from './eventos';
@@ -120,6 +121,32 @@ export const sacarDelAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido: 
         codigo: 'heroe.almacen_personal',
         mensaje: `${heroe.displayName} saca ${r.movido.toFixed(0)} ${params.recurso} de su almacén personal.`,
         payload: { heroeId: heroe.id, recurso: params.recurso, cantidad: r.movido, sentido: 'saca' } satisfies PayloadAlmacenPersonal,
+      }),
+    ],
+    { movido: r.movido }
+  );
+});
+
+export interface PayloadViveres {
+  heroeId: string;
+  cantidad: number;
+}
+
+/** Del carro de la columna a los víveres del héroe (Doc 5.13): lo que cabe. Nunca al revés. Solo el Líder de la columna. */
+export const pasarAViveres = comando<{ cantidad: number }, { movido: number }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const r = pasarAViveresEngine(heroe, exigirColumnaDe(estado, heroe.id), params.cantidad);
+  const siguiente: GameSessionState = {
+    ...conHeroe(estado, r.heroe),
+    ejercitos: estado.ejercitos.map((e) => (e.id === r.ejercito.id ? r.ejercito : e)),
+  };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'heroe.viveres',
+        mensaje: `${heroe.displayName} pasa ${r.movido.toFixed(0)} de trigo del carro a sus víveres.`,
+        payload: { heroeId: heroe.id, cantidad: r.movido } satisfies PayloadViveres,
       }),
     ],
     { movido: r.movido }

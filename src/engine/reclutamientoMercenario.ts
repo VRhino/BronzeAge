@@ -168,7 +168,7 @@ function reponibleAqui(e: Escuadron, campamento: CampamentoMercenarios, ejercito
 }
 
 /**
- * Pedir tropa prestada al campamento donde reside (D25, D45, D80): una escuadra de 15 por cada tropa de leva comunal que elija —milicia de
+ * Pedir tropa prestada al campamento donde reside (D25, D45, D80): una escuadra completa por cada tropa de leva comunal que elija —milicia de
  * lanceros, leñadores, granjeros; una, dos o las tres—, gratis, en su campamento. Sirve para aprender a usar tropa antes de tener la suya.
  * No es reclutar: la escuadra no es del héroe aunque la mande, y deja de estar disponible si deja de residir aquí.
  */
@@ -185,7 +185,7 @@ export function pedirPrestamo(campamentos: readonly CampamentoMercenarios[], her
       nombre: `${tropa.nombre} (prestada por ${campamento.id})`,
       heroeId: heroe.id,
       origen: poblacionDeTropa(tropa),
-      cantidad: MERCENARIOS.prestamo.unidades,
+      cantidad: tropa.unidadesPorDefecto,
       ...PROGRESION_INICIAL,
       moral: 100,
       tropaId,
@@ -196,15 +196,18 @@ export function pedirPrestamo(campamentos: readonly CampamentoMercenarios[], her
   });
 }
 
+/** El tamaño de una escuadra prestada: completa, como la de su tropa (D80, 2026-10-08). */
+export const tamanoPrestada = (e: Pick<Escuadron, 'tropaId' | 'cantidad'>): number => TROPAS_RECLUTABLES.find((t) => t.id === e.tropaId)?.unidadesPorDefecto ?? e.cantidad;
+
 /** Reponer gratis la tropa prestada hasta su tamaño (D80), la que esté en el campamento o en la columna a su puerta. */
 export function reponerPrestamo(campamentos: readonly CampamentoMercenarios[], heroe: Heroe, ejercitos: readonly Ejercito[]): { heroe: Heroe; repuestas: number } {
   const aqui = (e: Escuadron) => {
     const campamento = e.prestada && campamentos.find((c) => c.id === e.prestada!.campamentoId);
-    return !!campamento && reponibleAqui(e, campamento, ejercitos) && e.cantidad < MERCENARIOS.prestamo.unidades;
+    return !!campamento && reponibleAqui(e, campamento, ejercitos) && e.cantidad < tamanoPrestada(e);
   };
-  const repuestas = heroe.escuadrones.filter(aqui).reduce((n, e) => n + MERCENARIOS.prestamo.unidades - e.cantidad, 0);
+  const repuestas = heroe.escuadrones.filter(aqui).reduce((n, e) => n + tamanoPrestada(e) - e.cantidad, 0);
   if (repuestas === 0) throw new MercenariosInvalidoError('No hay tropa prestada que reponer aquí.');
-  return { heroe: { ...heroe, escuadrones: heroe.escuadrones.map((e) => (aqui(e) ? { ...e, cantidad: MERCENARIOS.prestamo.unidades } : e)) }, repuestas };
+  return { heroe: { ...heroe, escuadrones: heroe.escuadrones.map((e) => (aqui(e) ? { ...e, cantidad: tamanoPrestada(e) } : e)) }, repuestas };
 }
 
 /** Payload de `mercenarios.prestamo_retirado`: de quién era la tropa, quién la prestó y qué escuadras (con los hombres que tenían) se retiran. */

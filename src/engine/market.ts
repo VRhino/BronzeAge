@@ -26,7 +26,7 @@ import { COMISION, MERCADO, PRECIO_BASE, PRECIO_REFERENCIA } from '../constants'
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { factorComisionExterna } from './politicas';
 import { tieneMercadoActivo } from './asentamientoQuery';
-import { enLaPuertaDe, racionQueQueda } from './ejercitos';
+import { enLaPuertaDe } from './ejercitos';
 import { ReglaInvalidaError } from './errores';
 
 export class OrdenInvalidaError extends ReglaInvalidaError {}
@@ -204,8 +204,6 @@ export function comerciarEnPlaza(
   const pendiente = orden.cantidad - orden.cantidadCumplida;
   const espacioCarro = Math.max(0, capacidadCarga - cargaDe(ejercito));
   const enElCarro = ejercito.suministro[recurso] ?? 0;
-  // La ración gratis de un campamento no se vende (D50): sirve para moverse, no para sacar oro.
-  const vendible = enElCarro - (recurso === 'trigo' ? racionQueQueda(ejercito) : 0);
   const oroEnElCarro = ejercito.suministro['oro'] ?? 0;
   // Lo que de verdad cuesta o rinde cada unidad, comision incluida: comprando se paga de mas, vendiendo se
   // cobra de menos, y el resto de topes se miden ya sobre esta cifra y no sobre el precio de escaparate.
@@ -218,7 +216,7 @@ export function comerciarEnPlaza(
   const cantidad =
     orden.tipo === 'venta'
       ? Math.min(cantidadPedida, pendiente, cantidadDisponible(plaza.almacen, recurso), oroEnElCarro / precioNeto, topeCarro)
-      : Math.min(cantidadPedida, pendiente, vendible, huecoPara(plaza, recurso), cantidadDisponible(plaza.almacen, 'oro') / precioNeto, topeCarro);
+      : Math.min(cantidadPedida, pendiente, enElCarro, huecoPara(plaza, recurso), cantidadDisponible(plaza.almacen, 'oro') / precioNeto, topeCarro);
 
   if (!(cantidad > 0)) {
     throw new OrdenInvalidaError(

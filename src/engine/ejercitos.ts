@@ -43,6 +43,7 @@ import { esperaDestino, sucesorEnFormacion } from './formacion';
 import { enRefugio } from './zones';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
+import { descontarViveres, huecoDeColumna, huecoEnViveres, repartirEnViveres, sacarTrigoDe, viveresDeColumna } from './viveres';
 import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
 import { lineasPendientes, type LadoTrueque } from './trueque';
@@ -180,21 +181,6 @@ function adjuntasDe(ejercito: Ejercito, caravanas: readonly Caravana[]): Caravan
 }
 
 /**
- * Carga el carro con trigo del almacén (Doc 5.13, Paso 6). Se lleva el MENOR de dos topes:
- *
- *  - el espacio que le queda al carro, y
- *  - lo que el asentamiento puede soltar sin bajar de su `reservaDeTrigo` — el mismo margen que ya frena a la
- *    auto-construcción y al reclutamiento. Sacar un ejército cuesta stock real, pero no puede ser la vía por
- *    la que un jugador vacía su propia ciudad y la deja en hambruna.
- *
- * Si no llega, **se sale con menos autonomía y punto**: el diseño dice explícitamente que no se bloquea la
- * salida. Impedir mover tropa porque la ciudad va justa de comida sería una regla mucho más dura que la
- * pedida, y además dejaría al jugador encerrado justo cuando más falta le hace maniobrar.
- *
- * La reserva se mide sobre el asentamiento del que los escuadrones YA se han ido: dejan de comer de aquí en
- * el mismo acto, así que seguir contándolos protegería a bocas que ya no están.
- */
-/**
  * Carga el carro con lo que el jugador ELIGE (Doc 1.10.2), no solo con trigo.
  *
  * Tres topes, y cada uno tapa algo distinto:
@@ -202,7 +188,7 @@ function adjuntasDe(ejercito: Ejercito, caravanas: readonly Caravana[]): Caravan
  *  1. **La capacidad del carro**, medida sobre el TOTAL de recursos y no por recurso: es un carro, no una
  *     estantería con un cajon por material.
  *  2. **Lo que hay en el almacén**, descontando la reserva de comida de la plaza — sacar el carro no puede
- *     dejar a la guarnición sin comer (misma regla que `cargarCarro`).
+ *     dejar a la guarnición sin comer (misma regla que `sacarTrigoDe`).
  *  3. **Nada negativo.** Sin esto, "cargar" -100 de trigo sería un depósito encubierto que se salta la
  *     reserva.
  *
@@ -237,20 +223,6 @@ function cargarCarroElegido(
   return { asentamiento: { ...asentamiento, almacen: descontarRecursos(asentamiento.almacen, suministro) }, suministro };
 }
 
-function cargarCarro(
-  asentamiento: Asentamiento,
-  /** Ración de lo que se queda en el campamento de la plaza. */
-  consumoTropas: number,
-  yaEnElCarro: number,
-  capacidad: number
-): { asentamiento: Asentamiento; cargado: number } {
-  const espacio = Math.max(0, capacidad - yaEnElCarro);
-  const disponible = Math.max(0, cantidadDisponible(asentamiento.almacen, 'trigo') - reservaDeTrigo(asentamiento, consumoTropas));
-  const cargado = Math.min(espacio, disponible);
-  if (cargado <= 0) return { asentamiento, cargado: 0 };
-  return { asentamiento: { ...asentamiento, almacen: descontarRecursos(asentamiento.almacen, { trigo: cargado }) }, cargado };
-}
-
 /**
  * ¿Puede este ejército repostar en esta plaza? (Doc 5.13, Paso 8). Tres casos y ninguno negociable:
  *
@@ -266,10 +238,10 @@ function puedeRepostarEn(ejercito: Ejercito, plaza: Asentamiento, relaciones: re
 
 /**
  * Repostar al pasar (Doc 5.13, Paso 8): si el ejército está dentro de `LOGISTICA.radioReabastecimiento` de
- * una plaza donde tiene derecho a hacerlo, rellena el carro de su almacén.
+ * una plaza donde tiene derecho a hacerlo, rellena los víveres de sus héroes de su almacén.
  *
- * Es EXACTAMENTE la misma operación que cargar al salir —`cargarCarro`, con sus dos topes: el espacio libre
- * del carro y lo que la plaza puede soltar sin bajar de su reserva de comida—, solo que el almacén es otro.
+ * Es EXACTAMENTE la misma operación que cargar al salir —`sacarTrigoDe`, con sus dos topes: el hueco de los
+ * víveres y lo que la plaza puede soltar sin bajar de su reserva de comida—, solo que el almacén es otro.
  * Que sea la misma función es lo que garantiza que repostar en una ciudad ajena no pueda vaciarla por debajo
  * de lo que su propia gente necesita, sin ninguna regla nueva que mantener en paralelo.
  *
@@ -280,17 +252,17 @@ function puedeRepostarEn(ejercito: Ejercito, plaza: Asentamiento, relaciones: re
  * que convierte "sostener un paso de montaña" en una posición sostenible (Doc 5.12.3) en vez de una cuenta
  * atrás. Repostar no es gratis para nadie — sale del almacén de quien lo da.
  *
- * Reponer cada tick no se narra cada tick (era el 39 % del log a los 3 días): `relevante` es `true` solo cuando el carro
- * estaba por debajo de `LOGISTICA.umbralNarrarReposte` de su capacidad, es decir, cuando llega con hambre.
+ * Reponer cada tick no se narra cada tick (era el 39 % del log a los 3 días): `relevante` es `true` solo cuando los víveres
+ * estaban por debajo de `LOGISTICA.umbralNarrarReposte` de su capacidad, es decir, cuando llega con hambre.
  */
 function repostarSiPuede(
   ejercito: Ejercito,
+  heroes: readonly Heroe[],
   porId: Map<string, Asentamiento>,
   relaciones: readonly RelacionPolitica[],
-  caravanas: readonly Caravana[],
   /** La ración del campamento de cada plaza, que protege su reserva de trigo. */
   consumoTropasDe: (plaza: Asentamiento) => number
-): { ejercito: Ejercito; plaza: Asentamiento | undefined; repuesto: number; relevante: boolean } {
+): { heroes: Heroe[]; plaza: Asentamiento | undefined; repuesto: number; relevante: boolean } {
   const alcance = [...porId.values()]
     .filter(
       (a) =>
@@ -304,19 +276,19 @@ function repostarSiPuede(
     });
 
   const plaza = alcance[0];
-  if (!plaza) return { ejercito, plaza: undefined, repuesto: 0, relevante: false };
+  if (!plaza) return { heroes: [...heroes], plaza: undefined, repuesto: 0, relevante: false };
 
-  const enElCarro = ejercito.suministro['trigo'] ?? 0;
-  const capacidad = capacidadCargaDe(ejercito, caravanas);
-  const carga = cargarCarro(plaza, consumoTropasDe(plaza), enElCarro, capacidad);
-  if (carga.cargado <= 0) return { ejercito, plaza: undefined, repuesto: 0, relevante: false };
+  const ids = ejercito.participantes.map((p) => p.heroeId);
+  const llevaba = viveresDeColumna(heroes, ids);
+  const carga = sacarTrigoDe(plaza, consumoTropasDe(plaza), huecoDeColumna(heroes, ids));
+  if (carga.cargado <= 0) return { heroes: [...heroes], plaza: undefined, repuesto: 0, relevante: false };
 
   return {
-    ejercito: { ...ejercito, suministro: { ...ejercito.suministro, trigo: enElCarro + carga.cargado } },
+    heroes: repartirEnViveres(heroes, ids, carga.cargado).heroes,
     plaza: carga.asentamiento,
     repuesto: carga.cargado,
-    // Solo es noticia lo que llena un carro que iba vacío; la ración de cada minuto de uno acampado no lo es.
-    relevante: enElCarro < capacidad * LOGISTICA.umbralNarrarReposte,
+    // Solo es noticia lo que llena unos víveres que iban vacíos; el goteo de uno que marcha junto a su plaza no lo es.
+    relevante: llevaba < ids.length * LOGISTICA.capacidadViveresPorHeroe * LOGISTICA.umbralNarrarReposte,
   };
 }
 
@@ -336,9 +308,8 @@ function exigirLiderazgo(jugador: Heroe | undefined, escuadrones: readonly Escua
  * Saca a un jugador de campaña con los escuadrones que elija (Doc 5.12.1). Salir SOLO es esto mismo con un
  * participante: no hay dos casos ni dos tipos.
  *
- * Sale con el carro cargado del almacén hasta donde llegue sin comprometer la despensa del asentamiento
- * (`cargarCarro`, Doc 5.13). Puede salir con el carro vacío si la ciudad ya iba justa: eso no se impide, se
- * paga en autonomía.
+ * Sale con el carro vacío: los víveres los llena quien llama (`llenarViveres`, Doc 5.13), del almacén y sin
+ * comprometer la despensa. Si la ciudad iba justa se sale con menos: eso no se impide, se paga en autonomía.
  */
 export function movilizarEjercito(
   asentamiento: Asentamiento,
@@ -356,7 +327,7 @@ export function movilizarEjercito(
   /** Qué hacer con quien pida unirse por el camino (Doc 5.14.1). Se fija aquí y no cambia. Por defecto
    * `rechazar`: lo prudente es que la columna salga con quien salió salvo que su Líder diga otra cosa. */
   politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar'
-): { asentamiento: Asentamiento; ejercito: EjercitoConTropa; trigoCargado: number } {
+): { ejercito: EjercitoConTropa } {
   // Tu tropa está en tu campamento, y el campamento es tu residencia (Doc 5.15.2).
   if (!esResidente(asentamiento, heroeId)) {
     throw new MovilizacionInvalidaError('Solo se sale de campaña desde tu residencia: ahí está tu campamento.');
@@ -374,10 +345,8 @@ export function movilizarEjercito(
   const ruta = calcularRuta(mapa, asentamiento.posicion, destino, { pasosRio: asentamientos.map((a) => a.posicion) });
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
-  const carga = cargarCarro(asentamiento, consumoRacionDeEscuadrones(campamento.filter((e) => !idsFuera.has(e.id))), 0, capacidadCarrosDe(1));
 
   return {
-    asentamiento: carga.asentamiento,
     ejercito: {
       id,
       faccionId: asentamiento.faccionId,
@@ -390,7 +359,7 @@ export function movilizarEjercito(
       politicaDeUnion,
       escuadronIds: [...idsFuera],
       escuadrones,
-      suministro: { trigo: carga.cargado },
+      suministro: {},
       caravanasAdjuntasIds: [],
       objetivo,
       ruta,
@@ -398,7 +367,6 @@ export function movilizarEjercito(
       posicionActual: asentamiento.posicion,
       estado: 'marchando',
     },
-    trigoCargado: carga.cargado,
   };
 }
 
@@ -409,10 +377,8 @@ export function movilizarEjercito(
  * eso, unirse sería teletransportar refuerzos al otro extremo del mapa — y como el radio es el mismo que el
  * del reabastecimiento, "por dónde puede pasar a recogerte" y "dónde puede repostar" son la misma geografía.
  *
- * El que se une trae SU carro y lo carga de SU asentamiento (Doc 5.13). El tope se mide contra la capacidad
- * total de la columna ya con él dentro, no contra "un carro más": si el que se une YA era participante
- * —sumar más escuadrones a un ejército en el que ya vas es legítimo— no aparece ningún carro nuevo, y sin ese
- * tope repetir la operación sería una bomba de trigo infinita desde el almacén.
+ * El que se une trae SU carro y SUS víveres, que llena quien llama de SU asentamiento (`llenarViveres`, Doc 5.13):
+ * el tope es el de sus víveres, así que repetir la operación no saca más trigo del almacén.
  */
 /**
  * Salir al mundo (Doc 1.10.2): el jugador deja su residencia y aparece en el mapa **junto a la plaza**, sin
@@ -493,9 +459,6 @@ export function enLaPuertaDelCampamento(ejercito: Ejercito, campamento: Campamen
 
 const totalDe = (r: Readonly<Record<string, number>> | undefined): number => Object.values(r ?? {}).reduce((a, b) => a + b, 0);
 
-/** El trigo del carro que aún es ración gratis (D50): se come primero, así que es como mucho lo que lleva. */
-export const racionQueQueda = (columna: Pick<Ejercito, 'suministro' | 'racion'>): number => Math.min(columna.suministro['trigo'] ?? 0, columna.racion ?? 0);
-
 /**
  * Entrar en un campamento de mercenarios con la columna personal en su puerta (D76, D77).
  *
@@ -517,21 +480,17 @@ export function entrarEnCampamento(
   const dentro: UbicacionHeroe = { tipo: 'mercenarios', campamentoId: campamento.id };
   if (!campamento.residentesIds.includes(heroe.id)) return { heroe: { ...heroe, ubicacion: dentro }, columna, tropa: [], campamento };
 
-  // Lo que queda de la ración gratis vuelve al campamento, no al almacén (D50).
-  const devuelto = racionQueQueda(columna);
-  const suministro = { ...columna.suministro, ...(devuelto > 0 ? { trigo: columna.suministro['trigo']! - devuelto } : {}) };
-  const conDevuelto = devuelto > 0 ? { ...campamento, mercado: { ...campamento.mercado, trigo: (campamento.mercado['trigo'] ?? 0) + devuelto } } : campamento;
   let libre = ALMACEN_PERSONAL.capacidad - totalDe(heroe.almacenPersonal);
   const almacenPersonal = { ...heroe.almacenPersonal };
   const resto: Record<string, number> = {};
-  for (const [recurso, cantidad] of Object.entries(suministro)) {
+  for (const [recurso, cantidad] of Object.entries(columna.suministro)) {
     const cabe = Math.max(0, Math.min(cantidad, libre));
     if (cabe > 0) almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cabe;
     if (cantidad - cabe > 0) resto[recurso] = cantidad - cabe;
     libre -= cabe;
   }
-  const queda = totalDe(resto) > 0 ? { ...columna, escuadronIds: [], escuadrones: [], suministro: resto, racion: undefined } : undefined;
-  return { heroe: { ...heroe, ubicacion: dentro, almacenPersonal }, columna: queda, tropa: alCampamento(columna.escuadrones), campamento: conDevuelto };
+  const queda = totalDe(resto) > 0 ? { ...columna, escuadronIds: [], escuadrones: [], suministro: resto } : undefined;
+  return { heroe: { ...heroe, ubicacion: dentro, almacenPersonal }, columna: queda, tropa: alCampamento(columna.escuadrones), campamento };
 }
 
 /**
@@ -581,11 +540,9 @@ export function salirDelCampamento(
     suministro[recurso] = (suministro[recurso] ?? 0) + pedido;
     hueco -= pedido;
   }
-  // La ración gratis del residente (D24, D51, D90): al salir, si ya pasó el plazo desde la última, `MERCENARIOS.racion.trigo` de trigo
-  // (hasta llenar el carro). No se acumula: sobra y vuelve al entrar.
+  // La ración gratis del residente (D24, D51, D90): al salir, si ya pasó el plazo desde la última, le llena los víveres. No se acumula.
   const toca = heroe.racionEn === undefined || instante - heroe.racionEn >= MERCENARIOS.racion.cadaMinutos * 60_000;
-  const racion = toca ? Math.min(MERCENARIOS.racion.trigo, Math.max(0, hueco)) : 0;
-  if (racion > 0) suministro['trigo'] = (suministro['trigo'] ?? 0) + racion;
+  const racion = toca ? huecoEnViveres(heroe) : 0;
   const columnaId = aparcada?.id ?? id;
   const comoEjercito = politicaDeUnion !== 'rechazar';
   if (comoEjercito && !rumbo) throw new MovilizacionInvalidaError('Un ejército sale contra un destino: hay que darle rumbo.');
@@ -606,7 +563,6 @@ export function salirDelCampamento(
     escuadronIds: escuadrones.map((e) => e.id),
     escuadrones,
     suministro,
-    ...(racion > 0 ? { racion } : {}),
     caravanasAdjuntasIds: [],
     objetivo: comoEjercito && rumbo ? rumbo.objetivo : { tipo: 'punto', punto: campamento.posicion },
     ruta,
@@ -614,7 +570,7 @@ export function salirDelCampamento(
     posicionActual: campamento.posicion,
     estado: comoEjercito ? 'marchando' : 'estacionado',
   };
-  return { heroe: { ...enColumna(columnaId), almacenPersonal, ...(racion > 0 ? { racionEn: instante } : {}) }, columna };
+  return { heroe: { ...enColumna(columnaId), almacenPersonal, ...(racion > 0 ? { racionEn: instante, viveres: LOGISTICA.capacidadViveresPorHeroe } : {}) }, columna };
 }
 
 /**
@@ -692,10 +648,8 @@ export function unirseAEjercito(
   heroeId: string,
   escuadronIds: readonly string[],
   /** Para fechar su entrada: la antigüedad decide la sucesión del líder (Doc 5.14.3). */
-  instante: Instante,
-  /** Las del mundo: el que se une llena hasta la capacidad TOTAL de la columna, adjuntas incluidas. */
-  caravanas: readonly Caravana[] = []
-): { asentamiento: Asentamiento; ejercito: EjercitoConTropa; trigoCargado: number } {
+  instante: Instante
+): { ejercito: EjercitoConTropa } {
   if (!esResidente(asentamiento, heroeId)) {
     throw new MovilizacionInvalidaError('Solo un residente puede sacar tropas de este asentamiento.');
   }
@@ -710,30 +664,11 @@ export function unirseAEjercito(
   // Solo lo que aporta ESTE héroe cuenta contra SU liderazgo, incluido lo que ya lleve fuera (`exigirLiderazgo`).
   exigirLiderazgo(jugador, escuadrones);
 
-  const idsFuera = new Set(escuadrones.map((e) => e.id));
-  const escuadronesTotales = [...ejercito.escuadrones, ...escuadrones];
-  // Sumar más tropas a un ejército en el que YA vas es legítimo y no te convierte en dos participantes — ni
-  // aporta un carro nuevo, que es lo que el tope de carga de abajo mide.
+  // Sumar más tropas a un ejército en el que YA vas es legítimo y no te convierte en dos participantes.
   const yaDentro = ejercito.participantes.some((p) => p.heroeId === heroeId);
   const participantes = yaDentro ? ejercito.participantes : [...ejercito.participantes, { heroeId, unidoEn: instante }];
-  const enElCarro = ejercito.suministro['trigo'] ?? 0;
-  const carga = cargarCarro(
-    asentamiento,
-    consumoRacionDeEscuadrones(campamento.filter((e) => !idsFuera.has(e.id))),
-    enElCarro,
-    capacidadCargaDe({ ...ejercito, participantes }, caravanas)
-  );
 
-  return {
-    asentamiento: carga.asentamiento,
-    ejercito: {
-      ...ejercito,
-      participantes,
-      escuadrones: escuadronesTotales,
-      suministro: { ...ejercito.suministro, trigo: enElCarro + carga.cargado },
-    },
-    trigoCargado: carga.cargado,
-  };
+  return { ejercito: { ...ejercito, participantes, escuadrones: [...ejercito.escuadrones, ...escuadrones] } };
 }
 
 /**
@@ -987,14 +922,11 @@ export function unirseEnCampo(ejercito: EjercitoConTropa, columna: EjercitoConTr
     suministro[recurso] = (suministro[recurso] ?? 0) + cantidad;
   }
 
-  // La ración gratis de cada uno sigue siendo ración en el carro común (D50): si no, unirse la convertiría en trigo guardable.
-  const racion = racionQueQueda(ejercito) + racionQueQueda(columna);
   return {
     ...ejercito,
     participantes: [...ejercito.participantes, ...columna.participantes.map((p) => ({ ...p, unidoEn: instante }))],
     escuadrones: [...ejercito.escuadrones, ...columna.escuadrones],
     suministro,
-    racion: racion > 0 ? racion : undefined,
     // La petición atendida se retira: ya no hay nada que contestar.
     peticionesDeUnion: ejercito.peticionesDeUnion?.filter((p) => !columna.participantes.some((q) => q.heroeId === p.heroeId)),
   };
@@ -1078,9 +1010,6 @@ export function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string
     if (cantidad - parte > 0) suministroResto[recurso] = cantidad - parte;
   }
 
-  // La ración se reparte igual que el trigo, a prorrata (D50): separarse no la convierte en trigo guardable.
-  const racionTotal = racionQueQueda(ejercito);
-  const racionSuya = racionTotal * fraccion;
   const idsSuyos = new Set(suyos.map((e) => e.id));
   return {
     ejercito: {
@@ -1088,7 +1017,6 @@ export function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string
       participantes: ejercito.participantes.filter((p) => p.heroeId !== heroeId),
       escuadrones: ejercito.escuadrones.filter((e) => !idsSuyos.has(e.id)),
       suministro: suministroResto,
-      racion: racionTotal - racionSuya > 0 ? racionTotal - racionSuya : undefined,
     },
     columna: {
       id,
@@ -1102,7 +1030,6 @@ export function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string
       escuadronIds: suyos.map((e) => e.id),
       escuadrones: suyos,
       suministro: suministroColumna,
-      ...(racionSuya > 0 ? { racion: racionSuya } : {}),
       caravanasAdjuntasIds: [],
       objetivo: { tipo: 'punto', punto: ejercito.posicionActual },
       ruta: [],
@@ -1640,7 +1567,7 @@ export interface ResultadoAvanceEjercitos {
  *  1. **Comer primero.** Un ejército que se queda sin suministro este tick pierde moral este tick, avance
  *     incluido — si se moviera antes de comer, la última jornada saldría gratis.
  *  2. **Disolver si se quedó sin nadie** (Doc 5.13.4), antes de moverlo: si no, marcharía como fantasma.
- *  3. **Mover**, salvo estacionado (que acampa pero sigue comiendo, a `factorConsumoEstacionado`).
+ *  3. **Mover**, salvo estacionado (que acampa y come a `factorConsumoEstacionado`).
  *  4. **Llegar**: `regresando` reintegra la tropa y el sobrante en casa; cualquier otro destino deja el
  *     ejército acampado donde llegó: llegar no es asediar, ni para un bot (Doc 5.12.3).
  */
@@ -1706,22 +1633,18 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
   };
 
   for (const original of [...ejercitos].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((e) => conTropa(e, indice))) {
-    // 1. Comer. La MISMA regla del hambre que la guarnición, solo que de otra despensa (Doc 5.13).
-    const factorConsumo = original.estado === 'estacionado' ? LOGISTICA.factorConsumoEstacionado : 1;
-    const trigoEnCarro = original.suministro['trigo'] ?? 0;
-    const racion = avanzarRacion(original.escuadrones, trigoEnCarro, factorConsumo, participantesDe(original));
+    // 1. Comer. La MISMA regla del hambre que la guarnición, solo que de otra despensa: los víveres de sus héroes (Doc 5.13).
+    // En marcha a `factorConsumoEnMarcha`; acampada, a una décima parte de eso (decisión del usuario, 2026-10-08).
+    const factorConsumo = LOGISTICA.factorConsumoEnMarcha * (original.estado === 'estacionado' ? LOGISTICA.factorConsumoEstacionado : 1);
+    const idsDentro = original.participantes.map((p) => p.heroeId);
+    const racion = avanzarRacion(original.escuadrones, viveresDeColumna(heroes, idsDentro), factorConsumo, participantesDe(original));
     // `avanzarRacion` narra la deserción sin saber si es guarnición o campaña; aquí sí se sabe de quién es
     // esa columna, y sin atribuirla el evento saldría GLOBAL — o sea, contando a todo el mundo que a un
     // rival se le están desertando los hombres (Doc 5.12.7).
     eventos.push(...racion.eventos.map((e) => atribuir(e, original.origenAsentamientoId)));
+    heroes = descontarViveres(heroes, idsDentro, racion.trigoConsumido);
 
-    let ejercito: EjercitoConTropa = {
-      ...original,
-      escuadrones: racion.escuadrones,
-      suministro: { ...original.suministro, trigo: trigoEnCarro - racion.trigoConsumido },
-      // La ración gratis se come la primera (D50).
-      ...(original.racion ? { racion: Math.max(0, original.racion - racion.trigoConsumido) } : {}),
-    };
+    let ejercito: EjercitoConTropa = { ...original, escuadrones: racion.escuadrones };
 
     // 2. ¿Se quedó sin nadie DENTRO? Se disuelve y las identidades vacías vuelven a casa a poder rellenarse.
     // Perder todos los soldados ya no basta: los jugadores siguen ahí y ahora viajan a pie (Doc 5.12.1).
@@ -1777,10 +1700,10 @@ export function avanzarEjercitos(ejercitos: readonly Ejercito[], contexto: Conte
 
     // 3b. Repostar al pasar (Doc 5.13). Va DESPUÉS de moverse —se repone donde uno acaba, no donde estaba— y
     // ANTES de resolver la llegada, para que un ejército que se planta en una plaza propia entre en el asedio
-    // o acampe ya con el carro lleno.
-    const reposte = repostarSiPuede(ejercito, porId, relaciones, caravanas, consumoTropasDe);
+    // o acampe ya con los víveres llenos.
+    const reposte = repostarSiPuede(ejercito, heroes, porId, relaciones, consumoTropasDe);
     if (reposte.plaza) {
-      ejercito = { ...ejercito, suministro: reposte.ejercito.suministro };
+      heroes = reposte.heroes;
       porId.set(reposte.plaza.id, reposte.plaza);
       if (reposte.relevante) {
         eventos.push({

@@ -80,7 +80,8 @@ describe('unirseEnCampo — el precio es la libertad de movimiento (Doc 5.14.1)'
     const ejercito = sesion.getState().ejercitos[0]!;
     expect(ejercito.participantes).toHaveLength(2);
     expect([...ejercito.escuadronIds].sort()).toEqual(['esc-lider', 'esc-vecino']);
-    expect(ejercito.suministro['trigo'], 'y su carro entra en el común').toBeGreaterThan(60);
+    // El ejército salió con el carro vacío (el trigo de comer va en los víveres): lo que hay es lo del viajero.
+    expect(ejercito.suministro['trigo'], 'y su carro entra en el común').toBe(60);
     expect(sesion.getState().heroes.find((j) => j.id === vecino)!.ubicacion).toEqual({ tipo: 'columna', ejercitoId });
   });
 

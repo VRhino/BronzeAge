@@ -1216,7 +1216,9 @@ describe('interiorRecordado: la foto minima de lo que dejaste atras', () => {
 
     const ficha = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).asentamientosAvistados[0]!;
     expect(ficha.interiorRecordado, 'de donde has estado, recuerdas').toBeDefined();
-    expect(ficha.interiorRecordado!.almacen['trigo']?.cantidad).toBe(trigoAlSalir);
+    // Lo que deja atrás: el almacén sin los víveres que se llevó (Doc 5.13).
+    const viveres = sesion.getState().heroes.find((h) => h.id === fundador)!.viveres ?? 0;
+    expect(ficha.interiorRecordado!.almacen['trigo']?.cantidad).toBe(trigoAlSalir - viveres);
     expect(ficha.interiorRecordado!.vistoEn, 'con fecha, o no seria una foto sino una mentira').toBeDefined();
   });
 

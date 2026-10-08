@@ -46,8 +46,11 @@ import type { ContadorLogro, EdificioCampamentoTipo, EdificioTipo, EraId, GrupoP
  *   `OCUPACION.proteccionMinutos`, `BATALLA.capacidad.asedio` a 5, fuera `CIUDADANIA.casas*`,
  *   `MANTENIMIENTO.edificiosReferencia` en lugar de `poblacionReferencia`, y los cambios de
  *   población, experiencia de Facción y ascenso de la rama `ritmo-crecimiento`.
+ * v13 (2026-10-08): víveres — `LOGISTICA.capacidadViveresPorHeroe` y `factorConsumoEnMarcha` (`factorConsumoEstacionado`
+ *   pasa a ser relativo a la marcha; fuera `autonomiaTicksObjetivo`), `MERCENARIOS.racion` sin `trigo`, fuera `MERCENARIOS.prestamo`
+ *   (la tropa prestada sale completa); `LOGISTICA` se publica en `mundoYMilitar`.
  */
-export const BALANCE_VERSION = 12;
+export const BALANCE_VERSION = 13;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):
@@ -1928,18 +1931,6 @@ export const RECLUTAMIENTO_ORO_POR_ESCALON: Record<number, number> = { 1: 1, 2: 
 export const ORO_POR_CABALLO = 5;
 
 /**
- * Logística de campaña (Doc 5.13). Todo PLACEHOLDER a calibrar.
- *
- * `capacidadCarroPorJugador` NO es un número elegido: sale del RADIO OPERATIVO objetivo que fijó el usuario
- * —"un jugador solo tiene que poder recorrer al menos un cuarto del mapa ida y vuelta"— sobre el mapa de
- * 2000×2000. Son 1.000 unidades de recorrido; una carga máxima de liderazgo (~70 soldados) a velocidad
- * ligera (20) tarda 50 ticks y come `70 × 0.15 × 50 = 525`. De ahí el 500 redondeado.
- *
- * IMPORTANTE al rebalancear: si cambia la ración o la producción de trigo, RECALCULAR desde el radio en vez
- * de ajustar este número a ojo — si no, el radio operativo se rompe en silencio. `autonomiaTicksObjetivo` es
- * el invariante de diseño del que cuelga todo lo demás.
- */
-/**
  * Persecución (Doc 5.12.3). **Placeholder**, a calibrar (`Docs/Mecanicas a balancear.md`).
  */
 export const PERSECUCION = {
@@ -1962,17 +1953,27 @@ export const FORMACION_EJERCITO = {
   plazoMinutos: 10,
 } as const;
 
+/**
+ * Logística de campaña (Doc 5.13). Todo PLACEHOLDER a calibrar.
+ *
+ * Una columna come de los **víveres** de sus héroes, no del carro (decisión del usuario, 2026-10-08). El carro es solo carga.
+ */
 export const LOGISTICA = {
+  /** El carro de cada héroe: carga (botín, materiales, fondos). Se suma al formar ejército. */
   capacidadCarroPorJugador: 500,
-  autonomiaTicksObjetivo: 50,
   /**
-   * Cuánto come un ejército ACAMPADO respecto a uno en marcha (Doc 5.12.3). **Una décima parte** (decisión
-   * del usuario, 2026-09-04): con 0.5 estacionar apenas compraba tiempo —un carro lleno aguantaba el doble en
-   * vez de diez veces más— y "plantarse en un sitio" no llegaba a ser una jugada. A 0.1 sí lo es: sostener un
-   * paso de montaña deja de ser una carrera contra el hambre.
-   *
-   * Nunca 0, que es la otra mitad de la regla: acampar cuesta comida, solo que poca.
+   * Los víveres de cada héroe: trigo para comer, siempre con él (dentro o fuera), fijos por héroe y sumados en un ejército
+   * —para más, las caravanas—. NO es un número elegido: sale del radio operativo (Doc 5.13.1), un cuarto del mapa de 2000 ida
+   * y vuelta = 50 minutos a velocidad 20. La tropa prestada completa (85 soldados) más el héroe comen en marcha
+   * `(85 × 0.15 + 0.5) × 0.5 ≈ 6.6`/minuto: 331 en 50 minutos. Si cambia la ración, RECALCULAR desde el radio.
    */
+  capacidadViveresPorHeroe: 350,
+  /**
+   * Cuánto come una columna EN MARCHA respecto a la ración base (decisión del usuario, 2026-10-08): la mitad. Solo el mapa del
+   * mundo: la guarnición come la ración entera.
+   */
+  factorConsumoEnMarcha: 0.5,
+  /** Cuánto come una columna ACAMPADA (`estacionado`) respecto a lo que come en marcha (2026-10-08): una décima parte. */
   factorConsumoEstacionado: 0.1,
   radioReabastecimiento: 60,
   /**
@@ -2012,11 +2013,9 @@ export const MERCENARIOS = {
   intentosColocacion: 2000,
   /** Se mezcla con la seed del mapa: semilla derivada (D35), no consume el RNG de la partida. */
   salSemilla: 0x6d657263,
-  /** Ración gratis del residente (D24, D51, D90): al salir de su campamento, este trigo en el carro (de 500: quedan 100 libres para
-   * lo que recoja), hasta llenarlo; una vez cada `cadaMinutos`; no se acumula. PLACEHOLDER. */
-  racion: { trigo: 400, cadaMinutos: 30 },
-  /** Tropa prestada al residente (D25, D45, D80): escuadras de leva comunal de estas unidades, gratis al pedirlas y al reponerlas. PLACEHOLDER. */
-  prestamo: { unidades: 15 },
+  /** Ración gratis del residente (D24, D51, D90; 2026-10-08): al salir de su campamento le llena los víveres, una vez cada
+   * `cadaMinutos`. PLACEHOLDER. */
+  racion: { cadaMinutos: 30 },
   /** Ningún asentamiento se funda a menos de esto de un campamento (D16, §8.2): protección (60) + zona inicial (30) + margen. */
   radioExclusionFundar: 100,
   /** A menos de esto de un campamento nadie inicia un combate, ni jugadores ni bandidos (M4/D78, §8.2). PLACEHOLDER. */

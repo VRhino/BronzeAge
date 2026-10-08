@@ -144,6 +144,8 @@ export interface HeroeDto {
   cupoCampamento?: { dia: number; comprado: Record<string, number> };
   /** Cuándo recogió la última ración gratis de su campamento (Doc 1.9b). */
   racionEn?: Instante;
+  /** Víveres: el trigo que come su columna, siempre con él, hasta `LOGISTICA.capacidadViveresPorHeroe` (Doc 5.13). Ausente = 0. */
+  viveres?: number;
   /** Cuándo destruyó cada campamento de bandidos de las últimas 24 h: el botín decrece con ellas (Doc 1.9, D26). */
   bandidosDestruidosEn?: Instante[];
   /** Los alijos de exploración que ya abrió: cada uno, una vez por héroe (Doc 1.9b, D60). */

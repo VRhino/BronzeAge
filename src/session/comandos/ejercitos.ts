@@ -28,7 +28,8 @@ import { liderazgoComprometido } from '../../engine/liderazgo';
 import { situarHeroes } from '../../engine/ubicacion';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito, sinCambios } from './tipos';
-import { campamentoEn, comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCaravana, exigirEjercito, conAsentamiento } from './ayudas';
+import { campamentoEn, comando, conColumnas, conTropaDe, conViveresLlenos, exigirAsentamiento, exigirCaravana, exigirEjercito, conAsentamiento } from './ayudas';
+import { viveresDe } from '../../engine/viveres';
 import { evento, eventos } from './eventos';
 
 function conEjercito(estado: GameSessionState, actualizado: GameSessionState['ejercitos'][number]): GameSessionState {
@@ -50,8 +51,8 @@ export interface PayloadEjercitoMovilizado {
   escuadronIds: string[];
   liderazgoUsado: number;
   objetivo: ObjetivoEjercito;
-  /** Trigo que el carro se llevó del almacén (Doc 5.13). Puede ser 0: la ciudad iba justa y se sale sin
-   * autonomía, que es lo que el diseño manda en vez de bloquear la salida. */
+  /** Trigo que sus víveres se llevaron del almacén (Doc 5.13). Puede ser 0: ya iban llenos, o la ciudad iba justa y se sale
+   * con menos autonomía, que es lo que el diseño manda en vez de bloquear la salida. */
   trigoCargado: number;
 }
 
@@ -69,7 +70,7 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   const ejercitoId = ctx.ids.siguiente();
 
-  const { asentamiento: origen, ejercito, trigoCargado } = movilizarEngine(
+  const { ejercito } = movilizarEngine(
     asentamiento,
     campamentoEn(estado, asentamiento),
     jugadorDe(estado, params.heroeId),
@@ -84,13 +85,14 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
   );
 
   const destino = params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
-  // El carro vacío no es un detalle de contabilidad: es la diferencia entre una campaña y una marcha que se
-  // deshace por hambre a los pocos ticks, así que se dice en el propio mensaje y no solo en el payload.
-  const conElCarro =
-    trigoCargado > 0 ? `con ${Math.floor(trigoCargado)} de trigo en el carro` : 'CON EL CARRO VACÍO (el almacén no da más sin dejar la ciudad en riesgo)';
   // Quien sale de campaña va en su ejército, no en la plaza (Doc 5.12): mismo trato que `salirAlMundo`.
-  const conEjercito = conColumnas(conAsentamiento(estado, origen), [ejercito]);
-  const siguiente = { ...conEjercito, heroes: situarHeroes(conEjercito.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }) };
+  const conEjercito = conColumnas(estado, [ejercito]);
+  const { estado: conViveres, cargado: trigoCargado } = conViveresLlenos(conEjercito, asentamiento.id, params.heroeId);
+  const viveres = viveresDe(conViveres.heroes.find((h) => h.id === params.heroeId));
+  // Salir sin víveres no es un detalle de contabilidad: es la diferencia entre una campaña y una marcha que se deshace por
+  // hambre a los pocos minutos, así que se dice en el propio mensaje y no solo en el payload.
+  const conElCarro = viveres > 0 ? `con ${Math.floor(viveres)} de víveres` : 'SIN VÍVERES (el almacén no da más sin dejar la ciudad en riesgo)';
+  const siguiente = { ...conViveres, heroes: situarHeroes(conViveres.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }) };
 
   return exito(
     conHistorialDeJugador(siguiente, params.heroeId, `Sale de campaña desde ${asentamiento.id} hacia ${destino}.`),
@@ -119,7 +121,7 @@ export interface PayloadEjercitoRefuerzo {
   asentamientoId: string;
   heroeId: string;
   escuadronIds: string[];
-  /** Trigo que el que se une aporta al carro común, tomado de SU asentamiento (Doc 5.13). */
+  /** Trigo que el que se une carga en sus víveres, tomado de SU asentamiento (Doc 5.13). */
   trigoCargado: number;
 }
 
@@ -134,18 +136,17 @@ export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _ma
   const ejercitoActual = exigirEjercito(estado, params.ejercitoId);
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
 
-  const { asentamiento: origen, ejercito, trigoCargado } = unirseEngine(
+  const { ejercito } = unirseEngine(
     conTropaDe(estado, ejercitoActual),
     asentamiento,
     campamentoEn(estado, asentamiento),
     jugadorDe(estado, params.heroeId),
     params.heroeId,
     params.escuadronIds,
-    ctx.instante,
-    estado.caravanas
+    ctx.instante
   );
 
-  const conEjercito = conColumnas(conAsentamiento(estado, origen), [ejercito]);
+  const { estado: conEjercito, cargado: trigoCargado } = conViveresLlenos(conColumnas(estado, [ejercito]), asentamiento.id, params.heroeId);
   const siguiente = { ...conEjercito, heroes: situarHeroes(conEjercito.heroes, [params.heroeId], { tipo: 'columna', ejercitoId: ejercito.id }) };
   return exito(
     conHistorialDeJugador(siguiente, params.heroeId, `Se une al ejército ${ejercito.id} desde ${asentamiento.id}.`),

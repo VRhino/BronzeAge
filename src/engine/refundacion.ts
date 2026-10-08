@@ -2,7 +2,7 @@
 // asentamientos compra en el campamento una CARAVANA DE FUNDACIÓN al 75 % de lo que cuesta una normal, y la paga entre sus héroes: cada uno
 // aporta lo que quiere a un fondo del campamento. La caravana nace sin destino; su titular la lleva enganchada y funda con `fundar` (D10).
 import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion, Heroe } from '../domain/types';
-import { capacidadCargaDe, racionQueQueda } from './ejercitos';
+import { capacidadCargaDe } from './ejercitos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import { ALMACEN_PERSONAL, FUNDACION, MERCENARIOS } from '../constants';
 import { totalAlmacenPersonal } from './almacenPersonal';
@@ -52,7 +52,7 @@ function exigirLado(campamento: CampamentoMercenarios, heroe: Heroe, columna: Ej
 /**
  * Un ciudadano aporta al fondo de refundación de su Facción en el campamento donde está (Doc 1.9b, D39): desde su almacén personal si
  * reside allí, o desde el carro de su columna en la puerta. El oro sale primero del oro de botín (D27: el fondo es uno de sus dos
- * destinos). La ración gratis del carro no se aporta (D50). Lo suyo se puede retirar (`retirarDeRefundacion`) mientras no se gaste.
+ * destinos). Lo suyo se puede retirar (`retirarDeRefundacion`) mientras no se gaste.
  */
 export function aportarARefundacion(
   campamento: CampamentoMercenarios,
@@ -69,7 +69,7 @@ export function aportarARefundacion(
   if (!(cantidad > 0)) throw new MercenariosInvalidoError('La cantidad tiene que ser positiva.');
   exigirLado(campamento, heroe, columna, desde);
   const botin = recurso === 'oro' && desde === 'almacen' ? (heroe.oroDeBotin ?? 0) : 0;
-  const enCarro = columna ? (columna.suministro[recurso] ?? 0) - (recurso === 'trigo' ? racionQueQueda(columna) : 0) : 0;
+  const enCarro = columna ? (columna.suministro[recurso] ?? 0) : 0;
   const disponible = desde === 'almacen' ? botin + (heroe.almacenPersonal?.[recurso] ?? 0) : enCarro;
   const movido = Math.min(cantidad, disponible);
   if (movido <= 0) throw new MercenariosInvalidoError(desde === 'almacen' ? `No hay ${recurso} en el almacén personal.` : `El carro no lleva ${recurso} que aportar.`);

@@ -149,7 +149,9 @@ describe('entrarEnAsentamiento — la puerta (Doc 1.10.3)', () => {
     expect(r.ok).toBe(true);
     expect(sesion.getState().ejercitos, 'la columna deja de existir').toHaveLength(0);
     expect(campamento(sesion).map((e) => e.id)).toEqual(['esc-1']);
-    expect(sesion.getState().asentamientos[0]!.almacen['trigo']!.cantidad).toBe(trigoAntes);
+    // El carro vuelve entero al almacén; lo que se llevó en víveres sigue con él (Doc 5.13).
+    const viveres = sesion.getState().heroes.find((h) => h.id === fundador)!.viveres ?? 0;
+    expect(sesion.getState().asentamientos[0]!.almacen['trigo']!.cantidad).toBe(trigoAntes - viveres);
     expect(ubicacionDe(sesion, fundador)).toEqual({ tipo: 'asentamiento', asentamientoId });
   });
 

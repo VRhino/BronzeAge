@@ -56,6 +56,9 @@ const PUNTO_LEJOS = { tipo: 'punto', punto: { x: 900, y: 900 } } as const;
 
 const trigoDe = (a: { almacen: Record<string, { cantidad: number }> }) => a.almacen['trigo']?.cantidad ?? 0;
 
+/** Los víveres de un héroe (Doc 5.13): ahí, y no en el carro, va el trigo con el que sale. */
+const viveres = (estado: ReturnType<GameSession['getState']>, heroeId: string) => estado.heroes.find((h) => h.id === heroeId)?.viveres ?? 0;
+
 /** Deja el almacén de trigo en `cantidad`, para colocar al asentamiento a un lado u otro de su reserva. */
 function conTrigo(base: ReturnType<typeof partidaConTropas>, cantidad: number) {
   const payload = base.sesion.exportar();
@@ -106,10 +109,11 @@ describe('movilizarEjercito', () => {
     // La ruta se calcula al salir, como una caravana al despacharse.
     expect(ejercito.ruta.length).toBeGreaterThanOrEqual(2);
     expect(ejercito.progreso).toBe(0);
-    // Y sale con el carro cargado del almacén (Paso 6): algo lleva, y salió de la despensa de la ciudad.
-    expect(ejercito.suministro['trigo']).toBeGreaterThan(0);
+    // Y sale con los víveres llenos del almacén (Doc 5.13): algo lleva, salió de la despensa de la ciudad, y el carro va vacío.
+    expect(viveres(estado, fundador)).toBeGreaterThan(0);
+    expect(ejercito.suministro['trigo']).toBeUndefined();
     const trigoAntes = trigoDe(partidaConTropas().sesion.getState().asentamientos[0]!);
-    expect(trigoDe(estado.asentamientos[0]!)).toBeCloseTo(trigoAntes - ejercito.suministro['trigo']!);
+    expect(trigoDe(estado.asentamientos[0]!)).toBeCloseTo(trigoAntes - viveres(estado, fundador));
   });
 
   it('RECHAZA si los escuadrones exceden el Liderazgo del jugador', () => {
@@ -284,38 +288,38 @@ describe('unirseAEjercito', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------
-// Paso 6 — la carga del carro (Doc 5.13). Lo que se congela aquí: que sacar un ejército CUESTA stock real,
+// Paso 6 — los víveres al salir (Doc 5.13). Lo que se congela aquí: que sacar un ejército CUESTA stock real,
 // que ese coste tiene un suelo por debajo del cual no baja, y que ese suelo no bloquea la salida.
 // ---------------------------------------------------------------------------------------------------------
 
-describe('carga del carro desde el almacén', () => {
-  it('se lleva un carro entero si el almacén va sobrado', () => {
+describe('víveres desde el almacén', () => {
+  it('los llena enteros si el almacén va sobrado', () => {
     const { sesion, asentamientoId, fundador } = conTrigo(partidaConTropas(), 100000);
 
     sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
 
     const estado = sesion.getState();
-    expect(estado.ejercitos[0]!.suministro['trigo']).toBe(LOGISTICA.capacidadCarroPorJugador);
-    expect(trigoDe(estado.asentamientos[0]!)).toBeCloseTo(100000 - LOGISTICA.capacidadCarroPorJugador);
+    expect(viveres(estado, fundador)).toBe(LOGISTICA.capacidadViveresPorHeroe);
+    expect(trigoDe(estado.asentamientos[0]!)).toBeCloseTo(100000 - LOGISTICA.capacidadViveresPorHeroe);
   });
 
   it('NUNCA baja de la reserva: con la despensa justa, se lleva solo el sobrante', () => {
     const base = partidaConTropas();
-    // Reserva + 30: hay margen, pero muchísimo menos que un carro entero.
+    // Reserva + 30: hay margen, pero muchísimo menos que unos víveres enteros.
     const reserva = reservaDe(base.sesion.getState());
     const { sesion, asentamientoId, fundador } = conTrigo(base, reserva + 30);
 
     sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
 
     const estado = sesion.getState();
-    const cargado = estado.ejercitos[0]!.suministro['trigo']!;
+    const cargado = viveres(estado, fundador);
     expect(cargado).toBeGreaterThan(0);
-    expect(cargado).toBeLessThan(LOGISTICA.capacidadCarroPorJugador);
+    expect(cargado).toBeLessThan(LOGISTICA.capacidadViveresPorHeroe);
     // Lo que queda no baja de la reserva del asentamiento YA SIN esos escuadrones (que dejaron de comer aquí).
     expect(trigoDe(estado.asentamientos[0]!)).toBeGreaterThanOrEqual(reservaDe(estado) - 1e-9);
   });
 
-  it('con el almacén por debajo de la reserva sale IGUAL, con el carro vacío — no se bloquea la salida', () => {
+  it('con el almacén por debajo de la reserva sale IGUAL, sin víveres — no se bloquea la salida', () => {
     const base = partidaConTropas();
     const { sesion, asentamientoId, fundador } = conTrigo(base, 1);
 
@@ -323,11 +327,11 @@ describe('carga del carro desde el almacén', () => {
 
     expect(r.ok).toBe(true);
     const estado = sesion.getState();
-    expect(estado.ejercitos[0]!.suministro['trigo']).toBe(0);
+    expect(viveres(estado, fundador)).toBe(0);
     expect(trigoDe(estado.asentamientos[0]!)).toBe(1); // ni un grano: no se toca lo que está bajo reserva
   });
 
-  it('el que se une trae SU carro y lo carga de SU asentamiento', () => {
+  it('el que se une llena SUS víveres de SU asentamiento', () => {
     const { sesion, asentamientoId, fundador, vecino } = conTrigo(partidaConTropas(), 100000);
     sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
@@ -335,32 +339,32 @@ describe('carga del carro desde el almacén', () => {
     const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: vecino, escuadronIds: ['esc-vecino'] }, { actor: vecino });
 
     expect(r.ok).toBe(true);
-    // Dos participantes, dos carros: el suministro dobla.
-    expect(sesion.getState().ejercitos[0]!.suministro['trigo']).toBe(2 * LOGISTICA.capacidadCarroPorJugador);
+    // Dos participantes, dos víveres: se suman.
+    expect(viveres(sesion.getState(), fundador) + viveres(sesion.getState(), vecino)).toBe(2 * LOGISTICA.capacidadViveresPorHeroe);
   });
 
-  it('unirse DOS veces no duplica el carro: el tope va contra los participantes, no contra las veces', () => {
+  it('unirse DOS veces no duplica los víveres: el tope es el del héroe, no el de las veces', () => {
     const { sesion, asentamientoId, fundador } = conTrigo(partidaConTropas(), 100000);
     sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
 
-    // El MISMO jugador suma más escuadrones suyos: sigue siendo un participante, así que sigue siendo un carro.
+    // El MISMO jugador suma más escuadrones suyos: sigue siendo un participante, con sus mismos víveres.
     sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: ['esc-mimbre'] }, OPC);
     sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: ['esc-honderos'] }, OPC);
 
     const ejercito = sesion.getState().ejercitos[0]!;
     expect(ejercito.participantes).toHaveLength(1);
-    expect(ejercito.suministro['trigo']).toBe(LOGISTICA.capacidadCarroPorJugador);
+    expect(viveres(sesion.getState(), fundador)).toBe(LOGISTICA.capacidadViveresPorHeroe);
   });
 
-  it('el trigo se conserva: lo que sale del almacén es exactamente lo que entra en el carro', () => {
+  it('el trigo se conserva: lo que sale del almacén es exactamente lo que entra en los víveres', () => {
     const { sesion, asentamientoId, fundador } = conTrigo(partidaConTropas(), 700);
     const antes = trigoDe(sesion.getState().asentamientos[0]!);
 
     sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
 
     const estado = sesion.getState();
-    expect(trigoDe(estado.asentamientos[0]!) + estado.ejercitos[0]!.suministro['trigo']!).toBeCloseTo(antes);
+    expect(trigoDe(estado.asentamientos[0]!) + viveres(estado, fundador)).toBeCloseTo(antes);
   });
 });
 
