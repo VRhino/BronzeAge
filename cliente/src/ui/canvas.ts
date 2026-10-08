@@ -3,6 +3,8 @@ import { MERCENARIOS } from '@motor/constants';
 import type { ElementoCampamentoTipo, LayoutCampamento } from '@motor/engine/layoutCampamento';
 import type { TramoDeRed } from '@motor/engine/redCaminos';
 import type { Mapa } from '@motor/world/mapa';
+import { colorHex } from '../sigilo/sigilo';
+import { imagenDeSigilo } from '../sigilo/lienzo';
 
 export const FACCION_COLORES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085'];
 
@@ -318,8 +320,11 @@ export const EDIFICIO_COLOR: Record<EdificioTipo, string> = {
   parque: '#c8e0b8',
 };
 
+/** El color de una Facción en el mapa: el primario de su sigilo (como en el cliente de jugador); sin sigilo, uno de la paleta fija por orden. */
 export function faccionColor(faccionId: string, facciones: Faccion[]): string {
   const idx = facciones.findIndex((f) => f.id === faccionId);
+  const sigilo = facciones[idx]?.sigilo;
+  if (sigilo) return colorHex(sigilo.colorPrimarioId);
   return FACCION_COLORES[Math.max(0, idx) % FACCION_COLORES.length]!;
 }
 
@@ -544,12 +549,22 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     }
   }
 
-  // Asentamientos (punto de fundación)
+  // Asentamientos: el sigilo de su Facción, centrado en el punto de fundación. Mientras la imagen carga (o si la Facción no tiene sigilo)
+  // queda el punto de siempre, con el color de la Facción.
+  const ANCHO_SIGILO = 26;
   for (const asentamiento of state.asentamientos) {
-    const color = faccionColor(asentamiento.faccionId, state.facciones);
+    const x = asentamiento.posicion.x * scale;
+    const y = asentamiento.posicion.y * scale;
+    const sigilo = state.facciones.find((f) => f.id === asentamiento.faccionId)?.sigilo;
+    const imagen = sigilo ? imagenDeSigilo(sigilo, ANCHO_SIGILO * 2) : undefined;
+    if (imagen) {
+      const alto = ANCHO_SIGILO * 1.2;
+      ctx.drawImage(imagen, x - ANCHO_SIGILO / 2, y - alto / 2, ANCHO_SIGILO, alto);
+      continue;
+    }
     ctx.beginPath();
-    ctx.arc(asentamiento.posicion.x * scale, asentamiento.posicion.y * scale, 6, 0, Math.PI * 2);
-    ctx.fillStyle = color;
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = faccionColor(asentamiento.faccionId, state.facciones);
     ctx.fill();
     ctx.strokeStyle = '#1b1a17';
     ctx.lineWidth = 1.5;

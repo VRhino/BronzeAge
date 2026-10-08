@@ -27,6 +27,8 @@
 > - **Facción › General**: lista de miembros (conexión, cargo, residencia y dónde están ahora).
 > - **Comercio › Información › Caravanas en ruta**: ahora incluye las enganchadas a un ejército, el tipo, el nombre de origen/destino y la **escolta**
 >   (columna del ejército, escuadras cedidas con su poder, o «⚠ sin escolta» con la defensa base).
+> - **Mapa**: cada asentamiento se dibuja con el **sigilo de su Facción** (imagen del SVG, `src/sigilo/lienzo.ts`) en vez del punto, y el color de su
+>   zona de influencia —y de sus caravanas y columnas— es el **primario del sigilo**, como en el cliente de jugador. Sin sigilo, la paleta fija.
 > - **Guerra**: pestaña con Panorama (guerras, ejércitos en campo, batallas) y Reclutamiento; estados vacíos explicados.
 >
 > Anterior (v0.1.1, 2026-09-10): documentación reconciliada con el backend; la niebla de guerra ya está implementada.

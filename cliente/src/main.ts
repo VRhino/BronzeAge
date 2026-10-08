@@ -16,7 +16,8 @@ import { ALMACEN_PERSONAL, MERCENARIOS } from '@motor/constants';
 import { esc } from './ui/html';
 import { enlazarSubpestanas, htmlSubpaneles, htmlSubpestanas, type Subpestana } from './ui/subpestanas';
 import { htmlNombreConSigilo, svgSigilo } from './sigilo/sigilo';
-import { draw, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, FACCION_COLORES, type DrawState } from './ui/canvas';
+import { alCargarSigilos } from './sigilo/lienzo';
+import { draw, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
 // resolución física para que la capa de terreno/ríos no perdiera nitidez.
@@ -2082,7 +2083,7 @@ function renderLeyenda(state: GameState): void {
 
   const faccionesHtml =
     state.facciones
-      .map((f, i) => `<div class="legend-row"><span class="swatch" style="background:${FACCION_COLORES[i % FACCION_COLORES.length]}"></span>${f.nombre}</div>`)
+      .map((f) => `<div class="legend-row"><span class="swatch" style="background:${faccionColor(f.id, state.facciones)}"></span>${htmlNombreConSigilo(f, 16)}</div>`)
       .join('') || '<div class="legend-note">Sin Facciones.</div>';
 
   const legendMundoHtml = `
@@ -2343,6 +2344,7 @@ function render(): void {
 // Única suscripción: cualquier acción del store dispara un re-render. La interfaz nunca
 // vuelve a llamar `render()` manualmente tras una acción — eso sería recrear el acoplamiento.
 gameStore.subscribe(render);
+alCargarSigilos(render);
 
 function ocultarTooltipEdificioAsentamiento(): void {
   settlementBuildingTooltipEl.hidden = true;
