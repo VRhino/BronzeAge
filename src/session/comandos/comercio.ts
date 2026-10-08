@@ -1,6 +1,6 @@
 // Comandos de comercio: proponer un trueque entre asentamientos, colocar una orden de mercado y componer
 // una caravana comercial (revamp, Doc 3.13: casco vacío + carros + animales).
-import type { AcuerdoTrueque, AnimalTipo, Caravana, CarroTipo, RecursoTipo } from '../../domain/types';
+import type { AcuerdoTrueque, AnimalTipo, Caravana, CarroTipo, Escuadron, RecursoTipo } from '../../domain/types';
 import type { Instante } from '../../domain/tiempo';
 import {
   aceptarTrueque as aceptarTruequeEngine,
@@ -13,12 +13,13 @@ import {
   moverCargaCarroAparcada as moverCargaCarroAparcadaEngine,
   enviarCaravanaAlOrigen as enviarCaravanaAlOrigenEngine,
   seleccionarEscoltaCaravana,
+  asignarEscoltaACaravana as asignarEscoltaEngine,
+  retirarEscoltaDeCaravana as retirarEscoltaEngine,
   proponerTrueque as proponerTruequeEngine,
   rechazarTrueque as rechazarTruequeEngine,
 } from '../../engine/trade';
-import { puedeLlevar } from '../../engine/liderazgo';
 import { esCiudadano } from '../../engine/faccion';
-import { alCampamentoPorIds, conEscuadrones } from '../../engine/tropa';
+import { alCampamentoPorIds, conEscuadrones, indiceTropa } from '../../engine/tropa';
 import { anexarAlHistorialDeOrdenes, colocarOrdenMercado as colocarOrdenMercadoEngine, comerciarEnPlaza as comerciarEnPlazaEngine } from '../../engine/market';
 import { capacidadCargaDe } from '../../engine/ejercitos';
 import { computeTodasLasZonas } from '../../engine/zones';
@@ -390,7 +391,7 @@ export interface ParamsPrepararCaravana {
   destinoAsentamientoId: string;
   /** Mapa recurso -> cantidad: qué se carga del almacén del origen, hasta la capacidad de la caravana. */
   carga: Record<string, number>;
-  /** Escuadrones del jugador que van de escolta sin héroe (Doc 3.13.4), hasta el cupo del Mercado. */
+  /** Escuadrones del jugador que van de escolta sin héroe (Doc 3.13.4), hasta el cupo de Liderazgo del Mercado. */
   escoltaEscuadronIds?: string[];
   /** Hora de mundo (`Instante`, ms) a la que sale: programada. Con todo reservado desde ya. Ausente = sale al acabar la preparación. */
   salirEn?: number;
@@ -410,17 +411,9 @@ export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: st
 
     const jugador = estado.heroes.find((j) => j.id === params.heroeId);
     const escolta = seleccionarEscoltaCaravana(origen, jugador, params.escoltaEscuadronIds ?? []);
-    if (escolta.length > 0) {
-      // La escolta cuenta contra el Liderazgo del héroe mientras viaja (Doc 3.13.4), sumada a todo lo que ya
-      // tenga fuera del campamento: en otras escoltas o en su columna.
-      const yaFuera = (jugador?.escuadrones ?? []).filter((e) => e.contenedor.tipo !== 'campamento');
-      if (!puedeLlevar(jugador, [...yaFuera, ...escolta])) {
-        rechazar(CODIGOS_ERROR.comercioCaravanaInvalida);
-      }
-    }
 
     const territorio = { red: estado.red ?? RED_VACIA, asentamientos: estado.asentamientos, zonas: computeTodasLasZonas(estado.asentamientos) };
-    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, escolta, mapa, territorio, ctx.instante, params.salirEn as Instante | undefined);
+    const r = prepararCaravanaManualEngine(caravana, origen, destino, params.carga, escolta, escoltaCedida(estado, caravana), mapa, territorio, ctx.instante, params.salirEn as Instante | undefined);
     const siguiente: GameSessionState = {
       ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento),
       heroes: conEscuadrones(estado.heroes, r.tropa),
@@ -442,6 +435,75 @@ export const prepararCaravana = comando<ParamsPrepararCaravana, { caravanaId: st
     );
   }
 );
+
+/** Las escuadras que la caravana ya tiene cedidas, de cualquier héroe. */
+function escoltaCedida(estado: GameSessionState, caravana: Caravana): Escuadron[] {
+  const tropa = indiceTropa(estado.heroes);
+  return (caravana.escoltaIds ?? []).flatMap((id) => tropa.get(id) ?? []);
+}
+
+export interface ParamsAsignarEscolta {
+  caravanaId: string;
+  heroeId: string;
+  /** Escuadrones propios, en su campamento y fuera de la guarnición. */
+  escuadronIds: string[];
+}
+
+/**
+ * Cede escuadrones a una caravana comercial parada en su origen (Doc 3.13.4), sin lanzarla: el reparto automático la manda ya escoltada.
+ * Cada residente cede los suyos; el cupo (puntos de Liderazgo según el Mercado) es de la caravana y lo comparten. No gastan el Liderazgo de quien presta.
+ */
+export const asignarEscolta = comando<ParamsAsignarEscolta, { caravanaId: string; escolta: number }>((estado, _mapa, ctx, params) => {
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const origen = exigirAsentamiento(estado, caravana.origenAsentamientoId);
+  const jugador = estado.heroes.find((j) => j.id === params.heroeId);
+  const escolta = seleccionarEscoltaCaravana(origen, jugador, params.escuadronIds);
+  const r = asignarEscoltaEngine(caravana, origen, escolta, escoltaCedida(estado, caravana));
+  const siguiente: GameSessionState = { ...conCaravana(estado, r.caravana), heroes: conEscuadrones(estado.heroes, r.tropa) };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'comercio.caravana_escolta_cedida',
+        mensaje: `${jugador!.displayName} cede ${escolta.length} escuadrón(es) de escolta a la caravana ${caravana.id}.`,
+        payload: { caravanaId: caravana.id, heroeId: params.heroeId, escuadronIds: escolta.map((e) => e.id), escoltaTotal: r.caravana.escoltaIds?.length ?? 0 },
+        asentamientoId: origen.id,
+      }),
+    ],
+    { caravanaId: caravana.id, escolta: r.caravana.escoltaIds?.length ?? 0 }
+  );
+});
+
+export interface ParamsQuitarEscolta {
+  caravanaId: string;
+  heroeId: string;
+  /** Cuáles de los suyos retira; ausente = todos los que tenga cedidos a esa caravana. */
+  escuadronIds?: string[];
+}
+
+/** Retira de la escolta de una caravana parada en su origen los escuadrones del héroe; vuelven a su campamento. Nadie retira los de otro. */
+export const quitarEscolta = comando<ParamsQuitarEscolta, { caravanaId: string; retirados: number }>((estado, _mapa, ctx, params) => {
+  const caravana = exigirCaravana(estado, params.caravanaId);
+  const jugador = estado.heroes.find((j) => j.id === params.heroeId);
+  const suyos = (jugador?.escuadrones ?? []).filter((e) => (caravana.escoltaIds ?? []).includes(e.id)).map((e) => e.id);
+  const ids = params.escuadronIds ?? suyos;
+  if (ids.length === 0 || !ids.every((id) => suyos.includes(id))) rechazar(CODIGOS_ERROR.comercioCaravanaInvalida);
+
+  const r = retirarEscoltaEngine(caravana, ids);
+  const siguiente: GameSessionState = { ...conCaravana(estado, r.caravana), heroes: alCampamentoPorIds(estado.heroes, r.escoltaLiberada) };
+  return exito(
+    siguiente,
+    [
+      evento(ctx, {
+        codigo: 'comercio.caravana_escolta_retirada',
+        mensaje: `${jugador!.displayName} retira ${ids.length} escuadrón(es) de la escolta de la caravana ${caravana.id}.`,
+        payload: { caravanaId: caravana.id, heroeId: params.heroeId, escuadronIds: ids },
+        asentamientoId: caravana.origenAsentamientoId,
+      }),
+    ],
+    { caravanaId: caravana.id, retirados: ids.length }
+  );
+});
 
 export interface ParamsCancelarCaravana {
   caravanaId: string;

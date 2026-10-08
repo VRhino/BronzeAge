@@ -80,6 +80,7 @@ import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, PropuestaAnexion,
 import { propuestasVigentes } from '../../engine/trasladoDeFaccion';
 import { miradasActivasDe } from '../../engine/intel';
 import { esCaravanaGrande } from '../../engine/caravanas';
+import { liderazgoDeEscolta } from '../../engine/trade';
 import { tecnologiasDe } from '../../engine/tecnologia';
 import { distancia, pointInPolygon } from '../../world/geometria';
 import type { EstadoMapa } from '../../world/mapa';
@@ -449,8 +450,9 @@ export interface ProyeccionJugador {
    * Incluye lo que se está viendo AHORA aunque el tick todavía no lo haya grabado, para que la máscara nunca
    * deje un agujero justo donde el jugador está mirando. */
   exploracion: NieblaProyectada;
-  /** Las PROPIAS, completas: las que salen o llegan a una plaza tuya. */
-  caravanas: Caravana[];
+  /** Las PROPIAS, completas: las que salen o llegan a una plaza tuya. `escoltaLiderazgo` es DERIVADO y solo en las comerciales de una plaza tuya:
+   * Liderazgo que gasta su escolta y cupo que le da el Mercado de su origen (Doc 3.13.4), para mostrar "40/100" sin copiar la regla. */
+  caravanas: (Caravana & { escoltaLiderazgo?: { usado: number; cupo: number } })[];
   /** Las ajenas que se ven AHORA, redactadas (ver `CaravanaAvistada`). Fuera del radio de vision no existen
    * para el jugador — no hay lista de "caravanas del mundo" que consultar. */
   caravanasAvistadas: CaravanaAvistada[];
@@ -951,7 +953,12 @@ export function proyectarParaJugador(
     asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId) && f.asentamientoId !== dentroDe?.id),
     territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
-    caravanas: estado.caravanas.filter((c) => esPropio(c.origenAsentamientoId) || c.faccionId === faccionId || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId))),
+    caravanas: estado.caravanas
+      .filter((c) => esPropio(c.origenAsentamientoId) || c.faccionId === faccionId || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId)))
+      .map((c) => {
+        const origen = c.tipo === 'comercial' ? estado.asentamientos.find((a) => a.id === c.origenAsentamientoId) : undefined;
+        return origen && esPropio(origen.id) ? { ...c, escoltaLiderazgo: liderazgoDeEscolta(c, origen, tropa) } : c;
+      }),
     caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa, miradasVistas).filter((c) => !bloqueos.caravanas.has(c.id)),
     ejercitos: ejercitosPropios.map((e) => ({ ...e, capacidadCarga: capacidadCargaDe(e, estado.caravanas) })),
     ejercitosAvistados: ejercitosAvistados.map((e) => ({

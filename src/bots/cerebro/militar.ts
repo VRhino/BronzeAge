@@ -9,6 +9,7 @@ import { LOGISTICA, MILITAR, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../.
 import { edificiosPorTipoYEstado, nivelActualDe, nutricionPoblacionDe } from '../../engine/asentamientoQuery';
 import { consumoRacionDeEscuadrones, reservaDeTrigo } from '../../engine/tropas';
 import { poderTotal } from '../../engine/combate';
+import { costeLiderazgo } from '../../engine/liderazgo';
 import { poderEscuadron } from '../../engine/tropa';
 import { enLaPuertaDe } from '../../engine/ejercitos';
 import { distancia } from '../../world/geometria';
@@ -20,8 +21,12 @@ import { acudirALosSuyos } from './acudir';
 import { conducirCaravana, fundarDesdeCasa } from './fundar';
 import { columnaPropia, escuadrasLibres, plazasConocidas, estaHerido, loQueLeCabe, plazaDentro, plazasPropias, residentesDe, tieneCargo, type HeroeVisto } from './comun';
 
-/** La mejor tropa primero; sin la leva de escalón 1, que ocuparía a 30 pesants por escuadra para casi nada. */
-const TROPAS_POR_PREFERENCIA = TROPAS_RECLUTABLES.filter((t) => t.escalon > 1).sort((a, b) => b.escalon - a.escalon || b.poderBase - a.poderBase);
+/**
+ * Toda la tropa que la plaza sepa hacer, la mejor primero. Incluye la leva de escalón 1 (leñadores, granjeros): como haría un jugador con todo
+ * lo que tenga a su alcance, y deja escuadras de sobra con las que escoltar caravanas. Cada una ocupa 30 pesants, así que el motor la rechaza
+ * si la plaza no puede (y el bot lo intenta de nuevo más tarde).
+ */
+const TROPAS_POR_PREFERENCIA = [...TROPAS_RECLUTABLES].sort((a, b) => b.escalon - a.escalon || b.poderBase - a.poderBase);
 const NUTRICION_PARA_SALIR = 50;
 const SALUD_PARA_SALIR = 0.6;
 const NIVEL_PARA_CAMPANA = 2;
@@ -37,6 +42,7 @@ export async function residir(ctx: ContextoBot): Promise<void> {
   const heroe = ctx.vista.heroe;
   if (!plaza || !heroe || heroe.residenciaId !== plaza.id) return;
   await reclutar(ctx, plaza, heroe);
+  await escoltarCaravanas(ctx, plaza, heroe);
   await guarnecer(ctx, heroe);
   await prepararDefensa(ctx);
 }
@@ -51,6 +57,29 @@ async function reclutar(ctx: ContextoBot, plaza: Asentamiento, heroe: HeroeVisto
     if (!edificio || (edificio.nivelInterno ?? 1) < tropa.nivelRequerido) continue;
     if ((heroe.escuadrones.find((e) => e.tropaId === tropa.id)?.cantidad ?? 0) >= tropa.unidadesPorDefecto) continue;
     if ((await ctx.intentar(`reclutar:${tropa.id}`, 'reclutarTropa', { asentamientoId: plaza.id, heroeId: ctx.yo, tropaId: tropa.id }, 10 * 60_000))?.ok) return;
+  }
+}
+
+/**
+ * Cede a cada caravana comercial propia, parada en esta plaza, las escuadras que le quepan en su cupo de Liderazgo (Doc 3.13.4): las más baratas
+ * primero (la leva), conservando libre la mejor para sí. Antes de guarnecer, que es donde irían. Los bandidos atacan las caravanas sin escolta.
+ */
+async function escoltarCaravanas(ctx: ContextoBot, plaza: Asentamiento, heroe: HeroeVisto): Promise<void> {
+  const libres = escuadrasLibres(heroe).sort((a, b) => poderEscuadron(b) - poderEscuadron(a) || (a.id < b.id ? -1 : 1)).slice(1);
+  if (libres.length === 0) return;
+  for (const caravana of ctx.vista.caravanas) {
+    if (caravana.tipo !== 'comercial' || caravana.estado !== 'disponible' || caravana.origenAsentamientoId !== plaza.id || !caravana.escoltaLiderazgo) continue;
+    let queda = caravana.escoltaLiderazgo.cupo - caravana.escoltaLiderazgo.usado;
+    const cedidas: string[] = [];
+    for (const e of [...libres].sort((a, b) => costeLiderazgo(a.tropaId) - costeLiderazgo(b.tropaId) || (a.id < b.id ? -1 : 1))) {
+      if (cedidas.includes(e.id) || costeLiderazgo(e.tropaId) > queda) continue;
+      cedidas.push(e.id);
+      queda -= costeLiderazgo(e.tropaId);
+    }
+    if (cedidas.length === 0) continue;
+    if ((await ctx.intentar(`escolta:${caravana.id}`, 'asignarEscolta', { caravanaId: caravana.id, heroeId: ctx.yo, escuadronIds: cedidas }))?.ok) {
+      for (const id of cedidas) libres.splice(libres.findIndex((e) => e.id === id), 1);
+    }
   }
 }
 

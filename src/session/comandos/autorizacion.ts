@@ -582,6 +582,15 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     condicionJugador: (estado, heroeId, params) =>
       heroeId === params.heroeId && resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),
   },
+  // La escolta la cede cada residente del origen con lo suyo: nadie cede ni retira escuadrones a nombre de otro.
+  asignarEscolta: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => heroeId === params.heroeId && resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),
+  },
+  quitarEscolta: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => heroeId === params.heroeId && resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),
+  },
   cancelarCaravana: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => resideEnOrigenDeCaravana(estado, heroeId, params.caravanaId),

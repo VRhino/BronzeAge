@@ -157,7 +157,7 @@ interface Caravana {
 - `costoCaravanaPorDefecto()` = suma por recurso de `CARRO_CATALOGO.basico.costo` + `ANIMAL_CATALOGO.buey.costo` (hoy 50 madera) — lo que reserva el NPC de laboratorio antes de montar una caravana.
 - `prepTicks(c)` = `CARAVANA_PREPARACION.kPorCarro × max(0, nº carros − 1)` (en `prepararCaravanaManual`, `engine/trade.ts`).
 - Defensa de la caravana en combate: si `caravana.escolta?.length` → `poderTotal(escolta, cohesión)`; si adjunta a un ejército → poder del ejército (5.13.3); si no → `MILITAR.defensaBaseCaravana` (3.10). Resuelto en `bandidos.ts` e `interceptarCaravanaConEjercito` directamente, sin un `poderDefensaCaravana` central (no hacía falta).
-- `cupoEscolta(asentamiento)` = `CARAVANA_ESCOLTA.cupoPorNivelMercado[nivelInternoMercado − 1]` (`engine/asentamientoQuery.ts`).
+- `cupoEscolta(asentamiento)` = `CARAVANA_ESCOLTA.liderazgoPorNivelMercado[nivelInternoMercado − 1]` (`engine/asentamientoQuery.ts`). **Desde 2026-10-08 el cupo es en puntos de Liderazgo (100/200/300), no en nº de escuadras**: cada escuadra cedida gasta su `costeLiderazgo`, de la caravana y no del héroe que la presta (decisión del usuario; sin tope extra de escuadras).
 - `devolverEscoltaAGuarnicion(guarnición, escolta)` = funde por `jugadorId + tropaId` (`engine/caravanas.ts`).
 
 ### Constantes nuevas (`src/constants.ts`) — todas placeholder
@@ -175,7 +175,7 @@ export const ANIMAL_CATALOGO = {
 } as const;
 
 export const CARAVANA_PREPARACION = { kPorCarro: 2 };
-export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] as const };
+export const CARAVANA_ESCOLTA = { liderazgoPorNivelMercado: [100, 200, 300] as const }; // 2026-10-08: puntos de Liderazgo (antes nº de escuadras 1/2/3)
 ```
 
 **`CARAVANA_CATALOGO.comercial` se ELIMINA** (Ronda 5 §19): no queremos dejar el modelo viejo de capacidad/

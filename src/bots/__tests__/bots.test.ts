@@ -45,6 +45,12 @@ describe('bots: juegan con los comandos de un jugador', () => {
     expect(sesion.getState().ejercitos.every((e) => e.estado !== 'estacionado'), 'nadie se queda plantado').toBe(true);
   });
 
+  it('ceden escuadras de leva como escolta a sus caravanas comerciales paradas (Doc 3.13.4)', async () => {
+    const { eventos } = await mundo(3500);
+
+    expect(eventos.some((e) => e.codigo === 'comercio.caravana_escolta_cedida')).toBe(true);
+  });
+
   it('el explorador inspecciona plazas ajenas desde cerca: lo que sabe, lo ha ido a mirar', async () => {
     const { eventos } = await mundo(300);
 

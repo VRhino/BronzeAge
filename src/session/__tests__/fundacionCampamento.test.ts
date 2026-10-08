@@ -1,5 +1,6 @@
 // Fundar con la Caravana de Fundación de un campamento (D9-D16, D30, M2): se compra con el fondo, nace sin destino, la engancha su
 // titular y funda con `fundar` donde esté.
+import { NOMBRES_DE_CIUDADES } from '../../engine/nombresDeCiudades';
 import { describe, expect, it } from 'vitest';
 import { MERCENARIOS } from '../../constants';
 import { costoRefundacion } from '../../engine/refundacion';
@@ -63,6 +64,8 @@ describe('fundar con la caravana de un campamento', () => {
     const estado = lejos.getState();
     const plaza = estado.asentamientos.find((a) => a.id === r.datos!.asentamientoId)!;
     expect(plaza).toMatchObject({ faccionId, heroesFundadoresIds: [heroeId] });
+    expect(NOMBRES_DE_CIUDADES, 'recibe el nombre de una ciudad de la época').toContain(plaza.nombre);
+    expect(r.eventos.find((e) => e.codigo === 'fundacion.asentamiento_fundado')!.mensaje).toContain(plaza.nombre!);
     expect(estado.caravanas.some((c) => c.id === caravanaId), 'la caravana se gasta').toBe(false);
     expect(estado.ejercitos.some((e) => e.id === ejercitoId), 'la columna entra').toBe(false);
     expect(estado.heroes.find((h) => h.id === heroeId)!.ubicacion).toEqual({ tipo: 'asentamiento', asentamientoId: plaza.id });

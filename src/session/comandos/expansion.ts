@@ -20,6 +20,7 @@ import { CODIGOS_ERROR } from './codigosDeError';
 import { desdeCrudos } from './eventos';
 import { conExploracionFundida, conTropaDe, exigirColumnaDe, exigirJugador, rechazar } from './ayudas';
 import type { GameSessionState } from '../estado';
+import { nombreDeCiudadLibre } from '../../engine/nombresDeCiudades';
 import { exito } from './tipos';
 import { comando, conAsentamiento, exigirAsentamiento, exigirCaravana, exigirFaccionDe } from './ayudas';
 import { evento } from './eventos';
@@ -110,10 +111,13 @@ export const fundar = comando<Record<string, never>, { asentamientoId: string }>
   exigirPuertaDeFundacion(fundadores, true);
 
   const r = fundarConCaravana(mapa, estado.facciones, faccionId, columna.posicionActual, fundadores, estado.asentamientos, estado.campamentosMercenarios, ctx.instante);
+  // Recibe el nombre de una ciudad de la época que ninguna plaza de la partida lleve ya (se puede renombrar después).
+  const nombre = nombreDeCiudadLibre(estado.asentamientos.map((a) => a.nombre), r.asentamiento.id);
+  const nueva = nombre ? { ...r.asentamiento, nombre } : r.asentamiento;
   // Fundar es ENTRAR en lo que se acaba de levantar (Doc 1.10): la columna se deshace dentro —tropa al campamento, carro al almacén—,
   // sin la caravana, que se gasta en la fundación.
   const sinCaravana = { ...columna, faccionId, caravanasAdjuntasIds: columna.caravanasAdjuntasIds.filter((id) => id !== caravana.id) };
-  const dentro = absorberColumna(r.asentamiento, conTropaDe(estado, sinCaravana), true);
+  const dentro = absorberColumna(nueva, conTropaDe(estado, sinCaravana), true);
   const enLaColumna = columna.participantes.map((p) => p.heroeId);
 
   let siguiente: GameSessionState = {
@@ -138,8 +142,8 @@ export const fundar = comando<Record<string, never>, { asentamientoId: string }>
     [
       evento(ctx, {
         codigo: 'fundacion.asentamiento_fundado',
-        mensaje: `${faccion?.nombre ?? faccionId} funda asentamiento en (${Math.round(posicion.x)}, ${Math.round(posicion.y)}).`,
-        payload: { asentamientoId: dentro.asentamiento.id, faccionId, caravanaId: caravana.id, posicion, heroesIds: fundadores } satisfies PayloadFundado,
+        mensaje: `${faccion?.nombre ?? faccionId} funda ${nombre ?? 'un asentamiento'} en (${Math.round(posicion.x)}, ${Math.round(posicion.y)}).`,
+        payload: { asentamientoId: dentro.asentamiento.id, faccionId, caravanaId: caravana.id, posicion, heroesIds: fundadores, ...(nombre ? { nombre } : {}) } satisfies PayloadFundado,
         asentamientoId: dentro.asentamiento.id,
       }),
       ...desdeCrudos(ctx, r.eventos),

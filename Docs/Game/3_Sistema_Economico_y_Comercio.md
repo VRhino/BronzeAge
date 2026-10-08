@@ -88,7 +88,7 @@ Requiere tecnología de barcos + puertos. Fase 0 es 100% terrestre (eje naval po
 
 ## 3.12 Mercado como edificio y flota de caravanas propias
 
-**Mercado (edificio, Doc 4.2.1)**: adición MANUAL de Gobernador/Maestro de Obras (ver Doc 4.2), no auto-construcción. Gatea DOS cosas: colocar órdenes de mercado (3.3) y crear caravanas propias (más abajo). Sus niveles internos administran el cupo de flota (2/4/6) y el de escolta por caravana (1/2/3, 3.13.4) — ver catálogo completo en Doc 4.2.1.
+**Mercado (edificio, Doc 4.2.1)**: adición MANUAL de Gobernador/Maestro de Obras (ver Doc 4.2), no auto-construcción. Gatea DOS cosas: colocar órdenes de mercado (3.3) y crear caravanas propias (más abajo). Sus niveles internos administran el cupo de flota (2/4/6) y el de escolta por caravana (100/200/300 pts de Liderazgo, 3.13.4) — ver catálogo completo en Doc 4.2.1.
 
 **Flota de caravanas propias**: activo persistente, no efímero. Se crea como un casco vacío y gratis (`crearCaravana`, 3.13.2) que cuenta contra `cupoCaravanas` (nivel de Mercado + política "Ampliación de Flota", +1 aditivo) hasta que se pierda capturada en combate (3.10). **No se puede desmantelar voluntariamente.** Se reutiliza, no se reconstruye en cada viaje: su ciclo de estados está en 3.13.3.
 
@@ -191,11 +191,22 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
 - **Siguen con la caravana hasta que termina el viaje o es destruida** — cesión **por viaje**, no enganche
   permanente. Al terminar vuelven al campamento de su héroe. Si la caravana es destruida o capturada, por el
   motivo que sea, quedan a 0 unidades y vuelven igualmente al campamento de su héroe (Doc 5.15.4).
-- Mientras están cedidos no están en el campamento, así que tampoco pueden estar en guarnición, y **cuentan
-  contra el Liderazgo del héroe** (Doc 5.11), sumados a lo que lleve consigo y a sus otras escoltas. Ceder
-  tropa a una escolta no libera Liderazgo: es coste de oportunidad puro.
+- Mientras están cedidos no están en el campamento, así que tampoco pueden estar en guarnición. **No gastan el
+  Liderazgo del héroe que las presta**: el Liderazgo de un héroe solo lo afecta lo que él carga consigo (mundo
+  abierto, batallas…). Prestar tropa afecta siempre al cupo de quien la **recibe**, aquí la caravana (la
+  guarnición ya funciona así: cupo propio, Doc 5.15.3). Ver cupo abajo y Doc 5.11.
 - **No consumen ración.** Una escolta no es una campaña; se abstrae el suministro (a diferencia de Doc 5.13).
-- **Cupo por nivel interno de Mercado**: 1 / 2 / 3 escuadrones por caravana (`CARAVANA_ESCOLTA`).
+- **Cupo por nivel interno de Mercado**: cada caravana tiene su **propio cupo de Liderazgo**, que crece con el Mercado de su origen:
+  **100 / 200 / 300 puntos** (nivel 1 / 2 / 3; `CARAVANA_ESCOLTA.liderazgoPorNivelMercado`, placeholder a calibrar). Cada escuadra cedida
+  suma su **coste de Liderazgo** (Doc 5.11.1, por escalón: leva 7 … élite 45; no depende de cuánta gente le quede) hasta llegar al tope. Se
+  cede la escuadra **entera**, nunca tropas sueltas, y no hay otro límite de nº de escuadras. El cupo es **de la caravana, no de cada héroe**:
+  lo comparten todos los residentes que ceden a ella. Lo limitan además, para cada escuadra: ser del héroe, estar en su campamento (no en la
+  guarnición, ni de columna, ni ya cedida a otra caravana) y tener gente. El Liderazgo del que presta no interviene. La proyección del
+  jugador da `caravanas[].escoltaLiderazgo { usado, cupo }`.
+- **Ceder por adelantado** (2026-10-08): `asignarEscolta` cede escuadrones a una caravana **parada en su origen** (`disponible`) sin
+  lanzarla, y `quitarEscolta` retira las propias mientras siga parada. El reparto automático (3.13.5) la manda **ya escoltada**, y la escolta
+  vuelve a su campamento al acabar el viaje como siempre. Lanzarla a mano con más escuadras suma lo ya cedido al cupo. Nadie cede ni retira a
+  nombre de otro y hay que residir en el origen.
 - **Combate**: la escolta combate manejada por la IA del juego. Contra un héroe que intercepta la caravana
   (3.10) es una batalla de Unity; contra bandidos (Doc 1.9), sin ningún héroe humano en juego, se resuelve con
   números (Doc 5.15.6). Sus bajas son permanentes y no queda herida: los escuadrones no tienen ese estado (Doc

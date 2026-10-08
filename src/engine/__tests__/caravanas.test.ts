@@ -8,12 +8,14 @@ import type { Escuadron } from '../../domain/types';
 import { CARAVANA_COOLDOWN, CARAVANA_ESCOLTA, CARAVANA_PREPARACION } from '../../constants';
 import { capacidadCaravana, velocidadCaravana } from '../caravanas';
 import { cupoEscolta } from '../asentamientoQuery';
+import { costeLiderazgo } from '../liderazgo';
 import { avanzarAtaquesBandidos } from '../bandidos';
 import type { CaravanaConEscolta } from '../tropa';
 import { createRng } from '../../worldgen';
 import {
   aceptarTrueque,
   agregarCarroACaravana,
+  asignarEscoltaACaravana,
   avanzarComercio,
   cancelarPreparacionCaravana,
   comprarAnimalParaCaravana,
@@ -22,6 +24,7 @@ import {
   moverCarroEntreCaravanas,
   prepararCaravanaManual,
   proponerTrueque,
+  retirarEscoltaDeCaravana,
   CaravanaInvalidaError,
 } from '../trade';
 import { almacenSintetico, caravanaComercialCasiLlegando, mapaSintetico } from './tradeFixtures';
@@ -459,7 +462,7 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
   });
 
   function preparar(caravana: Caravana, carga: Record<string, number>) {
-    return prepararCaravanaManual(caravana, origen, destino, carga, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
+    return prepararCaravanaManual(caravana, origen, destino, carga, [], [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
   }
 
   it('una caravana de 1 carro sale al instante (prepTicks 0): pasa directo a en_transito', () => {
@@ -489,7 +492,7 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
   it('salida programada: reserva la carga ya, espera en el origen hasta la hora, y entonces sale', () => {
     const una = caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]);
     const saleEn = instanteDeTest(60);
-    const r = prepararCaravanaManual(una, origen, destino, { piedra: 100 }, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), saleEn);
+    const r = prepararCaravanaManual(una, origen, destino, { piedra: 100 }, [], [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), saleEn);
 
     expect(r.caravana.estado, 'aunque un carro saldría al instante').toBe('preparando');
     expect(r.caravana.preparaHasta).toBe(saleEn);
@@ -506,10 +509,10 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
       { tipoCarro: 'basico', animal: 'buey' },
       { tipoCarro: 'basico', animal: 'buey' },
     ]);
-    const demasiadoPronto = prepararCaravanaManual(dos, origen, destino, { piedra: 120 }, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), instanteDeTest(1));
+    const demasiadoPronto = prepararCaravanaManual(dos, origen, destino, { piedra: 120 }, [], [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), instanteDeTest(1));
     expect(demasiadoPronto.caravana.preparaHasta).toBe(instanteDeTest(CARAVANA_PREPARACION.kPorCarro));
 
-    const programada = prepararCaravanaManual(dos, origen, destino, { piedra: 120 }, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), instanteDeTest(500));
+    const programada = prepararCaravanaManual(dos, origen, destino, { piedra: 120 }, [], [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0), instanteDeTest(500));
     const cancelada = cancelarPreparacionCaravana(programada.caravana, programada.asentamiento);
     expect(cancelada.caravana.estado).toBe('disponible');
     expect(cancelada.asentamiento.almacen['piedra']!.cantidad).toBe(300);
@@ -517,7 +520,7 @@ describe('lanzamiento manual de una caravana (Doc 3.13.3)', () => {
 
   it('rechaza una hora de salida pasada o demasiado lejana', () => {
     const una = caravanaDe([{ tipoCarro: 'basico', animal: 'buey' }]);
-    const conSalida = (t: number) => () => prepararCaravanaManual(una, origen, destino, { piedra: 10 }, [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(10), instanteDeTest(t));
+    const conSalida = (t: number) => () => prepararCaravanaManual(una, origen, destino, { piedra: 10 }, [], [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(10), instanteDeTest(t));
     expect(conSalida(10)).toThrow(CaravanaInvalidaError);
     expect(conSalida(5)).toThrow(CaravanaInvalidaError);
     expect(conSalida(10 + CARAVANA_PREPARACION.maxProgramacionDias * 24 * 60 + 1)).toThrow(CaravanaInvalidaError);
@@ -578,25 +581,93 @@ describe('escolta sin héroe (Doc 3.13.4)', () => {
     carros: [{ tipoCarro: 'basico', animal: 'buey' }],
   });
 
-  it('cupoEscolta sale del nivel interno del Mercado (1/2/3)', () => {
-    expect(cupoEscolta(origenConMercado(1))).toBe(CARAVANA_ESCOLTA.cupoPorNivelMercado[0]);
-    expect(cupoEscolta(origenConMercado(3))).toBe(CARAVANA_ESCOLTA.cupoPorNivelMercado[2]);
+  it('cupoEscolta sale del nivel interno del Mercado, en puntos de Liderazgo (100/200/300)', () => {
+    expect(cupoEscolta(origenConMercado(1))).toBe(CARAVANA_ESCOLTA.liderazgoPorNivelMercado[0]);
+    expect(cupoEscolta(origenConMercado(3))).toBe(CARAVANA_ESCOLTA.liderazgoPorNivelMercado[2]);
   });
 
-  it('prepararCaravanaManual engancha la escolta y rechaza por encima del cupo', () => {
+  // milicia_lanceros cuesta `costeLiderazgo` (escalón 1 → 7); el cupo del nivel 1 son 100 → caben 14 y la 15ª no.
+  const coste = costeLiderazgo('milicia_lanceros');
+  const lanceros = (n: number, desde = 0) => Array.from({ length: n }, (_, i) => esc(`l${desde + i}`));
+
+  it('prepararCaravanaManual engancha la escolta y rechaza por encima del cupo de Liderazgo', () => {
     const origen = origenConMercado(1);
-    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
-    expect(r.caravana.escoltaIds).toEqual(['e1']);
+    const cabe = Math.floor(CARAVANA_ESCOLTA.liderazgoPorNivelMercado[0] / coste);
+    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, lanceros(cabe), [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
+    expect(r.caravana.escoltaIds).toHaveLength(cabe);
     expect(r.tropa[0]!.contenedor, 'la escuadra sale del campamento a la escolta').toEqual({ tipo: 'escolta', caravanaId: 'c1' });
 
     expect(() =>
-      prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1'), esc('e2')], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0))
-    ).toThrow(CaravanaInvalidaError); // cupo nivel 1 = 1
+      prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, lanceros(cabe + 1), [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0))
+    ).toThrow(/cupo/);
+  });
+
+  it('asignarEscoltaACaravana: cada escuadra gasta su coste de Liderazgo del cupo de la caravana, sea de quien sea', () => {
+    const origen = origenConMercado(1);
+    const cabe = Math.floor(CARAVANA_ESCOLTA.liderazgoPorNivelMercado[0] / coste);
+    const primera = asignarEscoltaACaravana(caravana1Carro(), origen, lanceros(cabe - 1), []);
+    expect(primera.caravana.escoltaIds).toHaveLength(cabe - 1);
+    expect(primera.tropa[0]!.contenedor).toEqual({ tipo: 'escolta', caravanaId: 'c1' });
+
+    // Otro residente completa el cupo; la siguiente ya no cabe.
+    const segunda = asignarEscoltaACaravana(primera.caravana, origen, [escuadronDePrueba('x1', 'j2', 'milicia_lanceros', 30)], primera.tropa);
+    expect(segunda.caravana.escoltaIds).toHaveLength(cabe);
+    expect(() => asignarEscoltaACaravana(segunda.caravana, origen, [esc('mas')], [...primera.tropa, ...segunda.tropa])).toThrow(/cupo/);
+  });
+
+  it('el coste va por escalón: pocas escuadras caras llenan lo que muchas baratas', () => {
+    const origen = origenConMercado(1); // 100 pts
+    const elite = (id: string) => escuadronDePrueba(id, 'j1', 'hequetai', 5);
+    const costeElite = costeLiderazgo('hequetai');
+    const caben = Math.floor(100 / costeElite);
+    expect(costeElite).toBeGreaterThan(coste);
+    expect(() => asignarEscoltaACaravana(caravana1Carro(), origen, Array.from({ length: caben + 1 }, (_, i) => elite(`g${i}`)), [])).toThrow(/cupo/);
+    expect(asignarEscoltaACaravana(caravana1Carro(), origen, Array.from({ length: caben }, (_, i) => elite(`g${i}`)), []).caravana.escoltaIds).toHaveLength(caben);
+  });
+
+  it('el coste no baja aunque la escuadra tenga menos gente', () => {
+    const origen = origenConMercado(1);
+    const mermadas = Array.from({ length: Math.floor(100 / coste) + 1 }, (_, i) => esc(`m${i}`, 1));
+    expect(() => asignarEscoltaACaravana(caravana1Carro(), origen, mermadas, [])).toThrow(/cupo/);
+  });
+
+  it('asignarEscoltaACaravana: solo con la caravana parada en su origen, sin repetir y sin dejarla vacía', () => {
+    const origen = origenConMercado(3);
+    expect(() => asignarEscoltaACaravana({ ...caravana1Carro(), estado: 'en_transito' }, origen, [esc('e1')], [])).toThrow(CaravanaInvalidaError);
+    expect(() => asignarEscoltaACaravana({ ...caravana1Carro(), tipo: 'construccion' }, origen, [esc('e1')], [])).toThrow(CaravanaInvalidaError);
+    expect(() => asignarEscoltaACaravana({ ...caravana1Carro(), origenAsentamientoId: 'otro' }, origen, [esc('e1')], [])).toThrow(CaravanaInvalidaError);
+    expect(() => asignarEscoltaACaravana(caravana1Carro(), origen, [], [])).toThrow(CaravanaInvalidaError);
+    expect(() => asignarEscoltaACaravana(caravana1Carro(), origen, [esc('e1'), esc('e1')], [])).toThrow(CaravanaInvalidaError);
+  });
+
+  it('retirarEscoltaDeCaravana devuelve los ids que se van y deja el resto', () => {
+    const origen = origenConMercado(3);
+    const uno = asignarEscoltaACaravana(caravana1Carro(), origen, [esc('e1')], []);
+    const dos = asignarEscoltaACaravana(uno.caravana, origen, [esc('e2')], uno.tropa).caravana;
+    const r = retirarEscoltaDeCaravana(dos, ['e1']);
+    expect(r.escoltaLiberada).toEqual(['e1']);
+    expect(r.caravana.escoltaIds).toEqual(['e2']);
+    expect(retirarEscoltaDeCaravana(r.caravana, ['e2']).caravana.escoltaIds).toBeUndefined();
+    expect(() => retirarEscoltaDeCaravana(dos, ['otra'])).toThrow(CaravanaInvalidaError);
+    expect(() => retirarEscoltaDeCaravana({ ...dos, estado: 'en_transito' }, ['e1'])).toThrow(CaravanaInvalidaError);
+  });
+
+  it('lanzar a mano una caravana ya escoltada suma lo cedido al cupo y lo conserva', () => {
+    const origen = origenConMercado(1);
+    const cabe = Math.floor(100 / coste);
+    const conUna = asignarEscoltaACaravana(caravana1Carro(), origen, lanceros(cabe - 1), []);
+    const r = prepararCaravanaManual(conUna.caravana, origen, destino, { piedra: 100 }, [esc('nueva')], conUna.tropa, mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
+    expect(r.caravana.escoltaIds).toHaveLength(cabe);
+    expect(r.tropa.map((t) => t.id), 'solo cambia de contenedor la nueva').toEqual(['nueva']);
+    expect(() => prepararCaravanaManual(conUna.caravana, origen, destino, { piedra: 100 }, [esc('n1'), esc('n2')], conUna.tropa, mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0))).toThrow(/cupo/);
+    // Sin añadir nada, sale con la que ya tiene.
+    const sola = prepararCaravanaManual(conUna.caravana, origen, destino, { piedra: 100 }, [], conUna.tropa, mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
+    expect(sola.caravana.escoltaIds).toHaveLength(cabe - 1);
   });
 
   it('cancelar libera la escolta: sus ids vuelven para ir al campamento', () => {
     const origen = origenConMercado(2);
-    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
+    const r = prepararCaravanaManual(caravana1Carro(), origen, destino, { piedra: 100 }, [esc('e1')], [], mapaSintetico(), SIN_TERRITORIO, instanteDeTest(0));
     const cancelada = cancelarPreparacionCaravana({ ...r.caravana, estado: 'preparando' }, r.asentamiento);
     expect(cancelada.caravana.escoltaIds).toBeUndefined();
     expect(cancelada.escoltaLiberada).toEqual(['e1']);

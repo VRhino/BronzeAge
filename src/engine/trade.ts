@@ -54,6 +54,7 @@ import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
 import { calcularPrecioReferencia } from './market';
+import { liderazgoComprometido } from './liderazgo';
 import { cupoCaravanas, cupoEscolta, puedeCrearCaravana, cooldownCaravanaRestante, tieneMercadoActivo } from './asentamientoQuery';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { aristasDeRed, peajeDe, podarRutas, registrarRuta, trazarRutaComercial } from './redCaminos';
@@ -263,13 +264,29 @@ export function construirCaravanaComercial(
 }
 
 /**
+ * El cupo de escolta es de la caravana y se mide en Liderazgo (Doc 3.13.4): lo que ya tiene cedido (`cedidas`) más lo que se
+ * añade no pasa del cupo del Mercado del origen. No se mira el Liderazgo de quien presta: paga la caravana.
+ */
+function exigirCupoEscolta(origen: Asentamiento, cedidas: readonly Escuadron[], nuevas: readonly Escuadron[]): void {
+  const cupo = cupoEscolta(origen);
+  const usado = liderazgoComprometido([...cedidas, ...nuevas]);
+  if (usado > cupo) throw new CaravanaInvalidaError(`La escolta (${usado} pts de Liderazgo) supera el cupo de la caravana (${cupo}).`);
+}
+
+/** Liderazgo que gasta la escolta de una caravana y cupo que le da su Mercado, para mostrarlo ("40/100"). */
+export function liderazgoDeEscolta(caravana: Caravana, origen: Asentamiento, tropa: ReadonlyMap<string, Escuadron>): { usado: number; cupo: number } {
+  const cedidas = (caravana.escoltaIds ?? []).flatMap((id) => tropa.get(id) ?? []);
+  return { usado: liderazgoComprometido(cedidas), cupo: cupoEscolta(origen) };
+}
+
+/**
  * Lanza una caravana comercial A MANO (Doc 3.13.3): el jugador elige carga, destino y —opcionalmente— una
  * escolta de escuadrones (Doc 3.13.4). La carga se reserva del almacén ya, y la caravana pasa por el estado
  * `'preparando'` en el origen —`kPorCarro × (nº carros − 1)` ticks, 0 para una de un solo carro— antes de
  * salir. `cancelarPreparacionCaravana` la revierte con devolución total (carga Y escolta).
  *
  * `escolta` son los escuadrones YA elegidos del campamento (`seleccionarEscoltaCaravana`); aquí solo se
- * comprueba el cupo del Mercado. Salen marcados como escolta de esta caravana en `tropa`, para devolvérselos a
+ * comprueba el cupo de Liderazgo del Mercado. Salen marcados como escolta de esta caravana en `tropa`, para devolvérselos a
  * su héroe.
  */
 export function prepararCaravanaManual(
@@ -278,6 +295,8 @@ export function prepararCaravanaManual(
   destino: Asentamiento,
   carga: Record<string, number>,
   escolta: Escuadron[],
+  /** Las escuadras que la caravana ya tiene cedidas (`escoltaIds`): cuentan con las nuevas contra el cupo. */
+  yaCedidas: readonly Escuadron[],
   mapa: Mapa,
   /** Para trazar (atracción, paso forzado por ciudades ajenas) y registrar la ruta en la red (Doc 1.6). */
   territorio: { red: RedCaminos; asentamientos: readonly Asentamiento[]; zonas: readonly ZonaInfluencia[] },
@@ -309,10 +328,9 @@ export function prepararCaravanaManual(
       throw new CaravanaInvalidaError(`No hay ${recurso} suficiente en el almacén de ${origen.id}.`);
     }
   }
-  const cupo = cupoEscolta(origen);
-  if (escolta.length > cupo) {
-    throw new CaravanaInvalidaError(`La escolta (${escolta.length}) supera el cupo del Mercado (${cupo}).`);
-  }
+  // El cupo es de la caravana, no del héroe: lo que ya se le cedió (`asignarEscoltaACaravana`) cuenta con lo que se añade ahora.
+  exigirCupoEscolta(origen, yaCedidas, escolta);
+  const yaCedida = caravana.escoltaIds ?? [];
   const trazado = trazarRutaComercial(mapa, territorio.red, origen, destino, territorio.asentamientos, territorio.zonas);
   if (!trazado) throw new CaravanaInvalidaError('No hay ruta por tierra hasta el destino (el agua y los ríos sin vado no se cruzan).');
 
@@ -339,7 +357,7 @@ export function prepararCaravanaManual(
       ruta: trazado.ruta,
       peajes: trazado.peajes.length > 0 ? trazado.peajes : undefined,
       preparaHasta: saleEn > instante ? saleEn : undefined,
-      escoltaIds: escolta.length > 0 ? escolta.map((e) => e.id) : undefined,
+      escoltaIds: yaCedida.length + escolta.length > 0 ? [...yaCedida, ...escolta.map((e) => e.id)] : undefined,
     },
     tropa: escolta.map((e) => ({ ...e, contenedor: { tipo: 'escolta', caravanaId: caravana.id } })),
     red: registrarRuta(territorio.red, origen, destino, trazado.ruta, instante),
@@ -366,6 +384,42 @@ export function seleccionarEscoltaCaravana(
     if (e.cantidad <= 0) throw new CaravanaInvalidaError(`El escuadrón ${id} está aniquilado.`);
     return e;
   });
+}
+
+/**
+ * Cede escuadrones a una caravana comercial PARADA en su origen (`disponible`), antes de que salga (Doc 3.13.4): el reparto automático la
+ * manda ya escoltada y la escolta vuelve a su campamento al acabar el viaje. El cupo (`cupoEscolta`: 100/200/300 pts de Liderazgo según el Mercado) es de
+ * la caravana, no de cada héroe: lo que ya tenía cedido (`yaCedidas`, de quien sea) cuenta con lo que se añade, y no gasta el Liderazgo de quien presta. `escolta` son escuadrones YA elegidos
+ * (`seleccionarEscoltaCaravana`); salen marcados como escolta de esta caravana en `tropa`.
+ */
+export function asignarEscoltaACaravana(
+  caravana: Caravana,
+  origen: Asentamiento,
+  escolta: Escuadron[],
+  yaCedidas: readonly Escuadron[]
+): { caravana: Caravana; tropa: Escuadron[] } {
+  if (caravana.tipo !== 'comercial') throw new CaravanaInvalidaError('Solo las caravanas comerciales llevan escolta sin héroe.');
+  if (caravana.estado !== 'disponible') throw new CaravanaInvalidaError('La escolta se cede con la caravana parada en su origen.');
+  if (caravana.origenAsentamientoId !== origen.id) throw new CaravanaInvalidaError('Ese asentamiento no es el origen de la caravana.');
+  if (escolta.length === 0) throw new CaravanaInvalidaError('Hay que ceder al menos un escuadrón.');
+  if (new Set(escolta.map((e) => e.id)).size !== escolta.length) throw new CaravanaInvalidaError('Un escuadrón no se cede dos veces.');
+  exigirCupoEscolta(origen, yaCedidas, escolta);
+  const yaCedida = caravana.escoltaIds ?? [];
+  return {
+    caravana: { ...caravana, escoltaIds: [...yaCedida, ...escolta.map((e) => e.id)] },
+    tropa: escolta.map((e) => ({ ...e, contenedor: { tipo: 'escolta', caravanaId: caravana.id } })),
+  };
+}
+
+/** Retira escuadrones de la escolta de una caravana parada en su origen; devuelve sus ids para que el llamador los vuelva a su campamento. */
+export function retirarEscoltaDeCaravana(caravana: Caravana, escuadronIds: readonly string[]): { caravana: Caravana; escoltaLiberada: string[] } {
+  if (caravana.estado !== 'disponible') throw new CaravanaInvalidaError('La escolta solo se retira con la caravana parada en su origen.');
+  const cedida = caravana.escoltaIds ?? [];
+  if (escuadronIds.length === 0 || !escuadronIds.every((id) => cedida.includes(id))) {
+    throw new CaravanaInvalidaError('Esos escuadrones no están en la escolta de esta caravana.');
+  }
+  const quedan = cedida.filter((id) => !escuadronIds.includes(id));
+  return { caravana: { ...caravana, escoltaIds: quedan.length > 0 ? quedan : undefined }, escoltaLiberada: [...escuadronIds] };
 }
 
 /** Cancela la preparación de una caravana: devuelve la carga al almacén y la escolta al campamento (Doc 3.13.3),

@@ -186,6 +186,8 @@ Las batallas con algún héroe humano se juegan como partidas reales en Unity (5
 
 Cada Héroe tiene un valor de **Liderazgo**, y cada tropa (tipo) un **coste de Liderazgo**. Al salir a campaña, la suma de los costes de los escuadrones que ese Héroe se lleva no puede exceder su Liderazgo.
 
+**El Liderazgo solo lo afecta lo que el héroe carga consigo** (mundo abierto, batallas…). Cuando presta tropas de cualquier manera —guarnición (5.15.3), escolta de una caravana (Doc 3.13.4)— el coste lo asume quien las **recibe**, con su propio cupo, no el que presta.
+
 **Es un límite de SALIDA, no de posesión.** Se pueden poseer muchos más escuadrones de los que se pueden sacar de una vez. Lo que se queda en el campamento no defiende por sí solo: solo la guarnición que el héroe asigna, que tiene su propio cupo y no gasta Liderazgo (5.15.3). Esto convierte "¿qué me llevo?" en la decisión central de cada campaña. La selección se puede guardar como **loadout** (5.16.5).
 
 En un ejército de varios héroes, **cada uno se valida contra SU propio Liderazgo, por separado**. No hay tope agregado del ejército: cuatro jugadores juntos sacan cuatro veces más.

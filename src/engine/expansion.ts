@@ -140,6 +140,8 @@ export interface PayloadFundado {
   caravanaId: string;
   posicion: Point;
   heroesIds: string[];
+  /** El nombre que recibe (de `NOMBRES_DE_CIUDADES`); ausente si ya se usaron todos. */
+  nombre?: string;
 }
 
 export function desarmarCaravanaFundacion(caravana: Caravana, posicionOrigen: Point | undefined, mundo: MundoDeDevolucion, facciones: readonly Faccion[]): MundoDeDevolucion {

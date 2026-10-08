@@ -188,8 +188,8 @@ async function enElCampamento(ctx: ContextoBot, casa: CampamentoMercenarios, fac
 
 const tropaEnCampamento = (escuadrones: readonly Escuadron[]) => escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && e.cantidad > 0);
 
-/** La ración gratis con la que sale (D24, D81): los minutos de marcha de la columna con la que sale. */
-const racionAlSalir = (escuadras: readonly Escuadron[]) => Math.round(consumoRacionDeColumna(escuadras, 1) * MERCENARIOS.racion.minutos);
+/** La ración gratis con la que sale (D24, D90): la misma para todos, hasta lo que quepa en el carro. */
+const racionAlSalir = (): number => MERCENARIOS.racion.trigo;
 
 /** Cuántos héroes con su leva prestada hacen falta para vencer ese poder. */
 const heroesPara = (poder: number) => Math.floor(poder / PODER_PRESTADO) + 1;
@@ -202,7 +202,7 @@ function presaConocida(ctx: ContextoBot, desde: Point, listos: number): { posici
   const leva = ctx.vista.heroe!.escuadrones.filter((e) => e.prestada);
   return [...ctx.pizarra.bandidos.values()]
     .filter((b) => ctx.vista.instante - b.vistoEn <= VIGENCIA_BANDIDO_MS && heroesPara(b.poder) <= listos)
-    .filter((b) => leva.length === 0 || 2 * trigoDelViaje(ctx, desde, b.posicion, leva) * MARGEN_TRIGO <= racionAlSalir(leva))
+    .filter((b) => leva.length === 0 || 2 * trigoDelViaje(ctx, desde, b.posicion, leva) * MARGEN_TRIGO <= racionAlSalir())
     .sort((a, b) => distancia(a.posicion, desde) - distancia(b.posicion, desde))[0];
 }
 

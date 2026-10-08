@@ -14,10 +14,9 @@ import { entrarEnCampamento, salirDelCampamento } from '../comandos/presencia';
 import { atacar } from '../comandos/interaccion';
 import { separarseDelEjercito, unirseEnCampo } from '../comandos/columna';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
-import { consumoRacionDeColumna } from '../../engine/tropas';
 
-/** La ración gratis con la que sale una columna con estas escuadras (D24, D51). */
-const racionCon = (escuadrones: readonly Escuadron[] = []) => Math.round(consumoRacionDeColumna(escuadrones, 1) * MERCENARIOS.racion.minutos);
+/** La ración gratis con la que sale una columna (D24, D90): la misma sea cual sea la tropa. */
+const racionCon = (_escuadrones: readonly Escuadron[] = []) => MERCENARIOS.racion.trigo;
 
 const PARAMS = { displayName: 'Ana', classDefinitionId: 'Spear', genero: 'femenino' as const, avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } };
 

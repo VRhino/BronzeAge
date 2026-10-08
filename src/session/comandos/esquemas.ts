@@ -326,6 +326,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
     },
     ['caravanaId', 'heroeId', 'destinoAsentamientoId', 'carga']
   ),
+  asignarEscolta: objeto({ caravanaId: IDENTIFICADOR, heroeId: IDENTIFICADOR, escuadronIds: { type: 'array', items: IDENTIFICADOR } }, ['caravanaId', 'heroeId', 'escuadronIds']),
+  quitarEscolta: objeto({ caravanaId: IDENTIFICADOR, heroeId: IDENTIFICADOR, escuadronIds: { type: 'array', items: IDENTIFICADOR } }, ['caravanaId', 'heroeId']),
   cancelarCaravana: objeto({ caravanaId: IDENTIFICADOR }, ['caravanaId']),
   moverCarroCaravana: objeto(
     { desdeCaravanaId: IDENTIFICADOR, haciaCaravanaId: IDENTIFICADOR, carroIndice: NUMERO },

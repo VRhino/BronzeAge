@@ -42,7 +42,7 @@ import { seguirPresa } from './persecucion';
 import { esperaDestino, sucesorEnFormacion } from './formacion';
 import { enRefugio } from './zones';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
-import { avanzarRacion, consumoRacionDeColumna, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
+import { avanzarRacion, consumoRacionDeEscuadrones, reservaDeTrigo } from './tropas';
 import { puedeLlevar } from './liderazgo';
 import { esResidente, estanAliadas } from './pertenencia';
 import { lineasPendientes, type LadoTrueque } from './trueque';
@@ -581,10 +581,10 @@ export function salirDelCampamento(
     suministro[recurso] = (suministro[recurso] ?? 0) + pedido;
     hueco -= pedido;
   }
-  // La ración gratis del residente (D24, D51): al salir, si ya pasó el plazo desde la última, lo que come en marcha esta columna
-  // durante `MERCENARIOS.racion.minutos`. No se acumula: sobra y vuelve al entrar.
+  // La ración gratis del residente (D24, D51, D90): al salir, si ya pasó el plazo desde la última, `MERCENARIOS.racion.trigo` de trigo
+  // (hasta llenar el carro). No se acumula: sobra y vuelve al entrar.
   const toca = heroe.racionEn === undefined || instante - heroe.racionEn >= MERCENARIOS.racion.cadaMinutos * 60_000;
-  const racion = toca ? Math.min(Math.round(consumoRacionDeColumna(escuadrones, 1) * MERCENARIOS.racion.minutos), Math.max(0, hueco)) : 0;
+  const racion = toca ? Math.min(MERCENARIOS.racion.trigo, Math.max(0, hueco)) : 0;
   if (racion > 0) suministro['trigo'] = (suministro['trigo'] ?? 0) + racion;
   const columnaId = aparcada?.id ?? id;
   const comoEjercito = politicaDeUnion !== 'rechazar';
@@ -1064,10 +1064,11 @@ export function separarseDelEjercito(
 export function desgajar(ejercito: EjercitoConTropa, heroeId: string, id: string): { ejercito: EjercitoConTropa; columna: EjercitoConTropa } {
   const dentro = ejercito.participantes.find((p) => p.heroeId === heroeId)!;
   const suyos = ejercito.escuadrones.filter((e) => e.heroeId === heroeId);
-  // Se lleva COMO MUCHO un carro, que es lo que aportó (Doc 5.13). Se reparte a prorrata sobre lo que haya:
-  // el carro es común mientras se marcha junto, así que no hay "su" trigo que devolver, solo una parte.
+  // Se lleva COMO MUCHO un carro, que es lo que aportó (Doc 5.13). Se reparte a prorrata sobre lo que haya: el carro es común
+  // mientras se marcha junto, así que no hay "su" trigo que devolver, solo su parte —una entre todos los que marchan—. Sin ese reparto el
+  // primero en irse se llevaba hasta un carro entero y el que se quedaba (el Líder, que vuelve a casa) se quedaba sin trigo.
   const total = Object.values(ejercito.suministro).reduce((suma, c) => suma + c, 0);
-  const seLleva = Math.min(capacidadCarrosDe(1), total);
+  const seLleva = Math.min(capacidadCarrosDe(1), total / Math.max(1, ejercito.participantes.length));
   const fraccion = total > 0 ? seLleva / total : 0;
   const suministroColumna: Record<string, number> = {};
   const suministroResto: Record<string, number> = {};

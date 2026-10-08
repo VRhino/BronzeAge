@@ -100,13 +100,13 @@ export function cupoMiradas(asentamiento: Asentamiento): number {
 }
 
 /**
- * Cuántos escuadrones-escolta admite una caravana lanzada desde este asentamiento (Doc 3.13.4): según el
- * nivel interno de su Mercado (1/2/3 → `CARAVANA_ESCOLTA.cupoPorNivelMercado`). 0 sin Mercado activo.
+ * Cupo de escolta de una caravana de este asentamiento (Doc 3.13.4), en puntos de Liderazgo: según el nivel
+ * interno de su Mercado (`CARAVANA_ESCOLTA.liderazgoPorNivelMercado`). 0 sin Mercado activo.
  */
 export function cupoEscolta(asentamiento: Asentamiento): number {
   const mercado = edificiosPorTipoYEstado(asentamiento, 'mercado')[0];
   if (!mercado) return 0;
-  return CARAVANA_ESCOLTA.cupoPorNivelMercado[nivelInternoActual(mercado) - 1] ?? 0;
+  return CARAVANA_ESCOLTA.liderazgoPorNivelMercado[nivelInternoActual(mercado) - 1] ?? 0;
 }
 
 /**

@@ -1037,7 +1037,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `admitirOtrasFacciones` (Doc 2.2, 5.15.1b): el ajuste del Rey sobre sus ataques.
       // +2 con la formación de ejércitos en campo (Doc 5.14.4): `organizarEjercito` y `cancelarFormacion`.
       // +1 con `ordenarEscuadras` (2026-10-07): el orden en que entran en combate las escuadras propias.
-      expect(cuerpo.oneOf.length).toBe(110);
+      // +2 con la escolta de las caravanas (Doc 3.13.4): `asignarEscolta` y `quitarEscolta`.
+      expect(cuerpo.oneOf.length).toBe(112);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });

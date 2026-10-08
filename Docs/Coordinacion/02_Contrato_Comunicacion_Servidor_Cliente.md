@@ -301,7 +301,7 @@ Un ejército avistado lleva `teSigue: true` cuando va tras una columna del jugad
 revela, y solo a quien persigue. De ahí sale el «te están persiguiendo».
 
 Capacidades DERIVADAS al servir (2026-10-07), para que el cliente no copie fórmulas: `heroe.capacidadAlmacenPersonal` (tope del almacén
-personal, Doc 2.5) y `ejercitos[].capacidadCarga` en cada ejército propio (lo que cabe en su carro con sus caravanas, `capacidadCargaDe`); el
+personal, Doc 2.5) y `caravanas[].escoltaLiderazgo { usado, cupo }` en cada caravana comercial propia (Liderazgo que gasta su escolta y cupo del Mercado de su origen, Doc 3.13.4; cada escuadra cedida cuesta su coste de Liderazgo y no el del héroe que la presta) y `ejercitos[].capacidadCarga` en cada ejército propio (lo que cabe en su carro con sus caravanas, `capacidadCargaDe`); el
 carro es `ejercitos[].suministro`, con `racion` el trigo gratis del campamento que no se puede guardar. `GET /v1/balance` publica además
 `MERCENARIOS` (préstamo de 15 unidades, ración, radios) y `ALMACEN_PERSONAL` en `mundoYMilitar`.
 

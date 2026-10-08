@@ -1401,11 +1401,12 @@ export const CARAVANA_PREPARACION = {
 };
 
 /**
- * Escolta sin héroe (Doc 3.13.4): un residente del origen cede escuadrones a una caravana como escolta
- * permanente por viaje. `cupoPorNivelMercado[n-1]` es cuántos escuadrones admite una caravana según el nivel
- * interno del Mercado del origen (1 → 1, 2 → 2, 3 → 3). Placeholder sin calibrar.
+ * Escolta sin héroe (Doc 3.13.4): un residente del origen cede escuadrones a una caravana como escolta por viaje.
+ * `liderazgoPorNivelMercado[n-1]` son los PUNTOS de Liderazgo (Doc 5.11.1) que admite una caravana según el nivel
+ * interno del Mercado del origen: cada escuadra cedida gasta su coste de Liderazgo del cupo de la caravana, no del
+ * héroe que la presta. Placeholder sin calibrar (2026-10-08: 100/200/300).
  */
-export const CARAVANA_ESCOLTA = { cupoPorNivelMercado: [1, 2, 3] as const };
+export const CARAVANA_ESCOLTA = { liderazgoPorNivelMercado: [100, 200, 300] as const };
 
 /**
  * Scoring de asignación de caravanas disponibles a lados pendientes de trueque (ampliación de comercio, a
@@ -2011,10 +2012,9 @@ export const MERCENARIOS = {
   intentosColocacion: 2000,
   /** Se mezcla con la seed del mapa: semilla derivada (D35), no consume el RNG de la partida. */
   salSemilla: 0x6d657263,
-  /** Ración gratis del residente (D24, D51, §8.1): al salir de su campamento, el trigo que come la columna con la que sale en
-   * estos minutos de marcha —medida en tropa, no en trigo fijo, para que llegue al anillo de bandidos y vuelva—; una vez cada
-   * tanto; no se acumula. PLACEHOLDER. */
-  racion: { minutos: 45, cadaMinutos: 30 },
+  /** Ración gratis del residente (D24, D51, D90): al salir de su campamento, este trigo en el carro (de 500: quedan 100 libres para
+   * lo que recoja), hasta llenarlo; una vez cada `cadaMinutos`; no se acumula. PLACEHOLDER. */
+  racion: { trigo: 400, cadaMinutos: 30 },
   /** Tropa prestada al residente (D25, D45, D80): escuadras de leva comunal de estas unidades, gratis al pedirlas y al reponerlas. PLACEHOLDER. */
   prestamo: { unidades: 15 },
   /** Ningún asentamiento se funda a menos de esto de un campamento (D16, §8.2): protección (60) + zona inicial (30) + margen. */
@@ -2069,8 +2069,9 @@ export const MERCENARIOS = {
   },
   // --- Refundar (paso 5) ---
   refundacion: {
-    /** La Caravana de Fundación comprada en un campamento cuesta esta fracción de una normal (`costoCaravanaFundacion`). */
-    porcentajeCoste: 0.75,
+    /** La Caravana de Fundación comprada en un campamento cuesta esta fracción de una normal (`costoCaravanaFundacion`). 0,75 → 0,4 el
+     * 2026-10-07 (D91). */
+    porcentajeCoste: 0.4,
   },
 } as const;
 
@@ -2253,9 +2254,9 @@ export const CAMPAMENTOS_BANDIDOS = {
    * de lanceros que pone en una batalla de Unity (poderBase 2: la mitad del poder); `oroPorHeroe`, el botín de cada héroe de la
    * columna que lo destruye (D22: solo oro). PLACEHOLDER. */
   niveles: {
-    1: { poder: 20, unidades: 10, oroPorHeroe: 9, peso: 0.5 },
-    2: { poder: 60, unidades: 30, oroPorHeroe: 10, peso: 0.3 },
-    3: { poder: 120, unidades: 60, oroPorHeroe: 11, peso: 0.2 },
+    1: { poder: 20, unidades: 10, oroPorHeroe: 30, peso: 0.5 },
+    2: { poder: 60, unidades: 30, oroPorHeroe: 33, peso: 0.3 },
+    3: { poder: 120, unidades: 60, oroPorHeroe: 36, peso: 0.2 },
   } as const,
   /** Rendimientos decrecientes por héroe (D26, §8.1): en una ventana de 24 h, botín completo en las primeras `completas`
    * destrucciones, luego `caidaPorCada` menos por cada una, y desde la `soloExperienciaDesde`ª nada de oro. */
