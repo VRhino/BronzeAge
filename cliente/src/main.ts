@@ -2123,8 +2123,12 @@ function renderLeyenda(state: GameState): void {
   legendBodyEl.innerHTML = legendTabActivo === 'mundo' ? legendMundoHtml : legendFaccionesHtml;
 }
 
+const LINEAS_DE_LOG = 500;
+
 function renderRegistro(state: GameState): void {
-  logEl.innerHTML = state.log.map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('');
+  // Solo con la pestaña a la vista y solo lo más reciente: pintar miles de líneas ocultas era el grueso del coste de cada render.
+  if (tabActivo !== 'registros') return;
+  logEl.innerHTML = state.log.slice(0, LINEAS_DE_LOG).map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('');
 }
 
 // Servicio de bots: habla directo con su canal de control (WebSocket), no con el backend del juego.
@@ -2172,6 +2176,7 @@ document.getElementById('main-tabs')!.addEventListener('click', (ev) => {
   if (!btn) return;
   tabActivo = btn.dataset.tab as 'guerra' | 'comercio' | 'asentamientos' | 'campamentos' | 'facciones' | 'jugadores' | 'politicas' | 'bots' | 'registros' | 'generacionMundo';
   actualizarTabs();
+  render();
 });
 
 document.getElementById('tab-comercio')!.addEventListener('click', (ev) => {
@@ -2326,15 +2331,16 @@ function render(): void {
   actualizarInfoTruequeAsentamientos(state);
   actualizarInfoFlota(state);
   renderPanelAsentamientos(state);
-  renderAsentamientosTab(state);
-  renderFaccionesTab(state);
-  renderCampamentosTab(state);
-  renderJugadoresTab(state);
+  // Las pestañas ocultas no se pintan; al cambiar de pestaña se repinta (ver `actualizarTabs`).
+  if (tabActivo === 'asentamientos') renderAsentamientosTab(state);
+  if (tabActivo === 'facciones') renderFaccionesTab(state);
+  if (tabActivo === 'campamentos') renderCampamentosTab(state);
+  if (tabActivo === 'jugadores') renderJugadoresTab(state);
   renderPanelPolitica(state);
   renderPanelProgresion(state);
   renderPanelCronica();
   renderPanelMilitar(state);
-  renderPanoramaGuerra(state);
+  if (tabActivo === 'guerra') renderPanoramaGuerra(state);
   renderPanelEconomia(state);
   renderLeyenda(state);
   renderRegistro(state);

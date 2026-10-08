@@ -104,6 +104,9 @@ export type EventoLog = EventoLogAdmin;
  * Vivía en `@motor/session/estado` hasta el 2026-09-09, cuando se retiró de ahí por ser puro cliente y su
  * único consumidor de producción ser esta herramienta.
  */
+/** Cuántos eventos del historial se guardan en el cliente (los más recientes). */
+const MAX_EVENTOS_EN_MEMORIA = 2000;
+
 function proyectarLog(eventos: readonly EventoDominio[]): EventoLog[] {
   return eventos.map((e) => ({
     momento: e.momento,
@@ -291,7 +294,8 @@ export class GameStore {
     try {
       const { eventos } = await consultarEventos(this.gameId, this.cursorEventos);
       if (eventos.length === 0) return;
-      this.eventos = [...[...eventos].reverse(), ...this.eventos];
+      // Tope: en una partida larga el historial crece sin fin y cada render lo recorría entero (crónica, log).
+      this.eventos = [...[...eventos].reverse(), ...this.eventos].slice(0, MAX_EVENTOS_EN_MEMORIA);
       this.cursorEventos = Math.max(this.cursorEventos, ...eventos.map((e) => e.version));
     } catch (err) {
       this.registrarRechazoEfimero(`no se pudo leer el historial: ${this.mensajeDeError(err)}`);

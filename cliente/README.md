@@ -3,6 +3,8 @@
 > **v0.2.0 · último cambio 2026-10-06** — pasada de usabilidad del cliente admin. Sigue siendo de solo lectura
 > salvo las acciones de administración (Mundo, Bots, NPC de Facción) y sigue acoplado al motor por tipos/consultas.
 >
+> - **Rendimiento** (2026-10-08): solo se repinta la pestaña a la vista; el historial del cliente se acota a 2000 eventos y el
+>   Registro pinta las 500 líneas más recientes (con 30 000 eventos, cambiar de Facción pasaba de ~15 ms a ~365 ms).
 > - **Subpestañas comunes** (`src/ui/subpestanas.ts`) en Bots, Facción, Jugadores, Asentamientos y Guerra.
 > - **Sigilo dibujado** (`src/sigilo/`, copia del dibujo del cliente jugador + `catalogoSigilos.json` del backend):
 >   antes solo se pintaba un cuadrado bicolor. Chip de Facción con su escudo; `htmlNombreConSigilo` para chips y cabeceras.
