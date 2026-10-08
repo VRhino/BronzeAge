@@ -34,7 +34,7 @@ contador en su semana objetivo (Doc 6.3). Plan y bitácora: `Consideraciones/Tec
 
 ## 34. La economía no llena los víveres de un ejército
 
-**2026-10-08:** la columna ya no come del carro sino de los **víveres** (350 por héroe, a media ración en marcha y a una décima de eso acampada;
+**2026-10-08:** la columna ya no come del carro sino de los **víveres** (350 por héroe, a un cuarto de ración en marcha y a una décima de eso acampada;
 Doc 5.13). Lo que hay que volver a medir es si las plazas llenan esos 350 sin bajar de su reserva, y si 350 sostiene el
 radio operativo con tropa propia (calculado con la prestada completa, 85 soldados).
 

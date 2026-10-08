@@ -519,7 +519,7 @@ Hay **dos productos**, los dos **exactos en el instante de la compra**: la infor
 
 **Un ejército en marcha NO come del almacén de su asentamiento.** Come de los **víveres** de sus héroes. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
 
-**En marcha se come media ración** (2026-10-08): una columna en movimiento come la mitad de lo que come esa tropa en guarnición (`LOGISTICA.factorConsumoEnMarcha`), sus soldados y sus héroes; **acampada, una décima parte de eso** (`LOGISTICA.factorConsumoEstacionado`). La guarnición sigue comiendo la ración entera del almacén.
+**En marcha se come un cuarto de ración** (2026-10-08, decisión del usuario; primero fue la mitad): una columna en movimiento come la cuarta parte de lo que come esa tropa en guarnición (`LOGISTICA.factorConsumoEnMarcha`), sus soldados y sus héroes; **acampada, una décima parte de eso** (`LOGISTICA.factorConsumoEstacionado`). La guarnición sigue comiendo la ración entera del almacén.
 
 Cada héroe lleva tres cosas distintas, y no se mezclan:
 
@@ -547,7 +547,7 @@ La capacidad de los víveres **no es un número elegido, es una consecuencia**. 
 
 > **Un jugador solo, con sus víveres, tiene que poder recorrer al menos un cuarto del mapa ida y vuelta con la comida que lleva.**
 
-Sobre el mapa de 2000×2000 eso son 1.000 unidades de recorrido, 50 minutos a velocidad ligera (20). La tropa prestada completa de un campamento (85 soldados, Doc 1.9b) más su héroe comen en marcha `(85 × 0.15 + 0.5) × 0.5 ≈ 6,6` por minuto: 331 en ese trayecto. De ahí los **350** de víveres por héroe.
+Sobre el mapa de 2000×2000 eso son 1.000 unidades de recorrido, 50 minutos a velocidad ligera (20). La tropa prestada completa de un campamento (85 soldados, Doc 1.9b) más su héroe comen en marcha `(85 × 0.15 + 0.5) × 0.25 ≈ 3,3` por minuto: 166 en ese trayecto. Los **350** de víveres por héroe se fijaron con el consumo a la mitad y se dejan así: hoy dan el doble de autonomía de la que exige la regla (a recalibrar con batch).
 
 Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a ser también un atributo logístico**: un ejército rápido cubre más mapa con la misma comida. Un ejército pesado tiene la mitad de alcance con el mismo carro — y por eso necesita caravanas.
 

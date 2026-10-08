@@ -46,7 +46,7 @@ import type { ContadorLogro, EdificioCampamentoTipo, EdificioTipo, EraId, GrupoP
  *   `OCUPACION.proteccionMinutos`, `BATALLA.capacidad.asedio` a 5, fuera `CIUDADANIA.casas*`,
  *   `MANTENIMIENTO.edificiosReferencia` en lugar de `poblacionReferencia`, y los cambios de
  *   población, experiencia de Facción y ascenso de la rama `ritmo-crecimiento`.
- * v13 (2026-10-08): víveres — `LOGISTICA.capacidadViveresPorHeroe` y `factorConsumoEnMarcha` (`factorConsumoEstacionado`
+ * v13 (2026-10-08): víveres — `LOGISTICA.capacidadViveresPorHeroe` y `factorConsumoEnMarcha` (0.25; `factorConsumoEstacionado`
  *   pasa a ser relativo a la marcha; fuera `autonomiaTicksObjetivo`), `MERCENARIOS.racion` sin `trigo`, fuera `MERCENARIOS.prestamo`
  *   (la tropa prestada sale completa); `LOGISTICA` se publica en `mundoYMilitar`.
  */
@@ -1969,10 +1969,10 @@ export const LOGISTICA = {
    */
   capacidadViveresPorHeroe: 350,
   /**
-   * Cuánto come una columna EN MARCHA respecto a la ración base (decisión del usuario, 2026-10-08): la mitad. Solo el mapa del
+   * Cuánto come una columna EN MARCHA respecto a la ración base (decisión del usuario, 2026-10-08): primero la mitad, luego un cuarto. Solo el mapa del
    * mundo: la guarnición come la ración entera.
    */
-  factorConsumoEnMarcha: 0.5,
+  factorConsumoEnMarcha: 0.25,
   /** Cuánto come una columna ACAMPADA (`estacionado`) respecto a lo que come en marcha (2026-10-08): una décima parte. */
   factorConsumoEstacionado: 0.1,
   radioReabastecimiento: 60,
