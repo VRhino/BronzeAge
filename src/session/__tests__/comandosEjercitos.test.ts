@@ -311,6 +311,16 @@ describe('unirseAEjercito', () => {
     expect(sesion.getState().ejercitos.filter((e) => e.participantes.some((p) => p.heroeId === vecino))).toHaveLength(1);
   });
 
+  it('la política «rechazar» también cierra la plaza a otros, pero no al que ya va en el ejército', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConTropas();
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    const ejercitoId = sesion.getState().ejercitos[0]!.id;
+
+    const ajeno = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: vecino, escuadronIds: ['esc-vecino'] }, { actor: vecino });
+    expect(ajeno.ok === false && ajeno.detalleError).toMatch(/no admite a nadie más/);
+    expect(sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: ['esc-mimbre'] }, OPC).ok).toBe(true);
+  });
+
   it('rechaza unirse a un ejército que no existe', () => {
     const { sesion, asentamientoId, fundador } = partidaConTropas();
     const escuadronId = 'esc-milicia';
@@ -370,7 +380,7 @@ describe('víveres desde el almacén', () => {
 
   it('el que se une llena SUS víveres de SU asentamiento', () => {
     const { sesion, asentamientoId, fundador, vecino } = conTrigo(partidaConTropas(), 100000);
-    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS, politicaDeUnion: 'aceptar' }, OPC);
     const ejercitoId = sesion.getState().ejercitos[0]!.id;
 
     const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: vecino, escuadronIds: ['esc-vecino'] }, { actor: vecino });

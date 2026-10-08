@@ -688,7 +688,7 @@ Un ejército también se puede preparar **antes de salir**, dentro de una plaza 
 - **Partir.** Salen **todos juntos, como un único ejército**, en la puerta del lugar, con el Líder de la convocatoria y su política. Sale quieto y su Líder lo dirige (5.12.1). Es todo o nada: si alguien ya no puede salir con lo que eligió (el almacén ya no da, su Liderazgo no llega), no sale nadie y se dice quién y por qué. Quien ya no esté dentro del lugar al partir se queda fuera de la salida.
 - **Quien va en una convocatoria no sale por su cuenta**: tiene que separarse o cancelar antes.
 
-Lo de antes sigue valiendo: unirse pasando el ejército por tu plaza (5.12.1) y unirse en campo (5.14.1).
+Lo de antes sigue valiendo: unirse pasando el ejército por tu plaza (5.12.1) y unirse en campo (5.14.1). **La política de unión del Líder rige en ambos sitios** (decisión del autor, 2026-10-08): con *rechazar* nadie más se suma tampoco desde su plaza; quien ya va en el ejército sí puede reforzarlo con más tropa.
 
 ## 5.15 Batallas con héroes: quién combate, guarnición y campamento
 

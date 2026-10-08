@@ -666,6 +666,10 @@ export function unirseAEjercito(
   if (distancia(ejercito.posicionActual, asentamiento.posicion) > LOGISTICA.radioReabastecimiento) {
     throw new MovilizacionInvalidaError('El ejército está demasiado lejos del asentamiento para recoger tropas.');
   }
+  // La política de unión que fijó el Líder también cierra la puerta desde la plaza (2026-10-08); reforzar el ejército en el que ya vas, no.
+  if (ejercito.politicaDeUnion === 'rechazar' && !ejercito.participantes.some((p) => p.heroeId === heroeId)) {
+    throw new MovilizacionInvalidaError('Esa columna no admite a nadie más.');
+  }
 
   const escuadrones = seleccionarParaCampana(campamento, heroeId, escuadronIds);
   // Solo lo que aporta ESTE héroe cuenta contra SU liderazgo, incluido lo que ya lleve fuera (`exigirLiderazgo`).
