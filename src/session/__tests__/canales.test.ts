@@ -63,6 +63,11 @@ describe('canal personal heroe/<id> (2026-10-07)', () => {
     expect(canalesDeEvento({ ...informe, payload: { heroeId: 'h2' } })).toContain(canalDeHeroe('h2'));
   });
 
+  it('una petición de unión llega también al Líder al que se le pide (`liderId`)', () => {
+    const pedida = { ...informe, codigo: 'columna.union_pedida', payload: { ejercitoId: 'e', heroeId: 'h1', liderId: 'h9', expiraEn: 0 } };
+    expect(canalesDeEvento(pedida)).toEqual(expect.arrayContaining([canalDeHeroe('h1'), canalDeHeroe('h9')]));
+  });
+
   it('un evento global no se duplica en el canal personal: ya va por mapa/general', () => {
     const { asentamientoId: _sin, ...global } = informe;
     expect(canalesDeEvento(global)).toEqual([CANAL_GENERAL]);

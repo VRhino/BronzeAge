@@ -15,6 +15,8 @@ import { aplicarExperiencia, esCiudadano } from '../../engine/faccion';
 import { EntregaInvalidaError, entregarDesdeCaravanaAdjunta } from '../../engine/trade';
 import {
   cargarCaravanaAdjunta as cargarCaravanaEngine,
+  columnaDe,
+  MovilizacionInvalidaError,
   ladoPendienteParaEjercito,
   movilizarEjercito as movilizarEngine,
   replegarEjercito as replegarEngine,
@@ -64,13 +66,22 @@ export interface ParamsMovilizarEjercito {
   /** Qué hacer con quien pida unirse por el camino (Doc 5.14.1). Se fija AQUÍ, al parir la columna, y no
    * cambia. Ausente = `rechazar`, que es lo prudente: la columna sale con quien salió. */
   politicaDeUnion?: 'rechazar' | 'aceptar' | 'preguntar';
+  /** Lo que se lleva en el carro desde el almacén (Doc 1.10.2), como en `salirAlMundo`. Ausente = carro vacío. */
+  carga?: Record<string, number>;
+}
+
+/** Un héroe va en una sola columna: llamar a otra desde la plaza le dejaría en dos. Sumar tropa a la suya sí vale. */
+function exigirSinOtraColumna(estado: GameSessionState, heroeId: string, ejercitoId?: string): void {
+  const suya = columnaDe(estado.ejercitos, heroeId);
+  if (suya && suya.id !== ejercitoId) throw new MovilizacionInvalidaError(`Ya vas en la columna ${suya.id}: entra en tu plaza antes de salir con otra.`);
 }
 
 export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: string }>((estado, mapa, ctx, params) => {
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  exigirSinOtraColumna(estado, params.heroeId);
   const ejercitoId = ctx.ids.siguiente();
 
-  const { ejercito } = movilizarEngine(
+  const { asentamiento: origen, ejercito } = movilizarEngine(
     asentamiento,
     campamentoEn(estado, asentamiento),
     jugadorDe(estado, params.heroeId),
@@ -81,12 +92,13 @@ export const movilizarEjercito = comando<ParamsMovilizarEjercito, { ejercitoId: 
     mapa,
     `ejercito-${ejercitoId}`,
     ctx.instante,
-    params.politicaDeUnion
+    params.politicaDeUnion,
+    params.carga
   );
 
   const destino = params.objetivo.tipo === 'asentamiento' ? params.objetivo.id : 'un punto del mapa';
   // Quien sale de campaña va en su ejército, no en la plaza (Doc 5.12): mismo trato que `salirAlMundo`.
-  const conEjercito = conColumnas(estado, [ejercito]);
+  const conEjercito = conColumnas(conAsentamiento(estado, origen), [ejercito]);
   const { estado: conViveres, cargado: trigoCargado } = conViveresLlenos(conEjercito, asentamiento.id, params.heroeId);
   const viveres = viveresDe(conViveres.heroes.find((h) => h.id === params.heroeId));
   // Salir sin víveres no es un detalle de contabilidad: es la diferencia entre una campaña y una marcha que se deshace por
@@ -135,6 +147,7 @@ export interface ParamsUnirseAEjercito {
 export const unirseAEjercito = comando<ParamsUnirseAEjercito, void>((estado, _mapa, ctx, params) => {
   const ejercitoActual = exigirEjercito(estado, params.ejercitoId);
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
+  exigirSinOtraColumna(estado, params.heroeId, ejercitoActual.id);
 
   const { ejercito } = unirseEngine(
     conTropaDe(estado, ejercitoActual),

@@ -119,15 +119,7 @@ describe('movilizarEjercito', () => {
   it('RECHAZA si los escuadrones exceden el Liderazgo del jugador', () => {
     // Liderazgo 7: justo una tropa de leva (escalón 1) y nada más — los honderos son de línea (14) y se pasan.
     const { sesion, asentamientoId, fundador } = partidaConTropas(7);
-    const milicia = 'esc-milicia';
     const honderos = 'esc-honderos';
-
-    const cabe = sesion.ejecutar(
-      movilizarEjercito,
-      { asentamientoId, heroeId: fundador, escuadronIds: [milicia], objetivo: PUNTO_LEJOS },
-      OPC
-    );
-    expect(cabe.ok).toBe(true);
 
     const noCabe = sesion.ejecutar(
       movilizarEjercito,
@@ -136,9 +128,43 @@ describe('movilizarEjercito', () => {
     );
     expect(noCabe.ok).toBe(false);
     expect(noCabe.ok === false && noCabe.codigoError).toBe(CODIGOS_ERROR.movilizacionInvalida);
-    // Y el rechazo no deja rastro: el escuadrón sigue en casa y no hay un segundo ejército.
+    // Y el rechazo no deja rastro: el escuadrón sigue en casa y no hay ejército.
     expect(campamento(sesion.getState()).map((e) => e.id)).toContain(honderos);
+    expect(sesion.getState().ejercitos).toHaveLength(0);
+
+    const cabe = sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    expect(cabe.ok).toBe(true);
+  });
+
+  it('quien ya va en una columna no sale con otra: un héroe va en una sola', () => {
+    const { sesion, asentamientoId, fundador } = partidaConTropas();
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+
+    const otra = sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-mimbre'], objetivo: PUNTO_LEJOS }, OPC);
+    expect(otra.ok === false && otra.detalleError).toMatch(/Ya vas en la columna/);
     expect(sesion.getState().ejercitos).toHaveLength(1);
+  });
+
+  it('carga el carro con lo elegido del almacén, como al salir al mundo', () => {
+    const { sesion, asentamientoId, fundador } = partidaConTropas();
+    const antes = trigoDe(sesion.getState().asentamientos[0]!);
+
+    const r = sesion.ejecutar(
+      movilizarEjercito,
+      { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS, carga: { trigo: 40 } },
+      OPC
+    );
+    expect(r.ok).toBe(true);
+    const estado = sesion.getState();
+    expect(estado.ejercitos[0]!.suministro).toEqual({ trigo: 40 });
+    expect(trigoDe(estado.asentamientos[0]!)).toBeCloseTo(antes - 40 - viveres(estado, fundador));
+
+    const demasiado = sesion.ejecutar(
+      movilizarEjercito,
+      { asentamientoId, heroeId: 'x', escuadronIds: [], objetivo: PUNTO_LEJOS, carga: { trigo: LOGISTICA.capacidadCarroPorJugador + 1 } },
+      OPC
+    );
+    expect(demasiado.ok).toBe(false);
   });
 
   it('rechaza llevarse el escuadrón de otro jugador', () => {
@@ -272,6 +298,17 @@ describe('unirseAEjercito', () => {
     const r = sesion.ejecutar(unirseAEjercito, { ejercitoId, asentamientoId, heroeId: fundador, escuadronIds: [segundo] }, OPC);
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.codigoError).toBe(CODIGOS_ERROR.movilizacionInvalida);
+  });
+
+  it('quien ya va en OTRA columna no llama a ésta desde la plaza: le dejaría en dos', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConTropas();
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: fundador, escuadronIds: ['esc-milicia'], objetivo: PUNTO_LEJOS }, OPC);
+    sesion.ejecutar(movilizarEjercito, { asentamientoId, heroeId: vecino, escuadronIds: ['esc-vecino'], objetivo: PUNTO_LEJOS }, OPC);
+    const [delFundador] = sesion.getState().ejercitos;
+
+    const r = sesion.ejecutar(unirseAEjercito, { ejercitoId: delFundador!.id, asentamientoId, heroeId: vecino, escuadronIds: [] }, OPC);
+    expect(r.ok === false && r.detalleError).toMatch(/Ya vas en la columna/);
+    expect(sesion.getState().ejercitos.filter((e) => e.participantes.some((p) => p.heroeId === vecino))).toHaveLength(1);
   });
 
   it('rechaza unirse a un ejército que no existe', () => {

@@ -52,6 +52,8 @@ export interface PayloadComposicionColumna {
 export interface PayloadPeticionDeUnion {
   ejercitoId: string;
   heroeId: string;
+  /** A quién se le pide: con él en el payload le llega por su canal `heroe/<id>` (`heroesNombrados`). */
+  liderId: string;
   /** Hasta cuándo sirve. Va en el payload para que el cliente pueda mostrar la cuenta atrás sin inventársela. */
   expiraEn: number;
 }
@@ -97,7 +99,7 @@ export const unirseEnCampo = comando<ParamsUnirseEnCampo, { unido: boolean }>((e
         evento(ctx, {
           codigo: 'columna.union_pedida',
           mensaje: `Un jugador pide unirse al ejército ${ejercito.id}.`,
-          payload: { ejercitoId: ejercito.id, heroeId: params.heroeId, expiraEn } satisfies PayloadPeticionDeUnion,
+          payload: { ejercitoId: ejercito.id, heroeId: params.heroeId, liderId: ejercito.liderId, expiraEn } satisfies PayloadPeticionDeUnion,
           asentamientoId: ejercito.origenAsentamientoId,
         }),
       ],

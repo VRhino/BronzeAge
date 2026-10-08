@@ -326,8 +326,10 @@ export function movilizarEjercito(
   instante: Instante,
   /** Qué hacer con quien pida unirse por el camino (Doc 5.14.1). Se fija aquí y no cambia. Por defecto
    * `rechazar`: lo prudente es que la columna salga con quien salió salvo que su Líder diga otra cosa. */
-  politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar'
-): { ejercito: EjercitoConTropa } {
+  politicaDeUnion: Ejercito['politicaDeUnion'] = 'rechazar',
+  /** Lo que se lleva en el carro desde el almacén, elegido como en `salirAlMundo`. */
+  carga: Readonly<Record<string, number>> = {}
+): { asentamiento: Asentamiento; ejercito: EjercitoConTropa } {
   // Tu tropa está en tu campamento, y el campamento es tu residencia (Doc 5.15.2).
   if (!esResidente(asentamiento, heroeId)) {
     throw new MovilizacionInvalidaError('Solo se sale de campaña desde tu residencia: ahí está tu campamento.');
@@ -345,8 +347,15 @@ export function movilizarEjercito(
   const ruta = calcularRuta(mapa, asentamiento.posicion, destino, { pasosRio: asentamientos.map((a) => a.posicion) });
   if (!ruta) throw new MovilizacionInvalidaError('No hay ruta por tierra hasta ese destino.');
   const idsFuera = new Set(escuadrones.map((e) => e.id));
+  const cargado = cargarCarroElegido(
+    asentamiento,
+    consumoRacionDeEscuadrones(campamento.filter((e) => !idsFuera.has(e.id))),
+    carga,
+    capacidadCarrosDe(1)
+  );
 
   return {
+    asentamiento: cargado.asentamiento,
     ejercito: {
       id,
       faccionId: asentamiento.faccionId,
@@ -359,7 +368,7 @@ export function movilizarEjercito(
       politicaDeUnion,
       escuadronIds: [...idsFuera],
       escuadrones,
-      suministro: {},
+      suministro: cargado.suministro,
       caravanasAdjuntasIds: [],
       objetivo,
       ruta,
@@ -389,10 +398,9 @@ export function movilizarEjercito(
  * esto es salir a lo tuyo y hace una columna `personal`, que rectifica el rumbo cuando quiere, no lleva
  * caravanas y a la que nadie se une.
  *
- * Tres cosas que la separan de movilizar, todas del canon:
+ * Dos cosas que la separan de movilizar, las dos del canon (la carga se elige en ambas):
  *
  *  - **Se puede salir sin tropas.** El viajero solo es una forma de jugar (Doc 5.12.1), no un caso raro.
- *  - **La carga se ELIGE**, no se rellena de trigo hasta arriba.
  *  - **Nace `estacionado` donde la plaza**, no marchando: el destino es un `marcharA` posterior.
  */
 export function salirAlMundo(
