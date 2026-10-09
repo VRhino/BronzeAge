@@ -89,6 +89,7 @@ import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
+import { poblacionActual, precioPorSoldado, tecnologiasDelCampamento, topePoblacion, tropasDelCampamento } from '../../engine/reclutamientoMercenario';
 import { compartenVision, esResidente } from '../../engine/pertenencia';
 import { ubicacionDeducida } from '../../engine/ubicacion';
 import { alijosALaVista, buscaAlijos } from '../../engine/alijos';
@@ -150,6 +151,15 @@ export interface ConvocatoriaProyectada {
   soyIntegrante: boolean;
 }
 
+/** Lo que se puede reclutar en el campamento donde el héroe reside (ver `reclutamientoDelCampamento`). */
+export interface ReclutamientoDeCampamento {
+  /** Las tropas que permiten los edificios del campamento; `desbloqueada` es la tecnología del campamento (Doc 1.9b), y solo las desbloqueadas se reclutan. */
+  tropas: { tropaId: string; precioPorSoldado: number; desbloqueada: boolean }[];
+  /** Reclutas disponibles ahora y lo máximo que caben (las viviendas). */
+  poblacion: number;
+  topePoblacion: number;
+}
+
 export interface EjercitoAvistado {
   id: string;
   /** Ejército o Columna personal: decide qué se le puede hacer (Doc 5.12.3). */
@@ -183,6 +193,28 @@ export type HeroeProyectado = Omit<Heroe, 'plazasRecordadas' | 'exploracionPerso
   /** La plaza donde reside, o `null` si es huérfano o reside en un campamento: un dato suyo, esté donde esté. */
   residenciaId: string | null;
 };
+
+/**
+ * Reclutar en el campamento donde el héroe RESIDE (Doc 1.9b, 2026-10-09): las tropas que sus edificios permiten, a qué precio por soldado
+ * le salen (con su Facción, su reputación y si conserva asentamientos: lo mismo que cobra `reclutarEnCampamento`), si su tecnología está
+ * desbloqueada y los reclutas que hay. Así el cliente enseña el coste y esconde lo bloqueado sin copiar las fórmulas. Quien no reside, nada.
+ */
+function reclutamientoDelCampamento(campamento: CampamentoMercenarios, estado: GameSessionState, heroe: Heroe, instante: Instante): ReclutamientoDeCampamento | undefined {
+  if (!campamento.residentesIds.includes(heroe.id)) return undefined;
+  const faccion = estado.facciones.find((f) => esCiudadano(f, heroe.id));
+  const tieneAsentamientos = (faccionId: string) => estado.asentamientos.some((a) => a.faccionId === faccionId);
+  const desbloqueadas = tecnologiasDelCampamento(estado.tecnologia, estado.facciones.filter((f) => tieneAsentamientos(f.id)), instante);
+  const conTecnologia = tropasDelCampamento(campamento, Object.keys(TECNOLOGIAS) as TecnologiaId[]);
+  return {
+    tropas: conTecnologia.map((t) => ({
+      tropaId: t.id,
+      precioPorSoldado: precioPorSoldado(t, faccion, faccion ? tieneAsentamientos(faccion.id) : false),
+      desbloqueada: desbloqueadas.includes(t.tecnologia),
+    })),
+    poblacion: poblacionActual(campamento, instante),
+    topePoblacion: topePoblacion(campamento),
+  };
+}
 
 /** Precio unitario y cupo restante de cada bien que el campamento tiene en venta, para este héroe (quien no reside solo compra trigo). */
 function mercadoDelCampamento(campamento: CampamentoMercenarios, heroe: Heroe, asentamientos: Asentamiento[], instante: Instante): { precios: Record<string, number>; cupoRestante: Record<string, number> } {
@@ -539,7 +571,7 @@ export interface ProyeccionJugador {
   /** El mostrador del campamento donde está dentro (2026-10-07): lo que cuesta una unidad de cada bien en venta (`precioDeVenta`: el coste de n
    * unidades es `ceil(n × precio)`) y lo que le queda del cupo de hoy (D41; ausente = sin cupo). Ausente fuera. Así el cliente enseña el total
    * antes de comprar sin copiar la fórmula; quien cobra sigue siendo el comando. */
-  mercadoCampamento?: { precios: Record<string, number>; cupoRestante: Record<string, number> };
+  mercadoCampamento?: { precios: Record<string, number>; cupoRestante: Record<string, number>; reclutamiento?: ReclutamientoDeCampamento };
   /** Los alijos de exploración a la vista de su columna que aún no abrió (D62); solo para quien puede abrirlos (D63). */
   alijos: Alijo[];
   /** Sin `asentamientoId` (eventos globales/de Facción) o con uno propio. Es el mismo criterio que evita la
@@ -1106,7 +1138,13 @@ export function proyectarParaJugador(
     ...(ubicacion.tipo === 'mercenarios'
       ? (() => {
           const dentro = estado.campamentosMercenarios.find((c) => c.id === ubicacion.campamentoId);
-          return dentro ? { escenaCampamento: escenaDeCampamento(dentro), ...(jugador ? { mercadoCampamento: mercadoDelCampamento(dentro, jugador, estado.asentamientos, instanteDeTick(estado.tick)) } : {}) } : {};
+          if (!dentro) return {};
+          const ahora = instanteDeTick(estado.tick);
+          const reclutamiento = jugador ? reclutamientoDelCampamento(dentro, estado, jugador, ahora) : undefined;
+          return {
+            escenaCampamento: escenaDeCampamento(dentro),
+            ...(jugador ? { mercadoCampamento: { ...mercadoDelCampamento(dentro, jugador, estado.asentamientos, ahora), ...(reclutamiento ? { reclutamiento } : {}) } } : {}),
+          };
         })()
       : {}),
     historial: estado.historialHeroes[heroeId] ?? [],

@@ -426,6 +426,15 @@ más estados que `activa`. Nada de otros jugadores. Para unirse: `POST /jugador/
 
 **`agregarCarroCaravana`** (2026-10-09) se rechaza con `detalleError` «La flota de este asentamiento ya tiene sus N carros…» cuando los carros de todas las caravanas comerciales del origen alcanzan el cupo del Mercado: 3 / 9 / 18 por nivel 1 / 2 / 3 (`cupoCarros` en `EDIFICIO_CATALOGO.mercado.niveles`, publicado en `GET /balance`). Mover carros entre caravanas no lo afecta.
 
+**`GET /v1/balance`, versión 14 (2026-10-09)** publica además lo que el cliente copiaba a mano: en `caravanas`, `CARRO_CATALOGO`, `ANIMAL_CATALOGO` (coste, capacidad base,
+factor de carga, velocidad), `CARAVANA_PREPARACION` y `CARAVANA_ESCOLTA`; en `mundoYMilitar`, `MOVIMIENTO` (`radioInspeccion`, `radioPuerta`, …),
+`RECLUTAMIENTO_ORO_POR_ESCALON` y `ORO_POR_CABALLO`; y el grupo nuevo `politica` con `PUERTA` (`cerradaAPorDefecto`), `CAPITAL` (`cooldownDias`), `ANEXION`, `FUSION` y
+`RELACION_PROPUESTA` (`caducidadDias`). El cupo de carros de la flota está en `catalogos.EDIFICIO_CATALOGO.mercado.niveles[n].cupoCarros`.
+
+**Reclutar en el campamento donde resides** (2026-10-09): `mercadoCampamento.reclutamiento` —solo para sus residentes— trae `tropas[] { tropaId, precioPorSoldado, desbloqueada }`
+(las que permiten los edificios del campamento; `precioPorSoldado` ya incluye recargo, reputación y descuento por no tener asentamientos; solo se reclutan las `desbloqueada`),
+`poblacion` (reclutas disponibles ahora) y `topePoblacion`. El oro de un escuadrón completo es `ceil(precioPorSoldado × (unidadesPorDefecto − las que ya tiene))`.
+
 ### 4.2b-ter Alianza y vasallaje con aceptación (2026-10-09, Doc 2.3 y 2.4)
 
 | Comando | Parámetros | Devuelve | Notas |

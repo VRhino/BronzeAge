@@ -49,8 +49,11 @@ import type { ContadorLogro, EdificioCampamentoTipo, EdificioTipo, EraId, GrupoP
  * v13 (2026-10-08): víveres — `LOGISTICA.capacidadViveresPorHeroe` y `factorConsumoEnMarcha` (0.25; `factorConsumoEstacionado`
  *   pasa a ser relativo a la marcha; fuera `autonomiaTicksObjetivo`), `MERCENARIOS.racion` sin `trigo`, fuera `MERCENARIOS.prestamo`
  *   (la tropa prestada sale completa); `LOGISTICA` se publica en `mundoYMilitar`.
+ * v14 (2026-10-09): `EDIFICIO_CATALOGO.mercado.niveles[*].cupoCarros` (3 / 9 / 18) y `RELACION_PROPUESTA`; el balance publica además `CARRO_CATALOGO`,
+ *   `ANIMAL_CATALOGO`, `CARAVANA_PREPARACION`, `CARAVANA_ESCOLTA` (en `caravanas`), `MOVIMIENTO`, `RECLUTAMIENTO_ORO_POR_ESCALON` y `ORO_POR_CABALLO`
+ *   (en `mundoYMilitar`) y el grupo nuevo `politica` (`PUERTA`, `CAPITAL`, `ANEXION`, `FUSION`, `RELACION_PROPUESTA`).
  */
-export const BALANCE_VERSION = 13;
+export const BALANCE_VERSION = 14;
 
 /**
  * Modelo temporal (Fase D, Docs/Arquitectura/10_Modelo_Temporal.md). **Decisión del usuario (2026-08-29):

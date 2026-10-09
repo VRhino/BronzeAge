@@ -268,3 +268,18 @@ describe('cambiar la selección en preparación', () => {
     expect(tropas[0]).toMatchObject({ nombre: expect.any(String), nivel: expect.any(Number), moral: expect.any(Number), cantidad: expect.any(Number) });
   });
 });
+
+describe('reclutar en el campamento donde se reside (proyección)', () => {
+  it('trae las tropas que permiten sus edificios con su precio por soldado, si están desbloqueadas, y los reclutas', () => {
+    const sesion = GameSession.crear('reclutar', { seed: 42 });
+    const ana = sesion.ejecutar(crearHeroe, { displayName: 'Ana', campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } }, { actor: 'j1' }).datos!.heroeId;
+
+    const m = proyectarParaJugador(sesion.getState(), ana, SIN_GEOMETRIA).mercadoCampamento!;
+
+    expect(m.reclutamiento).toBeDefined();
+    expect(m.reclutamiento!.tropas.length).toBeGreaterThan(0);
+    expect(m.reclutamiento!.tropas[0]).toMatchObject({ tropaId: expect.any(String), precioPorSoldado: expect.any(Number), desbloqueada: expect.any(Boolean) });
+    expect(m.reclutamiento!.poblacion).toBeGreaterThanOrEqual(0);
+    expect(m.reclutamiento!.topePoblacion).toBeGreaterThan(0);
+  });
+});
