@@ -440,6 +440,13 @@ sale el pago de adoptar; `null` sin Facción), `epicasPosibles[]` (las que un Ae
 (las que permiten los edificios del campamento; `precioPorSoldado` ya incluye recargo, reputación y descuento por no tener asentamientos; solo se reclutan las `desbloqueada`),
 `poblacion` (reclutas disponibles ahora) y `topePoblacion`. El oro de un escuadrón completo es `ceil(precioPorSoldado × (unidadesPorDefecto − las que ya tiene))`.
 
+**Comodidades de la proyección (2026-10-09, Doc 5.12.3).**
+- `informesDeInspeccion[]`: lo último que inspeccionaste, para que no se pierda al recargar. Cada uno `{ heroeId, objetivo: { tipo, id }, vistoEn, expiraEn, donde, contenido }` con el mismo `contenido`
+  que devolvió `inspeccionar` (`ComposicionColumna`, `ContenidoCaravana` o `DefensaPlaza`). Uno por objetivo (mirar otra vez lo sustituye), vigente `INSPECCION.informeMinutos` (10 min de mundo) y solo tuyo.
+- `caravanasAvistadas[].escoltada` es `true` también con escolta cedida sin héroe (`escoltaIds`), no solo adjunta a un ejército.
+- `asentamientosAvistados[].almacen`: el almacén de una plaza PROPIA cuando una columna tuya está a su puerta (`MOVIMIENTO.radioPuerta`); en el resto, ausente.
+- `GET /jugador/partidas` trae `nombre` si el administrador se lo puso: `POST /admin/partidas` acepta `nombre` (1-60 caracteres, opcional). Sin nombre, solo `gameId`. `estado` sigue siendo `activa`.
+
 ### 4.2b-ter Alianza y vasallaje con aceptación (2026-10-09, Doc 2.3 y 2.4)
 
 | Comando | Parámetros | Devuelve | Notas |

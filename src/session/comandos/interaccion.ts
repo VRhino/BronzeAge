@@ -56,7 +56,8 @@ import type { Instante } from '../../domain/tiempo';
 import type { PayloadAtaqueCampamento } from '../../engine/combate';
 import { agendarReaparicionBandidos, botinDeBandidos } from '../../engine/bandidos';
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
-import { exito } from './tipos';
+import { exito, type ContextoComando } from './tipos';
+import { conInformeDeInspeccion, type InformeDeInspeccion } from '../../engine/ejercitos';
 import { comando, conColumnas, conTropaDe, exigirAsentamiento, exigirCampamento, exigirCaravana, exigirColumnaDe, exigirEjercito, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { enProteccionDeCampamento } from '../../engine/mercenarios';
@@ -82,6 +83,14 @@ export interface PayloadObservado {
   objetivo: ObjetivoDeInspeccion;
 }
 
+/** Anota lo visto para que sobreviva a recargar (`informesDeInspeccion`, 2026-10-09). */
+function conInforme(estado: GameSessionState, ctx: ContextoComando, params: ParamsInspeccionar, donde: Point, contenido: InformeDeInspeccion['contenido']): GameSessionState {
+  return {
+    ...estado,
+    informesDeInspeccion: conInformeDeInspeccion(estado.informesDeInspeccion, { heroeId: params.heroeId, objetivo: params.objetivo, vistoEn: ctx.instante, donde, contenido }, ctx.instante),
+  };
+}
+
 /**
  * Mirar de cerca (Doc 5.12.3): qué tropas lleva esa columna y de quién son, qué carga esa caravana, o con qué se
  * defiende esa plaza ajena (su guarnición y quién está dentro).
@@ -100,7 +109,7 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
     const plaza = exigirAsentamiento(estado, params.objetivo.id);
     const defensa = inspeccionarPlaza(observador, plaza, estado.heroes);
     return exito(
-      conHistorialDeJugador(estado, params.heroeId, `Inspecciona la plaza ${plaza.id}.`),
+      conHistorialDeJugador(conInforme(estado, ctx, params, plaza.posicion, defensa), params.heroeId, `Inspecciona la plaza ${plaza.id}.`),
       [
         evento(ctx, {
           codigo: 'asentamiento.observado',
@@ -119,7 +128,7 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
     const composicion = inspeccionarColumna(observador, conTropaDe(estado, objetivo));
 
     return exito(
-      conHistorialDeJugador(estado, params.heroeId, `Inspecciona la columna ${objetivo.id}.`),
+      conHistorialDeJugador(conInforme(estado, ctx, params, objetivo.posicionActual, composicion), params.heroeId, `Inspecciona la columna ${objetivo.id}.`),
       [
         evento(ctx, {
           codigo: 'columna.observada',
@@ -140,7 +149,7 @@ export const inspeccionar = comando<ParamsInspeccionar, ComposicionColumna | Con
   const contenido = inspeccionarCaravanaEngine(observador, caravana, escoltada);
 
   return exito(
-    conHistorialDeJugador(estado, params.heroeId, `Inspecciona la caravana ${caravana.id}.`),
+    conHistorialDeJugador(conInforme(estado, ctx, params, caravana.posicionActual, contenido), params.heroeId, `Inspecciona la caravana ${caravana.id}.`),
     [
       evento(ctx, {
         codigo: 'caravana.observada',

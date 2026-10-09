@@ -12,7 +12,7 @@ import type { AcuerdoTrueque, Asentamiento, CampamentoBandido, CampamentoMercena
 import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
-import { ALMACEN_PERSONAL, BATALLA, LOGISTICA, MERCENARIOS, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
+import { ALMACEN_PERSONAL, BATALLA, INSPECCION, LOGISTICA, MERCENARIOS, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
 import { capacidadCaravana, velocidadCaravana } from './caravanas';
 import {
   alCampamento,
@@ -32,7 +32,7 @@ import {
   type IndiceTropa,
 } from './tropa';
 import { atribuir, type EventoCrudo } from '../domain/eventos';
-import type { Instante } from '../domain/tiempo';
+import { minutos, sumar as sumarTiempo, type Instante } from '../domain/tiempo';
 import type { RandomFn } from '../worldgen';
 import { asediarConEjercito, atacarCampamentoConColumna, desalojarResidentes, encuentroEntreEjercitos, interceptarCaravanaConEjercito } from './combate';
 import { sumarChatarra } from './chatarra';
@@ -70,6 +70,32 @@ export interface DefensaPlaza {
   faccionId: string;
   heroesIds: string[];
   guarnicion: { tropaId: string; cantidad: number; heroeId: string }[];
+}
+
+/**
+ * Lo último que inspeccionó un héroe de algo, para que no se pierda al recargar (2026-10-09). Uno por objetivo; dura `INSPECCION.informeMinutos`.
+ * `donde` es el punto en que estaba cuando se miró: lo que se ve envejece, y el cliente lo enseña con su fecha.
+ */
+export interface InformeDeInspeccion {
+  heroeId: string;
+  objetivo: { tipo: 'ejercito' | 'caravana' | 'asentamiento'; id: string };
+  vistoEn: Instante;
+  expiraEn: Instante;
+  donde: Point;
+  contenido: ComposicionColumna | ContenidoCaravana | DefensaPlaza;
+}
+
+/** Los informes vigentes con el nuevo anotado: el de ese mismo héroe y objetivo se sustituye, y los vencidos se barren. */
+export function conInformeDeInspeccion(
+  informes: readonly InformeDeInspeccion[] | undefined,
+  nuevo: Omit<InformeDeInspeccion, 'expiraEn'>,
+  ahora: Instante
+): InformeDeInspeccion[] {
+  const informe: InformeDeInspeccion = { ...nuevo, expiraEn: sumarTiempo(ahora, minutos(INSPECCION.informeMinutos)) };
+  return [
+    ...(informes ?? []).filter((i) => ahora < i.expiraEn && !(i.heroeId === nuevo.heroeId && i.objetivo.tipo === nuevo.objetivo.tipo && i.objetivo.id === nuevo.objetivo.id)),
+    informe,
+  ];
 }
 
 /** Lo que se saca de mirar de cerca una caravana (Doc 5.12.3): QUE lleva y si va escoltada, nunca CUANTO. */

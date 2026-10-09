@@ -82,12 +82,13 @@ export class GameSession {
     this.opciones = opciones;
   }
 
-  static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesSesion = {}): GameSession {
+  static crear(gameId: string, config: { seed: number; region?: RegionId; nombre?: string }, opciones: OpcionesSesion = {}): GameSession {
     const mapa = generarMapa({ ...MAPA_DEFAULT, seed: config.seed, region: config.region });
     const consulta = crearMapa(mapa, crearEstadoMapa());
     const campamentosMercenarios = colocarCampamentosIniciales(consulta, instanteDeTick(0));
     const estado: GameSessionState = {
       gameId,
+      ...(config.nombre?.trim() ? { nombre: config.nombre.trim() } : {}),
       mapa,
       estadoMapa: crearEstadoMapa(),
       asentamientos: [],

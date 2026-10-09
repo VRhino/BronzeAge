@@ -45,6 +45,7 @@ import type { EstadoMapa } from '../world/mapa';
 import type { EstadoSimulacion } from '../engine/simulation';
 import type { Batalla } from './batallas';
 import { SIMULACION } from '../constants';
+import type { InformeDeInspeccion } from '../engine/ejercitos';
 import { instante, type Instante } from '../domain/tiempo';
 
 /** `SIMULACION.epocaInicial` en ms, para `instanteDeTick` (más abajo). Al principio del módulo para que
@@ -73,6 +74,8 @@ export interface EventoLogAdmin {
  */
 export interface GameSessionState {
   gameId: string;
+  /** Cómo se llama la partida para quien la elige (2026-10-09): lo pone el administrador al crearla. Ausente = solo el `gameId`. */
+  nombre?: string;
   mapa: MapaGenerado;
   estadoMapa: EstadoMapa;
   asentamientos: Asentamiento[];
@@ -158,6 +161,8 @@ export interface GameSessionState {
   aedasResidentes?: EstadoAedasResidentes;
   /** Miradas compradas en las tabernas (Doc 5.12.10), vigentes o aún en cooldown. Las crean los comandos; ausente = ninguna. */
   miradasIntel?: MiradaIntel[];
+  /** Lo último que inspeccionó cada héroe (Doc 5.12.3), vigente `INSPECCION.informeMinutos`; los vencidos se barren al inspeccionar. Ausente = ninguno. */
+  informesDeInspeccion?: InformeDeInspeccion[];
   /** Propuestas de anexión (Doc 2.6) pendientes de respuesta del Rey de la absorbida; las caducadas se barren al proponer. Ausente = ninguna. */
   propuestasAnexion?: PropuestaAnexion[];
   /** Propuestas de fusión (Doc 2.6) pendientes de respuesta del Rey de B; las caducadas se barren al proponer. Ausente = ninguna. */

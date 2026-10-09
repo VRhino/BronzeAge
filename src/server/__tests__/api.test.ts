@@ -470,6 +470,17 @@ describe('GET /jugador/partidas (pantalla «Partidas»)', () => {
     expect(g1.heroe.faccion).toMatchObject({ nombre: 'Micenas', emblemaId: expect.any(String), colorEmblemaId: expect.any(String) });
   });
 
+  it('trae el nombre de la partida si el administrador se lo puso al crearla', async () => {
+    const admin = await sesionDe('jefa');
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas', headers: admin, payload: { gameId: 'con-nombre', seed: 42, nombre: 'Micenas' } });
+    await partidaCreada('sin-nombre');
+    const ana = await sesionDe('ana');
+
+    const { partidas } = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas', headers: ana })).json();
+    expect(partidas.find((p: { gameId: string }) => p.gameId === 'con-nombre').nombre).toBe('Micenas');
+    expect(partidas.find((p: { gameId: string }) => p.gameId === 'sin-nombre')).not.toHaveProperty('nombre');
+  });
+
   it('una membresía revocada cuenta como null', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');

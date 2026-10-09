@@ -40,6 +40,8 @@ interface CrearPartidaBody {
   gameId: string;
   seed: number;
   region?: RegionId;
+  /** Nombre legible de la partida, para quien la elige en la pantalla «Partidas» (opcional). */
+  nombre?: string;
   /** Descarta la partida abierta en este proceso (si la hay) y crea una limpia — operación destructiva: la
    * interfaz debe confirmarlo con el usuario antes de pedirlo. Exige `administrador_partida` o
    * `administrador_global`; un `moderador` NO puede (doc 5: sin acceso a regeneración de mundo). */
@@ -99,6 +101,7 @@ const ESQUEMA_CREAR_PARTIDA = {
       gameId: { type: 'string', minLength: 1 },
       seed: { type: 'number' },
       region: { type: 'string', enum: REGIONES },
+      nombre: { type: 'string', minLength: 1, maxLength: 60 },
       forzar: { type: 'boolean' },
       intervaloTickMs: { type: 'number', minimum: 50 },
     },
@@ -451,7 +454,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    * (`cancelarBatalla`), porque esa matriz razona sobre roles DE PARTIDA.
    */
   app.post<{ Body: CrearPartidaBody }>('/admin/partidas', { schema: ESQUEMA_CREAR_PARTIDA }, async (request, reply) => {
-    const { gameId, seed, region, forzar, intervaloTickMs } = request.body;
+    const { gameId, seed, region, nombre, forzar, intervaloTickMs } = request.body;
     const resuelto = resolverActor(request, deps, gameId);
     if (!resuelto) return sinSesion(reply);
     if (!puedeCrearPartida(resuelto.actor)) {
@@ -462,8 +465,8 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     }
 
     const runner = forzar
-      ? await deps.partidas.descartarYCrear(gameId, { seed, region }, intervaloTickMs)
-      : await deps.partidas.abrir(gameId, { seed, region }).catch((err: unknown) => {
+      ? await deps.partidas.descartarYCrear(gameId, { seed, region, nombre }, intervaloTickMs)
+      : await deps.partidas.abrir(gameId, { seed, region, nombre }).catch((err: unknown) => {
           if (err instanceof PartidaYaAbiertaError) return undefined;
           // Guardado de otra versión de la build: no se migra. 422 (no 500) para que el cliente ofrezca `forzar`.
           if (err instanceof FormatoSnapshotNoSoportadoError || err instanceof WorldgenVersionNoCoincideError || err instanceof LayoutVersionNoCoincideError) {

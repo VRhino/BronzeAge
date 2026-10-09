@@ -17,6 +17,8 @@ import { claveDeEventos } from './eventosDePartida';
 export interface ConfiguracionPartida {
   seed: number;
   region?: RegionId;
+  /** Nombre legible de la partida (opcional). */
+  nombre?: string;
 }
 
 export class PartidaYaAbiertaError extends Error {

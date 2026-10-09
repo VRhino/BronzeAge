@@ -306,3 +306,40 @@ describe('la tecnología propia en la proyección (2026-10-09)', () => {
     expect(proyectarParaJugador(con.getState(), fundador, SIN_GEOMETRIA).tecnologia.epicasPosibles).toEqual(['metalurgia_cobre']);
   });
 });
+
+describe('avistamientos de la proyección (2026-10-09)', () => {
+  const geo = SIN_GEOMETRIA;
+
+  it('una caravana con escolta cedida sin héroe llega como escoltada', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const p = sesion.exportar();
+    const aqui = p.state.asentamientos[0]!.posicion;
+    const caravana = (id: string, extra: object) => ({ id, tipo: 'comercial' as const, origenAsentamientoId: 'ajena', contenido: { trigo: 5 }, posicionActual: aqui, progreso: 0, estado: 'en_transito' as const, carros: [], ...extra });
+    const con = GameSession.importar({ ...p, state: { ...p.state, caravanas: [caravana('con', { escoltaIds: ['esc-x'] }), caravana('sin', {})] } });
+
+    const vistas = proyectarParaJugador(con.getState(), fundador, geo).caravanasAvistadas;
+    expect(vistas.find((c) => c.id === 'con')!.escoltada).toBe(true);
+    expect(vistas.find((c) => c.id === 'sin')!.escoltada).toBe(false);
+  });
+
+  it('el almacén de tu plaza llega cuando tu columna está a su puerta, y solo entonces', () => {
+    const { sesion, fundador, asentamientoId } = enLaPlaza();
+    sesion.ejecutar(REGISTRO_COMANDOS.salirAlMundo as never, { asentamientoId, heroeId: fundador, escuadronIds: [], carga: {} } as never, { actor: fundador });
+
+    const aLaPuerta = proyectarParaJugador(sesion.getState(), fundador, geo).asentamientosAvistados.find((a) => a.id === asentamientoId)!;
+    expect(aLaPuerta.almacen?.['trigo']?.cantidad).toBeGreaterThan(0);
+
+    const p = sesion.exportar();
+    const lejos = GameSession.importar({
+      ...p,
+      state: { ...p.state, ejercitos: p.state.ejercitos.map((e) => ({ ...e, posicionActual: { x: e.posicionActual.x + 30, y: e.posicionActual.y } })) },
+    });
+    const desdeLejos = proyectarParaJugador(lejos.getState(), fundador, geo).asentamientosAvistados.find((a) => a.id === asentamientoId);
+    expect(desdeLejos?.almacen, 'a 30 de la puerta no se ve el almacén').toBeUndefined();
+  });
+
+  it('la partida lleva el nombre que le puso el administrador', () => {
+    expect(GameSession.crear('p1', { seed: 42, nombre: '  Micenas  ' }).getState().nombre).toBe('Micenas');
+    expect(GameSession.crear('p2', { seed: 42 }).getState().nombre).toBeUndefined();
+  });
+});

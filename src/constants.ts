@@ -2125,6 +2125,12 @@ export const PRESENCIA = {
   topeAplazamientoMs: 300_000,
 } as const;
 
+/** Lo que se guarda de una inspección (Doc 5.12.3, 2026-10-09). Minutos de mundo. PLACEHOLDER. */
+export const INSPECCION = {
+  /** Cuánto dura el informe de lo inspeccionado en la proyección: lo que se vio envejece, y volver a mirar cuesta acercarse y delatarse. */
+  informeMinutos: 10,
+} as const;
+
 export const MOVIMIENTO = {
   /**
    * Velocidad de una columna SIN escuadrones — un jugador viajando solo. Por encima de la tropa ligera (20)

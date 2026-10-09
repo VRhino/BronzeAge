@@ -203,7 +203,7 @@ export class RunnerDePartida {
     this.versionEventosAnexados = versionEventosAnexados;
   }
 
-  static crear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): RunnerDePartida {
+  static crear(gameId: string, config: { seed: number; region?: RegionId; nombre?: string }, opciones: OpcionesRunner): RunnerDePartida {
     return new RunnerDePartida(GameSession.crear(gameId, config, opciones.sesion), opciones);
   }
 
@@ -218,7 +218,7 @@ export class RunnerDePartida {
    * descartada, y sus líneas se repasarían (o sus eventos se leerían) sobre la nueva. */
   static async crearYPersistir(
     gameId: string,
-    config: { seed: number; region?: RegionId },
+    config: { seed: number; region?: RegionId; nombre?: string },
     opciones: OpcionesRunner,
     persistencia: { forzar?: boolean } = {}
   ): Promise<RunnerDePartida> {
@@ -233,7 +233,7 @@ export class RunnerDePartida {
    * `gameId`, lo carga (en continuidad de RNG, ver `persistenciaPartida.ts`); si no, crea una partida nueva
    * con `config` (y la persiste, ver `crearYPersistir`). `config` se ignora si se carga un snapshot
    * existente. */
-  static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
+  static async cargarOCrear(gameId: string, config: { seed: number; region?: RegionId; nombre?: string }, opciones: OpcionesRunner): Promise<RunnerDePartida> {
     const existente = await cargarPartida(opciones.almacen, gameId, opciones.sesion);
     return existente
       ? new RunnerDePartida(existente.sesion, opciones, existente.versionEventosAnexados)

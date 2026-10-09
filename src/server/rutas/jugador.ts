@@ -83,6 +83,7 @@ const ESQUEMA_LISTAR_PARTIDAS = {
             type: 'object',
             properties: {
               gameId: { type: 'string' },
+              nombre: { type: 'string' },
               estado: { type: 'string', enum: ['activa'] },
               membresia: { type: ['object', 'null'], properties: { jugadorId: { type: 'string' } }, required: ['jugadorId'] },
               heroe: {
@@ -188,6 +189,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
         const faccion = heroe ? runner.getState().facciones.find((f) => esCiudadano(f, heroe.id)) : undefined;
         return {
           gameId: runner.gameId,
+          ...(runner.getState().nombre ? { nombre: runner.getState().nombre } : {}),
           estado: 'activa' as const,
           membresia: jugadorId ? { jugadorId } : null,
           heroe: heroe

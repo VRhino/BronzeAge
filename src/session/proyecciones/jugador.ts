@@ -89,6 +89,7 @@ import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
+import type { InformeDeInspeccion } from '../../engine/ejercitos';
 import { cumpleCondicion, type ContextoTecnologia } from '../../engine/tecnologia';
 import { encontrarCapital } from '../../engine/mantenimiento';
 import { crearMapa, type Mapa } from '../../world/mapa';
@@ -348,6 +349,11 @@ export interface AsentamientoAvistado {
    * Gobernador de campaña manda sobre lo que recuerda.
    */
   interiorRecordado?: InteriorRecordado;
+  /**
+   * El almacén de una plaza PROPIA cuando tu columna está a su puerta (2026-10-09): lo que hace falta para cargar una caravana o repostar desde
+   * ahí sin entrar (`cargarCaravana` ya lo permite). Dentro de la plaza viaja entera en `asentamientos`; desde lejos, nada. Ausente en el resto.
+   */
+  almacen?: Asentamiento['almacen'];
 }
 
 /**
@@ -364,8 +370,8 @@ export interface CaravanaAvistada {
   posicionActual: Point;
   /** De quien es, por su plaza de origen. Ausente si esa plaza ya no existe: entonces no es de nadie. */
   faccionId?: string;
-  /** Si marcha con un ejercito (Doc 5.13.2). Cambia la decision entera: una caravana escoltada no es una
-   * presa, es un combate. */
+  /** Si va escoltada: adjunta a un ejército (Doc 5.13.2) o con escuadrones cedidos sin héroe (Doc 3.13.4, desde 2026-10-09). Cambia la decision
+   * entera: una caravana escoltada no es una presa, es un combate. */
   escoltada: boolean;
   /** QUE lleva, sin cuanto. Ordenado para que la lista no baile entre ticks por el orden del objeto. */
   recursos: string[];
@@ -547,6 +553,8 @@ export interface ProyeccionJugador {
    * Van en un array aparte y no mezclados con `ejercitos` a propósito: la diferencia entre "lo veo entero"
    * y "solo lo avisto" es de tipo, no de un campo opcional que el cliente pueda olvidarse de mirar. */
   ejercitosAvistados: EjercitoAvistado[];
+  /** Lo último que inspeccionaste (Doc 5.12.3), vigente `INSPECCION.informeMinutos`: sobrevive a recargar. Solo tuyo. */
+  informesDeInspeccion: InformeDeInspeccion[];
   /** Los ejércitos en preparación del lugar donde estás (plaza o campamento) y de tu Facción, abiertos y sin partir (Doc 5.14.5). */
   convocatorias: ConvocatoriaProyectada[];
   /** La convocatoria en la que ya vas, si vas en alguna. */
@@ -924,7 +932,7 @@ function caravanasAvistadas(
       id: c.id,
       posicionActual: c.posicionActual,
       ...(faccionDePlaza.has(c.origenAsentamientoId) ? { faccionId: faccionDePlaza.get(c.origenAsentamientoId)! } : {}),
-      escoltada: adjuntas.has(c.id),
+      escoltada: adjuntas.has(c.id) || (c.escoltaIds?.length ?? 0) > 0,
       recursos: Object.keys(c.contenido)
         .filter((r) => (c.contenido[r] ?? 0) > 0)
         .sort(),
@@ -1018,6 +1026,7 @@ export function proyectarParaJugador(
   const poligonoDe = new Map(geometria.zonas.map((z) => [z.asentamientoId, z.poligono]));
   // Lo que se ve pero no se pisa. Los propios entran aquí igual que los ajenos: se excluye SOLO la plaza en
   // la que el jugador está, que es la única que viaja entera.
+  const susColumnas = ejercitosPropios.filter((e) => e.participantes.some((p) => p.heroeId === heroeId));
   const avistados = estado.asentamientos
     .filter((a) => a.id !== dentroDe?.id && seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa, miradasVistas))
     .map((a) => ({
@@ -1029,6 +1038,7 @@ export function proyectarParaJugador(
       zona: poligonoDe.get(a.id) ?? [],
       edificios: a.edificios.filter((e) => e.estado === 'activo'),
       ...(esPropio(a.id) ? { cargos: a.cargos, politicasActivas: a.politicasActivas } : {}),
+      ...(esPropio(a.id) && susColumnas.some((e) => enLaPuertaDe(e, a)) ? { almacen: a.almacen } : {}),
       ...(recordadas[a.id] ? { interiorRecordado: recordadas[a.id] } : {}),
     }));
   const seVe = new Set(avistados.map((a) => a.id));
@@ -1085,6 +1095,7 @@ export function proyectarParaJugador(
       }),
     caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa, miradasVistas).filter((c) => !bloqueos.caravanas.has(c.id)),
     ejercitos: ejercitosPropios.map((e) => ({ ...e, capacidadCarga: capacidadCargaDe(e, estado.caravanas) })),
+    informesDeInspeccion: (estado.informesDeInspeccion ?? []).filter((i) => i.heroeId === heroeId && instanteDeTick(estado.tick) < i.expiraEn),
     ...convocatoriasDelLugar(estado, heroeId, jugador, faccionId),
     ejercitosAvistados: ejercitosAvistados.map((e) => ({
       id: e.id,

@@ -413,6 +413,8 @@ De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 
 El **nivel** de una plaza sí se ve porque una ciudad grande se ve grande desde fuera; no dice cuánta tropa tiene dentro, que es lo que decidiría un ataque.
 
+**Lo que se mira se guarda un rato** (2026-10-09): el resultado de inspeccionar no se pierde al recargar; queda como informe, con la fecha y el lugar donde se vio, durante `INSPECCION.informeMinutos` (10 minutos de mundo). Es solo del que miró, y para renovarlo hay que volver a acercarse y delatarse.
+
 **Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (40)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son—, de una caravana, si lleva escolta y qué recursos carga, nunca cuántos, y de una plaza ajena su defensa: la guarnición y los héroes que hay dentro, nunca su almacén (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá. **O pagándola en una taberna** (5.12.10): una Mirada presta ojos sobre una zona durante un rato y un Informe da la foto, con fecha, del layout y la defensa de una plaza.
 
 **Las caravanas ajenas y neutrales solo se ven dentro del radio de visión**, con una excepción por tamaño. Fuera de él están ocultas, y **sin memoria**: a diferencia de una ciudad, una caravana se mueve, así que una foto vieja no diría "aquí hubo una" — diría una mentira sobre dónde está ahora.

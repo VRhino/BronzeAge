@@ -16,6 +16,9 @@ import { faccionAsentadaDePrueba } from './faccionAsentadaDePrueba';
 import { OPC, partidaConAsentamiento } from './fixtures';
 import { LOGISTICA, MOVIMIENTO, SIMULACION, VISION } from '../../constants';
 import { conEscuadrones } from '../../engine/tropa';
+import { proyectarParaJugador } from '../proyecciones/jugador';
+import { instante } from '../../domain/tiempo';
+import { INSPECCION } from '../../constants';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 
 const opcDe = (heroeId: string) => ({ ...OPC, actor: heroeId });
@@ -325,6 +328,25 @@ describe('inspeccionar — la informacion se compra acercandose', () => {
     const aviso = r.eventos!.find((e) => e.codigo === 'columna.observada');
     expect(aviso, 'sin aviso, inspeccionar seria telemetria gratis').toBeDefined();
     expect((aviso!.payload as { observadorId: string }).observadorId).toBe(vecino);
+  });
+
+  it('lo inspeccionado queda en la proyección, solo para quien lo vio, y caduca (2026-10-09)', () => {
+    const { sesion, ejercitoId, vecino, fundador } = ejercitoYViajero('rechazar');
+    const geometria = { zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} };
+    expect(proyectarParaJugador(sesion.getState(), vecino, geometria).informesDeInspeccion).toEqual([]);
+
+    sesion.ejecutar(inspeccionar, { heroeId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
+    sesion.ejecutar(inspeccionar, { heroeId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId } }, opcDe(vecino));
+
+    const informes = proyectarParaJugador(sesion.getState(), vecino, geometria).informesDeInspeccion;
+    expect(informes, 'mirar dos veces lo mismo deja un solo informe').toHaveLength(1);
+    expect(informes[0]).toMatchObject({ heroeId: vecino, objetivo: { tipo: 'ejercito', id: ejercitoId }, contenido: { heroesIds: [fundador] } });
+    expect(informes[0]!.expiraEn - informes[0]!.vistoEn).toBe(INSPECCION.informeMinutos * 60_000);
+    expect(proyectarParaJugador(sesion.getState(), fundador, geometria).informesDeInspeccion, 'el observado no ve lo que se vio de él').toEqual([]);
+
+    const p = sesion.exportar();
+    const vencido = GameSession.importar({ ...p, state: { ...p.state, informesDeInspeccion: p.state.informesDeInspeccion!.map((i) => ({ ...i, expiraEn: instante(0) })) } });
+    expect(proyectarParaJugador(vencido.getState(), vecino, geometria).informesDeInspeccion).toEqual([]);
   });
 
   it('desde MAS LEJOS de 40 no se puede: hay que acercarse de verdad', () => {
