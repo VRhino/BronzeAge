@@ -5,10 +5,9 @@ import { dias } from '../../domain/tiempo';
 import { calcularNivelFaccion } from '../../engine/faccion';
 import { GameSession } from '../gameSession';
 import type { GameSessionState } from '../estado';
-import { proponerRelacion } from '../comandos/diplomacia';
 import { proponerFusion, responderFusion, retirarFusion } from '../comandos/fusion';
 import { faccionAsentadaDePrueba } from './faccionAsentadaDePrueba';
-import { OPC } from './fixtures';
+import { OPC, acordarRelacion } from './fixtures';
 
 function partida(...nombres: string[]) {
   const s = GameSession.crear('fusion', { seed: 11 });
@@ -74,7 +73,7 @@ describe('proponerFusion', () => {
 
     expect(s.ejecutar(proponerFusion, { faccionAId: ids[1]!, faccionBId: ids[0]!, nuevoNombre: 'Otra', nuevoReyId: reyB }, OPC).codigoError).toBe('fusion.invalida');
 
-    s.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC);
+    acordarRelacion(s, { tipo: 'vasallaje', faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC);
     const reyA = faccion(s, ids[0]!).reyId!;
     expect(s.ejecutar(proponerFusion, { faccionAId: ids[0]!, faccionBId: ids[1]!, nuevoNombre: 'X', nuevoReyId: reyA }, OPC).codigoError).toBe('fusion.invalida');
     // Su propio señor sí puede: el vasallaje termina en la fusión.
@@ -107,9 +106,9 @@ describe('responderFusion', () => {
   it('aceptar la ejecuta: nace C con el Rey y el nombre pactados y todo lo de A y B pasa a ella', () => {
     const { s: s0, ids, plazas } = partida('Alfa', 'Beta', 'Gamma', 'Delta', 'Epsilon');
     const [a, b, aliadaDeB, vasallaDeA, vasallaDeB] = ids as [string, string, string, string, string];
-    s0.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: b, faccionBId: aliadaDeB }, OPC);
-    s0.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: a, faccionBId: vasallaDeA, tributoRecurso: 'madera', tributoCantidad: 2 }, OPC);
-    s0.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: b, faccionBId: vasallaDeB, tributoRecurso: 'piedra', tributoCantidad: 3 }, OPC);
+    acordarRelacion(s0, { tipo: 'alianza', faccionAId: b, faccionBId: aliadaDeB }, OPC);
+    acordarRelacion(s0, { tipo: 'vasallaje', faccionAId: a, faccionBId: vasallaDeA, tributoRecurso: 'madera', tributoCantidad: 2 }, OPC);
+    acordarRelacion(s0, { tipo: 'vasallaje', faccionAId: b, faccionBId: vasallaDeB, tributoRecurso: 'piedra', tributoCantidad: 3 }, OPC);
     const [fa, fb] = [faccion(s0, a), faccion(s0, b)];
     // A: más reputación y una tecnología propia; B: más experiencia y otra (aparecida pero sin adoptar).
     const s = conEstado(s0, (e) => ({
@@ -170,7 +169,7 @@ describe('responderFusion', () => {
 
   it('el vasallaje entre A y B termina con la fusión sin dejar relaciones colgando', () => {
     const { s, ids } = partida('Alfa', 'Beta');
-    s.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC);
+    acordarRelacion(s, { tipo: 'vasallaje', faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC);
     s.ejecutar(responderFusion, { propuestaId: proponer(s, ids), aceptar: true }, OPC);
 
     expect(s.getState().relaciones.filter((r) => r.estado === 'activa')).toEqual([]);
@@ -184,7 +183,7 @@ describe('responderFusion', () => {
     const cambiado = conEstado(s, (e) => ({ ...e, facciones: e.facciones.map((f) => (f.id === ids[0] ? { ...f, reyId: otroReyDeA } : f)) }));
     expect(cambiado.ejecutar(responderFusion, { propuestaId: id, aceptar: true }, OPC).codigoError).toBe('fusion.invalida');
 
-    s.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC);
+    acordarRelacion(s, { tipo: 'vasallaje', faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC);
     expect(s.ejecutar(responderFusion, { propuestaId: id, aceptar: true }, OPC).codigoError).toBe('fusion.invalida');
     expect(ids.every((i) => s.getState().facciones.some((f) => f.id === i))).toBe(true);
   });

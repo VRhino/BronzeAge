@@ -5,10 +5,9 @@ import { ANEXION } from '../../constants';
 import { dias } from '../../domain/tiempo';
 import { GameSession } from '../gameSession';
 import type { GameSessionState } from '../estado';
-import { proponerRelacion } from '../comandos/diplomacia';
 import { proponerAnexion, responderAnexion, retirarAnexion } from '../comandos/anexion';
 import { faccionAsentadaDePrueba } from './faccionAsentadaDePrueba';
-import { OPC } from './fixtures';
+import { OPC, acordarRelacion } from './fixtures';
 
 function partida(...nombres: string[]) {
   const s = GameSession.crear('anexion', { seed: 11 });
@@ -53,7 +52,7 @@ describe('proponerAnexion', () => {
     const { s, ids } = partida('Alfa', 'Beta', 'Gamma');
     expect(s.ejecutar(proponerAnexion, { faccionAId: ids[0]!, faccionBId: ids[0]! }, OPC).codigoError).toBe('anexion.invalida');
 
-    s.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC);
+    acordarRelacion(s, { tipo: 'vasallaje', faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC);
     expect(s.ejecutar(proponerAnexion, { faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC).codigoError).toBe('anexion.invalida');
     // Su propio señor sí puede: el vasallaje termina en la anexión.
     expect(s.ejecutar(proponerAnexion, { faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC).ok).toBe(true);
@@ -86,8 +85,8 @@ describe('responderAnexion', () => {
   it('aceptar la ejecuta: plazas, ciudadanos y ejércitos pasan a A; sus relaciones se cancelan o se heredan', () => {
     const { s, ids, plazas } = partida('Alfa', 'Beta', 'Gamma', 'Delta');
     const [a, b, aliada, vasalla] = ids as [string, string, string, string];
-    s.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: b, faccionBId: aliada }, OPC);
-    s.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: b, faccionBId: vasalla, tributoRecurso: 'madera', tributoCantidad: 3 }, OPC);
+    acordarRelacion(s, { tipo: 'alianza', faccionAId: b, faccionBId: aliada }, OPC);
+    acordarRelacion(s, { tipo: 'vasallaje', faccionAId: b, faccionBId: vasalla, tributoRecurso: 'madera', tributoCantidad: 3 }, OPC);
     const ciudadanosB = s.getState().facciones.find((f) => f.id === b)!.ciudadanosIds;
     s.ejecutar(proponerAnexion, { faccionAId: a, faccionBId: b }, OPC);
 
@@ -108,7 +107,7 @@ describe('responderAnexion', () => {
 
   it('el vasallaje entre A y B termina con la anexión sin dejar relaciones colgando', () => {
     const { s, ids } = partida('Alfa', 'Beta');
-    s.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC);
+    acordarRelacion(s, { tipo: 'vasallaje', faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC);
     s.ejecutar(proponerAnexion, { faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC);
     s.ejecutar(responderAnexion, { propuestaId: propuestas(s)[0]!.id, aceptar: true }, OPC);
 
@@ -118,7 +117,7 @@ describe('responderAnexion', () => {
   it('se rechaza si B pasó a ser vasalla de un tercero mientras esperaba', () => {
     const { s, ids } = partida('Alfa', 'Beta', 'Gamma');
     s.ejecutar(proponerAnexion, { faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC);
-    s.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC);
+    acordarRelacion(s, { tipo: 'vasallaje', faccionAId: ids[2]!, faccionBId: ids[1]! }, OPC);
 
     const r = s.ejecutar(responderAnexion, { propuestaId: propuestas(s)[0]!.id, aceptar: true }, OPC);
     expect(r.codigoError).toBe('anexion.invalida');
@@ -148,7 +147,7 @@ describe('retirarAnexion', () => {
 describe('desarme del señor (Doc 2.4, ruptura 4)', () => {
   it('sus vasallos quedan libres en el tick en que se queda sin asentamientos, y no antes', () => {
     const { s: s0, ids, plazas } = partida('Alfa', 'Beta');
-    s0.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC);
+    acordarRelacion(s0, { tipo: 'vasallaje', faccionAId: ids[0]!, faccionBId: ids[1]! }, OPC);
     s0.avanzarTick();
     expect(s0.getState().relaciones[0]!.estado).toBe('activa');
 

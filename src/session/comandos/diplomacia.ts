@@ -4,28 +4,29 @@
 // La rebelión la narra el MOTOR (`engine/diplomacia.ts`), que ya
 // emite `EventoCrudo` con código y payload; aquí solo se les añade el contexto temporal. Proponer y romper los
 // narra esta capa, que es donde se sabe qué relación se creó.
-import type { RecursoTipo } from '../../domain/types';
+import type { Instante } from '../../domain/tiempo';
+import type { PropuestaRelacion, RecursoTipo } from '../../domain/types';
 import {
-  proponerVasallaje as proponerVasallajeEngine,
-  proponerAlianza as proponerAlianzaEngine,
+  DiplomaciaInvalidaError,
+  exigirRelacionPosible,
+  proponerRelacionPendiente,
+  relacionDePropuesta,
+  type PayloadRelacionPropuestaPendiente,
+  type PayloadRelacionRespondida,
   romperRelacion as romperRelacionEngine,
   rebelionVasallo as rebelionVasalloEngine,
   declararGuerra as declararGuerraEngine,
   proponerPaz as proponerPazEngine,
   type PayloadGuerraDeclarada,
 } from '../../engine/diplomacia';
+import { propuestasVigentes } from '../../engine/trasladoDeFaccion';
+import { faccionesConBatallaAbierta } from '../batallas';
 import type { GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { comando, rechazar } from './ayudas';
+import { comando, exigirFaccion, rechazar } from './ayudas';
 import { CODIGOS_ERROR } from './codigosDeError';
 import { desdeCrudos, evento } from './eventos';
 
-export interface PayloadRelacionPropuesta {
-  relacionId: string;
-  tipo: 'vasallaje' | 'alianza';
-  faccionAId: string;
-  faccionBId: string;
-}
 export interface PayloadRelacionRota {
   relacionId: string;
   iniciadorFaccionId: string;
@@ -33,6 +34,7 @@ export interface PayloadRelacionRota {
 
 export interface ParamsProponerRelacion {
   tipo: 'vasallaje' | 'alianza';
+  /** Quien propone: en un vasallaje, la señora. La otra tiene que aceptar (2026-10-09). */
   faccionAId: string;
   faccionBId: string;
   /** Solo para vasallaje; ignorado en alianzas. */
@@ -40,38 +42,98 @@ export interface ParamsProponerRelacion {
   tributoCantidad?: number;
 }
 
-export const proponerRelacion = comando<ParamsProponerRelacion, { relacionId: string }>((estado, _mapa, ctx, params) => {
-  const nueva =
-    params.tipo === 'vasallaje'
-      ? proponerVasallajeEngine(
-          estado.facciones,
-          estado.relaciones,
-          params.faccionAId,
-          params.faccionBId,
-          params.tributoRecurso ?? 'trigo',
-          params.tributoCantidad ?? 0,
-          ctx.instante,
-          ctx.ids.siguiente()
-        )
-      : proponerAlianzaEngine(estado.facciones, estado.relaciones, params.faccionAId, params.faccionBId, ctx.instante, ctx.ids.siguiente());
+export interface ParamsResponderRelacion {
+  propuestaId: string;
+  aceptar: boolean;
+}
 
-  const siguiente: GameSessionState = { ...estado, relaciones: [...estado.relaciones, nueva] };
+export interface ParamsRetirarRelacion {
+  propuestaId: string;
+}
+
+function pendiente(estado: GameSessionState, propuestaId: string, ahora: Instante): PropuestaRelacion {
+  const propuesta = (estado.propuestasRelacion ?? []).find((p) => p.id === propuestaId);
+  if (!propuesta) rechazar(CODIGOS_ERROR.relacionPropuestaNoExiste);
+  if (propuestasVigentes([propuesta], ahora).length === 0) rechazar(CODIGOS_ERROR.relacionPropuestaCaducada);
+  return propuesta;
+}
+
+const carga = (p: PropuestaRelacion): PayloadRelacionPropuestaPendiente => ({ propuestaId: p.id, tipo: p.tipo, faccionAId: p.faccionAId, faccionBId: p.faccionBId });
+const sin = (e: GameSessionState, propuestaId: string): GameSessionState => ({ ...e, propuestasRelacion: (e.propuestasRelacion ?? []).filter((p) => p.id !== propuestaId) });
+
+/** Alianza o vasallaje (Doc 2.3 y 2.4): deja una propuesta pendiente que solo el Rey de la otra Facción acepta (2026-10-09), como la anexión. */
+export const proponerRelacion = comando<ParamsProponerRelacion, { propuestaId: string }>((estado, _mapa, ctx, params) => {
+  const a = exigirFaccion(estado, params.faccionAId);
+  const b = exigirFaccion(estado, params.faccionBId);
+  const nueva = proponerRelacionPendiente(
+    estado.facciones,
+    estado.relaciones,
+    estado.propuestasRelacion,
+    params.tipo,
+    params.faccionAId,
+    params.faccionBId,
+    params.tipo === 'vasallaje' ? { recurso: params.tributoRecurso ?? 'trigo', cantidadPorMinuto: params.tributoCantidad ?? 0 } : undefined,
+    ctx.actor,
+    ctx.instante,
+    `relacion-${params.faccionAId}-${params.faccionBId}-${ctx.ids.siguiente()}`
+  );
   return exito(
-    siguiente,
+    { ...estado, propuestasRelacion: [...propuestasVigentes(estado.propuestasRelacion, ctx.instante), nueva] },
     [
       evento(ctx, {
         codigo: 'diplomacia.relacion_propuesta',
-        mensaje: `Relación propuesta: ${nueva.id}.`,
-        payload: {
-          relacionId: nueva.id,
-          tipo: params.tipo,
-          faccionAId: params.faccionAId,
-          faccionBId: params.faccionBId,
-        } satisfies PayloadRelacionPropuesta,
+        mensaje: `${a.nombre} propone ${params.tipo === 'alianza' ? 'una alianza' : 'un vasallaje'} a ${b.nombre}.`,
+        payload: { ...carga(nueva), expiraEn: nueva.expiraEn },
+      }),
+    ],
+    { propuestaId: nueva.id }
+  );
+});
+
+/** El Rey de la otra Facción acepta (la relación nace en el acto) o rechaza. Al aceptar se revalida todo: el mundo cambia mientras espera. */
+export const responderRelacion = comando<ParamsResponderRelacion, { relacionId?: string }>((estado, _mapa, ctx, params) => {
+  const propuesta = pendiente(estado, params.propuestaId, ctx.instante);
+  const a = exigirFaccion(estado, propuesta.faccionAId);
+  const b = exigirFaccion(estado, propuesta.faccionBId);
+
+  if (!params.aceptar) {
+    return exito(sin(estado, propuesta.id), [
+      evento(ctx, {
+        codigo: 'diplomacia.relacion_rechazada',
+        mensaje: `${b.nombre} rechaza ${propuesta.tipo === 'alianza' ? 'la alianza' : 'el vasallaje'} de ${a.nombre}.`,
+        payload: { ...carga(propuesta), aceptada: false } satisfies PayloadRelacionRespondida,
+      }),
+    ]);
+  }
+
+  exigirRelacionPosible(estado.facciones, estado.relaciones, propuesta.tipo, propuesta.faccionAId, propuesta.faccionBId);
+  if (faccionesConBatallaAbierta(estado, [propuesta.faccionAId, propuesta.faccionBId], ctx.instante)) {
+    throw new DiplomaciaInvalidaError('Alguna de las dos Facciones tiene una batalla en curso: espera a que termine.');
+  }
+  const nueva = relacionDePropuesta(estado.facciones, estado.relaciones, propuesta, ctx.instante, ctx.ids.siguiente());
+  return exito(
+    { ...sin(estado, propuesta.id), relaciones: [...estado.relaciones, nueva] },
+    [
+      evento(ctx, {
+        codigo: 'diplomacia.relacion_aceptada',
+        mensaje: `${b.nombre} acepta ${propuesta.tipo === 'alianza' ? 'la alianza' : 'el vasallaje'} de ${a.nombre}.`,
+        payload: { ...carga(propuesta), aceptada: true, relacionId: nueva.id } satisfies PayloadRelacionRespondida,
       }),
     ],
     { relacionId: nueva.id }
   );
+});
+
+/** Quien propuso la retira mientras nadie la ha contestado. */
+export const retirarRelacion = comando<ParamsRetirarRelacion, void>((estado, _mapa, ctx, params) => {
+  const propuesta = pendiente(estado, params.propuestaId, ctx.instante);
+  return exito(sin(estado, propuesta.id), [
+    evento(ctx, {
+      codigo: 'diplomacia.relacion_retirada',
+      mensaje: `${propuesta.faccionAId} retira su propuesta de ${propuesta.tipo} a ${propuesta.faccionBId}.`,
+      payload: carga(propuesta),
+    }),
+  ]);
 });
 
 export interface ParamsRomperRelacion {

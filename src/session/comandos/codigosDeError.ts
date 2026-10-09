@@ -54,6 +54,8 @@ export const CODIGOS_ERROR = {
   // Anexión (Doc 2.6): la propuesta que se contesta o retira no existe, o ya caducó.
   anexionNoExiste: 'anexion.no_existe',
   anexionCaducada: 'anexion.caducada',
+  relacionPropuestaNoExiste: 'relacion.propuesta_no_existe',
+  relacionPropuestaCaducada: 'relacion.propuesta_caducada',
   fusionNoExiste: 'fusion.no_existe',
   fusionCaducada: 'fusion.caducada',
   faccionNombreVacio: 'faccion.nombre_vacio',

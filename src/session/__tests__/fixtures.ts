@@ -7,6 +7,7 @@ import { crearFaccion } from '../comandos/crearFaccion';
 import { fundarAsentamiento } from './fundarDePrueba';
 import { cambiarResidencia } from '../comandos/cargos';
 import { responderSolicitud, solicitarIngreso } from '../comandos/ingresoEnFaccion';
+import { proponerRelacion, responderRelacion } from '../comandos/diplomacia';
 import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { campamentoDe } from '../../engine/tropa';
 import { instanteDeTick, isoDeInstante } from '../estado';
@@ -164,4 +165,18 @@ export function entraDeVecino(sesion: GameSession, faccionId: string, asentamien
   sesion.ejecutar(solicitarIngreso, { faccionId }, { actor: heroeId });
   sesion.ejecutar(responderSolicitud, { faccionId, heroeId, aceptar: true }, { actor: rey });
   sesion.ejecutar(cambiarResidencia, { destinoId: asentamientoId, heroeId }, { actor: heroeId });
+}
+
+/**
+ * Alianza o vasallaje ya pactado: lo propone `faccionAId` y lo acepta el Rey de la otra (2026-10-09). Para los tests que solo necesitan la relación
+ * activa. Devuelve el resultado de aceptar (`datos.relacionId`), o el de proponer si ni siquiera se pudo proponer.
+ */
+export function acordarRelacion(
+  sesion: GameSession,
+  params: Parameters<typeof proponerRelacion>[3],
+  opc: { actor: string } = OPC
+): ReturnType<GameSession['ejecutar']> & { datos?: { relacionId: string } } {
+  const propuesta = sesion.ejecutar(proponerRelacion, params, opc);
+  if (!propuesta.ok) return propuesta as never;
+  return sesion.ejecutar(responderRelacion, { propuestaId: propuesta.datos!.propuestaId, aceptar: true }, opc) as never;
 }

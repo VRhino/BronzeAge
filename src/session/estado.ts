@@ -16,6 +16,7 @@ import type {
   MiradaIntel,
   PropuestaAnexion,
   PropuestaFusion,
+  PropuestaRelacion,
   Caravana,
   Faccion,
   OrdenMercado,
@@ -161,6 +162,8 @@ export interface GameSessionState {
   propuestasAnexion?: PropuestaAnexion[];
   /** Propuestas de fusión (Doc 2.6) pendientes de respuesta del Rey de B; las caducadas se barren al proponer. Ausente = ninguna. */
   propuestasFusion?: PropuestaFusion[];
+  /** Propuestas de alianza o vasallaje (Doc 2.3 y 2.4) pendientes de respuesta del Rey de la otra Facción; las caducadas se barren al proponer. Ausente = ninguna. */
+  propuestasRelacion?: PropuestaRelacion[];
 }
 
 /** Proyecta el estado de partida al subconjunto que consume el motor. El motor no conoce `gameId`, `version`,

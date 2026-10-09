@@ -17,7 +17,7 @@ import { asignarGuarnicion, borrarLoadout, guardarEnAlmacenPersonal, guardarLoad
 import { activarPolitica, asignarCargoLocal, asignarEmbajador, asignarRey, cambiarResidencia, dejarResidencia, admitirOtrasFacciones, designarCapital, residirEnCampamento } from './cargos';
 import { proponerAnexion, responderAnexion, retirarAnexion } from './anexion';
 import { proponerFusion, responderFusion, retirarFusion } from './fusion';
-import { declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from './diplomacia';
+import { declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, responderRelacion, retirarRelacion, romperRelacion } from './diplomacia';
 import {
   aceptarTrueque,
   agregarCarroCaravana,
@@ -119,6 +119,8 @@ const MANEJADORES = {
   responderFusion,
   retirarFusion,
   proponerRelacion,
+  responderRelacion,
+  retirarRelacion,
   rebelionVasallo,
   romperRelacion,
   declararGuerra,

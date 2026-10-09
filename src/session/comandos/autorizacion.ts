@@ -482,6 +482,21 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     // `faccionAId` es quien propone, por la misma convención que `romperRelacion.iniciadorFaccionId`.
     condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.faccionAId),
   },
+  // La ofrecida la contesta solo el Rey de la otra Facción (`faccionBId`); la retira quien tiene autoridad en la que ofreció (Doc 2.3 y 2.4).
+  responderRelacion: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const propuesta = estado.propuestasRelacion?.find((p) => p.id === params.propuestaId);
+      return !propuesta || esReyDeFaccion(estado, heroeId, propuesta.faccionBId);
+    },
+  },
+  retirarRelacion: {
+    rolesPermitidos: ['jugador'],
+    condicionJugador: (estado, heroeId, params) => {
+      const propuesta = estado.propuestasRelacion?.find((p) => p.id === params.propuestaId);
+      return !propuesta || conAutoridadDiplomatica(estado, heroeId, propuesta.faccionAId);
+    },
+  },
   romperRelacion: {
     rolesPermitidos: ['jugador'],
     condicionJugador: (estado, heroeId, params) => conAutoridadDiplomatica(estado, heroeId, params.iniciadorFaccionId),

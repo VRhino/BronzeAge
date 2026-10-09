@@ -78,7 +78,7 @@ import type {
   ZonaInfluencia,
 } from '../../domain/types';
 import { ALMACEN_PERSONAL, EDIFICIO_CATALOGO, EPICAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
-import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, PropuestaAnexion, PropuestaFusion, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
+import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, PropuestaAnexion, PropuestaFusion, PropuestaRelacion, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
 import { propuestasVigentes } from '../../engine/trasladoDeFaccion';
 import { miradasActivasDe } from '../../engine/intel';
 import { esCaravanaGrande } from '../../engine/caravanas';
@@ -490,6 +490,8 @@ export interface ProyeccionJugador {
   miradasIntel: MiradaIntel[];
   /** Las propuestas de anexión vigentes que ofrece o recibe la Facción propia (Doc 2.6): el Rey de la absorbida las acepta o rechaza, la absorbente las retira. */
   propuestasAnexion: PropuestaAnexion[];
+  /** Las propuestas de alianza o vasallaje vigentes que hizo o recibió la Facción propia (Doc 2.3 y 2.4): la receptora las acepta o rechaza, la proponente las retira. */
+  propuestasRelacion: PropuestaRelacion[];
   /** Las propuestas de fusión vigentes que hace o recibe la Facción propia (Doc 2.6): el Rey de B las acepta o rechaza, el de A las retira. */
   propuestasFusion: PropuestaFusion[];
   /** Los Informes de plaza de la Facción propia, el último de cada plaza, con su fecha (Doc 5.12.10). */
@@ -1033,6 +1035,7 @@ export function proyectarParaJugador(
       .map((a) => ({ id: a.id, posicion: a.posicion, ...(a.enAsentamientoId ? { enAsentamientoId: a.enAsentamientoId } : {}) })),
     miradasIntel: (estado.miradasIntel ?? []).filter((m) => m.faccionId === faccionId && m.libreEn > ahora),
     propuestasAnexion: propuestasVigentes(estado.propuestasAnexion, ahora).filter((p) => p.absorbenteId === faccionId || p.absorbidaId === faccionId),
+    propuestasRelacion: propuestasVigentes(estado.propuestasRelacion, ahora).filter((p) => p.faccionAId === faccionId || p.faccionBId === faccionId),
     propuestasFusion: propuestasVigentes(estado.propuestasFusion, ahora).filter((p) => p.faccionAId === faccionId || p.faccionBId === faccionId),
     informesPlaza: Object.values(memoria.informes ?? {}),
     tarifasIntel: { mirada: INTEL.mirada, informe: INTEL.informe, cupoMiradas: CUPO_MIRADAS },

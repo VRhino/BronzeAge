@@ -426,6 +426,16 @@ más estados que `activa`. Nada de otros jugadores. Para unirse: `POST /jugador/
 
 **`agregarCarroCaravana`** (2026-10-09) se rechaza con `detalleError` «La flota de este asentamiento ya tiene sus N carros…» cuando los carros de todas las caravanas comerciales del origen alcanzan el cupo del Mercado: 3 / 9 / 18 por nivel 1 / 2 / 3 (`cupoCarros` en `EDIFICIO_CATALOGO.mercado.niveles`, publicado en `GET /balance`). Mover carros entre caravanas no lo afecta.
 
+### 4.2b-ter Alianza y vasallaje con aceptación (2026-10-09, Doc 2.3 y 2.4)
+
+| Comando | Parámetros | Devuelve | Notas |
+|---|---|---|---|
+| `proponerRelacion` | `tipo` (`alianza` \| `vasallaje`), `faccionAId` (quien propone; en un vasallaje, la señora), `faccionBId`, `tributoRecurso?`, `tributoCantidad?` | `{ propuestaId }` | **Ya no crea la relación**: deja una propuesta pendiente. Rey o Embajador de A. Una pendiente por par de Facciones |
+| `responderRelacion` | `propuestaId`, `aceptar` | `{ relacionId? }` | Solo el Rey de B. Aceptar crea la relación activa (`relacionId`) y revalida; rechazar la retira |
+| `retirarRelacion` | `propuestaId` | — | Rey o Embajador de A, mientras nadie la ha contestado |
+
+Códigos de error nuevos: `relacion.propuesta_no_existe`, `relacion.propuesta_caducada`; las reglas rotas dan `diplomacia.invalida` con `detalleError`. Eventos: `diplomacia.relacion_propuesta` (`{ propuestaId, tipo, faccionAId, faccionBId, expiraEn }`), `diplomacia.relacion_aceptada` (+ `relacionId`), `diplomacia.relacion_rechazada`, `diplomacia.relacion_retirada`. **Proyección:** `propuestasRelacion[]` —`{ id, tipo, faccionAId, faccionBId, tributo?, propuestaPor, creadaEn, expiraEn }`, las vigentes que hizo o recibió la Facción propia—.
+
 ### 4.2b-bis Ejército en preparación y ejército sin destino fijo (2026-10-08, Doc 5.12.1 y 5.14.5; modelo en doc 01 §13)
 
 **Sin destino fijo.** `movilizarEjercito` y `salirDelCampamento` ya **no exigen `objetivo`** (opcional, para quien lo tenga claro): el ejército sale

@@ -266,6 +266,8 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   rebelionVasallo: objeto({ relacionId: IDENTIFICADOR }, ['relacionId']),
   declararGuerra: objeto({ faccionAId: IDENTIFICADOR, faccionBId: IDENTIFICADOR }, ['faccionAId', 'faccionBId']),
   proponerPaz: objeto({ relacionId: IDENTIFICADOR, faccionId: IDENTIFICADOR }, ['relacionId', 'faccionId']),
+  responderRelacion: objeto({ propuestaId: IDENTIFICADOR, aceptar: { type: 'boolean' } }, ['propuestaId', 'aceptar']),
+  retirarRelacion: objeto({ propuestaId: IDENTIFICADOR }, ['propuestaId']),
   proponerAnexion: objeto({ faccionAId: IDENTIFICADOR, faccionBId: IDENTIFICADOR }, ['faccionAId', 'faccionBId']),
   responderAnexion: objeto({ propuestaId: IDENTIFICADOR, aceptar: { type: 'boolean' } }, ['propuestaId', 'aceptar']),
   retirarAnexion: objeto({ propuestaId: IDENTIFICADOR }, ['propuestaId']),

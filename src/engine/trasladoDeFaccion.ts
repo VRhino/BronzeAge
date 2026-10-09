@@ -11,6 +11,7 @@ import type {
   MiradaIntel,
   PropuestaAnexion,
   PropuestaFusion,
+  PropuestaRelacion,
   RedCaminos,
   RelacionPolitica,
 } from '../domain/types';
@@ -31,6 +32,7 @@ export interface MundoDeFacciones {
   tecnologia: EstadoTecnologia;
   propuestasAnexion?: PropuestaAnexion[];
   propuestasFusion?: PropuestaFusion[];
+  propuestasRelacion?: PropuestaRelacion[];
 }
 
 /** Las propuestas (de anexión o de fusión) que aún valen: las caducadas se quedan en la lista hasta que algo las barre, pero ya no cuentan. */
@@ -121,5 +123,6 @@ export function trasladarFaccion(mundo: MundoDeFacciones, origenId: string, dest
     // Lo que se ofreció al origen o por él ya no tiene sentido; lo que otros ofrecen al destino sigue en pie.
     propuestasAnexion: (mundo.propuestasAnexion ?? []).filter((p) => !nombraOrigen(p)),
     propuestasFusion: (mundo.propuestasFusion ?? []).filter((p) => !nombraOrigen(p)),
+    propuestasRelacion: (mundo.propuestasRelacion ?? []).filter((p) => !nombraOrigen(p)),
   };
 }

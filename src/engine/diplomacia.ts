@@ -1,6 +1,7 @@
-import type { AcuerdoTrueque, Asentamiento, Faccion, RelacionPolitica } from '../domain/types';
+import type { AcuerdoTrueque, Asentamiento, Faccion, PropuestaRelacion, RelacionPolitica } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import type { Instante } from '../domain/tiempo';
+import { dias, sumar, type Instante } from '../domain/tiempo';
+import { propuestasVigentes } from './trasladoDeFaccion';
 
 /** Fase A5 — payload de `diplomacia.tributo_pagado` (ver `avanzarTributos`). */
 export interface PayloadTributoPagado {
@@ -9,7 +10,7 @@ export interface PayloadTributoPagado {
   recurso: string;
   cantidad: number;
 }
-import { REPUTACION } from '../constants';
+import { RELACION_PROPUESTA, REPUTACION } from '../constants';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { aplicarAjustesReputacion, puedeProponerAlianza } from './reputacion';
 import { ReglaInvalidaError } from './errores';
@@ -54,9 +55,87 @@ function validarPar(facciones: Faccion[], aId: string, bId: string, relaciones: 
   }
 }
 
+/** Payloads de la propuesta de alianza o vasallaje (2026-10-09). */
+export interface PayloadRelacionPropuestaPendiente {
+  propuestaId: string;
+  tipo: 'alianza' | 'vasallaje';
+  faccionAId: string;
+  faccionBId: string;
+}
+export interface PayloadRelacionRespondida extends PayloadRelacionPropuestaPendiente {
+  aceptada: boolean;
+  /** La relación que nació, si se aceptó. */
+  relacionId?: string;
+}
+
 /**
- * Vasallaje (Doc 2.4): "protección a cambio de tributo pactado en recursos específicos". Fase 0 acepta la
- * propuesta al instante (sin Embajador interactivo real todavía) y el tributo se paga automáticamente cada tick.
+ * Lo que impide que A proponga (o B acepte) esta alianza o vasallaje ahora mismo, o nada. Se mira al proponer y otra vez al aceptar: el mundo
+ * cambia mientras espera. Las dos Facciones existen, distintas y sin relación activa entre ellas (la guerra cuenta); las dos tienen Rey (A
+ * ofrece y el de B acepta); en un vasallaje ninguna es ya vasalla de una tercera; y la alianza pide la reputación de quien la propone.
+ */
+export function exigirRelacionPosible(
+  facciones: Faccion[],
+  relaciones: RelacionPolitica[],
+  tipo: 'alianza' | 'vasallaje',
+  faccionAId: string,
+  faccionBId: string
+): void {
+  validarPar(facciones, faccionAId, faccionBId, relaciones);
+  for (const id of [faccionAId, faccionBId]) {
+    const f = facciones.find((x) => x.id === id)!;
+    if (f.reyId === null) throw new DiplomaciaInvalidaError(`${f.nombre} no tiene Rey que pueda pactar.`);
+  }
+  if (tipo === 'vasallaje') {
+    const yaVasalla = relaciones.find((r) => r.estado === 'activa' && r.tipo === 'vasallaje' && (r.faccionBId === faccionAId || r.faccionBId === faccionBId));
+    if (yaVasalla) throw new DiplomaciaInvalidaError('Una Facción vasalla de otra no puede pactar un vasallaje: su señor tiene que liberarla antes.');
+  } else {
+    const proponente = facciones.find((f) => f.id === faccionAId)!;
+    if (!puedeProponerAlianza(proponente)) {
+      throw new DiplomaciaInvalidaError(`Reputación demasiado baja (${proponente.reputacion.toFixed(0)}) para que el Embajador proponga alianzas (Doc 2.7).`);
+    }
+  }
+}
+
+/** Una propuesta nueva de A a B, o el motivo por el que no cabe. Una sola entre cada par de Facciones, en cualquier sentido. */
+export function proponerRelacionPendiente(
+  facciones: Faccion[],
+  relaciones: RelacionPolitica[],
+  propuestas: readonly PropuestaRelacion[] | undefined,
+  tipo: 'alianza' | 'vasallaje',
+  faccionAId: string,
+  faccionBId: string,
+  tributo: { recurso: string; cantidadPorMinuto: number } | undefined,
+  propuestaPor: string,
+  ahora: Instante,
+  id: string
+): PropuestaRelacion {
+  exigirRelacionPosible(facciones, relaciones, tipo, faccionAId, faccionBId);
+  const yaPropuesta = propuestasVigentes(propuestas, ahora).some(
+    (p) => (p.faccionAId === faccionAId && p.faccionBId === faccionBId) || (p.faccionAId === faccionBId && p.faccionBId === faccionAId)
+  );
+  if (yaPropuesta) throw new DiplomaciaInvalidaError('Ya hay una propuesta pendiente entre estas Facciones.');
+  return {
+    id,
+    tipo,
+    faccionAId,
+    faccionBId,
+    ...(tipo === 'vasallaje' && tributo ? { tributo } : {}),
+    propuestaPor,
+    creadaEn: ahora,
+    expiraEn: sumar(ahora, dias(RELACION_PROPUESTA.caducidadDias)),
+  };
+}
+
+/** La relación activa que nace al aceptar la propuesta. */
+export function relacionDePropuesta(facciones: Faccion[], relaciones: RelacionPolitica[], propuesta: PropuestaRelacion, instante: Instante, contador = 0): RelacionPolitica {
+  return propuesta.tipo === 'vasallaje'
+    ? proponerVasallaje(facciones, relaciones, propuesta.faccionAId, propuesta.faccionBId, propuesta.tributo?.recurso ?? 'trigo', propuesta.tributo?.cantidadPorMinuto ?? 0, instante, contador)
+    : proponerAlianza(facciones, relaciones, propuesta.faccionAId, propuesta.faccionBId, instante, contador);
+}
+
+/**
+ * Vasallaje (Doc 2.4): "protección a cambio de tributo pactado en recursos específicos". Crea la relación activa; quien la pide al mundo es
+ * `relacionDePropuesta`, una vez aceptada (2026-10-09). El tributo se paga automáticamente cada tick.
  */
 export function proponerVasallaje(
   facciones: Faccion[],

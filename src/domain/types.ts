@@ -1348,6 +1348,24 @@ export interface PropuestaFusion {
   expiraEn: Instante;
 }
 
+/**
+ * Propuesta de alianza o vasallaje pendiente (Doc 2.3 y 2.4, 2026-10-09): `faccionAId` ofrece y solo el Rey de `faccionBId` la acepta; al aceptar
+ * nace la `RelacionPolitica` activa. En un vasallaje A es la señora y B la vasalla (como en la relación). Una por par; caduca sola
+ * (`RELACION_PROPUESTA.caducidadDias`) y se retira al contestarla, retirarla o cambiar el mundo bajo ella.
+ */
+export interface PropuestaRelacion {
+  id: string;
+  tipo: 'alianza' | 'vasallaje';
+  faccionAId: string;
+  faccionBId: string;
+  /** Solo en un vasallaje: lo que la vasalla pagará cada minuto. */
+  tributo?: { recurso: string; cantidadPorMinuto: number };
+  /** El Rey o Embajador de A que la hizo. */
+  propuestaPor: string;
+  creadaEn: Instante;
+  expiraEn: Instante;
+}
+
 // --- Sprint 6: Cierre (Doc 2.7/2.9, mantenimiento Doc 4.5) ---
 
 /**

@@ -16,7 +16,7 @@ import { proponerRelacion } from '../comandos/diplomacia';
 import { MOMENTO, OPC, partidaConAsentamiento } from './fixtures';
 import type { PayloadFaccionCreada } from '../comandos/crearFaccion';
 import type { PayloadRenombrado } from '../comandos/construccion';
-import type { PayloadRelacionPropuesta } from '../comandos/diplomacia';
+import type { PayloadRelacionPropuestaPendiente } from '../../engine/diplomacia';
 
 describe('eventos de comando (códigos estables)', () => {
   it('ningún comando aceptado emite ya `codigo: "legado"`', () => {
@@ -71,8 +71,8 @@ describe('eventos de comando (códigos estables)', () => {
     expect(r.ok).toBe(true);
     const e = r.eventos[0]!;
     expect(e.codigo).toBe('diplomacia.relacion_propuesta');
-    expect(e.payload as PayloadRelacionPropuesta).toEqual({
-      relacionId: r.datos!.relacionId,
+    expect(e.payload as PayloadRelacionPropuestaPendiente).toMatchObject({
+      propuestaId: r.datos!.propuestaId,
       tipo: 'alianza',
       faccionAId: faccionId,
       faccionBId: otra,

@@ -2100,6 +2100,12 @@ export const ANEXION = {
   caducidadDias: 3,
 } as const;
 
+/** Alianza y vasallaje (Doc 2.3 y 2.4, decidido el 2026-10-09): se proponen y la otra Facción tiene que aceptar, como la anexión. */
+export const RELACION_PROPUESTA = {
+  /** Días de mundo que una propuesta espera la respuesta del Rey de la otra Facción. PLACEHOLDER, igual que la anexión. */
+  caducidadDias: 3,
+} as const;
+
 /** Fusión entre Facciones (Doc 2.6, decidido el 2026-10-06). */
 export const FUSION = {
   /** Días de mundo que una propuesta espera la respuesta del Rey de B. PLACEHOLDER. */

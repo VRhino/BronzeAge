@@ -50,7 +50,7 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 1. El vasallo paga TRIBUTO al señor, en la forma que este decida.
 2. El señor debe DEFENDER a sus vasallos: declarar guerra a un vasallo declara automáticamente guerra a su señor, y viceversa (guerra al señor = guerra a todos sus vasallos).
 
-**Formación:** propuesta diplomática — protección a cambio de tributo pactado en recursos específicos.
+**Formación:** propuesta diplomática — protección a cambio de tributo pactado en recursos específicos. **Hace falta aceptación** (decisión del autor, 2026-10-09), como en la anexión y la fusión (2.6): la señora propone (`proponerRelacion`, el Rey o el Embajador) y queda pendiente; la contesta **solo el Rey de la otra Facción** (`responderRelacion`, aceptar o rechazar) y quien propuso puede retirarla (`retirarRelacion`). Aceptar crea la relación activa en el acto, con su tributo. Caduca a los `RELACION_PROPUESTA.caducidadDias` (3 días de mundo, placeholder) y solo puede haber una propuesta pendiente entre dos Facciones, en cualquier sentido. Al aceptar se revalida: las dos existen y tienen Rey, no hay relación activa entre ellas (la guerra cuenta), ninguna es ya vasalla de una tercera, no hay batalla abierta de ninguna de las dos. **Lo mismo vale para la alianza** (2.3). La guerra y la paz no cambian.
 
 **Ruptura (4 vías):**
 1. Rebelión forzada del vasallo → declaración de guerra automática del vasallo hacia el señor (y resto de vasallos), Y cancelación inmediata de todos los acuerdos comerciales/tratados vigentes.

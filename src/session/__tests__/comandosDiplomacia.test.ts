@@ -7,7 +7,10 @@
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
+import { declararGuerra, proponerPaz, proponerRelacion, rebelionVasallo, responderRelacion, retirarRelacion, romperRelacion } from '../comandos/diplomacia';
+
+import { acordarRelacion } from './fixtures';
+import { instante } from '../../domain/tiempo';
 
 const OPC = { actor: 'jugador-test' };
 
@@ -44,7 +47,7 @@ describe('rebelionVasallo', () => {
 describe('proponerRelacion', () => {
   it('éxito: crea la alianza, la añade al estado y devuelve su id', () => {
     const { sesion, a, b } = partidaConDosFacciones();
-    const resultado = sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
+    const resultado = acordarRelacion(sesion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
 
     expect(resultado.ok).toBe(true);
     expect(resultado.datos?.relacionId).toBeTruthy();
@@ -55,11 +58,7 @@ describe('proponerRelacion', () => {
 
   it('éxito: un vasallaje guarda el tributo indicado', () => {
     const { sesion, a, b } = partidaConDosFacciones();
-    const resultado = sesion.ejecutar(
-      proponerRelacion,
-      { tipo: 'vasallaje', faccionAId: a, faccionBId: b, tributoRecurso: 'madera', tributoCantidad: 5 },
-      OPC
-    );
+    const resultado = acordarRelacion(sesion, { tipo: 'vasallaje', faccionAId: a, faccionBId: b, tributoRecurso: 'madera', tributoCantidad: 5 }, OPC);
 
     expect(resultado.ok).toBe(true);
     const relacion = sesion.getState().relaciones[0]!;
@@ -69,12 +68,82 @@ describe('proponerRelacion', () => {
 
   it('una relación creada se puede romper después, y el comando la marca como rota', () => {
     const { sesion, a, b } = partidaConDosFacciones();
-    const creada = sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
+    const creada = acordarRelacion(sesion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
 
     const rota = sesion.ejecutar(romperRelacion, { relacionId: creada.datos!.relacionId, iniciadorFaccionId: a }, OPC);
 
     expect(rota.ok).toBe(true);
     expect(sesion.getState().relaciones[0]!.estado).toBe('rota');
+  });
+});
+
+describe('proponer una relación exige aceptación (2026-10-09)', () => {
+  it('proponer deja una propuesta pendiente: no nace ninguna relación', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    const r = sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: a, faccionBId: b, tributoRecurso: 'madera', tributoCantidad: 5 }, OPC);
+
+    expect(r.ok).toBe(true);
+    expect(sesion.getState().relaciones).toHaveLength(0);
+    expect(sesion.getState().propuestasRelacion).toEqual([
+      expect.objectContaining({ id: r.datos!.propuestaId, tipo: 'vasallaje', faccionAId: a, faccionBId: b, tributo: { recurso: 'madera', cantidadPorMinuto: 5 } }),
+    ]);
+  });
+
+  it('aceptar crea la relación activa con su tributo y retira la propuesta; rechazar y retirar solo la retiran', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    const { datos } = sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
+    const rechazada = sesion.ejecutar(responderRelacion, { propuestaId: datos!.propuestaId, aceptar: false }, OPC);
+    expect(rechazada.ok).toBe(true);
+    expect(sesion.getState().relaciones).toHaveLength(0);
+    expect(sesion.getState().propuestasRelacion).toEqual([]);
+
+    const otra = sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC).datos!.propuestaId;
+    expect(sesion.ejecutar(retirarRelacion, { propuestaId: otra }, OPC).ok).toBe(true);
+    expect(sesion.getState().propuestasRelacion).toEqual([]);
+
+    const ultima = sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC).datos!.propuestaId;
+    const aceptada = sesion.ejecutar(responderRelacion, { propuestaId: ultima, aceptar: true }, OPC);
+    expect(aceptada.ok).toBe(true);
+    expect(sesion.getState().relaciones).toMatchObject([{ tipo: 'alianza', estado: 'activa' }]);
+    expect(sesion.getState().propuestasRelacion).toEqual([]);
+    expect(aceptada.eventos.map((e) => e.codigo)).toContain('diplomacia.relacion_aceptada');
+  });
+
+  it('una sola pendiente entre dos Facciones, en cualquier sentido', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
+    expect(sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: b, faccionBId: a }, OPC).ok).toBe(false);
+  });
+
+  it('caduca: pasados los días de mundo ya no se puede contestar', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    const id = sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC).datos!.propuestaId;
+    const p = sesion.exportar();
+    const tarde = GameSession.importar({
+      ...p,
+      state: { ...p.state, propuestasRelacion: p.state.propuestasRelacion!.map((x) => ({ ...x, expiraEn: instante(0) })) },
+    });
+    const r = tarde.ejecutar(responderRelacion, { propuestaId: id, aceptar: true }, OPC);
+    expect(r.codigoError).toBe('relacion.propuesta_caducada');
+    expect(tarde.getState().relaciones).toHaveLength(0);
+  });
+
+  it('al aceptar se revalida: un vasallaje no se pacta si la vasalla ya lo es de un tercero', () => {
+    const sesion = GameSession.crear('revalida', { seed: 42 });
+    const [a, b, c] = ['a', 'b', 'c'].map((n) => sesion.ejecutar(crearFaccion, { nombre: n }, { actor: `j-${n}` }).datos!.faccionId);
+    const id = sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: a!, faccionBId: b! }, OPC).datos!.propuestaId;
+    acordarRelacion(sesion, { tipo: 'vasallaje', faccionAId: c!, faccionBId: b! }, OPC);
+
+    const r = sesion.ejecutar(responderRelacion, { propuestaId: id, aceptar: true }, OPC);
+    expect(r.ok === false && r.codigoError).toBe('diplomacia.invalida');
+    expect(sesion.getState().relaciones).toHaveLength(1);
+  });
+
+  it('sin Rey no se propone ni se acepta', () => {
+    const { sesion, a, b } = partidaConDosFacciones();
+    const p = sesion.exportar();
+    const sinRey = GameSession.importar({ ...p, state: { ...p.state, facciones: p.state.facciones.map((f) => (f.id === b ? { ...f, reyId: null } : f)) } });
+    expect(sinRey.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC).ok).toBe(false);
   });
 });
 
@@ -85,8 +154,8 @@ describe('declararGuerra y proponerPaz (Doc 2.4.1)', () => {
       (n) => sesion.ejecutar(crearFaccion, { nombre: n }, { actor: `j-${n}` }).datos!.faccionId
     );
     // b es vasallo de c; c tiene otro vasallo, d.
-    sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: c!, faccionBId: b! }, OPC);
-    sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: c!, faccionBId: d! }, OPC);
+    acordarRelacion(sesion, { tipo: 'vasallaje', faccionAId: c!, faccionBId: b! }, OPC);
+    acordarRelacion(sesion, { tipo: 'vasallaje', faccionAId: c!, faccionBId: d! }, OPC);
 
     const r = sesion.ejecutar(declararGuerra, { faccionAId: a!, faccionBId: b! }, OPC);
 
@@ -97,7 +166,7 @@ describe('declararGuerra y proponerPaz (Doc 2.4.1)', () => {
 
   it('rechazo: no se declara guerra a un aliado', () => {
     const { sesion, a, b } = partidaConDosFacciones();
-    sesion.ejecutar(proponerRelacion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
+    acordarRelacion(sesion, { tipo: 'alianza', faccionAId: a, faccionBId: b }, OPC);
     const antes = sesion.getState();
     expect(sesion.ejecutar(declararGuerra, { faccionAId: a, faccionBId: b }, OPC).ok).toBe(false);
     expect(sesion.getState()).toBe(antes);
@@ -123,7 +192,7 @@ describe('declararGuerra y proponerPaz (Doc 2.4.1)', () => {
 
   it('la rebelión del vasallo deja a ambos en guerra', () => {
     const { sesion, a, b } = partidaConDosFacciones();
-    const vasallajeId = sesion.ejecutar(proponerRelacion, { tipo: 'vasallaje', faccionAId: a, faccionBId: b }, OPC).datos!.relacionId;
+    const vasallajeId = acordarRelacion(sesion, { tipo: 'vasallaje', faccionAId: a, faccionBId: b }, OPC).datos!.relacionId;
     sesion.ejecutar(rebelionVasallo, { relacionId: vasallajeId }, OPC);
     const guerra = sesion.getState().relaciones.find((x) => x.tipo === 'guerra');
     expect(guerra).toMatchObject({ faccionAId: b, faccionBId: a, estado: 'activa' });
