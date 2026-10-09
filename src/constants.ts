@@ -274,6 +274,9 @@ export interface NivelEdificioTransformacion {
    * este nivel — ver `cupoCaravanas`, engine/asentamientoQuery.ts. Mercado no fabrica nada (recetas: []),
    * así que este campo reemplaza al de producción como "qué desbloquea" cada nivel para ese edificio. */
   cupoCaravanas?: number;
+  /** Solo Mercado (2026-10-09, decisión del autor): cuántos carros puede tener EN TOTAL la flota del asentamiento, repartidos como quiera entre sus
+   * caravanas — ver `cupoCarros`, engine/asentamientoQuery.ts. */
+  cupoCarros?: number;
   /** Solo Taberna (Doc 5.12.10): cuántas Miradas activas a la vez admite este nivel, contando las de esa taberna. */
   cupoMiradas?: number;
   /** Solo Granja (trazado urbano dinámico, a petición del usuario): rinde trigo en vez de ejecutar recetas
@@ -780,13 +783,14 @@ export const EDIFICIO_CATALOGO = {
     costo: { madera: 100 },
     tiempoConstruccionMinutos: 480,
     niveles: {
-      1: { trabajadoresRequeridos: 0, recetas: [], cupoCaravanas: 2 },
+      1: { trabajadoresRequeridos: 0, recetas: [], cupoCaravanas: 2, cupoCarros: 3 },
       2: {
         requisitoNivelAsentamiento: 2,
         costoMejora: { madera: 150, piedra: 100 },
         trabajadoresRequeridos: 0,
         recetas: [],
         cupoCaravanas: 4,
+        cupoCarros: 9,
       },
       3: {
         requisitoNivelAsentamiento: 3,
@@ -794,6 +798,7 @@ export const EDIFICIO_CATALOGO = {
         trabajadoresRequeridos: 0,
         recetas: [],
         cupoCaravanas: 6,
+        cupoCarros: 18,
       },
     } as Record<number, NivelEdificioTransformacion>,
   },

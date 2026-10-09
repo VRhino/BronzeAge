@@ -319,7 +319,7 @@ export interface ParamsAgregarCarro {
 export const agregarCarroCaravana = comando<ParamsAgregarCarro, { carros: number }>((estado, _mapa, ctx, params) => {
   const caravana = exigirCaravana(estado, params.caravanaId);
   const asentamiento = exigirAsentamiento(estado, caravana.origenAsentamientoId);
-  const r = agregarCarroEngine(caravana, asentamiento, params.tipoCarro);
+  const r = agregarCarroEngine(caravana, asentamiento, params.tipoCarro, estado.caravanas);
   const siguiente: GameSessionState = { ...conAsentamiento(conCaravana(estado, r.caravana), r.asentamiento) };
   return exito(
     siguiente,

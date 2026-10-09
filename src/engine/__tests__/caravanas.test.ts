@@ -412,19 +412,35 @@ describe('composición de caravana por piezas (Doc 3.13.2)', () => {
 
   it('agregarCarroACaravana: cobra el carro; el reforzado exige Carpintería activa', () => {
     const sinCarp = crearCaravanaVacia(asentamiento({ madera: 100 }), [], instanteDeTest(0), 0);
-    const c1 = agregarCarroACaravana(sinCarp.caravana, sinCarp.asentamiento, 'basico');
+    const c1 = agregarCarroACaravana(sinCarp.caravana, sinCarp.asentamiento, 'basico', [sinCarp.caravana]);
     expect(c1.caravana.carros).toEqual([{ tipoCarro: 'basico' }]);
     expect(c1.asentamiento.almacen['madera']!.cantidad).toBe(80); // 100 - 20
 
-    expect(() => agregarCarroACaravana(c1.caravana, c1.asentamiento, 'reforzado')).toThrow(CaravanaInvalidaError);
+    expect(() => agregarCarroACaravana(c1.caravana, c1.asentamiento, 'reforzado', [c1.caravana])).toThrow(CaravanaInvalidaError);
 
     const conCarp = crearCaravanaVacia(asentamiento({ madera: 100 }, true), [], instanteDeTest(0), 1);
-    expect(() => agregarCarroACaravana(conCarp.caravana, conCarp.asentamiento, 'reforzado')).not.toThrow();
+    expect(() => agregarCarroACaravana(conCarp.caravana, conCarp.asentamiento, 'reforzado', [conCarp.caravana])).not.toThrow();
+  });
+
+  it('el cupo de carros es de la flota entera del asentamiento (Mercado nivel 1: 3), no de cada caravana', () => {
+    const a = asentamiento({ madera: 1000 });
+    const uno = crearCaravanaVacia(a, [], instanteDeTest(0), 0);
+    const dos = crearCaravanaVacia(uno.asentamiento, [uno.caravana], instanteDeTest(60), 1);
+    let flota = [uno.caravana, dos.caravana];
+    let plaza = dos.asentamiento;
+    for (let i = 0; i < 3; i++) {
+      const destino = flota[i % 2]!;
+      const r = agregarCarroACaravana(destino, plaza, 'basico', flota);
+      flota = flota.map((c) => (c.id === destino.id ? r.caravana : c));
+      plaza = r.asentamiento;
+    }
+    expect(flota.flatMap((c) => c.carros!)).toHaveLength(3);
+    expect(() => agregarCarroACaravana(flota[0]!, plaza, 'basico', flota)).toThrow(/ya tiene sus 3 carros/);
   });
 
   it('comprarAnimalParaCaravana: cobra el animal (buey en oro), exige carro libre e índice válido', () => {
     const vacia = crearCaravanaVacia(asentamiento({ madera: 100, oro: 50 }), [], instanteDeTest(0), 0);
-    const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico');
+    const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico', [vacia.caravana]);
     const conBuey = comprarAnimalParaCaravana(conCarro.caravana, conCarro.asentamiento, 0, 'buey');
     expect(conBuey.caravana.carros![0]!.animal).toBe('buey');
     expect(conBuey.asentamiento.almacen['oro']!.cantidad).toBe(38); // 50 - 12 (buey en oro)

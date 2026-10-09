@@ -88,7 +88,7 @@ Requiere tecnología de barcos + puertos. Fase 0 es 100% terrestre (eje naval po
 
 ## 3.12 Mercado como edificio y flota de caravanas propias
 
-**Mercado (edificio, Doc 4.2.1)**: adición MANUAL de Gobernador/Maestro de Obras (ver Doc 4.2), no auto-construcción. Gatea DOS cosas: colocar órdenes de mercado (3.3) y crear caravanas propias (más abajo). Sus niveles internos administran el cupo de flota (2/4/6) y el de escolta por caravana (100/200/300 pts de Liderazgo, 3.13.4) — ver catálogo completo en Doc 4.2.1.
+**Mercado (edificio, Doc 4.2.1)**: adición MANUAL de Gobernador/Maestro de Obras (ver Doc 4.2), no auto-construcción. Gatea DOS cosas: colocar órdenes de mercado (3.3) y crear caravanas propias (más abajo). Sus niveles internos administran el cupo de flota (2/4/6), el de **carros de toda la flota** (3/9/18, 3.13.2) y el de escolta por caravana (100/200/300 pts de Liderazgo, 3.13.4) — ver catálogo completo en Doc 4.2.1.
 
 **Flota de caravanas propias**: activo persistente, no efímero. Se crea como un casco vacío y gratis (`crearCaravana`, 3.13.2) que cuenta contra `cupoCaravanas` (nivel de Mercado + política "Ampliación de Flota", +1 aditivo) hasta que se pierda capturada en combate (3.10). **No se puede desmantelar voluntariamente.** Se reutiliza, no se reconstruye en cada viaje: su ciclo de estados está en 3.13.3.
 
@@ -129,6 +129,8 @@ Todas las cifras (`CARRO_CATALOGO`, `ANIMAL_CATALOGO`, `CARAVANA_PREPARACION`, `
 La caravana comercial nace como un **casco vacío y gratis** (`crearCaravana`) — cuenta contra el cupo del
 Mercado y arranca el cooldown de creación, pero no puede viajar hasta que se le montan piezas. Todo el coste
 está en las piezas, que se construyen y compran **sobre una caravana concreta** (no hay piezas sueltas).
+
+**Tope de carros** (decisión del autor, 2026-10-09): el Mercado del origen limita cuántos carros puede tener **en total la flota del asentamiento**, repartidos como se quiera entre sus caravanas: **3 / 9 / 18** según el nivel interno 1 / 2 / 3 (`cupoCarros`). Se mira al **fabricar** un carro (`agregarCarroCaravana`): con la flota llena se rechaza. Mover carros entre caravanas propias no lo toca, y los carros de una caravana capturada vuelven a dejar sitio. Sin Mercado activo no se fabrica ninguno.
 
 **Carros:**
 

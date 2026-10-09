@@ -55,7 +55,7 @@ import { calcularRuta } from '../world/rutas';
 import { agregarRecurso, cantidadDisponible, descontarRecursos, tieneRecursos } from './almacen';
 import { calcularPrecioReferencia } from './market';
 import { liderazgoComprometido } from './liderazgo';
-import { cupoCaravanas, cupoEscolta, puedeCrearCaravana, cooldownCaravanaRestante, tieneMercadoActivo } from './asentamientoQuery';
+import { carrosEnUso, cupoCarros, cupoCaravanas, cupoEscolta, puedeCrearCaravana, cooldownCaravanaRestante, tieneMercadoActivo } from './asentamientoQuery';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { aristasDeRed, peajeDe, podarRutas, registrarRuta, trazarRutaComercial } from './redCaminos';
 import { factorCapacidadCaravana, factorComisionExterna, factorVelocidadCaravana } from './politicas';
@@ -204,9 +204,14 @@ function exigirReconfigurable(caravana: Caravana): void {
 export function agregarCarroACaravana(
   caravana: Caravana,
   asentamiento: Asentamiento,
-  tipoCarro: CarroTipo
+  tipoCarro: CarroTipo,
+  /** Todas las caravanas del mundo: el cupo de carros es de la flota entera del asentamiento (`cupoCarros`), no de cada caravana. */
+  caravanas: readonly Caravana[]
 ): { caravana: Caravana; asentamiento: Asentamiento } {
   exigirReconfigurable(caravana);
+  if (carrosEnUso(asentamiento.id, caravanas) >= cupoCarros(asentamiento)) {
+    throw new CaravanaInvalidaError(`La flota de este asentamiento ya tiene sus ${cupoCarros(asentamiento)} carros: el Mercado admite más al subir de nivel.`);
+  }
   const carro = CARRO_CATALOGO[tipoCarro];
   if (carro.fabrica === 'carpinteria' && !asentamiento.edificios.some((e) => e.tipo === 'carpinteria' && e.estado === 'activo')) {
     throw new CaravanaInvalidaError(`El carro ${tipoCarro} se fabrica en la Carpintería, y este asentamiento no tiene una activa.`);
@@ -258,7 +263,7 @@ export function construirCaravanaComercial(
   contador = 0
 ): { asentamiento: Asentamiento; caravana: Caravana } {
   const vacia = crearCaravanaVacia(asentamiento, caravanasExistentes, instante, contador);
-  const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico');
+  const conCarro = agregarCarroACaravana(vacia.caravana, vacia.asentamiento, 'basico', [...caravanasExistentes, vacia.caravana]);
   const conAnimal = comprarAnimalParaCaravana(conCarro.caravana, conCarro.asentamiento, 0, 'buey');
   return { asentamiento: conAnimal.asentamiento, caravana: conAnimal.caravana };
 }

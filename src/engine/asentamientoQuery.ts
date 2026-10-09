@@ -1,4 +1,4 @@
-import type { Asentamiento, Edificio, EdificioTipo, OrigenTropa, Point, TecnologiaId } from '../domain/types';
+import type { Asentamiento, Caravana, Edificio, EdificioTipo, OrigenTropa, Point, TecnologiaId } from '../domain/types';
 import { minutos, duracion, type Duracion, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import {
@@ -89,6 +89,22 @@ export function cupoCaravanas(asentamiento: Asentamiento): number {
   const niveles = (EDIFICIO_CATALOGO.mercado as { niveles?: Record<number, { cupoCaravanas?: number }> }).niveles;
   const base = niveles?.[nivelInternoActual(mercado)]?.cupoCaravanas ?? 0;
   return base + cupoCaravanaExtra(asentamiento);
+}
+
+/**
+ * Cuántos carros puede tener en total la flota de este asentamiento (2026-10-09): `cupoCarros` del nivel interno de su Mercado (3 / 9 / 18),
+ * repartidos como quiera entre sus caravanas. 0 sin Mercado activo. No cambia al mover carros entre caravanas: solo al fabricar uno nuevo.
+ */
+export function cupoCarros(asentamiento: Asentamiento): number {
+  const mercado = edificiosPorTipoYEstado(asentamiento, 'mercado')[0];
+  if (!mercado) return 0;
+  const niveles = (EDIFICIO_CATALOGO.mercado as { niveles?: Record<number, { cupoCarros?: number }> }).niveles;
+  return niveles?.[nivelInternoActual(mercado)]?.cupoCarros ?? 0;
+}
+
+/** Cuántos carros tienen ya las caravanas comerciales de este asentamiento, en cualquier estado. */
+export function carrosEnUso(asentamientoId: string, caravanas: readonly Caravana[]): number {
+  return caravanas.reduce((suma, c) => suma + (c.tipo === 'comercial' && !c.origenCampamentoId && c.origenAsentamientoId === asentamientoId ? (c.carros ?? []).length : 0), 0);
 }
 
 /** Cuántas Miradas activas a la vez admite la taberna de esta plaza (Doc 5.12.10): `cupoMiradas` de su nivel interno. 0 sin taberna activa. */

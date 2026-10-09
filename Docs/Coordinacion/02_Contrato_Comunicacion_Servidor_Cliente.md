@@ -424,6 +424,8 @@ más estados que `activa`. Nada de otros jugadores. Para unirse: `POST /jugador/
 **Tecnologías adoptadas de la Facción propia:** ya viajan en la proyección, `tecnologia.propias.adoptadas: TecnologiaId[]` (y `aparecidas`, `reveladas`);
 `propias` es `null` sin Facción.
 
+**`agregarCarroCaravana`** (2026-10-09) se rechaza con `detalleError` «La flota de este asentamiento ya tiene sus N carros…» cuando los carros de todas las caravanas comerciales del origen alcanzan el cupo del Mercado: 3 / 9 / 18 por nivel 1 / 2 / 3 (`cupoCarros` en `EDIFICIO_CATALOGO.mercado.niveles`, publicado en `GET /balance`). Mover carros entre caravanas no lo afecta.
+
 ### 4.2b-bis Ejército en preparación y ejército sin destino fijo (2026-10-08, Doc 5.12.1 y 5.14.5; modelo en doc 01 §13)
 
 **Sin destino fijo.** `movilizarEjercito` y `salirDelCampamento` ya **no exigen `objetivo`** (opcional, para quien lo tenga claro): el ejército sale
