@@ -15,7 +15,7 @@ function conLaOtraA(distancia: number, tipoDeLaOtra: 'personal' | 'ejercito' = '
     state: {
       ...payload.state,
       ejercitos: payload.state.ejercitos.map((e) =>
-        e.id === columnaVecino ? { ...e, tipo: tipoDeLaOtra, posicionActual: { x: propia.posicionActual.x + distancia, y: propia.posicionActual.y } } : e
+        e.id === columnaVecino ? { ...e, faccionId: 'faccion-rival', tipo: tipoDeLaOtra, posicionActual: { x: propia.posicionActual.x + distancia, y: propia.posicionActual.y } } : e
       ),
     },
   });
@@ -50,5 +50,53 @@ describe('perseguir', () => {
       state: { ...payload.state, ejercitos: payload.state.ejercitos.map((e) => (e.participantes.some((p) => p.heroeId === fundador) ? { ...e, tipo: 'ejercito' as const } : e)) },
     });
     expect(alReves.ejecutar(REGISTRO_COMANDOS.perseguir, { heroeId: fundador, objetivo: { tipo: 'ejercito', id: columnaVecino } }, { actor: fundador }).ok).toBe(false);
+  });
+
+  it('no se persigue a los tuyos ni a un aliado (Doc 5.12.3)', () => {
+    const { sesion, fundador, columnaVecino } = conLaOtraA(20);
+    const payload = sesion.exportar();
+    const propia = payload.state.ejercitos.find((e) => e.participantes.some((p) => p.heroeId === fundador))!;
+    const mismaFaccion = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, ejercitos: payload.state.ejercitos.map((e) => (e.id === columnaVecino ? { ...e, faccionId: propia.faccionId } : e)) },
+    });
+    const propio = mismaFaccion.ejecutar(REGISTRO_COMANDOS.perseguir, { heroeId: fundador, objetivo: { tipo: 'ejercito', id: columnaVecino } }, { actor: fundador });
+    expect(propio.ok === false && propio.detalleError).toMatch(/los tuyos ni a un aliado/);
+
+    const aliada = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        relaciones: [{ id: 'al-1', tipo: 'alianza', faccionAId: propia.faccionId, faccionBId: 'faccion-rival', creadoEn: payload.state.relaciones[0]?.creadoEn ?? (0 as never), estado: 'activa' }],
+      },
+    });
+    const r = aliada.ejecutar(REGISTRO_COMANDOS.perseguir, { heroeId: fundador, objetivo: { tipo: 'ejercito', id: columnaVecino } }, { actor: fundador });
+    expect(r.ok === false && r.detalleError).toMatch(/los tuyos ni a un aliado/);
+  });
+
+  it('un ejército no persigue caravanas, y solo el Líder decide a quién persigue la columna', () => {
+    const { sesion, fundador, vecino, propiaId, columnaVecino } = conLaOtraA(20);
+    const payload = sesion.exportar();
+    const comoEjercito = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        ejercitos: payload.state.ejercitos.map((e) => (e.id === propiaId ? { ...e, tipo: 'ejercito' as const } : e)),
+        caravanas: [{ id: 'car-x', tipo: 'comercial', origenAsentamientoId: 'otra', contenido: {}, posicionActual: payload.state.ejercitos.find((e) => e.id === propiaId)!.posicionActual, progreso: 0, estado: 'en_transito', carros: [] }],
+      },
+    });
+    const alCamino = comoEjercito.ejecutar(REGISTRO_COMANDOS.perseguir, { heroeId: fundador, objetivo: { tipo: 'caravana', id: 'car-x' } }, { actor: fundador });
+    expect(alCamino.ok === false && alCamino.detalleError).toMatch(/solo persigue a otro ejército/);
+
+    // El vecino va en la columna del fundador, pero no la manda.
+    const acompanante = GameSession.importar({
+      ...payload,
+      state: {
+        ...payload.state,
+        ejercitos: payload.state.ejercitos.filter((e) => e.id !== columnaVecino).map((e) => (e.id === propiaId ? { ...e, participantes: [...e.participantes, { heroeId: vecino, unidoEn: e.participantes[0]!.unidoEn }] } : e)),
+      },
+    });
+    const noLider = acompanante.ejecutar(REGISTRO_COMANDOS.perseguir, { heroeId: vecino, objetivo: { tipo: 'ejercito', id: columnaVecino } }, { actor: vecino });
+    expect(noLider.ok === false && noLider.detalleError).toMatch(/Solo el Líder/);
   });
 });

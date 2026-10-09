@@ -13,6 +13,7 @@
 //
 // El de 40 es el que hace de esto un juego de dos: la telemetría que la proyección niega a distancia se
 // consigue acercándose, y acercarse te delata. Nadie audita al rival desde el sofá.
+import { faccionDeCaravana } from '../../engine/expansion';
 import {
   asediarPlaza,
   atacarCampamento,
@@ -24,6 +25,7 @@ import {
   inspeccionarPlaza,
   alcanceDeVista,
   exigirCaravanaSuelta,
+  exigirPresaPerseguible,
   interceptar,
   MovilizacionInvalidaError,
   perseguir as perseguirEngine,
@@ -389,13 +391,18 @@ export const perseguir = comando<ParamsPerseguir, void>((estado, _mapa, ctx, par
   const heridos = exigirSano(estado, params.heroeId, ctx.instante);
   const columna = exigirColumnaDe(estado, params.heroeId);
   // Que el objetivo exista lo comprueba aquí y no el motor: es una entidad que buscar, no una regla.
+  // Decide la columna su Líder (Doc 5.14.3): en una columna personal, su único héroe.
+  if (columna.liderId !== params.heroeId) throw new MovilizacionInvalidaError('Solo el Líder decide a quién persigue la columna.');
   let presa: Ejercito | undefined;
   let dondeEsta: Point;
   if (params.objetivo.tipo === 'ejercito') {
     presa = exigirEjercito(estado, params.objetivo.id);
     dondeEsta = presa.posicionActual;
+    exigirPresaPerseguible(columna, params.objetivo, presa.faccionId, estado.relaciones);
   } else {
-    dondeEsta = exigirCaravana(estado, params.objetivo.id).posicionActual;
+    const caravana = exigirCaravana(estado, params.objetivo.id);
+    dondeEsta = caravana.posicionActual;
+    exigirPresaPerseguible(columna, params.objetivo, faccionDeCaravana(caravana, estado.asentamientos), estado.relaciones, caravana);
   }
   // Se persigue lo que se ve desde la propia columna: si no, la ruta delataría dónde está bajo la niebla (Doc 5.12.3).
   if (distancia(columna.posicionActual, dondeEsta) > alcanceDeVista(columna, indiceTropa(estado.heroes))) {

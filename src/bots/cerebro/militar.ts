@@ -371,7 +371,7 @@ function llevaTropa(ctx: ContextoBot, columna: Ejercito): boolean {
 }
 
 /**
- * Va a por lo que tiene a la vista (Doc 5.12.3): la columna enemiga más cercana con soldados o, si no, una caravana
+ * Va a por lo que tiene a la vista (Doc 5.12.3): la columna enemiga más cercana con soldados o, si es personal, una caravana
  * enemiga sin escolta. Al alcanzarla, el motor se lo ofrece y la ataca. No persigue a los suyos ni a un aliado.
  */
 async function perseguirLoQueVe(ctx: ContextoBot, columna: Ejercito): Promise<void> {
@@ -393,6 +393,8 @@ async function perseguirLoQueVe(ctx: ContextoBot, columna: Ejercito): Promise<vo
     await ctx.intentar(`perseguir:${rival.id}`, 'perseguir', { heroeId: yo, objetivo: { tipo: 'ejercito', id: rival.id } });
     return;
   }
+  // Un ejército solo persigue a otro ejército: a una caravana la persigue una columna personal (Doc 5.12.3).
+  if (columna.tipo === 'ejercito') return;
   const caravana = vista.caravanasAvistadas.filter((c) => !c.escoltada && enemiga(c.faccionId) && cerca(c.posicionActual)).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
   if (caravana) await ctx.intentar(`perseguir:${caravana.id}`, 'perseguir', { heroeId: yo, objetivo: { tipo: 'caravana', id: caravana.id } });
 }

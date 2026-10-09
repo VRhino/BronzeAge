@@ -1432,6 +1432,27 @@ export interface PayloadPresaAlcanzada {
 }
 
 /**
+ * Lo que el canon prohíbe perseguir (Doc 5.12.3, 5.14): a los tuyos ni a un aliado (dos columnas aliadas no se atacan), a una caravana adjunta a un
+ * ejército (es parte de él), ni a una caravana si quien persigue es un ejército: un ejército solo persigue a otro ejército, y a una caravana suelta
+ * solo una columna personal. `faccionPresa` es la Facción de la columna o de la caravana, si tiene (una neutral o de bandidos, no).
+ */
+export function exigirPresaPerseguible(
+  perseguidor: Pick<Ejercito, 'tipo' | 'faccionId'>,
+  objetivo: { tipo: 'ejercito' | 'caravana' },
+  faccionPresa: string | undefined,
+  relaciones: readonly RelacionPolitica[],
+  caravana?: Pick<Caravana, 'estado'>
+): void {
+  if (faccionPresa !== undefined && (faccionPresa === perseguidor.faccionId || estanAliadas(relaciones, perseguidor.faccionId, faccionPresa))) {
+    throw new MovilizacionInvalidaError('No se persigue a los tuyos ni a un aliado.');
+  }
+  if (objetivo.tipo === 'caravana') {
+    if (perseguidor.tipo === 'ejercito') throw new MovilizacionInvalidaError('Un ejército solo persigue a otro ejército: a una caravana la persigue una columna personal.');
+    if (caravana) exigirCaravanaSuelta(caravana);
+  }
+}
+
+/**
  * Fijar a quien persigues (Doc 5.12.3). No es un destino: es un objetivo que se mueve, y la ruta se
  * recalcula cada tick hacia donde este.
  *
