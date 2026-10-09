@@ -19,6 +19,7 @@ import type { Asentamiento, RegionId } from '../domain/types';
 import { GameSession, type OpcionesSesion, type PartidaExportada, type ResultadoComando } from '../session/gameSession';
 import { ACTOR_SISTEMA, type ActorId, type ManejadorComando } from '../session/comandos/tipos';
 import { REGISTRO_DIARIO, type DatosDeDiario, type ParamsDeDiario, type TipoDiario } from '../session/comandos/registro';
+import type { Instante } from '../domain/tiempo';
 import { eventosDesde, eventosRecortados, instanteDeTick, versionMasVieja, type EventoDominioConVersion, type GeometriaAsentamientos } from '../session/estado';
 import { calcularPrecioReferencia } from '../engine/market';
 import { computeTodasLasZonas, computeZonasFusionadasPorFaccion } from '../engine/zones';
@@ -75,7 +76,13 @@ export interface OpcionesRunner {
    * Los comandos de jugador ya difunden los suyos desde sus rutas; el reloj no tenía quién lo hiciera y los clientes
    * conectados solo se enteraban de lo que pasaba en el mundo al volver a preguntar.
    */
-  alEmitir?: (gameId: string, eventos: readonly EventoDominioConVersion[]) => void;
+  alEmitir?: (gameId: string, eventos: readonly EventoDominioConVersion[], marca: MarcaDeTick) => void;
+}
+
+/** Cuándo ocurrió un tick del reloj de mundo (2026-10-09): lo que el hub manda a todos los conectados para que sepan que hay algo nuevo que pedir. */
+export interface MarcaDeTick {
+  version: number;
+  instante: Instante;
 }
 
 export class RunnerDePartida {
@@ -467,7 +474,7 @@ export class RunnerDePartida {
     return this.encolar(async () => {
       for (let i = 0; i < adeudados && this.relojDeMundo; i++) {
         const r = await this.aplicarYAnotar((lineas) => this.unTickCompleto(lineas), true);
-        if (r.ok && this.alEmitir) this.alEmitir(this.gameId, this.eventosDelUltimoTick);
+        if (r.ok && this.alEmitir) this.alEmitir(this.gameId, this.eventosDelUltimoTick, { version: this.sesion.getState().version, instante: instanteDeTick(this.sesion.getState().tick) });
       }
     });
   }

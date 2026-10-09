@@ -141,9 +141,10 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
     // Mismo reloj de pared que el resto del servidor: así el reloj de mundo de cada partida y su catch-up
     // (D5, `RunnerDePartida.iniciarRelojDeMundo`) son inyectables en tests, no solo el reloj del sistema.
-    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora, { batallasEnUnity: servidoresBatalla.length > 0 }, (gameId, eventos) =>
-      hub.difundir(gameId, eventos)
-    ),
+    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora, { batallasEnUnity: servidoresBatalla.length > 0 }, (gameId, eventos, marca) => {
+      hub.difundir(gameId, eventos);
+      hub.difundirTick(gameId, marca);
+    }),
     ahora,
     hub,
     // Fase E2. Mismo almacén que los snapshots —una partida y su auditoría se archivan y podan juntas— y el

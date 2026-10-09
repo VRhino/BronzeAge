@@ -51,7 +51,7 @@ de entrada y recibe el `BattleResult` de salida, ambos por HTTP (§3).
   cliente Unity debe tratar un `409` como "no ocurrió", nunca como "ocurrió pero no se sabe si se guardó".
 - **Tiempo real (con BronzeAge, no con el servidor de batalla):** un único WebSocket por jugador con
   canales suscribibles. Cliente → `{"accion":"suscribir"|"desuscribir","canal":"..."}`. Servidor →
-  `{"tipo":"suscrito"|"desuscrito"}` | `{"tipo":"error",...}` | `{"tipo":"evento","gameId":...,"canal":...,"evento":...}` (`gameId` desde 2026-10-09: la partida de ese socket, para que un cliente con varias abiertas no las mezcle).
+  `{"tipo":"suscrito"|"desuscrito"}` | `{"tipo":"error",...}` | `{"tipo":"evento","gameId":...,"canal":...,"evento":...}` | `{"tipo":"tick","gameId":...,"version":...,"instante":...}` (desde 2026-10-09, a todos los conectados de la partida en cada tick del reloj de mundo, sin suscribirse y sin datos del mundo: es la señal para pedir la proyección en vez de sondear) (`gameId` desde 2026-10-09: la partida de ese socket, para que un cliente con varias abiertas no las mezcle).
   Autenticación en el handshake (`preValidation`), antes de aceptar la conexión.
 
 Ninguna de estas convenciones cambia para dar soporte a `Heroe`/`Escuadron`/`Batalla` — los comandos nuevos

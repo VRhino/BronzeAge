@@ -10,6 +10,7 @@
 //   cliente -> {"accion":"suscribir"|"desuscribir","canal":"mapa/general"|"asentamiento/<id>"|"batalla/<id>"|"heroe/<tuHeroeId>"}
 //   servidor -> {"tipo":"suscrito"|"desuscrito","canal":...}
 //             | {"tipo":"error","canal"?:...,"error":...}
+//             | {"tipo":"tick","gameId":...,"version":...,"instante":...}   (a todos, en cada tick del reloj de mundo: sin datos, para pedir la proyección)
 //             | {"tipo":"evento","gameId":...,"canal":...,"evento": EventoDominio}   (gameId: la partida de este socket, para que un cliente con varias no las mezcle)
 //
 // SIN mensaje sintético de "conectado": el evento `open` nativo de WebSocket ya se lo dice al cliente, y

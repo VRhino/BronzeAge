@@ -223,6 +223,26 @@ describe('difusion de eventos tras un comando', () => {
     ws2.terminate();
   });
 
+  it('el hub avisa de cada tick a todos los conectados de la partida, sin datos del mundo y sin que haga falta suscribirse', async () => {
+    await partidaCreada('g1');
+    await partidaCreada('g2');
+    const ana = await jugadorEn('g1', 'ana');
+    const bea = await jugadorEn('g2', 'bea');
+    const ws1 = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
+    const ws2 = await app.injectWS('/v1/jugador/partidas/g2/tiempo-real', { headers: bea.auth });
+    const recibidos: Record<string, unknown>[] = [];
+    ws2.on('message', (data: Buffer) => recibidos.push(JSON.parse(data.toString())));
+
+    const enG1 = esperarMensaje(ws1);
+    hub.difundirTick('g1', { version: 7, instante: 123 });
+
+    expect(await enG1).toEqual({ tipo: 'tick', gameId: 'g1', version: 7, instante: 123 });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(recibidos, 'otra partida no se entera').toEqual([]);
+    ws1.terminate();
+    ws2.terminate();
+  });
+
   it('un evento de UN asentamiento solo llega a quien esta suscrito a ESE asentamiento, no a mapa/general', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');

@@ -189,7 +189,10 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
     const r = RunnerDePartida.crear('g-aviso', { seed: 7 }, {
       almacen,
       ahora: () => new Date(relojMs).toISOString(),
-      alEmitir: (gameId, eventos) => avisos.push({ gameId, n: eventos.length }),
+      alEmitir: (gameId, eventos, marca) => {
+        avisos.push({ gameId, n: eventos.length });
+        expect(marca.version).toBeGreaterThan(0);
+      },
     });
     await r.avanzarTick(); // un tick a mano no avisa: lo difunde quien lo pide (ruta de admin)
     expect(avisos).toHaveLength(0);
