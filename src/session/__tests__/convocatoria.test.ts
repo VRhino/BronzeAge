@@ -9,6 +9,7 @@ import { responderSolicitud, solicitarIngreso } from '../comandos/ingresoEnFacci
 import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { proyectarParaJugador } from '../proyecciones/jugador';
 import { conEscuadrones } from '../../engine/tropa';
+import { instante } from '../../domain/tiempo';
 import { escuadronDePrueba } from '../../engine/__tests__/fixtures';
 import { abastecer, partidaConAsentamiento } from './fixtures';
 
@@ -281,5 +282,27 @@ describe('reclutar en el campamento donde se reside (proyección)', () => {
     expect(m.reclutamiento!.tropas[0]).toMatchObject({ tropaId: expect.any(String), precioPorSoldado: expect.any(Number), desbloqueada: expect.any(Boolean) });
     expect(m.reclutamiento!.poblacion).toBeGreaterThanOrEqual(0);
     expect(m.reclutamiento!.topePoblacion).toBeGreaterThan(0);
+  });
+});
+
+describe('la tecnología propia en la proyección (2026-10-09)', () => {
+  it('trae la capital de la Facción, la Era de cada tecnología suya y las épicas posibles', () => {
+    const { sesion, fundador, asentamientoId } = partidaConAsentamiento();
+
+    const t = proyectarParaJugador(sesion.getState(), fundador, SIN_GEOMETRIA).tecnologia;
+
+    expect(t.capitalId).toBe(asentamientoId);
+    expect(t.eraDe['leva_comunal']).toBe('reinos_palaciales');
+    expect(t.propias!.adoptadas.every((id) => t.eraDe[id] !== undefined)).toBe(true);
+    expect(t.epicasPosibles, 'sin logros cumplidos no hay épica posible').toEqual([]);
+    expect(proyectarParaJugador(sesion.getState(), 'forastero', SIN_GEOMETRIA).tecnologia.capitalId).toBeNull();
+  });
+
+  it('una épica es posible cuando su logro del servidor está cumplido y a la Facción aún no le ha aparecido', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const p = sesion.exportar();
+    const con = GameSession.importar({ ...p, state: { ...p.state, tecnologia: { ...p.state.tecnologia, logros: { ...p.state.tecnologia.logros, metalurgia_cobre: instante(0) } } } });
+
+    expect(proyectarParaJugador(con.getState(), fundador, SIN_GEOMETRIA).tecnologia.epicasPosibles).toEqual(['metalurgia_cobre']);
   });
 });

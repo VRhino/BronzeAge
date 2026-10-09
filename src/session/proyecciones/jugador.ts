@@ -77,7 +77,7 @@ import type {
   ZonaFaccion,
   ZonaInfluencia,
 } from '../../domain/types';
-import { ALMACEN_PERSONAL, EDIFICIO_CATALOGO, EPICAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
+import { ALMACEN_PERSONAL, EDIFICIO_CATALOGO, EPICAS, ERAS, INTEL, TECNOLOGIAS, TITULO_CAPITULO, VISION, type CondicionHito } from '../../constants';
 import type { ContadorLogro, EraId, InformePlaza, MiradaIntel, PropuestaAnexion, PropuestaFusion, PropuestaRelacion, TecnologiaId, TecnologiasFaccion } from '../../domain/types';
 import { propuestasVigentes } from '../../engine/trasladoDeFaccion';
 import { miradasActivasDe } from '../../engine/intel';
@@ -89,6 +89,9 @@ import type { EstadoMapa } from '../../world/mapa';
 import type { TrazadoAsentamiento } from '../../engine/trazado';
 import type { Instante } from '../../domain/tiempo';
 import { esCiudadano } from '../../engine/faccion';
+import { cumpleCondicion, type ContextoTecnologia } from '../../engine/tecnologia';
+import { encontrarCapital } from '../../engine/mantenimiento';
+import { crearMapa, type Mapa } from '../../world/mapa';
 import { poblacionActual, precioPorSoldado, tecnologiasDelCampamento, topePoblacion, tropasDelCampamento } from '../../engine/reclutamientoMercenario';
 import { compartenVision, esResidente } from '../../engine/pertenencia';
 import { ubicacionDeducida } from '../../engine/ubicacion';
@@ -375,8 +378,16 @@ export interface TecnologiaJugador {
   logros: { contador: ContadorLogro; umbral: number; en: Instante }[];
   /** `null` sin Facción. */
   propias: TecnologiasFaccion | null;
-  /** Lo que un Aeda le ha revelado y aún no le ha aparecido (Doc 6.4): quién la desbloqueó y el hito completo, para ver qué le falta. */
-  reveladas: { tecnologiaId: TecnologiaId; descubridorFaccionId: string; hito: CondicionHito[] }[];
+  /** Lo que un Aeda le ha revelado y aún no le ha aparecido (Doc 6.4): quién la desbloqueó, el hito completo y cuáles de sus condiciones cumple ya
+   * (`cumplidas[i]` es la de `hito[i]`), para ver qué le falta. */
+  reveladas: { tecnologiaId: TecnologiaId; descubridorFaccionId: string; hito: CondicionHito[]; cumplidas: boolean[] }[];
+  /** La Era de cada tecnología aparecida, adoptada o revelada de la Facción (2026-10-09): decide lo que cuesta adoptarla o comprarla (`TARIFA_ADOPCION`). */
+  eraDe: Partial<Record<TecnologiaId, EraId>>;
+  /** La plaza capital de la Facción propia, de donde sale el pago de adoptar (Doc 6.5); `null` sin Facción o sin plazas. */
+  capitalId: string | null;
+  /** Las tecnologías cuya épica podría empezar un Aeda de la Facción ahora: tienen épica, su logro del servidor está cumplido, su Era ha llegado, aún no le han aparecido a la
+   * Facción y ningún Aeda suyo la canta ya. */
+  epicasPosibles: TecnologiaId[];
 }
 
 /** Un Aeda residente de la Facción propia, con su épica (Doc 6.7). Los rivales no ven los suyos. */
@@ -407,14 +418,38 @@ export interface AedaAvistado {
 }
 
 /** Lo que un jugador sabe de la tecnología del mundo (Doc 6.3-6.4). */
-function tecnologiaParaJugador(estado: GameSessionState, faccionId: string | null): TecnologiaJugador {
+function tecnologiaParaJugador(estado: GameSessionState, faccionId: string | null, zonas: GeometriaAsentamientos['zonas']): TecnologiaJugador {
   const t = estado.tecnologia;
   const logros = (Object.entries(t.logros) as [TecnologiaId, Instante][])
     .map(([id, en]) => ({ contador: TECNOLOGIAS[id].logro!.contador, umbral: TECNOLOGIAS[id].logro!.umbral, en }))
     .sort((a, b) => a.en - b.en);
   const propias = faccionId ? tecnologiasDe(t, faccionId) : null;
-  const reveladas = (propias?.reveladas ?? []).map((id) => ({ tecnologiaId: id, descubridorFaccionId: t.primeros[id]!.faccionId, hito: TECNOLOGIAS[id].hito }));
-  return { era: t.era, eraDesde: t.eraDesde, logros, propias, reveladas };
+  const propiosAsentamientos = faccionId ? estado.asentamientos.filter((a) => a.faccionId === faccionId) : [];
+  // El mapa solo hace falta para un hito de yacimiento, y construirlo no es gratis: se crea la primera vez que se pide.
+  let mapa: Mapa | undefined;
+  const ctx: ContextoTecnologia = {
+    asentamientos: estado.asentamientos,
+    facciones: estado.facciones,
+    zonas,
+    get mapa() {
+      return (mapa ??= crearMapa(estado.mapa, estado.estadoMapa));
+    },
+    instante: instanteDeTick(estado.tick),
+  };
+  const reveladas = (propias?.reveladas ?? []).map((id) => ({
+    tecnologiaId: id,
+    descubridorFaccionId: t.primeros[id]!.faccionId,
+    hito: TECNOLOGIAS[id].hito,
+    cumplidas: TECNOLOGIAS[id].hito.map((c) => cumpleCondicion(c, faccionId!, propias!, propiosAsentamientos, ctx)),
+  }));
+  const eraDe = Object.fromEntries([...(propias?.aparecidas ?? []), ...(propias?.adoptadas ?? []), ...(propias?.reveladas ?? [])].map((id) => [id, TECNOLOGIAS[id].era]));
+  const cantan = new Set((estado.aedasResidentes?.aedas ?? []).filter((a) => a.faccionId === faccionId && a.epica).map((a) => a.epica!.tecnologiaId));
+  const epicasPosibles = !faccionId
+    ? []
+    : (Object.keys(EPICAS) as TecnologiaId[]).filter(
+        (id) => t.logros[id] !== undefined && ERAS[TECNOLOGIAS[id].era].orden <= ERAS[t.era].orden && !propias!.aparecidas.includes(id) && !cantan.has(id)
+      );
+  return { era: t.era, eraDesde: t.eraDesde, logros, propias, reveladas, eraDe, capitalId: faccionId ? (encontrarCapital(faccionId, propiosAsentamientos)?.id ?? null) : null, epicasPosibles };
 }
 
 /** `cupoMiradas` de cada nivel de la Taberna, sacado del catálogo para que el cliente no lo copie. */
@@ -1151,7 +1186,7 @@ export function proyectarParaJugador(
     zonas: zonasPropias,
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
     trazadoPorAsentamiento: Object.fromEntries(Object.entries(geometria.trazadoPorAsentamiento).filter(([id]) => esPropio(id))),
-    tecnologia: tecnologiaParaJugador(estado, faccionId),
+    tecnologia: tecnologiaParaJugador(estado, faccionId, geometria.zonas),
   };
 }
 

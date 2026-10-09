@@ -204,7 +204,7 @@ function edificioActivo(asentamientos: readonly Asentamiento[], tipo: EdificioTi
   return asentamientos.some((a) => a.edificios.some((e) => e.tipo === tipo && e.estado === 'activo' && (e.nivelInterno ?? 1) >= nivelInterno));
 }
 
-function cumpleCondicion(
+export function cumpleCondicion(
   c: CondicionHito,
   faccionId: string,
   tecnologias: TecnologiasFaccion,

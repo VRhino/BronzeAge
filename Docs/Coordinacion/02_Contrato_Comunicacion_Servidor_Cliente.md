@@ -431,6 +431,11 @@ factor de carga, velocidad), `CARAVANA_PREPARACION` y `CARAVANA_ESCOLTA`; en `mu
 `RECLUTAMIENTO_ORO_POR_ESCALON` y `ORO_POR_CABALLO`; y el grupo nuevo `politica` con `PUERTA` (`cerradaAPorDefecto`), `CAPITAL` (`cooldownDias`), `ANEXION`, `FUSION` y
 `RELACION_PROPUESTA` (`caducidadDias`). El cupo de carros de la flota está en `catalogos.EDIFICIO_CATALOGO.mercado.niveles[n].cupoCarros`.
 
+**Tecnología y Aedas (Doc 6), 2026-10-09.** `GET /v1/balance` trae el grupo `tecnologia`: `TECNOLOGIAS` (nombre, Era, logro `{ contador, umbral }`, `hito[]`, `bonusProduccion?`, `deArranque?`),
+`ERAS`, `TARIFA_ADOPCION` (lo que cuesta adoptar según la Era), `AEDAS` (`venta.factorOro`, `epica.enfriamientoMinutos`, …), `EPICAS` (nombre y capítulos; solo las tecnologías con logro tienen épica) y
+`TITULO_CAPITULO`. En la proyección, `tecnologia` añade: `eraDe` (la Era de cada tecnología aparecida, adoptada o revelada de tu Facción), `capitalId` (la plaza capital, de donde
+sale el pago de adoptar; `null` sin Facción), `epicasPosibles[]` (las que un Aeda tuyo podría empezar ahora) y, en cada `reveladas[]`, `cumplidas[]` (qué condiciones de su `hito` cumples ya, alineado con `hito[]`).
+
 **Reclutar en el campamento donde resides** (2026-10-09): `mercadoCampamento.reclutamiento` —solo para sus residentes— trae `tropas[] { tropaId, precioPorSoldado, desbloqueada }`
 (las que permiten los edificios del campamento; `precioPorSoldado` ya incluye recargo, reputación y descuento por no tener asentamientos; solo se reclutan las `desbloqueada`),
 `poblacion` (reclutas disponibles ahora) y `topePoblacion`. El oro de un escuadrón completo es `ceil(precioPorSoldado × (unidadesPorDefecto − las que ya tiene))`.

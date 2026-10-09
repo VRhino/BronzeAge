@@ -45,6 +45,18 @@ describe('GET /v1/balance', () => {
     expect(cuerpo.politica.PUERTA.cerradaAPorDefecto).toEqual(expect.arrayContaining(['neutrales', 'enemigos']));
   });
 
+  it('publica el catálogo de tecnología y Aedas (Doc 6)', async () => {
+    const t = (await app.inject({ method: 'GET', url: '/v1/balance' })).json().tecnologia;
+
+    expect(t.TECNOLOGIAS.canteria).toMatchObject({ nombre: 'Cantería', era: 'reinos_palaciales', bonusProduccion: { recurso: 'piedra', factor: 1.5 } });
+    expect(t.TECNOLOGIAS.metalurgia_cobre.hito.length).toBeGreaterThan(0);
+    expect(t.ERAS.reinos_palaciales.orden).toBe(1);
+    expect(t.TARIFA_ADOPCION.reinos_palaciales).toEqual({ oro: 100, madera: 200 });
+    expect(t.AEDAS.venta.factorOro).toBeGreaterThan(0);
+    expect(t.AEDAS.epica.enfriamientoMinutos).toBeGreaterThan(0);
+    expect(Object.keys(t.EPICAS)).toContain('metalurgia_cobre');
+  });
+
   it('aparece en el contrato publicado sin exigir seguridad', async () => {
     const doc = (await app.inject({ method: 'GET', url: '/v1/openapi.json' })).json();
 

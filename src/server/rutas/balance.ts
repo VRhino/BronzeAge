@@ -13,6 +13,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   ALMACEN,
+  AEDAS,
   ANEXION,
   ANIMAL_CATALOGO,
   ASIGNACION_CARAVANA,
@@ -30,6 +31,8 @@ import {
   CUPO_NIVEL_ASENTAMIENTO,
   EDIFICIO_CATALOGO,
   EDIFICIO_TAMANO,
+  EPICAS,
+  ERAS,
   EXTRACCION_MAXIMOS,
   EXTRACTOR_DESEMPATE,
   FUNDACION,
@@ -64,6 +67,9 @@ import {
   SCORE_BANDAS,
   SIMULACION,
   SITIO,
+  TARIFA_ADOPCION,
+  TECNOLOGIAS,
+  TITULO_CAPITULO,
   TRAZADO,
   TROPAS_RECLUTABLES,
   TRUEQUE,
@@ -91,6 +97,8 @@ function balancePublicado() {
     mundoYMilitar: { ZONA_INFLUENCIA, FUNDACION, POBLACION, MILITAR, LENERA_POR_BOSQUE, MERCENARIOS, ALMACEN_PERSONAL, LOGISTICA, MOVIMIENTO, RECLUTAMIENTO_ORO_POR_ESCALON, ORO_POR_CABALLO },
     // Puerta, capital y propuestas diplomáticas (2026-10-09): lo que el cliente copiaba a mano.
     politica: { PUERTA, CAPITAL, ANEXION, FUSION, RELACION_PROPUESTA },
+    // Tecnología por Eras y Aedas (Doc 6, 2026-10-09): el catálogo completo para que el cliente no escriba nombres ni tarifas a mano.
+    tecnologia: { TECNOLOGIAS, ERAS, TARIFA_ADOPCION, AEDAS, EPICAS, TITULO_CAPITULO },
     caravanas: { CARAVANA_COOLDOWN, ASIGNACION_CARAVANA, CARRO_CATALOGO, ANIMAL_CATALOGO, CARAVANA_PREPARACION, CARAVANA_ESCOLTA },
     reputacion: { REPUTACION },
     // Modelo temporal (Fase D / doc 10): un cliente necesita `epocaInicial` + `duracionTickMs` para

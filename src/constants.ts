@@ -51,7 +51,8 @@ import type { ContadorLogro, EdificioCampamentoTipo, EdificioTipo, EraId, GrupoP
  *   (la tropa prestada sale completa); `LOGISTICA` se publica en `mundoYMilitar`.
  * v14 (2026-10-09): `EDIFICIO_CATALOGO.mercado.niveles[*].cupoCarros` (3 / 9 / 18) y `RELACION_PROPUESTA`; el balance publica además `CARRO_CATALOGO`,
  *   `ANIMAL_CATALOGO`, `CARAVANA_PREPARACION`, `CARAVANA_ESCOLTA` (en `caravanas`), `MOVIMIENTO`, `RECLUTAMIENTO_ORO_POR_ESCALON` y `ORO_POR_CABALLO`
- *   (en `mundoYMilitar`) y el grupo nuevo `politica` (`PUERTA`, `CAPITAL`, `ANEXION`, `FUSION`, `RELACION_PROPUESTA`).
+ *   (en `mundoYMilitar`), el grupo nuevo `politica` (`PUERTA`, `CAPITAL`, `ANEXION`, `FUSION`, `RELACION_PROPUESTA`) y el grupo nuevo `tecnologia`
+ *   (`TECNOLOGIAS`, `ERAS`, `TARIFA_ADOPCION`, `AEDAS`, `EPICAS`, `TITULO_CAPITULO`).
  */
 export const BALANCE_VERSION = 14;
 
