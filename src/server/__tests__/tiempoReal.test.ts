@@ -199,6 +199,30 @@ describe('difusion de eventos tras un comando', () => {
     ws.terminate();
   });
 
+  it('lo que pasa en una partida no llega a los sockets de otra, ni siquiera del mismo usuario', async () => {
+    await partidaCreada('g1');
+    await partidaCreada('g2');
+    const ana1 = await jugadorEn('g1', 'ana');
+    const ana2 = await jugadorEn('g2', 'ana');
+    const ws1 = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana1.auth });
+    const ws2 = await app.injectWS('/v1/jugador/partidas/g2/tiempo-real', { headers: ana2.auth });
+    await suscribir(ws1, 'mapa/general');
+    await suscribir(ws2, 'mapa/general');
+    const recibidos: Record<string, unknown>[] = [];
+    ws2.on('message', (data: Buffer) => recibidos.push(JSON.parse(data.toString())));
+
+    const enG1 = esperarMensaje(ws1);
+    await ejecutar('g1', ana1.auth, 'crearFaccion', { nombre: 'Micenas' });
+    const mensaje = await enG1;
+    expect((mensaje.evento as { codigo: string }).codigo).toBe('faccion.creada');
+    expect(mensaje.gameId, 'el mensaje dice de qué partida es').toBe('g1');
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(recibidos, 'g2 no se entera de lo de g1').toEqual([]);
+    ws1.terminate();
+    ws2.terminate();
+  });
+
   it('un evento de UN asentamiento solo llega a quien esta suscrito a ESE asentamiento, no a mapa/general', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1', 'ana');

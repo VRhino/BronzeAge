@@ -70,7 +70,7 @@ export class HubDeDifusion {
 
     for (const evento of eventos) {
       for (const canal of canalesDeEvento(evento)) {
-        const mensaje = JSON.stringify({ tipo: 'evento', canal, evento });
+        const mensaje = JSON.stringify({ tipo: 'evento', gameId, canal, evento });
         for (const [socket, conexion] of conexiones) {
           if (conexion.canales.has(canal) && socket.readyState === socket.OPEN) socket.send(mensaje);
         }
