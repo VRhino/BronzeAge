@@ -1289,9 +1289,10 @@ export const TRAZADO = {
  * del trazo de verdad, no antes.
  */
 export const MURALLA = {
-  /** Gate de construcción (§8 del doc): el mismo nivel de asentamiento que exigía el viejo edificio `muralla`
-   * que este recinto sustituye (`EDIFICIO_CATALOGO.muralla.requisitoNivelAsentamientoConstruccion`). */
-  nivelMinimoConstruccion: 3,
+  /** Gate de construcción (§8 del doc, decidido el 2026-10-09): el nivel de asentamiento que pide cada nivel de recinto, tanto para trazarlo como para
+   * mejorar hasta él. Empalizada desde el nivel 2 (más tiempo para montarla y subirla a piedra antes del 4), muro de piedra desde el 3 y muralla con
+   * adarve desde el 4. El nivel 4 de asentamiento sigue exigiendo un recinto de piedra completo (`NIVEL_ASENTAMIENTO.requisitos[4]`). */
+  nivelAsentamientoPorNivelDeRecinto: { 1: 2, 2: 3, 3: 4 } as Readonly<Record<number, number>>,
   /** Nivel más alto de recinto (§7: 1 empalizada · 2 muro de piedra · 3 muralla con adarve). Tope de
    * `iniciarMejoraDeRecinto` — no hay nivel 4 de muralla. */
   nivelMaximo: 3,

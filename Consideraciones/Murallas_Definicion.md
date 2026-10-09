@@ -55,7 +55,7 @@ El enunciado del usuario dice cinco cosas:
 | "cada celda de muralla tiene un coste, es decir que escala mientras más celdas tenga" | El coste NO es del edificio: es `nº de celdas × tarifa por celda`. El perímetro es la unidad económica |
 | "deja granjas y corrales fuera" | Comprobación explícita en el trazo: la región encerrada no puede contener ninguna celda de Granja o Corral — si la dilatación llega a una, el muro hace un entrante y la deja fuera (§11.2). *Una primera versión lo resolvía con un tope de radio; el Paso 0 lo desmintió con datos (§11.1)* |
 | "las murallas tienen mejora, el coste es de madera y piedra" | Tres niveles con tarifa por celda distinta (§7-§8) |
-| "al principio no se pueden apostar soldados arriba, con niveles más altos sí; al subir de nivel gana torres, puertas" | Nivel 3 habilita guarnición. Torres sí son recompensa de nivel; **puertas NO** — son geométricas por obligación (§5) y quedan congeladas al trazar (§5.1). Ganar puertas nuevas solo se consigue **ampliando el recinto** (§10) |
+| "al principio no se pueden apostar soldados arriba, con niveles más altos sí; al subir de nivel gana torres, puertas" | El adarve (recinto de nivel 3, que exige asentamiento de nivel 4) habilita guarnición. Torres sí son recompensa de nivel; **puertas NO** — son geométricas por obligación (§5) y quedan congeladas al trazar (§5.1). Ganar puertas nuevas solo se consigue **ampliando el recinto** (§10) |
 
 ## 2. Decisiones
 
@@ -293,7 +293,7 @@ cumple el gate, igual que ya hace con el Mercado — si no, ninguna facción del
 (es el mismo agujero que documenta `issues/nivel_3_inalcanzable_sin_jugador_humano.md`, y hay que cerrarlo en
 el mismo paso o el gate de nivel 4 queda muerto).
 
-**Gate de construcción**: nivel de asentamiento 3, el mismo que tenía el edificio `muralla` que sustituye.
+**Gate de construcción** (decidido el 2026-10-09, sustituye al «nivel 3, el mismo que tenía el edificio `muralla`»): cada nivel de recinto pide su nivel de asentamiento, para trazarlo y para mejorar hasta él (`MURALLA.nivelAsentamientoPorNivelDeRecinto`): **empalizada desde el nivel 2, muro de piedra desde el 3 y muralla con adarve desde el 4**. El nivel 4 de asentamiento sigue exigiendo un recinto de piedra completo (Doc 4.5), así que la empalizada en el 2 solo da más tiempo para montarla y subirla a piedra antes del 4. El coste no cambia.
 
 ## 9. El arrabal (extramuros)
 
@@ -520,7 +520,7 @@ brecha, daño estructural y armas de asedio.
   Es lo que convierte "amurallar pronto" en fortaleza y "amurallar tarde" en metrópoli sin ninguna regla
   adicional — y `integridad` hace que un anillo a medio cerrar no defienda casi nada, porque se entra por el
   hueco.
-- **Guarnición sobre el adarve a partir del nivel 3**: capacidad = `f(nº de celdas)`, escuadrones asignados al
+- **Guarnición sobre el adarve (recinto de nivel 3, asentamiento de nivel 4)**: capacidad = `f(nº de celdas)`, escuadrones asignados al
   muro que ganan un bono adicional. Es el "apostar soldados arriba" del enunciado. Un muro largo admite más
   guarnición pero necesita más para cubrirse — otra vez el mismo intercambio, sin regla nueva.
 - **Puertas y torres como puntos duros**: la puerta es el punto débil (lo que un ariete ataca), la torre el

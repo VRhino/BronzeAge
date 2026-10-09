@@ -115,7 +115,7 @@ Para dimensionarlo: la reserva de comida de una ciudad de nivel 1 a tope ronda l
 - Da **+1 ranura de política al Gobernador** (4.4).
 - Coste: 800 madera + 1.200 piedra + 300 oro. Obra: 2 días. Huella 3×3.
 
-**Murallas** — no son un edificio del catálogo sino un **recinto** que rodea la ciudad y se levanta por obra, desde la empalizada barata hasta la muralla de piedra (`Consideraciones/Murallas_Definicion.md`). Tener un recinto completo **de piedra** (muro de piedra o muralla con adarve; la empalizada no basta) es requisito del nivel 4 (4.5) y suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
+**Murallas** — no son un edificio del catálogo sino un **recinto** que rodea la ciudad y se levanta por obra, desde la empalizada barata hasta la muralla de piedra (`Consideraciones/Murallas_Definicion.md`). **Cada nivel de recinto pide su nivel de asentamiento** (decidido el 2026-10-09): la **empalizada desde el nivel 2**, el **muro de piedra desde el 3** y la **muralla con adarve desde el 4**, tanto para trazarlo como para mejorar hasta él; así la empalizada del nivel 2 da tiempo para montarla y subirla a piedra antes del nivel 4. Tener un recinto completo **de piedra** (muro de piedra o muralla con adarve; la empalizada no basta) es requisito del nivel 4 (4.5) y suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
 
 ### Transformación de recursos
 

@@ -638,11 +638,18 @@ export function comprometerRecintoManualmente(
   if (!cargoOcupado(asentamiento, cargo)) {
     throw new RecintoInvalidoError(`Se necesita un ${cargo} asignado para trazar un recinto.`);
   }
-  const nivelOperativo = nivelActualDe(asentamiento);
-  if (nivelOperativo < MURALLA.nivelMinimoConstruccion) {
-    throw new RecintoInvalidoError(`Requiere nivel de asentamiento ${MURALLA.nivelMinimoConstruccion} (actual: ${nivelOperativo}).`);
-  }
+  exigirNivelDeAsentamientoParaRecinto(asentamiento, nivel);
   return comprometerRecinto(asentamiento, nivel, instante, id);
+}
+
+/** El asentamiento tiene el nivel que pide ese nivel de recinto (`MURALLA.nivelAsentamientoPorNivelDeRecinto`): empalizada 2, piedra 3, adarve 4. */
+function exigirNivelDeAsentamientoParaRecinto(asentamiento: Asentamiento, nivelDeRecinto: number): void {
+  const minimo = MURALLA.nivelAsentamientoPorNivelDeRecinto[nivelDeRecinto];
+  if (minimo === undefined) throw new RecintoInvalidoError(`No existe un recinto de nivel ${nivelDeRecinto}.`);
+  const nivelOperativo = nivelActualDe(asentamiento);
+  if (nivelOperativo < minimo) {
+    throw new RecintoInvalidoError(`Un recinto de nivel ${nivelDeRecinto} requiere asentamiento de nivel ${minimo} (actual: ${nivelOperativo}).`);
+  }
 }
 
 /**
@@ -693,6 +700,8 @@ export function iniciarMejoraDeRecintoManualmente(
   if (!cargoOcupado(asentamiento, cargo)) {
     throw new RecintoInvalidoError(`Se necesita un ${cargo} asignado para mejorar un recinto.`);
   }
+  const recinto = (asentamiento.recintos ?? []).find((r) => r.id === recintoId);
+  if (recinto) exigirNivelDeAsentamientoParaRecinto(asentamiento, recinto.nivel + 1);
   return iniciarMejoraDeRecinto(asentamiento, recintoId);
 }
 

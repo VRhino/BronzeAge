@@ -558,9 +558,31 @@ describe('murallas — el mando manual (Paso 2c)', () => {
     expect(() => comprometerRecintoManualmente(nivel3SinCargos, 'gobernador', 1, instanteDeTest(200))).toThrow(RecintoInvalidoError);
   });
 
-  it('comprometerRecintoManualmente exige MURALLA.nivelMinimoConstruccion (el fixture está en nivel 2)', () => {
+  it('el nivel de asentamiento que pide cada nivel de recinto: empalizada 2, piedra 3, adarve 4 (2026-10-09)', () => {
+    const base = ciudad(99, 200); // el fixture está en nivel 2
+    const en = (nivel: number): Asentamiento => ({ ...base, nivel, nivelActual: nivel });
+
+    expect(() => comprometerRecintoManualmente(en(1), 'gobernador', 1, instanteDeTest(200)), 'la empalizada no se abre en el nivel 1').toThrow(/nivel 2/);
+    expect(comprometerRecintoManualmente(en(2), 'gobernador', 1, instanteDeTest(200)).recintos).toHaveLength(1);
+    expect(() => comprometerRecintoManualmente(en(2), 'gobernador', 2, instanteDeTest(200)), 'ni la piedra en el 2').toThrow(/nivel 3/);
+    expect(() => comprometerRecintoManualmente(en(3), 'gobernador', 3, instanteDeTest(200)), 'ni el adarve en el 3').toThrow(/nivel 4/);
+    expect(comprometerRecintoManualmente(en(4), 'gobernador', 3, instanteDeTest(200)).recintos).toHaveLength(1);
+  });
+
+  it('mejorar un recinto exige el nivel de asentamiento del nivel al que sube', () => {
     const base = ciudad(99, 200);
-    expect(() => comprometerRecintoManualmente(base, 'gobernador', 1, instanteDeTest(200))).toThrow(RecintoInvalidoError);
+    const completo = (nivelAsentamiento: number, nivelRecinto: number): Asentamiento => {
+      const c = comprometerRecintoManualmente({ ...base, nivel: 4, nivelActual: 4 }, 'gobernador', nivelRecinto, instanteDeTest(200));
+      const r = c.recintos![0]!;
+      return { ...c, nivel: nivelAsentamiento, nivelActual: nivelAsentamiento, recintos: [{ ...r, avance: r.celdas.length - 1 }] };
+    };
+
+    const empalizadaEnElDos = completo(2, 1);
+    expect(() => iniciarMejoraDeRecintoManualmente(empalizadaEnElDos, 'gobernador', empalizadaEnElDos.recintos![0]!.id), 'a piedra hace falta el nivel 3').toThrow(/nivel 3/);
+    const empalizadaEnElTres = completo(3, 1);
+    expect(iniciarMejoraDeRecintoManualmente(empalizadaEnElTres, 'gobernador', empalizadaEnElTres.recintos![0]!.id).recintos![0]!.mejorandoA).toBe(2);
+    const piedraEnElTres = completo(3, 2);
+    expect(() => iniciarMejoraDeRecintoManualmente(piedraEnElTres, 'gobernador', piedraEnElTres.recintos![0]!.id), 'al adarve hace falta el nivel 4').toThrow(/nivel 4/);
   });
 
   it('con cargo y nivel suficientes, delega en comprometerRecinto', () => {
