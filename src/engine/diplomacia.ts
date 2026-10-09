@@ -230,7 +230,7 @@ export function proponerPaz(relaciones: RelacionPolitica[], relacionId: string, 
 }
 
 /**
- * Ruptura vía 2 (Doc 2.4): liberación voluntaria por el señor (vasallaje, bonus de reputación para la señora,
+ * Ruptura vía 2 (Doc 2.4): liberación voluntaria por el señor (vasallaje, solo él; bonus de reputación para la señora,
  * Doc 2.7) o fin unilateral de una Alianza (penalización de reputación para quien la rompe, `iniciadorFaccionId`).
  */
 export function romperRelacion(
@@ -242,6 +242,13 @@ export function romperRelacion(
   const relacion = relaciones.find((r) => r.id === relacionId);
   if (!relacion) throw new DiplomaciaInvalidaError('La relación no existe.');
   if (relacion.tipo === 'guerra') throw new DiplomaciaInvalidaError('Una guerra no se rompe: se acaba con la paz (`proponerPaz`).');
+  if (iniciadorFaccionId !== undefined && iniciadorFaccionId !== relacion.faccionAId && iniciadorFaccionId !== relacion.faccionBId) {
+    throw new DiplomaciaInvalidaError('Esa Facción no forma parte de la relación.');
+  }
+  // Un vasallaje solo lo suelta el señor (vía 2 de Doc 2.4); la vasalla se rebela (`rebelionVasallo`), con sus consecuencias.
+  if (relacion.tipo === 'vasallaje' && iniciadorFaccionId !== undefined && iniciadorFaccionId !== relacion.faccionAId) {
+    throw new DiplomaciaInvalidaError('Un vasallaje lo libera su señor; la vasalla solo puede rebelarse.');
+  }
 
   const ajustes =
     relacion.tipo === 'vasallaje'

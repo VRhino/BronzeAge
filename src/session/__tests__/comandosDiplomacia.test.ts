@@ -147,6 +147,31 @@ describe('proponer una relación exige aceptación (2026-10-09)', () => {
   });
 });
 
+describe('romperRelacion: quién puede (Doc 2.4)', () => {
+  it('un vasallaje solo lo libera su señor: la vasalla no, ni una tercera', () => {
+    const sesion = GameSession.crear('romper-quien', { seed: 42 });
+    const [a, b, c] = ['a', 'b', 'c'].map((n) => sesion.ejecutar(crearFaccion, { nombre: n }, { actor: `j-${n}` }).datos!.faccionId);
+    const id = acordarRelacion(sesion, { tipo: 'vasallaje', faccionAId: a!, faccionBId: b! }, OPC).datos!.relacionId;
+
+    const vasalla = sesion.ejecutar(romperRelacion, { relacionId: id, iniciadorFaccionId: b! }, OPC);
+    expect(vasalla.ok === false && vasalla.detalleError).toMatch(/solo puede rebelarse/);
+    expect(sesion.ejecutar(romperRelacion, { relacionId: id, iniciadorFaccionId: c! }, OPC).ok).toBe(false);
+    expect(sesion.getState().relaciones[0]!.estado).toBe('activa');
+
+    expect(sesion.ejecutar(romperRelacion, { relacionId: id, iniciadorFaccionId: a! }, OPC).ok).toBe(true);
+    expect(sesion.getState().relaciones[0]!.estado).toBe('rota');
+  });
+
+  it('una alianza la puede romper cualquiera de las dos, y nadie más', () => {
+    const sesion = GameSession.crear('romper-alianza', { seed: 42 });
+    const [a, b, c] = ['a', 'b', 'c'].map((n) => sesion.ejecutar(crearFaccion, { nombre: n }, { actor: `j-${n}` }).datos!.faccionId);
+    const id = acordarRelacion(sesion, { tipo: 'alianza', faccionAId: a!, faccionBId: b! }, OPC).datos!.relacionId;
+
+    expect(sesion.ejecutar(romperRelacion, { relacionId: id, iniciadorFaccionId: c! }, OPC).ok).toBe(false);
+    expect(sesion.ejecutar(romperRelacion, { relacionId: id, iniciadorFaccionId: b! }, OPC).ok).toBe(true);
+  });
+});
+
 describe('declararGuerra y proponerPaz (Doc 2.4.1)', () => {
   it('declarar crea la guerra y arrastra al señor del objetivo y a sus vasallos', () => {
     const sesion = GameSession.crear('guerra-test', { seed: 42 });

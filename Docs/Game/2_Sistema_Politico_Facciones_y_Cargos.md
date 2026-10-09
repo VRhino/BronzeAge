@@ -54,7 +54,7 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 
 **Ruptura (4 vías):**
 1. Rebelión forzada del vasallo → declaración de guerra automática del vasallo hacia el señor (y resto de vasallos), Y cancelación inmediata de todos los acuerdos comerciales/tratados vigentes.
-2. Liberación voluntaria por el señor.
+2. Liberación voluntaria por el señor (`romperRelacion`, **solo él**; la vasalla no puede romper su vasallaje: solo rebelarse, vía 1).
 3. Conquista por un tercero → destrucción total O anexión como vasalla del conquistador.
 4. Liberación automática si el señor es destruido o se «desarma» (decidido e implementado el 2026-10-06): un señor está **desarmado** cuando su Facción **se queda sin ningún asentamiento**, sea por conquista, ruina o abandono — «destruido» y «desarmado» son el mismo estado, y una Facción sin plazas no desaparece del mundo (Doc 5.15.5). En ese momento sus vasallos quedan libres: el vasallaje pasa a `rota` y se cantan en la crónica de los Aedas. **No cambia la reputación de nadie** (el señor no decide nada: el bonus de 2.7 es por liberar *voluntariamente*) **ni declara guerra**. Se barre una vez por tick, así que la liberación llega en el tick siguiente al hecho. Si el señor vuelve a fundar, ya no tiene vasallos.
 
