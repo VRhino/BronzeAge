@@ -110,6 +110,11 @@ export type EventoLog = EventoLogAdmin;
 /** Cuántos eventos del historial se guardan en el cliente (los más recientes). */
 const MAX_EVENTOS_EN_MEMORIA = 2000;
 
+/** Cuánto debe llevar oculta la pestaña para soltar el tiempo real. */
+const PAUSA_OCULTA_MS = 8_000;
+/** Tras volver a verse, se espera a las fotos nuevas antes de recurrir a una lectura completa. */
+const GRACIA_AL_REANUDAR_MS = 10_000;
+
 /** Cada cuánto se relee el estado completo por HTTP mientras el tiempo real va bien (03 §8.3: respaldo ≥ 60 s). */
 const LECTURA_COMPLETA_EN_VIVO_MS = 60_000;
 
@@ -237,6 +242,8 @@ export class GameStore {
   private conexion: ConexionAdmin | undefined;
   private ultimaLecturaCompleta = Date.now();
   private notifPendiente = false;
+  private temporizadorOculto: ReturnType<typeof setTimeout> | undefined;
+  private reanudadoEn = 0;
   private versionDePartidaVista = -1;
   /** Cuándo (performance.now) llegó el último dato de la partida: el origen de la interpolación de lo móvil. */
   private recibidoEn = performance.now();
@@ -298,7 +305,7 @@ export class GameStore {
     this.estadoCache = this.estadoBase;
     this.ultimaLecturaCompleta = Date.now();
     this.recibidoEn = performance.now();
-    this.refusionar();
+    this.refusionar(true);
     await this.sincronizarEventos();
     await this.sincronizarMapa(this.estadoCache.mapaId);
   }
@@ -321,6 +328,23 @@ export class GameStore {
     });
     this.conexion.abrir();
     this.conexion.suscribir(CANAL_PARTIDA);
+    document.addEventListener('visibilitychange', () => this.alCambiarVisibilidad());
+  }
+
+  /** Pestaña oculta más de unos segundos: se sueltan las suscripciones (un cambio rápido de foco no cuesta una foto de ~1 MiB). Al volver,
+   * se reabre todo y se sigue viendo lo último hasta que llegan las fotos nuevas. */
+  private alCambiarVisibilidad(): void {
+    clearTimeout(this.temporizadorOculto);
+    if (document.hidden) {
+      this.temporizadorOculto = setTimeout(() => {
+        if (document.hidden) this.conexion?.pausar();
+      }, PAUSA_OCULTA_MS);
+      return;
+    }
+    if (this.conexion?.estaPausada) {
+      this.reanudadoEn = Date.now();
+      this.conexion.reanudar();
+    }
   }
 
   /** Cuándo (performance.now) llegó el último dato de la partida. */
@@ -375,14 +399,15 @@ export class GameStore {
   }
 
   /** Compone `estadoCache` = lectura HTTP + lo que llegó por tiempo real. Sin conexión sana es la lectura HTTP sola. */
-  private refusionar(): void {
+  private refusionar(desdeLectura = false): void {
     const partida = this.conexion?.almacen(CANAL_PARTIDA);
     if (!this.conexion || !partida) {
-      this.estadoCache = this.estadoBase;
+      // Sin foto vigente (reconectando, pestaña recién vuelta): se conserva lo último que se veía; solo una lectura HTTP nueva lo sustituye.
+      if (desdeLectura || !this.conexion) this.estadoCache = this.estadoBase;
       return;
     }
     const conexion = this.conexion;
-    this.estadoCache = fusionarEstado(this.estadoBase, partida, (canal) => conexion.almacen(canal), conexion.intervaloTickMs);
+    this.estadoCache = fusionarEstado(this.estadoBase, partida, (canal) => conexion.ultimo(canal), conexion.intervaloTickMs);
   }
 
   /** Lo que las listas globales necesitan de cada asentamiento. Por tiempo real viene calculado por el servidor (`resumen`); con una lectura
@@ -1034,6 +1059,7 @@ export class GameStore {
   async refrescar(forzar = false): Promise<void> {
     // Con el tiempo real sano, la lectura completa es solo un respaldo (y trae lo que aún no viaja por canales).
     if (!forzar && this.enVivo && Date.now() - this.ultimaLecturaCompleta < LECTURA_COMPLETA_EN_VIVO_MS) return;
+    if (!forzar && Date.now() - this.reanudadoEn < GRACIA_AL_REANUDAR_MS) return;
     try {
       await this.recargar();
     } catch (err) {

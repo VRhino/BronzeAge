@@ -49,12 +49,34 @@ export class ConexionAdmin {
   private readonly deseados = new Set<string>();
   private readonly canales = new Map<string, CanalSuscrito>();
   private cerrado = false;
+  /** Pestaña oculta: el socket está cerrado a propósito (y con él las suscripciones del servidor) y no se reconecta hasta `reanudar`. */
+  private pausada = false;
   private intentos = 0;
   private reintento: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly opciones: OpcionesDeConexion) {}
 
   abrir(): void {
+    void this.conectar();
+  }
+
+  get estaPausada(): boolean {
+    return this.pausada;
+  }
+
+  /** Suelta el socket sin perder qué se quería ver ni lo último recibido: el servidor deja de contar estas suscripciones. */
+  pausar(): void {
+    if (this.pausada) return;
+    this.pausada = true;
+    clearTimeout(this.reintento);
+    this.socket?.close();
+  }
+
+  /** Vuelve a abrir y a suscribir todo; llegan fotos nuevas (mientras tanto se sigue viendo lo último recibido). */
+  reanudar(): void {
+    if (!this.pausada) return;
+    this.pausada = false;
+    this.intentos = 0;
     void this.conectar();
   }
 
@@ -74,6 +96,12 @@ export class ConexionAdmin {
   almacen(canal: string): AlmacenDeCanal | undefined {
     const c = this.canales.get(canal);
     return c?.almacen.conFoto && !c.esperandoFoto ? c.almacen : undefined;
+  }
+
+  /** Lo último recibido de un canal aunque ahora espere una foto nueva (reconexión, pestaña recién vuelta): para seguir mostrando algo sin parpadeo. */
+  ultimo(canal: string): AlmacenDeCanal | undefined {
+    const c = this.canales.get(canal);
+    return c?.almacen.conFoto ? c.almacen : undefined;
   }
 
   /** Los canales de detalle abiertos ahora, por si hace falta compararlos con lo que la interfaz quiere vigilar. */
@@ -103,7 +131,7 @@ export class ConexionAdmin {
   }
 
   private async conectar(): Promise<void> {
-    if (this.cerrado) return;
+    if (this.cerrado || this.pausada) return;
     let url: string;
     try {
       url = await this.opciones.url();
@@ -111,7 +139,7 @@ export class ConexionAdmin {
       this.programarReintento();
       return;
     }
-    if (this.cerrado) return;
+    if (this.cerrado || this.pausada) return;
     const socket = new WebSocket(url);
     this.socket = socket;
     let abierto = false;
@@ -139,7 +167,7 @@ export class ConexionAdmin {
       this.opciones.alEstado();
       if (!abierto) this.opciones.alFallarApertura();
       // 4404: la partida se borró; reconectar no sirve de nada.
-      if (!this.cerrado && ev.code !== 4404) this.programarReintento();
+      if (!this.cerrado && !this.pausada && ev.code !== 4404) this.programarReintento();
     };
   }
 

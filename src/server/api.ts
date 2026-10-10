@@ -30,6 +30,7 @@ import { crearDirectorioDeAdministradores, type AdministradorConfigurado } from 
 import { RegistroDePartidas } from './registroDePartidas';
 import { HubDeDifusion } from './difusion/hub';
 import { DifusorDeVistas, type OpcionesDifusor } from './difusion/difusorDeVistas';
+import { perMessageDeflateDe, type OpcionesCompresionWs } from './difusion/compresion';
 import { RegistroDeAuditoria } from './auditoria';
 import { TareaDeMantenimiento, type ConfiguracionMantenimiento } from './mantenimiento';
 import { registrarRutasDeSesion } from './rutas/sesiones';
@@ -110,6 +111,8 @@ export interface OpcionesServidor {
   servidoresBatalla?: readonly ServidorDeBatalla[];
   /** Ajustes del difusor de canales de vista (coalescencia, umbrales de socket lento…); por defecto los del contrato 03 §6. Los tests los acortan. */
   vistas?: Omit<OpcionesDifusor, 'fuenteDe'>;
+  /** Compresión `permessage-deflate` del WS: `false` la apaga; sin declarar, activada con umbral de 1 KiB y nivel 3 (`difusion/compresion.ts`). */
+  compresionWs?: OpcionesCompresionWs | false;
 }
 
 export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
@@ -119,7 +122,8 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   // Fase C9 viene a evitar: un cliente con un bug de tipos debe ver un 400, no que el servidor le adivine lo
   // que quiso decir.
   const app = Fastify({ logger: false, ajv: { customOptions: { coerceTypes: false } } });
-  app.register(fastifyWebsocket);
+  // Compresión `permessage-deflate` (contrato 03 §13.2): activada por defecto con umbral; se negocia, así que un cliente sin soporte no la nota.
+  app.register(fastifyWebsocket, { options: { perMessageDeflate: perMessageDeflateDe(opciones.compresionWs) } });
   app.register(fastifyCors, {
     // `[]`/ausente -> `false` (CORS desactivado del todo, ningún origen cruzado pasa) en vez de un array
     // vacío: es la forma inequívoca de decir "nada permitido" en `@fastify/cors`, sin depender de cómo

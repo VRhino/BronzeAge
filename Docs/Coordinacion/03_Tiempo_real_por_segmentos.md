@@ -539,6 +539,23 @@ Mundo de 500 bots al **tick 40000** (checkpoint del batch `BATCH_BOTS=500`: 32 p
 Lecturas: el delta de admin crece con el número de héroes (2609 `patch` en 20 ticks: cada tick toca ~130 entidades, sobre todo héroes con víveres/ración) y la foto de admin con ellos (1,2 MiB con 500 héroes);
 con `permessage-deflate` (13.2) o partiendo el héroe admin en ligero y detalle bajaría mucho. El resto escala bien: ninguna medida del flush pasa de 1 ms por clave.
 
+**Compresión `permessage-deflate` (13.2, implementada)** — `scripts/medicion-compresion-ws.ts` sobre el mismo mundo de 500 bots (tick 40000): los mensajes reales del difusor pasados por zlib (deflate crudo) a tres niveles.
+
+| Mensaje | Bruto | Nivel 1 | **Nivel 3 (por defecto)** | Nivel 6 |
+|---|---|---|---|---|
+| foto `admin/partida` | 1257 KiB | 119 KiB (9 %), 2,0 ms | **110 KiB (9 %), 2,3 ms** | 88 KiB (7 %), 5,8 ms |
+| foto `vista/mapa` | 129 KiB | 20,4 KiB (16 %), 0,3 ms | **17,8 KiB (14 %), 0,4 ms** | 15,7 KiB (12 %), 0,9 ms |
+| foto `vista/heroe` | 68 KiB | 7,4 KiB (11 %), 0,1 ms | **6,7 KiB (10 %), 0,1 ms** | 5,7 KiB (8 %), 0,4 ms |
+| delta `admin/partida` | 22 KiB | 4,5 KiB (20 %) | **4,3 KiB (20 %), <0,1 ms** | 4,1 KiB (18 %) |
+| delta `vista/mapa` | 4,0 KiB | 1,5 KiB (39 %) | **1,5 KiB (38 %), <0,1 ms** | 1,4 KiB (36 %) |
+| delta `vista/heroe` | 0,1 KiB | — | no se comprime (bajo el umbral) | — |
+
+Lectura: las fotos bajan a un 7–16 % de su tamaño por 0,1–2,3 ms de CPU, y los deltas de varios KiB a un 20–40 %; pasar del nivel 3 al 6 gana ~20 % más pero cuesta 2,5× la CPU, así que el
+nivel por defecto es 3. Configuración: activada por defecto con umbral de 1024 B (por debajo, el mensaje viaja tal cual) y sin contexto compartido entre mensajes
+(`serverNoContextTakeover`/`clientNoContextTakeover`: con cientos de sockets, el diccionario de zlib por socket sería memoria fija); `WS_COMPRESION=off|…`, `WS_COMPRESION_UMBRAL`,
+`WS_COMPRESION_NIVEL` en el entorno y `compresionWs` en `crearServidor`. Se negocia en el handshake: un cliente sin soporte (o que no la ofrece) recibe lo mismo sin comprimir (test con servidor
+real en `src/server/__tests__/compresionWs.test.ts`). La cifra del nivel 3 es la de producción; el efecto en una reconexión es pasar de ~1,2 MiB a ~110 KiB por la foto admin.
+
 ## 13. Optimizaciones de escala (decisión del usuario, 2026-10-10: todo lo que ayude a escalar se menciona; él decide)
 
 Regla de trabajo acordada: cualquier mejora que evite sufrir al servidor a futuro se **propone aquí con su coste y beneficio** y el usuario decide
@@ -547,7 +564,7 @@ si se aborda. Estado de cada una:
 | # | Mejora | Beneficio esperado | Coste / riesgo | Decisión |
 |---|---|---|---|---|
 | 13.1 | **`vista/mapa` por Facción** (una proyección y una serialización por Facción en vez de por héroe). Camino 2: sacar del mapa compartido lo que depende del héroe (`exploracionPersonal`, `plazasRecordadas`, plaza pisada excluida de avistados, almacén con la columna a la puerta) y llevarlo a `vista/heroe`. **Lo que ve cada jugador no cambia** | CPU y bytes ÷ tamaño medio de Facción con muchos jugadores | Toca la proyección, `session/vistas/segmentos.ts` y ambos clientes (los campos pasan de canal); test de paridad: la unión de canales ≡ la proyección HTTP | **APROBADA (usuario)** |
-| 13.2 | **Compresión `permessage-deflate`** en el WS, al menos para fotos (admin ≈275 KiB, mapa) | Fotos y reconexiones de ¼ a ⅒ de bytes; deltas pequeños no compensan CPU (umbral de tamaño) | Poco código (opción de `@fastify/websocket`/`ws`); CPU por foto; medir | **APROBADA (usuario, 2026-10-10)** |
+| 13.2 | ✅ **Compresión `permessage-deflate`** en el WS, al menos para fotos (admin ≈275 KiB, mapa) | Fotos y reconexiones de ¼ a ⅒ de bytes; deltas pequeños no compensan CPU (umbral de tamaño) | Poco código (opción de `@fastify/websocket`/`ws`); CPU por foto; medir | **APROBADA (usuario, 2026-10-10) · IMPLEMENTADA** (§12) |
 | 13.3 | **Reanudar con `desde`** (Fase 4): un hueco o reconexión corta no cuesta foto | Evita fotos en reconexiones breves y en el lento que se recupera | Buffer de ~64 deltas por clave en memoria | A decidir tras medir `fotos_enviadas` por motivo |
 | 13.4 | **Seguimiento de cambios (dirty tracking)** en vez de reconstruir y comparar la foto de cada clave: marcar qué entidades tocó el tick y proyectar solo esas | Coste del flush ∝ lo que cambia, no al tamaño del mundo | Invasivo: toca motor/estado; solo si `ms_proyeccion` crece con 500+ héroes | A decidir tras la medición de 500 bots |
 | 13.5 | **Suscripción por visibilidad real**: el cliente se desuscribe de canales cuando la pestaña está oculta (y re-suscribe con foto al volver); el admin puede pedir flush más lento (p. ej. cada 4 ticks) | Un panel abierto en segundo plano deja de costar | Solo clientes + un parámetro `ritmo` opcional en `suscribir` (aditivo) | **APROBADA (usuario, 2026-10-10)** |
