@@ -468,6 +468,7 @@ describe('GET /jugador/partidas (pantalla «Partidas»)', () => {
 
     const [g1] = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas', headers: ana })).json().partidas;
     expect(g1.heroe.faccion).toMatchObject({ nombre: 'Micenas', emblemaId: expect.any(String), colorEmblemaId: expect.any(String) });
+    expect(g1.heroe.faccion.sigilo, 'el sigilo completo').toMatchObject({ formaId: expect.any(String), campoId: expect.any(String), colorPrimarioId: expect.any(String), colorSecundarioId: expect.any(String), orlaId: expect.any(String), colorOrlaId: expect.any(String) });
   });
 
   it('trae el nombre de la partida si el administrador se lo puso al crearla', async () => {

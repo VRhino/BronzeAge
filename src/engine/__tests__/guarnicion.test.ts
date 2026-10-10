@@ -21,9 +21,9 @@ const edificio = (tipo: 'barracon' | 'galeriaDeTiro' | 'caballerizas', nivelInte
   nivelInterno,
 });
 
-const recinto = (levantado: boolean): Recinto => ({
+const recinto = (levantado: boolean, nivel = 1): Recinto => ({
   id: 'r1',
-  nivel: 1,
+  nivel,
   celdas: [{ col: 0, row: 0, clase: 'muro' }, { col: 1, row: 0, clase: 'puerta' }],
   avance: levantado ? 1 : -1,
   comprometidoEn: instanteDeTest(0),
@@ -49,10 +49,13 @@ describe('cupoGuarnicion', () => {
 
     expect(cupoGuarnicion({ ...base, recintos: [recinto(false)] }), 'un recinto a medio levantar no suma').toBe(soloEdificios);
     const conMuralla = { ...base, recintos: [recinto(true)] };
-    expect(cupoGuarnicion(conMuralla)).toBe(soloEdificios + GUARNICION.recintoCompleto);
+    expect(cupoGuarnicion(conMuralla)).toBe(soloEdificios + GUARNICION.recintoCompletoPorNivel[0]!);
+    for (const n of [2, 3]) {
+      expect(cupoGuarnicion({ ...base, recintos: [recinto(true, n)] }), `nivel ${n}`).toBe(soloEdificios + GUARNICION.recintoCompletoPorNivel[n - 1]!);
+    }
 
     const levas = { id: 'p1', politicaId: 'levas_guarnicion', cargo: 'general' as const, activadaEn: instanteDeTest(0), expiraEn: instanteDeTest(150) };
-    expect(cupoGuarnicion({ ...conMuralla, politicasActivas: [levas] })).toBe(soloEdificios + GUARNICION.recintoCompleto + 14);
+    expect(cupoGuarnicion({ ...conMuralla, politicasActivas: [levas] })).toBe(soloEdificios + GUARNICION.recintoCompletoPorNivel[0]! + 14);
   });
 });
 

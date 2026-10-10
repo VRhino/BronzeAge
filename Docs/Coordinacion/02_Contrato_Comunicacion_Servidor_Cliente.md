@@ -417,7 +417,7 @@ no cambie `layoutVersion`, y el fixture `fixtures/escenaCampamento.json` cambia 
 y `fondos`), `alijos` y, del héroe propio, `almacenPersonal`, `oroDeBotin`, `cupoCampamento`, `racionEn` y `alijosAbiertos`.
 **`GET /jugador/partidas`** (2026-10-08, pantalla «Partidas» tras el login; cualquier sesión). Devuelve `{ partidas: [...] }` ordenadas por `gameId`, una por
 partida abierta en el proceso: `{ gameId, estado: 'activa', membresia: { jugadorId } | null, heroe: { id, nombre, nivel, faccion: { id, nombre, emblemaId,
-colorEmblemaId } | null } | null }`. `membresia` es `null` si no es jugador de esa partida (una revocada o terminada también); `heroe` es `null` sin membresía
+colorEmblemaId, sigilo } | null } | null }` (`sigilo` = el `Sigilo` completo de esa Facción, el mismo que `facciones[].sigilo`; solo la del propio usuario). `membresia` es `null` si no es jugador de esa partida (una revocada o terminada también); `heroe` es `null` sin membresía
 o sin héroe. `nivel` es el nivel del héroe (Doc 5.16.1); `faccion` es aquella de la que es ciudadano. No hay nombre/etiqueta de partida (hoy solo `gameId`) ni
 más estados que `activa`. Nada de otros jugadores. Para unirse: `POST /jugador/partidas/:gameId/membresia`.
 

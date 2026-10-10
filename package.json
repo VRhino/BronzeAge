@@ -15,6 +15,7 @@
     "test:run": "vitest run",
     "prepare": "husky || true",
     "lab": "tsx scripts/lab.ts",
+    "mecanicas": "tsx scripts/sincronizar-mecanicas.ts",
     "typecheck:lab": "tsc --noEmit -p lab/tsconfig.json",
     "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json"
   },

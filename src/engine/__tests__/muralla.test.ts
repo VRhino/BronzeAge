@@ -951,6 +951,11 @@ describe('murallas — preferencia intramuros (Paso 4, §9)', () => {
     const a = ciudad(7, 200);
     expect(sitiosParaTipo(a, a.edificios, 'almacen')).toEqual(sitiosParaTipo({ ...a, recintos: [] }, a.edificios, 'almacen'));
   });
+
+  it('la Sala del Consejo (requisito del nivel 4) encuentra sitio', () => {
+    const a = ciudad(7, 200);
+    expect(sitiosParaTipo(a, a.edificios, 'salaConsejo').length).toBeGreaterThan(0);
+  });
 });
 
 // --- Paso 5: el gate de nivel 4 exige un recinto completo, no el viejo edificio `muralla` (§13) ---

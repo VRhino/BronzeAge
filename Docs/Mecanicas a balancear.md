@@ -121,3 +121,8 @@ Implementadas el 2026-10-06; las tres cifras son placeholder (`constants.ts`):
 ## 30. El batch no ejercita la guerra
 
 Con 30 bots, semilla 7, 120 960 ticks (y 60 480 con trigo ×3) el batch sale idéntico antes y después del trabajo de batallas del 2026-10-06, con cero campañas: los bots no hacen la guerra con este equilibrio, así que persecución, botín repartido, salidas y formación de ejércitos solo los cubren los tests. Para medirlos haría falta un checkpoint de Era II en adelante (los guardados hoy son del formato 1) o bots más belicosos. Ficha: `Consideraciones/Batalla_Este_Lado_Definicion.md`.
+
+## Murallas: gate por nivel de asentamiento (2026-10-09)
+
+La empalizada se abre en el nivel 2, el muro de piedra en el 3 y el adarve en el 4 (antes, todo desde el 3). Los bots comprometen el recinto de nivel 1 en cuanto pueden, así que ahora lo harán antes. Medir con batch cuánto retrasa el
+crecimiento de una ciudad de nivel 2 pagar la empalizada (≈2.100 de madera, upkeep en madera) y si llega a tiempo de subirla a piedra antes del nivel 4. Ver `Docs/Mechanics/Murallas.md`.

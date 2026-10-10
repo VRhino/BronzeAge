@@ -94,8 +94,27 @@ const ESQUEMA_LISTAR_PARTIDAS = {
                   nivel: { type: 'number' },
                   faccion: {
                     type: ['object', 'null'],
-                    properties: { id: { type: 'string' }, nombre: { type: 'string' }, emblemaId: { type: 'string' }, colorEmblemaId: { type: 'string' } },
-                    required: ['id', 'nombre', 'emblemaId', 'colorEmblemaId'],
+                    properties: {
+                      id: { type: 'string' },
+                      nombre: { type: 'string' },
+                      emblemaId: { type: 'string' },
+                      colorEmblemaId: { type: 'string' },
+                      // El sigilo completo de la Facción propia (2026-10-09): el mismo objeto que `facciones[].sigilo` de la proyección.
+                      sigilo: {
+                        type: 'object',
+                        properties: {
+                          formaId: { type: 'string' },
+                          campoId: { type: 'string' },
+                          emblemaId: { type: 'string' },
+                          colorPrimarioId: { type: 'string' },
+                          colorSecundarioId: { type: 'string' },
+                          colorEmblemaId: { type: 'string' },
+                          orlaId: { type: 'string' },
+                          colorOrlaId: { type: 'string' },
+                        },
+                      },
+                    },
+                    required: ['id', 'nombre', 'emblemaId', 'colorEmblemaId', 'sigilo'],
                   },
                 },
                 required: ['id', 'nombre', 'nivel', 'faccion'],
@@ -197,7 +216,7 @@ export function registrarRutasDeJugador(app: FastifyInstance, deps: Dependencias
                 id: heroe.id,
                 nombre: heroe.displayName,
                 nivel: heroe.nivel,
-                faccion: faccion ? { id: faccion.id, nombre: faccion.nombre, emblemaId: faccion.sigilo.emblemaId, colorEmblemaId: faccion.sigilo.colorEmblemaId } : null,
+                faccion: faccion ? { id: faccion.id, nombre: faccion.nombre, emblemaId: faccion.sigilo.emblemaId, colorEmblemaId: faccion.sigilo.colorEmblemaId, sigilo: faccion.sigilo } : null,
               }
             : null,
         };

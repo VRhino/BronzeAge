@@ -1186,7 +1186,7 @@ export function produccionTrigoDeGranja(nivelInterno: number | undefined): numbe
  *   hileras, una a cada calle, porque más atrás ya no se puede construir sin traer otra calle
  *   (`FONDO_MANZANA`, engine/trazado.ts).
  * - `radioAfuerasMin`: radio VEDADO alrededor del Centro Urbano — dentro de él no puede aparecer ninguna
- *   Granja ni ningún Corral (§8 del doc). Son **10 celdas** a petición del usuario, que seguía viendo granjas
+ *   Granja ni ningún Corral (§8 del doc). Son **20 celdas** (60 unidades locales) a petición del usuario, que seguía viendo granjas
  *   demasiado cerca del centro con el suelo anterior de 4: no basta con que prefieran el hueco más lejano, hay
  *   que prohibir el cercano.
  * - `anchoBandaAfueras`: las afueras llegan al menos hasta `radioAfuerasMin + anchoBandaAfueras`, aunque la
@@ -1921,7 +1921,8 @@ export const GUARNICION = {
   cupoPorNivelEdificio: [7, 14, 22],
   /** Caballerizas por nivel interno 1/2/3 (D37): nada, la caballería más barata (14) y la más cara del roster (32). */
   cupoPorNivelCaballerizas: [0, 14, 32],
-  recintoCompleto: 14,
+  /** Recinto completo, por NIVEL del mejor recinto terminado: empalizada / muro de piedra / muralla con adarve (2026-10-10). */
+  recintoCompletoPorNivel: [10, 15, 20],
 };
 
 /**

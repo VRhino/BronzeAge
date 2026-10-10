@@ -758,10 +758,10 @@ El campamento es donde un héroe guarda las escuadras que no lleva consigo, y es
   | Barracón, nivel 1 / 2 / 3 | 7 / 14 / 22 |
   | Galería de tiro, nivel 1 / 2 / 3 | 7 / 14 / 22 |
   | Caballerizas, nivel 1 / 2 / 3 | 0 / 14 / 32 |
-  | Recinto de muralla completo | +14 |
+  | Recinto de muralla completo (el mejor): empalizada / piedra / adarve | +10 / +15 / +20 |
   | Política "Levas de guarnición" (General, Doc 4.4) | +14 |
 
-  Sin Barracón, Galería de tiro ni Caballerizas de nivel 2 no hay guarnición. Con Barracón, Galería, muralla y política al máximo son 72 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que el héroe se lleva consigo. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
+  Sin Barracón, Galería de tiro ni Caballerizas de nivel 2 no hay guarnición. Con Barracón, Galería, muralla con adarve y política al máximo son 78 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que el héroe se lleva consigo. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
 - Una escuadra en guarnición se **entrega a la IA**: la maneja la IA y el héroe no puede usarla mientras siga asignada, aunque esté presente en la batalla.
 - En un asedio entra directamente, sin ocupar plaza de héroe.
 - Si el cupo baja por debajo de lo que ya tiene asignado (expira la política, se daña un edificio), lo asignado se queda; solo se impide asignar más.

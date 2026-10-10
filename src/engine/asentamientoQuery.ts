@@ -127,7 +127,7 @@ export function cupoEscolta(asentamiento: Asentamiento): number {
 
 /**
  * Cupo de guarnición que da esta plaza a CADA héroe residente (Doc 5.15.3), en puntos de Liderazgo: Barracón y
- * Galería de tiro según su nivel interno, más un recinto de muralla completo y la política "Levas de
+ * Galería de tiro según su nivel interno, más el mejor recinto de muralla completo (+10/+15/+20 según su nivel) y la política "Levas de
  * guarnición". Sin Barracón ni Galería de tiro no hay guarnición. Un recinto que se está mejorando vuelve a
  * integridad 0, así que mientras tanto no suma.
  */
@@ -138,7 +138,8 @@ export function cupoGuarnicion(asentamiento: Asentamiento): number {
     edificios.reduce((suma, e) => suma + (GUARNICION.cupoPorNivelEdificio[nivelInternoActual(e) - 1] ?? 0), 0) +
     (caballerizas ? (GUARNICION.cupoPorNivelCaballerizas[nivelInternoActual(caballerizas) - 1] ?? 0) : 0);
   if (porEdificios === 0) return 0;
-  const muralla = (asentamiento.recintos ?? []).some((r) => integridadDeRecinto(r) >= 1) ? GUARNICION.recintoCompleto : 0;
+  const nivelMuralla = Math.max(0, ...(asentamiento.recintos ?? []).filter((r) => integridadDeRecinto(r) >= 1).map((r) => r.nivel));
+  const muralla = nivelMuralla > 0 ? (GUARNICION.recintoCompletoPorNivel[nivelMuralla - 1] ?? 0) : 0;
   return porEdificios + muralla + cupoGuarnicionExtra(asentamiento);
 }
 
