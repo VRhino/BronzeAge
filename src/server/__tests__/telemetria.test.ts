@@ -42,7 +42,7 @@ function montar(opciones: { vivo?: boolean; conexiones?: number; encendida?: boo
   const fuentes = {
     partidas: { abiertas: () => [runner] },
     hub: { conexionesAbiertas: () => opciones.conexiones ?? 0 },
-    difusor: { tomarVentana: () => ventanasVistas.shift() ?? ventanaVacia(), suscripcionesDe: () => ({ 'vista/mapa': { suscriptores: 3, claves: 2 } }) },
+    difusor: { metricas: () => ({ porCanal: { 'vista/mapa': { bytesFoto: { p50: 4000, max: 5000 } } } }), tomarVentana: () => ventanasVistas.shift() ?? ventanaVacia(), suscripcionesDe: () => ({ 'vista/mapa': { suscriptores: 3, claves: 2 } }) },
   };
   const reg = new RegistroDeCarga(almacen, fuentes as never, () => '2026-10-10T10:00:00.000Z');
   creados.push(reg);
@@ -65,6 +65,7 @@ describe('RegistroDeCarga', () => {
     expect(m1.guardadoBytes).toBe(1234);
     expect(m1.canales['vista/mapa']).toMatchObject({ flushes: 2, bytesEnviados: 900, suscriptores: 3, claves: 2 });
     expect(m1.canales['vista/mapa']!.bytesFlush.max).toBe(300);
+    expect(m1.canales['vista/mapa']!.bytesFotoVida).toBe(5000);
     expect(m2.canales['vista/mapa']!.flushes).toBe(0);
     expect(m1.costeMuestraMs).toBeGreaterThanOrEqual(0);
   });

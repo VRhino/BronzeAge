@@ -115,7 +115,7 @@ function agregar(res: readonly { n: number; p50: number; p95: number; max: numbe
 }
 
 const CANAL_VACIO: MuestraDeCanal = {
-  flushes: 0, bytesEnviados: 0,
+  flushes: 0, bytesEnviados: 0, bytesFotoVida: 0,
   bytesFlush: { n: 0, p50: 0, p95: 0, max: 0 }, bytesFoto: { n: 0, p50: 0, p95: 0, max: 0 },
   msProyeccion: { n: 0, p50: 0, p95: 0, max: 0 }, msDiff: { n: 0, p50: 0, p95: 0, max: 0 }, msSerializacion: { n: 0, p50: 0, p95: 0, max: 0 },
   fotos: { alta: 0, resync: 0, lento: 0, visibilidad: 0 }, cambios: { upsert: 0, patch: 0, remove: 0, set: 0 },
@@ -137,7 +137,7 @@ function informeDeCanal(muestras: MuestraDeCarga[], tipo: string): InformeDeCana
     flushes: suma(cs.map((c) => c.flushes)),
     bytesMinPorCliente: Math.round(porCliente.length === 0 ? 0 : suma(porCliente) / porCliente.length),
     bytesFlush: agregar(cs.map((c) => c.bytesFlush)),
-    bytesFotoMax: maximo(cs.map((c) => c.bytesFoto.max)),
+    bytesFotoMax: maximo(cs.map((c) => Math.max(c.bytesFoto.max, c.bytesFotoVida ?? 0))),
     msProyeccion: agregar(cs.map((c) => c.msProyeccion)),
     msDiff: agregar(cs.map((c) => c.msDiff)),
     msSerializacion: agregar(cs.map((c) => c.msSerializacion)),

@@ -6,7 +6,7 @@ import type { MuestraDeCanal, MuestraDeCarga } from '../telemetria';
 
 const r = (p50: number, p95 = p50, max = p95, n = 1) => ({ n, p50, p95, max });
 const canal = (o: Partial<MuestraDeCanal> = {}): MuestraDeCanal => ({
-  flushes: 10, bytesEnviados: 600_000, bytesFlush: r(1000), bytesFoto: r(0, 0, 0, 0), msProyeccion: r(1), msDiff: r(1), msSerializacion: r(0.1),
+  flushes: 10, bytesEnviados: 600_000, bytesFlush: r(1000), bytesFoto: r(0, 0, 0, 0), bytesFotoVida: 0, msProyeccion: r(1), msDiff: r(1), msSerializacion: r(0.1),
   fotos: { alta: 0, resync: 0, lento: 0, visibilidad: 0 }, cambios: { upsert: 0, patch: 0, remove: 0, set: 0 }, socketsLentos: 0, cierres4408: 0, suscriptores: 2, claves: 1, ...o,
 });
 const muestra = (i: number, canales: Record<string, MuestraDeCanal>, o: Partial<MuestraDeCarga> = {}): MuestraDeCarga => ({

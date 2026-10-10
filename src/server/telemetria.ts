@@ -21,8 +21,7 @@
 // idénticas por día sin ninguna información.
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
-import type { DifusorDeVistas, VentanaDeVistas } from './difusion/difusorDeVistas';
-import { PERCENTIL } from './difusion/difusorDeVistas';
+import type { DifusorDeVistas, MetricasDeVistas, VentanaDeVistas } from './difusion/difusorDeVistas';
 import type { HubDeDifusion } from './difusion/hub';
 import { medicion } from './medicionDeCarga';
 import type { RegistroDePartidas } from './registroDePartidas';
@@ -42,7 +41,10 @@ export interface Resumen {
 
 const redondear = (x: number): number => Math.round(x * 100) / 100;
 export function resumir(xs: readonly number[]): Resumen {
-  return { n: xs.length, p50: redondear(PERCENTIL(xs, 0.5)), p95: redondear(PERCENTIL(xs, 0.95)), max: redondear(xs.length === 0 ? 0 : xs.reduce((m, x) => (x > m ? x : m), -Infinity)) };
+  if (xs.length === 0) return { n: 0, p50: 0, p95: 0, max: 0 };
+  const o = Float64Array.from(xs).sort(); // una sola ordenación para los tres números
+  const en = (p: number): number => redondear(o[Math.floor((o.length - 1) * p)]!);
+  return { n: o.length, p50: en(0.5), p95: en(0.95), max: redondear(o[o.length - 1]!) };
 }
 
 export interface MuestraDeCanal {
@@ -50,6 +52,8 @@ export interface MuestraDeCanal {
   bytesEnviados: number;
   bytesFlush: Resumen;
   bytesFoto: Resumen;
+  /** Mayor foto vista desde que arrancó el proceso (de las métricas de vida): referencia para el sondeo aunque en la ventana no se enviara ninguna. */
+  bytesFotoVida: number;
   msProyeccion: Resumen;
   msDiff: Resumen;
   msSerializacion: Resumen;
@@ -113,6 +117,9 @@ export interface FuentesDeCarga {
 }
 
 const MB = 1024 * 1024;
+/** El histograma de Node reporta el retraso INCLUIDO el periodo de muestreo (en reposo, p50 ≈ resolución; en Windows, más por la granularidad del temporizador, ~15 ms). Se resta para que «0» sea un bucle libre. */
+const RESOLUCION_BUCLE_MS = 10;
+const retrasoMs = (ns: number): number => Math.max(0, ns / 1e6 - RESOLUCION_BUCLE_MS);
 
 /** Intervalo al encender en caliente (sin env). */
 export const INTERVALO_POR_DEFECTO_MS = 10_000;
@@ -120,7 +127,7 @@ export const INTERVALO_POR_DEFECTO_MS = 10_000;
 export class RegistroDeCarga {
   private cola: Promise<unknown> = Promise.resolve();
   private temporizador?: ReturnType<typeof setInterval>;
-  private readonly bucle: IntervalHistogram = monitorEventLoopDelay({ resolution: 20 });
+  private readonly bucle: IntervalHistogram = monitorEventLoopDelay({ resolution: RESOLUCION_BUCLE_MS });
   private readonly playtests = new Map<string, string | null>();
   /** Partidas con la telemetría encendida en caliente, y si lo está para todo el proceso (env). */
   private readonly activas = new Set<string>();
@@ -222,7 +229,8 @@ export class RegistroDeCarga {
   muestrear(): void {
     const t0 = performance.now();
     const ventanaVistas = this.fuentes.difusor.tomarVentana();
-    const bucle = { p50: this.bucle.percentile(50) / 1e6, p99: this.bucle.percentile(99) / 1e6, max: this.bucle.max / 1e6 };
+    const vida = this.fuentes.difusor.metricas().porCanal;
+    const bucle = { p50: retrasoMs(this.bucle.percentile(50)), p99: retrasoMs(this.bucle.percentile(99)), max: retrasoMs(this.bucle.max) };
     this.bucle.reset();
     const memoria = process.memoryUsage();
     const ahoraPared = Date.now();
@@ -236,7 +244,7 @@ export class RegistroDeCarga {
       if (!this.global && !this.activas.has(gameId)) continue;
       if (!m.relojDeMundoActivo && conexiones === 0) continue;
       const subs = this.fuentes.difusor.suscripcionesDe(gameId);
-      const muestra = this.armar(gameId, m.tick, m.version, conexiones, m.colaPendiente, ahoraPared - (anterior ?? ahoraPared), v, ventanaVistas, subs, memoria, bucle);
+      const muestra = this.armar(gameId, m.tick, m.version, conexiones, m.colaPendiente, ahoraPared - (anterior ?? ahoraPared), v, ventanaVistas, subs, memoria, bucle, vida);
       muestra.costeMuestraMs = redondear(performance.now() - t0);
       const playtestId = this.playtests.get(gameId);
       if (playtestId) muestra.playtestId = playtestId;
@@ -248,7 +256,7 @@ export class RegistroDeCarga {
     gameId: string, tick: number, version: number, conexiones: number, colaPendiente: number, ventanaMs: number,
     v: { ticksMs: number[]; guardadoMs: number[]; guardadoBytes: number[] },
     vistas: VentanaDeVistas, subs: Record<string, { suscriptores: number; claves: number }>,
-    memoria: NodeJS.MemoryUsage, bucle: { p50: number; p99: number; max: number }
+    memoria: NodeJS.MemoryUsage, bucle: { p50: number; p99: number; max: number }, vida: MetricasDeVistas['porCanal']
   ): MuestraDeCarga {
     const canales: Record<string, MuestraDeCanal> = {};
     let suscriptores = 0;
@@ -263,6 +271,7 @@ export class RegistroDeCarga {
         bytesEnviados: w?.bytesEnviados ?? 0,
         bytesFlush: resumir(w?.bytesFlush ?? []),
         bytesFoto: resumir(w?.bytesFoto ?? []),
+        bytesFotoVida: vida[tipo]?.bytesFoto.max ?? 0,
         msProyeccion: resumir(w?.msProyeccion ?? []),
         msDiff: resumir(w?.msDiff ?? []),
         msSerializacion: resumir(w?.msSerializacion ?? []),

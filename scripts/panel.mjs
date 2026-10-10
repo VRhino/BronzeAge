@@ -1,14 +1,19 @@
-// Panel de control local: arranca/para los servicios de .claude/launch.json y muestra si escuchan.
-// Uso: npm run panel  (abre http://localhost:3999)
+// Panel de control local: arranca/para los servicios de .claude/launch.json y muestra si escuchan, y es el panel de
+// CARGA Y PRUEBAS (contrato 03 §14): etiqueta pruebas (enciende la telemetría de la partida), grafica la serie de
+// carga en vivo, lista la auditoría con coste por comando y descarga el informe.
+// Uso: npm run panel  (abre http://localhost:3999). Habla con bronze-age-server con una sesión de administrador
+// (PANEL_ADMIN, por defecto «dev jefa», el administrador de .claude/launch.json). La telemetría está APAGADA por
+// defecto en el servidor: «Iniciar prueba» la enciende para esa partida; «Terminar» la apaga.
 import http from 'node:http';
 import net from 'node:net';
-import { spawn, exec } from 'node:child_process';
+import { spawn, exec, execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PANEL_PUERTO ?? 3999);
+const HTML_CARGA = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'panel-carga.html'), 'utf8');
 const { configurations } = JSON.parse(readFileSync(path.join(RAIZ, '.claude/launch.json'), 'utf8'));
 
 // Cómo le dice cada servicio su puerto (y el de los que consume). P = puertos elegidos ahora mismo.
@@ -97,6 +102,7 @@ pre{background:#0d0b08;border-radius:6px;padding:8px;height:140px;overflow:auto;
 </style></head><body><h1>⚒ Panel de control — BronzeAge</h1>
 <h2>Backends</h2><div class="grid" id="backend"></div>
 <h2>Clientes</h2><div class="grid" id="clientes"></div>
+${HTML_CARGA}
 <script>
 async function post(u){await fetch(u,{method:'POST'});setTimeout(pintar,300)}
 async function pintar(){
@@ -129,7 +135,54 @@ async function pintar(){
 pintar();setInterval(pintar,2000);
 </script></body></html>`;
 
+// --- Carga y pruebas: proxy al backend con sesión de administrador ---
+let sesion;
+async function backend(ruta, init = {}) {
+  const base = `http://localhost:${puertos['bronze-age-server']}/v1`;
+  for (let intento = 0; intento < 2; intento++) {
+    if (!sesion) {
+      const r = await fetch(`${base}/sesiones`, { method: 'POST', headers: { authorization: process.env.PANEL_ADMIN ?? 'dev jefa' } });
+      if (!r.ok) throw new Error(`login ${r.status}`);
+      sesion = (await r.json()).sesionId;
+    }
+    const r = await fetch(base + ruta, { ...init, headers: { ...init.headers, authorization: `sesion ${sesion}` } });
+    if (r.status === 401) { sesion = null; continue; }
+    return r;
+  }
+  throw new Error('sesión de administrador rechazada');
+}
+// Solo estas rutas de admin: métricas (partidas abiertas), carga, auditoría y playtest.
+const RUTA_B = /^(metricas|partidas\/[\w.-]+\/(carga|auditoria|playtest))(\?.*)?$/;
+async function proxyB(req, res) {
+  const ruta = decodeURIComponent(req.url.slice('/api/b/'.length));
+  const metodo = req.method === 'PUT' ? 'PUT' : 'GET';
+  if (!RUTA_B.test(ruta) || (metodo === 'PUT' && !/\/playtest$/.test(ruta))) { res.writeHead(404); return res.end(); }
+  let cuerpo;
+  if (metodo === 'PUT') { cuerpo = ''; for await (const c of req) cuerpo += c; }
+  try {
+    const r = await backend(`/admin/${ruta}`, { method: metodo, body: cuerpo, headers: cuerpo ? { 'content-type': 'application/json' } : {} });
+    res.writeHead(r.status, { 'content-type': 'application/json' });
+    res.end(await r.text());
+  } catch (e) { res.writeHead(502, { 'content-type': 'text/plain' }); res.end(String(e.message ?? e)); }
+}
+// Informe Markdown: lo genera scripts/informe-carga.ts contra el backend en marcha.
+function informe(req, res) {
+  const [ruta, consulta = ''] = req.url.slice('/api/informe/'.length).split('?');
+  const gameId = decodeURIComponent(ruta);
+  const playtest = new URLSearchParams(consulta).get('playtest');
+  if (!/^[\w.-]+$/.test(gameId) || (playtest && !/^[\w.-]+$/.test(playtest))) { res.writeHead(400); return res.end(); }
+  const args = ['tsx', 'scripts/informe-carga.ts', '--url', `http://localhost:${puertos['bronze-age-server']}`, gameId, '--admin', process.env.PANEL_ADMIN ?? 'dev jefa', ...(playtest ? ['--playtest', playtest] : [])];
+  // shell:true para resolver npx.cmd en Windows; los argumentos ya están validados arriba salvo --admin (del entorno del usuario).
+  execFile('npx', args.map((a) => (/\s/.test(a) ? `"${a}"` : a)), { cwd: RAIZ, shell: true, maxBuffer: 16e6 }, (err, out, errOut) => {
+    if (err) { res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }); return res.end(errOut || String(err)); }
+    res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', 'content-disposition': `attachment; filename="informe-carga-${gameId}.md"` });
+    res.end(out);
+  });
+}
+
 http.createServer(async (req, res) => {
+  if (req.url.startsWith('/api/b/')) return proxyB(req, res);
+  if (req.url.startsWith('/api/informe/')) return informe(req, res);
   const [, api, accion, nombre, valor] = req.url.split('/');
   if (api !== 'api') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(HTML); }
   if (accion === 'estado') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify(await estado())); }

@@ -97,7 +97,7 @@ interface InstrumentosDeTipo {
 }
 
 const MUESTRAS = 256;
-export const PERCENTIL = (xs: readonly number[], p: number): number => {
+const PERCENTIL = (xs: readonly number[], p: number): number => {
   if (xs.length === 0) return 0;
   const orden = [...xs].sort((a, b) => a - b);
   return orden[Math.min(orden.length - 1, Math.floor((orden.length - 1) * p))]!;
