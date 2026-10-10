@@ -596,7 +596,7 @@ cada fixture en C# (regla §5.8 del modelo de cooperación).
 - Verificabilidad del worldgen híbrido (fixtures de paridad TS/C# vs. datos canónicos servidos) — doc 01
   §18, todavía sin decidir cuál de las dos vías se adopta.
 
-## 8. Tiempo real por segmentos de vista (2026-10-10, PROPUESTO — contrato en el doc 03)
+## 8. Tiempo real por segmentos de vista (2026-10-10, IMPLEMENTADO — contrato en el doc 03)
 
 Para dejar de sondear la proyección (jugador) y el estado completo (admin) cada pocos segundos, el WS gana canales de
 **estado** además de los de eventos. Resumen; el detalle, los ejemplos y los fixtures están en
@@ -607,8 +607,7 @@ Para dejar de sondear la proyección (jugador) y el estado completo (admin) cada
 - Mensajes nuevos servidor → cliente: `foto` (con `version`), `delta` (`desde`→`hasta`, `cambios` por `t`+`id`+`op`
   `upsert|patch|remove|set`, y `escalares`), `resync`, `revocado`. Cliente → servidor: `resincronizar` (y `desde`
   opcional en `suscribir`). `suscrito` gana `intervaloTickMs`; `error` gana `codigo`.
-- Campos aditivos en la proyección y el estado admin para lo móvil: `avancePorTick`, `desplazamientoPorTick`,
-  `llegadaEstimada?` (doc 03 §4.1).
+- Campos de lo móvil `avancePorTick`, `desplazamientoPorTick` (y `llegadaEstimada?`): solo en fotos y deltas del WS, desde el segundo tick (doc 03 §4.1).
 - **Se mantienen** los canales de eventos, el mensaje `tick` (deprecado cuando ambos clientes migren), `GET
   /jugador/partidas/:gameId` y `GET /admin/partidas/:gameId` como foto inicial y respaldo. Todo es aditivo: sigue siendo v1.
 
@@ -620,7 +619,7 @@ Fuente: `src/server/rutas/*.ts` y `GET /v1/openapi.json` (reflejo del código). 
 |---|---|---|---|
 | Sesión | `POST /sesiones`, `POST /registro`, `GET /sesiones/actual?gameId=` | proveedor (`dev`, `clave`) / ninguna / `sesion <id>` | §2 |
 | Jugador | `GET /jugador/partidas`, `POST …/:gameId/membresia`, `GET …/:gameId` (proyección), `GET …/:gameId/eventos?desde=`, `GET …/:gameId/cronica`, `GET …/:gameId/mapa/:mapaId`, `POST …/:gameId/comandos`, `GET …/:gameId/batallas/:battleId/asignacion`, WS `…/:gameId/tiempo-real` | `sesion <id>` (WS: también `?sesion=`) | §2, §3.4, §4, 03 |
-| Admin | `GET/POST /admin/partidas`, `DELETE /admin/partidas/:gameId`, `GET …/:gameId` (estado completo), `GET …/:gameId/eventos`, `POST …/:gameId/tick`, `POST …/:gameId/comandos`, `GET …/:gameId/exportar`, `GET …/:gameId/mapa/:mapaId`, `GET …/:gameId/membresias`, `GET /admin/metricas`, `GET/PUT /admin/registro/codigo`, respaldos (`/admin/respaldos*`, `/admin/partidas/:gameId/respaldos`); WS `…/:gameId/tiempo-real` (propuesto, 03) | `sesion <id>` de administrador | §2, 03 |
+| Admin | `GET/POST /admin/partidas`, `DELETE /admin/partidas/:gameId`, `GET …/:gameId` (estado completo), `GET …/:gameId/eventos`, `POST …/:gameId/tick`, `POST …/:gameId/comandos`, `GET …/:gameId/exportar`, `GET …/:gameId/mapa/:mapaId`, `GET …/:gameId/membresias`, `GET /admin/metricas`, `GET/PUT /admin/registro/codigo`, respaldos (`/admin/respaldos*`, `/admin/partidas/:gameId/respaldos`); WS `…/:gameId/tiempo-real` (03) | `sesion <id>` de administrador | §2, 03 |
 | Servidor a servidor (batallas) | `GET /batallas/pendientes`, `GET /batallas/:id/ticket`, `GET …/incorporaciones`, `POST …/asignacion`, `…/inicio`, `…/salidas`, `…/tokens`, `…/resultado` | `batalla-servidor <token>` | §3.2-§3.3 |
 | Públicas | `GET /balance` (catálogos y cifras), `GET /openapi.json`, `GET /salud` (fuera de `/v1`) | ninguna | §4.2b |
 | Errores | `{error}`; incompatibilidad de versión `{error, schemaVersionEsperada}` (409) | — | §5 |

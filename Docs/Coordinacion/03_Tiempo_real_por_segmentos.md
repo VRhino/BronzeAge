@@ -1,7 +1,9 @@
 # 03 — Tiempo real por segmentos de vista (contrato v1, extensión aditiva)
 
-**Estado:** PROPUESTO para implementar (2026-10-10). Nada de esto existe aún en el servidor; los fixtures de
-[`fixtures/tiempo-real/`](fixtures/tiempo-real/) son la forma que hay que cumplir. Sustituye al sondeo del estado
+**Estado:** IMPLEMENTADO en el servidor (Backend, commits `2ab3b11..fe78215`, 2026-10-10, sin push): canales `admin/*`, `vista/mapa`,
+`vista/heroe`, `vista/asentamiento/<id>`, con foto/delta/resync/revocado, coalescer, backpressure, métricas y schemas. Falta la Fase 4
+(`desde`) y medir con 500 bots. Los fixtures de [`fixtures/tiempo-real/`](fixtures/tiempo-real/) los cumple el servidor. Las **desviaciones
+del diseño inicial** están marcadas «(implementado así)» y resumidas en §12. Sustituye al sondeo del estado
 completo cada 3-5 s que hacen hoy el cliente admin y el cliente jugador.
 **Depende de:** `02_Contrato_Comunicacion_Servidor_Cliente.md` §2 (WS, `evento`, `tick`) y §4 (proyección), y de
 `01_Modelo_de_datos_compartido.md` para las entidades. **Compatibilidad v1:** solo se AÑADEN canales, mensajes y
@@ -54,9 +56,9 @@ animaciones); el delta mantiene el estado al día.
 
 | Canal | Quién | Contiene | Clave de agrupación (§6.2) |
 |---|---|---|---|
-| `vista/mapa` | jugador con membresía | Lo del mundo que su Facción (y los que comparten su vista) ve bajo la niebla: posiciones/progreso de lo móvil, asentamientos avistados/conocidos, territorio, batallas visibles, campamentos y Aedas a la vista | `faccionId` + firma de aliados con visión compartida; sin Facción: el `heroeId` |
+| `vista/mapa` | jugador con membresía (**implementado: clave = el héroe**, §6.2) | Lo del mundo que su Facción (y los que comparten su vista) ve bajo la niebla: posiciones/progreso de lo móvil, asentamientos avistados/conocidos, territorio, batallas visibles, campamentos y Aedas a la vista | *diseño:* `faccionId` + firma de aliados; *implementado:* el `heroeId` (§6.2) |
 | `vista/heroe` | jugador, solo su héroe | Lo personal: `heroe`, `ejercitos` propios con su `ruta`, `caravanas` propias, `convocatorias`, informes, miradas, mercado de campamento, tecnología… | el `heroeId` (no se comparte) |
-| `vista/asentamiento/<id>` | ciudadano de la Facción dueña (misma regla de `puedeSuscribirseA`) | El interior de esa plaza: escalares de `asentamiento`, `edificios` (con las obras: `estado: 'en_construccion'`/`'en_cola'` y `completaEn`), almacén, población, cargos, residentes, colas de reclutamiento, mercado local, muralla | el `asentamientoId` (todos los ciudadanos ven lo mismo) |
+| `vista/asentamiento/<id>` | ciudadano de la Facción dueña **y presente dentro de la plaza** (misma regla que `asentamientos[0]` de la proyección; Doc 1.10.1: la ciudadanía habilita, la presencia ejerce) | El interior de esa plaza: escalares de `asentamiento`, `edificios` (con las obras: `estado: 'en_construccion'`/`'en_cola'` y `completaEn`), almacén, población, cargos, residentes, colas de reclutamiento, mercado local, muralla | el `asentamientoId` (todos los ciudadanos ven lo mismo) |
 | `admin/partida` | administrador (`exigirAdministracion`) | La partida completa SIN niebla en versión **ligera** (§2.1) | la partida (un solo diff) |
 | `admin/heroe/<id>` | administrador | Detalle de un héroe: `historial` y, si pesa, `almacenPersonal` | el `heroeId` |
 | `admin/asentamiento/<id>` | administrador | El `Asentamiento` completo, sin niebla | el `asentamientoId` |
@@ -95,7 +97,10 @@ quitar solo `edificios`/`almacen` no basta. Contenido:
   `poblacion`, `poblacionEn`, `bandidosEn`, `origen`, `creadoEn`, `eligieronComoInicial`.
 - Completos y sin recortar: `ejercitos` (con `ruta`/`progreso`/`avancePorTick`), `caravanas` (con escolta), `facciones`
   (con sigilo), `relaciones`, `batallas`, `campamentosBandidos`, `aedas`, `titulos`, `tecnologia`, `red`/`caminos`,
-  `estadoMapa` y los escalares (`instante`, `version`, `mapaId`).
+  `estadoMapa` y los escalares (`mapaId`; `instante` y `version` van en la cabecera).
+
+  Definición implementada de `resumen`: `mantenimientoIncumplido = medidorMantenimiento < MANTENIMIENTO.medidorInicial`; `poderMilitar` = suma del
+  poder de las escuadras de los residentes en su campamento (no cuenta las que andan en columnas); el resto sale de `edificios` y `almacen`.
 
 > Si un campo de la proyección no aparece arriba, pertenece a `vista/heroe` por defecto. El reparto fino es decisión
 > de Backend (§10) siempre que cada campo viaje por UN solo canal de vista y la unión de los tres reproduzca la
@@ -206,8 +211,10 @@ nivel es un bloque `set`. El servidor implementa **un diff genérico** sobre est
 
 ### 4.1 Lo móvil: ruta una vez, progreso después
 
-Dos audiencias, dos formas. Los campos nuevos son **aditivos** también en la proyección HTTP (para que la foto WS y la
-HTTP coincidan), y ausentes cuando no aplican.
+Dos audiencias, dos formas. **Implementado así:** `avancePorTick` y `desplazamientoPorTick` viajan **solo por WS** (fotos y deltas), no en el GET HTTP; el servidor los calcula por
+diferencia con la foto anterior, así que **no aparecen hasta el segundo tick** de una entidad (el cliente no extrapola hasta tenerlos). `instante` y
+`version` van solo en la cabecera del mensaje, no en `datos` ni en `escalares`. Los ids sintéticos (`informesDeInspeccion`, `historial`) los fabrica el
+servidor. Ausentes cuando no aplican.
 
 **Propios** (`ejercitos`, `caravanas` en `vista/heroe`; en `admin/partida` todos): ya traen `ruta: Point[]`,
 `progreso` (0‥1 sobre la **longitud** de la polilínea, `engine/movimiento.ts`), `posicionActual`, `estado`. Regla:
@@ -285,7 +292,7 @@ Dos opciones:
 - **B. Diff por suscriptor sobre una foto cacheada** — una proyección filtrada por jugador y un diff por jugador; la foto
   cacheada ahorra rehacer la anterior, no la nueva.
 
-**Recomendación: A, con dos capas.**
+**Recomendación de diseño: A, con dos capas. Implementado así: A degenerada (clave = héroe)**, ver «Resultado de la implementación» al final de este apartado. Los argumentos siguen valiendo para cuando se pueda agrupar.
 
 Argumentos, comprobados contra el código de la proyección (`proyectarParaJugador`):
 
@@ -308,6 +315,13 @@ Argumentos, comprobados contra el código de la proyección (`proyectarParaJugad
    campo de `vista/mapa` debe ser función de la clave**.
 6. La reevaluación de la clave (cambio de Facción, relación de visión rota o creada) mueve al suscriptor de grupo con
    `resync` + foto del grupo nuevo (§7.2): el coste de la transición es una foto, que es lo que costaría B igualmente.
+
+**Resultado de la implementación (Backend, 2026-10-10).** `vista/mapa` agrupa por **héroe**, no por Facción: la proyección del
+mapa mezcla entradas de héroe (`exploracionPersonal`, `plazasRecordadas`, la plaza pisada excluida de avistados, el almacén de una
+plaza si su columna está a la puerta), y compartirlas por Facción las filtraría (rompe la invariante de que todo campo de `vista/mapa`
+sea función de la clave). Una proyección por héroe cuesta ≈0,5 ms. Para poder agrupar por Facción habría que sacar esas entradas del
+mapa hacia `vista/heroe`, y eso cambia **qué ve cada jugador**: es decisión de reglas, **del usuario** (pregunta abierta nº 6, §11). Mientras
+tanto la compartición por clave queda en `vista/asentamiento/<id>` y `admin/*`.
 
 Sobre `vista/asentamiento/<id>` y `admin/*` no hay duda: un diff por canal, compartido por todos los suscriptores.
 
@@ -367,10 +381,11 @@ flush ≤ el de una proyección HTTP × número de claves.
 ### 7.2 Autorización: al suscribir y reevaluada
 
 - **Al suscribirse:** `puedeSuscribirseA` (`session/canales.ts`) se amplía con los canales de vista: `vista/mapa` y
-  `vista/heroe` exigen héroe con membresía (como `mapa/general` y `heroe/<id>`); `vista/asentamiento/<id>` usa la regla
-  de `asentamiento/<id>` (`esCiudadano` de la Facción dueña); `admin/*`, `exigirAdministracion`.
+  `vista/heroe` exigen héroe con membresía (como `mapa/general` y `heroe/<id>`); `vista/asentamiento/<id>` exige
+  `esCiudadano` de la Facción dueña **y estar dentro de la plaza** (implementado así: la ciudadanía habilita, la presencia ejerce; sin
+  lo segundo, quien anda por el camino recibiría el interior de todas sus plazas); `admin/*`, `exigirAdministracion`.
 - **Reevaluación, en cada flush** (barata: sets en memoria), por tipo:
-  - `vista/asentamiento/<id>`: sigue existiendo la plaza y el héroe sigue siendo ciudadano de su Facción. Si no ⇒
+  - `vista/asentamiento/<id>`: sigue existiendo la plaza, el héroe sigue siendo ciudadano de su Facción **y sigue dentro de ella** (salir de la plaza ⇒ `revocado` en el siguiente flush). Si no ⇒
     `revocado` y desuscribir. Casos: expulsión/salida de la Facción, anexión, fusión, destrucción o traslado de plaza,
     cambio de Facción por `fundar`/`responderSolicitud`.
   - `vista/mapa`: se recalcula la **clave** del héroe (Facción + firma de visión compartida). Si cambió ⇒ `resync` con
@@ -484,6 +499,25 @@ Técnicas (las contesta quien implementa; no son reglas de juego):
 5. **Duración y frecuencia de la clave de visibilidad** si en el futuro la visión depende del héroe (exploración
    personal): hoy es de Facción; si cambia, esa parte se mueve a `vista/heroe`.
 
-De reglas de juego (del usuario; **no se deciden aquí**): ninguna prevista. Este contrato no cambia qué se ve ni quién,
+De reglas de juego (del usuario; **no se deciden aquí**):
+6. **Agrupar `vista/mapa` por Facción.** Hoy se calcula por héroe porque la proyección del mapa incluye información personal
+   (`exploracionPersonal`, `plazasRecordadas`, plaza pisada, almacén con la columna a la puerta). Agrupar por Facción exigiría que esa información
+   pasara a ser de Facción o saliera del mapa personal. Es una decisión sobre qué ve cada jugador; no hace falta para el play-test
+   (el coste por héroe es ≈0,5 ms) y solo importa si el número de jugadores crece mucho.
+
+Otras (no son reglas): Este contrato no cambia qué se ve ni quién,
 solo cómo se entrega. Si al implementarlo apareciera que la regla actual de visibilidad es ambigua en algún caso (p. ej.
 qué ve un héroe sin Facción dentro de una plaza ajena), se anota aquí como pregunta y se espera respuesta del usuario.
+
+## 12. Estado de la implementación y mediciones (2026-10-10)
+
+Implementado por Backend (`2ab3b11..fe78215`): endpoint `/v1/admin/partidas/:gameId/tiempo-real`; canales `admin/{partida,asentamiento,campamento,heroe}`,
+`vista/mapa`, `vista/heroe`, `vista/asentamiento/<id>`; foto, delta, resync, revocado; coalescer de 100 ms; backpressure (256/32 KiB, cierre 4408);
+rate limit de `resincronizar`; `error.codigo`; `intervaloTickMs` en `suscrito`; métricas en `/admin/metricas` (campo `vistas`); schemas `MensajeFoto`,
+`MensajeDelta`, `CambioDeVista`… en `contratos.schema.json`. Un test valida contra el schema todo lo que emite el difusor.
+
+Desviaciones del diseño inicial: (1) `vista/mapa` por héroe (§6.2); (2) `vista/asentamiento` exige presencia (§7.2); (3) `avancePorTick`/`desplazamientoPorTick` solo por WS y
+desde el segundo tick (§4.1); (4) `instante`/`version` solo en cabecera.
+
+Mediciones con el mundo vivo (12 plazas, 62 héroes): foto de admin 275 KiB y delta 6,7 KiB por tick, contra 5586 KiB del GET cada 3 s; jugador, delta de 3,4 KiB por tick
+(`vista/mapa` + `vista/heroe`) contra 254 KiB de proyección cada 5 s. Pendiente: Fase 4 (`desde`) y medir el mundo de 500 bots.
