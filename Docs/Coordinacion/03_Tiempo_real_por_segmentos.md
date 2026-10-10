@@ -204,7 +204,7 @@ Operaciones:
 van además en la cabecera del mensaje. Orden dentro de `cambios`: se aplican en el orden dado; el servidor emite
 primero los `remove`, luego `upsert`/`patch`, de modo que un id reutilizado no se borre tras reinsertarse.
 
-**Qué colecciones tienen clave y cuál es** (todas llevan `id` salvo que se indique): `ejercitos`, `ejercitosAvistados`,
+**Qué colecciones tienen clave y cuál es** (todas llevan `id` salvo que se indique; **la fuente es `src/session/vistas/segmentos.ts`**, y las excepciones implementadas son `zonas` → `asentamientoId`, `zonasFusionadas` → `faccionId`, `titulos` → `tituloId`, `batallas`/`batallasPropias` → `battleId`, `heroesVisibles`/`heroesVisiblesExtra` → `heroeId`, `asentamientosConocidos`/`informesPlaza` → `asentamientoId`; en `v` el `id` de la entidad es el valor de esa clave): `ejercitos`, `ejercitosAvistados`,
 `caravanas`, `caravanasAvistadas`, `asentamientos` (admin), `asentamientosAvistados`, `asentamientosConocidos`
 (`asentamientoId`), `aedasAvistados`, `aedasResidentes`, `batallas` (`battleId`), `campamentosBandidos`,
 `campamentosMercenarios`, `alijos`, `heroesVisibles` (`heroeId`), `heroes` (admin), `facciones`, `zonas`,
