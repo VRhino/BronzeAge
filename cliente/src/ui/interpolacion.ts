@@ -1,5 +1,5 @@
 // Movimiento fluido de lo móvil entre dos deltas del servidor (Docs/Coordinacion/03_Tiempo_real_por_segmentos.md §4.1): el mundo avanza
-// a saltos de un tick, el mapa se pinta a 24 fps y, entre un delta y el siguiente, ejércitos y caravanas siguen su `ruta` con el
+// a saltos de un tick, el mapa se pinta a la cadencia del monitor y, entre un delta y el siguiente, ejércitos y caravanas siguen su `ruta` con el
 // `avancePorTick` del último tick. No pide nada al servidor. PURO.
 import type { Point } from '@motor/domain/types';
 

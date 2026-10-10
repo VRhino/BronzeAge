@@ -416,6 +416,20 @@ function dibujarGlifoArbol(ctx: CanvasRenderingContext2D, x: number, y: number, 
  * `undefined` = no pintar capa de terreno (p. ej. mientras se genera el primer frame).
  */
 export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState, terrenoCache?: HTMLCanvasElement): void {
+  dibujarBase(ctx, canvas, state, terrenoCache);
+  dibujarMoviles(ctx, canvas, state);
+}
+
+/** Un cuadro de animación: la capa BASE ya pintada (`dibujarBase` sobre un canvas aparte, una vez por dato) más solo lo que se mueve. Pintar
+ * el terreno, los bosques, los nodos y los asentamientos en cada cuadro era casi todo el coste y no cambia entre dos ticks. */
+export function drawAnimado(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState, base: HTMLCanvasElement): void {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(base, 0, 0);
+  dibujarMoviles(ctx, canvas, state);
+}
+
+/** Todo lo que no se mueve entre ticks: límites, bosques, nodos, zonas, caminos y asentamientos. */
+export function dibujarBase(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState, terrenoCache?: HTMLCanvasElement): void {
   const scale = canvas.width / state.mapa.limites.ancho;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -570,6 +584,12 @@ export function draw(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, s
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
+
+}
+
+/** Lo que se mueve (rutas y puntos de caravanas y ejércitos) y los marcadores que van encima (bandidos, mercenarios, Aedas). */
+function dibujarMoviles(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, state: DrawState): void {
+  const scale = canvas.width / state.mapa.limites.ancho;
 
   // Ruta de caravana en tránsito (Fase 0.3): traza tenue detrás del punto — ayuda a depurar visualmente que
   // el pathfinding rodea montaña/agua en vez de ir en línea recta (ver `world/rutas.ts`).

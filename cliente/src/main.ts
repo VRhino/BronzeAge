@@ -19,7 +19,7 @@ import { interpolar } from './ui/interpolacion';
 import { enlazarSubpestanas, htmlSubpaneles, htmlSubpestanas, type Subpestana } from './ui/subpestanas';
 import { htmlNombreConSigilo, svgSigilo } from './sigilo/sigilo';
 import { alCargarSigilos } from './sigilo/lienzo';
-import { draw, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, type DrawState } from './ui/canvas';
+import { dibujarBase, drawAnimado, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
 // resolución física para que la capa de terreno/ríos no perdiera nitidez.
@@ -2279,37 +2279,32 @@ function terrenoCacheParaFrame(mapa: DrawState['mapa']): HTMLCanvasElement {
 }
 
 /** Lo último que se pintó del mapa general: el bucle de animación lo repinta con lo móvil interpolado. */
-let mapaEnVista: { drawState: DrawState; terreno: HTMLCanvasElement; intervaloMs: number | null; animado: boolean } | null = null;
-/** Coste del último cuadro (ms): si el mapa es caro, el bucle baja de 24 fps en vez de ahogar la página. */
-let costeDeCuadro = 0;
+let mapaEnVista: { drawState: DrawState; base: HTMLCanvasElement; intervaloMs: number | null; animado: boolean } | null = null;
+/** La capa base del mapa (todo lo que no se mueve entre ticks), pintada una vez por dato en un canvas aparte: cada cuadro de animación solo
+ * la copia y pinta encima lo móvil. */
+const capaBase = document.createElement('canvas');
 
 /** Pinta el mapa general con ejércitos y caravanas en el punto que toca ahora: la posición del último dato más lo que han avanzado desde
  * entonces (capado a un tick). Sin reloj de mundo o sin tiempo real no se extrapola. Devuelve si hay algo en movimiento. */
 function pintarMapaGeneral(): boolean {
   if (!mapaEnVista) return false;
-  const { drawState, terreno, intervaloMs } = mapaEnVista;
+  const { drawState, base, intervaloMs } = mapaEnVista;
   const fraccion = intervaloMs && gameStore.enVivo ? (performance.now() - gameStore.momentoDeDatos()) / intervaloMs : 0;
   const caravanas = interpolar(drawState.caravanas, fraccion);
   const ejercitos = interpolar(drawState.ejercitos, fraccion);
-  const inicio = performance.now();
-  draw(ctx, canvas, { ...drawState, caravanas, ejercitos }, terreno);
+  drawAnimado(ctx, canvas, { ...drawState, caravanas, ejercitos }, base);
   if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, drawState.mapa);
-  costeDeCuadro = performance.now() - inicio;
   return caravanas !== drawState.caravanas || ejercitos !== drawState.ejercitos;
 }
 
-const CUADROS_POR_SEGUNDO_MAPA = 24;
-let ultimoCuadro = 0;
-/** 24 fps solo para el mapa (los paneles se repintan cuando llegan datos). Se detiene sola si la pestaña está oculta, si el mapa general no
- * está a la vista o si no hay nada que mover. */
-function animarMapa(ahora: number): void {
+/** Un cuadro por `requestAnimationFrame` (al ritmo del monitor, 60 o más) mientras haya algo que mover: la interpolación es local y no cuesta
+ * tráfico. Los paneles NO entran aquí (se repintan cuando llegan datos). Se detiene sola si la pestaña está oculta, si el mapa general no está a
+ * la vista o si no hay nada en movimiento. Si dibujar cuesta más que un cuadro, el propio navegador espacia los rAF. */
+function animarMapa(): void {
   requestAnimationFrame(animarMapa);
-  const hueco = Math.max(1000 / CUADROS_POR_SEGUNDO_MAPA, costeDeCuadro * 2);
-  if (document.hidden || !mapaEnVista || !mapaEnVista.animado || !mapaEnVista.intervaloMs || ahora - ultimoCuadro < hueco) return;
+  if (document.hidden || !mapaEnVista || !mapaEnVista.animado || !mapaEnVista.intervaloMs) return;
   const fraccion = (performance.now() - gameStore.momentoDeDatos()) / mapaEnVista.intervaloMs;
   if (fraccion > 1.05 || !gameStore.enVivo) return;
-  // Se descuenta el resto, no se reinicia: con rAF a 60 Hz alternan cuadros de 2 y 3 ticks y la media sale en 24 fps (reiniciando salían 20).
-  ultimoCuadro = ahora - ((ahora - ultimoCuadro) % hueco);
   pintarMapaGeneral();
 }
 
@@ -2354,7 +2349,13 @@ function render(): void {
       ejercitos: state.ejercitos,
       aedas: state.aedas ?? [],
     };
-    mapaEnVista = { drawState, terreno: terrenoCacheParaFrame(drawState.mapa), intervaloMs: state.relojDeMundoIntervaloMs, animado: false };
+    if (capaBase.width !== canvas.width || capaBase.height !== canvas.height) {
+      capaBase.width = canvas.width;
+      capaBase.height = canvas.height;
+    }
+    const ctxBase = capaBase.getContext('2d')!;
+    dibujarBase(ctxBase, capaBase, drawState, terrenoCacheParaFrame(drawState.mapa));
+    mapaEnVista = { drawState, base: capaBase, intervaloMs: state.relojDeMundoIntervaloMs, animado: false };
     mapaEnVista.animado = pintarMapaGeneral();
   }
   if (vistaMapa === 'asentamiento') mapaEnVista = null;

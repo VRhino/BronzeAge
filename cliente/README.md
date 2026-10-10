@@ -11,8 +11,10 @@
 >   y vuelve a 5 s si el socket cae o el servidor no tiene el canal. Las listas globales leen `resumen` (calculado por el servidor), no el almacén ni los edificios.
 > - **Pestaña oculta**: tras 8 s oculta se cierra el socket (el servidor deja de contar las suscripciones; un cambio rápido de foco no cuesta nada); al volver se reabre,
 >   se resuscribe todo y se sigue viendo lo último hasta que llegan las fotos nuevas, sin parpadeo ni lectura completa.
-> - **Mapa a 24 fps** (`src/ui/interpolacion.ts`): con tiempo real y reloj de mundo, ejércitos y caravanas avanzan entre deltas por su `ruta` con `avancePorTick`
->   (capado a un tick, sin pedir nada al servidor); el bucle se detiene si la pestaña está oculta, si se ve un asentamiento o si nada se mueve.
+> - **Mapa a la cadencia del monitor** (`src/ui/interpolacion.ts`, `drawAnimado`): con tiempo real y reloj de mundo, ejércitos y caravanas avanzan entre deltas por su `ruta`
+>   con `avancePorTick`, un cuadro por `requestAnimationFrame` (60 o más; sin tope) y sin pedir nada al servidor. La capa base (terreno, bosques, nodos, zonas,
+>   asentamientos) se pinta una vez por dato en un canvas aparte; cada cuadro solo la copia y pinta lo móvil (medido en Chrome: 0,1-0,2 ms por cuadro con 22 ejércitos
+>   frente a 3 ms de pintarlo todo). El bucle se detiene si la pestaña está oculta, si se ve un asentamiento o si nada se mueve.
 > - **Repintado incremental** (`src/ui/pintar.ts`): `pintar(el, html)` sustituye a `innerHTML`; sin cambios no toca el DOM y con cambios
 >   solo parchea lo distinto (se conservan scroll, foco y `<details>`). Los eventos de los paneles se delegan una vez (`delegar`).
 > - **Subpestañas comunes** (`src/ui/subpestanas.ts`) en Bots, Facción, Jugadores, Asentamientos y Guerra.
