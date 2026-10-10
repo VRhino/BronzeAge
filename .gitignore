@@ -51,3 +51,5 @@ issues/
 graphify-out/
 
 Docs/Coordinacion/fixtures/*
+# Los fixtures de tiempo real (Docs/Coordinacion/03) son contrato, no capturas locales
+!Docs/Coordinacion/fixtures/tiempo-real/

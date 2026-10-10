@@ -7,7 +7,8 @@ Revisado y corregido tras `Docs/Coordinacion/propuestas/REVISION_CONTRATOS_CODEX
 R03, R06, R07, R08 y las correcciones menores de esa revisión).  
 **Fecha:** 2026-09-11  
 **Depende de:** `01_Modelo_de_datos_compartido.md` (mismo directorio) para las formas de `Heroe`,
-`Escuadron`, `Batalla`, `BattleTicket`, `BattleResult`, `BattleServerAssignment`.
+`Escuadron`, `Batalla`, `BattleTicket`, `BattleResult`, `BattleServerAssignment`.  
+**Índice de la carpeta:** [`README.md`](README.md). **Tiempo real por segmentos de vista** (foto + deltas, sustituye al sondeo): [`03_Tiempo_real_por_segmentos.md`](03_Tiempo_real_por_segmentos.md), resumen en §8.
 
 Este documento no reinventa convenciones: describe cómo se comunican Unity/Conquest y BronzeAge reutilizando
 lo que la API HTTP/WS de BronzeAge ya hace hoy (`src/server/`), y solo añade lo nuevo que exige el ciclo de
@@ -53,6 +54,7 @@ de entrada y recibe el `BattleResult` de salida, ambos por HTTP (§3).
   canales suscribibles. Cliente → `{"accion":"suscribir"|"desuscribir","canal":"..."}`. Servidor →
   `{"tipo":"suscrito"|"desuscrito"}` | `{"tipo":"error",...}` | `{"tipo":"evento","gameId":...,"canal":...,"evento":...}` | `{"tipo":"tick","gameId":...,"version":...,"instante":...}` (desde 2026-10-09, a todos los conectados de la partida en cada tick del reloj de mundo, sin suscribirse y sin datos del mundo: es la señal para pedir la proyección en vez de sondear) (`gameId` desde 2026-10-09: la partida de ese socket, para que un cliente con varias abiertas no las mezcle).
   Autenticación en el handshake (`preValidation`), antes de aceptar la conexión.
+  Estos canales (`mapa/general`, `asentamiento/<id>`, `heroe/<id>`, `batalla/<id>`) llevan **eventos**; el estado por segmentos de vista (`vista/*`, `admin/*`) se define en el doc 03 y es aditivo (§8).
 
 Ninguna de estas convenciones cambia para dar soporte a `Heroe`/`Escuadron`/`Batalla` — los comandos nuevos
 de dominio (crear/gestionar `Heroe`, loadouts, escuadras) usan el mismo `POST .../comandos` con un `tipo`
@@ -593,3 +595,34 @@ cada fixture en C# (regla §5.8 del modelo de cooperación).
   fuera de alcance de este documento, es política operativa.
 - Verificabilidad del worldgen híbrido (fixtures de paridad TS/C# vs. datos canónicos servidos) — doc 01
   §18, todavía sin decidir cuál de las dos vías se adopta.
+
+## 8. Tiempo real por segmentos de vista (2026-10-10, PROPUESTO — contrato en el doc 03)
+
+Para dejar de sondear la proyección (jugador) y el estado completo (admin) cada pocos segundos, el WS gana canales de
+**estado** además de los de eventos. Resumen; el detalle, los ejemplos y los fixtures están en
+[`03_Tiempo_real_por_segmentos.md`](03_Tiempo_real_por_segmentos.md):
+
+- Canales nuevos: `vista/mapa`, `vista/heroe`, `vista/asentamiento/<id>` (endpoint de jugador) y `admin/partida`,
+  `admin/asentamiento/<id>`, `admin/campamento/<id>` (endpoint nuevo `/v1/admin/partidas/:gameId/tiempo-real`).
+- Mensajes nuevos servidor → cliente: `foto` (con `version`), `delta` (`desde`→`hasta`, `cambios` por `t`+`id`+`op`
+  `upsert|patch|remove|set`, y `escalares`), `resync`, `revocado`. Cliente → servidor: `resincronizar` (y `desde`
+  opcional en `suscribir`). `suscrito` gana `intervaloTickMs`; `error` gana `codigo`.
+- Campos aditivos en la proyección y el estado admin para lo móvil: `avancePorTick`, `desplazamientoPorTick`,
+  `llegadaEstimada?` (doc 03 §4.1).
+- **Se mantienen** los canales de eventos, el mensaje `tick` (deprecado cuando ambos clientes migren), `GET
+  /jugador/partidas/:gameId` y `GET /admin/partidas/:gameId` como foto inicial y respaldo. Todo es aditivo: sigue siendo v1.
+
+## 9. Inventario de rutas HTTP/WS (2026-10-10)
+
+Fuente: `src/server/rutas/*.ts` y `GET /v1/openapi.json` (reflejo del código). Todo bajo `/v1`.
+
+| Superficie | Rutas | Autenticación | Se describe en |
+|---|---|---|---|
+| Sesión | `POST /sesiones`, `POST /registro`, `GET /sesiones/actual?gameId=` | proveedor (`dev`, `clave`) / ninguna / `sesion <id>` | §2 |
+| Jugador | `GET /jugador/partidas`, `POST …/:gameId/membresia`, `GET …/:gameId` (proyección), `GET …/:gameId/eventos?desde=`, `GET …/:gameId/cronica`, `GET …/:gameId/mapa/:mapaId`, `POST …/:gameId/comandos`, `GET …/:gameId/batallas/:battleId/asignacion`, WS `…/:gameId/tiempo-real` | `sesion <id>` (WS: también `?sesion=`) | §2, §3.4, §4, 03 |
+| Admin | `GET/POST /admin/partidas`, `DELETE /admin/partidas/:gameId`, `GET …/:gameId` (estado completo), `GET …/:gameId/eventos`, `POST …/:gameId/tick`, `POST …/:gameId/comandos`, `GET …/:gameId/exportar`, `GET …/:gameId/mapa/:mapaId`, `GET …/:gameId/membresias`, `GET /admin/metricas`, `GET/PUT /admin/registro/codigo`, respaldos (`/admin/respaldos*`, `/admin/partidas/:gameId/respaldos`); WS `…/:gameId/tiempo-real` (propuesto, 03) | `sesion <id>` de administrador | §2, 03 |
+| Servidor a servidor (batallas) | `GET /batallas/pendientes`, `GET /batallas/:id/ticket`, `GET …/incorporaciones`, `POST …/asignacion`, `…/inicio`, `…/salidas`, `…/tokens`, `…/resultado` | `batalla-servidor <token>` | §3.2-§3.3 |
+| Públicas | `GET /balance` (catálogos y cifras), `GET /openapi.json`, `GET /salud` (fuera de `/v1`) | ninguna | §4.2b |
+| Errores | `{error}`; incompatibilidad de versión `{error, schemaVersionEsperada}` (409) | — | §5 |
+
+Si esta tabla y el código discrepan, gana el código y se corrige la tabla en el mismo commit.

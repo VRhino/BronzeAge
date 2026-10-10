@@ -1,0 +1,15 @@
+{
+  "tipo": "foto",
+  "gameId": "g1",
+  "canal": "vista/asentamiento/a1",
+  "version": 1042,
+  "instante": 1789410720000,
+  "datos": {
+    "asentamiento": { "id": "a1", "nombre": "Micenas", "faccionId": "f1", "posicion": { "x": 100, "y": 80 }, "nivel": 2, "poblacion": { "pesants": 40, "artesanos": 8, "nobleza": 1 }, "almacen": { "trigo": { "cantidad": 310, "capacidad": 800 }, "madera": { "cantidad": 120, "capacidad": 800 } } },
+    "edificios": [
+      { "id": "ed1", "tipo": "centroUrbano", "posicion": { "x": 0, "y": 0 }, "estado": "activo" },
+      { "id": "ed7", "tipo": "granja", "posicion": { "x": 12, "y": -6 }, "estado": "en_construccion", "completaEn": 1789410780000 },
+      { "id": "ed8", "tipo": "lenera", "posicion": { "x": -10, "y": 8 }, "estado": "en_cola" }
+    ]
+  }
+}

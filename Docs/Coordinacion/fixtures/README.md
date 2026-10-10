@@ -21,3 +21,10 @@ BronzeAge. Elegir según lo que se necesite verificar:
 Ambos documentan units/coordenadas/rotación en su propio `README.md` — son las mismas convenciones en los
 dos (mismo motor), el segundo README solo reconfirma con sus propios datos y explica la diferencia de
 procedencia en detalle.
+
+## `tiempo-real/` — mensajes del WS por segmentos de vista
+
+Ejemplos de los mensajes definidos en [`../03_Tiempo_real_por_segmentos.md`](../03_Tiempo_real_por_segmentos.md) (foto,
+delta, latido, resync, revocado, error). A diferencia de los de arriba, **esta carpeta sí está en git** (`.gitignore` la
+excluye de la regla `fixtures/*`): son contrato, no capturas. Las versiones encadenan por canal: mapa y asentamiento
+`1042 → 1043 → 1044`; héroe `1050 → 1051 → 1052`. Backend los promueve a `src/contratos/v1/fixtures/` con su schema y test.

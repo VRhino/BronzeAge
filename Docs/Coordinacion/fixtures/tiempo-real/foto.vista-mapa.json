@@ -1,0 +1,26 @@
+{
+  "tipo": "foto",
+  "gameId": "g1",
+  "canal": "vista/mapa",
+  "version": 1042,
+  "instante": 1789410720000,
+  "datos": {
+    "mapaId": "v3-s1108",
+    "ejercitosAvistados": [
+      { "id": "e3", "tipo": "ejercito", "faccionId": "f2", "posicionActual": { "x": 382.6, "y": 242.4 }, "participantes": 2, "heroeIds": ["heroe-4", "heroe-5"], "desplazamientoPorTick": { "x": 5.9, "y": -2.2 } },
+      { "id": "e7", "tipo": "personal", "faccionId": "f1", "posicionActual": { "x": 120, "y": 90 }, "participantes": 1, "heroeIds": ["heroe-1"], "desplazamientoPorTick": { "x": 0, "y": 0 } }
+    ],
+    "caravanasAvistadas": [
+      { "id": "c2", "posicionActual": { "x": 300.1, "y": 188.7 }, "faccionId": "f2", "escoltada": false, "recursos": ["trigo"], "desplazamientoPorTick": { "x": 3.1, "y": 1.4 } }
+    ],
+    "asentamientosAvistados": [
+      { "id": "a9", "nombre": "Tirinto", "faccionId": "f2", "posicion": { "x": 410, "y": 233 }, "nivel": 2 }
+    ],
+    "batallas": [],
+    "territorioPorEjercito": { "e3": "f2" },
+    "heroesVisibles": [
+      { "heroeId": "heroe-4", "displayName": "Capitán de Tirinto", "classDefinitionId": "guerrero", "nivel": 3, "escuadrasQueLleva": [{ "tropaId": "lanceros_mimbre", "cantidad": 6, "nivel": 2 }], "equipamiento": { "arma": "lanza_bronce", "casco": null, "torso": null, "guantes": null, "pantalones": null, "botas": null } }
+    ],
+    "exploracion": { "nota": "bloque set; su forma es la de NieblaProyectada en la proyección HTTP" }
+  }
+}

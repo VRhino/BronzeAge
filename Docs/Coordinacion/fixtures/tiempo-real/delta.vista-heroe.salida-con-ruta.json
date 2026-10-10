@@ -1,0 +1,23 @@
+{
+  "tipo": "delta",
+  "gameId": "g1",
+  "canal": "vista/heroe",
+  "desde": 1050,
+  "hasta": 1051,
+  "instante": 1789410840000,
+  "cambios": [
+    {
+      "t": "ejercitos", "id": "e7", "op": "patch",
+      "v": {
+        "estado": "marchando",
+        "objetivo": { "tipo": "punto", "punto": { "x": 300, "y": 200 } },
+        "ruta": [{ "x": 120, "y": 90 }, { "x": 200, "y": 150 }, { "x": 300, "y": 200 }],
+        "progreso": 0.04,
+        "posicionActual": { "x": 127.2, "y": 95.4 },
+        "avancePorTick": 0.04,
+        "llegadaEstimada": 1790010840000
+      }
+    }
+  ],
+  "escalares": {}
+}

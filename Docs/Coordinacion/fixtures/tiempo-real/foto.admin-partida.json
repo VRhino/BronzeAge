@@ -1,0 +1,19 @@
+{
+  "tipo": "foto",
+  "gameId": "g1",
+  "canal": "admin/partida",
+  "version": 1042,
+  "instante": 1789410720000,
+  "datos": {
+    "asentamientos": [
+      { "id": "a1", "nombre": "Micenas", "faccionId": "f1", "posicion": { "x": 100, "y": 80 }, "nivel": 2, "poblacion": { "pesants": 40, "artesanos": 8, "nobleza": 1 } },
+      { "id": "a9", "nombre": "Tirinto", "faccionId": "f2", "posicion": { "x": 410, "y": 233 }, "nivel": 2, "poblacion": { "pesants": 33, "artesanos": 5, "nobleza": 1 } }
+    ],
+    "ejercitos": [
+      { "id": "e3", "faccionId": "f2", "tipo": "ejercito", "estado": "marchando", "ruta": [{ "x": 300, "y": 200 }, { "x": 410, "y": 233 }], "progreso": 0.3, "posicionActual": { "x": 333, "y": 210 }, "avancePorTick": 0.05, "participantes": [{ "heroeId": "heroe-4", "unidoEn": 1789400000000 }] }
+    ],
+    "caravanas": [],
+    "facciones": [{ "id": "f1", "nombre": "Argólida" }, { "id": "f2", "nombre": "Tirinto" }],
+    "batallas": []
+  }
+}

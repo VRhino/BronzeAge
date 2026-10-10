@@ -1,0 +1,12 @@
+{
+  "tipo": "delta",
+  "gameId": "g1",
+  "canal": "vista/heroe",
+  "desde": 1051,
+  "hasta": 1052,
+  "instante": 1789410900000,
+  "cambios": [
+    { "t": "ejercitos", "id": "e7", "op": "patch", "v": { "progreso": 0.081, "posicionActual": { "x": 134.9, "y": 101.1 }, "avancePorTick": 0.041 } }
+  ],
+  "escalares": {}
+}
