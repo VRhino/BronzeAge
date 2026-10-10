@@ -528,6 +528,17 @@ desde el segundo tick (§4.1); (4) `instante`/`version` solo en cabecera.
 Mediciones con el mundo vivo (12 plazas, 62 héroes): foto de admin 275 KiB y delta 6,7 KiB por tick, contra 5586 KiB del GET cada 3 s; jugador, delta de 3,4 KiB por tick
 (`vista/mapa` + `vista/heroe`) contra 254 KiB de proyección cada 5 s. Con el checkpoint del tick 20000 (24 plazas, 500 héroes): delta admin 18,6 KiB por tick contra 9043 KiB del GET cada 3 s; jugador ≈3,2 KiB por tick contra 171 KiB cada 5 s. Pendiente: Fase 4 (`desde`), retirar `tick` y repetir la medición al tick 40000.
 
+Mundo de 500 bots al **tick 40000** (checkpoint del batch `BATCH_BOTS=500`: 32 plazas, 500 héroes, 302 Facciones, 58 columnas, 100 caravanas; `scripts/medicion-tiempo-real.ts` sobre una copia):
+
+| | Sondeo hoy | Con canales de vista |
+|---|---|---|
+| Admin | GET completo 16 446 KiB cada 3 s (~329 MB/min) | foto de `admin/partida` 1259 KiB; delta medio 26,6 KiB por tick (máx 41,7); proyección p50 0,7 ms, diff p50 1,0 ms, serialización p50 0,08 ms |
+| Jugador | proyección 192 KiB cada 5 s (~2306 KiB/min) | foto `vista/mapa` 69 KiB + `vista/heroe` 30 KiB; delta 4,6 + 0,4 = 5,0 KiB por tick (0,22 % del sondeo); proyección p50 0,7 ms |
+| Coste de un tick con 50 jugadores suscritos | — | 233 ms (avanzar el mundo + flush); la parte de difusión es una fracción pequeña |
+
+Lecturas: el delta de admin crece con el número de héroes (2609 `patch` en 20 ticks: cada tick toca ~130 entidades, sobre todo héroes con víveres/ración) y la foto de admin con ellos (1,2 MiB con 500 héroes);
+con `permessage-deflate` (13.2) o partiendo el héroe admin en ligero y detalle bajaría mucho. El resto escala bien: ninguna medida del flush pasa de 1 ms por clave.
+
 ## 13. Optimizaciones de escala (decisión del usuario, 2026-10-10: todo lo que ayude a escalar se menciona; él decide)
 
 Regla de trabajo acordada: cualquier mejora que evite sufrir al servidor a futuro se **propone aquí con su coste y beneficio** y el usuario decide

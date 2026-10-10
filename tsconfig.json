@@ -12,7 +12,8 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": { "@motor/*": ["./src/*"] }
   },
   "include": ["src"]
 }
