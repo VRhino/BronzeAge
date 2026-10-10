@@ -305,15 +305,16 @@ describe('canales de jugador', () => {
     return { ...m, heroes, de };
   }
 
-  it('cada héroe tiene su grupo: dos jugadores nunca comparten foto, ni siquiera de vista/mapa', () => {
+  it('vista/heroe es de cada uno; el mapa lo comparten los de una misma Facción', () => {
     const { difusor, heroes, de } = conJugadores();
     expect(heroes.length).toBeGreaterThanOrEqual(2);
     const [a, b] = [sock(), sock()];
     difusor.suscribir('g1', a, de(heroes[0]!.jugadorId!), 'vista/mapa');
     difusor.suscribir('g1', b, de(heroes[1]!.jugadorId!), 'vista/mapa');
-    expect(difusor.metricas().grupos).toBe(2);
+    expect(difusor.metricas().grupos).toBe(1);
     difusor.suscribir('g1', a, de(heroes[0]!.jugadorId!), 'vista/heroe');
     difusor.suscribir('g1', b, de(heroes[1]!.jugadorId!), 'vista/heroe');
+    expect(difusor.metricas().grupos).toBe(3);
     const heroeA = a.mensajes().find((m) => m.canal === 'vista/heroe' && m.tipo === 'foto')!.datos.heroe;
     const heroeB = b.mensajes().find((m) => m.canal === 'vista/heroe' && m.tipo === 'foto')!.datos.heroe;
     expect(heroeA.id).toBe(heroes[0]!.id);

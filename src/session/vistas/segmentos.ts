@@ -18,7 +18,7 @@ import { esResidente } from '../../engine/pertenencia';
 import { ubicacionDeducida } from '../../engine/ubicacion';
 import { poderEscuadron } from '../../engine/tropa';
 import { instanteDeTick, vistaAdminDeEstado, type EventoLogAdmin, type GameSessionState, type GeometriaAsentamientos } from '../estado';
-import { proyectarParaJugador } from '../proyecciones/jugador';
+import { perspectivaDeMapa, proyectarMapa, proyectarPersonal, type MapaProyectado, type PerspectivaDeMapa } from '../proyecciones/jugador';
 import { clavePorId, type EsquemaDeVista, type Foto } from './diff';
 import type { ColeccionesMoviles } from './movimiento';
 
@@ -49,8 +49,8 @@ export interface ImpurosDePartida {
 
 export interface ContextoDeProyeccion {
   impuros: ImpurosDePartida;
-  /** Proyecciones de jugador ya hechas EN ESTE FLUSH: `vista/mapa` y `vista/heroe` del mismo héroe salen de la misma. */
-  memo: Map<string, ReturnType<typeof proyectarParaJugador> & Record<string, unknown>>;
+  /** Lo ya calculado EN ESTE FLUSH: la perspectiva de cada héroe, el mapa de cada perspectiva y lo personal de cada héroe. */
+  memo: Map<string, unknown>;
 }
 
 const CANALES_CON_ID_ADMIN: readonly TipoDeCanal[] = ['admin/asentamiento', 'admin/campamento', 'admin/heroe'];
@@ -113,7 +113,6 @@ const ESQUEMAS: Record<TipoDeCanal, DefinicionDeCanal> = {
         batallas: porClave('battleId'),
         campamentosBandidos: clavePorId,
         campamentosMercenarios: clavePorId,
-        alijos: clavePorId,
         heroesVisibles: porClave('heroeId'),
         facciones: clavePorId,
         zonas: porClave('asentamientoId'),
@@ -145,9 +144,14 @@ const ESQUEMAS: Record<TipoDeCanal, DefinicionDeCanal> = {
         ordenes: clavePorId,
         aedasResidentes: clavePorId,
         historial: clavePorId,
+        alijos: clavePorId,
+        campamentosPropios: clavePorId,
+        heroesVisiblesExtra: porClave('heroeId'),
+        batallasPropias: porClave('battleId'),
       },
+      mapas: ['detalleDeAvistados', 'ladoPropioPorBatalla'],
       unicas: ['heroe'],
-      escalares: ['faccionId', 'miConvocatoriaId'],
+      escalares: ['faccionId', 'miConvocatoriaId', 'plazaPisadaId'],
       cabecera: CABECERA,
     },
     moviles: { propios: ['ejercitos', 'caravanas'], ajenos: [] },
@@ -182,9 +186,12 @@ export function puedeVer(estado: GameSessionState, canal: CanalDeVista, audienci
 /** Dos suscriptores con la misma clave ven exactamente la misma foto y comparten diff y serialización. Los canales de administración ven
  * todos lo mismo: la clave es el propio canal; también el interior de una plaza, que no depende de quién lo mire (el derecho a verlo se
  * comprueba por suscriptor). Los demás de jugador, el héroe (ver la nota de cabecera). */
-export function claveDeGrupo(canal: CanalDeVista, audiencia: Audiencia, estado: GameSessionState): string {
+export function claveDeGrupo(canal: CanalDeVista, audiencia: Audiencia, estado: GameSessionState, ctx: ContextoDeProyeccion): string {
   if (audiencia.tipo === 'admin' || canal.tipo === 'vista/asentamiento') return canal.nombre;
-  return `${canal.nombre}|${heroeDeJugador(estado, audiencia.jugadorId)?.id ?? ''}`;
+  const heroe = heroeDeJugador(estado, audiencia.jugadorId);
+  if (!heroe) return `${canal.nombre}|`;
+  // El mapa lo comparten quienes ven lo mismo (misma Facción y aliados; `PerspectivaDeMapa.clave`); lo personal, nadie.
+  return canal.tipo === 'vista/mapa' ? `${canal.nombre}|${perspectivaDe(estado, heroe.id, ctx).clave}` : `${canal.nombre}|${heroe.id}`;
 }
 
 // --- Administración ---
@@ -285,35 +292,33 @@ function conIds(lineas: readonly EventoLogAdmin[]): (EventoLogAdmin & { id: stri
 
 // --- Jugador ---
 
-/** La proyección de jugador de este héroe, hecha una vez por flush y compartida por `vista/mapa` y `vista/heroe`. Las piezas que solo conoce el
- * runner (precios, producción, ascenso) se añaden como en la ruta HTTP: producción y ascenso solo de la plaza que se pisa. */
-function proyeccionDe(estado: GameSessionState, heroeId: string, ctx: ContextoDeProyeccion) {
-  let p = ctx.memo.get(heroeId);
-  if (p) return p;
-  const base = proyectarParaJugador(estado, heroeId, ctx.impuros.geometriaAsentamientos());
-  const dentro = base.asentamientos[0];
-  p = {
-    ...base,
-    preciosReferencia: ctx.impuros.preciosReferencia(),
-    ...(dentro ? { produccionDeAsentamiento: ctx.impuros.produccionDeAsentamiento(dentro.id), ascensoDeAsentamiento: ctx.impuros.ascensoDeAsentamiento(dentro.id) } : {}),
-  } as never;
-  ctx.memo.set(heroeId, p!);
-  return p!;
-}
+const memoizar = <T>(ctx: ContextoDeProyeccion, clave: string, calcular: () => T): T => {
+  if (!ctx.memo.has(clave)) ctx.memo.set(clave, calcular());
+  return ctx.memo.get(clave) as T;
+};
 
-const escoger = (p: Record<string, unknown>, claves: readonly string[]): Foto => Object.fromEntries(claves.filter((k) => p[k] !== undefined).map((k) => [k, p[k]]));
+const perspectivaDe = (estado: GameSessionState, heroeId: string, ctx: ContextoDeProyeccion): PerspectivaDeMapa =>
+  memoizar(ctx, `perspectiva|${heroeId}`, () => perspectivaDeMapa(estado, heroeId));
 
-const CLAVES_MAPA = [
-  'ejercitosAvistados', 'caravanasAvistadas', 'asentamientosAvistados', 'asentamientosConocidos', 'aedasAvistados', 'batallas', 'campamentosBandidos',
-  'campamentosMercenarios', 'alijos', 'heroesVisibles', 'facciones', 'zonas', 'zonasFusionadas', 'caminos', 'territorioPorEjercito', 'exploracion',
-  'relaciones', 'titulos', 'nombresDeCompaneros', 'nombresDeDirigentes', 'mapaId', 'estadoMapa',
-] as const;
+/** El mapa de una perspectiva, hecho una vez por flush y compartido por todos los héroes con la misma `clave`. */
+const mapaDe = (estado: GameSessionState, perspectiva: PerspectivaDeMapa, ctx: ContextoDeProyeccion): MapaProyectado =>
+  memoizar(ctx, `mapa|${perspectiva.clave}`, () => proyectarMapa(estado, perspectiva, ctx.impuros.geometriaAsentamientos()));
 
-const CLAVES_HEROE = [
-  'heroe', 'ejercitos', 'caravanas', 'convocatorias', 'miConvocatoriaId', 'miradasIntel', 'informesPlaza', 'tarifasIntel', 'propuestasAnexion',
-  'propuestasRelacion', 'propuestasFusion', 'acuerdos', 'ordenes', 'tecnologia', 'aedasResidentes', 'mercadoCampamento', 'escenaCampamento',
-  'ascensoDeAsentamiento', 'produccionDeAsentamiento', 'preciosReferencia', 'faccionId',
-] as const;
+/** Lo de un héroe que no es del mapa, con sus ajustes sobre él (03 §13.1) y las piezas que solo conoce el runner (precios, producción, ascenso:
+ * estas dos solo de la plaza que se pisa, como en el GET). */
+const personalDe = (estado: GameSessionState, heroeId: string, ctx: ContextoDeProyeccion) =>
+  memoizar(ctx, `personal|${heroeId}`, () => {
+    const perspectiva = perspectivaDe(estado, heroeId, ctx);
+    const r = proyectarPersonal(estado, heroeId, perspectiva, mapaDe(estado, perspectiva, ctx), ctx.impuros.geometriaAsentamientos());
+    return {
+      ...r.personal,
+      ...r.ajustes,
+      preciosReferencia: ctx.impuros.preciosReferencia(),
+      ...(r.dentroDe
+        ? { produccionDeAsentamiento: ctx.impuros.produccionDeAsentamiento(r.dentroDe.id), ascensoDeAsentamiento: ctx.impuros.ascensoDeAsentamiento(r.dentroDe.id) }
+        : {}),
+    } as Record<string, unknown>;
+  });
 
 /** La foto de un canal para el estado dado, o `undefined` si aquello que se mira ya no existe (el difusor lo trata como revocado). */
 export function proyectarCanal(estado: GameSessionState, canal: CanalDeVista, audiencia: Audiencia, ctx: ContextoDeProyeccion): Foto | undefined {
@@ -348,10 +353,10 @@ export function proyectarCanal(estado: GameSessionState, canal: CanalDeVista, au
       if (audiencia.tipo !== 'jugador') return undefined;
       const heroe = heroeDeJugador(estado, audiencia.jugadorId);
       if (!heroe) return undefined;
-      const p = proyeccionDe(estado, heroe.id, ctx) as unknown as Record<string, unknown>;
-      if (canal.tipo === 'vista/mapa') return { instante, ...escoger(p, CLAVES_MAPA) };
+      if (canal.tipo === 'vista/mapa') return { instante, ...mapaDe(estado, perspectivaDe(estado, heroe.id, ctx), ctx) };
+      const p = personalDe(estado, heroe.id, ctx);
       const informes = (p['informesDeInspeccion'] as { objetivo: { tipo: string; id: string } }[]).map((i) => ({ id: `${i.objetivo.tipo}:${i.objetivo.id}`, ...i }));
-      return { instante, ...escoger(p, CLAVES_HEROE), informesDeInspeccion: informes, historial: conIds(p['historial'] as EventoLogAdmin[]) };
+      return { instante, ...p, informesDeInspeccion: informes, historial: conIds(p['historial'] as EventoLogAdmin[]) };
     }
   }
 }

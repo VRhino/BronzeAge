@@ -215,21 +215,8 @@ export class DifusorDeVistas {
     const ctx = this.contexto(fuente);
     if (!conexion.derecho() || !puedeVer(estado, canal, conexion.audiencia)) return { error: 'no autorizado', codigo: 'no_autorizado' };
 
-    const clave = claveDeGrupo(canal, conexion.audiencia, estado);
-    let grupo = this.grupos.get(gameId)?.get(clave);
-    if (grupo) this.volcarGrupo(grupo, fuente, ctx); // que la foto que se le da esté al día y la cadena siga sin hueco
-    // El volcado pudo vaciar el grupo (todos perdieron el derecho) y retirarlo: se rehace como uno nuevo.
-    if (grupo && this.grupos.get(gameId)?.get(clave) !== grupo) grupo = undefined;
-    if (!grupo) {
-      const t0 = performance.now();
-      const foto = proyectarCanal(estado, canal, conexion.audiencia, ctx);
-      if (!foto) return { error: 'no autorizado', codigo: 'no_autorizado' };
-      this.instrumento(canal.tipo).msProyeccion.push(performance.now() - t0);
-      grupo = { gameId, audiencia: conexion.audiencia, clave, canal, version: estado.version, foto, suscriptores: new Map() };
-      let delJuego = this.grupos.get(gameId);
-      if (!delJuego) this.grupos.set(gameId, (delJuego = new Map()));
-      delJuego.set(clave, grupo);
-    }
+    const grupo = this.grupoPara(gameId, canal, conexion, fuente, estado, ctx);
+    if (!grupo) return { error: 'no autorizado', codigo: 'no_autorizado' };
 
     const antes = grupo.suscriptores.has(socket);
     grupo.suscriptores.set(socket, { conexion });
@@ -240,6 +227,41 @@ export class DifusorDeVistas {
     this.enviar(socket, JSON.stringify({ tipo: 'suscrito', canal: nombre, intervaloTickMs: fuente.intervaloRelojDeMundoMs() }));
     this.enviarFoto(grupo, socket, 'alta');
     return undefined;
+  }
+
+  /** El grupo al que pertenece esta conexión en este canal, creándolo si hace falta; `undefined` si lo que se mira no existe. Si ya existe se
+   * vuelca primero: la foto que se da tiene que estar al día para que la cadena siga sin hueco. */
+  private grupoPara(gameId: string, canal: CanalDeVista, conexion: ConexionDeVistas, fuente: FuenteDePartida, estado: GameSessionState, ctx: ContextoDeProyeccion): Grupo | undefined {
+    const clave = claveDeGrupo(canal, conexion.audiencia, estado, ctx);
+    let grupo = this.grupos.get(gameId)?.get(clave);
+    if (grupo) this.volcarGrupo(grupo, fuente, ctx);
+    // El volcado pudo vaciar el grupo (todos perdieron el derecho) y retirarlo: se rehace como uno nuevo.
+    if (grupo && this.grupos.get(gameId)?.get(clave) !== grupo) grupo = undefined;
+    if (grupo) return grupo;
+    const t0 = performance.now();
+    const foto = proyectarCanal(estado, canal, conexion.audiencia, ctx);
+    if (!foto) return undefined;
+    this.instrumento(canal.tipo).msProyeccion.push(performance.now() - t0);
+    grupo = { gameId, audiencia: conexion.audiencia, clave, canal, version: estado.version, foto, suscriptores: new Map() };
+    let delJuego = this.grupos.get(gameId);
+    if (!delJuego) this.grupos.set(gameId, (delJuego = new Map()));
+    delJuego.set(clave, grupo);
+    return grupo;
+  }
+
+  /** Un suscriptor cuya clave de visibilidad cambió (otra Facción, una alianza creada o rota, una columna que ya no es de la Facción): pasa a su
+   * grupo nuevo con `resync` (`visibilidad`) y la foto de ese grupo. Nunca un delta entre grupos distintos (03 §7.2). */
+  private reubicar(origen: Grupo, socket: WebSocket, s: Suscriptor, fuente: FuenteDePartida, estado: GameSessionState, ctx: ContextoDeProyeccion): void {
+    origen.suscriptores.delete(socket);
+    const destino = this.grupoPara(origen.gameId, origen.canal, s.conexion, fuente, estado, ctx);
+    if (!destino) {
+      this.enviar(socket, JSON.stringify({ tipo: 'revocado', canal: origen.canal.nombre, motivo: 'ya_no_existe' }));
+      this.suscripcionesPorSocket.get(socket)?.delete(origen.canal.nombre);
+      return;
+    }
+    destino.suscriptores.set(socket, { conexion: s.conexion });
+    this.enviar(socket, JSON.stringify({ tipo: 'resync', canal: origen.canal.nombre, motivo: 'visibilidad' }));
+    this.enviarFoto(destino, socket, 'visibilidad');
   }
 
   desuscribir(gameId: string, socket: WebSocket, nombre: string): void {
@@ -335,6 +357,16 @@ export class DifusorDeVistas {
       return;
     }
     if (estado.version === grupo.version) return;
+
+    // Quien ya no comparte la clave del grupo se va al suyo; los que se quedan siguen viendo lo mismo, y la proyección sale de cualquiera de ellos.
+    for (const [socket, s] of [...grupo.suscriptores]) {
+      if (claveDeGrupo(grupo.canal, s.conexion.audiencia, estado, ctx) !== grupo.clave) this.reubicar(grupo, socket, s, fuente, estado, ctx);
+    }
+    if (grupo.suscriptores.size === 0) {
+      this.limpiarSiVacio(grupo);
+      return;
+    }
+    grupo.audiencia = grupo.suscriptores.values().next().value!.conexion.audiencia;
 
     const t0 = performance.now();
     const proyectada = proyectarCanal(estado, grupo.canal, grupo.audiencia, ctx);

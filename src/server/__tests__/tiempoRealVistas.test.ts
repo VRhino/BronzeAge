@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import type WebSocket from 'ws';
 import { crearServidor } from '../api';
+import { componerProyeccion } from '../../session/proyecciones/jugador';
 import { crearRegistroProveedores } from '../../acceso/proveedorIdentidad';
 import { proveedoresPorDefecto } from '../identidad/proveedoresActivos';
 import { crearRepositorioIdentidadEnMemoria } from '../identidad/repositorioEnMemoria';
@@ -149,15 +150,26 @@ describe('vista/mapa y vista/heroe', () => {
     const http = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).json() as Record<string, unknown>;
     const fotos = Object.fromEntries(recibidos.filter((m) => m.tipo === 'foto').map((m) => [m.canal, m.datos as Record<string, unknown>]));
     const norm = (x: unknown) => JSON.parse(JSON.stringify(x));
-    for (const [campo, valor] of Object.entries(fotos['vista/mapa']!)) expect(norm(valor), `vista/mapa.${campo}`).toEqual(norm(http[campo]));
-    // vista/heroe: igual salvo los dos campos con id sintético (informes y historial) que el canal reparte con `id`.
-    for (const [campo, valor] of Object.entries(fotos['vista/heroe']!)) {
-      if (campo === 'historial' || campo === 'informesDeInspeccion') continue;
+    // vista/mapa se compone con los ajustes de vista/heroe (la unión de los dos canales, 03 §13.1) y da la proyección HTTP.
+    const heroe = fotos['vista/heroe']!;
+    const ajustes = {
+      plazaPisadaId: heroe['plazaPisadaId'],
+      detalleDeAvistados: heroe['detalleDeAvistados'] ?? {},
+      campamentosPropios: heroe['campamentosPropios'] ?? [],
+      heroesVisiblesExtra: heroe['heroesVisiblesExtra'] ?? [],
+      ladoPropioPorBatalla: heroe['ladoPropioPorBatalla'] ?? {},
+      batallasPropias: heroe['batallasPropias'] ?? [],
+    };
+    const compuesta = componerProyeccion(fotos['vista/mapa'] as never, (heroe['heroe'] as { id: string }).id, ajustes as never) as Record<string, unknown>;
+    for (const campo of Object.keys(fotos['vista/mapa']!)) expect(norm(compuesta[campo]), `vista/mapa.${campo}`).toEqual(norm(http[campo]));
+    // vista/heroe: igual salvo los ajustes y los dos campos con id sintético (informes y historial).
+    for (const [campo, valor] of Object.entries(heroe)) {
+      if (campo === 'historial' || campo === 'informesDeInspeccion' || campo in ajustes) continue;
       expect(norm(valor), `vista/heroe.${campo}`).toEqual(norm(http[campo]));
     }
     // Ningún campo viaja por los dos canales.
     const enMapa = new Set(Object.keys(fotos['vista/mapa']!));
-    expect(Object.keys(fotos['vista/heroe']!).filter((k) => enMapa.has(k))).toEqual([]);
+    expect(Object.keys(heroe).filter((k) => enMapa.has(k))).toEqual([]);
     ws.terminate();
   });
 
