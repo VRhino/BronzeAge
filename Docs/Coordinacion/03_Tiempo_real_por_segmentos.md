@@ -70,13 +70,13 @@ Qué va exactamente en cada bloque (nombres = los de `ProyeccionJugador` / `Esta
   `aedasAvistados`, `batallas`, `campamentosBandidos`, `campamentosMercenarios`, `alijos`, `heroesVisibles`,
   `facciones`, `zonas`, `zonasFusionadas`, `caminos`, `territorioPorEjercito`, `exploracion`, `relaciones`, `titulos`,
   `nombresDeCompaneros`, `nombresDeDirigentes`, escalares `instante`, `version`, `mapaId`, `estadoMapa`.
-- **`vista/heroe`:** `heroe`, `ejercitos`, `caravanas`, `convocatorias`, `miConvocatoriaId`, `informesDeInspeccion`,
+- **`vista/heroe`** (escalares `faccionId` y `miConvocatoriaId`, implementado así): `heroe`, `ejercitos`, `caravanas`, `convocatorias`, `miConvocatoriaId`, `informesDeInspeccion`,
   `miradasIntel`, `informesPlaza`, `tarifasIntel`, `propuestas*`, `acuerdos`, `ordenes`, `tecnologia`,
   `aedasResidentes`, `mercadoCampamento`, `escenaCampamento`, `historial`, `ascensoDeAsentamiento`,
   `produccionDeAsentamiento`, `preciosReferencia`.
 - **`vista/asentamiento/<id>`:** los campos de `Asentamiento` que la proyección sirve para la plaza propia
   (`asentamientos[i]` con ese `id`), descompuestos así: escalares en la entidad `asentamiento`, y `edificios` como
-  entidades con `id`. El trazado (`trazadoPorAsentamiento[id]`) viaja como bloque sustituible (cambia solo con
+  entidades con `id`. El trazado (`trazadoPorAsentamiento[id]` de la proyección) viaja con la clave **`trazado`** (implementado así) como bloque sustituible (cambia solo con
   `layoutVersion` o al construir).
 - Lo estático (`mapa/:mapaId`, catálogos de `GET /balance`, `catalogoTropas`) **no** viaja nunca por estos canales.
 
