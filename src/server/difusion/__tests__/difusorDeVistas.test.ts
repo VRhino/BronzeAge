@@ -5,6 +5,7 @@ import type WebSocket from 'ws';
 import { aplicarDiferencia } from '../../../session/vistas/diff';
 import { analizarCanal, definicionDe, proyectarCanal } from '../../../session/vistas/segmentos';
 import { partidaConAsentamiento } from '../../../session/__tests__/fixtures';
+import { erroresDeMensajeDelServidor } from '../../../contratos/v1/__tests__/validarTiempoReal';
 import { DifusorDeVistas, type ConexionDeVistas } from '../difusorDeVistas';
 
 class SocketFalso {
@@ -335,5 +336,80 @@ describe('canales de jugador', () => {
     tick();
     const deltas = s.mensajes().filter((m) => m.tipo === 'delta');
     expect(deltas.map((d) => d.canal).sort()).toEqual(['vista/heroe', 'vista/mapa']);
+  });
+});
+
+describe('vista/asentamiento', () => {
+  function enPlaza() {
+    const m = montar();
+    const estado = m.sesion.getState();
+    const dentro = estado.heroes.find((h) => h.jugadorId && h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === m.asentamientoId);
+    const de = (jugadorId: string): ConexionDeVistas => ({ audiencia: { tipo: 'jugador', jugadorId }, derecho: () => true });
+    return { ...m, dentro, de, canal: `vista/asentamiento/${m.asentamientoId}` };
+  }
+
+  it('quien está dentro de su plaza recibe el interior; el mismo contenido que asentamientos[0] de la proyección HTTP', () => {
+    const { difusor, dentro, de, canal, asentamientoId, sesion } = enPlaza();
+    expect(dentro, 'el fixture deja a un héroe dentro de la plaza').toBeDefined();
+    const s = sock();
+    expect(difusor.suscribir('g1', s, de(dentro!.jugadorId!), canal)).toBeUndefined();
+    const foto = s.mensajes()[1]!.datos;
+    const real = sesion.getState().asentamientos.find((a) => a.id === asentamientoId)!;
+    const { edificios, ...resto } = real;
+    expect(JSON.parse(JSON.stringify(foto.asentamiento))).toEqual(JSON.parse(JSON.stringify(resto)));
+    expect(foto.edificios).toHaveLength(edificios.length);
+  });
+
+  it('un héroe que no está dentro (aunque sea ciudadano) no ve el interior: ciudadanía habilita, presencia ejerce', () => {
+    const { difusor, dentro, de, canal, sesion } = enPlaza();
+    const estado = sesion.getState();
+    const fuera = estado.heroes.find((h) => h.jugadorId && h.id !== dentro!.id);
+    const s = sock();
+    // Se lo saca de la plaza: sigue siendo ciudadano, pero está en el camino.
+    (estado.heroes.find((h) => h.id === dentro!.id) as { ubicacion: unknown }).ubicacion = { tipo: 'columna', ejercitoId: 'x' };
+    expect(difusor.suscribir('g1', s, de(dentro!.jugadorId!), canal)).toMatchObject({ codigo: 'no_autorizado' });
+    expect(fuera === undefined || fuera.id !== dentro!.id).toBe(true);
+  });
+
+  it('al salir de la plaza se revoca en el siguiente flush; el que se queda dentro sigue recibiendo', () => {
+    const { difusor, de, canal, sesion, tick, asentamientoId } = enPlaza();
+    const estado = sesion.getState();
+    const faccionId = estado.asentamientos.find((a) => a.id === asentamientoId)!.faccionId;
+    const ciudadanos = estado.heroes.filter((h) => h.jugadorId && estado.facciones.find((f) => f.id === faccionId)?.ciudadanosIds.includes(h.id));
+    expect(ciudadanos.length, 'el fixture tiene dos ciudadanos').toBeGreaterThanOrEqual(2);
+    const [uno, otro] = ciudadanos as unknown as { id: string; jugadorId: string; ubicacion: unknown }[];
+    for (const h of [uno!, otro!]) h.ubicacion = { tipo: 'asentamiento', asentamientoId };
+    const [a, b] = [sock(), sock()];
+    difusor.suscribir('g1', a, de(uno!.jugadorId), canal);
+    difusor.suscribir('g1', b, de(otro!.jugadorId), canal);
+    expect(difusor.metricas().grupos).toBe(1); // comparten foto
+    uno!.ubicacion = { tipo: 'columna', ejercitoId: 'x' };
+    tick();
+    expect(a.ultimo()).toMatchObject({ tipo: 'revocado', canal });
+    expect(b.ultimo().tipo).toBe('delta');
+  });
+});
+
+describe('contrato', () => {
+  it('todo lo que el difusor manda cumple el schema: suscrito, foto, delta, resync y revocado, en todos los canales', () => {
+    const { difusor, sesion, tick, asentamientoId, conexion, admin } = montar();
+    const heroe = sesion.getState().heroes.find((h) => h.jugadorId)!;
+    const jugador: ConexionDeVistas = { audiencia: { tipo: 'jugador', jugadorId: heroe.jugadorId! }, derecho: () => true };
+    const a = sock();
+    const j = sock();
+    const lento = sock();
+    for (const c of ['admin/partida', `admin/asentamiento/${asentamientoId}`, `admin/heroe/${heroe.id}`]) difusor.suscribir('g1', a, conexion, c);
+    for (const c of ['vista/mapa', 'vista/heroe']) difusor.suscribir('g1', j, jugador, c);
+    difusor.suscribir('g1', lento, conexion, 'admin/partida');
+    tick();
+    lento.bufferedAmount = 1_000_000;
+    tick();
+    lento.bufferedAmount = 0;
+    tick(); // resync + foto al recuperarse
+    admin.vivo = false;
+    tick(); // revocado
+    const todos = [...a.mensajes(), ...j.mensajes(), ...lento.mensajes()];
+    expect(todos.map((m) => m.tipo)).toEqual(expect.arrayContaining(['suscrito', 'foto', 'delta', 'resync', 'revocado']));
+    for (const m of todos) expect(erroresDeMensajeDelServidor(m as never), JSON.stringify(m).slice(0, 200)).toEqual([]);
   });
 });

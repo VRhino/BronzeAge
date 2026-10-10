@@ -108,7 +108,7 @@ describe('admin/partida', () => {
 });
 
 describe('un jugador no ve canales de administración', () => {
-  it('suscribir a admin/* o a un vista/* que no existe es canal_desconocido; vista/mapa sin héroe, no_autorizado', async () => {
+  it('suscribir a admin/* es canal_desconocido; vista/* sin héroe (o de una plaza que no es suya), no_autorizado', async () => {
     await partida();
     const ana = await sesionDe('ana');
     await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: ana });
@@ -116,7 +116,7 @@ describe('un jugador no ve canales de administración', () => {
     const recibidos = recoger(ws);
     for (const canal of ['admin/partida', 'vista/asentamiento/a1', 'vista/mapa']) ws.send(JSON.stringify({ accion: 'suscribir', canal }));
     await hasta(() => recibidos.length >= 3);
-    expect(recibidos.map((m) => m.codigo)).toEqual(['canal_desconocido', 'canal_desconocido', 'no_autorizado']);
+    expect(recibidos.map((m) => m.codigo)).toEqual(['canal_desconocido', 'no_autorizado', 'no_autorizado']);
     ws.terminate();
   });
 });

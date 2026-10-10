@@ -878,6 +878,308 @@
       },
       "required": ["schemaVersion", "version", "formas", "campos", "orlas", "emblemas", "colores", "reservados"],
       "additionalProperties": false
+    },
+    "TiempoRealCanal": {
+      "description": "Nombre de un canal suscribible (doc 03 §2): de eventos (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`) o de vista (`vista/mapa`, `vista/heroe`, `vista/asentamiento/<id>`; `admin/*` solo en el endpoint de administración).",
+      "type": "string",
+      "minLength": 1
+    },
+    "MensajeSuscribir": {
+      "description": "Cliente -> servidor por el WebSocket de tiempo real (doc 03 §3.1). `desde` es opcional y de la fase 4.",
+      "type": "object",
+      "properties": {
+        "accion": {
+          "enum": [
+            "suscribir",
+            "desuscribir",
+            "resincronizar"
+          ]
+        },
+        "canal": {
+          "$ref": "#/definitions/TiempoRealCanal"
+        },
+        "desde": {
+          "$ref": "#/definitions/Entero"
+        }
+      },
+      "required": [
+        "accion",
+        "canal"
+      ],
+      "additionalProperties": false
+    },
+    "MensajeSuscrito": {
+      "description": "Respuesta a `suscribir` (doc 03 §3.2). `intervaloTickMs` es los ms reales entre ticks del reloj de mundo, o null si la partida no tiene reloj (el cliente no extrapola). En los canales de eventos no viaja.",
+      "type": "object",
+      "properties": {
+        "tipo": {
+          "const": "suscrito"
+        },
+        "canal": {
+          "$ref": "#/definitions/TiempoRealCanal"
+        },
+        "intervaloTickMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      },
+      "required": [
+        "tipo",
+        "canal"
+      ],
+      "additionalProperties": false
+    },
+    "MensajeFoto": {
+      "description": "Foto de un canal de vista (doc 03 §3.2): sustituye el almacén del canal. `datos` lleva las claves del canal con los mismos nombres y tipos que la proyeccion HTTP; `instante` y `version` van en la cabecera, no en `datos`.",
+      "type": "object",
+      "properties": {
+        "tipo": {
+          "const": "foto"
+        },
+        "gameId": {
+          "$ref": "#/definitions/Id"
+        },
+        "canal": {
+          "$ref": "#/definitions/TiempoRealCanal"
+        },
+        "version": {
+          "$ref": "#/definitions/Entero"
+        },
+        "instante": {
+          "$ref": "#/definitions/Instante"
+        },
+        "datos": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "tipo",
+        "gameId",
+        "canal",
+        "version",
+        "instante",
+        "datos"
+      ],
+      "additionalProperties": false
+    },
+    "CambioDeVista": {
+      "description": "Un cambio de un delta (doc 03 §4). `upsert` sustituye la entidad; `patch` fusiona claves de primer nivel (null borra la clave); `remove` la quita; `set` sustituye un bloque sin clave. `t` es la clave de primer nivel de `datos`.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "t": {
+              "type": "string",
+              "minLength": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "op": {
+              "const": "upsert"
+            },
+            "v": {}
+          },
+          "required": [
+            "t",
+            "id",
+            "op",
+            "v"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "t": {
+              "type": "string",
+              "minLength": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "op": {
+              "const": "patch"
+            },
+            "v": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "t",
+            "id",
+            "op",
+            "v"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "t": {
+              "type": "string",
+              "minLength": 1
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "op": {
+              "const": "remove"
+            }
+          },
+          "required": [
+            "t",
+            "id",
+            "op"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "t": {
+              "type": "string",
+              "minLength": 1
+            },
+            "op": {
+              "const": "set"
+            },
+            "v": {}
+          },
+          "required": [
+            "t",
+            "op",
+            "v"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "MensajeDelta": {
+      "description": "Delta encadenado de un canal de vista (doc 03 §3.2, §4): `desde` es la version del mensaje anterior de ESE canal; un delta vacio en cada tick es el latido. `escalares` se fusiona sobre la raiz del canal.",
+      "type": "object",
+      "properties": {
+        "tipo": {
+          "const": "delta"
+        },
+        "gameId": {
+          "$ref": "#/definitions/Id"
+        },
+        "canal": {
+          "$ref": "#/definitions/TiempoRealCanal"
+        },
+        "desde": {
+          "$ref": "#/definitions/Entero"
+        },
+        "hasta": {
+          "$ref": "#/definitions/Entero"
+        },
+        "instante": {
+          "$ref": "#/definitions/Instante"
+        },
+        "cambios": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CambioDeVista"
+          }
+        },
+        "escalares": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "tipo",
+        "gameId",
+        "canal",
+        "desde",
+        "hasta",
+        "instante",
+        "cambios",
+        "escalares"
+      ],
+      "additionalProperties": false
+    },
+    "MensajeResync": {
+      "description": "El servidor corta la cadena de un canal (doc 03 §3.2); va seguido de una `foto` sin que el cliente la pida.",
+      "type": "object",
+      "properties": {
+        "tipo": {
+          "const": "resync"
+        },
+        "canal": {
+          "$ref": "#/definitions/TiempoRealCanal"
+        },
+        "motivo": {
+          "enum": [
+            "cliente_lento",
+            "visibilidad",
+            "servidor_reiniciado",
+            "partida_reemplazada"
+          ]
+        }
+      },
+      "required": [
+        "tipo",
+        "canal",
+        "motivo"
+      ],
+      "additionalProperties": false
+    },
+    "MensajeRevocado": {
+      "description": "Se perdio el derecho a ver ese canal; el servidor ya lo ha desuscrito (doc 03 §3.2). `motivo` es informativo.",
+      "type": "object",
+      "properties": {
+        "tipo": {
+          "const": "revocado"
+        },
+        "canal": {
+          "$ref": "#/definitions/TiempoRealCanal"
+        },
+        "motivo": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "tipo",
+        "canal",
+        "motivo"
+      ],
+      "additionalProperties": false
+    },
+    "MensajeErrorTiempoReal": {
+      "description": "Error del WebSocket de tiempo real (doc 02 §2, doc 03 §3.2). `codigo` es aditivo; `error` conserva su texto.",
+      "type": "object",
+      "properties": {
+        "tipo": {
+          "const": "error"
+        },
+        "canal": {
+          "$ref": "#/definitions/TiempoRealCanal"
+        },
+        "error": {
+          "type": "string"
+        },
+        "codigo": {
+          "enum": [
+            "canal_desconocido",
+            "no_autorizado",
+            "demasiado_frecuente",
+            "formato"
+          ]
+        }
+      },
+      "required": [
+        "tipo",
+        "error"
+      ],
+      "additionalProperties": false
     }
   }
 }
