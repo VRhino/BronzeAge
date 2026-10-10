@@ -17,7 +17,7 @@ campos; nada de lo existente cambia de forma ni de significado (§8).
 3. Un delta lista, por tipo de entidad e `id`, qué se **inserta/sustituye** (`upsert`), qué se **retoca** (`patch`) y
    qué **desaparece** (`remove`), más los escalares que cambian (`instante`…). El cliente toca solo eso.
 4. Lo móvil manda su `ruta` una vez al salir y luego solo `progreso` + `avancePorTick` (propios) o
-   `desplazamientoPorTick` (ajenos): el cliente interpola a 24-60 fps sin preguntar nada.
+   `desplazamientoPorTick` (ajenos): el cliente interpola a la frecuencia del monitor (mínimo 30 fps, decisión del usuario 2026-10-10) sin preguntar nada.
 5. Hueco de versión, reconexión o socket lento ⇒ **foto de nuevo** (`resincronizar` / `resync`). Nunca hay reparación
    parcial.
 6. El GET HTTP de la proyección y el del estado admin **siguen existiendo** como foto inicial y respaldo; la foto de
@@ -505,7 +505,7 @@ Técnicas (las contesta quien implementa; no son reglas de juego):
 1. **Tamaño de `exploracion`** (la niebla explorada): si resulta grande, Backend propone en 03 su codificación por
    deltas de celdas (aditivo) en vez del bloque `set`. Hasta medirla, se envía como bloque cuando cambia.
 2. ~~Cliente admin: campos de la versión ligera~~ **Resuelta** (§2.1). Pendiente para Backend: confirmar que cada campo de `resumen` sale de funciones del motor existentes (si alguno no, avisar a Cliente admin).
-3. **Rate de flush:** ¿`COALESCER_MS = 100` y latido solo en tick es suficiente para el cliente jugador (24-60 fps con
+3. **Rate de flush:** ¿`COALESCER_MS = 100` y latido solo en tick es suficiente para el cliente jugador (>=30 fps, a la capacidad del monitor, con
    interpolación) o se necesita más frecuencia en combate/persecución?
 4. **Reanudar con `desde`** (Fase 4): ¿merece el buffer en memoria del servidor (últimos ~64 deltas por clave) o basta
    con foto en cada reconexión? Decidir con las métricas de `bytes_foto`.
