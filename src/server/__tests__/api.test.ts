@@ -1464,6 +1464,24 @@ describe('auditoría de comandos (E2)', () => {
     expect(lentos.json().entradas).toHaveLength(0);
   });
 
+  it('PUT /playtest etiqueta la prueba y GET /carga la devuelve; solo administración', async () => {
+    const { admin } = await partidaCreada('g1');
+    const ana = await jugadorEn('g1');
+    const vacio = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/carga', headers: admin });
+    expect(vacio.statusCode).toBe(200);
+    expect(vacio.json()).toEqual({ muestras: [], playtestVigente: null, corruptas: 0 });
+
+    const puesta = await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: admin, payload: { id: 'prueba-1' } });
+    expect(puesta.json()).toEqual({ gameId: 'g1', playtestId: 'prueba-1' });
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/carga?playtestId=prueba-1', headers: admin })).json().playtestVigente).toBe('prueba-1');
+    const cierre = await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: admin, payload: { id: null } });
+    expect(cierre.json().playtestId).toBeNull();
+
+    expect((await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: admin, payload: { id: 'con espacios' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: ana, payload: { id: 'x' } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/carga', headers: ana })).statusCode).toBe(403);
+  });
+
   it('la auditoria es SOLO de administracion: un jugador no audita a los demas', async () => {
     await partidaCreada('g1');
     const ana = await jugadorEn('g1');

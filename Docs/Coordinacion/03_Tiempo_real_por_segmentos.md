@@ -557,7 +557,9 @@ si se aborda. Estado de cada una:
 
 Las 13.2-13.8 no cambian el contrato salvo 13.5 (parámetro opcional `ritmo`, aditivo) y 13.3 (`desde`, ya previsto).
 
-## 14. Telemetría de carga para partidas vivas (estudio, abierto)
+## 14. Telemetría de carga para partidas vivas (implementada, 2026-10-10)
+
+> **Estado.** Implementada por «Telemetría y panel»: `server/telemetria.ts` (`RegistroDeCarga`), campos `ms`/`bytes` en la auditoría, `PUT/GET` de §14.A, `scripts/informe-carga.ts` y el panel `npm run panel` (los dos últimos, abajo, según se vayan cerrando). Lo que sigue de «estudio» es el diseño original; la sección 14.A recoge lo realmente hecho.
 
 Objetivo (usuario, 2026-10-10): cuando él corre un playtest de partidas vivas, poder **medir todo lo necesario** para decidir las mejoras de §13 sin
 instrumentar a mano. Idea: ampliar lo que la auditoría ya hace bien (JSONL append-only por partida, hermano del snapshot, sobrevive a cortes, se
@@ -582,3 +584,15 @@ Propuesta a estudiar (no se implementa hasta decidir):
 Preguntas para el estudio (con calma, antes de implementar): ¿qué decisiones de §13 necesitan qué métrica?; ¿una línea por muestra o por evento?; ¿exponerlo
 en el cliente admin (gráfica) o solo informe por script?; ¿se combina con `scripts/medicion-tiempo-real.ts`, que ya mide la línea base? Primer paso: que Backend
 revise `auditoria.ts`, `metricas.ts` y ese script y devuelva qué se reutiliza y qué falta.
+
+### 14.A Lo implementado
+
+- **Registro.** `<gameId>.carga.jsonl` por el mismo almacén que la auditoría: una línea JSON por muestra (`formatoVersion: 1`, `tipo: 'muestra'`), escritura sin esperar sobre cola encadenada, `drenar()` en el apagado. Muestreo cada `TELEMETRIA_INTERVALO_MS` (10 000 por defecto; `0` lo apaga; en tests, apagado). **Una partida sin reloj de mundo y sin conexiones no anota líneas.**
+- **Campos de la muestra:** `momento` (reloj de pared), `playtestId?`, `ventanaMs`, `tick`, `version`, `conexiones`, `colaPendiente`, `suscriptores`/`claves` (total y por tipo de canal), `tickMs` y `guardadoMs` (`{n,p50,p95,max}` de la ventana), `guardadoBytes`, `memoriaMb {rss,heapUsado}`, `bucleMs {p50,p99,max}` (`monitorEventLoopDelay`), `costeMuestraMs`, y `canales[tipo]`: `flushes`, `bytesEnviados`, `bytesFlush`/`bytesFoto` (resumen), `msProyeccion`/`msDiff`/`msSerializacion` (resumen), `fotos` por motivo, `cambios` por `op`, `socketsLentos`, `cierres4408`, `suscriptores`, `claves`.
+- **Ventanas «desde la muestra anterior».** `DifusorDeVistas.tomarVentana()` y `RunnerDePartida.tomarVentana()` devuelven y reinician los acumuladores; `metricas()` y los instrumentos de vida (series de 256) no cambian. Los del difusor son **de proceso** (por tipo de canal, no por partida): con varias partidas abiertas cada muestra repite la misma ventana de vistas.
+- **Etiqueta de prueba.** `PUT /admin/partidas/:gameId/playtest { id }` (`id` = `[A-Za-z0-9._-]{1,64}` o `null` para cerrar). Se guarda en memoria y como línea `tipo: 'playtest'` en el propio JSONL, así que sobrevive a un reinicio. Cada muestra posterior lleva `playtestId`.
+- **Lectura.** `GET /admin/partidas/:gameId/carga?desde&hasta&playtestId` → `{ muestras, playtestVigente, corruptas }` (administración). Una línea a medias se cuenta en `corruptas`, no tumba la lectura.
+- **Retención.** `TareaDeMantenimiento` poda también la carga: por edad (`retencionCargaDias`, 3 por defecto; pesa ~100× más que la auditoría) y por tamaño (`MAX_LINEAS_CARGA` = 100 000), conservando siempre la última marca de `playtest`. Borrar la partida borra su carga.
+- **Auditoría ampliada.** Cada comando ejecutado (aceptado o rechazado por el dominio) añade `ms` (coste de `runner.ejecutar`) y `bytes` (JSON de la respuesta); aditivo, `FORMATO_AUDITORIA_VERSION` sigue en 1. `GET …/auditoria` admite además `hasta` y `msMinimo`.
+- **Métrica nueva en persistencia:** `guardarPartida` devuelve el tamaño del snapshot escrito.
+

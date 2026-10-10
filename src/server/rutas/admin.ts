@@ -244,6 +244,87 @@ const ESQUEMA_METRICAS = {
   },
 } as const;
 
+const ESQUEMA_FIJAR_PLAYTEST = {
+  description:
+    'Fija (o cierra, con `id: null`) el `playtestId` vigente de la partida (03 §14): cada muestra de carga que se ' +
+    'anote desde ahora lo lleva, para cortar la serie por prueba. Persiste en el propio registro de carga.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  body: {
+    type: 'object',
+    properties: { id: { type: ['string', 'null'], minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9._-]+$' } },
+    required: ['id'],
+    additionalProperties: false,
+  },
+  response: {
+    200: { type: 'object', properties: { gameId: { type: 'string' }, playtestId: { type: ['string', 'null'] } }, required: ['gameId', 'playtestId'] },
+    400: ERROR_RESPUESTA,
+  },
+} as const;
+
+const RESUMEN_CARGA = {
+  type: 'object',
+  properties: { n: { type: 'number' }, p50: { type: 'number' }, p95: { type: 'number' }, max: { type: 'number' } },
+} as const;
+
+const ESQUEMA_CARGA = {
+  description:
+    'Telemetría de carga de la partida (03 §14): muestras periódicas (JSONL `<gameId>.carga.jsonl`) de coste del tick, ' +
+    'proyección/diff/serialización por tipo de canal, bytes, fotos por motivo, suscriptores, memoria y retraso del bucle. ' +
+    'Filtrable por rango de reloj de pared y por `playtestId`. Solo administración.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  querystring: {
+    type: 'object',
+    properties: {
+      desde: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo anterior.' },
+      hasta: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo posterior.' },
+      playtestId: { type: 'string', description: 'Solo las muestras de esta prueba.' },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        muestras: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              formatoVersion: { type: 'number' },
+              tipo: { type: 'string' },
+              momento: { type: 'string' },
+              gameId: { type: 'string' },
+              playtestId: { type: 'string' },
+              ventanaMs: { type: 'number' },
+              tick: { type: 'number' },
+              version: { type: 'number' },
+              conexiones: { type: 'number' },
+              colaPendiente: { type: 'number' },
+              suscriptores: { type: 'number' },
+              claves: { type: 'number' },
+              tickMs: RESUMEN_CARGA,
+              guardadoMs: RESUMEN_CARGA,
+              guardadoBytes: { type: 'number' },
+              canales: { type: 'object', additionalProperties: true },
+              memoriaMb: { type: 'object', additionalProperties: true },
+              bucleMs: { type: 'object', additionalProperties: true },
+              costeMuestraMs: { type: 'number' },
+            },
+          },
+        },
+        playtestVigente: { type: ['string', 'null'] },
+        corruptas: { type: 'number' },
+      },
+      required: ['muestras', 'playtestVigente', 'corruptas'],
+    },
+  },
+} as const;
+
 const ESQUEMA_AUDITORIA = {
   description:
     'Registro de auditoria de comandos de esta partida (Fase E2): quien pidio que, cuando, y con que ' +
@@ -633,6 +714,31 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
       // `leer` drena antes: `registrar` escribe sin esperar, asi que sin eso el comando que acaba de
       // ejecutarse podria no estar todavia en el archivo — justo el que se va a consultar.
       return reply.send(await deps.auditoria.leer(request.params.gameId, { desde, hasta, actor, soloRechazos: soloRechazos === 'true', ...(msMinimo !== undefined ? { msMinimo: Number(msMinimo) } : {}) }));
+    }
+  );
+
+  /**
+   * Telemetría de carga (03 §14). `PUT .../playtest` etiqueta la prueba en curso; `GET .../carga` devuelve las
+   * muestras. Administración de la partida, como la auditoría: lee de archivo y sobrevive al reinicio.
+   */
+  app.put<{ Params: ParametrosGameId; Body: { id: string | null } }>(
+    '/admin/partidas/:gameId/playtest',
+    { schema: ESQUEMA_FIJAR_PLAYTEST },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+      deps.telemetria.fijarPlaytest(request.params.gameId, request.body.id);
+      return reply.send({ gameId: request.params.gameId, playtestId: request.body.id });
+    }
+  );
+
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; hasta?: string; playtestId?: string } }>(
+    '/admin/partidas/:gameId/carga',
+    { schema: ESQUEMA_CARGA },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+      return reply.send(await deps.telemetria.leer(request.params.gameId, request.query));
     }
   );
 
