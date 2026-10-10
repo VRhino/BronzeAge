@@ -223,24 +223,19 @@ describe('difusion de eventos tras un comando', () => {
     ws2.terminate();
   });
 
-  it('el hub avisa de cada tick a todos los conectados de la partida, sin datos del mundo y sin que haga falta suscribirse', async () => {
+  it('el mensaje `tick` está retirado: un tick del mundo no manda nada a quien no se suscribió a un canal', async () => {
+    const admin = await sesionDe('jefa');
     await partidaCreada('g1');
-    await partidaCreada('g2');
     const ana = await jugadorEn('g1', 'ana');
-    const bea = await jugadorEn('g2', 'bea');
-    const ws1 = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
-    const ws2 = await app.injectWS('/v1/jugador/partidas/g2/tiempo-real', { headers: bea.auth });
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
     const recibidos: Record<string, unknown>[] = [];
-    ws2.on('message', (data: Buffer) => recibidos.push(JSON.parse(data.toString())));
+    ws.on('message', (data: Buffer) => recibidos.push(JSON.parse(data.toString())));
 
-    const enG1 = esperarMensaje(ws1);
-    hub.difundirTick('g1', { version: 7, instante: 123 });
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
+    await new Promise((r) => setTimeout(r, 50));
 
-    expect(await enG1).toEqual({ tipo: 'tick', gameId: 'g1', version: 7, instante: 123 });
-    await new Promise((r) => setTimeout(r, 30));
-    expect(recibidos, 'otra partida no se entera').toEqual([]);
-    ws1.terminate();
-    ws2.terminate();
+    expect(recibidos).toEqual([]);
+    ws.terminate();
   });
 
   it('un evento de UN asentamiento solo llega a quien esta suscrito a ESE asentamiento, no a mapa/general', async () => {

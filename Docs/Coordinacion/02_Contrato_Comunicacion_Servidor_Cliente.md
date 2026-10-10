@@ -52,7 +52,7 @@ de entrada y recibe el `BattleResult` de salida, ambos por HTTP (§3).
   cliente Unity debe tratar un `409` como "no ocurrió", nunca como "ocurrió pero no se sabe si se guardó".
 - **Tiempo real (con BronzeAge, no con el servidor de batalla):** un único WebSocket por jugador con
   canales suscribibles. Cliente → `{"accion":"suscribir"|"desuscribir","canal":"..."}`. Servidor →
-  `{"tipo":"suscrito"|"desuscrito"}` | `{"tipo":"error",...}` | `{"tipo":"evento","gameId":...,"canal":...,"evento":...}` | `{"tipo":"tick","gameId":...,"version":...,"instante":...}` (desde 2026-10-09, a todos los conectados de la partida en cada tick del reloj de mundo, sin suscribirse y sin datos del mundo: es la señal para pedir la proyección en vez de sondear) (`gameId` desde 2026-10-09: la partida de ese socket, para que un cliente con varias abiertas no las mezcle).
+  `{"tipo":"suscrito"|"desuscrito"}` | `{"tipo":"error",...}` | `{"tipo":"evento","gameId":...,"canal":...,"evento":...}` | ~~`{"tipo":"tick","gameId":...,"version":...,"instante":...}`~~ (**RETIRADO el 2026-10-10**: existió desde 2026-10-09 como señal para pedir la proyección en vez de sondear; lo sustituye el latido de los canales de vista —un delta vacío por tick, doc 03 §3.2—. Ya no se emite) (`gameId` desde 2026-10-09: la partida de ese socket, para que un cliente con varias abiertas no las mezcle).
   Autenticación en el handshake (`preValidation`), antes de aceptar la conexión.
   Estos canales (`mapa/general`, `asentamiento/<id>`, `heroe/<id>`, `batalla/<id>`) llevan **eventos**; el estado por segmentos de vista (`vista/*`, `admin/*`) se define en el doc 03 y es aditivo (§8).
 
@@ -609,7 +609,7 @@ Para dejar de sondear la proyección (jugador) y el estado completo (admin) cada
   opcional en `suscribir`) y `ritmo` (opcional en `suscribir` a un canal de vista: un delta cada N ticks, coalescidos; doc 03 §3.1). `suscrito` gana `intervaloTickMs` y
   `ritmo` (el aplicado); `error` gana `codigo`. La compresión `permessage-deflate` del WS se negocia en el handshake (doc 03 §12).
 - Campos de lo móvil `avancePorTick`, `desplazamientoPorTick` (y `llegadaEstimada?`): solo en fotos y deltas del WS, desde el segundo tick (doc 03 §4.1).
-- **Se mantienen** los canales de eventos, el mensaje `tick` (deprecado cuando ambos clientes migren), `GET
+- **Se mantienen** los canales de eventos, el mensaje `tick` ya NO (retirado el 2026-10-10; lo sustituye el latido de los canales de vista), `GET
   /jugador/partidas/:gameId` y `GET /admin/partidas/:gameId` como foto inicial y respaldo. Todo es aditivo: sigue siendo v1.
 
 ## 9. Inventario de rutas HTTP/WS (2026-10-10)

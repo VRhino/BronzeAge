@@ -5,7 +5,7 @@
 (`desde`) y medir con 500 bots. Los fixtures de [`fixtures/tiempo-real/`](fixtures/tiempo-real/) los cumple el servidor. Las **desviaciones
 del diseño inicial** están marcadas «(implementado así)» y resumidas en §12. Sustituye al sondeo del estado
 completo cada 3-5 s que hacen hoy el cliente admin y el cliente jugador.
-**Depende de:** `02_Contrato_Comunicacion_Servidor_Cliente.md` §2 (WS, `evento`, `tick`) y §4 (proyección), y de
+**Depende de:** `02_Contrato_Comunicacion_Servidor_Cliente.md` §2 (WS, `evento`; el mensaje `tick` se retiró el 2026-10-10) y §4 (proyección), y de
 `01_Modelo_de_datos_compartido.md` para las entidades. **Compatibilidad v1:** solo se AÑADEN canales, mensajes y
 campos; nada de lo existente cambia de forma ni de significado (§8).
 
@@ -29,8 +29,8 @@ campos; nada de lo existente cambia de forma ni de significado (§8).
    ninguna de las dos (§7).
 9. Backpressure: un socket lento no acumula cola; se salta y se le manda foto cuando se recupera, o se cierra (§6.3).
 10. La autorización se evalúa al suscribirse y **se reevalúa en cada flush** (§7.2); si se pierde, `revocado`.
-11. Los canales de EVENTOS (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`) y el mensaje `tick`
-    **se mantienen** sin cambios; `tick` se depreca cuando ambos clientes hayan migrado (§8).
+11. Los canales de EVENTOS (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`) 
+    **se mantienen** sin cambios. El mensaje `tick` se **RETIRÓ el 2026-10-10** (§8.1): el latido de los canales de vista lo sustituye.
 12. Migración en 4 fases (§8.2); cada una es desplegable sola y deja el sondeo como respaldo.
 
 ## 1. Problema medido y objetivos
@@ -159,7 +159,7 @@ aceptan en ese endpoint y los de jugador solo en el suyo.
   `session/comandos/tipos.ts`); `instante` es el tiempo de mundo de la foto.
 - `delta.desde` es la `version` del mensaje anterior de ESE canal (foto o delta); `hasta` la de este. Un delta puede
   cubrir varias versiones (varios comandos coalescidos, §6.1). Un delta vacío (`cambios: []`) en cada tick actúa de
-  **latido**: confirma que el cliente está al día y deja detectar un canal muerto sin mirar `tick`.
+  **latido**: confirma que el cliente está al día y deja detectar un canal muerto (el mensaje `tick`, retirado el 2026-10-10, ya no existe).
 - `resync` avisa de que la cadena se corta por el servidor (socket lento, reevaluación de visibilidad, reinicio del
   runner); **va seguido de una `foto`** sin que el cliente tenga que pedirla. `motivo`: `cliente_lento` | `visibilidad`
   | `servidor_reiniciado` | `partida_reemplazada`.
@@ -421,7 +421,7 @@ flush ≤ el de una proyección HTTP × número de claves.
 | `GET /jugador/partidas/:gameId` (proyección) | **Se mantiene** como foto inicial/respaldo y para quien no use WS (Unity v1) |
 | `GET /admin/partidas/:gameId` | **Se mantiene** (foto/respaldo, exportación) |
 | `GET .../eventos?desde=` y `.../cronica` | **Se mantienen**: son el cursor de eventos, ortogonal al estado |
-| Mensaje `tick` (sin datos) | **Deprecado** desde la Fase 4 (se sigue emitiendo hasta que ambos clientes lo dejen de usar y pase una versión menor del contrato); el latido de los canales de vista lo sustituye |
+| Mensaje `tick` (sin datos) | **RETIRADO el 2026-10-10** (el servidor ya no lo emite; ambos clientes habían dejado de leerlo). Antes: existió desde 2026-10-09 como señal para pedir la proyección; el latido de los canales de vista lo sustituye |
 | Sondeo de 3-5 s | **Se retira** de los clientes por canal al migrar; queda un sondeo lento de seguridad (≥ 60 s) mientras el WS esté caído (§8.3) |
 | Campos nuevos (`avancePorTick`, `desplazamientoPorTick`, `llegadaEstimada`, `intervaloTickMs`, `codigo` de error) | Aditivos también en HTTP; ignorables por los clientes actuales |
 
@@ -437,7 +437,7 @@ versión menor documentado en `02` y en el `GET /v1/openapi.json` (§10).
 | **1** | Infra del difusor (foto/delta/resync/backpressure/métricas), endpoint `admin/.../tiempo-real` y `admin/partida` + `admin/asentamiento/<id>` | **Admin:** abre el WS, aplica foto+deltas, deja el sondeo como respaldo | Admin sin sondeo de 3-5 s; sale si bytes del admin ≤ 10 % y sin huecos en 1 h de partida |
 | **2** | `vista/mapa` + `vista/heroe`; campos `avancePorTick`/`desplazamientoPorTick`; claves de visibilidad; test de invariancia y de paridad con la proyección | **Jugador:** el mapa, columnas y caravanas dejan de sondear; interpolación | Mapa fluido sin GET de proyección entre acciones; sin fuga en el test de visibilidad |
 | **3** | `vista/asentamiento/<id>` | **Jugador:** la vista de plaza deja el sondeo; sigue usando la respuesta de cada comando | Interior de plaza al día sin GET |
-| **4** | `desde` para reanudar sin foto (opcional); `tick` deprecado | Ambos: quitan el consumo de `tick`; sondeo solo de respaldo ≥ 60 s | Retirada de `tick` en la siguiente versión menor |
+| **4** | `desde` para reanudar sin foto (opcional); `tick` retirado (2026-10-10) | Ambos: quitan el consumo de `tick`; sondeo solo de respaldo ≥ 60 s | Hecho: `tick` ya no se emite |
 
 Cada fase se despliega sola. Los clientes activan cada canal por detección (`canal_desconocido` ⇒ siguen sondeando),
 así que no hay orden obligado entre despliegue de servidor y de clientes dentro de una fase.

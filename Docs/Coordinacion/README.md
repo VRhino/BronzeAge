@@ -21,7 +21,7 @@ mismo commit**. Los cambios en v1 son **solo aditivos**; lo que se retira se ano
 | Catálogos y cifras de balance (`GET /v1/balance`) | `src/server/rutas/balance.ts` | 02 §4.2b |
 | Comandos (nombre, `params`, rechazos, códigos de error) | `src/session/comandos/` (`REGISTRO_COMANDOS`, `esquemas.ts`, `codigosDeError.ts`) y OpenAPI | 02 §3.1, §4.2-§4.3 |
 | Eventos de dominio y su audiencia | `src/domain/eventos.ts`, `src/session/canales.ts` | 02 §4.1b; canales de eventos: 02 §2 |
-| **Tiempo real: canales de eventos** (`mapa/general`, `asentamiento/<id>`, `heroe/<id>`, `batalla/<id>`) y mensaje `tick` | `src/server/rutas/tiempoReal.ts`, `difusion/hub.ts`, `session/canales.ts` | 02 §2 (resumen) y §3.5 |
+| **Tiempo real: canales de eventos** (`mapa/general`, `asentamiento/<id>`, `heroe/<id>`, `batalla/<id>`) (el mensaje `tick` se retiró el 2026-10-10) | `src/server/rutas/tiempoReal.ts`, `difusion/hub.ts`, `session/canales.ts` | 02 §2 (resumen) y §3.5 |
 | **Tiempo real por segmentos de vista** (foto + deltas; sustituye al sondeo) | `src/server/difusion/`, `src/server/rutas/tiempoReal.ts` | [`03`](03_Tiempo_real_por_segmentos.md) |
 | Formato de error y versión (`ERROR_RESPUESTA`, `ERROR_VERSION_INCOMPATIBLE`, `schemaVersion`) | `src/server/rutas/esquemas.ts` | 02 §5 |
 | OpenAPI generado | `GET /v1/openapi.json` (reflejo del código, `src/server/openapi.ts`) | — |

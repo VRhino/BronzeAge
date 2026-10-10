@@ -154,10 +154,8 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     opciones.intervaloTickMs,
     ahora,
     { batallasEnUnity: servidoresBatalla.length > 0 },
-    (gameId, eventos, marca) => {
-      hub.difundir(gameId, eventos);
-      hub.difundirTick(gameId, marca);
-    },
+    // El mensaje `tick` (2026-10-09) se RETIRÓ el 2026-10-10: lo sustituye el latido de los canales de vista (delta vacío por tick, contrato 03).
+    (gameId, eventos) => hub.difundir(gameId, eventos),
     (gameId) => difusorDeVistas.notificar(gameId)
     ));
   const telemetria = new RegistroDeCarga(almacen, { partidas, hub, difusor: difusorDeVistas }, ahora);

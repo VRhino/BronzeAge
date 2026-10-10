@@ -60,18 +60,6 @@ export class HubDeDifusion {
   }
 
   /**
-   * Avisa a TODAS las conexiones de la partida de que ha pasado un tick del reloj de mundo (2026-10-09): `{ tipo: 'tick', gameId, version, instante }`.
-   * No lleva datos del mundo —ninguna posición, ninguna columna—, así que no filtra nada de la niebla: es la señal para que el cliente pida su
-   * proyección, en vez de sondear cada pocos segundos. No hace falta suscribirse a ningún canal.
-   */
-  difundirTick(gameId: string, marca: { version: number; instante: unknown }): void {
-    const conexiones = this.partidas.get(gameId);
-    if (!conexiones || conexiones.size === 0) return;
-    const mensaje = JSON.stringify({ tipo: 'tick', gameId, version: marca.version, instante: marca.instante });
-    for (const socket of conexiones.keys()) if (socket.readyState === socket.OPEN) socket.send(mensaje);
-  }
-
-  /**
    * Manda cada evento a las conexiones de `gameId` suscritas a su canal (`canalDeEvento`). Serializa el
    * mensaje UNA vez por evento y canal, no una vez por conexión — con muchos suscriptores al mismo canal (doc 6:
    * hasta 500 jugadores por partida) evita repetir `JSON.stringify` para cada uno.
