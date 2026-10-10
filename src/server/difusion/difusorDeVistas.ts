@@ -23,6 +23,7 @@ import {
   type TipoDeCanal,
 } from '../../session/vistas/segmentos';
 import type { GameSessionState } from '../../session/estado';
+import { medicion } from '../medicionDeCarga';
 
 /** Lo que el difusor necesita de una partida abierta (la cumple `RunnerDePartida`). */
 export interface FuenteDePartida extends ImpurosDePartida {
@@ -270,7 +271,7 @@ export class DifusorDeVistas {
     const foto = proyectarCanal(estado, canal, conexion.audiencia, ctx);
     if (!foto) return undefined;
     this.instrumento(canal.tipo).msProyeccion.push(performance.now() - t0);
-    this.instrumentoVentana(canal.tipo).msProyeccion.push(performance.now() - t0);
+    if (medicion.activa) this.instrumentoVentana(canal.tipo).msProyeccion.push(performance.now() - t0);
     grupo = { gameId, audiencia: conexion.audiencia, clave, canal, version: estado.version, foto, suscriptores: new Map() };
     let delJuego = this.grupos.get(gameId);
     if (!delJuego) this.grupos.set(gameId, (delJuego = new Map()));
@@ -372,7 +373,7 @@ export class DifusorDeVistas {
   private volcarGrupo(grupo: Grupo, fuente: FuenteDePartida, ctx: ContextoDeProyeccion): void {
     const estado = fuente.getState();
     const instr = this.instrumento(grupo.canal.tipo);
-    const vent = this.instrumentoVentana(grupo.canal.tipo);
+    const vent = medicion.activa ? this.instrumentoVentana(grupo.canal.tipo) : undefined;
 
     // Reevaluación del derecho (03 §7.2): quien lo pierde recibe `revocado` y sale del grupo, antes de proyectar nada para él.
     for (const [socket, s] of [...grupo.suscriptores]) {
@@ -440,10 +441,12 @@ export class DifusorDeVistas {
     anotar(instr.coalescidos, this.versionesDesdeFlush.get(grupo.gameId) ?? 1);
     instr.flushes++;
     for (const c of dif.cambios) instr.cambios[c.op]++;
-    vent.msProyeccion.push(t1 - t0);
-    vent.msDiff.push(t2 - t1);
-    vent.flushes++;
-    for (const c of dif.cambios) vent.cambios[c.op]++;
+    if (vent) {
+      vent.msProyeccion.push(t1 - t0);
+      vent.msDiff.push(t2 - t1);
+      vent.flushes++;
+      for (const c of dif.cambios) vent.cambios[c.op]++;
+    }
 
     // Nada que contar y el reloj no avanzó: no hay mensaje (la cadena sigue, `hasta` saltará cuando haya algo).
     if (dif.cambios.length === 0 && Object.keys(dif.escalares).length === 0 && !avanzoElTick) return;
@@ -454,8 +457,10 @@ export class DifusorDeVistas {
     const bytesMensaje = Buffer.byteLength(mensaje);
     anotar(instr.msSerializacion, msSerial);
     anotar(instr.bytesFlush, bytesMensaje);
-    vent.msSerializacion.push(msSerial);
-    vent.bytesFlush.push(bytesMensaje);
+    if (vent) {
+      vent.msSerializacion.push(msSerial);
+      vent.bytesFlush.push(bytesMensaje);
+    }
 
     const ahora = this.ahora();
     for (const [socket, s] of grupo.suscriptores) {
@@ -468,7 +473,7 @@ export class DifusorDeVistas {
           this.enviarFoto(grupo, socket, 'lento');
         } else if (ahora - s.desactualizadoDesde > this.opciones.lentoMaxMs) {
           instr.cierres4408++;
-          vent.cierres4408++;
+          if (vent) vent.cierres4408++;
           socket.close(4408, 'cliente lento');
         }
         continue;
@@ -476,7 +481,7 @@ export class DifusorDeVistas {
       if (buffer > this.opciones.umbralLentoBytes) {
         s.desactualizadoDesde = ahora;
         instr.socketsLentos++;
-        vent.socketsLentos++;
+        if (vent) vent.socketsLentos++;
         continue;
       }
       this.enviar(socket, mensaje, grupo.canal.tipo);
@@ -491,7 +496,7 @@ export class DifusorDeVistas {
     if (tipo) {
       const bytes = Buffer.byteLength(mensaje);
       this.instrumento(tipo).bytesEnviados += bytes;
-      this.instrumentoVentana(tipo).bytesEnviados += bytes;
+      if (medicion.activa) this.instrumentoVentana(tipo).bytesEnviados += bytes;
     }
   }
 
@@ -506,12 +511,14 @@ export class DifusorDeVistas {
       const bytesFoto = Buffer.byteLength(grupo.fotoJson);
       anotar(instr.msSerializacion, msSerial);
       anotar(instr.bytesFoto, bytesFoto);
-      const vent = this.instrumentoVentana(grupo.canal.tipo);
-      vent.msSerializacion.push(msSerial);
-      vent.bytesFoto.push(bytesFoto);
+      if (medicion.activa) {
+        const vent = this.instrumentoVentana(grupo.canal.tipo);
+        vent.msSerializacion.push(msSerial);
+        vent.bytesFoto.push(bytesFoto);
+      }
     }
     instr.fotos[motivo]++;
-    this.instrumentoVentana(grupo.canal.tipo).fotos[motivo]++;
+    if (medicion.activa) this.instrumentoVentana(grupo.canal.tipo).fotos[motivo]++;
     this.enviar(socket, grupo.fotoJson, grupo.canal.tipo);
     if (motivo !== 'alta') this.marcarFoto(socket, grupo.canal.nombre);
   }

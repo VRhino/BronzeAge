@@ -1459,7 +1459,12 @@ describe('auditoría de comandos (E2)', () => {
     // Coste por comando (aditivo): los ejecutados traen ms y bytes; el filtro msMinimo lo usa.
     const costeados = todo.json().entradas.filter((e: { ms?: number }) => e.ms !== undefined);
     expect(costeados.length).toBeGreaterThan(0);
-    expect(costeados.every((e: { ms: number; bytes: number }) => e.ms >= 0 && e.bytes > 0)).toBe(true);
+    expect(costeados.every((e: { ms: number; bytes?: number }) => e.ms >= 0 && e.bytes === undefined)).toBe(true); // los bytes solo con la telemetría encendida
+    await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: admin, payload: { id: 'p' } });
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/comandos', headers: ana, payload: { tipo: 'crearFaccion', params: { nombre: 'B' } } });
+    const conBytes = (await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria', headers: admin })).json().entradas.at(-1);
+    expect(conBytes.bytes).toBeGreaterThan(0);
+    await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: admin, payload: { id: null } });
     const lentos = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria?msMinimo=1000000', headers: admin });
     expect(lentos.json().entradas).toHaveLength(0);
   });
@@ -1469,13 +1474,14 @@ describe('auditoría de comandos (E2)', () => {
     const ana = await jugadorEn('g1');
     const vacio = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/carga', headers: admin });
     expect(vacio.statusCode).toBe(200);
-    expect(vacio.json()).toEqual({ muestras: [], playtestVigente: null, corruptas: 0 });
+    expect(vacio.json()).toEqual({ muestras: [], playtestVigente: null, telemetriaActiva: false, corruptas: 0 });
 
     const puesta = await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: admin, payload: { id: 'prueba-1' } });
-    expect(puesta.json()).toEqual({ gameId: 'g1', playtestId: 'prueba-1' });
+    expect(puesta.json()).toEqual({ gameId: 'g1', playtestId: 'prueba-1', telemetriaActiva: true });
+    expect(vacio.json().telemetriaActiva).toBe(false); // apagada por defecto
     expect((await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/carga?playtestId=prueba-1', headers: admin })).json().playtestVigente).toBe('prueba-1');
     const cierre = await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: admin, payload: { id: null } });
-    expect(cierre.json().playtestId).toBeNull();
+    expect(cierre.json()).toMatchObject({ playtestId: null, telemetriaActiva: false });
 
     expect((await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: admin, payload: { id: 'con espacios' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'PUT', url: '/v1/admin/partidas/g1/playtest', headers: ana, payload: { id: 'x' } })).statusCode).toBe(403);

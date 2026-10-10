@@ -1,6 +1,7 @@
 // Ejecución de un comando de partida por HTTP, compartida por las dos superficies. Lo que cambia entre
 // `/admin/*` y `/jugador/*` no es este flujo sino el ROL con el que se entra, y de eso ya se encargó el
 // filtro de superficie antes de llamar aquí.
+import { medicion } from '../medicionDeCarga';
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { REGISTRO_COMANDOS, type TipoComando } from '../../session/comandos/registro';
 import { verificarAutorizacion, type ActorDeComando } from '../../session/comandos/autorizacion';
@@ -159,8 +160,8 @@ export async function ejecutarComandoHttp(
       instante: resumen.instante,
       version: resultado.version,
       ms,
-      // ponytail: segunda serialización solo para contar bytes (un comando por jugador cada varios s); si molesta, medir en un hook onSend.
-      bytes: Buffer.byteLength(JSON.stringify(respuesta)),
+      // ponytail: segunda serialización solo para contar bytes, y solo con la telemetría encendida; si molesta, medir en un hook onSend.
+      ...(medicion.activa ? { bytes: Buffer.byteLength(JSON.stringify(respuesta)) } : {}),
       ...(resultado.ok
         ? { resultado: 'aceptado' as const }
         : { resultado: 'rechazado' as const, causa: 'dominio' as const, detalle: resultado.detalleError ? `${resultado.codigoError}: ${resultado.detalleError}` : resultado.codigoError }),

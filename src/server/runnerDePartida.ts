@@ -29,6 +29,7 @@ import { evaluarAscenso, type EvaluacionAscenso } from '../engine/ascenso';
 import { PRECIO_BASE } from '../constants';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
+import { medicion } from './medicionDeCarga';
 import { anexarEventos, claveDeEventos, leerEventos } from './eventosDePartida';
 import { anexarAlDiario, vaciarDiario, type LineaDiario } from './diarioDePartida';
 import { tecnologiasDe } from '../engine/tecnologia';
@@ -412,7 +413,7 @@ export class RunnerDePartida {
     this.instrumentos.ticks++;
     this.instrumentos.msTotal += ms;
     this.instrumentos.msUltimo = ms;
-    this.ventana.ticksMs.push(ms);
+    if (medicion.activa) this.ventana.ticksMs.push(ms);
     if (ms > this.instrumentos.msMax) this.instrumentos.msMax = ms;
     return resultado;
   }
@@ -600,8 +601,10 @@ export class RunnerDePartida {
     try {
       const t0 = performance.now();
       const bytes = await guardarPartida(this.almacen, this.sesion, this.ahora());
-      this.ventana.guardadoMs.push(performance.now() - t0);
-      this.ventana.guardadoBytes.push(bytes);
+      if (medicion.activa) {
+        this.ventana.guardadoMs.push(performance.now() - t0);
+        this.ventana.guardadoBytes.push(bytes);
+      }
       await vaciarDiario(this.almacen, this.gameId);
     } catch (err) {
       console.error(`[diario] no se pudo guardar '${this.gameId}' (versión ${this.sesion.getState().version}); el diario la conserva:`, err);

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import type { VentanaDeVistas } from '../difusion/difusorDeVistas';
+import { medicion } from '../medicionDeCarga';
 import { FORMATO_CARGA_VERSION, leerCarga, podarCarga, RegistroDeCarga, resumir, claveDeCarga } from '../telemetria';
 
 let directorio: string;
@@ -13,7 +14,12 @@ beforeEach(async () => {
   directorio = await mkdtemp(join(tmpdir(), 'bronzeage-carga-'));
   almacen = crearAlmacenEnDisco(directorio);
 });
-afterEach(async () => rm(directorio, { recursive: true, force: true }));
+const creados: RegistroDeCarga[] = [];
+afterEach(async () => {
+  creados.forEach((r) => r.detener());
+  creados.length = 0;
+  await rm(directorio, { recursive: true, force: true });
+});
 
 const ventanaVacia = (): VentanaDeVistas => ({ porCanal: {} });
 const ventanaConMapa = (): VentanaDeVistas => ({
@@ -26,8 +32,8 @@ const ventanaConMapa = (): VentanaDeVistas => ({
 });
 
 /** Fuentes de mentira: un runner vivo con ventanas que se consumen, hub con N conexiones y difusor con ventanas en cola. */
-function montar(opciones: { vivo?: boolean; conexiones?: number } = {}) {
-  const ventanasVistas = [ventanaConMapa(), ventanaVacia()];
+function montar(opciones: { vivo?: boolean; conexiones?: number; encendida?: boolean } = {}) {
+  const ventanasVistas: VentanaDeVistas[] = [];
   const runner = {
     gameId: 'g1',
     metricas: () => ({ tick: 7, version: 9, colaPendiente: 0, relojDeMundoActivo: opciones.vivo ?? true }),
@@ -38,7 +44,11 @@ function montar(opciones: { vivo?: boolean; conexiones?: number } = {}) {
     hub: { conexionesAbiertas: () => opciones.conexiones ?? 0 },
     difusor: { tomarVentana: () => ventanasVistas.shift() ?? ventanaVacia(), suscripcionesDe: () => ({ 'vista/mapa': { suscriptores: 3, claves: 2 } }) },
   };
-  return new RegistroDeCarga(almacen, fuentes as never, () => '2026-10-10T10:00:00.000Z');
+  const reg = new RegistroDeCarga(almacen, fuentes as never, () => '2026-10-10T10:00:00.000Z');
+  creados.push(reg);
+  if (opciones.encendida ?? true) reg.activarPartida('g1'); // encender limpia las ventanas: se cargan después
+  ventanasVistas.push(ventanaConMapa(), ventanaVacia());
+  return reg;
 }
 
 describe('RegistroDeCarga', () => {
@@ -57,6 +67,29 @@ describe('RegistroDeCarga', () => {
     expect(m1.canales['vista/mapa']!.bytesFlush.max).toBe(300);
     expect(m2.canales['vista/mapa']!.flushes).toBe(0);
     expect(m1.costeMuestraMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('apagada por defecto: no muestrea ni activa los puntos calientes; se enciende y apaga en caliente y por proceso', async () => {
+    const reg = montar({ encendida: false });
+    expect(reg.activa).toBe(false);
+    expect(medicion.activa).toBe(false);
+    reg.muestrear();
+    expect((await reg.leer('g1')).muestras).toHaveLength(0);
+
+    reg.activarPartida('g1');
+    expect(reg.activa).toBe(true);
+    expect(medicion.activa).toBe(true);
+    reg.muestrear();
+    expect((await reg.leer('g1')).muestras).toHaveLength(1);
+
+    reg.desactivarPartida('g1');
+    expect(medicion.activa).toBe(false);
+
+    reg.iniciar(60_000); // por env: todas las partidas
+    expect(medicion.activa).toBe(true);
+    reg.detener();
+    expect(reg.activa).toBe(false);
+    expect(medicion.activa).toBe(false);
   });
 
   it('no anota una partida ociosa (sin reloj de mundo ni conexiones) y sí con conexiones', async () => {

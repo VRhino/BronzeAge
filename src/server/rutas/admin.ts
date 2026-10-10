@@ -246,8 +246,8 @@ const ESQUEMA_METRICAS = {
 
 const ESQUEMA_FIJAR_PLAYTEST = {
   description:
-    'Fija (o cierra, con `id: null`) el `playtestId` vigente de la partida (03 §14): cada muestra de carga que se ' +
-    'anote desde ahora lo lleva, para cortar la serie por prueba. Persiste en el propio registro de carga.',
+    'Fija (o cierra, con `id: null`) el `playtestId` vigente de la partida (03 §14) y es el interruptor en caliente de la telemetría ' +
+    'de carga: con id la enciende para esta partida, con `null` la apaga. Cada muestra anotada lleva el id. Persiste en el propio registro de carga.',
   tags: ['admin'],
   security: SEGURIDAD_ADMIN,
   params: PARAMS_GAME_ID,
@@ -258,7 +258,7 @@ const ESQUEMA_FIJAR_PLAYTEST = {
     additionalProperties: false,
   },
   response: {
-    200: { type: 'object', properties: { gameId: { type: 'string' }, playtestId: { type: ['string', 'null'] } }, required: ['gameId', 'playtestId'] },
+    200: { type: 'object', properties: { gameId: { type: 'string' }, playtestId: { type: ['string', 'null'] }, telemetriaActiva: { type: 'boolean' } }, required: ['gameId', 'playtestId', 'telemetriaActiva'] },
     400: ERROR_RESPUESTA,
   },
 } as const;
@@ -318,6 +318,7 @@ const ESQUEMA_CARGA = {
           },
         },
         playtestVigente: { type: ['string', 'null'] },
+        telemetriaActiva: { type: 'boolean' },
         corruptas: { type: 'number' },
       },
       required: ['muestras', 'playtestVigente', 'corruptas'],
@@ -727,8 +728,12 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     async (request, reply) => {
       const acceso = exigirAdministracion(request, reply, deps);
       if (!acceso.ok) return acceso.respuesta;
-      deps.telemetria.fijarPlaytest(request.params.gameId, request.body.id);
-      return reply.send({ gameId: request.params.gameId, playtestId: request.body.id });
+      const { gameId } = request.params;
+      deps.telemetria.fijarPlaytest(gameId, request.body.id);
+      // Interruptor en caliente: fijar una prueba enciende el muestreo de esta partida; `id: null` lo apaga.
+      if (request.body.id === null) deps.telemetria.desactivarPartida(gameId);
+      else deps.telemetria.activarPartida(gameId);
+      return reply.send({ gameId, playtestId: request.body.id, telemetriaActiva: deps.telemetria.activa });
     }
   );
 
@@ -738,7 +743,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     async (request, reply) => {
       const acceso = exigirAdministracion(request, reply, deps);
       if (!acceso.ok) return acceso.respuesta;
-      return reply.send(await deps.telemetria.leer(request.params.gameId, request.query));
+      return reply.send({ ...(await deps.telemetria.leer(request.params.gameId, request.query)), telemetriaActiva: deps.telemetria.activa });
     }
   );
 

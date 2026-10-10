@@ -54,9 +54,10 @@ const ORIGENES_PERMITIDOS = (process.env.ORIGENES_PERMITIDOS ?? '')
   .map((o) => o.trim())
   .filter((o) => o !== '');
 const INTERVALO_TICK_MS = process.env.INTERVALO_TICK_MS ? Number(process.env.INTERVALO_TICK_MS) : undefined;
-// Telemetría de carga (03 §14): una muestra cada N ms por partida viva. Encendida por defecto (10 s, cuesta
-// una pasada de lecturas de contadores); `TELEMETRIA_INTERVALO_MS=0` la apaga.
-const TELEMETRIA_MS = process.env.TELEMETRIA_INTERVALO_MS ? Number(process.env.TELEMETRIA_INTERVALO_MS) : 10_000;
+// Telemetría de carga (03 §14): una muestra cada N ms por partida viva. APAGADA por defecto (decisión del
+// usuario): sin esta variable, o con 0, ni se muestrea ni se escribe `.carga.jsonl`. También se enciende en caliente con
+// `PUT /v1/admin/partidas/:gameId/playtest` (el panel).
+const TELEMETRIA_MS = process.env.TELEMETRIA_INTERVALO_MS ? Number(process.env.TELEMETRIA_INTERVALO_MS) : 0;
 const SERVIDORES_BATALLA = parsearServidoresDeBatalla(process.env.SERVIDORES_BATALLA);
 // Mantenimiento (Fase E2): respaldos y poda automaticos. Opt-in, como los ticks y los administradores: sin
 // `MANTENIMIENTO_INTERVALO_MS` no se respalda ni se borra nada por su cuenta. Los otros dos solo tienen

@@ -1,5 +1,6 @@
 // El difusor de vistas (03 §6): foto al suscribirse, deltas encadenados, un diff y una serialización por grupo, backpressure,
 // reevaluación del derecho y resincronización. Sin red: sockets de mentira y una `GameSession` real.
+import { medicion } from '../../medicionDeCarga';
 import { describe, expect, it } from 'vitest';
 import type WebSocket from 'ws';
 import { aplicarDiferencia } from '../../../session/vistas/diff';
@@ -176,6 +177,7 @@ describe('deltas', () => {
   });
 
   it('tomarVentana devuelve lo ocurrido desde la anterior y la reinicia, sin tocar metricas()', () => {
+    medicion.activa = true;
     const { difusor, conexion, tick } = montar();
     const s = sock();
     difusor.suscribir('g1', s, conexion, 'admin/partida');
@@ -189,6 +191,16 @@ describe('deltas', () => {
     expect(difusor.tomarVentana().porCanal).toEqual({});
     expect(difusor.metricas().porCanal['admin/partida']!.flushes).toBe(2);
     expect(difusor.suscripcionesDe('g1')['admin/partida']).toEqual({ suscriptores: 1, claves: 1 });
+    medicion.activa = false;
+  });
+
+  it('con la telemetría apagada (por defecto) no acumula ventana y las métricas de vida siguen', () => {
+    expect(medicion.activa).toBe(false);
+    const { difusor, conexion, tick } = montar();
+    difusor.suscribir('g1', sock(), conexion, 'admin/partida');
+    tick();
+    expect(difusor.tomarVentana().porCanal).toEqual({});
+    expect(difusor.metricas().porCanal['admin/partida']!.flushes).toBe(1);
   });
 
   it('sin suscriptores no se proyecta nada', () => {

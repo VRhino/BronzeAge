@@ -13,6 +13,10 @@
 // partida: con varias partidas abiertas cada muestra repite la misma ventana de vistas. Para un playtest (una
 // partida viva) es exacto; con varias, léase como «el proceso».
 //
+// **Apagada por defecto.** Sin `TELEMETRIA_INTERVALO_MS` ni un `PUT .../playtest` con id, no hay temporizador, no se
+// acumula ninguna ventana (`medicion.activa` es false y los puntos calientes ni lo tocan) y no se escribe ningún
+// `.carga.jsonl`. Se enciende por proceso (env, `iniciar`) o por partida (`activarPartida`, que es lo que hace el PUT).
+//
 // **Idle no se anota.** Una partida sin reloj de mundo y sin conexiones no genera líneas: serían miles de filas
 // idénticas por día sin ninguna información.
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
@@ -20,6 +24,7 @@ import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import type { DifusorDeVistas, VentanaDeVistas } from './difusion/difusorDeVistas';
 import { PERCENTIL } from './difusion/difusorDeVistas';
 import type { HubDeDifusion } from './difusion/hub';
+import { medicion } from './medicionDeCarga';
 import type { RegistroDePartidas } from './registroDePartidas';
 
 /** Versión del formato de CADA LÍNEA (mismo criterio que `FORMATO_AUDITORIA_VERSION`). */
@@ -109,11 +114,18 @@ export interface FuentesDeCarga {
 
 const MB = 1024 * 1024;
 
+/** Intervalo al encender en caliente (sin env). */
+export const INTERVALO_POR_DEFECTO_MS = 10_000;
+
 export class RegistroDeCarga {
   private cola: Promise<unknown> = Promise.resolve();
   private temporizador?: ReturnType<typeof setInterval>;
   private readonly bucle: IntervalHistogram = monitorEventLoopDelay({ resolution: 20 });
   private readonly playtests = new Map<string, string | null>();
+  /** Partidas con la telemetría encendida en caliente, y si lo está para todo el proceso (env). */
+  private readonly activas = new Set<string>();
+  private global = false;
+  private intervaloMs = INTERVALO_POR_DEFECTO_MS;
   private ultimaMuestraMs = new Map<string, number>();
   private _fallos = 0;
 
@@ -127,18 +139,52 @@ export class RegistroDeCarga {
     return this._fallos;
   }
 
-  /** Arranca el muestreo periódico. `unref`: la telemetría no mantiene vivo el proceso. */
+  /** ¿Se está muestreando algo? */
+  get activa(): boolean {
+    return this.global || this.activas.size > 0;
+  }
+
+  /** Enciende el muestreo para TODAS las partidas vivas (env `TELEMETRIA_INTERVALO_MS`). */
   iniciar(intervaloMs: number): void {
-    if (this.temporizador !== undefined) return;
-    this.bucle.enable();
-    this.temporizador = setInterval(() => this.muestrear(), intervaloMs);
-    this.temporizador.unref?.();
+    this.global = true;
+    this.intervaloMs = intervaloMs;
+    this.reevaluar();
+  }
+
+  /** Enciende el muestreo para una partida (lo hace `PUT .../playtest` con id). */
+  activarPartida(gameId: string): void {
+    this.activas.add(gameId);
+    this.reevaluar();
+  }
+
+  desactivarPartida(gameId: string): void {
+    this.activas.delete(gameId);
+    this.reevaluar();
   }
 
   detener(): void {
-    if (this.temporizador !== undefined) clearInterval(this.temporizador);
-    this.temporizador = undefined;
-    this.bucle.disable();
+    this.global = false;
+    this.activas.clear();
+    this.reevaluar();
+  }
+
+  /** Arranca o para el temporizador y el interruptor de los puntos calientes según haya algo activo. */
+  private reevaluar(): void {
+    if (this.activa && this.temporizador === undefined) {
+      medicion.activa = true;
+      // Ventanas limpias: lo acumulado en un encendido anterior no cuenta para este.
+      this.fuentes.difusor.tomarVentana();
+      for (const r of this.fuentes.partidas.abiertas()) r.tomarVentana();
+      this.ultimaMuestraMs.clear();
+      this.bucle.enable();
+      this.temporizador = setInterval(() => this.muestrear(), this.intervaloMs);
+      this.temporizador.unref?.();
+    } else if (!this.activa && this.temporizador !== undefined) {
+      clearInterval(this.temporizador);
+      this.temporizador = undefined;
+      this.bucle.disable();
+      medicion.activa = false;
+    }
   }
 
   async drenar(): Promise<void> {
@@ -187,6 +233,7 @@ export class RegistroDeCarga {
       const conexiones = this.fuentes.hub.conexionesAbiertas(gameId);
       const anterior = this.ultimaMuestraMs.get(gameId);
       this.ultimaMuestraMs.set(gameId, ahoraPared);
+      if (!this.global && !this.activas.has(gameId)) continue;
       if (!m.relojDeMundoActivo && conexiones === 0) continue;
       const subs = this.fuentes.difusor.suscripcionesDe(gameId);
       const muestra = this.armar(gameId, m.tick, m.version, conexiones, m.colaPendiente, ahoraPared - (anterior ?? ahoraPared), v, ventanaVistas, subs, memoria, bucle);
