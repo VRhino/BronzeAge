@@ -900,6 +900,11 @@
         },
         "desde": {
           "$ref": "#/definitions/Entero"
+        },
+        "ritmo": {
+          "description": "Entregar un delta cada N ticks, coalescidos (doc 03 §13.5): para paneles en segundo plano o admin lento. El servidor lo recorta a [1, tope] y devuelve el aplicado en `suscrito`.",
+          "type": "integer",
+          "minimum": 1
         }
       },
       "required": [
@@ -923,6 +928,11 @@
             "integer",
             "null"
           ],
+          "minimum": 1
+        },
+        "ritmo": {
+          "description": "El ritmo aplicado (doc 03 §13.5): cada cuántos ticks recibe un delta. 1 si no pidió otro. Solo en canales de vista.",
+          "type": "integer",
           "minimum": 1
         }
       },

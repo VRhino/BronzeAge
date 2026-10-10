@@ -606,7 +606,8 @@ Para dejar de sondear la proyección (jugador) y el estado completo (admin) cada
   `admin/asentamiento/<id>`, `admin/campamento/<id>`, `admin/heroe/<id>` (endpoint nuevo `/v1/admin/partidas/:gameId/tiempo-real`).
 - Mensajes nuevos servidor → cliente: `foto` (con `version`), `delta` (`desde`→`hasta`, `cambios` por `t`+`id`+`op`
   `upsert|patch|remove|set`, y `escalares`), `resync`, `revocado`. Cliente → servidor: `resincronizar` (y `desde`
-  opcional en `suscribir`). `suscrito` gana `intervaloTickMs`; `error` gana `codigo`.
+  opcional en `suscribir`) y `ritmo` (opcional en `suscribir` a un canal de vista: un delta cada N ticks, coalescidos; doc 03 §3.1). `suscrito` gana `intervaloTickMs` y
+  `ritmo` (el aplicado); `error` gana `codigo`. La compresión `permessage-deflate` del WS se negocia en el handshake (doc 03 §12).
 - Campos de lo móvil `avancePorTick`, `desplazamientoPorTick` (y `llegadaEstimada?`): solo en fotos y deltas del WS, desde el segundo tick (doc 03 §4.1).
 - **Se mantienen** los canales de eventos, el mensaje `tick` (deprecado cuando ambos clientes migren), `GET
   /jugador/partidas/:gameId` y `GET /admin/partidas/:gameId` como foto inicial y respaldo. Todo es aditivo: sigue siendo v1.

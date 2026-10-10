@@ -1,1 +1,1 @@
-{ "tipo": "suscrito", "canal": "vista/mapa", "intervaloTickMs": 4000 }
+{ "tipo": "suscrito", "canal": "vista/mapa", "intervaloTickMs": 4000, "ritmo": 1 }

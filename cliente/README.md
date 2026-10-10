@@ -9,6 +9,8 @@
 >   WebSocket `/v1/admin/partidas/:gameId/tiempo-real`, canal `admin/partida` (versión ligera: foto + deltas) y detalle `admin/asentamiento|campamento|heroe/<id>`
 >   solo de lo que se mira (`gameStore.vigilar`). El estado en vivo se compone sobre la última lectura HTTP; el sondeo completo baja a un respaldo de 60 s
 >   y vuelve a 5 s si el socket cae o el servidor no tiene el canal. Las listas globales leen `resumen` (calculado por el servidor), no el almacén ni los edificios.
+> - **Pestaña oculta**: tras 8 s oculta se cierra el socket (el servidor deja de contar las suscripciones; un cambio rápido de foco no cuesta nada); al volver se reabre,
+>   se resuscribe todo y se sigue viendo lo último hasta que llegan las fotos nuevas, sin parpadeo ni lectura completa.
 > - **Mapa a 24 fps** (`src/ui/interpolacion.ts`): con tiempo real y reloj de mundo, ejércitos y caravanas avanzan entre deltas por su `ruta` con `avancePorTick`
 >   (capado a un tick, sin pedir nada al servidor); el bucle se detiene si la pestaña está oculta, si se ve un asentamiento o si nada se mueve.
 > - **Repintado incremental** (`src/ui/pintar.ts`): `pintar(el, html)` sustituye a `innerHTML`; sin cambios no toca el DOM y con cambios

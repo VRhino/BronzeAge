@@ -66,7 +66,7 @@ describe('suscribir', () => {
     const s = sock();
     expect(difusor.suscribir('g1', s, conexion, 'admin/partida')).toBeUndefined();
     const [suscrito, foto] = s.mensajes();
-    expect(suscrito).toEqual({ tipo: 'suscrito', canal: 'admin/partida', intervaloTickMs: 4000 });
+    expect(suscrito).toEqual({ tipo: 'suscrito', canal: 'admin/partida', intervaloTickMs: 4000, ritmo: 1 });
     expect(foto).toMatchObject({ tipo: 'foto', gameId: 'g1', canal: 'admin/partida', version: sesion.getState().version });
     expect(foto!.datos).not.toHaveProperty('instante');
     expect(foto!.datos).not.toHaveProperty('version');
@@ -440,5 +440,85 @@ describe('contrato', () => {
     const todos = [...a.mensajes(), ...j.mensajes(), ...lento.mensajes()];
     expect(todos.map((m) => m.tipo)).toEqual(expect.arrayContaining(['suscrito', 'foto', 'delta', 'resync', 'revocado']));
     for (const m of todos) expect(erroresDeMensajeDelServidor(m as never), JSON.stringify(m).slice(0, 200)).toEqual([]);
+  });
+});
+
+describe('ritmo (13.5)', () => {
+  const ESQUEMA = (c: string) => definicionDe(analizarCanal(c, { tipo: 'admin' })!).esquema;
+
+  it('suscrito devuelve el ritmo aplicado: sin pedirlo 1, y lo pedido recortado a [1, tope] y a entero', () => {
+    const { difusor, conexion } = montar({ ritmoMaximo: 10 });
+    const pedir = (r?: number) => {
+      const s = sock();
+      difusor.suscribir('g1', s, conexion, 'admin/partida', r);
+      return s.mensajes()[0]!.ritmo;
+    };
+    expect([pedir(), pedir(1), pedir(0), pedir(-5), pedir(2.9), pedir(1000), pedir(Number.NaN)]).toEqual([1, 1, 1, 1, 2, 10, 1]);
+  });
+
+  it('el de ritmo N recibe UN delta coalescido cada N ticks, encadenado desde su última versión, y a la par del rápido en lo que sabe', () => {
+    const { difusor, conexion, tick, sesion } = montar();
+    const rapido = sock();
+    const lento = sock();
+    difusor.suscribir('g1', rapido, conexion, 'admin/partida');
+    difusor.suscribir('g1', lento, conexion, 'admin/partida', 3);
+    const v0 = sesion.getState().version;
+    const nLento = lento.enviados.length;
+
+    tick();
+    tick();
+    expect(lento.enviados).toHaveLength(nLento); // aún no le toca
+    expect(rapido.mensajes().filter((m) => m.tipo === 'delta')).toHaveLength(2);
+    tick();
+    const deltasLento = lento.mensajes().slice(nLento);
+    expect(deltasLento).toHaveLength(1);
+    expect(deltasLento[0]).toMatchObject({ tipo: 'delta', canal: 'admin/partida', desde: v0, hasta: sesion.getState().version });
+
+    // Aplicar ese único delta a su foto da exactamente el estado que el rápido tiene tras sus tres.
+    let c1 = rapido.mensajes()[1]!.datos as Record<string, unknown>;
+    for (const d of rapido.mensajes().filter((m) => m.tipo === 'delta')) c1 = aplicarDiferencia(c1, { cambios: d.cambios, escalares: d.escalares }, ESQUEMA('admin/partida'));
+    const c2 = aplicarDiferencia(lento.mensajes()[1]!.datos, { cambios: deltasLento[0]!.cambios, escalares: deltasLento[0]!.escalares }, ESQUEMA('admin/partida'));
+    const orden = (x: unknown) => JSON.parse(JSON.stringify(x, (_k, v) => (Array.isArray(v) ? [...v].sort((a, b) => String(a?.id ?? a?.tituloId).localeCompare(String(b?.id ?? b?.tituloId))) : v)));
+    expect(orden(c2)).toEqual(orden(c1));
+
+    // Y la cadena sigue: el siguiente parte de donde acabó el anterior.
+    tick();
+    tick();
+    tick();
+    expect(lento.ultimo().desde).toBe(deltasLento[0]!.hasta);
+  });
+
+  it('dos de ritmo lento a la par comparten el mensaje; los comandos entre ticks no adelantan la entrega', () => {
+    const { difusor, conexion, tick, sesion } = montar();
+    const a = sock();
+    const b = sock();
+    difusor.suscribir('g1', a, conexion, 'admin/partida', 2);
+    difusor.suscribir('g1', b, conexion, 'admin/partida', 2);
+    const n = a.enviados.length;
+    tick();
+    expect(a.enviados).toHaveLength(n);
+    (sesion.getState() as unknown as { version: number }).version++; // una transición sin tick
+    difusor.notificar('g1');
+    expect(a.enviados).toHaveLength(n);
+    tick();
+    expect(a.enviados.at(-1)).toBe(b.enviados.at(-1));
+    expect(a.ultimo().tipo).toBe('delta');
+  });
+
+  it('un socket de ritmo lento que se queda atrás por backpressure recibe resync + foto y sigue a su ritmo', () => {
+    const { difusor, conexion, tick } = montar();
+    const s = sock();
+    difusor.suscribir('g1', s, conexion, 'admin/partida', 2);
+    s.bufferedAmount = 1_000_000;
+    tick();
+    tick();
+    s.bufferedAmount = 0;
+    const n = s.enviados.length;
+    tick();
+    expect(s.mensajes().slice(n).map((m) => m.tipo)).toEqual(['resync', 'foto']);
+    tick();
+    expect(s.enviados).toHaveLength(n + 2); // entre medias no hay nada: le tocaba cada 2 ticks desde la foto
+    tick();
+    expect(s.ultimo().tipo).toBe('delta');
   });
 });
