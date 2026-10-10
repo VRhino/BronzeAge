@@ -1001,7 +1001,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   );
   const truequesHtml = truequesActivos.length
     ? `<table class="mini-table">
-        <thead><tr><th>Intercambio</th><th>CompletaciÃ³n</th><th>Caravanas asignadas</th><th>Expira</th></tr></thead>
+        <thead><tr><th>Intercambio</th><th>Completación</th><th>Caravanas asignadas</th><th>Expira</th></tr></thead>
         <tbody>
           ${truequesActivos
             .map((acuerdo) => {
@@ -1028,13 +1028,13 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="detail-section settlement-storage-summary">
         <div class="storage-section-heading">
           <span class="storage-section-icon" aria-hidden="true">📦</span>
-          <div><h3>AlmacÃ©n</h3><p>Existencias actuales y capacidad disponible</p></div>
+          <div><h3>Almacén</h3><p>Existencias actuales y capacidad disponible</p></div>
         </div>
         <div class="storage-resource-grid">${almacenHtml}</div>
         <details class="storage-reserve-section">
           <summary class="storage-section-heading storage-reserve-heading">
             <span class="storage-section-icon" aria-hidden="true">🔒</span>
-            <div><h3>Reserva protegida</h3><p>Material que la auto-construcciÃ³n no puede gastar</p></div>
+            <div><h3>Reserva protegida</h3><p>Material que la auto-construcción no puede gastar</p></div>
             <span class="storage-reserve-chevron" aria-hidden="true">▸</span>
           </summary>
           <div class="storage-reserve-content">${reservaHtml}</div>
