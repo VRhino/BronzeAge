@@ -44,7 +44,8 @@ const ticks = Number(ticksArg ?? '0');
 for (let i = 0; i < ticks; i++) await runner.avanzarTick();
 
 const estado = runner.getState();
-const jugadores = estado.heroes.filter((h) => h.jugadorId);
+const conCuenta = estado.heroes.filter((h) => h.jugadorId);
+const jugadores = conCuenta.length > 0 ? conCuenta : estado.heroes; // en un checkpoint del batch los héroes son bots, sin cuenta
 console.log(`partida '${gameId}' v${estado.version} tick ${estado.tick}: ${estado.asentamientos.length} asentamientos, ${estado.heroes.length} héroes (${jugadores.length} con cuenta), ${estado.ejercitos.length} columnas, ${estado.caravanas.length} caravanas, ${estado.facciones.length} Facciones\n`);
 
 const admin = medir(() => ({
