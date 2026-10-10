@@ -48,7 +48,8 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 |---|---|---|
 | [`Trazado_Urbano.md`](Trazado_Urbano.md) | ✅ 2026-10-09 | rejilla, huellas, red de calles, colocación de edificios, anclas, perfiles |
 | [`Murallas.md`](Murallas.md) | ✅ 2026-10-09 | recintos: trazo, puertas y torres, obra, mejora, ampliación, defensa, mantenimiento, daño |
+| [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) | ✅ 2026-10-10 | salir, rutas y velocidad, víveres y hambre, perseguir, repostar, caravanas adjuntas, unirse/separarse/formar, volver a casa, inspección |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 
-Pendientes, por orden de riesgo si se perdieran: movimiento y combate de ejércitos · economía y construcción (cola, recetas, mantenimiento) · el tick (orden y
+Pendientes, por orden de riesgo si se perdieran: combate (encuentros, asedio, conquista) · economía y construcción (cola, recetas, mantenimiento) · el tick (orden y
 efectos) · niebla de guerra · tecnología y Aedas · comercio y caravanas · diplomacia y Facciones · generación del mundo.

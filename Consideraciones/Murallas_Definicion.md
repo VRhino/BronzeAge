@@ -55,7 +55,7 @@ El enunciado del usuario dice cinco cosas:
 | "cada celda de muralla tiene un coste, es decir que escala mientras más celdas tenga" | El coste NO es del edificio: es `nº de celdas × tarifa por celda`. El perímetro es la unidad económica |
 | "deja granjas y corrales fuera" | Comprobación explícita en el trazo: la región encerrada no puede contener ninguna celda de Granja o Corral — si la dilatación llega a una, el muro hace un entrante y la deja fuera (§11.2). *Una primera versión lo resolvía con un tope de radio; el Paso 0 lo desmintió con datos (§11.1)* |
 | "las murallas tienen mejora, el coste es de madera y piedra" | Tres niveles con tarifa por celda distinta (§7-§8) |
-| "al principio no se pueden apostar soldados arriba, con niveles más altos sí; al subir de nivel gana torres, puertas" | El adarve (recinto de nivel 3, que exige asentamiento de nivel 4) habilita guarnición. Torres sí son recompensa de nivel; **puertas NO** — son geométricas por obligación (§5) y quedan congeladas al trazar (§5.1). Ganar puertas nuevas solo se consigue **ampliando el recinto** (§10) |
+| "al principio no se pueden apostar soldados arriba, con niveles más altos sí; al subir de nivel gana torres, puertas" | Apostar soldados arriba es cosa de Unity (el servidor no lo modela). Torres sí son recompensa de nivel; **puertas NO** — son geométricas por obligación (§5) y quedan congeladas al trazar (§5.1). Ganar puertas nuevas solo se consigue **ampliando el recinto** (§10) |
 
 ## 2. Decisiones
 
@@ -238,9 +238,9 @@ desembocando en la puerta más cercana. El arrabal crece por tanto pegado a las 
 
 | Nivel | Nombre | Qué añade | Bono base (§16) |
 |---|---|---|---|
-| 1 | **Empalizada** | El anillo cierra. Madera, sin torres, sin guarnición. Es el escalón barato que hace jugable el extremo "fortaleza temprana" de §0 | 1.3 |
+| 1 | **Empalizada** | El anillo cierra. Madera, sin torres. Es el escalón barato que hace jugable el extremo "fortaleza temprana" de §0 | 1.3 |
 | 2 | **Muro de piedra** | Torres en esquinas y tramos largos. Puertas reforzadas. Coste dominado por piedra | 1.8 |
-| 3 | **Muralla con adarve** | Habilita **guarnición sobre el muro** (§16). Torres más densas. Casas-puerta | 2.5 |
+| 3 | **Muralla con adarve** | Torres más densas. Casas-puerta | 2.5 |
 
 El bono base es el techo: el multiplicador real se divide entre el nº de puertas y se escala por la
 integridad del anillo (§16). Una empalizada cerrada con una sola puerta (**×1.30**) defiende más que un muro
@@ -503,8 +503,7 @@ tanto lo que fija su coste: **una ventaja abrumadora tiene que ser cara de obten
 **Dos de estas piezas ENTRAN en la primera pasada** (decisión 3, revisada): el multiplicador defensivo y el
 upkeep por celda. Es el mínimo que convierte el muro en una decisión de juego en vez de un peaje, y las dos
 son pocas líneas sobre código que ya existe. Se implementan y se miden **en su propio paso** (§18, Paso 3b),
-separadas del cambio geométrico, para no perder la atribución. **Siguen fuera**: guarnición sobre el adarve,
-brecha, daño estructural y armas de asedio.
+separadas del cambio geométrico, para no perder la atribución. **Siguen fuera**: brecha, daño estructural y armas de asedio.
 
 - **Multiplicador defensivo en `iniciarAsedio`**, aplicado a los escuadrones defensores, escalado por `nivel` y
   por `integridad` (un anillo a medio cerrar no defiende: se entra por el hueco).
@@ -520,9 +519,7 @@ brecha, daño estructural y armas de asedio.
   Es lo que convierte "amurallar pronto" en fortaleza y "amurallar tarde" en metrópoli sin ninguna regla
   adicional — y `integridad` hace que un anillo a medio cerrar no defienda casi nada, porque se entra por el
   hueco.
-- **Guarnición sobre el adarve (recinto de nivel 3, asentamiento de nivel 4)**: capacidad = `f(nº de celdas)`, escuadrones asignados al
-  muro que ganan un bono adicional. Es el "apostar soldados arriba" del enunciado. Un muro largo admite más
-  guarnición pero necesita más para cubrirse — otra vez el mismo intercambio, sin regla nueva.
+- **Guarnición sobre el adarve**: no la modela el servidor; es de Unity (decisión 2026-10-10).
 - **Puertas y torres como puntos duros**: la puerta es el punto débil (lo que un ariete ataca), la torre el
   fuerte. La brecha, el daño estructural y las armas de asedio (ariete, torre de asedio, que la Carpintería ya
   recluta en el diseño) son **Fase 1**, junto con el asedio instanciado.
@@ -1031,7 +1028,7 @@ dos apuntan a decisiones que hay que reabrir (§20).
 
     **Tres contrapesos ya están en el diseño, sin código nuevo:** (a) el recinto barato encierra poco, así que
     casi toda la ciudad futura crece extramuros y desprotegida (§9); (b) la ventaja *abrumadora* exige nivel 3
-    —piedra, adarve, guarnición—, que se paga por celda **y** por nivel, y una ciudad diminuta no lo sostiene;
+    —piedra, adarve—, que se paga por celda **y** por nivel, y una ciudad diminuta no lo sostiene;
     (c) el upkeep por celda (§16) cobra todos los ticks. **Hay que comprobar que bastan**: si no, la palanca es
     un mínimo de nivel de asentamiento o de población para poder trazar, no un parche geométrico. Medición:
     tick de commit más temprano viable × área encerrada × coste total, en el batch.
@@ -1045,8 +1042,6 @@ dos apuntan a decisiones que hay que reabrir (§20).
 ## 20. Abierto — lo que este documento deja sin cerrar a propósito
 
 - **Cifras**: todas las de §17 son placeholder. Se calibran en el Paso 6, no antes.
-- **Guarnición sobre el adarve** (nivel 3, §16): especificada, fuera de esta pasada. El multiplicador
-  defensivo y el upkeep SÍ entran (decisión 3 revisada, **✅ Paso 3b, 2026-09-01**).
 - ~~**Degradación de integridad por upkeep impagado** (§16): propuesta, sin decidir.~~ — **decidido en el
   Paso 3b: NO.** A petición del usuario, el upkeep se suma dentro de `calcularCostoMantenimiento` — el mismo
   pote que ya puede bajar `nivelActual`, sin una segunda vía de castigo aparte que solo tocara la integridad
