@@ -2308,7 +2308,8 @@ function animarMapa(ahora: number): void {
   if (document.hidden || !mapaEnVista || !mapaEnVista.animado || !mapaEnVista.intervaloMs || ahora - ultimoCuadro < hueco) return;
   const fraccion = (performance.now() - gameStore.momentoDeDatos()) / mapaEnVista.intervaloMs;
   if (fraccion > 1.05 || !gameStore.enVivo) return;
-  ultimoCuadro = ahora;
+  // Se descuenta el resto, no se reinicia: con rAF a 60 Hz alternan cuadros de 2 y 3 ticks y la media sale en 24 fps (reiniciando salían 20).
+  ultimoCuadro = ahora - ((ahora - ultimoCuadro) % hueco);
   pintarMapaGeneral();
 }
 
