@@ -91,6 +91,8 @@ const ESQUEMAS: Record<TipoDeCanal, DefinicionDeCanal> = {
         campamentosBandidos: clavePorId,
         aedas: clavePorId,
         titulos: porClave('tituloId'),
+        acuerdos: clavePorId,
+        ordenes: clavePorId,
       },
       escalares: ['mapaId', 'estadoMapa'],
       cabecera: CABECERA,
@@ -237,7 +239,7 @@ export function resumenDeAsentamiento(estado: GameSessionState, a: Asentamiento)
 }
 
 /** La versión ligera de la partida completa (03 §2.1): todo sin niebla, sin lo pesado de cada plaza, héroe y campamento. */
-function fotoAdminPartida(estado: GameSessionState): Foto {
+function fotoAdminPartida(estado: GameSessionState, ctx: ContextoDeProyeccion): Foto {
   const v = vistaAdminDeEstado(estado);
   return {
     instante: v.instante,
@@ -261,6 +263,10 @@ function fotoAdminPartida(estado: GameSessionState): Foto {
     titulos: estado.titulos,
     tecnologia: estado.tecnologia,
     red: estado.red ?? { aristas: [], rutas: [] },
+    acuerdos: estado.acuerdos,
+    ordenes: estado.ordenes,
+    aedasResidentes: estado.aedasResidentes ?? { aedas: [] },
+    preciosReferencia: ctx.impuros.preciosReferencia(),
   };
 }
 
@@ -314,7 +320,7 @@ export function proyectarCanal(estado: GameSessionState, canal: CanalDeVista, au
   const instante = instanteDeTick(estado.tick);
   switch (canal.tipo) {
     case 'admin/partida':
-      return fotoAdminPartida(estado);
+      return fotoAdminPartida(estado, ctx);
     case 'admin/asentamiento': {
       const a = estado.asentamientos.find((x) => x.id === canal.id);
       if (!a) return undefined;
