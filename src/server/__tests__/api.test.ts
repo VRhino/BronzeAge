@@ -1455,6 +1455,13 @@ describe('auditoría de comandos (E2)', () => {
     // La vista de moderacion: solo lo rechazado.
     const rechazos = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria?soloRechazos=true', headers: admin });
     expect(rechazos.json().entradas.map((e: { causa: string }) => e.causa)).toEqual(['autorizacion']);
+
+    // Coste por comando (aditivo): los ejecutados traen ms y bytes; el filtro msMinimo lo usa.
+    const costeados = todo.json().entradas.filter((e: { ms?: number }) => e.ms !== undefined);
+    expect(costeados.length).toBeGreaterThan(0);
+    expect(costeados.every((e: { ms: number; bytes: number }) => e.ms >= 0 && e.bytes > 0)).toBe(true);
+    const lentos = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1/auditoria?msMinimo=1000000', headers: admin });
+    expect(lentos.json().entradas).toHaveLength(0);
   });
 
   it('la auditoria es SOLO de administracion: un jugador no audita a los demas', async () => {

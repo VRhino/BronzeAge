@@ -125,6 +125,17 @@ describe('leerAuditoria', () => {
     const abuso = await leerAuditoria(almacen, 'g1', { actor: 'bruno', soloRechazos: true });
     expect(abuso.entradas.map((e) => e.causa)).toEqual(['autorizacion']);
   });
+
+  it('filtra por hasta y por coste mínimo (ms/bytes son aditivos)', async () => {
+    const registro = new RegistroDeAuditoria(almacen, relojDesde('2026-09-05T10:00:00.000Z', '2026-09-05T11:00:00.000Z', '2026-09-06T10:00:00.000Z'));
+    registro.registrar({ ...BASE, ms: 2, bytes: 100 });
+    registro.registrar({ ...BASE, ms: 30, bytes: 5000 });
+    registro.registrar({ ...BASE }); // línea sin coste (build anterior o rechazo previo a ejecutar)
+    await registro.drenar();
+
+    expect((await leerAuditoria(almacen, 'g1', { hasta: '2026-09-05T12:00:00.000Z' })).entradas).toHaveLength(2);
+    expect((await leerAuditoria(almacen, 'g1', { msMinimo: 10 })).entradas.map((e) => e.bytes)).toEqual([5000]);
+  });
 });
 
 describe('podarAuditoria', () => {

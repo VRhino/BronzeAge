@@ -144,22 +144,28 @@ export async function ejecutarComandoHttp(
   // deserialización de un body HTTP. Sin esquema por comando todavía (doc 4, pendiente): un `params` con la
   // forma equivocada puede lanzar dentro del manejador en vez de devolver un rechazo limpio — cae en el
   // `catch` como cualquier otro fallo y responde 409, no un crash del proceso.
+  const t0 = performance.now();
   try {
     const resultado = await runner.ejecutar(tipo, params as never, actorId, cuerpo.idempotencyKey);
+    const ms = Math.round((performance.now() - t0) * 100) / 100;
     hub.difundir(runner.gameId, resultado.eventos);
     // `ok: false` aquí NO es un error: es el dominio diciendo que no (sin recursos, plaza ocupada...). Se
     // audita igual, y con su `codigoError` — es lo que convierte un "no me deja construir" en algo
     // comprobable. `instante` y `version` salen del resumen porque describen la partida DESPUÉS del comando.
     const resumen = resumenDe(runner);
+    const respuesta = { ...resumen, resultado, ...(camposExtra ? camposExtra(runner) : {}) };
     auditoria.registrar({
       ...comun,
       instante: resumen.instante,
       version: resultado.version,
+      ms,
+      // ponytail: segunda serialización solo para contar bytes (un comando por jugador cada varios s); si molesta, medir en un hook onSend.
+      bytes: Buffer.byteLength(JSON.stringify(respuesta)),
       ...(resultado.ok
         ? { resultado: 'aceptado' as const }
         : { resultado: 'rechazado' as const, causa: 'dominio' as const, detalle: resultado.detalleError ? `${resultado.codigoError}: ${resultado.detalleError}` : resultado.codigoError }),
     });
-    return reply.send({ ...resumen, resultado, ...(camposExtra ? camposExtra(runner) : {}) });
+    return reply.send(respuesta);
   } catch (err) {
     // Solo un fallo de persistencia llega hasta aquí como excepción (ver `RunnerDePartida.aplicarYPersistir`).
     // Es el caso más importante de auditar de los cuatro: el comando SÍ se aplicó en memoria y NO se guardó,

@@ -255,6 +255,8 @@ const ESQUEMA_AUDITORIA = {
     type: 'object',
     properties: {
       desde: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo anterior.' },
+      hasta: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo posterior.' },
+      msMinimo: { type: 'string', pattern: '^[0-9]+(\.[0-9]+)?$', description: 'Solo comandos de al menos estos ms (coste de runner.ejecutar).' },
       actor: { type: 'string', description: 'Solo las lineas de este actor.' },
       // `'true'`/`'false'` como TEXTO, no `type: 'boolean'`: este servidor corre con `coerceTypes: false`
       // (Fase C9, ver `api.ts`), asi que un query param —que siempre llega como texto— nunca se convierte
@@ -282,6 +284,8 @@ const ESQUEMA_AUDITORIA = {
               causa: { type: 'string' },
               detalle: { type: 'string' },
               version: { type: 'number' },
+              ms: { type: 'number' },
+              bytes: { type: 'number' },
             },
           },
         },
@@ -615,17 +619,17 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    * Lee del archivo, no de memoria: el registro sobrevive al reinicio del proceso, que es la mitad de su
    * razon de ser.
    */
-  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; actor?: string; soloRechazos?: 'true' | 'false' } }>(
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; hasta?: string; msMinimo?: string; actor?: string; soloRechazos?: 'true' | 'false' } }>(
     '/admin/partidas/:gameId/auditoria',
     { schema: ESQUEMA_AUDITORIA },
     async (request, reply) => {
       const acceso = exigirAdministracion(request, reply, deps);
       if (!acceso.ok) return acceso.respuesta;
 
-      const { desde, actor, soloRechazos } = request.query;
+      const { desde, hasta, msMinimo, actor, soloRechazos } = request.query;
       // `leer` drena antes: `registrar` escribe sin esperar, asi que sin eso el comando que acaba de
       // ejecutarse podria no estar todavia en el archivo — justo el que se va a consultar.
-      return reply.send(await deps.auditoria.leer(request.params.gameId, { desde, actor, soloRechazos: soloRechazos === 'true' }));
+      return reply.send(await deps.auditoria.leer(request.params.gameId, { desde, hasta, actor, soloRechazos: soloRechazos === 'true', ...(msMinimo !== undefined ? { msMinimo: Number(msMinimo) } : {}) }));
     }
   );
 
