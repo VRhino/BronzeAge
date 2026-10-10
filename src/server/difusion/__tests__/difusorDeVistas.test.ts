@@ -31,13 +31,21 @@ const sock = () => new SocketFalso() as unknown as WebSocket & SocketFalso;
 
 function montar(opciones: Partial<ConstructorParameters<typeof DifusorDeVistas>[0]> = {}) {
   const { sesion, asentamientoId } = partidaConAsentamiento('g1');
-  const fuente = { getState: () => sesion.getState() as never, intervaloRelojDeMundoMs: () => 4000 };
+  const fuente = {
+    getState: () => sesion.getState() as never,
+    intervaloRelojDeMundoMs: () => 4000,
+    geometriaAsentamientos: () => ({ zonas: [], zonasFusionadas: [], trazadoPorAsentamiento: {} }),
+    preciosReferencia: () => ({}),
+    produccionDeAsentamiento: () => [],
+    ascensoDeAsentamiento: () => undefined,
+  };
   const ms = { t: 0 };
   const difusor = new DifusorDeVistas({ fuenteDe: (id) => (id === 'g1' ? fuente : undefined), coalescerMs: 0, ahoraMs: () => ms.t, ...opciones });
   const admin: { vivo: boolean } = { vivo: true };
   const conexion: ConexionDeVistas = { audiencia: { tipo: 'admin' }, derecho: () => admin.vivo };
   return {
     sesion,
+    fuente,
     asentamientoId,
     difusor,
     admin,
@@ -93,7 +101,7 @@ describe('suscribir', () => {
 
 describe('deltas', () => {
   it('foto + deltas encadenados reproducen la foto del estado, tick tras tick (paridad)', () => {
-    const { difusor, conexion, sesion, tick } = montar();
+    const { difusor, conexion, sesion, tick, fuente } = montar();
     const s = sock();
     difusor.suscribir('g1', s, conexion, 'admin/partida');
     const foto = s.mensajes()[1]!;
@@ -109,7 +117,7 @@ describe('deltas', () => {
       cliente = aplicarDiferencia(cliente, { cambios: delta.cambios, escalares: delta.escalares }, esquema);
       version = delta.hasta;
     }
-    const { instante: _i, version: _v, tick: _t, ...esperado } = proyectarCanal(sesion.getState() as never, { nombre: 'admin/partida', tipo: 'admin/partida' })!;
+    const { instante: _i, version: _v, tick: _t, ...esperado } = proyectarCanal(sesion.getState() as never, { nombre: 'admin/partida', tipo: 'admin/partida' }, { tipo: 'admin' }, { impuros: fuente, memo: new Map() })!;
     const ordena = (x: unknown) =>
       JSON.parse(JSON.stringify(x, (_k, v) => (Array.isArray(v) ? [...v].sort((a, b) => String(a?.id ?? a?.tituloId).localeCompare(String(b?.id ?? b?.tituloId))) : v)));
     expect(ordena(cliente)).toEqual(ordena(esperado));
@@ -285,5 +293,47 @@ describe('canales de detalle', () => {
     expect(s.mensajes()[1]!.datos.heroe).toMatchObject({ id: heroe.id });
     const ids = s.mensajes()[1]!.datos.historial.map((l: { id: string }) => l.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('canales de jugador', () => {
+  function conJugadores() {
+    const m = montar();
+    const heroes = m.sesion.getState().heroes.filter((h) => h.jugadorId);
+    const de = (jugadorId: string): ConexionDeVistas => ({ audiencia: { tipo: 'jugador', jugadorId }, derecho: () => true });
+    return { ...m, heroes, de };
+  }
+
+  it('cada héroe tiene su grupo: dos jugadores nunca comparten foto, ni siquiera de vista/mapa', () => {
+    const { difusor, heroes, de } = conJugadores();
+    expect(heroes.length).toBeGreaterThanOrEqual(2);
+    const [a, b] = [sock(), sock()];
+    difusor.suscribir('g1', a, de(heroes[0]!.jugadorId!), 'vista/mapa');
+    difusor.suscribir('g1', b, de(heroes[1]!.jugadorId!), 'vista/mapa');
+    expect(difusor.metricas().grupos).toBe(2);
+    difusor.suscribir('g1', a, de(heroes[0]!.jugadorId!), 'vista/heroe');
+    difusor.suscribir('g1', b, de(heroes[1]!.jugadorId!), 'vista/heroe');
+    const heroeA = a.mensajes().find((m) => m.canal === 'vista/heroe' && m.tipo === 'foto')!.datos.heroe;
+    const heroeB = b.mensajes().find((m) => m.canal === 'vista/heroe' && m.tipo === 'foto')!.datos.heroe;
+    expect(heroeA.id).toBe(heroes[0]!.id);
+    expect(heroeB.id).toBe(heroes[1]!.id);
+  });
+
+  it('un jugador sin héroe no tiene vistas; un administrador no puede nombrar vista/*', () => {
+    const { difusor, conexion, de } = conJugadores();
+    const s = sock();
+    expect(difusor.suscribir('g1', s, de('nadie'), 'vista/mapa')).toMatchObject({ codigo: 'no_autorizado' });
+    expect(difusor.suscribir('g1', s, conexion, 'vista/mapa')).toMatchObject({ codigo: 'canal_desconocido' });
+  });
+
+  it('vista/mapa y vista/heroe del mismo héroe reciben cada uno su delta en el mismo flush', () => {
+    const { difusor, heroes, de, tick } = conJugadores();
+    const s = sock();
+    const c = de(heroes[0]!.jugadorId!);
+    difusor.suscribir('g1', s, c, 'vista/mapa');
+    difusor.suscribir('g1', s, c, 'vista/heroe');
+    tick();
+    const deltas = s.mensajes().filter((m) => m.tipo === 'delta');
+    expect(deltas.map((d) => d.canal).sort()).toEqual(['vista/heroe', 'vista/mapa']);
   });
 });

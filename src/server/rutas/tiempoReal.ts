@@ -4,8 +4,9 @@
 // `Docs/Coordinacion/03_Tiempo_real_por_segmentos.md` y, para los canales de eventos, en `02_Contrato_Comunicacion_Servidor_Cliente.md` §2:
 // ahí es donde se mantiene, para que no viva duplicado en prosa aquí. Este archivo es el transporte:
 //
-//  - `/jugador/partidas/:gameId/tiempo-real`: canales de eventos (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`) y el
-//    mensaje `tick`. Los canales de vista de jugador (`vista/*`) se anuncian como `canal_desconocido` hasta que se implementen (fase 2 y 3).
+//  - `/jugador/partidas/:gameId/tiempo-real`: canales de eventos (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`), el
+//    mensaje `tick` y los canales de vista de jugador (`vista/mapa`, `vista/heroe`; `vista/asentamiento/<id>` es de la fase 3 y hoy se
+//    anuncia como `canal_desconocido`).
 //  - `/admin/partidas/:gameId/tiempo-real`: canales de vista de administración (`admin/*`); no tiene canales de eventos.
 //
 // Autenticación ANTES de completar el handshake (`preValidation`, en un `register` aparte para que el hook no se filtre a las demás rutas):
@@ -21,6 +22,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type WebSocket from 'ws';
 import { puedeAdministrar, puedeJugar } from '../../acceso/rolesDePartida';
 import { puedeSuscribirseA } from '../../session/canales';
+import { analizarCanal } from '../../session/vistas/segmentos';
 import type { CodigoDeError } from '../difusion/difusorDeVistas';
 import { partidaNoAbierta, resolverActor, sinPermiso, sinSesion, type DependenciasDeRutas, type ParametrosGameId } from './contexto';
 
@@ -111,6 +113,14 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
         const jugadorId = resuelto.actor.membresia!.jugadorId!;
 
         hub.conectar(gameId, jugadorId, socket);
+        // La membresía puede revocarse mientras el socket está abierto: se vuelve a mirar en cada flush (03 §7.2).
+        const conexionDeVistas = {
+          audiencia: { tipo: 'jugador' as const, jugadorId },
+          derecho: () => {
+            const r = resolverActor(conCredencialDeQuery(request), deps, gameId);
+            return r !== undefined && puedeJugar(r.actor);
+          },
+        };
         // Presencia (Doc 1.10.6, D33): estar conectado es tener el cliente abierto. Abrirlo trae al héroe de vuelta al
         // mundo; cerrar el último socket lo desconecta, y sale del mundo 2:30 después si no vuelve antes.
         presencia(gameId, jugadorId, 'conectarse');
@@ -121,11 +131,21 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
 
           if (mensaje.accion === 'desuscribir') {
             hub.desuscribir(gameId, socket, mensaje.canal);
+            difusorDeVistas.desuscribir(gameId, socket, mensaje.canal);
             socket.send(JSON.stringify({ tipo: 'desuscrito', canal: mensaje.canal }));
             return;
           }
-          // Los canales de vista de jugador aún no existen, y los de administración no existen para un jugador: ni se revela su nombre.
-          if (mensaje.accion === 'resincronizar' || CANAL_DE_VISTA.test(mensaje.canal)) {
+          // Canales de vista: foto y deltas por el difusor. Los `admin/*` y los `vista/*` que el servidor aún no tiene no existen para un
+          // jugador: ni se revela su nombre.
+          if (analizarCanal(mensaje.canal, conexionDeVistas.audiencia) || mensaje.accion === 'resincronizar') {
+            const fallo =
+              mensaje.accion === 'resincronizar'
+                ? difusorDeVistas.resincronizar(gameId, socket, mensaje.canal)
+                : difusorDeVistas.suscribir(gameId, socket, conexionDeVistas, mensaje.canal);
+            if (fallo) enviarError(socket, mensaje.canal, fallo.error, fallo.codigo);
+            return;
+          }
+          if (CANAL_DE_VISTA.test(mensaje.canal)) {
             enviarError(socket, mensaje.canal, 'canal desconocido', 'canal_desconocido');
             return;
           }
@@ -144,6 +164,7 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
 
         socket.on('close', () => {
           hub.desconectar(gameId, socket);
+          difusorDeVistas.desconectar(gameId, socket);
           if (!hub.sigueConectado(gameId, jugadorId)) presencia(gameId, jugadorId, 'desconectarse');
         });
       }

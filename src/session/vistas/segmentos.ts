@@ -1,24 +1,31 @@
-// Canales de vista (`Docs/Coordinacion/03_Tiempo_real_por_segmentos.md` §2): qué foto tiene cada canal, para quién, y cuándo siguen
-// siendo del mismo grupo dos suscriptores. Es NEGOCIO (qué ve quién), como `session/canales.ts`; el transporte vive en
-// `server/difusion/difusorDeVistas.ts`, que solo sabe pedir fotos y compararlas.
+// Canales de vista (`Docs/Coordinacion/03_Tiempo_real_por_segmentos.md` §2): qué foto tiene cada canal, para quién, y cuándo comparten foto
+// dos suscriptores. Es NEGOCIO (qué ve quién), como `session/canales.ts`; el transporte vive en `server/difusion/difusorDeVistas.ts`, que solo
+// sabe pedir fotos y compararlas.
 //
-// Hoy: los canales de administración (Fase 1 del contrato). Los de jugador (`vista/mapa`, `vista/heroe`, `vista/asentamiento/<id>`) entran
-// en las fases 2 y 3 por este mismo módulo.
+// Hoy: los canales de administración (fase 1) y los de jugador `vista/mapa` y `vista/heroe` (fase 2). `vista/asentamiento/<id>` es de la fase 3.
+//
+// **Los canales de jugador salen de UNA sola proyección por héroe** (`proyectarParaJugador`, memoizada por flush): el reparto en `vista/mapa` y
+// `vista/heroe` es solo de qué claves viajan por cada uno, así que la regla de qué se ve sigue escrita una vez y no puede divergir de la que
+// sirve el GET. Y la clave del grupo es el HÉROE también en `vista/mapa` (contrato 03 §6.2, caso en que «A degenera en B»): hoy la proyección del
+// mapa mezcla entradas de Facción con otras de héroe (`exploracionPersonal`, `plazasRecordadas`, la plaza que se pisa se excluye de los avistados,
+// el almacén de una plaza propia si su columna está en la puerta), y compartir foto por Facción filtraría lo de uno a sus compañeros. Para agrupar
+// por Facción hay que sacar antes esas entradas del mapa; ver el informe de medición.
 import type { Asentamiento, CampamentoMercenarios } from '../../domain/types';
 import { MANTENIMIENTO } from '../../constants';
 import { estaOcupado } from '../../engine/asentamientoQuery';
 import { esResidente } from '../../engine/pertenencia';
 import { poderEscuadron } from '../../engine/tropa';
-import { instanteDeTick, vistaAdminDeEstado, type EventoLogAdmin, type GameSessionState } from '../estado';
+import { instanteDeTick, vistaAdminDeEstado, type EventoLogAdmin, type GameSessionState, type GeometriaAsentamientos } from '../estado';
+import { proyectarParaJugador } from '../proyecciones/jugador';
 import { clavePorId, type EsquemaDeVista, type Foto } from './diff';
 import type { ColeccionesMoviles } from './movimiento';
 
-export type TipoDeCanal = 'admin/partida' | 'admin/asentamiento' | 'admin/campamento' | 'admin/heroe';
+export type TipoDeCanal = 'admin/partida' | 'admin/asentamiento' | 'admin/campamento' | 'admin/heroe' | 'vista/mapa' | 'vista/heroe';
 
 export interface CanalDeVista {
   nombre: string;
   tipo: TipoDeCanal;
-  /** El id de lo que se mira (plaza, campamento, héroe); ausente en `admin/partida`. */
+  /** El id de lo que se mira (plaza, campamento, héroe); ausente en los canales sin parámetro. */
   id?: string;
 }
 
@@ -27,15 +34,30 @@ export interface DefinicionDeCanal {
   moviles?: ColeccionesMoviles;
 }
 
-/** Quién pide: el administrador de la partida. (Los jugadores se añaden con las vistas de jugador.) */
-export type Audiencia = { tipo: 'admin' };
+/** Quién pide: el administrador de la partida, o un jugador (por su `jugadorId`: su héroe puede no existir todavía al conectar). */
+export type Audiencia = { tipo: 'admin' } | { tipo: 'jugador'; jugadorId: string };
+
+/** Lo que solo sabe calcular quien tiene la partida abierta (caches del `RunnerDePartida`), y que la proyección de jugador necesita. */
+export interface ImpurosDePartida {
+  geometriaAsentamientos(): GeometriaAsentamientos;
+  preciosReferencia(): Record<string, number>;
+  produccionDeAsentamiento(asentamientoId: string): unknown;
+  ascensoDeAsentamiento(asentamientoId: string): unknown;
+}
+
+export interface ContextoDeProyeccion {
+  impuros: ImpurosDePartida;
+  /** Proyecciones de jugador ya hechas EN ESTE FLUSH: `vista/mapa` y `vista/heroe` del mismo héroe salen de la misma. */
+  memo: Map<string, ReturnType<typeof proyectarParaJugador> & Record<string, unknown>>;
+}
 
 const CANALES_CON_ID: readonly TipoDeCanal[] = ['admin/asentamiento', 'admin/campamento', 'admin/heroe'];
+const CANALES_DE_JUGADOR: readonly TipoDeCanal[] = ['vista/mapa', 'vista/heroe'];
 
 /** El canal que nombra el cliente, o `undefined` si el servidor no lo implementa o no existe para esa audiencia (`canal_desconocido`). Un
- * canal `admin/*` no existe para un jugador: no se revela ni su nombre (03 §7.1.6). */
+ * canal `admin/*` no existe para un jugador, ni uno `vista/*` para un administrador: no se revela ni su nombre (03 §7.1.6). */
 export function analizarCanal(nombre: string, audiencia: Audiencia): CanalDeVista | undefined {
-  if (audiencia.tipo !== 'admin') return undefined;
+  if (audiencia.tipo === 'jugador') return CANALES_DE_JUGADOR.find((t) => t === nombre) ? { nombre, tipo: nombre as TipoDeCanal } : undefined;
   if (nombre === 'admin/partida') return { nombre, tipo: 'admin/partida' };
   for (const tipo of CANALES_CON_ID) {
     if (nombre.startsWith(`${tipo}/`) && nombre.length > tipo.length + 1) return { nombre, tipo, id: nombre.slice(tipo.length + 1) };
@@ -45,6 +67,8 @@ export function analizarCanal(nombre: string, audiencia: Audiencia): CanalDeVist
 
 /** `instante` y `version` van en la cabecera de cada mensaje (03 §3.2), no en `datos` ni en `escalares`. */
 const CABECERA = ['instante', 'version', 'tick'] as const;
+
+const porClave = <K extends string>(campo: K) => ((e: Record<K, string>) => e[campo]) as never;
 
 const ESQUEMAS: Record<TipoDeCanal, DefinicionDeCanal> = {
   'admin/partida': {
@@ -60,7 +84,7 @@ const ESQUEMAS: Record<TipoDeCanal, DefinicionDeCanal> = {
         batallas: clavePorId,
         campamentosBandidos: clavePorId,
         aedas: clavePorId,
-        titulos: ((t: { tituloId: string }) => t.tituloId) as never,
+        titulos: porClave('tituloId'),
       },
       escalares: ['mapaId', 'estadoMapa'],
       cabecera: CABECERA,
@@ -70,11 +94,81 @@ const ESQUEMAS: Record<TipoDeCanal, DefinicionDeCanal> = {
   'admin/asentamiento': { esquema: { colecciones: { edificios: clavePorId }, unicas: ['asentamiento'], escalares: [], cabecera: CABECERA } },
   'admin/campamento': { esquema: { colecciones: {}, unicas: ['campamento'], escalares: [], cabecera: CABECERA } },
   'admin/heroe': { esquema: { colecciones: { historial: clavePorId }, unicas: ['heroe'], escalares: [], cabecera: CABECERA } },
+  'vista/mapa': {
+    esquema: {
+      colecciones: {
+        ejercitosAvistados: clavePorId,
+        caravanasAvistadas: clavePorId,
+        asentamientosAvistados: clavePorId,
+        asentamientosConocidos: porClave('asentamientoId'),
+        aedasAvistados: clavePorId,
+        batallas: porClave('battleId'),
+        campamentosBandidos: clavePorId,
+        campamentosMercenarios: clavePorId,
+        alijos: clavePorId,
+        heroesVisibles: porClave('heroeId'),
+        facciones: clavePorId,
+        zonas: porClave('asentamientoId'),
+        zonasFusionadas: porClave('faccionId'),
+        caminos: clavePorId,
+        relaciones: clavePorId,
+        titulos: porClave('tituloId'),
+      },
+      mapas: ['territorioPorEjercito', 'nombresDeCompaneros', 'nombresDeDirigentes'],
+      escalares: ['mapaId', 'estadoMapa'],
+      cabecera: CABECERA,
+    },
+    moviles: { propios: [], ajenos: ['ejercitosAvistados', 'caravanasAvistadas'] },
+  },
+  'vista/heroe': {
+    esquema: {
+      colecciones: {
+        ejercitos: clavePorId,
+        caravanas: clavePorId,
+        convocatorias: clavePorId,
+        informesDeInspeccion: clavePorId,
+        miradasIntel: clavePorId,
+        informesPlaza: porClave('asentamientoId'),
+        propuestasAnexion: clavePorId,
+        propuestasRelacion: clavePorId,
+        propuestasFusion: clavePorId,
+        acuerdos: clavePorId,
+        ordenes: clavePorId,
+        aedasResidentes: clavePorId,
+        historial: clavePorId,
+      },
+      unicas: ['heroe'],
+      escalares: ['faccionId', 'miConvocatoriaId'],
+      cabecera: CABECERA,
+    },
+    moviles: { propios: ['ejercitos', 'caravanas'], ajenos: [] },
+  },
 };
 
 export function definicionDe(canal: CanalDeVista): DefinicionDeCanal {
   return ESQUEMAS[canal.tipo];
 }
+
+/** El héroe de un jugador en esta partida, si ya lo creó. */
+export function heroeDeJugador(estado: GameSessionState, jugadorId: string) {
+  return estado.heroes.find((h) => h.jugadorId === jugadorId);
+}
+
+/** ¿Puede esta audiencia seguir viendo este canal ahora? Se pregunta al suscribirse y se reevalúa en cada flush (03 §7.2). El permiso de
+ * administración o la membresía de jugador los comprueba quien abrió el socket; aquí se comprueba lo que sale del estado. */
+export function puedeVer(estado: GameSessionState, canal: CanalDeVista, audiencia: Audiencia): boolean {
+  if (audiencia.tipo === 'admin') return true;
+  return heroeDeJugador(estado, audiencia.jugadorId) !== undefined && CANALES_DE_JUGADOR.includes(canal.tipo);
+}
+
+/** Dos suscriptores con la misma clave ven exactamente la misma foto y comparten diff y serialización. Los canales de administración ven
+ * todos lo mismo: la clave es el propio canal. Los de jugador, el héroe (ver la nota de cabecera). */
+export function claveDeGrupo(canal: CanalDeVista, audiencia: Audiencia, estado: GameSessionState): string {
+  if (audiencia.tipo === 'admin') return canal.nombre;
+  return `${canal.nombre}|${heroeDeJugador(estado, audiencia.jugadorId)?.id ?? ''}`;
+}
+
+// --- Administración ---
 
 /** Lo que cuenta de una plaza en el listado, calculado aquí con las funciones del motor (03 §2.1): así un tick no parchea el almacén de
  * todas las plazas, solo `resumen` cuando cambia algo de esto. */
@@ -154,17 +248,53 @@ function fotoAdminPartida(estado: GameSessionState): Foto {
 }
 
 /** Un id estable para una línea del historial, que no trae uno: el momento, un resumen del texto y cuántas iguales hay antes. */
-function idDeLinea(l: EventoLogAdmin, repetidas: Map<string, number>): string {
-  let h = 5381;
-  for (let i = 0; i < l.mensaje.length; i++) h = (h * 33) ^ l.mensaje.charCodeAt(i);
-  const base = `${l.momento}#${(h >>> 0).toString(36)}`;
-  const n = repetidas.get(base) ?? 0;
-  repetidas.set(base, n + 1);
-  return `${base}.${n}`;
+function conIds(lineas: readonly EventoLogAdmin[]): (EventoLogAdmin & { id: string })[] {
+  const repetidas = new Map<string, number>();
+  return lineas.map((l) => {
+    let h = 5381;
+    for (let i = 0; i < l.mensaje.length; i++) h = (h * 33) ^ l.mensaje.charCodeAt(i);
+    const base = `${l.momento}#${(h >>> 0).toString(36)}`;
+    const n = repetidas.get(base) ?? 0;
+    repetidas.set(base, n + 1);
+    return { id: `${base}.${n}`, ...l };
+  });
 }
 
+// --- Jugador ---
+
+/** La proyección de jugador de este héroe, hecha una vez por flush y compartida por `vista/mapa` y `vista/heroe`. Las piezas que solo conoce el
+ * runner (precios, producción, ascenso) se añaden como en la ruta HTTP: producción y ascenso solo de la plaza que se pisa. */
+function proyeccionDe(estado: GameSessionState, heroeId: string, ctx: ContextoDeProyeccion) {
+  let p = ctx.memo.get(heroeId);
+  if (p) return p;
+  const base = proyectarParaJugador(estado, heroeId, ctx.impuros.geometriaAsentamientos());
+  const dentro = base.asentamientos[0];
+  p = {
+    ...base,
+    preciosReferencia: ctx.impuros.preciosReferencia(),
+    ...(dentro ? { produccionDeAsentamiento: ctx.impuros.produccionDeAsentamiento(dentro.id), ascensoDeAsentamiento: ctx.impuros.ascensoDeAsentamiento(dentro.id) } : {}),
+  } as never;
+  ctx.memo.set(heroeId, p!);
+  return p!;
+}
+
+const escoger = (p: Record<string, unknown>, claves: readonly string[]): Foto => Object.fromEntries(claves.filter((k) => p[k] !== undefined).map((k) => [k, p[k]]));
+
+const CLAVES_MAPA = [
+  'ejercitosAvistados', 'caravanasAvistadas', 'asentamientosAvistados', 'asentamientosConocidos', 'aedasAvistados', 'batallas', 'campamentosBandidos',
+  'campamentosMercenarios', 'alijos', 'heroesVisibles', 'facciones', 'zonas', 'zonasFusionadas', 'caminos', 'territorioPorEjercito', 'exploracion',
+  'relaciones', 'titulos', 'nombresDeCompaneros', 'nombresDeDirigentes', 'mapaId', 'estadoMapa',
+] as const;
+
+const CLAVES_HEROE = [
+  'heroe', 'ejercitos', 'caravanas', 'convocatorias', 'miConvocatoriaId', 'miradasIntel', 'informesPlaza', 'tarifasIntel', 'propuestasAnexion',
+  'propuestasRelacion', 'propuestasFusion', 'acuerdos', 'ordenes', 'tecnologia', 'aedasResidentes', 'mercadoCampamento', 'escenaCampamento',
+  'ascensoDeAsentamiento', 'produccionDeAsentamiento', 'preciosReferencia', 'faccionId',
+] as const;
+
 /** La foto de un canal para el estado dado, o `undefined` si aquello que se mira ya no existe (el difusor lo trata como revocado). */
-export function proyectarCanal(estado: GameSessionState, canal: CanalDeVista): Foto | undefined {
+export function proyectarCanal(estado: GameSessionState, canal: CanalDeVista, audiencia: Audiencia, ctx: ContextoDeProyeccion): Foto | undefined {
+  const instante = instanteDeTick(estado.tick);
   switch (canal.tipo) {
     case 'admin/partida':
       return fotoAdminPartida(estado);
@@ -172,24 +302,26 @@ export function proyectarCanal(estado: GameSessionState, canal: CanalDeVista): F
       const a = estado.asentamientos.find((x) => x.id === canal.id);
       if (!a) return undefined;
       const { edificios, ...resto } = a;
-      return { instante: instanteDeTick(estado.tick), asentamiento: resto, edificios };
+      return { instante, asentamiento: resto, edificios };
     }
     case 'admin/campamento': {
       const c: CampamentoMercenarios | undefined = estado.campamentosMercenarios.find((x) => x.id === canal.id);
-      return c ? { instante: instanteDeTick(estado.tick), campamento: c } : undefined;
+      return c ? { instante, campamento: c } : undefined;
     }
     case 'admin/heroe': {
       const h = estado.heroes.find((x) => x.id === canal.id);
       if (!h) return undefined;
-      const repetidas = new Map<string, number>();
-      const historial = (estado.historialHeroes[h.id] ?? []).map((l) => ({ id: idDeLinea(l, repetidas), ...l }));
-      return { instante: instanteDeTick(estado.tick), heroe: { id: h.id, almacenPersonal: h.almacenPersonal ?? {} }, historial };
+      return { instante, heroe: { id: h.id, almacenPersonal: h.almacenPersonal ?? {} }, historial: conIds(estado.historialHeroes[h.id] ?? []) };
+    }
+    case 'vista/mapa':
+    case 'vista/heroe': {
+      if (audiencia.tipo !== 'jugador') return undefined;
+      const heroe = heroeDeJugador(estado, audiencia.jugadorId);
+      if (!heroe) return undefined;
+      const p = proyeccionDe(estado, heroe.id, ctx) as unknown as Record<string, unknown>;
+      if (canal.tipo === 'vista/mapa') return { instante, ...escoger(p, CLAVES_MAPA) };
+      const informes = (p['informesDeInspeccion'] as { objetivo: { tipo: string; id: string } }[]).map((i) => ({ id: `${i.objetivo.tipo}:${i.objetivo.id}`, ...i }));
+      return { instante, ...escoger(p, CLAVES_HEROE), informesDeInspeccion: informes, historial: conIds(p['historial'] as EventoLogAdmin[]) };
     }
   }
-}
-
-/** Dos suscriptores con la misma clave ven exactamente la misma foto y comparten diff y serialización. Los canales de administración ven
- * todos lo mismo: la clave es el propio canal. */
-export function claveDeGrupo(canal: CanalDeVista, _audiencia: Audiencia): string {
-  return canal.nombre;
 }

@@ -10,11 +10,22 @@
 import type WebSocket from 'ws';
 import { diferenciar, type Foto } from '../../session/vistas/diff';
 import { anotarMovimiento } from '../../session/vistas/movimiento';
-import { analizarCanal, claveDeGrupo, definicionDe, proyectarCanal, type Audiencia, type CanalDeVista, type TipoDeCanal } from '../../session/vistas/segmentos';
+import {
+  analizarCanal,
+  claveDeGrupo,
+  definicionDe,
+  proyectarCanal,
+  puedeVer,
+  type Audiencia,
+  type CanalDeVista,
+  type ContextoDeProyeccion,
+  type ImpurosDePartida,
+  type TipoDeCanal,
+} from '../../session/vistas/segmentos';
 import type { GameSessionState } from '../../session/estado';
 
 /** Lo que el difusor necesita de una partida abierta (la cumple `RunnerDePartida`). */
-export interface FuenteDePartida {
+export interface FuenteDePartida extends ImpurosDePartida {
   getState(): GameSessionState;
   intervaloRelojDeMundoMs(): number | null;
 }
@@ -40,11 +51,11 @@ export interface OpcionesDifusor {
   programar?: (fn: () => void, ms: number) => unknown;
 }
 
-/** Quién es el socket y de qué es dueño de seguir viendo. `derecho` se reevalúa en cada flush. */
+/** Quién es el socket. `derecho` es lo que decide quien abrió la conexión (permiso de administración, membresía de jugador) y se reevalúa en
+ * cada flush; a eso se suma lo que sale del estado (`puedeVer`: p. ej. que el jugador tenga héroe). */
 export interface ConexionDeVistas {
   audiencia: Audiencia;
-  /** ¿Sigue autorizado a ver ESTE canal con el estado actual? `false` ⇒ `revocado`. */
-  derecho: (estado: GameSessionState, canal: CanalDeVista) => boolean;
+  derecho: () => boolean;
 }
 
 export type MotivoDeFoto = 'alta' | 'resync' | 'lento' | 'visibilidad';
@@ -58,6 +69,8 @@ interface Suscriptor {
 
 interface Grupo {
   gameId: string;
+  /** La de quien creó el grupo: todos los del grupo ven lo mismo, así que cualquiera de ellos proyecta igual. */
+  audiencia: Audiencia;
   clave: string;
   canal: CanalDeVista;
   version: number;
@@ -199,19 +212,20 @@ export class DifusorDeVistas {
       return { error: 'demasiadas suscripciones', codigo: 'formato' };
     }
     const estado = fuente.getState();
-    if (!conexion.derecho(estado, canal)) return { error: 'no autorizado', codigo: 'no_autorizado' };
+    const ctx = this.contexto(fuente);
+    if (!conexion.derecho() || !puedeVer(estado, canal, conexion.audiencia)) return { error: 'no autorizado', codigo: 'no_autorizado' };
 
-    const clave = claveDeGrupo(canal, conexion.audiencia);
+    const clave = claveDeGrupo(canal, conexion.audiencia, estado);
     let grupo = this.grupos.get(gameId)?.get(clave);
-    if (grupo) this.volcarGrupo(grupo, fuente); // que la foto que se le da esté al día y la cadena siga sin hueco
+    if (grupo) this.volcarGrupo(grupo, fuente, ctx); // que la foto que se le da esté al día y la cadena siga sin hueco
     // El volcado pudo vaciar el grupo (todos perdieron el derecho) y retirarlo: se rehace como uno nuevo.
     if (grupo && this.grupos.get(gameId)?.get(clave) !== grupo) grupo = undefined;
     if (!grupo) {
       const t0 = performance.now();
-      const foto = proyectarCanal(estado, canal);
+      const foto = proyectarCanal(estado, canal, conexion.audiencia, ctx);
       if (!foto) return { error: 'no autorizado', codigo: 'no_autorizado' };
       this.instrumento(canal.tipo).msProyeccion.push(performance.now() - t0);
-      grupo = { gameId, clave, canal, version: estado.version, foto, suscriptores: new Map() };
+      grupo = { gameId, audiencia: conexion.audiencia, clave, canal, version: estado.version, foto, suscriptores: new Map() };
       let delJuego = this.grupos.get(gameId);
       if (!delJuego) this.grupos.set(gameId, (delJuego = new Map()));
       delJuego.set(clave, grupo);
@@ -243,7 +257,7 @@ export class DifusorDeVistas {
     const ultima = this.ultimaFoto.get(socket)?.get(nombre);
     if (ultima !== undefined && this.ahora() - ultima < this.opciones.minMsEntreFotos) return { error: 'demasiado frecuente', codigo: 'demasiado_frecuente' };
     const fuente = this.opciones.fuenteDe(gameId);
-    if (fuente) this.volcarGrupo(grupo, fuente);
+    if (fuente) this.volcarGrupo(grupo, fuente, this.contexto(fuente));
     this.enviarFoto(grupo, socket, 'resync');
     return undefined;
   }
@@ -266,6 +280,11 @@ export class DifusorDeVistas {
     let m = this.ultimaFoto.get(socket);
     if (!m) this.ultimaFoto.set(socket, (m = new Map()));
     m.set(nombre, this.ahora());
+  }
+
+  /** Lo que comparten las proyecciones de un mismo flush: las del mismo héroe se calculan una vez. */
+  private contexto(fuente: FuenteDePartida): ContextoDeProyeccion {
+    return { impuros: fuente, memo: new Map() };
   }
 
   // --- Disparo ---
@@ -294,17 +313,18 @@ export class DifusorDeVistas {
     const fuente = this.opciones.fuenteDe(gameId);
     const grupos = this.grupos.get(gameId);
     if (!fuente || !grupos) return;
-    for (const grupo of [...grupos.values()]) this.volcarGrupo(grupo, fuente);
+    const ctx = this.contexto(fuente);
+    for (const grupo of [...grupos.values()]) this.volcarGrupo(grupo, fuente, ctx);
     this.versionesDesdeFlush.delete(gameId);
   }
 
-  private volcarGrupo(grupo: Grupo, fuente: FuenteDePartida): void {
+  private volcarGrupo(grupo: Grupo, fuente: FuenteDePartida, ctx: ContextoDeProyeccion): void {
     const estado = fuente.getState();
     const instr = this.instrumento(grupo.canal.tipo);
 
     // Reevaluación del derecho (03 §7.2): quien lo pierde recibe `revocado` y sale del grupo, antes de proyectar nada para él.
     for (const [socket, s] of [...grupo.suscriptores]) {
-      if (s.conexion.derecho(estado, grupo.canal)) continue;
+      if (s.conexion.derecho() && puedeVer(estado, grupo.canal, s.conexion.audiencia)) continue;
       this.enviar(socket, JSON.stringify({ tipo: 'revocado', canal: grupo.canal.nombre, motivo: 'sin_derecho' }));
       grupo.suscriptores.delete(socket);
       this.suscripcionesPorSocket.get(socket)?.delete(grupo.canal.nombre);
@@ -317,7 +337,7 @@ export class DifusorDeVistas {
     if (estado.version === grupo.version) return;
 
     const t0 = performance.now();
-    const proyectada = proyectarCanal(estado, grupo.canal);
+    const proyectada = proyectarCanal(estado, grupo.canal, grupo.audiencia, ctx);
     // La partida se reemplazó (empieza en otra versión, más baja): la cadena no continúa, foto nueva a todos (03 §3.2).
     if (proyectada && estado.version < grupo.version) {
       grupo.foto = proyectada;

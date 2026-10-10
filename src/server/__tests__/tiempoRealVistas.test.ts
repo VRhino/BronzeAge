@@ -108,16 +108,88 @@ describe('admin/partida', () => {
 });
 
 describe('un jugador no ve canales de administración', () => {
-  it('suscribir a admin/* o vista/* por el WS de jugador es canal_desconocido, sin revelar nada', async () => {
-    const admin = await partida();
+  it('suscribir a admin/* o a un vista/* que no existe es canal_desconocido; vista/mapa sin héroe, no_autorizado', async () => {
+    await partida();
     const ana = await sesionDe('ana');
     await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: ana });
     const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana });
     const recibidos = recoger(ws);
-    for (const canal of ['admin/partida', 'vista/mapa']) ws.send(JSON.stringify({ accion: 'suscribir', canal }));
-    await hasta(() => recibidos.length >= 2);
-    expect(recibidos.map((m) => m.codigo)).toEqual(['canal_desconocido', 'canal_desconocido']);
-    expect(admin.authorization).toBeTruthy();
+    for (const canal of ['admin/partida', 'vista/asentamiento/a1', 'vista/mapa']) ws.send(JSON.stringify({ accion: 'suscribir', canal }));
+    await hasta(() => recibidos.length >= 3);
+    expect(recibidos.map((m) => m.codigo)).toEqual(['canal_desconocido', 'canal_desconocido', 'no_autorizado']);
+    ws.terminate();
+  });
+});
+
+/** Unido a la partida y con su héroe creado, que es lo que hace falta para tener vistas. */
+async function jugadorConHeroe(sujetoId: string) {
+  const auth = await sesionDe(sujetoId);
+  await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: auth });
+  const creado = await app.inject({
+    method: 'POST',
+    url: '/v1/jugador/partidas/g1/comandos',
+    headers: auth,
+    payload: {
+      tipo: 'crearHeroe',
+      params: { displayName: sujetoId, campamentoId: 'mercenarios-0', classDefinitionId: 'Spear', genero: 'femenino', avatar: { cabezaId: '', peloId: '', barbaId: '', cejasId: '' } },
+    },
+  });
+  return { auth, heroeId: creado.json().resultado.datos.heroeId as string };
+}
+
+describe('vista/mapa y vista/heroe', () => {
+  it('juntas reproducen la proyección HTTP del jugador: nada de más y nada de menos en los campos que reparten', async () => {
+    await partida();
+    const { auth } = await jugadorConHeroe('ana');
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const recibidos = recoger(ws);
+    for (const canal of ['vista/mapa', 'vista/heroe']) ws.send(JSON.stringify({ accion: 'suscribir', canal }));
+    await hasta(() => recibidos.filter((m) => m.tipo === 'foto').length === 2);
+
+    const http = (await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth })).json() as Record<string, unknown>;
+    const fotos = Object.fromEntries(recibidos.filter((m) => m.tipo === 'foto').map((m) => [m.canal, m.datos as Record<string, unknown>]));
+    const norm = (x: unknown) => JSON.parse(JSON.stringify(x));
+    for (const [campo, valor] of Object.entries(fotos['vista/mapa']!)) expect(norm(valor), `vista/mapa.${campo}`).toEqual(norm(http[campo]));
+    // vista/heroe: igual salvo los dos campos con id sintético (informes y historial) que el canal reparte con `id`.
+    for (const [campo, valor] of Object.entries(fotos['vista/heroe']!)) {
+      if (campo === 'historial' || campo === 'informesDeInspeccion') continue;
+      expect(norm(valor), `vista/heroe.${campo}`).toEqual(norm(http[campo]));
+    }
+    // Ningún campo viaja por los dos canales.
+    const enMapa = new Set(Object.keys(fotos['vista/mapa']!));
+    expect(Object.keys(fotos['vista/heroe']!).filter((k) => enMapa.has(k))).toEqual([]);
+    ws.terminate();
+  });
+
+  it('un tick de administración llega a vista/heroe y a vista/mapa como deltas encadenados', async () => {
+    const admin = await partida();
+    const { auth } = await jugadorConHeroe('ana');
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const recibidos = recoger(ws);
+    for (const canal of ['vista/mapa', 'vista/heroe']) ws.send(JSON.stringify({ accion: 'suscribir', canal }));
+    await hasta(() => recibidos.filter((m) => m.tipo === 'foto').length === 2);
+    const versiones = Object.fromEntries(recibidos.filter((m) => m.tipo === 'foto').map((m) => [m.canal, m.version]));
+
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
+    await hasta(() => recibidos.filter((m) => m.tipo === 'delta').length === 2);
+    for (const d of recibidos.filter((m) => m.tipo === 'delta')) expect(d.desde).toBe(versiones[d.canal]);
+    ws.terminate();
+  });
+
+  it('perder la membresía revoca los canales en el siguiente flush', async () => {
+    const admin = await partida();
+    const { auth } = await jugadorConHeroe('ana');
+    const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: auth });
+    const recibidos = recoger(ws);
+    ws.send(JSON.stringify({ accion: 'suscribir', canal: 'vista/mapa' }));
+    await hasta(() => recibidos.some((m) => m.tipo === 'foto'));
+
+    const usuarioId = (await app.inject({ method: 'GET', url: '/v1/sesiones/actual', headers: auth })).json().usuarioId as string;
+    const revocada = await app.inject({ method: 'DELETE', url: `/v1/admin/partidas/g1/membresias/${usuarioId}`, headers: admin });
+    expect(revocada.statusCode).toBe(200);
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
+    await hasta(() => recibidos.some((m) => m.tipo === 'revocado'));
+    expect(recibidos.find((m) => m.tipo === 'revocado')).toMatchObject({ canal: 'vista/mapa' });
     ws.terminate();
   });
 });

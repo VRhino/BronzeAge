@@ -110,7 +110,7 @@ export function diferenciar(antes: Foto, despues: Foto, esquema: EsquemaDeVista)
     if (a === d) continue;
 
     if (escalaresDe.has(k)) {
-      if (!iguales(a, d)) escalares[k] = d;
+      if (!iguales(a, d)) escalares[k] = d === undefined ? null : d; // quitar un escalar es ponerlo a null: `undefined` no viaja
       continue;
     }
 

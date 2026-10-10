@@ -93,3 +93,41 @@ canal admin/partida:     foto ${kib(bytesFoto)}, delta medio ${kib(mediaDelta)} 
 console.log(`  proyección p50 ${m.ms.proyeccion.p50.toFixed(1)} ms · diff p50 ${m.ms.diff.p50.toFixed(1)} ms · serialización p50 ${m.ms.serializacion.p50.toFixed(2)} ms`);
 console.log(`  cambios por op: ${JSON.stringify(m.cambiosPorOp)}`);
 console.log(`  → a 1 tick/min: ${kib(mediaDelta)}/min por cliente admin (el sondeo a 3 s: ${kib((admin.bytes * 60) / 3)}/min → ${((mediaDelta / ((admin.bytes * 60) / 3)) * 100).toFixed(2)} %)`);
+
+// --- Canales de jugador: vista/mapa + vista/heroe de una muestra de héroes (grupo por héroe) ---
+const heroesMuestra = jugadores.slice(0, Math.min(jugadores.length, 50));
+const porCanal: Record<string, { fotos: number[]; deltas: number[] }> = { 'vista/mapa': { fotos: [], deltas: [] }, 'vista/heroe': { fotos: [], deltas: [] } };
+let enFoto = true;
+for (const h of heroesMuestra) {
+  const sock = {
+    OPEN: 1,
+    readyState: 1,
+    bufferedAmount: 0,
+    send: (m: string) => {
+      const msg = JSON.parse(m) as { tipo: string; canal?: string };
+      if (msg.canal && porCanal[msg.canal]) (enFoto ? porCanal[msg.canal]!.fotos : porCanal[msg.canal]!.deltas).push(Buffer.byteLength(m));
+    },
+    close: () => undefined,
+  } as never;
+  const c = { audiencia: { tipo: 'jugador' as const, jugadorId: h.jugadorId ?? '' }, derecho: () => true };
+  if (!h.jugadorId) continue;
+  difusor.suscribir(gameId, sock, c, 'vista/mapa');
+  difusor.suscribir(gameId, sock, c, 'vista/heroe');
+}
+enFoto = false;
+const t0 = performance.now();
+for (let i = 0; i < 5; i++) {
+  await runner.avanzarTick();
+  difusor.notificar(gameId);
+}
+const msPorTick = (performance.now() - t0) / 5;
+const media = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+const suscritos = Math.max(1, heroesMuestra.filter((h) => h.jugadorId).length);
+console.log(`
+canales de jugador (${suscritos} héroes suscritos a vista/mapa y vista/heroe), 5 ticks:`);
+for (const [canal, d] of Object.entries(porCanal)) console.log(`  ${canal}: foto media ${kib(media(d.fotos))}, delta medio ${kib(media(d.deltas))}`);
+const vm = difusor.metricas().porCanal;
+console.log(`  proyección p50/p95 vista/mapa ${vm['vista/mapa']?.ms.proyeccion.p50.toFixed(2)}/${vm['vista/mapa']?.ms.proyeccion.p95.toFixed(2)} ms · diff p50 ${vm['vista/mapa']?.ms.diff.p50.toFixed(2)} ms`);
+console.log(`  coste de un tick (avanzar + flush de ${suscritos} héroes): ${msPorTick.toFixed(0)} ms`);
+const deltaJugador = media(porCanal['vista/mapa']!.deltas) + media(porCanal['vista/heroe']!.deltas);
+console.log(`  → delta de un jugador por tick: ${kib(deltaJugador)} (el sondeo a 5 s: ${kib((totalBytes / Math.max(1, muestra.length)) * 12)}/min → ${((deltaJugador / ((totalBytes / Math.max(1, muestra.length)) * 12)) * 100).toFixed(2)} %)`);
