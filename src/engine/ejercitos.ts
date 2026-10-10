@@ -1311,8 +1311,8 @@ export function atacarColumna(
   validarAtaqueAColumna(atacante, defensor, relaciones, heridos);
 
   const choque = encuentroEntreEjercitos(enBatalla(atacante, heridos, heroes), enBatalla(defensor, heridos, heroes), facciones, rng);
-  const gano = choque.a.escuadrones.some((e) => e.cantidad > 0) && !choque.b.escuadrones.some((e) => e.cantidad > 0);
-  // Quien pierde es quien se queda sin nadie en pie; si los dos siguen enteros no hay derrota que castigar.
+  // Gana quien dice la resolución por poder, como en un asedio; las bajas (30-70 % al que pierde) ya están aplicadas.
+  const gano = choque.ganador === 'a';
   const perdedor = gano ? conApartadas(choque.b, defensor) : conApartadas(choque.a, atacante);
   const ganador = gano ? conApartadas(choque.a, atacante) : conApartadas(choque.b, defensor);
   const secuela = trasDerrota(perdedor);

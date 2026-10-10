@@ -735,7 +735,7 @@ export function encuentroEntreEjercitos(
   b: EjercitoConTropa,
   facciones: Faccion[],
   rng: RandomFn
-): { a: EjercitoConTropa; b: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[]; chatarra: Record<string, number> } {
+): { a: EjercitoConTropa; b: EjercitoConTropa; ganador: 'a' | 'b'; facciones: Faccion[]; eventos: EventoCrudo[]; chatarra: Record<string, number> } {
   const vivosA = a.escuadrones.filter((e) => e.cantidad > 0);
   const vivosB = b.escuadrones.filter((e) => e.cantidad > 0);
   const resultado = resolverCombate(vivosA, vivosB, rng);
@@ -769,6 +769,7 @@ export function encuentroEntreEjercitos(
   return {
     a: { ...a, escuadrones: a.escuadrones.map((e) => actualizadosA.get(e.id) ?? e) },
     b: { ...b, escuadrones: b.escuadrones.map((e) => actualizadosB.get(e.id) ?? e) },
+    ganador: resultado.ganador === 'atacante' ? 'a' : 'b',
     facciones: faccionesFinal,
     eventos,
     chatarra: resultado.chatarra,

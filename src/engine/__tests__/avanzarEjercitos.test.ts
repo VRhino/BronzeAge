@@ -1113,7 +1113,7 @@ describe('persecuciones: alcanzar a la presa no es atacarla', () => {
 
   it('un EJÉRCITO derrotado en campo abierto entrega la mitad del carro, igual que un viajero (Doc 5.12.3)', () => {
     // Hasta el 2026-09-13 solo la columna personal perdía el carro: el ejército se iba con la tregua y nada más.
-    // Un ataque que no tumba al defensor es una derrota del ATACANTE: con 5 contra 300 no depende del RNG.
+    // Perder la resolución por poder es una derrota del ATACANTE: con 5 contra 300 no depende del RNG.
     const { facciones, a, b } = dosColumnas(1, 5, 300);
 
     const r = atacarColumna(a, b, facciones, [], [], new Set(), createRng(1));
@@ -1122,6 +1122,15 @@ describe('persecuciones: alcanzar a la presa no es atacarla', () => {
     expect(r.atacante.suministro['trigo'], 'se queda con la mitad').toBe(50);
     expect(r.defensor.suministro['trigo'], 'y el vencedor carga la otra mitad').toBe(150);
     expect(r.vencidos, 'y sus héroes quedan heridos (Doc 5.16.4)').toEqual([RESIDENTE]);
+  });
+
+  it('el atacante que gana por poder vence aunque al defensor le queden soldados', () => {
+    const { facciones, a, b } = dosColumnas(1, 300, 5);
+
+    const r = atacarColumna(a, b, facciones, [], [], new Set(), createRng(1));
+
+    expect(r.vencidos, 'los heridos son los del defensor').toEqual([RIVAL]);
+    expect(r.atacante.suministro['trigo'], 'el atacante conserva su carro y carga la mitad del rival').toBeGreaterThan(a.suministro['trigo']!);
   });
 
   it('el vencedor se lleva en su carro la chatarra de las bajas de los DOS bandos (Doc 4.2.1)', () => {

@@ -9,6 +9,21 @@ Cubre cómo se **resuelve** un choque cuando el servidor lo calcula con números
 - **Canon:** Doc 5.2 (combate), 5.12.3–5.12.4 (encuentros y asedio), 5.12.9 (conquista), 5.15 (batalla, guarnición), 5.16 (héroe, bajas, heridos).
 - **No es el combate de Unity.** Con servidores de batalla y al menos un héroe humano, `atacar` no resuelve nada aquí: abre una batalla de Unity (`session/batallas.ts`, ciclo de batalla del contrato) y el resultado se aplica cuando llega. Este documento es lo que corre **sin** ellos (bots contra bots, partidas sin servidor de batalla, y todo lo que Unity no cubre aún). Las consecuencias de ganar o perder (heridos, botín, conquista, desalojo) son las mismas por los dos caminos y están aquí.
 
+
+### 1.1 Resoluciones que calcula el servidor (sin Unity)
+
+Todas son lo que corre cuando **no** hay servidor de batalla o ningún bando tiene un humano. Cada una tiene su equivalente de Unity (apertura en `session/batallas.ts`); al llegar el resultado de Unity se aplican las **mismas consecuencias**.
+
+| Resolución con números | Función | La dispara | Apertura equivalente en Unity |
+|---|---|---|---|
+| Columna contra columna | `atacarColumna` → `encuentroEntreEjercitos` | `atacar` (objetivo `ejercito`) | `aperturaContraColumna` |
+| Columna contra caravana | `interceptar` → `interceptarCaravanaConEjercito` | `atacar` (objetivo `caravana`) | `aperturaContraCaravana` |
+| Columna contra campamento de bandidos | `atacarCampamento` → `atacarCampamentoConColumna` | `atacar` (objetivo `campamento`) | `aperturaContraCampamento` |
+| Ejército contra plaza (asedio) | `asediarPlaza` → `asediarConEjercito` | `atacar` (objetivo `asentamiento`) | `aperturaDeAsedio` |
+| Asentamiento contra asentamiento | `iniciarAsedio` | nadie (código heredado) | — |
+
+El motor común de las cuatro primeras es `resolverCombate` (§4), salvo caravana y campamento, que comparan contra una cifra fija.
+
 ## 2. La orden: `atacar`
 
 Un comando, un objetivo: `ejercito` · `caravana` · `campamento` (de bandidos) · `asentamiento`.
@@ -67,8 +82,8 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Unity): no la propia columna; **no a los tuyos ni a un aliado**; **misma clase** (personal contra personal, ejército contra ejército); atacante a ≤ `LOGISTICA.radioEncuentro` (15) con héroe sano; el defensor con algún héroe sano.
 
 1. Cada bando pasa por `enBatalla`. El atacante es el «atacante» del motor y el otro el «defensor»; **sin muralla** (multiplicador 1) y, por tanto, el defensor en campo abierto conserva la cohesión y la ventaja de 1,05 (el motor no distingue).
-2. **El atacante solo gana si el defensor se queda sin un soldado en pie** (`gano = el atacante conserva soldados y el defensor ninguno`). En cualquier otro resultado —incluido que `resolverCombate` diera la victoria de poder al atacante pero el defensor siga con hombres— **el perdedor es el atacante**. Un test lo fija así («un ataque que no tumba al defensor es una derrota del atacante»). Como el perdedor de poder pierde entre el 30 % y el 70 % de cada escuadra, aniquilar a un defensor con escuadras grandes es raro: **en la práctica atacar una columna casi siempre cuesta heridos y media carga al atacante**. Ver [`Divergencias.md`](Divergencias.md).
-3. **Secuela de la derrota** (`trasDerrota`): el perdedor pierde `MOVIMIENTO.fraccionRobada` (la mitad) de **cada recurso de su carro**; los héroes del perdedor (`vencidos` = **todos** sus participantes, hayan combatido o no) quedan **heridos**. Si era personal, además suelta su presa.
+2. **Gana quien dice la resolución por poder** (§4), igual que en un asedio (decisión del autor, 2026-10-10; antes el atacante solo ganaba si dejaba al defensor sin un soldado en pie y casi siempre perdía). Las bajas del 30–70 % al bando que pierde ya vienen aplicadas por `resolverCombate`. `encuentroEntreEjercitos` devuelve `ganador: 'a' | 'b'` (a = atacante).
+3. **Secuela de la derrota** (`trasDerrota`): el bando que pierde pierde `MOVIMIENTO.fraccionRobada` (la mitad) de **cada recurso de su carro**; los héroes del perdedor (`vencidos` = **todos** los participantes del bando que pierde, hayan combatido o no) quedan **heridos**. Si era personal, además suelta su presa.
 4. **Botín**: lo robado + la chatarra de las bajas va al carro del ganador (`cargarBotin`) hasta `capacidadCargaDe(ganador, caravanas)`; **lo que no cabe se pierde**.
 5. Eventos: `combate.resuelto`, `combate.encuentro`; se narran a los **dos** hogares.
 
@@ -205,4 +220,4 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
 
 ## 15. Divergencias
 
-Ver [`Divergencias.md`](Divergencias.md): el atacante de una columna pierde casi siempre, y `iniciarAsedio` sin llamadores.
+Ver [`Divergencias.md`](Divergencias.md): `iniciarAsedio` sin llamadores.
