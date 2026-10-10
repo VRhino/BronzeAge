@@ -57,7 +57,8 @@ animaciones); el delta mantiene el estado al día.
 | `vista/mapa` | jugador con membresía | Lo del mundo que su Facción (y los que comparten su vista) ve bajo la niebla: posiciones/progreso de lo móvil, asentamientos avistados/conocidos, territorio, batallas visibles, campamentos y Aedas a la vista | `faccionId` + firma de aliados con visión compartida; sin Facción: el `heroeId` |
 | `vista/heroe` | jugador, solo su héroe | Lo personal: `heroe`, `ejercitos` propios con su `ruta`, `caravanas` propias, `convocatorias`, informes, miradas, mercado de campamento, tecnología… | el `heroeId` (no se comparte) |
 | `vista/asentamiento/<id>` | ciudadano de la Facción dueña (misma regla de `puedeSuscribirseA`) | El interior de esa plaza: escalares de `asentamiento`, `edificios` (con las obras: `estado: 'en_construccion'`/`'en_cola'` y `completaEn`), almacén, población, cargos, residentes, colas de reclutamiento, mercado local, muralla | el `asentamientoId` (todos los ciudadanos ven lo mismo) |
-| `admin/partida` | administrador (`exigirAdministracion`) | La partida completa SIN niebla pero en versión **ligera**: entidades con sus escalares y lo móvil con `ruta`/`progreso`; sin el detalle interior (edificios, almacén) | la partida (un solo diff) |
+| `admin/partida` | administrador (`exigirAdministracion`) | La partida completa SIN niebla en versión **ligera** (§2.1) | la partida (un solo diff) |
+| `admin/heroe/<id>` | administrador | Detalle de un héroe: `historial` y, si pesa, `almacenPersonal` | el `heroeId` |
 | `admin/asentamiento/<id>` | administrador | El `Asentamiento` completo, sin niebla | el `asentamientoId` |
 | `admin/campamento/<id>` | administrador | El campamento de mercenarios completo (mercado, residentes, fondos) | el `campamentoId` |
 
@@ -76,6 +77,25 @@ Qué va exactamente en cada bloque (nombres = los de `ProyeccionJugador` / `Esta
   entidades con `id`. El trazado (`trazadoPorAsentamiento[id]`) viaja como bloque sustituible (cambia solo con
   `layoutVersion` o al construir).
 - Lo estático (`mapa/:mapaId`, catálogos de `GET /balance`, `catalogoTropas`) **no** viaja nunca por estos canales.
+
+### 2.1 Versión ligera de `admin/partida` (acordada con Cliente admin, 2026-10-10)
+
+Las listas globales del admin (Registro/Militar, aviso de mantenimiento, mapa) derivan de TODOS los asentamientos, así que
+quitar solo `edificios`/`almacen` no basta. Contenido:
+
+- `asentamientos`: todos los escalares + `edificios` **solo de ámbito `'mapa'`** (el canvas dibuja murallas/torres) + un
+  bloque nuevo **`resumen`** calculado en servidor con las funciones del motor:
+  `{ edificiosActivos, edificiosEnCurso, almacenClave: { madera|piedra|trigo|oro: { cantidad, capacidad } },
+  mantenimientoIncumplido, ocupada, poderMilitar, tieneFundicion, tieneGranFundicion }`. Sin `almacen` completo, sin
+  `recintos`, sin `edificios` internos (van en `admin/asentamiento/<id>`). Así un tick no parchea el almacén de todas las
+  plazas; solo cambia `resumen` si cambia algo de eso. (Alternativa descartada: edificios compactos + almacén completo.)
+- `heroes`: todo salvo `historial` (con `escuadrones`, `ubicacion`, `desconectaEn`, `fuera`, `controlador`, `displayName`,
+  `oroDeBotin`, `racionEn`, `almacenPersonal`). Detalle en `admin/heroe/<id>`.
+- `campamentosMercenarios`: todo salvo `mercado` y `fondos` (van en `admin/campamento/<id>`); sí `residentesIds`, `edificios`,
+  `poblacion`, `poblacionEn`, `bandidosEn`, `origen`, `creadoEn`, `eligieronComoInicial`.
+- Completos y sin recortar: `ejercitos` (con `ruta`/`progreso`/`avancePorTick`), `caravanas` (con escolta), `facciones`
+  (con sigilo), `relaciones`, `batallas`, `campamentosBandidos`, `aedas`, `titulos`, `tecnologia`, `red`/`caminos`,
+  `estadoMapa` y los escalares (`instante`, `version`, `mapaId`).
 
 > Si un campo de la proyección no aparece arriba, pertenece a `vista/heroe` por defecto. El reparto fino es decisión
 > de Backend (§10) siempre que cada campo viaje por UN solo canal de vista y la unión de los tres reproduzca la
@@ -442,10 +462,10 @@ respuestas de `POST .../comandos` siguen devolviendo la proyección propia y el 
 
 **Cliente admin** (sesión «Cliente admin»)
 - Abrir el nuevo WS de admin (`/v1/admin/partidas/:gameId/tiempo-real`, mismas credenciales que sus GET) y suscribir
-  `admin/partida` (Fase 1); `admin/asentamiento/<id>` / `admin/campamento/<id>` al abrir el detalle.
+  `admin/partida` (Fase 1); `admin/asentamiento/<id>`, `admin/campamento/<id>` o `admin/heroe/<id>` al abrir el detalle.
 - Aplicar foto + deltas al almacén que hoy alimenta el estado completo; actualizar solo las filas/capas que cambian
   (no repintar todo); interpolar lo móvil igual que el jugador (la `ruta` está siempre).
-- Confirmar qué campos necesita en la versión ligera de `admin/partida` (pregunta 2 de §11).
+- Campos de la versión ligera: acordados (§2.1).
 - Sondeo de respaldo ≥ 60 s.
 
 **Coordinación** (esta sesión): mantener 03 y 02 al día con lo que decidan Backend y los clientes, y mantener el índice
@@ -456,8 +476,7 @@ respuestas de `POST .../comandos` siguen devolviendo la proyección propia y el 
 Técnicas (las contesta quien implementa; no son reglas de juego):
 1. **Tamaño de `exploracion`** (la niebla explorada): si resulta grande, Backend propone en 03 su codificación por
    deltas de celdas (aditivo) en vez del bloque `set`. Hasta medirla, se envía como bloque cuando cambia.
-2. **Cliente admin:** ¿qué campos necesita en la versión ligera de `admin/partida` y cuáles solo al abrir el detalle?
-   Propuesta de partida: ligera = todo menos `edificios`, `recintos`, `almacen` y `historial` de héroes.
+2. ~~Cliente admin: campos de la versión ligera~~ **Resuelta** (§2.1). Pendiente para Backend: confirmar que cada campo de `resumen` sale de funciones del motor existentes (si alguno no, avisar a Cliente admin).
 3. **Rate de flush:** ¿`COALESCER_MS = 100` y latido solo en tick es suficiente para el cliente jugador (24-60 fps con
    interpolación) o se necesita más frecuencia en combate/persecución?
 4. **Reanudar con `desde`** (Fase 4): ¿merece el buffer en memoria del servidor (últimos ~64 deltas por clave) o basta

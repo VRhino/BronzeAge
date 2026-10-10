@@ -603,7 +603,7 @@ Para dejar de sondear la proyección (jugador) y el estado completo (admin) cada
 [`03_Tiempo_real_por_segmentos.md`](03_Tiempo_real_por_segmentos.md):
 
 - Canales nuevos: `vista/mapa`, `vista/heroe`, `vista/asentamiento/<id>` (endpoint de jugador) y `admin/partida`,
-  `admin/asentamiento/<id>`, `admin/campamento/<id>` (endpoint nuevo `/v1/admin/partidas/:gameId/tiempo-real`).
+  `admin/asentamiento/<id>`, `admin/campamento/<id>`, `admin/heroe/<id>` (endpoint nuevo `/v1/admin/partidas/:gameId/tiempo-real`).
 - Mensajes nuevos servidor → cliente: `foto` (con `version`), `delta` (`desde`→`hasta`, `cambios` por `t`+`id`+`op`
   `upsert|patch|remove|set`, y `escalares`), `resync`, `revocado`. Cliente → servidor: `resincronizar` (y `desde`
   opcional en `suscribir`). `suscrito` gana `intervaloTickMs`; `error` gana `codigo`.
