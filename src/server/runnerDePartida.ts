@@ -144,6 +144,8 @@ export class RunnerDePartida {
    * catch-up sí** — ponerse al día de una semana caída son ~79 minutos con la cola parada. Sin esta métrica,
    * eso solo se ve desde fuera como "el servidor no responde".
    */
+  /** Muestras desde la última `tomarVentana()` (telemetría de carga, 03 §14). */
+  private ventana: { ticksMs: number[]; guardadoMs: number[]; guardadoBytes: number[] } = { ticksMs: [], guardadoMs: [], guardadoBytes: [] };
   private readonly instrumentos = { pendientes: 0, ticks: 0, msTotal: 0, msUltimo: 0, msMax: 0, ultimaRafaga: 0, mayorRafaga: 0, omitidos: 0 };
 
   /**
@@ -410,6 +412,7 @@ export class RunnerDePartida {
     this.instrumentos.ticks++;
     this.instrumentos.msTotal += ms;
     this.instrumentos.msUltimo = ms;
+    this.ventana.ticksMs.push(ms);
     if (ms > this.instrumentos.msMax) this.instrumentos.msMax = ms;
     return resultado;
   }
@@ -523,6 +526,13 @@ export class RunnerDePartida {
     };
   }
 
+  /** Devuelve y reinicia las muestras de la ventana: ms de cada tick y ms/bytes de cada guardado de snapshot. */
+  tomarVentana(): { ticksMs: number[]; guardadoMs: number[]; guardadoBytes: number[] } {
+    const v = this.ventana;
+    this.ventana = { ticksMs: [], guardadoMs: [], guardadoBytes: [] };
+    return v;
+  }
+
   /** ms de reloj de PARED entre ticks para esta partida, o `null` si su reloj de mundo está parado (solo
    * avanza con `POST .../tick`). Lo fija `INTERVALO_TICK_MS` del proceso, o el override que reciba
    * `RegistroDePartidas.descartarYCrear` al regenerar. La consola de administración lo muestra en la
@@ -588,7 +598,10 @@ export class RunnerDePartida {
    */
   private async guardarYVaciarDiario(): Promise<void> {
     try {
-      await guardarPartida(this.almacen, this.sesion, this.ahora());
+      const t0 = performance.now();
+      const bytes = await guardarPartida(this.almacen, this.sesion, this.ahora());
+      this.ventana.guardadoMs.push(performance.now() - t0);
+      this.ventana.guardadoBytes.push(bytes);
       await vaciarDiario(this.almacen, this.gameId);
     } catch (err) {
       console.error(`[diario] no se pudo guardar '${this.gameId}' (versión ${this.sesion.getState().version}); el diario la conserva:`, err);

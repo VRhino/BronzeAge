@@ -96,7 +96,7 @@ interface InstrumentosDeTipo {
 }
 
 const MUESTRAS = 256;
-const PERCENTIL = (xs: readonly number[], p: number): number => {
+export const PERCENTIL = (xs: readonly number[], p: number): number => {
   if (xs.length === 0) return 0;
   const orden = [...xs].sort((a, b) => a - b);
   return orden[Math.min(orden.length - 1, Math.floor((orden.length - 1) * p))]!;
@@ -120,6 +120,26 @@ const nuevoInstrumento = (): InstrumentosDeTipo => ({
   cierres4408: 0,
   revocados: {},
 });
+
+/** Telemetría de carga (03 §14): lo ocurrido desde la última `tomarVentana()`. Sin tope de 256 como las series de vida: la ventana es corta. */
+export interface VentanaDeVistas {
+  porCanal: Record<
+    string,
+    {
+      flushes: number;
+      fotos: Record<MotivoDeFoto, number>;
+      bytesEnviados: number;
+      bytesFlush: number[];
+      bytesFoto: number[];
+      msProyeccion: number[];
+      msDiff: number[];
+      msSerializacion: number[];
+      cambios: { upsert: number; patch: number; remove: number; set: number };
+      socketsLentos: number;
+      cierres4408: number;
+    }
+  >;
+}
 
 export interface MetricasDeVistas {
   suscriptores: number;
@@ -152,6 +172,8 @@ export class DifusorDeVistas {
   private readonly pendientes = new Map<string, unknown>();
   private readonly versionesDesdeFlush = new Map<string, number>();
   private readonly instrumentos = new Map<TipoDeCanal, InstrumentosDeTipo>();
+  /** Espejo de `instrumentos` que `tomarVentana()` vacía. Mismo objeto de tipos, series sin tope. */
+  private ventana = new Map<TipoDeCanal, InstrumentosDeTipo>();
 
   constructor(opciones: OpcionesDifusor) {
     this.opciones = {
@@ -169,6 +191,12 @@ export class DifusorDeVistas {
 
   private ahora(): number {
     return (this.opciones.ahoraMs ?? Date.now)();
+  }
+
+  private instrumentoVentana(tipo: TipoDeCanal): InstrumentosDeTipo {
+    let i = this.ventana.get(tipo);
+    if (!i) this.ventana.set(tipo, (i = nuevoInstrumento()));
+    return i;
   }
 
   private instrumento(tipo: TipoDeCanal): InstrumentosDeTipo {
@@ -242,6 +270,7 @@ export class DifusorDeVistas {
     const foto = proyectarCanal(estado, canal, conexion.audiencia, ctx);
     if (!foto) return undefined;
     this.instrumento(canal.tipo).msProyeccion.push(performance.now() - t0);
+    this.instrumentoVentana(canal.tipo).msProyeccion.push(performance.now() - t0);
     grupo = { gameId, audiencia: conexion.audiencia, clave, canal, version: estado.version, foto, suscriptores: new Map() };
     let delJuego = this.grupos.get(gameId);
     if (!delJuego) this.grupos.set(gameId, (delJuego = new Map()));
@@ -343,6 +372,7 @@ export class DifusorDeVistas {
   private volcarGrupo(grupo: Grupo, fuente: FuenteDePartida, ctx: ContextoDeProyeccion): void {
     const estado = fuente.getState();
     const instr = this.instrumento(grupo.canal.tipo);
+    const vent = this.instrumentoVentana(grupo.canal.tipo);
 
     // Reevaluación del derecho (03 §7.2): quien lo pierde recibe `revocado` y sale del grupo, antes de proyectar nada para él.
     for (const [socket, s] of [...grupo.suscriptores]) {
@@ -410,14 +440,22 @@ export class DifusorDeVistas {
     anotar(instr.coalescidos, this.versionesDesdeFlush.get(grupo.gameId) ?? 1);
     instr.flushes++;
     for (const c of dif.cambios) instr.cambios[c.op]++;
+    vent.msProyeccion.push(t1 - t0);
+    vent.msDiff.push(t2 - t1);
+    vent.flushes++;
+    for (const c of dif.cambios) vent.cambios[c.op]++;
 
     // Nada que contar y el reloj no avanzó: no hay mensaje (la cadena sigue, `hasta` saltará cuando haya algo).
     if (dif.cambios.length === 0 && Object.keys(dif.escalares).length === 0 && !avanzoElTick) return;
 
     const t3 = performance.now();
     const mensaje = JSON.stringify({ tipo: 'delta', gameId: grupo.gameId, canal: grupo.canal.nombre, desde, hasta: estado.version, instante, cambios: dif.cambios, escalares: dif.escalares });
-    anotar(instr.msSerializacion, performance.now() - t3);
-    anotar(instr.bytesFlush, Buffer.byteLength(mensaje));
+    const msSerial = performance.now() - t3;
+    const bytesMensaje = Buffer.byteLength(mensaje);
+    anotar(instr.msSerializacion, msSerial);
+    anotar(instr.bytesFlush, bytesMensaje);
+    vent.msSerializacion.push(msSerial);
+    vent.bytesFlush.push(bytesMensaje);
 
     const ahora = this.ahora();
     for (const [socket, s] of grupo.suscriptores) {
@@ -430,6 +468,7 @@ export class DifusorDeVistas {
           this.enviarFoto(grupo, socket, 'lento');
         } else if (ahora - s.desactualizadoDesde > this.opciones.lentoMaxMs) {
           instr.cierres4408++;
+          vent.cierres4408++;
           socket.close(4408, 'cliente lento');
         }
         continue;
@@ -437,6 +476,7 @@ export class DifusorDeVistas {
       if (buffer > this.opciones.umbralLentoBytes) {
         s.desactualizadoDesde = ahora;
         instr.socketsLentos++;
+        vent.socketsLentos++;
         continue;
       }
       this.enviar(socket, mensaje, grupo.canal.tipo);
@@ -448,7 +488,11 @@ export class DifusorDeVistas {
   private enviar(socket: WebSocket, mensaje: string, tipo?: TipoDeCanal): void {
     if (socket.readyState !== socket.OPEN) return;
     socket.send(mensaje);
-    if (tipo) this.instrumento(tipo).bytesEnviados += Buffer.byteLength(mensaje);
+    if (tipo) {
+      const bytes = Buffer.byteLength(mensaje);
+      this.instrumento(tipo).bytesEnviados += bytes;
+      this.instrumentoVentana(tipo).bytesEnviados += bytes;
+    }
   }
 
   /** La foto del grupo, con su JSON cacheado hasta el próximo flush: dos altas seguidas serializan una vez. */
@@ -458,15 +502,46 @@ export class DifusorDeVistas {
       const t0 = performance.now();
       const { instante, version: _v, tick: _t, ...datos } = grupo.foto;
       grupo.fotoJson = JSON.stringify({ tipo: 'foto', gameId: grupo.gameId, canal: grupo.canal.nombre, version: grupo.version, instante, datos });
-      anotar(instr.msSerializacion, performance.now() - t0);
-      anotar(instr.bytesFoto, Buffer.byteLength(grupo.fotoJson));
+      const msSerial = performance.now() - t0;
+      const bytesFoto = Buffer.byteLength(grupo.fotoJson);
+      anotar(instr.msSerializacion, msSerial);
+      anotar(instr.bytesFoto, bytesFoto);
+      const vent = this.instrumentoVentana(grupo.canal.tipo);
+      vent.msSerializacion.push(msSerial);
+      vent.bytesFoto.push(bytesFoto);
     }
     instr.fotos[motivo]++;
+    this.instrumentoVentana(grupo.canal.tipo).fotos[motivo]++;
     this.enviar(socket, grupo.fotoJson, grupo.canal.tipo);
     if (motivo !== 'alta') this.marcarFoto(socket, grupo.canal.nombre);
   }
 
   // --- Métricas ---
+
+  /** Devuelve lo acumulado desde la llamada anterior y lo reinicia (telemetría de carga, 03 §14). No altera `metricas()`. */
+  tomarVentana(): VentanaDeVistas {
+    const porCanal: VentanaDeVistas['porCanal'] = {};
+    for (const [tipo, i] of this.ventana) {
+      porCanal[tipo] = {
+        flushes: i.flushes, fotos: i.fotos, bytesEnviados: i.bytesEnviados, bytesFlush: i.bytesFlush, bytesFoto: i.bytesFoto,
+        msProyeccion: i.msProyeccion, msDiff: i.msDiff, msSerializacion: i.msSerializacion, cambios: i.cambios,
+        socketsLentos: i.socketsLentos, cierres4408: i.cierres4408,
+      };
+    }
+    this.ventana = new Map();
+    return { porCanal };
+  }
+
+  /** Suscriptores y claves por tipo de canal de UNA partida (instantánea, para la telemetría). */
+  suscripcionesDe(gameId: string): Record<string, { suscriptores: number; claves: number }> {
+    const r: Record<string, { suscriptores: number; claves: number }> = {};
+    for (const g of this.grupos.get(gameId)?.values() ?? []) {
+      const c = (r[g.canal.tipo] ??= { suscriptores: 0, claves: 0 });
+      c.suscriptores += g.suscriptores.size;
+      c.claves++;
+    }
+    return r;
+  }
 
   metricas(): MetricasDeVistas {
     const porCanal: MetricasDeVistas['porCanal'] = {};

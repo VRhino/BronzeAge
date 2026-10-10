@@ -30,6 +30,7 @@ import { crearDirectorioDeAdministradores, type AdministradorConfigurado } from 
 import { RegistroDePartidas } from './registroDePartidas';
 import { HubDeDifusion } from './difusion/hub';
 import { DifusorDeVistas, type OpcionesDifusor } from './difusion/difusorDeVistas';
+import { RegistroDeCarga } from './telemetria';
 import { RegistroDeAuditoria } from './auditoria';
 import { TareaDeMantenimiento, type ConfiguracionMantenimiento } from './mantenimiento';
 import { registrarRutasDeSesion } from './rutas/sesiones';
@@ -98,6 +99,8 @@ export interface OpcionesServidor {
    * que `intervaloTickMs`: sin configurarlo no se escribe ni se borra nada por su cuenta — un default que
    * borra archivos es el que nadie nota hasta que ya borró algo que hacía falta. */
   mantenimiento?: ConfiguracionMantenimiento;
+  /** Muestreo de carga (`telemetria.ts`, 03 §14) cada `intervaloMs`. `undefined` = no se muestrea (los tests); el registro existe igual para fijar/leer `playtest`. */
+  telemetria?: { intervaloMs: number };
   /** Código de invitación exigido en `POST /v1/registro` (alta de cuenta local). `undefined` = registro
    * abierto. */
   codigoRegistro?: string;
@@ -142,22 +145,24 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   // El difusor busca la partida por id cuando la necesita (la registra `RegistroDePartidas`, que se crea después y lo avisa de cada transición).
   const registroRef: { actual?: RegistroDePartidas } = {};
   const difusorDeVistas = new DifusorDeVistas({ fuenteDe: (gameId) => registroRef.actual?.obtener(gameId), ...opciones.vistas });
+  const partidas = (registroRef.actual = new RegistroDePartidas(
+    almacen,
+    opciones.intervaloTickMs,
+    ahora,
+    { batallasEnUnity: servidoresBatalla.length > 0 },
+    (gameId, eventos, marca) => {
+      hub.difundir(gameId, eventos);
+      hub.difundirTick(gameId, marca);
+    },
+    (gameId) => difusorDeVistas.notificar(gameId)
+    ));
+  const telemetria = new RegistroDeCarga(almacen, { partidas, hub, difusor: difusorDeVistas }, ahora);
   const deps: DependenciasDeRutas = {
     identidad,
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
     // Mismo reloj de pared que el resto del servidor: así el reloj de mundo de cada partida y su catch-up
     // (D5, `RunnerDePartida.iniciarRelojDeMundo`) son inyectables en tests, no solo el reloj del sistema.
-    partidas: (registroRef.actual = new RegistroDePartidas(
-      almacen,
-      opciones.intervaloTickMs,
-      ahora,
-      { batallasEnUnity: servidoresBatalla.length > 0 },
-      (gameId, eventos, marca) => {
-        hub.difundir(gameId, eventos);
-        hub.difundirTick(gameId, marca);
-      },
-      (gameId) => difusorDeVistas.notificar(gameId)
-    )),
+    partidas,
     ahora,
     hub,
     difusorDeVistas,
@@ -165,12 +170,15 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
     // mismo reloj de pared inyectado que el resto del servidor, para que un test pueda fechar sus líneas de
     // forma determinista en vez de depender de la hora del sistema.
     auditoria: new RegistroDeAuditoria(almacen, ahora),
+    telemetria,
     codigoRegistro: opciones.codigoRegistro,
     codigoRegistroBots: opciones.codigoRegistroBots,
     almacen,
     directorioRespaldos: (opciones.respaldosEnDisco ?? !opciones.almacen) ? opciones.directorio : undefined,
     servidoresBatalla,
   };
+
+  if (opciones.telemetria) telemetria.iniciar(opciones.telemetria.intervaloMs);
 
   // Apagado limpio: al cerrar la instancia, parar el reloj de mundo de cada partida abierta y dejar drenar
   // su cola (un tick a medio persistir no se aborta). `app.close()` —lo llama el handler de SIGINT/SIGTERM
@@ -183,10 +191,12 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
 
   app.addHook('onClose', async () => {
     mantenimiento?.detener();
+    deps.telemetria.detener();
     await deps.partidas.cerrar();
     // La auditoría se escribe sin esperar (`registrar` no devuelve promesa, ver `auditoria.ts`), así que sin
     // este drenaje las últimas líneas se perderían al apagar — justo las del incidente que hizo apagar.
     await deps.auditoria.drenar();
+    await deps.telemetria.drenar();
     await opciones.alCerrar?.();
   });
 

@@ -17,6 +17,7 @@ import { PartidaYaAbiertaError } from '../registroDePartidas';
 import { FormatoSnapshotNoSoportadoError, LayoutVersionNoCoincideError, WorldgenVersionNoCoincideError } from '../persistenciaPartida';
 import { recogerMetricas } from '../metricas';
 import { claveDeAuditoria } from '../auditoria';
+import { claveDeCarga } from '../telemetria';
 import { olvidarPartida } from '../identidad/olvidarPartida';
 import { eventosDesde, vistaAdminDeEstado } from '../../session/estado';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
@@ -500,6 +501,8 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     // La auditoría se escribe en cola: se drena antes de borrarla para que una línea pendiente no la vuelva a crear.
     await deps.auditoria.drenar();
     await deps.almacen.borrar(claveDeAuditoria(gameId));
+    await deps.telemetria.drenar();
+    await deps.almacen.borrar(claveDeCarga(gameId));
     console.log(`[partidas] '${gameId}' borrada por ${resuelto.actor.usuarioId}: ${conexionesCerradas} conexiones, ${revocadas} membresías revocadas, ${cuentasDeBotBorradas} cuentas de bot borradas`);
     return reply.send({ gameId, borrada: true, conexionesCerradas, membresiasRevocadas: revocadas, cuentasDeBotBorradas });
   });

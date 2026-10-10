@@ -175,6 +175,22 @@ describe('deltas', () => {
     expect(difusor.metricas().porCanal['admin/partida']!.versionesPorDelta.max).toBe(3);
   });
 
+  it('tomarVentana devuelve lo ocurrido desde la anterior y la reinicia, sin tocar metricas()', () => {
+    const { difusor, conexion, tick } = montar();
+    const s = sock();
+    difusor.suscribir('g1', s, conexion, 'admin/partida');
+    tick();
+    tick();
+    const w = difusor.tomarVentana().porCanal['admin/partida']!;
+    expect(w.flushes).toBe(2);
+    expect(w.fotos.alta).toBe(1);
+    expect(w.bytesFlush).toHaveLength(2);
+    expect(w.msProyeccion.length).toBeGreaterThanOrEqual(2);
+    expect(difusor.tomarVentana().porCanal).toEqual({});
+    expect(difusor.metricas().porCanal['admin/partida']!.flushes).toBe(2);
+    expect(difusor.suscripcionesDe('g1')['admin/partida']).toEqual({ suscriptores: 1, claves: 1 });
+  });
+
   it('sin suscriptores no se proyecta nada', () => {
     const { difusor, tick } = montar();
     tick();
