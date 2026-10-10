@@ -13,6 +13,7 @@ const FIXTURES = join(AQUI, '..', '..', '..', '..', 'Docs', 'Coordinacion', 'fix
 const DEFINICION_POR_PREFIJO: [prefijo: string, definicion: string][] = [
   ['suscribir.', 'MensajeSuscribir'],
   ['suscrito', 'MensajeSuscrito'],
+  ['evento.', 'MensajeEvento'],
   ['foto.', 'MensajeFoto'],
   ['delta.', 'MensajeDelta'],
   ['resync', 'MensajeResync'],

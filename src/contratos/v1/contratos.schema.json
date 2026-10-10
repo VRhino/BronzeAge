@@ -1190,6 +1190,56 @@
         "error"
       ],
       "additionalProperties": false
+    },
+    "MensajeEvento": {
+      "description": "Un evento de dominio empujado por un canal de EVENTOS (doc 02 §2, doc 03 §3.2). En `admin/eventos` llegan todos los de la partida, sin filtro de audiencia, con `version` (el cursor de `GET .../eventos?desde=`). En los demás canales de eventos, solo los de ese canal.",
+      "type": "object",
+      "properties": {
+        "tipo": {
+          "const": "evento"
+        },
+        "gameId": {
+          "$ref": "#/definitions/Id"
+        },
+        "canal": {
+          "$ref": "#/definitions/TiempoRealCanal"
+        },
+        "evento": {
+          "type": "object",
+          "properties": {
+            "codigo": {
+              "type": "string",
+              "minLength": 1
+            },
+            "mensaje": {
+              "type": "string"
+            },
+            "momento": {
+              "type": "string",
+              "minLength": 1
+            },
+            "asentamientoId": {
+              "type": "string"
+            },
+            "payload": {},
+            "version": {
+              "$ref": "#/definitions/Entero"
+            }
+          },
+          "required": [
+            "codigo",
+            "mensaje",
+            "momento"
+          ]
+        }
+      },
+      "required": [
+        "tipo",
+        "gameId",
+        "canal",
+        "evento"
+      ],
+      "additionalProperties": false
     }
   }
 }

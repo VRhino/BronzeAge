@@ -16,6 +16,7 @@ export function erroresDeMensaje(definicion: string, dato: unknown) {
 
 const DEFINICION_POR_TIPO: Record<string, string> = {
   suscrito: 'MensajeSuscrito',
+  evento: 'MensajeEvento',
   foto: 'MensajeFoto',
   delta: 'MensajeDelta',
   resync: 'MensajeResync',

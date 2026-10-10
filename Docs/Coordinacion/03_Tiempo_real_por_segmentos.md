@@ -63,6 +63,7 @@ animaciones); el delta mantiene el estado al día.
 | `admin/heroe/<id>` | administrador | Detalle de un héroe: `historial` y, si pesa, `almacenPersonal` | el `heroeId` |
 | `admin/asentamiento/<id>` | administrador | El `Asentamiento` completo, sin niebla | el `asentamientoId` |
 | `admin/campamento/<id>` | administrador | El campamento de mercenarios completo (mercado, residentes, fondos) | el `campamentoId` |
+| `admin/eventos` | administrador | **Canal de HECHOS, no de estado** (sin foto ni deltas): TODOS los eventos de dominio de la partida, sin niebla ni filtro de audiencia, con su `version`, en mensajes `evento` | — (lo lleva el hub, no el difusor de vistas) |
 
 Qué va exactamente en cada bloque (nombres = los de `ProyeccionJugador` / `EstadoAdmin`, que son la fuente):
 
@@ -137,6 +138,10 @@ aceptan en ese endpoint y los de jugador solo en el suyo.
   cada uno parte (`desde`) de la versión del último que se le entregó y cubre varias versiones; un delta vacío es su latido. La foto de la alta no depende del ritmo. Volver a
   suscribir con otro ritmo manda foto de nuevo, como cualquier alta. Un `ritmo` que no es un número es `error` con `codigo: "formato"`. Solo vale en canales de vista; los de
   eventos lo ignoran.
+- `admin/eventos` (solo en el WS de administración, **implementado**): `suscribir` responde `{"tipo":"suscrito","canal":"admin/eventos"}` (sin foto, sin `intervaloTickMs` ni `ritmo`) y desde ahí llega cada evento de la partida como
+  `{"tipo":"evento","gameId","canal":"admin/eventos","evento":{…, "version"}}`, la misma forma que los canales de eventos y lo mismo que devuelve `GET /admin/partidas/:gameId/eventos`. El permiso se reevalúa al
+  difundir (`revocado` con `motivo: "sin_derecho"` si se pierde). No hay `resincronizar` ni cadena de versiones: tras una reconexión se recuperan los perdidos con el cursor `GET .../eventos?desde=<última version vista>`. En el
+  endpoint de jugador el canal no existe (`canal_desconocido`).
 - `resincronizar` pide la foto de nuevo (el cliente detectó un hueco, o un fallo al aplicar). Rate limit: una foto por
   canal cada 2 s por socket; el exceso se responde `error` con `codigo: "demasiado_frecuente"`.
 
@@ -271,6 +276,7 @@ Los mensajes completos y válidos están en [`fixtures/tiempo-real/`](fixtures/t
 | `foto.vista-asentamiento.json`, `delta.vista-asentamiento.json` | interior de plaza: una obra que termina (`en_construccion` → `activo`), almacén que cambia |
 | `foto.admin-partida.json`, `delta.admin-partida.json` | partida sin niebla en versión ligera |
 | `delta.latido.json` | delta vacío de tick |
+| `suscrito.admin-eventos.json`, `evento.admin-eventos.json` | alta en `admin/eventos` (sin foto) y un evento con su `version` |
 | `suscribir.vista-mapa.ritmo.json`, `suscrito.ritmo.json`, `delta.vista-mapa.coalescido.json` | suscripción con `ritmo: 5`, su respuesta y un delta que cubre varias versiones (1043 → 1048) |
 | `resync.json`, `revocado.json`, `error.canal_desconocido.json` | los mensajes de control |
 
@@ -417,7 +423,7 @@ flush ≤ el de una proyección HTTP × número de claves.
 
 | Pieza actual | Destino |
 |---|---|
-| Canales de eventos `mapa/general`, `asentamiento/<id>`, `heroe/<id>`, `batalla/<id>` y mensaje `evento` | **Se mantienen sin cambios.** Los eventos son hechos (crónica, avisos, animaciones); un delta no los sustituye. Un cliente puede tener ambos |
+| Canales de eventos `mapa/general`, `asentamiento/<id>`, `heroe/<id>`, `batalla/<id>` y mensaje `evento` (más `admin/eventos`, solo administración, 2026-10-10) | **Se mantienen sin cambios.** Los eventos son hechos (crónica, avisos, animaciones); un delta no los sustituye. Un cliente puede tener ambos |
 | `GET /jugador/partidas/:gameId` (proyección) | **Se mantiene** como foto inicial/respaldo y para quien no use WS (Unity v1) |
 | `GET /admin/partidas/:gameId` | **Se mantiene** (foto/respaldo, exportación) |
 | `GET .../eventos?desde=` y `.../cronica` | **Se mantienen**: son el cursor de eventos, ortogonal al estado |
@@ -545,6 +551,11 @@ Mundo de 500 bots al **tick 40000** (checkpoint del batch `BATCH_BOTS=500`: 32 p
 
 Lecturas: el delta de admin crece con el número de héroes (2609 `patch` en 20 ticks: cada tick toca ~130 entidades, sobre todo héroes con víveres/ración) y la foto de admin con ellos (1,2 MiB con 500 héroes);
 con `permessage-deflate` (13.2) o partiendo el héroe admin en ligero y detalle bajaría mucho. El resto escala bien: ninguna medida del flush pasa de 1 ms por clave.
+
+**Difusión de eventos con `admin/eventos`** (`scripts/medicion-eventos-admin.ts`, mismo mundo de 500 bots, tick 40000, 32 plazas): ~9 eventos por tick de media. `hub.difundir` por tick (mediana): sin nadie suscrito a nada **0,000 ms**
+(el hub ya no serializa un canal que nadie escucha; antes hacía un `JSON.stringify` por evento y canal aunque no hubiera oyente); 50 jugadores en sus canales de siempre 0,019 ms; los mismos más un administrador en `admin/eventos`
+0,026 ms. Un tick del mundo cuesta ~124 ms, así que la difusión del canal de administración es <0,03 ms: no alarga el tick. (La telemetría está apagada por defecto; no hizo falta encenderla, el script mide `hub.difundir` directamente.)
+Mejora general del hub: ahora lleva un índice `canal → sockets` y solo recorre a los suscritos.
 
 **Compresión `permessage-deflate` (13.2, implementada)** — `scripts/medicion-compresion-ws.ts` sobre el mismo mundo de 500 bots (tick 40000): los mensajes reales del difusor pasados por zlib (deflate crudo) a tres niveles.
 

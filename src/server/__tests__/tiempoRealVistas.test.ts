@@ -222,6 +222,71 @@ describe('ritmo', () => {
   });
 });
 
+describe('admin/eventos', () => {
+  it('empuja TODOS los eventos de la partida con su version, sin filtro, y suscrito no lleva foto', async () => {
+    const admin = await partida();
+    const ws = await app.injectWS('/v1/admin/partidas/g1/tiempo-real', { headers: admin });
+    const recibidos = recoger(ws);
+    ws.send(JSON.stringify({ accion: 'suscribir', canal: 'admin/eventos' }));
+    await hasta(() => recibidos.length >= 1);
+    expect(recibidos[0]).toEqual({ tipo: 'suscrito', canal: 'admin/eventos' });
+
+    await jugadorConHeroe('ana'); // un comando de jugador: sus eventos llegan a la administración aunque no sean de ninguna plaza
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
+    await hasta(() => recibidos.some((m) => m.tipo === 'evento'));
+    const eventos = recibidos.filter((m) => m.tipo === 'evento');
+    for (const m of eventos) {
+      expect(m).toMatchObject({ tipo: 'evento', gameId: 'g1', canal: 'admin/eventos' });
+      expect(m.evento).toMatchObject({ codigo: expect.any(String), mensaje: expect.any(String), momento: expect.any(String) });
+    }
+    expect(eventos.some((m) => typeof m.evento.version === 'number')).toBe(true);
+    ws.terminate();
+  });
+
+  it('un jugador no puede suscribirse (canal_desconocido en su endpoint) y quien se desuscribe deja de recibir', async () => {
+    const admin = await partida();
+    const ana = await sesionDe('ana');
+    await app.inject({ method: 'POST', url: '/v1/jugador/partidas/g1/membresia', headers: ana });
+    const wsJ = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana });
+    const delJugador = recoger(wsJ);
+    wsJ.send(JSON.stringify({ accion: 'suscribir', canal: 'admin/eventos' }));
+    await hasta(() => delJugador.length >= 1);
+    expect(delJugador[0]).toMatchObject({ tipo: 'error', canal: 'admin/eventos', codigo: 'canal_desconocido' });
+    wsJ.terminate();
+
+    const ws = await app.injectWS('/v1/admin/partidas/g1/tiempo-real', { headers: admin });
+    const recibidos = recoger(ws);
+    ws.send(JSON.stringify({ accion: 'suscribir', canal: 'admin/eventos' }));
+    await hasta(() => recibidos.length >= 1);
+    ws.send(JSON.stringify({ accion: 'desuscribir', canal: 'admin/eventos' }));
+    await hasta(() => recibidos.some((m) => m.tipo === 'desuscrito'));
+    const n = recibidos.length;
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(recibidos).toHaveLength(n);
+    ws.terminate();
+  });
+
+  it('perder el permiso de administración revoca el canal en la siguiente difusión', async () => {
+    const admin = await partida();
+    // Un administrador de partida (no global), al que luego se le quita el rol.
+    const bea = await sesionDe('bea');
+    const usuarioId = (await app.inject({ method: 'GET', url: '/v1/sesiones/actual', headers: bea })).json().usuarioId as string;
+    const alta = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId, rol: 'administrador_partida' } });
+    expect(alta.statusCode).toBeLessThan(300);
+    const ws = await app.injectWS('/v1/admin/partidas/g1/tiempo-real', { headers: bea });
+    const recibidos = recoger(ws);
+    ws.send(JSON.stringify({ accion: 'suscribir', canal: 'admin/eventos' }));
+    await hasta(() => recibidos.length >= 1);
+
+    await app.inject({ method: 'DELETE', url: `/v1/admin/partidas/g1/membresias/${usuarioId}`, headers: admin });
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/tick', headers: admin });
+    await hasta(() => recibidos.some((m) => m.tipo === 'revocado'));
+    expect(recibidos.find((m) => m.tipo === 'revocado')).toMatchObject({ canal: 'admin/eventos' });
+    ws.terminate();
+  });
+});
+
 describe('métricas', () => {
   it('/admin/metricas incluye los canales de vista con sus suscriptores', async () => {
     const admin = await partida();

@@ -7,7 +7,7 @@
 //  - `/jugador/partidas/:gameId/tiempo-real`: canales de eventos (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`), el
 //    mensaje `tick` y los canales de vista de jugador (`vista/mapa`, `vista/heroe`; `vista/asentamiento/<id>` es de la fase 3 y hoy se
 //    anuncia como `canal_desconocido`).
-//  - `/admin/partidas/:gameId/tiempo-real`: canales de vista de administración (`admin/*`); no tiene canales de eventos.
+//  - `/admin/partidas/:gameId/tiempo-real`: canales de vista de administración (`admin/*`) y `admin/eventos`, todos los eventos de la partida sin filtro.
 //
 // Autenticación ANTES de completar el handshake (`preValidation`, en un `register` aparte para que el hook no se filtre a las demás rutas):
 // sin sesión válida ni el permiso que toque no hay conexión — el rechazo llega como una respuesta HTTP normal (401/403) a la petición de
@@ -21,9 +21,10 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type WebSocket from 'ws';
 import { puedeAdministrar, puedeJugar } from '../../acceso/rolesDePartida';
-import { puedeSuscribirseA } from '../../session/canales';
+import { CANAL_ADMIN_EVENTOS, puedeSuscribirseA } from '../../session/canales';
 import { analizarCanal } from '../../session/vistas/segmentos';
 import type { CodigoDeError } from '../difusion/difusorDeVistas';
+import { SIN_JUGADOR } from '../difusion/hub';
 import { partidaNoAbierta, resolverActor, sinPermiso, sinSesion, type DependenciasDeRutas, type ParametrosGameId } from './contexto';
 
 type Accion = 'suscribir' | 'desuscribir' | 'resincronizar';
@@ -199,13 +200,26 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
         },
       };
 
+      // `admin/eventos` es un canal de HECHOS, no de estado (sin foto ni versión de canal): lo lleva el hub, que reevalúa el permiso al difundir.
+      hub.conectar(gameId, SIN_JUGADOR, socket, conexion.derecho);
+
       socket.on('message', (data: Buffer) => {
         const mensaje = leerMensaje(socket, data);
         if (!mensaje) return;
 
         if (mensaje.accion === 'desuscribir') {
           difusorDeVistas.desuscribir(gameId, socket, mensaje.canal);
+          if (mensaje.canal === CANAL_ADMIN_EVENTOS) hub.desuscribir(gameId, socket, mensaje.canal);
           socket.send(JSON.stringify({ tipo: 'desuscrito', canal: mensaje.canal }));
+          return;
+        }
+        if (mensaje.canal === CANAL_ADMIN_EVENTOS) {
+          if (mensaje.accion === 'resincronizar') enviarError(socket, mensaje.canal, 'este canal no tiene foto: los eventos perdidos se piden con GET .../eventos?desde=', 'formato');
+          else if (!conexion.derecho()) enviarError(socket, mensaje.canal, 'no autorizado', 'no_autorizado');
+          else {
+            hub.suscribir(gameId, socket, mensaje.canal);
+            socket.send(JSON.stringify({ tipo: 'suscrito', canal: mensaje.canal }));
+          }
           return;
         }
         const fallo =
@@ -215,7 +229,10 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
         if (fallo) enviarError(socket, mensaje.canal, fallo.error, fallo.codigo);
       });
 
-      socket.on('close', () => difusorDeVistas.desconectar(gameId, socket));
+      socket.on('close', () => {
+        hub.desconectar(gameId, socket);
+        difusorDeVistas.desconectar(gameId, socket);
+      });
     });
   });
 }
