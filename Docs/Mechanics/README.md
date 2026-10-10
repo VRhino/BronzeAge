@@ -50,7 +50,8 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 | [`Murallas.md`](Murallas.md) | ✅ 2026-10-09 | recintos: trazo, puertas y torres, obra, mejora, ampliación, defensa, mantenimiento, daño |
 | [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) | ✅ 2026-10-10 | salir, rutas y velocidad, víveres y hambre, perseguir, repostar, caravanas adjuntas, unirse/separarse/formar, volver a casa, inspección |
 | [`Combate.md`](Combate.md) | ✅ 2026-10-10 | `atacar`, resolución numérica, encuentros, caravanas, bandidos, asedio, conquista, desalojo, heridos |
+| [`Economia_Construccion.md`](Economia_Construccion.md) | ✅ 2026-10-10 | fundación y zona, almacén, producción y recetas, cola de obras y auto-construcción, mejoras, población y hambre, mantenimiento, nivel de asentamiento y su ascenso, políticas económicas |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 
-Pendientes, por orden de riesgo si se perdieran: economía y construcción (cola, recetas, mantenimiento) · el tick (orden y
-efectos) · niebla de guerra · tecnología y Aedas · comercio y caravanas · diplomacia y Facciones · generación del mundo.
+Pendientes, por orden de riesgo si se perdieran: el tick (orden y efectos globales) · niebla de guerra · tecnología y Aedas · comercio y
+caravanas · diplomacia y Facciones · generación del mundo.
