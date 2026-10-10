@@ -15,6 +15,7 @@ import { layoutCampamento } from '@motor/engine/layoutCampamento';
 import { ALMACEN_PERSONAL, MERCENARIOS } from '@motor/constants';
 import { esc } from './ui/html';
 import { delegar, pintar } from './ui/pintar';
+import { interpolar } from './ui/interpolacion';
 import { enlazarSubpestanas, htmlSubpaneles, htmlSubpestanas, type Subpestana } from './ui/subpestanas';
 import { htmlNombreConSigilo, svgSigilo } from './sigilo/sigilo';
 import { alCargarSigilos } from './sigilo/lienzo';
@@ -2277,6 +2278,40 @@ function terrenoCacheParaFrame(mapa: DrawState['mapa']): HTMLCanvasElement {
   return terrenoCache.canvas;
 }
 
+/** Lo último que se pintó del mapa general: el bucle de animación lo repinta con lo móvil interpolado. */
+let mapaEnVista: { drawState: DrawState; terreno: HTMLCanvasElement; intervaloMs: number | null; animado: boolean } | null = null;
+/** Coste del último cuadro (ms): si el mapa es caro, el bucle baja de 24 fps en vez de ahogar la página. */
+let costeDeCuadro = 0;
+
+/** Pinta el mapa general con ejércitos y caravanas en el punto que toca ahora: la posición del último dato más lo que han avanzado desde
+ * entonces (capado a un tick). Sin reloj de mundo o sin tiempo real no se extrapola. Devuelve si hay algo en movimiento. */
+function pintarMapaGeneral(): boolean {
+  if (!mapaEnVista) return false;
+  const { drawState, terreno, intervaloMs } = mapaEnVista;
+  const fraccion = intervaloMs && gameStore.enVivo ? (performance.now() - gameStore.momentoDeDatos()) / intervaloMs : 0;
+  const caravanas = interpolar(drawState.caravanas, fraccion);
+  const ejercitos = interpolar(drawState.ejercitos, fraccion);
+  const inicio = performance.now();
+  draw(ctx, canvas, { ...drawState, caravanas, ejercitos }, terreno);
+  if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, drawState.mapa);
+  costeDeCuadro = performance.now() - inicio;
+  return caravanas !== drawState.caravanas || ejercitos !== drawState.ejercitos;
+}
+
+const CUADROS_POR_SEGUNDO_MAPA = 24;
+let ultimoCuadro = 0;
+/** 24 fps solo para el mapa (los paneles se repintan cuando llegan datos). Se detiene sola si la pestaña está oculta, si el mapa general no
+ * está a la vista o si no hay nada que mover. */
+function animarMapa(ahora: number): void {
+  requestAnimationFrame(animarMapa);
+  const hueco = Math.max(1000 / CUADROS_POR_SEGUNDO_MAPA, costeDeCuadro * 2);
+  if (document.hidden || !mapaEnVista || !mapaEnVista.animado || !mapaEnVista.intervaloMs || ahora - ultimoCuadro < hueco) return;
+  const fraccion = (performance.now() - gameStore.momentoDeDatos()) / mapaEnVista.intervaloMs;
+  if (fraccion > 1.05 || !gameStore.enVivo) return;
+  ultimoCuadro = ahora;
+  pintarMapaGeneral();
+}
+
 function render(): void {
   // Por tiempo real el estado llega ligero: el interior de plazas, campamentos y héroes se pide solo de lo que está a la vista.
   gameStore.vigilar({
@@ -2318,9 +2353,10 @@ function render(): void {
       ejercitos: state.ejercitos,
       aedas: state.aedas ?? [],
     };
-    draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
-    if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
+    mapaEnVista = { drawState, terreno: terrenoCacheParaFrame(drawState.mapa), intervaloMs: state.relojDeMundoIntervaloMs, animado: false };
+    mapaEnVista.animado = pintarMapaGeneral();
   }
+  if (vistaMapa === 'asentamiento') mapaEnVista = null;
   actualizarSelects(state);
   actualizarInfoTruequeAsentamientos(state);
   actualizarInfoFlota(state);
@@ -2344,6 +2380,7 @@ function render(): void {
 // Única suscripción: cualquier acción del store dispara un re-render. La interfaz nunca
 // vuelve a llamar `render()` manualmente tras una acción — eso sería recrear el acoplamiento.
 gameStore.subscribe(render);
+requestAnimationFrame(animarMapa);
 alCargarSigilos(render);
 
 function ocultarTooltipEdificioAsentamiento(): void {

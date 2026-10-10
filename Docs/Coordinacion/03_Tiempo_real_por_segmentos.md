@@ -97,7 +97,7 @@ quitar solo `edificios`/`almacen` no basta. Contenido:
   `poblacion`, `poblacionEn`, `bandidosEn`, `origen`, `creadoEn`, `eligieronComoInicial`.
 - Completos y sin recortar: `ejercitos` (con `ruta`/`progreso`/`avancePorTick`), `caravanas` (con escolta), `facciones`
   (con sigilo), `relaciones`, `batallas`, `campamentosBandidos`, `aedas`, `titulos`, `tecnologia`, `red`/`caminos`,
-  `estadoMapa` y los escalares (`mapaId`; `instante` y `version` van en la cabecera).
+  `estadoMapa`, y (añadidos por Backend a petición de Cliente admin, commit `e07b86a`) `acuerdos`, `ordenes`, `aedasResidentes` y `preciosReferencia`, y los escalares (`mapaId`; `instante` y `version` van en la cabecera).
 
   Definición implementada de `resumen`: `mantenimientoIncumplido = medidorMantenimiento < MANTENIMIENTO.medidorInicial`; `poderMilitar` = suma del
   poder de las escuadras de los residentes en su campamento (no cuenta las que andan en columnas); el resto sale de `edificios` y `almacen`.
@@ -520,4 +520,4 @@ Desviaciones del diseño inicial: (1) `vista/mapa` por héroe (§6.2); (2) `vist
 desde el segundo tick (§4.1); (4) `instante`/`version` solo en cabecera.
 
 Mediciones con el mundo vivo (12 plazas, 62 héroes): foto de admin 275 KiB y delta 6,7 KiB por tick, contra 5586 KiB del GET cada 3 s; jugador, delta de 3,4 KiB por tick
-(`vista/mapa` + `vista/heroe`) contra 254 KiB de proyección cada 5 s. Pendiente: Fase 4 (`desde`) y medir el mundo de 500 bots.
+(`vista/mapa` + `vista/heroe`) contra 254 KiB de proyección cada 5 s. Con el checkpoint del tick 20000 (24 plazas, 500 héroes): delta admin 18,6 KiB por tick contra 9043 KiB del GET cada 3 s; jugador ≈3,2 KiB por tick contra 171 KiB cada 5 s. Pendiente: Fase 4 (`desde`), retirar `tick` y repetir la medición al tick 40000.

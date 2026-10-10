@@ -238,6 +238,8 @@ export class GameStore {
   private ultimaLecturaCompleta = Date.now();
   private notifPendiente = false;
   private versionDePartidaVista = -1;
+  /** Cuándo (performance.now) llegó el último dato de la partida: el origen de la interpolación de lo móvil. */
+  private recibidoEn = performance.now();
   private listeners = new Set<Listener>();
   /** Mensajes de rechazo/error SOLO EN MEMORIA del cliente (nunca persistidos): a diferencia de la versión
    * local anterior, el servidor no tiene manera de que el cliente le pida "anota este rechazo en el log" sin
@@ -295,6 +297,7 @@ export class GameStore {
     this.estadoBase = await consultarEstado(this.gameId);
     this.estadoCache = this.estadoBase;
     this.ultimaLecturaCompleta = Date.now();
+    this.recibidoEn = performance.now();
     this.refusionar();
     await this.sincronizarEventos();
     await this.sincronizarMapa(this.estadoCache.mapaId);
@@ -320,6 +323,11 @@ export class GameStore {
     this.conexion.suscribir(CANAL_PARTIDA);
   }
 
+  /** Cuándo (performance.now) llegó el último dato de la partida. */
+  momentoDeDatos(): number {
+    return this.recibidoEn;
+  }
+
   /** ¿Llega el estado por tiempo real? Mientras sí, el sondeo completo baja a un respaldo lento. */
   get enVivo(): boolean {
     return this.conexion?.sano === true;
@@ -339,6 +347,7 @@ export class GameStore {
 
   private alCambiarCanal(canal: string): void {
     if (canal === CANAL_PARTIDA) {
+      this.recibidoEn = performance.now();
       const partida = this.conexion?.almacen(CANAL_PARTIDA);
       // El mapa solo cambia al regenerar la partida: ese caso se resuelve con una lectura completa.
       if (partida && partida.tiene('mapaId') && partida.bloque('mapaId') !== this.mapaGeneradoCache.id) {
