@@ -56,7 +56,7 @@ animaciones); el delta mantiene el estado al día.
 
 | Canal | Quién | Contiene | Clave de agrupación (§6.2) |
 |---|---|---|---|
-| `vista/mapa` | jugador con membresía (**implementado: clave = el héroe**, §6.2) | Lo del mundo que su Facción (y los que comparten su vista) ve bajo la niebla: posiciones/progreso de lo móvil, asentamientos avistados/conocidos, territorio, batallas visibles, campamentos y Aedas a la vista | *diseño:* `faccionId` + firma de aliados; *implementado:* el `heroeId` (§6.2); **a pasar a Facción, §13.1** |
+| `vista/mapa` | jugador con membresía (**implementado: clave de Facción**, §6.2) | Lo del mundo que su Facción (y los que comparten su vista) ve bajo la niebla: posiciones/progreso de lo móvil, asentamientos avistados/conocidos, territorio, batallas visibles, campamentos y Aedas a la vista | `f:<faccionId>\|<aliados con visión compartida>`; `h:<heroeId>` si el jugador no tiene Facción, va en una columna ajena a la Facción o ha explorado por su cuenta más de lo que sabe la Facción (§6.2, §13.1) |
 | `vista/heroe` | jugador, solo su héroe | Lo personal: `heroe`, `ejercitos` propios con su `ruta`, `caravanas` propias, `convocatorias`, informes, miradas, mercado de campamento, tecnología… | el `heroeId` (no se comparte) |
 | `vista/asentamiento/<id>` | ciudadano de la Facción dueña **y presente dentro de la plaza** (misma regla que `asentamientos[0]` de la proyección; Doc 1.10.1: la ciudadanía habilita, la presencia ejerce) | El interior de esa plaza: escalares de `asentamiento`, `edificios` (con las obras: `estado: 'en_construccion'`/`'en_cola'` y `completaEn`), almacén, población, cargos, residentes, colas de reclutamiento, mercado local, muralla | el `asentamientoId` (todos los ciudadanos ven lo mismo) |
 | `admin/partida` | administrador (`exigirAdministracion`) | La partida completa SIN niebla en versión **ligera** (§2.1) | la partida (un solo diff) |
@@ -67,13 +67,19 @@ animaciones); el delta mantiene el estado al día.
 Qué va exactamente en cada bloque (nombres = los de `ProyeccionJugador` / `EstadoAdmin`, que son la fuente):
 
 - **`vista/mapa`:** `ejercitosAvistados`, `caravanasAvistadas`, `asentamientosAvistados`, `asentamientosConocidos`,
-  `aedasAvistados`, `batallas`, `campamentosBandidos`, `campamentosMercenarios`, `alijos`, `heroesVisibles`,
+  `aedasAvistados`, `batallas`, `campamentosBandidos`, `campamentosMercenarios`, `heroesVisibles`,
   `facciones`, `zonas`, `zonasFusionadas`, `caminos`, `territorioPorEjercito`, `exploracion`, `relaciones`, `titulos`,
   `nombresDeCompaneros`, `nombresDeDirigentes`, escalares `instante`, `version`, `mapaId`, `estadoMapa`.
 - **`vista/heroe`** (escalares `faccionId` y `miConvocatoriaId`, implementado así): `heroe`, `ejercitos`, `caravanas`, `convocatorias`, `miConvocatoriaId`, `informesDeInspeccion`,
   `miradasIntel`, `informesPlaza`, `tarifasIntel`, `propuestas*`, `acuerdos`, `ordenes`, `tecnologia`,
   `aedasResidentes`, `mercadoCampamento`, `escenaCampamento`, `historial`, `ascensoDeAsentamiento`,
-  `produccionDeAsentamiento`, `preciosReferencia`.
+  `produccionDeAsentamiento`, `preciosReferencia`, `alijos` y los **ajustes sobre el mapa** (13.1, abajo).
+  Los ajustes son lo que cambia de un jugador a otro de la misma Facción y se componen con `vista/mapa` para dar exactamente la
+  proyección HTTP (`componerProyeccion`, `session/proyecciones/jugador.ts`, implementación de referencia):
+  `plazaPisadaId` (escalar: su ficha sale de `asentamientosAvistados`), `detalleDeAvistados` (mapa `id → {almacen?, interiorRecordado?}` que se
+  funde en la ficha de esa plaza), `campamentosPropios` (se suman a `campamentosMercenarios`), `heroesVisiblesExtra` (se suman a
+  `heroesVisibles`; el propio héroe se quita de ellos), `ladoPropioPorBatalla` (mapa `battleId → lado`, se pone en `ladoPropio` de esa batalla) y
+  `batallasPropias` (batallas en que combate y el mapa no ve; se suman a `batallas`).
 - **`vista/asentamiento/<id>`:** los campos de `Asentamiento` que la proyección sirve para la plaza propia
   (`asentamientos[i]` con ese `id`), descompuestos así: escalares en la entidad `asentamiento`, y `edificios` como
   entidades con `id`. El trazado (`trazadoPorAsentamiento[id]` de la proyección) viaja con la clave **`trazado`** (implementado así) como bloque sustituible (cambia solo con
@@ -292,7 +298,7 @@ Dos opciones:
 - **B. Diff por suscriptor sobre una foto cacheada** — una proyección filtrada por jugador y un diff por jugador; la foto
   cacheada ahorra rehacer la anterior, no la nueva.
 
-**Recomendación de diseño: A, con dos capas. Implementado así: A degenerada (clave = héroe)**, ver «Resultado de la implementación» al final de este apartado. Los argumentos siguen valiendo para cuando se pueda agrupar.
+**Recomendación de diseño: A, con dos capas. Implementado así (2026-10-10, 13.1): A, con la clave que describe la tabla de §2.** El mapa es función de la `PerspectivaDeMapa` del jugador y lo personal viaja en `vista/heroe` como ajustes; la «Resultado de la implementación» del final de este apartado recoge la historia de cuando era B.
 
 Argumentos, comprobados contra el código de la proyección (`proyectarParaJugador`):
 
