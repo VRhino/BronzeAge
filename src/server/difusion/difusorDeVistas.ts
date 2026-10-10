@@ -9,7 +9,7 @@
 //  - El derecho a ver se reevalúa en cada flush (03 §7.2).
 import type WebSocket from 'ws';
 import { diferenciar, type Foto } from '../../session/vistas/diff';
-import { anotarMovimiento } from '../../session/vistas/movimiento';
+import { anotarMovimiento, ticksEntre } from '../../session/vistas/movimiento';
 import {
   analizarCanal,
   claveDeGrupo,
@@ -43,6 +43,8 @@ export interface OpcionesDifusor {
   lentoMaxMs?: number;
   /** Tope de suscripciones por socket. */
   maxSuscripcionesPorSocket?: number;
+  /** Tope del parámetro `ritmo` de `suscribir` (entregar un delta cada N ticks, 03 §13.5): lo que pida el cliente se recorta a [1, esto]. */
+  ritmoMaximo?: number;
   /** Una foto por canal y socket cada tanto (ms), pedida por `resincronizar`. */
   minMsEntreFotos?: number;
   /** Reloj en ms (inyectable). */
@@ -63,12 +65,18 @@ export type CodigoDeError = 'canal_desconocido' | 'no_autorizado' | 'demasiado_f
 
 interface Suscriptor {
   conexion: ConexionDeVistas;
+  /** Cada cuántos ticks recibe un delta (1 = todos). Con más de 1 los deltas se coalescen: `desde` es la versión del último que recibió. */
+  ritmo: number;
+  /** Lo último que se le entregó (foto o delta) y su versión: de aquí sale el delta coalescido cuando le toca. */
+  entregado?: { version: number; foto: Foto };
   /** Desde cuándo (ms) no recibe nada por ir lento; ausente = al día. */
   desactualizadoDesde?: number;
 }
 
 interface Grupo {
   gameId: string;
+  /** Deltas coalescidos de ESTE flush para los de ritmo lento, por la versión desde la que parten: los comparten los que van a la par. */
+  cacheRitmo?: { version: number; mensajes: Map<number, string> };
   /** La de quien creó el grupo: todos los del grupo ven lo mismo, así que cualquiera de ellos proyecta igual. */
   audiencia: Audiencia;
   clave: string;
@@ -162,6 +170,7 @@ export class DifusorDeVistas {
       lentoMaxMs: opciones.lentoMaxMs ?? 15_000,
       maxSuscripcionesPorSocket: opciones.maxSuscripcionesPorSocket ?? 64,
       minMsEntreFotos: opciones.minMsEntreFotos ?? 2_000,
+      ritmoMaximo: opciones.ritmoMaximo ?? 60,
       ahoraMs: opciones.ahoraMs,
       programar: opciones.programar,
     };
@@ -201,7 +210,7 @@ export class DifusorDeVistas {
    * que el servidor no implementa o que no es de esta audiencia es `canal_desconocido` (no se revela que exista); uno que existe pero no se
    * puede ver, `no_autorizado`.
    */
-  suscribir(gameId: string, socket: WebSocket, conexion: ConexionDeVistas, nombre: string): { error: string; codigo: CodigoDeError } | undefined {
+  suscribir(gameId: string, socket: WebSocket, conexion: ConexionDeVistas, nombre: string, ritmoPedido?: number): { error: string; codigo: CodigoDeError } | undefined {
     const canal = analizarCanal(nombre, conexion.audiencia);
     if (!canal) return { error: 'canal desconocido', codigo: 'canal_desconocido' };
     const fuente = this.opciones.fuenteDe(gameId);
@@ -219,14 +228,21 @@ export class DifusorDeVistas {
     if (!grupo) return { error: 'no autorizado', codigo: 'no_autorizado' };
 
     const antes = grupo.suscriptores.has(socket);
-    grupo.suscriptores.set(socket, { conexion });
+    const ritmo = this.ritmoAplicado(ritmoPedido);
+    grupo.suscriptores.set(socket, { conexion, ritmo });
     propias.add(nombre);
     this.suscripcionesPorSocket.set(socket, propias);
     // La alta fija el momento de la primera foto; un `suscribir` repetido no la salta (usa `resincronizar`).
     if (!antes || !this.ultimaFoto.get(socket)?.has(nombre)) this.marcarFoto(socket, nombre);
-    this.enviar(socket, JSON.stringify({ tipo: 'suscrito', canal: nombre, intervaloTickMs: fuente.intervaloRelojDeMundoMs() }));
+    this.enviar(socket, JSON.stringify({ tipo: 'suscrito', canal: nombre, intervaloTickMs: fuente.intervaloRelojDeMundoMs(), ritmo }));
     this.enviarFoto(grupo, socket, 'alta');
     return undefined;
+  }
+
+  /** El ritmo que se aplica a lo que pide el cliente: un entero entre 1 (cada tick, lo normal) y el tope; sin pedirlo, 1. */
+  private ritmoAplicado(pedido: number | undefined): number {
+    if (pedido === undefined || !Number.isFinite(pedido)) return 1;
+    return Math.min(this.opciones.ritmoMaximo, Math.max(1, Math.floor(pedido)));
   }
 
   /** El grupo al que pertenece esta conexión en este canal, creándolo si hace falta; `undefined` si lo que se mira no existe. Si ya existe se
@@ -259,7 +275,7 @@ export class DifusorDeVistas {
       this.suscripcionesPorSocket.get(socket)?.delete(origen.canal.nombre);
       return;
     }
-    destino.suscriptores.set(socket, { conexion: s.conexion });
+    destino.suscriptores.set(socket, { conexion: s.conexion, ritmo: s.ritmo });
     this.enviar(socket, JSON.stringify({ tipo: 'resync', canal: origen.canal.nombre, motivo: 'visibilidad' }));
     this.enviarFoto(destino, socket, 'visibilidad');
   }
@@ -439,8 +455,24 @@ export class DifusorDeVistas {
         instr.socketsLentos++;
         continue;
       }
-      this.enviar(socket, mensaje, grupo.canal.tipo);
+      if (s.ritmo > 1) this.entregarEnRitmo(grupo, socket, s);
+      else this.enviar(socket, mensaje, grupo.canal.tipo);
     }
+  }
+
+  /** Al de ritmo lento le toca un delta cuando han pasado `ritmo` ticks desde lo último que se le entregó: uno solo, coalescido desde esa versión. */
+  private entregarEnRitmo(grupo: Grupo, socket: WebSocket, s: Suscriptor): void {
+    const e = s.entregado;
+    if (!e || ticksEntre(e.foto.instante, grupo.foto.instante) < s.ritmo) return;
+    if (grupo.cacheRitmo?.version !== grupo.version) grupo.cacheRitmo = { version: grupo.version, mensajes: new Map() };
+    let mensaje = grupo.cacheRitmo.mensajes.get(e.version);
+    if (!mensaje) {
+      const dif = diferenciar(e.foto, grupo.foto, definicionDe(grupo.canal).esquema);
+      mensaje = JSON.stringify({ tipo: 'delta', gameId: grupo.gameId, canal: grupo.canal.nombre, desde: e.version, hasta: grupo.version, instante: grupo.foto.instante, cambios: dif.cambios, escalares: dif.escalares });
+      grupo.cacheRitmo.mensajes.set(e.version, mensaje);
+    }
+    this.enviar(socket, mensaje, grupo.canal.tipo);
+    s.entregado = { version: grupo.version, foto: grupo.foto };
   }
 
   // --- Envío ---
@@ -463,6 +495,8 @@ export class DifusorDeVistas {
     }
     instr.fotos[motivo]++;
     this.enviar(socket, grupo.fotoJson, grupo.canal.tipo);
+    const s = grupo.suscriptores.get(socket);
+    if (s && s.ritmo > 1) s.entregado = { version: grupo.version, foto: grupo.foto }; // solo el de ritmo lento la necesita; al rápido le sobraría memoria
     if (motivo !== 'alta') this.marcarFoto(socket, grupo.canal.nombre);
   }
 

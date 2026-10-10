@@ -31,12 +31,18 @@ type Accion = 'suscribir' | 'desuscribir' | 'resincronizar';
 interface MensajeCliente {
   accion: Accion;
   canal: string;
+  /** Solo en `suscribir` a un canal de vista (03 §13.5): entregar un delta cada N ticks. El servidor lo recorta a su tope. */
+  ritmo?: number;
 }
 
 function esMensajeCliente(valor: unknown): valor is MensajeCliente {
   if (typeof valor !== 'object' || valor === null) return false;
   const v = valor as Record<string, unknown>;
-  return (v.accion === 'suscribir' || v.accion === 'desuscribir' || v.accion === 'resincronizar') && typeof v.canal === 'string';
+  return (
+    (v.accion === 'suscribir' || v.accion === 'desuscribir' || v.accion === 'resincronizar') &&
+    typeof v.canal === 'string' &&
+    (v.ritmo === undefined || typeof v.ritmo === 'number')
+  );
 }
 
 /** El navegador no puede mandar cabeceras propias en el handshake de `WebSocket` — solo clientes no
@@ -65,7 +71,7 @@ function leerMensaje(socket: WebSocket, data: Buffer): MensajeCliente | undefine
     return undefined;
   }
   if (!esMensajeCliente(mensaje)) {
-    enviarError(socket, undefined, 'se esperaba {accion, canal}', 'formato');
+    enviarError(socket, undefined, 'se esperaba {accion, canal, ritmo?}', 'formato');
     return undefined;
   }
   return mensaje;
@@ -141,7 +147,7 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
             const fallo =
               mensaje.accion === 'resincronizar'
                 ? difusorDeVistas.resincronizar(gameId, socket, mensaje.canal)
-                : difusorDeVistas.suscribir(gameId, socket, conexionDeVistas, mensaje.canal);
+                : difusorDeVistas.suscribir(gameId, socket, conexionDeVistas, mensaje.canal, mensaje.ritmo);
             if (fallo) enviarError(socket, mensaje.canal, fallo.error, fallo.codigo);
             return;
           }
@@ -205,7 +211,7 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
         const fallo =
           mensaje.accion === 'resincronizar'
             ? difusorDeVistas.resincronizar(gameId, socket, mensaje.canal)
-            : difusorDeVistas.suscribir(gameId, socket, conexion, mensaje.canal);
+            : difusorDeVistas.suscribir(gameId, socket, conexion, mensaje.canal, mensaje.ritmo);
         if (fallo) enviarError(socket, mensaje.canal, fallo.error, fallo.codigo);
       });
 

@@ -206,6 +206,22 @@ describe('vista/mapa y vista/heroe', () => {
   });
 });
 
+describe('ritmo', () => {
+  it('suscribir con ritmo lo recorta y lo devuelve en suscrito; un ritmo que no es número es error de formato', async () => {
+    const admin = await partida();
+    const ws = await app.injectWS('/v1/admin/partidas/g1/tiempo-real', { headers: admin });
+    const recibidos = recoger(ws);
+    ws.send(JSON.stringify({ accion: 'suscribir', canal: 'admin/partida', ritmo: 100000 }));
+    await hasta(() => recibidos.length >= 2);
+    expect(recibidos[0]).toMatchObject({ tipo: 'suscrito', canal: 'admin/partida', ritmo: 60 });
+
+    ws.send(JSON.stringify({ accion: 'suscribir', canal: 'admin/partida', ritmo: 'rapido' }));
+    await hasta(() => recibidos.length >= 3);
+    expect(recibidos[2]).toMatchObject({ tipo: 'error', codigo: 'formato' });
+    ws.terminate();
+  });
+});
+
 describe('métricas', () => {
   it('/admin/metricas incluye los canales de vista con sus suscriptores', async () => {
     const admin = await partida();
