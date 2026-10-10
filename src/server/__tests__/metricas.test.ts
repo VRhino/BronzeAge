@@ -11,6 +11,7 @@ import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RegistroDePartidas } from '../registroDePartidas';
 import { RegistroDeAuditoria } from '../auditoria';
 import { HubDeDifusion } from '../difusion/hub';
+import { DifusorDeVistas } from '../difusion/difusorDeVistas';
 import { recogerMetricas } from '../metricas';
 
 /** Espera de reloj REAL, para dejar que el `setInterval` del reloj de mundo dispare. */
@@ -44,6 +45,7 @@ function fuentes(extra: Partial<Parameters<typeof recogerMetricas>[0]> = {}) {
     partidas: registro,
     auditoria: new RegistroDeAuditoria(almacen, () => '2026-09-05T10:00:00.000Z'),
     hub: new HubDeDifusion(),
+    vistas: new DifusorDeVistas({ fuenteDe: () => undefined }),
     ahora: () => '2026-09-05T10:00:00.000Z',
     ...extra,
   };

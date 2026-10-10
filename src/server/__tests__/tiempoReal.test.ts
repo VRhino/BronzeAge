@@ -147,7 +147,7 @@ describe('protocolo de suscripcion', () => {
     const ws = await app.injectWS('/v1/jugador/partidas/g1/tiempo-real', { headers: ana.auth });
 
     expect(await suscribir(ws, `asentamiento/${asentamientoId}`)).toEqual({ tipo: 'suscrito', canal: `asentamiento/${asentamientoId}` });
-    expect(await suscribir(ws, 'asentamiento/no-existe')).toEqual({ tipo: 'error', canal: 'asentamiento/no-existe', error: 'no autorizado' });
+    expect(await suscribir(ws, 'asentamiento/no-existe')).toEqual({ tipo: 'error', canal: 'asentamiento/no-existe', error: 'no autorizado', codigo: 'no_autorizado' });
     ws.terminate();
   });
 

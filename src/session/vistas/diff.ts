@@ -22,8 +22,12 @@ export interface EsquemaDeVista {
   colecciones: Readonly<Record<string, (entidad: never) => string>>;
   /** Colecciones en forma de mapa `id → valor` (`nombresDe*`, `territorioPorEjercito`). */
   mapas?: readonly string[];
+  /** Entidades únicas: `datos[k]` es UNA entidad (con `id`), no un array (`asentamiento` de `vista/asentamiento/<id>`). Viajan como una colección de uno. */
+  unicas?: readonly string[];
   /** Claves de primer nivel que viajan fusionadas en `escalares`. */
   escalares: readonly string[];
+  /** Claves de la foto que van en la CABECERA del mensaje (`instante`, `version`) y no en `datos`: el diff las ignora. */
+  cabecera?: readonly string[];
 }
 
 export interface Diferencia {
@@ -94,10 +98,12 @@ export function diferenciar(antes: Foto, despues: Foto, esquema: EsquemaDeVista)
   const poner: Cambio[] = [];
   const escalares: Record<string, unknown> = {};
   const mapas = new Set(esquema.mapas ?? []);
+  const unicas = new Set(esquema.unicas ?? []);
   const escalaresDe = new Set(esquema.escalares);
 
   const claves = new Set([...Object.keys(antes), ...Object.keys(despues)]);
-  for (const k of [...Object.keys(esquema.colecciones), ...mapas, ...claves]) {
+  for (const k of esquema.cabecera ?? []) claves.delete(k);
+  for (const k of [...Object.keys(esquema.colecciones), ...mapas, ...unicas, ...claves]) {
     if (!claves.delete(k)) continue; // ya tratada (o ausente en las dos)
     const a = antes[k];
     const d = despues[k];
@@ -105,6 +111,19 @@ export function diferenciar(antes: Foto, despues: Foto, esquema: EsquemaDeVista)
 
     if (escalaresDe.has(k)) {
       if (!iguales(a, d)) escalares[k] = d;
+      continue;
+    }
+
+    if (unicas.has(k)) {
+      const previa = a as Record<string, unknown> | undefined;
+      const nueva = d as Record<string, unknown> | undefined;
+      const id = String((nueva ?? previa)?.['id']);
+      if (!nueva) quitar.push({ t: k, id, op: 'remove' });
+      else if (!previa) poner.push({ t: k, id, op: 'upsert', v: nueva });
+      else {
+        const cambio = diferirEntidad(k, id, previa, nueva);
+        if (cambio) poner.push(cambio);
+      }
       continue;
     }
 
@@ -148,6 +167,7 @@ export function diferenciar(antes: Foto, despues: Foto, esquema: EsquemaDeVista)
 export function aplicarDiferencia(foto: Foto, diferencia: Diferencia, esquema: EsquemaDeVista): Foto {
   const resultado: Foto = { ...foto, ...diferencia.escalares };
   const mapas = new Set(esquema.mapas ?? []);
+  const unicas = new Set(esquema.unicas ?? []);
   const copiadas = new Set<string>();
   const lista = (t: string): Record<string, unknown>[] => {
     if (!copiadas.has(t)) {
@@ -173,6 +193,21 @@ export function aplicarDiferencia(foto: Foto, diferencia: Diferencia, esquema: E
       const m = mapa(c.t);
       if (c.op === 'remove') delete m[c.id];
       else m[c.id] = c.op === 'upsert' ? c.v : { ...(m[c.id] as object), ...c.v };
+      continue;
+    }
+    if (unicas.has(c.t)) {
+      if (c.op === 'remove') delete resultado[c.t];
+      else if (c.op === 'upsert') resultado[c.t] = c.v;
+      else {
+        const base = resultado[c.t] as Record<string, unknown> | undefined;
+        if (!base) throw new Error(`patch de ${c.t}/${c.id}, que no existe: hay un hueco`);
+        const fusionada: Record<string, unknown> = { ...base };
+        for (const [k, v] of Object.entries(c.v)) {
+          if (v === null) delete fusionada[k];
+          else fusionada[k] = v;
+        }
+        resultado[c.t] = fusionada;
+      }
       continue;
     }
     const clave = esquema.colecciones[c.t];

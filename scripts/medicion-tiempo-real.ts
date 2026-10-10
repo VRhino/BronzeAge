@@ -11,6 +11,7 @@ import { crearAlmacenEnDisco } from '../src/server/almacen/enDisco';
 import { RunnerDePartida } from '../src/server/runnerDePartida';
 import { vistaAdminDeEstado } from '../src/session/estado';
 import { proyectarParaJugador } from '../src/session/proyecciones/jugador';
+import { DifusorDeVistas } from '../src/server/difusion/difusorDeVistas';
 
 const [directorio, gameId, ticksArg] = process.argv.slice(2);
 if (!directorio || !gameId) {
@@ -70,3 +71,24 @@ if (muestra.length > 0) {
   console.log(`  → ${por5s(1)}`);
 }
 console.log(`  → admin a 1 sondeo/3 s: ${kib((admin.bytes * 60) / 3)}/min`);
+
+// --- Canales de vista (contrato 03): lo mismo, empujado ---
+const difusor = new DifusorDeVistas({ fuenteDe: () => runner, coalescerMs: 0 });
+const enviados: number[] = [];
+const socket = { OPEN: 1, readyState: 1, bufferedAmount: 0, send: (m: string) => enviados.push(Buffer.byteLength(m)), close: () => undefined } as never;
+const conexion = { audiencia: { tipo: 'admin' as const }, derecho: () => true };
+difusor.suscribir(gameId, socket, conexion, 'admin/partida');
+const bytesFoto = enviados.at(-1)!;
+const TICKS_MEDIDOS = 20;
+enviados.length = 0;
+for (let i = 0; i < TICKS_MEDIDOS; i++) {
+  await runner.avanzarTick();
+  difusor.notificar(gameId);
+}
+const m = difusor.metricas().porCanal['admin/partida']!;
+const mediaDelta = enviados.reduce((a, b) => a + b, 0) / Math.max(1, enviados.length);
+console.log(`
+canal admin/partida:     foto ${kib(bytesFoto)}, delta medio ${kib(mediaDelta)} (${enviados.length} deltas en ${TICKS_MEDIDOS} ticks, máx ${kib(Math.max(0, ...enviados))})`);
+console.log(`  proyección p50 ${m.ms.proyeccion.p50.toFixed(1)} ms · diff p50 ${m.ms.diff.p50.toFixed(1)} ms · serialización p50 ${m.ms.serializacion.p50.toFixed(2)} ms`);
+console.log(`  cambios por op: ${JSON.stringify(m.cambiosPorOp)}`);
+console.log(`  → a 1 tick/min: ${kib(mediaDelta)}/min por cliente admin (el sondeo a 3 s: ${kib((admin.bytes * 60) / 3)}/min → ${((mediaDelta / ((admin.bytes * 60) / 3)) * 100).toFixed(2)} %)`);

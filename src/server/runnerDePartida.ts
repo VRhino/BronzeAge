@@ -77,6 +77,11 @@ export interface OpcionesRunner {
    * conectados solo se enteraban de lo que pasaba en el mundo al volver a preguntar.
    */
   alEmitir?: (gameId: string, eventos: readonly EventoDominioConVersion[], marca: MarcaDeTick) => void;
+  /**
+   * A quién avisar de que el estado cambió (comando de jugador, tick del reloj o de administración), una vez persistido. Es el disparo
+   * del difusor de vistas (`server/difusion/difusorDeVistas.ts`, 03 §6.1): se avisa de TODA transición aceptada, haya eventos o no.
+   */
+  alCambiarEstado?: (gameId: string) => void;
 }
 
 /** Cuándo ocurrió un tick del reloj de mundo (2026-10-09): lo que el hub manda a todos los conectados para que sepan que hay algo nuevo que pedir. */
@@ -91,6 +96,7 @@ export class RunnerDePartida {
   private readonly ahora: () => string;
   private readonly opcionesSesion: OpcionesSesion;
   private readonly alEmitir?: OpcionesRunner['alEmitir'];
+  private readonly alCambiarEstado?: OpcionesRunner['alCambiarEstado'];
   /** Los eventos del último tick, para difundirlos tras persistir. */
   private eventosDelUltimoTick: EventoDominioConVersion[] = [];
 
@@ -207,6 +213,7 @@ export class RunnerDePartida {
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
     this.opcionesSesion = opciones.sesion ?? {};
     this.alEmitir = opciones.alEmitir;
+    this.alCambiarEstado = opciones.alCambiarEstado;
     this.versionEventosAnexados = versionEventosAnexados;
   }
 
@@ -570,6 +577,7 @@ export class RunnerDePartida {
 
     await this.anexarEventosNuevos();
     if (guardar) await this.guardarYVaciarDiario();
+    this.alCambiarEstado?.(this.gameId);
     return resultado;
   }
 

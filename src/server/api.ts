@@ -29,6 +29,7 @@ import { crearRepositorioIdentidadEnMemoria } from './identidad/repositorioEnMem
 import { crearDirectorioDeAdministradores, type AdministradorConfigurado } from './identidad/administradoresGlobales';
 import { RegistroDePartidas } from './registroDePartidas';
 import { HubDeDifusion } from './difusion/hub';
+import { DifusorDeVistas, type OpcionesDifusor } from './difusion/difusorDeVistas';
 import { RegistroDeAuditoria } from './auditoria';
 import { TareaDeMantenimiento, type ConfiguracionMantenimiento } from './mantenimiento';
 import { registrarRutasDeSesion } from './rutas/sesiones';
@@ -107,6 +108,8 @@ export interface OpcionesServidor {
    * ninguna batalla llega a Unity y todas se resuelven con números (decisión del usuario, 2026-09-15).
    */
   servidoresBatalla?: readonly ServidorDeBatalla[];
+  /** Ajustes del difusor de canales de vista (coalescencia, umbrales de socket lento…); por defecto los del contrato 03 §6. Los tests los acortan. */
+  vistas?: Omit<OpcionesDifusor, 'fuenteDe'>;
 }
 
 export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
@@ -136,17 +139,28 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   const ahora = opciones.ahora ?? (() => new Date().toISOString());
   const servidoresBatalla = opciones.servidoresBatalla ?? [];
   const hub = opciones.hub ?? new HubDeDifusion();
+  // El difusor busca la partida por id cuando la necesita (la registra `RegistroDePartidas`, que se crea después y lo avisa de cada transición).
+  const registroRef: { actual?: RegistroDePartidas } = {};
+  const difusorDeVistas = new DifusorDeVistas({ fuenteDe: (gameId) => registroRef.actual?.obtener(gameId), ...opciones.vistas });
   const deps: DependenciasDeRutas = {
     identidad,
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
     // Mismo reloj de pared que el resto del servidor: así el reloj de mundo de cada partida y su catch-up
     // (D5, `RunnerDePartida.iniciarRelojDeMundo`) son inyectables en tests, no solo el reloj del sistema.
-    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora, { batallasEnUnity: servidoresBatalla.length > 0 }, (gameId, eventos, marca) => {
-      hub.difundir(gameId, eventos);
-      hub.difundirTick(gameId, marca);
-    }),
+    partidas: (registroRef.actual = new RegistroDePartidas(
+      almacen,
+      opciones.intervaloTickMs,
+      ahora,
+      { batallasEnUnity: servidoresBatalla.length > 0 },
+      (gameId, eventos, marca) => {
+        hub.difundir(gameId, eventos);
+        hub.difundirTick(gameId, marca);
+      },
+      (gameId) => difusorDeVistas.notificar(gameId)
+    )),
     ahora,
     hub,
+    difusorDeVistas,
     // Fase E2. Mismo almacén que los snapshots —una partida y su auditoría se archivan y podan juntas— y el
     // mismo reloj de pared inyectado que el resto del servidor, para que un test pueda fechar sus líneas de
     // forma determinista en vez de depender de la hora del sistema.

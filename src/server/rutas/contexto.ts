@@ -15,6 +15,7 @@ import type { ServidorDeBatalla } from '../identidad/servidoresDeBatalla';
 import type { RegistroDePartidas } from '../registroDePartidas';
 import type { RunnerDePartida } from '../runnerDePartida';
 import type { HubDeDifusion } from '../difusion/hub';
+import type { DifusorDeVistas } from '../difusion/difusorDeVistas';
 import type { RegistroDeAuditoria } from '../auditoria';
 import { idDeMapa, instanteDeTick } from '../../session/estado';
 import type { Instante } from '../../domain/tiempo';
@@ -29,6 +30,8 @@ export interface DependenciasDeRutas {
   ahora: () => string;
   /** Conexiones WebSocket activas (Fase C5) — a quién difundir tras un comando o un tick. */
   hub: HubDeDifusion;
+  /** Canales de vista con foto y deltas (contrato 03): el estado empujado en vez de sondeado. */
+  difusorDeVistas: DifusorDeVistas;
   /** Registro de auditoría de comandos (Fase E2). Se escribe desde `ejecutarComandoHttp`, que es el único
    * punto por el que pasan TODOS los comandos de las dos superficies, aceptados y rechazados. */
   auditoria: RegistroDeAuditoria;

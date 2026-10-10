@@ -215,6 +215,7 @@ const ESQUEMA_METRICAS = {
           properties: { aceptados: { type: 'number' }, autorizacion: { type: 'number' }, esquema: { type: 'number' }, dominio: { type: 'number' }, persistencia: { type: 'number' } },
         },
         auditoriaFallida: { type: 'number' },
+        vistas: { type: 'object', additionalProperties: true },
         partidas: {
           type: 'array',
           items: {
@@ -490,6 +491,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     }
     if (!(await deps.partidas.eliminar(gameId))) return reply.code(404).send({ error: `la partida '${gameId}' no existe.` });
     const conexionesCerradas = deps.hub.cerrarPartida(gameId);
+    deps.difusorDeVistas.olvidarPartida(gameId);
     const { revocadas, cuentasDeBotBorradas } = olvidarPartida(deps.identidad.repositorio, gameId, deps.ahora());
     // La auditoría se escribe en cola: se drena antes de borrarla para que una línea pendiente no la vuelva a crear.
     await deps.auditoria.drenar();
@@ -602,7 +604,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     if (!deps.administradores.esAdministradorGlobal(resuelto.usuario.id)) {
       return sinPermiso(reply, 'se requiere administrador global');
     }
-    return reply.send(recogerMetricas({ partidas: deps.partidas, auditoria: deps.auditoria, hub: deps.hub, ahora: deps.ahora }));
+    return reply.send(recogerMetricas({ partidas: deps.partidas, auditoria: deps.auditoria, hub: deps.hub, vistas: deps.difusorDeVistas, ahora: deps.ahora }));
   });
 
   /**

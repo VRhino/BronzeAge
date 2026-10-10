@@ -1,46 +1,40 @@
-// WebSocket único por jugador, con canales suscribibles (Fase C5, doc 6 §2): "una única conexión permanente
-// por jugador, con canales lógicos multiplexados encima" en vez de una conexión por pantalla.
+// WebSocket de tiempo real (Fase C5, doc 6 §2): una única conexión permanente por cliente, con canales lógicos multiplexados encima.
 //
-// Autenticación ANTES de completar el handshake (`preValidation`, en un `register` aparte para que el hook
-// no se filtre a las demás rutas): igual que las superficies HTTP, sin sesión válida ni membresía de jugador
-// no hay conexión — el rechazo llega como una respuesta HTTP normal (401/403) a la petición de upgrade, no
-// como un socket que se abre y se cierra solo sin explicación.
+// El protocolo (mensajes, canales de eventos y de vista, foto/delta/resync, errores y migración) está en
+// `Docs/Coordinacion/03_Tiempo_real_por_segmentos.md` y, para los canales de eventos, en `02_Contrato_Comunicacion_Servidor_Cliente.md` §2:
+// ahí es donde se mantiene, para que no viva duplicado en prosa aquí. Este archivo es el transporte:
 //
-// Protocolo (JSON sobre el socket):
-//   cliente -> {"accion":"suscribir"|"desuscribir","canal":"mapa/general"|"asentamiento/<id>"|"batalla/<id>"|"heroe/<tuHeroeId>"}
-//   servidor -> {"tipo":"suscrito"|"desuscrito","canal":...}
-//             | {"tipo":"error","canal"?:...,"error":...}
-//             | {"tipo":"tick","gameId":...,"version":...,"instante":...}   (a todos, en cada tick del reloj de mundo: sin datos, para pedir la proyección)
-//             | {"tipo":"evento","gameId":...,"canal":...,"evento": EventoDominio}   (gameId: la partida de este socket, para que un cliente con varias no las mezcle)
+//  - `/jugador/partidas/:gameId/tiempo-real`: canales de eventos (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`) y el
+//    mensaje `tick`. Los canales de vista de jugador (`vista/*`) se anuncian como `canal_desconocido` hasta que se implementen (fase 2 y 3).
+//  - `/admin/partidas/:gameId/tiempo-real`: canales de vista de administración (`admin/*`); no tiene canales de eventos.
 //
-// SIN mensaje sintético de "conectado": el evento `open` nativo de WebSocket ya se lo dice al cliente, y
-// como la autenticación ocurre en `preValidation` —ANTES de que el *handshake* se complete—, para cuando
-// `open` dispara la conexión ya está autenticada. Un frame de la app encima de eso no añadía información.
+// Autenticación ANTES de completar el handshake (`preValidation`, en un `register` aparte para que el hook no se filtre a las demás rutas):
+// sin sesión válida ni el permiso que toque no hay conexión — el rechazo llega como una respuesta HTTP normal (401/403) a la petición de
+// upgrade, no como un socket que se abre y se cierra solo sin explicación.
 //
-// Se descartó explícitamente por una razón más concreta que "es redundante": mandarlo de forma SÍNCRONA en
-// el mismo tick en que el handler de la ruta arranca compite con que el cliente termine de engancharse al
-// evento `message` — descubierto con `injectWS` en los tests (el primer mensaje se perdía siempre), pero es
-// una carrera real del transporte, no una peculiaridad del arnés de pruebas. Evitarla del todo (no mandar
-// nada hasta que el cliente inicie) es más simple y más robusto que retrasar el envío con un `setImmediate`.
+// SIN mensaje sintético de "conectado": el evento `open` nativo de WebSocket ya se lo dice al cliente, y la autenticación ocurre en
+// `preValidation`, ANTES de que el handshake se complete. Mandarlo de forma síncrona compite con que el cliente termine de engancharse a
+// `message` (se perdía el primer mensaje en los tests, y es una carrera real del transporte).
 //
-// Al reconectar se pierden las suscripciones (doc 6 §2): el cliente debe re-suscribirse solo. No hay estado
-// de suscripción que sobreviva al cierre del socket — más simple que reconstruir "qué tenía suscrito", y
-// coherente con que las suscripciones describen QUÉ se quiere ver, no un historial que recuperar.
+// Al reconectar se pierden las suscripciones (doc 6 §2): el cliente debe re-suscribirse solo.
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type WebSocket from 'ws';
-import { puedeJugar } from '../../acceso/rolesDePartida';
+import { puedeAdministrar, puedeJugar } from '../../acceso/rolesDePartida';
 import { puedeSuscribirseA } from '../../session/canales';
+import type { CodigoDeError } from '../difusion/difusorDeVistas';
 import { partidaNoAbierta, resolverActor, sinPermiso, sinSesion, type DependenciasDeRutas, type ParametrosGameId } from './contexto';
 
+type Accion = 'suscribir' | 'desuscribir' | 'resincronizar';
+
 interface MensajeCliente {
-  accion: 'suscribir' | 'desuscribir';
+  accion: Accion;
   canal: string;
 }
 
 function esMensajeCliente(valor: unknown): valor is MensajeCliente {
   if (typeof valor !== 'object' || valor === null) return false;
   const v = valor as Record<string, unknown>;
-  return (v.accion === 'suscribir' || v.accion === 'desuscribir') && typeof v.canal === 'string';
+  return (v.accion === 'suscribir' || v.accion === 'desuscribir' || v.accion === 'resincronizar') && typeof v.canal === 'string';
 }
 
 /** El navegador no puede mandar cabeceras propias en el handshake de `WebSocket` — solo clientes no
@@ -53,8 +47,30 @@ function conCredencialDeQuery(request: FastifyRequest): FastifyRequest {
   return { ...request, headers: { ...request.headers, authorization: `sesion ${sesionId}` } } as FastifyRequest;
 }
 
+const CANAL_DE_VISTA = /^(vista|admin)\//;
+
+function enviarError(socket: WebSocket, canal: string | undefined, error: string, codigo: CodigoDeError): void {
+  socket.send(JSON.stringify({ tipo: 'error', ...(canal === undefined ? {} : { canal }), error, codigo }));
+}
+
+/** Parsea y valida el mensaje del cliente; contesta el error por su cuenta y devuelve `undefined` si no vale. */
+function leerMensaje(socket: WebSocket, data: Buffer): MensajeCliente | undefined {
+  let mensaje: unknown;
+  try {
+    mensaje = JSON.parse(data.toString());
+  } catch {
+    enviarError(socket, undefined, 'mensaje no es JSON valido', 'formato');
+    return undefined;
+  }
+  if (!esMensajeCliente(mensaje)) {
+    enviarError(socket, undefined, 'se esperaba {accion, canal}', 'formato');
+    return undefined;
+  }
+  return mensaje;
+}
+
 export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: DependenciasDeRutas): void {
-  const { hub } = deps;
+  const { hub, difusorDeVistas } = deps;
   // Apagar el servidor (un despliegue) cierra todos los sockets, y eso no es que los jugadores cierren el cliente: no se
   // desconecta a nadie. Sin esto, cada despliegue los sacaría del mundo, y la escritura llegaría con la partida cerrada.
   let cerrando = false;
@@ -73,6 +89,7 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
       .then((r) => hub.difundir(gameId, r.eventos))
       .catch((err) => console.error(`[presencia] ${tipo} de ${heroe.id} en '${gameId}':`, err));
   };
+
   app.register(async (scoped) => {
     scoped.addHook('preValidation', async (request, reply) => {
       const { gameId } = request.params as ParametrosGameId;
@@ -99,21 +116,17 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
         presencia(gameId, jugadorId, 'conectarse');
 
         socket.on('message', (data: Buffer) => {
-          let mensaje: unknown;
-          try {
-            mensaje = JSON.parse(data.toString());
-          } catch {
-            socket.send(JSON.stringify({ tipo: 'error', error: 'mensaje no es JSON valido' }));
-            return;
-          }
-          if (!esMensajeCliente(mensaje)) {
-            socket.send(JSON.stringify({ tipo: 'error', error: 'se esperaba {accion, canal}' }));
-            return;
-          }
+          const mensaje = leerMensaje(socket, data);
+          if (!mensaje) return;
 
           if (mensaje.accion === 'desuscribir') {
             hub.desuscribir(gameId, socket, mensaje.canal);
             socket.send(JSON.stringify({ tipo: 'desuscrito', canal: mensaje.canal }));
+            return;
+          }
+          // Los canales de vista de jugador aún no existen, y los de administración no existen para un jugador: ni se revela su nombre.
+          if (mensaje.accion === 'resincronizar' || CANAL_DE_VISTA.test(mensaje.canal)) {
+            enviarError(socket, mensaje.canal, 'canal desconocido', 'canal_desconocido');
             return;
           }
 
@@ -122,7 +135,7 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
           const runner = deps.partidas.obtener(gameId);
           const heroe = runner?.getState().heroes.find((h) => h.jugadorId === jugadorId);
           if (!runner || !heroe || !puedeSuscribirseA(runner.getState(), heroe.id, mensaje.canal)) {
-            socket.send(JSON.stringify({ tipo: 'error', canal: mensaje.canal, error: 'no autorizado' }));
+            enviarError(socket, mensaje.canal, 'no autorizado', 'no_autorizado');
             return;
           }
           hub.suscribir(gameId, socket, mensaje.canal);
@@ -135,5 +148,47 @@ export function registrarRutaDeTiempoReal(app: FastifyInstance, deps: Dependenci
         });
       }
     );
+  });
+
+  // --- Administración: canales de vista `admin/*` (03 §3) ---
+  app.register(async (scoped) => {
+    scoped.addHook('preValidation', async (request, reply) => {
+      const { gameId } = request.params as ParametrosGameId;
+      const resuelto = resolverActor(conCredencialDeQuery(request), deps, gameId);
+      if (!resuelto) return sinSesion(reply);
+      if (!puedeAdministrar(resuelto.actor)) return sinPermiso(reply, 'sin rol de administracion en esta partida');
+      if (!deps.partidas.obtener(gameId)) return partidaNoAbierta(reply, gameId);
+    });
+
+    scoped.get<{ Params: ParametrosGameId }>('/admin/partidas/:gameId/tiempo-real', { websocket: true }, (socket: WebSocket, request) => {
+      const { gameId } = request.params;
+      const credencial = conCredencialDeQuery(request);
+      // El permiso de administración puede cambiar en caliente: se vuelve a mirar en cada flush, no solo al conectar (03 §7.2).
+      const conexion = {
+        audiencia: { tipo: 'admin' as const },
+        derecho: () => {
+          const r = resolverActor(credencial, deps, gameId);
+          return r !== undefined && puedeAdministrar(r.actor);
+        },
+      };
+
+      socket.on('message', (data: Buffer) => {
+        const mensaje = leerMensaje(socket, data);
+        if (!mensaje) return;
+
+        if (mensaje.accion === 'desuscribir') {
+          difusorDeVistas.desuscribir(gameId, socket, mensaje.canal);
+          socket.send(JSON.stringify({ tipo: 'desuscrito', canal: mensaje.canal }));
+          return;
+        }
+        const fallo =
+          mensaje.accion === 'resincronizar'
+            ? difusorDeVistas.resincronizar(gameId, socket, mensaje.canal)
+            : difusorDeVistas.suscribir(gameId, socket, conexion, mensaje.canal);
+        if (fallo) enviarError(socket, mensaje.canal, fallo.error, fallo.codigo);
+      });
+
+      socket.on('close', () => difusorDeVistas.desconectar(gameId, socket));
+    });
   });
 }

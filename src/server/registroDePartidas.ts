@@ -54,7 +54,9 @@ export class RegistroDePartidas {
     /** Cómo corren las partidas de este proceso (`OpcionesSesion`): hoy, si las batallas con humanos van a Unity. */
     private readonly opcionesSesion: OpcionesSesion = {},
     /** A quién se avisa de los eventos de cada tick del reloj de mundo (`OpcionesRunner.alEmitir`): el hub de WebSocket. */
-    private readonly alEmitir?: OpcionesRunner['alEmitir']
+    private readonly alEmitir?: OpcionesRunner['alEmitir'],
+    /** A quién se avisa de cada transición aceptada de cualquier partida (`OpcionesRunner.alCambiarEstado`): el difusor de vistas. */
+    private readonly alCambiarEstado?: OpcionesRunner['alCambiarEstado']
   ) {}
 
   obtener(gameId: string): RunnerDePartida | undefined {
@@ -85,7 +87,7 @@ export class RegistroDePartidas {
    */
   async abrir(gameId: string, config: ConfiguracionPartida): Promise<RunnerDePartida> {
     if (this.runners.has(gameId)) throw new PartidaYaAbiertaError(gameId);
-    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion, alEmitir: this.alEmitir });
+    const runner = await RunnerDePartida.cargarOCrear(gameId, config, { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion, alEmitir: this.alEmitir, alCambiarEstado: this.alCambiarEstado });
     this.runners.set(gameId, runner);
     this.arrancarRelojSiConfigurado(runner);
     return runner;
@@ -114,7 +116,7 @@ export class RegistroDePartidas {
     const runner = await RunnerDePartida.crearYPersistir(
       gameId,
       config,
-      { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion, alEmitir: this.alEmitir },
+      { almacen: this.almacen, ahora: this.ahora, sesion: this.opcionesSesion, alEmitir: this.alEmitir, alCambiarEstado: this.alCambiarEstado },
       { forzar: true }
     );
     this.runners.set(gameId, runner);
