@@ -56,7 +56,7 @@ animaciones); el delta mantiene el estado al día.
 
 | Canal | Quién | Contiene | Clave de agrupación (§6.2) |
 |---|---|---|---|
-| `vista/mapa` | jugador con membresía (**implementado: clave = el héroe**, §6.2) | Lo del mundo que su Facción (y los que comparten su vista) ve bajo la niebla: posiciones/progreso de lo móvil, asentamientos avistados/conocidos, territorio, batallas visibles, campamentos y Aedas a la vista | *diseño:* `faccionId` + firma de aliados; *implementado:* el `heroeId` (§6.2) |
+| `vista/mapa` | jugador con membresía (**implementado: clave = el héroe**, §6.2) | Lo del mundo que su Facción (y los que comparten su vista) ve bajo la niebla: posiciones/progreso de lo móvil, asentamientos avistados/conocidos, territorio, batallas visibles, campamentos y Aedas a la vista | *diseño:* `faccionId` + firma de aliados; *implementado:* el `heroeId` (§6.2); **a pasar a Facción, §13.1** |
 | `vista/heroe` | jugador, solo su héroe | Lo personal: `heroe`, `ejercitos` propios con su `ruta`, `caravanas` propias, `convocatorias`, informes, miradas, mercado de campamento, tecnología… | el `heroeId` (no se comparte) |
 | `vista/asentamiento/<id>` | ciudadano de la Facción dueña **y presente dentro de la plaza** (misma regla que `asentamientos[0]` de la proyección; Doc 1.10.1: la ciudadanía habilita, la presencia ejerce) | El interior de esa plaza: escalares de `asentamiento`, `edificios` (con las obras: `estado: 'en_construccion'`/`'en_cola'` y `completaEn`), almacén, población, cargos, residentes, colas de reclutamiento, mercado local, muralla | el `asentamientoId` (todos los ciudadanos ven lo mismo) |
 | `admin/partida` | administrador (`exigirAdministracion`) | La partida completa SIN niebla en versión **ligera** (§2.1) | la partida (un solo diff) |
@@ -320,7 +320,7 @@ Argumentos, comprobados contra el código de la proyección (`proyectarParaJugad
 mapa mezcla entradas de héroe (`exploracionPersonal`, `plazasRecordadas`, la plaza pisada excluida de avistados, el almacén de una
 plaza si su columna está a la puerta), y compartirlas por Facción las filtraría (rompe la invariante de que todo campo de `vista/mapa`
 sea función de la clave). Una proyección por héroe cuesta ≈0,5 ms. Para poder agrupar por Facción habría que sacar esas entradas del
-mapa hacia `vista/heroe`, y eso cambia **qué ve cada jugador**: es decisión de reglas, **del usuario** (pregunta abierta nº 6, §11). Mientras
+mapa hacia `vista/heroe`, y eso cambia **qué ve cada jugador**: es decisión de reglas, **del usuario** (pregunta nº 6, §11: **decidida el 2026-10-10**, ver §13). Mientras
 tanto la compartición por clave queda en `vista/asentamiento/<id>` y `admin/*`.
 
 Sobre `vista/asentamiento/<id>` y `admin/*` no hay duda: un diff por canal, compartido por todos los suscriptores.
@@ -382,7 +382,7 @@ flush ≤ el de una proyección HTTP × número de claves.
 
 - **Al suscribirse:** `puedeSuscribirseA` (`session/canales.ts`) se amplía con los canales de vista: `vista/mapa` y
   `vista/heroe` exigen héroe con membresía (como `mapa/general` y `heroe/<id>`); `vista/asentamiento/<id>` exige
-  `esCiudadano` de la Facción dueña **y estar dentro de la plaza** (implementado así: la ciudadanía habilita, la presencia ejerce; sin
+  `esCiudadano` de la Facción dueña **y estar dentro de la plaza** (implementado así y **confirmado por el usuario 2026-10-10: misma regla que el GET HTTP**; la ciudadanía habilita, la presencia ejerce; sin
   lo segundo, quien anda por el camino recibiría el interior de todas sus plazas); `admin/*`, `exigirAdministracion`.
 - **Reevaluación, en cada flush** (barata: sets en memoria), por tipo:
   - `vista/asentamiento/<id>`: sigue existiendo la plaza, el héroe sigue siendo ciudadano de su Facción **y sigue dentro de ella** (salir de la plaza ⇒ `revocado` en el siguiente flush). Si no ⇒
@@ -500,7 +500,7 @@ Técnicas (las contesta quien implementa; no son reglas de juego):
    personal): hoy es de Facción; si cambia, esa parte se mueve a `vista/heroe`.
 
 De reglas de juego (del usuario; **no se deciden aquí**):
-6. **Agrupar `vista/mapa` por Facción.** Hoy se calcula por héroe porque la proyección del mapa incluye información personal
+6. ~~Agrupar `vista/mapa` por Facción~~ **DECIDIDO (usuario, 2026-10-10): se aborda, por el camino 2 de §13.1 (sin cambiar lo que ve cada jugador).** Contexto original: Hoy se calcula por héroe porque la proyección del mapa incluye información personal
    (`exploracionPersonal`, `plazasRecordadas`, plaza pisada, almacén con la columna a la puerta). Agrupar por Facción exigiría que esa información
    pasara a ser de Facción o saliera del mapa personal. Es una decisión sobre qué ve cada jugador; no hace falta para el play-test
    (el coste por héroe es ≈0,5 ms) y solo importa si el número de jugadores crece mucho.
@@ -521,3 +521,47 @@ desde el segundo tick (§4.1); (4) `instante`/`version` solo en cabecera.
 
 Mediciones con el mundo vivo (12 plazas, 62 héroes): foto de admin 275 KiB y delta 6,7 KiB por tick, contra 5586 KiB del GET cada 3 s; jugador, delta de 3,4 KiB por tick
 (`vista/mapa` + `vista/heroe`) contra 254 KiB de proyección cada 5 s. Con el checkpoint del tick 20000 (24 plazas, 500 héroes): delta admin 18,6 KiB por tick contra 9043 KiB del GET cada 3 s; jugador ≈3,2 KiB por tick contra 171 KiB cada 5 s. Pendiente: Fase 4 (`desde`), retirar `tick` y repetir la medición al tick 40000.
+
+## 13. Optimizaciones de escala (decisión del usuario, 2026-10-10: todo lo que ayude a escalar se menciona; él decide)
+
+Regla de trabajo acordada: cualquier mejora que evite sufrir al servidor a futuro se **propone aquí con su coste y beneficio** y el usuario decide
+si se aborda. Estado de cada una:
+
+| # | Mejora | Beneficio esperado | Coste / riesgo | Decisión |
+|---|---|---|---|---|
+| 13.1 | **`vista/mapa` por Facción** (una proyección y una serialización por Facción en vez de por héroe). Camino 2: sacar del mapa compartido lo que depende del héroe (`exploracionPersonal`, `plazasRecordadas`, plaza pisada excluida de avistados, almacén con la columna a la puerta) y llevarlo a `vista/heroe`. **Lo que ve cada jugador no cambia** | CPU y bytes ÷ tamaño medio de Facción con muchos jugadores | Toca la proyección, `session/vistas/segmentos.ts` y ambos clientes (los campos pasan de canal); test de paridad: la unión de canales ≡ la proyección HTTP | **APROBADA (usuario)** |
+| 13.2 | **Compresión `permessage-deflate`** en el WS, al menos para fotos (admin ≈275 KiB, mapa) | Fotos y reconexiones de ¼ a ⅒ de bytes; deltas pequeños no compensan CPU (umbral de tamaño) | Poco código (opción de `@fastify/websocket`/`ws`); CPU por foto; medir | A decidir |
+| 13.3 | **Reanudar con `desde`** (Fase 4): un hueco o reconexión corta no cuesta foto | Evita fotos en reconexiones breves y en el lento que se recupera | Buffer de ~64 deltas por clave en memoria | A decidir tras medir `fotos_enviadas` por motivo |
+| 13.4 | **Seguimiento de cambios (dirty tracking)** en vez de reconstruir y comparar la foto de cada clave: marcar qué entidades tocó el tick y proyectar solo esas | Coste del flush ∝ lo que cambia, no al tamaño del mundo | Invasivo: toca motor/estado; solo si `ms_proyeccion` crece con 500+ héroes | A decidir tras la medición de 500 bots |
+| 13.5 | **Suscripción por visibilidad real**: el cliente se desuscribe de canales cuando la pestaña está oculta (y re-suscribe con foto al volver); el admin puede pedir flush más lento (p. ej. cada 4 ticks) | Un panel abierto en segundo plano deja de costar | Solo clientes + un parámetro `ritmo` opcional en `suscribir` (aditivo) | A decidir |
+| 13.6 | **Ritmo adaptativo del coalescer** por carga: si `ms_flush` supera el presupuesto, subir `COALESCER_MS` y servir menos flushes por segundo | El servidor se degrada con gracia en vez de retrasar el tick | Unas líneas en el difusor; métricas ya existen | A decidir |
+| 13.7 | **Serialización fuera del hilo principal** (worker) si la serialización de fotos/deltas domina con cientos de claves | Libera el hilo del tick | Complejidad alta; solo con datos que lo pidan | Diferida (sin datos) |
+| 13.8 | **Tope de frecuencia y de tamaño por socket** (ya hay backpressure y 4408): añadir presupuesto de bytes/s por socket | Protege de clientes lentos o abusivos a gran escala | Pequeño | A decidir |
+
+Las 13.2-13.8 no cambian el contrato salvo 13.5 (parámetro opcional `ritmo`, aditivo) y 13.3 (`desde`, ya previsto).
+
+## 14. Telemetría de carga para partidas vivas (estudio, abierto)
+
+Objetivo (usuario, 2026-10-10): cuando él corre un playtest de partidas vivas, poder **medir todo lo necesario** para decidir las mejoras de §13 sin
+instrumentar a mano. Idea: ampliar lo que la auditoría ya hace bien (JSONL append-only por partida, hermano del snapshot, sobrevive a cortes, se
+poda por edad; `server/auditoria.ts`) con una **telemetría de carga**: un JSONL aparte (`<gameId>.carga.jsonl`) de muestras periódicas, para no mezclar
+la auditoría de comandos (quién hizo qué) con la de rendimiento (cuánto costó).
+
+Lo que hay hoy: `GET /admin/metricas` da contadores **en memoria** (campo `vistas`, `hub`, `auditoria`), que se pierden al reiniciar y solo
+muestran el instante actual; la auditoría registra comandos, no coste. Falta serie temporal.
+
+Propuesta a estudiar (no se implementa hasta decidir):
+1. **Muestra cada N s** (propuesta 10 s) con: tick/versión, `ms_tick` (motor), conexiones y suscripciones por canal-tipo, `claves` de visibilidad,
+   bytes enviados y `ms_proyeccion`/`ms_diff`/`ms_serializacion` desde la muestra anterior (p50/p95/máx), `fotos_enviadas` por motivo, `cambios_por_flush`,
+   `sockets_lentos`/`cierres_4408`/`bufferedAmount` máx, uso de memoria y retraso del bucle de eventos (`monitorEventLoopDelay`), y tamaño del snapshot/guardado.
+2. **Por comando**: coste de `runner.ejecutar` (ms) y tamaño de su respuesta. Candidato natural a añadir a la propia línea de auditoría (campo
+   `ms` aditivo; `FORMATO_AUDITORIA_VERSION` ya admite líneas de builds distintas).
+3. **Etiquetas de sesión**: un `playtestId` opcional que el admin fija al empezar una prueba, para cortar la serie por prueba.
+4. **Lectura**: `GET /admin/partidas/:gameId/carga?desde=&hasta=` (JSON) y un script (`scripts/informe-carga.ts`) que resume una prueba: percentiles,
+   picos, bytes/min por cliente comparados con el sondeo, y candidatos de §13 que se activarían.
+5. **Retención**: la misma poda por edad que la auditoría; límite de tamaño.
+6. **Coste**: la propia telemetría debe costar < 1 % del tick; muestreo, no por mensaje.
+
+Preguntas para el estudio (con calma, antes de implementar): ¿qué decisiones de §13 necesitan qué métrica?; ¿una línea por muestra o por evento?; ¿exponerlo
+en el cliente admin (gráfica) o solo informe por script?; ¿se combina con `scripts/medicion-tiempo-real.ts`, que ya mide la línea base? Primer paso: que Backend
+revise `auditoria.ts`, `metricas.ts` y ese script y devuelva qué se reutiliza y qué falta.
