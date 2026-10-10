@@ -5,6 +5,10 @@
 >
 > - **Rendimiento** (2026-10-08): solo se repinta la pestaña a la vista; el historial del cliente se acota a 2000 eventos y el
 >   Registro pinta las 500 líneas más recientes (con 30 000 eventos, cambiar de Facción pasaba de ~15 ms a ~365 ms).
+> - **Tiempo real** (`src/app/conexionAdmin.ts`, `almacenDeCanal.ts`, `estadoEnVivo.ts`; contrato `Docs/Coordinacion/03_Tiempo_real_por_segmentos.md`):
+>   WebSocket `/v1/admin/partidas/:gameId/tiempo-real`, canal `admin/partida` (versión ligera: foto + deltas) y detalle `admin/asentamiento|campamento|heroe/<id>`
+>   solo de lo que se mira (`gameStore.vigilar`). El estado en vivo se compone sobre la última lectura HTTP; el sondeo completo baja a un respaldo de 60 s
+>   y vuelve a 5 s si el socket cae o el servidor no tiene el canal. Las listas globales leen `resumen` (calculado por el servidor), no el almacén ni los edificios.
 > - **Repintado incremental** (`src/ui/pintar.ts`): `pintar(el, html)` sustituye a `innerHTML`; sin cambios no toca el DOM y con cambios
 >   solo parchea lo distinto (se conservan scroll, foco y `<details>`). Los eventos de los paneles se delegan una vez (`delegar`).
 > - **Subpestañas comunes** (`src/ui/subpestanas.ts`) en Bots, Facción, Jugadores, Asentamientos y Guerra.

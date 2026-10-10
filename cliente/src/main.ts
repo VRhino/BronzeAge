@@ -670,13 +670,14 @@ function renderPanelAsentamientos(state: GameState): void {
       const { pesants, artesanos, nobleza } = a.poblacion;
       const faccion = state.facciones.find((f) => f.id === a.faccionId);
       const recursosClave = ['madera', 'piedra', 'trigo', 'oro'];
-      const activos = a.edificios.filter((e) => e.estado === 'activo').length;
-      const enCurso = a.edificios.length - activos;
+      const resumen = gameStore.resumenDe(a);
+      const activos = resumen.edificiosActivos;
+      const enCurso = resumen.edificiosEnCurso;
       const mantenimiento = Math.max(0, Math.min(100, a.medidorMantenimiento));
       const otrasCasas = a.casasCompradas.filter((id) => !a.heroesFundadoresIds.includes(id));
       const recursosHtml = recursosClave
         .map((r) => {
-          const recurso = a.almacen[r];
+          const recurso = resumen.almacenClave[r as keyof typeof resumen.almacenClave];
           return `<div class="registro-resource"><span>${RECURSO_ICONO[r] ?? '📦'} ${RECURSO_NOMBRE[r] ?? r}</span><strong>${Math.floor(recurso?.cantidad ?? 0)}<small>/${recurso?.capacidad ?? 0}</small></strong></div>`;
         })
         .join('');
@@ -1229,8 +1230,7 @@ function renderAsentamientosTab(state: GameState): void {
     .filter((a) => a.faccionId === faccionFiltroId)
     .map(
       (a) => {
-        const mantenimiento = gameStore.mantenimientoInfo(a);
-        const mantenimientoIncumplido = !mantenimiento.enGracia && mantenimiento.items.some((item) => !item.cubierto);
+        const mantenimientoIncumplido = gameStore.resumenDe(a).mantenimientoIncumplido;
         const avisoMantenimiento = mantenimientoIncumplido
           ? '<span class="settlement-warning-icon" title="Mantenimiento no cubierto" aria-label="Mantenimiento no cubierto">⚠</span>'
           : '';
@@ -1916,8 +1916,7 @@ function renderPanoramaGuerra(state: GameState): void {
 function renderPanelMilitar(state: GameState): void {
   let militarHtml = (state.asentamientos.length ? '' : '<p class="legend-note">Sin asentamientos: no hay guarniciones que medir. Los ejércitos en campo están en la pestaña Guerra.</p>') + state.asentamientos
     .map((a) => {
-      const tieneFundicion = a.edificios.some((e) => e.tipo === 'fundicion' && e.estado === 'activo');
-      const tieneGranFundicion = a.edificios.some((e) => e.tipo === 'granFundicion' && e.estado === 'activo');
+      const { tieneFundicion, tieneGranFundicion } = gameStore.resumenDe(a);
       const poder = gameStore.poderMilitarInfo(a);
       const escuadronesHtml =
         gameStore
@@ -2279,6 +2278,12 @@ function terrenoCacheParaFrame(mapa: DrawState['mapa']): HTMLCanvasElement {
 }
 
 function render(): void {
+  // Por tiempo real el estado llega ligero: el interior de plazas, campamentos y héroes se pide solo de lo que está a la vista.
+  gameStore.vigilar({
+    asentamientos: [asentamientoSeleccionadoId, truequeASelect.value, truequeBSelect.value, flotaAsentamientoSelect.value, vistaAsentamientoSelectEl.value],
+    campamentos: [campamentoTabId, campamentoSeleccionadoId],
+    heroes: [jugadorSeleccionadoId],
+  });
   const state = gameStore.getState();
 
   relojMundoEl.textContent = `🕑 ${fmtTiempoMundo(state.instante)}`;
@@ -2410,7 +2415,7 @@ canvas.addEventListener('mouseleave', () => {
 });
 
 document.getElementById('refrescar-btn')!.addEventListener('click', () => {
-  void gameStore.refrescar();
+  void gameStore.refrescar(true);
 });
 
 // El mundo avanza SOLO en el servidor (reloj de mundo, Fase D / D5). Esta interfaz no tiene sincronización

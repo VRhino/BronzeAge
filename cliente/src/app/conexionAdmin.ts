@@ -1,0 +1,213 @@
+// Conexión WebSocket de administración (`/v1/admin/partidas/:gameId/tiempo-real`, Docs/Coordinacion/03_Tiempo_real_por_segmentos.md §3):
+// suscribe canales, guarda el estado de cada uno en un `AlmacenDeCanal` y avisa cuando cambia. Solo habla por red: no interpreta el
+// contenido de los canales (eso es `estadoEnVivo.ts`).
+//
+// Reglas del cliente (03 §3.3): la foto sustituye; un delta que no encadena pide `resincronizar` y se descarta hasta que llegue la foto;
+// al reconectar las suscripciones no sobreviven, así que se repiten todas y llegan fotos nuevas.
+import { AlmacenDeCanal, type DeltaDeCanal } from './almacenDeCanal';
+
+export const CANAL_PARTIDA = 'admin/partida';
+export const canalAsentamiento = (id: string): string => `admin/asentamiento/${id}`;
+export const canalCampamento = (id: string): string => `admin/campamento/${id}`;
+export const canalHeroe = (id: string): string => `admin/heroe/${id}`;
+
+/** Entidades únicas de cada canal de detalle (03 §4: `asentamiento`, `campamento` y `heroe` no son arrays). */
+function unicasDe(canal: string): string[] {
+  if (canal.startsWith('admin/asentamiento/')) return ['asentamiento'];
+  if (canal.startsWith('admin/campamento/')) return ['campamento'];
+  if (canal.startsWith('admin/heroe/')) return ['heroe'];
+  return [];
+}
+
+export interface OpcionesDeConexion {
+  /** La URL del socket (con la sesión). Se pide en cada intento: la sesión pudo cambiar. */
+  url: () => Promise<string>;
+  /** Cambió el contenido de un canal (llegó una foto o un delta). */
+  alCambiar: (canal: string) => void;
+  /** Cambió el estado de la conexión (abierta, caída, canal esperando foto). */
+  alEstado: () => void;
+  /** El servidor no implementa ese canal: quien lo pedía cae al sondeo HTTP. */
+  alCanalDesconocido: (canal: string) => void;
+  /** Un intento de abrir falló: por si la sesión caducó. */
+  alFallarApertura: () => void;
+}
+
+interface CanalSuscrito {
+  almacen: AlmacenDeCanal;
+  /** Sin foto todavía, o cadena rota: se descartan los deltas hasta que llegue la foto. */
+  esperandoFoto: boolean;
+  ultimaPeticionDeFoto: number;
+}
+
+const MIN_ENTRE_FOTOS_MS = 2000;
+
+export class ConexionAdmin {
+  /** ms entre ticks del reloj de mundo; `null` si la partida no tiene reloj; `undefined` hasta saberlo. */
+  intervaloTickMs: number | null | undefined;
+
+  private socket: WebSocket | undefined;
+  private readonly deseados = new Set<string>();
+  private readonly canales = new Map<string, CanalSuscrito>();
+  private cerrado = false;
+  private intentos = 0;
+  private reintento: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(private readonly opciones: OpcionesDeConexion) {}
+
+  abrir(): void {
+    void this.conectar();
+  }
+
+  cerrar(): void {
+    this.cerrado = true;
+    clearTimeout(this.reintento);
+    this.socket?.close();
+    this.socket = undefined;
+  }
+
+  /** ¿Se puede fiar de `admin/partida` en vez del sondeo? Socket abierto y con foto vigente. */
+  get sano(): boolean {
+    const c = this.canales.get(CANAL_PARTIDA);
+    return this.socket?.readyState === WebSocket.OPEN && !!c && !c.esperandoFoto && c.almacen.conFoto;
+  }
+
+  almacen(canal: string): AlmacenDeCanal | undefined {
+    const c = this.canales.get(canal);
+    return c?.almacen.conFoto && !c.esperandoFoto ? c.almacen : undefined;
+  }
+
+  /** Los canales de detalle abiertos ahora, por si hace falta compararlos con lo que la interfaz quiere vigilar. */
+  get suscritos(): ReadonlySet<string> {
+    return this.deseados;
+  }
+
+  suscribir(canal: string): void {
+    if (this.deseados.has(canal)) return;
+    this.deseados.add(canal);
+    this.canales.set(canal, {
+      almacen: new AlmacenDeCanal(unicasDe(canal), canal === CANAL_PARTIDA ? { titulos: 'tituloId' } : {}),
+      esperandoFoto: true,
+      ultimaPeticionDeFoto: 0,
+    });
+    this.enviar({ accion: 'suscribir', canal });
+  }
+
+  desuscribir(canal: string): void {
+    if (!this.deseados.delete(canal)) return;
+    this.canales.delete(canal);
+    this.enviar({ accion: 'desuscribir', canal });
+  }
+
+  private enviar(mensaje: Record<string, unknown>): void {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(mensaje));
+  }
+
+  private async conectar(): Promise<void> {
+    if (this.cerrado) return;
+    let url: string;
+    try {
+      url = await this.opciones.url();
+    } catch {
+      this.programarReintento();
+      return;
+    }
+    if (this.cerrado) return;
+    const socket = new WebSocket(url);
+    this.socket = socket;
+    let abierto = false;
+    socket.onopen = () => {
+      abierto = true;
+      this.intentos = 0;
+      // Sin estado que sobreviva al cierre: se repite todo lo que se quería ver y llegan fotos nuevas.
+      for (const [nombre, c] of this.canales) {
+        c.esperandoFoto = true;
+        this.enviar({ accion: 'suscribir', canal: nombre });
+      }
+      this.opciones.alEstado();
+    };
+    socket.onmessage = (ev) => {
+      try {
+        this.recibir(JSON.parse(String(ev.data)) as Record<string, unknown>);
+      } catch {
+        // un mensaje que no se entiende no tumba la conexión: si faltó algo, el siguiente delta no encadena y se pide foto
+      }
+    };
+    socket.onclose = (ev) => {
+      if (this.socket !== socket) return;
+      this.socket = undefined;
+      for (const c of this.canales.values()) c.esperandoFoto = true;
+      this.opciones.alEstado();
+      if (!abierto) this.opciones.alFallarApertura();
+      // 4404: la partida se borró; reconectar no sirve de nada.
+      if (!this.cerrado && ev.code !== 4404) this.programarReintento();
+    };
+  }
+
+  private programarReintento(): void {
+    clearTimeout(this.reintento);
+    const espera = Math.min(15_000, 1000 * 2 ** this.intentos++);
+    this.reintento = setTimeout(() => void this.conectar(), espera);
+  }
+
+  private pedirFoto(canal: string): void {
+    const c = this.canales.get(canal);
+    if (!c) return;
+    c.esperandoFoto = true;
+    const espera = Math.max(0, c.ultimaPeticionDeFoto + MIN_ENTRE_FOTOS_MS - Date.now());
+    setTimeout(() => {
+      if (!this.canales.has(canal)) return;
+      c.ultimaPeticionDeFoto = Date.now();
+      this.enviar({ accion: 'resincronizar', canal });
+    }, espera);
+  }
+
+  private recibir(m: Record<string, unknown>): void {
+    const canal = m['canal'] as string | undefined;
+    switch (m['tipo']) {
+      case 'suscrito':
+        if (canal === CANAL_PARTIDA) this.intervaloTickMs = (m['intervaloTickMs'] as number | null | undefined) ?? null;
+        return;
+      case 'foto': {
+        const c = canal ? this.canales.get(canal) : undefined;
+        if (!c || !canal) return;
+        c.almacen.cargarFoto(m['version'] as number, m['instante'] as number, m['datos'] as Record<string, unknown>);
+        c.esperandoFoto = false;
+        this.opciones.alCambiar(canal);
+        this.opciones.alEstado();
+        return;
+      }
+      case 'delta': {
+        const c = canal ? this.canales.get(canal) : undefined;
+        if (!c || !canal || c.esperandoFoto) return;
+        const resultado = c.almacen.aplicarDelta(m as unknown as DeltaDeCanal);
+        if (resultado === 'hueco') {
+          this.pedirFoto(canal);
+          this.opciones.alEstado();
+        } else if (resultado === 'aplicado') this.opciones.alCambiar(canal);
+        return;
+      }
+      case 'resync': {
+        // La foto llega sola a continuación.
+        const c = canal ? this.canales.get(canal) : undefined;
+        if (c) c.esperandoFoto = true;
+        this.opciones.alEstado();
+        return;
+      }
+      case 'revocado':
+        if (canal) {
+          this.deseados.delete(canal);
+          this.canales.delete(canal);
+          this.opciones.alCambiar(canal);
+        }
+        return;
+      case 'error':
+        if (!canal) return;
+        if (m['codigo'] === 'canal_desconocido') {
+          this.deseados.delete(canal);
+          this.canales.delete(canal);
+          this.opciones.alCanalDesconocido(canal);
+        } else if (m['codigo'] === 'demasiado_frecuente') this.pedirFoto(canal);
+        return;
+    }
+  }
+}
