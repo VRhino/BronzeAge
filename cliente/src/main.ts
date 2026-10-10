@@ -14,6 +14,7 @@ import { avisarTrasRecargar, CATALOGOS, crearGameStore, elegirGameId, fmtTiempoM
 import { layoutCampamento } from '@motor/engine/layoutCampamento';
 import { ALMACEN_PERSONAL, MERCENARIOS } from '@motor/constants';
 import { esc } from './ui/html';
+import { delegar, pintar } from './ui/pintar';
 import { enlazarSubpestanas, htmlSubpaneles, htmlSubpestanas, type Subpestana } from './ui/subpestanas';
 import { htmlNombreConSigilo, svgSigilo } from './sigilo/sigilo';
 import { alCargarSigilos } from './sigilo/lienzo';
@@ -199,7 +200,6 @@ const SUBS_ASENTAMIENTO: Subpestana[] = [
   { id: 'militar', texto: 'Militar' },
 ];
 let asentamientoDetalleTab: 'general' | 'edificios' | 'produccion' | 'militar' = 'general';
-let reservaProtegidaAbierta = false;
 let faccionSeleccionadaId: string | null = null;
 let faccionSub = 'general';
 let campamentoTabId: string | null = null;
@@ -464,9 +464,9 @@ function renderInfoPartida(state: GameState): void {
     ['Proveedor', import.meta.env.VITE_PROVEEDOR_AUTH || 'dev'],
     ['Velocidad de tick', fmtIntervaloTick(state.relojDeMundoIntervaloMs)],
   ];
-  infoPartidaEl.innerHTML = filas
+  pintar(infoPartidaEl, filas
     .map(([k, v]) => `<div class="kv-row"><span>${k}</span><span>${v}</span></div>`)
-    .join('');
+    .join(''));
 }
 
 // Fase C8: el administrador observa, no interactúa como jugador — los selects de abajo solo alimentan
@@ -508,7 +508,7 @@ try {
 } catch (err) {
   if (err instanceof ApiError && err.status === 422) {
     // Guardado de otra versión de la build (no se migra): el admin decide si lo descarta y empieza de cero.
-    logEl.innerHTML = `<p>No se pudo abrir la partida: ${err.message}</p><button id="descartar-partida">Descartar y crear una nueva</button>`;
+    pintar(logEl, `<p>No se pudo abrir la partida: ${err.message}</p><button id="descartar-partida">Descartar y crear una nueva</button>`);
     document.getElementById('descartar-partida')!.addEventListener('click', async () => {
       try {
         await crearGameStore(undefined, undefined, true);
@@ -585,18 +585,18 @@ actualizarInfoTropa();
 function actualizarInfoFlota(state: GameState): void {
   const asentamiento = state.asentamientos.find((a) => a.id === flotaAsentamientoSelect.value);
   if (!asentamiento) {
-    flotaInfoEl.innerHTML = '<div class="kv-row"><span>Info:</span><span>Selecciona un asentamiento.</span></div>';
+    pintar(flotaInfoEl, '<div class="kv-row"><span>Info:</span><span>Selecciona un asentamiento.</span></div>');
     return;
   }
   const info = gameStore.caravanasInfo(asentamiento);
-  flotaInfoEl.innerHTML = `
+  pintar(flotaInfoEl, `
     <div class="kv-row"><span>Mercado activo</span><span>${info.mercadoActivo ? 'Sí' : 'No'}</span></div>
     <div class="kv-row"><span>Cupo de flota</span><span>${info.cupo}</span></div>
     <div class="kv-row"><span>Disponibles</span><span>${info.disponibles}</span></div>
     <div class="kv-row"><span>En tránsito</span><span>${info.enTransito}</span></div>
     <div class="kv-row"><span>Volviendo</span><span>${info.retornando}</span></div>
     <div class="kv-row"><span>Cooldown de creación</span><span>${info.cooldownCreacionRestanteMin > 0 ? `${info.cooldownCreacionRestanteMin} min` : 'Listo'}</span></div>
-  `;
+  `);
 }
 flotaAsentamientoSelect.addEventListener('change', () => actualizarInfoFlota(gameStore.getState()));
 
@@ -613,8 +613,8 @@ function actualizarInfoTruequeAsentamientos(state: GameState): void {
       .map((item) => `<span class="trade-material-pill"><span aria-hidden="true">${RECURSO_ICONO[item.recurso] ?? '📦'}</span>${RECURSO_NOMBRE[item.recurso] ?? item.recurso}<strong>${item.cantidad.toFixed(0)}</strong></span>`)
       .join('')}</div>`;
   };
-  truequeAInfoEl.innerHTML = renderInfo(truequeASelect);
-  truequeBInfoEl.innerHTML = renderInfo(truequeBSelect);
+  pintar(truequeAInfoEl, renderInfo(truequeASelect));
+  pintar(truequeBInfoEl, renderInfo(truequeBSelect));
 }
 
 truequeASelect.addEventListener('change', () => actualizarInfoTruequeAsentamientos(gameStore.getState()));
@@ -665,7 +665,7 @@ function actualizarSelects(state: GameState): void {
 }
 
 function renderPanelAsentamientos(state: GameState): void {
-  asentamientosPanelEl.innerHTML = state.asentamientos
+  pintar(asentamientosPanelEl, state.asentamientos
     .map((a) => {
       const { pesants, artesanos, nobleza } = a.poblacion;
       const faccion = state.facciones.find((f) => f.id === a.faccionId);
@@ -709,7 +709,7 @@ function renderPanelAsentamientos(state: GameState): void {
         <footer class="registro-asentamiento-footer"><span>Políticas activas: <strong>${a.politicasActivas.length}</strong></span><span>Fundadores: <strong>${a.heroesFundadoresIds.length}</strong></span></footer>
       </article>`;
     })
-    .join('') || '<p class="legend-note registro-empty">Aún no hay asentamientos fundados.</p>';
+    .join('') || '<p class="legend-note registro-empty">Aún no hay asentamientos fundados.</p>');
 }
 
 function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
@@ -1183,12 +1183,26 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   `;
 }
 
+const asentamientosTabEl = document.getElementById('asentamientos-tab')!;
+// Los eventos del panel se delegan una vez: `pintar` reutiliza los nodos y no hay que volver a enlazarlos tras cada repintado.
+delegar(asentamientosTabEl, 'change', '#asentamientos-faccion-select', (sel) => {
+  const state = gameStore.getState();
+  asentamientosFaccionFiltroId = (sel as HTMLSelectElement).value;
+  const primero = state.asentamientos.find((a) => a.faccionId === asentamientosFaccionFiltroId);
+  if (primero) asentamientoSeleccionadoId = primero.id;
+  render();
+});
+delegar(asentamientosTabEl, 'click', '.settlement-tab-btn', (btn) => {
+  asentamientoSeleccionadoId = btn.dataset.settlement!;
+  render();
+});
+
 function renderAsentamientosTab(state: GameState): void {
-  const cont = document.getElementById('asentamientos-tab')!;
+  const cont = asentamientosTabEl;
 
   if (state.asentamientos.length === 0) {
     asentamientoSeleccionadoId = null;
-    cont.innerHTML = '<p class="legend-note">Aún no hay asentamientos fundados.</p>';
+    pintar(cont, '<p class="legend-note">Aún no hay asentamientos fundados.</p>');
     return;
   }
 
@@ -1230,32 +1244,7 @@ function renderAsentamientosTab(state: GameState): void {
   </div>`;
 
   const seleccionado = state.asentamientos.find((a) => a.id === asentamientoSeleccionadoId)!;
-  const reservaActual = cont.querySelector<HTMLDetailsElement>('.storage-reserve-section');
-  if (reservaActual) reservaProtegidaAbierta = reservaActual.open;
-  cont.innerHTML = `${gruposHtml}${renderDetalleAsentamiento(seleccionado, state)}`;
-
-  const reservaNueva = cont.querySelector<HTMLDetailsElement>('.storage-reserve-section');
-  if (reservaNueva) {
-    reservaNueva.open = reservaProtegidaAbierta;
-    reservaNueva.addEventListener('toggle', () => {
-      reservaProtegidaAbierta = reservaNueva.open;
-    });
-  }
-
-  document.getElementById('asentamientos-faccion-select')?.addEventListener('change', (ev) => {
-    asentamientosFaccionFiltroId = (ev.target as HTMLSelectElement).value;
-    const primero = state.asentamientos.find((a) => a.faccionId === asentamientosFaccionFiltroId);
-    if (primero) asentamientoSeleccionadoId = primero.id;
-    render();
-  });
-
-  cont.querySelectorAll('.settlement-tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      asentamientoSeleccionadoId = (btn as HTMLElement).dataset.settlement!;
-      render();
-    });
-  });
-
+  pintar(cont, `${gruposHtml}${renderDetalleAsentamiento(seleccionado, state)}`);
   enlazarSubpestanas(cont, (id) => (asentamientoDetalleTab = id as typeof asentamientoDetalleTab));
 
 }
@@ -1568,11 +1557,17 @@ function renderDetalleCampamento(c: NonNullable<GameState['campamentosMercenario
   return `<div class="settlement-detail">${htmlSubpaneles(subs, campamentoSub, contenidos, 'Información del campamento')}</div>`;
 }
 
+const campamentosTabEl = document.getElementById('campamentos-tab')!;
+delegar(campamentosTabEl, 'click', '[data-campamento]', (btn) => {
+  campamentoTabId = btn.dataset.campamento!;
+  render();
+});
+
 function renderCampamentosTab(state: GameState): void {
-  const cont = document.getElementById('campamentos-tab')!;
+  const cont = campamentosTabEl;
   const campamentos = state.campamentosMercenarios ?? [];
   if (campamentos.length === 0) {
-    cont.innerHTML = '<p class="legend-note">Esta partida no tiene campamentos de mercenarios.</p>';
+    pintar(cont, '<p class="legend-note">Esta partida no tiene campamentos de mercenarios.</p>');
     return;
   }
   if (!campamentoTabId || !campamentos.some((c) => c.id === campamentoTabId)) campamentoTabId = campamentos[0]!.id;
@@ -1582,22 +1577,22 @@ function renderCampamentosTab(state: GameState): void {
         `<button type="button" class="settlement-tab-btn${c.id === campamentoTabId ? ' active' : ''}" data-campamento="${esc(c.id)}">${esc(c.id)} <span class="badge">${c.residentesIds.length}</span></button>`
     )
     .join('');
-  cont.innerHTML = `<div class="settlement-tab-row">${botones}</div>${renderDetalleCampamento(campamentos.find((c) => c.id === campamentoTabId)!, state)}`;
-  cont.querySelectorAll<HTMLElement>('[data-campamento]').forEach((btn) =>
-    btn.addEventListener('click', () => {
-      campamentoTabId = btn.dataset.campamento!;
-      render();
-    })
-  );
+  pintar(cont, `<div class="settlement-tab-row">${botones}</div>${renderDetalleCampamento(campamentos.find((c) => c.id === campamentoTabId)!, state)}`);
   enlazarSubpestanas(cont, (id) => (campamentoSub = id));
 }
 
+const faccionesTabEl = document.getElementById('facciones-tab')!;
+delegar(faccionesTabEl, 'click', '.settlement-tab-btn', (btn) => {
+  faccionSeleccionadaId = btn.dataset.faccion!;
+  render();
+});
+
 function renderFaccionesTab(state: GameState): void {
-  const cont = document.getElementById('facciones-tab')!;
+  const cont = faccionesTabEl;
 
   if (state.facciones.length === 0) {
     faccionSeleccionadaId = null;
-    cont.innerHTML = '<p class="legend-note">Aún no hay Facciones fundadas.</p>';
+    pintar(cont, '<p class="legend-note">Aún no hay Facciones fundadas.</p>');
     return;
   }
 
@@ -1612,14 +1607,7 @@ function renderFaccionesTab(state: GameState): void {
     )
     .join('');
   const seleccionada = state.facciones.find((f) => f.id === faccionSeleccionadaId)!;
-  cont.innerHTML = `<div class="settlement-tab-row">${botones}</div>${renderDetalleFaccion(seleccionada, state)}`;
-
-  cont.querySelectorAll('.settlement-tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      faccionSeleccionadaId = (btn as HTMLElement).dataset.faccion!;
-      render();
-    });
-  });
+  pintar(cont, `<div class="settlement-tab-row">${botones}</div>${renderDetalleFaccion(seleccionada, state)}`);
   enlazarSubpestanas(cont, (id) => (faccionSub = id));
 }
 
@@ -1744,13 +1732,25 @@ function renderDetalleJugador(heroeId: string, state: GameState): string {
   return `<div class="settlement-detail">${htmlSubpaneles(subs, jugadorSub, contenidos, 'Información del jugador')}</div>`;
 }
 
+const jugadoresTabEl = document.getElementById('jugadores-tab')!;
+delegar(jugadoresTabEl, 'change', '#jugadores-faccion-select', (sel) => {
+  jugadoresFaccionFiltroId = (sel as HTMLSelectElement).value;
+  const faccion = gameStore.getState().facciones.find((f) => f.id === jugadoresFaccionFiltroId);
+  if (faccion && faccion.ciudadanosIds.length > 0) jugadorSeleccionadoId = faccion.ciudadanosIds[0]!;
+  render();
+});
+delegar(jugadoresTabEl, 'click', '.settlement-tab-btn', (btn) => {
+  jugadorSeleccionadoId = btn.dataset.jugador!;
+  render();
+});
+
 function renderJugadoresTab(state: GameState): void {
-  const cont = document.getElementById('jugadores-tab')!;
+  const cont = jugadoresTabEl;
   const todosLosIds = state.facciones.flatMap((f) => f.ciudadanosIds);
 
   if (todosLosIds.length === 0) {
     jugadorSeleccionadoId = null;
-    cont.innerHTML = '<p class="legend-note">Aún no hay jugadores con ciudadanía.</p>';
+    pintar(cont, '<p class="legend-note">Aún no hay jugadores con ciudadanía.</p>');
     return;
   }
 
@@ -1783,21 +1783,7 @@ function renderJugadoresTab(state: GameState): void {
     <div class="settlement-tab-row">${botones}</div>
   </div>`;
 
-  cont.innerHTML = `${gruposHtml}${renderDetalleJugador(jugadorSeleccionadoId!, state)}`;
-
-  document.getElementById('jugadores-faccion-select')?.addEventListener('change', (ev) => {
-    jugadoresFaccionFiltroId = (ev.target as HTMLSelectElement).value;
-    const faccion = state.facciones.find((f) => f.id === jugadoresFaccionFiltroId);
-    if (faccion && faccion.ciudadanosIds.length > 0) jugadorSeleccionadoId = faccion.ciudadanosIds[0]!;
-    render();
-  });
-
-  cont.querySelectorAll('.settlement-tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      jugadorSeleccionadoId = (btn as HTMLElement).dataset.jugador!;
-      render();
-    });
-  });
+  pintar(cont, `${gruposHtml}${renderDetalleJugador(jugadorSeleccionadoId!, state)}`);
   enlazarSubpestanas(cont, (id) => (jugadorSub = id));
 }
 
@@ -1854,9 +1840,9 @@ function renderPanelPolitica(state: GameState): void {
       return `<div class="registro-liga"><strong>Liga ${i + 1}</strong><span>${nombres}</span>${liga.tieneVasallaje ? `<small>Gran Rey: ${granRey}</small>` : '<small>Sin vasallaje</small>'}</div>`;
     })
     .join('');
-  politicaPanelEl.innerHTML = `<section class="registro-section-block"><h3>Facciones</h3><div class="registro-politica-facciones">${facH || '<p class="legend-note">Sin facciones.</p>'}</div></section>
+  pintar(politicaPanelEl, `<section class="registro-section-block"><h3>Facciones</h3><div class="registro-politica-facciones">${facH || '<p class="legend-note">Sin facciones.</p>'}</div></section>
     <section class="registro-section-block"><h3>Relaciones diplomáticas</h3><div class="registro-politica-relations">${relH || '<p class="legend-note">Sin relaciones registradas.</p>'}</div></section>
-    <section class="registro-section-block"><h3>Ligas</h3><div class="registro-politica-ligas">${ligasH || '<p class="legend-note">Sin Ligas formadas.</p>'}</div></section>`;
+    <section class="registro-section-block"><h3>Ligas</h3><div class="registro-politica-ligas">${ligasH || '<p class="legend-note">Sin Ligas formadas.</p>'}</div></section>`);
 }
 
 /** Panorama de guerra: guerras declaradas, ejércitos en campo y batallas. Vive de las Facciones, no de las plazas: un mundo recién
@@ -1915,18 +1901,20 @@ function renderPanoramaGuerra(state: GameState): void {
     : '<p class="legend-note">Ninguna batalla abierta ni cerrada todavía.</p>';
 
   const seccion = (titulo: string, cuerpo: string): string => `<div class="detail-section"><h3>${titulo}</h3>${cuerpo}</div>`;
-  document.getElementById('guerra-panorama')!.innerHTML =
+  pintar(
+    document.getElementById('guerra-panorama')!,
     seccion(
       'Resumen',
       `<div class="kv-grid">${kpi('Guerras activas', activas.length)}${kpi('Ejércitos y columnas en campo', state.ejercitos.length)}${kpi('Batallas abiertas', batallasAbiertas.length)}${kpi('Campamentos de bandidos', state.campamentosBandidos.length)}${kpi('Asentamientos', state.asentamientos.length)}</div>${aviso}`
     ) +
     seccion('Guerras', guerrasHtml) +
     seccion(`Ejércitos en campo (${state.ejercitos.length})`, ejercitosHtml) +
-    seccion(`Batallas (${state.batallas.length})`, batallasHtml);
+    seccion(`Batallas (${state.batallas.length})`, batallasHtml)
+  );
 }
 
 function renderPanelMilitar(state: GameState): void {
-  militarPanelEl.innerHTML = (state.asentamientos.length ? '' : '<p class="legend-note">Sin asentamientos: no hay guarniciones que medir. Los ejércitos en campo están en la pestaña Guerra.</p>') + state.asentamientos
+  let militarHtml = (state.asentamientos.length ? '' : '<p class="legend-note">Sin asentamientos: no hay guarniciones que medir. Los ejércitos en campo están en la pestaña Guerra.</p>') + state.asentamientos
     .map((a) => {
       const tieneFundicion = a.edificios.some((e) => e.tipo === 'fundicion' && e.estado === 'activo');
       const tieneGranFundicion = a.edificios.some((e) => e.tipo === 'granFundicion' && e.estado === 'activo');
@@ -1947,22 +1935,23 @@ function renderPanelMilitar(state: GameState): void {
   const campamentosHtml = state.campamentosBandidos
     .map((c) => `<div class="registro-bandit"><strong>${c.id}</strong><span>Posición ${Math.round(c.posicion.x)}, ${Math.round(c.posicion.y)}</span><b>Poder ${c.poder}</b></div>`)
     .join('');
-  militarPanelEl.innerHTML += `<section class="registro-section-block"><h3>Campamentos de bandidos</h3><div class="registro-bandit-list">${campamentosHtml || '<p class="legend-note">Ninguno activo.</p>'}</div></section>`;
+  militarHtml += `<section class="registro-section-block"><h3>Campamentos de bandidos</h3><div class="registro-bandit-list">${campamentosHtml || '<p class="legend-note">Ninguno activo.</p>'}</div></section>`;
+  pintar(militarPanelEl, militarHtml);
 }
 
 /** Crónica de los Aedas (Doc 6.7) y dónde están los itinerantes. Solo lo que ya ha llegado por el registro de eventos. */
 function renderPanelCronica(): void {
   const itinerantes = gameStore.aedasInfo().itinerantes.map((a) => `<div class="registro-bandit"><strong>${a.id}</strong><span>${a.donde}</span></div>`).join('');
   const entradas = gameStore.cronica().map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('');
-  cronicaPanelEl.innerHTML = `<section class="registro-section-block"><h3>Aedas itinerantes</h3>${itinerantes || '<p class="legend-note">Aún no hay.</p>'}</section><section class="registro-section-block"><h3>Crónica</h3>${entradas || '<p class="legend-note">Nada que cantar todavía.</p>'}</section>`;
+  pintar(cronicaPanelEl, `<section class="registro-section-block"><h3>Aedas itinerantes</h3>${itinerantes || '<p class="legend-note">Aún no hay.</p>'}</section><section class="registro-section-block"><h3>Crónica</h3>${entradas || '<p class="legend-note">Nada que cantar todavía.</p>'}</section>`);
 }
 
 function renderPanelProgresion(state: GameState): void {
-  progresionPanelEl.innerHTML = state.titulos.length
+  pintar(progresionPanelEl, state.titulos.length
     ? `<div class="registro-title-grid">${state.titulos
         .map((t) => `<article class="registro-title-card"><span class="registro-title-mark">✦</span><div><h3>${t.nombre}</h3><p>${state.facciones.find((f) => f.id === t.poseedorId)?.nombre ?? t.poseedorId}</p></div><strong>${t.valorMetrica.toFixed(0)}<small>métrica</small></strong></article>`)
         .join('')}</div>`
-    : '<p class="legend-note registro-empty">Sin títulos calculados todavía (aparecen cuando el mundo avanza).</p>';
+    : '<p class="legend-note registro-empty">Sin títulos calculados todavía (aparecen cuando el mundo avanza).</p>');
 }
 
 /** Caravanas en tránsito: las que van (o vuelven) hacia un destino y las enganchadas a un ejército, con origen y destino por nombre, tipo,
@@ -2057,10 +2046,10 @@ function renderPanelEconomia(state: GameState): void {
         `<div class="trade-order-card"><span class="trade-order-icon">${o.tipo === 'venta' ? '↗' : '↙'}</span><div><strong>${o.tipo === 'venta' ? 'Venta' : 'Compra'} · ${o.recurso}</strong><small>Orden ${o.id} · ${o.estado}</small></div><span class="trade-order-amount">${o.cantidadCumplida.toFixed(0)}/${o.cantidad}<small> @ ${o.precioUnitario.toFixed(2)} oro</small></span></div>`
     )
     .join('');
-  economiaPanelEl.innerHTML = `<div class="trade-reference-strip"><span class="trade-reference-icon">🪙</span><div><strong>Precios de referencia</strong><small>Valor orientativo por unidad</small></div><span>${preciosHtml}</span></div>
+  pintar(economiaPanelEl, `<div class="trade-reference-strip"><span class="trade-reference-icon">🪙</span><div><strong>Precios de referencia</strong><small>Valor orientativo por unidad</small></div><span>${preciosHtml}</span></div>
     <section class="trade-overview-block"><h3>🔄 Trueques activos</h3>${acuerdosHtml}</section>
     <section class="trade-overview-block"><h3>🚚 Caravanas en ruta</h3>${caravanasEnRutaHtml(state)}</section>
-    ${ordenesHtml ? `<section class="trade-overview-block"><h3>📋 Órdenes del mercado</h3><div class="trade-orders-list">${ordenesHtml}</div></section>` : ''}`;
+    ${ordenesHtml ? `<section class="trade-overview-block"><h3>📋 Órdenes del mercado</h3><div class="trade-orders-list">${ordenesHtml}</div></section>` : ''}`);
 }
 
 function renderLeyenda(state: GameState): void {
@@ -2120,7 +2109,7 @@ function renderLeyenda(state: GameState): void {
     </div>
   `;
 
-  legendBodyEl.innerHTML = legendTabActivo === 'mundo' ? legendMundoHtml : legendFaccionesHtml;
+  pintar(legendBodyEl, legendTabActivo === 'mundo' ? legendMundoHtml : legendFaccionesHtml);
 }
 
 const LINEAS_DE_LOG = 500;
@@ -2128,7 +2117,7 @@ const LINEAS_DE_LOG = 500;
 function renderRegistro(state: GameState): void {
   // Solo con la pestaña a la vista y solo lo más reciente: pintar miles de líneas ocultas era el grueso del coste de cada render.
   if (tabActivo !== 'registros') return;
-  logEl.innerHTML = state.log.slice(0, LINEAS_DE_LOG).map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('');
+  pintar(logEl, state.log.slice(0, LINEAS_DE_LOG).map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join(''));
 }
 
 // Servicio de bots: habla directo con su canal de control (WebSocket), no con el backend del juego.

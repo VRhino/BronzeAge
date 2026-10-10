@@ -26,17 +26,22 @@ export function htmlSubpaneles(subs: readonly Subpestana[], activa: string, cont
   );
 }
 
-/** Cablea los botones de `htmlSubpaneles` dentro de `cont`: alterna el panel y avisa para recordar la elección. */
+const enlazados = new WeakSet<HTMLElement>();
+
+/** Cablea los botones de `htmlSubpaneles` dentro de `cont`: alterna el panel y avisa para recordar la elección. Delegado: se llama
+ * tras cada pintado y solo enlaza la primera vez (el contenedor no cambia, aunque su contenido se repinte). */
 export function enlazarSubpestanas(cont: HTMLElement, alCambiar: (id: string) => void): void {
-  cont.querySelectorAll<HTMLButtonElement>('[data-sub-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.subTab!;
-      alCambiar(id);
-      cont.querySelectorAll<HTMLButtonElement>('[data-sub-tab]').forEach((t) => {
-        t.classList.toggle('active', t === btn);
-        t.setAttribute('aria-selected', String(t === btn));
-      });
-      cont.querySelectorAll<HTMLElement>('[data-subpanel]').forEach((p) => p.classList.toggle('active', p.dataset.subpanel === id));
+  if (enlazados.has(cont)) return;
+  enlazados.add(cont);
+  cont.addEventListener('click', (ev) => {
+    const btn = (ev.target as Element).closest<HTMLButtonElement>('[data-sub-tab]');
+    if (!btn || !cont.contains(btn)) return;
+    const id = btn.dataset.subTab!;
+    alCambiar(id);
+    cont.querySelectorAll<HTMLButtonElement>('[data-sub-tab]').forEach((t) => {
+      t.classList.toggle('active', t === btn);
+      t.setAttribute('aria-selected', String(t === btn));
     });
+    cont.querySelectorAll<HTMLElement>('[data-subpanel]').forEach((p) => p.classList.toggle('active', p.dataset.subpanel === id));
   });
 }

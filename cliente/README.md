@@ -5,6 +5,8 @@
 >
 > - **Rendimiento** (2026-10-08): solo se repinta la pestaña a la vista; el historial del cliente se acota a 2000 eventos y el
 >   Registro pinta las 500 líneas más recientes (con 30 000 eventos, cambiar de Facción pasaba de ~15 ms a ~365 ms).
+> - **Repintado incremental** (`src/ui/pintar.ts`): `pintar(el, html)` sustituye a `innerHTML`; sin cambios no toca el DOM y con cambios
+>   solo parchea lo distinto (se conservan scroll, foco y `<details>`). Los eventos de los paneles se delegan una vez (`delegar`).
 > - **Subpestañas comunes** (`src/ui/subpestanas.ts`) en Bots, Facción, Jugadores, Asentamientos y Guerra.
 > - **Sigilo dibujado** (`src/sigilo/`, copia del dibujo del cliente jugador + `catalogoSigilos.json` del backend):
 >   antes solo se pintaba un cuadrado bicolor. Chip de Facción con su escudo; `htmlNombreConSigilo` para chips y cabeceras.
