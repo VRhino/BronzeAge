@@ -836,6 +836,8 @@ export const EDIFICIO_CATALOGO = {
     costo: { madera: 5000, piedra: 5000, oro: 500, cobre: 300, estano: 200, livestock: 200 },
     tiempoConstruccionMinutos: 40320,
     requisitoNivelAsentamientoConstruccion: 5,
+    /** Orden de la Era (`ERAS[..].orden`) que tiene que haber alcanzado el servidor: la Era V (Doc 4.2.1). */
+    ordenEraMinimo: 5,
   },
 } as const;
 
@@ -897,7 +899,22 @@ export const NECESIDADES = {
   // Desde el 2026-09-26 las MEJORAS de nivel interno también ocupan una de estas cuadrillas mientras duran
   // (decisión del usuario): construir y mejorar compiten por las mismas manos.
   maximoEnConstruccionSimultanea: 2,
+  /** Cupo de cada tipo de edificio de transformación por nivel operativo del asentamiento (los niveles 4 y 5 repiten el del 3 hasta que se definan nuevos escalones). */
+  maximoTransformacionPorNivel: { 2: 3, 3: 5, 4: 5, 5: 5 } as Record<number, number>,
+  /** Nivel operativo mínimo para que la auto-construcción cree un ancla nueva (árbol de anclas, Trazado_Urbano.md). */
+  nivelGateAnclas: 2,
+  /** Tope de la reserva manual del Tesorero, por recurso. */
+  reservaManualMaxima: 999,
 };
+
+/** Tipos que solo admiten UNA instancia por asentamiento (progresan por `nivelInterno` en vez de repetirse). */
+export const EDIFICIOS_UNICOS: readonly EdificioTipo[] = ['granero', 'barracon', 'galeriaDeTiro', 'caballerizas', 'palacio', 'salaConsejo', 'taberna', 'mercado', 'granFundicion', 'maravilla'];
+
+/** Tipos que mejoran de nivel interno (`avanzarMejoras`). */
+export const EDIFICIOS_CON_NIVELES: readonly EdificioTipo[] = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'caballerizas', 'palacio', 'mercado', 'granja', 'granero', 'taberna'];
+
+/** El recurso que un edificio de supervivencia produce y por tanto NO respeta en la reserva de construcción (huevo y gallina: es la única vía de recuperarlo). */
+export const RECURSO_PROPIO_DE_EDIFICIO: Partial<Record<EdificioTipo, string>> = { granja: 'trigo', lenera: 'madera' };
 
 /** Duración de una mejora de nivel interno: la obra base del edificio × `multiplicadorPorNivel`^(nivel − 1). Una
  * sola regla: las mejoras tardan más que la obra, y más cuanto más alto el nivel (decisión del usuario 2026-09-26). */
@@ -943,28 +960,6 @@ export const SCORE_BANDAS = {
 export const EXTRACTOR_DESEMPATE = {
   bonusPorMinutoStarved: 1,
   bonusMaximo: 400,
-};
-
-/**
- * Líneas de producción (Doc 4.2.1, a petición del usuario): la distancia dentro del asentamiento entre un
- * edificio de transformación y la fuente más cercana de cada insumo de su receta penaliza CUÁNTO produce ese
- * tick — nunca lo que consume por unidad (`consumePorUnidad` no cambia) — simulando que el insumo tarda más
- * en llegar cuanto más lejos está su origen. Ver `factorPorDistancia`/`factorLineaProduccion`,
- * engine/construction.ts. PLACEHOLDER sin cifras de diseño previas (ver Preguntas_Abiertas.md), calibrado a
- * ojo contra `ZONA_INFLUENCIA.radioMaximoPorNivel` (hasta 120).
- */
-export const LINEAS_PRODUCCION = {
-  // Por debajo de esta distancia, sin penalización (factor 1) — cubre colocaciones ya cercanas por azar.
-  distanciaSinPenalizacion: 25,
-  // A partir de esta distancia, el factor no baja más (suelo en `factorMinimo`) — más o menos el diámetro de
-  // una zona de nivel 3.
-  distanciaMaxima: 150,
-  // Producción nunca cae por debajo de este % solo por distancia, aunque la fuente esté en el otro extremo
-  // del asentamiento — evita que la penalización por sí sola pueda parar una línea de producción del todo.
-  factorMinimo: 0.4,
-  // Distancia asumida cuando el insumo no tiene NINGUNA fuente propia en el asentamiento (llega solo por
-  // trueque/caravana) — ni cerca ni lejos, un valor medio-alto a falta de una posición real que medir.
-  distanciaEstandarSinFuente: 90,
 };
 
 /**
@@ -2467,6 +2462,9 @@ export const MANTENIMIENTO = {
   /** Una Vivienda cuenta la mitad que otro edificio (2026-09-28, decisión del usuario): son la mayoría de los de una
    * plaza, unos 40 de los ~90 de un nivel 2. */
   pesoVivienda: 0.5,
+  /** Las piezas que nacen gratis con la ciudad (puestos del Mercado y anclas) también cuentan la mitad (2026-10-11, decisión del usuario): son parte de la ciudad, pero no obra. */
+  pesoPiezaGratuita: 0.5,
+  piezasGratuitas: ['puestoMercado', 'plaza', 'plazaDeArmas', 'patioDeGremios', 'pozo', 'parque'] as EdificioTipo[],
   /** El coste crece 1 por cada `escalaDistancia` de distancia a la capital, sin tope (decidido el 2026-10-02): ×2 a 400, ×3 a 800... */
   escalaDistancia: 400,
   degradacionPorDeficitTotal: 10,

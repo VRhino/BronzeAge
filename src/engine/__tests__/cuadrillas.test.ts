@@ -4,7 +4,7 @@
 // cadena de mejoras de la Granja retenía una cuadrilla durante más de mil ticks.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, Edificio } from '../../domain/types';
-import { EDIFICIO_CATALOGO, NECESIDADES } from '../../constants';
+import { EDIFICIO_CATALOGO, NECESIDADES, OCUPACION } from '../../constants';
 import { avanzarConstruccion, quitarDeCola, reclamosDeFuentes } from '../construction';
 import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest } from './fixtures';
 import { TODAS_LAS_TECNOLOGIAS } from '../tecnologia';
@@ -57,7 +57,7 @@ describe('cuadrillas de obra', () => {
     expect(tras.edificios.some((e) => e.mejora !== undefined)).toBe(false);
   });
 
-  it('quitar de la cola una reconstrucción devuelve lo que se pagó en su día: la obra y sus mejoras', () => {
+  it('quitar de la cola una reconstrucción devuelve solo la mitad (lo que queda) de la obra y sus mejoras', () => {
     const { plaza } = plazaConFondos();
     const granja = plaza.edificios.find((e) => e.tipo === 'granja')!;
     const a: Asentamiento = {
@@ -67,7 +67,8 @@ describe('cuadrillas de obra', () => {
     };
     const niveles = EDIFICIO_CATALOGO.granja.niveles as Record<number, { costoMejora?: Record<string, number> }>;
     const madera = (EDIFICIO_CATALOGO.granja.costo as Record<string, number>)['madera'] ?? 0;
-    const esperada = madera + (niveles[2]!.costoMejora!['madera'] ?? 0) + (niveles[3]!.costoMejora!['madera'] ?? 0);
+    const f = OCUPACION.fraccionCosteReconstruccion;
+    const esperada = Math.floor(madera * f) + Math.floor((niveles[2]!.costoMejora!['madera'] ?? 0) * f) + Math.floor((niveles[3]!.costoMejora!['madera'] ?? 0) * f);
 
     const tras = quitarDeCola(a, 'gobernador', granja.id);
 

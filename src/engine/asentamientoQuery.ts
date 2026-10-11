@@ -166,7 +166,7 @@ const EDIFICIOS_PRODUCTORES: EdificioTipo[] = ['granja', 'cantera', 'lenera', 'm
 /** Edificios de transformación con tiers (Doc 4.2.1, rediseño de progreso Fase 0): consumen mano de obra de
  * Artesanos (no Pesants), disparan su aparición (ver `engine/population.ts`), y cuentan para los gates de
  * nivel de asentamiento. Exportado: `population.ts` lo usa para saber si ya hay al menos uno activo. */
-export const EDIFICIOS_TRANSFORMACION: EdificioTipo[] = ['fundicion', 'curtiduria', 'armeria', 'carpinteria'];
+export const EDIFICIOS_TRANSFORMACION: EdificioTipo[] = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'granFundicion'];
 
 function nivelInternoActual(edificio: Pick<Edificio, 'nivelInterno'>): number {
   return edificio.nivelInterno ?? 1;

@@ -3,7 +3,7 @@
 Cómo nace un asentamiento, qué produce, cómo se construye y se mejora, cómo crece y come su gente, qué cuesta mantenerlo y cómo sube (o baja) de nivel. Es el
 sistema que corre **dentro de cada asentamiento en cada tick**; lo que ocurre entre asentamientos (comercio, caravanas) y la guerra están en otros documentos.
 
-- **Verificado contra:** `d406eed` (2026-10-10).
+- **Verificado contra:** `d406eed` (2026-10-10) y revisado el 2026-10-11 con las decisiones del usuario sobre las divergencias (piezas gratuitas, almacén lleno, Gran Fundición, reembolso de dañados, sin líneas de producción).
 - **Módulos:** `src/engine/construction.ts` (≈1.870 líneas: cola de obras, auto-construcción, producción, recetas, mejoras, comandos manuales),
   `settlement.ts` (fundación y viabilidad), `almacen.ts` (primitivas de almacén), `asentamientoQuery.ts` (cupos, mano de obra, progreso de nivel),
   `population.ts` (crecimiento, comida, impuestos), `mantenimiento.ts` (coste, medidor, nivel operativo, ruinas), `ascenso.ts` (subida de nivel),
@@ -70,7 +70,7 @@ Campos de `Asentamiento` que usa este documento:
 | `poblacion` | `{ pesants, artesanos, nobleza }`. |
 | `radioPotencial` | Radio de la zona de influencia. |
 | `ascenso?` | `{ nivelObjetivo, iniciadoEn, completaEn }` — obra de ascenso en curso. |
-| `autoConstruccionPausada?`, `recetasPausadas?` (recursos), `reservaManual?` (por recurso, 0–999) | Controles del jugador. |
+| `autoConstruccionPausada?`, `recetasPausadas?` (recursos), `reservaManual?` (por recurso, 0–`reservaManualMaxima`) | Controles del jugador. |
 | `extractoresTicksSinCupo?` | Contador anti-inanición por tipo de extractor (§6.2). |
 | `ocupacionHasta?`, `protegidaHasta?` | Ventanas tras una conquista o una fundación. |
 | `cargos` | `gobernadorId, tesoreroId, generalId, maestroObrasId, sacerdoteId`. |
@@ -128,8 +128,7 @@ la frontera se reparte según el poder relativo y se mueve cuando crece un radio
 
 ## 5. Producción
 
-Cada edificio `activo` produce cada tick, **en el orden del array `edificios`** (importa si el almacén se llena a mitad del recorrido). Todas las cantidades se añaden con tope de capacidad: **lo que no cabe se
-pierde** y activa `pausadoPorAlmacenLleno` (§5.5).
+Cada edificio `activo` produce cada tick, **en el orden del array `edificios`** (importa si el almacén se llena a mitad del recorrido). Todas las cantidades se añaden con tope de capacidad y, si no caben, la producción **se pausa** (§5.5).
 
 ### 5.1 Mano de obra
 
@@ -140,11 +139,11 @@ trabajadoresRequeridosTotal   = Σ EDIFICIO_CATALOGO[tipo].trabajadoresRequerido
                                 (el valor del tipo, no el del nivel interno; un extractor con el nodo agotado sigue contando)
 ratioManoObra                 = trabajadoresRequeridosTotal ≤ 0 ? 1 : min(1, pesants / trabajadoresRequeridosTotal)
 
-trabajadoresTransformacion    = Σ niveles[nivelInterno].trabajadoresRequeridos   de los ACTIVOS fundicion, curtiduria, armeria, carpinteria
+trabajadoresTransformacion    = Σ niveles[nivelInterno].trabajadoresRequeridos   de los ACTIVOS fundicion, curtiduria, armeria, carpinteria, granFundicion
 ratioManoObraArtesanos        = trabajadoresTransformacion ≤ 0 ? 1 : min(1, artesanos / trabajadoresTransformacion)
 ```
 
-La **Gran Fundición no entra** en `trabajadoresTransformacion` aunque su nivel 1 diga 12 (ver Divergencias). Los pesants que sobran (`pesants − trabajadoresRequeridosTotal`) son el pool de reclutamiento (`poblacionDisponibleParaReclutar`):
+La Gran Fundición cuenta como los demás talleres (sus 12 artesanos). Los pesants que sobran (`pesants − trabajadoresRequeridosTotal`) son el pool de reclutamiento (`poblacionDisponibleParaReclutar`):
 pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacion` (≥ 0); nobleza → toda.
 
 ### 5.2 Extractores y granjas
@@ -159,7 +158,7 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
   `(pos.x + cos(2π·i/40)·r, pos.y + sin(2π·i/40)·r)` con `r = ((i mod 5)/5) · radioPotencial`, quedándose con los que caen dentro del polígono de zona (o con todos si el polígono está vacío). Todas las Granjas
   del asentamiento comparten este único valor.
 - **`factorTecnologia`** = producto de `bonusProduccion.factor` de las tecnologías adoptadas cuyo `bonusProduccion.recurso` coincide con el recurso del extractor (p. ej. `canteria` ×1,5 la piedra).
-- **Extracción**: `mapa.extraer` devuelve `min(pedido, stock)` y **descuenta el stock aunque el almacén esté lleno** (lo que no cabe se pierde). El stock es `cantidadInicial − extraído`. Si tras extraer el stock llega a 0, se emite
+- **Extracción**: el extractor pide `min(produccionBase × …, espacio libre del almacén para ese recurso)` y `mapa.extraer` devuelve `min(pedido, stock)`: **solo se gasta del yacimiento lo que cabe**. El stock es `cantidadInicial − extraído`. Si tras extraer el stock llega a 0, se emite
   `construccion.yacimiento_agotado`.
 - **Regeneración** (`mapa.avanzarRegeneracion`, global del tick): un nodo con stock 0 que aún no tiene calendario agenda `instante + cooldown` (`REGENERACION_NODOS`: `livestock` 3 min; **todo lo demás** 10 min); cuando
   `instante ≥ calendario` se borra lo extraído y el nodo vuelve a su cantidad inicial. Evento `mapa.yacimiento_regenerado`.
@@ -174,28 +173,16 @@ Para cada edificio `activo` con `niveles` (fundicion, curtiduria, armeria, carpi
 
 ```
 saltar si  recetasPausadas contiene receta.produce   ó  falta la tecnología  ó  receta.requiereEdificio no está (algún edificio activo de ese tipo con nivelInterno ≥ nivel)
-cantidad = produccionBase × ratioManoObraArtesanos × factorLineaProduccion × factorProduccionTalleres
+cantidad = produccionBase × ratioManoObraArtesanos × factorProduccionTalleres
 para cada insumo:  disponible = max(0, almacen[insumo].cantidad − reserva[insumo]);  cantidad = min(cantidad, disponible / porUnidad)
+espacio = capacidad − cantidad de receta.produce;  si cantidad > espacio: cantidad = espacio y el edificio queda marcado pausadoPorAlmacenLleno
 si cantidad ≤ 0: nada
-descontar  porUnidad × cantidad  de cada insumo;  añadir cantidad de receta.produce (con tope de capacidad; el sobrante se pierde y marca pausadoPorAlmacenLleno)
+descontar  porUnidad × cantidad  de cada insumo;  añadir cantidad de receta.produce
 ```
 
-- Los **insumos se consumen enteros aunque el producto no quepa** (ver Divergencias).
+- Con el producto sin sitio la receta **para**: solo se fabrica (y solo se consumen los insumos de) lo que cabe.
 - `reserva` es la misma de la auto-construcción (§6.3): un taller nunca baja un recurso por debajo de lo que el mantenimiento y la comida van a cobrar, más la reserva manual del Tesorero.
-- **Línea de producción** (`factorLineaProduccion`): para cada insumo de la receta se toma la **distancia euclídea** entre el edificio y la fuente más cercana de ese insumo, y el factor de la receta es el **mínimo** de los factores:
-
-```
-factorPorDistancia(d) = 1                                   si d ≤ distanciaSinPenalizacion
-                      = factorMinimo                        si d ≥ distanciaMaxima
-                      = 1 − (d − dMin)/(dMax − dMin) × (1 − factorMinimo)    entre medias
-fuentes de un insumo: si es crudo (piedra→cantera, oro→mina, cobre→minaCobre, hierro→minaHierro, estano→minaEstano, livestock→corral, madera→lenera, trigo→granja):
-                      los extractores ACTIVOS de ese tipo; si es intermedio: los edificios activos cuya receta del nivel actual lo produce.
-                      Solo cuentan fuentes del MISMO ámbito que el consumidor (coordenadas comparables).
-sin fuente (o de otro ámbito): d = distanciaEstandarSinFuente
-```
-
-  Consecuencia práctica: los talleres son de ámbito `asentamiento` y las minas/cantera de ámbito `mapa`, así que **los insumos de mina nunca tienen fuente comparable**: cobre, estaño y hierro dan siempre
-  `d = 90` → factor 0,688. Solo madera (Leñera), livestock (Corral) y los intermedios (lingotes, cuero) dependen de la distancia real.
+- **No hay penalización por distancia** entre el taller y sus fuentes (se descartó el 2026-10-11): la posición de un edificio dentro de la ciudad no cambia lo que produce.
 - `factorProduccionTalleres` es el producto de las políticas activas (Barrios Gremiales ×1,1).
 - Las recetas devuelven además la cantidad fabricada por recurso, que alimenta los logros de Tecnología.
 
@@ -205,8 +192,8 @@ sin fuente (o de otro ámbito): d = distanciaEstandarSinFuente
 
 ### 5.5 Almacén lleno
 
-`pausadoPorAlmacenLleno` se pone a `true` en un edificio cuando su producto no cupo del todo este tick y a `false` cuando cupo. **Es solo una bandera informativa**: no detiene la producción ni el
-gasto de insumos (§5.2–5.3).
+`pausadoPorAlmacenLleno` se pone a `true` en un edificio cuando su producción de este tick quedó limitada por el espacio del almacén y a `false` cuando no. Un **extractor** o una **receta** pausados no gastan
+yacimiento ni insumos por lo que no cabe (§5.2–5.3); la **Granja** y la **Leñera** (que no gastan nada) simplemente no suman lo que no cabe.
 
 ## 6. Construcción
 
@@ -319,8 +306,8 @@ La construcción **manual** y la mejora manual usan la reserva dinámica **sin**
 La pide un residente presente con el cargo `gobernador` o `maestroObras` (el motor solo exige que **alguien** tenga ese cargo; es el comando el que comprueba que el actor es ese titular). Cualquier tipo del catálogo menos el Centro Urbano y los puestos
 de Mercado. Validaciones, en orden:
 
-1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. No es `centroUrbano` ni `puestoMercado`.
-4. Tipos **únicos** (`EDIFICIOS_UNICOS`: granero, barracon, galeriaDeTiro, caballerizas, palacio, salaConsejo, taberna, mercado, granFundicion, maravilla): ya hay uno (de cualquier estado).
+1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. Si el tipo pide una Era (`ordenEraMinimo`, hoy solo la Maravilla: la V), el servidor la ha alcanzado (`ERAS[era].orden`). 3b. No es `centroUrbano` ni `puestoMercado`.
+4. Tipos **únicos** (`EDIFICIOS_UNICOS`, §14.2): ya hay uno (de cualquier estado).
 5. Tope de Almacenes; tope de Viviendas. 6. `nivelActual ≥ requisitoNivelAsentamientoConstruccion` del tipo. 7. Tope de transformación.
 8. **Gran Fundición**: nivel de Facción ≥ `nivelFaccionMinimo` (6), el asentamiento es la **capital**, y la Facción no tiene ya otra (ninguno de sus asentamientos).
 9. `en_cola < maximoEnCola`. 10. `asegurarAnclaPara` y búsqueda de sitio (si no hay: «No hay sitio disponible dentro de la zona de influencia»).
@@ -329,7 +316,7 @@ de Mercado. Validaciones, en orden:
 Paga el coste completo, crea el edificio `en_cola` con id `edificio-<id>-manual-<n>` (n = id de contexto del comando) y `prioridad = SCORE_BANDAS.manual` (900). No comprueba `tieneInsumoDeArranque`, ni `necesitaNuevoExtractor`, ni
 `autoConstruccionPausada`, ni `hayProyectoPendiente` de los tipos no únicos (se pueden encolar varias Viviendas hasta el tope de cola).
 
-`quitarDeCola(cargo, edificioId)`: solo un edificio `en_cola`; **devuelve el coste completo del catálogo** más el `costoMejora` de cada nivel interno 2..`nivelInterno` (para uno `danado`), con `agregarRecurso` (el tope de capacidad
+`quitarDeCola(cargo, edificioId)`: solo un edificio `en_cola`; **devuelve el coste completo del catálogo** más el `costoMejora` de cada nivel interno 2..`nivelInterno`; **si el edificio está `danado` devuelve solo `OCUPACION.fraccionCosteReconstruccion` (la mitad) de cada recurso, redondeando hacia abajo**. Se añade con `agregarRecurso` (el tope de capacidad
 puede perder parte del reembolso). `moverEnCola(arriba|abajo)`: intercambia la `prioridad` con la del vecino de la lista ordenada por prioridad desc; en el extremo no hace nada.
 
 ### 6.5 Topes por nivel
@@ -346,10 +333,10 @@ a todos los efectos (cuentan en el mantenimiento, §10.1).
 
 ## 7. Mejoras de nivel interno
 
-Tipos que mejoran (`EDIFICIOS_CON_NIVELES`): fundicion, curtiduria, armeria, carpinteria, barracon, galeriaDeTiro, caballerizas, palacio, mercado, granja, granero, taberna.
+Tipos que mejoran: `EDIFICIOS_CON_NIVELES` (§14.2).
 
 **Elegibilidad** (`elegibleParaMejora`): el edificio está `activo`, es de esos tipos, no tiene ya una `mejora`, existe el nivel siguiente y se cumple: `nivelActual del asentamiento ≥ siguiente.requisitoNivelAsentamiento`;
-la Facción tiene `siguiente.requiereTecnologia`; si hay `requiereEdificio`, el **primer** edificio activo de ese tipo en el array existe y su `nivelInterno ≥ requiereEdificioNivel`.
+la Facción tiene `siguiente.requiereTecnologia`; si hay `requiereEdificio`, **algún** edificio activo de ese tipo tiene `nivelInterno ≥ requiereEdificioNivel` (por defecto 1).
 
 **Duración** (`minutosDeMejora`): `max(1, round( (niveles[siguiente].obraMinutos ?? tiempoConstruccionMinutos × MEJORA_EDIFICIO.multiplicadorPorNivel^(siguiente − 1)) × factorTiempoConstruccion ))`.
 O sea, la obra base ×2 para el nivel 2, ×4 para el 3, ×8 para el 4, salvo los `obraMinutos` propios (Taberna, Palacio).
@@ -371,7 +358,7 @@ Mientras se mejora el edificio sigue activo y produciendo con su nivel actual; l
 
 La conquista (Combate.md) baja un porcentaje de edificios a `estado: 'en_cola'` con `danado: true` (conservando `nivelInterno`) y les quita su capacidad de almacén. En el Paso 2 (§6.1) un `danado`: **no ocupa cuadrilla ni espera turno**, cobra
 `ceil(coste de catálogo × fraccionCosteReconstruccion)` **al arrancar** (si no hay con qué, espera), y tarda `tiempoConstruccionMinutos × factorTiempoConstruccion × fraccionCosteReconstruccion`. Al terminar vuelve a `activo`, recupera su capacidad (con el nivel que conservó) y `danado` se borra.
-Quitar de la cola un `danado` devuelve el coste **completo** más las mejoras (§6.4).
+Quitar de la cola un `danado` devuelve la mitad del coste y de las mejoras (§6.4).
 
 ## 9. Población
 
@@ -424,7 +411,7 @@ La nutrición **no** degrada el medidor de mantenimiento: son dos medidores inde
 
 ```
 nivel     = nivelActual
-edificios = Σ sobre los edificios con estado 'activo' de (tipo == 'vivienda' ? pesoVivienda : 1)        ← TODOS los tipos cuentan: centroUrbano, puestos de Mercado, anclas...
+edificios = Σ sobre los edificios con estado 'activo' de  pesoVivienda (0,5) si es vivienda · pesoPiezaGratuita (0,5) si es de `piezasGratuitas` (puestoMercado, plaza, plazaDeArmas, patioDeGremios, pozo, parque) · 1 el resto, incluido el centroUrbano
 escala    = (1 + edificios/edificiosReferencia) × (1 + distancia a la capital/escalaDistancia)           (distancia 0 si no hay capital)
 coste.madera = costoBase.madera × escala
 si nivel ≥ nivelParaPiedra: coste.piedra = piedraBase × escala
@@ -516,7 +503,7 @@ Los factores se **multiplican** entre las políticas activas del asentamiento (`
 | `mejorarEdificioAhora { …, edificioId }` | ídem | §7. `construccion.mejora_forzada` |
 | `alternarAutoConstruccion { asentamientoId, pausada }` | gobernador o maestroObras | Idempotente. `construccion.auto_alternada` |
 | `alternarReceta { asentamientoId, recurso, pausada }` | gobernador o maestroObras | Idempotente. `construccion.receta_alternada` |
-| `calibrarReservaManual { asentamientoId, recurso, valor }` | `tesorero` (y debe haber uno) | `reservaManual[recurso] = clamp(round(valor), 0, 999)`. Sin evento |
+| `calibrarReservaManual { asentamientoId, recurso, valor }` | `tesorero` (y debe haber uno) | `reservaManual[recurso] = clamp(round(valor), 0, NECESIDADES.reservaManualMaxima)`. Sin evento |
 | `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre vacío = volver a mostrar el id. `asentamiento.renombrado` |
 | `solicitarAscenso { asentamientoId }` | `gobernador` | §11.2. Error `ascenso.invalido` con todos los bloqueos |
 
@@ -1430,7 +1417,8 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "livestock": 200
     },
     "tiempoConstruccionMinutos": 40320,
-    "requisitoNivelAsentamientoConstruccion": 5
+    "requisitoNivelAsentamientoConstruccion": 5,
+    "ordenEraMinimo": 5
   }
 }
 ```
@@ -1452,7 +1440,15 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "5": 32
   },
   "maximoEnCola": 4,
-  "maximoEnConstruccionSimultanea": 2
+  "maximoEnConstruccionSimultanea": 2,
+  "maximoTransformacionPorNivel": {
+    "2": 3,
+    "3": 5,
+    "4": 5,
+    "5": 5
+  },
+  "nivelGateAnclas": 2,
+  "reservaManualMaxima": 999
 }
 ```
 <!-- /parametros -->
@@ -1490,17 +1486,6 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
 ```json
 {
   "multiplicadorPorNivel": 2
-}
-```
-<!-- /parametros -->
-
-<!-- parametros:LINEAS_PRODUCCION -->
-```json
-{
-  "distanciaSinPenalizacion": 25,
-  "distanciaMaxima": 150,
-  "factorMinimo": 0.4,
-  "distanciaEstandarSinFuente": 90
 }
 ```
 <!-- /parametros -->
@@ -1583,8 +1568,54 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
 ```
 <!-- /parametros -->
 
-Cifras que **no** están en `constants.ts` sino dentro del motor (y por tanto no las vigila el test de sincronización): `MAXIMO_TRANSFORMACION_POR_NIVEL` = `{2: 3, 3: 5, 4: 5, 5: 5}`, `NIVEL_GATE_ANCLAS` = 2, la lista `EDIFICIOS_UNICOS`
-(§6.4), la lista `EDIFICIOS_CON_NIVELES` (§7), `RECURSO_PROPIO` = `{granja: trigo, lenera: madera}` (§6.2) y el recorte 0–999 de la reserva manual.
+Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIOS_CON_NIVELES` y `RECURSO_PROPIO_DE_EDIFICIO` (el recurso que cada edificio de supervivencia no protege con la reserva).
+
+<!-- parametros:EDIFICIOS_UNICOS -->
+```json
+[
+  "granero",
+  "barracon",
+  "galeriaDeTiro",
+  "caballerizas",
+  "palacio",
+  "salaConsejo",
+  "taberna",
+  "mercado",
+  "granFundicion",
+  "maravilla"
+]
+```
+<!-- /parametros -->
+
+<!-- parametros:EDIFICIOS_CON_NIVELES -->
+```json
+[
+  "fundicion",
+  "curtiduria",
+  "armeria",
+  "carpinteria",
+  "barracon",
+  "galeriaDeTiro",
+  "caballerizas",
+  "palacio",
+  "mercado",
+  "granja",
+  "granero",
+  "taberna"
+]
+```
+<!-- /parametros -->
+
+<!-- parametros:RECURSO_PROPIO_DE_EDIFICIO -->
+```json
+{
+  "granja": "trigo",
+  "lenera": "madera"
+}
+```
+<!-- /parametros -->
+
+`NECESIDADES.maximoTransformacionPorNivel` es el tope de cada tipo de transformación por nivel operativo (§6.2), `nivelGateAnclas` el nivel mínimo para crear un ancla nueva y `reservaManualMaxima` el recorte de la reserva manual (§13).
 
 ### 14.3 Fundación y zona
 
@@ -1682,6 +1713,15 @@ Cifras que **no** están en `constants.ts` sino dentro del motor (y por tanto no
   "oroBase": 2,
   "edificiosReferencia": 50,
   "pesoVivienda": 0.5,
+  "pesoPiezaGratuita": 0.5,
+  "piezasGratuitas": [
+    "puestoMercado",
+    "plaza",
+    "plazaDeArmas",
+    "patioDeGremios",
+    "pozo",
+    "parque"
+  ],
   "escalaDistancia": 400,
   "degradacionPorDeficitTotal": 10,
   "regeneracionSiPagoCompleto": 5,
@@ -1988,7 +2028,7 @@ Todas las cifras de este documento son **placeholder sin calibrar** salvo que el
 | `medidorMantenimiento` siempre en [0, 100] | ídem |
 | `nivel` nunca baja; `nivelActual ≤ nivel` | ídem |
 | Un recurso nunca baja de la reserva por una obra o taller automáticos | `recetasTalleres.test.ts`, `regresiones_historicas.test.ts` |
-| El coste de mantenimiento escala con edificios activos (la Vivienda cuenta `pesoVivienda`), con el nivel efectivo y con la distancia sin tope | `costoMantenimiento.test.ts` |
+| El coste de mantenimiento escala con edificios activos (la Vivienda y las piezas gratuitas cuentan la mitad), con el nivel efectivo y con la distancia sin tope | `costoMantenimiento.test.ts` |
 | El colapso del medidor baja `nivelActual` un escalón; en nivel 1 es ruina | `eventosDominioMantenimiento.test.ts` |
 | La nutrición cae en `100/degradacionSinComida` ticks sin trigo y cuesta población solo desde 0 | `hambruna.test.ts` |
 | El cupo de Facción por nivel no se puede superar ni reservando | `cupo_nivel_invariante.test.ts`, `ascenso.test.ts` |
@@ -2000,10 +2040,10 @@ Todas las cifras de este documento son **placeholder sin calibrar** salvo que el
 
 - **El pago es al encolar y se devuelve entero al quitar** de la cola; una vez `en_construccion` no hay vuelta atrás ni reembolso.
 - **El orden del array `edificios` no se toca** al ordenar la cola: lo que se reordena es `prioridad`. Permutar el array movería las calles (Trazado_Urbano.md).
-- **Un taller con el almacén lleno desperdicia**: consume los insumos aunque el producto no quepa (y un extractor drena el nodo igualmente). `pausadoPorAlmacenLleno` solo lo avisa.
+- **Un almacén lleno pausa**: ni el taller consume insumos ni el extractor gasta el yacimiento por lo que no cabe (§5.5).
 - **Los nodos se regeneran rápido** (3 / 10 min), así que «agotar» un yacimiento es un bache corto; mientras tanto el extractor sigue pidiendo trabajadores y cuenta en el mantenimiento.
-- **Cualquier edificio `activo` paga mantenimiento** como un edificio normal, también los gratuitos (Centro Urbano, puestos de Mercado, anclas): ver Divergencias.
-- **`requiereEdificio` de una mejora** mira el primer edificio de ese tipo; **`requiereEdificio` de una receta** mira cualquiera (`some`).
+- **Todo edificio `activo` paga mantenimiento**: los normales y el Centro Urbano, 1; las Viviendas y las piezas gratuitas (puestos del Mercado, anclas), 0,5.
+- **`requiereEdificio`**, tanto de una mejora como de una receta, se cumple con **cualquier** edificio activo de ese tipo que tenga el nivel.
 - **La zona crece solo construyendo**: sin obras terminadas el radio no crece, aunque suba el nivel (solo sube su techo).
 - **`nivel` vs `nivelActual`**: el techo de población y el radio máximo usan el nivel **alcanzado**; construir, mejorar, el cupo de Almacenes/Viviendas/transformación y los materiales del mantenimiento usan el **operativo**.
 - **Gracia de mantenimiento** de un día desde `fundadoEn`; durante ella el medidor ni baja ni sube. La ocupación tras una conquista suspende el mantenimiento por completo (no cobra, no regenera).
@@ -2013,5 +2053,4 @@ Todas las cifras de este documento son **placeholder sin calibrar** salvo que el
 
 ## 17. Divergencias
 
-Ver [`Divergencias.md`](Divergencias.md): los puestos y anclas gratuitos pagan mantenimiento, los insumos de mina ignoran la distancia real, un almacén lleno desperdicia en vez de pausar, la Gran Fundición no cuenta como mano de obra, `requiereEdificio` mira solo
-el primer edificio, la Maravilla no comprueba la Era, el reembolso de un edificio dañado, cifras fuera de `constants.ts` y varios textos del canon desactualizados.
+Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver [`Divergencias.md`](Divergencias.md) para las demás áreas).

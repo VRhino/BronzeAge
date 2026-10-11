@@ -4,6 +4,7 @@
 // Todos son de alcance local: sus eventos llevan `asentamientoId`, que es lo que permite a una proyección de
 // Fase C mandárselos solo a quien tenga visibilidad sobre ese asentamiento.
 import type { EdificioTipo, RecursoTipo } from '../../domain/types';
+import { ERAS, NECESIDADES } from '../../constants';
 import {
   anadirEdificioManualmente as anadirEdificioManualmenteEngine,
   mejorarEdificioManualmente as mejorarEdificioManualmenteEngine,
@@ -72,7 +73,8 @@ export const anadirEdificioManualmente = comando<ParamsAnadirEdificio, void>((es
     tecnologiasDe(estado.tecnologia, asentamiento.faccionId).adoptadas,
     ctx.ids.siguiente(),
     consumoRacionDeEscuadrones(campamentoEn(estado, asentamiento)),
-    estado.asentamientos.some((a) => a.faccionId === asentamiento.faccionId && a.edificios.some((e) => e.tipo === 'granFundicion'))
+    estado.asentamientos.some((a) => a.faccionId === asentamiento.faccionId && a.edificios.some((e) => e.tipo === 'granFundicion')),
+    ERAS[estado.tecnologia.era].orden
   );
   return exito(conAsentamiento(estado, actualizado), [
     evento(ctx, {
@@ -226,7 +228,7 @@ export const calibrarReservaManual = comando<ParamsCalibrarReservaManual, void>(
   const asentamiento = exigirAsentamiento(estado, params.asentamientoId);
   if (!asentamiento.cargos.tesoreroId) rechazar(CODIGOS_ERROR.reservaSinTesorero);
 
-  const limpio = Math.max(0, Math.min(999, Math.round(params.valor)));
+  const limpio = Math.max(0, Math.min(NECESIDADES.reservaManualMaxima, Math.round(params.valor)));
   const actualizado = { ...asentamiento, reservaManual: { ...asentamiento.reservaManual, [params.recurso]: limpio } };
   // Sin evento a propósito: es un ajuste de calibración que se toca repetidamente con un slider, y anotar
   // cada paso llenaría el log de ruido (mismo criterio que tenía `GameStore`).

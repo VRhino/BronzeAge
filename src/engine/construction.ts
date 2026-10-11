@@ -1,17 +1,19 @@
 import type { Asentamiento, Edificio, EdificioTipo, Faccion, Point, Recinto, RecursoAlmacenado, RecursoTipo, TecnologiaId } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
-import { TECNOLOGIAS, type NivelEdificioTransformacion, type RecetaProduccion } from '../constants';
+import { TECNOLOGIAS, type NivelEdificioTransformacion } from '../constants';
 import {
   EDIFICIO_CATALOGO,
+  EDIFICIOS_CON_NIVELES,
+  EDIFICIOS_UNICOS,
   EXTRACCION_MAXIMOS,
   EXTRACTOR_DESEMPATE,
-  LINEAS_PRODUCCION,
   MEJORA_EDIFICIO,
   MERCADO_PUESTOS_POR_NIVEL,
   NECESIDADES,
   NIVEL_ASENTAMIENTO,
   OCUPACION,
   produccionTrigoDeGranja,
+  RECURSO_PROPIO_DE_EDIFICIO,
   SCORE_BANDAS,
   ZONA_INFLUENCIA,
 } from '../constants';
@@ -68,7 +70,6 @@ import { ReglaInvalidaError } from './errores';
  * única vía real de recuperar esos recursos, así que bloquearlas por la misma escasez que deben resolver
  * sería un huevo-y-la-gallina sin salida.
  */
-const RECURSO_PROPIO: Partial<Record<EdificioTipo, string>> = { granja: 'trigo', lenera: 'madera' };
 
 /**
  * Vista de Asentamiento (a petición del usuario): dos espacios lógicos separados. Casi todo edificio se
@@ -139,7 +140,7 @@ function puedeIniciarConstruccion(
   reserva: Partial<Record<RecursoTipo, number>>
 ): boolean {
   if (!tieneRecursos(almacen, costo)) return false;
-  const exento = RECURSO_PROPIO[tipo];
+  const exento = RECURSO_PROPIO_DE_EDIFICIO[tipo];
   return Object.entries(costo).every(([recurso, cantidad]) => {
     if (recurso === exento) return true;
     const reservaRecurso = reserva[recurso as RecursoTipo] ?? 0;
@@ -147,10 +148,6 @@ function puedeIniciarConstruccion(
     const disponible = almacen[recurso]?.cantidad ?? 0;
     return disponible - (cantidad ?? 0) >= reservaRecurso;
   });
-}
-
-function distancia(a: Point, b: Point): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 // --- Vista de Asentamiento: colocación sobre el trazado urbano dinámico ---
@@ -222,24 +219,6 @@ function sitioCercaDeNodo(
     .find((n) => mapa.terrenoEn(n.posicion) !== 'cima');
   return elegido ? { posicion: elegido.posicion, fuenteId: elegido.id } : null;
 }
-
-/**
- * Recurso base -> tipo de edificio que lo extrae directamente del mapa (mismos siete recursos "crudos" de
- * EXTRACTORES + granja/lenera, que quedan fuera de ese mapa por no agotar nodo, ver arriba). Usado por
- * `fuentesDeRecurso` (líneas de producción, Doc 4.2.1) para saber dónde buscar el origen de un insumo crudo
- * dentro del asentamiento — los insumos que NO aparecen aquí son intermedios de cadena (lingoteCobre, cuero,
- * ...) y su fuente es el transformador que los fabrica, no un extractor.
- */
-export const RECURSO_A_EXTRACTOR: Partial<Record<string, EdificioTipo>> = {
-  piedra: 'cantera',
-  oro: 'mina',
-  cobre: 'minaCobre',
-  hierro: 'minaHierro',
-  estano: 'minaEstano',
-  livestock: 'corral',
-  madera: 'lenera',
-  trigo: 'granja',
-};
 
 /**
  * Fuentes del mapa ya tomadas, sumando TODOS los asentamientos vivos.
@@ -464,7 +443,6 @@ function conUrgencia(base: number, urgencia: number, bonus = 0): number {
  * fundación, así que en la práctica esto solo puede llegar a frenar una Vivienda si el núcleo de Centro Urbano
  * se satura antes de nivel 2 — militar/industria nunca lo notan: sus tipos ya exigen nivel 2 para construcción
  * BASE (`requisitoNivelBase`), así que el gate siempre está cumplido de antemano cuando llegan aquí. */
-const NIVEL_GATE_ANCLAS = 2;
 
 /**
  * Etapa 5: garantiza que exista una ancla alcanzable para `tipo` ANTES de pedirle sitio — el árbol único de
@@ -478,7 +456,7 @@ const NIVEL_GATE_ANCLAS = 2;
  * instancia de la categoría se volvía a usar y el asentamiento fabricaba anclas nuevas sin parar en su lugar
  * (bug detectado con el laboratorio visual). Si alguna instancia sirve, listo, no hace falta ancla nueva.
  *
- * Si NINGUNA instancia sirve (o no existe ninguna todavía) y el asentamiento ya cumple `NIVEL_GATE_ANCLAS`,
+ * Si NINGUNA instancia sirve (o no existe ninguna todavía) y el asentamiento ya cumple `NECESIDADES.nivelGateAnclas`,
  * crea una ancla nueva en el árbol único (`crearAnclaNueva`, Lógica 1 — sin distinguir tipo/categoría en la
  * búsqueda de semilla, sin cambios) y aplica sus `anclasRecienSaturadas` sobre el array de edificios. Si no
  * hay categoría (no hay tipo de ancla que sortear — Mercado, que se resuelve solo dentro de `sitiosParaTipo`),
@@ -496,7 +474,7 @@ function asegurarAnclaPara(asentamiento: Asentamiento, edificios: Edificio[], ti
   const edificiosConLlenas = edificios.map((e) => (anclasRecienLlenas.includes(e.id) ? { ...e, anclaLlena: true } : e));
   if (instancia) return edificiosConLlenas;
 
-  if (nivelActualDe(asentamiento) < NIVEL_GATE_ANCLAS) return edificiosConLlenas;
+  if (nivelActualDe(asentamiento) < NECESIDADES.nivelGateAnclas) return edificiosConLlenas;
   const idAncla = nextId();
   const tipoAncla = tipoAnclaParaCategoria(categoria, idAncla);
   if (!tipoAncla) return edificiosConLlenas;
@@ -950,7 +928,6 @@ function pisaCalleComprometida(
  * están vacías, el nivel interno solo cambia `cupoCaravanas` (ver `cupoCaravanas`, asentamientoQuery.ts).
  * Granja también, y con dos particularidades propias: su nivel sube el rinde de trigo
  * (`produccionTrigoDeGranja`) y AGRANDA su huella, lo que obliga a mudarla (ver `avanzarMejoras`). */
-const EDIFICIOS_CON_NIVELES = ['fundicion', 'curtiduria', 'armeria', 'carpinteria', 'barracon', 'galeriaDeTiro', 'caballerizas', 'palacio', 'mercado', 'granja', 'granero', 'taberna'] as const;
 
 function nivelesDe(tipo: EdificioTipo): Record<number, NivelEdificioTransformacion> | undefined {
   return (EDIFICIO_CATALOGO[tipo] as { niveles?: Record<number, NivelEdificioTransformacion> }).niveles;
@@ -997,7 +974,7 @@ function elegibleParaMejora(
   edificio: Edificio,
   adoptadas: readonly TecnologiaId[]
 ): { nivelActual: number; nivelSiguiente: number; costo: Partial<Record<string, number>> } | null {
-  if (edificio.estado !== 'activo' || !(EDIFICIOS_CON_NIVELES as readonly string[]).includes(edificio.tipo)) return null;
+  if (edificio.estado !== 'activo' || !EDIFICIOS_CON_NIVELES.includes(edificio.tipo)) return null;
   if (edificio.mejora) return null;
   const niveles = nivelesDe(edificio.tipo);
   if (!niveles) return null;
@@ -1011,8 +988,8 @@ function elegibleParaMejora(
   if (!permite(adoptadas, siguiente.requiereTecnologia)) return null;
   if (siguiente.requiereEdificio) {
     const previo = edificiosPorTipoYEstado(asentamiento, siguiente.requiereEdificio as EdificioTipo);
-    if (previo.length === 0) return null;
-    if (siguiente.requiereEdificioNivel && (previo[0]!.nivelInterno ?? 1) < siguiente.requiereEdificioNivel) return null;
+    // Cualquier edificio de ese tipo vale (con dos Fundiciones basta con que una tenga el nivel), igual que en las recetas.
+    if (!previo.some((e) => (e.nivelInterno ?? 1) >= (siguiente.requiereEdificioNivel ?? 1))) return null;
   }
   return { nivelActual, nivelSiguiente, costo: siguiente.costoMejora ?? {} };
 }
@@ -1141,78 +1118,12 @@ function avanzarMejoras(
 }
 
 /**
- * Posiciones de los edificios ACTIVOS del asentamiento que producen `recurso` — un extractor dedicado si es
- * un recurso crudo (ver `RECURSO_A_EXTRACTOR`), o cualquier transformador cuya receta del `nivelInterno`
- * ACTUAL lo tenga como `produce` si es un intermedio de cadena (ej. Fundición -> lingoteCobre, insumo de
- * Armería). Líneas de producción (Doc 4.2.1, a petición del usuario): usado por `factorLineaProduccion` para
- * medir qué tan lejos tiene que "viajar" cada insumo de una receta dentro del asentamiento.
- *
- * Vista de Asentamiento: solo se devuelven fuentes DEL MISMO ESPACIO que el consumidor (`ambitoConsumidor`),
- * porque las coordenadas de los dos espacios (plano del asentamiento vs. mapa general) no son comparables.
- * Una fuente cruzada — p. ej. una Fundición interna que consume `cobre` de una Mina del mapa general — cuenta
- * como "sin fuente local" y cae a `LINEAS_PRODUCCION.distanciaEstandarSinFuente` (ver `factorLineaProduccion`).
- */
-function fuentesDeRecurso(asentamiento: Asentamiento, recurso: string, ambitoConsumidor: 'asentamiento' | 'mapa'): Point[] {
-  const mismoAmbito = (e: Edificio): boolean => (e.ambito ?? 'asentamiento') === ambitoConsumidor;
-  const extractorTipo = RECURSO_A_EXTRACTOR[recurso];
-  if (extractorTipo) {
-    return asentamiento.edificios
-      .filter((e) => e.tipo === extractorTipo && e.estado === 'activo' && mismoAmbito(e))
-      .map((e) => e.posicion);
-  }
-  const posiciones: Point[] = [];
-  for (const e of asentamiento.edificios) {
-    if (e.estado !== 'activo' || !mismoAmbito(e)) continue;
-    const nivel = nivelesDe(e.tipo)?.[e.nivelInterno ?? 1];
-    if (nivel?.recetas.some((r) => r.produce === recurso)) posiciones.push(e.posicion);
-  }
-  return posiciones;
-}
-
-/**
- * Factor 0..1 de producción según la distancia a la fuente más cercana de UN insumo (`LINEAS_PRODUCCION`,
- * constants.ts): 1 hasta `distanciaSinPenalizacion`, decae linealmente hasta `factorMinimo` en
- * `distanciaMaxima`. Nunca toca `consumePorUnidad` — solo cuánto se produce ese tick, simulando que el
- * insumo tarda más en llegar cuanto más lejos está su origen dentro del asentamiento.
- */
-export function factorPorDistancia(distanciaFuente: number): number {
-  const { distanciaSinPenalizacion, distanciaMaxima, factorMinimo } = LINEAS_PRODUCCION;
-  if (distanciaFuente <= distanciaSinPenalizacion) return 1;
-  if (distanciaFuente >= distanciaMaxima) return factorMinimo;
-  const progreso = (distanciaFuente - distanciaSinPenalizacion) / (distanciaMaxima - distanciaSinPenalizacion);
-  return 1 - progreso * (1 - factorMinimo);
-}
-
-/**
- * Factor de línea de producción de UNA receta completa: el insumo más penalizado manda (el eslabón más
- * débil de la cadena), no un promedio — así una receta con varios insumos no "diluye" el efecto de tener
- * uno de ellos lejos. Si un insumo no tiene ninguna fuente propia en el asentamiento (llega solo por
- * trueque/caravana), se usa `LINEAS_PRODUCCION.distanciaEstandarSinFuente` en su lugar.
- */
-export function factorLineaProduccion(edificio: Edificio, receta: RecetaProduccion, asentamiento: Asentamiento): number {
-  const insumos = Object.entries(receta.consumePorUnidad)
-    .filter(([, porUnidad]) => !!porUnidad)
-    .map(([insumo]) => insumo);
-  if (insumos.length === 0) return 1;
-  const ambitoConsumidor = edificio.ambito ?? 'asentamiento';
-  return Math.min(
-    ...insumos.map((insumo) => {
-      const fuentes = fuentesDeRecurso(asentamiento, insumo, ambitoConsumidor);
-      const distanciaFuente =
-        fuentes.length > 0 ? Math.min(...fuentes.map((p) => distancia(edificio.posicion, p))) : LINEAS_PRODUCCION.distanciaEstandarSinFuente;
-      return factorPorDistancia(distanciaFuente);
-    })
-  );
-}
-
-/**
  * Recetas de crafting de los edificios de transformación activos (Doc 4.2.1, rediseño de progreso Fase 0):
  * recorre las recetas del `nivelInterno` actual EN ORDEN (permite que una receta consuma el output de otra
  * del mismo tick, ej. Lingote de Bronce consumiendo Lingote de Cobre/Estaño recién producidos). La producción
  * real se limita por `min(produccionBase * ratioManoObraArtesanos, insumo_disponible / consumePorUnidad)`,
- * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad`, multiplicado además por el
- * factor de línea de producción (`factorLineaProduccion`, Doc 4.2.1) — nunca al revés: la penalización de
- * distancia reduce cuánto se produce, no cuánto insumo hace falta por unidad.
+ * mismo criterio que ya usan los extractores minerales contra `nodo.cantidad`. Si el almacén no tiene sitio para lo
+ * fabricado, la receta **para**: produce solo lo que cabe y consume solo los insumos de eso (2026-10-11, decisión del usuario).
  */
 function avanzarRecetas(
   asentamiento: Asentamiento,
@@ -1237,11 +1148,16 @@ function avanzarRecetas(
     for (const receta of nivel.recetas) {
       if (pausadas.has(receta.produce as RecursoTipo) || !permite(adoptadas, receta.requiereTecnologia)) continue;
       if (receta.requiereEdificio && !tieneEdificioDeNivel(asentamiento, receta.requiereEdificio.tipo, receta.requiereEdificio.nivel)) continue;
-      let cantidad = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio, receta, asentamiento) * factorProduccionTalleres(asentamiento);
+      let cantidad = receta.produccionBase * ratioArtesano * factorProduccionTalleres(asentamiento);
       for (const [insumo, porUnidad] of Object.entries(receta.consumePorUnidad)) {
         if (!porUnidad) continue;
         const disponible = Math.max(0, (almacenActual[insumo]?.cantidad ?? 0) - (reserva[insumo as RecursoTipo] ?? 0));
         cantidad = Math.min(cantidad, disponible / porUnidad);
+      }
+      const espacio = Math.max(0, (almacenActual[receta.produce]?.capacidad ?? 0) - (almacenActual[receta.produce]?.cantidad ?? 0));
+      if (cantidad > espacio) {
+        cantidad = espacio;
+        pausados.add(edificio.id);
       }
       if (cantidad <= 0) continue;
       const consumo: Partial<Record<string, number>> = {};
@@ -1249,11 +1165,9 @@ function avanzarRecetas(
         if (porUnidad) consumo[insumo] = porUnidad * cantidad;
       }
       almacenActual = descontarRecursos(almacenActual, consumo);
-      const resultado = agregarRecursoConSobrante(almacenActual, receta.produce, cantidad);
-      almacenActual = resultado.almacen;
-      if (resultado.sobrante > 0) pausados.add(edificio.id);
+      almacenActual = agregarRecurso(almacenActual, receta.produce, cantidad);
       const producido = receta.produce as RecursoTipo;
-      fabricado[producido] = (fabricado[producido] ?? 0) + cantidad - resultado.sobrante;
+      fabricado[producido] = (fabricado[producido] ?? 0) + cantidad;
     }
   }
   return { almacen: almacenActual, pausados, fabricado };
@@ -1358,14 +1272,13 @@ export function avanzarConstruccion(
     } else {
       const extraccion = EXTRACTORES[edificio.tipo];
       if (extraccion && mapa.nodoProductivo(edificio.fuenteId)) {
-        const cantidadExtraida = mapa.extraer(
-          edificio.fuenteId,
-          extraccion.produccionBase() * ratioMano * factorProduccionTecnologica(adoptadas, extraccion.recurso)
-        );
+        // Con el almacén lleno el extractor PARA: solo saca lo que cabe y el yacimiento no pierde el resto (2026-10-11).
+        const pedido = extraccion.produccionBase() * ratioMano * factorProduccionTecnologica(adoptadas, extraccion.recurso);
+        const espacio = Math.max(0, (almacen[extraccion.recurso]?.capacidad ?? 0) - (almacen[extraccion.recurso]?.cantidad ?? 0));
+        pausadoPorAlmacenLleno = pedido > espacio;
+        const cantidadExtraida = mapa.extraer(edificio.fuenteId, Math.min(pedido, espacio));
         extraido[extraccion.recurso] = (extraido[extraccion.recurso] ?? 0) + cantidadExtraida;
-        const resultado = agregarRecursoConSobrante(almacen, extraccion.recurso, cantidadExtraida);
-        almacen = resultado.almacen;
-        pausadoPorAlmacenLleno = resultado.sobrante > 0;
+        almacen = agregarRecurso(almacen, extraccion.recurso, cantidadExtraida);
         if (!mapa.nodoProductivo(edificio.fuenteId)) {
           eventos.push({
             codigo: 'construccion.yacimiento_agotado',
@@ -1541,34 +1454,10 @@ export function avanzarConstruccion(
 
 export class ConstruccionManualInvalidaError extends ReglaInvalidaError {}
 
-/** Tipos que solo admiten UNA instancia por asentamiento (progresan por `nivelInterno` en vez de repetirse) —
- * añadir una segunda no tiene sentido estructural, sea cual sea el mecanismo (auto o manual). */
-const EDIFICIOS_UNICOS = new Set<EdificioTipo>([
-  // El Granero crece por NIVEL INTERNO, no por número: uno por asentamiento, de 2.000 a 6.000 de trigo.
-  'granero',
-  'barracon',
-  'galeriaDeTiro',
-  'caballerizas',
-  'palacio',
-  'salaConsejo',
-  'taberna',
-  'mercado',
-  'granFundicion',
-  'maravilla',
-]);
-
-/** Cupo de cada tipo de edificio de transformaciÃ³n por nivel operativo del asentamiento.
- * Los niveles 4 y 5 mantienen el mismo tope que el nivel 3 hasta que se definan nuevos escalones. */
-const MAXIMO_TRANSFORMACION_POR_NIVEL: Partial<Record<number, number>> = {
-  2: 3,
-  3: 5,
-  4: 5,
-  5: 5,
-};
 const TIPOS_TRANSFORMACION: readonly EdificioTipo[] = ['fundicion', 'curtiduria', 'armeria', 'carpinteria'];
 
 function alcanzoTopeDeTransformacion(asentamiento: Asentamiento, tipo: EdificioTipo, adicionales: Edificio[] = []): boolean {
-  const tope = MAXIMO_TRANSFORMACION_POR_NIVEL[nivelActualDe(asentamiento)];
+  const tope = NECESIDADES.maximoTransformacionPorNivel[nivelActualDe(asentamiento)];
   if (tope === undefined) return false;
   const cantidad = asentamiento.edificios.filter((e) => e.tipo === tipo).length + adicionales.filter((e) => e.tipo === tipo).length;
   return cantidad >= tope;
@@ -1646,7 +1535,9 @@ export function anadirEdificioManualmente(
   /** Ración de la guarnición, para la reserva de trigo (ver `reservaDinamicaConstruccion`). */
   consumoTropasPorMinuto = 0,
   /** ¿Otro asentamiento de la Facción ya tiene (o está levantando) su Gran Fundición? Solo cabe una por Facción. */
-  faccionYaTieneGranFundicion = false
+  faccionYaTieneGranFundicion = false,
+  /** `ERAS[era].orden` del servidor, para los edificios que piden una Era (la Maravilla, la V). Por defecto 0: no se cumple ninguna. */
+  ordenEraDelServidor = 0
 ): Asentamiento {
   if (!cargoOcupado(asentamiento, cargo)) {
     throw new ConstruccionManualInvalidaError(`Se necesita un ${cargo} asignado para añadir edificios a la cola.`);
@@ -1655,13 +1546,17 @@ export function anadirEdificioManualmente(
   if (!permite(adoptadas, tecnologia)) {
     throw new ConstruccionManualInvalidaError(`Hace falta adoptar ${TECNOLOGIAS[tecnologia!].nombre} para construir ${tipo}.`);
   }
+  const ordenEraMinimo = (EDIFICIO_CATALOGO[tipo] as { ordenEraMinimo?: number }).ordenEraMinimo ?? 0;
+  if (ordenEraDelServidor < ordenEraMinimo) {
+    throw new ConstruccionManualInvalidaError(`Hace falta que el servidor llegue a la Era ${ordenEraMinimo} para construir ${tipo}.`);
+  }
   if (tipo === 'centroUrbano') {
     throw new ConstruccionManualInvalidaError('El Centro Urbano nunca pasa por la cola de construcción.');
   }
   if (tipo === 'puestoMercado') {
     throw new ConstruccionManualInvalidaError('Los puestos son parte de la zona de Mercado: aparecen solos al subir su nivel interno.');
   }
-  if (EDIFICIOS_UNICOS.has(tipo) && (edificiosPorTipoYEstado(asentamiento, tipo).length > 0 || hayProyectoPendiente(asentamiento, tipo))) {
+  if (EDIFICIOS_UNICOS.includes(tipo) && (edificiosPorTipoYEstado(asentamiento, tipo).length > 0 || hayProyectoPendiente(asentamiento, tipo))) {
     throw new ConstruccionManualInvalidaError(`Ya existe (o está en curso) una ${tipo} en este asentamiento.`);
   }
   if (tipo === 'almacen' && alcanzoTopeDeAlmacenes(asentamiento)) {
@@ -1683,7 +1578,7 @@ export function anadirEdificioManualmente(
   }
   if (TIPOS_TRANSFORMACION.includes(tipo) && alcanzoTopeDeTransformacion(asentamiento, tipo)) {
     throw new ConstruccionManualInvalidaError(
-      `Este asentamiento ya tiene el m\u00e1ximo de ${tipo} para su nivel (${MAXIMO_TRANSFORMACION_POR_NIVEL[nivelOperativo]}).`
+      `Este asentamiento ya tiene el m\u00e1ximo de ${tipo} para su nivel (${NECESIDADES.maximoTransformacionPorNivel[nivelOperativo]}).`
     );
   }
   if (tipo === 'granFundicion') {
@@ -1740,12 +1635,14 @@ export function quitarDeCola(asentamiento: Asentamiento, cargo: 'gobernador' | '
   }
   // Devuelve lo que se pagó en su día (decisión del usuario, 2026-09-27): la obra y, si es un edificio dañado que se
   // iba a reconstruir, también las mejoras que lo llevaron a su nivel interno.
-  const pagado: Partial<Record<string, number>>[] = [EDIFICIO_CATALOGO[edificio.tipo].costo as Partial<Record<string, number>>];
-  for (let nivel = 2; nivel <= (edificio.nivelInterno ?? 1); nivel++) pagado.push(nivelesDe(edificio.tipo)?.[nivel]?.costoMejora ?? {});
+  const reembolsable: Partial<Record<string, number>>[] = [EDIFICIO_CATALOGO[edificio.tipo].costo as Partial<Record<string, number>>];
+  for (let nivel = 2; nivel <= (edificio.nivelInterno ?? 1); nivel++) reembolsable.push(nivelesDe(edificio.tipo)?.[nivel]?.costoMejora ?? {});
+  // Un edificio dañado por un saqueo solo devuelve los materiales de lo que queda: la fracción que costaría reconstruirlo (2026-10-11, decisión del usuario).
+  const fraccion = edificio.danado ? OCUPACION.fraccionCosteReconstruccion : 1;
   let almacen = asentamiento.almacen;
-  for (const costo of pagado) {
+  for (const costo of reembolsable) {
     for (const [recurso, cantidad] of Object.entries(costo)) {
-      if (cantidad) almacen = agregarRecurso(almacen, recurso, cantidad);
+      if (cantidad) almacen = agregarRecurso(almacen, recurso, Math.floor(cantidad * fraccion));
     }
   }
   return { ...asentamiento, almacen, edificios: asentamiento.edificios.filter((e) => e.id !== edificioId) };

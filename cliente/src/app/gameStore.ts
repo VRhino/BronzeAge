@@ -75,7 +75,6 @@ import { campamentoDe, defensaDe } from '@motor/engine/tropa';
 import { heridosEn } from '@motor/engine/heroe';
 import {
   estadoMejoraEdificio as estadoMejoraEdificioEngine,
-  factorLineaProduccion,
   type EstadoMejoraEdificio,
 } from '@motor/engine/construction';
 export type { EstadoMejoraEdificio } from '@motor/engine/construction';
@@ -665,7 +664,7 @@ export class GameStore {
     });
     const ratioArtesano = ratioManoObraArtesanos(asentamiento);
     const consumoTotal = recetas.flatMap((receta) => {
-      const salidaTotal = receta.produccionBase * ratioArtesano * factorLineaProduccion(edificio as Edificio, receta, asentamiento);
+      const salidaTotal = receta.produccionBase * ratioArtesano;
       return Object.entries(receta.consumePorUnidad).map(([recurso, cantidad]) => ({ recurso, cantidadPorMinuto: cantidad * salidaTotal }));
     });
     return { produccion, consumo, consumoTotal };

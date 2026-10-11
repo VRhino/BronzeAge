@@ -42,7 +42,6 @@ import {
   LENERA_POR_BOSQUE,
   MERCENARIOS,
   ALMACEN_PERSONAL,
-  LINEAS_PRODUCCION,
   MANTENIMIENTO,
   MERCADO_PUESTOS_POR_NIVEL,
   MILITAR,
@@ -104,7 +103,7 @@ function balancePublicado() {
     // Modelo temporal (Fase D / doc 10): un cliente necesita `epocaInicial` + `duracionTickMs` para
     // traducir el `tick` de una partida a fecha de mundo (`instante = epocaInicial + tick × duracionTickMs`).
     temporal: { SIMULACION },
-    internas: { CAMPAMENTOS_BANDIDOS, REGENERACION_NODOS, SCORE_BANDAS, EXTRACTOR_DESEMPATE, LINEAS_PRODUCCION, EXTRACCION_MAXIMOS },
+    internas: { CAMPAMENTOS_BANDIDOS, REGENERACION_NODOS, SCORE_BANDAS, EXTRACTOR_DESEMPATE, EXTRACCION_MAXIMOS },
   };
 }
 

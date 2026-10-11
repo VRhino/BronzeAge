@@ -144,7 +144,9 @@ export function calcularCostoMantenimiento(asentamiento: Asentamiento, capital: 
   // Qué se cobra lo decide el nivel EFECTIVO (2026-09-27, decisión del usuario): una plaza que cae de nivel deja de
   // pagar lo del nivel perdido y puede recuperarse en vez de acabar en ruinas.
   const nivel = nivelActualDe(asentamiento);
-  const edificios = asentamiento.edificios.reduce((n, e) => n + (e.estado !== 'activo' ? 0 : e.tipo === 'vivienda' ? MANTENIMIENTO.pesoVivienda : 1), 0);
+  const pesoDe = (tipo: EdificioTipo): number =>
+    tipo === 'vivienda' ? MANTENIMIENTO.pesoVivienda : MANTENIMIENTO.piezasGratuitas.includes(tipo) ? MANTENIMIENTO.pesoPiezaGratuita : 1;
+  const edificios = asentamiento.edificios.reduce((n, e) => n + (e.estado !== 'activo' ? 0 : pesoDe(e.tipo)), 0);
   const factorEdificios = 1 + edificios / MANTENIMIENTO.edificiosReferencia;
   const dist = capital ? distancia(asentamiento.posicion, capital.posicion) : 0;
   const factorDistancia = 1 + dist / MANTENIMIENTO.escalaDistancia;
