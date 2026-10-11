@@ -2,21 +2,6 @@ import type { Asentamiento, Ejercito, OrdenMercado } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 
-/**
- * Payload de `mercado.compra` (ver `comerciarEnPlaza`). Ya no son dos plazas: uno de los dos lados es
- * siempre una COLUMNA, que es quien tiene que estar alli.
- */
-export interface PayloadMercadoCompra {
-  plazaId: string;
-  columnaId: string;
-  /** El de la ORDEN: `'venta'` = la plaza vende y la columna compra. */
-  tipo: 'compra' | 'venta';
-  recurso: string;
-  cantidad: number;
-  /** Lo que cambia de manos por la mercancia, sin la comision. */
-  valor: number;
-  comision: number;
-}
 /** Payload de `mercado.orden_expirada` — la oferta se retiró sola sin que nadie la tomara. */
 export interface PayloadOrdenExpirada {
   ordenId: string;
@@ -186,7 +171,7 @@ export function comerciarEnPlaza(
    * adjuntas (Doc 5.13.2). Se pasa ya calculada para no arrastrar aqui la resolucion de las adjuntas. */
   capacidadCarga: number,
   instante: Instante
-): { ejercito: Ejercito; plaza: Asentamiento; orden: OrdenMercado; cantidad: number; valor: number; comision: number; eventos: EventoCrudo[] } {
+): { ejercito: Ejercito; plaza: Asentamiento; orden: OrdenMercado; cantidad: number; valor: number; comision: number } {
   if (ejercito.liderId !== heroeId) throw new OrdenInvalidaError('Solo el Lider de la columna comercia con su carro.');
   if (orden.asentamientoId !== plaza.id) throw new OrdenInvalidaError('Esa orden no es de esta plaza.');
   if (orden.estado !== 'activa') throw new OrdenInvalidaError('Esa orden ya no esta en pie.');
@@ -255,23 +240,5 @@ export function comerciarEnPlaza(
     cantidad,
     valor,
     comision,
-    eventos: [
-      {
-        codigo: 'mercado.compra',
-        mensaje:
-          orden.tipo === 'venta'
-            ? `Mercado de ${plaza.id}: una columna compra ${cantidad.toFixed(1)} ${recurso} por ${valor.toFixed(1)} oro (comisión ${comision.toFixed(1)}).`
-            : `Mercado de ${plaza.id}: una columna entrega ${cantidad.toFixed(1)} ${recurso} y cobra ${valor.toFixed(1)} oro (comisión ${comision.toFixed(1)}).`,
-        payload: {
-          plazaId: plaza.id,
-          columnaId: ejercito.id,
-          tipo: orden.tipo,
-          recurso,
-          cantidad,
-          valor,
-          comision,
-        } satisfies PayloadMercadoCompra,
-      },
-    ],
   };
 }

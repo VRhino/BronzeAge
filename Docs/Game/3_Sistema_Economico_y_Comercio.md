@@ -18,7 +18,7 @@
 - **Cada envío sale en una caravana propia**: exige tener una caravana PROPIA **'disponible'** en el asentamiento origen (ver 3.12). `asignarCaravanasATrueque` la asigna automáticamente al envío pendiente; si no hay ninguna disponible, el envío espera al siguiente minuto. Para entregar a mano en un trueque, se engancha la caravana a un ejército y se entrega al llegar (Doc 5.13.3); el lanzamiento manual de 3.13.3 no se vincula a trueques.
 - Cuando hay menos caravanas disponibles que envíos pendientes en un mismo asentamiento (varios acuerdos compitiendo a la vez), se prioriza por un SCORE ponderado (ver 3.12: urgencia por expiración del acuerdo, urgencia por volumen pendiente, cercanía del destino) — no por orden de llegada.
 - La caravana viaja de verdad por el mapa, sobre una RUTA calculada por pathfinding (rodea terreno costoso, ver Doc 1.6/3.6), con la velocidad modulada por el coste del terreno que cruza en cada momento — y entrega al llegar. Al entregar, la caravana vuelve a estar 'disponible' en el origen: es un activo persistente y con coste (3.12), no un objeto de un solo uso.
-- Cumplir o incumplir un trueque ajusta el score de reputación de Facción (Doc 2.7).
+- Cumplir o incumplir un trueque ajusta el score de reputación de Facción (Doc 2.7) **solo entre Facciones distintas**: un trueque entre plazas de la misma Facción no mueve la reputación (decidido el 2026-10-11).
 
 ## 3.3 Órdenes de mercado (comercio abierto)
 - Un asentamiento coloca órdenes de compra/venta; cualquier jugador puede dejar lo pedido o comprar lo ofrecido.
@@ -41,7 +41,9 @@ Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con p
 - NO existe mercado NPC de respaldo.
 
 ## 3.5 Comisiones de comercio
-- Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles/Comercio Abierto") y por reputación de Facción.
+- Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles/Comercio Abierto").
+- **En un trueque o una entrega de caravana el comercio genera el oro de la comisión** (se acuña en el destino), **pero solo entre dos asentamientos distintos**: llevarse la carga al propio origen no rinde nada (2026-10-11).
+- **Reputación baja = recargo de su bolsillo** (2026-10-11): si la Facción de origen, distinta de la del destino, tiene reputación en el umbral bajo, paga además el 50 % extra de la comisión, sacado del oro de su almacén de origen y entregado al destino.
 - **En el mostrador (3.3), la paga quien toma la orden y se la queda la plaza donde ocurre**: comprando se paga de más, vendiendo se cobra de menos. El oro **se conserva**: la comisión sale de quien comercia, no se acuña. En un trueque, la comisión la cobra el destino al recibir cada entrega (`comisionDeEntrega`).
 
 ## 3.6 Categorías de caravana (heredado de Iberia)
@@ -103,7 +105,7 @@ Pesos y distancia de referencia (600 unidades) placeholder.
 
 **Políticas (Tesorero, Doc 4.4)**:
 - "Ampliación de Flota": +1 cupo de caravanas (aditivo).
-- "Carga Ampliada": ×1.5 la capacidad de carga de las caravanas propias.
+- "Carga Ampliada": ×1.5 la capacidad de carga de las caravanas propias, **también adjuntas a un ejército o aparcadas** (2026-10-11).
 - "Rutas Rápidas": ×1.5 la velocidad de las caravanas propias.
 
 ## 3.13 La caravana compuesta

@@ -10,6 +10,7 @@ export interface PayloadEntregaEscoltada {
   /** Lo entregado de cada línea del trueque que la caravana llevaba. */
   entregado: Record<string, number>;
   comision: number;
+  recargo: number;
 }
 
 /** Fase A5 — payloads de los eventos de este subsistema (ver `avanzarCaravanas`/`asignarCaravanasATrueque`). */
@@ -20,6 +21,8 @@ export interface PayloadCaravanaLlega {
   destinoId: string;
   contenido: Record<string, number>;
   comision: number;
+  /** Lo que la Facción de origen paga de más de su almacén por su mala reputación (cero si no la tiene o si es entre plazas de la misma Facción). */
+  recargo: number;
 }
 export interface PayloadTruequeCumplido {
   acuerdoId: string;
@@ -47,7 +50,7 @@ export interface PayloadPeajePaso {
 import { ANIMAL_CATALOGO, ASIGNACION_CARAVANA, CARAVANA_PREPARACION, CARRO_CATALOGO, COMISION, NIVEL_FACCION, REPUTACION, TRUEQUE } from '../constants';
 import { aplicarExperiencia, type AjusteExperiencia } from './faccion';
 import type { AnimalTipo, CarroTipo } from '../domain/types';
-import { capacidadCaravana, velocidadCaravana } from './caravanas';
+import { capacidadCaravana, capacidadEfectiva, velocidadCaravana } from './caravanas';
 import { esResidente } from './pertenencia';
 import { dias, minutos, sumar, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
@@ -468,7 +471,9 @@ export function moverCargaCarroAparcada(
   plaza: Asentamiento,
   recurso: string,
   cantidad: number,
-  sentido: 'cargar' | 'descargar'
+  sentido: 'cargar' | 'descargar',
+  /** Para la política «Carga Ampliada» del origen de la caravana. */
+  asentamientos: readonly Asentamiento[] = []
 ): { caravana: Caravana; plaza: Asentamiento } {
   if (caravana.estado !== 'aparcada') throw new CaravanaInvalidaError('Esta caravana no está aparcada en una plaza.');
   if (cantidad <= 0) throw new CaravanaInvalidaError('La cantidad tiene que ser positiva.');
@@ -476,7 +481,7 @@ export function moverCargaCarroAparcada(
 
   if (sentido === 'cargar') {
     const yaCargado = Object.values(caravana.contenido).reduce((a, b) => a + b, 0);
-    const espacio = capacidadCaravana(caravana) - yaCargado;
+    const espacio = capacidadEfectiva(caravana, asentamientos) - yaCargado;
     const movido = Math.min(cantidad, espacio, cantidadDisponible(plaza.almacen, recurso));
     if (movido <= 0) throw new CaravanaInvalidaError(`No se puede cargar: sin ${recurso} en el almacén de ${plaza.id}, o la caravana va llena.`);
     return {
@@ -715,15 +720,18 @@ function avanzarCaravanas(
       valorTotal += cantidad * calcularPrecioReferencia(recurso, [...asentamientosPorId.values()]);
       almacenDestino = agregarRecurso(almacenDestino, recurso, cantidad);
     }
-    const comision = comisionDeEntrega(valorTotal, distanciaTotal, origen, destino, facciones);
-    almacenDestino = agregarRecurso(almacenDestino, 'oro', comision);
+    const comision = comisionDeEntrega(valorTotal, distanciaTotal, origen, destino);
+    const origenAhora = asentamientosPorId.get(origen.id) ?? origen;
+    const recargo = recargoPorReputacion(comision, origenAhora, destino, facciones);
+    almacenDestino = agregarRecurso(almacenDestino, 'oro', comision + recargo);
     asentamientosPorId.set(destino.id, { ...destino, almacen: almacenDestino });
+    if (recargo > 0) asentamientosPorId.set(origen.id, { ...origenAhora, almacen: descontarRecursos(origenAhora.almacen, { oro: recargo }) });
 
     eventos.push({
       codigo: 'comercio.caravana_llega',
       mensaje: `Caravana ${caravana.tipo} de ${origen.id} llega a ${destino.id}: entrega ${Object.entries(caravana.contenido)
         .map(([r, c]) => `${c.toFixed(0)} ${r}`)
-        .join(', ')} (comisión +${comision.toFixed(1)} oro).`,
+        .join(', ')} (comisión +${comision.toFixed(1)} oro${recargo > 0 ? `, y ${recargo.toFixed(1)} más que paga ${origen.id} por su reputación` : ''}).`,
       payload: {
         caravanaId: caravana.id,
         tipo: caravana.tipo,
@@ -731,6 +739,7 @@ function avanzarCaravanas(
         destinoId: destino.id,
         contenido: caravana.contenido,
         comision,
+        recargo,
       } satisfies PayloadCaravanaLlega,
     });
 
@@ -806,23 +815,28 @@ function scoreAsignacion(l: LadoPendiente, origen: Asentamiento, destino: Asenta
 }
 
 /**
- * Comisión que cobra el destino por una entrega (Doc 3.3 + 2.7). Extraída de `avanzarCaravanas` al aparecer el
+ * Comisión que cobra el destino por una entrega (Doc 3.3 + 3.5). Extraída de `avanzarCaravanas` al aparecer el
  * segundo camino de entrega —la manual desde una caravana escoltada (Doc 5.13.3)—: los dos tienen que cobrar
  * igual, y con la fórmula copiada eso duraría hasta el primer retoque de una de las dos.
  *
- * Incluye la penalización por reputación: tratar con una Facción de origen poco confiable deja peores
- * términos, y el destino extrae más comisión de esa entrega.
+ * El comercio **genera** el oro (se acuña en el destino), pero solo entre dos asentamientos distintos: llevarse la
+ * carga a uno mismo no es comerciar y no rinde nada (decidido el 2026-10-11).
  */
-export function comisionDeEntrega(
-  valorTotal: number,
-  distanciaTotal: number,
-  origen: Asentamiento,
-  destino: Asentamiento,
-  facciones: readonly Faccion[]
-): number {
+export function comisionDeEntrega(valorTotal: number, distanciaTotal: number, origen: Asentamiento, destino: Asentamiento): number {
+  if (origen.id === destino.id) return 0;
+  return valorTotal * tasaComision(origen, destino) * bonusPorDistancia(distanciaTotal);
+}
+
+/**
+ * Lo que la Facción de origen paga **de su bolsillo** de más por tener mala reputación (Doc 2.7, decidido el 2026-10-11): la fracción
+ * extra de la comisión (`factorComisionPorReputacionBaja − 1`, hoy el 50 %). Solo entre Facciones distintas —la reputación es entre
+ * Facciones—. Sale del oro del almacén de origen y va al destino; paga lo que tenga.
+ */
+export function recargoPorReputacion(comision: number, origen: Asentamiento, destino: Asentamiento, facciones: readonly Faccion[]): number {
+  if (origen.faccionId === destino.faccionId) return 0;
   const faccionOrigen = facciones.find((f) => f.id === origen.faccionId);
-  const factorReputacion = faccionOrigen ? factorComisionPorReputacion(faccionOrigen) : 1;
-  return valorTotal * tasaComision(origen, destino) * bonusPorDistancia(distanciaTotal) * factorReputacion;
+  const extra = faccionOrigen ? factorComisionPorReputacion(faccionOrigen) - 1 : 0;
+  return Math.min(comision * extra, cantidadDisponible(origen.almacen, 'oro'));
 }
 
 /**
@@ -867,8 +881,9 @@ export function aplicarEntregaATrueque(
     const entreFacciones = faccionA !== faccionB;
     for (const faccionId of [faccionA, faccionB]) {
       if (!faccionId) continue;
+      if (!entreFacciones) continue; // la reputación y la experiencia son entre Facciones: comerciar con uno mismo no cuenta
       ajustesReputacion.push({ faccionId, delta: REPUTACION.bonusTruequeCumplido, razon: 'trueque cumplido' });
-      if (entreFacciones) ajustesExperiencia.push({ faccionId, delta: NIVEL_FACCION.xp.truequeCumplido, razon: 'trueque cumplido' });
+      ajustesExperiencia.push({ faccionId, delta: NIVEL_FACCION.xp.truequeCumplido, razon: 'trueque cumplido' });
     }
   }
   return { acuerdo: actualizado, eventos, ajustesReputacion, ajustesExperiencia };
@@ -905,10 +920,13 @@ export function entregarDesdeCaravanaAdjunta(
 ): {
   caravana: Caravana;
   destino: Asentamiento;
+  /** El asentamiento de origen del lado que entrega: paga el recargo por mala reputación. */
+  origen: Asentamiento;
   acuerdo: AcuerdoTrueque;
   /** Total entregado, de todas las líneas. */
   entregado: number;
   comision: number;
+  recargo: number;
   eventos: EventoCrudo[];
   ajustesReputacion: AjusteReputacion[];
   ajustesExperiencia: AjusteExperiencia[];
@@ -924,11 +942,12 @@ export function entregarDesdeCaravanaAdjunta(
 
   const asentamientosPorId = new Map(asentamientos.map((a) => [a.id, a]));
   const valorTotal = Object.entries(entregas).reduce((a, [recurso, c]) => a + c * calcularPrecioReferencia(recurso, [...asentamientos]), 0);
-  const comision = comisionDeEntrega(valorTotal, Math.max(1, distancia(origen.posicion, destino.posicion)), origen, destino, facciones);
+  const comision = comisionDeEntrega(valorTotal, Math.max(1, distancia(origen.posicion, destino.posicion)), origen, destino);
+  const recargo = recargoPorReputacion(comision, origen, destino, facciones);
 
   let almacen = destino.almacen;
   for (const [recurso, cantidad] of Object.entries(entregas)) almacen = agregarRecurso(almacen, recurso, cantidad);
-  almacen = agregarRecurso(almacen, 'oro', comision);
+  almacen = agregarRecurso(almacen, 'oro', comision + recargo);
 
   const aplicado = aplicarEntregaATrueque(acuerdo, lado, entregas, asentamientosPorId);
   const eventos: EventoCrudo[] = [
@@ -936,8 +955,8 @@ export function entregarDesdeCaravanaAdjunta(
       codigo: 'comercio.entrega_escoltada',
       mensaje: `La caravana escoltada ${caravana.id} entrega ${Object.entries(entregas)
         .map(([r, c]) => `${c.toFixed(0)} ${r}`)
-        .join(', ')} en ${destino.id} (comisión +${comision.toFixed(1)} oro).`,
-      payload: { caravanaId: caravana.id, acuerdoId: acuerdo.id, destinoId: destino.id, entregado: entregas, comision } satisfies PayloadEntregaEscoltada,
+        .join(', ')} en ${destino.id} (comisión +${comision.toFixed(1)} oro${recargo > 0 ? `, y ${recargo.toFixed(1)} más que paga ${origen.id} por su reputación` : ''}).`,
+      payload: { caravanaId: caravana.id, acuerdoId: acuerdo.id, destinoId: destino.id, entregado: entregas, comision, recargo } satisfies PayloadEntregaEscoltada,
     },
     ...aplicado.eventos,
   ];
@@ -952,9 +971,11 @@ export function entregarDesdeCaravanaAdjunta(
   return {
     caravana: { ...caravana, contenido },
     destino: { ...destino, almacen },
+    origen: recargo > 0 ? { ...origen, almacen: descontarRecursos(origen.almacen, { oro: recargo }) } : origen,
     acuerdo: aplicado.acuerdo,
     entregado,
     comision,
+    recargo,
     eventos,
     ajustesReputacion: aplicado.ajustesReputacion,
     ajustesExperiencia: aplicado.ajustesExperiencia,
@@ -1009,9 +1030,10 @@ function asignarCaravanasATrueque(
       // entregar de lo que había pactado (Doc 3.2, decidido el 2026-10-02).
       const faccionA = asentamientosPorId.get(acuerdo.asentamientoAId)?.faccionId;
       const faccionB = asentamientosPorId.get(acuerdo.asentamientoBId)?.faccionId;
+      // Solo entre Facciones distintas: la reputación es entre Facciones, y consigo misma no se incumple nada ante nadie.
       for (const [faccionId, lado] of [[faccionA, 'A'], [faccionB, 'B']] as const) {
         const incumplido = fraccionIncumplida(acuerdo, lado);
-        if (faccionId && incumplido > 0) {
+        if (faccionId && faccionA !== faccionB && incumplido > 0) {
           ajustesReputacion.push({ faccionId, delta: REPUTACION.penalizacionTruequeIncumplido * incumplido, razon: 'trueque incumplido' });
         }
       }
@@ -1041,8 +1063,8 @@ function asignarCaravanasATrueque(
 
     // Revamp (Doc 3.13.5): `reservadaManual` la saca del reparto automático — el jugador la despacha a mano.
     const disponibles = caravanas.filter(
-      (c) => c.tipo === 'comercial' && c.estado === 'disponible' && !c.reservadaManual && c.origenAsentamientoId === origenId
-    );
+      (c) => c.tipo === 'comercial' && c.estado === 'disponible' && !c.reservadaManual && c.origenAsentamientoId === origenId && capacidadCaravana(c) > 0
+    ); // sin carros con animal no puede cargar nada: no ocupa el turno de las que sí
     if (disponibles.length === 0) continue;
 
     const conScore = pendientes
@@ -1072,13 +1094,13 @@ function asignarCaravanasATrueque(
       }
       if (Object.keys(carga).length === 0) continue; // sin stock suficiente todavía: la caravana se reintenta el siguiente tick, no consume su turno
 
-      idx++;
       // Trazado al lanzar (Doc 1.6): se arrima a los caminos con peso y fuerza el paso por las ciudades ajenas que
       // cruce (`trazarRutaComercial`). Se recalcula en cada lanzamiento, así que la ruta del par migra sola hacia
       // los caminos principales, y queda registrada en la red. Sin camino por tierra la caravana NO sale y la
       // carga se queda en el almacén: se comprueba ANTES de descontar recursos.
       const trazado = trazarRutaComercial(mapa, red, origen, destino, [...asentamientosPorId.values()], zonas);
-      if (!trazado) continue;
+      if (!trazado) continue; // sin camino por tierra no sale, y no gasta la caravana: otro lado puede usarla
+      idx++;
       red = registrarRuta(red, origen, destino, trazado.ruta, instante);
 
       asentamientosPorId.set(origen.id, { ...origen, almacen: descontarRecursos(origen.almacen, carga) });

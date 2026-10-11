@@ -207,7 +207,7 @@ function conEjercitos(estado: GameSessionState, actualizados: readonly Ejercito[
  * sin sitio, se pierde. */
 function alCarroDe(estado: GameSessionState, b: Batalla, lado: LadoId, botin: Record<string, number>): GameSessionState {
   const columnas = columnasDelBando(estado, b, lado);
-  return conEjercitos(estado, repartirBotin(columnas, botin, (c) => capacidadCargaDe(c, estado.caravanas)));
+  return conEjercitos(estado, repartirBotin(columnas, botin, (c) => capacidadCargaDe(c, estado.caravanas, estado.asentamientos)));
 }
 
 /**

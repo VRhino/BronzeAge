@@ -7,7 +7,8 @@
 // catálogos. La validación de residencia / propiedad de escuadrones para la escolta vive en `session/`.
 
 import { ANIMAL_CATALOGO, CARRO_CATALOGO, VISION } from '../constants';
-import type { Caravana } from '../domain/types';
+import type { Asentamiento, Caravana } from '../domain/types';
+import { factorCapacidadCaravana } from './politicas';
 
 /** Los carros que llevan animal — los únicos que viajan y cuentan capacidad (Doc 3.13.1). */
 function carrosConTraccion(caravana: Caravana) {
@@ -26,6 +27,15 @@ export function capacidadCaravana(caravana: Caravana): number {
     (suma, c) => suma + CARRO_CATALOGO[c.tipoCarro].capacidadBase * ANIMAL_CATALOGO[c.animal!].factorCarga,
     0
   );
+}
+
+/**
+ * Capacidad de carga de una caravana **con la política «Carga Ampliada»** de su asentamiento de origen (Doc 3.12): la que vale siempre que se
+ * carga, viaje, esté enganchada a un ejército o aparcada. Si el origen ya no está en `asentamientos`, sin política.
+ */
+export function capacidadEfectiva(caravana: Caravana, asentamientos: readonly Asentamiento[]): number {
+  const origen = asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
+  return capacidadCaravana(caravana) * (origen ? factorCapacidadCaravana(origen) : 1);
 }
 
 /**

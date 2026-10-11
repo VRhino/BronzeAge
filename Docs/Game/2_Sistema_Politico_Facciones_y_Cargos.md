@@ -114,12 +114,12 @@ Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).
 
 **Penalizaciones:** romper Alianza unilateralmente; no defender a un vasallo atacado; rebelión de vasallo por incumplimiento del señor; incumplir acuerdo de trueque/orden de mercado aceptada; atacar a un Aliado sin romper la relación antes (la más severa).
 
-**Bonificaciones:** defender exitosamente a un vasallo; mantener Alianza activa mucho tiempo; cumplir acuerdos de trueque; liberar voluntariamente a un vasallo.
+**Bonificaciones:** defender exitosamente a un vasallo; mantener Alianza activa mucho tiempo; cumplir acuerdos de trueque; liberar voluntariamente a un vasallo. La reputación es **entre Facciones**: un trueque entre plazas de la misma Facción ni suma ni resta.
 
 **Decaimiento:** el score decae lentamente hacia 0 con el tiempo sin eventos nuevos.
 
 **Usos del score:**
-1. Términos de comercio asimétricos (score bajo = pagar primero en trueques).
+1. Términos de comercio asimétricos (score bajo = la Facción paga de su almacén un 50 % extra de la comisión en cada entrega a otra Facción, Doc 3.5).
 2. Coste de mercenarios/escoltas (más caro con score bajo).
 3. Restricciones del Embajador (cooldown/coste extra para proponer alianzas con score bajo).
 4. Dificultad para atraer Aedas residentes con score muy bajo.

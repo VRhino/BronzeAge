@@ -10,7 +10,6 @@ import { describe, expect, it } from 'vitest';
 import { instanteDeTest } from './fixtures';
 import type { Asentamiento, Ejercito, OrdenMercado } from '../../domain/types';
 import { caducarOrdenes, comerciarEnPlaza, OrdenInvalidaError } from '../market';
-import type { PayloadMercadoCompra } from '../market';
 import { almacenSintetico } from './tradeFixtures';
 import { COMISION, MERCADO } from '../../constants';
 
@@ -82,14 +81,6 @@ describe('el mostrador: la plaza VENDE y el jugador compra', () => {
 
     expect(r.orden.cantidadCumplida).toBe(50);
     expect(r.orden.estado).toBe('cumplida');
-
-    const evento = r.eventos[0]!;
-    if (typeof evento === 'string') throw new Error('esperaba un evento migrado, no una cadena');
-    expect(evento.codigo).toBe('mercado.compra');
-    const p = evento.payload as PayloadMercadoCompra;
-    expect(p.plazaId).toBe('plaza');
-    expect(p.columnaId).toBe('columna-1');
-    expect(p.tipo).toBe('venta');
   });
 
   it('sirve lo que puede: sin oro para tanto, compra menos en vez de fallar', () => {

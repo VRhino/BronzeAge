@@ -229,7 +229,7 @@ export const comerciarEnPlaza = comando<ParamsComerciarEnPlaza, { cantidad: numb
       plaza,
       orden,
       params.cantidad,
-      capacidadCargaDe(columna, estado.caravanas),
+      capacidadCargaDe(columna, estado.caravanas, estado.asentamientos),
       ctx.instante
     );
 
@@ -559,7 +559,7 @@ export const moverCargaCaravanaAparcada = comando<ParamsMoverCargaCaravanaAparca
     if (caravana.posicionActual.x !== plaza.posicion.x || caravana.posicionActual.y !== plaza.posicion.y) {
       rechazar(CODIGOS_ERROR.caravanaNoAparcadaAqui);
     }
-    const r = moverCargaCarroAparcadaEngine(caravana, plaza, params.recurso, params.cantidad, params.sentido);
+    const r = moverCargaCarroAparcadaEngine(caravana, plaza, params.recurso, params.cantidad, params.sentido, estado.asentamientos);
     const antes = caravana.contenido[params.recurso] ?? 0;
     const despues = r.caravana.contenido[params.recurso] ?? 0;
     const movido = Math.abs(despues - antes);

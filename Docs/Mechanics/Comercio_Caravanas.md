@@ -6,7 +6,7 @@ Cubre todo lo que mueve mercancía u oro **entre** lugares sin que sea guerra: e
 reconfigura y vuelve), el **mercado de una plaza** (órdenes y mostrador), el **mercado de un campamento de mercenarios**, los precios y las comisiones, las **rutas** de las caravanas (trazado,
 peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ruinas.
 
-- **Verificado contra:** `fc1c371` (2026-10-11).
+- **Verificado contra:** `e83cb9b` (2026-10-11) más las decisiones de esa jornada (comisión, recargo por reputación, reparto, capacidad, reputación entre Facciones).
 - **Fuentes:** `engine/trade.ts`, `engine/trueque.ts`, `engine/caravanas.ts`, `engine/market.ts`, `engine/mercadoMercenario.ts`, `engine/redCaminos.ts`, `engine/ruina.ts`, `engine/reputacion.ts`,
   `engine/politicas.ts`, `engine/asentamientoQuery.ts` (cupos), `world/rutas.ts`, `world/grafoNavegacion.ts`, `session/comandos/comercio.ts`, `session/comandos/mercenarios.ts` (`comprarEnCampamento`),
   `session/comandos/ejercitos.ts` (`entregarDeCaravana`), `session/comandos/autorizacion.ts`, `session/proyecciones/jugador.ts` (lo que se ve).
@@ -97,15 +97,19 @@ de Obras; 1 si no hay ninguna; ver `POLITICA_CATALOGO` en `Economia_Construccion
 valorTotal = Σ cantidad × calcularPrecioReferencia(recurso)       ; el oro vale 0
 distancia  = max(1, distancia en LÍNEA RECTA origen→destino)       ; no la longitud de la ruta
 bonus      = 1 + min(1, distancia / distanciaParaBonusMax) × (bonusPorDistanciaMax − 1)
-factorRep  = REPUTACION.factorComisionPorReputacionBaja  si reputación(Facción del ORIGEN) ≤ umbralBajoParaComision ; si no 1
-comisión   = valorTotal × tasa × bonus × factorRep
+comisión   = origen.id == destino.id ? 0 : valorTotal × tasa × bonus
 ```
 
-La comisión se **acuña**: se suma como oro al almacén del **destino** (topada por su capacidad de oro) y no se resta de nadie. Es una de las fuentes de oro del juego (Doc 3.1).
+La comisión se **acuña**: se suma como oro al almacén del **destino** (topada por su capacidad de oro) y no se resta de nadie. Es una de las fuentes de oro del juego (Doc 3.1). **Solo entre dos asentamientos
+distintos**: llevarse la carga a uno mismo no es comerciar (decidido el 2026-10-11).
+
+**Recargo por mala reputación** (`recargoPorReputacion`, decidido el 2026-10-11): si las Facciones de origen y destino son **distintas** y la reputación de la del **origen** es
+`≤ REPUTACION.umbralBajoParaComision`, esa Facción paga **de su bolsillo** un extra: `min( comisión × (factorComisionPorReputacionBaja − 1), oro del almacén de origen )`. Sale del oro del almacén
+de origen y se suma al del destino (no se acuña: se conserva). Entre plazas de la misma Facción no hay recargo. El mismo cálculo vale para la entrega manual (§4.5).
 
 ### 3.4 Comisión en el mostrador
 
-Distinta: se **conserva** (§8.3). No lleva bonus por distancia ni `factorRep`.
+Distinta: se **conserva** (§8.3). No lleva bonus por distancia ni recargo por reputación.
 
 <!-- parametros:COMISION -->
 ```json
@@ -170,7 +174,8 @@ Corre **después** de mover las caravanas (§6) y de podar la red. Para cada acu
 Luego, **por asentamiento de origen** (en el orden en que aparecen):
 
 ```
-disponibles = caravanas con tipo 'comercial', estado 'disponible', !reservadaManual, origen = este asentamiento    (en el orden del array de caravanas)
+disponibles = caravanas con tipo 'comercial', estado 'disponible', !reservadaManual, origen = este asentamiento, capacidadCaravana > 0    (en el orden del array de caravanas)
+             ; las que no tienen ningún carro con animal no cuentan: no pueden cargar nada ni ocupan el turno de las que sí
 si no hay → siguiente asentamiento
 para cada lado pendiente con destino existente: score ∈ [0,100]   ; orden DESCENDENTE (sort estable)
 idx = 0
@@ -182,9 +187,9 @@ para cada (lado, destino) en ese orden:
         cantidad = min( cantidadDisponible(almacén origen, recurso), faltante, libre )
         si cantidad > 0 : carga[recurso] = cantidad ; libre −= cantidad
     si carga está vacía → continue                        ; NO avanza idx: la caravana se reintenta con el siguiente lado y el siguiente tick
-    idx++
     trazado = trazarRutaComercial(origen → destino)       ; §7.2
-    si no hay trazado → continue                          ; el idx YA avanzó, no se descuenta nada
+    si no hay trazado → continue                          ; sin camino por tierra no sale y NO gasta la caravana
+    idx++
     red = registrarRuta(red, origen, destino, trazado.ruta, instante)
     almacén origen −= carga
     caravana → { estado en_transito, destino, contenido carga, origenAcuerdoId, ladoAcuerdo, posicionActual = origen.posicion, progreso 0, ruta, peajes }
@@ -231,9 +236,9 @@ pierde**) más la comisión (§3.3), y emite `comercio.caravana_llega`. Si la ca
 para cada (recurso, cantidad) en contenido :  línea del lado de esa caravana con ese recurso . cantidadEntregada += cantidad       ; lo que ninguna línea pide no suma
 si acuerdoSaldado (todas las líneas de los dos lados: cantidadEntregada ≥ cantidadTotal) :
     estado = cumplido ; evento comercio.trueque_cumplido {entreFacciones: faccion(A) ≠ faccion(B), intercambiado: Σ cantidadTotal por recurso, de los dos lados}
-    para faccionId en [faccion(A), faccion(B)]  (dos ajustes aunque sea la misma Facción) :
+    si entreFacciones, para faccionId en [faccion(A), faccion(B)] :        ; la reputación y la experiencia son entre Facciones
         reputación += REPUTACION.bonusTruequeCumplido
-        si entreFacciones : experiencia de Facción += NIVEL_FACCION.xp.truequeCumplido
+        experiencia de Facción += NIVEL_FACCION.xp.truequeCumplido
 ```
 
 El abono usa lo que la caravana **lleva al llegar**, es decir, tras los peajes (§7.3): si un peaje se llevó un 2 %, la línea queda corta y hace falta otro viaje.
@@ -242,15 +247,16 @@ El abono usa lo que la caravana **lleva al llegar**, es decir, tras los peajes (
 
 Cuando la caravana va **enganchada a un ejército** (`adjunta`) el reparto automático no la ve y la entrega la decide el jugador. Condiciones: la caravana va con ese ejército; el trueque está `activo` y
 **uno de sus lados lo debe la Facción del ejército** con líneas pendientes (`ladoPendienteParaEjercito`; el primer lado que lo cumpla, A antes que B); el ejército está a
-`≤ LOGISTICA.radioReabastecimiento` del asentamiento que **recibe**. Entrega por línea `min(lo que lleva, lo que falta)` (error `EntregaInvalidaError` si no entrega nada), cobra la **misma** comisión
-(§3.3, distancia recta origen→destino) y cierra por la misma vía (§4.4). Emite `comercio.entrega_escoltada` (más `trueque_cumplido` si cierra). La caravana **sigue adjunta** y con lo que sobre.
+`≤ LOGISTICA.radioReabastecimiento` del asentamiento que **recibe**. Entrega por línea `min(lo que lleva, lo que falta)` (error `EntregaInvalidaError` si no entrega nada), cobra la **misma** comisión y el mismo recargo por reputación
+(§3.3, distancia recta origen→destino; el recargo se descuenta del almacén de origen) y cierra por la misma vía (§4.4). Emite `comercio.entrega_escoltada` (más `trueque_cumplido` si cierra). La caravana **sigue adjunta** y con lo que sobre.
 
 ### 4.6 Reputación y experiencia, en una tabla
 
 | Hecho | Reputación | Experiencia de Facción |
 |---|---|---|
-| Trueque `cumplido` | `+bonusTruequeCumplido` a la Facción de A **y** a la de B (si son la misma, dos veces) | `+xp.truequeCumplido` a cada lado, **solo si son Facciones distintas** |
-| Trueque `activo` que vence | `penalizacionTruequeIncumplido × fraccionIncumplida` por lado (si es la misma Facción, dos veces) | — |
+| Trueque `cumplido` entre Facciones distintas | `+bonusTruequeCumplido` a la Facción de A **y** a la de B | `+xp.truequeCumplido` a cada lado |
+| Trueque `activo` que vence entre Facciones distintas | `penalizacionTruequeIncumplido × fraccionIncumplida` por lado | — |
+| Cualquiera de los dos entre plazas de la **misma** Facción | nada (la reputación es entre Facciones) | nada |
 | Propuesta sin contestar, rechazada, o cancelada por ruina | nada | nada |
 
 `fraccionIncumplida(lado) = 1 − min(Σ entregado por línea, cantidadTotal) / Σ cantidadTotal` (sumando cantidades de recursos distintos sin ponderar por precio).
@@ -297,8 +303,9 @@ esCaravanaGrande    = tipo 'comercial' y |carrosConTraccion| ≥ VISION.caravana
 ```
 
 Los multiplicadores de política los aplica **quien llama**, siempre con las políticas del asentamiento de **origen**: `factorCapacidadCaravana` ("Carga Ampliada" ×1,5) al **cargar para viajar**
-(reparto automático y `prepararCaravana`) y `factorVelocidadCaravana` ("Rutas Rápidas" ×1,5) al **mover** una comercial (ida y vuelta). La capacidad de una caravana **adjunta** o **aparcada** (que se carga
-a mano) no los lleva (ver divergencias).
+(reparto automático y `prepararCaravana`) y `factorVelocidadCaravana` ("Rutas Rápidas" ×1,5) al **mover** una comercial (ida y vuelta). El multiplicador de capacidad vale para **toda** caravana propia
+(decidido el 2026-10-11): `capacidadEfectiva(caravana, asentamientos)` = `capacidadCaravana × factorCapacidadCaravana(origen)` es la que usan el reparto, `prepararCaravana`, la carga de una
+caravana **adjunta** (`cargarCaravanaAdjunta`), la de una **aparcada** y `capacidadCargaDe` de un ejército con caravanas (botín, mostrador, víveres). Si el origen ya no existe, sin política.
 
 <!-- parametros:CARRO_CATALOGO -->
 ```json
@@ -613,7 +620,7 @@ las entradas a 0 se borran del carro ; cantidadCumplida += cantidad ; estado = c
 
 El **oro se conserva**: lo que la comisión quita a quien comercia se queda en la plaza (es lo que cuesta usar el mercado de otro). El oro ocupa carro como cualquier recurso. Una orden `cumplida` sale de
 `estado.ordenes` hacia el historial. El comando emite `mercado.comercio_en_plaza` con `entreFacciones` = el héroe es ciudadano de alguna Facción y **no** de la de la plaza (un héroe sin Facción cuenta como no
-`entreFacciones`). El motor construye un evento `mercado.compra` que **el comando descarta** (ver divergencias).
+`entreFacciones`). (El motor no emite evento propio: lo emite el comando.)
 
 Quién lo puede hacer: cualquier héroe (`rolesPermitidos: ['jugador']`) en su propio nombre; no exige residir ni estar dentro, solo estar en la puerta con su columna.
 
@@ -707,7 +714,7 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 | `comercio.trueque_cancelado` | ruina (§10) | narración |
 | `comercio.caravana_construida`, `_carro_agregado`, `_carro_movido`, `_reserva`, `_preparando`, `_cancelada`, `_escolta_cedida`, `_escolta_retirada`, `carga_caravana_aparcada`, `caravana_enviada_al_origen` | comandos | narración |
 | `comercio.caravana_animal_comprado` | `comprarAnimalCaravana` | contador de logros `animales.comprados` (`Tecnologia_Aedas.md`) |
-| `comercio.caravana_sale`, `peaje_paso`, `caravana_llega` | tick | `caravana_llega`: hecho `caravana` de las épicas (origen = plaza que cuenta; `comercial` con ≥ `AEDAS.epica.cargaMinimaCaravana` de carga) |
+| `comercio.caravana_sale`, `peaje_paso`, `caravana_llega` (esta lleva `comision` y `recargo`) | tick | `caravana_llega`: hecho `caravana` de las épicas (origen = plaza que cuenta; `comercial` con ≥ `AEDAS.epica.cargaMinimaCaravana` de carga) |
 | `comercio.entrega_escoltada` | `entregarDeCaravana` | narración |
 | `comercio.caravana_perdida`, `comercio.caravana_vuelve` | ruina (§10) y presencia (`Movimiento_Ejercitos.md`) | narración |
 | `mercado.orden_colocada`, `mercado.orden_expirada` | comando / tick | narración |
@@ -784,31 +791,28 @@ Los bloques de las secciones anteriores son los de este sistema. Además, de otr
 | El A\* rodea agua y obstáculos, nunca cruza el mar, cruza ríos solo por vado o ciudad, y se arrima a la red | `world/__tests__/rutas.test.ts` |
 | Cada evento del comercio sale con su código | `eventosDominioComercio.test.ts` |
 | Los dependientes de una ruina se cierran sin penalizar | `ruinaDependientes.test.ts` |
+| Llevarse la carga al propio origen no acuña; la mala reputación paga el extra del almacén de origen (solo entre Facciones, sin pasarse del oro que tenga) | `comercioDecisiones.test.ts` |
+| La reputación y la experiencia del trueque son entre Facciones (cumplir y vencer) | `comercioDecisiones.test.ts` |
+| Un casco sin carros no bloquea el reparto; un destino inalcanzable no gasta la caravana | `comercioDecisiones.test.ts` |
+| «Carga Ampliada» vale para la caravana aparcada (y, con la misma función, adjunta y de ejército) | `comercioDecisiones.test.ts` |
 
 ## 15. Casos límite y decisiones que parecen raras
 
-- **La comisión se acuña y la reputación baja no la «paga» nadie.** `factorRep` (×1,5 con reputación ≤ −40) multiplica lo que **recibe el destino**, y el oro sale de la nada: a quien tiene mala reputación
-  no le cuesta nada. Y se aplica también a una entrega entre plazas de la **misma** Facción. (Ver divergencias.)
+- **El recargo por reputación solo cuenta entre Facciones y paga lo que haya**: con el almacén de origen sin oro, el castigo se queda en lo que tenga (nunca negativo). El mostrador no lo lleva.
 - **Lo que no cabe en el almacén del destino se pierde, y el trueque lo da por entregado.** `agregarRecurso` topa por capacidad; `aplicarEntregaATrueque` abona lo que la caravana llevaba, no lo que entró.
   La comisión en oro se topa igual por la capacidad de oro.
 - **Una caravana que llega después de vencer el acuerdo** sigue abonando líneas (no mira el `estado`): si con ello se saldan los dos lados, el acuerdo `expirado` pasa a `cumplido` y reparte la
-  recompensa, aunque ya se hubiera penalizado el vencimiento. El orden del tick (mover antes de caducar) permite que la que llega justo el tick del vencimiento cierre bien.
-- **Un trueque inalcanzable puede bloquear a los demás.** En el reparto, `idx++` ocurre **antes** de trazar la ruta: si el lado mejor puntuado no tiene camino por tierra, se «gasta» una caravana de ese
-  origen cada tick sin despachar nada. Con una sola caravana disponible, los demás lados de ese origen no salen mientras el inalcanzable puntúe más.
-- **Un casco vacío (o sin animales) primero en el array bloquea el reparto de las demás** de ese origen: su capacidad es 0, la carga sale vacía, no se avanza `idx` y todos los lados prueban con la misma
-  caravana inservible. Se evita reservándolo (`reservarCaravana`).
-- **Una manual puede llevar la carga a cualquier sitio.** No se mira el destino: ni que sea de otra Facción, ni que no sea el propio origen. Enviarla al **propio origen** vuelve en 2 ticks con la comisión del
-  3 % acuñada (probado: 400 de madera dejan ≈ 10 de oro por viaje).
+  recompensa, aunque ya se hubiera penalizado el vencimiento (decisión del 2026-10-11: se deja así). El orden del tick (mover antes de caducar) permite que la que llega justo el tick del vencimiento cierre bien.
+- **Una manual puede llevar la carga a cualquier sitio** (otra Facción, un enemigo…): solo se mira que no sea el propio origen para cobrar comisión (§3.3). Regalar mercancía por esta vía es posible.
 - **El regreso desanda la ida entera, incluido un rodeo que ya no hace falta**, y no cobra peajes.
 - **Un peaje se calcula sobre lo que lleva en ese momento**: dos ciudades seguidas cobran el 2 % cada una sobre lo que queda tras la primera.
 - **Las órdenes no reservan nada.** Una orden de venta puede quedarse sin mercancía y una de compra sin oro; el mostrador sirve lo que haya o falla.
 - **Una orden con precio 0 o negativo se coloca pero no se liquida** (`precioUnitario ≤ 0`), igual que cualquiera sobre el oro cuando no se da precio.
 - **`prepararCaravana` registra la ruta en la red al lanzar, no al salir**: cancelar deja el camino.
-- **Los trueques entre plazas de la misma Facción cuentan para reputación** (`+5` dos veces) pero no para la experiencia de Facción ni para el mercado de mercenarios (decisión del 2026-09-27: en la Era II medida,
-  2 910 de 2 919 trueques eran consigo misma).
+- **Los trueques entre plazas de la misma Facción no tocan la reputación, la experiencia ni el mercado de mercenarios** (decisión del 2026-09-27 para los dos últimos; del 2026-10-11 para la reputación). Sí pagan la comisión del 3 %.
 - **El oro vale 0 al calcular la comisión** (`PRECIO_BASE` no lo tiene): un trueque de oro por oro no acuña nada.
 - **El `distanciaTotal` del bonus es en línea recta**, no la longitud de la ruta ni los peajes.
 
 ## 16. Divergencias
 
-Anotadas en [`Divergencias.md`](Divergencias.md): las del comercio y las caravanas.
+Ninguna abierta. Las del 2026-10-11 se resolvieron: comisión solo entre asentamientos distintos, recargo por reputación, reparto sin atascos, «Carga Ampliada» para toda caravana, reputación solo entre Facciones, código muerto retirado.

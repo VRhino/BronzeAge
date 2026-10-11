@@ -109,7 +109,7 @@ export const guardarEnAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido:
 export const sacarDelAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
   const columna = exigirColumnaDe(estado, heroe.id);
-  const r = sacarEngine(heroe, columna, params.recurso, params.cantidad, capacidadCargaDe(columna, estado.caravanas));
+  const r = sacarEngine(heroe, columna, params.recurso, params.cantidad, capacidadCargaDe(columna, estado.caravanas, estado.asentamientos));
   const siguiente: GameSessionState = {
     ...conHeroe(estado, r.heroe),
     ejercitos: estado.ejercitos.map((e) => (e.id === r.ejercito.id ? r.ejercito : e)),

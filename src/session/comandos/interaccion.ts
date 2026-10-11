@@ -293,7 +293,8 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
       estado.caravanas,
       heridos,
       ctx.rng,
-      estado.heroes
+      estado.heroes,
+      estado.asentamientos
     );
 
     const trasChoque = conColumnas(estado, [choque.atacante, choque.defensor]);
@@ -314,7 +315,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
   const emboscada = interceptar(
     conTropaDe(estado, atacante),
     conEscolta(caravana, indiceTropa(estado.heroes)),
-    capacidadCargaDe(atacante, estado.caravanas),
+    capacidadCargaDe(atacante, estado.caravanas, estado.asentamientos),
     heridos,
     ctx.rng,
     estado.heroes,

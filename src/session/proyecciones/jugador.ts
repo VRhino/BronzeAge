@@ -1098,7 +1098,7 @@ export function proyectarParaJugador(
         return origen && esPropio(origen.id) ? { ...c, escoltaLiderazgo: liderazgoDeEscolta(c, origen, tropa) } : c;
       }),
     caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa, miradasVistas).filter((c) => !bloqueos.caravanas.has(c.id)),
-    ejercitos: ejercitosPropios.map((e) => ({ ...e, capacidadCarga: capacidadCargaDe(e, estado.caravanas) })),
+    ejercitos: ejercitosPropios.map((e) => ({ ...e, capacidadCarga: capacidadCargaDe(e, estado.caravanas, estado.asentamientos) })),
     informesDeInspeccion: (estado.informesDeInspeccion ?? []).filter((i) => i.heroeId === heroeId && instanteDeTick(estado.tick) < i.expiraEn),
     ...convocatoriasDelLugar(estado, heroeId, jugador, faccionId),
     ejercitosAvistados: ejercitosAvistados.map((e) => ({

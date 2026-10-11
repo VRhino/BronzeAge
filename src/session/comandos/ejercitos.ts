@@ -352,7 +352,7 @@ export const cargarCaravana = comando<ParamsCargarCaravana, { cargado: number }>
   const caravana = exigirCaravana(estado, params.caravanaId);
   const plaza = exigirAsentamiento(estado, params.asentamientoId);
 
-  const r = cargarCaravanaEngine(ejercito, caravana, plaza, params.recurso, params.cantidad, estado.relaciones);
+  const r = cargarCaravanaEngine(ejercito, caravana, plaza, params.recurso, params.cantidad, estado.relaciones, estado.asentamientos);
   const siguiente = conCaravana(conAsentamiento(estado, r.plaza), r.caravana);
   return exito(
     siguiente,
@@ -419,7 +419,7 @@ export const entregarDeCaravana = comando<ParamsEntregarDeCaravana, { entregado:
 
     const trasXp = aplicarExperiencia(aplicarAjustesReputacion(estado.facciones, r.ajustesReputacion), r.ajustesExperiencia);
     const siguiente: GameSessionState = {
-      ...conCaravana(conAsentamiento(estado, r.destino), r.caravana),
+      ...conCaravana(conAsentamiento(conAsentamiento(estado, r.origen), r.destino), r.caravana),
       acuerdos: estado.acuerdos.map((a) => (a.id === r.acuerdo.id ? r.acuerdo : a)),
       facciones: trasXp.facciones,
     };

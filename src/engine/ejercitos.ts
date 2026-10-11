@@ -13,7 +13,7 @@ import type { Mapa } from '../world/mapa';
 import { calcularRuta } from '../world/rutas';
 import { distancia } from '../world/geometria';
 import { ALMACEN_PERSONAL, BATALLA, INSPECCION, LOGISTICA, MERCENARIOS, MOVIMIENTO, TROPAS_RECLUTABLES, VISION } from '../constants';
-import { capacidadCaravana, velocidadCaravana } from './caravanas';
+import { capacidadEfectiva, velocidadCaravana } from './caravanas';
 import {
   alCampamento,
   alTopeDeBatalla,
@@ -184,10 +184,10 @@ export function participantesDe(ejercito: Pick<Ejercito, 'participantes'>): numb
  * llamador no tenga que resolverlas. Omitirlas devuelve solo los carros, que es lo correcto para un ejército
  * que todavía no ha enganchado ninguna.
  */
-export function capacidadCargaDe(ejercito: Ejercito, caravanas: readonly Caravana[] = []): number {
+export function capacidadCargaDe(ejercito: Ejercito, caravanas: readonly Caravana[] = [], asentamientos: readonly Asentamiento[] = []): number {
   return (
     capacidadCarrosDe(participantesDe(ejercito)) +
-    adjuntasDe(ejercito, caravanas).reduce((suma, c) => suma + capacidadCaravana(c), 0)
+    adjuntasDe(ejercito, caravanas).reduce((suma, c) => suma + capacidadEfectiva(c, asentamientos), 0)
   );
 }
 
@@ -785,7 +785,9 @@ export function cargarCaravanaAdjunta(
   plaza: Asentamiento,
   recurso: string,
   cantidad: number,
-  relaciones: readonly RelacionPolitica[]
+  relaciones: readonly RelacionPolitica[],
+  /** Para la política «Carga Ampliada» del origen de la caravana. */
+  asentamientos: readonly Asentamiento[] = []
 ): { caravana: Caravana; plaza: Asentamiento; cargado: number } {
   if (!ejercito.caravanasAdjuntasIds.includes(caravana.id)) {
     throw new MovilizacionInvalidaError('Esa caravana no va con este ejército.');
@@ -799,7 +801,7 @@ export function cargarCaravanaAdjunta(
   }
 
   const yaCargado = Object.values(caravana.contenido).reduce((a, b) => a + b, 0);
-  const espacio = capacidadCaravana(caravana) - yaCargado;
+  const espacio = capacidadEfectiva(caravana, asentamientos) - yaCargado;
   if (espacio <= 0) throw new MovilizacionInvalidaError('La caravana ya va llena.');
 
   const cargado = Math.min(cantidad, espacio, cantidadDisponible(plaza.almacen, recurso));
@@ -1302,7 +1304,9 @@ export function atacarColumna(
   heridos: ReadonlySet<string>,
   rng: RandomFn,
   /** Para el tope de héroes por bando (`enBatalla`). */
-  heroes: readonly Heroe[] = []
+  heroes: readonly Heroe[] = [],
+  /** Para la capacidad de las caravanas que lleva el ganador (política «Carga Ampliada»). */
+  asentamientos: readonly Asentamiento[] = []
 ): { atacante: EjercitoConTropa; defensor: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[] } {
   if (atacante.id === defensor.id) throw new MovilizacionInvalidaError('Esa columna es la tuya.');
   if (atacante.faccionId === defensor.faccionId || estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)) {
@@ -1318,7 +1322,7 @@ export function atacarColumna(
   const secuela = trasDerrota(perdedor);
 
   // La chatarra de las bajas de los dos bandos (Doc 4.2.1) se suma al botín: va al mismo carro, con el mismo tope.
-  const conBotin = cargarBotin(ganador, sumarChatarra(secuela.botin, choque.chatarra), capacidadCargaDe(ganador, caravanas));
+  const conBotin = cargarBotin(ganador, sumarChatarra(secuela.botin, choque.chatarra), capacidadCargaDe(ganador, caravanas, asentamientos));
 
   return {
     atacante: gano ? conBotin : secuela.perdedor,
@@ -1431,7 +1435,7 @@ export function asediarPlaza(
   const plazaTras = asedio.conquistado
     ? asedio.defensor
     : { ...asedio.defensor, almacen: Object.entries(asedio.chatarra).reduce((almacen, [recurso, cantidad]) => agregarRecurso(almacen, recurso, cantidad), asedio.defensor.almacen) };
-  const ejercitoTras = asedio.conquistado ? cargarBotin(asedio.ejercito, asedio.chatarra, capacidadCargaDe(asedio.ejercito, mundo.caravanas)) : asedio.ejercito;
+  const ejercitoTras = asedio.conquistado ? cargarBotin(asedio.ejercito, asedio.chatarra, capacidadCargaDe(asedio.ejercito, mundo.caravanas, mundo.asentamientos)) : asedio.ejercito;
   let asentamientos = mundo.asentamientos.map((a) => (a.id === plaza.id ? plazaTras : a));
   let columnas: EjercitoConTropa[] = [];
   let campamentosMercenarios = [...(mundo.campamentosMercenarios ?? [])];
