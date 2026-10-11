@@ -187,7 +187,7 @@ Las funciones que construyen cosas del mundo con una semilla propia (`createRng(
 1. `version = version + 1`.
 2. **Épicas de los Aedas residentes** (`avanzarEpicas`) con los eventos del tick/comando, sobre el estado resultante; sus eventos se añaden a los hechos.
 3. **Crónica** (`entradasDeCronica(hechos, estado)`): entradas narradas a partir de los hechos.
-4. A cada evento se le asigna la `version` y se **antepone** a `estado.eventosDominio` (más nuevo primero). El log en memoria se recorta a **`MAX_EVENTOS_EN_MEMORIA` = 5 000** cortando siempre entre dos versiones (el evento más viejo que se conserva es de una versión completa);
+4. A cada evento se le asigna la `version` y se **antepone** a `estado.eventosDominio` (más nuevo primero). El log en memoria se recorta a **`INFRA.eventosMaximosEnMemoria` = 5 000** cortando siempre entre dos versiones (el evento más viejo que se conserva es de una versión completa);
    el historial completo vive en el JSONL de la partida.
 5. **Logros del servidor** (Doc 6.3): `tecnologia = sumarContadores(tecnologia de las épicas, contadoresDeEventos(eventos))`. Lo que no deja evento (extracción, talleres) ya lo contó el tick en el paso 19 de §5.3.
 6. **Mercados de mercenarios**: `mercadoMercenario = sumarComerciado(…, comerciadoDeEventos(eventos))` (lo comerciado entre Facciones alimenta la reposición, Doc 1.9b).
@@ -214,7 +214,17 @@ El `momento` de estos pasos es `instanteDeTick(estado.tick)` del estado **ya** a
 ```
 <!-- /parametros -->
 
-Cifras que viven en el código y no en `constants.ts`: `MAX_TICKS_POR_PASADA` = 5 y `LIMITE_IDEMPOTENCIA` = 500 claves (`RunnerDePartida`), y `MAX_EVENTOS_EN_MEMORIA` = 5 000 (`session/estado.ts`).
+Cifras de **infraestructura** (viven en `constantsInfra.ts`, no en `constants.ts`: no son reglas del juego y no alteran el resultado de una simulación). `ticksMaximosPorPasada` es el `MAX_TICKS_POR_PASADA` de arriba; `limiteIdempotencia`, las claves que recuerda `RunnerDePartida`; `eventosMaximosEnMemoria`, el recorte del log en memoria.
+
+<!-- parametros:INFRA -->
+```json
+{
+  "ticksMaximosPorPasada": 5,
+  "limiteIdempotencia": 500,
+  "eventosMaximosEnMemoria": 5000
+}
+```
+<!-- /parametros -->
 Las constantes de XP (`NIVEL_FACCION.xp.edificioCompletado`, `ascensoPorNivel`) son de Facciones.
 
 ## 9. Invariantes

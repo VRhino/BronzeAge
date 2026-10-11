@@ -414,7 +414,7 @@ Fase D — lo que viaja es `instante`/`momento`). Se avanza a mano vía `POST /a
 **reloj de mundo** de `RunnerDePartida` (Fase D5) si el despliegue configura `INTERVALO_TICK_MS` (**C12**,
 opt-in — sin configurarlo, ninguna partida avanza sola, ni siquiera en los tests). El reloj ancla su
 referencia a "ahora" al abrir la partida: **el mundo no avanza mientras el servidor está caído**, y un atraso
-mayor que `MAX_TICKS_POR_PASADA` (5) se descarta en vez de ejecutarse en ráfaga. `GET /admin/partidas`
+mayor que `INFRA.ticksMaximosPorPasada` (5) se descarta en vez de ejecutarse en ráfaga. `GET /admin/partidas`
 descubre qué partidas existen en disco, incluidas las que nadie ha reabierto todavía en este proceso.
 
 ## Persistencia, historial y observabilidad

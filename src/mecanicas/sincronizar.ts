@@ -8,7 +8,11 @@
 //   ...
 //   ```
 //   <!-- /parametros -->
-import * as constantes from '../constants';
+import * as constantesJuego from '../constants';
+import * as constantesInfra from '../constantsInfra';
+
+// Las reglas del juego (`constants.ts`) y las de infraestructura (`constantsInfra.ts`) se citan igual desde los documentos.
+const constantes = { ...constantesJuego, ...constantesInfra };
 
 const BLOQUE = /<!-- parametros:([A-Za-z0-9_]+) -->\r?\n```json\r?\n[\s\S]*?\r?\n```\r?\n<!-- \/parametros -->/g;
 

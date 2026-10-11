@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../gameSession';
 import { crearFaccion } from '../comandos/crearFaccion';
-import { anteponerEventos, idDeMapa, eventosDesde, MAX_EVENTOS_EN_MEMORIA, vistaAdminDeEstado, type EventoDominioConVersion } from '../estado';
+import { anteponerEventos, idDeMapa, eventosDesde, vistaAdminDeEstado, type EventoDominioConVersion } from '../estado';
+import { INFRA } from '../../constantsInfra';
 
 
 describe('idDeMapa', () => {
@@ -100,10 +101,10 @@ describe('anteponerEventos', () => {
 
   it('en el tope recorta los más viejos y NUNCA parte una versión', () => {
     // Una versión por cada 2 eventos: el tope (par) cae entre versiones; con 3 por versión, hay que retroceder.
-    const viejos = Array.from({ length: MAX_EVENTOS_EN_MEMORIA }, (_, i) => ev(Math.floor((MAX_EVENTOS_EN_MEMORIA - 1 - i) / 3) + 1, i));
+    const viejos = Array.from({ length: INFRA.eventosMaximosEnMemoria }, (_, i) => ev(Math.floor((INFRA.eventosMaximosEnMemoria - 1 - i) / 3) + 1, i));
     const nuevos = [ev(9999, 0), ev(9999, 1)];
     const r = anteponerEventos(nuevos, viejos);
-    expect(r.length).toBeLessThanOrEqual(MAX_EVENTOS_EN_MEMORIA);
+    expect(r.length).toBeLessThanOrEqual(INFRA.eventosMaximosEnMemoria);
     expect(r.slice(0, 2)).toEqual(nuevos);
     const masVieja = r.at(-1)!.version;
     const quedanDeEsaVersion = r.filter((e) => e.version === masVieja).length;

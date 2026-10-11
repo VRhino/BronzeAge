@@ -107,7 +107,7 @@ por eso `referenciaMs` se ancla a "ahora" al arrancarlo (`RunnerDePartida.inicia
 
 Lo que **sí** se recupera es la deriva del temporizador: `setInterval` no dispara exacto y las décimas se
 acumulan hasta valer un tick entero cada ~10 minutos; sin recuperarlas el mundo correría más lento que el
-tiempo real y "1 tick = 1 minuto" dejaría de ser cierto. `MAX_TICKS_POR_PASADA` (5) separa esa deriva —que
+tiempo real y "1 tick = 1 minuto" dejaría de ser cierto. `INFRA.ticksMaximosPorPasada` (5) separa esa deriva —que
 produce 2 ticks como mucho— de una congelación del proceso —que produce cientos y se descarta, contándola en
 la métrica `ticksOmitidos`—.
 

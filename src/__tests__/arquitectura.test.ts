@@ -30,6 +30,8 @@ import { ARCHIVOS_FUENTE, archivosDeCapa } from './fuenteDelProyecto';
 const CAPAS_PERMITIDAS: Record<string, string[]> = {
   domain: [],
   constants: ['domain'],
+  // Infraestructura del servidor, no reglas del juego: el motor (engine) no puede leerla.
+  constantsInfra: [],
   worldgen: ['domain', 'constants'],
   world: ['domain', 'worldgen', 'constants'],
   engine: ['domain', 'worldgen', 'world', 'constants'],
@@ -47,12 +49,12 @@ const CAPAS_PERMITIDAS: Record<string, string[]> = {
   // `acceso` porque la autorización de comandos (`comandos/autorizacion.ts`) cruza ambos dominios: qué rol
   // técnico tiene el actor Y qué relación de juego guarda con la entidad objetivo. Ve `contratos` porque una
   // batalla de Unity congela y guarda su ticket con la forma del contrato (`session/batallas.ts`).
-  session: ['domain', 'worldgen', 'world', 'engine', 'constants', 'acceso', 'contratos'],
+  session: ['domain', 'worldgen', 'world', 'engine', 'constants', 'constantsInfra', 'acceso', 'contratos'],
   // `server` es la capa de aplicación DE PROCESO backend (Node — `fs`, HTTP, futuro WebSocket): todo lo que
   // `session` no puede tener porque es deliberadamente síncrona y sin E/S (doc 7 §2). Persistencia de
   // partida, `RunnerDePartida`, la API y los ADAPTADORES de los puertos de `acceso` (proveedor de identidad,
   // repositorio, parseo de cabeceras).
-  server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants', 'acceso', 'contratos'],
+  server: ['domain', 'worldgen', 'world', 'engine', 'session', 'constants', 'constantsInfra', 'acceso', 'contratos'],
 };
 
 /** Capa de una ruta absoluta-desde-raíz (`/src/engine/population.ts` -> `'engine'`, `/src/constants.ts` ->

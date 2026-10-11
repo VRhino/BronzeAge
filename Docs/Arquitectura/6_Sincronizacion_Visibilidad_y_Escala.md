@@ -210,7 +210,7 @@ Esta era la razón de re-medir, así que conviene dejar la conclusión escrita e
     El problema desaparece en vez de gestionarse. Ver [10_Modelo_Temporal.md](10_Modelo_Temporal.md) §2.
   - Queda un caso acotado: el proceso vivo pero congelado (host suspendido, salto de NTP). Ahí sí hay que
     distinguir la deriva del temporizador —que se recupera, o el mundo correría lento— de una congelación
-    —que se descarta y se cuenta en `ticksOmitidos`—. La frontera es `MAX_TICKS_POR_PASADA` = 5.
+    —que se descarta y se cuenta en `ticksOmitidos`—. La frontera es `INFRA.ticksMaximosPorPasada` = 5.
 - Esto **reencuadra la decisión pendiente**: las tres vías que se plantearon en agosto (lotes de comandos
   entre ticks, partir el tick en fases cedibles, mover el tick a un worker) se propusieron contra un tick
   lento. Contra una ráfaga de catch-up, la palanca más barata es acotarla de otro modo — bajar

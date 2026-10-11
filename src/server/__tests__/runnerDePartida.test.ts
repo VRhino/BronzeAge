@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { crearAlmacenEnDisco } from '../almacen/enDisco';
 import { RunnerDePartida } from '../runnerDePartida';
-import { MAX_EVENTOS_EN_MEMORIA } from '../../session/estado';
+import { INFRA } from '../../constantsInfra';
 import { cargarPartida, guardarPartida, type SnapshotPartida } from '../persistenciaPartida';
 import { partidaConAsentamiento } from '../../session/__tests__/fixtures';
 
@@ -240,7 +240,7 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
   it('sigue avanzando con el tiempo y deja de avanzar al detenerlo', async () => {
     const { r, avanzar } = runnerConReloj('g-continuo');
     r.iniciarRelojDeMundo(20);
-    avanzar(60); // 3 intervalos: por debajo de `MAX_TICKS_POR_PASADA`, así que se recuperan
+    avanzar(60); // 3 intervalos: por debajo de `INFRA.ticksMaximosPorPasada`, así que se recuperan
     await esperar(120); // deja que el setInterval real dispare
     await r.esperarColaVacia();
     r.detenerRelojDeMundo();
@@ -287,7 +287,7 @@ describe('RunnerDePartida — reloj de mundo (D5)', () => {
 
   it('un atraso GRANDE con el reloj en marcha se descarta y se cuenta, en vez de ejecutarse', async () => {
     // El caso "proceso vivo pero congelado" (host suspendido, salto de reloj por NTP): se parece a la deriva
-    // del temporizador vista desde aquí, y `MAX_TICKS_POR_PASADA` es donde se traza la frontera. Por encima
+    // del temporizador vista desde aquí, y `INFRA.ticksMaximosPorPasada` es donde se traza la frontera. Por encima
     // se descarta el tiempo, igual que en una caída, y queda constancia en `ticksOmitidos`.
     const { r, avanzar } = runnerConReloj('g-congelado');
     r.iniciarRelojDeMundo(50);
@@ -511,8 +511,8 @@ describe('RunnerDePartida — log de eventos acotado en memoria (N2a)', () => {
       await r.avanzarTick();
     }
     const estado = r.getState();
-    expect(estado.eventosDominio.length, 'memoria acotada').toBeLessThanOrEqual(MAX_EVENTOS_EN_MEMORIA);
-    expect(estado.eventosDominio.length, 'y no vacía').toBeGreaterThan(MAX_EVENTOS_EN_MEMORIA - 1000);
+    expect(estado.eventosDominio.length, 'memoria acotada').toBeLessThanOrEqual(INFRA.eventosMaximosEnMemoria);
+    expect(estado.eventosDominio.length, 'y no vacía').toBeGreaterThan(INFRA.eventosMaximosEnMemoria - 1000);
 
     const todos = await r.eventosDesde(0);
     const versiones = todos.map((e) => e.version);

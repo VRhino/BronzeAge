@@ -27,6 +27,7 @@ import { trazadoParaAsentamiento } from '../engine/trazado';
 import { produccionPorMinuto, type ProduccionItem } from '../engine/asentamientoQuery';
 import { evaluarAscenso, type EvaluacionAscenso } from '../engine/ascenso';
 import { PRECIO_BASE } from '../constants';
+import { INFRA } from '../constantsInfra';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
 import { anexarEventos, claveDeEventos, leerEventos } from './eventosDePartida';
@@ -58,7 +59,7 @@ export interface MetricasDePartida {
   /** Tiempo de mundo DESCARTADO desde que arrancó el proceso, en ticks: los atrasos que se dieron por
    * "el servidor no estaba sirviendo" en vez de ejecutarlos. Es la consecuencia observable de que el mundo no
    * avance durante las caídas — un valor alto tras un incidente es lo esperado; uno que crece con el servidor
-   * sano significa que `MAX_TICKS_POR_PASADA` se quedó corto. */
+   * sano significa que `INFRA.ticksMaximosPorPasada` se quedó corto. */
   ticksOmitidos: number;
   relojDeMundoActivo: boolean;
 }
@@ -109,26 +110,6 @@ export class RunnerDePartida {
   private relojDeMundo: { intervaloMs: number; timer: ReturnType<typeof setInterval>; referenciaMs: number } | null = null;
 
   /**
-   * Cuántos ticks atrasados acepta ejecutar de golpe una pasada de `sincronizarConReloj`. Por encima de eso,
-   * el tiempo pendiente **se descarta** en vez de ejecutarse (ver `sincronizarConReloj`).
-   *
-   * **No es un tope de rendimiento, es dónde se traza la frontera** entre las dos cosas que producen un
-   * atraso, que se parecen mucho vistas desde aquí:
-   *
-   *  - **Deriva del temporizador**, que SÍ hay que recuperar: `setInterval` no dispara exacto, y unas décimas
-   *    por disparo se acumulan hasta valer un tick entero cada ~10 minutos. Si no se recuperaran, el mundo
-   *    correría más lento que el tiempo real y "1 tick = 1 minuto" dejaría de ser cierto. Esto produce 2
-   *    ticks de atraso como mucho.
-   *  - **El proceso no estuvo sirviendo** (host suspendido, event loop bloqueado un minuto largo, salto de
-   *    reloj por una corrección NTP), que NO hay que recuperar por la misma razón por la que no se recupera
-   *    un reinicio. Esto produce decenas o cientos.
-   *
-   * 5 separa las dos con holgura por los dos lados. Es el único número elegido a ojo de todo esto; súbelo si
-   * alguna vez se ven `ticksOmitidos` con el servidor sano.
-   */
-  private static readonly MAX_TICKS_POR_PASADA = 5;
-
-  /**
    * Instrumentación de la partida (Fase E3). Vive AQUÍ y no en un colector global porque estos tres números
    * solo los conoce el runner: cuánta cola tiene pendiente, cuánto tarda su tick y cuántos ticks ejecutó la
    * última ráfaga de catch-up.
@@ -159,7 +140,6 @@ export class RunnerDePartida {
    * así que un reintento legítimo debe poder intentarlo de nuevo, no quedarse pegado a un fallo pasado.
    */
   private readonly idempotencia = new Map<string, Promise<ResultadoComando<unknown>>>();
-  private static readonly LIMITE_IDEMPOTENCIA = 500;
 
   /**
    * Caché de precios de referencia (a petición del usuario, tras la auditoría de doc 9: `calcularPrecioReferencia`
@@ -253,7 +233,7 @@ export class RunnerDePartida {
 
   /**
    * Eventos con `version` mayor que `desde`, en orden cronológico. El estado solo guarda los últimos
-   * (`MAX_EVENTOS_EN_MEMORIA`): si el cursor es anterior a lo que hay en memoria, el tramo viejo se lee del JSONL.
+   * (`INFRA.eventosMaximosEnMemoria`): si el cursor es anterior a lo que hay en memoria, el tramo viejo se lee del JSONL.
    */
   async eventosDesde(desde: number): Promise<EventoDominioConVersion[]> {
     const estado = this.sesion.getState();
@@ -371,7 +351,7 @@ export class RunnerDePartida {
 
     const promesa = this.encolar(operacion);
     this.idempotencia.set(clave, promesa);
-    if (this.idempotencia.size > RunnerDePartida.LIMITE_IDEMPOTENCIA) {
+    if (this.idempotencia.size > INFRA.limiteIdempotencia) {
       const masAntigua = this.idempotencia.keys().next().value;
       if (masAntigua !== undefined) this.idempotencia.delete(masAntigua);
     }
@@ -461,7 +441,7 @@ export class RunnerDePartida {
     // "ahora": el mundo se queda donde estaba, que es la decisión, y no hay ráfaga que ocupe la cola. Se
     // cuenta en `omitidos` porque es la consecuencia observable de esa decisión y quien opera debe verla —
     // si aparece con el servidor sano, el que está mal es el umbral.
-    if (adeudados > RunnerDePartida.MAX_TICKS_POR_PASADA) {
+    if (adeudados > INFRA.ticksMaximosPorPasada) {
       reloj.referenciaMs = ahoraMs;
       this.instrumentos.omitidos += adeudados;
       this.instrumentos.ultimaRafaga = 0;
@@ -603,7 +583,7 @@ export class RunnerDePartida {
    * estado, este archivo es el historial derivado (mismo trato que `auditoria.ts`). Si el append falla se
    * grita y el cursor NO avanza, así que el próximo comando reintenta ese tramo — los eventos siguen en
    * memoria hasta un reinicio. Va por comando y no por tick porque la memoria solo guarda los últimos
-   * `MAX_EVENTOS_EN_MEMORIA`: un tick con muchos comandos podría recortarlos antes de llegar aquí.
+   * `INFRA.eventosMaximosEnMemoria`: un tick con muchos comandos podría recortarlos antes de llegar aquí.
    */
   private async anexarEventosNuevos(): Promise<void> {
     const estado = this.sesion.getState();
