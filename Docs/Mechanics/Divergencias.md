@@ -18,11 +18,6 @@ Alta = impide algo del juego · Media = el juego va contra la intención escrita
 ### 8. `iniciarAsedio` no tiene llamadores · **Baja**
 - `engine/combate.ts` conserva `iniciarAsedio` (asedio de asentamiento a asentamiento, exige General) y sus tests, pero ningún comando ni el tick lo usa desde que los ejércitos asedian (`asediarConEjercito`). Es código muerto salvo que se quiera conservar como referencia; borrarlo se lleva sus tests.
 
-### 11. Una épica o una compra no registran descubridora · **Media**
-- `primeros[id]` (la Facción descubridora) solo se escribe cuando una Facción cumple el **hito**. Si una tecnología aparece por la épica de un Aeda residente **antes** de que nadie cumpla el hito, `primeros` queda vacío: los Aedas itinerantes no la «conocen» (nunca se revela ni se vende), no se canta el descubrimiento
-  y los campamentos de mercenarios no la desbloquean (`tecnologiasDelCampamento` exige `primeros`). (La compra a un Aeda exige que ya exista `primeros`, así que ahí no pasa.)
-- El canon 6.3 dice que la primera Facción en conseguirla queda como descubridora, sin distinguir la vía.
-- **Falta decidir:** si completar una épica cuenta como descubrir (registrar `primeros`), o solo el hito.
 
 ## Consecuencias pendientes de medir
 

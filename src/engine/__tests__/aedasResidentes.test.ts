@@ -253,6 +253,8 @@ describe('avance de una épica', () => {
     expect(r.estado.cumplidas[plaza.faccionId]).toBe(1);
     expect(tecnologiasDe(r.tecnologia, plaza.faccionId).aparecidas).toContain('metalurgia_cobre');
     expect(tecnologiasDe(r.tecnologia, plaza.faccionId).adoptadas).not.toContain('metalurgia_cobre');
+    // Un descubrimiento es un descubrimiento: la Facción queda como descubridora aunque nadie cumpliera el hito.
+    expect(r.tecnologia.primeros.metalurgia_cobre).toEqual({ faccionId: plaza.faccionId, en: instanteDeTest(10) });
     const publico = r.eventos.find((e) => typeof e !== 'string' && e.codigo === 'aedas.epica_cumplida');
     expect(publico).toBeDefined();
     expect(typeof publico !== 'string' && publico!.mensaje).not.toMatch(/cobre/i);

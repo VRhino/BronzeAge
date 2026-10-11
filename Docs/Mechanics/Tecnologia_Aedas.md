@@ -19,7 +19,7 @@ EstadoTecnologia (del servidor) = {
   eraDesde:   Instante                               cuándo empezó (su plazo cuenta desde aquí)
   contadores: Partial<Record<ContadorLogro, number>> los hechos del mundo, acumulados
   logros:     Partial<Record<TecnologiaId, Instante>>  cuándo se cumplió el logro de cada tecnología; FIJO para siempre
-  primeros:   Partial<Record<TecnologiaId, { faccionId, en }>>   la primera Facción que la desbloqueó POR HITO (descubridora)
+  primeros:   Partial<Record<TecnologiaId, { faccionId, en }>>   la primera Facción que la desbloqueó (descubridora), por hito o por épica
   cantadas?:  TecnologiaId[]                          descubrimientos que los Aedas ya han cantado
   porFaccion: Record<faccionId, TecnologiasFaccion>   una Facción sin entrada solo tiene las de arranque
 }
@@ -223,7 +223,7 @@ si no, si quedan capítulos → capitulo += 1, hechos = 0, ultimoHechoEn = insta
 si no (último capítulo) → la épica termina: cumplidas[facción] += 1; la tecnología APARECE a la Facción (hacerAparecer, sin hito);  eventos aedas.epica_tecnologia (privado) y aedas.epica_cumplida (PÚBLICO, sin nombrar la tecnología)
 ```
 
-`hacerAparecer` **no registra** `primeros[id]` (ver Divergencias). Cada tecnología con logro tiene su épica (`EPICAS`): 3 capítulos en la Era I, 4 en la II, 5 en la III.
+`hacerAparecer(estado, facción, id, instante)` registra `primeros[id] = { faccionId, en: instante }` si nadie la tenía (un descubrimiento lo es sea cual sea la vía, decidido 2026-10-11): desde entonces los Aedas itinerantes la conocen tras el retraso, se canta y los campamentos la desbloquean. Cada tecnología con logro tiene su épica (`EPICAS`): 3 capítulos en la Era I, 4 en la II, 5 en la III.
 
 ## 8. Crónica (`entradasDeCronica`)
 
@@ -1418,4 +1418,4 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
 
 ## 14. Divergencias
 
-Abierta una: la épica no registra descubridora (ver [`Divergencias.md`](Divergencias.md)). Las **Eras IV y V** son diseño a medias aún sin implementar (no es una divergencia: el código solo llega a la III).
+Ninguna abierta. Las **Eras IV y V** son diseño a medias aún sin implementar (no es una divergencia: el código solo llega a la III).

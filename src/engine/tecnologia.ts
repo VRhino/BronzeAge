@@ -328,11 +328,15 @@ function conAparecida(tecnologias: TecnologiasFaccion, id: TecnologiaId): Tecnol
   };
 }
 
-/** La tecnología le aparece a la Facción sin pasar por su hito (épica de un Aeda residente, Doc 6.7). */
-export function hacerAparecer(estado: EstadoTecnologia, faccionId: string, id: TecnologiaId): EstadoTecnologia {
+/**
+ * La tecnología le aparece a la Facción sin pasar por su hito (épica de un Aeda residente, compra a un Aeda, Doc 6.7).
+ * Un descubrimiento es un descubrimiento, sea cual sea la vía: si nadie la tenía, la Facción queda como descubridora.
+ */
+export function hacerAparecer(estado: EstadoTecnologia, faccionId: string, id: TecnologiaId, instante: Instante): EstadoTecnologia {
   const tecnologias = tecnologiasDe(estado, faccionId);
   if (tecnologias.aparecidas.includes(id)) return estado;
-  return { ...estado, porFaccion: { ...estado.porFaccion, [faccionId]: conAparecida(tecnologias, id) } };
+  const primeros = estado.primeros[id] ? estado.primeros : { ...estado.primeros, [id]: { faccionId, en: instante } };
+  return { ...estado, primeros, porFaccion: { ...estado.porFaccion, [faccionId]: conAparecida(tecnologias, id) } };
 }
 
 export class AdopcionInvalidaError extends ReglaInvalidaError {}
@@ -493,7 +497,7 @@ export function venderTecnologia(
   const precio = precioDeVenta(id);
   if (!tieneRecursos(plaza.almacen, { oro: precio })) throw new VentaInvalidaError(`El almacén de ${plaza.nombre ?? plaza.id} no tiene los ${precio} de oro que pide el Aeda.`);
   return {
-    tecnologia: hacerAparecer(estado, faccion.id, id),
+    tecnologia: hacerAparecer(estado, faccion.id, id, instante),
     plaza: { ...plaza, almacen: descontarRecursos(plaza.almacen, { oro: precio }) },
     eventos: [
       {

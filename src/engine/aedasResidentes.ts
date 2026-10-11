@@ -314,7 +314,7 @@ export function avanzarEpicas(
     }
     const { epica: _cumplida, ...sinEpica } = aeda;
     actual = { ...reemplazar(actual, sinEpica), cumplidas: { ...actual.cumplidas, [aeda.faccionId]: (actual.cumplidas[aeda.faccionId] ?? 0) + 1 } };
-    tecnologia = hacerAparecer(tecnologia, aeda.faccionId, epica.tecnologiaId);
+    tecnologia = hacerAparecer(tecnologia, aeda.faccionId, epica.tecnologiaId, ctx.instante);
     const faccion = ctx.facciones.find((f) => f.id === aeda.faccionId);
     salida.push(
       { codigo: 'aedas.epica_tecnologia', mensaje: `${aeda.nombre} completa el ${definicion.nombre}: ${TECNOLOGIAS[epica.tecnologiaId].nombre} aparece, sin pasar por su hito.`, payload, asentamientoId: aeda.asentamientoId },

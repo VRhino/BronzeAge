@@ -66,7 +66,7 @@ Para que una tecnología aparezca por desarrollo propio hacen falta dos cosas:
 - **El hito de la Facción**: condiciones de la propia Facción (edificios, niveles, otras tecnologías adoptadas…).
 
 Cuando una Facción cumple el hito de una tecnología cuyo logro ya existe y cuya Era ya empezó, la tecnología **le
-aparece**. La primera Facción en conseguirlo queda en la crónica como su descubridora.
+aparece**. La primera Facción en conseguirla —por hito o por épica de un Aeda— queda en la crónica como su descubridora.
 
 Las cifras X de los logros se ajustan para que cada logro se cumpla en una semana concreta de su Era: los de cada
 Era se reparten por su tramo en el orden de adopción, y el último cae una semana antes del plazo.
