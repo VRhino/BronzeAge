@@ -220,13 +220,13 @@ function reclutamientoDelCampamento(campamento: CampamentoMercenarios, estado: G
   };
 }
 
-/** Precio unitario y cupo restante de cada bien que el campamento tiene en venta, para este héroe (quien no reside solo compra trigo). */
+/** Precio unitario y cupo restante de cada bien que el campamento tiene en venta, para este héroe (quien no reside paga con el oro del carro y no tiene cupo). */
 function mercadoDelCampamento(campamento: CampamentoMercenarios, heroe: Heroe, asentamientos: Asentamiento[], instante: Instante): { precios: Record<string, number>; cupoRestante: Record<string, number> } {
   const reside = campamento.residentesIds.includes(heroe.id);
   const precios: Record<string, number> = {};
   const cupoRestante: Record<string, number> = {};
   for (const [recurso, stock] of Object.entries(campamento.mercado ?? {})) {
-    if (!(stock > 0) || recurso === 'oro' || (!reside && recurso !== 'trigo')) continue;
+    if (!(stock > 0) || recurso === 'oro') continue;
     const precio = precioDeVenta(recurso, asentamientos);
     if (precio <= 0) continue;
     precios[recurso] = precio;

@@ -22,7 +22,7 @@ import { CODIGOS_ERROR } from './codigosDeError';
 import type { GameSessionState } from '../estado';
 import { evento } from './eventos';
 import { campamentoDeResidente } from '../../engine/mercenarios';
-import { columnaDe, enLaPuertaDelCampamento } from '../../engine/ejercitos';
+import { capacidadCargaDe, columnaDe, enLaPuertaDelCampamento } from '../../engine/ejercitos';
 import { abrirAlijo as abrirAlijoEngine, buscaAlijos } from '../../engine/alijos';
 
 /** ¿Está el héroe en ese campamento (D75)? Dentro, o con su columna en la puerta. */
@@ -126,7 +126,7 @@ export const comprarEnCampamento = comando<ParamsComprarEnCampamento, { cantidad
   if (!campamento) rechazar(params.campamentoId ? CODIGOS_ERROR.campamentoDesconocido : CODIGOS_ERROR.mercenariosInvalido);
   exigirEn(estado, heroe.id, campamento);
   const columna = columnaDe(estado.ejercitos, heroe.id);
-  const r = comprarEngine(campamento, heroe, columna, estado.asentamientos, params.recurso, params.cantidad, ctx.instante);
+  const r = comprarEngine(campamento, heroe, columna, estado.asentamientos, params.recurso, params.cantidad, ctx.instante, columna ? capacidadCargaDe(columna, estado.caravanas, estado.asentamientos) : 0);
   return exito(
     {
       ...estado,

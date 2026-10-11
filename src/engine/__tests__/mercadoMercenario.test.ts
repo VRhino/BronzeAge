@@ -92,8 +92,8 @@ describe('reposición', () => {
 
 describe('comprarEnCampamento', () => {
   const precio = precioDeVenta('madera', mundo);
-  const compra = (c: CampamentoMercenarios, h: Heroe, recurso: string, n: number, columna?: Ejercito, instante = T0) =>
-    comprarEnCampamento(c, h, columna, mundo, recurso, n, instante);
+  const compra = (c: CampamentoMercenarios, h: Heroe, recurso: string, n: number, columna?: Ejercito, instante = T0, capacidad?: number) =>
+    comprarEnCampamento(c, h, columna, mundo, recurso, n, instante, capacidad);
 
   it('el precio es el de referencia más el margen', () => {
     expect(precio).toBeGreaterThan(0);
@@ -126,14 +126,45 @@ describe('comprarEnCampamento', () => {
     expect(compra(campamento({ trigo: 300 }), heroe({ oro: 900 }), 'trigo', 70).cantidad, 'más que el cupo de madera').toBe(70);
   });
 
-  it('quien no reside solo compra trigo, y le va al carro de su columna (D44)', () => {
-    const forastero = { ...campamento({ trigo: 300, madera: 100 }), residentesIds: [] };
-    const columna = { id: 'col', participantes: [{ heroeId: 'h1', unidoEn: T0 }], escuadronIds: [], suministro: {}, caravanasAdjuntasIds: [] } as unknown as Ejercito;
-    const r = compra(forastero, heroe({ oro: 500 }), 'trigo', 20, columna);
-    expect(r.columna!.suministro).toEqual({ trigo: 20 });
-    expect(r.heroe.almacenPersonal).toEqual({ oro: 500 - r.oro });
-    expect(() => compra(forastero, heroe({ oro: 500 }), 'madera', 5, columna)).toThrow(MercenariosInvalidoError);
-    expect(() => compra(forastero, heroe({ oro: 500 }), 'trigo', 5)).toThrow(MercenariosInvalidoError);
+  describe('quien no reside, desde la puerta (2026-10-11)', () => {
+    const forastero = () => ({ ...campamento({ trigo: 300, madera: 300, cobre: 100 }), residentesIds: [] });
+    const columna = (suministro: Record<string, number>) =>
+      ({ id: 'col', participantes: [{ heroeId: 'h1', unidoEn: T0 }], escuadronIds: [], suministro, caravanasAdjuntasIds: [] }) as unknown as Ejercito;
+
+    it('compra cualquier bien en venta —también cobre o madera—, paga con el oro del carro y se lo lleva al carro', () => {
+      const precioCobre = precioDeVenta('cobre', mundo);
+      const r = compra(forastero(), heroe({ oro: 999 }), 'cobre', 20, columna({ oro: 500 }));
+      expect(r.cantidad).toBe(20);
+      expect(r.oro).toBe(Math.ceil(20 * precioCobre));
+      expect(r.columna!.suministro).toEqual({ oro: 500 - r.oro, cobre: 20 });
+      expect(r.campamento.mercado['cobre']).toBe(80);
+      expect(r.heroe, 'su almacén personal ni se toca ni paga').toEqual(heroe({ oro: 999 }));
+      expect(compra(forastero(), heroe({ oro: 0 }), 'trigo', 5, columna({ oro: 50 })).columna!.suministro['trigo']).toBe(5);
+    });
+
+    it('sin cupo diario: compra más madera que el tope del residente, y cuantas veces quiera', () => {
+      const tope = MERCENARIOS.mercado.cupoDiario['madera']!;
+      const r = compra(forastero(), heroe({ oro: 0 }), 'madera', tope + 40, columna({ oro: 400 }));
+      expect(r.cantidad).toBe(tope + 40);
+      expect(compra(r.campamento, r.heroe, 'madera', 1, r.columna).cantidad).toBe(1);
+    });
+
+    it('sirve lo que puede: por stock, por oro del carro y por sitio en el carro', () => {
+      expect(compra({ ...forastero(), mercado: { cobre: 4 } }, heroe(), 'cobre', 50, columna({ oro: 500 })).cantidad).toBe(4);
+      const precioCobre = precioDeVenta('cobre', mundo);
+      expect(compra(forastero(), heroe(), 'cobre', 50, columna({ oro: Math.ceil(precioCobre * 3) })).cantidad).toBe(3);
+      // Un carro lleno de otra cosa solo deja sitio para lo que el oro gastado libera.
+      const lleno = compra(forastero(), heroe(), 'cobre', 500, columna({ oro: 400, piedra: 100 }), T0, 500);
+      expect(Object.values(lleno.columna!.suministro).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(500);
+    });
+
+    it('rechaza: sin columna, sin oro en el carro, sin stock, el oro y los bienes sin precio', () => {
+      expect(() => compra(forastero(), heroe({ oro: 999 }), 'trigo', 5)).toThrow(MercenariosInvalidoError);
+      expect(() => compra(forastero(), heroe({ oro: 999 }), 'cobre', 5, columna({}))).toThrow(MercenariosInvalidoError);
+      expect(() => compra({ ...forastero(), mercado: { cobre: 0 } }, heroe(), 'cobre', 5, columna({ oro: 500 }))).toThrow(MercenariosInvalidoError);
+      expect(() => compra(forastero(), heroe(), 'oro', 5, columna({ oro: 500 }))).toThrow(MercenariosInvalidoError);
+      expect(() => compra({ ...forastero(), mercado: { armaBronce: 50 } }, heroe(), 'armaBronce', 5, columna({ oro: 500 }))).toThrow(MercenariosInvalidoError);
+    });
   });
 
   it('paga primero con el oro de botín (D27), que no ocupa sitio en el almacén', () => {

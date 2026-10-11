@@ -97,70 +97,82 @@ export function cupoRestanteHoy(heroe: Heroe, reside: boolean, recurso: string, 
 }
 
 /**
- * Comprar en el mercado de un campamento (Doc 1.9b), pagando con el oro del almacén personal. Sirve lo que puede en vez de fallar cuando
- * se pide de más —el tope sale del stock, del cupo del día, del oro y del sitio donde va—, pero falla si no puede servir nada. El oro
- * cobrado se destruye. Unidades enteras.
+ * Comprar en el mercado de un campamento (Doc 1.9b). Sirve lo que puede en vez de fallar cuando se pide de más —el tope sale del stock,
+ * del cupo del día, del oro y del sitio donde va—, pero falla si no puede servir nada. El oro cobrado se destruye. Unidades enteras.
  *
- * - **Quien reside en él** compra cualquier bien en venta, a su almacén personal, con cupo diario en madera y piedra (D41).
- * - **Cualquier otro héroe** solo compra trigo, para repostar, y le va al carro de su columna (D44).
+ * - **Quien reside en él** compra cualquier bien en venta, pagando con el oro de botín y el de su almacén personal, a su almacén personal,
+ *   con cupo diario en madera y piedra (D41).
+ * - **Cualquier otro héroe** compra **cualquier bien en venta desde la puerta** (decidido el 2026-10-11: cobre, estaño, el trigo para
+ *   repostar y las demás materias primas), a precio normal, **pagando con el oro de su carro y llevándoselo al carro**, sin cupo diario.
+ *   Compite por el mismo stock que el residente.
  */
 export function comprarEnCampamento(
   campamento: CampamentoMercenarios,
   heroe: Heroe,
-  /** Su columna en la puerta (o aparcada dentro): adonde va el trigo de quien no reside. */
+  /** Su columna en la puerta (o aparcada dentro): de donde paga y adonde va lo comprado quien no reside. */
   columna: Ejercito | undefined,
   asentamientos: Asentamiento[],
   recurso: string,
   cantidadPedida: number,
-  instante: Instante
+  instante: Instante,
+  /** `capacidadCargaDe(columna, caravanas, asentamientos)`: lo que cabe en el carro con las caravanas que lleva. Sin él, solo los carros de los héroes. */
+  capacidadCarga: number = columna ? capacidadCargaDe(columna) : 0
 ): { campamento: CampamentoMercenarios; heroe: Heroe; columna: Ejercito | undefined; cantidad: number; oro: number } {
   if (!(cantidadPedida >= 1)) throw new MercenariosInvalidoError('Hay que pedir al menos una unidad.');
   if (recurso === 'oro') throw new MercenariosInvalidoError('El oro no se vende: es con lo que se paga.');
   const reside = campamento.residentesIds.includes(heroe.id);
-  if (!reside && recurso !== 'trigo') throw new MercenariosInvalidoError('Quien no reside aquí solo compra trigo para repostar.');
-  if (!reside && !columna) throw new MercenariosInvalidoError('Hace falta la columna para llevarse el trigo.');
+  if (!reside && !columna) throw new MercenariosInvalidoError('Hace falta la columna a la puerta para comprar sin residir aquí.');
   const precio = precioDeVenta(recurso, asentamientos);
   if (precio <= 0) throw new MercenariosInvalidoError('Ese bien no se vende en el campamento.');
   const coste = (n: number) => Math.ceil(n * precio);
+  const stock = Math.floor(campamento.mercado[recurso] ?? 0);
+  const sinStock = `El campamento no tiene ${recurso} en venta.`;
+  const conStockMenos = (n: number): CampamentoMercenarios => ({ ...campamento, mercado: { ...campamento.mercado, [recurso]: (campamento.mercado[recurso] ?? 0) - n } });
+
+  if (!reside) {
+    // De visita: el carro paga y recibe. Cada unidad cambia `precio` de oro por una de mercancía, así que el carro solo crece si el precio es < 1.
+    const carro = columna!;
+    const oroEnCarro = carro.suministro['oro'] ?? 0;
+    const libre = capacidadCarga - Object.values(carro.suministro).reduce((a, b) => a + b, 0);
+    let cantidad = Math.min(Math.floor(cantidadPedida), stock, Math.floor(oroEnCarro / precio));
+    while (cantidad > 0 && cantidad - coste(cantidad) > libre) cantidad--;
+    while (cantidad > 0 && coste(cantidad) > oroEnCarro) cantidad--;
+    if (cantidad <= 0) {
+      throw new MercenariosInvalidoError(stock <= 0 ? sinStock : oroEnCarro < precio ? 'No hay oro suficiente en el carro.' : 'El carro está lleno.');
+    }
+    const oro = coste(cantidad);
+    const suministro: Record<string, number> = { ...carro.suministro, oro: oroEnCarro - oro, [recurso]: (carro.suministro[recurso] ?? 0) + cantidad };
+    if (suministro['oro'] === 0) delete suministro['oro'];
+    return { campamento: conStockMenos(cantidad), heroe, columna: { ...carro, suministro }, cantidad, oro };
+  }
 
   const cupo = cupoRestanteHoy(heroe, reside, recurso, instante);
-  const stock = Math.floor(campamento.mercado[recurso] ?? 0);
   // Se paga primero con el oro de botín (D27: el mercado del campamento es uno de sus dos destinos), luego con el del almacén.
   const botin = heroe.oroDeBotin ?? 0;
   const guardadoOro = botin + (heroe.almacenPersonal?.['oro'] ?? 0);
   const delAlmacen = (n: number) => Math.max(0, coste(n) - botin);
-  // Sitio: en el almacén cada unidad ocupa 1 y libera lo que cuesta en oro; en el carro, lo que quede libre.
-  const enCarro = !reside;
-  const libreCarro = columna ? capacidadCargaDe(columna) - Object.values(columna.suministro).reduce((a, b) => a + b, 0) : 0;
-  const libre = enCarro ? libreCarro : ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(heroe);
+  // Sitio: en el almacén cada unidad ocupa 1 y libera lo que cuesta en oro.
+  const libre = ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(heroe);
   let cantidad = Math.min(Math.floor(cantidadPedida), stock, cupo, Math.floor(guardadoOro / precio));
-  while (cantidad > 0 && (enCarro ? cantidad : cantidad - delAlmacen(cantidad)) > libre) cantidad--;
+  while (cantidad > 0 && cantidad - delAlmacen(cantidad) > libre) cantidad--;
   while (cantidad > 0 && coste(cantidad) > guardadoOro) cantidad--;
   if (cantidad <= 0) {
     throw new MercenariosInvalidoError(
-      stock <= 0
-        ? `El campamento no tiene ${recurso} en venta.`
-        : cupo <= 0
-          ? `Ya has comprado hoy todo el ${recurso} que se te vende.`
-          : guardadoOro < precio
-            ? 'No hay oro suficiente en el almacén personal.'
-            : enCarro
-              ? 'El carro está lleno.'
-              : 'El almacén personal está lleno.'
+      stock <= 0 ? sinStock : cupo <= 0 ? `Ya has comprado hoy todo el ${recurso} que se te vende.` : guardadoOro < precio ? 'No hay oro suficiente en el almacén personal.' : 'El almacén personal está lleno.'
     );
   }
 
   const oro = coste(cantidad);
   const almacenPersonal: Record<string, number> = { ...heroe.almacenPersonal, oro: (heroe.almacenPersonal?.['oro'] ?? 0) - delAlmacen(cantidad) };
-  if (!enCarro) almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cantidad;
+  almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cantidad;
   if (almacenPersonal['oro'] === 0) delete almacenPersonal['oro'];
   const dia = diaDe(instante);
   const comprado = heroe.cupoCampamento?.dia === dia ? heroe.cupoCampamento.comprado : {};
-  const cupoCampamento = reside && recurso in MERCENARIOS.mercado.cupoDiario ? { dia, comprado: { ...comprado, [recurso]: (comprado[recurso] ?? 0) + cantidad } } : heroe.cupoCampamento;
+  const cupoCampamento = recurso in MERCENARIOS.mercado.cupoDiario ? { dia, comprado: { ...comprado, [recurso]: (comprado[recurso] ?? 0) + cantidad } } : heroe.cupoCampamento;
   return {
-    campamento: { ...campamento, mercado: { ...campamento.mercado, [recurso]: (campamento.mercado[recurso] ?? 0) - cantidad } },
+    campamento: conStockMenos(cantidad),
     heroe: { ...heroe, almacenPersonal, oroDeBotin: Math.max(0, botin - oro), ...(cupoCampamento ? { cupoCampamento } : {}) },
-    columna: enCarro && columna ? { ...columna, suministro: { ...columna.suministro, [recurso]: (columna.suministro[recurso] ?? 0) + cantidad } } : columna,
+    columna,
     cantidad,
     oro,
   };

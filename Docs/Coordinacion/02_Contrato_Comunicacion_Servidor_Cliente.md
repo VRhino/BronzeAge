@@ -399,7 +399,7 @@ devuelve `{ cantidad, oro }` con lo que sirvió de verdad.
 | `residirEnCampamento` | `heroeId`, `campamentoId` | — | Cambiar de casa (Doc 2.5), con su cooldown |
 | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `recurso`, `cantidad` | `{ movido }` | Entre el carro de su columna y su almacén personal |
 | `pasarAViveres` | `cantidad` | `{ movido }` | Del carro de su columna a sus víveres (`HeroeDto.viveres`), lo que quepa; nunca al revés. Solo el Líder. Evento `heroe.viveres` (2026-10-08) |
-| `comprarEnCampamento` | `recurso`, `cantidad`, `campamentoId?` | `{ cantidad, oro }` | Paga primero con `oroDeBotin`. Quien no reside ahí solo compra trigo, al carro. Cupo diario en madera y piedra |
+| `comprarEnCampamento` | `recurso`, `cantidad`, `campamentoId?` | `{ cantidad, oro }` | Paga primero con `oroDeBotin`. Quien no reside ahí compra cualquier bien en venta desde la puerta, paga con el oro de su carro y lo recibe en el carro, sin cupo. Cupo diario en madera y piedra (solo residentes) |
 | `reclutarEnCampamento` | `tropaId`, `pagarCon?` | `{ cantidad, oro }` | Solo el residente |
 | `pedirPrestamo` | `tropaIds[]` (de 1 a 3 tropas de leva comunal) | `{ escuadronIds }` | Gratis; una escuadra completa por tropa (`EscuadronDto.prestada`) |
 | `reponerPrestamo` | — | `{ repuestas }` | Gratis |

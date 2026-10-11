@@ -651,17 +651,32 @@ Un campamento nace con `stockInicial` de cada bien en venta y, **sobre eso**, su
 El héroe tiene que estar **en el campamento** (dentro, o con su columna en la puerta: `MOVIMIENTO.radioPuerta`). Cantidades **enteras**: pedir menos de 1, o pedir oro, se rechaza.
 
 - **Reside en él** ⇒ compra cualquier bien en venta; lo comprado va a su **almacén personal**; con **cupo diario** por héroe en `cupoDiario` (madera y piedra; el día es `floor(instante / 86 400 000)`).
-- **No reside** ⇒ solo **trigo** (para repostar), y va al **carro de su columna** (hace falta la columna); sin cupo.
+- **No reside** ⇒ compra **cualquier bien en venta desde la puerta** (cobre, estaño, trigo para repostar, madera… decidido el 2026-10-11), al mismo precio, **pagando con el oro de su carro** y llevándoselo **al carro de su
+  columna** (hace falta la columna); **sin cupo diario**, pero compite por el mismo stock. No toca su almacén personal ni su oro de botín.
+
+**Residente:**
 
 ```
 coste(n)   = ceil(n × precio)
 oroDeBotin primero, luego el oro del almacén personal:   guardado = botín + almacén.oro ;  delAlmacén(n) = max(0, coste(n) − botín)
 cantidad   = min( floor(pedida), floor(stock del campamento), cupo restante hoy, floor(guardado / precio) )
-sitio      : residente → ALMACEN_PERSONAL.capacidad − total del almacén personal ;  no residente → capacidad de carga de la columna − Σ suministro
-mientras  (residente ? cantidad − delAlmacén(cantidad) : cantidad) > sitio : cantidad−−       ; en el almacén cada unidad ocupa 1 y libera lo que cuesta en oro
+sitio      : ALMACEN_PERSONAL.capacidad − total del almacén personal
+mientras  cantidad − delAlmacén(cantidad) > sitio : cantidad−−       ; en el almacén cada unidad ocupa 1 y libera lo que cuesta en oro
 mientras  coste(cantidad) > guardado : cantidad−−
-si cantidad ≤ 0 → error con el motivo (sin stock / cupo agotado / sin oro / carro o almacén lleno)
+si cantidad ≤ 0 → error con el motivo (sin stock / cupo agotado / sin oro / almacén lleno)
 oro cobrado = coste(cantidad) ; stock −= cantidad ; botín = max(0, botín − oro)
+```
+
+**No residente (de visita):**
+
+```
+oroCarro   = columna.suministro.oro
+libre      = capacidadCargaDe(columna, caravanas, asentamientos) − Σ suministro      ; con las caravanas adjuntas y «Carga Ampliada»
+cantidad   = min( floor(pedida), floor(stock), floor(oroCarro / precio) )                ; sin cupo
+mientras  cantidad − coste(cantidad) > libre : cantidad−−       ; cada unidad cambia coste de oro por una de mercancía: el carro solo crece si el precio es < 1
+mientras  coste(cantidad) > oroCarro : cantidad−−
+si cantidad ≤ 0 → error (sin stock / sin oro en el carro / carro lleno)
+carro.oro −= coste(cantidad) ; carro[recurso] += cantidad ; stock −= cantidad          ; el oro cobrado se destruye
 ```
 
 ### 9.3 Cómo se repone
