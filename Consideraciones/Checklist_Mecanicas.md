@@ -147,7 +147,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 
 ## Cargos
 - ✅ Nivel Facción (Rey, Embajador) y nivel asentamiento (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote) — `código: ✔` (`engine/cargos.ts`)
-- ✅ Multi-cargo permitido; liberación tras inactividad — `código: ✔`
+- ✅ Multi-cargo permitido (la liberación por inactividad se descartó el 2026-10-11)
 
 ## Mantenimiento
 - ✅ Medidor 0-100, coste periódico escalonado por nivel y por distancia al centro de poder — `código: ✔` (`engine/mantenimiento.ts`, `MANTENIMIENTO`)

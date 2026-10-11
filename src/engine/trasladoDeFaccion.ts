@@ -103,7 +103,11 @@ export function trasladarFaccion(mundo: MundoDeFacciones, origenId: string, dest
         const sinOrigen = f.derrotadaPor === origenId ? { ...f, derrotadaPor: destinoId } : f;
         return f.id === destinoId ? { ...sinOrigen, ciudadanosIds: [...new Set([...f.ciudadanosIds, ...(origen?.ciudadanosIds ?? [])])] } : sinOrigen;
       }),
-    asentamientos: mundo.asentamientos.map((s) => (s.faccionId === origenId ? { ...s, faccionId: destinoId } : s)),
+    // La marca de capital del origen no sobrevive a su Facción (la fusión ya dejó puesta la que vale).
+    asentamientos: mundo.asentamientos.map((s) => {
+      const marcada = s.capitalDeFaccionId === origenId ? { ...s, capitalDeFaccionId: undefined } : s;
+      return s.faccionId === origenId ? { ...marcada, faccionId: destinoId } : marcada;
+    }),
     relaciones,
     ejercitos: mundo.ejercitos.map((e) => (e.faccionId === origenId ? { ...e, faccionId: destinoId } : e)),
     caravanas: mundo.caravanas.map((c) => (c.faccionId === origenId ? { ...c, faccionId: destinoId } : c)),

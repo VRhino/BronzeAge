@@ -27,7 +27,6 @@
 
 ### Reglas generales de cargos
 - Un jugador PUEDE ejercer varios cargos a la vez.
-- Cargo se LIBERA tras 1 semana de inactividad del jugador que lo ocupa.
 - Sucesión del Rey al abandonar la Facción: el trono pasa al siguiente ciudadano (ver "Nivel Facción").
 
 ## 2.2.1 Nivel de Facción y cupo de expansión

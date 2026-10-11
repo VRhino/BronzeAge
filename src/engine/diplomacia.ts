@@ -13,6 +13,7 @@ export interface PayloadTributoPagado {
 import { RELACION_PROPUESTA, REPUTACION } from '../constants';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
 import { aplicarAjustesReputacion, puedeProponerAlianza } from './reputacion';
+import { encontrarCapital } from './mantenimiento';
 import { ReglaInvalidaError } from './errores';
 
 /** Payload de `rebelionVasallo` — comando de jugador, no tick (ver `session/comandos/diplomacia.ts`). */
@@ -344,7 +345,10 @@ export function liberarVasallosDeSenoresDesarmados(
   };
 }
 
-/** Tributo periódico (Doc 2.4): del asentamiento con más stock del recurso pactado al primer asentamiento del señor. */
+/**
+ * Tributo periódico (Doc 2.4, decidido el 2026-10-11): el pactado cada minuto se reparte a partes iguales entre **todos** los asentamientos de la
+ * vasalla; cada uno paga hasta su parte con lo que tenga, y todo va al almacén de la **capital** de la señora.
+ */
 export function avanzarTributos(
   relaciones: RelacionPolitica[],
   asentamientos: Asentamiento[]
@@ -355,29 +359,29 @@ export function avanzarTributos(
   for (const relacion of relaciones) {
     if (relacion.estado !== 'activa' || relacion.tipo !== 'vasallaje' || !relacion.tributo) continue;
 
-    const señora = [...asentamientosPorId.values()].filter((a) => a.faccionId === relacion.faccionAId)[0];
-    const pagadores = [...asentamientosPorId.values()]
-      .filter((a) => a.faccionId === relacion.faccionBId)
-      .sort((a, b) => cantidadDisponible(b.almacen, relacion.tributo!.recurso) - cantidadDisponible(a.almacen, relacion.tributo!.recurso));
-    const pagador = pagadores[0];
-    if (!señora || !pagador) continue;
+    const capital = encontrarCapital(relacion.faccionAId, [...asentamientosPorId.values()]);
+    const pagadores = [...asentamientosPorId.values()].filter((a) => a.faccionId === relacion.faccionBId);
+    if (!capital || pagadores.length === 0) continue;
 
-    const disponible = cantidadDisponible(pagador.almacen, relacion.tributo.recurso);
-    const cantidad = Math.min(disponible, relacion.tributo.cantidadPorMinuto);
-    if (cantidad <= 0) continue;
+    const parte = relacion.tributo.cantidadPorMinuto / pagadores.length;
+    for (const pagador of pagadores) {
+      const cantidad = Math.min(cantidadDisponible(pagador.almacen, relacion.tributo.recurso), parte);
+      if (cantidad <= 0) continue;
 
-    asentamientosPorId.set(pagador.id, { ...pagador, almacen: descontarRecursos(pagador.almacen, { [relacion.tributo.recurso]: cantidad }) });
-    asentamientosPorId.set(señora.id, { ...señora, almacen: agregarRecurso(señora.almacen, relacion.tributo.recurso, cantidad) });
-    eventos.push({
-      codigo: 'diplomacia.tributo_pagado',
-      mensaje: `Tributo: ${pagador.id} paga ${cantidad.toFixed(1)} ${relacion.tributo.recurso} a ${señora.id}.`,
-      payload: {
-        pagadorId: pagador.id,
-        señoraId: señora.id,
-        recurso: relacion.tributo.recurso,
-        cantidad,
-      } satisfies PayloadTributoPagado,
-    });
+      asentamientosPorId.set(pagador.id, { ...pagador, almacen: descontarRecursos(pagador.almacen, { [relacion.tributo.recurso]: cantidad }) });
+      const destino = asentamientosPorId.get(capital.id)!;
+      asentamientosPorId.set(capital.id, { ...destino, almacen: agregarRecurso(destino.almacen, relacion.tributo.recurso, cantidad) });
+      eventos.push({
+        codigo: 'diplomacia.tributo_pagado',
+        mensaje: `Tributo: ${pagador.id} paga ${cantidad.toFixed(1)} ${relacion.tributo.recurso} a ${capital.id}.`,
+        payload: {
+          pagadorId: pagador.id,
+          señoraId: capital.id,
+          recurso: relacion.tributo.recurso,
+          cantidad,
+        } satisfies PayloadTributoPagado,
+      });
+    }
   }
 
   return { asentamientos: asentamientos.map((a) => asentamientosPorId.get(a.id)!), eventos };

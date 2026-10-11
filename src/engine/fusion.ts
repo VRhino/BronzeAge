@@ -51,6 +51,10 @@ export function exigirFusionPosible(
   if (nuevoReyId !== a.reyId && nuevoReyId !== b.reyId) throw new FusionInvalidaError('El Rey de la Facción nueva ha de ser el Rey de una de las dos.');
   const nombre = nuevoNombre.trim();
   if (!nombre) throw new FusionInvalidaError('La Facción nueva necesita un nombre.');
+  // Como `crearFaccion`: ninguna otra Facción lleva ya ese nombre (sin mirar mayúsculas). Las dos que se disuelven no cuentan: C puede quedarse con el nombre de una.
+  if (facciones.some((f) => f.id !== a.id && f.id !== b.id && f.nombre.toLowerCase() === nombre.toLowerCase())) {
+    throw new FusionInvalidaError(`Ya existe una Facción llamada "${nombre}".`);
+  }
   for (const [f, otra] of [[a, b], [b, a]] as const) {
     if (senorAjeno(relaciones, f.id, otra.id)) throw new FusionInvalidaError(`${f.nombre} es vasalla de otra Facción: su señor tiene que liberarla antes.`);
   }

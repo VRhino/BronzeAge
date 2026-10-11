@@ -281,8 +281,7 @@ Queda **una `RelacionPolitica` por Facción alcanzada**, todas con el mismo cont
   `diplomacia.vasallo_liberado`. Llega al tick siguiente a la caída de la última plaza.
 
 ### 5.6 Tributo (`avanzarTributos`, cada tick)
-Por cada vasallaje activo con tributo: la **señora** = el primer asentamiento de la Facción señora en el orden del estado; el **pagador** = el asentamiento de la vasalla con **más stock** del recurso; paga
-`min(stock del pagador, cantidadPorMinuto)` si > 0, que se suma al almacén de la señora (topado por capacidad) y se resta del pagador; evento `diplomacia.tributo_pagado`. Si falta una de las dos plazas, no hay pago.
+Por cada vasallaje activo con tributo (decidido el 2026-10-11): el pactado `cantidadPorMinuto` se **reparte a partes iguales entre todos los asentamientos de la vasalla**; cada uno paga `min(su stock del recurso, su parte)` (si es > 0) y todo se suma al almacén de la **capital de la señora** (`encontrarCapital`, §3.7; topado por capacidad). Un evento `diplomacia.tributo_pagado` por plaza que paga (`señoraId` = la capital). Sin capital o sin plazas de la vasalla, no hay pago.
 
 ### 5.7 Liga y Gran Rey (`computeLigas`)
 No se guarda. Componentes conexas del grafo de relaciones **activas** (cualquier tipo, la guerra incluida) con ≥ 2 Facciones. `tieneVasallaje`: hay un vasallaje activo dentro. **Gran Rey:** la Facción señora de la
@@ -310,7 +309,7 @@ Liga que **nunca es vasalla** dentro de esa misma Liga (la primera que cumple).
 
 ### 6.2 Fusión (A y B se disuelven en C)
 - **Proponer** (`proponerFusion`): el Rey de A, que fija `nuevoNombre` y `nuevoReyId`. `exigirFusionPosible`: distintas; existen; las dos tienen Rey; `nuevoReyId` es el Rey de A o el de B; nombre no vacío tras recortar;
-  ninguna es vasalla de una tercera. **No se comprueba que el nombre esté libre.** `propuestaPor = a.reyId`.
+  ninguna es vasalla de una tercera. **El nombre se revisa como en `crearFaccion`:** no vacío y no usado por otra Facción (sin mirar mayúsculas); las dos que se disuelven no cuentan, así que C puede quedarse con el nombre de una. `propuestaPor = a.reyId`.
 - **Responder** (Rey de B): aceptar vuelve a mirar todo lo anterior, que `a.reyId` siga siendo `propuestaPor` y que no haya batalla abierta.
 - **Nace C:** `id = faccion-fusion-{instante}-{A}-{B}`, `nombre`, `sigilo` de A, `reyId = nuevoReyId`, `embajadorId = null`, `experiencia = max`, `reputacion = max` de las dos, `nivel = calcularNivelFaccion`,
   `ciudadanosIds` vacío (luego se llenan), tecnología = **unión** (aparecidas y adoptadas; reveladas menos las ya aparecidas). **Capitales:** la marca de capital de cada plaza sale; solo la que tenía designada el Rey
@@ -325,7 +324,7 @@ Todo lo que lleva el id de `origen` pasa a `destino`, en este orden de efectos:
 - **Facciones:** el origen desaparece; `derrotadaPor` que apuntaba al origen apunta a `destino`; `destino.ciudadanosIds` = unión (sin repetir, el destino primero).
 - **Asentamientos, ejércitos, caravanas, rutas de la red, Aedas residentes, Miradas:** su `faccionId` pasa a `destino`. Las épicas cumplidas del origen se **suman** a las de `destino`.
 - **Propuestas** (anexión, fusión, relación) que nombraban al origen se descartan; las que otros hacen a `destino` siguen.
-- **No se tocan:** `solicitudesIds` del origen (desaparecen con él), la marca `capitalDeFaccionId` de sus plazas (en una anexión queda apuntando a una Facción que ya no existe), `salidasFaccionPorHeroe`.
+- **No se tocan:** `solicitudesIds` del origen (desaparecen con él), `salidasFaccionPorHeroe`. La marca `capitalDeFaccionId` del origen **se borra** de sus plazas al pasar a `destino`.
 
 <!-- parametros:ANEXION -->
 ```json
@@ -397,7 +396,7 @@ La crónica de los Aedas canta la anexión, la fusión, la liberación de vasall
 ## 12. Casos límite y decisiones que parecen raras
 - **Una propuesta caducada no desaparece sola:** queda en la lista hasta que se añade otra del mismo tipo (que poda las caducadas) o se contesta; ya no se puede contestar ni cuenta como «pendiente».
 - **Declarar guerra no arrastra a los aliados del bando contrario con los que ya hay relación:** solo se salta quien tiene una relación activa con el atacante; el objetivo directo, si la tiene, hace fallar todo.
-- **El tributo va a «la primera plaza» de la señora**, no a su capital, y sale de la plaza con más stock de la vasalla; con `cantidadPorMinuto = 0` o sin stock no pasa nada.
+- **El tributo se reparte entre todas las plazas de la vasalla:** una plaza sin stock no paga y las demás no cubren su parte; con `cantidadPorMinuto = 0` no pasa nada.
 - **La alianza da reputación mínima:** el bonus por alianza (`bonusPorMinutoAlianzaActiva`) es menor que el decaimiento, así que por sí sola no sube una reputación por encima de ~0,05 (suman varias alianzas).
 - **El Embajador designado puede ser el propio Rey**, y al irse el Rey el Embajador se vacía si el heredero era él mismo.
 - **`asignarRey` con Rey ya presente** es un traspaso: el antiguo sigue siendo ciudadano; el Embajador no se toca.
