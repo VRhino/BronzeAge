@@ -41,6 +41,7 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 - **El generador de números aleatorios y su semilla** (decisión del autor, 2026-10-09: anotado, fuera de alcance). Los sistemas que lo usan lo indican, pero para
   una migración **bit-idéntica** de las simulaciones habrá que especificarlo aparte (`createRng`/`restaurarRng`, `worldgen`).
 - Los textos de presentación y la interfaz: son de los clientes.
+- **Las Eras IV y V** (tecnologías, tarifas de adopción, el techo de nivel 5 y la Maravilla): el canon las define a medias y el código solo llega a la III. Se documentarán cuando se implementen.
 
 ## Índice
 

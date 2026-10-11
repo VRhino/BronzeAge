@@ -33,7 +33,7 @@ AedaResidente  = { id, nombre, asentamientoId, faccionId (la dueña cuando lleg�
 EstadoAedasResidentes = { aedas[], siguiente (nº del próximo, solo crece), esperaDesde: Record<asentamientoId, Instante>, cumplidas: Record<faccionId, nº> }
 ```
 
-Una tecnología pasa, para cada Facción, por **oculta → revelada → aparecida → adoptada**. La **tecnología de arranque** (las de `deArranque`: `leva_comunal` y `hostigamiento_tribal`) la tiene toda Facción aparecida y adoptada desde que nace, sin logro ni hito.
+Una tecnología pasa, para cada Facción, por **oculta → revelada → aparecida → adoptada**. Hay **dos vías** para que aparezca: el **desarrollo propio** (logro del servidor + hito, §3) y los **Aedas** (compra, §6.4, o épica, §7.2); el comercio entre Facciones y la conquista se descartaron (2026-10-11). La **tecnología de arranque** (las de `deArranque`: `leva_comunal` y `hostigamiento_tribal`) la tiene toda Facción aparecida y adoptada desde que nace, sin logro ni hito.
 `tecnologiasDe(estado, faccionId)` devuelve las de arranque a una Facción sin entrada.
 
 ## 2. Logros del servidor
@@ -125,9 +125,10 @@ Un campamento no adopta nada: **desbloquea** cada tecnología —al instante y g
 ```
 (instante − primeros[id].en) ≥ horasTrasLaPrimera × 60 min      ← primeros[id] debe existir: una tecnología que nadie ha desbloqueado por hito no está en el campamento
 (Facciones con ≥ 1 asentamiento que la tienen ADOPTADA) / (Facciones con ≥ 1 asentamiento) ≥ porcentajeFacciones     (0 Facciones → no)
+                                                                                                  bots y humanos cuentan igual: juegan por la misma vía
 ```
 
-Las de arranque están siempre. `humanasVivas` en el código son **todas** las Facciones que conservan algún asentamiento (ver Divergencias).
+Las de arranque están siempre. «Vivas» son todas las Facciones que conservan algún asentamiento (no se distingue a los bots).
 
 ## 6. Aedas itinerantes
 
@@ -1417,4 +1418,4 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
 
 ## 14. Divergencias
 
-Ver [`Divergencias.md`](Divergencias.md): Eras IV y V sin implementar, las vías de comercio y conquista del Doc 6.1 sin implementar, la épica no registra descubridora, y `humanasVivas`.
+Abierta una: la épica no registra descubridora (ver [`Divergencias.md`](Divergencias.md)). Las **Eras IV y V** son diseño a medias aún sin implementar (no es una divergencia: el código solo llega a la III).

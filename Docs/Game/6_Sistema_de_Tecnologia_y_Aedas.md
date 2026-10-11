@@ -24,15 +24,12 @@ Una tecnología pasa por cuatro estados para cada Facción: **oculta**, **revela
 existe, qué le falta y quién la desbloqueó, pero aún no puede adoptarla), **aparecida** (cumplidas sus condiciones o
 comprada a un Aeda: puede adoptarla) y **adoptada**.
 
-**Cuatro vías para conseguirla:**
+**Dos vías para conseguirla:**
 1. **Desarrollo propio**: cumplir su logro del servidor y el hito de la Facción (6.3) y pagarla (6.5).
-2. **Comercio**: pagar a una Facción que ya la tiene adoptada.
-3. **Aedas**: pagar oro a un Aeda itinerante que la conoce (6.7), o completar la épica de un Aeda residente (6.7).
-4. **Conquista**: al conquistar un asentamiento que ya reclutaba con una tecnología, esa tecnología le aparece al
-   conquistador.
+2. **Aedas**: pagar oro a un Aeda itinerante que la conoce (6.7), o completar la épica de un Aeda residente (6.7).
 
-Comercio, Aedas (venta y épica) y conquista **se saltan el hito de la Facción, nunca el logro del servidor**. En todas las vías la
-adopción se paga igual (6.5).
+Los Aedas (venta y épica) **se saltan el hito de la Facción, nunca el logro del servidor**. En las dos vías la adopción se paga igual (6.5).
+Se descartaron (2026-10-11) el comercio entre Facciones y la conquista como vías de acceso a la tecnología: lo que una Facción no desarrolla lo compra a un Aeda o lo canta uno de los suyos.
 
 ## 6.2 Eras
 
@@ -46,6 +43,7 @@ La season (12 meses) se divide en cinco Eras, de ~1300 a 323 a. C. (hasta Alejan
 | IV | `profesionalizacion_imperial` | Profesionalización | 18-26 | cosas de nivel 3; meseta en el 4 |
 | V | `hegemonia_macedonica` | Hegemonía macedónica | 26-52 | concentrada en 3 y 4; primeras cosas de nivel 5 |
 
+- **Las Eras IV y V están definidas a medias y pendientes de implementar** (2026-10-11): hoy el servidor solo tiene las tres primeras, y todo lo que este documento dice de las IV y V (tarifas, niveles, la Maravilla) es el diseño al que se va, no lo que corre.
 - **El servidor arranca en la Era I**, con dos tecnologías adoptadas por todas las Facciones: `leva_comunal` y
   `hostigamiento_tribal`.
 - Cada Era tiene sus logros del servidor (6.3). **La Era siguiente empieza cuando se cumplen TODOS los logros de la
@@ -81,7 +79,7 @@ Era se reparten por su tramo en el orden de adopción, y el último cae una sema
   tecnologías que conocen y la Facción aún no tiene aparecidas: cuáles son, qué requisitos de hito le faltan y quién
   las desbloqueó.
 - **La ventaja del primero** es ese tiempo: los Aedas conocen una tecnología **24 horas** después de que alguien la
-  desbloquea (`AEDAS.retrasoConocimientoHoras`, placeholder), no antes. No hay descuento: todos pagan la misma tarifa.
+  desbloquea (`AEDAS.retrasoConocimientoMinutos`, 24 · 60, placeholder), no antes. No hay descuento: todos pagan la misma tarifa.
 
 ## 6.5 Adopción
 
@@ -99,7 +97,7 @@ Las Facciones de bots siguen la misma regla (5.15.6).
 
 ## 6.5b Tecnología propia de los campamentos de mercenarios (2026-10-02)
 
-Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnología el último**, al instante y gratis, cuando la tiene el **50 %** de las Facciones humanas vivas (las que no gobierna la IA y conservan algún asentamiento) **o** han pasado **72 horas** desde que la primera Facción la desbloqueó, lo que llegue antes. Las de arranque ya están. Así se recluta allí lo que una Facción no alcanza por edificio o materiales (Doc 5.8), y la ventaja del primero dura unos días sin ser eterna. Una tecnología que nadie ha desbloqueado no está en el campamento. Cifras en `MERCENARIOS.tecnologia` (placeholder).
+Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnología el último**, al instante y gratis, cuando la tiene el **50 %** de las Facciones vivas (las que conservan algún asentamiento; los bots juegan por la misma vía que los humanos y cuentan igual) **o** han pasado **72 horas** desde que la primera Facción la desbloqueó, lo que llegue antes. Las de arranque ya están. Así se recluta allí lo que una Facción no alcanza por edificio o materiales (Doc 5.8), y la ventaja del primero dura unos días sin ser eterna. Una tecnología que nadie ha desbloqueado no está en el campamento. Cifras en `MERCENARIOS.tecnologia` (placeholder).
 
 ## 6.6 Catálogo
 

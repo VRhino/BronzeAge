@@ -61,7 +61,7 @@ export interface PayloadReclutadoEnCampamento {
 
 /**
  * Recluta o repone una tropa en el campamento donde reside el actor (Doc 1.9b). La regla vive en el motor; aquí solo se resuelve
- * qué Facciones cuentan como humanas vivas (las que no gobierna la IA y conservan algún asentamiento) para la tecnología del
+ * qué Facciones cuentan como vivas (las que conservan algún asentamiento) para la tecnología del
  * campamento, y la Facción del héroe para el precio.
  */
 export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantidad: number; oro: number; seUne: boolean }>((estado, _mapa, ctx, params) => {
@@ -69,8 +69,8 @@ export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantid
   exigirEnSuCampamento(estado, heroe.id);
   const faccion = estado.facciones.find((f) => esCiudadano(f, heroe.id));
   const tieneAsentamientos = (faccionId: string) => estado.asentamientos.some((a) => a.faccionId === faccionId);
-  const humanasVivas = estado.facciones.filter((f) => tieneAsentamientos(f.id));
-  const adoptadas = tecnologiasDelCampamento(estado.tecnologia, humanasVivas, ctx.instante);
+  const vivas = estado.facciones.filter((f) => tieneAsentamientos(f.id));
+  const adoptadas = tecnologiasDelCampamento(estado.tecnologia, vivas, ctx.instante);
 
   const r = reclutarEngine(
     estado.campamentosMercenarios,

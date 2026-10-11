@@ -27,18 +27,18 @@ export function poblacionActual(campamento: CampamentoMercenarios, instante: Ins
  * Las tecnologías que desbloquea el campamento (Doc 1.9b): cada una el ÚLTIMO, al instante y gratis, cuando la tiene al menos
  * `MERCENARIOS.tecnologia.porcentajeFacciones` de las Facciones humanas vivas o han pasado `horasTrasLaPrimera` desde que la primera
  * la desbloqueó, lo que llegue antes. Las de arranque (que toda Facción tiene) ya están. Una tecnología que nadie ha desbloqueado,
- * no. `humanasVivas`: las Facciones que no gobierna la IA y que conservan algún asentamiento.
+ * no. `vivas`: las Facciones que conservan algún asentamiento (los bots juegan por la misma vía que los humanos y cuentan igual).
  */
-export function tecnologiasDelCampamento(tecnologia: EstadoTecnologia, humanasVivas: readonly Faccion[], instante: Instante): TecnologiaId[] {
+export function tecnologiasDelCampamento(tecnologia: EstadoTecnologia, vivas: readonly Faccion[], instante: Instante): TecnologiaId[] {
   const plazo = minutos(60 * MERCENARIOS.tecnologia.horasTrasLaPrimera);
   return (Object.keys(TECNOLOGIAS) as TecnologiaId[]).filter((id) => {
     if (TECNOLOGIAS[id].deArranque) return true;
     const primera = tecnologia.primeros[id];
     if (!primera) return false;
     if (transcurrido(primera.en, instante) >= plazo) return true;
-    if (humanasVivas.length === 0) return false;
-    const la_tienen = humanasVivas.filter((f) => tecnologiasDe(tecnologia, f.id).adoptadas.includes(id)).length;
-    return la_tienen / humanasVivas.length >= MERCENARIOS.tecnologia.porcentajeFacciones;
+    if (vivas.length === 0) return false;
+    const la_tienen = vivas.filter((f) => tecnologiasDe(tecnologia, f.id).adoptadas.includes(id)).length;
+    return la_tienen / vivas.length >= MERCENARIOS.tecnologia.porcentajeFacciones;
   });
 }
 
