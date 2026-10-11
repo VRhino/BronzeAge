@@ -359,7 +359,7 @@ Tareas derivadas de este documento, reflejadas en
   con parámetros por definir (radio de visualización, decaimiento del contacto), no arquitectura. El diseño
   de fondo vive en §3.2 de este doc. **Esa mecánica ya está en ejecución** (2026-09-04/05): la memoria por
   Facción y su proyección existen, con el plan de 6 pasos en
-  [`Consideraciones/Niebla_De_Guerra_Definicion.md`](../../Consideraciones/Niebla_De_Guerra_Definicion.md).
+  [`Docs/Mechanics/Niebla_De_Guerra.md`](../../Docs/Mechanics/Niebla_De_Guerra.md).
 - [x] Protocolo de suscripciones sobre conexión única — hecho en **C5** (no C3, como decía esta línea):
   `server/difusion/hub.ts` multiplexa canales sobre una única conexión y serializa el mensaje una vez por
   evento, no una por conexión.

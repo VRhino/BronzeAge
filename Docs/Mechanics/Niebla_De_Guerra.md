@@ -8,7 +8,7 @@ así que la proyección es una frontera de seguridad, no una capa de presentaci�
   `src/engine/ubicacion.ts` (`grabarExploracionPersonal`, foto del interior), `src/engine/ejercitos.ts` (`alcanceDeVista`), `src/engine/pertenencia.ts` (`compartenVision`), `src/engine/alijos.ts`,
   `src/session/proyecciones/jugador.ts` (`proyectarParaJugador`: dónde se aplican todas las reglas), `src/session/comandos/intel.ts` (comprar), `src/session/comandos/ayudas.ts` (`conExploracionFundida`),
   `src/engine/trasladoDeFaccion.ts` (memoria al fusionar/anexar).
-- **Canon:** Doc 5.12.7 (qué ve), 5.12.8 (qué recuerda), 5.12.10 (intel), 1.10 (el jugador en el mundo), 1.3 (exploración sin bandera). **Historia y razones:** `Consideraciones/Niebla_De_Guerra_Definicion.md`.
+- **Canon:** Doc 5.12.7 (qué ve), 5.12.8 (qué recuerda), 5.12.10 (intel), 1.10 (el jugador en el mundo), 1.3 (exploración sin bandera). El documento de diseño que la precedió (`Consideraciones/Niebla_De_Guerra_Definicion.md`) se borró el 2026-10-11 al pasar todo aquí; sigue en el historial de git.
 - **Fuera de alcance aquí:** la inspección de cerca (anillo de 40) → [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md); la proyección de lo que es propio (almacén, cola, etc.) salvo en lo que afecta a la niebla; el terreno, que **lo tapa el cliente** con la máscara (el servidor solo dice qué se ha explorado); el cliente de administración no tapa nada.
 
 ## 1. Idea
@@ -36,7 +36,7 @@ MemoriaFaccion = {
   informes?:     Record<asentamientoId, InformePlaza>       último informe comprado en una taberna
 }
 FichaConocida  = { asentamientoId, nombre?, faccionId, posicion, nivel, conocidoEn: Instante, radioPotencial? }
-InformePlaza   = { asentamientoId, faccionId, nombre?, nivel, conocidoEn, edificios[{tipo, posicion, estado, nivelInterno?, ambito?}], recintos[{nivel, celdas, avance}], guarnicion: Escuadron[], heroesIds }
+InformePlaza   = { asentamientoId, faccionId, nombre?, nivel, conocidoEn, posicion?, edificios[{tipo, posicion, estado, nivelInterno?, ambito?}], recintos[{nivel, celdas, avance}], guarnicion: Escuadron[], heroesIds }
 MiradaIntel    = { id, faccionId, origenId, centro, radio, compradaEn, expiraEn, libreEn }
 Heroe.exploracionPersonal?: Exploracion                     lo explorado SIN bandera
 Heroe.plazasRecordadas?:    Record<asentamientoId, InteriorRecordado>   foto del interior de una plaza al salir: { vistoEn, almacen, cola (edificios en_cola/en_construccion), guarnicion }
@@ -94,6 +94,8 @@ para cada Facción con algún ojo propio (sus plazas + sus columnas con faccionI
         asentamientos[a.id] = { id, nombre, faccionId, posicion, nivel, conocidoEn: instante, radioPotencial }   ← sobrescribe la anterior
     si no hubo novedad y la Facción ya tenía registro, se devuelve la misma memoria (un tick tranquilo no reescribe el estado)
 ```
+
+**Se olvida lo de una plaza que ya no existe** (decidido el 2026-10-11): si la plaza de una ficha o de un informe ya no está entre los asentamientos del mundo **y** su sitio cae en el alcance de algún ojo propio, la ficha y el informe se borran de la memoria (el informe usa su `posicion`, o la de la ficha si es un informe anterior a ese campo). Mientras el sitio no se vuelve a ver, la foto vieja se queda. Una plaza que sigue en pie —aunque haya cambiado de dueño— nunca se olvida: su ficha se actualiza.
 
 Una Facción **sin ojos** (sin plazas ni columnas) no graba nada. Las plazas **propias** no entran en `asentamientos` (viajan completas o como avistadas). Una columna **huérfana** (`faccionId == ''`) no graba en ninguna Facción.
 
@@ -164,7 +166,7 @@ Reglas transversales:
 
 - **Lo que se ve gana a lo que se recuerda**: una plaza aparece en `asentamientosAvistados` **o** en `asentamientosConocidos`, nunca en las dos (y las `conocidas` excluyen `dentroDe`).
 - **Una plaza ajena nunca revela** almacén, escuadras, edificios en obra, colas, cargos ni políticas, ni en vivo ni recordada. `edificios` viaja **solo los `activo`**.
-- **Caravana «grande»** (`esCaravanaGrande`: comercial con ≥ `VISION.caravanaGrande.carros` carros con animal) llama la atención si está `preparando` o `en_transito` y hay una plaza o columna **propia** a `≤ VISION.caravanaGrande.radio` de ella (aunque no entre en la vista normal). Una que vuelve vacía o va enganchada a una columna no llama la atención por sí misma.
+- **Caravana «grande»** (`esCaravanaGrande`: comercial con ≥ `VISION.caravanaGrande.carros` carros con animal) llama la atención si está `preparando` o `en_transito` y hay un ojo **propio, aliado o prestado** a `≤ VISION.caravanaGrande.radio` de ella: una plaza o columna propia, una plaza o columna de una Facción que comparte visión, o el centro de una Mirada (aunque no entre en la vista normal). Una que vuelve vacía o va enganchada a una columna no llama la atención por sí misma.
 - El jugador **ve siempre por donde ha andado él**: su `exploracionPersonal` se funde con la memoria de la Facción en la máscara.
 - Un jugador sin Facción nunca tiene `memoria`: se usa `MEMORIA_VACIA`.
 
@@ -273,7 +275,7 @@ efecto:  memoria[mi Facción].informes[plaza] = informe;  evento asentamiento.in
 ## 9. Casos límite y decisiones que parecen raras
 
 - **Una celda se marca por su centro**, salvo la del propio ojo, que se marca siempre.
-- **Plazas destruidas siguen en la memoria**: una ficha o un informe de una plaza que cayó en ruinas no se borra; se delata solo por su fecha. (Una plaza **anexada o fusionada** sí se limpia de la memoria de la Facción resultante, §4.3.)
+- **Una plaza destruida se olvida al volver a ver el sitio** (§4.1), no antes: hasta entonces su foto sigue en la memoria. Una plaza **anexada o fusionada** se limpia de la memoria de la Facción resultante (§4.3).
 - **Una plaza conquistada conserva su ficha vieja** (Facción y nivel de antes) hasta que se vuelva a ver.
 - **Lo explorado por la visión prestada no se graba**, pero un Informe sí se puede comprar de una plaza que solo se vio en una Mirada.
 - **El mismo disco para ver y para grabar**: el alcance de una plaza se mide contra `radioPotencial`, no contra el polígono, y por tanto crece con el nivel (una plaza de nivel 5 vigila 240 y ve más lejos que una columna).
@@ -284,4 +286,4 @@ efecto:  memoria[mi Facción].informes[plaza] = informe;  evento asentamiento.in
 
 ## 10. Divergencias
 
-Ver [`Divergencias.md`](Divergencias.md): la atención de la caravana grande no la comparten los aliados ni las Miradas, y las plazas destruidas se quedan en la memoria.
+Ninguna abierta.

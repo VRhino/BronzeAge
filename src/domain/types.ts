@@ -1522,6 +1522,8 @@ export interface InformePlaza {
   nombre?: string;
   nivel: number;
   conocidoEn: Instante;
+  /** Dónde está la plaza: permite olvidar el informe cuando la Facción vuelve a ver el sitio y ya no está. Ausente en los informes anteriores a este campo. */
+  posicion?: Point;
   edificios: EdificioInforme[];
   recintos: { nivel: number; celdas: CeldaMuro[]; avance: number }[];
   guarnicion: { tropaId: string; cantidad: number; heroeId: string }[];

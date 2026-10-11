@@ -105,6 +105,7 @@ export function levantarInforme(plaza: Asentamiento, heroes: readonly Heroe[], a
     ...(plaza.nombre !== undefined ? { nombre: plaza.nombre } : {}),
     nivel: plaza.nivel,
     conocidoEn: ahora,
+    posicion: plaza.posicion,
     edificios: plaza.edificios
       .filter((e) => e.estado !== 'en_cola')
       .map((e) => ({

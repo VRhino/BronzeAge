@@ -10,7 +10,7 @@ import { conHeroe, enPie, partidaConAsentamiento, MOMENTO, OPC } from '../../__t
 import { crearFaccion } from '../../comandos/crearFaccion';
 import { fundarAsentamiento } from '../../__tests__/fundarDePrueba';
 import { entrarEnAsentamiento, salirAlMundo } from '../../comandos/presencia';
-import { idDeMapa, type GameSessionState, type GeometriaAsentamientos } from '../../estado';
+import { idDeMapa, instanteDeTick, type GameSessionState, type GeometriaAsentamientos } from '../../estado';
 import { computeTodasLasZonas } from '../../../engine/zones';
 import { estaExplorado, marcarVisto, rejillaDe } from '../../../engine/exploracion';
 import { MEMORIA_VACIA, type FichaConocida } from '../../../engine/memoria';
@@ -18,7 +18,7 @@ import { eventosDominioParaJugador, eventosVisiblesParaJugador, proyectarParaJug
 import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Point } from '../../../domain/types';
 import type { RedCaminos } from '../../../domain/types';
 import { aristasDeTrazado } from '../../../engine/redCaminos';
-import { EXPLORACION, VISION, ZONA_INFLUENCIA } from '../../../constants';
+import { EXPLORACION, INTEL, VISION, ZONA_INFLUENCIA } from '../../../constants';
 
 // Estas pruebas verifican filtrado por Facción/ciudadanía, no la geometría por frame (Fase C10, cubierta en
 // su propia sección más abajo) — una entrada vacía basta y no obliga a construir asentamientos reales solo
@@ -114,7 +114,7 @@ describe('asentamientos: SOLO el interior de la plaza que se pisa (Doc 1.10.1)',
   });
 });
 
-// Niebla de guerra, Paso 1 (Consideraciones/Niebla_De_Guerra_Definicion.md §2.1-2.2). Se funda una plaza
+// Niebla de guerra, Paso 1 (Docs/Mechanics/Niebla_De_Guerra.md). Se funda una plaza
 // rival de verdad en vez de inyectarla en el estado: asi las pruebas van contra `radioPotencial` real y
 // contra el `nivel` real, no contra un objeto a mano que podria no parecerse a un asentamiento.
 describe('asentamientosAvistados: la FICHA de lo ajeno, solo si se ve', () => {
@@ -361,6 +361,17 @@ describe('caravanasAvistadas: las grandes llaman la atención', () => {
     expect(avistadas(caravana('grande', radio - 1), caravana('pequena', radio - 1, { carros: conBuey(carros - 1) }))).toEqual(['grande']);
     expect(avistadas(caravana('grande', radio + 1)), 'más allá del radio, nada').toEqual([]);
     expect(avistadas(caravana('pequena', 50, { carros: conBuey(1) })), 'la pequeña, cerca, sí').toEqual(['pequena']);
+  });
+
+  it('también se ve a esa distancia desde una Mirada comprada (visión prestada), no solo desde plazas y columnas', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    const faccionId = proyectarParaJugador(estado, fundador, SIN_GEOMETRIA).faccionId!;
+    const mirada = (centroX: number) => ({ id: 'm1', faccionId, origenId: 'taberna', centro: { x: centroX, y: 1500 }, radio: INTEL.mirada.radio, compradaEn: instanteDeTick(0), expiraEn: instanteDeTick(estado.tick + 100), libreEn: instanteDeTick(estado.tick + 200) });
+    const lejana = caravana('lejana', 0, { posicionActual: { x: 1200 + radio - 1, y: 1500 } });
+    const ve = (centroX: number) => proyectarParaJugador({ ...estado, caravanas: [lejana], miradasIntel: [mirada(centroX)] }, fundador, SIN_GEOMETRIA).caravanasAvistadas.map((c) => c.id);
+    expect(ve(1200), 'dentro del radio ampliado de la Mirada').toEqual(['lejana']);
+    expect(ve(1200 - radio - 50), 'fuera del radio ampliado').toEqual([]);
   });
 
   it('también mientras se prepara en su plaza, pero no vacía de vuelta, ni parada, ni si los carros no tienen animal', () => {

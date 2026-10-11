@@ -152,6 +152,46 @@ describe('grabarLoVisto: la ficha de lo ajeno', () => {
   });
 });
 
+describe('grabarLoVisto: lo recordado de una plaza que ya no existe', () => {
+  const informeDe = (suya: ReturnType<typeof dosPlazasLejanas>['suya']) => ({
+    asentamientoId: suya.id, faccionId: 'faccion-2', nivel: 1, conocidoEn: instanteDeTest(1), posicion: suya.posicion,
+    edificios: [], recintos: [], guarnicion: [], heroesIds: [],
+  });
+
+  it('se olvida la ficha y el informe cuando la Faccion vuelve a ver el sitio y la plaza no esta', () => {
+    const { facciones, mia, suya } = dosPlazasLejanas();
+    const base = { facciones, limites: mapa.limites, tropa: TROPA };
+    const vista = grabarLoVisto({}, { ...base, asentamientos: [mia, suya], ejercitos: [ejercito('faccion-1', suya.posicion.x, suya.posicion.y)], instante: instanteDeTest(1) });
+    const conInforme = { ...vista, 'faccion-1': { ...vista['faccion-1']!, informes: { [suya.id]: informeDe(suya) } } };
+
+    const trasRuinas = grabarLoVisto(conInforme, { ...base, asentamientos: [mia], ejercitos: [ejercito('faccion-1', suya.posicion.x, suya.posicion.y)], instante: instanteDeTest(2) });
+
+    expect(trasRuinas['faccion-1']!.asentamientos[suya.id]).toBeUndefined();
+    expect(trasRuinas['faccion-1']!.informes?.[suya.id]).toBeUndefined();
+  });
+
+  it('mientras no se vuelve a ver el sitio, la foto se queda aunque la plaza haya caido', () => {
+    const { facciones, mia, suya } = dosPlazasLejanas();
+    const base = { facciones, limites: mapa.limites, tropa: TROPA };
+    const vista = grabarLoVisto({}, { ...base, asentamientos: [mia, suya], ejercitos: [ejercito('faccion-1', suya.posicion.x, suya.posicion.y)], instante: instanteDeTest(1) });
+    const conInforme = { ...vista, 'faccion-1': { ...vista['faccion-1']!, informes: { [suya.id]: informeDe(suya) } } };
+
+    const lejos = grabarLoVisto(conInforme, { ...base, asentamientos: [mia], ejercitos: [], instante: instanteDeTest(2) });
+
+    expect(lejos['faccion-1']!.asentamientos[suya.id]).toBeDefined();
+    expect(lejos['faccion-1']!.informes?.[suya.id]).toBeDefined();
+  });
+
+  it('una plaza que sigue en pie (aunque haya cambiado de dueno) no se olvida', () => {
+    const { facciones, mia, suya } = dosPlazasLejanas();
+    const base = { facciones, limites: mapa.limites, tropa: TROPA, ejercitos: [ejercito('faccion-1', suya.posicion.x, suya.posicion.y)] };
+    const vista = grabarLoVisto({}, { ...base, asentamientos: [mia, suya], instante: instanteDeTest(1) });
+    const conquistada = grabarLoVisto(vista, { ...base, asentamientos: [mia, { ...suya, faccionId: 'faccion-3' }], instante: instanteDeTest(2) });
+
+    expect(conquistada['faccion-1']!.asentamientos[suya.id]!.faccionId).toBe('faccion-3');
+  });
+});
+
 describe('MEMORIA_VACIA', () => {
   it('es lo que vale una Faccion sin registro: nada explorado y nada conocido', () => {
     expect(celdasExploradas(MEMORIA_VACIA.exploracion)).toBe(0);

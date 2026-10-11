@@ -321,7 +321,7 @@ Piezas de soporte:
 
 Estaba anotada como mecánica pendiente hasta la v1.0 de este documento; se implementó entre el 2026-09-03 y el
 2026-09-05. Las **decisiones y el plan de los 6 pasos** viven en
-[`Consideraciones/Niebla_De_Guerra_Definicion.md`](../../Consideraciones/Niebla_De_Guerra_Definicion.md) y las
+[`Docs/Mechanics/Niebla_De_Guerra.md`](../../Docs/Mechanics/Niebla_De_Guerra.md) y las
 **reglas de juego** en Doc 5.12.7; aquí solo se registra dónde se apoya en la arquitectura.
 
 Sale de una sola regla —*lo que alcanzas a ver este tick queda grabado*— y produce tres estados:

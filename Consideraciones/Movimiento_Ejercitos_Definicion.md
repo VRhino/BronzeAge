@@ -153,7 +153,7 @@ compromiso, peor sienta el azar — y en Fase 0 el combate **no se ve** (es cál
 swing del 15% no se lee como tensión sino como "el juego me quitó el ejército".
 
 **El argumento de fondo:** ya hay una fuente de incertidumbre mejor. La niebla de guerra
-(`Niebla_De_Guerra_Definicion.md`) hace que no sepas qué guarnición hay en casa — incertidumbre **reducible
+(`Docs/Mechanics/Niebla_De_Guerra.md`) hace que no sepas qué guarnición hay en casa — incertidumbre **reducible
 jugando bien** (explorar, mantener contacto), diegética, y que no cuesta determinismo. El jitter es
 incertidumbre que no puedes reducir por mucho que juegues. El contraargumento clásico ("sin azar nadie ataca
 salvo que ya haya ganado sobre el papel") **solo aplica con información perfecta**, que es justo lo que la
@@ -769,7 +769,7 @@ usuario dio la tabla real. Calibrarla es un cambio de **datos**, no de código.
 
 - **Los números de liderazgo** (§1.3) — pendiente de confirmación del usuario.
 - ~~**Visibilidad de ejércitos ajenos.**~~ **RESUELTO** con la niebla de guerra (2026-09-04/09,
-  `Niebla_De_Guerra_Definicion.md`): `proyectarParaJugador` avista ejércitos ajenos redactados dentro de
+  `Docs/Mechanics/Niebla_De_Guerra.md`): `proyectarParaJugador` avista ejércitos ajenos redactados dentro de
   `VISION.ejercito`/`VISION.margenAsentamiento`, y un aliado/vasallo comparte su vista en vivo (Paso 4).
   Queda solo la calibración de esos radios (Paso 6).
 - **Progresión del liderazgo** — es §11 (*progreso jugador y tropa*), sin diseñar.

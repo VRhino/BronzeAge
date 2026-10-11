@@ -552,7 +552,7 @@ parar"). `conquistasAcumuladas` sigue vivo (48 en 1000 ticks) — el NPC conquis
 
 ## 11. Plan técnico de `guarnecer` (ponytail full) — HECHO (2026-09-09)
 
-Diseño en §2.3 / §2.3d. Hecho junto con la niebla Paso 4 (`Niebla_De_Guerra_Definicion.md`), independientes
+Diseño en §2.3 / §2.3d. Hecho junto con la niebla Paso 4 (`Docs/Mechanics/Niebla_De_Guerra.md`), independientes
 entre sí. Decisiones del usuario (2026-09-09): jugador queda dentro de la plaza tras guarnecer (17.1);
 adjuntas → `'aparcada'` con intercambio de almacén y dos vías de salida (17.2); cualquier ejército de la
 Facción puede recoger una `'aparcada'`; el viaje de vuelta cargada reusa `'retornando'`.

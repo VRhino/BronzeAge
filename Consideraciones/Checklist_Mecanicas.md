@@ -43,7 +43,7 @@ Diseñado (a veces "cerrado") pero **sin una línea en `src/`**:
   efectivo debería ser base + progresión, pero esa progresión no está ni diseñada ni implementada.
   (aparcado, `Docs/Ideas a diseñar.md` §11)
 - ~~**Visión compartida por alianza**~~ — **HECHO 2026-09-09** (Paso 4, ampliado a vasallaje;
-  `Niebla_De_Guerra_Definicion.md` §5.6).
+  `Docs/Mechanics/Niebla_De_Guerra.md` §5.6).
 - **Materiales exóticos** (los pide el diseño de la Maravilla — aparcado, `Docs/Ideas a diseñar.md` §23) y **NPCs
   hostiles** más allá de los bandidos (`Docs/Ideas a diseñar.md` §9).
 
@@ -200,13 +200,13 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - 🔶 **Progresión de Liderazgo del jugador**: `Jugador.liderazgoBase` está, pero el efectivo debería ser base + progresión y esa progresión no está ni diseñada ni implementada — `código: ✘`. Aparcada en `Docs/Ideas a diseñar.md` §11.
 
 ## Niebla de guerra y conocimiento del mundo *(mecánica nueva, no estaba en este documento)*
-- ✅ Diseño cerrado 2026-09-04 (`Consideraciones/Niebla_De_Guerra_Definicion.md`, reglas en Doc 5.12.7 / 5.12.8). Tres estados: nunca visto (tapado, terreno incluido) / visto antes (última foto, filtro oscuro) / viéndolo ahora. Regla única: **ver es conocer**.
+- ✅ Diseño cerrado 2026-09-04 (`Docs/Mechanics/Niebla_De_Guerra.md`, reglas en Doc 5.12.7 / 5.12.8). Tres estados: nunca visto (tapado, terreno incluido) / visto antes (última foto, filtro oscuro) / viéndolo ahora. Regla única: **ver es conocer**.
 - ✅ Paso 1 — la VISTA: `ejercitosAvistados` y `asentamientosAvistados` en la proyección, siempre redactados; radios en `VISION` — `código: ✔`
 - ✅ Paso 2 — la MEMORIA se graba, por FACCIÓN, sobre rejilla de celdas de 25, y solo crece; migración de snapshot v6 → v7 — `código: ✔` (`engine/exploracion.ts`, `engine/memoria.ts`, `EXPLORACION`)
 - ✅ Paso 3 — la memoria se proyecta: `asentamientosConocidos` + máscara `exploracion`; lo visto en vivo gana a lo recordado — `código: ✔`
 - ✅ Paso 5 — se pinta: el cliente de jugador tapa lo no explorado y oscurece lo recordado a partir de dos máscaras (`celdas` y `visibles`); el cliente de administración no aplica máscara — `código: ✔`
 - ✅ Fronteras ajenas (2026-09-05) — `código: ✔`
-- ✅ **Paso 4 — visión compartida por alianza y vasallaje**, en vivo y no "último conocido" — `código: ✔` (2026-09-09). `compartenVision` (`engine/pertenencia.ts`) + ojos aliados solo en la capa "en vivo" de `proyectarParaJugador`; nunca en memoria. Sin migración. `Niebla_De_Guerra_Definicion.md` §5.6.
+- ✅ **Paso 4 — visión compartida por alianza y vasallaje**, en vivo y no "último conocido" — `código: ✔` (2026-09-09). `compartenVision` (`engine/pertenencia.ts`) + ojos aliados solo en la capa "en vivo" de `proyectarParaJugador`; nunca en memoria. Sin migración. `Docs/Mechanics/Niebla_De_Guerra.md` §5.6.
 - 🔶 Paso 6 — calibración del margen de asentamiento y del tamaño de celda — `código: ◐`
 
 ## Intel de taberna *(mecánica nueva, 2026-10-05)*

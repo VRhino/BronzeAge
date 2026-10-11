@@ -900,10 +900,14 @@ function territorioDeCadaEjercito(
  * (Doc 5.12.7): desde que se prepara en su plaza y mientras viaja cargada. Una que vuelve vacía, o enganchada a una columna, ya no
  * llama la atención por sí misma: lo que se ve de ella es lo que se ve de su columna.
  */
-function llamaLaAtencion(c: Caravana, asentamientosPropios: readonly Asentamiento[], ejercitosPropios: readonly Ejercito[]): boolean {
+function llamaLaAtencion(c: Caravana, asentamientosPropios: readonly Asentamiento[], ejercitosPropios: readonly Ejercito[], miradas: readonly MiradaIntel[]): boolean {
   if ((c.estado !== 'preparando' && c.estado !== 'en_transito') || !esCaravanaGrande(c)) return false;
   const { radio } = VISION.caravanaGrande;
-  return asentamientosPropios.some((a) => distancia(c.posicionActual, a.posicion) <= radio) || ejercitosPropios.some((e) => distancia(c.posicionActual, e.posicionActual) <= radio);
+  return (
+    asentamientosPropios.some((a) => distancia(c.posicionActual, a.posicion) <= radio) ||
+    ejercitosPropios.some((e) => distancia(c.posicionActual, e.posicionActual) <= radio) ||
+    miradas.some((m) => distancia(c.posicionActual, m.centro) <= radio)
+  );
 }
 
 /**
@@ -927,7 +931,7 @@ function caravanasAvistadas(
   return estado.caravanas
     .filter((c) => !esPropio(c.origenAsentamientoId) && !(c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId)))
     .filter((c) => c.estado !== 'disponible')
-    .filter((c) => seVeAhora(c.posicionActual, asentamientosPropios, ejercitosPropios, tropa, miradas) || llamaLaAtencion(c, asentamientosPropios, ejercitosPropios))
+    .filter((c) => seVeAhora(c.posicionActual, asentamientosPropios, ejercitosPropios, tropa, miradas) || llamaLaAtencion(c, asentamientosPropios, ejercitosPropios, miradas))
     .map((c) => ({
       id: c.id,
       posicionActual: c.posicionActual,
@@ -1000,7 +1004,7 @@ export function proyectarParaJugador(
   // Niebla Paso 4: un aliado (o señor/vasallo) ve lo que ves tú, EN VIVO. Sus plazas y columnas se suman a la
   // capa "viéndolo ahora" —`seVeAhora`, avistados, la máscara `visibles`—, nunca a la memoria ni a lo
   // explorado: al romperse la relación, `compartenVision` deja de incluir esa Facción y en la proyección
-  // siguiente lo que solo veías por ella desaparece (no queda "último conocido"). Ver `Niebla_De_Guerra_Definicion.md` §5.6.
+  // siguiente lo que solo veías por ella desaparece (no queda "último conocido"). Ver `Docs/Mechanics/Niebla_De_Guerra.md` §5.2.
   const faccionesQueComparten =
     faccionId !== null
       ? new Set(

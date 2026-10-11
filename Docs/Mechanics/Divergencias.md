@@ -18,19 +18,6 @@ Alta = impide algo del juego · Media = el juego va contra la intención escrita
 ### 8. `iniciarAsedio` no tiene llamadores · **Baja**
 - `engine/combate.ts` conserva `iniciarAsedio` (asedio de asentamiento a asentamiento, exige General) y sus tests, pero ningún comando ni el tick lo usa desde que los ejércitos asedian (`asediarConEjercito`). Es código muerto salvo que se quiera conservar como referencia; borrarlo se lleva sus tests.
 
-### 9. Las plazas destruidas se quedan en la memoria · **Baja**
-- La memoria de una Facción (`FichaConocida`, `InformePlaza`) solo se limpia al anexar o fusionar Facciones. Una plaza que cae en **ruinas** deja su ficha y sus informes para siempre: en `asentamientosConocidos` sigue apareciendo una ciudad que ya no existe, con su fecha.
-- El canon (5.12.8) dice que lo recordado no caduca y que el dato viejo se delata solo por su fecha, pero no distingue «vieja» de «ya no existe».
-- **Falta decidir:** si se borra la ficha cuando la Facción vuelve a ver el sitio y la plaza no está (o al caer en ruinas), o se deja como está.
-
-### 10. La atención de la caravana grande no la comparten aliados ni Miradas · **Baja**
-- Canon 5.12.7: una caravana grande se ve desde «cualquier plaza o columna de otra Facción» a `VISION.caravanaGrande.radio` (300). El código (`llamaLaAtencion`) solo mira las plazas y columnas **propias**; los ojos aliados y las Miradas ven la caravana con la vista normal, no con el radio ampliado.
-- **Falta decidir:** si el radio ampliado también debe valer para la visión prestada.
-
-### 11. `NieblaProyectada.visibles` no es siempre un subconjunto de `celdas` · **Baja**
-- El comentario del tipo dice que lo visible es siempre un subconjunto de lo explorado. Con visión compartida (aliados) o Miradas, `visibles` incluye celdas que `celdas` no tiene (a propósito: lo prestado no se explora). El cliente debe leer `visibles` como «viéndolo» aunque el bit no esté en `celdas`.
-- Hay que corregir el comentario del código (o el cliente, si asume el subconjunto).
-
 ## Consecuencias pendientes de medir
 
 - **Gate de murallas por nivel (2026-10-09):** los bots comprometen el recinto de nivel 1 en cuanto pueden (`bots/cerebro/gobierno.ts`), así que ahora lo harán desde el nivel 2, antes que antes. El coste (≈2.100 de madera por

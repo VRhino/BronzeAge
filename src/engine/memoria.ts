@@ -1,5 +1,5 @@
 // Lo que cada Facción RECUERDA del mundo (niebla de guerra, Paso 2 —
-// `Consideraciones/Niebla_De_Guerra_Definicion.md` §4).
+// `Docs/Mechanics/Niebla_De_Guerra.md` §4).
 //
 // La regla es una sola, y de ella salen los tres estados que ve el jugador: **lo que alcanzas a ver este tick
 // queda grabado**. Ver algo ES conocerlo; comerciar no es una vía aparte, es otra forma de verlo un instante.
@@ -133,11 +133,29 @@ export function grabarLoVisto(
       };
     }
 
+    // Lo recordado de una plaza que ya no existe se olvida cuando la Facción vuelve a ver el sitio y no está (ruinas, fusión de zona…):
+    // la foto vieja se delata sola por su fecha, pero una ciudad que ya no existe no es "vieja", es falsa.
+    const vivas = new Set(contexto.asentamientos.map((a) => a.id));
+    const sitioVisto = (p: Point): boolean => ojos.some((ojo) => distancia(p, ojo.posicion) <= ojo.alcance);
+    let informes = previa.informes;
+    for (const informe of Object.values(previa.informes ?? {})) {
+      if (vivas.has(informe.asentamientoId)) continue;
+      const donde = informe.posicion ?? previa.asentamientos[informe.asentamientoId]?.posicion;
+      if (!donde || !sitioVisto(donde)) continue;
+      if (informes === previa.informes) informes = { ...previa.informes };
+      delete informes![informe.asentamientoId];
+    }
+    for (const ficha of Object.values(previa.asentamientos)) {
+      if (vivas.has(ficha.asentamientoId) || !sitioVisto(ficha.posicion)) continue;
+      if (asentamientos === previa.asentamientos) asentamientos = { ...previa.asentamientos };
+      delete asentamientos[ficha.asentamientoId];
+    }
+
     // Se devuelve la MISMA memoria si no hubo novedad, para que un tick tranquilo no reescriba el estado.
-    if (exploracion === previa.exploracion && asentamientos === previa.asentamientos) {
+    if (exploracion === previa.exploracion && asentamientos === previa.asentamientos && informes === previa.informes) {
       if (salida[faccion.id] !== undefined) continue;
     }
-    salida[faccion.id] = { ...previa, exploracion, asentamientos };
+    salida[faccion.id] = { ...previa, exploracion, asentamientos, ...(informes !== undefined ? { informes } : {}) };
   }
 
   return salida;

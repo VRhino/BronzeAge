@@ -1,5 +1,5 @@
 // Lo que una Facción ha llegado a ver alguna vez, como ÁREA (niebla de guerra, Paso 2 —
-// `Consideraciones/Niebla_De_Guerra_Definicion.md` §4).
+// `Docs/Mechanics/Niebla_De_Guerra.md` §2).
 //
 // Es la mitad de la niebla que separa el estado 1 del 2: "nunca he estado ahí" (tapado) de "ya lo vi alguna
 // vez" (visible, aunque sea con la última foto). Lo que se ve AHORA no se guarda aquí ni en ningún sitio: se
@@ -174,8 +174,9 @@ export interface NieblaProyectada {
    * `fila * columnas + columna`, contando desde el bit MENOS significativo de cada byte, y cada byte son dos
    * caracteres hex. */
   celdas: ExploracionInterna;
-  /** Lo que se está viendo AHORA MISMO, en el mismo formato y sobre la misma rejilla. Siempre es un
-   * subconjunto de `celdas`. */
+  /** Lo que se está viendo AHORA MISMO, en el mismo formato y sobre la misma rejilla. Incluye lo que ven los
+   * ojos propios —que también están en `celdas`— y la visión PRESTADA (aliados, señor, vasallo y Miradas), que
+   * no se explora: por eso NO es siempre un subconjunto de `celdas`. Un bit visible manda sobre uno ausente de `celdas`. */
   visibles: ExploracionInterna;
 }
 
