@@ -449,7 +449,7 @@ La reserva de §6.3 existe para que la obra, los talleres y las mejoras nunca de
 ### 10.4 Ruinas
 
 Cuando `avanzarMantenimiento` devuelve `destruido`, el asentamiento desaparece del estado y el tick resuelve todo lo que colgaba de él: sus residentes pasan a la plaza más cercana de su Facción (o al campamento de mercenarios más cercano), su campamento de
-bandidos se dispersa, sus trueques se cancelan sin penalizar y las caravanas que iban o venían vuelven o se pierden (`engine/ruina.ts`, caravanas.md pendiente). Si era la última plaza de la Facción, queda derrotada sin ganador.
+bandidos se dispersa, sus trueques se cancelan sin penalizar y las caravanas que iban o venían vuelven o se pierden (`engine/ruina.ts`, ver [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §10). Si era la última plaza de la Facción, queda derrotada sin ganador.
 
 ## 11. Nivel de asentamiento
 

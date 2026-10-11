@@ -10,9 +10,11 @@
 //   <!-- /parametros -->
 import * as constantesJuego from '../constants';
 import * as constantesInfra from '../constantsInfra';
+import * as configMundo from '../worldgen/config';
 
-// Las reglas del juego (`constants.ts`) y las de infraestructura (`constantsInfra.ts`) se citan igual desde los documentos.
-const constantes = { ...constantesJuego, ...constantesInfra };
+// Las reglas del juego (`constants.ts`), las de infraestructura (`constantsInfra.ts`) y las congeladas de la generación del mundo (`worldgen/config.ts`)
+// se citan igual desde los documentos; sus nombres no chocan.
+const constantes = { ...constantesJuego, ...constantesInfra, ...configMundo };
 
 const BLOQUE = /<!-- parametros:([A-Za-z0-9_]+) -->\r?\n```json\r?\n[\s\S]*?\r?\n```\r?\n<!-- \/parametros -->/g;
 

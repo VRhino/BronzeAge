@@ -3,7 +3,7 @@
 ## 1. Alcance y fuentes
 
 Cubre cómo se **mueve, come, se junta y se separa** una columna en el mapa del mundo: salir, marchar, perseguir, repostar, formar ejércitos, enganchar caravanas, entrar en plazas y campamentos, y volver a casa. El **combate** que ocurre cuando dos
-columnas, una caravana, un campamento o una plaza se encuentran está en [`Combate.md`](Combate.md) (pendiente); aquí solo se dice dónde empieza.
+columnas, una caravana, un campamento o una plaza se encuentran está en [`Combate.md`](Combate.md); aquí solo se dice dónde empieza.
 
 - **Módulos:** `src/engine/ejercitos.ts` (≈1.900 líneas: casi todo), `movimiento.ts` (avance sobre una polilínea), `persecucion.ts` (seguir a la presa), `formacion.ts` (formar y deshacer), `viveres.ts`, `liderazgo.ts`, `tropas.ts` (`avanzarRacion`), `src/world/rutas.ts` (A* sobre el grafo de navegación).
 - **Verificado contra:** `05e4dcb` (2026-10-10).
@@ -78,7 +78,7 @@ progreso'   = min(1, (recorrido + avance) / longitud)
 posicion'   = punto de la polilínea a progreso' × longitud
 ```
 - `costeEnPunto` (mapa) es el coste del terreno **en el punto donde está al empezar el tick**, no a lo largo del paso: es una aproximación deliberada (un paso largo cruza terreno que no ve).
-- Llano = 1, y sube con colinas, montañas, bosque (disco, `1 + bosquePorDensidad × densidad`)… (`COSTE_MOVIMIENTO`, `worldgen/config.ts`). Sobre la red de caminos el coste se multiplica por `factorCamino` (0,5).
+- Llano = 1, y sube con colinas, montañas, bosque (disco, `1 + bosquePorDensidad × densidad`)… (`COSTE_MOVIMIENTO`, `worldgen/config.ts`). Sobre la red de caminos el coste se multiplica por `COSTE_MOVIMIENTO.factorCamino` (bloque y grafo de navegación en [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §7.1).
 - Una ruta de un solo punto o vacía no se mueve.
 
 ### 4.3 La ruta (`calcularRuta`, A\* sobre el grafo de navegación)
