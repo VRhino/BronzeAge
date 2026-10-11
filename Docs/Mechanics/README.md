@@ -56,6 +56,7 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 | [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) | ✅ 2026-10-11 | rejilla de lo explorado, ojos y alcance, memoria de la Facción, exploración sin bandera, visión compartida, regla de cada cosa en la proyección, Miradas e Informes |
 | [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) | ✅ 2026-10-11 | logros del servidor y sus contadores, Eras, aparición por hito, adopción, campamentos de mercenarios, Aedas itinerantes (revelar y vender), residentes y épicas, crónica |
 | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) | ✅ 2026-10-11 | precio de referencia y comisiones, trueque (propuesta, reparto automático, entrega, vencimiento), flota de caravanas (cupos, carros, animales, escolta, lanzamiento y programación, aparcada), viaje, rutas (grafo, A*, peajes, red de caminos), mercado de plaza (órdenes y mostrador), mercado de mercenarios, ruinas |
+| [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) | ✅ 2026-10-11 | Facción (crear, entrar, salir, cargos, nivel, reputación, capital, sigilo), residencia y puerta, alianza/vasallaje/guerra/paz/rebelión/tributo, Liga y Gran Rey, anexión y fusión (traslado), derrota, títulos |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 
-Pendientes, por orden de riesgo si se perdieran: diplomacia y Facciones · generación del mundo.
+Pendiente, por orden de riesgo si se perdiera: generación del mundo.
