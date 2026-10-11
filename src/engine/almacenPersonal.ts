@@ -2,7 +2,7 @@
 // recurso. Se llena y se vacía con el carro de su columna, que es donde lleva lo que gana (botín, compras): nunca toca el almacén de
 // una plaza, así que no abre un agujero en la economía de la Facción.
 //
-// **Vive donde el héroe reside** (2026-10-11): nada se mueve de él a otro espacio por arte de magia. Solo se toca desde la propia residencia o con
+// **Vive donde el héroe reside** (2026-10-11): nada se mueve de él a otro espacio por arte de magia (solo viaja con el héroe al cambiar de base). Solo se toca desde la propia residencia o con
 // el carro propio del héroe en su base, es decir, con su columna a la puerta de la plaza o del campamento donde reside.
 import type { Asentamiento, CampamentoMercenarios, Ejercito, Heroe } from '../domain/types';
 import { ALMACEN_PERSONAL } from '../constants';
