@@ -55,6 +55,7 @@ Igual, con estas diferencias: se puede salir **sin tropas** (el viajero solo es 
 ### 3.3 `salirDelCampamento` (de un campamento de mercenarios)
 - El **no residente** retoma la columna con la que entró (aparcada a la puerta); sin ella, error.
 - El **residente** elige tropa de su campamento y carga del **almacén personal** (no del de una plaza): cada recurso pedido debe estar y caber en lo que queda del carro (que puede traer un resto de cuando entró).
+- **El almacén personal vive donde se reside** (2026-10-11): `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` exigen ser el Líder de la columna **y** tenerla a la puerta de la propia residencia (`enSuBase`: la plaza donde es residente o el campamento donde reside, a ≤ `MOVIMIENTO.radioPuerta`); en campo abierto o a la puerta de otro sitio se rechazan. Entrar en el propio campamento vuelca el carro al almacén (§10), y salir de él carga desde el almacén. Comprar, reclutar y aportar al fondo con el almacén personal solo se hace en el campamento donde se reside.
 - **Ración gratis** (`MERCENARIOS.racion.cadaMinutos`): si pasó ese plazo desde `racionEn` (o nunca la tuvo), sale con los víveres al tope (`capacidadViveresPorHeroe`) y `racionEn = ahora`. No se acumula.
 - Con `politicaDeUnion ≠ 'rechazar'` sale como ejército (y con ruta si se le dio rumbo); si no, columna personal quieta.
 
@@ -99,7 +100,7 @@ posicion'   = punto de la polilínea a progreso' × longitud
 
 ### 6.1 Los víveres (`engine/viveres.ts`)
 - Tope por héroe: `LOGISTICA.capacidadViveresPorHeroe` (350, derivado del radio operativo: ida y vuelta a un cuarto del mapa = 50 min a velocidad 20). **En un ejército se suman.** Van siempre con el héroe, dentro o fuera.
-- Se llenan **solo** (a) al salir, de la plaza (`llenarViveres`), (b) al repostar (§8), (c) con la ración del campamento de mercenarios (§3.3), (d) desde el carro con `pasarAViveres` (solo el Líder; mueve `min(pedido, trigo del carro, hueco)`; nunca al revés).
+- Se llenan **solo** (a) al salir, de la plaza (`llenarViveres`), (b) al repostar (§8), (c) con la ración del campamento de mercenarios (§3.3) o con `repostarEnCampamento` (gratis, cualquier héroe en un campamento —dentro o con la columna a la puerta—, hasta el tope; no gasta el stock del mercado y no pasa por el carro), (d) desde el carro con `pasarAViveres` (solo el Líder; mueve `min(pedido, trigo del carro, hueco)`; nunca al revés).
 - `sacarTrigoDe(plaza, consumoTropas, espacio)`: suelta `min(espacio, trigo − reservaDeTrigo)`. La **reserva** es lo que comen la población y la guarnición durante `RESERVA_CONSTRUCCION.horizonteMinutosComida`; sacar una columna cuesta stock real pero **no puede dejar la ciudad en hambruna**: si no llega, se sale con menos.
 - `descontarViveres` descuenta **a prorrata de lo que lleva cada héroe** (comer del montón común no vacía primero los de uno); por eso separarse se lleva su parte sin reparto.
 

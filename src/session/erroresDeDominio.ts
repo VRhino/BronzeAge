@@ -28,6 +28,7 @@ import { RecintoInvalidoError } from '../engine/muralla';
 import { MovilizacionInvalidaError } from '../engine/ejercitos';
 import { PuertaInvalidaError } from '../engine/pertenencia';
 import { HeroeInvalidoError } from '../engine/heroe';
+import { ViveresInvalidosError } from '../engine/viveres';
 import { BatallaInvalidaError, BatallaYaAsignadaError } from './batallas';
 import { CODIGOS_ERROR, type CodigoError } from './comandos/codigosDeError';
 
@@ -55,6 +56,7 @@ const CODIGOS_DE_ERROR = new Map<Function, CodigoError>([
   [FundacionInvalidaError, CODIGOS_ERROR.fundacionInvalida],
   [FusionInvalidaError, CODIGOS_ERROR.fusionInvalida],
   [HeroeInvalidoError, CODIGOS_ERROR.heroeInvalido],
+  [ViveresInvalidosError, CODIGOS_ERROR.heroeInvalido],
   [OrdenInvalidaError, CODIGOS_ERROR.mercadoOrdenInvalida],
   [PoliticaInvalidaError, CODIGOS_ERROR.politicaInvalida],
   [PuertaInvalidaError, CODIGOS_ERROR.puertaInvalida],

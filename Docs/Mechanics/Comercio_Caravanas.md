@@ -651,7 +651,7 @@ Un campamento nace con `stockInicial` de cada bien en venta y, **sobre eso**, su
 El héroe tiene que estar **en el campamento** (dentro, o con su columna en la puerta: `MOVIMIENTO.radioPuerta`). Cantidades **enteras**: pedir menos de 1, o pedir oro, se rechaza.
 
 - **Reside en él** ⇒ compra cualquier bien en venta; lo comprado va a su **almacén personal**; con **cupo diario** por héroe en `cupoDiario` (madera y piedra; el día es `floor(instante / 86 400 000)`).
-- **No reside** ⇒ compra **cualquier bien en venta desde la puerta** (cobre, estaño, trigo para repostar, madera… decidido el 2026-10-11), al mismo precio, **pagando con el oro de su carro** y llevándoselo **al carro de su
+- **No reside** ⇒ compra **cualquier bien en venta desde la puerta, salvo el trigo** (cobre, estaño, madera… decidido el 2026-10-11; el trigo se reposta gratis a víveres con `repostarEnCampamento` y nunca va al carro: pedirlo es un error), al mismo precio, **pagando con el oro de su carro** y llevándoselo **al carro de su
   columna** (hace falta la columna); **sin cupo diario**, pero compite por el mismo stock. No toca su almacén personal ni su oro de botín.
 
 **Residente:**
@@ -678,6 +678,10 @@ mientras  coste(cantidad) > oroCarro : cantidad−−
 si cantidad ≤ 0 → error (sin stock / sin oro en el carro / carro lleno)
 carro.oro −= coste(cantidad) ; carro[recurso] += cantidad ; stock −= cantidad          ; el oro cobrado se destruye
 ```
+
+### 9.2b Repostar gratis (`repostarEnCampamento`)
+
+Cualquier héroe, residente o no, en un campamento (dentro, o con su columna a la puerta) llena sus **víveres** hasta `LOGISTICA.capacidadViveresPorHeroe`, **gratis** y **sin gastar el stock** del mercado; falla si ya los tiene llenos. El trigo no pasa por el carro ni por el almacén personal.
 
 ### 9.3 Cómo se repone
 
@@ -715,7 +719,7 @@ La red de caminos se poda sola al faltar un extremo (§7.4).
 | `prepararCaravana`, `asignarEscolta`, `quitarEscolta` | el actor es el `heroeId` del comando **y** reside en el origen |
 | `moverCargaCaravanaAparcada`, `enviarCaravanaAlOrigen` | el actor es el `heroeId`; residente del **origen** de la caravana y **presente** en la plaza que la hospeda |
 | `comerciarEnPlaza` | el actor es el `heroeId`; el motor exige columna propia en la puerta |
-| `comprarEnCampamento` | cualquier héroe; el motor exige estar en el campamento |
+| `comprarEnCampamento`, `repostarEnCampamento` | cualquier héroe; el motor exige estar en el campamento |
 
 Un id inexistente se deja pasar a propósito para que el comando devuelva el error específico, no un «sin permiso».
 

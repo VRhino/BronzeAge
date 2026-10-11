@@ -159,6 +159,7 @@ export const ESQUEMAS_PARAMS: Record<TipoComando, EsquemaJson> = {
   retirarDeRefundacion: objeto({ recurso: RECURSO, cantidad: NUMERO, lado: { type: 'string', enum: ['almacen', 'carro'] } }, ['recurso', 'cantidad', 'lado']),
   comprarCaravanaDeRefundacion: objeto({}, []),
   fundar: objeto({}, []),
+  repostarEnCampamento: objeto({ campamentoId: IDENTIFICADOR }, []),
   comprarEnCampamento: objeto({ recurso: RECURSO, cantidad: NUMERO, campamentoId: IDENTIFICADOR }, ['recurso', 'cantidad']),
   pedirPrestamo: objeto({ tropaIds: LISTA_DE_IDENTIFICADORES }, ['tropaIds']),
   reponerPrestamo: objeto({}, []),

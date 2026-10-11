@@ -139,7 +139,8 @@ describe('comprarEnCampamento', () => {
       expect(r.columna!.suministro).toEqual({ oro: 500 - r.oro, cobre: 20 });
       expect(r.campamento.mercado['cobre']).toBe(80);
       expect(r.heroe, 'su almacén personal ni se toca ni paga').toEqual(heroe({ oro: 999 }));
-      expect(compra(forastero(), heroe({ oro: 0 }), 'trigo', 5, columna({ oro: 50 })).columna!.suministro['trigo']).toBe(5);
+      // El trigo nunca va al carro: se reposta gratis a los víveres (`repostarEnCampamento`).
+      expect(() => compra(forastero(), heroe({ oro: 0 }), 'trigo', 5, columna({ oro: 50 }))).toThrow(MercenariosInvalidoError);
     });
 
     it('sin cupo diario: compra más madera que el tope del residente, y cuantas veces quiera', () => {

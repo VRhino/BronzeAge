@@ -70,6 +70,16 @@ export function huecoDeColumna(heroes: readonly Heroe[], heroeIds: readonly stri
   return heroeIds.reduce((suma, id) => suma + huecoEnViveres(heroes.find((h) => h.id === id)), 0);
 }
 
+/**
+ * Repostar en un campamento de mercenarios (Doc 1.9b, 2026-10-11): **gratis y para todos**, residentes o no, directo a los **víveres**, hasta el
+ * tope por héroe. Nunca al carro y sin gastar el stock del mercado. Falla si ya los tiene llenos.
+ */
+export function repostarViveresGratis(heroe: Heroe): { heroe: Heroe; cargado: number } {
+  const cargado = huecoEnViveres(heroe);
+  if (cargado <= 0) throw new ViveresInvalidosError('Los víveres están llenos.');
+  return { heroe: { ...heroe, viveres: LOGISTICA.capacidadViveresPorHeroe }, cargado };
+}
+
 /** Del carro de su columna a sus víveres: lo que cabe. Nunca al revés —los víveres no son carga—. El carro es común, así que solo lo
  * toca el Líder, como el almacén personal. */
 export function pasarAViveres(heroe: Heroe, ejercito: Ejercito, cantidad: number): { heroe: Heroe; ejercito: Ejercito; movido: number } {

@@ -117,40 +117,60 @@ describe('salirDeCampamentos', () => {
 
 describe('almacén personal', () => {
   const heroe = heroeDePrueba('h1', { tipo: 'columna', ejercitoId: 'e1' });
+  // Su residencia: un campamento en (0, 0), donde están todas las columnas de prueba de abajo.
+  const EN_CASA = { asentamientos: [], campamentos: [campamento('casa', 0, 0, ['h1', 'h2'])] };
 
   it('guarda del carro lo que cabe hasta el tope, y lo saca de vuelta hasta lo que cabe en el carro', () => {
     const e = columna('e1', 'h1', 0, 0, { madera: 300, oro: 50 });
-    const g = guardarEnAlmacenPersonal(heroe, e, 'madera', 200);
+    const g = guardarEnAlmacenPersonal(heroe, e, 'madera', 200, EN_CASA);
     expect(g.movido).toBe(200);
     expect(g.heroe.almacenPersonal).toEqual({ madera: 200 });
     expect(g.ejercito.suministro).toEqual({ madera: 100, oro: 50 });
 
-    const s = sacarDelAlmacenPersonal(g.heroe, g.ejercito, 'madera', 500, 170);
+    const s = sacarDelAlmacenPersonal(g.heroe, g.ejercito, 'madera', 500, 170, EN_CASA);
     expect(s.movido, 'el carro de 170 lleva ya 150: solo caben 20').toBe(20);
     expect(s.heroe.almacenPersonal).toEqual({ madera: 180 });
     expect(s.ejercito.suministro['madera']).toBe(120);
   });
 
+  it('solo se toca con la columna a la puerta de la residencia: en campo abierto o a la puerta de otro sitio, no', () => {
+    const lejos = columna('e1', 'h1', 500, 500, { madera: 100 });
+    expect(() => guardarEnAlmacenPersonal(heroe, lejos, 'madera', 10, EN_CASA)).toThrow(HeroeInvalidoError);
+    expect(() => sacarDelAlmacenPersonal({ ...heroe, almacenPersonal: { madera: 50 } }, lejos, 'madera', 10, 100, EN_CASA)).toThrow(HeroeInvalidoError);
+    // A la puerta de un campamento que no es su residencia, tampoco.
+    const ajeno = { asentamientos: [], campamentos: [campamento('otro', 500, 500, ['h1']), campamento('casa', 0, 0, ['h9'])] };
+    expect(() => guardarEnAlmacenPersonal(heroe, lejos, 'madera', 10, { ...ajeno, campamentos: [campamento('casa', 0, 0, ['h9'])] })).toThrow(HeroeInvalidoError);
+    // Sin residencia no hay almacén al que ir.
+    expect(() => guardarEnAlmacenPersonal(heroe, columna('e1', 'h1', 0, 0, { madera: 100 }), 'madera', 10, { asentamientos: [], campamentos: [] })).toThrow(HeroeInvalidoError);
+  });
+
+  it('si reside en una plaza, su base es la puerta de esa plaza', () => {
+    const casa = plaza('casa', 'f1', { posicion: { x: 0, y: 0 }, heroesFundadoresIds: ['h1'] });
+    const enPlaza = { asentamientos: [casa], campamentos: [] };
+    expect(guardarEnAlmacenPersonal(heroe, columna('e1', 'h1', 0, 0, { madera: 100 }), 'madera', 10, enPlaza).movido).toBe(10);
+    expect(() => guardarEnAlmacenPersonal(heroe, columna('e1', 'h1', 500, 500, { madera: 100 }), 'madera', 10, enPlaza)).toThrow(HeroeInvalidoError);
+  });
+
   it('el tope es en total, de cualquier recurso', () => {
     const lleno = { ...heroe, almacenPersonal: { piedra: ALMACEN_PERSONAL.capacidad - 10 } };
-    const g = guardarEnAlmacenPersonal(lleno, columna('e1', 'h1', 0, 0, { oro: 100 }), 'oro', 100);
+    const g = guardarEnAlmacenPersonal(lleno, columna('e1', 'h1', 0, 0, { oro: 100 }), 'oro', 100, EN_CASA);
     expect(g.movido).toBe(10);
     expect(totalAlmacenPersonal(g.heroe)).toBe(ALMACEN_PERSONAL.capacidad);
-    expect(() => guardarEnAlmacenPersonal(g.heroe, columna('e1', 'h1', 0, 0, { oro: 100 }), 'oro', 1)).toThrow(HeroeInvalidoError);
+    expect(() => guardarEnAlmacenPersonal(g.heroe, columna('e1', 'h1', 0, 0, { oro: 100 }), 'oro', 1, EN_CASA)).toThrow(HeroeInvalidoError);
   });
 
   it('solo el Líder, con cantidades positivas y recursos que haya', () => {
     const e = columna('e1', 'h1', 0, 0, { madera: 10 });
-    expect(() => guardarEnAlmacenPersonal({ ...heroe, id: 'h2' }, e, 'madera', 5)).toThrow(HeroeInvalidoError);
-    expect(() => guardarEnAlmacenPersonal(heroe, e, 'madera', 0)).toThrow(HeroeInvalidoError);
-    expect(() => guardarEnAlmacenPersonal(heroe, e, 'piedra', 5)).toThrow(HeroeInvalidoError);
-    expect(() => sacarDelAlmacenPersonal(heroe, e, 'madera', 5, 100)).toThrow(HeroeInvalidoError); // no hay nada guardado
+    expect(() => guardarEnAlmacenPersonal({ ...heroe, id: 'h2' }, e, 'madera', 5, EN_CASA)).toThrow(HeroeInvalidoError);
+    expect(() => guardarEnAlmacenPersonal(heroe, e, 'madera', 0, EN_CASA)).toThrow(HeroeInvalidoError);
+    expect(() => guardarEnAlmacenPersonal(heroe, e, 'piedra', 5, EN_CASA)).toThrow(HeroeInvalidoError);
+    expect(() => sacarDelAlmacenPersonal(heroe, e, 'madera', 5, 100, EN_CASA)).toThrow(HeroeInvalidoError); // no hay nada guardado
   });
 
   it('un recurso que queda en cero desaparece del registro', () => {
     const e = columna('e1', 'h1', 0, 0, { madera: 10 });
-    const g = guardarEnAlmacenPersonal(heroe, e, 'madera', 10);
+    const g = guardarEnAlmacenPersonal(heroe, e, 'madera', 10, EN_CASA);
     expect(g.ejercito.suministro).toEqual({});
-    expect(sacarDelAlmacenPersonal(g.heroe, g.ejercito, 'madera', 10, 100).heroe.almacenPersonal).toEqual({});
+    expect(sacarDelAlmacenPersonal(g.heroe, g.ejercito, 'madera', 10, 100, EN_CASA).heroe.almacenPersonal).toEqual({});
   });
 });

@@ -24,6 +24,7 @@ import { evento } from './eventos';
 import { campamentoDeResidente } from '../../engine/mercenarios';
 import { capacidadCargaDe, columnaDe, enLaPuertaDelCampamento } from '../../engine/ejercitos';
 import { abrirAlijo as abrirAlijoEngine, buscaAlijos } from '../../engine/alijos';
+import { repostarViveresGratis } from '../../engine/viveres';
 
 /** ¿Está el héroe en ese campamento (D75)? Dentro, o con su columna en la puerta. */
 export function exigirEn(estado: GameSessionState, heroeId: string, campamento: CampamentoMercenarios): void {
@@ -102,7 +103,7 @@ export const reclutarEnCampamento = comando<ParamsReclutarEnCampamento, { cantid
 export interface ParamsComprarEnCampamento {
   recurso: string;
   cantidad: number;
-  /** Dónde compra: por defecto, donde reside. Cualquier otro campamento solo le vende trigo para repostar (D44). */
+  /** Dónde compra: por defecto, donde reside. En otro campamento compra de visita, con el oro de su carro (el trigo no se compra: se reposta gratis). */
   campamentoId?: string;
 }
 
@@ -142,6 +143,45 @@ export const comprarEnCampamento = comando<ParamsComprarEnCampamento, { cantidad
       }),
     ],
     { cantidad: r.cantidad, oro: r.oro }
+  );
+});
+
+export interface ParamsRepostarEnCampamento {
+  /** Dónde reposta: por defecto, el campamento donde está (dentro, o con su columna a la puerta). */
+  campamentoId?: string;
+}
+
+export interface PayloadRepostadoEnCampamento {
+  campamentoId: string;
+  heroeId: string;
+  cantidad: number;
+}
+
+/**
+ * Repostar víveres en un campamento de mercenarios (Doc 1.9b, 2026-10-11): **gratis y para cualquier héroe**, residente o no, estando en él (dentro o con
+ * la columna a su puerta). El trigo va **solo a los víveres**, nunca al carro, y no gasta el stock del mercado.
+ */
+export const repostarEnCampamento = comando<ParamsRepostarEnCampamento, { cargado: number }>((estado, _mapa, ctx, params) => {
+  const heroe = exigirJugador(estado, ctx.actor);
+  const columna = columnaDe(estado.ejercitos, heroe.id);
+  const campamento = params.campamentoId
+    ? estado.campamentosMercenarios.find((c) => c.id === params.campamentoId)
+    : estado.campamentosMercenarios.find(
+        (c) => (heroe.ubicacion.tipo === 'mercenarios' && heroe.ubicacion.campamentoId === c.id) || (columna !== undefined && enLaPuertaDelCampamento(columna, c))
+      );
+  if (!campamento) rechazar(params.campamentoId ? CODIGOS_ERROR.campamentoDesconocido : CODIGOS_ERROR.campamentoLejos);
+  exigirEn(estado, heroe.id, campamento);
+  const r = repostarViveresGratis(heroe);
+  return exito(
+    { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? r.heroe : h)) },
+    [
+      evento(ctx, {
+        codigo: 'mercenarios.repostado',
+        mensaje: `${heroe.displayName} reposta ${r.cargado.toFixed(0)} de trigo gratis en ${campamento.id}.`,
+        payload: { campamentoId: campamento.id, heroeId: heroe.id, cantidad: r.cargado } satisfies PayloadRepostadoEnCampamento,
+      }),
+    ],
+    { cargado: r.cargado }
   );
 });
 

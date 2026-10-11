@@ -1,11 +1,11 @@
 // Campamentos de mercenarios, paso 2 (Doc 2.5, 2026-10-02): residir en uno, no quedar huérfano, y el almacén personal.
 import { describe, expect, it } from 'vitest';
 import type { CampamentoMercenarios } from '../../domain/types';
-import { CIUDADANIA, MERCENARIOS, SIMULACION } from '../../constants';
+import { CIUDADANIA, LOGISTICA, MERCENARIOS, SIMULACION } from '../../constants';
 import { GameSession } from '../gameSession';
 import { cambiarResidencia, dejarResidencia, residirEnCampamento } from '../comandos/cargos';
 import { guardarEnAlmacenPersonal, sacarDelAlmacenPersonal } from '../comandos/heroe';
-import { comprarEnCampamento, reclutarEnCampamento } from '../comandos/mercenarios';
+import { comprarEnCampamento, reclutarEnCampamento, repostarEnCampamento } from '../comandos/mercenarios';
 import { exito } from '../comandos/tipos';
 import { aportarARefundacion, comprarCaravanaDeRefundacion } from '../comandos/mercenarios';
 import { costoRefundacion } from '../../engine/refundacion';
@@ -228,6 +228,36 @@ describe('comprarEnCampamento', () => {
     expect(r.ok).toBe(false);
     expect(r.codigoError).toBe('mercenarios.invalido');
     expect(sesion.getState()).toBe(antes);
+  });
+});
+
+describe('repostarEnCampamento (trigo gratis, solo a víveres)', () => {
+  const enElCampamento = (reside: boolean) => {
+    const base = conCampamentos();
+    if (reside) base.sesion.ejecutar(residirEnCampamento, { heroeId: base.fundador, campamentoId: 'merc-1' }, base.opc);
+    const payload = base.sesion.exportar();
+    const sesion = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, viveres: 100, ubicacion: { tipo: 'mercenarios' as const, campamentoId: 'merc-1' } } : h)) },
+    });
+    return { sesion, opc: base.opc, fundador: base.fundador };
+  };
+
+  it('el residente llena sus víveres gratis, sin gastar stock ni tocar su almacén', () => {
+    const { sesion, opc, fundador } = enElCampamento(true);
+    const antes = campamentoDe(sesion, 'merc-1').mercado['trigo'];
+    const r = sesion.ejecutar(repostarEnCampamento, {}, opc);
+    expect(r.ok).toBe(true);
+    const heroe = sesion.getState().heroes.find((h) => h.id === fundador)!;
+    expect(heroe.viveres).toBe(LOGISTICA.capacidadViveresPorHeroe);
+    expect(r.datos!.cargado).toBe(LOGISTICA.capacidadViveresPorHeroe - 100);
+    expect(campamentoDe(sesion, 'merc-1').mercado['trigo']).toBe(antes);
+  });
+
+  it('el que no reside también reposta gratis; y con los víveres llenos se rechaza', () => {
+    const { sesion, opc } = enElCampamento(false);
+    expect(sesion.ejecutar(repostarEnCampamento, {}, opc).ok).toBe(true);
+    expect(sesion.ejecutar(repostarEnCampamento, {}, opc).ok).toBe(false);
   });
 });
 

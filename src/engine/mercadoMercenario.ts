@@ -102,8 +102,8 @@ export function cupoRestanteHoy(heroe: Heroe, reside: boolean, recurso: string, 
  *
  * - **Quien reside en él** compra cualquier bien en venta, pagando con el oro de botín y el de su almacén personal, a su almacén personal,
  *   con cupo diario en madera y piedra (D41).
- * - **Cualquier otro héroe** compra **cualquier bien en venta desde la puerta** (decidido el 2026-10-11: cobre, estaño, el trigo para
- *   repostar y las demás materias primas), a precio normal, **pagando con el oro de su carro y llevándoselo al carro**, sin cupo diario.
+ * - **Cualquier otro héroe** compra **cualquier bien en venta desde la puerta** (decidido el 2026-10-11: cobre, estaño y las demás materias
+ *   primas, **menos el trigo**: ese se reposta gratis a los víveres y nunca va al carro), a precio normal, **pagando con el oro de su carro y llevándoselo al carro**, sin cupo diario.
  *   Compite por el mismo stock que el residente.
  */
 export function comprarEnCampamento(
@@ -122,6 +122,7 @@ export function comprarEnCampamento(
   if (recurso === 'oro') throw new MercenariosInvalidoError('El oro no se vende: es con lo que se paga.');
   const reside = campamento.residentesIds.includes(heroe.id);
   if (!reside && !columna) throw new MercenariosInvalidoError('Hace falta la columna a la puerta para comprar sin residir aquí.');
+  if (!reside && recurso === 'trigo') throw new MercenariosInvalidoError('El trigo no se compra para el carro: se reposta gratis a los víveres (`repostarEnCampamento`).');
   const precio = precioDeVenta(recurso, asentamientos);
   if (precio <= 0) throw new MercenariosInvalidoError('Ese bien no se vende en el campamento.');
   const coste = (n: number) => Math.ceil(n * precio);

@@ -87,7 +87,7 @@ export interface PayloadAlmacenPersonal {
 export const guardarEnAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
   const columna = exigirColumnaDe(estado, heroe.id);
-  const r = guardarEngine(heroe, columna, params.recurso, params.cantidad);
+  const r = guardarEngine(heroe, columna, params.recurso, params.cantidad, { asentamientos: estado.asentamientos, campamentos: estado.campamentosMercenarios });
   const siguiente: GameSessionState = {
     ...conHeroe(estado, r.heroe),
     ejercitos: estado.ejercitos.map((e) => (e.id === r.ejercito.id ? r.ejercito : e)),
@@ -109,7 +109,7 @@ export const guardarEnAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido:
 export const sacarDelAlmacenPersonal = comando<ParamsAlmacenPersonal, { movido: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
   const columna = exigirColumnaDe(estado, heroe.id);
-  const r = sacarEngine(heroe, columna, params.recurso, params.cantidad, capacidadCargaDe(columna, estado.caravanas, estado.asentamientos));
+  const r = sacarEngine(heroe, columna, params.recurso, params.cantidad, capacidadCargaDe(columna, estado.caravanas, estado.asentamientos), { asentamientos: estado.asentamientos, campamentos: estado.campamentosMercenarios });
   const siguiente: GameSessionState = {
     ...conHeroe(estado, r.heroe),
     ejercitos: estado.ejercitos.map((e) => (e.id === r.ejercito.id ? r.ejercito : e)),
