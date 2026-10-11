@@ -1321,7 +1321,7 @@ EstadoTecnologia                (GameSessionState.tecnologia)
 
 ## 22. Aedas (nuevo, 2026-10-05)
 
-Reglas en Doc 6.7; decisiones y desvíos en `Consideraciones/Aedas_Definicion.md`. Dos clases de NPC que dan acceso a la tecnología y
+Reglas en Doc 6.7; decisiones y desvíos en `Docs/Mechanics/Tecnologia_Aedas.md`. Dos clases de NPC que dan acceso a la tecnología y
 narran el lore. **No entran en una batalla**: no combaten ni se atacan, así que `BattleTicket` y `BattleResult` no cambian.
 
 ```text

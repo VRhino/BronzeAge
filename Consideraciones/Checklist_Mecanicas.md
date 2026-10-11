@@ -76,7 +76,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Cooldown compartido de creación de caravanas (Fundación y comercial) — `código: ✔` (`CARAVANA_COOLDOWN`)
 
 ## Tecnología
-- ✅ Vías de acceso: desarrollo propio y Aedas — `código: ✔` (Eras I-III, 2026-09-29; Aedas 2026-10-05, `engine/aedas.ts`, comando `comprarTecnologiaAeda`, `GET /cronica`; reglas en Doc 6.7, decisiones en `Consideraciones/Aedas_Definicion.md`). Faltan conquista y comercio (`Docs/Mecanicas a desarrollar.md` §20)
+- ✅ Vías de acceso: desarrollo propio y Aedas — `código: ✔` (Eras I-III, 2026-09-29; Aedas 2026-10-05, `engine/aedas.ts`, comando `comprarTecnologiaAeda`, `GET /cronica`; reglas en Doc 6.7, decisiones en `Docs/Mechanics/Tecnologia_Aedas.md`). Faltan conquista y comercio (`Docs/Mecanicas a desarrollar.md` §20)
 - ✅ Aedas itinerantes (difunden tras 24 h y venden por el doble de la tarifa), residentes con épica por capítulos, título Mecenas de los Aedas y crónica — `código: ✔`; cifras en `Docs/Mecanicas a balancear.md` §42
 - ✅ Narración de Aedas/Poetas al cambiar de manos un título de servidor — `código: ✔` (`engine/titulos.ts`)
 - 🔶 Árbol tecnológico del desarrollo propio: estructurado o libre/emergente — `código: ✘`

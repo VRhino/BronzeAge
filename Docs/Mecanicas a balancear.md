@@ -76,7 +76,7 @@ intercepciones sin que todas las caravanas sean visibles. Hecho el 2026-10-05.
 
 Las cifras de `AEDAS` (`constants.ts`) son placeholder, sin calibrar: retraso de conocimiento (24 h), itinerantes por Facción
 (1 por cada 3, mínimo 3), estancia (6 h), velocidad (20), precio de venta (2 × el oro de la tarifa), llegada de residentes (24 h), bonos de felicidad (5 %) y de nobleza (25 %) por residente, y las épicas: cantidades de cada capítulo (`EPICAS`), enfriamiento (6 h) y carga mínima de caravana. Medir con batch cuánto
-adelantan las adopciones (Era I: nivel 2 a 5,8 días) y si la venta hace irrelevante el hito, cuánto tardan las épicas en cumplirse con un solo residente (objetivo: más que el hito, menos que esperar a la Era siguiente) y si algún hecho se farmea. Plan: `Consideraciones/Aedas_Definicion.md`.
+adelantan las adopciones (Era I: nivel 2 a 5,8 días) y si la venta hace irrelevante el hito, cuánto tardan las épicas en cumplirse con un solo residente (objetivo: más que el hito, menos que esperar a la Era siguiente) y si algún hecho se farmea. Plan: `Docs/Mechanics/Tecnologia_Aedas.md`.
 
 ## 18. Taberna e intel: cifras
 
