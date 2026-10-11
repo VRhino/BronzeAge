@@ -1,15 +1,14 @@
 // La Caravana de Fundación (Doc 1.8): la única forma de fundar. La de un campamento de mercenarios y la de una plaza son la misma
 // entidad: nace SIN destino, parada en su origen, con un titular que la engancha a su columna y funda con `fundar` donde esté.
 // Sin titular que la lleve vuelve sola a su origen, y suelta caduca; al desarmarse o caducar devuelve lo que costó.
-import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion, Heroe, Point } from '../domain/types';
+import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion, Point } from '../domain/types';
 import type { EventoCrudo } from '../domain/eventos';
 import { minutos, sumar, type Instante } from '../domain/tiempo';
 import type { Mapa } from '../world/mapa';
 import { distancia } from '../world/geometria';
 import { calcularRuta } from '../world/rutas';
-import { ALMACEN_PERSONAL, CARAVANA_CATALOGO, EDIFICIO_CATALOGO, FUNDACION, MERCENARIOS, MOVIMIENTO } from '../constants';
+import { CARAVANA_CATALOGO, EDIFICIO_CATALOGO, FUNDACION, MERCENARIOS, MOVIMIENTO } from '../constants';
 import { agregarRecurso, descontarRecursos, tieneRecursos } from './almacen';
-import { totalAlmacenPersonal } from './almacenPersonal';
 import { avanzarPosicionEnRuta } from './movimiento';
 import { calcularCapFundacion, esCiudadano } from './faccion';
 import { fundarAsentamiento, FundacionInvalidaError } from './settlement';
@@ -108,15 +107,16 @@ export function lanzarCaravanaFundacion(
 /** Lo que cambia al devolver una Caravana de Fundación a quien la pagó. */
 export interface MundoDeDevolucion {
   asentamientos: Asentamiento[];
-  heroes: Heroe[];
+  /** Sus fondos de refundación reciben lo que costó la caravana comprada en ellos. */
+  campamentos: CampamentoMercenarios[];
 }
 
 /**
- * Devuelve lo que costó la caravana (D14, D34, D43, D68): la de un campamento, a cada aportante según su registro (`devolverAportes`); la
+ * Devuelve lo que costó la caravana (D14, D34, D43, D68): la de un campamento, **al fondo de ese campamento**, a nombre de cada aportante según su registro (`devolverAportes`); la
  * de una plaza, íntegra al almacén de su origen, hasta donde quepa. Si el origen ya no existe, se pierde.
  */
 export function devolverCaravana(caravana: Caravana, mundo: MundoDeDevolucion, facciones: readonly Faccion[]): MundoDeDevolucion {
-  if (caravana.origenCampamentoId) return { ...mundo, heroes: devolverAportes(caravana, mundo.heroes, facciones) };
+  if (caravana.origenCampamentoId) return { ...mundo, campamentos: devolverAportes(caravana, mundo.campamentos, facciones) };
   return {
     ...mundo,
     asentamientos: mundo.asentamientos.map((a) => {
@@ -176,28 +176,23 @@ export function fundarConCaravana(
 }
 
 /**
- * Devuelve lo que costó la caravana a cada aportante, según su registro (D14, D34, D43, D68): a su almacén personal hasta donde quepa, el
- * oro como oro de botín. Lo que no se pueda recibir —no cabe, o el aportante ya no es ciudadano de esa Facción— se pierde.
+ * Devuelve lo que costó la caravana de un campamento **al fondo de refundación de ese campamento**, a nombre de cada aportante según su registro
+ * (D14, D34, D43, D68; 2026-10-11): nada llega a nadie por arte de magia, cada uno lo retira allí en persona (`retirarDeRefundacion`). Lo
+ * de quien ya no es ciudadano de esa Facción se pierde.
  */
-export function devolverAportes(caravana: Caravana, heroes: readonly Heroe[], facciones: readonly Faccion[]): Heroe[] {
+export function devolverAportes(caravana: Caravana, campamentos: readonly CampamentoMercenarios[], facciones: readonly Faccion[]): CampamentoMercenarios[] {
   const faccion = facciones.find((f) => f.id === caravana.faccionId);
   const aportes = caravana.aportes ?? {};
-  return heroes.map((h) => {
-    const suyo = aportes[h.id];
-    if (!suyo || !faccion || !esCiudadano(faccion, h.id)) return h;
-    let libre = ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(h);
-    const almacenPersonal = { ...h.almacenPersonal };
-    let oroDeBotin = h.oroDeBotin ?? 0;
-    for (const [recurso, n] of Object.entries(suyo)) {
-      if (recurso === 'oro') {
-        oroDeBotin += n;
-        continue;
-      }
-      const cabe = Math.max(0, Math.min(n, libre));
-      if (cabe > 0) almacenPersonal[recurso] = (almacenPersonal[recurso] ?? 0) + cabe;
-      libre -= cabe;
+  return campamentos.map((c) => {
+    if (c.id !== caravana.origenCampamentoId || !faccion) return c;
+    const fondos = { ...c.fondos };
+    for (const [heroeId, suyo] of Object.entries(aportes)) {
+      if (!esCiudadano(faccion, heroeId)) continue;
+      const actual = { ...fondos[heroeId] };
+      for (const [recurso, n] of Object.entries(suyo)) actual[recurso] = (actual[recurso] ?? 0) + n;
+      fondos[heroeId] = actual;
     }
-    return { ...h, almacenPersonal, oroDeBotin };
+    return { ...c, fondos };
   });
 }
 
@@ -218,11 +213,10 @@ export function avanzarCaravanasDeFundacion<E extends Ejercito>(
   ejercitos: readonly E[],
   mundo: MundoDeDevolucion,
   facciones: readonly Faccion[],
-  campamentos: readonly CampamentoMercenarios[],
   mapa: Mapa,
   instante: Instante
-): { caravanas: Caravana[]; ejercitos: E[]; asentamientos: Asentamiento[]; heroes: Heroe[]; eventos: EventoCrudo[] } {
-  if (!caravanas.some((c) => c.titularId)) return { caravanas: [...caravanas], ejercitos: [...ejercitos], asentamientos: mundo.asentamientos, heroes: mundo.heroes, eventos: [] };
+): { caravanas: Caravana[]; ejercitos: E[]; asentamientos: Asentamiento[]; campamentos: CampamentoMercenarios[]; eventos: EventoCrudo[] } {
+  if (!caravanas.some((c) => c.titularId)) return { caravanas: [...caravanas], ejercitos: [...ejercitos], asentamientos: mundo.asentamientos, campamentos: mundo.campamentos, eventos: [] };
   const eventos: EventoCrudo[] = [];
   let ejercitosTras = [...ejercitos];
   let tras: MundoDeDevolucion = mundo;
@@ -242,7 +236,7 @@ export function avanzarCaravanasDeFundacion<E extends Ejercito>(
       restantes.push(c);
       continue;
     }
-    const origen = c.origenCampamentoId ? campamentos.find((m) => m.id === c.origenCampamentoId) : tras.asentamientos.find((a) => a.id === c.origenAsentamientoId);
+    const origen = c.origenCampamentoId ? tras.campamentos.find((m) => m.id === c.origenCampamentoId) : tras.asentamientos.find((a) => a.id === c.origenAsentamientoId);
     if (c.estado === 'adjunta') {
       const columna = ejercitosTras.find((e) => e.caravanasAdjuntasIds.includes(c.id));
       const faccion = facciones.find((f) => f.id === c.faccionId);
@@ -277,5 +271,5 @@ export function avanzarCaravanasDeFundacion<E extends Ejercito>(
     }
     restantes.push(c);
   }
-  return { caravanas: restantes, ejercitos: ejercitosTras, asentamientos: tras.asentamientos, heroes: tras.heroes, eventos };
+  return { caravanas: restantes, ejercitos: ejercitosTras, asentamientos: tras.asentamientos, campamentos: tras.campamentos, eventos };
 }

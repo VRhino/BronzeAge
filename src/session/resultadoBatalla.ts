@@ -246,17 +246,20 @@ function capturarCaravana(estado: GameSessionState, b: Batalla, caravanaId: stri
   );
 }
 
-/** El campamento cae (Doc 1.9): oro para cada héroe del bando atacante (D22, D26, D27), y se agenda su reaparición. */
+/** El campamento cae (Doc 1.9): oro para cada héroe del bando atacante (D22, D26), que sube al carro de su columna, y se agenda su reaparición. */
 function destruirCampamento(estado: GameSessionState, b: Batalla, campamentoId: string, ahora: Instante): GameSessionState {
   const campamento = estado.campamentosBandidos.find((c) => c.id === campamentoId);
   if (!campamento) return estado;
   const heroeIds = participacionesDe(b).filter((p) => p.lado === 'atacante').map((p) => p.participante.heroeId);
-  return {
+  const botin = botinDeBandidos(estado.heroes, heroeIds, campamento.nivel, ahora);
+  const oroGanado = Object.values(botin.oro).reduce((a, b) => a + b, 0);
+  const tras: GameSessionState = {
     ...estado,
-    heroes: botinDeBandidos(estado.heroes, heroeIds, campamento.nivel, ahora).heroes,
+    heroes: botin.heroes,
     campamentosBandidos: estado.campamentosBandidos.filter((c) => c.id !== campamentoId),
     asentamientos: agendarReaparicionBandidos(estado.asentamientos, campamento, ahora),
   };
+  return oroGanado > 0 ? alCarroDe(tras, b, 'atacante', { oro: oroGanado }) : tras;
 }
 
 /** Asedio que gana el atacante (Doc 5.15.5): la plaza pasa a su Facción con el saqueo de siempre (Doc 5.12.9), y quien

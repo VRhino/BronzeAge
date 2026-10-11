@@ -190,7 +190,7 @@ precio  = ceil( oroBase + oroPorUnidad × distancia mínima del centro a mis ojo
 ```
 
 - Resultado: la lista de Miradas del servidor **sin las ya enfriadas** más la nueva. **No avisa a nadie** y **no deja memoria**: mientras `expiraEn > ahora` suma a «lo visible ahora» de la Facción y de sus aliados.
-- Cupo: taberna de plaza → `cupoMiradas` del nivel interno (1/2/3); taberna de campamento → `INTEL.campamento.cupoMiradas` por Facción y campamento. La compra la hace el Rey, el Embajador o el Gobernador **presente** en la plaza (se paga del almacén de esa plaza) o cualquier héroe con Facción presente en el campamento (se paga con su oro de botín).
+- Cupo: taberna de plaza → `cupoMiradas` del nivel interno (1/2/3); taberna de campamento → `INTEL.campamento.cupoMiradas` por Facción y campamento. La compra la hace el Rey, el Embajador o el Gobernador **presente** en la plaza (se paga del almacén de esa plaza) o cualquier héroe con Facción presente en el campamento (se paga con su oro del almacén personal del residente o del carro del visitante).
 
 ### 6.2 Informe de plaza (`comprarInformePlaza`)
 

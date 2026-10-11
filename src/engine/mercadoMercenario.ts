@@ -100,7 +100,7 @@ export function cupoRestanteHoy(heroe: Heroe, reside: boolean, recurso: string, 
  * Comprar en el mercado de un campamento (Doc 1.9b). Sirve lo que puede en vez de fallar cuando se pide de más —el tope sale del stock,
  * del cupo del día, del oro y del sitio donde va—, pero falla si no puede servir nada. El oro cobrado se destruye. Unidades enteras.
  *
- * - **Quien reside en él** compra cualquier bien en venta, pagando con el oro de botín y el de su almacén personal, a su almacén personal,
+ * - **Quien reside en él** compra cualquier bien en venta, pagando con el oro de su almacén personal, a su almacén personal,
  *   con cupo diario en madera y piedra (D41).
  * - **Cualquier otro héroe** compra **cualquier bien en venta desde la puerta** (decidido el 2026-10-11: cobre, estaño y las demás materias
  *   primas, **menos el trigo**: ese se reposta gratis a los víveres y nunca va al carro), a precio normal, **pagando con el oro de su carro y llevándoselo al carro**, sin cupo diario.
@@ -148,10 +148,9 @@ export function comprarEnCampamento(
   }
 
   const cupo = cupoRestanteHoy(heroe, reside, recurso, instante);
-  // Se paga primero con el oro de botín (D27: el mercado del campamento es uno de sus dos destinos), luego con el del almacén.
-  const botin = heroe.oroDeBotin ?? 0;
-  const guardadoOro = botin + (heroe.almacenPersonal?.['oro'] ?? 0);
-  const delAlmacen = (n: number) => Math.max(0, coste(n) - botin);
+  // Paga con el oro de su almacén personal, que está aquí (es su residencia).
+  const guardadoOro = heroe.almacenPersonal?.['oro'] ?? 0;
+  const delAlmacen = coste;
   // Sitio: en el almacén cada unidad ocupa 1 y libera lo que cuesta en oro.
   const libre = ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(heroe);
   let cantidad = Math.min(Math.floor(cantidadPedida), stock, cupo, Math.floor(guardadoOro / precio));
@@ -172,7 +171,7 @@ export function comprarEnCampamento(
   const cupoCampamento = recurso in MERCENARIOS.mercado.cupoDiario ? { dia, comprado: { ...comprado, [recurso]: (comprado[recurso] ?? 0) + cantidad } } : heroe.cupoCampamento;
   return {
     campamento: conStockMenos(cantidad),
-    heroe: { ...heroe, almacenPersonal, oroDeBotin: Math.max(0, botin - oro), ...(cupoCampamento ? { cupoCampamento } : {}) },
+    heroe: { ...heroe, almacenPersonal, ...(cupoCampamento ? { cupoCampamento } : {}) },
     columna,
     cantidad,
     oro,

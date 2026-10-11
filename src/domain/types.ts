@@ -435,9 +435,6 @@ export interface Heroe {
    * y con la ración del campamento; no se roba. Ausente = 0.
    */
   viveres?: number;
-  /** Oro de botín de bandidos y alijos (D22, D27, D61): solo se gasta en el mercado de un campamento o en el fondo de refundación,
-   * nunca en la economía de una plaza. Va aparte del almacén personal y no ocupa sitio en él. */
-  oroDeBotin?: number;
   /** Cuándo destruyó cada campamento de bandidos de las últimas 24 h: los rendimientos decrecientes (D26) se cuentan con esto. */
   bandidosDestruidosEn?: Instante[];
   /** Los alijos que ya abrió (D60): cada héroe abre cada uno una vez. */

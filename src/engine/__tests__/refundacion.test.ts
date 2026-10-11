@@ -61,10 +61,9 @@ describe('fondo de refundación (D39)', () => {
     expect(a.campamento.fondos).toEqual({ h1: { madera: 30 } });
   });
 
-  it('el oro retirado vuelve como oro de botín (D27)', () => {
+  it('el oro retirado vuelve como cualquier recurso: al almacén personal (si reside allí)', () => {
     const r = retirarDeRefundacion(campamento({ fondos: { h1: { oro: 20 } } }), heroe('h1', {}), undefined, 'oro', 20, 'almacen');
-    expect(r.heroe.oroDeBotin).toBe(20);
-    expect(r.heroe.almacenPersonal).toEqual({});
+    expect(r.heroe.almacenPersonal).toEqual({ oro: 20 });
   });
 
   it('el fondo de la Facción suma a sus ciudadanos y no a otros', () => {

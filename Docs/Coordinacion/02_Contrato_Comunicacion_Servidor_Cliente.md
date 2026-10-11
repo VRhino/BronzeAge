@@ -325,7 +325,7 @@ combate.resuelto                 (asedios y encuentros en campo)
              atacante: LadoDelInforme, defensor: LadoDelInforme }
 combate.campamento_destruido / combate.ataque_campamento_fallido      (columna contra bandidos)
   payload: { atacanteId, campamentoId, nivelCampamento, poderCampamento, atacante: LadoDelInforme,
-             oroPorHeroe?: { heroeId: oro }      (si cae: el oro de botín que gana cada héroe, 2026-10-07)
+             oroPorHeroe?: { heroeId: oro }      (si cae: el oro que gana cada héroe y que sube al carro, 2026-10-07)
              carroPerdido?: { recurso: n } }     (si aguanta: lo que la columna pierde de su carro, 2026-10-07)
 ```
 
@@ -388,7 +388,7 @@ Todos van por `POST .../comandos` como el resto. «En el campamento» = dentro (
 columna a la puerta (`MOVIMIENTO.radioPuerta`).
 
 Estando dentro, la proyección trae `mercadoCampamento: { precios, cupoRestante }` (2026-10-07): el precio de UNA unidad de cada bien que te
-venden (el coste de n es `ceil(n × precio)`; se paga primero con el oro de botín y luego con el oro del almacén personal) y lo que te queda
+venden (el coste de n es `ceil(n × precio)`; el residente paga con el oro de su almacén personal; quien no reside, con el oro de su carro) y lo que te queda
 hoy del cupo diario (D41; sin entrada = sin cupo). Es para enseñar el total antes de comprar: quien cobra es `comprarEnCampamento`, que
 devuelve `{ cantidad, oro }` con lo que sirvió de verdad.
 
@@ -400,11 +400,11 @@ devuelve `{ cantidad, oro }` con lo que sirvió de verdad.
 | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `recurso`, `cantidad` | `{ movido }` | Entre el carro de su columna y su almacén personal. Solo con la columna **a la puerta de su residencia** (el almacén vive donde se reside) |
 | `pasarAViveres` | `cantidad` | `{ movido }` | Del carro de su columna a sus víveres (`HeroeDto.viveres`), lo que quepa; nunca al revés. Solo el Líder. Evento `heroe.viveres` (2026-10-08) |
 | `repostarEnCampamento` | `campamentoId?` | `{ cargado }` | Llena los víveres del héroe hasta el tope, **gratis y para cualquiera** (residente o no), estando en el campamento (dentro o con la columna a la puerta). Nunca al carro. Evento `mercenarios.repostado` (2026-10-11) |
-| `comprarEnCampamento` | `recurso`, `cantidad`, `campamentoId?` | `{ cantidad, oro }` | Paga primero con `oroDeBotin`. Quien no reside ahí compra cualquier bien en venta (salvo el trigo, que se reposta gratis a víveres) desde la puerta, paga con el oro de su carro y lo recibe en el carro, sin cupo. Cupo diario en madera y piedra (solo residentes) |
+| `comprarEnCampamento` | `recurso`, `cantidad`, `campamentoId?` | `{ cantidad, oro }` | El residente paga con su almacén personal. Quien no reside ahí compra cualquier bien en venta (salvo el trigo, que se reposta gratis a víveres) desde la puerta, paga con el oro de su carro y lo recibe en el carro, sin cupo. Cupo diario en madera y piedra (solo residentes) |
 | `reclutarEnCampamento` | `tropaId`, `pagarCon?` | `{ cantidad, oro }` | Solo el residente |
 | `pedirPrestamo` | `tropaIds[]` (de 1 a 3 tropas de leva comunal) | `{ escuadronIds }` | Gratis; una escuadra completa por tropa (`EscuadronDto.prestada`) |
 | `reponerPrestamo` | — | `{ repuestas }` | Gratis |
-| `abrirAlijo` | `alijoId` | `{ oro }` | Estando en el sitio; el oro va a `oroDeBotin`. La proyección trae los `alijos` a la vista |
+| `abrirAlijo` | `alijoId` | `{ oro }` | Estando en el sitio; el oro sube al carro de la columna. La proyección trae los `alijos` a la vista |
 | `aportarARefundacion` / `retirarDeRefundacion` | `recurso`, `cantidad`, `lado` (`almacen` \| `carro`) | `{ movido }` | Fondo de su Facción sin asentamientos en ese campamento |
 
 **Proyección** (2026-10-05): `campamentosMercenarios` trae los que la Facción conoce (`CampamentoMercenarios`, doc 01 §10) y, **estando
@@ -417,7 +417,7 @@ no cambie `layoutVersion`, y el fixture `fixtures/escenaCampamento.json` cambia 
 | `responderSolicitud` | `faccionId`, `heroeId`, `aceptar` | — | Solo el Rey |
 
 `comprarCasa` y `unirseAFaccion` ya no existen. En la proyección: `campamentosMercenarios` (los conocidos, con `mercado`
-y `fondos`), `alijos` y, del héroe propio, `almacenPersonal`, `oroDeBotin`, `cupoCampamento`, `racionEn` y `alijosAbiertos`.
+y `fondos`), `alijos` y, del héroe propio, `almacenPersonal`, `cupoCampamento`, `racionEn` y `alijosAbiertos`.
 **`GET /jugador/partidas`** (2026-10-08, pantalla «Partidas» tras el login; cualquier sesión). Devuelve `{ partidas: [...] }` ordenadas por `gameId`, una por
 partida abierta en el proceso: `{ gameId, estado: 'activa', membresia: { jugadorId } | null, heroe: { id, nombre, nivel, faccion: { id, nombre, emblemaId,
 colorEmblemaId, sigilo } | null } | null }` (`sigilo` = el `Sigilo` completo de esa Facción, el mismo que `facciones[].sigilo`; solo la del propio usuario). `membresia` es `null` si no es jugador de esa partida (una revocada o terminada también); `heroe` es `null` sin membresía
@@ -507,7 +507,7 @@ Por `POST .../comandos` como el resto. `origen` es la taberna donde se compra: `
 
 | Comando | Parámetros | Devuelve (`resultado.datos`) | Notas |
 |---|---|---|---|
-| `comprarMirada` | `origen`, `centro: {x, y}` | `MiradaIntel` | Un ojo sobre cualquier punto del mapa (radio y duración en `tarifasIntel`). Plaza: Rey, Embajador o Gobernador, presente en ella; paga su almacén. Campamento: cualquier héroe **con Facción**, dentro o a la puerta; paga su `oroDeBotin`. Rechazos (`intel.invalida`): sin taberna, sin oro, cupo de Miradas lleno, zona enfriándose, centro fuera del mapa |
+| `comprarMirada` | `origen`, `centro: {x, y}` | `MiradaIntel` | Un ojo sobre cualquier punto del mapa (radio y duración en `tarifasIntel`). Plaza: Rey, Embajador o Gobernador, presente en ella; paga su almacén. Campamento: cualquier héroe **con Facción**, dentro o a la puerta; paga con el oro de su almacén personal (residente) o del carro (de visita). Rechazos (`intel.invalida`): sin taberna, sin oro, cupo de Miradas lleno, zona enfriándose, centro fuera del mapa |
 | `comprarInformePlaza` | `origen`, `asentamientoId` | `InformePlaza` | De una plaza ajena que la Facción conoce (ficha en su memoria o dentro de una Mirada abierta). Rechazos (`intel.invalida`): plaza propia o desconocida, informe reciente (cooldown), sin oro. **Avisa, sin firma, a la Facción espiada** (`asentamiento.informe_pedido`) |
 
 **Proyección**: `miradasIntel[]` (las de la Facción, abiertas o enfriándose: dibujar el círculo con cuenta atrás hasta `expiraEn` y la zona vedada hasta

@@ -258,7 +258,7 @@ async function salirAFundar(ctx: ContextoBot, casa: CampamentoMercenarios, carav
 
 /**
  * El fondo de su Facción en este campamento (D39): si ya alcanza, compra la caravana; si no, pone lo que falta de lo que tiene,
- * comprando en el mercado con su oro de botín lo que no tenga, y el oro al final. Devuelve si compró la caravana.
+ * comprando en el mercado con el oro de su almacén personal lo que no tenga, y el oro al final. Devuelve si compró la caravana.
  */
 async function aportarYComprar(ctx: ContextoBot, casa: CampamentoMercenarios, faccion: Faccion): Promise<boolean> {
   const heroe = ctx.vista.heroe!;
@@ -271,9 +271,9 @@ async function aportarYComprar(ctx: ContextoBot, casa: CampamentoMercenarios, fa
   for (const recurso of ORDEN_DEL_FONDO) {
     const pide = falta(recurso);
     if (pide === 0) continue;
-    // El oro de botín paga primero los materiales en el mercado; al fondo, el que sobre cuando ya estén.
+    // El oro del almacén paga primero los materiales en el mercado; al fondo, el que sobre cuando ya estén.
     if (recurso === 'oro' && ORDEN_DEL_FONDO.some((r) => r !== 'oro' && falta(r) > 0)) break;
-    let tiene = recurso === 'oro' ? (heroe.oroDeBotin ?? 0) : (heroe.almacenPersonal?.[recurso] ?? 0);
+    let tiene = heroe.almacenPersonal?.[recurso] ?? 0;
     if (recurso !== 'oro' && tiene < pide) {
       const compra = await ctx.intentar(`comprar:${recurso}`, 'comprarEnCampamento', { recurso, cantidad: pide - tiene }, 60 * 60_000);
       tiene += compra?.ok && compra.datos ? compra.datos.cantidad : 0;

@@ -2,6 +2,7 @@
 // Son POR HÉROE: cada uno abre cada alijo una sola vez y no reaparecen, así que nadie le quita uno a otro y quien llega tarde
 // encuentra lo mismo que el primero. Solo los ven y los abren los héroes de Facciones sin asentamiento, y su oro va al oro de botín.
 import type { Alijo, Asentamiento, CampamentoMercenarios, Ejercito, Faccion, Heroe, Point } from '../domain/types';
+import { cargarBotin } from './ejercitos';
 import { ALIJOS, MOVIMIENTO, VISION } from '../constants';
 import type { Mapa } from '../world/mapa';
 import { createRng } from '../worldgen';
@@ -53,10 +54,17 @@ export function alijosALaVista(alijos: readonly Alijo[], heroe: Heroe, columna: 
   return alijos.filter((a) => !abiertos.has(a.id) && distancia(a.posicion, columna.posicionActual) <= VISION.jugadorSolo);
 }
 
-/** Abrir un alijo estando en el sitio (D62): su oro, al oro de botín del héroe, y queda abierto para él. */
-export function abrirAlijo(alijo: Alijo, heroe: Heroe, columna: Ejercito | undefined, puedeBuscar: boolean): Heroe {
+/** Abrir un alijo estando en el sitio (D62): su oro sube **al carro** de su columna (lo que no cabe se pierde), y el alijo queda abierto para él. */
+export function abrirAlijo(
+  alijo: Alijo,
+  heroe: Heroe,
+  columna: Ejercito | undefined,
+  puedeBuscar: boolean,
+  /** `capacidadCargaDe(columna, caravanas, asentamientos)`. */
+  capacidadCarga: number
+): { heroe: Heroe; columna: Ejercito } {
   if (!puedeBuscar) throw new AlijoInvalidoError('Los alijos solo los abre quien es de una Facción sin asentamiento.');
   if (heroe.alijosAbiertos?.includes(alijo.id)) throw new AlijoInvalidoError('Ese alijo ya lo abriste.');
   if (!columna || distancia(columna.posicionActual, alijo.posicion) > MOVIMIENTO.radioPuerta) throw new AlijoInvalidoError('Hay que estar en el sitio.');
-  return { ...heroe, oroDeBotin: (heroe.oroDeBotin ?? 0) + alijo.oro, alijosAbiertos: [...(heroe.alijosAbiertos ?? []), alijo.id] };
+  return { heroe: { ...heroe, alijosAbiertos: [...(heroe.alijosAbiertos ?? []), alijo.id] }, columna: cargarBotin(columna, { oro: alijo.oro }, capacidadCarga) };
 }

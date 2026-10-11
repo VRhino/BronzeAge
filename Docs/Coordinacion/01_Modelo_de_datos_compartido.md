@@ -527,7 +527,7 @@ CampamentoBandido
 Alijo                      alijo de exploración (2026-10-04, D60-D63); en el estado, `alijos[]`, colocados al crear la partida
   id
   posicion: Point
-  oro: number             lo que da a cada héroe que lo abre, a su oro de botín
+  oro: number             lo que da a cada héroe que lo abre, al carro de su columna
 
 CampamentoMercenarios      enclave neutral (Doc 1.9b) — NUEVO 2026-10-02; en el estado, `campamentosMercenarios[]`
   id
@@ -649,8 +649,7 @@ Heroe
                          (D40b). Ausente = conectado.
   escuadrones: Escuadron[]   TODAS sus escuadras, estén donde estén (§13) — nuevo
   almacenPersonal?: Record<recurso, number>   lo que guarda para sí, hasta 1000 en total; viaja con él — NUEVO 2026-10-02
-  oroDeBotin?: number     oro de bandidos y alijos (2026-10-04, D27): solo se gasta en el mercado de un campamento o en
-                         el fondo de refundación; no ocupa sitio en el almacén
+  oroDeBotin?: number     OBSOLETO (2026-10-11): ya no existe; el oro de bandidos y alijos sube al carro de la columna
   bandidosDestruidosEn?: Instante[]   los de las últimas 24 h, para los rendimientos decrecientes (D26)
   alijosAbiertos?: string[]   los alijos de exploración que ya abrió: cada uno, una vez por héroe (D60)
   cupoCampamento?: { dia, comprado }   lo comprado hoy en el mercado de su campamento (cupo diario, D41)
@@ -1407,7 +1406,7 @@ TarifasIntel                    (ProyeccionJugador.tarifasIntel = INTEL, para co
 
 - **Edificio**: `EdificioTipo 'taberna'` (§3). `cupoMiradas` por nivel interno: 1 / 2 / 3. Una por asentamiento; nivel 2 de asentamiento.
 - **Precio**: Mirada = `ceil(oroBase + oroPorUnidad × distancia)` a los ojos propios más cercanos (plazas y columnas de la Facción y la taberna);
-  Informe = `oroPorNivel × nivel` de la plaza mirada. Paga el almacén de la plaza (taberna de plaza) o el `oroDeBotin` del héroe (campamento).
+  Informe = `oroPorNivel × nivel` de la plaza mirada. Paga el almacén de la plaza (taberna de plaza) o el oro del almacén personal del residente / del carro del visitante (campamento).
 - **Visibilidad**: la Mirada y el Informe son de la Facción compradora (`miradasIntel` e `informesPlaza` solo traen los suyos). Lo que una
   Mirada deja ver se proyecta en las listas de siempre (`asentamientosAvistados`, `ejercitosAvistados`, `caravanasAvistadas`,
   `campamentosBandidos`, `exploracion.visibles`), también a los aliados mientras dura la alianza. **No se graba en la memoria ni en lo explorado.**

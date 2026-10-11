@@ -93,7 +93,7 @@ describe('atacar un campamento de bandidos con la columna (Doc 1.9)', () => {
     expect(correr()).toEqual(a);
   });
 
-  it('si cae, su botín es oro de botín para el héroe (D22, D27) y se agenda su reaparición', () => {
+  it('si cae, su botín es oro que sube al carro de la columna (D22) y se agenda su reaparición', () => {
     const { sesion, fundador, columnaId } = columnaFrenteACampamento(1);
 
     expect(atacarElCampamento(sesion, fundador).ok).toBe(true);
@@ -101,7 +101,7 @@ describe('atacar un campamento de bandidos con la columna (Doc 1.9)', () => {
     const estado = sesion.getState();
     expect(estado.campamentosBandidos).toEqual([]);
     expect(estado.asentamientos.some((a) => a.bandidosReaparecenEn !== undefined), 'su plaza agenda la reaparición').toBe(true);
-    expect(estado.heroes.find((h) => h.id === fundador)!.oroDeBotin, 'el oro del nivel 1').toBe(CAMPAMENTOS_BANDIDOS.niveles[1].oroPorHeroe);
+    expect(estado.ejercitos.find((e) => e.id === columnaId)!.suministro['oro'], 'el oro del nivel 1, en el carro').toBe(CAMPAMENTOS_BANDIDOS.niveles[1].oroPorHeroe);
     expect(estado.ejercitos.find((e) => e.id === columnaId)!.suministro['madera'] ?? 0, 'nada al carro').toBe(0);
   });
 

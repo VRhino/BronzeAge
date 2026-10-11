@@ -16,6 +16,7 @@ import { CODIGOS_ERROR } from './codigosDeError';
 import { comando, conAsentamiento, exigirAsentamiento, exigirJugador, rechazar } from './ayudas';
 import { evento } from './eventos';
 import { exigirEn } from './mercenarios';
+import { columnaDe } from '../../engine/ejercitos';
 
 /** Dónde se compra: la taberna de una plaza propia o la de un campamento de mercenarios. */
 export type OrigenDeIntel = { tipo: 'asentamiento'; id: string } | { tipo: 'campamento'; id: string };
@@ -68,10 +69,21 @@ function resolverCompra(estado: GameSessionState, actor: string, origen: OrigenD
     posicion: campamento.posicion,
     faccion,
     cupo: INTEL.campamento.cupoMiradas,
+    // Quien reside aquí paga del oro de su almacén personal; de visita, del oro del carro de su columna (2026-10-11).
     cobrar: (e, precio) => {
-      const botin = heroe.oroDeBotin ?? 0;
-      if (botin < precio) throw new IntelInvalidaError(`No tienes los ${precio} de oro que cuesta (tienes ${botin}).`);
-      return { ...e, heroes: e.heroes.map((h: Heroe) => (h.id === heroe.id ? { ...h, oroDeBotin: botin - precio } : h)) };
+      if (campamento.residentesIds.includes(heroe.id)) {
+        const oro = heroe.almacenPersonal?.['oro'] ?? 0;
+        if (oro < precio) throw new IntelInvalidaError(`No tienes los ${precio} de oro que cuesta en tu almacén personal (tienes ${oro}).`);
+        const resto: Record<string, number> = { ...heroe.almacenPersonal, oro: oro - precio };
+        if (resto['oro'] === 0) delete resto['oro'];
+        return { ...e, heroes: e.heroes.map((h: Heroe) => (h.id === heroe.id ? { ...h, almacenPersonal: resto } : h)) };
+      }
+      const columna = columnaDe(e.ejercitos, heroe.id);
+      const oro = columna?.suministro['oro'] ?? 0;
+      if (!columna || oro < precio) throw new IntelInvalidaError(`No tienes los ${precio} de oro que cuesta en el carro de tu columna (tienes ${oro}).`);
+      const suministro: Record<string, number> = { ...columna.suministro, oro: oro - precio };
+      if (suministro['oro'] === 0) delete suministro['oro'];
+      return { ...e, ejercitos: e.ejercitos.map((x) => (x.id === columna.id ? { ...x, suministro } : x)) };
     },
   };
 }

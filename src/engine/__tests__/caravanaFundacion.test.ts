@@ -2,7 +2,7 @@
 // parada en su origen con un titular; sin nadie que la lleve vuelve sola, suelta caduca, y al desarmarse o caducar devuelve lo que costó.
 // Y funda donde esté su columna (`fundarConCaravana`): nunca encima de un campamento de mercenarios (D16).
 import { describe, expect, it } from 'vitest';
-import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion, Heroe } from '../../domain/types';
+import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion } from '../../domain/types';
 import { CARAVANA_COOLDOWN, FUNDACION, MERCENARIOS, MOVIMIENTO } from '../../constants';
 import {
   avanzarCaravanasDeFundacion,
@@ -15,7 +15,7 @@ import {
 } from '../expansion';
 import { FundacionInvalidaError } from '../settlement';
 import { comprarCaravanaDeRefundacion, costoRefundacion } from '../refundacion';
-import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, heroeDePrueba, instanteDeTest, posicionRecomendable } from './fixtures';
+import { crearFacciones, crearMapaDeterminista, fundarAsentamientoDeTest, instanteDeTest, posicionRecomendable } from './fixtures';
 
 const mapa = crearMapaDeterminista(1);
 
@@ -33,7 +33,6 @@ function contextoDePlaza() {
   return { plaza, faccion, titularId: faccion.ciudadanosIds[0]! };
 }
 
-const heroe = (id: string, extra: Partial<Heroe> = {}): Heroe => heroeDePrueba(id, { tipo: 'asentamiento', asentamientoId: 'x' }, extra);
 
 describe('lanzar la Caravana de Fundación desde una plaza', () => {
   it('nace sin destino, parada en la plaza, con su titular, su Facción y su caducidad; cobra el coste y arranca el cooldown', () => {
@@ -86,22 +85,21 @@ describe('desarmar a mano', () => {
     const p = plaza();
     const c = suelta(p);
     const sinCoste = { ...p, almacen: { ...p.almacen, madera: { cantidad: 0, capacidad: 5000 } } };
-    const r = desarmarCaravanaFundacion(c, p.posicion, { asentamientos: [sinCoste], heroes: [] }, [faccion]);
+    const r = desarmarCaravanaFundacion(c, p.posicion, { asentamientos: [sinCoste], campamentos: [] }, [faccion]);
     expect(r.asentamientos[0]!.almacen['madera']!.cantidad).toBe(costoCaravanaFundacion()['madera']);
   });
 
-  it('la de un campamento devuelve a cada aportante lo suyo', () => {
+  it('la de un campamento devuelve lo suyo al fondo de ese campamento, a nombre de cada aportante', () => {
     const f = { ...faccion, id: 'f', ciudadanosIds: ['h1'], nivel: 1 };
     const campamento = { id: 'merc-1', posicion: { x: 400, y: 400 }, residentesIds: ['h1'], fondos: { h1: costoRefundacion() } } as unknown as CampamentoMercenarios;
     const c = comprarCaravanaDeRefundacion(campamento, f, [], [], 'h1', instanteDeTest(0)).caravana;
-    const r = desarmarCaravanaFundacion(c, campamento.posicion, { asentamientos: [], heroes: [heroe('h1')] }, [f]);
-    expect(r.heroes[0]!.oroDeBotin).toBe(costoRefundacion()['oro']);
-    expect(r.heroes[0]!.almacenPersonal?.['madera']).toBe(costoRefundacion()['madera']);
+    const r = desarmarCaravanaFundacion(c, campamento.posicion, { asentamientos: [], campamentos: [{ ...campamento, fondos: {} }] }, [f]);
+    expect(r.campamentos[0]!.fondos['h1']).toEqual(costoRefundacion());
   });
 
   it('solo suelta y en la puerta de su origen: ni enganchada, ni lejos (sería teletransportar el coste)', () => {
     const p = plaza();
-    const mundo = { asentamientos: [p], heroes: [] };
+    const mundo = { asentamientos: [p], campamentos: [] };
     expect(() => desarmarCaravanaFundacion(suelta(p, { estado: 'adjunta' }), p.posicion, mundo, [faccion])).toThrow(ExpansionInvalidaError);
     const lejos = { x: p.posicion.x + MOVIMIENTO.radioPuerta + 1, y: p.posicion.y };
     expect(() => desarmarCaravanaFundacion(suelta(p, { posicionActual: lejos }), p.posicion, mundo, [faccion])).toThrow(ExpansionInvalidaError);
@@ -131,7 +129,7 @@ describe('la caravana con el tiempo (D13, D14, D40, D43, D68), de plaza y de cam
         titularId: 'h1',
         caducaEn: instanteDeTest(FUNDACION.caducidadCaravanaHoras * 60),
       }),
-      devuelto: (r: { asentamientos: Asentamiento[]; heroes: Heroe[] }) => r.asentamientos[0]!.almacen['madera']!.cantidad,
+      devuelto: (r: { asentamientos: Asentamiento[]; campamentos: CampamentoMercenarios[] }) => r.asentamientos[0]!.almacen['madera']!.cantidad,
       esperado: 70,
     },
     {
@@ -139,16 +137,17 @@ describe('la caravana con el tiempo (D13, D14, D40, D43, D68), de plaza y de cam
       plaza: undefined,
       caravana: (): Caravana =>
         comprarCaravanaDeRefundacion({ ...campamentos[0]!, fondos: { h1: { ...costo } } }, f, [], [], 'h1', instanteDeTest(0)).caravana,
-      devuelto: (r: { asentamientos: Asentamiento[]; heroes: Heroe[] }) => r.heroes[0]!.oroDeBotin ?? 0,
+      devuelto: (r: { asentamientos: Asentamiento[]; campamentos: CampamentoMercenarios[] }) => r.campamentos[0]!.fondos['h1']?.['oro'] ?? 0,
       esperado: costo['oro']!,
     },
   ];
 
   for (const o of origenes) {
     describe(o.nombre, () => {
-      const mundo = () => ({ asentamientos: o.plaza ? [o.plaza] : [], heroes: [heroe('h1')] });
-      const tick = (cs: Caravana[], ejercitos: Ejercito[], m: { asentamientos: Asentamiento[]; heroes: Heroe[] }, t: number) =>
-        avanzarCaravanasDeFundacion(cs, ejercitos, m, [f], campamentos, mapa, instanteDeTest(t));
+      // El campamento arranca con el fondo vacío: lo devuelto vuelve a él.
+      const mundo = () => ({ asentamientos: o.plaza ? [o.plaza] : [], campamentos });
+      const tick = (cs: Caravana[], ejercitos: Ejercito[], m: { asentamientos: Asentamiento[]; campamentos: CampamentoMercenarios[] }, t: number) =>
+        avanzarCaravanasDeFundacion(cs, ejercitos, m, [f], mapa, instanteDeTest(t));
 
       it('suelta y sin nadie, caduca y devuelve', () => {
         const c = o.caravana();
@@ -167,11 +166,11 @@ describe('la caravana con el tiempo (D13, D14, D40, D43, D68), de plaza y de cam
         expect(r.ejercitos[0]!.caravanasAdjuntasIds).toEqual([]);
 
         let cs = r.caravanas;
-        let m = { asentamientos: r.asentamientos, heroes: r.heroes };
+        let m = { asentamientos: r.asentamientos, campamentos: r.campamentos };
         for (let t = 2; t < 500 && cs.length > 0; t++) {
           const paso = tick(cs, [], m, t);
           cs = paso.caravanas;
-          m = { asentamientos: paso.asentamientos, heroes: paso.heroes };
+          m = { asentamientos: paso.asentamientos, campamentos: paso.campamentos };
         }
         expect(cs, 'llegó y se desarmó').toEqual([]);
         expect(o.devuelto(m)).toBe(o.esperado);
@@ -189,17 +188,16 @@ describe('la caravana con el tiempo (D13, D14, D40, D43, D68), de plaza y de cam
     });
   }
 
-  it('devolver a los aportantes: lo suyo, el oro como botín; quien ya no es ciudadano lo pierde', () => {
+  it('devolver a los aportantes: lo suyo, al fondo del campamento; quien ya no es ciudadano lo pierde', () => {
     const c = { ...origenes[1]!.caravana(), aportes: { h1: { madera: 10, oro: 5 }, ajeno: { madera: 7 } } };
-    const [h1, ajeno] = devolverAportes(c, [heroe('h1'), heroe('ajeno')], [f]);
-    expect(h1!.almacenPersonal).toEqual({ madera: 10 });
-    expect(h1!.oroDeBotin).toBe(5);
-    expect(ajeno!.almacenPersonal ?? {}).toEqual({});
+    const [camp] = devolverAportes(c, [{ ...campamentos[0]!, fondos: { h1: { madera: 1 } } }], [f]);
+    expect(camp!.fondos['h1']).toEqual({ madera: 11, oro: 5 });
+    expect(camp!.fondos['ajeno']).toBeUndefined();
   });
 
   it('si su plaza de origen ya no existe, al caducar se pierde en vez de devolver', () => {
     const c = origenes[0]!.caravana();
-    const r = avanzarCaravanasDeFundacion([c], [], { asentamientos: [], heroes: [] }, [f], [], mapa, instanteDeTest(FUNDACION.caducidadCaravanaHoras * 60));
+    const r = avanzarCaravanasDeFundacion([c], [], { asentamientos: [], campamentos: [] }, [f], mapa, instanteDeTest(FUNDACION.caducidadCaravanaHoras * 60));
     expect(r.caravanas).toEqual([]);
     expect(r.eventos.map((e) => (typeof e === 'string' ? e : e.codigo))).toEqual(['fundacion.caravana_perdida']);
   });
@@ -207,7 +205,7 @@ describe('la caravana con el tiempo (D13, D14, D40, D43, D68), de plaza y de cam
   it('sin origen en pie, la que vuelve sola se pierde', () => {
     const c = { ...origenes[0]!.caravana(), estado: 'adjunta' as const, caducaEn: undefined };
     const sinTitular = { id: 'col', participantes: [], caravanasAdjuntasIds: [c.id], posicionActual: c.posicionActual } as unknown as Ejercito;
-    const r = avanzarCaravanasDeFundacion([c], [sinTitular], { asentamientos: [], heroes: [] }, [f], [], mapa, instanteDeTest(1));
+    const r = avanzarCaravanasDeFundacion([c], [sinTitular], { asentamientos: [], campamentos: [] }, [f], mapa, instanteDeTest(1));
     expect(r.caravanas).toEqual([]);
     expect(r.eventos.map((e) => (typeof e === 'string' ? e : e.codigo))).toEqual(['fundacion.caravana_perdida']);
   });

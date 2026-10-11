@@ -173,7 +173,7 @@ describe('autorización', () => {
 describe('taberna de un campamento de mercenarios', () => {
   const campamento = { id: 'merc-1', posicion: { x: 900, y: 900 }, origen: 0, edificios: [...MERCENARIOS.edificiosFijos, 'barracon'], residentesIds: [], poblacion: 100, poblacionEn: 0, mercado: {}, fondos: {}, creadoEn: 0 } as unknown as CampamentoMercenarios;
 
-  /** El fundador dentro del campamento, con oro de botín; sin taberna en la plaza: aquí compra cualquier héroe de una Facción. */
+  /** El fundador residiendo dentro del campamento, con oro en su almacén personal; sin taberna en la plaza: aquí compra cualquier héroe de una Facción. */
   function enElCampamento(oro: number) {
     const base = conTaberna({ taberna: false });
     const payload = base.sesion.exportar();
@@ -181,15 +181,15 @@ describe('taberna de un campamento de mercenarios', () => {
       ...payload,
       state: {
         ...payload.state,
-        campamentosMercenarios: [campamento],
-        heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, oroDeBotin: oro, ubicacion: { tipo: 'mercenarios' as const, campamentoId: 'merc-1' } } : h)),
+        campamentosMercenarios: [{ ...campamento, residentesIds: [base.fundador] }],
+        heroes: payload.state.heroes.map((h) => (h.id === base.fundador ? { ...h, almacenPersonal: { oro }, ubicacion: { tipo: 'mercenarios' as const, campamentoId: 'merc-1' } } : h)),
       },
     });
     return { ...base, sesion, origen: { tipo: 'campamento' as const, id: 'merc-1' } };
   }
-  const botin = (sesion: GameSession, heroeId: string) => sesion.getState().heroes.find((h) => h.id === heroeId)!.oroDeBotin ?? 0;
+  const botin = (sesion: GameSession, heroeId: string) => sesion.getState().heroes.find((h) => h.id === heroeId)!.almacenPersonal?.['oro'] ?? 0;
 
-  it('compra con el oro de botín del héroe y la Mirada es de su Facción, con un cupo fijo', () => {
+  it('compra con el oro del almacén personal del residente y la Mirada es de su Facción, con un cupo fijo', () => {
     const { sesion, opc, origen, fundador, faccionId } = enElCampamento(500);
 
     const r = sesion.ejecutar(comprarMirada, { origen, centro: RIVAL_EN }, opc);
@@ -200,7 +200,7 @@ describe('taberna de un campamento de mercenarios', () => {
     expect(sesion.ejecutar(comprarMirada, { origen, centro: { x: 200, y: 1700 } }, opc).codigoError).toBe('intel.invalida');
   });
 
-  it('rechazo: sin oro de botín, y fuera del campamento', () => {
+  it('rechazo: sin oro en el almacén, y fuera del campamento', () => {
     const pobre = enElCampamento(1);
     expect(pobre.sesion.ejecutar(comprarMirada, { origen: pobre.origen, centro: RIVAL_EN }, pobre.opc).codigoError).toBe('intel.invalida');
 

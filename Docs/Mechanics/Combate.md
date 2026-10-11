@@ -117,7 +117,7 @@ Consecuencias que aplica `asediarPlaza`:
 - Interceptar no da experiencia de Facción.
 
 ### 7.2 Atacar un campamento de bandidos (`atacarCampamento` → `atacarCampamentoConColumna`)
-- La columna debe llevar soldados; compara `poder × jitter` con el `poder` fijo del campamento (**una** tirada). Gana → bajas 5 %, el campamento cae (su botín de oro por héroe lo reparte el comando con `botinDeBandidos`); pierde → bajas 25 %, héroes heridos y se pierde la mitad del carro (nadie se la queda).
+- La columna debe llevar soldados; compara `poder × jitter` con el `poder` fijo del campamento (**una** tirada). Gana → bajas 5 %, el campamento cae (su botín de oro por héroe, `botinDeBandidos`, lo carga el comando en el carro de la columna: lo que no cabe se pierde); pierde → bajas 25 %, héroes heridos y se pierde la mitad del carro (nadie se la queda).
 - XP de Facción: `NIVEL_FACCION.xp.bandidos / nivel de Facción` por campamento destruido (0 desde `nivelSinXpBandidos`), **sin exigir combate digno**.
 
 ## 8. Conquista: lo que le pasa a la plaza (`aplicarConquista`)

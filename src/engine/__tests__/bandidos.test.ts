@@ -141,10 +141,11 @@ describe('el botín de bandidos', () => {
     return botinDeBandidos([heroe], ['h1'], nivel, t(60)).oro['h1'];
   };
 
-  it('oro del nivel por héroe, a su oro de botín, para cada héroe de la columna', () => {
+  it('oro del nivel por héroe de la columna (lo carga quien llama en el carro), y se anota cuándo destruyó cada uno', () => {
     const heroes = ['h1', 'h2'].map((id) => heroeDePrueba(id, { tipo: 'columna', ejercitoId: 'c' }));
     const r = botinDeBandidos(heroes, ['h1', 'h2'], 2, t(0));
-    expect(r.heroes.map((h) => h.oroDeBotin)).toEqual([CAMPAMENTOS_BANDIDOS.niveles[2].oroPorHeroe, CAMPAMENTOS_BANDIDOS.niveles[2].oroPorHeroe]);
+    expect(r.oro).toEqual({ h1: CAMPAMENTOS_BANDIDOS.niveles[2].oroPorHeroe, h2: CAMPAMENTOS_BANDIDOS.niveles[2].oroPorHeroe });
+    expect(r.heroes.map((h) => h.bandidosDestruidosEn)).toEqual([[t(0)], [t(0)]]);
     expect(r.heroes[0]!.almacenPersonal?.['oro'], 'no al almacén').toBeUndefined();
   });
 

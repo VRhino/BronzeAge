@@ -1489,7 +1489,6 @@ function renderDetalleCampamento(c: NonNullable<GameState['campamentosMercenario
       faccion ? htmlNombreConSigilo(faccion, 16) : '—',
       ubicacionDe(state, h),
       tropa.length ? `${tropa.length} (${num(tropa.reduce((t, e) => t + e.cantidad, 0))} uds.)` : '—',
-      num(h?.oroDeBotin ?? 0),
       h?.racionEn !== undefined ? fmtTiempoMundo(h.racionEn) : '—',
     ];
   });
@@ -1541,7 +1540,7 @@ function renderDetalleCampamento(c: NonNullable<GameState['campamentosMercenario
       ) + seccion('Edificios', `<div class="chip-row">${edificios.map(([e, n]) => `<span class="chip">${EDIFICIO_CAMPAMENTO_NOMBRE[e] ?? e}${n > 1 ? ` ×${n}` : ''}</span>`).join('')}</div>`),
     residentes: seccion(
       `Residentes (${c.residentesIds.length})`,
-      tabla(['Héroe', 'Facción', 'Ahora', 'Tropa en casa', 'Oro de botín', 'Última ración'], residentes, 'Nadie reside aquí.')
+      tabla(['Héroe', 'Facción', 'Ahora', 'Tropa en casa', 'Última ración'], residentes, 'Nadie reside aquí.')
     ),
     mercado:
       seccion('Mercado (en venta)', tabla(['Bien', 'Unidades'], mercado, 'El mercado está vacío.')) +
@@ -1665,7 +1664,7 @@ function renderDetalleJugador(heroeId: string, state: GameState): string {
     ? `<div class="log-panel">${historial.map((e) => `<div>[${fmtTiempoMundo(e.momento)}] ${e.mensaje}</div>`).join('')}</div>`
     : '<p class="legend-note">Sin actividad registrada todavía.</p>';
 
-  // Almacén personal (Doc 2.5): lo que el héroe lleva consigo; el oro de botín va aparte y no ocupa sitio.
+  // Almacén personal (Doc 2.5): lo que el héroe guarda en su residencia.
   const almacen = Object.entries(heroe?.almacenPersonal ?? {}).filter(([, n]) => n > 0);
   const ocupado = almacen.reduce((t, [, n]) => t + n, 0);
   const pctAlmacen = Math.min(100, Math.round((ocupado / ALMACEN_PERSONAL.capacidad) * 100));
@@ -1680,8 +1679,7 @@ function renderDetalleJugador(heroeId: string, state: GameState): string {
       <div class="mantenimiento-bar"><div class="mantenimiento-fill" style="width:${pctAlmacen}%"></div></div>
       ${almacen.length ? tablaRecursos(almacen) : '<p class="legend-note">Almacén vacío.</p>'}
     </div>
-    <div class="detail-section"><h3>Botín y otros</h3><div class="kv-grid">
-      <div class="kv-row"><span>Oro de botín</span><span>${Math.round(heroe?.oroDeBotin ?? 0).toLocaleString('es-ES')}</span></div>
+    <div class="detail-section"><h3>Otros</h3><div class="kv-grid">
       <div class="kv-row"><span>Última ración gratis</span><span>${heroe?.racionEn !== undefined ? fmtTiempoMundo(heroe.racionEn) : '—'}</span></div>
       <div class="kv-row"><span>Alijos abiertos</span><span>${heroe?.alijosAbiertos?.length ?? 0}</span></div>
     </div></div>

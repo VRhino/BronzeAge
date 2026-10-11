@@ -385,7 +385,7 @@ Sobre los campamentos ya implementados (pasos 0-7 del plan de campamentos). Cód
   tardío, a una al azar) y, sin respuesta en 2 h, crean la suya. El Rey bot acepta toda solicitud.
 - **Su Facción ya tiene plaza** (tardío aceptado, o compañero que fundó sin él): sale, `cambiarResidencia` y marcha a ella.
 - **Economía del campamento**: pide la leva prestada (solo los lanceros: con las tres comería el triple) y la repone; con el
-  oro de botín compra lo que falta del coste de la caravana y lo aporta al fondo, el oro al final; con el fondo completo,
+  oro de su almacén personal compra lo que falta del coste de la caravana y lo aporta al fondo, el oro al final; con el fondo completo,
   compra la caravana.
 - **Explorar sin tropa**: sin un bandido conocido al alcance, uno sale solo (sin tropa no come) a dar la vuelta al anillo
   (8 puntos a 200, que su vista de 80 cubre) y abre los alijos que ve. Lo que ve de los bandidos va a la pizarra, porque

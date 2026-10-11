@@ -18,6 +18,7 @@ import {
   asediarPlaza,
   atacarCampamento,
   atacarColumna,
+  cargarBotin,
   capacidadCargaDe,
   dejarDePerseguir as dejarDePerseguirEngine,
   inspeccionarCaravana as inspeccionarCaravanaEngine,
@@ -256,8 +257,10 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     const campamento = exigirCampamento(estado, params.objetivo.id);
     const asalto = atacarCampamento(conTropaDe(estado, atacante), campamento, [...estado.facciones], heridos, ctx.rng, estado.heroes);
     const trasAsalto = conColumnas(estado, [asalto.ejercito]);
-    // El botín (D22, D26, D27): oro para cada héroe de la columna, a su oro de botín.
+    // El botín (D22, D26): oro para cada héroe de la columna, que sube **al carro** (lo que no cabe se pierde).
     const botin = asalto.destruido ? botinDeBandidos(trasAsalto.heroes, atacante.participantes.map((p) => p.heroeId), campamento.nivel, ctx.instante) : undefined;
+    const oroGanado = botin ? Object.values(botin.oro).reduce((a, b) => a + b, 0) : 0;
+    const trasBotin = oroGanado > 0 ? conColumnas(trasAsalto, [cargarBotin(asalto.ejercito, { oro: oroGanado }, capacidadCargaDe(asalto.ejercito, estado.caravanas, estado.asentamientos))]) : trasAsalto;
     const conBotin = botin ? botin.heroes : trasAsalto.heroes;
     // El informe cuenta también lo que se gana o se pierde (2026-10-07): el oro de cada héroe si cae, la mitad del carro si aguanta.
     const informados = asalto.eventos.map((e) =>
@@ -266,7 +269,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
         : e
     );
     const siguiente: GameSessionState = {
-      ...trasAsalto,
+      ...trasBotin,
       facciones: asalto.facciones,
       heroes: herir(conBotin, asalto.vencidos, ctx.instante),
       // Al destruirlo, su asentamiento agenda la reaparición; el spawn en sí lo evalúa el tick (`avanzarSpawnBandidos`).

@@ -652,19 +652,19 @@ El héroe tiene que estar **en el campamento** (dentro, o con su columna en la p
 
 - **Reside en él** ⇒ compra cualquier bien en venta; lo comprado va a su **almacén personal**; con **cupo diario** por héroe en `cupoDiario` (madera y piedra; el día es `floor(instante / 86 400 000)`).
 - **No reside** ⇒ compra **cualquier bien en venta desde la puerta, salvo el trigo** (cobre, estaño, madera… decidido el 2026-10-11; el trigo se reposta gratis a víveres con `repostarEnCampamento` y nunca va al carro: pedirlo es un error), al mismo precio, **pagando con el oro de su carro** y llevándoselo **al carro de su
-  columna** (hace falta la columna); **sin cupo diario**, pero compite por el mismo stock. No toca su almacén personal ni su oro de botín.
+  columna** (hace falta la columna); **sin cupo diario**, pero compite por el mismo stock. No toca su almacén personal.
 
 **Residente:**
 
 ```
 coste(n)   = ceil(n × precio)
-oroDeBotin primero, luego el oro del almacén personal:   guardado = botín + almacén.oro ;  delAlmacén(n) = max(0, coste(n) − botín)
+guardado   = almacén personal.oro ;  delAlmacén(n) = coste(n)                        ; ya no hay oro de botín aparte (2026-10-11)
 cantidad   = min( floor(pedida), floor(stock del campamento), cupo restante hoy, floor(guardado / precio) )
 sitio      : ALMACEN_PERSONAL.capacidad − total del almacén personal
 mientras  cantidad − delAlmacén(cantidad) > sitio : cantidad−−       ; en el almacén cada unidad ocupa 1 y libera lo que cuesta en oro
 mientras  coste(cantidad) > guardado : cantidad−−
 si cantidad ≤ 0 → error con el motivo (sin stock / cupo agotado / sin oro / almacén lleno)
-oro cobrado = coste(cantidad) ; stock −= cantidad ; botín = max(0, botín − oro)
+oro cobrado = coste(cantidad) ; stock −= cantidad
 ```
 
 **No residente (de visita):**

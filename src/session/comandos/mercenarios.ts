@@ -320,14 +320,15 @@ export const reponerPrestamo = comando<Record<string, never>, { repuestas: numbe
   );
 });
 
-/** Abrir un alijo de exploración estando en el sitio (D60-D63): su oro, al oro de botín. */
+/** Abrir un alijo de exploración estando en el sitio (D60-D63): su oro sube al carro de la columna. */
 export const abrirAlijo = comando<{ alijoId: string }, { oro: number }>((estado, _mapa, ctx, params) => {
   const heroe = exigirJugador(estado, ctx.actor);
   const alijo = (estado.alijos ?? []).find((a) => a.id === params.alijoId);
   if (!alijo) rechazar(CODIGOS_ERROR.alijoDesconocido);
-  const tras = abrirAlijoEngine(alijo, heroe, columnaDe(estado.ejercitos, heroe.id), buscaAlijos(heroe.id, estado.facciones, estado.asentamientos));
+  const columna = columnaDe(estado.ejercitos, heroe.id);
+  const tras = abrirAlijoEngine(alijo, heroe, columna, buscaAlijos(heroe.id, estado.facciones, estado.asentamientos), columna ? capacidadCargaDe(columna, estado.caravanas, estado.asentamientos) : 0);
   return exito(
-    { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? tras : h)) },
+    { ...estado, heroes: estado.heroes.map((h) => (h.id === heroe.id ? tras.heroe : h)), ejercitos: estado.ejercitos.map((e) => (e.id === tras.columna.id ? tras.columna : e)) },
     [evento(ctx, { codigo: 'alijo.abierto', mensaje: `${heroe.displayName} encuentra un alijo con ${alijo.oro} de oro.`, payload: { heroeId: heroe.id, alijoId: alijo.id, oro: alijo.oro } })],
     { oro: alijo.oro }
   );

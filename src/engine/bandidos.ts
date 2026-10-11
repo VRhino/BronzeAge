@@ -148,9 +148,11 @@ export function avanzarSpawnBandidos(
 }
 
 /**
- * El botín de un campamento de bandidos destruido (D22, D26, D27): oro, el del nivel para cada héroe de la columna que lo destruye,
- * a su oro de botín —que solo se gasta en un campamento—. Con rendimientos decrecientes por héroe: en las últimas 24 h, completo las
- * primeras veces, luego cada vez menos, y al final solo experiencia.
+ * El botín de un campamento de bandidos destruido (D22, D26): oro, el del nivel para cada héroe de la columna que lo destruye. Con
+ * rendimientos decrecientes por héroe: en las últimas 24 h, completo las primeras veces, luego cada vez menos, y al final solo experiencia.
+ *
+ * Devuelve el oro de cada héroe (`oro`) para que quien llama lo **cargue en el carro de la columna** (2026-10-11: el oro no se mueve a ninguna
+ * bolsa del héroe; llega a casa en el carro y entra al almacén personal en su residencia). Aquí solo se anota cuándo destruyó cada uno.
  */
 export function botinDeBandidos(
   heroes: readonly Heroe[],
@@ -168,7 +170,7 @@ export function botinDeBandidos(
     const factor = n <= completas ? 1 : n >= soloExperienciaDesde ? 0 : Math.max(0, 1 - caidaPorCada * (n - completas));
     const ganado = Math.round(CAMPAMENTOS_BANDIDOS.niveles[nivel].oroPorHeroe * factor);
     oro[h.id] = ganado;
-    return { ...h, bandidosDestruidosEn: [...recientes, instante], ...(ganado > 0 ? { oroDeBotin: (h.oroDeBotin ?? 0) + ganado } : {}) };
+    return { ...h, bandidosDestruidosEn: [...recientes, instante] };
   });
   return { heroes: tras, oro };
 }

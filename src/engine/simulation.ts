@@ -413,16 +413,14 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   const trasCaravanasDeFundacion = avanzarCaravanasDeFundacion(
     trasEjercitos.caravanas,
     trasFormaciones.ejercitos,
-    { asentamientos: trasTributos.asentamientos, heroes },
+    { asentamientos: trasTributos.asentamientos, campamentos: trasReposicion.campamentos },
     faccionesFinal,
-    trasReposicion.campamentos,
     mapa,
     instante
   );
-  heroes = trasCaravanasDeFundacion.heroes;
   eventosDominio.push(...comoEventosDominio(trasCaravanasDeFundacion.eventos, contexto));
   // La tropa prestada de un campamento donde ya no reside, fuera (D45).
-  const sinPrestamos = sinPrestamosAjenos(heroes, trasCaravanasDeFundacion.ejercitos, trasCaravanasDeFundacion.caravanas, trasReposicion.campamentos);
+  const sinPrestamos = sinPrestamosAjenos(heroes, trasCaravanasDeFundacion.ejercitos, trasCaravanasDeFundacion.caravanas, trasCaravanasDeFundacion.campamentos);
   heroes = sinPrestamos.heroes;
   eventosDominio.push(...comoEventosDominio(sinPrestamos.eventos, contexto));
 
@@ -439,7 +437,7 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
     red: trasComercio.red,
     campamentosBandidos: trasSpawnBandidos.campamentos,
     // Los que acogieron a los residentes de una plaza conquistada este tick (`desalojarResidentes`).
-    campamentosMercenarios: trasReposicion.campamentos,
+    campamentosMercenarios: trasCaravanasDeFundacion.campamentos,
     mercadoMercenario: trasReposicion.mercado,
     // Al FINAL, y con lo que ya se movió: lo que se graba es dónde acabaron las columnas este minuto, no de
     // dónde salieron. No emite eventos ni cambia nada más — la memoria solo mira.

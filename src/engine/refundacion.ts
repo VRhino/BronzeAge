@@ -51,8 +51,7 @@ function exigirLado(campamento: CampamentoMercenarios, heroe: Heroe, columna: Ej
 
 /**
  * Un ciudadano aporta al fondo de refundación de su Facción en el campamento donde está (Doc 1.9b, D39): desde su almacén personal si
- * reside allí, o desde el carro de su columna en la puerta. El oro sale primero del oro de botín (D27: el fondo es uno de sus dos
- * destinos). Lo suyo se puede retirar (`retirarDeRefundacion`) mientras no se gaste.
+ * reside allí, o desde el carro de su columna en la puerta. Lo suyo se puede retirar (`retirarDeRefundacion`) mientras no se gaste.
  */
 export function aportarARefundacion(
   campamento: CampamentoMercenarios,
@@ -68,12 +67,10 @@ export function aportarARefundacion(
   exigirFaccionSinAsentamientos(faccion, asentamientos);
   if (!(cantidad > 0)) throw new MercenariosInvalidoError('La cantidad tiene que ser positiva.');
   exigirLado(campamento, heroe, columna, desde);
-  const botin = recurso === 'oro' && desde === 'almacen' ? (heroe.oroDeBotin ?? 0) : 0;
   const enCarro = columna ? (columna.suministro[recurso] ?? 0) : 0;
-  const disponible = desde === 'almacen' ? botin + (heroe.almacenPersonal?.[recurso] ?? 0) : enCarro;
+  const disponible = desde === 'almacen' ? (heroe.almacenPersonal?.[recurso] ?? 0) : enCarro;
   const movido = Math.min(cantidad, disponible);
   if (movido <= 0) throw new MercenariosInvalidoError(desde === 'almacen' ? `No hay ${recurso} en el almacén personal.` : `El carro no lleva ${recurso} que aportar.`);
-  const deBotin = Math.min(botin, movido);
   const fondos = { ...campamento.fondos, [heroe.id]: { ...campamento.fondos[heroe.id], [recurso]: (campamento.fondos[heroe.id]?.[recurso] ?? 0) + movido } };
 
   if (desde === 'carro') {
@@ -82,7 +79,7 @@ export function aportarARefundacion(
   const guardado = heroe.almacenPersonal?.[recurso] ?? 0;
   return {
     campamento: { ...campamento, fondos },
-    heroe: { ...heroe, ...(deBotin > 0 ? { oroDeBotin: botin - deBotin } : {}), almacenPersonal: sinCeros({ ...heroe.almacenPersonal, [recurso]: guardado - (movido - deBotin) }) },
+    heroe: { ...heroe, almacenPersonal: sinCeros({ ...heroe.almacenPersonal, [recurso]: guardado - movido }) },
     columna,
     movido,
   };
@@ -90,7 +87,7 @@ export function aportarARefundacion(
 
 /**
  * Un héroe retira lo suyo del fondo del campamento donde está, al almacén personal (si reside allí) o al carro de su columna, hasta donde
- * quepa. El oro vuelve siempre como oro de botín (D27): si no, aportar y retirar lavaría el botín hacia la economía de una plaza.
+ * quepa. El oro es un recurso más: vuelve al almacén personal (si reside allí) o al carro, como todo lo demás.
  */
 export function retirarDeRefundacion(
   campamento: CampamentoMercenarios,
@@ -101,19 +98,16 @@ export function retirarDeRefundacion(
   hacia: LadoDelFondo
 ): { campamento: CampamentoMercenarios; heroe: Heroe; columna: Ejercito | undefined; movido: number } {
   if (!(cantidad > 0)) throw new MercenariosInvalidoError('La cantidad tiene que ser positiva.');
-  const esOro = recurso === 'oro';
-  if (!esOro) exigirLado(campamento, heroe, columna, hacia);
+  exigirLado(campamento, heroe, columna, hacia);
   const aportado = campamento.fondos[heroe.id]?.[recurso] ?? 0;
-  const sitio = esOro
-    ? Infinity
-    : hacia === 'almacen'
+  const sitio =
+    hacia === 'almacen'
       ? ALMACEN_PERSONAL.capacidad - totalAlmacenPersonal(heroe)
       : capacidadCargaDe(columna!) - Object.values(columna!.suministro).reduce((a, b) => a + b, 0);
   const movido = Math.min(cantidad, aportado, Math.max(0, sitio));
   if (movido <= 0) throw new MercenariosInvalidoError(aportado <= 0 ? `No has aportado ${recurso}.` : 'No queda sitio donde guardarlo.');
   const fondos = { ...campamento.fondos, [heroe.id]: sinCeros({ ...campamento.fondos[heroe.id], [recurso]: aportado - movido }) };
 
-  if (esOro) return { campamento: { ...campamento, fondos }, heroe: { ...heroe, oroDeBotin: (heroe.oroDeBotin ?? 0) + movido }, columna, movido };
   if (hacia === 'carro') {
     return { campamento: { ...campamento, fondos }, heroe, columna: { ...columna!, suministro: { ...columna!.suministro, [recurso]: (columna!.suministro[recurso] ?? 0) + movido } }, movido };
   }

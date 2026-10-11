@@ -41,11 +41,13 @@ describe('ver y abrir un alijo', () => {
     expect(alijosALaVista([alijo], { ...heroe, alijosAbiertos: ['alijo-x'] }, columnaEn({ x: 500, y: 500 }))).toEqual([]);
   });
 
-  it('se abre en el sitio una vez por héroe, a su oro de botín; solo quien es de una Facción sin asentamiento', () => {
-    const abierto = abrirAlijo(alijo, heroe, columnaEn({ x: 500, y: 505 }), true);
-    expect(abierto.oroDeBotin).toBe(5);
-    expect(() => abrirAlijo(alijo, abierto, columnaEn({ x: 500, y: 505 }), true)).toThrow(AlijoInvalidoError);
-    expect(() => abrirAlijo(alijo, heroe, columnaEn({ x: 600, y: 600 }), true), 'lejos').toThrow(AlijoInvalidoError);
-    expect(() => abrirAlijo(alijo, heroe, columnaEn({ x: 500, y: 500 }), false), 'con asentamiento').toThrow(AlijoInvalidoError);
+  it('se abre en el sitio una vez por héroe, y su oro sube al carro de la columna (lo que no cabe se pierde); solo quien es de una Facción sin asentamiento', () => {
+    const abierto = abrirAlijo(alijo, heroe, columnaEn({ x: 500, y: 505 }), true, 100);
+    expect(abierto.columna.suministro['oro']).toBe(5);
+    expect(abierto.heroe.alijosAbiertos).toEqual(['alijo-x']);
+    expect(abrirAlijo(alijo, heroe, columnaEn({ x: 500, y: 505 }), true, 3).columna.suministro['oro'], 'solo cabe lo que cabe').toBe(3);
+    expect(() => abrirAlijo(alijo, abierto.heroe, columnaEn({ x: 500, y: 505 }), true, 100)).toThrow(AlijoInvalidoError);
+    expect(() => abrirAlijo(alijo, heroe, columnaEn({ x: 600, y: 600 }), true, 100), 'lejos').toThrow(AlijoInvalidoError);
+    expect(() => abrirAlijo(alijo, heroe, columnaEn({ x: 500, y: 500 }), false, 100), 'con asentamiento').toThrow(AlijoInvalidoError);
   });
 });

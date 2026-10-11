@@ -77,10 +77,11 @@ export const desarmarCaravanaFundacion = comando<ParamsDesarmarCaravanaFundacion
     ? estado.campamentosMercenarios.find((c) => c.id === caravana.origenCampamentoId)
     : estado.asentamientos.find((a) => a.id === caravana.origenAsentamientoId);
 
-  const devuelto = desarmarCaravanaFundacionEngine(caravana, origen?.posicion, { asentamientos: estado.asentamientos, heroes: estado.heroes }, estado.facciones);
+  const devuelto = desarmarCaravanaFundacionEngine(caravana, origen?.posicion, { asentamientos: estado.asentamientos, campamentos: estado.campamentosMercenarios }, estado.facciones);
   const siguiente: GameSessionState = {
     ...estado,
-    ...devuelto,
+    asentamientos: devuelto.asentamientos,
+    campamentosMercenarios: devuelto.campamentos,
     caravanas: estado.caravanas.filter((c) => c.id !== params.caravanaId),
   };
   return exito(siguiente, [

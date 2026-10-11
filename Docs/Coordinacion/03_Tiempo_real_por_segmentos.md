@@ -90,7 +90,7 @@ quitar solo `edificios`/`almacen` no basta. Contenido:
   `recintos`, sin `edificios` internos (van en `admin/asentamiento/<id>`). Así un tick no parchea el almacén de todas las
   plazas; solo cambia `resumen` si cambia algo de eso. (Alternativa descartada: edificios compactos + almacén completo.)
 - `heroes`: todo salvo `historial` (con `escuadrones`, `ubicacion`, `desconectaEn`, `fuera`, `controlador`, `displayName`,
-  `oroDeBotin`, `racionEn`, `almacenPersonal`). Detalle en `admin/heroe/<id>`.
+  `racionEn`, `almacenPersonal`). Detalle en `admin/heroe/<id>`.
 - `campamentosMercenarios`: todo salvo `mercado` y `fondos` (van en `admin/campamento/<id>`); sí `residentesIds`, `edificios`,
   `poblacion`, `poblacionEn`, `bandidosEn`, `origen`, `creadoEn`, `eligieronComoInicial`.
 - Completos y sin recortar: `ejercitos` (con `ruta`/`progreso`/`avancePorTick`), `caravanas` (con escolta), `facciones`

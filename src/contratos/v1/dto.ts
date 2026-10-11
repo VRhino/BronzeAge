@@ -138,7 +138,7 @@ export interface HeroeDto {
   ubicacion: UbicacionHeroe;
   /** Lo que guarda en su campamento de residencia (Doc 2.5). */
   almacenPersonal?: Record<string, number>;
-  /** Oro de bandidos y alijos (Doc 1.9, D27): solo se gasta en el mercado de un campamento o en el fondo de refundación. */
+  /** @deprecated Ya no existe (2026-10-11): el oro de bandidos y alijos va al carro de la columna. Se conserva en el contrato v1 por compatibilidad y nunca se rellena. */
   oroDeBotin?: number;
   /** Lo comprado hoy en el mercado de su campamento, contra el cupo diario (Doc 3.3b). */
   cupoCampamento?: { dia: number; comprado: Record<string, number> };
