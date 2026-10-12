@@ -20,9 +20,8 @@ Todas son lo que corre cuando **no** hay servidor de batalla o ningún bando tie
 | Columna contra caravana | `interceptar` → `interceptarCaravanaConEjercito` | `atacar` (objetivo `caravana`) | `aperturaContraCaravana` |
 | Columna contra campamento de bandidos | `atacarCampamento` → `atacarCampamentoConColumna` | `atacar` (objetivo `campamento`) | `aperturaContraCampamento` |
 | Ejército contra plaza (asedio) | `asediarPlaza` → `asediarConEjercito` | `atacar` (objetivo `asentamiento`) | `aperturaDeAsedio` |
-| Asentamiento contra asentamiento | `iniciarAsedio` | nadie (código heredado) | — |
 
-El motor común de las cuatro primeras es `resolverCombate` (§4), salvo caravana y campamento, que comparan contra una cifra fija.
+El motor común es `resolverCombate` (§4), salvo caravana y campamento, que comparan contra una cifra fija. (El antiguo asedio de asentamiento a asentamiento, `iniciarAsedio`, se retiró el 2026-10-12: nadie lo usaba.)
 
 ## 2. La orden: `atacar`
 
@@ -105,8 +104,6 @@ Consecuencias que aplica `asediarPlaza`:
 - **Chatarra**: al carro del ejército si conquista (limitada por su capacidad de carga); al almacén de la plaza si resiste.
 - **Si cae**: `aplicarConquista` (§8) + `desalojarResidentes` (§9) + `registrarDerrota` (§10).
 - Eventos: se atribuyen siempre al hogar del atacante, y a la plaza **solo si resistió** (si cae es del atacante y contárselo a ella lo enseñaría dos veces). Hueco conocido: al vencido no le llega su derrota, porque pierde la plaza por la que la vería.
-
-> **`iniciarAsedio`** (asentamiento contra asentamiento, exige General) sigue en `combate.ts` con su misma lógica pero **no lo llama ningún comando en producción**: solo sus tests. Es un camino heredado de antes de los ejércitos; ver [`Divergencias.md`](Divergencias.md).
 
 ## 7. Otros objetivos
 
@@ -216,8 +213,9 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
 - **El carro se pierde por mitades aunque el héroe que lo llevaba estuviera herido y no combatiera**: el carro es de la columna.
 - **Un encuentro en campo no da ventaja de defensor «de verdad»**: el motor da cohesión y 1,05 al segundo bando; por eso el orden atacante/defensor importa y el comando lo fija (quien ordena es el atacante).
 - **El multiplicador de muralla usa solo el último recinto** de la lista, no el mejor: los recintos interiores son «historia en piedra» (ver `Murallas.md`).
+- **Defender al vasallo también cuenta con números** (2026-10-12): tras resolver con números un asedio, un choque entre columnas o una intercepción cuyo defensor es de una Facción vasalla, se aplica `ajustesPorDefensaDeVasallo` (Diplomacia §5.9) con los héroes que de verdad defendieron (los de la plaza que entran a defender, los de la columna atacada; una caravana suelta no lleva ninguno). Con números nadie de otra Facción entra a defender una plaza ajena, así que la señora figura ausente: si la vasalla pierde, ella paga la penalización.
 - **El mismo asedio puede pasar por Unity o por números**; las consecuencias deben ser idénticas por los dos caminos (`aplicarConquista`, `desalojarResidentes`, `registrarDerrota` son compartidos).
 
 ## 15. Divergencias
 
-Ver [`Divergencias.md`](Divergencias.md): `iniciarAsedio` sin llamadores.
+Ninguna abierta.

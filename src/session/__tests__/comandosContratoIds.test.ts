@@ -24,7 +24,7 @@ import {
 import { proponerAnexion, responderAnexion } from '../comandos/anexion';
 import { rebelionVasallo, romperRelacion } from '../comandos/diplomacia';
 import { proponerFusion, responderFusion } from '../comandos/fusion';
-import { iniciarAsedio, reclutarTropa } from '../comandos/militar';
+import { reclutarTropa } from '../comandos/militar';
 import { colocarOrdenMercado, crearCaravana, proponerTrueque } from '../comandos/comercio';
 import { desarmarCaravanaFundacion, lanzarCaravanaFundacion } from '../comandos/expansion';
 import { OPC, partidaConAsentamiento } from './fixtures';
@@ -136,15 +136,8 @@ const CASOS: CasoIdInexistente[] = [
     ejecutar: ({ sesion, asentamientoId, fundador }) =>
       sesion.ejecutar(reclutarTropa, { asentamientoId, heroeId: fundador, tropaId: 'no-existe', origen: 'pesants' }, OPC),
   },
-  {
-    etiqueta: 'iniciarAsedio: defensorId',
-    codigoEsperado: 'asentamiento.no_existe',
-    ejecutar: ({ sesion, asentamientoId }) =>
-      sesion.ejecutar(iniciarAsedio, { atacanteId: asentamientoId, defensorId: 'no-existe', escuadronIds: [] }, OPC),
-  },
   // El caso de `combateCampoAbierto` (segundo asentamiento inexistente) se retiró con el comando en el Paso
-  // 11: `iniciarAsedio: defensorId`, justo arriba, ya cubre exactamente ese camino. El de
-  // `interceptarCaravana` se re-apunta aquí en vez de perderse — lo que se congela es que un `caravanaId`
+  // 11. El de `interceptarCaravana` se re-apunta aquí en vez de perderse — lo que se congela es que un `caravanaId`
   // inexistente sale como `caravana.no_existe` y no como un error interno, y eso lo prueba igual de bien
   // cualquier comando que empiece por `exigirCaravana`.
   {

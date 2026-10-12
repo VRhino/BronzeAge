@@ -158,7 +158,7 @@ export function resolverCombate(
   const jitterD = 1 + (rng() * 2 - 1) * MILITAR.varianzaCombate;
   const poderA = poderTotal(atacantes, false) * jitterA;
   // El multiplicador de muralla (Paso 3b, `multiplicadorDefensivoDeRecintos`) SOLO llega aquí desde
-  // `iniciarAsedio` — un encuentro en mundo abierto no lo pasa nunca (1 por defecto): ahí no hay ningún
+  // el asedio (`asediarConEjercito`) — un encuentro en mundo abierto no lo pasa nunca (1 por defecto): ahí no hay ningún
   // recinto que atravesar, así que aplicarlo ahí sería un bono de la nada.
   // Y el defensor, por serlo, tiene una pequeña ventaja (`MILITAR.ventajaDefensor`); el azar de arriba decide los
   // combates parejos, y en un empate exacto gana él.
@@ -194,12 +194,6 @@ export function resolverCombate(
       },
     ],
   };
-}
-
-function seleccionarEscuadrones(tropa: readonly Escuadron[], ids: readonly string[]): Escuadron[] {
-  const seleccionados = tropa.filter((e) => ids.includes(e.id) && e.cantidad > 0);
-  if (seleccionados.length === 0) throw new CombateInvalidoError('No hay escuadrones válidos seleccionados.');
-  return seleccionados;
 }
 
 /**
@@ -386,138 +380,6 @@ export function desalojarResidentes(
   };
 }
 
-/**
- * Asedio de asentamientos (Doc 5.2.1): mortalidad severa, sin instancia visual (Fase 0 = cálculo). La conquista
- * exacta tras ganar el asedio queda PENDIENTE en el diseño (Preguntas_Abiertas) — Fase 0 asume CAPTURA directa
- * (reasignación de Facción), la opción más simple de las citadas ahí (captura/destrucción/vasallaje automático).
- */
-export function iniciarAsedio(
-  atacante: Asentamiento,
-  /** El campamento del atacante (`campamentoDe`): de ahí salen los escuadrones elegidos. */
-  tropaAtacante: readonly Escuadron[],
-  defensor: Asentamiento,
-  /** El campamento del defensor: su guarnición entera, hoy (`enGuarnicion` llega en la fase 3). */
-  tropaDefensora: readonly Escuadron[],
-  escuadronIdsAtacantes: string[],
-  facciones: Faccion[],
-  relaciones: RelacionPolitica[],
-  instante: Instante,
-  rng: RandomFn
-): { defensor: Asentamiento; facciones: Faccion[]; eventos: EventoCrudo[]; conquistado: boolean; tropa: Escuadron[] } {
-  if (atacante.faccionId === defensor.faccionId) {
-    throw new CombateInvalidoError('No se puede asediar un asentamiento de la propia Facción.');
-  }
-  if (!atacante.cargos.generalId) throw new CombateInvalidoError('El atacante necesita un General para asediar.');
-
-  // Protección tras la conquista (Doc 5.12.9): una plaza recién conquistada es INMUNE a un nuevo asedio hasta que
-  // el reloj vence. Rebota sin combate y sin tocar el RNG.
-  if (estaProtegida(defensor, instante)) {
-    return {
-      defensor,
-      facciones,
-      tropa: [],
-      eventos: [
-        {
-          codigo: 'combate.asedio_resistido',
-          mensaje: `${defensor.id} está protegida tras su conquista y rechaza el asedio de ${atacante.id} sin combatir.`,
-          payload: {
-            atacanteId: atacante.id,
-            defensorId: defensor.id,
-            faccionAtacanteId: atacante.faccionId,
-            faccionDefensoraId: defensor.faccionId,
-            ...datosDeAsedio(defensor, [], false),
-          } satisfies PayloadAsedio,
-        },
-      ],
-      conquistado: false,
-    };
-  }
-
-  const escuadronesAtacantes = seleccionarEscuadrones(tropaAtacante, escuadronIdsAtacantes);
-
-  // Plaza desguarnecida: cae sin combate y sin tocar el RNG, igual que cuando la alcanza un ejército (Doc 5.12.4). Antes
-  // este camino rechazaba el asedio con "No hay escuadrones válidos" y la plaza sin defensa era inconquistable por comando.
-  if (!tropaDefensora.some((e) => e.cantidad > 0)) {
-    const payload: PayloadAsedio = {
-      atacanteId: atacante.id,
-      defensorId: defensor.id,
-      faccionAtacanteId: atacante.faccionId,
-      faccionDefensoraId: defensor.faccionId,
-      ...datosDeAsedio(defensor, [], true),
-    };
-    const trasXp = aplicarExperiencia(facciones, [{ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' }]);
-    return {
-      defensor: aplicarConquista(defensor, atacante.faccionId, instante),
-      facciones: trasXp.facciones,
-      eventos: [
-        { codigo: 'combate.asedio_conquista', mensaje: `${defensor.id} cae sin un solo defensor en pie ante ${atacante.id}.`, payload },
-        ...trasXp.eventos,
-      ],
-      conquistado: true,
-      tropa: escuadronesAtacantes,
-    };
-  }
-  const escuadronesDefensores = seleccionarEscuadrones(tropaDefensora, tropaDefensora.map((e) => e.id));
-
-  // Paso 3b (§16 del doc de murallas): la razón de ser de toda la mecánica — un asedio contra un recinto
-  // cerrado es mucho más caro para el atacante, y tanto más cuantas menos puertas tenga el defensor.
-  const multiplicadorMuralla = multiplicadorDefensivoDeRecintos(defensor.recintos ?? []);
-  const resultado = resolverCombate(escuadronesAtacantes, escuadronesDefensores, rng, multiplicadorMuralla);
-
-  const conquistado = resultado.ganador === 'atacante';
-  const payloadAsedio: PayloadAsedio = {
-    atacanteId: atacante.id,
-    defensorId: defensor.id,
-    faccionAtacanteId: atacante.faccionId,
-    faccionDefensoraId: defensor.faccionId,
-    ...datosDeAsedio(defensor, escuadronesDefensores, true),
-  };
-  const eventos: EventoCrudo[] = [
-    ...resultado.eventos,
-    conquistado
-      ? { codigo: 'combate.asedio_conquista', mensaje: `${atacante.id} conquista ${defensor.id}.`, payload: payloadAsedio }
-      : { codigo: 'combate.asedio_resistido', mensaje: `${defensor.id} resiste el asedio de ${atacante.id}.`, payload: payloadAsedio },
-  ];
-
-  // Atacar a un Aliado sin romper la relación antes es la penalización MÁS SEVERA de reputación (Doc 2.7).
-  const faccionesConReputacion = estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)
-    ? aplicarAjustesReputacion(facciones, [
-        { faccionId: atacante.faccionId, delta: REPUTACION.penalizacionAtacarAliado, razon: 'atacar a un Aliado' },
-      ])
-    : facciones;
-
-  // Doc Fase_0_5 §8: participación en combate otorga XP de Facción a ambos bandos; conquistar suma además el
-  // bonus de conquista al atacante. Nota: el cupo de asentamientos por nivel (§5) NO se re-evalúa aquí — un
-  // asentamiento conquistado conserva su `nivel` sin verificar cupo del conquistador, mismo criterio que
-  // `CAP_FUNDACION_POR_NIVEL` (Doc 1.7, no aplica a conquista) — punto abierto #2 del documento de diseño.
-  const ajustesXp: AjusteExperiencia[] = [
-    {
-      faccionId: atacante.faccionId,
-      delta: xpDeCombate(escuadronesAtacantes, resultado.digno),
-      razon: 'combate (asedio)',
-    },
-    {
-      faccionId: defensor.faccionId,
-      delta: xpDeCombate(escuadronesDefensores, resultado.digno),
-      razon: 'combate (asedio)',
-    },
-  ];
-  if (conquistado) ajustesXp.push({ faccionId: atacante.faccionId, delta: NIVEL_FACCION.xp.conquista, razon: 'conquista' });
-  const trasXp = aplicarExperiencia(faccionesConReputacion, ajustesXp);
-  const faccionesFinal = trasXp.facciones;
-  eventos.push(...trasXp.eventos);
-
-  // Conquistar no mueve a nadie (Doc 5.15.5): los atacantes siguen en su campamento con sus bajas y la plaza
-  // queda sin guarnición. A los residentes derrotados los desaloja el llamador (`desalojarResidentes`).
-  return {
-    defensor: conquistado ? aplicarConquista(defensor, atacante.faccionId, instante) : defensor,
-    facciones: faccionesFinal,
-    eventos,
-    conquistado,
-    tropa: [...resultado.atacantes, ...resultado.defensores],
-  };
-}
-
 // `combateCampoAbierto` e `interceptarCaravana` VIVÍAN AQUÍ y se retiraron en el Paso 11 del movimiento de
 // ejércitos (2026-09-04), junto con sus comandos. Lo que hacían no se ha perdido: son ahora
 // `encuentroEntreEjercitos` e `interceptarCaravanaConEjercito` (más abajo), disparadas por la GEOMETRÍA desde
@@ -583,11 +445,10 @@ export function atacarCampamentoConColumna(
 /**
  * Asedio disparado por la LLEGADA de un ejército a un asentamiento ajeno (Doc 5.12, Paso 7).
  *
- * Es el mismo combate que `iniciarAsedio` con dos diferencias que importan:
+ * El atacante es un ejército: sus escuadrones ya salieron de casa y viajan con él, y no se exige General (la decisión
+ * de quién sale se tomó al movilizar).
  *
- *  1. **El atacante es un ejército, no un asentamiento.** Sus escuadrones ya salieron de casa y viajan con él,
- *     así que no hay que seleccionarlos ni exigir General: la decisión de quién sale se tomó al movilizar.
- *  2. **Si no hay defensores, no hay combate.** Doc 5.12.4: un asentamiento cuyos jugadores se llevaron todo
+ * **Si no hay defensores, no hay combate.** Doc 5.12.4: un asentamiento cuyos jugadores se llevaron todo
  *     queda indefenso y cae sin pelear. Y esta rama **no consume aleatoriedad**, que no es un detalle: una
  *     partida donde nadie asedia una plaza defendida hace exactamente las mismas llamadas al RNG que antes de
  *     existir el Paso 7, y el guardián de determinismo sigue verde sin tocarlo.

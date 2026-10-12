@@ -159,6 +159,7 @@ plazas propias). Autoriza el comando: el actor debe **residir** en el asentamien
 Solo mientras sigue `propuesto` (una vez), y solo quien reside en el asentamiento **B**.
 - **Aceptar**: `estado = activo`, `expiraEn = ahora + plazoMinutosPorDefecto` (el plazo **se cuenta desde el sí**). Aceptar no traza ningún camino.
 - **Rechazar**: `estado = rechazado` (queda, no se borra).
+- **Un trueque activo no se cancela** (decidido el 2026-10-12): una vez aceptado, o se cumple o vence. No hay comando para retirarlo; la única salida anticipada es la ruina de una de las dos plazas (§10, sin penalización).
 - Una propuesta que nadie contesta **caduca** en `asignarCaravanasATrueque` (§4.3) al cumplirse `expiraEn`: `estado = expirado`, evento `comercio.trueque_expirado`, **sin penalización**.
 
 ### 4.3 El reparto automático (`asignarCaravanasATrueque`, dentro de `avanzarComercio`)

@@ -36,7 +36,7 @@ import {
   rechazarTrueque,
   reservarCaravana,
 } from './comercio';
-import { iniciarAsedio, reclutarTropa } from './militar';
+import { reclutarTropa } from './militar';
 import {
   alternarAutoConstruccion,
   alternarReceta,
@@ -170,7 +170,6 @@ const MANEJADORES = {
   soltarCaravana,
   cargarCaravana,
   entregarDeCaravana,
-  iniciarAsedio,
   reclutarTropa,
   alternarAutoConstruccion,
   alternarReceta,

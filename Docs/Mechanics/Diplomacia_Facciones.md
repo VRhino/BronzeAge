@@ -314,10 +314,7 @@ para cada señora con un vasallaje activo sobre vasalla:
     !presente y gana el atacante : reputación(señora) += penalizacionNoDefenderVasallo
     en cualquier otro caso       : nada
 ```
-Vale para cualquier batalla cuyo defensor sea de la vasalla (plaza, caravana, y lo que venga). Solo existe en las batallas de Unity: el asedio y el combate con números enfrentan
-solo a la tropa de la plaza, sin héroes de la señora, y no tocan esta reputación (§12).
-
-## 6. Anexión y fusión
+Vale para cualquier batalla cuyo defensor sea de la vasalla (plaza, caravana, y lo que venga), por las dos vías: la batalla de Unity (`conReputacionDeVasallos`, con los héroes que participaron) y el combate con números (`atacar` contra una plaza, una columna o una caravana: `conDefensaDeVasallo` en `session/comandos/interaccion.ts`, con los héroes que defendieron). Las dos usan `ajustesPorDefensaDeVasallo` (`engine/reputacion.ts`). Con números, los defensores de una plaza son solo sus residentes, así que la señora aparece ausente y paga la penalización si la plaza cae; el bonus llega cuando un héroe suyo defiende de verdad (Unity, o una columna suya).
 
 ### 6.1 Anexión (A absorbe a B)
 - **Proponer** (`proponerAnexion`): Rey o Embajador de A. `exigirAnexionPosible`: distintas; existen; **B tiene Rey**; B **no es vasalla de una tercera** (si su señor es A, vale: el vasallaje termina con la anexión). Una
@@ -411,12 +408,12 @@ La crónica de los Aedas canta la anexión, la fusión, la liberación de vasall
 | Fusión: propuesta, respuesta, qué hereda C, capital, relaciones | `comandosFusion.test.ts` |
 | Derrota: solo se anota si no queda plaza | `derrotas.test.ts` |
 | Vasalla conquistada por un tercero (traspaso, tributo, guerras, casos sin efecto) | `vasallaConquistada.test.ts` |
-| Defender al vasallo (bonus, penalización, sin efecto) y guerra tras romper una alianza (ventana y quién paga) | `reputacionVasallos.test.ts` |
+| Defender al vasallo (bonus, penalización, sin efecto; con números y en Unity) y guerra tras romper una alianza (ventana y quién paga) | `reputacionVasallos.test.ts`, `batallas.test.ts` |
 | Títulos y experiencia | `eventosDominioTitulos.test.ts`, `experienciaFaccion.test.ts` |
 
 ## 12. Casos límite y decisiones que parecen raras
 - **`derrotadaPor` no caduca mientras la Facción no tenga plaza:** si una vasalla ya conquistada, sin plazas, se hace vasalla de otra Facción distinta del conquistador, el siguiente tick pasa a ser vasalla del conquistador.
-- **Defender al vasallo solo cuenta en las batallas de Unity** (§5.9); el asedio con números no premia ni penaliza a la señora.
+- **El señor «debe defender» solo como reputación** (decidido el 2026-10-12): no hay obligación en el motor; no defender cuesta reputación y es todo el castigo.
 - **Una propuesta caducada no desaparece sola:** queda en la lista hasta que se añade otra del mismo tipo (que poda las caducadas) o se contesta; ya no se puede contestar ni cuenta como «pendiente».
 - **Declarar guerra no arrastra a los aliados del bando contrario con los que ya hay relación:** solo se salta quien tiene una relación activa con el atacante; el objetivo directo, si la tiene, hace fallar todo.
 - **El tributo se reparte entre todas las plazas de la vasalla:** una plaza sin stock no paga y las demás no cubren su parte; con `cantidadPorMinuto = 0` no pasa nada.

@@ -14,6 +14,8 @@
 // El de 40 es el que hace de esto un juego de dos: la telemetría que la proyección niega a distancia se
 // consigue acercándose, y acercarse te delata. Nadie audita al rival desde el sofá.
 import { faccionDeCaravana } from '../../engine/expansion';
+import { esCiudadano } from '../../engine/faccion';
+import { ajustesPorDefensaDeVasallo, aplicarAjustesReputacion } from '../../engine/reputacion';
 import {
   asediarPlaza,
   atacarCampamento,
@@ -50,7 +52,7 @@ import {
   type Apertura,
 } from '../batallas';
 import { heridosEn, herir } from '../../engine/heroe';
-import { conEscolta, indiceTropa, sinEscolta } from '../../engine/tropa';
+import { conEscolta, heroesQueEntranADefender, indiceTropa, sinEscolta } from '../../engine/tropa';
 import type { Asentamiento, Ejercito, Point } from '../../domain/types';
 import { distancia } from '../../world/geometria';
 import type { Instante } from '../../domain/tiempo';
@@ -227,6 +229,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
 
   if (params.objetivo.tipo === 'asentamiento') {
     const plaza = plazaAsediable(estado, atacante, params.objetivo.id, heridos, ctx.instante);
+    const defensoresDeLaPlaza = heroesQueEntranADefender(plaza, estado.heroes, heridos).map((h) => h.id);
     const asedio = asediarPlaza(
       conTropaDe(estado, atacante),
       plaza,
@@ -244,7 +247,19 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
       ctx.rng
     );
     const siguiente = conColumnas(
-      { ...estado, asentamientos: asedio.asentamientos, heroes: asedio.heroes, facciones: asedio.facciones, campamentosMercenarios: asedio.campamentosMercenarios },
+      {
+        ...estado,
+        asentamientos: asedio.asentamientos,
+        heroes: asedio.heroes,
+        facciones: conDefensaDeVasallo(
+          asedio.facciones,
+          estado,
+          plaza.faccionId,
+          defensoresDeLaPlaza,
+          asedio.asentamientos.find((a) => a.id === plaza.id)?.faccionId === plaza.faccionId
+        ),
+        campamentosMercenarios: asedio.campamentosMercenarios,
+      },
       [asedio.ejercito, ...asedio.columnas]
     );
     return exito(
@@ -301,7 +316,12 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     );
 
     const trasChoque = conColumnas(estado, [choque.atacante, choque.defensor]);
-    const siguiente: GameSessionState = { ...trasChoque, facciones: choque.facciones, heroes: herir(trasChoque.heroes, choque.vencidos, ctx.instante) };
+    const defensoresDeLaColumna = defensor.participantes.map((p) => p.heroeId).filter((id) => !heridos.has(id));
+    const siguiente: GameSessionState = {
+      ...trasChoque,
+      facciones: conDefensaDeVasallo(choque.facciones, estado, defensor.faccionId, defensoresDeLaColumna, !choque.ganoElAtacante),
+      heroes: herir(trasChoque.heroes, choque.vencidos, ctx.instante),
+    };
 
     return exito(
       conHistorialDeJugador(siguiente, params.heroeId, `Ataca a la columna ${defensor.id}.`),
@@ -327,8 +347,11 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
   // La escolta vuelve a su héroe: la de una caravana capturada, a 0 y al campamento (Doc 5.15.4).
   const queda = emboscada.caravana ? sinEscolta(emboscada.caravana) : undefined;
   const conAtacante = conColumnas(estado, [emboscada.ejercito], [...emboscada.escoltaPerdida, ...(queda?.tropa ?? [])]);
+  const faccionDeLaCaravana = faccionDeCaravana(caravana, estado.asentamientos);
   const siguiente: GameSessionState = {
     ...conAtacante,
+    // Una caravana suelta no lleva héroes: la defiende su escolta sin héroe, así que la señora no está presente.
+    facciones: faccionDeLaCaravana ? conDefensaDeVasallo(conAtacante.facciones, estado, faccionDeLaCaravana, [], !emboscada.capturada) : conAtacante.facciones,
     heroes: herir(conAtacante.heroes, emboscada.vencidos, ctx.instante),
     caravanas: queda
       ? conAtacante.caravanas.map((c) => (c.id === caravana.id ? queda.caravana : c))
@@ -343,6 +366,17 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
     ]
   );
 });
+
+/**
+ * Defender al vasallo cuando el combate se resuelve con números (Doc 2.7): la misma regla que la batalla de Unity
+ * (`ajustesPorDefensaDeVasallo`), con los héroes que de verdad defendieron (los de la plaza que entran a defender o los de la
+ * columna atacada). Quien no puede estar en la defensa —nadie de otra Facción entra a defender una plaza ajena con números—
+ * cuenta como ausente.
+ */
+function conDefensaDeVasallo(facciones: GameSessionState['facciones'], estado: GameSessionState, vasallaId: string, heroeIds: readonly string[], ganoElDefensor: boolean): GameSessionState['facciones'] {
+  const presentes = new Set(heroeIds.flatMap((id) => estado.facciones.find((f) => esCiudadano(f, id))?.id ?? []));
+  return aplicarAjustesReputacion([...facciones], ajustesPorDefensaDeVasallo(estado.relaciones, vasallaId, presentes, ganoElDefensor));
+}
 
 /** Junto a un campamento de mercenarios nadie inicia un combate (M4/D78): ni desde allí ni contra lo que está allí. */
 function exigirFueraDeProteccion(estado: GameSessionState, atacante: Ejercito, objetivo: ParamsAtacar['objetivo']): void {

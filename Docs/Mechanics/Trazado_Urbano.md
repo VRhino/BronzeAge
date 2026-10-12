@@ -6,7 +6,7 @@ estado propio: lo único que se guarda de ella son las posiciones de los edifici
 - **Verificado contra:** `e18c0b4` (2026-10-09).
 - **Módulo:** `src/engine/trazado.ts` (≈2.400 líneas). Lo usan `engine/construction.ts` (auto-construcción, construcción manual, `asegurarAnclaPara`), `engine/settlement.ts`
   (fundación) y `engine/muralla.ts` (comparte el vocabulario de celdas).
-- **Diseño e historia:** `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` (1.900 líneas; su cuerpo numerado describe todavía el modelo de *aristas*, ya retirado).
+- **Diseño e historia:** el documento largo de diseño (`Vista_Asentamiento_Trazado_Urbano.md`, modelo de *aristas* ya retirado) se borró el 2026-10-12; la descripción vigente es este documento.
   Esta es la descripción vigente.
 
 ## 1. Los tres pilares
@@ -27,7 +27,7 @@ Las manzanas no existen como dato: son el espacio que queda encerrado cuando las
 - `radioMapa = 220` es solo presentación (zoom del lienzo); no interviene en ninguna decisión.
 - `LAYOUT_VERSION = 2`: revisión de la geometría. **Un snapshot de otra revisión se rechaza al cargar** (`cargarPartida`), porque las huellas y la red se *derivan* de las tablas y se
   reinterpretarían en silencio. Se sube al cambiar cualquier huella, el tamaño de celda, `FONDO_MANZANA` o una constante de `TRAZADO` que mueva lo ya colocado.
-- `ESCALA.unidadesLocalesPorUnidadMapa = 40` está declarada pero **ningún cálculo del motor la usa** (ver [`Divergencias.md`](Divergencias.md)). El radio de la ciudad en unidades locales
+- El espacio local de la Vista de Asentamiento y el mapa del mundo son **espacios separados**, sin equivalencia de unidades (decidido el 2026-10-12). El radio de la ciudad en unidades locales
   es `radioUrbanoDe(asentamiento) = asentamiento.radioPotencial` tal cual (`ZONA_INFLUENCIA.radioInicial` 30 → `radioMaximoPorNivel` 60/90/120/150/180).
 
 ### 2.2 Celda, rectángulo y posición
@@ -472,14 +472,6 @@ origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto 
 {
   "tamanoCelda": 3,
   "radioMapa": 220
-}
-```
-<!-- /parametros -->
-
-<!-- parametros:ESCALA -->
-```json
-{
-  "unidadesLocalesPorUnidadMapa": 40
 }
 ```
 <!-- /parametros -->

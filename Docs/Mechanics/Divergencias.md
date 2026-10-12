@@ -7,24 +7,7 @@ Alta = impide algo del juego · Media = el juego va contra la intención escrita
 
 ## Abiertas
 
-### 5. `ESCALA.unidadesLocalesPorUnidadMapa` no se usa · **Baja**
-- Está declarada (40) y documentada como «la equivalencia que faltaba declarar», pero ningún cálculo del motor la aplica: `radioUrbanoDe` devuelve `radioPotencial` (unidades de mapa, 30–180) **tal cual como unidades
-  locales**. La ciudad mide, pues, 10–60 celdas de radio, y la «décima parte de la provincia» del comentario no se cumple en el motor.
-
-### 7. `Consideraciones/Vista_Asentamiento_Trazado_Urbano.md` está desactualizado · **Baja**
-- Su propio encabezado admite que las secciones numeradas «siguen describiendo el modelo de ARISTAS y están pendientes de reescritura». La descripción vigente es [`Trazado_Urbano.md`](Trazado_Urbano.md). Cuando se
-  complete la migración de este contenido, el documento de diseño se borra (decisión del autor).
-
-### 8. `iniciarAsedio` no tiene llamadores · **Baja**
-- `engine/combate.ts` conserva `iniciarAsedio` (asedio de asentamiento a asentamiento, exige General) y sus tests, pero ningún comando ni el tick lo usa desde que los ejércitos asedian (`asediarConEjercito`). Es código muerto salvo que se quiera conservar como referencia; borrarlo se lleva sus tests.
-
-### 15. Vasallaje: faltan «conquista por un tercero» y las obligaciones de defensa · **Media**
-- Hecho el 2026-10-12: la ruptura 3 (todas las plazas conquistadas por un tercero → vasalla del conquistador, §5.5) y la consecuencia de no defender (reputación, §5.9).
-- **Queda:** el canon dice que el señor «debe defender» a sus vasallos; no es una obligación del motor, solo reputación.
-
-### 16. Reputación: faltan eventos del canon · **Baja**
-- Hecho el 2026-10-12: defender / no defender a un vasallo (+15 / −3, §5.9) y guerra tras romper una alianza (−15, ventana de 3 días, §5.4). Quitado del canon el «incumplir orden de mercado aceptada».
-- **Queda:** el asedio con números (sin héroes de la señora) no aplica la regla de defensa, y no hay vía para cancelar un trueque antes de tiempo.
+Ninguna. Las últimas (2026-10-12) se resolvieron así: la escala local y la del mapa son espacios separados (se borró `ESCALA`); se borró el diseño viejo del trazado y el asedio de asentamiento a asentamiento (`iniciarAsedio`, sin usos); «el señor debe defender» es solo reputación; y defender a un vasallo también cuenta en el combate con números. Un trueque aceptado no se cancela: se cumple o vence.
 
 ## Consecuencias pendientes de medir
 

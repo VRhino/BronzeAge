@@ -1012,43 +1012,6 @@ export const SITIO = {
  * Es solo PRESENTACIÓN: `radioMapa` decide el zoom del lienzo de la Vista de Asentamiento, nunca dónde se
  * coloca un edificio. Cambiarlo no mueve la simulación.
  */
-/**
- * ESCALA DEL MUNDO (a petición del usuario, 2026-09-02) — la equivalencia que faltaba declarar.
- *
- * El motor maneja DOS espacios y hasta ahora nadie había dicho cómo se relacionan, así que el código los
- * trataba como iguales:
- *
- *  - **Mapa general** (`Asentamiento.posicion`, `radioPotencial`, rutas, ejércitos): 2000×2000 unidades.
- *  - **Vista de Asentamiento** (`Edificio.posicion`, `REJILLA_ASENTAMIENTO`, todo `engine/trazado.ts`):
- *    espacio plano y separado, centrado en el Centro Urbano.
- *
- * Sin esta declaración la ficción no cerraba: una zona de influencia debe ser una PROVINCIA y la ciudad un
- * punto dentro de ella, pero al compartir unidades la ciudad medía ~121 y su provincia 30-180 — la urbe era
- * más grande que el territorio que controlaba, y el propio `radioMaximoAfueras` lo daba por hecho ("el campo
- * de una ciudad está FUERA de su zona de influencia").
- *
- * **Por qué 40 y no 10.** El primer intento fue 10, y no bastaba: la ciudad tiene un TAMAÑO MÍNIMO de ~121
- * unidades locales que no encoge —el suelo `max(radioUrbano, radioAfuerasMin + anchoBandaAfueras)` de
- * `radioMaximoAfueras`, que existe porque al fundar la Granja inicial no cabe más cerca— mientras que la
- * provincia SÍ arranca pequeña (`radioInicial` 30). Con 10, una aldea recién fundada ocupaba el 40% de su
- * provincia y solo llegaba a la décima en los niveles altos.
- *
- * 40 es el factor que cubre el PEOR caso: al fundar, esa ciudad mínima mide 3,0 unidades de mapa dentro de
- * una provincia de 30 — el 10,1%. De ahí para arriba el ratio solo baja (5% en nivel 1, 3% en nivel 5),
- * porque la provincia crece y el suelo de la ciudad no. Es decir: **la ciudad nunca pasa de una décima de su
- * provincia**, que era la proporción buscada.
- *
- * Se llegó aquí sin tocar el trazado urbano ni `radioInicial`, que es lo que el usuario pidió preservar: la
- * escala local es la palanca, y basta con hacerla más pequeña frente a la mundial.
- *
- * **No cambia ningún número de la simulación**: el trazado urbano sigue midiendo lo mismo en sus unidades y
- * la zona de influencia sigue midiendo lo mismo en las suyas. Lo que cambia es que ahora está DICHO, y que
- * `radioUrbanoDe` (engine/asentamientoQuery.ts) es el único punto donde los dos espacios se tocan.
- */
-export const ESCALA = {
-  unidadesLocalesPorUnidadMapa: 40,
-};
-
 export const REJILLA_ASENTAMIENTO = {
   /**
    * Lado de una celda en unidades locales. Es la escala de la CALLE: una calle (`TRAZADO.anchoCalle` = 1) y una
@@ -2187,13 +2150,13 @@ export const VISION = {
   /**
    * Campo de visión de un ejército en marcha.
    *
-   * 150 sobre un mapa de 2000 es ~2 radios de provincia (~76, ver `ESCALA` y Doc 1.0a): un ejército ve
+   * 150 sobre un mapa de 2000 es ~2 radios de provincia (~76, ver Doc 1.0a): un ejército ve
    * VARIAS ciudades por delante si la geografía lo permite, que es lo que se pedía. Y queda holgadamente por
    * debajo del radio de cohesión de un reino (`MANTENIMIENTO.escalaDistancia` = 400, ~5 provincias), así que
    * ver no equivale a controlar.
    *
-   * Se descartó 30 —el radio de una zona de influencia recién fundada— porque bajo la escala rota parecía
-   * razonable y con la escala declarada no llega ni al borde de la propia provincia.
+   * Se descartó 30 —el radio de una zona de influencia recién fundada— porque no llega ni al borde de la
+   * propia provincia.
    */
   ejercito: 150,
   /**

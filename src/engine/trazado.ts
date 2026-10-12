@@ -787,24 +787,12 @@ export function esDeAfueras(tipo: EdificioTipo): boolean {
 /**
  * Radio del casco urbano en UNIDADES LOCALES — hasta dónde puede colocar edificios este módulo.
  *
- * Existe para separar dos cosas que `radioPotencial` venía haciendo a la vez sin que nadie lo hubiera
- * decidido (ver `ESCALA` en constants.ts):
+ * El espacio local de la Vista de Asentamiento y el mapa del mundo son espacios SEPARADOS (decidido el 2026-10-12): no hay
+ * ninguna equivalencia entre sus unidades. El radio de la ciudad parte del `radioPotencial` de la provincia (30 → 180) y se
+ * usa tal cual como unidades locales; si ciudad y provincia deben crecer a ritmos distintos, este es el único punto que se toca.
  *
- *  - **la PROVINCIA**: `Asentamiento.radioPotencial`, en unidades de MAPA — dibuja la zona de influencia,
- *    decide dónde se puede fundar y de dónde se muestrea la fertilidad;
- *  - **la CIUDAD**: hasta dónde llega el trazado en el espacio LOCAL de la Vista de Asentamiento.
- *
- * Hoy devuelve el mismo número a propósito: la separación es CONCEPTUAL y no cambia el comportamiento, así
- * que el batch tiene que salir idéntico. Pero al estar aquí, el día que ciudad y provincia deban crecer a
- * ritmos distintos —o que una ciudad amurallada deje de expandirse mientras su provincia sigue— se toca este
- * punto y nada más.
- *
- * Lo que la separación arregla ya, sin mover una cifra: con la escala declarada (1 unidad de mapa = 10
- * locales), una ciudad de radio local 150 mide 15 en el mapa dentro de una provincia de ~76. Antes, al
- * compartir unidades sin decirlo, la ciudad era MÁS GRANDE que la provincia que controlaba.
- *
- * Vive en `trazado.ts` y no en `asentamientoQuery.ts` porque este módulo es el dueño del espacio local — y
- * porque `asentamientoQuery` ya importa de aquí (`integridadDeRecinto`), así que al revés sería un ciclo.
+ * Vive en `trazado.ts` y no en `asentamientoQuery.ts` porque este módulo es el dueño del espacio local — y porque
+ * `asentamientoQuery` ya importa de aquí (`integridadDeRecinto`), así que al revés sería un ciclo.
  */
 export function radioUrbanoDe(asentamiento: Pick<Asentamiento, 'radioPotencial'>): number {
   return asentamiento.radioPotencial;

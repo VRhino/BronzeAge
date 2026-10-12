@@ -3,29 +3,18 @@
 
 ## 1.0a La escala del mundo
 
-El motor maneja **dos espacios**: el mapa del mundo y la Vista de Asentamiento. La equivalencia es:
+El motor maneja **dos espacios separados**: el **mapa del mundo** (2000×2000 unidades) y el espacio local de la **Vista de Asentamiento**. No hay equivalencia entre sus unidades (decidido el 2026-10-12): el trazado de una ciudad se mide en el suyo y la zona de influencia en el del mapa, y ninguna regla convierte de uno a otro.
 
-> **1 unidad de mapa = 40 unidades locales de la Vista de Asentamiento.**
-
-De ahí sale la jerarquía territorial de la ficción:
+La jerarquía territorial de la ficción, en unidades de mapa:
 
 | | radio | equivale a |
 |---|---|---|
-| **Ciudad** (casco urbano + afueras) | 121-205 unidades locales = **3-5 de mapa** | el núcleo habitado |
-| **Provincia** (zona de influencia) | **30-180 de mapa**, según nivel | lo que controla un asentamiento |
+| **Provincia** (zona de influencia) | **30-180**, según nivel | lo que controla un asentamiento |
 | **Reino** | todas las provincias de una Facción | sin número fijo: una Facción podría llegar a todo el mapa |
 
 **Cuántas provincias caben.** El mundo mide 2000×2000 y el 91% es habitable (7,6% agua y 1,3% cima), o sea
 3,64 millones de unidades². Repartido entre las **200 provincias** que Fase 0 quiere, salen 18.207 u² por
 provincia: un **radio de ~76**, cerca del tope de zona de influencia de nivel 1 (60).
-
-**Por qué 40.** Una ciudad tiene un TAMAÑO MÍNIMO de ~121 unidades locales que no encoge —al fundar, la Granja
-inicial no cabe más cerca—, mientras que la provincia arranca pequeña (radio 30). Con 40, ese peor caso mide
-3,0 de mapa dentro de una provincia de 30: el **10,1%**. De ahí para arriba el ratio solo baja (5% en nivel 1,
-3% en nivel 5), porque la provincia crece y el mínimo de la ciudad no.
-
-**La regla: una ciudad nunca pasa de una décima de su provincia.** El resto es campo, bosque y minas — lo que
-debe haber entre dos ciudades.
 
 **Un reino cómodo mide ~5 provincias**: sale de `MANTENIMIENTO.escalaDistancia` = 400, la distancia a la capital a la
 que el coste de mantenimiento se duplica (×2; sigue creciendo, sin tope, Doc 4.5). 400 / 76 ≈ 5.

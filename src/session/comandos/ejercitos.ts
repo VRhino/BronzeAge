@@ -4,8 +4,7 @@
 // qué, y hacia dónde; el ejército queda creado, en `marchando`, con su ruta ya calculada.
 //
 // Llegar no es combatir (Doc 5.12.3-5.12.4): un ejército que llega acampa, y el combate se ordena con `atacar`
-// (`interaccion.ts`) a distancia de choque, también contra una plaza. `iniciarAsedio` sigue vivo como vía directa
-// entre dos asentamientos vecinos, que no exige movilizar.
+// (`interaccion.ts`) a distancia de choque, también contra una plaza.
 import { FUNDACION, LOGISTICA } from '../../constants';
 import { minutos, sumar } from '../../domain/tiempo';
 import { faccionDeCaravana } from '../../engine/expansion';

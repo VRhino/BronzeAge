@@ -3,10 +3,9 @@
 import { describe, expect, it } from 'vitest';
 import { registrarDerrota } from '../../engine/faccion';
 import { esResidente } from '../../engine/pertenencia';
-import { crearFacciones, escuadronDePrueba } from '../../engine/__tests__/fixtures';
+import { crearFacciones } from '../../engine/__tests__/fixtures';
 import { GameSession } from '../gameSession';
 import { faccionAsentadaDePrueba } from './faccionAsentadaDePrueba';
-import { iniciarAsedio } from '../comandos/militar';
 import type { GameSessionState } from '../estado';
 
 const residenciasDe = (e: { asentamientos: GameSessionState['asentamientos']; campamentosMercenarios: GameSessionState['campamentosMercenarios'] }, id: string) => [
@@ -71,32 +70,4 @@ describe('derrotas en la partida real (D59)', () => {
     expectResidenciaCoherente(e);
   });
 
-  it('iniciarAsedio registra la derrota (B4) y la Facción vencida no se anexiona: sus bots siguen siendo suyos', () => {
-    const { s: s0, alfa, beta } = partidaNpc();
-    const origen = s0.getState().asentamientos.find((a) => a.faccionId === alfa.id)!;
-    const objetivo = s0.getState().asentamientos.find((a) => a.faccionId === beta.id)!;
-    const general = origen.heroesFundadoresIds[0]!;
-    const botsBeta = [...objetivo.heroesFundadoresIds];
-    const s = conEstado(s0, (st) => ({
-      ...st,
-      asentamientos: st.asentamientos.map((a) =>
-        a.id === origen.id ? { ...a, cargos: { ...a.cargos, generalId: general } } : a.id === objetivo.id ? { ...a, protegidaHasta: undefined, ocupacionHasta: undefined } : a
-      ),
-      // El comando no asedia una plaza sin ninguna escuadra que la defienda: se le deja una testimonial, en la guarnición.
-      heroes: st.heroes.map((h) =>
-        h.id === general
-          ? { ...h, escuadrones: [escuadronDePrueba('esc-asalto', general, 'milicia_lanceros', 500)] }
-          : h.id === botsBeta[0]
-            ? { ...h, escuadrones: [escuadronDePrueba('esc-defensa', h.id, 'milicia_lanceros', 1, { enGuarnicion: true })] }
-            : h
-      ),
-    }));
-    const r = s.ejecutar(iniciarAsedio, { atacanteId: origen.id, defensorId: objetivo.id, escuadronIds: ['esc-asalto'] });
-    expect(r.ok && r.datos?.conquistado).toBe(true);
-    const e = s.getState();
-    expect(e.facciones.find((f) => f.id === beta.id)!.derrotadaPor).toBe(alfa.id);
-    const alfaFinal = e.facciones.find((f) => f.id === alfa.id)!;
-    for (const id of botsBeta) expect(alfaFinal.ciudadanosIds).not.toContain(id);
-    expectResidenciaCoherente(e);
-  });
 });

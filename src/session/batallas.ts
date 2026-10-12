@@ -2,7 +2,7 @@
 // congelado, bloquear lo que interviene, dejar que se una quien llega y cerrarlas sin castigo si vence un plazo o se
 // cancelan. Aplicar el resultado vive en `resultadoBatalla.ts`.
 //
-// No es estado del motor: una batalla la abre un comando (`atacar`, `iniciarAsedio`), y lo que está en
+// No es estado del motor: una batalla la abre un comando (`atacar`), y lo que está en
 // una batalla activa ni siquiera entra en el tick. Todo lo que viaja a Conquest tiene la forma del contrato
 // (`contratos/v1/dto.ts`).
 import type { Asentamiento, CampamentoBandido, Caravana, Ejercito, Escuadron, Heroe, Point } from '../domain/types';

@@ -15,7 +15,7 @@ import { repartirBotin } from '../engine/repartoDeBotin';
 import { aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from '../engine/faccion';
 import { herir } from '../engine/heroe';
 import { estanAliadas } from '../engine/pertenencia';
-import { aplicarAjustesReputacion, type AjusteReputacion } from '../engine/reputacion';
+import { ajustesPorDefensaDeVasallo, aplicarAjustesReputacion } from '../engine/reputacion';
 import { alCampamento, conEscuadrones, conExperiencia, sinTropa } from '../engine/tropa';
 import { sumarContadores, type DeltaContadores } from '../engine/tecnologia';
 import { integridadDeRecinto } from '../engine/trazado';
@@ -294,15 +294,12 @@ export function conReputacionDeVasallos(estado: GameSessionState, b: Batalla, r:
   const vasallaId = b.ticket.bandos.defensor.faccionId;
   if (!vasallaId) return estado;
   const participaron = new Set(r.porHeroe.filter((h) => h.participo).map((h) => h.heroeId));
-  const defensoras = participacionesDe(b).filter((p) => p.lado === 'defensor');
-  const señoras = new Set(estado.relaciones.filter((x) => x.estado === 'activa' && x.tipo === 'vasallaje' && x.faccionBId === vasallaId).map((x) => x.faccionAId));
-  const ajustes: AjusteReputacion[] = [...señoras].map((señoraId) => {
-    const presente = defensoras.some((p) => p.participante.faccionId === señoraId && participaron.has(p.participante.heroeId));
-    return presente
-      ? { faccionId: señoraId, delta: r.ganador === 'defensor' ? REPUTACION.bonusDefenderVasallo : 0, razon: 'defender a un vasallo' }
-      : { faccionId: señoraId, delta: r.ganador === 'atacante' ? REPUTACION.penalizacionNoDefenderVasallo : 0, razon: 'no defender a un vasallo' };
-  });
-  return { ...estado, facciones: aplicarAjustesReputacion(estado.facciones, ajustes.filter((a) => a.delta !== 0)) };
+  const presentes = new Set(
+    participacionesDe(b)
+      .filter((p) => p.lado === 'defensor' && participaron.has(p.participante.heroeId) && p.participante.faccionId)
+      .map((p) => p.participante.faccionId!)
+  );
+  return { ...estado, facciones: aplicarAjustesReputacion(estado.facciones, ajustesPorDefensaDeVasallo(estado.relaciones, vasallaId, presentes, r.ganador === 'defensor')) };
 }
 
 /** XP de Facción por combatir, como en el combate con números (Doc Fase_0_5 §8): por cada héroe de su bando que

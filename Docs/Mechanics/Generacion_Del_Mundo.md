@@ -1236,4 +1236,4 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
 
 ## 17. Divergencias
 
-Las abiertas están en [`Divergencias.md`](Divergencias.md): #5 (`ESCALA.unidadesLocalesPorUnidadMapa` sin uso). Resueltas el 2026-10-12 al escribir este documento: se borró del canon la sección de chokepoints (1.5, sin renumerar) y la línea del spawn de jugadores; la regeneración del ganado se documenta como 3 frente a 10 minutos; se aceptó que un bosque admita 2 o 3 Leñeras (nunca 1) y se actualizaron los comentarios de calibración; la tabla de oro por nivel del canon 1.9 se corrigió a 30/33/36.
+No hay divergencias abiertas. Resueltas el 2026-10-12 al escribir este documento: se borró del canon la sección de chokepoints (1.5, sin renumerar) y la línea del spawn de jugadores; la regeneración del ganado se documenta como 3 frente a 10 minutos; se aceptó que un bosque admita 2 o 3 Leñeras (nunca 1) y se actualizaron los comentarios de calibración; la tabla de oro por nivel del canon 1.9 se corrigió a 30/33/36.

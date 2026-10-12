@@ -22,6 +22,27 @@ export function aplicarAjustesReputacion(facciones: Faccion[], ajustes: AjusteRe
   return facciones.map((f) => porId.get(f.id)!);
 }
 
+/**
+ * Defender al vasallo (Doc 2.7, 2026-10-12): para cada señora activa de `vasallaId`, +`bonusDefenderVasallo` si algún héroe suyo
+ * (`faccionesPresentes`: las Facciones de los héroes que defendieron) estuvo en la defensa y esta aguantó, y
+ * `penalizacionNoDefenderVasallo` si el defensor perdió sin ninguno. La comparten la batalla de Unity y el combate con números.
+ */
+export function ajustesPorDefensaDeVasallo(
+  relaciones: readonly RelacionPolitica[],
+  vasallaId: string,
+  faccionesPresentes: ReadonlySet<string>,
+  ganoElDefensor: boolean
+): AjusteReputacion[] {
+  const señoras = new Set(relaciones.filter((x) => x.estado === 'activa' && x.tipo === 'vasallaje' && x.faccionBId === vasallaId).map((x) => x.faccionAId));
+  return [...señoras]
+    .map((señoraId): AjusteReputacion =>
+      faccionesPresentes.has(señoraId)
+        ? { faccionId: señoraId, delta: ganoElDefensor ? REPUTACION.bonusDefenderVasallo : 0, razon: 'defender a un vasallo' }
+        : { faccionId: señoraId, delta: ganoElDefensor ? 0 : REPUTACION.penalizacionNoDefenderVasallo, razon: 'no defender a un vasallo' }
+    )
+    .filter((a) => a.delta !== 0);
+}
+
 /** Decaimiento hacia 0 (Doc 2.7) + trickle por mantener una Alianza activa mucho tiempo. */
 export function avanzarReputacion(facciones: Faccion[], relaciones: RelacionPolitica[]): Faccion[] {
   const bonusPorFaccion = new Map<string, number>();

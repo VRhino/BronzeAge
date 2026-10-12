@@ -8,6 +8,7 @@ import type { GameSessionState } from '../../session/estado';
 import type { Batalla } from '../../session/batallas';
 import { conReputacionDeVasallos } from '../../session/resultadoBatalla';
 import { ajustesPorGuerraTrasRomper, romperRelacion } from '../diplomacia';
+import { ajustesPorDefensaDeVasallo } from '../reputacion';
 import { instanteDeTest } from './fixtures';
 
 const faccion = (id: string): Faccion => ({ id, nombre: id, reyId: `rey-${id}`, embajadorId: null, ciudadanosIds: [], reputacion: 0, experiencia: 0, nivel: 1 }) as unknown as Faccion;
@@ -38,6 +39,22 @@ describe('defender al vasallo (batalla)', () => {
     expect(rep(conReputacionDeVasallos(estado(), batalla([]), resultado('defensor', [])))).toBe(0);
     const libre = { ...estado(), relaciones: [] } as unknown as GameSessionState;
     expect(rep(conReputacionDeVasallos(libre, batalla([]), resultado('atacante', [])))).toBe(0);
+  });
+});
+
+describe('defender al vasallo (la regla, sea cual sea la vía)', () => {
+  const aj = (presentes: string[], gano: boolean) => ajustesPorDefensaDeVasallo([vasallaje], 'vasalla', new Set(presentes), gano);
+
+  it('presente y aguanta: bonus; presente y cae: nada; ausente y cae: penalización; ausente y aguanta: nada', () => {
+    expect(aj(['senora'], true)).toEqual([expect.objectContaining({ faccionId: 'senora', delta: REPUTACION.bonusDefenderVasallo })]);
+    expect(aj(['senora'], false)).toEqual([]);
+    expect(aj([], false)).toEqual([expect.objectContaining({ faccionId: 'senora', delta: REPUTACION.penalizacionNoDefenderVasallo })]);
+    expect(aj([], true)).toEqual([]);
+  });
+
+  it('solo cuenta un vasallaje activo del defensor', () => {
+    expect(ajustesPorDefensaDeVasallo([{ ...vasallaje, estado: 'rota' }], 'vasalla', new Set(), false)).toEqual([]);
+    expect(ajustesPorDefensaDeVasallo([vasallaje], 'otra', new Set(), false)).toEqual([]);
   });
 });
 

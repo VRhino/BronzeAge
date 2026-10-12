@@ -17,7 +17,7 @@ import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
 import { conHeroe, enPie, frenteACampamento } from './fixtures';
 import { heridosEn } from '../../engine/heroe';
 import { SCHEMA_VERSION, type BattleResult } from '../../contratos/v1/dto';
-import { BATALLA, CAMPAMENTOS_BANDIDOS, MOVIMIENTO } from '../../constants';
+import { BATALLA, CAMPAMENTOS_BANDIDOS, MOVIMIENTO, REPUTACION } from '../../constants';
 
 const SCHEMA = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../contratos/v1/contratos.schema.json'), 'utf8'));
 const ajv = new Ajv({ allErrors: true, strict: true, strictRequired: false, allowUnionTypes: true });
@@ -77,6 +77,22 @@ describe('asediar es una orden, no una llegada (Doc 5.12.4)', () => {
 
     expect(r.ok).toBe(true);
     expect(sesion.getState().asentamientos.find((a) => a.id === plazaId)!.faccionId, 'sin defensores cae').toBe(faccionPropia);
+    expect(sesion.getState().facciones.find((f) => f.id === 'faccion-rival')!.derrotadaPor, 'era su última plaza: queda derrotada').toBe(faccionPropia);
+  });
+
+  it('con números, si cae la plaza de una vasalla sin ningún héroe de su señora en la defensa, la señora pierde reputación (Doc 2.7)', () => {
+    const { sesion, fundador, plazaId } = frenteAPlaza(false);
+    const payload = sesion.exportar();
+    const señora = { ...payload.state.facciones[0]!, id: 'faccion-senora', nombre: 'Micenas', ciudadanosIds: [], reputacion: 0 };
+    const vasallaje = { id: 'v', tipo: 'vasallaje', faccionAId: señora.id, faccionBId: 'faccion-rival', creadoEn: instanteDeTick(0), estado: 'activa' };
+    const conVasallaje = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, facciones: [...payload.state.facciones, señora], relaciones: [...payload.state.relaciones, vasallaje as never] },
+    });
+
+    asediar(conVasallaje, fundador, plazaId);
+
+    expect(conVasallaje.getState().facciones.find((f) => f.id === señora.id)!.reputacion).toBe(REPUTACION.penalizacionNoDefenderVasallo);
   });
 
   it('con servidores, abre la batalla de asedio a nombre de quien la ordena, y un segundo asedio a la misma plaza espera', () => {

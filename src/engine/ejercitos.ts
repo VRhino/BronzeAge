@@ -1307,7 +1307,7 @@ export function atacarColumna(
   heroes: readonly Heroe[] = [],
   /** Para la capacidad de las caravanas que lleva el ganador (política «Carga Ampliada»). */
   asentamientos: readonly Asentamiento[] = []
-): { atacante: EjercitoConTropa; defensor: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[] } {
+): { atacante: EjercitoConTropa; defensor: EjercitoConTropa; facciones: Faccion[]; eventos: EventoCrudo[]; vencidos: string[]; ganoElAtacante: boolean } {
   if (atacante.id === defensor.id) throw new MovilizacionInvalidaError('Esa columna es la tuya.');
   if (atacante.faccionId === defensor.faccionId || estanAliadas(relaciones, atacante.faccionId, defensor.faccionId)) {
     throw new MovilizacionInvalidaError('No se ataca a los tuyos ni a un aliado.');
@@ -1330,6 +1330,7 @@ export function atacarColumna(
     facciones: choque.facciones,
     eventos: choque.eventos,
     vencidos: secuela.vencidos,
+    ganoElAtacante: gano,
   };
 }
 

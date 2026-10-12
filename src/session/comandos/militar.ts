@@ -1,39 +1,14 @@
-// Comandos militares: reclutar tropa y las cuatro formas de combate (asedio, campo abierto, intercepción de
-// caravana y ataque a campamento de bandidos).
-//
-// Los cuatro de combate son de los pocos comandos de jugador que consumen aleatoriedad (`ctx.rng` — jitter de
-// combate, ver `engine/combate.ts`). Por eso importa que el rng venga del contexto y no de un global: es lo
-// que mantiene una partida reproducible aunque un jugador ataque en mitad de ella.
-//
-// Sus eventos son los MÁS sensibles a visibilidad de toda la capa de comandos —quién atacó a quién— así que
-// son los que más ganan con `codigo`/`payload` estructurados: las proyecciones por audiencia de Fase C
-// filtran sobre eso. Los payloads de combate los declara `engine/combate.ts`, que es quien resuelve.
+// Comandos militares: reclutar tropa. Los de combate (`atacar`, `inspeccionar`...) viven en `interaccion.ts`.
 import { poblacionDeTropa, reclutarTropa as reclutarTropaEngine } from '../../engine/tropas';
 import { TROPAS_RECLUTABLES } from '../../constants';
 import { contadoresDeReclutamiento, sumarContadores, tecnologiasDe } from '../../engine/tecnologia';
-import { esCiudadano, registrarDerrota } from '../../engine/faccion';
-import {
-  CombateInvalidoError,
-  desalojarResidentes,
-  iniciarAsedio as iniciarAsedioEngine,
-} from '../../engine/combate';
-import { heridosEn, herir } from '../../engine/heroe';
-import { conEscuadrones, defensaDe, heroesQueEntranADefender, sinTropa } from '../../engine/tropa';
-import type { Escuadron, OrigenTropa } from '../../domain/types';
+import { esCiudadano } from '../../engine/faccion';
+import type { OrigenTropa } from '../../domain/types';
 
-/** Lo que se puede sacar del campamento a combatir: la guarnición la maneja la IA de la plaza (Doc 5.15.3), y las
- * escuadras de un héroe herido no combaten (Doc 5.16.4). */
-function combatientes(tropa: readonly Escuadron[], ids: readonly string[], heridos: ReadonlySet<string>): Escuadron[] {
-  if (tropa.some((e) => ids.includes(e.id) && heridos.has(e.heroeId))) throw new CombateInvalidoError('Las escuadras de un héroe herido no combaten.');
-  return tropa.filter((e) => !e.enGuarnicion);
-}
-
-/** Los héroes que llevan a la batalla las escuadras elegidas: si pierden, quedan heridos (Doc 5.16.4). */
-const duenosDe = (tropa: readonly Escuadron[], ids: readonly string[]): string[] => [...new Set(tropa.filter((e) => ids.includes(e.id)).map((e) => e.heroeId))];
 import { conHistorialDeJugador, type GameSessionState } from '../estado';
 import { exito } from './tipos';
-import { campamentoEn, comando, conAsentamiento, exigirAsentamiento } from './ayudas';
-import { desdeCrudos, evento } from './eventos';
+import { comando, conAsentamiento, exigirAsentamiento } from './ayudas';
+import { evento } from './eventos';
 
 /** Reclutamiento: lo narra esta capa (el motor devuelve el asentamiento actualizado, sin eventos). */
 export interface PayloadReclutamiento {
@@ -97,58 +72,6 @@ export const reclutarTropa = comando<ParamsReclutarTropa, { reclutados: number }
     ],
     { reclutados }
   );
-});
-
-export interface ParamsIniciarAsedio {
-  atacanteId: string;
-  defensorId: string;
-  escuadronIds: string[];
-}
-
-export const iniciarAsedio = comando<ParamsIniciarAsedio, { conquistado: boolean }>((estado, _mapa, ctx, params) => {
-  const atacante = exigirAsentamiento(estado, params.atacanteId);
-  const defensor = exigirAsentamiento(estado, params.defensorId);
-  const heridos = heridosEn(estado.heroes, ctx.instante);
-  const tropa = combatientes(campamentoEn(estado, atacante), params.escuadronIds, heridos);
-  const defensores = heroesQueEntranADefender(defensor, estado.heroes, heridos);
-  const defensa = defensaDe(defensor, estado.heroes, heridos);
-
-  const resultado = iniciarAsedioEngine(
-    atacante,
-    tropa,
-    defensor,
-    defensa,
-    params.escuadronIds,
-    estado.facciones,
-    estado.relaciones,
-    ctx.instante,
-    ctx.rng
-  );
-  // Los héroes del bando que pierde quedan heridos (Doc 5.16.4). Una plaza ocupada rebota sin combate (`tropa` vacía).
-  const vencidos = resultado.tropa.length === 0 ? [] : resultado.conquistado ? defensores.map((h) => h.id) : duenosDe(tropa, params.escuadronIds);
-  const tras: GameSessionState = {
-    ...conAsentamiento(estado, resultado.defensor),
-    facciones: resultado.facciones,
-    heroes: herir(conEscuadrones(estado.heroes, resultado.tropa), vencidos, ctx.instante),
-  };
-  // Los residentes derrotados se van con su campamento a 0 a la plaza más cercana de su Facción, y quien estaba dentro
-  // queda fuera, junto a ella, con las escuadras con las que defendió (Doc 5.15.5).
-  const lucharon = new Set(defensa.filter((e) => !e.enGuarnicion).map((e) => e.id));
-  const desalojo = resultado.conquistado
-    ? desalojarResidentes(defensor, tras.asentamientos, tras.heroes, tras.ejercitos, lucharon, ctx.instante, tras.campamentosMercenarios)
-    : undefined;
-  const siguiente: GameSessionState = desalojo
-    ? {
-        ...tras,
-        asentamientos: desalojo.asentamientos,
-        heroes: desalojo.heroes,
-        campamentosMercenarios: desalojo.campamentosMercenarios,
-        ejercitos: [...tras.ejercitos, ...desalojo.columnas.map((c) => sinTropa(c).ejercito)],
-        // Si era la última plaza de su Facción, queda derrotada, igual que por los otros caminos de la conquista.
-        facciones: registrarDerrota(tras.facciones, desalojo.asentamientos, defensor.faccionId, atacante.faccionId),
-      }
-    : tras;
-  return exito(siguiente, desdeCrudos(ctx, resultado.eventos, atacante.id), { conquistado: resultado.conquistado });
 });
 
 // `combateCampoAbierto` e `interceptarCaravana` VIVÍAN AQUÍ y se retiraron en el Paso 11 del movimiento de

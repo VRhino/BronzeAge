@@ -1092,7 +1092,8 @@ describe('POST /jugador/partidas/:gameId/comandos', () => {
       // +1 con `ordenarEscuadras` (2026-10-07): el orden en que entran en combate las escuadras propias.
       // +2 con la escolta de las caravanas (Doc 3.13.4): `asignarEscolta` y `quitarEscolta`.
       // +1 con `pasarAViveres` (2026-10-08): del carro a los víveres (Doc 5.13).
-      expect(cuerpo.oneOf.length).toBe(123);
+      // -1 sin `iniciarAsedio` (2026-10-12): nadie lo usaba; el asedio es `atacar` contra una plaza.
+      expect(cuerpo.oneOf.length).toBe(122);
       const ramaCrearFaccion = cuerpo.oneOf.find((r: { properties: { tipo: { enum: string[] } } }) => r.properties.tipo.enum[0] === 'crearFaccion');
       expect(ramaCrearFaccion.properties.params.required).toEqual(['nombre']);
     });
