@@ -402,7 +402,7 @@ describe('RunnerDePartida — preciosReferencia (doc 9: entrada privilegiada, so
 
   it('trae un precio para cada recurso de PRECIO_BASE, ni uno más ni uno menos', () => {
     const { r } = runnerConReloj(MOMENTO);
-    expect(Object.keys(r.preciosReferencia()).sort()).toEqual(['cobre', 'estano', 'livestock', 'madera', 'piedra', 'trigo'].sort());
+    expect(Object.keys(r.preciosReferencia()).sort()).toEqual(['cobre', 'estano', 'hierro', 'livestock', 'madera', 'piedra', 'trigo'].sort());
   });
 
   it('dentro del minuto de TTL, dos lecturas devuelven el MISMO objeto — no se recalcula de más', () => {

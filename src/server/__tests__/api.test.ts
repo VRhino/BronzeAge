@@ -349,7 +349,7 @@ describe('GET /admin/partidas/:gameId (estado completo)', () => {
     const { admin } = await partidaCreada('g1');
     const res = await app.inject({ method: 'GET', url: '/v1/admin/partidas/g1', headers: admin });
 
-    expect(Object.keys(res.json().preciosReferencia).sort()).toEqual(['cobre', 'estano', 'livestock', 'madera', 'piedra', 'trigo'].sort());
+    expect(Object.keys(res.json().preciosReferencia).sort()).toEqual(['cobre', 'estano', 'hierro', 'livestock', 'madera', 'piedra', 'trigo'].sort());
   });
 });
 
@@ -554,7 +554,7 @@ describe('GET /jugador/partidas/:gameId (proyeccion, Fase C4 Slice 1)', () => {
 
     const res = await app.inject({ method: 'GET', url: '/v1/jugador/partidas/g1', headers: auth });
 
-    expect(Object.keys(res.json().preciosReferencia).sort()).toEqual(['cobre', 'estano', 'livestock', 'madera', 'piedra', 'trigo'].sort());
+    expect(Object.keys(res.json().preciosReferencia).sort()).toEqual(['cobre', 'estano', 'hierro', 'livestock', 'madera', 'piedra', 'trigo'].sort());
   });
 
   it('produccionDeAsentamiento: viaja solo cuando el jugador pisa una plaza propia (la calcula el servidor)', async () => {

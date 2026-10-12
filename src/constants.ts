@@ -1473,6 +1473,7 @@ export const PRECIO_BASE: Record<string, number> = {
   trigo: 1.5,
   cobre: 3,
   estano: 6,
+  hierro: 4,
   livestock: 2,
 };
 
