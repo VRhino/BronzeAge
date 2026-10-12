@@ -282,6 +282,10 @@ Queda **una `RelacionPolitica` por Facción alcanzada**, todas con el mismo cont
   y la vasalla **declara guerra a la señora** (con el arrastre de §5.4: a sus demás vasallos también). Evento `diplomacia.rebelion_vasallo`.
 - **Señor desarmado** (`liberarVasallosDeSenoresDesarmados`, cada tick **antes** del tributo): todo vasallaje activo cuya señora **no tiene ningún asentamiento** pasa a `rota`, sin reputación ni guerra; evento
   `diplomacia.vasallo_liberado`. Llega al tick siguiente a la caída de la última plaza.
+- **Vasalla conquistada por un tercero** (`pasarVasallasConquistadas`, cada tick, justo después del desarme del señor y antes del tributo; decidido el 2026-10-12): para todo vasallaje activo
+  cuya vasalla **no tiene ninguna plaza** y cuyo `derrotadaPor` es otra Facción existente que **no es la señora**: el vasallaje pasa a `rota`, nace `vasallaje-{conquistador}-{vasalla}-c{instante}`
+  con el **mismo tributo**, y las guerras activas entre vasalla y conquistador pasan a `rota`. Sin reputación. Evento `diplomacia.vasallo_conquistado`. Llega al tick siguiente a la caída de la
+  última plaza. Con alguna plaza, por ruina (`derrotadaPor = null`) o si la conquistó la propia señora, no cambia nada.
 
 ### 5.6 Tributo (`avanzarTributos`, cada tick)
 Por cada vasallaje activo con tributo (decidido el 2026-10-11): el pactado `cantidadPorMinuto` se **reparte a partes iguales entre todos los asentamientos de la vasalla**; cada uno paga `min(su stock del recurso, su parte)` (si es > 0) y todo se suma al almacén de la **capital de la señora** (`encontrarCapital`, §3.7; topado por capacidad). Un evento `diplomacia.tributo_pagado` por plaza que paga (`señoraId` = la capital). Sin capital o sin plazas de la vasalla, no hay pago.
@@ -379,7 +383,7 @@ siguen, residen en campamentos y puede volver a fundar (al fundar, `derrotadaPor
 | `faccion.creada`, `faccion.solicitud_ingreso`, `faccion.ciudadania_union`, `faccion.solicitud_denegada`, `faccion.abandonada`, `faccion.nivel_subio`, `faccion.capital_designada`, `faccion.admision_en_ataques` | comandos y tick |
 | `cargo.rey_asignado`, `cargo.embajador_asignado`, `cargo.local_asignado` | comandos |
 | `ciudadania.residencia_cambiada`, `…_dejada`, `…_en_campamento` | comandos |
-| `diplomacia.relacion_propuesta`, `_aceptada`, `_rechazada`, `_retirada`, `relacion_rota`, `guerra_declarada`, `paz_propuesta`, `paz_firmada`, `rebelion_vasallo`, `vasallo_liberado`, `tributo_pagado` | comandos y tick |
+| `diplomacia.relacion_propuesta`, `_aceptada`, `_rechazada`, `_retirada`, `relacion_rota`, `guerra_declarada`, `paz_propuesta`, `paz_firmada`, `rebelion_vasallo`, `vasallo_liberado`, `vasallo_conquistado`, `tributo_pagado` | comandos y tick |
 | `diplomacia.anexion_propuesta/_rechazada/_retirada`, `diplomacia.anexion`, `diplomacia.fusion_propuesta/_rechazada/_retirada`, `diplomacia.fusion` | comandos |
 | `asentamiento.puerta_fijada`, `asentamiento.veto` | comandos |
 | `titulo.cambia_manos`, `titulo.nace` | tick |
@@ -406,10 +410,12 @@ La crónica de los Aedas canta la anexión, la fusión, la liberación de vasall
 | Anexión: propuesta, respuesta, traslado, relaciones, desarme del señor | `comandosAnexion.test.ts` |
 | Fusión: propuesta, respuesta, qué hereda C, capital, relaciones | `comandosFusion.test.ts` |
 | Derrota: solo se anota si no queda plaza | `derrotas.test.ts` |
+| Vasalla conquistada por un tercero (traspaso, tributo, guerras, casos sin efecto) | `vasallaConquistada.test.ts` |
 | Defender al vasallo (bonus, penalización, sin efecto) y guerra tras romper una alianza (ventana y quién paga) | `reputacionVasallos.test.ts` |
 | Títulos y experiencia | `eventosDominioTitulos.test.ts`, `experienciaFaccion.test.ts` |
 
 ## 12. Casos límite y decisiones que parecen raras
+- **`derrotadaPor` no caduca mientras la Facción no tenga plaza:** si una vasalla ya conquistada, sin plazas, se hace vasalla de otra Facción distinta del conquistador, el siguiente tick pasa a ser vasalla del conquistador.
 - **Defender al vasallo solo cuenta en las batallas de Unity** (§5.9); el asedio con números no premia ni penaliza a la señora.
 - **Una propuesta caducada no desaparece sola:** queda en la lista hasta que se añade otra del mismo tipo (que poda las caducadas) o se contesta; ya no se puede contestar ni cuenta como «pendiente».
 - **Declarar guerra no arrastra a los aliados del bando contrario con los que ya hay relación:** solo se salta quien tiene una relación activa con el atacante; el objetivo directo, si la tiene, hace fallar todo.

@@ -30,6 +30,15 @@ export interface PayloadVasalloLiberado {
   faccionVasallaId: string;
 }
 
+/** Payload de `diplomacia.vasallo_conquistado` (un tercero conquistó todas las plazas de la vasalla, ver `pasarVasallasConquistadas`). */
+export interface PayloadVasalloConquistado {
+  relacionRotaId: string;
+  relacionNuevaId: string;
+  faccionSenoraAnteriorId: string;
+  faccionVasallaId: string;
+  faccionConquistadoraId: string;
+}
+
 /** Payload de `diplomacia.guerra_declarada`. */
 export interface PayloadGuerraDeclarada {
   relacionIds: string[];
@@ -366,6 +375,51 @@ export function liberarVasallosDeSenoresDesarmados(
       payload: { relacionId: r.id, faccionSenoraId: r.faccionAId, faccionVasallaId: r.faccionBId } satisfies PayloadVasalloLiberado,
     })),
   };
+}
+
+/**
+ * Ruptura vía 3 (Doc 2.4, decidido el 2026-10-12): si un tercero conquista **todas** las plazas de una vasalla, esta pasa a ser vasalla del conquistador: el vasallaje
+ * con su señora pasa a `rota` (sin reputación ni guerra) y nace uno nuevo con el mismo tributo; las guerras activas entre la vasalla y el conquistador se acaban. El
+ * conquistador es `derrotadaPor` (que solo existe mientras la vasalla no tiene plaza); si es la propia señora o nadie (colapso), no pasa nada. Se barre cada tick.
+ */
+export function pasarVasallasConquistadas(
+  relaciones: RelacionPolitica[],
+  facciones: readonly Faccion[],
+  asentamientos: readonly Asentamiento[],
+  instante: Instante
+): { relaciones: RelacionPolitica[]; eventos: EventoCrudo[] } {
+  const conPlaza = new Set(asentamientos.map((a) => a.faccionId));
+  const conquistadora = new Map(facciones.flatMap((f) => (f.derrotadaPor && !conPlaza.has(f.id) ? [[f.id, f.derrotadaPor] as const] : [])));
+  const eventos: EventoCrudo[] = [];
+  let tras = relaciones;
+  for (const vasallaje of relaciones) {
+    const conquistadorId = conquistadora.get(vasallaje.faccionBId);
+    if (vasallaje.estado !== 'activa' || vasallaje.tipo !== 'vasallaje' || !conquistadorId || conquistadorId === vasallaje.faccionAId) continue;
+    if (!facciones.some((f) => f.id === conquistadorId)) continue;
+    const nuevo: RelacionPolitica = {
+      id: `vasallaje-${conquistadorId}-${vasallaje.faccionBId}-c${instante}`,
+      tipo: 'vasallaje',
+      faccionAId: conquistadorId,
+      faccionBId: vasallaje.faccionBId,
+      ...(vasallaje.tributo ? { tributo: vasallaje.tributo } : {}),
+      creadoEn: instante,
+      estado: 'activa',
+    };
+    const entreLasDos = (r: RelacionPolitica) => r.tipo === 'guerra' && r.estado === 'activa' && [r.faccionAId, r.faccionBId].includes(conquistadorId) && [r.faccionAId, r.faccionBId].includes(vasallaje.faccionBId);
+    tras = [...tras.map((r) => (r.id === vasallaje.id || entreLasDos(r) ? { ...r, estado: 'rota' as const } : r)), nuevo];
+    eventos.push({
+      codigo: 'diplomacia.vasallo_conquistado',
+      mensaje: `${vasallaje.faccionBId} cae ante ${conquistadorId} y pasa a ser su vasalla; deja de serlo de ${vasallaje.faccionAId}.`,
+      payload: {
+        relacionRotaId: vasallaje.id,
+        relacionNuevaId: nuevo.id,
+        faccionSenoraAnteriorId: vasallaje.faccionAId,
+        faccionVasallaId: vasallaje.faccionBId,
+        faccionConquistadoraId: conquistadorId,
+      } satisfies PayloadVasalloConquistado,
+    });
+  }
+  return { relaciones: tras, eventos };
 }
 
 /**

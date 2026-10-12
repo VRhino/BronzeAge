@@ -13,7 +13,7 @@ import { avanzarCaravanasDeFundacion } from './expansion';
 import { alCampamentoPorIds, campamentoDe, conEscolta, conEscuadrones, conTropa, indiceTropa, sinEscolta } from './tropa';
 import { anexarAlHistorialDeOrdenes, caducarOrdenes } from './market';
 import { avanzarPoliticas } from './politicas';
-import { avanzarTributos, liberarVasallosDeSenoresDesarmados } from './diplomacia';
+import { avanzarTributos, liberarVasallosDeSenoresDesarmados, pasarVasallasConquistadas } from './diplomacia';
 import { aplicarExperiencia, registrarDerrota, sinSolicitudesCaducadas, type AjusteExperiencia } from './faccion';
 import { NIVEL_FACCION } from '../constants';
 import { avanzarMantenimientoTropas, consumoRacionDeEscuadrones } from './tropas';
@@ -354,7 +354,10 @@ export function avanzarSimulacion(estado: EstadoSimulacion, mapa: Mapa, contexto
   // Un señor sin asentamientos suelta a sus vasallos antes de que se les cobre tributo (Doc 2.4, ruptura 4).
   const trasLiberacion = liberarVasallosDeSenoresDesarmados(estado.relaciones, trasEjercitos.asentamientos);
   eventosDominio.push(...comoEventosDominio(trasLiberacion.eventos, contexto));
-  const relaciones = trasLiberacion.relaciones;
+  // Una vasalla a la que un tercero le quitó todas las plazas pasa a ser suya (Doc 2.4, ruptura 3).
+  const trasConquista = pasarVasallasConquistadas(trasLiberacion.relaciones, trasEjercitos.facciones, trasEjercitos.asentamientos, instante);
+  eventosDominio.push(...comoEventosDominio(trasConquista.eventos, contexto));
+  const relaciones = trasConquista.relaciones;
 
   const trasTributos = avanzarTributos(relaciones, trasEjercitos.asentamientos);
   eventosDominio.push(...comoEventosDominio(trasTributos.eventos, contexto));

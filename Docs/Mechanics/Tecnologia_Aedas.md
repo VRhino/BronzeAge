@@ -235,7 +235,7 @@ No es estado: es una **vista de los eventos**. Se calcula en `exito` sobre los h
 | `combate.asedio_conquista` | caída de la plaza: quién la arranca de quién (una de dos frases, según un hash del momento y el mensaje) |
 | `asentamiento.ruinas` | lamento por las ruinas de la plaza |
 | `fundacion.asentamiento_fundado` | fundación de la plaza por la Facción |
-| `diplomacia.guerra_declarada`, `.rebelion_vasallo`, `.vasallo_liberado`, `.anexion`, `.fusion` | la frase de cada hecho |
+| `diplomacia.guerra_declarada`, `.rebelion_vasallo`, `.vasallo_liberado`, `.vasallo_conquistado`, `.anexion`, `.fusion` | la frase de cada hecho |
 | `asentamiento.nivel_subio` con `nivelNuevo ≥ 3` | solo si es **la primera plaza del mundo** en llegar a ese nivel (ninguna otra, fuera de las que suben en ese mismo lote, tenía `nivel ≥` el nuevo); si dos suben a la vez se canta una sola |
 
 La variante de una frase es determinista: `hash(clave) mod nº de opciones`, con `h = (h·31 + código del carácter) mod 2³²`.

@@ -19,9 +19,8 @@ Alta = impide algo del juego · Media = el juego va contra la intención escrita
 - `engine/combate.ts` conserva `iniciarAsedio` (asedio de asentamiento a asentamiento, exige General) y sus tests, pero ningún comando ni el tick lo usa desde que los ejércitos asedian (`asediarConEjercito`). Es código muerto salvo que se quiera conservar como referencia; borrarlo se lleva sus tests.
 
 ### 15. Vasallaje: faltan «conquista por un tercero» y las obligaciones de defensa · **Media**
-- Canon 2.4: la ruptura 3 (conquista por un tercero → destrucción o anexión como vasalla del conquistador) no existe: conquistar plazas de una vasalla no toca su vasallaje, que solo termina por las otras vías. Y el señor «debe defender» a sus vasallos:
-  hoy solo existe que la guerra a uno arrastra al otro; no hay obligación ni consecuencia por no defender.
-- **Falta decidir:** si la conquista de una vasalla por un tercero debe cambiar algo, y qué es «defender».
+- Hecho el 2026-10-12: la ruptura 3 (todas las plazas conquistadas por un tercero → vasalla del conquistador, §5.5) y la consecuencia de no defender (reputación, §5.9).
+- **Queda:** el canon dice que el señor «debe defender» a sus vasallos; no es una obligación del motor, solo reputación.
 
 ### 16. Reputación: faltan eventos del canon · **Baja**
 - Hecho el 2026-10-12: defender / no defender a un vasallo (+15 / −3, §5.9) y guerra tras romper una alianza (−15, ventana de 3 días, §5.4). Quitado del canon el «incumplir orden de mercado aceptada».

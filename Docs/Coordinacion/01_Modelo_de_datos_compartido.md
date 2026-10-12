@@ -498,7 +498,9 @@ RelacionPolitica
 ```
 
 Un vasallaje pasa a `rota` también cuando su **señor se queda sin asentamientos** (Doc 2.4, ruptura 4): evento `diplomacia.vasallo_liberado`
-(`{ relacionId, faccionSenoraId, faccionVasallaId }`), público a través de la crónica.
+(`{ relacionId, faccionSenoraId, faccionVasallaId }`), público a través de la crónica. Y cuando un tercero conquista **todas** las plazas de una vasalla (ruptura 3), el vasallaje con su señora
+pasa a `rota` y nace otro con el conquistador: evento `diplomacia.vasallo_conquistado`
+(`{ relacionRotaId, relacionNuevaId, faccionSenoraAnteriorId, faccionVasallaId, faccionConquistadoraId }`), también en la crónica.
 
 ## 9. `Titulo`
 
