@@ -62,10 +62,11 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) | ✅ 2026-10-12 | Caravana de Fundación (coste, lanzar desde una plaza, fundar, desarmar, caducar y volver sola, devolver), nombres de ciudades y refundación desde un campamento (fondo, aportar, retirar, comprar) |
 | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) | ✅ 2026-10-12 | dónde está un héroe (los cuatro sitios y el diagrama de transiciones), salir/entrar de plazas y campamentos, guarnecer, marchar, conectarse/desconectarse, fijar la puerta y vetar, y la convocatoria (ejército en preparación: convocar, unirse, petición, partir todo-o-nada) |
 | [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md) | ✅ 2026-10-12 | índice de todo lo del campamento (dónde está cada cosa) y lo nuevo: población de reclutas, reclutar y su precio, tropa prestada y su retirada, y la planta |
+| [`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md) | ✅ 2026-10-12 | roles técnicos y superficies, el camino de un comando, los predicados de pertenencia, **la matriz de los 122 comandos**, qué proyecta el servidor a cada audiencia (administración, jugador sin y con héroe, eventos, crónica) y los canales de tiempo real (eventos y vistas de foto + delta) |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 
 No queda ningún documento pendiente de la lista inicial.
 
 ## Artefactos visuales
 
-Cada documento nuevo lleva un artefacto HTML interactivo en [`artefactos/`](artefactos/) (también publicado como página privada): [`presencia_y_convocatoria.html`](artefactos/presencia_y_convocatoria.html) y [`campamentos_mercenarios.html`](artefactos/campamentos_mercenarios.html). Los datos de los que salen de código (la planta, los precios) se generan con el motor; las cifras sueltas llevan la fecha en el pie.
+Cada documento nuevo lleva un artefacto HTML interactivo en [`artefactos/`](artefactos/) (también publicado como página privada): [`presencia_y_convocatoria.html`](artefactos/presencia_y_convocatoria.html) y [`campamentos_mercenarios.html`](artefactos/campamentos_mercenarios.html) y [`permisos_y_proyecciones.html`](artefactos/permisos_y_proyecciones.html) (la matriz de los 122 comandos con un simulador de perfil, el camino de una orden, lo que ve cada observador y un laboratorio de deltas). Los datos de los que salen de código (la planta, los precios) se generan con el motor; las cifras sueltas llevan la fecha en el pie.

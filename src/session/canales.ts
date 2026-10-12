@@ -6,11 +6,14 @@
 // el socket, parsear los mensajes JSON, mantener la lista de conexiones— es infraestructura y vive en
 // `server/difusion/`.
 //
-// Dos canales, calcados de los ejemplos del doc 6 §2:
+// Los canales de EVENTOS (los de VISTA, foto y delta, viven en `vistas/segmentos.ts`):
 //   - `mapa/general`: eventos SIN `asentamientoId` (globales — diplomacia, Facciones, tick). Abierto a
 //     cualquiera con `Membresia` de jugador en la partida.
 //   - `asentamiento/<id>`: eventos de ESE asentamiento. Solo si es de la Facción propia — la autorización de
 //     canal usa la MISMA regla que la proyección: nada de lo ajeno, ni siquiera en tiempo real.
+//   - `batalla/<id>`: los eventos de una batalla de Unity; la sigue quien combate en ella o la ve bajo la niebla.
+//   - `heroe/<id>`: lo que nombra a un héroe y no va ya por el canal general; solo lo abre él.
+//   - `admin/eventos`: todos, sin filtro, solo en el WebSocket de administración.
 //
 // De ahí que atribuir un evento importe más de lo que parece: lo que sale sin `asentamientoId` se difunde por
 // `mapa/general`, al que puede suscribirse CUALQUIER jugador de la partida. Los eventos de campaña se

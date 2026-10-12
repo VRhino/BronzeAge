@@ -41,7 +41,7 @@
 // Y el tránsito sale solo: al dejar de ver algo, deja de estar en la lista de en vivo y se queda la última
 // foto. Cuando las dos coinciden gana la de en vivo — estar mirándolo es mejor información que recordarlo.
 //
-// Lo que sigue faltando es la visión compartida por ALIANZA (Paso 4).
+// La visión compartida por ALIANZA o vasallaje (Paso 4) suma los ojos de la otra Facción a lo que se ve ahora, nunca a lo recordado.
 import { cupoGuarnicion } from '../../engine/asentamientoQuery';
 import { estaHerido, guarnicionOcupada, liderazgoDeLoadout } from '../../engine/heroe';
 import { costeLiderazgo } from '../../engine/liderazgo';

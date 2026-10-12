@@ -7,7 +7,10 @@ Alta = impide algo del juego · Media = el juego va contra la intención escrita
 
 ## Abiertas
 
-Ninguna. Las últimas (2026-10-12) se resolvieron así: la escala local y la del mapa son espacios separados (se borró `ESCALA`); se borró el diseño viejo del trazado y el asedio de asentamiento a asentamiento (`iniciarAsedio`, sin usos); «el señor debe defender» es solo reputación; defender a un vasallo también cuenta en el combate con números; un trueque aceptado no se cancela (se cumple o vence); y una escuadra reservada para una batalla no se repone ni entra o sale de la guarnición.
+- **Tesorero y trueque/Mercado** ([`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md) §11). El canon (Doc 2.2 y glosario) define al Tesorero como «gestión económica (trueque + Mercado)», pero proponer, aceptar y rechazar un trueque y colocar una orden de mercado lo puede hacer **cualquier residente presente**, sin cargo. Falta decidir si esas acciones pasan a exigir el cargo (y cuál: Tesorero, o Gobernador también) o si el canon debe decir que son de cualquier residente.
+- **Rol `observador`** (misma sección). `Docs/Arquitectura/5` lo define «solo lectura, proyección pública» y el servidor deja otorgarlo, pero ninguna ruta lo admite: una membresía de observador no concede nada. Falta decidir si se implementa su superficie de lectura o se retira del enum y de los roles otorgables.
+
+Las últimas cerradas (2026-10-12) se resolvieron así: la escala local y la del mapa son espacios separados (se borró `ESCALA`); se borró el diseño viejo del trazado y el asedio de asentamiento a asentamiento (`iniciarAsedio`, sin usos); «el señor debe defender» es solo reputación; defender a un vasallo también cuenta en el combate con números; un trueque aceptado no se cancela (se cumple o vence); y una escuadra reservada para una batalla no se repone ni entra o sale de la guarnición.
 
 ## Consecuencias pendientes de medir
 

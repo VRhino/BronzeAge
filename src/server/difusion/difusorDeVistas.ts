@@ -24,6 +24,7 @@ import {
 } from '../../session/vistas/segmentos';
 import type { GameSessionState } from '../../session/estado';
 import { medicion } from '../medicionDeCarga';
+import { DIFUSION } from '../../constantsInfra';
 
 /** Lo que el difusor necesita de una partida abierta (la cumple `RunnerDePartida`). */
 export interface FuenteDePartida extends ImpurosDePartida {
@@ -187,13 +188,13 @@ export class DifusorDeVistas {
   constructor(opciones: OpcionesDifusor) {
     this.opciones = {
       fuenteDe: opciones.fuenteDe,
-      coalescerMs: opciones.coalescerMs ?? 100,
-      umbralLentoBytes: opciones.umbralLentoBytes ?? 256 * 1024,
-      umbralRecuperadoBytes: opciones.umbralRecuperadoBytes ?? 32 * 1024,
-      lentoMaxMs: opciones.lentoMaxMs ?? 15_000,
-      maxSuscripcionesPorSocket: opciones.maxSuscripcionesPorSocket ?? 64,
-      minMsEntreFotos: opciones.minMsEntreFotos ?? 2_000,
-      ritmoMaximo: opciones.ritmoMaximo ?? 60,
+      coalescerMs: opciones.coalescerMs ?? DIFUSION.coalescerMs,
+      umbralLentoBytes: opciones.umbralLentoBytes ?? DIFUSION.umbralLentoBytes,
+      umbralRecuperadoBytes: opciones.umbralRecuperadoBytes ?? DIFUSION.umbralRecuperadoBytes,
+      lentoMaxMs: opciones.lentoMaxMs ?? DIFUSION.lentoMaxMs,
+      maxSuscripcionesPorSocket: opciones.maxSuscripcionesPorSocket ?? DIFUSION.maxSuscripcionesPorSocket,
+      minMsEntreFotos: opciones.minMsEntreFotos ?? DIFUSION.minMsEntreFotos,
+      ritmoMaximo: opciones.ritmoMaximo ?? DIFUSION.ritmoMaximo,
       ahoraMs: opciones.ahoraMs,
       programar: opciones.programar,
     };

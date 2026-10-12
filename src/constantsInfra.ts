@@ -36,3 +36,24 @@ export const INFRA = {
    */
   eventosMaximosEnMemoria: 5_000,
 } as const;
+
+/**
+ * Los canales de VISTA del tiempo real (`server/difusion/difusorDeVistas.ts`, `Docs/Coordinacion/03_Tiempo_real_por_segmentos.md`): cuándo se vuelca un cambio, cuándo un
+ * socket se considera lento y cuánto se le deja pedir. Son del transporte, no del juego: no cambian lo que ve nadie, solo cuánto tarda en llegar y cuánto cuesta.
+ */
+export const DIFUSION = {
+  /** Ventana de coalescencia (ms): como mucho un volcado por partida en ese tiempo; los cambios de dentro se juntan en un solo delta. */
+  coalescerMs: 100,
+  /** Con más de esto en el búfer del socket no se le envía nada: se marca desactualizado y se saltan sus deltas. */
+  umbralLentoBytes: 262_144,
+  /** Por debajo de esto un socket desactualizado vuelve a recibir `resync` + foto. */
+  umbralRecuperadoBytes: 32_768,
+  /** Desactualizado durante más de esto (ms): se cierra con el código 4408. */
+  lentoMaxMs: 15_000,
+  /** Tope de canales de vista suscritos por socket. */
+  maxSuscripcionesPorSocket: 64,
+  /** Una foto por canal y socket cada tanto (ms), pedida con `resincronizar`. */
+  minMsEntreFotos: 2_000,
+  /** Tope del `ritmo` que puede pedir un suscriptor (un delta cada N ticks): lo pedido se recorta a [1, esto]. */
+  ritmoMaximo: 60,
+} as const;

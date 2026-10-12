@@ -4,9 +4,8 @@
 // `Docs/Coordinacion/03_Tiempo_real_por_segmentos.md` y, para los canales de eventos, en `02_Contrato_Comunicacion_Servidor_Cliente.md` §2:
 // ahí es donde se mantiene, para que no viva duplicado en prosa aquí. Este archivo es el transporte:
 //
-//  - `/jugador/partidas/:gameId/tiempo-real`: canales de eventos (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`), el
-//    mensaje `tick` y los canales de vista de jugador (`vista/mapa`, `vista/heroe`; `vista/asentamiento/<id>` es de la fase 3 y hoy se
-//    anuncia como `canal_desconocido`).
+//  - `/jugador/partidas/:gameId/tiempo-real`: canales de eventos (`mapa/general`, `asentamiento/<id>`, `batalla/<id>`, `heroe/<id>`) y los canales
+//    de vista de jugador (`vista/mapa`, `vista/heroe`, `vista/asentamiento/<id>`).
 //  - `/admin/partidas/:gameId/tiempo-real`: canales de vista de administración (`admin/*`) y `admin/eventos`, todos los eventos de la partida sin filtro.
 //
 // Autenticación ANTES de completar el handshake (`preValidation`, en un `register` aparte para que el hook no se filtre a las demás rutas):

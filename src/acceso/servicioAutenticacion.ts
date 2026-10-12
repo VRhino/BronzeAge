@@ -12,7 +12,8 @@ import { CredencialInvalidaError } from './proveedorIdentidad';
 import type { RepositorioIdentidad } from './repositorio';
 import type { Sesion, Usuario } from './tipos';
 
-const DURACION_SESION_MS = 1000 * 60 * 60 * 12; // 12h — arbitrario para esta etapa, revisar en C6/producción
+/** Cuánto dura una sesión emitida. 12 h — arbitrario para esta etapa, revisar en producción. Se cita desde `Docs/Mechanics/Proyecciones_Y_Autorizacion.md` (`acceso` no importa constantes). */
+export const DURACION_SESION_MS = 1000 * 60 * 60 * 12;
 
 /** Credencial presentada por un cliente, ya separada en esquema y valor por la capa de transporte. El
  * `esquema` decide qué `ProveedorIdentidad` la verifica (ej. `'dev'`), o si es una sesión ya emitida. */
