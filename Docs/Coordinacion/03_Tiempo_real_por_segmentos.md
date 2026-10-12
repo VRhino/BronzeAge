@@ -185,6 +185,11 @@ aceptan en ese endpoint y los de jugador solo en el suyo.
    separado: el cliente repinta por `requestAnimationFrame`, no por mensaje.
 5. Mientras el canal esté sin foto (esperándola), la UI conserva lo último dibujado y no muestra datos nuevos a medias.
 6. Si un canal responde `canal_desconocido`, ese canal vuelve al sondeo HTTP (§8.3) sin afectar a los demás.
+7. **Eventos de dominio: varios comparten `version`** (un tick o un comando emite varios eventos con la misma, p. ej. dos «llega a su
+   destino»). En directo (canales de eventos, `admin/eventos`) el socket entrega cada evento **una vez**: **no se descartan por `version <= última`**,
+   se perderían. El filtro por versión se aplica **solo** a los eventos acumulados durante una recuperación con el cursor
+   `GET .../eventos?desde=<version>`, que siempre devuelve versiones completas: tras recuperar, se descartan los del WS ya cubiertos por el
+   cursor. (Hallazgo de Cliente admin, 2026-10-12; vale también para el cliente jugador.)
 
 ## 4. Formato del delta
 

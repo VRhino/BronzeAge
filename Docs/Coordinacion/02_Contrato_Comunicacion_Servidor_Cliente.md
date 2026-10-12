@@ -241,6 +241,7 @@ recibió. Al reconectar el WebSocket, vuelve a suscribirse a sus canales (las su
 un cierre) y pide `GET .../eventos?desde=<ese version>` para recuperar lo que se perdió; si el hueco es
 grande, le basta con pedir la proyección entera otra vez. El WebSocket solo avisa: nunca es la única copia de
 un dato.
+**Varios eventos comparten `version`** (un tick o un comando emite varios). En directo, el cliente NO descarta eventos del WS por `version <= última`: el socket entrega cada uno una vez. El filtro por versión se aplica solo a lo acumulado durante la recuperación con el cursor, que devuelve versiones completas (doc 03 §3.3, regla 7).
 
 Estas rutas NO cambian de forma para dar soporte a `Heroe` — solo su contenido crece. La proyección identifica
 al jugador por su héroe (`heroeId`, que sustituye al antiguo `jugadorId`); el `jugadorId` de la membresía
