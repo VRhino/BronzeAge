@@ -90,7 +90,7 @@ import { isoDeInstante } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
 import { ApiError, consultarEstado, consultarEventos, crearOResumirPartida, ejecutarComando, obtenerMapa, olvidarSesion, urlTiempoRealAdmin } from './apiCliente';
-import { CANAL_PARTIDA, canalAsentamiento, canalCampamento, canalHeroe, ConexionAdmin } from './conexionAdmin';
+import { CANAL_EVENTOS, CANAL_PARTIDA, canalAsentamiento, canalCampamento, canalHeroe, ConexionAdmin } from './conexionAdmin';
 import { fusionarEstado, type AsentamientoConResumen } from './estadoEnVivo';
 import type { ResumenDeAsentamiento } from '@motor/session/vistas/segmentos';
 
@@ -242,6 +242,9 @@ export class GameStore {
   private conexion: ConexionAdmin | undefined;
   private ultimaLecturaCompleta = Date.now();
   private notifPendiente = false;
+  /** Mientras se cierra el hueco con el cursor HTTP, los eventos del socket esperan aquí (si se aplicaran antes, el cursor saltaría y el hueco se perdería). */
+  private recuperandoEventos = false;
+  private eventosEnEspera: EventoDominioConVersion[] = [];
   private temporizadorOculto: ReturnType<typeof setTimeout> | undefined;
   private reanudadoEn = 0;
   private versionDePartidaVista = -1;
@@ -325,10 +328,35 @@ export class GameStore {
         this.conexion = undefined;
       },
       alFallarApertura: () => olvidarSesion(),
+      alEvento: (e) => (this.recuperandoEventos ? this.eventosEnEspera.push(e) : this.aplicarEvento(e)),
+      alSuscritoEventos: () => void this.recuperarEventos(),
     });
     this.conexion.abrir();
     this.conexion.suscribir(CANAL_PARTIDA);
+    this.conexion.suscribir(CANAL_EVENTOS);
     document.addEventListener('visibilitychange', () => this.alCambiarVisibilidad());
+  }
+
+  /** Un evento de dominio llegado por el socket: el más nuevo va delante, y lo que no supera el cursor ya está anotado. */
+  private aplicarEvento(e: EventoDominioConVersion): void {
+    if (e.version <= this.cursorEventos) return;
+    this.eventos = [e, ...this.eventos].slice(0, MAX_EVENTOS_EN_MEMORIA);
+    this.cursorEventos = e.version;
+    this.programarNotify();
+  }
+
+  /** Tras (re)suscribirse a `admin/eventos`: se cierra el hueco desde el último evento visto con el cursor HTTP y luego se sueltan los que llegaron
+   * por el socket mientras tanto. Sin esto, lo ocurrido entre el arranque (o la caída) y la suscripción no se vería nunca. */
+  private async recuperarEventos(): Promise<void> {
+    this.recuperandoEventos = true;
+    try {
+      await this.sincronizarEventos();
+    } finally {
+      this.recuperandoEventos = false;
+      const espera = this.eventosEnEspera.sort((a, b) => a.version - b.version);
+      this.eventosEnEspera = [];
+      for (const e of espera) this.aplicarEvento(e);
+    }
   }
 
   /** Pestaña oculta más de unos segundos: se sueltan las suscripciones (un cambio rápido de foco no cuesta una foto de ~1 MiB). Al volver,
@@ -379,7 +407,7 @@ export class GameStore {
         return;
       }
       // El historial de eventos (log y crónica) sigue su cursor HTTP: pequeño, y solo cuando la versión avanza.
-      if (partida && partida.version !== this.versionDePartidaVista) {
+      if (partida && partida.version !== this.versionDePartidaVista && !this.conexion?.eventosActivos) {
         this.versionDePartidaVista = partida.version;
         void this.sincronizarEventos().then(() => this.programarNotify());
       }
@@ -437,7 +465,9 @@ export class GameStore {
    */
   private async sincronizarEventos(): Promise<void> {
     try {
-      const { eventos } = await consultarEventos(this.gameId, this.cursorEventos);
+      const { eventos: leidos } = await consultarEventos(this.gameId, this.cursorEventos);
+      // Lo que ya llegó por el socket mientras esta petición volaba no se vuelve a anotar.
+      const eventos = leidos.filter((e) => e.version > this.cursorEventos);
       if (eventos.length === 0) return;
       // Tope: en una partida larga el historial crece sin fin y cada render lo recorría entero (crónica, log).
       this.eventos = [...[...eventos].reverse(), ...this.eventos].slice(0, MAX_EVENTOS_EN_MEMORIA);
