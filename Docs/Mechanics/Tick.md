@@ -64,7 +64,8 @@ instante = instanteDeTick(tick')            ← el instante RESULTANTE: los even
 5. estado'  = conResultadoDeSimulacion({ ...estado, tick: tick', estadoMapa: resultado.estadoMapa }, resultado con los apartados AÑADIDOS AL FINAL de ejercitos y de caravanas)
 6. eventos de las batallas vencidas en 1: 'batalla.fallida' («no llegó a jugarse: nadie pierde nada»), con el momento del tick
 7. conSalidasDelMundo(estado', mapa, instante, bloqueos.heroes)
-8. exito(estado'', [eventos de la simulación, eventos de batallas fallidas, eventos de salidas])
+8. retirarCerradas(estado'', instante): las batallas cerradas hace más de BATALLA.conservarCerradasMinutos salen de estado.batallas (el servidor las anexa al histórico de la partida, Batalla_Unity_Ciclo §3.3)
+9. exito(estado''', [eventos de la simulación, eventos de batallas fallidas, eventos de salidas])
 ```
 
 Consecuencias:

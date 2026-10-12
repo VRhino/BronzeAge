@@ -864,6 +864,10 @@ Batalla
                              que se van sumando
   resultado?                el BattleResult aplicado, entero — idempotencia, ver §16
   aplicadaEn?: Instante      cuándo se aplicó
+  cerradaEn?: Instante       cuándo pasó a aplicada, cancelada o fallida. Una cerrada se conserva en el estado
+                             BATALLA.conservarCerradasMinutos; después sale del snapshot y se
+                             guarda en el histórico de batallas de la partida (<gameId>.batallas.jsonl) y la batalla
+                             deja de existir para el contrato (404)
 ```
 
 **Ciclo y transiciones (R01; tabla añadida el 2026-09-13):**

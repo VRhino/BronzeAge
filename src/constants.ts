@@ -1864,6 +1864,10 @@ export const BATALLA = {
   plazoAsignacionMinutos: 5,
   plazoInicioMinutos: 5,
   margenMinutos: 5,
+  /** Cuánto se conserva en `estado.batallas` una batalla cerrada, en minutos de mundo: la idempotencia del resultado y el
+   * ticket «recuperable en cualquier momento» (doc 01 §15) piden que siga ahí un rato. Después el tick la saca del estado y
+   * el servidor la anexa al histórico de la partida (`server/historicoDeBatallas.ts`). */
+  conservarCerradasMinutos: 60,
   /** Tropa sin dueño: la de un campamento (su poder 30 de hoy, Doc 1.9) y los carreteros de una caravana sin escolta
    * (Doc 3.10). No persisten entre batallas. */
   tropaCarreteros: { tropaId: 'milicia_lanceros', unidades: 13 },

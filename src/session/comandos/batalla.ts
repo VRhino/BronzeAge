@@ -54,7 +54,7 @@ export const unirseABatalla = comando<ParamsUnirseABatalla, { secuencias: number
 /** Echarse atrás antes de que empiece la partida: nadie pierde nada (doc 01 §15). */
 export const cancelarBatalla = comando<ParamsCancelarBatalla, void>((estado, _mapa, ctx, params) => {
   const batalla = exigirBatalla(estado, params.battleId, ctx.instante);
-  const siguiente = cancelar(estado, batalla);
+  const siguiente = cancelar(estado, batalla, ctx.instante);
   return exito(
     siguiente,
     eventosDeBatalla(siguiente, batalla, 'batalla.cancelada', `Se cancela la batalla ${batalla.id}: nadie pierde nada.`).map((e) => evento(ctx, e))

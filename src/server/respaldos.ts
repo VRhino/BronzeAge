@@ -28,6 +28,7 @@ import { crearAlmacenEnDisco } from './almacen/enDisco';
 import { cargarPartida } from './persistenciaPartida';
 import { claveDeAuditoria } from './auditoria';
 import { claveDeEventos } from './eventosDePartida';
+import { claveDeHistoricoDeBatallas } from './historicoDeBatallas';
 import { claveDeDiario } from './diarioDePartida';
 
 /** Subdirectorio de respaldos, hermano de los snapshots. Aparte y no mezclado con ellos para que
@@ -64,6 +65,7 @@ const SUFIJO_PARTIDA = '.json';
 const SUFIJO_AUDITORIA = '.auditoria.jsonl';
 const SUFIJO_EVENTOS = '.eventos.jsonl';
 const SUFIJO_DIARIO = '.diario.jsonl';
+const SUFIJO_BATALLAS = '.batallas.jsonl';
 
 function nombreDeRespaldo(gameId: string, momento: string, sufijo: string): string {
   return `${gameId}--${momentoParaArchivo(momento)}${sufijo}`;
@@ -103,6 +105,7 @@ export async function respaldarPartida(directorio: string, gameId: string, momen
     [SUFIJO_AUDITORIA, claveDeAuditoria(gameId)],
     [SUFIJO_EVENTOS, claveDeEventos(gameId)],
     [SUFIJO_DIARIO, claveDeDiario(gameId)],
+    [SUFIJO_BATALLAS, claveDeHistoricoDeBatallas(gameId)],
   ];
   for (const [sufijo, clave] of hermanos) {
     const origenHermano = join(directorio, clave);
@@ -138,7 +141,8 @@ export async function listarRespaldos(directorio: string, gameId: string): Promi
       !archivo.endsWith(SUFIJO_PARTIDA) ||
       archivo.endsWith(SUFIJO_AUDITORIA) ||
       archivo.endsWith(SUFIJO_EVENTOS) ||
-      archivo.endsWith(SUFIJO_DIARIO)
+      archivo.endsWith(SUFIJO_DIARIO) ||
+      archivo.endsWith(SUFIJO_BATALLAS)
     )
       continue;
     const sello = archivo.slice(prefijo.length, archivo.length - SUFIJO_PARTIDA.length);
@@ -181,7 +185,7 @@ export async function borrarRespaldo(directorio: string, archivo: string): Promi
     return false;
   }
   const base = archivo.slice(0, -SUFIJO_PARTIDA.length);
-  for (const sufijo of [SUFIJO_PARTIDA, SUFIJO_AUDITORIA, SUFIJO_EVENTOS, SUFIJO_DIARIO]) await rm(join(destinoDir, base + sufijo), { force: true });
+  for (const sufijo of [SUFIJO_PARTIDA, SUFIJO_AUDITORIA, SUFIJO_EVENTOS, SUFIJO_DIARIO, SUFIJO_BATALLAS]) await rm(join(destinoDir, base + sufijo), { force: true });
   return true;
 }
 
@@ -205,7 +209,7 @@ export class RespaldoInservibleError extends Error {
  * rechaza aquí), y solo entonces se sustituye el snapshot vigente con un `rename` atómico. Nunca hay un
  * instante en que la partida esté medio restaurada: o sigue la vieja, o está la nueva entera.
  *
- * El historial de eventos (`<gameId>.eventos.jsonl`) y el diario de comandos (`<gameId>.diario.jsonl`) se
+ * El historial de eventos (`<gameId>.eventos.jsonl`), el de batallas (`<gameId>.batallas.jsonl`) y el diario de comandos (`<gameId>.diario.jsonl`) se
  * restauran junto al snapshot: se pone el del respaldo, o —si el respaldo no lo trae— se BORRA el vigente. El
  * historial de después ya no corresponde, y el diario vigente es de la partida viva: repasado sobre el
  * respaldo, la haría avanzar hacia donde estaba.
@@ -245,6 +249,7 @@ export async function restaurarPartida(directorio: string, gameId: string, archi
     // (`cargarPartida`) los rehidrata/repasa y comprueba que también cargan.
     const tieneEventos = await copiarSiExiste(SUFIJO_EVENTOS);
     const tieneDiario = await copiarSiExiste(SUFIJO_DIARIO);
+    const tieneBatallas = await copiarSiExiste(SUFIJO_BATALLAS);
 
     const cargada = await cargarPartida(crearAlmacenEnDisco(pruebas), gameId);
     if (!cargada) throw new RespaldoInservibleError(archivo, 'no contiene una partida legible');
@@ -256,6 +261,8 @@ export async function restaurarPartida(directorio: string, gameId: string, archi
     else await rm(join(directorio, claveDeEventos(gameId)), { force: true });
     if (tieneDiario) await rename(join(pruebas, `${gameId}${SUFIJO_DIARIO}`), join(directorio, claveDeDiario(gameId)));
     else await rm(join(directorio, claveDeDiario(gameId)), { force: true });
+    if (tieneBatallas) await rename(join(pruebas, `${gameId}${SUFIJO_BATALLAS}`), join(directorio, claveDeHistoricoDeBatallas(gameId)));
+    else await rm(join(directorio, claveDeHistoricoDeBatallas(gameId)), { force: true });
     return version;
   } catch (err) {
     if (err instanceof RespaldoInservibleError) throw err;

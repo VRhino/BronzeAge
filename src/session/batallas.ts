@@ -64,6 +64,9 @@ export interface Batalla {
   /** El resultado aplicado, entero: repetirlo igual no cambia nada, y otro distinto se rechaza (doc 01 §16). */
   resultado?: BattleResult;
   aplicadaEn?: Instante;
+  /** Cuándo pasó a `aplicada`, `cancelada` o `fallida`: desde aquí corre `BATALLA.conservarCerradasMinutos`. Sin ella (una
+   * batalla guardada antes de existir), cuenta `aplicadaEn` o, en su defecto, `expiraEn`. */
+  cerradaEn?: Instante;
 }
 
 export interface SalidaRegistrada {
@@ -503,18 +506,18 @@ export function unirseABatalla(
 }
 
 /** Cierra sin aplicar nada: suelta los candados y nadie gana ni pierde (doc 01 §15). */
-export function cerrarSinResultado(estado: GameSessionState, batalla: Batalla, final: 'cancelada' | 'fallida'): GameSessionState {
+export function cerrarSinResultado(estado: GameSessionState, batalla: Batalla, final: 'cancelada' | 'fallida', ahora: Instante): GameSessionState {
   return {
     ...estado,
     heroes: conReserva(estado.heroes, escuadrasConDueno(batalla), undefined),
-    batallas: estado.batallas.map((b) => (b.id === batalla.id ? { ...b, estado: final } : b)),
+    batallas: estado.batallas.map((b) => (b.id === batalla.id ? { ...b, estado: final, cerradaEn: ahora } : b)),
   };
 }
 
 /** Cancelar antes de que empiece la partida (doc 02 §3.1). Quién puede lo decide la matriz de autorización. */
-export function cancelarBatalla(estado: GameSessionState, batalla: Batalla): GameSessionState {
+export function cancelarBatalla(estado: GameSessionState, batalla: Batalla, ahora: Instante): GameSessionState {
   if (batalla.estado === 'en_curso') throw new BatallaInvalidaError('La partida ya empezó: no se puede cancelar.');
-  return cerrarSinResultado(estado, batalla, 'cancelada');
+  return cerrarSinResultado(estado, batalla, 'cancelada', ahora);
 }
 
 /**
@@ -530,7 +533,20 @@ export function sinCandadosVencidos(estado: GameSessionState, ahora: Instante): 
 /** Pasa a `fallida` las que vencieron su plazo: nadie la asignó, nadie la empezó o el resultado no llegó a tiempo. */
 export function vencerBatallas(estado: GameSessionState, ahora: Instante): { estado: GameSessionState; vencidas: Batalla[] } {
   const vencidas = estado.batallas.filter((b) => ACTIVAS.has(b.estado) && ahora >= b.expiraEn);
-  return { estado: vencidas.reduce((e, b) => cerrarSinResultado(e, b, 'fallida'), estado), vencidas };
+  return { estado: vencidas.reduce((e, b) => cerrarSinResultado(e, b, 'fallida', ahora), estado), vencidas };
+}
+
+/**
+ * Saca de `estado.batallas` las cerradas hace más de `BATALLA.conservarCerradasMinutos`. Las devuelve para que el servidor las
+ * guarde en el histórico de la partida (`server/historicoDeBatallas.ts`): al estado ya no le sirven, y el snapshot no debe
+ * crecer con cada batalla (un asedio lleva congelado el mapa de la plaza).
+ */
+export function retirarCerradas(estado: GameSessionState, ahora: Instante): { estado: GameSessionState; retiradas: Batalla[] } {
+  const limite = minutos(BATALLA.conservarCerradasMinutos);
+  const retiradas = estado.batallas.filter((b) => !ACTIVAS.has(b.estado) && ahora >= sumar(b.cerradaEn ?? b.aplicadaEn ?? b.expiraEn, limite));
+  if (retiradas.length === 0) return { estado, retiradas };
+  const fuera = new Set(retiradas.map((b) => b.id));
+  return { estado: { ...estado, batallas: estado.batallas.filter((b) => !fuera.has(b.id)) }, retiradas };
 }
 
 // --- Lo que manda Conquest (doc 02 §3.3) ---

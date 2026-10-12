@@ -37,11 +37,19 @@ No hay un comando para abrir una batalla: la abre `atacar` (contra una columna, 
 | `bloqueo` | `{ ejercitoIds, caravanaIds, asentamientoId?, campamentoId? }`: lo que se queda quieto, además de sus héroes. |
 | `expiraEn` | Plazo del estado actual, en **tiempo de mundo** (§6). |
 | `convocatoriaHasta?` | Solo un asedio: hasta cuándo se entra «como si estuviera desde el principio». |
-| `iniciadaEn?`, `aplicadaEn?` | Instantes de mundo. |
+| `iniciadaEn?`, `aplicadaEn?`, `cerradaEn?` | Instantes de mundo. `cerradaEn` es cuándo pasó a `aplicada`, `cancelada` o `fallida`: de ahí corre la retención (§3.3). Sin ella (una batalla guardada antes de existir) cuenta `aplicadaEn` o, en su defecto, `expiraEn`. |
 | `asignacion?` | La `BattleServerAssignment` aceptada **más** `servidorId` (quién la registró). Los tokens que se van sumando viven aquí. |
 | `resultado?` | El `BattleResult` aplicado, **entero** (idempotencia, §8.6). |
 
-`estado.batallas` guarda las abiertas y las cerradas: **no se purga** (§13).
+`estado.batallas` guarda las abiertas y las cerradas **recientes** (§3.3).
+
+### 3.3 Retención y histórico
+
+Una batalla cerrada se queda en `estado.batallas` `BATALLA.conservarCerradasMinutos` (§11) de mundo: es lo que hace falta para repetir el `resultado` de una `aplicada` y para el `GET …/ticket` de una cerrada. Cuando `ahora ≥ cerradaEn + retención`, **el último paso del tick** (`retirarCerradas`) la saca del estado y del snapshot.
+
+Lo retirado no se pierde: `RunnerDePartida` lo compara con el estado previo y lo anexa, **antes** de anotar el tick en el diario, a `<gameId>.batallas.jsonl` (`server/historicoDeBatallas.ts`), hermano del snapshot como `.eventos.jsonl`. Cada línea es `{ gameId, archivadaEn (ISO de pared), batalla }` con la `Batalla` entera (ticket, incorporaciones, salidas, asignación y resultado). Un corte entre anexar y anotar repite la línea; la lectura (`leerHistoricoDeBatallas`) descarta las repetidas por `batalla.id` y las líneas a medias. El respaldo de una partida lo copia y restaurarla lo devuelve al punto respaldado; descartar o eliminar la partida lo vacía o lo borra.
+
+Después de retirada, la batalla **no existe** para el contrato: `GET …/ticket`, asignación, inicio, tokens, salida y resultado responden `404`, también un `resultado` idéntico al aplicado.
 
 ### 3.2 Lo que viaja a Conquest (el contrato v1)
 
@@ -186,7 +194,7 @@ Entra **su columna entera**: todos sus héroes sanos con lo que llevan en ella (
 | Ruta | Para qué |
 |---|---|
 | `GET /batallas/pendientes` | Las `convocando` activas y **fuera de convocatoria**: `{ battleId, gameId, ticketRevision }`. Idempotente y sin efectos; el orquestador hace polling. |
-| `GET /batallas/:id/ticket` | El ticket vigente, **recuperable siempre** (también de una cerrada); `404` mientras dure la convocatoria. |
+| `GET /batallas/:id/ticket` | El ticket vigente, recuperable mientras la batalla siga en el estado (también una cerrada, durante la retención, §3.3); `404` mientras dure la convocatoria. |
 | `GET /batallas/:id/incorporaciones` | Las incorporaciones vigentes (sin las de quien salió antes de empezar). |
 | `POST /batallas/:id/asignacion` | Dónde se juega. |
 | `POST /batallas/:id/inicio` | La partida empezó de verdad. |
@@ -294,6 +302,7 @@ Los efectos de una batalla en curso sobre las plazas (construir, mejorar…) se 
   "plazoAsignacionMinutos": 5,
   "plazoInicioMinutos": 5,
   "margenMinutos": 5,
+  "conservarCerradasMinutos": 60,
   "tropaCarreteros": {
     "tropaId": "milicia_lanceros",
     "unidades": 13
@@ -336,10 +345,10 @@ Los que intervienen y viven en otro documento: `LOGISTICA.radioEncuentro` (dista
 - **Entrar durante la convocatoria no sube la revisión** y **entrar después tampoco**: la revisión solo sube con una salida previa al inicio.
 - **`no_conectado` y `derrotado`**: la primera sale sin castigo y reabre la convocatoria; la segunda hiere. Quien sale antes de empezar no se sustituye.
 - **Un `derrotado: false` explícito protege** al perdedor de la herida; quien no lo trae, se hiere con su bando.
-- **Un mensaje a una batalla cerrada** responde `404` (asignación, inicio, tokens, salida) o `409` (resultado), salvo el `resultado` idéntico de una `aplicada`, que responde bien.
+- **Un mensaje a una batalla cerrada** responde `404` (asignación, inicio, tokens, salida) o `409` (resultado), salvo el `resultado` idéntico de una `aplicada`, que responde bien. Pasada la retención (§3.3) todo responde `404`.
 - **La Facción de una columna sin bandera** es `null` en el ticket y en `faccionAtacanteId`/`faccionDefensoraId`; una conquista con atacante sin Facción **no ocurre**.
 - **El plazo vencido suelta todo al instante**, columna y escuadras (`bloqueosDe` mira el plazo; `sinCandadosVencidos` suelta el `reservaBatalla` al validar cada comando). El tick solo cierra la batalla (`fallida`) y la narra. Con el reloj del motor (los comandos corren en el instante del tick y el tick cierra antes) esa ventana no llega a verse; la comprobación perezosa lo garantiza sin depender de él.
-- **`estado.batallas` no se purga**: las cerradas se quedan (hace falta `aplicada` para la idempotencia y el ticket es «recuperable en cualquier momento»); crece con cada batalla de Unity (§15).
+- **Una batalla cerrada sale del estado a la hora de la retención** (`BATALLA.conservarCerradasMinutos`) y pasa al histórico de la partida: el estado y el snapshot no crecen con cada batalla (§3.3).
 - **El `battleId` solo es único entre partidas si el `gameId` lo es**: sale de un resumen de 64 bits del `gameId` más el contador; no hay aleatoriedad.
 - **La salida del mundo espera**: aunque el héroe lleve su `desconectaEn` cumplido, no sale mientras combate; la hace el primer tick tras acabar. Si Conquest lo da por desconectado, lo saca de la batalla con una `SalidaBatalla` (`desconexion`, §8.4) y entonces sale en el tick siguiente.
 
@@ -352,12 +361,12 @@ El ciclo se escribió antes de varias cosas que han cambiado (columnas sin bande
 3. **Los eventos de una batalla no llegaban por el cursor a quien no tiene plaza** (el caso más habitual de quien ataca a los bandidos al llegar): el evento va a la plaza de origen de su columna, que para una salida de campamento es `''`, y no lleva lista de héroes. Ahora el cursor incluye los de las batallas en que combate.
 4. **Código muerto**: `faccionesEnBatalla` (la IA de Facciones NPC «no gobierna mientras dura») no la usaba nadie desde que no hay Facciones NPC en el motor; se borra con su test.
 5. **El candado de las escuadras de una batalla vencida lo soltaba solo el tick** (el contrato pide comprobar el plazo justo antes de validar la acción). Ahora lo suelta `sinCandadosVencidos` al validar cada comando con candado, sin esperar al tick. Con el reloj actual la ventana no se llegaba a ver, pero un servidor sin tick (la reconstrucción) sí la habría tenido.
+6. **`estado.batallas` crecía sin límite** (cada batalla de Unity cerrada se quedaba en el estado y en el snapshot, un asedio con el mapa de la plaza congelado). Ahora se conserva `BATALLA.conservarCerradasMinutos` y después pasa al histórico de la partida (§3.3).
 
 ## 15. Divergencias
 
 **Abiertas** (a decidir por el autor, también en [`Divergencias.md`](Divergencias.md)):
 
-- **`estado.batallas` crece sin límite.** Cada batalla de Unity cerrada se queda en el estado y en el snapshot (un asedio lleva el mapa de la plaza congelado). Falta decidir cuánto se conserva (la idempotencia del resultado y el `GET …/ticket` «recuperable en cualquier momento» piden que una cerrada siga unos minutos).
 
 **Pendientes de Conquest** (no son divergencias del servidor; el contrato las anota como decididas):
 

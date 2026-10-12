@@ -12,6 +12,8 @@ import { cargarPartida, guardarPartida } from '../persistenciaPartida';
 import { RegistroDeAuditoria } from '../auditoria';
 import { RunnerDePartida } from '../runnerDePartida';
 import { anexarEventos, leerEventos } from '../eventosDePartida';
+import { anexarHistoricoDeBatallas, leerHistoricoDeBatallas } from '../historicoDeBatallas';
+import type { Batalla } from '../../session/batallas';
 import {
   DIRECTORIO_RESPALDOS,
   listarRespaldos,
@@ -89,6 +91,18 @@ describe('respaldarPartida', () => {
 
     // ...y la restauración deja el historial como estaba: solo el evento de la versión 1.
     expect((await leerEventos(almacen, 'g1')).map((e) => e.version)).toEqual([1]);
+  });
+
+  it('se lleva el histórico de batallas consigo, y `restaurarPartida` lo devuelve al punto respaldado', async () => {
+    await partidaConFacciones('g1', 1);
+    const batalla = (id: string) => ({ id, estado: 'fallida' }) as Batalla;
+    await anexarHistoricoDeBatallas(almacen, 'g1', [batalla('b1')], '2026-09-05T10:00:00.000Z');
+    await respaldarPartida(directorio, 'g1', '2026-09-05T11:22:33.444Z');
+    await anexarHistoricoDeBatallas(almacen, 'g1', [batalla('b2')], '2026-09-05T12:00:00.000Z');
+
+    await restaurarPartida(directorio, 'g1', (await listarRespaldos(directorio, 'g1'))[0]!.archivo);
+
+    expect((await leerHistoricoDeBatallas(almacen, 'g1')).map((r) => r.batalla.id)).toEqual(['b1']);
   });
 
   it('se lleva el diario de comandos consigo: el respaldo incluye lo aceptado desde el último guardado', async () => {

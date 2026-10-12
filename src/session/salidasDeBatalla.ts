@@ -81,5 +81,5 @@ export function registrarSalida(estado: GameSessionState, batalla: Batalla, sali
   };
   const sinHumano = !quedan.some((p) => p.participante.controlador === 'humano');
   const sinAtacantes = !quedan.some((p) => p.lado === 'atacante');
-  return sinHumano || sinAtacantes ? cerrarSinResultado(conBatalla(siguiente, revisada), revisada, 'cancelada') : conBatalla(siguiente, revisada);
+  return sinHumano || sinAtacantes ? cerrarSinResultado(conBatalla(siguiente, revisada), revisada, 'cancelada', ahora) : conBatalla(siguiente, revisada);
 }

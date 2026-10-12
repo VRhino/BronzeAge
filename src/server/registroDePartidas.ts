@@ -13,6 +13,7 @@ import type { OpcionesSesion } from '../session/gameSession';
 import { claveDeSnapshot, listarPartidas, type ResumenPartidaEnDisco } from './persistenciaPartida';
 import { claveDeDiario } from './diarioDePartida';
 import { claveDeEventos } from './eventosDePartida';
+import { claveDeHistoricoDeBatallas } from './historicoDeBatallas';
 
 export interface ConfiguracionPartida {
   seed: number;
@@ -134,7 +135,7 @@ export class RegistroDePartidas {
   }
 
   /**
-   * Para la partida por completo y la borra: reloj, cola, snapshot, diario e historial de eventos. La auditoría y el acceso los
+   * Para la partida por completo y la borra: reloj, cola, snapshot, diario, historial de eventos y de batallas. La auditoría y el acceso los
    * borra quien llama (la ruta, que los conoce); los respaldos se conservan como red de seguridad. `false` si no existía ni abierta ni en disco.
    */
   async eliminar(gameId: string): Promise<boolean> {
@@ -142,7 +143,7 @@ export class RegistroDePartidas {
     const enDisco = (await listarPartidas(this.almacen)).some((p) => p.gameId === gameId);
     if (!abierta && !enDisco) return false;
     await this.cerrarUna(gameId);
-    for (const clave of [claveDeSnapshot(gameId), claveDeDiario(gameId), claveDeEventos(gameId)]) await this.almacen.borrar(clave);
+    for (const clave of [claveDeSnapshot(gameId), claveDeDiario(gameId), claveDeEventos(gameId), claveDeHistoricoDeBatallas(gameId)]) await this.almacen.borrar(clave);
     return true;
   }
 

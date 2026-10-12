@@ -1,6 +1,6 @@
 import type { Mapa } from '../../world/mapa';
 import { avanzarSimulacion, type ContextoSimulacion } from '../../engine/simulation';
-import { bloqueosDe, eventosDeBatalla, vencerBatallas } from '../batallas';
+import { bloqueosDe, eventosDeBatalla, retirarCerradas, vencerBatallas } from '../batallas';
 import { conResultadoDeSimulacion, estadoSimulacionDe, instanteDeTick, isoDeInstante, type GameSessionState } from '../estado';
 import { exito, type ContextoComando, type TransicionComando } from './tipos';
 import { salirDelMundo } from '../../engine/presencia';
@@ -75,7 +75,8 @@ export function avanzarTick(
     .flatMap((b) => eventosDeBatalla(trasTick, b, 'batalla.fallida', `La batalla ${b.id} no llegó a jugarse: nadie pierde nada.`))
     .map((e) => ({ ...e, momento }));
   const presencia = conSalidasDelMundo(trasTick, mapa, instante, bloqueos.heroes);
-  return exito(presencia.estado, [...resultado.eventosDominio, ...eventosDeBatallas, ...conMomento({ ...ctx, momento }, presencia.eventos)]);
+  const { estado: sinCerradas } = retirarCerradas(presencia.estado, instante);
+  return exito(sinCerradas, [...resultado.eventosDominio, ...eventosDeBatallas, ...conMomento({ ...ctx, momento }, presencia.eventos)]);
 }
 
 /**

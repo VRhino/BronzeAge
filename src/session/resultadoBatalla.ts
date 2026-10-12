@@ -53,7 +53,7 @@ export function aplicarResultado(estado: GameSessionState, b: Batalla, r: Battle
   siguiente = recogerChatarra(siguiente, b, r);
   siguiente = conXpDeFaccion(siguiente, b, r);
   siguiente = conReputacionDeVasallos(siguiente, b, r);
-  return conBatalla(siguiente, { ...b, estado: 'aplicada', resultado: r, aplicadaEn: ahora });
+  return conBatalla(siguiente, { ...b, estado: 'aplicada', resultado: r, aplicadaEn: ahora, cerradaEn: ahora });
 }
 
 /** El checklist de doc 02 §3.3, puntos 1-8 y 10-12 (el 9, la versión del contrato, lo mira la ruta). Cualquier fallo

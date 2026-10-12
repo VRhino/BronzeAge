@@ -32,6 +32,7 @@ import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
 import { medicion } from './medicionDeCarga';
 import { anexarEventos, claveDeEventos, leerEventos } from './eventosDePartida';
+import { anexarHistoricoDeBatallas, claveDeHistoricoDeBatallas } from './historicoDeBatallas';
 import { anexarAlDiario, vaciarDiario, type LineaDiario } from './diarioDePartida';
 import { tecnologiasDe } from '../engine/tecnologia';
 
@@ -223,6 +224,7 @@ export class RunnerDePartida {
     await guardarPartida(opciones.almacen, runner.sesion, runner.ahora(), persistencia);
     await vaciarDiario(opciones.almacen, gameId);
     await opciones.almacen.escribir(claveDeEventos(gameId), '');
+    await opciones.almacen.escribir(claveDeHistoricoDeBatallas(gameId), '');
     return runner;
   }
 
@@ -560,6 +562,7 @@ export class RunnerDePartida {
     if (lineas.length === 0) return resultado; // rechazado o sin cambios: no hay nada que anotar
 
     try {
+      await this.archivarBatallasRetiradas(previo);
       await anexarAlDiario(this.almacen, this.gameId, lineas);
     } catch (err) {
       this.sesion = GameSession.importar(previo, this.opcionesSesion);
@@ -570,6 +573,20 @@ export class RunnerDePartida {
     if (guardar) await this.guardarYVaciarDiario();
     this.alCambiarEstado?.(this.gameId);
     return resultado;
+  }
+
+  /**
+   * Anexa al histórico (`historicoDeBatallas.ts`) las batallas que el tick sacó de `estado.batallas` respecto a `previo`.
+   * Va ANTES de anotar el diario y su fallo revierte el comando, como el del diario: si el tick quedara anotado sin esto,
+   * el repaso tras una caída lo repetiría sin anexar nada y la batalla se perdería. Lo contrario (anexar y que el diario
+   * falle) solo repite una línea, que la lectura descarta.
+   */
+  private async archivarBatallasRetiradas(previo: PartidaExportada): Promise<void> {
+    const antes = previo.state.batallas;
+    const ahora = this.sesion.getState().batallas;
+    if (antes === ahora) return;
+    const quedan = new Set(ahora.map((b) => b.id));
+    await anexarHistoricoDeBatallas(this.almacen, this.gameId, antes.filter((b) => !quedan.has(b.id)), this.ahora());
   }
 
   /**

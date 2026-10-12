@@ -279,6 +279,9 @@ Piezas de soporte:
   hermano del snapshot (`<gameId>.eventos.jsonl`), mismo patrón que `auditoria.ts`. `anexarEventos` añade una
   línea por evento; `leerEventos` lo devuelve más-nuevo-primero para que `cargarPartida` rehidrate
   `eventosDominio`.
+- `server/historicoDeBatallas.ts` — las batallas de Unity cerradas que el tick saca de `estado.batallas` tras su retención,
+  en un JSONL append-only hermano del snapshot (`<gameId>.batallas.jsonl`), con el `gameId` en cada línea. Lo anexa
+  `RunnerDePartida` antes de anotar el tick en el diario; `leerHistoricoDeBatallas` descarta repetidas y líneas a medias.
 - `server/persistenciaIdentidad.ts` — el dominio de acceso (usuarios/sesiones/membresías/credenciales
   locales) bajo la clave `identidad.json` del mismo almacén, reescrito entero en cada mutación. Solo
   `index.ts` lo cablea; `crearServidor` trae el repositorio **en memoria** por defecto.

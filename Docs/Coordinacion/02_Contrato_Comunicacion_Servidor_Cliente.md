@@ -95,8 +95,8 @@ GET /v1/batallas/pendientes        lista batallas en 'convocando' sin BattleServ
                                    el orquestador de Conquest hace polling; idempotente, sin efectos.
                                    Responde { batallas: [{ battleId, gameId, ticketRevision }] }
 GET /v1/batallas/:battleId/ticket    el BattleTicket vigente (huellaTicket/ticketRevision actuales) —
-                                     recuperable en cualquier momento por el orquestador, no solo la
-                                     primera vez
+                                     recuperable por el orquestador mientras la batalla siga en el estado
+                                     (una cerrada se conserva BATALLA.conservarCerradasMinutos; después, 404)
 GET /v1/batallas/:battleId/incorporaciones
                                      los héroes que se han unido después del ticket, en orden
                                      (`IncorporacionBatalla[]`, doc 01 §15). El ticket no cambia
