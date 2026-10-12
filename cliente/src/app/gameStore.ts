@@ -89,7 +89,7 @@ import { isoDeInstante } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
 import { ApiError, consultarEstado, consultarEventos, crearOResumirPartida, ejecutarComando, obtenerMapa, olvidarSesion, urlTiempoRealAdmin } from './apiCliente';
-import { CANAL_PARTIDA, canalAsentamiento, canalCampamento, canalHeroe, ConexionAdmin } from './conexionAdmin';
+import { CANAL_EVENTOS, CANAL_PARTIDA, canalAsentamiento, canalCampamento, canalHeroe, ConexionAdmin } from './conexionAdmin';
 import { fusionarEstado, type AsentamientoConResumen } from './estadoEnVivo';
 import type { ResumenDeAsentamiento } from '@motor/session/vistas/segmentos';
 
@@ -241,6 +241,9 @@ export class GameStore {
   private conexion: ConexionAdmin | undefined;
   private ultimaLecturaCompleta = Date.now();
   private notifPendiente = false;
+  /** Mientras se cierra el hueco con el cursor HTTP, los eventos del socket esperan aquí (si se aplicaran antes, el cursor saltaría y el hueco se perdería). */
+  private recuperandoEventos = false;
+  private eventosEnEspera: EventoDominioConVersion[] = [];
   private temporizadorOculto: ReturnType<typeof setTimeout> | undefined;
   private reanudadoEn = 0;
   private versionDePartidaVista = -1;
@@ -324,10 +327,37 @@ export class GameStore {
         this.conexion = undefined;
       },
       alFallarApertura: () => olvidarSesion(),
+      alEvento: (e) => (this.recuperandoEventos ? this.eventosEnEspera.push(e) : this.aplicarEvento(e)),
+      alSuscritoEventos: () => void this.recuperarEventos(),
     });
     this.conexion.abrir();
     this.conexion.suscribir(CANAL_PARTIDA);
+    this.conexion.suscribir(CANAL_EVENTOS);
     document.addEventListener('visibilitychange', () => this.alCambiarVisibilidad());
+  }
+
+  /** Un evento de dominio llegado por el socket: el más nuevo va delante. Varios eventos comparten versión (los de un mismo comando o tick),
+   * así que en directo no se descarta ninguno por versión: el socket entrega cada uno una vez. */
+  private aplicarEvento(e: EventoDominioConVersion): void {
+    this.eventos = [e, ...this.eventos].slice(0, MAX_EVENTOS_EN_MEMORIA);
+    this.cursorEventos = Math.max(this.cursorEventos, e.version);
+    this.programarNotify();
+  }
+
+  /** Tras (re)suscribirse a `admin/eventos`: se cierra el hueco desde el último evento visto con el cursor HTTP y luego se sueltan los que llegaron
+   * por el socket mientras tanto. Sin esto, lo ocurrido entre el arranque (o la caída) y la suscripción no se vería nunca. */
+  private async recuperarEventos(): Promise<void> {
+    this.recuperandoEventos = true;
+    try {
+      await this.sincronizarEventos();
+    } finally {
+      this.recuperandoEventos = false;
+      // El cursor HTTP trae versiones COMPLETAS: lo acumulado del socket hasta esa versión ya está anotado; lo posterior es nuevo.
+      const hasta = this.cursorEventos;
+      const espera = this.eventosEnEspera.filter((e) => e.version > hasta);
+      this.eventosEnEspera = [];
+      for (const e of espera) this.aplicarEvento(e);
+    }
   }
 
   /** Pestaña oculta más de unos segundos: se sueltan las suscripciones (un cambio rápido de foco no cuesta una foto de ~1 MiB). Al volver,
@@ -364,7 +394,7 @@ export class GameStore {
     for (const id of vistos.asentamientos) if (id && e.asentamientos.some((a) => a.id === id)) quiero.add(canalAsentamiento(id));
     for (const id of vistos.campamentos) if (id && e.campamentosMercenarios.some((c) => c.id === id)) quiero.add(canalCampamento(id));
     for (const id of vistos.heroes) if (id && e.heroes.some((h) => h.id === id)) quiero.add(canalHeroe(id));
-    for (const canal of [...this.conexion.suscritos]) if (canal !== CANAL_PARTIDA && !quiero.has(canal)) this.conexion.desuscribir(canal);
+    for (const canal of [...this.conexion.suscritos]) if (canal !== CANAL_PARTIDA && canal !== CANAL_EVENTOS && !quiero.has(canal)) this.conexion.desuscribir(canal);
     for (const canal of quiero) this.conexion.suscribir(canal);
   }
 
@@ -378,7 +408,7 @@ export class GameStore {
         return;
       }
       // El historial de eventos (log y crónica) sigue su cursor HTTP: pequeño, y solo cuando la versión avanza.
-      if (partida && partida.version !== this.versionDePartidaVista) {
+      if (partida && partida.version !== this.versionDePartidaVista && !this.conexion?.eventosActivos) {
         this.versionDePartidaVista = partida.version;
         void this.sincronizarEventos().then(() => this.programarNotify());
       }
@@ -436,7 +466,9 @@ export class GameStore {
    */
   private async sincronizarEventos(): Promise<void> {
     try {
-      const { eventos } = await consultarEventos(this.gameId, this.cursorEventos);
+      const { eventos: leidos } = await consultarEventos(this.gameId, this.cursorEventos);
+      // Lo que ya llegó por el socket mientras esta petición volaba no se vuelve a anotar.
+      const eventos = leidos.filter((e) => e.version > this.cursorEventos);
       if (eventos.length === 0) return;
       // Tope: en una partida larga el historial crece sin fin y cada render lo recorría entero (crónica, log).
       this.eventos = [...[...eventos].reverse(), ...this.eventos].slice(0, MAX_EVENTOS_EN_MEMORIA);

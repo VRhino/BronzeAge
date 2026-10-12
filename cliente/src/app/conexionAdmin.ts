@@ -4,9 +4,12 @@
 //
 // Reglas del cliente (03 §3.3): la foto sustituye; un delta que no encadena pide `resincronizar` y se descarta hasta que llegue la foto;
 // al reconectar las suscripciones no sobreviven, así que se repiten todas y llegan fotos nuevas.
+import type { EventoDominioConVersion } from '@motor/session/estado';
 import { AlmacenDeCanal, type DeltaDeCanal } from './almacenDeCanal';
 
 export const CANAL_PARTIDA = 'admin/partida';
+/** Canal de HECHOS (no de estado): cada evento de dominio de la partida, sin foto ni deltas. */
+export const CANAL_EVENTOS = 'admin/eventos';
 export const canalAsentamiento = (id: string): string => `admin/asentamiento/${id}`;
 export const canalCampamento = (id: string): string => `admin/campamento/${id}`;
 export const canalHeroe = (id: string): string => `admin/heroe/${id}`;
@@ -30,6 +33,10 @@ export interface OpcionesDeConexion {
   alCanalDesconocido: (canal: string) => void;
   /** Un intento de abrir falló: por si la sesión caducó. */
   alFallarApertura: () => void;
+  /** Llegó un evento de dominio por `admin/eventos`. */
+  alEvento: (evento: EventoDominioConVersion) => void;
+  /** El servidor confirmó la suscripción a `admin/eventos` (la primera vez, o tras reconectar o reanudar): hay que cerrar el hueco con el cursor HTTP. */
+  alSuscritoEventos: () => void;
 }
 
 interface CanalSuscrito {
@@ -49,6 +56,8 @@ export class ConexionAdmin {
   private readonly deseados = new Set<string>();
   private readonly canales = new Map<string, CanalSuscrito>();
   private cerrado = false;
+  /** `admin/eventos` suscrito y confirmado en el socket actual: mientras sea así no hace falta pedir eventos por HTTP. */
+  eventosActivos = false;
   /** Pestaña oculta: el socket está cerrado a propósito (y con él las suscripciones del servidor) y no se reconecta hasta `reanudar`. */
   private pausada = false;
   private intentos = 0;
@@ -112,6 +121,10 @@ export class ConexionAdmin {
   suscribir(canal: string): void {
     if (this.deseados.has(canal)) return;
     this.deseados.add(canal);
+    if (canal === CANAL_EVENTOS) {
+      this.enviar({ accion: 'suscribir', canal });
+      return;
+    }
     this.canales.set(canal, {
       almacen: new AlmacenDeCanal(unicasDe(canal), canal === CANAL_PARTIDA ? { titulos: 'tituloId' } : {}),
       esperandoFoto: true,
@@ -147,8 +160,9 @@ export class ConexionAdmin {
       abierto = true;
       this.intentos = 0;
       // Sin estado que sobreviva al cierre: se repite todo lo que se quería ver y llegan fotos nuevas.
-      for (const [nombre, c] of this.canales) {
-        c.esperandoFoto = true;
+      for (const nombre of this.deseados) {
+        const c = this.canales.get(nombre);
+        if (c) c.esperandoFoto = true;
         this.enviar({ accion: 'suscribir', canal: nombre });
       }
       this.opciones.alEstado();
@@ -163,6 +177,7 @@ export class ConexionAdmin {
     socket.onclose = (ev) => {
       if (this.socket !== socket) return;
       this.socket = undefined;
+      this.eventosActivos = false;
       for (const c of this.canales.values()) c.esperandoFoto = true;
       this.opciones.alEstado();
       if (!abierto) this.opciones.alFallarApertura();
@@ -192,7 +207,14 @@ export class ConexionAdmin {
   private recibir(m: Record<string, unknown>): void {
     const canal = m['canal'] as string | undefined;
     switch (m['tipo']) {
+      case 'evento':
+        if (canal === CANAL_EVENTOS) this.opciones.alEvento(m['evento'] as EventoDominioConVersion);
+        return;
       case 'suscrito':
+        if (canal === CANAL_EVENTOS) {
+          this.eventosActivos = true;
+          this.opciones.alSuscritoEventos();
+        }
         if (canal === CANAL_PARTIDA) this.intervaloTickMs = (m['intervaloTickMs'] as number | null | undefined) ?? null;
         return;
       case 'foto': {
@@ -222,6 +244,7 @@ export class ConexionAdmin {
         return;
       }
       case 'revocado':
+        if (canal === CANAL_EVENTOS) this.eventosActivos = false;
         if (canal) {
           this.deseados.delete(canal);
           this.canales.delete(canal);
@@ -230,6 +253,7 @@ export class ConexionAdmin {
         return;
       case 'error':
         if (!canal) return;
+        if (canal === CANAL_EVENTOS) this.eventosActivos = false;
         if (m['codigo'] === 'canal_desconocido') {
           this.deseados.delete(canal);
           this.canales.delete(canal);

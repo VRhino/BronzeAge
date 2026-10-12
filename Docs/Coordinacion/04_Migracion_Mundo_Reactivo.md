@@ -1,8 +1,8 @@
 # 04 — Mundo reactivo (sin tick, servidor en Rust)
 
 > **Estado (2026-10-12): sustituido por la reconstrucción.** Decisión del usuario: no hay migración por fases ni
-> convivencia con el servidor TypeScript. El servidor se reconstruye entero en Rust sobre el mundo reactivo, en la
-> rama `reconstruccion`; el playtest se apaga y el cliente final es Unity. Problemas, decisiones (D1-D9) y orden:
+> convivencia con el servidor TypeScript. El servidor se reconstruye entero en Rust sobre el mundo reactivo,
+> en `main` (el último TypeScript queda en la rama `typescript-final`); el playtest se apaga y el cliente final es Unity. Problemas, decisiones (D1-D11) y orden:
 > [`Consideraciones/Reconstruccion_Definicion.md`](../../Consideraciones/Reconstruccion_Definicion.md). Diseño del núcleo:
 > [`Docs/Arquitectura/13_Mundo_Reactivo_Rust.md`](../Arquitectura/13_Mundo_Reactivo_Rust.md).
 
