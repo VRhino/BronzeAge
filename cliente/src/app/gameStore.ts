@@ -337,11 +337,11 @@ export class GameStore {
     document.addEventListener('visibilitychange', () => this.alCambiarVisibilidad());
   }
 
-  /** Un evento de dominio llegado por el socket: el más nuevo va delante, y lo que no supera el cursor ya está anotado. */
+  /** Un evento de dominio llegado por el socket: el más nuevo va delante. Varios eventos comparten versión (los de un mismo comando o tick),
+   * así que en directo no se descarta ninguno por versión: el socket entrega cada uno una vez. */
   private aplicarEvento(e: EventoDominioConVersion): void {
-    if (e.version <= this.cursorEventos) return;
     this.eventos = [e, ...this.eventos].slice(0, MAX_EVENTOS_EN_MEMORIA);
-    this.cursorEventos = e.version;
+    this.cursorEventos = Math.max(this.cursorEventos, e.version);
     this.programarNotify();
   }
 
@@ -353,7 +353,9 @@ export class GameStore {
       await this.sincronizarEventos();
     } finally {
       this.recuperandoEventos = false;
-      const espera = this.eventosEnEspera.sort((a, b) => a.version - b.version);
+      // El cursor HTTP trae versiones COMPLETAS: lo acumulado del socket hasta esa versión ya está anotado; lo posterior es nuevo.
+      const hasta = this.cursorEventos;
+      const espera = this.eventosEnEspera.filter((e) => e.version > hasta);
       this.eventosEnEspera = [];
       for (const e of espera) this.aplicarEvento(e);
     }
@@ -393,7 +395,7 @@ export class GameStore {
     for (const id of vistos.asentamientos) if (id && e.asentamientos.some((a) => a.id === id)) quiero.add(canalAsentamiento(id));
     for (const id of vistos.campamentos) if (id && e.campamentosMercenarios.some((c) => c.id === id)) quiero.add(canalCampamento(id));
     for (const id of vistos.heroes) if (id && e.heroes.some((h) => h.id === id)) quiero.add(canalHeroe(id));
-    for (const canal of [...this.conexion.suscritos]) if (canal !== CANAL_PARTIDA && !quiero.has(canal)) this.conexion.desuscribir(canal);
+    for (const canal of [...this.conexion.suscritos]) if (canal !== CANAL_PARTIDA && canal !== CANAL_EVENTOS && !quiero.has(canal)) this.conexion.desuscribir(canal);
     for (const canal of quiero) this.conexion.suscribir(canal);
   }
 

@@ -9,6 +9,8 @@
 >   WebSocket `/v1/admin/partidas/:gameId/tiempo-real`, canal `admin/partida` (versión ligera: foto + deltas) y detalle `admin/asentamiento|campamento|heroe/<id>`
 >   solo de lo que se mira (`gameStore.vigilar`). El estado en vivo se compone sobre la última lectura HTTP; el sondeo completo baja a un respaldo de 60 s
 >   y vuelve a 5 s si el socket cae o el servidor no tiene el canal. Las listas globales leen `resumen` (calculado por el servidor), no el almacén ni los edificios.
+> - **Eventos por tiempo real**: el log y la crónica llegan por el canal `admin/eventos` (cada evento de dominio, sin fotos ni deltas); el cursor HTTP `GET .../eventos?desde=` solo
+>   cierra el hueco al arrancar y tras reconectar o reanudar (lo que llega por el socket mientras tanto espera y se descarta hasta la versión ya leída). Varios eventos comparten versión, así que en directo no se descarta ninguno por versión.
 > - **Pestaña oculta**: tras 8 s oculta se cierra el socket (el servidor deja de contar las suscripciones; un cambio rápido de foco no cuesta nada); al volver se reabre,
 >   se resuscribe todo y se sigue viendo lo último hasta que llegan las fotos nuevas, sin parpadeo ni lectura completa.
 > - **Mapa a la cadencia del monitor** (`src/ui/interpolacion.ts`, `drawAnimado`): con tiempo real y reloj de mundo, ejércitos y caravanas avanzan entre deltas por su `ruta`
