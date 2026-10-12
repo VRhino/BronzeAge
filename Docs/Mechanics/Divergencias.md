@@ -26,6 +26,24 @@ Alta = impide algo del juego · Media = el juego va contra la intención escrita
 - Hecho el 2026-10-12: defender / no defender a un vasallo (+15 / −3, §5.9) y guerra tras romper una alianza (−15, ventana de 3 días, §5.4). Quitado del canon el «incumplir orden de mercado aceptada».
 - **Queda:** el asedio con números (sin héroes de la señora) no aplica la regla de defensa, y no hay vía para cancelar un trueque antes de tiempo.
 
+### 17. El canon describe los chokepoints, que ya no existen · **Media**
+- `Docs/Game/1_Sistema_de_Mundo_y_Territorio.md` §1.5 sigue describiendo puertos de montaña con control por zona y peaje en oro. El generador los retiró en la v15 (2026-08-26): ni `generarChokepoints`, ni el tipo, ni el peaje existen en `src/`.
+  Falta decidir si se borra la sección del canon (y las menciones de `Docs/Arquitectura/` y `Notas_revision.md`) o si la mecánica vuelve.
+
+### 18. La regeneración del ganado no es «el doble» de la del mineral · **Baja**
+- El canon (1.4) dice que el ganado regenera «al DOBLE de rápido» que los yacimientos minerales; el código usa 3 min frente a 10 (×3,3). Falta decidir cuál manda: la frase o las cifras.
+
+### 19. Ningún bosque admite una sola Leñera · **Media**
+- `LENERA_POR_BOSQUE` (`umbral2` 45, `umbral3` 65) se calibró en «tercios del rango de radio 30–80»; los bosques salen hoy con radio 45–120. Medido en las seeds 1/42/7: 0 bosques de capacidad 1, 48–50 de capacidad 2 y 120–122 de capacidad 3 (de 170).
+  O las Leñeras por bosque deben ser mín 1 / máx 3 de verdad, y hay que recalibrar los umbrales al rango actual, o se acepta el 2–3 y se actualiza el comentario. Es balance de explotación: cambiarlo no altera el mapa.
+
+### 20. Comentarios de calibración desactualizados en el generador · **Baja**
+- `ELEVACION` documenta los percentiles «agua ~7 %, costa ~11 %, llano ~50 %, colina ~18 %, montaña ~11 %, cima ~3 %»; con el borde y el suavizado (v8–v14) el mundo libre da llano 42–47 %, colina 15–17 %, montaña 15–19 %, cima 0,6–1,8 %, costa 11–14 % y agua 4–10 %.
+  Lo mismo con «los bosques tienen radio 30–80» (`mapa.ts`, `constants.ts`; hoy 45–120) y «60 piedras por seed» (hoy 240). Solo comentarios; los umbrales no se tocan sin subir `WORLDGEN_VERSION`.
+
+### 21. El canon 1.1 describe un spawn de jugadores que no existe · **Baja**
+- «Spawn de jugadores nuevos: posición aleatoria uniforme» no se corresponde con nada: no hay colocación inicial de jugadores; se funda con una Caravana de Fundación (canon 1.8) y quien no tiene plaza, con campamentos y alijos (1.9b). Falta reescribir esa línea.
+
 ## Consecuencias pendientes de medir
 
 - **Comercio (2026-10-11):** la comisión deja de acuñarse al llevarse la carga al propio origen, la mala reputación paga un 50 % extra de su almacén, el reparto automático ya no se atasca con cascos vacíos ni destinos inalcanzables, y los trueques entre plazas de la misma Facción dejan de mover la reputación. Pueden cambiar el oro en circulación y el ritmo del comercio en el batch; medirlo (`Docs/Mecanicas a balancear.md`).

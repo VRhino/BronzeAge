@@ -174,9 +174,9 @@ Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
 
 | Nivel | Sale | Poder | Tropa en Unity | Oro por héroe |
 |---|---|---|---|---|
-| 1 | 50 % | 20 | 10 milicias de lanceros | 9 |
-| 2 | 30 % | 60 | 30 | 10 |
-| 3 | 20 % | 120 | 60 | 11 |
+| 1 | 50 % | 20 | 10 milicias de lanceros | 30 |
+| 2 | 30 % | 60 | 30 | 33 |
+| 3 | 20 % | 120 | 60 | 36 |
 
 - Radio de ataque a caravanas: 40 unidades del mapa.
 - Reaparición del de un asentamiento: 60 minutos tras destruirse.

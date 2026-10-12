@@ -25,9 +25,9 @@ function aceptaTerrenoPara(
  * rareza respeta el espaciado frente a lo ya colocado por las anteriores, aplicando su propio
  * `espacioMinimo` (los raros se separan mucho más que los comunes).
  *
- * Las posiciones de todos los tipos se sortean antes que las cantidades, no intercaladas — el orden de
- * consumo del PRNG es parte del contrato: alterarlo cambia todos los mundos ya guardados para una seed
- * dada (ver `WORLDGEN_VERSION`).
+ * Dentro de cada tipo, primero se sortean todas sus posiciones y después sus cantidades; el siguiente tipo empieza
+ * cuando acaba el anterior — el orden de consumo del PRNG es parte del contrato: alterarlo cambia todos los mundos
+ * ya guardados para una seed dada (ver `WORLDGEN_VERSION`).
  */
 export function generarNodosDeRareza(
   rng: RandomFn,

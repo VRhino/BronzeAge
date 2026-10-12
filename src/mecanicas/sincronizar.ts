@@ -11,10 +11,12 @@
 import * as constantesJuego from '../constants';
 import * as constantesInfra from '../constantsInfra';
 import * as configMundo from '../worldgen/config';
+import { REGIONES } from '../worldgen/regiones';
+import { WORLDGEN_VERSION } from '../worldgen/types';
 
 // Las reglas del juego (`constants.ts`), las de infraestructura (`constantsInfra.ts`) y las congeladas de la generación del mundo (`worldgen/config.ts`)
-// se citan igual desde los documentos; sus nombres no chocan.
-const constantes = { ...constantesJuego, ...constantesInfra, ...configMundo };
+// se citan igual desde los documentos (más las regiones autoradas y la versión del generador); sus nombres no chocan.
+const constantes = { ...constantesJuego, ...constantesInfra, ...configMundo, REGIONES, WORLDGEN_VERSION };
 
 const BLOQUE = /<!-- parametros:([A-Za-z0-9_]+) -->\r?\n```json\r?\n[\s\S]*?\r?\n```\r?\n<!-- \/parametros -->/g;
 
