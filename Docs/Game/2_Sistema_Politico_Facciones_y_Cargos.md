@@ -111,9 +111,9 @@ Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).
 
 **Uso en mercenarios** (2026-10-02): una Facción con reputación baja paga más al reclutar en un campamento de mercenarios (Doc 5.8), con el mismo recargo que en comercio.
 
-**Penalizaciones:** romper Alianza unilateralmente; no defender a un vasallo atacado; rebelión de vasallo por incumplimiento del señor; incumplir acuerdo de trueque/orden de mercado aceptada; atacar a un Aliado sin romper la relación antes (la más severa).
+**Penalizaciones:** romper Alianza unilateralmente; no defender a un vasallo atacado (−3: su batalla se pierde sin ningún héroe del señor en la defensa); rebelión de vasallo por incumplimiento del señor; incumplir acuerdo de trueque; atacar a un Aliado sin romper la relación antes (la más severa); declarar la guerra a una Facción con la que se rompió una alianza hace menos de 3 días (−15, a quien rompió y declara).
 
-**Bonificaciones:** defender exitosamente a un vasallo; mantener Alianza activa mucho tiempo; cumplir acuerdos de trueque; liberar voluntariamente a un vasallo. La reputación es **entre Facciones**: un trueque entre plazas de la misma Facción ni suma ni resta.
+**Bonificaciones:** defender exitosamente a un vasallo (+15: un héroe del señor participa en la defensa de una plaza, caravana o cualquier otra cosa del vasallo y el bando defensor gana); mantener Alianza activa mucho tiempo; cumplir acuerdos de trueque; liberar voluntariamente a un vasallo. La reputación es **entre Facciones**: un trueque entre plazas de la misma Facción ni suma ni resta.
 
 **Decaimiento:** el score decae lentamente hacia 0 con el tiempo sin eventos nuevos.
 

@@ -1309,6 +1309,9 @@ export interface RelacionPolitica {
   /** Instante de mundo en que se estableció la relación (Fase D). */
   creadoEn: Instante;
   estado: 'activa' | 'rota';
+  /** Solo alianza rota con `romperRelacion`: quién la rompió y cuándo (la guerra a esa Facción poco después se penaliza, Doc 2.7). */
+  rotaPor?: string;
+  rotaEn?: Instante;
   /** Solo guerra: la Facción que ya ofreció la paz. La guerra acaba cuando la acepta la otra (Doc 2.4.1). */
   pazPropuestaPor?: string;
 }

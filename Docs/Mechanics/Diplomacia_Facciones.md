@@ -106,7 +106,7 @@ si rep > 0 : rep = max(0, rep − decaimientoPorMinuto) ; si rep < 0 : rep = min
 rep += (nº de alianzas activas en las que está) × bonusPorMinutoAlianzaActiva ; recortado a [−100, 100]
 ```
 Qué la mueve (cifras en `REPUTACION`, bloque en `Comercio_Caravanas.md` §13): trueque cumplido (+) y vencido (−) entre Facciones distintas · romper una alianza (− a quien rompe) · liberar a un vasallo voluntariamente (+ a la
-señora) · rebelión de un vasallo (− a la señora) · atacar a un aliado (−, en `Combate.md`). Qué cambia según ella: proponer una alianza exige `reputacion ≥ umbralBajoParaEmbajador`; el recargo de comisión
+señora) · rebelión de un vasallo (− a la señora) · atacar a un aliado (−, en `Combate.md`) · **defender a un vasallo** (§5.9) · **declarar la guerra tras romper una alianza** (§5.4). Qué cambia según ella: proponer una alianza exige `reputacion ≥ umbralBajoParaEmbajador`; el recargo de comisión
 (`Comercio_Caravanas.md` §3.3) y del reclutamiento en campamentos (`REPUTACION.factorComisionPorReputacionBaja`, con `reputacion ≤ umbralBajoParaComision`); la llegada de Aedas residentes (`Tecnologia_Aedas.md`).
 
 ### 3.7 Capital (`designarCapital`)
@@ -261,6 +261,9 @@ Distintas, las dos existen y **no hay entre ellas ninguna relación activa de ni
 - **Retirar:** la autoridad de la que ofreció, mientras nadie contestó.
 
 ### 5.4 Guerra y paz (`declararGuerra`, `proponerPaz`)
+Al declarar, si `atacante` rompió una alianza con `objetivo` (`rotaPor`) hace menos de `ventanaGuerraTrasRomperAlianzaDias` días (`rotaEn`), pierde `penalizacionGuerraTrasRomperAlianza` de reputación
+(`ajustesPorGuerraTrasRomper`, que aplica el comando). `romperRelacion` anota `rotaPor`/`rotaEn` solo en las alianzas; las que acaban por anexión o fusión no.
+
 ```
 declarar(atacante, objetivo):  validarPar(atacante, objetivo)
     señor  = (el señor activo del objetivo, si es vasallo)  si no  el objetivo
@@ -297,6 +300,18 @@ Liga que **nunca es vasalla** dentro de esa misma Liga (la primera que cumple).
 }
 ```
 <!-- /parametros -->
+
+### 5.9 Defender al vasallo (`conReputacionDeVasallos`, al aplicar el resultado de una batalla)
+```
+vasalla = bando defensor.faccionId   (si no hay Facción, nada)
+para cada señora con un vasallaje activo sobre vasalla:
+    presente = algún héroe de la señora en el bando defensor, con participo = true en el resultado
+    presente  y gana el defensor : reputación(señora) += bonusDefenderVasallo
+    !presente y gana el atacante : reputación(señora) += penalizacionNoDefenderVasallo
+    en cualquier otro caso       : nada
+```
+Vale para cualquier batalla cuyo defensor sea de la vasalla (plaza, caravana, y lo que venga). Solo existe en las batallas de Unity: el asedio y el combate con números enfrentan
+solo a la tropa de la plaza, sin héroes de la señora, y no tocan esta reputación (§12).
 
 ## 6. Anexión y fusión
 
@@ -391,9 +406,11 @@ La crónica de los Aedas canta la anexión, la fusión, la liberación de vasall
 | Anexión: propuesta, respuesta, traslado, relaciones, desarme del señor | `comandosAnexion.test.ts` |
 | Fusión: propuesta, respuesta, qué hereda C, capital, relaciones | `comandosFusion.test.ts` |
 | Derrota: solo se anota si no queda plaza | `derrotas.test.ts` |
+| Defender al vasallo (bonus, penalización, sin efecto) y guerra tras romper una alianza (ventana y quién paga) | `reputacionVasallos.test.ts` |
 | Títulos y experiencia | `eventosDominioTitulos.test.ts`, `experienciaFaccion.test.ts` |
 
 ## 12. Casos límite y decisiones que parecen raras
+- **Defender al vasallo solo cuenta en las batallas de Unity** (§5.9); el asedio con números no premia ni penaliza a la señora.
 - **Una propuesta caducada no desaparece sola:** queda en la lista hasta que se añade otra del mismo tipo (que poda las caducadas) o se contesta; ya no se puede contestar ni cuenta como «pendiente».
 - **Declarar guerra no arrastra a los aliados del bando contrario con los que ya hay relación:** solo se salta quien tiene una relación activa con el atacante; el objetivo directo, si la tiene, hace fallar todo.
 - **El tributo se reparte entre todas las plazas de la vasalla:** una plaza sin stock no paga y las demás no cubren su parte; con `cantidadPorMinuto = 0` no pasa nada.

@@ -15,7 +15,7 @@ import { repartirBotin } from '../engine/repartoDeBotin';
 import { aplicarAjustesExperiencia, registrarDerrota, type AjusteExperiencia } from '../engine/faccion';
 import { herir } from '../engine/heroe';
 import { estanAliadas } from '../engine/pertenencia';
-import { aplicarAjustesReputacion } from '../engine/reputacion';
+import { aplicarAjustesReputacion, type AjusteReputacion } from '../engine/reputacion';
 import { alCampamento, conEscuadrones, conExperiencia, sinTropa } from '../engine/tropa';
 import { sumarContadores, type DeltaContadores } from '../engine/tecnologia';
 import { integridadDeRecinto } from '../engine/trazado';
@@ -52,6 +52,7 @@ export function aplicarResultado(estado: GameSessionState, b: Batalla, r: Battle
   siguiente = consecuencias(siguiente, b, r.ganador, ahora);
   siguiente = recogerChatarra(siguiente, b, r);
   siguiente = conXpDeFaccion(siguiente, b, r);
+  siguiente = conReputacionDeVasallos(siguiente, b, r);
   return conBatalla(siguiente, { ...b, estado: 'aplicada', resultado: r, aplicadaEn: ahora });
 }
 
@@ -284,6 +285,24 @@ function conquistar(estado: GameSessionState, b: Batalla, ahora: Instante): Game
     ejercitos: [...estado.ejercitos, ...fuera.map((f) => f.ejercito)],
     heroes: conEscuadrones(desalojo.heroes, fuera.flatMap((f) => f.tropa)),
   };
+}
+
+/** Defender al vasallo (Doc 2.7, decidido el 2026-10-12): en una batalla cuyo bando defensor es de una Facción vasalla —sea una plaza, una caravana
+ * u otra cosa suya—, su señora gana reputación si algún héroe suyo participó en esa defensa y el bando defensor aguantó; y la pierde, menos, si el
+ * defensor perdió y ninguno de sus héroes estuvo. */
+export function conReputacionDeVasallos(estado: GameSessionState, b: Batalla, r: BattleResult): GameSessionState {
+  const vasallaId = b.ticket.bandos.defensor.faccionId;
+  if (!vasallaId) return estado;
+  const participaron = new Set(r.porHeroe.filter((h) => h.participo).map((h) => h.heroeId));
+  const defensoras = participacionesDe(b).filter((p) => p.lado === 'defensor');
+  const señoras = new Set(estado.relaciones.filter((x) => x.estado === 'activa' && x.tipo === 'vasallaje' && x.faccionBId === vasallaId).map((x) => x.faccionAId));
+  const ajustes: AjusteReputacion[] = [...señoras].map((señoraId) => {
+    const presente = defensoras.some((p) => p.participante.faccionId === señoraId && participaron.has(p.participante.heroeId));
+    return presente
+      ? { faccionId: señoraId, delta: r.ganador === 'defensor' ? REPUTACION.bonusDefenderVasallo : 0, razon: 'defender a un vasallo' }
+      : { faccionId: señoraId, delta: r.ganador === 'atacante' ? REPUTACION.penalizacionNoDefenderVasallo : 0, razon: 'no defender a un vasallo' };
+  });
+  return { ...estado, facciones: aplicarAjustesReputacion(estado.facciones, ajustes.filter((a) => a.delta !== 0)) };
 }
 
 /** XP de Facción por combatir, como en el combate con números (Doc Fase_0_5 §8): por cada héroe de su bando que

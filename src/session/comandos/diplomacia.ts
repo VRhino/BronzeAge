@@ -15,12 +15,14 @@ import {
   type PayloadRelacionRespondida,
   romperRelacion as romperRelacionEngine,
   rebelionVasallo as rebelionVasalloEngine,
+  ajustesPorGuerraTrasRomper,
   declararGuerra as declararGuerraEngine,
   proponerPaz as proponerPazEngine,
   type PayloadGuerraDeclarada,
 } from '../../engine/diplomacia';
 import { propuestasVigentes } from '../../engine/trasladoDeFaccion';
 import { faccionesConBatallaAbierta } from '../batallas';
+import { aplicarAjustesReputacion } from '../../engine/reputacion';
 import type { GameSessionState } from '../estado';
 import { exito } from './tipos';
 import { comando, exigirFaccion, rechazar } from './ayudas';
@@ -144,7 +146,7 @@ export interface ParamsRomperRelacion {
 export const romperRelacion = comando<ParamsRomperRelacion, void>((estado, _mapa, ctx, params) => {
   if (!params.relacionId) rechazar(CODIGOS_ERROR.diplomaciaRelacionNoIndicada);
 
-  const resultado = romperRelacionEngine(estado.facciones, estado.relaciones, params.relacionId, params.iniciadorFaccionId);
+  const resultado = romperRelacionEngine(estado.facciones, estado.relaciones, params.relacionId, params.iniciadorFaccionId, ctx.instante);
   const siguiente: GameSessionState = { ...estado, facciones: resultado.facciones, relaciones: resultado.relaciones };
   return exito(siguiente, [
     evento(ctx, {
@@ -188,7 +190,8 @@ export interface ParamsDeclararGuerra {
 
 export const declararGuerra = comando<ParamsDeclararGuerra, { relacionIds: string[] }>((estado, _mapa, ctx, params) => {
   const guerras = declararGuerraEngine(estado.facciones, estado.relaciones, params.faccionAId, params.faccionBId, ctx.instante, ctx.ids.siguiente());
-  const siguiente: GameSessionState = { ...estado, relaciones: [...estado.relaciones, ...guerras] };
+  const facciones = aplicarAjustesReputacion(estado.facciones, ajustesPorGuerraTrasRomper(estado.relaciones, params.faccionAId, params.faccionBId, ctx.instante));
+  const siguiente: GameSessionState = { ...estado, facciones, relaciones: [...estado.relaciones, ...guerras] };
   const relacionIds = guerras.map((g) => g.id);
   return exito(
     siguiente,

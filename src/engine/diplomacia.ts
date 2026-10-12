@@ -12,7 +12,7 @@ export interface PayloadTributoPagado {
 }
 import { RELACION_PROPUESTA, REPUTACION } from '../constants';
 import { agregarRecurso, cantidadDisponible, descontarRecursos } from './almacen';
-import { aplicarAjustesReputacion, puedeProponerAlianza } from './reputacion';
+import { aplicarAjustesReputacion, puedeProponerAlianza, type AjusteReputacion } from './reputacion';
 import { encontrarCapital } from './mantenimiento';
 import { ReglaInvalidaError } from './errores';
 
@@ -238,7 +238,8 @@ export function romperRelacion(
   facciones: Faccion[],
   relaciones: RelacionPolitica[],
   relacionId: string,
-  iniciadorFaccionId?: string
+  iniciadorFaccionId?: string,
+  instante?: Instante
 ): { facciones: Faccion[]; relaciones: RelacionPolitica[] } {
   const relacion = relaciones.find((r) => r.id === relacionId);
   if (!relacion) throw new DiplomaciaInvalidaError('La relación no existe.');
@@ -264,8 +265,30 @@ export function romperRelacion(
 
   return {
     facciones: aplicarAjustesReputacion(facciones, ajustes),
-    relaciones: relaciones.map((r) => (r.id === relacionId ? { ...r, estado: 'rota' as const } : r)),
+    relaciones: relaciones.map((r) =>
+      r.id !== relacionId
+        ? r
+        : { ...r, estado: 'rota' as const, ...(r.tipo === 'alianza' && instante !== undefined ? { rotaPor: iniciadorFaccionId ?? r.faccionAId, rotaEn: instante } : {}) }
+    ),
   };
+}
+
+/**
+ * Declarar la guerra a una Facción con la que quien declara rompió una alianza hace menos de `ventanaGuerraTrasRomperAlianzaDias` penaliza a quien declara
+ * (Doc 2.7): romper para atacar de inmediato es la traición que la reputación debe pagar.
+ */
+export function ajustesPorGuerraTrasRomper(relaciones: RelacionPolitica[], atacanteId: string, objetivoId: string, instante: Instante): AjusteReputacion[] {
+  const reciente = relaciones.some(
+    (r) =>
+      r.tipo === 'alianza' &&
+      r.estado === 'rota' &&
+      r.rotaPor === atacanteId &&
+      r.rotaEn !== undefined &&
+      [r.faccionAId, r.faccionBId].includes(objetivoId) &&
+      [r.faccionAId, r.faccionBId].includes(atacanteId) &&
+      instante < sumar(r.rotaEn, dias(REPUTACION.ventanaGuerraTrasRomperAlianzaDias))
+  );
+  return reciente ? [{ faccionId: atacanteId, delta: REPUTACION.penalizacionGuerraTrasRomperAlianza, razon: 'guerra tras romper una alianza' }] : [];
 }
 
 /**

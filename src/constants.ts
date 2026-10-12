@@ -2521,6 +2521,12 @@ export const REPUTACION = {
   penalizacionRebelionParaSenora: -10,
   penalizacionRomperAlianza: -12,
   penalizacionAtacarAliado: -25,
+  // Vasallos (decidido el 2026-10-12): un héroe del señor presente en la defensa de algo del vasallo que aguanta; sin ninguno cuando cae.
+  bonusDefenderVasallo: 15,
+  penalizacionNoDefenderVasallo: -3,
+  // Declarar la guerra a quien era aliada y se rompió hace poco: la penaliza a quien rompió la alianza y declara.
+  penalizacionGuerraTrasRomperAlianza: -15,
+  ventanaGuerraTrasRomperAlianzaDias: 3,
   bonusPorMinutoAlianzaActiva: 0.05,
   // Restricción del Embajador (Doc 2.7, uso 3): por debajo de este umbral no puede proponer alianzas.
   umbralBajoParaEmbajador: -40,

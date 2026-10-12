@@ -24,7 +24,8 @@ Alta = impide algo del juego · Media = el juego va contra la intención escrita
 - **Falta decidir:** si la conquista de una vasalla por un tercero debe cambiar algo, y qué es «defender».
 
 ### 16. Reputación: faltan eventos del canon · **Baja**
-- Canon 2.7: penalizaciones por «no defender a un vasallo atacado» e «incumplir orden de mercado aceptada», y bonificación por «defender exitosamente a un vasallo». No existen (las órdenes ya no se aceptan: se toman en el mostrador).
+- Hecho el 2026-10-12: defender / no defender a un vasallo (+15 / −3, §5.9) y guerra tras romper una alianza (−15, ventana de 3 días, §5.4). Quitado del canon el «incumplir orden de mercado aceptada».
+- **Queda:** el asedio con números (sin héroes de la señora) no aplica la regla de defensa, y no hay vía para cancelar un trueque antes de tiempo.
 
 ## Consecuencias pendientes de medir
 
