@@ -1976,7 +1976,8 @@ export const LOGISTICA = {
    * Los víveres de cada héroe: trigo para comer, siempre con él (dentro o fuera), fijos por héroe y sumados en un ejército
    * —para más, las caravanas—. NO es un número elegido: sale del radio operativo (Doc 5.13.1), un cuarto del mapa de 2000 ida
    * y vuelta = 50 minutos a velocidad 20. La tropa prestada completa (85 soldados) más el héroe comen en marcha
-   * `(85 × 0.15 + 0.5) × 0.5 ≈ 6.6`/minuto: 331 en 50 minutos. Si cambia la ración, RECALCULAR desde el radio.
+   * `(85 × 0.15 + 0.5) × 0.25 ≈ 3.3`/minuto: 166 en 50 minutos, así que 350 da el doble de la autonomía que exige la regla
+   * (se fijó con el consumo a la mitad; a recalibrar con batch). Si cambia la ración, RECALCULAR desde el radio.
    */
   capacidadViveresPorHeroe: 350,
   /**
@@ -1988,7 +1989,7 @@ export const LOGISTICA = {
   factorConsumoEstacionado: 0.1,
   radioReabastecimiento: 60,
   /**
-   * Fracción de la capacidad del carro bajo la cual repostar es noticia (`ejercito.reabastecido`). Por encima es la ración
+   * Fracción de la capacidad de los VÍVERES de la columna bajo la cual repostar es noticia (`ejercito.reabastecido`). Por encima es la ración
    * de cada minuto de un ejército acampado junto a su plaza y no se narra (era el 39 % del log a los 3 días).
    */
   umbralNarrarReposte: 0.5,

@@ -47,7 +47,7 @@ Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando
 - **Los antiguos residentes pierden la residencia y con ella los cargos locales**: la ciudad cambia de dueño entera, valga para los que estaban de campaña como para los que estaban en casa (Doc 2.5).
 - La ciudad **no se entrega intacta**: la conquista la saquea (población, edificios, murallas), la **protege un día** contra nuevos asedios y abre una **ventana de ocupación** de tiempo fijo — recaudación y crecimiento a la mitad, mantenimiento congelado. El premio sigue siendo "un asentamiento en funcionamiento" (5.12.4), pero **es una inversión que tarda en rendir**, no un subidón inmediato. Detalle en 5.12.9.
 - Llevarse escuadrones a campaña los saca del campamento de verdad: dejan de comer del almacén (5.13). Los que se quedan en el campamento sin estar en guarnición no defienden (5.12.4).
-- **Un héroe cuya Facción se queda sin asentamientos queda HUÉRFANO** (Doc 0): conserva sus escuadrones, pero sin residencia — sin sitio donde guardarlos, reabastecer ni reclutar. Deja de serlo al volver a residir en algún asentamiento (ciudadanía, Doc 2.5).
+- **Un héroe cuya Facción se queda sin asentamientos pasa a residir en el campamento de mercenarios más cercano** (Doc 1.9b, 5.15.5): conserva sus escuadrones, y allí los guarda, reposta y recluta. Ya no hay huérfanos (Doc 0).
 
 Ciclo de vida propiamente dicho:
 
@@ -246,13 +246,13 @@ Los ejércitos se mueven por el mapa del mundo para atacar, igual que las carava
 
 El Héroe puede salir **solo** (con las tropas que quiera, incluidas ninguna) o **junto a otros héroes**. En el motor son **la misma entidad** y comparten movimiento, suministro y combate. En las REGLAS no son lo mismo, y la línea que los separa **no es cuánta gente va dentro: es cómo salió la columna**.
 
-**Lo decide el acto de salir, y no cambia nunca:** salir *a lo tuyo* hace una Columna personal; **movilizarse** (o partir una convocatoria, 5.14.5) hace un Ejército, aunque en ese primer momento vayas solo. Salir juntos se puede de tres maneras: uno moviliza y los demás se suman, en su plaza o en el campo (5.14); o se prepara el ejército dentro del lugar y parten todos a la vez (5.14.5).
+**Lo decide el acto de salir, y no cambia nunca** (con una sola excepción, reclamar una caravana suelta, 5.13.2): salir *a lo tuyo* hace una Columna personal; **movilizarse** (o partir una convocatoria, 5.14.5) hace un Ejército, aunque en ese primer momento vayas solo. Salir juntos se puede de tres maneras: uno moviliza y los demás se suman, en su plaza o en el campo (5.14); o se prepara el ejército dentro del lugar y parten todos a la vez (5.14.5).
 
 | | **Columna personal** | **Ejército** |
 |---|---|---|
 | Cómo nace | Se **sale al mundo** desde la residencia | Se **moviliza** desde un asentamiento, se **parte una convocatoria** (5.14.5) o se **forma en campo** (5.14.4), aunque salga uno solo |
 | Quién dirige el rumbo | Él mismo, con sus clics | **Su Líder**, con sus clics, las veces que quiera; los demás acompañan |
-| Caravanas adjuntas | **No puede llevarlas** | Sí, y las conserva aunque baje a un miembro |
+| Caravanas adjuntas | **No puede llevarlas**: la que reclama deja de serlo (5.13.2) | Sí, y las conserva aunque baje a un miembro |
 | Se le pueden unir otros | No | Sí, **solo de su misma Facción** (5.14) |
 | Separarse | No aplica: separarse es disolverla | Sí, **mientras quede alguien** (5.14) |
 
@@ -264,7 +264,7 @@ Dos reglas cierran el modelo:
 
 **Un ejército no tiene destino fijo** (decisión del autor, 2026-10-08): la niebla de guerra hace que su Líder no pueda decidir un único rumbo de antemano. Por eso **sale quieto en la puerta** y **lo dirige su Líder con sus clics**, tantas veces como quiera y en cualquier momento, también a mitad de marcha (`marcharA`). Los demás miembros no dirigen: si piden un rumbo se les rechaza. **Acompañar sigue costando libertad**: quien se une cede la dirección al Líder, y separarse se la devuelve al instante.
 
-**Un Héroe puede unirse a un ejército ya en campaña** de dos formas distintas, con geometrías distintas: pasando el ejército por **su asentamiento**, de donde saca tropas frescas; o **cruzándoselo en el campo**, aportando lo que ya lleva encima (5.14). En ambos casos sus escuadrones se validan contra su propio Liderazgo.
+**Un Héroe puede unirse a un ejército ya en campaña** de dos formas distintas, con geometrías distintas: con el ejército en **la puerta de su asentamiento**, de donde saca tropas frescas; o **cruzándoselo en el campo**, aportando lo que ya lleva encima (5.14). En ambos casos sus escuadrones se validan contra su propio Liderazgo.
 
 ### 5.12.2 Identificación en el mapa
 
@@ -527,18 +527,22 @@ Cada héroe lleva tres cosas distintas, y no se mezclan:
 |---|---|---|---|
 | Qué lleva | carga: botín, materiales, fondos | lo que guarda para sí | **solo trigo, para comer** |
 | Dónde está | con la columna | en su residencia; solo se usa desde dentro | **siempre con el héroe**, dentro o fuera |
-| Capacidad | fija por héroe; se suma en un ejército | fija | **fija por héroe** (`LOGISTICA.capacidadViveresPorHeroe`); en un ejército **se suman** — para llevar más están las caravanas (5.13.2) |
+| Capacidad | fija por héroe; se suma en un ejército | fija | **fija por héroe** (`LOGISTICA.capacidadViveresPorHeroe`); en un ejército pasan a ser **los víveres del ejército** (abajo) — para llevar más están las caravanas (5.13.2) |
 
 - **Los víveres no son carga**: no se descargan nunca (ni al volver a casa ni en el almacén personal), no se venden y **no se roban** — quien derrota a una columna se lleva la mitad del carro (5.12.3), no sus víveres.
-- **Del carro a los víveres, nunca al revés.** El Líder de la columna puede pasar trigo del carro a sus víveres, hasta llenarlos (`pasarAViveres`): así se come el trigo saqueado o el que traen las caravanas adjuntas.
-- **En un ejército son comunes** mientras marchan juntos: se come del montón, a prorrata de lo que lleva cada uno, y quien se separa se lleva los suyos.
+- **Del carro a los víveres, nunca al revés.** El Líder de la columna puede pasar trigo del carro a los víveres, hasta llenarlos (`pasarAViveres`): en una columna personal, a los suyos; en un ejército, a **los víveres del ejército**. Así se come el trigo saqueado o el que traen las caravanas adjuntas.
+- **Los víveres del ejército.** En un ejército los víveres dejan de ser de cada héroe: el ejército tiene **unos víveres propios**, cuya capacidad es la suma de la de sus héroes y que **es lo único que se ve** mientras marchan juntos. De ahí come todo el ejército (soldados y héroes) al moverse y al acampar, y ahí entra todo lo que se repone.
+  - **Al unirse**, el héroe aporta sus víveres y su capacidad.
+  - **Al separarse, o al desarmarse el ejército** (5.14.2, 5.14.5), cada héroe se lleva **una parte igual**: víveres del ejército × su capacidad / la capacidad total (con todos a 350, el montón entre el número de héroes).
 - **Capacidad del carro**: **FIJA e igual para todos los Héroes** — es un carro, no una abstracción proporcional a lo que llevas. Se **suma** al formar ejército: un ejército de cuatro lleva cuatro carros.
 - **Llenar los víveres**: al salir o al unirse, cada Héroe **toma del asentamiento** hasta llenarlos. Si el almacén no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento. Quien sale de su campamento de mercenarios los llena con la ración gratis (Doc 1.9b).
-- **Reabastecimiento en ruta**: al pasar por un asentamiento **propio**, siempre. Por uno **aliado**, solo si ese asentamiento tiene la opción activada. Por uno neutral u hostil, nunca. "Al pasar" es estar dentro del **radio de reabastecimiento**, el mismo que decide dónde puede un ejército recoger refuerzos (5.12.1): por dónde puede pasar a recogerte y dónde puede repostar son la misma geografía.
-
-  Repostar rellena los víveres con las **mismas dos reglas que llenarlos al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da. Abrir el almacén a un aliado **cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa — quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
-
-  Sin límite de veces.
+- **Repostar** es llenar los víveres en ruta. Hay dos formas, según quién:
+  - **Columna personal: automático, dentro de la zona de influencia.** Mientras un héroe con su columna está **dentro de la zona de influencia** de un asentamiento donde puede repostar, sus víveres se rellenan solos de ese asentamiento, sin ninguna orden y sin límite de veces. Como las zonas no se solapan, siempre es una sola plaza: la dueña de la zona en la que está.
+  - **Ejército: con el botón «Repostar», en la puerta.** Un ejército **no reposta solo**. Su Líder, con el ejército en la puerta de un asentamiento donde pueda repostar (`MOVIMIENTO.radioPuerta`), pulsa **Repostar** y se rellenan los víveres del ejército de su almacén.
+  - **Dónde se puede**: en un asentamiento **propio**, siempre. En uno **aliado** —alianza o vasallaje, en cualquier dirección—, solo si ese asentamiento tiene la opción activada. En uno neutral u hostil, nunca. En un **campamento de mercenarios**, cualquiera y gratis (Doc 1.9b).
+  - **Con las mismas dos reglas que llenarlos al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da.
+  - **Abrir el almacén a un aliado cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa. Quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
+- **El carro no se carga en movimiento; los víveres sí.** El carro solo se llena parado en un lugar: dentro de un asentamiento o de un campamento de mercenarios, o en su puerta para las acciones que se hacen desde ella (comprar, recoger tropas, cargar o entregar con una caravana adjunta, 5.13.3). Un héroe con su columna puede ir a otra plaza o a un campamento, comprar allí, llenar el carro e irse. En marcha solo se reponen los víveres, y solo una columna personal.
 - **Regreso**: lo que lleva el carro **vuelve al almacén** del asentamiento de origen; los víveres siguen con el héroe. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
 
 ### 5.13.1 El radio operativo es la constante de diseño
@@ -556,7 +560,9 @@ Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a
 Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de carga más allá de la suma de los carros de sus héroes. Es la forma de proyectar una campaña lejos sin depender de que se unan más héroes.
 
 - La capacidad de una caravana es **igual o mayor que la del carro de un jugador** — si cargara menos, la caravana no tendría sentido como tren de suministros. Son iguales: 500.
-- **Se engancha y se suelta en marcha**, con cuatro condiciones: que sea de tu Facción, que esté **disponible** (una caravana ya despachada está cumpliendo un trueque y secuestrarla lo rompería), que esté al alcance —el mismo radio con el que se recogen refuerzos y se reposta— y que no vaya ya enganchada. Al soltarla se queda **donde esté la columna**: no vuelve sola a casa, igual que un ejército no se teletransporta al replegarse.
+- **Se engancha solo dentro del lugar donde está la caravana**: un asentamiento, o un campamento de mercenarios en el caso de la Caravana de Fundación (Doc 1.8). Nunca en mundo abierto: quien quiere llevar una caravana sale ya como ejército. Además, tiene que ser de tu Facción, estar **disponible** o aparcada (una caravana ya despachada está cumpliendo un trueque y secuestrarla lo rompería) y no ir ya enganchada.
+- **Se puede soltar en marcha**: se queda **suelta donde esté la columna**. No vuelve sola a casa, igual que un ejército no se teletransporta al replegarse.
+- **Reclamar una caravana suelta.** En mundo abierto, un héroe de la misma Facción que la caravana, junto a ella, interactúa con ella y pulsa **Reclamar**: pasa a su columna y la lleva donde quiera. **Reclamarla convierte al instante su columna personal en un Ejército**, con él de Líder, la caravana adjunta, la política de unión que elija al reclamar y la plaza de origen de la caravana como origen (a donde se replegará); si ya iba en un ejército, la suma a ese. Vale para cualquier caravana suelta de su Facción, también para la Caravana de Fundación que vuelve sola a su origen (Doc 1.8).
 - Mientras va enganchada **viaja con el ejército**: su posición es la de la columna, no una ruta propia.
 - **Entran en el `min` de velocidad.** Una caravana comercial va a 16, así que adjuntarla baja un ejército ligero de 20 a 16 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
 - **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.
@@ -570,9 +576,9 @@ Una caravana adjunta **puede ir cargada de mercancía y hacer su entrega** mient
 
 En la práctica son tres actos del jugador:
 
-1. **Enganchar** una caravana disponible, estando la columna a su alcance.
-2. **Cargar** lo que quiera del almacén de una plaza que le abra la puerta — la propia siempre, una aliada si tiene la opción activa. La misma geografía con la que reposta el trigo.
-3. **Entregar**, al llegar: interactuando con un asentamiento se ven los **trueques activos**, cuánto falta **por tu parte** en cada uno, y se entrega de lo que la caravana lleve. Se entrega el menor de lo cargado y lo que falta, y el destino cobra su comisión exactamente igual que en una entrega automática — el camino manual no es una puerta trasera con otras reglas.
+1. **Enganchar** una caravana disponible, estando el ejército dentro del asentamiento donde está la caravana (5.13.2).
+2. **Cargar** lo que quiera del almacén de una plaza que le abra la puerta —la propia siempre, una aliada si tiene la opción activa—, con el ejército **en su puerta**. Son las mismas plazas donde puede repostar.
+3. **Entregar**, al llegar a la puerta del destino: interactuando con un asentamiento se ven los **trueques activos**, cuánto falta **por tu parte** en cada uno, y se entrega de lo que la caravana lleve. Se entrega el menor de lo cargado y lo que falta, y el destino cobra su comisión exactamente igual que en una entrega automática — el camino manual no es una puerta trasera con otras reglas.
 
 **Los bandidos atacan a la columna, no a la caravana**: una caravana escoltada se resuelve contra el poder de combate del ejército y no contra la defensa base fija. Si no, escoltar no protegería de los bandidos.
 
@@ -614,7 +620,7 @@ Es distinto de unirse pasando el ejército por tu asentamiento (5.12.1), y convi
 
 | | Unirse en tu plaza | Unirse en campo |
 |---|---|---|
-| Qué exige | Que el ejército pase cerca de **tu asentamiento** | Que estéis **uno junto al otro** en el mapa |
+| Qué exige | Que el ejército esté en **la puerta de tu asentamiento** | Que estéis **uno junto al otro** en el mapa |
 | Qué aportas | Tropas frescas sacadas **de casa** | Lo que **ya llevas encima**: tus escuadrones y tu carro |
 
 En ambos casos lo que aportas se valida contra tu propio Liderazgo (5.11).
@@ -645,7 +651,7 @@ Sin esto, un desconocido podría engancharse a tu marcha sin que pudieras negart
 
 ### 5.14.2 Separarse
 
-Sales del Ejército con lo tuyo —tus escuadrones y **hasta un carro** de suministro, que es lo que aportaste— y naces como **Columna personal** en la posición donde estabas. Recuperas la libertad de movimiento al instante.
+Sales del Ejército con lo tuyo —tus escuadrones, **hasta un carro** de suministro, que es lo que aportaste, y **tu parte igual de los víveres del ejército** (5.13)— y naces como **Columna personal** en la posición donde estabas. Recuperas la libertad de movimiento al instante.
 
 **El origen NO cambia.** Tu columna nueva conserva el asentamiento del que salió el Ejército, no el tuyo: el destino puede cambiar, el origen no. Es donde te replegarás. *(Es también lo que ya ocurría al unirse pasando por tu plaza — un jugador que se suma a un ejército de otra ciudad vuelve con él a esa ciudad, no a la suya.)*
 
@@ -697,7 +703,7 @@ Lo de antes sigue valiendo: unirse pasando el ejército por tu plaza (5.12.1) y 
 
 Un ejército en la puerta de **una plaza de su Facción** (`guarnecer`) o de **un campamento de mercenarios** (`entrarEnCampamento`) puede entrar (decisión del autor):
 
-- **Lo ordena su Líder** y se **desarma** en la puerta: cada héroe queda en una Columna personal con su parte del carro (a prorrata, como al separarse) y entra como lo haría solo.
+- **Lo ordena su Líder** y se **desarma** en la puerta: cada héroe queda en una Columna personal con su parte del carro (a prorrata, como al separarse) y su parte igual de los víveres del ejército y entra como lo haría solo.
 - **Los que residen allí entran normal**: la tropa vuelve al campamento y el carro al almacén (personal, en un campamento, hasta el tope; lo que no cabe queda en el carro aparcado).
 - **Los que no residen entran de visita**: dentro del lugar, con su columna aparcada intacta en la puerta. Una puerta cerrada o un veto les alcanza como a cualquiera.
 - **Caravanas adjuntas**: solo entra si **todas son de ese lugar**; si no, hay que soltarlas o llevarlas a su origen antes. Las de ese lugar quedan aparcadas en una plaza, o sueltas en un campamento (la Caravana de Fundación).
