@@ -5,8 +5,8 @@
 // militar razona por contenedor —la tropa de ESTA columna, la escolta de ESTA caravana—, así que trabaja sobre
 // VISTAS que las llevan puestas (`EjercitoConTropa`, `CaravanaConEscolta`): se montan al entrar en una operación
 // y se deshacen al salir, devolviendo al héroe las escuadras que cambiaron (`conEscuadrones`).
-import type { Asentamiento, Caravana, Ejercito, Escuadron, Heroe } from '../domain/types';
-import { esResidente } from './pertenencia';
+import type { Asentamiento, Caravana, Ejercito, Escuadron, Faccion, Heroe, RelacionPolitica } from '../domain/types';
+import { esResidente, grupoDePuerta } from './pertenencia';
 import { BATALLA, MILITAR, TROPAS_RECLUTABLES } from '../constants';
 
 export type EjercitoConTropa = Ejercito & { escuadrones: Escuadron[] };
@@ -135,6 +135,54 @@ export function defensaDe(asentamiento: Asentamiento, heroes: readonly Heroe[], 
   return heroes
     .filter((h) => esResidente(asentamiento, h.id))
     .flatMap((h) => h.escuadrones.filter((e) => e.contenedor.tipo === 'campamento' && (e.enGuarnicion || enPersona.has(e.id))));
+}
+
+/**
+ * Los héroes de fuera que entran a defender una plaza con números (2026-10-12): los que están DENTRO en ese momento —conectados y sanos— y son de la
+ * propia Facción de la plaza o de una aliada (alianza, o vasallaje en cualquier sentido), ocupando el cupo que dejan los residentes (`cupo`),
+ * por nivel y poder como en `alTopeDeBatalla`. Defienden con las escuadras de la columna que dejaron aparcada a la puerta.
+ */
+export function visitantesQueEntranADefender(
+  asentamiento: Asentamiento,
+  heroes: readonly Heroe[],
+  heridos: ReadonlySet<string>,
+  facciones: readonly Faccion[],
+  relaciones: readonly RelacionPolitica[],
+  cupo: number
+): Heroe[] {
+  if (cupo <= 0) return [];
+  const amigos = heroes.filter((h) => {
+    if (esResidente(asentamiento, h.id) || heridos.has(h.id) || h.fuera) return false;
+    if (h.ubicacion.tipo !== 'asentamiento' || h.ubicacion.asentamientoId !== asentamiento.id) return false;
+    const faccionId = facciones.find((f) => f.ciudadanosIds.includes(h.id))?.id;
+    if (!faccionId) return false;
+    const grupo = grupoDePuerta(relaciones, faccionId, asentamiento.faccionId);
+    return grupo === 'propia' || grupo === 'aliados';
+  });
+  return alTopeDeBatalla(amigos, escuadrasDeSuColumna, cupo);
+}
+
+function escuadrasDeSuColumna(h: Heroe): Escuadron[] {
+  return h.escuadrones.filter((e) => e.contenedor.tipo === 'ejercito' && e.cantidad > 0);
+}
+
+/**
+ * Todo lo que defiende una plaza con números: sus residentes dentro (con su loadout) y, en el cupo que dejan, los visitantes amigos (con su
+ * columna aparcada), más la guarnición. `heroes` son los que combaten en persona (los que quedan heridos si la plaza cae).
+ */
+export function defensoresDeLaPlaza(
+  asentamiento: Asentamiento,
+  heroes: readonly Heroe[],
+  heridos: ReadonlySet<string>,
+  facciones: readonly Faccion[],
+  relaciones: readonly RelacionPolitica[]
+): { heroes: Heroe[]; escuadras: Escuadron[] } {
+  const residentes = heroesQueEntranADefender(asentamiento, heroes, heridos);
+  const visitantes = visitantesQueEntranADefender(asentamiento, heroes, heridos, facciones, relaciones, BATALLA.capacidad.asedio - residentes.length);
+  return {
+    heroes: [...residentes, ...visitantes],
+    escuadras: [...defensaDe(asentamiento, heroes, heridos), ...visitantes.flatMap(escuadrasDeSuColumna)],
+  };
 }
 
 /** Suelta la guarnición de un héroe que deja de residir donde la tenía: solo se guarnece la residencia (5.15.3). */

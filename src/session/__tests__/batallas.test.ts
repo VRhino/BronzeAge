@@ -95,6 +95,30 @@ describe('asediar es una orden, no una llegada (Doc 5.12.4)', () => {
     expect(conVasallaje.getState().facciones.find((f) => f.id === señora.id)!.reputacion).toBe(REPUTACION.penalizacionNoDefenderVasallo);
   });
 
+  it('con números, un héroe de la señora que está dentro de la plaza de su vasalla cuenta como presente: si cae, no hay penalización', () => {
+    const { sesion, fundador, plazaId } = frenteAPlaza(false);
+    const payload = sesion.exportar();
+    const base = payload.state.heroes.find((h) => h.id === fundador)!;
+    const amigo = {
+      ...base,
+      id: 'heroe-senora',
+      jugadorId: 'heroe-senora',
+      ubicacion: { tipo: 'asentamiento' as const, asentamientoId: plazaId },
+      loadouts: [],
+      escuadrones: [{ ...base.escuadrones[0]!, id: 'esc-senora', heroeId: 'heroe-senora', cantidad: 5, contenedor: { tipo: 'ejercito' as const, ejercitoId: 'col-senora' } }],
+    };
+    const señora = { ...payload.state.facciones[0]!, id: 'faccion-senora', nombre: 'Micenas', ciudadanosIds: [amigo.id], reputacion: 0 };
+    const vasallaje = { id: 'v', tipo: 'vasallaje', faccionAId: señora.id, faccionBId: 'faccion-rival', creadoEn: instanteDeTick(0), estado: 'activa' };
+    const s = GameSession.importar({
+      ...payload,
+      state: { ...payload.state, heroes: [...payload.state.heroes, amigo], facciones: [...payload.state.facciones, señora], relaciones: [...payload.state.relaciones, vasallaje as never] },
+    });
+
+    asediar(s, fundador, plazaId);
+
+    expect(s.getState().facciones.find((f) => f.id === señora.id)!.reputacion).toBe(0);
+  });
+
   it('con servidores, abre la batalla de asedio a nombre de quien la ordena, y un segundo asedio a la misma plaza espera', () => {
     const { sesion, fundador, vecino, plazaId } = frenteAPlaza();
 

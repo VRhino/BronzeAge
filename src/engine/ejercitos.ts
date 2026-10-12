@@ -21,9 +21,8 @@ import {
   conEscolta,
   conEscuadrones,
   conTropa,
-  defensaDe,
+  defensoresDeLaPlaza,
   guarnicionDe,
-  heroesQueEntranADefender,
   indiceTropa,
   sinEscolta,
   sinTropa,
@@ -1423,8 +1422,7 @@ export function asediarPlaza(
   campamentosMercenarios: CampamentoMercenarios[];
   eventos: EventoCrudo[];
 } {
-  const defensores = heroesQueEntranADefender(plaza, mundo.heroes, heridos);
-  const defensa = defensaDe(plaza, mundo.heroes, heridos);
+  const { heroes: defensores, escuadras: defensa } = defensoresDeLaPlaza(plaza, mundo.heroes, heridos, mundo.facciones, mundo.relaciones);
   // Las que defienden en persona: si la plaza cae, salen con su héroe (Doc 5.15.5). La guarnición no.
   const lucharon = new Set(defensa.filter((e) => !e.enGuarnicion).map((e) => e.id));
   const asedio = asediarConEjercito(enBatalla(ejercito, heridos, mundo.heroes, BATALLA.capacidad.asedio), plaza, defensa, mundo.facciones, [...mundo.relaciones], instante, rng);

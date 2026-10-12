@@ -52,7 +52,7 @@ import {
   type Apertura,
 } from '../batallas';
 import { heridosEn, herir } from '../../engine/heroe';
-import { conEscolta, heroesQueEntranADefender, indiceTropa, sinEscolta } from '../../engine/tropa';
+import { conEscolta, defensoresDeLaPlaza, indiceTropa, sinEscolta } from '../../engine/tropa';
 import type { Asentamiento, Ejercito, Point } from '../../domain/types';
 import { distancia } from '../../world/geometria';
 import type { Instante } from '../../domain/tiempo';
@@ -229,7 +229,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
 
   if (params.objetivo.tipo === 'asentamiento') {
     const plaza = plazaAsediable(estado, atacante, params.objetivo.id, heridos, ctx.instante);
-    const defensoresDeLaPlaza = heroesQueEntranADefender(plaza, estado.heroes, heridos).map((h) => h.id);
+    const heroesQueDefienden = defensoresDeLaPlaza(plaza, estado.heroes, heridos, estado.facciones, estado.relaciones).heroes.map((h) => h.id);
     const asedio = asediarPlaza(
       conTropaDe(estado, atacante),
       plaza,
@@ -255,7 +255,7 @@ export const atacar = comando<ParamsAtacar, { battleId: string } | undefined>((e
           asedio.facciones,
           estado,
           plaza.faccionId,
-          defensoresDeLaPlaza,
+          heroesQueDefienden,
           asedio.asentamientos.find((a) => a.id === plaza.id)?.faccionId === plaza.faccionId
         ),
         campamentosMercenarios: asedio.campamentosMercenarios,

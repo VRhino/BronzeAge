@@ -42,6 +42,7 @@ De la columna entran **las escuadras de los héroes sanos**, y de ellos solo los
 ### 3.2 Quién defiende una plaza (`defensaDe`)
 - **La guarnición** (escuadras con `enGuarnicion` de los campamentos de los residentes) — sin héroe, siempre defiende, incluso si su dueño está herido.
 - Los **residentes que defienden en persona** (`heroesQueDefienden`): residentes **dentro** de la plaza, **sanos** y **conectados** (`!fuera`); con tope `BATALLA.capacidad.asedio` (mismo orden que §3.1). Aportan las escuadras de su **loadout activo** que tengan en el campamento. El resto del campamento no defiende.
+- Los **visitantes amigos** (`visitantesQueEntranADefender`, decidido el 2026-10-12): héroes que no residen pero están **dentro** de la plaza en ese momento, sanos y conectados, de la **propia Facción** de la plaza o de una **aliada** (`grupoDePuerta` = `propia` o `aliados`: alianza o vasallaje en cualquier sentido). Ocupan el cupo que dejan los residentes (`BATALLA.capacidad.asedio − residentes que entran`), por nivel y poder, y aportan las escuadras de la **columna que dejaron aparcada a la puerta** (`contenedor: ejercito`). `defensoresDeLaPlaza` junta todo: héroes (los que quedan heridos si la plaza cae) y escuadras. En Unity no hace falta: se unen a la batalla.
 - Una escuadra aniquilada (`cantidad ≤ 0`) no cuenta.
 
 ### 3.3 Poder de una escuadra
@@ -205,6 +206,7 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
 - Las bajas son permanentes y una escuadra nunca desaparece: queda a `cantidad: 0` hasta que se rellene.
 - Una columna con todos sus héroes heridos no se puede atacar ni perseguir.
 - Una plaza conquistada es inatacable durante `proteccionMinutos`.
+- Con números defienden una plaza sus residentes y, en el cupo que dejan, los héroes de la propia Facción o aliados que estén dentro; no neutrales ni enemigos (`defensaConAliados.test.ts`, `batallas.test.ts`).
 - Tras `desalojarResidentes` ningún héroe queda con `ubicacion` dentro de la plaza conquistada.
 
 ## 14. Casos límite y decisiones que parecen raras
@@ -213,7 +215,7 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
 - **El carro se pierde por mitades aunque el héroe que lo llevaba estuviera herido y no combatiera**: el carro es de la columna.
 - **Un encuentro en campo no da ventaja de defensor «de verdad»**: el motor da cohesión y 1,05 al segundo bando; por eso el orden atacante/defensor importa y el comando lo fija (quien ordena es el atacante).
 - **El multiplicador de muralla usa solo el último recinto** de la lista, no el mejor: los recintos interiores son «historia en piedra» (ver `Murallas.md`).
-- **Defender al vasallo también cuenta con números** (2026-10-12): tras resolver con números un asedio, un choque entre columnas o una intercepción cuyo defensor es de una Facción vasalla, se aplica `ajustesPorDefensaDeVasallo` (Diplomacia §5.9) con los héroes que de verdad defendieron (los de la plaza que entran a defender, los de la columna atacada; una caravana suelta no lleva ninguno). Con números nadie de otra Facción entra a defender una plaza ajena, así que la señora figura ausente: si la vasalla pierde, ella paga la penalización.
+- **Defender al vasallo también cuenta con números** (2026-10-12): tras resolver con números un asedio, un choque entre columnas o una intercepción cuyo defensor es de una Facción vasalla, se aplica `ajustesPorDefensaDeVasallo` (Diplomacia §5.9) con los héroes que de verdad defendieron (los de la plaza que entran a defender, los de la columna atacada; una caravana suelta no lleva ninguno). Una señora cuenta como presente si tiene un héroe dentro de la plaza de su vasalla cuando la atacan (§3.2); si no, y la vasalla pierde, paga la penalización.
 - **El mismo asedio puede pasar por Unity o por números**; las consecuencias deben ser idénticas por los dos caminos (`aplicarConquista`, `desalojarResidentes`, `registrarDerrota` son compartidos).
 
 ## 15. Divergencias
