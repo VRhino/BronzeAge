@@ -1,7 +1,7 @@
 # Mundo reactivo en Rust: un mundo con reloj propio, sin tick
 
 > **Estado (2026-10-12): diseño del núcleo de la reconstrucción, ACORDADA.** El servidor se reconstruye entero en Rust
-> sobre este modelo, sin fases ni convivencia con el servidor TypeScript, en la rama `reconstruccion` de
+> sobre este modelo, sin fases ni convivencia con el servidor TypeScript, sobre `main` de
 > `BronzeAgeFase0`. Problemas, decisiones y orden: [`Consideraciones/Reconstruccion_Definicion.md`](../../Consideraciones/Reconstruccion_Definicion.md).
 > Qué cambia para los clientes: [`Docs/Coordinacion/04_Migracion_Mundo_Reactivo.md`](../Coordinacion/04_Migracion_Mundo_Reactivo.md).
 >
