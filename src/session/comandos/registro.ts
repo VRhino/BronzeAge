@@ -196,8 +196,11 @@ const MANEJADORES = {
   cancelarBatalla,
 } satisfies Record<string, ManejadorComando<any, any>>;
 
-/** Todos llevan el candado de batalla (Doc 5.15.1) salvo los dos que actúan sobre la propia batalla. */
-export const REGISTRO_COMANDOS = conCandadoDeBatalla(MANEJADORES, ['unirseABatalla', 'cancelarBatalla']);
+/**
+ * Todos llevan el candado de batalla (Doc 5.15.1) salvo los dos que actúan sobre la propia batalla y los dos de presencia: cerrar el
+ * cliente en plena batalla tiene que anotarse (el tick lo aplica al terminar, D33b) y volver a conectarse tiene que anularlo.
+ */
+export const REGISTRO_COMANDOS = conCandadoDeBatalla(MANEJADORES, ['unirseABatalla', 'cancelarBatalla', 'conectarse', 'desconectarse']);
 
 export type TipoComando = keyof typeof REGISTRO_COMANDOS;
 

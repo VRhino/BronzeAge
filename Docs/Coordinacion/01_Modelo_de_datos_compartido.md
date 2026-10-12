@@ -843,14 +843,13 @@ completitud. Corregido abajo.
 
 ```text
 Batalla
-  id: battleId            OPACO Y GLOBALMENTE ÚNICO (UUID) — corrección R03: NO se genera con
-                          `session/idGenerator.ts` (ese contador es secuencial POR PARTIDA, no sirve para
-                          un id que rutas/mensajes server-a-servidor referencian sin `gameId` al lado)
-  gameId
+  id: battleId            OPACO Y GLOBALMENTE ÚNICO (UUID): se deriva del `gameId` y del contador de ids de la partida
+                          (`idDeBatalla`, sin aleatoriedad), con la forma 8-4-4-4-12 que exige el schema
   estado: 'convocando' | 'asignada' | 'en_curso' | 'aplicada' | 'cancelada' | 'fallida'
-  ticketRevision: number    empieza en 0; sube si hace falta una revisión nueva del ticket (§ABAJO)
-  huellaTicket             hash del BattleTicket vigente para la ticketRevision actual
-  intentoAsignacionId?      del BattleServerAssignment activo — ver abajo
+                          `gameId` y `ticketRevision` (empieza en 0; sube con una salida previa al inicio) van DENTRO de `ticket`
+  asignacion?              el BattleServerAssignment activo con su `intentoAsignacionId` — ver abajo
+  salidas?                 quienes han salido ({ heroeId, motivo, derrotado, en }); solo crece
+  convocatoriaHasta?       solo un asedio: hasta cuándo se entra como si se estuviera desde el principio
   expiraEn: Instante        plazo del estado actual, en tiempo de MUNDO (ver nota de reloj en §0/§12: no confundir
                           con la expiración de credenciales): que la asignen (5 minutos), que empiece (5 minutos)
                           o, en curso, la duración máxima de `BattleRules` más un margen (5 minutos)
@@ -860,7 +859,7 @@ Batalla
   ticket: BattleTicket       congelado al abrir: bandos con capacidad independiente (asimétrico permitido),
                              participantes por heroeId (humanos y bot, nunca jugadorId) y escuadras reservadas
   incorporaciones: IncorporacionBatalla[]   los héroes que se unen después, en orden (ver abajo)
-  bloqueo: { ejercitoIds, caravanaIds, asentamientoId? }   lo que se queda quieto mientras dura (Doc 5.15.1)
+  bloqueo: { ejercitoIds, caravanaIds, asentamientoId?, campamentoId? }   lo que se queda quieto mientras dura (Doc 5.15.1)
   asignacion?                la BattleServerAssignment aceptada, con el servidor que la registró y los tokens
                              que se van sumando
   resultado?                el BattleResult aplicado, entero — idempotencia, ver §16
@@ -913,7 +912,8 @@ entonces aparece en `GET /v1/batallas/pendientes`. El resto de batallas se publi
 (`SalidaBatalla`, `POST /v1/batallas/:battleId/salidas`): `heroeId`, `motivo` (`no_conectado` antes de empezar, `eliminado`,
 `abandono`, `desconexion` en curso), `derrotado` y cómo quedaron sus escuadras. BronzeAge libera sus candados y su columna,
 y lo deja herido si `derrotado`. Antes de empezar (`asignada`) la salida **sube `ticketRevision`** y la batalla vuelve a
-`convocando`; en curso **no cambia el ticket**: las salidas, como las incorporaciones, solo crecen. El resultado no repite
+`convocando`; en curso **no cambia el ticket**: las salidas, como las incorporaciones, solo crecen. Si no queda ningún héroe humano, o el atacante se queda sin
+héroes, la batalla se **cancela sin castigo**; si sale quien la inició, `iniciadaPor` pasa al primer atacante que queda. El resultado no repite
 a quien salió antes. `porHeroe[].derrotado` dice quién queda herido (Doc 5.16.4).
 
 **Bandos con varias Facciones.** `BattleSide.faccionId` es la titular; cada `BattleParticipantSnapshot` lleva su propio
@@ -1058,7 +1058,7 @@ BattleResult
   objetivos: [{ objetivoId, capturadoPor: lado | null }]   informativo: BronzeAge no aplica nada a partir de
                              ellos, y sus ids son del mapa táctico de Conquest
   porEscuadra: [{ squadId, desplegados, supervivientesAlCierre, muertos, xpGanada }]
-  porHeroe: [{ heroeId, participo, sobrevivioAlCierre, xpGanada, botin? }]
+  porHeroe: [{ heroeId, participo, sobrevivioAlCierre, xpGanada, derrotado?, botin? }]
   versionServidor            build del servidor de batalla
 ```
 
@@ -1086,8 +1086,8 @@ cuenta una sola vez, al CIERRE de la batalla, nunca por evento de despliegue int
 servidor de batalla permite respawn del héroe durante la partida, eso es asunto táctico de Unity y no se
 reporta aquí; BronzeAge solo necesita saber si terminó vivo.
 
-**Herido del héroe (decidido 2026-09-13, Doc 5.16.4):** no lo manda Unity. BronzeAge lo aplica al aplicar
-el resultado: todos los héroes del bando perdedor quedan heridos 2 minutos de mundo (`Heroe.heridoHasta`).
+**Herido del héroe (Doc 5.16.4):** lo aplica BronzeAge al aplicar el resultado, a quien Unity da por derrotado
+(`porHeroe[].derrotado`) y, si el resultado no lo dice, a todos los del bando perdedor; quedan heridos 2 minutos de mundo (`Heroe.heridoHasta`).
 Mientras dura no pueden ser perseguidos, perseguir ni entrar en batallas: los comandos que lo intenten se
 rechazan, y un héroe herido no puede figurar en un `BattleTicket` nuevo. Por eso `porHeroe` ya no lleva el
 campo `herido`. Sustituye a la Tregua de `Ejercito`.

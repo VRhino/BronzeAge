@@ -2,7 +2,7 @@
 
 **Estado:** ACEPTADO. Las rutas de batalla existen en `src/server/rutas/batallas.ts` (rama `heroe-dominio`,
 2026-09-15): pendientes, ticket, incorporaciones, asignación, inicio, tokens, resultado y la asignación de cada
-jugador. Falta el canal `batalla/<battleId>` (fase 3).
+jugador y el canal `batalla/<battleId>` (§3.5).
 Revisado y corregido tras `Docs/Coordinacion/propuestas/REVISION_CONTRATOS_CODEX_2026-09-11.md` (R01, R02,
 R03, R06, R07, R08 y las correcciones menores de esa revisión).  
 **Fecha:** 2026-09-11  
@@ -71,8 +71,7 @@ entregar un secreto por destinatario. Corregido abajo.
 ### 3.1 Comandos de jugador (mismo mecanismo del §2)
 
 No hay un comando para abrir una batalla. La abren los mismos hechos que hoy abren un combate —`atacar` (contra
-una columna, una caravana, un campamento de bandidos o una plaza, que es asediarla) y, del lado NPC, el ejército
-bot que llega a su plaza de destino o la columna bot que alcanza a su presa— cuando interviene algún héroe humano
+una columna, una caravana, un campamento de bandidos o una plaza, que es asediarla) y lo mismo hace un bot, que ataca con el mismo comando que un humano (Doc 5.15.6)— cuando interviene algún héroe humano
 y el proceso tiene servidores de batalla (§3.3). Un héroe humano no abre ninguna solo por llegar o alcanzar (Doc
 5.12.3-5.12.4). `atacar` devuelve entonces `{ battleId }` en
 `resultado.datos`. El lobby previo no pasa por aquí (vive en `Ejercito`, sin persistencia nueva — doc 01 §15).
@@ -172,13 +171,13 @@ aplicar, valida en orden (checklist ampliado — corrección R03/R04/R05):
 6. ninguna cifra negativa ni por encima de lo autorizado;
 7. si `razon` es `tiempo_agotado`, `ganador` es `defensor` (Doc 5.15.1);
 8. `fin` posterior a `inicio`, y la duración no pasa de `reglas.duracionMaximaSegundos`;
-9. `schemaVersion`/versión de build/balance autorizada;
+9. `schemaVersion` (la ruta responde `409` con la esperada; `versionServidor` se guarda y no se compara);
 10. la credencial de la cabecera es la del servidor que registró la asignación, y el `intentoAsignacionId`
     del cuerpo es el activo de esta `Batalla`;
-11. `xpGanada` de cada héroe y escuadra es un entero ≥ 0 y no supera el tope por batalla de `BattleRules`
-    si lo hay (la XP la calcula Unity desde 2026-09-13, doc 01 §15);
+11. `xpGanada` de cada héroe y escuadra es un entero ≥ 0 (lo valida el schema); hoy no hay tope por batalla en `BattleRules`
+    (la XP la calcula Unity desde 2026-09-13, doc 01 §15);
 12. `botin` de cada héroe (doc 01 §15): solo en héroes con `participo: true`; cada `itemDefinitionId` existe
-    en `versionCatalogoObjetos` del ticket; cantidades enteras > 0 y monedas enteras ≥ 0, por debajo del tope
+    en `versionCatalogoObjetos` del ticket (pendiente de CQ-004: hoy se aceptan); cantidades enteras > 0 y monedas enteras ≥ 0, por debajo del tope
     de `BattleRules` si lo hay; los objetos no superan `casillasInventarioLibres` del `HeroSnapshot`; cada
     `itemInstanceId` es nuevo en la partida.
 

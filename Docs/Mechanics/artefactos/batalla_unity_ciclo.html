@@ -1,0 +1,410 @@
+<title>Ciclo de batalla</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Concepto: el parte de una operación. Pizarra fría, teal para lo que avanza, ámbar para lo que espera, rojo para lo que se corta. */
+:root {
+  --bg: #eef1f4; --panel: #ffffff; --panel2: #f6f8fa; --ink: #16202b; --muted: #5a6877; --line: #d3dae2;
+  --accent: #0b7a70; --accent-soft: #d6efec; --on-accent: #ffffff; --ok: #17803d; --ok-soft: #dcf3e4; --no: #b3261e; --no-soft: #fbe3e1;
+  --warn: #9a6200; --warn-soft: #fbefd2; --code: #0f4c75;
+  --f-display: 'Bricolage Grotesque', 'Segoe UI', sans-serif; --f-body: 'IBM Plex Sans', 'Segoe UI', sans-serif; --f-mono: 'IBM Plex Mono', Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e151d; --panel: #151f2a; --panel2: #1b2735; --ink: #e5ecf3; --muted: #93a3b4; --line: #2a3a4c;
+  --accent: #38d1c0; --accent-soft: #123a38; --on-accent: #06201d; --ok: #52d283; --ok-soft: #14301f; --no: #ff8a80; --no-soft: #3b1815;
+  --warn: #f2b84b; --warn-soft: #382a0c; --code: #8cc8f0; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e151d; --panel: #151f2a; --panel2: #1b2735; --ink: #e5ecf3; --muted: #93a3b4; --line: #2a3a4c;
+  --accent: #38d1c0; --accent-soft: #123a38; --on-accent: #06201d; --ok: #52d283; --ok-soft: #14301f; --no: #ff8a80; --no-soft: #3b1815;
+  --warn: #f2b84b; --warn-soft: #382a0c; --code: #8cc8f0; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; padding-inline: 16px; padding-block: 18px 40px; margin: 0; }
+.wrap { max-width: 1180px; margin-inline: auto; }
+header h1 { font-family: var(--f-display); font-size: clamp(26px, 4.4vw, 38px); line-height: 1.08; margin: 0 0 6px; letter-spacing: -0.01em; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 72ch; }
+.pie { color: var(--muted); font-size: 12.5px; margin-top: 26px; }
+nav.tabs { display: flex; gap: 6px; margin: 18px 0 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+nav.tabs button { font: 600 14px var(--f-body); background: none; border: 0; border-bottom: 3px solid transparent; padding: 9px 12px; color: var(--muted); cursor: pointer; border-radius: 6px 6px 0 0; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h2 { font-family: var(--f-display); font-size: 21px; margin: 0 0 4px; }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.sub { color: var(--muted); margin: 0 0 14px; max-width: 76ch; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+code { font-family: var(--f-mono); font-size: 0.92em; }
+button.b { font: 600 13px var(--f-body); border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 11px; cursor: pointer; }
+button.b:hover { border-color: var(--accent); }
+button.b.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+button.b[disabled] { opacity: .4; cursor: not-allowed; }
+select { font: 14px var(--f-body); background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; min-width: 0; max-width: 100%; }
+.pill { display: inline-block; font: 600 12px var(--f-body); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.no { background: var(--no-soft); color: var(--no); } .pill.warn { background: var(--warn-soft); color: var(--warn); } .pill.mut { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+.stack { display: grid; gap: 12px; }
+.cola { margin: 0; padding-left: 18px; font-size: 13.5px; } .cola li { margin: 2px 0; }
+
+/* estados */
+.estados { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 12px; }
+.est { font: 600 13px var(--f-mono); padding: 7px 12px; border-radius: 8px; border: 2px solid var(--line); background: var(--panel2); color: var(--muted); }
+.est.ahora { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.est.fin.ahora { border-color: var(--no); background: var(--no-soft); }
+.est.aplicada.ahora { border-color: var(--ok); background: var(--ok-soft); }
+.flecha { color: var(--muted); }
+.datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.dato { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.dato small { display: block; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
+.dato b { font-family: var(--f-mono); font-size: 14px; }
+.log { display: grid; gap: 4px; max-height: 340px; overflow-y: auto; }
+.l { font-size: 13px; border-left: 3px solid var(--line); padding: 3px 9px; background: var(--panel2); border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.l.http { border-left-color: var(--accent); } .l.rechazo { border-left-color: var(--no); } .l.evento { border-left-color: var(--warn); }
+.l .k { font: 600 11.5px var(--f-mono); margin-right: 6px; color: var(--muted); }
+table { border-collapse: collapse; width: 100%; min-width: 520px; }
+th, td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; font-size: 13.5px; }
+th { font: 600 12px var(--f-body); color: var(--muted); background: var(--panel2); }
+.tabla { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.veredicto { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 14px; }
+.veredicto.ok { background: var(--ok-soft); } .veredicto.no { background: var(--no-soft); }
+.tog { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: 14px; cursor: pointer; }
+.tog input { width: 16px; height: 16px; accent-color: var(--accent); }
+.campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.campos label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Una batalla de Unity, de principio a fin</h1>
+  <p>Lo que hace BronzeAge desde que alguien ataca hasta que se aplica el resultado: los estados, los plazos, quién puede unirse a qué bando y qué cambia en el mundo. Sale de <code>Docs/Mechanics/Batalla_Unity_Ciclo.md</code>.</p>
+</header>
+
+<nav class="tabs" role="tablist" id="tabs">
+  <button role="tab" id="t-ciclo" aria-selected="true" data-tab="ciclo">El ciclo paso a paso</button>
+  <button role="tab" id="t-bando" aria-selected="false" data-tab="bando">¿A qué bando me uno?</button>
+  <button role="tab" id="t-efectos" aria-selected="false" data-tab="efectos">Qué cambia al terminar</button>
+</nav>
+
+<!-- ============ CICLO ============ -->
+<section id="p-ciclo">
+  <h2>Prueba el ciclo</h2>
+  <p class="sub">Abre una batalla y ve dando los pasos que da cada parte: los jugadores (columna izquierda arriba), el servidor de batalla de Conquest (abajo) y el reloj del mundo. Cada paso dice qué responde BronzeAge. El estado y los plazos son los reales: un tick de mundo dura un minuto.</p>
+  <div class="grid2">
+    <div class="stack">
+      <div class="panel">
+        <h3>1 · Abrir (<code>atacar</code>)</h3>
+        <div class="row" style="margin-bottom:8px"><label for="ctx" style="font-size:13px;color:var(--muted)">Qué se ataca</label>
+          <select id="ctx"><option value="asedio">una plaza (asedio)</option><option value="campo_abierto">otra columna (campo abierto)</option><option value="caravana">una caravana</option><option value="campamento_bandidos">un campamento de bandidos</option></select></div>
+        <div class="row"><button class="b pri" id="a-abrir">Atacar</button><button class="b" id="a-reiniciar">Empezar de nuevo</button></div>
+      </div>
+      <div class="panel">
+        <h3>Jugadores</h3>
+        <div class="row">
+          <button class="b" id="a-unir">Bruno se une (atacante)</button>
+          <button class="b" id="a-cancelar">Aria cancela</button>
+          <button class="b" id="a-desc">Aria cierra el cliente</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Conquest (servidor de batalla)</h3>
+        <div class="row" style="margin-bottom:8px">
+          <button class="b" id="c-asignar">Asignación</button><button class="b" id="c-inicio">Inicio</button><button class="b" id="c-token">Token tardío</button>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <select id="c-quien" aria-label="Quién sale"><option>Aria</option><option>Bruno</option></select>
+          <select id="c-motivo" aria-label="Motivo de la salida"><option value="no_conectado">no_conectado</option><option value="eliminado">eliminado (derrotado)</option><option value="abandono">abandono (derrotado)</option></select>
+          <button class="b" id="c-salida">Salida</button>
+        </div>
+        <div class="row">
+          <select id="c-ganador" aria-label="Ganador"><option value="atacante">gana el atacante</option><option value="defensor">gana el defensor</option></select>
+          <button class="b" id="c-resultado">Resultado</button><button class="b" id="c-repetir">Repetir el mismo</button><button class="b" id="c-otro">Otro distinto</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Reloj</h3>
+        <div class="row"><button class="b" id="r-tick">Pasa 1 minuto (un tick)</button><button class="b" id="r-5">Pasan 5 minutos</button></div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="panel">
+        <h3>Estado</h3>
+        <div class="estados" id="estados"></div>
+        <div class="datos" id="datos"></div>
+      </div>
+      <div class="panel"><h3>Quién combate</h3><div class="tabla"><table id="tpart"></table></div></div>
+      <div class="panel"><h3>Lo que pasa</h3><div class="log" id="log"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BANDO ============ -->
+<section id="p-bando" hidden>
+  <h2>¿A qué bando me uno?</h2>
+  <p class="sub">La regla de <code>unirseABatalla</code> (Doc 5.15.1b), la misma función que usa el servidor. Elige el tipo de batalla y quién eres.</p>
+  <div class="panel">
+    <div class="campos">
+      <label>Tipo de batalla<select id="b-ctx"><option value="asedio">Asedio</option><option value="caravana">Asalto de caravana</option><option value="campamento_bandidos">Campamento de bandidos (PvE)</option><option value="campal">Batalla campal (ejército contra ejército)</option><option value="persecucion">Persecución (columnas personales)</option></select></label>
+      <label>Mi columna<select id="b-col"><option value="personal">Columna personal</option><option value="ejercito">Ejército</option></select></label>
+      <label>Mi Facción<select id="b-fac"><option value="D">La del defensor</option><option value="A">La del atacante</option><option value="L">Aliada o vasalla del defensor</option><option value="O">Otra, sin relación</option><option value="">Ninguna</option></select></label>
+      <label>Bando que pido<select id="b-pedido"><option value="">(no pido ninguno)</option><option value="atacante">atacante</option><option value="defensor">defensor</option></select></label>
+    </div>
+    <label class="tog" style="margin-top:8px"><input type="checkbox" id="b-admite"><span>El Rey de la Facción atacante admite a otras Facciones en sus ataques</span></label>
+    <div class="veredicto" id="b-res"></div>
+  </div>
+  <div class="panel" style="margin-top:12px"><h3>Y además tiene que cumplirse</h3>
+    <ul class="cola">
+      <li>Estar <b>sano</b>, no estar ya en otra batalla y llegar con tu <b>columna</b>.</li>
+      <li>Tu columna a menos de <code>LOGISTICA.radioEncuentro</code> del punto de la batalla (la plaza, en un asedio).</li>
+      <li>Que el bando <b>no esté lleno</b> (5 héroes). Si lo está, no entras: la cola es solo de los que ya estaban al abrir.</li>
+      <li>Entra tu <b>columna entera</b>: todos sus héroes sanos con lo que llevan. Durante la convocatoria de un asedio entras en el ticket; después, como refuerzo.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ EFECTOS ============ -->
+<section id="p-efectos" hidden>
+  <h2>Qué cambia al terminar</h2>
+  <p class="sub">Cuando llega el resultado, BronzeAge lo aplica entero y de una vez. Unity manda los hechos (quién ganó, cuánto quedó de cada escuadra, XP, botín); el resto lo decide BronzeAge.</p>
+  <div class="row" style="margin-bottom:10px"><div class="row" id="e-ctx"></div><div class="row" id="e-gan"></div></div>
+  <div class="panel"><h3 id="e-tit"></h3><ul class="cola" id="e-lista"></ul></div>
+  <div class="panel" style="margin-top:12px"><h3>Siempre, gane quien gane</h3>
+    <ul class="cola">
+      <li>Cada escuadra queda con los supervivientes que dice Unity y suma su XP (una tropa prestada no gana).</li>
+      <li>Cada héroe suma su XP y su botín. El <b>nivel</b> del héroe no sube todavía: espera la curva de Conquest.</li>
+      <li>Quedan <b>heridos</b> dos minutos los que Unity da por derrotados; si no lo dice, los del bando perdedor.</li>
+      <li>La chatarra de los caídos, de los dos bandos, se la queda quien gana.</li>
+      <li>Cada Facción con héroes que participaron suma XP de combate. Atacar a un aliado cuesta reputación.</li>
+      <li>Defender a un vasallo da reputación a su señora si alguno de sus héroes estuvo y el bando aguantó.</li>
+      <li>Se sueltan todos los candados de las escuadras y las columnas vuelven a moverse.</li>
+    </ul>
+  </div>
+</section>
+
+<p class="pie">Verificado contra el commit <code>1850a73</code> más los arreglos del 2026-10-12. Las reglas de unión son la misma función que ejecuta el servidor; los plazos salen de <code>BATALLA</code> en <code>constants.ts</code>.</p>
+</div>
+
+<script>
+// Port a JS de session/entradaEnBatalla.ts (ladoParaUnirse). Devuelve { lado } o { error }.
+// c = { tipo, columnas?, atacanteFaccion, defensorFaccion }  h = { faccion, columnaTipo, relacionConDefensor: 'propia'|'aliada'|'otra', admite }
+function ladoParaUnirse(c, h, pedido) {
+  const no = (error) => ({ error });
+  if (c.tipo === 'campo_abierto') {
+    if (c.columnas === 'ejercitos') return no('Una batalla campal no admite a nadie de fuera.');
+    if (h.columnaTipo === 'ejercito') return no('Una persecución es de columnas personales: un ejército no se une.');
+    return pedido ? { lado: pedido } : no('Elige bando: en una persecución se puede ir con cualquiera.');
+  }
+  if (c.tipo === 'campamento_bandidos') return pedido === 'defensor' ? no('Nadie puede ayudar a los bandidos.') : { lado: 'atacante' };
+  if (!h.faccion) return no('Hace falta una Facción para unirse a esta batalla.');
+  const lado = h.faccion === c.atacanteFaccion ? 'atacante' : c.defensorFaccion && (h.faccion === c.defensorFaccion || h.relacionConDefensor === 'aliada') ? 'defensor' : h.admite ? 'atacante' : undefined;
+  if (!lado) return no('Tu Facción no combate en esta batalla.');
+  if (pedido && pedido !== lado) return no('No puedes unirte a ese bando.');
+  return { lado };
+}
+
+const BATALLA = {"capacidad":{"asedio":5,"resto":5},"duracionMinutos":{"asedio":30,"resto":15},"convocatoriaSegundos":30,"plazoAsignacionMinutos":5,"plazoInicioMinutos":5,"margenMinutos":5,"tropaCarreteros":{"tropaId":"milicia_lanceros","unidades":13},"casillasInventario":72,"versionCatalogoHeroe":"conquest-heroes-1","versionCatalogoObjetos":"conquest-items-1"};
+const $ = (s, r = document) => r.querySelector(s);
+const el = (t, p = {}, ...h) => { const e = Object.assign(document.createElement(t), p); h.flat().forEach((x) => e.append(x)); return e; };
+const chip = (txt, on) => { const b = document.createElement('button'); b.className = 'b'; b.textContent = txt; b.setAttribute('aria-pressed', String(on)); if (on) b.classList.add('pri'); return b; };
+
+const TABS = ['ciclo', 'bando', 'efectos'];
+function ir(t) { if (!TABS.includes(t)) t = 'ciclo'; TABS.forEach((x) => { $('#p-' + x).hidden = x !== t; $('#t-' + x).setAttribute('aria-selected', String(x === t)); }); try { history.replaceState(null, '', '#' + t); } catch (e) {} }
+$('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) ir(b.dataset.tab); });
+
+/* ---------- el ciclo ---------- */
+const HEROES = {
+  Aria: { humano: true, lado: 'atacante', escuadra: 'lanceros de Aria' },
+  Bruno: { humano: true, lado: 'atacante', escuadra: 'arqueros de Bruno' },
+  Cleo: { humano: false, lado: 'defensor', escuadra: 'hoplitas de Cleo' },
+  Eneas: { humano: true, lado: 'defensor', escuadra: 'lanceros de Eneas' },
+};
+const nuevo = () => ({ t: 0, estado: null, ctx: 'asedio', rev: 0, expira: null, conv: null, asign: false, resultado: null, ticket: [], incorp: [], salidas: [], bloqueo: [], candados: [], sinHeroe: [], tokens: [], iniciadora: 'Aria', log: [] });
+let B = nuevo();
+const ACT = ['convocando', 'asignada', 'en_curso'];
+const activa = () => B.estado !== null && ACT.includes(B.estado) && B.t < B.expira;
+const enConv = () => B.conv !== null && B.t < B.conv;
+const dur = () => (B.ctx === 'asedio' ? BATALLA.duracionMinutos.asedio : BATALLA.duracionMinutos.resto);
+const dentro = () => [...B.ticket, ...B.incorp].filter((h) => !B.salidas.some((s) => s.h === h.h));
+const say = (k, texto) => B.log.unshift({ k, texto });
+const R = { ok: (t) => say('http', '200 · ' + t), no: (c, t) => say('rechazo', c + ' · ' + t) };
+
+function abrir() {
+  if (B.estado && activa()) return R.no('409', 'ya hay una batalla en curso en este escenario');
+  const ctx = $('#ctx').value; const t = B.t; const log = B.log;
+  B = { ...nuevo(), t, log, ctx };
+  const ataca = [{ h: 'Aria', lado: 'atacante' }];
+  let def = [], sin = [], bloqueo = ['ejército de Aria'];
+  if (ctx === 'asedio') { def = [{ h: 'Cleo', lado: 'defensor' }]; sin = ['guarnición de la plaza']; bloqueo.push('la plaza asediada'); B.conv = t + BATALLA.convocatoriaSegundos / 60; }
+  if (ctx === 'campo_abierto') { def = [{ h: 'Eneas', lado: 'defensor' }]; bloqueo.push('columna de Eneas'); }
+  if (ctx === 'caravana') { sin = ['escolta de la caravana']; bloqueo.push('la caravana'); }
+  if (ctx === 'campamento_bandidos') { sin = ['bandidos (sin dueño)']; bloqueo.push('el campamento'); }
+  B.ticket = [...ataca, ...def]; B.sinHeroe = sin; B.bloqueo = bloqueo; B.estado = 'convocando';
+  B.expira = (B.conv ?? t) + BATALLA.plazoAsignacionMinutos;
+  B.candados = [...B.ticket.map((x) => HEROES[x.h].escuadra), ...sin.filter((s) => !s.startsWith('bandidos'))];
+  say('http', '200 · atacar → { battleId } · estado convocando, ticket revisión 0, candados puestos');
+  say('evento', ctx === 'campamento_bandidos' ? 'evento_pve.abierta' : 'batalla.abierta');
+  if (ctx === 'asedio') say('http', 'Convocatoria de ' + BATALLA.convocatoriaSegundos + ' s: quien se una ahora entra en el ticket; no se publica en /pendientes todavía');
+}
+function unir() {
+  if (!activa()) return R.no('batalla.no_existe', 'no hay batalla activa');
+  if (dentro().some((h) => h.h === 'Bruno')) return R.no('batalla.invalida', 'Ya estás en una batalla.');
+  if (B.ctx === 'campo_abierto') return R.no('batalla.invalida', 'Una batalla campal no admite a nadie de fuera.');
+  const lleno = dentro().filter((h) => h.lado === 'atacante').length + 1 > BATALLA.capacidad[B.ctx === 'asedio' ? 'asedio' : 'resto'];
+  if (lleno) return R.no('batalla.invalida', 'Ese bando está lleno.');
+  const lado = 'atacante';
+  if (enConv()) { B.ticket.push({ h: 'Bruno', lado }); say('http', '200 · unirseABatalla → entra EN EL TICKET (convocatoria), revisión sin cambios'); }
+  else { B.incorp.push({ h: 'Bruno', lado, sec: B.incorp.length + 1 }); say('http', '200 · unirseABatalla → incorporación nº ' + B.incorp.length + ' (el ticket no cambia, la revisión tampoco)'); }
+  B.candados.push(HEROES.Bruno.escuadra); B.bloqueo.push('ejército de Bruno');
+  say('evento', 'batalla.refuerzos');
+}
+function cancelar() {
+  if (!activa()) return R.no('batalla.no_existe', 'no hay batalla activa');
+  if (B.estado === 'en_curso') return R.no('batalla.invalida', 'La partida ya empezó: no se puede cancelar.');
+  if (B.iniciadora !== 'Aria') return R.no('403', 'solo quien la inició, o el administrador');
+  cerrar('cancelada'); say('http', '200 · cancelarBatalla → cancelada, candados sueltos, nadie pierde nada'); say('evento', 'batalla.cancelada');
+}
+function desc() {
+  if (!B.estado) return R.no('—', 'no hay batalla');
+  B.desconecta = true;
+  say('http', '200 · desconectarse → se ANOTA aunque haya candado (conectarse y desconectarse no lo llevan). Sale del mundo al terminar la batalla, no antes');
+}
+function cerrar(estado) { B.estado = estado; B.candados = []; B.bloqueo = []; }
+function asignar() {
+  if (!B.estado) return R.no('404', 'la batalla no existe');
+  if (B.asign && B.estado !== 'convocando') return R.ok('mismo intento y mismo servidor: sin cambios');
+  if (B.estado !== 'convocando') return R.no('409 batalla.ya_asignada', 'la batalla ya tiene servidor');
+  if (enConv()) return R.no('409 batalla.invalida', 'La batalla sigue en convocatoria: todavía no se puede asignar.');
+  B.asign = true; B.estado = 'asignada'; B.expira = B.t + BATALLA.plazoInicioMinutos;
+  say('http', '200 · asignación aceptada (gana la primera) · plazo para empezar: ' + BATALLA.plazoInicioMinutos + ' min'); say('evento', 'batalla.asignada');
+}
+function inicio() {
+  if (B.estado === 'en_curso') return R.ok('ya estaba en curso: sin cambios');
+  if (B.estado !== 'asignada') return R.no('409', 'no hay una asignación activa que confirmar');
+  B.estado = 'en_curso'; B.expira = B.t + dur() + BATALLA.margenMinutos;
+  say('http', '200 · inicio → en_curso · plazo: ' + dur() + ' min de partida + ' + BATALLA.margenMinutos + ' de margen'); say('evento', 'batalla.en_curso');
+}
+function token() {
+  if (!B.asign || !['asignada', 'en_curso'].includes(B.estado)) return R.no('409', 'Esa no es la asignación activa de esta batalla.');
+  say('http', '200 · tokens → el nuevo sustituye al anterior del mismo héroe. Sin evento'); B.tokens.push('Bruno');
+}
+function salida() {
+  const quien = $('#c-quien').value; const motivo = $('#c-motivo').value;
+  if (B.salidas.some((s) => s.h === quien)) return R.ok('esa salida ya estaba registrada: sin cambios');
+  if (!B.asign || !B.estado) return R.no('409', 'Esa no es la asignación activa de esta batalla.');
+  const antes = motivo === 'no_conectado';
+  if (antes ? B.estado !== 'asignada' : B.estado !== 'en_curso') return R.no('409 batalla.invalida', antes ? 'Solo se da de baja por no conectarse antes de que empiece la partida.' : 'Solo se sale así con la partida en curso.');
+  if (!dentro().some((h) => h.h === quien)) return R.no('409 batalla.invalida', 'Ese héroe no combate en esta batalla.');
+  B.salidas.push({ h: quien, motivo });
+  B.candados = B.candados.filter((c) => c !== HEROES[quien].escuadra);
+  if (quien === 'Bruno') B.bloqueo = B.bloqueo.filter((x) => x !== 'ejército de Bruno'); else B.bloqueo = B.bloqueo.filter((x) => x !== 'ejército de Aria');
+  if (B.iniciadora === quien) { const otro = dentro().find((h) => h.lado === 'atacante'); if (otro) B.iniciadora = otro.h; }
+  if (antes) {
+    B.ticket = B.ticket.filter((h) => h.h !== quien); B.rev++; B.estado = 'convocando'; B.asign = false; B.tokens = []; B.expira = B.t + BATALLA.plazoAsignacionMinutos;
+    const humanos = dentro().some((h) => HEROES[h.h].humano); const atac = dentro().some((h) => h.lado === 'atacante');
+    say('http', '200 · salida no_conectado → sin castigo; ticketRevision ' + B.rev + ': la asignación y los tokens anteriores ya no valen; vuelve a convocando');
+    if (!humanos || !atac) { cerrar('cancelada'); say('http', 'Sin héroes humanos o sin atacantes: se cancela sin castigo'); say('evento', 'batalla.cancelada'); }
+    else say('evento', 'batalla.revisada');
+  } else {
+    say('http', '200 · salida ' + motivo + ' → bajas aplicadas y ' + quien + ' queda herido 2 min; el ticket no cambia; el resultado ya no lo repite'); say('evento', 'batalla.salida');
+  }
+}
+const CONSEC = {
+  asedio: { atacante: ['La plaza pasa a la Facción atacante con el saqueo de siempre (lo pone BronzeAge: Unity no reporta daño).', 'Quien estaba dentro sale; los defensores que combatieron salen con las escuadras que les quedaron; el resto del campamento a 0 y a su nueva casa.', 'La Facción vencida registra la derrota.'], defensor: ['La plaza resiste: no cambia nada más.', 'La chatarra de los caídos va al almacén de la plaza.'] },
+  campo_abierto: { atacante: ['Las columnas del bando perdedor entregan la mitad de su carro, que se reparte entre las del ganador (lo que quepa).'], defensor: ['Las columnas atacantes pierden la mitad de su carro, que se reparte entre las del defensor.'] },
+  caravana: { atacante: ['La caravana cae: su escolta queda a 0 y vuelve al campamento de su héroe, y la mitad de la carga va al carro de los atacantes.'], defensor: ['La caravana se zafa: los atacantes pierden la mitad de su carro y nadie se la lleva.'] },
+  campamento_bandidos: { atacante: ['El campamento cae: oro de bandidos para cada héroe atacante (decrece si repite), al carro de su columna, y se agenda su reaparición.'], defensor: ['Los bandidos aguantan: los atacantes quedan heridos y pierden la mitad del carro; nadie se la lleva.'] },
+};
+function resultado(distinto) {
+  if (B.estado === 'aplicada') {
+    if (distinto) return R.no('409', 'Esa batalla ya se aplicó con otro resultado.');
+    return R.ok('el mismo resultado otra vez: sin cambios (la batalla guarda el resultado entero)');
+  }
+  if (B.estado !== 'en_curso' || B.t >= B.expira) return R.no('409 batalla.invalida', 'La batalla no está en curso: no admite resultado.');
+  const g = $('#c-ganador').value;
+  B.resultado = g;
+  const perd = dentro().filter((h) => h.lado !== g).map((h) => h.h);
+  say('http', '200 · resultado (checklist superado) → aplicada, gana el ' + g);
+  (CONSEC[B.ctx][g] || []).forEach((x) => say('http', '· ' + x));
+  say('http', '· Heridos 2 min (nadie se lo dijo a Unity: los del bando perdedor): ' + (perd.join(', ') || 'ninguno'));
+  say('evento', (B.ctx === 'campamento_bandidos' ? 'evento_pve' : 'batalla') + '.aplicada · ganador ' + g);
+  if (B.desconecta) say('http', 'Aria sale del mundo en el primer tick tras acabar (había pedido desconectarse)');
+  cerrar('aplicada');
+}
+function tick(n) {
+  for (let i = 0; i < n; i++) {
+    B.t += 1;
+    if (B.estado && ACT.includes(B.estado) && B.t >= B.expira) {
+      cerrar('fallida'); say('http', 'Tick ' + B.t + ' · vencerBatallas → fallida: nadie gana ni pierde, candados sueltos'); say('evento', 'batalla.fallida');
+    }
+  }
+  if (n >= 1 && !(B.estado === 'fallida')) say('http', 'Pasan ' + n + ' min de mundo' + (B.conv !== null && B.t >= B.conv ? ' · la convocatoria ya cerró: aparece en /pendientes' : ''));
+}
+const ESTADOS = ['convocando', 'asignada', 'en_curso', 'aplicada', 'cancelada', 'fallida'];
+function pintar() {
+  const est = $('#estados'); est.textContent = '';
+  ESTADOS.forEach((e, i) => {
+    const cls = ['est'];
+    if (e === 'aplicada') cls.push('aplicada');
+    if (e === 'cancelada' || e === 'fallida') cls.push('fin');
+    if (B.estado === e) cls.push('ahora');
+    est.append(el('span', { className: cls.join(' '), textContent: e }));
+    if (i < 3) est.append(el('span', { className: 'flecha', textContent: '→' }));
+    if (i === 3) est.append(el('span', { className: 'flecha', textContent: '·' }));
+  });
+  const d = $('#datos'); d.textContent = '';
+  const caja = (k, v) => d.append(el('div', { className: 'dato' }, el('small', { textContent: k }), el('b', { textContent: v })));
+  caja('Reloj de mundo', 'minuto ' + B.t);
+  caja('Plazo (expiraEn)', B.estado && ACT.includes(B.estado) ? 'en ' + Math.max(0, +(B.expira - B.t).toFixed(1)) + ' min' : '—');
+  caja('ticketRevision', String(B.rev));
+  caja('Convocatoria', B.conv === null ? 'no tiene' : enConv() ? 'abierta' : 'cerrada');
+  caja('En /pendientes', B.estado === 'convocando' && activa() && !enConv() ? 'sí' : 'no');
+  caja('Servidor asignado', B.asign ? 'sí' : 'no');
+  caja('Candados de escuadra', String(B.candados.length));
+  caja('Bloqueado', B.bloqueo.length ? B.bloqueo.join(', ') : 'nada');
+  const t = $('#tpart'); t.textContent = '';
+  t.append(el('thead', {}, el('tr', {}, ['Héroe', 'Bando', 'Entró', 'Controlador', 'Estado'].map((x) => el('th', { textContent: x })))));
+  const filas = [...B.ticket.map((h) => ({ ...h, como: 'en el ticket' })), ...B.incorp.map((h) => ({ ...h, como: 'incorporación ' + h.sec }))];
+  const tb = el('tbody');
+  filas.forEach((h) => { const sal = B.salidas.find((s) => s.h === h.h); tb.append(el('tr', {}, el('td', { textContent: h.h }), el('td', { textContent: h.lado }), el('td', { textContent: h.como }), el('td', { textContent: HEROES[h.h].humano ? 'humano' : 'bot' }), el('td', {}, el('span', { className: 'pill ' + (sal ? 'warn' : 'ok'), textContent: sal ? 'salió (' + sal.motivo + ')' : 'combate' })))); });
+  B.sinHeroe.forEach((s) => tb.append(el('tr', {}, el('td', { textContent: s }), el('td', { textContent: 'defensor' }), el('td', { textContent: 'sin héroe' }), el('td', { textContent: 'IA de juego' }), el('td', {}, el('span', { className: 'pill mut', textContent: 'no ocupa plaza' })))));
+  if (!filas.length && !B.sinHeroe.length) tb.append(el('tr', {}, el('td', { colSpan: 5, textContent: 'Todavía no hay batalla: pulsa «Atacar».', style: 'color:var(--muted)' })));
+  t.append(tb);
+  const l = $('#log'); l.textContent = '';
+  if (!B.log.length) l.append(el('div', { className: 'l', textContent: 'Nada todavía.' }));
+  B.log.slice(0, 40).forEach((x) => l.append(el('div', { className: 'l ' + x.k }, el('span', { className: 'k', textContent: x.k === 'evento' ? 'evento' : x.k === 'rechazo' ? 'rechazo' : 'HTTP' }), x.texto)));
+}
+const acc = (f) => () => { f(); pintar(); };
+function iniciarCiclo() {
+  $('#a-abrir').addEventListener('click', acc(abrir));
+  $('#a-reiniciar').addEventListener('click', () => { B = nuevo(); pintar(); });
+  $('#a-unir').addEventListener('click', acc(unir)); $('#a-cancelar').addEventListener('click', acc(cancelar)); $('#a-desc').addEventListener('click', acc(desc));
+  $('#c-asignar').addEventListener('click', acc(asignar)); $('#c-inicio').addEventListener('click', acc(inicio)); $('#c-token').addEventListener('click', acc(token));
+  $('#c-salida').addEventListener('click', acc(salida)); $('#c-resultado').addEventListener('click', acc(() => resultado(false)));
+  $('#c-repetir').addEventListener('click', acc(() => resultado(false))); $('#c-otro').addEventListener('click', acc(() => resultado(true)));
+  $('#r-tick').addEventListener('click', acc(() => tick(1))); $('#r-5').addEventListener('click', acc(() => tick(5)));
+  pintar();
+}
+
+/* ---------- a qué bando ---------- */
+function pintarBando() {
+  const v = $('#b-ctx').value;
+  const c = v === 'campal' ? { tipo: 'campo_abierto', columnas: 'ejercitos' } : v === 'persecucion' ? { tipo: 'campo_abierto', columnas: 'solitarios' } : { tipo: v };
+  const fac = $('#b-fac').value;
+  const rel = fac === 'L' ? 'aliada' : fac === 'D' ? 'propia' : 'otra';
+  const r = ladoParaUnirse({ ...c, atacanteFaccion: 'A', defensorFaccion: 'D' }, { faccion: fac || null, columnaTipo: $('#b-col').value, relacionConDefensor: rel, admite: $('#b-admite').checked }, $('#b-pedido').value || undefined);
+  const x = $('#b-res');
+  x.className = 'veredicto ' + (r.error ? 'no' : 'ok');
+  x.textContent = r.error ? 'Rechazado (batalla.invalida): ' + r.error : 'Entras en el bando ' + r.lado.toUpperCase() + '.';
+}
+/* ---------- efectos ---------- */
+let eCtx = 'asedio', eGan = 'atacante';
+const NOM = { asedio: 'Asedio', campo_abierto: 'Campo abierto', caravana: 'Asalto de caravana', campamento_bandidos: 'Campamento de bandidos' };
+function pintarEfectos() {
+  const c = $('#e-ctx'); c.textContent = ''; Object.keys(NOM).forEach((k) => { const b = chip(NOM[k], k === eCtx); b.addEventListener('click', () => { eCtx = k; pintarEfectos(); }); c.append(b); });
+  const g = $('#e-gan'); g.textContent = ''; ['atacante', 'defensor'].forEach((k) => { const b = chip('gana el ' + k, k === eGan); b.addEventListener('click', () => { eGan = k; pintarEfectos(); }); g.append(b); });
+  $('#e-tit').textContent = NOM[eCtx] + ' · gana el ' + eGan;
+  const l = $('#e-lista'); l.textContent = ''; CONSEC[eCtx][eGan].forEach((x) => l.append(el('li', { textContent: x })));
+}
+['b-ctx', 'b-col', 'b-fac', 'b-pedido', 'b-admite'].forEach((id) => $('#' + id).addEventListener('change', pintarBando));
+iniciarCiclo(); pintarBando(); pintarEfectos();
+ir((location.hash || '').slice(1));
+</script>

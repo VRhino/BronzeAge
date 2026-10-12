@@ -49,7 +49,7 @@ import { RED_VACIA, tramosDeRed } from '../../engine/redCaminos';
 import { escenaDeCampamento } from './escenaCampamento';
 import { cupoRestanteHoy, precioDeVenta } from '../../engine/mercadoMercenario';
 import type { EscenaCampamento } from '../../contratos/v1/dto';
-import { heroesNombrados } from '../../domain/eventos';
+import { batallaDeEvento, heroesNombrados } from '../../domain/eventos';
 import { convocatoriaDe, integrantesDentro, lugarDe, mismoLugar } from '../../engine/convocatoria';
 import type {
   AcuerdoTrueque,
@@ -122,7 +122,7 @@ import {
   type GameSessionState,
   type GeometriaAsentamientos,
 } from '../estado';
-import { batallasActivas, batallaVisible, bloqueosDe, type BatallaVisible } from '../batallas';
+import { batallasActivas, batallaVisible, bloqueosDe, combateEn, type BatallaVisible } from '../batallas';
 import type { LadoId } from '../../contratos/v1/dto';
 
 /**
@@ -1346,10 +1346,17 @@ export function eventosDominioParaJugador(estado: GameSessionState, heroeId: str
 }
 
 /** El filtro de audiencia sobre eventos ya elegidos (de memoria o del JSONL): el mismo criterio para los dos orígenes. Pasan los globales (sin
- * plaza), los de una plaza propia y los que nombran a este héroe (`heroesNombrados`). Lo último hace falta porque la atribución por plaza no lo
+ * plaza), los de una plaza propia, los que nombran a este héroe (`heroesNombrados`) y los de las batallas en que combate. Lo último hace falta porque la atribución por plaza no lo
  * cubre: una columna que salió de un campamento de mercenarios no tiene plaza de origen (`asentamientoId: ''`), y en un combate entre Facciones
  * el evento va a la plaza de uno solo de los bandos. */
 export function eventosVisiblesParaJugador(estado: GameSessionState, heroeId: string, eventos: readonly EventoDominioConVersion[]): EventoDominioConVersion[] {
   const { esPropio } = propioDeJugador(estado, faccionDe(estado, heroeId));
-  return eventos.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId) || heroesNombrados(e).includes(heroeId));
+  // Los de las batallas en que combate (o combatió): los eventos de una batalla no llevan la lista de héroes (doc 02 §3.5), así que sin esto
+  // no le llegarían a quien no tiene plaza de la que enterarse (una columna salida de un campamento de mercenarios).
+  const suyas = new Set(estado.batallas.filter((b) => combateEn(b, heroeId)).map((b) => b.id));
+  return eventos.filter((e) => {
+    if (e.asentamientoId === undefined || esPropio(e.asentamientoId) || heroesNombrados(e).includes(heroeId)) return true;
+    const batalla = batallaDeEvento(e);
+    return batalla !== undefined && suyas.has(batalla);
+  });
 }

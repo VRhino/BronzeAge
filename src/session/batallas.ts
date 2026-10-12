@@ -188,15 +188,6 @@ export function tocaLoBloqueado(estado: GameSessionState, ahora: Instante, actor
   );
 }
 
-/** Las Facciones con algo en una batalla activa: su IA no gobierna mientras dure (`avanzarFaccionesNpc`). */
-export function faccionesEnBatalla(estado: Pick<GameSessionState, 'batallas'>, ahora: Instante): Set<string> {
-  return new Set(
-    batallasActivas(estado, ahora)
-      .flatMap((b) => [b.ticket.bandos.atacante.faccionId, b.ticket.bandos.defensor.faccionId, ...participacionesDe(b).map((p) => p.participante.faccionId)])
-      .filter((f): f is string => f !== null)
-  );
-}
-
 // --- El ticket: la foto que viaja a Conquest ---
 
 function escuadraEnTicket(e: Escuadron): SquadSnapshot {
@@ -307,7 +298,8 @@ function enElMapa(estado: GameSessionState, centro: Point): BattleTicket['mapa']
 }
 
 function bandoDeColumna(estado: GameSessionState, columna: Ejercito, heridos: ReadonlySet<string>): Bando {
-  return { faccionId: columna.faccionId, participantes: heroesDeColumna(estado, columna, heridos), escuadrasSinHeroe: [] };
+  // Una columna sin bandera (un recién llegado, Doc 1.3) lleva la Facción vacía: en el contrato, un bando que no es de nadie es `null`.
+  return { faccionId: columna.faccionId || null, participantes: heroesDeColumna(estado, columna, heridos), escuadrasSinHeroe: [] };
 }
 
 export function aperturaContraColumna(estado: GameSessionState, atacante: Ejercito, defensor: Ejercito, iniciadaPor: string, heridos: ReadonlySet<string>): Apertura {

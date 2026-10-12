@@ -10,8 +10,8 @@ import { GameSession } from '../gameSession';
 import { REGISTRO_COMANDOS } from '../comandos/registro';
 import { verificarAutorizacion } from '../comandos/autorizacion';
 import { CODIGOS_ERROR } from '../comandos/codigosDeError';
-import { proyectarParaJugador } from '../proyecciones/jugador';
-import { enConvocatoria, escuadrasDe, faccionesEnBatalla, participacionesDe, type Batalla } from '../batallas';
+import { eventosDominioParaJugador, proyectarParaJugador } from '../proyecciones/jugador';
+import { enConvocatoria, escuadrasDe, participacionesDe, type Batalla } from '../batallas';
 import { aplicarResultado, confirmarInicio, registrarAsignacion, registrarSalida } from '../comandos/batalla';
 import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
 import { conHeroe, enPie, frenteACampamento } from './fixtures';
@@ -66,6 +66,47 @@ describe('abrir una batalla de Unity (doc 01 §15)', () => {
     expect(batalla!.ticket.bandos.defensor.escuadrasSinHeroe).toMatchObject([{ heroeId: null, tropaId: 'milicia_lanceros', efectivosAutorizados: CAMPAMENTOS_BANDIDOS.niveles[1].unidades }]);
     expect(reservadas(sesion, fundador).map((e) => e.reservaBatalla!.battleId)).toEqual([batalla!.id]);
     expect(sesion.getState().campamentosBandidos, 'no se resuelve aquí: el campamento sigue en pie').toHaveLength(1);
+  });
+});
+
+describe('un recién llegado sin Facción ataca a los bandidos', () => {
+  it('su columna lleva la Facción vacía y el ticket sigue cumpliendo el contrato: el bando no es de nadie (null), no una cadena vacía', () => {
+    const { sesion, fundador, columna } = frenteACampamento();
+    const payload = sesion.exportar();
+    const sinBandera = GameSession.importar(
+      {
+        ...payload,
+        state: {
+          ...payload.state,
+          facciones: payload.state.facciones.map((f) => ({ ...f, ciudadanosIds: f.ciudadanosIds.filter((id) => id !== fundador) })),
+          ejercitos: payload.state.ejercitos.map((e) => (e.id === columna ? { ...e, faccionId: '' } : e)),
+        },
+      },
+      { batallasEnUnity: true }
+    );
+
+    expect(atacarCampamento(sinBandera, fundador).ok).toBe(true);
+
+    const ticket = sinBandera.getState().batallas[0]!.ticket;
+    expect(ticket.bandos.atacante.faccionId).toBeNull();
+    expect(erroresDe('BattleTicket', ticket)).toEqual([]);
+  });
+});
+
+describe('los eventos de una batalla llegan a quien combate en ella', () => {
+  it('también si su columna salió de un campamento de mercenarios y no tiene plaza a la que atribuirlos', () => {
+    const { sesion, fundador, vecino, columna } = frenteACampamento();
+    const payload = sesion.exportar();
+    const sinPlaza = GameSession.importar(
+      { ...payload, state: { ...payload.state, ejercitos: payload.state.ejercitos.map((e) => (e.id === columna ? { ...e, origenAsentamientoId: '' } : e)) } },
+      { batallasEnUnity: true }
+    );
+    atacarCampamento(sinPlaza, fundador);
+    const estado = sinPlaza.getState();
+
+    const codigos = (heroeId: string) => eventosDominioParaJugador(estado, heroeId, 0).map((e) => e.codigo);
+    expect(codigos(fundador)).toContain('evento_pve.abierta');
+    expect(codigos(vecino), 'quien no combate ni es de esa plaza no se entera').not.toContain('evento_pve.abierta');
   });
 });
 
@@ -128,6 +169,7 @@ describe('asediar es una orden, no una llegada (Doc 5.12.4)', () => {
     expect(batalla.id).toBe(r.datos!.battleId);
     expect(batalla.iniciadaPor).toBe(fundador);
     expect(batalla.ticket.contextoEstrategico).toEqual({ tipo: 'asedio', asentamientoId: plazaId });
+    expect(erroresDe('BattleTicket', batalla.ticket), 'el ticket de un asedio, con la plaza congelada, cumple el contrato').toEqual([]);
     expect(batalla.bloqueo.asentamientoId).toBe(plazaId);
     expect(asediar(sesion, vecino, plazaId).ok, 'la plaza ya está en una batalla').toBe(false);
   });
@@ -210,6 +252,33 @@ describe('la convocatoria de un asedio (Doc 5.15.1b)', () => {
   });
 });
 
+describe('desconectarse en plena batalla (Doc 1.10.6, D33b)', () => {
+  it('la petición se anota aunque el candado esté puesto, y el héroe sale del mundo al terminar, no antes', () => {
+    const { sesion, fundador } = frenteACampamento();
+    const battleId = atacarCampamento(sesion, fundador).datos!.battleId;
+
+    expect(sesion.ejecutar(REGISTRO_COMANDOS.desconectarse, { heroeId: fundador }, { actor: fundador }).ok, 'cerrar el cliente en una batalla no se rechaza').toBe(true);
+    const heroe = () => sesion.getState().heroes.find((h) => h.id === fundador)!;
+    expect(heroe().desconectaEn).toBeDefined();
+
+    for (let i = 0; i < 3; i++) sesion.avanzarTick();
+    expect(heroe().fuera, 'pasada la espera, sigue dentro mientras combate').toBeUndefined();
+
+    sesion.ejecutar(REGISTRO_COMANDOS.cancelarBatalla, { battleId }, { actor: fundador });
+    sesion.avanzarTick();
+    expect(heroe().fuera, 'terminada la batalla, sale').toBeDefined();
+  });
+
+  it('volver a conectarse en plena batalla cancela la petición', () => {
+    const { sesion, fundador } = frenteACampamento();
+    atacarCampamento(sesion, fundador);
+    sesion.ejecutar(REGISTRO_COMANDOS.desconectarse, { heroeId: fundador }, { actor: fundador });
+
+    expect(sesion.ejecutar(REGISTRO_COMANDOS.conectarse, { heroeId: fundador }, { actor: fundador }).ok).toBe(true);
+    expect(sesion.getState().heroes.find((h) => h.id === fundador)!.desconectaEn).toBeUndefined();
+  });
+});
+
 describe('mientras se juega (Doc 5.15.1)', () => {
   it('lo que combate no recibe órdenes ni se mueve, y nadie más ataca el campamento', () => {
     const { sesion, fundador, vecino, columna } = frenteACampamento();
@@ -244,14 +313,6 @@ describe('mientras se juega (Doc 5.15.1)', () => {
     expect(reservadas(sesion, fundador)).toEqual([]);
   });
 
-  it('la IA de las Facciones que combaten no gobierna mientras dura', () => {
-    const { sesion, fundador } = frenteACampamento();
-    atacarCampamento(sesion, fundador);
-    const estado = sesion.getState();
-    const suya = estado.facciones.find((f) => f.ciudadanosIds.includes(fundador))!.id;
-
-    expect([...faccionesEnBatalla(estado, instanteDeTick(estado.tick))]).toEqual([suya]);
-  });
 });
 
 describe('unirse a una batalla (Doc 5.15.1)', () => {

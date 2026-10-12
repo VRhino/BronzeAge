@@ -94,6 +94,13 @@ export function atribuir(evento: EventoCrudo, asentamientoId: string): EventoCru
  * informe de combate (doc 02 §4.1b). Es la audiencia personal de un evento, la misma para el cursor `GET .../eventos`
  * (`eventosVisiblesParaJugador`) y para el canal de tiempo real `heroe/<id>` (`session/canales.ts`): así no pueden separarse.
  */
+/** La batalla de un evento `batalla.*` o `evento_pve.*`, si lo es (doc 02 §3.5): su `payload.battleId`. */
+export function batallaDeEvento(evento: Pick<EventoDominio, 'codigo' | 'payload'>): string | undefined {
+  if (!evento.codigo.startsWith('batalla.') && !evento.codigo.startsWith('evento_pve.')) return undefined;
+  const id = (evento.payload as { battleId?: unknown } | undefined)?.battleId;
+  return typeof id === 'string' ? id : undefined;
+}
+
 export function heroesNombrados(evento: Pick<EventoDominio, 'payload'>): string[] {
   const p = evento.payload as { heroeId?: unknown; liderId?: unknown; heroesIds?: unknown; atacante?: { heroesIds?: unknown }; defensor?: { heroesIds?: unknown } } | undefined;
   if (!p || typeof p !== 'object') return [];

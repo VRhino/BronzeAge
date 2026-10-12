@@ -116,6 +116,7 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
 - **`conectarse { heroeId }`**:
   - Si **no estaba `fuera`**: si tenía `desconectaEn`, lo **cancela** (sin eventos); si no, nada.
   - Si estaba `fuera`: `volverAlMundo`. Dentro de una plaza o un campamento solo recupera el control. Si salió con su columna, **reaparece en su punto** con una columna personal nueva (`ejercito-{ids.siguiente()}`): `tipo personal`, `estacionado`, `politicaDeUnion rechazar`, `liderId` él, `suministro` = su carro de `fuera`, `escuadronIds` = sus escuadras `contenedor: fuera` (que vuelven a `ejercito`), `faccionId` la de su ciudadanía (o `''`), `origenAsentamientoId` su residencia (o `''`). Evento `jugador.vuelve_al_mundo` atribuido a su residencia.
+- **En plena batalla de Unity** los dos comandos **no llevan el candado** de batalla: `desconectarse` se anota (`desconectaEn`) pero el tick no lo aplica mientras el héroe combate —sale en el primer tick tras acabar—, y `conectarse` la anula ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §5.1).
 - **Fuera del mundo no se da ninguna orden**: la autorización rechaza todo menos `conectarse` con el motivo `fuera_del_mundo`.
 - Quién lo aplica y cuándo: el tick ([`Tick.md`](Tick.md) §4.1). Lo pide el cliente al cerrarse, o el runner de bots al acabar su sesión.
 

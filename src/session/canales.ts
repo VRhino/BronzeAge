@@ -18,7 +18,7 @@
 // De ahí que atribuir un evento importe más de lo que parece: lo que sale sin `asentamientoId` se difunde por
 // `mapa/general`, al que puede suscribirse CUALQUIER jugador de la partida. Los eventos de campaña se
 // atribuyen a su asentamiento de origen justamente por esto (ver `avanzarEjercitos`).
-import { heroesNombrados, type EventoDominio } from '../domain/eventos';
+import { batallaDeEvento, heroesNombrados, type EventoDominio } from '../domain/eventos';
 import { esCiudadano } from '../engine/faccion';
 import { combateEn } from './batallas';
 import type { GameSessionState } from './estado';
@@ -55,18 +55,11 @@ export function canalDeHeroe(heroeId: string): string {
   return `heroe/${heroeId}`;
 }
 
-/** La batalla de un evento `batalla.*` o `evento_pve.*`, si lo es (doc 02 §3.5). */
-function batallaDe(evento: EventoDominio): string | undefined {
-  if (!evento.codigo.startsWith('batalla.') && !evento.codigo.startsWith('evento_pve.')) return undefined;
-  const id = (evento.payload as { battleId?: unknown } | undefined)?.battleId;
-  return typeof id === 'string' ? id : undefined;
-}
-
 /** Todos los canales por los que va un evento: el de siempre; si es de una batalla, el de la batalla (doc 02 §3.5); y si no es global, el
  * personal de cada héroe que nombra (un global ya le llega por `mapa/general`). Sin esto, los eventos de «ninguna plaza» (`asentamientoId: ''`,
  * columnas salidas de un campamento) no los recibía nadie en tiempo real. */
 export function canalesDeEvento(evento: EventoDominio): string[] {
-  const battleId = batallaDe(evento);
+  const battleId = batallaDeEvento(evento);
   const personales = evento.asentamientoId === undefined ? [] : heroesNombrados(evento).map(canalDeHeroe);
   return [canalDeEvento(evento), ...(battleId === undefined ? [] : [canalDeBatalla(battleId)]), ...personales];
 }
