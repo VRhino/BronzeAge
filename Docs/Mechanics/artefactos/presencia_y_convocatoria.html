@@ -1,0 +1,459 @@
+<title>Presencia y Convocatoria</title>
+<style>
+/* Layout: cuatro láminas con pestañas (mapa de ubicaciones, puerta, desconexión, convocatoria); cada una es una regla de Presencia_Y_Convocatoria.md hecha manipulable. */
+:root {
+  --bg: #eef1f1;
+  --surface: #ffffff;
+  --ink: #1b2a30;
+  --muted: #5b6d72;
+  --line: #cdd8d9;
+  --accent: #1f7a6d;      /* pátina de cobre */
+  --accent-soft: #d6ece8;
+  --bronze: #9a5b1f;
+  --bronze-soft: #f1e1cf;
+  --bad: #b3372c;
+  --bad-soft: #f6dcd8;
+  --ok: #2f7d3b;
+  --ok-soft: #dcefdc;
+  --node: #e3ebec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101a1d; --surface: #172428; --ink: #e3ecec; --muted: #94a8ac; --line: #2c4146;
+    --accent: #4cc0ae; --accent-soft: #1b3b38; --bronze: #e0a266; --bronze-soft: #3a2b1b;
+    --bad: #ee8a7e; --bad-soft: #3d2320; --ok: #82cf8c; --ok-soft: #1f3523; --node: #1f3237;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101a1d; --surface: #172428; --ink: #e3ecec; --muted: #94a8ac; --line: #2c4146;
+  --accent: #4cc0ae; --accent-soft: #1b3b38; --bronze: #e0a266; --bronze-soft: #3a2b1b;
+  --bad: #ee8a7e; --bad-soft: #3d2320; --ok: #82cf8c; --ok-soft: #1f3523; --node: #1f3237;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 "IBM Plex Sans", system-ui, sans-serif; padding-inline: 16px; padding-block: 20px 48px; }
+.wrap { max-width: 960px; margin: 0 auto; }
+h1, h2, h3 { font-family: "Newsreader", Georgia, serif; font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: 2rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.05rem; }
+.lede { color: var(--muted); max-width: 62ch; margin: 6px 0 20px; }
+.mono, code, kbd { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.86em; }
+code { background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.tab { font: inherit; background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px; color: var(--muted); cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tab:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel { display: none; }
+.panel.on { display: block; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.svgbox { overflow-x: auto; }
+svg { display: block; width: 100%; height: auto; min-width: 520px; }
+.node rect { fill: var(--node); stroke: var(--line); stroke-width: 1.5; }
+.node text { fill: var(--ink); font: 600 14px "IBM Plex Sans", sans-serif; text-anchor: middle; }
+.node .sub { font: 400 11px "IBM Plex Sans", sans-serif; fill: var(--muted); }
+.edge path { fill: none; stroke: var(--accent); stroke-width: 2; cursor: pointer; }
+.edge.sel path { stroke: var(--bronze); stroke-width: 3.5; }
+.edge .hit { stroke: transparent; stroke-width: 16; }
+.edge text { fill: var(--muted); font: 500 10.5px "IBM Plex Mono", monospace; text-anchor: middle; pointer-events: none; }
+.edge.sel text { fill: var(--bronze); }
+.edge:focus-visible path:not(.hit) { stroke: var(--bronze); }
+marker path { fill: var(--accent); }
+.detail dl { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+.detail dt { color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 2px; }
+.detail dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.pill { display: inline-block; font-size: 0.78rem; padding: 1px 8px; border-radius: 99px; background: var(--bronze-soft); color: var(--bronze); font-weight: 600; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+label { display: block; font-size: 0.82rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+select, input[type=range] { font: inherit; width: 100%; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; }
+.ctrls { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.check { display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: 0; font-size: 0.95rem; color: var(--ink); }
+.result { margin-top: 14px; padding: 12px 14px; border-radius: 6px; background: var(--accent-soft); border-left: 4px solid var(--accent); }
+.result.bad { background: var(--bad-soft); border-left-color: var(--bad); }
+.result.ok { background: var(--ok-soft); border-left-color: var(--ok); }
+.result strong { display: block; }
+.steps { margin: 8px 0 0; padding-left: 1.2em; }
+.btn { font: inherit; font-size: 0.88rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 5px; padding: 5px 10px; cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #08201c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #08201c; } }
+.btn.danger { color: var(--bad); }
+.heroes { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.hero { border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--surface); min-width: 0; }
+.hero.lider { border-color: var(--bronze); }
+.hero.fuera { opacity: 0.55; }
+.hero h3 { display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.hero .meta { color: var(--muted); font-size: 0.85rem; margin: 2px 0 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.log { margin: 0; padding: 0; list-style: none; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.log li { padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+.log li:last-child { border-bottom: 0; }
+.log .err { color: var(--bad); }
+.log .okk { color: var(--ok); }
+.log .cmd { font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; color: var(--muted); }
+.timeline { overflow-x: auto; }
+.pet { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+.note { color: var(--muted); font-size: 0.88rem; margin-top: 10px; }
+footer { margin-top: 28px; color: var(--muted); font-size: 0.85rem; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:wght@500;600&display=swap">
+
+<div class="wrap">
+  <h1>Presencia y Convocatoria</h1>
+  <p class="lede">Dónde puede estar un héroe, cómo pasa de un sitio a otro, quién cruza una puerta, cuándo sale del mundo al desconectarse y cómo se prepara un ejército dentro de una plaza. Cada lámina es una regla de <code>Presencia_Y_Convocatoria.md</code> que puedes mover.</p>
+
+  <div class="tabs" role="tablist" aria-label="Láminas">
+    <button class="tab" role="tab" id="t-mapa" aria-selected="true" aria-controls="p-mapa">Dónde está el héroe</button>
+    <button class="tab" role="tab" id="t-puerta" aria-selected="false" aria-controls="p-puerta">La puerta</button>
+    <button class="tab" role="tab" id="t-desc" aria-selected="false" aria-controls="p-desc">Desconectarse</button>
+    <button class="tab" role="tab" id="t-conv" aria-selected="false" aria-controls="p-conv">Convocatoria</button>
+  </div>
+
+  <!-- 1. Mapa de ubicaciones -->
+  <section class="panel on" id="p-mapa" role="tabpanel" aria-labelledby="t-mapa">
+    <div class="grid2">
+      <div class="card svgbox">
+        <svg viewBox="0 0 760 400" role="img" aria-label="Grafo de las cuatro ubicaciones del héroe y los comandos que las conectan">
+          <defs>
+            <marker id="flecha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+          </defs>
+          <g id="aristas"></g>
+          <g class="node" transform="translate(30,150)"><rect width="170" height="90" rx="8"/><text x="85" y="40">Dentro de una plaza</text><text class="sub" x="85" y="60">ubicacion: asentamiento</text></g>
+          <g class="node" transform="translate(295,150)"><rect width="170" height="90" rx="8"/><text x="85" y="40">En el mapa</text><text class="sub" x="85" y="60">ubicacion: columna</text></g>
+          <g class="node" transform="translate(560,150)"><rect width="170" height="90" rx="8"/><text x="85" y="40">En un campamento</text><text class="sub" x="85" y="60">ubicacion: mercenarios</text></g>
+          <g class="node" transform="translate(295,15)"><rect width="170" height="60" rx="8"/><text x="85" y="30">Fuera del mundo</text><text class="sub" x="85" y="48">ubicacion: desconectado</text></g>
+          <g class="node" transform="translate(560,320)"><rect width="170" height="50" rx="8"/><text x="85" y="30">crearHeroe</text></g>
+        </svg>
+        <p class="note">Pulsa una flecha (o enfócala con el teclado y pulsa Intro) para ver el comando y lo que pasa con la columna.</p>
+      </div>
+      <div class="card detail" id="detalle-arista" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- 2. Puerta -->
+  <section class="panel" id="p-puerta" role="tabpanel" aria-labelledby="t-puerta">
+    <div class="card">
+      <h2>¿Puede entrar en una plaza?</h2>
+      <p class="note" style="margin-top:4px">Reproduce <code>cruzarLaPuerta</code>: cuatro condiciones en este orden, y después, qué pasa con la columna.</p>
+      <div class="ctrls">
+        <div><label for="g-clase">Tu columna</label><select id="g-clase"><option value="personal">Personal</option><option value="ejercito">Ejército</option></select></div>
+        <div><label for="g-dist">Distancia a la plaza</label><select id="g-dist"><option value="4">4 (en la puerta)</option><option value="10">10 (justo el límite)</option><option value="11">11 (fuera)</option><option value="60">60</option></select></div>
+        <div><label for="g-res">Relación con la plaza</label><select id="g-res"><option value="residente">Resido en ella</option><option value="propia">De su Facción, no resido</option><option value="aliados">De una Facción aliada o vasalla/señora</option><option value="neutrales">De una Facción neutral</option><option value="enemigos">De una Facción en guerra</option></select></div>
+        <div><label for="g-veto">¿Estás vetado?</label><select id="g-veto"><option value="no">No</option><option value="si">Sí</option></select></div>
+        <div><label for="g-cierre">Puerta cerrada a</label><select id="g-cierre"><option value="defecto">Por defecto (neutrales y enemigos)</option><option value="nadie">Nadie</option><option value="todos">Aliados, neutrales y enemigos</option></select></div>
+      </div>
+      <div id="puerta-res"></div>
+    </div>
+  </section>
+
+  <!-- 3. Desconexión -->
+  <section class="panel" id="p-desc" role="tabpanel" aria-labelledby="t-desc">
+    <div class="card">
+      <h2>¿Cuándo sale del mundo quien se desconecta?</h2>
+      <p class="note" style="margin-top:4px">El tick aplica la salida cuando se cumplen todas las condiciones (<code>Tick.md</code> §4.1). Mueve el reloj desde el instante en que pidió desconectarse.</p>
+      <div class="ctrls">
+        <div><label for="d-t">Segundos desde que pidió desconectarse: <span id="d-tv" class="mono">0</span></label><input id="d-t" type="range" min="0" max="360" step="5" value="0"></div>
+        <div><label class="check"><input id="d-pers" type="checkbox"> Una columna enemiga le persigue</label></div>
+        <div><label class="check"><input id="d-bat" type="checkbox"> Está dentro de una batalla</label></div>
+        <div><label for="d-lugar">Dónde está</label><select id="d-lugar"><option value="plaza">Dentro de una plaza o un campamento</option><option value="solo">En el mapa, solo en su columna</option><option value="ejercito">En el mapa, en un ejército con más gente</option></select></div>
+      </div>
+      <div class="timeline"><svg id="d-svg" viewBox="0 0 720 120" role="img" aria-label="Línea de tiempo de la desconexión" style="min-width:560px"></svg></div>
+      <div id="d-res"></div>
+    </div>
+  </section>
+
+  <!-- 4. Convocatoria -->
+  <section class="panel" id="p-conv" role="tabpanel" aria-labelledby="t-conv">
+    <div class="card">
+      <h2>Ejército en preparación en la plaza de Micenas</h2>
+      <p class="note" style="margin-top:4px">Aria, Bron y Cal son de la misma Facción y están dentro; Dex es de otra. Nadie ha salido: las escuadras siguen en su campamento hasta que el Líder parte.</p>
+      <div class="ctrls" style="margin-top:12px">
+        <div><label for="c-pol">Política de unión del ejército</label><select id="c-pol"><option value="aceptar">aceptar (se une ya)</option><option value="preguntar">preguntar (el Líder decide en 10 s)</option></select></div>
+        <div><label class="check"><input id="c-falla" type="checkbox"> Bron pierde Liderazgo y ya no podría salir</label></div>
+        <div><button class="btn" id="c-reset">Reiniciar escena</button></div>
+      </div>
+      <div class="heroes" id="c-heroes"></div>
+      <div id="c-estado" class="result" style="margin:0 0 14px"></div>
+      <h3 style="margin-bottom:8px">Registro</h3>
+      <ul class="log" id="c-log" aria-live="polite"></ul>
+    </div>
+  </section>
+
+  <footer>Cifras tomadas de <code>constants.ts</code> el 2026-10-12: radio de la puerta 10, retardo de desconexión 150 s, tope de aplazamiento 300 s, vida de una petición de unión 10 s. Si cambian, este artefacto hay que regenerarlo.</footer>
+</div>
+
+<script>
+(function () {
+  /* ---------- pestañas ---------- */
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tabs.forEach(function (x) { x.setAttribute('aria-selected', x === t ? 'true' : 'false'); });
+      document.querySelectorAll('.panel').forEach(function (p) { p.classList.toggle('on', p.id === t.getAttribute('aria-controls')); });
+    });
+  });
+
+  /* ---------- 1. grafo de ubicaciones ---------- */
+  // Nodos: plaza (30..200, 150..240), mapa (295..465), campamento (560..730), fuera (295..465, 15..75), crear (560..730, 320..370)
+  var ARISTAS = [
+    { id: 'e1', d: 'M295 180 L200 180', lbl: 'entrarEnAsentamiento', lx: 247, ly: 172, t: 'entrarEnAsentamiento',
+      cond: 'Columna personal, a ≤ 10 de la plaza, y la puerta te deja pasar (residente > veto > grupo).',
+      col: 'En tu residencia la columna se deshace: tropa al campamento, carro al almacén. En otra plaza queda aparcada a la puerta.',
+      ev: 'jugador.entra_en_asentamiento', nota: 'Un ejército no entra así: separarse antes, o usar guarnecer.' },
+    { id: 'e2', d: 'M200 215 L295 215', lbl: 'salirAlMundo / salirDeAsentamiento', lx: 247, ly: 238, t: 'salirAlMundo · salirDeAsentamiento',
+      cond: 'Desde tu residencia: salirAlMundo, eliges tropa y carga. Desde una plaza ajena: salirDeAsentamiento, sin elegir.',
+      col: 'Nace una columna con lo elegido (o retomas la aparcada). Los víveres se llenan y se toma la foto del interior que dejas.',
+      ev: 'jugador.sale_al_mundo · jugador.sale_de_asentamiento', nota: 'Si estás en un ejército en preparación, ninguna de las dos te deja salir por tu cuenta.' },
+    { id: 'e3', d: 'M465 180 L560 180', lbl: 'entrarEnCampamento', lx: 512, ly: 172, t: 'entrarEnCampamento',
+      cond: 'Entras solo (un ejército se desarma antes) y a ≤ 10 de su puerta.',
+      col: 'En tu campamento: tropa al campamento y carro al almacén personal (lo que no cabe se queda en el carro aparcado). En otro: la columna queda a la puerta.',
+      ev: 'jugador.entra_en_campamento · ejercito.entra_en_campamento', nota: 'El tope del almacén personal es ALMACEN_PERSONAL.capacidad.' },
+    { id: 'e4', d: 'M560 215 L465 215', lbl: 'salirDelCampamento', lx: 512, ly: 238, t: 'salirDelCampamento',
+      cond: 'Estás dentro de ese campamento.',
+      col: 'Residente: eliges tropa y carga del almacén personal y recibes la ración gratis (cada 30 min). Visitante: retomas tu columna aparcada.',
+      ev: 'jugador.sale_de_campamento', nota: 'Con política de unión distinta de rechazar sale como ejército.' },
+    { id: 'e5', d: 'M380 150 L380 75', lbl: 'desconectarse (+2:30)', lx: 380, ly: 118, t: 'desconectarse',
+      cond: 'Pides desconectarte; a los 150 s el tick te saca (se aplaza si te persiguen, nunca en batalla).',
+      col: 'En plaza o campamento no se mueve nada. En el mapa, tu columna desaparece y te llevas tu tropa y tu carro.',
+      ev: 'jugador.se_desconecta · jugador.sale_del_mundo', nota: 'Fuera del mundo no se da ninguna orden, salvo conectarse.' },
+    { id: 'e6', d: 'M410 75 L410 150', lbl: 'conectarse', lx: 440, ly: 118, t: 'conectarse',
+      cond: 'Si aún no habías salido, cancela la salida. Si estabas fuera, reapareces.',
+      col: 'En el mapa reapareces en tu punto con una columna personal nueva, quieta, con tus escuadras y tu carro.',
+      ev: 'jugador.vuelve_al_mundo', nota: 'Dentro de una plaza solo recuperas el control.' },
+    { id: 'e7', d: 'M645 320 L645 240', lbl: 'crearHeroe', lx: 700, ly: 285, t: 'crearHeroe',
+      cond: 'Un héroe por jugador; el campamento elegido existe y el nombre no está vacío.',
+      col: 'Nace dentro del campamento como residente, sin columna en el mapa.',
+      ev: 'heroe.creado', nota: 'Es el único comando de un actor sin héroe.' },
+    { id: 'e8', d: 'M295 150 Q250 95 200 150', lbl: '', lx: 0, ly: 0, t: 'guarnecer · fundar',
+      cond: 'guarnecer: un ejército de la Facción de la plaza, a ≤ 10; solo su Líder lo hace entrar. fundar: el titular con la Caravana de Fundación enganchada.',
+      col: 'El ejército se desarma en la puerta y cada héroe entra como lo haría solo; fundar deshace la columna dentro de la plaza nueva.',
+      ev: 'ejercito.guarnece · fundacion.asentamiento_fundado', nota: 'Las caravanas adjuntas quedan aparcadas en la plaza.' }
+  ];
+  var g = document.getElementById('aristas');
+  var NS = 'http://www.w3.org/2000/svg';
+  function pintarDetalle(a) {
+    document.getElementById('detalle-arista').innerHTML =
+      '<span class="pill">' + a.t + '</span><dl>' +
+      '<dt>Condición</dt><dd>' + a.cond + '</dd>' +
+      '<dt>Columna</dt><dd>' + a.col + '</dd>' +
+      '<dt>Evento</dt><dd class="mono">' + a.ev + '</dd>' +
+      '<dt>Ojo</dt><dd>' + a.nota + '</dd></dl>';
+  }
+  ARISTAS.forEach(function (a, i) {
+    var e = document.createElementNS(NS, 'g');
+    e.setAttribute('class', 'edge'); e.setAttribute('tabindex', '0'); e.setAttribute('role', 'button'); e.setAttribute('aria-label', a.t);
+    var hit = document.createElementNS(NS, 'path'); hit.setAttribute('d', a.d); hit.setAttribute('class', 'hit');
+    var p = document.createElementNS(NS, 'path'); p.setAttribute('d', a.d); p.setAttribute('marker-end', 'url(#flecha)');
+    e.appendChild(hit); e.appendChild(p);
+    if (a.lbl) { var t = document.createElementNS(NS, 'text'); t.setAttribute('x', a.lx); t.setAttribute('y', a.ly); t.textContent = a.lbl; e.appendChild(t); }
+    function sel() { g.querySelectorAll('.edge').forEach(function (x) { x.classList.remove('sel'); }); e.classList.add('sel'); pintarDetalle(a); }
+    e.addEventListener('click', sel);
+    e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); sel(); } });
+    g.appendChild(e);
+    if (i === 0) { e.classList.add('sel'); pintarDetalle(a); }
+  });
+
+  /* ---------- 2. la puerta ---------- */
+  var RADIO_PUERTA = 10;
+  function puerta() {
+    var clase = v('g-clase'), dist = +v('g-dist'), rel = v('g-res'), veto = v('g-veto') === 'si', cierre = v('g-cierre');
+    var cerradaA = cierre === 'defecto' ? ['neutrales', 'enemigos'] : cierre === 'nadie' ? [] : ['aliados', 'neutrales', 'enemigos'];
+    var pasos = [], fallo = null;
+    function paso(ok, texto) { pasos.push({ ok: ok, texto: texto }); if (!ok && !fallo) fallo = texto; return ok; }
+    paso(clase === 'personal', clase === 'personal' ? '1 · La columna es personal.' : '1 · Vas en un ejército: hay que separarse antes de entrar en una plaza (un ejército usa guarnecer).');
+    if (!fallo) paso(dist <= RADIO_PUERTA, dist <= RADIO_PUERTA ? '2 · Estás en la puerta (' + dist + ' ≤ ' + RADIO_PUERTA + ').' : '2 · Hay que estar a menos de ' + RADIO_PUERTA + ' de la plaza (estás a ' + dist + ').');
+    var entra;
+    if (!fallo) {
+      var motivo;
+      if (rel === 'residente') { entra = true; motivo = 'Eres residente: nadie se queda fuera de su casa, ni por veto ni por grupo.'; }
+      else if (veto) { entra = false; motivo = 'El Gobernador te ha vetado: el veto pesa más que el grupo.'; }
+      else if (rel === 'propia') { entra = true; motivo = 'Eres de la propia Facción: nunca se te cierra la puerta.'; }
+      else { entra = cerradaA.indexOf(rel) < 0; motivo = entra ? 'La puerta no está cerrada al grupo «' + rel + '».' : 'La puerta está cerrada al grupo «' + rel + '».'; }
+      paso(entra, '3 · ' + motivo);
+    }
+    var out = '<ol class="steps">' + pasos.map(function (p) { return '<li><span class="pill ' + (p.ok ? 'ok' : 'bad') + '">' + (p.ok ? 'pasa' : 'falla') + '</span> ' + p.texto + '</li>'; }).join('') + '</ol>';
+    var cls, cab;
+    if (fallo) { cls = 'bad'; cab = 'No entras'; out += '<p class="note">Rechazo: <span class="mono">movilizacion.invalida</span>. No cambia nada.</p>'; }
+    else if (rel === 'residente') { cls = 'ok'; cab = 'Entras en tu residencia y tu columna se deshace'; out += '<p>4 · Tropa al campamento de la plaza y el carro entero al almacén (hasta donde quepa). La columna desaparece.</p>'; }
+    else { cls = 'ok'; cab = 'Entras de visita y tu columna queda aparcada a la puerta'; out += '<p>4 · La columna se queda intacta fuera. Sales con <code>salirDeAsentamiento</code> y la retomas sin elegir nada. Si defienden la plaza, puedes defenderla desde dentro con esa columna si eres de la Facción o aliado.</p>'; }
+    document.getElementById('puerta-res').innerHTML = '<div class="result ' + cls + '"><strong>' + cab + '</strong>' + out + '</div>';
+  }
+  function v(id) { return document.getElementById(id).value; }
+  ['g-clase', 'g-dist', 'g-res', 'g-veto', 'g-cierre'].forEach(function (id) { document.getElementById(id).addEventListener('change', puerta); });
+  puerta();
+
+  /* ---------- 3. desconexión ---------- */
+  var RETARDO = 150, TOPE = 300;
+  function mmss(s) { return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function desc() {
+    var t = +v('d-t'), pers = document.getElementById('d-pers').checked, bat = document.getElementById('d-bat').checked, lugar = v('d-lugar');
+    document.getElementById('d-tv').textContent = mmss(t);
+    var cumpleRetardo = t >= RETARDO;
+    var sale = cumpleRetardo && !bat && (t >= TOPE || !pers);
+    var porQue;
+    if (!cumpleRetardo) porQue = 'Aún no ha pasado el retardo de ' + mmss(RETARDO) + ': sigue en el mundo y se mueve como iba.';
+    else if (bat) porQue = 'Está dentro de una batalla: la salida no se aplica mientras dure.';
+    else if (pers && t < TOPE) porQue = 'Le persiguen: la salida se aplaza, y como mucho hasta ' + mmss(TOPE) + '.';
+    else if (pers) porQue = 'Se llegó al tope de aplazamiento: sale aunque le persigan. Huir desconectándose no gana nada.';
+    else porQue = 'Cumplido el retardo y sin nadie persiguiéndole: sale.';
+    var efecto = '';
+    if (sale) {
+      efecto = lugar === 'plaza' ? 'No se mueve nada: queda marcado como fuera, no defiende en persona y la guarnición defiende como siempre.'
+        : lugar === 'solo' ? 'Su columna desaparece; se lleva su tropa y su carro y queda en el punto donde estaba. Las caravanas adjuntas sin titular vuelven solas a su origen.'
+        : 'El ejército sigue sin él. Si era el Líder, el mando pasa al conectado de más antigüedad. Se separa con lo suyo y, como mucho, un carro.';
+    }
+    document.getElementById('d-res').innerHTML = '<div class="result ' + (sale ? 'ok' : '') + '"><strong>' + (sale ? 'Sale del mundo' : 'Sigue en el mundo') + ' · ' + mmss(t) + '</strong>' + porQue + (efecto ? '<p style="margin:6px 0 0">' + efecto + '</p>' : '') + '</div>';
+    // línea de tiempo
+    var W = 720, x0 = 30, x1 = 690, sc = (x1 - x0) / 360, X = function (s) { return x0 + s * sc; };
+    var h = '<line x1="' + x0 + '" y1="70" x2="' + x1 + '" y2="70" stroke="var(--line)" stroke-width="4"/>';
+    h += '<rect x="' + X(RETARDO) + '" y="62" width="' + (X(TOPE) - X(RETARDO)) + '" height="16" fill="var(--bronze-soft)"/>';
+    h += '<text x="' + ((X(RETARDO) + X(TOPE)) / 2) + '" y="56" text-anchor="middle" font-size="11" fill="var(--bronze)" font-family="IBM Plex Sans">ventana de aplazamiento</text>';
+    [[0, 'pide'], [RETARDO, 'retardo 2:30'], [TOPE, 'tope 5:00']].forEach(function (m) {
+      h += '<line x1="' + X(m[0]) + '" y1="62" x2="' + X(m[0]) + '" y2="82" stroke="var(--ink)" stroke-width="2"/><text x="' + X(m[0]) + '" y="100" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="IBM Plex Sans">' + m[1] + '</text>';
+    });
+    h += '<circle cx="' + X(t) + '" cy="70" r="8" fill="' + (sale ? 'var(--ok)' : 'var(--accent)') + '"/>';
+    document.getElementById('d-svg').innerHTML = h;
+  }
+  ['d-t', 'd-pers', 'd-bat', 'd-lugar'].forEach(function (id) { document.getElementById(id).addEventListener('input', desc); });
+  desc();
+
+  /* ---------- 4. convocatoria ---------- */
+  var VIDA_PETICION = 10000;
+  var HEROES = [
+    { id: 'aria', nombre: 'Aria', rol: 'Residente · Facción A', facc: 'A' },
+    { id: 'bron', nombre: 'Bron', rol: 'Residente · Facción A', facc: 'A' },
+    { id: 'cal', nombre: 'Cal', rol: 'Visitante · Facción A · columna aparcada a la puerta', facc: 'A' },
+    { id: 'dex', nombre: 'Dex', rol: 'Residente · Facción B', facc: 'B' }
+  ];
+  var S;
+  function nuevo() { S = { conv: null, log: [], fuera: {}, partio: null }; }
+  nuevo();
+  function say(cmd, msg, tipo) { S.log.unshift({ cmd: cmd, msg: msg, tipo: tipo }); }
+  function heroe(id) { return HEROES.filter(function (h) { return h.id === id; })[0]; }
+  function enConv(id) { return S.conv && S.conv.integrantes.indexOf(id) >= 0; }
+  function peticionDe(id) { return S.conv && S.conv.peticiones.filter(function (p) { return p.id === id; })[0]; }
+  function puedeSalir(id) {
+    if (id === 'bron' && document.getElementById('c-falla').checked) return 'Bron no puede salir con lo elegido: supera su Liderazgo.';
+    return null;
+  }
+  function accion(cmd, id) { ejecutar(cmd, id); render(); }
+  function ejecutar(cmd, id) {
+    var h = heroe(id), n = h.nombre;
+    if (cmd === 'convocar') {
+      if (S.conv) return say('convocarEjercito', n + ': ya estás en un ejército en preparación.', 'err');
+      var f = puedeSalir(id); if (f) return say('convocarEjercito', f, 'err');
+      S.conv = { lider: id, facc: h.facc, pol: document.getElementById('c-pol').value, integrantes: [id], peticiones: [] };
+      S.partio = null;
+      say('convocarEjercito', n + ' convoca un ejército (' + S.conv.pol + '). Nadie sale todavía.', 'ok');
+    } else if (cmd === 'unirse') {
+      if (!S.conv) return say('unirseAConvocatoria', 'Ese ejército en preparación ya no existe.', 'err');
+      if (S.fuera[id]) return say('unirseAConvocatoria', n + ': solo se une quien está dentro del mismo lugar.', 'err');
+      if (h.facc !== S.conv.facc) return say('unirseAConvocatoria', 'Un ejército lo componen ciudadanos de una sola Facción.', 'err');
+      if (enConv(id)) return say('unirseAConvocatoria', n + ': ya estás en un ejército en preparación.', 'err');
+      var f2 = puedeSalir(id); if (f2) return say('unirseAConvocatoria', f2, 'err');
+      if (S.conv.pol === 'preguntar') {
+        S.conv.peticiones = S.conv.peticiones.filter(function (p) { return p.id !== id && Date.now() < p.expira; });
+        S.conv.peticiones.push({ id: id, expira: Date.now() + VIDA_PETICION });
+        say('unirseAConvocatoria', n + ' pide unirse. El Líder tiene 10 s; el silencio cuenta como un no.', 'ok');
+      } else { S.conv.integrantes.push(id); say('unirseAConvocatoria', n + ' se une al ejército.', 'ok'); }
+    } else if (cmd === 'aceptar' || cmd === 'rechazar') {
+      var p = peticionDe(id);
+      if (!p) return say('responderPeticionDeConvocatoria', 'No hay ninguna petición de ' + n + '.', 'err');
+      if (Date.now() >= p.expira) { S.conv.peticiones = S.conv.peticiones.filter(function (x) { return x !== p; }); return say('responderPeticionDeConvocatoria', 'La petición de ' + n + ' ya caducó: el silencio cuenta como un no.', 'err'); }
+      S.conv.peticiones = S.conv.peticiones.filter(function (x) { return x !== p; });
+      if (cmd === 'rechazar') return say('responderPeticionDeConvocatoria', 'El Líder rechaza a ' + n + '.', 'ok');
+      var f3 = puedeSalir(id); if (f3) return say('responderPeticionDeConvocatoria', 'Al aceptar se revalida todo. ' + f3, 'err');
+      S.conv.integrantes.push(id); say('responderPeticionDeConvocatoria', 'El Líder acepta a ' + n + '.', 'ok');
+    } else if (cmd === 'separarse') {
+      if (!enConv(id)) return say('separarseDeConvocatoria', n + ': no estás en ningún ejército en preparación.', 'err');
+      if (S.conv.lider === id) return say('separarseDeConvocatoria', 'El Líder no se separa de su ejército: lo cancela.', 'err');
+      S.conv.integrantes = S.conv.integrantes.filter(function (x) { return x !== id; });
+      say('separarseDeConvocatoria', n + ' se separa. Sigue dentro del lugar y no hay nada que devolver.', 'ok');
+    } else if (cmd === 'cancelar') {
+      if (!enConv(id)) return say('cancelarConvocatoria', n + ': no estás en ningún ejército en preparación.', 'err');
+      if (S.conv.lider !== id) return say('cancelarConvocatoria', 'Solo el Líder cancela el ejército: los demás se separan.', 'err');
+      S.conv = null; say('cancelarConvocatoria', n + ' cancela. Todos siguen dentro con todo en su sitio.', 'ok');
+    } else if (cmd === 'salir') {
+      if (enConv(id)) return say('salirAlMundo', 'Estás en un ejército en preparación: sepárate o cancélalo antes de salir por tu cuenta.', 'err');
+      say('salirAlMundo', n + ' sale por su cuenta.', 'ok');
+    } else if (cmd === 'desalojado') {
+      S.fuera[id] = true; say('(mundo)', n + ' ya no está dentro del lugar (lo desalojan). Sigue en la lista, pero no saldrá con los demás.', 'ok');
+    } else if (cmd === 'partir') {
+      if (!enConv(id)) return say('partirConvocatoria', n + ': no estás en ningún ejército en preparación.', 'err');
+      if (S.conv.lider !== id) return say('partirConvocatoria', 'Solo el Líder hace partir al ejército.', 'err');
+      var dentro = S.conv.integrantes.filter(function (x) { return !S.fuera[x]; });
+      if (dentro[0] !== S.conv.lider) return say('partirConvocatoria', 'El Líder ya no está dentro del lugar.', 'err');
+      for (var i = 0; i < dentro.length; i++) {
+        var fx = puedeSalir(dentro[i]);
+        if (fx) return say('partirConvocatoria', 'Todo o nada: ' + fx + ' Nadie sale.', 'err');
+      }
+      S.partio = { ids: dentro, pol: S.conv.pol, dejados: S.conv.integrantes.filter(function (x) { return S.fuera[x]; }) };
+      say('partirConvocatoria', 'Parte el ejército con ' + dentro.length + ' héroe(s), quieto en la puerta.', 'ok');
+      S.conv = null;
+    }
+  }
+  function botones(h) {
+    var id = h.id, enC = enConv(id), pet = peticionDe(id), lider = S.conv && S.conv.lider === id, out = [];
+    function b(txt, cmd, cls, dis) { return '<button class="btn ' + (cls || '') + '" data-cmd="' + cmd + '" data-id="' + id + '"' + (dis ? ' disabled' : '') + '>' + txt + '</button>'; }
+    out.push(b('Convocar', 'convocar', '', !!S.conv));
+    out.push(b('Unirse', 'unirse', '', !S.conv || enC || !!pet));
+    out.push(b('Separarse', 'separarse', '', !enC));
+    out.push(b('Cancelar', 'cancelar', 'danger', !lider));
+    out.push(b('Partir', 'partir', 'primary', !lider));
+    out.push(b('Salir por su cuenta', 'salir', '', false));
+    out.push(b('Desalojado', 'desalojado', '', !!S.fuera[id]));
+    return '<div class="row">' + out.join('') + '</div>';
+  }
+  function render() {
+    // caducar peticiones
+    if (S.conv) S.conv.peticiones = S.conv.peticiones.filter(function (p) { return Date.now() < p.expira; });
+    var h = '';
+    HEROES.forEach(function (x) {
+      var lider = S.conv && S.conv.lider === x.id, enC = enConv(x.id);
+      h += '<div class="hero' + (lider ? ' lider' : '') + (S.fuera[x.id] ? ' fuera' : '') + '"><h3>' + x.nombre + (lider ? ' <span class="pill">Líder</span>' : enC ? ' <span class="pill ok">integrante</span>' : '') + '</h3><div class="meta">' + x.rol + (S.fuera[x.id] ? ' · fuera del lugar' : '') + '</div>' + botones(x) + '</div>';
+    });
+    document.getElementById('c-heroes').innerHTML = h;
+    pintarEstado();
+    document.getElementById('c-log').innerHTML = S.log.map(function (l) { return '<li><div class="cmd">' + l.cmd + '</div><div class="' + (l.tipo === 'err' ? 'err' : 'okk') + '">' + l.msg + '</div></li>'; }).join('') || '<li class="cmd">Sin acciones todavía.</li>';
+    lastKey = clavePeticiones();
+  }
+  var lastKey = '';
+  function clavePeticiones() { return S.conv ? S.conv.peticiones.map(function (p) { return p.id; }).join(',') : ''; }
+  function pintarEstado() {
+    var est = '';
+    if (S.partio) {
+      var lista = S.partio.ids.map(function (i) { return heroe(i).nombre; }).join(', ');
+      est = '<strong>El ejército ha partido</strong>Salen juntos como un único ejército quieto en la puerta, con política de unión «' + S.partio.pol + '»: ' + lista + '.' + (S.partio.dejados.length ? ' Quedan fuera: ' + S.partio.dejados.map(function (i) { return heroe(i).nombre; }).join(', ') + '.' : '') + ' El Líder lo dirige con <code>marcharA</code>.';
+      document.getElementById('c-estado').className = 'result ok';
+    } else if (S.conv) {
+      var pets = S.conv.peticiones.map(function (p) {
+        var seg = Math.max(0, Math.ceil((p.expira - Date.now()) / 1000));
+        return '<div class="pet"><span><strong>' + heroe(p.id).nombre + '</strong> pide unirse · ' + seg + ' s</span><button class="btn" data-cmd="aceptar" data-id="' + p.id + '">Aceptar</button><button class="btn" data-cmd="rechazar" data-id="' + p.id + '">Rechazar</button></div>';
+      }).join('');
+      est = '<strong>En preparación · política «' + S.conv.pol + '»</strong>Líder: ' + heroe(S.conv.lider).nombre + '. Integrantes: ' + S.conv.integrantes.map(function (i) { return heroe(i).nombre + (S.fuera[i] ? ' (fuera)' : ''); }).join(', ') + '. Nadie ha salido; las escuadras siguen en el campamento.' + pets;
+      document.getElementById('c-estado').className = 'result';
+    } else {
+      est = '<strong>Sin ejército en preparación</strong>Cualquiera de los tres de la Facción A puede convocar uno.';
+      document.getElementById('c-estado').className = 'result';
+    }
+    document.getElementById('c-estado').innerHTML = est;
+  }
+  document.getElementById('p-conv').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-cmd]'); if (!b) return;
+    accion(b.getAttribute('data-cmd'), b.getAttribute('data-id'));
+  });
+  document.getElementById('c-reset').addEventListener('click', function () { nuevo(); render(); });
+  setInterval(function () {
+    if (!S.conv || !S.conv.peticiones.length) return;
+    S.conv.peticiones = S.conv.peticiones.filter(function (p) { return Date.now() < p.expira; });
+    if (clavePeticiones() !== lastKey) render(); else pintarEstado();
+  }, 500);
+  render();
+})();
+</script>
