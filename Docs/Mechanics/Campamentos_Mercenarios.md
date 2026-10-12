@@ -1,0 +1,241 @@
+# Campamentos de mercenarios
+
+## 1. Alcance y fuentes
+
+Un campamento de mercenarios es un **enclave neutral** del mundo abierto: sin Facción, sin zona de influencia, que no crece ni desaparece y al que se puede entrar, residir, comprar, reclutar y refundar. Su mecánica está repartida en varios documentos; este es el **índice** de todas
+ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **población de reclutas**, el **reclutamiento**, la **tropa prestada** y la **planta** del campamento.
+
+- **Verificado contra:** `6a71770` (2026-10-12).
+- **Fuentes de lo nuevo:** `engine/reclutamientoMercenario.ts`, `engine/layoutCampamento.ts`, `session/proyecciones/escenaCampamento.ts`, `session/comandos/mercenarios.ts` (`reclutarEnCampamento`, `pedirPrestamo`, `reponerPrestamo`, `exigirEn`), `engine/simulation.ts` (`sinPrestamosAjenos`, paso 23 del tick).
+- **Canon:** [`Docs/Game/1_Sistema_de_Mundo_y_Territorio.md`](../Game/1_Sistema_de_Mundo_y_Territorio.md) 1.9b, Doc 2.5 (residencia), Doc 5.8 (reclutar).
+
+## 2. Modelo de datos (`estado.campamentosMercenarios`)
+
+| Campo | Significado |
+|---|---|
+| `id` | `mercenarios-{i}` (orden de aceptación al colocarlos). |
+| `posicion` | Punto en tierra firme; pegado a un bosque si lo hay cerca (Generación del mundo §11). |
+| `origen` | Variante de aspecto `0‥MERCENARIOS.origenes−1`; solo cambia cómo se ve. |
+| `edificios` | `[taberna, vivienda ×10, mercado, un militar]` (barracón, galería de tiro o caballerizas, elegido por la posición). Fijo: no se construye. |
+| `residentesIds` | Héroes que residen aquí (cualquier Facción, sin límite, aunque su Facción tenga plazas). |
+| `eligieronComoInicial` | Cuántos héroes lo eligieron al nacer (solo crece). |
+| `poblacion`, `poblacionEn` | Reclutas disponibles en ese instante (§4). |
+| `mercado` | Stock en venta ([`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9). |
+| `fondos` | Fondo de refundación por héroe ([`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §9). |
+| `bandidosEn?` | Cuándo puede aparecer el siguiente campamento de bandidos de su anillo ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §13). |
+| `creadoEn` | Instante de la partida en que se colocó (tick 0). |
+
+## 3. Dónde está cada cosa
+
+| Aspecto | Documento |
+|---|---|
+| **Colocación** (puntos al azar, separación, pegado al bosque, ficha) | `Generacion_Del_Mundo.md` §11 |
+| **Alijos** a su alrededor, abrirlos | `Generacion_Del_Mundo.md` §12 |
+| **Bandidos del anillo** (cuántos, cuándo) | `Generacion_Del_Mundo.md` §13 |
+| **Crear el héroe dentro**, residir, el huérfano que se acoge, ruina de una plaza | `Heroe_Y_Tropa.md` §3; [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (residencia) |
+| **Entrar, salir**, retomar la columna aparcada, ración gratis al salir | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §5; `Movimiento_Ejercitos.md` §3.3 |
+| **Repostar** víveres gratis (cualquiera) | `Comercio_Caravanas.md` §9.2b |
+| **Mercado** (qué vende, comprar, reponer), almacén personal | `Comercio_Caravanas.md` §9 |
+| **Refundar** (fondo, aportar, comprar la caravana) | `Fundacion_Y_Refundacion.md` §9 |
+| **Tecnología propia** del campamento (cuándo desbloquea cada una) | [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) |
+| **Aedas**, taberna e intel (Miradas, Informes) | `Tecnologia_Aedas.md`; [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) |
+| **Protección** (a `radioProteccion` nadie inicia un combate) | [`Combate.md`](Combate.md) §2 |
+| **Reclutar**, **población**, **tropa prestada**, **planta** | este documento |
+
+## 4. Población y reclutas
+
+```
+tope(c)      = (nº de viviendas en c.edificios) × MERCENARIOS.poblacionPorVivienda          ; 10 viviendas × 10 = 100
+actual(c, t) = min( tope(c),  c.poblacion + horas(t − c.poblacionEn) × MERCENARIOS.poblacionPorHora )
+               horas = max(0, t − poblacionEn) / 60 min
+```
+
+La población **no se escribe cada tick**: lo guardado es el valor y el instante, y la cantidad de ahora se calcula al mirar. Nace llena (`poblacion = tope`). Al reclutar se guarda `poblacion = actual − cantidad` y `poblacionEn = ahora`. No come ni cuesta mantenimiento; añadir viviendas al layout subiría el tope sin tocar nada más.
+
+## 5. Reclutar en el campamento (`reclutarEnCampamento`)
+
+Solo **donde se reside**, y estando en él: dentro, o con la columna a la puerta (`exigirEn`: `ubicacion = mercenarios` en ese campamento, o la columna a `≤ radioPuerta`; si no, `campamento.lejos`). Comando `{ tropaId, pagarCon? }` con `pagarCon ∈ almacenPersonal (por defecto) | carro`.
+
+### 5.1 Qué se puede reclutar (`tropasDelCampamento`)
+
+Una tropa del catálogo `TROPAS_RECLUTABLES` está disponible si **todas** se cumplen:
+
+1. Su edificio existe en el campamento: `barracon`, `galeriaDeTiro` o `caballerizas` (el Centro Urbano no existe aquí, así que **la leva de arranque no se recluta**) y el campamento lo tiene en `edificios`.
+2. `tropa.nivelRequerido ≤ MERCENARIOS.nivelEdificios` (3: todas sus tropas, limitadas por la tecnología).
+3. Su `tecnologia` está en las **tecnologías del campamento** (`tecnologiasDelCampamento`): las de arranque siempre; las demás, cuando la tiene al menos `MERCENARIOS.tecnologia.porcentajeFacciones` de las Facciones humanas **vivas** (las que conservan algún asentamiento; los bots cuentan igual) **o** han pasado `horasTrasLaPrimera` desde que la primera la desbloqueó, lo que llegue antes.
+   Una tecnología que nadie ha desbloqueado por hito no está; sin Facciones vivas manda solo el plazo. Detalle en [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md).
+
+### 5.2 El precio (`precioPorSoldado`)
+
+```
+base     = RECLUTAMIENTO_ORO_POR_ESCALON[escalón] + (caballos ?? 0) × ORO_POR_CABALLO + (Σ unidades de equipo de tropa.costoEquipo) × MERCENARIOS.valorEquipoEnOro
+conRecargo = base × MERCENARIOS.recargo × factorComisionPorReputacion(Facción)       ; la mala reputación (≤ −40) lo multiplica por 1,5
+precio   = conRecargo                                    si la Facción tiene asentamientos (o el héroe no tiene Facción)
+         = conRecargo × MERCENARIOS.descuentoSinAsentamientos   si la Facción no tiene ninguno
+oro total = ceil(precio × cantidad)
+```
+
+El campamento **cobra todo en oro** (no recibe equipo fabricado): cada unidad de equipo vale `valorEquipoEnOro`. Para el héroe sin Facción no hay recargo por reputación ni descuento.
+
+### 5.3 Condiciones y efecto, en orden
+
+Todas lanzan `MercenariosInvalidoError`:
+
+1. Reside en un campamento («solo se recluta en el campamento donde se reside») y el héroe existe.
+2. La tropa está disponible (§5.1).
+3. **Una escuadra por tropa**: si ya tiene la suya (no prestada) y no es reponible aquí (campamento, o columna a la puerta del campamento; nunca escolta ni fuera), rechaza.
+4. `cantidad = unidadesPorDefecto − (existente?.cantidad ?? 0)`; si ≤ 0, ya está al tope.
+5. `actual(campamento) ≥ cantidad` («no tiene reclutas suficientes»).
+6. **Pago**: con `almacenPersonal`, `heroe.almacenPersonal.oro ≥ oro`; con `carro`, debe ser el Líder de una columna a `≤ radioPuerta` del campamento y llevar el oro en el carro. El oro se descuenta (la clave se borra si queda en 0).
+
+Efecto: si la escuadra existe, `cantidad +=` (moral, nivel y experiencia no cambian); si no, nace `escuadron-{campamento.id}-{n}` en `contenedor: campamento` con la progresión inicial y `moral 100`.
+**Se une a la columna**: si es nueva y su Líder tiene una columna a la puerta y la escuadra **cabe en su Liderazgo** contando lo que ya lleva fuera del campamento (`puedeLlevar(héroe, [fuera + nueva])`), nace directamente en esa columna (`contenedor: ejercito`, y se añade a `escuadronIds`) para no obligarle a entrar y volver a salir. Una escuadra que se repone no se mueve.
+`poblacion = actual − cantidad`, `poblacionEn = ahora`. Evento `mercenarios.reclutado { campamentoId, heroeId, tropaId, cantidad, oro, seUne }`. Resultado `{ cantidad, oro, seUne }`.
+A diferencia de reclutar en una plaza, **no cuenta contadores de tecnología** y **no exige reserva de trigo ni población de plaza**.
+
+## 6. La tropa prestada
+
+Gratis, para **quien reside** en el campamento, para aprender a usar tropa antes de tener la propia.
+
+- **`pedirPrestamo { tropaIds }`** (estando en su campamento): al menos una; solo **leva comunal** (`tropa.tecnologia = leva_comunal`: milicia de lanceros, leñadores, granjeros; una, dos o las tres, sin repetir ids); rechaza una tropa que ya tiene prestada. Crea por cada una `prestada-{héroe}-{tropaId}` completa (`unidadesPorDefecto`), `moral 100`, en `contenedor: campamento`, con `prestada: { campamentoId }`. Evento `mercenarios.prestamo`.
+- **No es tropa del héroe**: no gana experiencia (`conExperiencia` la deja igual), no cuenta para «una escuadra por tropa», no come mientras vive en el campamento (la ración es de la guarnición/campamento de plazas).
+- **`reponerPrestamo`**: repone **gratis** hasta su tamaño completo (`tamanoPrestada` = `unidadesPorDefecto` de su tropa) las prestadas que estén en el campamento o en la columna a su puerta; rechaza si no hay nada que reponer. Evento `mercenarios.prestamo_repuesto { heroeId, repuestas }`.
+- **Retirada** (`sinPrestamosAjenos`, paso 23 del tick): toda escuadra con `prestada` cuyo campamento ya no tiene al héroe en `residentesIds` se **retira** de donde esté —del héroe, de su columna (`escuadronIds`) y de una escolta (`escoltaIds`)—, narrada con `mercenarios.prestamo_retirado { heroeId, campamentoId, escuadras[{ escuadronId, tropaId, cantidad }] }` (asentamiento `''` = de nadie; solo lo recibe el héroe del payload). Sin ella, al jugador le desaparecían las escuadras sin explicación.
+
+## 7. La planta del campamento (`layoutCampamento`)
+
+Presentación pura: ningún número cambia lo que hace el campamento. Reutiliza el motor de trazado de asentamientos ([`Trazado_Urbano.md`](Trazado_Urbano.md)) **una sola vez**: el campamento no crece, no se mantiene, no se degrada ni sube de nivel. Función pura de `{ id, edificios }`: no se guarda y la misma entidad siempre da lo mismo.
+
+```
+perfil = resolverPerfil(id)                 ← el id del campamento es la semilla de su planta (cada uno tiene la suya)
+si hay taberna: se coloca un «centroUrbano» en (0, 0)         ← la taberna es el ancla principal
+para tipo en [mercado, barracón, galería de tiro, caballerizas, vivienda]:       ← en este orden
+    para cada edificio de ese tipo del campamento:
+        asegurarAncla(tipo): igual que la construcción pero sin cupo de nivel; si hace falta, crea un ancla nueva (plaza de armas, plaza, pozo, parque…)
+        sitioParaTipo({ radioPotencial: MERCENARIOS.layout.radioLocal }, …)  → se coloca en el sitio que da el motor
+        si es el mercado: coloca sus puestos de nivel MERCENARIOS.layout.nivelMercado (MERCADO_PUESTOS_POR_NIVEL[1] = [1,1,2,2,3] → 5 puestos)
+trazado = trazadoParaAsentamiento(sin recintos) → huellas y calles
+empalizada = un anillo de una celda a una celda de margen alrededor de todas las huellas y calles, con la puerta de dos celdas al sur
+```
+
+Resultado: `elementos` (edificios y, de relleno, `puestoMercado`, `plazaDeArmas`, `plaza`, `pozo`, `parque`), `calles` y `empalizada { muro, puerta }`. La empalizada es **decorativa**: dentro no hay combate.
+Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez viviendas) da 19 elementos —1 taberna, 1 mercado, 5 puestos, 1 plaza de armas, 1 barracón y 10 viviendas—, 23 tramos de calle y una puerta de 6×3 unidades.
+**Para Conquest** (`escenaDeCampamento`): el mismo trazado en celdas (`unidadesPorCelda = REJILLA_ASENTAMIENTO.tamanoCelda`): `{ campamentoId, origen, layoutVersion: LAYOUT_VERSION, unidadesPorCelda, edificios[{ edificioId, tipo, posicion (centro), ancho, alto }], calles[], empalizada[celdas muro/puerta] }`.
+
+## 8. Quién puede qué dentro
+
+| Acción | Quién | Dónde |
+|---|---|---|
+| Residir | cualquier héroe, sin límite, cuesta el cooldown de residencia | `residirEnCampamento`, no exige estar allí |
+| Entrar / salir | cualquiera con columna a la puerta (propio o ajeno) | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §5 |
+| Reclutar, tropa prestada, comprar con el almacén personal | **solo el residente** | dentro o con la columna a la puerta |
+| Comprar de visita | cualquiera, con el oro del carro (sin trigo) | `Comercio_Caravanas.md` §9.2 |
+| Repostar víveres | cualquiera, gratis | `Comercio_Caravanas.md` §9.2b |
+| Aportar al fondo de refundación | ciudadano de una Facción **sin plazas** | `Fundacion_Y_Refundacion.md` §9 |
+| Intel de la taberna | cualquier héroe **de una Facción** | `Niebla_De_Guerra.md` |
+| Iniciar un combate a `radioProteccion` (60) | **nadie** (ni jugadores ni bandidos) | `Combate.md` §2 |
+| Abrir un alijo | héroe de una Facción **sin asentamientos** o sin Facción | `Generacion_Del_Mundo.md` §12 |
+
+## 9. Parámetros
+
+<!-- parametros:MERCENARIOS -->
+```json
+{
+  "separacion": 900,
+  "margenBorde": 150,
+  "intentosColocacion": 2000,
+  "salSemilla": 1835364963,
+  "racion": {
+    "cadaMinutos": 30
+  },
+  "radioExclusionFundar": 100,
+  "radioProteccion": 60,
+  "origenes": 3,
+  "edificiosFijos": [
+    "taberna",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "mercado"
+  ],
+  "edificiosMilitares": [
+    "barracon",
+    "galeriaDeTiro",
+    "caballerizas"
+  ],
+  "layout": {
+    "radioLocal": 60,
+    "nivelMercado": 1
+  },
+  "margenBosque": 100,
+  "pegadoAlBorde": 10,
+  "poblacionPorVivienda": 10,
+  "poblacionPorHora": 10,
+  "recargo": 1.5,
+  "descuentoSinAsentamientos": 0.6,
+  "nivelEdificios": 3,
+  "valorEquipoEnOro": 8,
+  "tecnologia": {
+    "porcentajeFacciones": 0.5,
+    "horasTrasLaPrimera": 72
+  },
+  "mercado": {
+    "cadaHoras": 3,
+    "proporcionRepone": 0.03,
+    "topePorBien": 300,
+    "stockInicial": 100,
+    "pilas": {
+      "madera": 300,
+      "piedra": 60,
+      "trigo": 300
+    },
+    "cupoDiario": {
+      "madera": 60,
+      "piedra": 10
+    },
+    "margen": 1.3
+  },
+  "refundacion": {
+    "porcentajeCoste": 0.4
+  }
+}
+```
+<!-- /parametros -->
+
+(`RECLUTAMIENTO_ORO_POR_ESCALON` y `ORO_POR_CABALLO` en [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §12; `REPUTACION.umbralBajoParaComision` (−40) y `factorComisionPorReputacionBaja` (1,5) en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md); `MERCADO_PUESTOS_POR_NIVEL` en `constants.ts`.)
+
+## 10. Invariantes
+
+| Invariante | Test que lo vigila |
+|---|---|
+| Colocación: separación mínima, lejos del borde, misma seed ⇒ mismos, nunca sobre agua, pegados a un bosque | `engine/__tests__/mercenarios.test.ts` |
+| Población: el tope son sus viviendas por lo que da cada una y recupera por hora; más viviendas, más tope; lo gastado se recupera sin ningún tick | `engine/__tests__/reclutamientoMercenario.test.ts` |
+| Qué se recluta: edificio y tecnología; la tecnología del campamento por porcentaje de Facciones o por plazo; sin Facciones manda el plazo | `reclutamientoMercenario.test.ts` |
+| Precio: oro del escalón, caballos y equipo × recargo; la mala reputación lo encarece; sin asentamientos lo abarata | `reclutamientoMercenario.test.ts` |
+| Reclutar: crea la escuadra, cobra del almacén personal o del carro y gasta población; repone solo lo que falta; se une a la columna si cabe en el Liderazgo (contando lo que ya lleva fuera); rechaza no residente, tropa que no ofrece, sin oro, sin reclutas, al tope | `reclutamientoMercenario.test.ts` |
+| Tropa prestada: se pide gratis una, dos o las tres, no gana experiencia; se repone gratis; al dejar de residir se retira, también de la columna, con evento | `session/__tests__/entrarSalirCampamento.test.ts`, `reclutamientoMercenario.test.ts` |
+| Planta: todo colocado, con calles, sin solapes y dentro de la empalizada; determinista y distinta por campamento | `engine/__tests__/layoutCampamento.test.ts`, `contratos/v1/__tests__/contratos.test.ts` |
+| Residir y reubicar de una ruina | `session/__tests__/residenciaMercenaria.test.ts` |
+| Mercado de campamento | `engine/__tests__/mercadoMercenario.test.ts` |
+
+## 11. Casos límite y decisiones que parecen raras
+
+- **La población gastada no se paga con tiempo de tick**: se recupera al mirar, así que un campamento sin visitas durante días está lleno sin que haya corrido nada.
+- **Reclutar aquí no pide reserva de trigo ni población de plaza**: el campamento cobra todo en oro y gasta solo sus reclutas; por eso es la vía para recomponerse de quien no alcanza una tropa por edificio o materiales.
+- **Una Facción sin plazas paga menos** (`descuentoSinAsentamientos`) **y una de mala reputación paga más** (×1,5): los dos factores se multiplican.
+- **La escuadra reclutada puede nacer ya en la columna** si cabe en el Liderazgo; si no cabe, nace en el campamento aunque el héroe tenga la columna a la puerta.
+- **«Una escuadra por tropa»** cuenta también la que esté en la columna a la puerta (se repone allí); la prestada nunca cuenta.
+- **El préstamo dura lo que dura la residencia**: mudarse (o quedarse sin casa) retira la tropa prestada en el tick siguiente, aunque esté en una columna lejos.
+- **El Centro Urbano no existe en el campamento**: la tropa de leva de arranque que sale de él no se recluta aquí (solo se **presta**).
+- **La empalizada no defiende**: es decorado; la protección real es el radio `radioProteccion`, donde nadie inicia combates.
+
+## 12. Divergencias
+
+Ninguna abierta.

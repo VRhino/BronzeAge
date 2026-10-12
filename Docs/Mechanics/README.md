@@ -61,6 +61,11 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) | ✅ 2026-10-12 | el héroe (crear, progresión, monedas, herido), Liderazgo, loadouts, guarnición y su cupo, orden de escuadras, la escuadra (modelo, vistas, nivel, chatarra) y reclutar tropa en una plaza (condiciones, coste, efecto) |
 | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) | ✅ 2026-10-12 | Caravana de Fundación (coste, lanzar desde una plaza, fundar, desarmar, caducar y volver sola, devolver), nombres de ciudades y refundación desde un campamento (fondo, aportar, retirar, comprar) |
 | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) | ✅ 2026-10-12 | dónde está un héroe (los cuatro sitios y el diagrama de transiciones), salir/entrar de plazas y campamentos, guarnecer, marchar, conectarse/desconectarse, fijar la puerta y vetar, y la convocatoria (ejército en preparación: convocar, unirse, petición, partir todo-o-nada) |
+| [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md) | ✅ 2026-10-12 | índice de todo lo del campamento (dónde está cada cosa) y lo nuevo: población de reclutas, reclutar y su precio, tropa prestada y su retirada, y la planta |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 
 No queda ningún documento pendiente de la lista inicial.
+
+## Artefactos visuales
+
+Cada documento nuevo lleva un artefacto HTML interactivo en [`artefactos/`](artefactos/) (también publicado como página privada): [`presencia_y_convocatoria.html`](artefactos/presencia_y_convocatoria.html) y [`campamentos_mercenarios.html`](artefactos/campamentos_mercenarios.html). Los datos de los que salen de código (la planta, los precios) se generan con el motor; las cifras sueltas llevan la fecha en el pie.
