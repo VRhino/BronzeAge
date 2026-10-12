@@ -517,6 +517,16 @@ export function cancelarBatalla(estado: GameSessionState, batalla: Batalla): Gam
   return cerrarSinResultado(estado, batalla, 'cancelada');
 }
 
+/**
+ * Suelta ya el candado de las escuadras de las batallas vencidas, sin esperar al tick que las cierra (doc 01 §15: los
+ * vencimientos se comprueban justo antes de validar una acción que use una escuadra con candado). El estado de la
+ * batalla no cambia: eso, y su evento, siguen siendo del tick.
+ */
+export function sinCandadosVencidos(estado: GameSessionState, ahora: Instante): GameSessionState {
+  const ids = estado.batallas.filter((b) => ACTIVAS.has(b.estado) && ahora >= b.expiraEn).flatMap(escuadrasConDueno);
+  return ids.length === 0 ? estado : { ...estado, heroes: conReserva(estado.heroes, ids, undefined) };
+}
+
 /** Pasa a `fallida` las que vencieron su plazo: nadie la asignó, nadie la empezó o el resultado no llegó a tiempo. */
 export function vencerBatallas(estado: GameSessionState, ahora: Instante): { estado: GameSessionState; vencidas: Batalla[] } {
   const vencidas = estado.batallas.filter((b) => ACTIVAS.has(b.estado) && ahora >= b.expiraEn);

@@ -8,6 +8,7 @@ import {
   eventosDeBatalla,
   registrarAsignacion as asignar,
   registrarTokens as sumarTokens,
+  sinCandadosVencidos,
   tocaLoBloqueado,
   unirseABatalla as unirse,
   type Batalla,
@@ -139,6 +140,8 @@ export function conCandadoDeBatalla<T extends Record<string, ManejadorComando<an
   const conCandado =
     (manejador: ManejadorComando<unknown, unknown>): ManejadorComando<unknown, unknown> =>
     (estado, mapa, ctx, params) =>
-      tocaLoBloqueado(estado, ctx.instante, ctx.actor, params) ? rechazo(estado, CODIGOS_ERROR.batallaBloqueo) : manejador(estado, mapa, ctx, params);
+      tocaLoBloqueado(estado, ctx.instante, ctx.actor, params)
+        ? rechazo(estado, CODIGOS_ERROR.batallaBloqueo)
+        : manejador(sinCandadosVencidos(estado, ctx.instante), mapa, ctx, params);
   return Object.fromEntries(Object.entries(manejadores).map(([tipo, m]) => [tipo, libres.includes(tipo) ? m : conCandado(m)])) as T;
 }

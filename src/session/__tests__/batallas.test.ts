@@ -16,6 +16,7 @@ import { aplicarResultado, confirmarInicio, registrarAsignacion, registrarSalida
 import { instanteDeTick, type GeometriaAsentamientos } from '../estado';
 import { conHeroe, enPie, frenteACampamento } from './fixtures';
 import { heridosEn } from '../../engine/heroe';
+import type { Instante } from '../../domain/tiempo';
 import { SCHEMA_VERSION, type BattleResult } from '../../contratos/v1/dto';
 import { BATALLA, CAMPAMENTOS_BANDIDOS, MOVIMIENTO, REPUTACION } from '../../constants';
 
@@ -90,6 +91,35 @@ describe('un recién llegado sin Facción ataca a los bandidos', () => {
     const ticket = sinBandera.getState().batallas[0]!.ticket;
     expect(ticket.bandos.atacante.faccionId).toBeNull();
     expect(erroresDe('BattleTicket', ticket)).toEqual([]);
+  });
+});
+
+describe('el candado de una escuadra no sobrevive al plazo de su batalla (doc 01 §15)', () => {
+  it('vencida pero aún sin cerrar, la escuadra se puede usar: el plazo se comprueba al validar la acción, no al cerrar', () => {
+    const { sesion, fundador } = frenteACampamento();
+    atacarCampamento(sesion, fundador);
+    const squadId = reservadas(sesion, fundador)[0]!.id;
+    const payload = sesion.exportar();
+    const marcar = <E extends { id: string }>(e: E) => (e.id === squadId ? { ...e, enGuarnicion: true } : e);
+    const vencida = (expiraEn: Instante) =>
+      GameSession.importar(
+        {
+          ...payload,
+          state: {
+            ...payload.state,
+            heroes: payload.state.heroes.map((h) => ({ ...h, escuadrones: h.escuadrones.map(marcar) })),
+            batallas: payload.state.batallas.map((b) => ({ ...b, expiraEn })),
+          },
+        },
+        { batallasEnUnity: true }
+      );
+    const retirar = (s: GameSession) => s.ejecutar(REGISTRO_COMANDOS.retirarGuarnicion, { squadId }, { actor: fundador });
+
+    expect(retirar(vencida(payload.state.batallas[0]!.expiraEn)).ok, 'dentro de plazo sigue en la batalla').toBe(false);
+    const ahora = instanteDeTick(payload.state.tick);
+    const libre = vencida(ahora);
+    expect(retirar(libre).ok, 'vencida').toBe(true);
+    expect(libre.getState().batallas[0]!.estado, 'la cierra el tick, con su evento').toBe('convocando');
   });
 });
 

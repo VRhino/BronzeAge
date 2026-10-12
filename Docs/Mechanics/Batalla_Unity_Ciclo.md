@@ -116,7 +116,7 @@ battleId = a '-' b[0..4) '-' b[4..8) '-' c[0..4) '-' c[4..16)
 
 ## 5. Lo bloqueado y el candado de comandos
 
-**Una batalla activa** es la que está `convocando`, `asignada` o `en_curso` **y** dentro de plazo (`ahora < expiraEn`): una vencida deja de bloquear ya, aunque la cierre el siguiente tick.
+**Una batalla activa** es la que está `convocando`, `asignada` o `en_curso` **y** dentro de plazo (`ahora < expiraEn`): una vencida deja de bloquear ya, aunque la cierre el siguiente tick. Lo mismo con el candado de las escuadras: antes de ejecutar cualquier comando con candado, `sinCandadosVencidos(estado, ahora)` suelta el `reservaBatalla` de las escuadras de las batallas vencidas (sin cerrarlas ni narrar nada: eso es del tick), así que reponer o guarnecer no dependen de que el tick haya pasado.
 
 `bloqueosDe(estado, ahora)` reúne, de las activas: los **héroes que combaten** (`participacionesDe`), los ids de `bloqueo.ejercitoIds`, `caravanaIds`, el `asentamientoId` asediado y el `campamentoId` atacado.
 
@@ -325,6 +325,7 @@ Los que intervienen y viven en otro documento: `LOGISTICA.radioEncuentro` (dista
 | Conquista, captura, destrucción de campamento, carro, chatarra y XP de Facción | `batallas.test.ts` |
 | Los eventos del ciclo no llevan tokens, escuadras ni listas de héroes; sí el recuento por bando | `session/__tests__/canalDeBatalla.test.ts` |
 | Los eventos de una batalla llegan por el cursor a quien combate en ella aunque no tenga plaza | `batallas.test.ts` |
+| El candado de una escuadra no sobrevive al plazo de su batalla, aunque el tick aún no la haya cerrado | `batallas.test.ts` |
 | Quien puede seguir una batalla: quien combate, o la ve; no un forastero | `canalDeBatalla.test.ts` |
 
 ## 13. Casos límite y decisiones que parecen raras
@@ -337,25 +338,25 @@ Los que intervienen y viven en otro documento: `LOGISTICA.radioEncuentro` (dista
 - **Un `derrotado: false` explícito protege** al perdedor de la herida; quien no lo trae, se hiere con su bando.
 - **Un mensaje a una batalla cerrada** responde `404` (asignación, inicio, tokens, salida) o `409` (resultado), salvo el `resultado` idéntico de una `aplicada`, que responde bien.
 - **La Facción de una columna sin bandera** es `null` en el ticket y en `faccionAtacanteId`/`faccionDefensoraId`; una conquista con atacante sin Facción **no ocurre**.
-- **El plazo vencido suelta la columna al instante, pero las escuadras conservan su candado hasta el tick siguiente** (`bloqueosDe` mira el plazo; `reservaBatalla` solo lo suelta `vencerBatallas`): hasta un tick de mundo no se pueden reponer ni guarnecer (§15).
+- **El plazo vencido suelta todo al instante**, columna y escuadras (`bloqueosDe` mira el plazo; `sinCandadosVencidos` suelta el `reservaBatalla` al validar cada comando). El tick solo cierra la batalla (`fallida`) y la narra. Con el reloj del motor (los comandos corren en el instante del tick y el tick cierra antes) esa ventana no llega a verse; la comprobación perezosa lo garantiza sin depender de él.
 - **`estado.batallas` no se purga**: las cerradas se quedan (hace falta `aplicada` para la idempotencia y el ticket es «recuperable en cualquier momento»); crece con cada batalla de Unity (§15).
 - **El `battleId` solo es único entre partidas si el `gameId` lo es**: sale de un resumen de 64 bits del `gameId` más el contador; no hay aleatoriedad.
 - **La salida del mundo espera**: aunque el héroe lleve su `desconectaEn` cumplido, no sale mientras combate; la hace el primer tick tras acabar. Si Conquest lo da por desconectado, lo saca de la batalla con una `SalidaBatalla` (`desconexion`, §8.4) y entonces sale en el tick siguiente.
 
 ## 14. Lo que se corrigió al documentar (2026-10-12)
 
-El ciclo se escribió antes de varias cosas que han cambiado (columnas sin bandera, presencia, canales personales). Al contrastarlo con el contrato y el modelo de datos salieron cuatro desajustes **del código**, ya corregidos con su test:
+El ciclo se escribió antes de varias cosas que han cambiado (columnas sin bandera, presencia, canales personales). Al contrastarlo con el contrato y el modelo de datos salieron cinco desajustes **del código**, ya corregidos con su test:
 
 1. **Un recién llegado sin Facción que atacaba un campamento de bandidos generaba un ticket inválido.** Su columna lleva la Facción vacía (`''`) y el bando salía con `faccionId: ''`; el contrato exige un id no vacío o `null`. Ahora es `null` (`bandoDeColumna`).
 2. **Cerrar el cliente en plena batalla no se anotaba.** `desconectarse` llevaba el candado de batalla y se rechazaba con `batalla.bloqueado`; el tick ya sabía esperar al fin de la batalla (D33b) pero la petición nunca llegaba a registrarse, así que el héroe se quedaba «conectado» para siempre. `conectarse` tampoco podía anular la petición. Ahora los dos están libres de candado.
 3. **Los eventos de una batalla no llegaban por el cursor a quien no tiene plaza** (el caso más habitual de quien ataca a los bandidos al llegar): el evento va a la plaza de origen de su columna, que para una salida de campamento es `''`, y no lleva lista de héroes. Ahora el cursor incluye los de las batallas en que combate.
 4. **Código muerto**: `faccionesEnBatalla` (la IA de Facciones NPC «no gobierna mientras dura») no la usaba nadie desde que no hay Facciones NPC en el motor; se borra con su test.
+5. **El candado de las escuadras de una batalla vencida lo soltaba solo el tick** (el contrato pide comprobar el plazo justo antes de validar la acción). Ahora lo suelta `sinCandadosVencidos` al validar cada comando con candado, sin esperar al tick. Con el reloj actual la ventana no se llegaba a ver, pero un servidor sin tick (la reconstrucción) sí la habría tenido.
 
 ## 15. Divergencias
 
 **Abiertas** (a decidir por el autor, también en [`Divergencias.md`](Divergencias.md)):
 
-- **El candado de las escuadras tras un plazo vencido.** El contrato (doc 01 §15) pide comprobar los vencimientos «justo antes de validar cualquier acción que quiera usar una escuadra con candado», para que una batalla vencida no deje una escuadra bloqueada. El código la libera en el **siguiente tick**: hasta un minuto de mundo, reponer o guarnecer se rechazan por una batalla que ya no está activa.
 - **`estado.batallas` crece sin límite.** Cada batalla de Unity cerrada se queda en el estado y en el snapshot (un asedio lleva el mapa de la plaza congelado). Falta decidir cuánto se conserva (la idempotencia del resultado y el `GET …/ticket` «recuperable en cualquier momento» piden que una cerrada siga unos minutos).
 
 **Pendientes de Conquest** (no son divergencias del servidor; el contrato las anota como decididas):
