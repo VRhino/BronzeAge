@@ -123,6 +123,7 @@ import {
   type GeometriaAsentamientos,
 } from '../estado';
 import { batallasActivas, batallaVisible, bloqueosDe, type BatallaVisible } from '../batallas';
+import type { LadoId } from '../../contratos/v1/dto';
 
 /**
  * Un ejército AJENO tal como se ve desde fuera (Doc 5.12.7): dónde está, de qué Facción es y cuántos
@@ -685,8 +686,7 @@ function faccionDe(estado: GameSessionState, heroeId: string): string | null {
 /** Lo que "propio" significa para un jugador (Slice 1: su Facción, nada de rivales) — factorizado para que
  * `proyectarParaJugador` y `eventosDominioParaJugador` (cursor, Fase C13) usen exactamente el mismo criterio,
  * en vez de que cada uno recalcule su propia versión y puedan divergir. */
-function propioDeJugador(estado: GameSessionState, heroeId: string) {
-  const faccionId = faccionDe(estado, heroeId);
+function propioDeJugador(estado: GameSessionState, faccionId: string | null) {
   const asentamientosPropios = estado.asentamientos.filter((a) => a.faccionId === faccionId);
   const idsPropios = new Set(asentamientosPropios.map((a) => a.id));
   return { faccionId, asentamientosPropios, esPropio: (asentamientoId: string) => idsPropios.has(asentamientoId) };
@@ -954,28 +954,35 @@ export function campamentosParaElegir(estado: GameSessionState) {
   }));
 }
 
-export function proyectarParaJugador(
-  estado: GameSessionState,
-  heroeId: string,
-  geometria: GeometriaAsentamientos
-): Omit<ProyeccionJugador, 'preciosReferencia' | 'produccionDeAsentamiento' | 'ascensoDeAsentamiento'> {
-  const { faccionId, asentamientosPropios, esPropio } = propioDeJugador(estado, heroeId);
+/**
+ * Desde dónde se mira el mapa (contrato 03 §6.2): lo que decide qué ve el jugador del mundo, que es de su Facción y de los que comparten su
+ * vista, no suyo. `clave` agrupa a quienes ven exactamente lo mismo: `f:<facción>|<aliados con visión compartida>` para un miembro de una Facción,
+ * y `h:<héroe>` para quien tiene algo que solo es suyo y no se puede compartir sin filtrarlo: no tener Facción, ir en una columna que no es de
+ * la Facción, o haber explorado por su cuenta más de lo que sabe la Facción (`exploracionPersonal`).
+ */
+export interface PerspectivaDeMapa {
+  clave: string;
+  faccionId: string | null;
+  /** Las columnas desde las que se ve: las de la Facción, más las suyas si es huérfano (ver `clave`). */
+  ejercitosPropios: readonly Ejercito[];
+  /** Lo explorado alguna vez que sirve de base a la niebla (la memoria de la Facción, más lo explorado por su cuenta si no es compartible). */
+  explorado: string;
+  /** Facciones con visión compartida con la propia (alianza, señor, vasallo): sus ojos suman a lo visible ahora. */
+  faccionesQueComparten: ReadonlySet<string>;
+}
 
-  // La plaza que el jugador PISA, que es la única cuyo interior viaja (Doc 1.10.1). Se exige además que sea
-  // de su Facción: dentro de una plaza ajena solo se ve la capa pública (Doc 1.10.4), y qué lleva esa capa
-  // es una decisión que el diseño todavía no ha tomado — hasta que la tome, no enseñamos de más.
+/** Un ejército es "propio" si es de tu Facción, si VAS DENTRO, o si llevas tropa tuya en él (ver la nota de `proyectarMapa`). */
+function esColumnaDe(e: Ejercito, heroeId: string, faccionId: string | null, jugador: Heroe | undefined): boolean {
+  return (
+    (faccionId !== null && e.faccionId === faccionId) ||
+    e.participantes.some((p) => p.heroeId === heroeId) ||
+    (jugador?.escuadrones ?? []).some((esc) => esc.contenedor.tipo === 'ejercito' && esc.contenedor.ejercitoId === e.id)
+  );
+}
+
+export function perspectivaDeMapa(estado: GameSessionState, heroeId: string): PerspectivaDeMapa {
+  const faccionId = faccionDe(estado, heroeId);
   const jugador = estado.heroes.find((j) => j.id === heroeId);
-  const recordadas = jugador?.plazasRecordadas ?? {};
-  // Sin registro se DEDUCE, con la misma función que usa el alta: proyectar es LEER, y una lectura no puede
-  // escribir en el estado para darse de alta a sí misma. Y pasa de verdad — un jugador que entra en la
-  // partida y pide su pantalla antes de dar ninguna orden todavía no tiene registro; sin esto vería un mundo
-  // vacío desde dentro de su propia ciudad.
-  const ubicacion = jugador?.ubicacion ?? ubicacionDeducida(heroeId, estado.asentamientos, estado.ejercitos);
-  const dentroDe =
-    ubicacion.tipo === 'asentamiento'
-      ? asentamientosPropios.find((a) => a.id === ubicacion.asentamientoId)
-      : undefined;
-
   // Un ejército es "propio" si es de tu Facción, si VAS DENTRO, o si llevas tropa tuya en él.
   //
   // La de en medio es la que hace posible existir sin bandera, y faltaba: un recién llegado no tiene Facción
@@ -986,37 +993,60 @@ export function proyectarParaJugador(
   //
   // La tercera tampoco es redundante: un jugador huérfano (Doc 5.4) se queda sin Facción pero no sin los
   // escuadrones que iban con él.
-  const ejercitosPropios = estado.ejercitos.filter(
-    (e) =>
-      (faccionId !== null && e.faccionId === faccionId) ||
-      e.participantes.some((p) => p.heroeId === heroeId) ||
-      (jugador?.escuadrones ?? []).some((esc) => esc.contenedor.tipo === 'ejercito' && esc.contenedor.ejercitoId === e.id)
-  );
-  // Las plazas en cuya PUERTA hay una columna de este jugador. Un mercado enseña sus ofertas a quien esta
-  // dentro, y solo a ese: sin esto el mostrador (`comerciarEnPlaza`) seria inusable —habria que comprar a
-  // ciegas—, y con una lista global cualquiera podria leer los precios del mundo entero sin moverse.
-  const enElMostradorDe = new Set(
-    estado.asentamientos.filter((a) => ejercitosPropios.some((e) => enLaPuertaDe(e, a))).map((a) => a.id)
-  );
-  const zonasPropias = geometria.zonas.filter((z) => esPropio(z.asentamientoId));
-  const propios = new Set(ejercitosPropios.map((e) => e.id));
-
-  // Niebla Paso 4: un aliado (o señor/vasallo) ve lo que ves tú, EN VIVO. Sus plazas y columnas se suman a la
-  // capa "viéndolo ahora" —`seVeAhora`, avistados, la máscara `visibles`—, nunca a la memoria ni a lo
-  // explorado: al romperse la relación, `compartenVision` deja de incluir esa Facción y en la proyección
-  // siguiente lo que solo veías por ella desaparece (no queda "último conocido"). Ver `Docs/Mechanics/Niebla_De_Guerra.md` §5.2.
+  const ejercitosPropios = estado.ejercitos.filter((e) => esColumnaDe(e, heroeId, faccionId, jugador));
+  // Niebla Paso 4: un aliado (o señor/vasallo) ve lo que ves tú, EN VIVO. Sus plazas y columnas se suman a la capa "viéndolo ahora", nunca a la
+  // memoria ni a lo explorado: al romperse la relación `compartenVision` deja de incluir esa Facción y lo que solo veías por ella desaparece.
   const faccionesQueComparten =
     faccionId !== null
-      ? new Set(
-          estado.facciones
-            .filter((f) => f.id !== faccionId && compartenVision(estado.relaciones, faccionId, f.id))
-            .map((f) => f.id)
-        )
+      ? new Set(estado.facciones.filter((f) => f.id !== faccionId && compartenVision(estado.relaciones, faccionId, f.id)).map((f) => f.id))
       : new Set<string>();
+  const memoria = (faccionId !== null ? estado.memoriaPorFaccion[faccionId] : undefined) ?? MEMORIA_VACIA;
+  // El jugador ve SIEMPRE por donde ha andado él, tenga bandera o no. El tick graba ese rastro en `Jugador.exploracionPersonal` mientras su
+  // columna sea huérfana, y hay que fundirlo con la memoria de la Facción.
+  const explorado = fundirExploraciones(memoria.exploracion, jugador?.exploracionPersonal ?? SIN_EXPLORAR);
+  const compartible = faccionId !== null && ejercitosPropios.every((e) => e.faccionId === faccionId) && explorado === memoria.exploracion;
+  return {
+    clave: compartible ? `f:${faccionId}|${[...faccionesQueComparten].sort().join(',')}` : `h:${heroeId}`,
+    faccionId,
+    ejercitosPropios,
+    explorado,
+    faccionesQueComparten,
+  };
+}
+
+/** Lo del mundo que ve una perspectiva (contrato 03: `vista/mapa`). No depende del héroe, solo de su `PerspectivaDeMapa`: dos héroes con la
+ * misma `clave` obtienen exactamente lo mismo. Lo que sí es de cada héroe viaja aparte (`AjustesDeHeroe`) y se compone con esto. */
+export interface MapaProyectado {
+  mapaId: string;
+  estadoMapa: EstadoMapa;
+  facciones: Faccion[];
+  asentamientosAvistados: AsentamientoAvistado[];
+  asentamientosConocidos: FichaConocida[];
+  territorioPorEjercito: Record<string, string>;
+  exploracion: NieblaProyectada;
+  caravanasAvistadas: CaravanaAvistada[];
+  ejercitosAvistados: EjercitoAvistado[];
+  aedasAvistados: AedaAvistado[];
+  batallas: BatallaVisible[];
+  heroesVisibles: HeroePublico[];
+  nombresDeCompaneros: Record<string, string>;
+  nombresDeDirigentes: Record<string, string>;
+  relaciones: RelacionPolitica[];
+  titulos: Titulo[];
+  caminos: CaminoProyectado[];
+  campamentosBandidos: CampamentoBandido[];
+  campamentosMercenarios: CampamentoMercenarios[];
+  zonas: ZonaInfluencia[];
+  zonasFusionadas: ZonaFaccion[];
+}
+
+export function proyectarMapa(estado: GameSessionState, perspectiva: PerspectivaDeMapa, geometria: GeometriaAsentamientos): MapaProyectado {
+  const { faccionId, ejercitosPropios, faccionesQueComparten } = perspectiva;
+  const { asentamientosPropios, esPropio } = propioDeJugador(estado, faccionId);
+  const propios = new Set(ejercitosPropios.map((e) => e.id));
   const asentamientosAliados = estado.asentamientos.filter((a) => faccionesQueComparten.has(a.faccionId));
   const ejercitosAliados = estado.ejercitos.filter((e) => faccionesQueComparten.has(e.faccionId));
-  // Los ojos que cuentan para "ver ahora" = propios + aliados. Se reutiliza el mismo array cuando no hay
-  // aliados para no reasignar nada en el caso normal.
+  // Los ojos que cuentan para "ver ahora" = propios + aliados. Se reutiliza el mismo array cuando no hay aliados.
   const ojosAsent = asentamientosAliados.length > 0 ? [...asentamientosPropios, ...asentamientosAliados] : asentamientosPropios;
   const ojosEjercito = ejercitosAliados.length > 0 ? [...ejercitosPropios, ...ejercitosAliados] : ejercitosPropios;
   const tropa = indiceTropa(estado.heroes);
@@ -1024,15 +1054,12 @@ export function proyectarParaJugador(
   // Los ojos que prestan las tabernas (Doc 5.12.10): los de la Facción y los de quienes comparten su visión, en vivo y sin memoria.
   const miradasVistas = miradasActivasDe(estado.miradasIntel ?? [], new Set(faccionId !== null ? [faccionId, ...faccionesQueComparten] : []), ahora);
 
-  // La zona sale de `geometria`, que el runner ya calculó y cachea para TODOS los asentamientos: adjuntarla
-  // aquí no cuesta un cálculo más. Una plaza sin zona en la geometría (no debería pasar) viaja con el
-  // contorno vacío en vez de romper la proyección entera.
+  // La zona sale de `geometria`, que el runner ya calculó y cachea para TODOS los asentamientos. Una plaza sin zona en la geometría (no debería
+  // pasar) viaja con el contorno vacío en vez de romper la proyección entera.
   const poligonoDe = new Map(geometria.zonas.map((z) => [z.asentamientoId, z.poligono]));
-  // Lo que se ve pero no se pisa. Los propios entran aquí igual que los ajenos: se excluye SOLO la plaza en
-  // la que el jugador está, que es la única que viaja entera.
-  const susColumnas = ejercitosPropios.filter((e) => e.participantes.some((p) => p.heroeId === heroeId));
-  const avistados = estado.asentamientos
-    .filter((a) => a.id !== dentroDe?.id && seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa, miradasVistas))
+  // Lo que se ve, incluida la plaza que cada jugador pise: quitarla de su lista y darle su interior es cosa suya (`AjustesDeHeroe`).
+  const avistados: AsentamientoAvistado[] = estado.asentamientos
+    .filter((a) => seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa, miradasVistas))
     .map((a) => ({
       id: a.id,
       nombre: a.nombre,
@@ -1042,65 +1069,33 @@ export function proyectarParaJugador(
       zona: poligonoDe.get(a.id) ?? [],
       edificios: a.edificios.filter((e) => e.estado === 'activo'),
       ...(esPropio(a.id) ? { cargos: a.cargos, politicasActivas: a.politicasActivas } : {}),
-      ...(esPropio(a.id) && susColumnas.some((e) => enLaPuertaDe(e, a)) ? { almacen: a.almacen } : {}),
-      ...(recordadas[a.id] ? { interiorRecordado: recordadas[a.id] } : {}),
     }));
   const seVe = new Set(avistados.map((a) => a.id));
 
   const memoria = (faccionId !== null ? estado.memoriaPorFaccion[faccionId] : undefined) ?? MEMORIA_VACIA;
-  // El jugador ve SIEMPRE por donde ha andado él, tenga bandera o no. El tick graba ese rastro en
-  // `Jugador.exploracionPersonal` mientras su columna sea huérfana (`grabarExploracionPersonal`), y hay que
-  // fundirlo con la memoria de la Facción: un ciudadano cuya columna de aparición nunca se marcó con su
-  // bandera —`responderSolicitud` funde lo andado ANTES de entrar, pero lo de después queda solo aquí— caminaría
-  // si no por un mapa que se cierra de nuevo tras cada paso (niebla de guerra, los tres niveles).
-  const exploradoDelJugador = fundirExploraciones(memoria.exploracion, jugador?.exploracionPersonal ?? SIN_EXPLORAR);
-  // La niebla se calcula ANTES del objeto porque además de viajar es el filtro de los caminos: la misma
-  // máscara que tapa el terreno decide qué calzadas existen para este jugador.
-  const exploracion = nieblaDe(exploradoDelJugador, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados, miradasVistas);
+  // La niebla se calcula ANTES del objeto porque además de viajar es el filtro de los caminos: la misma máscara que tapa el terreno decide qué
+  // calzadas existen para este jugador.
+  const exploracion = nieblaDe(perspectiva.explorado, estado, asentamientosPropios, ejercitosPropios, asentamientosAliados, ejercitosAliados, miradasVistas);
 
   const bloqueos = bloqueosDe(estado, ahora);
-  const batallas = batallasActivas(estado, ahora)
-    .map((b) => batallaVisible(b, heroeId))
-    .filter((b) => b.ladoPropio !== undefined || seVeAhora(b.punto, ojosAsent, ojosEjercito, tropa, miradasVistas));
   const ejercitosAvistados = estado.ejercitos.filter(
     (e) => !propios.has(e.id) && !bloqueos.ejercitos.has(e.id) && seVeAhora(e.posicionActual, ojosAsent, ojosEjercito, tropa, miradasVistas)
   );
-  // Los héroes ajenos que se ven (doc 02 §4.1): los que van en una columna propia o avistada, y los que están dentro
-  // de la plaza que se pisa. De ellos solo viaja su parte pública.
-  const idsVisibles = new Set([
-    ...[...ejercitosPropios, ...ejercitosAvistados].flatMap((e) => e.participantes.map((p) => p.heroeId)),
-    ...estado.heroes.filter((h) => dentroDe && h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === dentroDe.id).map((h) => h.id),
-  ]);
-  idsVisibles.delete(heroeId);
+  // Los héroes ajenos que se ven (doc 02 §4.1): los que van en una columna propia o avistada. De ellos solo viaja su parte pública. Los que
+  // están dentro de la plaza que se pisa se suman por jugador (`AjustesDeHeroe`).
+  const idsVisibles = new Set([...ejercitosPropios, ...ejercitosAvistados].flatMap((e) => e.participantes.map((p) => p.heroeId)));
   const faccionPropia = estado.facciones.find((f) => f.id === faccionId);
 
   return {
-    gameId: estado.gameId,
-    instante: instanteDeTick(estado.tick),
-    version: estado.version,
-    heroeId,
-    faccionId,
     mapaId: idDeMapa(estado.mapa),
     estadoMapa: estado.estadoMapa,
     facciones: estado.facciones,
-    asentamientos: dentroDe ? [dentroDe] : [],
     asentamientosAvistados: avistados,
     // Lo recordado MENOS lo que se ve ahora. Cada plaza aparece en una lista o en la otra, nunca en las dos.
-    // Las propias ya no se descuentan aquí: desde que solo viaja entera la que se pisa, una plaza de tu
-    // Facción que no estés viendo es exactamente igual de recordada que cualquier otra.
-    asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId) && f.asentamientoId !== dentroDe?.id),
+    asentamientosConocidos: Object.values(memoria.asentamientos).filter((f) => !seVe.has(f.asentamientoId)),
     territorioPorEjercito: territorioDeCadaEjercito(ejercitosPropios, geometria.zonas, estado.asentamientos),
     exploracion,
-    caravanas: estado.caravanas
-      .filter((c) => esPropio(c.origenAsentamientoId) || c.faccionId === faccionId || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId)))
-      .map((c) => {
-        const origen = c.tipo === 'comercial' ? estado.asentamientos.find((a) => a.id === c.origenAsentamientoId) : undefined;
-        return origen && esPropio(origen.id) ? { ...c, escoltaLiderazgo: liderazgoDeEscolta(c, origen, tropa) } : c;
-      }),
     caravanasAvistadas: caravanasAvistadas(estado, esPropio, ojosAsent, ojosEjercito, tropa, miradasVistas).filter((c) => !bloqueos.caravanas.has(c.id)),
-    ejercitos: ejercitosPropios.map((e) => ({ ...e, capacidadCarga: capacidadCargaDe(e, estado.caravanas, estado.asentamientos) })),
-    informesDeInspeccion: (estado.informesDeInspeccion ?? []).filter((i) => i.heroeId === heroeId && instanteDeTick(estado.tick) < i.expiraEn),
-    ...convocatoriasDelLugar(estado, heroeId, jugador, faccionId),
     ejercitosAvistados: ejercitosAvistados.map((e) => ({
       id: e.id,
       tipo: e.tipo,
@@ -1112,43 +1107,13 @@ export function proyectarParaJugador(
       ...(e.persiguiendo?.tipo === 'ejercito' && propios.has(e.persiguiendo.id) ? { teSigue: true as const } : {}),
     })),
     aedasAvistados: (estado.aedas ?? [])
-      
       .filter((a) => seVeAhora(a.posicion, ojosAsent, ojosEjercito, tropa, miradasVistas))
       .map((a) => ({ id: a.id, posicion: a.posicion, ...(a.enAsentamientoId ? { enAsentamientoId: a.enAsentamientoId } : {}) })),
-    miradasIntel: (estado.miradasIntel ?? []).filter((m) => m.faccionId === faccionId && m.libreEn > ahora),
-    propuestasAnexion: propuestasVigentes(estado.propuestasAnexion, ahora).filter((p) => p.absorbenteId === faccionId || p.absorbidaId === faccionId),
-    propuestasRelacion: propuestasVigentes(estado.propuestasRelacion, ahora).filter((p) => p.faccionAId === faccionId || p.faccionBId === faccionId),
-    propuestasFusion: propuestasVigentes(estado.propuestasFusion, ahora).filter((p) => p.faccionAId === faccionId || p.faccionBId === faccionId),
-    informesPlaza: Object.values(memoria.informes ?? {}),
-    tarifasIntel: { mirada: INTEL.mirada, informe: INTEL.informe, cupoMiradas: CUPO_MIRADAS },
-    aedasResidentes: (estado.aedasResidentes?.aedas ?? [])
-      .filter((a) => esPropio(a.asentamientoId))
-      .map((a): AedaResidenteProyectado => {
-        const definicion = a.epica && EPICAS[a.epica.tecnologiaId];
-        const capitulo = a.epica && definicion?.capitulos[a.epica.capitulo];
-        return {
-          id: a.id,
-          nombre: a.nombre,
-          asentamientoId: a.asentamientoId,
-          ...(a.epica && definicion && capitulo
-            ? {
-                epica: {
-                  tecnologiaId: a.epica.tecnologiaId,
-                  nombre: definicion.nombre,
-                  capitulo: a.epica.capitulo,
-                  capitulos: definicion.capitulos.length,
-                  tituloCapitulo: TITULO_CAPITULO[capitulo.hecho],
-                  hechos: a.epica.hechos,
-                  hechosNecesarios: capitulo.cantidad,
-                  ...(a.epica.ultimoHechoEn !== undefined ? { ultimoHechoEn: a.epica.ultimoHechoEn } : {}),
-                },
-              }
-            : {}),
-        };
-      }),
-    batallas,
-    heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
-    heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map((h) => heroePublico(h, instanteDeTick(estado.tick))),
+    // Las batallas que se ven; en las que combate cada jugador, `AjustesDeHeroe` añade su bando y las que no se ven.
+    batallas: batallasActivas(estado, ahora)
+      .filter((b) => seVeAhora(b.punto, ojosAsent, ojosEjercito, tropa, miradasVistas))
+      .map((b) => batallaVisible(b, '')),
+    heroesVisibles: estado.heroes.filter((h) => idsVisibles.has(h.id)).map((h) => heroePublico(h, ahora)),
     nombresDeDirigentes: Object.fromEntries(
       estado.facciones
         .flatMap((f) => [f.reyId, f.embajadorId])
@@ -1162,46 +1127,211 @@ export function proyectarParaJugador(
         .filter((h) => faccionPropia && (esCiudadano(faccionPropia, h.id) || (faccionPropia.solicitudesIds ?? []).includes(h.id)))
         .map((h) => [h.id, h.displayName])
     ),
-    acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
-    // De las propias, todas —incluidas las cumplidas, que son el historial de tu mercado—. De una plaza ajena
-    // en cuya puerta estas, solo las que siguen EN PIE: es el escaparate, no su contabilidad.
-    ordenes: [
-      ...estado.ordenes.filter((o) => esPropio(o.asentamientoId) || (o.estado === 'activa' && enElMostradorDe.has(o.asentamientoId))),
-      ...(estado.historialOrdenes ?? []).filter((o) => esPropio(o.asentamientoId)),
-    ],
     relaciones: estado.relaciones,
     titulos: estado.titulos,
     caminos: caminosConocidos(estado.red ?? RED_VACIA, exploracion),
     campamentosBandidos: campamentosAvistados(estado.campamentosBandidos, ojosAsent, ojosEjercito, tropa, miradasVistas),
-    alijos:
-      jugador && buscaAlijos(heroeId, estado.facciones, estado.asentamientos)
-        ? alijosALaVista(estado.alijos ?? [], jugador, columnaDe(estado.ejercitos, heroeId))
-        : [],
-    campamentosMercenarios: campamentosMercenariosConocidos(
-      estado.campamentosMercenarios,
-      exploracion,
-      new Set([
-        ...estado.campamentosMercenarios.filter((c) => c.residentesIds.includes(heroeId)).map((c) => c.id),
-        ...(ubicacion.tipo === 'mercenarios' ? [ubicacion.campamentoId] : []),
-      ])
-    ),
-    ...(ubicacion.tipo === 'mercenarios'
-      ? (() => {
-          const dentro = estado.campamentosMercenarios.find((c) => c.id === ubicacion.campamentoId);
-          if (!dentro) return {};
-          const ahora = instanteDeTick(estado.tick);
-          const reclutamiento = jugador ? reclutamientoDelCampamento(dentro, estado, jugador, ahora) : undefined;
-          return {
-            escenaCampamento: escenaDeCampamento(dentro),
-            ...(jugador ? { mercadoCampamento: { ...mercadoDelCampamento(dentro, jugador, estado.asentamientos, ahora), ...(reclutamiento ? { reclutamiento } : {}) } } : {}),
-          };
-        })()
-      : {}),
-    historial: estado.historialHeroes[heroeId] ?? [],
-    zonas: zonasPropias,
+    campamentosMercenarios: campamentosMercenariosConocidos(estado.campamentosMercenarios, exploracion, new Set()),
+    zonas: geometria.zonas.filter((z) => esPropio(z.asentamientoId)),
     zonasFusionadas: geometria.zonasFusionadas.filter((zf) => zf.faccionId === faccionId),
+  };
+}
+
+/**
+ * Lo del mapa que cambia de un jugador a otro de la misma Facción (contrato 03 §13.1): se compone con el `MapaProyectado` de su
+ * perspectiva (`componerProyeccion`) y da exactamente lo que ve este jugador. Todo es pequeño y viaja en `vista/heroe`.
+ */
+export interface AjustesDeHeroe {
+  /** La plaza que pisa: su ficha sale de los avistados y su interior viaja en `asentamientos` / `vista/asentamiento/<id>`. */
+  plazaPisadaId?: string;
+  /** De cada plaza avistada, lo que solo ve él: su almacén si su columna está a la puerta de una propia, y lo que recuerda de su interior. */
+  detalleDeAvistados: Record<string, Pick<AsentamientoAvistado, 'almacen' | 'interiorRecordado'>>;
+  /** Campamentos de mercenarios que conoce por vivir o estar en ellos aunque no haya explorado nada (nace dentro, D74), y que el mapa no trae. */
+  campamentosPropios: CampamentoMercenarios[];
+  /** Héroes que están dentro de la plaza que pisa y no van en ninguna columna que se vea. */
+  heroesVisiblesExtra: HeroePublico[];
+  /** El bando en que combate en cada batalla del mapa, y las batallas en que combate sin que el mapa las vea. */
+  ladoPropioPorBatalla: Record<string, LadoId>;
+  batallasPropias: BatallaVisible[];
+}
+
+/** La proyección de un jugador a partir de su mapa y de lo suyo: la composición que hacen el GET y, en el cliente, la unión de `vista/mapa` y
+ * `vista/heroe`. Es la implementación de referencia de esa unión. */
+export function componerProyeccion<M extends MapaProyectado>(
+  mapa: M,
+  heroeId: string,
+  ajustes: AjustesDeHeroe
+): Omit<M, 'asentamientosAvistados' | 'heroesVisibles' | 'batallas' | 'campamentosMercenarios'> &
+  Pick<ProyeccionJugador, 'asentamientosAvistados' | 'heroesVisibles' | 'batallas' | 'campamentosMercenarios'> {
+  const { plazaPisadaId, detalleDeAvistados } = ajustes;
+  return {
+    ...mapa,
+    asentamientosAvistados: mapa.asentamientosAvistados
+      .filter((a) => a.id !== plazaPisadaId)
+      .map((a) => (detalleDeAvistados[a.id] ? { ...a, ...detalleDeAvistados[a.id] } : a)),
+    asentamientosConocidos: mapa.asentamientosConocidos.filter((f) => f.asentamientoId !== plazaPisadaId),
+    campamentosMercenarios: [...mapa.campamentosMercenarios, ...ajustes.campamentosPropios],
+    heroesVisibles: [...mapa.heroesVisibles.filter((h) => h.heroeId !== heroeId), ...ajustes.heroesVisiblesExtra],
+    batallas: [
+      ...mapa.batallas.map((b) => (ajustes.ladoPropioPorBatalla[b.battleId] ? { ...b, ladoPropio: ajustes.ladoPropioPorBatalla[b.battleId] } : b)),
+      ...ajustes.batallasPropias,
+    ],
+  };
+}
+
+/** Lo que es de este héroe: sus ajustes sobre el mapa y todo lo personal que no es del mapa. Sin los campos impuros del runner (precios, producción, ascenso). */
+export function proyectarPersonal(estado: GameSessionState, heroeId: string, perspectiva: PerspectivaDeMapa, mapa: MapaProyectado, geometria: GeometriaAsentamientos) {
+  const { faccionId, ejercitosPropios } = perspectiva;
+  const { asentamientosPropios, esPropio } = propioDeJugador(estado, faccionId);
+
+  // La plaza que el jugador PISA, que es la única cuyo interior viaja (Doc 1.10.1). Se exige además que sea de su Facción: dentro de una plaza
+  // ajena solo se ve la capa pública (Doc 1.10.4), y qué lleva esa capa es una decisión que el diseño todavía no ha tomado.
+  const jugador = estado.heroes.find((j) => j.id === heroeId);
+  const recordadas = jugador?.plazasRecordadas ?? {};
+  // Sin registro se DEDUCE, con la misma función que usa el alta: proyectar es LEER, y una lectura no puede escribir en el estado para darse de
+  // alta a sí misma. Un jugador que entra en la partida y pide su pantalla antes de dar ninguna orden todavía no tiene registro.
+  const ubicacion = jugador?.ubicacion ?? ubicacionDeducida(heroeId, estado.asentamientos, estado.ejercitos);
+  const dentroDe = ubicacion.tipo === 'asentamiento' ? asentamientosPropios.find((a) => a.id === ubicacion.asentamientoId) : undefined;
+  const ahora = instanteDeTick(estado.tick);
+  // Las columnas en cuya puerta está la suya: un mercado enseña sus ofertas a quien está dentro, y solo a ese.
+  const susColumnas = ejercitosPropios.filter((e) => e.participantes.some((p) => p.heroeId === heroeId));
+  const enElMostradorDe = new Set(estado.asentamientos.filter((a) => ejercitosPropios.some((e) => enLaPuertaDe(e, a))).map((a) => a.id));
+
+  const detalleDeAvistados: AjustesDeHeroe['detalleDeAvistados'] = {};
+  for (const a of mapa.asentamientosAvistados) {
+    const plaza = estado.asentamientos.find((x) => x.id === a.id)!;
+    const detalle: AjustesDeHeroe['detalleDeAvistados'][string] = {
+      ...(esPropio(a.id) && susColumnas.some((e) => enLaPuertaDe(e, plaza)) ? { almacen: plaza.almacen } : {}),
+      ...(recordadas[a.id] ? { interiorRecordado: recordadas[a.id] } : {}),
+    };
+    if (Object.keys(detalle).length > 0) detalleDeAvistados[a.id] = detalle;
+  }
+
+  const enMapa = new Set(mapa.campamentosMercenarios.map((c) => c.id));
+  const suyos = new Set([
+    ...estado.campamentosMercenarios.filter((c) => c.residentesIds.includes(heroeId)).map((c) => c.id),
+    ...(ubicacion.tipo === 'mercenarios' ? [ubicacion.campamentoId] : []),
+  ]);
+  const campamentosPropios = estado.campamentosMercenarios.filter((c) => suyos.has(c.id) && !enMapa.has(c.id));
+
+  const yaVisibles = new Set(mapa.heroesVisibles.map((h) => h.heroeId));
+  const heroesVisiblesExtra = estado.heroes
+    .filter((h) => dentroDe && h.id !== heroeId && !yaVisibles.has(h.id) && h.ubicacion.tipo === 'asentamiento' && h.ubicacion.asentamientoId === dentroDe.id)
+    .map((h) => heroePublico(h, ahora));
+
+  const vistas = new Set(mapa.batallas.map((b) => b.battleId));
+  const ladoPropioPorBatalla: Record<string, LadoId> = {};
+  const batallasPropias: BatallaVisible[] = [];
+  for (const b of batallasActivas(estado, ahora)) {
+    const mia = batallaVisible(b, heroeId);
+    if (!mia.ladoPropio) continue;
+    if (vistas.has(b.id)) ladoPropioPorBatalla[b.id] = mia.ladoPropio;
+    else batallasPropias.push(mia);
+  }
+
+  const memoria = (faccionId !== null ? estado.memoriaPorFaccion[faccionId] : undefined) ?? MEMORIA_VACIA;
+  const tropa = indiceTropa(estado.heroes);
+
+  const ajustes: AjustesDeHeroe = {
+    ...(dentroDe ? { plazaPisadaId: dentroDe.id } : {}),
+    detalleDeAvistados,
+    campamentosPropios,
+    heroesVisiblesExtra,
+    ladoPropioPorBatalla,
+    batallasPropias,
+  };
+  return {
+    ajustes,
+    dentroDe,
+    personal: {
+      faccionId,
+      caravanas: estado.caravanas
+        .filter((c) => esPropio(c.origenAsentamientoId) || c.faccionId === faccionId || (c.destinoAsentamientoId !== undefined && esPropio(c.destinoAsentamientoId)))
+        .map((c) => {
+          const origen = c.tipo === 'comercial' ? estado.asentamientos.find((a) => a.id === c.origenAsentamientoId) : undefined;
+          return origen && esPropio(origen.id) ? { ...c, escoltaLiderazgo: liderazgoDeEscolta(c, origen, tropa) } : c;
+        }),
+      ejercitos: ejercitosPropios.map((e) => ({ ...e, capacidadCarga: capacidadCargaDe(e, estado.caravanas, estado.asentamientos) })),
+      informesDeInspeccion: (estado.informesDeInspeccion ?? []).filter((i) => i.heroeId === heroeId && ahora < i.expiraEn),
+      ...convocatoriasDelLugar(estado, heroeId, jugador, faccionId),
+      miradasIntel: (estado.miradasIntel ?? []).filter((m) => m.faccionId === faccionId && m.libreEn > ahora),
+      propuestasAnexion: propuestasVigentes(estado.propuestasAnexion, ahora).filter((p) => p.absorbenteId === faccionId || p.absorbidaId === faccionId),
+      propuestasRelacion: propuestasVigentes(estado.propuestasRelacion, ahora).filter((p) => p.faccionAId === faccionId || p.faccionBId === faccionId),
+      propuestasFusion: propuestasVigentes(estado.propuestasFusion, ahora).filter((p) => p.faccionAId === faccionId || p.faccionBId === faccionId),
+      informesPlaza: Object.values(memoria.informes ?? {}),
+      tarifasIntel: { mirada: INTEL.mirada, informe: INTEL.informe, cupoMiradas: CUPO_MIRADAS },
+      aedasResidentes: (estado.aedasResidentes?.aedas ?? [])
+        .filter((a) => esPropio(a.asentamientoId))
+        .map((a): AedaResidenteProyectado => {
+          const definicion = a.epica && EPICAS[a.epica.tecnologiaId];
+          const capitulo = a.epica && definicion?.capitulos[a.epica.capitulo];
+          return {
+            id: a.id,
+            nombre: a.nombre,
+            asentamientoId: a.asentamientoId,
+            ...(a.epica && definicion && capitulo
+              ? {
+                  epica: {
+                    tecnologiaId: a.epica.tecnologiaId,
+                    nombre: definicion.nombre,
+                    capitulo: a.epica.capitulo,
+                    capitulos: definicion.capitulos.length,
+                    tituloCapitulo: TITULO_CAPITULO[capitulo.hecho],
+                    hechos: a.epica.hechos,
+                    hechosNecesarios: capitulo.cantidad,
+                    ...(a.epica.ultimoHechoEn !== undefined ? { ultimoHechoEn: a.epica.ultimoHechoEn } : {}),
+                  },
+                }
+              : {}),
+          };
+        }),
+      heroe: jugador ? heroeProyectado(jugador, estado.asentamientos) : null,
+      acuerdos: estado.acuerdos.filter((a) => esPropio(a.asentamientoAId) || esPropio(a.asentamientoBId)),
+      // De las propias, todas —incluidas las cumplidas, que son el historial de tu mercado—. De una plaza ajena en cuya puerta estas, solo las que
+      // siguen EN PIE: es el escaparate, no su contabilidad.
+      ordenes: [
+        ...estado.ordenes.filter((o) => esPropio(o.asentamientoId) || (o.estado === 'activa' && enElMostradorDe.has(o.asentamientoId))),
+        ...(estado.historialOrdenes ?? []).filter((o) => esPropio(o.asentamientoId)),
+      ],
+      alijos:
+        jugador && buscaAlijos(heroeId, estado.facciones, estado.asentamientos)
+          ? alijosALaVista(estado.alijos ?? [], jugador, columnaDe(estado.ejercitos, heroeId))
+          : [],
+      ...(ubicacion.tipo === 'mercenarios'
+        ? (() => {
+            const dentro = estado.campamentosMercenarios.find((c) => c.id === ubicacion.campamentoId);
+            if (!dentro) return {};
+            const reclutamiento = jugador ? reclutamientoDelCampamento(dentro, estado, jugador, ahora) : undefined;
+            return {
+              escenaCampamento: escenaDeCampamento(dentro),
+              ...(jugador ? { mercadoCampamento: { ...mercadoDelCampamento(dentro, jugador, estado.asentamientos, ahora), ...(reclutamiento ? { reclutamiento } : {}) } } : {}),
+            };
+          })()
+        : {}),
+      historial: estado.historialHeroes[heroeId] ?? [],
+      tecnologia: tecnologiaParaJugador(estado, faccionId, geometria.zonas),
+    },
+  };
+}
+
+export function proyectarParaJugador(
+  estado: GameSessionState,
+  heroeId: string,
+  geometria: GeometriaAsentamientos
+): Omit<ProyeccionJugador, 'preciosReferencia' | 'produccionDeAsentamiento' | 'ascensoDeAsentamiento'> {
+  const perspectiva = perspectivaDeMapa(estado, heroeId);
+  const mapa = proyectarMapa(estado, perspectiva, geometria);
+  const { ajustes, dentroDe, personal } = proyectarPersonal(estado, heroeId, perspectiva, mapa, geometria);
+  const { asentamientosPropios: _ap, esPropio } = propioDeJugador(estado, perspectiva.faccionId);
+  return {
+    gameId: estado.gameId,
+    instante: instanteDeTick(estado.tick),
+    version: estado.version,
+    heroeId,
+    ...componerProyeccion(mapa, heroeId, ajustes),
+    ...personal,
+    asentamientos: dentroDe ? [dentroDe] : [],
     trazadoPorAsentamiento: Object.fromEntries(Object.entries(geometria.trazadoPorAsentamiento).filter(([id]) => esPropio(id))),
-    tecnologia: tecnologiaParaJugador(estado, faccionId, geometria.zonas),
   };
 }
 
@@ -1220,6 +1350,6 @@ export function eventosDominioParaJugador(estado: GameSessionState, heroeId: str
  * cubre: una columna que salió de un campamento de mercenarios no tiene plaza de origen (`asentamientoId: ''`), y en un combate entre Facciones
  * el evento va a la plaza de uno solo de los bandos. */
 export function eventosVisiblesParaJugador(estado: GameSessionState, heroeId: string, eventos: readonly EventoDominioConVersion[]): EventoDominioConVersion[] {
-  const { esPropio } = propioDeJugador(estado, heroeId);
+  const { esPropio } = propioDeJugador(estado, faccionDe(estado, heroeId));
   return eventos.filter((e) => e.asentamientoId === undefined || esPropio(e.asentamientoId) || heroesNombrados(e).includes(heroeId));
 }

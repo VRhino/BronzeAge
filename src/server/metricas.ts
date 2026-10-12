@@ -14,6 +14,7 @@
 // problema, y sin ellas un servidor atascado solo se ve desde fuera como "no responde".
 import type { RegistroDeAuditoria, RecuentoDeComandos } from './auditoria';
 import type { HubDeDifusion } from './difusion/hub';
+import type { DifusorDeVistas, MetricasDeVistas } from './difusion/difusorDeVistas';
 import type { RegistroDePartidas } from './registroDePartidas';
 import type { MetricasDePartida } from './runnerDePartida';
 
@@ -39,12 +40,15 @@ export interface Metricas {
    * comando" en `auditoria.ts`). */
   auditoriaFallida: number;
   partidas: (MetricasDePartida & { conexiones: number })[];
+  /** Canales de vista (contrato 03 §6.4): suscriptores, bytes por flush, milisegundos de proyección/diff/serialización, fotos por motivo, sockets lentos. */
+  vistas: MetricasDeVistas;
 }
 
 export interface FuentesDeMetricas {
   partidas: RegistroDePartidas;
   auditoria: RegistroDeAuditoria;
   hub: HubDeDifusion;
+  vistas: DifusorDeVistas;
   ahora: () => string;
   /** Inyectable para poder congelarlo en un test — mismo criterio que el reloj. Por defecto, el del proceso. */
   arribaSegundos?: () => number;
@@ -75,5 +79,6 @@ export function recogerMetricas(fuentes: FuentesDeMetricas): Metricas {
       ...runner.metricas(),
       conexiones: fuentes.hub.conexionesAbiertas(runner.gameId),
     })),
+    vistas: fuentes.vistas.metricas(),
   };
 }

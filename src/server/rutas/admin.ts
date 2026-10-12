@@ -17,6 +17,7 @@ import { PartidaYaAbiertaError } from '../registroDePartidas';
 import { FormatoSnapshotNoSoportadoError, LayoutVersionNoCoincideError, WorldgenVersionNoCoincideError } from '../persistenciaPartida';
 import { recogerMetricas } from '../metricas';
 import { claveDeAuditoria } from '../auditoria';
+import { claveDeCarga } from '../telemetria';
 import { olvidarPartida } from '../identidad/olvidarPartida';
 import { eventosDesde, vistaAdminDeEstado } from '../../session/estado';
 import { ESQUEMA_SESION_AUTH } from '../openapi';
@@ -215,6 +216,7 @@ const ESQUEMA_METRICAS = {
           properties: { aceptados: { type: 'number' }, autorizacion: { type: 'number' }, esquema: { type: 'number' }, dominio: { type: 'number' }, persistencia: { type: 'number' } },
         },
         auditoriaFallida: { type: 'number' },
+        vistas: { type: 'object', additionalProperties: true },
         partidas: {
           type: 'array',
           items: {
@@ -242,6 +244,88 @@ const ESQUEMA_METRICAS = {
   },
 } as const;
 
+const ESQUEMA_FIJAR_PLAYTEST = {
+  description:
+    'Fija (o cierra, con `id: null`) el `playtestId` vigente de la partida (03 §14) y es el interruptor en caliente de la telemetría ' +
+    'de carga: con id la enciende para esta partida, con `null` la apaga. Cada muestra anotada lleva el id. Persiste en el propio registro de carga.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  body: {
+    type: 'object',
+    properties: { id: { type: ['string', 'null'], minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9._-]+$' } },
+    required: ['id'],
+    additionalProperties: false,
+  },
+  response: {
+    200: { type: 'object', properties: { gameId: { type: 'string' }, playtestId: { type: ['string', 'null'] }, telemetriaActiva: { type: 'boolean' } }, required: ['gameId', 'playtestId', 'telemetriaActiva'] },
+    400: ERROR_RESPUESTA,
+  },
+} as const;
+
+const RESUMEN_CARGA = {
+  type: 'object',
+  properties: { n: { type: 'number' }, p50: { type: 'number' }, p95: { type: 'number' }, max: { type: 'number' } },
+} as const;
+
+const ESQUEMA_CARGA = {
+  description:
+    'Telemetría de carga de la partida (03 §14): muestras periódicas (JSONL `<gameId>.carga.jsonl`) de coste del tick, ' +
+    'proyección/diff/serialización por tipo de canal, bytes, fotos por motivo, suscriptores, memoria y retraso del bucle. ' +
+    'Filtrable por rango de reloj de pared y por `playtestId`. Solo administración.',
+  tags: ['admin'],
+  security: SEGURIDAD_ADMIN,
+  params: PARAMS_GAME_ID,
+  querystring: {
+    type: 'object',
+    properties: {
+      desde: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo anterior.' },
+      hasta: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo posterior.' },
+      playtestId: { type: 'string', description: 'Solo las muestras de esta prueba.' },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        muestras: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              formatoVersion: { type: 'number' },
+              tipo: { type: 'string' },
+              momento: { type: 'string' },
+              gameId: { type: 'string' },
+              playtestId: { type: 'string' },
+              ventanaMs: { type: 'number' },
+              tick: { type: 'number' },
+              version: { type: 'number' },
+              conexiones: { type: 'number' },
+              colaPendiente: { type: 'number' },
+              suscriptores: { type: 'number' },
+              claves: { type: 'number' },
+              tickMs: RESUMEN_CARGA,
+              guardadoMs: RESUMEN_CARGA,
+              guardadoBytes: { type: 'number' },
+              canales: { type: 'object', additionalProperties: true },
+              memoriaMb: { type: 'object', additionalProperties: true },
+              bucleMs: { type: 'object', additionalProperties: true },
+              costeMuestraMs: { type: 'number' },
+            },
+          },
+        },
+        playtestVigente: { type: ['string', 'null'] },
+        telemetriaActiva: { type: 'boolean' },
+        corruptas: { type: 'number' },
+      },
+      required: ['muestras', 'playtestVigente', 'corruptas'],
+    },
+  },
+} as const;
+
 const ESQUEMA_AUDITORIA = {
   description:
     'Registro de auditoria de comandos de esta partida (Fase E2): quien pidio que, cuando, y con que ' +
@@ -254,6 +338,8 @@ const ESQUEMA_AUDITORIA = {
     type: 'object',
     properties: {
       desde: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo anterior.' },
+      hasta: { type: 'string', description: 'ISO 8601 de reloj de PARED; descarta lo posterior.' },
+      msMinimo: { type: 'string', pattern: '^[0-9]+(\.[0-9]+)?$', description: 'Solo comandos de al menos estos ms (coste de runner.ejecutar).' },
       actor: { type: 'string', description: 'Solo las lineas de este actor.' },
       // `'true'`/`'false'` como TEXTO, no `type: 'boolean'`: este servidor corre con `coerceTypes: false`
       // (Fase C9, ver `api.ts`), asi que un query param —que siempre llega como texto— nunca se convierte
@@ -281,6 +367,8 @@ const ESQUEMA_AUDITORIA = {
               causa: { type: 'string' },
               detalle: { type: 'string' },
               version: { type: 'number' },
+              ms: { type: 'number' },
+              bytes: { type: 'number' },
             },
           },
         },
@@ -490,10 +578,13 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     }
     if (!(await deps.partidas.eliminar(gameId))) return reply.code(404).send({ error: `la partida '${gameId}' no existe.` });
     const conexionesCerradas = deps.hub.cerrarPartida(gameId);
+    deps.difusorDeVistas.olvidarPartida(gameId);
     const { revocadas, cuentasDeBotBorradas } = olvidarPartida(deps.identidad.repositorio, gameId, deps.ahora());
     // La auditoría se escribe en cola: se drena antes de borrarla para que una línea pendiente no la vuelva a crear.
     await deps.auditoria.drenar();
     await deps.almacen.borrar(claveDeAuditoria(gameId));
+    await deps.telemetria.drenar();
+    await deps.almacen.borrar(claveDeCarga(gameId));
     console.log(`[partidas] '${gameId}' borrada por ${resuelto.actor.usuarioId}: ${conexionesCerradas} conexiones, ${revocadas} membresías revocadas, ${cuentasDeBotBorradas} cuentas de bot borradas`);
     return reply.send({ gameId, borrada: true, conexionesCerradas, membresiasRevocadas: revocadas, cuentasDeBotBorradas });
   });
@@ -602,7 +693,7 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
     if (!deps.administradores.esAdministradorGlobal(resuelto.usuario.id)) {
       return sinPermiso(reply, 'se requiere administrador global');
     }
-    return reply.send(recogerMetricas({ partidas: deps.partidas, auditoria: deps.auditoria, hub: deps.hub, ahora: deps.ahora }));
+    return reply.send(recogerMetricas({ partidas: deps.partidas, auditoria: deps.auditoria, hub: deps.hub, vistas: deps.difusorDeVistas, ahora: deps.ahora }));
   });
 
   /**
@@ -613,17 +704,46 @@ export function registrarRutasDeAdmin(app: FastifyInstance, deps: DependenciasDe
    * Lee del archivo, no de memoria: el registro sobrevive al reinicio del proceso, que es la mitad de su
    * razon de ser.
    */
-  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; actor?: string; soloRechazos?: 'true' | 'false' } }>(
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; hasta?: string; msMinimo?: string; actor?: string; soloRechazos?: 'true' | 'false' } }>(
     '/admin/partidas/:gameId/auditoria',
     { schema: ESQUEMA_AUDITORIA },
     async (request, reply) => {
       const acceso = exigirAdministracion(request, reply, deps);
       if (!acceso.ok) return acceso.respuesta;
 
-      const { desde, actor, soloRechazos } = request.query;
+      const { desde, hasta, msMinimo, actor, soloRechazos } = request.query;
       // `leer` drena antes: `registrar` escribe sin esperar, asi que sin eso el comando que acaba de
       // ejecutarse podria no estar todavia en el archivo — justo el que se va a consultar.
-      return reply.send(await deps.auditoria.leer(request.params.gameId, { desde, actor, soloRechazos: soloRechazos === 'true' }));
+      return reply.send(await deps.auditoria.leer(request.params.gameId, { desde, hasta, actor, soloRechazos: soloRechazos === 'true', ...(msMinimo !== undefined ? { msMinimo: Number(msMinimo) } : {}) }));
+    }
+  );
+
+  /**
+   * Telemetría de carga (03 §14). `PUT .../playtest` etiqueta la prueba en curso; `GET .../carga` devuelve las
+   * muestras. Administración de la partida, como la auditoría: lee de archivo y sobrevive al reinicio.
+   */
+  app.put<{ Params: ParametrosGameId; Body: { id: string | null } }>(
+    '/admin/partidas/:gameId/playtest',
+    { schema: ESQUEMA_FIJAR_PLAYTEST },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+      const { gameId } = request.params;
+      deps.telemetria.fijarPlaytest(gameId, request.body.id);
+      // Interruptor en caliente: fijar una prueba enciende el muestreo de esta partida; `id: null` lo apaga.
+      if (request.body.id === null) deps.telemetria.desactivarPartida(gameId);
+      else deps.telemetria.activarPartida(gameId);
+      return reply.send({ gameId, playtestId: request.body.id, telemetriaActiva: deps.telemetria.activa });
+    }
+  );
+
+  app.get<{ Params: ParametrosGameId; Querystring: { desde?: string; hasta?: string; playtestId?: string } }>(
+    '/admin/partidas/:gameId/carga',
+    { schema: ESQUEMA_CARGA },
+    async (request, reply) => {
+      const acceso = exigirAdministracion(request, reply, deps);
+      if (!acceso.ok) return acceso.respuesta;
+      return reply.send({ ...(await deps.telemetria.leer(request.params.gameId, request.query)), telemetriaActiva: deps.telemetria.activa });
     }
   );
 

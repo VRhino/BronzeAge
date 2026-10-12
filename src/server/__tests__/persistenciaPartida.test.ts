@@ -110,7 +110,7 @@ describe('guardarPartida / cargarPartida', () => {
   it('guardar dos veces la MISMA versión no lanza — es un reintento válido, no un conflicto', async () => {
     const sesion = partidaEnMarcha();
     await guardarPartida(almacen, sesion, MOMENTO);
-    await expect(guardarPartida(almacen, sesion, MOMENTO)).resolves.toBeUndefined();
+    await expect(guardarPartida(almacen, sesion, MOMENTO)).resolves.toBeGreaterThan(0);
   });
 
   it('rechaza sobreescribir con una versión MENOR que la que ya hay en disco, y no toca el archivo', async () => {
@@ -122,7 +122,7 @@ describe('guardarPartida / cargarPartida', () => {
     // Una sesión "atrasada" (por ejemplo, una réplica en memoria que no vio los últimos comandos) intenta
     // guardar una versión anterior a la que ya hay en disco.
     const atrasada = GameSession.importar(sesion.exportar());
-    await expect(guardarPartida(almacen, atrasada, MOMENTO)).resolves.toBeUndefined(); // misma versión: ok
+    await expect(guardarPartida(almacen, atrasada, MOMENTO)).resolves.toBeGreaterThan(0); // misma versión: ok
     sesion.avanzarTick(); // sesion avanza; `atrasada` se queda atrás
     await guardarPartida(almacen, sesion, MOMENTO); // disco ahora en versión N+1
 

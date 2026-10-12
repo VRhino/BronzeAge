@@ -17,6 +17,7 @@
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { listarPartidas } from './persistenciaPartida';
 import { podarAuditoria } from './auditoria';
+import { podarCarga } from './telemetria';
 import { podarRespaldos, respaldarPartida } from './respaldos';
 
 export interface ConfiguracionMantenimiento {
@@ -30,9 +31,11 @@ export interface ConfiguracionMantenimiento {
   /** Días de auditoría que se conservan. La auditoría sí se poda por EDAD: su valor es responder "qué pasó
    * el martes", y una línea de hace un año no responde a nada que nadie vaya a preguntar. */
   retencionAuditoriaDias?: number;
+  /** Días de telemetría de carga (`<gameId>.carga.jsonl`, una línea cada ~10 s) que se conservan. Más corta que la auditoría: pesa mucho más. */
+  retencionCargaDias?: number;
 }
 
-const POR_DEFECTO = { respaldosAConservar: 7, retencionAuditoriaDias: 30 };
+const POR_DEFECTO = { respaldosAConservar: 7, retencionAuditoriaDias: 30, retencionCargaDias: 3 };
 
 /** Qué hizo una pasada. Se devuelve en vez de solo registrarse por consola para que los tests puedan
  * comprobarlo, y para que las métricas de E3 tengan de dónde leerlo sin parsear un log. */
@@ -41,6 +44,7 @@ export interface ResumenPasada {
   respaldadas: number;
   respaldosBorrados: number;
   auditoriaBorrada: number;
+  cargaBorrada: number;
   /** Partidas cuya pasada falló, con el porqué. Un fallo en una partida NO aborta las demás: el
    * mantenimiento es una tarea de fondo, y que una partida tenga el disco lleno no es razón para dejar al
    * resto del servidor sin respaldo. */
@@ -87,13 +91,17 @@ export class TareaDeMantenimiento {
    * que la otra acaba de escribir.
    */
   async ejecutarPasada(): Promise<ResumenPasada> {
-    const resumen: ResumenPasada = { partidas: 0, respaldadas: 0, respaldosBorrados: 0, auditoriaBorrada: 0, fallos: [] };
+    const resumen: ResumenPasada = { partidas: 0, respaldadas: 0, respaldosBorrados: 0, auditoriaBorrada: 0, cargaBorrada: 0, fallos: [] };
     if (this.enCurso) return resumen;
     this.enCurso = true;
     try {
       const momento = this.ahora();
       const limiteAuditoria = new Date(
         new Date(momento).getTime() - (this.config.retencionAuditoriaDias ?? POR_DEFECTO.retencionAuditoriaDias) * MS_POR_DIA
+      ).toISOString();
+
+      const limiteCarga = new Date(
+        new Date(momento).getTime() - (this.config.retencionCargaDias ?? POR_DEFECTO.retencionCargaDias) * MS_POR_DIA
       ).toISOString();
 
       const partidas = await listarPartidas(this.almacen);
@@ -103,6 +111,7 @@ export class TareaDeMantenimiento {
           if (await respaldarPartida(this.directorio, gameId, momento)) resumen.respaldadas++;
           resumen.respaldosBorrados += await podarRespaldos(this.directorio, gameId, this.config.respaldosAConservar ?? POR_DEFECTO.respaldosAConservar);
           resumen.auditoriaBorrada += await podarAuditoria(this.almacen, gameId, limiteAuditoria);
+          resumen.cargaBorrada += await podarCarga(this.almacen, gameId, limiteCarga);
         } catch (err) {
           resumen.fallos.push({ gameId, error: err instanceof Error ? err.message : String(err) });
         }

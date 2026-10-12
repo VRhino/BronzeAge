@@ -15,6 +15,8 @@ import type { ServidorDeBatalla } from '../identidad/servidoresDeBatalla';
 import type { RegistroDePartidas } from '../registroDePartidas';
 import type { RunnerDePartida } from '../runnerDePartida';
 import type { HubDeDifusion } from '../difusion/hub';
+import type { DifusorDeVistas } from '../difusion/difusorDeVistas';
+import type { RegistroDeCarga } from '../telemetria';
 import type { RegistroDeAuditoria } from '../auditoria';
 import { idDeMapa, instanteDeTick } from '../../session/estado';
 import type { Instante } from '../../domain/tiempo';
@@ -29,9 +31,13 @@ export interface DependenciasDeRutas {
   ahora: () => string;
   /** Conexiones WebSocket activas (Fase C5) — a quién difundir tras un comando o un tick. */
   hub: HubDeDifusion;
+  /** Canales de vista con foto y deltas (contrato 03): el estado empujado en vez de sondeado. */
+  difusorDeVistas: DifusorDeVistas;
   /** Registro de auditoría de comandos (Fase E2). Se escribe desde `ejecutarComandoHttp`, que es el único
    * punto por el que pasan TODOS los comandos de las dos superficies, aceptados y rechazados. */
   auditoria: RegistroDeAuditoria;
+  /** Telemetría de carga (03 §14): muestras periódicas de coste y `playtestId`. */
+  telemetria: RegistroDeCarga;
   /** Código de invitación exigido en `POST /v1/registro`. `undefined` = registro abierto. */
   codigoRegistro?: string;
   /** Código con el que `POST /v1/registro` da de alta una cuenta de BOT (doc 12 §8.3). `undefined` = no hay altas de bot. */

@@ -36,6 +36,9 @@ function puedeSeguirLaBatalla(estado: GameSessionState, heroeId: string, battleI
 
 export const CANAL_GENERAL = 'mapa/general';
 
+/** Todos los eventos de la partida, sin filtro de audiencia: solo en el WS de administración (contrato 03). */
+export const CANAL_ADMIN_EVENTOS = 'admin/eventos';
+
 export function canalDeAsentamiento(asentamientoId: string): string {
   return `asentamiento/${asentamientoId}`;
 }

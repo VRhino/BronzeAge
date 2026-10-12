@@ -161,7 +161,7 @@ async function leerSnapshotSiExiste(almacen: AlmacenDeObjetos, gameId: string): 
  * creación (`RunnerDePartida.crearYPersistir`) es justo lo que hace visible ese conflicto ahora, antes solo
  * pasaba cuando llegaba el primer comando/tick de la partida nueva.
  */
-export async function guardarPartida(almacen: AlmacenDeObjetos, sesion: GameSession, guardadoEn: string, opciones: { forzar?: boolean } = {}): Promise<void> {
+export async function guardarPartida(almacen: AlmacenDeObjetos, sesion: GameSession, guardadoEn: string, opciones: { forzar?: boolean } = {}): Promise<number> {
   const partida = sesion.exportar();
 
   const existente = await leerSnapshotSiExiste(almacen, sesion.gameId);
@@ -188,7 +188,10 @@ export async function guardarPartida(almacen: AlmacenDeObjetos, sesion: GameSess
       },
     },
   };
-  await almacen.escribir(claveDeSnapshot(sesion.gameId), JSON.stringify(snapshot));
+  const texto = JSON.stringify(snapshot);
+  await almacen.escribir(claveDeSnapshot(sesion.gameId), texto);
+  // Bytes (UTF-16 chars ≈ bytes; el snapshot es casi todo ASCII) para la telemetría de carga.
+  return texto.length;
 }
 
 /** Lo que devuelve `cargarPartida`. Un objeto de un solo campo y no la `GameSession` a secas porque D5 le

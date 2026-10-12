@@ -15,10 +15,11 @@ import { layoutCampamento } from '@motor/engine/layoutCampamento';
 import { ALMACEN_PERSONAL, MERCENARIOS } from '@motor/constants';
 import { esc } from './ui/html';
 import { delegar, pintar } from './ui/pintar';
+import { interpolar } from './ui/interpolacion';
 import { enlazarSubpestanas, htmlSubpaneles, htmlSubpestanas, type Subpestana } from './ui/subpestanas';
 import { htmlNombreConSigilo, svgSigilo } from './sigilo/sigilo';
 import { alCargarSigilos } from './sigilo/lienzo';
-import { draw, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, type DrawState } from './ui/canvas';
+import { dibujarBase, drawAnimado, drawAsentamiento, drawCampamento, drawFiltroFertilidad, drawTerreno, faccionColor, BIOMA_COLOR, BIOMA_COLOR_SIMPLE, RECURSO_COLOR, RECURSOS_EN_MAPA, EDIFICIO_COLOR, type DrawState } from './ui/canvas';
 
 // Subido de 800 a 900 junto con el mapa 2000x2000 (Fase 0.1): el mundo más grande necesitaba algo más de
 // resolución física para que la capa de terreno/ríos no perdiera nitidez.
@@ -670,13 +671,14 @@ function renderPanelAsentamientos(state: GameState): void {
       const { pesants, artesanos, nobleza } = a.poblacion;
       const faccion = state.facciones.find((f) => f.id === a.faccionId);
       const recursosClave = ['madera', 'piedra', 'trigo', 'oro'];
-      const activos = a.edificios.filter((e) => e.estado === 'activo').length;
-      const enCurso = a.edificios.length - activos;
+      const resumen = gameStore.resumenDe(a);
+      const activos = resumen.edificiosActivos;
+      const enCurso = resumen.edificiosEnCurso;
       const mantenimiento = Math.max(0, Math.min(100, a.medidorMantenimiento));
       const otrasCasas = a.casasCompradas.filter((id) => !a.heroesFundadoresIds.includes(id));
       const recursosHtml = recursosClave
         .map((r) => {
-          const recurso = a.almacen[r];
+          const recurso = resumen.almacenClave[r as keyof typeof resumen.almacenClave];
           return `<div class="registro-resource"><span>${RECURSO_ICONO[r] ?? '📦'} ${RECURSO_NOMBRE[r] ?? r}</span><strong>${Math.floor(recurso?.cantidad ?? 0)}<small>/${recurso?.capacidad ?? 0}</small></strong></div>`;
         })
         .join('');
@@ -999,7 +1001,7 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
   );
   const truequesHtml = truequesActivos.length
     ? `<table class="mini-table">
-        <thead><tr><th>Intercambio</th><th>CompletaciÃ³n</th><th>Caravanas asignadas</th><th>Expira</th></tr></thead>
+        <thead><tr><th>Intercambio</th><th>Completación</th><th>Caravanas asignadas</th><th>Expira</th></tr></thead>
         <tbody>
           ${truequesActivos
             .map((acuerdo) => {
@@ -1026,13 +1028,13 @@ function renderDetalleAsentamiento(a: Asentamiento, state: GameState): string {
       <div class="detail-section settlement-storage-summary">
         <div class="storage-section-heading">
           <span class="storage-section-icon" aria-hidden="true">📦</span>
-          <div><h3>AlmacÃ©n</h3><p>Existencias actuales y capacidad disponible</p></div>
+          <div><h3>Almacén</h3><p>Existencias actuales y capacidad disponible</p></div>
         </div>
         <div class="storage-resource-grid">${almacenHtml}</div>
         <details class="storage-reserve-section">
           <summary class="storage-section-heading storage-reserve-heading">
             <span class="storage-section-icon" aria-hidden="true">🔒</span>
-            <div><h3>Reserva protegida</h3><p>Material que la auto-construcciÃ³n no puede gastar</p></div>
+            <div><h3>Reserva protegida</h3><p>Material que la auto-construcción no puede gastar</p></div>
             <span class="storage-reserve-chevron" aria-hidden="true">▸</span>
           </summary>
           <div class="storage-reserve-content">${reservaHtml}</div>
@@ -1229,8 +1231,7 @@ function renderAsentamientosTab(state: GameState): void {
     .filter((a) => a.faccionId === faccionFiltroId)
     .map(
       (a) => {
-        const mantenimiento = gameStore.mantenimientoInfo(a);
-        const mantenimientoIncumplido = !mantenimiento.enGracia && mantenimiento.items.some((item) => !item.cubierto);
+        const mantenimientoIncumplido = gameStore.resumenDe(a).mantenimientoIncumplido;
         const avisoMantenimiento = mantenimientoIncumplido
           ? '<span class="settlement-warning-icon" title="Mantenimiento no cubierto" aria-label="Mantenimiento no cubierto">⚠</span>'
           : '';
@@ -1914,8 +1915,7 @@ function renderPanoramaGuerra(state: GameState): void {
 function renderPanelMilitar(state: GameState): void {
   let militarHtml = (state.asentamientos.length ? '' : '<p class="legend-note">Sin asentamientos: no hay guarniciones que medir. Los ejércitos en campo están en la pestaña Guerra.</p>') + state.asentamientos
     .map((a) => {
-      const tieneFundicion = a.edificios.some((e) => e.tipo === 'fundicion' && e.estado === 'activo');
-      const tieneGranFundicion = a.edificios.some((e) => e.tipo === 'granFundicion' && e.estado === 'activo');
+      const { tieneFundicion, tieneGranFundicion } = gameStore.resumenDe(a);
       const poder = gameStore.poderMilitarInfo(a);
       const escuadronesHtml =
         gameStore
@@ -2276,7 +2276,43 @@ function terrenoCacheParaFrame(mapa: DrawState['mapa']): HTMLCanvasElement {
   return terrenoCache.canvas;
 }
 
+/** Lo último que se pintó del mapa general: el bucle de animación lo repinta con lo móvil interpolado. */
+let mapaEnVista: { drawState: DrawState; base: HTMLCanvasElement; intervaloMs: number | null; animado: boolean } | null = null;
+/** La capa base del mapa (todo lo que no se mueve entre ticks), pintada una vez por dato en un canvas aparte: cada cuadro de animación solo
+ * la copia y pinta encima lo móvil. */
+const capaBase = document.createElement('canvas');
+
+/** Pinta el mapa general con ejércitos y caravanas en el punto que toca ahora: la posición del último dato más lo que han avanzado desde
+ * entonces (capado a un tick). Sin reloj de mundo o sin tiempo real no se extrapola. Devuelve si hay algo en movimiento. */
+function pintarMapaGeneral(): boolean {
+  if (!mapaEnVista) return false;
+  const { drawState, base, intervaloMs } = mapaEnVista;
+  const fraccion = intervaloMs && gameStore.enVivo ? (performance.now() - gameStore.momentoDeDatos()) / intervaloMs : 0;
+  const caravanas = interpolar(drawState.caravanas, fraccion);
+  const ejercitos = interpolar(drawState.ejercitos, fraccion);
+  drawAnimado(ctx, canvas, { ...drawState, caravanas, ejercitos }, base);
+  if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, drawState.mapa);
+  return caravanas !== drawState.caravanas || ejercitos !== drawState.ejercitos;
+}
+
+/** Un cuadro por `requestAnimationFrame` (al ritmo del monitor, 60 o más) mientras haya algo que mover: la interpolación es local y no cuesta
+ * tráfico. Los paneles NO entran aquí (se repintan cuando llegan datos). Se detiene sola si la pestaña está oculta, si el mapa general no está a
+ * la vista o si no hay nada en movimiento. Si dibujar cuesta más que un cuadro, el propio navegador espacia los rAF. */
+function animarMapa(): void {
+  requestAnimationFrame(animarMapa);
+  if (document.hidden || !mapaEnVista || !mapaEnVista.animado || !mapaEnVista.intervaloMs) return;
+  const fraccion = (performance.now() - gameStore.momentoDeDatos()) / mapaEnVista.intervaloMs;
+  if (fraccion > 1.05 || !gameStore.enVivo) return;
+  pintarMapaGeneral();
+}
+
 function render(): void {
+  // Por tiempo real el estado llega ligero: el interior de plazas, campamentos y héroes se pide solo de lo que está a la vista.
+  gameStore.vigilar({
+    asentamientos: [asentamientoSeleccionadoId, truequeASelect.value, truequeBSelect.value, flotaAsentamientoSelect.value, vistaAsentamientoSelectEl.value],
+    campamentos: [campamentoTabId, campamentoSeleccionadoId],
+    heroes: [jugadorSeleccionadoId],
+  });
   const state = gameStore.getState();
 
   relojMundoEl.textContent = `🕑 ${fmtTiempoMundo(state.instante)}`;
@@ -2311,9 +2347,16 @@ function render(): void {
       ejercitos: state.ejercitos,
       aedas: state.aedas ?? [],
     };
-    draw(ctx, canvas, drawState, terrenoCacheParaFrame(drawState.mapa));
-    if (mostrarFiltroFertilidad) drawFiltroFertilidad(ctx, canvas, gameStore.getMapa(state));
+    if (capaBase.width !== canvas.width || capaBase.height !== canvas.height) {
+      capaBase.width = canvas.width;
+      capaBase.height = canvas.height;
+    }
+    const ctxBase = capaBase.getContext('2d')!;
+    dibujarBase(ctxBase, capaBase, drawState, terrenoCacheParaFrame(drawState.mapa));
+    mapaEnVista = { drawState, base: capaBase, intervaloMs: state.relojDeMundoIntervaloMs, animado: false };
+    mapaEnVista.animado = pintarMapaGeneral();
   }
+  if (vistaMapa === 'asentamiento') mapaEnVista = null;
   actualizarSelects(state);
   actualizarInfoTruequeAsentamientos(state);
   actualizarInfoFlota(state);
@@ -2337,6 +2380,7 @@ function render(): void {
 // Única suscripción: cualquier acción del store dispara un re-render. La interfaz nunca
 // vuelve a llamar `render()` manualmente tras una acción — eso sería recrear el acoplamiento.
 gameStore.subscribe(render);
+requestAnimationFrame(animarMapa);
 alCargarSigilos(render);
 
 function ocultarTooltipEdificioAsentamiento(): void {
@@ -2408,7 +2452,7 @@ canvas.addEventListener('mouseleave', () => {
 });
 
 document.getElementById('refrescar-btn')!.addEventListener('click', () => {
-  void gameStore.refrescar();
+  void gameStore.refrescar(true);
 });
 
 // El mundo avanza SOLO en el servidor (reloj de mundo, Fase D / D5). Esta interfaz no tiene sincronización

@@ -242,6 +242,6 @@ Un ejército con caravanas adjuntas que **entra en una plaza de su Facción** (D
   su cupo de Mercado, y los bandidos no la tocan (está en una plaza amiga).
 - **Intercambia con el almacén de la anfitriona.** Un residente de su origen presente en la plaza puede cargar
   recursos del almacén al carro y descargar del carro al almacén.
-- **Solo sale de dos formas:** enganchada a un ejército de la Facción (cualquiera, no solo el que la trajo), o
+- **Solo sale de dos formas:** enganchada a un ejército de la Facción que esté dentro de esa plaza (cualquiera, no solo el que la trajo; Doc 5.13.2), o
   **enviada a su origen** — si va vacía aparece allí al instante, si lleva carga recorre el mapa de vuelta y
   la vuelca en el almacén del origen al llegar (una caravana con carga nunca se teletransporta).

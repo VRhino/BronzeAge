@@ -30,6 +30,7 @@ import { PRECIO_BASE } from '../constants';
 import { INFRA } from '../constantsInfra';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { cargarPartida, guardarPartida } from './persistenciaPartida';
+import { medicion } from './medicionDeCarga';
 import { anexarEventos, claveDeEventos, leerEventos } from './eventosDePartida';
 import { anexarAlDiario, vaciarDiario, type LineaDiario } from './diarioDePartida';
 import { tecnologiasDe } from '../engine/tecnologia';
@@ -78,6 +79,11 @@ export interface OpcionesRunner {
    * conectados solo se enteraban de lo que pasaba en el mundo al volver a preguntar.
    */
   alEmitir?: (gameId: string, eventos: readonly EventoDominioConVersion[], marca: MarcaDeTick) => void;
+  /**
+   * A quién avisar de que el estado cambió (comando de jugador, tick del reloj o de administración), una vez persistido. Es el disparo
+   * del difusor de vistas (`server/difusion/difusorDeVistas.ts`, 03 §6.1): se avisa de TODA transición aceptada, haya eventos o no.
+   */
+  alCambiarEstado?: (gameId: string) => void;
 }
 
 /** Cuándo ocurrió un tick del reloj de mundo (2026-10-09): lo que el hub manda a todos los conectados para que sepan que hay algo nuevo que pedir. */
@@ -92,6 +98,7 @@ export class RunnerDePartida {
   private readonly ahora: () => string;
   private readonly opcionesSesion: OpcionesSesion;
   private readonly alEmitir?: OpcionesRunner['alEmitir'];
+  private readonly alCambiarEstado?: OpcionesRunner['alCambiarEstado'];
   /** Los eventos del último tick, para difundirlos tras persistir. */
   private eventosDelUltimoTick: EventoDominioConVersion[] = [];
 
@@ -119,6 +126,8 @@ export class RunnerDePartida {
    * catch-up sí** — ponerse al día de una semana caída son ~79 minutos con la cola parada. Sin esta métrica,
    * eso solo se ve desde fuera como "el servidor no responde".
    */
+  /** Muestras desde la última `tomarVentana()` (telemetría de carga, 03 §14). */
+  private ventana: { ticksMs: number[]; guardadoMs: number[]; guardadoBytes: number[] } = { ticksMs: [], guardadoMs: [], guardadoBytes: [] };
   private readonly instrumentos = { pendientes: 0, ticks: 0, msTotal: 0, msUltimo: 0, msMax: 0, ultimaRafaga: 0, mayorRafaga: 0, omitidos: 0 };
 
   /**
@@ -187,6 +196,7 @@ export class RunnerDePartida {
     this.ahora = opciones.ahora ?? (() => new Date().toISOString());
     this.opcionesSesion = opciones.sesion ?? {};
     this.alEmitir = opciones.alEmitir;
+    this.alCambiarEstado = opciones.alCambiarEstado;
     this.versionEventosAnexados = versionEventosAnexados;
   }
 
@@ -383,6 +393,7 @@ export class RunnerDePartida {
     this.instrumentos.ticks++;
     this.instrumentos.msTotal += ms;
     this.instrumentos.msUltimo = ms;
+    if (medicion.activa) this.ventana.ticksMs.push(ms);
     if (ms > this.instrumentos.msMax) this.instrumentos.msMax = ms;
     return resultado;
   }
@@ -496,6 +507,13 @@ export class RunnerDePartida {
     };
   }
 
+  /** Devuelve y reinicia las muestras de la ventana: ms de cada tick y ms/bytes de cada guardado de snapshot. */
+  tomarVentana(): { ticksMs: number[]; guardadoMs: number[]; guardadoBytes: number[] } {
+    const v = this.ventana;
+    this.ventana = { ticksMs: [], guardadoMs: [], guardadoBytes: [] };
+    return v;
+  }
+
   /** ms de reloj de PARED entre ticks para esta partida, o `null` si su reloj de mundo está parado (solo
    * avanza con `POST .../tick`). Lo fija `INTERVALO_TICK_MS` del proceso, o el override que reciba
    * `RegistroDePartidas.descartarYCrear` al regenerar. La consola de administración lo muestra en la
@@ -550,6 +568,7 @@ export class RunnerDePartida {
 
     await this.anexarEventosNuevos();
     if (guardar) await this.guardarYVaciarDiario();
+    this.alCambiarEstado?.(this.gameId);
     return resultado;
   }
 
@@ -560,7 +579,12 @@ export class RunnerDePartida {
    */
   private async guardarYVaciarDiario(): Promise<void> {
     try {
-      await guardarPartida(this.almacen, this.sesion, this.ahora());
+      const t0 = performance.now();
+      const bytes = await guardarPartida(this.almacen, this.sesion, this.ahora());
+      if (medicion.activa) {
+        this.ventana.guardadoMs.push(performance.now() - t0);
+        this.ventana.guardadoBytes.push(bytes);
+      }
       await vaciarDiario(this.almacen, this.gameId);
     } catch (err) {
       console.error(`[diario] no se pudo guardar '${this.gameId}' (versión ${this.sesion.getState().version}); el diario la conserva:`, err);

@@ -85,10 +85,13 @@ import { poderEscuadron, poderTotal } from '@motor/engine/combate';
 import type { EstadoAdmin, EventoLogAdmin } from '@motor/session/estado';
 import type { EventoDominio } from '@motor/domain/eventos';
 import type { EventoDominioConVersion } from '@motor/session/estado';
-import { instanteDeTick, isoDeInstante } from '@motor/session/estado';
+import { isoDeInstante } from '@motor/session/estado';
 import type { ParamsDe, TipoComando } from '@motor/session/comandos/registro';
 import type { MapaGenerado } from '@motor/worldgen';
-import { ApiError, consultarEstado, consultarEventos, crearOResumirPartida, ejecutarComando, obtenerMapa } from './apiCliente';
+import { ApiError, consultarEstado, consultarEventos, crearOResumirPartida, ejecutarComando, obtenerMapa, olvidarSesion, urlTiempoRealAdmin } from './apiCliente';
+import { CANAL_PARTIDA, canalAsentamiento, canalCampamento, canalHeroe, ConexionAdmin } from './conexionAdmin';
+import { fusionarEstado, type AsentamientoConResumen } from './estadoEnVivo';
+import type { ResumenDeAsentamiento } from '@motor/session/vistas/segmentos';
 
 /** Entrada de log en texto — Fase D: `momento` (ISO de mundo) en vez de `tick`. Mismo shape que
  * `EventoLogAdmin` del motor (`proyectarLog`, aquí abajo, la produce). */
@@ -105,6 +108,14 @@ export type EventoLog = EventoLogAdmin;
  */
 /** Cuántos eventos del historial se guardan en el cliente (los más recientes). */
 const MAX_EVENTOS_EN_MEMORIA = 2000;
+
+/** Cuánto debe llevar oculta la pestaña para soltar el tiempo real. */
+const PAUSA_OCULTA_MS = 8_000;
+/** Tras volver a verse, se espera a las fotos nuevas antes de recurrir a una lectura completa. */
+const GRACIA_AL_REANUDAR_MS = 10_000;
+
+/** Cada cuánto se relee el estado completo por HTTP mientras el tiempo real va bien (03 §8.3: respaldo ≥ 60 s). */
+const LECTURA_COMPLETA_EN_VIVO_MS = 60_000;
 
 function proyectarLog(eventos: readonly EventoDominio[]): EventoLog[] {
   return eventos.map((e) => ({
@@ -222,7 +233,19 @@ function idsNoVacios(csv: string): string[] {
  */
 export class GameStore {
   private gameId: string;
+  /** Lo que ve la interfaz: la última lectura HTTP completa, con lo que haya llegado por tiempo real encima (ver `refusionar`). */
   private estadoCache: EstadoAdmin;
+  /** La última lectura HTTP completa, tal cual: la base sobre la que se compone el estado en vivo. */
+  private estadoBase: EstadoAdmin;
+  /** WebSocket de administración (tiempo real por canales). Sin él, o mientras no esté sano, el sondeo HTTP sigue como siempre. */
+  private conexion: ConexionAdmin | undefined;
+  private ultimaLecturaCompleta = Date.now();
+  private notifPendiente = false;
+  private temporizadorOculto: ReturnType<typeof setTimeout> | undefined;
+  private reanudadoEn = 0;
+  private versionDePartidaVista = -1;
+  /** Cuándo (performance.now) llegó el último dato de la partida: el origen de la interpolación de lo móvil. */
+  private recibidoEn = performance.now();
   private listeners = new Set<Listener>();
   /** Mensajes de rechazo/error SOLO EN MEMORIA del cliente (nunca persistidos): a diferencia de la versión
    * local anterior, el servidor no tiene manera de que el cliente le pida "anota este rechazo en el log" sin
@@ -267,6 +290,7 @@ export class GameStore {
   private constructor(gameId: string, estadoInicial: EstadoAdmin, mapaInicial: MapaGenerado) {
     this.gameId = gameId;
     this.estadoCache = estadoInicial;
+    this.estadoBase = estadoInicial;
     this.mapaGeneradoCache = { id: estadoInicial.mapaId, mapa: mapaInicial };
   }
 
@@ -276,9 +300,130 @@ export class GameStore {
    * refresque uno y olvide el otro, y el síntoma sería una consola que deja de crecer sin que nada falle.
    */
   private async recargar(): Promise<void> {
-    this.estadoCache = await consultarEstado(this.gameId);
+    this.estadoBase = await consultarEstado(this.gameId);
+    this.estadoCache = this.estadoBase;
+    this.ultimaLecturaCompleta = Date.now();
+    this.recibidoEn = performance.now();
+    this.refusionar(true);
     await this.sincronizarEventos();
     await this.sincronizarMapa(this.estadoCache.mapaId);
+  }
+
+  // --- Tiempo real (Docs/Coordinacion/03): el estado llega por canales y se compone sobre la última lectura HTTP ---
+
+  /** Abre el WebSocket de administración y suscribe la versión ligera de la partida. Si el servidor no lo tiene, todo sigue por sondeo. */
+  iniciarTiempoReal(): void {
+    if (this.conexion) return;
+    this.conexion = new ConexionAdmin({
+      url: () => urlTiempoRealAdmin(this.gameId),
+      alCambiar: (canal) => this.alCambiarCanal(canal),
+      alEstado: () => this.programarNotify(),
+      alCanalDesconocido: (canal) => {
+        if (canal !== CANAL_PARTIDA) return;
+        this.conexion?.cerrar();
+        this.conexion = undefined;
+      },
+      alFallarApertura: () => olvidarSesion(),
+    });
+    this.conexion.abrir();
+    this.conexion.suscribir(CANAL_PARTIDA);
+    document.addEventListener('visibilitychange', () => this.alCambiarVisibilidad());
+  }
+
+  /** Pestaña oculta más de unos segundos: se sueltan las suscripciones (un cambio rápido de foco no cuesta una foto de ~1 MiB). Al volver,
+   * se reabre todo y se sigue viendo lo último hasta que llegan las fotos nuevas. */
+  private alCambiarVisibilidad(): void {
+    clearTimeout(this.temporizadorOculto);
+    if (document.hidden) {
+      this.temporizadorOculto = setTimeout(() => {
+        if (document.hidden) this.conexion?.pausar();
+      }, PAUSA_OCULTA_MS);
+      return;
+    }
+    if (this.conexion?.estaPausada) {
+      this.reanudadoEn = Date.now();
+      this.conexion.reanudar();
+    }
+  }
+
+  /** Cuándo (performance.now) llegó el último dato de la partida. */
+  momentoDeDatos(): number {
+    return this.recibidoEn;
+  }
+
+  /** ¿Llega el estado por tiempo real? Mientras sí, el sondeo completo baja a un respaldo lento. */
+  get enVivo(): boolean {
+    return this.conexion?.sano === true;
+  }
+
+  /** Qué detalle se está mirando: se suscribe a esos canales y se sueltan los demás. Solo los que existen en la partida. */
+  vigilar(vistos: { asentamientos: readonly (string | null | undefined)[]; campamentos: readonly (string | null | undefined)[]; heroes: readonly (string | null | undefined)[] }): void {
+    if (!this.conexion) return;
+    const e = this.estadoCache;
+    const quiero = new Set<string>();
+    for (const id of vistos.asentamientos) if (id && e.asentamientos.some((a) => a.id === id)) quiero.add(canalAsentamiento(id));
+    for (const id of vistos.campamentos) if (id && e.campamentosMercenarios.some((c) => c.id === id)) quiero.add(canalCampamento(id));
+    for (const id of vistos.heroes) if (id && e.heroes.some((h) => h.id === id)) quiero.add(canalHeroe(id));
+    for (const canal of [...this.conexion.suscritos]) if (canal !== CANAL_PARTIDA && !quiero.has(canal)) this.conexion.desuscribir(canal);
+    for (const canal of quiero) this.conexion.suscribir(canal);
+  }
+
+  private alCambiarCanal(canal: string): void {
+    if (canal === CANAL_PARTIDA) {
+      this.recibidoEn = performance.now();
+      const partida = this.conexion?.almacen(CANAL_PARTIDA);
+      // El mapa solo cambia al regenerar la partida: ese caso se resuelve con una lectura completa.
+      if (partida && partida.tiene('mapaId') && partida.bloque('mapaId') !== this.mapaGeneradoCache.id) {
+        void this.recargar().then(() => this.programarNotify());
+        return;
+      }
+      // El historial de eventos (log y crónica) sigue su cursor HTTP: pequeño, y solo cuando la versión avanza.
+      if (partida && partida.version !== this.versionDePartidaVista) {
+        this.versionDePartidaVista = partida.version;
+        void this.sincronizarEventos().then(() => this.programarNotify());
+      }
+    }
+    this.programarNotify();
+  }
+
+  /** Varios mensajes seguidos se juntan en un solo repintado. */
+  private programarNotify(): void {
+    if (this.notifPendiente) return;
+    this.notifPendiente = true;
+    setTimeout(() => {
+      this.notifPendiente = false;
+      this.refusionar();
+      this.notify();
+    }, 0);
+  }
+
+  /** Compone `estadoCache` = lectura HTTP + lo que llegó por tiempo real. Sin conexión sana es la lectura HTTP sola. */
+  private refusionar(desdeLectura = false): void {
+    const partida = this.conexion?.almacen(CANAL_PARTIDA);
+    if (!this.conexion || !partida) {
+      // Sin foto vigente (reconectando, pestaña recién vuelta): se conserva lo último que se veía; solo una lectura HTTP nueva lo sustituye.
+      if (desdeLectura || !this.conexion) this.estadoCache = this.estadoBase;
+      return;
+    }
+    const conexion = this.conexion;
+    this.estadoCache = fusionarEstado(this.estadoBase, partida, (canal) => conexion.ultimo(canal), conexion.intervaloTickMs);
+  }
+
+  /** Lo que las listas globales necesitan de cada asentamiento. Por tiempo real viene calculado por el servidor (`resumen`); con una lectura
+   * HTTP completa se deriva del asentamiento entero. */
+  resumenDe(a: Asentamiento): Pick<ResumenDeAsentamiento, 'edificiosActivos' | 'edificiosEnCurso' | 'almacenClave' | 'mantenimientoIncumplido' | 'tieneFundicion' | 'tieneGranFundicion'> {
+    const dado = (a as AsentamientoConResumen).resumen;
+    if (dado) return dado;
+    const activos = a.edificios.filter((e) => e.estado === 'activo');
+    const clave = (r: 'madera' | 'piedra' | 'trigo' | 'oro') => ({ cantidad: a.almacen[r]?.cantidad ?? 0, capacidad: a.almacen[r]?.capacidad ?? 0 });
+    return {
+      edificiosActivos: activos.length,
+      edificiosEnCurso: a.edificios.filter((e) => e.estado === 'en_construccion' || e.estado === 'en_cola').length,
+      almacenClave: { madera: clave('madera'), piedra: clave('piedra'), trigo: clave('trigo'), oro: clave('oro') },
+      mantenimientoIncumplido: a.medidorMantenimiento < MANTENIMIENTO.medidorInicial,
+      tieneFundicion: activos.some((e) => e.tipo === 'fundicion'),
+      tieneGranFundicion: activos.some((e) => e.tipo === 'granFundicion'),
+    };
   }
 
   /**
@@ -331,6 +476,7 @@ export class GameStore {
     // posterior; ahora se siembra al abrir y a partir de ahí solo llega lo nuevo. Sin esto la consola
     // arrancaría vacía hasta el primer refresco.
     await store.sincronizarEventos();
+    store.iniciarTiempoReal();
     return store;
   }
 
@@ -677,7 +823,7 @@ export class GameStore {
 
   /** Resumen militar de solo lectura: lo que defendería la plaza ahora (guarnición y loadouts de quien está dentro y sano). */
   poderMilitarInfo(asentamiento: Asentamiento): { soldados: number; poder: number } {
-    const guarnicion = defensaDe(asentamiento, this.state.heroes, heridosEn(this.state.heroes, instanteDeTick(this.state.tick)));
+    const guarnicion = defensaDe(asentamiento, this.state.heroes, heridosEn(this.state.heroes, this.state.instante));
     return {
       soldados: guarnicion.reduce((total, escuadron) => total + escuadron.cantidad, 0),
       poder: guarnicion.reduce((total, escuadron) => total + poderEscuadron(escuadron), 0),
@@ -909,7 +1055,10 @@ export class GameStore {
   /** Re-pide el estado completo al servidor. El mundo avanza SOLO en el servidor (reloj de mundo, Fase D /
    * D5: un tick por minuto real, con catch-up tras reinicio) — la interfaz no lo empuja, solo vuelve a leer.
    * Lo llama el botón "Refrescar" y el auto-refresco de `main.ts`. */
-  async refrescar(): Promise<void> {
+  async refrescar(forzar = false): Promise<void> {
+    // Con el tiempo real sano, la lectura completa es solo un respaldo (y trae lo que aún no viaja por canales).
+    if (!forzar && this.enVivo && Date.now() - this.ultimaLecturaCompleta < LECTURA_COMPLETA_EN_VIVO_MS) return;
+    if (!forzar && Date.now() - this.reanudadoEn < GRACIA_AL_REANUDAR_MS) return;
     try {
       await this.recargar();
     } catch (err) {
@@ -930,7 +1079,9 @@ export class GameStore {
       // reiniciar el cursor, el de la partida vieja los filtraría todos y la consola saldría vacía.
       this.eventos = [];
       this.cursorEventos = 0;
-      this.estadoCache = await consultarEstado(this.gameId);
+      this.estadoBase = await consultarEstado(this.gameId);
+      this.estadoCache = this.estadoBase;
+      this.ultimaLecturaCompleta = Date.now();
       // El único punto donde `sincronizarMapa` de verdad pide algo: regenerar SIEMPRE reemplaza la seed, así
       // que `mapaId` cambia siempre — a diferencia de `despachar`/`refrescar`, donde suele ser un no-op.
       await this.sincronizarMapa(this.estadoCache.mapaId);

@@ -84,6 +84,18 @@ async function iniciarSesion(): Promise<string> {
   return id;
 }
 
+/** La URL del WebSocket de administración (03 §3): el navegador no puede mandar cabeceras en el handshake, así que la sesión va en `?sesion=`. */
+export async function urlTiempoRealAdmin(gameId: string): Promise<string> {
+  const id = sesionId ?? (await iniciarSesion());
+  const esquema = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${esquema}://${location.host}${V1}/admin/partidas/${encodeURIComponent(gameId)}/tiempo-real?sesion=${encodeURIComponent(id)}`;
+}
+
+/** Si el socket no llega a abrirse, la sesión pudo caducar: se descarta y el siguiente intento entra de nuevo. */
+export function olvidarSesion(): void {
+  sesionId = null;
+}
+
 /**
  * Petición autenticada. Si la sesión falta o el servidor la rechaza (401: caducó, o el proceso se reinició y
  * la perdió — hoy vive en memoria), entra una vez y reintenta. Un segundo 401 se propaga: reintentar en

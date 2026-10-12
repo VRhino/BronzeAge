@@ -21,6 +21,9 @@
 // comentario de `RegistroDePartidas`). Con "mundo = tiempo real" (doc 10 §2) el valor es 60000 (=
 // `SIMULACION.duracionTickMs`): un minuto real por tick.
 //
+// `WS_COMPRESION` (`off` la apaga), `WS_COMPRESION_UMBRAL` (bytes, 1024 por defecto) y `WS_COMPRESION_NIVEL` (zlib 1-9, 3 por defecto) ajustan
+// la compresión `permessage-deflate` del WebSocket (contrato 03 §13.2): activada por defecto y negociada, un cliente sin soporte no la nota.
+//
 // `SERVIDORES_BATALLA` (doc 02 §3.3) declara los servidores de batalla de Conquest que pueden hablar con esta
 // instancia, como `servidorId:token` separados por comas. Es también el interruptor: sin ella, ninguna batalla llega a
 // Unity y todas se resuelven con números, como antes de existir el ciclo de batalla.
@@ -33,6 +36,7 @@ import { crearRegistroProveedores } from '../acceso/proveedorIdentidad';
 import type { AlmacenDeObjetos } from './almacen/almacenDeObjetos';
 import { crearAlmacenEnDisco } from './almacen/enDisco';
 import { crearAlmacenEnLibsql } from './almacen/enLibsql';
+import { compresionDeEntorno } from './difusion/compresion';
 import { parsearAdministradores } from './identidad/administradoresGlobales';
 import { parsearServidoresDeBatalla } from './identidad/servidoresDeBatalla';
 import { proveedoresDeProceso } from './identidad/proveedoresActivos';
@@ -54,6 +58,10 @@ const ORIGENES_PERMITIDOS = (process.env.ORIGENES_PERMITIDOS ?? '')
   .map((o) => o.trim())
   .filter((o) => o !== '');
 const INTERVALO_TICK_MS = process.env.INTERVALO_TICK_MS ? Number(process.env.INTERVALO_TICK_MS) : undefined;
+// Telemetría de carga (03 §14): una muestra cada N ms por partida viva. APAGADA por defecto (decisión del
+// usuario): sin esta variable, o con 0, ni se muestrea ni se escribe `.carga.jsonl`. También se enciende en caliente con
+// `PUT /v1/admin/partidas/:gameId/playtest` (el panel).
+const TELEMETRIA_MS = process.env.TELEMETRIA_INTERVALO_MS ? Number(process.env.TELEMETRIA_INTERVALO_MS) : 0;
 const SERVIDORES_BATALLA = parsearServidoresDeBatalla(process.env.SERVIDORES_BATALLA);
 // Mantenimiento (Fase E2): respaldos y poda automaticos. Opt-in, como los ticks y los administradores: sin
 // `MANTENIMIENTO_INTERVALO_MS` no se respalda ni se borra nada por su cuenta. Los otros dos solo tienen
@@ -85,6 +93,7 @@ async function arrancar(): Promise<void> {
     origenesPermitidos: ORIGENES_PERMITIDOS,
     intervaloTickMs: INTERVALO_TICK_MS,
     mantenimiento: MANTENIMIENTO,
+    telemetria: TELEMETRIA_MS > 0 ? { intervaloMs: TELEMETRIA_MS } : undefined,
     identidad: {
       proveedores: crearRegistroProveedores(proveedoresDeProceso(identidad.repositorio)),
       repositorio: identidad.repositorio,
@@ -92,6 +101,7 @@ async function arrancar(): Promise<void> {
     codigoRegistro: CODIGO_REGISTRO,
     codigoRegistroBots: CODIGO_REGISTRO_BOTS,
     servidoresBatalla: SERVIDORES_BATALLA,
+    compresionWs: compresionDeEntorno(process.env),
     // Cerrar el servidor drena las escrituras de identidad pendientes (ver `alCerrar` en `api.ts`).
     alCerrar: () => identidad.esperarEscrituras(),
   });

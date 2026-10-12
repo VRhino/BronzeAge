@@ -16,6 +16,9 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1: solo (b) hecha |
 | 20 | TECNOLOGÍA | Tecnología por Eras: lo que falta tras las Eras I-III | ◐ Eras I-III hechas |
 | 38 | MILITAR | Tope de héroes en asedio: volver a 15 cuando entren jugadores | ◐ 5 mientras se prueba con NPC |
+| 44 | GUERRA | Guerra logística: caravanas A/B, pueblos extractores, avanzadas | ✘ en diseño |
+| 45 | LOGÍSTICA | Repostar por zona, víveres del ejército, enganchar solo dentro y reclamar | ✘ canon escrito, código pendiente |
+| 46 | BOTS | Comportamiento de bots emergente: lo que los bots tienen que aprender con cada cambio | ✘ lista abierta |
 
 **Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06), y también, de los cabos sueltos §33/§35 (2026-10-06): la **riqueza acumulada** por comisiones, el **bonus por distancia en el mostrador**, **cortar rutas como guerra económica**, la **cola de prioridad de reclutamiento** y las **armas de asedio** como mecánica aparte.
 
@@ -89,3 +92,90 @@ bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 Mientras se prueba con NPC, el asedio admite 5 héroes por bando como el resto de batallas (decisión del usuario,
 2026-09-27; `BATALLA.capacidad.asedio`, Doc 5.15.1). Cuando entren jugadores vuelve a **15 contra 15**: cambiar la
 constante y el canon, y avisar a Conquest, que abre la instancia con esa capacidad (`BattleSide.capacidadMaxima`).
+
+## 44. Guerra logística: caravanas A/B, pueblos extractores y avanzadas
+
+En diseño desde el 2026-10-11, cero código y canon sin tocar (se reescribe al implementar). Todo vive en
+`Consideraciones/Guerra_Logistica_Definicion.md`:
+- **Cerrado**: se acaba la inmunidad de caravanas; batalla A (disputa de carros) fuera de la zona del dueño o de sus
+  aliados y B (aguante, pierde el 70 %) dentro; atacar una caravana siempre exige guerra o la declara. Pueblos
+  extractores con almacén propio, guarnición de mineros y carro de acarreo que sale lleno; saqueo por encima del 50 %.
+  Obras de mapa: se marcan desde la plaza y se levantan llevando los materiales al sitio.
+- **Cerrado también**: avanzadas (atalaya → fuerte → ciudadela), y la plaza pasa a ver solo su zona (lo de fuera lo
+  ven las avanzadas, radio 60). Diseño completo; falta detallar el plan e implementar.
+- La calibración de distancias y velocidades va en una sesión aparte.
+
+## 45. Repostar por zona, víveres del ejército, enganchar solo dentro y reclamar
+
+**Canon reescrito el 2026-10-11** (Doc 5.13, 5.13.2, 5.13.3, 5.14.1, 5.14.2, 5.14.5; Doc 1.8 y 1.9b; Doc 3.13.7).
+El código todavía hace lo de antes; `Docs/Mechanics/Movimiento_Ejercitos.md` describe el código y se actualiza al
+implementarlo.
+
+**Qué cambia:**
+- **Se acaba `LOGISTICA.radioReabastecimiento`** (60):
+  - la columna personal reposta sola **dentro de la zona de influencia** de una plaza donde puede;
+  - el ejército no reposta solo: usa el botón **Repostar** en la puerta (`radioPuerta`);
+  - recoger tropas, cargar una caravana adjunta y entregar un trueque se hacen también **en la puerta**.
+- **Víveres del ejército**: un montón propio con la capacidad sumada; al separarse o desarmarse, parte igual.
+  `pasarAViveres` en un ejército llena ese montón.
+- **Aliado incluye el vasallaje** al repostar (hoy `estanAliadas` solo cuenta alianzas).
+- **Campamento de mercenarios**: Repostar gratis para todos, distinto de comprar trigo. La ración del residente cada
+  30 min (`MERCENARIOS.racion`) queda absorbida.
+- **Enganchar solo dentro** del lugar donde está la caravana (plaza o campamento), nunca en mundo abierto. **Reclamar**
+  una caravana suelta de tu Facción, junto a ella, es una acción aparte.
+
+**Impacto en el código (2026-10-11):**
+- **Motor**:
+  - `engine/viveres.ts` (montón del ejército, reparto igual);
+  - `engine/ejercitos.ts`:
+    - `repostarSiPuede`: solo columnas personales y por zona;
+    - `puedeRepostarEn`: vasallaje;
+    - los 4 usos del radio (recoger tropas, `adjuntarCaravana`, `cargarCaravanaAdjunta`, comer en el tick);
+  - `engine/expansion.ts` (reclamar la de Fundación en ruta);
+  - `engine/pertenencia.ts` (predicado de aliado con vasallaje);
+  - `engine/mercadoMercenario.ts`.
+- **Sesión**:
+  - `session/comandos/ejercitos.ts` (`adjuntarCaravana`, `soltarCaravana`, `entregarDeCaravana`, comando nuevo
+    `repostar`, comando nuevo `reclamarCaravana`);
+  - `presencia.ts` y `ayudas.ts` (`conViveresLlenos`, salir de un campamento);
+  - `autorizacion.ts`, `esquemas.ts`, `registro.ts`.
+- **Tipos y contrato**: `domain/types.ts` (`Ejercito.viveres`); `src/contratos/v1/dto.ts` y su schema;
+  `session/proyecciones/jugador.ts`.
+- **Bots**:
+  - `bots/cerebro/fundar.ts`, que engancha justo al salir y re-engancha en ruta;
+  - `bots/cerebro/sinPlaza.ts`, que engancha tras `salirDelCampamento`;
+  - `bots/cerebro/militar.ts`, que calcula el alcance con los víveres.
+- **Clientes**:
+  - BronzeAgeClient: `apiCliente.ts`, `main.ts`, `tiposDominio.ts`, `ui/caravanasAdjuntas.ts`, `ui/panelAliados.ts`,
+    `ui/unirseDesdePlaza.ts`;
+  - cliente admin: `cliente/src/app/gameStore.ts`, `cliente/src/main.ts`.
+- **Tests**: unos 15 archivos. Los que más pesan son `avanzarEjercitos.test.ts`, `comandosEjercitos.test.ts`,
+  `caravanaFundacion.test.ts`, `fundacionCampamento.test.ts`, `fundacionDesdePlaza.test.ts`, `guarnecer.test.ts`,
+  `viveres.test.ts` y `entrarSalirCampamento.test.ts`.
+- **Docs**: `Docs/Mechanics/Movimiento_Ejercitos.md` §6-§9, `Docs/Coordinacion/02` (comandos) y
+  `Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md` (bots).
+
+## 46. Comportamiento de bots emergente
+
+**Lista abierta y acumulativa**: aquí se anota, según se diseñan las demás mecánicas, lo que los bots (`src/bots/`,
+Doc Arquitectura 12) tendrán que hacer distinto o aprender. No se implementa con cada mecánica: se aborda en su
+momento, con todo junto. Cada punto dice de qué mecánica sale.
+
+**De §45 (repostar y caravanas):**
+- `bots/cerebro/fundar.ts` y `sinPlaza.ts`: hoy salen y **luego** enganchan la Caravana de Fundación. Tienen que
+  engancharla **antes de salir**, dentro de la plaza o del campamento, y salir ya como ejército.
+- `sinPlaza.ts`: sale del campamento «admitiendo compañía» con un destino fijado; el ejército sale quieto y se
+  dirige después con `marcharA`.
+- Reclamar una caravana suelta (la de Fundación que vuelve sola) crea un ejército: decidir si el bot lo usa.
+- `militar.ts`: el alcance de ida y vuelta se calcula con los víveres del héroe; pasa a ser los del ejército.
+- Repostar: una columna personal lo hace sola dentro de la zona; un ejército de bots tiene que pulsar **Repostar** en
+  la puerta antes de salir y al volver. En un campamento de mercenarios, repostar es gratis para todos.
+- El vasallaje cuenta como aliado al repostar.
+
+**De §44 (guerra logística):**
+- Marcar obras de mapa (pueblos, avanzadas) y llevar los materiales al sitio.
+- Escoltar el carro de acarreo; saquear pueblos y atacar caravanas.
+- **Aceptar o no el riesgo de declarar la guerra** al atacar (toda agresión la declara, salvo unirse al asedio de otro).
+- Guarnecer avanzadas y repostar en ellas.
+- Reclutar mineros en el Centro Urbano.
+- La plaza ve solo su zona: los bots deciden con lo que ven, así que verán menos hasta tener avanzadas.

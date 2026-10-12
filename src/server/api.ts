@@ -29,6 +29,9 @@ import { crearRepositorioIdentidadEnMemoria } from './identidad/repositorioEnMem
 import { crearDirectorioDeAdministradores, type AdministradorConfigurado } from './identidad/administradoresGlobales';
 import { RegistroDePartidas } from './registroDePartidas';
 import { HubDeDifusion } from './difusion/hub';
+import { DifusorDeVistas, type OpcionesDifusor } from './difusion/difusorDeVistas';
+import { RegistroDeCarga } from './telemetria';
+import { perMessageDeflateDe, type OpcionesCompresionWs } from './difusion/compresion';
 import { RegistroDeAuditoria } from './auditoria';
 import { TareaDeMantenimiento, type ConfiguracionMantenimiento } from './mantenimiento';
 import { registrarRutasDeSesion } from './rutas/sesiones';
@@ -97,6 +100,8 @@ export interface OpcionesServidor {
    * que `intervaloTickMs`: sin configurarlo no se escribe ni se borra nada por su cuenta — un default que
    * borra archivos es el que nadie nota hasta que ya borró algo que hacía falta. */
   mantenimiento?: ConfiguracionMantenimiento;
+  /** Muestreo de carga (`telemetria.ts`, 03 §14) cada `intervaloMs`. `undefined` = no se muestrea (los tests); el registro existe igual para fijar/leer `playtest`. */
+  telemetria?: { intervaloMs: number };
   /** Código de invitación exigido en `POST /v1/registro` (alta de cuenta local). `undefined` = registro
    * abierto. */
   codigoRegistro?: string;
@@ -107,6 +112,10 @@ export interface OpcionesServidor {
    * ninguna batalla llega a Unity y todas se resuelven con números (decisión del usuario, 2026-09-15).
    */
   servidoresBatalla?: readonly ServidorDeBatalla[];
+  /** Ajustes del difusor de canales de vista (coalescencia, umbrales de socket lento…); por defecto los del contrato 03 §6. Los tests los acortan. */
+  vistas?: Omit<OpcionesDifusor, 'fuenteDe'>;
+  /** Compresión `permessage-deflate` del WS: `false` la apaga; sin declarar, activada con umbral de 1 KiB y nivel 3 (`difusion/compresion.ts`). */
+  compresionWs?: OpcionesCompresionWs | false;
 }
 
 export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
@@ -116,7 +125,8 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   // Fase C9 viene a evitar: un cliente con un bug de tipos debe ver un 400, no que el servidor le adivine lo
   // que quiso decir.
   const app = Fastify({ logger: false, ajv: { customOptions: { coerceTypes: false } } });
-  app.register(fastifyWebsocket);
+  // Compresión `permessage-deflate` (contrato 03 §13.2): activada por defecto con umbral; se negocia, así que un cliente sin soporte no la nota.
+  app.register(fastifyWebsocket, { options: { perMessageDeflate: perMessageDeflateDe(opciones.compresionWs) } });
   app.register(fastifyCors, {
     // `[]`/ausente -> `false` (CORS desactivado del todo, ningún origen cruzado pasa) en vez de un array
     // vacío: es la forma inequívoca de decir "nada permitido" en `@fastify/cors`, sin depender de cómo
@@ -136,27 +146,41 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
   const ahora = opciones.ahora ?? (() => new Date().toISOString());
   const servidoresBatalla = opciones.servidoresBatalla ?? [];
   const hub = opciones.hub ?? new HubDeDifusion();
+  // El difusor busca la partida por id cuando la necesita (la registra `RegistroDePartidas`, que se crea después y lo avisa de cada transición).
+  const registroRef: { actual?: RegistroDePartidas } = {};
+  const difusorDeVistas = new DifusorDeVistas({ fuenteDe: (gameId) => registroRef.actual?.obtener(gameId), ...opciones.vistas });
+  const partidas = (registroRef.actual = new RegistroDePartidas(
+    almacen,
+    opciones.intervaloTickMs,
+    ahora,
+    { batallasEnUnity: servidoresBatalla.length > 0 },
+    // El mensaje `tick` (2026-10-09) se RETIRÓ el 2026-10-10: lo sustituye el latido de los canales de vista (delta vacío por tick, contrato 03).
+    (gameId, eventos) => hub.difundir(gameId, eventos),
+    (gameId) => difusorDeVistas.notificar(gameId)
+    ));
+  const telemetria = new RegistroDeCarga(almacen, { partidas, hub, difusor: difusorDeVistas }, ahora);
   const deps: DependenciasDeRutas = {
     identidad,
     administradores: crearDirectorioDeAdministradores(opciones.administradoresGlobales ?? [], identidad.repositorio),
     // Mismo reloj de pared que el resto del servidor: así el reloj de mundo de cada partida y su catch-up
     // (D5, `RunnerDePartida.iniciarRelojDeMundo`) son inyectables en tests, no solo el reloj del sistema.
-    partidas: new RegistroDePartidas(almacen, opciones.intervaloTickMs, ahora, { batallasEnUnity: servidoresBatalla.length > 0 }, (gameId, eventos, marca) => {
-      hub.difundir(gameId, eventos);
-      hub.difundirTick(gameId, marca);
-    }),
+    partidas,
     ahora,
     hub,
+    difusorDeVistas,
     // Fase E2. Mismo almacén que los snapshots —una partida y su auditoría se archivan y podan juntas— y el
     // mismo reloj de pared inyectado que el resto del servidor, para que un test pueda fechar sus líneas de
     // forma determinista en vez de depender de la hora del sistema.
     auditoria: new RegistroDeAuditoria(almacen, ahora),
+    telemetria,
     codigoRegistro: opciones.codigoRegistro,
     codigoRegistroBots: opciones.codigoRegistroBots,
     almacen,
     directorioRespaldos: (opciones.respaldosEnDisco ?? !opciones.almacen) ? opciones.directorio : undefined,
     servidoresBatalla,
   };
+
+  if (opciones.telemetria) telemetria.iniciar(opciones.telemetria.intervaloMs);
 
   // Apagado limpio: al cerrar la instancia, parar el reloj de mundo de cada partida abierta y dejar drenar
   // su cola (un tick a medio persistir no se aborta). `app.close()` —lo llama el handler de SIGINT/SIGTERM
@@ -169,10 +193,12 @@ export function crearServidor(opciones: OpcionesServidor): FastifyInstance {
 
   app.addHook('onClose', async () => {
     mantenimiento?.detener();
+    deps.telemetria.detener();
     await deps.partidas.cerrar();
     // La auditoría se escribe sin esperar (`registrar` no devuelve promesa, ver `auditoria.ts`), así que sin
     // este drenaje las últimas líneas se perderían al apagar — justo las del incidente que hizo apagar.
     await deps.auditoria.drenar();
+    await deps.telemetria.drenar();
     await opciones.alCerrar?.();
   });
 

@@ -79,6 +79,10 @@ export interface EntradaAuditoria {
   /** Versión de la partida TRAS el comando. Junto con `instante` es lo que permite cruzar una línea de
    * auditoría con el evento de dominio que produjo (`EventoDominioConVersion.version`, Fase C13). */
   version?: number;
+  /** Coste del comando: ms de `runner.ejecutar` (aditivo; ausente en líneas anteriores y en rechazos previos a ejecutar). */
+  ms?: number;
+  /** Bytes del cuerpo JSON de la respuesta de éxito (aditivo; mismo criterio que `ms`). */
+  bytes?: number;
 }
 
 /** Clave del registro de una partida en el almacén. Sufijo propio y no una extensión suelta para que un
@@ -188,6 +192,10 @@ export interface FiltroAuditoria {
   desde?: string;
   actor?: string;
   soloRechazos?: boolean;
+  /** ISO 8601 de reloj de PARED; descarta lo posterior (para cortar una prueba). */
+  hasta?: string;
+  /** Solo comandos que cuestan al menos esto (ms): encuentra los lentos. */
+  msMinimo?: number;
 }
 
 /**
@@ -219,6 +227,8 @@ export async function leerAuditoria(
       continue;
     }
     if (filtro?.desde !== undefined && entrada.momento < filtro.desde) continue;
+    if (filtro?.hasta !== undefined && entrada.momento > filtro.hasta) continue;
+    if (filtro?.msMinimo !== undefined && (entrada.ms ?? 0) < filtro.msMinimo) continue;
     if (filtro?.actor !== undefined && entrada.actor !== filtro.actor) continue;
     if (filtro?.soloRechazos === true && entrada.resultado !== 'rechazado') continue;
     entradas.push(entrada);
