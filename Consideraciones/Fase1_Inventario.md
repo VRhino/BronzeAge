@@ -14,14 +14,16 @@ Con la reconstrucción hay tres destinos y una condición:
 - **Descartado**: superado por la reconstrucción o sin valor para ella.
 - **Condición**: ninguna decisión puede vivir solo aquí. Lo que hoy esté solo aquí **sube al canon** en esta fase.
 
-## Hallazgo que condiciona la fase
+## Hallazgo (resuelto): `Docs/Mechanics/` ya refleja el motor entero
 
-`Docs/Mechanics/` (el nivel «con precisión suficiente para reimplementar») tiene solo 5 documentos: combate, movimiento,
-murallas, trazado urbano y divergencias. El resto de las mecánicas implementadas (economía, comercio, población, política,
-niebla, tecnología, campamentos, caravanas…) hoy tienen la regla en `Docs/Game/` pero **el detalle exacto solo está en el
-código TypeScript**. Para reimplementar en Rust sin perderlo hay que extraerlo a `Docs/Mechanics/` antes de retirar el motor.
-Eso añade a la fase 1 un trabajo grande que no estaba en §4.1. (La memoria dice que economía, tick, niebla, tecnología y
-comercio se documentaron el 2026-10-11, pero no están en `main`: hay que localizar esa rama o sesión.)
+Revisado el 2026-10-12 sobre `b8f7a3d`: 18 documentos y ~10.600 líneas. Comprobado: los 122 comandos de `REGISTRO_COMANDOS`
+coinciden con la matriz de `Proyecciones_Y_Autorizacion.md`; todos los módulos de `src/engine`, `src/world`, `src/domain` y
+`src/session/proyecciones` aparecen citados; un test obliga a un bloque de parámetros por cada tabla de `constants.ts`;
+`Divergencias.md` no tiene abiertas. Huecos que quedan, todos aceptables: (1) el algoritmo del generador aleatorio
+(`createRng`) no está especificado, solo su consumo; no hace falta, porque el Rust no será bit-idéntico; (2) infraestructura
+del servidor (persistencia, telemetría, registro de partidas) no es mecánica y se define en la arquitectura Rust;
+(3) Eras IV y V, pospuestas. Por tanto **no hay extracción pendiente**: lo que falta es el *delta* de la reconstrucción por
+documento (ver `Reconstruccion_Definicion.md` §4.1).
 
 ## A. Decisiones que viven solo aquí → suben al canon (trabajo real de la fase)
 
@@ -85,4 +87,3 @@ comercio se documentaron el 2026-10-11, pero no están en `main`: hay que locali
 2. Los 7 pendientes de `Mecanicas a desarrollar.md`: caravanas diferidas, Eras (§20), tope de asedio (§38), guerra logística (§44), repostar y enganchar (§45), bots emergentes (§46).
 3. Trazado urbano: ¿lo calcula Unity o lo entrega el artefacto de mundo?
 4. NPC de gobernanza: ¿se conserva la cesión de Facción?
-5. Que la extracción de los detalles exactos a `Docs/Mechanics/` entre en la fase 1.
