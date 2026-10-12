@@ -30,7 +30,7 @@ comercio se documentaron el 2026-10-11, pero no están en `main`: hay que locali
 | `Calibracion_Distancias_Definicion.md` | 497 | Velocidades, zonas, ciudad, focos, anillos, estaño, bosques | Bajar §2-§5 a `Docs/Game/1` y constantes al archivo común; O1 y O2 abiertos (**tú**) |
 | `Guerra_Logistica_Definicion.md` | 352 | Caravanas A/B, pueblos extractores, avanzadas, la plaza ve solo su zona | Bajar a `Docs/Game/3` y `5`; cerrar pendiente §44 |
 | `Mecanicas a desarrollar.md` §45 y víveres | — | Repostar por zona, víveres del ejército, enganchar solo dentro | Decidir (**tú**) y bajar a `Docs/Game/5` |
-| `BA-006_Revision_Tecnologia_Eras.md` | 961 | Eras I-III en canon; IV-V decididas/en curso, logros por calibrar | Bajar IV-V a `Docs/Game/6`; pendiente §20 |
+| `BA-006_Revision_Tecnologia_Eras.md` | 961 | Eras I-III en canon; IV-V **pospuestas** por el usuario (2026-10-05) | Se conservan como catálogo de datos pospuesto; el contrato debe dejarlas abiertas (§20) |
 | `Ritmo_Crecimiento_Asentamientos.md` | 806 | Crecimiento en horas vs Eras en semanas; Era I medida, decisiones pendientes | Decidir (**tú**) con la calibración nueva |
 | `Murallas_Definicion.md` | 1096 | Murallas por nivel (empalizada 2 / piedra 3 / adarve 4), decidido 2026-10-09 | Verificar contra `Docs/Mechanics/Murallas.md`; bajar a `Docs/Game/4` |
 | `Economia_Del_Oro_Definicion.md` | 545 | Impuestos y demanda; Paso 6 (calibración) sin hacer | Confirmar canon; la calibración se rehace con el motor nuevo |
