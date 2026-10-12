@@ -97,7 +97,7 @@ Definir entidades externas al motor:
 - `Usuario`: cuenta autenticable.
 - `Sesion`: credenciales, caducidad y contexto de acceso.
 - `Jugador`: identidad dentro de una partida; relación con usuario y facción.
-- `Rol`: jugador, administrador de partida, moderador, administrador global, observador, servicio NPC.
+- `Rol`: jugador, administrador de partida, moderador, administrador global, servicio NPC (el observador de solo lectura se retiró el 2026-10-12: ninguna ruta lo usaba).
 - `Partida`: `gameId`, estado, configuración, versión de reglas, semilla, estado del RNG, tick y estado del ciclo de servidor.
 - `Membresia`: relación usuario-jugador-partida-facción con vigencia y permisos.
 

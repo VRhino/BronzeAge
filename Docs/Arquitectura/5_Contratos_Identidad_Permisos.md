@@ -101,7 +101,6 @@ Rol =
   | 'administrador_partida' — gestiona ESA partida (equivalente a la consola de admin actual, GameStore)
   | 'moderador'            — subset de administrador_partida, sin acceso a balance/regeneración de mundo
   | 'administrador_global' — gestiona instancias/partidas, no un jugador de ninguna
-  | 'observador'           — solo lectura, proyección pública
   | 'servicio_npc'         — el propio backend actuando como NPC de gobernanza (`avanzarNpcGobernanza`), no un Usuario humano
 ```
 
@@ -185,7 +184,7 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | `avanzarTick` | administrador_partida (etapa provisional) o scheduler del servidor | — (Doc 2: "el servidor sigue siendo quien avance y resuelva los ticks"; en producción no es un comando de cliente) |
 | `regenerarMundo`, `importarSimulacion`, `exportarSimulacion`, `exportarMapaUnity` | administrador_partida | — |
 | `getBalance`, `actualizarBalance`, `restaurarBalance` | administrador_partida | — (Doc 2, punto 8: balance debe pasar a versionado por partida/temporada, auditado) |
-| Consultas de solo lectura (`getState`, `getZonas`, `getLigas`, `viabilidadFundacion`, `produccionInfo`, `manoObraInfo`, `nivelAsentamientoInfo`, etc.) | observador | Proyección según Doc 2 punto 7 — un `observador`/`jugador` NO debe recibir el mismo payload que `administrador_partida`; la proyección exacta por rol queda para cuando se diseñen los DTOs (Fase C) |
+| Consultas de solo lectura (`getState`, `getZonas`, `getLigas`, `viabilidadFundacion`, `produccionInfo`, `manoObraInfo`, `nivelAsentamientoInfo`, etc.) | jugador | Proyección según Doc 2 punto 7 — un `jugador` NO debe recibir el mismo payload que `administrador_partida`; la proyección exacta por rol queda para cuando se diseñen los DTOs (Fase C) |
 
 Notas sobre la matriz:
 

@@ -64,7 +64,7 @@ describe('crearRepositorioIdentidadPersistente', () => {
 
   it('revocar una membresía persiste el `hasta`', async () => {
     const primero = await crearRepositorioIdentidadPersistente(almacen);
-    primero.repositorio.otorgarMembresia({ usuarioId: 'usuario-1', gameId: 'g1', jugadorId: null, rol: 'observador', desde: AHORA });
+    primero.repositorio.otorgarMembresia({ usuarioId: 'usuario-1', gameId: 'g1', jugadorId: null, rol: 'moderador', desde: AHORA });
     expect(primero.repositorio.revocarMembresia('usuario-1', 'g1', '2026-06-01T00:00:00.000Z')).toBe(true);
     expect(primero.repositorio.revocarMembresia('usuario-1', 'ausente', AHORA)).toBe(false);
     await primero.esperarEscrituras();

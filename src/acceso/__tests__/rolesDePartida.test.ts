@@ -40,9 +40,8 @@ describe('puedeAdministrar', () => {
     expect(puedeAdministrar(actor(undefined, true))).toBe(true);
   });
 
-  it('no lo cumplen jugador, observador ni quien no tiene membresia', () => {
+  it('no lo cumplen jugador ni quien no tiene membresia', () => {
     expect(puedeAdministrar(actor('jugador'))).toBe(false);
-    expect(puedeAdministrar(actor('observador'))).toBe(false);
     expect(puedeAdministrar(actor(undefined))).toBe(false);
   });
 });
@@ -50,7 +49,7 @@ describe('puedeAdministrar', () => {
 describe('puedeJugar', () => {
   it('solo el rol jugador', () => {
     expect(puedeJugar(actor('jugador'))).toBe(true);
-    expect(puedeJugar(actor('observador'))).toBe(false);
+    expect(puedeJugar(actor('moderador'))).toBe(false);
     expect(puedeJugar(actor(undefined))).toBe(false);
   });
 

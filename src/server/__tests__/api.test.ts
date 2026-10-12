@@ -1223,15 +1223,15 @@ describe('gestión de membresías técnicas (/admin/partidas/:gameId/membresias,
     ).toBe(404);
 
     const beto = await usuarioIdDe('beto');
-    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'observador' } });
-    const repetido = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'moderador' } });
+    await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'moderador' } });
+    const repetido = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol: 'administrador_partida' } });
     expect(repetido.statusCode).toBe(409);
   });
 
   it('el esquema rechaza un rol no otorgable (jugador, administrador_global)', async () => {
     const { admin } = await partidaCreada('g1');
     const beto = await usuarioIdDe('beto');
-    for (const rol of ['jugador', 'administrador_global', 'servicio_npc']) {
+    for (const rol of ['jugador', 'administrador_global', 'servicio_npc', 'observador']) {
       const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: admin, payload: { usuarioId: beto, rol } });
       expect(res.statusCode).toBe(400);
     }
@@ -1244,7 +1244,7 @@ describe('gestión de membresías técnicas (/admin/partidas/:gameId/membresias,
     const betoAuth = { authorization: `sesion ${(await app.inject({ method: 'POST', url: '/v1/sesiones', headers: { authorization: 'dev beto' } })).json().sesionId}` };
     const carlos = await usuarioIdDe('carlos');
 
-    const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: betoAuth, payload: { usuarioId: carlos, rol: 'observador' } });
+    const res = await app.inject({ method: 'POST', url: '/v1/admin/partidas/g1/membresias', headers: betoAuth, payload: { usuarioId: carlos, rol: 'moderador' } });
     expect(res.statusCode).toBe(403);
   });
 

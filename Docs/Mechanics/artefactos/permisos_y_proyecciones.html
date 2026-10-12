@@ -140,7 +140,7 @@ td.c { text-align: center; width: 1%; white-space: nowrap; }
       <div class="panel">
         <h3>Quién soy</h3>
         <label class="tog" style="padding-bottom:8px"><span>Rol técnico</span>
-          <select id="rol"><option value="jugador">jugador</option><option value="administrador_partida">administrador de partida</option><option value="administrador_global">administrador global</option><option value="moderador">moderador</option><option value="observador">observador</option></select></label>
+          <select id="rol"><option value="jugador">jugador</option><option value="administrador_partida">administrador de partida</option><option value="administrador_global">administrador global</option><option value="moderador">moderador</option></select></label>
         <div id="toggles"></div>
       </div>
     </aside>
@@ -479,7 +479,7 @@ const PASOS = [
 const ESC = [
   ['Todo bien', 11, '200', '{\n  "gameId": "…", "instante": …, "version": 1234, "mapaId": "…",\n  "resultado": { "ok": true, "datos": …, "eventos": [ … ], "version": 1234 },\n  "proyeccion": { … }\n}', 'La versión de la partida sube y la proyección propia viaja ya actualizada.'],
   ['Sin sesión', 1, '401', '{ "error": "sesion ausente, invalida o expirada" }', 'Ni se mira qué partida es.'],
-  ['Soy observador (o sin membresía)', 2, '403', '{ "error": "sin membresia de jugador en esta partida" }', 'Acceso técnico no es tener personaje: un administrador sin membresía de jugador tampoco pasa por /jugador.'],
+  ['No soy jugador de la partida', 2, '403', '{ "error": "sin membresia de jugador en esta partida" }', 'Acceso técnico no es tener personaje: un administrador sin membresía de jugador tampoco pasa por /jugador.'],
   ['La partida está cerrada', 3, '404', '{ "error": "la partida \'x\' no está abierta en este proceso." }', 'En admin el rol se comprueba antes, para no revelar que existe.'],
   ['Params mal formados', 4, '400', '{ "error": "body/params … must have required property …" }', 'La validación ocurre antes que el manejador; el rechazo queda en la auditoría con causa «esquema».'],
   ['Comando de otro rol', 6, '403', '{ "error": "no autorizado (rol_insuficiente)" }', 'Por ejemplo, un moderador intentando cancelarBatalla.'],

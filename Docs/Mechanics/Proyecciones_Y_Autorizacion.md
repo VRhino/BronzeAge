@@ -40,9 +40,9 @@ Membresia          { usuarioId, gameId, jugadorId|null, rol, desde, hasta?, moti
 ```
 <!-- /parametros -->
 
-### 2.2 Los seis roles técnicos
+### 2.2 Los cinco roles técnicos
 
-`RolTecnico = jugador | administrador_partida | moderador | administrador_global | observador | servicio_npc`. **Son un eje distinto del de los cargos del juego** (Rey, Gobernador…): un administrador no hereda ningún cargo ni puede actuar como jugador por serlo.
+`RolTecnico = jugador | administrador_partida | moderador | administrador_global | servicio_npc`. **Son un eje distinto del de los cargos del juego** (Rey, Gobernador…): un administrador no hereda ningún cargo ni puede actuar como jugador por serlo.
 
 `rolEnPartida(actor)`: **manda la `Membresia` vigente** de esa partida; solo si no hay ninguna cae a `administrador_global` (si el usuario figura como tal en la instancia); si tampoco, no tiene rol. (Un administrador global que **además** es jugador de esa partida actúa con el rol `jugador` en los comandos.)
 
@@ -54,13 +54,12 @@ Membresia          { usuarioId, gameId, jugadorId|null, rol, desde, hasta?, moti
 | `administrador_partida` | – | ✔ | – | ✔ | ✔ | solo `cancelarBatalla` |
 | `moderador` | – | ✔ | – | – | – | **ninguno** |
 | `administrador_global` | – | ✔ | ✔ | ✔ | ✔ | solo `cancelarBatalla` |
-| `observador` | – | – | – | – | – | ninguno (ni lee nada: ver §11) |
 | `servicio_npc` | – | – | – | – | – | no aplica (actor `'sistema'`) |
 
 - `puedeJugar(actor)` = la **membresía vigente** tiene rol `jugador`. Tener acceso técnico no es tener personaje: un administrador sin membresía de jugador no puede usar `/jugador/*`.
 - `puedeAdministrar(actor)` = `esAdministradorGlobal` ∨ membresía con rol `administrador_partida` o `moderador`.
 - `puedeDescartarPartida` = `esAdministradorGlobal` ∨ rol `administrador_partida` (el moderador queda fuera: no regenera el mundo). `puedeGestionarMembresias`, igual.
-- **Roles otorgables** por `POST /admin/partidas/:gameId/membresias`: `administrador_partida`, `moderador`, `observador`. `jugador` solo se obtiene uniéndose (`/membresia`); `administrador_global` y `servicio_npc` no se reparten. Otorgar a quien ya tiene membresía (vigente o no) es 409: hay que revocar antes.
+- **Roles otorgables** por `POST /admin/partidas/:gameId/membresias`: `administrador_partida`, `moderador`. `jugador` solo se obtiene uniéndose (`/membresia`); `administrador_global` y `servicio_npc` no se reparten. Otorgar a quien ya tiene membresía (vigente o no) es 409: hay que revocar antes.
 - Quien **crea o reabre** una partida (solo `administrador_global`) recibe una membresía `administrador_partida` sobre ella si no tenía ninguna.
 
 ### 2.3 Superficies (todas bajo `/v1`)
@@ -526,6 +525,4 @@ Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve na
 
 ## 11. Divergencias
 
-Abiertas, a decidir por el autor (también en [`Divergencias.md`](Divergencias.md)):
-
-- **Rol `observador`.** `Docs/Arquitectura/5` lo define «solo lectura, proyección pública» y el servidor permite otorgarlo, pero **no hay ninguna ruta que lo admita**: `puedeAdministrar` y `puedeJugar` lo excluyen, así que una membresía de observador no concede nada (ni siquiera leer).
+Ninguna abierta. Las resueltas (2026-10-12): comerciar por la plaza es del Tesorero o del Gobernador (§5.5), y el rol `observador` («solo lectura») se retiró porque ninguna ruta lo admitía.

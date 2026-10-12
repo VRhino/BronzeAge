@@ -189,7 +189,7 @@ const ESQUEMA_EXPORTAR = {
  * la superficie de jugador (necesita un `jugadorId`). `administrador_global` tampoco: es de instancia,
  * configurado por variable de entorno (`ADMINISTRADORES`), no repartible por partida. `servicio_npc` es
  * interno. */
-const ROLES_OTORGABLES: readonly RolTecnico[] = ['administrador_partida', 'moderador', 'observador'];
+const ROLES_OTORGABLES: readonly RolTecnico[] = ['administrador_partida', 'moderador'];
 
 const ESQUEMA_METRICAS = {
   description:

@@ -52,7 +52,7 @@ const lanzarDesde = (origenAsentamientoId: string) => ({ origenAsentamientoId })
 describe('filtro de rol técnico', () => {
   it('un rol no listado se rechaza sin llegar a evaluar la condición de dominio', () => {
     const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = verificarAutorizacion('lanzarCaravanaFundacion', lanzarDesde(asentamientoId), sesion.getState(), { rol: 'observador', heroeId: null });
+    const resultado = verificarAutorizacion('lanzarCaravanaFundacion', lanzarDesde(asentamientoId), sesion.getState(), { rol: 'moderador', heroeId: null });
     expect(resultado).toEqual({ autorizado: false, motivo: 'rol_insuficiente' });
   });
 

@@ -12,7 +12,6 @@ export type RolTecnico =
   | 'administrador_partida'
   | 'moderador'
   | 'administrador_global'
-  | 'observador'
   | 'servicio_npc';
 
 /** Cuenta autenticable, externa a cualquier partida concreta. No sabe nada de proveedores de identidad — eso
