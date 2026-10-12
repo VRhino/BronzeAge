@@ -59,6 +59,7 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 | [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) | ✅ 2026-10-11 | Facción (crear, entrar, salir, cargos, nivel, reputación, capital, sigilo), residencia y puerta, alianza/vasallaje/guerra/paz/rebelión/tributo, Liga y Gran Rey, anexión y fusión (traslado), derrota, títulos |
 | [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) | ✅ 2026-10-12 | `generarMapa` (orden y consumo del generador, ruido, elevación y borde, terreno, bioma, fertilidad, regiones, ríos, bosques, yacimientos), la fachada `Mapa` (stock, regeneración, coste, Leñeras), colocación de campamentos de mercenarios y alijos, aparición y acoso de bandidos |
 | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) | ✅ 2026-10-12 | el héroe (crear, progresión, monedas, herido), Liderazgo, loadouts, guarnición y su cupo, orden de escuadras, la escuadra (modelo, vistas, nivel, chatarra) y reclutar tropa en una plaza (condiciones, coste, efecto) |
+| [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) | ✅ 2026-10-12 | Caravana de Fundación (coste, lanzar desde una plaza, fundar, desarmar, caducar y volver sola, devolver), nombres de ciudades y refundación desde un campamento (fondo, aportar, retirar, comprar) |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 
 No queda ningún documento pendiente de la lista inicial.

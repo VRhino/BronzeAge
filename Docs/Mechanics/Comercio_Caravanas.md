@@ -12,7 +12,7 @@ peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ru
   `session/comandos/ejercitos.ts` (`entregarDeCaravana`), `session/comandos/autorizacion.ts`, `session/proyecciones/jugador.ts` (lo que se ve).
 - **Canon:** [`Docs/Game/3_Sistema_Economico_y_Comercio.md`](../Game/3_Sistema_Economico_y_Comercio.md) (y Doc 1.6 para la red de caminos, Doc 1.9b para el campamento de mercenarios).
 - **No está aquí** (está en su documento): la caravana **adjunta** a un ejército, sus víveres y su carga (→ [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9); interceptar, capturar o ser atacada por
-  bandidos, la inmunidad dentro de una zona (→ [`Combate.md`](Combate.md)); la **Caravana de Fundación** (→ [`Economia_Construccion.md`](Economia_Construccion.md)); el Mercado como edificio (costes, niveles,
+  bandidos, la inmunidad dentro de una zona (→ [`Combate.md`](Combate.md)); la **Caravana de Fundación** (→ [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md)); el Mercado como edificio (costes, niveles,
   puestos) y las políticas como sistema (→ `Economia_Construccion.md`); el generador aleatorio (el comercio **no consume** ninguna tirada).
 
 El comercio corre en el paso 6 de la cadena del tick (`avanzarComercio`) y las órdenes caducan en el paso 12 (`caducarOrdenes`); ver [`Tick.md`](Tick.md).

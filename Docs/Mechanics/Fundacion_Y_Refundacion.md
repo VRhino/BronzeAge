@@ -1,0 +1,200 @@
+# Fundación y refundación
+
+## 1. Alcance y fuentes
+
+Cubre la **Caravana de Fundación** —la única forma de fundar un asentamiento— desde que se prepara hasta que funda, se desarma o caduca, y la **refundación**: cómo una Facción que se quedó sin plazas compra esa caravana en un campamento de mercenarios con un fondo común.
+
+- **Verificado contra:** `30c30cd` (2026-10-12).
+- **Fuentes:** `engine/expansion.ts`, `engine/refundacion.ts`, `engine/nombresDeCiudades.ts`, `session/comandos/expansion.ts` (`lanzarCaravanaFundacion`, `desarmarCaravanaFundacion`, `fundar`), `session/comandos/mercenarios.ts` (`aportarARefundacion`, `retirarDeRefundacion`, `comprarCaravanaDeRefundacion`),
+  `engine/settlement.ts` (`fundarAsentamiento`, `exigirPuertaDeFundacion`), `engine/faccion.ts` (`calcularCapFundacion`), `engine/asentamientoQuery.ts` (cooldown de caravanas).
+- **Canon:** [`Docs/Game/1_Sistema_de_Mundo_y_Territorio.md`](../Game/1_Sistema_de_Mundo_y_Territorio.md) 1.2, 1.7, 1.8, 1.9b.
+- **No está aquí** (está en su documento):
+  - El **estado inicial del asentamiento** que nace (edificios, población, almacén, zona de influencia), la validación `fundarAsentamiento` y la viabilidad de un sitio → [`Economia_Construccion.md`](Economia_Construccion.md) §3.
+  - **Enganchar** la caravana a una columna (`adjuntarCaravana`), soltarla, escoltarla y que `caravanasAlEntrar` la aparque → [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9.
+  - El campamento de mercenarios donde se compra: su colocación → [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §11; su mercado y sus residentes → [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9. El almacén personal → `Movimiento_Ejercitos.md` §3.
+  - Interceptar la caravana de fundación → [`Combate.md`](Combate.md) §7.1. Las demás caravanas (`comercial`) → `Comercio_Caravanas.md`.
+
+Corre dentro del tick en `avanzarCaravanasDeFundacion` (paso 22 de la cadena; ver [`Tick.md`](Tick.md)).
+
+## 2. Modelo de datos
+
+La caravana de fundación es una `Caravana` de `tipo: 'construccion'`. Campos propios de esta mecánica:
+
+| Campo | Significado |
+|---|---|
+| `id` | `caravana-fundacion-{origen}-{ids.siguiente()}` (el origen es una plaza o un campamento). |
+| `faccionId` | **Su Facción**, siempre (D48): `faccionDeCaravana` usa este campo y, si falta, la Facción de la plaza de origen. |
+| `origenAsentamientoId` | La plaza de origen; para la de un campamento lleva **el id del campamento** (y a la vez `origenCampamentoId`). |
+| `origenCampamentoId?` | Solo la comprada en un campamento. |
+| `contenido` | Lo que costó (el coste completo, o el de refundación): lo que se devuelve. |
+| `titularId` | Quien la lleva y funda. Ver §4. |
+| `caducaEn?` | Instante en que, suelta, caduca. |
+| `aportes?` | Solo la de un campamento: `heroeId → recurso → cantidad` que puso cada aportante (para devolvérselo). |
+| `estado`, `ruta`, `progreso`, `posicionActual` | `disponible` (parada) · `adjunta` (en una columna) · `retornando` (vuelve sola a su origen) · `aparcada` (dejada en una plaza al guarnecer). |
+
+**Fondo de refundación:** `CampamentoMercenarios.fondos`: `heroeId → recurso → cantidad`. Lo aportado por cada héroe en ese campamento.
+
+## 3. El coste (`costoCaravanaFundacion`)
+
+```
+costo = FUNDACION.materialesIniciales                                     { madera, piedra, trigo, oro }
+      + EDIFICIO_CATALOGO.granja.costo                                    (la granja inicial)
+      + EDIFICIO_CATALOGO.vivienda.costo × FUNDACION.viviendasIniciales   (las viviendas iniciales)
+      + madera += FUNDACION.costoMaderaExtraCaravana                      (fabricar la caravana en sí)
+```
+
+El Centro Urbano no cuesta nada. Con las cifras de hoy: `madera 160, piedra 20, trigo 100, oro 100`.
+**Coste de refundación** (`costoRefundacion`): cada recurso del coste normal × `MERCENARIOS.refundacion.porcentajeCoste` (0,4), **redondeado hacia arriba**, quitando los que quedan en 0. Hoy: `madera 64, piedra 8, trigo 40, oro 40`.
+
+## 4. Lanzarla desde una plaza (`lanzarCaravanaFundacion`)
+
+Comando `lanzarCaravanaFundacion { origenAsentamientoId }`; el **actor es el titular**. Condiciones, en este orden (`ExpansionInvalidaError`, salvo la primera, que es del comando):
+
+1. El asentamiento existe y su Facción existe; el actor es un héroe.
+2. El origen pertenece a la Facción.
+3. El titular es **ciudadano** de la Facción.
+4. **`nivelActual` ≥ 2** del origen (no el alcanzado: un origen degradado no puede lanzar).
+5. **Cooldown de caravanas**: `ultimaCaravanaCreadaEn + CARAVANA_COOLDOWN.cooldownMinutos ≤ ahora`. El cooldown lo **comparte** con la caravana comercial; la de un campamento (§7) no lo toca.
+6. **Cap de fundación**: `asentamientos efectivos < calcularCapFundacion(nivel de la Facción)`. Efectivos = plazas de la Facción **más** sus caravanas de fundación vivas: el cupo se **reserva al lanzar**, no al fundar. Cap por nivel: `CAP_FUNDACION_POR_NIVEL` (`calcularCapFundacion` toma el índice `min(largo, max(1, nivel)) − 1`).
+7. El almacén del origen cubre `costoCaravanaFundacion()`.
+
+Efecto: el almacén se descuenta, `origen.ultimaCaravanaCreadaEn = ahora`, y nace la caravana `disponible`, **sin destino**, parada en la plaza (`posicionActual = origen.posicion`), con `titularId`, `faccionId` y `caducaEn = ahora + 60 min × caducidadCaravanaHoras` (48 h). Evento `expansion.caravana_lanzada` a la plaza.
+
+## 5. Fundar (`fundar`)
+
+Comando sin parámetros; lo ejecuta el **titular**, con la caravana enganchada a su columna. Se funda **donde está la columna** (`columna.posicionActual`).
+
+1. El actor es un héroe con columna (`sinColumna` si no); la columna lleva una caravana `construccion` con `titularId === actor` (y con `faccionId`); si no, `fundacion.sin_caravana`.
+2. **Fundadores** = el titular y los demás participantes de la columna, **solo los ciudadanos de la Facción de la caravana**, recortado a `FUNDACION.maxJugadoresFundacionGrupal` (5): unirse a la columna es el consentimiento (D12). Hace falta `exigirPuertaDeFundacion`: al menos `minFundadoresParaFaccionNueva` (1 hoy) fundadores; `exigeCiudadaniaPrevia` está desactivado, y el comando pasa `yaFueCiudadano = true`.
+3. `fundarConCaravana` añade a lo de `fundarAsentamiento` ([`Economia_Construccion.md`](Economia_Construccion.md) §3: dentro del mapa, fuera de toda zona ya recortada, no cima, tope de fundación) dos exigencias: **no sobre agua**, y **a `MERCENARIOS.radioExclusionFundar` (100) o más de cualquier campamento** de mercenarios (estricto: a 100 exactos se funda).
+4. Nombre: `nombreDeCiudadLibre(nombres de las plazas existentes, id de la nueva)` (§8). Si no queda ninguno, la plaza se queda sin nombre.
+5. **La columna entra en la plaza que acaba de levantar y se deshace dentro** (`absorberColumna` con devolver suministro): la tropa vuelve al campamento y el carro al almacén de la plaza nueva. Sus ids de caravana adjunta restantes quedan `aparcada` en ella. **La caravana de fundación se gasta.**
+6. Todos los de la columna quedan `ubicacion: asentamiento` (dentro); los fundadores salen de cualquier campamento de mercenarios donde residieran; la exploración personal de cada fundador se funde con la de la Facción; historial `Funda {id}.`.
+7. Eventos: `fundacion.asentamiento_fundado { asentamientoId, faccionId, caravanaId, posicion, heroesIds, nombre? }` y los de `fundarAsentamiento` (p. ej. experiencia de Facción: la fundación da `NIVEL_FACCION.xp.fundacion` solo si la Facción ya tenía alguna plaza).
+
+## 6. Desarmarla a mano (`desarmarCaravanaFundacion`)
+
+Solo su **titular** (el actor), y solo si es `construccion`, está **`disponible`** (suelta: no enganchada ni volviendo) y a `≤ MOVIMIENTO.radioPuerta` de la posición de su origen (plaza o campamento); si no, `ExpansionInvalidaError`. Devuelve el coste (§7.2) y elimina la caravana. Evento `expansion.caravana_desarmada`.
+La restricción de la puerta existe para que desarmar no sea mover el coste de un sitio a otro sin recorrer el camino: lo que anda sola o caduca ya lo devuelve donde toca.
+
+## 7. El tiempo (`avanzarCaravanasDeFundacion`)
+
+Sin ninguna caravana con titular, no hace nada. Para cada caravana con `titularId` (las demás pasan igual):
+
+- **`adjunta`**: busca su columna. Se queda si **la columna existe, el titular va en ella y sigue siendo ciudadano** de la Facción. Si no (otro la lleva, el titular dejó la Facción o salió del mundo, la columna ya no existe): se **quita de la columna** y calcula la ruta de vuelta (`calcularRuta` desde donde está hasta su origen).
+  Con ruta: pasa a `retornando` (`progreso 0`), evento `fundacion.caravana_vuelve`. Sin ruta o sin origen: se **pierde** (`fundacion.caravana_perdida`). Mientras vuelve, otro ciudadano puede **reclamarla** (`adjuntarCaravana`) y pasa a ser titular.
+- **`retornando`**: avanza `CARAVANA_CATALOGO.construccion.velocidad` (10) por la ruta con `avanzarPosicionEnRuta`; al llegar (`progreso ≥ 1`) **se desarma y devuelve** (`fundacion.caravana_devuelta`).
+- **`aparcada` sin `caducaEn`** (la dejó una columna al guarnecer): pasa a `disponible` y le empieza a correr `caducaEn = ahora + 48 h`.
+- **`disponible` con `caducaEn` vencido** (`ahora ≥ caducaEn`): **caduca y devuelve**.
+- Cualquier otra: sigue.
+
+### 7.1 Devolver (`devolverCaravana`)
+
+- Si **no tiene origen en pie** (la plaza ya no existe; no aplica a un campamento) → se pierde, con evento `fundacion.caravana_perdida`.
+- **La de una plaza**: el `contenido` íntegro al almacén del origen, recurso a recurso con `agregarRecurso` (**hasta donde quepa**: lo que excede la capacidad se pierde).
+- **La de un campamento** (`origenCampamentoId`): `devolverAportes`: **al fondo de ese campamento, a nombre de cada aportante** según `aportes`. Lo de quien ya no es ciudadano de esa Facción **se pierde**. Nada llega a nadie por arte de magia: cada uno lo retira en persona (§9).
+
+## 8. Nombre de la ciudad (`nombreDeCiudadLibre`)
+
+Lista fija `NOMBRES_DE_CIUDADES` (159 hoy) de ciudades de la Edad del Bronce. Se normalizan (sin tildes, minúsculas) para comparar con los nombres ya usados; entre los libres se elige el índice `hash(semilla) mod libres.length`, con `semilla` = el id de la plaza nueva y `hash` = **FNV-1a de 32 bits** sobre los códigos de carácter (`h = 0x811c9dc5`; por carácter `h ^= c; h = imul(h, 0x01000193)`; resultado `h >>> 0`).
+No gasta el azar de la partida. Sin libres → `undefined`. Es presentación: el nombre no cambia lo que hace la plaza.
+
+## 9. Refundar desde un campamento
+
+Solo una Facción **sin ninguna plaza**; quien conserva alguna expande con la caravana de plaza (§4).
+
+### 9.1 El fondo (`aportarARefundacion`, `retirarDeRefundacion`)
+
+El héroe debe estar **en el campamento**: dentro, o con su columna a la puerta (`campamentoDondeEsta`; si no, `campamento.lejos`). Comandos `{ recurso, cantidad, lado }` con `lado ∈ almacen | carro`:
+
+- **Aportar**: el actor es ciudadano de una Facción; esa Facción no tiene asentamientos; cantidad > 0. `lado = almacen` exige **residir en ese campamento** (el almacén personal vive donde se reside); `lado = carro` exige ser el **Líder** de la columna que está en la puerta. Se mueve `min(cantidad, disponible)` (rechaza si es 0) del almacén personal o del carro a `fondos[heroe][recurso]`. Evento `mercenarios.fondo_refundacion` (`sentido: aporta`).
+- **Retirar** lo propio: cantidad > 0; mismo requisito de lado; se mueve `min(cantidad, aportado, sitio)` (sitio = `ALMACEN_PERSONAL.capacidad − total` del almacén personal, o `capacidadCargaDe(columna) − lo que ya lleva` en el carro). `sentido: retira`. **El oro es un recurso más**. Se puede retirar mientras no se gaste.
+- **Fondo de la Facción** (`fondoDeFaccion`): suma de `fondos` de los héroes que **son ciudadanos de esa Facción**, por recurso.
+
+### 9.2 Comprar la caravana (`comprarCaravanaDeRefundacion`)
+
+El actor es ciudadano; la Facción no tiene plazas; **no tiene ya una caravana de fundación**; `calcularCapFundacion(nivel) ≥ 1`; y el fondo cubre `costoRefundacion()` (si no: «el fondo no cubre el coste: faltan …»). Se gasta recurso a recurso **sobre el mismo conjunto que cuenta el fondo**, recorriendo `faccion.ciudadanosIds` **en orden de ciudadanía** y tomando de cada uno lo que tenga hasta cubrir; lo que sobra de cada uno **se queda en el fondo**, y lo gastado a cada uno se anota en `aportes`.
+Nace parada en el campamento (`origenCampamentoId = origenAsentamientoId = campamento.id`, `posicionActual = campamento.posicion`), **sin destino**, con el actor de titular, `contenido = costoRefundacion()` y `caducaEn = ahora + 48 h`. Evento `mercenarios.caravana_refundacion`. **No aplica el cooldown** de caravanas (no es de una plaza).
+A partir de ahí es la misma entidad: se engancha, se funda con `fundar` (§5), se desarma (§6) o caduca (§7).
+
+## 10. Parámetros
+
+<!-- parametros:FUNDACION -->
+```json
+{
+  "maxJugadoresFundacionGrupal": 5,
+  "minFundadoresParaFaccionNueva": 1,
+  "exigeCiudadaniaPrevia": false,
+  "distanciaMinimaAparicion": 200,
+  "intentosDeAparicion": 200,
+  "materialesIniciales": {
+    "madera": 50,
+    "piedra": 20,
+    "trigo": 100,
+    "oro": 100
+  },
+  "viviendasIniciales": 3,
+  "costoMaderaExtraCaravana": 50,
+  "caducidadCaravanaHoras": 48
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:CAP_FUNDACION_POR_NIVEL -->
+```json
+[
+  1,
+  2,
+  3,
+  3,
+  4,
+  5,
+  5,
+  6,
+  6,
+  7
+]
+```
+<!-- /parametros -->
+
+<!-- parametros:CARAVANA_COOLDOWN -->
+```json
+{
+  "cooldownMinutos": 10
+}
+```
+<!-- /parametros -->
+
+(`MERCENARIOS.refundacion.porcentajeCoste` y `radioExclusionFundar` están en el bloque `MERCENARIOS` de [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md); `CARAVANA_CATALOGO.construccion` —capacidad 150, velocidad 10— en [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §13.)
+
+## 11. Invariantes
+
+| Invariante | Test que lo vigila |
+|---|---|
+| Lanzar: nace sin destino, parada, con titular, Facción y caducidad; cobra el coste y arranca el cooldown; rechaza no ciudadano, nivel < 2, sin recursos, cooldown y cupo del Cap (que cuenta las ya lanzadas) | `engine/__tests__/caravanaFundacion.test.ts`, `session/__tests__/comandosExpansion.test.ts` |
+| Desarmar: la de plaza devuelve íntegro; la de campamento, al fondo a nombre de cada aportante; solo suelta y en la puerta de su origen | `caravanaFundacion.test.ts`, `fundacionDesdePlaza.test.ts` |
+| Con el tiempo: suelta caduca y devuelve; enganchada sin su titular se suelta y vuelve; al llegar se desarma; aparcada al guarnecer cuenta como suelta; sin origen se pierde | `caravanaFundacion.test.ts`, `fundacionCampamento.test.ts` |
+| Fundar: no a menos de `radioExclusionFundar` de un campamento (cualquiera), sí a esa distancia; ni sin la caravana enganchada; ni dentro de una zona; ni sobre cima | `caravanaFundacion.test.ts`, `fundacionDesdePlaza.test.ts`, `fundacion_terreno.test.ts` |
+| La columna del titular funda en grupo con los ciudadanos que lleva, la caravana se gasta y todos residen en la plaza nueva | `fundacionCampamento.test.ts`, `fundacionDesdePlaza.test.ts` |
+| Refundación: coste por porcentaje; el fondo suma a sus ciudadanos y no a otros; aportar desde almacén (residente) o carro (en la puerta); retirar; el oro vuelve como un recurso; rechazos (con plazas, no ciudadano, más de lo que hay) | `engine/__tests__/refundacion.test.ts` |
+| Comprar: nace parada con titular y aportes, deja el sobrante; gasta lo mismo que cuenta (el aporte de quien se mudó se descuenta, el de otra Facción no se toca); rechaza fondo corto, Facción con plaza o con otra caravana | `refundacion.test.ts` |
+| Nombres: son al menos cien, sin repetidos; el mismo id da el mismo nombre; nunca uno ya usado (con o sin tildes y mayúsculas); reparten por toda la lista | `engine/__tests__/nombresDeCiudades.test.ts` |
+
+**Sin test propio:** el reclamo de la caravana que vuelve (`adjuntarCaravana` por otro ciudadano) fuera del flujo de campamento, la pérdida por falta de ruta de vuelta y el redondeo hacia arriba del coste de refundación.
+
+## 12. Casos límite y decisiones que parecen raras
+
+- **El cupo se reserva al lanzar**, no al fundar: una caravana en el camino ya ocupa un puesto del Cap, y una destruida lo libera.
+- **El cooldown es de la plaza, y compartido con las caravanas comerciales**: lanzar una de fundación impide construir una comercial durante 10 minutos, y viceversa. Comprar una de refundación en un campamento no lo toca.
+- **Devolver a una plaza llena pierde el exceso**: `agregarRecurso` topa por capacidad.
+- **Quien deja la Facción pierde su aporte**: `devolverAportes` y `fondoDeFaccion` solo cuentan ciudadanos.
+- **Gastar por orden de ciudadanía, no por quién aportó primero**: el fondo se consume de los ciudadanos en el orden de `faccion.ciudadanosIds`, hasta cubrir cada recurso.
+- **El titular es único y no se cambia comprándola de nuevo**: solo otro ciudadano que la reclama por el camino (mientras vuelve sola) se convierte en titular.
+- **Aparcada ≠ caducando**: la caravana que una columna deja aparcada al guarnecer empieza a caducar cuando el tick la ve aparcada (entonces pasa a `disponible` con `caducaEn = ahora + 48 h`), no desde que se aparcó; hasta entonces no tiene `caducaEn`.
+- **Sin camino de vuelta, se pierde**: no hay teletransporte; una isla o un enclave sin ruta pierde lo que costó la caravana.
+- **La plaza fundada no se mira como zona de nadie**: el punto no puede caer en la zona de **ninguna** plaza existente, ni la de la propia Facción.
+- **`minFundadoresParaFaccionNueva` = 1 y `exigeCiudadaniaPrevia` = false** son configuración de las primeras pruebas; el comando pasa `yaFueCiudadano = true`, así que esa segunda exigencia nunca se evalúa hoy.
+
+## 13. Divergencias
+
+Ninguna abierta.

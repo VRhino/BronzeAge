@@ -266,7 +266,7 @@ export interface PayloadCaravanaDeRefundacion {
   titularId: string;
 }
 
-/** Compra la Caravana de Fundación al 75 % con el fondo de su Facción en el campamento donde está (Doc 1.9b, D39): nace parada en él, sin
+/** Compra la Caravana de Fundación al 40 % con el fondo de su Facción en el campamento donde está (Doc 1.9b, D39): nace parada en él, sin
  * destino, con el actor de titular (D10, D11). */
 export const comprarCaravanaDeRefundacion = comando<Record<string, never>, { caravanaId: string }>((estado, _mapa, ctx) => {
   const heroe = exigirJugador(estado, ctx.actor);

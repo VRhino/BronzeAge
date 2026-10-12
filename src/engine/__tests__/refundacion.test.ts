@@ -1,4 +1,4 @@
-// Refundar desde un campamento de mercenarios (Doc 1.9b, paso 5): el fondo de la Facción, la Caravana de Fundación al 75 % y su viaje.
+// Refundar desde un campamento de mercenarios (Doc 1.9b, paso 5): el fondo de la Facción, la Caravana de Fundación al porcentaje de coste y su viaje.
 import { describe, expect, it } from 'vitest';
 import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion, Heroe } from '../../domain/types';
 import { FUNDACION, MERCENARIOS } from '../../constants';
@@ -27,7 +27,7 @@ const heroe = (id: string, almacenPersonal: Record<string, number>): Heroe => he
 const plaza = (faccionId: string): Asentamiento => ({ id: 'a', faccionId, posicion: { x: 1500, y: 1500 }, radioPotencial: 30 }) as unknown as Asentamiento;
 
 describe('coste', () => {
-  it('es el 75 % de una Caravana de Fundación normal, por recurso', () => {
+  it('es el porcentaje de coste de una Caravana de Fundación normal, por recurso', () => {
     const normal = costoCaravanaFundacion();
     const r = costoRefundacion();
     for (const [recurso, n] of Object.entries(normal)) {

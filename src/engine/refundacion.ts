@@ -1,5 +1,5 @@
 // Refundar desde un campamento de mercenarios (Doc 1.9b, `Docs/Mecanicas a desarrollar.md` §40, paso 5): una Facción que se quedó sin
-// asentamientos compra en el campamento una CARAVANA DE FUNDACIÓN al 75 % de lo que cuesta una normal, y la paga entre sus héroes: cada uno
+// asentamientos compra en el campamento una CARAVANA DE FUNDACIÓN al 40 % de lo que cuesta una normal (`MERCENARIOS.refundacion.porcentajeCoste`), y la paga entre sus héroes: cada uno
 // aporta lo que quiere a un fondo del campamento. La caravana nace sin destino; su titular la lleva enganchada y funda con `fundar` (D10).
 import type { Asentamiento, CampamentoMercenarios, Caravana, Ejercito, Faccion, Heroe } from '../domain/types';
 import { capacidadCargaDe } from './ejercitos';
