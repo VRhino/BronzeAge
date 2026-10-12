@@ -127,6 +127,7 @@ export function asignarGuarnicion(heroe: Heroe, residencia: Asentamiento | undef
   if (!residencia) throw new HeroeInvalidoError('No resides en ningún asentamiento: no tienes guarnición.');
   const escuadra = heroe.escuadrones.find((e) => e.id === squadId);
   if (!escuadra) throw new HeroeInvalidoError(`La escuadra ${squadId} no es tuya.`);
+  if (escuadra.reservaBatalla) throw new HeroeInvalidoError('Esa escuadra está en una batalla.');
   if (escuadra.contenedor.tipo !== 'campamento') throw new HeroeInvalidoError('Esa escuadra no está en tu campamento.');
   if (escuadra.enGuarnicion) throw new HeroeInvalidoError('Esa escuadra ya está en la guarnición.');
   const cupo = cupoGuarnicion(residencia);
@@ -136,7 +137,9 @@ export function asignarGuarnicion(heroe: Heroe, residencia: Asentamiento | undef
 }
 
 export function retirarGuarnicion(heroe: Heroe, squadId: string): Heroe {
-  if (!heroe.escuadrones.find((e) => e.id === squadId)?.enGuarnicion) throw new HeroeInvalidoError('Esa escuadra no está en la guarnición.');
+  const escuadra = heroe.escuadrones.find((e) => e.id === squadId);
+  if (!escuadra?.enGuarnicion) throw new HeroeInvalidoError('Esa escuadra no está en la guarnición.');
+  if (escuadra.reservaBatalla) throw new HeroeInvalidoError('Esa escuadra está en una batalla.');
   return conGuarnicion(heroe, squadId, false);
 }
 

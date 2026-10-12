@@ -121,6 +121,18 @@ describe('reclutarTropa — escuadrones por jugador (Doc 2.5)', () => {
   });
 });
 
+describe('reclutarTropa — una escuadra en batalla no se repone', () => {
+  it('con el candado de una batalla de Unity rechaza reponer, y sin él repone', () => {
+    const trasReclutar = reclutarTropa(asentamientoDeTest(), HEROES, [], 'jugador-a', 'faccion-1', 'milicia_lanceros', TODAS_LAS_TECNOLOGIAS, 0);
+    const conBajas = (reserva: boolean) =>
+      trasReclutar.heroes.map((h) => ({ ...h, escuadrones: h.escuadrones.map((e) => ({ ...e, cantidad: 20, ...(reserva ? { reservaBatalla: { battleId: 'b1' } } : {}) })) }));
+    const plaza = conRecursos(trasReclutar.asentamiento, 10, 100);
+
+    expect(() => reclutarTropa(plaza, conBajas(true), [], 'jugador-a', 'faccion-1', 'milicia_lanceros', TODAS_LAS_TECNOLOGIAS, 1)).toThrow(ReclutamientoInvalidoError);
+    expect(reclutarTropa(plaza, conBajas(false), [], 'jugador-a', 'faccion-1', 'milicia_lanceros', TODAS_LAS_TECNOLOGIAS, 1).heroes.find((h) => h.id === 'jugador-a')!.escuadrones[0]!.cantidad).toBe(25);
+  });
+});
+
 describe('reclutarTropa — la tecnología de la Facción (Doc 6.1)', () => {
   it('sin la tecnología de la tropa no se recluta, aunque haya edificio y equipo', () => {
     expect(() =>

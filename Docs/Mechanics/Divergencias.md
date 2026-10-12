@@ -7,9 +7,7 @@ Alta = impide algo del juego · Media = el juego va contra la intención escrita
 
 ## Abiertas
 
-### 1. El candado de batalla de una escuadra solo se mira al abrir otra batalla · **Media**
-- `Escuadron.reservaBatalla` impide que la misma escuadra entre en otra batalla, pero ni `reclutarTropa` (reponer), ni `asignarGuarnicion`/`retirarGuarnicion`, ni `guardarLoadout`/`borrarLoadout` la comprueban: durante una batalla de Unity se puede reponer, guarnecer o sacar del loadout una escuadra reservada.
-- Falta decidir si esas acciones deben rechazarse mientras haya candado (el modelo de datos compartido dice que el candado presente significa «en una batalla»).
+Ninguna. Las últimas (2026-10-12) se resolvieron así: la escala local y la del mapa son espacios separados (se borró `ESCALA`); se borró el diseño viejo del trazado y el asedio de asentamiento a asentamiento (`iniciarAsedio`, sin usos); «el señor debe defender» es solo reputación; defender a un vasallo también cuenta en el combate con números; un trueque aceptado no se cancela (se cumple o vence); y una escuadra reservada para una batalla no se repone ni entra o sale de la guarnición.
 
 ## Consecuencias pendientes de medir
 

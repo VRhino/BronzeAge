@@ -159,6 +159,26 @@ describe('guarnición (Doc 5.15.3)', () => {
     expect(sesion.ejecutar(retirarGuarnicion, { squadId: 'esc-1' }, opc).codigoError).toBe('heroe.invalido');
   });
 
+  it('una escuadra reservada para una batalla no entra ni sale de la guarnición, pero sí cabe en un loadout', () => {
+    const { sesion, fundador } = residenteConBarracon();
+    const payload = sesion.exportar();
+    const reservar = (enGuarnicion: boolean) =>
+      GameSession.importar({
+        ...payload,
+        state: {
+          ...payload.state,
+          heroes: payload.state.heroes.map((h) =>
+            h.id === fundador ? { ...h, escuadrones: h.escuadrones.map((e) => (e.id === 'esc-1' ? { ...e, enGuarnicion, reservaBatalla: { battleId: 'b1' } } : e)) } : h
+          ),
+        },
+      });
+    const opc = { actor: fundador };
+
+    expect(reservar(false).ejecutar(asignarGuarnicion, { squadId: 'esc-1' }, opc).codigoError).toBe('heroe.invalido');
+    expect(reservar(true).ejecutar(retirarGuarnicion, { squadId: 'esc-1' }, opc).codigoError).toBe('heroe.invalido');
+    expect(reservar(false).ejecutar(guardarLoadout, { displayName: 'L', squadIds: ['esc-1'], perksSeleccionados: [] }, opc).ok).toBe(true);
+  });
+
   it('sin Barracón ni Galería de tiro no hay cupo, y quien no reside no tiene guarnición', () => {
     const { sesion, fundador } = residenteConBarracon(false);
     expect(sesion.ejecutar(asignarGuarnicion, { squadId: 'esc-1' }, { actor: fundador }).codigoError).toBe('heroe.invalido');

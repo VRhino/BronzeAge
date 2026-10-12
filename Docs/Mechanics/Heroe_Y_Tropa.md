@@ -136,7 +136,7 @@ Con los números de hoy (7/14/22/32/45): 1 élite + 1 pesada + 1 veterana = 99; 
 
 Resultado: `id = anterior.id` o `loadout-{ids.siguiente()}`; `activo = datos.activo ?? anterior.activo ?? false`. **Marcarlo activo desactiva los demás.** Uno nuevo se **añade al final**. El comando devuelve `{ loadoutId, liderazgoTotal }` (el Liderazgo que suma, derivado). No emite eventos.
 
-Es una comodidad: **no mira dónde están las escuadras** (pueden estar en un ejército o heridas…); eso se comprueba al salir con ellas. `borrarLoadout` quita el loadout (rechaza si no existe) y **no garantiza que quede uno activo**: sin loadout activo, el héroe defiende con ninguna escuadra de su loadout (Combate §3.2 usa `loadouts.find(activo)?.squadIds ?? []`).
+Es una comodidad: **no hay tope de loadouts** y **la misma escuadra puede estar en varios** (solo uno está activo a la vez, así que no compiten); **no mira dónde están las escuadras** (pueden estar en un ejército o heridas…); eso se comprueba al salir con ellas. `borrarLoadout` quita el loadout (rechaza si no existe) y **no garantiza que quede uno activo**: sin loadout activo, el héroe defiende con ninguna escuadra de su loadout (Combate §3.2 usa `loadouts.find(activo)?.squadIds ?? []`).
 
 ## 7. Guarnición
 
@@ -154,9 +154,9 @@ cupo      = edificios + muralla + cupoGuarnicionExtra(plaza)                  ; 
 
 Un recinto en mejora vuelve a integridad 0 y mientras tanto no suma.
 
-**`asignarGuarnicion(heroe, residencia, squadId)`** — la `residencia` es el asentamiento donde el héroe es residente (`esResidente`); rechaza (`heroe.invalido`): sin residencia en un asentamiento; escuadra que no es suya; que no esté en `contenedor: campamento`; que ya esté en la guarnición;
+**`asignarGuarnicion(heroe, residencia, squadId)`** — la `residencia` es el asentamiento donde el héroe es residente (`esResidente`); rechaza (`heroe.invalido`): sin residencia en un asentamiento; escuadra que no es suya; que esté **reservada para una batalla** (`reservaBatalla`); que no esté en `contenedor: campamento`; que ya esté en la guarnición;
 o que `guarnicionOcupada(heroe) + costeLiderazgo(esa tropa) > cupo` (`guarnicionOcupada` = Liderazgo de sus escuadras con `enGuarnicion`). Marca `enGuarnicion = true`. **Si el cupo baja después, lo asignado se queda**: solo impide asignar más.
-**`retirarGuarnicion`**: rechaza si esa escuadra no está en la guarnición; la deja `enGuarnicion = false`.
+**`retirarGuarnicion`**: rechaza si esa escuadra no está en la guarnición o está reservada para una batalla; la deja `enGuarnicion = false`.
 
 Mientras una escuadra está en la guarnición, el héroe **no puede sacarla** de la plaza (la salida a campaña lo rechaza: `El escuadrón … está en la guarnición`). Dejar de residir suelta la guarnición (`sinGuarnicion`).
 El campamento (todas las escuadras con `contenedor: campamento` de los residentes) **come del almacén de la plaza**: `avanzarMantenimientoTropas` (tick, paso 5) llama a `avanzarRacion(campamento, trigo del almacén)` con factor 1 y 0 participantes, y descuenta el trigo consumido del almacén ([`Tick.md`](Tick.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.3).
@@ -226,7 +226,7 @@ Todas lanzan `tropas.reclutamiento_invalido`:
 2. La tropa no está en el catálogo.
 3. La **tecnología** que habilita la tropa no está adoptada por la **Facción de la plaza** (`tecnologiasDe(estado, plaza.faccionId).adoptadas`, Doc 6.1).
 4. El héroe no existe.
-5. `existente` = su escuadra de esa tropa (no prestada). Si existe y **no es reponible aquí**: rechazo. Reponible aquí = `contenedor: campamento` y el héroe reside en esta plaza; o `contenedor: ejercito` y esa columna está a `≤ MOVIMIENTO.radioPuerta` de la plaza. En escolta o fuera del mundo: nunca.
+5. `existente` = su escuadra de esa tropa (no prestada). Si está **reservada para una batalla** (`reservaBatalla`): rechazo (no se repone hasta que acabe). Si existe y **no es reponible aquí**: rechazo. Reponible aquí = `contenedor: campamento` y el héroe reside en esta plaza; o `contenedor: ejercito` y esa columna está a `≤ MOVIMIENTO.radioPuerta` de la plaza. En escolta o fuera del mundo: nunca.
 6. Permiso `solo_reponer` y no hay `existente`.
 7. `cantidad = tropa.unidadesPorDefecto − (existente?.cantidad ?? 0)`; si `cantidad ≤ 0`, ya está al tope.
 8. **Población**: `poblacionDisponibleParaReclutar(plaza, origen) ≥ cantidad`, con `origen = poblacionDeTropa(tropa)`: escalón 1–2 → `pesants`, 3 → `artesanos`, 4–5 → `nobleza`.
@@ -743,6 +743,8 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
 | Guarnición: asigna dentro del cupo, rechaza pasarse, retirar la devuelve; sin Barracón ni Galería no hay cupo y quien no reside no tiene guarnición; mudarse la suelta | `comandosHeroe.test.ts`, `engine/__tests__/guarnicion.test.ts` |
 | Cupo: Caballerizas no dan nada en el nivel 1; suma edificios, recinto completo y «Levas de guarnición»; sin Barracón ni Galería no hay guarnición aunque haya muralla | `guarnicion.test.ts` |
 | Costes de Liderazgo por escalón (crecientes, independientes del poder, 0 para tropa desconocida); mezclas máximas; el límite es de salida; sin héroe usa el base; lo libre nunca es negativo | `engine/__tests__/liderazgo.test.ts` |
+| Una escuadra reservada para una batalla no se repone | `tropas.test.ts` |
+| Una escuadra reservada no entra ni sale de la guarnición, pero sí cabe en un loadout | `comandosHeroe.test.ts` |
 | Dos héroes reclutan la misma tropa en la misma plaza → dos escuadras; reclutar de nuevo repone hasta el tope sin crear otra; al tope se rechaza | `engine/__tests__/tropas.test.ts` |
 | Otra Facción no recluta; un ciudadano que no reside solo repone su columna a la puerta; reclutar no exige General; sin la tecnología no se recluta | `tropas.test.ts` |
 | La clase de población sale del escalón; una tropa de nobleza sin nobles no se recluta | `tropas.test.ts` |
@@ -763,11 +765,11 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
 - **El pool de reclutamiento no es la población total** sino lo que no hace falta para producir: un reclutamiento puede fallar con población de sobra si toda ella trabaja.
 - **La tropa del Centro Urbano es gratis en oro**: solo cuesta su equipo; el resto de edificios añaden oro por escalón y por caballo.
 - **Sin loadout activo no defiende en persona**: borrar el activo no activa otro. La guarnición sigue defendiendo.
-- **El candado `reservaBatalla` solo se comprueba al abrir otra batalla**: ni `reclutarTropa` (reponer), ni `asignarGuarnicion`, ni `guardarLoadout`/`borrarLoadout` miran si la escuadra está reservada para una batalla en curso.
+- **El candado `reservaBatalla`** (decidido el 2026-10-12) impide abrir otra batalla con esa escuadra, **reponerla** y **entrar o salir de la guarnición** mientras dura la batalla. **No** afecta a los loadouts: son selecciones, no mueven nada, y la misma escuadra puede estar en varios.
 - **`guardarLoadout` no mira dónde están las escuadras**, ni si están heridas o prestadas; solo que sean suyas y quepan.
 - **`asignarGuarnicion` toma la primera plaza donde el héroe es residente**; un residente de un campamento de mercenarios no tiene guarnición (rechaza «no resides en ningún asentamiento»).
 - **Una escuadra sin héroe es un error, no un caso**: `conEscuadrones` lanza si la escuadra apunta a un héroe que no existe.
 
 ## 15. Divergencias
 
-Abierta: #1 de [`Divergencias.md`](Divergencias.md) (el candado de batalla de una escuadra).
+Ninguna abierta.

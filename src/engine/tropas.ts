@@ -98,6 +98,7 @@ export function reclutarTropa(
   if (!heroe) throw new ReclutamientoInvalidoError('Ese héroe no existe.');
 
   const existente = heroe.escuadrones.find((e) => e.tropaId === tropaId && !e.prestada);
+  if (existente?.reservaBatalla) throw new ReclutamientoInvalidoError(`Tu escuadra de ${tropa.nombre} está en una batalla: no se puede reponer hasta que acabe.`);
   if (existente && !reponibleAqui(existente, asentamiento, ejercitos)) {
     throw new ReclutamientoInvalidoError(`Ya tienes una escuadra de ${tropa.nombre}: está en ${dondeEsta(existente)}. Solo puedes reponerla donde está.`);
   }
