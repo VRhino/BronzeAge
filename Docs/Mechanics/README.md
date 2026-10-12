@@ -60,6 +60,7 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 | [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) | ✅ 2026-10-12 | `generarMapa` (orden y consumo del generador, ruido, elevación y borde, terreno, bioma, fertilidad, regiones, ríos, bosques, yacimientos), la fachada `Mapa` (stock, regeneración, coste, Leñeras), colocación de campamentos de mercenarios y alijos, aparición y acoso de bandidos |
 | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) | ✅ 2026-10-12 | el héroe (crear, progresión, monedas, herido), Liderazgo, loadouts, guarnición y su cupo, orden de escuadras, la escuadra (modelo, vistas, nivel, chatarra) y reclutar tropa en una plaza (condiciones, coste, efecto) |
 | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) | ✅ 2026-10-12 | Caravana de Fundación (coste, lanzar desde una plaza, fundar, desarmar, caducar y volver sola, devolver), nombres de ciudades y refundación desde un campamento (fondo, aportar, retirar, comprar) |
+| [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) | ✅ 2026-10-12 | dónde está un héroe (los cuatro sitios y el diagrama de transiciones), salir/entrar de plazas y campamentos, guarnecer, marchar, conectarse/desconectarse, fijar la puerta y vetar, y la convocatoria (ejército en preparación: convocar, unirse, petición, partir todo-o-nada) |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 
 No queda ningún documento pendiente de la lista inicial.
