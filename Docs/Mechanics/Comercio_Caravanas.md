@@ -714,9 +714,10 @@ La red de caminos se poda sola al faltar un extremo (§7.4).
 
 | Comando | Quién |
 |---|---|
-| `proponerTrueque` | residente del asentamiento A |
-| `aceptarTrueque`, `rechazarTrueque` | residente del asentamiento B |
-| `colocarOrdenMercado`, `crearCaravana` | residente del asentamiento |
+| `proponerTrueque` | **Tesorero o Gobernador** del asentamiento A, residente y dentro (decidido 2026-10-12; antes bastaba residir) |
+| `aceptarTrueque`, `rechazarTrueque` | Tesorero o Gobernador del asentamiento B, residente y dentro |
+| `colocarOrdenMercado` | Tesorero o Gobernador del asentamiento, residente y dentro |
+| `crearCaravana` | residente del asentamiento (las caravanas siguen abiertas a cualquier residente) |
 | `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `cancelarCaravana`, `moverCarroCaravana` | residente del **origen** de la caravana |
 | `prepararCaravana`, `asignarEscolta`, `quitarEscolta` | el actor es el `heroeId` del comando **y** reside en el origen |
 | `moverCargaCaravanaAparcada`, `enviarCaravanaAlOrigen` | el actor es el `heroeId`; residente del **origen** de la caravana y **presente** en la plaza que la hospeda |

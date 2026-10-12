@@ -177,8 +177,10 @@ cumplirse. "Facción propia" significa `Jugador.faccionId` del actor debe coinci
 | `proponerAnexion`, `retirarAnexion` | jugador | Rey o Embajador de la Facción absorbente (`faccionAId`, o la de la propuesta) — 2026-10-06, Doc 2.6 |
 | `responderAnexion` | jugador | **solo el Rey de la Facción absorbida** (la de la propuesta) — 2026-10-06, Doc 2.6 |
 | `proponerRelacion` | jugador | Facción propia de `faccionAId` (quien propone), cargo de rey/embajador — **fila añadida 2026-08-25**: no estaba en la versión original de esta tabla, aunque el comando ya existía; implementada en `server/autorizacion/matriz.ts` por analogía con `romperRelacion` |
-| `proponerTrueque` | jugador | residente de `asentamientoAId` (quien propone) — **fila añadida 2026-08-25**, mismo motivo que `proponerRelacion` |
-| `colocarOrdenMercado`, `crearCaravana`, `reclutarTropa` | jugador | residente del asentamiento objetivo |
+| `proponerTrueque` | jugador | **Tesorero o Gobernador** de `asentamientoAId` (quien propone), residente y presente — 2026-10-12 (antes: cualquier residente) |
+| `aceptarTrueque`, `rechazarTrueque` | jugador | Tesorero o Gobernador del lado receptor (`asentamientoBId` del acuerdo) — 2026-10-12 |
+| `colocarOrdenMercado` | jugador | Tesorero o Gobernador del asentamiento, residente y presente — 2026-10-12 |
+| `crearCaravana`, `reclutarTropa` | jugador | residente del asentamiento objetivo |
 | `iniciarAsedio`, `combateCampoAbierto`, `interceptarCaravana`, `atacarCampamentoBandidos` | jugador | residente del asentamiento atacante, escuadrones propios del jugador o de otros residentes autorizados. Hoy solo queda `iniciarAsedio`; el resto es `atacar`/`perseguir` desde la columna (nota de arriba) |
 | `avanzarTick` | administrador_partida (etapa provisional) o scheduler del servidor | — (Doc 2: "el servidor sigue siendo quien avance y resuelva los ticks"; en producción no es un comando de cliente) |
 | `regenerarMundo`, `importarSimulacion`, `exportarSimulacion`, `exportarMapaUnity` | administrador_partida | — |

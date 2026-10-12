@@ -80,14 +80,22 @@ function esFaccionPropia(estado: GameSessionState, heroeId: string, faccionId: s
 }
 
 /**
- * Residente presente en el asentamiento B de ese acuerdo — el que TIENE que contestar (Doc 3.2).
+ * Comerciar en nombre de una plaza (trueques y órdenes de Mercado, Doc 2.2 y 3): lo hace su Tesorero o su Gobernador, residente y dentro de ella
+ * (decisión del autor, 2026-10-12: antes bastaba con residir). Una plaza que no existe se deja pasar, como en el resto de resolutores.
+ */
+function gestionaElComercio(estado: GameSessionState, heroeId: string, asentamientoId: string): boolean {
+  return residenteConCargo(estado, heroeId, asentamientoId, 'tesorero') || residenteConCargo(estado, heroeId, asentamientoId, 'gobernador');
+}
+
+/**
+ * Gestiona el comercio del asentamiento B de ese acuerdo — el lado que TIENE que contestar (Doc 3.2).
  *
  * Un acuerdo inexistente se deja pasar, mismo criterio fail-open que el resto de resolutores de este archivo:
  * lo rechaza el propio comando con `acuerdo.no_existe`, que dice mucho mas que un "no autorizado".
  */
-function resideEnElLadoQueContesta(estado: GameSessionState, heroeId: string, acuerdoId: string): boolean {
+function gestionaElLadoQueContesta(estado: GameSessionState, heroeId: string, acuerdoId: string): boolean {
   const acuerdo = estado.acuerdos.find((a) => a.id === acuerdoId);
-  return acuerdo === undefined || reside(estado, heroeId, acuerdo.asentamientoBId);
+  return acuerdo === undefined || gestionaElComercio(estado, heroeId, acuerdo.asentamientoBId);
 }
 
 /** Residente del asentamiento de origen de la caravana (revamp, Doc 3.13): componerla y reservarla es cosa de casa. */
@@ -559,24 +567,24 @@ export const MATRIZ_AUTORIZACION: { [T in TipoComando]: EntradaMatriz<T> } = {
     },
   },
 
-  // --- Comercio: residente del asentamiento objetivo ---
+  // --- Comercio: trueques y Mercado son del Tesorero o del Gobernador de la plaza, dentro de ella; las caravanas, de cualquier residente ---
   proponerTrueque: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, heroeId, params) => reside(estado, heroeId, params.asentamientoAId),
+    condicionJugador: (estado, heroeId, params) => gestionaElComercio(estado, heroeId, params.asentamientoAId),
   },
   // Contestar es cosa del lado RECEPTOR (B): quien propuso ya dijo lo suyo, y dejarle aceptar su propia
   // propuesta devolveria el pacto unilateral que este comando existe para quitar.
   aceptarTrueque: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, heroeId, params) => resideEnElLadoQueContesta(estado, heroeId, params.acuerdoId),
+    condicionJugador: (estado, heroeId, params) => gestionaElLadoQueContesta(estado, heroeId, params.acuerdoId),
   },
   rechazarTrueque: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, heroeId, params) => resideEnElLadoQueContesta(estado, heroeId, params.acuerdoId),
+    condicionJugador: (estado, heroeId, params) => gestionaElLadoQueContesta(estado, heroeId, params.acuerdoId),
   },
   colocarOrdenMercado: {
     rolesPermitidos: ['jugador'],
-    condicionJugador: (estado, heroeId, params) => reside(estado, heroeId, params.asentamientoId),
+    condicionJugador: (estado, heroeId, params) => gestionaElComercio(estado, heroeId, params.asentamientoId),
   },
   crearCaravana: {
     rolesPermitidos: ['jugador'],

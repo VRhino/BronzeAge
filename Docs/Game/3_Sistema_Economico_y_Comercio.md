@@ -8,6 +8,7 @@
 - ENTRE JUGADORES: recurso más de trueque, sin restricción especial.
 
 ## 3.2 Trueque de materiales (acuerdos entre Facciones)
+- **Quién comercia por la plaza** (decidido el 2026-10-12): el Tesorero o el Gobernador (Doc 2.2), residente y dentro de ella. Vale para proponer un trueque, para contestarlo (`aceptarTrueque`/`rechazarTrueque`, desde el lado receptor) y para las órdenes de Mercado.
 - Contrato MARCO abierto en el tiempo: `proponerTrueque` crea el acuerdo (lo pactado por cada lado, plazo por defecto de **un día de mundo**: lo que hace falta para que las caravanas vayan y vuelvan).
 - **Trueque compuesto** (2026-10-02): cada lado ofrece **una o varias líneas**, cada una un recurso con su cantidad (`lineasA` / `lineasB`); un lado no repite recurso. Cada línea lleva su propio progreso. El acuerdo se **cumple cuando están saldadas todas las líneas de los dos lados**. Las líneas de un lado salen en **un solo cargamento**: la caravana carga las líneas en el orden del acuerdo hasta llenarse (y hasta donde llega el stock de cada una), y lo que no cabe va en el siguiente viaje. Al vencer sin cumplir, cada lado recibe la penalización de reputación (Doc 2.7) **en proporción a lo que dejó sin entregar** de lo pactado; lo ya entregado no se devuelve.
 - **PROPUESTA → ACEPTACIÓN**: el acuerdo nace `'propuesto'` y **no obliga a nadie** hasta que el lado receptor (B) contesta con `aceptarTrueque` o `rechazarTrueque`. Ninguna caravana lo mira mientras siga propuesto.

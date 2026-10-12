@@ -20,7 +20,7 @@
 
 ### Nivel asentamiento (el Gobernador designa a los demás; al Gobernador lo designa el Rey)
 - **Gobernador**: máxima autoridad del asentamiento, designa al resto de cargos locales. Ve y controla la cola de auto-construcción (ver Doc 4.2). **Lo designa el REY de la Facción dueña del asentamiento** (Fase 0; el modelo canónico, ELECTO por ciudadanos, llega con la votación real). Es un acto de nivel Facción: el Rey no necesita residir ni estar presente en la plaza, igual que al designar Embajador. Los otros cuatro cargos los designa el Gobernador vigente, y para ello tiene que residir y estar PRESENTE en el asentamiento (ver 2.5).
-- **Tesorero**: gestión económica completa (trueque + Mercado).
+- **Tesorero**: gestión económica completa (trueque + Mercado). **Proponer, aceptar y rechazar un trueque y colocar órdenes de Mercado es del Tesorero o del Gobernador de la plaza** (decidido el 2026-10-12), residente y dentro de ella; un residente sin cargo no comercia por la plaza (sí lanza caravanas, 3.13).
 - **General**: mando militar del asentamiento — coordina el combate conjunto (ver Doc 5.2), pero NO es un gate de reclutamiento: reclutar es beneficio de RESIDENCIA (2.5), así que cualquier héroe residente recluta y repone SUS escuadrones sin necesidad de que exista un General asignado.
 - **Maestro de Obras**: gestiona prioridades de auto-construcción, bonus a tiempos de construcción. Puede reordenar, añadir y quitar proyectos de la cola — nunca elegir su ubicación (ver Doc 4.2).
 - **Sacerdote**: acelerador de aparición de Nobleza (no requisito) + bonificación de felicidad.

@@ -206,7 +206,7 @@ Condición: `yo` (`params.heroeId == héroe del actor`). La geometría y el rest
 | `fijarPuerta` | `yo` ∧ (`cargo(A, gobernador)` ∨ `reyDeLaPlaza(A)`) — el Rey **no** tiene que estar presente |
 | `vetarJugador` | `yo` ∧ `cargo(A, gobernador)` — **el Rey no puede** (asimetría con `fijarPuerta`, ver [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §8) |
 
-### 5.4 Residente presente (12)
+### 5.4 Residente presente (8)
 
 Condición: `reside(A)` — residente **y** dentro de la plaza. «La ciudadanía habilita, la presencia ejerce» (Doc 2.5): un Gobernador de campaña sigue siéndolo pero no gobierna desde el camino.
 
@@ -214,13 +214,11 @@ Condición: `reside(A)` — residente **y** dentro de la plaza. «La ciudadanía
 |---|---|---|
 | `lanzarCaravanaFundacion` | `origenAsentamientoId` | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) |
 | `renombrarAsentamiento` | `asentamientoId` (basta residir: el canon deja abierto exigir un cargo) | [`Economia_Construccion.md`](Economia_Construccion.md) |
-| `proponerTrueque` | `asentamientoAId` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
-| `aceptarTrueque`, `rechazarTrueque` | `asentamientoBId` **del acuerdo**: contesta el lado receptor, no quien propuso | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
-| `colocarOrdenMercado`, `crearCaravana` | `asentamientoId` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
+| `crearCaravana` | `asentamientoId` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
 | `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `cancelarCaravana` | `resideEnOrigen(caravanaId)` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
 | `moverCarroCaravana` | `resideEnOrigen(desdeCaravanaId)` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
 
-### 5.5 Cargo local (14)
+### 5.5 Cargo local (18)
 
 Condición: `cargo(A, c)`. En los comandos con `params.cargo`, **el cliente declara con qué cargo actúa** y la matriz comprueba que sea el titular de **ese** cargo; que el cargo declarado sirva para esa acción lo rechaza el comando.
 
@@ -231,9 +229,11 @@ Condición: `cargo(A, c)`. En los comandos con `params.cargo`, **el cliente decl
 | `alternarReabastecerAliados` | `gobernador` ∨ `tesorero` |
 | `alternarAutoConstruccion`, `alternarReceta` | `gobernador` ∨ `maestroObras` |
 | `calibrarReservaManual` | `tesorero` |
+| `proponerTrueque` (en `asentamientoAId`), `colocarOrdenMercado` | `tesorero` ∨ `gobernador` (decidido el 2026-10-12: el canon da el comercio al Tesorero y el Gobernador manda en la plaza) |
+| `aceptarTrueque`, `rechazarTrueque` | `tesorero` ∨ `gobernador` **del asentamiento `asentamientoBId` del acuerdo**: contesta el lado receptor, no quien propuso. Acuerdo inexistente: pasa |
 | `asignarCargoLocal` | si `params.cargo == 'gobernador'`: `reyDelAsentamiento(A)` (sin presencia); si no: `cargo(A, gobernador)` |
 
-Documentos: [`Economia_Construccion.md`](Economia_Construccion.md) (políticas, cola, mejoras, ascenso, auto-construcción, recetas, reserva), [`Murallas.md`](Murallas.md), [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (cargos), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) (reabastecer aliados).
+Documentos: [`Economia_Construccion.md`](Economia_Construccion.md) (políticas, cola, mejoras, ascenso, auto-construcción, recetas, reserva), [`Comercio_Caravanas.md`](Comercio_Caravanas.md) (trueques y Mercado), [`Murallas.md`](Murallas.md), [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (cargos), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) (reabastecer aliados).
 
 ### 5.6 Tecnología e intel (6)
 
@@ -498,6 +498,7 @@ Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve na
 | Solo el Rey responde a las solicitudes de ingreso, designa la capital, decide la admisión de otras Facciones; `solicitarAscenso` es solo del Gobernador; `fijarPuerta`: Gobernador o Rey; `vetarJugador`: Gobernador; designar Gobernador es del Rey, los demás cargos del Gobernador vigente | `autorizacionComandos.test.ts` |
 | El cargo se comprueba sobre el titular, no sobre si el puesto está cubierto | `autorizacionComandos.test.ts` |
 | Nadie recluta (ni actúa) a nombre de otro | `autorizacionComandos.test.ts` |
+| Trueques y órdenes de Mercado, solo el Tesorero o el Gobernador (residente y dentro); las caravanas, cualquier residente | `autorizacionComandos.test.ts` |
 | `membresía` manda sobre `administrador_global`; `puedeJugar` solo con rol `jugador`; el moderador no descarta | `acceso/__tests__/rolesDePartida.test.ts` |
 | Un canal de evento de plaza solo lo abre un ciudadano de su Facción; el personal, solo su héroe; la batalla, quien combate o la ve | `session/__tests__/canales.test.ts`, `canalDeBatalla.test.ts` |
 | `foto + deltas ≡ foto final`, tick tras tick, y dos suscriptores del mismo grupo reciben el MISMO texto con UNA proyección | `server/difusion/__tests__/difusorDeVistas.test.ts`, `session/vistas/__tests__/diff.test.ts` |
@@ -527,5 +528,4 @@ Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve na
 
 Abiertas, a decidir por el autor (también en [`Divergencias.md`](Divergencias.md)):
 
-- **Tesorero y trueque/Mercado.** El canon (Doc 2.2, glosario) define al Tesorero como «gestión económica (trueque + Mercado)», pero `proponerTrueque`, `aceptarTrueque`, `rechazarTrueque` y `colocarOrdenMercado` los puede hacer **cualquier residente presente**, sin cargo. El cargo solo pesa en las políticas, la reserva manual y abrir el almacén a un aliado.
 - **Rol `observador`.** `Docs/Arquitectura/5` lo define «solo lectura, proyección pública» y el servidor permite otorgarlo, pero **no hay ninguna ruta que lo admita**: `puedeAdministrar` y `puedeJugar` lo excluyen, así que una membresía de observador no concede nada (ni siquiera leer).

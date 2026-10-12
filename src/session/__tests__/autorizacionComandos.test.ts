@@ -226,15 +226,40 @@ describe('ir en un ejército', () => {
   });
 });
 
+describe('comerciar es del Tesorero o del Gobernador (Doc 2.2, decisión del autor 2026-10-12)', () => {
+  const trueque = (asentamientoId: string) => ({ asentamientoAId: asentamientoId, lineasA: [], asentamientoBId: 'otra', lineasB: [] });
+  const orden = (asentamientoId: string) => ({ asentamientoId, tipo: 'venta' as const, recurso: 'trigo' as const, cantidad: 1 });
+
+  it('un residente sin cargo no propone trueques ni coloca órdenes; sí lanza caravanas', () => {
+    const { sesion, asentamientoId, fundador } = partidaConAsentamiento();
+    const estado = sesion.getState();
+    expect(verificarAutorizacion('proponerTrueque', trueque(asentamientoId), estado, jugador(fundador))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('colocarOrdenMercado', orden(asentamientoId), estado, jugador(fundador))).toEqual(POR_DOMINIO);
+    expect(verificarAutorizacion('crearCaravana', { asentamientoId }, estado, jugador(fundador))).toEqual(AUTORIZADO);
+  });
+
+  it('el Tesorero y el Gobernador sí; otro residente sin cargo, no', () => {
+    const { sesion, asentamientoId, fundador, vecino } = partidaConAsentamiento();
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'gobernador', heroeId: fundador }, OPC);
+    sesion.ejecutar(asignarCargoLocal, { asentamientoId, cargo: 'tesorero', heroeId: vecino }, OPC);
+    const estado = sesion.getState();
+    for (const quien of [fundador, vecino]) {
+      expect(verificarAutorizacion('proponerTrueque', trueque(asentamientoId), estado, jugador(quien))).toEqual(AUTORIZADO);
+      expect(verificarAutorizacion('colocarOrdenMercado', orden(asentamientoId), estado, jugador(quien))).toEqual(AUTORIZADO);
+    }
+    expect(verificarAutorizacion('colocarOrdenMercado', orden(asentamientoId), estado, jugador('forastero'))).toEqual(POR_DOMINIO);
+  });
+
+  it('un acuerdo que no existe pasa la matriz: lo rechaza el comando', () => {
+    const { sesion, fundador } = partidaConAsentamiento();
+    expect(verificarAutorizacion('aceptarTrueque', { acuerdoId: 'no-existe' }, sesion.getState(), jugador(fundador))).toEqual(AUTORIZADO);
+  });
+});
+
 describe('residencia en el asentamiento objetivo', () => {
-  it('colocarOrdenMercado rechaza a quien no reside ahí', () => {
+  it('crearCaravana rechaza a quien no reside ahí', () => {
     const { sesion, asentamientoId } = partidaConAsentamiento();
-    const resultado = verificarAutorizacion(
-      'colocarOrdenMercado',
-      { asentamientoId, tipo: 'venta', recurso: 'trigo', cantidad: 1 },
-      sesion.getState(),
-      jugador('forastero')
-    );
+    const resultado = verificarAutorizacion('crearCaravana', { asentamientoId }, sesion.getState(), jugador('forastero'));
     expect(resultado).toEqual(POR_DOMINIO);
   });
 
