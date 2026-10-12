@@ -36,6 +36,14 @@ casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 6. **Casos límite y decisiones que parecen raras** — con el porqué.
 7. **Divergencias** — qué difiere del canon o de lo que dice el diseño.
 
+**Versión del balance** (`BALANCE_VERSION`, la que publica `/balance` para que un cliente sepa cuándo invalidar lo que guardó):
+
+<!-- parametros:BALANCE_VERSION -->
+```json
+14
+```
+<!-- /parametros -->
+
 ## Qué NO está aquí (todavía)
 
 - **El generador de números aleatorios y su semilla** (decisión del autor, 2026-10-09: anotado, fuera de alcance). Los sistemas que lo usan lo indican, pero para

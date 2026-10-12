@@ -154,9 +154,18 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
 | Leñera | `produccionBaseMadera × bosque.densidad × ratioManoObra` | no usa fertilidad ni tecnología; si el bosque no existe, no produce |
 | Cantera, Mina (oro), Mina de cobre / estaño / hierro, Corral | `mapa.extraer(fuenteId, produccionBase × ratioManoObra × factorTecnologia)` | rinde piedra, oro, cobre, estaño, hierro, livestock. Solo si el nodo tiene stock |
 
-- **`fertilidadZona`** (`mejorFertilidadEnZona`): la mayor `mapa.fertilidadEn` de una lista de candidatos = la posición del asentamiento + 40 puntos `i = 0..39` en
+- **`fertilidadZona`** (`mejorFertilidadEnZona`): la mayor `mapa.fertilidadEn` de una lista de candidatos = la posición del asentamiento + `SITIO.muestrasFertilidad` (40) puntos `i = 0..39` en
   `(pos.x + cos(2π·i/40)·r, pos.y + sin(2π·i/40)·r)` con `r = ((i mod 5)/5) · radioPotencial`, quedándose con los que caen dentro del polígono de zona (o con todos si el polígono está vacío). Todas las Granjas
   del asentamiento comparten este único valor.
+
+<!-- parametros:SITIO -->
+```json
+{
+  "muestrasFertilidad": 40
+}
+```
+<!-- /parametros -->
+
 - **`factorTecnologia`** = producto de `bonusProduccion.factor` de las tecnologías adoptadas cuyo `bonusProduccion.recurso` coincide con el recurso del extractor (p. ej. `canteria` ×1,5 la piedra).
 - **Extracción**: el extractor pide `min(produccionBase × …, espacio libre del almacén para ese recurso)` y `mapa.extraer` devuelve `min(pedido, stock)`: **solo se gasta del yacimiento lo que cabe**. El stock es `cantidadInicial − extraído`. Si tras extraer el stock llega a 0, se emite
   `construccion.yacimiento_agotado`.

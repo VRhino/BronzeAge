@@ -107,6 +107,16 @@ Como en Conquest (`HeroDataService.CreateNewHero`), pero **sin equipo inicial** 
 - **Botín de Unity:** cada objeto va a una casilla libre del inventario (`BATALLA.casillasInventario`), como `tipo: 'visual'` y `precio: 0` (sin catálogo de objetos, CQ-004); las monedas se suman a `monedasHeroe`.
 - **Equipar:** no existe el comando; el equipamiento solo cambia por la vía de Conquest.
 
+### 4.4 Eventos del héroe
+
+Sin plaza (globales del héroe):
+
+| Evento | Comando | Payload |
+|---|---|---|
+| `heroe.puntos_repartidos` | `repartirPuntos` | `{ heroeId, atributos }` |
+| `heroe.almacen_personal` | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `{ heroeId, recurso, cantidad (lo movido), sentido: guarda \| saca }` |
+| `heroe.viveres` | `pasarAViveres` | `{ heroeId, cantidad (lo movido) }` |
+
 ## 5. Liderazgo
 
 Un límite de **salida**, no de posesión: se puede poseer mucha más tropa de la que se saca de una vez.

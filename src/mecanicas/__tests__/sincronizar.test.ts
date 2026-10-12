@@ -3,6 +3,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import * as constantesJuego from '../../constants';
+import * as constantesInfra from '../../constantsInfra';
 import { parametrosDe, sincronizar } from '../sincronizar';
 
 const RAIZ = join(fileURLToPath(new URL('../../../', import.meta.url)), 'Docs', 'Mechanics');
@@ -37,4 +39,15 @@ describe('Docs/Mechanics está al día con constants.ts', () => {
       expect(texto, 'una cifra de constants.ts cambió: ejecuta `npm run mecanicas`').toBe(original);
     });
   }
+});
+
+describe('Docs/Mechanics cubre todas las constantes del juego', () => {
+  it('cada tabla de constants.ts y constantsInfra.ts tiene su bloque de parámetros en algún documento', () => {
+    const texto = documentos(RAIZ).map((ruta) => readFileSync(ruta, 'utf-8')).join('\n');
+    const conBloque = new Set([...texto.matchAll(/<!-- parametros:([A-Za-z0-9_]+) -->/g)].map((m) => m[1]));
+    const sinBloque = Object.entries({ ...constantesJuego, ...constantesInfra })
+      .filter(([nombre, valor]) => typeof valor !== 'function' && !conBloque.has(nombre))
+      .map(([nombre]) => nombre);
+    expect(sinBloque, 'una tabla nueva de constants.ts necesita su bloque <!-- parametros:NOMBRE --> en el documento de su mecánica').toEqual([]);
+  });
 });

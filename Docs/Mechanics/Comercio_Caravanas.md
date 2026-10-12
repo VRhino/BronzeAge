@@ -669,6 +669,14 @@ si cantidad ≤ 0 → error con el motivo (sin stock / cupo agotado / sin oro / 
 oro cobrado = coste(cantidad) ; stock −= cantidad
 ```
 
+<!-- parametros:ALMACEN_PERSONAL -->
+```json
+{
+  "capacidad": 1000
+}
+```
+<!-- /parametros -->
+
 **No residente (de visita):**
 
 ```
@@ -685,6 +693,8 @@ carro.oro −= coste(cantidad) ; carro[recurso] += cantidad ; stock −= cantida
 
 Cualquier héroe, residente o no, en un campamento (dentro, o con su columna a la puerta) llena sus **víveres** hasta `LOGISTICA.capacidadViveresPorHeroe`, **gratis** y **sin gastar el stock** del mercado; falla si ya los tiene llenos. El trigo no pasa por el carro ni por el almacén personal.
 
+Emite `mercenarios.repostado { campamentoId, heroeId, cantidad }` (la cantidad cargada), sin plaza.
+
 ### 9.3 Cómo se repone
 
 - **Qué cuenta como comercio del mundo** (`comerciadoDeEventos`, leído de los eventos de cada comando en `exito`): el `intercambiado` (por recurso) de cada `comercio.trueque_cumplido` con
@@ -699,6 +709,7 @@ Las cifras de `MERCENARIOS.mercado` (`cadaHoras`, `proporcionRepone`, `topePorBi
 
 En el mismo tick de la ruina (antes del comercio), para la plaza `R` destruida:
 
+- Su **campamento de bandidos** (el que nació de esa plaza, `asentamientoId = R`) desaparece con el evento `bandidos.campamento_disperso { campamentoId, asentamientoArruinadoId }`.
 - Sus **trueques** `activo` o `propuesto` pasan a `expirado` **sin penalizar a nadie** (evento `comercio.trueque_cancelado` a la plaza socia).
 - Las caravanas, salvo las `construccion` y las `adjunta` (siguen su propio camino):
   - **Salían de `R`** ⇒ se **pierden** (`comercio.caravana_perdida`), su escolta vuelve al campamento.

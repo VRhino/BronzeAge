@@ -61,6 +61,15 @@ El **orden del array `edificios` es significativo**: es el orden de construcció
 - `puestoMercado` → `PUESTO_MERCADO_FORMA[nivelInterno ?? 1]`.
 - cualquier otro → `EDIFICIO_TAMANO[tipo]`, y si no está en la tabla `EDIFICIO_TAMANO_POR_DEFECTO` (1×1: vivienda, leñera, minas, gran fundición, maravilla).
 
+<!-- parametros:EDIFICIO_TAMANO_POR_DEFECTO -->
+```json
+{
+  "ancho": 1,
+  "alto": 1
+}
+```
+<!-- /parametros -->
+
 <!-- parametros:EDIFICIO_TAMANO -->
 ```json
 {

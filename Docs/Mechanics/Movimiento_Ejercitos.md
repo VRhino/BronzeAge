@@ -123,6 +123,7 @@ La guarnición usa **la misma `avanzarRacion`**, con factor 1 y 0 participantes;
 ## 7. Perseguir
 
 - **`perseguir`** fija `persiguiendo = {tipo, id}` y `estado: marchando`. Condiciones: no a sí mismo; la columna propia con algún héroe sano; presa de la **misma clase** (`personal` con `personal`, `ejército` con `ejército`); si la presa es una columna, con algún héroe sano. Antes, `exigirPresaPerseguible`: no a los tuyos ni a un aliado, no a una caravana adjunta, y **un ejército no persigue caravanas** (las persigue una columna personal).
+- **`dejarDePerseguir { heroeId }`**: la columna del héroe suelta la presa (`persiguiendo = undefined`; la columna sigue `marchando` hasta que llegue a su último destino calculado). No comprueba que persiguiera algo: **siempre** anota el historial y emite `columna.persecucion_abandonada`. Lo mismo hace, sin evento, cualquier `marcharA`.
 - **Cada tick** (`seguirPresa`), con la posición de la presa **al empezar el tick** (para no depender del orden):
   1. Presa fuera del mapa (entró en plaza/campamento, se disolvió, adjunta o en batalla) → se suelta, `columna.presa_a_cubierto`.
   2. Presa a más de `alcanceDeVista` del perseguidor (`VISION.ejercito` si lleva soldados en pie, si no `VISION.jugadorSolo`) → se suelta, `columna.presa_perdida`. Así la trayectoria no delata dónde está bajo la niebla.
@@ -139,12 +140,14 @@ Tras moverse y antes de resolver la llegada (`repostarSiPuede`):
 3. `sacarTrigoDe(plaza, ración de su campamento, hueco de víveres de la columna)`; el trigo se reparte llenando héroe a héroe (`repartirEnViveres`).
 4. Sin límite de veces: acampar junto a una plaza amiga repone cada tick (eso hace sostenible «sostener un paso»). **Solo se narra** (`ejercito.reabastecido`) si la columna llevaba menos de `umbralNarrarReposte` (50 %) de víveres.
 
+- **`alternarReabastecerAliados { asentamientoId, permitido }`**: abre o cierra el almacén de la plaza a los ejércitos **aliados** (`Asentamiento.permiteReabastecerAliados`, ausente = cerrado). Repostar le cuesta stock real a quien da, así que lo decide la plaza (Gobernador o Tesorero). Si el valor no cambia, `sinCambios` (sin versión ni evento); si cambia, `logistica.reabastecer_aliados { asentamientoId, permitido }`. Cerrar no es retroactivo: lo ya repuesto está repuesto, y desde el tick siguiente la puerta está cerrada. Los ejércitos de la propia Facción entran siempre.
+
 ## 9. Caravanas adjuntas
 
 - **`adjuntarCaravana`**: misma Facción que el ejército; no ya enganchada; estado `disponible` o `aparcada` (o `retornando` si es de Fundación); a ≤ `radioReabastecimiento` del ejército. La **Caravana de Fundación** la lleva su titular: otro solo la reclama si el titular ya no es vigente. No se comprueba el cupo de Mercado: engancharla ya la saca de comerciar.
 - Una adjunta pasa a `estado: 'adjunta'` y su `posicionActual` sigue a la columna cada tick.
 - **`soltarCaravana`**: queda `disponible` donde esté la columna; no vuelve sola.
-- **`cargarCaravanaAdjunta`**: de una plaza a ≤ 60 donde pueda repostar; `min(pedido, espacio, disponible)`; **sin reserva** (igual que el comercio automático).
+- **`cargarCaravanaAdjunta`**: de una plaza a ≤ 60 donde pueda repostar; `min(pedido, espacio, disponible)`; **sin reserva** (igual que el comercio automático). Es el comando **`cargarCaravana { ejercitoId, caravanaId, asentamientoId, recurso, cantidad }`**: devuelve `{ cargado }` y emite `ejercito.caravana_cargada`. Rechaza si la caravana no va con ese ejército, la cantidad no es positiva, la plaza está a más de `radioReabastecimiento`, no abre su almacén a ese ejército (`puedeRepostarEn`), la caravana ya va llena (capacidad efectiva, con «Carga Ampliada» del origen) o no hay de ese recurso.
 - **Capacidad de carga** del ejército (`capacidadCargaDe`) = `participantes × capacidadCarroPorJugador` + Σ `capacidadCaravana` de las adjuntas.
 - Si el ejército se disuelve (§11) las adjuntas **se pierden con él** (`ejercito.caravanas_perdidas`); también si lo derrotan (Combate).
 
@@ -157,6 +160,7 @@ Residente de esa plaza; mismo bando; ejército a ≤ `radioReabastecimiento` de 
 - El ejército no rechaza; es `ejercito` **o** una formación; la que se une es `personal` sin formación; ambas con Facción no vacía e igual; a ≤ `radioEncuentro` (15).
 - Aporta lo que ya lleva: escuadras y carro. `unidoEn = ahora`. **Adopta el destino del ejército y ya no puede rectificar**: ese es el precio de marchar acompañado.
 - Con `preguntar`: `anotarPeticionDeUnion` valida antes de anotar (no hacer perder al Líder los 10 s), sustituye la petición previa de ese jugador y barre las vencidas. `retirarPeticionDeUnion`: solo el Líder, y la petición debe estar viva (el silencio vale como «no»).
+- **`responderPeticionDeUnion { heroeId (el Líder), ejercitoId, solicitanteId, aceptar }`**: `retirarPeticionDeUnion` valida (solo el Líder, petición viva). **Rechazar** la retira y emite `columna.union_rechazada` (`{ unido: false }`). **Aceptar** ejecuta `unirseEnCampo` con la geometría de **ahora** (el solicitante tiene que seguir a ≤ `radioEncuentro`, no donde estaba al pedir), completa la formación si llega a 3, borra la columna del solicitante, lo sitúa en la fundida y emite `columna.union_en_campo` (`{ unido: true }`).
 
 ### 10.3 Separarse (`separarseDelEjercito` → `desgajar`)
 - Debe ir dentro; de una columna personal no te separas; **el Líder no puede** (cede antes) salvo en una formación, donde el mando pasa al que lleva más tiempo (`sucesorEnFormacion`); **el último tampoco** (cancela la marcha).
@@ -168,6 +172,7 @@ Residente de esa plaza; mismo bando; ejército a ≤ `radioReabastecimiento` de 
 - `completarFormacion`: con ≥ `FORMACION_EJERCITO.minimo` (3) participantes pasa a `tipo: 'ejercito'` y pierde la marca; queda quieto hasta que su Líder lo dirija.
 - Cada tick `disolverFormacionesVencidas`: las que pasaron `expiraEn` sin llegar a 3 se deshacen (`columna.formacion_disuelta`).
 - `disolverFormacion` (también usada para **desarmar** un ejército que va a entrar en un lugar): el Líder se queda con la columna (queda `personal`, política `rechazar`, sin peticiones **ni caravanas**) y cada otro nace como personal donde estaba, vía `desgajar`.
+- **`cancelarFormacion { heroeId }`**: solo el **Líder** de una formación (los demás se separan; fuera de una formación, `MovilizacionInvalidaError`). Aplica `deshacerFormaciones` a esa formación —`disolverFormacion` más situar a cada héroe en su nueva columna personal—, anota el historial y emite `columna.formacion_disuelta`, igual que cuando vence el plazo.
 
 ## 11. Terminar la campaña
 
@@ -194,6 +199,23 @@ No consume aleatoriedad. Orden canónico por id. Para cada ejército:
 4. **Llegar** (§5, §11).
 
 Fase 2 (después de todos): `cerrarPersecuciones` (§7). Cada escuadra vuelve a su héroe con su estado final.
+
+### 13.1 Eventos de los comandos de columnas
+
+Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» es el `asentamientoId` al que se atribuye (decide quién lo oye, [`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md) §8); sin plaza, es global del héroe.
+
+| Evento | Comando | Plaza | Payload |
+|---|---|---|---|
+| `ejercito.movilizado` | `movilizarEjercito` | la de origen | `{ ejercitoId, origenAsentamientoId, heroeId, escuadronIds, liderazgoUsado, objetivo, trigoCargado }` |
+| `ejercito.refuerzo` | `unirseAEjercito` | la desde la que se refuerza | `{ ejercitoId, asentamientoId, heroeId, escuadronIds, trigoCargado }` |
+| `ejercito.repliegue` | `replegarEjercito` | — | `{ ejercitoId, desdeEstado: marchando \| estacionado }` |
+| `ejercito.estacionado` | `estacionarEjercito` | — | `{ ejercitoId }` |
+| `ejercito.caravana_adjuntada` / `ejercito.caravana_soltada` | `adjuntarCaravana` / `soltarCaravana` | origen del ejército | `{ ejercitoId, caravanaId, heroeId }` |
+| `columna.formacion_iniciada` | `organizarEjercito` | origen de la formación | `{ ejercitoId, liderId }` |
+| `columna.separacion` | `separarseDelEjercito` | origen del ejército | `{ ejercitoId, columnaId, heroeId }` |
+| `columna.liderazgo_cedido` | `cederLiderazgo` | origen del ejército | `{ ejercitoId, anteriorId, sucesorId }` |
+| `columna.persecucion_iniciada` | `perseguir` | origen de la columna | `{ ejercitoId, heroeId, objetivo }` |
+| `asentamiento.observado` / `columna.observada` / `caravana.observada` | `inspeccionar` (§12) | la **observada** (la plaza mirada; el origen de la columna o caravana mirada) | `{ observadorId, objetivo }` — el observado se entera de que lo miran |
 
 ## 14. Parámetros
 
@@ -237,6 +259,38 @@ Fase 2 (después de todos): `cerrarPersecuciones` (§7). Cada escuadra vuelve a 
 
 <!-- parametros:VISION -->
 ```json
+{
+  "ejercito": 150,
+  "jugadorSolo": 80,
+  "margenAsentamiento": 60,
+  "caravanaGrande": {
+    "carros": 3,
+    "radio": 300
+  }
+}
+```
+<!-- /parametros -->
+
+`MOVIMIENTO` reúne lo que no es de logística: `velocidadJugador` (columna sin escuadrones), `consumoPorParticipante`, `radioPuerta` (cruzar la puerta de una plaza), `vidaPeticionUnionSegundos`, `radioInspeccion` (§12) y `fraccionRobada` (la mitad del carro del derrotado). `PERSECUCION.umbralRecalculo` es el desplazamiento de la presa que obliga a recalcular la ruta (§7).
+
+<!-- parametros:MOVIMIENTO -->
+```json
+{
+  "velocidadJugador": 22,
+  "consumoPorParticipante": 0.5,
+  "radioPuerta": 10,
+  "vidaPeticionUnionSegundos": 10,
+  "radioInspeccion": 40,
+  "fraccionRobada": 0.5
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:PERSECUCION -->
+```json
+{
+  "umbralRecalculo": 30
+}
 ```
 <!-- /parametros -->
 

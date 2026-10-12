@@ -172,6 +172,10 @@ momento, con todo junto. Cada punto dice de qué mecánica sale.
   la puerta antes de salir y al volver. En un campamento de mercenarios, repostar es gratis para todos.
 - El vasallaje cuenta como aliado al repostar.
 
+**De repostar gratis en el campamento (2026-10-11, `repostarEnCampamento`, `Docs/Mechanics/Comercio_Caravanas.md` §9.2b):**
+- `bots/cerebro/sinPlaza.ts` se apoya solo en la ración gratis al salir (`racionAlSalir`: víveres llenos). Con `repostarEnCampamento` puede rellenarlos a la puerta del campamento, con la columna fuera, sin entrar y volver a salir: decidir si le compensa y cuándo (p. ej. al volver de un campamento de bandidos, antes de lanzarse a otro).
+- `debeVolver` calcula el trigo del viaje de vuelta con los víveres de la columna: si el bot repostara a la puerta, la vuelta ya no es «hasta que se acabe el trigo».
+
 **De §44 (guerra logística):**
 - Marcar obras de mapa (pueblos, avanzadas) y llevar los materiales al sitio.
 - Escoltar el carro de acarreo; saquear pueblos y atacar caravanas.
