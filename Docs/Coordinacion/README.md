@@ -23,6 +23,7 @@ mismo commit**. Los cambios en v1 son **solo aditivos**; lo que se retira se ano
 | Eventos de dominio y su audiencia | `src/domain/eventos.ts`, `src/session/canales.ts` | 02 §4.1b; canales de eventos: 02 §2 |
 | **Tiempo real: canales de eventos** (`mapa/general`, `asentamiento/<id>`, `heroe/<id>`, `batalla/<id>`) (el mensaje `tick` se retiró el 2026-10-10) | `src/server/rutas/tiempoReal.ts`, `difusion/hub.ts`, `session/canales.ts` | 02 §2 (resumen) y §3.5 |
 | **Tiempo real por segmentos de vista** (foto + deltas; sustituye al sondeo) | `src/server/difusion/`, `src/server/rutas/tiempoReal.ts` | [`03`](03_Tiempo_real_por_segmentos.md) |
+| **Reconstrucción sobre el mundo reactivo** (sin tick, servidor en Rust, cliente final Unity; acordada 2026-10-12) | — (rama `reconstruccion`) | [`04`](04_Migracion_Mundo_Reactivo.md), diseño en [`Arquitectura/13`](../Arquitectura/13_Mundo_Reactivo_Rust.md), decisiones en [`Consideraciones/Reconstruccion_Definicion.md`](../../Consideraciones/Reconstruccion_Definicion.md) |
 | Formato de error y versión (`ERROR_RESPUESTA`, `ERROR_VERSION_INCOMPATIBLE`, `schemaVersion`) | `src/server/rutas/esquemas.ts` | 02 §5 |
 | OpenAPI generado | `GET /v1/openapi.json` (reflejo del código, `src/server/openapi.ts`) | — |
 | Schemas JSON y fixtures verificados por test | `src/contratos/v1/` | 02 §6 |
