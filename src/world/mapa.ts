@@ -492,7 +492,7 @@ export class Mapa {
 
   /**
    * ¿Hay algún bosque cuyo BORDE entre en el círculo dado? No hace falta que lo esté su centro: los bosques
-   * tienen radio 30-80 y una zona de influencia puede tocar un bosque grande por un punto muy alejado de su
+   * tienen radio 45-120 y una zona de influencia puede tocar un bosque grande por un punto muy alejado de su
    * centro. Este es el criterio único — antes vivía duplicado en `settlement.ts` y `construction.ts`.
    */
   hayBosqueEnRadio(centro: Point, radio: number): boolean {
@@ -513,7 +513,7 @@ export class Mapa {
     );
   }
 
-  /** Cuántas Leñeras admite un bosque a la vez según su tamaño (mín 1 / máx 3, ver `LENERA_POR_BOSQUE`). */
+  /** Cuántas Leñeras admite un bosque a la vez según su tamaño (2 o 3 con los radios de hoy, ver `LENERA_POR_BOSQUE`). */
   capacidadLeneras(bosqueId: string): number {
     const bosque = this.bosque(bosqueId);
     if (!bosque) return 0;

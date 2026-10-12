@@ -788,7 +788,7 @@ extraer(id, n): si el nodo no existe o n ≤ 0 → 0 ; disponible = stock(id) ; 
 
 ### 10.3 Leñeras en un bosque
 
-`capacidadLeneras(bosque)`: `radio ≥ LENERA_POR_BOSQUE.umbral3` → 3; `≥ umbral2` → 2; si no, 1.
+`capacidadLeneras(bosque)`: `radio ≥ LENERA_POR_BOSQUE.umbral3` → 3; `≥ umbral2` → 2; si no, 1. Con los radios de `BOSQUE` (45–120) la rama «1» no se da nunca: ~29 % de los bosques admiten 2 y ~71 %, 3 (decidido así el 2026-10-12).
 
 `puntoDeTrabajoEnBosque(bosqueId, polígono, ocupadas)`: punto preferido = el **centro** si `ocupadas = 0`; si no, `centro + radio·0,4·(cos(2π·ocupadas/3), sin(2π·ocupadas/3))`. Si cae dentro del polígono, ese. Si no, se prueban **anillos** de radio `radio·k/3`, `k = 1, 2, 3`, con 12 muestras cada uno
 (ángulo `2π·i/12`, `i = 0…11`) y se devuelve la primera dentro; ninguna → `null`.
@@ -1236,4 +1236,4 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
 
 ## 17. Divergencias
 
-Las abiertas están en [`Divergencias.md`](Divergencias.md): #5 (`ESCALA.unidadesLocalesPorUnidadMapa` sin uso) y las nuevas #17–#21 de este documento (chokepoints en el canon, regeneración «al doble», capacidad de Leñeras, comentarios de calibración desactualizados y spawn de jugadores en el canon). La tabla de oro por nivel del canon 1.9 (9/10/11) estaba desactualizada respecto a su propio texto y al código (30/33/36) y se corrigió en este commit.
+Las abiertas están en [`Divergencias.md`](Divergencias.md): #5 (`ESCALA.unidadesLocalesPorUnidadMapa` sin uso). Resueltas el 2026-10-12 al escribir este documento: se borró del canon la sección de chokepoints (1.5, sin renumerar) y la línea del spawn de jugadores; la regeneración del ganado se documenta como 3 frente a 10 minutos; se aceptó que un bosque admita 2 o 3 Leñeras (nunca 1) y se actualizaron los comentarios de calibración; la tabla de oro por nivel del canon 1.9 se corrigió a 30/33/36.

@@ -84,8 +84,9 @@ export const SIMULACION = {
 /**
  * Capacidad de Leñeras por bosque según su tamaño (a petición del usuario): un bosque grande admite más de
  * una Leñera trabajando en él a la vez, mín 1 / máx 3 — ver `capacidadLenerasBosque` en engine/construction.ts.
- * Umbrales repartidos en tercios del rango de radio con que se generan los bosques (30-80, ver
- * `BOSQUE` en worldgen/config.ts): <45 -> 1, 45-64 -> 2, >=65 -> 3.
+ * Umbrales: <45 -> 1, 45-64 -> 2, >=65 -> 3. Los bosques se generan con radio 45-120 (`BOSQUE` en worldgen/config.ts),
+ * así que en la práctica un bosque admite 2 (radio < 65, ~29 %) o 3 Leñeras (~71 %); la capacidad 1 no se da (decidido
+ * 2026-10-12: se acepta).
  * Es balance de EXPLOTACIÓN, no de generación: cambiarlo no altera el mapa, solo cuántas Leñeras caben.
  */
 export const LENERA_POR_BOSQUE = {

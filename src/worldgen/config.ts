@@ -145,8 +145,8 @@ export const ELEVACION = congelar({
   escala: 0.00167,
   lacunaridad: 2,
   persistencia: 0.5,
-  // Percentiles observados (medidos sobre rejilla 400², seeds 1/42/7 — muy estables entre seeds):
-  // agua ~7%, costa ~11%, llano ~50%, colina ~18%, montaña ~11%, cima ~3%.
+  // Reparto del mundo libre medido el 2026-10-12 (v17, rejilla 200², seeds 1/42/7, con el borde y el suavizado):
+  // agua 4-10%, costa 11-14%, llano 42-47%, colina 15-17%, montaña 15-19%, cima 0,6-1,8%.
   umbralAgua: 0.375,
   umbralCosta: 0.42,
   umbralColina: 0.545,
@@ -246,7 +246,7 @@ export const BIOMA = congelar({
 
 /**
  * Biomas donde SE PERMITE que aparezca cada tipo de recurso (colocación condicionada al terreno, Fase 0.1).
- * Piedra se deja permisivo a propósito: es el recurso común (60/seed) y no debe faltar. Los metales
+ * Piedra se deja permisivo a propósito: es el recurso común (240/seed) y no debe faltar. Los metales
  * (cobre/estaño/oro) quedan restringidos a colina/montaña — "metales en montaña" pedido explícitamente.
  * Oro se deja SOLO en montaña (el más exclusivo, es el más raro); cobre/estaño se permiten también en
  * colina porque, con `RECURSO_RAREZA.raro.espacioMinimo`=120 y solo 6 nodos por tipo, restringir dos

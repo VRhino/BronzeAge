@@ -47,13 +47,12 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 ## 1.1 Generación del mundo (Fase 0)
 - Mapa CUADRADO, espacio de coordenadas continuo (no grid discreto).
 - Tamaño base: 2000×2000 unidades, PARAMETRIZABLE.
-- Terreno con RELIEVE REAL: campo de ELEVACIÓN continuo por ruido fractal, clasificado en bandas agua/costa/llano/colina/montaña/cima; RÍOS como polilíneas que nacen en montaña y descienden por gradiente de máxima pendiente; BIOMA derivado de terreno+fertilidad+humedad — ver `Consideraciones/Fase_0_1_Definicion.md`. El coste de moverse por el mapa depende del tipo de terreno (ver 1.5/1.6 y Doc 3.6). Opcionalmente sesgado a una región geográfica real (Grecia continental/Anatolia/Egeo/Nilo/Mesopotamia — "Libre", sin sesgo, es el valor por defecto). Sin mar navegable (eje naval pospuesto, ver `Roadmap_Escalado.md`).
+- Terreno con RELIEVE REAL: campo de ELEVACIÓN continuo por ruido fractal, clasificado en bandas agua/costa/llano/colina/montaña/cima; RÍOS como polilíneas que nacen en montaña y descienden por gradiente de máxima pendiente; BIOMA derivado de terreno+fertilidad+humedad — ver `Consideraciones/Fase_0_1_Definicion.md`. El coste de moverse por el mapa depende del tipo de terreno (ver 1.6 y Doc 3.6). Opcionalmente sesgado a una región geográfica real (Grecia continental/Anatolia/Egeo/Nilo/Mesopotamia — "Libre", sin sesgo, es el valor por defecto). Sin mar navegable (eje naval pospuesto, ver `Roadmap_Escalado.md`).
 - Generación PROCEDURAL de recursos por niveles de rareza:
   - Común (alta frecuencia, disperso): Madera (bosques, ver 1.4), Piedra, Trigo (vía fertilidad, ver 1.4).
   - Intermedio (frecuencia media, varios clusters): Cobre.
   - Raro (baja frecuencia, pocos clusters, espaciado mínimo forzado entre ellos): Estaño, Oro.
   - El estaño tiene además **yacimientos de frecuencia intermedia, la mitad que el cobre**, que se suman a los raros: sin ellos casi nadie fabricaba bronce y el nivel 3, que lo pide, no llegaba (`ESTANO_EXTRA`, `worldgen/config.ts`).
-- Spawn de jugadores nuevos: posición aleatoria uniforme, INDEPENDIENTE de la ubicación de recursos.
 - Fases avanzadas (fuera de alcance de Fase 0): mar navegable; posible mapa fijo diseñado a mano en vez de procedural; puntos de interés fijos (ruinas, maravillas); clima.
 
 ## 1.2 Fundación de asentamientos
@@ -96,11 +95,8 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 - LIVESTOCK = **ganado vacuno**: fauna LIBRE en el mapa, se aprovecha con el Corral. Da el cuero de la Curtiduría. Cría/domesticación pospuesta a fases avanzadas (se trata como recurso consumible/finito).
 - CABALLOS: no son livestock. **Se compran con oro** al reclutar caballería y carros (Doc 5.8), y los animales de tiro de las caravanas se compran igual (Doc 3.13). Cuando exista la captura y la cría habrá las dos fuentes.
 - MADERA y PIEDRA: materiales base de construcción de edificios e insumo de materiales derivados.
-- REGENERACIÓN DE YACIMIENTOS AGOTADOS: un nodo (mineral o livestock) que llega a stock 0 no queda muerto para siempre — vuelve a aparecer con su cantidad inicial completa pasado un cooldown, parametrizable por categoría (`REGENERACION_NODOS`). Livestock (fauna, se recupera por reproducción/migración) regenera al DOBLE de rápido que los yacimientos minerales (piedra/cobre/estaño/hierro/oro) — un filón agotado tarda mucho más en "rellenarse" que una manada.
+- REGENERACIÓN DE YACIMIENTOS AGOTADOS: un nodo (mineral o livestock) que llega a stock 0 no queda muerto para siempre — vuelve a aparecer con su cantidad inicial completa pasado un cooldown, parametrizable por categoría (`REGENERACION_NODOS`). Livestock (fauna, se recupera por reproducción/migración) regenera en 3 minutos de mundo y los yacimientos minerales (piedra/cobre/estaño/hierro/oro) en 10 — un filón agotado tarda más en "rellenarse" que una manada.
 - COMMODITIES DE NOBLEZA (uvas/olivas → vino/aceite): no son alimento básico, requeridas para felicidad de la Nobleza; su déficit arriesga rebelión/estancamiento, no hambruna.
-
-## 1.5 Chokepoints estratégicos (heredado de Iberia)
-Puertos de montaña detectados como PUNTOS DE SILLA del campo de elevación (mínimo local a lo largo de la cresta, máximo local en la dirección perpendicular — geometría determinista por seed). El asentamiento cuya zona de influencia CUBRE un chokepoint lo controla; las caravanas comerciales de una Facción rival cuya ruta pasa cerca pagan un PEAJE EN ORO al controlador, cobrado al llegar a destino (ver `Consideraciones/Fase_0_3_Definicion.md`). Solo los puertos de montaña son chokepoints; los vados de río no.
 
 ## 1.6 Red de caminos
 Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`. Cifras placeholder.
