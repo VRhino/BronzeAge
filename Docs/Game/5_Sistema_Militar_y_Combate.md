@@ -105,9 +105,9 @@ El roster no se organiza por Tier abstracto: cada tropa se recluta en Centro Urb
 
 | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
 |---|---|---|---|---|---|---|---|
-| Milicia de lanceros | `leva_comunal` (I) | 2 Madera (en bruto, sin pasar por Armería) | 2 | 2 | 25 | 20 | 1 |
-| Leñadores | `leva_comunal` (I) | 1 Madera (su hacha) | 1 | 1 | 30 | 20 | 1 |
-| Granjeros | `leva_comunal` (I) | nada (sus herramientas) | 1 | 1 | 30 | 20 | 1 |
+| Milicia de lanceros | `leva_comunal` (I) | 2 Madera (en bruto, sin pasar por Armería) | 2 | 2 | 25 | 30 | 1 |
+| Leñadores | `leva_comunal` (I) | 1 Madera (su hacha) | 1 | 1 | 30 | 30 | 1 |
+| Granjeros | `leva_comunal` (I) | nada (sus herramientas) | 1 | 1 | 30 | 30 | 1 |
 
 Leñadores y granjeros son muy malos en combate y muy desorganizados: en la batalla no forman (Conquest).
 
@@ -115,39 +115,39 @@ Leñadores y granjeros son muy malos en combate y muy desorganizados: en la bata
 
 | Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Lanceros con escudo de mimbre | `escudos_ligeros` (I) | 1 Arma de Madera | 2 | 3 | 25 | 20 | 2 |
-| 1 | Espadachines de espada corta de cobre | `armamento_palacial` (I) | 1 Arma de Cobre + 1 Armadura Básica | 2 | 4 | 20 | 16 | 2 |
-| 2 | Hacheros ligeros | `armamento_palacial` (I) | 1 Arma de Bronce + 1 Armadura Básica | 3 | 7 | 18 | 16 | 2 |
-| 2 | Espadachines con espadas y escudos de bronce | `aleacion_bronce` (I) | 2 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 18 | 16 | 2 |
-| 2 | Hacheros armados (armadura media) | `aleacion_bronce` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 12 | 15 | 12 | 2 |
-| 2 | Guerreros filisteos (Peleset) | `forja_hierro_temprana` (II) | 1 Arma de Hierro + 1 Armadura Intermedia | 3 | 9 | 18 | 16 | 2 |
-| 2 | Shardana | `bronce_calidad_militar` (II) | 1 Arma de Bronce de Calidad + 1 Armadura Básica | 4 | 15 | 15 | 16 | 3 |
-| 2 | Hoplitas ciudadanos | `ciudadania_militar` (III) | 1 Arma de Hierro + 1 Armadura de Bronce | 3 | 10 | 18 | 16 | 3 |
-| 3 | Lanceros pesados micénicos (escudos grandes) | `panoplia_bronce` (II) | 2 Arma de Bronce + 1 Armadura de Bronce | 4 | 14 | 15 | 12 | 3 |
-| 3 | Hequetai (guardia de bronce) | `panoplia_bronce` (II) | 1 Arma de Bronce de Calidad + 1 Armadura de Bronce | 5 | 17 | 12 | 12 | 3 |
-| 3 | Espartiatas | `falange_hoplita` (III) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 4 | 17 | 15 | 12 | 4 |
+| 1 | Lanceros con escudo de mimbre | `escudos_ligeros` (I) | 1 Arma de Madera | 2 | 3 | 25 | 30 | 2 |
+| 1 | Espadachines de espada corta de cobre | `armamento_palacial` (I) | 1 Arma de Cobre + 1 Armadura Básica | 2 | 4 | 20 | 24 | 2 |
+| 2 | Hacheros ligeros | `armamento_palacial` (I) | 1 Arma de Bronce + 1 Armadura Básica | 3 | 7 | 18 | 24 | 2 |
+| 2 | Espadachines con espadas y escudos de bronce | `aleacion_bronce` (I) | 2 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 18 | 24 | 2 |
+| 2 | Hacheros armados (armadura media) | `aleacion_bronce` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 12 | 15 | 18 | 2 |
+| 2 | Guerreros filisteos (Peleset) | `forja_hierro_temprana` (II) | 1 Arma de Hierro + 1 Armadura Intermedia | 3 | 9 | 18 | 24 | 2 |
+| 2 | Shardana | `bronce_calidad_militar` (II) | 1 Arma de Bronce de Calidad + 1 Armadura Básica | 4 | 15 | 15 | 24 | 3 |
+| 2 | Hoplitas ciudadanos | `ciudadania_militar` (III) | 1 Arma de Hierro + 1 Armadura de Bronce | 3 | 10 | 18 | 24 | 3 |
+| 3 | Lanceros pesados micénicos (escudos grandes) | `panoplia_bronce` (II) | 2 Arma de Bronce + 1 Armadura de Bronce | 4 | 14 | 15 | 18 | 3 |
+| 3 | Hequetai (guardia de bronce) | `panoplia_bronce` (II) | 1 Arma de Bronce de Calidad + 1 Armadura de Bronce | 5 | 17 | 12 | 18 | 3 |
+| 3 | Espartiatas | `falange_hoplita` (III) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 4 | 17 | 15 | 18 | 4 |
 
 **Galería de tiro (a distancia):**
 
 | Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Honderos (escaramuzadores) | `hostigamiento_tribal` (I) | 1 Arma de Madera | 2 | 5 | 20 | 20 | 2 |
-| 2 | Escaramuzadores con jabalina | `hostigamiento_tribal` (I) | 1 Arma de Cobre + 1 Armadura Básica | 3 | 8 | 18 | 20 | 2 |
-| 2 | Arqueros | `arqueria_palacial` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 18 | 16 | 2 |
-| 2 | Peltastas | `pantalla_escaramuzadores` (III) | 2 Arma de Hierro (jabalinas), sin armadura | 3 | 9 | 18 | 20 | 2 |
-| 2 | Honderos rodios | `pantalla_escaramuzadores` (III) | 1 Arma de Hierro + 1 Armadura Básica | 3 | 9 | 18 | 20 | 2 |
-| 3 | Arqueros con arco compuesto | `arco_compuesto` (II) | 3 Arma de Bronce + 2 Armadura Intermedia | 5 | 15 | 12 | 12 | 3 |
-| 3 | Arqueros escitas | `arqueria_especializada` (III) | 1 Arma de Hierro + 1 Armadura Básica | 5 | 17 | 12 | 16 | 3 |
+| 1 | Honderos (escaramuzadores) | `hostigamiento_tribal` (I) | 1 Arma de Madera | 2 | 5 | 20 | 30 | 2 |
+| 2 | Escaramuzadores con jabalina | `hostigamiento_tribal` (I) | 1 Arma de Cobre + 1 Armadura Básica | 3 | 8 | 18 | 30 | 2 |
+| 2 | Arqueros | `arqueria_palacial` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 18 | 24 | 2 |
+| 2 | Peltastas | `pantalla_escaramuzadores` (III) | 2 Arma de Hierro (jabalinas), sin armadura | 3 | 9 | 18 | 30 | 2 |
+| 2 | Honderos rodios | `pantalla_escaramuzadores` (III) | 1 Arma de Hierro + 1 Armadura Básica | 3 | 9 | 18 | 30 | 2 |
+| 3 | Arqueros con arco compuesto | `arco_compuesto` (II) | 3 Arma de Bronce + 2 Armadura Intermedia | 5 | 15 | 12 | 18 | 3 |
+| 3 | Arqueros escitas | `arqueria_especializada` (III) | 1 Arma de Hierro + 1 Armadura Básica | 5 | 17 | 12 | 24 | 3 |
 
 **Caballerizas (caballería y carros):**
 
 | Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Exploradores a caballo | `cria_caballar` (I) | 1 Arma de Cobre + 1 caballo | 2 | 3 | 20 | 28 | 2 |
-| 1 | Jinetes asirios | `equitacion_militar` (II) | 1 Arma de Hierro + 1 caballo | 2 | 5 | 20 | 28 | 2 |
-| 2 | Carros de guerra | `carros_guerra` (I) | 1 Carro de Guerra + 2 caballos + 1 Arma de Bronce | 4 | 13 | 15 | 20 | 3 |
-| 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 18 | 28 | 2 |
-| 2 | Caballería asiria | `caballeria_organizada` (III) | 1 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 3 | 10 | 18 | 28 | 3 |
+| 1 | Exploradores a caballo | `cria_caballar` (I) | 1 Arma de Cobre + 1 caballo | 2 | 3 | 20 | 42 | 2 |
+| 1 | Jinetes asirios | `equitacion_militar` (II) | 1 Arma de Hierro + 1 caballo | 2 | 5 | 20 | 42 | 2 |
+| 2 | Carros de guerra | `carros_guerra` (I) | 1 Carro de Guerra + 2 caballos + 1 Arma de Bronce | 4 | 13 | 15 | 30 | 3 |
+| 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 18 | 42 | 2 |
+| 2 | Caballería asiria | `caballeria_organizada` (III) | 1 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 3 | 10 | 18 | 42 | 3 |
 
 Los exploradores a caballo son caballería de exploración, floja en combate. Una tropa puede depender de una tecnología y su arma de otra (los escaramuzadores esperan al Arma de Cobre de `metalurgia_cobre`, los jinetes asirios al Arma de Hierro de `forja_hierro_temprana`): es el patrón normal de las cuatro puertas.
 
@@ -280,7 +280,7 @@ Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; e
 |---|---|
 | Ejército ajeno (a un ejército) o Columna personal ajena (a una Columna personal) | **Inspeccionar** · **Perseguir** · **Atacar** a 15. Entre un ejército y una Columna personal solo se puede **Inspeccionar** |
 | Caravana ajena o neutral, suelta | **Inspeccionar** · **Interceptar**. Una caravana adjunta a un ejército es parte de él: solo otro ejército la ataca |
-| Asentamiento | En su puerta (10): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 40, **Inspeccionar** su defensa; a distancia de ataque (15), **Atacar**, que es asediarla (5.12.4) y **solo lo hace un ejército**; una Columna personal puede **Unirse** a un asedio ya abierto (5.15.1) |
+| Asentamiento | En su puerta (2): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 8, **Inspeccionar** su defensa; a distancia de ataque (3), **Atacar**, que es asediarla (5.12.4) y **solo lo hace un ejército**; una Columna personal puede **Unirse** a un asedio ya abierto (5.15.1) |
 | Campamento de bandidos | **Atacar**, un ejército o una Columna personal (evento PvE, 5.15.1) |
 | Batalla en curso | **Unirse** al bando que te corresponda, mientras quede sitio (5.15.1) |
 
@@ -362,21 +362,21 @@ Si el asedio **resiste**, el ejército se queda acampado fuera con sus escuadron
 
 | Clase | Tropas | Velocidad |
 |---|---|---|
-| **Montada** | Exploradores a caballo, Jinetes asirios, Jinetes escitas, Caballería asiria | **28** |
-| **Ligera** | Milicia de lanceros, Leñadores, Granjeros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina, Peltastas, Honderos rodios, Carros de guerra | **20** |
-| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros, Guerreros filisteos, Shardana, Hoplitas ciudadanos, Arqueros escitas | **16** |
-| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto, Hequetai, Espartiatas | **12** |
+| **Montada** | Exploradores a caballo, Jinetes asirios, Jinetes escitas, Caballería asiria | **42** |
+| **Ligera** | Milicia de lanceros, Leñadores, Granjeros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina, Peltastas, Honderos rodios, Carros de guerra | **30** |
+| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros, Guerreros filisteos, Shardana, Hoplitas ciudadanos, Arqueros escitas | **24** |
+| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto, Hequetai, Espartiatas | **18** |
 
 Dos reglas fijan esta tabla:
 
-1. **Una caravana inicial no puede ser más rápida que un ejército en movimiento.** La caravana comercial va a 16, así que ni siquiera un ejército medio se deja adelantar por ella.
-2. **Un jugador solo con infantería ligera tiene que poder alcanzar una caravana inicial.** Ligera 20 > comercial 16: la caza.
+1. **Una caravana inicial no puede ser más rápida que un ejército en movimiento.** La caravana comercial va a 24, así que ni siquiera un ejército medio se deja adelantar por ella.
+2. **Un jugador solo con infantería ligera tiene que poder alcanzar una caravana inicial.** Ligera 30 > comercial 24: la caza.
 
 Consecuencias que salen del `min` sin escribir ninguna regla más:
 
-- Un ejército **pesado (12) no alcanza a ninguna caravana**, y eso es correcto: un ejército de asedio no persigue mercaderes. La intercepción es cosa de tropa ligera.
-- **Meter un solo escuadrón pesado en una partida de incursión la frena a 12** y le quita la capacidad de cazar. Incursión y asedio pasan a ser composiciones distintas, no la misma fuerza con otra orden.
-- La caravana de **contrabando y la de caballo (24) escapan de todo lo que va a pie**, lo cual es deliberado: el contrabandista evade por diseño, y no es una caravana "inicial". **Solo la caballería (28) las alcanza**; los carros de guerra van a 20.
+- Un ejército **pesado (18) no alcanza a ninguna caravana**, y eso es correcto: un ejército de asedio no persigue mercaderes. La intercepción es cosa de tropa ligera.
+- **Meter un solo escuadrón pesado en una partida de incursión la frena a 18** y le quita la capacidad de cazar. Incursión y asedio pasan a ser composiciones distintas, no la misma fuerza con otra orden.
+- La caravana de **caballo (36) escapa de todo lo que va a pie**, lo cual es deliberado. **Solo la caballería (42) la alcanza**; los carros de guerra van a 30.
 
 ### 5.12.6 Cancelar la marcha
 
@@ -392,17 +392,17 @@ Y es la razón por la que **deshacer un ejército es replegarlo, no vaciarlo**: 
 
 Un jugador ve de lo AJENO lo que alcancen sus tres clases de ojos:
 
-1. **Sus plazas**, que vigilan su radio de influencia **más 60** unidades de mapa. La ciudad mira algo más allá de su frontera, como una atalaya.
-2. **Sus ejércitos en marcha**, que ven **150** a la redonda.
-3. **Él mismo, viajando solo**, que ve **80**. Menos que una columna a propósito: un hombre solo no despliega batidores. Es bastante para viajar sin caer a ciegas en una emboscada, y poco para que el explorador solitario sea la mejor unidad de información del juego.
+1. **Sus plazas**, que vigilan su radio de influencia **más 10** unidades de mapa. La ciudad mira algo más allá de su frontera, como una atalaya.
+2. **Sus ejércitos en marcha**, que ven **30** a la redonda.
+3. **Él mismo, viajando solo**, que ve **15**, más o menos el ancho de la pantalla. Menos que una columna a propósito: un hombre solo no despliega batidores. Es bastante para viajar sin caer a ciegas en una emboscada, y poco para que el explorador solitario sea la mejor unidad de información del juego.
 
 **Los dos números solo se entienden comparados.** Que la columna vea más lejos que la plaza es lo que mantiene el valor de explorar: un ejército divisa una ciudad mucho antes de que la ciudad lo divise a él, y conserva la iniciativa. Y el margen de la plaza coincide con la distancia a la que un ejército puede repostar en ella (5.13), lo que da una regla fácil de recordar: **si una columna está lo bastante cerca como para repostar en tu ciudad, tu ciudad la ve.**
 
-Sobre el mundo de 2000×2000, los 150 del ejército son unas **dos provincias** (Doc 1.0a) — varias ciudades por delante si la geografía lo permite — y siguen muy por debajo del radio de cohesión de un reino (~5 provincias): ver no es lo mismo que controlar. Los 60 de margen **duplican el área vigilada de una plaza recién fundada**, así que se notan desde el primer minuto.
+Sobre el mundo de 2.667×2.000, los 30 del ejército son **un minuto de camino**: el anillo de plazas vecinas con un minuto de aviso, y siguen muy por debajo del radio de cohesión de un reino (~5 provincias): ver no es lo mismo que controlar. Los 10 de margen **más que duplican el área vigilada de una plaza recién fundada** (radio 6), así que se notan desde el primer minuto.
 
 El margen de la plaza se mide sobre su **radio**, no sobre la silueta de su zona. La zona viene recortada por las fronteras con Facciones rivales (Doc 1.2), y ese recorte es político, no óptico: que un rival plante su frontera pegada a tu ciudad no ciega a tus vigías.
 
-> **Consecuencia**: como el radio crece con el nivel (60 → 180), una plaza de **nivel 5 vigila 240 y ve más lejos que un ejército**. Es coherente con la ficción —una capital tiene atalayas— pero diluye la ventaja de explorar cerca de las grandes ciudades.
+> **Consecuencia**: como el radio crece con el nivel (10 → 30), una plaza de **nivel 5 vigila 40 y ve más lejos que un ejército**. Es coherente con la ficción —una capital tiene atalayas— pero diluye la ventaja de explorar cerca de las grandes ciudades.
 
 De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 
@@ -415,11 +415,11 @@ El **nivel** de una plaza sí se ve porque una ciudad grande se ve grande desde 
 
 **Lo que se mira se guarda un rato** (2026-10-09): el resultado de inspeccionar no se pierde al recargar; queda como informe, con la fecha y el lugar donde se vio, durante `INSPECCION.informeMinutos` (10 minutos de mundo). Es solo del que miró, y para renovarlo hay que volver a acercarse y delatarse.
 
-**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (40)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son—, de una caravana, si lleva escolta y qué recursos carga, nunca cuántos, y de una plaza ajena su defensa: la guarnición y los héroes que hay dentro, nunca su almacén (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá. **O pagándola en una taberna** (5.12.10): una Mirada presta ojos sobre una zona durante un rato y un Informe da la foto, con fecha, del layout y la defensa de una plaza.
+**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (8)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son—, de una caravana, si lleva escolta y qué recursos carga, nunca cuántos, y de una plaza ajena su defensa: la guarnición y los héroes que hay dentro, nunca su almacén (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá. **O pagándola en una taberna** (5.12.10): una Mirada presta ojos sobre una zona durante un rato y un Informe da la foto, con fecha, del layout y la defensa de una plaza.
 
 **Las caravanas ajenas y neutrales solo se ven dentro del radio de visión**, con una excepción por tamaño. Fuera de él están ocultas, y **sin memoria**: a diferencia de una ciudad, una caravana se mueve, así que una foto vieja no diría "aquí hubo una" — diría una mentira sobre dónde está ahora.
 
-**Las caravanas grandes llaman la atención** (2026-10-05, `VISION.caravanaGrande`, placeholder): una caravana comercial con **3 o más carros con animal** se ve desde cualquier plaza o columna de otra Facción —también las de quienes comparten tu visión, y desde el centro de una Mirada comprada— a **300** de ella, aunque no entre en su vista normal, **desde que está `preparando` en su plaza** y mientras viaja cargada. Es el gancho de conflicto de las caravanas: que otras Facciones salgan a interceptarlas. Una pequeña sigue bajo la niebla normal. Una que vuelve vacía, o va enganchada a una columna, no llama la atención por sí misma. Lo que se ve de ella es lo de siempre —dónde está, de quién es, si va escoltada y qué recursos lleva, nunca cuántos—; la composición, solo en el anillo de inspección (arriba). Una `preparando` sigue sin ser interceptable (está en su plaza, 3.13.3): se ve para que se salga a esperarla, no para atacarla en casa.
+**Las caravanas grandes llaman la atención** (2026-10-05, `VISION.caravanaGrande`, placeholder): una caravana comercial con **3 o más carros con animal** se ve desde cualquier plaza o columna de otra Facción —también las de quienes comparten tu visión, y desde el centro de una Mirada comprada— a **60** de ella, aunque no entre en su vista normal, **desde que está `preparando` en su plaza** y mientras viaja cargada. Es el gancho de conflicto de las caravanas: que otras Facciones salgan a interceptarlas. Una pequeña sigue bajo la niebla normal. Una que vuelve vacía, o va enganchada a una columna, no llama la atención por sí misma. Lo que se ve de ella es lo de siempre —dónde está, de quién es, si va escoltada y qué recursos lleva, nunca cuántos—; la composición, solo en el anillo de inspección (arriba). Una `preparando` sigue sin ser interceptable (está en su plaza, 3.13.3): se ve para que se salga a esperarla, no para atacarla en casa.
 
 ### 5.12.8 Qué recuerda el jugador — la memoria
 
@@ -452,7 +452,7 @@ Un camino se conoce **tramo a tramo**: se ve cada tramo con algún extremo en ti
 
 De una frontera que solo **recuerdas** queda hasta dónde llegaba, no su trazo exacto: la línea real está negociada con vecinos que quizá no conozcas, y de esos no sabes nada. Se dibuja aproximada, y se ve que lo es.
 
-**Y sabes en tierra de quién estás cuando marchas.** Una columna que entra en territorio ajeno lo nota, aunque no alcance a ver la ciudad que manda ahí — que es posible: una capital de nivel 5 vigila 240 y una columna ve 150, así que hay una franja en la que estás dentro de sus dominios sin haberla divisado. Lo que se sabe es **de qué Facción es el suelo**, nunca dónde tiene su capital.
+**Y sabes en tierra de quién estás cuando marchas.** Una columna que entra en territorio ajeno lo nota, aunque no alcance a ver la ciudad que manda ahí — que es posible: una capital de nivel 5 vigila 40 y una columna ve 30, así que hay una franja en la que estás dentro de sus dominios sin haberla divisado. Lo que se sabe es **de qué Facción es el suelo**, nunca dónde tiene su capital.
 
 > **El terreno lo tapa el cliente de jugador, no el servidor.** La geografía no es información táctica —es la misma para todos— así que el servidor solo dice QUÉ has explorado y cada cliente decide cómo pintarlo. El de administración no tapa nada: es una herramienta de operación, no un jugador.
 
@@ -496,11 +496,11 @@ Hay **dos productos**, los dos **exactos en el instante de la compra**: la infor
 
 | | **Mirada** | **Informe de plaza** |
 |---|---|---|
-| Qué es | Un **ojo prestado** sobre un punto cualquiera del mapa, con el radio de una columna (`INTEL.mirada.radio`, 150) y una duración (`duracionMinutos`, 2 h) | La **foto con fecha** de una plaza ajena: sus **edificios** (tipo, sitio, nivel interno, si están en obra), sus **recintos** de muralla, su **guarnición** y los **héroes** que hay dentro |
+| Qué es | Un **ojo prestado** sobre un punto cualquiera del mapa, con el radio de una columna (`INTEL.mirada.radio`, 30) y una duración (`duracionMinutos`, 2 h) | La **foto con fecha** de una plaza ajena: sus **edificios** (tipo, sitio, nivel interno, si están en obra), sus **recintos** de muralla, su **guarnición** y los **héroes** que hay dentro |
 | Qué ves | Lo que verías con una columna ahí, **en vivo**: ejércitos, caravanas, campamentos de bandidos y fichas de plazas (nombre, Facción, posición y nivel, Doc 5.12.7). **Nunca interiores** | El layout y la defensa tal como estaban al comprarlo. **Nunca el almacén, las colas, los cargos ni las políticas** |
 | Memoria | **Ninguna**: entra en «lo que se ve ahora», no en lo explorado (igual que los ojos aliados, 5.12.8). Al caducar, lo que solo veías por ella vuelve a la niebla y no queda «último conocido» | Se **guarda en la memoria de la Facción**, el último de cada plaza, y **envejece a la vista**: viaja con su fecha, como una ficha conocida (5.12.8) |
 | Se comparte | **Con quienes comparten tu visión** (aliados y vasallaje, 5.12.8), en vivo y mientras dure la alianza. No viaja la compra, solo lo que ve | **No**: es memoria de la Facción compradora. Un aliado que lo quiera lo compra |
-| Precio | `oroBase` (40) más `oroPorUnidad` (0,1) por unidad de **distancia a tus ojos propios más cercanos** (tus plazas, tus columnas y la taberna donde compras): mirar lejos cuesta más | `oroPorNivel` (60) por **nivel de la plaza mirada**: una capital cuesta más que una aldea |
+| Precio | `oroBase` (40) más `oroPorUnidad` (0,5) por unidad de **distancia a tus ojos propios más cercanos** (tus plazas, tus columnas y la taberna donde compras): mirar lejos cuesta más | `oroPorNivel` (60) por **nivel de la plaza mirada**: una capital cuesta más que una aldea |
 | Freno | Un **cupo** de Miradas abiertas a la vez por taberna y, tras caducar, la **zona se enfría** (`cooldownMinutos`, 2 h): no se repite una Mirada con el centro a menos de un radio de otra reciente de la misma Facción | Un **cooldown** por plaza (`informe.cooldownMinutos`, 6 h): el mismo informe no se pide dos veces seguidas |
 
 **Cómo se mira.** El centro de una Mirada puede ser cualquier punto del mapa, explorado o no: comprar un ojo sobre tierra que nunca pisaste es justo para lo que sirve. Un Informe solo se pide de una plaza **que la Facción conoce** —tiene su ficha en la memoria o cae dentro de una Mirada abierta—, así que el camino natural es *mirar una zona, ver la plaza y pedir su informe*; no se puede recorrer el mundo probando identificadores. De la propia Facción no se pide.
@@ -551,7 +551,7 @@ La capacidad de los víveres **no es un número elegido, es una consecuencia**. 
 
 > **Un jugador solo, con sus víveres, tiene que poder recorrer al menos un cuarto del mapa ida y vuelta con la comida que lleva.**
 
-Sobre el mapa de 2000×2000 eso son 1.000 unidades de recorrido, 50 minutos a velocidad ligera (20). La tropa prestada completa de un campamento (85 soldados, Doc 1.9b) más su héroe comen en marcha `(85 × 0.15 + 0.5) × 0.25 ≈ 3,3` por minuto: 166 en ese trayecto. Los **350** de víveres por héroe se fijaron con el consumo a la mitad y se dejan así: hoy dan el doble de autonomía de la que exige la regla (a recalibrar con batch).
+Sobre el mapa de 2.667×2.000 eso son unas 1.333 unidades de recorrido, 44 minutos a velocidad ligera (30). La tropa prestada completa de un campamento (85 soldados, Doc 1.9b) más su héroe comen en marcha `(85 × 0.15 + 0.5) × 0.25 ≈ 3,3` por minuto: 166 en ese trayecto. Los **350** de víveres por héroe se fijaron con el consumo a la mitad y se dejan así: hoy dan el doble de autonomía de la que exige la regla (a recalibrar con batch).
 
 Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a ser también un atributo logístico**: un ejército rápido cubre más mapa con la misma comida. Un ejército pesado tiene la mitad de alcance con el mismo carro — y por eso necesita caravanas.
 
@@ -564,7 +564,7 @@ Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de ca
 - **Se puede soltar en marcha**: se queda **suelta donde esté la columna**. No vuelve sola a casa, igual que un ejército no se teletransporta al replegarse.
 - **Reclamar una caravana suelta.** En mundo abierto, un héroe de la misma Facción que la caravana, junto a ella, interactúa con ella y pulsa **Reclamar**: pasa a su columna y la lleva donde quiera. **Reclamarla convierte al instante su columna personal en un Ejército**, con él de Líder, la caravana adjunta, la política de unión que elija al reclamar y la plaza de origen de la caravana como origen (a donde se replegará); si ya iba en un ejército, la suma a ese. Vale para cualquier caravana suelta de su Facción, también para la Caravana de Fundación que vuelve sola a su origen (Doc 1.8).
 - Mientras va enganchada **viaja con el ejército**: su posición es la de la columna, no una ruta propia.
-- **Entran en el `min` de velocidad.** Una caravana comercial va a 16, así que adjuntarla baja un ejército ligero de 20 a 16 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
+- **Entran en el `min` de velocidad.** Una caravana comercial va a 24, así que adjuntarla baja un ejército ligero de 30 a 24 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
 - **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.
 - **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. Se pierden igualmente si la columna **se disuelve** por quedarse sin nadie dentro (5.13.4): en los dos casos deja de existir en campo abierto, y lo que vuelve a casa son las *identidades* de sus escuadrones, no bienes físicos — una caravana sin nadie que la lleve no se teletransporta a ninguna parte. *(Distinto es que se quede sola porque su gente se desconectó sin llegar a disolverla: entonces vuelve a su origen, Doc 3.10.)*
 

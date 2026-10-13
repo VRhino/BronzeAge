@@ -3,21 +3,22 @@
 
 ## 1.0a La escala del mundo
 
-El motor maneja **dos espacios separados**: el **mapa del mundo** (2000×2000 unidades) y el espacio local de la **Vista de Asentamiento**. No hay equivalencia entre sus unidades (decidido el 2026-10-12): el trazado de una ciudad se mide en el suyo y la zona de influencia en el del mapa, y ninguna regla convierte de uno a otro.
+El motor maneja **dos espacios separados**: el **mapa del mundo** (2.667×2.000 unidades, el mundo regional a factor 12) y el espacio local de la **Vista de Asentamiento**. No hay equivalencia entre sus unidades (decidido el 2026-10-12): el trazado de una ciudad se mide en el suyo y la zona de influencia en el del mapa, y ninguna regla convierte de uno a otro.
 
 La jerarquía territorial de la ficción, en unidades de mapa:
 
 | | radio | equivale a |
 |---|---|---|
-| **Provincia** (zona de influencia) | **30-180**, según nivel | lo que controla un asentamiento |
+| **Provincia** (zona de influencia) | **6-30**, según nivel | lo que controla un asentamiento |
 | **Reino** | todas las provincias de una Facción | sin número fijo: una Facción podría llegar a todo el mapa |
 
-**Cuántas provincias caben.** El mundo mide 2000×2000 y el 91% es habitable (7,6% agua y 1,3% cima), o sea
-3,64 millones de unidades². Repartido entre las **200 provincias** que Fase 0 quiere, salen 18.207 u² por
-provincia: un **radio de ~76**, cerca del tope de zona de influencia de nivel 1 (60).
+**Separación entre plazas.** Dos plazas distan **30 o más** de centro a centro: un minuto de camino a velocidad ligera (30). La zona inicial (radio 6) no solapa ninguna otra zona; las zonas grandes se recortan al crecer (fronteras duras, 1.2) y los recursos accesibles se cuentan sobre la zona recortada.
 
-**Un reino cómodo mide ~5 provincias**: sale de `MANTENIMIENTO.escalaDistancia` = 400, la distancia a la capital a la
-que el coste de mantenimiento se duplica (×2; sigue creciendo, sin tope, Doc 4.5). 400 / 76 ≈ 5.
+**Cuántas provincias caben.** El mundo mide 2.667×2.000 y es mayoritariamente tierra firme en el mundo regional (en torno a dos tercios, el resto agua). El número de plazas no es una meta de diseño: lo fija la separación mínima, no una cuota.
+
+**Un reino cómodo mide ~5 provincias**: sale de `MANTENIMIENTO.escalaDistancia` = 80, la distancia a la capital a la que el coste de mantenimiento se duplica (×2; sigue creciendo, sin tope, Doc 4.5).
+
+**La sensación de distancia.** La calibración es de densidad, no de escala: el mundo mantiene su tamaño y las plazas se juntan. Con la tropa ligera a 30 unidades por minuto (0,5 por segundo en tiempo real), la plaza vecina está a 1 minuto, el radio de una zona de nivel 2 a 30 s y cruzar el mapa de lado lleva 89 minutos (111 en diagonal). Con el zoom de juego (15 de ancho) una pantalla se cruza en unos 30 s.
 
 ## 1.0b El agua es un OBSTÁCULO
 
@@ -35,7 +36,7 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 
 ## 1.1 Generación del mundo (Fase 0)
 - Mapa CUADRADO, espacio de coordenadas continuo (no grid discreto).
-- Tamaño base: 2000×2000 unidades, PARAMETRIZABLE.
+- Tamaño base: 2.667×2.000 unidades (el mundo regional a factor 12), PARAMETRIZABLE.
 - Terreno con RELIEVE REAL: campo de ELEVACIÓN continuo por ruido fractal, clasificado en bandas agua/costa/llano/colina/montaña/cima; RÍOS como polilíneas que nacen en montaña y descienden por gradiente de máxima pendiente; BIOMA derivado de terreno+fertilidad+humedad — ver `Consideraciones/Fase_0_1_Definicion.md`. El coste de moverse por el mapa depende del tipo de terreno (ver 1.6 y Doc 3.6). Opcionalmente sesgado a una región geográfica real (Grecia continental/Anatolia/Egeo/Nilo/Mesopotamia — "Libre", sin sesgo, es el valor por defecto). Sin mar navegable (eje naval pospuesto, ver `Roadmap_Escalado.md`).
 - Generación PROCEDURAL de recursos por niveles de rareza:
   - Común (alta frecuencia, disperso): Madera (bosques, ver 1.4), Piedra, Trigo (vía fertilidad, ver 1.4).
@@ -46,10 +47,10 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 
 ## 1.2 Fundación de asentamientos
 - La posición es LIBRE —sin rejilla ni puntos predefinidos— y se funda donde está el héroe (1.3): el sitio se elige caminando hasta él.
-- **Aviso de viabilidad al fundar** (ayuda, no bloqueante): antes de confirmar se dibuja el radio inicial (30 unidades, ver TAMAÑO abajo) coloreado según viabilidad — VERDE si la posición es fundable, hay un bosque LIBRE alcanzable dentro del radio (madera garantizada desde el principio) **y al menos un nodo de piedra**; ÁMBAR si es fundable pero le falta alguna de las dos; ROJO si la posición no es válida (fuera del mapa, solapa una zona de influencia existente, cima o agua). No impide fundar en ámbar: es solo información para decidir mejor. También indica qué nodos minerales caen dentro del radio inicial.
+- **Aviso de viabilidad al fundar** (ayuda, no bloqueante): antes de confirmar se dibuja el radio inicial (6 unidades, ver TAMAÑO abajo) coloreado según viabilidad — VERDE si la posición es fundable, hay un bosque LIBRE alcanzable dentro del radio (madera garantizada desde el principio) **y al menos un nodo de piedra**; ÁMBAR si es fundable pero le falta alguna de las dos; ROJO si la posición no es válida (fuera del mapa, solapa una zona de influencia existente, cima o agua). No impide fundar en ámbar: es solo información para decidir mejor. También indica qué nodos minerales caen dentro del radio inicial.
   - **Por qué la piedra cuenta** (2026-09-26): sin piedra no hay Cantera, sin Cantera no hay tercer tipo de extracción para el nivel 2 (Doc 4.5), y sin nivel 2 la zona no crece hasta alcanzar piedra más lejos — el asentamiento nace condenado a nivel 1. Los NPC aplican el mismo criterio al fundar y al expandirse.
 - Al fundar se genera automáticamente una ZONA DE INFLUENCIA (círculo/polígono) = nodo.
-- TAMAÑO: nace con un radio inicial de 30 unidades y crece gradualmente cada minuto hacia un TECHO que escala con el NIVEL del asentamiento (Doc 4.5): nivel 1 → 60, 2 → 90, 3 → 120, 4 → 150, 5 → 180. Subir de nivel no hace saltar el radio de golpe — solo levanta el techo hacia el que la zona ya venía creciendo.
+- TAMAÑO: nace con un radio inicial de 6 unidades y crece gradualmente cada minuto hacia un TECHO que escala con el NIVEL del asentamiento (Doc 4.5): nivel 1 → 10, 2 → 15, 3 → 20, 4 → 25, 5 → 30. Cada edificio completado la agranda 1 unidad. Subir de nivel no hace saltar el radio de golpe — solo levanta el techo hacia el que la zona ya venía creciendo.
 - Reglas de construcción: solo se puede construir dentro de una zona de influencia existente (ampliándola si es del mismo bando) o fuera de cualquier zona (creando una nueva).
 - FRONTERAS: al chocar dos zonas en expansión se genera un LÍMITE DURO — ninguna zona sigue creciendo en esa dirección. Solo se rompe si el asentamiento rival cae o su zona se debilita/reduce (guerra u otros medios). Las fronteras son "vivas", reflejan el poder relativo de cada bando en cada momento.
 
@@ -92,7 +93,7 @@ Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `Cons
 
 **El terreno por el que se viaja** (caravanas, ejércitos y fundación, con el mismo pathfinding):
 - **El agua no se cruza** (1.0b).
-- **Los ríos tampoco, salvo por un vado.** El tramo alto, cerca del nacimiento, es arroyo y se cruza por cualquier sitio; aguas abajo hay un vado cada ~300 u en el mapa de 2000 (~2 km en el regional). Una ciudad a orillas del río es también paso: el río se cruza por la ciudad. Los vados salen de la geometría del río, no del azar.
+- **Los ríos tampoco, salvo por un vado.** El tramo alto, cerca del nacimiento, es arroyo y se cruza por cualquier sitio; aguas abajo hay un vado cada ~100 u en el mapa de 2.667 (un vado cada 300 son 10 minutos de rodeo). Una ciudad a orillas del río es también paso: el río se cruza por la ciudad. Los vados salen de la geometría del río, no del azar.
 - **El bosque frena, no bloquea**: dentro de un bosque el coste de moverse se multiplica por `1 + 2 × densidad`, así que un bosque denso cuesta casi el triple. Las rutas lo rodean cuando el rodeo compensa.
 
 **Los caminos.**
@@ -131,7 +132,7 @@ Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se s
 - **Desde una plaza**: la lanza (`lanzarCaravanaFundacion`) un residente de ella presente, que pasa a ser su titular. Gates de origen, todos a la vez: la plaza **paga el coste completo** de su almacén; está en **nivel 2** como mínimo (gate estructural, independiente del coste); y el **cooldown de creación** —tras lanzar una Caravana de Fundación o crear una comercial (Doc 3.12), mismo cooldown COMPARTIDO— no ha de estar corriendo: `CARAVANA_COOLDOWN` (10 minutos, parametrizable), para que no se spamee la creación cuando la recién lanzada es destruida (bandidos, 1.9; intercepción, Doc 3.10). El **cupo del Cap de Fundación** se reserva al lanzar: cuentan las plazas de la Facción más sus caravanas de fundación vivas.
 - **Desde un campamento de mercenarios** (2026-10-02; rehecho el 2026-10-04, D9-D16, D30, D34, D39, D40, D68; 1.9b): una Facción sin asentamientos, que no tiene origen del que partir, la compra en un campamento al 40 % del coste, con el fondo que aportan sus héroes **en ese campamento** (lo traen en su almacén personal si residen allí, o en el carro). Los gates de la plaza no aplican; sí el Cap de Fundación.
 
-**Fundar** (`fundar`, D30): el titular, con la caravana enganchada a su columna, en un punto **fuera de toda zona de influencia**, no sobre agua y a **100** o más de **cualquier campamento de mercenarios** (`MERCENARIOS.radioExclusionFundar`, D16). Nunca encima de un campamento. Los ciudadanos de su Facción que van en esa columna son **cofundadores** (hasta `FUNDACION.maxJugadoresFundacionGrupal`): unirse a la columna es el consentimiento (D12). La caravana se gasta y la columna entra en la plaza nueva.
+**Fundar** (`fundar`, D30): el titular, con la caravana enganchada a su columna, en un punto **fuera de toda zona de influencia**, no sobre agua y a **20** o más de **cualquier campamento de mercenarios** (`MERCENARIOS.radioExclusionFundar`, D16). Nunca encima de un campamento. Los ciudadanos de su Facción que van en esa columna son **cofundadores** (hasta `FUNDACION.maxJugadoresFundacionGrupal`): unirse a la columna es el consentimiento (D12). La caravana se gasta y la columna entra en la plaza nueva.
 
 **Escoltarla**: la caravana viaja con la columna de su titular y se defiende con ella (Doc 5.13.3): los héroes de la Facción que se le unen (`unirseEnCampo`) la escoltan como a cualquier caravana. Interceptable igual que las demás (Doc 3.10), mismas reglas de combate y umbral de captura del 50 %.
 
@@ -147,7 +148,7 @@ Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se s
 Una sola entidad con **tres niveles**, que sale **al azar** al aparecer (2026-10-04, D21, D37). Aparecen por dos vías:
 
 - **Uno por asentamiento, SIEMPRE**: cada asentamiento vivo tiene el suyo, en SU bosque no reclamado MÁS CERCANO (un bosque que NO se solapa con ninguna zona de influencia; se comprueba el CENTRO del bosque contra los polígonos de zona), y queda ASIGNADO a él. Así nunca aparece en la otra punta del mapa sin ningún asentamiento cerca, ni pegado a una zona de influencia. **Cada asentamiento lleva su propio plazo** de reaparición: tras destruirse el suyo, le reaparece uno cuando vence, sea quien sea quien lo destruyó.
-- **En el anillo de cada campamento de mercenarios, según la demanda** (D42, D28): a la misma distancia en todos (entre 150 y 250), en tierra firme, fuera de toda zona y de la protección de cualquier campamento. Hay **uno por cada 2 residentes de Facciones sin asentamiento** (o sin Facción), entre 1 y 6; mientras falten, aparece uno cada 10 minutos.
+- **En el anillo de cada campamento de mercenarios, según la demanda** (D42, D28): a la misma distancia en todos (entre 30 y 50), en tierra firme, fuera de toda zona y de la protección de cualquier campamento. Hay **uno por cada 2 residentes de Facciones sin asentamiento** (o sin Facción), entre 1 y 6; mientras falten, aparece uno cada 10 minutos.
 
 - Mientras el campamento sigue en pie, ATACA CARAVANAS (Doc 3.10) que pasen dentro de un radio fijo de su posición, cada minuto — se resuelve con números, contra la defensa de la caravana. Si gana, la caravana se pierde por completo (nadie la recibe: el bandido no tiene almacén propio). Junto a un campamento de mercenarios no ataca (1.9b).
 - **Se ataca con una columna que llegue a él** (Doc 5.12.3), y la batalla se juega en Unity: los héroes de la columna contra las tropas del campamento, manejadas por la IA del juego (Doc 5.15.6). SIN gate de cargo: a diferencia de un asedio, un campamento bandido es una amenaza de mundo abierto, no una acción de guerra entre Facciones. Si pierde, sus héroes quedan heridos (5.16.4) y la columna pierde la mitad del carro, que no se lleva nadie. Si el servidor no tiene conectado ningún servidor de batalla de Conquest, el choque se resuelve con números: los soldados de los héroes sanos contra el poder del campamento.
@@ -163,7 +164,8 @@ Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
 | 2 | 30 % | 60 | 30 | 33 |
 | 3 | 20 % | 120 | 60 | 36 |
 
-- Radio de ataque a caravanas: 40 unidades del mapa.
+- Radio de ataque a caravanas: 7 unidades del mapa.
+- Cada plaza tiene su campamento de bandidos en el bosque más cercano **a 10 o más del borde de su zona** (más separados que antes).
 - Reaparición del de un asentamiento: 60 minutos tras destruirse.
 
 El campamento no bloquea la explotación del bosque que ocupa: solo amenaza a las caravanas de paso.
@@ -172,7 +174,7 @@ El campamento no bloquea la explotación del bosque que ocupa: solo amenaza a la
 
 Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ninguna Facción, no se puede atacar, no crece y no desaparece. **No es un asentamiento**: no tiene zona de influencia, y ninguna zona lo absorbe (las zonas salen de los asentamientos). Es un enclave.
 
-- **Colocación.** Todos existen **desde que se crea el mundo** y no aparecen más (`colocarCampamentosIniciales`): puntos al azar en tierra firme, pegados a un bosque si lo hay a menos de `MERCENARIOS.margenBosque`, a una **distancia mínima** entre ellos (`MERCENARIOS.separacion`: 900 en el playtest, unos 4 en un mapa de 2000; 600 para más gente, de 6 a 9) y a `margenBorde` del borde. El azar sale de una semilla derivada de la del mapa: misma seed, mismos campamentos.
+- **Colocación.** Todos existen **desde que se crea el mundo** y no aparecen más (`colocarCampamentosIniciales`): puntos al azar en tierra firme, pegados a un bosque si lo hay a menos de `MERCENARIOS.margenBosque`, a una **distancia mínima** entre ellos (`MERCENARIOS.separacion`: 600, de 8 a 10 campamentos en el mundo regional; cada uno es el centro de un foco de actividad, 1.9c) y a `margenBorde` del borde. El azar sale de una semilla derivada de la del mapa: misma seed, mismos campamentos.
 - **Forma.** Taberna, **diez viviendas** y mercado, más **un edificio militar** (barracón, galería de tiro o caballeriza) que se elige al nacer. Hay **3 variantes de aspecto** (el *origen*, para los modelos), sin efecto sobre lo que hace. Aspecto y edificio militar salen de la posición, no del azar de la partida. **Estructura interna** (`layoutCampamento`, 2026-10-05): **reutiliza el trazado de asentamientos** (Doc 1.5) con la **taberna como ancla principal** —el papel del Centro Urbano—: las viviendas se pegan a ella, el mercado nace con sus puestos de nivel 1, el edificio militar con su plaza de armas, y las calles salen de las reglas de siempre. Pero se coloca **una sola vez**: el campamento no crece, no tiene mantenimiento, no se degrada ni sube de nivel. Lo rodea una **empalizada decorativa** —sin efecto de juego: dentro no hay combate— con una puerta de dos celdas al sur. Cada campamento tiene su propia planta, que sale de su id; es función pura del campamento, así que no se guarda nada. Es lo que se ve al estar dentro (D73).
 - **Niebla.** Se conoce **como un camino**: si la Facción ha explorado alguna vez el terreno donde está, lo recuerda; no hace falta verlo ahora, porque un campamento no se mueve ni desaparece. El campamento donde reside o donde está dentro lo conoce siempre.
 - **Dentro.** El campamento tiene un «dentro», como una plaza: el héroe está en su vista de asentamiento (edificios y layout). Dentro no se come ni hay combate. **Se ve como desde dentro de una plaza**: el mapa de campaña con la visión compartida de su Facción y aliados (quien no tiene Facción ni columna fuera no ve nada vivo). **Cualquier héroe puede entrar en cualquier campamento**, con su columna en la puerta (`entrarEnCampamento`, a `MOVIMIENTO.radioPuerta`):
@@ -184,12 +186,32 @@ Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ningun
 - **Tropa prestada.** El campamento presta a su residente, **gratis**, tropa de leva comunal: **una escuadra completa de cada tropa que elija** —milicia de lanceros (25), leñadores (30), granjeros (30); una, dos o las tres— (`pedirPrestamo`; el tamaño es el de la escuadra de su tropa, `unidadesPorDefecto`). Es para aprender a usar tropa antes de tener la propia. **No es tropa del héroe**: no gana experiencia ni cuenta para «una escuadra por tropa» (Doc 5.8), y el campamento la retira si deja de residir en él. No come mientras vive en el campamento. Si pierde gente se repone **gratis**, hasta completa, en el campamento o con la columna a su puerta (`reponerPrestamo`).
 - **Repostar gratis, para todos** (2026-10-11, `repostarEnCampamento`): cualquier héroe, residente o no, estando en un campamento (dentro o con la columna a la puerta) **llena sus víveres hasta el tope sin pagar y sin gastar stock**. El trigo va **solo a los víveres, nunca al carro**: no se compra trigo para el carro.
 - **Ración gratis del residente.** Al salir de su campamento, al residente se le **llenan los víveres** (Doc 5.13), una vez cada 30 minutos de mundo (`MERCENARIOS.racion`); no se acumula. Los víveres no son carga: no se guardan en el almacén personal ni se venden, sirven para moverse.
-- **Alijos de exploración** (D29, D60-D63). Escondites de oro colocados al crear el mundo alrededor de cada campamento (`colocarAlijos`, `ALIJOS`): 3 a 100-200 con 3 de oro, 2 a 200-300 con 5 y 1 a 300-450 —en los huecos entre campamentos— con 11; siempre con ese campamento como el más cercano, en tierra firme y fuera de su protección. **Son por héroe**: cada uno abre cada alijo una vez y no reaparecen, así que nadie le quita uno a otro. Solo los ven y los abren los héroes de **Facciones sin asentamiento** (o sin Facción): un alijo **se ve** cuando está a la vista de su columna (`VISION.jugadorSolo`, 80) y no lo ha abierto; **se abre** estando en el sitio (`abrirAlijo`). Su oro sube al **carro** de la columna (1.9).
-- **Protección.** A menos de `MERCENARIOS.radioProteccion` (60) de un campamento nadie inicia un combate: ni jugadores (`atacar` se rechaza desde allí y contra lo que está allí) ni bandidos.
+- **Alijos de exploración** (D29, D60-D63). Escondites de oro colocados al crear el mundo alrededor de cada campamento (`colocarAlijos`, `ALIJOS`): 3 a 20-40 con 3 de oro, 2 a 40-90 con 5 y 1 a 250-300 —en la tierra lejana, junto a las vetas— con 11; siempre con ese campamento como el más cercano, en tierra firme y fuera de su protección. **Son por héroe**: cada uno abre cada alijo una vez y no reaparecen, así que nadie le quita uno a otro. Solo los ven y los abren los héroes de **Facciones sin asentamiento** (o sin Facción): un alijo **se ve** cuando está a la vista de su columna (`VISION.jugadorSolo`, 15) y no lo ha abierto; **se abre** estando en el sitio (`abrirAlijo`). Su oro sube al **carro** de la columna (1.9).
+- **Protección.** A menos de `MERCENARIOS.radioProteccion` (10) de un campamento nadie inicia un combate: ni jugadores (`atacar` se rechaza desde allí y contra lo que está allí) ni bandidos.
 - **Residencia** (paso 2): cualquier héroe puede residir en él, y es la casa de quien se queda sin asentamiento; se acaba el huérfano (Doc 2.5, 5.15.5). Almacén personal de cada héroe: Doc 2.5.
 - **Reclutamiento** (paso 3): reclutar y reponer las tropas de sus edificios, con tecnología propia, pagando oro y gastando la población del campamento (Doc 5.8, 6.5b). Población: viviendas × 10 (100 con las diez), recupera 10 por hora.
 - **Mercado** (paso 4): solo vende, con stock limitado, y el oro cobrado se destruye (Doc 3.3b). **Madera, piedra y trigo tienen pila propia** (`MERCENARIOS.mercado.pilas`: 300, 60 y 300), que vuelve a su tope en cada reposición sin depender del comercio del mundo; los demás bienes se reponen con lo que se comercia. **Cupo por héroe y día** en madera (60) y piedra (10). Quien reside compra a su almacén personal; **cualquier otro héroe compra desde la puerta cualquier bien en venta salvo el trigo (que se reposta gratis a los víveres), pagando con el oro de su carro y llevándoselo al carro** de su columna, sin cupo diario.
 - **Refundar** (paso 5; rehecho 2026-10-04): una Facción **sin asentamientos** compra en el campamento una **Caravana de Fundación al 40 %** del coste normal; cómo se lleva, se funda, vuelve y caduca, en 1.8. Cada ciudadano aporta lo que quiere al **fondo de su Facción en ese campamento** —desde su almacén personal si reside allí, o desde el carro de su columna en la puerta (`aportarARefundacion`)— y lo suyo se retira mientras no se gaste (el oro, como oro de botín); cuando el fondo cubre el coste, uno de ellos la compra (`comprarCaravanaDeRefundacion`) y es su titular.
+
+## 1.9c Focos de actividad, anillos de tierra y bosques (decidido el 2026-10-12)
+
+**Los focos los crean los campamentos de mercenarios.** Toda Facción sin plaza vive en un campamento y funda andando desde él; con la exclusión a 20, las plazas se apiñan a su alrededor y las de nivel 2 o más lanzan desde ahí sus Caravanas de Fundación: el foco crece hacia fuera y puede llegar a tocar otro. Los campamentos están a **600** unos de otros (1.9b), de 8 a 10 en el mundo regional (en la emulación sobre su máscara de tierra, 10 a 12).
+
+**Tres anillos de tierra**, por distancia al campamento más cercano. El generador reparte los recursos por anillos y para eso coloca primero los campamentos:
+
+| Anillo | Distancia | Qué hay |
+|---|---|---|
+| **Foco** | hasta 150 | Tierra fértil: bosques medianos y pequeños densos, piedra, fauna, algo de cobre y hierro. **Sin estaño.** |
+| **Frontera** | 150-250 | Bosques grandes compartidos, cobre, hierro, piedra y algo de oro. Es donde se expande la segunda generación de plazas. |
+| **Tierra lejana** | más de 250 | **Distritos mineros**: vetas de estaño (y oro) en colina o montaña, guardadas por bandidos. Alijos lejanos y fauna de estepa. |
+
+Un foco de 150 son unos 5 minutos a pie. La capacidad del foco es geométrica, no una cuota: a separación 30 caben del orden de 45 plazas una vez descontados pendiente, bosque, agua y recortes de frontera. La tierra firme es el 66 % del rectángulo y la mitad o más queda a más de 250 de todo campamento.
+
+**El estaño solo fuera de los focos** (`exclusionEstanoCampamento` = 200: el foco más un margen de 50). Se agrupa en **vetas** de 3 a 6 nodos de estaño (y de 0 a 2 de oro) en un radio de 20-30, con las cuotas repartidas para sumar exactamente el total (en proporción a la tierra firme; sin supernodos). Una plaza de nivel 2-3 plantada en el centro de una veta cubre 2-3 nodos, lo que justifica una **colonia minera**; varios nodos del mismo tipo dentro de una zona son válidos. Cada veta lleva un campamento de bandidos de nivel 2-3 sin plaza dueña y un alijo lejano. El bronce depende así de expandirse, comerciar o pelear: las caravanas de estaño cruzan tierra de nadie.
+
+**Bosques: pocos grandes y muchos medianos o pequeños.** Los grandes (radio 40-80, del orden de 10-20) son comarcas compartidas entre focos o en su borde, y dan disputa por la madera; los medianos y pequeños (radio 4-20) están dentro de los focos para que cada plaza tenga madera cerca. En el mundo regional el bosque es un campo continuo de densidad: las masas explotables llevan identificador y capacidad de Leñeras, y su propiedad se resuelve por las zonas reales.
+
+**Abierto** (se decide en la fase del artefacto de mundo): dónde va el oro (tierra lejana, frontera o mitad y mitad, propuesta) y cuántas Leñeras admite un bosque (hoy 1-3 según el radio; para los pequeños umbrales ~8/11, y para los grandes compartidos, por área).
 
 ## 1.10 El héroe está SITUADO en el mundo
 

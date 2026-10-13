@@ -1,6 +1,6 @@
 # Calibración de distancias y velocidades — definición
 
-> **Estado (2026-10-12): en diseño, cero código, canon sin tocar.** El canon (`Docs/Game/`) se reescribe al implementar
+> **Estado (2026-10-13): canon al día** (Docs/Game 1.0a-1.2, 1.8, 1.9, 1.9b, nueva 1.9c, 3.10, 3.x, 4.5, 5.8, 5.12.3-5.12.7, 5.13.1, 5.13.3 con los valores de §2 y §4). Abierto: O1 (oro) y O2 (Leñeras por bosque). Las cifras de `constants.ts` y el delta de `Docs/Mechanics` se aplican al reescribirlos para el núcleo reactivo. Antes: en diseño, cero código, canon sin tocar.** El canon (`Docs/Game/`) se reescribe al implementar
 > (decisión del usuario, 2026-10-11). Página de trabajo con el simulador y las tablas:
 > https://claude.ai/artifact/9MViDfr2yzTsqaRgUCXbMU
 >

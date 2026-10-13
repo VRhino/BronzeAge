@@ -60,7 +60,7 @@ Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con p
 - Es **la única vía por la que la mercancía de una orden de mercado cambia de manos** (3.3): el transporte físico no es opcional.
 
 ## 3.8 Bonificación por distancia (heredado de Iberia)
-- Aplica como bonus a la comisión de trueque: hasta ×1.5 a partir de 600 unidades de distancia recorrida.
+- Aplica como bonus a la comisión de trueque: hasta ×1.5 a partir de 120 unidades de distancia recorrida.
 - NO aplica al mostrador (3.3): el bonus está definido sobre la distancia que recorre una CARAVANA de un acuerdo, y en el mostrador el viaje lo hace el jugador.
 
 ## 3.9 Dependencia logística real (heredado de Iberia)
@@ -85,7 +85,7 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 
 **LAS CARAVANAS NO CRUZAN EL AGUA** (Doc 1.0b): si no hay ruta por tierra entre origen y destino, la caravana **no sale** y la carga se queda en el almacén; tampoco suma camino a la red. Aplica igual a las Caravanas de Fundación, que además no pueden fundar en un punto inalcanzable. Comerciar entre dos costas enfrentadas exigiría comercio marítimo, fuera de alcance (3.11).
 
-**LA INTERCEPCIÓN ES EMBOSCADA, NO PERSECUCIÓN**: con las velocidades de tropa de Doc 5.12.5, solo un ejército de infantería **ligera** (20) supera a una caravana comercial tirada por bueyes (16) y puede darle caza. Un ejército medio (16) la iguala y uno pesado (12) no la alcanza jamás; el contrabando (24) y la caravana tirada por caballos (24, 3.13.2) escapan de todo lo que va a pie: **solo la caballería (28) las alcanza**. Interceptar con tropa pesada solo es posible **estando ya apostado en la ruta**, no persiguiendo.
+**LA INTERCEPCIÓN ES EMBOSCADA, NO PERSECUCIÓN**: con las velocidades de tropa de Doc 5.12.5, solo un ejército de infantería **ligera** (30) supera a una caravana comercial tirada por bueyes (24) y puede darle caza. Un ejército medio (24) la iguala y uno pesado (18) no la alcanza jamás; la caravana tirada por caballos (36, 3.13.2) escapa de todo lo que va a pie: **solo la caballería (42) la alcanza**. Interceptar con tropa pesada solo es posible **estando ya apostado en la ruta**, no persiguiendo.
 
 ## 3.11 Comercio marítimo — fuera de alcance de Fase 0
 Requiere tecnología de barcos + puertos. Fase 0 es 100% terrestre (eje naval pospuesto a fase completa).
@@ -103,7 +103,7 @@ Requiere tecnología de barcos + puertos. Fase 0 es 100% terrestre (eje naval po
 - Urgencia por volumen pendiente (30%): qué fracción del total pactado sigue sin entregar.
 - Cercanía del destino (20%): destinos más cercanos rinden más envíos por caravana disponible.
 
-Pesos y distancia de referencia (600 unidades) placeholder.
+Pesos y distancia de referencia (120 unidades) placeholder.
 
 **Políticas (Tesorero, Doc 4.4)**:
 - "Ampliación de Flota": +1 cupo de caravanas (aditivo).
@@ -140,16 +140,16 @@ está en las piezas, que se construyen y compran **sobre una caravana concreta**
 
 | Carro | Dónde se fabrica | Coste | Rol |
 |---|---|---|---|
-| Básico | Mercado | 20 madera | `capacidadBase` ancla — un carro básico + un buey dan 500 de capacidad a velocidad 16 |
+| Básico | Mercado | 20 madera | `capacidadBase` ancla — un carro básico + un buey dan 500 de capacidad a velocidad 24 |
 | Reforzado | Carpintería | 40 madera | Más `capacidadBase` (800) |
 
 **Animales** — se compran sobre una caravana y se enganchan a un carro sin tracción:
 
 | Animal | `factorCarga` | Velocidad | Coste | Nota |
 |---|---|---|---|---|
-| Buey | 1.0 | 16 | **~12 oro** | El ancla |
-| Caballo | 0.5 | 24 | 60 oro | A esta velocidad **escapa de todo lo que va a pie**; solo la caballería la alcanza (3.10, "emboscada, no persecución") |
-| Camello | 0.75 | ~19 | 40 oro | Opción intermedia |
+| Buey | 1.0 | 24 | **~12 oro** | El ancla |
+| Caballo | 0.5 | 36 | 60 oro | A esta velocidad **escapa de todo lo que va a pie**; solo la caballería la alcanza (3.10, "emboscada, no persecución") |
+| Camello | 0.75 | ~28 | 40 oro | Opción intermedia |
 
 **El buey se paga en ORO, no en madera.** La fundación entrega 100 oro (`FUNDACION.materialesIniciales`) y la
 recaudación de oro por población (3.1 / Doc 4.1) lo repone aunque no haya mina, así que un asentamiento nuevo
