@@ -80,4 +80,5 @@ unos 4,7 MB y pasa todas las validaciones; la herramienta `cargo run -p mundo --
 - **Coherencia con el raster:** la transitabilidad es la del raster. Grafo, recursos, campamentos, bandidos y alijos se ajustan al centro de una celda transitable
   antes de escribirse; el campo `anillo` de cada elemento conserva el del punto original.
 - **Rendimiento del generador:** unos 12 minutos por mundo (relieve 2,5 min, metales y parcelas 2 min, recursos 2 min, grafo 2 min, rasters 3,5 min); es una herramienta fuera de línea.
-- **Pendiente:** hierro en las vetas, vados reales (hoy provisionales, uno por cada ~100 estratégicas de río) y que los ríos limiten el paso: en este generador no bloquean `esTransitable`.
+- **Ríos y vados (2026-10-13):** los ríos cortan el paso salvo en los vados. El trazo del río se marca como barrera en la rejilla de transitabilidad, engrosado una celda a cada lado (así ninguna arista lo cruza entre dos muestras), y cada vado abre un hueco de 100 unidades del generador de radio. Siempre hay al menos un vado por río y luego uno cada 100 estratégicas (`generador/src/vados.ts`). En la semilla 42: 116 vados; el grafo tiene 52.914 nodos, 19 componentes y el 99,92 % en la mayor, con los 9 campamentos dentro de ella.
+- **Pendiente:** hierro en las vetas y vados elegidos por geografía (hoy equiespaciados a lo largo del río).

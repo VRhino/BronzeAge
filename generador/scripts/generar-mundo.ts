@@ -4,7 +4,8 @@ import { generarRegionalVisor } from './visor-worldgen.regional';
 import { generarMundoEstrategico } from '../src/mundoEstrategico';
 import { metalesARecursos, generarRecursosNoMetalicos } from '../src/recursos';
 import { colocarBandidosYAlijos } from '../src/contenidoVivo';
-import { construirGrafo } from '../src/navegacion';
+import { componentes, construirGrafo, estadisticasGrafo, nodoMasCercano } from '../src/navegacion';
+import { bloquearRios, colocarVados, PARAMETROS_VADOS } from '../src/vados';
 import { escribirArtefacto } from '../src/artefacto';
 import { costeEnPunto, esTransitable } from '../src/costeMovimiento';
 import { evaluarElevacion, evaluarTerreno } from '../src/elevacion';
@@ -29,7 +30,7 @@ const transitableCelda = (p: Point): boolean => {
   const cx = Math.floor(p.x / lado), cy = Math.floor(p.y / lado);
   if (cx < 0 || cy < 0 || cx >= nx || cy >= ny) return false;
   const i = cy * nx + cx;
-  if (celdaT[i] === 2) celdaT[i] = esTransitable(r.elevacion, centroCelda(i)) ? 1 : 0;
+  if (celdaT[i] === 2) celdaT[i] = bloqueoRios[i] === 0 && esTransitable(r.elevacion, centroCelda(i)) ? 1 : 0;
   return celdaT[i] === 1;
 };
 /** Si la celda de `p` no es transitable, lo lleva al centro de la celda transitable más cercana (hasta 6 celdas). */
@@ -45,6 +46,9 @@ const aCeldaTransitable = (p: Point): Point => {
   if (!mejor) throw new Error(`Sin celda transitable cerca de (${p.x}, ${p.y})`);
   return mejor;
 };
+// Los ríos cortan el paso salvo en los vados: se trazan como barrera en la misma rejilla.
+const vadosPorRio = colocarVados(r.rios);
+const bloqueoRios = bloquearRios({ ancho, alto }, r.rios, [...vadosPorRio.values()].flat(), lado);
 const e = medir('campamentos, metales y parcelas', () => generarMundoEstrategico(r));
 const recursos = medir('recursos', () => [...metalesARecursos(e.nodos), ...generarRecursosNoMetalicos(r, e.campamentos, e.nodos.map(n => n.posicion))]
   .map(x => ({ ...x, posicion: aCeldaTransitable(x.posicion) })));
@@ -54,17 +58,13 @@ const colocados = medir('bandidos y alijos', () => colocarBandidosYAlijos(seed, 
 const bandidos = colocados.bandidos.map(b => ({ ...b, posicion: aCeldaTransitable(b.posicion) }));
 const alijos = colocados.alijos.map(a => ({ ...a, posicion: aCeldaTransitable(a.posicion) }));
 
-// Vados provisionales: un punto del cauce cada ~100 estratégicas de río (los ríos no bloquean `esTransitable` en este generador).
-const rios: RioMundo[] = r.rios.map(rio => {
-  const vados: Point[] = [];
-  let acumulado = 0;
-  for (let i = 1; i < rio.puntos.length; i++) {
-    acumulado += Math.hypot(rio.puntos[i]!.x - rio.puntos[i - 1]!.x, rio.puntos[i]!.y - rio.puntos[i - 1]!.y);
-    if (acumulado >= 100 * FACTOR) { vados.push(rio.puntos[i]!); acumulado = 0; }
-  }
-  return { id: rio.id, puntos: rio.puntos, terminaEnLago: rio.terminaEnLago, navegable: rio.navegable, vados };
-});
-const grafo = medir('grafo de navegación', () => construirGrafo({ ancho, alto }, transitableCelda, p => costeEnPunto(r.elevacion, p), rios.flatMap(x => x.vados)));
+const rios: RioMundo[] = r.rios.map(rio => ({ id: rio.id, puntos: rio.puntos, terminaEnLago: rio.terminaEnLago, navegable: rio.navegable, vados: vadosPorRio.get(rio.id) ?? [] }));
+const grafo = medir('grafo de navegación', () => construirGrafo({ ancho, alto }, transitableCelda, p => costeEnPunto(r.elevacion, p), rios.flatMap(x => x.vados), { radioVado: PARAMETROS_VADOS.radioHueco }));
+
+const comp = componentes(grafo), est = estadisticasGrafo(grafo, comp);
+const fuera = (puntos: Point[]) => puntos.filter(p => { const n = nodoMasCercano(grafo, p); return !n || comp.componenteDe[n.id] !== est.mayor; }).length;
+console.log(`grafo: ${est.nodos} nodos, ${est.aristas} aristas (${est.aristasVado} de vado), ${est.componentes} componentes, mayor ${(100 * est.fraccionMayor).toFixed(2)} %; ` +
+  `fuera de la mayor: campamentos ${fuera(e.campamentos.map(c => c.posicion))}/${e.campamentos.length}, recursos ${fuera(recursos.map(x => x.posicion))}/${recursos.length}, vados ${[...vadosPorRio.values()].flat().length}`);
 
 const mundo: MundoGenerado = {
   seed, ancho, alto, generador: 'regional-17-costas-1+estrategico-1',
