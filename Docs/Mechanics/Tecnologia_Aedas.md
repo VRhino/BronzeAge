@@ -1,5 +1,7 @@
 # Tecnología por Eras y Aedas
 
+> **Reescrito el 2026-10-13 para el mundo reactivo.** Donde este documento dice «cada tick», léase **«en cada evaluación»**: los contadores suben **al ocurrir** el hecho (la extracción y la fabricación son ritmos y acumulan al cambiar de ritmo y en cada muestreo), las condiciones de adopción y de Era se evalúan **al subir un contador** y en un muestreo de baja frecuencia, los Aedas itinerantes se mueven por **planes** con eventos de llegada y de fin de estancia, y los residentes llegan por eventos agendados ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §3). **Las Eras IV y V siguen pospuestas** (se definen con el motor nuevo). El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Tecnologia_Aedas.md`.
+
 Cómo llega una tecnología a una Facción (logro del servidor + hito propio, compra a un Aeda o épica de un residente), cómo avanzan las Eras, cómo se adopta y qué hacen los Aedas: itinerantes que revelan y venden,
 residentes que cantan épicas, y la crónica que narra los hechos públicos.
 
@@ -67,7 +69,7 @@ Todos los contadores se **suman** salvo `plazasEnNivel.N`, que es un **récord**
 
 ## 3. El tick de tecnología (`avanzarTecnologia`)
 
-Corre al final de la cadena del tick ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §5.3, paso 19), después de sumar los contadores de producción. Determinista y **sin generador aleatorio**.
+Se evalúa cuando sube un contador y en un muestreo de baja frecuencia ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §3.2), tras sumar los contadores de producción. Determinista y **sin generador aleatorio**.
 
 ```
 0. récords:  para N en {2, 3}:  ahora = nº de plazas con nivelActual ≥ N;  si ahora > contadores['plazasEnNivel.N'] → se guarda
@@ -75,7 +77,7 @@ Corre al final de la cadena del tick ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)
 2. Era:      siguiente = la Era que sigue a la vigente (ninguna en la última)
              todos   = TODAS las tecnologías de la Era vigente que tienen logro lo tienen cumplido
              porPlazo= instante − eraDesde ≥ plazoSemanas × 7 días
-             si todos ∨ porPlazo:  era = siguiente, eraDesde = instante;  evento público era.comienza { era, porPlazo: !todos }       ← solo UNA Era por tick
+             si todos ∨ porPlazo:  era = siguiente, eraDesde = instante;  evento público era.comienza { era, porPlazo: !todos }       ← solo UNA Era por evaluación
 3. aparición: para cada Facción con ≥ 1 asentamiento, para cada tecnología en el orden del catálogo:
              saltar si es de arranque, ya aparecida, sin logro cumplido, o de una Era posterior a la vigente (con la Era ya actualizada en 2)
              si TODAS las condiciones del hito se cumplen → aparece: se añade a aparecidas (y se quita de reveladas);
@@ -144,7 +146,7 @@ nacen los que faltan hasta el objetivo (nunca se eliminan si baja):  id 'aeda-<i
 una plaza los acepta salvo que su Facción les haya cerrado la puerta con el grupo 'aedas' (puertaCerradaA; el cierre por defecto no los incluye)
 ```
 
-Cada tick, para cada Aeda **en el orden del array** (y luego los recién nacidos):
+En cada evaluación, para cada Aeda **en el orden del array** (y luego los recién nacidos):
 
 ```
 si tiene ruta y destino:
@@ -162,7 +164,7 @@ No son atacables ni capturables y se ven como una columna ajena solo dentro del 
 
 ### 6.3 Revelar (`revelarTecnologias`)
 
-Cada tick, por cada Aeda **detenido en una plaza** cuya Facción existe, en el orden del array: para cada tecnología que el Aeda **conoce** (§6.1) y la Facción no tiene **aparecida ni revelada**, se añade a `reveladas` y se emite `aedas.revela { faccionId, tecnologiaId, descubridorFaccionId, faltan[] }`
+En cada evaluación, por cada Aeda **detenido en una plaza** cuya Facción existe, en el orden del array: para cada tecnología que el Aeda **conoce** (§6.1) y la Facción no tiene **aparecida ni revelada**, se añade a `reveladas` y se emite `aedas.revela { faccionId, tecnologiaId, descubridorFaccionId, faltan[] }`
 (atribuido a la plaza; privado). `faltan` es el texto de las condiciones del hito que la Facción aún no cumple. Revelan a **la Facción dueña de la plaza**, sea cual sea (también a una enemiga). Una tecnología revelada pasa a aparecida —y sale de `reveladas`— cuando se cumple el hito.
 
 ### 6.4 Vender (`venderTecnologia`, comando `comprarTecnologiaAeda`)
@@ -189,7 +191,7 @@ cupoDeResidentes(plaza) = (sin Palacio activo ∨ nobleza ≤ 0) ? 0 : AEDAS.res
              llega uno ('aeda-r<siguiente>', nombre NOMBRES[(siguiente−1) mod 24]), siguiente++, se olvida la espera;  evento aedas.residente_llega
 ```
 
-A lo sumo **llega uno por plaza y tick**; si sigue habiendo cupo, la espera vuelve a empezar al tick siguiente.
+A lo sumo **llega uno por plaza y evaluación**; si sigue habiendo cupo, la espera vuelve a empezar.
 
 ### 7.2 Épicas
 
@@ -1407,13 +1409,13 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
 
 ## 13. Casos límite y decisiones que parecen raras
 
-- **Una sola Era por tick**, aunque se cumplieran las condiciones de dos.
+- **Una sola Era por evaluación**, aunque se cumplieran las condiciones de dos.
 - **El logro de una Era posterior puede cumplirse antes de que empiece**: queda fijado, y la tecnología aparece en cuanto la Era llega y se cumple el hito.
 - **`plazasEnNivel.N` es un récord**, no una suma: una plaza que sube, baja y vuelve a subir no cuenta dos veces.
 - **Revelar es a la Facción dueña de la plaza donde está el Aeda**, sea amiga o enemiga: los Aedas son neutrales y no tienen Facción.
 - **Un Aeda itinerante nunca muere** y su número solo crece (si bajan las Facciones, sobran).
 - **Un hecho de plaza solo inspira al Aeda de esa plaza**; uno de Facción, a los de todas sus plazas.
-- **A lo sumo un hecho por Aeda por evaluación**, y evaluar ocurre en cada comando y tick (no solo en el tick).
+- **A lo sumo un hecho por Aeda por evaluación**, y evaluar ocurre en cada orden y en cada evento (no solo en un muestreo).
 - **Una tecnología solo aparecida por épica o compra no cuenta para el campamento de mercenarios** si nadie la ha desbloqueado por hito (`primeros` no se registra por esas vías).
 
 ## 14. Divergencias

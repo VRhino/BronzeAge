@@ -5,6 +5,7 @@
 Cubre al **héroe como personaje** (cómo nace, qué puntos y qué monedas tiene, cómo se hiere), su **Liderazgo**, sus **loadouts**, su **guarnición** y el **orden** de sus escuadras, y la **tropa**: qué es una escuadra, dónde puede estar, cómo
 se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se construye el catálogo de tropas y la **chatarra** que dejan los caídos.
 
+- **Reescrito el 2026-10-13** para el mundo reactivo (el hambre de la guarnición es un ritmo, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)) y con las reglas nuevas de tropa: **la tropa que va con su héroe se queda con él y la tropa prestada vuelve sin viaje al campamento** (Doc 5.15.2b), los **mineros** del Centro Urbano y el asedio de **15 contra 15**. El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Heroe_Y_Tropa.md`.
 - **Verificado contra:** `da09799` (2026-10-12).
 - **Fuentes:** `engine/heroe.ts`, `engine/liderazgo.ts`, `engine/tropa.ts`, `engine/tropas.ts`, `engine/chatarra.ts`, `engine/asentamientoQuery.ts` (`cupoGuarnicion`, `poblacionDisponibleParaReclutar`), `engine/pertenencia.ts` (`puedeReclutarEn`),
   `engine/politicas.ts` (`factorCostoReclutamiento`), `session/comandos/{crearHeroe,heroe,militar}.ts`, `session/comandos/autorizacion.ts` (quién puede cada uno), `session/resultadoBatalla.ts` (`conLoQueTrajo`, lo que Unity añade al héroe y a sus escuadras).
@@ -169,7 +170,7 @@ o que `guarnicionOcupada(heroe) + costeLiderazgo(esa tropa) > cupo` (`guarnicion
 **`retirarGuarnicion`**: rechaza si esa escuadra no está en la guarnición o está reservada para una batalla; la deja `enGuarnicion = false`.
 
 Mientras una escuadra está en la guarnición, el héroe **no puede sacarla** de la plaza (la salida a campaña lo rechaza: `El escuadrón … está en la guarnición`). Dejar de residir suelta la guarnición (`sinGuarnicion`).
-El campamento (todas las escuadras con `contenedor: campamento` de los residentes) **come del almacén de la plaza**: `avanzarMantenimientoTropas` (tick, paso 5) llama a `avanzarRacion(campamento, trigo del almacén)` con factor 1 y 0 participantes, y descuenta el trigo consumido del almacén ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.3).
+El campamento (todas las escuadras con `contenedor: campamento` de los residentes) **come del almacén de la plaza**: la ración de la guarnición (un **ritmo** de consumo contra la despensa del almacén, con eventos de umbral; antes `avanzarMantenimientoTropas`, tick paso 5) llama a `avanzarRacion(campamento, trigo del almacén)` con factor 1 y 0 participantes, y descuenta el trigo consumido del almacén ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.3).
 
 ## 8. Orden de las escuadras (`ordenarEscuadras`)
 
@@ -783,3 +784,12 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
 ## 15. Divergencias
 
 Ninguna abierta.
+
+## 12. Tropa del héroe y tropa prestada (decidido el 2026-10-13, Doc 5.15.2b)
+
+- **Tropa del héroe**: la que va en su columna (`contenedor: ejercito`), en su campamento o en su guarnición. **La tropa que va con su héroe se queda con su héroe**; nunca vuelve sola a ningún sitio. Si el héroe saca una escuadra de una guarnición y se une a un ejército, y el ejército se desarma, la escuadra sigue con él (`desgajar`).
+- **Tropa prestada** (en sentido de la regla, no solo la `prestada` de un campamento): la que está **fuera de la columna de su héroe**: la guarnición de una plaza y la escolta cedida a una caravana. Cuando ya no puede estar donde está prestada (cae la plaza, se destruye la caravana, la caravana termina su viaje), **vuelve sin viaje al campamento de su héroe**: con 0 soldados si la causa es una derrota (Doc 5.15.5, 3.13.4), intacta si es un final normal.
+- Mientras la escuadra siga prestada y su sitio en pie, su héroe puede ir a la plaza y sacarla de la guarnición.
+- **Mineros** (Doc 5.8): tropa del Centro Urbano (leva, escalón 1, 30 unidades, velocidad 30, 1 de piedra por soldado, sin oro). Entran en la tropa prestada del campamento de mercenarios y son la guarnición de serie de los pueblos extractores.
+- **Asedio**: `BATALLA.capacidad.asedio` = **15** (el bloque TypeScript dice 5): 15 contra 15.
+

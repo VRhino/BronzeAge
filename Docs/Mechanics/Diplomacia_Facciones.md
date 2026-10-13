@@ -6,6 +6,7 @@ Cubre la **Facción como entidad** (crearla, entrar, salir, cargos, nivel, reput
 entre Facciones** (alianza, vasallaje y su tributo, guerra y paz, rebelión, la Liga y el Gran Rey), la **anexión** y la **fusión** (y el traslado de todo lo que colgaba de una Facción que
 desaparece), la **derrota** y los **títulos** de prestigio.
 
+- **Reescrito el 2026-10-13** para el mundo reactivo: lo que corría «cada tick» (reputación, tributo, títulos, liberación de vasallos) pasa a ritmos y a reevaluaciones por dependencia ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)), y la guerra incorpora la regla nueva de que **toda agresión entre Facciones exige guerra o la declara** (§5.4). El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Diplomacia_Facciones.md`.
 - **Verificado contra:** `71d5758` (2026-10-11).
 - **Fuentes:** `engine/faccion.ts`, `engine/cargos.ts`, `engine/pertenencia.ts`, `engine/capital.ts`, `engine/sigilo.ts`, `engine/reputacion.ts`, `engine/diplomacia.ts`, `engine/liga.ts`, `engine/anexion.ts`,
   `engine/fusion.ts`, `engine/trasladoDeFaccion.ts`, `engine/titulos.ts`, `engine/mercenarios.ts` (residir en un campamento), `engine/ubicacion.ts` (cruzar la puerta), `session/comandos/{crearFaccion,
@@ -69,7 +70,7 @@ su columna (si va solo) toma la Facción. Sin sigilo dado se le asigna `sigiloLi
 - **Pedir:** el actor no es ciudadano de ninguna; entra en `solicitudesIds` de esa Facción (pedir dos veces es pedir lo mismo). Puede pedir a **varias** a la vez.
 - **Responder:** solo el **Rey** de esa Facción. **Aceptar** (el héroe no es ya ciudadano de otra): lo añade al final de `ciudadanosIds` y lo quita de **todas** las listas de solicitantes; su exploración personal
   se funde en la memoria de la Facción y su columna la toma. **Denegar:** solo lo quita de esa lista. Aceptar no da residencia: para vivir en una plaza se muda (§4.2).
-- Cada tick `sinSolicitudesCaducadas` quita de las listas a cualquier ciudadano (red de seguridad).
+- La caducidad de las solicitudes es un **evento**; `sinSolicitudesCaducadas` quita de las listas a cualquier ciudadano cuando cambia la ciudadanía (red de seguridad).
 
 ### 3.3 Salir (`dejarFaccion`)
 
@@ -93,14 +94,14 @@ se iba **o** si es el nuevo Rey. Además, si reside en una plaza, **deja la resi
 calcularNivelFaccion = 1 + (cuántos umbrales de NIVEL_FACCION.xpParaNivel han alcanzado ya `experiencia`, en orden), con tope nivelMaximo
 ```
 
-`experiencia` solo sube (`aplicarAjustesExperiencia` ignora lo ≤ 0). Quien da la experiencia (`aplicarExperiencia`) sube el nivel **en el mismo momento** (evento `faccion.nivel_subio`); el tick solo recalcula lo suyo
+`experiencia` solo sube (`aplicarAjustesExperiencia` ignora lo ≤ 0). Quien da la experiencia (`aplicarExperiencia`) sube el nivel **en el mismo momento** (evento `faccion.nivel_subio`); el resto se recalcula al ocurrir el hecho
 (construcción, ascensos). El nivel de una Facción que nace de una fusión se calcula al nacer. Los eventos que dan experiencia y su cuantía (`NIVEL_FACCION.xp`) están en cada sistema.
 - **Cap de fundación** (`calcularCapFundacion(nivel)`) = `CAP_FUNDACION_POR_NIVEL[min(10, nivel) − 1]`.
 - **Cupo de asentamientos en nivel 2 o 3** (`calcularCupoNivel(nivel, objetivo)`) = `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3[min(10, nivel) − 1]`.
 
 ### 3.6 Reputación
 
-Cada Facción lleva un número −100..+100 (`ajustarReputacion` lo recorta). Cada tick (`avanzarReputacion`, antes de los títulos):
+Cada Facción lleva un número −100..+100 (`ajustarReputacion` lo recorta). La reputación es un **ritmo** (no se barre cada minuto):
 ```
 si rep > 0 : rep = max(0, rep − decaimientoPorMinuto) ; si rep < 0 : rep = min(0, rep + decaimientoPorMinuto)
 rep += (nº de alianzas activas en las que está) × bonusPorMinutoAlianzaActiva ; recortado a [−100, 100]
@@ -457,6 +458,7 @@ Distintas, las dos existen y **no hay entre ellas ninguna relación activa de ni
 - **Retirar:** la autoridad de la que ofreció, mientras nadie contestó.
 
 ### 5.4 Guerra y paz (`declararGuerra`, `proponerPaz`)
+**Toda agresión entre Facciones exige guerra o la declara** (decidido el 2026-10-11, Doc 2.4.1): atacar una caravana, saquear un pueblo, atacar una avanzada, atacar una columna o asediar una plaza. Si no hay guerra con el dueño del objetivo, `atacar` sin la confirmación `declaraGuerra: true` se rechaza con un `detalleError` que enumera las consecuencias; con ella, **declara la guerra** (cualquier héroe puede, no solo el Rey o el Embajador) y la guerra se arrastra por vasallaje como siempre. Excepción: unirse como atacante a un asedio que abrió otro, siendo neutral y admitido por el Rey de la Facción atacante, no la declara. El comando `declararGuerra` (Rey o Embajador) sigue existiendo.
 Al declarar, si `atacante` rompió una alianza con `objetivo` (`rotaPor`) hace menos de `ventanaGuerraTrasRomperAlianzaDias` días (`rotaEn`), pierde `penalizacionGuerraTrasRomperAlianza` de reputación
 (`ajustesPorGuerraTrasRomper`, que aplica el comando). `romperRelacion` anota `rotaPor`/`rotaEn` solo en las alianzas; las que acaban por anexión o fusión no.
 
@@ -476,14 +478,15 @@ Queda **una `RelacionPolitica` por Facción alcanzada**, todas con el mismo cont
   la vasalla solo puede rebelarse. La relación pasa a `rota`.
 - **`rebelionVasallo(relacionId)`:** la vasalla; el vasallaje pasa a `rota`; los trueques `activo` **entre plazas de las dos Facciones** pasan a `expirado` (sin penalización); `penalizacionRebelionParaSenora` a la señora;
   y la vasalla **declara guerra a la señora** (con el arrastre de §5.4: a sus demás vasallos también). Evento `diplomacia.rebelion_vasallo`.
-- **Señor desarmado** (`liberarVasallosDeSenoresDesarmados`, cada tick **antes** del tributo): todo vasallaje activo cuya señora **no tiene ningún asentamiento** pasa a `rota`, sin reputación ni guerra; evento
-  `diplomacia.vasallo_liberado`. Llega al tick siguiente a la caída de la última plaza.
-- **Vasalla conquistada por un tercero** (`pasarVasallasConquistadas`, cada tick, justo después del desarme del señor y antes del tributo; decidido el 2026-10-12): para todo vasallaje activo
+- **Señor desarmado** (`liberarVasallosDeSenoresDesarmados`, **al perder la señora su última plaza**, antes del tributo): todo vasallaje activo cuya señora **no tiene ningún asentamiento** pasa a `rota`, sin reputación ni guerra; evento
+  `diplomacia.vasallo_liberado`. Ocurre en el instante de la caída de la última plaza.
+- **Vasalla conquistada por un tercero** (`pasarVasallasConquistadas`, **al quedarse la vasalla sin plazas**, justo después del desarme del señor y antes del tributo; decidido el 2026-10-12): para todo vasallaje activo
   cuya vasalla **no tiene ninguna plaza** y cuyo `derrotadaPor` es otra Facción existente que **no es la señora**: el vasallaje pasa a `rota`, nace `vasallaje-{conquistador}-{vasalla}-c{instante}`
   con el **mismo tributo**, y las guerras activas entre vasalla y conquistador pasan a `rota`. Sin reputación. Evento `diplomacia.vasallo_conquistado`. Llega al tick siguiente a la caída de la
   última plaza. Con alguna plaza, por ruina (`derrotadaPor = null`) o si la conquistó la propia señora, no cambia nada.
 
-### 5.6 Tributo (`avanzarTributos`, cada tick)
+### 5.6 Tributo (`avanzarTributos`, como flujo continuo)
+**Es un ritmo de flujo**: el `cantidadPorMinuto` pactado se mueve de la vasalla a la capital de la señora de forma continua; el servidor programa un evento si el stock de una plaza de la vasalla llega a 0 o el almacén de la capital se llena (cambian los ritmos). Lo que sigue describe la regla de reparto y de tope.
 Por cada vasallaje activo con tributo (decidido el 2026-10-11): el pactado `cantidadPorMinuto` se **reparte a partes iguales entre todos los asentamientos de la vasalla**; cada uno paga `min(su stock del recurso, su parte)` (si es > 0) y todo se suma al almacén de la **capital de la señora** (`encontrarCapital`, §3.7; topado por capacidad). Un evento `diplomacia.tributo_pagado` por plaza que paga (`señoraId` = la capital). Sin capital o sin plazas de la vasalla, no hay pago.
 
 ### 5.7 Liga y Gran Rey (`computeLigas`)
@@ -554,15 +557,15 @@ Todo lo que lleva el id de `origen` pasa a `destino`, en este orden de efectos:
 ```
 <!-- /parametros -->
 
-## 7. Títulos de prestigio (`calcularTitulos`, cada tick)
+## 7. Títulos de prestigio (`calcularTitulos`, por reevaluación)
 
-Se recalculan enteros cada tick, tras la reputación, y no dan ningún beneficio mecánico. Con ≥ 1 Facción:
+Se recalculan enteros cuando cambia lo que miran (Facciones, plazas, relaciones, héroes) y como muestreo de baja frecuencia, tras la reputación, y no dan ningún beneficio mecánico. Con ≥ 1 Facción:
 - **Facción más grande:** más asentamientos; empate: mayor población total.
 - **Mayor poder económico:** más oro sumando los almacenes de sus plazas.
 - **Ejército más grande:** más soldados sumando los escuadrones de **todos sus ciudadanos**, estén donde estén.
 - **Gran Rey:** la Facción cima de una Liga por vasallaje (§5.7), si la hay (la primera Liga que tenga).
 - **Mecenas de los Aedas:** `valor = épicas cumplidas × 10 + Aedas residentes`; gana el mayor y solo existe si es > 0.
-En cada caso desempata el **orden de la lista de Facciones** (el sort es estable). `narrarCambiosDeTitulo` compara con los del tick anterior y emite `titulo.cambia_manos` (el poseedor cambió) o `titulo.nace`
+En cada caso desempata el **orden de la lista de Facciones** (el sort es estable). `narrarCambiosDeTitulo` compara con los de la evaluación anterior y emite `titulo.cambia_manos` (el poseedor cambió) o `titulo.nace`
 (no existía un título de ese nombre antes), públicos, cantados por los Aedas; no emite nada cuando un título desaparece.
 
 ## 8. Derrota (`registrarDerrota`)
@@ -582,8 +585,8 @@ siguen, residen en campamentos y puede volver a fundar (al fundar, `derrotadaPor
 | `titulo.cambia_manos`, `titulo.nace` | tick |
 La crónica de los Aedas canta la anexión, la fusión, la liberación de vasallos y los títulos (→ `Tecnologia_Aedas.md`).
 
-## 10. Orden dentro del tick
-(Paso a paso en [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md).) Liberar vasallos de señores desarmados → tributo → experiencia de construcción y niveles → `avanzarReputacion` y `sinSolicitudesCaducadas` → reposición de mercados → títulos.
+## 10. Orden de los eventos del mismo instante
+(Prioridades en [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2, prioridad 9.) Liberar vasallos de señores desarmados → tributo → experiencia de construcción y niveles → `avanzarReputacion` y `sinSolicitudesCaducadas` → reposición de mercados → títulos.
 
 ## 11. Invariantes
 
@@ -608,7 +611,7 @@ La crónica de los Aedas canta la anexión, la fusión, la liberación de vasall
 | Títulos y experiencia | `eventosDominioTitulos.test.ts`, `experienciaFaccion.test.ts` |
 
 ## 12. Casos límite y decisiones que parecen raras
-- **`derrotadaPor` no caduca mientras la Facción no tenga plaza:** si una vasalla ya conquistada, sin plazas, se hace vasalla de otra Facción distinta del conquistador, el siguiente tick pasa a ser vasalla del conquistador.
+- **`derrotadaPor` no caduca mientras la Facción no tenga plaza:** si una vasalla ya conquistada, sin plazas, se hace vasalla de otra Facción distinta del conquistador, en la reevaluación siguiente pasa a ser vasalla del conquistador.
 - **El señor «debe defender» solo como reputación** (decidido el 2026-10-12): no hay obligación en el motor; no defender cuesta reputación y es todo el castigo.
 - **Una propuesta caducada no desaparece sola:** queda en la lista hasta que se añade otra del mismo tipo (que poda las caducadas) o se contesta; ya no se puede contestar ni cuenta como «pendiente».
 - **Declarar guerra no arrastra a los aliados del bando contrario con los que ya hay relación:** solo se salta quien tiene una relación activa con el atacante; el objetivo directo, si la tiene, hace fallar todo.
