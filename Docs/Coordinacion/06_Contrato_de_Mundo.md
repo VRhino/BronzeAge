@@ -26,8 +26,9 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 | `anillos` | raster u8 (`Anillo`) | foco (hasta 150), frontera (150-250) y tierra lejana (>250), por distancia al campamento más cercano |
 | `transitable` | raster en bits | lo que se puede pisar; **autoridad única** de transitabilidad |
 | `rios` | vectorial | cauces, vados |
-| `bosques` | vectorial (`ZonaBosque`) | masas explotables con id y **capacidad de Leñeras** (pocos grandes, muchos medianos y pequeños) |
-| `nodos` | vectorial (`NodoRecurso`) | yacimientos y ganado con cantidad inicial y anillo |
+| `bosques` | vectorial (`ZonaBosque`) | masas explotables con id y área (pocos grandes, muchos medianos y pequeños) |
+| `parcelas` | vectorial (`ParcelaBosque`) | **cupos de explotación** de cada masa: puntos fijos separados `2·rp`, con su densidad. Una Leñera (que se construye en la ciudad) ocupa una parcela dentro de la zona de su asentamiento |
+| `nodos` | vectorial (`NodoRecurso`) | yacimientos y ganado con cantidad inicial y anillo; estaño y oro por gradiente |
 | `vetas` | vectorial (`Veta`) | distritos mineros de estaño (y oro), con su campamento de bandidos y su alijo lejano |
 | `campamentos` | vectorial | campamentos de mercenarios: centros de los focos, a 600 unos de otros |
 | `bandidos_iniciales`, `alijos` | vectorial | colocados por el generador, no por el motor |
@@ -36,15 +37,15 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 **Reglas de generación** (las del canon 1.9c; el generador las cumple y el contrato las comprueba al cargar):
 
 1. Primero se colocan los campamentos de mercenarios (aptos: fértiles y conectados; separación 600; margen de borde 60), luego los campos de distancia y los anillos, luego el bosque y los recursos, luego las vetas.
-2. **El estaño solo fuera de 200 de un campamento** (`exclusionEstanoCampamento`), agrupado en vetas de 3 a 6 nodos en un radio de 20-30, con cuotas que suman **exactamente** el total (en proporción a la tierra firme).
-3. Los bosques son una mezcla: pocos grandes (radio 40-80) en la frontera y muchos pequeños (radio 4-20) dentro de los focos.
+2. **Estaño y oro por gradiente**: 5 % en el foco (muestra en el borde, un tercio de cantidad), 25 % en la frontera (aislados) y 70 % en la tierra lejana (vetas de 3 a 6 nodos de estaño y 0 a 2 de oro en un radio de 20-30), con cuotas por anillo que suman **exactamente** el total (en proporción a la tierra firme).
+3. Los bosques son una mezcla: pocos grandes (radio 40-80) en la frontera y muchos pequeños (radio 4-20) dentro de los focos. Cada masa lleva su rejilla de **parcelas** (`rp` = 8, separación ≥ 16).
 4. Las posiciones salen de datos versionados y reproducibles: nada se mueve a mano después.
-5. **Abiertos para la fase 4** (decisión del usuario): dónde va el oro (O1) y cuántas Leñeras admite un bosque grande (O2).
+5. **Decidido el 2026-10-13** (cierra O1 y O2): el gradiente de metales y las parcelas de explotación con cuota del 50 % por asentamiento (Doc 1.9c). Las cifras (`rp`, reparto, cuota) viven en el archivo común de datos de juego y se calibran en la fase 6.
 
 ## 3. Validaciones al cargar (servidor)
 
 Hash del contenido = `Manifiesto.hash`; cada capa con su sha256; tamaño = 2.667 × 2.000; origen y destino de toda arista del grafo
-transitables; todo nodo, campamento y alijo en tierra transitable; estaño a ≥ 200 de todo campamento; cuotas exactas; ningún
+transitables; todo nodo, campamento y alijo en tierra transitable; cuotas por anillo exactas; parcelas dentro de su masa y a ≥ 2·`rp` unas de otras; ningún
 yacimiento dentro de agua. Un artefacto que no pasa **no se carga**.
 
 ## 4. El paquete de Unity (`PaqueteUnity`)

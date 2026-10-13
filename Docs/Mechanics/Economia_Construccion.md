@@ -179,7 +179,7 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
   `construccion.yacimiento_agotado`.
 - **Regeneración** (`mapa.avanzarRegeneracion`, global del tick): un nodo con stock 0 que aún no tiene calendario agenda `instante + cooldown` (`REGENERACION_NODOS`: `livestock` 3 min; **todo lo demás** 10 min); cuando
   `instante ≥ calendario` se borra lo extraído y el nodo vuelve a su cantidad inicial. Evento `mapa.yacimiento_regenerado`.
-- **Bosques**: un bosque admite 1, 2 o 3 Leñeras según su radio (`LENERA_POR_BOSQUE`: ≥ `umbral3` → 3, ≥ `umbral2` → 2, si no 1). La Leñera se coloca en el espacio de la ciudad, pero su
+- **Bosques** (en la reconstrucción: parcelas, ver nota en `Generacion_Del_Mundo.md` §10.3): un bosque admite 1, 2 o 3 Leñeras según su radio (`LENERA_POR_BOSQUE`: ≥ `umbral3` → 3, ≥ `umbral2` → 2, si no 1). La Leñera se coloca en el espacio de la ciudad, pero su
   `fuenteId` es el bosque.
 - **Nodos reclamados**: un yacimiento lo explota un solo extractor de **todo el mundo** (`reclamosDeFuentes`: conjunto de `fuenteId` de todos los asentamientos; las Leñeras se cuentan aparte por bosque).
 

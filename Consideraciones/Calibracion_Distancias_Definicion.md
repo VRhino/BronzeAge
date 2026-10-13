@@ -10,7 +10,7 @@
 >   agrupado en distritos mineros (§5).
 > - **Cerrado también:** contrato de escala con el mundo regional de Codex: **factor 12** unidades Unity por unidad
 >   estratégica, mapa estratégico de **2.667 × 2.000** (§2.1). El número de plazas o de jugadores no es prioritario.
-> - **Abierto:** dónde va el oro (§5.1, O1) y la capacidad de Leñeras de un bosque grande (§6, O2).
+> - **Decidido el 2026-10-13:** O1 (oro y estaño por gradiente 5/25/70 % por anillos, §5.1) y O2 (parcelas de explotación con cuota por asentamiento, §6).
 > - **Propuesta pendiente:** migración total del worldgen al mundo regional, borrando el viejo y las partidas (§11).
 > - **Acordada (2026-10-12):** reconstrucción con soluciones finales (`Reconstruccion_Definicion.md`): mundo reactivo
 >   sin tick, servidor en Rust, artefacto de mundo, Unity como cliente final. Resuelve §3.1 y absorbe §11.
@@ -311,8 +311,9 @@ ya cae casi todo fuera, porque solo admite colina o montaña y los campamentos b
 - **Mantenimiento de la colonia**: con `escalaDistancia` 80, una colonia a 300 de la capital paga ×4,75. Encarece mucho
   la expansión minera; puede ser lo que se quiere (el estaño se compra) o pedir subir la escala a 120-150.
 
-**O1 — El oro.** ¿Se va también a la tierra lejana, o se reparte entre frontera y distritos? *Propuesta:* mitad y mitad;
-el estaño es el que obliga a salir.
+**O1 — El oro. DECIDIDO (2026-10-13).** Estaño y oro por gradiente según el anillo: foco 5 % (una muestra en el borde, un tercio de
+cantidad), frontera 25 % (aislados), tierra lejana 70 % (vetas). Sustituye a la exclusión dura del estaño a 200 y a la
+propuesta de mitad y mitad. A comprobar con el batch: que los bots no se queden sin bronce en la Era I.
 
 ## 6. Bosques: pocos grandes y muchos medianos o pequeños
 
@@ -327,9 +328,10 @@ compatible (recap §8.4): dentro del campo visual, **masas explotables con ID y 
 resuelve por las zonas reales; las pequeñas en los focos y las comarcas en la frontera. El aspecto no muestra los
 límites de esas masas.
 
-**O2 — Leñeras por bosque.** Hoy 1-3 según el radio (`LENERA_POR_BOSQUE`, umbrales 45/65). Para los pequeños,
-umbrales ~8/11; para los grandes compartidos, 3 se queda corto: ¿por área, sin tope fijo? Bosque grande no equivale a
-madera ilimitada para todos.
+**O2 — Leñeras por bosque. DECIDIDO (2026-10-13).** Se sustituye el contador por radio (`LENERA_POR_BOSQUE`) por **parcelas de
+explotación**: puntos fijos de la masa, separados `2·rp` (`rp` = 8), que el generador entrega en el artefacto. La Leñera (dentro de
+la ciudad) toma una parcela libre dentro de la zona de su asentamiento, con un máximo del 50 % (mínimo 1) de las parcelas de la masa por
+asentamiento. Sin freno de rendimiento. Detalle en Doc 1.9c.
 
 ## 7. Canon a reescribir al implementar
 

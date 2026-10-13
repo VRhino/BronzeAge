@@ -790,6 +790,8 @@ extraer(id, n): si el nodo no existe o n ≤ 0 → 0 ; disponible = stock(id) ; 
 
 ### 10.3 Leñeras en un bosque
 
+> **Nota (2026-10-13):** en la reconstrucción la capacidad por radio de bosque (`LENERA_POR_BOSQUE`, `capacidadLeneras`) se sustituye por **parcelas de explotación** con cuota por asentamiento (Doc 1.9c y 4.2). Lo que sigue describe el motor TypeScript.
+
 `capacidadLeneras(bosque)`: `radio ≥ LENERA_POR_BOSQUE.umbral3` → 3; `≥ umbral2` → 2; si no, 1. Con los radios de `BOSQUE` (45–120) la rama «1» no se da nunca: ~29 % de los bosques admiten 2 y ~71 %, 3 (decidido así el 2026-10-12).
 
 `puntoDeTrabajoEnBosque(bosqueId, polígono, ocupadas)`: punto preferido = el **centro** si `ocupadas = 0`; si no, `centro + radio·0,4·(cos(2π·ocupadas/3), sin(2π·ocupadas/3))`. Si cae dentro del polígono, ese. Si no, se prueban **anillos** de radio `radio·k/3`, `k = 1, 2, 3`, con 12 muestras cada uno

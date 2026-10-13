@@ -112,13 +112,14 @@ message ArtefactoDeMundo {
   Raster anillos = 7;                    // u8: Anillo por celda
   Raster transitable = 8;                // bits: 1 = se puede pisar
   repeated Rio rios = 9;
-  repeated ZonaBosque bosques = 10;      // masas explotables con id y capacidad de Leñeras
+  repeated ZonaBosque bosques = 10;      // masas explotables con id y área
   repeated NodoRecurso nodos = 11;       // yacimientos y ganado, con anillo y cantidad inicial
   repeated Veta vetas = 12;
   repeated CampamentoMercenarios campamentos = 13;   // colocados por el generador, centros de los focos (separación 600)
   repeated CampamentoBandidos bandidos_iniciales = 14;
   repeated Alijo alijos = 15;
   GrafoNavegacion navegacion = 16;
+  repeated ParcelaBosque parcelas = 17;  // cupos de explotación de los bosques (separados >= 2·rp)
 }
 
 // Paquete de Unity derivado del artefacto: terreno en sectores a escala ×12.

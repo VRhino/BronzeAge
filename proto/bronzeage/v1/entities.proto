@@ -133,7 +133,7 @@ message Edificio {
   EstadoEdificio estado = 4;
   optional int64 completa_en_ms = 5;
   AmbitoEdificio ambito = 6;
-  optional string fuente_id = 7;         // nodo de recurso que explota (extractores de mapa)
+  optional string fuente_id = 7;         // nodo de recurso o parcela de bosque que explota
   optional uint32 nivel_interno = 8;
   optional MejoraEnCurso mejora = 9;
   bool rotado = 10;
@@ -317,7 +317,18 @@ message ZonaBosque {
   Punto centro = 2;
   sint64 radio = 3;
   uint32 densidad_milesimas = 4;         // 0..1000
-  uint32 capacidad_lenera = 5;           // Leñeras que admite
+  reserved 5;                            // antes `capacidad_lenera`: ahora el cupo son las parcelas
+  uint64 area = 6;                       // milésimas² de unidad estratégica
+}
+
+// Cupo de explotación de una masa de bosque (Doc 1.9c). Fija en el artefacto; ocupada cuando una Leñera la tiene en
+// `Edificio.fuente_id`. La Leñera se construye en la ciudad; la parcela solo dice de qué parte del bosque vive.
+message ParcelaBosque {
+  string id = 1;
+  string bosque_id = 2;
+  Punto centro = 3;
+  uint32 densidad_milesimas = 4;         // media de la densidad bajo la parcela
+  optional string anillo = 5;
 }
 
 // ───────────────────────────── Héroe y tropa ─────────────────────────────
