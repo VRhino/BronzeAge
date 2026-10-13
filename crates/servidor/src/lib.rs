@@ -37,12 +37,12 @@
 //!
 //! # Códigos de error
 //! Los del contrato (`token_invalido`, `version_protocolo`, `demasiadas_ordenes`, `partida_no_disponible`, `rol_no_permitido`,
-//! `interno`…) más, aditivos y documentados en [`codigos`]: `hola_esperado`, `mensaje_invalido`.
+//! `interno`…) más, aditivos y documentados en [`codigos`]: `hola_esperado`, `hola_repetido`, `mensaje_invalido`.
 //!
-//! # Reanudación a mitad de sesión
-//! El `.proto` no tiene mensaje propio para «he visto un hueco, reanudo»; este crate trata un segundo `Hola` como esa petición y
-//! la pasa al núcleo como [`ComandoSesion::Reanuda`] (el núcleo contesta con `Foto`/`Delta` por el canal). Decisión pendiente de
-//! confirmar en el contrato.
+//! # Reanudación
+//! Reanudar es **reconectar**: un nuevo `Hola` con `versiones_conocidas`, y el núcleo decide por ámbito (sin novedad, deltas o
+//! foto) en la `Bienvenida`. No hay reanudación a mitad de sesión: un segundo `Hola` recibe `ErrorSesion{hola_repetido}` (no fatal) y
+//! se ignora (decidido el 2026-10-13, contrato 05 §7).
 
 pub mod nucleo;
 pub mod prueba;

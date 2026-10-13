@@ -112,7 +112,7 @@ servidor → [Delta* con los cambios que produjo]  →  ResultadoOrden { peticio
    el tramo) o `REANUDA_CON_FOTO` (versión demasiado vieja, ámbito nuevo o cambio de grupo de visión).
 4. Para poder mandar deltas, el servidor conserva en memoria las deltas de cada ámbito durante un tiempo de retención y, más allá,
    las reconstruye del registro de eventos; si no puede, foto.
-5. Un cliente que detecta un hueco de `secuencia` reanuda con el mismo procedimiento, sin cerrar la sesión de red.
+5. Un cliente que detecta un hueco de `secuencia` **cierra la conexión y reconecta** con el mismo procedimiento (nuevo `Hola` con `versiones_conocidas`). No hay reanudación a mitad de sesión: `Hola` solo puede ser el primer mensaje, y un segundo `Hola` es `ErrorSesion{hola_repetido}` (no fatal; se ignora).
 6. **El reloj de mundo se congela mientras el servidor está apagado** ([`Mechanics/Reloj_Y_Eventos.md`](../Mechanics/Reloj_Y_Eventos.md)): una
    reapertura tras una caída no trae «tiempo perdido» que simular.
 
@@ -145,7 +145,7 @@ saqueo de pueblo y ataque a una avanzada ([`Combate.md`](../Mechanics/Combate.md
 
 ## 10. Errores de sesión
 
-`ErrorSesion{codigo, mensaje, fatal}`: `token_invalido`, `version_protocolo`, `hueco_de_secuencia` (no fatal: reanudar),
+`ErrorSesion{codigo, mensaje, fatal}`: `token_invalido`, `version_protocolo`, `hueco_de_secuencia` (lo detecta el cliente: cierra y reconecta), `hola_repetido` (no fatal),
 `demasiadas_ordenes`, `partida_no_disponible`, `mundo_distinto` (el hash cambió), `rol_no_permitido`, `interno`.
 
 ## 11. Evolución del contrato

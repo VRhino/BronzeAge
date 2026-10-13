@@ -175,10 +175,12 @@ async fn reanudacion_sin_novedad_con_deltas_y_con_foto() {
     let Some(ms::Cuerpo::Delta(d)) = c.esperar().await.cuerpo else { panic!("se esperaba la Delta de reanudación") };
     assert_eq!((d.desde, d.hasta), (3, 5));
 
-    // Reanudación a mitad de sesión (un segundo Hola): equivalente a la de la apertura.
+    // Reanudar es reconectar: un segundo Hola en la misma sesión es un error no fatal y la sesión sigue viva.
     c.enviar(mc::Cuerpo::Hola(reanudar(0))).await;
-    let Some(ms::Cuerpo::Delta(d)) = c.esperar().await.cuerpo else { panic!() };
-    assert_eq!((d.desde, d.hasta), (0, 5));
+    let Some(ms::Cuerpo::Error(e)) = c.esperar().await.cuerpo else { panic!("se esperaba hola_repetido") };
+    assert_eq!((e.codigo.as_str(), e.fatal), ("hola_repetido", false));
+    c.enviar(mc::Cuerpo::Ping(contrato::v1::Ping { cliente_envio_ms: 7 })).await;
+    assert!(matches!(c.esperar().await.cuerpo, Some(ms::Cuerpo::Pong(p)) if p.cliente_envio_ms == 7));
     c.cerrar().await;
 
     // Demasiado viejo: foto.

@@ -128,21 +128,6 @@ impl Actor {
                 let admin = hola.cliente() == pb::TipoCliente::ClienteAdminWeb;
                 self.conecta(sesion, identidad.cliente_id, admin, hola, difusion, respuesta);
             }
-            ComandoSesion::Reanuda { sesion, versiones_conocidas } => {
-                self.avanzar();
-                let Some(s) = self.sesiones.get(&sesion) else { return };
-                let (cliente, tx) = (s.cliente.clone(), s.tx.clone());
-                let conocida = versiones_conocidas.get(&clave_ambito_heroe(&cliente)).copied();
-                let (_, version, msg) = self.reanudar(&cliente, conocida);
-                if let Some(s) = self.sesiones.get_mut(&sesion) {
-                    s.version = version;
-                }
-                if let Some(m) = msg {
-                    if !depositar(&tx, m) {
-                        self.quitar(sesion);
-                    }
-                }
-            }
             ComandoSesion::Orden { sesion, orden } => self.orden(sesion, orden),
             ComandoSesion::Vista { sesion, rect } => {
                 if let Some(s) = self.sesiones.get_mut(&sesion) {

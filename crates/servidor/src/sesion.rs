@@ -432,7 +432,13 @@ async fn bucle<A: Autenticador>(
                         Some(rect) => ComandoSesion::Vista { sesion: id, rect },
                         None => continue,
                     },
-                    Some(mc::Cuerpo::Hola(h)) => ComandoSesion::Reanuda { sesion: id, versiones_conocidas: h.versiones_conocidas },
+                    Some(mc::Cuerpo::Hola(_)) => {
+                        // Reanudar es reconectar: un segundo Hola no se pasa al núcleo (contrato 05 §7).
+                        if !em.error(error(codigos::HOLA_REPETIDO, "Hola solo puede ser el primer mensaje; para reanudar, reconecta", false)).await {
+                            return;
+                        }
+                        continue;
+                    }
                     Some(mc::Cuerpo::Batalla(mensaje)) => {
                         if abierta.rol != TipoCliente::ClienteServidorBatalla {
                             if !em.error(error(codigos::ROL_NO_PERMITIDO, "solo un servidor de batalla envía mensajes de batalla", false)).await {

@@ -1,7 +1,6 @@
 //! La interfaz entre el servidor de sesiones y el núcleo (que se escribe aparte), más la configuración y el reloj compartido.
 
 use std::{
-    collections::BTreeMap,
     future::Future,
     sync::{Arc, RwLock},
     time::{Duration, Instant as Pared},
@@ -26,6 +25,8 @@ pub mod codigos {
     pub const INTERNO: &str = "interno";
     /// Aditivo: el primer mensaje del cliente no fue `Hola`.
     pub const HOLA_ESPERADO: &str = "hola_esperado";
+    /// Un segundo `Hola` en una sesión abierta (no fatal): reanudar es reconectar.
+    pub const HOLA_REPETIDO: &str = "hola_repetido";
     /// Aditivo: trama no decodificable, de texto, o `MensajeDeCliente` vacío.
     pub const MENSAJE_INVALIDO: &str = "mensaje_invalido";
 }
@@ -65,8 +66,6 @@ pub enum ComandoSesion {
         difusion: mpsc::Sender<Difusion>,
         respuesta: oneshot::Sender<Result<Bienvenida, ErrorSesion>>,
     },
-    /// Un segundo `Hola` en una sesión abierta: reanudar (p. ej. tras detectar un hueco de secuencia). Clave `"TIPO:id"`.
-    Reanuda { sesion: SesionId, versiones_conocidas: BTreeMap<String, u64> },
     Orden { sesion: SesionId, orden: Orden },
     Vista { sesion: SesionId, rect: Rectangulo },
     /// Mensaje de un servidor de batalla (solo si la sesión es `CLIENTE_SERVIDOR_BATALLA`).

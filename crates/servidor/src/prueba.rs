@@ -139,12 +139,6 @@ impl NucleoFalso {
                         e.sesiones.insert(sesion, SesionFalsa { cliente: identidad.cliente_id, difusion });
                         let _ = respuesta.send(Ok(b));
                     }
-                    ComandoSesion::Reanuda { sesion, versiones_conocidas } => {
-                        let v = e.version;
-                        if let Some(s) = e.sesiones.get(&sesion) {
-                            reanudar(v, &s.cliente, &versiones_conocidas, &s.difusion);
-                        }
-                    }
                     ComandoSesion::Orden { sesion, orden } => {
                         e.ordenes += 1;
                         let id = orden.peticion_id.clone();
