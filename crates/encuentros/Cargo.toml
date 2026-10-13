@@ -1,0 +1,9 @@
+[package]
+name = "encuentros"
+version = "0.1.0"
+edition = "2021"
+description = "Encuentros exactos entre planes: rejilla espacio-temporal, persecución e intercepción (fase 5, Arquitectura/13 §3)"
+
+[dependencies]
+base = { path = "../base" }
+cola = { path = "../cola" }

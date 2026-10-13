@@ -18,6 +18,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "base"
+version = "0.1.0"
+
+[[package]]
 name = "bitflags"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -55,6 +59,13 @@ name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+
+[[package]]
+name = "cola"
+version = "0.1.0"
+dependencies = [
+ "base",
+]
 
 [[package]]
 name = "contrato"
@@ -100,6 +111,14 @@ name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
+
+[[package]]
+name = "encuentros"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "cola",
+]
 
 [[package]]
 name = "equivalent"
@@ -239,10 +258,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "nucleo"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "cola",
+ "contrato",
+ "encuentros",
+ "mundo",
+ "persistencia",
+ "rutas",
+ "vision",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "persistencia"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "contrato",
+]
 
 [[package]]
 name = "petgraph"
@@ -453,6 +494,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rutas"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "contrato",
+ "mundo",
+]
+
+[[package]]
+name = "servidor"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "contrato",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -541,6 +599,14 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vision"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "mundo",
+]
 
 [[package]]
 name = "windows-link"

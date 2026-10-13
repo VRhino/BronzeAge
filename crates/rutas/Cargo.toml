@@ -1,0 +1,10 @@
+[package]
+name = "rutas"
+version = "0.1.0"
+edition = "2021"
+description = "Rutas: A* sobre el grafo de navegación del artefacto de mundo → Plan con instantes por vértice (fase 5)"
+
+[dependencies]
+base = { path = "../base" }
+mundo = { path = "../mundo" }
+contrato = { path = "../contrato" }

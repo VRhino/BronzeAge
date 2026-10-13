@@ -1,0 +1,15 @@
+[package]
+name = "nucleo"
+version = "0.1.0"
+edition = "2021"
+description = "Núcleo de un solo hilo: aplica órdenes y eventos en (instante, secuencia); modo acelerado (fase 5)"
+
+[dependencies]
+base = { path = "../base" }
+cola = { path = "../cola" }
+rutas = { path = "../rutas" }
+persistencia = { path = "../persistencia" }
+encuentros = { path = "../encuentros" }
+vision = { path = "../vision" }
+mundo = { path = "../mundo" }
+contrato = { path = "../contrato" }
