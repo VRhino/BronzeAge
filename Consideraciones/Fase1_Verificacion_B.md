@@ -69,6 +69,15 @@ X1 aprobado: emblemas, insignias, rumores y «Estado de Facción» a `Docs/Ideas
 ### Decidido de la cuarta tanda
 Y1: la caravana aparcada en una plaza que cae se destruye (canon 3.13.7). Y2: sin coste, solo el cooldown. Y4: a `Docs/Ideas a diseñar.md`. Y5 y la lista de bots emergentes: `Docs/Arquitectura/12` §15. Y3 resuelto con una regla más general (5.15.2b: la tropa que va con su héroe se queda con él; la tropa prestada vuelve sin viaje al campamento si no puede seguir donde está) y con la retirada de la «vuelta a casa» de los ejércitos (5.12.6 cancelar = detenerse; 5.13.4 un ejército no guarda tropa por su cuenta; 5.14.2 sin origen). `Docs/Mechanics` (estado `regresando`, `origenAsentamientoId`, disolución con tropa) se corrige al reescribirlo. Retirados `Fase_0_5`, `Fase_0_6`, `Checklist_Mecanicas`, `Economia_Del_Oro` y `Ocupacion_Post_Conquista`. `Docs/Mecanicas a desarrollar.md` queda reducido a las Eras IV-V pospuestas y al tope de asedio.
 
+## Quinta tanda (2026-10-13): lo que quedaba
+
+- `Preguntas_Abiertas.md`: lista antigua, casi toda resuelta, descartada o ya en Ideas. Lo único vivo (qué es un imperio frente a una alianza grande) pasó a Ideas §47.
+- `Revision_2026-09-08_Economia_Y_Guerra.md`: índice de sesión; sus puntos abiertos eran los de Economía y Ocupación, ya tratados.
+- `NPC_Gobernanza_Facciones_Controladas.md`: la cesión de Facción se descarta; sus reglas de comportamiento (lo aprendido del batch) pasaron a `Docs/Arquitectura/12` §16 para los bots de Rust.
+- `Diarios_Simulaciones_Batch/` (14 archivos): descartados; siguen en `typescript-final`.
+
+Retirados los cuatro. Quedan en `Consideraciones/` solo: `Reconstruccion_Definicion`, `Calibracion_Distancias_Definicion`, `Guerra_Logistica_Definicion`, `Ritmo_Crecimiento_Asentamientos` y `BA-006_Revision_Tecnologia_Eras` (historia viva de la reconstrucción) y los descartables de la tabla C pendientes de tu visto bueno: `Auditoria_Tick_Eventos`, `Correcciones_Durante_Desarrollo`, `Plan_Implementacion_Tecnica`, `Roadmap_Escalado`, `Fase_0_Definicion`, `Fase_0_1`, `Fase_0_3`, `Fase_0_4` y `Tecnologia_Eras_I-III_Definicion`.
+
 ## Decidido el 2026-10-13
 
 - **V1** varianza ±15 %: se deja como está (constante del archivo común). **V2** escuadra mermada: regla escrita en el canon (5.11.1). **V3, V4** y la demolición de recintos: a `Docs/Ideas a diseñar.md` §47. **Jerarquía de puertas: descartada.**

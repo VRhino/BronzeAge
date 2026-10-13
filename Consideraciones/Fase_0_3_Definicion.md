@@ -81,7 +81,7 @@ recorriendo zonas a mano) en vez de reutilizar `controladorDeChokepoint` (`engin
 - Los caminos comerciales, al ser estado de partida y no de mundo generado, NO suben `WORLDGEN_VERSION` —
   viven en `SimulacionExportada.caminos` (opcional, `?? []` en partidas guardadas antes de Fase 0.3).
 
-## Pendiente (documentado también en `Preguntas_Abiertas.md`)
+## Pendiente (documentado también en `typescript-final:Consideraciones/Preguntas_Abiertas.md`)
 
 - Bloqueo/escolta militar de chokepoints (Doc 1.5): necesita un concepto de "guerra activa" entre Facciones
   que no existe hoy — el combate en Fase 0 es cálculo puntual (asedio/campo abierto/intercepción), no

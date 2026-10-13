@@ -505,3 +505,24 @@ momento, con todo junto. Cada punto dice de qué mecánica sale.
 - Rotación de guarnición: un bot que quiere reforzar una frontera con `guarnecer` fuera de una conquista.
 - La política «Presión Fiscal»: el bot solo ve el baseline; darle criterio (¿sube impuestos si el oro está bajo y la población alta?).
 - El oro de reclutamiento puede estrangular al bot militar: medirlo y, si hace falta, enseñarle a priorizar oro para reclutar.
+
+## 16. Reglas de comportamiento de los bots aprendidas del batch (heredadas del NPC de gobernanza, 2026-10-13)
+
+El antiguo «NPC de gobernanza» (la IA que gobernaba Facciones desde dentro del motor TypeScript) se retira; la cesión de una Facción
+al NPC se descarta. Lo que sí vale para los bots de Rust, que juegan con el contrato de un jugador, son estas reglas, medidas en la
+Era I del batch (de 2.172 conquistas sin una sola batalla a una guerra con combates):
+
+- **Cada fundación de un bot trae 5 héroes nuevos** (los bots, no los jugadores), reservados al lanzar la Caravana de Fundación y creados cuando la plaza existe de verdad. Así las plazas hijas no nacen vacías.
+- **Recluta la mejor tropa que su plaza sepa hacer**: cada residente recluta o repone una escuadra por tick, la de escalón más alto; con el tiempo junta una escuadra por tipo.
+- **Guarnece con sus escuadras más fuertes** hasta llenar el cupo, pero nunca la última que le queda fuera.
+- **Solo sale contra lo que puede ganar**: compara el poder de su expedición con la defensa que encontrará (contando como presentes a los residentes que andan fuera), y no sale contra una plaza protegida (recién conquistada o recién fundada).
+- **No ataca la última plaza de una Facción** (conquistarla la haría desaparecer); un jugador sí puede.
+- **No conquista lo que no puede ocupar**: una casa con un solo residente no sale de campaña. **Quien conquista se queda**: se muda a la plaza tomada y la guarnece, si deja al menos otro residente en su casa.
+- **Sale de campaña con varios héroes juntos** (hasta la capacidad del asedio, sanos y sin cargo, los más fuertes primero); el Gobernador se queda.
+- **Caza sus bandidos como un jugador**: cada plaza manda a un héroe sin cargo, con su Liderazgo, a por su campamento.
+- **Reparte sus héroes entre sus plazas**: si entre la plaza con más residentes y la que menos tiene hay 2 o más de diferencia, un héroe se muda a la segunda.
+- **Toda plaza tiene Gobernador** (el primer fundador o, si no queda, el primer residente): sin él no se construyen caravanas ni edificios ni se piden subidas.
+- **Construye todas las caravanas comerciales que le caben**, y **el trueque de supervivencia salta a tiempo**: cuando la reserva de un recurso de mantenimiento no cubre 4 horas, pide lo que cuestan esas 4 horas.
+- **Una Facción de bots que pierde su última plaza se disuelve** y sus héroes vuelven a los campamentos; si la derrota otra Facción de bots, esta se la anexiona.
+- **Los bots dirigen sus columnas como cualquier jugador**: llevan a su héroe a la puerta de su residencia y entran. Ninguna tropa vuelve sola.
+- **Personalidades** (expansionista, mercantil, militarista) y diplomacia entre Facciones de bots: sin diseñar; el primer paso para que varias Facciones de bots no se lean como una sola repetida.

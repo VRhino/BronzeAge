@@ -1,6 +1,6 @@
 # simulaciones-batch
 
-Carpeta fuera de `src/` para escenarios de batch desechables — ver `Consideraciones/Diarios_Simulaciones_Batch/*.md`
+Carpeta fuera de `src/` para escenarios de batch desechables — ver `typescript-final:Consideraciones/Diarios_Simulaciones_Batch/*.md`
 para los resultados que este tipo de script produce. El script estable vive en `scripts/run-batch-sim.ts`.
 
 ## Puntos de control: medir una Era sin repetir las anteriores
@@ -38,7 +38,7 @@ resto a mano (`GameState.faccionesNpcIds` → `GameStore.avanzarTick`). Sigue te
 motor: vive en la capa de aplicación y solo consume funciones PÚBLICAS de `src/engine/*`, igual que `GameStore`
 cuando el jugador pulsa un botón.
 
-Diseño, decisiones y limitaciones: `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
+Diseño, decisiones y limitaciones: `typescript-final:Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`.
 
 Lo que cambia para un escenario de batch: **nada**, salvo la ruta del import. `ConfigNpcGobernanza.faccionesIds`
 acota el NPC a un subconjunto de Facciones; omitirlo (lo que hacen los scripts de batch) es gobernar el mundo

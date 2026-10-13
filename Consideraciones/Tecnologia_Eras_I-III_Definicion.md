@@ -213,7 +213,7 @@ Cada paso deja los tests en verde y se puede fusionar por separado.
 - [x] Construye Caballerizas (Paso 5), Mina de hierro (auto-construcción con la tecnología), Palacio (Paso 6), Sala
   del Consejo y recinto de piedra (Paso 9); la subida a 4 la pide la regla general de ascenso.
 - [ ] `TROPAS_POR_PREFERENCIA_NPC` filtra por tecnología adoptada y recluta con la clase que toca.
-- [ ] Actualizar `Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §4.9.
+- [ ] Actualizar `typescript-final:Consideraciones/NPC_Gobernanza_Facciones_Controladas.md` §4.9.
 
 ### Paso 11 — Contrato y clientes
 - [x] `contratos/v1`: catálogo de tropas con las nuevas (versión 4); `ProyeccionJugador.tecnologia` (Era, logros

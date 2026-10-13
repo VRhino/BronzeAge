@@ -115,7 +115,7 @@ larga distancia?), y qué los consume además de la Maravilla.
 
 **Estado: el EDIFICIO Maravilla implementado (único, nivel de asentamiento máximo, vía cola manual, coste
 placeholder); el CICLO no.** Diseño cerrado en `Consideraciones/Roadmap_Escalado.md` Eje 4 y
-`Preguntas_Abiertas.md` §14d: 12 meses de servidor, cierre anticipado por la primera Facción que complete la
+`typescript-final:Consideraciones/Preguntas_Abiertas.md` §14d: 12 meses de servidor, cierre anticipado por la primera Facción que complete la
 Maravilla, y la Facción ganadora persiste como Facción-legado NPC de solo mantenimiento y comercio.
 
 Requiere infraestructura de servidor / multi-instancia (reset, generación del nuevo mapa, destino de las
@@ -172,3 +172,5 @@ Salen de los documentos de decisión que se retiran. Ninguno tiene código.
 - **Después de una conquista** (antes pendientes de `Ocupacion_Post_Conquista` y `Economia_Del_Oro`): consolidación explícita de lo
   conquistado (enviar colonos, un coste que hace la posesión permanente), revuelta de un asentamiento ocupado con felicidad baja,
   sueldos de tropa en oro (upkeep continuo) y recaudación reducida en un asentamiento degradado.
+- **Progresión de imperio**: qué diferencia mecánicamente a un imperio de una alianza grande, qué pasa cuando se fragmenta y la lista
+  completa de títulos disponibles (antes `Preguntas_Abiertas` §6).
