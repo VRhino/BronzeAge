@@ -2,11 +2,11 @@
 
 ## 1. Alcance y fuentes
 
-Cubre cómo se **resuelve** un choque cuando el servidor lo calcula con números (sin Unity): columna contra columna, columna contra caravana, columna contra campamento de bandidos, ejército contra plaza (asedio), y lo que pasa cuando una plaza **cae** (conquista, saqueo, desalojo). El movimiento previo (llegar, perseguir, alcanzar a 15) está en [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md).
+Cubre cómo se **resuelve** un choque cuando el servidor lo calcula con números (sin Unity): columna contra columna, columna contra caravana, columna contra campamento de bandidos, ejército contra plaza (asedio), y lo que pasa cuando una plaza **cae** (conquista, saqueo, desalojo). El movimiento previo (llegar, perseguir, alcanzar a 3) está en [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md).
 
 - **Módulos:** `src/engine/combate.ts` (resolución), `src/engine/ejercitos.ts` (`atacarColumna`, `interceptar`, `atacarCampamento`, `asediarPlaza`, `trasDerrota`, `cargarBotin`, validaciones, `enBatalla`), `src/engine/tropa.ts` (`poderEscuadron`, `defensaDe`, `alTopeDeBatalla`), `src/engine/chatarra.ts`, `src/engine/heroe.ts` (heridos), `src/session/comandos/interaccion.ts` (comando `atacar`).
-- **Verificado contra:** `f1697af` (2026-10-10).
-- **Canon:** Doc 5.2 (combate), 5.12.3–5.12.4 (encuentros y asedio), 5.12.9 (conquista), 5.15 (batalla, guarnición), 5.16 (héroe, bajas, heridos).
+- **Reescrito el 2026-10-13** para el mundo reactivo (los choques nacen de **encuentros exactos**, no de un barrido por tick) y con la guerra logística (caravanas A/B sin inmunidad, saqueo de pueblos, avanzadas) y la calibración. El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Combate.md`.
+- **Canon:** Doc 5.2 (combate y modalidades), 5.12.3–5.12.4 (encuentros y asedio), 5.12.9 (conquista), 5.15 (batalla, guarnición), 5.16 (héroe, bajas, heridos), 3.10 (combate de caravanas), 4.2.2 (saqueo de pueblos), 5.17 (avanzadas), 2.4.1 (guerra).
 - **No es el combate de Unity.** Con servidores de batalla y al menos un héroe humano, `atacar` no resuelve nada aquí: abre una batalla de Unity (`session/batallas.ts`, ciclo de batalla del contrato) y el resultado se aplica cuando llega. Este documento es lo que corre **sin** ellos (bots contra bots, partidas sin servidor de batalla, y todo lo que Unity no cubre aún). Las consecuencias de ganar o perder (heridos, botín, conquista, desalojo) son las mismas por los dos caminos y están aquí.
 
 
@@ -20,24 +20,27 @@ Todas son lo que corre cuando **no** hay servidor de batalla o ningún bando tie
 | Columna contra caravana | `interceptar` → `interceptarCaravanaConEjercito` | `atacar` (objetivo `caravana`) | `aperturaContraCaravana` |
 | Columna contra campamento de bandidos | `atacarCampamento` → `atacarCampamentoConColumna` | `atacar` (objetivo `campamento`) | `aperturaContraCampamento` |
 | Ejército contra plaza (asedio) | `asediarPlaza` → `asediarConEjercito` | `atacar` (objetivo `asentamiento`) | `aperturaDeAsedio` |
+| Ejército contra un pueblo extractor (saqueo) | `saquearPueblo` | `atacar` (objetivo `pueblo`) | apertura de saqueo (§7.3) |
+| Ejército contra una avanzada | `atacarAvanzada` | `atacar` (objetivo `avanzada`) | apertura de avanzada (§7.4) |
 
 El motor común es `resolverCombate` (§4), salvo caravana y campamento, que comparan contra una cifra fija. (El antiguo asedio de asentamiento a asentamiento, `iniciarAsedio`, se retiró el 2026-10-12: nadie lo usaba.)
 
 ## 2. La orden: `atacar`
 
-Un comando, un objetivo: `ejercito` · `caravana` · `campamento` (de bandidos) · `asentamiento`.
+Un comando, un objetivo: `ejercito` · `caravana` · `campamento` (de bandidos) · `asentamiento` · `pueblo` · `avanzada`. **Los choques nacen de un encuentro exacto** (dos planes que se acercan a ≤ `radioEncuentro`, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): el servidor ofrece atacar en ese instante y el jugador decide; llegar nunca ataca.
 
 1. El héroe debe estar **sano** (`exigirSano`) y en una columna.
-2. **Protección de campamento de mercenarios** (`radioProteccion`): nadie inicia un combate a menos de ese radio de un campamento, ni desde allí ni contra lo que esté allí.
-3. Si hay servidores de batalla (`ctx.batallasEnUnity`) y hay humano en alguno de los bandos → se abre batalla de Unity y termina aquí.
-4. Si no, se resuelve según el objetivo (§4–§7), y el comando aplica las consecuencias.
+2. **Toda agresión entre Facciones exige guerra o la declara** (Doc 2.4.1). Si no hay guerra con el dueño del objetivo, `atacar` sin `declaraGuerra: true` se rechaza con un `detalleError` que enumera las consecuencias (contra quién queda la Facción en guerra y quién entra por arrastre); con la confirmación, **declara la guerra** (cualquier héroe puede) y ataca. Excepción: unirse a un asedio que abrió otro, siendo neutral y admitido, no la declara. Los bandidos y los campamentos no la requieren.
+3. **Protección de campamento de mercenarios** (`radioProteccion` = 10): nadie inicia un combate a menos de ese radio de un campamento, ni desde allí ni contra lo que esté allí.
+4. Si hay servidores de batalla (`ctx.batallasEnUnity`) y hay humano en alguno de los bandos → se abre batalla de Unity y termina aquí.
+5. Si no, se resuelve según el objetivo (§4–§7), y el comando aplica las consecuencias.
 
 Llegar a un sitio **no** ataca; atacar siempre se ordena (humano o bot).
 
 ## 3. Quién combate
 
 ### 3.1 Un ejército que ataca (`enBatalla`)
-De la columna entran **las escuadras de los héroes sanos**, y de ellos solo los `tope` mejores (`BATALLA.capacidad.resto` para encuentros/caravanas/bandidos, `.asedio` para asedios; hoy 5 y 5): orden por **nivel de héroe descendente, luego poder de sus escuadras descendente, luego id**. El resto de escuadras se **aparta**: no combaten ni sufren bajas, y se devuelven intactas a su columna (`conApartadas`). Las de un héroe herido no entran (Doc 5.16.4).
+De la columna entran **las escuadras de los héroes sanos**, y de ellos solo los `tope` mejores (`BATALLA.capacidad.resto` para encuentros/caravanas/bandidos = 5, `.asedio` para asedios = **15** desde el 2026-10-13: 15 contra 15): orden por **nivel de héroe descendente, luego poder de sus escuadras descendente, luego id**. El resto de escuadras se **aparta**: no combaten ni sufren bajas, y se devuelven intactas a su columna (`conApartadas`). Las de un héroe herido no entran (Doc 5.16.4).
 
 ### 3.2 Quién defiende una plaza (`defensaDe`)
 - **La guarnición** (escuadras con `enGuarnicion` de los campamentos de los residentes) — sin héroe, siempre defiende, incluso si su dueño está herido.
@@ -79,7 +82,7 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 
 ## 5. Encuentro entre columnas (`atacarColumna` / `encuentroEntreEjercitos`)
 
-Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Unity): no la propia columna; **no a los tuyos ni a un aliado**; **misma clase** (personal contra personal, ejército contra ejército); atacante a ≤ `LOGISTICA.radioEncuentro` (15) con héroe sano; el defensor con algún héroe sano.
+Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Unity): no la propia columna; **no a los tuyos ni a un aliado**; **misma clase** (personal contra personal, ejército contra ejército); atacante a ≤ `LOGISTICA.radioEncuentro` (**3** calibrado; 15 en el bloque TypeScript) con héroe sano; el defensor con algún héroe sano.
 
 1. Cada bando pasa por `enBatalla`. El atacante es el «atacante» del motor y el otro el «defensor»; **sin muralla** (multiplicador 1) y, por tanto, el defensor en campo abierto conserva la cohesión y la ventaja de 1,05 (el motor no distingue).
 2. **Gana quien dice la resolución por poder** (§4), igual que en un asedio (decisión del autor, 2026-10-10; antes el atacante solo ganaba si dejaba al defensor sin un soldado en pie y casi siempre perdía). Las bajas del 30–70 % al bando que pierde ya vienen aplicadas por `resolverCombate`. `encuentroEntreEjercitos` devuelve `ganador: 'a' | 'b'` (a = atacante).
@@ -89,7 +92,7 @@ Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Un
 
 ## 6. Asedio de una plaza (`asediarPlaza` → `asediarConEjercito`)
 
-Validaciones (`validarAsedio`): atacante **ejército** (una columna personal no abre un asedio); plaza de **otra Facción**; a ≤ 15 con héroe sano; plaza **no protegida** tras su conquista.
+Validaciones (`validarAsedio`): atacante **ejército** (una columna personal no abre un asedio); plaza de **otra Facción**; a ≤ 3 con héroe sano; plaza **no protegida** tras su conquista.
 
 Orden (`asediarConEjercito`):
 1. **Plaza protegida** (`estaProtegida`: `ahora < protegidaHasta`): rebota, `combate.asedio_resistido`, sin combate ni RNG.
@@ -109,14 +112,33 @@ Consecuencias que aplica `asediarPlaza`:
 ## 7. Otros objetivos
 
 ### 7.1 Interceptar una caravana (`interceptar` → `interceptarCaravanaConEjercito`)
-- Rechaza una caravana **adjunta** (se ataca al ejército) y una en **refugio** (dentro de la zona de influencia de otra Facción).
-- Defensa = `poderTotal(escolta, cohesión)` si la caravana tiene **escolta sin héroe**; si no, `MILITAR.defensaBaseCaravana`.
-- `gana = poder(atacante) × jitter > defensa` (**una** tirada de `rng`). Si gana: bajas del atacante 5 %, la escolta 25 % y **la caravana se destruye**; el atacante carga `umbralCapturaCaravana` (50 %) de cada recurso en su carro, limitado por el hueco libre (el resto se pierde); la escolta de una caravana capturada queda a 0 y vuelve a su campamento. Si pierde: bajas del atacante 25 %, escolta 5 %, la caravana se zafa y **los héroes del atacante quedan heridos**.
-- Interceptar no da experiencia de Facción.
+- Rechaza una caravana **adjunta** (se ataca al ejército). **Ya no hay refugio ni inmunidad**: ninguna zona protege del todo a una caravana (Doc 3.10); lo que cambia es el **tipo**.
+- **El servidor decide el tipo** por la posición de la caravana **en el instante del ataque** contra los polígonos de zona: **B — Aguante** si está en zona del dueño o de un aliado del dueño (alianza o vasallaje); **A — Disputa de carros** en zona de un enemigo, de un aliado de un enemigo, de un neutral o fuera de toda zona.
+- Atacar una caravana exige guerra con su dueño en cualquier sitio, o la declara (§2).
+- Defensa = `poderTotal(escolta, cohesión)` si tiene **escolta sin héroe**; si no, `MILITAR.defensaBaseCaravana`. Con escolta por ejército, el ejército.
+- **Con números (bot contra bot)**: `gana = poder(atacante) × jitter > defensa × ventajaDeTipo` (**una** tirada de `rng`), con `ventajaDeTipo` = ×1,25 en **B** (placeholder) y ×1 en **A**.
+  - **A, si gana el atacante**: pierde la caravana **la mitad de los carros, redondeando hacia arriba**, con su animal; el atacante carga la carga de esos carros en los suyos hasta donde quepa (el resto se destruye). Si pierde todos, la caravana se elimina (Comercio §libera cupo y aplica el cooldown).
+  - **B, si gana el atacante**: el dueño pierde el **70 %** de la carga, recurso a recurso, y **el 30 % se salva siempre** (llega en los carros que queden o con los carreteros); también pierde la mitad de los carros (placeholder). El atacante carga lo que le quepa del 70 %.
+  - Si gana el defensor: no se pierde nada; bajas del atacante 25 %, escolta 5 % y los héroes del atacante quedan heridos.
+- **Con Unity**: el servidor manda el tipo (`modalidad: 'disputa' | 'aguante'`, con los carros identificados) y Unity responde quién ganó y los `carrosPerdidos`. Los carros **no cambian de manos en el mundo: solo la carga**.
+- Desaparece el «captura exactamente el 50 %» (`umbralCapturaCaravana` queda solo como referencia de la versión TypeScript).
+- Interceptar no da experiencia de Facción. Sí da la defensa de una caravana: **experiencia de Facción por héroe participante** del bando que defiende (Doc 2.2).
 
 ### 7.2 Atacar un campamento de bandidos (`atacarCampamento` → `atacarCampamentoConColumna`)
+- **Los bandidos no actúan dentro de ninguna zona de influencia** y solo atacan caravanas que pasan junto a su campamento (un **encuentro exacto** con el radio de ataque, 7). Es PvE y no exige guerra.
 - La columna debe llevar soldados; compara `poder × jitter` con el `poder` fijo del campamento (**una** tirada). Gana → bajas 5 %, el campamento cae (su botín de oro por héroe, `botinDeBandidos`, lo carga el comando en el carro de la columna: lo que no cabe se pierde); pierde → bajas 25 %, héroes heridos y se pierde la mitad del carro (nadie se la queda). Eventos: `combate.campamento_destruido` si gana y `combate.ataque_campamento_fallido` si pierde; el comando les añade al payload el oro de cada héroe (si cae) o el carro perdido (si aguanta).
 - XP de Facción: `NIVEL_FACCION.xp.bandidos / nivel de Facción` por campamento destruido (0 desde `nivelSinXpBandidos`), **sin exigir combate digno**.
+
+### 7.3 Saqueo de un pueblo extractor (`saquearPueblo`)
+- Atacante **ejército** de otra Facción (exige guerra o la declara, §2), a ≤ 3 del pueblo. Es una **batalla propia** de saqueo, **nunca de conquista**: el pueblo no cambia de dueño ni se destruye.
+- Defensa: la **guarnición de serie** (30 mineros sin dueño, IA, fuera de cupo) y, si hay, quien lo defienda; se resuelve con `resolverCombate` y la ventaja del defensor de B.
+- **El pueblo protege el 50 % de su capacidad**: si gana el atacante, se lleva solo lo que esté **por encima de la mitad**, recurso a recurso, hasta lo que le quepa en los carros; si gana el defensor, nada. Un almacén de 500: con 250 o menos, nada; con 275, 25; con 500, 250.
+- La guarnición de serie, si cae, se repone gratis en 6 horas.
+
+### 7.4 Ataque a una avanzada (`atacarAvanzada`)
+- Solo un **ejército** la abre; dura 30 minutos como un asedio. Exige guerra o la declara.
+- Defienden la **guarnición de serie** (por etapa: atalaya 1 escuadra del escalón 2; fuerte 3 + 2 del escalón 3; ciudadela 5 del escalón 3 + 3 del escalón 4) y la de jugadores (14 / 45 / 90 puntos de Liderazgo por héroe residente de la madre).
+- Si gana el atacante: **atalaya destruida**; **fuerte en ruinas** con 1 día de invulnerabilidad (si sigue en ruinas pasado ese día y lo atacan y gana el atacante, queda destruido); **ciudadela en ruinas, nunca destruida**. Del almacén, el atacante se lleva lo que le quepa en los carros. En ruinas no funciona nada (visión, guarnición, reabastecimiento) y la guarnición de jugadores queda a 0 y vuelve al campamento de su héroe. Reparar cuesta el 50 % de construir la etapa.
 
 ## 8. Conquista: lo que le pasa a la plaza (`aplicarConquista`)
 
@@ -129,12 +151,13 @@ Pura y determinista (no usa RNG). La ciudad cambia de dueño entera:
 - **Las decisiones del gobierno derrotado caen**: políticas activas, reserva manual del Tesorero, pausa de auto-construcción y recetas paradas.
 - `medidorMantenimiento = 100`; `protegidaHasta = ahora + proteccionMinutos` (inmune a otro asedio un día); `ocupacionHasta = ahora + duracionMinutos` (recaudación y crecimiento al `factorRecaudacion` / `factorCrecimiento`, mantenimiento congelado).
 - **Queda sin guarnición**: nadie la guarnece por haberla ganado; si los conquistadores quieren defenderla, tienen que pasar a residir en ella.
+- **Sus pueblos extractores y sus avanzadas pasan al conquistador** con la zona (en una **ruina** de la madre, los pueblos y las atalayas/fuertes desaparecen y la ciudadela queda como ruina sin dueño). Las **caravanas aparcadas** en la plaza se destruyen (Doc 3.13.7).
 
 ## 9. Desalojo (`desalojarResidentes`)
 
 Nadie se queda dentro de una plaza enemiga:
 - Quien estaba **dentro**: si tiene una columna aparcada a la puerta, vuelve a ella; si no, nace una **columna personal** estacionada en la plaza (`${plaza}-salida-${héroe}-${instante}`), con el carro vacío y las escuadras con las que **defendió y sobrevivieron**; su `faccionId` es la de la plaza si residía, `''` si era visitante. Un residente herido no defendió, así que sale solo.
-- **Todos los residentes**: el resto de su campamento (guarnición incluida) queda a 0 y pasa con ellos al **asentamiento más cercano de su Facción** (empate por id), donde pasan a residir (se añaden a sus `casasCompradas`). **Sin ninguno**, pasan al **campamento de mercenarios más cercano** a la plaza perdida (`acogerEnCampamentoMasCercano`), con sus escuadras a 0 pero suyas, con su nivel y experiencia. Lo que llevaban fuera (columna, escolta) no se toca.
+- **Todos los residentes**: el resto de su campamento (guarnición incluida: tropa **prestada** que ya no puede seguir donde está, Doc 5.15.2b) queda a 0 y pasa con ellos al **asentamiento más cercano de su Facción** (empate por id), donde pasan a residir (se añaden a sus `casasCompradas`). **Sin ninguno**, pasan al **campamento de mercenarios más cercano** a la plaza perdida (`acogerEnCampamentoMasCercano`), con sus escuadras a 0 pero suyas, con su nivel y experiencia. Lo que llevaban fuera (columna, escolta) no se toca.
 - El traslado **no mira el cupo de viviendas** del destino (`ponytail:` anotado; si hace falta tope, ahí).
 
 ## 10. Derrota de Facción (`registrarDerrota`)
@@ -177,6 +200,8 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
 ```
 <!-- /parametros -->
 
+Valores vigentes para la reconstrucción: `radioEncuentro` 3, `radioProteccion` 10, `BATALLA.capacidad.asedio` 15, radio de ataque de bandidos 7; `ventajaDefensor` de B ×1,25 (placeholder).
+
 <!-- parametros:HEROE -->
 ```json
 {
@@ -202,7 +227,7 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
 
 ## 13. Invariantes
 
-- Un combate con números consume **exactamente** las tiradas indicadas (2 en `resolverCombate`, 1 en caravana y campamento, 0 en las ramas sin combate): lo vigila el guardián de determinismo.
+- Un combate con números consume **exactamente** las tiradas indicadas (2 en `resolverCombate`, 1 en caravana y campamento, 0 en las ramas sin combate), en el orden de la cola de eventos: lo vigila la prueba de reproducción.
 - Las bajas son permanentes y una escuadra nunca desaparece: queda a `cantidad: 0` hasta que se rellene.
 - Una columna con todos sus héroes heridos no se puede atacar ni perseguir.
 - Una plaza conquistada es inatacable durante `proteccionMinutos`.
