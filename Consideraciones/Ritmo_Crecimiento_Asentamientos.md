@@ -1,5 +1,7 @@
 # Ritmo de crecimiento de los asentamientos
 
+> **Estado (2026-10-13): historia.** El mecanismo y las cifras vigentes viven en `Docs/Game/4` §4.5 y `Docs/Mechanics/Economia_Construccion.md`. Aprobado: el ritmo de los niveles 2 y 3 y los objetivos por Era. Pospuesto con las Eras IV y V: gates, costes y obras de los niveles 4 y 5, los bienes de lujo y atar el 3 → 4 a `instituciones_civicas`. Las mediciones de abajo son del motor TypeScript (`typescript-final`) y se rehacen con el motor nuevo.
+
 **Abierto el 2026-09-25.** Sale de la revisión de BA-006: **D49** fija qué nivel de asentamiento le toca a cada
 Era, y **D34/D44/D48** fijan cuánto dura cada Era. Para saber si D49 es cierto hace falta saber **cuánto tarda
 de verdad un asentamiento en subir de nivel**, y eso hoy no está medido. Aquí está el mecanismo tal como vive

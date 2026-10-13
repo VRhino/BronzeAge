@@ -122,3 +122,4 @@ Al comprobar cada documento de la tabla A contra el canon y `Docs/Mechanics/`, l
 
 Pendiente de la guerra logística: el contrato (Doc 01, Doc 02, `src/contratos/v1/`) se redefine en la fase 2, y los documentos de `Mechanics` afectados (Comercio_Caravanas, Combate, Niebla_De_Guerra, Movimiento_Ejercitos, Economia_Construccion) llevan su parte al reescribirse.
 
+**Ritmo de crecimiento (2026-10-13):** hecho. Aprobado el ritmo de los niveles 2 y 3 y los objetivos por Era; los niveles 4 y 5 se posponen con las Eras IV y V. `Ritmo_Crecimiento_Asentamientos.md` pasa a historia. **Eras:** `BA-006_Revision_Tecnologia_Eras.md` queda pospuesto entero para después, con el motor nuevo. La tabla A queda cerrada.
