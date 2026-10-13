@@ -436,6 +436,7 @@ dependencies = [
  "base",
  "cola",
  "contrato",
+ "encuentros",
  "mundo",
  "persistencia",
  "prost-types",
@@ -444,6 +445,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tokio",
+ "vision",
 ]
 
 [[package]]

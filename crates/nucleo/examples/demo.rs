@@ -10,6 +10,7 @@
 
 use base::{Instante, Punto, Rng};
 use mundo::{Mundo, OpcionesValidacion, TAMANO_CELDA};
+use nucleo::espacial::{GeneradorEncuentros, GeneradorVision};
 use nucleo::{Ajustes, Arranque, Comando, EventoNucleo, Nucleo, Peticion, Reglas};
 use rutas::Rutas;
 use std::fmt::Write as _;
@@ -64,6 +65,8 @@ fn texto_del_evento(e: &EventoNucleo) -> String {
     match e.codigo.as_ref() {
         "ejercito.llega" => format!("{nombre} llega a su destino"),
         "ejercito.sin_viveres" => format!("{nombre} se queda sin víveres"),
+        "ejercito.encuentro" => format!("Ejército {} y Ejército {} se encuentran", e.ejercitos[0], e.ejercitos.get(1).copied().unwrap_or(0)),
+        "vision.contacto" => format!("La facción f{} ve por primera vez a la f{} ({nombre})", e.datos.first().map_or(0, |d| d.1) + 1, e.datos.get(1).map_or(0, |d| d.1) + 1),
         "ejercito.viveres_bajos" => format!("{nombre}: víveres bajos ({:.1})", e.datos.first().map_or(0, |d| d.1) as f64 / 1000.0),
         otro => format!("{nombre}: {otro}"),
     }
@@ -88,8 +91,11 @@ fn main() {
     println!("mundo {}: cargar y validar {:?}; rutas ({} nodos, espaciado {}): {:?}", &mundo.hash()[..12], t_carga, rutas.nodos(), rutas.espaciado(), t.elapsed());
 
     // ── El núcleo y las columnas ──
-    let ajustes = Ajustes { retencion_cambios: 1 << 20, ..Ajustes::default() };
+    let ajustes = Ajustes { retencion_cambios: 1 << 20, muestreo_ms: 250, ..Ajustes::default() };
     let mut nucleo = Nucleo::nuevo(Arranque { reglas: Reglas::default(), ajustes, semilla, inicio: 0, rutas, mundo_hash: mundo.hash().to_owned() });
+    // Encuentros exactos entre columnas y visión muestreada cada 250 ms (generadores espaciales del núcleo).
+    nucleo.agregar_generador(Box::new(GeneradorEncuentros::nuevo()));
+    nucleo.agregar_generador(Box::new(GeneradorVision::nuevo()));
     let campamentos: Vec<(String, Punto)> =
         mundo.campamentos().iter().map(|c| (c.id.clone(), c.posicion.map(|p| Punto::new(p.x, p.y)).expect("campamento con posición"))).collect();
     assert!(!campamentos.is_empty(), "el mundo no tiene campamentos");
@@ -220,13 +226,14 @@ fn main() {
         j.push_str("]}");
     }
     // Se conservan todos los avisos de víveres y se muestrean las llegadas hasta no pasar de MAX_EVENTOS_JSON.
-    let llegadas = eventos.iter().filter(|e| e.codigo == "ejercito.llega").count();
+    let muestreable = |c: &str| c == "ejercito.llega" || c == "ejercito.encuentro";
+    let llegadas = eventos.iter().filter(|e| muestreable(&e.codigo)).count();
     let resto = eventos.len() - llegadas;
     let cada = if eventos.len() > MAX_EVENTOS_JSON { llegadas.div_ceil(MAX_EVENTOS_JSON.saturating_sub(resto).max(1)) } else { 1 };
     j.push_str("],\"eventos\":[");
     let (mut k, mut escritos) = (0usize, 0usize);
     for e in &eventos {
-        if e.codigo == "ejercito.llega" {
+        if muestreable(&e.codigo) {
             k += 1;
             if (k - 1) % cada != 0 {
                 continue;

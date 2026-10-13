@@ -12,6 +12,7 @@ mod comando;
 mod estado;
 mod generadores;
 mod nucleo;
+pub mod espacial;
 pub mod proyeccion;
 pub mod sesiones;
 
