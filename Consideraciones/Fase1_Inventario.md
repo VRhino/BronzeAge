@@ -87,3 +87,21 @@ documento (ver `Reconstruccion_Definicion.md` §4.1).
 2. Los 7 pendientes de `Mecanicas a desarrollar.md`: caravanas diferidas, Eras (§20), tope de asedio (§38), guerra logística (§44), repostar y enganchar (§45), bots emergentes (§46).
 3. Trazado urbano: ¿lo calcula Unity o lo entrega el artefacto de mundo?
 4. NPC de gobernanza: ¿se conserva la cesión de Facción?
+
+## Decisiones del 2026-10-13
+
+| # | Tema | Decisión |
+|---|---|---|
+| 1 | Inventario | Mi propuesta es el plan; se revisa documento a documento |
+| 2 | Worldgen anterior (`Fase_0_1`, `0_3`, `0_4`) | Descartar (antes, caminos y chokepoints al canon) |
+| 3 | `Docs/Mechanics` | **Reescribir** los documentos para el mundo reactivo y la calibración; lo de hoy queda en `typescript-final` |
+| 4 | Trazado urbano | Lo calcula el **servidor** y lo entrega; Unity solo dibuja |
+| 5 | NPC de gobernanza (cesión de Facción) | Descartar |
+| 6 | §8 caravanas diferidas (cría, camello, catálogo de carros, carro unificado) | Todo a `Docs/Ideas a diseñar.md` |
+| 7 | §20 Eras IV-V y otras vías | Como recomendé: IV-V pospuestas con el catálogo como datos abiertos; equipo de asedio entra con lo militar; vías de conquista y comercio a Ideas |
+| 8 | §38 asedio | 15 contra 15 en el canon y en el archivo de constantes |
+| 9 | §44 y §45 | Decididos; entran tal cual en la reconstrucción |
+| 10 | §46 bots | Lista a `Arquitectura/12`; se aborda en la fase 7 |
+
+Añadido el mismo día: `Docs/Mechanics/Comandos_Parametros.md`, con la forma de `params` de los 122 comandos volcada de `session/comandos/esquemas.ts`
+(la frontera «forma en el borde, reglas en el motor» se conserva en el contrato 05).
