@@ -7,3 +7,4 @@
 # del repo, que hoy se normaliza solo con autocrlf.
 .husky/** text eol=lf
 *.sh text eol=lf
+contratos/golden/*.bin binary
