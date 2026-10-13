@@ -7,7 +7,7 @@ alrededor del casco urbano que se levanta celda a celda.
 - **Módulos:** `src/engine/muralla.ts` (≈980 líneas: trazo, comprometer, obra, mejora, ampliación, defensa, upkeep), `src/engine/trazado.ts` (suelo ocupado, red de calles, preferencia intramuros),
   `src/engine/combate.ts` (uso en el asedio y daño en la conquista), `src/engine/asentamientoQuery.ts` (cupo de guarnición), `src/engine/mantenimiento.ts` (upkeep),
   `src/session/comandos/murallas.ts` (comandos).
-- **Canon:** Doc 4 «Murallas», Doc 4.5 (nivel 4), Doc 5.15.3 (guarnición). **Diseño e historia:** `Consideraciones/Murallas_Definicion.md`.
+- **Canon:** Doc 4 «Murallas», Doc 4.5 (nivel 4), Doc 5.15.3 (guarnición). **Diseño e historia:** `typescript-final:Consideraciones/Murallas_Definicion.md`.
 - Vocabulario de celdas, rejilla y red de calles: [`Trazado_Urbano.md`](Trazado_Urbano.md).
 
 ## 1. Idea

@@ -42,7 +42,7 @@ radio operativo con tropa propia (calculado con la prestada completa, 85 soldado
 operativo sin comprobar que hubiera trigo con el que llenarlo. En batch, ningún asentamiento llegaba a llenar un
 carro y 26 de 28 no podían aportar ni un grano sin bajar de su reserva de comida. Después se dobló la
 producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las cuatro palancas posibles en
-`Consideraciones/Movimiento_Ejercitos_Definicion.md` §10.
+`typescript-final:Consideraciones/Movimiento_Ejercitos_Definicion.md` §10.
 
 ## 36. Héroes bot: calibración
 
@@ -63,7 +63,7 @@ misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o
 
 Las cifras de `MERCENARIOS` (`constants.ts`) son placeholder, sin calibrar con batch. Desde el 2026-10-08 la tropa
 prestada sale **completa** (25-30 por escuadra, antes 15): el anillo de bandidos se calculó contra 15 lanceros
-(`Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md` §423) y el cerebro «sin plaza» ya cuenta 50 de poder
+(`typescript-final:Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md` §423) y el cerebro «sin plaza» ya cuenta 50 de poder
 (`PODER_PRESTADO`). Medir si los niveles de bandido siguen siendo un reto.
 
 ## 8. Caravanas: visibilidad por tamaño

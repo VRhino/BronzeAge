@@ -148,3 +148,19 @@ Sale del triaje de los cabos sueltos comerciales (2026-10-06).
   medio. No existe.
 - **Retirada del almacén al salir** (Doc 1.10.2): que el Tesorero pueda fijar cuánto material puede llevarse cada
   héroe.
+
+## 47. Aparcado en la fase 1 de la reconstrucción (2026-10-13)
+
+Salen de los documentos de decisión que se retiran. Ninguno tiene código.
+
+- **Órdenes condicionales**: reglas de enfrentamiento y retirada automática por umbral de bajas, para que un jugador que
+  vuelve tras horas sin conectar no encuentre solo un log. Es la crítica más profunda del consejo al movimiento de
+  ejércitos; el movimiento es su prerrequisito.
+- **Tope del Tesorero a la retirada del almacén**: cuánto material puede llevarse cada héroe al salir (Doc 1.10.2). Gancho
+  previsto desde el diseño del jugador situado.
+- **Demolición de un recinto completo** (incendio, asedio, abandono): hoy nada de lo construido se destruye. El modelo de
+  celda de muro ya admite estado dañado por celda.
+- **Trozos diferidos del revamp de caravanas** (antes `Mecanicas a desarrollar.md` §8.1, decidido el 2026-10-13: todo a
+  ideas): cría de animales de tiro, camello inmune al desierto, catálogo ampliado de carros y unificación del carro de
+  columna y del de caravana en un solo tipo `Carro`.
+

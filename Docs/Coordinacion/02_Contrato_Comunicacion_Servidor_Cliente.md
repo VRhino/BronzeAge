@@ -382,7 +382,7 @@ campamento retira la tropa prestada a quien deja de residir en él (D45), esté 
 - Como el resto de comandos de `/jugador/*`, todos devuelven en la misma respuesta la proyección propia
   actualizada, y los rechazos de dominio salen como `resultado.ok: false` con su `codigoError`.
 
-### 4.2b Comandos del campamento de mercenarios (2026-10-04, Doc 1.9b; plan en `Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md`)
+### 4.2b Comandos del campamento de mercenarios (2026-10-04, Doc 1.9b; plan en `typescript-final:Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md`)
 
 Todos van por `POST .../comandos` como el resto. «En el campamento» = dentro (`ubicacion.tipo === 'mercenarios'`) o con su
 columna a la puerta (`MOVIMIENTO.radioPuerta`).

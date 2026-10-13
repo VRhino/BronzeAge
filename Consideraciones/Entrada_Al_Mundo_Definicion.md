@@ -110,7 +110,7 @@ son de nadie. Queda un reparto limpio:
 
 > **Descartado por decisión del usuario.** No se puede entrar en una Facción NPC, así que no hay vida de huésped
 > dentro de ella. El vestíbulo es ahora el campamento de mercenarios: ver
-> `Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md` (D49). Se conserva el texto como historia.
+> `typescript-final:Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md` (D49). Se conserva el texto como historia.
 
 Idea del usuario, y no es un adorno: **es el contenido del vestíbulo**. Sin ella la fase de huésped es
 "espera a poder fundar", que es la peor versión de esto.
@@ -145,6 +145,6 @@ y porque decide si el vestíbulo es un sitio donde se juega o una sala de espera
 5. ~~El resto del paso 9 del jugador situado~~ — **HECHO (2026-09-07)**: spawn aleatorio, memoria personal
    (ya no inerte: hay columnas huérfanas de verdad que la alimentan) y fundar donde se está — aparecer con
    columna, el contrato de fundación sin `posicion`, y la columna que se disuelve al fundar reutilizando
-   `cruzarLaPuerta`. Ver `Jugador_Situado_Definicion.md` §5.9 para el detalle y lo que cambió del plan
+   `cruzarLaPuerta`. Ver `typescript-final:Consideraciones/Jugador_Situado_Definicion.md` §5.9 para el detalle y lo que cambió del plan
    original.
 6. ~~**Aparte, sin fecha:** qué hace un huésped (§5).~~ Descartado (2026-10-03).

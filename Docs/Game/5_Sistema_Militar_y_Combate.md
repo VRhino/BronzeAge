@@ -200,6 +200,8 @@ En un ejército de varios héroes, **cada uno se valida contra SU propio Lideraz
 **A mayor calidad de la tropa, mayor coste de Liderazgo.** Las tropas se agrupan en
 **cinco escalones**, de leva a élite, y el coste es el de su escalón — no una fórmula sobre su poder.
 
+**El coste mira el tipo de tropa, no cuántos soldados quedan** (decidido el 2026-10-13): una escuadra mermada paga el Liderazgo completo (3 de 20 cuesta lo mismo que 20 de 20). Así no se puede sacar a campaña una élite parcial para pagar menos.
+
 | Escalón | Coste | Soldados por escuadrón (de partida) | Caben con 100 | Tropas |
 |---|---|---|---|---|
 | 1 — leva | 7 | 25 | 14 | Leñadores, Granjeros |

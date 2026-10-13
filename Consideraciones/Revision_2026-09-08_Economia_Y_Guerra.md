@@ -92,7 +92,7 @@ El NPC no lo necesita — sostiene por la guarnición-ejército.
 
 - `Preguntas_Abiertas.md` §1: "cómo se conquista un asentamiento enemigo exactamente" → guarnición del
   conquistador + saqueo + ventana de ocupación.
-- `Movimiento_Ejercitos_Definicion.md` punto abierto #2 (cupo de nivel al conquistar) — sigue sin re-evaluarse;
+- `typescript-final:Consideraciones/Movimiento_Ejercitos_Definicion.md` punto abierto #2 (cupo de nivel al conquistar) — sigue sin re-evaluarse;
   anotar que la ocupación no lo toca.
 - `Preguntas_Abiertas.md` §1: "cómo se declara una guerra" → **sigue abierta**. Hoy cualquier no-aliado es
   atacable; no hay estado de guerra. Fuera del alcance de esta sesión.

@@ -542,7 +542,7 @@ parar"). `conquistasAcumuladas` sigue vivo (48 en 1000 ticks) — el NPC conquis
 - ✅ **Doc 2.5** — el "beneficio de ciudadanía: reclutar" matizado; comando `cambiarResidencia` documentado
   (Doc 2.6 no aplica — es fusión de Facciones).
 - ✅ **`Preguntas_Abiertas.md` §1** ("cómo se conquista exactamente") — marcado RESUELTO.
-- ✅ **`Movimiento_Ejercitos_Definicion.md`** §11.1 y punto #16 — nota de que la ocupación supera "escuadrones
+- ✅ **`typescript-final:Consideraciones/Movimiento_Ejercitos_Definicion.md`** §11.1 y punto #16 — nota de que la ocupación supera "escuadrones
   a 0 al conquistar" y no toca el cupo de nivel.
 - ✅ **`Economia_Del_Oro_Definicion.md`** §Paso 6 — "Iteración 3": la ocupación es un dampener nuevo de
   `oroMedio` (recaudación ×0.5 en plazas ocupadas + drenaje al reponer guarniciones), a calibrar junto con

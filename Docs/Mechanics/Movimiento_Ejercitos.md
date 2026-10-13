@@ -307,7 +307,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 - **`costeEnPunto` se lee al empezar el tick**: un paso largo no «ve» la montaña que está a medio paso. Es barato y suficiente con ticks de un minuto.
 - **El tipo no se deriva del número de miembros** (ver §2): derivarlo reabriría el agujero de rectificar rumbo en un ejército reducido a uno.
 - **Cancelar la marcha es del Líder, no atrapa a nadie**: el que no quiera seguir se separa.
-- **Una escuadra mermada paga su Liderazgo completo**: si se midiera por soldados vivos, la tropa cara se podría sacar «en dosis pequeñas». Punto abierto conocido (`Consideraciones/Movimiento_Ejercitos_Definicion.md` §7).
+- **Una escuadra mermada paga su Liderazgo completo**: si se midiera por soldados vivos, la tropa cara se podría sacar «en dosis pequeñas». Punto abierto conocido (`typescript-final:Consideraciones/Movimiento_Ejercitos_Definicion.md` §7).
 - **Disolverse por hambre pierde las caravanas adjuntas** aunque el canon solo lo diga del ejército derrotado: en los dos casos deja de existir en campo abierto.
 - **Los eventos de deserción llevan `asentamientoId`**: sin él saldrían globales.
 

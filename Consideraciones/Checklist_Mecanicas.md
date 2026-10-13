@@ -49,7 +49,7 @@ Diseñado (a veces "cerrado") pero **sin una línea en `src/`**:
 
 **Cerrado desde la auditoría anterior (2026-09-06 → 2026-09-08):** impuestos / el oro como presupuesto
 (`Economia_Del_Oro_Definicion.md`, motor hecho, calibrando); el jugador como entidad situada + su movimiento
-libre + el spawn aleatorio de onboarding (`Jugador_Situado_Definicion.md`, 2026-09-07); comerciar con una
+libre + el spawn aleatorio de onboarding (`typescript-final:Consideraciones/Jugador_Situado_Definicion.md`, 2026-09-07); comerciar con una
 plaza ajena desde su puerta (`Comercio_Fisico_Definicion.md`, 2026-09-07).
 
 Y una corrección en sentido contrario: **los chokepoints ya no existen**. Estaban marcados aquí como
@@ -65,7 +65,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 ## Fundación y zonas de influencia
 - ✅ Fundación libre, zona de influencia automática, reglas de construcción, fronteras con límite duro — `código: ✔` (`engine/zones.ts`, `engine/settlement.ts`)
 - ✅ Fundación grupal (hasta 5 jugadores) — `código: ✔` (`engine/settlement.ts`)
-- ✅ Onboarding: spawn aleatorio del jugador en el mundo abierto — `código: ✔` (2026-09-07, parte del jugador situado — `Jugador_Situado_Definicion.md` §5 paso 9)
+- ✅ Onboarding: spawn aleatorio del jugador en el mundo abierto — `código: ✔` (2026-09-07, parte del jugador situado — `typescript-final:Consideraciones/Jugador_Situado_Definicion.md` §5 paso 9)
 - ❌ **Chokepoints estratégicos — DESCARTADOS (2026-08-26, decisión del usuario: "no me está dando nada en este momento")** — `código: ✘`. Retirados por completo en `WORLDGEN_VERSION` v15: `worldgen/chokepoints.ts`, `engine/chokepoints.ts`, `CHOKEPOINTS_PEAJE`, el tipo `Chokepoint` y su renderizado. El resto del mundo sale bit a bit idéntico para la misma seed.
 - ✅ Cap de fundación por Facción, escala con el nivel de Facción (1→7) — `código: ✔` (`CAP_FUNDACION_POR_NIVEL`)
 - ✅ Período de gracia sin cobro de Mantenimiento al fundar — `código: ✔` (`MANTENIMIENTO.graciaMinutos = 60`)
@@ -127,7 +127,7 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ Caché de búsqueda de colocación: la búsqueda deja de repetirse cada tick — `código: ✔` (`cacheTrazado.test.ts`)
 
 ## Murallas y recintos *(mecánica nueva, no estaba en este documento)*
-- ✅ Diseño cerrado en `Consideraciones/Murallas_Definicion.md` (2026-08-31) — `código: ✔` (`engine/muralla.ts`, `MURALLA`, comandos `comprometerRecinto` / `abandonarRecinto` / `mejorarRecinto`)
+- ✅ Diseño cerrado en `typescript-final:Consideraciones/Murallas_Definicion.md` (2026-08-31) — `código: ✔` (`engine/muralla.ts`, `MURALLA`, comandos `comprometerRecinto` / `abandonarRecinto` / `mejorarRecinto`)
 - ✅ El recinto NO es un `EdificioTipo`: entidad propia con trazo de celdas de muro, puertas geométricas congeladas con el trazo, torres por paso y niveles 1-3 (empalizada → muralla de piedra) — `código: ✔`
 - ✅ Obra progresiva con coste por celda y upkeep por celda; ampliación de recinto; arrabal / extramuros — `código: ✔` (`costoDeTrazo`, `avanzarObraDeRecintos`, `upkeepDeRecintos`, `edificiosExtramurosDe`)
 - ✅ Multiplicador defensivo por recinto (1.3 / 1.8 / 2.5) aplicado en asedio — `código: ✔` (`multiplicadorDefensivoDeRecintos`)
@@ -186,11 +186,11 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 - ✅ **Exilio** (Doc 1.10.5 / 2.8): la puerta de cada asentamiento se cierra por grupo —neutrales, aliados, enemigos—, la fija el Gobernador o el Rey — `código: ✔` (2026-10-02)
 - ✅ Declaración formal de guerra (Doc 2.4.1): estado y paz mutua; atacar sigue libre. Unidades navales — fuera de alcance de Fase 0
 - 🔶 Establos / carros de guerra sin edificio de reclutamiento definido; `poderBase` de las tropas es placeholder — `código: ◐`
-- 🔶 Varianza de combate (abierta en `Movimiento_Ejercitos_Definicion.md` §1.4) — `código: ◐`
+- 🔶 Varianza de combate (abierta en `typescript-final:Consideraciones/Movimiento_Ejercitos_Definicion.md` §1.4) — `código: ◐`
 
 ## Ejércitos, movimiento y suministro en campaña *(mecánica nueva, no estaba en este documento)*
-- ✅ Diseño cerrado y mecánica **cerrada el 2026-09-04** (`Consideraciones/Movimiento_Ejercitos_Definicion.md`, reglas en Doc 5.11-5.13) — `código: ✔`
-- ✅ Un ejército es la única forma de salir del asentamiento; un solo destino, y los encuentros salen de la geometría — `código: ✔` (`engine/ejercitos.ts`, `engine/movimiento.ts`). ⚠️ **Las dos últimas mitades las revisa el diseño del jugador situado** (2026-09-06): "un solo destino" pasa a ser rectificable y "los encuentros salen de la geometría" pasa a "la geometría ofrece, el jugador declara" — ver `Consideraciones/Jugador_Situado_Definicion.md` §1.1c.
+- ✅ Diseño cerrado y mecánica **cerrada el 2026-09-04** (`typescript-final:Consideraciones/Movimiento_Ejercitos_Definicion.md`, reglas en Doc 5.11-5.13) — `código: ✔`
+- ✅ Un ejército es la única forma de salir del asentamiento; un solo destino, y los encuentros salen de la geometría — `código: ✔` (`engine/ejercitos.ts`, `engine/movimiento.ts`). ⚠️ **Las dos últimas mitades las revisa el diseño del jugador situado** (2026-09-06): "un solo destino" pasa a ser rectificable y "los encuentros salen de la geometría" pasa a "la geometría ofrece, el jugador declara" — ver `typescript-final:Consideraciones/Jugador_Situado_Definicion.md` §1.1c.
 - ✅ **Liderazgo**: coste por escalón de tropa y tope de lo que un jugador puede llevar — `código: ✔` (`engine/liderazgo.ts`, `LIDERAZGO`)
 - ✅ Comandos completos: movilizar, unirse, replegar, estacionar, adjuntar / soltar / cargar / entregar caravana, reabastecer aliados — `código: ✔`
 - ✅ Suministro en campaña: radio operativo, caravanas adjuntas como tren de suministros, ejército sin nada se disuelve — `código: ✔` (`LOGISTICA`)
@@ -256,14 +256,14 @@ geometría, control por zona de influencia, peaje en oro, tipo de dominio y rend
 ## El jugador como entidad en el mundo
 
 > **IMPLEMENTADO (2026-09-07).** Las dos entradas de abajo se diseñaron juntas —la segunda es el verbo de la
-> primera— en `Consideraciones/Jugador_Situado_Definicion.md`: treinta y seis decisiones del usuario en once
+> primera— en `typescript-final:Consideraciones/Jugador_Situado_Definicion.md`: treinta y seis decisiones del usuario en once
 > rondas, representación en el motor, plan de 10 pasos (todos cerrados), invariantes y abiertos. El movimiento
 > es clic a destino (miniatura estilo Total War), así que Fase 0 y Fase 1 comparten modelo y **no hace falta
 > netcode**. Canon: Doc 0 (glosario), Doc 1 §1.3/§1.10, Doc 2 §2.5, Doc 5 §5.1/§5.12/§5.14. El comercio con
 > plaza ajena salió a mecánica propia y también está hecho (`Comercio_Fisico_Definicion.md`). Queda solo
 > calibración de `MOVIMIENTO.*` / `VISION.*`.
 
-- ✅ El jugador tiene una ubicación física: nace en mundo abierto, funda y entra en el asentamiento, sale, entra en otros; ve el mapa de lo conocido desde cualquier parte pero **nunca** el interior de un asentamiento en el que no esté físicamente; el Gobernador puede prohibir la entrada a neutrales o enemigos — `código: ✔` (2026-09-07). `Jugador.ubicacion` (`asentamiento`|`columna`|`desconectado`), proyección recortada al interior de la plaza que se pisa, `plazasRecordadas`, `politicaDeAcceso` + `vetarJugador`. Migración v8→v9/v10. Diseño en `Consideraciones/Jugador_Situado_Definicion.md`; canon Doc 0/1/2/5.
+- ✅ El jugador tiene una ubicación física: nace en mundo abierto, funda y entra en el asentamiento, sale, entra en otros; ve el mapa de lo conocido desde cualquier parte pero **nunca** el interior de un asentamiento en el que no esté físicamente; el Gobernador puede prohibir la entrada a neutrales o enemigos — `código: ✔` (2026-09-07). `Jugador.ubicacion` (`asentamiento`|`columna`|`desconectado`), proyección recortada al interior de la plaza que se pisa, `plazasRecordadas`, `politicaDeAcceso` + `vetarJugador`. Migración v8→v9/v10. Diseño en `typescript-final:Consideraciones/Jugador_Situado_Definicion.md`; canon Doc 0/1/2/5.
 - ✅ Movimiento libre por el mapa general: más rápido sin tropas (`MOVIMIENTO.velocidadJugador`), consumo de trigo casi nulo, por clic sobre el mapa (`salirAlMundo`/`marcharA`) — `código: ✔` (2026-09-07). La duda de "100% cliente" quedó **resuelta: no** (la posición es T3 por doc 9). Comandos de interacción por anillo: `inspeccionar`/`atacar`/`perseguir`.
 
 ## Onboarding y curva inicial

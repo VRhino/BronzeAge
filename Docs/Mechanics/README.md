@@ -12,7 +12,7 @@ y una migración habría perdido lo que el código sabe.
 | `Docs/Mechanics/` (esta) | **Cómo se calcula exactamente**: datos, algoritmos, orden, fórmulas, casos límite | «el anillo es la capa de vecindad 4 exterior a la región dilatada» |
 | `Docs/Coordinacion/` | Contrato con los clientes: comandos, eventos, proyecciones, modelo de datos compartido | `GET /jugador/partidas` |
 | `Docs/Arquitectura/` | Cómo está organizado el servidor | tick, sesiones, persistencia |
-| `Consideraciones/` | **Por qué se decidió así**: decisiones, planes, mediciones, historia. Se consulta, no se implementa desde ahí | `Murallas_Definicion.md` |
+| `Consideraciones/` | **Por qué se decidió así**: decisiones, planes, mediciones, historia. Se consulta, no se implementa desde ahí | `typescript-final:Consideraciones/Murallas_Definicion.md` |
 
 Si el canon y `Mechanics` se contradicen, gana el canon (es la intención) y `Mechanics` está desactualizado **o** el código no cumple el canon: en los dos
 casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.

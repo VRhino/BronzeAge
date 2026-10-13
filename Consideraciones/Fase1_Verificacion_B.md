@@ -1,6 +1,6 @@
 # Fase 1 — Verificación de la tabla B
 
-> **Estado (2026-10-13): en curso.** Por cada documento ya implementado se comprueba que ninguna decisión viva solo en él: lo
+> **Estado (2026-10-13): en curso; cuatro documentos verificados y retirados.** Por cada documento ya implementado se comprueba que ninguna decisión viva solo en él: lo
 > vigente tiene que estar en `Docs/Game/` o en `Docs/Mechanics/`; lo abierto, decidido o en `Docs/Ideas a diseñar.md`. Cuando
 > un documento queda verificado se **borra** de `Consideraciones/` (la historia queda en git y en `typescript-final`, decisión
 > del autor del 2026-10-09 y del 2026-10-13). Nada se borra sin tu visto bueno.
@@ -12,7 +12,12 @@
 | `Campamentos_Entrada_Fundacion_Definicion.md` | Cerrado entero (71 decisiones, sin puntos abiertos): canon 1.9b y `Mechanics` (Campamentos_Mercenarios, Fundacion_Y_Refundacion, Presencia). | — |
 | `Murallas_Definicion.md` | Vigente en `Mechanics/Murallas.md` y canon 4.2.1; las cifras son placeholder. Quedan dos ideas aplazadas. | V5 |
 
-## Lo que hay que decidir
+## Decidido el 2026-10-13
+
+- **V1** varianza ±15 %: se deja como está (constante del archivo común). **V2** escuadra mermada: regla escrita en el canon (5.11.1). **V3, V4** y la demolición de recintos: a `Docs/Ideas a diseñar.md` §47. **Jerarquía de puertas: descartada.**
+- Retirados de `Consideraciones/` (siguen en git y en `typescript-final`): `Jugador_Situado`, `Movimiento_Ejercitos`, `Campamentos_Entrada_Fundacion`, `Murallas`. Las referencias de los `.md` apuntan ahora a `typescript-final:Consideraciones/...`.
+
+## Propuesta original
 
 - **V1. Varianza de combate** (±15 %, `MILITAR.varianzaCombate`, canon 5.2.5). El documento de movimiento la dejó abierta con
   tres opciones (dejarla, bajarla a 0,03-0,05, quitarla entre Facciones). Hoy solo afecta a las batallas que se resuelven con
@@ -26,7 +31,7 @@
   *Recomiendo `Docs/Ideas a diseñar.md`.*
 - **V5. Jerarquía de puertas** (postigo / puerta / casa-puerta) y **demolición de un recinto completo**. *Recomiendo `Docs/Ideas a diseñar.md`.*
 
-## Quedan por verificar (16)
+## Quedan por verificar (12)
 
 `Anexion_Y_Desarme`, `Batalla_Este_Lado`, `Comercio_Fisico`, `Entrada_Al_Mundo`, `Identidad_Visual`, `Revamp_Caravanas`,
 `Rutas_Caravana_Avanzadas`, `Taberna_Intel`, `Fase_0_5_Especializacion_y_Cupos`, `Fase_0_6_Expansion_Niveles_Asentamiento`,

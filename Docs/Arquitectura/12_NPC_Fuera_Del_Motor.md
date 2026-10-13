@@ -3,7 +3,7 @@
 Plan para sacar **todo el comportamiento NPC** (gobernanza incluida) del motor y del tick, y que los bots jueguen
 **desde fuera, como un jugador más**: ven lo que ve un jugador y actúan con los comandos de un jugador.
 
-Nace de dos decisiones del usuario (`Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md`):
+Nace de dos decisiones del usuario (`typescript-final:Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md`):
 
 - **D52**: el NPC sale del motor porque ya ocupa demasiado del tick, y la lógica nueva de bots-héroe lo empeoraría.
 - **D53-D59**: los bots-héroe nacen en los campamentos y siguen el mismo flujo que un humano (sesiones, llegada
