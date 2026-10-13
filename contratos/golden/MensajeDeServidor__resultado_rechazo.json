@@ -1,0 +1,1 @@
+{"secuencia":"4","resultado":{"peticionId":"req-9","resultado":"ORDEN_RECHAZADA","versionTras":"42","rechazo":{"codigo":"guerra.confirmar","mensaje":"declarar guerra","detalle":{"consecuencias":"reputacion"}}}}

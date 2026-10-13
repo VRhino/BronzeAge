@@ -5,6 +5,6 @@ fn main() {
     let ficheros = ["common", "entities", "orders", "events", "battle", "session", "world"]
         .map(|f| raiz.join(format!("bronzeage/v1/{f}.proto")));
     std::env::set_var("PROTOC", protoc_bin_vendored::protoc_bin_path().unwrap());
-    prost_build::compile_protos(&ficheros, &[raiz]).unwrap();
+    prost_build::Config::new().btree_map(["."]).compile_protos(&ficheros, &[raiz]).unwrap();
     println!("cargo:rerun-if-changed=../../proto");
 }
