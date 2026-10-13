@@ -26,7 +26,9 @@ El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadene
 
 1. **Asedio de asentamientos**: atacante captura banderas/áreas vitales antes de que expire el tiempo; defensor gana resistiendo. Defienden los héroes que están dentro y la guarnición (5.12.4), más los héroes de la Facción de la plaza que se unan mientras quede sitio (5.15.1). Mortalidad severa (permadeath). Los héroes en cola rellenan la instancia a medida que caen otros; el tope de la batalla cuenta héroes (5.15.1).
 2. **Mundo abierto**: choque de patrullas/ejércitos. Bandera/campamento transitorio; quien la pierde se retira, entrega la mitad de su carro y sus héroes quedan heridos (5.16.4). **Se declara, pero solo estando delante**: la proximidad ofrece atacar y el jugador decide; nadie es arrastrado a un combate por pasar cerca (5.12.3). Alcanzar a quien huye es lo que hace la persecución.
-3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, la proximidad de una columna a una caravana ofrece interceptarla, y el jugador decide (5.12.3).
+3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, la proximidad de una columna a una caravana ofrece interceptarla, y el jugador decide (5.12.3). Dos tipos según dónde esté respecto a su dueño: **A, disputa de carros**, y **B, aguante** (3.10).
+   - **3b. Saqueo de un pueblo extractor**: batalla propia de saqueo, nunca de conquista (4.2.2).
+   - **3c. Avanzada**: la abre solo un ejército y dura 30 minutos, como un asedio (5.17).
 4. **Entrenamiento/matchmaking** (pospuesto a una fase posterior a Fase 0/1): 15v15 puro, sin permadeath, para probar tácticas. Requiere lo mismo que el Attack Timer (5.6).
 ### 5.2.5 Resolución numérica y varianza de combate
 
@@ -108,8 +110,9 @@ El roster no se organiza por Tier abstracto: cada tropa se recluta en Centro Urb
 | Milicia de lanceros | `leva_comunal` (I) | 2 Madera (en bruto, sin pasar por Armería) | 2 | 2 | 25 | 30 | 1 |
 | Leñadores | `leva_comunal` (I) | 1 Madera (su hacha) | 1 | 1 | 30 | 30 | 1 |
 | Granjeros | `leva_comunal` (I) | nada (sus herramientas) | 1 | 1 | 30 | 30 | 1 |
+| Mineros | `leva_comunal` (I) | 1 Piedra (su pico), sin oro | 1 | 1 | 30 | 30 | 1 |
 
-Leñadores y granjeros son muy malos en combate y muy desorganizados: en la batalla no forman (Conquest).
+Leñadores, granjeros y mineros son muy malos en combate y muy desorganizados: en la batalla no forman (Unity). Los mineros entran también en la tropa prestada del campamento de mercenarios y son la guarnición de serie de los pueblos extractores (4.2.2).
 
 **Barracón (cuerpo a cuerpo):**
 
@@ -392,17 +395,18 @@ Y es la razón por la que **deshacer un ejército es replegarlo, no vaciarlo**: 
 
 Un jugador ve de lo AJENO lo que alcancen sus tres clases de ojos:
 
-1. **Sus plazas**, que vigilan su radio de influencia **más 10** unidades de mapa. La ciudad mira algo más allá de su frontera, como una atalaya.
+1. **Sus plazas**, que vigilan **solo su zona de influencia** (`VISION.margenAsentamiento` = 0): ni un paso más allá de su frontera. Lo de fuera lo ven las avanzadas (5.17).
+   - **Sus avanzadas**, cada una con un círculo de **12** unidades de mapa alrededor de sí, fijo en las tres etapas e independiente del de la plaza. Puesta en la frontera, asoma 12 más allá; como solo se construye dentro de la zona, nunca ve más de 12 por fuera.
 2. **Sus ejércitos en marcha**, que ven **30** a la redonda.
 3. **Él mismo, viajando solo**, que ve **15**, más o menos el ancho de la pantalla. Menos que una columna a propósito: un hombre solo no despliega batidores. Es bastante para viajar sin caer a ciegas en una emboscada, y poco para que el explorador solitario sea la mejor unidad de información del juego.
 
-**Los dos números solo se entienden comparados.** Que la columna vea más lejos que la plaza es lo que mantiene el valor de explorar: un ejército divisa una ciudad mucho antes de que la ciudad lo divise a él, y conserva la iniciativa. Y el margen de la plaza coincide con la distancia a la que un ejército puede repostar en ella (5.13), lo que da una regla fácil de recordar: **si una columna está lo bastante cerca como para repostar en tu ciudad, tu ciudad la ve.**
+**Los dos números solo se entienden comparados.** Que la columna vea más lejos que la plaza es lo que mantiene el valor de explorar: un ejército divisa una ciudad mucho antes de que la ciudad lo divise a él, y conserva la iniciativa. Una columna puede repostar en una plaza que no la ve, y es aceptable: reponer víveres no depende de verla. Ganan valor las Miradas de la taberna (5.12.10) y la visión compartida entre aliados.
 
-Sobre el mundo de 2.667×2.000, los 30 del ejército son **un minuto de camino**: el anillo de plazas vecinas con un minuto de aviso, y siguen muy por debajo del radio de cohesión de un reino (~5 provincias): ver no es lo mismo que controlar. Los 10 de margen **más que duplican el área vigilada de una plaza recién fundada** (radio 6), así que se notan desde el primer minuto.
+Sobre el mundo de 2.667×2.000, los 30 del ejército son **un minuto de camino**: el anillo de plazas vecinas con un minuto de aviso, y siguen muy por debajo del radio de cohesión de un reino (~5 provincias): ver no es lo mismo que controlar.
 
-El margen de la plaza se mide sobre su **radio**, no sobre la silueta de su zona. La zona viene recortada por las fronteras con Facciones rivales (Doc 1.2), y ese recorte es político, no óptico: que un rival plante su frontera pegada a tu ciudad no ciega a tus vigías.
+La visión de la plaza se mide sobre su **radio**, no sobre la silueta de su zona. La zona viene recortada por las fronteras con Facciones rivales (Doc 1.2), y ese recorte es político, no óptico: que un rival plante su frontera pegada a tu ciudad no ciega a tus vigías.
 
-> **Consecuencia**: como el radio crece con el nivel (10 → 30), una plaza de **nivel 5 vigila 40 y ve más lejos que un ejército**. Es coherente con la ficción —una capital tiene atalayas— pero diluye la ventaja de explorar cerca de las grandes ciudades.
+> **Consecuencia**: una plaza joven (zona de 6 a 10) ve mucho menos que un ejército (30), que gana iniciativa frente a ella; el día de protección tras fundar amortigua el arranque. Una capital de nivel 5 ve exactamente lo que ve un ejército (30), y solo las avanzadas le dan ojos más allá de su frontera.
 
 De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 
@@ -452,7 +456,7 @@ Un camino se conoce **tramo a tramo**: se ve cada tramo con algún extremo en ti
 
 De una frontera que solo **recuerdas** queda hasta dónde llegaba, no su trazo exacto: la línea real está negociada con vecinos que quizá no conozcas, y de esos no sabes nada. Se dibuja aproximada, y se ve que lo es.
 
-**Y sabes en tierra de quién estás cuando marchas.** Una columna que entra en territorio ajeno lo nota, aunque no alcance a ver la ciudad que manda ahí — que es posible: una capital de nivel 5 vigila 40 y una columna ve 30, así que hay una franja en la que estás dentro de sus dominios sin haberla divisado. Lo que se sabe es **de qué Facción es el suelo**, nunca dónde tiene su capital.
+**Y sabes en tierra de quién estás cuando marchas.** Una columna que entra en territorio ajeno lo nota, aunque no alcance a ver la ciudad que manda ahí — que es posible: una columna ve 30 y una plaza de zona mayor que eso queda fuera de su vista cuando cruzas su frontera, así que hay una franja en la que estás dentro de sus dominios sin haberla divisado. Lo que se sabe es **de qué Facción es el suelo**, nunca dónde tiene su capital.
 
 > **El terreno lo tapa el cliente de jugador, no el servidor.** La geografía no es información táctica —es la misma para todos— así que el servidor solo dice QUÉ has explorado y cada cliente decide cómo pintarlo. El de administración no tapa nada: es una herramienta de operación, no un jugador.
 
@@ -539,6 +543,7 @@ Cada héroe lleva tres cosas distintas, y no se mezclan:
 - **Repostar** es llenar los víveres en ruta. Hay dos formas, según quién:
   - **Columna personal: automático, dentro de la zona de influencia.** Mientras un héroe con su columna está **dentro de la zona de influencia** de un asentamiento donde puede repostar, sus víveres se rellenan solos de ese asentamiento, sin ninguna orden y sin límite de veces. Como las zonas no se solapan, siempre es una sola plaza: la dueña de la zona en la que está.
   - **Ejército: con el botón «Repostar», en la puerta.** Un ejército **no reposta solo**. Su Líder, con el ejército en la puerta de un asentamiento donde pueda repostar (`MOVIMIENTO.radioPuerta`), pulsa **Repostar** y se rellenan los víveres del ejército de su almacén.
+  - **En una avanzada con almacén** (fuerte o ciudadela, 5.17): un ejército de la Facción reposta en su puerta con el mismo botón, y así se alarga el radio operativo de una campaña. Las columnas personales no lo necesitan: dentro de la zona ya reposta solas de la plaza.
   - **Dónde se puede**: en un asentamiento **propio**, siempre. En uno **aliado** —alianza o vasallaje, en cualquier dirección—, solo si ese asentamiento tiene la opción activada. En uno neutral u hostil, nunca. En un **campamento de mercenarios**, cualquiera y gratis (Doc 1.9b).
   - **Con las mismas dos reglas que llenarlos al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da.
   - **Abrir el almacén a un aliado cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa. Quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
@@ -742,9 +747,12 @@ Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si
 | **Asedio** | Un **ejército** que ataca una plaza enemiga | **Atacante:** primero los del ejército que lo abre; si queda sitio, su Facción y, **si el Rey de esa Facción lo admite** (2.2), héroes de Facciones neutrales o enemigas del defensor, nunca un aliado suyo. **Defensor:** su Facción y sus aliados. Pueden unirse ejércitos y Columnas personales |
 | **Batalla campal** | Un ejército que ataca a otro ejército | **Nadie de fuera** |
 | **Persecución** | Una Columna personal que alcanza a otra Columna personal | **Libre:** cualquier Columna personal, de cualquier Facción, al bando que elija |
-| **Asalto de caravana** | Un ejército o una Columna personal que ataca una caravana suelta | **Atacante:** su Facción y, si el Rey lo admite, neutrales o enemigos del defensor. **Defensor:** la Facción dueña de la caravana y sus aliados |
+| **Asalto de caravana** (A, disputa; o B, aguante: lo decide el servidor por la zona, 3.10) | Un ejército o una Columna personal que ataca una caravana suelta | **Atacante:** su Facción y, si el Rey lo admite, neutrales o enemigos del defensor. **Defensor:** la Facción dueña de la caravana y sus aliados |
+| **Saqueo de un pueblo** | Un ejército que ataca un pueblo extractor (4.2.2) | **Atacante:** su Facción y, si el Rey lo admite, neutrales o enemigos del defensor. **Defensor:** la Facción dueña del pueblo y sus aliados |
+| **Avanzada** | Solo un ejército, 30 minutos (5.17) | Como el asedio: atacante y defensor igual que en una plaza |
 | **Campamento de bandidos** (evento PvE) | Un ejército o una Columna personal | Cualquier héroe, de cualquier Facción, **siempre en el bando atacante**. Nadie puede ayudar a los bandidos |
 
+- **Toda agresión entre Facciones exige guerra o la declara** (2.4.1); unirse a un asedio ajeno como atacante no la declara.
 - **Vasallo y señor cuentan como aliados para unirse a una batalla**: pueden defenderse entre sí, y ninguno puede unirse al ataque contra el otro.
 - **Solo un ejército abre un asedio.** Una Columna personal no puede asediar, pero sí unirse a un asedio abierto.
 - **Convocatoria del asedio.** Al abrirse hay **30 segundos** (`BATALLA.convocatoriaSegundos`) antes de que empiece la partida, en los que se une quien cumpla lo anterior y **entra como uno de los que estaban al empezar**. Quien la abrió puede cancelarla en ese tiempo. Quien llega después entra como refuerzo.
@@ -756,6 +764,7 @@ El campamento es donde un héroe guarda las escuadras que no lleva consigo, y es
 
 ### 5.15.3 La guarnición
 
+- Los **pueblos extractores** (4.2.2) y las **avanzadas** (5.17) tienen además una guarnición de serie manejada por la IA, fuera de cupo; las avanzadas admiten también guarnición de jugadores, por héroe residente de la madre.
 - Un héroe puede asignar algunas de sus escuadras a la guarnición del asentamiento **donde reside**, y solo ahí.
 - Tiene un **cupo propio por héroe** que decide el asentamiento: sus edificios y políticas dan "liderazgo de guarnición" a cada héroe residente, en la misma escala que el coste de Liderazgo de las tropas (5.11.1: leva 7, línea 14, veterana 22, pesada 32, élite 45). **No gasta el Liderazgo del héroe**, que sigue siendo lo que lleva consigo.
 
@@ -853,3 +862,28 @@ Un héroe derrotado en una partida real pierde **parte de las tropas que llevó 
 - **Entre compañeros de Facción:** cada ciudadano conoce el **nombre** de todos los demás ciudadanos de su Facción, los vea o no (decisión del usuario, 2026-09-14). El resto de su ficha sigue la regla de lo público.
 
 "Público" significa que lo ve cualquiera que pueda ver al héroe. Dónde está un héroe sigue sujeto a la niebla de guerra (5.12.7), y su memoria y exploración son solo suyas (5.12.8).
+
+## 5.17 Avanzadas (decidido el 2026-10-11)
+
+**Una avanzada es un puesto fortificado de la plaza madre, en el mapa.** Tres etapas, que son sus tres niveles: **atalaya → fuerte (empalizada) → ciudadela (piedra)**. Siempre se empieza por la atalaya y se va subiendo; no se construye directamente un fuerte ni una ciudadela.
+
+- **Plaza madre**: atalaya y fuerte desde el **nivel 2**; ciudadela desde el **3** (como las murallas). **Cupo**: una avanzada por nivel de la madre (2 en nivel 2 … 5 en nivel 5).
+- **Ubicación**: donde quiera el jugador **dentro de la zona propia, nunca fuera**, y no dentro del asentamiento. Se construye, se mejora y se repara como obra de mapa (4.2.2). **No genera zona de influencia.**
+- **Visión**: círculo fijo de **12** alrededor de sí (5.12.7). Es lo que ve la plaza fuera de su frontera.
+- **Guarnición de jugadores**: cupo **por héroe residente de la madre y por avanzada**, en puntos de Liderazgo: **14 / 45 / 90** (atalaya / fuerte / ciudadela). Las escuadras las llevan sus héroes hasta allí y comen el trigo de la madre.
+- **Guarnición de serie**, manejada por la IA y fuera de cupo, que se repone gratis en unas horas. **La tropa la elige el Gobernador de la madre** entre las que tiene desbloqueadas la Facción en cada escalón; por defecto, milicia de lanceros en el escalón 2.
+
+  | Etapa | Escalón 2 | Escalón 3 | Escalón 4 |
+  |---|---|---|---|
+  | Atalaya | 1 escuadra | — | — |
+  | Fuerte | 3 | 2 | — |
+  | Ciudadela | — | 5 | 3 |
+
+- **Batalla**: la misma en las tres etapas; cambian el mapa interior (uno por etapa) y la guarnición de serie. **La abre solo un ejército y dura 30 minutos**, como un asedio. Atacarla es guerra o la declara (2.4.1).
+- **Almacén**: la atalaya no tiene; el fuerte, unos 2.000; la ciudadela, unos 10.000. Se llena con los carros de los héroes; un ejército de la Facción reposta en su puerta (5.13).
+- **Si gana el atacante**: la atalaya queda **destruida**. El fuerte queda **en ruinas**, con 1 día de invulnerabilidad; si pasado ese día sigue en ruinas, la atacan y gana el atacante, queda destruido. La ciudadela queda **en ruinas y nunca se destruye**. Del almacén, el atacante se lleva lo que le quepa en los carros. **En ruinas no funciona nada** (ni visión, ni guarnición, ni reabastecimiento); la guarnición de jugadores queda a 0 y vuelve al campamento de su héroe (5.15.5). **Reparar cuesta el 50 % de construir** la etapa.
+- **Destrucción manual** por quien la construyó, para reubicarla: atalaya y fuerte sí, la ciudadela no; no se recupera nada.
+- **Conquista de la madre**: pasan al conquistador. **Ruina de la madre**: atalaya y fuerte desaparecen; la ciudadela queda como ruina sin dueño, y quien tenga después esa zona puede repararla.
+- **Mantenimiento**: edificio activo de la madre. **Niebla**: se recuerda como una ciudad. **Tamaño**: como mucho 0,2 de mapa.
+
+Costes (placeholder, en viajes de carro de 500): atalaya 200 madera + 100 piedra, obra de 2 h; atalaya → fuerte 600 madera + 400 piedra + 50 oro, 12 h; fuerte → ciudadela 1.500 madera + 2.000 piedra + 300 oro, 2 días (unos 8 viajes: un ejército con caravana).

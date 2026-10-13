@@ -81,7 +81,7 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 ## 1.4 Fuentes de recursos por tipo
 - CULTIVOS (trigo): NO son un nodo recolectable directo. Dependen de la FERTILIDAD DEL SUELO de la zona (atributo de terreno); requieren construir una Granja para aprovecharse.
 - MADERA: proviene de BOSQUES, representados como ZONAS del mapa (no puntos), con densidad variable.
-- MINERALES (cobre, estaño, hierro, oro): CONDICIONADOS AL RELIEVE — cobre, estaño y hierro en colina o montaña, oro solo en montaña (el más exclusivo, es el más raro); piedra permisiva (colina/montaña/llanura fértil/estepa) para no comprometer el recurso común más consumido (`RECURSO_BIOMA_PERMITIDO`, `worldgen/config.ts`). **El mineral de hierro es mucho más abundante que el estaño: sus yacimientos son 1,5 veces más frecuentes que los de cobre.** Cada uno tiene su propio edificio de extracción: cantera para piedra, mina de oro, mina de cobre, mina de estaño, mina de hierro.
+- MINERALES (cobre, estaño, hierro, oro) — **solo se explotan con un pueblo extractor** (Doc 4.2.2) —: CONDICIONADOS AL RELIEVE — cobre, estaño y hierro en colina o montaña, oro solo en montaña (el más exclusivo, es el más raro); piedra permisiva (colina/montaña/llanura fértil/estepa) para no comprometer el recurso común más consumido (`RECURSO_BIOMA_PERMITIDO`, `worldgen/config.ts`). **El mineral de hierro es mucho más abundante que el estaño: sus yacimientos son 1,5 veces más frecuentes que los de cobre.** Cada uno tiene su propio edificio de extracción: cantera para piedra, mina de oro, mina de cobre, mina de estaño, mina de hierro.
 - LIVESTOCK = **ganado vacuno**: fauna LIBRE en el mapa, se aprovecha con el Corral. Da el cuero de la Curtiduría. Cría/domesticación pospuesta a fases avanzadas (se trata como recurso consumible/finito).
 - CABALLOS: no son livestock. **Se compran con oro** al reclutar caballería y carros (Doc 5.8), y los animales de tiro de las caravanas se compran igual (Doc 3.13). Cuando exista la captura y la cría habrá las dos fuentes.
 - MADERA y PIEDRA: materiales base de construcción de edificios e insumo de materiales derivados.
@@ -167,6 +167,7 @@ Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
 - Radio de ataque a caravanas: 7 unidades del mapa.
 - Cada plaza tiene su campamento de bandidos en el bosque más cercano **a 10 o más del borde de su zona** (más separados que antes).
 - Reaparición del de un asentamiento: 60 minutos tras destruirse.
+- **Atacan caravanas**: los campamentos no se mueven; solo atacan las caravanas que pasan cerca de donde están apostados, con resolución numérica. Es un evento PvE que no figura entre los tipos de batalla instanciada (5.15.1b). **Siguen sin actuar dentro de ninguna zona de influencia**: quitar la inmunidad de las caravanas (3.10) es una regla entre Facciones, no contra el PvE.
 
 El campamento no bloquea la explotación del bosque que ocupa: solo amenaza a las caravanas de paso.
 

@@ -1,6 +1,6 @@
 # Guerra logística — definición
 
-> **Estado (2026-10-11): en diseño, cero código, canon sin tocar.** El canon (`Docs/Game/`) se reescribe cuando se
+> **Estado (2026-10-13): canon al día** en Docs/Game 2.4.1, 3.10, 3.13.6, 3.13.8, 4.2.2, 4.5, 5.2, 5.8, 5.12.7, 5.13, 5.15 y 5.17, con las cifras escaladas por la calibración (acarreo a velocidad 24, visión de la avanzada 12, elementos de hasta 0,2 de mapa). Pendiente: contrato y `Docs/Mechanics`. Antes: en diseño, cero código, canon sin tocar.** El canon (`Docs/Game/`) se reescribe cuando se
 > implementa (decisión del usuario, 2026-10-11); hasta entonces las reglas viven aquí. La lista de canon a reescribir
 > está en §6. Entrada de pendientes: `Docs/Mecanicas a desarrollar.md` §44.
 >

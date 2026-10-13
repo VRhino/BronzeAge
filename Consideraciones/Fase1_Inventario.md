@@ -105,3 +105,20 @@ documento (ver `Reconstruccion_Definicion.md` §4.1).
 
 Añadido el mismo día: `Docs/Mechanics/Comandos_Parametros.md`, con la forma de `params` de los 122 comandos volcada de `session/comandos/esquemas.ts`
 (la frontera «forma en el borde, reglas en el motor» se conserva en el contrato 05).
+
+## Reclasificación del 2026-10-13 (tabla A, revisada 1 a 1)
+
+Al comprobar cada documento de la tabla A contra el canon y `Docs/Mechanics/`, la tabla A se reduce:
+
+| Documento | Estado | Destino |
+|---|---|---|
+| `Calibracion_Distancias_Definicion.md` | **Hecho**: canon al día (Docs/Game 1, 3, 4 y 5; nueva 1.9c) | Historia. Abiertos O1 (oro) y O2 (Leñeras), para la fase del artefacto de mundo |
+| `Guerra_Logistica_Definicion.md` | **Hecho**: canon al día (2.4.1, 3.10, 3.13.6, nueva 3.13.8, nueva 4.2.2, 4.5, 5.2, 5.8, 5.12.7, 5.13, 5.15, nueva 5.17) | Historia |
+| `Murallas_Definicion.md`, `Economia_Del_Oro_Definicion.md`, `Ocupacion_Post_Conquista_Definicion.md` | Implementados, con canon y `Mechanics` | Pasan a la tabla B: solo verificar que no quede nada suelto |
+| `Vista_Asentamiento_Trazado_Urbano.md`, `Aedas_Definicion.md`, `Niebla_De_Guerra_Definicion.md` | Ya borrados de `Consideraciones/` (pasaron a `Mechanics`) | Sin acción |
+| `BA-006_Revision_Tecnologia_Eras.md`, `Ritmo_Crecimiento_Asentamientos.md` | Pendientes | Siguen en la tabla A: Eras IV-V pospuestas; el ritmo se rehace con la calibración nueva |
+| `Consideraciones/Diarios_Simulaciones_Batch/` (14 archivos) | Mediciones del motor TypeScript, algunas contaminadas por un bug de ids ya corregido | Descartados (quedan en `typescript-final`) |
+| `Docs/Mecanicas a balancear.md`, `Docs/Ideas a diseñar.md`, `Docs/Notas_revision.md` | Fuera del inventario original | A revisar: balance se rehace con el motor nuevo; Ideas recibe lo descartado de `Mecanicas a desarrollar.md` (§8.1) |
+
+Pendiente de la guerra logística: el contrato (Doc 01, Doc 02, `src/contratos/v1/`) se redefine en la fase 2, y los documentos de `Mechanics` afectados (Comercio_Caravanas, Combate, Niebla_De_Guerra, Movimiento_Ejercitos, Economia_Construccion) llevan su parte al reescribirse.
+

@@ -74,10 +74,22 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
   - Su tamaño **se deriva del poder del héroe**, no se escribe suelto: `defensaBaseCaravana = poderHeroe × 1.7`, redondeado hacia arriba a milicianos (poder 2 cada uno): **13 unidades**. Se deriva porque `poderBase` es placeholder (Doc 5.8) y una constante a mano se desincronizaría en cuanto se recalibre el roster — mismo criterio que el coste de Liderazgo (Doc 5.11.1).
   - **Por qué 1.7 y no menos.** Con la varianza de combate (±15% por bando, Doc 5.2.5), para ganar SIEMPRE hace falta superar `1.15 / 0.85 = 1.353`. 1.7 deja margen por encima de ese mínimo sin acercarse al escuadrón más barato: son **26** de defensa, frente a 15 de un héroe y **50** de una milicia completa. Un jugador solo pierde siempre; cualquier escuadrón real gana siempre.
   - Lo que esto cierra: el rol de **salteador unipersonal** —rápido, barato y sin nada que perder—. Depredar caravanas exige tropa.
-- Captura exactamente el 50% de la carga si el atacante gana (umbral de captura).
-- Una caravana capturada se elimina: no hay reparación (3.13.6).
+- **Se acabó la inmunidad (2026-10-11).** Ninguna zona protege del todo a una caravana: lo que cambia según la zona es el **tipo de batalla**. Se mira la posición de la caravana en el momento del ataque, contra los polígonos de zona (las zonas no se solapan, Doc 1.2):
+
+  | Dónde está la caravana | Tipo |
+  |---|---|
+  | Zona de influencia **del dueño** o de un **aliado del dueño** (alianza o vasallaje, el mismo predicado de 5.15.1b) | **B — Aguante** |
+  | Zona de un enemigo, de un aliado de un enemigo, de un neutral, o **fuera de toda zona** | **A — Disputa de carros** |
+
+  - **A — Disputa**: los carros cambian de manos dentro de la partida y el atacante se lleva el carro que logre sacar hasta cierto punto del mapa. Lo decide Unity.
+  - **B — Aguante**: las caravanas están protegidas en la parte trasera del mapa y el defensor tiene que aguantar sin rendirse hasta que se agote el tiempo. Si se agota, gana el defensor.
+- **Los carros no cambian de manos en el mundo: solo la carga.** El atacante se queda con lo que le **quepa en los carros de sus columnas**; el resto de lo perdido se destruye. Unity responde **qué carros se perdieron** (`carrosPerdidos`); se destruyen con su animal y la caravana sigue con los que le queden (si los pierde todos, se elimina, 3.13.6).
+  - **A**: la carga perdida es la de los carros perdidos.
+  - **B**: si gana el atacante, el dueño pierde el **70 %** de la carga, recurso a recurso; el **30 % se salva siempre** y llega a su destino en los carros que queden o, si no queda ninguno, con los carreteros. Si gana el defensor, no se pierde nada.
+  - **Bot contra bot** (5.2.5): B usa una `ventajaDefensor` mayor que el ×1,05 general (placeholder ×1,25). Si gana el atacante, en A pierde la mitad de los carros, redondeando hacia arriba (placeholder); en B, el 70 % de la carga y la mitad de los carros.
+- Atacar una caravana de otra Facción **exige guerra con su dueño en cualquier sitio, o la declara** (2.4.1), de modo que el paso forzoso por una ciudad ajena (peaje, Doc 1.6) no se convierte en una trampa.
 - **Los bandidos** (Doc 1.9) atacan las caravanas que pasan cerca de su campamento, con la misma resolución numérica.
-- **Inmunidad** (Doc 1.6): dentro de una zona de influencia que no sea del atacante, una caravana no puede ser atacada — ni por bandidos ni interceptada. El riesgo está en campo abierto y en la zona del propio atacante.
+- Los bandidos **siguen sin actuar dentro de ninguna zona**; la regla entre Facciones de arriba no se aplica al PvE.
 
 **ESCOLTA POR EJÉRCITO (Doc 5.13.3).** Una caravana puede ir **adjunta a un ejército** y hacer su entrega normal mientras marcha con él. Deja de defenderse con la defensa base fija y pasa a estar protegida por el poder de combate real del ejército. Se autoequilibra con la regla de velocidad (Doc 5.12.5): el ejército va al ritmo de su integrante más lento, así que escoltar una caravana comercial (16) frena a un ejército ligero (20) y le quita la capacidad de cazar otras caravanas — **no se puede escoltar y depredar a la vez**. Si el ejército es derrotado, la caravana escoltada se pierde con él.
 
@@ -231,8 +243,7 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
 
 ### 3.13.6 Captura
 
-Si el atacante gana, **la caravana se elimina**: carros, animales y carga se pierden, y la parte capturada de
-la carga (3.10) va al carro del atacante. El dueño reconstruye contra su cupo con el `CARAVANA_COOLDOWN` de
+Si el atacante gana, **pierde los carros que Unity declare perdidos** (3.10), con su animal; la parte de la carga que le quepa va al carro del atacante y el resto se destruye. Si pierde todos los carros, **la caravana se elimina**. El dueño reconstruye contra su cupo con el `CARAVANA_COOLDOWN` de
 siempre. Su escolta sin héroe queda a 0 unidades y vuelve al campamento de su héroe (3.13.4).
 
 ### 3.13.7 Caravana aparcada
@@ -247,3 +258,13 @@ Un ejército con caravanas adjuntas que **entra en una plaza de su Facción** (D
 - **Solo sale de dos formas:** enganchada a un ejército de la Facción que esté dentro de esa plaza (cualquiera, no solo el que la trajo; Doc 5.13.2), o
   **enviada a su origen** — si va vacía aparece allí al instante, si lleva carga recorre el mapa de vuelta y
   la vuelca en el almacén del origen al llegar (una caravana con carga nunca se teletransporta).
+
+### 3.13.8 Carro de acarreo (2026-10-11)
+
+Cada pueblo extractor (4.2.2) tiene un carro propio, una caravana de tipo `acarreo` ligada a él: **1 carro básico con buey** (500 de capacidad, velocidad 24) que hace una ruta fija entre el pueblo y su plaza madre.
+
+- **Solo sale con el carro lleno.** Cada viaje es un botín grande con un ritmo previsible, que se puede vigilar y defender. Vuelca en el almacén de la madre y vuelve vacío.
+- **No cuenta contra los cupos del Mercado** (caravanas y carros) ni exige Mercado.
+- **Se puede escoltar**: con escolta sin héroe de los residentes de la madre (cupo del Mercado de la madre si lo tiene, 100/200/300; **100** si no) o con escolta por ejército (5.13.3).
+- **Casi siempre lucha en B**, porque viaja dentro de la zona del dueño; si una frontera recorta la zona y la ruta sale de ella, ese tramo es A.
+- **Si se destruye**, se compra otro en la plaza madre, solo si el pueblo no tiene ninguno, al coste de carro más buey (20 madera + ~12 oro). Mientras no tenga carro, el pueblo acumula hasta llenar su almacén.
