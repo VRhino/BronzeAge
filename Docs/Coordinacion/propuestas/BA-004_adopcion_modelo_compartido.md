@@ -58,7 +58,7 @@ Contrastado contra `src/domain/types.ts`, `src/acceso/tipos.ts` y
   escolta/reserva de batalla), con invariante de exclusividad: solo en uno a la vez. Unicidad
   (decisión del usuario, 2026-09-13): como mucho una `Escuadron` por (`heroeId`, `tropaId`) en toda la
   partida, comprobada contra todas las escuadras del héroe y no solo contra la lista del asentamiento — ver
-  `01_Modelo_de_datos_compartido.md` §13.
+  `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §13.
 
 ### 2. Propiedad de escuadras por jugador y asignación por loadout
 
@@ -147,7 +147,7 @@ calcula/valida en BronzeAge y nunca se acepta como verdad enviada por el cliente
    (decisión del usuario, sustituye lo que decía aquí):** la XP ganada la calcula el servidor de batalla
    Unity, porque depende del desempeño (bajas, héroes abatidos, capturas, daño, MVP, puesto en la tabla) y
    eso solo lo ve Unity. Llega como delta en el `BattleResult`; BronzeAge la valida, la suma y aplica la
-   curva de nivel. Detalle en `01_Modelo_de_datos_compartido.md` §15.
+   curva de nivel. Detalle en `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §15.
 3. **Herido vs muerto — RESUELTO, decisión del usuario (2026-09-11): gana BronzeAge.** El `heridoHasta` que
    mencionaba la revisión anterior es un estado que debe aplicar al **héroe** (que ahora sí combate
    directamente en la partida real de Unity), no a la escuadra. **Las escuadras no tienen estado de

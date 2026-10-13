@@ -73,7 +73,7 @@ lugar:
    UNA `Escuadron` por `tropaId` en toda la partida, esté donde esté. Se comprueba contra todas sus
    escuadras, no solo contra la lista del asentamiento; si ya tiene una de ese tipo fuera, no se recluta
    otra: solo se repone donde está. Sin duplicados posibles, volver nunca obliga a fusionar. Detalle en
-   `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §13.
+   `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §13.
 4. **No hay cambio de héroe dentro de una partida**, justamente porque solo puede existir uno por mundo — no
    hace falta diseñar sustitución/reasignación. Confirmado.
 5. **Identidad de escuadra aniquilada y repuesta** — respuesta original correcta, sin cambios: `Escuadron.id`

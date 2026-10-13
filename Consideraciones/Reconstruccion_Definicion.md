@@ -177,7 +177,7 @@ datos del que se generan los contratos.
 
 | # | Decisión |
 |---|---|
-| D1 | **La reconstrucción sustituye** al plan anterior de cerrar primero el servidor TypeScript y migrar después por fases. Se retiran sus referencias (`Docs/Coordinacion/04_Migracion_Mundo_Reactivo.md`, `Docs/Arquitectura/13_Mundo_Reactivo_Rust.md`, índice de Coordinación) |
+| D1 | **La reconstrucción sustituye** al plan anterior de cerrar primero el servidor TypeScript y migrar después por fases. Se retiran sus referencias (`typescript-final:Docs/Coordinacion/04_Migracion_Mundo_Reactivo.md`, `Docs/Arquitectura/13_Mundo_Reactivo_Rust.md`, índice de Coordinación) |
 | D2 | **Servidor de un solo núcleo, todo en Rust**, en un proceso. Sin reparto TypeScript/Rust |
 | D3 | **El generador sigue en TypeScript** como herramienta fuera de línea: no corre durante la partida, es el código de Codex, y lo que comparte con el servidor son las constantes de juego en un archivo de datos común |
 | D4 | **Dentro de `BronzeAgeFase0`, sobre `main`** (decisión del 2026-10-12, sustituye a la rama `reconstruccion`). La rama **`typescript-final`**, copia de `main` en `eb1cdd9`, guarda el último TypeScript |

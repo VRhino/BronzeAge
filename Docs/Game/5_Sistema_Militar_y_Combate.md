@@ -716,7 +716,7 @@ Esto sustituye la regla del 2026-09-14 de guarnecer solo si todos los del ejérc
 
 ## 5.15 Batallas con héroes: quién combate, guarnición y campamento
 
-Las batallas se juegan como partidas reales en Unity. Los datos que se intercambian con Unity están en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md`.
+Las batallas se juegan como partidas reales en Unity. Los datos que se intercambian con Unity están en `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md`.
 
 ### 5.15.1 Una escuadra combate con su héroe
 
@@ -816,7 +816,7 @@ Un bando puede no tener ningún humano (solo héroes bot, solo guarnición o esc
 
 ## 5.16 El Héroe
 
-El detalle de datos del héroe está en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14.
+El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14.
 
 ### 5.16.1 Un héroe por jugador y mundo
 

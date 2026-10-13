@@ -3,7 +3,7 @@
 > **Estado (2026-10-12): diseño del núcleo de la reconstrucción, ACORDADA.** El servidor se reconstruye entero en Rust
 > sobre este modelo, sin fases ni convivencia con el servidor TypeScript, sobre `main` de
 > `BronzeAgeFase0`. Problemas, decisiones y orden: [`Consideraciones/Reconstruccion_Definicion.md`](../../Consideraciones/Reconstruccion_Definicion.md).
-> Qué cambia para los clientes: [`Docs/Coordinacion/04_Migracion_Mundo_Reactivo.md`](../Coordinacion/04_Migracion_Mundo_Reactivo.md).
+> Qué cambia para los clientes: [`typescript-final:Docs/Coordinacion/04_Migracion_Mundo_Reactivo.md`](../Coordinacion/04_Migracion_Mundo_Reactivo.md).
 >
 > Origen: conversación con el usuario (sesión «Cliente jugador», 2026-10-11) tras medir el movimiento del mapa con
 > el contrato 03. Con un tick de 500 ms (valor de prueba) basta interpolar un tick por detrás; con el tick real de

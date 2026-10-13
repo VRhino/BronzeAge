@@ -13,7 +13,7 @@ Sin embargo, **aceptado como diseño no equivale todavía a contrato implementab
 
 Fuentes revisadas: ambos documentos completos, respuestas BA-001..004, notas humanas y cooperación de Conquest; código de tiempos, proyecciones, rutas, runner, difusión WS y murallas de BronzeAge; persistencia de héroes/escuadras/loadouts y spawning de Conquest; rutas consumidas por `BronzeAgeClient/src/apiCliente.ts`. Se contrastó también el informe Graphify de Conquest, usándolo solo como navegación, no como prueba de comportamiento.
 
-En lo siguiente **M** = `Docs/Coordinacion/01_Modelo_de_datos_compartido.md`; **C** = `Docs/Coordinacion/02_Contrato_Comunicacion_Servidor_Cliente.md`. Las líneas corresponden a la revisión de esta fecha. P1 bloquea una integración correcta; P2 debe cerrarse antes de publicar el contrato correspondiente. Son defectos del diseño documentado, no vulnerabilidades demostradas en endpoints nuevos: esos endpoints aún no existen.
+En lo siguiente **M** = `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md`; **C** = `typescript-final:Docs/Coordinacion/02_Contrato_Comunicacion_Servidor_Cliente.md`. Las líneas corresponden a la revisión de esta fecha. P1 bloquea una integración correcta; P2 debe cerrarse antes de publicar el contrato correspondiente. Son defectos del diseño documentado, no vulnerabilidades demostradas en endpoints nuevos: esos endpoints aún no existen.
 
 ## R01 · P1 · El primer resultado no tiene transición de entrada
 
@@ -157,7 +157,7 @@ R03), `server/difusion/hub.ts` (`difundir` serializa una vez para todos los susc
 `rutas/jugador.ts` (rutas reales de membresía/proyección/eventos/mapa, confirma R08).
 
 Todos los R01-R10 y las correcciones menores quedan incorporados directamente en
-`01_Modelo_de_datos_compartido.md` y `02_Contrato_Comunicacion_Servidor_Cliente.md` (no en un documento de
+`typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md` y `typescript-final:Docs/Coordinacion/02_Contrato_Comunicacion_Servidor_Cliente.md` (no en un documento de
 respuesta aparte — mismo criterio que la revisión anterior de Codex sobre BA-001..004):
 
 - **R01** (transición sin mensaje): nuevo `POST /v1/batallas/:battleId/inicio`; ciclo de `Batalla`

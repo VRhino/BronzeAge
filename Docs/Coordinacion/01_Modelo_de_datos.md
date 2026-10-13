@@ -3,7 +3,7 @@
 > **Estado (2026-10-13): reescrito en la fase 2.** El modelo es [`proto/bronzeage/v1/entities.proto`](../../proto/bronzeage/v1/entities.proto) y
 > [`battle.proto`](../../proto/bronzeage/v1/battle.proto): **todas las entidades del dominio**, no solo las de la feature del momento. Este
 > documento es el mapa: qué entidad es cada mensaje, de qué documento del canon sale y qué invariantes la gobiernan. El modelo anterior
-> (`01_Modelo_de_datos_compartido.md`, JSON del servidor TypeScript) está en `typescript-final:Docs/Coordinacion/`.
+> (`typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md`, JSON del servidor TypeScript) está en `typescript-final:Docs/Coordinacion/`.
 > Sale del canon (`Docs/Game`) y de `Docs/Mechanics`, **no** del código viejo.
 
 ## 1. Reglas del modelo

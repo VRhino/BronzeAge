@@ -150,7 +150,7 @@ Sin migración (regla general del usuario). Nueva **`LAYOUT_VERSION = 2`** (`src
 - Se publica en `GET /v1/balance` → `geometriaUrbana.LAYOUT_VERSION` y viaja en el export del laboratorio
   (`layoutVersion`). No es el `version` de la proyección.
 - `BALANCE_VERSION` sube a 9 porque cambia el contenido de tablas servidas, pero sigue sin rechazar nada.
-- `01_Modelo_de_datos_compartido.md` actualizado: §3 (huella) y §17 (`layoutVersion` y factor celda→local).
+- `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md` actualizado: §3 (huella) y §17 (`layoutVersion` y factor celda→local).
 
 ### Pruebas
 
