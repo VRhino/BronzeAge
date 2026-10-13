@@ -4,12 +4,12 @@
 
 Cubre **dónde está un héroe** (los cuatro sitios posibles y cómo pasa de uno a otro), los comandos de **presencia** —salir al mundo, entrar y salir de una plaza o de un campamento, guarnecer, marchar, conectarse y desconectarse, fijar la puerta y vetar— y la **convocatoria**: un ejército en preparación *dentro* de una plaza o un campamento, antes de salir.
 
-- **Verificado contra:** `b3953c6` (2026-10-12).
+- **Reescrito el 2026-10-13** para el mundo reactivo (planes en vez de ruta por tick, desconexión como evento programado) y la calibración (`radioPuerta` = 2). El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Presencia_Y_Convocatoria.md`.
 - **Fuentes:** `engine/ubicacion.ts`, `engine/presencia.ts`, `engine/convocatoria.ts`, `session/comandos/presencia.ts`, `session/comandos/convocatoria.ts`, `session/comandos/desarmar.ts`, `session/comandos/autorizacion.ts` (quién puede cada uno), `session/proyecciones/jugador.ts` (`convocatoriasDelLugar`), y del motor de ejércitos (`engine/ejercitos.ts`): `entrarEnCampamento`, `salirDelCampamento`, `marcharA`, `exigirPuedeGuarnecer`, `caravanasAlEntrar`.
 - **Canon:** [`Docs/Game/1_Sistema_de_Mundo_y_Territorio.md`](../Game/1_Sistema_de_Mundo_y_Territorio.md) 1.10 (el héroe está situado), [`Docs/Game/5_Sistema_Militar_y_Combate.md`](../Game/5_Sistema_Militar_y_Combate.md) 5.12.1 y 5.14.5.
 - **No está aquí** (está en su documento):
   - Qué hace por dentro `salirAlMundo` / `salirDelCampamento` / `movilizarEjercito` (elegir tropa, Liderazgo, cargar el carro, ruta) → [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §3; terminar la campaña, `caravanasAlEntrar`, inspeccionar → §11–§12; juntar y separar columnas, formar un ejército en campo → §10.
-  - La **desconexión que aplica el tick** (`salirDelMundo`: cuándo, aplazamiento, qué pasa con la columna) → [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §4.1. Aquí solo los comandos que la piden y la cancelan.
+  - La **desconexión que aplica el evento programado** (`salirDelMundo`: cuándo, aplazamiento, qué pasa con la columna) → [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §7. Aquí solo los comandos que la piden y la cancelan.
   - La regla de la **puerta** (grupos, capas, exilio) → [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md); aquí, los dos comandos que la fijan.
   - La **niebla** que se graba al salir y la foto del interior → [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md).
   - Dónde defiende un héroe que está dentro de una plaza cuando la atacan → [`Combate.md`](Combate.md) §3.2.
@@ -20,7 +20,7 @@ Cubre **dónde está un héroe** (los cuatro sitios posibles y cómo pasa de uno
 UbicacionHeroe = asentamiento { asentamientoId }      dentro de una plaza
                | columna      { ejercitoId }          en el mapa, en su columna (personal o ejército)
                | mercenarios  { campamentoId }        dentro de un campamento de mercenarios
-               | desconectado { punto }               fuera del mundo (solo si salió con su columna, Tick §4.1)
+               | desconectado { punto }               fuera del mundo (solo si salió con su columna, Reloj_Y_Eventos §7)
 ```
 
 Residir es otra cosa (ciudadanía, Doc 2.5); un héroe de campaña sigue residiendo en su plaza aunque esté en el camino. **Solo los comandos de esta sección escriben la ubicación** (más `fundar`, que deja a la columna dentro de la plaza recién levantada).
@@ -63,7 +63,7 @@ Está envuelto en `sinConvocatoria` (§9): quien está en un ejército en prepar
 Exige tener columna (`jugador.sin_columna`). Cuatro condiciones, en este orden (`MovilizacionInvalidaError`):
 
 1. **La columna es personal**: «Vas en un ejército: hay que separarse antes de entrar en una plaza». (Un ejército entra por `guarnecer`, §4.3.)
-2. **En la puerta**: `distancia(columna, plaza) ≤ MOVIMIENTO.radioPuerta` (10). Entrar es un acto, no un roce.
+2. **En la puerta**: `distancia(columna, plaza) ≤ MOVIMIENTO.radioPuerta` (**2** calibrado; 10 en el bloque TypeScript). Entrar es un acto, no un roce.
 3. **Con permiso**: `puedeEntrarEn(plaza, héroe, columna.faccionId, relaciones)`: un residente entra siempre; luego manda el veto; luego el grupo (la propia Facción nunca se bloquea). Detalle en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (`PUERTA.cerradaAPorDefecto`).
 4. **Residencia o no**:
    - **Su residencia**: la columna **se deshace** (`absorberColumna(…, devolverSuministro = true)`): las escuadras vuelven al campamento (`contenedor: campamento`) y el carro entero al almacén de la plaza (hasta donde quepa); la columna desaparece.
@@ -89,7 +89,7 @@ Retoma la columna aparcada de una plaza **ajena**, sin pantalla de equipamiento.
 
 Exige columna. Si la columna es **personal con un solo participante**, entra él solo (`entrarEnCampamento` del motor); si no —un ejército, o una personal con compañía— entra el ejército entero, ordenado por su Líder:
 
-- **Solo (motor)**: error si no es el Líder de una columna de un participante; error si no está a `≤ radioPuerta` (10) del campamento. `ubicacion = mercenarios`.
+- **Solo (motor)**: error si no es el Líder de una columna de un participante; error si no está a `≤ radioPuerta` (2) del campamento. `ubicacion = mercenarios`.
   - **No residente** (visitante): su columna queda a la puerta, intacta, sin tocar nada.
   - **Residente**: vuelca el carro al almacén personal **hasta `ALMACEN_PERSONAL.capacidad`**, recurso a recurso en el orden del carro; lo que no cabe **se queda en el carro** (la columna sigue aparcada a la puerta, sin escuadras y solo con ese resto); las escuadras vuelven al campamento (`alCampamento`).
 - **Ejército**: debe estar a la puerta; `desarmarAlEntrar` (como `guarnecer`: solo el Líder, caravanas solo de este campamento, cada héroe en su columna personal) y cada héroe entra como lo haría solo. Evento `ejercito.entra_en_campamento`.
@@ -107,18 +107,18 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
 - Una formación (ejército aún por formar) no se mueve.
 - El héroe debe tener `ubicacion = columna` (dentro de una plaza hay que salir antes).
 - Destino `ObjetivoEjercito` (un asentamiento o un punto) → `calcularRuta` con los asentamientos como pasos de río; sin ruta por tierra, error. El agua no se cruza.
-- Efecto: `estado = marchando`, `objetivo`, `ruta`, `progreso = 0`, y se **abandona la persecución** (marchar a un punto y perseguir a la vez no existe).
+- Efecto: `estado = marchando`, `objetivo`, un **plan nuevo calculado desde la posición real en ese instante** ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §4.2: vértices con su instante de paso) y se **abandona la persecución** (marchar a un punto y perseguir a la vez no existe). El plan anterior queda invalidado (sube la generación).
 - `rectifica = (la columna ya estaba marchando)`. Evento `jugador.marcha_fijada { ejercitoId, heroeId, objetivo, rectifica }`.
 
 ## 7. Conectarse y desconectarse
 
-- **`desconectarse { heroeId }`**: si ya está `fuera` o ya tiene `desconectaEn`, no hace nada. Si no: `desconectaEn = ahora + PRESENCIA.retardoDesconexionMs` (150 000 ms = 2 min 30 s). Evento `jugador.se_desconecta`. El héroe sigue en el mundo esos dos minutos y medio, moviéndose como iba.
+- **`desconectarse { heroeId }`**: si ya está `fuera` o ya tiene `desconectaEn`, no hace nada. Si no: `desconectaEn = ahora + PRESENCIA.retardoDesconexionMs` (150 000 ms = 2 min 30 s) y **se programa el evento de salida a ese instante**. Evento `jugador.se_desconecta`. El héroe sigue en el mundo esos dos minutos y medio, moviéndose como iba (su plan sigue).
 - **`conectarse { heroeId }`**:
   - Si **no estaba `fuera`**: si tenía `desconectaEn`, lo **cancela** (sin eventos); si no, nada.
   - Si estaba `fuera`: `volverAlMundo`. Dentro de una plaza o un campamento solo recupera el control. Si salió con su columna, **reaparece en su punto** con una columna personal nueva (`ejercito-{ids.siguiente()}`): `tipo personal`, `estacionado`, `politicaDeUnion rechazar`, `liderId` él, `suministro` = su carro de `fuera`, `escuadronIds` = sus escuadras `contenedor: fuera` (que vuelven a `ejercito`), `faccionId` la de su ciudadanía (o `''`), `origenAsentamientoId` su residencia (o `''`). Evento `jugador.vuelve_al_mundo` atribuido a su residencia.
-- **En plena batalla de Unity** los dos comandos **no llevan el candado** de batalla: `desconectarse` se anota (`desconectaEn`) pero el tick no lo aplica mientras el héroe combate —sale en el primer tick tras acabar—, y `conectarse` la anula ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §5.1).
+- **En plena batalla de Unity** los dos comandos **no llevan el candado** de batalla: `desconectarse` se anota (`desconectaEn`) pero el evento de salida no se aplica mientras el héroe combate —sale en cuanto acaba la batalla—, y `conectarse` la anula ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §5.1).
 - **Fuera del mundo no se da ninguna orden**: la autorización rechaza todo menos `conectarse` con el motivo `fuera_del_mundo`.
-- Quién lo aplica y cuándo: el tick ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §4.1). Lo pide el cliente al cerrarse, o el runner de bots al acabar su sesión.
+- Quién lo aplica y cuándo: el evento programado ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §7). Lo pide el cliente al cerrarse, o el runner de bots al acabar su sesión.
 
 ## 8. Fijar la puerta y vetar
 
@@ -179,7 +179,7 @@ para cada integrante de `dentro`, en orden:
     anota (heroeId, ejercitoId de su columna)
 base = la columna del Líder  →  se convierte en el ejército:
         tipo = ejercito, politicaDeUnion = la de la convocatoria,
-        origenCampamentoId = lugar.id si el lugar es un campamento
+        (sin origen: un ejército no vuelve solo a ningún sitio)
 para cada otra columna:  unirseEnCampo(ejército, columna con la posición del ejército)   ← todas salen por la misma puerta
         se quita su columna; el héroe pasa a ubicacion = columna del ejército
 la convocatoria se elimina
@@ -219,7 +219,7 @@ Un héroe `fuera` del mundo: solo `conectarse` (§7).
 ```
 <!-- /parametros -->
 
-(`MOVIMIENTO.radioPuerta` y `vidaPeticionUnionSegundos` están en el bloque `MOVIMIENTO` de [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §14; `PUERTA` en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md).)
+(`MOVIMIENTO.radioPuerta` y `vidaPeticionUnionSegundos` están en el bloque `MOVIMIENTO` de [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §14 (con su valor calibrado); `PUERTA` en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md).)
 
 ## 12. Invariantes
 
