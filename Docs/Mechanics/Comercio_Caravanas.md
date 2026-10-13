@@ -12,10 +12,10 @@ peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ru
   `session/comandos/ejercitos.ts` (`entregarDeCaravana`), `session/comandos/autorizacion.ts`, `session/proyecciones/jugador.ts` (lo que se ve).
 - **Canon:** [`Docs/Game/3_Sistema_Economico_y_Comercio.md`](../Game/3_Sistema_Economico_y_Comercio.md) (y Doc 1.6 para la red de caminos, Doc 1.9b para el campamento de mercenarios).
 - **No está aquí** (está en su documento): la caravana **adjunta** a un ejército, sus víveres y su carga (→ [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9); interceptar, capturar o ser atacada por
-  bandidos, la inmunidad dentro de una zona (→ [`Combate.md`](Combate.md)); la **Caravana de Fundación** (→ [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md)); el Mercado como edificio (costes, niveles,
+  bandidos, y los tipos A/B según la zona (→ [`Combate.md`](Combate.md) §7.1); la **Caravana de Fundación** (→ [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md)); el Mercado como edificio (costes, niveles,
   puestos) y las políticas como sistema (→ `Economia_Construccion.md`); el generador aleatorio (el comercio **no consume** ninguna tirada).
 
-El comercio corre en el paso 6 de la cadena del tick (`avanzarComercio`) y las órdenes caducan en el paso 12 (`caducarOrdenes`); ver [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md).
+**Reescrito el 2026-10-13** para el mundo reactivo ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)): las caravanas son **planes** con eventos de salida, de peaje y de llegada; los trueques y las órdenes de mercado caducan como **eventos** a su instante; la asignación automática se reevalúa cuando nace un trueque, queda libre una caravana o cambia el almacén de un lado. El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Comercio_Caravanas.md`.
 
 ## 2. Modelo de datos
 
@@ -417,8 +417,8 @@ red = registrarRuta(red, origen, destino, ruta, ahora)         ; la ruta entra e
 evento comercio.caravana_preparando
 ```
 
-Salida inmediata (`en_transito` desde el comando): **no** hay evento `comercio.caravana_sale`; empieza a moverse en el siguiente tick. Con preparación, el tick que cumple `ahora ≥ preparaHasta` la pasa a
-`en_transito`, emite `comercio.caravana_sale` **y no la mueve ese tick**. Una caravana `preparando` está en su ciudad: no es interceptable.
+Salida inmediata (`en_transito` desde el comando): **no** hay evento `comercio.caravana_sale`; su plan empieza en ese instante. Con preparación, el **evento programado** a `preparaHasta` la pasa a
+`en_transito`, emite `comercio.caravana_sale` y le calcula el plan desde ese instante. Una caravana `preparando` está en su ciudad: no es interceptable.
 
 **`cancelarCaravana`** (solo `preparando`): la carga vuelve al almacén del origen (`agregarRecurso`, topada por capacidad), la caravana pasa a `disponible` sin destino/contenido/ruta/escolta y se devuelve
 la escolta al campamento. La ruta ya registrada en la red **no se retira**.
@@ -442,22 +442,22 @@ Una caravana `aparcada` (dejada en una plaza de su Facción al entrar un ejérci
 - **Volver** (`enviarCaravanaAlOrigen`): **vacía** ⇒ pasa a `disponible` **al instante** en su origen (sin viaje). **Con carga** ⇒ `retornando` con `destinoAsentamientoId = la anfitriona`, ruta
   `calcularRuta(anfitriona → origen)` **sin atracción de la red ni peajes**; al llegar vuelca el contenido en el almacén del origen (topado) y queda `disponible`. Sin ruta por tierra ⇒ error.
 
-## 6. El viaje (`avanzarCaravanas`)
+## 6. El viaje (el plan de la caravana)
 
-Para cada caravana, en el orden del array:
+Una caravana en viaje es un **plan** (vértices con su instante de paso, [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §4.2) y se mueve por eventos, no por barrido:
 
 1. **`preparando`**: si `preparaHasta` definido e `instante ≥ preparaHasta` → `en_transito` (+ evento `comercio.caravana_sale`); si no, queda. No se mueve en ningún caso.
 2. **Sin `destinoAsentamientoId`** (Fundación, `disponible`, `adjunta`, `aparcada`): se deja pasar; la mueve su propio subsistema.
 3. **Origen inexistente**, o destino inexistente **y** no está `retornando`: la caravana **desaparece** (sin evento) y su escolta se libera al campamento. (Hoy solo ocurre con partidas guardadas antes de
    `ruina.ts`, que cierra el caso al caer la plaza.)
-4. **Mover**: `velocidad = velocidadCaravana × (comercial ? factorVelocidadCaravana(origen) : 1)`; el paso es `avanzarPosicionEnRuta` con las **aristas de la red** (más rápido sobre camino; fórmula en
-   `Movimiento_Ejercitos.md` §4.2). `distanciaTotal = max(1, distancia recta entre los dos extremos del viaje)`; solo sirve para el bonus de la comisión.
-5. **Peajes** (solo a la ida, §7.3).
-6. Si `progreso < 1`: queda con su nueva posición. Si no:
+4. **Plan**: `velocidad = velocidadCaravana × (comercial ? factorVelocidadCaravana(origen) : 1)` (calibrada: buey 24, camello 28, caballo 36); el plan se construye de una vez con las **aristas de la red** (más rápido sobre camino; fórmula en
+   `Movimiento_Ejercitos.md` §4.2). El plan se rehace si cambia la velocidad, se construye un camino en el trayecto o se engancha. `distanciaTotal = max(1, distancia recta entre los dos extremos del viaje)`; solo sirve para el bonus de la comisión.
+5. **Peajes** (solo a la ida, §7.3): un evento en el instante exacto en que el plan cruza cada zona ajena.
+6. Al **evento de llegada** (el último vértice del plan):
    - **`retornando`** ⇒ llegada a casa: el contenido que aún lleve (solo si vino de `enviarCaravanaAlOrigen`) se vuelca en el origen (topado); la caravana queda
      `{estado: disponible, contenido: {}, destino: –, origenAcuerdoId: –, ladoAcuerdo: –, progreso: 0, posicionActual: origen, ruta: –, escoltaIds: –}` y su escolta vuelve al campamento.
    - **`en_transito`** ⇒ **entrega** (§4.4; vale igual sin trueque) y, si es `comercial`, pasa a `retornando` con `contenido {}`, `progreso 0`, `posicionActual = destino` y la **misma ruta invertida**.
-     El regreso **desanda el camino de ida**; no se recalcula. Una caravana de otro tipo que llegase aquí **se pierde** al entregar (hoy no hay ninguna: la de Fundación no pasa por este bucle).
+     El regreso **desanda el camino de ida**; no se recalcula. Una caravana de otro tipo que llegase aquí **se pierde** al entregar (la de Fundación y la de acarreo tienen su propio subsistema).
 
 Una caravana nunca se teletransporta salvo la vacía enviada a casa (§5.7).
 
@@ -563,7 +563,7 @@ descartan de `peajes` todos los ya alcanzados, se haya cobrado o no. **La ciudad
 - **`registrarRuta`** (en cada lanzamiento): `id = "{origen}>{destino}"`; `aristas = aristasDeTrazado(ruta)` (las claves de cada par de puntos consecutivos, sin repetir); `ultimoLanzamiento = ahora`. La ruta
   anterior del mismo par se **sustituye**; las aristas nuevas se añaden a `red.aristas`; las que la ruta nueva ya no pisa **siguen** en la red (como sendero).
 - **`pesosDeRed`** = para cada arista, cuántas rutas vigentes la contienen (las de peso 0 no aparecen). **`aristasDeRed`** = todas las aristas, con o sin peso: sobre cualquiera la caravana avanza más rápido.
-- **`podarRutas`** (cada tick, al principio de `avanzarComercio`): quita las rutas con `ahora − ultimoLanzamiento ≥ caducidadMinutos` o con un extremo que ya no existe. Devuelve la **misma** red si no cambia
+- **`podarRutas`** (cuando se registra o se usa una ruta, y como evento periódico de baja frecuencia): quita las rutas con `ahora − ultimoLanzamiento ≥ caducidadMinutos` o con un extremo que ya no existe. Devuelve la **misma** red si no cambia
   nada (los derivados están cacheados por identidad del objeto).
 - **`escalonDePeso(p)`**: `p ≥ escalonCalzada → 2` (calzada); `p ≥ escalonCamino → 1` (camino); si no `0` (sendero). `tramosDeRed(red, visible)` encadena aristas contiguas del mismo escalón en polilíneas
   (solo por nodos con exactamente 2 aristas de ese escalón) para pintarlas; `visible(a, b)` filtra por niebla (`Niebla_De_Guerra.md`).
@@ -594,7 +594,7 @@ tiene una plaza, y no impide ordenar un recurso sin precio de referencia (el oro
 
 ### 8.2 Caducidad e historial
 
-Cada tick (`caducarOrdenes`, paso 12): una orden `activa` con `instante ≥ expiraEn` pasa a `expirada` (evento `mercado.orden_expirada`); las que ya no están `activa` salen de `estado.ordenes`. Las cerradas
+En su instante de caducidad (**evento**): una orden `activa` con `instante ≥ expiraEn` pasa a `expirada` (evento `mercado.orden_expirada`); las que ya no están `activa` salen de `estado.ordenes`. Las cerradas
 se anexan a `historialOrdenes` (`anexarAlHistorialDeOrdenes`), que recuerda solo las **últimas `MERCADO.historialPorPlaza` de cada plaza**, del más viejo al más nuevo. No existe emparejamiento automático:
 nada cierra una orden salvo el mostrador o el plazo.
 
@@ -699,7 +699,7 @@ Emite `mercenarios.repostado { campamentoId, heroeId, cantidad }` (la cantidad c
 
 - **Qué cuenta como comercio del mundo** (`comerciadoDeEventos`, leído de los eventos de cada comando en `exito`): el `intercambiado` (por recurso) de cada `comercio.trueque_cumplido` con
   `entreFacciones`, y la `cantidad` de cada `mercado.comercio_en_plaza` con `entreFacciones`. Se suma a `mercadoMercenario.contadores`. Lo que una Facción comercia consigo misma no cuenta.
-- **Reposición** (`reponerMercados`, paso 17 del tick): si `instante ≥ reponeEn`: para cada campamento, el stock arranca como el suyo **con las pilas devueltas a su tope**, y a cada bien con contador
+- **Reposición** (`reponerMercados`, evento agendado): si `instante ≥ reponeEn`: para cada campamento, el stock arranca como el suyo **con las pilas devueltas a su tope**, y a cada bien con contador
   `> 0` y que **no sea una pila** se le suma `contador × proporcionRepone`, topado por `topePorBien`. Después los contadores vuelven a `{}` y `reponeEn = instante + cadaHoras × 60` min. Es una cita
   agendada: los demás ticks solo comparan un instante. El primer `reponeEn` es `creación + cadaHoras` horas.
 
@@ -707,7 +707,7 @@ Las cifras de `MERCENARIOS.mercado` (`cadaHoras`, `proporcionRepone`, `topePorBi
 
 ## 10. Cuando una plaza cae en ruinas (`cerrarDependientesDeRuina`)
 
-En el mismo tick de la ruina (antes del comercio), para la plaza `R` destruida:
+En el instante del evento de ruina (antes de cualquier evento de comercio del mismo instante, prioridad 5 frente a 6), para la plaza `R` destruida:
 
 - Su **campamento de bandidos** (el que nació de esa plaza, `asentamientoId = R`) desaparece con el evento `bandidos.campamento_disperso { campamentoId, asentamientoArruinadoId }`.
 - Sus **trueques** `activo` o `propuesto` pasan a `expirado` **sin penalizar a nadie** (evento `comercio.trueque_cancelado` a la plaza socia).
@@ -715,8 +715,9 @@ En el mismo tick de la ruina (antes del comercio), para la plaza `R` destruida:
   - **Salían de `R`** ⇒ se **pierden** (`comercio.caravana_perdida`), su escolta vuelve al campamento.
   - **Iban hacia `R`** (`en_transito` o `preparando`) o **estaban `aparcada`** en ella:
     - `preparando` ⇒ la carga vuelve al almacén del origen y queda `disponible` (`comercio.caravana_vuelve`).
-    - en camino o aparcada ⇒ `retornando` con `ruta = calcularRuta(posición actual → origen)` (**sin atracción**) y `destino = R`, con su carga (la vuelca en el origen al llegar); sin camino por tierra, o sin
+    - en camino ⇒ `retornando` con plan `calcularRuta(posición actual → origen)` (**sin atracción**) y `destino = R`, con su carga (la vuelca en el origen al llegar); sin camino por tierra, o sin
       origen, se pierde.
+    - **aparcada en `R`** ⇒ **se destruye** con sus carros, animales y carga, sin captura (decidido el 2026-10-13, Doc 3.13.7).
   - Las demás siguen como estaban.
 
 La red de caminos se poda sola al faltar un extremo (§7.4).
@@ -853,3 +854,17 @@ Los bloques de las secciones anteriores son los de este sistema. Además, de otr
 ## 16. Divergencias
 
 Ninguna abierta. Las del 2026-10-11 se resolvieron: comisión solo entre asentamientos distintos, recargo por reputación, reparto sin atascos, «Carga Ampliada» para toda caravana, reputación solo entre Facciones, código muerto retirado.
+
+## 12. Carro de acarreo (guerra logística, Doc 3.13.8)
+
+Cada pueblo extractor (Economia_Construccion §pueblos) tiene un carro propio: una caravana de tipo `acarreo` ligada al pueblo.
+
+- **Un carro básico con buey** (500 de capacidad, velocidad **24**) y una **ruta fija** pueblo ↔ plaza madre, calculada una vez como cualquier plan.
+- **Solo sale con el carro lleno**: el evento de salida se programa cuando el almacén local del pueblo alcanza la capacidad del carro (o al reponerse el carro con almacén ya lleno). Vuelca en el almacén de la madre y vuelve vacío.
+- **No cuenta** contra los cupos de caravanas ni de carros del Mercado, ni exige Mercado. No entra en el reparto automático ni en el trueque.
+- **Escolta**: sin héroe, de los residentes de la madre (cupo del Mercado de la madre si lo tiene, 100/200/300; **100** si no) o por ejército (Movimiento §9).
+- **Casi siempre lucha en B** (viaja dentro de la zona del dueño); si una frontera recorta la zona y la ruta sale de ella, ese tramo es A (Combate §7.1).
+- **Si se destruye**, se compra otro en la plaza madre solo si el pueblo no tiene ninguno, al coste de carro + buey (20 madera + ~12 oro). Mientras no tenga carro, el pueblo acumula hasta llenar el almacén y la extracción para.
+- La **solvencia** de la madre (Doc 4.5) cuenta lo que llega por acarreo como la media de las llegadas en 24 h o como la producción del pueblo.
+
+Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_CARAVANA.distanciaReferencia` 600 → **120** (los bloques de arriba son los de TypeScript); velocidades ×1,5; `NAVEGACION.espaciadoMin` 45 → **8** y vados cada 100.
