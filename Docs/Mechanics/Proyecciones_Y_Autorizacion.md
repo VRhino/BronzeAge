@@ -1,5 +1,7 @@
 # Proyecciones y autorización
 
+> **Reescrito el 2026-10-13** en lo que cambia con la reconstrucción; el resto es la autorización y la proyección tal como son y pasa al contrato 05. Ver §«Cambios de la reconstrucción» al final.
+
 ## 1. Alcance y fuentes
 
 Cubre **quién puede hacer qué** y **qué ve cada uno**: los roles técnicos y las superficies del servidor, el camino de un comando desde la petición hasta el motor, los predicados de pertenencia en los que se apoya la autorización, **la matriz de los 122 comandos**, lo que el servidor proyecta a cada audiencia (administración, jugador, eventos) y cómo se reparte por los canales de tiempo real (foto + delta).
@@ -70,7 +72,7 @@ Membresia          { usuarioId, gameId, jugadorId|null, rol, desde, hasta?, moti
 | Sesión | `POST /sesiones`, `POST /registro` (código de invitación), `GET /sesiones/actual?gameId=` | credencial / sesión |
 | Jugador | `GET /jugador/partidas` (lista las abiertas con lo del propio usuario), `POST /jugador/partidas/:g/membresia` | sesión |
 | Jugador | `GET /jugador/partidas/:g` (proyección), `.../eventos?desde=`, `.../cronica`, `.../mapa/:mapaId`, `POST .../comandos`, `GET .../batallas/:b/asignacion`, WebSocket `.../tiempo-real` | `puedeJugar` (+ la partida abierta) |
-| Administración | `GET /admin/partidas/:g` (estado completo), `.../eventos`, `.../exportar`, `.../mapa/:mapaId`, `POST .../tick`, `POST .../comandos`, `GET .../auditoria`, `PUT .../playtest`, `GET .../carga`, `GET .../membresias`, WebSocket `.../tiempo-real` | `puedeAdministrar` |
+| Administración | `GET /admin/partidas/:g` (estado completo), `.../eventos`, `.../exportar`, `.../mapa/:mapaId`, `POST .../reloj` (acelerar, pausar o fijar el factor del reloj de mundo; sustituye a `POST .../tick`), `POST .../comandos`, `GET .../auditoria`, `PUT .../playtest`, `GET .../carga`, `GET .../membresias`, WebSocket `.../tiempo-real` | `puedeAdministrar` |
 | Administración | `POST` y `DELETE .../membresias[/:usuarioId]` | `puedeGestionarMembresias` |
 | Instancia | `GET /admin/partidas`, `POST /admin/partidas` (crear / reabrir), `GET` y `PUT /admin/registro/codigo`, `GET /admin/metricas`, `/admin/respaldos*` | `administrador_global` |
 | Instancia | `POST /admin/partidas` con `forzar`, `DELETE /admin/partidas/:g` | `administrador_global` ∧ `puedeDescartarPartida` |
@@ -92,7 +94,7 @@ POST /jugador/partidas/:g/comandos   |   POST /admin/partidas/:g/comandos       
       /admin:   { rol: rolEnPartida(actor), heroeId: <su héroe, si tiene membresía de jugador> }
  4. verificarAutorizacion(tipo, params, estado, actor)                              403 { error: 'no autorizado (<motivo>)' }  (§4)
  5. runner.ejecutar(tipo, params, actorId, idempotencyKey)
-      – entra en la COLA SERIAL de la partida (la misma que el tick)
+      – entra en la COLA SERIAL de la partida (el núcleo de un solo hilo; los eventos programados comparten esa cola)
       – idempotencia: la clave es  actor ':' idempotencyKey ; un segundo intento (en curso o ya resuelto) devuelve LA MISMA promesa
         sin volver a aplicar el comando. No se compara que el comando coincida. Recuerda las últimas `limiteIdempotencia` (500) claves.
  6. GameSession.ejecutar → candado de batalla → manejador del comando                (Tick §3)
@@ -511,7 +513,7 @@ Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve na
 ## 10. Casos límite y decisiones que parecen raras
 
 - **El administrador global que también juega** actúa con el rol `jugador` en los comandos (la membresía manda). Por `/admin/…/comandos` pasa entonces la condición de dominio de su héroe, no la de un administrador.
-- **`moderador` puede avanzar el tick a mano** (`POST …/tick` pide `puedeAdministrar`) y leer todo, pero **no ejecuta ningún comando** (ni siquiera `cancelarBatalla`).
+- **`moderador` puede controlar el reloj a mano** (`POST …/reloj` pide `puedeAdministrar`) y leer todo, pero **no ejecuta ningún comando** (ni siquiera `cancelarBatalla`).
 - **La condición de `fijarPuerta` y `vetarJugador` difiere**: el Rey puede fijar la puerta de cualquier plaza de su Facción sin estar presente; no puede vetar.
 - **`asignarCargoLocal` de Gobernador no pide presencia, el resto de cargos sí**: designar Gobernador es un acto de la Facción; los demás cargos los designa el Gobernador *desde la plaza*.
 - **Un forastero con columna a la puerta de una plaza ajena ve su mostrador** (`ordenes` activas), pero no su interior.
@@ -526,3 +528,12 @@ Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve na
 ## 11. Divergencias
 
 Ninguna abierta. Las resueltas (2026-10-12): comerciar por la plaza es del Tesorero o del Gobernador (§5.5), y el rol `observador` («solo lectura») se retiró porque ninguna ruta lo admitía.
+
+## Cambios de la reconstrucción (2026-10-13)
+
+- **Sin tick.** Los canales de vista ya no mandan «progreso por tick» ni `avancePorTick`: lo propio viaja como **plan completo** (vértices con su instante) una vez, y un cambio de plan llega como plan nuevo que empieza donde está la columna; lo ajeno, solo el tramo dentro de la vista con horizonte corto (~30 s), renovado (Niebla §5.4). Las economías y obras viajan como `(cantidad en t₀, ritmo)` y «termina en t». Se conservan fotos + deltas por canal, agrupación por clave de visión, serialización única por grupo y `resync`/`revocado`. El `ritmo` de suscripción (§ de difusión) deja de existir: lo sustituye el reloj de mundo. Detalle: contrato 05 (fase 2).
+- **Comandos retirados**: `replegarEjercito` (no hay vuelta a casa; cancelar = `estacionarEjercito`), el `POST …/tick`.
+- **Comandos nuevos o ampliados** (parámetros por fijar en el contrato 05, ver [`Comandos_Parametros.md`](Comandos_Parametros.md)): `repostar` (el Líder, con el ejército en la puerta), `reclamarCaravana` (junto a una caravana suelta), `atacar` con `declaraGuerra: true` y los objetivos `pueblo` y `avanzada`, y los de las obras de mapa: marcar un pueblo, colocar una avanzada, entregar materiales en el sitio, cancelar o destruir una obra, mejorar y reparar una avanzada, elegir la tropa de serie de una avanzada, guarnecer una avanzada y reponer el carro de acarreo. Autorización: las obras de mapa las usan el Gobernador o el Maestro de Obras **presentes** en la plaza madre; entregar materiales, cualquier ciudadano de la Facción con la columna en el sitio.
+- **Proyección**: la plaza ve solo su zona y las avanzadas ven 12 (Niebla §3); pueblos y avanzadas ajenos se recuerdan como una ciudad; la plaza deja de ver más allá de su frontera.
+- **Predicado nuevo**: «en guerra o declarable» para `atacar` (toda agresión entre Facciones exige guerra o la declara).
+

@@ -1,12 +1,14 @@
 # Campamentos de mercenarios
 
+> **Reescrito el 2026-10-13** para el mundo reactivo: sin tick, la retirada de la tropa prestada ocurre al cambiar la residencia (Doc 5.15.2b: la tropa prestada vuelve sin viaje al campamento de su héroe). Los campamentos están a 600 unos de otros (Doc 1.9c). El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Campamentos_Mercenarios.md`.
+
 ## 1. Alcance y fuentes
 
 Un campamento de mercenarios es un **enclave neutral** del mundo abierto: sin Facción, sin zona de influencia, que no crece ni desaparece y al que se puede entrar, residir, comprar, reclutar y refundar. Su mecánica está repartida en varios documentos; este es el **índice** de todas
 ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **población de reclutas**, el **reclutamiento**, la **tropa prestada** y la **planta** del campamento.
 
 - **Verificado contra:** `6a71770` (2026-10-12).
-- **Fuentes de lo nuevo:** `engine/reclutamientoMercenario.ts`, `engine/layoutCampamento.ts`, `session/proyecciones/escenaCampamento.ts`, `session/comandos/mercenarios.ts` (`reclutarEnCampamento`, `pedirPrestamo`, `reponerPrestamo`, `exigirEn`), `engine/simulation.ts` (`sinPrestamosAjenos`, paso 23 del tick).
+- **Fuentes de lo nuevo:** `engine/reclutamientoMercenario.ts`, `engine/layoutCampamento.ts`, `session/proyecciones/escenaCampamento.ts`, `session/comandos/mercenarios.ts` (`reclutarEnCampamento`, `pedirPrestamo`, `reponerPrestamo`, `exigirEn`), `engine/simulation.ts` (`sinPrestamosAjenos`, al cambiar la residencia del héroe).
 - **Canon:** [`Docs/Game/1_Sistema_de_Mundo_y_Territorio.md`](../Game/1_Sistema_de_Mundo_y_Territorio.md) 1.9b, Doc 2.5 (residencia), Doc 5.8 (reclutar).
 
 ## 2. Modelo de datos (`estado.campamentosMercenarios`)
@@ -23,7 +25,7 @@ ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **p
 | `mercado` | Stock en venta ([`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9). |
 | `fondos` | Fondo de refundación por héroe ([`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §9). |
 | `bandidosEn?` | Cuándo puede aparecer el siguiente campamento de bandidos de su anillo ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §13). |
-| `creadoEn` | Instante de la partida en que se colocó (tick 0). |
+| `creadoEn` | Instante de mundo en que se colocó (al crear el mundo). |
 
 ## 3. Dónde está cada cosa
 
@@ -50,7 +52,7 @@ actual(c, t) = min( tope(c),  c.poblacion + horas(t − c.poblacionEn) × MERCEN
                horas = max(0, t − poblacionEn) / 60 min
 ```
 
-La población **no se escribe cada tick**: lo guardado es el valor y el instante, y la cantidad de ahora se calcula al mirar. Nace llena (`poblacion = tope`). Al reclutar se guarda `poblacion = actual − cantidad` y `poblacionEn = ahora`. No come ni cuesta mantenimiento; añadir viviendas al layout subiría el tope sin tocar nada más.
+La población **no se escribe nunca por minuto**: lo guardado es el valor y el instante, y la cantidad de ahora se calcula al mirar. Nace llena (`poblacion = tope`). Al reclutar se guarda `poblacion = actual − cantidad` y `poblacionEn = ahora`. No come ni cuesta mantenimiento; añadir viviendas al layout subiría el tope sin tocar nada más.
 
 ## 5. Reclutar en el campamento (`reclutarEnCampamento`)
 
@@ -216,7 +218,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 | Invariante | Test que lo vigila |
 |---|---|
 | Colocación: separación mínima, lejos del borde, misma seed ⇒ mismos, nunca sobre agua, pegados a un bosque | `engine/__tests__/mercenarios.test.ts` |
-| Población: el tope son sus viviendas por lo que da cada una y recupera por hora; más viviendas, más tope; lo gastado se recupera sin ningún tick | `engine/__tests__/reclutamientoMercenario.test.ts` |
+| Población: el tope son sus viviendas por lo que da cada una y recupera por hora; más viviendas, más tope; lo gastado se recupera sin ningún evento | `engine/__tests__/reclutamientoMercenario.test.ts` |
 | Qué se recluta: edificio y tecnología; la tecnología del campamento por porcentaje de Facciones o por plazo; sin Facciones manda el plazo | `reclutamientoMercenario.test.ts` |
 | Precio: oro del escalón, caballos y equipo × recargo; la mala reputación lo encarece; sin asentamientos lo abarata | `reclutamientoMercenario.test.ts` |
 | Reclutar: crea la escuadra, cobra del almacén personal o del carro y gasta población; repone solo lo que falta; se une a la columna si cabe en el Liderazgo (contando lo que ya lleva fuera); rechaza no residente, tropa que no ofrece, sin oro, sin reclutas, al tope | `reclutamientoMercenario.test.ts` |
@@ -232,7 +234,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 - **Una Facción sin plazas paga menos** (`descuentoSinAsentamientos`) **y una de mala reputación paga más** (×1,5): los dos factores se multiplican.
 - **La escuadra reclutada puede nacer ya en la columna** si cabe en el Liderazgo; si no cabe, nace en el campamento aunque el héroe tenga la columna a la puerta.
 - **«Una escuadra por tropa»** cuenta también la que esté en la columna a la puerta (se repone allí); la prestada nunca cuenta.
-- **El préstamo dura lo que dura la residencia**: mudarse (o quedarse sin casa) retira la tropa prestada en el tick siguiente, aunque esté en una columna lejos.
+- **El préstamo dura lo que dura la residencia**: mudarse (o quedarse sin casa) retira la tropa prestada en el mismo instante, aunque esté en una columna lejos.
 - **El Centro Urbano no existe en el campamento**: la tropa de leva de arranque que sale de él no se recluta aquí (solo se **presta**).
 - **La empalizada no defiende**: es decorado; la protección real es el radio `radioProteccion`, donde nadie inicia combates.
 

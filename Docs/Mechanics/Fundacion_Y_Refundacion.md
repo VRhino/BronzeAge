@@ -1,5 +1,7 @@
 # Fundación y refundación
 
+> **Reescrito el 2026-10-13** para el mundo reactivo; distancias de fundación calibradas: separación mínima entre plazas **30** y exclusión de **20** respecto a un campamento (Doc 1.8). El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Fundacion_Y_Refundacion.md`.
+
 ## 1. Alcance y fuentes
 
 Cubre la **Caravana de Fundación** —la única forma de fundar un asentamiento— desde que se prepara hasta que funda, se desarma o caduca, y la **refundación**: cómo una Facción que se quedó sin plazas compra esa caravana en un campamento de mercenarios con un fondo común.
@@ -14,7 +16,7 @@ Cubre la **Caravana de Fundación** —la única forma de fundar un asentamiento
   - El campamento de mercenarios donde se compra: su colocación → [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §11; su mercado y sus residentes → [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9. El almacén personal → `Movimiento_Ejercitos.md` §3.
   - Interceptar la caravana de fundación → [`Combate.md`](Combate.md) §7.1. Las demás caravanas (`comercial`) → `Comercio_Caravanas.md`.
 
-Corre dentro del tick en `avanzarCaravanasDeFundacion` (paso 22 de la cadena; ver [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)).
+Corre por **eventos**: la caravana de fundación tiene un plan (vuelve sola, se desarma al llegar) y un evento de caducidad ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)). Sin titular vuelve sola a su origen; si una plaza anfitriona cae, las caravanas aparcadas en ella se destruyen (Doc 3.13.7).
 
 ## 2. Modelo de datos
 
@@ -190,7 +192,7 @@ A partir de ahí es la misma entidad: se engancha, se funda con `fundar` (§5), 
 - **Quien deja la Facción pierde su aporte**: `devolverAportes` y `fondoDeFaccion` solo cuentan ciudadanos.
 - **Gastar por orden de ciudadanía, no por quién aportó primero**: el fondo se consume de los ciudadanos en el orden de `faccion.ciudadanosIds`, hasta cubrir cada recurso.
 - **El titular es único y no se cambia comprándola de nuevo**: solo otro ciudadano que la reclama por el camino (mientras vuelve sola) se convierte en titular.
-- **Aparcada ≠ caducando**: la caravana que una columna deja aparcada al guarnecer empieza a caducar cuando el tick la ve aparcada (entonces pasa a `disponible` con `caducaEn = ahora + 48 h`), no desde que se aparcó; hasta entonces no tiene `caducaEn`.
+- **Aparcada ≠ caducando**: la caravana que una columna deja aparcada al guarnecer empieza a caducar cuando el evento de aparcado la registra (entonces pasa a `disponible` con `caducaEn = ahora + 48 h`), no desde que se aparcó; hasta entonces no tiene `caducaEn`.
 - **Sin camino de vuelta, se pierde**: no hay teletransporte; una isla o un enclave sin ruta pierde lo que costó la caravana.
 - **La plaza fundada no se mira como zona de nadie**: el punto no puede caer en la zona de **ninguna** plaza existente, ni la de la propia Facción.
 - **`minFundadoresParaFaccionNueva` = 1 y `exigeCiudadaniaPrevia` = false** son configuración de las primeras pruebas; el comando pasa `yaFueCiudadano = true`, así que esa segunda exigencia nunca se evalúa hoy.

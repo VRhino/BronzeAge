@@ -18,3 +18,8 @@ Las últimas (2026-10-12) se resolvieron así: las batallas cerradas se conserva
   una empalizada, según el diseño) y el upkeep pesan antes en la economía de una ciudad pequeña. Hay que medirlo con batch (`Docs/Mecanicas a balancear.md`).
 - **Economía (2026-10-11):** quitar la penalización por distancia de las recetas (+45 % de rendimiento en toda la cadena metalúrgica, que daba ×0,688), contar los puestos y anclas a la mitad en el mantenimiento y pausar (en vez de desperdiciar) con el almacén lleno cambian el ritmo
   de la economía en el mismo sentido: más producción y menos coste. Hay que medirlo con batch (`Docs/Mecanicas a balancear.md`) antes de calibrar nada.
+
+## Divergencias abiertas de la reconstrucción (2026-10-13)
+
+Los documentos de `Docs/Mechanics` describen ya el diseño del mundo reactivo y el código TypeScript (en `typescript-final`) no lo cumple en: el reloj por tick, la población con redondeo estocástico, `regresando` y `origenAsentamientoId`, `replegarEjercito`, `radioReabastecimiento`, la inmunidad de las caravanas en zonas ajenas, los pueblos extractores y las avanzadas (no existen), la visión de la plaza con margen, las velocidades, zonas y radios sin calibrar y el asedio de 5 contra 5. No se arreglan en TypeScript: se implementan en el servidor de Rust.
+

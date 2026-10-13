@@ -1,5 +1,7 @@
 # Trazado urbano — la Vista de Asentamiento
 
+> **Reescrito el 2026-10-13**: el **servidor calcula el trazado** de cada asentamiento una vez, con este algoritmo, y lo entrega; Unity solo lo dibuja (decisión del usuario). La escala de la ciudad se reduce un 80 % respecto al mapa (`ESCALA.unidadesLocalesPorUnidadMapa` = 200; `radioUrbanoDe = radioPotencial × 6`, Doc 1.0a). Los algoritmos de este documento no cambian. El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Trazado_Urbano.md`.
+
 Cómo se decide **dónde va cada edificio** de un asentamiento y por dónde pasan sus calles. Es una geometría pura sobre una rejilla, determinista y sin
 estado propio: lo único que se guarda de ella son las posiciones de los edificios (y los recintos, ver [`Murallas.md`](Murallas.md)).
 
@@ -413,7 +415,7 @@ tipoAncla := tipoAnclaParaCategoria(categoria, idNuevo)    // sorteo determinist
 resultado := crearAnclaNueva(...)                           // §7.2
 si null → fin
 marcar semillaSaturada = true en las recién saturadas
-GATE de utilidad: si sitiosPorAtraccionDura(nuevaAncla, …) está vacío → NO se añade el ancla (se conservan las semillas saturadas) y se reintenta otro tick
+GATE de utilidad: si sitiosPorAtraccionDura(nuevaAncla, …) está vacío → NO se añade el ancla (se conservan las semillas saturadas) y se reintenta en la siguiente reevaluación
 si no → añadir la nueva ancla
 ```
 

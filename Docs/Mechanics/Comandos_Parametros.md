@@ -135,3 +135,13 @@ es la lista de mensajes de orden que hay que cubrir.
 | `unirseAEjercito` | `ejercitoId`: string<br>`asentamientoId`: string<br>`heroeId`: string<br>`escuadronIds`: string[] |
 | `replegarEjercito` | `ejercitoId`: string |
 | `estacionarEjercito` | `ejercitoId`: string |
+
+## Cambios de la reconstrucción (2026-10-13)
+
+Esta tabla es la del motor TypeScript. En el contrato 05 (Protobuf):
+
+- **Se retira** `replegarEjercito`.
+- **Se amplía** `atacar`: `declaraGuerra?: boolean` y los objetivos `pueblo` y `avanzada`.
+- **Nuevos**: `repostar { heroeId }`, `reclamarCaravana { heroeId, caravanaId, politicaDeUnion }`, `marcarPueblo`, `colocarAvanzada`, `entregarEnObra`, `cancelarObra`, `destruirPueblo`, `destruirAvanzada`, `mejorarAvanzada`, `repararAvanzada`, `elegirTropaDeAvanzada`, `guarnecerAvanzada`, `reponerCarroDeAcarreo`.
+- La frontera «forma en el borde, reglas en el motor» se conserva.
+

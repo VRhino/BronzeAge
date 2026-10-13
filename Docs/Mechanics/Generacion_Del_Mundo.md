@@ -1,10 +1,12 @@
 # Generación del mundo
 
+> **Reescrito el 2026-10-13: este documento describe el generador del motor TypeScript (`typescript-final`) y pasa a ser la referencia de sus reglas, no su implementación.** En la reconstrucción el mundo es un **artefacto** inmutable por hash producido fuera de línea por el generador regional (TypeScript, de Codex) a **2.667 × 2.000** (factor 12 sobre Unity), con la **economía del mundo** del canon 1.9c: campamentos de mercenarios a 600 (8-10, centro de cada foco), tres anillos de tierra (foco hasta 150, frontera 150-250, tierra lejana), estaño solo fuera de 200 de un campamento y en vetas guardadas por bandidos, bosques mezclados y cuotas exactas. El servidor Rust **carga** el artefacto y no genera nada: de este documento sigue vigente la fachada `Mapa` (stock, regeneración por evento, coste de movimiento, Leñeras) y las reglas de campamentos, alijos y bandidos con los valores calibrados (alijos 20-40 / 40-90 / 250-300; bandidos a ≥ 10 del borde de su zona; protección de campamento 10). Abiertos para la fase 4: el oro (O1) y las Leñeras por bosque grande (O2).
+
 ## 1. Alcance y fuentes
 
 Cubre todo lo que **existe antes de que nadie juegue** y lo que de ello cambia durante la partida: el **mapa** (relieve, fertilidad, bioma, ríos, bosques, yacimientos y ganado), las **regiones** que sesgan el relieve, la fachada `Mapa` por la que
 el motor lo consulta (estado de lo extraído, regeneración, coste de movimiento, Leñeras), y las tres capas que se colocan **sobre** el mapa: los **campamentos de mercenarios** y los **alijos** (se colocan una vez, al crear la
-partida) y los **campamentos de bandidos** (aparecen en el tick).
+partida) y los **campamentos de bandidos** (aparecen por eventos, no por un barrido).
 
 - **Verificado contra:** `e77c2a1` (2026-10-12), más la corrección de un comentario de `worldgen/nodos.ts` y la ampliación de `mecanicas/sincronizar.ts` (regiones y versión del generador) que trae este documento.
 - **Fuentes:** `worldgen/{index,config,types,ruido,elevacion,fertilidad,biomas,rios,bosques,nodos,colocacion,regiones,costeMovimiento}.ts`, `world/{mapa,geometria}.ts`, `engine/{mercenarios,alijos,bandidos}.ts`,
@@ -773,7 +775,7 @@ extraer(id, n): si el nodo no existe o n ≤ 0 → 0 ; disponible = stock(id) ; 
                 sacado = min(n, disponible) ; extraido[id] += sacado ; mutaciones++ ; devolver sacado
 ```
 
-**Regeneración** (`avanzarRegeneracion(instante)`, paso 7 del tick), para cada nodo **en orden de generación** con `stock ≤ 0`:
+**Regeneración** (un **evento** al fin del cooldown de cada nodo; antes `avanzarRegeneracion`), para cada nodo **en orden de generación** con `stock ≤ 0`:
 
 1. Sin entrada en `regeneraEn`: se agenda `instante + cooldown` (`livestock` = `REGENERACION_NODOS.livestock.cooldownMinutos`; **todo lo demás**, también la piedra, = `.metales`). El cooldown cuenta desde el tick en que se **detecta** el agotamiento, no desde que ocurrió. Esto también cura partidas viejas.
 2. Con entrada y `instante ≥ regeneraEn`: se borran `extraido[id]` y `regeneraEn[id]` (stock completo) y se emite `mapa.yacimiento_regenerado { nodoId, recurso }`.
@@ -840,7 +842,7 @@ Evento `alijo.abierto { heroeId, alijoId, oro }`.
 
 ## 13. Campamentos de bandidos (`engine/bandidos.ts`)
 
-**No hay ninguno al crear el mundo** (`campamentosBandidos = []`): aparecen en el tick, y solo mientras existan asentamientos o campamentos de mercenarios que los atraigan. Los dos orígenes los evalúa `avanzarSpawnBandidos` cada tick (paso 8, consume el generador de la partida):
+**No hay ninguno al crear el mundo** (`campamentosBandidos = []`): aparecen por un evento programado al fin del plazo de cada plaza, y solo mientras existan asentamientos o campamentos de mercenarios que los atraigan. Los dos orígenes los evalúa `avanzarSpawnBandidos` cada tick (paso 8, consume el generador de la partida):
 
 **Nivel** (`nivelAlAzar`): `t = r`; para los niveles 1, 2, 3 en ese orden, `t −= peso`; el primero que deja `t < 0`. Si ninguno, nivel 1. `poder` = `niveles[nivel].poder`.
 
@@ -850,7 +852,7 @@ Evento `alijo.abierto { heroeId, alijoId, oro }`.
 
 **B. En el anillo de cada campamento de mercenarios, según la demanda.** Para cada uno en orden: salta si `instante < bandidosEn`. `tocan = clamp(ceil(residentesSinPlaza / residentesPorBandido), minimo, maximo)`, donde `residentesSinPlaza` cuenta a los residentes cuya Facción **no tiene asentamientos** o que no tienen Facción.
 Si ya hay `≥ tocan` campamentos suyos (`campamentoMercenariosId`), nada. Si no, `puntoDelAnillo`: hasta 20 intentos con `angulo = r·2π` y `radio = radioMin + r·(radioMax − radioMin)` (dos tiradas por intento), válido si está dentro del mapa, es transitable, no es agua, **no** cae en ninguna zona de influencia y no está en la
-protección de ningún campamento de mercenarios. Sin punto: no se hace nada (ni se agenda), de modo que **se reintenta cada tick** y gasta tiradas cada vez. Con punto: `{ id: "bandidos-{merc.id}-{instante}", bosqueId: "", campamentoMercenariosId, nivel }` (una tirada de nivel) y
+protección de ningún campamento de mercenarios. Sin punto: no se hace nada (ni se agenda), de modo que **se reintenta en el siguiente evento de aparición** y gasta tiradas cada vez. Con punto: `{ id: "bandidos-{merc.id}-{instante}", bosqueId: "", campamentoMercenariosId, nivel }` (una tirada de nivel) y
 `bandidosEn = instante + reaparicionMinutos`.
 
 **Acoso** (`avanzarAtaquesBandidos`, paso 9). Para cada caravana en orden, salvo las `disponible`, `preparando` y `aparcada`: toma el **primer** campamento (en el orden de la lista) a `≤ radioAtaqueCaravana`. No actúa si no hay ninguno, si la caravana está dentro de **cualquier** zona de influencia
@@ -1226,7 +1228,7 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
 - **`pasosMax` agotado deja el río como lago** (`terminaEnLago = true`), igual que un gradiente casi nulo: no hay un estado «sin terminar».
 - **Un río de un solo punto** (nacimiento de respaldo o gradiente insuficiente) existe y se cuenta, pero no tiene segmentos: no aporta humedad y su distancia a cualquier punto es infinita.
 - **La Leñera «de centro»**: el primer puesto de un bosque es siempre su centro; los siguientes giran a 0,4·radio con ángulos de 120° y 240°. Si el punto preferido cae fuera de la zona, se buscan anillos dentro del propio bosque (un bosque puede tocar la zona por un punto que no es su centro).
-- **La regeneración empieza al detectar**, no al agotar. Un yacimiento que se agota y se detecta en el mismo tick tarda exactamente el cooldown; uno agotado entre dos ejecuciones del paso 7 se retrasa a la siguiente.
+- **La regeneración empieza al detectar**, no al agotar. Un yacimiento que se agota y se detecta en el mismo instante tarda exactamente el cooldown; uno agotado entre dos ejecuciones del paso 7 se retrasa a la siguiente.
 - **El anillo de bandidos sin sitio gasta tiradas todos los ticks** (hasta 40) mientras no encuentre un punto: es la única vía por la que el generador de la partida avanza sin que ocurra nada visible.
 - **Los bandidos de un asentamiento miran el centro del bosque**, no su círculo, para decidir si está reclamado (misma simplificación que `posicionLibreParaFundar`): un bosque cuyo centro queda fuera de toda zona pero cuyo borde la toca cuenta como libre.
 - **El campamento de bandidos de un asentamiento no bloquea el bosque que ocupa**; solo amenaza las caravanas que pasen a menos de 40.

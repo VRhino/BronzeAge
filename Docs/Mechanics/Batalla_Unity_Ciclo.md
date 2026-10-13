@@ -124,11 +124,11 @@ battleId = a '-' b[0..4) '-' b[4..8) '-' c[0..4) '-' c[4..16)
 
 ## 5. Lo bloqueado y el candado de comandos
 
-**Una batalla activa** es la que está `convocando`, `asignada` o `en_curso` **y** dentro de plazo (`ahora < expiraEn`): una vencida deja de bloquear ya, aunque la cierre el siguiente tick. Lo mismo con el candado de las escuadras: antes de ejecutar cualquier comando con candado, `sinCandadosVencidos(estado, ahora)` suelta el `reservaBatalla` de las escuadras de las batallas vencidas (sin cerrarlas ni narrar nada: eso es del tick), así que reponer o guarnecer no dependen de que el tick haya pasado.
+**Una batalla activa** es la que está `convocando`, `asignada` o `en_curso` **y** dentro de plazo (`ahora < expiraEn`): una vencida deja de bloquear ya, aunque la cierre su evento de vencimiento. Lo mismo con el candado de las escuadras: antes de ejecutar cualquier comando con candado, `sinCandadosVencidos(estado, ahora)` suelta el `reservaBatalla` de las escuadras de las batallas vencidas (sin cerrarlas ni narrar nada: eso es del tick), así que reponer o guarnecer no dependen de que el tick haya pasado.
 
 `bloqueosDe(estado, ahora)` reúne, de las activas: los **héroes que combaten** (`participacionesDe`), los ids de `bloqueo.ejercitoIds`, `caravanaIds`, el `asentamientoId` asediado y el `campamentoId` atacado.
 
-- **En el tick**: lo bloqueado **no se simula** (los ejércitos y caravanas bloqueados se apartan, no se mueven, no comen, no son perseguidos; vuelven al final de las listas), y el héroe bloqueado **no sale del mundo** aunque cumpla su espera ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §4.1).
+- **Mientras dura**: lo bloqueado **no se simula** (los ejércitos y caravanas bloqueados se apartan, no se mueven, no comen, no son perseguidos; vuelven al final de las listas), y el héroe bloqueado **no sale del mundo** aunque cumpla su espera ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §4.1).
 - **En un comando** (`conCandadoDeBatalla` envuelve **todo el registro** salvo los comandos de §5.1): se rechaza con **`batalla.bloqueado`** (200, `ok: false`, sin gastar un dado ni un id) si `tocaLoBloqueado(estado, ahora, actor, params)`:
 
 ```
@@ -146,7 +146,7 @@ Mira los parámetros **por su nombre** (la convención de todo el registro): cub
 
 ### 5.1 Los que no llevan candado
 
-`unirseABatalla` y `cancelarBatalla` (actúan sobre la propia batalla) y **`conectarse` y `desconectarse`**: cerrar el cliente en plena batalla tiene que **anotarse** (el tick lo aplica al terminar, D33b) y volver a conectarse tiene que **anular** esa petición. Los mensajes de Conquest y el tick no pasan por el registro de comandos, así que no llevan candado.
+`unirseABatalla` y `cancelarBatalla` (actúan sobre la propia batalla) y **`conectarse` y `desconectarse`**: cerrar el cliente en plena batalla tiene que **anotarse** (el evento de salida se aplica al terminar, D33b) y volver a conectarse tiene que **anular** esa petición. Los mensajes de Conquest y el tick no pasan por el registro de comandos, así que no llevan candado.
 
 ## 6. Plazos y vencimientos
 
@@ -159,9 +159,9 @@ Mira los parámetros **por su nombre** (la convención de todo el registro): cub
 | Al empezar (`en_curso`) | ahora + `duracionMaximaSegundos / 60 + BATALLA.margenMinutos` minutos |
 | Tras una salida previa al inicio (vuelve a `convocando`) | ahora + `BATALLA.plazoAsignacionMinutos` |
 
-El margen existe para que, tras una caída corta del servidor (que recupera los ticks de golpe), una batalla que ya terminó no se dé por fallida.
+El margen existe para que un retraso entre Unity y el servidor no haga fallar una batalla que ya terminó. (El reloj de mundo se congela mientras el servidor está apagado, así que una caída no consume plazo.)
 
-**`vencerBatallas`** (primer paso del tick): toda activa con `instante ≥ expiraEn` pasa a **`fallida`** sin castigo: suelta los candados de sus escuadras (`cerrarSinResultado`), nadie gana ni pierde, y se narra `batalla.fallida`. Esto vale desde `convocando`, `asignada` y `en_curso`.
+**`vencerBatallas`** (evento programado a `expiraEn`, prioridad 1 en [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): toda activa con `instante ≥ expiraEn` pasa a **`fallida`** sin castigo: suelta los candados de sus escuadras (`cerrarSinResultado`), nadie gana ni pierde, y se narra `batalla.fallida`. Esto vale desde `convocando`, `asignada` y `en_curso`.
 
 ## 7. Unirse
 
@@ -334,7 +334,7 @@ Los que intervienen y viven en otro documento: `LOGISTICA.radioEncuentro` (dista
 | Conquista, captura, destrucción de campamento, carro, chatarra y XP de Facción | `batallas.test.ts` |
 | Los eventos del ciclo no llevan tokens, escuadras ni listas de héroes; sí el recuento por bando | `session/__tests__/canalDeBatalla.test.ts` |
 | Los eventos de una batalla llegan por el cursor a quien combate en ella aunque no tenga plaza | `batallas.test.ts` |
-| El candado de una escuadra no sobrevive al plazo de su batalla, aunque el tick aún no la haya cerrado | `batallas.test.ts` |
+| El candado de una escuadra no sobrevive al plazo de su batalla, aunque el evento aún no la haya cerrado | `batallas.test.ts` |
 | Quien puede seguir una batalla: quien combate, o la ve; no un forastero | `canalDeBatalla.test.ts` |
 
 ## 13. Casos límite y decisiones que parecen raras
@@ -347,7 +347,7 @@ Los que intervienen y viven en otro documento: `LOGISTICA.radioEncuentro` (dista
 - **Un `derrotado: false` explícito protege** al perdedor de la herida; quien no lo trae, se hiere con su bando.
 - **Un mensaje a una batalla cerrada** responde `404` (asignación, inicio, tokens, salida) o `409` (resultado), salvo el `resultado` idéntico de una `aplicada`, que responde bien. Pasada la retención (§3.3) todo responde `404`.
 - **La Facción de una columna sin bandera** es `null` en el ticket y en `faccionAtacanteId`/`faccionDefensoraId`; una conquista con atacante sin Facción **no ocurre**.
-- **El plazo vencido suelta todo al instante**, columna y escuadras (`bloqueosDe` mira el plazo; `sinCandadosVencidos` suelta el `reservaBatalla` al validar cada comando). El tick solo cierra la batalla (`fallida`) y la narra. Con el reloj del motor (los comandos corren en el instante del tick y el tick cierra antes) esa ventana no llega a verse; la comprobación perezosa lo garantiza sin depender de él.
+- **El plazo vencido suelta todo al instante**, columna y escuadras (`bloqueosDe` mira el plazo; `sinCandadosVencidos` suelta el `reservaBatalla` al validar cada comando). El evento de vencimiento solo cierra la batalla (`fallida`) y la narra. Con el reloj del motor (los comandos corren en el instante del tick y el tick cierra antes) esa ventana no llega a verse; la comprobación perezosa lo garantiza sin depender de él.
 - **Una batalla cerrada sale del estado a la hora de la retención** (`BATALLA.conservarCerradasMinutos`) y pasa al histórico de la partida: el estado y el snapshot no crecen con cada batalla (§3.3).
 - **El `battleId` solo es único entre partidas si el `gameId` lo es**: sale de un resumen de 64 bits del `gameId` más el contador; no hay aleatoriedad.
 - **La salida del mundo espera**: aunque el héroe lleve su `desconectaEn` cumplido, no sale mientras combate; la hace el primer tick tras acabar. Si Conquest lo da por desconectado, lo saca de la batalla con una `SalidaBatalla` (`desconexion`, §8.4) y entonces sale en el tick siguiente.
@@ -371,3 +371,15 @@ El ciclo se escribió antes de varias cosas que han cambiado (columnas sin bande
 **Pendientes de Conquest** (no son divergencias del servidor; el contrato las anota como decididas):
 
 - `atributosEfectivos` sin el equipo y objetos de botín sin tipo ni precio (CQ-004); la XP del héroe se suma pero **el nivel no sube** (CQ-001); no se valida que el objeto exista ni un tope de XP o monedas.
+
+## Modalidades añadidas por la guerra logística (2026-10-13)
+
+El ticket y el contrato de resultado (v1) se amplían, siempre en aditivo, con las batallas nuevas (Doc 5.2, 5.15.1b; detalle de la resolución con números en [`Combate.md`](Combate.md) §7):
+
+- **Asalto de caravana, modalidad `disputa` o `aguante`.** El servidor decide el tipo por la zona donde está la caravana en el instante del ataque y lo manda en `contextoEstrategico.caravana { caravanaId, punto, modalidad }`, con los carros identificados (id y carga de cada uno). La respuesta de Unity añade `carrosPerdidos: carroId[]` (en A y en B); el servidor destruye esos carros con su animal y calcula la carga perdida (A: la de los carros; B: el 70 % de la carga, el 30 % se salva). En A, los carros cambian de manos dentro de la partida y el atacante se lleva el que logre sacar; en B, el defensor aguanta hasta que se agota el tiempo.
+- **Saqueo de un pueblo extractor.** Batalla propia; Unity decide el dentro (mapa = el trazado del pueblo). El resultado es solo saqueo, nunca conquista: el pueblo protege el 50 % de su capacidad y el atacante se lleva solo lo que esté por encima, hasta lo que le quepa en los carros.
+- **Ataque a una avanzada.** La abre solo un ejército y dura 30 minutos como un asedio; hay un mapa interior por etapa (atalaya, fuerte, ciudadela). Resultado: destruida, en ruinas o resistida según la etapa (Combate §7.4).
+- **Asedio de 15 contra 15** (`BATALLA.capacidad.asedio`).
+- Toda agresión entre Facciones exige guerra o la declara; unirse como atacante a un asedio ajeno no la declara.
+- No se envía nada de esto a Conquest sin permiso del usuario.
+

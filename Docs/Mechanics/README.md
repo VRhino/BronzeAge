@@ -1,6 +1,6 @@
 # Mechanics — cómo funciona lo que ya está implementado
 
-Esta carpeta describe, **con la precisión suficiente para reimplementarlo en otro lenguaje**, el comportamiento que hoy tiene el juego. Nace el
+Esta carpeta describe, **con la precisión suficiente para implementarlo**, el comportamiento del juego. **Desde el 2026-10-13 describe el diseño de la reconstrucción en Rust** (mundo reactivo sin tick, calibración de distancias, guerra logística, ejércitos sin vuelta a casa): el comportamiento del servidor TypeScript, tal como era, está en `typescript-final:Docs/Mechanics/`. Cada documento lleva una nota de «Reescrito» que dice qué cambió y las cifras vigentes cuando difieren de las de los bloques sincronizados (que siguen copiando `constants.ts` de TypeScript). Nace el
 2026-10-09 por decisión del autor: las reglas de trazado y de murallas vivían solo en el código y en documentos de diseño narrados como historia,
 y una migración habría perdido lo que el código sabe.
 

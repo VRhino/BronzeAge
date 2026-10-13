@@ -1,5 +1,7 @@
 # Murallas — los recintos
 
+> **Reescrito el 2026-10-13** para el mundo reactivo: la obra de un recinto es una obra con evento de fin por celda y el upkeep es un ritmo. Las murallas por nivel (empalizada nivel 2, piedra nivel 3, adarve nivel 4) siguen como en el canon 4.2.1; las cifras de coste siguen siendo placeholder. La jerarquía de puertas se descartó y la demolición de un recinto está en Ideas. El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Murallas.md`.
+
 Cómo se traza, se paga, se mejora, se amplía, defiende, cuesta mantener y se daña un **recinto** (la muralla de un asentamiento). Un recinto **no es un edificio**: es un anillo cerrado de celdas
 alrededor del casco urbano que se levanta celda a celda.
 
@@ -96,19 +98,19 @@ crear Recinto { nivel, celdas: trazo.celdas, avance: −1, comprometidoEn }
 - **`contieneA(nuevo, anterior)`**: ninguna celda del anillo nuevo coincide con una del viejo, y un flood fill desde fuera del anillo nuevo no llega a ninguna del viejo sin cruzar el muro nuevo. Es el invariante «el área encerrada nunca decrece».
 - **Extramuros** = edificios urbanos (no granja/corral) con alguna celda fuera del interior del recinto.
 - El interior de un recinto ya congelado (`regionInteriorDeRecinto`) es la **inundación 4-conexa desde una celda del Centro Urbano** que no cruza ninguna celda del anillo (**las puertas bloquean** aquí: son un hueco para quien camina,
-  no un agujero en la contabilidad del interior), acotada a la caja del anillo +1. `areaEncerradaDeRecinto` da el mismo número en cualquier tick posterior (el anillo no cambia).
+  no un agujero en la contabilidad del interior), acotada a la caja del anillo +1. `areaEncerradaDeRecinto` da el mismo número en cualquier instante posterior (el anillo no cambia).
 - Un recinto se puede comprometer **directamente en cualquier nivel permitido por su gate** (el esquema acepta 1, 2 o 3) pagando solo la tarifa de ese nivel, sin pasar por los anteriores. Es intencional (2026-10-10): permite defenderse antes con lo que se pueda, o levantar la muralla más tarde con la ciudad más grande.
 
 ## 5. La obra (`avanzarObraDeRecintos`)
 
-La corre el tick de construcción de cada asentamiento (`construction.ts`) **después** de `evaluarNecesidades`, para que la construcción normal tenga preferencia sobre los materiales. No ocupa hueco de la cola de edificios.
+La corre como cualquier obra de cada asentamiento (`construction.ts`) **después** de `evaluarNecesidades`, para que la construcción normal tenga preferencia sobre los materiales. No ocupa hueco de la cola de edificios.
 
 ```
 para cada recinto incompleto (avance < celdas.length − 1):
     nivelDePago := mejorandoA ?? nivel
     si siguienteCeldaEn existe y instante < siguienteCeldaEn → nada
     coste := tarifaPorCelda[nivelDePago] × factor(clase de la celda avance+1)
-    si no hay recursos, o pagarlos dejaría un recurso por debajo de la RESERVA de mantenimiento → nada este tick (no falla, no se cancela, no hay deuda)
+    si no hay recursos, o pagarlos dejaría un recurso por debajo de la RESERVA de mantenimiento → nada en este evento (no falla, no se cancela, no hay deuda)
     descontar; avance += 1;  siguienteCeldaEn := instante + minutosPorCelda[nivelDePago] × factorTiempoMuralla
     si completa:
         si hay mejora: nivel := mejorandoA; recalcular torres sobre el mismo anillo (marcarTorres con la región interior); borrar mejorandoA; evento construccion.recinto_mejorado
@@ -167,7 +169,7 @@ Un recinto en mejora no suma. Progresivo por decisión del autor (2026-10-10).
 
 ### 9.4 Mantenimiento (upkeep)
 
-`upkeepDeRecintos`: por cada recinto con celdas levantadas, `upkeepPorCelda[nivel actual] × (avance + 1)` por recurso y tick. Usa el nivel **actual**, nunca `mejorandoA`. Se **suma** al coste de mantenimiento del asentamiento
+`upkeepDeRecintos`: por cada recinto con celdas levantadas, `upkeepPorCelda[nivel actual] × (avance + 1)` por recurso y minuto (un **ritmo** de coste que se suma al mantenimiento). Usa el nivel **actual**, nunca `mejorandoA`. Se **suma** al coste de mantenimiento del asentamiento
 (`calcularCostoMantenimiento`) sin el factor de población ni de distancia: el muro cuesta lo que pesan sus celdas.
 
 ### 9.5 Colocación de edificios
