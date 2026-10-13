@@ -1,8 +1,9 @@
 # Economía y construcción de un asentamiento
 
 Cómo nace un asentamiento, qué produce, cómo se construye y se mejora, cómo crece y come su gente, qué cuesta mantenerlo y cómo sube (o baja) de nivel. Es el
-sistema que corre **dentro de cada asentamiento en cada tick**; lo que ocurre entre asentamientos (comercio, caravanas) y la guerra están en otros documentos.
+sistema que corre **dentro de cada asentamiento, de forma continua (ritmos y eventos, sin tick)**; lo que ocurre entre asentamientos (comercio, caravanas) y la guerra están en otros documentos.
 
+- **Reescrito el 2026-10-13** para el mundo reactivo: §1 pasa de «orden dentro del tick» a ritmos y eventos, el crecimiento de población es continuo (sin redondeo estocástico) y se añaden los pueblos extractores y la calibración (§14). Las fórmulas «por tick» de las demás secciones son **ritmos por minuto**, idénticos; donde el texto diga «cada tick» léase «continuamente, con eventos en los umbrales». El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Economia_Construccion.md`.
 - **Verificado contra:** `d406eed` (2026-10-10) y revisado el 2026-10-11 con las decisiones del usuario sobre las divergencias (piezas gratuitas, almacén lleno, Gran Fundición, reembolso de dañados, sin líneas de producción).
 - **Módulos:** `src/engine/construction.ts` (≈1.870 líneas: cola de obras, auto-construcción, producción, recetas, mejoras, comandos manuales),
   `settlement.ts` (fundación y viabilidad), `almacen.ts` (primitivas de almacén), `asentamientoQuery.ts` (cupos, mano de obra, progreso de nivel),
@@ -14,24 +15,31 @@ sistema que corre **dentro de cada asentamiento en cada tick**; lo que ocurre en
   la guarnición y las tropas (`avanzarMantenimientoTropas`, reclutar) → combate/militar; el comercio; el orden global del tick; la fertilidad y los nodos del mapa
   (los genera `worldgen`, aquí son una caja negra: `fertilidadEn`, `bosque`, `stock`).
 
-> **Unidades.** 1 tick = 1 minuto de mundo. Toda tasa «por minuto» es «por tick». Los tiempos de obra son minutos de mundo.
+> **Unidades.** No hay tick. Toda tasa «por minuto» es un **ritmo**: el estado guarda `(valor en t₀, ritmo)` y el valor en un instante `t` es `min(tope, valor₀ + ritmo × (t − t₀))`. Los tiempos de obra y de mejora son instantes de fin (eventos).
 
-## 1. Orden dentro de un asentamiento y tick
+## 1. Cómo corre un asentamiento (ritmos y eventos)
 
-Para cada asentamiento, el tick (`engine/simulation.ts`) ejecuta **en este orden**:
+| Antes (un paso por minuto) | Ahora | Evento que programa |
+|---|---|---|
+| `avanzarConstruccion`: obras, producción, recetas, mejoras, auto-construcción, recintos (§6) | **Ritmo** neto por recurso de la producción y las recetas; **evento** de fin de cada obra y de cada mejora; la auto-construcción se **reevalúa por dependencia** | almacén lleno, recurso a 0, obra terminada, mejora terminada |
+| `avanzarPoliticas` | **Evento** a la caducidad de cada política | política caduca |
+| `avanzarAscenso` (§11.4) | **Evento** al fin de la obra de ascenso | ascenso completado |
+| `avanzarNutricionPoblacion` (§9.2) | **Ritmo** de consumo de comida; la nutrición cambia por umbrales de reserva | reserva a 0, nutrición cruza umbral |
+| `avanzarMantenimientoTropas` | **Ritmo** de consumo de la guarnición (otro documento) | despensa a 0, deserción |
+| `crecerPoblacion` (§9.1) | **Ritmo** logístico continuo | población cruza un cupo o el techo de nivel |
+| Recaudación de oro (§9.3) | **Ritmo** (impuesto por clase × población) | almacén de oro lleno |
+| `avanzarMantenimiento` (§10) | **Ritmo** de coste y de medidor | medidor cruza un umbral, baja el nivel, ruina |
+| Fin de ocupación y de protección | **Evento** a su instante | ocupación terminada |
 
-1. `avanzarConstruccion` — obras en curso, producción, arranque de obras, recetas, mejoras, auto-construcción, obra de recintos (§6).
-2. `avanzarPoliticas` — expira las políticas vencidas **después** de que la construcción las haya usado este tick.
-3. `avanzarAscenso` — termina la obra de ascenso de nivel si toca (§11.4).
-4. `avanzarNutricionPoblacion` — la población **come antes que las tropas** (§9.2).
-5. `avanzarMantenimientoTropas` — la ración de la guarnición (no es de este documento).
-6. `crecerPoblacion` (§9.1).
-7. Recaudación de oro: `almacen.oro += recaudacionOro(población ya crecida)`, con tope de capacidad (§9.3).
-8. `avanzarMantenimiento` — el oro recién recaudado ya paga el mantenimiento del mismo tick (§10).
-9. Fin de la ocupación y de la protección si su instante venció (`ocupacionHasta`, `protegidaHasta`).
+**Desempate del mismo instante** (prioridad de tipo, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): la obra usa las políticas antes de que expiren; la población come antes que las tropas; la recaudación usa la población ya crecida; el oro recaudado paga el mantenimiento del mismo instante; una ruina deja de existir para el comercio y los ejércitos de ese instante.
 
-Después, a nivel global, se eliminan los asentamientos «destruidos» por el mantenimiento (ruinas, §10.4). La experiencia de Facción por edificio completado
-(`NIVEL_FACCION.xp.edificioCompletado` × nº de obras terminadas) y por ascenso (`xp.ascensoPorNivel` × nivel nuevo) se acumula y se aplica más abajo en el tick.
+**Auto-construcción por dependencia**: `evaluarNecesidades` (§6.2) no corre cada minuto. Se reevalúa cuando cambia algo de lo que mira: el almacén (cruza la reserva o un umbral), la cola o las cuadrillas (termina una obra), la población (cruza un cupo), el nivel, las políticas o la pausa. Un candidato que no se compromete no deja rastro y se reevalúa en el siguiente cambio de esas entradas.
+
+**Consecuencias de la continuidad sobre los pasos de §6**:
+- Una obra comprometida arranca **en el mismo instante** de comprometerla (si hay hueco); termina en `completaEn = inicio + duración`. Ya no hay «arranca en t+1».
+- La medida de cuadrillas (§6.1) usa el estado **en el instante del evento**; una obra que termina libera su hueco en ese mismo instante.
+- La experiencia de Facción por edificio completado y por ascenso se aplica **al ocurrir** el evento.
+- Los recintos ven su obra (Murallas §5) como cualquier otra obra de fin programado.
 
 ## 2. Modelo de datos
 
@@ -373,7 +381,7 @@ Quitar de la cola un `danado` devuelve la mitad del coste y de las mejoras (§6.
 
 ### 9.1 Crecimiento (`crecerPoblacion`)
 
-Las tres clases usan la misma forma: `esperado = actual × tasa`, con `tasa = tasaBase × comidaFactor × espacioFactor × estabilidad(1) × felicidad`, y **redondeo estocástico** (`crecimientoEstocastico`): incremento = `floor(esperado) + (rng() < frac(esperado) ? 1 : 0)`.
+Las tres clases usan la misma forma: `esperado = actual × tasa`, con `tasa = tasaBase × comidaFactor × espacioFactor × estabilidad(1) × felicidad`, y **población continua**: el estado guarda la población como número continuo con su ritmo y se **lee entera (suelo)**; **no hay tirada** (decisión del 2026-10-13, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §10). El incremento es el ritmo `actual × tasa` integrado en el tiempo.
 
 ```
 comidaFactor = factorCrecimientoMinimo + (1 − factorCrecimientoMinimo) × nutricion/100
@@ -390,7 +398,7 @@ Techo:     techo = techoPoblacion[nivel ALCANZADO];  espacioBajoTecho = max(0, t
            cada clase += floor(incremento × factorTecho)       (nunca purga población ya asentada)
 ```
 
-**Orden de consumo del generador aleatorio** (importa para reproducir una simulación): primero Pesants (siempre una tirada), después Artesanos (una tirada solo si se cumplen las condiciones y `artesanos > 0`), después Nobleza (ídem).
+**El crecimiento no consume el generador aleatorio.** Los eventos «primeros artesanos» y «primeros nobles» (+1 sin dado) se disparan al cumplirse la condición.
 
 ### 9.2 Comida y hambruna (`avanzarNutricionPoblacion`)
 
@@ -2063,3 +2071,37 @@ Todas las cifras de este documento son **placeholder sin calibrar** salvo que el
 ## 17. Divergencias
 
 Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver [`Divergencias.md`](Divergencias.md) para las demás áreas).
+
+## 14. Pueblos extractores y obras de mapa (guerra logística, Doc 4.2.2)
+
+**La extracción mineral sale de la ciudad.** Los minerales (cobre, estaño, hierro, oro) y toda Cantera **después de la primera** solo se explotan con un **pueblo extractor**; Granja, Leñera y Corral siguen dentro. La **primera Cantera** sigue siendo directa (sin piedra no hay obra de ascenso al nivel 2). En nivel 1 ya no hay minas; el oro de esa etapa sale de la recaudación por población.
+
+- **Qué es**: el extractor de mapa (`ambito: 'mapa'`) sobre su nodo, **más un almacén local (500, placeholder), un carro con buey (Comercio §12) y una guarnición de serie de 30 mineros** (IA, sin dueño, fuera de cupo, se repone gratis en 6 h). No es un asentamiento: sin zona, nivel, cargos ni medidor; cuenta como **edificio activo de su plaza madre**, que paga su mantenimiento.
+- **Requisitos**: madre de **nivel 2 o más** y el nodo dentro de su zona. **Cupo** por nivel de la madre: 2 / 3 / 4 / 5 pueblos.
+- **Trabajadores**: pesants de la madre; el pueblo no tiene población propia ni crece.
+- **Extracción**: **ritmo** `produccionBase × ratioManoObra × factorTecnología` contra el almacén local; con el almacén lleno, la extracción para (evento «almacén lleno»). Con el nodo agotado espera a la regeneración (`REGENERACION_NODOS`) sin mudarse; los pueblos **no** entran en el reemplazo automático ni en `EXTRACCION_MAXIMOS`.
+- **Destruirlo a mano** libera el cupo y no recupera nada. Tamaño: como mucho **0,2 de mapa**.
+- **Conquista de la madre**: los pueblos pasan al conquistador; **ruina** de la madre: desaparecen.
+- **Solvencia** para subir de nivel (§11): lo que llega por acarreo cuenta como la media de las llegadas en una ventana de 24 h o como la producción del pueblo.
+
+**Obras de mapa** (pueblos y avanzadas): no pasan por la cola de construcción. (1) Panel en la plaza madre (Gobernador o Maestro de Obras presentes): candidatos = nodos de la zona sin pueblo; una avanzada no tiene candidatos (la coloca el héroe en el sitio, dentro de la zona). (2) La obra aparece en el mapa **«pendiente de materiales»** y ocupa cupo. (3) Los materiales se **llevan físicamente** en los carros de las columnas o en caravanas adjuntas a un ejército, y se entregan con la columna a `radioPuerta`. (4) Con todo entregado arranca la obra (corta; evento de fin). (5) Cancelar o destruir no recupera lo entregado. Pendiente, se ve pero no se puede atacar. Costes (placeholder): pueblo = su extractor + 50 madera + carro (20 madera) + buey (12 oro), obra de 4-8 h.
+
+**Mineros**: tropa nueva del Centro Urbano (leva, escalón 1, 30 unidades, velocidad 30, 1 de piedra por soldado, sin oro); entran en la tropa prestada del campamento.
+
+## 15. Calibración de distancias (valores vigentes)
+
+Los bloques de parámetros de este documento son los del motor TypeScript. Valores vigentes para la reconstrucción (Calibracion_Distancias_Definicion §4.2):
+
+| Parámetro | Bloque (TypeScript) | Vigente |
+|---|---|---|
+| `ZONA_INFLUENCIA.radioInicial` | 30 | **6** |
+| `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **10 / 15 / 20 / 25 / 30** |
+| `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **1** |
+| `ESCALA.unidadesLocalesPorUnidadMapa` | 40 | **200** (la ciudad ocupa un 80 % menos del mapa) |
+| `radioUrbanoDe` | = radioPotencial | **radioPotencial × 6** |
+| `MANTENIMIENTO.escalaDistancia` | 400 | **80** |
+| `LINEAS_PRODUCCION` | 25 / 150 / 90 | **se elimina** (decisión previa del autor) |
+| `RECURSO_RAREZA.espacioMinimo` | 20 / 40 / 120 | **4 / 7 / 20** |
+| `LIVESTOCK.espacioMinimo` | 30 | **5** |
+| Ritmo de niveles 2-3 | — | aprobado (Doc 4.5); niveles 4-5 con las Eras IV-V, pospuestos |
+
