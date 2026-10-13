@@ -8,6 +8,7 @@ import { evaluarRuido } from './ruido';
 import { createRng, derivarSeed } from './rng';
 import { colocarCampamentos, type Campamento } from './campamentos';
 import { repartirMetales, type Sitio } from './metales';
+import { generarParcelas } from './parcelas';
 
 /** Lo que necesita del relieve regional ya generado (`generarRegionalVisor`). */
 export interface Relieve {
@@ -53,5 +54,6 @@ export function generarMundoEstrategico(r: Relieve) {
   const campamentos: Campamento[] = colocarCampamentos(r.config.seed, r.config, p => puntuarCampamento(r, p));
   const sitios = sitiosDeMetal(r);
   const { nodos, vetas } = repartirMetales(r.config.seed, campamentos, sitios);
-  return { campamentos, nodos, vetas, sitios: sitios.length };
+  const { masas, parcelas } = generarParcelas(r.config, p => evaluarForestal(r.forestacion, r.elevacion, p).densidad, campamentos);
+  return { campamentos, nodos, vetas, masas, parcelas, sitios: sitios.length };
 }

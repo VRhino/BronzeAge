@@ -17,11 +17,16 @@ console.log(`estratégico ${(Date.now() - t) / 1000} s; sitios de metal ${mundo.
 const cuenta: Record<string, number> = {};
 for (const n of mundo.nodos) cuenta[`${n.tipo}/${n.anillo}`] = (cuenta[`${n.tipo}/${n.anillo}`] ?? 0) + 1;
 console.log(cuenta);
+const porAnillo: Record<string, number> = {};
+for (const q of mundo.parcelas) porAnillo[q.anillo] = (porAnillo[q.anillo] ?? 0) + 1;
+const tam = mundo.masas.map(m => m.parcelasIds.length).sort((a, b) => a - b);
+console.log(`bosques ${mundo.masas.length}, parcelas ${mundo.parcelas.length}`, porAnillo, `parcelas por masa: min ${tam[0]}, mediana ${tam[Math.floor(tam.length / 2)]}, max ${tam[tam.length - 1]}`);
 
 const E = 1 / FACTOR, celda = 200, col: Record<string, string> = { agua: '#9ec3d6', costa: '#d8d0a0', llano: '#c9d9a0', colina: '#b0a878', montana: '#8a8478', cima: '#e8e8e8' };
 let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ANCHO * E} ${ALTO * E}" width="1600" style="background:#fff">`;
 for (let y = 0; y < ALTO; y += celda) for (let x = 0; x < ANCHO; x += celda)
   svg += `<rect x="${x * E}" y="${y * E}" width="${celda * E}" height="${celda * E}" fill="${col[evaluarTerreno(regional.elevacion, { x: x + celda / 2, y: y + celda / 2 })] ?? '#ccc'}"/>`;
+for (const q of mundo.parcelas) svg += `<circle cx="${q.centro.x * E}" cy="${q.centro.y * E}" r="2.5" fill="#1b5e20" opacity=".75"/>`;
 for (const c of mundo.campamentos) {
   const { x, y } = c.posicion;
   svg += `<circle cx="${x * E}" cy="${y * E}" r="${ESTRATEGICAS.fronteraMax}" fill="none" stroke="#c07000" stroke-width="2" stroke-dasharray="8 6"/>`
