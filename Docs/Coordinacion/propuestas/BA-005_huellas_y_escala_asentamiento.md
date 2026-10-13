@@ -1,6 +1,7 @@
 # BA-005 — Huellas de edificios y escala de la grilla de asentamiento
 
-**Estado:** ACEPTADO — implementado en la rama `ba-005-huellas` de BronzeAge, pendiente de commit y de la validación de Codex con el fixture nuevo (ver "Revisión de Claude" al final)  
+**Estado (2026-10-13):** ABSORBIDO (2026-10-13): las huellas y la escala del asentamiento pasan al contrato 05 y al contrato de mundo (el servidor calcula el trazado y lo entrega; ciudad un 80 % menor); ver `CIERRE_FASE_2.md`. Pendiente de confirmar con Codex.  
+**Estado anterior:** ACEPTADO — implementado en la rama `ba-005-huellas` de BronzeAge, pendiente de commit y de la validación de Codex con el fixture nuevo (ver "Revisión de Claude" al final)  
 **Fecha:** 2026-09-13  
 **Autor:** Codex · **Implementación BronzeAge:** Claude  
 **Origen:** playtest del usuario en SettlementPreview y encargo de documentar/proponer el cambio.

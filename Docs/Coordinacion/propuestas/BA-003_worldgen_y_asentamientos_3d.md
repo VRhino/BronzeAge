@@ -1,7 +1,8 @@
 # BA-003 — Frontera de worldgen y asentamientos para Unity 3D
 
 **Destino:** `BronzeAgeFase0`  
-**Estado:** ACEPTADO (revisión 2026-09-11 — usuario confirmó la recomendación híbrida de worldgen; matices de
+**Estado (2026-10-13):** SUSTITUIDO por el contrato de mundo (2026-10-13): `Docs/Coordinacion/06_Contrato_de_Mundo.md` y `proto/bronzeage/v1/world.proto` (artefacto por hash, sin semilla en el contrato); ver `CIERRE_FASE_2.md`. Pendiente de confirmar con Codex.  
+**Estado anterior:** ACEPTADO (revisión 2026-09-11 — usuario confirmó la recomendación híbrida de worldgen; matices de
 Codex incorporados, ver abajo)  
 **Prioridad:** Media, posterior al modelo compartido
 

@@ -1,0 +1,129 @@
+// Contrato 05 de BronzeAge — tipos comunes.
+//
+// Convenciones (valen para todo el contrato):
+//  * TIEMPO: instantes de mundo en milisegundos desde la época 2026-01-01T00:00:00Z, `int64`, campos `*_ms`.
+//    Duraciones, también en ms. El reloj de mundo es continuo (no hay tick); ver Docs/Mechanics/Reloj_Y_Eventos.md.
+//  * ESPACIO: coordenadas del mapa ESTRATÉGICO (2.667 x 2.000 unidades) en MILÉSIMAS de unidad, `sint64`
+//    (punto fijo: las reproducciones son idénticas en cualquier máquina). Unity usa el factor 12 sobre el mismo artefacto.
+//  * CANTIDADES de juego (recursos, víveres, oro, ritmos): enteros en MILÉSIMAS, `sint64`.
+//  * IDENTIFICADORES de catálogo (recursos, edificios, tropas, tecnologías, políticas): cadenas estables del archivo
+//    común de datos de juego, no enumeraciones: añadir contenido no cambia el contrato.
+//  * PRESENCIA: los campos `optional` y los mensajes distinguen «no viene» de «valor por defecto». Para BORRAR un campo
+//    en una actualización parcial se lista su nombre en `Cambio.campos_borrados`.
+//  * Los nombres de campo son snake_case en español (el dominio); los mensajes de batalla compartidos con Unity
+//    conservan los nombres en inglés del contrato v1 (BattleTicket, BattleResult...).
+syntax = "proto3";
+
+package bronzeage.v1;
+
+option csharp_namespace = "BronzeAge.Contract.V1";
+
+// Punto del mapa estratégico, en milésimas de unidad.
+message Punto {
+  sint64 x = 1;
+  sint64 y = 2;
+}
+
+// Un vértice de un plan de movimiento: dónde está la columna y A QUÉ INSTANTE pasa por él.
+message Vertice {
+  Punto p = 1;
+  int64 en_ms = 2;
+}
+
+// Plan de movimiento: la posición en cualquier instante es la interpolación lineal entre vértices consecutivos.
+// Antes del primer vértice la entidad está en él; después del último, se queda en él.
+// `generacion` sube con cada plan nuevo; un cambio de plan EMPIEZA donde está la entidad en ese instante.
+message Plan {
+  uint32 generacion = 1;
+  repeated Vertice vertices = 2;
+}
+
+// Ritmo: valor(t) = clamp(valor_en_t0 + por_minuto * (t - t0) / 60000, minimo, maximo).
+// Todas las cantidades en milésimas. Sirve para almacenes, víveres, población, medidor, reputación...
+message Ritmo {
+  sint64 valor_en_t0 = 1;
+  int64 t0_ms = 2;
+  sint64 por_minuto = 3;
+  optional sint64 maximo = 4;
+  optional sint64 minimo = 5;
+}
+
+// Un recurso almacenado: cantidad (como ritmo) y capacidad.
+message Existencia {
+  Ritmo cantidad = 1;
+  sint64 capacidad = 2;
+}
+
+// Cantidades por id de catálogo (carros, cargas, aportes). En milésimas.
+message Cantidades {
+  map<string, sint64> por_id = 1;
+}
+
+message Sigilo {
+  string forma_id = 1;
+  string campo_id = 2;
+  string emblema_id = 3;
+  string color_primario_id = 4;
+  string color_secundario_id = 5;
+  string color_emblema_id = 6;
+  string orla_id = 7;
+  string color_orla_id = 8;
+}
+
+// Tipos de entidad con identidad propia en el almacén del cliente.
+enum TipoEntidad {
+  TIPO_ENTIDAD_NO_ESPECIFICADO = 0;
+  FACCION = 1;
+  ASENTAMIENTO = 2;
+  HEROE = 3;
+  ESCUADRON = 4;
+  EJERCITO = 5;
+  CARAVANA = 6;
+  CONVOCATORIA = 7;
+  CAMPAMENTO_MERCENARIOS = 8;
+  CAMPAMENTO_BANDIDOS = 9;
+  ALIJO = 10;
+  ACUERDO_TRUEQUE = 11;
+  ORDEN_MERCADO = 12;
+  RELACION_POLITICA = 13;
+  PROPUESTA = 14;
+  TITULO = 15;
+  AEDA = 16;
+  MIRADA_INTEL = 17;
+  INFORME_PLAZA = 18;
+  BATALLA = 19;
+  PUEBLO = 20;
+  AVANZADA = 21;
+  OBRA_DE_MAPA = 22;
+  NODO_RECURSO = 23;
+  MEMORIA_FACCION = 24;
+  RED_CAMINOS = 25;
+  TECNOLOGIA_FACCION = 26;
+  ZONA_FACCION = 27;
+}
+
+// Ámbito de suscripción de una sesión. El servidor suscribe solo lo que corresponde al héroe (jamás lo pide el cliente):
+//   HEROE (el propio), ASENTAMIENTO (donde está dentro), CAMPAMENTO (donde está dentro), BATALLA (en la que combate),
+//   FACCION (la propia), VISTA (el mundo visible a la Facción, filtrado por niebla).
+// `ADMIN` solo para sesiones de administración.
+enum AmbitoTipo {
+  AMBITO_NO_ESPECIFICADO = 0;
+  AMBITO_HEROE = 1;
+  AMBITO_ASENTAMIENTO = 2;
+  AMBITO_CAMPAMENTO = 3;
+  AMBITO_BATALLA = 4;
+  AMBITO_FACCION = 5;
+  AMBITO_VISTA = 6;
+  AMBITO_ADMIN = 7;
+}
+
+message Ambito {
+  AmbitoTipo tipo = 1;
+  string id = 2;
+}
+
+// Rectángulo en el mapa estratégico (milésimas), para fijar el interés de la vista.
+message Rectangulo {
+  Punto min = 1;
+  Punto max = 2;
+}

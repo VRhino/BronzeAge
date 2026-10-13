@@ -1,0 +1,965 @@
+// Contrato 05 de BronzeAge — órdenes (comandos) del cliente.
+//
+// Generado el 2026-10-13 desde `session/comandos/esquemas.ts` (la forma de params de los comandos del motor TypeScript) y
+// revisado: se retira `replegarEjercito` (los ejércitos no tienen vuelta a casa; cancelar la marcha es `estacionar_ejercito`),
+// `atacar` gana `declara_guerra` y los objetivos `pueblo` y `avanzada`, y se añaden las órdenes de la reconstrucción
+// (repostar, reclamar caravana, obras de mapa, pueblos, avanzadas, control del reloj de administración).
+// Las cantidades (recursos, oro, víveres) viajan en MILÉSIMAS (sint64); las coordenadas, en milésimas de unidad de mapa.
+// Los campos que eran cadenas de un catálogo cerrado se mantienen como string; los valores admitidos van en el comentario.
+//
+// Frontera: esto valida la FORMA. Que una entidad exista o que una cantidad esté en rango lo rechaza el núcleo con su
+// propio código de error (RechazoOrden en session.proto), no el parseo.
+syntax = "proto3";
+
+package bronzeage.v1;
+
+import "bronzeage/v1/common.proto";
+
+option csharp_namespace = "BronzeAge.Contract.V1";
+
+message OrdenAbandonarEpica {
+  string asentamiento_id = 1;
+  string aeda_id = 2;
+}
+
+message OrdenAbandonarRecinto {
+  string asentamiento_id = 1;
+  string recinto_id = 2;
+}
+
+message OrdenAbrirAlijo {
+  string alijo_id = 1;
+}
+
+message OrdenAceptarTrueque {
+  string acuerdo_id = 1;
+}
+
+message OrdenActivarPolitica {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | tesorero | general | maestroObras | sacerdote
+  string politica_id = 3;
+}
+
+message OrdenAdjuntarCaravana {
+  string ejercito_id = 1;
+  string caravana_id = 2;
+  string heroe_id = 3;
+}
+
+message OrdenAdmitirOtrasFacciones {
+  string faccion_id = 1;
+  bool admitir = 2;
+}
+
+message OrdenAdoptarTecnologia {
+  string faccion_id = 1;
+  string tecnologia_id = 2;  // id de catálogo
+}
+
+message OrdenAgregarCarroCaravana {
+  string caravana_id = 1;
+  string tipo_carro = 2;  // basico | reforzado
+}
+
+message OrdenAlternarAutoConstruccion {
+  string asentamiento_id = 1;
+  bool pausada = 2;
+}
+
+message OrdenAlternarReabastecerAliados {
+  string asentamiento_id = 1;
+  bool permitido = 2;
+}
+
+message OrdenAlternarReceta {
+  string asentamiento_id = 1;
+  string recurso = 2;  // id de catálogo
+  bool pausada = 3;
+}
+
+message OrdenAnadirEdificioManualmente {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string tipo = 3;  // id de catálogo
+}
+
+message OrdenAportarARefundacion {
+  string recurso = 1;  // id de catálogo
+  sint64 cantidad = 2;
+  string lado = 3;  // almacen | carro
+}
+
+message OrdenAsignarCargoLocal {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | tesorero | general | maestroObras | sacerdote
+  string heroe_id = 3;
+}
+
+message OrdenAsignarEmbajador {
+  string faccion_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenAsignarEscolta {
+  string caravana_id = 1;
+  string heroe_id = 2;
+  repeated string escuadron_ids = 3;
+}
+
+message OrdenAsignarGuarnicion {
+  string squad_id = 1;
+}
+
+message OrdenAsignarRey {
+  string faccion_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenAtacar {
+  message Objetivo {
+    oneof tipo {
+    string ejercito_id = 1;
+    string caravana_id = 2;
+    string campamento_id = 3;
+    string asentamiento_id = 4;
+    string pueblo_id = 5;
+    string avanzada_id = 6;
+    }
+  }
+  string heroe_id = 1;
+  Objetivo objetivo = 2;
+  optional bool declara_guerra = 3;
+}
+
+message OrdenBorrarLoadout {
+  string loadout_id = 1;
+}
+
+message OrdenCalibrarReservaManual {
+  string asentamiento_id = 1;
+  string recurso = 2;  // id de catálogo
+  sint64 valor = 3;
+}
+
+message OrdenCambiarResidencia {
+  string destino_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenCambiarSeleccionDeConvocatoria {
+  string heroe_id = 1;
+  repeated string escuadron_ids = 2;
+  Cantidades carga = 3;
+}
+
+message OrdenCancelarBatalla {
+  string battle_id = 1;
+}
+
+message OrdenCancelarCaravana {
+  string caravana_id = 1;
+}
+
+message OrdenCancelarConvocatoria {
+  string heroe_id = 1;
+}
+
+message OrdenCancelarFormacion {
+  string heroe_id = 1;
+}
+
+message OrdenCancelarObra {
+  string heroe_id = 1;
+  string obra_id = 2;
+}
+
+message OrdenCargarCaravana {
+  string ejercito_id = 1;
+  string caravana_id = 2;
+  string asentamiento_id = 3;
+  string recurso = 4;  // id de catálogo
+  sint64 cantidad = 5;
+}
+
+message OrdenCederLiderazgo {
+  string ejercito_id = 1;
+  string heroe_id = 2;
+  string sucesor_id = 3;
+}
+
+message OrdenColocarAvanzada {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+  Punto posicion = 3;
+}
+
+message OrdenColocarOrdenMercado {
+  string asentamiento_id = 1;
+  string tipo = 2;  // compra | venta
+  string recurso = 3;  // id de catálogo
+  sint64 cantidad = 4;
+  optional sint64 precio = 5;
+}
+
+message OrdenComerciarEnPlaza {
+  string heroe_id = 1;
+  string asentamiento_id = 2;
+  string orden_id = 3;
+  sint64 cantidad = 4;
+}
+
+message OrdenComprarAnimalCaravana {
+  string caravana_id = 1;
+  sint64 carro_indice = 2;
+  string tipo_animal = 3;  // buey | caballo | camello
+}
+
+message OrdenComprarCaravanaDeRefundacion {
+}
+
+message OrdenComprarEnCampamento {
+  string recurso = 1;  // id de catálogo
+  sint64 cantidad = 2;
+  optional string campamento_id = 3;
+}
+
+message OrdenComprarInformePlaza {
+  message Origen {
+    string tipo = 1;  // asentamiento | campamento
+    string id = 2;
+  }
+  Origen origen = 1;
+  string asentamiento_id = 2;
+}
+
+message OrdenComprarMirada {
+  message Origen {
+    string tipo = 1;  // asentamiento | campamento
+    string id = 2;
+  }
+  Origen origen = 1;
+  Punto centro = 2;
+}
+
+message OrdenComprarTecnologiaAeda {
+  string asentamiento_id = 1;
+  string tecnologia_id = 2;  // id de catálogo
+}
+
+message OrdenComprometerRecinto {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string nivel = 3;  // 1 | 2 | 3
+}
+
+message OrdenConectarse {
+  string heroe_id = 1;
+}
+
+message OrdenControlarReloj {
+  string accion = 1;  // pausar | reanudar | fijar_factor | avanzar_hasta
+  optional int64 factor_milesimas = 2;
+  optional int64 hasta_ms = 3;
+}
+
+message OrdenConvocarEjercito {
+  string heroe_id = 1;
+  string politica_de_union = 2;  // aceptar | preguntar
+  repeated string escuadron_ids = 3;
+  Cantidades carga = 4;
+}
+
+message OrdenCrearCaravana {
+  string asentamiento_id = 1;
+}
+
+message OrdenCrearFaccion {
+  message Sigilo {
+    string forma_id = 1;
+    string campo_id = 2;
+    string emblema_id = 3;
+    string color_primario_id = 4;
+    string color_secundario_id = 5;
+    string color_emblema_id = 6;
+    string orla_id = 7;
+    string color_orla_id = 8;
+  }
+  string nombre = 1;
+  optional Sigilo sigilo = 2;
+}
+
+message OrdenCrearHeroe {
+  message Avatar {
+    string cabeza_id = 1;
+    string pelo_id = 2;
+    string barba_id = 3;
+    string cejas_id = 4;
+  }
+  string display_name = 1;
+  string campamento_id = 2;
+  string class_definition_id = 3;
+  string genero = 4;  // masculino | femenino
+  Avatar avatar = 5;
+}
+
+message OrdenDeclararGuerra {
+  string faccion_a_id = 1;
+  string faccion_b_id = 2;
+}
+
+message OrdenDejarDePerseguir {
+  string heroe_id = 1;
+}
+
+message OrdenDejarFaccion {
+}
+
+message OrdenDejarResidencia {
+  string heroe_id = 1;
+}
+
+message OrdenDesarmarCaravanaFundacion {
+  string caravana_id = 1;
+}
+
+message OrdenDesconectarse {
+  string heroe_id = 1;
+}
+
+message OrdenDesignarCapital {
+  string faccion_id = 1;
+  string asentamiento_id = 2;
+}
+
+message OrdenDestruirAvanzada {
+  string heroe_id = 1;
+  string avanzada_id = 2;
+}
+
+message OrdenDestruirPueblo {
+  string heroe_id = 1;
+  string pueblo_id = 2;
+}
+
+message OrdenElegirTropaDeAvanzada {
+  string heroe_id = 1;
+  string avanzada_id = 2;
+  string tropa_id = 3;
+}
+
+message OrdenEmpezarEpica {
+  string asentamiento_id = 1;
+  string aeda_id = 2;
+  string tecnologia_id = 3;  // id de catálogo
+}
+
+message OrdenEntrarEnAsentamiento {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenEntrarEnCampamento {
+  string campamento_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenEntregarDeCaravana {
+  string ejercito_id = 1;
+  string caravana_id = 2;
+  string acuerdo_id = 3;
+}
+
+message OrdenEntregarEnObra {
+  string heroe_id = 1;
+  string obra_id = 2;
+  Cantidades materiales = 3;
+}
+
+message OrdenEnviarCaravanaAlOrigen {
+  string heroe_id = 1;
+  string caravana_id = 2;
+  string asentamiento_id = 3;
+}
+
+message OrdenEstacionarEjercito {
+  string ejercito_id = 1;
+}
+
+message OrdenFijarPuerta {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+  repeated string cerrada_a = 3;
+}
+
+message OrdenFundar {
+}
+
+message OrdenGuardarEnAlmacenPersonal {
+  string recurso = 1;  // id de catálogo
+  sint64 cantidad = 2;
+}
+
+message OrdenGuardarLoadout {
+  optional string loadout_id = 1;
+  string display_name = 2;
+  repeated string squad_ids = 3;
+  repeated int64 perks_seleccionados = 4;
+  optional bool activo = 5;
+}
+
+message OrdenGuarnecer {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenGuarnecerAvanzada {
+  string heroe_id = 1;
+  string avanzada_id = 2;
+  repeated string escuadron_ids = 3;
+}
+
+message OrdenInspeccionar {
+  message Objetivo {
+    oneof tipo {
+    string ejercito_id = 1;
+    string caravana_id = 2;
+    string asentamiento_id = 3;
+    }
+  }
+  string heroe_id = 1;
+  Objetivo objetivo = 2;
+}
+
+message OrdenLanzarCaravanaFundacion {
+  string origen_asentamiento_id = 1;
+}
+
+message OrdenMarcarPueblo {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+  string nodo_id = 3;
+}
+
+message OrdenMarcharA {
+  message Objetivo {
+    oneof tipo {
+    string asentamiento_id = 1;
+    Punto punto = 2;
+    }
+  }
+  string heroe_id = 1;
+  Objetivo objetivo = 2;
+}
+
+message OrdenMejorarAvanzada {
+  string heroe_id = 1;
+  string avanzada_id = 2;
+}
+
+message OrdenMejorarEdificioAhora {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string edificio_id = 3;
+}
+
+message OrdenMejorarRecinto {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string recinto_id = 3;
+}
+
+message OrdenMoverCargaCaravanaAparcada {
+  string heroe_id = 1;
+  string caravana_id = 2;
+  string asentamiento_id = 3;
+  string recurso = 4;  // id de catálogo
+  sint64 cantidad = 5;
+  string sentido = 6;  // cargar | descargar
+}
+
+message OrdenMoverCarroCaravana {
+  string desde_caravana_id = 1;
+  string hacia_caravana_id = 2;
+  sint64 carro_indice = 3;
+}
+
+message OrdenMoverEnCola {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string edificio_id = 3;
+  string direccion = 4;  // arriba | abajo
+}
+
+message OrdenMovilizarEjercito {
+  message Objetivo {
+    oneof tipo {
+    string asentamiento_id = 1;
+    Punto punto = 2;
+    }
+  }
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+  repeated string escuadron_ids = 3;
+  optional Objetivo objetivo = 4;
+  optional string politica_de_union = 5;  // rechazar | aceptar | preguntar
+  optional Cantidades carga = 6;
+}
+
+message OrdenOrdenarEscuadras {
+  repeated string escuadron_ids = 1;
+}
+
+message OrdenOrganizarEjercito {
+  string heroe_id = 1;
+  string politica_de_union = 2;  // aceptar | preguntar
+}
+
+message OrdenPartirConvocatoria {
+  string heroe_id = 1;
+}
+
+message OrdenPasarAViveres {
+  sint64 cantidad = 1;
+}
+
+message OrdenPedirPrestamo {
+  repeated string tropa_ids = 1;
+}
+
+message OrdenPerseguir {
+  message Objetivo {
+    oneof tipo {
+    string ejercito_id = 1;
+    string caravana_id = 2;
+    }
+  }
+  string heroe_id = 1;
+  Objetivo objetivo = 2;
+}
+
+message OrdenPrepararCaravana {
+  string caravana_id = 1;
+  string heroe_id = 2;
+  string destino_asentamiento_id = 3;
+  Cantidades carga = 4;
+  repeated string escolta_escuadron_ids = 5;
+  optional sint64 salir_en = 6;
+}
+
+message OrdenProponerAnexion {
+  string faccion_a_id = 1;
+  string faccion_b_id = 2;
+}
+
+message OrdenProponerFusion {
+  string faccion_a_id = 1;
+  string faccion_b_id = 2;
+  string nuevo_nombre = 3;
+  string nuevo_rey_id = 4;
+}
+
+message OrdenProponerPaz {
+  string relacion_id = 1;
+  string faccion_id = 2;
+}
+
+message OrdenProponerRelacion {
+  string tipo = 1;  // vasallaje | alianza
+  string faccion_a_id = 2;
+  string faccion_b_id = 3;
+  optional string tributo_recurso = 4;  // id de catálogo
+  optional sint64 tributo_cantidad = 5;
+}
+
+message OrdenProponerTrueque {
+  message LineasA {
+    string recurso = 1;  // id de catálogo
+    sint64 cantidad = 2;
+  }
+  message LineasB {
+    string recurso = 1;  // id de catálogo
+    sint64 cantidad = 2;
+  }
+  string asentamiento_a_id = 1;
+  repeated LineasA lineas_a = 2;
+  string asentamiento_b_id = 3;
+  repeated LineasB lineas_b = 4;
+}
+
+message OrdenQuitarDeCola {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string edificio_id = 3;
+}
+
+message OrdenQuitarEscolta {
+  string caravana_id = 1;
+  string heroe_id = 2;
+  repeated string escuadron_ids = 3;
+}
+
+message OrdenRebelionVasallo {
+  string relacion_id = 1;
+}
+
+message OrdenRechazarTrueque {
+  string acuerdo_id = 1;
+}
+
+message OrdenReclamarCaravana {
+  string heroe_id = 1;
+  string caravana_id = 2;
+  optional string politica_de_union = 3;  // rechazar | aceptar | preguntar
+}
+
+message OrdenReclutarEnCampamento {
+  string tropa_id = 1;
+  optional string pagar_con = 2;  // almacenPersonal | carro
+}
+
+message OrdenReclutarTropa {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+  string tropa_id = 3;
+  optional string origen = 4;  // pesants | artesanos
+}
+
+message OrdenRenombrarAsentamiento {
+  string asentamiento_id = 1;
+  string nombre = 2;
+}
+
+message OrdenRepararAvanzada {
+  string heroe_id = 1;
+  string avanzada_id = 2;
+}
+
+message OrdenRepartirPuntos {
+  message Atributos {
+    optional int64 fuerza = 1;
+    optional int64 destreza = 2;
+    optional int64 armadura = 3;
+    optional int64 vitalidad = 4;
+  }
+  Atributos atributos = 1;
+}
+
+message OrdenReponerCarroDeAcarreo {
+  string heroe_id = 1;
+  string pueblo_id = 2;
+}
+
+message OrdenReponerPrestamo {
+}
+
+message OrdenRepostar {
+  string heroe_id = 1;
+}
+
+message OrdenRepostarEnCampamento {
+  optional string campamento_id = 1;
+}
+
+message OrdenReservarCaravana {
+  string caravana_id = 1;
+  bool reservada = 2;
+}
+
+message OrdenResidirEnCampamento {
+  string heroe_id = 1;
+  string campamento_id = 2;
+}
+
+message OrdenResponderAnexion {
+  string propuesta_id = 1;
+  bool aceptar = 2;
+}
+
+message OrdenResponderFusion {
+  string propuesta_id = 1;
+  bool aceptar = 2;
+}
+
+message OrdenResponderPeticionDeConvocatoria {
+  string heroe_id = 1;
+  string convocatoria_id = 2;
+  string solicitante_id = 3;
+  bool aceptar = 4;
+}
+
+message OrdenResponderPeticionDeUnion {
+  string ejercito_id = 1;
+  string heroe_id = 2;
+  string solicitante_id = 3;
+  bool aceptar = 4;
+}
+
+message OrdenResponderRelacion {
+  string propuesta_id = 1;
+  bool aceptar = 2;
+}
+
+message OrdenResponderSolicitud {
+  string faccion_id = 1;
+  string heroe_id = 2;
+  bool aceptar = 3;
+}
+
+message OrdenRetirarAnexion {
+  string propuesta_id = 1;
+}
+
+message OrdenRetirarDeRefundacion {
+  string recurso = 1;  // id de catálogo
+  sint64 cantidad = 2;
+  string lado = 3;  // almacen | carro
+}
+
+message OrdenRetirarFusion {
+  string propuesta_id = 1;
+}
+
+message OrdenRetirarGuarnicion {
+  string squad_id = 1;
+}
+
+message OrdenRetirarRelacion {
+  string propuesta_id = 1;
+}
+
+message OrdenRomperRelacion {
+  string relacion_id = 1;
+  string iniciador_faccion_id = 2;
+}
+
+message OrdenSacarDelAlmacenPersonal {
+  string recurso = 1;  // id de catálogo
+  sint64 cantidad = 2;
+}
+
+message OrdenSalirAlMundo {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+  repeated string escuadron_ids = 3;
+  Cantidades carga = 4;
+}
+
+message OrdenSalirDeAsentamiento {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenSalirDelCampamento {
+  message Objetivo {
+    oneof tipo {
+    string asentamiento_id = 1;
+    Punto punto = 2;
+    }
+  }
+  string campamento_id = 1;
+  string heroe_id = 2;
+  repeated string escuadron_ids = 3;
+  Cantidades carga = 4;
+  optional string politica_de_union = 5;  // rechazar | aceptar | preguntar
+  optional Objetivo objetivo = 6;
+}
+
+message OrdenSepararseDeConvocatoria {
+  string heroe_id = 1;
+}
+
+message OrdenSepararseDelEjercito {
+  string heroe_id = 1;
+}
+
+message OrdenSolicitarAscenso {
+  string asentamiento_id = 1;
+}
+
+message OrdenSolicitarIngreso {
+  string faccion_id = 1;
+}
+
+message OrdenSoltarCaravana {
+  string ejercito_id = 1;
+  string caravana_id = 2;
+  string heroe_id = 3;
+}
+
+message OrdenUnirseABatalla {
+  string heroe_id = 1;
+  string battle_id = 2;
+  optional string lado = 3;  // atacante | defensor
+}
+
+message OrdenUnirseAConvocatoria {
+  string heroe_id = 1;
+  string convocatoria_id = 2;
+  repeated string escuadron_ids = 3;
+  Cantidades carga = 4;
+}
+
+message OrdenUnirseAEjercito {
+  string ejercito_id = 1;
+  string asentamiento_id = 2;
+  string heroe_id = 3;
+  repeated string escuadron_ids = 4;
+}
+
+message OrdenUnirseEnCampo {
+  string ejercito_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenVetarJugador {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+  string vetado_id = 3;
+  bool vetar = 4;
+}
+
+// Una orden del cliente. `peticion_id` es único por sesión y sirve de clave de idempotencia: reenviar la misma
+// petición (p. ej. tras reconectar) no la ejecuta dos veces. `version_esperada`, si viene, rechaza la orden cuando el
+// mundo ya cambió más allá de esa versión (para acciones que dependen de lo que el jugador estaba viendo).
+message Orden {
+  string peticion_id = 1;
+  optional uint64 version_esperada = 2;
+  oneof cuerpo {
+    OrdenAbandonarEpica abandonar_epica = 10;
+    OrdenAbandonarRecinto abandonar_recinto = 11;
+    OrdenAbrirAlijo abrir_alijo = 12;
+    OrdenAceptarTrueque aceptar_trueque = 13;
+    OrdenActivarPolitica activar_politica = 14;
+    OrdenAdjuntarCaravana adjuntar_caravana = 15;
+    OrdenAdmitirOtrasFacciones admitir_otras_facciones = 16;
+    OrdenAdoptarTecnologia adoptar_tecnologia = 17;
+    OrdenAgregarCarroCaravana agregar_carro_caravana = 18;
+    OrdenAlternarAutoConstruccion alternar_auto_construccion = 19;
+    OrdenAlternarReabastecerAliados alternar_reabastecer_aliados = 20;
+    OrdenAlternarReceta alternar_receta = 21;
+    OrdenAnadirEdificioManualmente anadir_edificio_manualmente = 22;
+    OrdenAportarARefundacion aportar_a_refundacion = 23;
+    OrdenAsignarCargoLocal asignar_cargo_local = 24;
+    OrdenAsignarEmbajador asignar_embajador = 25;
+    OrdenAsignarEscolta asignar_escolta = 26;
+    OrdenAsignarGuarnicion asignar_guarnicion = 27;
+    OrdenAsignarRey asignar_rey = 28;
+    OrdenAtacar atacar = 29;
+    OrdenBorrarLoadout borrar_loadout = 30;
+    OrdenCalibrarReservaManual calibrar_reserva_manual = 31;
+    OrdenCambiarResidencia cambiar_residencia = 32;
+    OrdenCambiarSeleccionDeConvocatoria cambiar_seleccion_de_convocatoria = 33;
+    OrdenCancelarBatalla cancelar_batalla = 34;
+    OrdenCancelarCaravana cancelar_caravana = 35;
+    OrdenCancelarConvocatoria cancelar_convocatoria = 36;
+    OrdenCancelarFormacion cancelar_formacion = 37;
+    OrdenCancelarObra cancelar_obra = 38;
+    OrdenCargarCaravana cargar_caravana = 39;
+    OrdenCederLiderazgo ceder_liderazgo = 40;
+    OrdenColocarAvanzada colocar_avanzada = 41;
+    OrdenColocarOrdenMercado colocar_orden_mercado = 42;
+    OrdenComerciarEnPlaza comerciar_en_plaza = 43;
+    OrdenComprarAnimalCaravana comprar_animal_caravana = 44;
+    OrdenComprarCaravanaDeRefundacion comprar_caravana_de_refundacion = 45;
+    OrdenComprarEnCampamento comprar_en_campamento = 46;
+    OrdenComprarInformePlaza comprar_informe_plaza = 47;
+    OrdenComprarMirada comprar_mirada = 48;
+    OrdenComprarTecnologiaAeda comprar_tecnologia_aeda = 49;
+    OrdenComprometerRecinto comprometer_recinto = 50;
+    OrdenConectarse conectarse = 51;
+    OrdenControlarReloj controlar_reloj = 52;
+    OrdenConvocarEjercito convocar_ejercito = 53;
+    OrdenCrearCaravana crear_caravana = 54;
+    OrdenCrearFaccion crear_faccion = 55;
+    OrdenCrearHeroe crear_heroe = 56;
+    OrdenDeclararGuerra declarar_guerra = 57;
+    OrdenDejarDePerseguir dejar_de_perseguir = 58;
+    OrdenDejarFaccion dejar_faccion = 59;
+    OrdenDejarResidencia dejar_residencia = 60;
+    OrdenDesarmarCaravanaFundacion desarmar_caravana_fundacion = 61;
+    OrdenDesconectarse desconectarse = 62;
+    OrdenDesignarCapital designar_capital = 63;
+    OrdenDestruirAvanzada destruir_avanzada = 64;
+    OrdenDestruirPueblo destruir_pueblo = 65;
+    OrdenElegirTropaDeAvanzada elegir_tropa_de_avanzada = 66;
+    OrdenEmpezarEpica empezar_epica = 67;
+    OrdenEntrarEnAsentamiento entrar_en_asentamiento = 68;
+    OrdenEntrarEnCampamento entrar_en_campamento = 69;
+    OrdenEntregarDeCaravana entregar_de_caravana = 70;
+    OrdenEntregarEnObra entregar_en_obra = 71;
+    OrdenEnviarCaravanaAlOrigen enviar_caravana_al_origen = 72;
+    OrdenEstacionarEjercito estacionar_ejercito = 73;
+    OrdenFijarPuerta fijar_puerta = 74;
+    OrdenFundar fundar = 75;
+    OrdenGuardarEnAlmacenPersonal guardar_en_almacen_personal = 76;
+    OrdenGuardarLoadout guardar_loadout = 77;
+    OrdenGuarnecer guarnecer = 78;
+    OrdenGuarnecerAvanzada guarnecer_avanzada = 79;
+    OrdenInspeccionar inspeccionar = 80;
+    OrdenLanzarCaravanaFundacion lanzar_caravana_fundacion = 81;
+    OrdenMarcarPueblo marcar_pueblo = 82;
+    OrdenMarcharA marchar_a = 83;
+    OrdenMejorarAvanzada mejorar_avanzada = 84;
+    OrdenMejorarEdificioAhora mejorar_edificio_ahora = 85;
+    OrdenMejorarRecinto mejorar_recinto = 86;
+    OrdenMoverCargaCaravanaAparcada mover_carga_caravana_aparcada = 87;
+    OrdenMoverCarroCaravana mover_carro_caravana = 88;
+    OrdenMoverEnCola mover_en_cola = 89;
+    OrdenMovilizarEjercito movilizar_ejercito = 90;
+    OrdenOrdenarEscuadras ordenar_escuadras = 91;
+    OrdenOrganizarEjercito organizar_ejercito = 92;
+    OrdenPartirConvocatoria partir_convocatoria = 93;
+    OrdenPasarAViveres pasar_a_viveres = 94;
+    OrdenPedirPrestamo pedir_prestamo = 95;
+    OrdenPerseguir perseguir = 96;
+    OrdenPrepararCaravana preparar_caravana = 97;
+    OrdenProponerAnexion proponer_anexion = 98;
+    OrdenProponerFusion proponer_fusion = 99;
+    OrdenProponerPaz proponer_paz = 100;
+    OrdenProponerRelacion proponer_relacion = 101;
+    OrdenProponerTrueque proponer_trueque = 102;
+    OrdenQuitarDeCola quitar_de_cola = 103;
+    OrdenQuitarEscolta quitar_escolta = 104;
+    OrdenRebelionVasallo rebelion_vasallo = 105;
+    OrdenRechazarTrueque rechazar_trueque = 106;
+    OrdenReclamarCaravana reclamar_caravana = 107;
+    OrdenReclutarEnCampamento reclutar_en_campamento = 108;
+    OrdenReclutarTropa reclutar_tropa = 109;
+    OrdenRenombrarAsentamiento renombrar_asentamiento = 110;
+    OrdenRepararAvanzada reparar_avanzada = 111;
+    OrdenRepartirPuntos repartir_puntos = 112;
+    OrdenReponerCarroDeAcarreo reponer_carro_de_acarreo = 113;
+    OrdenReponerPrestamo reponer_prestamo = 114;
+    OrdenRepostar repostar = 115;
+    OrdenRepostarEnCampamento repostar_en_campamento = 116;
+    OrdenReservarCaravana reservar_caravana = 117;
+    OrdenResidirEnCampamento residir_en_campamento = 118;
+    OrdenResponderAnexion responder_anexion = 119;
+    OrdenResponderFusion responder_fusion = 120;
+    OrdenResponderPeticionDeConvocatoria responder_peticion_de_convocatoria = 121;
+    OrdenResponderPeticionDeUnion responder_peticion_de_union = 122;
+    OrdenResponderRelacion responder_relacion = 123;
+    OrdenResponderSolicitud responder_solicitud = 124;
+    OrdenRetirarAnexion retirar_anexion = 125;
+    OrdenRetirarDeRefundacion retirar_de_refundacion = 126;
+    OrdenRetirarFusion retirar_fusion = 127;
+    OrdenRetirarGuarnicion retirar_guarnicion = 128;
+    OrdenRetirarRelacion retirar_relacion = 129;
+    OrdenRomperRelacion romper_relacion = 130;
+    OrdenSacarDelAlmacenPersonal sacar_del_almacen_personal = 131;
+    OrdenSalirAlMundo salir_al_mundo = 132;
+    OrdenSalirDeAsentamiento salir_de_asentamiento = 133;
+    OrdenSalirDelCampamento salir_del_campamento = 134;
+    OrdenSepararseDeConvocatoria separarse_de_convocatoria = 135;
+    OrdenSepararseDelEjercito separarse_del_ejercito = 136;
+    OrdenSolicitarAscenso solicitar_ascenso = 137;
+    OrdenSolicitarIngreso solicitar_ingreso = 138;
+    OrdenSoltarCaravana soltar_caravana = 139;
+    OrdenUnirseABatalla unirse_a_batalla = 140;
+    OrdenUnirseAConvocatoria unirse_a_convocatoria = 141;
+    OrdenUnirseAEjercito unirse_a_ejercito = 142;
+    OrdenUnirseEnCampo unirse_en_campo = 143;
+    OrdenVetarJugador vetar_jugador = 144;
+  }
+}

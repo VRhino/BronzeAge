@@ -1,7 +1,8 @@
 # BA-001 — Ciclo persistente de batalla jugable
 
 **Destino:** `BronzeAgeFase0`  
-**Estado:** ACEPTADO (revisión 2026-09-11, corregido con la revisión de Codex del mismo día — decisiones
+**Estado (2026-10-13):** ABSORBIDO en el contrato 05 (2026-10-13): `proto/bronzeage/v1/battle.proto`, `session.proto` y `Docs/Mechanics/Batalla_Unity_Ciclo.md`; ver `CIERRE_FASE_2.md`. Lo decidido aquí sigue vigente. Pendiente de confirmar con Codex.  
+**Estado anterior:** ACEPTADO (revisión 2026-09-11, corregido con la revisión de Codex del mismo día — decisiones
 cerradas, diseño listo para implementar del lado de BronzeAge)  
 **Prioridad:** Alta  
 **Solicitante:** Conquest / Codex

@@ -1,7 +1,8 @@
 # BA-006 — Progresión histórica, tecnología y ampliación del roster
 
 **Destino:** `BronzeAgeFase0`  
-**Estado:** LISTO_PARA_REVISION  
+**Estado (2026-10-13):** POSPUESTO con las Eras IV y V (decisión del usuario, 2026-10-13): se retoma con el motor nuevo. Las Eras I-III están en el canon (Doc 6).  
+**Estado anterior:** LISTO_PARA_REVISION  
 **Prioridad:** Media — diseño posterior a Fase 0 y previo al roster ampliado de Conquest  
 **Fecha:** 2026-09-13  
 **Autor:** Codex · **Implementación BronzeAge:** Claude  

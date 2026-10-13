@@ -1,0 +1,272 @@
+// Contrato 05 de BronzeAge — la sesión en tiempo real.
+//
+// UNA sesión persistente por cliente (WebSocket con tramas binarias; una trama = un mensaje Protobuf; compresión
+// zstd negociada en el handshake). Por ella viaja TODO: el mundo que el jugador ve, sus órdenes con respuesta causal,
+// el reloj y la reanudación. Nada se pide por HTTP fuera de la sesión (salvo la autenticación inicial y el artefacto
+// de mundo por hash).
+//
+// Garantías del servidor:
+//  1. ORDEN: los mensajes del servidor llevan `secuencia` creciente sin huecos; un hueco obliga al cliente a reanudar.
+//  2. CAUSALIDAD: para cada orden aceptada, TODA `Delta` con `hasta <= version_tras` que afecte a los ámbitos del cliente
+//     se envía ANTES del `ResultadoOrden`. Al recibir «hecho», el cliente ya tiene el estado nuevo.
+//  3. REANUDACIÓN: al reconectar, el cliente dice qué versión tiene de cada ámbito y recibe solo lo que cambió (deltas)
+//     o una foto si es muy vieja.
+//  4. HORIZONTE: de lo ajeno solo viaja el tramo del plan que está dentro de la vista y con horizonte corto (~30 s),
+//     renovado; el destino nunca se revela.
+//  5. IDEMPOTENCIA: una orden con el mismo `peticion_id` no se ejecuta dos veces; se responde con el mismo resultado.
+syntax = "proto3";
+
+package bronzeage.v1;
+
+import "google/protobuf/struct.proto";
+import "bronzeage/v1/common.proto";
+import "bronzeage/v1/entities.proto";
+import "bronzeage/v1/events.proto";
+import "bronzeage/v1/orders.proto";
+import "bronzeage/v1/battle.proto";
+
+option csharp_namespace = "BronzeAge.Contract.V1";
+
+// ───────────────────────────── Cliente → servidor ─────────────────────────────
+
+enum TipoCliente {
+  TIPO_CLIENTE_NO_ESPECIFICADO = 0;
+  CLIENTE_UNITY = 1;
+  CLIENTE_ADMIN_WEB = 2;
+  CLIENTE_BOT = 3;
+  CLIENTE_SERVIDOR_BATALLA = 4;
+}
+
+// Primer mensaje de toda sesión.
+message Hola {
+  uint32 version_protocolo = 1;          // =1 en esta versión
+  TipoCliente cliente = 2;
+  string version_cliente = 3;
+  string token = 4;                      // credencial emitida por el servicio de acceso
+  string partida_id = 5;
+  optional string mundo_hash_conocido = 6; // hash del artefacto de mundo que el cliente ya tiene en disco
+  // Reanudación: versión que el cliente tiene de cada ámbito, con la clave "tipo:id" (p. ej. "HEROE:heroe-3").
+  map<string, uint64> versiones_conocidas = 7;
+  repeated string compresiones = 8;      // "zstd"
+  int64 reloj_cliente_ms = 9;            // reloj monótono local en el momento de enviar (para el primer cálculo de desfase)
+}
+
+message Ping {
+  int64 cliente_envio_ms = 1;
+}
+
+// Interés en el mapa: el servidor manda las entidades visibles a la Facción dentro de este rectángulo.
+message CambiarVista {
+  Rectangulo rectangulo = 1;
+}
+
+// Sesión de servidor de batalla (cliente = CLIENTE_SERVIDOR_BATALLA): mensajes de ida.
+message MensajeDeServidorDeBatalla {
+  oneof cuerpo {
+    BattleServerAssignment asignacion = 1;
+    InicioBatalla inicio = 2;
+    SalidaBatalla salida = 3;
+    BattleResult resultado = 4;
+  }
+}
+
+message MensajeDeCliente {
+  oneof cuerpo {
+    Hola hola = 1;
+    Orden orden = 2;
+    Ping ping = 3;
+    CambiarVista vista = 4;
+    MensajeDeServidorDeBatalla batalla = 5;
+  }
+}
+
+// ───────────────────────────── Servidor → cliente ─────────────────────────────
+
+// Reloj de mundo. `mundo_ms` es el instante de mundo en el momento del envío; `factor_milesimas` los segundos de mundo por
+// segundo real × 1000 (1000 = tiempo real; ≠ 1000 solo en pruebas y en el batch); `pausado` cuando el reloj está parado
+// (el mundo se congela mientras el servidor está apagado o en pausa de administración).
+message Reloj {
+  int64 mundo_ms = 1;
+  uint32 factor_milesimas = 2;
+  bool pausado = 3;
+  int64 servidor_ms = 4;                 // reloj monótono del servidor en el envío
+}
+
+message Pong {
+  int64 cliente_envio_ms = 1;            // eco
+  int64 servidor_recibio_ms = 2;
+  Reloj reloj = 3;
+}
+// El cliente estima el desfase: desfase = reloj.mundo_ms - (cliente_envio_ms + rtt/2), con rtt = recepcion - cliente_envio_ms,
+// y lo suaviza con el mínimo de las últimas muestras. Con ese desfase evalúa los planes y los ritmos en cada fotograma.
+
+enum DecisionReanudacion {
+  DECISION_NO_ESPECIFICADA = 0;
+  REANUDA_CON_DELTAS = 1;                // el cliente estaba al día salvo un tramo que se le manda
+  REANUDA_CON_FOTO = 2;                  // demasiado viejo, o ámbito nuevo: se manda una foto
+  REANUDA_SIN_NOVEDAD = 3;
+}
+
+message AmbitoSuscrito {
+  Ambito ambito = 1;
+  uint64 version_actual = 2;
+  DecisionReanudacion decision = 3;
+}
+
+message InfoMundo {
+  string hash = 1;                       // artefacto de mundo vigente
+  string url_artefacto = 2;              // dónde descargarlo (por hash) si el cliente no lo tiene
+  string url_paquete_unity = 3;          // paquete derivado ×12, por hash
+  uint32 factor_unity = 4;               // 12
+  uint32 version_balance = 5;
+  uint32 version_catalogo_tropas = 6;
+  string version_datos_de_juego = 7;     // archivo común de datos de juego
+}
+
+message Bienvenida {
+  string sesion_id = 1;
+  optional string heroe_id = 2;
+  optional string faccion_id = 3;
+  InfoMundo mundo = 4;
+  Reloj reloj = 5;
+  repeated AmbitoSuscrito ambitos = 6;
+  uint32 maximo_ordenes_pendientes = 7;
+}
+
+enum TipoCambio {
+  TIPO_CAMBIO_NO_ESPECIFICADO = 0;
+  CAMBIO_ACTUALIZA = 1;                  // crea o actualiza (parcial)
+  CAMBIO_QUITA = 2;
+}
+
+// Entidad con identidad. Una actualización PARCIAL trae solo los campos que cambiaron (presencia de Protobuf); los campos
+// repetidos y los mapas, cuando cambian, vienen COMPLETOS. Para borrar un campo opcional, su nombre en `campos_borrados`.
+message Entidad {
+  oneof cuerpo {
+    Faccion faccion = 1;
+    Asentamiento asentamiento = 2;
+    Heroe heroe = 3;
+    Escuadron escuadron = 4;
+    Ejercito ejercito = 5;
+    Caravana caravana = 6;
+    Convocatoria convocatoria = 7;
+    CampamentoMercenarios campamento_mercenarios = 8;
+    CampamentoBandidos campamento_bandidos = 9;
+    Alijo alijo = 10;
+    AcuerdoTrueque acuerdo_trueque = 11;
+    OrdenMercado orden_mercado = 12;
+    RelacionPolitica relacion = 13;
+    Propuesta propuesta = 14;
+    Titulo titulo = 15;
+    AedaResidente aeda_residente = 16;
+    AedaItinerante aeda_itinerante = 17;
+    MiradaIntel mirada = 18;
+    InformePlaza informe = 19;
+    Batalla batalla = 20;
+    Pueblo pueblo = 21;
+    Avanzada avanzada = 22;
+    ObraDeMapa obra = 23;
+    NodoRecurso nodo = 24;
+    MemoriaFaccion memoria = 25;
+    RedCaminos red_caminos = 26;
+    TecnologiasFaccion tecnologias = 27;
+    EstadoTecnologia estado_tecnologia = 28;
+    ZonaFaccion zona_faccion = 29;
+  }
+}
+
+message Cambio {
+  TipoCambio tipo = 1;
+  TipoEntidad entidad = 2;
+  string id = 3;                         // identidad de la entidad (para QUITA y para localizar la actualización)
+  optional Entidad datos = 4;            // en ACTUALIZA
+  repeated string campos_borrados = 5;
+}
+
+// Foto completa de un ámbito (al suscribirse, al reanudar tarde, tras un `Revocado` o un hueco de secuencia).
+message Foto {
+  Ambito ambito = 1;
+  uint64 version = 2;
+  repeated Entidad entidades = 3;
+  optional NieblaProyectada niebla = 4;  // en el ámbito VISTA
+}
+
+// Cambios de un ámbito entre dos versiones.
+message Delta {
+  Ambito ambito = 1;
+  uint64 desde = 2;
+  uint64 hasta = 3;
+  repeated Cambio cambios = 4;
+  repeated EventoDominio eventos = 5;
+  optional NieblaProyectada niebla = 6;
+}
+
+enum Resultado {
+  RESULTADO_NO_ESPECIFICADO = 0;
+  ORDEN_ACEPTADA = 1;
+  ORDEN_RECHAZADA = 2;
+  ORDEN_SIN_CAMBIOS = 3;                 // válida pero no cambió nada
+  ORDEN_DUPLICADA = 4;                   // misma peticion_id: se repite el resultado anterior
+}
+
+message RechazoOrden {
+  string codigo = 1;                     // estable: «ascenso.invalido», «no_autorizado», «fuera_del_mundo», «guerra.confirmar»...
+  string mensaje = 2;                    // texto de diagnóstico (no localizado)
+  google.protobuf.Struct detalle = 3;    // p. ej. las consecuencias de declarar una guerra
+}
+
+message ReferenciaCreada {
+  TipoEntidad entidad = 1;
+  string id = 2;
+}
+
+message ResultadoOrden {
+  string peticion_id = 1;
+  Resultado resultado = 2;
+  uint64 version_tras = 3;               // versión de mundo con los efectos ya aplicados
+  optional RechazoOrden rechazo = 4;
+  repeated ReferenciaCreada creadas = 5;
+  optional google.protobuf.Struct datos = 6; // respuesta propia de la orden (p. ej. { cargado })
+}
+
+// El cliente deja de ver un ámbito (salió de la plaza, acabó la batalla...): debe descartar sus entidades.
+message Revocado {
+  Ambito ambito = 1;
+  string motivo = 2;
+}
+
+message Aviso {
+  string codigo = 1;                     // «servidor.reiniciando», «reloj.cambiado», «mundo.nuevo»...
+  string mensaje = 2;
+  optional Reloj reloj = 3;
+}
+
+message ErrorSesion {
+  string codigo = 1;                     // «token_invalido», «version_protocolo», «hueco_de_secuencia»...
+  string mensaje = 2;
+  bool fatal = 3;
+}
+
+// Sesión de servidor de batalla: mensajes de vuelta.
+message MensajeParaServidorDeBatalla {
+  oneof cuerpo {
+    BattleTicket ticket = 1;
+    IncorporacionBatalla incorporacion = 2;
+    TokensBatalla tokens = 3;
+  }
+}
+
+message MensajeDeServidor {
+  uint64 secuencia = 1;                  // creciente, sin huecos, por sesión
+  oneof cuerpo {
+    Bienvenida bienvenida = 2;
+    Foto foto = 3;
+    Delta delta = 4;
+    ResultadoOrden resultado = 5;
+    Pong pong = 6;
+    Revocado revocado = 7;
+    Aviso aviso = 8;
+    ErrorSesion error = 9;
+    MensajeParaServidorDeBatalla batalla = 10;
+  }
+}

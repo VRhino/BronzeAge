@@ -1,0 +1,333 @@
+// Contrato 05 de BronzeAge — batalla de Unity.
+//
+// Es el contrato v1 de batalla (ticket, asignación, tokens, inicio, salida, resultado), traducido a Protobuf y ampliado
+// con las modalidades de la guerra logística. Los nombres de mensaje y de campo conservan el inglés del contrato v1
+// (BattleTicket, BattleResult...) para que Conquest/Unity no tenga que renombrar nada. BronzeAge decide que la batalla
+// ocurra, dónde, quién entra, quién sale y qué le queda a cada uno; Unity decide TODO lo que pasa dentro.
+syntax = "proto3";
+
+package bronzeage.v1;
+
+import "bronzeage/v1/common.proto";
+import "bronzeage/v1/entities.proto";
+
+option csharp_namespace = "BronzeAge.Contract.V1";
+
+enum LadoId {
+  LADO_NO_ESPECIFICADO = 0;
+  ATACANTE = 1;
+  DEFENSOR = 2;
+}
+
+enum EstadoBatalla {
+  ESTADO_BATALLA_NO_ESPECIFICADO = 0;
+  BATALLA_CONVOCANDO = 1;
+  BATALLA_ASIGNADA = 2;
+  BATALLA_EN_CURSO = 3;
+  BATALLA_APLICADA = 4;
+  BATALLA_CANCELADA = 5;
+  BATALLA_FALLIDA = 6;
+}
+
+// Modalidad de un asalto de caravana, decidida por el SERVIDOR según la zona donde está la caravana en el instante del
+// ataque (Doc 3.10): disputa de carros fuera de la zona del dueño o de sus aliados; aguante dentro de ella.
+enum ModalidadCaravana {
+  MODALIDAD_NO_ESPECIFICADA = 0;
+  MODALIDAD_DISPUTA = 1;
+  MODALIDAD_AGUANTE = 2;
+}
+
+message CarroEnBatalla {
+  string carro_id = 1;
+  Cantidades carga = 2;
+}
+
+message ContextoAsedio {
+  string asentamiento_id = 1;
+}
+
+message ContextoCampoAbierto {
+  Punto punto = 1;
+  bool solitarios = 2;                   // persecución entre columnas personales; si no, campal entre ejércitos
+}
+
+message ContextoCaravana {
+  string caravana_id = 1;
+  Punto punto = 2;
+  ModalidadCaravana modalidad = 3;
+  repeated CarroEnBatalla carros = 4;
+}
+
+message ContextoCampamentoBandidos {
+  string campamento_id = 1;
+  Punto punto = 2;
+}
+
+// Saqueo de un pueblo extractor: nunca de conquista; el pueblo protege el 50 % de su capacidad.
+message ContextoSaqueoPueblo {
+  string pueblo_id = 1;
+  Punto punto = 2;
+  Cantidades protegido = 3;              // lo que NO se puede llevar el atacante (la mitad de la capacidad)
+}
+
+// Ataque a una avanzada: solo un ejército, 30 minutos; un mapa interior por etapa.
+message ContextoAvanzada {
+  string avanzada_id = 1;
+  uint32 etapa = 2;
+  Punto punto = 3;
+}
+
+message ContextoEstrategico {
+  oneof tipo {
+    ContextoAsedio asedio = 1;
+    ContextoCampoAbierto campo_abierto = 2;
+    ContextoCaravana caravana = 3;
+    ContextoCampamentoBandidos campamento_bandidos = 4;
+    ContextoSaqueoPueblo saqueo_pueblo = 5;
+    ContextoAvanzada avanzada = 6;
+  }
+}
+
+message HeroSnapshot {
+  string display_name = 1;
+  string class_definition_id = 2;
+  uint32 nivel = 3;
+  bool femenino = 4;
+  Avatar avatar = 5;
+  repeated uint32 perks_desbloqueados = 6;
+  Equipamiento equipamiento = 7;
+  Atributos atributos_efectivos = 8;
+  uint32 casillas_inventario_libres = 9;
+}
+
+message SquadSnapshot {
+  string squad_id = 1;
+  optional string heroe_id = 2;          // ausente = escuadra sin héroe (IA del juego)
+  string tropa_id = 3;
+  uint32 efectivos_autorizados = 4;
+  uint32 nivel = 5;
+  sint64 experiencia = 6;
+  sint64 moral = 7;
+  repeated string habilidades_desbloqueadas = 8;
+  repeated uint32 formaciones_desbloqueadas = 9;
+  uint32 formacion_seleccionada = 10;
+}
+
+message BattleParticipantSnapshot {
+  string heroe_id = 1;
+  optional string faccion_id = 2;
+  bool es_bot = 3;
+  HeroSnapshot heroe = 4;
+  repeated SquadSnapshot escuadras = 5;
+}
+
+message BattleSide {
+  optional string faccion_id = 1;
+  uint32 capacidad_maxima = 2;           // asedio: 15
+  repeated BattleParticipantSnapshot participantes = 3;
+  repeated SquadSnapshot escuadras_sin_heroe = 4;
+}
+
+// El terreno de la batalla sale del artefacto de mundo: Unity no lo inventa.
+message BattleMapReference {
+  string mapa_id = 1;                    // hash del artefacto de mundo
+  Punto centro = 2;
+}
+
+message EdificioEnBatalla {
+  string edificio_id = 1;
+  string tipo = 2;
+  Punto posicion = 3;
+  uint32 ancho = 4;
+  uint32 alto = 5;
+  optional uint32 nivel_interno = 6;
+  EstadoEdificio estado = 7;
+  bool danado = 8;
+}
+
+message RecintoEnBatalla {
+  string recinto_id = 1;
+  uint32 nivel = 2;
+  repeated CeldaMuro celdas = 3;
+}
+
+message SettlementBattleSnapshot {
+  string settlement_id = 1;
+  uint32 layout_version = 2;
+  uint32 unidades_por_celda = 3;
+  repeated EdificioEnBatalla edificios = 4;
+  repeated RecintoEnBatalla recintos = 5;
+}
+
+message BattleRules {
+  uint32 duracion_maxima_segundos = 1;
+  uint32 version_balance = 2;
+  uint32 version_catalogo_tropas = 3;
+  string version_catalogo_heroe = 4;
+  string version_catalogo_objetos = 5;
+}
+
+message BattleTicket {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  string game_id = 3;
+  uint32 ticket_revision = 4;
+  ContextoEstrategico contexto_estrategico = 5;
+  BattleSide atacante = 6;
+  BattleSide defensor = 7;
+  oneof mapa {
+    BattleMapReference mapa_referencia = 8;
+    SettlementBattleSnapshot mapa_asentamiento = 9;
+  }
+  BattleRules reglas = 10;
+}
+
+message IncorporacionBatalla {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  uint32 secuencia = 3;
+  LadoId lado = 4;
+  BattleParticipantSnapshot participante = 5;
+}
+
+message TokenParticipante {
+  string heroe_id = 1;
+  string token = 2;
+  int64 expira_en_ms = 3;
+}
+
+message InstanciaDeBatalla {
+  string host = 1;
+  uint32 puerto = 2;
+  string protocolo = 3;
+}
+
+message BattleServerAssignment {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  uint32 ticket_revision = 3;
+  string intento_asignacion_id = 4;
+  InstanciaDeBatalla instancia = 5;
+  repeated TokenParticipante tokens_participante = 6;
+}
+
+message TokensBatalla {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  string intento_asignacion_id = 3;
+  repeated TokenParticipante tokens_participante = 4;
+}
+
+message InicioBatalla {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  uint32 ticket_revision = 3;
+  string intento_asignacion_id = 4;
+}
+
+message ObjetoBotin {
+  string item_definition_id = 1;
+  uint32 cantidad = 2;
+  optional string item_instance_id = 3;
+  repeated Estadistica estadisticas = 4;
+}
+
+message Botin {
+  repeated ObjetoBotin objetos = 1;
+  Monedas monedas = 2;
+}
+
+enum MotivoSalida {
+  MOTIVO_SALIDA_NO_ESPECIFICADO = 0;
+  SALIDA_NO_CONECTADO = 1;
+  SALIDA_ELIMINADO = 2;
+  SALIDA_ABANDONO = 3;
+  SALIDA_DESCONEXION = 4;
+}
+
+message ResultadoEscuadraSalida {
+  string squad_id = 1;
+  uint32 supervivientes = 2;
+  uint32 muertos = 3;
+}
+
+message SalidaBatalla {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  uint32 ticket_revision = 3;
+  string intento_asignacion_id = 4;
+  string heroe_id = 5;
+  MotivoSalida motivo = 6;
+  bool derrotado = 7;
+  repeated ResultadoEscuadraSalida escuadras = 8;
+}
+
+enum RazonVictoria {
+  RAZON_NO_ESPECIFICADA = 0;
+  OBJETIVOS_CAPTURADOS = 1;
+  ANIQUILACION = 2;
+  TIEMPO_AGOTADO = 3;
+}
+
+message ObjetivoResultado {
+  string objetivo_id = 1;
+  optional LadoId capturado_por = 2;
+}
+
+message ResultadoEscuadra {
+  string squad_id = 1;
+  uint32 desplegados = 2;
+  uint32 supervivientes_al_cierre = 3;
+  uint32 muertos = 4;
+  sint64 xp_ganada = 5;
+}
+
+message ResultadoHeroe {
+  string heroe_id = 1;
+  bool participo = 2;
+  bool sobrevivio_al_cierre = 3;
+  sint64 xp_ganada = 4;
+  optional bool derrotado = 5;
+  optional Botin botin = 6;
+}
+
+message BattleResult {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  string result_id = 3;
+  uint32 ticket_revision = 4;
+  string intento_asignacion_id = 5;
+  int64 inicio_ms = 6;
+  int64 fin_ms = 7;
+  LadoId ganador = 8;
+  RazonVictoria razon = 9;
+  repeated ObjetivoResultado objetivos = 10;
+  repeated ResultadoEscuadra por_escuadra = 11;
+  repeated ResultadoHeroe por_heroe = 12;
+  string version_servidor = 13;
+  // Guerra logística: Unity responde qué carros se perdieron (modalidades disputa y aguante). Los carros no cambian de
+  // manos en el mundo: solo la carga. El servidor calcula la carga perdida y destruye esos carros con su animal.
+  repeated string carros_perdidos = 14;
+}
+
+// Estado de una batalla tal como lo guarda el servidor y lo proyecta a los clientes.
+message Batalla {
+  string id = 1;
+  uint64 version = 2;
+  EstadoBatalla estado = 3;
+  string iniciada_por = 4;
+  Punto punto = 5;
+  BattleTicket ticket = 6;
+  repeated IncorporacionBatalla incorporaciones = 7;
+  repeated string bloqueo_ejercito_ids = 8;
+  repeated string bloqueo_caravana_ids = 9;
+  optional string bloqueo_asentamiento_id = 10;
+  optional string bloqueo_campamento_id = 11;
+  int64 expira_en_ms = 12;
+  optional int64 convocatoria_hasta_ms = 13;
+  optional int64 iniciada_en_ms = 14;
+  optional BattleResult resultado = 15;
+  optional int64 aplicada_en_ms = 16;
+  optional int64 cerrada_en_ms = 17;
+  optional LadoId lado_propio = 18;      // solo en la proyección
+}

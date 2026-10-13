@@ -1,0 +1,24 @@
+// Contrato 05 de BronzeAge — eventos de dominio.
+//
+// Un evento es un HECHO que ya ocurrió (narración, avisos, crónica), no el cambio de estado: el estado viaja como
+// entidades (entities.proto) en la misma `Delta`. Un cliente no necesita interpretar eventos para estar al día.
+// El catálogo de códigos (≈180, familia.nombre: comercio.*, diplomacia.*, construccion.*, ejercito.*, columna.*, aedas.*,
+// jugador.*, asentamiento.*, mercenarios.*, combate.*, faccion.*, heroe.*, fundacion.*, bandidos.*, tecnologia.*...) y la forma
+// del payload de cada uno viven en Docs/Coordinacion/05_Contrato_de_Sesion.md §Eventos. El payload es una estructura
+// (google.protobuf.Struct) con los campos documentados para cada código.
+syntax = "proto3";
+
+package bronzeage.v1;
+
+import "google/protobuf/struct.proto";
+
+option csharp_namespace = "BronzeAge.Contract.V1";
+
+message EventoDominio {
+  string codigo = 1;
+  uint64 version = 2;                    // versión de mundo que lo produjo
+  int64 en_ms = 3;                       // instante de mundo en que ocurrió
+  optional string asentamiento_id = 4;   // a quién se atribuye (decide quién lo oye)
+  repeated string heroes_ids = 5;        // héroes nombrados: lo oyen aunque no vean la plaza
+  google.protobuf.Struct payload = 6;
+}

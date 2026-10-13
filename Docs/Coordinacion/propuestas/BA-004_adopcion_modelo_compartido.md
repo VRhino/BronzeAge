@@ -1,7 +1,8 @@
 # BA-004 — Revisión y adopción del modelo compartido de entidades v0
 
 **Destino:** `BronzeAgeFase0`  
-**Estado:** ACEPTADO (revisión 2026-09-11, corregido con la revisión de Codex del mismo día — ver abajo)  
+**Estado (2026-10-13):** ABSORBIDO en el contrato 05 (2026-10-13): el modelo de datos completo es `entities.proto` y `battle.proto` (`Docs/Coordinacion/01_Modelo_de_datos.md`); ver `CIERRE_FASE_2.md`. Pendiente de confirmar con Codex.  
+**Estado anterior:** ACEPTADO (revisión 2026-09-11, corregido con la revisión de Codex del mismo día — ver abajo)  
 **Prioridad:** Alta  
 **Documento origen:** `Conquest_prototype/Docs/Coordinacion/03_Modelo_compartido_entidades_v0.md`
 

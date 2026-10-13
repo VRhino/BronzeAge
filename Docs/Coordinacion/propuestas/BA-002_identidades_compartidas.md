@@ -1,7 +1,8 @@
 # BA-002 — Identidades persistentes compartidas
 
 **Destino:** `BronzeAgeFase0`  
-**Estado:** ACEPTADO (revisión 2026-09-11, corregido con la revisión de Codex del mismo día — ver abajo)  
+**Estado (2026-10-13):** ABSORBIDO en el contrato 05 (2026-10-13): las identidades estables son los `id` de `entities.proto`; ver `CIERRE_FASE_2.md`. Pendiente de confirmar con Codex.  
+**Estado anterior:** ACEPTADO (revisión 2026-09-11, corregido con la revisión de Codex del mismo día — ver abajo)  
 **Prioridad:** Alta
 
 ## Problema
