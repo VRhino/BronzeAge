@@ -114,8 +114,7 @@ clientes ─┤ WS/HTTP · auth · parseo y validación sin estado       │
 
 - **Event sourcing:** log de solo añadir (órdenes + resultados de workers) y una **foto periódica** del estado, hecha
   sin parar el núcleo (estructuras persistentes o clon rápido serializado por otro hilo).
-- **Arranque:** última foto + repetición del log. Como el estado es analítico, «ponerse al día» tras una caída es
-  procesar los eventos pendientes, no simular los minutos perdidos.
+- **Arranque:** última foto + repetición del log. Como el estado es analítico, arrancar es cargar y repetir; **el reloj de mundo se congela mientras el servidor está apagado** (decisión del 2026-10-13, regla del autor del 2026-09-05): no hay eventos "vencidos" que procesar al volver.
 
 ## 7. Escala orientativa (1.000 jugadores)
 

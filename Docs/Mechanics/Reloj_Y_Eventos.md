@@ -99,9 +99,9 @@ Una columna o una caravana que participa en una batalla activa (`convocando`, `a
 ## 8. El generador aleatorio
 
 - **Una sola secuencia de la partida**, consumida en el orden de la cola (que es total y determinista). Cualquier cambio de orden cambia la partida a partir de ahí, así que el orden de la cola es parte de las reglas.
-- Consumen el generador: el **combate resuelto con números** (varianza de ±15 %), el **nivel y el punto** de un campamento de bandidos nuevo, y los **sorteos de aparición** (Aedas, eventos). Lo que construye el mundo con una semilla propia (campamentos de mercenarios, alijos, el artefacto de mundo) **no** toca la secuencia de la partida.
+- Consumen el generador: el **combate resuelto con números** (varianza de ±15 %), el **nivel y el punto** de un campamento de bandidos nuevo, y los **sorteos de aparición** (Aedas, eventos). El crecimiento de población no. Lo que construye el mundo con una semilla propia (campamentos de mercenarios, alijos, el artefacto de mundo) **no** toca la secuencia de la partida.
 - Lo que vuelve de un worker (una ruta, un cálculo de combate) entra como un evento más y **se escribe en el registro**, para que una reproducción no dependa de qué hilo terminó antes.
-- **Pendiente de decidir** (§10): el redondeo estocástico del crecimiento de población.
+- El crecimiento de población **no** consume el generador (§10, decisión 1).
 
 ## 9. Parámetros
 
@@ -137,11 +137,11 @@ Cifras de **infraestructura** (en `constantsInfra.ts`; no alteran el resultado d
 ```
 <!-- /parametros -->
 
-## 10. Decisiones abiertas
+## 10. Decisiones (2026-10-13)
 
-1. **Población discreta o continua.** Hoy el crecimiento se redondea con una tirada (3,4 habitantes dan 3 o 4 con esa probabilidad). En un mundo de ritmos lo natural es guardar la población continua y leerla entera (suelo), sin tirada. Cambia el resultado por debajo de un habitante y quita una fuente de azar.
-2. **Tras una caída del servidor.** La regla del autor (2026-09-05) es que el mundo **no se recupera**: el reloj se queda donde estaba. En un núcleo por eventos hay dos opciones: congelar el reloj de mundo mientras el servidor está apagado (mismo comportamiento de hoy) o dejar correr y procesar los eventos vencidos al arrancar. Arquitectura/13 §6 supone la segunda; el canon, la primera.
-3. **Órdenes a mitad de camino** (Arquitectura/13 §8.2): se aplican desde la posición real del instante de la orden. Cambia sutilmente algunas jugadas; hay que confirmarlo.
+1. **La población es continua.** Se guarda como número continuo (valor en t₀ y ritmo logístico) y se **lee en entero (suelo)**. Se elimina la tirada del redondeo estocástico: el crecimiento deja de consumir el generador aleatorio.
+2. **Tras una caída del servidor, el mundo no se recupera.** El reloj de mundo **se congela mientras el servidor está apagado** (regla del autor del 2026-09-05): al arrancar, el instante de mundo es el último guardado, no se procesan eventos que "vencieron" durante la caída y los plazos conservan el tiempo que les quedaba. (Sustituye a la lectura de Arquitectura/13 §6; ver su corrección.)
+3. **Las órdenes a mitad de camino parten de la posición real en el instante de la orden**, no de la del inicio de un minuto.
 
 ## 11. Invariantes
 
@@ -157,4 +157,4 @@ Cifras de **infraestructura** (en `constantsInfra.ts`; no alteran el resultado d
 
 ## 12. Divergencias
 
-Ninguna abierta. Las tres decisiones de §10 se cierran con el usuario antes de implementar el núcleo.
+Ninguna abierta.
