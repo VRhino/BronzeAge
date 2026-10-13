@@ -2,7 +2,7 @@
 
 La reconstrucción redefine el contrato entre BronzeAge, Unity y los demás clientes (D8): Protobuf por esquema, sesión en tiempo real,
 mundo por hash. Las propuestas `BA-*` se **absorben** en ese contrato: lo que decidieron sigue vigente, pero su forma (JSON, HTTP,
-semilla, tick) se sustituye. **Pendiente de confirmar con Codex** (esta carpeta es suya); el usuario decide cuándo y cómo se le avisa.
+semilla, tick) se sustituye. **Las propuestas originales se retiraron de la carpeta** (historial de git); esta carpeta la mantienen Codex y Claude.
 
 | Propuesta | Qué decidió | Dónde vive ahora |
 |---|---|---|

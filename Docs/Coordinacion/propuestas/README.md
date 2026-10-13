@@ -1,16 +1,22 @@
-# Propuestas entrantes para BronzeAge
+# Propuestas de Codex/Conquest para BronzeAge
 
-Esta es la única carpeta de `BronzeAgeFase0` que Codex puede modificar. Contiene solicitudes detectadas al
-trabajar en `Conquest_prototype`; no son código ni decisiones aceptadas automáticamente.
+Carpeta de solicitudes `BA-*` que Codex detecta al trabajar en `Conquest_prototype`. Claude, como propietario de BronzeAge, también
+mantiene esta carpeta (decisión del usuario, 2026-10-13): actualiza el estado de cada propuesta y **retira las cerradas**, dejando aquí
+qué fue de ellas. El texto original de las retiradas está en el historial de git (`git log -- Docs/Coordinacion/propuestas`).
 
-Claude, como propietario de BronzeAge, revisa las propuestas `BA-*`, actualiza su estado y las implementa o
-rechaza desde una rama propia. Codex no modifica ninguna otra ruta de este repositorio.
+## Vigentes
 
-El modelo completo de cooperación está en
-`Conquest_prototype/Docs/Coordinacion/01_Modelo_de_cooperacion.md` y las notas humanas prioritarias en
-`Conquest_prototype/Docs/Coordinacion/Notas_de_integracion.md`.
+- [BA-006 — Progresión histórica, tecnología y roster](BA-006_progresion_historica_y_roster.md): **pospuesta** con las Eras IV y V; se retoma con el motor nuevo. Las Eras I-III están en el canon (Doc 6).
 
-## Pendiente de revisión
+## Cerradas y retiradas (2026-10-13)
 
-- [BA-005 — Huellas y escala del asentamiento](BA-005_huellas_y_escala_asentamiento.md): división de dimensiones lógicas por dos, inventario de 27 tipos y definición de celda lógica/escala física. Incluye origen de grilla, compatibilidad de partidas y entrega de fixtures para Unity.
-- [BA-006 — Progresión histórica, tecnología y roster](BA-006_progresion_historica_y_roster.md): cinco capítulos globales desde el Bronce tardío hasta las reformas macedónicas, adopción tecnológica por Facción y ampliación gradual del roster. **Eras I-III implementadas en BronzeAge (2026-09-29)**; IV y V en diseño. Lo que necesita Conquest, en CQ-006 (`Conquest_prototype`).
+Absorbidas en el contrato 05 de la reconstrucción; la correspondencia con los esquemas está en [`CIERRE_FASE_2.md`](CIERRE_FASE_2.md).
+
+| Propuesta | Qué pasó | Dónde vive ahora |
+|---|---|---|
+| BA-001 Ciclo de batalla | Absorbida | `battle.proto`, `session.proto`, `Mechanics/Batalla_Unity_Ciclo.md` |
+| BA-002 Identidades compartidas | Absorbida | los `id` de `entities.proto` |
+| BA-003 Worldgen y asentamientos 3D | Sustituida | [`06_Contrato_de_Mundo.md`](../06_Contrato_de_Mundo.md), `world.proto` |
+| BA-004 Modelo compartido | Absorbida | [`01_Modelo_de_datos.md`](../01_Modelo_de_datos.md), `entities.proto` |
+| BA-005 Huellas y escala | Absorbida | el servidor calcula el trazado; ciudad −80 % |
+| Revisiones de Codex (2026-09-11) | Resueltas y superadas por el contrato Protobuf | — |

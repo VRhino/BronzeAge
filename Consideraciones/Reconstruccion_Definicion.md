@@ -139,7 +139,7 @@ intermedio. Unity se conecta directamente al contrato 05 cuando exista el núcle
    Es lo primero, antes de crear los repos y antes de escribir código.
 2. **Contratos** sobre ese canon: contrato de mundo (artefacto + paquete Unity) y contrato 05 en Protobuf (§2.1), con el
    modelo de datos completo.
-   **Hecho el 2026-10-13 (diseño):** `proto/bronzeage/v1/` (common, entities, orders, events, battle, session, world; 296 mensajes, 135 órdenes, validado por carga con protobufjs), `Docs/Coordinacion/01_Modelo_de_datos.md`, `05_Contrato_de_Sesion.md`, `06_Contrato_de_Mundo.md` y `propuestas/CIERRE_FASE_2.md`. Pendiente: confirmar el cierre de BA-001..005 con Codex, ficheros dorados y generación de código al crear los repos (fase 3).
+   **Hecho el 2026-10-13 (diseño):** `proto/bronzeage/v1/` (common, entities, orders, events, battle, session, world; 296 mensajes, 135 órdenes, validado por carga con protobufjs), `Docs/Coordinacion/01_Modelo_de_datos.md`, `05_Contrato_de_Sesion.md`, `06_Contrato_de_Mundo.md` y `propuestas/CIERRE_FASE_2.md`. Pendiente: ficheros dorados y generación de código al crear los repos (fase 3).
 3. **Tres repositorios** (D10), una vez existe el contrato: servidor (este repo), bots y admin web. Nacen desde cero
    sobre el contrato 05; el TypeScript actual queda en `typescript-final` como referencia, porque ni los bots ni el
    admin compilan sin el motor (importan `domain`, `engine`, `session` y `server`; el admin, unos 40 módulos por el
