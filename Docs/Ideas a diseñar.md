@@ -163,4 +163,5 @@ Salen de los documentos de decisión que se retiran. Ninguno tiene código.
 - **Trozos diferidos del revamp de caravanas** (antes `Mecanicas a desarrollar.md` §8.1, decidido el 2026-10-13: todo a
   ideas): cría de animales de tiro, camello inmune al desierto, catálogo ampliado de carros y unificación del carro de
   columna y del de caravana en un solo tipo `Carro`.
-
+- **Comercio del forastero** (antes pendiente de `Comercio_Fisico`): que un forastero publique sus propias órdenes en un mercado
+  ajeno, y que el Gobernador cierre el mostrador sin cerrar la puerta (dejar pasar pero no vender, o vender solo a aliados).

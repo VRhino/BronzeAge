@@ -13,7 +13,7 @@
 > también un amplificador de la fuente: más comercio → más comisiones). El buey sigue en oro — la fundación ya
 > trae 100 oro para la primera caravana.
 >
-> Este bloque **revisa dos decisiones cerradas del revamp de caravanas** (`Revamp_Caravanas_Definicion.md`
+> Este bloque **revisa dos decisiones cerradas del revamp de caravanas** (`typescript-final:Consideraciones/Revamp_Caravanas_Definicion.md`
 > §17 buey en madera, §18 bootstrap descartado) — ver §7.
 
 ## 0. El trabajo del oro en el canon
@@ -262,9 +262,9 @@ acumula** — sin él, `oroMedio` sube sin techo pase lo que pase con las compra
 
 ## 7. Decisiones que este bloque revisa (al cerrarse, actualizar)
 
-- **`Revamp_Caravanas_Definicion.md` §17** (buey en madera) → **buey en oro (~12)**. Motivo: el impuesto + la
+- **`typescript-final:Consideraciones/Revamp_Caravanas_Definicion.md` §17** (buey en madera) → **buey en oro (~12)**. Motivo: el impuesto + la
   caravana #0 gratis cortan las dos patas del deadlock que justificaba la madera.
-- **`Revamp_Caravanas_Definicion.md` §18** (bootstrap descartado) → **bootstrap DE VUELTA** (1 carro + 1 buey
+- **`typescript-final:Consideraciones/Revamp_Caravanas_Definicion.md` §18** (bootstrap descartado) → **bootstrap DE VUELTA** (1 carro + 1 buey
   gratis al completar el Mercado). Motivo: la medición que lo descartó usó el arnés con el bug de ids; se
   re-mide post-fix.
 - **`Docs/Game/3` §3.13.2** (tabla de animales + "El Mercado no regala ninguna caravana") — al cerrar.
@@ -536,7 +536,7 @@ intel a la vez.
 
 - Al cerrar: actualizar la ficha §1, escribir el diario de la campaña, y actualizar el canon —
   `Docs/Game/3` §3.13.2 (animales, bootstrap), §3.5 (usos del oro), `Docs/Game/4` §4.5 (`nivelParaOro`),
-  `Docs/Game/5` (coste de reclutamiento en oro), y `Revamp_Caravanas_Definicion.md` §17/§18.
+  `Docs/Game/5` (coste de reclutamiento en oro), y `typescript-final:Consideraciones/Revamp_Caravanas_Definicion.md` §17/§18.
 
 ### Fuera de este plan
 

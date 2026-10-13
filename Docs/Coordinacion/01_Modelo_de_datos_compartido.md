@@ -1421,7 +1421,7 @@ TarifasIntel                    (ProyeccionJugador.tarifasIntel = INTEL, para co
 
 ## 25. Anexión con aceptación (nuevo, 2026-10-06)
 
-Canon: Doc 2 §2.6. Decisiones: `Consideraciones/Anexion_Y_Desarme_Definicion.md`. La anexión necesita que el Rey de la absorbida la acepte: el comando
+Canon: Doc 2 §2.6. Decisiones: `typescript-final:Consideraciones/Anexion_Y_Desarme_Definicion.md`. La anexión necesita que el Rey de la absorbida la acepte: el comando
 `anexionar` desaparece y lo sustituyen tres.
 
 ```text
@@ -1447,7 +1447,7 @@ Eventos    diplomacia.anexion_propuesta, diplomacia.anexion_rechazada, diplomaci
 
 ## 26. Fusión con aceptación (nuevo, 2026-10-06)
 
-Canon: Doc 2 §2.6, opción 2. Decisiones: `Consideraciones/Anexion_Y_Desarme_Definicion.md` §5. Como la anexión: la fusión necesita que el Rey de B la acepte.
+Canon: Doc 2 §2.6, opción 2. Decisiones: `typescript-final:Consideraciones/Anexion_Y_Desarme_Definicion.md` §5. Como la anexión: la fusión necesita que el Rey de B la acepte.
 El comando `fusionar` desaparece y lo sustituyen tres.
 
 ```text

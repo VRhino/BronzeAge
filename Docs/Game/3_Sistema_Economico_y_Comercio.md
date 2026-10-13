@@ -125,7 +125,7 @@ Pesos y distancia de referencia (120 unidades) placeholder.
 ## 3.13 La caravana compuesta
 
 Una caravana `comercial` es un contenedor de **carros, animales y escolta**, y de lo que se le monta deriva su
-capacidad y su velocidad. Diseño y representación en el motor en `Consideraciones/Revamp_Caravanas_Definicion.md`.
+capacidad y su velocidad. Diseño y representación en el motor en `typescript-final:Consideraciones/Revamp_Caravanas_Definicion.md`.
 Todas las cifras (`CARRO_CATALOGO`, `ANIMAL_CATALOGO`, `CARAVANA_PREPARACION`, `CARAVANA_ESCOLTA`) son placeholder.
 
 ### 3.13.1 Tres partes

@@ -34,7 +34,7 @@ completo; su estado queda en el checklist.
 El **núcleo está implementado** (2026-09-08, Pasos 1-5): la caravana `comercial` es un contenedor de carros
 con animal que deriva capacidad/velocidad, casco vacío + piezas, lanzamiento manual con estado `preparando`,
 y escolta sin héroe. Reglas en `Docs/Game/3` §3.13; decisiones, motor y plan en
-`Consideraciones/Revamp_Caravanas_Definicion.md`.
+`typescript-final:Consideraciones/Revamp_Caravanas_Definicion.md`.
 
 ### 8.1 Lo diferido — forma diseñada, implementación en un pase posterior
 

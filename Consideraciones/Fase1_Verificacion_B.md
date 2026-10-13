@@ -1,6 +1,6 @@
 # Fase 1 — Verificación de la tabla B
 
-> **Estado (2026-10-13): en curso; cuatro documentos verificados y retirados.** Por cada documento ya implementado se comprueba que ninguna decisión viva solo en él: lo
+> **Estado (2026-10-13): en curso; ocho documentos verificados y retirados.** Por cada documento ya implementado se comprueba que ninguna decisión viva solo en él: lo
 > vigente tiene que estar en `Docs/Game/` o en `Docs/Mechanics/`; lo abierto, decidido o en `Docs/Ideas a diseñar.md`. Cuando
 > un documento queda verificado se **borra** de `Consideraciones/` (la historia queda en git y en `typescript-final`, decisión
 > del autor del 2026-10-09 y del 2026-10-13). Nada se borra sin tu visto bueno.
@@ -28,6 +28,21 @@
   No está en `Mechanics`. *Recomiendo que sí, igual que el resto del combate,* y escribirlo en el canon (5.16).
 - **W3. El camello sin su inmunidad al desierto** sigue en el catálogo como «opción media». *Recomiendo dejarlo y revisarlo al calibrar con el motor nuevo.*
 
+### Decidido de la segunda tanda
+W1 al `Docs/Ideas a diseñar.md` §47; W2 escrito en el canon (2.2: la defensa de una caravana da experiencia de Facción por héroe participante); W3 se queda. Retirados `Anexion_Y_Desarme`, `Batalla_Este_Lado`, `Comercio_Fisico` y `Revamp_Caravanas`.
+
+## Tercera tanda (2026-10-13)
+
+| Documento | Resultado | Pendiente de decidir |
+|---|---|---|
+| `Entrada_Al_Mundo_Definicion.md` | Cerrado: lo que quedaba (la vida de un huésped) se descartó el 2026-10-03; las reglas están en canon 1.3 y 1.9b y `Mechanics/Campamentos_Mercenarios.md`. | — |
+| `Identidad_Visual_Definicion.md` | Cerrado (sigilo, estandarte e insignias de títulos en canon 2.8.1). Quedan dos cosas externas: siete emblemas sin icono (escudo en ocho, Puerta de los Leones, águila bicéfala hitita, toro alado, árbol sagrado, casco de colmillos, sol de Vergina) y las insignias de títulos de jugador-poseedor cuando exista «general con más victorias». | X1 |
+| `Rutas_Caravana_Avanzadas_Definicion.md` | Reglas en canon 1.6 y `Mechanics/Comercio_Caravanas.md`. Los puntos abiertos (vados, separación del grafo, bosques, escala del regional) quedan superados por la calibración (`NAVEGACION`, mundo de 2.667) y por el artefacto de mundo; el logro `logistica_campana` va con la Era IV, pospuesta. | — |
+| `Taberna_Intel_Definicion.md` | Reglas en canon 5.12.10 y 4.2.1. Un héroe sin Facción no compra: ya consta en el canon (5.12.10). Quedan sin diseñar los rumores de las tabernas y el «Estado de Facción». | X1 |
+
+- **X1.** Pasar a `Docs/Ideas a diseñar.md` los siete emblemas por encargar (tarea del lado de Unity), las insignias de títulos de
+  jugador-poseedor, los rumores de las tabernas y el «Estado de Facción». *Recomiendo hacerlo.*
+
 ## Decidido el 2026-10-13
 
 - **V1** varianza ±15 %: se deja como está (constante del archivo común). **V2** escuadra mermada: regla escrita en el canon (5.11.1). **V3, V4** y la demolición de recintos: a `Docs/Ideas a diseñar.md` §47. **Jerarquía de puertas: descartada.**
@@ -47,7 +62,7 @@
   *Recomiendo `Docs/Ideas a diseñar.md`.*
 - **V5. Jerarquía de puertas** (postigo / puerta / casa-puerta) y **demolición de un recinto completo**. *Recomiendo `Docs/Ideas a diseñar.md`.*
 
-## Quedan por verificar (8)
+## Quedan por verificar (4)
 
 `Anexion_Y_Desarme`, `Batalla_Este_Lado`, `Comercio_Fisico`, `Entrada_Al_Mundo`, `Identidad_Visual`, `Revamp_Caravanas`,
 `Rutas_Caravana_Avanzadas`, `Taberna_Intel`, `Fase_0_5_Especializacion_y_Cupos`, `Fase_0_6_Expansion_Niveles_Asentamiento`,
