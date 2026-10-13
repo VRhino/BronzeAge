@@ -67,3 +67,17 @@ yacimiento dentro de agua. Un artefacto que no pasa **no se carga**.
 
 El generador y el servidor comparten un fichero dorado: un mundo pequeño con su hash y el resultado esperado de las validaciones.
 Unity carga el mismo fichero y comprueba que el paquete derivado coincide en hash con el declarado.
+
+## 7. Formato del artefacto (implementado 2026-10-13)
+
+Escritor: `generador/src/artefacto.ts`. Cargador y validador del servidor: `crates/mundo` (`Mundo::cargar`). Un artefacto real (semilla 42) ocupa
+unos 4,7 MB y pasa todas las validaciones; la herramienta `cargo run -p mundo --example validar -- <archivo>` lo comprueba.
+
+- **Unidades:** milésimas de unidad estratégica (`round(u · 1000 / 12)` desde las del generador).
+- **Rasters:** celda de 4 unidades estratégicas (667 × 500 en el mundo real), filas de norte a sur, valor del centro de la celda. `altura` u16 LE;
+  `terreno`, `fertilidad`, `humedad`, `densidad_bosque`, `anillos` u8; `transitable` en bits (celda `i` → byte `i>>3`, bit `i&7`, LSB primero). Todos con zstd.
+- **Hash:** sha256 hexadecimal de la serialización Protobuf del artefacto con `manifiesto.hash = ""`. Cada capa lleva el sha256 de sus bytes comprimidos.
+- **Coherencia con el raster:** la transitabilidad es la del raster. Grafo, recursos, campamentos, bandidos y alijos se ajustan al centro de una celda transitable
+  antes de escribirse; el campo `anillo` de cada elemento conserva el del punto original.
+- **Rendimiento del generador:** unos 12 minutos por mundo (relieve 2,5 min, metales y parcelas 2 min, recursos 2 min, grafo 2 min, rasters 3,5 min); es una herramienta fuera de línea.
+- **Pendiente:** hierro en las vetas, vados reales (hoy provisionales, uno por cada ~100 estratégicas de río) y que los ríos limiten el paso: en este generador no bloquean `esTransitable`.

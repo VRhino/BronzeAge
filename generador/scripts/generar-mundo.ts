@@ -19,11 +19,40 @@ const seed = Number(process.argv[2] ?? 42), carpeta = process.argv[3] ?? 'salida
 const ancho = 2667 * FACTOR, alto = 2000 * FACTOR;
 const medir = <T>(nombre: string, f: () => T): T => { const t = Date.now(); const r = f(); console.log(`${nombre}: ${((Date.now() - t) / 1000).toFixed(1)} s`); return r; };
 
+// La transitabilidad del artefacto es el raster de celdas de 4 unidades estratégicas (se muestrea el centro). Todo lo demás
+// —grafo, recursos, campamentos— se comprueba contra esa misma rejilla para que el servidor lo valide sin discrepancias.
+const lado = 4 * FACTOR, nx = Math.ceil(ancho / lado), ny = Math.ceil(alto / lado);
+const celdaT = new Uint8Array(nx * ny).fill(2);
+const centroCelda = (i: number): Point => ({ x: ((i % nx) + 0.5) * lado, y: (Math.floor(i / nx) + 0.5) * lado });
 const r = medir('relieve', () => generarRegionalVisor(seed, ancho, alto));
+const transitableCelda = (p: Point): boolean => {
+  const cx = Math.floor(p.x / lado), cy = Math.floor(p.y / lado);
+  if (cx < 0 || cy < 0 || cx >= nx || cy >= ny) return false;
+  const i = cy * nx + cx;
+  if (celdaT[i] === 2) celdaT[i] = esTransitable(r.elevacion, centroCelda(i)) ? 1 : 0;
+  return celdaT[i] === 1;
+};
+/** Si la celda de `p` no es transitable, lo lleva al centro de la celda transitable más cercana (hasta 6 celdas). */
+const aCeldaTransitable = (p: Point): Point => {
+  if (transitableCelda(p)) return p;
+  const cx = Math.floor(p.x / lado), cy = Math.floor(p.y / lado);
+  let mejor: Point | undefined, d = Infinity;
+  for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
+    const q = { x: (cx + dx + 0.5) * lado, y: (cy + dy + 0.5) * lado };
+    const dd = Math.hypot(q.x - p.x, q.y - p.y);
+    if (dd < d && transitableCelda(q)) { d = dd; mejor = q; }
+  }
+  if (!mejor) throw new Error(`Sin celda transitable cerca de (${p.x}, ${p.y})`);
+  return mejor;
+};
 const e = medir('campamentos, metales y parcelas', () => generarMundoEstrategico(r));
-const recursos = medir('recursos', () => [...metalesARecursos(e.nodos), ...generarRecursosNoMetalicos(r, e.campamentos)]);
+const recursos = medir('recursos', () => [...metalesARecursos(e.nodos), ...generarRecursosNoMetalicos(r, e.campamentos, e.nodos.map(n => n.posicion))]
+  .map(x => ({ ...x, posicion: aCeldaTransitable(x.posicion) })));
+for (const c of e.campamentos) c.posicion = aCeldaTransitable(c.posicion);
 const apto = (p: Point) => evaluarTerreno(r.elevacion, p) !== 'agua' && esTransitable(r.elevacion, p) && r.conexion.tieneAcceso(p);
-const { bandidos, alijos } = medir('bandidos y alijos', () => colocarBandidosYAlijos(seed, { ancho, alto }, e.campamentos, e.vetas, apto));
+const colocados = medir('bandidos y alijos', () => colocarBandidosYAlijos(seed, { ancho, alto }, e.campamentos, e.vetas, apto));
+const bandidos = colocados.bandidos.map(b => ({ ...b, posicion: aCeldaTransitable(b.posicion) }));
+const alijos = colocados.alijos.map(a => ({ ...a, posicion: aCeldaTransitable(a.posicion) }));
 
 // Vados provisionales: un punto del cauce cada ~100 estratégicas de río (los ríos no bloquean `esTransitable` en este generador).
 const rios: RioMundo[] = r.rios.map(rio => {
@@ -35,7 +64,7 @@ const rios: RioMundo[] = r.rios.map(rio => {
   }
   return { id: rio.id, puntos: rio.puntos, terminaEnLago: rio.terminaEnLago, navegable: rio.navegable, vados };
 });
-const grafo = medir('grafo de navegación', () => construirGrafo({ ancho, alto }, p => esTransitable(r.elevacion, p), p => costeEnPunto(r.elevacion, p), rios.flatMap(x => x.vados)));
+const grafo = medir('grafo de navegación', () => construirGrafo({ ancho, alto }, transitableCelda, p => costeEnPunto(r.elevacion, p), rios.flatMap(x => x.vados)));
 
 const mundo: MundoGenerado = {
   seed, ancho, alto, generador: 'regional-17-costas-1+estrategico-1',
@@ -46,7 +75,7 @@ const mundo: MundoGenerado = {
     fertilidad: p => evaluarSuelo(r.suelos, r.elevacion, p, evaluarForestal(r.forestacion, r.elevacion, p).densidad).fertilidad,
     humedad: p => humedadRegionalEn(r.elevacion.regional!, p),
     densidadBosque: p => evaluarForestal(r.forestacion, r.elevacion, p).densidad,
-    transitable: p => esTransitable(r.elevacion, p),
+    transitable: transitableCelda,
   },
 };
 const salida = medir('artefacto', () => escribirArtefacto(mundo, carpeta));
