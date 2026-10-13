@@ -127,7 +127,7 @@ fn parametros(x: &Entrada) -> Vec<Parametro> {
         parametro("Hash del mundo", x.c.mundo.hash()),
         parametro("Radio inicial de la zona", u(r.radio_inicial)),
         parametro("Techos de zona por nivel", format!("{} u", lista(&r.techos))),
-        parametro("Crecimiento de la zona", format!("{} u/min", r.crecimiento_por_minuto as f64 / 1000.0)),
+        parametro("Crecimiento de la zona por edificio completado", format!("{} u", r.crecimiento_por_edificio as f64 / 1000.0)),
         parametro("Separación mínima entre plazas", u(r.separacion_plazas)),
         parametro("Exclusión junto a campamentos de mercenarios", u(r.exclusion_campamento)),
         parametro("Cap de fundación por nivel de Facción", format!("{:?}", r.cap_por_nivel)),

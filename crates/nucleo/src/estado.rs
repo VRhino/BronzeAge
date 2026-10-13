@@ -13,9 +13,6 @@ pub const PRIO_UMBRAL: u8 = 3;
 /// Prioridad de las llegadas: «llegadas y encuentros de columnas».
 pub const PRIO_LLEGADA: u8 = 8;
 
-/// Prioridad del crecimiento de las zonas de influencia (Reloj_Y_Eventos §2: «crecimiento»).
-pub const PRIO_ZONA: u8 = 4;
-
 const MAGIA: &[u8; 4] = b"BAN2";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
@@ -46,8 +43,8 @@ pub struct ReglasTerritorio {
     pub radio_inicial: Mil,
     /// Techo del radio por nivel del asentamiento (10 / 15 / 20 / 25 / 30).
     pub techos: Vec<Mil>,
-    /// Cuánto crece la zona por minuto hacia su techo. **Placeholder**: el canon dice «gradualmente cada minuto»; se calibra en el batch.
-    pub crecimiento_por_minuto: Mil,
+    /// Cuánto agranda la zona cada edificio completado (`crecimientoPorEdificioCompletado`: 1). La zona no crece con el tiempo.
+    pub crecimiento_por_edificio: Mil,
     /// Distancia mínima entre plazas, de centro a centro (30).
     pub separacion_plazas: Mil,
     /// Distancia mínima a un campamento de mercenarios para fundar (`radioExclusionFundar`: 20).
@@ -63,7 +60,7 @@ impl Default for ReglasTerritorio {
         Self {
             radio_inicial: 6_000,
             techos: vec![10_000, 15_000, 20_000, 25_000, 30_000],
-            crecimiento_por_minuto: 200,
+            crecimiento_por_edificio: 1_000,
             separacion_plazas: 30_000,
             exclusion_campamento: 20_000,
             cap_por_nivel: vec![1, 2, 3, 3, 4, 5, 5, 6, 6, 7],
@@ -114,7 +111,7 @@ impl Ejercito {
     }
 }
 
-/// Una plaza. La zona de influencia es un disco cuyo radio crece como un ritmo hacia el techo de su nivel; el polígono
+/// Una plaza. La zona de influencia es un disco cuyo radio crece con cada edificio completado, hasta el techo de su nivel; el polígono
 /// recortado por las fronteras se deriva (`Nucleo::poligono_zona`) y no se guarda.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Asentamiento {
@@ -123,7 +120,8 @@ pub struct Asentamiento {
     pub posicion: Punto,
     pub nivel: u32,
     pub fundado_en: Instante,
-    pub radio: Ritmo,
+    /// Radio de la zona, en milésimas.
+    pub radio: Mil,
     /// Parcelas de bosque que explota (índices del artefacto).
     pub parcelas: BTreeSet<u32>,
     pub version: u64,
@@ -138,10 +136,6 @@ pub enum Carga {
     Umbral(Mil),
     /// Evento de un [`GeneradorDeEventos`](crate::GeneradorDeEventos): `generador` es su posición en la lista.
     Externa { generador: u16, tipo: u16, a: u64, b: u64 },
-    /// El radio de la zona llegó al techo de su nivel.
-    ZonaTecho,
-    /// Las zonas de dos plazas de Facciones distintas se tocan; `otra_generacion` es la de `otra` al calcular el cruce.
-    ZonaContacto { otra: u64, otra_generacion: u32 },
 }
 
 /// Un hecho ocurrido (crónica y avisos), no el cambio de estado: ese viaja en las entidades.
@@ -261,7 +255,7 @@ impl Estado {
         w.i64(t.radio_inicial);
         w.u32(t.techos.len() as u32);
         t.techos.iter().for_each(|&x| w.i64(x));
-        w.i64(t.crecimiento_por_minuto);
+        w.i64(t.crecimiento_por_edificio);
         w.i64(t.separacion_plazas);
         w.i64(t.exclusion_campamento);
         w.u32(t.cap_por_nivel.len() as u32);
@@ -306,12 +300,7 @@ impl Estado {
             w.punto(a.posicion);
             w.u32(a.nivel);
             w.i64(a.fundado_en);
-            let v = &a.radio;
-            w.i64(v.valor_en_t0);
-            w.i64(v.t0);
-            w.i64(v.por_minuto);
-            w.opt_i64(v.maximo);
-            w.opt_i64(v.minimo);
+            w.i64(a.radio);
             w.u32(a.parcelas.len() as u32);
             a.parcelas.iter().for_each(|&p| w.u32(p));
             w.u64(a.version);
@@ -356,12 +345,6 @@ impl Estado {
                     w.u64(*a);
                     w.u64(*b);
                 }
-                Carga::ZonaTecho => w.u8(3),
-                Carga::ZonaContacto { otra, otra_generacion } => {
-                    w.u8(4);
-                    w.u64(*otra);
-                    w.u32(*otra_generacion);
-                }
             }
         }
 
@@ -398,12 +381,12 @@ impl Estado {
                 for _ in 0..r.u32()? {
                     techos.push(r.i64()?);
                 }
-                let (crecimiento_por_minuto, separacion_plazas, exclusion_campamento) = (r.i64()?, r.i64()?, r.i64()?);
+                let (crecimiento_por_edificio, separacion_plazas, exclusion_campamento) = (r.i64()?, r.i64()?, r.i64()?);
                 let mut cap_por_nivel = Vec::new();
                 for _ in 0..r.u32()? {
                     cap_por_nivel.push(r.u32()?);
                 }
-                ReglasTerritorio { radio_inicial, techos, crecimiento_por_minuto, separacion_plazas, exclusion_campamento, cap_por_nivel, cuota_parcelas_pct: r.u32()? }
+                ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento, cap_por_nivel, cuota_parcelas_pct: r.u32()? }
             },
         };
         if &guardadas != reglas {
@@ -450,7 +433,7 @@ impl Estado {
 
         for _ in 0..r.cuenta()? {
             let (id, faccion, posicion, nivel, fundado_en) = (r.u64()?, r.u32()?, r.punto()?, r.u32()?, r.i64()?);
-            let radio = Ritmo { valor_en_t0: r.i64()?, t0: r.i64()?, por_minuto: r.i64()?, maximo: r.opt_i64()?, minimo: r.opt_i64()? };
+            let radio = r.i64()?;
             let mut parcelas = BTreeSet::new();
             for _ in 0..r.u32()? {
                 let p = r.u32()?;
@@ -482,8 +465,6 @@ impl Estado {
                 0 => Carga::Llegada,
                 1 => Carga::Umbral(r.i64()?),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
-                3 => Carga::ZonaTecho,
-                4 => Carga::ZonaContacto { otra: r.u64()?, otra_generacion: r.u32()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };
             eventos.push(Evento { instante, prioridad, secuencia, clave, carga });

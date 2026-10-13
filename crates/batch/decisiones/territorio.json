@@ -1,5 +1,5 @@
 {
-  "resumen": "La mecánica de territorio funciona: las tres reglas de distancia, la cuota de bosque y el determinismo salen en verde, y el tiempo hasta la primera plaza es corto. Lo que falla es la materia prima del mundo frente al tamaño de las zonas: con radios de 6 a 30 unidades, el generador deja muy poca piedra y muy pocas parcelas de bosque dentro de una zona, así que solo el 7 % de las plazas nace con bosque libre y piedra, más de la mitad nunca tiene piedra a su alcance y 3 de cada 4 Leñeras se quedan sin parcela. No es un fallo del código: es la escala de los datos del mundo, que aún es la anterior a la calibración de distancias.",
+  "resumen": "La mecánica de territorio funciona: las tres reglas de distancia, la cuota de bosque y el determinismo salen en verde, y el tiempo hasta la primera plaza es corto. Lo que falla es la materia prima del mundo frente al tamaño de las zonas: con radios de 6 a 30 unidades, el generador deja muy poca piedra y muy pocas parcelas de bosque dentro de una zona, así que solo el 7 % de las plazas nace con bosque libre y piedra, más de la mitad nunca tiene piedra a su alcance y más de 8 de cada 10 Leñeras se quedan sin parcela. No es un fallo del código: es la escala de los datos del mundo, que aún es la anterior a la calibración de distancias.",
   "anomalias": [
     {
       "titulo": "Piedra y bosque escasos para el tamaño de las zonas",
@@ -42,23 +42,6 @@
           "texto": "Aceptar que «verde» sea raro: se funda casi siempre en ámbar y la madera y la piedra llegan al crecer la zona con los niveles.",
           "recomendada": false,
           "efecto": "No toca nada, pero pierde la garantía de arrancar con madera (Doc 1.2) y retrasa el primer nivel."
-        }
-      ]
-    },
-    {
-      "id": "D2",
-      "pregunta": "¿A qué velocidad crece la zona hacia su techo?",
-      "contexto": "El canon dice «crece gradualmente cada minuto» pero no da la cifra. Con 0,2 unidades por minuto, una plaza de nivel 1 pasa de radio 6 a 10 en 20 minutos y se queda ahí hasta subir de nivel (días). Es un valor provisional.",
-      "opciones": [
-        {
-          "texto": "0,2 u/min (techo del nivel 1 a los 20 min).",
-          "recomendada": true,
-          "efecto": "La zona útil llega pronto; las fronteras entre vecinos se fijan en la primera hora, así que quien funda cerca de otro lo sabe enseguida."
-        },
-        {
-          "texto": "0,05 u/min (techo del nivel 1 a los 80 min).",
-          "recomendada": false,
-          "efecto": "Crecimiento más gradual y visible, pero las primeras horas se juegan con la zona pequeña y los problemas de piedra y bosque del D1 duran más."
         }
       ]
     }

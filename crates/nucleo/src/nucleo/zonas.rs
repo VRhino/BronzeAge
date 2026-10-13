@@ -1,17 +1,15 @@
 //! Mundo y territorio sobre el núcleo (Doc 1): fundar, zonas de influencia que crecen y chocan, y parcelas de bosque.
 //! Las reglas puras viven en el crate `territorio`; aquí está el estado, los eventos y las órdenes.
 //!
-//! La zona de una plaza es un disco cuyo radio es un [`Ritmo`] (crece cada minuto hasta el techo de su nivel). No hay
-//! barrido: dos cosas se programan en la cola con la generación de la plaza, y se rehacen cuando el ritmo cambia
-//! (fundar, subir de nivel, agrandar):
-//! - `ZonaTecho`: el instante en que el radio llega al techo.
-//! - `ZonaContacto`: para cada vecina de otra Facción, el instante exacto en que sus zonas se tocan (suma de radios = distancia).
-//!   Desde ese instante la frontera dura recorta ambas zonas; el recorte es una consulta ([`Nucleo::en_zona`]), no un estado.
+//! La zona de una plaza es un disco cuyo radio **solo crece con los edificios completados** (`AgrandarZona`: 1 unidad cada
+//! uno, hasta el techo de su nivel); no crece con el tiempo (Economia_Construccion §3.1). Subir de nivel solo levanta el
+//! techo. Por eso no hay eventos programados: el contacto entre zonas de Facciones distintas se comprueba en el momento en que
+//! un radio cambia (fundar, agrandar) y se anuncia una sola vez por pareja. Desde entonces la frontera dura recorta ambas
+//! zonas; el recorte es una consulta ([`Nucleo::en_zona`]), no un estado.
 
 use super::*;
-use crate::estado::{Asentamiento, PRIO_ZONA};
+use crate::estado::Asentamiento;
 use base::Instante;
-use cola::Clave;
 use mundo::Mundo;
 use std::collections::BTreeSet;
 use territorio::{Disco, DistanciasDeFundacion, Motivo, Parcela, SinParcela, Terreno, Viabilidad};
@@ -53,13 +51,6 @@ impl Geografia {
     }
 }
 
-/// Distancia entera redondeada hacia arriba: dos discos se tocan cuando la suma de radios llega a este valor.
-fn distancia_techo(a: Punto, b: Punto) -> Mil {
-    let d2 = a.dist2(b);
-    let d = base::isqrt(d2);
-    (if d * d < d2 { d + 1 } else { d }) as Mil
-}
-
 /// Lo que se sabe de un sitio antes de fundar (Doc 1.2: el aviso de viabilidad, que no impide fundar).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InformeViabilidad {
@@ -75,35 +66,33 @@ pub struct InformeViabilidad {
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
 
-    fn disco_de(&self, a: &Asentamiento, t: Instante) -> Disco {
-        Disco { centro: a.posicion, radio: a.radio.valor_en(t), faccion: a.faccion }
+    fn disco_de(&self, a: &Asentamiento) -> Disco {
+        Disco { centro: a.posicion, radio: a.radio, faccion: a.faccion }
     }
 
     /// Los discos de todas las plazas en `t`, por id.
-    fn discos(&self, t: Instante) -> Vec<(u64, Disco)> {
-        self.estado.asentamientos.values().map(|a| (a.id, self.disco_de(a, t))).collect()
+    fn discos(&self) -> Vec<(u64, Disco)> {
+        self.estado.asentamientos.values().map(|a| (a.id, self.disco_de(a))).collect()
     }
 
     /// Radio de la zona de una plaza ahora, en milésimas.
     pub fn radio_zona(&self, id: u64) -> Option<Mil> {
-        self.estado.asentamientos.get(&id).map(|a| a.radio.valor_en(self.estado.ahora))
+        self.estado.asentamientos.get(&id).map(|a| a.radio)
     }
 
     /// ¿Cae `p` en la zona real de la plaza (disco recortado por las fronteras con otras Facciones)?
     pub fn en_zona(&self, id: u64, p: Punto) -> bool {
-        let t = self.estado.ahora;
         let Some(a) = self.estado.asentamientos.get(&id) else { return false };
-        let yo = self.disco_de(a, t);
-        let vecinos: Vec<Disco> = self.discos(t).into_iter().filter(|&(o, _)| o != id).map(|(_, d)| d).collect();
+        let yo = self.disco_de(a);
+        let vecinos: Vec<Disco> = self.discos().into_iter().filter(|&(o, _)| o != id).map(|(_, d)| d).collect();
         territorio::en_zona(p, &yo, &vecinos)
     }
 
     /// Polígono de la zona real (presentación: `Asentamiento.zona`). 48 lados, como `ZONA_INFLUENCIA.segmentosPoligono`.
     pub fn poligono_zona(&self, id: u64) -> Vec<Punto> {
-        let t = self.estado.ahora;
         let Some(a) = self.estado.asentamientos.get(&id) else { return vec![] };
-        let vecinos: Vec<Disco> = self.discos(t).into_iter().filter(|&(o, _)| o != id).map(|(_, d)| d).collect();
-        territorio::poligono(&self.disco_de(a, t), &vecinos, 48)
+        let vecinos: Vec<Disco> = self.discos().into_iter().filter(|&(o, _)| o != id).map(|(_, d)| d).collect();
+        territorio::poligono(&self.disco_de(a), &vecinos, 48)
     }
 
     /// Plazas vigentes de una Facción.
@@ -114,11 +103,10 @@ impl Nucleo {
     /// El aviso de viabilidad de fundar en `p` para esa Facción. `None` si el núcleo no tiene mundo cargado.
     pub fn viabilidad(&self, p: Punto, faccion: u32) -> Option<InformeViabilidad> {
         let geo = self.geografia.as_ref()?;
-        let t = self.estado.ahora;
-        let motivo = self.validar_fundacion(geo, p, t).err();
+        let motivo = self.validar_fundacion(geo, p).err();
         let nuevo = Disco { centro: p, radio: self.estado.reglas.territorio.radio_inicial, faccion };
         // La zona con la que nacería: el círculo inicial recortado contra las plazas de otras Facciones.
-        let vecinos: Vec<Disco> = self.discos(t).into_iter().map(|(_, d)| d).collect();
+        let vecinos: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
         let tocan: Vec<Disco> = vecinos.into_iter().filter(|d| territorio::se_tocan(&nuevo, d)).collect();
         let en_zona = |c: Punto| territorio::en_zona(c, &nuevo, &tocan);
         let parcelas_libres = geo.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_zona(pa.centro)).count();
@@ -126,75 +114,42 @@ impl Nucleo {
         Some(InformeViabilidad { color: territorio::viabilidad(motivo.is_none(), parcelas_libres, piedra), motivo, parcelas_libres, piedra })
     }
 
-    fn validar_fundacion(&self, geo: &Geografia, p: Punto, t: Instante) -> Result<(), Motivo> {
+    fn validar_fundacion(&self, geo: &Geografia, p: Punto) -> Result<(), Motivo> {
         let r = &self.estado.reglas.territorio;
-        let plazas: Vec<Disco> = self.discos(t).into_iter().map(|(_, d)| d).collect();
+        let plazas: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
         let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento };
         territorio::validar(p, geo.terreno(p), &plazas, geo.campamentos.iter().copied(), &dist)
     }
 
-    // ───────────────────────────── Eventos de la zona ─────────────────────────────
+    // ───────────────────────────── Fronteras ─────────────────────────────
 
-    /// Rehace los eventos de la plaza tras cambiar su ritmo: sube la generación (los viejos se descartan solos) y programa el
-    /// techo y el contacto con cada vecina de otra Facción que aún no se ha tocado.
-    fn reprogramar_zona(&mut self, id: u64, t: Instante) {
-        let generacion = self.estado.generaciones.subir(id);
-        let clave = Clave { entidad: id, generacion };
+    /// Tras cambiar el radio de `id` (o nacer), anuncia las parejas con una plaza de otra Facción cuyas zonas ya se tocan y
+    /// no se habían tocado antes. Las zonas nunca se encogen, así que un contacto no se deshace.
+    fn contactos_nuevos(&mut self, id: u64, t: Instante) {
         let a = self.estado.asentamientos[&id].clone();
-        if let Some(max) = a.radio.maximo.filter(|&m| a.radio.valor_en(t) < m) {
-            if let Some(ti) = a.radio.instante_de_valor(max, t) {
-                self.estado.cola.programar(ti, PRIO_ZONA, clave, Carga::ZonaTecho);
-            }
+        let yo = self.disco_de(&a);
+        let nuevos: Vec<u64> = self
+            .estado
+            .asentamientos
+            .values()
+            .filter(|o| o.faccion != a.faccion && territorio::se_tocan(&yo, &self.disco_de(o)) && !self.estado.contactos.contains(&(id.min(o.id), id.max(o.id))))
+            .map(|o| o.id)
+            .collect();
+        for otra in nuevos {
+            let b = &self.estado.asentamientos[&otra];
+            let (fa, fb) = (a.faccion as i64, b.faccion as i64);
+            let punto = Punto::new((a.posicion.x + b.posicion.x) / 2, (a.posicion.y + b.posicion.y) / 2);
+            self.estado.contactos.insert((id.min(otra), id.max(otra)));
+            self.tr.asentamientos.extend([id, otra]);
+            self.tr.eventos.push(EventoNucleo {
+                codigo: "zona.frontera".into(),
+                en: t,
+                ejercitos: vec![],
+                asentamientos: vec![id.min(otra), id.max(otra)],
+                punto: Some(punto),
+                datos: vec![("faccionA", fa), ("faccionB", fb)],
+            });
         }
-        let alcance_a = a.radio.maximo.unwrap_or(0);
-        let mut contactos = Vec::new();
-        for o in self.estado.asentamientos.values().filter(|o| o.id != id && o.faccion != a.faccion) {
-            if self.estado.contactos.contains(&(id.min(o.id), id.max(o.id))) {
-                continue;
-            }
-            let d = distancia_techo(a.posicion, o.posicion);
-            if d > alcance_a + o.radio.maximo.unwrap_or(0) {
-                continue; // con los techos de hoy no se tocarán; subir de nivel rehará esto
-            }
-            if let Some(tc) = territorio::instante_de_contacto(&a.radio, &o.radio, d, t) {
-                contactos.push((tc, o.id));
-            }
-        }
-        for (tc, otra) in contactos {
-            let otra_generacion = self.estado.generaciones.actual(otra);
-            self.estado.cola.programar(tc, PRIO_ZONA, clave, Carga::ZonaContacto { otra, otra_generacion });
-        }
-    }
-
-    pub(super) fn zona_en_techo(&mut self, id: u64, t: Instante) {
-        let Some(a) = self.estado.asentamientos.get(&id) else { return };
-        if a.radio.maximo.is_none_or(|m| a.radio.valor_en(t) < m) {
-            return; // defensivo: el evento no corresponde al ritmo vigente
-        }
-        let (posicion, radio) = (a.posicion, a.radio.valor_en(t));
-        self.tr.asentamientos.push(id);
-        self.tr.eventos.push(EventoNucleo { codigo: "zona.techo".into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(posicion), datos: vec![("radio", radio)] });
-    }
-
-    pub(super) fn zonas_se_tocan(&mut self, id: u64, otra: u64, otra_generacion: u32, t: Instante) {
-        if self.estado.generaciones.actual(otra) != otra_generacion {
-            return; // la otra cambió de ritmo después de calcular el cruce: su reprogramación lo recalculó
-        }
-        let (Some(a), Some(b)) = (self.estado.asentamientos.get(&id), self.estado.asentamientos.get(&otra)) else { return };
-        if !self.estado.contactos.insert((id.min(otra), id.max(otra))) {
-            return;
-        }
-        let (fa, fb) = (a.faccion as i64, b.faccion as i64);
-        let punto = Punto::new((a.posicion.x + b.posicion.x) / 2, (a.posicion.y + b.posicion.y) / 2);
-        self.tr.asentamientos.extend([id, otra]);
-        self.tr.eventos.push(EventoNucleo {
-            codigo: "zona.frontera".into(),
-            en: t,
-            ejercitos: vec![],
-            asentamientos: vec![id.min(otra), id.max(otra)],
-            punto: Some(punto),
-            datos: vec![("faccionA", fa), ("faccionB", fb)],
-        });
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -247,32 +202,26 @@ impl Nucleo {
                 if *nivel == actual {
                     return Err(sin_cambios());
                 }
-                let techo = self.estado.reglas.territorio.techo(*nivel);
-                let a = self.estado.asentamientos.get_mut(asentamiento).expect("existe");
-                a.nivel = *nivel;
-                a.radio = Ritmo { maximo: Some(techo), ..a.radio.reanclado(t, a.radio.por_minuto) };
+                // Solo sube el techo: el radio no salta (Doc 1.2).
+                self.estado.asentamientos.get_mut(asentamiento).expect("existe").nivel = *nivel;
                 self.tr.asentamientos.push(*asentamiento);
                 self.tr.eventos.push(EventoNucleo { codigo: "asentamiento.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("nivel", *nivel as i64)] });
-                self.reprogramar_zona(*asentamiento, t);
                 Ok(None)
             }
-            Comando::AgrandarZona { asentamiento, milesimas } => {
+            Comando::AgrandarZona { asentamiento } => {
                 if let Some(r) = solo_admin() {
                     return Err(r);
                 }
                 existe(self, *asentamiento)?;
-                if *milesimas <= 0 {
-                    return Err(rechazo(rechazos::ZONA_INVALIDA, "agrandar es sumar radio".into()));
-                }
+                let r = &self.estado.reglas.territorio;
                 let a = self.estado.asentamientos.get_mut(asentamiento).expect("existe");
-                let (actual, techo) = (a.radio.valor_en(t), a.radio.maximo.unwrap_or(Mil::MAX));
-                let nuevo = (actual + milesimas).min(techo);
-                if nuevo == actual {
+                let nuevo = (a.radio + r.crecimiento_por_edificio).min(r.techo(a.nivel));
+                if nuevo == a.radio {
                     return Err(sin_cambios());
                 }
-                a.radio = Ritmo { valor_en_t0: nuevo, t0: t, ..a.radio };
+                a.radio = nuevo;
                 self.tr.asentamientos.push(*asentamiento);
-                self.reprogramar_zona(*asentamiento, t);
+                self.contactos_nuevos(*asentamiento, t);
                 Ok(None)
             }
             Comando::ReclamarParcela { asentamiento } => {
@@ -282,9 +231,9 @@ impl Nucleo {
                 let Some(geo) = &self.geografia else { return Err(rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into())) };
                 existe(self, *asentamiento)?;
                 let a = &self.estado.asentamientos[asentamiento];
-                let yo = self.disco_de(a, t);
+                let yo = self.disco_de(a);
                 // Solo importan las vecinas que recortan esta zona; el resto no cambia la respuesta.
-                let tocan: Vec<Disco> = self.discos(t).into_iter().filter(|&(o, d)| o != *asentamiento && territorio::se_tocan(&yo, &d)).map(|(_, d)| d).collect();
+                let tocan: Vec<Disco> = self.discos().into_iter().filter(|&(o, d)| o != *asentamiento && territorio::se_tocan(&yo, &d)).map(|(_, d)| d).collect();
                 let elegida = territorio::elegir_parcela(
                     &geo.parcelas,
                     &geo.total_por_masa,
@@ -343,11 +292,10 @@ impl Nucleo {
         if tiene >= cap {
             return Err(Respuesta::rechazo(rechazos::CAP_ALCANZADO, format!("la Facción tiene {tiene} plazas y su cap es {cap}"), v));
         }
-        if let Err(m) = self.validar_fundacion(geo, punto, t) {
+        if let Err(m) = self.validar_fundacion(geo, punto) {
             return Err(Respuesta::rechazo(m.codigo(), format!("no se puede fundar en ({}, {})", punto.x, punto.y), v));
         }
-        let techo = r.techo(1);
-        let radio = Ritmo { valor_en_t0: r.radio_inicial, t0: t, por_minuto: r.crecimiento_por_minuto, maximo: Some(techo), minimo: None };
+        let radio = r.radio_inicial;
         let id = self.estado.siguiente_id;
         self.estado.siguiente_id += 1;
         self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, nivel: 1, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0 });
@@ -362,7 +310,7 @@ impl Nucleo {
             punto: Some(punto),
             datos: vec![("faccion", faccion as i64)],
         });
-        self.reprogramar_zona(id, t);
+        self.contactos_nuevos(id, t);
         Ok(Some(id))
     }
 }

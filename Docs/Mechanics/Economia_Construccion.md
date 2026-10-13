@@ -102,7 +102,7 @@ Estado inicial:
 id            = 'asentamiento-<nº de asentamientos existentes>-<round x>-<round y>-t<floor(fundadoEn / 60000)>'
                 (el minuto de mundo lo hace único si se refunda donde cayó otro; el id es además la semilla del trazado urbano)
 nivel = nivelActual = 1;  rachaMantenimientoSano = 0;  medidorMantenimiento = 100
-radioPotencial = ritmo { valor ZONA_INFLUENCIA.radioInicial, +crecimientoPorMinuto/min, techo = radioMaximoPorNivel[1] }   (§3.1)
+radioPotencial = ZONA_INFLUENCIA.radioInicial   (§3.1)
 poblacion      = { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 }
 almacen[tipo]  = { cantidad: FUNDACION.materialesIniciales[tipo] ?? 0, capacidad: ALMACEN.capacidadInicialPorRecurso }   (los 29 tipos)
 edificios      = centroUrbano (0,0) + FUNDACION.viviendasIniciales viviendas + 1 granja, todos 'activo' y de ámbito 'asentamiento',
@@ -120,16 +120,13 @@ Leñera en la zona real con que nacería ∧ hay ≥ 1 nodo de piedra sin explot
 
 ### 3.1 Zona de influencia
 
-> **Implementado en Rust (2026-10-13)**: `crates/territorio/src/zona.rs` (reglas puras) y `crates/nucleo/src/nucleo/zonas.rs` (estado, eventos y órdenes). Lo que sigue sustituye a la versión por tick de `computeZonaInfluencia`.
+> **Implementado en Rust (2026-10-13)**: `crates/territorio/src/zona.rs` (reglas puras) y `crates/nucleo/src/nucleo/zonas.rs` (estado, órdenes y eventos).
 
-La zona es un **disco** (centro = la plaza) cuyo radio es un **ritmo**: nace en `radioInicial` (6) y crece `crecimientoPorMinuto` por minuto hacia el **techo de su nivel** (10 / 15 / 20 / 25 / 30). Cada edificio completado la agranda de golpe `crecimientoPorEdificioCompletado` (1), sin pasar del techo (`AgrandarZona`; lo llamará la construcción). Subir de nivel solo levanta el techo: el radio sigue desde donde estaba (`FijarNivelAsentamiento`; lo llamará el ascenso). No hay barrido: el radio en cualquier instante sale de `valor + ritmo · Δt`.
+La zona es un **disco** (centro = la plaza). Nace con `radioInicial` (6) y **solo crece por obra, nunca por tiempo**: cada edificio completado la agranda `crecimientoPorEdificioCompletado` (1), sin pasar del **techo de su nivel** (`radioMaximoPorNivel`: 10 / 15 / 20 / 25 / 30). Subir de nivel solo levanta el techo: el radio no salta. La construcción llama a `AgrandarZona` al completar cada edificio (hasta entonces la administración); el ascenso, a `FijarNivelAsentamiento`.
 
-Eventos de la cola (prioridad 4, «crecimiento»), ligados a la generación de la plaza y rehechos cada vez que su ritmo cambia (fundar, subir de nivel, agrandar):
+**Contacto.** Como el radio solo cambia en esos instantes, no hay eventos programados: al fundar y al agrandar una zona se comprueba qué plazas de **otra Facción** quedan tocándola (`distancia ≤ suma de radios`) y se anuncia una sola vez por pareja (`zona.frontera`, `Estado.contactos`). Las zonas nunca se encogen, así que un contacto no se deshace.
 
-- **`zona.techo`**: el instante en que el radio llega al techo.
-- **`zona.frontera`**: para cada vecina de **otra Facción** cuyos techos permiten alcanzarse, el instante **exacto** en que la suma de los dos radios llega a la distancia entre centros (resuelto como ecuación lineal por tramos: cada radio es lineal hasta su techo). Se anuncia una sola vez por pareja (`Estado.contactos`); las zonas nunca se separan.
-
-**Fronteras duras.** Desde el contacto la zona de una plaza queda recortada por un semiplano contra cada vecina de otra Facción que la toca: la frontera pasa a `d · r_propio / (r_propio + r_rival)` del centro propio, perpendicular a la recta que une los centros, y **se mueve** cuando crece un radio. Los de la **misma** Facción no se recortan (se solapan). Pertenecer a la zona es una consulta exacta en enteros (`Nucleo::en_zona`: `(p − c)·(o − c)·(r + r') ≤ d²·r`, sin raíces); el polígono de 48 lados (`Nucleo::poligono_zona`, Sutherland-Hodgman) es solo presentación (`Asentamiento.zona`) y no entra en ninguna decisión ni en el hash. En el contrato el radio viaja como `Ritmo` (`Asentamiento.radio_potencial`), así que el cliente anima el crecimiento sin mensajes.
+**Fronteras duras.** Desde el contacto la zona de una plaza queda recortada por un semiplano contra cada vecina de otra Facción que la toca: la frontera pasa a `d · r_propio / (r_propio + r_rival)` del centro propio, perpendicular a la recta que une los centros, y **se mueve** cuando crece un radio. Los de la **misma** Facción no se recortan (se solapan). Pertenecer a la zona es una consulta exacta en enteros (`Nucleo::en_zona`: `(p − c)·(o − c)·(r + r') ≤ d²·r`, sin raíces); el polígono de 48 lados (`Nucleo::poligono_zona`, Sutherland-Hodgman) es solo presentación (`Asentamiento.zona`) y no entra en ninguna decisión ni en el hash.
 
 ## 4. Almacén
 
@@ -2104,7 +2101,6 @@ Los bloques de parámetros de este documento son los del motor TypeScript. Valor
 | `ZONA_INFLUENCIA.radioInicial` | 30 | **6** |
 | `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **10 / 15 / 20 / 25 / 30** |
 | `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **1** |
-| `ZONA_INFLUENCIA.crecimientoPorMinuto` | — (el radio crecía solo por obra) | **0,2** (placeholder; decisión D2 del informe de territorio) |
 | `ZONA_INFLUENCIA.separacionPlazas` | — | **30** (Doc 1.0a) |
 | `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
 | `ESCALA.unidadesLocalesPorUnidadMapa` | 40 | **200** (la ciudad ocupa un 80 % menos del mapa) |

@@ -1,10 +1,10 @@
-//! Zonas de influencia y fronteras duras (Doc 1.2). Una zona es un disco que crece con el tiempo; cuando toca la de otra
+//! Zonas de influencia y fronteras duras (Doc 1.2). Una zona es un disco que crece con cada edificio; cuando toca la de otra
 //! Facción se recorta con un semiplano que reparte la distancia según el radio de cada una, y se mueve al crecer los radios.
 //! Las de la misma Facción se solapan y no se recortan.
 //!
 //! Todo lo que decide es aritmética entera exacta (`i128`, sin raíces); el polígono es solo presentación y usa `f64`.
 
-use base::{Instante, Mil, Punto, Ritmo, MS_POR_MINUTO};
+use base::{Mil, Punto};
 
 /// Una zona en un instante: centro, radio (milésimas) y Facción dueña.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,38 +75,6 @@ pub fn poligono<'a>(yo: &Disco, vecinos: impl IntoIterator<Item = &'a Disco>, la
         }
     }
     pol.into_iter().map(|(x, y)| Punto::new(x.round() as Mil, y.round() as Mil)).collect()
-}
-
-/// Primer instante `>= desde` en que la suma de los dos radios llega a `distancia` (las zonas se tocan). `Some(desde)` si
-/// ya se tocan; `None` si no se tocarán nunca con los ritmos vigentes (se plantan en su techo antes de alcanzarse).
-pub fn instante_de_contacto(a: &Ritmo, b: &Ritmo, distancia: Mil, desde: Instante) -> Option<Instante> {
-    let suma = |t: Instante| a.valor_en(t) as i128 + b.valor_en(t) as i128;
-    if suma(desde) >= distancia as i128 {
-        return Some(desde);
-    }
-    // Cada radio es lineal hasta su tope: los cortes de tramo son esos dos instantes.
-    let mut cortes: Vec<Instante> = [a, b].iter().filter_map(|r| r.maximo.and_then(|m| r.instante_de_valor(m, desde))).filter(|&t| t > desde).collect();
-    cortes.sort_unstable();
-    cortes.insert(0, desde);
-    for (i, &inicio) in cortes.iter().enumerate() {
-        let fin = cortes.get(i + 1).copied();
-        // Pendiente del tramo: la de cada radio que aún no está en su tope al empezar.
-        let pendiente: i128 = [a, b].iter().map(|r| if r.maximo.is_some_and(|m| r.valor_en(inicio) >= m) { 0 } else { r.por_minuto as i128 }).sum();
-        if pendiente <= 0 {
-            continue;
-        }
-        let falta = distancia as i128 - suma(inicio);
-        let dt = (falta * MS_POR_MINUTO as i128 + pendiente - 1) / pendiente;
-        let mut t = inicio + dt as Instante;
-        // Los redondeos hacia abajo de cada ritmo por separado pueden dejar la suma 1 ms corta.
-        while suma(t) < distancia as i128 && fin.is_none_or(|f| t < f) {
-            t += 1;
-        }
-        if suma(t) >= distancia as i128 && fin.is_none_or(|f| t <= f) {
-            return Some(t);
-        }
-    }
-    None
 }
 
 #[cfg(test)]
@@ -180,43 +148,5 @@ mod pruebas {
         // Misma Facción: sin recorte.
         let c = d(15_000, 0, 10_000, 1);
         assert_eq!(poligono(&a, [&c], 48), poligono(&a, [], 48));
-    }
-
-    fn ritmo(v0: Mil, por_min: Mil, max: Mil) -> Ritmo {
-        Ritmo { valor_en_t0: v0, t0: 0, por_minuto: por_min, maximo: Some(max), minimo: None }
-    }
-
-    #[test]
-    fn contacto_con_dos_radios_que_crecen() {
-        // 6+6 = 12 en t0; distancia 30; cada uno crece 200/min: faltan 18 → 18000/400 = 45 min.
-        let (a, b) = (ritmo(6_000, 200, 30_000), ritmo(6_000, 200, 30_000));
-        assert_eq!(instante_de_contacto(&a, &b, 30_000, 0), Some(45 * MS_POR_MINUTO));
-        // Ya se tocan.
-        assert_eq!(instante_de_contacto(&a, &b, 12_000, 5), Some(5));
-    }
-
-    #[test]
-    fn contacto_que_nunca_llega_por_los_topes() {
-        // Techos 10+10 = 20 < 30.
-        let (a, b) = (ritmo(6_000, 200, 10_000), ritmo(6_000, 200, 10_000));
-        assert_eq!(instante_de_contacto(&a, &b, 30_000, 0), None);
-        // Con techos 10+10 y distancia 20 llegan justo al tope.
-        assert_eq!(instante_de_contacto(&a, &b, 20_000, 0), Some(20 * MS_POR_MINUTO));
-    }
-
-    #[test]
-    fn contacto_con_uno_ya_en_su_tope() {
-        // A está plantada en 10 (tope); B crece de 6 a 20/min=200: 10+x ≥ 25 → x = 15 → 45 min.
-        let a = ritmo(10_000, 200, 10_000);
-        let b = ritmo(6_000, 200, 30_000);
-        assert_eq!(instante_de_contacto(&a, &b, 25_000, 0), Some(45 * MS_POR_MINUTO));
-    }
-
-    #[test]
-    fn contacto_cuando_uno_se_planta_a_mitad_de_camino() {
-        // A llega a su tope (8) a los 10 min; luego solo crece B. Objetivo 20: a 10 min suman 8+8=16; faltan 4 a 200/min → 20 min más.
-        let a = ritmo(6_000, 200, 8_000);
-        let b = ritmo(6_000, 200, 30_000);
-        assert_eq!(instante_de_contacto(&a, &b, 20_000, 0), Some(30 * MS_POR_MINUTO));
     }
 }

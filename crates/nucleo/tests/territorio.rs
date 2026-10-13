@@ -146,33 +146,34 @@ fn el_cap_de_fundacion_sube_con_el_nivel_de_faccion() {
     assert_eq!(n.plazas_de(1).count(), 2);
 }
 
+/// Completa `n` edificios de la plaza (cada uno agranda su zona 1 unidad hasta el techo); devuelve cuántos cambiaron algo.
+fn edificios(n: &mut Nucleo, t: i64, id: u64, cuantos: usize) -> usize {
+    (0..cuantos).filter(|i| n.aplicar_en(t, admin(&format!("e{id}-{t}-{i}-{}", n.version()), Comando::AgrandarZona { asentamiento: id })).aceptada()).count()
+}
+
 #[test]
-fn la_zona_crece_cada_minuto_hasta_el_techo_de_su_nivel() {
+fn la_zona_solo_crece_con_edificios_hasta_el_techo_de_su_nivel() {
     let m = con_mundo!();
     let mut n = nuevo(m);
     let p = sitio(&n, &m.0, 1, 60_000, 0, 1, false);
     let id = fundar_en(&mut n, 0, "a", 1, p);
-    n.avanzar_hasta(10 * MIN);
-    assert_eq!(n.radio_zona(id), Some(8_000), "0,2 u/min");
-    assert!(eventos(&n, "zona.techo").is_empty());
-    n.avanzar_hasta(25 * MIN);
-    assert_eq!(n.radio_zona(id), Some(10_000), "techo del nivel 1");
-    assert_eq!(eventos(&n, "zona.techo"), vec![(20 * MIN, vec![id])]);
-    // Subir de nivel levanta el techo sin saltos: sigue desde donde estaba.
-    assert!(n.aplicar_en(25 * MIN, admin("n2", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 2 })).aceptada());
+    // El tiempo solo no la agranda.
+    n.avanzar_hasta(7 * 24 * 60 * MIN);
+    assert_eq!(n.radio_zona(id), Some(6_000));
+    // Cada edificio, 1 unidad; el nivel 1 tiene techo 10.
+    assert_eq!(edificios(&mut n, 8 * 24 * 60 * MIN, id, 10), 4, "de 6 a 10: cuatro edificios, los demás ya no agrandan");
     assert_eq!(n.radio_zona(id), Some(10_000));
-    n.avanzar_hasta(35 * MIN);
-    assert_eq!(n.radio_zona(id), Some(12_000));
-    n.avanzar_hasta(60 * MIN);
-    assert_eq!(n.radio_zona(id), Some(15_000));
-    assert_eq!(eventos(&n, "zona.techo").len(), 2);
-    // Un edificio completado agranda 1 unidad de golpe, sin pasar del techo.
-    assert!(n.aplicar_en(60 * MIN, admin("n3", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 })).aceptada());
-    assert!(n.aplicar_en(60 * MIN, admin("g1", Comando::AgrandarZona { asentamiento: id, milesimas: 1_000 })).aceptada());
-    assert_eq!(n.radio_zona(id), Some(16_000));
+    // Subir de nivel levanta el techo sin saltos: el radio sigue donde estaba.
+    let t = 9 * 24 * 60 * MIN;
+    assert!(n.aplicar_en(t, admin("n2", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 2 })).aceptada());
+    assert_eq!(n.radio_zona(id), Some(10_000));
+    assert_eq!(edificios(&mut n, t, id, 9), 5, "techo 15");
+    assert!(n.aplicar_en(t, admin("n3", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 })).aceptada());
+    assert_eq!(edificios(&mut n, t, id, 9), 5, "techo 20");
+    assert_eq!(n.radio_zona(id), Some(20_000));
     // El nivel no baja ni se sale de la tabla.
-    assert_eq!(codigo(&n.aplicar_en(60 * MIN, admin("n1", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 1 }))), rechazos::NIVEL_INVALIDO);
-    assert_eq!(codigo(&n.aplicar_en(60 * MIN, admin("n9", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 9 }))), rechazos::NIVEL_INVALIDO);
+    assert_eq!(codigo(&n.aplicar_en(t, admin("n1", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 1 }))), rechazos::NIVEL_INVALIDO);
+    assert_eq!(codigo(&n.aplicar_en(t, admin("n9", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 9 }))), rechazos::NIVEL_INVALIDO);
 }
 
 /// Dos plazas de distinta Facción a `d` (en un anillo del mismo campamento, buscando un par fundable).
@@ -190,43 +191,49 @@ fn par(n: &mut Nucleo, m: &Mundo, d: i64, f: (u32, u32), t: i64) -> (u64, u64, P
     panic!("sin sitio para la segunda plaza");
 }
 
+/// Sube a nivel 3 las dos plazas y completa edificios de una y otra, por turnos, hasta que sus zonas se toquen.
+/// Devuelve el instante del edificio que provocó el contacto y la suma de radios justo antes de él.
+fn crecer_hasta_tocarse(n: &mut Nucleo, a: u64, b: u64, t: i64) -> (i64, i64) {
+    for (id, x) in [(a, "na"), (b, "nb")] {
+        assert!(n.aplicar_en(t, admin(x, Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 })).aceptada());
+    }
+    for i in 0..40 {
+        let antes = n.radio_zona(a).unwrap() + n.radio_zona(b).unwrap();
+        let ti = t + i * MIN;
+        edificios(n, ti, if i % 2 == 0 { a } else { b }, 1);
+        if !n.estado().contactos.is_empty() {
+            return (ti, antes);
+        }
+    }
+    panic!("las zonas no llegaron a tocarse");
+}
+
 #[test]
-fn las_zonas_de_dos_facciones_se_tocan_en_el_instante_exacto() {
+fn las_zonas_de_dos_facciones_se_tocan_justo_cuando_la_suma_de_radios_llega_a_la_distancia() {
     let m = con_mundo!();
     let mut n = nuevo(m);
     let (a, b, pa, pb) = par(&mut n, &m.0, 32_000, (1, 2), 0);
     let d = pa.dist(pb);
-    // Con el techo del nivel 1 (10+10 < 32) no se tocan nunca...
-    n.avanzar_hasta(3 * 60 * MIN);
+    // Con zonas de 6 (suma 12) no se tocan, por mucho tiempo que pase.
+    n.avanzar_hasta(30 * 24 * 60 * MIN);
     assert!(eventos(&n, "zona.frontera").is_empty());
-    // ...pero con el nivel 3 (techo 20) sí. Radios en 10+10 = 20; faltan d−20 a 0,4 por minuto.
-    for (id, x) in [(a, "na"), (b, "nb")] {
-        assert!(n.aplicar_en(3 * 60 * MIN, admin(x, Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 })).aceptada());
-    }
-    let esperado = 3 * 60 * MIN + ((d - 20_000) * MIN + 399) / 400;
-    n.avanzar_hasta(esperado - 1);
-    assert!(eventos(&n, "zona.frontera").is_empty(), "un milisegundo antes aún no");
-    let punto_a = Punto::new((pa.x * 7 + pb.x * 3) / 10, (pa.y * 7 + pb.y * 3) / 10); // al 70 % del camino hacia b
-    assert!(n.en_zona(a, punto_a) == (pa.dist(punto_a) <= n.radio_zona(a).unwrap()), "sin contacto, la zona es el disco");
-    n.avanzar_hasta(esperado + 5);
+    let (t, antes) = crecer_hasta_tocarse(&mut n, a, b, 31 * 24 * 60 * MIN);
+    assert!(antes < d && n.radio_zona(a).unwrap() + n.radio_zona(b).unwrap() >= d, "el edificio que las junta es el primero que alcanza la distancia");
     let ev = eventos(&n, "zona.frontera");
-    assert_eq!(ev.len(), 1);
-    assert!((ev[0].0 - esperado).abs() <= 1, "contacto en {} y se esperaba {esperado}", ev[0].0);
-    assert_eq!(ev[0].1, vec![a.min(b), a.max(b)]);
+    assert_eq!(ev, vec![(t, vec![a.min(b), a.max(b)])]);
     // Ahora la frontera recorta: ningún punto de la zona de a pasa del plano de reparto; el polígono lo respeta.
-    n.avanzar_hasta(esperado + 20 * MIN);
     let (ra, rb) = (n.radio_zona(a).unwrap(), n.radio_zona(b).unwrap());
     let k = d * ra / (ra + rb); // distancia de a a la frontera
-    assert!(n.en_zona(a, Punto::new(pa.x + (pb.x - pa.x) * (k - 100) / d, pa.y + (pb.y - pa.y) * (k - 100) / d)));
-    assert!(!n.en_zona(a, Punto::new(pa.x + (pb.x - pa.x) * (k + 300) / d, pa.y + (pb.y - pa.y) * (k + 300) / d)));
+    let sobre = |k: i64| Punto::new(pa.x + (pb.x - pa.x) * k / d, pa.y + (pb.y - pa.y) * k / d);
+    assert!(n.en_zona(a, sobre(k - 100)));
+    assert!(!n.en_zona(a, sobre(k + 300)));
     let poligono = n.poligono_zona(a);
-    assert_eq!(poligono.len() >= 3, true);
-    let ux = (pb.x - pa.x) as f64 / d as f64;
-    let uy = (pb.y - pa.y) as f64 / d as f64;
+    assert!(poligono.len() >= 3);
+    let (ux, uy) = ((pb.x - pa.x) as f64 / d as f64, (pb.y - pa.y) as f64 / d as f64);
     assert!(poligono.iter().all(|q| ((q.x - pa.x) as f64 * ux + (q.y - pa.y) as f64 * uy) <= k as f64 + 2.0));
-    // No se repite el aviso aunque cambien los ritmos.
-    n.aplicar_en(esperado + 20 * MIN, admin("g", Comando::AgrandarZona { asentamiento: a, milesimas: 500 }));
-    n.avanzar_hasta(esperado + 60 * MIN);
+    // La frontera se mueve al crecer un radio, y el aviso no se repite.
+    edificios(&mut n, t + MIN, a, 1);
+    assert!(n.radio_zona(a).unwrap() > ra);
     assert_eq!(eventos(&n, "zona.frontera").len(), 1);
 }
 
@@ -238,8 +245,9 @@ fn las_zonas_de_la_misma_faccion_se_solapan_sin_frontera() {
     let (a, b, ..) = par(&mut n, &m.0, 32_000, (1, 1), 0);
     for (id, x) in [(a, "na"), (b, "nb")] {
         n.aplicar_en(0, admin(x, Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 }));
+        edificios(&mut n, 0, id, 20);
     }
-    n.avanzar_hasta(2 * 60 * MIN);
+    assert_eq!((n.radio_zona(a), n.radio_zona(b)), (Some(20_000), Some(20_000)), "20 + 20 > 32: se solapan");
     assert!(eventos(&n, "zona.frontera").is_empty());
     assert!(n.estado().contactos.is_empty());
 }
@@ -253,7 +261,7 @@ fn las_parcelas_respetan_zona_cupo_y_exclusividad() {
     let id = fundar_en(&mut n, 0, "a", 1, p);
     // Para tener alcance, sube la plaza a nivel 3 y deja crecer la zona.
     n.aplicar_en(0, admin("n3", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 }));
-    n.avanzar_hasta(80 * MIN);
+    edificios(&mut n, 80 * MIN, id, 14);
     let mut tomadas = Vec::new();
     loop {
         let r = n.aplicar_en(80 * MIN, admin(&format!("p{}", tomadas.len()), Comando::ReclamarParcela { asentamiento: id }));
@@ -310,13 +318,11 @@ fn el_territorio_sobrevive_a_la_foto_y_al_registro() {
     let hash = {
         let mut n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
         let (a, b, ..) = par(&mut n, &m.0, 32_000, (1, 2), 0);
-        for (id, x) in [(a, "na"), (b, "nb")] {
-            n.aplicar_en(MIN, admin(x, Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 }));
-        }
-        n.aplicar_en(MIN, admin("p", Comando::ReclamarParcela { asentamiento: a }));
-        n.avanzar_hasta(30 * MIN);
-        n.foto_ahora(); // a mitad: la foto lleva ritmos, contactos pendientes y parcelas
-        n.avanzar_hasta(60 * MIN);
+        let (t, _) = crecer_hasta_tocarse(&mut n, a, b, MIN);
+        n.aplicar_en(t, admin("p", Comando::ReclamarParcela { asentamiento: a }));
+        n.foto_ahora(); // a mitad: la foto lleva radios, contactos y parcelas
+        edificios(&mut n, t + MIN, b, 3);
+        n.avanzar_hasta(t + 60 * MIN);
         n.apagar().unwrap();
         n.hash_estado()
     };
@@ -327,7 +333,7 @@ fn el_territorio_sobrevive_a_la_foto_y_al_registro() {
 }
 
 #[test]
-fn la_plaza_se_proyecta_al_contrato_con_su_radio_como_ritmo() {
+fn la_plaza_se_proyecta_al_contrato() {
     use contrato::v1 as pb;
     let m = con_mundo!();
     let mut n = nuevo(m);
@@ -336,7 +342,6 @@ fn la_plaza_se_proyecta_al_contrato_con_su_radio_como_ritmo() {
     let a = &n.estado().asentamientos[&id];
     let Some(pb::entidad::Cuerpo::Asentamiento(e)) = nucleo::proyeccion::entidad_asentamiento(a, &n.poligono_zona(id)).cuerpo else { panic!("no es un asentamiento") };
     assert_eq!((e.id.as_str(), e.faccion_id.as_str(), e.nivel), (format!("as-{id}").as_str(), "f1", 1));
-    let r = e.radio_potencial.unwrap();
-    assert_eq!((r.valor_en_t0, r.t0_ms, r.por_minuto, r.maximo), (6_000, 5 * MIN, 200, Some(10_000)));
+    assert_eq!(e.radio_potencial, 6_000);
     assert_eq!(e.zona.len(), 48, "sin vecinas, el polígono es el disco entero");
 }

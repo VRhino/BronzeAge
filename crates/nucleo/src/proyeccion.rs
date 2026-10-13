@@ -56,10 +56,8 @@ pub fn entidad_ejercito(e: &Ejercito, t: Instante) -> pb::Entidad {
     }
 }
 
-/// La plaza como entidad del contrato. `zona` es el polígono real recortado (`Nucleo::poligono_zona`); el radio viaja como
-/// ritmo (valor, por minuto, techo) para que el cliente anime el crecimiento sin nuevos mensajes.
+/// La plaza como entidad del contrato. `zona` es el polígono real recortado (`Nucleo::poligono_zona`).
 pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Entidad {
-    let r = &a.radio;
     pb::Entidad {
         cuerpo: Some(pb::entidad::Cuerpo::Asentamiento(pb::Asentamiento {
             id: id_asentamiento(a.id),
@@ -69,7 +67,7 @@ pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Entid
             nivel: a.nivel,
             nivel_actual: a.nivel,
             fundado_en_ms: a.fundado_en,
-            radio_potencial: Some(pb::Ritmo { valor_en_t0: r.valor_en_t0, t0_ms: r.t0, por_minuto: r.por_minuto, maximo: r.maximo, minimo: r.minimo }),
+            radio_potencial: a.radio,
             zona: zona.iter().map(|&p| punto(p)).collect(),
             ..Default::default()
         })),

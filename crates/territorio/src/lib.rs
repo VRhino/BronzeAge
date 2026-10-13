@@ -7,4 +7,4 @@ mod zona;
 
 pub use fundacion::{cap_de_fundacion, validar, viabilidad, DistanciasDeFundacion, Motivo, Terreno, Viabilidad};
 pub use parcelas::{cupo_por_masa, elegir as elegir_parcela, Parcela, SinParcela};
-pub use zona::{en_zona, instante_de_contacto, poligono, se_tocan, Disco};
+pub use zona::{en_zona, poligono, se_tocan, Disco};

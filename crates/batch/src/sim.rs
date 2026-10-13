@@ -19,8 +19,8 @@ pub const ANILLO_CAMPAMENTO: (i64, i64) = (30_000, 120_000);
 pub const ANILLO_PLAZA: (i64, i64) = (30_000, 70_000);
 pub const REINTENTO_MIN: i64 = 10;
 pub const MAX_REINTENTOS: u32 = 6;
-pub const EDIFICIO_CADA_MIN: i64 = 20;
-pub const MAX_EDIFICIOS: u32 = 30;
+pub const EDIFICIO_CADA_MIN: i64 = 120;
+pub const MAX_EDIFICIOS: u32 = 1_000;
 pub const LENERA_A_MIN: [i64; 3] = [30, 90, 180];
 pub const NIVEL_2_H: i64 = 48;
 pub const NIVEL_3_H: i64 = 144;
@@ -333,7 +333,7 @@ impl Sim<'_> {
 
     /// Un edificio completado agranda la zona una unidad.
     fn edificio(&mut self, t: Instante, plaza: u64, n: u32) {
-        self.admin(t, Comando::AgrandarZona { asentamiento: plaza, milesimas: 1_000 });
+        self.admin(t, Comando::AgrandarZona { asentamiento: plaza });
         if n < MAX_EDIFICIOS {
             self.programar(t + EDIFICIO_CADA_MIN * MIN, Accion::Edificio { plaza, n: n + 1 });
         }

@@ -34,8 +34,9 @@ pub enum Comando {
     Fundar { ejercito: u64 },
     /// Sube el nivel de una plaza (y con él el techo de su zona). Solo administración; lo sustituirá el ascenso.
     FijarNivelAsentamiento { asentamiento: u64, nivel: u32 },
-    /// Agranda la zona de una plaza (un edificio completado: 1 unidad). Solo administración; lo llamará la construcción.
-    AgrandarZona { asentamiento: u64, milesimas: Mil },
+    /// Un edificio completado agranda la zona de su plaza (`crecimiento_por_edificio`, hasta el techo del nivel). Solo
+    /// administración; lo llamará la construcción.
+    AgrandarZona { asentamiento: u64 },
     /// Una Leñera pide su parcela de bosque (Doc 1.9c). Solo administración; lo llamará la construcción.
     ReclamarParcela { asentamiento: u64 },
     /// Una Leñera destruida devuelve su parcela. Solo administración.
@@ -120,10 +121,9 @@ impl Peticion {
                 w.u64(*asentamiento);
                 w.u32(*nivel);
             }
-            Comando::AgrandarZona { asentamiento, milesimas } => {
+            Comando::AgrandarZona { asentamiento } => {
                 w.u8(9);
                 w.u64(*asentamiento);
-                w.i64(*milesimas);
             }
             Comando::ReclamarParcela { asentamiento } => {
                 w.u8(10);
@@ -164,7 +164,7 @@ impl Peticion {
             6 => Comando::DarCaravanaFundacion { ejercito: r.u64()? },
             7 => Comando::Fundar { ejercito: r.u64()? },
             8 => Comando::FijarNivelAsentamiento { asentamiento: r.u64()?, nivel: r.u32()? },
-            9 => Comando::AgrandarZona { asentamiento: r.u64()?, milesimas: r.i64()? },
+            9 => Comando::AgrandarZona { asentamiento: r.u64()? },
             10 => Comando::ReclamarParcela { asentamiento: r.u64()? },
             11 => Comando::SoltarParcela { asentamiento: r.u64()?, parcela: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
@@ -190,7 +190,6 @@ pub mod rechazos {
     pub const SIN_CARAVANA: &str = "fundacion.sin_caravana";
     pub const CAP_ALCANZADO: &str = "fundacion.cap_alcanzado";
     pub const NIVEL_INVALIDO: &str = "nivel.invalido";
-    pub const ZONA_INVALIDA: &str = "zona.invalida";
     pub const PARCELA_SIN_LIBRES: &str = "parcela.sin_libres";
     pub const PARCELA_CUPO_AGOTADO: &str = "parcela.cupo_agotado";
     pub const PARCELA_AJENA: &str = "parcela.no_es_tuya";

@@ -375,8 +375,6 @@ impl Nucleo {
         match ev.carga {
             Carga::Llegada => self.llegada(id, t),
             Carga::Umbral(objetivo) => self.umbral(id, objetivo, t),
-            Carga::ZonaTecho => self.zona_en_techo(id, t),
-            Carga::ZonaContacto { otra, otra_generacion } => self.zonas_se_tocan(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
                 if let Some(g) = gens.get_mut(generador as usize) {

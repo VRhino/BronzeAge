@@ -18,7 +18,7 @@ pub mod sesiones;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
-pub use estado::{Asentamiento, Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, ReglasTerritorio, PRIO_LLEGADA, PRIO_UMBRAL, PRIO_ZONA};
+pub use estado::{Asentamiento, Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, ReglasTerritorio, PRIO_LLEGADA, PRIO_UMBRAL};
 pub use generadores::{Cx, GeneradorDeEventos};
 pub use nucleo::{Ajustes, Arranque, InformeViabilidad, Metricas, Nucleo};
 

@@ -215,7 +215,7 @@ message Asentamiento {
   uint32 nivel_actual = 8;               // operativo (baja con el mantenimiento)
   optional uint32 racha_mantenimiento_sano = 9;
   int64 fundado_en_ms = 10;
-  Ritmo radio_potencial = 11;            // zona de influencia (milésimas de unidad de mapa): crece por minuto hasta `maximo` = techo del nivel
+  sint64 radio_potencial = 11;           // zona de influencia, en milésimas de unidad de mapa
   repeated Punto zona = 12;              // polígono real recortado por fronteras (derivado, solo lectura)
   Poblacion poblacion = 13;
   map<string, Existencia> almacen = 14;  // por id de recurso
