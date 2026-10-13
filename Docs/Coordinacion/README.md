@@ -19,7 +19,6 @@ que rompa es `bronzeage.v2` con plan de migración.
 | **Batalla de Unity** | `battle.proto` | [`Mechanics/Batalla_Unity_Ciclo.md`](../Mechanics/Batalla_Unity_Ciclo.md) |
 | **Mundo** (artefacto por hash y paquete de Unity) | `world.proto` | [`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md) |
 | Propuestas entrantes de Codex/Conquest (`BA-*`) y su cierre | [`propuestas/`](propuestas/README.md) | [`propuestas/CIERRE_FASE_2.md`](propuestas/CIERRE_FASE_2.md) |
-| Fixture geométrico de asentamiento (Unity) y fixtures de tiempo real del servidor TypeScript (los usa una prueba del código congelado) | [`fixtures/`](fixtures/README.md) | `fixtures/README.md` |
 
 El contrato HTTP y de canales del servidor TypeScript (`01` modelo JSON, `02` HTTP, `03` tiempo real por segmentos, `04` migración) está en
 `typescript-final:Docs/Coordinacion/`.

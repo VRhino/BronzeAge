@@ -33,26 +33,10 @@ pnpm-debug.log*
 Thumbs.db
 issues/
 
-# Snapshots de partida de `npm run server` (src/server/persistenciaPartida.ts), directorio por defecto
-/partidas
-/partidas-pruebas
-/datos
-
-# Bundle del laboratorio visual (se regenera con `npm run lab`)
-/lab/dist/
-
-# Puntos de control del batch (`scripts/run-batch-sim.ts`, BATCH_CHECKPOINT_DIR / BATCH_DESDE): decenas de MB,
-# se regeneran; ver `simulaciones-batch/README.md`
-/simulaciones-batch/checkpoints/
-
 # Salidas de graphify — sin anclar a la raíz: escribe `graphify-out/` en el directorio
 # desde el que se lanza Y una caché de extracción dentro de la carpeta escaneada.
-# Todo se regenera con `/graphify <path>`; el grafo de `src/` pesa ~5 MB.
+# Todo se regenera con `/graphify <path>`; el grafo pesa ~5 MB.
 graphify-out/
-
-Docs/Coordinacion/fixtures/*
-# Los fixtures de tiempo real (Docs/Coordinacion/03) son contrato, no capturas locales
-!Docs/Coordinacion/fixtures/tiempo-real/
 
 # Rust
 target/
