@@ -2,14 +2,20 @@
 name = "nucleo"
 version = "0.1.0"
 edition = "2021"
-description = "Núcleo de un solo hilo: aplica órdenes y eventos en (instante, secuencia); modo acelerado (fase 5)"
+description = "Núcleo de un solo hilo: aplica órdenes y eventos en (instante, prioridad, secuencia); modo acelerado y en vivo; persistencia por registro y fotos; sesiones del contrato 05 (fase 5)"
 
+# `encuentros` y `vision` se conectan después (ver `GeneradorDeEventos`).
 [dependencies]
 base = { path = "../base" }
 cola = { path = "../cola" }
 rutas = { path = "../rutas" }
 persistencia = { path = "../persistencia" }
-encuentros = { path = "../encuentros" }
-vision = { path = "../vision" }
 mundo = { path = "../mundo" }
 contrato = { path = "../contrato" }
+servidor = { path = "../servidor" }
+prost-types = "0.13"
+sha2 = "0.10"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+
+[dev-dependencies]
+tempfile = "3"

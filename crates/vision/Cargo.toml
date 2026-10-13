@@ -7,3 +7,5 @@ description = "Visión muestreada cada 250 ms por Facción, en paralelo (fase 5,
 [dependencies]
 base = { path = "../base" }
 mundo = { path = "../mundo" }
+contrato = { path = "../contrato" }
+rayon = "1"

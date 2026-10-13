@@ -436,11 +436,14 @@ dependencies = [
  "base",
  "cola",
  "contrato",
- "encuentros",
  "mundo",
  "persistencia",
+ "prost-types",
  "rutas",
- "vision",
+ "servidor",
+ "sha2",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -909,7 +912,9 @@ name = "vision"
 version = "0.1.0"
 dependencies = [
  "base",
+ "contrato",
  "mundo",
+ "rayon",
 ]
 
 [[package]]
