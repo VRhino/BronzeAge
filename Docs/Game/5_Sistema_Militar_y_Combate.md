@@ -337,7 +337,7 @@ Elegir atacar no es teletransportarse: hay que estar delante. Cuando dos columna
 
 En un choque en campo abierto **no hay atacante ni defensor**: los dos iban a lo suyo, así que ninguno recibe el bonus de cohesión defensiva. Esa ventaja es de quien defiende una plaza, no de quien se topa con otro en un camino.
 
-Al emboscar una caravana, el botín —el 50% de su carga, 3.10— **viaja en el carro del ejército**, con dos consecuencias: cabe solo lo que quepa, y llega a casa como el resto del carro —el sobrante vuelve al almacén de origen al replegarse (5.13)—. El carro no puede descargarse en ruta, así que esto no lo convierte en un transporte de mercancías: para eso están las caravanas adjuntas.
+Al emboscar una caravana, el botín —el 50% de su carga, 3.10— **viaja en el carro del ejército**, con dos consecuencias: cabe solo lo que quepa, y viaja y se entrega como el resto del carro —va al almacén de la plaza donde su dueño entra a vivir (5.14.6)—. El carro no puede descargarse en ruta, así que esto no lo convierte en un transporte de mercancías: para eso están las caravanas adjuntas.
 
 Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume **una décima parte** de lo que consume en marcha, pero **nunca cero** (5.13): a una décima parte, unos víveres llenos sostienen una posición diez veces más de lo que duran en marcha, y aparcar es una jugada de verdad en vez de un aplazamiento contra el hambre.
 
@@ -385,13 +385,13 @@ Consecuencias que salen del `min` sin escribir ninguna regla más:
 
 ### 5.12.6 Cancelar la marcha
 
-Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **dispara la vuelta**: el ejército pasa a `regresando` y desanda su ruta hacia el asentamiento de origen. No se teletransporta ni se desvanece — volver cuesta el mismo camino que costó ir, y sigue comiendo del carro durante el regreso.
+Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **detiene al ejército donde está**: queda `estacionado`, quieto, y su Líder lo dirige de nuevo cuando quiera (5.12). **No hay vuelta a casa automática**: un ejército no tiene destino fijo ni plaza a la que regrese solo, y no se teletransporta ni se desvanece; para ir a un sitio, su Líder lo lleva con sus clics.
 
-**Esto vale para un EJÉRCITO. Una Columna personal no cancela: rectifica** (5.12.1). Un ejército también puede rectificar —su Líder hace clic en otro punto—; cancelar es la orden de **volver a casa**, que es distinta de cambiar de destino.
+**Esto vale para un EJÉRCITO. Una Columna personal no cancela: rectifica** (5.12.1). Un ejército también puede rectificar —su Líder hace clic en otro punto—; cancelar es la orden de **detenerse**, distinta de cambiar de destino.
 
 **Cancelar es del Líder, y solo suyo** (5.14.3): como dirigir el rumbo, no puede ser cosa de uno cualquiera. No atrapa a nadie: el que no quiera seguir **se separa**, que eso sí puede hacerlo cualquiera.
 
-Y es la razón por la que **deshacer un ejército es replegarlo, no vaciarlo**: el último miembro no puede separarse (5.14), así que la vuelta es el camino.
+**Deshacer un ejército es llevarlo a la puerta de una plaza o de un campamento y desarmarlo** (5.14.6): el último miembro no puede separarse (5.14), así que el ejército no se vacía en campo abierto.
 
 ### 5.12.7 Qué ve el jugador — la vista
 
@@ -535,7 +535,7 @@ Cada héroe lleva tres cosas distintas, y no se mezclan:
 | Dónde está | con la columna | en su residencia; solo se usa desde dentro | **siempre con el héroe**, dentro o fuera |
 | Capacidad | fija por héroe; se suma en un ejército | fija | **fija por héroe** (`LOGISTICA.capacidadViveresPorHeroe`); en un ejército pasan a ser **los víveres del ejército** (abajo) — para llevar más están las caravanas (5.13.2) |
 
-- **Los víveres no son carga**: no se descargan nunca (ni al volver a casa ni en el almacén personal), no se venden y **no se roban** — quien derrota a una columna se lleva la mitad del carro (5.12.3), no sus víveres.
+- **Los víveres no son carga**: no se descargan nunca (ni al entrar en su plaza ni en el almacén personal), no se venden y **no se roban** — quien derrota a una columna se lleva la mitad del carro (5.12.3), no sus víveres.
 - **Del carro a los víveres, nunca al revés.** El Líder de la columna puede pasar trigo del carro a los víveres, hasta llenarlos (`pasarAViveres`): en una columna personal, a los suyos; en un ejército, a **los víveres del ejército**. Así se come el trigo saqueado o el que traen las caravanas adjuntas.
 - **Los víveres del ejército.** En un ejército los víveres dejan de ser de cada héroe: el ejército tiene **unos víveres propios**, cuya capacidad es la suma de la de sus héroes y que **es lo único que se ve** mientras marchan juntos. De ahí come todo el ejército (soldados y héroes) al moverse y al acampar, y ahí entra todo lo que se repone.
   - **Al unirse**, el héroe aporta sus víveres y su capacidad.
@@ -550,7 +550,7 @@ Cada héroe lleva tres cosas distintas, y no se mezclan:
   - **Con las mismas dos reglas que llenarlos al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da.
   - **Abrir el almacén a un aliado cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa. Quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
 - **El carro no se carga en movimiento; los víveres sí.** El carro solo se llena parado en un lugar: dentro de un asentamiento o de un campamento de mercenarios, o en su puerta para las acciones que se hacen desde ella (comprar, recoger tropas, cargar o entregar con una caravana adjunta, 5.13.3). Un héroe con su columna puede ir a otra plaza o a un campamento, comprar allí, llenar el carro e irse. En marcha solo se reponen los víveres, y solo una columna personal.
-- **Regreso**: lo que lleva el carro **vuelve al almacén** del asentamiento de origen; los víveres siguen con el héroe. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
+- **Al entrar en la plaza donde reside** (5.14.6): lo que lleva el carro **pasa al almacén** de esa plaza; los víveres siguen con el héroe. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
 
 ### 5.13.1 El radio operativo es la constante de diseño
 
@@ -573,7 +573,7 @@ Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de ca
 - Mientras va enganchada **viaja con el ejército**: su posición es la de la columna, no una ruta propia.
 - **Entran en el `min` de velocidad.** Una caravana comercial va a 24, así que adjuntarla baja un ejército ligero de 30 a 24 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
 - **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.
-- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. Se pierden igualmente si la columna **se disuelve** por quedarse sin nadie dentro (5.13.4): en los dos casos deja de existir en campo abierto, y lo que vuelve a casa son las *identidades* de sus escuadrones, no bienes físicos — una caravana sin nadie que la lleve no se teletransporta a ninguna parte. *(Distinto es que se quede sola porque su gente se desconectó sin llegar a disolverla: entonces vuelve a su origen, Doc 3.10.)*
+- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. **No** se pierden si la columna se queda sin nadie dentro porque su gente se desconectó: la caravana, que sí viaja por sí sola, vuelve a su origen (Doc 1.10.6, 3.10).
 
 ### 5.13.3 Escolta de caravanas
 
@@ -607,14 +607,10 @@ Son dos cosas distintas y confundirlas costaba las dos mitades:
 | Sus escuadrones caen todos | **Sigue existiendo.** Sus héroes están dentro, solo que ahora viajan sin tropa: a la velocidad del viajero (5.12.5) y comiendo su ración de héroe. Lo que no puede es combatir |
 | No queda ningún héroe dentro | **Se disuelve** |
 
-Al disolverse, las identidades de escuadrón —vacías pero con su nombre, su nivel y su experiencia— **vuelven
-al campamento de su héroe**, que es donde se pueden rellenar reclutando (5.4). No se pierden: lo que murió
-son las unidades, no el squad. Si su héroe no reside en ningún sitio (aún sin Facción), siguen con él hasta que
-vuelva a residir en algún asentamiento.
+**Un ejército no guarda tropa por su cuenta.** Es un conjunto de héroes que se mueven juntos con sus columnas y sus caravanas adjuntas: la tropa, el carro y los víveres son de cada héroe y salen con él al separarse o al desconectarse (Doc 1.10.6). Por eso, cuando no queda ningún héroe dentro, **no hay tropa que devolver**: el ejército simplemente deja de existir, y lo único que queda en el mapa son las caravanas adjuntas, que vuelven solas a su origen (5.13.3).
 
 **Quién vacía una columna, entonces:** separarse (5.14.2) y desconectarse (Doc 1.10.6) — y el último que
-queda no puede separarse, así que en la práctica una columna atendida no se disuelve nunca sola: vuelve a
-casa. La que se vacía de verdad es aquella cuya gente se desconectó, que es justo el caso que esta regla
+queda no puede separarse, así que en la práctica una columna atendida no se disuelve nunca sola: su Líder la desarma en una puerta (5.14.6). La que se vacía de verdad es aquella cuya gente se desconectó, que es justo el caso que esta regla
 nació para cerrar.
 
 ## 5.14 Unirse y separarse en campo
@@ -660,11 +656,11 @@ Sin esto, un desconocido podría engancharse a tu marcha sin que pudieras negart
 
 Sales del Ejército con lo tuyo —tus escuadrones, **hasta un carro** de suministro, que es lo que aportaste, y **tu parte igual de los víveres del ejército** (5.13)— y naces como **Columna personal** en la posición donde estabas. Recuperas la libertad de movimiento al instante.
 
-**El origen NO cambia.** Tu columna nueva conserva el asentamiento del que salió el Ejército, no el tuyo: el destino puede cambiar, el origen no. Es donde te replegarás. *(Es también lo que ya ocurría al unirse pasando por tu plaza — un jugador que se suma a un ejército de otra ciudad vuelve con él a esa ciudad, no a la suya.)*
+**No hay plaza a la que replegarse sola.** Tu columna nueva nace donde estás, con tu tropa, tu carro y tu parte de los víveres, y se queda contigo: la tropa que va con su héroe nunca vuelve sola a ningún sitio.
 
 **El Líder no puede separarse.** Para irse tiene que **elevar a otro integrante a Líder**, y entonces sí.
 
-De esa regla sale sola otra que no hace falta escribir aparte: **un Ejército nunca se queda vacío en campo abierto**, porque el último que queda es siempre su Líder —los demás se fueron cediendo el mando o sin tenerlo—. Deshacerlo es **cancelar y volver** (5.12.6), no irse vaciándolo — si no, sus caravanas adjuntas, su suministro y sus escuadrones quedarían abandonados en mitad del mapa.
+De esa regla sale sola otra que no hace falta escribir aparte: **un Ejército nunca se queda vacío en campo abierto**, porque el último que queda es siempre su Líder —los demás se fueron cediendo el mando o sin tenerlo—. Deshacerlo es **llevarlo a una puerta y desarmarlo** (5.14.6), no irse vaciándolo — si no, sus caravanas adjuntas, su suministro y sus escuadrones quedarían abandonados en mitad del mapa.
 
 ### 5.14.3 El Líder
 
@@ -675,7 +671,7 @@ Es el Héroe que **formó** el Ejército. No es un cargo político (Doc 2.2): es
 3. **Cancela la marcha** — es suya en exclusiva (5.12.6).
 4. **No puede separarse** sin ceder antes el liderazgo (arriba).
 
-**Que cancelar sea solo suyo no atrapa a nadie**, porque cancelar no es la salida de la marcha: es hacer volver a todos. El que no quiera seguir **se separa**, y eso puede hacerlo cualquiera. Lo que el mando decide no es quién se queda, sino si la columna entera da media vuelta.
+**Que cancelar sea solo suyo no atrapa a nadie**, porque cancelar no es la salida de la marcha: es detener a todos. El que no quiera seguir **se separa**, y eso puede hacerlo cualquiera. Lo que el mando decide no es quién se queda, sino si la columna entera se detiene.
 
 **Si el Líder se desconecta, el mando pasa al integrante con más ANTIGÜEDAD** — y si ese también está fuera, al siguiente. No puede irse por su voluntad, pero sí puede caérsele la conexión, y una columna en campaña no puede quedarse sin nadie que la mande. **Nunca se queda sin candidato**: todos los que van dentro son de su misma Facción y cualquiera vale, así que mientras quede alguien hay Líder — y si no queda nadie, la columna ya se disolvió (Doc 1.10.6).
 
@@ -763,6 +759,12 @@ Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si
 ### 5.15.2 El campamento del héroe
 
 El campamento es donde un héroe guarda las escuadras que no lleva consigo, y está en el asentamiento donde reside. También puede estar en un campamento de mercenarios (Doc 1.9b), donde se reside sin límite y sin guarnición. Ya no hay huérfanos (2026-10-02): quien se queda sin casa pasa al campamento de mercenarios más cercano, con sus escuadras y su almacén personal (Doc 2.5).
+
+### 5.15.2b Tropa del héroe y tropa prestada (decidido el 2026-10-13)
+
+**La tropa que va con su héroe se queda con su héroe**: nunca vuelve sola a ningún sitio. Si el héroe saca una escuadra de una guarnición y se une a un ejército, y el ejército se desarma, la escuadra sigue con él.
+
+**Tropa prestada** es la que está fuera de la columna de su héroe: la guarnición de una plaza y la escolta de una caravana. Cuando ya no puede estar donde está prestada (cae la plaza, se destruye la caravana, la caravana termina su viaje), **vuelve sin viaje al campamento de su héroe**: con 0 soldados si la causa es una derrota (5.15.5, Doc 3.13.4), intacta si es un final normal. Mientras siga prestada y su sitio siga en pie, el héroe puede ir a buscarla y sacarla.
 
 ### 5.15.3 La guarnición
 
