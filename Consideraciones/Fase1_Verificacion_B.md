@@ -12,6 +12,22 @@
 | `Campamentos_Entrada_Fundacion_Definicion.md` | Cerrado entero (71 decisiones, sin puntos abiertos): canon 1.9b y `Mechanics` (Campamentos_Mercenarios, Fundacion_Y_Refundacion, Presencia). | — |
 | `Murallas_Definicion.md` | Vigente en `Mechanics/Murallas.md` y canon 4.2.1; las cifras son placeholder. Quedan dos ideas aplazadas. | V5 |
 
+## Segunda tanda (2026-10-13)
+
+| Documento | Resultado | Pendiente de decidir |
+|---|---|---|
+| `Anexion_Y_Desarme_Definicion.md` | Sin nada vivo: reglas en canon 2.4 y 2.6 y en `Mechanics/Diplomacia_Facciones.md` (caducidad a 3 días, una pendiente por par, anexión y fusión a la vez). Lo «fuera de esta pasada» eran pantallas del cliente web, que se retira. | — |
+| `Batalla_Este_Lado_Definicion.md` | Sin nada vivo: las 10 decisiones y el reparto con Unity están en `Mechanics/Batalla_Unity_Ciclo.md` y canon 5.15; el canal `batalla/<id>` y CQ-011 pasan al contrato 05. | — |
+| `Comercio_Fisico_Definicion.md` | Reglas en `Mechanics/Comercio_Caravanas.md` (§8.3 el mostrador). Dos palancas sin diseñar. | W1 |
+| `Revamp_Caravanas_Definicion.md` | Reglas en canon 3.13 y `Mechanics/Comercio_Caravanas.md`; los trozos diferidos ya están en Ideas §47. | W2, W3 |
+
+- **W1. Comercio del forastero**: ¿puede publicar sus propias órdenes en un mercado ajeno, o solo tomar las publicadas?, y ¿puede el
+  Gobernador cerrar el mostrador sin cerrar la puerta (dejar pasar pero no vender, o vender solo a aliados)? *Recomiendo `Docs/Ideas a diseñar.md`.*
+- **W2. Experiencia de Facción por defender una caravana** (`NIVEL_FACCION.xp.defensaCaravana`): hoy no se multiplica por los
+  jugadores que participan porque la escolta no tenía héroes reales. Con escolta real, ¿se multiplica como el resto del combate?
+  No está en `Mechanics`. *Recomiendo que sí, igual que el resto del combate,* y escribirlo en el canon (5.16).
+- **W3. El camello sin su inmunidad al desierto** sigue en el catálogo como «opción media». *Recomiendo dejarlo y revisarlo al calibrar con el motor nuevo.*
+
 ## Decidido el 2026-10-13
 
 - **V1** varianza ±15 %: se deja como está (constante del archivo común). **V2** escuadra mermada: regla escrita en el canon (5.11.1). **V3, V4** y la demolición de recintos: a `Docs/Ideas a diseñar.md` §47. **Jerarquía de puertas: descartada.**
@@ -31,7 +47,7 @@
   *Recomiendo `Docs/Ideas a diseñar.md`.*
 - **V5. Jerarquía de puertas** (postigo / puerta / casa-puerta) y **demolición de un recinto completo**. *Recomiendo `Docs/Ideas a diseñar.md`.*
 
-## Quedan por verificar (12)
+## Quedan por verificar (8)
 
 `Anexion_Y_Desarme`, `Batalla_Este_Lado`, `Comercio_Fisico`, `Entrada_Al_Mundo`, `Identidad_Visual`, `Revamp_Caravanas`,
 `Rutas_Caravana_Avanzadas`, `Taberna_Intel`, `Fase_0_5_Especializacion_y_Cupos`, `Fase_0_6_Expansion_Niveles_Asentamiento`,
