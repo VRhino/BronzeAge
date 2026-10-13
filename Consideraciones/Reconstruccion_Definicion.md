@@ -132,7 +132,7 @@ intermedio. Unity se conecta directamente al contrato 05 cuando exista el núcle
 ## 4. Orden de la reconstrucción
 
 0. **Arranque** (hecho el 2026-10-12): la rama **`typescript-final`** guarda el último TypeScript (copia de `main` en
-   `eb1cdd9`, sin subir a ningún remoto). Desde ahora todo el trabajo va sobre `main`, que es la reconstrucción (D4).
+   `eb1cdd9` el 2026-10-12; el 2026-10-13 la rama se adelantó a `main` para incluir el código TypeScript y la documentación completa de `Docs/Mechanics`, sin subir a ningún remoto). Desde ahora todo el trabajo va sobre `main`, que es la reconstrucción (D4).
    Se apaga el playtest (D5). El servidor TypeScript, sus bots y el cliente web de jugador se retiran de `main` cuando
    llegue su sustituto; hasta entonces `main` solo recibe documentación y especificación (D11).
 1. **Ordenar el trabajo previo** (§4.1): el canon al día con todo lo decidido y los pendientes cerrados o descartados.
