@@ -1,0 +1,77 @@
+{
+  "sistema": "Mundo y territorio",
+  "fecha": "2026-10-13",
+  "mundo_hash": "7d178b3e90a1c4f2",
+  "semilla": 42,
+  "dias_simulados": 30,
+  "resumen": "Se simularon 30 días con 40 facciones sobre el mundo real. Las plazas respetan la separación mínima y las zonas crecen al ritmo previsto, pero la ocupación del mapa se queda corta y hay demasiadas plazas fundadas en la misma comarca. Hay dos decisiones pendientes sobre el ritmo de fundación.",
+  "parametros": [
+    {"nombre": "Crecimiento de zona", "valor": "0,2 u/min"},
+    {"nombre": "Separación mínima entre plazas", "valor": "30 u"},
+    {"nombre": "Facciones simuladas", "valor": "40"},
+    {"nombre": "Tamaño del mundo", "valor": "2667 × 2000 u"},
+    {"nombre": "Velocidad de simulación", "valor": "×1440 (1 día por minuto)"}
+  ],
+  "metricas": [
+    {"id": "separacion_min", "nombre": "Distancia mínima entre plazas", "unidad": "u", "esperado_min": 30.0, "esperado_max": null, "medido": 31.2, "origen": "Doc 1.0a", "nota": "La pareja más cercana está en la comarca norte."},
+    {"id": "ocupacion", "nombre": "Ocupación del mapa a los 30 días", "unidad": "%", "esperado_min": 35.0, "esperado_max": 60.0, "medido": 31.0, "origen": "Doc 1.2", "nota": "Falta poco; depende del ritmo de fundación."},
+    {"id": "zonas_solapadas", "nombre": "Zonas de influencia solapadas", "unidad": "%", "esperado_min": null, "esperado_max": 10.0, "medido": 24.5, "origen": "Doc 1.3", "nota": "Se concentran en el centro del mapa."},
+    {"id": "crecimiento", "nombre": "Crecimiento medio de zona", "unidad": "u/min", "esperado_min": 0.18, "esperado_max": 0.22, "medido": 0.2, "origen": "Doc 1.1"},
+    {"id": "plazas_dia", "nombre": "Plazas fundadas por día (media)", "unidad": "plazas", "esperado_min": 2.0, "esperado_max": 6.0, "medido": 3.4, "origen": "Doc 1.2"},
+    {"id": "aislada", "nombre": "Plazas sin vecina a menos de 200 u", "unidad": "plazas", "esperado_min": null, "esperado_max": 0.0, "medido": 0.0, "origen": "Doc 1.0b"},
+    {"id": "focos", "nombre": "Focos de actividad activos", "unidad": "", "esperado_min": null, "esperado_max": null, "medido": 12.0, "origen": "Informativa", "nota": "Sin objetivo todavía."},
+    {"id": "tiempo_ruta", "nombre": "Tiempo medio de ruta entre plazas vecinas", "unidad": "min", "esperado_min": 5.0, "esperado_max": 15.0, "medido": null, "origen": "Doc 1.4", "nota": "El batch no llegó a medirlo."}
+  ],
+  "series": [
+    {
+      "id": "s1", "titulo": "Plazas fundadas por día", "tipo": "linea", "eje_x": "día", "eje_y": "plazas",
+      "series": [
+        {"nombre": "Norte", "puntos": [[0,1],[5,3],[10,4],[15,6],[20,5],[25,4],[30,3]]},
+        {"nombre": "Centro", "puntos": [[0,2],[5,5],[10,9],[15,12],[20,10],[25,7],[30,5]]},
+        {"nombre": "Sur", "puntos": [[0,0],[5,1],[10,2],[15,3],[20,4],[25,4],[30,3]]}
+      ]
+    },
+    {
+      "id": "s2", "titulo": "Distancia entre plazas vecinas", "tipo": "histograma", "eje_x": "distancia (u)", "eje_y": "pares de plazas",
+      "series": [
+        {"nombre": "Pares de plazas", "puntos": [[30,4],[40,11],[50,19],[60,24],[70,17],[80,12],[90,6],[100,3],[110,1]]}
+      ]
+    }
+  ],
+  "mapa": {
+    "ancho": 2667, "alto": 2000,
+    "capas": [
+      {"nombre": "Zonas de influencia", "color": "#3b82f6", "circulos": [
+        {"x": 600, "y": 500, "r": 180}, {"x": 800, "y": 560, "r": 150}, {"x": 1400, "y": 1000, "r": 220},
+        {"x": 1550, "y": 1080, "r": 190}, {"x": 2100, "y": 1500, "r": 160}, {"x": 700, "y": 1500, "r": 140}
+      ], "puntos": []},
+      {"nombre": "Plazas", "color": "#e11d48", "circulos": [], "puntos": [
+        {"x": 600, "y": 500}, {"x": 800, "y": 560}, {"x": 1400, "y": 1000},
+        {"x": 1550, "y": 1080}, {"x": 2100, "y": 1500}, {"x": 700, "y": 1500}, {"x": 1900, "y": 400}
+      ]}
+    ]
+  },
+  "anomalias": [
+    {"titulo": "Dos plazas fundadas a menos de 5 u una de otra", "detalle": "Ocurrió el día 12 en la comarca norte. La regla de separación se comprobó con el mapa del día anterior, no con el actual.", "causa": "codigo"},
+    {"titulo": "La ocupación se mide sobre el mundo entero, incluido el mar", "detalle": "Si se descuenta el mar, la ocupación sube al 42 % y entra en rango. Conviene decidir qué área cuenta como ocupable.", "causa": "medicion"}
+  ],
+  "decisiones": [
+    {
+      "id": "D1", "pregunta": "¿Cómo se corrige la ocupación baja?",
+      "contexto": "La ocupación medida es del 31 % frente al 35 % esperado como mínimo; parte de la diferencia es del mar.",
+      "opciones": [
+        {"texto": "Medir la ocupación solo sobre tierra firme", "recomendada": false, "efecto": "Sube a 42 % sin tocar el juego."},
+        {"texto": "Subir el ritmo de fundación de plazas", "recomendada": true, "efecto": "Más plazas por día; hay que volver a medir solapes."},
+        {"texto": "No hacer nada y esperar a más días simulados", "recomendada": false}
+      ]
+    },
+    {
+      "id": "D2", "pregunta": "¿Se limita el solape de zonas en el centro?",
+      "contexto": "El 24,5 % de las zonas se solapa, más del doble de lo esperado, y casi todo ocurre en el centro.",
+      "opciones": [
+        {"texto": "Dejarlo: el centro es el punto caliente buscado", "recomendada": false, "efecto": "El informe lo seguirá marcando en rojo."},
+        {"texto": "Reducir el crecimiento de zona cerca de otras plazas", "recomendada": true, "efecto": "Baja el solape; ralentiza el crecimiento en el centro."}
+      ]
+    }
+  ]
+}

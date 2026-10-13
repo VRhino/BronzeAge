@@ -20,6 +20,7 @@ fn correr(m: &Mundo, rutas: &Arc<Rutas>) -> ([u8; 32], Vec<(Punto, Option<i64>)>
         inicio: 0,
         rutas: rutas.clone(),
         mundo_hash: m.hash().into(),
+        mundo: None,
     });
     let camps: Vec<Punto> = m.campamentos().iter().map(|c| c.posicion.map(|p| Punto::new(p.x, p.y)).unwrap()).collect();
     let ids: Vec<u64> = (0..camps.len())

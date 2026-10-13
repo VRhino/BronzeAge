@@ -23,6 +23,7 @@
 
 use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
 use crate::estado::{Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, PRIO_LLEGADA, PRIO_UMBRAL};
+use mundo::Mundo;
 use crate::generadores::{Cx, GeneradorDeEventos, Transicion};
 use base::{Instante, Mil, Plan, Punto, Ritmo};
 use cola::Evento;
@@ -36,6 +37,10 @@ use std::path::Path;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::JoinHandle;
+
+mod zonas;
+
+pub use zonas::InformeViabilidad;
 
 /// Tipos de entrada del registro.
 const ENTRADA_PETICION: u16 = 1;
@@ -73,6 +78,8 @@ pub struct Arranque {
     pub rutas: Arc<Rutas>,
     /// Hash del artefacto de mundo (`InfoMundo.hash`).
     pub mundo_hash: String,
+    /// El artefacto cargado: sin él no hay fundación ni parcelas (el núcleo genérico de las pruebas de movimiento no lo usa).
+    pub mundo: Option<Arc<Mundo>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -127,6 +134,7 @@ pub struct Nucleo {
     mundo_hash: String,
     semilla: u64,
     generadores: Vec<Box<dyn GeneradorDeEventos>>,
+    geografia: Option<zonas::Geografia>,
     reloj: Option<RelojCompartido>,
     tr: Transicion,
     /// Un registro por versión, contiguos: el de la versión `v` está en la posición `v - base_registro - 1`.
@@ -213,6 +221,7 @@ impl Nucleo {
             mundo_hash: a.mundo_hash,
             semilla: a.semilla,
             generadores: Vec::new(),
+            geografia: a.mundo.map(zonas::Geografia::de),
             reloj: None,
             tr: Transicion::default(),
             registro: VecDeque::new(),
@@ -366,6 +375,8 @@ impl Nucleo {
         match ev.carga {
             Carga::Llegada => self.llegada(id, t),
             Carga::Umbral(objetivo) => self.umbral(id, objetivo, t),
+            Carga::ZonaTecho => self.zona_en_techo(id, t),
+            Carga::ZonaContacto { otra, otra_generacion } => self.zonas_se_tocan(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
                 if let Some(g) = gens.get_mut(generador as usize) {
@@ -391,7 +402,7 @@ impl Nucleo {
 
     /// La ÚNICA función que sube la versión: si la transición cambió algo (o se fuerza), cierra un registro de cambios.
     fn cerrar_version(&mut self, t: Instante, forzar: bool) -> bool {
-        if self.tr.tocados.is_empty() && self.tr.eventos.is_empty() && !forzar {
+        if self.tr.tocados.is_empty() && self.tr.asentamientos.is_empty() && self.tr.eventos.is_empty() && !forzar {
             return false;
         }
         self.estado.version += 1;
@@ -404,8 +415,16 @@ impl Nucleo {
                 e.version = v;
             }
         }
+        let mut asentamientos = std::mem::take(&mut self.tr.asentamientos);
+        asentamientos.sort_unstable();
+        asentamientos.dedup();
+        for id in &asentamientos {
+            if let Some(a) = self.estado.asentamientos.get_mut(id) {
+                a.version = v;
+            }
+        }
         let eventos = std::mem::take(&mut self.tr.eventos);
-        self.registro.push_back(CambioVersion { version: v, en: t, ejercitos: ids, eventos });
+        self.registro.push_back(CambioVersion { version: v, en: t, ejercitos: ids, asentamientos, eventos });
         if self.registro.len() > self.ajustes.retencion_cambios {
             if let Some(c) = self.registro.pop_front() {
                 self.base_registro = c.version;
@@ -422,7 +441,7 @@ impl Nucleo {
     }
 
     fn evento(&mut self, codigo: &'static str, en: Instante, id: u64, punto: Option<Punto>, datos: Vec<(&'static str, i64)>) {
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en, ejercitos: vec![id], punto, datos });
+        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en, ejercitos: vec![id], asentamientos: vec![], punto, datos });
     }
 
     /// Programa la llegada (si hay plan) y los umbrales de víveres con la generación vigente. Llamar tras subirla.
@@ -604,6 +623,7 @@ impl Nucleo {
                     plan: Plan::default(),
                     viveres,
                     capacidad_viveres: *capacidad_viveres,
+                    caravana_fundacion: false,
                     version: 0,
                 });
                 self.tr.tocados.push(id);
@@ -658,6 +678,17 @@ impl Nucleo {
                 self.detener(id, t);
                 self.evento("ejercito.estacionado", t, id, Some(punto), vec![]);
             }
+            Comando::FijarNivelFaccion { .. }
+            | Comando::DarCaravanaFundacion { .. }
+            | Comando::Fundar { .. }
+            | Comando::FijarNivelAsentamiento { .. }
+            | Comando::AgrandarZona { .. }
+            | Comando::ReclamarParcela { .. }
+            | Comando::SoltarParcela { .. } => match self.ejecutar_territorio(t, p) {
+                Ok(Some(creada)) => creadas.push(creada),
+                Ok(None) => {}
+                Err(r) => return r,
+            },
             Comando::Reloj(accion) => {
                 if !p.admin {
                     return Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración controla el reloj", v);

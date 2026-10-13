@@ -40,3 +40,6 @@ graphify-out/
 
 # Rust
 target/
+
+# Informes del batch de validación (se regeneran con `batch territorio`)
+batch/salida/

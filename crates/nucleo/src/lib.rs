@@ -18,9 +18,9 @@ pub mod sesiones;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
-pub use estado::{Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, PRIO_LLEGADA, PRIO_UMBRAL};
+pub use estado::{Asentamiento, Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, ReglasTerritorio, PRIO_LLEGADA, PRIO_UMBRAL, PRIO_ZONA};
 pub use generadores::{Cx, GeneradorDeEventos};
-pub use nucleo::{Ajustes, Arranque, Metricas, Nucleo};
+pub use nucleo::{Ajustes, Arranque, InformeViabilidad, Metricas, Nucleo};
 
 /// sha256 en hexadecimal minúsculas.
 pub fn hex(h: &[u8; 32]) -> String {

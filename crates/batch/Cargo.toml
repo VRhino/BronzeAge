@@ -1,0 +1,14 @@
+[package]
+name = "batch"
+version = "0.1.0"
+edition = "2021"
+description = "Batch de validación por sistema (fase 6): simulación acelerada del núcleo con una población sintética y el informe resultante"
+
+[dependencies]
+base = { path = "../base" }
+mundo = { path = "../mundo" }
+rutas = { path = "../rutas" }
+nucleo = { path = "../nucleo" }
+territorio = { path = "../territorio" }
+informe = { path = "../informe" }
+serde_json = "1"

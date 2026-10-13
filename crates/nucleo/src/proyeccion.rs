@@ -1,12 +1,16 @@
 //! Del estado del núcleo a las entidades del contrato 05 (`Cambio`, `Entidad`, `EventoDominio`).
 
-use crate::estado::{Ejercito, EventoNucleo};
+use crate::estado::{Asentamiento, Ejercito, EventoNucleo};
 use base::Instante;
 use contrato::v1 as pb;
 use std::collections::BTreeMap;
 
 pub fn id_ejercito(id: u64) -> String {
     format!("ej-{id}")
+}
+
+pub fn id_asentamiento(id: u64) -> String {
+    format!("as-{id}")
 }
 
 pub fn parse_id_ejercito(s: &str) -> Option<u64> {
@@ -52,6 +56,26 @@ pub fn entidad_ejercito(e: &Ejercito, t: Instante) -> pb::Entidad {
     }
 }
 
+/// La plaza como entidad del contrato. `zona` es el polígono real recortado (`Nucleo::poligono_zona`); el radio viaja como
+/// ritmo (valor, por minuto, techo) para que el cliente anime el crecimiento sin nuevos mensajes.
+pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Entidad {
+    let r = &a.radio;
+    pb::Entidad {
+        cuerpo: Some(pb::entidad::Cuerpo::Asentamiento(pb::Asentamiento {
+            id: id_asentamiento(a.id),
+            version: a.version,
+            faccion_id: format!("f{}", a.faccion),
+            posicion: Some(punto(a.posicion)),
+            nivel: a.nivel,
+            nivel_actual: a.nivel,
+            fundado_en_ms: a.fundado_en,
+            radio_potencial: Some(pb::Ritmo { valor_en_t0: r.valor_en_t0, t0_ms: r.t0, por_minuto: r.por_minuto, maximo: r.maximo, minimo: r.minimo }),
+            zona: zona.iter().map(|&p| punto(p)).collect(),
+            ..Default::default()
+        })),
+    }
+}
+
 pub fn cambio_ejercito(e: &Ejercito, t: Instante) -> pb::Cambio {
     pb::Cambio {
         tipo: pb::TipoCambio::CambioActualiza as i32,
@@ -82,7 +106,7 @@ pub fn evento_dominio(ev: &EventoNucleo, version: u64, heroes: Vec<String>) -> p
         codigo: ev.codigo.to_string(),
         version,
         en_ms: ev.en,
-        asentamiento_id: None,
+        asentamiento_id: ev.asentamientos.first().map(|&id| id_asentamiento(id)),
         heroes_ids: heroes,
         payload: Some(prost_types::Struct { fields: campos }),
     }

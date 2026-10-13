@@ -6,14 +6,17 @@ use base::{Instante, Mil, Plan, Punto, Ritmo, Rng, Vertice};
 use cola::{Clave, Cola, Evento, Generaciones};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 /// Prioridad de los umbrales de víveres: «consumo de población y de tropa» (Reloj_Y_Eventos §2).
 pub const PRIO_UMBRAL: u8 = 3;
 /// Prioridad de las llegadas: «llegadas y encuentros de columnas».
 pub const PRIO_LLEGADA: u8 = 8;
 
-const MAGIA: &[u8; 4] = b"BAN1";
+/// Prioridad del crecimiento de las zonas de influencia (Reloj_Y_Eventos §2: «crecimiento»).
+pub const PRIO_ZONA: u8 = 4;
+
+const MAGIA: &[u8; 4] = b"BAN2";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -27,11 +30,53 @@ pub struct Reglas {
     pub viveres_bajos_pct: u32,
     /// Peticiones recordadas para la idempotencia (`INFRA.limiteIdempotencia`).
     pub limite_idempotencia: usize,
+    pub territorio: ReglasTerritorio,
 }
 
 impl Default for Reglas {
     fn default() -> Self {
-        Self { consumo_marcha: 830, consumo_estacionado: 83, viveres_bajos_pct: 25, limite_idempotencia: 500 }
+        Self { consumo_marcha: 830, consumo_estacionado: 83, viveres_bajos_pct: 25, limite_idempotencia: 500, territorio: ReglasTerritorio::default() }
+    }
+}
+
+/// Mundo y territorio (Doc 1.0a, 1.2, 1.7, 1.9c). Distancias y radios en milésimas de unidad estratégica.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasTerritorio {
+    /// Radio con el que nace la zona de una plaza (`ZONA_INFLUENCIA.radioInicial`: 6).
+    pub radio_inicial: Mil,
+    /// Techo del radio por nivel del asentamiento (10 / 15 / 20 / 25 / 30).
+    pub techos: Vec<Mil>,
+    /// Cuánto crece la zona por minuto hacia su techo. **Placeholder**: el canon dice «gradualmente cada minuto»; se calibra en el batch.
+    pub crecimiento_por_minuto: Mil,
+    /// Distancia mínima entre plazas, de centro a centro (30).
+    pub separacion_plazas: Mil,
+    /// Distancia mínima a un campamento de mercenarios para fundar (`radioExclusionFundar`: 20).
+    pub exclusion_campamento: Mil,
+    /// Plazas que puede fundar una Facción por nivel (`CAP_FUNDACION_POR_NIVEL`).
+    pub cap_por_nivel: Vec<u32>,
+    /// Parte de las parcelas de una masa de bosque que puede ocupar un asentamiento (`cuotaParcelasPorAsentamiento`: 50).
+    pub cuota_parcelas_pct: u32,
+}
+
+impl Default for ReglasTerritorio {
+    fn default() -> Self {
+        Self {
+            radio_inicial: 6_000,
+            techos: vec![10_000, 15_000, 20_000, 25_000, 30_000],
+            crecimiento_por_minuto: 200,
+            separacion_plazas: 30_000,
+            exclusion_campamento: 20_000,
+            cap_por_nivel: vec![1, 2, 3, 3, 4, 5, 5, 6, 6, 7],
+            cuota_parcelas_pct: 50,
+        }
+    }
+}
+
+impl ReglasTerritorio {
+    /// Techo del radio de un asentamiento de ese nivel (los niveles fuera de la tabla usan el último).
+    pub fn techo(&self, nivel: u32) -> Mil {
+        let i = (nivel.max(1) as usize).min(self.techos.len().max(1)) - 1;
+        self.techos.get(i).copied().unwrap_or(self.radio_inicial)
     }
 }
 
@@ -52,6 +97,9 @@ pub struct Ejercito {
     pub plan: Plan,
     pub viveres: Ritmo,
     pub capacidad_viveres: Mil,
+    /// Lleva enganchada una Caravana de Fundación (Doc 1.8): puede fundar donde está. La compra y el lanzamiento son de
+    /// la economía; hasta entonces la da la administración.
+    pub caravana_fundacion: bool,
     /// Versión de mundo del último cambio.
     pub version: u64,
 }
@@ -66,6 +114,21 @@ impl Ejercito {
     }
 }
 
+/// Una plaza. La zona de influencia es un disco cuyo radio crece como un ritmo hacia el techo de su nivel; el polígono
+/// recortado por las fronteras se deriva (`Nucleo::poligono_zona`) y no se guarda.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Asentamiento {
+    pub id: u64,
+    pub faccion: u32,
+    pub posicion: Punto,
+    pub nivel: u32,
+    pub fundado_en: Instante,
+    pub radio: Ritmo,
+    /// Parcelas de bosque que explota (índices del artefacto).
+    pub parcelas: BTreeSet<u32>,
+    pub version: u64,
+}
+
 /// Qué ocurre cuando vence un evento de la cola.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Carga {
@@ -75,6 +138,10 @@ pub enum Carga {
     Umbral(Mil),
     /// Evento de un [`GeneradorDeEventos`](crate::GeneradorDeEventos): `generador` es su posición en la lista.
     Externa { generador: u16, tipo: u16, a: u64, b: u64 },
+    /// El radio de la zona llegó al techo de su nivel.
+    ZonaTecho,
+    /// Las zonas de dos plazas de Facciones distintas se tocan; `otra_generacion` es la de `otra` al calcular el cruce.
+    ZonaContacto { otra: u64, otra_generacion: u32 },
 }
 
 /// Un hecho ocurrido (crónica y avisos), no el cambio de estado: ese viaja en las entidades.
@@ -85,6 +152,8 @@ pub struct EventoNucleo {
     pub en: Instante,
     /// Columnas implicadas: deciden quién lo oye.
     pub ejercitos: Vec<u64>,
+    /// Plazas implicadas.
+    pub asentamientos: Vec<u64>,
     pub punto: Option<Punto>,
     pub datos: Vec<(&'static str, i64)>,
 }
@@ -96,6 +165,8 @@ pub struct CambioVersion {
     pub en: Instante,
     /// Ejércitos cuyo estado cambió (ordenados, sin repetir).
     pub ejercitos: Vec<u64>,
+    /// Plazas cuyo estado cambió (ordenadas, sin repetir).
+    pub asentamientos: Vec<u64>,
     pub eventos: Vec<EventoNucleo>,
 }
 
@@ -110,6 +181,13 @@ pub struct Estado {
     pub rng: Rng,
     pub siguiente_id: u64,
     pub ejercitos: BTreeMap<u64, Ejercito>,
+    pub asentamientos: BTreeMap<u64, Asentamiento>,
+    /// Parcela de bosque (índice del artefacto) → asentamiento que la explota.
+    pub parcelas_ocupadas: BTreeMap<u32, u64>,
+    /// Pares de plazas `(menor id, mayor id)` de Facciones distintas cuyas zonas ya se han tocado (nunca se separan).
+    pub contactos: BTreeSet<(u64, u64)>,
+    /// Nivel de cada Facción (1 si no consta): fija su cap de fundación. Lo gobernará la experiencia de Facción.
+    pub niveles_faccion: BTreeMap<u32, u32>,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     por_lider: HashMap<String, u64>,
@@ -130,6 +208,10 @@ impl Estado {
             rng: Rng::derivado(semilla, "nucleo"),
             siguiente_id: 1,
             ejercitos: BTreeMap::new(),
+            asentamientos: BTreeMap::new(),
+            parcelas_ocupadas: BTreeMap::new(),
+            contactos: BTreeSet::new(),
+            niveles_faccion: BTreeMap::new(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             por_lider: HashMap::new(),
@@ -175,6 +257,16 @@ impl Estado {
         w.i64(r.consumo_estacionado);
         w.u32(r.viveres_bajos_pct);
         w.u64(r.limite_idempotencia as u64);
+        let t = &r.territorio;
+        w.i64(t.radio_inicial);
+        w.u32(t.techos.len() as u32);
+        t.techos.iter().for_each(|&x| w.i64(x));
+        w.i64(t.crecimiento_por_minuto);
+        w.i64(t.separacion_plazas);
+        w.i64(t.exclusion_campamento);
+        w.u32(t.cap_por_nivel.len() as u32);
+        t.cap_por_nivel.iter().for_each(|&x| w.u32(x));
+        w.u32(t.cuota_parcelas_pct);
         w.u64(self.version);
         w.i64(self.ahora);
         w.u32(self.factor_milesimas);
@@ -203,7 +295,36 @@ impl Estado {
             w.opt_i64(v.maximo);
             w.opt_i64(v.minimo);
             w.i64(e.capacidad_viveres);
+            w.bool(e.caravana_fundacion);
             w.u64(e.version);
+        }
+
+        w.u64(self.asentamientos.len() as u64);
+        for a in self.asentamientos.values() {
+            w.u64(a.id);
+            w.u32(a.faccion);
+            w.punto(a.posicion);
+            w.u32(a.nivel);
+            w.i64(a.fundado_en);
+            let v = &a.radio;
+            w.i64(v.valor_en_t0);
+            w.i64(v.t0);
+            w.i64(v.por_minuto);
+            w.opt_i64(v.maximo);
+            w.opt_i64(v.minimo);
+            w.u32(a.parcelas.len() as u32);
+            a.parcelas.iter().for_each(|&p| w.u32(p));
+            w.u64(a.version);
+        }
+        w.u64(self.contactos.len() as u64);
+        for &(a, b) in &self.contactos {
+            w.u64(a);
+            w.u64(b);
+        }
+        w.u64(self.niveles_faccion.len() as u64);
+        for (&f, &n) in &self.niveles_faccion {
+            w.u32(f);
+            w.u32(n);
         }
 
         let gens = self.generaciones.volcar();
@@ -235,6 +356,12 @@ impl Estado {
                     w.u64(*a);
                     w.u64(*b);
                 }
+                Carga::ZonaTecho => w.u8(3),
+                Carga::ZonaContacto { otra, otra_generacion } => {
+                    w.u8(4);
+                    w.u64(*otra);
+                    w.u32(*otra_generacion);
+                }
             }
         }
 
@@ -265,6 +392,19 @@ impl Estado {
             consumo_estacionado: r.i64()?,
             viveres_bajos_pct: r.u32()?,
             limite_idempotencia: r.u64()? as usize,
+            territorio: {
+                let radio_inicial = r.i64()?;
+                let mut techos = Vec::new();
+                for _ in 0..r.u32()? {
+                    techos.push(r.i64()?);
+                }
+                let (crecimiento_por_minuto, separacion_plazas, exclusion_campamento) = (r.i64()?, r.i64()?, r.i64()?);
+                let mut cap_por_nivel = Vec::new();
+                for _ in 0..r.u32()? {
+                    cap_por_nivel.push(r.u32()?);
+                }
+                ReglasTerritorio { radio_inicial, techos, crecimiento_por_minuto, separacion_plazas, exclusion_campamento, cap_por_nivel, cuota_parcelas_pct: r.u32()? }
+            },
         };
         if &guardadas != reglas {
             return Err(ErrorFormato("las reglas de la foto no coinciden con las pedidas"));
@@ -292,7 +432,7 @@ impl Estado {
                 maximo: r.opt_i64()?,
                 minimo: r.opt_i64()?,
             };
-            let (capacidad_viveres, version) = (r.i64()?, r.u64()?);
+            let (capacidad_viveres, caravana_fundacion, version) = (r.i64()?, r.bool()?, r.u64()?);
             s.insertar(Ejercito {
                 id,
                 lider,
@@ -303,8 +443,28 @@ impl Estado {
                 plan: Plan { generacion, vertices },
                 viveres,
                 capacidad_viveres,
+                caravana_fundacion,
                 version,
             });
+        }
+
+        for _ in 0..r.cuenta()? {
+            let (id, faccion, posicion, nivel, fundado_en) = (r.u64()?, r.u32()?, r.punto()?, r.u32()?, r.i64()?);
+            let radio = Ritmo { valor_en_t0: r.i64()?, t0: r.i64()?, por_minuto: r.i64()?, maximo: r.opt_i64()?, minimo: r.opt_i64()? };
+            let mut parcelas = BTreeSet::new();
+            for _ in 0..r.u32()? {
+                let p = r.u32()?;
+                s.parcelas_ocupadas.insert(p, id);
+                parcelas.insert(p);
+            }
+            let version = r.u64()?;
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, nivel, fundado_en, radio, parcelas, version });
+        }
+        for _ in 0..r.cuenta()? {
+            s.contactos.insert((r.u64()?, r.u64()?));
+        }
+        for _ in 0..r.cuenta()? {
+            s.niveles_faccion.insert(r.u32()?, r.u32()?);
         }
 
         let mut gens = Vec::new();
@@ -322,6 +482,8 @@ impl Estado {
                 0 => Carga::Llegada,
                 1 => Carga::Umbral(r.i64()?),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
+                3 => Carga::ZonaTecho,
+                4 => Carga::ZonaContacto { otra: r.u64()?, otra_generacion: r.u32()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };
             eventos.push(Evento { instante, prioridad, secuencia, clave, carga });

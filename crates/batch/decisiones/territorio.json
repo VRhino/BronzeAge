@@ -1,0 +1,66 @@
+{
+  "resumen": "La mecánica de territorio funciona: las tres reglas de distancia, la cuota de bosque y el determinismo salen en verde, y el tiempo hasta la primera plaza es corto. Lo que falla es la materia prima del mundo frente al tamaño de las zonas: con radios de 6 a 30 unidades, el generador deja muy poca piedra y muy pocas parcelas de bosque dentro de una zona, así que solo el 7 % de las plazas nace con bosque libre y piedra, más de la mitad nunca tiene piedra a su alcance y 3 de cada 4 Leñeras se quedan sin parcela. No es un fallo del código: es la escala de los datos del mundo, que aún es la anterior a la calibración de distancias.",
+  "anomalias": [
+    {
+      "titulo": "Piedra y bosque escasos para el tamaño de las zonas",
+      "detalle": "El mundo tiene 560 nodos de piedra y 5.858 parcelas de bosque para 3,4 millones de unidades² de tierra transitable: un nodo de piedra cada ~6.000 u² y una parcela cada ~580 u². Una zona de nivel 1 (radio 10) mide 314 u², así que contiene de media 0,05 nodos de piedra y 0,5 parcelas. Los conteos del generador son los de antes de reducir las zonas a la quinta parte; solo se recalibró el espaciado mínimo (4 / 7 / 20), no el total.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "La tierra lejana queda sin cubrir por la población sintética",
+      "detalle": "Estaño y oro cubiertos al 100 % en el foco, 36-50 % en la frontera y 0 % lejos, pero los nodos sí se reparten 4,8 / 25 / 70 % por anillo como se decidió. La población del batch nunca se aleja más de 120 u de su campamento; el gradiente se medirá de verdad con los bots de la fase 7.",
+      "causa": "medicion"
+    },
+    {
+      "titulo": "El 25 % de las Facciones no consigue plaza",
+      "detalle": "400 Facciones sobre 9 campamentos son ~44 por foco, casi la capacidad estimada (45); además la política sintética solo busca entre 30 y 120 u del campamento y se rinde tras 6 reintentos. Un jugador real caminaría más lejos. Se vigilará con los bots, no se corrige aquí.",
+      "causa": "medicion"
+    },
+    {
+      "titulo": "El tiempo se va en consultar viabilidad",
+      "detalle": "99 % de los 82 s son 1,08 millones de llamadas a la consulta de viabilidad (~75 µs cada una), que recorre todas las parcelas y piedras del mundo y recompone la lista de plazas en cada llamada. Aceptable con 400 Facciones; con miles de bots habrá que añadir un índice espacial.",
+      "causa": "codigo"
+    }
+  ],
+  "decisiones": [
+    {
+      "id": "D1",
+      "pregunta": "¿Cómo arreglamos la escasez de piedra y de parcelas de bosque dentro de las zonas?",
+      "contexto": "Con los datos de hoy, una plaza que nace con bosque libre y piedra en su zona inicial es una rareza (1-2 % de los puntos fundables), y sin piedra no hay Cantera ni nivel 2 (Doc 1.2). La causa es que los totales del mundo no se rescalaron cuando las zonas se redujeron a la quinta parte.",
+      "opciones": [
+        {
+          "texto": "Rescalar los datos del mundo: piedra ×10 (unos 5.600 nodos) y parcelas de bosque con rp = 4 en vez de 8 (unas 4 veces más, y cada una rinde en proporción a su área). Metales y su gradiente 5 / 25 / 70 no cambian.",
+          "recomendada": true,
+          "efecto": "Mantiene las zonas y las distancias que ya calibramos. Hay que regenerar el mundo (~12 min) y repetir este batch; si sigue en rojo, vuelvo con los números exactos en vez de adivinar."
+        },
+        {
+          "texto": "Agrandar las zonas: radio inicial 10 y techos ×1,5 (15 / 22 / 30 / 37 / 45).",
+          "recomendada": false,
+          "efecto": "Toca la calibración de distancias y el diseño de fronteras: más solapes entre plazas vecinas y más recorte. No arregla las parcelas, solo las alcanza desde más lejos."
+        },
+        {
+          "texto": "Aceptar que «verde» sea raro: se funda casi siempre en ámbar y la madera y la piedra llegan al crecer la zona con los niveles.",
+          "recomendada": false,
+          "efecto": "No toca nada, pero pierde la garantía de arrancar con madera (Doc 1.2) y retrasa el primer nivel."
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "pregunta": "¿A qué velocidad crece la zona hacia su techo?",
+      "contexto": "El canon dice «crece gradualmente cada minuto» pero no da la cifra. Con 0,2 unidades por minuto, una plaza de nivel 1 pasa de radio 6 a 10 en 20 minutos y se queda ahí hasta subir de nivel (días). Es un valor provisional.",
+      "opciones": [
+        {
+          "texto": "0,2 u/min (techo del nivel 1 a los 20 min).",
+          "recomendada": true,
+          "efecto": "La zona útil llega pronto; las fronteras entre vecinos se fijan en la primera hora, así que quien funda cerca de otro lo sabe enseguida."
+        },
+        {
+          "texto": "0,05 u/min (techo del nivel 1 a los 80 min).",
+          "recomendada": false,
+          "efecto": "Crecimiento más gradual y visible, pero las primeras horas se juegan con la zona pequeña y los problemas de piedra y bosque del D1 duran más."
+        }
+      ]
+    }
+  ]
+}

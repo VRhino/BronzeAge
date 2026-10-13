@@ -25,6 +25,21 @@ pub enum Comando {
     Estacionar { ejercito: u64 },
     /// Solo administración.
     Reloj(AccionReloj),
+    /// Nivel de una Facción (fija su cap de fundación). Solo administración; lo sustituirá la experiencia de Facción.
+    FijarNivelFaccion { faccion: u32, nivel: u32 },
+    /// Engancha una Caravana de Fundación a la columna. Solo administración; lo sustituirán la compra en un campamento y el
+    /// lanzamiento desde una plaza.
+    DarCaravanaFundacion { ejercito: u64 },
+    /// Funda una plaza donde está la columna, gastando su caravana (Doc 1.8).
+    Fundar { ejercito: u64 },
+    /// Sube el nivel de una plaza (y con él el techo de su zona). Solo administración; lo sustituirá el ascenso.
+    FijarNivelAsentamiento { asentamiento: u64, nivel: u32 },
+    /// Agranda la zona de una plaza (un edificio completado: 1 unidad). Solo administración; lo llamará la construcción.
+    AgrandarZona { asentamiento: u64, milesimas: Mil },
+    /// Una Leñera pide su parcela de bosque (Doc 1.9c). Solo administración; lo llamará la construcción.
+    ReclamarParcela { asentamiento: u64 },
+    /// Una Leñera destruida devuelve su parcela. Solo administración.
+    SoltarParcela { asentamiento: u64, parcela: u32 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -87,6 +102,38 @@ impl Peticion {
                     }
                 }
             }
+            Comando::FijarNivelFaccion { faccion, nivel } => {
+                w.u8(5);
+                w.u32(*faccion);
+                w.u32(*nivel);
+            }
+            Comando::DarCaravanaFundacion { ejercito } => {
+                w.u8(6);
+                w.u64(*ejercito);
+            }
+            Comando::Fundar { ejercito } => {
+                w.u8(7);
+                w.u64(*ejercito);
+            }
+            Comando::FijarNivelAsentamiento { asentamiento, nivel } => {
+                w.u8(8);
+                w.u64(*asentamiento);
+                w.u32(*nivel);
+            }
+            Comando::AgrandarZona { asentamiento, milesimas } => {
+                w.u8(9);
+                w.u64(*asentamiento);
+                w.i64(*milesimas);
+            }
+            Comando::ReclamarParcela { asentamiento } => {
+                w.u8(10);
+                w.u64(*asentamiento);
+            }
+            Comando::SoltarParcela { asentamiento, parcela } => {
+                w.u8(11);
+                w.u64(*asentamiento);
+                w.u32(*parcela);
+            }
         }
         w.0
     }
@@ -113,6 +160,13 @@ impl Peticion {
                 3 => AccionReloj::AvanzarHasta(r.i64()?),
                 _ => return Err(ErrorFormato("acción de reloj desconocida")),
             }),
+            5 => Comando::FijarNivelFaccion { faccion: r.u32()?, nivel: r.u32()? },
+            6 => Comando::DarCaravanaFundacion { ejercito: r.u64()? },
+            7 => Comando::Fundar { ejercito: r.u64()? },
+            8 => Comando::FijarNivelAsentamiento { asentamiento: r.u64()?, nivel: r.u32()? },
+            9 => Comando::AgrandarZona { asentamiento: r.u64()?, milesimas: r.i64()? },
+            10 => Comando::ReclamarParcela { asentamiento: r.u64()? },
+            11 => Comando::SoltarParcela { asentamiento: r.u64()?, parcela: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -131,6 +185,15 @@ pub mod rechazos {
     pub const OBJETIVO_NO_SOPORTADO: &str = "objetivo.no_soportado";
     pub const RELOJ_INVALIDO: &str = "reloj.invalido";
     pub const LIDER_REPETIDO: &str = "heroe.ya_tiene_columna";
+    pub const SIN_MUNDO: &str = "mundo.no_cargado";
+    pub const ASENTAMIENTO_DESCONOCIDO: &str = "asentamiento.desconocido";
+    pub const SIN_CARAVANA: &str = "fundacion.sin_caravana";
+    pub const CAP_ALCANZADO: &str = "fundacion.cap_alcanzado";
+    pub const NIVEL_INVALIDO: &str = "nivel.invalido";
+    pub const ZONA_INVALIDA: &str = "zona.invalida";
+    pub const PARCELA_SIN_LIBRES: &str = "parcela.sin_libres";
+    pub const PARCELA_CUPO_AGOTADO: &str = "parcela.cupo_agotado";
+    pub const PARCELA_AJENA: &str = "parcela.no_es_tuya";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -148,7 +211,7 @@ pub struct Respuesta {
     pub resultado: Resultado,
     /// Versión de mundo con los efectos ya aplicados.
     pub version_tras: u64,
-    /// Ejércitos creados por la orden.
+    /// Ejércitos o plazas creados por la orden.
     pub creadas: Vec<u64>,
 }
 

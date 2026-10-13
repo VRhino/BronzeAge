@@ -75,6 +75,7 @@ impl GeneradorDeEventos for GeneradorEncuentros {
             codigo: "ejercito.encuentro".into(),
             en: t,
             ejercitos: vec![lo, hi],
+            asentamientos: vec![],
             punto: Some(punto),
             datos: vec![("faccionA", fa), ("faccionB", fb)],
         });
@@ -144,6 +145,7 @@ impl GeneradorDeEventos for GeneradorVision {
                 codigo: "vision.contacto".into(),
                 en: t,
                 ejercitos: vec![visto],
+                asentamientos: vec![],
                 punto: None,
                 datos: vec![("faccionQueVe", a as i64), ("faccionVista", b as i64)],
             });

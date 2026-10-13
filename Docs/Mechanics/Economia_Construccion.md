@@ -89,8 +89,8 @@ Validaciones, en este orden (cada una lanza `FundacionInvalidaError`):
 
 1. Entre 1 y `FUNDACION.maxJugadoresFundacionGrupal` (5) héroes fundadores.
 2. La posición está dentro del mapa.
-3. `posicionLibreParaFundar`: el punto **no cae dentro del polígono de zona ya recortado de ningún asentamiento existente** (de cualquier Facción, también la propia).
-4. El terreno no es `cima`. (`agua` no se comprueba aquí: la rechaza `fundarConCaravana`, que es la única vía de fundar.)
+3. `posicionLibreParaFundar`: el punto **no cae dentro de la zona real (recortada) de ningún asentamiento existente** (de cualquier Facción, también la propia) y está **a `separacionPlazas` (30) o más de cualquier plaza** (Doc 1.0a: con zonas pequeñas la separación manda).
+4. El terreno no es `cima`, ni `agua`, ni una celda **no transitable** del artefacto (río sin vado, pendiente: la plaza quedaría incomunicada). En Rust las tres comprobaciones de terreno van antes que las de zona y distancia.
 5. La Facción existe y no ha llegado al tope de fundación `calcularCapFundacion(nivel de Facción)` (cuenta los asentamientos que ya tiene).
 
 `exigirPuertaDeFundacion` (mínimo de fundadores `FUNDACION.minFundadoresParaFaccionNueva`, ciudadanía previa `exigeCiudadaniaPrevia`) es una función aparte para fundar una **Facción
@@ -102,7 +102,7 @@ Estado inicial:
 id            = 'asentamiento-<nº de asentamientos existentes>-<round x>-<round y>-t<floor(fundadoEn / 60000)>'
                 (el minuto de mundo lo hace único si se refunda donde cayó otro; el id es además la semilla del trazado urbano)
 nivel = nivelActual = 1;  rachaMantenimientoSano = 0;  medidorMantenimiento = 100
-radioPotencial = ZONA_INFLUENCIA.radioInicial
+radioPotencial = ritmo { valor ZONA_INFLUENCIA.radioInicial, +crecimientoPorMinuto/min, techo = radioMaximoPorNivel[1] }   (§3.1)
 poblacion      = { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 }
 almacen[tipo]  = { cantidad: FUNDACION.materialesIniciales[tipo] ?? 0, capacidad: ALMACEN.capacidadInicialPorRecurso }   (los 29 tipos)
 edificios      = centroUrbano (0,0) + FUNDACION.viviendasIniciales viviendas + 1 granja, todos 'activo' y de ámbito 'asentamiento',
@@ -120,9 +120,16 @@ Leñera en la zona real con que nacería ∧ hay ≥ 1 nodo de piedra sin explot
 
 ### 3.1 Zona de influencia
 
-`computeZonaInfluencia(a, todos)`: polígono de `segmentosPoligono` (48) lados inscrito en el círculo de radio `radioPotencial`, recortado (Sutherland-Hodgman) por un semiplano contra
-**cada asentamiento de otra Facción cuyo círculo toque el suyo** (distancia ≤ suma de radios × (1+1e-6)). El plano de frontera pasa a `distancia × r_propio / (r_propio + r_rival)` del centro propio:
-la frontera se reparte según el poder relativo y se mueve cuando crece un radio. Los de la **misma** Facción no se recortan (se solapan). El radio crece por obra (§6.1 paso 4) y nunca por tiempo.
+> **Implementado en Rust (2026-10-13)**: `crates/territorio/src/zona.rs` (reglas puras) y `crates/nucleo/src/nucleo/zonas.rs` (estado, eventos y órdenes). Lo que sigue sustituye a la versión por tick de `computeZonaInfluencia`.
+
+La zona es un **disco** (centro = la plaza) cuyo radio es un **ritmo**: nace en `radioInicial` (6) y crece `crecimientoPorMinuto` por minuto hacia el **techo de su nivel** (10 / 15 / 20 / 25 / 30). Cada edificio completado la agranda de golpe `crecimientoPorEdificioCompletado` (1), sin pasar del techo (`AgrandarZona`; lo llamará la construcción). Subir de nivel solo levanta el techo: el radio sigue desde donde estaba (`FijarNivelAsentamiento`; lo llamará el ascenso). No hay barrido: el radio en cualquier instante sale de `valor + ritmo · Δt`.
+
+Eventos de la cola (prioridad 4, «crecimiento»), ligados a la generación de la plaza y rehechos cada vez que su ritmo cambia (fundar, subir de nivel, agrandar):
+
+- **`zona.techo`**: el instante en que el radio llega al techo.
+- **`zona.frontera`**: para cada vecina de **otra Facción** cuyos techos permiten alcanzarse, el instante **exacto** en que la suma de los dos radios llega a la distancia entre centros (resuelto como ecuación lineal por tramos: cada radio es lineal hasta su techo). Se anuncia una sola vez por pareja (`Estado.contactos`); las zonas nunca se separan.
+
+**Fronteras duras.** Desde el contacto la zona de una plaza queda recortada por un semiplano contra cada vecina de otra Facción que la toca: la frontera pasa a `d · r_propio / (r_propio + r_rival)` del centro propio, perpendicular a la recta que une los centros, y **se mueve** cuando crece un radio. Los de la **misma** Facción no se recortan (se solapan). Pertenecer a la zona es una consulta exacta en enteros (`Nucleo::en_zona`: `(p − c)·(o − c)·(r + r') ≤ d²·r`, sin raíces); el polígono de 48 lados (`Nucleo::poligono_zona`, Sutherland-Hodgman) es solo presentación (`Asentamiento.zona`) y no entra en ninguna decisión ni en el hash. En el contrato el radio viaja como `Ritmo` (`Asentamiento.radio_potencial`), así que el cliente anima el crecimiento sin mensajes.
 
 ## 4. Almacén
 
@@ -2097,6 +2104,9 @@ Los bloques de parámetros de este documento son los del motor TypeScript. Valor
 | `ZONA_INFLUENCIA.radioInicial` | 30 | **6** |
 | `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **10 / 15 / 20 / 25 / 30** |
 | `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **1** |
+| `ZONA_INFLUENCIA.crecimientoPorMinuto` | — (el radio crecía solo por obra) | **0,2** (placeholder; decisión D2 del informe de territorio) |
+| `ZONA_INFLUENCIA.separacionPlazas` | — | **30** (Doc 1.0a) |
+| `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
 | `ESCALA.unidadesLocalesPorUnidadMapa` | 40 | **200** (la ciudad ocupa un 80 % menos del mapa) |
 | `radioUrbanoDe` | = radioPotencial | **radioPotencial × 6** |
 | `MANTENIMIENTO.escalaDistancia` | 400 | **80** |

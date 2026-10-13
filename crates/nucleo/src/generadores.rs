@@ -19,6 +19,7 @@ use cola::Clave;
 #[derive(Default)]
 pub(crate) struct Transicion {
     pub tocados: Vec<u64>,
+    pub asentamientos: Vec<u64>,
     pub eventos: Vec<EventoNucleo>,
 }
 

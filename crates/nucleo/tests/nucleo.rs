@@ -341,7 +341,7 @@ impl nucleo::GeneradorDeEventos for Espia {
     fn al_vencer(&mut self, cx: &mut nucleo::Cx<'_>, entidad: u64, tipo: u16, _a: u64, _b: u64) {
         assert_eq!(tipo, 1);
         let punto = cx.estado().ejercitos[&entidad].plan.posicion_en(cx.ahora());
-        cx.emitir(nucleo::EventoNucleo { codigo: "espia.medio".into(), en: cx.ahora(), ejercitos: vec![entidad], punto, datos: vec![] });
+        cx.emitir(nucleo::EventoNucleo { codigo: "espia.medio".into(), en: cx.ahora(), ejercitos: vec![entidad], asentamientos: vec![], punto, datos: vec![] });
     }
 }
 

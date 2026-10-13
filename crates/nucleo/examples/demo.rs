@@ -92,7 +92,7 @@ fn main() {
 
     // ── El núcleo y las columnas ──
     let ajustes = Ajustes { retencion_cambios: 1 << 20, muestreo_ms: 250, ..Ajustes::default() };
-    let mut nucleo = Nucleo::nuevo(Arranque { reglas: Reglas::default(), ajustes, semilla, inicio: 0, rutas, mundo_hash: mundo.hash().to_owned() });
+    let mut nucleo = Nucleo::nuevo(Arranque { reglas: Reglas::default(), ajustes, semilla, inicio: 0, rutas, mundo_hash: mundo.hash().to_owned(), mundo: None });
     // Encuentros exactos entre columnas y visión muestreada cada 250 ms (generadores espaciales del núcleo).
     nucleo.agregar_generador(Box::new(GeneradorEncuentros::nuevo()));
     nucleo.agregar_generador(Box::new(GeneradorVision::nuevo()));

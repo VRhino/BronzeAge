@@ -43,7 +43,7 @@ pub fn reticula(w: i64, h: i64) -> Arc<Rutas> {
 }
 
 pub fn arranque(rutas: Arc<Rutas>) -> Arranque {
-    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla: 42, inicio: 0, rutas, mundo_hash: "hash-de-prueba".into() }
+    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla: 42, inicio: 0, rutas, mundo_hash: "hash-de-prueba".into(), mundo: None }
 }
 
 pub fn nucleo(w: i64, h: i64) -> Nucleo {

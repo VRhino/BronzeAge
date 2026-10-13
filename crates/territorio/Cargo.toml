@@ -1,0 +1,8 @@
+[package]
+name = "territorio"
+version = "0.1.0"
+edition = "2021"
+description = "Reglas puras de mundo y territorio (fase 6): zonas de influencia y fronteras, fundación, parcelas de bosque"
+
+[dependencies]
+base = { path = "../base" }
