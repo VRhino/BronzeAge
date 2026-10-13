@@ -1,0 +1,10 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  # Nombres en español (snake_case) y mensajes de batalla en inglés (contrato v1 de Unity): se revisan con `buf lint`.
+breaking:
+  use:
+    - FILE
