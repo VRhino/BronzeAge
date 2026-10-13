@@ -169,7 +169,7 @@ o que `guarnicionOcupada(heroe) + costeLiderazgo(esa tropa) > cupo` (`guarnicion
 **`retirarGuarnicion`**: rechaza si esa escuadra no está en la guarnición o está reservada para una batalla; la deja `enGuarnicion = false`.
 
 Mientras una escuadra está en la guarnición, el héroe **no puede sacarla** de la plaza (la salida a campaña lo rechaza: `El escuadrón … está en la guarnición`). Dejar de residir suelta la guarnición (`sinGuarnicion`).
-El campamento (todas las escuadras con `contenedor: campamento` de los residentes) **come del almacén de la plaza**: `avanzarMantenimientoTropas` (tick, paso 5) llama a `avanzarRacion(campamento, trigo del almacén)` con factor 1 y 0 participantes, y descuenta el trigo consumido del almacén ([`Tick.md`](Tick.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.3).
+El campamento (todas las escuadras con `contenedor: campamento` de los residentes) **come del almacén de la plaza**: `avanzarMantenimientoTropas` (tick, paso 5) llama a `avanzarRacion(campamento, trigo del almacén)` con factor 1 y 0 participantes, y descuenta el trigo consumido del almacén ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.3).
 
 ## 8. Orden de las escuadras (`ordenarEscuadras`)
 

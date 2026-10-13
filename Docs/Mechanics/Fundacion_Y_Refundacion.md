@@ -14,7 +14,7 @@ Cubre la **Caravana de Fundación** —la única forma de fundar un asentamiento
   - El campamento de mercenarios donde se compra: su colocación → [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §11; su mercado y sus residentes → [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9. El almacén personal → `Movimiento_Ejercitos.md` §3.
   - Interceptar la caravana de fundación → [`Combate.md`](Combate.md) §7.1. Las demás caravanas (`comercial`) → `Comercio_Caravanas.md`.
 
-Corre dentro del tick en `avanzarCaravanasDeFundacion` (paso 22 de la cadena; ver [`Tick.md`](Tick.md)).
+Corre dentro del tick en `avanzarCaravanasDeFundacion` (paso 22 de la cadena; ver [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)).
 
 ## 2. Modelo de datos
 

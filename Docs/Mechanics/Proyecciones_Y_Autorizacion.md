@@ -485,7 +485,7 @@ Cada grupo guarda **una** foto (ya filtrada para su audiencia) y una `version` (
 ```
 <!-- /parametros -->
 
-Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve nadie, solo cuánto tarda en llegar. La duración de la sesión (`ACCESO.duracionSesionMs`, §2.1) y `INFRA.limiteIdempotencia` (§3, [`Tick.md`](Tick.md) §8) son las otras dos. Las del juego que intervienen en lo que se ve (`VISION`, `INSPECCION`, `INTEL`, `ALMACEN_PERSONAL`…) están en [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §7.
+Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve nadie, solo cuánto tarda en llegar. La duración de la sesión (`ACCESO.duracionSesionMs`, §2.1) y `INFRA.limiteIdempotencia` (§3, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §8) son las otras dos. Las del juego que intervienen en lo que se ve (`VISION`, `INSPECCION`, `INTEL`, `ALMACEN_PERSONAL`…) están en [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §7.
 
 ## 9. Invariantes
 

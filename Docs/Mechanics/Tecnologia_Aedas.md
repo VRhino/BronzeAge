@@ -67,7 +67,7 @@ Todos los contadores se **suman** salvo `plazasEnNivel.N`, que es un **récord**
 
 ## 3. El tick de tecnología (`avanzarTecnologia`)
 
-Corre al final de la cadena del tick ([`Tick.md`](Tick.md) §5.3, paso 19), después de sumar los contadores de producción. Determinista y **sin generador aleatorio**.
+Corre al final de la cadena del tick ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §5.3, paso 19), después de sumar los contadores de producción. Determinista y **sin generador aleatorio**.
 
 ```
 0. récords:  para N en {2, 3}:  ahora = nº de plazas con nivelActual ≥ N;  si ahora > contadores['plazasEnNivel.N'] → se guarda
@@ -197,7 +197,7 @@ A lo sumo **llega uno por plaza y tick**; si sigue habiendo cupo, la espera vuel
 su Era ha empezado; **no ha aparecido** a la Facción; y ningún otro Aeda de la Facción canta ya su épica. Crea `epica = { tecnologiaId, capitulo: 0, hechos: 0, claves: [] }` (evento `aedas.epica_empieza`). No cuesta oro. Una épica puede empezar aunque la tecnología solo esté revelada, o ni eso.
 `abandonarEpica` borra la épica en curso y todo lo avanzado (`aedas.epica_abandonada`).
 
-**Hechos inspiradores** (`hechosDeEventos`), sacados de los eventos de cada tick o comando (se evalúan en `exito`, [`Tick.md`](Tick.md) §7):
+**Hechos inspiradores** (`hechosDeEventos`), sacados de los eventos de cada tick o comando (se evalúan en `exito`, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §7):
 
 | Hecho | Evento | De quién | Clave irrepetible |
 |---|---|---|---|

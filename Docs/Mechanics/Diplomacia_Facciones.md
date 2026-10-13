@@ -583,7 +583,7 @@ siguen, residen en campamentos y puede volver a fundar (al fundar, `derrotadaPor
 La crónica de los Aedas canta la anexión, la fusión, la liberación de vasallos y los títulos (→ `Tecnologia_Aedas.md`).
 
 ## 10. Orden dentro del tick
-(Paso a paso en [`Tick.md`](Tick.md).) Liberar vasallos de señores desarmados → tributo → experiencia de construcción y niveles → `avanzarReputacion` y `sinSolicitudesCaducadas` → reposición de mercados → títulos.
+(Paso a paso en [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md).) Liberar vasallos de señores desarmados → tributo → experiencia de construcción y niveles → `avanzarReputacion` y `sinSolicitudesCaducadas` → reposición de mercados → títulos.
 
 ## 11. Invariantes
 

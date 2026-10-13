@@ -18,7 +18,7 @@ partida) y los **campamentos de bandidos** (aparecen en el tick).
   - Qué ve cada cual de un alijo o de un campamento → [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md). Atacar un campamento de bandidos y su botín → [`Combate.md`](Combate.md) §7.2.
   - Los **contornos fusionados** de bosques y zonas (`world/poligonos.ts`, `Mapa.contornosBosques`): campo de distancia con signo + marching squares, **solo para dibujar**; ninguna regla los consulta.
 
-Quién llama a qué: `GameSession.crear` genera el mapa (`generarMapa`) y, sobre él, los campamentos y los alijos; el tick llama a `mapa.avanzarRegeneracion` (paso 7) y a `avanzarSpawnBandidos` (paso 8) y `avanzarAtaquesBandidos` (paso 9); ver [`Tick.md`](Tick.md).
+Quién llama a qué: `GameSession.crear` genera el mapa (`generarMapa`) y, sobre él, los campamentos y los alijos; el tick llama a `mapa.avanzarRegeneracion` (paso 7) y a `avanzarSpawnBandidos` (paso 8) y `avanzarAtaquesBandidos` (paso 9); ver [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md).
 
 ## 2. Modelo de datos
 

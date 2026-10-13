@@ -9,7 +9,7 @@ Cubre **dónde está un héroe** (los cuatro sitios posibles y cómo pasa de uno
 - **Canon:** [`Docs/Game/1_Sistema_de_Mundo_y_Territorio.md`](../Game/1_Sistema_de_Mundo_y_Territorio.md) 1.10 (el héroe está situado), [`Docs/Game/5_Sistema_Militar_y_Combate.md`](../Game/5_Sistema_Militar_y_Combate.md) 5.12.1 y 5.14.5.
 - **No está aquí** (está en su documento):
   - Qué hace por dentro `salirAlMundo` / `salirDelCampamento` / `movilizarEjercito` (elegir tropa, Liderazgo, cargar el carro, ruta) → [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §3; terminar la campaña, `caravanasAlEntrar`, inspeccionar → §11–§12; juntar y separar columnas, formar un ejército en campo → §10.
-  - La **desconexión que aplica el tick** (`salirDelMundo`: cuándo, aplazamiento, qué pasa con la columna) → [`Tick.md`](Tick.md) §4.1. Aquí solo los comandos que la piden y la cancelan.
+  - La **desconexión que aplica el tick** (`salirDelMundo`: cuándo, aplazamiento, qué pasa con la columna) → [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §4.1. Aquí solo los comandos que la piden y la cancelan.
   - La regla de la **puerta** (grupos, capas, exilio) → [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md); aquí, los dos comandos que la fijan.
   - La **niebla** que se graba al salir y la foto del interior → [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md).
   - Dónde defiende un héroe que está dentro de una plaza cuando la atacan → [`Combate.md`](Combate.md) §3.2.
@@ -118,7 +118,7 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
   - Si estaba `fuera`: `volverAlMundo`. Dentro de una plaza o un campamento solo recupera el control. Si salió con su columna, **reaparece en su punto** con una columna personal nueva (`ejercito-{ids.siguiente()}`): `tipo personal`, `estacionado`, `politicaDeUnion rechazar`, `liderId` él, `suministro` = su carro de `fuera`, `escuadronIds` = sus escuadras `contenedor: fuera` (que vuelven a `ejercito`), `faccionId` la de su ciudadanía (o `''`), `origenAsentamientoId` su residencia (o `''`). Evento `jugador.vuelve_al_mundo` atribuido a su residencia.
 - **En plena batalla de Unity** los dos comandos **no llevan el candado** de batalla: `desconectarse` se anota (`desconectaEn`) pero el tick no lo aplica mientras el héroe combate —sale en el primer tick tras acabar—, y `conectarse` la anula ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §5.1).
 - **Fuera del mundo no se da ninguna orden**: la autorización rechaza todo menos `conectarse` con el motivo `fuera_del_mundo`.
-- Quién lo aplica y cuándo: el tick ([`Tick.md`](Tick.md) §4.1). Lo pide el cliente al cerrarse, o el runner de bots al acabar su sesión.
+- Quién lo aplica y cuándo: el tick ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §4.1). Lo pide el cliente al cerrarse, o el runner de bots al acabar su sesión.
 
 ## 8. Fijar la puerta y vetar
 

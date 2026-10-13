@@ -128,7 +128,7 @@ battleId = a '-' b[0..4) '-' b[4..8) '-' c[0..4) '-' c[4..16)
 
 `bloqueosDe(estado, ahora)` reúne, de las activas: los **héroes que combaten** (`participacionesDe`), los ids de `bloqueo.ejercitoIds`, `caravanaIds`, el `asentamientoId` asediado y el `campamentoId` atacado.
 
-- **En el tick**: lo bloqueado **no se simula** (los ejércitos y caravanas bloqueados se apartan, no se mueven, no comen, no son perseguidos; vuelven al final de las listas), y el héroe bloqueado **no sale del mundo** aunque cumpla su espera ([`Tick.md`](Tick.md) §4.1).
+- **En el tick**: lo bloqueado **no se simula** (los ejércitos y caravanas bloqueados se apartan, no se mueven, no comen, no son perseguidos; vuelven al final de las listas), y el héroe bloqueado **no sale del mundo** aunque cumpla su espera ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §4.1).
 - **En un comando** (`conCandadoDeBatalla` envuelve **todo el registro** salvo los comandos de §5.1): se rechaza con **`batalla.bloqueado`** (200, `ok: false`, sin gastar un dado ni un id) si `tocaLoBloqueado(estado, ahora, actor, params)`:
 
 ```

@@ -15,7 +15,7 @@ peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ru
   bandidos, la inmunidad dentro de una zona (→ [`Combate.md`](Combate.md)); la **Caravana de Fundación** (→ [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md)); el Mercado como edificio (costes, niveles,
   puestos) y las políticas como sistema (→ `Economia_Construccion.md`); el generador aleatorio (el comercio **no consume** ninguna tirada).
 
-El comercio corre en el paso 6 de la cadena del tick (`avanzarComercio`) y las órdenes caducan en el paso 12 (`caducarOrdenes`); ver [`Tick.md`](Tick.md).
+El comercio corre en el paso 6 de la cadena del tick (`avanzarComercio`) y las órdenes caducan en el paso 12 (`caducarOrdenes`); ver [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md).
 
 ## 2. Modelo de datos
 

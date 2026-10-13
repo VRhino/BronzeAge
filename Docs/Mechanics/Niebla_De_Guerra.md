@@ -85,7 +85,7 @@ Una celda cuenta como vista cuando lo está **su centro** (la niebla se retira u
 
 ### 4.1 En el tick (`grabarLoVisto`, al FINAL de la cadena)
 
-Se ejecuta al final de `avanzarSimulacion` ([`Tick.md`](Tick.md) §5.3, paso 24), con las posiciones ya movidas: se graba dónde acabó cada columna este minuto, no de dónde salió.
+Se ejecuta al final de `avanzarSimulacion` ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §5.3, paso 24), con las posiciones ya movidas: se graba dónde acabó cada columna este minuto, no de dónde salió.
 
 ```
 para cada Facción con algún ojo propio (sus plazas + sus columnas con faccionId == la suya):
