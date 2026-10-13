@@ -1,2 +1,4 @@
 node_modules/
 salida/
+# Código TypeScript generado desde proto/ por `npm run generar`
+src/gen/
