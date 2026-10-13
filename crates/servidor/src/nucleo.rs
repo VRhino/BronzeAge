@@ -1,0 +1,157 @@
+//! La interfaz entre el servidor de sesiones y el núcleo (que se escribe aparte), más la configuración y el reloj compartido.
+
+use std::{
+    collections::BTreeMap,
+    future::Future,
+    sync::{Arc, RwLock},
+    time::{Duration, Instant as Pared},
+};
+
+use base::{Instante, RelojMundo};
+use contrato::v1::{
+    Aviso, Bienvenida, Delta, ErrorSesion, Foto, Hola, MensajeDeServidorDeBatalla, MensajeParaServidorDeBatalla, Orden,
+    Rectangulo, Reloj, ResultadoOrden, Revocado, TipoCliente,
+};
+use tokio::sync::{mpsc, oneshot};
+
+/// Identificador de sesión que asigna el servidor (único mientras el proceso vive). El núcleo lo usa para direccionar.
+pub type SesionId = u64;
+
+/// Códigos de `ErrorSesion.codigo` que emite este crate.
+pub mod codigos {
+    pub const TOKEN_INVALIDO: &str = "token_invalido";
+    pub const VERSION_PROTOCOLO: &str = "version_protocolo";
+    pub const DEMASIADAS_ORDENES: &str = "demasiadas_ordenes";
+    pub const ROL_NO_PERMITIDO: &str = "rol_no_permitido";
+    pub const INTERNO: &str = "interno";
+    /// Aditivo: el primer mensaje del cliente no fue `Hola`.
+    pub const HOLA_ESPERADO: &str = "hola_esperado";
+    /// Aditivo: trama no decodificable, de texto, o `MensajeDeCliente` vacío.
+    pub const MENSAJE_INVALIDO: &str = "mensaje_invalido";
+}
+
+/// Quién es el dueño del token. Lo devuelve el [`Autenticador`].
+#[derive(Clone, Debug)]
+pub struct Identidad {
+    /// Una sola sesión viva por `cliente_id`.
+    pub cliente_id: String,
+    /// Tipos de cliente que este token puede abrir (`Hola.cliente` debe estar aquí, si no `rol_no_permitido`).
+    pub roles: Vec<TipoCliente>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ErrorAcceso {
+    /// Inválido o caducado → `token_invalido`.
+    Invalido,
+    /// El servicio de acceso no responde → `interno`.
+    NoDisponible,
+}
+
+/// Servicio de acceso (fase 3). Asíncrona porque normalmente consulta otro servicio.
+pub trait Autenticador: Send + Sync + 'static {
+    fn autenticar(&self, token: &str) -> impl Future<Output = Result<Identidad, ErrorAcceso>> + Send;
+}
+
+/// Del servidor al núcleo.
+#[derive(Debug)]
+pub enum ComandoSesion {
+    /// Sesión autenticada que pide entrar. El núcleo decide la reanudación con `hola.versiones_conocidas`, contesta por
+    /// `respuesta` con la `Bienvenida` (o un `ErrorSesion`; el servidor lo manda y cierra) y empieza a escribir en `difusion`.
+    /// El servidor sobrescribe `Bienvenida.maximo_ordenes_pendientes` con su configuración.
+    Conecta {
+        sesion: SesionId,
+        identidad: Identidad,
+        hola: Hola,
+        difusion: mpsc::Sender<Difusion>,
+        respuesta: oneshot::Sender<Result<Bienvenida, ErrorSesion>>,
+    },
+    /// Un segundo `Hola` en una sesión abierta: reanudar (p. ej. tras detectar un hueco de secuencia). Clave `"TIPO:id"`.
+    Reanuda { sesion: SesionId, versiones_conocidas: BTreeMap<String, u64> },
+    Orden { sesion: SesionId, orden: Orden },
+    Vista { sesion: SesionId, rect: Rectangulo },
+    /// Mensaje de un servidor de batalla (solo si la sesión es `CLIENTE_SERVIDOR_BATALLA`).
+    Batalla { sesion: SesionId, mensaje: MensajeDeServidorDeBatalla },
+    /// La sesión terminó (cliente, red, expulsión o error). Llega siempre tras un `Conecta`, aceptado o no: el núcleo ignora ids que no conoce.
+    Desconecta { sesion: SesionId },
+}
+
+/// Del núcleo a una sesión, ya construido. El servidor solo numera, comprime y envía, en el orden recibido.
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)] // mensajes Protobuf: se mueven una vez por canal, no vale la pena el Box
+pub enum Difusion {
+    Foto(Foto),
+    Delta(Delta),
+    Resultado(ResultadoOrden),
+    Revocado(Revocado),
+    Aviso(Aviso),
+    Batalla(MensajeParaServidorDeBatalla),
+    /// Error de sesión originado en el núcleo; si es `fatal`, la sesión se cierra tras enviarlo.
+    Cerrar(ErrorSesion),
+}
+
+/// Parámetros del servidor.
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub max_ordenes_pendientes: u32,
+    /// Tiempo máximo para recibir `Hola` y que el núcleo conteste.
+    pub timeout_hola: Duration,
+    /// Tiempo máximo para escribir una trama a un cliente; si lo supera, la sesión se cierra (cliente lento).
+    pub timeout_escritura: Duration,
+    /// Capacidad del canal núcleo → sesión.
+    pub capacidad_difusion: usize,
+    /// Tamaño máximo de una trama del cliente, ya descomprimida.
+    pub max_trama_cliente: usize,
+    /// Tamaño mínimo (bytes) de una trama saliente para comprimirla, si el cliente negoció zstd.
+    pub umbral_compresion: usize,
+    pub nivel_zstd: i32,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            max_ordenes_pendientes: 64,
+            timeout_hola: Duration::from_secs(5),
+            timeout_escritura: Duration::from_secs(10),
+            capacidad_difusion: 1024,
+            max_trama_cliente: 1 << 20,
+            umbral_compresion: 256,
+            nivel_zstd: 3,
+        }
+    }
+}
+
+/// El reloj de mundo compartido entre el núcleo (que lo gobierna) y las sesiones (que lo sirven en `Pong`).
+/// «Pared» es el tiempo monótono en ms desde que se creó este reloj: el núcleo debe usar la misma noción.
+#[derive(Clone)]
+pub struct RelojCompartido {
+    reloj: Arc<RwLock<RelojMundo>>,
+    origen: Pared,
+}
+
+impl RelojCompartido {
+    /// Reloj con `mundo` como instante actual, a ritmo normal.
+    pub fn nuevo(mundo: Instante) -> Self {
+        Self { reloj: Arc::new(RwLock::new(RelojMundo::nuevo(0, mundo))), origen: Pared::now() }
+    }
+    pub fn pared_ms(&self) -> i64 {
+        self.origen.elapsed().as_millis() as i64
+    }
+    pub fn mundo_ahora(&self) -> Instante {
+        self.con(|r, pared| r.mundo_en(pared))
+    }
+    /// Lee o muta el reloj; la función recibe también la pared actual.
+    pub fn con<R>(&self, f: impl FnOnce(&mut RelojMundo, i64) -> R) -> R {
+        let pared = self.pared_ms();
+        let mut g = self.reloj.write().unwrap_or_else(|e| e.into_inner());
+        f(&mut g, pared)
+    }
+    /// El `Reloj` Protobuf en este instante.
+    pub fn reloj(&self) -> Reloj {
+        self.con(|r, pared| Reloj {
+            mundo_ms: r.mundo_en(pared),
+            factor_milesimas: r.factor_milesimas(),
+            pausado: r.pausado(),
+            servidor_ms: pared,
+        })
+    }
+}

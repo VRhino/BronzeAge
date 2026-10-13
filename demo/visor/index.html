@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BronzeAge - visor de la demo</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --fondo: #f4f1ea; --panel: #ffffff; --texto: #1d2230; --suave: #5d6577; --linea: #d6d2c7;
+  --acento: #2563eb; --mar: #cfe3ee;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --fondo: #14171f; --panel: #1c212c; --texto: #e6e9f0; --suave: #98a1b5; --linea: #323a4a;
+    --acento: #6ea0ff; --mar: #0f2433;
+  }
+}
+:root[data-tema="oscuro"] {
+  --fondo: #14171f; --panel: #1c212c; --texto: #e6e9f0; --suave: #98a1b5; --linea: #323a4a;
+  --acento: #6ea0ff; --mar: #0f2433;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--fondo); color: var(--texto); font: 14px/1.35 system-ui, sans-serif; display: flex; flex-direction: column; }
+header, footer { background: var(--panel); border-color: var(--linea); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 16px; }
+header { border-bottom: 1px solid; }
+footer { border-top: 1px solid; }
+h1 { font-size: 15px; margin: 0; font-weight: 600; }
+button, select, input[type=text] { font: inherit; color: var(--texto); background: var(--fondo); border: 1px solid var(--linea); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--acento); }
+button.activo { background: var(--acento); color: #fff; border-color: var(--acento); }
+.grupo { display: flex; gap: 4px; align-items: center; }
+#reloj { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 110px; }
+main { flex: 1; display: flex; min-height: 0; }
+#lienzo-caja { flex: 1; position: relative; min-width: 0; background: var(--mar); }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+canvas.arrastrando { cursor: grabbing; }
+#estado { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--linea); border-radius: 6px; padding: 6px 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+#estado b { color: var(--acento); }
+#aviso { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 16px; }
+#aviso > div { background: var(--panel); border: 1px solid var(--linea); border-radius: 8px; padding: 16px 20px; max-width: 460px; }
+aside { width: 320px; background: var(--panel); border-left: 1px solid var(--linea); display: flex; flex-direction: column; min-height: 0; }
+aside section { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); margin: 0; padding: 8px 12px 4px; }
+aside section + section { border-top: 1px solid var(--linea); }
+ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 60px; }
+li { padding: 4px 12px; cursor: pointer; border-left: 3px solid transparent; }
+li:hover { background: var(--fondo); }
+li.futuro { opacity: .45; }
+li.sel { border-left-color: var(--acento); background: var(--fondo); }
+li small { color: var(--suave); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+#filtro { margin: 0 12px 6px; }
+#info { padding: 4px 12px 8px; font-size: 12px; color: var(--suave); font-variant-numeric: tabular-nums; min-height: 34px; }
+input[type=range] { flex: 1; min-width: 160px; accent-color: var(--acento); }
+@media (max-width: 760px) {
+  main { flex-direction: column; }
+  aside { width: auto; height: 38%; border-left: 0; border-top: 1px solid var(--linea); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="titulo">BronzeAge - visor de la demo</h1>
+  <div class="grupo">
+    <button id="play" title="Espacio">Play</button>
+    <span id="reloj">0:00:00</span>
+  </div>
+  <div class="grupo" id="velocidades">
+    <button data-v="1">x1</button><button data-v="10">x10</button><button data-v="60">x60</button><button data-v="600">x600</button>
+  </div>
+  <div class="grupo">
+    <button id="ajustar" title="Encuadrar todo el mundo">Encuadrar</button>
+    <button id="tema" title="Claro / oscuro">Tema</button>
+    <button id="abrir">Abrir demo.json</button>
+    <input id="archivo" type="file" accept=".json,application/json" hidden>
+  </div>
+</header>
+<main>
+  <div id="lienzo-caja">
+    <canvas id="lienzo"></canvas>
+    <div id="estado"></div>
+    <div id="aviso"><div id="aviso-texto"></div></div>
+  </div>
+  <aside>
+    <section>
+      <h2>Eventos <span id="n-ev"></span></h2>
+      <ul id="eventos"></ul>
+    </section>
+    <section>
+      <h2>Entidades <span id="n-ent"></span></h2>
+      <input id="filtro" type="text" placeholder="Filtrar por nombre o id">
+      <ul id="lista"></ul>
+      <div id="info"></div>
+    </section>
+  </aside>
+</main>
+<footer>
+  <input id="barra" type="range" min="0" max="1" step="1" value="0" aria-label="Instante de mundo">
+</footer>
+<script>
+'use strict';
+// ---------------------------------------------------------------------------
+// Estado. Todo en milésimas de unidad estratégica (posición) y ms de mundo (tiempo).
+// ---------------------------------------------------------------------------
+const $ = id => document.getElementById(id);
+const lienzo = $('lienzo'), ctx = lienzo.getContext('2d');
+const D = { // datos cargados, planes aplanados en arrays tipados para evaluar sin asignar memoria
+  demo: null, N: 0,
+  T: null, X: null, Y: null,          // vértices de todos los planes, uno tras otro
+  ini: null, fin: null, cur: null,    // por entidad: rango [ini, fin) y cursor de tramo cacheado
+  PX: null, PY: null, VIS: null,      // posición evaluada en este fotograma
+  orden: null,                        // índices ordenados por color (menos cambios de fillStyle)
+  SX: null, SY: null,                 // pantalla (para elegir con clic)
+  terreno: null, // canvas fuera de pantalla con 1 px por celda
+};
+const V = { cx: 0, cy: 0, s: 0.0003, ancho: 100, alto: 100, dpr: 1 }; // vista: centro en mundo, px CSS por milésima
+const R = { t: 0, vel: 60, play: false, sel: -1, seguir: false, arrastrandoBarra: false, ultimo: 0 };
+const M = { fotogramas: 0, evalsTotal: 0, ventFot: 0, ventEv: 0, ventMsEval: 0, ventMsDib: 0, ventT0: performance.now(), fps: 0, evalsPorS: 0, msEval: 0, msDib: 0 };
+let colores = {}, evIdx = 0, evLis = [], entLis = [];
+
+const PALETAS = { // 1 agua, 2 costa, 3 llano, 4 colina, 5 montaña, 6 cima
+  claro:  [null, '#a9cbe0', '#e6dcb0', '#b8cf8e', '#9db071', '#8b8b86', '#f2f2ee'],
+  oscuro: [null, '#14344a', '#4a4a34', '#2f4a2c', '#3d5030', '#58585a', '#a9acb4'],
+};
+
+function tema() {
+  const forzado = document.documentElement.dataset.tema;
+  if (forzado) return forzado;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro';
+}
+function leerColores() {
+  const c = getComputedStyle(document.documentElement);
+  const g = n => c.getPropertyValue(n).trim();
+  colores = { mar: g('--mar'), texto: g('--texto'), suave: g('--suave'), acento: g('--acento'), panel: g('--panel') };
+  pintarTerreno();
+}
+
+// ---------------------------------------------------------------------------
+// Carga
+// ---------------------------------------------------------------------------
+function aviso(txt) { $('aviso').style.display = txt ? 'flex' : 'none'; $('aviso-texto').innerHTML = txt || ''; }
+
+async function cargarURL(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(url + ': HTTP ' + r.status);
+  return r.json();
+}
+
+function cargar(demo) {
+  const ents = demo.entidades || [];
+  const N = ents.length;
+  let total = 0;
+  for (const e of ents) total += e.plan.length;
+  const T = new Float64Array(total), X = new Float64Array(total), Y = new Float64Array(total);
+  const ini = new Int32Array(N), fin = new Int32Array(N), cur = new Int32Array(N);
+  let k = 0, avisos = 0;
+  ents.forEach((e, i) => {
+    ini[i] = k; cur[i] = k;
+    for (const p of e.plan) {
+      if (k > ini[i] && p.t < T[k - 1]) avisos++; // instantes que retroceden: el plan es inválido
+      T[k] = p.t; X[k] = p.x; Y[k] = p.y; k++;
+    }
+    fin[i] = k;
+  });
+  const orden = Array.from({ length: N }, (_, i) => i).sort((a, b) => (ents[a].color || '').localeCompare(ents[b].color || ''));
+  Object.assign(D, {
+    demo, N, T, X, Y, ini, fin, cur, orden,
+    PX: new Float64Array(N), PY: new Float64Array(N), VIS: new Uint8Array(N),
+    SX: new Float32Array(N), SY: new Float32Array(N),
+  });
+  const m = demo.mundo;
+  D.terreno = null;
+  if (m.terreno && m.terreno.base64) {
+    const bin = atob(m.terreno.base64), n = m.terreno.columnas * m.terreno.filas;
+    if (bin.length !== n) console.warn('terreno: ' + bin.length + ' bytes, se esperaban ' + n);
+    D.celdas = Uint8Array.from(bin, ch => ch.charCodeAt(0));
+  }
+  pintarTerreno();
+  $('titulo').textContent = demo.titulo || 'Demo';
+  document.title = 'BronzeAge - ' + (demo.titulo || 'demo');
+  const barra = $('barra');
+  barra.max = demo.duracion_ms; R.t = 0; R.sel = -1; R.seguir = false; evIdx = 0;
+  construirEventos(); construirLista();
+  encuadrar();
+  aviso(avisos ? 'Aviso: ' + avisos + ' vértices con instante decreciente.' : '');
+  if (avisos) setTimeout(() => aviso(''), 4000);
+  pausar();
+}
+
+function pintarTerreno() {
+  const m = D.demo && D.demo.mundo;
+  if (!m || !D.celdas) return;
+  const { columnas, filas } = m.terreno, pal = PALETAS[tema()];
+  const c = document.createElement('canvas'); c.width = columnas; c.height = filas;
+  const cx = c.getContext('2d'), img = cx.createImageData(columnas, filas);
+  const rgb = pal.map(h => h && [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+  for (let i = 0; i < D.celdas.length; i++) {
+    const col = rgb[D.celdas[i]];
+    if (col) { img.data[4 * i] = col[0]; img.data[4 * i + 1] = col[1]; img.data[4 * i + 2] = col[2]; img.data[4 * i + 3] = 255; }
+  }
+  cx.putImageData(img, 0, 0);
+  D.terreno = c;
+}
+
+// ---------------------------------------------------------------------------
+// Evaluación de planes: lo que hará el cliente real. Sin posiciones por tick.
+// Búsqueda binaria del tramo + cursor cacheado: en reproducción normal el tramo
+// es el mismo o el siguiente, así que el coste por entidad es O(1).
+// ---------------------------------------------------------------------------
+function evaluarTodo(t) {
+  const { N, T, X, Y, ini, fin, cur, PX, PY, VIS } = D;
+  for (let i = 0; i < N; i++) {
+    const s = ini[i], e = fin[i];
+    if (e === s || t < T[s]) { VIS[i] = 0; continue; }
+    VIS[i] = 1;
+    if (t >= T[e - 1]) { PX[i] = X[e - 1]; PY[i] = Y[e - 1]; cur[i] = Math.max(s, e - 2); continue; } // plan agotado: se queda quieta
+    let c = cur[i];
+    if (!(c >= s && c < e - 1 && T[c] <= t && t < T[c + 1])) {
+      if (c + 1 < e - 1 && c >= s && T[c + 1] <= t && t < T[c + 2]) c++;       // caso normal al avanzar
+      else { let lo = s, hi = e - 2;                                           // búsqueda binaria: último c con T[c] <= t
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (T[mid] <= t) lo = mid; else hi = mid - 1; }
+        c = lo; }
+      cur[i] = c;
+    }
+    const f = (t - T[c]) / (T[c + 1] - T[c]);
+    PX[i] = X[c] + (X[c + 1] - X[c]) * f; PY[i] = Y[c] + (Y[c + 1] - Y[c]) * f;
+  }
+  M.ventEv += N; M.evalsTotal += N;
+}
+
+// ---------------------------------------------------------------------------
+// Vista
+// ---------------------------------------------------------------------------
+function ajustarLienzo() {
+  const r = lienzo.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  V.ancho = r.width; V.alto = r.height; V.dpr = d;
+  lienzo.width = Math.round(r.width * d); lienzo.height = Math.round(r.height * d);
+}
+function encuadrar() {
+  if (!D.demo) return;
+  const m = D.demo.mundo;
+  V.cx = m.ancho / 2; V.cy = m.alto / 2;
+  V.s = Math.min(V.ancho / m.ancho, V.alto / m.alto) * 0.98;
+  R.seguir = false;
+}
+const aX = x => (x - V.cx) * V.s + V.ancho / 2, aY = y => (y - V.cy) * V.s + V.alto / 2;
+function centrar(x, y) { V.cx = x; V.cy = y; }
+function zoomEn(px, py, factor) {
+  const min = Math.min(V.ancho / D.demo.mundo.ancho, V.alto / D.demo.mundo.alto) * 0.4, max = 0.2;
+  const s2 = Math.min(max, Math.max(min, V.s * factor));
+  const wx = (px - V.ancho / 2) / V.s + V.cx, wy = (py - V.alto / 2) / V.s + V.cy;
+  V.s = s2; V.cx = wx - (px - V.ancho / 2) / V.s; V.cy = wy - (py - V.alto / 2) / V.s;
+}
+
+// ---------------------------------------------------------------------------
+// Dibujo
+// ---------------------------------------------------------------------------
+function trazoPlan(i, t0, t1) { // polilínea del plan de la entidad i entre los instantes t0 y t1
+  const { T, X, Y, ini, fin } = D, s = ini[i], e = fin[i];
+  if (e - s < 1) return false;
+  let primero = true;
+  const punto = (x, y) => { if (primero) { ctx.moveTo(aX(x), aY(y)); primero = false; } else ctx.lineTo(aX(x), aY(y)); };
+  const en = t => { // posición en t (acotada al plan)
+    if (t <= T[s]) return [X[s], Y[s]];
+    if (t >= T[e - 1]) return [X[e - 1], Y[e - 1]];
+    let lo = s, hi = e - 2;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (T[m] <= t) lo = m; else hi = m - 1; }
+    const f = (t - T[lo]) / (T[lo + 1] - T[lo]);
+    return [X[lo] + (X[lo + 1] - X[lo]) * f, Y[lo] + (Y[lo + 1] - Y[lo]) * f];
+  };
+  const a = en(t0); punto(a[0], a[1]);
+  for (let k = s; k < e; k++) if (T[k] > t0 && T[k] < t1) punto(X[k], Y[k]);
+  const b = en(t1); punto(b[0], b[1]);
+  return true;
+}
+
+function dibujar() {
+  const d = V.dpr;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.fillStyle = colores.mar; ctx.fillRect(0, 0, V.ancho, V.alto);
+  if (!D.demo) return;
+  const m = D.demo.mundo, t = R.t, N = D.N;
+  if (D.terreno) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(D.terreno, aX(0), aY(0), m.ancho * V.s, m.alto * V.s);
+  } else { ctx.fillStyle = 'rgba(128,128,128,.15)'; ctx.fillRect(aX(0), aY(0), m.ancho * V.s, m.alto * V.s); }
+  ctx.strokeStyle = colores.suave; ctx.lineWidth = 1; ctx.strokeRect(aX(0), aY(0), m.ancho * V.s, m.alto * V.s);
+
+  // campamentos
+  ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+  for (const c of D.demo.campamentos || []) {
+    const x = aX(c.x), y = aY(c.y);
+    if (x < -20 || y < -20 || x > V.ancho + 20 || y > V.alto + 20) continue;
+    ctx.fillStyle = colores.panel; ctx.strokeStyle = colores.texto; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x + 6, y + 5); ctx.lineTo(x - 6, y + 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+    if (V.s > 0.0002) { ctx.fillStyle = colores.texto; ctx.fillText(c.id, x + 9, y); }
+  }
+
+  // planes y estelas
+  const chico = N <= 200, estela = N <= 2000;
+  const trailMs = Math.max(60000, R.vel * 5000);
+  if (chico) { // plan entero atenuado
+    ctx.lineWidth = 1; ctx.globalAlpha = 0.28;
+    for (let i = 0; i < N; i++) {
+      if (i === R.sel) continue;
+      ctx.strokeStyle = D.demo.entidades[i].color || '#888';
+      ctx.beginPath(); if (trazoPlan(i, -Infinity, Infinity)) ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (estela) {
+    ctx.lineWidth = 2; ctx.globalAlpha = 0.8;
+    for (let i = 0; i < N; i++) {
+      if (!D.VIS[i]) continue;
+      ctx.strokeStyle = D.demo.entidades[i].color || '#888';
+      ctx.beginPath(); if (trazoPlan(i, t - trailMs, t)) ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (R.sel >= 0) { // el plan del seleccionado: pasado a trazos, futuro continuo
+    const e = D.demo.entidades[R.sel];
+    ctx.strokeStyle = e.color || '#888'; ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]); ctx.beginPath(); if (trazoPlan(R.sel, -Infinity, t)) ctx.stroke();
+    ctx.setLineDash([]); ctx.beginPath(); if (trazoPlan(R.sel, t, Infinity)) ctx.stroke();
+    for (let k = D.ini[R.sel]; k < D.fin[R.sel]; k++) { // vértices
+      ctx.fillStyle = colores.panel; ctx.beginPath(); ctx.arc(aX(D.X[k]), aY(D.Y[k]), 3, 0, 6.2832); ctx.fill(); ctx.stroke();
+    }
+    if (D.VIS[R.sel] && e.radio_vision) {
+      ctx.globalAlpha = 0.12; ctx.fillStyle = e.color || '#888';
+      ctx.beginPath(); ctx.arc(aX(D.PX[R.sel]), aY(D.PY[R.sel]), e.radio_vision * V.s, 0, 6.2832); ctx.fill();
+      ctx.globalAlpha = 1; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.arc(aX(D.PX[R.sel]), aY(D.PY[R.sel]), e.radio_vision * V.s, 0, 6.2832); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  // eventos recientes (anillo que se apaga con la edad, en tiempo de mundo)
+  const vida = Math.max(120000, R.vel * 4000);
+  for (const ev of D.demo.eventos || []) {
+    if (ev.t > t || t - ev.t > vida || ev.x == null) continue;
+    const f = (t - ev.t) / vida, r = 6 + 22 * f;
+    ctx.globalAlpha = 1 - f; ctx.strokeStyle = '#e11d48'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(aX(ev.x), aY(ev.y), r, 0, 6.2832); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // entidades: puntos. Con muchas, fillRect agrupado por color.
+  const ents = D.demo.entidades, w = V.ancho, h = V.alto;
+  let col = null;
+  if (N <= 600) {
+    for (let i = 0; i < N; i++) {
+      if (!D.VIS[i]) continue;
+      const x = aX(D.PX[i]), y = aY(D.PY[i]); D.SX[i] = x; D.SY[i] = y;
+      ctx.fillStyle = ents[i].color || '#888'; ctx.strokeStyle = colores.panel; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.2832); ctx.fill(); ctx.stroke();
+    }
+  } else {
+    for (const i of D.orden) {
+      if (!D.VIS[i]) continue;
+      const x = aX(D.PX[i]), y = aY(D.PY[i]); D.SX[i] = x; D.SY[i] = y;
+      if (x < -3 || y < -3 || x > w || y > h) continue;
+      const c = ents[i].color || '#888';
+      if (c !== col) { ctx.fillStyle = c; col = c; }
+      ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+    }
+  }
+  if (R.sel >= 0 && D.VIS[R.sel]) { // anillo y nombre del seleccionado
+    const x = aX(D.PX[R.sel]), y = aY(D.PY[R.sel]);
+    ctx.strokeStyle = colores.texto; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 9, 0, 6.2832); ctx.stroke();
+    ctx.fillStyle = colores.texto; ctx.font = '12px system-ui, sans-serif'; ctx.fillText(ents[R.sel].nombre || ents[R.sel].id, x + 13, y - 11);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bucle
+// ---------------------------------------------------------------------------
+function fmt(ms) {
+  const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+  return (d ? d + 'd ' : '') + h + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+}
+const un = v => (v / 1000).toFixed(1);
+
+function bucle(ahora) {
+  requestAnimationFrame(bucle);
+  const dt = Math.min(100, ahora - R.ultimo); R.ultimo = ahora;
+  if (!D.demo) return;
+  if (R.play) {
+    R.t += dt * R.vel;
+    if (R.t >= D.demo.duracion_ms) { R.t = D.demo.duracion_ms; pausar(); }
+  }
+  const t0 = performance.now();
+  evaluarTodo(R.t);
+  const t1 = performance.now();
+  if (R.seguir && R.sel >= 0 && D.VIS[R.sel]) centrar(D.PX[R.sel], D.PY[R.sel]);
+  dibujar();
+  const t2 = performance.now();
+  M.fotogramas++; M.ventFot++; M.ventMsEval += t1 - t0; M.ventMsDib += t2 - t1;
+  if (t2 - M.ventT0 >= 1000) { // ventana de 1 s
+    const seg = (t2 - M.ventT0) / 1000;
+    M.fps = M.ventFot / seg; M.evalsPorS = M.ventEv / seg;
+    M.msEval = M.ventMsEval / M.ventFot; M.msDib = M.ventMsDib / M.ventFot;
+    M.ventFot = 0; M.ventEv = 0; M.ventMsEval = 0; M.ventMsDib = 0; M.ventT0 = t2;
+  }
+  actualizarUI();
+}
+
+let ultimaUI = 0;
+function actualizarUI() {
+  $('reloj').textContent = fmt(R.t);
+  if (!R.arrastrandoBarra) $('barra').value = R.t;
+  // eventos pasados / futuros
+  const evs = D.demo.eventos || [];
+  let lo = 0, hi = evs.length; // cuántos eventos con t <= R.t
+  while (lo < hi) { const m = (lo + hi) >> 1; if (evs[m].t <= R.t) lo = m + 1; else hi = m; }
+  if (lo !== evIdx) {
+    for (let k = Math.min(lo, evIdx); k < Math.max(lo, evIdx); k++) evLis[k].classList.toggle('futuro', k >= lo);
+    evIdx = lo;
+  }
+  const ahora = performance.now();
+  if (ahora - ultimaUI < 120) return; // el texto no necesita 60 Hz
+  ultimaUI = ahora;
+  $('estado').innerHTML = '<b>posición evaluada desde el plan: sin tick</b> · ' + D.N.toLocaleString('es') + ' entidades · fotogramas ' +
+    M.fotogramas.toLocaleString('es') + ' · ' + M.fps.toFixed(0) + ' fps · evaluaciones/s ' + Math.round(M.evalsPorS).toLocaleString('es') +
+    ' · evaluar ' + M.msEval.toFixed(2) + ' ms · dibujar ' + M.msDib.toFixed(2) + ' ms · mensajes de posición: 0';
+  if (R.sel >= 0) {
+    const e = D.demo.entidades[R.sel], i = R.sel, n = D.fin[i] - D.ini[i] - 1;
+    const tr = Math.min(n, Math.max(1, D.cur[i] - D.ini[i] + 1));
+    let v = '';
+    if (D.VIS[i] && D.cur[i] + 1 < D.fin[i] && R.t < D.T[D.fin[i] - 1]) {
+      const c = D.cur[i], dx = D.X[c + 1] - D.X[c], dy = D.Y[c + 1] - D.Y[c], dt = D.T[c + 1] - D.T[c];
+      v = ' · ritmo ' + (Math.hypot(dx, dy) / dt).toFixed(2) + ' u/s';
+    }
+    $('info').textContent = (e.nombre || e.id) + ' (' + (e.faccion || '-') + ') · ' + (D.VIS[i] ? '(' + un(D.PX[i]) + ', ' + un(D.PY[i]) + ')' : 'fuera de plan') +
+      ' · tramo ' + tr + '/' + n + v + (R.seguir ? ' · siguiendo' : '');
+  } else $('info').textContent = 'Clic en un punto o en la lista para seleccionar; doble clic en la lista para seguir.';
+}
+
+// ---------------------------------------------------------------------------
+// Paneles
+// ---------------------------------------------------------------------------
+function construirEventos() {
+  const ul = $('eventos'); ul.textContent = '';
+  const evs = D.demo.eventos = (D.demo.eventos || []).slice().sort((a, b) => a.t - b.t);
+  $('n-ev').textContent = '(' + evs.length + ')';
+  const frag = document.createDocumentFragment();
+  evLis = evs.map(ev => {
+    const li = document.createElement('li'); li.className = 'futuro';
+    li.innerHTML = '<small></small><span></span>';
+    li.firstChild.textContent = fmt(ev.t); li.lastChild.textContent = ev.texto || ev.tipo;
+    li.onclick = () => { R.t = ev.t; if (ev.x != null) { R.seguir = false; centrar(ev.x, ev.y); } };
+    frag.appendChild(li); return li;
+  });
+  ul.appendChild(frag);
+}
+
+function construirLista() {
+  const ents = D.demo.entidades, q = $('filtro').value.trim().toLowerCase();
+  $('n-ent').textContent = '(' + ents.length.toLocaleString('es') + ')';
+  const ul = $('lista'); ul.textContent = '';
+  const frag = document.createDocumentFragment(); entLis = []; let n = 0;
+  for (let i = 0; i < ents.length && n < 300; i++) {
+    const e = ents[i];
+    if (q && !((e.nombre || '') + ' ' + e.id).toLowerCase().includes(q)) continue;
+    const li = document.createElement('li'); li.dataset.i = i;
+    li.innerHTML = '<span class="punto"></span><span></span>';
+    li.firstChild.style.background = e.color || '#888';
+    li.lastChild.textContent = (e.nombre || e.id) + (e.faccion ? ' · ' + e.faccion : '');
+    li.onclick = () => seleccionar(i, false);
+    li.ondblclick = () => seleccionar(i, true);
+    frag.appendChild(li); entLis.push(li); n++;
+  }
+  ul.appendChild(frag); marcarSel();
+}
+function marcarSel() { for (const li of entLis) li.classList.toggle('sel', +li.dataset.i === R.sel); }
+function seleccionar(i, seguir) {
+  R.sel = i; R.seguir = !!seguir && i >= 0;
+  if (i >= 0 && D.VIS[i]) centrar(D.PX[i], D.PY[i]);
+  marcarSel();
+}
+
+// ---------------------------------------------------------------------------
+// Controles
+// ---------------------------------------------------------------------------
+function pausar() { R.play = false; $('play').textContent = 'Play'; $('play').classList.remove('activo'); }
+function alternar() {
+  if (!D.demo) return;
+  if (R.play) return pausar();
+  if (R.t >= D.demo.duracion_ms) R.t = 0;
+  R.play = true; $('play').textContent = 'Pausa'; $('play').classList.add('activo');
+}
+function velocidad(v) {
+  R.vel = v;
+  document.querySelectorAll('#velocidades button').forEach(b => b.classList.toggle('activo', +b.dataset.v === v));
+}
+$('play').onclick = alternar;
+document.querySelectorAll('#velocidades button').forEach(b => b.onclick = () => velocidad(+b.dataset.v));
+$('ajustar').onclick = encuadrar;
+$('tema').onclick = () => {
+  const r = document.documentElement;
+  r.dataset.tema = tema() === 'oscuro' ? 'claro' : 'oscuro'; leerColores();
+};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', leerColores);
+$('abrir').onclick = () => $('archivo').click();
+$('archivo').onchange = async e => { const f = e.target.files[0]; if (f) abrirTexto(await f.text()); };
+$('filtro').oninput = () => construirLista();
+const barra = $('barra');
+barra.addEventListener('pointerdown', () => R.arrastrandoBarra = true);
+addEventListener('pointerup', () => R.arrastrandoBarra = false);
+barra.oninput = () => { R.t = +barra.value; };
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+  if (e.code === 'Space') { e.preventDefault(); alternar(); }
+});
+
+// ratón: arrastrar, rueda, clic para elegir
+let arr = null;
+lienzo.addEventListener('pointerdown', e => { lienzo.setPointerCapture(e.pointerId); arr = { x: e.clientX, y: e.clientY, mov: false }; lienzo.classList.add('arrastrando'); });
+lienzo.addEventListener('pointermove', e => {
+  if (!arr) return;
+  const dx = e.clientX - arr.x, dy = e.clientY - arr.y;
+  if (Math.abs(dx) + Math.abs(dy) > 3) arr.mov = true;
+  if (arr.mov) { V.cx -= dx / V.s; V.cy -= dy / V.s; R.seguir = false; arr.x = e.clientX; arr.y = e.clientY; }
+});
+lienzo.addEventListener('pointerup', e => {
+  lienzo.classList.remove('arrastrando');
+  if (arr && !arr.mov && D.demo) { // clic: la entidad más cercana a menos de 10 px
+    const r = lienzo.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    let mejor = -1, md = 100;
+    for (let i = 0; i < D.N; i++) { if (!D.VIS[i]) continue; const d = (D.SX[i] - px) ** 2 + (D.SY[i] - py) ** 2; if (d < md) { md = d; mejor = i; } }
+    seleccionar(mejor, false);
+  }
+  arr = null;
+});
+lienzo.addEventListener('wheel', e => {
+  e.preventDefault(); if (!D.demo) return;
+  const r = lienzo.getBoundingClientRect();
+  zoomEn(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
+}, { passive: false });
+
+function abrirTexto(txt) {
+  try { cargar(JSON.parse(txt)); } catch (err) { aviso('No se pudo leer el archivo: ' + err.message); }
+}
+// arrastrar un archivo sobre la página
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', async e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) abrirTexto(await f.text()); });
+
+new ResizeObserver(ajustarLienzo).observe(lienzo);
+
+// ---------------------------------------------------------------------------
+// Arranque: ?f=archivo.json, si no demo.json, si no ejemplo.json; si todo falla, selector manual
+// ---------------------------------------------------------------------------
+(async function () {
+  ajustarLienzo(); leerColores(); velocidad(60);
+  const q = new URLSearchParams(location.search).get('f');
+  for (const url of q ? [q] : ['demo.json', 'ejemplo.json']) {
+    try { cargar(await cargarURL(url)); requestAnimationFrame(bucle); window.__visor = { D, R, M, V }; return; } catch (err) { console.info('sin ' + url + ': ' + err.message); }
+  }
+  aviso('No se encontró <b>demo.json</b> junto a esta página (o el navegador no deja leerlo desde file://).<br>Usa <b>Abrir demo.json</b> o arrastra el archivo aquí.');
+  requestAnimationFrame(bucle); window.__visor = { D, R, M, V };
+})();
+</script>
+</body>
+</html>

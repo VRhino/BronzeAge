@@ -7,3 +7,8 @@ description = "Sesión en tiempo real del contrato 05 sobre WebSocket: hola, fot
 [dependencies]
 base = { path = "../base" }
 contrato = { path = "../contrato" }
+futures-util = "0.3.34"
+prost = "0.13"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tokio-tungstenite = "0.30.0"
+zstd = "0.14.2"

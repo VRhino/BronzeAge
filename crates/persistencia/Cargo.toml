@@ -6,4 +6,8 @@ description = "Persistencia por registro de eventos y fotos, con recuperación d
 
 [dependencies]
 base = { path = "../base" }
-contrato = { path = "../contrato" }
+sha2 = "0.10"
+zstd = "0.13"
+
+[dev-dependencies]
+tempfile = "3"

@@ -8,3 +8,4 @@ description = "Rutas: A* sobre el grafo de navegaci√≥n del artefacto de mundo ‚Ü
 base = { path = "../base" }
 mundo = { path = "../mundo" }
 contrato = { path = "../contrato" }
+rayon = "1"
