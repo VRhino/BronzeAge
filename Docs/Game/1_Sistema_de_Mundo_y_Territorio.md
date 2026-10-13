@@ -89,7 +89,7 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 - COMMODITIES DE NOBLEZA (uvas/olivas → vino/aceite): no son alimento básico, requeridas para felicidad de la Nobleza; su déficit arriesga rebelión/estancamiento, no hambruna.
 
 ## 1.6 Red de caminos
-Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`. Cifras placeholder.
+Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `typescript-final:Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`. Cifras placeholder.
 
 **El terreno por el que se viaja** (caravanas, ejércitos y fundación, con el mismo pathfinding):
 - **El agua no se cruza** (1.0b).

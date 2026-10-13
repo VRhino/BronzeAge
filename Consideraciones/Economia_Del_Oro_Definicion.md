@@ -4,7 +4,7 @@
 > Tres rondas de decisiones con el usuario. **Cierra la entrada que fue §1 (Impuestos) de
 > `Docs/Mecanicas a desarrollar.md`** y cubre el lado de la DEMANDA que la hace tener sentido (reclutamiento en
 > oro, animales de caravana en oro, intel de taberna). El sink recurrente de intel/taberna se diseñó e
-> implementó después (2026-10-05, `Taberna_Intel_Definicion.md`, Doc 5.12.10). Plan técnico y estado por paso en §10. Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5,
+> implementó después (2026-10-05, `typescript-final:Consideraciones/Taberna_Intel_Definicion.md`, Doc 5.12.10). Plan técnico y estado por paso en §10. Canon escrito: Doc 3 §3.1/§3.13.2, Doc 4 §4.1/§4.4/§4.5,
 > Doc 5 §5.8. Tests: `recaudacionOro` · `presionFiscal` · `reclutamientoOro` (+ ajustes en `caravanas.test.ts`
 > por el buey en oro, y `snapshot_baseline` re-generado por la recaudación).
 >
@@ -225,7 +225,7 @@ acumula** — sin él, `oroMedio` sube sin techo pase lo que pase con las compra
   tamaños de ejército, almacenes ajenos) que la niebla de guerra no da ni a distancia de contacto.
 - **Precio escala con el valor**: intel de una Facción lejana y poderosa cuesta más que la del vecino que ya
   ves. Recurrente = el peaje de jugar informado.
-- **Diseñada e implementada el 2026-10-05** en su propia ficha (`Taberna_Intel_Definicion.md`, reglas en Doc 5.12.10): Mirada (40 de oro + 0,1 por unidad de distancia) e Informe de plaza (60 por nivel), con cupos y cooldowns. Cifras placeholder, a calibrar con batch (`Mecanicas a balancear.md` §18).
+- **Diseñada e implementada el 2026-10-05** en su propia ficha (`typescript-final:Consideraciones/Taberna_Intel_Definicion.md`, reglas en Doc 5.12.10): Mirada (40 de oro + 0,1 por unidad de distancia) e Informe de plaza (60 por nivel), con cupos y cooldowns. Cifras placeholder, a calibrar con batch (`Mecanicas a balancear.md` §18).
 
 ## 5. Política "Presión Fiscal"
 
@@ -286,7 +286,7 @@ acumula** — sin él, `oroMedio` sube sin techo pase lo que pase con las compra
   espiral, temático). Fuera del primer pase.
 - **Diferido — mercenarios** (Doc 3.1), **sueldos de tropa en oro** (upkeep continuo — segundo drenaje militar,
   palanca de reserva si la fricción del reclutamiento no basta).
-- **Ficha nueva:** `Taberna_Intel_Definicion.md` — el sink recurrente (§4.5), hecha el 2026-10-05.
+- **Ficha nueva:** `typescript-final:Consideraciones/Taberna_Intel_Definicion.md` — el sink recurrente (§4.5), hecha el 2026-10-05.
 
 ## 9. Invariantes
 
@@ -540,6 +540,6 @@ intel a la vez.
 
 ### Fuera de este plan
 
-Taberna + intel (`Taberna_Intel_Definicion.md`, hecha el 2026-10-05) — es el sink recurrente, pero es un edificio +
+Taberna + intel (`typescript-final:Consideraciones/Taberna_Intel_Definicion.md`, hecha el 2026-10-05) — es el sink recurrente, pero es un edificio +
 un sistema de información con caducidad, no cabía aquí. Se diseñó y se implementó aparte; la calibración del
 Paso 6 se hace **contando con él** (deja margen de oro; cifras en `Mecanicas a balancear.md` §18).

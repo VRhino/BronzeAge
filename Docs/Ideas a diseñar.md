@@ -50,7 +50,7 @@ algo que se recalcula al vuelo. Hoy las zonas de influencia y las fronteras ajen
 **Estado: `código: ✘` — solo decisiones tomadas en BA-006, sin documento de canon ni una línea de código.** Hasta el
 2026-10-05 estaba repartida entre `Consideraciones/BA-006_Revision_Tecnologia_Eras.md` (sección «Culturas», D12-D27),
 Doc 4 (Sala del Consejo) y Doc 6.1 (roster universal) y no figuraba en esta lista. Se separó de la identidad visual del
-sigilo (`Consideraciones/Identidad_Visual_Definicion.md`, cerrada): **la cultura es del asentamiento y de sus edificios, y no afecta a los sigilos ni a los estandartes de la
+sigilo (`typescript-final:Consideraciones/Identidad_Visual_Definicion.md`, cerrada): **la cultura es del asentamiento y de sus edificios, y no afecta a los sigilos ni a los estandartes de la
 Facción.**
 
 **Lo ya decidido** (BA-006, que sigue siendo su fuente hasta que exista el documento propio):
@@ -165,3 +165,7 @@ Salen de los documentos de decisión que se retiran. Ninguno tiene código.
   columna y del de caravana en un solo tipo `Carro`.
 - **Comercio del forastero** (antes pendiente de `Comercio_Fisico`): que un forastero publique sus propias órdenes en un mercado
   ajeno, y que el Gobernador cierre el mostrador sin cerrar la puerta (dejar pasar pero no vender, o vender solo a aliados).
+- **Siete emblemas del sigilo sin icono** (tarea del lado de Unity; se añaden al catálogo solo con ids nuevos): escudo en ocho,
+  Puerta de los Leones, águila bicéfala hitita, toro alado, árbol sagrado, casco de colmillos y sol de Vergina.
+- **Insignias de títulos de jugador-poseedor**, cuando exista el título «general con más victorias».
+- **Rumores de las tabernas de campamento y «Estado de Facción»**: sin diseñar.

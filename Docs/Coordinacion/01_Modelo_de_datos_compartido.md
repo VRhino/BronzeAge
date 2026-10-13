@@ -1355,7 +1355,7 @@ AedaResidente                   (GameSessionState.aedasResidentes.aedas)
 
 ## 23. Sigilo de Facción (nuevo, 2026-10-05)
 
-Canon: Doc 2 §2.8.1. Decisiones: `Consideraciones/Identidad_Visual_Definicion.md`.
+Canon: Doc 2 §2.8.1. Decisiones: `typescript-final:Consideraciones/Identidad_Visual_Definicion.md`.
 
 ```text
 Sigilo { formaId, campoId, emblemaId, colorPrimarioId, colorSecundarioId,      ids del catálogo, nada más
@@ -1384,7 +1384,7 @@ CatalogoSigilos             `src/contratos/v1/catalogoSigilos.json` (schema `Cat
 ## 24. Intel de las tabernas (nuevo, 2026-10-05)
 
 Canon: Doc 5 §5.12.10 (la intel), Doc 4 §4.2.1 (el edificio) y Doc 1 §1.9b (la taberna del campamento). Decisiones:
-`Consideraciones/Taberna_Intel_Definicion.md`. Información pagada sobre la niebla: **Miradas** (un ojo prestado sobre un punto) e **Informes de
+`typescript-final:Consideraciones/Taberna_Intel_Definicion.md`. Información pagada sobre la niebla: **Miradas** (un ojo prestado sobre un punto) e **Informes de
 plaza** (foto con fecha). **No entran en una batalla**: `BattleTicket` y `BattleResult` no cambian.
 
 ```text

@@ -1,6 +1,6 @@
 # Fase 1 — Verificación de la tabla B
 
-> **Estado (2026-10-13): en curso; ocho documentos verificados y retirados.** Por cada documento ya implementado se comprueba que ninguna decisión viva solo en él: lo
+> **Estado (2026-10-13): en curso; doce documentos verificados y retirados.** Por cada documento ya implementado se comprueba que ninguna decisión viva solo en él: lo
 > vigente tiene que estar en `Docs/Game/` o en `Docs/Mechanics/`; lo abierto, decidido o en `Docs/Ideas a diseñar.md`. Cuando
 > un documento queda verificado se **borra** de `Consideraciones/` (la historia queda en git y en `typescript-final`, decisión
 > del autor del 2026-10-09 y del 2026-10-13). Nada se borra sin tu visto bueno.
@@ -43,6 +43,29 @@ W1 al `Docs/Ideas a diseñar.md` §47; W2 escrito en el canon (2.2: la defensa d
 - **X1.** Pasar a `Docs/Ideas a diseñar.md` los siete emblemas por encargar (tarea del lado de Unity), las insignias de títulos de
   jugador-poseedor, los rumores de las tabernas y el «Estado de Facción». *Recomiendo hacerlo.*
 
+### Decidido de la tercera tanda
+X1 aprobado: emblemas, insignias, rumores y «Estado de Facción» a `Docs/Ideas a diseñar.md`. Retirados `Entrada_Al_Mundo`, `Identidad_Visual`, `Rutas_Caravana_Avanzadas` y `Taberna_Intel`.
+
+## Cuarta tanda (2026-10-13)
+
+| Documento | Resultado | Pendiente de decidir |
+|---|---|---|
+| `Fase_0_5_Definicion_Especializacion_y_Cupos.md` | Cerrado: sus puntos abiertos están resueltos o descartados; el cupo de niveles 4-5 ya está en Ideas §32 (Era V). Las cifras son placeholder y se calibran en la fase 6. | — |
+| `Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` | Cerrado: sus propuestas (techos, radios, almacenes, tope de Viviendas) están en canon 4.5 y `Mechanics/Economia_Construccion.md`. | — |
+| `Checklist_Mecanicas.md` | Índice de estados; lo descartado y lo pospuesto ya figura en `Mecanicas a desarrollar.md` y en Ideas. | — |
+| `Economia_Del_Oro_Definicion.md` | Reglas en canon 3.1, 4.4 y `Mechanics/Economia_Construccion.md`. Quedan ideas diferidas. | Y4, Y5 |
+| `Ocupacion_Post_Conquista_Definicion.md` | Reglas en canon 5.12.9 y `Mechanics/Combate.md`. Un hueco de reglas y varias ideas. | Y1, Y2, Y3, Y4, Y5 |
+
+- **Y1. Caravana aparcada cuando cae la plaza anfitriona.** Hoy nadie la toca: se queda `aparcada` en la posición de una plaza ya
+  enemiga. *Recomiendo que salga a la puerta con la columna de su dueño* (igual que la columna, que «está fuera y la retomas»), y
+  escribirlo en el canon 3.13.7.
+- **Y2. Coste de `cambiarResidencia`.** Hoy solo hay cooldown de 3 días (canon 2.4), sin coste. *Recomiendo dejarlo así.*
+- **Y3. `movilizarEjercito` desde una plaza donde no resides pero tienes guarnición:** el ejército se repliega ahí, no a tu residencia.
+  *Recomiendo confirmarlo como regla* (la tropa vuelve de donde salió).
+- **Y4. A `Docs/Ideas a diseñar.md`:** consolidación explícita de lo conquistado (colonos), revuelta de un asentamiento ocupado,
+  sueldos de tropa en oro (upkeep continuo) y recaudación reducida en un asentamiento degradado.
+- **Y5. A la lista de bots (fase 7, `Arquitectura/12`):** rotación de guarnición del NPC y la política «Presión Fiscal» del NPC.
+
 ## Decidido el 2026-10-13
 
 - **V1** varianza ±15 %: se deja como está (constante del archivo común). **V2** escuadra mermada: regla escrita en el canon (5.11.1). **V3, V4** y la demolición de recintos: a `Docs/Ideas a diseñar.md` §47. **Jerarquía de puertas: descartada.**
@@ -62,7 +85,11 @@ W1 al `Docs/Ideas a diseñar.md` §47; W2 escrito en el canon (2.2: la defensa d
   *Recomiendo `Docs/Ideas a diseñar.md`.*
 - **V5. Jerarquía de puertas** (postigo / puerta / casa-puerta) y **demolición de un recinto completo**. *Recomiendo `Docs/Ideas a diseñar.md`.*
 
-## Quedan por verificar (4)
+## Quedan por verificar
+
+Solo los de la cuarta tanda, a la espera de tu respuesta; después, `Revision_2026-09-08_Economia_Y_Guerra`, `Preguntas_Abiertas`, `NPC_Gobernanza` y `Diarios_Simulaciones_Batch` (descartados) y el vaciado de `Mecanicas a desarrollar.md`.
+
+## (Lista anterior)
 
 `Anexion_Y_Desarme`, `Batalla_Este_Lado`, `Comercio_Fisico`, `Entrada_Al_Mundo`, `Identidad_Visual`, `Revamp_Caravanas`,
 `Rutas_Caravana_Avanzadas`, `Taberna_Intel`, `Fase_0_5_Especializacion_y_Cupos`, `Fase_0_6_Expansion_Niveles_Asentamiento`,
