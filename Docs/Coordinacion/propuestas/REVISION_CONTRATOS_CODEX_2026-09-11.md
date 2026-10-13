@@ -91,7 +91,7 @@ Seleccionar `tokensParticipante[heroeId]` requiere una entrega distinta por dest
 
 No es cierto que todo `Instante` salga hoy como ISO: `src/session/proyecciones/jugador.ts:637` devuelve un número y `src/server/rutas/esquemas.ts:22` declara `instante` numérico. `session/estado.ts` ofrece conversión ISO, pero no convierte recursivamente la proyección. Un lector C# que espere cadenas fallará.
 
-Además, `Instante` es tiempo de MUNDO. La decisión temporal existente conserva el tick tras una caída (`Docs/Arquitectura/10_Modelo_Temporal.md`, «Una caída no consume tiempo de mundo»). Una fecha ISO no convierte ese reloj en UTC real. Vigencia de credenciales, duración de partida real y timeout de infraestructura necesitan identificar su reloj; no pueden compararse indiscriminadamente con el tiempo del mundo.
+Además, `Instante` es tiempo de MUNDO. La decisión temporal existente conserva el tick tras una caída (`typescript-final:Docs/Arquitectura/10_Modelo_Temporal.md`, «Una caída no consume tiempo de mundo»). Una fecha ISO no convierte ese reloj en UTC real. Vigencia de credenciales, duración de partida real y timeout de infraestructura necesitan identificar su reloj; no pueden compararse indiscriminadamente con el tiempo del mundo.
 
 **Propuesta:** documentar el formato actual y, si se cambia, publicar DTO/versión que lo haga explícito. Diferenciar campos de mundo y UTC real. Mantener la política aceptada de timeout en mundo si es la deseada, pero explicar qué sucede durante caída/pausa y no reutilizar ese instante como expiración criptográfica. El núcleo puro no necesita leer el reloj: infraestructura puede aportar el tiempo adecuado.
 

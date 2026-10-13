@@ -490,7 +490,7 @@ Lo detectado al repasar el documento el 2026-09-25. Cada punto se decide cuando 
 ## Era I — CERRADA el 2026-09-25 (D48-D53, P2 aprobada)
 
 > **Bajada al canon el 2026-09-29** (Doc 6.2-6.6, Doc 5.8, Doc 4.2.1): desde ahí manda el canon; lo de abajo queda como
-> historia de las decisiones. Plan de código: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
+> historia de las decisiones. Plan de código: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
 
 Id `reinos_palaciales`. Con D48 el servidor **arranca aquí**. Criterio de reparto: D49 (Era I vive en los
 niveles 1-2, con poca cosa en el 3).
@@ -573,7 +573,7 @@ asentamiento sino el orden de adopción**: arranque → `metalurgia_cobre` → `
 ## Era II — CERRADA el 2026-09-29
 
 > **Bajada al canon el 2026-09-29** (Doc 6.2-6.6, Doc 5.8, Doc 4.2.1): desde ahí manda el canon; lo de abajo queda como
-> historia de las decisiones. Plan de código: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
+> historia de las decisiones. Plan de código: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
 
 Criterio de reparto: D49 (**meseta en el nivel 3**, con cosas sueltas de niveles menores). Con P2 aprobada, el
 Barracón 3, la Galería 3 y las Caballerizas 3 piden nivel 3 + Carpintería 2, y la Armería 3 nivel 3 + Fundición 2
@@ -631,7 +631,7 @@ Al bajar la Era II a código, P1/P2 (Barracón 3 y Armería 3 dejan de pedir Pal
 ## Era III — CERRADA el 2026-09-29
 
 > **Bajada al canon el 2026-09-29** (Doc 6.2-6.6, Doc 5.8, Doc 4.2.1): desde ahí manda el canon; lo de abajo queda como
-> historia de las decisiones. Plan de código: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
+> historia de las decisiones. Plan de código: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
 
 Criterio: D49 (concentrada en el nivel 3, primeras cosas de nivel 4). 7 semanas (11-18).
 
@@ -803,7 +803,7 @@ EV-4 (nombre de la tecnología), EV-7 (logro de `companeros_reales`; el resto de
 ## Cifras para implementar las Eras I-III (aprobadas el 2026-09-29)
 
 > **Bajada al canon el 2026-09-29** (Doc 6.2-6.6, Doc 5.8, Doc 4.2.1): desde ahí manda el canon; lo de abajo queda como
-> historia de las decisiones. Plan de código: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
+> historia de las decisiones. Plan de código: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
 
 Todo placeholder salvo lo que es regla; se calibra con batch.
 

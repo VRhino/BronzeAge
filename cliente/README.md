@@ -84,13 +84,13 @@ paquete npm).
 
 Los hitos de aislamiento del backend C7–C13 están completos y la niebla de guerra, que fue el antiguo
 "Slice 2" de C4, también está implementada. El detalle histórico del aislamiento está en el roadmap
-(`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`) y diagnosticado en
-detalle en `Docs/Arquitectura/4_Plan_Evolucion_Tareas.md` § "Diagnóstico de aislamiento del cliente". Ver
+(`typescript-final:Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`) y diagnosticado en
+detalle en `typescript-final:Docs/Arquitectura/4_Plan_Evolucion_Tareas.md` § "Diagnóstico de aislamiento del cliente". Ver
 también el repositorio `BronzeAgeClient`, que ya prueba que un cliente sin motor puede hablar con este
 backend. **La
 Fase C no se cierra hasta que un cliente sin importar el código del motor de este repo pueda jugar una partida
 completa contra este backend** — eso NO significa cero lógica de dominio en el cliente, ver
-`Docs/Arquitectura/9_Reglas_vs_Simulacion.md` para el eje real (regla de entrada propia vs. simulación /
+`typescript-final:Docs/Arquitectura/9_Reglas_vs_Simulacion.md` para el eje real (regla de entrada propia vs. simulación /
 entrada privilegiada).
 
 ## El administrador observa, no interactúa como jugador (C8, resuelto 2026-08-26)

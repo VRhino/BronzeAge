@@ -225,7 +225,7 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 
 ### Trofeo
 
-**Maravilla** (`Roadmap_Escalado.md` Eje 4) — edificio único de coste extremo, sin recetas ni producción: es un trofeo, no un edificio productivo. Disponible vía control manual de cola (Gobernador/Maestro de Obras, ver 4.2), no auto-construcción. Completarla cierra el ciclo del servidor (Doc 2.9).
+**Maravilla** (`typescript-final:Consideraciones/Roadmap_Escalado.md` Eje 4) — edificio único de coste extremo, sin recetas ni producción: es un trofeo, no un edificio productivo. Disponible vía control manual de cola (Gobernador/Maestro de Obras, ver 4.2), no auto-construcción. Completarla cierra el ciclo del servidor (Doc 2.9).
 - Requisito: Asentamiento en nivel MÁXIMO (nivel 5) y el servidor en la Era V (Doc 6.2).
 - Coste: 5000 madera + 5000 piedra + 500 oro + 300 cobre + 200 estaño + 200 livestock (todos los recursos EN BRUTO del catálogo, varias veces el coste del Palacio). Obra: 4 semanas.
 

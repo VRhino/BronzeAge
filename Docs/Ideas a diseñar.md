@@ -114,7 +114,7 @@ larga distancia?), y qué los consume además de la Maravilla.
 ## 24. Ciclo de servidor de 12 meses + Maravilla + legado NPC
 
 **Estado: el EDIFICIO Maravilla implementado (único, nivel de asentamiento máximo, vía cola manual, coste
-placeholder); el CICLO no.** Diseño cerrado en `Consideraciones/Roadmap_Escalado.md` Eje 4 y
+placeholder); el CICLO no.** Diseño cerrado en `typescript-final:Consideraciones/Roadmap_Escalado.md` Eje 4 y
 `typescript-final:Consideraciones/Preguntas_Abiertas.md` §14d: 12 meses de servidor, cierre anticipado por la primera Facción que complete la
 Maravilla, y la Facción ganadora persiste como Facción-legado NPC de solo mantenimiento y comercio.
 

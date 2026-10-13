@@ -30,7 +30,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 ## 20. Tecnología por Eras: calibrar los logros
 
 **Calibrar la X de cada logro** con el batch (`scripts/batch/medidorTecnologia.ts`): cada umbral, en lo que marque su
-contador en su semana objetivo (Doc 6.3). Plan y bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
+contador en su semana objetivo (Doc 6.3). Plan y bitácora: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
 
 ## 34. La economía no llena los víveres de un ejército
 

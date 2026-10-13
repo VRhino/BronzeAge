@@ -139,6 +139,6 @@ clientes ─┤ WS/HTTP · auth · parseo y validación sin estado       │
 
 ## 9. Relación con lo que existe
 
-- `10_Modelo_Temporal.md` (tick = minuto de mundo) describe el servidor actual; este documento lo sustituye.
-- `6_Sincronizacion_Visibilidad_y_Escala.md` y el contrato 03 aportan el envoltorio de la entrega (canales, grupos,
+- `typescript-final:Docs/Arquitectura/10_Modelo_Temporal.md` (tick = minuto de mundo) describe el servidor actual; este documento lo sustituye.
+- `typescript-final:Docs/Arquitectura/6_Sincronizacion_Visibilidad_y_Escala.md` y el contrato 03 aportan el envoltorio de la entrega (canales, grupos,
   backpressure), que el contrato 05 conserva.

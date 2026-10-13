@@ -36,7 +36,7 @@ ningún campo `Instante` de este documento cambia de forma respecto al contrato 
 auditoría), no de forma universal — no se generaliza aquí sin necesidad.
 
 **Distinción de reloj, nueva en esta revisión:** `Instante` es tiempo de MUNDO — no avanza durante una
-caída del proceso (`Docs/Arquitectura/10_Modelo_Temporal.md`: "una caída no consume tiempo de mundo"). Eso
+caída del proceso (`typescript-final:Docs/Arquitectura/10_Modelo_Temporal.md`: "una caída no consume tiempo de mundo"). Eso
 es correcto para plazos de JUEGO (`Batalla.expiraEn`, timeout de infraestructura) pero **no vale para
 vigencia de credenciales**: un token de participante (§15) debe caducar en tiempo real transcurrido aunque
 el proceso esté caído, o un token robado seguiría siendo válido indefinidamente durante una caída larga. Por
@@ -894,7 +894,7 @@ Así una batalla vencida nunca deja una escuadra bloqueada solo porque nadie hay
 paso a `fallida` deja un evento persistente y auditable.
 
 **Si se cae BronzeAge durante una batalla (R07):** mientras está caído, el tiempo de mundo no avanza
-(`Docs/Arquitectura/10_Modelo_Temporal.md`, "una caída no consume tiempo de mundo"), así que `expiraEn`
+(`typescript-final:Docs/Arquitectura/10_Modelo_Temporal.md`, "una caída no consume tiempo de mundo"), así que `expiraEn`
 tampoco: al volver, la batalla sigue `en_curso`. La partida en Unity no depende de BronzeAge
 y se sigue jugando. Conquest reintenta el `POST .../resultado`, espaciando cada vez más los intentos, hasta
 recibir una respuesta definitiva (2xx, o un 409 que no sea transitorio), y BronzeAge lo acepta al volver. Los
@@ -1285,7 +1285,7 @@ es también un asunto de PERMISO, y hay que ser preciso con la diferencia:
   `runtimeEntityId` de Conquest, cualquier campo interno de cálculo (ver `Titulo.valorMetrica` como derivado,
   no autoritativo).
 - La proyección exacta por rol (jugador/observador/administrador) queda para cuando se diseñen los DTO de
-  lectura general (`Docs/Arquitectura/5_Contratos_Identidad_Permisos.md`, punto 7; ver también doc 02 §"Extensión
+  lectura general (`typescript-final:Docs/Arquitectura/5_Contratos_Identidad_Permisos.md`, punto 7; ver también doc 02 §"Extensión
   de lectura estratégica") — este documento fija QUÉ existe, no todavía el DTO de lectura filtrado campo por
   campo.
 

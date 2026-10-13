@@ -30,7 +30,7 @@ contrato que pueda probarse desde C#.
 ## Revisión desde BronzeAge (2026-09-11)
 
 Contrastado contra `src/domain/types.ts`, `src/acceso/tipos.ts` y
-`Docs/Arquitectura/5_Contratos_Identidad_Permisos.md` (código y diseño real, no solo intención).
+`typescript-final:Docs/Arquitectura/5_Contratos_Identidad_Permisos.md` (código y diseño real, no solo intención).
 
 ### 1. Ámbitos y cardinalidad de `userId`, `playerId`, `heroId`, `squadId`
 

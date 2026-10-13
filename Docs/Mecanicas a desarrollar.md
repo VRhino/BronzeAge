@@ -33,7 +33,7 @@ completo; su estado queda en el checklist.
 ## 20. Tecnología por Eras: lo que falta tras las Eras I-III
 
 **Estado: Eras I-III en el canon (Doc 6) y en el código (2026-09-29, vía del desarrollo), `código: ◐`.** Plan y
-bitácora: `Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
+bitácora: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`. Falta:
 
 - **Eras IV y V — POSPUESTAS** (decisión del usuario, 2026-10-05): el alcance se queda en las Eras I-III. Catálogo, roster y
   logros siguen en la revisión (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`, EV-1 a EV-7). La subida 4 → 5 la tiene

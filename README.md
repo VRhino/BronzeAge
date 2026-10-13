@@ -13,12 +13,12 @@ Leer en este orden:
 5. **`Docs/4_Sistema_de_Poblacion_Construccion_y_Mantenimiento.md`** — 3 clases de población, auto-construcción, políticas, mantenimiento.
 6. **`Docs/5_Sistema_Militar_y_Combate.md`** — combate, formaciones, roster de tropas, reclutamiento.
 7. **`Docs/6_Sistema_de_Tecnologia_y_Aedas.md`** — vías de tecnología, Aedas/Poetas.
-8. **`Consideraciones/Fase_0_Definicion.md`** — alcance exacto de lo que se implementa primero (simulación pura de datos, sin gráficos).
-9. **`Consideraciones/Plan_Implementacion_Tecnica.md`** — stack (TypeScript), modelo de datos, orden de sprints. **Documento más directamente accionable para generar código.**
-10. **`Consideraciones/Roadmap_Escalado.md`** — fases posteriores a Fase 0 (Fase 1 mapa de campaña en Unity/C#, Fase final integración total).
+8. **`typescript-final:Consideraciones/Fase_0_Definicion.md`** — alcance exacto de lo que se implementa primero (simulación pura de datos, sin gráficos).
+9. **`typescript-final:Consideraciones/Plan_Implementacion_Tecnica.md`** — stack (TypeScript), modelo de datos, orden de sprints. **Documento más directamente accionable para generar código.**
+10. **`typescript-final:Consideraciones/Roadmap_Escalado.md`** — fases posteriores a Fase 0 (Fase 1 mapa de campaña en Unity/C#, Fase final integración total).
 11. **`typescript-final:Consideraciones/Checklist_Mecanicas.md`** — estado de completitud (cerrado/pendiente) de cada sistema.
 12. **`typescript-final:Consideraciones/Preguntas_Abiertas.md`** — lo que sigue sin resolver. Usar valores placeholder razonables para estos puntos, no bloquear la implementación por ellos.
-13. **`Consideraciones/Correcciones_Durante_Desarrollo.md`** — bugs de diseño/lógica encontrados y corregidos al implementar Fase 0; varios resuelven preguntas que estaban marcadas como pendientes.
+13. **`typescript-final:Consideraciones/Correcciones_Durante_Desarrollo.md`** — bugs de diseño/lógica encontrados y corregidos al implementar Fase 0; varios resuelven preguntas que estaban marcadas como pendientes.
 14. **`typescript-final:Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`** — herramienta de la interfaz (no mecánica de juego): ceder una Facción a un NPC que la gobierna sola mientras se juegan otras a mano, con acoplamiento cero con el motor.
 
 ## Estado general del diseño
@@ -31,14 +31,14 @@ Contenido explícitamente **fuera de Fase 0** (no implementar aún): representac
 
 Fase 0 (Sprints 1-6, el motor de simulación puro) está **implementada** en TypeScript (`src/`). Desde ahí el
 proyecto siguió evolucionando **más allá de lo que describe esta sección** — ver
-**[`Docs/Arquitectura/1_Arquitectura_Actual.md`](Docs/Arquitectura/1_Arquitectura_Actual.md)** para el estado
+**[`typescript-final:Docs/Arquitectura/1_Arquitectura_Actual.md`](typescript-final:Docs/Arquitectura/1_Arquitectura_Actual.md)** para el estado
 real hoy: este repositorio es ahora un **backend multijugador puro** (Fastify, autenticación/autorización por
 comando, proyecciones por audiencia, WebSocket) — "validada jugando en el navegador" ya no aplica, el juego se
 prueba contra la API HTTP/WS. El cliente de JUGADOR vive desde `2dfe9e7` en su propio repositorio
 (`BronzeAgeClient`); aquí solo queda `cliente/`, la consola de administración/depuración, que todavía no puede
 salir porque sigue importando el motor (ver `cliente/README.md`). El roadmap completo de esa evolución
-(Fases A-E) vive en **[`Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`](Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md)**.
-Ver **`Consideraciones/Correcciones_Durante_Desarrollo.md`** para el registro de bugs de diseño/lógica
+(Fases A-E) vive en **[`typescript-final:Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md`](typescript-final:Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md)**.
+Ver **`typescript-final:Consideraciones/Correcciones_Durante_Desarrollo.md`** para el registro de bugs de diseño/lógica
 encontrados y corregidos durante la implementación de Fase 0 — varios de ellos resolvieron preguntas que
 estaban marcadas como pendientes en esta documentación (protección temporal de asentamientos nuevos,
 reemplazo de recursos agotados, calibración de Mantenimiento), y ya están reflejados en los Docs 1, 2, 4 y 5.
@@ -55,14 +55,14 @@ Docs/                                              Documentación de diseño por
   5_Sistema_Militar_y_Combate.md
   6_Sistema_de_Tecnologia_y_Aedas.md
   Arquitectura/                                    Evolución del backend (CÓMO se sirve el juego) — empezar
-                                                     por 1_Arquitectura_Actual.md y 3_Plan_Evolucion_Roadmap.md
+                                                     por typescript-final:Docs/Arquitectura/1_Arquitectura_Actual.md y typescript-final:Docs/Arquitectura/3_Plan_Evolucion_Roadmap.md
 Consideraciones/                                   Alcance, plan técnico y estado del proyecto
-  Fase_0_Definicion.md
-  Plan_Implementacion_Tecnica.md
-  Roadmap_Escalado.md
+  typescript-final:Consideraciones/Fase_0_Definicion.md
+  typescript-final:Consideraciones/Plan_Implementacion_Tecnica.md
+  typescript-final:Consideraciones/Roadmap_Escalado.md
   typescript-final:Consideraciones/Checklist_Mecanicas.md
   typescript-final:Consideraciones/Preguntas_Abiertas.md
-  Correcciones_Durante_Desarrollo.md
+  typescript-final:Consideraciones/Correcciones_Durante_Desarrollo.md
 src/                                                Backend: domain/constants/worldgen/world/engine (motor
                                                      puro de Fase 0) + acceso/session/server (multijugador,
                                                      Fases B-C)

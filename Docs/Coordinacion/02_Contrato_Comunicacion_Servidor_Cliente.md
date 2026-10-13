@@ -59,7 +59,7 @@ de entrada y recibe el `BattleResult` de salida, ambos por HTTP (§3).
 Ninguna de estas convenciones cambia para dar soporte a `Heroe`/`Escuadron`/`Batalla` — los comandos nuevos
 de dominio (crear/gestionar `Heroe`, loadouts, escuadras) usan el mismo `POST .../comandos` con un `tipo`
 nuevo en `REGISTRO_COMANDOS`, sujeto a la misma matriz de autorización que ya existe
-(`Docs/Arquitectura/5_Contratos_Identidad_Permisos.md`).
+(`typescript-final:Docs/Arquitectura/5_Contratos_Identidad_Permisos.md`).
 
 ## 3. Extensión para el ciclo de batalla (BA-001, nuevo)
 
