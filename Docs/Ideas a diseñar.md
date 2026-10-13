@@ -169,3 +169,6 @@ Salen de los documentos de decisión que se retiran. Ninguno tiene código.
   Puerta de los Leones, águila bicéfala hitita, toro alado, árbol sagrado, casco de colmillos y sol de Vergina.
 - **Insignias de títulos de jugador-poseedor**, cuando exista el título «general con más victorias».
 - **Rumores de las tabernas de campamento y «Estado de Facción»**: sin diseñar.
+- **Después de una conquista** (antes pendientes de `Ocupacion_Post_Conquista` y `Economia_Del_Oro`): consolidación explícita de lo
+  conquistado (enviar colonos, un coste que hace la posesión permanente), revuelta de un asentamiento ocupado con felicidad baja,
+  sueldos de tropa en oro (upkeep continuo) y recaudación reducida en un asentamiento degradado.

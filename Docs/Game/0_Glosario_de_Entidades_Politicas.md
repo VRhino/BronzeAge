@@ -82,7 +82,7 @@ Selección de escuadrones que un Héroe deja guardada para salir a mundo abierto
 
 La despensa general de un asentamiento es su **almacén** (`Asentamiento.almacen`): guarda todos los recursos, y su capacidad la amplía el edificio **Almacén**. De ahí come la población y la tropa que no está en campaña, y de ahí se carga el carro de un ejército.
 
-El **Granero** es un edificio que amplía solo la capacidad de **trigo**, mucho más que un Almacén (Doc 4.2.1). No confundir con el **rol** de especialización de un asentamiento que se dedica a producir trigo, que también se llama granero, junto a Aserradero, Cuenca Minera, Dehesa y Ciudad (`Consideraciones/Fase_0_5_Definicion_Especializacion_y_Cupos.md` §4): uno es un edificio; el otro, la vocación de un asentamiento entero.
+El **Granero** es un edificio que amplía solo la capacidad de **trigo**, mucho más que un Almacén (Doc 4.2.1). No confundir con el **rol** de especialización de un asentamiento que se dedica a producir trigo, que también se llama granero, junto a Aserradero, Cuenca Minera, Dehesa y Ciudad (`typescript-final:Consideraciones/Fase_0_5_Definicion_Especializacion_y_Cupos.md` §4): uno es un edificio; el otro, la vocación de un asentamiento entero.
 
 ## Asentamiento
 Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.

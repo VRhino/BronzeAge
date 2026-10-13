@@ -473,3 +473,35 @@ proceso). Código: `src/bots/control/`, `cliente/src/bots/`.
   el mundo), retirar de verdad a los huérfanos (hoy solo se ven), y reconectar el socket de un bot cuya conexión se cae sin
   que el runner lo sepa. Despliegue en Render con disco para `BOTS_DIRECTORIO`.
 
+## 15. Comportamiento emergente pendiente (lista abierta, 2026-10-13)
+
+**Lista abierta y acumulativa**: aquí se anota, según se diseñan las demás mecánicas, lo que los bots (`src/bots/`)) tendrán que hacer distinto o aprender. No se implementa con cada mecánica: se aborda en su
+momento, con todo junto. Cada punto dice de qué mecánica sale.
+
+**De §45 (repostar y caravanas):**
+- `bots/cerebro/fundar.ts` y `sinPlaza.ts`: hoy salen y **luego** enganchan la Caravana de Fundación. Tienen que
+  engancharla **antes de salir**, dentro de la plaza o del campamento, y salir ya como ejército.
+- `sinPlaza.ts`: sale del campamento «admitiendo compañía» con un destino fijado; el ejército sale quieto y se
+  dirige después con `marcharA`.
+- Reclamar una caravana suelta (la de Fundación que vuelve sola) crea un ejército: decidir si el bot lo usa.
+- `militar.ts`: el alcance de ida y vuelta se calcula con los víveres del héroe; pasa a ser los del ejército.
+- Repostar: una columna personal lo hace sola dentro de la zona; un ejército de bots tiene que pulsar **Repostar** en
+  la puerta antes de salir y al volver. En un campamento de mercenarios, repostar es gratis para todos.
+- El vasallaje cuenta como aliado al repostar.
+
+**De repostar gratis en el campamento (2026-10-11, `repostarEnCampamento`, `Docs/Mechanics/Comercio_Caravanas.md` §9.2b):**
+- `bots/cerebro/sinPlaza.ts` se apoya solo en la ración gratis al salir (`racionAlSalir`: víveres llenos). Con `repostarEnCampamento` puede rellenarlos a la puerta del campamento, con la columna fuera, sin entrar y volver a salir: decidir si le compensa y cuándo (p. ej. al volver de un campamento de bandidos, antes de lanzarse a otro).
+- `debeVolver` calcula el trigo del viaje de vuelta con los víveres de la columna: si el bot repostara a la puerta, la vuelta ya no es «hasta que se acabe el trigo».
+
+**De §44 (guerra logística):**
+- Marcar obras de mapa (pueblos, avanzadas) y llevar los materiales al sitio.
+- Escoltar el carro de acarreo; saquear pueblos y atacar caravanas.
+- **Aceptar o no el riesgo de declarar la guerra** al atacar (toda agresión la declara, salvo unirse al asedio de otro).
+- Guarnecer avanzadas y repostar en ellas.
+- Reclutar mineros en el Centro Urbano.
+- La plaza ve solo su zona: los bots deciden con lo que ven, así que verán menos hasta tener avanzadas.
+
+**De la ocupación tras una conquista y de la economía del oro:**
+- Rotación de guarnición: un bot que quiere reforzar una frontera con `guarnecer` fuera de una conquista.
+- La política «Presión Fiscal»: el bot solo ve el baseline; darle criterio (¿sube impuestos si el oro está bajo y la población alta?).
+- El oro de reclutamiento puede estrangular al bot militar: medirlo y, si hace falta, enseñarle a priorizar oro para reclutar.

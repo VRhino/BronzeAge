@@ -473,7 +473,7 @@ que depende de un campo escrito "en cada camino" es frágil.
 hecho sin su consecuencia.
 
 **O2 · Lo que sobrevive a una conquista.** `aplicarConquista` (`combate.ts:199-253`) conserva `politicasActivas`,
-`reservaManual` y `autoConstruccionPausada` del dueño derrotado. `Ocupacion_Post_Conquista_Definicion.md` no lo trata.
+`reservaManual` y `autoConstruccionPausada` del dueño derrotado. `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion.md` no lo trata.
 
 **O3 · Excepciones como control de flujo en el NPC.** Siguen en reclutar (residuo), `anadirEdificioManualmente`,
 `comprometerRecintoManualmente` y `asignarGuarnicion`. Hoy suman <1 ms; conviene no añadir más pasos así.

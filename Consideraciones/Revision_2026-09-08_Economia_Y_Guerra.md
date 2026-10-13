@@ -9,8 +9,8 @@ Los detalles viven en los tres docs de definición; esto es el índice y el esta
 
 | Pieza | Estado | Doc de detalle |
 |---|---|---|
-| **Impuestos: recaudación de oro por población** | ✅ implementado (commit `d0510e1`) | `Economia_Del_Oro_Definicion.md` §4.1 |
-| Política "Presión Fiscal" (Tesorero) | ✅ implementado | `Economia_Del_Oro_Definicion.md` §5 |
+| **Impuestos: recaudación de oro por población** | ✅ implementado (commit `d0510e1`) | `typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md` §4.1 |
+| Política "Presión Fiscal" (Tesorero) | ✅ implementado | `typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md` §5 |
 | Reclutamiento cuesta oro por escalón (salvo milicia) | ✅ implementado | ídem §4.2 |
 | Buey de caravana en oro (30 madera → 12 oro) | ✅ implementado | ídem §4.3 |
 | `MANTENIMIENTO.nivelParaOro` 3 → 2 | ✅ implementado | ídem §4.4 |
@@ -18,9 +18,9 @@ Los detalles viven en los tres docs de definición; esto es el índice y el esta
 | **Fix: colapso por bosque saturado** (`evaluarViabilidadFundacion` exige bosque LIBRE) | ✅ implementado | ídem §10 |
 | Instrumentación de batch (`BATCH_RUINAS_DIAG`, `pctSueloOcupado`) | ✅ implementado | ídem §10 |
 | **Calibración (Paso 6) del bloque de oro** | 🔶 en curso — iter 2: oroMedio ×2.2 base y trepando | ídem §10 |
-| **Ocupación post-conquista** (saqueo, ventana, oro reducido) | ✅ implementado — pasos 3-9 (commits `26662b4`, `c2f21f4`); 🔶 calibración (paso 10) en curso | `Ocupacion_Post_Conquista_Definicion.md` |
+| **Ocupación post-conquista** (saqueo, ventana, oro reducido) | ✅ implementado — pasos 3-9 (commits `26662b4`, `c2f21f4`); 🔶 calibración (paso 10) en curso | `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion.md` |
 | **Guarnición-ejército** (el conquistador se vuelve guarnición) | ✅ implementado (Paso 4, `26662b4`) | ídem §2.2 |
-| `guarnecer` (defender plaza propia marchando) | ✅ implementado **2026-09-09** (follow-up separado del plan de ocupación) | `Ocupacion_Post_Conquista_Definicion.md` §2.3/§11 |
+| `guarnecer` (defender plaza propia marchando) | ✅ implementado **2026-09-09** (follow-up separado del plan de ocupación) | `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §2.3/§11 |
 | **Reclutamiento desatado de residencia** (reponer/mover fuera de casa; nuevo escuadrón solo en casa) | ✅ implementado (Paso 1, commit `f844f7a`) | ídem §1 Ronda 2, §2.3b |
 | **Comando `cambiarResidencia`** | ✅ implementado (Paso 2, commit `f844f7a`) | ídem §2.3c |
 
@@ -46,7 +46,7 @@ Falta cerrar en canon (tras la campaña de calibración, Paso 6): las cifras fin
 ## 3. Mapa de canon — ✅ REPARTIDO (2026-09-08)
 
 Todo lo de esta sección está **implementado y en canon**. Destino final entre paréntesis en cada apartado;
-detalle del reparto en `Ocupacion_Post_Conquista_Definicion.md` §10.
+detalle del reparto en `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion.md` §10.
 
 ### 3.1 Ocupación post-conquista → **`Docs/Game/5` §5.12.9 nuevo** + bullets de §5.4
 
@@ -101,7 +101,7 @@ El NPC no lo necesita — sostiene por la guarnición-ejército.
 
 ## 4. Cómo encaja todo — la guerra como sink de oro
 
-`Economia_Del_Oro_Definicion.md` §5: el oro debe obligar a elegir entre ejército / flota / intel. La guerra
+`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md` §5: el oro debe obligar a elegir entre ejército / flota / intel. La guerra
 ya es un sink parcial (reponer bajas de combate cuesta oro; reclutamientos NPC −17% al meter el coste). Lo
 que el diseño de conquista añade:
 

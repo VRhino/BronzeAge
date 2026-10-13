@@ -5,7 +5,7 @@
 [Diario_Simulaciones_Batch_100_Facciones_Expansion.md](Diario_Simulaciones_Batch_100_Facciones_Expansion.md)
 (100 Facciones, 1 asentamiento cada una, 5 jugadores fundadores, mismo `simulaciones-batch/npcGobernanza.ts`
 sin tocar, motor sin tocar), corrida inmediatamente después de implementarse
-[Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md](Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md)
+[typescript-final:Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md](typescript-final:Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md)
 (niveles de asentamiento 3→5, gates de construcción reordenados) — para medir el efecto real de ese rediseño
 sobre un escenario que, en su versión anterior (3 niveles), nunca logró pasar de nivel 1.
 

@@ -101,7 +101,7 @@ Catálogo en `TROPAS_RECLUTABLES`. Terminología (Doc 0): son tres conceptos y l
 
 El roster no se organiza por Tier abstracto: cada tropa se recluta en Centro Urbano, Barracón, Galería de tiro o Caballerizas, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1; Centro Urbano no tiene niveles), con la tecnología adoptada por la Facción (Doc 6) y pagando el equipo correspondiente, fabricado en Armería, Carpintería o comprado (caballos). "Costo" en las tablas de abajo es POR SOLDADO — el costo real de reclutar es ese valor × "Unidades". Cada tropa tiene además un `poderBase` (placeholder) que usan las batallas que se resuelven con números (5.2.5). "Asent." es el nivel de asentamiento que hace falta de verdad: el mayor entre el del edificio y el del equipo.
 
-**Coste de oro por reclutar** (`Consideraciones/Economia_Del_Oro_Definicion.md`): además del equipo, reclutar cuesta **oro por soldado según el escalón de la tropa** (`RECLUTAMIENTO_ORO_POR_ESCALON` en `constants.ts`, PLACEHOLDER 1/2/4/7/11 para escalones 1-5 — curva que sube más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`), más **5 de oro por caballo** en la caballería y los carros. **Única excepción: las tropas del Centro Urbano** (milicia de lanceros, leñadores y granjeros), que no pagan oro: la defensa mínima no depende del tesoro. Todo lo demás cuesta oro, escalón 1 incluido. Reponer bajas vuelve a pagar oro por los soldados repuestos. `factorCostoReclutamiento` ("Leva Forzosa", Doc 4.4) toca **solo el equipo, no el oro** — no se conscribe moneda. Regla de motor uniforme: se cobra igual a NPC y jugador.
+**Coste de oro por reclutar** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`): además del equipo, reclutar cuesta **oro por soldado según el escalón de la tropa** (`RECLUTAMIENTO_ORO_POR_ESCALON` en `constants.ts`, PLACEHOLDER 1/2/4/7/11 para escalones 1-5 — curva que sube más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`), más **5 de oro por caballo** en la caballería y los carros. **Única excepción: las tropas del Centro Urbano** (milicia de lanceros, leñadores y granjeros), que no pagan oro: la defensa mínima no depende del tesoro. Todo lo demás cuesta oro, escalón 1 incluido. Reponer bajas vuelve a pagar oro por los soldados repuestos. `factorCostoReclutamiento` ("Leva Forzosa", Doc 4.4) toca **solo el equipo, no el oro** — no se conscribe moneda. Regla de motor uniforme: se cobra igual a NPC y jugador.
 
 **Centro Urbano (defensa mínima, sin edificio dedicado):**
 
@@ -469,7 +469,7 @@ De una frontera que solo **recuerdas** queda hasta dónde llegaba, no su trazo e
 - **La protección del nuevo dueño**, un día de mundo: nadie puede asediarla mientras se recupera y recluta con qué defenderse, para que no cambie de manos cada vez que pasa un ejército. Un asentamiento recién fundado nace con la misma protección (Doc 1.2). Pasado ese día, quien quiera conservarla tiene que defenderla: trasladar allí su campamento y asignar guarnición, o estar dentro cuando la ataquen.
 - **La ventana de ocupación**, más corta: el coste de haberla tomado.
 
-Diseño en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras placeholder en `OCUPACION`.
+Diseño en `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras placeholder en `OCUPACION`.
 
 **Al conquistar**:
 

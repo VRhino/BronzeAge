@@ -1,6 +1,6 @@
 # Fase 1 — Verificación de la tabla B
 
-> **Estado (2026-10-13): en curso; doce documentos verificados y retirados.** Por cada documento ya implementado se comprueba que ninguna decisión viva solo en él: lo
+> **Estado (2026-10-13): en curso; diecisiete documentos verificados y retirados (queda Y3 por responder).** Por cada documento ya implementado se comprueba que ninguna decisión viva solo en él: lo
 > vigente tiene que estar en `Docs/Game/` o en `Docs/Mechanics/`; lo abierto, decidido o en `Docs/Ideas a diseñar.md`. Cuando
 > un documento queda verificado se **borra** de `Consideraciones/` (la historia queda en git y en `typescript-final`, decisión
 > del autor del 2026-10-09 y del 2026-10-13). Nada se borra sin tu visto bueno.
@@ -65,6 +65,9 @@ X1 aprobado: emblemas, insignias, rumores y «Estado de Facción» a `Docs/Ideas
 - **Y4. A `Docs/Ideas a diseñar.md`:** consolidación explícita de lo conquistado (colonos), revuelta de un asentamiento ocupado,
   sueldos de tropa en oro (upkeep continuo) y recaudación reducida en un asentamiento degradado.
 - **Y5. A la lista de bots (fase 7, `Arquitectura/12`):** rotación de guarnición del NPC y la política «Presión Fiscal» del NPC.
+
+### Decidido de la cuarta tanda
+Y1: la caravana aparcada en una plaza que cae se destruye (canon 3.13.7). Y2: sin coste, solo el cooldown. Y4: a `Docs/Ideas a diseñar.md`. Y5 y la lista de bots emergentes: `Docs/Arquitectura/12` §15. Y3 (origen de un ejército movilizado desde una plaza donde no resides) pendiente de explicar. Retirados `Fase_0_5`, `Fase_0_6`, `Checklist_Mecanicas`, `Economia_Del_Oro` y `Ocupacion_Post_Conquista`. `Docs/Mecanicas a desarrollar.md` queda reducido a las Eras IV-V pospuestas y al tope de asedio.
 
 ## Decidido el 2026-10-13
 

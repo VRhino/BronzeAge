@@ -4,7 +4,7 @@
 - NO es moneda acuñada: es METAL PRECIOSO EN BRUTO PESADO (sistema tipo siclo/shekel).
 - ORIGEN: mina de oro en el mapa, mismo patrón que cantera/mina de cobre (nodo finito, con reemplazo automático al agotarse — ver Doc 4.2); comisiones de comercio (3.5); y **recaudación en el asentamiento según población y clase** (Doc 4.1).
 - USO: medio de pago en Mercado (3.3) y en comisiones (3.5); **coste de reclutamiento** salvo la milicia inicial (Doc 5.8); **compra de animales de arrastre para caravanas**, buey incluido (3.13.2); Maravilla (Doc 4.2.1). Pensado también para tecnología, mercenarios y sueldos (Aedas, Doc 6), sistemas que Fase 0 no tiene.
-- **El oro obliga a elegir** (`Consideraciones/Economia_Del_Oro_Definicion.md`): es la única moneda que convierte entre ambiciones (ejército / flota comercial / información), y no se puede ir a por todas a la vez. La recaudación por población es la FUENTE que lo hace pagable sin mina; el reclutamiento en oro y los animales en oro son los SUMIDEROS; y la política "Presión Fiscal" (Tesorero, Doc 4.4) cambia más oro por menos crecimiento.
+- **El oro obliga a elegir** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`): es la única moneda que convierte entre ambiciones (ejército / flota comercial / información), y no se puede ir a por todas a la vez. La recaudación por población es la FUENTE que lo hace pagable sin mina; el reclutamiento en oro y los animales en oro son los SUMIDEROS; y la política "Presión Fiscal" (Tesorero, Doc 4.4) cambia más oro por menos crecimiento.
 - ENTRE JUGADORES: recurso más de trueque, sin restricción especial.
 
 ## 3.2 Trueque de materiales (acuerdos entre Facciones)
@@ -258,6 +258,8 @@ Un ejército con caravanas adjuntas que **entra en una plaza de su Facción** (D
 - **Solo sale de dos formas:** enganchada a un ejército de la Facción que esté dentro de esa plaza (cualquiera, no solo el que la trajo; Doc 5.13.2), o
   **enviada a su origen** — si va vacía aparece allí al instante, si lleva carga recorre el mapa de vuelta y
   la vuelca en el almacén del origen al llegar (una caravana con carga nunca se teletransporta).
+
+**Si cae la plaza anfitriona, las caravanas aparcadas en ella se destruyen** (decidido el 2026-10-13): carros, animales y carga se pierden, sin captura.
 
 ### 3.13.8 Carro de acarreo (2026-10-11)
 

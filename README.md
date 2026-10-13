@@ -16,7 +16,7 @@ Leer en este orden:
 8. **`Consideraciones/Fase_0_Definicion.md`** — alcance exacto de lo que se implementa primero (simulación pura de datos, sin gráficos).
 9. **`Consideraciones/Plan_Implementacion_Tecnica.md`** — stack (TypeScript), modelo de datos, orden de sprints. **Documento más directamente accionable para generar código.**
 10. **`Consideraciones/Roadmap_Escalado.md`** — fases posteriores a Fase 0 (Fase 1 mapa de campaña en Unity/C#, Fase final integración total).
-11. **`Consideraciones/Checklist_Mecanicas.md`** — estado de completitud (cerrado/pendiente) de cada sistema.
+11. **`typescript-final:Consideraciones/Checklist_Mecanicas.md`** — estado de completitud (cerrado/pendiente) de cada sistema.
 12. **`Consideraciones/Preguntas_Abiertas.md`** — lo que sigue sin resolver. Usar valores placeholder razonables para estos puntos, no bloquear la implementación por ellos.
 13. **`Consideraciones/Correcciones_Durante_Desarrollo.md`** — bugs de diseño/lógica encontrados y corregidos al implementar Fase 0; varios resuelven preguntas que estaban marcadas como pendientes.
 14. **`Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`** — herramienta de la interfaz (no mecánica de juego): ceder una Facción a un NPC que la gobierna sola mientras se juegan otras a mano, con acoplamiento cero con el motor.
@@ -60,7 +60,7 @@ Consideraciones/                                   Alcance, plan técnico y esta
   Fase_0_Definicion.md
   Plan_Implementacion_Tecnica.md
   Roadmap_Escalado.md
-  Checklist_Mecanicas.md
+  typescript-final:Consideraciones/Checklist_Mecanicas.md
   Preguntas_Abiertas.md
   Correcciones_Durante_Desarrollo.md
 src/                                                Backend: domain/constants/worldgen/world/engine (motor

@@ -19,7 +19,7 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 - Mientras la nutrición se MANTIENE en 0 (hambre sostenida, no solo un bache puntual), cada minuto cuesta una fracción real de población — **5% de pesants+artesanos**, el mismo valor que la deserción de tropas sin moral, y **1% de la Nobleza**, la más resistente.
 - Cifras placeholder (`POBLACION.hambre`).
 
-**Recaudación de oro por clase** (`Consideraciones/Economia_Del_Oro_Definicion.md`):
+**Recaudación de oro por clase** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`):
 - Cada minuto, el asentamiento **genera oro según su población y de qué clase es** (`recaudacionOro`) — espejo exacto del consumo de comida, con signo opuesto: `Σ(habitantes_clase × IMPUESTOS.tasa_clase)`, sumado al almacén respetando su capacidad (el sobrante se pierde, igual que la producción de mina).
 - **Nobleza > Artesanos > Pesants** por cabeza (`IMPUESTOS`, placeholder: 0.06 / 0.015 / 0.004 oro/min). Base imponible por riqueza — crecer Nobleza = asentamiento rico; refuerza el valor del Palacio.
 - **NO escala por distancia a la capital ni por nivel** — el eje de distancia ya es el "impuesto de cohesión" del lado del coste (Mantenimiento, 4.5). Dejar el ingreso plano hace que el impuesto premie crecer alto y cohesionado.
@@ -103,7 +103,7 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 
 **Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 10 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+20, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
 - Coste: 10 madera. Obra: 4 horas.
-- **Tope por nivel de asentamiento** (`maximoViviendasPorNivel`): el máximo útil de Viviendas en un nivel se deriva de la población (pesants Y artesanos, se toma el mayor de los dos cupos) que exige alcanzar el SIGUIENTE nivel — construir más de las que ese cupo necesita no sirve para nada hasta subir de nivel. Cifras en `Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` §7.
+- **Tope por nivel de asentamiento** (`maximoViviendasPorNivel`): el máximo útil de Viviendas en un nivel se deriva de la población (pesants Y artesanos, se toma el mayor de los dos cupos) que exige alcanzar el SIGUIENTE nivel — construir más de las que ese cupo necesita no sirve para nada hasta subir de nivel. Cifras en `typescript-final:Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` §7.
 
 ### Extracción de recursos
 
