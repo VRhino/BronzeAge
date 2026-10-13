@@ -1,3 +1,3 @@
 # El servidor TypeScript ya no se toca (se reconstruye en Rust): el hook comprueba el contrato.
 export PATH="$PATH:$HOME/.cargo/bin:$LOCALAPPDATA/Microsoft/WinGet/Links"
-buf lint && buf build && cargo test -q -p contrato
+buf lint && buf build && cargo test -q --workspace

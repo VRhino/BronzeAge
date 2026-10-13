@@ -1,0 +1,12 @@
+[package]
+name = "mundo"
+version = "0.1.0"
+edition = "2021"
+description = "Cargador y validador del artefacto de mundo de BronzeAge (Docs/Coordinacion/06_Contrato_de_Mundo.md)"
+
+[dependencies]
+contrato = { path = "../contrato" }
+prost = "0.13"
+sha2 = "0.10"
+thiserror = "2"
+zstd = "0.13"
