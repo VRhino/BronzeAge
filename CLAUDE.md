@@ -13,7 +13,3 @@ Todo `git commit` y `git push` lo hace un **subagente con el modelo Haiku 5.5** 
 ## Fuente de verdad de las reglas
 
 Si el canon (`Docs/Game/`) y `Docs/Mechanics/` se contradicen, gana `Mechanics` y se corrige el canon (ver `Docs/Mechanics/README.md`).
-
-## Después de la migración a Rust
-
-El barrido de `Docs/Coordinacion/` y de los documentos de `Docs/Mechanics/` aún sin cruzar contra el canon se hace **cuando el motor en Rust esté terminado**, no antes (decidido el 2026-10-17). Hasta entonces el canon (`Docs/Game/`) ya está alineado con `Mechanics`.
