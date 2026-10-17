@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { anilloEn, colocarCampamentos, FACTOR } from '../campamentos';
 import { PARAMETROS_CONTENIDO as P, colocarBandidosYAlijos } from '../contenidoVivo';
+import { repartirMetales, type Sitio } from '../metales';
 
 const ANCHO = 32004, ALTO = 24000;
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -9,13 +10,28 @@ const est = (a: { x: number; y: number }, b: { x: number; y: number }) => dist(a
 // Mundo llano sintético: todo apto. Comprueba las reglas, no la geografía.
 const limites = { ancho: ANCHO, alto: ALTO };
 const campamentos = colocarCampamentos(7, limites, () => 1);
+const sitios: Sitio[] = [];
+for (let y = 60; y < ALTO; y += 120) for (let x = 60; x < ANCHO; x += 120) sitios.push({ posicion: { x, y }, calidad: { estano: 0.7, oro: 0.7 } });
+const { vetas } = repartirMetales(7, campamentos, sitios);
 const todo = () => true;
-const { bandidos, alijos } = colocarBandidosYAlijos(7, limites, campamentos, todo);
+const { bandidos, alijos } = colocarBandidosYAlijos(7, limites, campamentos, vetas, todo);
 
 describe('bandidos y alijos', () => {
+  it('un bandido de nivel 2-3 y un alijo lejano por veta, cerca de su centro', () => {
+    for (const v of vetas) {
+      const bs = bandidos.filter(b => b.vetaId === v.id), a = alijos.filter(x => x.id === `alijo-${v.id}`);
+      expect(bs).toHaveLength(1);
+      expect(a).toHaveLength(1);
+      expect([2, 3]).toContain(bs[0]!.nivel);
+      expect(est(bs[0]!.posicion, v.centro)).toBeLessThanOrEqual(8);
+      expect(est(a[0]!.posicion, v.centro)).toBeLessThanOrEqual(25);
+      expect(a[0]!.anillo).toBe('lejana');
+      expect(a[0]!.oro).toBe(P.veta.oroAlijo);
+    }
+  });
   it('anillo de bandidos de 30 a 50 de cada campamento, fuera de su protección', () => {
     for (const m of campamentos) {
-      const anillo = bandidos.filter(b => anilloEn(campamentos, b.posicion).campamento === m.id);
+      const anillo = bandidos.filter(b => !b.vetaId && anilloEn(campamentos, b.posicion).campamento === m.id);
       expect(anillo).toHaveLength(P.anillo.inicialesPorCampamento);
       for (const b of anillo) {
         expect(est(b.posicion, m.posicion)).toBeGreaterThanOrEqual(P.anillo.radioMin);
@@ -50,18 +66,18 @@ describe('bandidos y alijos', () => {
   });
   it('oro total coherente con las bandas', () => {
     const porCampamento = P.alijosCercanos.reduce((s, b) => s + b.cuantos * b.oro, 0);
-    expect(alijos.reduce((s, a) => s + a.oro, 0)).toBe(campamentos.length * porCampamento);
+    expect(alijos.reduce((s, a) => s + a.oro, 0)).toBe(campamentos.length * porCampamento + vetas.length * P.veta.oroAlijo);
   });
   it('respeta el terreno apto', () => {
     const sinFranja = (p: { x: number; y: number }) => !(p.x > 14000 && p.x < 15000);
-    const r = colocarBandidosYAlijos(7, limites, campamentos, sinFranja);
+    const r = colocarBandidosYAlijos(7, limites, campamentos, vetas, sinFranja);
     for (const x of [...r.bandidos, ...r.alijos]) expect(sinFranja(x.posicion)).toBe(true);
   });
   it('sin terreno apto, falla con un error claro', () => {
-    expect(() => colocarBandidosYAlijos(7, limites, campamentos, () => false)).toThrow(/Contenido/);
+    expect(() => colocarBandidosYAlijos(7, limites, campamentos, vetas, () => false)).toThrow(/Contenido/);
   });
   it('misma semilla, mismo resultado; otra semilla, otro', () => {
-    expect(colocarBandidosYAlijos(7, limites, campamentos, todo)).toEqual({ bandidos, alijos });
-    expect(colocarBandidosYAlijos(8, limites, campamentos, todo).bandidos).not.toEqual(bandidos);
+    expect(colocarBandidosYAlijos(7, limites, campamentos, vetas, todo)).toEqual({ bandidos, alijos });
+    expect(colocarBandidosYAlijos(8, limites, campamentos, vetas, todo).bandidos).not.toEqual(bandidos);
   });
 });
