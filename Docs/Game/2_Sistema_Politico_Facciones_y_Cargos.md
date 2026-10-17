@@ -1,10 +1,10 @@
 # 2. Sistema Político: Facciones, Cargos y Diplomacia
 
 ## 2.1 Glosario rápido (ver página "Glosario de Entidades Políticas" para el detalle completo)
-- **Héroe** (el personaje de cada Jugador en el mundo, uno por mundo, Doc 5.16): pertenece a 1 y solo 1 Facción, y reside en 1 y solo 1 asentamiento (Doc 2.5). Tiene como mucho un escuadrón de cada tropa en toda la partida (Doc 5.8); sus escuadrones son SUYOS, no del asentamiento (Doc 5.4), y su Liderazgo limita cuántos puede llevarse consigo (Doc 5.11).
+- **Héroe** (el personaje de cada Jugador en el mundo, uno por mundo, Doc 5.16): pertenece a 1 y solo 1 Facción, y reside en 1 y solo 1 sitio: un asentamiento o un campamento de mercenarios (Doc 2.5). Tiene como mucho un escuadrón de cada tropa en toda la partida (Doc 5.8); sus escuadrones son SUYOS, no del asentamiento (Doc 5.4), y su Liderazgo limita cuántos puede llevarse consigo (Doc 5.11).
 - **Asentamiento**: pertenece a 1 y solo 1 Facción.
 - **Facción**: entidad política soberana, agrupa héroes y asentamientos. Tiene cargos de nivel Facción (Rey, Embajador).
-- **Liga**: red de Facciones conectadas entre sí (por vasallaje y/o alianza). NO tiene cargos ni ciudadanía propia.
+- **Liga**: componente conexa del grafo de relaciones activas entre Facciones, de cualquier tipo (vasallaje, alianza e incluso guerra; mínimo 2 Facciones). NO tiene cargos ni ciudadanía propia.
 - **Vasallo/Señor**: relación ATADA entre 2 Facciones.
 - **Aliado**: relación LIBRE y revocable entre 2 Facciones.
 - **Gran Rey**: título de PRESTIGIO (no cargo mecánico) del Rey cuya Facción domina otras Facciones enteras.
@@ -12,8 +12,8 @@
 ## 2.2 Cargos
 
 ### Nivel Facción
-- **Rey**: autoridad sobre vasallaje, designación de Gobernadores de los asentamientos de su Facción (ver más abajo), políticas superiores hacia asentamientos de la Facción (sugerencia u obligatorias), y todas las funciones del Embajador. Automático si la Liga se formó por vasallaje (Rey de la Facción señora); ELECTO por voto entre representantes si se formó por alianza entre iguales (sin empates permitidos, se repite la votación si hay).
-  - **Fase 0: una Facción SIEMPRE tiene Rey.** Quien la crea queda automáticamente como su primer Rey, sin votación — es el caso base de "Rey automático por vasallaje" aplicado a una Facción de un solo miembro. Al abandonar la Facción, el trono pasa al siguiente ciudadano de la lista (orden de ingreso, el fundador primero); solo queda vacío si se va el último ciudadano. Un traspaso deliberado (`asignarRey`) solo lo puede hacer el Rey vigente.
+- **Rey**: autoridad sobre vasallaje, designación de Gobernadores de los asentamientos de su Facción (ver más abajo) y todas las funciones del Embajador. Es siempre el Rey de la Facción, no de la Liga (la Liga no tiene Rey ni cargos): no hay votación (la elección por voto entre representantes queda como diseño futuro, no implementado).
+  - **Fase 0: una Facción SIEMPRE tiene Rey.** Quien la crea queda automáticamente como su primer Rey, sin votación — es el caso base. Al abandonar la Facción, el trono pasa al siguiente ciudadano de la lista (orden de ingreso, el fundador primero); solo queda vacío si se va el último ciudadano. Un traspaso deliberado (`asignarRey`) solo lo puede hacer el Rey vigente.
   - **Ajuste permanente «Admitir a otras Facciones en nuestros ataques»** (2026-10-06, Doc 5.15.1b): solo lo cambia el Rey, desactivado por defecto. Activado, en los asedios y asaltos de caravana que abra su Facción pueden unirse al ataque héroes de Facciones neutrales o enemigas del defensor (nunca aliadas suyas), mientras quede sitio.
 - **Embajador**: crea alianzas y declara guerras. Designado directamente por el Rey.
 - **Capital** (decidido el 2026-10-02): la **designa el Rey** (`designarCapital`), entre los asentamientos de la Facción que tengan un **Palacio activo** (4.2.1). Es donde el Rey adopta tecnología (Doc 6.5) y el centro del mantenimiento por distancia (Doc 4.5). **Trasladarla tiene un cooldown** (`CAPITAL.cooldownDias`, placeholder 14 días de mundo) y no cuesta recursos; el primer nombramiento es libre. Mientras no haya una designada, y si la designada se pierde (se conquista el asentamiento o se queda sin Palacio), la capital es el **asentamiento vivo más antiguo** hasta que el Rey designe otra, sin esperar el cooldown. No hay cargo de Facción nuevo: es un acto del Rey, como designar Embajador.
@@ -21,9 +21,9 @@
 ### Nivel asentamiento (el Gobernador designa a los demás; al Gobernador lo designa el Rey)
 - **Gobernador**: máxima autoridad del asentamiento, designa al resto de cargos locales. Ve y controla la cola de auto-construcción (ver Doc 4.2). **Lo designa el REY de la Facción dueña del asentamiento** (Fase 0; el modelo canónico, ELECTO por ciudadanos, llega con la votación real). Es un acto de nivel Facción: el Rey no necesita residir ni estar presente en la plaza, igual que al designar Embajador. Los otros cuatro cargos los designa el Gobernador vigente, y para ello tiene que residir y estar PRESENTE en el asentamiento (ver 2.5).
 - **Tesorero**: gestión económica completa (trueque + Mercado). **Proponer, aceptar y rechazar un trueque y colocar órdenes de Mercado es del Tesorero o del Gobernador de la plaza** (decidido el 2026-10-12), residente y dentro de ella; un residente sin cargo no comercia por la plaza (sí lanza caravanas, 3.13).
-- **General**: mando militar del asentamiento — coordina el combate conjunto (ver Doc 5.2), pero NO es un gate de reclutamiento: reclutar es beneficio de RESIDENCIA (2.5), así que cualquier héroe residente recluta y repone SUS escuadrones sin necesidad de que exista un General asignado.
+- **General**: mando militar del asentamiento — sus políticas son de reclutamiento y guarnición (Leva Forzosa, Levas de guarnición), sin función de mando conjunto en combate, y NO es un gate de reclutamiento: reclutar es beneficio de RESIDENCIA (2.5), así que cualquier héroe residente recluta y repone SUS escuadrones sin necesidad de que exista un General asignado.
 - **Maestro de Obras**: gestiona prioridades de auto-construcción, bonus a tiempos de construcción. Puede reordenar, añadir y quitar proyectos de la cola — nunca elegir su ubicación (ver Doc 4.2).
-- **Sacerdote**: acelerador de aparición de Nobleza (no requisito) + bonificación de felicidad.
+- **Sacerdote**: políticas de Racionamiento (menos consumo de comida) y Culto a la Fertilidad (acelera el crecimiento de Nobleza, no es requisito), y dirige las épicas de los Aedas junto al Rey y al Gobernador.
 
 ### Reglas generales de cargos
 - Un jugador PUEDE ejercer varios cargos a la vez.
@@ -38,16 +38,17 @@
   - La interfaz enseña cuándo el cupo es uno de los motivos que impiden pedir la subida.
 
 ## 2.3 Formación de Liga (dos caminos)
-1. **Por vasallaje** (jerarquía, SIN votación): una Facción reúne una o más Facciones vasallas → el Rey de la Facción señora es Rey por defecto.
-2. **Por alianza entre iguales** (federación, CON votación): varias Facciones independientes se federan como iguales → se vota Rey.
+La Liga no se guarda: se deriva de las relaciones activas, y no tiene Rey ni votación (cada Facción conserva el suyo).
+1. **Por vasallaje** (jerarquía): una Facción reúne una o más Facciones vasallas; la señora que nunca es vasalla dentro de la Liga es su cima.
+2. **Por alianza entre iguales** (federación): varias Facciones independientes se federan como iguales.
 
-Una Facción puede someter a otra Facción entera como vasalla, o federarse con otra como iguales, en cualquier escala (esto es lo que genera el título de Gran Rey, ver 2.7).
+Una Facción puede someter a otra Facción entera como vasalla, o federarse con otra como iguales, en cualquier escala (el título de Gran Rey sale de la cima de una Liga con vasallaje, ver 2.9).
 
 ## 2.4 Reglas de vasallaje
 
 **Obligaciones:**
 1. El vasallo paga TRIBUTO al señor, en la forma que este decida.
-2. El señor debe DEFENDER a sus vasallos: declarar guerra a un vasallo declara automáticamente guerra a su señor, y viceversa (guerra al señor = guerra a todos sus vasallos).
+2. Defender a los vasallos es un incentivo de reputación, no una obligación mecánica (+15 si defiende con éxito, −3 si no defiende; ver 2.7). Declarar guerra a un vasallo declara automáticamente guerra a su señor, y viceversa (guerra al señor = guerra a todos sus vasallos).
 
 **Formación:** propuesta diplomática — protección a cambio de tributo pactado en recursos específicos. **Hace falta aceptación** (decisión del autor, 2026-10-09), como en la anexión y la fusión (2.6): la señora propone (`proponerRelacion`, el Rey o el Embajador) y queda pendiente; la contesta **solo el Rey de la otra Facción** (`responderRelacion`, aceptar o rechazar) y quien propuso puede retirarla (`retirarRelacion`). Aceptar crea la relación activa en el acto, con su tributo. Caduca a los `RELACION_PROPUESTA.caducidadDias` (3 días de mundo, placeholder) y solo puede haber una propuesta pendiente entre dos Facciones, en cualquier sentido. Al aceptar se revalida: las dos existen y tienen Rey, no hay relación activa entre ellas (la guerra cuenta), ninguna es ya vasalla de una tercera, no hay batalla abierta de ninguna de las dos. **Lo mismo vale para la alianza** (2.3). La guerra y la paz no cambian.
 
@@ -55,7 +56,7 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 1. Rebelión forzada del vasallo → declaración de guerra automática del vasallo hacia el señor (y resto de vasallos), Y cancelación inmediata de todos los acuerdos comerciales/tratados vigentes.
 2. Liberación voluntaria por el señor (`romperRelacion`, **solo él**; la vasalla no puede romper su vasallaje: solo rebelarse, vía 1).
 3. Conquista por un tercero (decidido e implementado el 2026-10-12): si un tercero conquista **todas** las plazas de la vasalla, esta pasa a ser **vasalla del conquistador** con el mismo tributo, y el vasallaje con su señora anterior se rompe, sin reputación ni guerra. Las guerras entre la vasalla y el conquistador se acaban. Llega en el tick siguiente a la caída de la última plaza. Si la vasalla conserva alguna plaza, o cae por ruina o la conquista la señora, el vasallaje no cambia.
-4. Liberación automática si el señor es destruido o se «desarma» (decidido e implementado el 2026-10-06): un señor está **desarmado** cuando su Facción **se queda sin ningún asentamiento**, sea por conquista, ruina o abandono — «destruido» y «desarmado» son el mismo estado, y una Facción sin plazas no desaparece del mundo (Doc 5.15.5). En ese momento sus vasallos quedan libres: el vasallaje pasa a `rota` y se cantan en la crónica de los Aedas. **No cambia la reputación de nadie** (el señor no decide nada: el bonus de 2.7 es por liberar *voluntariamente*) **ni declara guerra**. Se barre una vez por tick, así que la liberación llega en el tick siguiente al hecho. Si el señor vuelve a fundar, ya no tiene vasallos.
+4. Liberación automática si el señor es destruido o se «desarma» (decidido e implementado el 2026-10-06): un señor está **desarmado** cuando su Facción **se queda sin ningún asentamiento**, sea por conquista, ruina o abandono — «destruido» y «desarmado» son el mismo estado, y una Facción sin plazas no desaparece del mundo (Doc 5.15.5). En ese momento sus vasallos quedan libres: el vasallaje pasa a `rota` y se cantan en la crónica de los Aedas. **No cambia la reputación de nadie** (el señor no decide nada: el bonus de 2.7 es por liberar *voluntariamente*) **ni declara guerra**. Ocurre en el instante en que el señor pierde su última plaza (evento, no barrido por tick). Si el señor vuelve a fundar, ya no tiene vasallos.
 
 ### 2.4.1 Guerra (decidido el 2026-10-02)
 - **Se declara libre**: sin frontera compartida ni casus belli. La declara el Rey o el Embajador de la Facción (comando `declararGuerra`), contra cualquier Facción con la que no tenga ya una relación activa: para atacar a una aliada o a un señor o vasallo propio hay que romper antes la relación.
@@ -66,10 +67,10 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 
 ## 2.5 Ciudadanía
 - Se liga a la FACCIÓN del héroe (NO a la Liga completa — los vasallos mantienen ciudadanía separada de su señor).
-- Obtención, TRES vías (2026-10-04, D31: no hay compra de casa):
+- Obtención, DOS vías (2026-10-04, D31: no hay compra de casa):
   1. **Crear la Facción** — quien la crea queda como su primer ciudadano **y su primer Rey** de inmediato, sin necesidad de fundar todavía (ver 2.2, "una Facción SIEMPRE tiene Rey").
   2. **Pedir el ingreso** en una existente (`solicitarIngreso`, D46): el héroe entra en su **lista de solicitantes** y **solo el Rey** acepta o deniega (`responderSolicitud`). Aceptado, es ciudadano y sus solicitudes en otras Facciones caen; denegado, sale de la lista. Solo da ciudadanía, no residencia.
-  3. **Fundar un asentamiento** — cada fundador recibe automáticamente una casa en el asentamiento recién fundado, y con ella ciudadanía inmediata.
+- **Fundar un asentamiento** no da ciudadanía: solo los ciudadanos de la Facción pueden fundar, y cada fundador recibe automáticamente una casa (residencia) en el asentamiento recién fundado.
 - **No hay tope de residentes** por asentamiento: el tope que cuenta es el de héroes que entran en una batalla (Doc 5.15.1).
 - **Abandonar** (el héroe solo puede dejar SU PROPIA Facción): quita la ciudadanía **y la casa**: deja su residencia y sus cargos LOCALES (2026-10-02). Sigue siendo suyo lo que lleva. Si el que se va era Rey, el trono pasa al siguiente ciudadano (queda vacío solo si era el último); si era Embajador, la embajada se libera. 
 - **Dejar la residencia** (`dejarResidencia`, 2026-10-02): libera la vivienda y vacía los cargos locales ahí, sin dejar la Facción ni tomar otra casa; el héroe pasa a residir en el campamento de mercenarios más cercano a donde está (abajo), hasta que se mude a otra plaza. No hay reembolso.
@@ -78,11 +79,11 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 - **Cooldown de residencia** (`CIUDADANIA.cooldownCambioResidenciaDias`, 3 días de mundo, placeholder): tras `cambiarResidencia`, `dejarResidencia` o `residirEnCampamento` no se puede cambiar otra vez hasta que pase. El primero es libre, y la reubicación forzosa por conquista (Doc 5.15.5) no cuenta.
 - **Cambiar de residencia** (`cambiarResidencia`): atómico — deja la residencia actual (se libera su vivienda y se vacían sus cargos locales ahí) y toma una nueva en otro asentamiento **de la misma Facción** que lo permita (sin veto). **El héroe traslada con ella su campamento**: sus escuadrones pasan a la nueva residencia, y los que tuviera en la guarnición de la vieja dejan de serlo, porque solo se guarnece donde se reside (Doc 5.15.3). Es lo que hace un héroe para consolidar una conquista, y lo que hace un ciudadano que vive en un campamento para entrar a vivir en una plaza de su Facción: sin plaza de la que salir, solo toma la nueva y deja el campamento.
 - **1 héroe, 1 Facción a la vez**: crear una Facción o pedir el ingreso en una se rechaza si el héroe ya es ciudadano de otra. Anti-abuso "crear, abandonar, crear" en bucle: tras abandonar, no se puede CREAR una Facción nueva hasta pasados 7 días (`CIUDADANIA.cooldownCreacionFaccionDias`) — el cooldown solo afecta a crear, no a pedir el ingreso en una existente (esa vía sigue libre de inmediato tras abandonar).
-- Beneficios: ejercer cargo, iniciar caravanas en Mercados de la Facción, votar políticas, reclutar tropas (reclutar un escuadrón **nuevo** solo en tu residencia; **reponer** un escuadrón que ya tienes y **mover** escuadrones propios, en cualquier plaza de tu Facción que lo permita, estando presente — ver Doc 5.8), comisiones de comercio más bajas dentro de la misma Facción.
+- Beneficios: ejercer cargo, iniciar caravanas en Mercados de la Facción, reclutar tropas (reclutar un escuadrón **nuevo** solo en tu residencia; **reponer** fuera de ella solo una escuadra de tu columna a la puerta de la plaza, y **mover** escuadrones propios o salir como ejército exige residir y estar presente — ver Doc 5.8), comisiones de comercio más bajas dentro de la misma Facción.
 - La residencia es UN solo asentamiento a la vez, nunca varios: comprar una segunda casa se rechaza mientras el héroe siga residiendo en otro.
-- **LA CIUDADANÍA HABILITA, LA PRESENCIA EJERCE** (ver Doc 1.10). Ser ciudadano es lo que te da derecho a ejercer cargo, reclutar, comerciar y votar políticas; **estar dentro del asentamiento** es lo que te permite hacerlo ahí y ahora. Un Gobernador de campaña sigue siendo el Gobernador y no pierde el cargo, pero no gobierna a distancia: mientras está fuera no puede dar órdenes nuevas a su plaza. Lo ya ordenado sigue corriendo solo.
+- **LA CIUDADANÍA HABILITA, LA PRESENCIA EJERCE** (ver Doc 1.10). Ser ciudadano es lo que te da derecho a ejercer cargo, reclutar y comerciar; **estar dentro del asentamiento** es lo que te permite hacerlo ahí y ahora. Un Gobernador de campaña sigue siendo el Gobernador y no pierde el cargo, pero no gobierna a distancia: mientras está fuera no puede dar órdenes nuevas a su plaza. Lo ya ordenado sigue corriendo solo.
   - Consecuencia buscada: **la delegación importa**. Los cargos locales no son un adorno del que se los quedó primero: son la forma de que la ciudad siga funcionando mientras su gente está fuera.
-  - Residencia y presencia son cosas distintas: se reside en un solo asentamiento (arriba), pero se puede estar dentro de cualquiera al que te dejen entrar (Doc 1.10.5). Reclutar un escuadrón **nuevo** exige las dos cosas — es en tu residencia, y estando en ella. **Reponer** y **mover** tropa propia solo exigen presencia + permiso de la plaza (Doc 5.8).
+  - Residencia y presencia son cosas distintas: se reside en un solo asentamiento (arriba), pero se puede estar dentro de cualquiera al que te dejen entrar (Doc 1.10.5). Reclutar un escuadrón **nuevo** exige las dos cosas — es en tu residencia, y estando en ella. **Reponer** fuera de la residencia solo vale para escuadras de tu columna a la puerta de la plaza, y **mover** tropa propia o salir como ejército exige residir y estar presente (Doc 5.8).
 
 ## 2.6 Fusión/anexión voluntaria entre 2 Facciones
 Menú con 2 opciones al ejecutar la acción:
@@ -120,13 +121,13 @@ Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).
 **Usos del score:**
 1. Términos de comercio asimétricos (score bajo = la Facción paga de su almacén un 50 % extra de la comisión en cada entrega a otra Facción, Doc 3.5).
 2. Coste de mercenarios/escoltas (más caro con score bajo).
-3. Restricciones del Embajador (cooldown/coste extra para proponer alianzas con score bajo).
+3. Restricciones del Embajador (con reputación por debajo de −40 la Facción no puede proponer alianzas; no hay cooldown ni coste extra).
 4. Dificultad para atraer Aedas residentes con score muy bajo.
 
 El score es PÚBLICO y total (no hay sistema de rumores/espionaje que lo oculte parcialmente). La taberna (Doc 5.12.10) vende información militar y de territorio pagada y con caducidad; no es un sistema de rumores sobre el score ni sobre la reputación.
 
 ## 2.8 Mecánicas heredadas de Iberia (política local)
-- **Exilio**: la puerta de cada asentamiento se puede cerrar por grupo —neutrales, aliados o vasallos, enemigos en guerra (2.4.1) y los Aedas (6.7)—; nunca a la propia Facción. Lo cambia el Gobernador de ese asentamiento o el Rey, sin coste (decidido e implementado el 2026-10-02, Doc 1.10.5). La pérdida de materiales y tropas al perder la casa es la reubicación por conquista (Doc 5.15.5), no el exilio.
+- **Exilio**: la puerta de cada asentamiento se puede cerrar por grupo —neutrales, aliados (incluye vasallos y señores), enemigos en guerra (2.4.1) y los Aedas (6.7)—; nunca a la propia Facción. Lo cambia el Gobernador de ese asentamiento o el Rey, sin coste. Además, solo el Gobernador (no el Rey) puede vetar a un jugador concreto (`vetarJugador`), como exilio individual (decidido e implementado el 2026-10-02, Doc 1.10.5). La pérdida de materiales y tropas al perder la casa es la reubicación por conquista (Doc 5.15.5), no el exilio.
 - **Identidad visual**: cada Facción tiene su propio sigilo/estandarte; una Liga puede tener uno colectivo (ver 2.8.1).
 
 ### 2.8.1 Sigilo, estandarte e identidad de imperios (decidido el 2026-10-05; implementado en el backend y en BronzeAgeClient, ver Doc 01 §23; Conquest lo dibuja con su CQ-009)
@@ -139,7 +140,7 @@ El score es PÚBLICO y total (no hay sistema de rumores/espionaje que lo oculte 
 - **Cultura y audio quedan fuera de este apartado**: el audio y la música por cultura entran con la cultura (`Docs/Mecanicas a desarrollar.md` §43). Decisiones y plan del sigilo: `typescript-final:Consideraciones/Identidad_Visual_Definicion.md`.
 
 ## 2.9 Progresión sin condición de victoria
-El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria PARA EL JUGADOR. En vez de victoria personal, existen TÍTULOS DINÁMICOS de PRESTIGIO (sin beneficio mecánico, solo prestigio) que cambian de mano según el poder relativo, recalculados PERIÓDICAMENTE (no en tiempo real). Ejemplos de referencia (lista abierta, no cerrada): imperio/Facción más grande, general con más victorias, Facción con mayor poder económico, ejército más grande, "Gran Rey", "Mecenas de los Aedas" (más épicas cumplidas, Doc 6.7). El histórico de títulos se narra por los AEDAS/POETAS (ver Doc 6), consultable vía interfaz dedicada Y eventos in-game.
+El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria PARA EL JUGADOR. En vez de victoria personal, existen TÍTULOS DINÁMICOS de PRESTIGIO (sin beneficio mecánico, solo prestigio) que cambian de mano según el poder relativo, reevaluados por dependencia (al cambiar lo que miran) y por muestreo de baja frecuencia. Ejemplos de referencia (lista abierta, no cerrada): imperio/Facción más grande, Facción con mayor poder económico, ejército más grande, "Gran Rey", "Mecenas de los Aedas" (épicas cumplidas ×10 + Aedas residentes, Doc 6.7). El histórico de títulos se narra por los AEDAS/POETAS (ver Doc 6), consultable vía interfaz dedicada Y eventos in-game.
 
 **El servidor sí tiene un final.** Nadie "gana" la partida como jugador, pero cada INSTANCIA DE SERVIDOR tiene un ciclo de vida acotado (~12 meses, o antes si una Facción completa la Maravilla del ciclo) que termina en un reseteo del mundo, con la Facción que completa la Maravilla persistiendo como legado NPC. Mecanismo completo en `typescript-final:Consideraciones/Roadmap_Escalado.md` Eje 4.
 

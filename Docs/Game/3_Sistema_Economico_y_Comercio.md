@@ -2,8 +2,8 @@
 
 ## 3.1 Oro
 - NO es moneda acuñada: es METAL PRECIOSO EN BRUTO PESADO (sistema tipo siclo/shekel).
-- ORIGEN: mina de oro en el mapa, mismo patrón que cantera/mina de cobre (nodo finito, con reemplazo automático al agotarse — ver Doc 4.2); comisiones de comercio (3.5); y **recaudación en el asentamiento según población y clase** (Doc 4.1).
-- USO: medio de pago en Mercado (3.3) y en comisiones (3.5); **coste de reclutamiento** salvo la milicia inicial (Doc 5.8); **compra de animales de arrastre para caravanas**, buey incluido (3.13.2); Maravilla (Doc 4.2.1). Pensado también para tecnología, mercenarios y sueldos (Aedas, Doc 6), sistemas que Fase 0 no tiene.
+- ORIGEN: mina de oro en el mapa, mismo patrón que cantera/mina de cobre (nodo que se agota y se regenera tras un cooldown corto (3 min el ganado, 10 min el resto) — ver Doc 4.2); comisiones de comercio (3.5); y **recaudación en el asentamiento según población y clase** (Doc 4.1).
+- USO: medio de pago en Mercado (3.3) y en comisiones (3.5); **coste de reclutamiento** salvo la milicia inicial (Doc 5.8); **compra de animales de arrastre para caravanas**, buey incluido (3.13.2); Maravilla (Doc 4.2.1); **compra de tecnología a Aedas** (Doc 6); **miradas e informes** de la taberna; y **mercado de mercenarios** (3.3b), donde el oro cobrado se destruye. Los sueldos no existen.
 - **El oro obliga a elegir** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`): es la única moneda que convierte entre ambiciones (ejército / flota comercial / información), y no se puede ir a por todas a la vez. La recaudación por población es la FUENTE que lo hace pagable sin mina; el reclutamiento en oro y los animales en oro son los SUMIDEROS; y la política "Presión Fiscal" (Tesorero, Doc 4.4) cambia más oro por menos crecimiento.
 - ENTRE JUGADORES: recurso más de trueque, sin restricción especial.
 
@@ -17,7 +17,7 @@
   - Una propuesta **sin contestar caduca sin penalizar a nadie** (no hubo promesa que romper); una **rechazada** queda como `'rechazado'` y no se borra: una respuesta es información, y es distinta de un silencio.
   - Aceptar no traza ningún camino: los caminos los hacen las caravanas que viajan (red de caminos, Doc 1.6).
   - **Contesta siempre un jugador** —humano o bot, con el cargo que toca (2026-10-04, D52)—: no hay plazas NPC que contesten solas.
-- **Cada envío sale en una caravana propia**: exige tener una caravana PROPIA **'disponible'** en el asentamiento origen (ver 3.12). `asignarCaravanasATrueque` la asigna automáticamente al envío pendiente; si no hay ninguna disponible, el envío espera al siguiente minuto. Para entregar a mano en un trueque, se engancha la caravana a un ejército y se entrega al llegar (Doc 5.13.3); el lanzamiento manual de 3.13.3 no se vincula a trueques.
+- **Cada envío sale en una caravana propia**: exige tener una caravana PROPIA **'disponible'** en el asentamiento origen (ver 3.12). `asignarCaravanasATrueque` la asigna automáticamente al envío pendiente; si no hay ninguna disponible, el envío espera hasta que quede libre una caravana (la asignación se reevalúa en ese momento). Para entregar a mano en un trueque, se engancha la caravana a un ejército y se entrega al llegar (Doc 5.13.3); el lanzamiento manual de 3.13.3 no se vincula a trueques.
 - Cuando hay menos caravanas disponibles que envíos pendientes en un mismo asentamiento (varios acuerdos compitiendo a la vez), se prioriza por un SCORE ponderado (ver 3.12: urgencia por expiración del acuerdo, urgencia por volumen pendiente, cercanía del destino) — no por orden de llegada.
 - La caravana viaja de verdad por el mapa, sobre una RUTA calculada por pathfinding (rodea terreno costoso, ver Doc 1.6/3.6), con la velocidad modulada por el coste del terreno que cruza en cada momento — y entrega al llegar. Al entregar, la caravana vuelve a estar 'disponible' en el origen: es un activo persistente y con coste (3.12), no un objeto de un solo uso.
 - Cumplir o incumplir un trueque ajusta el score de reputación de Facción (Doc 2.7) **solo entre Facciones distintas**: un trueque entre plazas de la misma Facción no mueve la reputación (decidido el 2026-10-11).
@@ -43,7 +43,7 @@ Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con p
 - NO existe mercado NPC de respaldo.
 
 ## 3.5 Comisiones de comercio
-- Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles/Comercio Abierto").
+- Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles Proteccionistas" y "Arterias Comerciales" del Maestro de Obras, "Comercio Abierto"; se multiplican y solo tocan la comisión externa).
 - **En un trueque o una entrega de caravana el comercio genera el oro de la comisión** (se acuña en el destino), **pero solo entre dos asentamientos distintos**: llevarse la carga al propio origen no rinde nada (2026-10-11).
 - **Reputación baja = recargo de su bolsillo** (2026-10-11): si la Facción de origen, distinta de la del destino, tiene reputación en el umbral bajo, paga además el 50 % extra de la comisión, sacado del oro de su almacén de origen y entregado al destino.
 - **En el mostrador (3.3), la paga quien toma la orden y se la queda la plaza donde ocurre**: comprando se paga de más, vendiendo se cobra de menos. El oro **se conserva**: la comisión sale de quien comercia, no se acuña. En un trueque, la comisión la cobra el destino al recibir cada entrega (`comisionDeEntrega`).
@@ -52,7 +52,7 @@ Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con p
 1. **Comercial**: la que se usa en Trueque y Mercado, y la única que es un activo PROPIO y persistente (ver 3.12). Es una caravana **compuesta** —lista de carros, cada uno con su animal— y deriva de ahí capacidad y velocidad (3.13).
 2. **Militar**: lleva equipo militar antes de un asedio. Capacidad y velocidad propias (`CARAVANA_CATALOGO`).
 3. **De construcción**: la Caravana de Fundación (Doc 1.8), un mecanismo aparte del de Trueque/Mercado — no forma parte de la flota propia de 3.12.
-4. **De contrabando**: detección reducida; es la más rápida (24).
+4. **De contrabando**: detección reducida; solo datos, sin flota ni disparador.
 - **Movimiento con coste de terreno** (ver Doc 1.1/1.6): la velocidad es la base, y el avance real por minuto se divide entre el coste de terreno en la posición actual (llano≈1, colina/montaña más lento, cima muy caro; el agua no se cruza) — cruzar relieve accidentado tarda más. El bosque también frena y los ríos solo se cruzan por un vado o por una ciudad ribereña. Cada caravana calcula su RUTA por pathfinding en cada lanzamiento (rodea el relieve costoso y se arrima a los caminos ya transitados), y avanza más rápido en cada tramo que sea camino (Doc 1.6). Una comercial que cruce la zona de una ciudad ajena pasa por ella y deja un peaje en especie del 2 % de su carga.
 
 ## 3.7 Transporte individual espontáneo (heredado de Iberia)
@@ -60,14 +60,14 @@ Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con p
 - Es **la única vía por la que la mercancía de una orden de mercado cambia de manos** (3.3): el transporte físico no es opcional.
 
 ## 3.8 Bonificación por distancia (heredado de Iberia)
-- Aplica como bonus a la comisión de trueque: hasta ×1.5 a partir de 120 unidades de distancia recorrida.
+- Aplica como bonus a la comisión de trueque: bonus lineal hasta ×1.5, que se alcanza a 120 unidades de distancia en línea recta entre origen y destino.
 - NO aplica al mostrador (3.3): el bonus está definido sobre la distancia que recorre una CARAVANA de un acuerdo, y en el mostrador el viaje lo hace el jugador.
 
 ## 3.9 Dependencia logística real (heredado de Iberia)
 No hay un sistema que detecte explícitamente "cortar una ruta" como evento de guerra económica. Si no llegan caravanas, el receptor simplemente no recibe el recurso: es una consecuencia natural del modelo de trueque, no una mecánica dedicada.
 
 ## 3.10 Combate de caravanas
-- **Interceptar no es un comando**: es lo que puede hacer una columna que se cruza con una caravana enemiga en el mapa, si elige interceptarla (Doc 5.12.3). No hace falta General porque no hace falta orden: hace falta tener una columna ahí, que es más caro y más interesante. El botín viaja en su carro y llega a casa al replegarse.
+- **Interceptar no es un comando**: es lo que puede hacer una columna que se cruza con una caravana enemiga en el mapa, si elige interceptarla (Doc 5.12.3). No hace falta General porque no hace falta orden: hace falta tener una columna ahí, que es más caro y más interesante. El botín viaja en su carro y llega a casa cuando la columna entra en una plaza propia (se vuelca al almacén, Doc 1.10.3).
 - La caravana se defiende con **tres capas**: sin nada → la defensa base fija (`defensaBaseCaravana`); con escolta sin héroe (escuadrones cedidos, 3.13.4) → la escolta, manejada por la IA del juego; adjunta a un ejército → el ejército (Doc 5.13.3).
 - **UNA CARAVANA SOLA SE DEFIENDE DE UN JUGADOR SOLO.** El héroe combate por sí mismo (Doc 5.1), así que la defensa base deja clara una frontera: **un jugador solo no roba caravanas**. La caravana lleva carreteros y guardias; un hombre a caballo no la para.
   - La defensa base son los **carreteros**: una escuadra de milicia de lanceros sin dueño, manejada por la IA del juego. Es lo que combate en Unity contra un héroe que intercepta la caravana (Doc 5.15), y lo que pesa en el cálculo contra bandidos.
@@ -91,7 +91,7 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 - **Los bandidos** (Doc 1.9) atacan las caravanas que pasan cerca de su campamento, con la misma resolución numérica.
 - Los bandidos **siguen sin actuar dentro de ninguna zona**; la regla entre Facciones de arriba no se aplica al PvE.
 
-**ESCOLTA POR EJÉRCITO (Doc 5.13.3).** Una caravana puede ir **adjunta a un ejército** y hacer su entrega normal mientras marcha con él. Deja de defenderse con la defensa base fija y pasa a estar protegida por el poder de combate real del ejército. Se autoequilibra con la regla de velocidad (Doc 5.12.5): el ejército va al ritmo de su integrante más lento, así que escoltar una caravana comercial (16) frena a un ejército ligero (20) y le quita la capacidad de cazar otras caravanas — **no se puede escoltar y depredar a la vez**. Si el ejército es derrotado, la caravana escoltada se pierde con él.
+**ESCOLTA POR EJÉRCITO (Doc 5.13.3).** Una caravana puede ir **adjunta a un ejército** y hacer su entrega normal mientras marcha con él. Deja de defenderse con la defensa base fija y pasa a estar protegida por el poder de combate real del ejército. Se autoequilibra con la regla de velocidad (Doc 5.12.5): el ejército va al ritmo de su integrante más lento, así que escoltar una caravana comercial (24) frena a un ejército ligero (30) y le quita la capacidad de cazar otras caravanas — **no se puede escoltar y depredar a la vez**. Si el ejército es derrotado, la caravana escoltada se pierde con él.
 
 **Pero quedarse sola no es lo mismo que ser capturada.** Si el ejército se deshace sin que nadie lo venciera —porque todos sus integrantes se desconectaron y cada uno se llevó lo suyo (Doc 1.10.6)—, la caravana **vuelve por su cuenta al asentamiento de origen**, haciendo el camino y siendo interceptable durante el regreso. Al derrotado se las quita un enemigo, porque el tren de suministros es objetivo militar; a estas no las venció nadie y los carreteros se vuelven a casa. Si su origen ya no existe, se pierden.
 
