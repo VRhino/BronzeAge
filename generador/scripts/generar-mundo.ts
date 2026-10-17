@@ -54,7 +54,7 @@ const recursos = medir('recursos', () => [...metalesARecursos(e.nodos), ...gener
   .map(x => ({ ...x, posicion: aCeldaTransitable(x.posicion) })));
 for (const c of e.campamentos) c.posicion = aCeldaTransitable(c.posicion);
 const apto = (p: Point) => evaluarTerreno(r.elevacion, p) !== 'agua' && esTransitable(r.elevacion, p) && r.conexion.tieneAcceso(p);
-const colocados = medir('bandidos y alijos', () => colocarBandidosYAlijos(seed, { ancho, alto }, e.campamentos, e.vetas, apto));
+const colocados = medir('bandidos y alijos', () => colocarBandidosYAlijos(seed, { ancho, alto }, e.campamentos, apto));
 const bandidos = colocados.bandidos.map(b => ({ ...b, posicion: aCeldaTransitable(b.posicion) }));
 const alijos = colocados.alijos.map(a => ({ ...a, posicion: aCeldaTransitable(a.posicion) }));
 
