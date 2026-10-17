@@ -17,7 +17,3 @@ Si el canon (`Docs/Game/`) y `Docs/Mechanics/` se contradicen, gana `Mechanics` 
 ## Después de la migración a Rust
 
 El barrido de `Docs/Coordinacion/` y de los documentos de `Docs/Mechanics/` aún sin cruzar contra el canon se hace **cuando el motor en Rust esté terminado**, no antes (decidido el 2026-10-17). Hasta entonces el canon (`Docs/Game/`) ya está alineado con `Mechanics`.
-
-## Skills del proyecto
-
-`.claude/skills/session-start-hook/SKILL.md` es una copia corregida del skill de usuario del mismo nombre: la plantilla del hook es síncrona y los pasos de validación no llevan énfasis sin motivo. Está en el repo para que las sesiones nuevas la carguen, ya que `~/.claude` no se conserva entre sesiones en la nube.
