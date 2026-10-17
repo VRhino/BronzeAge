@@ -9,7 +9,7 @@ residentes que cantan épicas, y la crónica que narra los hechos públicos.
 - **Módulos:** `src/engine/tecnologia.ts` (logros, Eras, aparición, adopción, revelar, vender), `src/engine/aedas.ts` (itinerantes), `src/engine/aedasResidentes.ts` (residentes y épicas), `src/engine/cronica.ts` (crónica),
   `src/engine/reclutamientoMercenario.ts` (`tecnologiasDelCampamento`), `src/session/comandos/tecnologia.ts` (comandos), `src/session/resultadoBatalla.ts` (`contadoresDeBatalla`), `src/session/comandos/tipos.ts` (`exito`),
   `src/session/proyecciones/jugador.ts` (`tecnologiaParaJugador`).
-- **Canon:** Doc 6 (6.1–6.7), Doc 2.9 (títulos), Doc 5.8 (qué tropa pide qué tecnología). Los números de **calibración** (las X de los logros, las tarifas, los cupos) son placeholder; el efecto de gatear con tecnología en construcción, mejoras, recetas y reclutamiento está en
+- **Canon:** Doc 6 (6.1–6.7), Doc 2.9 (títulos), Doc 5.8 (qué tropa pide qué tecnología). Los números de **calibración** (las X de los logros de la Era I están balanceadas; las de las Eras II y III, las tarifas y los cupos son placeholder); el efecto de gatear con tecnología en construcción, mejoras, recetas y reclutamiento está en
   [`Economia_Construccion.md`](Economia_Construccion.md).
 - **Fuera de alcance aquí:** el reclutamiento en sí (Doc 5.8); la proyección completa del jugador ([`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) para lo que se ve de un Aeda).
 
@@ -423,7 +423,7 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
 
 ### 11.1 Catálogo de tecnologías
 
-Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la X del logro, **placeholder** hasta calibrarlo con batch en su semana objetivo), `hito[]` y `bonusProduccion?`.
+Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la X del logro: **calibrado con batch para la Era I**; las de las Eras II y III siguen siendo placeholder), `hito[]` y `bonusProduccion?`.
 
 <!-- parametros:TECNOLOGIAS -->
 ```json
