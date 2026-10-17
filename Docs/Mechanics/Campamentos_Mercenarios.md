@@ -65,7 +65,7 @@ Una tropa del catálogo `TROPAS_RECLUTABLES` está disponible si **todas** se cu
 1. Su edificio existe en el campamento: `barracon`, `galeriaDeTiro` o `caballerizas` (el Centro Urbano no existe aquí, así que **la leva de arranque no se recluta**) y el campamento lo tiene en `edificios`.
 2. `tropa.nivelRequerido ≤ MERCENARIOS.nivelEdificios` (3: todas sus tropas, limitadas por la tecnología).
 3. Su `tecnologia` está en las **tecnologías del campamento** (`tecnologiasDelCampamento`): las de arranque siempre; las demás, cuando la tiene al menos `MERCENARIOS.tecnologia.porcentajeFacciones` de las Facciones humanas **vivas** (las que conservan algún asentamiento; los bots cuentan igual) **o** han pasado `horasTrasLaPrimera` desde que la primera la desbloqueó, lo que llegue antes.
-   Una tecnología que nadie ha desbloqueado por hito no está; sin Facciones vivas manda solo el plazo. Detalle en [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md).
+   Una tecnología que nadie ha desbloqueado (por hito, épica o compra) no está; sin Facciones vivas manda solo el plazo. Detalle en [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md).
 
 ### 5.2 El precio (`precioPorSoldado`)
 
@@ -135,7 +135,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 | Repostar víveres | cualquiera, gratis | `Comercio_Caravanas.md` §9.2b |
 | Aportar al fondo de refundación | ciudadano de una Facción **sin plazas** | `Fundacion_Y_Refundacion.md` §9 |
 | Intel de la taberna | cualquier héroe **de una Facción** | `Niebla_De_Guerra.md` |
-| Iniciar un combate a `radioProteccion` (60) | **nadie** (ni jugadores ni bandidos) | `Combate.md` §2 |
+| Iniciar un combate a `radioProteccion` (10) | **nadie** (ni jugadores ni bandidos) | `Combate.md` §2 |
 | Abrir un alijo | héroe de una Facción **sin asentamientos** o sin Facción | `Generacion_Del_Mundo.md` §12 |
 
 ## 9. Parámetros
@@ -151,7 +151,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
     "cadaMinutos": 30
   },
   "radioExclusionFundar": 100,
-  "radioProteccion": 60,
+  "radioProteccion": 10,
   "origenes": 3,
   "edificiosFijos": [
     "taberna",

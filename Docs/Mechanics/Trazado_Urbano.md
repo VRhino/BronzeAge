@@ -29,8 +29,7 @@ Las manzanas no existen como dato: son el espacio que queda encerrado cuando las
 - `radioMapa = 220` es solo presentación (zoom del lienzo); no interviene en ninguna decisión.
 - `LAYOUT_VERSION = 2`: revisión de la geometría. **Un snapshot de otra revisión se rechaza al cargar** (`cargarPartida`), porque las huellas y la red se *derivan* de las tablas y se
   reinterpretarían en silencio. Se sube al cambiar cualquier huella, el tamaño de celda, `FONDO_MANZANA` o una constante de `TRAZADO` que mueva lo ya colocado.
-- El espacio local de la Vista de Asentamiento y el mapa del mundo son **espacios separados**, sin equivalencia de unidades (decidido el 2026-10-12). El radio de la ciudad en unidades locales
-  es `radioUrbanoDe(asentamiento) = asentamiento.radioPotencial` tal cual (`ZONA_INFLUENCIA.radioInicial` 30 → `radioMaximoPorNivel` 60/90/120/150/180).
+- El espacio local de la ciudad y el mapa del mundo son **espacios separados**: la ciudad no se mide contra el exterior (decidido el 2026-10-17; `ESCALA` y `radioUrbanoDe` se borraron). Su tamaño es **propio e interno**: `radioCiudad`, en unidades locales, nace en `TRAZADO.radioCiudad.inicial` (30), crece `TRAZADO.radioCiudad.crecimientoPorEdificio` (5) por edificio completado y topa en `radioCiudad.maximoPorNivel` (60 / 90 / 120 / 150 / 180 para los niveles 1-5). No se deriva del radio de la zona de influencia ni de ninguna cifra del mapa; los valores son los de siempre, así que el trazado no cambia.
 
 ### 2.2 Celda, rectángulo y posición
 
@@ -310,7 +309,7 @@ módulos y salían transversales amontonadas o ausentes.
 ## 6. Colocación: ¿dónde va un edificio nuevo?
 
 `sitiosParaTipo(asentamiento, edificios, tipo, nivelInterno?, perfil)` devuelve la **lista ordenada** de sitios posibles `{ punto, rotado }`; el mejor es el primero (`sitioParaTipo`). Vacía = no cabe.
-El resultado depende solo de `(id, edificios, recintos con su avance, radioPotencial, tipo, nivelInterno, perfil)`.
+El resultado depende solo de `(id, edificios, recintos con su avance, radioCiudad, tipo, nivelInterno, perfil)`.
 
 El **perfil** efectivo es `TRAZADO.perfilForzado ?? perfil de la política activa ?? perfilPorTradicion(id)` (§8).
 
@@ -462,7 +461,7 @@ Un quinto perfil («palatina», dominado por `borde`) se descartó: `borde` solo
 Dos cachés LRU de 512 entradas (`Map`, se reinserta al acertar y se desaloja la primera):
 
 - **Red de calles**, clave = `id` + por cada edificio `tipo:x,y:nivelInterno:rotado:ambito` + por cada recinto sus celdas `col,row,clase`. **No** incluye `estado` ni `completaEn`.
-- **Sitios**, clave = la anterior + por recinto `id:nivel:avance:mejorandoA` + `radioPotencial` + `tipo` + `nivelInterno` + `perfil`. Incluye `avance` porque la preferencia intramuros solo se aplica con el recinto completo.
+- **Sitios**, clave = la anterior + por recinto `id:nivel:avance:mejorandoA` + `radioCiudad` + `tipo` + `nivelInterno` + `perfil`. Incluye `avance` porque la preferencia intramuros solo se aplica con el recinto completo.
 
 La clave es el contenido exacto, no un hash: una colisión daría una red equivocada en silencio. Ante la duda, la clave incluye de más (cuesta aciertos) y nunca de menos (daría una respuesta errónea).
 
@@ -474,7 +473,7 @@ La clave es el contenido exacto, no un hash: una colisión daría una red equivo
 ## 11. Fundación
 
 `edificiosIniciales`: el Centro Urbano en `(0,0)`; `FUNDACION.viviendasIniciales` (3) viviendas colocadas con `sitioEnBarrio` (cada una ve las anteriores); la granja inicial con `sitioEnBarrio` (si no cabe, **cae al
-origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto de colocación `{ id, radioPotencial: ZONA_INFLUENCIA.radioInicial }`.
+origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto de colocación `{ id, radioCiudad: TRAZADO.radioCiudad.inicial }`.
 
 ## 12. Parámetros
 

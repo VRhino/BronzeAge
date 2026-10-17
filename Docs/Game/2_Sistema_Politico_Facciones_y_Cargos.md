@@ -12,7 +12,7 @@
 ## 2.2 Cargos
 
 ### Nivel Facción
-- **Rey**: autoridad sobre vasallaje, designación de Gobernadores de los asentamientos de su Facción (ver más abajo) y todas las funciones del Embajador. Es siempre el Rey de la Facción, no de la Liga (la Liga no tiene Rey ni cargos): no hay votación (la elección por voto entre representantes queda como diseño futuro, no implementado).
+- **Rey**: autoridad sobre vasallaje, designación de Gobernadores de los asentamientos de su Facción (ver más abajo) y todas las funciones del Embajador. Es siempre el Rey de la Facción, no de la Liga (la Liga no tiene Rey ni cargos): no hay votación (la elección por voto queda en `Docs/Mecanicas a desarrollar.md` §39, no implementada).
   - **Fase 0: una Facción SIEMPRE tiene Rey.** Quien la crea queda automáticamente como su primer Rey, sin votación — es el caso base. Al abandonar la Facción, el trono pasa al siguiente ciudadano de la lista (orden de ingreso, el fundador primero); solo queda vacío si se va el último ciudadano. Un traspaso deliberado (`asignarRey`) solo lo puede hacer el Rey vigente.
   - **Ajuste permanente «Admitir a otras Facciones en nuestros ataques»** (2026-10-06, Doc 5.15.1b): solo lo cambia el Rey, desactivado por defecto. Activado, en los asedios y asaltos de caravana que abra su Facción pueden unirse al ataque héroes de Facciones neutrales o enemigas del defensor (nunca aliadas suyas), mientras quede sitio.
 - **Embajador**: crea alianzas y declara guerras. Designado directamente por el Rey.

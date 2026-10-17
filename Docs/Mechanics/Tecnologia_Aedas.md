@@ -125,7 +125,7 @@ y algunas dan un `bonusProduccion` (hoy solo `canteria`: ×1,5 la piedra que sac
 Un campamento no adopta nada: **desbloquea** cada tecnología —al instante y gratis— cuando se cumple lo que llegue antes de:
 
 ```
-(instante − primeros[id].en) ≥ horasTrasLaPrimera × 60 min      ← primeros[id] debe existir: una tecnología que nadie ha desbloqueado por hito no está en el campamento
+(instante − primeros[id].en) ≥ horasTrasLaPrimera × 60 min      ← primeros[id] debe existir: una tecnología que nadie ha desbloqueado (por hito, épica o compra) no está en el campamento
 (Facciones con ≥ 1 asentamiento que la tienen ADOPTADA) / (Facciones con ≥ 1 asentamiento) ≥ porcentajeFacciones     (0 Facciones → no)
                                                                                                   bots y humanos cuentan igual: juegan por la misma vía
 ```
@@ -175,7 +175,7 @@ Efecto: la plaza paga; la tecnología pasa a **aparecida** (no a adoptada: adopt
 
 ## 7. Aedas residentes
 
-Viven en un asentamiento con **Palacio activo** y **Nobleza > 0**. Dan felicidad y crecimiento de nobleza ([`Economia_Construccion.md`](Economia_Construccion.md) §9.1) y cuentan para el título de prestigio «Mecenas de los Aedas» (Doc 2.9: más épicas cumplidas y, a igualdad, más residentes).
+Viven en un asentamiento con **Palacio activo** y **Nobleza > 0**. Dan felicidad y crecimiento de nobleza ([`Economia_Construccion.md`](Economia_Construccion.md) §9.1) y cuentan para el título de prestigio «Mecenas de los Aedas» (Doc 2.9: valor = épicas cumplidas × 10 + Aedas residentes).
 
 ### 7.1 Ciclo de vida (`avanzarResidentes`, en el tick, tras tecnología y Aedas itinerantes)
 
@@ -347,7 +347,7 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
     "cadaMinutos": 30
   },
   "radioExclusionFundar": 100,
-  "radioProteccion": 60,
+  "radioProteccion": 10,
   "origenes": 3,
   "edificiosFijos": [
     "taberna",
@@ -1416,7 +1416,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
 - **Un Aeda itinerante nunca muere** y su número solo crece (si bajan las Facciones, sobran).
 - **Un hecho de plaza solo inspira al Aeda de esa plaza**; uno de Facción, a los de todas sus plazas.
 - **A lo sumo un hecho por Aeda por evaluación**, y evaluar ocurre en cada orden y en cada evento (no solo en un muestreo).
-- **Una tecnología solo aparecida por épica o compra no cuenta para el campamento de mercenarios** si nadie la ha desbloqueado por hito (`primeros` no se registra por esas vías).
+- **Una tecnología aparecida por épica o compra sí cuenta para el campamento de mercenarios**: `primeros` se registra por cualquier vía (corregido el 2026-10-17; no registrarlo era un error).
 
 ## 14. Divergencias
 
