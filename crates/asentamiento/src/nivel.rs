@@ -9,6 +9,10 @@ use base::Mil;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+/// Viviendas de más que el tope del nivel (Economia_Construccion §6.5): sin ellas el cupo de artesanos del nivel 2 (40 × 10) es
+/// exactamente el requisito del nivel 3 (400) y la población, que se acerca al cupo sin tocarlo, no llegaría.
+pub const MARGEN_VIVIENDAS: u32 = 2;
+
 #[derive(Clone, Debug, Default)]
 pub struct Requisito {
     pub pesants: i64,
@@ -114,12 +118,13 @@ impl ReglasNivel {
         curva.get((nivel_faccion.clamp(1, 10) - 1) as usize).copied()
     }
 
-    /// `maximoViviendasPorNivel(n)` (cupos por Vivienda en habitantes enteros): las que da el nivel siguiente (mayor de los cupos de pesants y artesanos que exige), o, en el
+    /// `maximoViviendasPorNivel(n)` (cupos por Vivienda en habitantes enteros): las que da el nivel siguiente (mayor de los cupos de pesants y artesanos que exige)
+    /// más un margen de `MARGEN_VIVIENDAS` (decidido el 2026-10-18: con el cupo justo, una clase nunca llega al requisito), o, en el
     /// nivel máximo, las que llenan el techo de población. Más Viviendas de las necesarias no sirven hasta subir.
     pub fn maximo_viviendas(&self, nivel: u32, capacidad_pesants: i64, capacidad_artesanos: i64) -> u32 {
         let techo_alcanza = |hab: i64, cap: i64| if cap <= 0 { 0 } else { (hab + cap - 1) / cap };
         match self.requisitos.get(&(nivel + 1)) {
-            Some(r) => techo_alcanza(r.pesants, capacidad_pesants).max(techo_alcanza(r.artesanos, capacidad_artesanos)) as u32,
+            Some(r) => techo_alcanza(r.pesants, capacidad_pesants).max(techo_alcanza(r.artesanos, capacidad_artesanos)) as u32 + MARGEN_VIVIENDAS,
             None => techo_alcanza(self.techo(nivel) / 1000, capacidad_pesants) as u32,
         }
     }
@@ -188,10 +193,10 @@ mod pruebas {
     fn el_tope_de_viviendas_sale_del_nivel_siguiente() {
         let r = Reglas::cargar().nivel;
         // Nivel 1 → pide 200 pesants (15 por Vivienda → 14) y 0 artesanos.
-        assert_eq!(r.maximo_viviendas(1, 15, 10), 14);
+        assert_eq!(r.maximo_viviendas(1, 15, 10), 14 + MARGEN_VIVIENDAS);
         // Nivel 2 → 500 pesants (34) y 400 artesanos (40): el mayor.
-        assert_eq!(r.maximo_viviendas(2, 15, 10), 40);
+        assert_eq!(r.maximo_viviendas(2, 15, 10), 40 + MARGEN_VIVIENDAS, "cupo de 420 artesanos para un requisito de 400");
         // Nivel 5, el máximo: las que llenan el techo de 20.000.
-        assert_eq!(r.maximo_viviendas(5, 15, 10), 1334);
+        assert_eq!(r.maximo_viviendas(5, 15, 10), 1334, "en el nivel máximo no hay margen: solo llenan el techo");
     }
 }

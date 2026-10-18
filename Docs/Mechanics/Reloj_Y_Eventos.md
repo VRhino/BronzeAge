@@ -139,7 +139,7 @@ Cifras de **infraestructura** (en `constantsInfra.ts`; no alteran el resultado d
 
 ## 10. Decisiones (2026-10-13)
 
-1. **La población es continua.** Se guarda como número continuo (valor en t₀ y ritmo logístico) y se **lee en entero (suelo)**. Se elimina la tirada del redondeo estocástico: el crecimiento deja de consumir el generador aleatorio.
+1. **La población es continua.** Se guarda como número continuo (valor en t₀ y ritmo logístico) y se **lee en entero (suelo)**, salvo los **requisitos de nivel de asentamiento**, que se leen **redondeados al entero más cercano** (decidido el 2026-10-18: con el suelo una clase que se acerca al cupo sin tocarlo, como 399,997 de 400, no los cumpliría nunca). Se elimina la tirada del redondeo estocástico: el crecimiento deja de consumir el generador aleatorio.
 2. **Tras una caída del servidor, el mundo no se recupera.** El reloj de mundo **se congela mientras el servidor está apagado** (regla del autor del 2026-09-05): al arrancar, el instante de mundo es el último guardado, no se procesan eventos que "vencieron" durante la caída y los plazos conservan el tiempo que les quedaba. (Sustituye a la lectura de Arquitectura/13 §6; ver su corrección.)
 3. **Las órdenes a mitad de camino parten de la posición real en el instante de la orden**, no de la del inicio de un minuto.
 

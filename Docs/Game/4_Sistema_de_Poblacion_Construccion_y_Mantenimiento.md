@@ -102,7 +102,7 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 
 **Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 10 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+20, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
 - Coste: 10 madera. Obra: 4 horas.
-- **Tope por nivel de asentamiento** (`maximoViviendasPorNivel`): el máximo útil de Viviendas en un nivel se deriva de la población (pesants Y artesanos, se toma el mayor de los dos cupos) que exige alcanzar el SIGUIENTE nivel — construir más de las que ese cupo necesita no sirve para nada hasta subir de nivel. Cifras en `typescript-final:Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` §7.
+- **Tope por nivel de asentamiento** (`maximoViviendasPorNivel`): el máximo útil de Viviendas en un nivel se deriva de la población (pesants Y artesanos, se toma el mayor de los dos cupos) que exige alcanzar el SIGUIENTE nivel — construir más de las que ese cupo necesita no sirve para nada hasta subir de nivel. **Se permiten 2 Viviendas de margen** sobre lo que exige el nivel siguiente (decidido el 2026-10-18): con el cupo justo la población, que crece de forma logística, se acerca al cupo sin tocarlo y no llegaría al requisito (40 Viviendas = 400 artesanos para un requisito de 400). Cifras en `typescript-final:Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` §7.
 
 ### Extracción de recursos
 
@@ -256,7 +256,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
 - **"Levas de guarnición"** (General): mientras esté activa, suma +14 al cupo de guarnición de cada héroe residente (Doc 5.15.3).
 
 ## 4.5 Mantenimiento de asentamientos (sistema unificado, incluye ex-"Coste de Gobernanza")
-- **NIVEL DE ASENTAMIENTO — por requisitos y a petición del Gobernador**: el nivel NO sube solo. Cumplir A LA VEZ los requisitos de población y de edificios es lo que permite PEDIR la subida al nivel siguiente (ver "Subida de nivel" abajo). Nivel máximo: 5.
+- **NIVEL DE ASENTAMIENTO — por requisitos y a petición del Gobernador**: el nivel NO sube solo. Cumplir A LA VEZ los requisitos de población (leídos **redondeando al entero más cercano**) y de edificios es lo que permite PEDIR la subida al nivel siguiente (ver "Subida de nivel" abajo). Nivel máximo: 5.
   - Nivel 2: 200 pesants + 3 de los 7 tipos de extracción (Cantera, Leñera, Granja, Mina de oro, Mina de cobre, Mina de estaño, Corral). No pide artesanos: sin nivel 2 no hay edificios de transformación, y sin ellos no aparecen artesanos.
   - Nivel 3: 500 pesants + 400 artesanos + Armería, Curtiduría, Fundición, Barracón y Galería de tiro.
   - Nivel 4: 1.000 pesants + 800 artesanos + un recinto de muralla completo **de piedra** (muro de piedra o muralla con adarve, no empalizada) + Sala del Consejo (4.2.1).

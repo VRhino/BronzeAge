@@ -67,6 +67,12 @@ impl Poblacion {
         (self.pesants / 1000, self.artesanos / 1000, self.nobleza / 1000)
     }
 
+    /// Habitantes por clase redondeados al entero más cercano. Es la lectura de los **requisitos de nivel** (decidido el 2026-10-18):
+    /// con el suelo, una clase que se acerca al cupo sin tocarlo (399,997 de 400) nunca los cumpliría.
+    pub fn redondeados(&self) -> (i64, i64, i64) {
+        ((self.pesants + 500) / 1000, (self.artesanos + 500) / 1000, (self.nobleza + 500) / 1000)
+    }
+
     /// Trigo que come toda la población en un minuto (milésimas), sin importar la clase.
     pub fn consumo_por_minuto(&self, r: &ReglasPoblacion, e: &Entorno) -> Mil {
         por(por(self.total(), r.consumo_por_habitante), e.factor_consumo)
@@ -167,6 +173,8 @@ mod pruebas {
         let r = Reglas::cargar().poblacion;
         let p = Poblacion::nueva(&r);
         assert_eq!((p.enteros(), p.nutricion), ((20, 0, 0), 100_000));
+        let casi = Poblacion { pesants: 199_600, artesanos: 399_997, nobleza: 499, nutricion: 0 };
+        assert_eq!((casi.enteros(), casi.redondeados()), ((199, 399, 0), (200, 400, 0)), "suelo para la mano de obra, redondeo para los requisitos de nivel");
     }
 
     #[test]

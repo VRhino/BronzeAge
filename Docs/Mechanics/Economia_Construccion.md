@@ -343,7 +343,7 @@ puede perder parte del reembolso). `moverEnCola(arriba|abajo)`: intercambia la `
 ### 6.5 Topes por nivel
 
 - **Almacenes**: `NECESIDADES.maximoAlmacenesPorNivel[nivelActual]`.
-- **Viviendas** (`maximoViviendasPorNivel(n)`): si existe el requisito del nivel `n+1`: `max( ceil(pesants_{n+1}/capacidadPesants), ceil(artesanos_{n+1}/capacidadArtesanos) )`; en el nivel máximo, `ceil(techoPoblacion[n]/capacidadPesants)`.
+- **Viviendas** (`maximoViviendasPorNivel(n)`): si existe el requisito del nivel `n+1`: `max( ceil(pesants_{n+1}/capacidadPesants), ceil(artesanos_{n+1}/capacidadArtesanos) ) + MARGEN_VIVIENDAS (2)`; en el nivel máximo, `ceil(techoPoblacion[n]/capacidadPesants)`. **El margen de 2 se decidió el 2026-10-18**: con el cupo justo (40 Viviendas × 10 = 400 artesanos para un requisito de 400) la población logística se acerca al cupo sin tocarlo y el requisito no se cumpliría nunca; con el margen el cupo es 420.
   Cuenta Viviendas de cualquier estado.
 
 ### 6.6 Puestos del Mercado
@@ -479,7 +479,7 @@ bandidos se dispersa, sus trueques se cancelan sin penalizar y las caravanas que
 ### 11.1 Gates (`evaluarGatesDeNivel(a, nivelObjetivo)`)
 
 ```
-poblacion = pesants ≥ req.pesants ∧ artesanos ≥ req.artesanos           (la nobleza no cuenta)
+poblacion = pesants ≥ req.pesants ∧ artesanos ≥ req.artesanos           (la nobleza no cuenta; se leen **redondeados al entero más cercano**, no el suelo: decidido el 2026-10-18)
 construidos = nº de tipos de req.edificios con algún edificio ACTIVO cuyo nivelInterno ≥ req.nivelInternoMinimo[tipo] (por defecto 1)
 cumpleRecinto = req.recintoCompletoNivelMinimo indefinido ∨ algún recinto con nivel ≥ ese mínimo e integridad ≥ 1
 edificios = construidos ≥ (req.edificiosMinimo ?? req.edificios.length) ∧ cumpleRecinto

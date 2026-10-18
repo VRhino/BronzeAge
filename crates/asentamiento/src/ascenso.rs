@@ -66,7 +66,7 @@ impl Asentamiento {
         if self.ascenso.is_some() {
             b.push(Bloqueo::AscensoEnCurso);
         }
-        let (pesants, artesanos, _) = self.poblacion.enteros();
+        let (pesants, artesanos, _) = self.poblacion.redondeados();
         for f in r.nivel.gates(objetivo, &self.edificios, pesants, artesanos, x.recinto_nivel).unwrap_or_default() {
             b.push(match f {
                 Falta::Poblacion => Bloqueo::FaltaPoblacion,
