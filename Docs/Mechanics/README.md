@@ -14,8 +14,7 @@ y una migración habría perdido lo que el código sabe.
 | `Docs/Arquitectura/` | Cómo está organizado el servidor | tick, sesiones, persistencia |
 | `Consideraciones/` | **Por qué se decidió así**: decisiones, planes, mediciones, historia. Se consulta, no se implementa desde ahí | `typescript-final:Consideraciones/Murallas_Definicion.md` |
 
-Si el canon y `Mechanics` se contradicen, gana el canon (es la intención) y `Mechanics` está desactualizado **o** el código no cumple el canon: en los dos
-casos se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
+Si el canon y `Mechanics` se contradicen, gana `Mechanics` (decisión del autor, 2026-10-17: es la última fuente de la verdad) y el canon está desactualizado: se corrige el canon. Si es el código el que no cumple `Mechanics`, se anota en [`Divergencias.md`](Divergencias.md) hasta resolverlo.
 
 ## Regla de trabajo (decidida el 2026-10-09)
 

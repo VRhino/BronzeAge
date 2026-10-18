@@ -2103,8 +2103,7 @@ Los bloques de parámetros de este documento son los del motor TypeScript. Valor
 | `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **1** |
 | `ZONA_INFLUENCIA.separacionPlazas` | — | **30** (Doc 1.0a) |
 | `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
-| `ESCALA.unidadesLocalesPorUnidadMapa` | 40 | **200** (la ciudad ocupa un 80 % menos del mapa) |
-| `radioUrbanoDe` | = radioPotencial | **radioPotencial × 6** |
+| `ESCALA` / `radioUrbanoDe` | existían | **se borran**: el espacio local y el del mapa son independientes (Doc 1.0a). La ciudad usa su propio `radioCiudad` (30, +5 por edificio, máximos 60-180; `Trazado_Urbano.md`) |
 | `MANTENIMIENTO.escalaDistancia` | 400 | **80** |
 | `LINEAS_PRODUCCION` | 25 / 150 / 90 | **se elimina** (decisión previa del autor) |
 | `RECURSO_RAREZA.espacioMinimo` | 20 / 40 / 120 | **4 / 7 / 20** |

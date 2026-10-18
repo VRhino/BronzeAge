@@ -20,6 +20,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 |---|---|---|---|
 | 20 | TECNOLOGÍA | Eras IV y V (pospuestas con el motor nuevo) | Eras I-III en canon |
 | 38 | MILITAR | Tope de héroes en asedio: 15 contra 15 (decidido el 2026-10-13) | constante del archivo común |
+| 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
 
 **Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06), y también, de los cabos sueltos §33/§35 (2026-10-06): la **riqueza acumulada** por comisiones, el **bonus por distancia en el mostrador**, **cortar rutas como guerra económica**, la **cola de prioridad de reclutamiento** y las **armas de asedio** como mecánica aparte.
 
@@ -50,3 +51,6 @@ bitácora: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md
 
 Decidido el 2026-10-13: **15 contra 15** en el canon (Doc 5.15.1) y como constante del archivo común (`BATALLA.capacidad.asedio`); la capacidad que abre la instancia en Unity (`BattleSide.capacidadMaxima`) sale de ahí.
 
+## 39. Elección del Rey por voto
+
+Decidido el 2026-10-17: la elección del Rey por voto entre representantes (antes ligada a la Liga por alianza) **no existe hoy** y queda como mecánica pendiente. Hoy el Rey de una Facción lo asigna el anterior (el primero es quien la crea; la sucesión sigue el orden de ingreso). La Liga no tiene Rey ni cargos (Doc 2.2, `Diplomacia_Facciones.md` §3.4 y §5.7).

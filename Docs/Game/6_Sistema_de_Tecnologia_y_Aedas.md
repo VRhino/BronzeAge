@@ -84,7 +84,7 @@ Era se reparten por su tramo en el orden de adopción, y el último cae una sema
 ## 6.5 Adopción
 
 **La adopta el Rey, estando en la capital, y la paga el almacén de la capital.** La adopción es instantánea. La capital
-la designa el Rey (Doc 2.2); mientras no designe ninguna, es el asentamiento vivo más antiguo de la Facción.
+la designa el Rey (Doc 2.2) y exige un Palacio activo, con enfriamiento entre designaciones; mientras no designe ninguna, o si la designada pierde el Palacio, es el asentamiento vivo más antiguo de la Facción.
 Las Facciones de bots siguen la misma regla (5.15.6).
 
 | Era de la tecnología | Oro | Bien de la Era |
@@ -101,7 +101,7 @@ Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnol
 
 ## 6.6 Catálogo
 
-Las X de la Era I se fijaron con el batch en la semana objetivo de su logro (6.3) y caen donde toca. Las de las Eras II y III son provisionales: sus contadores dependen de qué tecnologías adopta cada Facción, y con jugadores NPC se adoptan pocas, así que cada cambio mueve el mundo entero. Siguen sin medida `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado` y `trabajos_asedio`, cuyo contador no se mueve. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
+Las X de la Era I están balanceadas (calibradas con el batch) en la semana objetivo de su logro (6.3) y caen donde toca. Las de las Eras II y III son provisionales: sus contadores dependen de qué tecnologías adopta cada Facción, y con jugadores NPC se adoptan pocas, así que cada cambio mueve el mundo entero. Siguen sin medida `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado` y `trabajos_asedio`, cuyo contador no se mueve. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
 tropas de cada tecnología, con su edificio, equipo y escalón, en Doc 5.8. **Una tecnología también puede dar un
 bonus de producción** en vez de abrir contenido (`bonusProduccion`: un recurso y un factor sobre lo que sacan sus
 extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc 4.5).
@@ -128,7 +128,7 @@ extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc
 | `bronce_calidad_militar` | Arma de Bronce de Calidad y Armadura de Bronce (Armería 3); Shardana | X piezas de equipo de bronce fabricadas (Dendra) | Armería 3 |
 | `forja_hierro_temprana` | Mina de hierro, Lingote de Hierro (Fundición 2), Arma de Hierro (Armería 2); guerreros filisteos | X caravanas destruidas o capturadas (colapso del estaño) | Fundición 2 + yacimiento de hierro en su territorio |
 | `panoplia_bronce` | lanceros pesados micénicos, Hequetai | X escuadrones reclutados (Vaso de los Guerreros) | `bronce_calidad_militar` + Barracón 3 |
-| `disciplina_formacion` | formaciones cerradas (táctico, en la batalla) | X asedios resistidos en combate (Batalla del Delta); no cuentan los rebotes por ocupación | Barracón 2 |
+| `disciplina_formacion` | formaciones cerradas (táctico, en la batalla) | X asedios resistidos en combate (Batalla del Delta); no cuentan los rebotes por protección ni las plazas sin defensores | Barracón 2 |
 | `arco_compuesto` | arqueros con arco compuesto | X arqueros reclutados | Carpintería 2 + Galería 3 |
 | `equitacion_militar` | jinetes asirios | X soldados de caballería reclutados, **cada soldado de carro de guerra vale por 5 de jinete** (Assurnasirpal) | Caballerizas activas |
 | `carpinteria_militar` | escalas y defensas de campaña (equipo) | primera conquista de una plaza con muralla completa (Dapur) | Carpintería 2 |
@@ -172,8 +172,8 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
 - **Venden**: mientras están en un asentamiento, el Rey o el Gobernador de esa plaza puede comprarles una tecnología
   que conocen, de las **Eras I-III**, con el **logro del servidor ya cumplido** y la Era ya abierta. Cuesta **2 × el oro
   de la tarifa de adopción de su Era** (6.5; 200 / 600 / 1.200), que sale del almacén de esa plaza. La Facción se salta el
-  hito y la tecnología le **aparece**; la adopción se paga igual, por el Rey en la capital. Las Eras IV y V solo llegan
-  por hito propio, comercio, conquista o épica de un residente.
+  hito y la tecnología le **aparece**; la adopción se paga igual, por el Rey en la capital. Las Eras IV y V no se pueden
+  comprar a un Aeda: solo llegan por hito propio (y, cuando se definan, por la épica que se les asigne).
 - **Cantan** los logros del servidor (6.3) y los descubrimientos (crónica, abajo): hechos públicos, sin decir qué
   tecnología abre cada logro.
 
@@ -189,7 +189,7 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
 - **Conquista**: si la plaza cambia de dueño, el Aeda se queda mientras haya nobleza, pero **pierde la épica en curso**.
 - **Qué dan**: cada residente suma un 5 % de crecimiento de población (la felicidad) y un 25 % de crecimiento de nobleza
   (`AEDAS.residentes.bonoFelicidad` y `bonoNobleza`, placeholder), y cuenta para el título de prestigio **«Mecenas de los
-  Aedas»** (Doc 2.9): la Facción con más épicas cumplidas y, a igualdad, más Aedas residentes. Sin efecto mecánico.
+  Aedas»** (Doc 2.9): la Facción con mayor valor = épicas cumplidas × 10 + Aedas residentes. Sin efecto mecánico.
 
 #### Épica
 

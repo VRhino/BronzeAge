@@ -1,6 +1,6 @@
 # Generación del mundo
 
-> **Reescrito el 2026-10-13: este documento describe el generador del motor TypeScript (`typescript-final`) y pasa a ser la referencia de sus reglas, no su implementación.** En la reconstrucción el mundo es un **artefacto** inmutable por hash producido fuera de línea por el generador regional (TypeScript, de Codex) a **2.667 × 2.000** (factor 12 sobre Unity), con la **economía del mundo** del canon 1.9c: campamentos de mercenarios a 600 (8-10, centro de cada foco), tres anillos de tierra (foco hasta 150, frontera 150-250, tierra lejana), estaño solo fuera de 200 de un campamento y en vetas guardadas por bandidos, bosques mezclados y cuotas exactas. El servidor Rust **carga** el artefacto y no genera nada: de este documento sigue vigente la fachada `Mapa` (stock, regeneración por evento, coste de movimiento, Leñeras) y las reglas de campamentos, alijos y bandidos con los valores calibrados (alijos 20-40 / 40-90 / 250-300; bandidos a ≥ 10 del borde de su zona; protección de campamento 10). Abiertos para la fase 4: el oro (O1) y las Leñeras por bosque grande (O2).
+> **Reescrito el 2026-10-13: este documento describe el generador del motor TypeScript (`typescript-final`) y pasa a ser la referencia de sus reglas, no su implementación.** En la reconstrucción el mundo es un **artefacto** inmutable por hash producido fuera de línea por el generador regional (TypeScript, de Codex) a **2.667 × 2.000** (factor 12 sobre Unity), con la **economía del mundo** del canon 1.9c: campamentos de mercenarios a 600 (8-10, centro de cada foco), tres anillos de tierra (foco hasta 150, frontera 150-250, tierra lejana), estaño y oro por **gradiente** de anillo (foco 5 %, frontera 25 %, tierra lejana 70 %, Doc 1.9c, decidido el 2026-10-13) en vetas guardadas por bandidos, bosques mezclados y cuotas exactas. El servidor Rust **carga** el artefacto y no genera nada: de este documento sigue vigente la fachada `Mapa` (stock, regeneración por evento, coste de movimiento, Leñeras) y las reglas de campamentos, alijos y bandidos con los valores calibrados (alijos 20-40 / 40-90 / 250-300; bandidos a ≥ 10 del borde de su zona; protección de campamento 10). Resueltos (2026-10-13): el oro y el estaño por gradiente de anillo (O1, Doc 1.9c) y las Leñeras por parcelas de explotación (O2, Doc 1.9c).
 
 ## 1. Alcance y fuentes
 
@@ -843,6 +843,8 @@ se carga **en el carro de la columna** con `cargarBotin` (`min(capacidad − lo 
 Evento `alijo.abierto { heroeId, alijoId, oro }`.
 
 ## 13. Campamentos de bandidos (`engine/bandidos.ts`)
+
+> **Además, en la reconstrucción** (decidido el 2026-10-17: el generador regional es la referencia): el artefacto trae un campamento de bandidos de nivel 2-3 sin plaza dueña y un alijo lejano **por cada veta** de estaño y oro (Doc 1.9c), colocados por el generador, no por estos eventos. Lo de abajo describe solo los dos orígenes del motor TypeScript (por asentamiento y anillo de cada campamento de mercenarios).
 
 **No hay ninguno al crear el mundo** (`campamentosBandidos = []`): aparecen por un evento programado al fin del plazo de cada plaza, y solo mientras existan asentamientos o campamentos de mercenarios que los atraigan. Los dos orígenes los evalúa `avanzarSpawnBandidos` cada tick (paso 8, consume el generador de la partida):
 

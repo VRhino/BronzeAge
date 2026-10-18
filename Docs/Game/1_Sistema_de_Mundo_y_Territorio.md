@@ -30,12 +30,12 @@ Tres consecuencias:
 2. **No se puede fundar sobre agua**: el asentamiento quedaría incomunicado para siempre. El agua y la cima son terreno inhabitable.
 3. **La cima es transitable**, solo que cara (coste 12): es terreno difícil, no un medio distinto.
 
-**Los RÍOS no cortan el paso**: no son terreno sino una entidad aparte, y el coste de movimiento no los tiene en cuenta.
+**Los RÍOS son una entidad aparte, no terreno**: se cruzan solo por un vado o por una ciudad ribereña (1.6).
 
 El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas enfrentadas no comercian.
 
 ## 1.1 Generación del mundo (Fase 0)
-- Mapa CUADRADO, espacio de coordenadas continuo (no grid discreto).
+- Mapa RECTANGULAR (2.667×2.000), espacio de coordenadas continuo (no grid discreto).
 - Tamaño base: 2.667×2.000 unidades (el mundo regional a factor 12), PARAMETRIZABLE.
 - Terreno con RELIEVE REAL: campo de ELEVACIÓN continuo por ruido fractal, clasificado en bandas agua/costa/llano/colina/montaña/cima; RÍOS como polilíneas que nacen en montaña y descienden por gradiente de máxima pendiente; BIOMA derivado de terreno+fertilidad+humedad — ver `typescript-final:Consideraciones/Fase_0_1_Definicion.md`. El coste de moverse por el mapa depende del tipo de terreno (ver 1.6 y Doc 3.6). Opcionalmente sesgado a una región geográfica real (Grecia continental/Anatolia/Egeo/Nilo/Mesopotamia — "Libre", sin sesgo, es el valor por defecto). Sin mar navegable (eje naval pospuesto, ver `typescript-final:Consideraciones/Roadmap_Escalado.md`).
 - Generación PROCEDURAL de recursos por niveles de rareza:
@@ -51,8 +51,8 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
   - **Por qué la piedra cuenta** (2026-09-26): sin piedra no hay Cantera, sin Cantera no hay tercer tipo de extracción para el nivel 2 (Doc 4.5), y sin nivel 2 la zona no crece hasta alcanzar piedra más lejos — el asentamiento nace condenado a nivel 1. Los NPC aplican el mismo criterio al fundar y al expandirse.
 - Al fundar se genera automáticamente una ZONA DE INFLUENCIA (círculo/polígono) = nodo.
 - TAMAÑO: nace con un radio inicial de 6 unidades y **solo crece por obra**, nunca por tiempo: cada edificio completado la agranda 1 unidad, hasta un TECHO que escala con el NIVEL del asentamiento (Doc 4.5): nivel 1 → 10, 2 → 15, 3 → 20, 4 → 25, 5 → 30. Subir de nivel no hace saltar el radio de golpe — solo levanta el techo hasta el que los edificios pueden seguir agrandando la zona.
-- Reglas de construcción: solo se puede construir dentro de una zona de influencia existente (ampliándola si es del mismo bando) o fuera de cualquier zona (creando una nueva).
-- FRONTERAS: al chocar dos zonas en expansión se genera un LÍMITE DURO — ninguna zona sigue creciendo en esa dirección. Solo se rompe si el asentamiento rival cae o su zona se debilita/reduce (guerra u otros medios). Las fronteras son "vivas", reflejan el poder relativo de cada bando en cada momento.
+- Reglas de construcción: solo se construye dentro de la zona del propio asentamiento. Una zona nueva nace únicamente al fundar (1.8).
+- FRONTERAS: al chocar dos zonas en expansión se genera un LÍMITE DURO — ninguna zona sigue creciendo en esa dirección. Las zonas nunca se encogen: la frontera solo se mueve cuando crece un radio y se levanta únicamente si la plaza rival cae o se arruina. Las fronteras son "vivas", reflejan el poder relativo de cada bando en cada momento.
 
 ## 1.3 Onboarding de nuevos jugadores
 - **El héroe nace DENTRO de un campamento de mercenarios (1.9b) que elige**, como residente, sin columna en el mapa. La pantalla de elección muestra todos los campamentos con dos cifras: cuántos lo eligieron al nacer y cuántos residen ahora (solo informativas, sin tope). Desde allí sale al mundo cuando quiere.
@@ -81,7 +81,7 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 ## 1.4 Fuentes de recursos por tipo
 - CULTIVOS (trigo): NO son un nodo recolectable directo. Dependen de la FERTILIDAD DEL SUELO de la zona (atributo de terreno); requieren construir una Granja para aprovecharse.
 - MADERA: proviene de BOSQUES, representados como ZONAS del mapa (no puntos), con densidad variable.
-- MINERALES (cobre, estaño, hierro, oro) — **solo se explotan con un pueblo extractor** (Doc 4.2.2) —: CONDICIONADOS AL RELIEVE — cobre, estaño y hierro en colina o montaña, oro solo en montaña (el más exclusivo, es el más raro); piedra permisiva (colina/montaña/llanura fértil/estepa) para no comprometer el recurso común más consumido (`RECURSO_BIOMA_PERMITIDO`, `worldgen/config.ts`). **El mineral de hierro es mucho más abundante que el estaño: sus yacimientos son 1,5 veces más frecuentes que los de cobre.** Cada uno tiene su propio edificio de extracción: cantera para piedra, mina de oro, mina de cobre, mina de estaño, mina de hierro.
+- MINERALES (cobre, estaño, hierro, oro) — **solo se explotan con un pueblo extractor** (Doc 4.2.2; también toda Cantera después de la primera, la primera es directa) —: CONDICIONADOS AL RELIEVE — cobre, estaño y hierro en colina o montaña, oro solo en montaña (el más exclusivo, es el más raro); piedra permisiva (colina/montaña/llanura fértil/estepa) para no comprometer el recurso común más consumido (`RECURSO_BIOMA_PERMITIDO`, `worldgen/config.ts`). **El mineral de hierro es mucho más abundante que el estaño: sus yacimientos son 1,5 veces más frecuentes que los de cobre.** Cada uno tiene su propio edificio de extracción: cantera para piedra, mina de oro, mina de cobre, mina de estaño, mina de hierro.
 - LIVESTOCK = **ganado vacuno**: fauna LIBRE en el mapa, se aprovecha con el Corral. Da el cuero de la Curtiduría. Cría/domesticación pospuesta a fases avanzadas (se trata como recurso consumible/finito).
 - CABALLOS: no son livestock. **Se compran con oro** al reclutar caballería y carros (Doc 5.8), y los animales de tiro de las caravanas se compran igual (Doc 3.13). Cuando exista la captura y la cría habrá las dos fuentes.
 - MADERA y PIEDRA: materiales base de construcción de edificios e insumo de materiales derivados.
@@ -106,7 +106,7 @@ Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `type
 
 **Paso por ciudades** (Doc 3.6, 3.10):
 - Si el trazado de una caravana comercial cruza la zona de influencia de un asentamiento **ajeno** (de otra Facción), se fuerza el paso por esa ciudad y la caravana deja allí un **peaje en especie del 2 % de cada recurso que lleve**, sin pararse. Varias ciudades en el camino: se pasa por todas, en orden. A la vuelta va vacía y no paga. Una ciudad propia no fuerza nada.
-- **Inmunidad**: dentro de una zona de influencia que no sea del atacante, una caravana no puede ser atacada — ni por bandidos (que no tienen zona: cualquier zona protege) ni interceptada por una columna. La zona propia del atacante no es refugio.
+- **Sin inmunidad**: ninguna zona protege del todo a una caravana frente a una columna; la zona solo decide el tipo de combate (A o B, Doc 3.10). Los bandidos sí siguen sin actuar dentro de ninguna zona.
 
 **Logro de `logistica_campana`** (Doc 6, Era IV; BA-006 D30): existe un tramo **fuera de toda zona de influencia** recorrido por al menos **10 rutas de 3 Facciones distintas**.
 
@@ -134,7 +134,7 @@ Mecanismo COMPLEMENTARIO al Cap de Fundación (1.7) — ambos coexisten, no se s
 
 **Fundar** (`fundar`, D30): el titular, con la caravana enganchada a su columna, en un punto **fuera de toda zona de influencia**, no sobre agua y a **20** o más de **cualquier campamento de mercenarios** (`MERCENARIOS.radioExclusionFundar`, D16). Nunca encima de un campamento. Los ciudadanos de su Facción que van en esa columna son **cofundadores** (hasta `FUNDACION.maxJugadoresFundacionGrupal`): unirse a la columna es el consentimiento (D12). La caravana se gasta y la columna entra en la plaza nueva.
 
-**Escoltarla**: la caravana viaja con la columna de su titular y se defiende con ella (Doc 5.13.3): los héroes de la Facción que se le unen (`unirseEnCampo`) la escoltan como a cualquier caravana. Interceptable igual que las demás (Doc 3.10), mismas reglas de combate y umbral de captura del 50 %.
+**Escoltarla**: la caravana viaja con la columna de su titular y se defiende con ella (Doc 5.13.3): los héroes de la Facción que se le unen (`unirseEnCampo`) la escoltan como a cualquier caravana. Interceptable igual que las demás (Doc 3.10), mismas reglas de combate (tipo A o B según la zona).
 
 **Titular y Facción**: lleva su Facción; solo un ciudadano de ella la engancha, los demás solo pueden atacarla. **Si el titular deja de llevarla** (sale del mundo, deja la Facción, o la lleva otro), se suelta y **vuelve sola** a su origen; otro ciudadano puede **reclamarla** por el camino (Doc 5.13.2: junto a ella, botón Reclamar) y pasa a ser el titular. Si llega sin nadie, **se desarma**.
 
@@ -150,7 +150,7 @@ Una sola entidad con **tres niveles**, que sale **al azar** al aparecer (2026-10
 - **Uno por asentamiento, SIEMPRE**: cada asentamiento vivo tiene el suyo, en SU bosque no reclamado MÁS CERCANO (un bosque que NO se solapa con ninguna zona de influencia; se comprueba el CENTRO del bosque contra los polígonos de zona), y queda ASIGNADO a él. Así nunca aparece en la otra punta del mapa sin ningún asentamiento cerca, ni pegado a una zona de influencia. **Cada asentamiento lleva su propio plazo** de reaparición: tras destruirse el suyo, le reaparece uno cuando vence, sea quien sea quien lo destruyó.
 - **En el anillo de cada campamento de mercenarios, según la demanda** (D42, D28): a la misma distancia en todos (entre 30 y 50), en tierra firme, fuera de toda zona y de la protección de cualquier campamento. Hay **uno por cada 2 residentes de Facciones sin asentamiento** (o sin Facción), entre 1 y 6; mientras falten, aparece uno cada 10 minutos.
 
-- Mientras el campamento sigue en pie, ATACA CARAVANAS (Doc 3.10) que pasen dentro de un radio fijo de su posición, cada minuto — se resuelve con números, contra la defensa de la caravana. Si gana, la caravana se pierde por completo (nadie la recibe: el bandido no tiene almacén propio). Junto a un campamento de mercenarios no ataca (1.9b).
+- Mientras el campamento sigue en pie, ATACA CARAVANAS (Doc 3.10) cuando el plan de la caravana cruza su radio de ataque (encuentro exacto) — se resuelve con números, contra la defensa de la caravana. Si gana, la caravana se pierde por completo (nadie la recibe: el bandido no tiene almacén propio). Junto a un campamento de mercenarios no ataca (1.9b).
 - **Se ataca con una columna que llegue a él** (Doc 5.12.3), y la batalla se juega en Unity: los héroes de la columna contra las tropas del campamento, manejadas por la IA del juego (Doc 5.15.6). SIN gate de cargo: a diferencia de un asedio, un campamento bandido es una amenaza de mundo abierto, no una acción de guerra entre Facciones. Si pierde, sus héroes quedan heridos (5.16.4) y la columna pierde la mitad del carro, que no se lleva nadie. Si el servidor no tiene conectado ningún servidor de batalla de Conquest, el choque se resuelve con números: los soldados de los héroes sanos contra el poder del campamento.
 - **El botín es solo oro** (D22): al destruirlo, **cada héroe de la columna** recibe el oro de su nivel (30, 33 y 36 de oro en los niveles 1, 2 y 3). El oro **sube al carro de la columna** (2026-10-11; lo que no cabe se pierde) y llega a casa como cualquier carga: al entrar en la residencia pasa al almacén personal, que **solo se gasta en el mercado, la taberna o el fondo de refundación de su campamento**: nunca llega a la economía de una plaza. Ya no existe una «bolsa de oro de botín» aparte. Lo que se retira del fondo vuelve como cualquier recurso.
 - **Rendimientos decrecientes por héroe** (D26): en las últimas 24 h, botín completo en las 8 primeras destrucciones, luego un 15 % menos por cada una, y desde la 14.ª solo experiencia.
@@ -208,7 +208,7 @@ Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ningun
 
 Un foco de 150 son unos 5 minutos a pie. La capacidad del foco es geométrica, no una cuota: a separación 30 caben del orden de 45 plazas una vez descontados pendiente, bosque, agua y recortes de frontera. La tierra firme es el 66 % del rectángulo y la mitad o más queda a más de 250 de todo campamento.
 
-**Estaño y oro, por gradiente** (decidido el 2026-10-13, cierra O1): cuanto más lejos del campamento, más hay y más rico es, para que el jugador sepa que existen cerca y que hay más a medida que se aleja. El reparto es el mismo para los dos metales (`repartoMetalesPorAnillo`): **foco 5 %, frontera 25 %, tierra lejana 70 %**. Con el total de hoy (unos 64 de estaño y 48 de oro) son 3 y 2-3 nodos en los focos, 16 y 12 en la frontera y 45 y 34 lejos. Los del foco son una **muestra**: van en el borde del foco (de 100 a 150 del campamento) y llevan un tercio de la cantidad normal. Las cuotas por anillo suman exactamente el total; sin supernodos. Lo de la frontera va aislado, con el espaciado de los raros (120). Lo de la tierra lejana va agrupado en **vetas** de 3 a 6 nodos de estaño (y de 0 a 2 de oro) en un radio de 20-30: una plaza de nivel 2-3 plantada en el centro de una veta cubre 2-3 nodos, lo que justifica una **colonia minera**; varios nodos del mismo tipo dentro de una zona son válidos. Cada veta lleva un campamento de bandidos de nivel 2-3 sin plaza dueña y un alijo lejano. El bronce depende así de expandirse, comerciar o pelear: las caravanas de estaño cruzan tierra de nadie. (Sustituye a la exclusión dura `exclusionEstanoCampamento` = 200.)
+**Estaño y oro, por gradiente** (decidido el 2026-10-13, cierra O1): cuanto más lejos del campamento, más hay y más rico es, para que el jugador sepa que existen cerca y que hay más a medida que se aleja. El reparto es el mismo para los dos metales (`repartoMetalesPorAnillo`): **foco 5 %, frontera 25 %, tierra lejana 70 %**. Con el total de hoy (unos 64 de estaño y 24 de oro) son 3 y 1 nodos en los focos, 16 y 6 en la frontera y 45 y 17 lejos. Los del foco son una **muestra**: van en el borde del foco (de 100 a 150 del campamento) y llevan un tercio de la cantidad normal. Las cuotas por anillo suman exactamente el total; sin supernodos. Lo de la frontera va aislado, con el espaciado de los raros (20 tras la calibración). Lo de la tierra lejana va agrupado en **vetas** de 3 a 6 nodos de estaño (y de 0 a 2 de oro) en un radio de 20-30: una plaza de nivel 2-3 plantada en el centro de una veta cubre 2-3 nodos, lo que justifica una **colonia minera**; varios nodos del mismo tipo dentro de una zona son válidos. Cada veta lleva un campamento de bandidos de nivel 2-3 sin plaza dueña y un alijo lejano. El bronce depende así de expandirse, comerciar o pelear: las caravanas de estaño cruzan tierra de nadie. (Sustituye a la exclusión dura `exclusionEstanoCampamento` = 200.)
 
 **Bosques: pocos grandes y muchos medianos o pequeños.** Los grandes (radio 40-80, del orden de 10-20) son comarcas compartidas entre focos o en su borde, y dan disputa por la madera; los medianos y pequeños (radio 4-20) están dentro de los focos para que cada plaza tenga madera cerca. En el mundo regional el bosque es un campo continuo de densidad: las masas explotables llevan identificador y área.
 
@@ -216,19 +216,20 @@ Un foco de 150 son unos 5 minutos a pie. La capacidad del foco es geométrica, n
 
 ## 1.10 El héroe está SITUADO en el mundo
 
-El héroe de cada jugador es un partícipe del mundo, no un ente volador superior. En todo momento está en **uno** de tres sitios, nunca en dos y nunca en ninguno:
+El héroe de cada jugador es un partícipe del mundo, no un ente volador superior. En todo momento está en **uno** de cuatro sitios, nunca en dos y nunca en ninguno:
 
 | Dónde | Qué significa |
 |---|---|
 | **Dentro de un asentamiento** | Ve su interior completo y puede dar órdenes ahí |
 | **En una columna, en el mapa** | Se mueve, ve lo que su columna alcanza, interactúa con lo que se cruza (Doc 5.12) |
+| **Dentro de un campamento de mercenarios** | Donde nace y donde reside si no tiene asentamiento; sin columna (1.9b) |
 | **Desconectado** | Fuera del mundo, con su sitio guardado |
 
 ### 1.10.1 Solo ves donde estás, y solo actúas donde estás
 
-**Nunca se ve el interior de un asentamiento en el que no se está físicamente.** Ni siquiera uno propio, ni siquiera siendo su Gobernador. Almacén, guarnición, colas de construcción, cargos y trazado urbano son cosas que se miran desde dentro.
+**Nunca se ve el interior de un asentamiento en el que no se está físicamente.** Ni siquiera uno propio, ni siquiera siendo su Gobernador. Almacén, guarnición, colas de construcción y trazado urbano son cosas que se miran desde dentro; desde fuera, de una plaza propia solo viajan sus cargos y políticas activas y, con una columna a la puerta, su almacén.
 
-Y la regla es también de ACCIÓN: **construir, reclutar, comerciar, activar políticas y designar cargos exige estar dentro** de la plaza en cuestión (Doc 2.5). Con acción remota el jugador seguiría siendo un ojo volador, solo que con una venda.
+Y la regla es también de ACCIÓN: **construir, reclutar, comerciar, activar políticas y designar cargos exige estar dentro** de la plaza en cuestión (Doc 2.5), salvo lo que se hace en la puerta (mostrador de comercio, reponer con la columna a la puerta) y lo que el Rey hace sin presencia (designar Gobernador, fijar la puerta). Con acción remota el jugador seguiría siendo un ojo volador, solo que con una venda.
 
 **Lo ya ordenado sigue corriendo solo.** Salir no congela tu ciudad: la auto-construcción avanza, las colas terminan, las caravanas en ruta llegan, la producción produce. Lo que no puedes es darle órdenes NUEVAS mientras no estés.
 
@@ -260,7 +261,7 @@ De ahí salen dos consecuencias sin necesidad de más reglas: si conquistan la p
 
 ### 1.10.4 Dentro de una plaza ajena solo se ve la capa pública
 
-Trazado, edificios visibles y mercado. **Nunca** almacén exacto, guarnición, colas de construcción ni cargos.
+La ficha pública (edificios `activo`, zona) y el mostrador de órdenes activas. **Nunca** el interior ni el trazado: ni almacén exacto, guarnición, colas de construcción ni cargos.
 
 Entrar es reconocimiento legítimo —ves si la ciudad es grande, rica y está amurallada— y por eso cerrar la puerta sigue siendo una defensa real sin que abrirla sea suicida.
 

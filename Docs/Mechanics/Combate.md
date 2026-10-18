@@ -195,7 +195,7 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
   "bonusCohesionPorEscuadronExtra": 0.1,
   "varianzaCombate": 0.15,
   "umbralCapturaCaravana": 0.5,
-  "defensaBaseCaravana": 15
+  "defensaBaseCaravana": 26
 }
 ```
 <!-- /parametros -->
