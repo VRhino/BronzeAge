@@ -3,7 +3,7 @@
 
 use crate::geo::{Cargado, Geo};
 use base::{Instante, Punto, Rng, MS_POR_MINUTO};
-use nucleo::{rechazos, Ajustes, Arranque, Comando, InformeViabilidad, Nucleo, Peticion, Reglas, Resultado};
+use nucleo::{Ajustes, Arranque, Comando, InformeViabilidad, Nucleo, Peticion, Reglas, Resultado};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap};
 use std::time::{Duration, Instant};
@@ -19,14 +19,18 @@ pub const ANILLO_CAMPAMENTO: (i64, i64) = (30_000, 120_000);
 pub const ANILLO_PLAZA: (i64, i64) = (30_000, 70_000);
 pub const REINTENTO_MIN: i64 = 10;
 pub const MAX_REINTENTOS: u32 = 6;
-pub const EDIFICIO_CADA_MIN: i64 = 120;
-pub const MAX_EDIFICIOS: u32 = 1_000;
-pub const LENERA_A_MIN: [i64; 3] = [30, 90, 180];
-pub const NIVEL_2_H: i64 = 48;
-pub const NIVEL_3_H: i64 = 144;
+/// Nivel de la Facción (solo fija el cap de fundación; el nivel de cada plaza lo da la economía real del núcleo).
+pub const NIVEL_FACCION_2_H: i64 = 48;
+pub const NIVEL_FACCION_3_H: i64 = 144;
 pub const EXPANSION_CADA_H: i64 = 12;
+/// Tras abandonar una búsqueda de expansión (el entorno está saturado) la Facción no vuelve a intentarlo durante este tiempo.
+pub const EXPANSION_PAUSA_H: i64 = 72;
+/// Cada cuántos minutos el «jugador» sintético pide a cada plaza el ascenso de nivel (el núcleo lo exige: la economía no asciende sola).
+pub const ASCENSO_CADA_MIN: i64 = 60;
 pub const VELOCIDAD: i64 = 500;
 pub const VIVERES: i64 = 350_000;
+/// Motivo con el que el batch cuenta los sitios descartados por el aviso de ruina (no es un rechazo del núcleo).
+const RECHAZO_CONDENADA: &str = "batch.sitio_condenado";
 
 /// Una fundación lograda.
 pub struct Fundacion {
@@ -37,13 +41,6 @@ pub struct Fundacion {
     pub verde: bool,
 }
 
-/// Un intento de Leñera.
-pub struct Lenera {
-    pub anillo: usize,
-    /// `ok`, `parcela.sin_libres`, `parcela.cupo_agotado` u otro código de rechazo.
-    pub resultado: String,
-}
-
 #[derive(Default)]
 pub struct Registros {
     /// Motivo → veces rechazado (candidatos rojos, rutas imposibles, fundaciones fallidas).
@@ -51,7 +48,8 @@ pub struct Registros {
     pub fundaciones: Vec<Fundacion>,
     /// Búsquedas abandonadas tras agotar los reintentos: (Facción, era la primera plaza).
     pub renuncias: Vec<(u32, bool)>,
-    pub lenera: Vec<Lenera>,
+    /// Órdenes `SolicitarAscenso` aceptadas y rechazadas por motivo (la plaza tiene que reunir lo que pide el ascenso real).
+    pub ascensos: BTreeMap<String, u64>,
     pub viab_llamadas: u64,
     pub viab_tiempo: Duration,
 }
@@ -70,9 +68,7 @@ enum Accion {
     Buscar { f: u32, reintento: u32, desde: Instante, primera: bool },
     Fundar { f: u32, reintento: u32, desde: Instante, primera: bool },
     Expansion(u32),
-    Edificio { plaza: u64, n: u32 },
-    Lenera { plaza: u64 },
-    NivelPlaza { plaza: u64, nivel: u32 },
+    Ascenso { plaza: u64 },
     NivelFaccion { f: u32, nivel: u32 },
 }
 
@@ -82,6 +78,8 @@ struct Faccion {
     /// Hay una búsqueda o una marcha en curso.
     ocupada: bool,
     plazas: Vec<u64>,
+    /// No expande antes de este instante (pausa tras una búsqueda de expansión abandonada).
+    pausa_hasta: Instante,
 }
 
 struct Sim<'a> {
@@ -153,9 +151,7 @@ impl Sim<'_> {
                 Accion::Buscar { f, reintento, desde, primera } => self.buscar(t, f, reintento, desde, primera),
                 Accion::Fundar { f, reintento, desde, primera } => self.fundar(t, f, reintento, desde, primera),
                 Accion::Expansion(f) => self.expansion(t, f),
-                Accion::Edificio { plaza, n } => self.edificio(t, plaza, n),
-                Accion::Lenera { plaza } => self.lenera(t, plaza),
-                Accion::NivelPlaza { plaza, nivel } => { self.admin(t, Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel }); },
+                Accion::Ascenso { plaza } => self.ascenso(t, plaza),
                 Accion::NivelFaccion { f, nivel } => { self.admin(t, Comando::FijarNivelFaccion { faccion: f, nivel }); },
             }
         }
@@ -202,7 +198,7 @@ impl Sim<'_> {
         let campamento = f as usize % self.geo.campamentos.len();
         let ejercito = self.n.crear_ejercito(t, &format!("h{f}"), "batch", f, self.geo.campamentos[campamento], VELOCIDAD, VIVERES, VIVERES).expect("alta de la columna");
         self.admin(t, Comando::DarCaravanaFundacion { ejercito });
-        self.facciones.push(Faccion { ejercito, campamento, ocupada: true, plazas: Vec::new() });
+        self.facciones.push(Faccion { ejercito, campamento, ocupada: true, plazas: Vec::new(), pausa_hasta: 0 });
         self.programar(t, Accion::Buscar { f, reintento: 0, desde: t, primera: true });
     }
 
@@ -238,6 +234,9 @@ impl Sim<'_> {
             let v = self.viab(p, f);
             if let Some(m) = v.motivo {
                 self.rechazo(m.codigo());
+            } else if v.condenada {
+                // Un jugador no funda donde el aviso dice que la plaza caerá en ruinas (sin madera suficiente).
+                self.rechazo(RECHAZO_CONDENADA);
             } else if v.color == Viabilidad::Verde {
                 return vec![p];
             } else {
@@ -272,6 +271,9 @@ impl Sim<'_> {
         if reintento >= MAX_REINTENTOS {
             self.reg.renuncias.push((f, primera));
             self.facciones[f as usize - 1].ocupada = false;
+            if !primera {
+                self.facciones[f as usize - 1].pausa_hasta = t + EXPANSION_PAUSA_H * HORA;
+            }
         } else {
             self.programar(t, Accion::Buscar { f, reintento: reintento + 1, desde, primera });
         }
@@ -296,34 +298,47 @@ impl Sim<'_> {
         self.tras_fundar(t, f, plaza);
     }
 
-    /// Todo lo que sucede con una plaza recién fundada, y con la Facción si era la primera.
+    /// Todo lo que sucede con una plaza recién fundada, y con la Facción si era la primera. La plaza se construye y crece
+    /// sola con la economía real del núcleo; aquí no se simula nada de eso.
     fn tras_fundar(&mut self, t: Instante, f: u32, plaza: u64) {
         let primera = self.faccion(f).plazas.is_empty();
         self.facciones[f as usize - 1].plazas.push(plaza);
         self.facciones[f as usize - 1].ocupada = false;
         if primera {
-            self.programar(t + NIVEL_2_H * HORA, Accion::NivelFaccion { f, nivel: 2 });
-            self.programar(t + NIVEL_3_H * HORA, Accion::NivelFaccion { f, nivel: 3 });
+            self.programar(t + NIVEL_FACCION_2_H * HORA, Accion::NivelFaccion { f, nivel: 2 });
+            self.programar(t + NIVEL_FACCION_3_H * HORA, Accion::NivelFaccion { f, nivel: 3 });
             self.programar(t + EXPANSION_CADA_H * HORA, Accion::Expansion(f));
         }
-        self.programar(t + NIVEL_2_H * HORA, Accion::NivelPlaza { plaza, nivel: 2 });
-        self.programar(t + NIVEL_3_H * HORA, Accion::NivelPlaza { plaza, nivel: 3 });
-        self.programar(t + EDIFICIO_CADA_MIN * MIN, Accion::Edificio { plaza, n: 1 });
-        for m in LENERA_A_MIN {
-            self.programar(t + m * MIN, Accion::Lenera { plaza });
+        self.programar(t + ASCENSO_CADA_MIN * MIN, Accion::Ascenso { plaza });
+    }
+
+    /// El «jugador» pide el ascenso de la plaza cada hora mientras siga viva; si reúne los requisitos, la economía real lo ejecuta
+    /// (obra, coste, nivel nuevo y techo de zona). Las plazas caídas en ruinas dejan de pedirlo.
+    fn ascenso(&mut self, t: Instante, plaza: u64) {
+        if !self.n.estado().asentamientos.contains_key(&plaza) {
+            return;
         }
+        self.programar(t + ASCENSO_CADA_MIN * MIN, Accion::Ascenso { plaza });
+        let r = self.como_batch(t, Comando::SolicitarAscenso { asentamiento: plaza });
+        let motivo = match &r.resultado {
+            Resultado::Rechazada { codigo, .. } => codigo.to_string(),
+            _ => "ok".to_string(),
+        };
+        *self.reg.ascensos.entry(motivo).or_insert(0) += 1;
     }
 
     fn expansion(&mut self, t: Instante, f: u32) {
         self.programar(t + EXPANSION_CADA_H * HORA, Accion::Expansion(f));
         let fa = self.faccion(f);
-        if fa.ocupada {
+        if fa.ocupada || t < fa.pausa_hasta {
             return;
         }
-        let nivel_plaza = fa.plazas.first().and_then(|id| self.n.estado().asentamientos.get(id)).map_or(0, |a| a.nivel());
+        // Nivel real de la plaza viva más antigua (la economía de cada plaza lo sube sola; una en ruinas ya no cuenta).
+        let vivas: Vec<_> = fa.plazas.iter().filter_map(|id| self.n.estado().asentamientos.get(id)).collect();
+        let nivel_plaza = vivas.first().map_or(0, |a| a.nivel());
         let nivel_faccion = self.n.estado().niveles_faccion.get(&f).copied().unwrap_or(1);
         let cap = territorio::cap_de_fundacion(nivel_faccion, &self.n.estado().reglas.territorio.cap_por_nivel) as usize;
-        if nivel_plaza < 2 || fa.plazas.len() >= cap {
+        if nivel_plaza < 2 || vivas.len() >= cap {
             return;
         }
         let ejercito = fa.ejercito;
@@ -331,28 +346,4 @@ impl Sim<'_> {
         self.facciones[f as usize - 1].ocupada = true;
         self.programar(t, Accion::Buscar { f, reintento: 0, desde: t, primera: false });
     }
-
-    /// Un edificio completado agranda la zona una unidad.
-    fn edificio(&mut self, t: Instante, plaza: u64, n: u32) {
-        self.admin(t, Comando::AgrandarZona { asentamiento: plaza });
-        if n < MAX_EDIFICIOS {
-            self.programar(t + EDIFICIO_CADA_MIN * MIN, Accion::Edificio { plaza, n: n + 1 });
-        }
-    }
-
-    fn lenera(&mut self, t: Instante, plaza: u64) {
-        let r = self.admin(t, Comando::ReclamarParcela { asentamiento: plaza });
-        let resultado = match &r.resultado {
-            Resultado::Aceptada => "ok".to_string(),
-            Resultado::Rechazada { codigo, .. } => codigo.to_string(),
-            otro => format!("{otro:?}"),
-        };
-        let Some(a) = self.n.estado().asentamientos.get(&plaza) else { return };
-        let anillo = self.geo.anillo(a.posicion).0;
-        self.reg.lenera.push(Lenera { anillo, resultado });
-    }
 }
-
-/// Códigos de rechazo de la Leñera que el informe distingue.
-pub const SIN_LIBRES: &str = rechazos::PARCELA_SIN_LIBRES;
-pub const CUPO_AGOTADO: &str = rechazos::PARCELA_CUPO_AGOTADO;

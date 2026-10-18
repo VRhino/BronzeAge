@@ -1,69 +1,74 @@
 {
-  "resumen": "Con el mundo reescalado (piedra ×10 = 5.601 nodos, parcelas con rp = 4 = 23.877, metales 64 de estaño y 24 de oro) el territorio mejora mucho: las plazas que nacen con bosque libre y piedra pasan del 7 % al 52 % y las que no alcanzan ninguna piedra del 55 % al 5 %. Las tres reglas de distancia, la cuota de bosque y el determinismo siguen en verde. Quedan tres rojos: el 21 % de las plazas no alcanza ninguna parcela de bosque con su zona máxima, solo el 44 % de las Leñeras se concede (el objetivo es 90 %) y el escenario tarda 287 s en vez de 82 s, porque 10 veces más piedras hacen la consulta de viabilidad 3,5 veces más lenta.",
+  "resumen": "Con el batch recortado a territorio (la construcción, el nivel de plaza y el crecimiento de la zona son ahora la economía real del núcleo; el batch solo funda, pide el ascenso cada hora y mide) las tres reglas de distancia, la cuota de bosque y el determinismo salen en verde: separación mínima 30,003 u, 0 plazas en zona ajena, 0 junto a un campamento de mercenarios, cuota máxima de una masa 50 % (justo el límite). El bosque, que era el rojo del informe anterior (21 % de plazas sin parcela en su zona máxima), ya no lo es: 0 % sin parcela de bosque y 5,9 % sin piedra. Las plazas nacen en sitio verde el 76,4 % de las veces y la primera tarda 9,9 min. Se fundan 444 plazas (226 primeras y 218 expansiones; 1,1 % acaba en ruinas, porque el batch ya no funda donde el aviso de viabilidad dice «condenada»); el 48,3 % de las que siguen vivas llega a nivel 2 (zona de 15 u) y ninguna a nivel 3, así que las zonas aún no se tocan y las fronteras no se ponen a prueba. D1 (piedra ×10 y parcelas con rp = 4) queda cerrada con el mundo de 2026-10-18. Dos rojos: el 43,5 % de las Facciones no consigue plaza y el escenario tarda 177 s en vez de 120 s, por la consulta de viabilidad (105 s). Este escenario ya no es comparable con el informe anterior (287 s, Leñeras y niveles sintéticos): ahora corre la economía completa de cada plaza.",
   "anomalias": [
     {
-      "titulo": "El bosque sigue corto aunque hay 4 veces más parcelas",
-      "detalle": "Con rp = 4 el mundo tiene 23.877 parcelas (antes 5.858), una cada ~140 u² de tierra transitable, pero el 20,7 % de las plazas no alcanza ninguna con su zona máxima y el 55,7 % de las Leñeras se niega por «sin parcelas libres en la zona»; solo el 3,8 % de las parcelas del mundo acaba ocupado. Es decir, no falta bosque en total, falta bosque donde se funda: las parcelas se agrupan en las masas y las zonas pequeñas (radio 6 a 30) caen a menudo fuera de ellas. No he comprobado todavía si el sitio elegido por el batch (primer verde de 25 candidatos) sesga esto.",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "La tierra lejana queda sin cubrir por la población sintética",
-      "detalle": "Estaño cubierto al 67 % en el foco, 38 % en la frontera y 0 % lejos; oro 100 %, 33 % y 0 %. Los nodos sí se reparten por anillo según el gradiente decidido (5 / 25 / 70 %). La población del batch nunca se aleja más de 120 u de su campamento; el gradiente se medirá de verdad con los bots de la fase 7.",
+      "titulo": "Ninguna plaza llega a nivel 3: contactos de frontera y recortes de zona no se han puesto a prueba",
+      "detalle": "A los 30 días el 48,3 % de las plazas vivas es de nivel 2 (212 de 439, techo de zona 15 u) y 0 % de nivel 3 (20 u). Dos plazas de Facciones distintas están a 30 u o más, así que con zonas de 15 u como mucho no pueden tocarse: contactos por plaza 0 y área perdida 0,001 %. Esos verdes no demuestran que las fronteras funcionen, solo que no se ejercitaron. Los ascensos pedidos (una orden por plaza y hora) acabaron en 212 aceptados y 274.869 rechazados: faltan edificios 41 %, sin cupo de la Facción 36 %, falta población 17 %, ascenso en curso 5,5 %, recursos insuficientes 0,2 %. El cupo depende de que el batch suponga la Facción en nivel 2 a las 48 h y en nivel 3 a las 144 h de fundar (el cap de fundación sale de ahí).",
       "causa": "medicion"
     },
     {
-      "titulo": "El 26 % de las Facciones no consigue plaza",
-      "detalle": "400 Facciones sobre 9 campamentos son ~44 por foco, la capacidad estimada es 45 y la saturación media del foco sale al 105 %. Además la política sintética solo busca entre 30 y 120 u del campamento y se rinde tras 6 reintentos. Un jugador real caminaría más lejos. Se vigilará con los bots, no se corrige aquí.",
+      "titulo": "El 43,5 % de las Facciones no consigue ninguna plaza (antes el 17 %)",
+      "detalle": "De 400 Facciones, 226 fundan y 174 agotan sus 6 reintentos (el informe cuenta 982 búsquedas abandonadas, 174 primeras y el resto expansiones). Los 9 campamentos acaban con ~49 plazas cada uno (capacidad estimada 45; saturación del foco media 73 %, máxima 113 %). El rechazo dominante es estar a menos de 30 u de otra plaza (77.444 candidatos) o dentro de su zona (54.900), y desde que el batch descarta los sitios que el aviso de viabilidad da por condenados (18.029 descartes) quedan menos candidatos útiles. Un jugador real caminaría más allá de 120 u. Se vigilará con los bots de la fase 7; no se corrige aquí.",
       "causa": "medicion"
     },
     {
-      "titulo": "La consulta de viabilidad es ahora el cuello de botella (287 s, antes 82 s)",
-      "detalle": "El 99 % del tiempo (285 s) son 1,12 millones de llamadas a `viabilidad` (~250 µs cada una, antes 75 µs): recorre todas las parcelas y piedras del mundo en cada llamada, y ahora hay 10 veces más piedras y 4 veces más parcelas. Es la deuda del índice espacial que ya estaba anotada; con este mundo deja de ser opcional, y con miles de bots sería inviable.",
+      "titulo": "La cobertura de metales por las zonas es muy baja",
+      "detalle": "Estaño cubierto por alguna zona: 33,3 % en el foco, 12,5 % en la frontera, 0 % lejos; oro 0 % en los tres anillos. Las zonas miden como mucho 15 u, la población sintética no se aleja de su campamento y los nodos de metal se reparten 5 / 25 / 70 % por anillo. No indica un fallo del reparto: el gradiente real se medirá con los bots, que sí viajan.",
+      "causa": "medicion"
+    },
+    {
+      "titulo": "El tiempo de pared está en rojo (177 s, objetivo 120 s) y el 59 % es la consulta de viabilidad",
+      "detalle": "105 s de 177 s son 187.550 llamadas a `viabilidad` (~557 µs cada una, más que los ~250 µs anteriores porque ahora calcula también el aviso de ruina); los otros ~72 s son los 16,5 millones de eventos del núcleo (la economía de cada plaza, un paso por minuto). La consulta sigue recorriendo todas las piedras y parcelas del mundo (5.601 y 23.877) en cada llamada: es la deuda del índice espacial anotada en `Docs/Mecanicas a desarrollar.md`. No se ha tocado el umbral de 120 s. Con 200 Facciones el escenario tarda 120 s (ámbar), pero se mantiene el escenario por defecto de 400 Facciones y 30 días porque es el que satura los focos.",
       "causa": "codigo"
     },
     {
-      "titulo": "Separación de metales aislados bajada de 120 a 100",
-      "detalle": "Con 64 de estaño (16 en frontera) la semilla 42 no admitía 16 nodos aislados separados 120 u (ni 110); a 100 u cabe. Es un parámetro del generador que no está en el canon, tocado a raíz de pasar a 64 / 24. Si se prefiere otra solución (otra semilla, otro reparto por anillos), habría que regenerar el mundo de nuevo.",
+      "titulo": "El escenario ya no es comparable con el informe anterior",
+      "detalle": "El informe anterior (287 s, Leñeras concedidas 44 %, 21 % de plazas sin parcela) simulaba a mano edificios, Leñeras, ampliación de zona y niveles. Ahora la construcción, la ampliación de la zona y el reclamo de parcelas los hace la economía real de cada plaza; el batch solo pide el ascenso, funda (también desde plazas de nivel 2 reales) y mide. Las Leñeras concedidas y sus gráficos por anillo se eliminan del informe de territorio: las cubre `batch poblacion`. Además el batch ya no funda en sitios condenados a ruina y una Facción pausa 72 h su expansión tras abandonar una búsqueda (sin esa pausa los reintentos infinitos duplicaban las llamadas a `viabilidad`).",
       "causa": "diseno"
     }
   ],
   "decisiones": [
     {
       "id": "D2",
-      "pregunta": "¿Cómo cerramos el bosque, que sigue en rojo (21 % de plazas sin parcela, 44 % de Leñeras)?",
-      "contexto": "Cuatro veces más parcelas no han bastado porque las parcelas viven en masas concentradas y las zonas son pequeñas. Antes de tocar datos conviene saber si el problema es del mundo o de dónde fundan las plazas sintéticas.",
+      "pregunta": "¿Hago ahora el índice espacial de `viabilidad`?",
+      "contexto": "Es el 59 % del tiempo del escenario (105 s de 177 s, objetivo 120 s). Cada corrida de calibración cuesta 3 minutos y los bots de la fase 7 llamarían a esa consulta muchas veces más.",
       "opciones": [
         {
-          "texto": "Diagnosticar primero (sin cambiar datos): medir cuántas parcelas hay a ≤ 30 u de cada plaza y si las plazas rojas están lejos de toda masa, y decidir con esos números.",
+          "texto": "Sí, ahora: rejilla espacial de piedras y parcelas en el crate `territorio`, sin cambiar resultados (el informe debe salir idéntico antes y después).",
           "recomendada": true,
-          "efecto": "Es rápido (un informe extra, sin regenerar el mundo) y evita rescalar a ciegas por segunda vez."
+          "efecto": "El batch baja a unos 72 s y se verifica comparando los informes; quita el rojo de rendimiento sin mover el umbral."
         },
         {
-          "texto": "Bajar rp a 3 y regenerar el mundo (~12 min): unas 1,8 veces más parcelas.",
+          "texto": "Bajar el escenario por defecto a 200 Facciones.",
           "recomendada": false,
-          "efecto": "Sube los cupos, pero cada parcela rinde menos y no cambia que las masas estén concentradas."
+          "efecto": "Queda en 120 s (justo ámbar), pero deja de saturar los focos (no ejercita la competencia por sitio) y esconde el problema."
         },
         {
-          "texto": "Aceptar el 44 % de Leñeras concedidas: la Leñera pide parcela y quien no la tenga fundará junto a otro bosque.",
+          "texto": "Dejarlo para la fase 7 y aceptar el rojo.",
           "recomendada": false,
-          "efecto": "No toca nada, pero el objetivo del 90 % queda sin cumplir y el segundo recurso básico depende del azar del sitio."
+          "efecto": "Sin cambios, pero cada iteración sigue costando unos 3 minutos."
         }
       ]
     },
     {
       "id": "D3",
-      "pregunta": "¿Hago ahora el índice espacial de `viabilidad`?",
-      "contexto": "Con el mundo nuevo el batch tarda 287 s (objetivo 120 s) por culpa de esa consulta; cada iteración de calibración cuesta casi 5 minutos y los bots de la fase 7 lo multiplicarían.",
+      "pregunta": "¿Cómo ponemos a prueba las fronteras si ninguna plaza llega a nivel 3 en 30 días?",
+      "contexto": "Los contactos y los recortes de zona solo ocurren con zonas de 20 u (nivel 3), y la economía real no las alcanza en este plazo: faltan edificios, cupo de Facción y población. Hoy esos verdes no demuestran nada.",
       "opciones": [
         {
-          "texto": "Sí, ahora: rejilla espacial de piedras y parcelas en el crate `territorio`, sin cambiar resultados (el determinismo y las métricas deben salir idénticos).",
+          "texto": "Añadir un modo de estrés opcional del batch (p. ej. `--estres-fronteras`) que fije el nivel 3 con la orden de administración al fundar, etiquetado en el informe como estrés y fuera del escenario por defecto.",
           "recomendada": true,
-          "efecto": "Devuelve el batch a segundos y se verifica comparando el informe antes y después."
+          "efecto": "Ejercita contactos, recortes y la invariante de zona ajena con zonas grandes, sin volver a mezclar la construcción sintética en el escenario normal."
         },
         {
-          "texto": "Dejarlo para la fase 7.",
+          "texto": "Alargar el escenario (60-90 días) hasta que la economía llegue a nivel 3.",
           "recomendada": false,
-          "efecto": "Sigue habiendo 5 minutos por corrida durante el resto de la fase 6."
+          "efecto": "Es la prueba más fiel, pero a ~6 s por día de mundo supone 6-9 minutos por corrida y no se sabe si llega."
+        },
+        {
+          "texto": "Dejarlo para los bots de la fase 7.",
+          "recomendada": false,
+          "efecto": "No cuesta nada ahora, pero la frontera dura queda sin medir durante el resto de la fase 6."
         }
       ]
     }

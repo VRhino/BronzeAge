@@ -24,7 +24,6 @@ pub struct Plaza {
 }
 
 pub fn plazas_finales(n: &Nucleo, geo: &Geo) -> Vec<Plaza> {
-    let t = n.ahora();
     n.estado()
         .asentamientos
         .values()

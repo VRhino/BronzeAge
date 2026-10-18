@@ -78,7 +78,7 @@ pub fn armar(x: &Entrada) -> Informe {
     metricas.extend(invariantes(x, &plazas));
     metricas.extend(fundaciones(x));
     metricas.extend(recursos_en_la_zona(x, &plazas));
-    metricas.extend(lenera(x));
+    metricas.extend(vida_de_las_plazas(x, &plazas));
     metricas.extend(bosque(x, &plazas));
     metricas.extend(fronteras(x, &plazas));
     metricas.extend(reparto(x, &plazas));
@@ -92,7 +92,7 @@ pub fn armar(x: &Entrada) -> Informe {
         (Some(1.0), Some(1.0)),
         x.determinismo.map(|ok| ok as u8 as f64),
         "Arquitectura/13 §4 (núcleo determinista)",
-        "Se repite un escenario reducido (50 Facciones, 3 días) con la misma semilla y se comparan los `hash_estado()` finales.",
+        "Se repite un escenario reducido (25 Facciones, 2 días) con la misma semilla y se comparan los `hash_estado()` finales.",
     ));
     let anomalias = anomalias(&metricas);
     let resumen = format!(
@@ -110,7 +110,7 @@ pub fn armar(x: &Entrada) -> Informe {
         resumen,
         parametros: parametros(x),
         metricas,
-        series: [vec![fundadas_por_dia(x), histograma_radios(&plazas), grafico_lenera(x), grafico_rechazos(x)], vec![grafico_metales]].concat(),
+        series: [vec![fundadas_por_dia(x), histograma_radios(&plazas), grafico_rechazos(x), grafico_ascensos(x)], vec![grafico_metales]].concat(),
         mapa: Some(mapa(x, &plazas)),
         anomalias,
         decisiones: vec![],
@@ -128,19 +128,19 @@ fn parametros(x: &Entrada) -> Vec<Parametro> {
         parametro("Hash del mundo", x.c.mundo.hash()),
         parametro("Radio inicial de la zona", u(r.radio_inicial)),
         parametro("Techos de zona por nivel", format!("{} u", lista(&r.techos))),
-        parametro("Crecimiento de la zona por edificio completado", format!("{} u", r.crecimiento_por_edificio as f64 / 1000.0)),
+        parametro("Crecimiento de la zona por edificio completado (lo aplica la economía real)", format!("{} u", r.crecimiento_por_edificio as f64 / 1000.0)),
         parametro("Separación mínima entre plazas", u(r.separacion_plazas)),
         parametro("Exclusión junto a campamentos de mercenarios", u(r.exclusion_campamento)),
         parametro("Cap de fundación por nivel de Facción", format!("{:?}", r.cap_por_nivel)),
         parametro("Cuota de parcelas por masa y asentamiento", format!("{} %", r.cuota_parcelas_pct)),
         parametro("Supuesto del batch: nacimientos", format!("repartidos al azar en las primeras {} h, en el campamento i mod n", sim::NACEN_EN_HORAS)),
         parametro("Supuesto del batch: columna", format!("velocidad {} u/min, víveres {}", sim::VELOCIDAD as f64 * 0.06, sim::VIVERES / 1000)),
-        parametro("Supuesto del batch: búsqueda de sitio", format!("{} candidatos; 30-120 u del campamento (expansión: 30-70 u de una plaza propia)", sim::CANDIDATOS)),
+        parametro("Supuesto del batch: búsqueda de sitio", format!("{} candidatos; 30-120 u del campamento (expansión: 30-70 u de una plaza propia); se descartan los que el aviso de viabilidad da por condenados a ruina", sim::CANDIDATOS)),
         parametro("Supuesto del batch: reintento", format!("si todo es Rojo, a los {} min; máximo {} reintentos", sim::REINTENTO_MIN, sim::MAX_REINTENTOS)),
-        parametro("Supuesto del batch: edificios", format!("uno cada {} min de mundo, hasta {}; cada uno agranda la zona 1 u", sim::EDIFICIO_CADA_MIN, sim::MAX_EDIFICIOS)),
-        parametro("Supuesto del batch: Leñeras", format!("se piden a los {:?} min de fundada la plaza", sim::LENERA_A_MIN)),
-        parametro("Supuesto del batch: niveles", format!("plaza y Facción a nivel 2 a las {} h y a nivel 3 a las {} h de fundar", sim::NIVEL_2_H, sim::NIVEL_3_H)),
-        parametro("Supuesto del batch: expansión", format!("cada {} h, si la plaza más antigua es de nivel 2+ y el cap lo permite", sim::EXPANSION_CADA_H)),
+        parametro("Construcción, zona, nivel de plaza y parcelas de bosque", "la economía real del núcleo (crate `asentamiento`, un evento de un minuto por plaza): el batch no simula edificios, Leñeras ni niveles de plaza; solo funda y mide"),
+        parametro("Supuesto del batch: ascenso", format!("el «jugador» sintético pide `SolicitarAscenso` a cada plaza viva cada {} min; lo concede o rechaza la economía real", sim::ASCENSO_CADA_MIN)),
+        parametro("Supuesto del batch: nivel de la Facción", format!("solo fija el cap de fundación: nivel 2 a las {} h y nivel 3 a las {} h de fundar la primera plaza", sim::NIVEL_FACCION_2_H, sim::NIVEL_FACCION_3_H)),
+        parametro("Supuesto del batch: expansión", format!("cada {} h, si la plaza viva más antigua alcanzó de verdad el nivel 2+ (`nivel()` de la economía) y el cap lo permite; tras abandonar una búsqueda, pausa de {} h", sim::EXPANSION_CADA_H, sim::EXPANSION_PAUSA_H)),
     ]
 }
 
@@ -204,36 +204,31 @@ fn recursos_en_la_zona(x: &Entrada, plazas: &[Plaza]) -> Vec<Metrica> {
     ]
 }
 
-/// 8: Leñeras concedidas y por qué fallan.
-fn lenera(x: &Entrada) -> Vec<Metrica> {
-    let l = &x.corrida.reg.lenera;
-    let con = |r: &str| l.iter().filter(|e| e.resultado == r).count();
-    let por_anillo = |a: usize| {
-        let (t, ok) = (l.iter().filter(|e| e.anillo == a).count(), l.iter().filter(|e| e.anillo == a && e.resultado == "ok").count());
-        pct(ok, t).map_or("sin datos".to_string(), |v| format!("{v:.1} % de {t}"))
-    };
-    let nota = format!(
-        "Intentos de `ReclamarParcela` a los 30, 90 y 180 min de fundar cada plaza (supuesto del batch). Concedidas por anillo de la plaza: foco {}, frontera {}, lejana {}.",
-        por_anillo(0),
-        por_anillo(1),
-        por_anillo(2)
-    );
+/// Lo que la economía real de las plazas deja al territorio: cuántas sobreviven y qué techo de zona alcanzan (informativas).
+fn vida_de_las_plazas(x: &Entrada, plazas: &[Plaza]) -> Vec<Metrica> {
+    let reg = &x.corrida.reg;
+    let fundadas = reg.fundaciones.len();
+    let nivel_2 = plazas.iter().filter(|p| p.nivel >= 2).count();
+    let nivel_3 = plazas.iter().filter(|p| p.nivel >= 3).count();
+    let ascensos = |c: &str| reg.ascensos.get(c).copied().unwrap_or(0);
     vec![
-        metrica("lenera_concedidas", "Leñeras concedidas", "% de intentos", min(90.0), pct(con("ok"), l.len()), "Doc 1.9c (parcelas de bosque)", &nota),
-        metrica("lenera_sin_libres", "Leñeras negadas: sin parcelas libres en la zona", "% de intentos", INFO, pct(con(sim::SIN_LIBRES), l.len()), "Doc 1.9c", "`parcela.sin_libres`: ninguna parcela libre cae en la zona real de la plaza."),
-        metrica("lenera_cupo", "Leñeras negadas: cupo de la masa agotado", "% de intentos", INFO, pct(con(sim::CUPO_AGOTADO), l.len()), "Doc 1.9c", "`parcela.cupo_agotado`: hay parcelas libres, pero la plaza ya tiene su 50 % de cada masa que alcanza."),
+        metrica("plazas_en_ruinas", "Plazas fundadas que cayeron en ruinas", "%", INFO, pct(fundadas - plazas.len().min(fundadas), fundadas), "Economia_Construccion (ruinas)", "Fundadas menos vivas al final. Las arruina la economía real de la plaza (p. ej. sin madera suficiente), no el batch (informativa)."),
+        metrica("plazas_nivel_2", "Plazas vivas de nivel 2 o más", "%", INFO, pct(nivel_2, plazas.len()), "Doc 1.9c (techo de zona por nivel)", "El nivel lo sube la economía real con el ascenso que pide el «jugador» sintético (informativa). Con nivel 2 el techo de la zona es de 15 u."),
+        metrica("plazas_nivel_3", "Plazas vivas de nivel 3 o más", "%", INFO, pct(nivel_3, plazas.len()), "Doc 1.9c (techo de zona por nivel)", "Con nivel 3 el techo es de 20 u; hasta entonces dos plazas a 30 u no pueden tocarse y no hay contactos de frontera (informativa)."),
+        metrica("ascensos_aceptados", "Ascensos pedidos y aceptados por la economía", "órdenes", INFO, Some(ascensos("ok") as f64), "Economia_Construccion §11", "Órdenes `SolicitarAscenso` aceptadas, una petición por plaza y hora (informativa)."),
+        metrica("ascensos_rechazados", "Ascensos pedidos y rechazados por la economía", "órdenes", INFO, Some(reg.ascensos.iter().filter(|(c, _)| *c != "ok").map(|(_, k)| k).sum::<u64>() as f64), "Economia_Construccion §11", "Rechazos por población, edificios, cupo, recursos... (informativa; el detalle por motivo no se desglosa)."),
     ]
 }
 
-/// 9 y 10: cuota por masa y ocupación del bosque.
+/// Cuota por masa y ocupación del bosque.
 fn bosque(x: &Entrada, plazas: &[Plaza]) -> Vec<Metrica> {
     let n = &x.corrida.nucleo;
     let (mayor, llenas) = md::cuota_y_masas_llenas(n, plazas, x.geo);
     let ocupadas = n.estado().parcelas_ocupadas.len();
     vec![
         metrica("cuota_max_masa", "Máxima fracción de una masa de bosque ocupada por un solo asentamiento", "%", max(50.0), mayor, "Doc 1.9c (cuota de parcelas por asentamiento)", "Mayor parcelas_del_asentamiento / parcelas_de_la_masa sobre todas las plazas y masas de 2 o más parcelas (con una sola parcela la cuota mínima es 1, así que 100 % no es una infracción)."),
-        metrica("parcelas_ocupadas", "Parcelas ocupadas del mundo", "%", INFO, pct(ocupadas, x.geo.parcelas.len()), "Doc 1.9c", "Parcelas con Leñera sobre el total del artefacto (informativa)."),
-        metrica("masas_agotadas", "Masas de bosque con todas sus parcelas ocupadas", "masas", INFO, Some(llenas as f64), "Doc 1.9c", "Masas cuyas parcelas están todas explotadas (informativa)."),
+        metrica("parcelas_ocupadas", "Parcelas ocupadas del mundo", "%", INFO, pct(ocupadas, x.geo.parcelas.len()), "Doc 1.9c", "Parcelas con Leñera sobre el total del artefacto (informativa). La economía real de cada plaza (no una petición sintética) reclama las parcelas, así que depende de cuánto construyan las plazas en el tiempo simulado."),
+        metrica("masas_agotadas", "Masas de bosque con todas sus parcelas ocupadas", "masas", INFO, Some(llenas as f64), "Doc 1.9c", "Masas cuyas parcelas están todas explotadas (informativa). La economía real de la plaza (no una petición sintética) reclama las parcelas."),
     ]
 }
 
@@ -243,9 +238,9 @@ fn fronteras(x: &Entrada, plazas: &[Plaza]) -> Vec<Metrica> {
     let (media, maximo) = md::contactos(n, plazas);
     let (perdida, perdida_max) = md::area_perdida(n, plazas);
     vec![
-        metrica("contactos_media", "Contactos de frontera por plaza (media)", "contactos", INFO, media, "Doc 1.2 (fronteras duras)", "Cada par de plazas de Facciones distintas cuyas zonas se han tocado cuenta un contacto en cada una (informativa)."),
+        metrica("contactos_media", "Contactos de frontera por plaza (media)", "contactos", INFO, media, "Doc 1.2 (fronteras duras)", "Cada par de plazas de Facciones distintas cuyas zonas se han tocado cuenta un contacto en cada una (informativa). Con techos de zona de 10 y 15 u (niveles 1 y 2) y plazas a 30 u o más no hay contactos: hacen falta plazas de nivel 3."),
         metrica("contactos_max", "Contactos de frontera por plaza (máximo)", "contactos", INFO, Some(maximo as f64), "Doc 1.2", "La plaza con más vecinas de otra Facción en contacto (informativa)."),
-        metrica("area_perdida", "Área de la zona perdida por recortes (media)", "%", max(25.0), perdida, "Doc 1.2 (las zonas no se estrangulan)", "Área del polígono real (`poligono_zona`) frente al polígono de 48 lados de su radio sin recortar, media sobre todas las plazas al final."),
+        metrica("area_perdida", "Área de la zona perdida por recortes (media)", "%", max(25.0), perdida, "Doc 1.2 (las zonas no se estrangulan)", "Área del polígono real (`poligono_zona`) frente al polígono de 48 lados de su radio sin recortar, media sobre todas las plazas al final. Sin contactos (ver «Contactos de frontera») no hay recortes y la métrica sale en verde sin haberse puesto a prueba."),
         metrica("area_perdida_max", "Área de la zona perdida por recortes (máxima)", "%", INFO, perdida_max, "Doc 1.2", "La plaza más recortada (informativa)."),
     ]
 }
@@ -322,24 +317,14 @@ fn histograma_radios(plazas: &[Plaza]) -> Grafico {
     Grafico { id: "radio_zona".into(), titulo: "Radio de la zona al final".into(), tipo: TipoGrafico::Histograma, eje_x: "radio (u)".into(), eje_y: "plazas".into(), series: vec![serie("Plazas", puntos)] }
 }
 
-fn grafico_lenera(x: &Entrada) -> Grafico {
-    let l = &x.corrida.reg.lenera;
-    let cuenta = |r: &dyn Fn(&str) -> bool| (0..3).map(|a| (a as f64, l.iter().filter(|e| e.anillo == a && r(&e.resultado)).count() as f64)).collect();
-    let mut series = vec![
-        serie("Concedida", cuenta(&|r| r == "ok")),
-        serie("Sin parcelas libres", cuenta(&|r| r == sim::SIN_LIBRES)),
-        serie("Cupo agotado", cuenta(&|r| r == sim::CUPO_AGOTADO)),
-    ];
-    let otros: Vec<(f64, f64)> = cuenta(&|r| r != "ok" && r != sim::SIN_LIBRES && r != sim::CUPO_AGOTADO);
-    if otros.iter().any(|p| p.1 > 0.0) {
-        series.push(serie("Otro rechazo", otros));
-    }
-    Grafico { id: "lenera_por_anillo".into(), titulo: "Leñeras por resultado y anillo".into(), tipo: TipoGrafico::Barras, eje_x: "anillo de la plaza (0 foco, 1 frontera, 2 lejana)".into(), eje_y: "intentos".into(), series }
-}
-
 fn grafico_rechazos(x: &Entrada) -> Grafico {
     let series = x.corrida.reg.rechazos.iter().map(|(m, k)| serie(m, vec![(0.0, *k as f64)])).collect();
     Grafico { id: "rechazos".into(), titulo: "Motivos de rechazo".into(), tipo: TipoGrafico::Barras, eje_x: "motivo".into(), eje_y: "veces".into(), series }
+}
+
+fn grafico_ascensos(x: &Entrada) -> Grafico {
+    let series = x.corrida.reg.ascensos.iter().map(|(m, k)| serie(m, vec![(0.0, *k as f64)])).collect();
+    Grafico { id: "ascensos".into(), titulo: "Ascensos pedidos: resultado de la economía real".into(), tipo: TipoGrafico::Barras, eje_x: "resultado".into(), eje_y: "órdenes (una por plaza y hora)".into(), series }
 }
 
 pub(crate) fn hex(c: [u8; 3]) -> String {

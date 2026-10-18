@@ -37,7 +37,7 @@ fn sin_tiempos(mut i: Informe) -> String {
 fn el_escenario_pequeno_produce_todas_las_metricas() {
     let c = con_mundo!();
     let i = territorio(c, &pequeno());
-    assert!(i.metricas.len() >= 30);
+    assert!(i.metricas.len() >= 32);
     for m in &i.metricas {
         let v = m.medido.unwrap_or_else(|| panic!("«{}» sin medir", m.id));
         assert!(v.is_finite(), "{} = {v}", m.id);
@@ -45,6 +45,9 @@ fn el_escenario_pequeno_produce_todas_las_metricas() {
     let ids: std::collections::BTreeSet<_> = i.metricas.iter().map(|m| &m.id).collect();
     assert_eq!(ids.len(), i.metricas.len(), "ids repetidos");
     assert_eq!(i.series.len(), 5);
+    for id in ["lenera_concedidas", "lenera_sin_libres", "lenera_cupo"] {
+        assert!(i.metricas.iter().all(|m| m.id != id), "«{id}» ya no es de territorio (la construye la economía real)");
+    }
     let mapa = i.mapa.as_ref().unwrap();
     for nombre in ["Zonas", "Plazas", "Campamentos de mercenarios", "Estaño", "Oro"] {
         assert!(mapa.capas.iter().any(|c| c.nombre == nombre), "falta la capa «{nombre}»");
@@ -68,7 +71,8 @@ fn los_invariantes_se_cumplen() {
 #[test]
 fn el_mismo_escenario_da_el_mismo_informe() {
     let c = con_mundo!();
-    let (a, b) = (territorio(c, &pequeno()), territorio(c, &pequeno()));
+    let e = Escenario { verificar_determinismo: false, ..pequeno() };
+    let (a, b) = (territorio(c, &e), territorio(c, &e));
     assert_eq!(sin_tiempos(a), sin_tiempos(b));
 }
 

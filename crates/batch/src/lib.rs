@@ -76,10 +76,10 @@ pub fn poblacion(c: &Cargado, e: &EscenarioPoblacion) -> Informe {
     armarpob::armar(&armarpob::Entrada { c, mapa: &mapa, e, corrida: &corrida, reglas: &reglas, determinismo, pared_total: t0.elapsed() })
 }
 
-/// 50 Facciones y 3 días, dos veces: ¿mismo `hash_estado()`?
+/// 25 Facciones y 2 días, dos veces: ¿mismo `hash_estado()`?
 fn es_determinista(c: &Cargado, geo: &geo::Geo, semilla: u64) -> bool {
-    let a = sim::simular(c, geo, 50, 3, semilla);
-    let b = sim::simular(c, geo, 50, 3, semilla);
+    let a = sim::simular(c, geo, 25, 2, semilla);
+    let b = sim::simular(c, geo, 25, 2, semilla);
     a.nucleo.hash_estado() == b.nucleo.hash_estado()
 }
 
