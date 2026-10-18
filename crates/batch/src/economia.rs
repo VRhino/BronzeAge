@@ -1,141 +1,59 @@
-//! Los adaptadores que ponen al asentamiento (crate `asentamiento`) sobre el mundo real: los nodos de piedra y de ganado con su stock
-//! finito, las parcelas de bosque y los reclamos compartidos entre todas las plazas. Cada nodo o parcela lo explota una sola plaza.
+//! Los adaptadores que ponen al asentamiento (crate `asentamiento`) sobre el mundo real para el batch de población: el stock finito de los
+//! nodos de piedra y de ganado, los reclamos de parcelas y nodos compartidos entre todas las plazas. Cada nodo o parcela lo explota una
+//! sola plaza. La geometría (rejilla de búsqueda) y la elección de sitio son las del núcleo (`nucleo::economia`), que las comparte.
 //!
-//! - [`Mapa`]: lo inmutable del artefacto (posiciones, cantidades, densidades) con una rejilla para buscar por radio.
+//! - [`Mapa`]: el mapa del núcleo más las reglas de territorio del batch.
 //! - [`Recursos`]: el stock vivo de los nodos; implementa `Fuentes` (extraer y regenerar).
 //! - [`Reclamos`]: quién tiene qué parcela o nodo.
 //! - [`SitiosVilla`]: el `Sitios` de una plaza, con su disco de zona.
 
+use asentamiento::asentamiento::Sitios;
 use asentamiento::catalogo::Tipo;
 use asentamiento::edificio::Fuente;
 use asentamiento::produccion::Fuentes;
-use asentamiento::asentamiento::Sitios;
-use base::{Instante, Mil, Punto, MS_POR_MINUTO};
+use base::{Instante, Mil, Punto};
 use mundo::Mundo;
+use nucleo::economia::{regeneracion_ms, StockNodo};
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::sync::Arc;
-use territorio::{Parcela, SinParcela};
+#[cfg(test)]
+use territorio::Parcela;
 
-/// Lado de la celda de la rejilla de búsqueda (milésimas): 10 unidades.
-const CELDA: i64 = 10_000;
-/// Regeneración de un nodo agotado (`REGENERACION_NODOS`): el ganado a los 3 minutos, los minerales a los 10.
-pub const REGENERA_GANADO_MIN: i64 = 3;
-pub const REGENERA_MINERAL_MIN: i64 = 10;
+#[cfg(test)]
+pub use nucleo::economia::NodoMapa;
+pub use nucleo::economia::{REGENERA_GANADO_MIN, REGENERA_MINERAL_MIN};
 
-/// Puntos indexados por celda para preguntar «los que caen en este disco».
-struct Rejilla {
-    columnas: i64,
-    filas: i64,
-    celdas: Vec<Vec<u32>>,
-}
-
-impl Rejilla {
-    fn nueva(ancho: i64, alto: i64, puntos: impl Iterator<Item = (u32, Punto)>) -> Self {
-        let (columnas, filas) = (ancho / CELDA + 1, alto / CELDA + 1);
-        let mut celdas = vec![Vec::new(); (columnas * filas) as usize];
-        for (id, p) in puntos {
-            let (c, f) = ((p.x / CELDA).clamp(0, columnas - 1), (p.y / CELDA).clamp(0, filas - 1));
-            celdas[(f * columnas + c) as usize].push(id);
-        }
-        Self { columnas, filas, celdas }
-    }
-
-    /// Ids cuyo punto está a `radio` o menos de `centro`, en orden ascendente de id.
-    fn en_disco(&self, centro: Punto, radio: Mil, posicion: impl Fn(u32) -> Punto) -> Vec<u32> {
-        let (c0, c1) = (((centro.x - radio) / CELDA).max(0), ((centro.x + radio) / CELDA).min(self.columnas - 1));
-        let (f0, f1) = (((centro.y - radio) / CELDA).max(0), ((centro.y + radio) / CELDA).min(self.filas - 1));
-        let mut v = Vec::new();
-        for f in f0..=f1 {
-            for c in c0..=c1 {
-                v.extend(self.celdas[(f * self.columnas + c) as usize].iter().copied().filter(|&id| posicion(id).dist2(centro) <= (radio as i128).pow(2)));
-            }
-        }
-        v.sort_unstable();
-        v
-    }
-}
-
-/// Un nodo finito del mapa.
-pub struct NodoMapa {
-    pub pos: Punto,
-    pub tipo: Tipo,
-    pub inicial: Mil,
-}
-
-/// Lo que el batch necesita del artefacto para la economía, inmutable.
+/// Lo que el batch necesita del artefacto para la economía, inmutable: el mapa del núcleo y las reglas de territorio (cuota de parcelas por
+/// masa, techos de la zona, crecimiento por edificio). Se usa como el mapa del núcleo (`Deref`).
 pub struct Mapa {
-    /// Piedra y ganado en una sola lista: `Fuente::Nodo(i)` indexa aquí.
-    pub nodos: Vec<NodoMapa>,
-    pub parcelas: Vec<Parcela>,
-    pub total_por_masa: Vec<usize>,
-    /// Densidad de cada parcela en ppm (la del contrato son milésimas: ×1000).
-    pub densidad_ppm: Vec<i64>,
-    pub campamentos: Vec<Punto>,
-    /// Reglas de territorio del núcleo (cuota de parcelas por masa, techos de la zona, crecimiento por edificio).
+    base: Arc<nucleo::economia::Mapa>,
     pub reglas: nucleo::ReglasTerritorio,
-    pub ancho: i64,
-    pub alto: i64,
-    rej_parcelas: Rejilla,
-    rej_piedra: Rejilla,
-    rej_ganado: Rejilla,
 }
 
-macro_rules! pt {
-    ($o:expr) => {
-        $o.as_ref().map(|p| Punto::new(p.x, p.y)).unwrap_or_default()
-    };
+impl Deref for Mapa {
+    type Target = nucleo::economia::Mapa;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
 }
 
 impl Mapa {
     pub fn de(m: &Mundo) -> Arc<Mapa> {
-        let masas: std::collections::HashMap<&str, usize> = m.bosques().iter().enumerate().map(|(i, b)| (b.id.as_str(), i)).collect();
-        let parcelas: Vec<Parcela> = m.parcelas().iter().map(|p| Parcela { bosque: masas[p.bosque_id.as_str()] as u32, centro: pt!(p.centro), densidad: p.densidad_milesimas }).collect();
-        let mut total_por_masa = vec![0; masas.len()];
-        parcelas.iter().for_each(|p| total_por_masa[p.bosque as usize] += 1);
-        let nodos: Vec<NodoMapa> = m
-            .nodos()
-            .iter()
-            .filter_map(|n| {
-                let tipo = match n.tipo.as_str() {
-                    "piedra" => Tipo::Cantera,
-                    "livestock" => Tipo::Corral,
-                    _ => return None,
-                };
-                Some(NodoMapa { pos: pt!(n.posicion), tipo, inicial: n.cantidad_inicial })
-            })
-            .collect();
-        let (ancho, alto) = m.tamano();
-        Self::nuevo(nodos, parcelas, total_por_masa, m.campamentos().iter().map(|c| pt!(c.posicion)).collect(), ancho, alto)
+        Arc::new(Mapa { base: nucleo::economia::Mapa::de(m), reglas: nucleo::ReglasTerritorio::default() })
     }
 
-    /// El mapa a partir de sus partes (también para los mundos de pruebas).
+    /// El mapa a partir de sus partes (los mundos de pruebas).
+    #[cfg(test)]
     pub fn nuevo(nodos: Vec<NodoMapa>, parcelas: Vec<Parcela>, total_por_masa: Vec<usize>, campamentos: Vec<Punto>, ancho: i64, alto: i64) -> Arc<Mapa> {
-        let densidad_ppm = parcelas.iter().map(|p| p.densidad as i64 * 1000).collect();
-        let de_tipo = |t: Tipo| nodos.iter().enumerate().filter(move |(_, n)| n.tipo == t).map(|(i, n)| (i as u32, n.pos)).collect::<Vec<_>>();
-        let rej_piedra = Rejilla::nueva(ancho, alto, de_tipo(Tipo::Cantera).into_iter());
-        let rej_ganado = Rejilla::nueva(ancho, alto, de_tipo(Tipo::Corral).into_iter());
-        let rej_parcelas = Rejilla::nueva(ancho, alto, parcelas.iter().enumerate().map(|(i, p)| (i as u32, p.centro)));
-        Arc::new(Mapa { nodos, parcelas, total_por_masa, densidad_ppm, campamentos, reglas: nucleo::ReglasTerritorio::default(), ancho, alto, rej_parcelas, rej_piedra, rej_ganado })
-    }
-
-    pub fn parcelas_en(&self, centro: Punto, radio: Mil) -> Vec<u32> {
-        self.rej_parcelas.en_disco(centro, radio, |i| self.parcelas[i as usize].centro)
-    }
-
-    pub fn piedra_en(&self, centro: Punto, radio: Mil) -> Vec<u32> {
-        self.rej_piedra.en_disco(centro, radio, |i| self.nodos[i as usize].pos)
-    }
-
-    pub fn ganado_en(&self, centro: Punto, radio: Mil) -> Vec<u32> {
-        self.rej_ganado.en_disco(centro, radio, |i| self.nodos[i as usize].pos)
+        Arc::new(Mapa { base: nucleo::economia::Mapa::nuevo(nodos, parcelas, total_por_masa, campamentos, ancho, alto), reglas: nucleo::ReglasTerritorio::default() })
     }
 }
 
 /// El stock vivo de los nodos. Un nodo agotado vuelve a su cantidad inicial pasado el cooldown de su categoría.
 pub struct Recursos {
     mapa: Arc<Mapa>,
-    stock: Vec<Mil>,
-    vacio_desde: Vec<Option<Instante>>,
+    nodos: Vec<StockNodo>,
     /// El instante del minuto en curso (lo fija el bucle antes de cada paso).
     pub ahora: Instante,
     /// Veces que un nodo se agotó (informativo).
@@ -144,16 +62,12 @@ pub struct Recursos {
 
 impl Recursos {
     pub fn nuevo(mapa: &Arc<Mapa>) -> Self {
-        Self { mapa: mapa.clone(), stock: mapa.nodos.iter().map(|n| n.inicial).collect(), vacio_desde: vec![None; mapa.nodos.len()], ahora: 0, agotamientos: 0 }
-    }
-
-    fn cooldown(&self, nodo: usize) -> i64 {
-        MS_POR_MINUTO * if self.mapa.nodos[nodo].tipo == Tipo::Corral { REGENERA_GANADO_MIN } else { REGENERA_MINERAL_MIN }
+        Self { mapa: mapa.clone(), nodos: mapa.nodos.iter().map(|n| StockNodo::nuevo(n.inicial)).collect(), ahora: 0, agotamientos: 0 }
     }
 
     /// Stock de todos los nodos y su calendario (para el hash de estado).
     pub fn estado(&self) -> impl Iterator<Item = (Mil, Option<Instante>)> + '_ {
-        self.stock.iter().copied().zip(self.vacio_desde.iter().copied())
+        self.nodos.iter().map(|n| (n.stock, n.vacio_desde))
     }
 }
 
@@ -163,22 +77,9 @@ impl Fuentes for Recursos {
     }
 
     fn extraer(&mut self, nodo: u32, pedido: Mil) -> Mil {
-        let n = nodo as usize;
-        if self.stock[n] == 0 {
-            match self.vacio_desde[n] {
-                Some(desde) if self.ahora - desde >= self.cooldown(n) => {
-                    self.stock[n] = self.mapa.nodos[n].inicial;
-                    self.vacio_desde[n] = None;
-                }
-                _ => return 0,
-            }
-        }
-        let sale = pedido.min(self.stock[n]);
-        self.stock[n] -= sale;
-        if self.stock[n] == 0 {
-            self.vacio_desde[n] = Some(self.ahora);
-            self.agotamientos += 1;
-        }
+        let n = &self.mapa.nodos[nodo as usize];
+        let (sale, agotado) = self.nodos[nodo as usize].extraer(n.inicial, regeneracion_ms(n.tipo), self.ahora, pedido);
+        self.agotamientos += agotado as u64;
         sale
     }
 }
@@ -226,54 +127,28 @@ pub struct SitiosVilla<'a> {
     pub sin_sitio: &'a mut SinSitio,
 }
 
-impl SitiosVilla<'_> {
-    fn parcela(&self) -> Result<u32, SinParcela> {
-        // Solo las parcelas del disco (y las propias, por si acaso): el resto no cambia la respuesta de `elegir`.
-        let mut locales = self.mapa.parcelas_en(self.centro, self.radio);
-        locales.extend(self.parcelas.iter().copied());
-        locales.sort_unstable();
-        locales.dedup();
-        let ps: Vec<Parcela> = locales.iter().map(|&g| self.mapa.parcelas[g as usize]).collect();
-        let propias: BTreeSet<u32> = locales.iter().enumerate().filter(|(_, g)| self.parcelas.contains(g)).map(|(i, _)| i as u32).collect();
-        let r2 = (self.radio as i128).pow(2);
-        territorio::elegir_parcela(&ps, &self.mapa.total_por_masa, self.mapa.reglas.cuota_parcelas_pct, self.centro, &propias, |i| self.reclamos.parcela[locales[i as usize] as usize].is_none(), |c| c.dist2(self.centro) <= r2)
-            .map(|i| locales[i as usize])
-    }
-
-    fn el_mas_cercano(&self, candidatos: Vec<u32>) -> Option<u32> {
-        candidatos.into_iter().filter(|&n| self.reclamos.nodo[n as usize].is_none()).min_by_key(|&n| (self.mapa.nodos[n as usize].pos.dist2(self.centro), n))
-    }
-}
-
 impl Sitios for SitiosVilla<'_> {
     fn proponer(&mut self, tipo: Tipo) -> Option<Option<Fuente>> {
-        match tipo {
-            Tipo::Lenera => match self.parcela() {
-                Ok(p) => Some(Some(Fuente::Parcela(p))),
-                Err(_) => {
-                    self.sin_sitio.denegar(0);
-                    None
-                }
-            },
-            Tipo::Cantera => match self.el_mas_cercano(self.mapa.piedra_en(self.centro, self.radio)) {
-                Some(n) => Some(Some(Fuente::Nodo(n))),
-                None => {
-                    self.sin_sitio.denegar(1);
-                    None
-                }
-            },
-            Tipo::Corral => match self.el_mas_cercano(self.mapa.ganado_en(self.centro, self.radio)) {
-                Some(n) => Some(Some(Fuente::Nodo(n))),
-                None => {
-                    self.sin_sitio.denegar(2);
-                    None
-                }
-            },
-            // Van por pueblo extractor (Doc 4.2.2), que este batch no implementa.
-            Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => None,
-            // El trazado urbano real (crate `trazado`) no está integrado: ponemos que siempre hay sitio.
-            _ => Some(None),
+        let reclamos = &*self.reclamos;
+        let propuesta = self.mapa.proponer(
+            tipo,
+            self.centro,
+            self.radio,
+            self.parcelas,
+            self.mapa.reglas.cuota_parcelas_pct,
+            &|i| reclamos.parcela[i as usize].is_none(),
+            &|n| reclamos.nodo[n as usize].is_none(),
+            &|_| true,
+        );
+        if propuesta.is_none() {
+            match tipo {
+                Tipo::Lenera => self.sin_sitio.denegar(0),
+                Tipo::Cantera => self.sin_sitio.denegar(1),
+                Tipo::Corral => self.sin_sitio.denegar(2),
+                _ => {}
+            }
         }
+        propuesta
     }
 
     fn tomar(&mut self, tipo: Tipo, fuente: Option<Fuente>) {
@@ -295,6 +170,7 @@ impl Sitios for SitiosVilla<'_> {
 #[cfg(test)]
 mod pruebas {
     use super::*;
+    use base::MS_POR_MINUTO;
 
     fn nodo(x: i64, tipo: Tipo) -> NodoMapa {
         NodoMapa { pos: Punto::new(x * 1000, 0), tipo, inicial: 100_000 }

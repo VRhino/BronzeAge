@@ -6,7 +6,7 @@ use crate::economia::{Mapa, Reclamos, Recursos, SinSitio, SitiosVilla};
 use asentamiento::asentamiento::{Asentamiento, Evento, Exterior};
 use asentamiento::ascenso::Bloqueo;
 use asentamiento::catalogo::Tipo;
-use asentamiento::datos::{bloque, mil, Reglas, UNO};
+use asentamiento::datos::{Reglas, UNO};
 use asentamiento::edificio::Fuente;
 use asentamiento::recurso::{Recurso, TODOS};
 use base::{Instante, Mil, Punto, Rng, MS_POR_MINUTO};
@@ -179,13 +179,6 @@ fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64) -> (Vec<(Punto
     (puntos, sin_colocar)
 }
 
-/// Materiales iniciales y viviendas de `FUNDACION` (Mechanics §14.3).
-fn fundacion() -> (Vec<(Recurso, Mil)>, u32) {
-    let f = bloque("FUNDACION");
-    let materiales = f["materialesIniciales"].as_object().expect("materialesIniciales").iter().map(|(k, v)| (Recurso::desde_nombre(k).expect("recurso"), mil(v.as_f64().expect("cantidad")))).collect();
-    (materiales, f["viviendasIniciales"].as_u64().expect("viviendasIniciales") as u32)
-}
-
 fn contar(a: &Asentamiento) -> BTreeMap<Tipo, u32> {
     let mut m = BTreeMap::new();
     a.edificios.iter().filter(|e| e.activo()).for_each(|e| *m.entry(e.tipo).or_insert(0) += 1);
@@ -303,13 +296,12 @@ fn comprobar_fuentes(villas: &[Villa], reclamos: &Reclamos, viol: &mut Violacion
 pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla: u64) -> Corrida {
     let reglas = Reglas::cargar();
     let (puntos, sin_colocar) = colocar(mundo, mapa, plazas, semilla);
-    let (materiales, viviendas) = fundacion();
-    let dia_foto = dias.min(7);
+        let dia_foto = dias.min(7);
     let mut villas: Vec<Villa> = puntos
         .into_iter()
         .map(|(pos, verde)| {
-            let a = Asentamiento::fundar(&reglas, 0, &materiales, viviendas);
-            let reg = Registro { nutricion_min: a.poblacion.nutricion, medidor_min: a.medidor.valor, pesants_dia: vec![a.poblacion.pesants], viviendas_dia: vec![viviendas], ..Registro::default() };
+            let a = Asentamiento::fundar(&reglas, 0, &reglas.materiales_iniciales, reglas.viviendas_iniciales);
+            let reg = Registro { nutricion_min: a.poblacion.nutricion, medidor_min: a.medidor.valor, pesants_dia: vec![a.poblacion.pesants], viviendas_dia: vec![reglas.viviendas_iniciales], ..Registro::default() };
             Villa { pos, verde, parcelas_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).len(), densidad_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).iter().map(|&i| mapa.densidad_ppm[i as usize]).sum(), piedra_n1: mapa.piedra_en(pos, mapa.reglas.techo(1)).len(), a, radio: mapa.reglas.radio_inicial, parcelas: BTreeSet::new(), reg }
         })
         .collect();

@@ -2,18 +2,26 @@
 //! que entra en `hash_estado` y en las fotos; lo que no está aquí (sesiones, registro de cambios, métricas) se reconstruye.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
+use crate::codec_economia;
+use crate::economia::StockNodo;
 use base::{Instante, Mil, Plan, Punto, Ritmo, Rng, Vertice};
 use cola::{Clave, Cola, Evento, Generaciones};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::sync::{Arc, OnceLock};
 
 /// Prioridad de los umbrales de víveres: «consumo de población y de tropa» (Reloj_Y_Eventos §2).
 pub const PRIO_UMBRAL: u8 = 3;
 /// Prioridad de las llegadas: «llegadas y encuentros de columnas».
 pub const PRIO_LLEGADA: u8 = 8;
+/// Prioridad del paso de un minuto de una plaza: la de «fin de obras, de ascensos y de políticas» (Reloj_Y_Eventos §2). El paso es
+/// atómico y, dentro de él, el crate `asentamiento` ya respeta el orden de la regla: construcción y políticas, ascenso, comida,
+/// crecimiento y recaudación, y por último mantenimiento y ruinas. Con la prioridad 2 una obra que acaba en el instante del paso usa las
+/// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
+pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-const MAGIA: &[u8; 4] = b"BAN2";
+const MAGIA: &[u8; 4] = b"BAN3";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -28,13 +36,49 @@ pub struct Reglas {
     /// Peticiones recordadas para la idempotencia (`INFRA.limiteIdempotencia`).
     pub limite_idempotencia: usize,
     pub territorio: ReglasTerritorio,
+    /// Las reglas de población, economía y construcción de las plazas (Economia_Construccion).
+    pub economia: ReglasEconomia,
 }
 
 impl Default for Reglas {
     fn default() -> Self {
-        Self { consumo_marcha: 830, consumo_estacionado: 83, viveres_bajos_pct: 25, limite_idempotencia: 500, territorio: ReglasTerritorio::default() }
+        Self { consumo_marcha: 830, consumo_estacionado: 83, viveres_bajos_pct: 25, limite_idempotencia: 500, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
     }
 }
+
+/// Las reglas del crate `asentamiento` (datos del documento de Mechanics, ya convertidos a enteros). No se serializan: en las fotos va su
+/// **huella**, el sha256 de los bloques de parámetros del documento incrustado (no de su prosa); recuperar con otras reglas falla igual que con `ReglasTerritorio`.
+#[derive(Clone, Debug)]
+pub struct ReglasEconomia {
+    pub datos: Arc<asentamiento::Reglas>,
+    huella: String,
+}
+
+impl ReglasEconomia {
+    /// Carga las cifras del documento incrustado (parsea los bloques JSON: hágase una vez).
+    pub fn cargar() -> Self {
+        let huella = crate::hex(&Sha256::digest(asentamiento::datos::texto_de_parametros()).into());
+        Self { datos: Arc::new(asentamiento::Reglas::cargar()), huella }
+    }
+    /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros del documento de Mechanics del que salen).
+    pub fn huella(&self) -> &str {
+        &self.huella
+    }
+}
+
+impl Default for ReglasEconomia {
+    fn default() -> Self {
+        static REGLAS: OnceLock<ReglasEconomia> = OnceLock::new();
+        REGLAS.get_or_init(ReglasEconomia::cargar).clone()
+    }
+}
+
+impl PartialEq for ReglasEconomia {
+    fn eq(&self, o: &Self) -> bool {
+        self.huella == o.huella
+    }
+}
+impl Eq for ReglasEconomia {}
 
 /// Mundo y territorio (Doc 1.0a, 1.2, 1.7, 1.9c). Distancias y radios en milésimas de unidad estratégica.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,19 +156,32 @@ impl Ejercito {
 }
 
 /// Una plaza. La zona de influencia es un disco cuyo radio crece con cada edificio completado, hasta el techo de su nivel; el polígono
-/// recortado por las fronteras se deriva (`Nucleo::poligono_zona`) y no se guarda.
+/// recortado por las fronteras se deriva (`Nucleo::poligono_zona`) y no se guarda. Lleva su economía (población, almacén, edificios,
+/// políticas, ascenso: el crate `asentamiento`), que avanza sola un minuto de mundo por evento.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Asentamiento {
     pub id: u64,
     pub faccion: u32,
     pub posicion: Punto,
-    pub nivel: u32,
+    /// Instante de fundación (el mismo que `economia.fundado_en`): la fase de los pasos de minuto.
     pub fundado_en: Instante,
     /// Radio de la zona, en milésimas.
     pub radio: Mil,
     /// Parcelas de bosque que explota (índices del artefacto).
     pub parcelas: BTreeSet<u32>,
     pub version: u64,
+    pub economia: asentamiento::asentamiento::Asentamiento,
+}
+
+impl Asentamiento {
+    /// Nivel alcanzado (vive en la economía; fija el techo de la zona y de la población).
+    pub fn nivel(&self) -> u32 {
+        self.economia.nivel
+    }
+    /// Nivel operativo (baja si el mantenimiento no se paga).
+    pub fn nivel_actual(&self) -> u32 {
+        self.economia.nivel_actual()
+    }
 }
 
 /// Qué ocurre cuando vence un evento de la cola.
@@ -134,6 +191,8 @@ pub enum Carga {
     Llegada,
     /// Los víveres cruzaron este valor (milésimas).
     Umbral(Mil),
+    /// Paso de un minuto de la economía de la plaza (la entidad del evento). Recurrente: cada paso programa el siguiente.
+    Minuto,
     /// Evento de un [`GeneradorDeEventos`](crate::GeneradorDeEventos): `generador` es su posición en la lista.
     Externa { generador: u16, tipo: u16, a: u64, b: u64 },
 }
@@ -178,6 +237,11 @@ pub struct Estado {
     pub asentamientos: BTreeMap<u64, Asentamiento>,
     /// Parcela de bosque (índice del artefacto) → asentamiento que la explota.
     pub parcelas_ocupadas: BTreeMap<u32, u64>,
+    /// Nodo de piedra o ganado (índice de `economia::Mapa::nodos`) → asentamiento que lo explota. Se reconstruye de las fuentes de los
+    /// edificios, igual que `parcelas_ocupadas` de las parcelas.
+    pub nodos_reclamados: BTreeMap<u32, u64>,
+    /// Stock de los nodos que alguien ha tocado (los demás tienen su cantidad inicial).
+    pub yacimientos: BTreeMap<u32, StockNodo>,
     /// Pares de plazas `(menor id, mayor id)` de Facciones distintas cuyas zonas ya se han tocado (nunca se separan).
     pub contactos: BTreeSet<(u64, u64)>,
     /// Nivel de cada Facción (1 si no consta): fija su cap de fundación. Lo gobernará la experiencia de Facción.
@@ -204,6 +268,8 @@ impl Estado {
             ejercitos: BTreeMap::new(),
             asentamientos: BTreeMap::new(),
             parcelas_ocupadas: BTreeMap::new(),
+            nodos_reclamados: BTreeMap::new(),
+            yacimientos: BTreeMap::new(),
             contactos: BTreeSet::new(),
             niveles_faccion: BTreeMap::new(),
             generaciones: Generaciones::nuevas(),
@@ -261,6 +327,7 @@ impl Estado {
         w.u32(t.cap_por_nivel.len() as u32);
         t.cap_por_nivel.iter().for_each(|&x| w.u32(x));
         w.u32(t.cuota_parcelas_pct);
+        w.texto(r.economia.huella());
         w.u64(self.version);
         w.i64(self.ahora);
         w.u32(self.factor_milesimas);
@@ -298,12 +365,18 @@ impl Estado {
             w.u64(a.id);
             w.u32(a.faccion);
             w.punto(a.posicion);
-            w.u32(a.nivel);
             w.i64(a.fundado_en);
             w.i64(a.radio);
             w.u32(a.parcelas.len() as u32);
             a.parcelas.iter().for_each(|&p| w.u32(p));
             w.u64(a.version);
+            codec_economia::escribir(&mut w, &a.economia);
+        }
+        w.u64(self.yacimientos.len() as u64);
+        for (&nodo, st) in &self.yacimientos {
+            w.u32(nodo);
+            w.i64(st.stock);
+            w.opt_i64(st.vacio_desde);
         }
         w.u64(self.contactos.len() as u64);
         for &(a, b) in &self.contactos {
@@ -338,6 +411,7 @@ impl Estado {
                     w.u8(1);
                     w.i64(*v);
                 }
+                Carga::Minuto => w.u8(3),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -388,6 +462,13 @@ impl Estado {
                 }
                 ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento, cap_por_nivel, cuota_parcelas_pct: r.u32()? }
             },
+            economia: {
+                let huella = r.texto()?;
+                if huella != reglas.economia.huella() {
+                    return Err(ErrorFormato("las reglas de economía de la foto no son las del documento incrustado (huella distinta)"));
+                }
+                reglas.economia.clone()
+            },
         };
         if &guardadas != reglas {
             return Err(ErrorFormato("las reglas de la foto no coinciden con las pedidas"));
@@ -432,7 +513,7 @@ impl Estado {
         }
 
         for _ in 0..r.cuenta()? {
-            let (id, faccion, posicion, nivel, fundado_en) = (r.u64()?, r.u32()?, r.punto()?, r.u32()?, r.i64()?);
+            let (id, faccion, posicion, fundado_en) = (r.u64()?, r.u32()?, r.punto()?, r.i64()?);
             let radio = r.i64()?;
             let mut parcelas = BTreeSet::new();
             for _ in 0..r.u32()? {
@@ -441,7 +522,17 @@ impl Estado {
                 parcelas.insert(p);
             }
             let version = r.u64()?;
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, nivel, fundado_en, radio, parcelas, version });
+            let economia = codec_economia::leer(&mut r)?;
+            for e in &economia.edificios {
+                if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
+                    s.nodos_reclamados.insert(n, id);
+                }
+            }
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia });
+        }
+        for _ in 0..r.cuenta()? {
+            let nodo = r.u32()?;
+            s.yacimientos.insert(nodo, StockNodo { stock: r.i64()?, vacio_desde: r.opt_i64()? });
         }
         for _ in 0..r.cuenta()? {
             s.contactos.insert((r.u64()?, r.u64()?));
@@ -464,6 +555,7 @@ impl Estado {
             let carga = match r.u8()? {
                 0 => Carga::Llegada,
                 1 => Carga::Umbral(r.i64()?),
+                3 => Carga::Minuto,
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

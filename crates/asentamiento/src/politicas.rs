@@ -67,6 +67,11 @@ pub fn slots_disponibles(r: &ReglasPoliticas, a: &Activador) -> u32 {
 }
 
 impl Politicas {
+    /// Restaurar de una foto.
+    pub fn desde_activas(activas: Vec<Activa>) -> Self {
+        Self { activas }
+    }
+
     pub fn activas(&self) -> &[Activa] {
         &self.activas
     }

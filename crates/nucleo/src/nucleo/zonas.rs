@@ -8,35 +8,23 @@
 //! zonas; el recorte es una consulta ([`Nucleo::en_zona`]), no un estado.
 
 use super::*;
+use crate::economia::Mapa;
 use crate::estado::Asentamiento;
 use base::Instante;
 use mundo::Mundo;
 use std::collections::BTreeSet;
-use territorio::{Disco, DistanciasDeFundacion, Motivo, Parcela, SinParcela, Terreno, Viabilidad};
+use territorio::{Disco, DistanciasDeFundacion, Motivo, SinParcela, Terreno, Viabilidad};
 
 /// Lo que el núcleo necesita del artefacto de mundo, ya preparado: no es estado de la partida.
 pub(crate) struct Geografia {
     mundo: Arc<Mundo>,
-    parcelas: Vec<Parcela>,
-    total_por_masa: Vec<usize>,
-    campamentos: Vec<Punto>,
-    piedra: Vec<Punto>,
+    /// Parcelas, nodos y campamentos con su rejilla de búsqueda (los comparte la economía de las plazas).
+    pub(super) mapa: Arc<Mapa>,
 }
 
 impl Geografia {
     pub(crate) fn de(mundo: Arc<Mundo>) -> Self {
-        let masas: std::collections::HashMap<&str, usize> = mundo.bosques().iter().enumerate().map(|(i, b)| (b.id.as_str(), i)).collect();
-        let punto = |p: &Option<contrato::v1::Punto>| p.map(|p| Punto::new(p.x, p.y)).unwrap_or_default();
-        let parcelas: Vec<Parcela> = mundo
-            .parcelas()
-            .iter()
-            .map(|p| Parcela { bosque: masas[p.bosque_id.as_str()] as u32, centro: punto(&p.centro), densidad: p.densidad_milesimas })
-            .collect();
-        let mut total_por_masa = vec![0; masas.len()];
-        parcelas.iter().for_each(|p| total_por_masa[p.bosque as usize] += 1);
-        let campamentos = mundo.campamentos().iter().map(|c| punto(&c.posicion)).collect();
-        let piedra = mundo.nodos().iter().filter(|n| n.tipo == "piedra").map(|n| punto(&n.posicion)).collect();
-        Self { mundo, parcelas, total_por_masa, campamentos, piedra }
+        Self { mapa: Mapa::de(&mundo), mundo }
     }
 
     fn terreno(&self, p: Punto) -> Terreno {
@@ -113,12 +101,12 @@ impl Nucleo {
         let vecinos: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
         let tocan: Vec<Disco> = vecinos.into_iter().filter(|d| territorio::se_tocan(&nuevo, d)).collect();
         let en_zona = |c: Punto| territorio::en_zona(c, &nuevo, &tocan);
-        let parcelas_libres = geo.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_zona(pa.centro)).count();
-        let piedra = geo.piedra.iter().filter(|&&c| en_zona(c)).count();
+        let parcelas_libres = geo.mapa.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_zona(pa.centro)).count();
+        let piedra = geo.mapa.nodos.iter().filter(|n| n.tipo == asentamiento::Tipo::Cantera && en_zona(n.pos)).count();
         // El mismo cálculo con el disco que alcanzará la zona en el nivel 1.
         let techo = Disco { radio: self.estado.reglas.territorio.techo(1), ..nuevo };
         let en_techo = |c: Punto| territorio::en_zona(c, &techo, &tocan);
-        let parcelas_en_techo = geo.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_techo(pa.centro)).count();
+        let parcelas_en_techo = geo.mapa.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_techo(pa.centro)).count();
         Some(InformeViabilidad { color: territorio::viabilidad(motivo.is_none(), parcelas_libres, piedra), motivo, parcelas_libres, piedra, parcelas_en_techo, condenada: motivo.is_none() && parcelas_en_techo == 0 })
     }
 
@@ -126,7 +114,7 @@ impl Nucleo {
         let r = &self.estado.reglas.territorio;
         let plazas: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
         let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento };
-        territorio::validar(p, geo.terreno(p), &plazas, geo.campamentos.iter().copied(), &dist)
+        territorio::validar(p, geo.terreno(p), &plazas, geo.mapa.campamentos.iter().copied(), &dist)
     }
 
     // ───────────────────────────── Fronteras ─────────────────────────────
@@ -134,19 +122,19 @@ impl Nucleo {
     /// Tras cambiar el radio de `id` (o nacer), anuncia las parejas con una plaza de otra Facción cuyas zonas ya se tocan y
     /// no se habían tocado antes. Las zonas nunca se encogen, así que un contacto no se deshace.
     fn contactos_nuevos(&mut self, id: u64, t: Instante) {
-        let a = self.estado.asentamientos[&id].clone();
-        let yo = self.disco_de(&a);
+        let a = &self.estado.asentamientos[&id];
+        let (yo, faccion, posicion) = (self.disco_de(a), a.faccion, a.posicion);
         let nuevos: Vec<u64> = self
             .estado
             .asentamientos
             .values()
-            .filter(|o| o.faccion != a.faccion && territorio::se_tocan(&yo, &self.disco_de(o)) && !self.estado.contactos.contains(&(id.min(o.id), id.max(o.id))))
+            .filter(|o| o.faccion != faccion && territorio::se_tocan(&yo, &self.disco_de(o)) && !self.estado.contactos.contains(&(id.min(o.id), id.max(o.id))))
             .map(|o| o.id)
             .collect();
         for otra in nuevos {
             let b = &self.estado.asentamientos[&otra];
-            let (fa, fb) = (a.faccion as i64, b.faccion as i64);
-            let punto = Punto::new((a.posicion.x + b.posicion.x) / 2, (a.posicion.y + b.posicion.y) / 2);
+            let (fa, fb) = (faccion as i64, b.faccion as i64);
+            let punto = Punto::new((posicion.x + b.posicion.x) / 2, (posicion.y + b.posicion.y) / 2);
             self.estado.contactos.insert((id.min(otra), id.max(otra)));
             self.tr.asentamientos.extend([id, otra]);
             self.tr.eventos.push(EventoNucleo {
@@ -158,6 +146,21 @@ impl Nucleo {
                 datos: vec![("faccionA", fa), ("faccionB", fb)],
             });
         }
+    }
+
+    /// La zona de `id` crece `edificios` unidades de `crecimiento_por_edificio` (uno por edificio completado), sin pasar del techo del
+    /// nivel alcanzado. Anuncia los contactos nuevos. Devuelve si el radio cambió. Es el único sitio donde crece una zona.
+    pub(super) fn agrandar_zona(&mut self, id: u64, edificios: i64, t: Instante) -> bool {
+        let r = &self.estado.reglas.territorio;
+        let a = self.estado.asentamientos.get_mut(&id).expect("existe");
+        let nuevo = (a.radio + edificios * r.crecimiento_por_edificio).min(r.techo(a.nivel()));
+        if nuevo <= a.radio {
+            return false;
+        }
+        a.radio = nuevo;
+        self.tr.asentamientos.push(id);
+        self.contactos_nuevos(id, t);
+        true
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -203,15 +206,21 @@ impl Nucleo {
                     return Err(r);
                 }
                 existe(self, *asentamiento)?;
-                let (actual, max_nivel) = (self.estado.asentamientos[asentamiento].nivel, self.estado.reglas.territorio.techos.len() as u32);
+                let (actual, max_nivel) = (self.estado.asentamientos[asentamiento].nivel(), self.estado.reglas.territorio.techos.len() as u32);
                 if *nivel < actual || *nivel > max_nivel {
                     return Err(rechazo(rechazos::NIVEL_INVALIDO, format!("el nivel va de {actual} a {max_nivel}, no a {nivel}")));
                 }
                 if *nivel == actual {
                     return Err(sin_cambios());
                 }
-                // Solo sube el techo: el radio no salta (Doc 1.2).
-                self.estado.asentamientos.get_mut(asentamiento).expect("existe").nivel = *nivel;
+                // Solo sube el techo: el radio no salta (Doc 1.2). Fija el nivel alcanzado y el operativo de la economía.
+                let eco = &mut self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia;
+                eco.nivel = *nivel;
+                eco.medidor.nivel_actual = *nivel;
+                // DUDA: una obra de ascenso hacia un nivel que el atajo ya concede no tiene sentido (al acabar bajaría el nivel): se descarta.
+                if eco.ascenso.is_some_and(|s| s.nivel_objetivo <= *nivel) {
+                    eco.ascenso = None;
+                }
                 self.tr.asentamientos.push(*asentamiento);
                 self.tr.eventos.push(EventoNucleo { codigo: "asentamiento.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("nivel", *nivel as i64)] });
                 Ok(None)
@@ -221,15 +230,9 @@ impl Nucleo {
                     return Err(r);
                 }
                 existe(self, *asentamiento)?;
-                let r = &self.estado.reglas.territorio;
-                let a = self.estado.asentamientos.get_mut(asentamiento).expect("existe");
-                let nuevo = (a.radio + r.crecimiento_por_edificio).min(r.techo(a.nivel));
-                if nuevo == a.radio {
+                if !self.agrandar_zona(*asentamiento, 1, t) {
                     return Err(sin_cambios());
                 }
-                a.radio = nuevo;
-                self.tr.asentamientos.push(*asentamiento);
-                self.contactos_nuevos(*asentamiento, t);
                 Ok(None)
             }
             Comando::ReclamarParcela { asentamiento } => {
@@ -243,8 +246,8 @@ impl Nucleo {
                 // Solo importan las vecinas que recortan esta zona; el resto no cambia la respuesta.
                 let tocan: Vec<Disco> = self.discos().into_iter().filter(|&(o, d)| o != *asentamiento && territorio::se_tocan(&yo, &d)).map(|(_, d)| d).collect();
                 let elegida = territorio::elegir_parcela(
-                    &geo.parcelas,
-                    &geo.total_por_masa,
+                    &geo.mapa.parcelas,
+                    &geo.mapa.total_por_masa,
                     self.estado.reglas.territorio.cuota_parcelas_pct,
                     a.posicion,
                     &a.parcelas,
@@ -256,7 +259,7 @@ impl Nucleo {
                     Err(SinParcela::NoHayLibres) => return Err(rechazo(rechazos::PARCELA_SIN_LIBRES, "no hay parcelas libres en la zona".into())),
                     Err(SinParcela::CupoAgotado) => return Err(rechazo(rechazos::PARCELA_CUPO_AGOTADO, "ya explota todo lo que le toca de los bosques que alcanza".into())),
                 };
-                let centro = geo.parcelas[parcela as usize].centro;
+                let centro = geo.mapa.parcelas[parcela as usize].centro;
                 self.estado.parcelas_ocupadas.insert(parcela, *asentamiento);
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").parcelas.insert(parcela);
                 self.tr.asentamientos.push(*asentamiento);
@@ -306,7 +309,10 @@ impl Nucleo {
         let radio = r.radio_inicial;
         let id = self.estado.siguiente_id;
         self.estado.siguiente_id += 1;
-        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, nivel: 1, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0 });
+        let eco = &self.estado.reglas.economia.datos;
+        let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, t, &eco.materiales_iniciales, eco.viviendas_iniciales);
+        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia });
+        self.programar_minuto(id, t + base::MS_POR_MINUTO);
         self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;
         self.tr.tocados.push(ejercito);
         self.tr.asentamientos.push(id);

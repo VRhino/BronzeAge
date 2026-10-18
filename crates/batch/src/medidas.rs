@@ -30,7 +30,7 @@ pub fn plazas_finales(n: &Nucleo, geo: &Geo) -> Vec<Plaza> {
         .values()
         .map(|a| {
             let (anillo, campamento) = geo.anillo(a.posicion);
-            Plaza { id: a.id, faccion: a.faccion, pos: a.posicion, nivel: a.nivel, radio: a.radio, anillo, campamento, parcelas: a.parcelas.iter().copied().collect() }
+            Plaza { id: a.id, faccion: a.faccion, pos: a.posicion, nivel: a.nivel(), radio: a.radio, anillo, campamento, parcelas: a.parcelas.iter().copied().collect() }
         })
         .collect()
 }

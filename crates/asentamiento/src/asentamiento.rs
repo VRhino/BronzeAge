@@ -88,7 +88,7 @@ pub enum Evento {
     NivelSubio { nivel: u32 },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Asentamiento {
     pub fundado_en: Instante,
     /// Nivel alcanzado (monótono): fija el techo de población y de zona.

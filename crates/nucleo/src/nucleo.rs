@@ -38,6 +38,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+mod construccion;
 mod zonas;
 
 pub use zonas::InformeViabilidad;
@@ -375,6 +376,7 @@ impl Nucleo {
         match ev.carga {
             Carga::Llegada => self.llegada(id, t),
             Carga::Umbral(objetivo) => self.umbral(id, objetivo, t),
+            Carga::Minuto => self.minuto_de_plaza(id, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
                 if let Some(g) = gens.get_mut(generador as usize) {
@@ -683,6 +685,19 @@ impl Nucleo {
             | Comando::AgrandarZona { .. }
             | Comando::ReclamarParcela { .. }
             | Comando::SoltarParcela { .. } => match self.ejecutar_territorio(t, p) {
+                Ok(Some(creada)) => creadas.push(creada),
+                Ok(None) => {}
+                Err(r) => return r,
+            },
+            Comando::AnadirEdificio { .. }
+            | Comando::QuitarDeCola { .. }
+            | Comando::MoverEnCola { .. }
+            | Comando::MejorarEdificio { .. }
+            | Comando::AlternarAutoConstruccion { .. }
+            | Comando::AlternarReceta { .. }
+            | Comando::CalibrarReserva { .. }
+            | Comando::SolicitarAscenso { .. }
+            | Comando::ActivarPolitica { .. } => match self.ejecutar_economia(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,

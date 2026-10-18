@@ -4,11 +4,13 @@
 //! Los decimales de los datos (0,12, 1,5…) se convierten una sola vez, al cargar, a enteros: **ppm** (millonésimas) para tasas y
 //! factores, **milésimas** (`Mil`) para cantidades. Después todo es aritmética entera.
 
+use crate::recurso::Recurso;
 use base::Mil;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-const ECONOMIA: &str = include_str!("../../../Docs/Mechanics/Economia_Construccion.md");
+/// El documento incrustado: de él salen todas las cifras.
+pub const ECONOMIA: &str = include_str!("../../../Docs/Mechanics/Economia_Construccion.md");
 
 /// 1,0 en ppm.
 pub const UNO: i64 = 1_000_000;
@@ -22,6 +24,20 @@ pub fn bloque_de(doc: &str, nombre: &str) -> Result<Value, String> {
     let cuerpo = resto[..fin].trim();
     let cuerpo = cuerpo.strip_prefix("```json").and_then(|c| c.strip_suffix("```")).ok_or_else(|| format!("el bloque «{nombre}» no es json"))?;
     serde_json::from_str(cuerpo).map_err(|e| format!("bloque «{nombre}»: {e}"))
+}
+
+/// Los bloques `<!-- parametros:... -->` del documento, uno tras otro y sin la prosa que los rodea: es lo que define las reglas, así que
+/// su hash es la identidad de las reglas (editar el texto del documento no la cambia; editar una cifra, sí).
+pub fn texto_de_parametros() -> String {
+    let (mut fuera, mut resto) = (String::new(), ECONOMIA);
+    while let Some(i) = resto.find("<!-- parametros:") {
+        let desde = &resto[i..];
+        let fin = desde.find("<!-- /parametros -->").map_or(desde.len(), |f| f + "<!-- /parametros -->".len());
+        fuera.push_str(&desde[..fin]);
+        fuera.push('\n');
+        resto = &desde[fin..];
+    }
+    fuera
 }
 
 /// Un bloque de Economia_Construccion. Los datos están compilados dentro: si falta o no es json es un error de programación.
@@ -122,6 +138,10 @@ pub struct Reglas {
     pub construccion: crate::catalogo::ReglasConstruccion,
     pub mantenimiento: crate::mantenimiento::ReglasMantenimiento,
     pub nivel: crate::nivel::ReglasNivel,
+    /// `FUNDACION.materialesIniciales`: lo que trae una plaza recién fundada.
+    pub materiales_iniciales: Vec<(Recurso, Mil)>,
+    /// `FUNDACION.viviendasIniciales`.
+    pub viviendas_iniciales: u32,
 }
 
 impl Reglas {
@@ -184,7 +204,16 @@ impl Reglas {
             duracion_minutos: num(&pol, "duracionMinutosPorDefecto") as i64,
             catalogo,
         };
+        let fundacion = b("FUNDACION");
+        let materiales_iniciales = fundacion["materialesIniciales"]
+            .as_object()
+            .expect("materialesIniciales")
+            .iter()
+            .map(|(k, v)| (Recurso::desde_nombre(k).expect("recurso de materialesIniciales"), mil(v.as_f64().expect("cantidad"))))
+            .collect();
         Reglas {
+            materiales_iniciales,
+            viviendas_iniciales: fundacion["viviendasIniciales"].as_u64().expect("viviendasIniciales") as u32,
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),
@@ -206,6 +235,14 @@ mod pruebas {
         assert_eq!(bloque_de(doc, "A").unwrap()["n"], 2.5);
         assert!(bloque_de(doc, "B").is_err());
         assert!(bloque_de("<!-- parametros:A -->\n```json\n{", "A").is_err());
+    }
+
+    #[test]
+    fn la_identidad_de_las_reglas_son_sus_bloques_y_no_la_prosa() {
+        let t = texto_de_parametros();
+        assert!(t.starts_with("<!-- parametros:") && t.contains("\"materialesIniciales\""));
+        assert!(!t.contains("Implementado en Rust") && !t.contains("## 1. Cómo corre"), "la prosa del documento no entra");
+        assert_eq!(t.matches("<!-- parametros:").count(), t.matches("<!-- /parametros -->").count());
     }
 
     #[test]

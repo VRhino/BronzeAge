@@ -220,10 +220,11 @@ impl Sim<'_> {
     /// Centro y anillo de la búsqueda: el campamento la primera vez; después, una plaza propia al azar.
     fn origen_de_busqueda(&mut self, f: u32, primera: bool) -> (Punto, (i64, i64)) {
         let fa = self.faccion(f);
-        if primera || fa.plazas.is_empty() {
+        // Una plaza propia puede haber caído en ruinas (la economía de la plaza corre sola): solo cuentan las que siguen vivas.
+        let propias: Vec<u64> = fa.plazas.iter().copied().filter(|id| self.n.estado().asentamientos.contains_key(id)).collect();
+        if primera || propias.is_empty() {
             return (self.geo.campamentos[fa.campamento], ANILLO_CAMPAMENTO);
         }
-        let propias = fa.plazas.clone();
         let id = propias[self.rng.por_debajo(propias.len() as u64) as usize];
         (self.n.estado().asentamientos[&id].posicion, ANILLO_PLAZA)
     }
@@ -319,7 +320,7 @@ impl Sim<'_> {
         if fa.ocupada {
             return;
         }
-        let nivel_plaza = fa.plazas.first().map_or(0, |id| self.n.estado().asentamientos[id].nivel);
+        let nivel_plaza = fa.plazas.first().and_then(|id| self.n.estado().asentamientos.get(id)).map_or(0, |a| a.nivel());
         let nivel_faccion = self.n.estado().niveles_faccion.get(&f).copied().unwrap_or(1);
         let cap = territorio::cap_de_fundacion(nivel_faccion, &self.n.estado().reglas.territorio.cap_por_nivel) as usize;
         if nivel_plaza < 2 || fa.plazas.len() >= cap {
@@ -346,7 +347,8 @@ impl Sim<'_> {
             Resultado::Rechazada { codigo, .. } => codigo.to_string(),
             otro => format!("{otro:?}"),
         };
-        let anillo = self.geo.anillo(self.n.estado().asentamientos[&plaza].posicion).0;
+        let Some(a) = self.n.estado().asentamientos.get(&plaza) else { return };
+        let anillo = self.geo.anillo(a.posicion).0;
         self.reg.lenera.push(Lenera { anillo, resultado });
     }
 }

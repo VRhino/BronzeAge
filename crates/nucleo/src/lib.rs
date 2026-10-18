@@ -5,20 +5,24 @@
 //!   por registro de peticiones + fotos, y `hash_estado()` determinista.
 //! - [`Estado`]: lo que entra en el hash y en las fotos. [`CambioVersion`]: el registro de cambios por versión.
 //! - [`GeneradorDeEventos`]: el hueco para `encuentros` y `vision`.
+//! - [`economia`]: cada plaza fundada lleva su economía (crate `asentamiento`) y avanza sola un minuto de mundo por evento
+//!   (`Carga::Minuto`); aquí están el mapa, los yacimientos y los sitios que comparten el núcleo y el batch de población.
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;
+mod codec_economia;
 mod comando;
 mod estado;
 mod generadores;
 mod nucleo;
+pub mod economia;
 pub mod espacial;
 pub mod proyeccion;
 pub mod sesiones;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
-pub use estado::{Asentamiento, Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, ReglasTerritorio, PRIO_LLEGADA, PRIO_UMBRAL};
+pub use estado::{Asentamiento, Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, PRIO_ASENTAMIENTO, PRIO_LLEGADA, PRIO_UMBRAL};
 pub use generadores::{Cx, GeneradorDeEventos};
 pub use nucleo::{Ajustes, Arranque, InformeViabilidad, Metricas, Nucleo};
 

@@ -13,6 +13,7 @@ mundo = { path = "../mundo" }
 encuentros = { path = "../encuentros" }
 vision = { path = "../vision" }
 territorio = { path = "../territorio" }
+asentamiento = { path = "../asentamiento" }
 contrato = { path = "../contrato" }
 servidor = { path = "../servidor" }
 prost-types = "0.13"

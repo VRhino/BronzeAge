@@ -106,7 +106,7 @@ fn fundar_y_sus_rechazos() {
     let id = r.creadas[0];
     assert!(n.version() > v0);
     let a = &n.estado().asentamientos[&id];
-    assert_eq!((a.faccion, a.nivel, a.posicion, a.fundado_en), (1, 1, p, MIN));
+    assert_eq!((a.faccion, a.nivel(), a.posicion, a.fundado_en), (1, 1, p, MIN));
     assert_eq!(n.radio_zona(id), Some(6_000));
     assert!(!n.estado().ejercitos[&e].caravana_fundacion);
     assert_eq!(eventos(&n, "fundacion.asentamiento_fundado"), vec![(MIN, vec![id])]);
@@ -157,14 +157,15 @@ fn la_zona_solo_crece_con_edificios_hasta_el_techo_de_su_nivel() {
     let mut n = nuevo(m);
     let p = sitio(&n, &m.0, 1, 60_000, 0, 1, false);
     let id = fundar_en(&mut n, 0, "a", 1, p);
-    // El tiempo solo no la agranda.
-    n.avanzar_hasta(7 * 24 * 60 * MIN);
+    // El tiempo solo no la agranda: sin edificios nuevos (la auto-construcción pausada), la plaza vive 10 minutos y el radio no se mueve.
+    assert!(n.aplicar_en(0, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true })).aceptada());
+    n.avanzar_hasta(10 * MIN);
     assert_eq!(n.radio_zona(id), Some(6_000));
     // Cada edificio, 1 unidad; el nivel 1 tiene techo 10.
-    assert_eq!(edificios(&mut n, 8 * 24 * 60 * MIN, id, 10), 4, "de 6 a 10: cuatro edificios, los demás ya no agrandan");
+    assert_eq!(edificios(&mut n, 11 * MIN, id, 10), 4, "de 6 a 10: cuatro edificios, los demás ya no agrandan");
     assert_eq!(n.radio_zona(id), Some(10_000));
     // Subir de nivel levanta el techo sin saltos: el radio sigue donde estaba.
-    let t = 9 * 24 * 60 * MIN;
+    let t = 12 * MIN;
     assert!(n.aplicar_en(t, admin("n2", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 2 })).aceptada());
     assert_eq!(n.radio_zona(id), Some(10_000));
     assert_eq!(edificios(&mut n, t, id, 9), 5, "techo 15");

@@ -16,6 +16,16 @@ impl Almacen {
         Self { cantidad: [0; 29], capacidad: [capacidad; 29] }
     }
 
+    /// Las cantidades y capacidades de los 29 recursos, en orden de [`TODOS`] (para serializar).
+    pub fn partes(&self) -> (&[Mil; 29], &[Mil; 29]) {
+        (&self.cantidad, &self.capacidad)
+    }
+
+    /// Inversa de [`Almacen::partes`] (restaurar de una foto). No recorta: se guardó un almacén válido.
+    pub fn desde_partes(cantidad: [Mil; 29], capacidad: [Mil; 29]) -> Self {
+        Self { cantidad, capacidad }
+    }
+
     pub fn cantidad(&self, r: Recurso) -> Mil {
         self.cantidad[r.indice()]
     }
