@@ -84,6 +84,8 @@ pub struct Villa {
     pub verde: bool,
     /// Parcelas de bosque y nodos de piedra en el disco del techo del nivel 1 al fundar (lo que el sitio ofrece como máximo).
     pub parcelas_n1: usize,
+    /// Suma de las densidades (ppm, 1,0 = 1.000.000) de esas parcelas: la madera que da el bosque a 10 u si se explotase entero.
+    pub densidad_n1: i64,
     pub piedra_n1: usize,
     pub a: Asentamiento,
     /// Radio de la zona (milésimas): crece 1 u por edificio completado hasta el techo de su nivel.
@@ -148,6 +150,10 @@ fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64) -> (Vec<(Punto
                 let ang = (rng.por_debajo(360_000) as f64 / 1000.0).to_radians();
                 let p = Punto::new(centro.x + (radio * ang.cos()) as i64, centro.y + (radio * ang.sin()) as i64);
                 if territorio::validar(p, terreno(mundo, p), &discos, mapa.campamentos.iter().copied(), &dist).is_err() {
+                    continue;
+                }
+                // No se funda a ciegas (decidido el 2026-10-18): sin una parcela de bosque a 10 u o menos la plaza cae en ruinas.
+                if mapa.parcelas_en(p, r.techo(1)).is_empty() {
                     continue;
                 }
                 let (parcelas, piedra) = (mapa.parcelas_en(p, r.radio_inicial).len(), mapa.piedra_en(p, r.radio_inicial).len());
@@ -304,7 +310,7 @@ pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla:
         .map(|(pos, verde)| {
             let a = Asentamiento::fundar(&reglas, 0, &materiales, viviendas);
             let reg = Registro { nutricion_min: a.poblacion.nutricion, medidor_min: a.medidor.valor, pesants_dia: vec![a.poblacion.pesants], viviendas_dia: vec![viviendas], ..Registro::default() };
-            Villa { pos, verde, parcelas_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).len(), piedra_n1: mapa.piedra_en(pos, mapa.reglas.techo(1)).len(), a, radio: mapa.reglas.radio_inicial, parcelas: BTreeSet::new(), reg }
+            Villa { pos, verde, parcelas_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).len(), densidad_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).iter().map(|&i| mapa.densidad_ppm[i as usize]).sum(), piedra_n1: mapa.piedra_en(pos, mapa.reglas.techo(1)).len(), a, radio: mapa.reglas.radio_inicial, parcelas: BTreeSet::new(), reg }
         })
         .collect();
     let (mut recursos, mut reclamos, mut viol) = (Recursos::nuevo(mapa), Reclamos::nuevo(mapa), Violaciones::default());

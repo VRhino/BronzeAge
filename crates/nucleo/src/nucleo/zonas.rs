@@ -61,6 +61,10 @@ pub struct InformeViabilidad {
     pub parcelas_libres: usize,
     /// Nodos de piedra en esa zona.
     pub piedra: usize,
+    /// Parcelas de bosque libres a menos del techo de la zona del nivel 1 (10 u) del punto. Con 0 la plaza **caerá en ruinas**: sin
+    /// Leñera no hay madera para el mantenimiento y no llega a crecer lo bastante para alcanzar otro bosque (decidido el 2026-10-18).
+    pub parcelas_en_techo: usize,
+    pub condenada: bool,
 }
 
 impl Nucleo {
@@ -111,7 +115,11 @@ impl Nucleo {
         let en_zona = |c: Punto| territorio::en_zona(c, &nuevo, &tocan);
         let parcelas_libres = geo.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_zona(pa.centro)).count();
         let piedra = geo.piedra.iter().filter(|&&c| en_zona(c)).count();
-        Some(InformeViabilidad { color: territorio::viabilidad(motivo.is_none(), parcelas_libres, piedra), motivo, parcelas_libres, piedra })
+        // El mismo cálculo con el disco que alcanzará la zona en el nivel 1.
+        let techo = Disco { radio: self.estado.reglas.territorio.techo(1), ..nuevo };
+        let en_techo = |c: Punto| territorio::en_zona(c, &techo, &tocan);
+        let parcelas_en_techo = geo.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_techo(pa.centro)).count();
+        Some(InformeViabilidad { color: territorio::viabilidad(motivo.is_none(), parcelas_libres, piedra), motivo, parcelas_libres, piedra, parcelas_en_techo, condenada: motivo.is_none() && parcelas_en_techo == 0 })
     }
 
     fn validar_fundacion(&self, geo: &Geografia, p: Punto) -> Result<(), Motivo> {

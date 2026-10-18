@@ -112,7 +112,7 @@ fn parametros(x: &Entrada) -> Vec<informe::Parametro> {
         parametro("Semilla", x.e.semilla),
         parametro("Hash del mundo", x.c.mundo.hash()),
         parametro("Escenario", "todas las plazas fundadas a la vez (t = 0), cada una de una Facción distinta; un bucle global por minuto avanza todas (competencia por nodos y parcelas)"),
-        parametro("Colocación", format!("hasta {} candidatos a 30-120 u de un campamento (plazas repartidas por igual entre los {}), el primero Verde o el mejor Ámbar; hasta {} rondas si ninguno es fundable", sp::CANDIDATOS, x.mapa.campamentos.len(), sp::MAX_RONDAS)),
+        parametro("Colocación", format!("hasta {} candidatos a 30-120 u de un campamento (plazas repartidas por igual entre los {}), el primero Verde o el mejor Ámbar, descartando los sitios sin ninguna parcela de bosque a 10 u o menos (la plaza caería en ruinas: P1, 2026-10-18); hasta {} rondas si ninguno es fundable", sp::CANDIDATOS, x.mapa.campamentos.len(), sp::MAX_RONDAS)),
         parametro("Materiales iniciales", "FUNDACION.materialesIniciales (madera 50, piedra 20, trigo 100, oro 100) y 3 Viviendas iniciales"),
         parametro("Zona de cada plaza", format!("disco de {} al fundar, +{} por edificio completado, techos por nivel alcanzado {} u; SIN recorte por vecinas", u(t.radio_inicial), u(t.crecimiento_por_edificio), techos)),
         parametro("Cuota de parcelas por masa", format!("{} % por asentamiento", t.cuota_parcelas_pct)),
@@ -142,6 +142,8 @@ fn colocacion(x: &Entrada) -> Vec<Metrica> {
     let v = &c.villas;
     vec![
         metrica("colocadas_verde_pct", "Plazas que nacen en sitio verde", "%", min(50.0), pct(v.iter().filter(|p| p.verde).count(), v.len()), "Doc 1.2 (piedra y bosque desde el principio)", "Parcelas libres y piedra en el disco inicial de 6 u, entre los 25 candidatos de la primera ronda (el primer verde, o el mejor ámbar si no hay)."),
+        metrica("densidad_n1_ruinas", "Densidad total de bosque a 10 u de las plazas que caen en ruinas (mediana)", "madera/min", INFO, mediana(&v.iter().filter(|p| p.reg.ruinas.is_some()).map(|p| p.densidad_n1 as f64 / 1e6 * 5.0).collect::<Vec<_>>()), "Economia_Construccion §5.2 (Leñera 5 × densidad)", "Madera por minuto que daría el bosque a 10 u si se explotase entero (5 × la suma de densidades de sus parcelas), medido al fundar. Para comparar con el mantenimiento de madera (~1,65 al día 1, ~2,5 con 40 edificios)."),
+        metrica("densidad_n1_resto", "Densidad total de bosque a 10 u de las plazas que no caen (mediana)", "madera/min", INFO, mediana(&v.iter().filter(|p| p.reg.ruinas.is_none()).map(|p| p.densidad_n1 as f64 / 1e6 * 5.0).collect::<Vec<_>>()), "Economia_Construccion §5.2 (Leñera 5 × densidad)", "Lo mismo para las plazas que sobreviven."),
         metrica("sin_bosque_n1_pct", "Plazas sin ninguna parcela de bosque en el disco de 10 u", "%", max(10.0), pct(v.iter().filter(|p| p.parcelas_n1 == 0).count(), v.len()), "Doc 1.2 / D2 de bosque (sin bosque no hay Leñera)", "Parcelas del artefacto a 10 u o menos de la plaza (techo de la zona en el nivel 1) al fundar, antes de cualquier competencia."),
         metrica("sin_piedra_n1_pct", "Plazas sin ningún nodo de piedra en el disco de 10 u", "%", max(15.0), pct(v.iter().filter(|p| p.piedra_n1 == 0).count(), v.len()), "Doc 1.2 (sin piedra no hay Cantera ni nivel 2)", "Nodos de piedra a 10 u o menos de la plaza al fundar, antes de cualquier competencia."),
     ]
