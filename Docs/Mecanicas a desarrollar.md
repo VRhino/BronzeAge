@@ -22,6 +22,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 38 | MILITAR | Tope de héroes en asedio: 15 contra 15 (decidido el 2026-10-13) | constante del archivo común |
 | 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
 | — | MUNDO | Índice espacial de `viabilidad` (rendimiento del batch de territorio) | recorre todo el mundo en cada llamada |
+| — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 
 **Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06), y también, de los cabos sueltos §33/§35 (2026-10-06): la **riqueza acumulada** por comisiones, el **bonus por distancia en el mostrador**, **cortar rutas como guerra económica**, la **cola de prioridad de reclutamiento** y las **armas de asedio** como mecánica aparte.
 
@@ -59,3 +60,27 @@ Decidido el 2026-10-17: la elección del Rey por voto entre representantes (ante
 ## Índice espacial de `viabilidad` (2026-10-18)
 
 La consulta `viabilidad` (y `validar_fundacion`) recorre todas las piedras y parcelas del mundo en cada llamada. Con el mundo rescalado (5.601 piedras, 23.877 parcelas) el batch de territorio tarda 287 s (objetivo 120 s): el 99 % son 1,12 millones de llamadas de ~250 µs. Hace falta una rejilla espacial en `crates/territorio` que no cambie los resultados (el informe antes y después debe salir idéntico). Dejado para más adelante por el autor; los bots de la fase 7 lo harían inviable.
+
+## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)
+
+**Regla del autor:** los recortes de funcionalidad al implementar un sistema en Rust son **temporales**. El motor **no se considera migrado** hasta que tenga todas las funcionalidades de la versión TypeScript (`typescript-final`, ver su `Consideraciones/Checklist_Mecanicas.md`), adaptadas a los ritmos, eventos y demás del mundo reactivo. Cada vez que se recorta algo se anota aquí; al volver, se borra la fila. **Antes de retirar el TypeScript (fase 9) esta tabla debe estar vacía** y los sistemas aún sin empezar (economía y comercio, militar y combate, política, tecnología y Aedas) implementados.
+
+| Sistema | Recorte temporal hoy | Dónde vuelve |
+|---|---|---|
+| Territorio | Fundar sin titular ni fundadores; sin protección de un día, nombre de ciudad, experiencia de Facción ni anulación de la derrota; la columna no se disuelve al fundar | Sistema de fundación (Doc 1.3, 1.8) y Facciones |
+| Territorio | Caravana de Fundación solo por atajo de administración: faltan comprar en un campamento, lanzar, desarmar, caducar y refundar | Economía y comercio (Doc 3.13) |
+| Territorio | Proyección de plazas a las sesiones (ámbito Facción y visión); índice espacial de `viabilidad` | Proyecciones y visión; sección «Índice espacial» |
+| Población y construcción | **Trazado urbano fuera del núcleo**: todo edificio sin yacimiento «cabe»; sin anclas ni gate de nivel 2, sin reubicación de la Granja al mejorar, sin puestos del Mercado al completar y mejorar, sin anclas gratuitas | Integrar `crates/trazado` (hecho, 21 pruebas) en el núcleo y persistir la `Ciudad` |
+| Población y construcción | Pueblos extractores y obras de mapa (Doc 4.2.2): las minas devuelven «sin sitio»; sin acarreo, mineros ni solvencia con acarreo | Guerra logística y movimiento |
+| Población y construcción | Reconstrucción tras saqueo (`danado`) solo en el modelo, sin conquista que la dispare | Militar y combate |
+| Población y construcción | Sin tecnologías: no hay requisitos de edificios ni de recetas ni bonus de producción (p. ej. `canteria`); la producción fabricada no alimenta logros | Tecnología y Aedas (Doc 6) |
+| Población y construcción | Sin guarnición ni ración de tropas en el trigo, ni reserva de comida por reclutamiento; sin pool de reclutamiento real | Militar y combate |
+| Población y construcción | Sin recintos de muralla: nivel de recinto = 0, sin upkeep ni obra de recintos | `Murallas.md` |
+| Población y construcción | Cascada de ruinas: la plaza desaparece, pero no pasan sus residentes, no se dispersa su campamento de bandidos, no se cancelan trueques, no vuelven las caravanas, ni se derrota a la Facción sin plazas | Política, comercio y militar |
+| Población y construcción | Sin cargos ni residencia: las órdenes las autoriza la administración o el propietario de una columna; las políticas asumen el cargo ocupado; sin Sala del Consejo en los slots; sin `renombrarAsentamiento` | Política (Doc 2.2) |
+| Población y construcción | Sin capital designada ni distancia a la capital (mantenimiento ×1 siempre); Gran Fundición sin tope por Facción | Política y Facciones |
+| Población y construcción | Fertilidad de zona fija en 1,0 (falta el muestreo de 40 puntos del terreno); sin Aedas (felicidad y nobleza), sin ocupación tras conquista, ciudadanos fijos en 1 | Mundo, tecnología y militar |
+| Población y construcción | Experiencia de Facción por edificio completado y por ascenso; cupo de Facción real por nivel de Facción (se asume cupo libre) | Facciones (Doc 2.2.1) |
+| Población y construcción | Fines de obra, mejora, política y ascenso con precisión de un minuto (sin evento propio); cobertura parcial de hambre y reemplazo de fuentes con regeneración resueltos por simplificación | Refinar al calibrar con bots (fase 7) |
+| Contrato | Las órdenes nuevas de economía (códigos 12-20 del núcleo) no están mapeadas a órdenes del contrato Protobuf 05 | Contrato 05 y servidor de sesiones |
+| Batch | `batch territorio` simula plazas con economía propia: sus cifras de Leñera y tiempo ya no valen; se recorta a las invariantes de territorio | Informe de cada sistema |

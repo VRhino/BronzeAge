@@ -134,6 +134,11 @@ fn terreno(m: &Mundo, p: Punto) -> Terreno {
     }
 }
 
+/// Madera por minuto (milésimas) que daría el bosque a 10 u de `p` si se explotase entero: 5 × la suma de densidades de sus parcelas.
+fn madera_potencial(mapa: &Mapa, p: Punto) -> Mil {
+    5_000 * mapa.parcelas_en(p, mapa.reglas.techo(1)).iter().map(|&i| mapa.densidad_ppm[i as usize]).sum::<i64>() / 1_000_000
+}
+
 /// Reparte las plazas entre los campamentos por igual y elige el sitio de cada una (ver la cabecera del módulo).
 fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64) -> (Vec<(Punto, bool)>, u32) {
     let mut rng = Rng::derivado(semilla, "poblacion");
@@ -152,8 +157,8 @@ fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64) -> (Vec<(Punto
                 if territorio::validar(p, terreno(mundo, p), &discos, mapa.campamentos.iter().copied(), &dist).is_err() {
                     continue;
                 }
-                // No se funda a ciegas (decidido el 2026-10-18): sin una parcela de bosque a 10 u o menos la plaza cae en ruinas.
-                if mapa.parcelas_en(p, r.techo(1)).is_empty() {
+                // No se funda a ciegas (decidido el 2026-10-18): sin madera potencial suficiente a 10 u (`MADERA_MINIMA_POTENCIAL`) la plaza cae en ruinas.
+                if madera_potencial(mapa, p) < nucleo::economia::MADERA_MINIMA_POTENCIAL {
                     continue;
                 }
                 let (parcelas, piedra) = (mapa.parcelas_en(p, r.radio_inicial).len(), mapa.piedra_en(p, r.radio_inicial).len());

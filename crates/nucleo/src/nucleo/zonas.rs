@@ -52,6 +52,9 @@ pub struct InformeViabilidad {
     /// Parcelas de bosque libres a menos del techo de la zona del nivel 1 (10 u) del punto. Con 0 la plaza **caerá en ruinas**: sin
     /// Leñera no hay madera para el mantenimiento y no llega a crecer lo bastante para alcanzar otro bosque (decidido el 2026-10-18).
     pub parcelas_en_techo: usize,
+    /// Madera por minuto (milésimas) que daría ese bosque si se explotase entero: base de la Leñera × Σ densidades de las parcelas libres.
+    pub madera_potencial: Mil,
+    /// La plaza caerá en ruinas: sin parcela a 10 u o con menos madera potencial que `economia::MADERA_MINIMA_POTENCIAL`.
     pub condenada: bool,
 }
 
@@ -106,8 +109,12 @@ impl Nucleo {
         // El mismo cálculo con el disco que alcanzará la zona en el nivel 1.
         let techo = Disco { radio: self.estado.reglas.territorio.techo(1), ..nuevo };
         let en_techo = |c: Punto| territorio::en_zona(c, &techo, &tocan);
-        let parcelas_en_techo = geo.mapa.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_techo(pa.centro)).count();
-        Some(InformeViabilidad { color: territorio::viabilidad(motivo.is_none(), parcelas_libres, piedra), motivo, parcelas_libres, piedra, parcelas_en_techo, condenada: motivo.is_none() && parcelas_en_techo == 0 })
+        let libres_en_techo: Vec<&territorio::Parcela> = geo.mapa.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_techo(pa.centro)).map(|(_, pa)| pa).collect();
+        let parcelas_en_techo = libres_en_techo.len();
+        let base_lenera = self.estado.reglas.economia.datos.catalogo.tipo(asentamiento::Tipo::Lenera).produccion.map_or(0, |(_, b)| b);
+        let madera_potencial = base_lenera * libres_en_techo.iter().map(|pa| pa.densidad as Mil).sum::<Mil>() / 1000;
+        let condenada = motivo.is_none() && (parcelas_en_techo == 0 || madera_potencial < crate::economia::MADERA_MINIMA_POTENCIAL);
+        Some(InformeViabilidad { color: territorio::viabilidad(motivo.is_none(), parcelas_libres, piedra), motivo, parcelas_libres, piedra, parcelas_en_techo, madera_potencial, condenada })
     }
 
     fn validar_fundacion(&self, geo: &Geografia, p: Punto) -> Result<(), Motivo> {

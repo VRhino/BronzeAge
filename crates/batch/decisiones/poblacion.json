@@ -1,19 +1,19 @@
 {
-  "resumen": "Se simularon 30 días de mundo con 300 plazas pedidas (240 colocadas: con la regla nueva de no fundar sin bosque a 10 u o menos, 60 no encuentran sitio en el anillo de 30-120 u de su campamento, que ya está ocupado por las demás), minuto a minuto y en competencia por los nodos y las parcelas del mundo real. Cuando el sitio es bueno la economía funciona: sin hambre, sin violaciones de invariantes, determinista, y el nivel 2 llega a los 5,3 días de mediana (2,3 hasta los 200 pesants que pide el nivel, más los 3 de la obra). Aplicar P1 (no fundar sin bosque) baja las ruinas del 29,7 % al 17,9 %, pero no las quita: de las 43 plazas en ruinas, 20 perdieron sus parcelas contra otras plazas (se fundaron todas a la vez) y 23 tenían bosque, pero ralo: el bosque a 10 u de las que caen daría una mediana de 1,34 de madera por minuto y el de las que sobreviven 16,3, frente a un mantenimiento de ~1,65 al día 1 y ~2,5 con 40 edificios. El nivel 2 llega al 79,6 % de las plazas. Nadie llega al nivel 3 todavía: el requisito de 400 artesanos ya se cumple (dos Viviendas de margen y requisitos redondeados, 2026-10-18), pero faltan el cupo de Facción, el Barracón y la Galería de tiro y la materia prima de la Curtiduría y la Fundición. El escenario tarda 44 s (objetivo 120 s).",
+  "resumen": "Se simularon 30 días de mundo con 300 plazas pedidas (230 colocadas: con las reglas de no fundar sin madera suficiente a 10 u, 70 no encuentran sitio en el anillo de 30-120 u de su campamento, que ya está ocupado por las demás), minuto a minuto y en competencia por los nodos y las parcelas del mundo real. Con esa regla (P1 y P2, 2026-10-18) la economía funciona: el 92,2 % de las plazas llega al nivel 2 (el 98,1 % de las que nacen con bosque y piedra a 10 u), con una mediana de 5,25 días (2,3 hasta los 200 pesants que pide el nivel, más los 3 de la obra), sin hambre, sin violaciones de invariantes y de forma determinista. Las ruinas bajan del 29,7 % (fundando a ciegas) al 2,6 % (6 plazas), todas por perder sus parcelas contra otras plazas al fundarse todas a la vez. El Corral lo construye el 13,0 % de las plazas y el 40,0 % tiene ganado a 30 u o menos. Nadie llega al nivel 3 todavía: el requisito de 400 artesanos ya se cumple, pero faltan el cupo de Facción, el Barracón y la Galería de tiro y la materia prima de la Curtiduría y la Fundición. El escenario tarda 38 s (objetivo 120 s).",
   "anomalias": [
     {
-      "titulo": "Una de cada seis plazas sigue cayendo en ruinas aunque nazca con bosque cerca (17,9 %)",
-      "detalle": "Con la regla de no fundar sin una parcela de bosque a 10 u o menos (P1, decidida el 2026-10-18), el 17,9 % de las 240 plazas (43) cae en Ruinas el día 1-2 por no poder pagar la madera del mantenimiento. 20 de ellas nunca terminan una Leñera: perdieron sus parcelas contra otras plazas o por la cuota de la masa, porque en el batch se fundan todas a la vez (en el juego real las fundaciones llegan escalonadas). Las otras 23 sí tienen Leñera pero su bosque es ralo: la mejor parcela tiene densidad 0,21 de mediana. Antes de P1 eran el 29,7 % de 286 plazas.",
+      "titulo": "Quedan 6 plazas en ruinas (2,6 %), todas por competencia por el bosque",
+      "detalle": "Con P1 (sin parcela de bosque a 10 u no se funda) y P2 (madera potencial a 10 u de al menos 3 por minuto), el 2,6 % de las 230 plazas (6) cae en Ruinas el día 1 por no pagar la madera del mantenimiento: ninguna llegó a terminar una Leñera porque otras plazas se quedaron antes con sus parcelas (en el batch se fundan todas a la vez; en el juego real las fundaciones llegan escalonadas). Antes: 29,7 % fundando a ciegas, 17,9 % solo con P1.",
       "causa": "diseno"
     },
     {
-      "titulo": "Un bosque ralo no sostiene una plaza (23 de las 43 ruinas)",
-      "detalle": "La madera que da el bosque a 10 u de la plaza, si se explotase entero (5 × la suma de densidades de sus parcelas), es de 1,34 por minuto de mediana en las plazas que caen y de 16,3 en las que sobreviven. El mantenimiento de madera es ~1,65 por minuto al día 1 y ~2,5 con 40 edificios, así que por debajo de unos 3 de madera potencial una plaza no se sostiene. «Una parcela a 10 u» no basta: hace falta bosque suficiente.",
+      "titulo": "El bosque ralo ya no arruina plazas (P2)",
+      "detalle": "Con el umbral de 3 madera por minuto de bosque potencial a 10 u, ninguna de las plazas con Leñera cae en ruinas. La madera potencial mediana a 10 u de las 6 que caen es 5,2 y la de las que sobreviven 15,3 (medida al fundar, antes de la competencia). El umbral de 3 es un placeholder a calibrar (el mantenimiento pide ~1,65 al día 1 y ~2,5 con 40 edificios).",
       "causa": "diseno"
     },
     {
       "titulo": "Las plazas sin piedra cercana se quedan en el nivel 1 para siempre",
-      "detalle": "Sin ningún nodo de piedra a 10 u o menos (5,2 % de las plazas) no hay Cantera, no hay piedra para el coste de ascenso (400) ni para el mantenimiento del nivel 2, y solo tienen 2 de los 3 tipos de extracción que pide el nivel 2 (Granja y Leñera; las minas van por pueblo extractor, que este batch no tiene). Sobreviven (tienen madera) pero no suben: a la última comprobación pesaban «faltan edificios», «recursos insuficientes» e «insolvente». Con la zona del nivel 2 (15 u) alguna alcanzaría piedra, pero el nivel 2 es justo lo que no pueden pagar.",
+      "detalle": "Sin ningún nodo de piedra a 10 u o menos (6,1 % de las plazas) no hay Cantera, no hay piedra para el coste de ascenso (400) ni para el mantenimiento del nivel 2, y solo tienen 2 de los 3 tipos de extracción que pide el nivel 2 (Granja y Leñera; las minas van por pueblo extractor, que este batch no tiene). Sobreviven (tienen madera) pero no suben: a la última comprobación pesaban «faltan edificios», «recursos insuficientes» e «insolvente». Con la zona del nivel 2 (15 u) alguna alcanzaría piedra, pero el nivel 2 es justo lo que no pueden pagar.",
       "causa": "diseno"
     },
     {
@@ -23,7 +23,7 @@
     },
     {
       "titulo": "El Corral: solo el 9,4 % de las plazas lo consigue",
-      "detalle": "Antes de reordenar el generador ninguna plaza (0 de 286) tenía un nodo de ganado a 30 u o menos: los 400 nodos estaban en la tierra lejana (250-863 u de un campamento) porque la piedra ×10 llenaba la rejilla de candidatos del foco antes de que le tocara al ganado. Con la ganadería colocada antes que la piedra, el 52,8 % de las plazas tiene algún nodo a 30 u o menos (mediana 1) y el 19,2 % a 15 u o menos (el techo de la zona en el nivel 2); el 12,5 % termina un Corral (9,4 % antes de P1) y al 98,6 % se le negó sitio al pedir el primero (la zona empieza en 6 u y crece con los edificios). Consecuencia: la mayoría de las plazas no produce livestock, así que no hay cuero ni Curtiduría automática.",
+      "detalle": "Antes de reordenar el generador ninguna plaza (0 de 286) tenía un nodo de ganado a 30 u o menos: los 400 nodos estaban en la tierra lejana (250-863 u de un campamento) porque la piedra ×10 llenaba la rejilla de candidatos del foco antes de que le tocara al ganado. Con la ganadería colocada antes que la piedra, el 40,0 % de las plazas tiene algún nodo a 30 u o menos (mediana 1) y el 19,2 % a 15 u o menos (el techo de la zona en el nivel 2); el 13,0 % termina un Corral y al 98,6 % se le negó sitio al pedir el primero (la zona empieza en 6 u y crece con los edificios). Consecuencia: la mayoría de las plazas no produce livestock, así que no hay cuero ni Curtiduría automática.",
       "causa": "diseno"
     },
     {
@@ -45,8 +45,8 @@
   "decisiones": [
     {
       "id": "P1",
-      "pregunta": "P1 aplicada (2026-10-18): el aviso de viabilidad dice que sin parcela de bosque a 10 u o menos la plaza caerá en ruinas, y el batch y los bots no fundan ahí. Resultado: ruinas del 29,7 % al 17,9 %.",
-      "contexto": "Hecho: `InformeViabilidad` lleva `parcelas_en_techo` y `condenada`; el Doc 1.2 lo recoge. Queda lo que P1 no resuelve: el bosque ralo (P2) y la competencia por las mismas parcelas cuando se funda a la vez.",
+      "pregunta": "P1 aplicada (2026-10-18): el aviso de viabilidad dice que sin madera suficiente a 10 u la plaza caerá en ruinas, y el batch y los bots no fundan ahí.",
+      "contexto": "Hecho: `InformeViabilidad` lleva `parcelas_en_techo`, `madera_potencial` y `condenada`; el Doc 1.2 lo recoge.",
       "opciones": [
         {
           "texto": "Dar P1 por cerrada y decidir P2 (bosque ralo).",
@@ -57,23 +57,13 @@
     },
     {
       "id": "P2",
-      "pregunta": "¿Cómo evitamos las plazas que nacen con bosque ralo y caen en ruinas (23 de las 43)?",
-      "contexto": "El bosque a 10 u de las plazas que caen da una mediana de 1,34 de madera por minuto frente a 16,3 en las que sobreviven; el mantenimiento pide ~1,65 al día 1 y ~2,5 con 40 edificios. Con una sola parcela de densidad 0,15-0,26 no se paga.",
+      "pregunta": "P2 aplicada (2026-10-18): la condena exige además 3 de madera por minuto de bosque potencial a 10 u. Resultado: ruinas del 17,9 % al 2,6 %.",
+      "contexto": "El 3 es un placeholder a calibrar con bots y economía real (`MADERA_MINIMA_POTENCIAL`). Quedan 6 plazas por competencia por parcelas al fundar a la vez.",
       "opciones": [
         {
-          "texto": "El aviso exige madera potencial suficiente: la condena pasa de «ninguna parcela a 10 u» a «menos de 3 de madera por minuto a 10 u» (5 × la suma de densidades < 3).",
+          "texto": "Dar P2 por cerrada y calibrar el 3 con los bots (fase 7).",
           "recomendada": true,
-          "efecto": "Separa limpiamente las plazas que caen de las que sobreviven en este batch; los bots y el aviso no fundarían en esos sitios. El 3 es un placeholder a calibrar."
-        },
-        {
-          "texto": "Subir la densidad mínima de las parcelas del generador a 0,3 y regenerar el mundo (~12 min).",
-          "recomendada": false,
-          "efecto": "Cambia el hash del mundo y obliga a repetir los batches; no cubre los bosques con pocas parcelas."
-        },
-        {
-          "texto": "Dejarlo: quien funda en un bosque ralo pierde la plaza.",
-          "recomendada": false,
-          "efecto": "No toca nada; el aviso Ámbar ya avisa de que falta bosque."
+          "efecto": "Sin más cambios."
         }
       ]
     },
