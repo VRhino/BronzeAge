@@ -10,12 +10,12 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// Redondeo a 3 decimales: el JSON queda estable y legible.
-fn r3(v: f64) -> f64 {
+pub(crate) fn r3(v: f64) -> f64 {
     (v * 1000.0).round() / 1000.0
 }
 
 #[allow(clippy::too_many_arguments)]
-fn metrica(id: &str, nombre: &str, unidad: &str, rango: (Option<f64>, Option<f64>), medido: Option<f64>, origen: &str, nota: &str) -> Metrica {
+pub(crate) fn metrica(id: &str, nombre: &str, unidad: &str, rango: (Option<f64>, Option<f64>), medido: Option<f64>, origen: &str, nota: &str) -> Metrica {
     Metrica {
         id: id.into(),
         nombre: nombre.into(),
@@ -29,19 +29,19 @@ fn metrica(id: &str, nombre: &str, unidad: &str, rango: (Option<f64>, Option<f64
     }
 }
 
-const INFO: (Option<f64>, Option<f64>) = (None, None);
-const fn min(v: f64) -> (Option<f64>, Option<f64>) {
+pub(crate) const INFO: (Option<f64>, Option<f64>) = (None, None);
+pub(crate) const fn min(v: f64) -> (Option<f64>, Option<f64>) {
     (Some(v), None)
 }
-const fn max(v: f64) -> (Option<f64>, Option<f64>) {
+pub(crate) const fn max(v: f64) -> (Option<f64>, Option<f64>) {
     (None, Some(v))
 }
 
-fn serie(nombre: &str, puntos: Vec<(f64, f64)>) -> Serie {
+pub(crate) fn serie(nombre: &str, puntos: Vec<(f64, f64)>) -> Serie {
     Serie { nombre: nombre.into(), puntos }
 }
 
-fn parametro(nombre: &str, valor: impl ToString) -> Parametro {
+pub(crate) fn parametro(nombre: &str, valor: impl ToString) -> Parametro {
     Parametro { nombre: nombre.into(), valor: valor.to_string() }
 }
 
@@ -342,7 +342,7 @@ fn grafico_rechazos(x: &Entrada) -> Grafico {
     Grafico { id: "rechazos".into(), titulo: "Motivos de rechazo".into(), tipo: TipoGrafico::Barras, eje_x: "motivo".into(), eje_y: "veces".into(), series }
 }
 
-fn hex(c: [u8; 3]) -> String {
+pub(crate) fn hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 

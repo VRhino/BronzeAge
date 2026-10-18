@@ -1,15 +1,19 @@
 //! Batch de validación del sistema «mundo y territorio» (fase 6): una población sintética de Facciones juega semanas de
 //! mundo sobre el núcleo en modo acelerado y las medidas resultantes se comparan con lo que el diseño espera.
 //!
-//! - [`territorio`] corre el escenario y devuelve el [`Informe`].
+//! - [`territorio`] corre el escenario de «mundo y territorio» y devuelve el [`Informe`].
+//! - [`poblacion`] corre el de «población, construcción y mantenimiento» (plazas del crate `asentamiento` sobre el mundo real).
 //! - [`escribir`] deja `informe.json` e `informe.html` en una carpeta.
 //! - [`fundir_decisiones`] añade a mano el resumen, las anomalías y las decisiones tras leer los resultados.
 
 mod armar;
+mod armarpob;
+mod economia;
 mod fondo;
 mod geo;
 mod medidas;
 mod sim;
+mod simpob;
 
 pub use geo::{artefacto_en, cargar, carpeta_por_defecto, Cargado};
 pub use informe::{semaforo, Informe, Semaforo};
@@ -41,6 +45,35 @@ pub fn territorio(c: &Cargado, e: &Escenario) -> Informe {
     let corrida = sim::simular(c, &geo, e.facciones, e.dias, e.semilla);
     let determinismo = e.verificar_determinismo.then(|| es_determinista(c, &geo, e.semilla));
     armar::armar(&armar::Entrada { c, geo: &geo, e, corrida: &corrida, malla: &malla, determinismo, pared_total: t0.elapsed() })
+}
+
+/// Parámetros del escenario de población: plazas fundadas a la vez, simuladas minuto a minuto.
+#[derive(Clone, Debug)]
+pub struct EscenarioPoblacion {
+    pub plazas: u32,
+    pub dias: u32,
+    pub semilla: u64,
+    /// Repite un escenario reducido dos veces y compara los hashes del estado.
+    pub verificar_determinismo: bool,
+}
+
+impl Default for EscenarioPoblacion {
+    fn default() -> Self {
+        Self { plazas: 300, dias: 30, semilla: 42, verificar_determinismo: true }
+    }
+}
+
+/// Corre el escenario de población sobre el mundo y monta el informe.
+pub fn poblacion(c: &Cargado, e: &EscenarioPoblacion) -> Informe {
+    let t0 = Instant::now();
+    let mapa = economia::Mapa::de(&c.mundo);
+    let corrida = simpob::simular(&c.mundo, &mapa, e.plazas, e.dias, e.semilla);
+    let determinismo = e.verificar_determinismo.then(|| {
+        let (a, b) = (simpob::simular(&c.mundo, &mapa, 20, 3, e.semilla), simpob::simular(&c.mundo, &mapa, 20, 3, e.semilla));
+        simpob::hash_estado(&a) == simpob::hash_estado(&b)
+    });
+    let reglas = asentamiento::datos::Reglas::cargar();
+    armarpob::armar(&armarpob::Entrada { c, mapa: &mapa, e, corrida: &corrida, reglas: &reglas, determinismo, pared_total: t0.elapsed() })
 }
 
 /// 50 Facciones y 3 días, dos veces: ¿mismo `hash_estado()`?

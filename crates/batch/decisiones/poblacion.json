@@ -1,0 +1,152 @@
+{
+  "resumen": "Se simularon 30 días de mundo con 300 plazas pedidas (286 colocadas; 14 no caben en el anillo de 30-120 u de su campamento, que se satura con ~33 plazas por foco), minuto a minuto y en competencia por los nodos y las parcelas del mundo real. La economía del asentamiento funciona cuando el sitio es bueno: el 94,3 % de las plazas que nacen con bosque y piedra a 10 u o menos llegan al nivel 2, con una mediana de 5,3 días (2,3 hasta los 200 pesants que pide el nivel, que es cuando se pide la subida, más los 3 de la obra), sin hambre (0 % del tiempo con déficit de trigo), sin ninguna violación de invariantes y de forma determinista. El problema es el sitio, no la economía: el 31,8 % de todas las plazas cae en ruinas entre el día 1 y el 2, 83 de las 91 porque no tienen ninguna parcela de bosque a 10 u o menos (sin Leñera no hay madera para el mantenimiento) y 8 porque su bosque es ralo (densidad 0,18). Otras 13 plazas sin piedra se quedan para siempre en el nivel 1. Nadie llega al nivel 3 (el requisito de 400 artesanos coincide con el cupo exacto de las Viviendas y la población solo se acerca a 399,997) y ninguna plaza consigue un Corral. El escenario tarda 41 s (objetivo 120 s).",
+  "anomalias": [
+    {
+      "titulo": "Casi un tercio de las plazas muere de falta de madera (31,8 % en ruinas)",
+      "detalle": "91 de 286 plazas llegan a Ruinas con el medidor a 0 por no poder pagar la madera del mantenimiento; la mediana de la caída es el día 1,0 (justo cuando acaba la gracia de un día). 83 de ellas no llegaron a terminar ninguna Leñera: el 95 % de las plazas sin Leñera no tenía ni una parcela de bosque en el disco de 10 u (techo de la zona en el nivel 1) al fundar, así que la Leñera nunca tuvo sitio. Es la cara grave del bosque pendiente en el sistema 1 (D2 de territorio: 20,7 % de plazas sin parcela con la zona máxima de 30 u): aquí no es solo menos Leñeras, es una plaza que desaparece. Descartado que sea la política de búsqueda: probando 100 candidatos por plaza en vez de 25, las plazas verdes suben solo del 55,6 % al 67,8 % y las ruinas bajan del 31,8 % al 30,1 %, porque el foco ya está ocupado por las demás plazas. De los sitios que no son verdes (44 %), el 62 % carece de bosque cercano.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "Un bosque ralo no sostiene una plaza (8 ruinas con Leñera)",
+      "detalle": "8 plazas construyeron su Leñera (a la hora 1) pero su mejor parcela tiene una densidad mediana de 0,18 (el generador admite desde 0,15): la madera que dan no cubre el mantenimiento y caen en ruinas los días 1-2. Una de ellas llegó al nivel 2, tuvo un colapso de mantenimiento (el único del escenario) y cayó en el día 7 con dos Leñeras de densidad 0,26 y 0,18. Son el 2,8 % de las plazas, dentro del 5 % tolerable, pero con el valor esperado de ruinas en 0.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "Las plazas sin piedra cercana se quedan en el nivel 1 para siempre (13 plazas)",
+      "detalle": "Sin ningún nodo de piedra a 10 u o menos (6,3 % de las plazas) no hay Cantera, no hay piedra para el coste de ascenso (400) ni para el mantenimiento del nivel 2, y solo tienen 2 de los 3 tipos de extracción que pide el nivel 2 (Granja y Leñera; las minas van por pueblo extractor, que este batch no tiene). Sobreviven (tienen madera) pero no suben: a la última comprobación pesaban «faltan edificios», «recursos insuficientes» e «insolvente». Con la zona del nivel 2 (15 u) alguna alcanzaría piedra, pero el nivel 2 es justo lo que no pueden pagar.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "El nivel 3 es inalcanzable: el requisito de 400 artesanos coincide con el cupo exacto",
+      "detalle": "Las 183 plazas de nivel 2 acaban con 599 pesants y 399,997 artesanos. El tope de Viviendas (`maximo_viviendas`) da justo 40, cuyo cupo de artesanos es 400, el mismo número que pide el nivel 3; el crecimiento logístico se acerca al cupo sin tocarlo y el requisito lee enteros (suelo), así que 399 nunca llega a 400. Aunque se arreglase, el nivel 3 sigue bloqueado en este batch por otros motivos: el cupo de Facción del nivel 3 con una Facción de nivel 1 es 0, el Barracón y la Galería de tiro solo se añaden a mano (el batch no da órdenes manuales) y en el día 30 no aparece ninguna Curtiduría ni Fundición entre los edificios (no investigado por qué).",
+      "causa": "codigo"
+    },
+    {
+      "titulo": "El Corral no encuentra ganado: 0 de 286 plazas lo construyen",
+      "detalle": "El mundo tiene 400 nodos de ganado frente a 5.601 de piedra, repartidos en 5,3 millones de u²: un disco de 15 u (el techo de la zona en el nivel 2) contiene de media 0,05. El 100 % de las plazas pidió un Corral y se le negó sitio. Consecuencia: ninguna plaza produce livestock, así que no hay cuero ni nada que lo use (Curtiduría, Caballerizas).",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "El techo de población del nivel 2 (1.500) no se alcanza: lo limita el cupo de Viviendas",
+      "detalle": "La mediana de pesants se queda en 600 desde el día 11 (40 Viviendas × 15) y los artesanos en 400 (40 × 10); el techo de población del nivel 2 en los datos es 1.500. No es un fallo: `maximo_viviendas` solo deja las Viviendas que exige el nivel siguiente. Se anota porque el techo del nivel 2 queda entonces como decorativo.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "Todas las plazas con buen sitio se comportan igual (sin varianza)",
+      "detalle": "Las 183 plazas que llegan al nivel 2 lo hacen entre el día 5,29 y el 6: el histograma tiene una sola barra. El mismo estado inicial, la fertilidad fijada en 1,0 y un jugador que solo mira cada hora dan una economía determinista sin ruido; lo que varía entre plazas es solo el sitio (parcelas, piedra, competencia). La dispersión real vendrá del jugador (bots de la fase 7), de la fertilidad del terreno y de las tecnologías.",
+      "causa": "medicion"
+    },
+    {
+      "titulo": "Simplificaciones y límites de este batch",
+      "detalle": "Sin trazado urbano real (el resto de edificios siempre tiene sitio; el crate `trazado` se integrará después), sin recorte de las zonas por las vecinas (discos que crecen 1 u por edificio hasta el techo del nivel), sin pueblos extractores (Mina, MinaCobre, MinaEstano y MinaHierro devuelven siempre sin sitio, así que no hay metales), sin tecnologías, nivel de Facción 1 con una plaza por Facción, 1 ciudadano, sin guarnición, saqueos ni órdenes manuales, fertilidad 1,0 en todas partes. Las plazas se fundaron todas a la vez (t = 0) en anillos de 30-120 u de 9 campamentos: 14 de las 300 no hallaron sitio válido tras 40 rondas de 25 candidatos (foco saturado: 33 plazas pedidas por campamento frente a las ~45 que estima el canon).",
+      "causa": "medicion"
+    }
+  ],
+  "decisiones": [
+    {
+      "id": "P1",
+      "pregunta": "¿Qué hacemos con las plazas que nacen sin bosque y caen en ruinas (31,8 %)?",
+      "contexto": "Es el rojo grande del informe y responde al diagnóstico que pedía el D2 de territorio: el problema no es la búsqueda de los bots (con 100 candidatos por plaza las ruinas apenas bajan del 31,8 % al 30,1 %) sino que en el foco ya poblado quedan pocos sitios con bosque. Donde hay bosque y piedra a 10 u, el 94,3 % de las plazas sube al nivel 2 en 5,3 días.",
+      "opciones": [
+        {
+          "texto": "Mantener la regla (la Leñera pide parcela) y no dejar fundar a ciegas: el aviso Ámbar pasa a decir que sin parcela a 10 u o menos la plaza caerá en ruinas, y las políticas sintéticas (batch y bots) solo fundan en Verde o en Ámbar con parcela y piedra a 10 u o menos, ampliando la búsqueda hacia la frontera si el foco no tiene.",
+          "recomendada": true,
+          "efecto": "Quita las 83 ruinas sin Leñera (27 puntos). Con el foco saturado, parte de las plazas se fundará más lejos de su campamento; se verifica con una segunda corrida y con los bots de la fase 7."
+        },
+        {
+          "texto": "Dar a toda plaza una vía mínima de madera sin parcela (por ejemplo un monte bajo junto a la ciudad con densidad fija 0,3).",
+          "recomendada": false,
+          "efecto": "Las ruinas por madera desaparecen, pero cambia la regla «la Leñera pide parcela» y deja de importar dónde se funda respecto del bosque. Es una decisión de reglas del autor."
+        },
+        {
+          "texto": "No hacer nada: quien funda sin bosque pierde su plaza.",
+          "recomendada": false,
+          "efecto": "Sin coste, pero en un mundo con 300 plazas casi un tercio desaparece en el día 2, mal para el playtest."
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "pregunta": "¿Hacemos algo con el bosque ralo (8 plazas en ruinas con densidad 0,18)?",
+      "contexto": "Son el 2,8 % de las plazas y la Leñera elige la parcela más densa de las libres; pero con una sola parcela de 0,15-0,26 no se paga el mantenimiento. Probablemente P1 las reduzca porque la política evitaría los sitios con una única parcela pobre.",
+      "opciones": [
+        {
+          "texto": "Re-medir tras P1 antes de tocar nada.",
+          "recomendada": true,
+          "efecto": "No cambia datos ni reglas; si siguen ≥ 2 % de ruinas por bosque ralo, se decide con el número nuevo."
+        },
+        {
+          "texto": "Que el aviso Verde exija además densidad de la mejor parcela ≥ 0,3.",
+          "recomendada": false,
+          "efecto": "Cambia la definición de Verde (y las métricas de territorio); evita fundar sobre un bosque que no sostiene la plaza."
+        },
+        {
+          "texto": "Subir la densidad mínima de las parcelas del generador a 0,3 y regenerar el mundo (~12 min).",
+          "recomendada": false,
+          "efecto": "Quita el problema de raíz pero reduce las parcelas (hoy 23.877) y empeora P1."
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "pregunta": "¿Cómo desbloqueamos el requisito de 400 artesanos del nivel 3?",
+      "contexto": "Con 40 Viviendas el cupo de artesanos es exactamente 400 y la población logística se queda en 399,997: el requisito (enteros, suelo) no se cumple nunca. Es una consecuencia de que `maximo_viviendas` dé justo lo que pide el nivel siguiente.",
+      "opciones": [
+        {
+          "texto": "Dejar una Vivienda de margen en `maximo_viviendas` (41 en el nivel 2): el cupo pasa a 410 y los 400 se alcanzan en horas.",
+          "recomendada": true,
+          "efecto": "No toca ninguna cifra de las tablas del autor (400, 15, 10); solo el margen de un límite derivado. Cuesta una Vivienda más de mantenimiento."
+        },
+        {
+          "texto": "Leer la población del requisito redondeando al entero más cercano en vez del suelo.",
+          "recomendada": false,
+          "efecto": "399,997 contaría como 400, pero rompe la decisión de que los demás sistemas ven el suelo y afectaría a todos los requisitos."
+        },
+        {
+          "texto": "Bajar el requisito de artesanos del nivel 3 a 399.",
+          "recomendada": false,
+          "efecto": "Arregla el síntoma cambiando una cifra del autor."
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "pregunta": "¿Cuándo medimos el nivel 3?",
+      "contexto": "El ritmo de los niveles 2-3 está aprobado en el canon, pero este batch no puede medir el 3: faltan el cupo de Facción (0 con Facción de nivel 1), el Barracón y la Galería de tiro (solo a mano) y el arreglo de P3.",
+      "opciones": [
+        {
+          "texto": "Tras P3, ampliar el jugador sintético: Facción de nivel 3 y órdenes manuales de Barracón y Galería de tiro, y repetir la corrida de 30 días.",
+          "recomendada": true,
+          "efecto": "Da por primera vez el tiempo hasta el nivel 3 y los edificios que le faltan (Curtiduría, Fundición); el coste es una política sintética más compleja."
+        },
+        {
+          "texto": "Dejar el nivel 3 para los bots de la fase 7.",
+          "recomendada": false,
+          "efecto": "No añade trabajo ahora, pero el ritmo aprobado queda sin comprobar hasta el final y los fallos del nivel 3 saldrán tarde."
+        }
+      ]
+    },
+    {
+      "id": "P5",
+      "pregunta": "¿Qué hacemos con el Corral, que nunca encuentra ganado (0 de 286 plazas)?",
+      "contexto": "Hay 400 nodos de ganado en todo el mundo y el disco de zona del nivel 2 tiene 15 u de radio (~0,05 nodos de media). Sin Corral no hay livestock ni cuero. Es el mismo tipo de pregunta que el bosque en territorio: falta saber si es el mundo o dónde se funda.",
+      "opciones": [
+        {
+          "texto": "Diagnosticar primero: contar los nodos de ganado a 30 u o menos de cada plaza y decidir con ese número, sin regenerar el mundo.",
+          "recomendada": true,
+          "efecto": "Es rápido y evita regenerar el mundo a ciegas; el resultado dice si basta con mover ganado o hay que cambiar de modelo."
+        },
+        {
+          "texto": "Multiplicar por ~10 los nodos de ganado del generador (400 a ~4.000) y regenerar el mundo (~12 min).",
+          "recomendada": false,
+          "efecto": "Probablemente da Corral a la mayoría de las plazas, pero el ganado dejaría de ser un recurso escaso."
+        },
+        {
+          "texto": "Sacar el ganado de la ciudad con un pueblo extractor, como los minerales.",
+          "recomendada": false,
+          "efecto": "Cambia una regla del Doc 4.2 (el Corral dentro de la ciudad); decide el autor."
+        }
+      ]
+    }
+  ]
+}
