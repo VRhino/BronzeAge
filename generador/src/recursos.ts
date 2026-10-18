@@ -161,8 +161,9 @@ export function repartirRecursosNoMetalicos(
 
   const recursos: RecursoMundo[] = [];
   const escala = limites.ancho * limites.alto / p.areaBase;
-  // Los más escasos primero: así la piedra y la fauna, que sobran, no les quitan el sitio.
-  for (const tipo of ['cobre', 'hierro', 'piedra', 'ganaderia'] as TipoNoMetalico[]) {
+  // Los más escasos primero: así la piedra, que sobra, no les quita el sitio. La fauna va antes que la piedra desde que esta es ×10
+  // (5.601 nodos): con la piedra primero llenaba la rejilla de candidatos del foco y no quedaba sitio para el ganado (0 plazas con ganado a 30 u).
+  for (const tipo of ['cobre', 'hierro', 'ganaderia', 'piedra'] as TipoNoMetalico[]) {
     const azar = createRng(derivarSeed(seed, `recursos-${tipo}-1`));
     const pool = candidatos.map(c => ({
       c, q: calidad(tipo, c), azar: azar(),

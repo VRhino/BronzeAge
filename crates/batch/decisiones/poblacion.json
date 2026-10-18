@@ -1,19 +1,19 @@
 {
-  "resumen": "Se simularon 30 días de mundo con 300 plazas pedidas (286 colocadas; 14 no caben en el anillo de 30-120 u de su campamento, que se satura con ~33 plazas por foco), minuto a minuto y en competencia por los nodos y las parcelas del mundo real. La economía del asentamiento funciona cuando el sitio es bueno: el 94,3 % de las plazas que nacen con bosque y piedra a 10 u o menos llegan al nivel 2, con una mediana de 5,3 días (2,3 hasta los 200 pesants que pide el nivel, que es cuando se pide la subida, más los 3 de la obra), sin hambre (0 % del tiempo con déficit de trigo), sin ninguna violación de invariantes y de forma determinista. El problema es el sitio, no la economía: el 31,8 % de todas las plazas cae en ruinas entre el día 1 y el 2, 83 de las 91 porque no tienen ninguna parcela de bosque a 10 u o menos (sin Leñera no hay madera para el mantenimiento) y 8 porque su bosque es ralo (densidad 0,18). Otras 13 plazas sin piedra se quedan para siempre en el nivel 1. Nadie llega al nivel 3 todavía (el requisito de 400 artesanos ya se cumple tras decidir el 2026-10-18 dos Viviendas de margen y leer los requisitos redondeando, pero faltan el cupo de Facción, el Barracón y la Galería de tiro y la materia prima de la Curtiduría y la Fundición) y ninguna plaza consigue un Corral. El escenario tarda 41 s (objetivo 120 s).",
+  "resumen": "Se simularon 30 días de mundo con 300 plazas pedidas (286 colocadas; 14 no caben en el anillo de 30-120 u de su campamento, que se satura con ~33 plazas por foco), minuto a minuto y en competencia por los nodos y las parcelas del mundo real. La economía del asentamiento funciona cuando el sitio es bueno: el 92,9 % de las plazas que nacen con bosque y piedra a 10 u o menos llegan al nivel 2, con una mediana de 5,3 días (2,3 hasta los 200 pesants que pide el nivel, que es cuando se pide la subida, más los 3 de la obra), sin hambre (0 % del tiempo con déficit de trigo), sin ninguna violación de invariantes y de forma determinista. El problema es el sitio, no la economía: el 29,7 % de todas las plazas cae en ruinas entre el día 1 y el 2, sobre todo porque no tienen ninguna parcela de bosque a 10 u o menos (el 22,7 % de las plazas), y sin Leñera no hay madera para el mantenimiento. Un 31,1 % de las plazas se queda en el nivel 1 (las ruinas y las que no tienen piedra cercana). Nadie llega al nivel 3 todavía: el requisito de 400 artesanos ya se cumple tras las dos decisiones del 2026-10-18 (dos Viviendas de margen y requisitos leídos redondeando), pero faltan el cupo de Facción, el Barracón y la Galería de tiro y la materia prima de la Curtiduría y la Fundición. El Corral, que no se construía nunca por un fallo del generador (la piedra ×10 llenaba el foco antes que el ganado y los 400 nodos quedaban en la tierra lejana), ya lo tienen el 9,4 % de las plazas tras reordenar el reparto. El escenario tarda 46 s (objetivo 120 s).",
   "anomalias": [
     {
-      "titulo": "Casi un tercio de las plazas muere de falta de madera (31,8 % en ruinas)",
-      "detalle": "91 de 286 plazas llegan a Ruinas con el medidor a 0 por no poder pagar la madera del mantenimiento; la mediana de la caída es el día 1,0 (justo cuando acaba la gracia de un día). 83 de ellas no llegaron a terminar ninguna Leñera: el 95 % de las plazas sin Leñera no tenía ni una parcela de bosque en el disco de 10 u (techo de la zona en el nivel 1) al fundar, así que la Leñera nunca tuvo sitio. Es la cara grave del bosque pendiente en el sistema 1 (D2 de territorio: 20,7 % de plazas sin parcela con la zona máxima de 30 u): aquí no es solo menos Leñeras, es una plaza que desaparece. Descartado que sea la política de búsqueda: probando 100 candidatos por plaza en vez de 25, las plazas verdes suben solo del 55,6 % al 67,8 % y las ruinas bajan del 31,8 % al 30,1 %, porque el foco ya está ocupado por las demás plazas. De los sitios que no son verdes (44 %), el 62 % carece de bosque cercano.",
+      "titulo": "Casi un tercio de las plazas muere de falta de madera (29,7 % en ruinas)",
+      "detalle": "El 29,7 % de las plazas (85 de 286) llega a Ruinas con el medidor a 0 por no poder pagar la madera del mantenimiento, el día 1-2 (justo cuando acaba la gracia de un día). El 24,1 % de las plazas no termina nunca una Leñera, y el 22,7 % no tiene ni una parcela de bosque en el disco de 10 u (techo de la zona en el nivel 1) al fundar, así que la Leñera nunca tuvo sitio. Es la cara grave del bosque pendiente en el sistema 1 (D2 de territorio): aquí no es solo menos Leñeras, es una plaza que desaparece. En la corrida anterior del mismo escenario se probó con 100 candidatos por plaza en vez de 25 y las ruinas solo bajaron del 31,8 % al 30,1 %: no es la política de búsqueda, es que en el foco ya poblado quedan pocos sitios con bosque.",
       "causa": "diseno"
     },
     {
-      "titulo": "Un bosque ralo no sostiene una plaza (8 ruinas con Leñera)",
-      "detalle": "8 plazas construyeron su Leñera (a la hora 1) pero su mejor parcela tiene una densidad mediana de 0,18 (el generador admite desde 0,15): la madera que dan no cubre el mantenimiento y caen en ruinas los días 1-2. Una de ellas llegó al nivel 2, tuvo un colapso de mantenimiento (el único del escenario) y cayó en el día 7 con dos Leñeras de densidad 0,26 y 0,18. Son el 2,8 % de las plazas, dentro del 5 % tolerable, pero con el valor esperado de ruinas en 0.",
+      "titulo": "Un bosque ralo no sostiene una plaza",
+      "detalle": "Algunas plazas construyen su Leñera pero su mejor parcela tiene densidad 0,15-0,26 (el generador admite desde 0,15): la madera que da no cubre el mantenimiento y caen los días 1-2. En la corrida anterior eran 8 plazas (2,8 %), dentro del 5 % tolerable pero con el valor esperado de ruinas en 0; con el mundo nuevo no se ha vuelto a separar la cifra.",
       "causa": "diseno"
     },
     {
-      "titulo": "Las plazas sin piedra cercana se quedan en el nivel 1 para siempre (13 plazas)",
-      "detalle": "Sin ningún nodo de piedra a 10 u o menos (6,3 % de las plazas) no hay Cantera, no hay piedra para el coste de ascenso (400) ni para el mantenimiento del nivel 2, y solo tienen 2 de los 3 tipos de extracción que pide el nivel 2 (Granja y Leñera; las minas van por pueblo extractor, que este batch no tiene). Sobreviven (tienen madera) pero no suben: a la última comprobación pesaban «faltan edificios», «recursos insuficientes» e «insolvente». Con la zona del nivel 2 (15 u) alguna alcanzaría piedra, pero el nivel 2 es justo lo que no pueden pagar.",
+      "titulo": "Las plazas sin piedra cercana se quedan en el nivel 1 para siempre",
+      "detalle": "Sin ningún nodo de piedra a 10 u o menos (5,2 % de las plazas) no hay Cantera, no hay piedra para el coste de ascenso (400) ni para el mantenimiento del nivel 2, y solo tienen 2 de los 3 tipos de extracción que pide el nivel 2 (Granja y Leñera; las minas van por pueblo extractor, que este batch no tiene). Sobreviven (tienen madera) pero no suben: a la última comprobación pesaban «faltan edificios», «recursos insuficientes» e «insolvente». Con la zona del nivel 2 (15 u) alguna alcanzaría piedra, pero el nivel 2 es justo lo que no pueden pagar.",
       "causa": "diseno"
     },
     {
@@ -22,18 +22,18 @@
       "causa": "codigo"
     },
     {
-      "titulo": "El Corral no encuentra ganado: 0 de 286 plazas lo construyen",
-      "detalle": "El mundo tiene 400 nodos de ganado frente a 5.601 de piedra, repartidos en 5,3 millones de u²: un disco de 15 u (el techo de la zona en el nivel 2) contiene de media 0,05. El 100 % de las plazas pidió un Corral y se le negó sitio. Consecuencia: ninguna plaza produce livestock, así que no hay cuero ni nada que lo use (Curtiduría, Caballerizas).",
+      "titulo": "El Corral: solo el 9,4 % de las plazas lo consigue",
+      "detalle": "Antes de reordenar el generador ninguna plaza (0 de 286) tenía un nodo de ganado a 30 u o menos: los 400 nodos estaban en la tierra lejana (250-863 u de un campamento) porque la piedra ×10 llenaba la rejilla de candidatos del foco antes de que le tocara al ganado. Con la ganadería colocada antes que la piedra, el 52,8 % de las plazas tiene algún nodo a 30 u o menos (mediana 1) y el 19,2 % a 15 u o menos (el techo de la zona en el nivel 2); el 9,4 % termina un Corral y al 98,6 % se le negó sitio al pedir el primero (la zona empieza en 6 u y crece con los edificios). Consecuencia: la mayoría de las plazas no produce livestock, así que no hay cuero ni Curtiduría automática.",
       "causa": "diseno"
     },
     {
       "titulo": "El techo de población del nivel 2 (1.500) no se alcanza: lo limita el cupo de Viviendas",
-      "detalle": "La mediana de pesants se queda en 600 desde el día 11 (42 Viviendas × 15) y los artesanos en 400 (40 × 10); el techo de población del nivel 2 en los datos es 1.500. No es un fallo: `maximo_viviendas` solo deja las Viviendas que exige el nivel siguiente. Se anota porque el techo del nivel 2 queda entonces como decorativo.",
+      "detalle": "La mediana de pesants se queda en 600 desde el día 11 (42 Viviendas × 15) y los artesanos en 420 (42 × 10); el techo de población del nivel 2 en los datos es 1.500. No es un fallo: `maximo_viviendas` solo deja las Viviendas que exige el nivel siguiente. Se anota porque el techo del nivel 2 queda entonces como decorativo.",
       "causa": "diseno"
     },
     {
       "titulo": "Todas las plazas con buen sitio se comportan igual (sin varianza)",
-      "detalle": "Las 183 plazas que llegan al nivel 2 lo hacen entre el día 5,29 y el 6: el histograma tiene una sola barra. El mismo estado inicial, la fertilidad fijada en 1,0 y un jugador que solo mira cada hora dan una economía determinista sin ruido; lo que varía entre plazas es solo el sitio (parcelas, piedra, competencia). La dispersión real vendrá del jugador (bots de la fase 7), de la fertilidad del terreno y de las tecnologías.",
+      "detalle": "Las plazas que llegan al nivel 2 lo hacen entre el día 5,29 y el 6: el histograma tiene una sola barra. El mismo estado inicial, la fertilidad fijada en 1,0 y un jugador que solo mira cada hora dan una economía determinista sin ruido; lo que varía entre plazas es solo el sitio (parcelas, piedra, competencia). La dispersión real vendrá del jugador (bots de la fase 7), de la fertilidad del terreno y de las tecnologías.",
       "causa": "medicion"
     },
     {
@@ -45,8 +45,8 @@
   "decisiones": [
     {
       "id": "P1",
-      "pregunta": "¿Qué hacemos con las plazas que nacen sin bosque y caen en ruinas (31,8 %)? (Decidido el 2026-10-18: avisar y no fundar a ciegas; falta aplicarlo al aviso de viabilidad y a los bots.)",
-      "contexto": "Es el rojo grande del informe y responde al diagnóstico que pedía el D2 de territorio: el problema no es la búsqueda de los bots (con 100 candidatos por plaza las ruinas apenas bajan del 31,8 % al 30,1 %) sino que en el foco ya poblado quedan pocos sitios con bosque. Donde hay bosque y piedra a 10 u, el 94,3 % de las plazas sube al nivel 2 en 5,3 días.",
+      "pregunta": "¿Qué hacemos con las plazas que nacen sin bosque y caen en ruinas (29,7 %)? (Decidido el 2026-10-18: avisar y no fundar a ciegas; falta aplicarlo al aviso de viabilidad y a los bots.)",
+      "contexto": "Es el rojo grande del informe y responde al diagnóstico que pedía el D2 de territorio: el problema no es la búsqueda de los bots (con 100 candidatos por plaza las ruinas apenas bajan del 31,8 % al 30,1 % en la corrida anterior) sino que en el foco ya poblado quedan pocos sitios con bosque. Donde hay bosque y piedra a 10 u, el 92,9 % de las plazas sube al nivel 2 en 5,3 días.",
       "opciones": [
         {
           "texto": "Mantener la regla (la Leñera pide parcela) y no dejar fundar a ciegas: el aviso Ámbar pasa a decir que sin parcela a 10 u o menos la plaza caerá en ruinas, y las políticas sintéticas (batch y bots) solo fundan en Verde o en Ámbar con parcela y piedra a 10 u o menos, ampliando la búsqueda hacia la frontera si el foco no tiene.",
@@ -106,23 +106,23 @@
     },
     {
       "id": "P5",
-      "pregunta": "¿Qué hacemos con el Corral, que nunca encuentra ganado (0 de 286 plazas)? (Decidido el 2026-10-18: diagnosticar primero, contando los nodos de ganado a 30 u o menos de cada plaza.)",
-      "contexto": "Hay 400 nodos de ganado en todo el mundo y el disco de zona del nivel 2 tiene 15 u de radio (~0,05 nodos de media). Sin Corral no hay livestock ni cuero. Es el mismo tipo de pregunta que el bosque en territorio: falta saber si es el mundo o dónde se funda.",
+      "pregunta": "¿Qué hacemos con el ganado, que ya aparece cerca de la mitad de las plazas pero solo el 9,4 % construye un Corral? (El diagnóstico del 2026-10-18 encontró la causa: el generador; ya reordenado.)",
+      "contexto": "Con el reparto corregido hay ganado a 30 u o menos en el 52,8 % de las plazas y a 15 u o menos en el 19,2 %. Sin Corral no hay livestock ni cuero, y la Curtiduría (requisito del nivel 3) no se auto-propone. Es un recurso escaso a propósito, que empuja a expandirse o a comerciar; la pregunta es si la escasez actual es la que queremos.",
       "opciones": [
         {
-          "texto": "Diagnosticar primero: contar los nodos de ganado a 30 u o menos de cada plaza y decidir con ese número, sin regenerar el mundo.",
+          "texto": "Dejarlo así y medirlo con comercio y bots: el ganado escaso empuja a expandirse y a comerciar, y la Curtiduría se puede añadir a mano.",
           "recomendada": true,
-          "efecto": "Es rápido y evita regenerar el mundo a ciegas; el resultado dice si basta con mover ganado o hay que cambiar de modelo."
+          "efecto": "No toca el mundo. El nivel 3 depende entonces del comercio, que se mide en el sistema de economía."
         },
         {
-          "texto": "Multiplicar por ~10 los nodos de ganado del generador (400 a ~4.000) y regenerar el mundo (~12 min).",
+          "texto": "Subir el ganado ×3 en el generador (de 400 a unos 1.200 nodos) y regenerar el mundo (~12 min).",
           "recomendada": false,
-          "efecto": "Probablemente da Corral a la mayoría de las plazas, pero el ganado dejaría de ser un recurso escaso."
+          "efecto": "Más plazas con Corral en el nivel 2; cambia el hash del mundo y obliga a repetir los batches."
         },
         {
           "texto": "Sacar el ganado de la ciudad con un pueblo extractor, como los minerales.",
           "recomendada": false,
-          "efecto": "Cambia una regla del Doc 4.2 (el Corral dentro de la ciudad); decide el autor."
+          "efecto": "El Corral deja de depender del disco de la zona, pero es una regla nueva (Doc 4.2.2) que hay que diseñar."
         }
       ]
     }
