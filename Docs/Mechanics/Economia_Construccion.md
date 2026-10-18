@@ -421,6 +421,8 @@ si nutricion ≤ umbralMuertePorHambre (0):
 
 La nutrición **no** degrada el medidor de mantenimiento: son dos medidores independientes.
 
+**Sin tick (decidido el 2026-10-18).** El bloque anterior es el de TypeScript. En el mundo reactivo, mientras `nutricion = 0` la población decae de forma **continua y determinista**: pesants y artesanos a `−ln(1 − fraccionMuertePorMinutoHambre)` por minuto (≈5,13 %), la nobleza a `−ln(1 − fraccionMuertePorMinutoHambreNobleza)` (≈1,01 %), sin redondeo ni tirada. La cobertura de un minuto con déficit parcial es `stock > 0 ? 1 : min(1, producción/consumo)`. Cómo se emite `poblacion.hambruna_muerte` (por unidad entera cruzada o agregado) se fija al implementarlo.
+
 ### 9.3 Recaudación de oro
 
 `recaudacionOro = (pesants × tasaPesants + artesanos × tasaArtesanos + nobleza × tasaNobleza) × factorRecaudacion(políticas) × (ocupado ? OCUPACION.factorRecaudacion : 1)`. No depende de la distancia a la capital ni del nivel. Se suma al almacén con tope de capacidad

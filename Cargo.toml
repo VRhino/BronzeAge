@@ -5,4 +5,5 @@ members = [
   "crates/cola", "crates/rutas", "crates/persistencia", "crates/servidor",
   "crates/encuentros", "crates/vision", "crates/nucleo",
   "crates/territorio", "crates/informe", "crates/batch",
+  "crates/trazado", "crates/asentamiento",
 ]

@@ -1,0 +1,9 @@
+[package]
+name = "asentamiento"
+version = "0.1.0"
+edition = "2021"
+description = "Población, economía y construcción de un asentamiento (Doc 4, Mechanics/Economia_Construccion): reglas puras en enteros, sin reloj propio"
+
+[dependencies]
+base = { path = "../base" }
+serde_json = "1"

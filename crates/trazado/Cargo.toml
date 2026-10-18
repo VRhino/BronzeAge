@@ -1,0 +1,8 @@
+[package]
+name = "trazado"
+version = "0.1.0"
+edition = "2021"
+description = "Trazado urbano (Docs/Mechanics/Trazado_Urbano.md): dónde cae cada edificio dentro de un asentamiento. Geometría pura, determinista, sin estado de partida"
+
+[dependencies]
+base = { path = "../base" }

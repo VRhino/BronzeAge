@@ -18,6 +18,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "asentamiento"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "serde_json",
+]
+
+[[package]]
 name = "base"
 version = "0.1.0"
 
@@ -945,6 +953,13 @@ dependencies = [
  "log",
  "tokio",
  "tungstenite",
+]
+
+[[package]]
+name = "trazado"
+version = "0.1.0"
+dependencies = [
+ "base",
 ]
 
 [[package]]
