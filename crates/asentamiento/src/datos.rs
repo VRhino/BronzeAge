@@ -118,6 +118,10 @@ pub struct Reglas {
     pub politicas: ReglasPoliticas,
     /// Capacidad inicial de cada recurso en un asentamiento nuevo, en milésimas.
     pub capacidad_inicial: Mil,
+    pub catalogo: crate::catalogo::Catalogo,
+    pub construccion: crate::catalogo::ReglasConstruccion,
+    pub mantenimiento: crate::mantenimiento::ReglasMantenimiento,
+    pub nivel: crate::nivel::ReglasNivel,
 }
 
 impl Reglas {
@@ -180,7 +184,15 @@ impl Reglas {
             duracion_minutos: num(&pol, "duracionMinutosPorDefecto") as i64,
             catalogo,
         };
-        Reglas { poblacion, politicas, capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")) }
+        Reglas {
+            poblacion,
+            politicas,
+            capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),
+            catalogo: crate::catalogo::Catalogo::de(&b("EDIFICIO_CATALOGO")),
+            construccion: crate::catalogo::ReglasConstruccion::de(b),
+            mantenimiento: crate::mantenimiento::ReglasMantenimiento::de(&b("MANTENIMIENTO")),
+            nivel: crate::nivel::ReglasNivel::de(&b("NIVEL_ASENTAMIENTO"), &b("ASCENSO_ASENTAMIENTO"), &b("CUPO_NIVEL_ASENTAMIENTO")),
+        }
     }
 }
 

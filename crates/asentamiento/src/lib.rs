@@ -5,12 +5,22 @@
 //! después producción, mantenimiento, obras y cola, auto-construcción y ascenso.
 
 pub mod almacen;
+pub mod ascenso;
+pub mod asentamiento;
+pub mod catalogo;
 pub mod datos;
+pub mod edificio;
+pub mod mantenimiento;
+pub mod necesidades;
+pub mod nivel;
+pub mod obras;
 pub mod politicas;
 pub mod poblacion;
+pub mod produccion;
 pub mod recurso;
 
 pub use almacen::Almacen;
+pub use catalogo::{Catalogo, Tipo};
 pub use datos::Reglas;
 pub use poblacion::{Entorno, Poblacion, Suceso};
 pub use politicas::{Activador, Cargo, Politicas};
