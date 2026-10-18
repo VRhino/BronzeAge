@@ -1,5 +1,6 @@
 //! Monta el `Informe` del sistema «mundo y territorio» con las medidas de la simulación.
 
+use crate::fondo;
 use crate::geo::{Cargado, Geo, ANILLOS};
 use crate::medidas::{self as md, pct, Malla, Plaza, PLAZAS_POR_FOCO};
 use crate::sim::{self, Corrida};
@@ -341,6 +342,10 @@ fn grafico_rechazos(x: &Entrada) -> Grafico {
     Grafico { id: "rechazos".into(), titulo: "Motivos de rechazo".into(), tipo: TipoGrafico::Barras, eje_x: "motivo".into(), eje_y: "veces".into(), series }
 }
 
+fn hex(c: [u8; 3]) -> String {
+    format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
+}
+
 fn mapa(x: &Entrada, plazas: &[Plaza]) -> Mapa {
     let u = |v: i64| v as f64 / 1000.0;
     let capa = |nombre: &str, color: &str, circulos, puntos| Capa { nombre: nombre.into(), color: color.into(), circulos, puntos };
@@ -348,10 +353,22 @@ fn mapa(x: &Entrada, plazas: &[Plaza]) -> Mapa {
     Mapa {
         ancho: u(x.geo.ancho),
         alto: u(x.geo.alto),
+        fondo: fondo::fondo(&x.c.mundo),
         capas: vec![
             capa("Zonas", "#3b82f6", plazas.iter().map(|p| Circulo { x: u(p.pos.x), y: u(p.pos.y), r: u(p.radio) }).collect(), vec![]),
             capa("Plazas", "#dc2626", vec![], plazas.iter().map(|p| punto(p.pos)).collect()),
             capa("Campamentos de mercenarios", "#16a34a", vec![], x.geo.campamentos.iter().map(|&p| punto(p)).collect()),
+            capa("Estaño", "#c026d3", vec![], x.geo.metales.iter().filter(|m| m.tipo == 0).map(|m| punto(m.p)).collect()),
+            capa("Oro", "#facc15", vec![], x.geo.metales.iter().filter(|m| m.tipo == 1).map(|m| punto(m.p)).collect()),
+            // Capas sin geometría: solo explican los colores del fondo (los dibuja `fondo`, un píxel por celda).
+            capa("Piedra (píxel)", &hex(fondo::PIEDRA), vec![], vec![]),
+            capa("Parcela de bosque (píxel)", &hex(fondo::PARCELA), vec![], vec![]),
+            capa("Bosque", &hex(fondo::BOSQUE), vec![], vec![]),
+            capa("Río", &hex(fondo::RIO), vec![], vec![]),
+            capa("Agua", &hex(fondo::AGUA), vec![], vec![]),
+            capa("Llano", &hex(fondo::LLANO), vec![], vec![]),
+            capa("Colina", &hex(fondo::COLINA), vec![], vec![]),
+            capa("Montaña", &hex(fondo::MONTANA), vec![], vec![]),
         ],
     }
 }

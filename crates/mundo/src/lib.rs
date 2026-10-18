@@ -51,7 +51,7 @@ pub struct OpcionesValidacion {
 
 impl Default for OpcionesValidacion {
     fn default() -> Self {
-        Self { tamano_esperado: Some((2_667_000, 2_000_000)), rp: 8, separacion_campamentos: 600 }
+        Self { tamano_esperado: Some((2_667_000, 2_000_000)), rp: 4, separacion_campamentos: 600 }
     }
 }
 

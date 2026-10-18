@@ -6,6 +6,7 @@
 //! - [`fundir_decisiones`] añade a mano el resumen, las anomalías y las decisiones tras leer los resultados.
 
 mod armar;
+mod fondo;
 mod geo;
 mod medidas;
 mod sim;

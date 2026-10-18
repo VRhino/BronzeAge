@@ -9,7 +9,7 @@ import { anilloEn, FACTOR, type Anillo, type Campamento } from './campamentos';
  */
 export const PARAMETROS_PARCELAS = {
   /** Radio de una parcela (estratégicas). */
-  rp: 8,
+  rp: 4,
   /** Lado de la celda del raster de densidad (estratégicas). */
   celda: 4,
   /** Densidad mínima para contar como bosque. */

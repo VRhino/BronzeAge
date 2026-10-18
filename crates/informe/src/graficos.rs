@@ -232,6 +232,9 @@ pub fn mapa(m: &Mapa) -> Option<String> {
         w = c(m.ancho),
         h = c(m.alto)
     );
+    if let Some(f) = m.fondo.as_deref().filter(|f| f.starts_with("data:image/bmp;base64,") && f.bytes().all(|b| b.is_ascii_alphanumeric() || b"+/=:;,-./".contains(&b))) {
+        let _ = write!(o, "<image href=\"{f}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" style=\"image-rendering:pixelated\"/>", c(m.ancho), c(m.alto));
+    }
     for cp in &m.capas {
         let color = color_seguro(&cp.color);
         let _ = write!(o, "<g fill=\"{color}\" stroke=\"{color}\">");

@@ -38,7 +38,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 
 1. Primero se colocan los campamentos de mercenarios (aptos: fértiles y conectados; separación 600; margen de borde 60), luego los campos de distancia y los anillos, luego el bosque y los recursos, luego las vetas.
 2. **Estaño y oro por gradiente**: 5 % en el foco (muestra en el borde, un tercio de cantidad), 25 % en la frontera (aislados) y 70 % en la tierra lejana (vetas de 3 a 6 nodos de estaño y 0 a 2 de oro en un radio de 20-30), con cuotas por anillo que suman **exactamente** el total (en proporción a la tierra firme).
-3. Los bosques son una mezcla: pocos grandes (radio 40-80) en la frontera y muchos pequeños (radio 4-20) dentro de los focos. Cada masa lleva su rejilla de **parcelas** (`rp` = 8, separación ≥ 16).
+3. Los bosques son una mezcla: pocos grandes (radio 40-80) en la frontera y muchos pequeños (radio 4-20) dentro de los focos. Cada masa lleva su rejilla de **parcelas** (`rp` = 4, separación ≥ 8).
 4. Las posiciones salen de datos versionados y reproducibles: nada se mueve a mano después.
 5. **Decidido el 2026-10-13** (cierra O1 y O2): el gradiente de metales y las parcelas de explotación con cuota del 50 % por asentamiento (Doc 1.9c). Las cifras (`rp`, reparto, cuota) viven en el archivo común de datos de juego y se calibran en la fase 6.
 

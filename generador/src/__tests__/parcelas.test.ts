@@ -26,7 +26,7 @@ describe('parcelas de bosque', () => {
     const g = masas.find(m => m.radio / FACTOR > 20)!, p = masas.find(m => m.radio / FACTOR < 20)!;
     expect(g.parcelasIds.length).toBeGreaterThan(15);
     expect(p.parcelasIds.length).toBeGreaterThanOrEqual(1);
-    expect(p.parcelasIds.length).toBeLessThanOrEqual(2);
+    expect(p.parcelasIds.length).toBeLessThanOrEqual(4);
   });
   it('un bosque continental se parte en comarcas de tamaño acotado', () => {
     const inmenso = (p: { x: number; y: number }) => (dist(p, { x: 6000, y: 4000 }) < 150 * FACTOR ? 0.8 : 0);

@@ -147,7 +147,7 @@ fn base() -> ArtefactoDeMundo {
 }
 
 fn opciones() -> OpcionesValidacion {
-    OpcionesValidacion { tamano_esperado: Some((ANCHO, ALTO)), ..Default::default() }
+    OpcionesValidacion { tamano_esperado: Some((ANCHO, ALTO)), rp: 8, ..Default::default() }
 }
 
 /// Aplica el cambio, sella y carga.

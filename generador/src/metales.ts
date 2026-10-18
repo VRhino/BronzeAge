@@ -14,8 +14,8 @@ export const PARAMETROS_METALES = {
   /** El foco se siembra en su borde exterior (distancia estratégica al campamento). */
   bordeFoco: { min: 100, max: 150 },
   cantidadFoco: 1 / 3,
-  /** Separación entre nodos aislados del mismo metal (estratégicas). */
-  espacioAislado: 120,
+  /** Separación entre nodos aislados del mismo metal (estratégicas). Con 64 de estaño (16 en frontera) en la semilla 42 no cabe a 110: 100 es el mayor valor que cabe. */
+  espacioAislado: 100,
   /** Dentro de una veta: separación mínima entre nodos y radio máximo (estratégicas). */
   espacioEnVeta: 8,
   radioVeta: { min: 20, max: 30 },

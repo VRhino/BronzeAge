@@ -126,6 +126,18 @@ fn graficos_degenerados_no_dan_nan() {
 }
 
 #[test]
+fn el_fondo_del_mapa_solo_se_pinta_si_es_un_bmp_valido() {
+    let mut i = ejemplo();
+    let uri = bmp_uri(2, 1, &[255, 0, 0, 0, 255, 0]).unwrap();
+    i.mapa.as_mut().unwrap().fondo = Some(uri.clone());
+    assert!(renderizar(&i).contains(&format!("<image href=\"{uri}\"")));
+    i.mapa.as_mut().unwrap().fondo = Some("data:image/bmp;base64,AA\" onload=\"x".into());
+    assert!(!renderizar(&i).contains("<image"));
+    i.mapa.as_mut().unwrap().fondo = Some("javascript:alert(1)".into());
+    assert!(!renderizar(&i).contains("<image"));
+}
+
+#[test]
 fn mapa_con_tamano_invalido_se_omite() {
     let mut i = ejemplo();
     i.mapa.as_mut().unwrap().ancho = 0.0;

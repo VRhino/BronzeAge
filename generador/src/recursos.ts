@@ -22,7 +22,7 @@ export const PARAMETROS_RECURSOS = {
    * Totales de partida: los de Codex con densidad 4 (piedra 140·4, cobre 60·4, ganadería 100·4) para su mundo de 32000×24000,
    * más el hierro a 1,5 veces el cobre (`HIERRO.factorCantidad` de typescript-final). Se escalan por área.
    */
-  totalBase: { piedra: 560, cobre: 240, hierro: 360, ganaderia: 400 } as Record<TipoNoMetalico, number>,
+  totalBase: { piedra: 5600, cobre: 240, hierro: 360, ganaderia: 400 } as Record<TipoNoMetalico, number>,
   areaBase: 32000 * 24000,
   /**
    * Reparto por anillo (suma 1 por tipo). El anillo con 0 no recibe ninguno salvo que otro no tenga sitio:
@@ -36,8 +36,8 @@ export const PARAMETROS_RECURSOS = {
     hierro: { foco: 0.2, frontera: 0.8, lejana: 0 },
     ganaderia: { foco: 0.5, frontera: 0, lejana: 0.5 },
   } as Record<TipoNoMetalico, Record<Anillo, number>>,
-  /** Separación mínima (generador) entre yacimientos del mismo tipo (la piedra, más densa, 220) y con cualquier otro. */
-  separacionMismoTipo: { piedra: 220, cobre: 250, hierro: 250, ganaderia: 250 } as Record<TipoNoMetalico, number>,
+  /** Separación mínima (generador) entre yacimientos del mismo tipo (la piedra, más densa, 70) y con cualquier otro. */
+  separacionMismoTipo: { piedra: 70, cobre: 250, hierro: 250, ganaderia: 250 } as Record<TipoNoMetalico, number>,
   separacionOtroTipo: 45,
   /** Rejilla de prospección y azar de cada punto (generador), como la «prospección fina» de Codex. */
   pasoPrueba: 150,

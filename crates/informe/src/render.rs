@@ -47,7 +47,7 @@ svg .tt{fill:var(--texto);font-size:14px}
 .l{fill:none;stroke-width:2.2;stroke-linejoin:round}
 .s0{stroke:var(--s0)}.s1{stroke:var(--s1)}.s2{stroke:var(--s2)}.s3{stroke:var(--s3)}.s4{stroke:var(--s4)}.s5{stroke:var(--s5)}
 .f0{fill:var(--s0)}.f1{fill:var(--s1)}.f2{fill:var(--s2)}.f3{fill:var(--s3)}.f4{fill:var(--s4)}.f5{fill:var(--s5)}
-.muestra{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.muestra{box-shadow:inset 0 0 0 1px var(--borde);display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 span.f0{background:var(--s0)}span.f1{background:var(--s1)}span.f2{background:var(--s2)}span.f3{background:var(--s3)}span.f4{background:var(--s4)}span.f5{background:var(--s5)}
 .leyenda{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.88rem}
 .vacio{color:var(--suave);margin:0}

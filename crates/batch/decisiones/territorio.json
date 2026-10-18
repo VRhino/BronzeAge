@@ -1,47 +1,69 @@
 {
-  "resumen": "La mecánica de territorio funciona: las tres reglas de distancia, la cuota de bosque y el determinismo salen en verde, y el tiempo hasta la primera plaza es corto. Lo que falla es la materia prima del mundo frente al tamaño de las zonas: con radios de 6 a 30 unidades, el generador deja muy poca piedra y muy pocas parcelas de bosque dentro de una zona, así que solo el 7 % de las plazas nace con bosque libre y piedra, más de la mitad nunca tiene piedra a su alcance y más de 8 de cada 10 Leñeras se quedan sin parcela. No es un fallo del código: es la escala de los datos del mundo, que aún es la anterior a la calibración de distancias.",
+  "resumen": "Con el mundo reescalado (piedra ×10 = 5.601 nodos, parcelas con rp = 4 = 23.877, metales 64 de estaño y 24 de oro) el territorio mejora mucho: las plazas que nacen con bosque libre y piedra pasan del 7 % al 52 % y las que no alcanzan ninguna piedra del 55 % al 5 %. Las tres reglas de distancia, la cuota de bosque y el determinismo siguen en verde. Quedan tres rojos: el 21 % de las plazas no alcanza ninguna parcela de bosque con su zona máxima, solo el 44 % de las Leñeras se concede (el objetivo es 90 %) y el escenario tarda 287 s en vez de 82 s, porque 10 veces más piedras hacen la consulta de viabilidad 3,5 veces más lenta.",
   "anomalias": [
     {
-      "titulo": "Piedra y bosque escasos para el tamaño de las zonas",
-      "detalle": "El mundo tiene 560 nodos de piedra y 5.858 parcelas de bosque para 3,4 millones de unidades² de tierra transitable: un nodo de piedra cada ~6.000 u² y una parcela cada ~580 u². Una zona de nivel 1 (radio 10) mide 314 u², así que contiene de media 0,05 nodos de piedra y 0,5 parcelas. Los conteos del generador son los de antes de reducir las zonas a la quinta parte; solo se recalibró el espaciado mínimo (4 / 7 / 20), no el total.",
+      "titulo": "El bosque sigue corto aunque hay 4 veces más parcelas",
+      "detalle": "Con rp = 4 el mundo tiene 23.877 parcelas (antes 5.858), una cada ~140 u² de tierra transitable, pero el 20,7 % de las plazas no alcanza ninguna con su zona máxima y el 55,7 % de las Leñeras se niega por «sin parcelas libres en la zona»; solo el 3,8 % de las parcelas del mundo acaba ocupado. Es decir, no falta bosque en total, falta bosque donde se funda: las parcelas se agrupan en las masas y las zonas pequeñas (radio 6 a 30) caen a menudo fuera de ellas. No he comprobado todavía si el sitio elegido por el batch (primer verde de 25 candidatos) sesga esto.",
       "causa": "diseno"
     },
     {
       "titulo": "La tierra lejana queda sin cubrir por la población sintética",
-      "detalle": "Estaño y oro cubiertos al 100 % en el foco, 36-50 % en la frontera y 0 % lejos, pero los nodos sí se reparten 4,8 / 25 / 70 % por anillo como se decidió. La población del batch nunca se aleja más de 120 u de su campamento; el gradiente se medirá de verdad con los bots de la fase 7.",
+      "detalle": "Estaño cubierto al 67 % en el foco, 38 % en la frontera y 0 % lejos; oro 100 %, 33 % y 0 %. Los nodos sí se reparten por anillo según el gradiente decidido (5 / 25 / 70 %). La población del batch nunca se aleja más de 120 u de su campamento; el gradiente se medirá de verdad con los bots de la fase 7.",
       "causa": "medicion"
     },
     {
-      "titulo": "El 25 % de las Facciones no consigue plaza",
-      "detalle": "400 Facciones sobre 9 campamentos son ~44 por foco, casi la capacidad estimada (45); además la política sintética solo busca entre 30 y 120 u del campamento y se rinde tras 6 reintentos. Un jugador real caminaría más lejos. Se vigilará con los bots, no se corrige aquí.",
+      "titulo": "El 26 % de las Facciones no consigue plaza",
+      "detalle": "400 Facciones sobre 9 campamentos son ~44 por foco, la capacidad estimada es 45 y la saturación media del foco sale al 105 %. Además la política sintética solo busca entre 30 y 120 u del campamento y se rinde tras 6 reintentos. Un jugador real caminaría más lejos. Se vigilará con los bots, no se corrige aquí.",
       "causa": "medicion"
     },
     {
-      "titulo": "El tiempo se va en consultar viabilidad",
-      "detalle": "99 % de los 82 s son 1,08 millones de llamadas a la consulta de viabilidad (~75 µs cada una), que recorre todas las parcelas y piedras del mundo y recompone la lista de plazas en cada llamada. Aceptable con 400 Facciones; con miles de bots habrá que añadir un índice espacial.",
+      "titulo": "La consulta de viabilidad es ahora el cuello de botella (287 s, antes 82 s)",
+      "detalle": "El 99 % del tiempo (285 s) son 1,12 millones de llamadas a `viabilidad` (~250 µs cada una, antes 75 µs): recorre todas las parcelas y piedras del mundo en cada llamada, y ahora hay 10 veces más piedras y 4 veces más parcelas. Es la deuda del índice espacial que ya estaba anotada; con este mundo deja de ser opcional, y con miles de bots sería inviable.",
       "causa": "codigo"
+    },
+    {
+      "titulo": "Separación de metales aislados bajada de 120 a 100",
+      "detalle": "Con 64 de estaño (16 en frontera) la semilla 42 no admitía 16 nodos aislados separados 120 u (ni 110); a 100 u cabe. Es un parámetro del generador que no está en el canon, tocado a raíz de pasar a 64 / 24. Si se prefiere otra solución (otra semilla, otro reparto por anillos), habría que regenerar el mundo de nuevo.",
+      "causa": "diseno"
     }
   ],
   "decisiones": [
     {
-      "id": "D1",
-      "pregunta": "¿Cómo arreglamos la escasez de piedra y de parcelas de bosque dentro de las zonas?",
-      "contexto": "Con los datos de hoy, una plaza que nace con bosque libre y piedra en su zona inicial es una rareza (1-2 % de los puntos fundables), y sin piedra no hay Cantera ni nivel 2 (Doc 1.2). La causa es que los totales del mundo no se rescalaron cuando las zonas se redujeron a la quinta parte.",
+      "id": "D2",
+      "pregunta": "¿Cómo cerramos el bosque, que sigue en rojo (21 % de plazas sin parcela, 44 % de Leñeras)?",
+      "contexto": "Cuatro veces más parcelas no han bastado porque las parcelas viven en masas concentradas y las zonas son pequeñas. Antes de tocar datos conviene saber si el problema es del mundo o de dónde fundan las plazas sintéticas.",
       "opciones": [
         {
-          "texto": "Rescalar los datos del mundo: piedra ×10 (unos 5.600 nodos) y parcelas de bosque con rp = 4 en vez de 8 (unas 4 veces más, y cada una rinde en proporción a su área). Metales y su gradiente 5 / 25 / 70 no cambian.",
+          "texto": "Diagnosticar primero (sin cambiar datos): medir cuántas parcelas hay a ≤ 30 u de cada plaza y si las plazas rojas están lejos de toda masa, y decidir con esos números.",
           "recomendada": true,
-          "efecto": "Mantiene las zonas y las distancias que ya calibramos. Hay que regenerar el mundo (~12 min) y repetir este batch; si sigue en rojo, vuelvo con los números exactos en vez de adivinar."
+          "efecto": "Es rápido (un informe extra, sin regenerar el mundo) y evita rescalar a ciegas por segunda vez."
         },
         {
-          "texto": "Agrandar las zonas: radio inicial 10 y techos ×1,5 (15 / 22 / 30 / 37 / 45).",
+          "texto": "Bajar rp a 3 y regenerar el mundo (~12 min): unas 1,8 veces más parcelas.",
           "recomendada": false,
-          "efecto": "Toca la calibración de distancias y el diseño de fronteras: más solapes entre plazas vecinas y más recorte. No arregla las parcelas, solo las alcanza desde más lejos."
+          "efecto": "Sube los cupos, pero cada parcela rinde menos y no cambia que las masas estén concentradas."
         },
         {
-          "texto": "Aceptar que «verde» sea raro: se funda casi siempre en ámbar y la madera y la piedra llegan al crecer la zona con los niveles.",
+          "texto": "Aceptar el 44 % de Leñeras concedidas: la Leñera pide parcela y quien no la tenga fundará junto a otro bosque.",
           "recomendada": false,
-          "efecto": "No toca nada, pero pierde la garantía de arrancar con madera (Doc 1.2) y retrasa el primer nivel."
+          "efecto": "No toca nada, pero el objetivo del 90 % queda sin cumplir y el segundo recurso básico depende del azar del sitio."
+        }
+      ]
+    },
+    {
+      "id": "D3",
+      "pregunta": "¿Hago ahora el índice espacial de `viabilidad`?",
+      "contexto": "Con el mundo nuevo el batch tarda 287 s (objetivo 120 s) por culpa de esa consulta; cada iteración de calibración cuesta casi 5 minutos y los bots de la fase 7 lo multiplicarían.",
+      "opciones": [
+        {
+          "texto": "Sí, ahora: rejilla espacial de piedras y parcelas en el crate `territorio`, sin cambiar resultados (el determinismo y las métricas deben salir idénticos).",
+          "recomendada": true,
+          "efecto": "Devuelve el batch a segundos y se verifica comparando el informe antes y después."
+        },
+        {
+          "texto": "Dejarlo para la fase 7.",
+          "recomendada": false,
+          "efecto": "Sigue habiendo 5 minutos por corrida durante el resto de la fase 6."
         }
       ]
     }

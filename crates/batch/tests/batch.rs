@@ -45,7 +45,11 @@ fn el_escenario_pequeno_produce_todas_las_metricas() {
     let ids: std::collections::BTreeSet<_> = i.metricas.iter().map(|m| &m.id).collect();
     assert_eq!(ids.len(), i.metricas.len(), "ids repetidos");
     assert_eq!(i.series.len(), 5);
-    assert_eq!(i.mapa.as_ref().unwrap().capas.len(), 3);
+    let mapa = i.mapa.as_ref().unwrap();
+    for nombre in ["Zonas", "Plazas", "Campamentos de mercenarios", "Estaño", "Oro"] {
+        assert!(mapa.capas.iter().any(|c| c.nombre == nombre), "falta la capa «{nombre}»");
+    }
+    assert!(mapa.fondo.as_deref().is_some_and(|f| f.starts_with("data:image/bmp;base64,")), "el mapa no lleva fondo");
     let html = informe::renderizar(&i);
     assert!(html.contains("Mundo y territorio") && html.contains("Distancia mínima entre plazas"));
 }

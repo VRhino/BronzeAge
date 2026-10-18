@@ -21,6 +21,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 20 | TECNOLOGÍA | Eras IV y V (pospuestas con el motor nuevo) | Eras I-III en canon |
 | 38 | MILITAR | Tope de héroes en asedio: 15 contra 15 (decidido el 2026-10-13) | constante del archivo común |
 | 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
+| — | MUNDO | Índice espacial de `viabilidad` (rendimiento del batch de territorio) | recorre todo el mundo en cada llamada |
 
 **Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06), y también, de los cabos sueltos §33/§35 (2026-10-06): la **riqueza acumulada** por comisiones, el **bonus por distancia en el mostrador**, **cortar rutas como guerra económica**, la **cola de prioridad de reclutamiento** y las **armas de asedio** como mecánica aparte.
 
@@ -54,3 +55,7 @@ Decidido el 2026-10-13: **15 contra 15** en el canon (Doc 5.15.1) y como constan
 ## 39. Elección del Rey por voto
 
 Decidido el 2026-10-17: la elección del Rey por voto entre representantes (antes ligada a la Liga por alianza) **no existe hoy** y queda como mecánica pendiente. Hoy el Rey de una Facción lo asigna el anterior (el primero es quien la crea; la sucesión sigue el orden de ingreso). La Liga no tiene Rey ni cargos (Doc 2.2, `Diplomacia_Facciones.md` §3.4 y §5.7).
+
+## Índice espacial de `viabilidad` (2026-10-18)
+
+La consulta `viabilidad` (y `validar_fundacion`) recorre todas las piedras y parcelas del mundo en cada llamada. Con el mundo rescalado (5.601 piedras, 23.877 parcelas) el batch de territorio tarda 287 s (objetivo 120 s): el 99 % son 1,12 millones de llamadas de ~250 µs. Hace falta una rejilla espacial en `crates/territorio` que no cambie los resultados (el informe antes y después debe salir idéntico). Dejado para más adelante por el autor; los bots de la fase 7 lo harían inviable.

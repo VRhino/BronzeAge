@@ -37,19 +37,19 @@ const recursos = repartirRecursosNoMetalicos(42, campamentos, sintetico, { ancho
 const de = (tipo: string, anillo?: string) => recursos.filter(r => r.tipo === tipo && (!anillo || r.anillo === anillo));
 
 describe('recursos no metálicos', () => {
-  it('totales exactos de partida: piedra 560, cobre 240, hierro 360, ganadería 400', () => {
-    expect(de('piedra')).toHaveLength(560);
+  it('totales exactos de partida: piedra 5601, cobre 240, hierro 360, ganadería 400', () => {
+    expect(de('piedra')).toHaveLength(5601);
     expect(de('cobre')).toHaveLength(240);
     expect(de('hierro')).toHaveLength(360);
     expect(de('ganaderia')).toHaveLength(400);
-    expect(recursos).toHaveLength(1560);
-    expect(new Set(recursos.map(r => r.id)).size).toBe(1560);
+    expect(recursos).toHaveLength(6601);
+    expect(new Set(recursos.map(r => r.id)).size).toBe(6601);
   });
   it('el hierro es 1,5 veces el cobre', () => {
     expect(de('hierro').length).toBe(1.5 * de('cobre').length);
   });
   it('el reparto por anillo sigue el canon 1.9c', () => {
-    expect([de('piedra', 'foco').length, de('piedra', 'frontera').length, de('piedra', 'lejana').length]).toEqual([336, 224, 0]);
+    expect([de('piedra', 'foco').length, de('piedra', 'frontera').length, de('piedra', 'lejana').length]).toEqual([3361, 2240, 0]);
     expect([de('cobre', 'foco').length, de('cobre', 'frontera').length, de('cobre', 'lejana').length]).toEqual([48, 192, 0]);
     expect([de('hierro', 'foco').length, de('hierro', 'frontera').length, de('hierro', 'lejana').length]).toEqual([72, 288, 0]);
     expect([de('ganaderia', 'foco').length, de('ganaderia', 'frontera').length, de('ganaderia', 'lejana').length]).toEqual([200, 0, 200]);
@@ -69,7 +69,7 @@ describe('recursos no metálicos', () => {
     const minerales = [...de('cobre'), ...de('hierro')];
     expect(minerales.filter(r => ['colina', 'montana'].includes(terreno(r.posicion))).length / minerales.length).toBeGreaterThan(0.9);
   });
-  it('separaciones mínimas: mismo tipo (piedra 220, resto 250) y 45 entre tipos distintos', () => {
+  it('separaciones mínimas: mismo tipo (piedra 70, resto 250) y 45 entre tipos distintos', () => {
     let infracciones = 0;
     for (const [i, a] of recursos.entries()) for (const b of recursos.slice(i + 1)) {
       const minimo = a.tipo === b.tipo ? P.separacionMismoTipo[a.tipo as keyof typeof P.separacionMismoTipo] : P.separacionOtroTipo;
@@ -88,7 +88,7 @@ describe('recursos no metálicos', () => {
   });
   it('escala por área: un mundo más pequeño tiene proporcionalmente menos', () => {
     const chico = repartirRecursosNoMetalicos(42, campamentos.slice(0, 3), sintetico, { ancho: 16002, alto: 12000 });
-    expect(chico.filter(r => r.tipo === 'piedra')).toHaveLength(140);
+    expect(chico.filter(r => r.tipo === 'piedra')).toHaveLength(1400);
     expect(chico.filter(r => r.tipo === 'hierro')).toHaveLength(90);
   });
   it('si un tipo no cabe, lanza error en vez de entregar menos', () => {

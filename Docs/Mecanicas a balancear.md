@@ -130,3 +130,12 @@ crecimiento de una ciudad de nivel 2 pagar la empalizada (≈2.100 de madera, up
 ## Economía: piezas gratuitas, almacén lleno y sin penalización por distancia (2026-10-11)
 
 Los puestos del Mercado y las anclas pagan mantenimiento a la mitad (antes no contaban nada especial: peso 1); un almacén lleno pausa extractores y talleres en vez de desperdiciar; la Gran Fundición cuenta como mano de obra de artesanos; y desaparece la penalización por distancia de las recetas (que daba ×0,688 a toda la cadena de metal). Todo empuja a más producción y menos coste: medir con batch si la economía se acelera de más. Ver `Docs/Mechanics/Economia_Construccion.md`.
+
+## Territorio: bosque, parcelas y metales aislados (2026-10-18)
+
+Sistema 1 de la fase 6 (mundo y territorio) implementado; el informe de batch está en `batch/salida/territorio/` (se regenera con `batch territorio --decisiones crates/batch/decisiones/territorio.json`). Tras rescalar el mundo (piedra ×10 = 5.601 nodos, parcelas con `rp` = 4 = 23.877, metales 64 de estaño y 24 de oro) queda sin cerrar:
+
+- **Bosque (decisión D2 abierta, dejado así por el autor):** el 21 % de las plazas no alcanza ninguna parcela con su zona máxima (objetivo ≤ 10 %) y solo se concede el 44 % de las Leñeras (objetivo ≥ 90 %; el 56 % se niega por «sin parcelas libres en la zona»). No falta bosque en total (3,8 % de las parcelas ocupadas): las parcelas se agrupan en masas y las zonas de 6-30 u caen a menudo fuera. Antes de rescalar otra vez, medir cuántas parcelas hay a ≤ 30 u de cada plaza y si las plazas sin parcela están lejos de toda masa; si hace falta, probar `rp` = 3 (otros ~12 min de generación) o dejar el 44 %.
+- **Separación de metales aislados (`PARAMETROS_METALES.espacioAislado`):** bajada de 120 a 100 u porque con 64 de estaño (16 en frontera) la semilla 42 no admitía 16 nodos a 110. No está en el canon; si se cambia la semilla o el reparto por anillos, revisarla.
+- **Cobertura de metales por la población sintética:** estaño 67 / 38 / 0 % (foco / frontera / lejana) y oro 100 / 33 / 0 %: el batch nunca se aleja más de 120 u del campamento; el gradiente 5 / 25 / 70 se mide de verdad con los bots de la fase 7.
+- **Facciones sin plaza (26 %):** 400 Facciones sobre 9 campamentos saturan el foco (105 %); un jugador real buscaría más lejos. Vigilar con los bots.

@@ -3,10 +3,12 @@
 //! Uso: `informe <entrada.json> <salida.html>` o, desde código, `renderizar(&informe)`.
 
 mod graficos;
+mod imagen;
 mod render;
 
 use serde::{Deserialize, Serialize};
 
+pub use imagen::bmp_uri;
 pub use render::renderizar;
 
 /// Informe completo: lo que la simulación midió frente a lo esperado.
@@ -97,6 +99,9 @@ pub struct Mapa {
     pub alto: f64,
     #[serde(default)]
     pub capas: Vec<Capa>,
+    /// Imagen de fondo (URI de datos, p. ej. de `bmp_uri`) que cubre todo el mundo: terreno, bosque, ríos...
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fondo: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
