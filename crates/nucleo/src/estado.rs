@@ -2,8 +2,10 @@
 //! que entra en `hash_estado` y en las fotos; lo que no está aquí (sesiones, registro de cambios, métricas) se reconstruye.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
+use crate::codec_ciudad;
 use crate::codec_economia;
 use crate::economia::StockNodo;
+use crate::urbanismo::{Urbanismo, Urbe};
 use base::{Instante, Mil, Plan, Punto, Ritmo, Rng, Vertice};
 use cola::{Clave, Cola, Evento, Generaciones};
 use sha2::{Digest, Sha256};
@@ -21,7 +23,7 @@ pub const PRIO_LLEGADA: u8 = 8;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-const MAGIA: &[u8; 4] = b"BAN3";
+const MAGIA: &[u8; 4] = b"BAN4";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -46,21 +48,27 @@ impl Default for Reglas {
     }
 }
 
-/// Las reglas del crate `asentamiento` (datos del documento de Mechanics, ya convertidos a enteros). No se serializan: en las fotos va su
-/// **huella**, el sha256 de los bloques de parámetros del documento incrustado (no de su prosa); recuperar con otras reglas falla igual que con `ReglasTerritorio`.
+/// Las reglas del crate `asentamiento` (datos del documento de Mechanics, ya convertidos a enteros) y las huellas del trazado urbano
+/// (bloques del documento `Trazado_Urbano.md`). No se serializan: en las fotos va su **huella**, el sha256 de los bloques de parámetros de
+/// los dos documentos incrustados (no de su prosa); recuperar con otras reglas falla igual que con `ReglasTerritorio`.
 #[derive(Clone, Debug)]
 pub struct ReglasEconomia {
     pub datos: Arc<asentamiento::Reglas>,
+    /// Tipo → huella y categoría de la ciudad de cada plaza.
+    pub urbanismo: Arc<Urbanismo>,
     huella: String,
 }
 
 impl ReglasEconomia {
-    /// Carga las cifras del documento incrustado (parsea los bloques JSON: hágase una vez).
+    /// Carga las cifras de los documentos incrustados (parsea los bloques JSON: hágase una vez).
     pub fn cargar() -> Self {
-        let huella = crate::hex(&Sha256::digest(asentamiento::datos::texto_de_parametros()).into());
-        Self { datos: Arc::new(asentamiento::Reglas::cargar()), huella }
+        let bloques = asentamiento::datos::texto_de_parametros() + &asentamiento::datos::texto_de_parametros_de(crate::urbanismo::DOC_TRAZADO);
+        let huella = crate::hex(&Sha256::digest(bloques).into());
+        let datos = asentamiento::Reglas::cargar();
+        let urbanismo = Arc::new(Urbanismo::cargar(&datos));
+        Self { datos: Arc::new(datos), urbanismo, huella }
     }
-    /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros del documento de Mechanics del que salen).
+    /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
         &self.huella
     }
@@ -171,6 +179,8 @@ pub struct Asentamiento {
     pub parcelas: BTreeSet<u32>,
     pub version: u64,
     pub economia: asentamiento::asentamiento::Asentamiento,
+    /// Su ciudad: dónde está cada edificio de la economía (los mismos ids). Se guarda en las fotos y entra en el hash.
+    pub urbe: Urbe,
 }
 
 impl Asentamiento {
@@ -371,6 +381,7 @@ impl Estado {
             a.parcelas.iter().for_each(|&p| w.u32(p));
             w.u64(a.version);
             codec_economia::escribir(&mut w, &a.economia);
+            codec_ciudad::escribir(&mut w, a.urbe.ciudad());
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -523,12 +534,13 @@ impl Estado {
             }
             let version = r.u64()?;
             let economia = codec_economia::leer(&mut r)?;
+            let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r)?);
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
                 }
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;

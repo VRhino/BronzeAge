@@ -19,7 +19,8 @@
 //!
 //! # No cubierto aquí
 //! Trazo, coste y levantamiento de recintos (Murallas.md): el llamador pasa sus celdas ([`Recinto`]). La tabla de huellas por
-//! tipo y los cachés LRU de T §9 (la red es incremental y el suelo es un estado de la `Ciudad`).
+//! tipo (vive en `nucleo::urbanismo`, leída de los bloques de T §2.4) y los cachés LRU de T §9 (la red es incremental y el suelo es un
+//! estado de la `Ciudad`; el núcleo cachea por plaza las preguntas «¿cabe?»).
 
 mod anclas;
 mod azar;

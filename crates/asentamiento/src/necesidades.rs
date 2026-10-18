@@ -66,6 +66,8 @@ impl Asentamiento {
         let n = &c.necesidades;
         let mut candidatos: Vec<Candidato> = vec![];
         let mut propuestos_extractor: Vec<Tipo> = vec![];
+        // Las preguntas de sitio de esta pasada ven la ciudad tal como está al empezar: lo que se comprometa se confirma al final.
+        let u = self.urbano(r);
 
         // Déficit de trigo: real y proyectado (con la población que cabe en las Viviendas construidas o en camino).
         let (cap_p, cap_a, cap_n) = self.capacidades(r);
@@ -85,7 +87,7 @@ impl Asentamiento {
         let pendientes = self.edificios.iter().filter(|e| e.tipo == Tipo::Granja && !e.activo()).count() as u32;
         let limite = if en_deficit { n.maximo_granjas_pendientes_en_deficit } else { 1 };
         if (activas == 0 || en_deficit_proyectado) && pendientes < limite && !self.hay_mejora_granja_disponible(r, x, reserva) && self.puede_pagar(r, x, Tipo::Granja, reserva) {
-            if let Some(fuente) = x.sitios.proponer(Tipo::Granja) {
+            if let Some(fuente) = x.sitios.proponer(Tipo::Granja, &u) {
                 let urgencia = if activas == 0 { 100 } else { (razon(consumo_objetivo - produccion, consumo_objetivo.max(1)) / 10_000).clamp(0, 100) };
                 candidatos.push(Candidato { tipo: Tipo::Granja, score: c.bandas.supervivencia + urgencia, fuente });
             }
@@ -93,7 +95,7 @@ impl Asentamiento {
 
         // 2. Leñera.
         if (self.edificios.activos(Tipo::Lenera) as u32) < c.extraccion_maxima_por_tipo && !self.pendiente(Tipo::Lenera) && self.puede_pagar(r, x, Tipo::Lenera, reserva) {
-            if let Some(fuente) = x.sitios.proponer(Tipo::Lenera) {
+            if let Some(fuente) = x.sitios.proponer(Tipo::Lenera, &u) {
                 let urgencia = if self.edificios.activos(Tipo::Lenera) == 0 {
                     100
                 } else if self.almacen.cantidad(crate::recurso::Recurso::Madera) < reserva[crate::recurso::Recurso::Madera.indice()] {
@@ -112,7 +114,7 @@ impl Asentamiento {
             if !necesita || self.pendiente(tipo) || !self.puede_pagar(r, x, tipo, reserva) {
                 continue;
             }
-            if let Some(fuente) = x.sitios.proponer(tipo) {
+            if let Some(fuente) = x.sitios.proponer(tipo, &u) {
                 let sin_cupo = self.extractor_minutos_sin_cupo.iter().find(|(t, _)| *t == tipo).map_or(0, |p| p.1);
                 let urgencia = if existentes > 0 { 40 } else { 100 } + (sin_cupo * c.extractor_bonus_por_minuto).min(c.extractor_bonus_maximo);
                 candidatos.push(Candidato { tipo, score: c.bandas.extractor_base + urgencia, fuente });
@@ -128,7 +130,7 @@ impl Asentamiento {
             && (self.edificios.en_cualquier_estado(Tipo::Vivienda) as u32) < self.maximo_viviendas(r)
             && self.puede_pagar(r, x, Tipo::Vivienda, reserva)
         {
-            if let Some(fuente) = x.sitios.proponer(Tipo::Vivienda) {
+            if let Some(fuente) = x.sitios.proponer(Tipo::Vivienda, &u) {
                 candidatos.push(Candidato { tipo: Tipo::Vivienda, score: c.bandas.crecimiento + ocupacion_viviendas / 10_000, fuente });
             }
         }
@@ -137,7 +139,7 @@ impl Asentamiento {
         let trigo = crate::recurso::Recurso::Trigo;
         let ocupacion_trigo = if self.almacen.capacidad(trigo) > 0 { razon(self.almacen.cantidad(trigo), self.almacen.capacidad(trigo)) } else { 0 };
         if ocupacion_trigo >= n.umbral_almacen_ampliacion && self.edificios.en_cualquier_estado(Tipo::Granero) == 0 && self.puede_pagar(r, x, Tipo::Granero, reserva) {
-            if let Some(fuente) = x.sitios.proponer(Tipo::Granero) {
+            if let Some(fuente) = x.sitios.proponer(Tipo::Granero, &u) {
                 candidatos.push(Candidato { tipo: Tipo::Granero, score: c.bandas.crecimiento + ocupacion_trigo / 10_000, fuente });
             }
         }
@@ -146,7 +148,7 @@ impl Asentamiento {
         let ocupacion = self.ocupacion_maxima();
         let tope_almacenes = n.maximo_almacenes_por_nivel.get(&self.nivel_actual()).is_some_and(|&m| self.edificios.en_cualquier_estado(Tipo::Almacen) as u32 >= m);
         if ocupacion >= n.umbral_almacen_ampliacion && !self.pendiente(Tipo::Almacen) && !tope_almacenes && self.puede_pagar(r, x, Tipo::Almacen, reserva) {
-            if let Some(fuente) = x.sitios.proponer(Tipo::Almacen) {
+            if let Some(fuente) = x.sitios.proponer(Tipo::Almacen, &u) {
                 candidatos.push(Candidato { tipo: Tipo::Almacen, score: c.bandas.crecimiento + ocupacion / 10_000, fuente });
             }
         }
@@ -159,7 +161,7 @@ impl Asentamiento {
                 if self.alcanzo_tope_transformacion(r, tipo, 0) || !self.tiene_insumo_de_arranque(r, tipo) || !self.puede_pagar(r, x, tipo, reserva) {
                     continue;
                 }
-                if let Some(fuente) = x.sitios.proponer(tipo) {
+                if let Some(fuente) = x.sitios.proponer(tipo, &u) {
                     candidatos.push(Candidato { tipo, score: c.bandas.transformacion, fuente });
                     break;
                 }
@@ -172,7 +174,7 @@ impl Asentamiento {
             && !self.pendiente(Tipo::Carpinteria)
             && self.puede_pagar(r, x, Tipo::Carpinteria, reserva)
         {
-            if let Some(fuente) = x.sitios.proponer(Tipo::Carpinteria) {
+            if let Some(fuente) = x.sitios.proponer(Tipo::Carpinteria, &u) {
                 candidatos.push(Candidato { tipo: Tipo::Carpinteria, score: c.bandas.transformacion, fuente });
             }
         }
@@ -191,12 +193,19 @@ impl Asentamiento {
             if matches!(cand.tipo, Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::Carpinteria) && self.alcanzo_tope_transformacion(r, cand.tipo, en_este_commit) {
                 continue;
             }
-            if !self.puede_iniciar(r, cand.tipo, &def.costo, reserva) || !self.almacen.pagar(&def.costo) {
+            if !self.puede_iniciar(r, cand.tipo, &def.costo, reserva) {
                 continue;
             }
-            x.sitios.tomar(cand.tipo, cand.fuente);
+            // El sitio se toma antes de pagar: otro proyecto de esta misma pasada puede habérselo quedado (entonces no se cobra).
             let id = self.siguiente_edificio;
             self.siguiente_edificio += 1;
+            let u = self.urbano(r);
+            let Some(gratuitos) = x.sitios.tomar(id, cand.tipo, cand.fuente, &u, &mut self.siguiente_edificio) else {
+                self.siguiente_edificio = id;
+                continue;
+            };
+            self.almacen.pagar(&def.costo);
+            self.alta_gratuitos(gratuitos, ev);
             let mut e = Edificio::nuevo(id, cand.tipo, Estado::EnCola);
             e.prioridad = cand.score;
             e.fuente = cand.fuente;

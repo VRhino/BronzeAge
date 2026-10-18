@@ -123,8 +123,8 @@ impl Politicas {
     }
 
     /// El perfil de trazado que fija la primera ordenanza activa, si hay (Doc 4.4: las ordenanzas de trazado).
-    pub fn perfil_trazado(&self, r: &ReglasPoliticas) -> Option<String> {
-        self.activas.iter().find_map(|x| r.catalogo.iter().find(|p| p.id == x.id)?.perfil_trazado.clone())
+    pub fn perfil_trazado<'r>(&self, r: &'r ReglasPoliticas) -> Option<&'r str> {
+        self.activas.iter().find_map(|x| r.catalogo.iter().find(|p| p.id == x.id)?.perfil_trazado.as_deref())
     }
 }
 
@@ -177,7 +177,7 @@ mod pruebas {
         // Dos políticas con el mismo factor se multiplican: Presión Fiscal (×0,8) y Plazas Mayores (×1,25) se compensan.
         p.activar(&r, "plazas_mayores", &ctx(Cargo::MaestroObras), 0).unwrap();
         assert_eq!(p.factor(&r, "factorCrecimientoPoblacion"), 1_000_000);
-        assert_eq!(p.perfil_trazado(&r).as_deref(), Some("nucleos"));
+        assert_eq!(p.perfil_trazado(&r), Some("nucleos"));
         p.activar(&r, "cupo_caravana_extra", &ctx(Cargo::Tesorero), 0).unwrap();
         assert_eq!(p.suma(&r, "cupoCaravanaExtra"), 1);
     }

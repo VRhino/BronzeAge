@@ -472,11 +472,13 @@ dependencies = [
  "persistencia",
  "prost-types",
  "rutas",
+ "serde_json",
  "servidor",
  "sha2",
  "tempfile",
  "territorio",
  "tokio",
+ "trazado",
  "vision",
 ]
 

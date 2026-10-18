@@ -101,6 +101,7 @@ fn rechazo_de_politica(e: ErrorPolitica) -> (&'static str, &'static str) {
 fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &asentamiento::Reglas) -> EventoNucleo {
     let (codigo, datos): (&'static str, Vec<(&'static str, i64)>) = match e {
         EventoEco::EdificioCompletado { id, tipo } => ("construccion.edificio_completado", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64)]),
+        EventoEco::EdificioGratuito { id, tipo, nivel } => ("construccion.edificio_gratuito", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("nivel", *nivel as i64)]),
         EventoEco::ObraIniciada { id, tipo, completa_en } => ("construccion.obra_iniciada", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("completaEn", *completa_en)]),
         EventoEco::MejoraIniciada { id, nivel } => ("construccion.mejora_iniciada", vec![("edificio", *id as i64), ("nivel", *nivel as i64)]),
         EventoEco::MejoraCompletada { id, nivel } => ("construccion.mejora_completada", vec![("edificio", *id as i64), ("nivel", *nivel as i64)]),
@@ -152,6 +153,8 @@ impl Nucleo {
                 id,
                 yo: Disco { centro: a.posicion, radio: a.radio, faccion: a.faccion },
                 parcelas: &mut a.parcelas,
+                urbe: &mut a.urbe,
+                urbanismo: &reglas.economia.urbanismo,
                 parcelas_ocupadas,
                 nodos_reclamados,
                 otras: asentamientos,
@@ -295,15 +298,22 @@ impl Nucleo {
         let mut sucesos: Vec<EventoEco> = vec![];
         match &p.comando {
             Comando::AnadirEdificio { tipo, .. } => {
-                let nuevo = self.con_exterior(id, t, |eco, x| eco.anadir_manual(x.reglas, x, *tipo)).expect("la plaza existe y hay mundo");
+                let (nuevo, gratuitos) = self
+                    .con_exterior(id, t, |eco, x| {
+                        let mut ev = vec![];
+                        (eco.anadir_manual(x.reglas, x, *tipo, &mut ev), ev)
+                    })
+                    .expect("la plaza existe y hay mundo");
                 let eid = nuevo.map_err(rechazo_obra)?;
                 creada = Some(eid as u64);
+                sucesos.extend(gratuitos); // las anclas que el trazado creó antes de colocarlo
                 sucesos.push(EventoEco::Encolada { id: eid, tipo: *tipo });
             }
             Comando::QuitarDeCola { edificio, .. } => {
-                let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
-                let fuente = eco.edificio(*edificio).and_then(|e| e.fuente);
-                eco.quitar_de_cola(&datos, *edificio).map_err(rechazo_obra)?;
+                let plaza = self.estado.asentamientos.get_mut(&id).expect("existe");
+                let fuente = plaza.economia.edificio(*edificio).and_then(|e| e.fuente);
+                plaza.economia.quitar_de_cola(&datos, *edificio).map_err(rechazo_obra)?;
+                plaza.urbe.quitar(*edificio); // su pieza deja de ocupar suelo
                 self.liberar_fuente(id, fuente);
                 sucesos.push(EventoEco::Desencolada { id: *edificio });
             }

@@ -29,7 +29,12 @@ pub fn bloque_de(doc: &str, nombre: &str) -> Result<Value, String> {
 /// Los bloques `<!-- parametros:... -->` del documento, uno tras otro y sin la prosa que los rodea: es lo que define las reglas, así que
 /// su hash es la identidad de las reglas (editar el texto del documento no la cambia; editar una cifra, sí).
 pub fn texto_de_parametros() -> String {
-    let (mut fuera, mut resto) = (String::new(), ECONOMIA);
+    texto_de_parametros_de(ECONOMIA)
+}
+
+/// Lo mismo para cualquier documento de Mechanics (el núcleo suma así los bloques del Trazado urbano a la identidad de las reglas).
+pub fn texto_de_parametros_de(doc: &str) -> String {
+    let (mut fuera, mut resto) = (String::new(), doc);
     while let Some(i) = resto.find("<!-- parametros:") {
         let desde = &resto[i..];
         let fin = desde.find("<!-- /parametros -->").map_or(desde.len(), |f| f + "<!-- /parametros -->".len());

@@ -72,6 +72,8 @@ pub struct NivelInterno {
     pub cupo_caravanas: u32,
     pub cupo_carros: u32,
     pub cupo_miradas: u32,
+    /// Huella en celdas del trazado urbano (ancho, alto) si cambia con el nivel interno (hoy solo la Granja: 2×2, 2×3, 4×3, 6×6).
+    pub tamano: Option<(i32, i32)>,
 }
 
 #[derive(Clone, Debug)]
@@ -194,6 +196,7 @@ fn nivel_interno(v: &Value) -> NivelInterno {
         cupo_caravanas: f(v, "cupoCaravanas").unwrap_or(0.0) as u32,
         cupo_carros: f(v, "cupoCarros").unwrap_or(0.0) as u32,
         cupo_miradas: f(v, "cupoMiradas").unwrap_or(0.0) as u32,
+        tamano: v.get("tamano").and_then(|t| Some((f(t, "ancho")? as i32, f(t, "alto")? as i32))),
     }
 }
 

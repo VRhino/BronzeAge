@@ -60,21 +60,21 @@ fn la_cola_manual_paga_al_encolar_respeta_los_topes_y_se_reembolsa_entera_al_qui
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let mut x = exterior!(&r, s, w);
     let antes = a.almacen.cantidad(Recurso::Madera);
-    let id = a.anadir_manual(&r, &mut x, Tipo::Vivienda).unwrap();
+    let id = a.anadir_manual(&r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap();
     assert_eq!(a.almacen.cantidad(Recurso::Madera), antes - 10_000, "paga los 10 de madera al encolar");
     assert_eq!(a.edificio(id).unwrap().prioridad, 900, "banda «manual»");
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::CentroUrbano), Err(ErrorObra::TipoNoManual));
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Palacio), Err(ErrorObra::NivelInsuficiente), "el Palacio pide nivel 2");
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Maravilla), Err(ErrorObra::EraInsuficiente));
+    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::CentroUrbano, &mut vec![]), Err(ErrorObra::TipoNoManual));
+    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Palacio, &mut vec![]), Err(ErrorObra::NivelInsuficiente), "el Palacio pide nivel 2");
+    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Maravilla, &mut vec![]), Err(ErrorObra::EraInsuficiente));
     a.quitar_de_cola(&r, id).unwrap();
     assert_eq!(a.almacen.cantidad(Recurso::Madera), antes, "se devuelve el coste completo");
     assert!(a.edificio(id).is_none());
     assert_eq!(a.quitar_de_cola(&r, id), Err(ErrorObra::NoExiste));
     // Cola de cuatro: la quinta se rechaza.
     for _ in 0..4 {
-        a.anadir_manual(&r, &mut x, Tipo::Granja).unwrap();
+        a.anadir_manual(&r, &mut x, Tipo::Granja, &mut vec![]).unwrap();
     }
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Granja), Err(ErrorObra::ColaLlena));
+    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Granja, &mut vec![]), Err(ErrorObra::ColaLlena));
 }
 
 #[test]
@@ -84,15 +84,15 @@ fn los_tipos_unicos_y_los_topes_de_nivel_se_hacen_cumplir() {
     a.medidor.nivel_actual = 2;
     a.nivel = 2;
     let mut x = exterior!(&r, s, w);
-    a.anadir_manual(&r, &mut x, Tipo::Taberna).unwrap();
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Taberna), Err(ErrorObra::Unico));
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::GranFundicion), Err(ErrorObra::NivelInsuficiente), "pide capital de nivel 4");
+    a.anadir_manual(&r, &mut x, Tipo::Taberna, &mut vec![]).unwrap();
+    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Taberna, &mut vec![]), Err(ErrorObra::Unico));
+    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::GranFundicion, &mut vec![]), Err(ErrorObra::NivelInsuficiente), "pide capital de nivel 4");
     // Tres Fundiciones en el nivel 2; la cuarta choca con el tope de transformación.
     for _ in 0..3 {
-        let id = a.anadir_manual(&r, &mut x, Tipo::Fundicion).unwrap();
+        let id = a.anadir_manual(&r, &mut x, Tipo::Fundicion, &mut vec![]).unwrap();
         a.edificios.iter_mut().find(|e| e.id == id).unwrap().estado = Estado::EnConstruccion; // libera el cupo de la cola
     }
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Fundicion), Err(ErrorObra::TopeTransformacion));
+    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Fundicion, &mut vec![]), Err(ErrorObra::TopeTransformacion));
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn mover_en_cola_intercambia_prioridades_con_el_vecino() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let mut x = exterior!(&r, s, w);
-    let ids: Vec<u32> = (0..3).map(|_| a.anadir_manual(&r, &mut x, Tipo::Granja).unwrap()).collect();
+    let ids: Vec<u32> = (0..3).map(|_| a.anadir_manual(&r, &mut x, Tipo::Granja, &mut vec![]).unwrap()).collect();
     for (k, &id) in ids.iter().enumerate() {
         a.edificios.iter_mut().find(|e| e.id == id).unwrap().prioridad = 900 - k as i64; // orden: 0, 1, 2
     }
@@ -118,10 +118,10 @@ fn una_mejora_manual_paga_ocupa_cuadrilla_y_sube_el_nivel_al_terminar() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
-    let x = exterior!(&r, s, w);
-    a.mejorar_ahora(0, &r, &x, granja).unwrap();
+    let mut x = exterior!(&r, s, w);
+    a.mejorar_ahora(0, &r, &mut x, granja).unwrap();
     assert_eq!(a.edificios.cuadrillas_ocupadas(), 1);
-    assert_eq!(a.mejorar_ahora(0, &r, &x, granja), Err(ErrorObra::NoEsMejorable), "ya se está mejorando");
+    assert_eq!(a.mejorar_ahora(0, &r, &mut x, granja), Err(ErrorObra::NoEsMejorable), "ya se está mejorando");
     // La obra base de la Granja son 120 minutos; el nivel 2 tarda ×2 = 240.
     let m = a.edificio(granja).unwrap().mejora.unwrap();
     assert_eq!((m.nivel_objetivo, m.completa_en), (2, 240 * MS_POR_MINUTO));

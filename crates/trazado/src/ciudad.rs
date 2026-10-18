@@ -333,6 +333,15 @@ impl Ciudad {
         self.reconstruir();
     }
 
+    /// Quita una pieza (un edificio que sale de la cola de obras sin haberse levantado) y recalcula la red desde las demás, en su
+    /// orden de construcción. Los latches de las anclas se conservan. `false` si no existía.
+    pub fn quitar(&mut self, id: u32) -> bool {
+        let Some(k) = self.piezas.iter().position(|p| p.id == id) else { return false };
+        self.piezas.remove(k);
+        self.reconstruir();
+        true
+    }
+
     pub(crate) fn sin_pieza(&self, id: u32) -> Ciudad {
         let mut c = self.clone();
         c.piezas.retain(|p| p.id != id);

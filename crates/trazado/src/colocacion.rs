@@ -241,6 +241,11 @@ impl Ciudad {
 
     /// Sitio para la huella nueva de una pieza que crece (hoy, la granja al mejorar), con el suelo sin la propia pieza.
     /// `None` = no cabe en ningún sitio (la mejora no se aplica).
+    ///
+    /// Elige entre los sitios **con salida a la red** (T §6.7): primero los que no acercan su borde al centro, y de ellos el más cercano
+    /// a la posición actual (a igual distancia, el primero de [`Ciudad::sitios_para`]); si ninguno, el más cercano de todos. La salida a
+    /// la red cuesta un BFS por sitio, así que se prueba en orden de cercanía y se para en el primero que vale: da exactamente lo mismo
+    /// que filtrar todos y quedarse con el mínimo, sin pagar miles de búsquedas.
     pub fn reubicar_por_tamano(&self, id: u32, nueva: Huella, perfil: Perfil, radio_ul: i32) -> Option<Colocacion> {
         let pieza = self.pieza(id)?;
         let sin = self.sin_pieza(id);
@@ -255,8 +260,7 @@ impl Ciudad {
             radio_ul,
         };
         let cap = sin.cap_de(pieza.categoria);
-        let validos: Vec<Colocacion> =
-            sin.sitios_para(&ped).into_iter().filter(|s| sin.suelo.tiene_frente(&s.rect) || sin.suelo.corredor(&s.rect, cap).is_some()).collect();
+        let sitios = sin.sitios_para(&ped);
         let actual = pieza.rect;
         let (cx, cy) = (actual.centro().x, actual.centro().y);
         let dist = |s: &Colocacion| {
@@ -264,12 +268,14 @@ impl Ciudad {
             (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy)
         };
         let borde_actual = actual.dist2_borde_al_origen();
-        validos
-            .iter()
-            .filter(|s| s.rect.dist2_borde_al_origen() >= borde_actual)
-            .min_by_key(|s| dist(s))
-            .or_else(|| validos.iter().min_by_key(|s| dist(s)))
-            .copied()
+        let con_salida = |s: &Colocacion| sin.suelo.tiene_frente(&s.rect) || sin.suelo.corredor(&s.rect, cap).is_some();
+        let mejor = |sin_acercar: bool| {
+            let mut orden: Vec<(i64, usize)> =
+                sitios.iter().enumerate().filter(|(_, s)| !sin_acercar || s.rect.dist2_borde_al_origen() >= borde_actual).map(|(i, s)| (dist(s), i)).collect();
+            orden.sort_unstable();
+            orden.into_iter().map(|(_, i)| &sitios[i]).find(|s| con_salida(s)).copied()
+        };
+        mejor(true).or_else(|| mejor(false))
     }
 
     /// Aplica una reubicación: la pieza cambia de rectángulo conservando su sitio en el orden de construcción.
@@ -294,4 +300,54 @@ fn comparar(a: &Cand, b: &Cand, orden: &[crate::tipos::Clave; 5]) -> Ordering {
         }
     }
     a.sem.cmp(&b.sem)
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    /// La definición literal de T §6.7: filtrar todos los sitios con salida y quedarse con el mínimo (la que había antes de hacerlo perezoso).
+    fn por_tamano_literal(c: &Ciudad, id: u32, nueva: Huella, perfil: Perfil, radio_ul: i32) -> Option<Colocacion> {
+        let pieza = c.pieza(id)?;
+        let sin = c.sin_pieza(id);
+        let ped = Pedido { id, tipo: pieza.tipo, categoria: pieza.categoria, rol: pieza.rol, huella: nueva, permitir_rotacion: false, perfil, radio_ul };
+        let cap = sin.cap_de(pieza.categoria);
+        let validos: Vec<Colocacion> =
+            sin.sitios_para(&ped).into_iter().filter(|s| sin.suelo.tiene_frente(&s.rect) || sin.suelo.corredor(&s.rect, cap).is_some()).collect();
+        let actual = pieza.rect;
+        let (cx, cy) = (actual.centro().x, actual.centro().y);
+        let dist = |s: &Colocacion| {
+            let c = s.rect.centro();
+            (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy)
+        };
+        let borde_actual = actual.dist2_borde_al_origen();
+        validos.iter().filter(|s| s.rect.dist2_borde_al_origen() >= borde_actual).min_by_key(|s| dist(s)).or_else(|| validos.iter().min_by_key(|s| dist(s))).copied()
+    }
+
+    #[test]
+    fn reubicar_perezoso_da_lo_mismo_que_la_definicion_literal() {
+        for semilla in [3u64, 8, 21] {
+            let params = Parametros::default();
+            let tp = |tipo, a, h| crate::fundacion::TipoPieza { tipo, huella: Huella::new(a, h) };
+            let mut c = Ciudad::fundar(&crate::fundacion::EntradaFundacion {
+                semilla,
+                params,
+                perfil: Perfil::por_tradicion(semilla),
+                primer_id: 0,
+                centro: tp(1, 4, 4),
+                vivienda: tp(2, 1, 1),
+                granja: tp(3, 2, 2),
+            });
+            let granja = c.piezas().iter().find(|p| p.categoria == Categoria::Afueras).map(|p| p.id).expect("la fundación pone la granja");
+            // Un par de granjas más y casas para que el suelo no esté vacío.
+            for (k, (cat, h)) in [(Categoria::Afueras, (2, 2)), (Categoria::Residencial, (1, 1)), (Categoria::Afueras, (4, 3)), (Categoria::Generico, (2, 1))].into_iter().cycle().take(24).enumerate() {
+                let ped = Pedido { id: 100 + k as u32, tipo: 9, categoria: cat, rol: Rol::Normal, huella: Huella::new(h.0, h.1), permitir_rotacion: cat != Categoria::Afueras || h != (2, 2), perfil: Perfil::Nucleos, radio_ul: 60 };
+                c.colocar_siguiente(&ped);
+            }
+            for h in [(2, 3), (4, 3), (6, 6), (9, 9)] {
+                let (nueva, radio) = (Huella::new(h.0, h.1), 60);
+                assert_eq!(c.reubicar_por_tamano(granja, nueva, Perfil::Nucleos, radio), por_tamano_literal(&c, granja, nueva, Perfil::Nucleos, radio), "semilla {semilla}, huella {h:?}");
+            }
+        }
+    }
 }

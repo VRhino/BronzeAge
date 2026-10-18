@@ -425,3 +425,17 @@ fn rendimiento_200_edificios() {
     let tope = if cfg!(debug_assertions) { 60.0 } else { 1.0 };
     assert!(dt.as_secs_f64() < tope, "demasiado lento: {dt:?} (tope {tope} s)");
 }
+
+#[test]
+fn quitar_una_pieza_deja_la_ciudad_como_si_no_se_hubiera_colocado() {
+    let mut s = ciudad_de(5, Perfil::Nucleos, 30);
+    let antes = s.c.clone();
+    let id = s.construir(T_VIVIENDA).expect("cabe");
+    assert!(s.c.pieza(id).is_some() && s.c != antes);
+    assert!(s.c.quitar(id));
+    assert!(s.c.pieza(id).is_none());
+    assert_eq!(s.c.piezas(), antes.piezas());
+    assert_eq!((s.c.calles(), s.c.caminos()), (antes.calles(), antes.caminos()), "la red se recalcula sin la pieza");
+    assert!(!s.c.quitar(id), "ya no existe");
+    verificar(&s.c, s.radio());
+}

@@ -25,14 +25,55 @@ pub struct Ascenso {
     pub completa_en: Instante,
 }
 
+/// Lo que el trazado urbano necesita saber de la plaza en cada pregunta (cambia dentro del minuto: una obra que acaba agranda la
+/// ciudad). Lo calcula [`Asentamiento::urbano`]; el adaptador no ve la economía.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Urbano<'r> {
+    /// Nivel alcanzado: fija el techo del radio de la ciudad.
+    pub nivel: u32,
+    /// Nivel operativo: el que abre el gate de las anclas.
+    pub nivel_operativo: u32,
+    /// Edificios construidos por la cola (activos, sin los de la fundación ni los gratuitos): agrandan la ciudad.
+    pub completados: u32,
+    /// Perfil de trazado de la ordenanza activa (`nucleos`, `caminera`, `compacta`, `gremial`), si la hay.
+    pub perfil: Option<&'r str>,
+    /// El id que recibiría el próximo edificio (el de un proyecto que se comprometa ahora).
+    pub siguiente_id: u32,
+}
+
+/// Un edificio gratuito y ya activo que el trazado crea por su cuenta (ancla de saturación, puesto del Mercado): nunca pasa por la
+/// cola ni cuesta nada, pero es un edificio de la economía (cuenta a la mitad en el mantenimiento).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Gratuito {
+    pub id: u32,
+    pub tipo: Tipo,
+    /// En los puestos del Mercado es su **forma**, no un nivel (Economia_Construccion §6.6).
+    pub nivel_interno: u8,
+}
+
 /// Dónde puede ir un edificio nuevo: la geometría de la ciudad y los nodos o parcelas libres del mapa. Lo implementa el núcleo
 /// (con el trazado urbano y el mundo); las pruebas, con un doble.
 pub trait Sitios {
     /// ¿Hay sitio para este tipo? `Some(fuente)` si lo hay (la fuente libre más cercana en la zona si el tipo ligue a una), `None` si no.
     /// No toma nada: solo mira.
-    fn proponer(&mut self, tipo: Tipo) -> Option<Option<Fuente>>;
-    /// El proyecto se comprometió: la fuente queda tomada.
-    fn tomar(&mut self, tipo: Tipo, fuente: Option<Fuente>);
+    fn proponer(&mut self, tipo: Tipo, u: &Urbano) -> Option<Option<Fuente>>;
+    /// El proyecto se comprometió con el id `id`: la fuente queda tomada y el edificio, colocado en la ciudad. Si hay que crear antes un
+    /// ancla (edificio gratuito), su id sale de `ids` (el contador de ids de la plaza, ya por delante de `id`) y vuelve en el resultado.
+    /// `None` = ya no hay sitio (otro proyecto de la misma pasada se lo quedó): no se toca nada y el proyecto no se compromete.
+    fn tomar(&mut self, id: u32, tipo: Tipo, fuente: Option<Fuente>, u: &Urbano, ids: &mut u32) -> Option<Vec<Gratuito>>;
+    /// Un Mercado acaba de completarse (`nivel` 1) o de subir a `nivel`: los puestos gratuitos de ese nivel que caben, con sus ids de
+    /// `ids`. Si a un puesto no le queda sitio se salta en silencio.
+    fn puestos_de_mercado(&mut self, _nivel: u8, _u: &Urbano, _ids: &mut u32) -> Vec<Gratuito> {
+        vec![]
+    }
+    /// Al mejorar a `nivel`, ¿cabe la huella nueva del edificio? Solo cambia de huella la Granja. No toca nada.
+    fn hueco_al_mejorar(&mut self, _id: u32, _tipo: Tipo, _nivel: u8, _u: &Urbano) -> bool {
+        true
+    }
+    /// La mejora terminó: muda el edificio a un hueco de su huella nueva. `false` = no hay hueco y la mejora espera.
+    fn reubicar(&mut self, _id: u32, _tipo: Tipo, _nivel: u8, _u: &Urbano) -> bool {
+        true
+    }
 }
 
 /// Lo que el asentamiento necesita del resto del mundo en cada minuto.
@@ -67,6 +108,8 @@ pub struct Exterior<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Evento {
     EdificioCompletado { id: u32, tipo: Tipo },
+    /// Nació un edificio gratuito y activo (ancla de saturación, puesto del Mercado). `nivel` es su forma si es un puesto.
+    EdificioGratuito { id: u32, tipo: Tipo, nivel: u8 },
     ObraIniciada { id: u32, tipo: Tipo, completa_en: Instante },
     MejoraIniciada { id: u32, nivel: u8 },
     MejoraCompletada { id: u32, nivel: u8 },
@@ -154,6 +197,30 @@ impl Asentamiento {
         self.medidor.nivel_actual
     }
 
+    /// Lo que el trazado urbano pregunta a la plaza (ver [`Urbano`]). Los edificios de la fundación son los de id menor que
+    /// `viviendas iniciales + 2` (Centro Urbano, Viviendas y Granja).
+    ///
+    /// DUDA: el documento dice que el `radioCiudad` crece «por edificio completado» sin precisar cuáles. Aquí cuentan los que pasaron por
+    /// la cola (los mismos que agrandan la zona del mapa): ni los de la fundación (la ciudad nace con su radio inicial, sin salto) ni los
+    /// gratuitos (anclas y puestos del Mercado, que nacen sin obra). Y el techo por nivel usa el nivel alcanzado, como la zona; el gate de
+    /// las anclas, el operativo (`nivelActual`, como en Economia_Construccion §6.2).
+    pub fn urbano<'r>(&self, r: &'r Reglas) -> Urbano<'r> {
+        let fundacion = r.viviendas_iniciales + 2;
+        let gratuitas = &r.mantenimiento.piezas_gratuitas;
+        let completados = self.edificios.iter().filter(|e| e.activo() && e.id >= fundacion && !gratuitas.contains(&e.tipo)).count() as u32;
+        Urbano { nivel: self.nivel, nivel_operativo: self.nivel_actual(), completados, perfil: self.politicas.perfil_trazado(&r.politicas), siguiente_id: self.siguiente_edificio }
+    }
+
+    /// Da de alta edificios gratuitos ya activos (con su suceso). No cuentan como «completados»: no agrandan la zona.
+    pub(crate) fn alta_gratuitos(&mut self, gratuitos: Vec<Gratuito>, ev: &mut Vec<Evento>) {
+        for g in gratuitos {
+            let mut e = Edificio::nuevo(g.id, g.tipo, Estado::Activo);
+            e.nivel_interno = g.nivel_interno;
+            self.edificios.push(e);
+            ev.push(Evento::EdificioGratuito { id: g.id, tipo: g.tipo, nivel: g.nivel_interno });
+        }
+    }
+
     pub fn edificio(&self, id: u32) -> Option<&Edificio> {
         self.edificios.iter().find(|e| e.id == id)
     }
@@ -219,7 +286,7 @@ impl Asentamiento {
         // 1. Construcción. Las cuadrillas se miden con el estado de principio de minuto: una obra que acaba ahora no libera hueco
         //    hasta el siguiente.
         let ocupadas_al_empezar = self.edificios.cuadrillas_ocupadas();
-        self.completar_obras(t, r, &mut ev);
+        self.completar_obras(t, r, x, &mut ev);
         self.arrancar_obras(t, r, ocupadas_al_empezar, &mut ev);
 
         let (pesants, artesanos, _) = self.poblacion.enteros();
@@ -294,9 +361,10 @@ impl Asentamiento {
 pub struct SitiosLibres;
 
 impl Sitios for SitiosLibres {
-    fn proponer(&mut self, tipo: Tipo) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, _: &Urbano) -> Option<Option<Fuente>> {
         (!tipo.es_extractor() && tipo != Tipo::Lenera).then_some(None)
     }
-    fn tomar(&mut self, _: Tipo, _: Option<Fuente>) {}
+    fn tomar(&mut self, _: u32, _: Tipo, _: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {
+        Some(vec![])
+    }
 }
-

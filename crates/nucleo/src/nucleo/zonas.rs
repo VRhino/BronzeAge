@@ -90,6 +90,19 @@ impl Nucleo {
         territorio::poligono(&self.disco_de(a), &vecinos, 48)
     }
 
+    /// La ciudad de una plaza (solo lectura): sus piezas con el rectángulo de cada edificio, las calles y los caminos. Para pintar, véase
+    /// también [`Nucleo::vista_ciudad`].
+    pub fn ciudad(&self, id: u64) -> Option<&trazado::Ciudad> {
+        self.estado.asentamientos.get(&id).map(|a| a.urbe.ciudad())
+    }
+
+    /// Todo lo que un cliente necesita para dibujar la ciudad de una plaza (T §10), en unidades locales.
+    pub fn vista_ciudad(&self, id: u64) -> Option<crate::urbanismo::VistaCiudad> {
+        let a = self.estado.asentamientos.get(&id)?;
+        let u = a.economia.urbano(&self.estado.reglas.economia.datos);
+        Some(a.urbe.vista(a.urbe.radio_ul(&u)))
+    }
+
     /// Plazas vigentes de una Facción.
     pub fn plazas_de(&self, faccion: u32) -> impl Iterator<Item = &Asentamiento> {
         self.estado.asentamientos.values().filter(move |a| a.faccion == faccion)
@@ -318,7 +331,9 @@ impl Nucleo {
         self.estado.siguiente_id += 1;
         let eco = &self.estado.reglas.economia.datos;
         let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, t, &eco.materiales_iniciales, eco.viviendas_iniciales);
-        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia });
+        // Su ciudad nace con los mismos edificios iniciales que la economía (ids 0..=viviendas+1).
+        let urbe = crate::urbanismo::Urbe::fundar(&self.estado.reglas.economia, self.semilla, id);
+        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe });
         self.programar_minuto(id, t + base::MS_POR_MINUTO);
         self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;
         self.tr.tocados.push(ejercito);

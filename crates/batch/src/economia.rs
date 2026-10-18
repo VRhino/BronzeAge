@@ -7,7 +7,7 @@
 //! - [`Reclamos`]: quién tiene qué parcela o nodo.
 //! - [`SitiosVilla`]: el `Sitios` de una plaza, con su disco de zona.
 
-use asentamiento::asentamiento::Sitios;
+use asentamiento::asentamiento::{Gratuito, Sitios, Urbano};
 use asentamiento::catalogo::Tipo;
 use asentamiento::edificio::Fuente;
 use asentamiento::produccion::Fuentes;
@@ -116,7 +116,8 @@ impl SinSitio {
 }
 
 /// El `Sitios` de una plaza: disco de zona sin recorte por vecinas (simplificación). Lenera → parcela de bosque con la cuota por masa;
-/// Cantera → el nodo de piedra libre más cercano; Corral → el de ganado; minas → ninguno (van por pueblo extractor); el resto, siempre cabe.
+/// Cantera → el nodo de piedra libre más cercano; Corral → el de ganado; minas → ninguno (van por pueblo extractor); el resto, siempre cabe:
+/// el batch de población no usa la ciudad de las plazas (trazado urbano), solo sus yacimientos, así que sus cifras no cambian con ella.
 pub struct SitiosVilla<'a> {
     pub mapa: &'a Mapa,
     pub reclamos: &'a mut Reclamos,
@@ -128,7 +129,7 @@ pub struct SitiosVilla<'a> {
 }
 
 impl Sitios for SitiosVilla<'_> {
-    fn proponer(&mut self, tipo: Tipo) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, _: &Urbano) -> Option<Option<Fuente>> {
         let reclamos = &*self.reclamos;
         let propuesta = self.mapa.proponer(
             tipo,
@@ -151,7 +152,7 @@ impl Sitios for SitiosVilla<'_> {
         propuesta
     }
 
-    fn tomar(&mut self, tipo: Tipo, fuente: Option<Fuente>) {
+    fn tomar(&mut self, _: u32, tipo: Tipo, fuente: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {
         match (tipo, fuente) {
             (Tipo::Lenera, Some(Fuente::Parcela(p))) => {
                 self.reclamos.parcela[p as usize] = Some(self.villa);
@@ -164,6 +165,7 @@ impl Sitios for SitiosVilla<'_> {
             }
             _ => {}
         }
+        Some(vec![])
     }
 }
 
@@ -171,6 +173,9 @@ impl Sitios for SitiosVilla<'_> {
 mod pruebas {
     use super::*;
     use base::MS_POR_MINUTO;
+
+    /// El contexto urbano no importa a este adaptador.
+    const U: Urbano = Urbano { nivel: 1, nivel_operativo: 1, completados: 0, perfil: None, siguiente_id: 0 };
 
     fn nodo(x: i64, tipo: Tipo) -> NodoMapa {
         NodoMapa { pos: Punto::new(x * 1000, 0), tipo, inicial: 100_000 }
@@ -224,14 +229,14 @@ mod pruebas {
         let m = mapa();
         let (mut rec, mut propias, mut otras) = (Reclamos::nuevo(&m), BTreeSet::new(), BTreeSet::new());
         let (mut ss1, mut ss2) = (SinSitio::default(), SinSitio::default());
-        let p = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1).proponer(Tipo::Cantera);
+        let p = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1).proponer(Tipo::Cantera, &U);
         assert_eq!(p, Some(Some(Fuente::Nodo(0))), "la más cercana");
-        sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1).tomar(Tipo::Cantera, Some(Fuente::Nodo(0)));
+        sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1).tomar(0, Tipo::Cantera, Some(Fuente::Nodo(0)), &U, &mut 1);
         // Otra plaza con el mismo disco recibe la segunda, y luego ninguna.
         let mut s2 = sitios(&m, &mut rec, 1, 10_000, &mut otras, &mut ss2);
-        assert_eq!(s2.proponer(Tipo::Cantera), Some(Some(Fuente::Nodo(1))));
-        s2.tomar(Tipo::Cantera, Some(Fuente::Nodo(1)));
-        assert_eq!(s2.proponer(Tipo::Cantera), None);
+        assert_eq!(s2.proponer(Tipo::Cantera, &U), Some(Some(Fuente::Nodo(1))));
+        s2.tomar(0, Tipo::Cantera, Some(Fuente::Nodo(1)), &U, &mut 1);
+        assert_eq!(s2.proponer(Tipo::Cantera, &U), None);
         assert_eq!((ss2.sin_ninguno[1], ss2.total[1]), (0, 1), "ya tenía una: la denegación no cuenta como «sin ninguno»");
     }
 
@@ -241,11 +246,11 @@ mod pruebas {
         let (mut rec, mut propias, mut ss) = (Reclamos::nuevo(&m), BTreeSet::new(), SinSitio::default());
         let mut s = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss);
         // Masa de 2 parcelas, cuota 50 % = 1: una Leñera y no más.
-        let Some(Some(Fuente::Parcela(p))) = s.proponer(Tipo::Lenera) else { panic!("hay parcela") };
-        s.tomar(Tipo::Lenera, Some(Fuente::Parcela(p)));
-        assert_eq!(s.proponer(Tipo::Lenera), None, "cupo de la masa agotado");
-        assert_eq!(s.proponer(Tipo::MinaEstano), None);
-        assert_eq!(s.proponer(Tipo::Vivienda), Some(None), "el resto siempre cabe");
+        let Some(Some(Fuente::Parcela(p))) = s.proponer(Tipo::Lenera, &U) else { panic!("hay parcela") };
+        s.tomar(0, Tipo::Lenera, Some(Fuente::Parcela(p)), &U, &mut 1);
+        assert_eq!(s.proponer(Tipo::Lenera, &U), None, "cupo de la masa agotado");
+        assert_eq!(s.proponer(Tipo::MinaEstano, &U), None);
+        assert_eq!(s.proponer(Tipo::Vivienda, &U), Some(None), "el resto siempre cabe");
         assert_eq!((ss.sin_ninguno[0], ss.total[0], ss.tiene[0]), (0, 1, true));
         assert_eq!(rec.parcela.iter().flatten().count(), 1);
     }

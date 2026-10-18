@@ -5,13 +5,14 @@
 //!   sitio de cada tipo de edificio ([`Mapa::proponer`]).
 //! - [`StockNodo`]: el stock vivo de un nodo y su regeneración. Es **estado del núcleo** (entra en el hash y en las fotos); se guarda solo
 //!   el de los nodos que alguien ha tocado.
-//! - [`FuentesMundo`] y [`SitiosPlaza`]: los `Fuentes` y `Sitios` de una plaza dentro del núcleo.
+//! - [`FuentesMundo`] y [`SitiosPlaza`]: los `Fuentes` y `Sitios` de una plaza dentro del núcleo (los yacimientos del mapa más la
+//!   ciudad de la plaza, [`crate::urbanismo`]).
 
 /// Madera por minuto mínima que debe poder dar el bosque a 10 u de una plaza para que no caiga en ruinas (decidido el 2026-10-18; la
 /// cifra es un placeholder a calibrar: el mantenimiento pide ~1,65 al día 1 y ~2,5 con 40 edificios). Se mide como `5 × Σ densidades`.
 pub const MADERA_MINIMA_POTENCIAL: Mil = 3_000;
 
-use asentamiento::asentamiento::Sitios;
+use asentamiento::asentamiento::{Gratuito, Sitios, Urbano};
 use asentamiento::catalogo::Tipo;
 use asentamiento::edificio::Fuente;
 use asentamiento::produccion::Fuentes;
@@ -23,6 +24,7 @@ use std::sync::Arc;
 use territorio::{Disco, Parcela};
 
 use crate::estado::Asentamiento;
+use crate::urbanismo::{Urbanismo, Urbe};
 
 /// Lado de la celda de la rejilla de búsqueda (milésimas): 10 unidades.
 const CELDA: i64 = 10_000;
@@ -157,8 +159,9 @@ impl Mapa {
 
     /// Dónde puede ir un edificio de esa plaza (el contrato de `Sitios::proponer`, sin tomar nada):
     /// Leñera → parcela de bosque libre en la zona, con la cuota por masa; Cantera → el nodo de piedra libre más cercano en la zona; Corral →
-    /// el de ganado; minas → `None` (van por pueblo extractor, Doc 4.2.2); el resto, `Some(None)` (el trazado urbano real aún no está
-    /// integrado: siempre cabe). `en_zona` recorta el disco `(centro, radio)` por las fronteras con otras Facciones.
+    /// el de ganado; minas → `None` (van por pueblo extractor, Doc 4.2.2); el resto, `Some(None)`: este método solo conoce los yacimientos, y que
+    /// el edificio **quepa en la ciudad** lo decide el trazado urbano ([`crate::urbanismo::Urbe`]) en las plazas del núcleo; el batch de
+    /// población no lo usa y deja que siempre quepa. `en_zona` recorta el disco `(centro, radio)` por las fronteras con otras Facciones.
     #[allow(clippy::too_many_arguments)]
     pub fn proponer(
         &self,
@@ -177,7 +180,7 @@ impl Mapa {
             Tipo::Corral => self.mas_cercano(self.ganado_en(centro, radio), centro, nodo_libre, en_zona).map(|n| Some(Fuente::Nodo(n))),
             // Van por pueblo extractor (Doc 4.2.2), que aún no está implementado.
             Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => None,
-            // El trazado urbano real (crate `trazado`) no está integrado: siempre hay sitio.
+            // Sin yacimiento: el sitio lo decide la ciudad de la plaza, no el mapa.
             _ => Some(None),
         }
     }
@@ -248,6 +251,9 @@ pub(crate) struct SitiosPlaza<'a> {
     pub id: u64,
     pub yo: Disco,
     pub parcelas: &'a mut BTreeSet<u32>,
+    /// La ciudad de la plaza y la tabla de huellas: dónde cae cada edificio dentro de ella.
+    pub urbe: &'a mut Urbe,
+    pub urbanismo: &'a Urbanismo,
     pub parcelas_ocupadas: &'a mut BTreeMap<u32, u64>,
     pub nodos_reclamados: &'a mut BTreeMap<u32, u64>,
     /// Las demás plazas (la propia no está: el llamante la saca del mapa mientras avanza).
@@ -271,16 +277,21 @@ impl SitiosPlaza<'_> {
 }
 
 impl Sitios for SitiosPlaza<'_> {
-    fn proponer(&mut self, tipo: Tipo) -> Option<Option<Fuente>> {
+    /// Hay sitio si lo hay en el mapa (los que ligan a un yacimiento) y en la ciudad (caché). Se mira antes el mapa, que es barato: una
+    /// Leñera sin parcela libre o un Corral sin ganado no tienen sitio, y no hace falta barrer la ciudad para saberlo.
+    fn proponer(&mut self, tipo: Tipo, u: &Urbano) -> Option<Option<Fuente>> {
         let yo = self.yo;
         // Solo los tipos que ligan a un yacimiento miran la geometría de la zona.
         let ligado = matches!(tipo, Tipo::Lenera | Tipo::Cantera | Tipo::Corral);
         let vecinos: &[Disco] = if ligado { self.vecinos() } else { &[] };
         let (po, nr) = (&*self.parcelas_ocupadas, &*self.nodos_reclamados);
-        self.mapa.proponer(tipo, yo.centro, yo.radio, self.parcelas, self.cuota_pct, &|i| !po.contains_key(&i), &|n| !nr.contains_key(&n), &|c| territorio::en_zona(c, &yo, vecinos))
+        let fuente = self.mapa.proponer(tipo, yo.centro, yo.radio, self.parcelas, self.cuota_pct, &|i| !po.contains_key(&i), &|n| !nr.contains_key(&n), &|c| territorio::en_zona(c, &yo, vecinos))?;
+        self.urbe.cabe(self.urbanismo, tipo, u).then_some(fuente)
     }
 
-    fn tomar(&mut self, _tipo: Tipo, fuente: Option<Fuente>) {
+    /// Coloca el edificio en la ciudad y, solo si cabe, toma su yacimiento. `None` = otro proyecto de la misma pasada se quedó el sitio.
+    fn tomar(&mut self, id: u32, tipo: Tipo, fuente: Option<Fuente>, u: &Urbano, ids: &mut u32) -> Option<Vec<Gratuito>> {
+        let gratuitos = self.urbe.tomar(self.urbanismo, id, tipo, u, ids)?;
         match fuente {
             Some(Fuente::Parcela(p)) => {
                 self.parcelas_ocupadas.insert(p, self.id);
@@ -291,5 +302,18 @@ impl Sitios for SitiosPlaza<'_> {
             }
             None => {}
         }
+        Some(gratuitos)
+    }
+
+    fn puestos_de_mercado(&mut self, nivel: u8, u: &Urbano, ids: &mut u32) -> Vec<Gratuito> {
+        self.urbe.puestos(self.urbanismo, nivel, u, ids)
+    }
+
+    fn hueco_al_mejorar(&mut self, id: u32, tipo: Tipo, nivel: u8, u: &Urbano) -> bool {
+        self.urbe.hueco_al_mejorar(self.urbanismo, id, tipo, nivel, u)
+    }
+
+    fn reubicar(&mut self, id: u32, tipo: Tipo, nivel: u8, u: &Urbano) -> bool {
+        self.urbe.reubicar(self.urbanismo, id, tipo, nivel, u)
     }
 }

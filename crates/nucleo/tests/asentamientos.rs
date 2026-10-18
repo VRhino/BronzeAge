@@ -443,7 +443,8 @@ fn estado_con_una_plaza() -> Estado {
     let mut s = Estado::nuevo(Reglas::default(), "h".into(), 1, 0);
     let eco = &s.reglas.economia.datos;
     let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia });
+    let urbe = nucleo::urbanismo::Urbe::fundar(&s.reglas.economia, 7, 1);
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe });
     s
 }
 

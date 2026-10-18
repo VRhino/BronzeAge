@@ -7,9 +7,11 @@
 //! - [`GeneradorDeEventos`]: el hueco para `encuentros` y `vision`.
 //! - [`economia`]: cada plaza fundada lleva su economía (crate `asentamiento`) y avanza sola un minuto de mundo por evento
 //!   (`Carga::Minuto`); aquí están el mapa, los yacimientos y los sitios que comparten el núcleo y el batch de población.
+//! - [`urbanismo`]: la ciudad de cada plaza (crate `trazado`): dónde cae cada edificio, anclas, puestos del Mercado y reubicación de la Granja.
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;
+mod codec_ciudad;
 mod codec_economia;
 mod comando;
 mod estado;
@@ -19,6 +21,7 @@ pub mod economia;
 pub mod espacial;
 pub mod proyeccion;
 pub mod sesiones;
+pub mod urbanismo;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};

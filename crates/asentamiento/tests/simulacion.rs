@@ -2,7 +2,7 @@
 //! uno de ganado). Se vigilan los invariantes de Economia_Construccion §15 y que la economía arranque sola: Leñera, Cantera,
 //! Viviendas, crecimiento y la subida al nivel 2.
 
-use asentamiento::asentamiento::{Ascenso, Asentamiento, Evento, Exterior, Sitios};
+use asentamiento::asentamiento::{Ascenso, Asentamiento, Evento, Exterior, Gratuito, Sitios, Urbano};
 use asentamiento::catalogo::Tipo;
 use asentamiento::datos::{Reglas, UNO};
 use asentamiento::edificio::{Edificios, Fuente};
@@ -52,7 +52,7 @@ struct Terreno {
 }
 
 impl Sitios for Terreno {
-    fn proponer(&mut self, tipo: Tipo) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, _: &Urbano) -> Option<Option<Fuente>> {
         match tipo {
             Tipo::Lenera => self.parcelas_libres.first().map(|&p| Some(Fuente::Parcela(p))),
             Tipo::Cantera => self.cantera_libre.then_some(Some(Fuente::Nodo(1))),
@@ -61,13 +61,14 @@ impl Sitios for Terreno {
             _ => Some(None),
         }
     }
-    fn tomar(&mut self, tipo: Tipo, fuente: Option<Fuente>) {
+    fn tomar(&mut self, _: u32, tipo: Tipo, fuente: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {
         match (tipo, fuente) {
             (Tipo::Lenera, Some(Fuente::Parcela(p))) => self.parcelas_libres.retain(|&x| x != p),
             (Tipo::Cantera, _) => self.cantera_libre = false,
             (Tipo::Corral, _) => self.corral_libre = false,
             _ => {}
         }
+        Some(vec![])
     }
 }
 

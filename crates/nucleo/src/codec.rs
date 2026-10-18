@@ -27,6 +27,9 @@ impl Escritor {
     pub fn u32(&mut self, v: u32) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
+    pub fn i32(&mut self, v: i32) {
+        self.0.extend_from_slice(&v.to_le_bytes());
+    }
     pub fn u64(&mut self, v: u64) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
@@ -77,6 +80,9 @@ impl<'a> Lector<'a> {
     }
     pub fn u32(&mut self) -> Result<u32, ErrorFormato> {
         Ok(u32::from_le_bytes(self.tomar(4)?.try_into().unwrap()))
+    }
+    pub fn i32(&mut self) -> Result<i32, ErrorFormato> {
+        Ok(i32::from_le_bytes(self.tomar(4)?.try_into().unwrap()))
     }
     pub fn u64(&mut self) -> Result<u64, ErrorFormato> {
         Ok(u64::from_le_bytes(self.tomar(8)?.try_into().unwrap()))
