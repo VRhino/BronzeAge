@@ -28,11 +28,11 @@ describe('estaño y oro por gradiente', () => {
   const de = (tipo: string, anillo?: string) => nodos.filter(n => n.tipo === tipo && (!anillo || n.anillo === anillo));
 
   it('las cuotas por anillo suman exactamente el total', () => {
-    expect(cuotasPorAnillo(56, P.reparto)).toEqual({ foco: 3, frontera: 14, lejana: 39 });
-    expect(cuotasPorAnillo(48, P.reparto)).toEqual({ foco: 2, frontera: 12, lejana: 34 });
-    expect(de('estano')).toHaveLength(56);
-    expect(de('oro')).toHaveLength(48);
-    expect(de('estano', 'lejana')).toHaveLength(39);
+    expect(cuotasPorAnillo(64, P.reparto)).toEqual({ foco: 3, frontera: 16, lejana: 45 });
+    expect(cuotasPorAnillo(24, P.reparto)).toEqual({ foco: 1, frontera: 6, lejana: 17 });
+    expect(de('estano')).toHaveLength(64);
+    expect(de('oro')).toHaveLength(24);
+    expect(de('estano', 'lejana')).toHaveLength(45);
   });
   it('cada nodo está en el anillo que declara', () => {
     for (const n of nodos) expect(anilloEn(campamentos, n.posicion).anillo).toBe(n.anillo);
@@ -46,7 +46,7 @@ describe('estaño y oro por gradiente', () => {
     }
   });
   it('vetas de 3 a 6 estaños con 0 a 2 oros, dentro del radio', () => {
-    expect(vetas.length).toBe(9);
+    expect(vetas.length).toBe(10);
     for (const v of vetas) {
       const propios = nodos.filter(n => n.vetaId === v.id);
       const estano = propios.filter(n => n.tipo === 'estano').length, oro = propios.length - estano;

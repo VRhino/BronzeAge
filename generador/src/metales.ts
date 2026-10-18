@@ -9,7 +9,7 @@ import { anilloEn, FACTOR, type Anillo, type Campamento } from './campamentos';
 export type Metal = 'estano' | 'oro';
 
 export const PARAMETROS_METALES = {
-  total: { estano: 56, oro: 48 } as Record<Metal, number>,
+  total: { estano: 64, oro: 24 } as Record<Metal, number>,
   reparto: { foco: 0.05, frontera: 0.25, lejana: 0.7 } as Record<Anillo, number>,
   /** El foco se siembra en su borde exterior (distancia estratégica al campamento). */
   bordeFoco: { min: 100, max: 150 },
