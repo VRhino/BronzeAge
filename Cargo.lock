@@ -41,6 +41,7 @@ dependencies = [
  "rutas",
  "serde_json",
  "territorio",
+ "trazado",
 ]
 
 [[package]]

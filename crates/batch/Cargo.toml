@@ -11,5 +11,6 @@ rutas = { path = "../rutas" }
 nucleo = { path = "../nucleo" }
 territorio = { path = "../territorio" }
 asentamiento = { path = "../asentamiento" }
+trazado = { path = "../trazado" }
 informe = { path = "../informe" }
 serde_json = "1"

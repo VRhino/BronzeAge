@@ -5,7 +5,7 @@
 //! - [`Mapa`]: el mapa del núcleo más las reglas de territorio del batch.
 //! - [`Recursos`]: el stock vivo de los nodos; implementa `Fuentes` (extraer y regenerar).
 //! - [`Reclamos`]: quién tiene qué parcela o nodo.
-//! - [`SitiosVilla`]: el `Sitios` de una plaza, con su disco de zona.
+//! - [`SitiosVilla`]: el `Sitios` de una plaza, con su disco de zona y su ciudad real ([`nucleo::urbanismo::Urbe`], la misma del núcleo).
 
 use asentamiento::asentamiento::{Gratuito, Sitios, Urbano};
 use asentamiento::catalogo::Tipo;
@@ -14,7 +14,8 @@ use asentamiento::produccion::Fuentes;
 use base::{Instante, Mil, Punto};
 use mundo::Mundo;
 use nucleo::economia::{regeneracion_ms, StockNodo};
-use std::collections::BTreeSet;
+use nucleo::urbanismo::{Urbanismo, Urbe};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Deref;
 use std::sync::Arc;
 #[cfg(test)]
@@ -115,9 +116,24 @@ impl SinSitio {
     }
 }
 
-/// El `Sitios` de una plaza: disco de zona sin recorte por vecinas (simplificación). Lenera → parcela de bosque con la cuota por masa;
-/// Cantera → el nodo de piedra libre más cercano; Corral → el de ganado; minas → ninguno (van por pueblo extractor); el resto, siempre cabe:
-/// el batch de población no usa la ciudad de las plazas (trazado urbano), solo sus yacimientos, así que sus cifras no cambian con ella.
+/// Lo que la ciudad de una plaza le negó o le hizo esperar (Trazado_Urbano §6, §6.7, §7.1).
+#[derive(Clone, Debug, Default)]
+pub struct SinSitioCiudad {
+    /// Consultas `proponer` denegadas por falta de sitio **en la ciudad** (el mapa sí tenía el yacimiento), por tipo. La auto-construcción
+    /// repite la pregunta cada minuto mientras quiere el edificio.
+    pub denegadas: BTreeMap<Tipo, u64>,
+    /// `tomar` que ya no halló sitio (otro proyecto de la misma pasada se lo quedó), por tipo.
+    pub tomar_negado: BTreeMap<Tipo, u64>,
+    /// Mejoras terminadas que esperan hueco para mudarse (la Granja): id del edificio → minuto en que empezó a esperar.
+    pub esperando: BTreeMap<u32, i64>,
+    /// Esperas ya resueltas, en minutos.
+    pub esperas: Vec<i64>,
+}
+
+/// El `Sitios` de una plaza: disco de zona sin recorte por vecinas (simplificación) y su ciudad real, la del núcleo. Lenera → parcela de
+/// bosque con la cuota por masa; Cantera → el nodo de piedra libre más cercano; Corral → el de ganado; minas → ninguno (van por pueblo
+/// extractor); y todo lo que tiene huella en la rejilla, además, solo si **cabe en la ciudad** (anclas, puestos y mudanza de la Granja
+/// incluidos: es el mismo adaptador que [`nucleo::economia`] usa en las plazas del núcleo, sin recorte de zona por vecinas).
 pub struct SitiosVilla<'a> {
     pub mapa: &'a Mapa,
     pub reclamos: &'a mut Reclamos,
@@ -126,10 +142,15 @@ pub struct SitiosVilla<'a> {
     pub radio: Mil,
     pub parcelas: &'a mut BTreeSet<u32>,
     pub sin_sitio: &'a mut SinSitio,
+    pub urbe: &'a mut Urbe,
+    pub urbanismo: &'a Urbanismo,
+    pub ciudad: &'a mut SinSitioCiudad,
+    /// El minuto de mundo en curso (para medir cuánto espera una mejora sin hueco).
+    pub minuto: i64,
 }
 
 impl Sitios for SitiosVilla<'_> {
-    fn proponer(&mut self, tipo: Tipo, _: &Urbano) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, u: &Urbano) -> Option<Option<Fuente>> {
         let reclamos = &*self.reclamos;
         let propuesta = self.mapa.proponer(
             tipo,
@@ -141,18 +162,28 @@ impl Sitios for SitiosVilla<'_> {
             &|n| reclamos.nodo[n as usize].is_none(),
             &|_| true,
         );
-        if propuesta.is_none() {
+        let Some(fuente) = propuesta else {
             match tipo {
                 Tipo::Lenera => self.sin_sitio.denegar(0),
                 Tipo::Cantera => self.sin_sitio.denegar(1),
                 Tipo::Corral => self.sin_sitio.denegar(2),
                 _ => {}
             }
+            return None;
+        };
+        if self.urbe.cabe(self.urbanismo, tipo, u) {
+            Some(fuente)
+        } else {
+            *self.ciudad.denegadas.entry(tipo).or_default() += 1;
+            None
         }
-        propuesta
     }
 
-    fn tomar(&mut self, _: u32, tipo: Tipo, fuente: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {
+    fn tomar(&mut self, id: u32, tipo: Tipo, fuente: Option<Fuente>, u: &Urbano, ids: &mut u32) -> Option<Vec<Gratuito>> {
+        let Some(gratuitos) = self.urbe.tomar(self.urbanismo, id, tipo, u, ids) else {
+            *self.ciudad.tomar_negado.entry(tipo).or_default() += 1;
+            return None;
+        };
         match (tipo, fuente) {
             (Tipo::Lenera, Some(Fuente::Parcela(p))) => {
                 self.reclamos.parcela[p as usize] = Some(self.villa);
@@ -165,7 +196,28 @@ impl Sitios for SitiosVilla<'_> {
             }
             _ => {}
         }
-        Some(vec![])
+        Some(gratuitos)
+    }
+
+    fn puestos_de_mercado(&mut self, nivel: u8, u: &Urbano, ids: &mut u32) -> Vec<Gratuito> {
+        self.urbe.puestos(self.urbanismo, nivel, u, ids)
+    }
+
+    fn hueco_al_mejorar(&mut self, id: u32, tipo: Tipo, nivel: u8, u: &Urbano) -> bool {
+        self.urbe.hueco_al_mejorar(self.urbanismo, id, tipo, nivel, u)
+    }
+
+    /// La mudanza al terminar la mejora; si no hay hueco, la mejora espera y aquí se mide cuánto.
+    fn reubicar(&mut self, id: u32, tipo: Tipo, nivel: u8, u: &Urbano) -> bool {
+        let cabe = self.urbe.reubicar(self.urbanismo, id, tipo, nivel, u);
+        if cabe {
+            if let Some(desde) = self.ciudad.esperando.remove(&id) {
+                self.ciudad.esperas.push(self.minuto - desde);
+            }
+        } else {
+            self.ciudad.esperando.entry(id).or_insert(self.minuto);
+        }
+        cabe
     }
 }
 
@@ -192,8 +244,24 @@ mod pruebas {
         Mapa::nuevo(nodos, parcelas, vec![2, 4], vec![], 100_000, 100_000)
     }
 
-    fn sitios<'a>(m: &'a Mapa, r: &'a mut Reclamos, villa: u32, radio: Mil, parcelas: &'a mut BTreeSet<u32>, s: &'a mut SinSitio) -> SitiosVilla<'a> {
-        SitiosVilla { mapa: m, reclamos: r, villa, centro: Punto::new(0, 0), radio, parcelas, sin_sitio: s }
+    /// Una plaza de pruebas: su ciudad recién fundada y los registros que el `Sitios` rellena.
+    struct Plaza {
+        re: nucleo::ReglasEconomia,
+        urbe: Urbe,
+        ciudad: SinSitioCiudad,
+    }
+
+    impl Plaza {
+        fn nueva() -> Self {
+            let re = nucleo::ReglasEconomia::default();
+            let urbe = Urbe::fundar(&re, 1, 0);
+            Self { re, urbe, ciudad: SinSitioCiudad::default() }
+        }
+    }
+
+    fn sitios<'a>(m: &'a Mapa, r: &'a mut Reclamos, villa: u32, radio: Mil, parcelas: &'a mut BTreeSet<u32>, s: &'a mut SinSitio, p: &'a mut Plaza) -> SitiosVilla<'a> {
+        let Plaza { re, urbe, ciudad } = p;
+        SitiosVilla { mapa: m, reclamos: r, villa, centro: Punto::new(0, 0), radio, parcelas, sin_sitio: s, urbe, urbanismo: &re.urbanismo, ciudad, minuto: 0 }
     }
 
     #[test]
@@ -229,11 +297,12 @@ mod pruebas {
         let m = mapa();
         let (mut rec, mut propias, mut otras) = (Reclamos::nuevo(&m), BTreeSet::new(), BTreeSet::new());
         let (mut ss1, mut ss2) = (SinSitio::default(), SinSitio::default());
-        let p = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1).proponer(Tipo::Cantera, &U);
+        let (mut p1, mut p2) = (Plaza::nueva(), Plaza::nueva());
+        let p = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).proponer(Tipo::Cantera, &U);
         assert_eq!(p, Some(Some(Fuente::Nodo(0))), "la más cercana");
-        sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1).tomar(0, Tipo::Cantera, Some(Fuente::Nodo(0)), &U, &mut 1);
+        sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).tomar(0, Tipo::Cantera, Some(Fuente::Nodo(0)), &U, &mut 1);
         // Otra plaza con el mismo disco recibe la segunda, y luego ninguna.
-        let mut s2 = sitios(&m, &mut rec, 1, 10_000, &mut otras, &mut ss2);
+        let mut s2 = sitios(&m, &mut rec, 1, 10_000, &mut otras, &mut ss2, &mut p2);
         assert_eq!(s2.proponer(Tipo::Cantera, &U), Some(Some(Fuente::Nodo(1))));
         s2.tomar(0, Tipo::Cantera, Some(Fuente::Nodo(1)), &U, &mut 1);
         assert_eq!(s2.proponer(Tipo::Cantera, &U), None);
@@ -241,16 +310,28 @@ mod pruebas {
     }
 
     #[test]
+    fn lo_que_la_ciudad_niega_se_cuenta_por_tipo() {
+        let m = mapa();
+        let (mut rec, mut propias, mut ss, mut plaza) = (Reclamos::nuevo(&m), BTreeSet::new(), SinSitio::default(), Plaza::nueva());
+        let mut s = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss, &mut plaza);
+        // El Centro Urbano no se coloca nunca: el mapa no se opone (no liga a un yacimiento) pero la ciudad dice que no cabe.
+        assert_eq!(s.proponer(Tipo::CentroUrbano, &U), None);
+        assert_eq!(s.proponer(Tipo::CentroUrbano, &U), None);
+        assert_eq!(plaza.ciudad.denegadas.get(&Tipo::CentroUrbano), Some(&2));
+        assert_eq!((ss.total, plaza.ciudad.denegadas.len()), ([0; 3], 1), "no se confunde con la falta de yacimiento");
+    }
+
+    #[test]
     fn la_lenera_respeta_la_cuota_de_la_masa_y_las_minas_van_por_pueblo() {
         let m = mapa();
-        let (mut rec, mut propias, mut ss) = (Reclamos::nuevo(&m), BTreeSet::new(), SinSitio::default());
-        let mut s = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss);
+        let (mut rec, mut propias, mut ss, mut plaza) = (Reclamos::nuevo(&m), BTreeSet::new(), SinSitio::default(), Plaza::nueva());
+        let mut s = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss, &mut plaza);
         // Masa de 2 parcelas, cuota 50 % = 1: una Leñera y no más.
         let Some(Some(Fuente::Parcela(p))) = s.proponer(Tipo::Lenera, &U) else { panic!("hay parcela") };
-        s.tomar(0, Tipo::Lenera, Some(Fuente::Parcela(p)), &U, &mut 1);
+        s.tomar(100, Tipo::Lenera, Some(Fuente::Parcela(p)), &U, &mut 101);
         assert_eq!(s.proponer(Tipo::Lenera, &U), None, "cupo de la masa agotado");
         assert_eq!(s.proponer(Tipo::MinaEstano, &U), None);
-        assert_eq!(s.proponer(Tipo::Vivienda, &U), Some(None), "el resto siempre cabe");
+        assert_eq!(s.proponer(Tipo::Vivienda, &U), Some(None), "en una ciudad recién fundada cabe una Vivienda");
         assert_eq!((ss.sin_ninguno[0], ss.total[0], ss.tiene[0]), (0, 1, true));
         assert_eq!(rec.parcela.iter().flatten().count(), 1);
     }

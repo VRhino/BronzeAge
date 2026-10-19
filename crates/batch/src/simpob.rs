@@ -2,20 +2,23 @@
 //! que viven `dias` días minuto a minuto con la política más simple posible (pedir la subida cada hora si nada la bloquea). Un bucle
 //! global por minuto avanza todos, así que compiten de verdad por los nodos de piedra y las parcelas de bosque.
 
-use crate::economia::{Mapa, Reclamos, Recursos, SinSitio, SitiosVilla};
+use crate::economia::{Mapa, Reclamos, Recursos, SinSitio, SinSitioCiudad, SitiosVilla};
 use asentamiento::asentamiento::{Asentamiento, Evento, Exterior};
 use asentamiento::ascenso::Bloqueo;
-use asentamiento::catalogo::Tipo;
-use asentamiento::datos::{Reglas, UNO};
+use asentamiento::catalogo::{Tipo, TIPOS};
+use asentamiento::datos::UNO;
 use asentamiento::edificio::Fuente;
 use asentamiento::recurso::{Recurso, TODOS};
 use base::{Instante, Mil, Punto, Rng, MS_POR_MINUTO};
 use mundo::Mundo;
+use nucleo::urbanismo::Urbe;
+use nucleo::ReglasEconomia;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use territorio::{Disco, DistanciasDeFundacion, Terreno, Viabilidad};
+use trazado::{Categoria, Rol};
 
 const MIN_POR_DIA: i64 = 1440;
 /// Cada cuántos minutos el «jugador» sintético mira si puede subir de nivel.
@@ -69,6 +72,13 @@ pub struct Registro {
     pub edificios_a: BTreeMap<Tipo, u32>,
     pub edificios_fin: BTreeMap<Tipo, u32>,
     pub sin_sitio: SinSitio,
+    /// Lo que la ciudad le negó (por tipo) y las mejoras que esperaron hueco.
+    pub ciudad: SinSitioCiudad,
+    /// Piezas de la ciudad en la foto intermedia y al final.
+    pub piezas_a: usize,
+    pub piezas_fin: usize,
+    /// Minuto en que el trazado creó la primera ancla de saturación.
+    pub primera_ancla: Option<i64>,
     /// En cuántas comprobaciones horarias (con el nivel 1) pesó cada bloqueo.
     pub bloqueos_horas: [u32; 7],
     pub comprobaciones_n1: u32,
@@ -88,6 +98,8 @@ pub struct Villa {
     pub densidad_n1: i64,
     pub piedra_n1: usize,
     pub a: Asentamiento,
+    /// La ciudad de la plaza: dónde está cada uno de sus edificios (Trazado_Urbano).
+    pub urbe: Urbe,
     /// Radio de la zona (milésimas): crece 1 u por edificio completado hasta el techo de su nivel.
     pub radio: Mil,
     pub parcelas: BTreeSet<u32>,
@@ -111,11 +123,36 @@ impl Violaciones {
     }
 }
 
+/// Violaciones de los invariantes de la ciudad (Trazado_Urbano §13) y de su acuerdo con la economía; todas deben ser 0. Se comprueban
+/// al final en todas las plazas que siguen en pie.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ViolacionesCiudad {
+    /// Plazas comprobadas.
+    pub plazas: u32,
+    /// Pares de piezas que se pisan.
+    pub solape: u64,
+    /// Piezas sobre una celda de calle o de camino.
+    pub suelo: u64,
+    /// Piezas fuera del disco urbano (o, en las afueras, fuera de su banda).
+    pub disco: u64,
+    /// Piezas sin ninguna celda de calle o camino pegada.
+    pub sin_salida: u64,
+    /// Piezas sin su edificio (mismo id y tipo) o edificios con huella en la rejilla sin pieza.
+    pub economia: u64,
+}
+
+impl ViolacionesCiudad {
+    pub fn total(&self) -> u64 {
+        self.solape + self.suelo + self.disco + self.sin_salida + self.economia
+    }
+}
+
 pub struct Corrida {
     pub villas: Vec<Villa>,
     pub recursos: Recursos,
     pub reclamos: Reclamos,
     pub violaciones: Violaciones,
+    pub ciudades: ViolacionesCiudad,
     /// Plazas que se pidieron y no encontraron ningún punto fundable.
     pub sin_colocar: u32,
     pub pared: Duration,
@@ -192,12 +229,13 @@ fn contar(a: &Asentamiento) -> BTreeMap<Tipo, u32> {
 
 /// Un minuto de una plaza: el paso del asentamiento, la política del jugador, la zona y los invariantes.
 #[allow(clippy::too_many_arguments)]
-fn paso(v: &mut Villa, indice: u32, minuto: i64, reglas: &Reglas, mapa: &Mapa, recursos: &mut Recursos, reclamos: &mut Reclamos, viol: &mut Violaciones) {
+fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Mapa, recursos: &mut Recursos, reclamos: &mut Reclamos, viol: &mut Violaciones) {
     let t: Instante = minuto * MS_POR_MINUTO;
-    let Villa { pos, a, radio, parcelas, reg, .. } = v;
+    let Villa { pos, a, radio, parcelas, reg, urbe, .. } = v;
+    let (reglas, urb) = (&*re.datos, &*re.urbanismo);
     let sin_tecnologia = |_: &str| false;
     let sin_bonus = |_: Recurso| UNO;
-    let mut sitios = SitiosVilla { mapa, reclamos, villa: indice, centro: *pos, radio: *radio, parcelas, sin_sitio: &mut reg.sin_sitio };
+    let mut sitios = SitiosVilla { mapa, reclamos, villa: indice, centro: *pos, radio: *radio, parcelas, sin_sitio: &mut reg.sin_sitio, urbe, urbanismo: urb, ciudad: &mut reg.ciudad, minuto };
     let mut x = Exterior {
         reglas,
         fuentes: recursos,
@@ -247,6 +285,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, reglas: &Reglas, mapa: &Mapa, r
             Evento::EdificioCompletado { tipo: Tipo::Lenera, .. } => drop(reg.primera_lenera.get_or_insert(minuto)),
             Evento::EdificioCompletado { tipo: Tipo::Cantera, .. } => drop(reg.primera_cantera.get_or_insert(minuto)),
             Evento::EdificioCompletado { tipo: Tipo::Corral, .. } => drop(reg.primera_corral.get_or_insert(minuto)),
+            Evento::EdificioGratuito { tipo, .. } if urb.clase(tipo).is_some_and(|c| c.rol == Rol::AnclaSaturacion) => drop(reg.primera_ancla.get_or_insert(minuto)),
             Evento::NivelSubio { nivel: 2 } => drop(reg.nivel2.get_or_insert(minuto)),
             Evento::NivelSubio { nivel: 3 } => drop(reg.nivel3.get_or_insert(minuto)),
             Evento::Hambruna { pesants, artesanos, nobleza } => reg.muertes += pesants + artesanos + nobleza,
@@ -297,17 +336,55 @@ fn comprobar_fuentes(villas: &[Villa], reclamos: &Reclamos, viol: &mut Violacion
     viol.reclamos += reclamados.abs_diff(vistas.len()) as u64;
 }
 
+/// Semidiagonal de una huella en milésimas de unidad local (la de `trazado`, que no la exporta).
+fn media_diagonal_mil(r: &trazado::Rect) -> i64 {
+    let (a, b) = (r.ancho as i128, r.alto as i128);
+    base::isqrt((a * a + b * b) * 1500 * 1500) as i64
+}
+
+/// Los invariantes de §13 de `Trazado_Urbano.md` y el acuerdo ciudad-economía, en todas las plazas que siguen en pie.
+fn comprobar_ciudades(villas: &[Villa], re: &ReglasEconomia, out: &mut ViolacionesCiudad) {
+    for v in villas.iter().filter(|v| !v.a.destruido) {
+        out.plazas += 1;
+        let c = v.urbe.ciudad();
+        let prm = c.params();
+        let radio = v.urbe.radio_ul(&v.a.urbano(&re.datos)) as i64;
+        let (afueras_min, banda) = (prm.radio_afueras_min_ul as i64, prm.ancho_banda_afueras_ul as i64);
+        let ps = c.piezas();
+        for (k, p) in ps.iter().enumerate() {
+            out.solape += ps[..k].iter().filter(|q| q.rect.solapa(&p.rect)).count() as u64;
+            out.suelo += p.rect.celdas().any(|cl| c.es_calle(cl) || c.es_camino(cl)) as u64;
+            let centro2 = p.rect.dist2_centro_al_origen();
+            let dentro = if p.categoria == Categoria::Afueras {
+                // T §6.3: el campo vive en la banda de las afueras, a >= `radioAfuerasMin` del centro (borde) y hasta `max(radio, 60 + 36)` más la semidiagonal.
+                let tope = radio.max(afueras_min + banda) * 1000 + media_diagonal_mil(&p.rect);
+                centro2 <= tope * tope && p.rect.dist2_borde_al_origen() >= (afueras_min * 1000).pow(2)
+            } else {
+                centro2 <= (radio * 1000).pow(2)
+            };
+            out.disco += !dentro as u64;
+            out.sin_salida += !p.rect.adyacentes().into_iter().any(|cl| c.es_calle(cl) || c.es_camino(cl)) as u64;
+            out.economia += !v.a.edificio(p.id).is_some_and(|e| e.tipo == TIPOS[p.tipo as usize]) as u64;
+        }
+        out.economia += v.a.edificios.iter().filter(|e| re.urbanismo.clase(e.tipo).is_some() && c.pieza(e.id).is_none()).count() as u64;
+    }
+}
+
 /// Corre `plazas` plazas durante `dias` días de mundo.
 pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla: u64) -> Corrida {
-    let reglas = Reglas::cargar();
+    let re = ReglasEconomia::default();
+    let reglas = &*re.datos;
     let (puntos, sin_colocar) = colocar(mundo, mapa, plazas, semilla);
-        let dia_foto = dias.min(7);
+    let dia_foto = dias.min(7);
     let mut villas: Vec<Villa> = puntos
         .into_iter()
-        .map(|(pos, verde)| {
-            let a = Asentamiento::fundar(&reglas, 0, &reglas.materiales_iniciales, reglas.viviendas_iniciales);
+        .enumerate()
+        .map(|(i, (pos, verde))| {
+            let a = Asentamiento::fundar(reglas, 0, &reglas.materiales_iniciales, reglas.viviendas_iniciales);
+            // La ciudad de cada plaza: semilla determinista del escenario y del indice de la plaza, con los mismos edificios iniciales que la economia.
+            let urbe = Urbe::fundar(&re, semilla, i as u64);
             let reg = Registro { nutricion_min: a.poblacion.nutricion, medidor_min: a.medidor.valor, pesants_dia: vec![a.poblacion.pesants], viviendas_dia: vec![reglas.viviendas_iniciales], ..Registro::default() };
-            Villa { pos, verde, parcelas_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).len(), densidad_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).iter().map(|&i| mapa.densidad_ppm[i as usize]).sum(), piedra_n1: mapa.piedra_en(pos, mapa.reglas.techo(1)).len(), a, radio: mapa.reglas.radio_inicial, parcelas: BTreeSet::new(), reg }
+            Villa { pos, verde, parcelas_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).len(), densidad_n1: mapa.parcelas_en(pos, mapa.reglas.techo(1)).iter().map(|&i| mapa.densidad_ppm[i as usize]).sum(), piedra_n1: mapa.piedra_en(pos, mapa.reglas.techo(1)).len(), a, urbe, radio: mapa.reglas.radio_inicial, parcelas: BTreeSet::new(), reg }
         })
         .collect();
     let (mut recursos, mut reclamos, mut viol) = (Recursos::nuevo(mapa), Reclamos::nuevo(mapa), Violaciones::default());
@@ -315,7 +392,7 @@ pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla:
     for minuto in 1..=dias as i64 * MIN_POR_DIA {
         recursos.ahora = minuto * MS_POR_MINUTO;
         for (i, v) in villas.iter_mut().enumerate().filter(|(_, v)| !v.a.destruido) {
-            paso(v, i as u32, minuto, &reglas, mapa, &mut recursos, &mut reclamos, &mut viol);
+            paso(v, i as u32, minuto, &re, mapa, &mut recursos, &mut reclamos, &mut viol);
         }
         if minuto % MIN_POR_DIA == 0 {
             let dia = (minuto / MIN_POR_DIA) as u32;
@@ -324,17 +401,21 @@ pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla:
                 v.reg.viviendas_dia.push(v.a.edificios.iter().filter(|e| e.activo() && e.tipo == Tipo::Vivienda).count() as u32);
                 if dia == dia_foto {
                     v.reg.edificios_a = contar(&v.a);
+                    v.reg.piezas_a = v.urbe.ciudad().piezas().len();
                 }
                 if dia == dias {
                     v.reg.edificios_fin = contar(&v.a);
+                    v.reg.piezas_fin = v.urbe.ciudad().piezas().len();
                 }
             }
         }
     }
     let pared = t0.elapsed();
     comprobar_fuentes(&villas, &reclamos, &mut viol);
+    let mut ciudades = ViolacionesCiudad::default();
+    comprobar_ciudades(&villas, &re, &mut ciudades);
     let pasos = villas.iter().map(|v| v.reg.pasos).sum();
-    Corrida { villas, recursos, reclamos, violaciones: viol, sin_colocar, pared, pasos, dia_foto }
+    Corrida { villas, recursos, reclamos, violaciones: viol, ciudades, sin_colocar, pared, pasos, dia_foto }
 }
 
 /// Hash del estado final de todas las plazas y del mapa (para comprobar el determinismo).
@@ -346,9 +427,48 @@ pub fn hash_estado(c: &Corrida) -> u64 {
         TODOS.iter().for_each(|&r| a.almacen.cantidad(r).hash(&mut h));
         a.edificios.iter().for_each(|e| (e.id, e.tipo, e.estado as u8, e.nivel_interno, e.completa_en, e.fuente.map(|f| format!("{f:?}"))).hash(&mut h));
         v.parcelas.iter().for_each(|p| p.hash(&mut h));
+        v.urbe.ciudad().piezas().iter().for_each(|p| (p.id, p.tipo, p.rect.col, p.rect.row, p.rect.ancho, p.rect.alto, p.rotado).hash(&mut h));
     }
     c.recursos.estado().for_each(|s| s.hash(&mut h));
     c.reclamos.parcela.hash(&mut h);
     c.reclamos.nodo.hash(&mut h);
     h.finish()
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+    use asentamiento::edificio::{Edificio, Estado};
+    use trazado::{Ciudad, Pieza, Rect};
+
+    fn villa(re: &ReglasEconomia) -> Villa {
+        let r = &re.datos;
+        let a = Asentamiento::fundar(r, 0, &r.materiales_iniciales, r.viviendas_iniciales);
+        Villa { pos: Punto::new(0, 0), verde: true, parcelas_n1: 0, densidad_n1: 0, piedra_n1: 0, a, urbe: Urbe::fundar(re, 42, 0), radio: 6_000, parcelas: BTreeSet::new(), reg: Registro::default() }
+    }
+
+    fn comprobar(v: &Villa, re: &ReglasEconomia) -> ViolacionesCiudad {
+        let mut out = ViolacionesCiudad::default();
+        comprobar_ciudades(std::slice::from_ref(v), re, &mut out);
+        out
+    }
+
+    #[test]
+    fn los_invariantes_de_la_ciudad_detectan_lo_que_se_tuerce() {
+        let re = ReglasEconomia::default();
+        let mut v = villa(&re);
+        assert_eq!(comprobar(&v, &re), ViolacionesCiudad { plazas: 1, ..Default::default() }, "una plaza recién fundada cumple todo");
+        // Una Vivienda en la economía y en la ciudad, pero lejos del disco y de cualquier calle.
+        let c = v.urbe.ciudad();
+        let mut piezas = c.piezas().to_vec();
+        let pieza = |id, col| Pieza { id, tipo: Tipo::Vivienda as u8 as u16, categoria: Categoria::Residencial, rol: Rol::Normal, rect: Rect::new(col, 0, 1, 1), rotado: false, ancla_llena: false, semilla_saturada: false };
+        piezas.push(pieza(50, 60));
+        v.urbe = Urbe::desde_ciudad(Ciudad::desde_partes(c.semilla(), *c.params(), trazado::LAYOUT_VERSION, piezas, vec![]).unwrap());
+        v.a.edificios.push(Edificio::nuevo(50, Tipo::Vivienda, Estado::Activo));
+        let o = comprobar(&v, &re);
+        assert_eq!((o.disco, o.sin_salida, o.solape, o.suelo, o.economia), (1, 1, 0, 0, 0), "{o:?}");
+        // Sin su edificio, la pieza desacuerda con la economía.
+        v.a.edificios.pop();
+        assert_eq!(comprobar(&v, &re).economia, 1);
+    }
 }

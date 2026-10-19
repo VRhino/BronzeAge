@@ -1,7 +1,7 @@
 //! `batch territorio [--mundo <.bin>] [--facciones 400] [--dias 30] [--semilla 42] [--salida batch/salida/territorio] [--decisiones <.json>]`
 //! `batch poblacion  [--mundo <.bin>] [--plazas 300]    [--dias 30] [--semilla 42] [--salida batch/salida/poblacion]  [--decisiones <.json>]`
 
-use batch::{artefacto_en, cargar, carpeta_por_defecto, escribir, fundir_decisiones, poblacion, resumen_en_texto, territorio, Escenario, EscenarioPoblacion, Informe};
+use batch::{artefacto_en, cargar, carpeta_por_defecto, escribir, fundir_decisiones, poblacion_y_ciudad, resumen_en_texto, territorio, Escenario, EscenarioPoblacion, Informe};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -55,6 +55,7 @@ fn ejecutar(sistema: Sistema, args: &[String]) -> Result<(), String> {
     let t0 = Instant::now();
     println!("Mundo: {}", ruta.display());
     let mundo = cargar(&ruta)?;
+    let mut ciudad_svg = None;
     let informe: Informe = match sistema {
         Sistema::Territorio => {
             println!("Cargado en {:.1} s; simulando {} Facciones durante {} días...", t0.elapsed().as_secs_f64(), o.cantidad, o.dias);
@@ -62,7 +63,9 @@ fn ejecutar(sistema: Sistema, args: &[String]) -> Result<(), String> {
         }
         Sistema::Poblacion => {
             println!("Cargado en {:.1} s; simulando {} plazas durante {} días...", t0.elapsed().as_secs_f64(), o.cantidad, o.dias);
-            poblacion(&mundo, &EscenarioPoblacion { plazas: o.cantidad, dias: o.dias, semilla: o.semilla, ..EscenarioPoblacion::default() })
+            let (informe, svg) = poblacion_y_ciudad(&mundo, &EscenarioPoblacion { plazas: o.cantidad, dias: o.dias, semilla: o.semilla, ..EscenarioPoblacion::default() });
+            ciudad_svg = svg;
+            informe
         }
     };
     let mut informe = informe;
@@ -71,6 +74,9 @@ fn ejecutar(sistema: Sistema, args: &[String]) -> Result<(), String> {
         fundir_decisiones(&mut informe, &json)?;
     }
     escribir(&informe, &o.salida)?;
+    if let Some(svg) = ciudad_svg {
+        std::fs::write(o.salida.join("ciudad_ejemplo.svg"), svg).map_err(|e| e.to_string())?;
+    }
     println!("{}\n", resumen_en_texto(&informe));
     for a in &informe.anomalias {
         println!("ANOMALIA: {}", a.titulo);

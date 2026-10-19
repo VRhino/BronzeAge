@@ -1,6 +1,6 @@
 //! El batch de «población, construcción y mantenimiento» sobre el artefacto real; se omite si no está generado.
 
-use batch::{artefacto_en, cargar, carpeta_por_defecto, fundir_decisiones, poblacion, semaforo, Cargado, EscenarioPoblacion, Informe, Semaforo};
+use batch::{artefacto_en, cargar, carpeta_por_defecto, fundir_decisiones, poblacion, poblacion_y_ciudad, semaforo, Cargado, EscenarioPoblacion, Informe, Semaforo};
 use std::sync::OnceLock;
 
 fn mundo() -> Option<&'static Cargado> {
@@ -48,10 +48,10 @@ fn el_escenario_pequeno_produce_todas_las_metricas() {
     }
     let ids: std::collections::BTreeSet<_> = i.metricas.iter().map(|m| &m.id).collect();
     assert_eq!(ids.len(), i.metricas.len(), "ids repetidos");
-    for id in ["nivel2_pct", "nivel2_mediana_dias", "ruinas_pct", "hambre_pct", "muertes_totales", "primera_lenera_horas", "sin_lenera_pct", "sin_cantera_pct", "pesants_fin", "pesants_200_pct", "viviendas_fin", "edificios_fin", "deficit_trigo_pct", "nutricion_min", "medidor_bajo50_pct", "pared_total", "pasos", "us_por_paso", "determinismo", "invariantes"] {
+    for id in ["nivel2_pct", "nivel2_mediana_dias", "ruinas_pct", "hambre_pct", "muertes_totales", "primera_lenera_horas", "sin_lenera_pct", "sin_cantera_pct", "pesants_fin", "pesants_200_pct", "viviendas_fin", "edificios_fin", "deficit_trigo_pct", "nutricion_min", "medidor_bajo50_pct", "pared_total", "pasos", "us_por_paso", "determinismo", "invariantes", "invariantes_ciudad", "ciudad_sin_sitio_vivienda_pct", "ciudad_sin_sitio_almacen_pct", "ciudad_sin_sitio_granero_pct", "ciudad_sin_sitio_lenera_pct", "piezas_a", "piezas_fin", "anclas_plazas_pct", "ancla_primera_dia", "mejora_espera_pct", "mejora_espera_max_h", "cuadrilla_retenida_24h", "radio_ciudad_medio", "radio_tope_pct", "puestos_mercado_total"] {
         assert!(i.metricas.iter().any(|m| m.id == id), "falta la métrica «{id}»");
     }
-    assert_eq!(i.series.len(), 5);
+    assert_eq!(i.series.len(), 6);
     // En 4 días nadie llega al nivel 2: solo el histograma de ese día puede estar vacío.
     assert!(i.series.iter().filter(|g| g.id != "dia_nivel2").all(|g| g.series.iter().any(|s| !s.puntos.is_empty())), "algún gráfico sin datos");
     let mapa = i.mapa.as_ref().unwrap();
@@ -62,13 +62,15 @@ fn el_escenario_pequeno_produce_todas_las_metricas() {
     let html = informe::renderizar(&i);
     assert!(html.contains("Población, construcción y mantenimiento") && html.contains("Plazas que llegan al nivel 2"));
     assert!(medida(&i, "pasos") > 0.0);
+    // Cada plaza lleva su ciudad: al menos el Centro Urbano, las 3 Viviendas y la Granja iniciales.
+    assert!(medida(&i, "piezas_a") >= 5.0 && medida(&i, "radio_ciudad_medio") >= 30.0);
 }
 
 #[test]
 fn los_invariantes_y_el_determinismo_se_cumplen() {
     let c = con_mundo!();
     let i = poblacion(c, &pequeno());
-    for id in ["invariantes", "determinismo"] {
+    for id in ["invariantes", "invariantes_ciudad", "determinismo"] {
         let m = i.metricas.iter().find(|m| m.id == id).unwrap();
         assert_eq!(semaforo(m), Semaforo::Verde, "{id}: {:?}", m.medido);
     }
@@ -76,9 +78,19 @@ fn los_invariantes_y_el_determinismo_se_cumplen() {
 }
 
 #[test]
+fn la_ciudad_de_ejemplo_sale_como_svg() {
+    let c = con_mundo!();
+    let (_, svg) = poblacion_y_ciudad(c, &EscenarioPoblacion { verificar_determinismo: false, dias: 2, ..pequeno() });
+    let svg = svg.expect("queda alguna plaza en pie");
+    assert!(svg.starts_with("<svg") && svg.trim_end().ends_with("</svg>") && svg.contains("<title>centroUrbano #0</title>"));
+}
+
+#[test]
 fn el_mismo_escenario_da_el_mismo_informe() {
     let c = con_mundo!();
-    let (a, b) = (poblacion(c, &pequeno()), poblacion(c, &pequeno()));
+    // Sin la repetición interna del determinismo (cada corrida ya son tres simulaciones en debug): aquí se comparan las dos corridas.
+    let e = EscenarioPoblacion { verificar_determinismo: false, ..pequeno() };
+    let (a, b) = (poblacion(c, &e), poblacion(c, &e));
     assert_eq!(sin_tiempos(a), sin_tiempos(b));
 }
 

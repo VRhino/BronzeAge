@@ -6,11 +6,12 @@ use crate::geo::Cargado;
 use crate::economia::Mapa;
 use crate::simpob::{self as sp, Corrida, Villa};
 use crate::EscenarioPoblacion;
-use asentamiento::catalogo::Tipo;
+use asentamiento::catalogo::{Tipo, TIPOS};
 use asentamiento::datos::Reglas;
 use informe::{Anomalia, Capa, Causa, Circulo, Grafico, Informe, Mapa as MapaInforme, Metrica, Punto, TipoGrafico};
 use std::collections::BTreeMap;
 use std::time::Duration;
+use trazado::Rol;
 
 const MIN_POR_DIA: f64 = 1440.0;
 
@@ -21,6 +22,7 @@ pub struct Entrada<'a> {
     pub e: &'a EscenarioPoblacion,
     pub corrida: &'a Corrida,
     pub reglas: &'a Reglas,
+    pub urb: &'a nucleo::urbanismo::Urbanismo,
     pub determinismo: Option<bool>,
     pub pared_total: Duration,
 }
@@ -54,6 +56,7 @@ pub fn armar(x: &Entrada) -> Informe {
     metricas.extend(poblacion(x));
     metricas.extend(trigo_y_mantenimiento(x));
     metricas.extend(cuellos(x));
+    metricas.extend(ciudad(x));
     metricas.extend(rendimiento(x));
     metricas.push(metrica(
         "determinismo",
@@ -77,13 +80,26 @@ pub fn armar(x: &Entrada) -> Informe {
             v.almacen, v.poblacion, v.medidor, v.nivel, v.duplicados, v.reclamos
         ),
     ));
+    let ciudades = &c.ciudades;
+    metricas.push(metrica(
+        "invariantes_ciudad",
+        "Violaciones de los invariantes de la ciudad (§13)",
+        "violaciones",
+        max(0.0),
+        Some(ciudades.total() as f64),
+        "Trazado_Urbano §13 (Invariantes)",
+        &format!(
+            "Se comprueban al final en las {} plazas que siguen en pie: piezas que se pisan ({}), piezas sobre una celda de calle o camino ({}), fuera del disco urbano de su `radioCiudad` o, en las afueras, fuera de su banda de 60 u.l. a max(radio, 96) ({}), sin ninguna calle o camino pegado, es decir, sin salida a la red ({}), y desacuerdos entre la ciudad y la economía (pieza sin su edificio con el mismo id y tipo, o edificio con huella en la rejilla sin pieza) ({}). Entre paréntesis, las violaciones de cada una.",
+            ciudades.plazas, ciudades.solape, ciudades.suelo, ciudades.disco, ciudades.sin_salida, ciudades.economia
+        ),
+    ));
     let anomalias = anomalias(&metricas);
     let resumen = format!(
         "Se simularon {} días de mundo con {} plazas sintéticas ({} colocadas) sobre el mundo real, minuto a minuto y en competencia por los nodos y parcelas. Resumen automático; la lectura la añade quien revise los resultados.",
         x.e.dias,
         x.e.plazas,
         c.villas.len()
-    );
+    ) + " Cada plaza lleva su ciudad real (trazado urbano del núcleo).";
     Informe {
         sistema: "Población, construcción y mantenimiento".into(),
         fecha: hoy(),
@@ -93,7 +109,7 @@ pub fn armar(x: &Entrada) -> Informe {
         resumen,
         parametros: parametros(x),
         metricas,
-        series: vec![grafico_pesants(x), grafico_nivel2(x), histograma_nivel2(x), grafico_edificios(x), grafico_sin_sitio(x)],
+        series: vec![grafico_pesants(x), grafico_nivel2(x), histograma_nivel2(x), grafico_edificios(x), grafico_sin_sitio(x), grafico_sin_sitio_ciudad(x)],
         mapa: Some(mapa(x)),
         anomalias,
         decisiones: vec![],
@@ -121,7 +137,8 @@ fn parametros(x: &Entrada) -> Vec<informe::Parametro> {
         parametro("Política del jugador", format!("cada {} min pide la subida de nivel si nada la bloquea; no activa políticas ni da órdenes manuales", sp::CADA_MIN_ASCENSO)),
         parametro("Cupo de Facción", format!("nivel 2: {:?} plazas con Facción de nivel 1 (cupo ocupado siempre 0: una plaza por Facción)", r.nivel.cupo_faccion(2, 1))),
         parametro("Obra de ascenso al nivel 2", asc(2)),
-        parametro("Límites del batch", "sin trazado urbano real (siempre hay sitio para el resto de edificios), sin pueblos extractores (minas: ninguna), sin tecnologías, sin recorte de zonas por vecinas, sin guarnición ni saqueos"),
+        parametro("Ciudad de cada plaza", format!("la `Ciudad` del crate `trazado` con el mismo adaptador que el núcleo (`nucleo::urbanismo::Urbe`): fundada al nacer la plaza con semilla derivada de la del escenario ({}) y del índice de la plaza, con los edificios iniciales de la economía como piezas; los edificios se colocan de verdad (anclas gratuitas con el gate de nivel 2, puestos del Mercado, Granja que se muda al mejorar o la mejora espera hueco)", x.e.semilla)),
+        parametro("Límites del batch", "sin pueblos extractores (minas: ninguna), sin tecnologías, sin recorte de zonas por vecinas, sin recintos de muralla, sin guarnición ni saqueos, sin órdenes manuales (no se construyen Mercados, Palacio ni edificios militares)"),
     ]
 }
 
@@ -296,6 +313,143 @@ fn fmt(v: Option<f64>) -> String {
     v.map_or("—".into(), |v| format!("{v:.0} %"))
 }
 
+fn nombres(tipos: &[Tipo]) -> String {
+    tipos.iter().map(|t| t.nombre()).collect::<Vec<_>>().join(", ")
+}
+
+/// Esperas (minutos) de las mejoras que pidieron hueco para mudarse: las resueltas y, en las plazas que siguen en pie, las que siguen
+/// esperando al terminar la simulación.
+fn esperas_de(p: &Villa, fin_min: i64) -> Vec<i64> {
+    let mut e = p.reg.ciudad.esperas.clone();
+    if !p.a.destruido {
+        e.extend(p.reg.ciudad.esperando.values().map(|desde| fin_min - desde));
+    }
+    e
+}
+
+/// 11: la ciudad real de cada plaza (Trazado_Urbano).
+fn ciudad(x: &Entrada) -> Vec<Metrica> {
+    let c = x.corrida;
+    let v = &c.villas;
+    let vivas: Vec<&Villa> = v.iter().filter(|p| !p.a.destruido).collect();
+    let (dias, dia_a) = (x.e.dias, c.dia_foto);
+    let fin_min = dias as i64 * 1440;
+    let con_negado = |tipos: &[Tipo]| pct(v.iter().filter(|p| tipos.iter().any(|t| p.reg.ciudad.denegadas.contains_key(t))).count(), v.len());
+    let consultas = |tipos: &[Tipo]| v.iter().flat_map(|p| tipos.iter().map(|t| p.reg.ciudad.denegadas.get(t).copied().unwrap_or(0))).sum::<u64>();
+    let mut metricas = Vec::new();
+
+    // Sin sitio en la ciudad: los cuatro tipos que no deben quedarse sin él (ancla del Centro Urbano o radio urbano libre), y los demás.
+    let esperados: [(Tipo, &str, &str, &str); 4] = [
+        (Tipo::Vivienda, "Viviendas", "Trazado_Urbano §6.5 (satélites del Centro Urbano, que es su ancla)", "Una Vivienda sin sitio frena la población y con ella el nivel 2."),
+        (Tipo::Almacen, "Almacenes", "Trazado_Urbano §6.4 (genéricos: todo el radio urbano)", "Un Almacén sin sitio deja el almacén lleno y frena la construcción."),
+        (Tipo::Granero, "Graneros", "Trazado_Urbano §6.4 (genéricos: todo el radio urbano)", "Un Granero sin sitio limita el trigo guardado."),
+        (Tipo::Lenera, "Leñeras", "Trazado_Urbano §6.4 (genéricos: todo el radio urbano)", "Una Leñera sin sitio en la ciudad (teniendo ya parcela de bosque en el mapa) deja a la plaza sin madera."),
+    ];
+    for (tipo, plural, origen, efecto) in esperados {
+        let id = format!("ciudad_sin_sitio_{}_pct", tipo.nombre().to_lowercase());
+        metricas.push(metrica(
+            &id,
+            &format!("Plazas a las que la ciudad negó sitio para {plural}"),
+            "%",
+            max(5.0),
+            con_negado(&[tipo]),
+            origen,
+            &format!("Plazas en que `proponer({})` devolvió `None` porque no cabía en la ciudad (el mapa sí daba sitio). {efecto} Consultas denegadas en total: {} (la auto-construcción repite la pregunta cada minuto).", tipo.nombre(), consultas(&[tipo])),
+        ));
+    }
+    let talleres = [Tipo::Fundicion, Tipo::Curtiduria, Tipo::Armeria, Tipo::Carpinteria];
+    metricas.push(metrica("ciudad_sin_sitio_granja_pct", "Plazas a las que la ciudad negó sitio para una Granja", "%", INFO, con_negado(&[Tipo::Granja]), "Trazado_Urbano §6.3 (afueras: banda de 60 a 96 u.l., caminos)", &format!("Consultas denegadas: {}. Las Granjas van a las afueras, fuera del radio de la ciudad.", consultas(&[Tipo::Granja]))));
+    metricas.push(metrica("ciudad_sin_sitio_corral_pct", "Plazas a las que la ciudad negó sitio para un Corral", "%", INFO, con_negado(&[Tipo::Corral]), "Trazado_Urbano §6.3 (afueras)", &format!("Consultas denegadas: {}. El Corral exige además un nodo de ganado en la zona (ver «sin sitio» del mapa).", consultas(&[Tipo::Corral]))));
+    metricas.push(metrica("ciudad_sin_sitio_talleres_pct", "Plazas a las que la ciudad negó sitio para un taller de transformación", "%", INFO, con_negado(&talleres), "Trazado_Urbano §7.1 (ancla de saturación con el gate de nivel 2)", &format!("Algún tipo de {} sin sitio. Consultas denegadas: {}. Sin ancla de su barrio un taller solo cabe si el nivel operativo abre el gate de las anclas (nivel 2).", nombres(&talleres), consultas(&talleres))));
+    let por_tipo: BTreeMap<Tipo, usize> = TIPOS.iter().map(|&t| (t, v.iter().filter(|p| p.reg.ciudad.denegadas.contains_key(&t)).count())).filter(|&(_, n)| n > 0).collect();
+    let negados: u64 = v.iter().map(|p| p.reg.ciudad.tomar_negado.values().sum::<u64>()).sum();
+    metricas.push(metrica(
+        "ciudad_sin_sitio_alguno_pct",
+        "Plazas a las que la ciudad negó sitio para algún edificio",
+        "%",
+        INFO,
+        pct(v.iter().filter(|p| !p.reg.ciudad.denegadas.is_empty()).count(), v.len()),
+        "Trazado_Urbano §6 (colocación)",
+        &format!(
+            "Cualquier tipo. Plazas por tipo: {}. `tomar` negados tras una propuesta que sí cabía: {negados}.",
+            if por_tipo.is_empty() { "ninguno".to_string() } else { por_tipo.iter().map(|(t, n)| format!("{} {n}", t.nombre())).collect::<Vec<_>>().join(", ") }
+        ),
+    ));
+
+    // Piezas y anclas.
+    let med = |f: &dyn Fn(&Villa) -> f64| mediana(&v.iter().map(f).collect::<Vec<_>>());
+    metricas.push(metrica("piezas_a", &format!("Piezas en la ciudad a los {dia_a} días (mediana)"), "piezas", INFO, med(&|p| p.reg.piezas_a as f64), "Trazado_Urbano §2 (modelo de datos)", "Edificios con huella en la rejilla: los de la economía menos Cantera y minas (que solo ocupan su yacimiento) más las anclas y los puestos del Mercado."));
+    metricas.push(metrica("piezas_fin", &format!("Piezas en la ciudad a los {dias} días (mediana)"), "piezas", INFO, med(&|p| p.reg.piezas_fin as f64), "Trazado_Urbano §2 (modelo de datos)", "Lo mismo al final de la simulación."));
+    let n_anclas = |p: &Villa, t: Tipo| p.urbe.ciudad().piezas().iter().filter(|q| TIPOS[q.tipo as usize] == t).count() as f64;
+    let es_ancla = |t: Tipo| x.urb.clase(t).is_some_and(|k| k.rol == Rol::AnclaSaturacion);
+    let anclas: Vec<Tipo> = TIPOS.iter().copied().filter(|&t| es_ancla(t)).collect();
+    for &t in &anclas {
+        metricas.push(metrica(
+            &format!("ancla_{}_mediana", t.nombre().to_lowercase()),
+            &format!("Anclas de {} por plaza (mediana)", t.nombre()),
+            "anclas",
+            INFO,
+            med(&|p| n_anclas(p, t)),
+            "Trazado_Urbano §7.1 (anclas de saturación)",
+            &format!("Plazas con al menos una: {}.", fmt(pct(v.iter().filter(|p| n_anclas(p, t) > 0.0).count(), v.len()))),
+        ));
+    }
+    metricas.push(metrica("anclas_plazas_pct", "Plazas en que el trazado creó alguna ancla de saturación", "%", INFO, pct(v.iter().filter(|p| p.reg.primera_ancla.is_some()).count(), v.len()), "Trazado_Urbano §7.1", &format!("Tipos de ancla: {}. Son edificios gratuitos y activos (cuentan a la mitad en el mantenimiento y no agrandan la ciudad).", nombres(&anclas))));
+    metricas.push(metrica(
+        "ancla_primera_dia",
+        "Día mediano de la primera ancla (entre las plazas que la tienen)",
+        "días",
+        INFO,
+        mediana(&v.iter().filter_map(|p| p.reg.primera_ancla).map(|m| m as f64 / MIN_POR_DIA).collect::<Vec<_>>()).or(Some(0.0)),
+        "Trazado_Urbano §7.1 (gate de nivel 2 para crear anclas)",
+        "0 si ninguna plaza llegó a crear una. Sin ancla antes del nivel 2 salvo la del Centro Urbano (el barrio residencial y los genéricos no la necesitan); se crea al comprometer el primer edificio de un barrio que la pide.",
+    ));
+
+    // Mejoras de Granja que esperan hueco.
+    let esperas: Vec<Vec<i64>> = v.iter().map(|p| esperas_de(p, fin_min)).collect();
+    let peor: Vec<f64> = esperas.iter().filter_map(|e| e.iter().max()).map(|&m| m as f64 / 60.0).collect();
+    let retenidas = esperas.iter().filter(|e| e.iter().any(|&m| m > 24 * 60)).count();
+    let mejoradas = v.iter().filter(|p| p.a.edificios.iter().any(|e| e.tipo == Tipo::Granja && e.nivel_interno >= 2)).count();
+    metricas.push(metrica("granja_mejorada_pct", "Plazas cuya Granja llegó al nivel interno 2 o más", "%", INFO, pct(mejoradas, v.len()), "Trazado_Urbano §6.7 (reubicación de un edificio que crece)", "La Granja es el único edificio que cambia de huella al mejorar (2×2, 2×3, 4×3, 6×6): al terminar la mejora se muda a un hueco de su tamaño nuevo."));
+    metricas.push(metrica("mejora_espera_pct", "Plazas en que una mejora esperó hueco para mudarse", "%", INFO, pct(peor.len(), v.len()), "Trazado_Urbano §6.7", "Mejoras terminadas cuya Granja no halló hueco de la huella nueva: la mejora se queda esperando y conserva su cuadrilla. Cuenta las resueltas y las que siguen esperando al final."));
+    metricas.push(metrica("mejora_espera_mediana_h", "Espera mediana de la peor mejora sin hueco (plazas que esperaron)", "h", INFO, mediana(&peor).or(Some(0.0)), "Trazado_Urbano §6.7", if peor.is_empty() { "Ninguna mejora esperó." } else { "Por plaza se toma su espera más larga; 0 si ninguna esperó." }));
+    metricas.push(metrica("mejora_espera_max_h", "Espera máxima de una mejora sin hueco", "h", INFO, peor.iter().copied().max_by(f64::total_cmp).or(Some(0.0)), "Trazado_Urbano §6.7", "La mayor espera de cualquier plaza (la que siga esperando al final cuenta hasta el final de la simulación)."));
+    metricas.push(metrica(
+        "cuadrilla_retenida_24h",
+        "Plazas con una cuadrilla retenida más de 24 h por una mejora sin hueco",
+        "plazas",
+        max(0.0),
+        Some(retenidas as f64),
+        "Economia_Construccion §6.4 (cuadrillas) y Trazado_Urbano §6.7",
+        "Riesgo de bloqueo: la mejora automática arranca sin comprobar el hueco (como en TypeScript) y retiene su cuadrilla mientras no haya donde mudar la Granja. Un valor mayor que 0 es un bloqueo real.",
+    ));
+
+    // Tamaño de la ciudad.
+    let radios: Vec<(i32, i32)> = vivas
+        .iter()
+        .map(|p| {
+            let prm = p.urbe.ciudad().params();
+            (p.urbe.radio_ul(&p.a.urbano(x.reglas)), prm.maximo_por_nivel_ul[(p.a.nivel.clamp(1, 5) - 1) as usize])
+        })
+        .collect();
+    let media = (!radios.is_empty()).then(|| radios.iter().map(|r| r.0 as f64).sum::<f64>() / radios.len() as f64);
+    metricas.push(metrica("radio_ciudad_medio", &format!("Radio de la ciudad a los {dias} días (media)"), "u.l.", INFO, media, "Trazado_Urbano §2.1 (radioCiudad)", "Unidades locales (no del mapa): 30 al fundar, +5 por edificio completado, con el tope del nivel alcanzado (60 / 90 / 120 / 150 / 180). Plazas en pie."));
+    let lejos: Vec<f64> = vivas
+        .iter()
+        .filter_map(|p| p.urbe.ciudad().piezas().iter().filter(|q| q.categoria != trazado::Categoria::Afueras).map(|q| q.rect.dist2_centro_al_origen()).max())
+        .map(|d2| (d2 as f64).sqrt() / 1000.0)
+        .collect();
+    metricas.push(metrica("pieza_urbana_lejana_mediana", &format!("Distancia de la pieza urbana más lejana a los {dias} días (mediana)"), "u.l.", INFO, mediana(&lejos), "Trazado_Urbano §6.4-§6.5 (colocación dentro del radio urbano)", "Centro de la pieza más alejada del Centro Urbano sin contar las afueras (Granjas y Corrales). Si es mucho menor que el radio de la ciudad, el espacio no limita: la ciudad no está presionada por su disco."));
+    metricas.push(metrica("radio_tope_pct", "Plazas cuyo radio de ciudad llega al máximo de su nivel", "%", INFO, pct(radios.iter().filter(|r| r.0 >= r.1).count(), radios.len()), "Trazado_Urbano §2.1 (radioCiudad)", "Plazas en pie con el radio en el tope de su nivel: ahí la ciudad solo crece subiendo de nivel."));
+
+    // Mercado.
+    let con_mercado = v.iter().filter(|p| p.reg.edificios_fin.get(&Tipo::Mercado).is_some_and(|&n| n > 0)).count();
+    let puestos: u32 = v.iter().map(|p| p.reg.edificios_fin.get(&Tipo::PuestoMercado).copied().unwrap_or(0)).sum();
+    metricas.push(metrica("mercado_plazas_pct", "Plazas con un Mercado terminado", "%", INFO, pct(con_mercado, v.len()), "Economia_Construccion §6.6 (puestos del Mercado)", if con_mercado == 0 { "Ninguna: el Mercado no se auto-construye y este batch no da órdenes manuales; los puestos se prueban en `nucleo/tests/urbanismo.rs`." } else { "Plazas con un Mercado activo al final." }));
+    metricas.push(metrica("puestos_mercado_total", "Puestos del Mercado levantados (total)", "puestos", INFO, Some(puestos as f64), "Economia_Construccion §6.6 y Trazado_Urbano §2.4 (MERCADO_PUESTOS_POR_NIVEL)", if con_mercado == 0 { "Ninguno: sin Mercados no hay puestos." } else { "Puestos gratuitos activos colocados en la ciudad; los que no caben se saltan en silencio." }));
+    metricas
+}
+
 /// 10: rendimiento.
 fn rendimiento(x: &Entrada) -> Vec<Metrica> {
     let c = x.corrida;
@@ -368,6 +522,26 @@ fn grafico_sin_sitio(x: &Entrada) -> Grafico {
     }
 }
 
+fn grafico_sin_sitio_ciudad(x: &Entrada) -> Grafico {
+    let v = &x.corrida.villas;
+    let k = |tipos: &[Tipo]| vec![(0.0, v.iter().filter(|p| tipos.iter().any(|t| p.reg.ciudad.denegadas.contains_key(t))).count() as f64)];
+    Grafico {
+        id: "sin_sitio_ciudad".into(),
+        titulo: "Plazas a las que la ciudad negó sitio, por tipo de edificio".into(),
+        tipo: TipoGrafico::Barras,
+        eje_x: "tipo de edificio".into(),
+        eje_y: "plazas".into(),
+        series: vec![
+            serie("Vivienda", k(&[Tipo::Vivienda])),
+            serie("Almacén", k(&[Tipo::Almacen])),
+            serie("Granero", k(&[Tipo::Granero])),
+            serie("Leñera", k(&[Tipo::Lenera])),
+            serie("Granja", k(&[Tipo::Granja])),
+            serie("Talleres", k(&[Tipo::Fundicion, Tipo::Curtiduria, Tipo::Armeria, Tipo::Carpinteria])),
+        ],
+    }
+}
+
 fn mapa(x: &Entrada) -> MapaInforme {
     let u = |v: i64| v as f64 / 1000.0;
     let capa = |nombre: &str, color: &str, circulos, puntos| Capa { nombre: nombre.into(), color: color.into(), circulos, puntos };
@@ -388,7 +562,7 @@ fn mapa(x: &Entrada) -> MapaInforme {
 
 /// Anomalías automáticas: solo violaciones de invariante.
 fn anomalias(metricas: &[Metrica]) -> Vec<Anomalia> {
-    ["invariantes", "determinismo"]
+    ["invariantes", "invariantes_ciudad", "determinismo"]
         .iter()
         .filter_map(|id| metricas.iter().find(|m| m.id == *id))
         .filter(|m| !matches!(informe::semaforo(m), informe::Semaforo::Verde | informe::Semaforo::Informativa | informe::Semaforo::SinDato))

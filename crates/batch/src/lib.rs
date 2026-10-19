@@ -2,7 +2,8 @@
 //! mundo sobre el núcleo en modo acelerado y las medidas resultantes se comparan con lo que el diseño espera.
 //!
 //! - [`territorio`] corre el escenario de «mundo y territorio» y devuelve el [`Informe`].
-//! - [`poblacion`] corre el de «población, construcción y mantenimiento» (plazas del crate `asentamiento` sobre el mundo real).
+//! - [`poblacion`] corre el de «población, construcción y mantenimiento» (plazas del crate `asentamiento` sobre el mundo real, cada una con
+//!   su ciudad real del trazado urbano).
 //! - [`escribir`] deja `informe.json` e `informe.html` en una carpeta.
 //! - [`fundir_decisiones`] añade a mano el resumen, las anomalías y las decisiones tras leer los resultados.
 
@@ -14,6 +15,7 @@ mod geo;
 mod medidas;
 mod sim;
 mod simpob;
+mod svgciudad;
 
 pub use geo::{artefacto_en, cargar, carpeta_por_defecto, Cargado};
 pub use informe::{semaforo, Informe, Semaforo};
@@ -65,6 +67,11 @@ impl Default for EscenarioPoblacion {
 
 /// Corre el escenario de población sobre el mundo y monta el informe.
 pub fn poblacion(c: &Cargado, e: &EscenarioPoblacion) -> Informe {
+    poblacion_y_ciudad(c, e).0
+}
+
+/// Lo mismo que [`poblacion`] y, además, el SVG de la ciudad de una plaza de ejemplo (`ciudad_ejemplo.svg`), si queda alguna en pie.
+pub fn poblacion_y_ciudad(c: &Cargado, e: &EscenarioPoblacion) -> (Informe, Option<String>) {
     let t0 = Instant::now();
     let mapa = economia::Mapa::de(&c.mundo);
     let corrida = simpob::simular(&c.mundo, &mapa, e.plazas, e.dias, e.semilla);
@@ -72,8 +79,9 @@ pub fn poblacion(c: &Cargado, e: &EscenarioPoblacion) -> Informe {
         let (a, b) = (simpob::simular(&c.mundo, &mapa, 20, 3, e.semilla), simpob::simular(&c.mundo, &mapa, 20, 3, e.semilla));
         simpob::hash_estado(&a) == simpob::hash_estado(&b)
     });
-    let reglas = asentamiento::datos::Reglas::cargar();
-    armarpob::armar(&armarpob::Entrada { c, mapa: &mapa, e, corrida: &corrida, reglas: &reglas, determinismo, pared_total: t0.elapsed() })
+    let re = nucleo::ReglasEconomia::default();
+    let svg = svgciudad::ciudad_ejemplo(&corrida, &re.datos);
+    (armarpob::armar(&armarpob::Entrada { c, mapa: &mapa, e, corrida: &corrida, reglas: &re.datos, urb: &re.urbanismo, determinismo, pared_total: t0.elapsed() }), svg)
 }
 
 /// 25 Facciones y 2 días, dos veces: ¿mismo `hash_estado()`?
