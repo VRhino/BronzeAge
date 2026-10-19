@@ -87,6 +87,11 @@ impl Reputacion {
         self.alianzas
     }
 
+    /// El ancla del ritmo `(valor en t0, t0)`, en ppm de punto: lo que una foto guarda para restaurarla con [`Reputacion::desde`].
+    pub fn ancla(&self) -> (i64, Instante) {
+        (self.ritmo.valor_en_t0, self.ritmo.t0)
+    }
+
     /// Aplica una variación en `t` (recortada a ±100) y reancla el ritmo.
     pub fn ajustar(&mut self, r: &ReglasReputacion, t: Instante, delta: i64) {
         let v = (self.valor_en(t) + delta).clamp(-MAXIMO, MAXIMO);

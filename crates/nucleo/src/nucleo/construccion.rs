@@ -196,7 +196,7 @@ impl Nucleo {
         let ruinas = sucesos.iter().any(|e| matches!(e, EventoEco::Ruinas { .. }));
         self.anotar_sucesos(id, t, &sucesos);
         if ruinas {
-            self.arruinar(id);
+            self.arruinar(id, t);
             return;
         }
         // La zona crece 1 unidad por edificio completado, hasta el techo del nivel (Economia_Construccion §3.1).
@@ -219,7 +219,7 @@ impl Nucleo {
 
     /// Una plaza cayó en ruinas: desaparece del estado y libera sus parcelas y nodos. Sube su generación (descarta el paso de minuto ya
     /// programado) y el evento `asentamiento.ruinas` ya se anotó.
-    fn arruinar(&mut self, id: u64) {
+    fn arruinar(&mut self, id: u64, t: Instante) {
         let Some(a) = self.estado.asentamientos.remove(&id) else { return };
         for p in &a.parcelas {
             self.estado.parcelas_ocupadas.remove(p);
@@ -231,8 +231,10 @@ impl Nucleo {
         }
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.estado.generaciones.subir(id);
-        // Gancho: la cascada completa de una ruina (residentes reubicados, caravanas y trueques, campamento de bandidos, Facción
-        // derrotada si era la última) es de otros sistemas y se ejecutará aquí, en este orden y en este instante.
+        // La cascada de comercio: trueques anulados sin penalizar, caravanas perdidas o devueltas y órdenes de mercado borradas. Los residentes
+        // reubicados, el campamento de bandidos y la Facción derrotada (si era su última plaza) son de otros sistemas y se ejecutarán aquí, en
+        // este orden y en este instante.
+        self.cerrar_comercio(id, comercio::ruina::Motivo::Ruina, t);
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -240,7 +242,7 @@ impl Nucleo {
     /// ¿Puede esta petición mandar en la plaza? Hoy: administración o propietario de alguna columna de la Facción de la plaza. DUDA: los
     /// cargos (Gobernador, Maestro de Obras, Tesorero), la residencia y la presencia vendrán del sistema de héroes y residentes; hasta
     /// entonces esto es lo más simple y conservador (como `Fundar`, que exige ser el propietario de la columna).
-    fn manda_en(&self, p: &Peticion, faccion: u32) -> bool {
+    pub(super) fn manda_en(&self, p: &Peticion, faccion: u32) -> bool {
         p.admin || self.estado.ejercitos.values().any(|e| e.faccion == faccion && e.propietario == p.actor)
     }
 

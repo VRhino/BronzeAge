@@ -3,8 +3,10 @@
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
+use crate::codec_comercio::{animal_a_u8, animal_de_u8, tipo_carro_a_u8, tipo_carro_de_u8};
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
+use comercio::caravana::{Animal, TipoCarro};
 
 /// Acción sobre el reloj de mundo (`OrdenControlarReloj`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,6 +65,49 @@ pub enum Comando {
     SolicitarAscenso { asentamiento: u64 },
     /// Activa una política con la duración por defecto, en el cargo indicado.
     ActivarPolitica { asentamiento: u64, politica: String, cargo: Cargo },
+    // ── Comercio (Comercio_Caravanas §4-§5, §8). Las puede dar la administración o el propietario de alguna columna de la Facción de la plaza
+    //    (en el trueque, la del lado al que le toca); los cargos, la residencia y la presencia vendrán del sistema de héroes y residentes. ──
+    /// Propone un trueque de `a` a `b`: `lineas_a` salen de A, `lineas_b` de B. `creadas` lleva el id del acuerdo.
+    ProponerTrueque { a: u64, b: u64, lineas_a: Vec<(Recurso, Mil)>, lineas_b: Vec<(Recurso, Mil)> },
+    /// Acepta una propuesta (la plaza B): el plazo para cumplir se cuenta desde el sí.
+    AceptarTrueque { acuerdo: u64 },
+    /// Rechaza una propuesta (la plaza B).
+    RechazarTrueque { acuerdo: u64 },
+    /// Coloca una orden de compra o de venta en el mercado de la plaza. `precio` `None` = el de referencia. `creadas` lleva el id de la orden.
+    ColocarOrdenMercado { asentamiento: u64, venta: bool, recurso: Recurso, cantidad: Mil, precio: Option<i64> },
+    /// Retira una orden activa antes de su plazo (no figura en el documento de mecánicas: lo pidió el autor al encargar la fase 3B-1).
+    CancelarOrdenMercado { orden: u64 },
+    /// El Líder de la columna toma una orden en el mostrador de la plaza, con su columna en la puerta.
+    ComerciarEnPlaza { ejercito: u64, orden: u64, cantidad: Mil },
+    /// Crea un casco de caravana comercial en la plaza (Mercado activo, cooldown y cupo). `creadas` lleva el id de la caravana.
+    CrearCaravana { asentamiento: u64 },
+    /// Fabrica un carro (sin animal) y lo monta en la caravana, pagando del almacén de su origen.
+    AnadirCarro { caravana: u64, tipo: TipoCarro },
+    /// Compra un animal (oro del almacén del origen) para el carro `carro` de la caravana.
+    AnadirAnimal { caravana: u64, carro: u32, animal: Animal },
+    /// Pasa el carro `carro` (con su animal) de la caravana `de` a la caravana `a`, del mismo origen.
+    MoverCarro { de: u64, a: u64, carro: u32 },
+    /// Pone o quita `reservadaManual` (fuera del reparto automático).
+    ReservarCaravana { caravana: u64, reservada: bool },
+    /// Lanza a mano una caravana: reserva la carga del almacén y queda `preparando`. Aún no sale (fase 3B-2).
+    PrepararCaravana { caravana: u64, destino: u64, carga: Vec<(Recurso, Mil)>, salir_en: Option<Instante> },
+    /// Cancela una caravana `preparando`: la carga vuelve al almacén de su origen (topada por su capacidad).
+    CancelarCaravana { caravana: u64 },
+    /// Carga o descarga una caravana aparcada contra el almacén de la plaza que la hospeda.
+    MoverCargaAparcada { caravana: u64, recurso: Recurso, cantidad: Mil, cargar: bool },
+    /// Manda una caravana aparcada vacía a su origen (al instante). Con carga hace falta un viaje (fase 3B-2).
+    EnviarCaravanaAlOrigen { caravana: u64 },
+    /// Entrega manual de una caravana adjunta a la columna, a la puerta de la plaza que recibe (§4.5).
+    EntregarDeCaravana { ejercito: u64, caravana: u64, acuerdo: u64 },
+    // ── Andamiaje de administración, provisional hasta que existan los sistemas que lo sustituyen. ──
+    /// Añade recursos al almacén de una plaza (fuera del diseño: no es una fuente de juego). Solo administración.
+    DarRecursos { asentamiento: u64, recurso: Recurso, cantidad: Mil },
+    /// Añade al carro de una columna (`suministro`). Solo administración; lo sustituirán el sistema de héroes y el botín.
+    DarSuministro { ejercito: u64, recurso: Recurso, cantidad: Mil },
+    /// Engancha una caravana `disponible` o `aparcada` a una columna. Solo administración; lo hará el sistema de ejércitos.
+    AdjuntarCaravana { caravana: u64, ejercito: u64 },
+    /// Deja la caravana adjunta aparcada en una plaza de su Facción (la columna entra en ella). Solo administración; lo hará el sistema de ejércitos.
+    AparcarCaravana { caravana: u64, asentamiento: u64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,6 +118,23 @@ pub struct Peticion {
     pub peticion_id: String,
     pub version_esperada: Option<u64>,
     pub comando: Comando,
+}
+
+/// Una lista de `(recurso, cantidad)`: `n u64 · n × (recurso u8, cantidad i64)`.
+fn lineas(w: &mut Escritor, v: &[(Recurso, Mil)]) {
+    w.u64(v.len() as u64);
+    for &(r, n) in v {
+        w.u8(recurso_a_u8(r));
+        w.i64(n);
+    }
+}
+
+fn leer_lineas(r: &mut Lector) -> Result<Vec<(Recurso, Mil)>, ErrorFormato> {
+    let mut v = Vec::new();
+    for _ in 0..r.cuenta()? {
+        v.push((recurso_de_u8(r.u8()?)?, r.i64()?));
+    }
+    Ok(v)
 }
 
 impl Peticion {
@@ -204,6 +266,115 @@ impl Peticion {
                 w.texto(politica);
                 w.u8(cargo_a_u8(*cargo));
             }
+            Comando::ProponerTrueque { a, b, lineas_a, lineas_b } => {
+                w.u8(21);
+                w.u64(*a);
+                w.u64(*b);
+                lineas(&mut w, lineas_a);
+                lineas(&mut w, lineas_b);
+            }
+            Comando::AceptarTrueque { acuerdo } => {
+                w.u8(22);
+                w.u64(*acuerdo);
+            }
+            Comando::RechazarTrueque { acuerdo } => {
+                w.u8(23);
+                w.u64(*acuerdo);
+            }
+            Comando::ColocarOrdenMercado { asentamiento, venta, recurso, cantidad, precio } => {
+                w.u8(24);
+                w.u64(*asentamiento);
+                w.bool(*venta);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+                w.opt_i64(*precio);
+            }
+            Comando::CancelarOrdenMercado { orden } => {
+                w.u8(25);
+                w.u64(*orden);
+            }
+            Comando::ComerciarEnPlaza { ejercito, orden, cantidad } => {
+                w.u8(26);
+                w.u64(*ejercito);
+                w.u64(*orden);
+                w.i64(*cantidad);
+            }
+            Comando::CrearCaravana { asentamiento } => {
+                w.u8(27);
+                w.u64(*asentamiento);
+            }
+            Comando::AnadirCarro { caravana, tipo } => {
+                w.u8(28);
+                w.u64(*caravana);
+                w.u8(tipo_carro_a_u8(*tipo));
+            }
+            Comando::AnadirAnimal { caravana, carro, animal } => {
+                w.u8(29);
+                w.u64(*caravana);
+                w.u32(*carro);
+                w.u8(animal_a_u8(*animal));
+            }
+            Comando::MoverCarro { de, a, carro } => {
+                w.u8(30);
+                w.u64(*de);
+                w.u64(*a);
+                w.u32(*carro);
+            }
+            Comando::ReservarCaravana { caravana, reservada } => {
+                w.u8(31);
+                w.u64(*caravana);
+                w.bool(*reservada);
+            }
+            Comando::PrepararCaravana { caravana, destino, carga, salir_en } => {
+                w.u8(32);
+                w.u64(*caravana);
+                w.u64(*destino);
+                lineas(&mut w, carga);
+                w.opt_i64(*salir_en);
+            }
+            Comando::CancelarCaravana { caravana } => {
+                w.u8(33);
+                w.u64(*caravana);
+            }
+            Comando::MoverCargaAparcada { caravana, recurso, cantidad, cargar } => {
+                w.u8(34);
+                w.u64(*caravana);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+                w.bool(*cargar);
+            }
+            Comando::EnviarCaravanaAlOrigen { caravana } => {
+                w.u8(35);
+                w.u64(*caravana);
+            }
+            Comando::EntregarDeCaravana { ejercito, caravana, acuerdo } => {
+                w.u8(36);
+                w.u64(*ejercito);
+                w.u64(*caravana);
+                w.u64(*acuerdo);
+            }
+            Comando::DarRecursos { asentamiento, recurso, cantidad } => {
+                w.u8(37);
+                w.u64(*asentamiento);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
+            Comando::DarSuministro { ejercito, recurso, cantidad } => {
+                w.u8(38);
+                w.u64(*ejercito);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
+            Comando::AdjuntarCaravana { caravana, ejercito } => {
+                w.u8(39);
+                w.u64(*caravana);
+                w.u64(*ejercito);
+            }
+            Comando::AparcarCaravana { caravana, asentamiento } => {
+                w.u8(40);
+                w.u64(*caravana);
+                w.u64(*asentamiento);
+            }
         }
         w.0
     }
@@ -246,6 +417,26 @@ impl Peticion {
             18 => Comando::CalibrarReserva { asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, valor: r.i64()? },
             19 => Comando::SolicitarAscenso { asentamiento: r.u64()? },
             20 => Comando::ActivarPolitica { asentamiento: r.u64()?, politica: r.texto()?, cargo: cargo_de_u8(r.u8()?)? },
+            21 => Comando::ProponerTrueque { a: r.u64()?, b: r.u64()?, lineas_a: leer_lineas(&mut r)?, lineas_b: leer_lineas(&mut r)? },
+            22 => Comando::AceptarTrueque { acuerdo: r.u64()? },
+            23 => Comando::RechazarTrueque { acuerdo: r.u64()? },
+            24 => Comando::ColocarOrdenMercado { asentamiento: r.u64()?, venta: r.bool()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, precio: r.opt_i64()? },
+            25 => Comando::CancelarOrdenMercado { orden: r.u64()? },
+            26 => Comando::ComerciarEnPlaza { ejercito: r.u64()?, orden: r.u64()?, cantidad: r.i64()? },
+            27 => Comando::CrearCaravana { asentamiento: r.u64()? },
+            28 => Comando::AnadirCarro { caravana: r.u64()?, tipo: tipo_carro_de_u8(r.u8()?)? },
+            29 => Comando::AnadirAnimal { caravana: r.u64()?, carro: r.u32()?, animal: animal_de_u8(r.u8()?)? },
+            30 => Comando::MoverCarro { de: r.u64()?, a: r.u64()?, carro: r.u32()? },
+            31 => Comando::ReservarCaravana { caravana: r.u64()?, reservada: r.bool()? },
+            32 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()? },
+            33 => Comando::CancelarCaravana { caravana: r.u64()? },
+            34 => Comando::MoverCargaAparcada { caravana: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, cargar: r.bool()? },
+            35 => Comando::EnviarCaravanaAlOrigen { caravana: r.u64()? },
+            36 => Comando::EntregarDeCaravana { ejercito: r.u64()?, caravana: r.u64()?, acuerdo: r.u64()? },
+            37 => Comando::DarRecursos { asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            38 => Comando::DarSuministro { ejercito: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            39 => Comando::AdjuntarCaravana { caravana: r.u64()?, ejercito: r.u64()? },
+            40 => Comando::AparcarCaravana { caravana: r.u64()?, asentamiento: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -303,6 +494,66 @@ pub mod rechazos {
     pub const POLITICA_CARGO_VACIO: &str = "politica.cargo_vacio";
     pub const POLITICA_YA_ACTIVA: &str = "politica.ya_activa";
     pub const POLITICA_SIN_SLOT: &str = "politica.sin_slot";
+    // Trueque (`ErrorTrueque`).
+    pub const TRUEQUE_DESCONOCIDO: &str = "trueque.desconocido";
+    pub const TRUEQUE_MISMO_ASENTAMIENTO: &str = "trueque.mismo_asentamiento";
+    pub const TRUEQUE_LADO_VACIO: &str = "trueque.lado_vacio";
+    pub const TRUEQUE_CANTIDAD_NO_POSITIVA: &str = "trueque.cantidad_no_positiva";
+    pub const TRUEQUE_RECURSO_REPETIDO: &str = "trueque.recurso_repetido";
+    pub const TRUEQUE_NO_ESTA_PROPUESTO: &str = "trueque.no_esta_propuesto";
+    pub const TRUEQUE_PROPUESTA_VENCIDA: &str = "trueque.propuesta_vencida";
+    pub const TRUEQUE_NO_ACTIVO: &str = "trueque.no_activo";
+    // Mercado de la plaza (`ErrorOrden`) y mostrador (`ErrorMostrador`).
+    pub const MERCADO_SIN_MERCADO: &str = "mercado.sin_mercado";
+    pub const ORDEN_DESCONOCIDA: &str = "orden.desconocida";
+    pub const ORDEN_NO_ACTIVA: &str = "orden.no_activa";
+    pub const ORDEN_CANTIDAD_NO_POSITIVA: &str = "orden.cantidad_no_positiva";
+    pub const ORDEN_SIN_STOCK: &str = "orden.sin_stock";
+    pub const MOSTRADOR_NO_ES_LIDER: &str = "mostrador.no_es_lider";
+    pub const MOSTRADOR_ORDEN_AJENA: &str = "mostrador.orden_ajena";
+    pub const MOSTRADOR_ORDEN_CADUCADA: &str = "mostrador.orden_caducada";
+    pub const MOSTRADOR_FUERA_DE_LA_PUERTA: &str = "mostrador.fuera_de_la_puerta";
+    pub const MOSTRADOR_CANTIDAD_NO_POSITIVA: &str = "mostrador.cantidad_no_positiva";
+    pub const MOSTRADOR_PRECIO_NO_POSITIVO: &str = "mostrador.precio_no_positivo";
+    pub const MOSTRADOR_RECURSO_ORO: &str = "mostrador.recurso_oro";
+    pub const MOSTRADOR_NADA_QUE_SERVIR: &str = "mostrador.nada_que_servir";
+    // Caravanas (`ErrorCaravana`).
+    pub const CARAVANA_DESCONOCIDA: &str = "caravana.desconocida";
+    pub const CARAVANA_NO_ES_COMERCIAL: &str = "caravana.no_es_comercial";
+    pub const CARAVANA_NO_DISPONIBLE: &str = "caravana.no_disponible";
+    pub const CARAVANA_NO_PREPARANDO: &str = "caravana.no_preparando";
+    pub const CARAVANA_NO_APARCADA: &str = "caravana.no_aparcada";
+    pub const CARAVANA_ESTADO_INVALIDO: &str = "caravana.estado_invalido";
+    pub const CARAVANA_SIN_MERCADO: &str = "caravana.sin_mercado";
+    pub const CARAVANA_EN_COOLDOWN: &str = "caravana.en_cooldown";
+    pub const CARAVANA_CUPO_DE_CARAVANAS: &str = "caravana.cupo_de_caravanas";
+    pub const CARAVANA_CUPO_DE_CARROS: &str = "caravana.cupo_de_carros";
+    pub const CARAVANA_SIN_CARPINTERIA: &str = "caravana.sin_carpinteria";
+    pub const CARAVANA_SIN_RECURSOS: &str = "caravana.sin_recursos";
+    pub const CARAVANA_CARRO_INEXISTENTE: &str = "caravana.carro_inexistente";
+    pub const CARAVANA_CARRO_YA_TIENE_ANIMAL: &str = "caravana.carro_ya_tiene_animal";
+    pub const CARAVANA_ORIGEN_DISTINTO: &str = "caravana.origen_distinto";
+    pub const CARAVANA_SIN_CAPACIDAD: &str = "caravana.sin_capacidad";
+    pub const CARAVANA_CARGA_INVALIDA: &str = "caravana.carga_invalida";
+    pub const CARAVANA_SIN_STOCK: &str = "caravana.sin_stock";
+    pub const CARAVANA_CUPO_DE_ESCOLTA: &str = "caravana.cupo_de_escolta";
+    pub const CARAVANA_ESCOLTA_INVALIDA: &str = "caravana.escolta_invalida";
+    pub const CARAVANA_SIN_RUTA: &str = "caravana.sin_ruta";
+    pub const CARAVANA_SALIDA_INVALIDA: &str = "caravana.salida_invalida";
+    pub const CARAVANA_NO_HA_LLEGADO: &str = "caravana.no_ha_llegado";
+    pub const CARAVANA_SIN_PLAN: &str = "caravana.sin_plan";
+    pub const CARAVANA_NADA_QUE_MOVER: &str = "caravana.nada_que_mover";
+    /// 3B-1: una salida inmediata (un solo carro y sin `salir_en`) necesita el movimiento de la fase 3B-2.
+    pub const CARAVANA_SALIDA_INMEDIATA: &str = "caravana.salida_inmediata";
+    /// 3B-1: mandar al origen una aparcada con carga necesita un viaje (fase 3B-2).
+    pub const CARAVANA_REQUIERE_VIAJE: &str = "caravana.requiere_viaje";
+    pub const CARAVANA_PLAZA_AJENA: &str = "caravana.plaza_ajena";
+    pub const CARAVANA_NO_ESTA_ADJUNTA: &str = "caravana.no_esta_adjunta";
+    // Entrega manual (§4.5).
+    pub const ENTREGA_INVALIDA: &str = "entrega.invalida";
+    pub const ENTREGA_NO_DEBE: &str = "entrega.no_debe";
+    pub const ENTREGA_FUERA_DE_LA_PUERTA: &str = "entrega.fuera_de_la_puerta";
+    pub const CANTIDAD_NO_POSITIVA: &str = "cantidad.no_positiva";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -357,6 +608,42 @@ mod pruebas {
         // Un tipo o un recurso fuera de rango no se decodifica.
         let mut b = Peticion::nueva("a", "i", Comando::AnadirEdificio { asentamiento: 1, tipo: Tipo::Granja }).codificar();
         *b.last_mut().unwrap() = 200;
+        assert!(Peticion::decodificar(&b).is_err());
+    }
+
+    #[test]
+    fn las_ordenes_de_comercio_dan_la_vuelta_por_el_registro() {
+        let comandos = vec![
+            Comando::ProponerTrueque { a: 3, b: 4, lineas_a: vec![(Recurso::Madera, 100_000), (Recurso::Oro, 5)], lineas_b: vec![(Recurso::Cobre, 30_000)] },
+            Comando::AceptarTrueque { acuerdo: 7 },
+            Comando::RechazarTrueque { acuerdo: 7 },
+            Comando::ColocarOrdenMercado { asentamiento: 3, venta: true, recurso: Recurso::Piedra, cantidad: 9, precio: Some(-4) },
+            Comando::ColocarOrdenMercado { asentamiento: 3, venta: false, recurso: Recurso::Piedra, cantidad: 9, precio: None },
+            Comando::CancelarOrdenMercado { orden: 2 },
+            Comando::ComerciarEnPlaza { ejercito: 1, orden: 2, cantidad: 3_000 },
+            Comando::CrearCaravana { asentamiento: 3 },
+            Comando::AnadirCarro { caravana: 1, tipo: TipoCarro::Reforzado },
+            Comando::AnadirAnimal { caravana: 1, carro: 0, animal: Animal::Camello },
+            Comando::MoverCarro { de: 1, a: 2, carro: 1 },
+            Comando::ReservarCaravana { caravana: 1, reservada: true },
+            Comando::PrepararCaravana { caravana: 1, destino: 4, carga: vec![(Recurso::Madera, 1_000)], salir_en: Some(77) },
+            Comando::PrepararCaravana { caravana: 1, destino: 4, carga: vec![], salir_en: None },
+            Comando::CancelarCaravana { caravana: 1 },
+            Comando::MoverCargaAparcada { caravana: 1, recurso: Recurso::Trigo, cantidad: 5, cargar: false },
+            Comando::EnviarCaravanaAlOrigen { caravana: 1 },
+            Comando::EntregarDeCaravana { ejercito: 2, caravana: 1, acuerdo: 3 },
+            Comando::DarRecursos { asentamiento: 3, recurso: Recurso::Oro, cantidad: 1_000 },
+            Comando::DarSuministro { ejercito: 2, recurso: Recurso::Oro, cantidad: 1_000 },
+            Comando::AdjuntarCaravana { caravana: 1, ejercito: 2 },
+            Comando::AparcarCaravana { caravana: 1, asentamiento: 3 },
+        ];
+        for c in comandos {
+            let p = Peticion { actor: "ana".into(), admin: true, peticion_id: "y".into(), version_esperada: None, comando: c };
+            assert_eq!(Peticion::decodificar(&p.codificar()).unwrap(), p);
+        }
+        // Un tipo de carro fuera de rango no se decodifica.
+        let mut b = Peticion::nueva("a", "i", Comando::AnadirCarro { caravana: 1, tipo: TipoCarro::Basico }).codificar();
+        *b.last_mut().unwrap() = 9;
         assert!(Peticion::decodificar(&b).is_err());
     }
 }

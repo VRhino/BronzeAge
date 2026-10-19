@@ -3,8 +3,10 @@
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_ciudad;
+use crate::codec_comercio;
 use crate::codec_economia;
 use crate::economia::StockNodo;
+use crate::estado_comercio::EstadoComercio;
 use crate::urbanismo::{Urbanismo, Urbe};
 use base::{Instante, Mil, Plan, Punto, Ritmo, Rng, Vertice};
 use cola::{Clave, Cola, Evento, Generaciones};
@@ -15,15 +17,22 @@ use std::sync::{Arc, OnceLock};
 
 /// Prioridad de los umbrales de víveres: «consumo de población y de tropa» (Reloj_Y_Eventos §2).
 pub const PRIO_UMBRAL: u8 = 3;
+/// Prioridad del comercio: «comercio, trueques, órdenes de mercado, caravanas» (Reloj_Y_Eventos §2). Va después de los mantenimientos y las ruinas
+/// (5): una plaza arruinada ya no existe para el comercio de ese instante. Dentro de la prioridad el orden es el de [`SucesoComercio::rango`].
+pub const PRIO_COMERCIO: u8 = 6;
 /// Prioridad de las llegadas: «llegadas y encuentros de columnas».
 pub const PRIO_LLEGADA: u8 = 8;
+/// Prioridad de la reputación: «diplomacia, tributos, experiencia, reputación».
+pub const PRIO_REPUTACION: u8 = 9;
 /// Prioridad del paso de un minuto de una plaza: la de «fin de obras, de ascensos y de políticas» (Reloj_Y_Eventos §2). El paso es
 /// atómico y, dentro de él, el crate `asentamiento` ya respeta el orden de la regla: construcción y políticas, ascenso, comida,
 /// crecimiento y recaudación, y por último mantenimiento y ruinas. Con la prioridad 2 una obra que acaba en el instante del paso usa las
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-const MAGIA: &[u8; 4] = b"BAN4";
+/// BAN5: BAN4 más el comercio (trueques, órdenes, flota, reputación) y los eventos de comercio de la cola. BAN4 se rechaza.
+const MAGIA: &[u8; 4] = b"BAN5";
+const MAGIA_ANTERIOR: &[u8; 4] = b"BAN4";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -48,25 +57,28 @@ impl Default for Reglas {
     }
 }
 
-/// Las reglas del crate `asentamiento` (datos del documento de Mechanics, ya convertidos a enteros) y las huellas del trazado urbano
-/// (bloques del documento `Trazado_Urbano.md`). No se serializan: en las fotos va su **huella**, el sha256 de los bloques de parámetros de
-/// los dos documentos incrustados (no de su prosa); recuperar con otras reglas falla igual que con `ReglasTerritorio`.
+/// Las reglas del crate `asentamiento` (datos del documento de Mechanics, ya convertidos a enteros), las huellas del trazado urbano
+/// (bloques del documento `Trazado_Urbano.md`) y las del comercio (crate `comercio`). No se serializan: en las fotos va su **huella**, el
+/// sha256 de los bloques de parámetros de los documentos incrustados (no de su prosa); recuperar con otras reglas falla igual que con
+/// `ReglasTerritorio`.
 #[derive(Clone, Debug)]
 pub struct ReglasEconomia {
     pub datos: Arc<asentamiento::Reglas>,
     /// Tipo → huella y categoría de la ciudad de cada plaza.
     pub urbanismo: Arc<Urbanismo>,
+    /// Las cifras del comercio (precios, comisiones, trueques, mercado, flota, reputación).
+    pub comercio: Arc<comercio::Reglas>,
     huella: String,
 }
 
 impl ReglasEconomia {
     /// Carga las cifras de los documentos incrustados (parsea los bloques JSON: hágase una vez).
     pub fn cargar() -> Self {
-        let bloques = asentamiento::datos::texto_de_parametros() + &asentamiento::datos::texto_de_parametros_de(crate::urbanismo::DOC_TRAZADO);
+        let bloques = asentamiento::datos::texto_de_parametros() + &asentamiento::datos::texto_de_parametros_de(crate::urbanismo::DOC_TRAZADO) + &comercio::datos::texto_de_parametros();
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        Self { datos: Arc::new(datos), urbanismo, huella }
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -205,6 +217,75 @@ pub enum Carga {
     Minuto,
     /// Evento de un [`GeneradorDeEventos`](crate::GeneradorDeEventos): `generador` es su posición en la lista.
     Externa { generador: u16, tipo: u16, a: u64, b: u64 },
+    /// Un plazo del comercio (la entidad del evento es el trueque, la orden o la caravana, con la etiqueta de `estado_comercio`).
+    /// `aplazos` cuenta las veces que ya se dejó pasar a los de rango menor del mismo instante ([`SucesoComercio::rango`]).
+    Comercio { suceso: SucesoComercio, aplazos: u8 },
+    /// Cita de la reputación de una Facción (la entidad): cruza el 0 o sale del umbral bajo. Se recalcula tras cada cambio.
+    Reputacion(CitaReputacion),
+}
+
+/// Qué cita de la reputación de una Facción vence (Reputación como ritmo, Comercio_Caravanas §4.6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CitaReputacion {
+    /// La reputación negativa sube hasta cruzar el 0: el ritmo cambia de régimen y se reancla.
+    CruceDeCero,
+    /// La reputación sale del umbral bajo (`umbralBajoParaComision`): deja de pagar el recargo.
+    SalidaDelUmbral,
+}
+
+impl CitaReputacion {
+    pub(crate) fn a_u8(self) -> u8 {
+        match self {
+            CitaReputacion::CruceDeCero => 0,
+            CitaReputacion::SalidaDelUmbral => 1,
+        }
+    }
+    pub(crate) fn de_u8(i: u8) -> Option<Self> {
+        match i {
+            0 => Some(CitaReputacion::CruceDeCero),
+            1 => Some(CitaReputacion::SalidaDelUmbral),
+            _ => None,
+        }
+    }
+}
+
+/// Qué plazo de comercio vence. El orden de salida dentro de la prioridad 6 es: llegadas, fin de preparación, caducidades y reparto
+/// (lo que llega cambia de estado antes de lo que caduca): se consigue con [`SucesoComercio::rango`], porque la cola solo ordena por
+/// `(instante, prioridad, secuencia)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SucesoComercio {
+    /// El fin del tiempo de preparación de una caravana lanzada a mano (la entidad es la caravana).
+    FinPreparacion,
+    /// Caducidad de un trueque `propuesto` o `activo` (la entidad es el trueque).
+    CaducaTrueque,
+    /// Caducidad de una orden de mercado (la entidad es la orden).
+    CaducaOrden,
+}
+
+impl SucesoComercio {
+    /// Posición dentro de la prioridad 6 (0 = llegadas, aún sin implementar; 3 = reparto, ídem). Un evento de rango `r` deja pasar `r`
+    /// veces a los eventos del mismo instante que ya estaban en la cola antes de ejecutarse.
+    pub fn rango(self) -> u8 {
+        match self {
+            SucesoComercio::FinPreparacion => 1,
+            SucesoComercio::CaducaTrueque | SucesoComercio::CaducaOrden => 2,
+        }
+    }
+    pub(crate) fn a_u8(self) -> u8 {
+        match self {
+            SucesoComercio::FinPreparacion => 0,
+            SucesoComercio::CaducaTrueque => 1,
+            SucesoComercio::CaducaOrden => 2,
+        }
+    }
+    pub(crate) fn de_u8(i: u8) -> Option<Self> {
+        match i {
+            0 => Some(SucesoComercio::FinPreparacion),
+            1 => Some(SucesoComercio::CaducaTrueque),
+            2 => Some(SucesoComercio::CaducaOrden),
+            _ => None,
+        }
+    }
 }
 
 /// Un hecho ocurrido (crónica y avisos), no el cambio de estado: ese viaja en las entidades.
@@ -256,6 +337,8 @@ pub struct Estado {
     pub contactos: BTreeSet<(u64, u64)>,
     /// Nivel de cada Facción (1 si no consta): fija su cap de fundación. Lo gobernará la experiencia de Facción.
     pub niveles_faccion: BTreeMap<u32, u32>,
+    /// Trueques, órdenes de mercado, flota de caravanas y reputación entre Facciones (Comercio_Caravanas §2).
+    pub comercio: EstadoComercio,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     por_lider: HashMap<String, u64>,
@@ -282,6 +365,7 @@ impl Estado {
             yacimientos: BTreeMap::new(),
             contactos: BTreeSet::new(),
             niveles_faccion: BTreeMap::new(),
+            comercio: EstadoComercio::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             por_lider: HashMap::new(),
@@ -399,6 +483,7 @@ impl Estado {
             w.u32(f);
             w.u32(n);
         }
+        codec_comercio::escribir(&mut w, &self.comercio);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -423,6 +508,15 @@ impl Estado {
                     w.i64(*v);
                 }
                 Carga::Minuto => w.u8(3),
+                Carga::Comercio { suceso, aplazos } => {
+                    w.u8(4);
+                    w.u8(suceso.a_u8());
+                    w.u8(*aplazos);
+                }
+                Carga::Reputacion(c) => {
+                    w.u8(5);
+                    w.u8(c.a_u8());
+                }
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -449,8 +543,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        if r.magia()? != *MAGIA {
-            return Err(ErrorFormato("no es un estado del núcleo"));
+        match r.magia()? {
+            m if m == *MAGIA => {}
+            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN4 (sin comercio): ya no se admite")),
+            _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));
@@ -552,6 +648,7 @@ impl Estado {
         for _ in 0..r.cuenta()? {
             s.niveles_faccion.insert(r.u32()?, r.u32()?);
         }
+        s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -568,6 +665,8 @@ impl Estado {
                 0 => Carga::Llegada,
                 1 => Carga::Umbral(r.i64()?),
                 3 => Carga::Minuto,
+                4 => Carga::Comercio { suceso: SucesoComercio::de_u8(r.u8()?).ok_or(ErrorFormato("suceso de comercio desconocido"))?, aplazos: r.u8()? },
+                5 => Carga::Reputacion(CitaReputacion::de_u8(r.u8()?).ok_or(ErrorFormato("cita de reputación desconocida"))?),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

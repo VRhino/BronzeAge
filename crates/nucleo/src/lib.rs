@@ -8,13 +8,18 @@
 //! - [`economia`]: cada plaza fundada lleva su economía (crate `asentamiento`) y avanza sola un minuto de mundo por evento
 //!   (`Carga::Minuto`); aquí están el mapa, los yacimientos y los sitios que comparten el núcleo y el batch de población.
 //! - [`urbanismo`]: la ciudad de cada plaza (crate `trazado`): dónde cae cada edificio, anclas, puestos del Mercado y reubicación de la Granja.
+//! - [`EstadoComercio`]: el comercio estático (fase 3B-1): trueques, órdenes de mercado y mostrador, flota de caravanas (aún sin movimiento),
+//!   reputación entre Facciones y sus plazos como eventos de prioridad 6 y 9 (`Carga::Comercio`, `Carga::Reputacion`); las reglas puras son el
+//!   crate `comercio`. Las órdenes están en `Comando` (códigos 21-40) y el cierre por ruina o conquista, en `Nucleo`.
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;
 mod codec_ciudad;
+mod codec_comercio;
 mod codec_economia;
 mod comando;
 mod estado;
+mod estado_comercio;
 mod generadores;
 mod nucleo;
 pub mod economia;
@@ -25,7 +30,8 @@ pub mod urbanismo;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
-pub use estado::{Asentamiento, Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, PRIO_ASENTAMIENTO, PRIO_LLEGADA, PRIO_UMBRAL};
+pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, SucesoComercio, PRIO_ASENTAMIENTO, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_UMBRAL};
+pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
 pub use generadores::{Cx, GeneradorDeEventos};
 pub use nucleo::{Ajustes, Arranque, InformeViabilidad, Metricas, Nucleo};
 

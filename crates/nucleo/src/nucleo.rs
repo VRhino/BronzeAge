@@ -39,6 +39,8 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 mod construccion;
+mod flota;
+mod mercado;
 mod zonas;
 
 pub use zonas::InformeViabilidad;
@@ -377,6 +379,8 @@ impl Nucleo {
             Carga::Llegada => self.llegada(id, t),
             Carga::Umbral(objetivo) => self.umbral(id, objetivo, t),
             Carga::Minuto => self.minuto_de_plaza(id, t),
+            Carga::Comercio { suceso, aplazos } => self.comercio_vence(ev.clave, suceso, aplazos, t),
+            Carga::Reputacion(cita) => self.cita_de_reputacion(id, cita, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
                 if let Some(g) = gens.get_mut(generador as usize) {
@@ -698,6 +702,34 @@ impl Nucleo {
             | Comando::CalibrarReserva { .. }
             | Comando::SolicitarAscenso { .. }
             | Comando::ActivarPolitica { .. } => match self.ejecutar_economia(t, p) {
+                Ok(Some(creada)) => creadas.push(creada),
+                Ok(None) => {}
+                Err(r) => return r,
+            },
+            Comando::ProponerTrueque { .. }
+            | Comando::AceptarTrueque { .. }
+            | Comando::RechazarTrueque { .. }
+            | Comando::ColocarOrdenMercado { .. }
+            | Comando::CancelarOrdenMercado { .. }
+            | Comando::ComerciarEnPlaza { .. }
+            | Comando::DarRecursos { .. }
+            | Comando::DarSuministro { .. } => match self.ejecutar_mercado(t, p) {
+                Ok(Some(creada)) => creadas.push(creada),
+                Ok(None) => {}
+                Err(r) => return r,
+            },
+            Comando::CrearCaravana { .. }
+            | Comando::AnadirCarro { .. }
+            | Comando::AnadirAnimal { .. }
+            | Comando::MoverCarro { .. }
+            | Comando::ReservarCaravana { .. }
+            | Comando::PrepararCaravana { .. }
+            | Comando::CancelarCaravana { .. }
+            | Comando::MoverCargaAparcada { .. }
+            | Comando::EnviarCaravanaAlOrigen { .. }
+            | Comando::EntregarDeCaravana { .. }
+            | Comando::AdjuntarCaravana { .. }
+            | Comando::AparcarCaravana { .. } => match self.ejecutar_flota(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,
