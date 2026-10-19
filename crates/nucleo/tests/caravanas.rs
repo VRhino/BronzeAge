@@ -606,7 +606,7 @@ fn tercera_plaza(e: &mut Escenario, m: &M) -> u64 {
 }
 
 #[test]
-fn la_conquista_pasa_la_flota_y_hace_volver_a_las_que_iban_con_su_carga() {
+fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     let (a, b) = (e.a, e.b);
@@ -628,7 +628,6 @@ fn la_conquista_pasa_la_flota_y_hace_volver_a_las_que_iban_con_su_carga() {
     e.ok("ana", Comando::MoverCargaAparcada { caravana: cc, recurso: Madera, cantidad: 5_000, cargar: true });
     let tr = e.trueque(&[(Cobre, 1_000)], &[(Estano, 1_000)]);
     let cobre_b0 = cantidad(&e.n, b, Cobre);
-    let madera_c0 = cantidad(&e.n, c, Madera);
     e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None });
     e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 50_000)], salir_en: None });
     e.avanzar(20 * MIN);
@@ -640,23 +639,19 @@ fn la_conquista_pasa_la_flota_y_hace_volver_a_las_que_iban_con_su_carga() {
     assert_eq!(e.n.acuerdo(tr).unwrap().estado, EstadoTrueque::Expirado);
     assert_eq!((e.n.reputacion(1), e.n.reputacion(2)), (0, 0));
     assert_eq!(e.caravana_de(ca).estado, EstadoCaravana::EnTransito);
-    // La que iba hacia la plaza regresa con su carga desde donde está; la aparcada con carga en la plaza vuelve viajando a su origen.
+    // La que iba hacia la plaza regresa con su carga desde donde está; la aparcada en la plaza se destruye con su carga, sin captura (Doc 3.13.7).
     let vuelta = e.caravana_de(cb);
     assert_eq!((vuelta.estado, vuelta.destino, vuelta.contenido[&Cobre]), (EstadoCaravana::Retornando, Some(a as u32), 50_000));
     assert_eq!(vuelta.plan.as_ref().unwrap().vertices.first().unwrap().p, donde);
-    let aparcada = e.caravana_de(cc);
-    assert_eq!((aparcada.estado, aparcada.destino, aparcada.contenido[&Madera]), (EstadoCaravana::Retornando, Some(a as u32), 5_000));
-    assert_eq!(aparcada.plan.as_ref().unwrap().vertices.first().unwrap().p, pos(&e.n, a));
-    // Cada una llega a su casa y vuelca lo que llevaba; la de A, que no era destino de nadie, entrega en B.
+    assert!(e.n.caravana(cc).is_none(), "la aparcada en la plaza conquistada se destruye");
+    assert_eq!(hechos(&e.n, "comercio.caravana_perdida").iter().map(|h| dato(h, "caravana")).collect::<Vec<_>>(), vec![cc as i64]);
+    // La que regresó llega a su casa y vuelca lo que llevaba; la de A, que no era destino de nadie, entrega en B.
     e.avanzar(DIA);
-    for car in [cb, cc] {
-        assert_eq!(e.caravana_de(car).estado, EstadoCaravana::Disponible);
-    }
+    assert_eq!(e.caravana_de(cb).estado, EstadoCaravana::Disponible);
     assert_eq!(cantidad(&e.n, b, Cobre), cobre_b0 + 100_000, "la de B volvió con sus 50 y la de A, que seguía su camino, le trajo sus 100");
-    assert!(cantidad(&e.n, c, Madera) >= madera_c0 + 5_000 - 2, "la madera volvió a la casa de la caravana");
     let llegadas = hechos(&e.n, "comercio.caravana_llega");
     assert_eq!((llegadas.len(), dato(&llegadas[0], "caravana")), (1, ca as i64));
-    assert_eq!(hechos(&e.n, "comercio.caravana_en_casa").len(), 3, "las dos que dieron la vuelta y la que entregó y volvió");
+    assert_eq!(hechos(&e.n, "comercio.caravana_en_casa").len(), 2, "la que dio la vuelta y la que entregó y volvió");
 }
 
 // ───────────────────────────── 5. La red de caminos ─────────────────────────────

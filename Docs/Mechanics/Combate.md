@@ -25,7 +25,7 @@ Todas son lo que corre cuando **no** hay servidor de batalla o ningún bando tie
 
 El motor común es `resolverCombate` (§4), salvo caravana y campamento, que comparan contra una cifra fija. (El antiguo asedio de asentamiento a asentamiento, `iniciarAsedio`, se retiró el 2026-10-12: nadie lo usaba.)
 
-## 2. La orden: `atacar`
+> **Decisiones del autor del 2026-10-19 (sistema 4)** que ya están aplicadas en este documento: **el héroe suma 15** al poder de su bando (§3.3, `MILITAR.poderPorHeroe`), **las murallas son una fase propia** posterior al sistema militar (recinto 0 hasta entonces, §6), **la caravana aparcada en una plaza conquistada se destruye** (§8; el código de la fase 3B-2 se corrigió con su prueba), **el equipo de asedio no tiene efecto** en el combate con números y `umbralCapturaCaravana` sale del bloque `MILITAR` (§7.1). La resolución en Rust es la fase 4A-2; las cifras de los bloques ya son las vigentes.
 
 Un comando, un objetivo: `ejercito` · `caravana` · `campamento` (de bandidos) · `asentamiento` · `pueblo` · `avanzada`. **Los choques nacen de un encuentro exacto** (dos planes que se acercan a ≤ `radioEncuentro`, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): el servidor ofrece atacar en ese instante y el jugador decide; llegar nunca ataca.
 
@@ -48,11 +48,13 @@ De la columna entran **las escuadras de los héroes sanos**, y de ellos solo los
 - Los **visitantes amigos** (`visitantesQueEntranADefender`, decidido el 2026-10-12): héroes que no residen pero están **dentro** de la plaza en ese momento, sanos y conectados, de la **propia Facción** de la plaza o de una **aliada** (`grupoDePuerta` = `propia` o `aliados`: alianza o vasallaje en cualquier sentido). Ocupan el cupo que dejan los residentes (`BATALLA.capacidad.asedio − residentes que entran`), por nivel y poder, y aportan las escuadras de la **columna que dejaron aparcada a la puerta** (`contenedor: ejercito`). `defensoresDeLaPlaza` junta todo: héroes (los que quedan heridos si la plaza cae) y escuadras. En Unity no hace falta: se unen a la batalla.
 - Una escuadra aniquilada (`cantidad ≤ 0`) no cuenta.
 
-### 3.3 Poder de una escuadra
+### 3.3 Poder de una escuadra y de un héroe
 ```
 poderEscuadron = poderBase(tropa) × cantidad × (1 + nivel × bonusPoderPorNivelEscuadra)
+poderBando     = Σ poderEscuadron  +  MILITAR.poderPorHeroe × (héroes sanos del bando que combaten)
 ```
 `poderBase` sale del catálogo `TROPAS_RECLUTABLES`. El nivel de escuadra (1‥`nivelMaximoEscuadra`) sube con experiencia (`experienciaParaSubirEscuadra`); la tropa **prestada** por un campamento de mercenarios no gana experiencia.
+**El héroe suma 15** (`MILITAR.poderPorHeroe`, decidido el 2026-10-19, Doc 5.1): aditivo, por cada héroe sano que combate en ese bando, además de sus escuadras. Por eso un bando con héroes y sin una sola escuadra tiene poder, y una columna sin tropa puede combatir con números. // DUDA: el poder de los héroes entra en la suma antes de la cohesión, la varianza y las ventajas (§4), y la cohesión sigue contando solo escuadras.
 
 ## 4. La resolución (`resolverCombate`)
 
@@ -61,8 +63,8 @@ Es **un solo motor** para encuentro, asedio, campamento y caravana (con variante
 ```
 jitterA = 1 + (rng()·2 − 1) · varianzaCombate        // dos tiradas, A primero
 jitterD = 1 + (rng()·2 − 1) · varianzaCombate
-poderA  = Σ poder(atacantes)                          × jitterA
-poderD  = Σ poder(defensores) × (1 + bonusCohesionPorEscuadronExtra·(nDef − 1)) × jitterD × multiplicadorDefensor × ventajaDefensor
+poderA  = poderBando(atacantes)                        × jitterA
+poderD  = poderBando(defensores) × (1 + bonusCohesionPorEscuadronExtra·(nDef − 1)) × jitterD × multiplicadorDefensor × ventajaDefensor   // nDef = escuadras del defensor
 ganador = poderA > poderD ? atacante : defensor       // empate exacto: gana el defensor
 ratio   = min(poderA, poderD) / max(poderA, poderD, 1)
 bajasGanador  = 0,05 + 0,15 · ratio
@@ -70,7 +72,7 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 ```
 - La **cohesión** (`bonusCohesionPorEscuadronExtra`) solo la lleva el **defensor** y solo si hay más de una escuadra; el atacante nunca.
 - `ventajaDefensor` (1,05) y el `multiplicadorDefensor` (muralla, §6) multiplican solo al defensor.
-- Con `atacantes` o `defensores` vacíos lanza `CombateInvalidoError`.
+- Con un bando **vacío** (sin escuadras con soldados y sin héroes sanos) lanza `CombateInvalidoError`.
 - **Bajas permanentes** (`aplicarBajas`): cada escuadra pierde `round(cantidad × fracción)` (mínimo 0 de cantidad). La escuadra **persiste como identidad** con `cantidad: 0`. Además cada escuadra gana experiencia: `experienciaGanadaPorVictoria` si su bando ganó, `experienciaGanadaPorDerrota` si no.
 - **Consume exactamente dos `rng()`** por combate, en ese orden. Las ramas sin combate (plaza sin defensores, protegida) **no consumen aleatoriedad**: una partida sin asedios hace las mismas llamadas al RNG que antes de existir los asedios.
 - **Combate digno** (`esCombateDigno`): `min(poderA, poderD) ≥ NIVEL_FACCION.ratioCombateDigno × max(poderA, poderD)`. Solo un combate digno da experiencia de Facción.
@@ -98,7 +100,7 @@ Orden (`asediarConEjercito`):
 1. **Plaza protegida** (`estaProtegida`: `ahora < protegidaHasta`): rebota, `combate.asedio_resistido`, sin combate ni RNG.
 2. **Sin defensores** (ninguna escuadra con soldados en `defensaDe`) → **cae sin combate**, sin RNG: `combate.asedio_conquista` y XP de conquista para el atacante. (Sin atacantes con soldados → «sin nadie con quien combatir», no cae.)
 3. En otro caso, `resolverCombate(atacantes, defensores, rng, multiplicadorMuralla)` con
-   `multiplicadorMuralla = 1 + (bonoDefensaPorNivel[nivel] − 1) × integridad / nº puertas`, usando solo el **último recinto** de la plaza (el más exterior) — ver [`Murallas.md`](Murallas.md) §9. `integridad` ∈ [0,1]: un anillo a medio cerrar casi no defiende.
+   `multiplicadorMuralla = 1 + (bonoDefensaPorNivel[nivel] − 1) × integridad / nº puertas`, usando solo el **último recinto** de la plaza (el más exterior) — ver [`Murallas.md`](Murallas.md) §9. `integridad` ∈ [0,1]: un anillo a medio cerrar casi no defiende. **Las murallas son una fase propia posterior al sistema militar** (decidido el 2026-10-19): hasta entonces el recinto es 0, el multiplicador vale 1 y no hay cupo de muralla en la guarnición.
 4. **Reputación**: si atacante y defensor están **aliados** (se atacó sin romper la alianza), la Facción atacante recibe `REPUTACION.penalizacionAtacarAliado` (la más severa).
 5. **XP de Facción**: combate (a ambos, si digno) y, si conquista, `NIVEL_FACCION.xp.conquista` al atacante.
 6. Resultado: `conquistado = (ganador == atacante)`. El ejército **sigue fuera y acampa**; conquistar no lo convierte en guarnición (Doc 5.15.5).
@@ -121,7 +123,7 @@ Consecuencias que aplica `asediarPlaza`:
   - **B, si gana el atacante**: el dueño pierde el **70 %** de la carga, recurso a recurso, y **el 30 % se salva siempre** (llega en los carros que queden o con los carreteros); también pierde la mitad de los carros (placeholder). El atacante carga lo que le quepa del 70 %.
   - Si gana el defensor: no se pierde nada; bajas del atacante 25 %, escolta 5 % y los héroes del atacante quedan heridos.
 - **Con Unity**: el servidor manda el tipo (`modalidad: 'disputa' | 'aguante'`, con los carros identificados) y Unity responde quién ganó y los `carrosPerdidos`. Los carros **no cambian de manos en el mundo: solo la carga**.
-- Desaparece el «captura exactamente el 50 %» (`umbralCapturaCaravana` queda solo como referencia de la versión TypeScript).
+- Desaparece el «captura exactamente el 50 %» (`umbralCapturaCaravana` se retiró del bloque `MILITAR` el 2026-10-19).
 - Interceptar no da experiencia de Facción. Sí da la defensa de una caravana: **experiencia de Facción por héroe participante** del bando que defiende (Doc 2.2).
 
 ### 7.2 Atacar un campamento de bandidos (`atacarCampamento` → `atacarCampamentoConColumna`)
@@ -194,13 +196,13 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
   "ventajaDefensor": 1.05,
   "bonusCohesionPorEscuadronExtra": 0.1,
   "varianzaCombate": 0.15,
-  "umbralCapturaCaravana": 0.5,
-  "defensaBaseCaravana": 26
+  "defensaBaseCaravana": 26,
+  "poderPorHeroe": 15
 }
 ```
 <!-- /parametros -->
 
-Valores vigentes para la reconstrucción: `radioEncuentro` 3, `radioProteccion` 10, `BATALLA.capacidad.asedio` 15, radio de ataque de bandidos 7; `ventajaDefensor` de B ×1,25 (placeholder).
+Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (3) está en `LOGISTICA` ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md)), `radioProteccion` (10) en `MERCENARIOS`, `BATALLA.capacidad.asedio` (15) en [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) y el radio de ataque de los bandidos (`radioAtaqueCaravana`) en `CAMPAMENTOS_BANDIDOS` de [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md). La `ventajaDefensor` del aguante (B) es ×1,25 (placeholder, todavía sin bloque).
 
 <!-- parametros:HEROE -->
 ```json

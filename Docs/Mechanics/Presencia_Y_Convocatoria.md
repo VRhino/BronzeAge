@@ -14,7 +14,7 @@ Cubre **dónde está un héroe** (los cuatro sitios posibles y cómo pasa de uno
   - La **niebla** que se graba al salir y la foto del interior → [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md).
   - Dónde defiende un héroe que está dentro de una plaza cuando la atacan → [`Combate.md`](Combate.md) §3.2.
 
-## 2. Dónde está un héroe (`Heroe.ubicacion`)
+> **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Crate `crates/militar`: `presencia` (§2 y §7: los cuatro sitios, `desconectarse` con su retardo de 2 min 30 s, `conectarse` y qué hace el evento de salida: sale, espera al fin de la batalla o se aplaza hasta `topeAplazamiento` si le persiguen) y `convocatoria` (§9: convocar, unirse con `Aceptar` o `Preguntar`, peticiones de 10 s, cambiar la selección, separarse, cancelar y **partir todo o nada**). «Poder salir con lo elegido» (§9.2) lo simula el núcleo con la salida real y llega a `partir` como una función; el resto de §3-§6 y §8 (las transiciones concretas, la puerta y los vetos) es de la fase 4B y del sistema político.
 
 ```
 UbicacionHeroe = asentamiento { asentamientoId }      dentro de una plaza

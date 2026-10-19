@@ -372,7 +372,7 @@ impl Nucleo {
     /// dan la vuelta con su carga desde donde están («las órdenes parten de la posición real»). Sin cerrar versión: lo hace quien la llama
     /// (el evento de ruina o la orden de conquista).
     ///
-    /// DUDA: una caravana aparcada con carga en la plaza conquistada vuelve viajando a su origen; si no hay ruta por tierra se pierde.
+    /// La caravana aparcada en la plaza que cae se destruye, sea por ruina o por conquista (Doc 3.13.7, decidido el 2026-10-19).
     pub(super) fn cerrar_comercio(&mut self, plaza: u64, motivo: Motivo, t: Instante) {
         let pid = id32(plaza);
         // Los caminos de regreso se calculan antes (el A* necesita `&mut self`): una caravana en camino hacia la plaza solo regresa si lo hay.
@@ -404,7 +404,6 @@ impl Nucleo {
                 Accion::Pierde | Accion::Destruye => self.perder_caravana(t, caravana),
                 Accion::Regresa => self.regresar_caravana(t, caravana, pid),
                 Accion::Vuelve => self.hacer_volver_caravana(t, caravana),
-                Accion::EnviaAlOrigen => self.enviar_caravana_a_casa(t, caravana),
             }
         }
         self.invalidar_red();
@@ -486,27 +485,5 @@ impl Nucleo {
         let carga = total(&c.contenido);
         self.instalar_plan(id, plan);
         self.emitir_comercio(t, EventoComercio::CaravanaVuelve { caravana: id }, vec![origen], &[("regresa", 1), ("carga", carga)]);
-    }
-
-    /// Una aparcada en la plaza conquistada vuelve a su origen (§5.7): vacía, al instante; con carga, viajando.
-    fn enviar_caravana_a_casa(&mut self, t: Instante, id: u64) {
-        let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
-        let origen = self.estado.comercio.flota[i].origen as u64;
-        let Some(posicion) = self.estado.asentamientos.get(&origen).map(|o| o.posicion) else { return self.perder_caravana(t, id) };
-        if self.estado.comercio.flota[i].contenido.is_empty() {
-            if self.estado.comercio.flota[i].enviar_al_origen(posicion, None).is_ok() {
-                self.emitir_comercio(t, EventoComercio::CaravanaEnviadaAlOrigen { caravana: id }, vec![origen], &[]);
-                self.reparto_de_plaza(origen, t);
-            }
-            return;
-        }
-        let Some(anfitriona) = self.estado.comercio.flota[i].anfitriona.map(u64::from).and_then(|a| self.estado.asentamientos.get(&a)).map(|a| a.posicion) else { return };
-        let Some((plan, camino)) = self.plan_de_regreso(id, anfitriona, t) else { return self.perder_caravana(t, id) };
-        let c = &mut self.estado.comercio.flota[i];
-        if c.enviar_al_origen(posicion, Some(plan.clone())).is_ok() {
-            (c.ruta, c.costes, c.posicion) = (camino.puntos, camino.costes, anfitriona);
-            self.instalar_plan(id, plan);
-            self.emitir_comercio(t, EventoComercio::CaravanaEnviadaAlOrigen { caravana: id }, vec![origen], &[]);
-        }
     }
 }

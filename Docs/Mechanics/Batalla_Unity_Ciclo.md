@@ -100,15 +100,15 @@ Cada contexto tiene su **apertura** (`Apertura`: contexto, punto, iniciadora, lo
 | Contexto | Quién lo abre | Atacante | Defensor | Bloquea | `mapa` |
 |---|---|---|---|---|---|
 | `campo_abierto` | `atacar` a otra columna (`validarAtaqueAColumna`: no a los tuyos ni a un aliado, misma clase, a ≤ `radioEncuentro`, héroe sano en las dos) | su columna | la columna atacada | las dos columnas | `mapa`, centro = posición del defendido |
-| `caravana` | `atacar` a una caravana suelta | su columna | **sin héroes**: su escolta cedida (`escoltaIds`); sin escolta, una escuadra de **carreteros** sin dueño (`BATALLA.tropaCarreteros`); `faccionId` = la de su plaza de origen (o `null`) | la columna atacante y la caravana | `mapa`, en la caravana |
+| `caravana` | `atacar` a una caravana (no adjunta) | su columna | **sin héroes**: su escolta cedida (`escoltaIds`); sin escolta, una escuadra de **carreteros** sin dueño (`BATALLA.tropaCarreteros`); `faccionId` = la de su plaza de origen (o `null`) | la columna atacante y la caravana | `mapa`, en la caravana |
 | `campamento_bandidos` | `atacar` a un campamento (un evento PvE) | su columna | una escuadra de `milicia_lanceros` con las unidades del nivel del campamento (`CAMPAMENTOS_BANDIDOS.niveles`), sin dueño; `faccionId: null` | la columna y el campamento | `mapa`, en el campamento |
 | `asedio` | `atacar` a una plaza, **un ejército** | su ejército | los **residentes sanos que están dentro** (`heroesQueDefienden`: conectados, ubicación = esa plaza), cada uno con las escuadras de su **loadout activo** que tiene en el campamento y no en la guarnición; más la **guarnición** sin héroe (`escuadrasSinHeroe`); `faccionId` = la de la plaza | el ejército y la plaza | `SettlementBattleSnapshot` (§3.3) |
 
 - **Los héroes de una columna** son los sanos de `participantes`, con las escuadras suyas cuyo contenedor es **esa** columna y que tienen efectivos. Los heridos no entran (sus escuadras ni se reservan).
 - **El lado defensor de un asedio no incluye a los visitantes** (héroes de fuera, aunque sean aliados, que estén dentro): entran, si quieren, **uniéndose** durante la convocatoria (§5). El combate con números sí los mete de oficio ([`Combate.md`](Combate.md) §3.2).
-- **Capacidad** (`capacidadMaxima`, en héroes): `BATALLA.capacidad.asedio` en un asedio, `.resto` en las demás. Las escuadras sin héroe no ocupan plaza. **Al abrir no se recorta**: si la columna lleva más héroes que la capacidad, todos van al ticket (la cola de los que sobran es cosa de Unity); la capacidad solo frena a quien se une.
+- **Capacidad** (`capacidadMaxima`, en héroes): `BATALLA.capacidad.asedio` (15) en un asedio y en una avanzada (que se juega como asedio), `.resto` (5) en las demás, también en el saqueo de un pueblo. Las escuadras sin héroe no ocupan plaza. **Al abrir no se recorta**: si la columna lleva más héroes que la capacidad, todos van al ticket (la cola de los que sobran es cosa de Unity); la capacidad solo frena a quien se une.
 - **Duración** (`reglas.duracionMaximaSegundos`) = `BATALLA.duracionMinutos.{asedio|resto} × 60`. Si se agota, **gana el defensor**, en cualquier batalla (§8.6).
-- **Convocatoria** (solo asedio): `convocatoriaHasta = ahora + BATALLA.convocatoriaSegundos`. Mientras dura (`enConvocatoria`: `ahora < convocatoriaHasta`), quien se une **entra en el ticket** (revisión 0) como uno de los del principio, y el ticket **no se publica ni se asigna** (§8.1, §8.2). Como el tiempo de mundo avanza por ticks de un minuto, en la práctica la convocatoria dura hasta el siguiente tick. Los demás contextos no la tienen y salen hacia Unity al abrirse.
+- **Convocatoria** (solo asedio): `convocatoriaHasta = ahora + BATALLA.convocatoriaSegundos`. Mientras dura (`enConvocatoria`: `ahora < convocatoriaHasta`), quien se une **entra en el ticket** (revisión 0) como uno de los del principio, y el ticket **no se publica ni se asigna** (§8.1, §8.2). La convocatoria acaba en un **evento exacto** a `convocatoriaHasta` (sin tick: son 30 s justos). Los demás contextos no la tienen y salen hacia Unity al abrirse.
 - **Candado** (`reservaBatalla`): se pone `{ battleId }` a **todas las escuadras con dueño** del ticket (`escuadrasConDueno`: las de los héroes y las sin héroe que tengan `heroeId`, como la guarnición y la escolta). Mientras lo tengan: no se **reponen** y no entran ni salen de la **guarnición** ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md)); los loadouts no se ven afectados.
 - **El evento** `batalla.abierta` se atribuye a las plazas implicadas (§10) y al historial del héroe.
 
@@ -265,7 +265,7 @@ No se comprueba (hoy): que cada `itemDefinitionId` exista en el catálogo de obj
 3. **Logros del servidor** (`contadoresDeBatalla`): `batallas.libradas` +1; `batallas.conHoplitas` si hay una escuadra de `hoplitas_ciudadanos`; en `campo_abierto`, `batallas.campoAbierto`; ganando el atacante, `caravanas.destruidasOCapturadas` (caravana) o `bandidos.campamentosDestruidos` (campamento); en un asedio, `asedios.contraMurallaCompleta` (algún recinto con integridad ≥ 1), y si resiste `asedios.resistidosEnCombate` (más `asedios.resistidosConResidentes` si hubo defensores con héroe) o, si cae con muralla completa, `conquistas.conMurallaCompleta`.
 4. **Consecuencias** (`consecuencias`), según el contexto:
    - **Asedio, gana el atacante** → **conquista**: la plaza pasa a la Facción atacante con el saqueo de siempre (`aplicarConquista`, Doc 5.12.9); `desalojarResidentes` (quien estaba dentro sale; los defensores que combatieron salen con las escuadras que les quedaron; el resto del campamento a 0 y a su nueva residencia, [`Combate.md`](Combate.md) §9); `registrarDerrota`. Si el bando atacante no tiene Facción, **no se conquista nada**. **Unity no reporta daño**: lo pone el saqueo. Gana el defensor: nada más (no hay pérdida de carro en un asedio).
-   - **Mundo abierto** (columna, caravana o campamento): cada columna del bando que **pierde** entrega **la mitad de su carro** (`trasDerrota`), que se reparte entre las columnas del que gana, lo que quepa (contra una caravana o un campamento esa mitad no se la lleva nadie). Si **gana el atacante**: **caravana** → su escolta queda a 0 y vuelve al campamento de su héroe, la caravana desaparece y `MILITAR.umbralCapturaCaravana` de su carga va al carro de los atacantes; **campamento** → oro de bandidos para cada héroe atacante (con el decrecimiento por reincidencia, `botinDeBandidos`) al carro de su columna, el campamento desaparece y se agenda su reaparición. El reparto (`repartirBotin`) es por rondas: cada ronda divide lo pendiente a partes iguales entre las columnas con sitio (`capacidadCargaDe − lo que ya lleva`); la que se llena sale de la siguiente; lo que no cabe en ninguna se pierde. Termina en, como mucho, tantas rondas como columnas.
+   - **Mundo abierto** (columna, caravana o campamento): cada columna del bando que **pierde** entrega **la mitad de su carro** (`trasDerrota`), que se reparte entre las columnas del que gana, lo que quepa (contra una caravana o un campamento esa mitad no se la lleva nadie). Si **gana el atacante**: **caravana** → su escolta queda a 0 y vuelve al campamento de su héroe, según el tipo (A o B, [`Combate.md`](Combate.md) §7.1) la caravana pierde la mitad de sus carros con su animal, o el 70 % de su carga, y lo que quepa va al carro de los atacantes; **campamento** → oro de bandidos para cada héroe atacante (con el decrecimiento por reincidencia, `botinDeBandidos`) al carro de su columna, el campamento desaparece y se agenda su reaparición. El reparto (`repartirBotin`) es por rondas: cada ronda divide lo pendiente a partes iguales entre las columnas con sitio (`capacidadCargaDe − lo que ya lleva`); la que se llena sale de la siguiente; lo que no cabe en ninguna se pierde. Termina en, como mucho, tantas rondas como columnas.
 5. **Chatarra** (Doc 4.2.1): el equipo de **todos los caídos, de los dos bandos**, se lo queda quien gana: a los carros de sus columnas (a partes iguales, lo que quepa); si defiende una plaza y gana, a **su almacén**; sin columna que la lleve (caravana o campamento vencedores) se pierde.
 6. **XP de Facción**: por cada héroe que **participó**, `NIVEL_FACCION.xp.combate` a **su propia Facción** (un bando puede mezclar); en un asedio ganado por el atacante, además `NIVEL_FACCION.xp.conquista` a la atacante. Asediar a un **aliado** (alianza) cuesta `REPUTACION.penalizacionAtacarAliado`.
 7. **Reputación por defender a un vasallo** (Doc 2.7): si el bando defensor es de una Facción **vasalla**, su señora gana reputación si algún héroe suyo defendió y el bando aguantó, y la pierde, menos, si perdió y ninguno estuvo (`ajustesPorDefensaDeVasallo`, compartido con el combate con números).
@@ -287,11 +287,13 @@ Los efectos de una batalla en curso sobre las plazas (construir, mejorar…) se 
 
 ## 11. Parámetros
 
+> **2026-10-19:** el bloque `BATALLA` es el vigente: `capacidad.asedio` vale **15** (el motor TypeScript tenía 5) y se usa también en la avanzada; el saqueo de un pueblo usa `capacidad.resto`.
+
 <!-- parametros:BATALLA -->
 ```json
 {
   "capacidad": {
-    "asedio": 5,
+    "asedio": 15,
     "resto": 5
   },
   "duracionMinutos": {
@@ -314,7 +316,7 @@ Los efectos de una batalla en curso sobre las plazas (construir, mejorar…) se 
 ```
 <!-- /parametros -->
 
-Los que intervienen y viven en otro documento: `LOGISTICA.radioEncuentro` (distancia de choque y de unión; [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md)), `MILITAR.umbralCapturaCaravana`, `NIVEL_FACCION.xp`, `REPUTACION.penalizacionAtacarAliado`, `CAMPAMENTOS_BANDIDOS.niveles` y `PRESENCIA` ([`Combate.md`](Combate.md), [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md)).
+Los que intervienen y viven en otro documento: `LOGISTICA.radioEncuentro` (distancia de choque y de unión; [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md)), `NIVEL_FACCION.xp`, `REPUTACION.penalizacionAtacarAliado`, `CAMPAMENTOS_BANDIDOS.niveles` y `PRESENCIA` ([`Combate.md`](Combate.md), [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md)).
 
 ## 12. Invariantes
 

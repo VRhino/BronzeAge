@@ -7,7 +7,8 @@
 //!   o se pierde si no hay camino por tierra ni origen); la **aparcada en `R`** se destruye con todo, sin captura. Las `construccion` y las
 //!   `adjunta` siguen su propio camino.
 //! - **Conquista de `R`** (decidida el 2026-10-18): la **flota** pasa al conquistador con su zona (no se pierde ninguna), los trueques con la
-//!   plaza se anulan igual que en la ruina y las caravanas que iban hacia ella **regresan con su carga**.
+//!   plaza se anulan igual que en la ruina y las caravanas que iban hacia ella **regresan con su carga**. La **aparcada en `R`** se destruye
+//!   igual que en la ruina (decidido el 2026-10-19: el tren de suministros es objetivo, Doc 3.13.7 y 5.13.2).
 
 use crate::caravana::{Caravana, EstadoCaravana, Escuadra, TipoCaravana};
 use crate::tipos::{AcuerdoId, AsentamientoId, CaravanaId};
@@ -32,10 +33,8 @@ pub enum Accion {
     /// En camino hacia la plaza: regresa con su carga por `calcularRuta(posición → origen)` sin atracción: el núcleo construye el plan y
     /// llama a [`Caravana::regresar_a_origen`].
     Regresa,
-    /// Aparcada en la plaza que cae en ruinas: se destruye con carros, animales y carga, sin captura.
+    /// Aparcada en la plaza que cae (en ruinas o conquistada): se destruye con carros, animales y carga, sin captura.
     Destruye,
-    /// Aparcada en la plaza conquistada: se manda al origen como `enviarCaravanaAlOrigen` ([`Caravana::enviar_al_origen`]).
-    EnviaAlOrigen,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -75,9 +74,7 @@ pub fn cancelar_trueques(plaza: AsentamientoId, acuerdos: &mut [AcuerdoTrueque])
 /// Resuelve la cascada de comercio de la plaza `plaza` que desaparece o cambia de dueño. `origen_existe` dice si el origen de una
 /// caravana sigue existiendo (en la ruina, `plaza` ya no cuenta) y `hay_camino_a_origen` si desde su posición actual hay camino por tierra
 /// a su origen. Los trueques se cancelan en `acuerdos`; las caravanas **no se tocan**: se devuelven las acciones.
-// DUDA: en una conquista, el documento solo fija trueques y caravanas hacia la plaza; la caravana aparcada en ella (de otro origen,
-// de la Facción vencida) se manda a casa como `enviarCaravanaAlOrigen` en vez de destruirla (la destrucción es regla de la ruina), y la
-// escolta de la flota traspasada (escuadras de héroes desalojados) se deja al sistema militar.
+// DUDA: la escolta de la flota traspasada por una conquista (escuadras de héroes desalojados) se deja al sistema militar.
 // DUDA: una caravana `EnBatalla` sigue como está; su resultado lo aplica el sistema militar.
 pub fn cerrar_dependientes(
     motivo: Motivo,
@@ -102,7 +99,7 @@ pub fn cerrar_dependientes(
             (EstadoCaravana::EnTransito, Some(d)) if d == plaza => {
                 accion(if origen_existe(c.origen) && hay_camino_a_origen(c) { Accion::Regresa } else { Accion::Pierde });
             }
-            (EstadoCaravana::Aparcada, _) if c.anfitriona == Some(plaza) => accion(if motivo == Motivo::Ruina { Accion::Destruye } else { Accion::EnviaAlOrigen }),
+            (EstadoCaravana::Aparcada, _) if c.anfitriona == Some(plaza) => accion(Accion::Destruye),
             _ => {} // las demás siguen como estaban
         }
     }
@@ -192,14 +189,16 @@ mod pruebas {
     }
 
     #[test]
-    fn la_aparcada_en_la_plaza_que_cae_se_destruye_sin_captura() {
+    fn la_aparcada_en_la_plaza_que_cae_se_destruye_sin_captura_en_la_ruina_y_en_la_conquista() {
         let mut ap = car(1, 6, EstadoCaravana::Aparcada, None);
         ap.anfitriona = Some(5);
         let mut ap_otra = car(2, 6, EstadoCaravana::Aparcada, None);
         ap_otra.anfitriona = Some(99);
-        let c = cerrar(Motivo::Ruina, 5, &mut [], &[ap, ap_otra]);
-        assert_eq!(accion_de(&c, 1), Some(Accion::Destruye));
-        assert_eq!(accion_de(&c, 2), None);
+        for motivo in [Motivo::Ruina, Motivo::Conquista] {
+            let c = cerrar(motivo, 5, &mut [], &[ap.clone(), ap_otra.clone()]);
+            assert_eq!(accion_de(&c, 1), Some(Accion::Destruye), "{motivo:?}");
+            assert_eq!(accion_de(&c, 2), None, "la aparcada en otra plaza no se toca");
+        }
     }
 
     #[test]
@@ -228,7 +227,7 @@ mod pruebas {
         assert_eq!(accion_de(&c, 1), None);
         assert_eq!(accion_de(&c, 3), Some(Accion::Vuelve));
         assert_eq!(accion_de(&c, 4), Some(Accion::Regresa), "regresan con su carga");
-        assert_eq!(accion_de(&c, 5), Some(Accion::EnviaAlOrigen));
+        assert_eq!(accion_de(&c, 5), Some(Accion::Destruye), "la aparcada en la plaza conquistada se destruye (Doc 3.13.7)");
         assert_eq!(c.trueques.len(), 1, "los trueques con la plaza se anulan igual");
         assert_eq!(ac[0].estado, EstadoTrueque::Expirado);
     }

@@ -18,7 +18,13 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
   - El ciclo de la batalla de Unity, que aplica XP y botín al héroe (§4.3 resume lo que le hace).
   - El mantenimiento de la población que reclutar consume → [`Economia_Construccion.md`](Economia_Construccion.md) §9; las tecnologías que habilitan cada tropa → [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md).
 
-## 2. Modelo de datos
+> **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Es el crate `crates/militar`, que no depende del núcleo ni está integrado todavía en él (eso es la fase 4B-1): `catalogo` (§12: las 27 tropas, con los Mineros, y la clase de población que sale del escalón), `escuadra` (§2.3 y §10.2: nivel, experiencia, poder y la **moral como ritmo**), `liderazgo` (§5), `heroe` (§2.1-§4, §6, §8 y §9: progresión inicial, repartir puntos, loadouts, orden de escuadras y herido), `guarnicion` (§7: cupo, asignar, retirar, soltar), `reclutamiento` (§11) y `mercenarios` (reclutar en un campamento y la tropa prestada, [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md)). Las cifras son las de los bloques de este documento **sin correcciones en el código** (los bloques se reescribieron el 2026-10-19; la huella de las reglas de una foto cambia). Decisiones de la implementación:
+> - Los ids son números (`HeroeId`, `EscuadraId`…) y la tropa es un `enum` con los ids de los datos (`"lanceros_mimbre"`); añadir una tropa (Eras IV-V) es añadir una variante y su fila del bloque.
+> - **La plaza entra por un resumen**, no por el `Asentamiento` entero: el pool de reclutamiento por clase (de `asentamiento::produccion::disponibles_para_reclutar`), el factor de «Leva Forzosa», el trigo que come la población y los soldados del campamento. `reclutar` valida en el orden de §11.2 y **no cambia nada si rechaza** (ni gasta el id de la escuadra).
+> - La **residencia** es mínima (una plaza o un campamento, `Residencia`); la ciudadanía, los cargos, las casas compradas y el cooldown son del sistema político. El veto, la Facción y la tecnología adoptada llegan como datos del llamador.
+> - La escuadra guarda la **plaza donde se reclutó** (`plaza_origen`) para atribuirle los avisos de deserción: en TypeScript salía del id de texto.
+> - El **cupo de guarnición** recibe el nivel del mejor recinto completo (hoy siempre 0: las murallas son una fase propia posterior al sistema militar, decidido el 2026-10-19) y el extra de «Levas de guarnición» como números.
+> - DUDA: el **XP** de una escuadra se guarda en milésimas de punto (el 0,5 de una derrota no cabe en un entero); el nivel de un **héroe** no sube (CQ-001).
 
 ### 2.1 `Heroe` (`estado.heroes`)
 
@@ -268,7 +274,7 @@ El oro y el equipo salen del **almacén de la plaza** (no del almacén personal 
 
 ## 12. Parámetros
 
-Las del catálogo viven en `constants.ts`; los números de balance de combate y de ración de `MILITAR` están en [`Combate.md`](Combate.md) §12.
+Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19): las velocidades de las tropas son las calibradas (×1,5 sobre las del motor TypeScript: montada 42, ligera 30, media 24, pesada 18) y el catálogo incluye a los **Mineros** (27 tropas). Los números de balance de combate y de ración de `MILITAR` están en [`Combate.md`](Combate.md) §12.
 
 <!-- parametros:LIDERAZGO -->
 ```json
@@ -365,7 +371,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "madera": 2
     },
     "poderBase": 2,
-    "velocidad": 20,
+    "velocidad": 30,
     "escalon": 2,
     "unidadesPorDefecto": 25
   },
@@ -379,7 +385,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "madera": 1
     },
     "poderBase": 1,
-    "velocidad": 20,
+    "velocidad": 30,
     "escalon": 1,
     "unidadesPorDefecto": 30
   },
@@ -391,7 +397,21 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
     "nivelRequerido": 1,
     "costoEquipo": {},
     "poderBase": 1,
-    "velocidad": 20,
+    "velocidad": 30,
+    "escalon": 1,
+    "unidadesPorDefecto": 30
+  },
+  {
+    "id": "mineros",
+    "tecnologia": "leva_comunal",
+    "nombre": "Mineros",
+    "edificio": "centroUrbano",
+    "nivelRequerido": 1,
+    "costoEquipo": {
+      "piedra": 1
+    },
+    "poderBase": 1,
+    "velocidad": 30,
     "escalon": 1,
     "unidadesPorDefecto": 30
   },
@@ -405,7 +425,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaMadera": 1
     },
     "poderBase": 3,
-    "velocidad": 20,
+    "velocidad": 30,
     "escalon": 2,
     "unidadesPorDefecto": 25
   },
@@ -420,7 +440,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBasica": 1
     },
     "poderBase": 4,
-    "velocidad": 16,
+    "velocidad": 24,
     "escalon": 2,
     "unidadesPorDefecto": 20
   },
@@ -435,7 +455,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBasica": 1
     },
     "poderBase": 7,
-    "velocidad": 16,
+    "velocidad": 24,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -450,7 +470,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraIntermedia": 1
     },
     "poderBase": 9,
-    "velocidad": 16,
+    "velocidad": 24,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -465,7 +485,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBronce": 1
     },
     "poderBase": 14,
-    "velocidad": 12,
+    "velocidad": 18,
     "escalon": 4,
     "unidadesPorDefecto": 15
   },
@@ -480,7 +500,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraIntermedia": 1
     },
     "poderBase": 12,
-    "velocidad": 12,
+    "velocidad": 18,
     "escalon": 3,
     "unidadesPorDefecto": 15
   },
@@ -494,7 +514,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaMadera": 1
     },
     "poderBase": 5,
-    "velocidad": 20,
+    "velocidad": 30,
     "escalon": 2,
     "unidadesPorDefecto": 20
   },
@@ -509,7 +529,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBasica": 1
     },
     "poderBase": 8,
-    "velocidad": 20,
+    "velocidad": 30,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -524,7 +544,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraIntermedia": 1
     },
     "poderBase": 9,
-    "velocidad": 16,
+    "velocidad": 24,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -539,7 +559,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraIntermedia": 2
     },
     "poderBase": 15,
-    "velocidad": 12,
+    "velocidad": 18,
     "escalon": 5,
     "unidadesPorDefecto": 12
   },
@@ -554,7 +574,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
     },
     "caballos": 1,
     "poderBase": 3,
-    "velocidad": 28,
+    "velocidad": 42,
     "escalon": 2,
     "unidadesPorDefecto": 20
   },
@@ -570,7 +590,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
     },
     "caballos": 2,
     "poderBase": 13,
-    "velocidad": 20,
+    "velocidad": 30,
     "escalon": 4,
     "unidadesPorDefecto": 15
   },
@@ -585,7 +605,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
     },
     "caballos": 1,
     "poderBase": 5,
-    "velocidad": 28,
+    "velocidad": 42,
     "escalon": 2,
     "unidadesPorDefecto": 20
   },
@@ -600,7 +620,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraIntermedia": 1
     },
     "poderBase": 9,
-    "velocidad": 16,
+    "velocidad": 24,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -615,7 +635,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBasica": 1
     },
     "poderBase": 15,
-    "velocidad": 16,
+    "velocidad": 24,
     "escalon": 4,
     "unidadesPorDefecto": 15
   },
@@ -630,7 +650,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBronce": 1
     },
     "poderBase": 17,
-    "velocidad": 12,
+    "velocidad": 18,
     "escalon": 5,
     "unidadesPorDefecto": 12
   },
@@ -645,7 +665,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBasica": 1
     },
     "poderBase": 9,
-    "velocidad": 20,
+    "velocidad": 30,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -659,7 +679,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaHierro": 2
     },
     "poderBase": 9,
-    "velocidad": 20,
+    "velocidad": 30,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -675,7 +695,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
     },
     "caballos": 1,
     "poderBase": 8,
-    "velocidad": 28,
+    "velocidad": 42,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -690,7 +710,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBronce": 1
     },
     "poderBase": 10,
-    "velocidad": 16,
+    "velocidad": 24,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -706,7 +726,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
     },
     "caballos": 1,
     "poderBase": 10,
-    "velocidad": 28,
+    "velocidad": 42,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -721,7 +741,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBasica": 1
     },
     "poderBase": 17,
-    "velocidad": 16,
+    "velocidad": 24,
     "escalon": 5,
     "unidadesPorDefecto": 12
   },
@@ -736,7 +756,7 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
       "armaduraBronceCalidad": 1
     },
     "poderBase": 17,
-    "velocidad": 12,
+    "velocidad": 18,
     "escalon": 4,
     "unidadesPorDefecto": 15
   }
@@ -785,11 +805,11 @@ Las del catálogo viven en `constants.ts`; los números de balance de combate y 
 
 Ninguna abierta.
 
-## 12. Tropa del héroe y tropa prestada (decidido el 2026-10-13, Doc 5.15.2b)
+## 16. Tropa del héroe y tropa prestada (decidido el 2026-10-13, Doc 5.15.2b)
 
 - **Tropa del héroe**: la que va en su columna (`contenedor: ejercito`), en su campamento o en su guarnición. **La tropa que va con su héroe se queda con su héroe**; nunca vuelve sola a ningún sitio. Si el héroe saca una escuadra de una guarnición y se une a un ejército, y el ejército se desarma, la escuadra sigue con él (`desgajar`).
 - **Tropa prestada** (en sentido de la regla, no solo la `prestada` de un campamento): la que está **fuera de la columna de su héroe**: la guarnición de una plaza y la escolta cedida a una caravana. Cuando ya no puede estar donde está prestada (cae la plaza, se destruye la caravana, la caravana termina su viaje), **vuelve sin viaje al campamento de su héroe**: con 0 soldados si la causa es una derrota (Doc 5.15.5, 3.13.4), intacta si es un final normal.
 - Mientras la escuadra siga prestada y su sitio en pie, su héroe puede ir a la plaza y sacarla de la guarnición.
-- **Mineros** (Doc 5.8): tropa del Centro Urbano (leva, escalón 1, 30 unidades, velocidad 30, 1 de piedra por soldado, sin oro). Entran en la tropa prestada del campamento de mercenarios y son la guarnición de serie de los pueblos extractores.
-- **Asedio**: `BATALLA.capacidad.asedio` = **15** (el bloque TypeScript dice 5): 15 contra 15.
+- **Mineros** (Doc 5.8): tropa del Centro Urbano (leva, escalón 1, 30 unidades, velocidad 30, 1 de piedra por soldado, sin oro); ya están en `TROPAS_RECLUTABLES`. Entran en la tropa prestada del campamento de mercenarios y son la guarnición de serie de los pueblos extractores.
+- **Asedio**: `BATALLA.capacidad.asedio` = **15**: 15 contra 15.
 

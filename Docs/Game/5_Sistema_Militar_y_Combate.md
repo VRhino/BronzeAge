@@ -7,7 +7,7 @@ Cada Jugador está en el mundo como su **Héroe** (5.16), un comandante que lide
 
 > **Un héroe solo vale lo que UNA unidad de la tropa de élite.**
 
-Se deriva del catálogo (5.8) en vez de escribirse a mano, por el mismo motivo que el coste de Liderazgo (5.11.1): `poderBase` es placeholder, y un número suelto se desincronizaría al recalibrar. Son **15**. *(Pendiente: Mechanics/Combate §4 solo cuenta el poder de las escuadras y no define poder de héroe; esta regla no está implementada en el motor.)*
+Se deriva del catálogo (5.8) en vez de escribirse a mano, por el mismo motivo que el coste de Liderazgo (5.11.1): `poderBase` es placeholder, y un número suelto se desincronizaría al recalibrar. Son **15** (`MILITAR.poderPorHeroe`) y se **suman** al poder de su bando: cada héroe sano que combate aporta 15, además de sus escuadras (decidido el 2026-10-19). Un bando con héroes y sin una sola escuadra sí tiene poder.
 
 Qué significa esa cifra, que es lo que dice si está bien puesta:
 
@@ -82,7 +82,7 @@ El tipo de unidad reclutable depende de las **cuatro puertas** (Doc 6.1): la Era
 - Fundición: fabricación de lingotes de cobre, estaño, bronce y hierro — auto-construcción (ver Doc 4.2).
 - Curtiduría: tratamiento de cuero (livestock → cuero → cuero curtido → cuero de calidad).
 - Armería: fabricación de armas y armaduras a partir de lingotes y cuero — insumo directo del reclutamiento de Barracón/Galería de tiro.
-- Carpintería: fabrica equipo (ariete, torre de asedio y la pieza de Carro de Guerra), no recluta. Habilita el nivel 2 de Barracón y Galería de tiro, y su nivel 2 el nivel 3 de Barracón, Galería de tiro y Caballerizas.
+- Carpintería: fabrica equipo (la pieza de Carro de Guerra y, en las Eras II-III, escalas y equipo de asedio), no recluta. El equipo de asedio **no tiene efecto en el combate con números** (decidido el 2026-10-19). Habilita el nivel 2 de Barracón y Galería de tiro, y su nivel 2 el nivel 3 de Barracón, Galería de tiro y Caballerizas.
 - Barracón: reclutamiento de tropas cuerpo a cuerpo (ver roster 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
 - Galería de tiro: reclutamiento de tropas a distancia (ver roster 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
 - Caballerizas: reclutamiento de caballería y carros de guerra (ver roster 5.8); pide `cria_caballar`. Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
@@ -101,7 +101,7 @@ Catálogo en `TROPAS_RECLUTABLES`. Terminología (Doc 0): son tres conceptos y l
 
 El roster no se organiza por Tier abstracto: cada tropa se recluta en Centro Urbano, Barracón, Galería de tiro o Caballerizas, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1; Centro Urbano no tiene niveles), con la tecnología adoptada por la Facción (Doc 6) y pagando el equipo correspondiente, fabricado en Armería, Carpintería o comprado (caballos). "Costo" en las tablas de abajo es POR SOLDADO — el costo real de reclutar es ese valor × "Unidades". Cada tropa tiene además un `poderBase` (placeholder) que usan las batallas que se resuelven con números (5.2.5). "Asent." es el nivel de asentamiento que hace falta de verdad: el mayor entre el del edificio y el del equipo.
 
-**Coste de oro por reclutar** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`): además del equipo, reclutar cuesta **oro por soldado según el escalón de la tropa** (`RECLUTAMIENTO_ORO_POR_ESCALON` en `constants.ts`, PLACEHOLDER 1/2/4/7/11 para escalones 1-5 — curva que sube más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`), más **5 de oro por caballo** en la caballería y los carros. **Única excepción: las tropas del Centro Urbano** (milicia de lanceros, leñadores y granjeros), que no pagan oro: la defensa mínima no depende del tesoro. Todo lo demás cuesta oro, escalón 1 incluido. Reponer bajas vuelve a pagar oro por los soldados repuestos. `factorCostoReclutamiento` ("Leva Forzosa", Doc 4.4) toca **solo el equipo, no el oro** — no se conscribe moneda. Regla de motor uniforme: se cobra igual a NPC y jugador.
+**Coste de oro por reclutar** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`): además del equipo, reclutar cuesta **oro por soldado según el escalón de la tropa** (`RECLUTAMIENTO_ORO_POR_ESCALON` en `constants.ts`, PLACEHOLDER 1/2/4/7/11 para escalones 1-5 — curva que sube más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`), más **5 de oro por caballo** en la caballería y los carros. **Única excepción: las tropas del Centro Urbano** (milicia de lanceros, leñadores, granjeros y mineros), que no pagan oro: la defensa mínima no depende del tesoro. Todo lo demás cuesta oro, escalón 1 incluido. Reponer bajas vuelve a pagar oro por los soldados repuestos. `factorCostoReclutamiento` ("Leva Forzosa", Doc 4.4) toca **solo el equipo, no el oro** — no se conscribe moneda. Regla de motor uniforme: se cobra igual a NPC y jugador.
 
 **Centro Urbano (defensa mínima, sin edificio dedicado):**
 
@@ -251,7 +251,7 @@ Los ejércitos se mueven por el mapa del mundo para atacar, igual que las carava
 
 El Héroe puede salir **solo** (con las tropas que quiera, incluidas ninguna) o **junto a otros héroes**. En el motor son **la misma entidad** y comparten movimiento, suministro y combate. En las REGLAS no son lo mismo, y la línea que los separa **no es cuánta gente va dentro: es cómo salió la columna**.
 
-**Lo decide el acto de salir, y no cambia nunca** (con una sola excepción, reclamar una caravana suelta, 5.13.2): salir *a lo tuyo* hace una Columna personal; **movilizarse** (o partir una convocatoria, 5.14.5) hace un Ejército, aunque en ese primer momento vayas solo. Salir juntos se puede de tres maneras: uno moviliza y los demás se suman, en su plaza o en el campo (5.14); o se prepara el ejército dentro del lugar y parten todos a la vez (5.14.5).
+**Lo decide el acto de salir, y no cambia nunca** (con una sola excepción, reclamar la Caravana de Fundación que vuelve sola, 5.13.2): salir *a lo tuyo* hace una Columna personal; **movilizarse** (o partir una convocatoria, 5.14.5) hace un Ejército, aunque en ese primer momento vayas solo. Salir juntos se puede de tres maneras: uno moviliza y los demás se suman, en su plaza o en el campo (5.14); o se prepara el ejército dentro del lugar y parten todos a la vez (5.14.5).
 
 | | **Columna personal** | **Ejército** |
 |---|---|---|
@@ -284,7 +284,7 @@ Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; e
 | Sobre qué | Qué se le ofrece |
 |---|---|
 | Ejército ajeno (a un ejército) o Columna personal ajena (a una Columna personal) | **Inspeccionar** · **Perseguir** · **Atacar** a 3. Entre un ejército y una Columna personal solo se puede **Inspeccionar** |
-| Caravana ajena o neutral, suelta | **Inspeccionar** · **Interceptar**. Una caravana adjunta a un ejército es parte de él: solo otro ejército la ataca |
+| Caravana ajena o neutral, no adjunta | **Inspeccionar** · **Interceptar**. Una caravana adjunta a un ejército es parte de él: solo otro ejército la ataca |
 | Asentamiento | En su puerta (2): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 8, **Inspeccionar** su defensa; a distancia de ataque (3), **Atacar**, que es asediarla (5.12.4) y **solo lo hace un ejército**; una Columna personal puede **Unirse** a un asedio ya abierto (5.15.1) |
 | Campamento de bandidos | **Atacar**, un ejército o una Columna personal (evento PvE, 5.15.1) |
 | Batalla en curso | **Unirse** al bando que te corresponda, mientras quede sitio (5.15.1) |
@@ -305,7 +305,7 @@ Cada distancia significa una cosa distinta, y las tres juntas son el corazón de
 
 #### Persecución
 
-Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula hacia donde esté, **cuando la presa se ha movido más de `PERSECUCION.umbralRecalculo` desde el último destino calculado** (no en cada tick). Solo se persigue lo que se ve desde la propia columna. Un ejército solo persigue a otro ejército; una Columna personal, a otra Columna personal o a una caravana suelta. **El motor lo exige** (2026-10-09): no se persigue a los tuyos ni a un aliado, ni a una caravana adjunta a un ejército, y **decide a quién persigue la columna su Líder**. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de seis formas:
+Perseguir fija un objetivo **móvil** en vez de un punto: el servidor conoce el plan de la presa y recalcula el de quien persigue **cuando la presa cambia de plan** (un evento, no un sondeo; ya no hay umbral de recalculo). **Solo se persigue lo que se ve desde la propia columna**: la persecución solo se puede iniciar con la presa dentro del alcance de vista (30 con soldados, 15 sin ellos) y **si la presa sale de él, la persecución se cancela** (decidido el 2026-10-19). Un ejército solo persigue a otro ejército; una Columna personal, a otra Columna personal o a una caravana (no adjunta). **El motor lo exige** (2026-10-09): no se persigue a los tuyos ni a un aliado, ni a una caravana adjunta a un ejército, y **decide a quién persigue la columna su Líder**. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de seis formas:
 
 - se llega a **3**, y ahí se ofrece atacar (quien persigue a un solitario abre una **persecución**; un ejército a otro, una **batalla campal**, 5.15.1);
 - el perseguidor **cambia de destino**;
@@ -567,8 +567,8 @@ Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de ca
 
 - La capacidad de una caravana es **igual o mayor que la del carro de un jugador** — si cargara menos, la caravana no tendría sentido como tren de suministros. Son iguales: 500.
 - **Se engancha solo dentro del lugar donde está la caravana**: un asentamiento, o un campamento de mercenarios en el caso de la Caravana de Fundación (Doc 1.8). Nunca en mundo abierto: quien quiere llevar una caravana sale ya como ejército. Además, tiene que ser de tu Facción, estar **disponible** o aparcada (una caravana ya despachada está cumpliendo un trueque y secuestrarla lo rompería) y no ir ya enganchada.
-- **Se puede soltar en marcha**: se queda **suelta donde esté la columna**. No vuelve sola a casa, igual que un ejército no se teletransporta al replegarse.
-- **Reclamar una caravana suelta.** En mundo abierto, un héroe de la misma Facción que la caravana, junto a ella, interactúa con ella y pulsa **Reclamar**: pasa a su columna y la lleva donde quiera. **Reclamarla convierte al instante su columna personal en un Ejército**, con él de Líder, la caravana adjunta, la política de unión que elija al reclamar; si ya iba en un ejército, la suma a ese. Vale para cualquier caravana suelta de su Facción, también para la Caravana de Fundación que vuelve sola a su origen (Doc 1.8).
+- **Se suelta solo dentro de una plaza** (decidido el 2026-10-19): no hay caravanas sueltas por el mapa. Soltarla en una plaza la deja **aparcada** allí (Doc 3.13.7), como al entrar con ella; la Caravana de Fundación, que se engancha en un campamento, se suelta en un campamento (Doc 1.8). En mundo abierto no se puede soltar.
+- **Reclamar la Caravana de Fundación que vuelve sola.** En mundo abierto, un héroe de la misma Facción que la caravana, junto a ella, interactúa con ella y pulsa **Reclamar**: pasa a su columna y la lleva donde quiera. **Reclamarla convierte al instante su columna personal en un Ejército**, con él de Líder, la caravana adjunta, la política de unión que elija al reclamar; si ya iba en un ejército, la suma a ese. Vale solo para ella (Doc 1.8): las caravanas comerciales no quedan sueltas en el mapa.
 - Mientras va enganchada **viaja con el ejército**: su posición es la de la columna, no una ruta propia.
 - **Entran en el `min` de velocidad.** Una caravana comercial va a 24, así que adjuntarla baja un ejército ligero de 30 a 24 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
 - **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.

@@ -10,7 +10,7 @@ Cubre cómo se **mueve, come, se junta y se separa** una columna en el mapa: sal
 
 > **Unidades.** El mapa mide **2.667 × 2.000** unidades. Las velocidades son «unidades de mapa por minuto» **antes** del coste del terreno; el reloj es continuo. Un ejército **no tiene destino fijo ni vuelve solo a ningún sitio**: sale quieto a la puerta y su Líder lo dirige con sus clics (Doc 5.12).
 
-## 2. Modelo de datos
+> **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Crate `crates/militar`, sin posición ni plan (son del núcleo, fase 4B-2): `racion` (§6: la ración de una columna y de una guarnición, los víveres como **ritmo** con el evento «víveres a 0», `llenar` y `pasarAViveres`; la moral y la deserción están en `escuadra`), `columna` (§2, §4.1, §5, §10 y parte de §11: la composición y el mando de una columna; salir, `unirseEnCampo`, `unirseAEjercito`, peticiones de 10 s, `separarseDelEjercito`, `desgajar`, `cederLiderazgo`, la sucesión por antigüedad, formar un ejército en campo, `desarmar`; la velocidad como mínimo y el alcance de vista) y `persecucion` (§7: las condiciones y el alcance). Cada operación que cambia la gente, el carro o el estado deja los víveres con la capacidad (suma de sus héroes) y el consumo bien anotados. **Decisiones del autor del 2026-10-19 aplicadas en este documento:** persecución solo con la presa a la vista y se cancela si sale de ella (sin `umbralRecalculo`, §7); una caravana solo se suelta dentro de una plaza (§9); los bloques son los valores vigentes (§14). Lo que **no** está todavía: repostar (§8), las caravanas adjuntas dentro de la columna (§9, `caravanasAlEntrar`, derrota), inspeccionar (§12) y el resto de §11 (disolución sin nadie, entrar en un lugar).
 
 `Ejercito` es la columna, sea personal o ejército. Campos que importan:
 
@@ -115,13 +115,13 @@ ritmo de consumo (por minuto) = Σ(cantidad de soldados) × MILITAR.racionPorSol
 
 ## 7. Perseguir
 
-- **`perseguir`** fija `persiguiendo = {tipo, id}` y `estado: marchando`. Condiciones: no a sí mismo; la columna propia con algún héroe sano; presa de la **misma clase** (`personal` con `personal`, `ejército` con `ejército`) y, si es una columna, con algún héroe sano. Antes: no a los tuyos ni a un aliado, no a una caravana adjunta, y **un ejército no persigue caravanas** (las persigue una columna personal).
+- **`perseguir`** fija `persiguiendo = {tipo, id}` y `estado: marchando`. Condiciones: no a sí mismo; la columna propia con algún héroe sano; presa de la **misma clase** (`personal` con `personal`, `ejército` con `ejército`) y, si es una columna, con algún héroe sano. Antes: no a los tuyos ni a un aliado, no a una caravana adjunta, y **un ejército no persigue caravanas** (las persigue una columna personal). **Solo se inicia con la presa a la vista** (decidido el 2026-10-19): a ≤ `alcanceDeVista` del perseguidor (`VISION.ejercito` = 30 si lleva soldados, si no `VISION.jugadorSolo` = 15); si no, se rechaza. **Solo se inicia con la presa a la vista** (decidido el 2026-10-19): a ≤ `alcanceDeVista` del perseguidor (`VISION.ejercito` = 30 si lleva soldados, si no `VISION.jugadorSolo` = 15); si no, se rechaza.
 - **`dejarDePerseguir { heroeId }`** suelta la presa; siempre anota el historial y emite `columna.persecucion_abandonada`. Cualquier `marcharA` también la suelta, sin evento.
 - **El servidor conoce el plan de la presa** y calcula el **punto de intercepción**: el primer instante en que el perseguidor, a su velocidad, está a ≤ `LOGISTICA.radioEncuentro` (3) de la presa. Lo recalcula cuando la presa cambia de plan (**un evento, no un sondeo**).
   1. Presa fuera del mapa (entró en plaza o campamento, se disolvió, adjunta o en batalla) → se suelta, `columna.presa_a_cubierto`.
-  2. Presa a más de `alcanceDeVista` del perseguidor (`VISION.ejercito` = 30 si lleva soldados, si no `VISION.jugadorSolo` = 15) → se suelta, `columna.presa_perdida`. Así la trayectoria no delata dónde está bajo la niebla. Esa distancia se comprueba en cada **muestreo de visión**.
-  3. Si la presa se ha movido ≤ `PERSECUCION.umbralRecalculo` (6) respecto al destino ya calculado, no se recalcula.
-  4. Si no hay camino por tierra → se suelta, `presa_perdida`.
+  2. **Presa fuera del alcance de vista** (a más de 30 si el perseguidor lleva soldados, si no de 15) → la persecución se **cancela** (`columna.presa_perdida`): ya no está a la vista, y si no la trayectoria del perseguidor delataría dónde está bajo la niebla. Es un **evento exacto**: se calcula, plan contra plan, el primer instante en que la presa sale del radio, y se reprograma cuando cualquiera de los dos cambia de plan (no es un muestreo, porque cambia el juego).
+  3. Si no hay camino por tierra → se suelta, `presa_perdida`.
+  (**No hay umbral de recálculo** (decidido el 2026-10-19): el plan del perseguidor se recalcula cada vez que la presa cambia el suyo, que es un evento.)
 - **Alcance:** si la presa está a ≤ `radioEncuentro`, es enemiga (no misma Facción ni aliada), tiene héroe sano (columna) o no está en un refugio ni adjunta ni `disponible` (caravana) → `persiguiendo` se borra y se emite `columna.presa_alcanzada`. **No hay combate**: atacar es una orden aparte (Combate §2).
 
 ## 8. Repostar (Doc 5.13)
@@ -138,8 +138,8 @@ ritmo de consumo (por minuto) = Σ(cantidad de soldados) × MILITAR.racionPorSol
 
 - **`adjuntarCaravana`**: **solo dentro del lugar donde está la caravana** (una plaza, o un campamento para la Caravana de Fundación), nunca en mundo abierto; misma Facción; no ya enganchada; estado `disponible` o `aparcada`. La Caravana de Fundación la lleva su titular: otro solo la reclama si el titular ya no es vigente. No se comprueba el cupo de Mercado: engancharla ya la saca de comerciar.
 - Una adjunta pasa a `estado: 'adjunta'` y su posición **es la de la columna**.
-- **`soltarCaravana`**: queda `disponible` **suelta donde esté la columna**; no vuelve sola.
-- **`reclamarCaravana`**: en mundo abierto, un héroe de la misma Facción, junto a una caravana suelta, la reclama: pasa a su columna. **Reclamarla convierte al instante su columna personal en un ejército**, con él de Líder y la política de unión que elija; si ya iba en un ejército, la suma a ese. Vale para cualquier caravana suelta de su Facción, también la de Fundación.
+- **`soltarCaravana`**: **solo dentro de una plaza** (decidido el 2026-10-19; no hay caravanas sueltas por el mapa): la caravana queda `aparcada` en ella, como al entrar con la columna (§11). La Caravana de Fundación se suelta dentro del campamento donde se enganchó y queda `disponible`. En mundo abierto se rechaza.
+- **`reclamarCaravana`**: en mundo abierto, un héroe de la misma Facción, junto a la **Caravana de Fundación que vuelve sola** a su origen, la reclama: pasa a su columna. **Reclamarla convierte al instante su columna personal en un ejército**, con él de Líder y la política de unión que elija; si ya iba en un ejército, la suma a ese. Vale solo para ella: las caravanas comerciales no quedan sueltas en el mapa.
 - **`cargarCaravana { ejercitoId, caravanaId, asentamientoId, recurso, cantidad }`**: carga de una plaza con el ejército **en su puerta** y donde pueda repostar; `min(pedido, espacio, disponible)`; sin reserva. Devuelve `{ cargado }` y emite `ejercito.caravana_cargada`. Rechaza si la caravana no va con ese ejército, la cantidad no es positiva, la plaza no abre su almacén (`puedeRepostarEn`) o la caravana va llena (capacidad efectiva, con «Carga Ampliada» del origen).
 - **Capacidad de carga** del ejército = `participantes × capacidadCarroPorJugador` + Σ `capacidadCaravana` de las adjuntas.
 - Si el ejército es **derrotado**, las adjuntas se pierden (`ejercito.caravanas_perdidas`). Si su gente se desconecta y se queda sin nadie, vuelven solas a su origen (Doc 1.10.6, 3.10).
@@ -186,6 +186,8 @@ A ≤ `MOVIMIENTO.radioInspeccion` (8): se ve la composición de una columna aje
 | Deserción | moral ≤ 0 con soldados | `tropas.desercion` |
 | Encuentro | cruce exacto de planes (Combate §2) | ofrece atacar o interceptar |
 | Intercepción | punto calculado al perseguir (§7) | `columna.presa_alcanzada` |
+| Presa fuera de vista | primer instante en que sale del alcance de vista (§7) | cancela la persecución (`columna.presa_perdida`) |
+| Presa fuera de vista | primer instante en que sale del alcance de vista (§7) | cancela la persecución (`columna.presa_perdida`) |
 | Caducidad de petición o formación | `expiraEn` | retira la petición o deshace la formación |
 
 Los eventos se descartan si la generación de la columna cambió. Sin ejércitos en combate, un mundo no consume el generador aleatorio por movimiento.
@@ -210,21 +212,21 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 
 ## 14. Parámetros
 
-Las cifras de estos bloques se copian de `constants.ts` y son las del **motor TypeScript** (sin calibrar). **Los valores vigentes para la reconstrucción son los de la calibración** (Calibracion_Distancias_Definicion §4), que el archivo común de datos recogerá:
+**Los bloques de este documento son los valores vigentes de la reconstrucción** (reescritos el 2026-10-19, decisión del autor para el sistema 4): ya no copian `constants.ts`. Respecto al motor TypeScript cambian, tras la calibración (Calibracion_Distancias_Definicion §4):
 
-| Parámetro | Bloque (TypeScript) | Vigente |
+| Parámetro | Motor TypeScript | Vigente (en el bloque) |
 |---|---|---|
 | `MOVIMIENTO.velocidadJugador` | 22 | **33** |
-| Velocidades de tropa | 28 / 20 / 16 / 12 | **42 / 30 / 24 / 18** |
+| Velocidades de tropa (`TROPAS_RECLUTABLES`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md)) | 28 / 20 / 16 / 12 | **42 / 30 / 24 / 18** |
 | `MOVIMIENTO.radioPuerta` | 10 | **2** |
 | `MOVIMIENTO.radioInspeccion` | 40 | **8** |
 | `LOGISTICA.radioEncuentro` | 15 | **3** |
-| `LOGISTICA.radioReabastecimiento` | 60 | **se retira** (§8) |
+| `LOGISTICA.radioReabastecimiento` | 60 | **retirado** (§8) |
 | `VISION.ejercito` | 150 | **30** |
 | `VISION.jugadorSolo` | 80 | **15** |
 | `VISION.margenAsentamiento` | 60 | **0** (la plaza ve solo su zona; las avanzadas ven 12) |
 | `VISION.caravanaGrande.radio` | 300 | **60** |
-| `PERSECUCION.umbralRecalculo` | 30 | **6** |
+| `PERSECUCION.umbralRecalculo` | 30 | **retirado** (§7) |
 
 <!-- parametros:LIDERAZGO -->
 ```json
@@ -248,9 +250,8 @@ Las cifras de estos bloques se copian de `constants.ts` y son las del **motor Ty
   "capacidadViveresPorHeroe": 350,
   "factorConsumoEnMarcha": 0.25,
   "factorConsumoEstacionado": 0.1,
-  "radioReabastecimiento": 60,
   "umbralNarrarReposte": 0.5,
-  "radioEncuentro": 15
+  "radioEncuentro": 3
 }
 ```
 <!-- /parametros -->
@@ -267,36 +268,28 @@ Las cifras de estos bloques se copian de `constants.ts` y son las del **motor Ty
 <!-- parametros:VISION -->
 ```json
 {
-  "ejercito": 150,
-  "jugadorSolo": 80,
-  "margenAsentamiento": 60,
+  "ejercito": 30,
+  "jugadorSolo": 15,
+  "margenAsentamiento": 0,
   "caravanaGrande": {
     "carros": 3,
-    "radio": 300
+    "radio": 60
   }
 }
 ```
 <!-- /parametros -->
 
-`MOVIMIENTO` reúne lo que no es de logística: `velocidadJugador`, `consumoPorParticipante`, `radioPuerta`, `vidaPeticionUnionSegundos`, `radioInspeccion` y `fraccionRobada` (la mitad del carro del derrotado). `PERSECUCION.umbralRecalculo` es el desplazamiento de la presa que obliga a recalcular el plan (§7).
+`MOVIMIENTO` reúne lo que no es de logística: `velocidadJugador`, `consumoPorParticipante`, `radioPuerta`, `vidaPeticionUnionSegundos`, `radioInspeccion` y `fraccionRobada` (la mitad del carro del derrotado).
 
 <!-- parametros:MOVIMIENTO -->
 ```json
 {
-  "velocidadJugador": 22,
+  "velocidadJugador": 33,
   "consumoPorParticipante": 0.5,
-  "radioPuerta": 10,
+  "radioPuerta": 2,
   "vidaPeticionUnionSegundos": 10,
-  "radioInspeccion": 40,
+  "radioInspeccion": 8,
   "fraccionRobada": 0.5
-}
-```
-<!-- /parametros -->
-
-<!-- parametros:PERSECUCION -->
-```json
-{
-  "umbralRecalculo": 30
 }
 ```
 <!-- /parametros -->

@@ -981,7 +981,7 @@ fn una_plaza_que_cae_en_ruinas_cierra_sus_trueques_sin_penalizar_pierde_su_flota
 }
 
 #[test]
-fn la_conquista_pasa_la_flota_anula_los_trueques_y_devuelve_las_caravanas() {
+fn la_conquista_pasa_la_flota_anula_los_trueques_devuelve_las_caravanas_y_destruye_las_aparcadas() {
     let m = con_mundo!();
     let mut e = escenario(m, 7, true);
     let (a, b) = (e.a, e.b);
@@ -1018,13 +1018,12 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_y_devuelve_las_caravanas() {
     let flota = hechos(&e.n, "comercio.flota_traspasada");
     assert_eq!((flota.len(), flota[0].1.clone(), dato(&flota[0], "caravanas")), (1, vec![a], 1));
     assert!(e.n.libro_ordenes().orden(orden).is_some(), "las órdenes del Mercado se quedan");
-    // La de B que iba hacia A vuelve con su carga; la vacía de C aparcada en A vuelve a su origen; la que lleva carga vuelve viajando.
+    // La de B que iba hacia A vuelve con su carga; las dos de C aparcadas en A (vacía o con carga) se destruyen, sin captura (Doc 3.13.7).
     let vuelta = e.n.caravana(cb).unwrap();
     assert_eq!((vuelta.estado, vuelta.contenido.is_empty()), (EstadoCaravana::Disponible, true));
-    let en_casa = e.n.caravana(cc1).unwrap();
-    assert_eq!((en_casa.estado, en_casa.anfitriona, en_casa.posicion), (EstadoCaravana::Disponible, None, pos(&e.n, c)));
-    let viaja = e.n.caravana(cc2).unwrap();
-    assert_eq!((viaja.estado, viaja.destino, viaja.contenido[&Madera]), (EstadoCaravana::Retornando, Some(a as u32), 5_000), "con carga vuelve viajando a su origen y vuelca lo que lleva");
+    assert!(e.n.caravana(cc1).is_none() && e.n.caravana(cc2).is_none(), "las aparcadas en la plaza conquistada se destruyen");
+    let perdidas = hechos(&e.n, "comercio.caravana_perdida");
+    assert_eq!(perdidas.iter().map(|h| dato(h, "caravana")).collect::<Vec<_>>(), vec![cc1 as i64, cc2 as i64]);
     // Lo anulado no vuelve a caducar ni a salir de la preparación.
     e.avanzar(3 * DIA);
     assert!(hechos(&e.n, "comercio.trueque_expirado").is_empty());

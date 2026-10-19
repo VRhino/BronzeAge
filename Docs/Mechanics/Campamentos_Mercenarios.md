@@ -11,7 +11,7 @@ ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **p
 - **Fuentes de lo nuevo:** `engine/reclutamientoMercenario.ts`, `engine/layoutCampamento.ts`, `session/proyecciones/escenaCampamento.ts`, `session/comandos/mercenarios.ts` (`reclutarEnCampamento`, `pedirPrestamo`, `reponerPrestamo`, `exigirEn`), `engine/simulation.ts` (`sinPrestamosAjenos`, al cambiar la residencia del héroe).
 - **Canon:** [`Docs/Game/1_Sistema_de_Mundo_y_Territorio.md`](../Game/1_Sistema_de_Mundo_y_Territorio.md) 1.9b, Doc 2.5 (residencia), Doc 5.8 (reclutar).
 
-## 2. Modelo de datos (`estado.campamentosMercenarios`)
+> **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Crate `crates/militar`, módulo `mercenarios`: los reclutas del campamento (§4: valor e instante, la cantidad de ahora se calcula al mirar), las tropas que ofrece (§5.1; la tecnología del campamento llega como una función, es del sistema 6), el precio (§5.2, redondeado hacia arriba **una vez sobre el total**), reclutar (§5.3, con «se une a la columna» si cabe en el Liderazgo) y la tropa prestada (§6: pedir, reponer, retirar). Quien paga (el almacén personal o el carro) lo descuenta el llamador. La planta, el mercado y el almacén personal no están en este crate.
 
 | Campo | Significado |
 |---|---|

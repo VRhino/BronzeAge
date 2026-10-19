@@ -147,8 +147,8 @@ extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc
 | `caballeria_organizada` | jinetes escitas, caballería asiria | X jinetes asirios reclutados (Tiglat-Pileser III) | Caballerizas 2 |
 | `trabajos_asedio` | equipo de asedio de Carpintería 2 | X asedios contra plazas con muralla completa (Laquis) | Carpintería 2 |
 
-Las escalas, las defensas de campaña y el equipo de asedio de Carpintería 2 todavía no tienen efecto en combate: la
-tecnología se adopta y su equipo llega con la mecánica de asedio.
+Las escalas, las defensas de campaña y el equipo de asedio de Carpintería 2 no tienen efecto en el combate con números (decidido el
+2026-10-19): la tecnología se adopta y su equipo, si llega, será cosa de Unity.
 
 ## 6.7 Aedas
 

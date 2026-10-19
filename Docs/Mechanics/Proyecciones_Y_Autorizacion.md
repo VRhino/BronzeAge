@@ -191,7 +191,7 @@ Condición: `yo` (`params.heroeId == héroe del actor`). La geometría y el rest
 | `inspeccionar`, `perseguir`, `dejarDePerseguir` | [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md), [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) |
 | `atacar` | [`Combate.md`](Combate.md) |
 | `comerciarEnPlaza` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md): estar a la puerta con la columna lo comprueba el motor |
-| `unirseABatalla` | `Batalla_Unity_Ciclo` (pendiente) |
+| `unirseABatalla` | [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) |
 
 ### 5.3 «Yo» y algo más (12)
 
@@ -270,9 +270,9 @@ Documento: [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (y [`Fundacion_Y
 
 ### 5.8 Dentro de un ejército (6)
 
-Condición: `enEjercito(params.ejercitoId)`. **No exige ser el Líder**: cualquier participante puede replegar o estacionar (la cesión de mando de una coalición no existe en esta fase); que el comando exija además ser el Líder (cancelar la marcha, Doc 5.14.3) lo comprueba el motor.
+Condición: `enEjercito(params.ejercitoId)`. **No exige ser el Líder**: cualquier participante puede estacionar (la cesión de mando de una coalición no existe en esta fase); que el comando exija además ser el Líder (cancelar la marcha, Doc 5.14.3) lo comprueba el motor.
 
-`adjuntarCaravana`, `soltarCaravana`, `cargarCaravana`, `entregarDeCaravana`, `replegarEjercito`, `estacionarEjercito` — [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md).
+`adjuntarCaravana`, `soltarCaravana`, `cargarCaravana`, `entregarDeCaravana`, `estacionarEjercito` — [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md).
 
 ### 5.9 Administración (1)
 

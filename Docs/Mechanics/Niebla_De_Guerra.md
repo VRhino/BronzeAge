@@ -206,9 +206,9 @@ efecto:  memoria[mi Facción].informes[plaza] = informe;  evento asentamiento.in
 
 ## 7. Parámetros
 
-Los bloques son los del motor TypeScript (sin calibrar). **Vigentes para la reconstrucción** (Calibracion_Distancias_Definicion §4.4-§4.5 y Guerra_Logistica):
+**Los bloques son los valores vigentes** (reescritos el 2026-10-19, decisión del autor para el sistema 4). Respecto al motor TypeScript cambian, tras la calibración (Calibracion_Distancias_Definicion §4.4-§4.5 y Guerra_Logistica):
 
-| Parámetro | Bloque | Vigente |
+| Parámetro | Motor TypeScript | Vigente (en el bloque) |
 |---|---|---|
 | `VISION.ejercito` | 150 | **30** |
 | `VISION.jugadorSolo` | 80 | **15** |
@@ -222,12 +222,12 @@ Los bloques son los del motor TypeScript (sin calibrar). **Vigentes para la reco
 <!-- parametros:VISION -->
 ```json
 {
-  "ejercito": 150,
-  "jugadorSolo": 80,
-  "margenAsentamiento": 60,
+  "ejercito": 30,
+  "jugadorSolo": 15,
+  "margenAsentamiento": 0,
   "caravanaGrande": {
     "carros": 3,
-    "radio": 300
+    "radio": 60
   }
 }
 ```
@@ -236,7 +236,7 @@ Los bloques son los del motor TypeScript (sin calibrar). **Vigentes para la reco
 <!-- parametros:EXPLORACION -->
 ```json
 {
-  "tamanoCelda": 25
+  "tamanoCelda": 5
 }
 ```
 <!-- /parametros -->
@@ -245,10 +245,10 @@ Los bloques son los del motor TypeScript (sin calibrar). **Vigentes para la reco
 ```json
 {
   "mirada": {
-    "radio": 150,
+    "radio": 30,
     "duracionMinutos": 120,
     "oroBase": 40,
-    "oroPorUnidad": 0.1,
+    "oroPorUnidad": 0.5,
     "cooldownMinutos": 120
   },
   "informe": {

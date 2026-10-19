@@ -1,6 +1,6 @@
 # Mechanics — cómo funciona lo que ya está implementado
 
-Esta carpeta describe, **con la precisión suficiente para implementarlo**, el comportamiento del juego. **Desde el 2026-10-13 describe el diseño de la reconstrucción en Rust** (mundo reactivo sin tick, calibración de distancias, guerra logística, ejércitos sin vuelta a casa): el comportamiento del servidor TypeScript, tal como era, está en `typescript-final:Docs/Mechanics/`. Cada documento lleva una nota de «Reescrito» que dice qué cambió y las cifras vigentes cuando difieren de las de los bloques sincronizados (que siguen copiando `constants.ts` de TypeScript). Nace el
+Esta carpeta describe, **con la precisión suficiente para implementarlo**, el comportamiento del juego. **Desde el 2026-10-13 describe el diseño de la reconstrucción en Rust** (mundo reactivo sin tick, calibración de distancias, guerra logística, ejércitos sin vuelta a casa): el comportamiento del servidor TypeScript, tal como era, está en `typescript-final:Docs/Mechanics/`. Cada documento lleva una nota de «Reescrito» que dice qué cambió. **Desde el 2026-10-19 los bloques `parametros:*` de los documentos del sistema militar (héroe y tropa, movimiento, combate, niebla y ciclo de batalla) son los valores vigentes de la reconstrucción**, no una copia de `constants.ts` (decisión del autor al empezar el sistema 4): el código Rust los lee tal cual. Nace el
 2026-10-09 por decisión del autor: las reglas de trazado y de murallas vivían solo en el código y en documentos de diseño narrados como historia,
 y una migración habría perdido lo que el código sabe.
 
@@ -20,8 +20,7 @@ Si el canon y `Mechanics` se contradicen, gana `Mechanics` (decisión del autor,
 
 > **Todo cambio de comportamiento actualiza su documento de `Mechanics` en el mismo commit.**
 
-- Las cifras no se escriben a mano: viven en bloques `<!-- parametros:NOMBRE -->` que se copian de `src/constants.ts`.
-  `npm run mecanicas` los reescribe y un test (`src/mecanicas/__tests__/sincronizar.test.ts`) falla si alguno quedó viejo.
+- Las cifras no se escriben a mano: viven en bloques `<!-- parametros:NOMBRE -->`. En los documentos de los sistemas ya reconstruidos en Rust el bloque **es** la fuente de verdad y el crate correspondiente lo incrusta (`include_str!`) y lo lee; en el resto todavía copian `src/constants.ts` y la prosa dice qué valor es el vigente.
 - Lo que **no** es una cifra (un algoritmo, un orden, una excepción) lo tiene que tocar quien cambia el código; no hay test que lo detecte.
 - Lo que queda obsoleto en `Consideraciones/` se **borra** cuando su contenido pasa aquí (decisión del autor): no se mantienen dos versiones.
 
