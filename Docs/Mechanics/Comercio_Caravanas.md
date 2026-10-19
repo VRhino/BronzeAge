@@ -152,11 +152,11 @@ Distinta: se **conserva** (§8.3). No lleva bonus por distancia ni recargo por r
 
 Condiciones del motor: A ≠ B; los dos asentamientos existen; las líneas cumplen §2.1. Resultado: acuerdo `propuesto`, `expiraEn = ahora + TRUEQUE.plazoMinutosPorDefecto`, `id` con el siguiente
 contador de la sesión. **No se comprueba** ni Mercado, ni stock, ni relación política entre las Facciones, ni que sean de Facciones distintas: se puede proponer a cualquiera, y consigo mismo (entre dos
-plazas propias). Autoriza el comando: el actor debe **residir** en el asentamiento A.
+plazas propias). Autoriza el comando: el Tesorero o el Gobernador del asentamiento A, residente y dentro (decidido el 2026-10-12; ver §11; el «basta residir» de TypeScript queda superado).
 
 ### 4.2 Contestar (`aceptarTrueque`, `rechazarTrueque`)
 
-Solo mientras sigue `propuesto` (una vez), y solo quien reside en el asentamiento **B**.
+Solo mientras sigue `propuesto` (una vez), y solo el Tesorero o el Gobernador del asentamiento **B**, residente y dentro (§11).
 - **Aceptar**: `estado = activo`, `expiraEn = ahora + plazoMinutosPorDefecto` (el plazo **se cuenta desde el sí**). Aceptar no traza ningún camino.
 - **Rechazar**: `estado = rechazado` (queda, no se borra).
 - **Un trueque activo no se cancela** (decidido el 2026-10-12): una vez aceptado, o se cumple o vence. No hay comando para retirarlo; la única salida anticipada es la ruina de una de las dos plazas (§10, sin penalización).
@@ -206,7 +206,7 @@ urgenciaVolumen    = 100 × min(1, (total − entregado) / total)               
 cercanía           = 100 × (1 − min(1, distanciaRecta / ASIGNACION_CARAVANA.distanciaReferencia))
 ```
 
-Notas: `creadoEn` no se reescribe al aceptar, así que tras aceptar el tramo ya consumido del plazo cuenta desde la propuesta; y el reparto **no mira Mercado ni cupos**: una caravana ya creada es
+Notas: **la urgencia se cuenta desde la aceptación** (decidido el 2026-10-18; el TypeScript no reescribía `creadoEn` y el tramo ya consumido del plazo contaba desde la propuesta): se guarda `aceptadoEn` y `urgenciaExpiracion` mide `expiraEn − aceptadoEn`; y el reparto **no mira Mercado ni cupos**: una caravana ya creada es
 reparto aunque el Mercado ya no esté. El reparto **no compone** caravanas ni asigna escolta; despacha la escolta que la caravana ya tenga cedida (`escoltaIds` se conserva).
 
 <!-- parametros:TRUEQUE -->
@@ -248,8 +248,7 @@ El abono usa lo que la caravana **lleva al llegar**, es decir, tras los peajes (
 ### 4.5 Entrega manual con una caravana adjunta (`entregarDeCaravana`)
 
 Cuando la caravana va **enganchada a un ejército** (`adjunta`) el reparto automático no la ve y la entrega la decide el jugador. Condiciones: la caravana va con ese ejército; el trueque está `activo` y
-**uno de sus lados lo debe la Facción del ejército** con líneas pendientes (`ladoPendienteParaEjercito`; el primer lado que lo cumpla, A antes que B); el ejército está a
-`≤ LOGISTICA.radioReabastecimiento` del asentamiento que **recibe**. Entrega por línea `min(lo que lleva, lo que falta)` (error `EntregaInvalidaError` si no entrega nada), cobra la **misma** comisión y el mismo recargo por reputación
+**uno de sus lados lo debe la Facción del ejército** con líneas pendientes (`ladoPendienteParaEjercito`; el primer lado que lo cumpla, A antes que B); el ejército está en la **puerta** del asentamiento que **recibe** (`radioPuerta`; el radio de reabastecimiento desaparece, Movimiento_Ejercitos §8). Entrega por línea `min(lo que lleva, lo que falta)` (error `EntregaInvalidaError` si no entrega nada), cobra la **misma** comisión y el mismo recargo por reputación
 (§3.3, distancia recta origen→destino; el recargo se descuenta del almacén de origen) y cierra por la misma vía (§4.4). Emite `comercio.entrega_escoltada` (más `trueque_cumplido` si cierra). La caravana **sigue adjunta** y con lo que sobre.
 
 ### 4.6 Reputación y experiencia, en una tabla
@@ -707,6 +706,8 @@ Las cifras de `MERCENARIOS.mercado` (`cadaHoras`, `proporcionRepone`, `topePorBi
 
 ## 10. Cuando una plaza cae en ruinas (`cerrarDependientesDeRuina`)
 
+> **Cambio de dueño por conquista (decidido el 2026-10-18; antes solo estaba escrito el caso de ruina).** La **flota** y los **pueblos extractores** de la plaza pasan al conquistador junto con su zona. Los trueques con la plaza conquistada se **anulan sin penalizar a nadie** (como en la ruina) y las caravanas que iban hacia ella **regresan con su carga**. La fusión o anexión de Facciones a mitad de trueque queda por decidir con la política.
+
 En el instante del evento de ruina (antes de cualquier evento de comercio del mismo instante, prioridad 5 frente a 6), para la plaza `R` destruida:
 
 - Su **campamento de bandidos** (el que nació de esa plaza, `asentamientoId = R`) desaparece con el evento `bandidos.campamento_disperso { campamentoId, asentamientoArruinadoId }`.
@@ -757,13 +758,15 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 
 ## 13. Parámetros
 
+**Reputación (decidido el 2026-10-18):** el decaimiento baja de 0,2 a **0,002 por minuto** (placeholder a calibrar): con 0,2 un +5 o un −8 se borraban en 25-40 min y el umbral de −40 casi no se alcanzaba, contra el «decae lentamente» del canon (Doc 2.7). El bonus por minuto de alianza se reduce en la misma proporción (0,05 → 0,0005) para conservar la regla «por sí solo no sube la reputación por encima de ~0,05»: el bonus sigue por debajo del decaimiento (0,0005 < 0,002).
+
 Los bloques de las secciones anteriores son los de este sistema. Además, de otros documentos: `REPUTACION` (también en §4.6) y `NIVEL_FACCION.xp.truequeCumplido` (`Economia_Construccion.md`), `LOGISTICA`
 (`Movimiento_Ejercitos.md`), `MERCENARIOS` (`Tecnologia_Aedas.md`), `POLITICA_CATALOGO` y `EDIFICIO_CATALOGO` (`Economia_Construccion.md`).
 
 <!-- parametros:REPUTACION -->
 ```json
 {
-  "decaimientoPorMinuto": 0.2,
+  "decaimientoPorMinuto": 0.002,
   "bonusTruequeCumplido": 5,
   "penalizacionTruequeIncumplido": -8,
   "bonusLiberarVasalloVoluntario": 6,
@@ -774,7 +777,7 @@ Los bloques de las secciones anteriores son los de este sistema. Además, de otr
   "penalizacionNoDefenderVasallo": -3,
   "penalizacionGuerraTrasRomperAlianza": -15,
   "ventanaGuerraTrasRomperAlianzaDias": 3,
-  "bonusPorMinutoAlianzaActiva": 0.05,
+  "bonusPorMinutoAlianzaActiva": 0.0005,
   "umbralBajoParaEmbajador": -40,
   "umbralBajoParaComision": -40,
   "factorComisionPorReputacionBaja": 1.5
@@ -863,6 +866,7 @@ Cada pueblo extractor (Economia_Construccion §pueblos) tiene un carro propio: u
 - **Solo sale con el carro lleno**: el evento de salida se programa cuando el almacén local del pueblo alcanza la capacidad del carro (o al reponerse el carro con almacén ya lleno). Vuelca en el almacén de la madre y vuelve vacío.
 - **No cuenta** contra los cupos de caravanas ni de carros del Mercado, ni exige Mercado. No entra en el reparto automático ni en el trueque.
 - **Escolta**: sin héroe, de los residentes de la madre (cupo del Mercado de la madre si lo tiene, 100/200/300; **100** si no) o por ejército (Movimiento §9).
+- **No le afectan** «Carga Ampliada» ni «Rutas Rápidas» (decidido el 2026-10-18): solo mueven a las caravanas comerciales (§6.4); con ×1,5 de capacidad el carro de 750 superaría el almacén de 500 del pueblo y «sale lleno» no se dispararía nunca.
 - **Casi siempre lucha en B** (viaja dentro de la zona del dueño); si una frontera recorta la zona y la ruta sale de ella, ese tramo es A (Combate §7.1).
 - **Si se destruye**, se compra otro en la plaza madre solo si el pueblo no tiene ninguno, al coste de carro + buey (20 madera + ~12 oro). Mientras no tenga carro, el pueblo acumula hasta llenar el almacén y la extracción para.
 - La **solvencia** de la madre (Doc 4.5) cuenta lo que llega por acarreo como la media de las llegadas en 24 h o como la producción del pueblo.

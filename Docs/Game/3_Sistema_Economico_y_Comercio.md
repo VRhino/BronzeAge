@@ -19,7 +19,7 @@
   - **Contesta siempre un jugador** —humano o bot, con el cargo que toca (2026-10-04, D52)—: no hay plazas NPC que contesten solas.
 - **Cada envío sale en una caravana propia**: exige tener una caravana PROPIA **'disponible'** en el asentamiento origen (ver 3.12). `asignarCaravanasATrueque` la asigna automáticamente al envío pendiente; si no hay ninguna disponible, el envío espera hasta que quede libre una caravana (la asignación se reevalúa en ese momento). Para entregar a mano en un trueque, se engancha la caravana a un ejército y se entrega al llegar (Doc 5.13.3); el lanzamiento manual de 3.13.3 no se vincula a trueques.
 - Cuando hay menos caravanas disponibles que envíos pendientes en un mismo asentamiento (varios acuerdos compitiendo a la vez), se prioriza por un SCORE ponderado (ver 3.12: urgencia por expiración del acuerdo, urgencia por volumen pendiente, cercanía del destino) — no por orden de llegada.
-- La caravana viaja de verdad por el mapa, sobre una RUTA calculada por pathfinding (rodea terreno costoso, ver Doc 1.6/3.6), con la velocidad modulada por el coste del terreno que cruza en cada momento — y entrega al llegar. Al entregar, la caravana vuelve a estar 'disponible' en el origen: es un activo persistente y con coste (3.12), no un objeto de un solo uso.
+- La caravana viaja de verdad por el mapa, sobre una RUTA calculada por pathfinding (rodea terreno costoso, ver Doc 1.6/3.6), con la velocidad modulada por el coste del terreno que cruza en cada momento — y entrega al llegar. Al entregar, la caravana pasa a `retornando` y vuelve a estar 'disponible' al llegar al origen (3.13.3): es un activo persistente y con coste (3.12), no un objeto de un solo uso.
 - Cumplir o incumplir un trueque ajusta el score de reputación de Facción (Doc 2.7) **solo entre Facciones distintas**: un trueque entre plazas de la misma Facción no mueve la reputación (decidido el 2026-10-11).
 
 ## 3.3 Órdenes de mercado (comercio abierto)
@@ -43,7 +43,7 @@ Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con p
 - NO existe mercado NPC de respaldo.
 
 ## 3.5 Comisiones de comercio
-- Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles Proteccionistas" y "Arterias Comerciales" del Maestro de Obras, "Comercio Abierto"; se multiplican y solo tocan la comisión externa).
+- Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles Proteccionistas" y "Comercio Abierto" del Tesorero, "Arterias Comerciales" del Maestro de Obras; se multiplican y solo tocan la comisión externa). Corregido el 2026-10-18 al contrastar con Mechanics.
 - **En un trueque o una entrega de caravana el comercio genera el oro de la comisión** (se acuña en el destino), **pero solo entre dos asentamientos distintos**: llevarse la carga al propio origen no rinde nada (2026-10-11).
 - **Reputación baja = recargo de su bolsillo** (2026-10-11): si la Facción de origen, distinta de la del destino, tiene reputación en el umbral bajo, paga además el 50 % extra de la comisión, sacado del oro de su almacén de origen y entregado al destino.
 - **En el mostrador (3.3), la paga quien toma la orden y se la queda la plaza donde ocurre**: comprando se paga de más, vendiendo se cobra de menos. El oro **se conserva**: la comisión sale de quien comercia, no se acuña. En un trueque, la comisión la cobra el destino al recibir cada entrega (`comisionDeEntrega`).
@@ -53,7 +53,8 @@ Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con p
 2. **Militar**: lleva equipo militar antes de un asedio. Capacidad y velocidad propias (`CARAVANA_CATALOGO`).
 3. **De construcción**: la Caravana de Fundación (Doc 1.8), un mecanismo aparte del de Trueque/Mercado — no forma parte de la flota propia de 3.12.
 4. **De contrabando**: detección reducida; solo datos, sin flota ni disparador.
-- **Movimiento con coste de terreno** (ver Doc 1.1/1.6): la velocidad es la base, y el avance real por minuto se divide entre el coste de terreno en la posición actual (llano≈1, colina/montaña más lento, cima muy caro; el agua no se cruza) — cruzar relieve accidentado tarda más. El bosque también frena y los ríos solo se cruzan por un vado o por una ciudad ribereña. Cada caravana calcula su RUTA por pathfinding en cada lanzamiento (rodea el relieve costoso y se arrima a los caminos ya transitados), y avanza más rápido en cada tramo que sea camino (Doc 1.6). Una comercial que cruce la zona de una ciudad ajena pasa por ella y deja un peaje en especie del 2 % de su carga.
+5. **De acarreo** (3.13.8): la caravana de plan fijo de un pueblo extractor, que lleva lo extraído a su plaza madre; no es de la flota propia.
+- **Movimiento con coste de terreno** (ver Doc 1.1/1.6): la velocidad es la base, y el avance se resuelve con un plan por la ruta, con el coste de terreno evaluado a lo largo de cada tramo (Movimiento_Ejercitos §4.2) (llano≈1, colina/montaña más lento, cima muy caro; el agua no se cruza) — cruzar relieve accidentado tarda más. El bosque también frena y los ríos solo se cruzan por un vado o por una ciudad ribereña. Cada caravana calcula su RUTA por pathfinding en cada lanzamiento (rodea el relieve costoso y se arrima a los caminos ya transitados), y avanza más rápido en cada tramo que sea camino (Doc 1.6). Una comercial que cruce la zona de una ciudad ajena pasa por ella y deja un peaje en especie del 2 % de su carga.
 
 ## 3.7 Transporte individual espontáneo (heredado de Iberia)
 - **El inventario personal es el carro de la columna** (`Ejercito.suministro`, capacidad `LOGISTICA.capacidadCarroPorJugador` por héroe más las caravanas adjuntas, Doc 5.13.2): admite cualquier recurso, incluido el oro. Se carga al salir eligiendo qué llevar (Doc 1.10.2) y se vuelca al almacén al entrar en tu residencia (Doc 1.10.3).
@@ -85,7 +86,7 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
 - **Los carros no cambian de manos en el mundo: solo la carga.** El atacante se queda con lo que le **quepa en los carros de sus columnas**; el resto de lo perdido se destruye. Unity responde **qué carros se perdieron** (`carrosPerdidos`); se destruyen con su animal y la caravana sigue con los que le queden (si los pierde todos, se elimina, 3.13.6).
   - **A**: la carga perdida es la de los carros perdidos.
   - **B**: si gana el atacante, el dueño pierde el **70 %** de la carga, recurso a recurso; el **30 % se salva siempre** y llega a su destino en los carros que queden o, si no queda ninguno, con los carreteros. Si gana el defensor, no se pierde nada.
-  - **Bot contra bot** (5.2.5): B usa una `ventajaDefensor` mayor que el ×1,05 general (placeholder ×1,25). Si gana el atacante, en A pierde la mitad de los carros, redondeando hacia arriba (placeholder); en B, el 70 % de la carga y la mitad de los carros.
+  - **Bot contra bot** (5.2.5): B usa una `ventajaDefensor` ×1,25 (placeholder) y A ×1; el atacante tira una sola vez (Combate §7.1; corregido el 2026-10-18). Si gana el atacante, en A pierde la mitad de los carros, redondeando hacia arriba (placeholder); en B, el 70 % de la carga y la mitad de los carros.
 - Atacar una caravana de otra Facción **exige guerra con su dueño en cualquier sitio, o la declara** (2.4.1), de modo que el paso forzoso por una ciudad ajena (peaje, Doc 1.6) no se convierte en una trampa.
 - **Los bandidos** (Doc 1.9) atacan las caravanas que pasan cerca de su campamento, con la misma resolución numérica.
 - Los bandidos **siguen sin actuar dentro de ninguna zona**; la regla entre Facciones de arriba no se aplica al PvE.
@@ -105,7 +106,7 @@ Requiere tecnología de barcos + puertos. Fase 0 es 100% terrestre (eje naval po
 
 **Mercado (edificio, Doc 4.2.1)**: adición MANUAL de Gobernador/Maestro de Obras (ver Doc 4.2), no auto-construcción. Gatea DOS cosas: colocar órdenes de mercado (3.3) y crear caravanas propias (más abajo). Sus niveles internos administran el cupo de flota (2/4/6), el de **carros de toda la flota** (3/9/18, 3.13.2) y el de escolta por caravana (100/200/300 pts de Liderazgo, 3.13.4) — ver catálogo completo en Doc 4.2.1.
 
-**Flota de caravanas propias**: activo persistente, no efímero. Se crea como un casco vacío y gratis (`crearCaravana`, 3.13.2) que cuenta contra `cupoCaravanas` (nivel de Mercado + política "Ampliación de Flota", +1 aditivo) hasta que se pierda capturada en combate (3.10). **No se puede desmantelar voluntariamente.** Se reutiliza, no se reconstruye en cada viaje: su ciclo de estados está en 3.13.3.
+**Flota de caravanas propias**: activo persistente, no efímero. Se crea como un casco vacío y gratis (`crearCaravana`, 3.13.2) que cuenta contra `cupoCaravanas` (nivel de Mercado + política "Ampliación de Flota", +1 aditivo) hasta que se pierda: capturada en combate (3.10), destruida o por la ruina de su plaza (Comercio_Caravanas §5.2 y §10). **No se puede desmantelar voluntariamente.** Se reutiliza, no se reconstruye en cada viaje: su ciclo de estados está en 3.13.3.
 
 **Cooldown de creación**: tras crear una caravana desde un asentamiento —comercial o de Fundación (Doc 1.8), COMPARTIDO entre las dos— hay que esperar `CARAVANA_COOLDOWN` (10 minutos, parametrizable) antes de poder crear otra desde el mismo asentamiento. Evita que se spamee la creación cuando una caravana recién salida es destruida (bandidos, Doc 1.9; combate de caravanas, 3.10) y el cupo y los recursos vuelven a estar disponibles de inmediato. Es regla del MOTOR, así que gatea igual la creación de un jugador que la de la gobernanza NPC.
 
@@ -186,7 +187,7 @@ las grandes tardan. La carga se **reserva del almacén ya** (se descuenta al pre
   carga y escolta se reservan al programar, no al salir**, así que a la hora de salida no puede faltar nada; no hay
   estado nuevo ni rechazo por falta de recursos en ese momento. `cancelarCaravana` la revierte entera mientras espera.
 - **`cancelarCaravana`** mientras siga `'preparando'` la devuelve a `'disponible'` y **reingresa la carga
-  entera** al almacén — igual que quitar una obra `'en_cola'` (Doc 4.2).
+  entera** al almacén, topada por su capacidad (lo que no cabe se pierde; Comercio_Caravanas §5.6) — igual que quitar una obra `'en_cola'` (Doc 4.2).
 - Al vencer la preparación, pasa a `'en_transito'` sobre la ruta ya calculada (si al preparar no había ruta
   por tierra, el comando se rechaza — el agua es infranqueable, Doc 1.0b).
 - Una caravana `'preparando'` **no es interceptable**: está en su ciudad, no en el camino.

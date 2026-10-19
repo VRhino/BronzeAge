@@ -84,7 +84,7 @@ Las cifras de `INTEL` y de `EDIFICIO_CATALOGO.taberna` (`constants.ts`) son plac
 
 ## 32. Reputación: cifras
 
-`REPUTACION` (`constants.ts`) es placeholder: bonus por trueque cumplido (+5) y por liberar a un vasallo (+6), penalizaciones por trueque incumplido (−8), rebelión (−10), romper alianza (−12) y atacar a un aliado (−25), bonus por minuto de alianza (0,05), decaimiento (0,2 por minuto) y umbrales (−40 para el Embajador y para la comisión, ×1,5). Medir con batch que el score no se sature en ±100 ni quede pegado a 0, y que los umbrales muerdan sin bloquear la diplomacia. Canon: Doc 2.7.
+`REPUTACION` (`constants.ts`) es placeholder: bonus por trueque cumplido (+5) y por liberar a un vasallo (+6), penalizaciones por trueque incumplido (−8), rebelión (−10), romper alianza (−12) y atacar a un aliado (−25), bonus por minuto de alianza (0,05), decaimiento (0,002 por minuto desde el 2026-10-18; era 0,2) y bonus por minuto de alianza (0,0005; era 0,05) y umbrales (−40 para el Embajador y para la comisión, ×1,5). Medir con batch que el score no se sature en ±100 ni quede pegado a 0, y que los umbrales muerdan sin bloquear la diplomacia. Canon: Doc 2.7.
 
 ## 33. Comisión intermedia entre aliadas y vasallas
 
