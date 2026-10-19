@@ -10,6 +10,7 @@ use crate::estado_comercio::EstadoComercio;
 use crate::urbanismo::{Urbanismo, Urbe};
 use base::{Instante, Mil, Plan, Punto, Ritmo, Rng, Vertice};
 use cola::{Clave, Cola, Evento, Generaciones};
+use comercio::Carga as Mercancia;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -30,9 +31,10 @@ pub const PRIO_REPUTACION: u8 = 9;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-/// BAN5: BAN4 más el comercio (trueques, órdenes, flota, reputación) y los eventos de comercio de la cola. BAN4 se rechaza.
-const MAGIA: &[u8; 4] = b"BAN5";
-const MAGIA_ANTERIOR: &[u8; 4] = b"BAN4";
+/// BAN6: BAN5 más el viaje de las caravanas (costes de ruta, planes, pausa por batalla), la red de caminos, el pulso del reparto, el mercado de
+/// mercenarios y, en cada columna, su carro (`suministro`) y sus caravanas adjuntas. BAN5 se rechaza.
+const MAGIA: &[u8; 4] = b"BAN6";
+const MAGIA_ANTERIOR: &[u8; 4] = b"BAN5";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -161,6 +163,13 @@ pub struct Ejercito {
     /// Lleva enganchada una Caravana de Fundación (Doc 1.8): puede fundar donde está. La compra y el lanzamiento son de
     /// la economía; hasta entonces la da la administración.
     pub caravana_fundacion: bool,
+    /// El carro de la columna (`suministro`, Movimiento_Ejercitos §2): botín y materiales; no es lo que se come. Su capacidad es la del
+    /// carro de un jugador más la de las caravanas adjuntas (`Nucleo::capacidad_de_carga`).
+    // DUDA: el sistema de héroes traerá los participantes (un carro por héroe) y el reparto por héroe al separarse; hoy hay un solo carro por
+    // columna y lo llena la administración (`DarSuministro`), el mostrador y el campamento de mercenarios.
+    pub suministro: Mercancia,
+    /// Caravanas enganchadas a la columna (ids ascendentes, §9): viajan con ella y el reparto automático no las ve.
+    pub caravanas_adjuntas: Vec<u64>,
     /// Versión de mundo del último cambio.
     pub version: u64,
 }
@@ -249,26 +258,37 @@ impl CitaReputacion {
     }
 }
 
-/// Qué plazo de comercio vence. El orden de salida dentro de la prioridad 6 es: llegadas, fin de preparación, caducidades y reparto
+/// Qué plazo de comercio vence. El orden de salida dentro de la prioridad 6 es: llegadas y peajes, fin de preparación, caducidades y reparto
 /// (lo que llega cambia de estado antes de lo que caduca): se consigue con [`SucesoComercio::rango`], porque la cola solo ordena por
 /// `(instante, prioridad, secuencia)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SucesoComercio {
-    /// El fin del tiempo de preparación de una caravana lanzada a mano (la entidad es la caravana).
+    /// El fin del tiempo de preparación de una caravana lanzada a mano (la entidad es la caravana): sale con su plan.
     FinPreparacion,
     /// Caducidad de un trueque `propuesto` o `activo` (la entidad es el trueque).
     CaducaTrueque,
     /// Caducidad de una orden de mercado (la entidad es la orden).
     CaducaOrden,
+    /// El plan de una caravana llegó a su último vértice (la entidad es la caravana): entrega, regreso o llegada a casa.
+    LlegadaCaravana,
+    /// El plan de una caravana cruza una ciudad ajena que cobra peaje (la entidad es la caravana; un evento por peaje pendiente).
+    PeajeCaravana,
+    /// Pulso del reparto automático de una plaza de origen con un lado pendiente sin cargar (la entidad es la plaza); recurrente cada minuto
+    /// mientras haya algo que repartir y nada que lo impida, y se detiene solo.
+    PulsoReparto,
+    /// Reposición de los mercados de mercenarios (la entidad es el mercado, único); solo se programa si algo cambió.
+    ReponeMercenarios,
 }
 
 impl SucesoComercio {
-    /// Posición dentro de la prioridad 6 (0 = llegadas, aún sin implementar; 3 = reparto, ídem). Un evento de rango `r` deja pasar `r`
-    /// veces a los eventos del mismo instante que ya estaban en la cola antes de ejecutarse.
+    /// Posición dentro de la prioridad 6: 0 = llegadas y peajes, 1 = fin de preparación, 2 = caducidades, 3 = reparto y reposición. Un evento
+    /// de rango `r` deja pasar `r` veces a los eventos del mismo instante que ya estaban en la cola antes de ejecutarse.
     pub fn rango(self) -> u8 {
         match self {
+            SucesoComercio::LlegadaCaravana | SucesoComercio::PeajeCaravana => 0,
             SucesoComercio::FinPreparacion => 1,
             SucesoComercio::CaducaTrueque | SucesoComercio::CaducaOrden => 2,
+            SucesoComercio::PulsoReparto | SucesoComercio::ReponeMercenarios => 3,
         }
     }
     pub(crate) fn a_u8(self) -> u8 {
@@ -276,6 +296,10 @@ impl SucesoComercio {
             SucesoComercio::FinPreparacion => 0,
             SucesoComercio::CaducaTrueque => 1,
             SucesoComercio::CaducaOrden => 2,
+            SucesoComercio::LlegadaCaravana => 3,
+            SucesoComercio::PeajeCaravana => 4,
+            SucesoComercio::PulsoReparto => 5,
+            SucesoComercio::ReponeMercenarios => 6,
         }
     }
     pub(crate) fn de_u8(i: u8) -> Option<Self> {
@@ -283,6 +307,10 @@ impl SucesoComercio {
             0 => Some(SucesoComercio::FinPreparacion),
             1 => Some(SucesoComercio::CaducaTrueque),
             2 => Some(SucesoComercio::CaducaOrden),
+            3 => Some(SucesoComercio::LlegadaCaravana),
+            4 => Some(SucesoComercio::PeajeCaravana),
+            5 => Some(SucesoComercio::PulsoReparto),
+            6 => Some(SucesoComercio::ReponeMercenarios),
             _ => None,
         }
     }
@@ -349,6 +377,8 @@ pub struct Estado {
 
 impl Estado {
     pub fn nuevo(reglas: Reglas, mundo_hash: String, semilla: u64, ahora: Instante) -> Self {
+        let mut comercio = EstadoComercio::default();
+        comercio.mercenarios.mercado = comercio::mercenarios::MercadoMercenario::nuevo(&reglas.economia.comercio.mercenarios, ahora);
         Self {
             reglas,
             mundo_hash,
@@ -365,7 +395,7 @@ impl Estado {
             yacimientos: BTreeMap::new(),
             contactos: BTreeSet::new(),
             niveles_faccion: BTreeMap::new(),
-            comercio: EstadoComercio::default(),
+            comercio,
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             por_lider: HashMap::new(),
@@ -451,6 +481,9 @@ impl Estado {
             w.opt_i64(v.minimo);
             w.i64(e.capacidad_viveres);
             w.bool(e.caravana_fundacion);
+            codec_comercio::carga_escribir(&mut w, &e.suministro);
+            w.u32(e.caravanas_adjuntas.len() as u32);
+            e.caravanas_adjuntas.iter().for_each(|&c| w.u64(c));
             w.u64(e.version);
         }
 
@@ -545,7 +578,7 @@ impl Estado {
         let mut r = Lector::nuevo(bytes);
         match r.magia()? {
             m if m == *MAGIA => {}
-            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN4 (sin comercio): ya no se admite")),
+            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN5 (sin viaje de caravanas): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
@@ -603,7 +636,13 @@ impl Estado {
                 maximo: r.opt_i64()?,
                 minimo: r.opt_i64()?,
             };
-            let (capacidad_viveres, caravana_fundacion, version) = (r.i64()?, r.bool()?, r.u64()?);
+            let (capacidad_viveres, caravana_fundacion) = (r.i64()?, r.bool()?);
+            let suministro = codec_comercio::carga_leer(&mut r)?;
+            let mut caravanas_adjuntas = Vec::new();
+            for _ in 0..r.u32()? {
+                caravanas_adjuntas.push(r.u64()?);
+            }
+            let version = r.u64()?;
             s.insertar(Ejercito {
                 id,
                 lider,
@@ -615,6 +654,8 @@ impl Estado {
                 viveres,
                 capacidad_viveres,
                 caravana_fundacion,
+                suministro,
+                caravanas_adjuntas,
                 version,
             });
         }

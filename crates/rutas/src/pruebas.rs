@@ -280,3 +280,54 @@ fn mundo_real_mide_rutas_entre_campamentos() {
         eprintln!("ruta más larga: {} vértices, coste {} → {:.1} min a 500 mil/s", c.puntos.len(), c.coste_total(), plan.fin().unwrap() as f64 / 60_000.0);
     }
 }
+
+// ───────────────────────────── Red de caminos: atracción y plan por minuto (caravanas) ─────────────────────────────
+
+/// Una atracción con las aristas que unen los nodos `ruta` (por celdas), todas con `peso`.
+fn atraccion_por(ruta: &[(i64, i64)], peso: u32) -> Arc<Atraccion> {
+    let pesos = ruta.windows(2).map(|w| (clave_arista(c(w[0].0, w[0].1), c(w[1].0, w[1].1)), peso)).collect();
+    Arc::new(Atraccion { pesos, por_peso: 100_000, minimo: 500_000 })
+}
+
+#[test]
+fn la_atraccion_de_la_red_desvia_la_ruta_hacia_las_aristas_con_peso_y_sin_ella_nada_cambia() {
+    let r = abierta(12, 12);
+    let (a, b) = (c(0, 5), c(10, 5));
+    let recta = r.ruta(a, b, &Opciones::default()).unwrap();
+    assert_eq!(recta.coste_total(), 10_000);
+    // Un camino con rodeo por la fila 2 (la ida: 3 filas arriba, 10 a lo ancho, 3 abajo): con mucho peso compensa.
+    let mut rodeo: Vec<(i64, i64)> = vec![(0, 5), (0, 4), (0, 3), (0, 2)];
+    rodeo.extend((1..=10).map(|x| (x, 2)));
+    rodeo.extend([(10, 3), (10, 4), (10, 5)]);
+    let con = Opciones { atraccion: Some(atraccion_por(&rodeo, 5)), ..Opciones::default() };
+    let desviada = r.ruta(a, b, &con).unwrap();
+    assert!(desviada.puntos.iter().any(|p| p.y == c(0, 2).y), "se arrima al camino: {:?}", desviada.puntos);
+    // El coste que devuelve es el real del terreno (sin atracción): el plan no se abarata por el peso.
+    assert!(desviada.coste_total() > recta.coste_total());
+    // Sin pesos, o con un mapa de pesos vacío, el resultado es idéntico al de siempre.
+    let vacia = Opciones { atraccion: Some(Arc::new(Atraccion { pesos: Default::default(), por_peso: 100_000, minimo: 500_000 })), ..Opciones::default() };
+    assert_eq!(r.ruta(a, b, &vacia).unwrap(), recta);
+    // El factor: 1 − 0,1 × peso, con suelo en 0,5; peso 0 no atrae.
+    let at = atraccion_por(&[], 0);
+    assert_eq!((at.factor(0), at.factor(1), at.factor(3), at.factor(9)), (1_000_000, 900_000, 700_000, 500_000));
+    // Determinista.
+    assert_eq!(r.ruta(a, b, &con).unwrap(), r.ruta(a, b, &con).unwrap());
+}
+
+#[test]
+fn la_clave_de_arista_redondea_a_entero_y_no_depende_del_sentido() {
+    assert_eq!(clave_arista(Punto::new(10_400, 20_600), Punto::new(30_000, 40_499)), ((10, 21), (30, 40)));
+    assert_eq!(clave_arista(Punto::new(30_000, 40_499), Punto::new(10_400, 20_600)), ((10, 21), (30, 40)));
+}
+
+#[test]
+fn el_plan_por_minuto_reparte_el_tiempo_por_el_coste_de_cada_tramo() {
+    let puntos = [c(0, 0), c(1, 0), c(2, 0)];
+    // Un espaciado (8 unidades) en llano a 24 unidades por minuto tarda 20 s; el segundo tramo, a mitad de coste (camino), 10 s.
+    let plan = a_plan_por_minuto(&puntos, &[1_000, 500], ESP, 5_000, 24_000, 3);
+    assert_eq!(plan.generacion, 3);
+    assert_eq!(plan.vertices.iter().map(|v| v.en).collect::<Vec<_>>(), vec![5_000, 25_000, 35_000]);
+    // Es lo mismo que el plan por segundo a la velocidad equivalente (24 u/min = 400 milésimas/s).
+    let cam = Camino { puntos: puntos.to_vec(), costes: vec![1_000, 1_000], nodos: vec![], espaciado: ESP };
+    assert_eq!(a_plan_por_minuto(&puntos, &cam.costes, ESP, 5_000, 24_000, 3), cam.a_plan(5_000, 400, 3));
+}

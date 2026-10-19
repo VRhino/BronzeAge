@@ -4,21 +4,27 @@
 //! Formato (little endian, el de `codec`): `siguiente_acuerdo u64 · siguiente_orden u64 · siguiente_caravana u64 ·
 //! acuerdos{n u64 · n × acuerdo} · libro{órdenes{n u64 · n × orden} · historial{ídem}} · flota{n u64 · n × caravana} ·
 //! reputación{n u64 · n × (facción u32, valor i64, t0 i64, alianzas u32)} · última caravana{n u64 · n × (plaza u64, instante i64)} ·
-//! suministros{n u64 · n × (columna u64, carga)} · adjuntas{n u64 · n × (caravana u64, columna u64)}`.
+//! red{aristas{n u64 · n × (x0,y0,x1,y1 i64)} · rutas{n u64 · n × (origen u32, destino u32, facción u32, aristas{n u64 · n × arista}, último
+//! lanzamiento i64)}} · reparto{n u64 · n × (plaza u64, instante i64)} · mercenarios{contadores{carga} · repone_en i64 · stock{n u64 · n ×
+//! (campamento u32, carga)} · cupos{n u64 · n × (columna u64, día i64, carga)} · residencias{n u64 · n × (columna u64, campamento u32)} ·
+//! personal{n u64 · n × (columna u64, carga)} · pulso opt_i64}`. El carro (`suministro`) y las caravanas adjuntas de cada columna viajan con
+//! la columna (`estado`).
 //! Un acuerdo: `id u64 · a u32 · b u32 · líneas_a{n u64 · n × (recurso u8, total i64, entregada i64)} · líneas_b · creado_en i64 ·
 //! aceptado_en opt_i64 · expira_en i64 · estado u8`. Una orden: `id u64 · plaza u32 · tipo u8 · recurso u8 · cantidad i64 · cumplida i64 ·
 //! precio i64 · creado_en i64 · expira_en i64 · estado u8`. Una carga: `n u64 · n × (recurso u8, cantidad i64)`. Una caravana: `id u64 ·
 //! tipo u8 · origen u32 · destino opt_u64 · contenido{carga} · carros{n u64 · n × (tipo u8, animal u8: 255 ninguno)} · estado u8 ·
-//! posición · ruta{n u64 · n × punto} · plan{bool · generación u32 · n u32 · n × (punto, instante i64)} · peajes{n u64 · n × (ciudad u32,
+//! posición · ruta{n u64 · n × punto} · costes{n u64 · n × i64} · plan{bool · generación u32 · n u32 · n × (punto, instante i64)} · peajes{n u64 · n × (ciudad u32,
 //! progreso i64)} · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
-//! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · de_campamento bool`.
+//! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · pausada_desde opt_i64 · de_campamento bool`.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{recurso_a_u8, recurso_de_u8};
-use crate::estado_comercio::EstadoComercio;
+use crate::estado_comercio::{EstadoComercio, EstadoMercenarios};
 use base::{Plan, Vertice};
 use comercio::caravana::{Animal, Caravana, Carro, Escuadra, EstadoCaravana, TipoCaravana, TipoCarro};
+use comercio::mercenarios::{CupoDiario, MercadoMercenario, StockCampamento};
 use comercio::orden_mercado::{EstadoOrden, LibroOrdenes, OrdenMercado, TipoOrden};
+use comercio::red_caminos::{Arista, RedCaminos, RutaComercial};
 use comercio::reputacion::Reputacion;
 use comercio::trueque::{AcuerdoTrueque, EstadoTrueque, Linea};
 use comercio::viaje::Peaje;
@@ -172,7 +178,7 @@ fn estado_caravana_de_u8(i: u8) -> Result<EstadoCaravana, ErrorFormato> {
     })
 }
 
-fn carga_escribir(w: &mut Escritor, c: &Carga) {
+pub(crate) fn carga_escribir(w: &mut Escritor, c: &Carga) {
     w.u64(c.len() as u64);
     for (&r, &n) in c {
         w.u8(recurso_a_u8(r));
@@ -180,7 +186,7 @@ fn carga_escribir(w: &mut Escritor, c: &Carga) {
     }
 }
 
-fn carga_leer(r: &mut Lector) -> Result<Carga, ErrorFormato> {
+pub(crate) fn carga_leer(r: &mut Lector) -> Result<Carga, ErrorFormato> {
     let mut c = Carga::new();
     for _ in 0..r.cuenta()? {
         let (rec, n) = (recurso_de_u8(r.u8()?)?, r.i64()?);
@@ -274,6 +280,7 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
         estado,
         posicion,
         ruta,
+        costes,
         plan,
         peajes,
         origen_acuerdo,
@@ -282,6 +289,7 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
         reservada_manual,
         anfitriona,
         antes_de_batalla,
+        pausada_desde,
         de_campamento,
     } = c;
     w.u64(*id);
@@ -298,6 +306,8 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
     w.punto(*posicion);
     w.u64(ruta.len() as u64);
     ruta.iter().for_each(|&p| w.punto(p));
+    w.u64(costes.len() as u64);
+    costes.iter().for_each(|&c| w.i64(c));
     match plan {
         Some(Plan { generacion, vertices }) => {
             w.bool(true);
@@ -333,6 +343,7 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
     w.bool(*reservada_manual);
     w.opt_u64(anfitriona.map(u64::from));
     w.u8(antes_de_batalla.map_or(NINGUNO, estado_caravana_a_u8));
+    w.opt_i64(*pausada_desde);
     w.bool(*de_campamento);
 }
 
@@ -358,6 +369,10 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
     let mut ruta = Vec::new();
     for _ in 0..r.cuenta()? {
         ruta.push(r.punto()?);
+    }
+    let mut costes = Vec::new();
+    for _ in 0..r.cuenta()? {
+        costes.push(r.i64()?);
     }
     let plan = if r.bool()? {
         let generacion = r.u32()?;
@@ -395,6 +410,7 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
         estado,
         posicion,
         ruta,
+        costes,
         plan,
         peajes,
         origen_acuerdo,
@@ -403,12 +419,109 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
         reservada_manual,
         anfitriona,
         antes_de_batalla,
+        pausada_desde: r.opt_i64()?,
         de_campamento: r.bool()?,
     })
 }
 
+fn arista_escribir(w: &mut Escritor, a: &Arista) {
+    let ((x0, y0), (x1, y1)) = a;
+    w.i64(*x0);
+    w.i64(*y0);
+    w.i64(*x1);
+    w.i64(*y1);
+}
+
+fn arista_leer(r: &mut Lector) -> Result<Arista, ErrorFormato> {
+    Ok(((r.i64()?, r.i64()?), (r.i64()?, r.i64()?)))
+}
+
+fn red_escribir(w: &mut Escritor, red: &RedCaminos) {
+    let aristas: Vec<&Arista> = red.aristas().collect();
+    w.u64(aristas.len() as u64);
+    aristas.into_iter().for_each(|a| arista_escribir(w, a));
+    let rutas: Vec<_> = red.rutas().collect();
+    w.u64(rutas.len() as u64);
+    for RutaComercial { origen, destino, faccion, aristas, ultimo_lanzamiento } in rutas {
+        w.u32(*origen);
+        w.u32(*destino);
+        w.u32(*faccion);
+        w.u64(aristas.len() as u64);
+        aristas.iter().for_each(|a| arista_escribir(w, a));
+        w.i64(*ultimo_lanzamiento);
+    }
+}
+
+fn red_leer(r: &mut Lector) -> Result<RedCaminos, ErrorFormato> {
+    let mut aristas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        aristas.push(arista_leer(r)?);
+    }
+    let mut rutas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        let (origen, destino, faccion) = (r.u32()?, r.u32()?, r.u32()?);
+        let mut propias = Vec::new();
+        for _ in 0..r.cuenta()? {
+            propias.push(arista_leer(r)?);
+        }
+        rutas.push(RutaComercial { origen, destino, faccion, aristas: propias, ultimo_lanzamiento: r.i64()? });
+    }
+    Ok(RedCaminos::desde_partes(aristas, rutas))
+}
+
+fn mercenarios_escribir(w: &mut Escritor, m: &EstadoMercenarios) {
+    let EstadoMercenarios { mercado, stock, cupos, residencias, personal, pulso } = m;
+    let MercadoMercenario { contadores, repone_en } = mercado;
+    carga_escribir(w, contadores);
+    w.i64(*repone_en);
+    w.u64(stock.len() as u64);
+    for (&campamento, s) in stock {
+        w.u32(campamento);
+        carga_escribir(w, &s.stock);
+    }
+    w.u64(cupos.len() as u64);
+    for (&columna, c) in cupos {
+        let CupoDiario { dia, comprado } = c;
+        w.u64(columna);
+        w.i64(*dia);
+        carga_escribir(w, comprado);
+    }
+    w.u64(residencias.len() as u64);
+    for (&columna, &campamento) in residencias {
+        w.u64(columna);
+        w.u32(campamento);
+    }
+    w.u64(personal.len() as u64);
+    for (&columna, carga) in personal {
+        w.u64(columna);
+        carga_escribir(w, carga);
+    }
+    w.opt_i64(*pulso);
+}
+
+fn mercenarios_leer(r: &mut Lector) -> Result<EstadoMercenarios, ErrorFormato> {
+    let mut m = EstadoMercenarios { mercado: MercadoMercenario { contadores: carga_leer(r)?, repone_en: r.i64()? }, ..EstadoMercenarios::default() };
+    for _ in 0..r.cuenta()? {
+        let campamento = r.u32()?;
+        m.stock.insert(campamento, StockCampamento { stock: carga_leer(r)? });
+    }
+    for _ in 0..r.cuenta()? {
+        let columna = r.u64()?;
+        m.cupos.insert(columna, CupoDiario { dia: r.i64()?, comprado: carga_leer(r)? });
+    }
+    for _ in 0..r.cuenta()? {
+        m.residencias.insert(r.u64()?, r.u32()?);
+    }
+    for _ in 0..r.cuenta()? {
+        let columna = r.u64()?;
+        m.personal.insert(columna, carga_leer(r)?);
+    }
+    m.pulso = r.opt_i64()?;
+    Ok(m)
+}
+
 pub(crate) fn escribir(w: &mut Escritor, c: &EstadoComercio) {
-    let EstadoComercio { acuerdos, libro, flota, reputacion, ultima_caravana, suministros, adjuntas, siguiente_acuerdo, siguiente_orden, siguiente_caravana } = c;
+    let EstadoComercio { acuerdos, libro, flota, reputacion, ultima_caravana, red, reparto, mercenarios, siguiente_acuerdo, siguiente_orden, siguiente_caravana } = c;
     w.u64(*siguiente_acuerdo);
     w.u64(*siguiente_orden);
     w.u64(*siguiente_caravana);
@@ -434,16 +547,13 @@ pub(crate) fn escribir(w: &mut Escritor, c: &EstadoComercio) {
         w.u64(plaza);
         w.i64(t);
     }
-    w.u64(suministros.len() as u64);
-    for (&columna, carga) in suministros {
-        w.u64(columna);
-        carga_escribir(w, carga);
+    red_escribir(w, red);
+    w.u64(reparto.len() as u64);
+    for (&plaza, &t) in reparto {
+        w.u64(plaza);
+        w.i64(t);
     }
-    w.u64(adjuntas.len() as u64);
-    for (&caravana, &columna) in adjuntas {
-        w.u64(caravana);
-        w.u64(columna);
-    }
+    mercenarios_escribir(w, mercenarios);
 }
 
 pub(crate) fn leer(r: &mut Lector, reglas: &Reglas) -> Result<EstadoComercio, ErrorFormato> {
@@ -467,12 +577,10 @@ pub(crate) fn leer(r: &mut Lector, reglas: &Reglas) -> Result<EstadoComercio, Er
     for _ in 0..r.cuenta()? {
         c.ultima_caravana.insert(r.u64()?, r.i64()?);
     }
+    c.red = red_leer(r)?;
     for _ in 0..r.cuenta()? {
-        let columna = r.u64()?;
-        c.suministros.insert(columna, carga_leer(r)?);
+        c.reparto.insert(r.u64()?, r.i64()?);
     }
-    for _ in 0..r.cuenta()? {
-        c.adjuntas.insert(r.u64()?, r.u64()?);
-    }
+    c.mercenarios = mercenarios_leer(r)?;
     Ok(c)
 }

@@ -66,7 +66,7 @@ impl Nucleo {
     }
 
     /// Los discos de todas las plazas en `t`, por id.
-    fn discos(&self) -> Vec<(u64, Disco)> {
+    pub(super) fn discos(&self) -> Vec<(u64, Disco)> {
         self.estado.asentamientos.values().map(|a| (a.id, self.disco_de(a))).collect()
     }
 

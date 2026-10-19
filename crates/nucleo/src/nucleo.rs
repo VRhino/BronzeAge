@@ -27,6 +27,7 @@ use mundo::Mundo;
 use crate::generadores::{Cx, GeneradorDeEventos, Transicion};
 use base::{Instante, Mil, Plan, Punto, Ritmo};
 use cola::Evento;
+use comercio::caravana::EstadoCaravana;
 use persistencia::{Almacen, Foto, Fotos};
 use rutas::{Camino, Escritorio, Opciones, Peticion as PeticionRuta, Rutas};
 use servidor::RelojCompartido;
@@ -41,6 +42,8 @@ use std::thread::JoinHandle;
 mod construccion;
 mod flota;
 mod mercado;
+mod mercenarios;
+mod viaje;
 mod zonas;
 
 pub use zonas::InformeViabilidad;
@@ -148,6 +151,8 @@ pub struct Nucleo {
     metricas: Metricas,
     avisos: Vec<persistencia::Aviso>,
     recuperado: bool,
+    /// Memos del viaje de las caravanas (rutas y atracción de la red): funciones puras del estado, no entran en el hash ni en las fotos.
+    cache: viaje::CacheViaje,
 }
 
 impl Nucleo {
@@ -234,6 +239,7 @@ impl Nucleo {
             metricas: Metricas::default(),
             avisos: Vec::new(),
             recuperado: false,
+            cache: viaje::CacheViaje::default(),
         };
         n.reiniciar_muestreo();
         n
@@ -304,6 +310,11 @@ impl Nucleo {
     pub fn agregar_generador(&mut self, mut g: Box<dyn GeneradorDeEventos>) {
         for e in self.estado.ejercitos.values().filter(|e| e.marchando()) {
             g.plan_vigente(e.id, &e.plan);
+        }
+        for c in &self.estado.comercio.flota {
+            if let (Some(plan), EstadoCaravana::EnTransito | EstadoCaravana::Retornando) = (&c.plan, c.estado) {
+                g.plan_vigente(crate::estado_comercio::entidad_caravana(c.id), plan);
+            }
         }
         self.generadores.push(g);
     }
@@ -628,6 +639,8 @@ impl Nucleo {
                     viveres,
                     capacidad_viveres: *capacidad_viveres,
                     caravana_fundacion: false,
+                    suministro: Default::default(),
+                    caravanas_adjuntas: Vec::new(),
                     version: 0,
                 });
                 self.tr.tocados.push(id);
@@ -641,7 +654,7 @@ impl Nucleo {
                 if !p.admin && e.propietario != p.actor {
                     return Respuesta::rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya", v);
                 }
-                let (id, origen, velocidad, marchando) = (e.id, e.posicion_en(t), e.velocidad, e.marchando());
+                let (id, origen, velocidad, marchando) = (e.id, e.posicion_en(t), self.velocidad_de_columna(e), e.marchando());
                 let camino = precalculado.unwrap_or_else(|| {
                     self.metricas.rutas_calculadas += 1;
                     self.rutas.ruta_con(&mut self.escritorio, origen, *destino, &Opciones::default())
@@ -730,6 +743,11 @@ impl Nucleo {
             | Comando::EntregarDeCaravana { .. }
             | Comando::AdjuntarCaravana { .. }
             | Comando::AparcarCaravana { .. } => match self.ejecutar_flota(t, p) {
+                Ok(Some(creada)) => creadas.push(creada),
+                Ok(None) => {}
+                Err(r) => return r,
+            },
+            Comando::ComprarEnCampamento { .. } | Comando::RepostarEnCampamento { .. } | Comando::FijarResidencia { .. } | Comando::DarAlmacenPersonal { .. } => match self.ejecutar_mercenarios(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,

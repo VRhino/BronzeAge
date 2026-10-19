@@ -18,8 +18,9 @@
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
+use std::sync::Arc;
 
-use base::{Instante, Mil, Plan, Punto, Vertice};
+use base::{Instante, Mil, Plan, Punto, Vertice, MS_POR_MINUTO};
 use contrato::v1::GrafoNavegacion;
 use mundo::{Mundo, TAMANO_CELDA};
 use rayon::prelude::*;
@@ -29,6 +30,53 @@ pub const ENGANCHES: usize = 4;
 /// Desplazamiento de la heurística en punto fijo.
 const DESPLAZ: u32 = 20;
 const SIN_PADRE: u32 = u32::MAX;
+/// Uno, en ppm.
+const UNO: i64 = 1_000_000;
+
+/// Clave de una arista de la red de caminos: los dos extremos **redondeados a unidad entera** y ordenados (la de
+/// `comercio::red_caminos::Arista`, que este crate no conoce).
+pub type ClaveArista = ((i64, i64), (i64, i64));
+
+fn entero(v: i64) -> i64 {
+    (v + 500).div_euclid(1000)
+}
+
+/// `claveArista(a, b)`: la misma clave sea cual sea el sentido.
+pub fn clave_arista(a: Punto, b: Punto) -> ClaveArista {
+    let (p, q) = ((entero(a.x), entero(a.y)), (entero(b.x), entero(b.y)));
+    if p <= q {
+        (p, q)
+    } else {
+        (q, p)
+    }
+}
+
+/// La atracción de la red de caminos (Comercio_Caravanas §7.1): el coste de una arista se multiplica por `factorAtraccion(peso)`, con
+/// `factorAtraccion(p) = p > 0 ? max(minimo, 1 − por_peso × p) : 1`. Solo desvía la ruta; no entra en los tiempos del plan.
+#[derive(Clone, Debug, Default)]
+pub struct Atraccion {
+    /// Peso de cada arista (cuántas rutas vigentes la pisan); las de peso 0 no aparecen.
+    pub pesos: HashMap<ClaveArista, u32>,
+    /// `NAVEGACION.atraccionPorPeso` en ppm.
+    pub por_peso: i64,
+    /// `NAVEGACION.atraccionMin` en ppm.
+    pub minimo: i64,
+}
+
+impl Atraccion {
+    /// El factor (ppm) de una arista de peso `p`.
+    pub fn factor(&self, p: u32) -> i64 {
+        if p > 0 {
+            (UNO - self.por_peso * p as i64).max(self.minimo)
+        } else {
+            UNO
+        }
+    }
+    /// El menor factor que puede aparecer (para que la heurística siga siendo admisible).
+    fn factor_minimo(&self) -> i64 {
+        self.pesos.values().map(|&p| self.factor(p)).min().unwrap_or(UNO).min(UNO)
+    }
+}
 
 /// Opciones de una petición de ruta.
 #[derive(Clone, Debug, Default)]
@@ -38,6 +86,8 @@ pub struct Opciones {
     pub penalizacion_vado: i64,
     /// Ids de nodo (`NodoGrafo.id`) por los que no se puede pasar ni engancharse.
     pub bloqueados: Vec<u32>,
+    /// La red de caminos que atrae a la ruta (las caravanas comerciales); `None` o sin pesos = sin atracción.
+    pub atraccion: Option<Arc<Atraccion>>,
 }
 
 /// Una petición de un lote.
@@ -85,6 +135,25 @@ pub fn a_plan(camino: &Camino, salida: Instante, velocidad: Mil, generacion: u32
             acum += camino.costes[i - 1] as i128;
         }
         let ms = (acum * camino.espaciado as i128 + v / 2) / v;
+        vertices.push(Vertice { p, en: salida + ms as Instante });
+    }
+    Plan::nuevo(generacion, vertices)
+}
+
+/// Plan sobre una polilínea con el coste de cada tramo dado (`costes[i]` es el de `puntos[i] → puntos[i+1]`, en milésimas de
+/// espaciado) y la velocidad en **milésimas de unidad por minuto** (la de las caravanas: 24.000 = 24 unidades por minuto). El instante
+/// de cada vértice es `salida + redondeo(coste_acumulado × espaciado × 60 / velocidad)` ms. `velocidad <= 0` se trata como 1.
+pub fn a_plan_por_minuto(puntos: &[Punto], costes: &[i64], espaciado: i64, salida: Instante, velocidad: Mil, generacion: u32) -> Plan {
+    debug_assert!(costes.len() + 1 >= puntos.len(), "falta el coste de algún tramo");
+    let v = velocidad.max(1) as i128;
+    let por_milesima = (MS_POR_MINUTO / 1000) as i128;
+    let mut acum: i128 = 0;
+    let mut vertices = Vec::with_capacity(puntos.len());
+    for (i, &p) in puntos.iter().enumerate() {
+        if i > 0 {
+            acum += costes.get(i - 1).copied().unwrap_or(0) as i128;
+        }
+        let ms = (acum * espaciado as i128 * por_milesima + v / 2) / v;
         vertices.push(Vertice { p, en: salida + ms as Instante });
     }
     Plan::nuevo(generacion, vertices)
@@ -331,8 +400,8 @@ impl Rutas {
         (a.dist(b) * 1000 + self.espaciado / 2) / self.espaciado
     }
 
-    fn h(&self, desde: Punto, destino: Punto) -> i64 {
-        ((desde.dist(destino) as i128 * self.ratio_min as i128) >> DESPLAZ) as i64
+    fn h(&self, desde: Punto, destino: Punto, factor: i64) -> i64 {
+        ((desde.dist(destino) as i128 * self.ratio_min as i128 * factor as i128 / UNO as i128) >> DESPLAZ) as i64
     }
 
     /// A* con la memoria de trabajo `e`.
@@ -365,6 +434,9 @@ impl Rutas {
             }
         }
         let esta_bloqueado = |i: u32| e.bloqueado[i as usize] == marca;
+        // La atracción de la red solo abarata aristas: la heurística se afloja al menor factor que puede aparecer (sigue admisible).
+        let atraccion = opciones.atraccion.as_deref().filter(|a| !a.pesos.is_empty());
+        let fh = atraccion.map_or(UNO, Atraccion::factor_minimo);
         let salidas = self.enganches(origen, &esta_bloqueado);
         let llegadas = self.enganches(destino, &esta_bloqueado);
         if salidas.is_empty() || llegadas.is_empty() {
@@ -373,7 +445,7 @@ impl Rutas {
 
         e.cola.clear();
         for &(s, c) in &salidas {
-            let (s_, h) = (s as usize, self.h(self.pos[s as usize], destino));
+            let (s_, h) = (s as usize, self.h(self.pos[s as usize], destino, fh));
             if e.visto[s_] != marca || c < e.g[s_] {
                 (e.visto[s_], e.g[s_], e.padre[s_]) = (marca, c, SIN_PADRE);
                 e.cola.push(Reverse((c + h, h, s, false)));
@@ -390,7 +462,7 @@ impl Rutas {
                 break;
             }
             let gu = e.g[u as usize];
-            let hu = self.h(self.pos[u as usize], destino);
+            let hu = self.h(self.pos[u as usize], destino, fh);
             if f > gu + hu {
                 continue; // entrada vieja
             }
@@ -402,12 +474,18 @@ impl Rutas {
                 if esta_bloqueado(v) {
                     continue;
                 }
-                let paso = self.coste[k] as i64 + if self.vado[k] { opciones.penalizacion_vado } else { 0 };
+                let mut coste = self.coste[k] as i64;
+                if let Some(a) = atraccion {
+                    if let Some(&peso) = a.pesos.get(&clave_arista(self.pos[u as usize], self.pos[v as usize])) {
+                        coste = coste * a.factor(peso) / UNO;
+                    }
+                }
+                let paso = coste + if self.vado[k] { opciones.penalizacion_vado } else { 0 };
                 let g2 = gu + paso;
                 let vi = v as usize;
                 if e.visto[vi] != marca || g2 < e.g[vi] {
                     (e.visto[vi], e.g[vi], e.padre[vi], e.padre_arista[vi]) = (marca, g2, u, k as u32);
-                    let h = self.h(self.pos[vi], destino);
+                    let h = self.h(self.pos[vi], destino, fh);
                     e.cola.push(Reverse((g2 + h, h, v, false)));
                 }
             }

@@ -145,6 +145,9 @@ pub struct Caravana {
     pub posicion: Punto,
     /// La polilínea calculada al lanzar (la de ida); el regreso la desanda.
     pub ruta: Vec<Punto>,
+    /// Coste de terreno de cada tramo de `ruta` (milésimas de espaciado, como `Camino::costes` de `crates/rutas`): con él se rehace el plan al
+    /// salir de la preparación. Vacío si no hay ruta.
+    pub costes: Vec<i64>,
     pub plan: Option<Plan>,
     /// Pasos forzados por ciudades ajenas que aún no ha cruzado (solo a la ida).
     pub peajes: Vec<Peaje>,
@@ -159,6 +162,8 @@ pub struct Caravana {
     pub anfitriona: Option<AsentamientoId>,
     /// Lo que estaba haciendo al entrar en batalla.
     pub antes_de_batalla: Option<EstadoCaravana>,
+    /// Instante en que quedó apartada por la batalla (su plan queda en pausa; al salir se desplaza lo que haya durado).
+    pub pausada_desde: Option<Instante>,
     /// Nacida en un campamento: no cuenta para `carrosEnUso`.
     pub de_campamento: bool,
 }
@@ -288,6 +293,7 @@ impl Caravana {
             estado: EstadoCaravana::Disponible,
             posicion,
             ruta: Vec::new(),
+            costes: Vec::new(),
             plan: None,
             peajes: Vec::new(),
             origen_acuerdo: None,
@@ -296,6 +302,7 @@ impl Caravana {
             reservada_manual: false,
             anfitriona: None,
             antes_de_batalla: None,
+            pausada_desde: None,
             de_campamento: false,
         }
     }
@@ -537,6 +544,7 @@ impl Caravana {
         self.origen_acuerdo = None;
         self.prepara_hasta = None;
         self.ruta.clear();
+        self.costes.clear();
         self.peajes.clear();
         self.plan = None;
         self.anfitriona = None;
@@ -676,6 +684,7 @@ impl Caravana {
         self.posicion = aqui;
         self.plan = Some(vuelta);
         self.ruta = invertir_ruta(&self.ruta);
+        self.costes.reverse();
         self.peajes.clear();
         Ok(Llegada::Entrega { destino, contenido, origen_acuerdo })
     }

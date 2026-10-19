@@ -59,13 +59,33 @@ pub struct RedCaminos {
     rutas: BTreeMap<(AsentamientoId, AsentamientoId), RutaComercial>,
 }
 
+/// Lo que cambió al registrar una ruta: las aristas que entran por primera vez en la red (ya son camino) y si cambiaron los pesos
+/// (una ruta nueva para el par, o con otras aristas que la anterior).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CambioRed {
+    pub nuevas: Vec<Arista>,
+    pub pesos_cambiados: bool,
+}
+
 impl RedCaminos {
+    /// Reconstruye la red desde sus piezas (la recuperación de una foto).
+    pub fn desde_partes(aristas: impl IntoIterator<Item = Arista>, rutas: impl IntoIterator<Item = RutaComercial>) -> Self {
+        Self { aristas: aristas.into_iter().collect(), rutas: rutas.into_iter().map(|r| ((r.origen, r.destino), r)).collect() }
+    }
+
+    pub fn vacia(&self) -> bool {
+        self.aristas.is_empty() && self.rutas.is_empty()
+    }
+
     /// `registrarRuta` (en cada lanzamiento, a mano o por reparto): la ruta anterior del mismo par se **sustituye**; las aristas nuevas se
     /// añaden y las que la ruta nueva ya no pisa **siguen** en la red. Una ruta sin tramos no se registra.
-    pub fn registrar_ruta(&mut self, origen: AsentamientoId, destino: AsentamientoId, faccion: FaccionId, ruta: &[Punto], ahora: Instante) {
+    pub fn registrar_ruta(&mut self, origen: AsentamientoId, destino: AsentamientoId, faccion: FaccionId, ruta: &[Punto], ahora: Instante) -> CambioRed {
         let aristas = aristas_de_trazado(ruta);
+        let nuevas: Vec<Arista> = aristas.iter().filter(|a| !self.aristas.contains(a)).copied().collect();
+        let pesos_cambiados = self.rutas.get(&(origen, destino)).is_none_or(|x| x.aristas != aristas);
         self.aristas.extend(aristas.iter().copied());
         self.rutas.insert((origen, destino), RutaComercial { origen, destino, faccion, aristas, ultimo_lanzamiento: ahora });
+        CambioRed { nuevas, pesos_cambiados }
     }
 
     /// `podarRutas`: quita las rutas con `ahora − ultimoLanzamiento >= caducidad` o con un extremo que ya no existe. Devuelve `true` si
@@ -232,6 +252,22 @@ mod pruebas {
         assert!(!montar(&[1, 2, 3], 9).camino_compartido_abierto(&r, &sin_zonas), "9 rutas no bastan");
         assert!(!montar(&[1, 2], 12).camino_compartido_abierto(&r, &sin_zonas), "dos Facciones no bastan");
         assert!(!montar(&[1, 2, 3], 10).camino_compartido_abierto(&r, &|punto| punto == p(105, 100)), "el punto medio está en una zona");
+    }
+
+    #[test]
+    fn registrar_dice_que_aristas_abre_y_si_cambian_los_pesos() {
+        let mut red = RedCaminos::default();
+        let c1 = red.registrar_ruta(1, 2, 7, &[p(0, 0), p(10, 0)], 0);
+        assert_eq!((c1.nuevas.len(), c1.pesos_cambiados), (1, true), "una ruta nueva abre su arista y cambia los pesos");
+        let c2 = red.registrar_ruta(1, 2, 7, &[p(0, 0), p(10, 0)], 9);
+        assert_eq!((c2.nuevas.len(), c2.pesos_cambiados), (0, false), "lanzar otra vez la misma ruta no abre nada ni cambia los pesos");
+        let c3 = red.registrar_ruta(1, 3, 7, &[p(0, 0), p(10, 0)], 9);
+        assert_eq!((c3.nuevas.len(), c3.pesos_cambiados), (0, true), "otro par por las mismas aristas: pesan más");
+        let c4 = red.registrar_ruta(1, 2, 7, &[p(0, 0), p(0, 10)], 9);
+        assert_eq!((c4.nuevas.len(), c4.pesos_cambiados), (1, true));
+        // Reconstruirla desde sus piezas la deja igual.
+        let copia = RedCaminos::desde_partes(red.aristas().copied(), red.rutas().cloned());
+        assert_eq!(copia, red);
     }
 
     #[test]

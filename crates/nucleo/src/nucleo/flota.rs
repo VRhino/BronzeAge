@@ -1,12 +1,11 @@
-//! La flota de caravanas dentro del núcleo (Comercio_Caravanas §5, §10): crearlas, componerlas, lanzarlas a mano (queda `preparando`; el
-//! movimiento es de la fase 3B-2), la aparcada, la entrega manual de una adjunta, y el cierre del comercio de una plaza que cae en ruinas o
-//! cambia de dueño. Las reglas puras viven en el crate `comercio`.
+//! La flota de caravanas dentro del núcleo (Comercio_Caravanas §5, §10): crearlas, componerlas, lanzarlas a mano (sale ya o queda
+//! `preparando` hasta su hora), la aparcada y la adjunta, la entrega manual de una adjunta, y el cierre del comercio de una plaza que cae en
+//! ruinas o cambia de dueño. Las reglas puras viven en el crate `comercio`; el viaje (trazado, plan, peajes, llegada, reparto y red de
+//! caminos) está en [`viaje`](super::viaje).
 //!
-//! # Lo que aún no se mueve
-//! Ninguna caravana viaja todavía: no hay plan, ni peajes, ni reparto automático. `prepararCaravana` guarda la polilínea que calcula
-//! `crates/rutas` (sin la atracción de la red de caminos) y no admite la salida inmediata (un solo carro y sin `salir_en`), que entraría en
-//! `en_transito` sin plan: con preparación, el evento de fin se limita a registrarla (`comercio.preparacion_terminada`) y la caravana sigue
-//! `preparando` hasta que la cancelen.
+//! # Lo que dispara el reparto
+//! Una caravana que queda libre (se cancela su preparación, se le monta el primer animal, se libera de la reserva, vuelve vacía a su origen o
+//! llega a casa) hace que su plaza reevalúe el reparto a los trueques activos (`Nucleo::reparto_de_plaza`).
 
 use super::*;
 use crate::estado::SucesoComercio;
@@ -20,7 +19,7 @@ use comercio::ruina::{cerrar_dependientes, Accion, AccionCaravana, Motivo, Trueq
 use comercio::trueque::EstadoTrueque;
 use comercio::{total, Carga as Mercancia, Lado};
 
-fn rechazo_de_caravana(e: ErrorCaravana) -> (&'static str, &'static str) {
+pub(super) fn rechazo_de_caravana(e: ErrorCaravana) -> (&'static str, &'static str) {
     use rechazos::*;
     match e {
         ErrorCaravana::NoEsComercial => (CARAVANA_NO_ES_COMERCIAL, "la caravana no es comercial"),
@@ -83,7 +82,6 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
-        let solo_admin = || (!p.admin).then(|| rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
         let cr = self.estado.reglas.economia.comercio.clone();
         let de_caravana = |e: ErrorCaravana| {
             let (c, m) = rechazo_de_caravana(e);
@@ -132,6 +130,7 @@ impl Nucleo {
                 comercio.flota[i].comprar_animal(&cr.flota, *carro as usize, *animal, almacen).map_err(de_caravana)?;
                 self.tr.asentamientos.push(origen);
                 self.emitir_comercio(t, EventoComercio::CaravanaAnimalComprado { caravana: *caravana }, vec![origen], &[]);
+                self.reparto_de_plaza(origen, t);
                 Ok(None)
             }
             Comando::MoverCarro { de, a, carro } => {
@@ -150,6 +149,7 @@ impl Nucleo {
                 };
                 mover_carro(origen_de, destino_de, *carro as usize).map_err(de_caravana)?;
                 self.emitir_comercio(t, EventoComercio::CaravanaCarroMovido { caravana: *de }, vec![origen], &[("hacia", *a as i64)]);
+                self.reparto_de_plaza(origen, t);
                 Ok(None)
             }
             Comando::ReservarCaravana { caravana, reservada } => {
@@ -160,6 +160,9 @@ impl Nucleo {
                 }
                 c.reservar(*reservada);
                 self.emitir_comercio(t, EventoComercio::CaravanaReserva { caravana: *caravana, reservada: *reservada }, vec![origen], &[]);
+                if !*reservada {
+                    self.reparto_de_plaza(origen, t);
+                }
                 Ok(None)
             }
             Comando::PrepararCaravana { caravana, destino, carga, salir_en } => self.preparar_caravana(t, p, *caravana, *destino, carga, *salir_en),
@@ -169,6 +172,7 @@ impl Nucleo {
                 self.invalidar_comercio(entidad_caravana(*caravana));
                 self.tr.asentamientos.push(origen);
                 self.emitir_comercio(t, EventoComercio::CaravanaCancelada { caravana: *caravana }, vec![origen], &[("devuelto", devuelto), ("perdido", perdido)]);
+                self.reparto_de_plaza(origen, t);
                 Ok(None)
             }
             Comando::MoverCargaAparcada { caravana, recurso, cantidad, cargar } => {
@@ -197,60 +201,45 @@ impl Nucleo {
                 if c.estado != EstadoCaravana::Aparcada {
                     return Err(de_caravana(ErrorCaravana::NoAparcada));
                 }
-                if !c.contenido.is_empty() {
-                    return Err(rechazo(rechazos::CARAVANA_REQUIERE_VIAJE, "con carga la caravana vuelve viajando, y el movimiento llega en la fase 3B-2".into()));
-                }
                 let posicion = self.estado.asentamientos[&origen].posicion;
-                self.estado.comercio.flota[i].enviar_al_origen(posicion, None).map_err(de_caravana)?;
+                if c.contenido.is_empty() {
+                    // Vacía: queda `disponible` en su origen al instante, sin viaje.
+                    self.estado.comercio.flota[i].enviar_al_origen(posicion, None).map_err(de_caravana)?;
+                    self.emitir_comercio(t, EventoComercio::CaravanaEnviadaAlOrigen { caravana: *caravana }, vec![origen], &[]);
+                    self.reparto_de_plaza(origen, t);
+                    return Ok(None);
+                }
+                // Con carga: vuelve viajando desde la plaza que la hospeda, sin atracción de la red ni peajes, y vuelca lo que lleva al llegar.
+                let anfitriona = c.anfitriona.map(u64::from).and_then(|a| self.estado.asentamientos.get(&a)).map(|a| a.posicion).ok_or_else(|| de_caravana(ErrorCaravana::NoAparcada))?;
+                let Some((plan, camino)) = self.plan_de_regreso(*caravana, anfitriona, t) else { return Err(de_caravana(ErrorCaravana::SinRuta)) };
+                self.estado.comercio.flota[i].enviar_al_origen(posicion, Some(plan.clone())).map_err(de_caravana)?;
+                let c = &mut self.estado.comercio.flota[i];
+                (c.ruta, c.costes, c.posicion) = (camino.puntos, camino.costes, anfitriona);
+                self.instalar_plan(*caravana, plan);
                 self.emitir_comercio(t, EventoComercio::CaravanaEnviadaAlOrigen { caravana: *caravana }, vec![origen], &[]);
                 Ok(None)
             }
             Comando::EntregarDeCaravana { ejercito, caravana, acuerdo } => self.entregar_de_caravana(t, p, *ejercito, *caravana, *acuerdo),
-            Comando::AdjuntarCaravana { caravana, ejercito } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
-                if !self.estado.ejercitos.contains_key(ejercito) {
-                    return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")));
-                }
-                let i = self.estado.comercio.posicion_caravana(*caravana).ok_or_else(|| desconocida(*caravana))?;
-                self.estado.comercio.flota[i].adjuntar().map_err(de_caravana)?;
-                self.estado.comercio.adjuntas.insert(*caravana, *ejercito);
-                Ok(None)
-            }
-            Comando::AparcarCaravana { caravana, asentamiento } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
-                let i = self.estado.comercio.posicion_caravana(*caravana).ok_or_else(|| desconocida(*caravana))?;
-                let anfitriona = self.plaza_o_rechazo(*asentamiento)?;
-                let (faccion, posicion) = (anfitriona.faccion, anfitriona.posicion);
-                let origen = self.estado.comercio.flota[i].origen as u64;
-                if self.estado.asentamientos.get(&origen).map(|o| o.faccion) != Some(faccion) {
-                    return Err(rechazo(rechazos::CARAVANA_PLAZA_AJENA, "una caravana solo se aparca en una plaza de su Facción".into()));
-                }
-                self.estado.comercio.flota[i].aparcar(id32(*asentamiento), posicion).map_err(de_caravana)?;
-                self.estado.comercio.adjuntas.remove(caravana);
-                Ok(None)
-            }
+            Comando::AdjuntarCaravana { caravana, ejercito } => self.adjuntar_caravana(t, p, *caravana, *ejercito),
+            Comando::AparcarCaravana { caravana, asentamiento } => self.aparcar_caravana(t, p, *caravana, *asentamiento),
             _ => unreachable!("solo se llama con órdenes de la flota"),
         }
     }
 
-    /// `prepararCaravana` (§5.6) sin salida: valida con el crate sobre una copia, reserva la carga del almacén y deja la caravana `preparando`
-    /// hasta `sale_en`. La ruta es la de `crates/rutas` (sin la red de caminos); los peajes de zonas ajenas llegan con la fase 3B-2.
+    /// `prepararCaravana` (§5.6): valida con el crate sobre una copia, reserva la carga del almacén y deja la caravana `preparando` hasta
+    /// `sale_en`, o la hace salir ya si no hay espera (un solo carro y sin `salir_en`). La ruta es el trazado de §7.2 (zonas ajenas con peaje y
+    /// atracción de la red); se registra en la red aunque luego se cancele.
     fn preparar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, destino: u64, carga: &[(Recurso, Mil)], salir_en: Option<Instante>) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let cr = self.estado.reglas.economia.comercio.clone();
         let (i, origen_id) = self.caravana_de_orden(p, caravana)?;
-        let posicion_destino = self.plaza_o_rechazo(destino)?.posicion;
+        self.plaza_o_rechazo(destino)?;
         let origen = &self.estado.asentamientos[&origen_id];
-        let (posicion_origen, cupos, factores) = (origen.posicion, self.cupos_de(origen), self.factores_de(origen));
+        let (cupos, factores) = (self.cupos_de(origen), self.factores_de(origen));
         // La ruta por tierra: sin ella el crate rechaza con `SinRuta` (después de las demás validaciones).
-        let camino = self.rutas.ruta_con(&mut self.escritorio, posicion_origen, posicion_destino, &Opciones::default());
-        self.metricas.rutas_calculadas += 1;
-        let ruta = camino.map(|c| if c.puntos.len() >= 2 { c.puntos } else { vec![posicion_origen, posicion_destino] });
+        let trazado = self.trazar_ruta_comercial(origen_id, destino, t);
+        let peajes = trazado.as_ref().map(|z| comercio::viaje::peajes_de_paradas(&z.paradas, comercio::viaje::longitud_ruta(&z.puntos))).unwrap_or_default();
         let mut carga_por_recurso = Mercancia::new();
         for &(r, n) in carga {
             *carga_por_recurso.entry(r).or_insert(0) += n;
@@ -262,8 +251,8 @@ impl Nucleo {
             cupo_escolta: cupos.escolta,
             salir_en,
             factor_capacidad: factores.capacidad,
-            ruta,
-            peajes: vec![],
+            ruta: trazado.as_ref().map(|z| z.puntos.clone()),
+            peajes,
         };
         let mut copia = self.estado.comercio.flota[i].clone();
         let mut almacen = self.estado.asentamientos[&origen_id].economia.almacen.clone();
@@ -271,16 +260,21 @@ impl Nucleo {
             let (c, m) = rechazo_de_caravana(e);
             rechazo(c, m.into())
         })?;
-        // DUDA: una salida inmediata (un solo carro y sin `salir_en`) pasaría a `en_transito` sin que exista el movimiento: hasta la fase 3B-2 se
-        // rechaza (con dos carros o una hora de salida programada sí se prepara).
-        if preparacion.estado != EstadoCaravana::Preparando {
-            return Err(rechazo(rechazos::CARAVANA_SALIDA_INMEDIATA, "la salida inmediata necesita el movimiento de las caravanas (fase 3B-2): usa dos carros o una hora de salida".into()));
-        }
+        let trazado = trazado.expect("`preparar` exige una ruta");
+        copia.costes = trazado.costes.clone();
         self.estado.comercio.flota[i] = copia;
         self.estado.asentamientos.get_mut(&origen_id).expect("existe").economia.almacen = almacen;
-        self.programar_comercio(preparacion.sale_en, entidad_caravana(caravana), SucesoComercio::FinPreparacion);
         self.tr.asentamientos.push(origen_id);
+        if preparacion.estado == EstadoCaravana::Preparando {
+            self.programar_comercio(preparacion.sale_en, entidad_caravana(caravana), SucesoComercio::FinPreparacion);
+        } else {
+            // Salida inmediata: sin `caravana_sale`, su plan empieza en este instante.
+            let plan = self.plan_de(&self.estado.comercio.flota[i], &trazado.puntos, &trazado.costes, t);
+            self.instalar_plan(caravana, plan);
+        }
         self.emitir_comercio(t, EventoComercio::CaravanaPreparando { caravana }, vec![origen_id, destino], &[("saleEn", preparacion.sale_en)]);
+        // La ruta entra en la red ya, aunque luego se cancele; la propia caravana no se rehace por ella.
+        self.registrar_ruta_en_red(origen_id, destino, &trazado.puntos, t, &[caravana]);
         Ok(None)
     }
 
@@ -296,17 +290,6 @@ impl Nucleo {
         Ok((devuelto, total(&llevaba) - devuelto))
     }
 
-    /// El plazo de preparación terminó. Solo se registra: la salida real (plan, peajes, `caravana_sale`) es de la fase 3B-2.
-    pub(super) fn fin_de_preparacion(&mut self, id: u64, t: Instante) {
-        let Some(c) = self.estado.comercio.caravana(id) else { return };
-        if c.estado != EstadoCaravana::Preparando || c.prepara_hasta.is_none_or(|h| h > t) {
-            return;
-        }
-        let origen = c.origen as u64;
-        // DUDA: el evento no está en Comercio_Caravanas §12 (allí el fin de preparación emite `comercio.caravana_sale`, que exige el movimiento).
-        self.emitir_propio(t, "comercio.preparacion_terminada", vec![origen], vec![("caravana", id as i64)]);
-    }
-
     /// `entregarDeCaravana` (§4.5): una caravana adjunta a la columna entrega, a la puerta del que recibe, lo que le falta al trueque a la
     /// Facción de la columna. Cobra la misma comisión y el mismo recargo que una entrega de viaje y cierra por la misma vía.
     fn entregar_de_caravana(&mut self, t: Instante, p: &Peticion, ejercito: u64, caravana: u64, acuerdo: u64) -> Result<Option<u64>, Respuesta> {
@@ -319,7 +302,7 @@ impl Nucleo {
         let (posicion_columna, faccion_columna) = (e.posicion_en(t), e.faccion);
         let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{caravana}")))?;
         let c = &self.estado.comercio.flota[ci];
-        if c.estado != EstadoCaravana::Adjunta || self.estado.comercio.adjuntas.get(&caravana) != Some(&ejercito) {
+        if c.estado != EstadoCaravana::Adjunta || !e.caravanas_adjuntas.contains(&caravana) {
             return Err(rechazo(rechazos::CARAVANA_NO_ESTA_ADJUNTA, "la caravana no va enganchada a esa columna".into()));
         }
         let ai = self.estado.comercio.posicion_acuerdo(acuerdo).ok_or_else(|| rechazo(rechazos::TRUEQUE_DESCONOCIDO, format!("trueque-{acuerdo}")))?;
@@ -360,8 +343,8 @@ impl Nucleo {
 
     /// Entrega todo lo que lleva la caravana en la plaza `destino` como si hubiera llegado (§4.4): cada recurso topado por la capacidad del
     /// destino, la comisión acuñada, el recargo por mala reputación y, con `vinculo`, el abono al `lado` del trueque (que no mira su estado:
-    /// rareza (a) de §15). Es el gancho que usará el evento de llegada de la fase 3B-2 y con el que las pruebas hacen llegar una caravana de
-    /// pruebas; no deja entrada en el registro (si se usa fuera de una orden o un evento registrado, la recuperación no la repite).
+    /// rareza (a) de §15). Es el gancho con el que las pruebas hacen llegar una caravana sin esperar al viaje (el evento de llegada
+    /// real, `llegada_de_caravana`, usa las mismas piezas); no deja entrada en el registro (si se usa fuera de una orden o un evento registrado, la recuperación no la repite).
     /// `None` si la caravana o las plazas no existen. Procesa los eventos hasta `t` y cierra la versión.
     pub fn entregar_contenido(&mut self, t: Instante, caravana: u64, destino: u64, vinculo: Option<(u64, Lado)>) -> Option<comercio::entrega::ResultadoEntrega> {
         let t = t.max(self.estado.ahora);
@@ -385,17 +368,32 @@ impl Nucleo {
 
     /// La cascada de comercio de una plaza que desaparece (`Motivo::Ruina`, tras sacarla del estado) o cambia de dueño (`Motivo::Conquista`,
     /// con la plaza ya en manos del conquistador): sus trueques vivos se anulan sin penalizar (`trueque_cancelado` a la socia), las caravanas
-    /// se pierden, vuelven, regresan o se destruyen según §10 y, en la ruina, sus órdenes de mercado se borran. Sin cerrar versión: lo hace
-    /// quien la llama (el evento de ruina o la orden de conquista).
+    /// se pierden, vuelven, regresan o se destruyen según §10 y, en la ruina, sus órdenes de mercado se borran. Las que iban hacia la plaza
+    /// dan la vuelta con su carga desde donde están («las órdenes parten de la posición real»). Sin cerrar versión: lo hace quien la llama
+    /// (el evento de ruina o la orden de conquista).
     ///
-    /// DUDA: una caravana aparcada en la plaza conquistada y con carga debería volver viajando (fase 3B-2); hasta entonces se queda aparcada.
-    /// La que `regresa` (en camino hacia la plaza) no puede existir mientras nada se mueva: si apareciera, se pierde.
+    /// DUDA: una caravana aparcada con carga en la plaza conquistada vuelve viajando a su origen; si no hay ruta por tierra se pierde.
     pub(super) fn cerrar_comercio(&mut self, plaza: u64, motivo: Motivo, t: Instante) {
         let pid = id32(plaza);
+        // Los caminos de regreso se calculan antes (el A* necesita `&mut self`): una caravana en camino hacia la plaza solo regresa si lo hay.
+        let en_camino: Vec<(u64, Punto, Punto)> = self
+            .estado
+            .comercio
+            .flota
+            .iter()
+            .filter(|c| c.estado == EstadoCaravana::EnTransito && c.destino == Some(pid) && c.origen != pid)
+            .filter_map(|c| Some((c.id, c.posicion_en(t), self.estado.asentamientos.get(&(c.origen as u64))?.posicion)))
+            .collect();
+        let mut caminos = std::collections::BTreeSet::new();
+        for (id, desde, hasta) in en_camino {
+            if self.camino_sin_red(desde, hasta).is_some() {
+                caminos.insert(id);
+            }
+        }
         let cierre = {
             let Estado { comercio, asentamientos, .. } = &mut self.estado;
             let existe = |o: u32| asentamientos.contains_key(&(o as u64));
-            cerrar_dependientes(motivo, pid, &mut comercio.acuerdos, &comercio.flota, &existe, &|_| true)
+            cerrar_dependientes(motivo, pid, &mut comercio.acuerdos, &comercio.flota, &existe, &|c| caminos.contains(&c.id))
         };
         for TruequeCancelado { acuerdo, socia } in cierre.trueques {
             self.invalidar_comercio(entidad_trueque(acuerdo));
@@ -403,11 +401,13 @@ impl Nucleo {
         }
         for AccionCaravana { caravana, accion, .. } in cierre.caravanas {
             match accion {
-                Accion::Pierde | Accion::Destruye | Accion::Regresa => self.perder_caravana(t, caravana),
+                Accion::Pierde | Accion::Destruye => self.perder_caravana(t, caravana),
+                Accion::Regresa => self.regresar_caravana(t, caravana, pid),
                 Accion::Vuelve => self.hacer_volver_caravana(t, caravana),
                 Accion::EnviaAlOrigen => self.enviar_caravana_a_casa(t, caravana),
             }
         }
+        self.invalidar_red();
         match motivo {
             Motivo::Ruina => {
                 let libro = &mut self.estado.comercio.libro;
@@ -418,6 +418,7 @@ impl Nucleo {
                     self.invalidar_comercio(crate::estado_comercio::entidad_orden(orden));
                 }
                 self.estado.comercio.ultima_caravana.remove(&plaza);
+                self.estado.comercio.reparto.remove(&plaza);
             }
             Motivo::Conquista => {
                 if !cierre.flota_traspasada.is_empty() {
@@ -443,11 +444,11 @@ impl Nucleo {
     }
 
     /// Quita la caravana del mundo (se pierde con su carga) y avisa a la plaza de su origen, si existe.
-    fn perder_caravana(&mut self, t: Instante, id: u64) {
+    pub(super) fn perder_caravana(&mut self, t: Instante, id: u64) {
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let c = self.estado.comercio.flota.remove(i);
-        self.estado.comercio.adjuntas.remove(&id);
-        self.invalidar_comercio(entidad_caravana(id));
+        self.soltar_de_columnas(id);
+        self.retirar_plan(id);
         let origen = c.origen as u64;
         let plazas = if self.estado.asentamientos.contains_key(&origen) { vec![origen] } else { vec![] };
         self.emitir_comercio(t, EventoComercio::CaravanaPerdida { caravana: id }, plazas, &[("carga", total(&c.contenido))]);
@@ -464,14 +465,44 @@ impl Nucleo {
         self.invalidar_comercio(entidad_caravana(id));
         self.tr.asentamientos.push(origen);
         self.emitir_comercio(t, EventoComercio::CaravanaVuelve { caravana: id }, vec![origen], &[("devuelto", devuelto), ("perdido", perdido)]);
+        self.reparto_de_plaza(origen, t);
     }
 
-    /// Una aparcada en la plaza conquistada vuelve a su origen (§5.7): vacía, al instante.
+    /// Una en camino hacia la plaza que cae: da la vuelta con su carga por un plan nuevo desde donde está (sin atracción de la red ni peajes)
+    /// y la vuelca en su origen al llegar. Sin camino por tierra se pierde.
+    fn regresar_caravana(&mut self, t: Instante, id: u64, ruina: u32) {
+        let Some(c) = self.estado.comercio.caravana(id) else { return };
+        let (aqui, origen) = (c.posicion_en(t), c.origen as u64);
+        let Some((plan, camino)) = self.plan_de_regreso(id, aqui, t) else { return self.perder_caravana(t, id) };
+        let i = self.estado.comercio.posicion_caravana(id).expect("existe");
+        let c = &mut self.estado.comercio.flota[i];
+        if c.regresar_a_origen(ruina, plan.clone()).is_err() {
+            return;
+        }
+        (c.ruta, c.costes, c.posicion) = (camino.puntos, camino.costes, aqui);
+        let carga = total(&c.contenido);
+        self.instalar_plan(id, plan);
+        self.emitir_comercio(t, EventoComercio::CaravanaVuelve { caravana: id }, vec![origen], &[("regresa", 1), ("carga", carga)]);
+    }
+
+    /// Una aparcada en la plaza conquistada vuelve a su origen (§5.7): vacía, al instante; con carga, viajando.
     fn enviar_caravana_a_casa(&mut self, t: Instante, id: u64) {
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let origen = self.estado.comercio.flota[i].origen as u64;
         let Some(posicion) = self.estado.asentamientos.get(&origen).map(|o| o.posicion) else { return self.perder_caravana(t, id) };
-        if self.estado.comercio.flota[i].enviar_al_origen(posicion, None).is_ok() {
+        if self.estado.comercio.flota[i].contenido.is_empty() {
+            if self.estado.comercio.flota[i].enviar_al_origen(posicion, None).is_ok() {
+                self.emitir_comercio(t, EventoComercio::CaravanaEnviadaAlOrigen { caravana: id }, vec![origen], &[]);
+                self.reparto_de_plaza(origen, t);
+            }
+            return;
+        }
+        let Some(anfitriona) = self.estado.comercio.flota[i].anfitriona.map(u64::from).and_then(|a| self.estado.asentamientos.get(&a)).map(|a| a.posicion) else { return };
+        let Some((plan, camino)) = self.plan_de_regreso(id, anfitriona, t) else { return self.perder_caravana(t, id) };
+        let c = &mut self.estado.comercio.flota[i];
+        if c.enviar_al_origen(posicion, Some(plan.clone())).is_ok() {
+            (c.ruta, c.costes, c.posicion) = (camino.puntos, camino.costes, anfitriona);
+            self.instalar_plan(id, plan);
             self.emitir_comercio(t, EventoComercio::CaravanaEnviadaAlOrigen { caravana: id }, vec![origen], &[]);
         }
     }

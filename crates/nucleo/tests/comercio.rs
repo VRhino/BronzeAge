@@ -101,7 +101,7 @@ fn oro(n: &Nucleo) -> i64 {
 fn mundo_de(n: &Nucleo, r: Recurso) -> i64 {
     let e = n.estado();
     e.asentamientos.values().map(|a| a.economia.almacen.cantidad(r)).sum::<i64>()
-        + e.comercio.suministros.values().map(|c| c.get(&r).copied().unwrap_or(0)).sum::<i64>()
+        + e.ejercitos.values().map(|c| c.suministro.get(&r).copied().unwrap_or(0)).sum::<i64>()
         + e.comercio.flota.iter().map(|c| c.contenido.get(&r).copied().unwrap_or(0)).sum::<i64>()
 }
 
@@ -174,6 +174,8 @@ impl Escenario {
     /// Crea en `origen` una caravana con `carros` carros con buey, la engancha a `columna` y la deja aparcada en `anfitriona`.
     fn caravana_aparcada_en(&mut self, actor: &str, origen: u64, columna: u64, anfitriona: u64, carros: u32) -> u64 {
         let id = self.ok(actor, Comando::CrearCaravana { asentamiento: origen }).creadas[0];
+        // Reservada: el reparto automático no se la lleva mientras se monta.
+        self.ok(actor, Comando::ReservarCaravana { caravana: id, reservada: true });
         for k in 0..carros {
             self.ok(actor, Comando::AnadirCarro { caravana: id, tipo: TipoCarro::Basico });
             self.ok(actor, Comando::AnadirAnimal { caravana: id, carro: k, animal: Animal::Buey });
@@ -703,7 +705,6 @@ fn preparar_reserva_la_carga_registra_el_fin_y_cancelar_la_devuelve_topada_por_l
     assert_eq!(e.rechazada("ana", preparar(vec![(Madera, 1_000)], None)), rechazos::CARAVANA_SIN_CAPACIDAD);
     e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: TipoCarro::Basico });
     e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: 0, animal: Animal::Buey });
-    assert_eq!(e.rechazada("ana", preparar(vec![(Madera, 1_000)], None)), rechazos::CARAVANA_SALIDA_INMEDIATA);
     let t = e.n.ahora();
     assert_eq!(e.rechazada("ana", preparar(vec![(Madera, 1_000)], Some(t))), rechazos::CARAVANA_SALIDA_INVALIDA);
     assert_eq!(e.rechazada("ana", preparar(vec![(Madera, 1_000)], Some(t + 3 * DIA + 1))), rechazos::CARAVANA_SALIDA_INVALIDA);
@@ -734,13 +735,11 @@ fn preparar_reserva_la_carga_registra_el_fin_y_cancelar_la_devuelve_topada_por_l
     assert_eq!(e.rechazada("ana", preparar(vec![(Madera, 1_000)], Some(t + HORA))), rechazos::CARAVANA_NO_DISPONIBLE);
     assert_eq!(e.rechazada("ana", Comando::CancelarCaravana { caravana: 999 }), rechazos::CARAVANA_DESCONOCIDA);
     assert_eq!(e.rechazada("beto", Comando::CancelarCaravana { caravana: c }), rechazos::NO_AUTORIZADO);
-    // El fin de la preparación es un evento a su instante: solo se registra, la caravana sigue preparando.
+    // El fin de la preparación es un evento a su instante: hasta entonces sigue preparando (en su ciudad, sin plan).
     e.avanzar_hasta(t + 2 * MIN - 1);
-    assert!(hechos(&e.n, "comercio.preparacion_terminada").is_empty());
-    e.avanzar_hasta(t + 2 * MIN);
-    let fin = hechos(&e.n, "comercio.preparacion_terminada");
-    assert_eq!((fin.len(), fin[0].0, dato(&fin[0], "caravana")), (1, t + 2 * MIN, c as i64));
+    assert!(hechos(&e.n, "comercio.caravana_sale").is_empty());
     assert_eq!(e.n.caravana(c).unwrap().estado, EstadoCaravana::Preparando);
+    assert!(e.n.caravana(c).unwrap().plan.is_none());
     // Cancelar: la carga vuelve al almacén, pero solo cabe lo que deja la capacidad (el resto se pierde).
     let espacio = e.n.economia(a).unwrap().almacen.espacio(Madera);
     assert!(espacio >= 200_000, "{espacio}");
@@ -756,11 +755,12 @@ fn preparar_reserva_la_carga_registra_el_fin_y_cancelar_la_devuelve_topada_por_l
     assert_eq!(e.rechazada("ana", Comando::CancelarCaravana { caravana: c }), rechazos::CARAVANA_NO_PREPARANDO);
     // El fin de la preparación cancelada no vuelve a salir, y una caravana que se prepara de nuevo tiene su propio plazo.
     e.avanzar(10 * MIN);
-    assert_eq!(hechos(&e.n, "comercio.preparacion_terminada").len(), 1);
+    assert!(hechos(&e.n, "comercio.caravana_sale").is_empty());
     e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 10_000)], salir_en: None });
     let t2 = e.n.ahora();
     e.avanzar(2 * MIN);
-    assert_eq!(hechos(&e.n, "comercio.preparacion_terminada").iter().map(|h| h.0).collect::<Vec<_>>(), vec![t + 2 * MIN, t2 + 2 * MIN]);
+    assert_eq!(hechos(&e.n, "comercio.caravana_sale").iter().map(|h| (h.0, dato(h, "caravana"))).collect::<Vec<_>>(), vec![(t2 + 2 * MIN, c as i64)]);
+    assert_eq!(e.n.caravana(c).unwrap().estado, EstadoCaravana::EnTransito);
 }
 
 #[test]
@@ -785,8 +785,7 @@ fn una_aparcada_se_carga_se_descarga_y_vuelve_vacia_al_origen() {
     assert_eq!(e.rechazada("beto", Comando::MoverCargaAparcada { caravana: c, recurso: Madera, cantidad: 1, cargar: false }), rechazos::NO_AUTORIZADO);
     e.ok("ana", Comando::MoverCargaAparcada { caravana: c, recurso: Madera, cantidad: 100_000, cargar: false });
     assert_eq!((e.n.caravana(c).unwrap().contenido[&Madera], cantidad(&e.n, a, Madera)), (madera0 - 100_000, 100_000));
-    // Con carga no vuelve sola (hace falta un viaje: 3B-2); vacía, al instante.
-    assert_eq!(e.rechazada("ana", Comando::EnviarCaravanaAlOrigen { caravana: c }), rechazos::CARAVANA_REQUIERE_VIAJE);
+    // Vacía vuelve al instante (con carga viaja: véase `tests/caravanas.rs`).
     for r in [Madera, Piedra] {
         let n = e.n.caravana(c).unwrap().contenido[&r];
         e.ok("ana", Comando::MoverCargaAparcada { caravana: c, recurso: r, cantidad: n, cargar: false });
@@ -801,7 +800,7 @@ fn una_aparcada_se_carga_se_descarga_y_vuelve_vacia_al_origen() {
     // Aparcar solo en una plaza de la Facción de su origen.
     e.ok("admin", Comando::AdjuntarCaravana { caravana: c, ejercito: col });
     assert_eq!(e.rechazada("admin", Comando::AparcarCaravana { caravana: c, asentamiento: b }), rechazos::CARAVANA_PLAZA_AJENA);
-    assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a }), rechazos::NO_AUTORIZADO, "es andamiaje de administración");
+    assert_eq!(e.rechazada("beto", Comando::AparcarCaravana { caravana: c, asentamiento: a }), rechazos::NO_AUTORIZADO, "la columna es de Ana");
     assert_eq!(e.rechazada("admin", Comando::AdjuntarCaravana { caravana: c, ejercito: 999 }), rechazos::EJERCITO_DESCONOCIDO);
     assert_eq!(e.rechazada("admin", Comando::AdjuntarCaravana { caravana: c, ejercito: col }), rechazos::CARAVANA_ESTADO_INVALIDO, "ya está adjunta");
 }
@@ -889,7 +888,7 @@ fn en_el_mismo_instante_el_fin_de_preparacion_sale_antes_que_las_caducidades() {
         .filter(|ev| ev.en == vence && (ev.codigo.starts_with("comercio.") || ev.codigo.starts_with("mercado.")))
         .map(|ev| ev.codigo.to_string())
         .collect();
-    assert_eq!(salida, vec!["comercio.preparacion_terminada", "comercio.trueque_expirado", "mercado.orden_expirada"], "fin de preparación, luego caducidades en el orden en que se programaron");
+    assert_eq!(salida, vec!["comercio.caravana_sale", "comercio.trueque_expirado", "mercado.orden_expirada"], "fin de preparación, luego caducidades en el orden en que se programaron");
 }
 
 // ───────────────────────────── 8. Ruina y conquista ─────────────────────────────
@@ -976,7 +975,7 @@ fn una_plaza_que_cae_en_ruinas_cierra_sus_trueques_sin_penalizar_pierde_su_flota
     // Nada de lo cerrado vuelve a caducar ni a prepararse: sus eventos se invalidaron con la entidad.
     e.avanzar(4 * DIA);
     assert!(hechos(&e.n, "comercio.trueque_expirado").is_empty());
-    assert!(hechos(&e.n, "comercio.preparacion_terminada").is_empty());
+    assert!(hechos(&e.n, "comercio.caravana_sale").is_empty());
     assert_eq!((e.n.reputacion(1), e.n.reputacion(2)), (0, 0));
     assert_eq!(e.n.libro_ordenes().buscar(ajena).unwrap().estado, EstadoOrden::Expirada, "la de B caducó por su plazo");
 }
@@ -1019,16 +1018,17 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_y_devuelve_las_caravanas() {
     let flota = hechos(&e.n, "comercio.flota_traspasada");
     assert_eq!((flota.len(), flota[0].1.clone(), dato(&flota[0], "caravanas")), (1, vec![a], 1));
     assert!(e.n.libro_ordenes().orden(orden).is_some(), "las órdenes del Mercado se quedan");
-    // La de B que iba hacia A vuelve con su carga; la vacía de C aparcada en A vuelve a su origen; la que lleva carga espera el viaje.
+    // La de B que iba hacia A vuelve con su carga; la vacía de C aparcada en A vuelve a su origen; la que lleva carga vuelve viajando.
     let vuelta = e.n.caravana(cb).unwrap();
     assert_eq!((vuelta.estado, vuelta.contenido.is_empty()), (EstadoCaravana::Disponible, true));
     let en_casa = e.n.caravana(cc1).unwrap();
     assert_eq!((en_casa.estado, en_casa.anfitriona, en_casa.posicion), (EstadoCaravana::Disponible, None, pos(&e.n, c)));
-    assert_eq!((e.n.caravana(cc2).unwrap().estado, e.n.caravana(cc2).unwrap().anfitriona), (EstadoCaravana::Aparcada, Some(a as u32)));
+    let viaja = e.n.caravana(cc2).unwrap();
+    assert_eq!((viaja.estado, viaja.destino, viaja.contenido[&Madera]), (EstadoCaravana::Retornando, Some(a as u32), 5_000), "con carga vuelve viajando a su origen y vuelca lo que lleva");
     // Lo anulado no vuelve a caducar ni a salir de la preparación.
     e.avanzar(3 * DIA);
     assert!(hechos(&e.n, "comercio.trueque_expirado").is_empty());
-    assert!(hechos(&e.n, "comercio.preparacion_terminada").is_empty());
+    assert!(hechos(&e.n, "comercio.caravana_sale").is_empty());
 }
 
 // ───────────────────────────── 9. Determinismo y recuperación ─────────────────────────────
@@ -1045,6 +1045,8 @@ fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
         e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: TipoCarro::Basico });
         e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: k, animal: Animal::Buey });
     }
+    // Reservada: el reparto automático no se la lleva y la lanza el guion a mano.
+    e.ok("ana", Comando::ReservarCaravana { caravana: c, reservada: true });
     let t1 = e.trueque(&[(Madera, 10_000)], &[(Cobre, 10_000)]);
     e.ok("beto", Comando::ProponerTrueque { a: b, b: a, lineas_a: vec![(Piedra, 5_000)], lineas_b: vec![(Madera, 5_000)] });
     let v = e.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 50_000, precio: Some(2 * PUNTO) }).creadas[0];
@@ -1055,8 +1057,6 @@ fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let v2 = e.ok_en(base + HORA, "ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: false, recurso: Cobre, cantidad: 5_000, precio: None }).creadas[0];
     e.ok_en(base + HORA, "ana", Comando::CancelarOrdenMercado { orden: v2 });
     avanzar(e, base + 5 * HORA);
-    e.ok_en(base + 5 * HORA, "ana", Comando::CancelarCaravana { caravana: c });
-    e.ok_en(base + 5 * HORA, "ana", Comando::ReservarCaravana { caravana: c, reservada: true });
     avanzar(e, base + DIA + HORA);
     avanzar(e, base + 3 * DIA);
     e.n.avanzar_hasta(base + 3 * DIA);
@@ -1103,11 +1103,12 @@ fn recuperar_desde_foto_en_mitad_de_un_trueque_da_el_mismo_mundo() {
         e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 100_000 });
         e.trueque(&[(Madera, 10_000)], &[(Cobre, 10_000)]);
         let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
+        e.ok("ana", Comando::ReservarCaravana { caravana: c, reservada: true });
         for k in 0..2 {
             e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: TipoCarro::Basico });
             e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: k, animal: Animal::Buey });
         }
-        let salir = e.n.ahora() + 6 * HORA;
+        let salir = e.n.ahora() + 12 * HORA;
         e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 50_000)], salir_en: Some(salir) });
         let v = e.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 30_000, precio: Some(PUNTO) }).creadas[0];
         e.ok("beto", Comando::ComerciarEnPlaza { ejercito: col, orden: v, cantidad: 10_000 });
@@ -1192,8 +1193,35 @@ fn estado_con_comercio() -> Estado {
     s.comercio.reputacion.insert(1, Reputacion::desde(&cr.reputacion, -12 * PUNTO, 500, 2));
     s.comercio.reputacion.insert(7, Reputacion::desde(&cr.reputacion, 40 * PUNTO, 900, 0));
     s.comercio.ultima_caravana.insert(1, 42);
-    s.comercio.suministros.insert(3, [(Oro, 5), (Piedra, 6)].into_iter().collect());
-    s.comercio.adjuntas.insert(6, 3);
+    let mut col = nucleo::Ejercito {
+        id: 3,
+        lider: "h".into(),
+        propietario: "p".into(),
+        faccion: 1,
+        velocidad: 500,
+        posicion: Punto::new(1, 2),
+        plan: Default::default(),
+        viveres: base::Ritmo::constante(10, 0),
+        capacidad_viveres: 100,
+        caravana_fundacion: false,
+        suministro: [(Oro, 5), (Piedra, 6)].into_iter().collect(),
+        caravanas_adjuntas: vec![6],
+        version: 0,
+    };
+    col.caravanas_adjuntas.sort();
+    s.ejercitos.insert(3, col);
+    s.comercio.red.registrar_ruta(1, 2, 1, &[Punto::new(1_000, 1_000), Punto::new(9_000, 1_000), Punto::new(9_000, 9_000)], 5);
+    s.comercio.red.registrar_ruta(2, 1, 2, &[Punto::new(9_000, 9_000), Punto::new(1_000, 1_000)], 6);
+    s.comercio.reparto.insert(1, 60_000);
+    s.comercio.mercenarios.mercado.contadores.insert(Cobre, 7_000);
+    s.comercio.mercenarios.mercado.repone_en = 123;
+    s.comercio.mercenarios.stock.insert(2, comercio::mercenarios::StockCampamento::nuevo(&cr));
+    s.comercio.mercenarios.cupos.insert(3, comercio::mercenarios::CupoDiario { dia: 4, comprado: [(Madera, 9)].into_iter().collect() });
+    s.comercio.mercenarios.residencias.insert(3, 2);
+    s.comercio.mercenarios.personal.insert(3, [(Oro, 8)].into_iter().collect());
+    s.comercio.mercenarios.pulso = Some(999);
+    s.comercio.flota[0].costes = vec![7, 8];
+    s.comercio.flota[0].pausada_desde = Some(55);
     s.comercio.siguiente_acuerdo = 6;
     s.comercio.siguiente_orden = 4;
     s.comercio.siguiente_caravana = 7;
@@ -1207,15 +1235,15 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..4], b"BAN5");
+    assert_eq!(&bytes[..4], b"BAN6");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
-    // Un formato anterior (BAN4) se rechaza con su motivo, y uno ajeno también.
+    // Un formato anterior (BAN5) se rechaza con su motivo, y uno ajeno también.
     let mut viejo = bytes.clone();
-    viejo[3] = b'4';
-    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN4 no debe admitirse") };
-    assert!(e.to_string().contains("BAN4"), "{e}");
+    viejo[3] = b'5';
+    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN5 no debe admitirse") };
+    assert!(e.to_string().contains("BAN5"), "{e}");
     assert!(Estado::deserializar(b"XXXX", &reglas, "h").is_err());
     // Cada campo del comercio cambia el hash (y ninguno coincide con otro cambio).
     type Cambio = (&'static str, Box<dyn Fn(&mut nucleo::EstadoComercio)>);
@@ -1271,8 +1299,25 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
             c.reputacion.insert(8, Reputacion::nueva(0));
         })),
         ("ultima_caravana", Box::new(|c| *c.ultima_caravana.get_mut(&1).unwrap() += 1)),
-        ("suministros", Box::new(|c| *c.suministros.get_mut(&3).unwrap().get_mut(&Oro).unwrap() += 1)),
-        ("adjuntas", Box::new(|c| *c.adjuntas.get_mut(&6).unwrap() = 4)),
+        ("caravana.costes", Box::new(|c| c.flota[0].costes[0] += 1)),
+        ("caravana.pausada_desde", Box::new(|c| c.flota[0].pausada_desde = None)),
+        ("red.ruta", Box::new(|c| {
+            c.red.registrar_ruta(1, 2, 1, &[Punto::new(1_000, 1_000), Punto::new(9_000, 1_000)], 5);
+        })),
+        ("red.ultimo_lanzamiento", Box::new(|c| {
+            c.red.registrar_ruta(2, 1, 2, &[Punto::new(9_000, 9_000), Punto::new(1_000, 1_000)], 7);
+        })),
+        ("red.arista_nueva", Box::new(|c| {
+            c.red.registrar_ruta(3, 4, 1, &[Punto::new(20_000, 20_000), Punto::new(30_000, 20_000)], 6);
+        })),
+        ("reparto", Box::new(|c| *c.reparto.get_mut(&1).unwrap() += 1)),
+        ("mercenarios.contadores", Box::new(|c| *c.mercenarios.mercado.contadores.get_mut(&Cobre).unwrap() += 1)),
+        ("mercenarios.repone_en", Box::new(|c| c.mercenarios.mercado.repone_en += 1)),
+        ("mercenarios.stock", Box::new(|c| *c.mercenarios.stock.get_mut(&2).unwrap().stock.get_mut(&Cobre).unwrap() += 1)),
+        ("mercenarios.cupo", Box::new(|c| c.mercenarios.cupos.get_mut(&3).unwrap().dia += 1)),
+        ("mercenarios.residencia", Box::new(|c| *c.mercenarios.residencias.get_mut(&3).unwrap() = 3)),
+        ("mercenarios.personal", Box::new(|c| *c.mercenarios.personal.get_mut(&3).unwrap().get_mut(&Oro).unwrap() += 1)),
+        ("mercenarios.pulso", Box::new(|c| c.mercenarios.pulso = None)),
         ("siguiente_acuerdo", Box::new(|c| c.siguiente_acuerdo += 1)),
         ("siguiente_orden", Box::new(|c| c.siguiente_orden += 1)),
         ("siguiente_caravana", Box::new(|c| c.siguiente_caravana += 1)),
@@ -1282,6 +1327,14 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();
         f(&mut s.comercio);
         assert!(vistos.insert(s.hash()), "el hash no cambió (o coincidió con otro cambio) al tocar {nombre}");
+    }
+    // El carro y las caravanas adjuntas viajan con la columna.
+    type CambioColumna = (&'static str, Box<dyn Fn(&mut nucleo::Ejercito)>);
+    let columna: Vec<CambioColumna> = vec![("suministro", Box::new(|e| *e.suministro.get_mut(&Oro).unwrap() += 1)), ("adjuntas", Box::new(|e| e.caravanas_adjuntas.push(9)))];
+    for (nombre, f) in columna {
+        let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();
+        f(s.ejercitos.get_mut(&3).unwrap());
+        assert!(vistos.insert(s.hash()), "el hash no cambió (o coincidió con otro cambio) al tocar {nombre} de la columna");
     }
 }
 

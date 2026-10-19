@@ -89,13 +89,13 @@ pub enum Comando {
     MoverCarro { de: u64, a: u64, carro: u32 },
     /// Pone o quita `reservadaManual` (fuera del reparto automático).
     ReservarCaravana { caravana: u64, reservada: bool },
-    /// Lanza a mano una caravana: reserva la carga del almacén y queda `preparando`. Aún no sale (fase 3B-2).
+    /// Lanza a mano una caravana: reserva la carga del almacén y queda `preparando` (o sale ya, con un solo carro y sin `salir_en`).
     PrepararCaravana { caravana: u64, destino: u64, carga: Vec<(Recurso, Mil)>, salir_en: Option<Instante> },
     /// Cancela una caravana `preparando`: la carga vuelve al almacén de su origen (topada por su capacidad).
     CancelarCaravana { caravana: u64 },
     /// Carga o descarga una caravana aparcada contra el almacén de la plaza que la hospeda.
     MoverCargaAparcada { caravana: u64, recurso: Recurso, cantidad: Mil, cargar: bool },
-    /// Manda una caravana aparcada vacía a su origen (al instante). Con carga hace falta un viaje (fase 3B-2).
+    /// Manda una caravana aparcada a su origen: vacía, al instante; con carga, viajando (vuelca lo que lleva al llegar).
     EnviarCaravanaAlOrigen { caravana: u64 },
     /// Entrega manual de una caravana adjunta a la columna, a la puerta de la plaza que recibe (§4.5).
     EntregarDeCaravana { ejercito: u64, caravana: u64, acuerdo: u64 },
@@ -104,10 +104,23 @@ pub enum Comando {
     DarRecursos { asentamiento: u64, recurso: Recurso, cantidad: Mil },
     /// Añade al carro de una columna (`suministro`). Solo administración; lo sustituirán el sistema de héroes y el botín.
     DarSuministro { ejercito: u64, recurso: Recurso, cantidad: Mil },
-    /// Engancha una caravana `disponible` o `aparcada` a una columna. Solo administración; lo hará el sistema de ejércitos.
+    /// Engancha una caravana `disponible` o `aparcada` a una columna de su Facción que está a la puerta de la plaza donde la caravana está
+    /// (Movimiento_Ejercitos §9). La columna pasa a viajar a la velocidad de su elemento más lento y la caravana va con ella.
     AdjuntarCaravana { caravana: u64, ejercito: u64 },
-    /// Deja la caravana adjunta aparcada en una plaza de su Facción (la columna entra en ella). Solo administración; lo hará el sistema de ejércitos.
+    /// Deja la caravana adjunta aparcada en una plaza de su Facción, con la columna a su puerta (la columna «entra»; Movimiento_Ejercitos §11).
     AparcarCaravana { caravana: u64, asentamiento: u64 },
+    // ── Mercado de los campamentos de mercenarios (Comercio_Caravanas §9). `campamento` es el índice del artefacto de mundo; la columna debe estar
+    //    a la puerta. El Líder es, de momento, el propietario de la columna. ──
+    /// Compra `cantidad` (se sirven unidades enteras) de un bien. Una columna residente paga de su almacén personal y compra con cupo diario; una
+    /// visitante paga con el oro de su carro, lleva la compra al carro y no compra trigo.
+    ComprarEnCampamento { ejercito: u64, campamento: u32, recurso: Recurso, cantidad: Mil },
+    /// Llena los víveres de la columna, gratis y sin gastar el stock del mercado.
+    RepostarEnCampamento { ejercito: u64, campamento: u32 },
+    // ── Andamiaje de administración del mercado de mercenarios, provisional hasta el sistema de héroes (residencia y almacén personal). ──
+    /// Fija (o quita, con `None`) el campamento donde reside la columna. Solo administración.
+    FijarResidencia { ejercito: u64, campamento: Option<u32> },
+    /// Añade al almacén personal de una columna residente. Solo administración.
+    DarAlmacenPersonal { ejercito: u64, recurso: Recurso, cantidad: Mil },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -375,6 +388,29 @@ impl Peticion {
                 w.u64(*caravana);
                 w.u64(*asentamiento);
             }
+            Comando::ComprarEnCampamento { ejercito, campamento, recurso, cantidad } => {
+                w.u8(41);
+                w.u64(*ejercito);
+                w.u32(*campamento);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
+            Comando::RepostarEnCampamento { ejercito, campamento } => {
+                w.u8(42);
+                w.u64(*ejercito);
+                w.u32(*campamento);
+            }
+            Comando::FijarResidencia { ejercito, campamento } => {
+                w.u8(43);
+                w.u64(*ejercito);
+                w.opt_u64(campamento.map(u64::from));
+            }
+            Comando::DarAlmacenPersonal { ejercito, recurso, cantidad } => {
+                w.u8(44);
+                w.u64(*ejercito);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
         }
         w.0
     }
@@ -437,6 +473,13 @@ impl Peticion {
             38 => Comando::DarSuministro { ejercito: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             39 => Comando::AdjuntarCaravana { caravana: r.u64()?, ejercito: r.u64()? },
             40 => Comando::AparcarCaravana { caravana: r.u64()?, asentamiento: r.u64()? },
+            41 => Comando::ComprarEnCampamento { ejercito: r.u64()?, campamento: r.u32()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            42 => Comando::RepostarEnCampamento { ejercito: r.u64()?, campamento: r.u32()? },
+            43 => Comando::FijarResidencia {
+                ejercito: r.u64()?,
+                campamento: r.opt_u64()?.map(u32::try_from).transpose().map_err(|_| ErrorFormato("campamento fuera de rango"))?,
+            },
+            44 => Comando::DarAlmacenPersonal { ejercito: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -543,10 +586,10 @@ pub mod rechazos {
     pub const CARAVANA_NO_HA_LLEGADO: &str = "caravana.no_ha_llegado";
     pub const CARAVANA_SIN_PLAN: &str = "caravana.sin_plan";
     pub const CARAVANA_NADA_QUE_MOVER: &str = "caravana.nada_que_mover";
-    /// 3B-1: una salida inmediata (un solo carro y sin `salir_en`) necesita el movimiento de la fase 3B-2.
-    pub const CARAVANA_SALIDA_INMEDIATA: &str = "caravana.salida_inmediata";
-    /// 3B-1: mandar al origen una aparcada con carga necesita un viaje (fase 3B-2).
-    pub const CARAVANA_REQUIERE_VIAJE: &str = "caravana.requiere_viaje";
+    /// Adjuntar o aparcar con la columna lejos de la puerta de la plaza donde está la caravana.
+    pub const CARAVANA_FUERA_DE_LA_PUERTA: &str = "caravana.fuera_de_la_puerta";
+    /// Adjuntar a una columna de otra Facción.
+    pub const CARAVANA_FACCION_AJENA: &str = "caravana.faccion_ajena";
     pub const CARAVANA_PLAZA_AJENA: &str = "caravana.plaza_ajena";
     pub const CARAVANA_NO_ESTA_ADJUNTA: &str = "caravana.no_esta_adjunta";
     // Entrega manual (§4.5).
@@ -554,6 +597,17 @@ pub mod rechazos {
     pub const ENTREGA_NO_DEBE: &str = "entrega.no_debe";
     pub const ENTREGA_FUERA_DE_LA_PUERTA: &str = "entrega.fuera_de_la_puerta";
     pub const CANTIDAD_NO_POSITIVA: &str = "cantidad.no_positiva";
+    // Mercado de los campamentos de mercenarios (`ErrorMercenarios`).
+    pub const CAMPAMENTO_DESCONOCIDO: &str = "campamento.desconocido";
+    pub const CAMPAMENTO_FUERA_DE_LA_PUERTA: &str = "campamento.fuera_de_la_puerta";
+    pub const MERCENARIOS_CANTIDAD_INVALIDA: &str = "mercenarios.cantidad_invalida";
+    pub const MERCENARIOS_SIN_PRECIO: &str = "mercenarios.sin_precio";
+    pub const MERCENARIOS_TRIGO_NO_VA_AL_CARRO: &str = "mercenarios.trigo_no_va_al_carro";
+    pub const MERCENARIOS_SIN_STOCK: &str = "mercenarios.sin_stock";
+    pub const MERCENARIOS_CUPO_AGOTADO: &str = "mercenarios.cupo_agotado";
+    pub const MERCENARIOS_SIN_ORO: &str = "mercenarios.sin_oro";
+    pub const MERCENARIOS_SIN_SITIO: &str = "mercenarios.sin_sitio";
+    pub const MERCENARIOS_VIVERES_LLENOS: &str = "mercenarios.viveres_llenos";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -636,6 +690,11 @@ mod pruebas {
             Comando::DarSuministro { ejercito: 2, recurso: Recurso::Oro, cantidad: 1_000 },
             Comando::AdjuntarCaravana { caravana: 1, ejercito: 2 },
             Comando::AparcarCaravana { caravana: 1, asentamiento: 3 },
+            Comando::ComprarEnCampamento { ejercito: 2, campamento: 7, recurso: Recurso::Cobre, cantidad: 5_000 },
+            Comando::RepostarEnCampamento { ejercito: 2, campamento: 7 },
+            Comando::FijarResidencia { ejercito: 2, campamento: Some(7) },
+            Comando::FijarResidencia { ejercito: 2, campamento: None },
+            Comando::DarAlmacenPersonal { ejercito: 2, recurso: Recurso::Oro, cantidad: 9 },
         ];
         for c in comandos {
             let p = Peticion { actor: "ana".into(), admin: true, peticion_id: "y".into(), version_esperada: None, comando: c };

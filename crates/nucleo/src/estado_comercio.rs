@@ -1,10 +1,13 @@
-//! El estado del comercio dentro del núcleo (Comercio_Caravanas §2): trueques, libro de órdenes de mercado, flota de caravanas, reputación
-//! de las Facciones y los contadores de ids. Entra entero en el hash y en las fotos (`codec_comercio`). Las reglas puras viven en el crate
-//! `comercio`; aquí solo está lo que el núcleo guarda y las claves con las que sus eventos se invalidan en la cola.
+//! El estado del comercio dentro del núcleo (Comercio_Caravanas §2): trueques, libro de órdenes de mercado, flota de caravanas, red de
+//! caminos, mercado de mercenarios, reputación de las Facciones y los contadores de ids. Entra entero en el hash y en las fotos
+//! (`codec_comercio`). Las reglas puras viven en el crate `comercio`; aquí solo está lo que el núcleo guarda y las claves con las que sus
+//! eventos se invalidan en la cola.
 
 use base::Instante;
 use comercio::caravana::{Caravana, TipoCaravana};
+use comercio::mercenarios::{CupoDiario, MercadoMercenario, StockCampamento};
 use comercio::orden_mercado::LibroOrdenes;
+use comercio::red_caminos::RedCaminos;
 use comercio::reputacion::Reputacion;
 use comercio::trueque::AcuerdoTrueque;
 use comercio::{AcuerdoId, CaravanaId, Carga as Mercancia, OrdenId};
@@ -17,6 +20,7 @@ const ETIQUETA_TRUEQUE: u64 = ETIQUETA;
 const ETIQUETA_ORDEN: u64 = 2 * ETIQUETA;
 const ETIQUETA_CARAVANA: u64 = 3 * ETIQUETA;
 const ETIQUETA_REPUTACION: u64 = 4 * ETIQUETA;
+const ETIQUETA_MERCENARIOS: u64 = 5 * ETIQUETA;
 
 /// Clave de entidad (de generación y de cola) de un trueque.
 pub fn entidad_trueque(id: AcuerdoId) -> u64 {
@@ -26,7 +30,8 @@ pub fn entidad_trueque(id: AcuerdoId) -> u64 {
 pub fn entidad_orden(id: OrdenId) -> u64 {
     ETIQUETA_ORDEN | id
 }
-/// Clave de entidad de una caravana.
+/// Clave de entidad de una caravana. Es también su id en la rejilla de encuentros (`encuentros::Rejilla`), que comparte con las columnas: la
+/// etiqueta evita que choque con el id de un ejército.
 pub fn entidad_caravana(id: CaravanaId) -> u64 {
     ETIQUETA_CARAVANA | id
 }
@@ -34,10 +39,46 @@ pub fn entidad_caravana(id: CaravanaId) -> u64 {
 pub fn entidad_reputacion(faccion: u32) -> u64 {
     ETIQUETA_REPUTACION | faccion as u64
 }
+/// Clave de entidad del mercado de mercenarios (es uno solo para todo el mundo: su reposición es global).
+pub fn entidad_mercenarios() -> u64 {
+    ETIQUETA_MERCENARIOS
+}
 
 /// El id de comercio que lleva una clave de entidad (sin la etiqueta).
 pub(crate) fn id_de_entidad(entidad: u64) -> u64 {
     entidad & (ETIQUETA - 1)
+}
+
+/// ¿Es esta clave de entidad la de una caravana? (la rejilla de encuentros mezcla columnas y caravanas).
+pub fn es_entidad_caravana(entidad: u64) -> bool {
+    entidad & !(ETIQUETA - 1) == ETIQUETA_CARAVANA
+}
+
+/// El mercado de los campamentos de mercenarios (Comercio_Caravanas §9, §2.5). Los campamentos son los del artefacto de mundo (por su índice);
+/// solo se guarda el stock de los que ya se tocaron: el que falta tiene el inicial.
+///
+/// Lo provisional (hasta que existan los héroes, su almacén personal y la residencia): la columna hace de héroe. Una columna **reside** en un
+/// campamento si la administración lo fijó (`FijarResidencia`), con un almacén personal propio que también llena la administración.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EstadoMercenarios {
+    /// Lo comerciado entre Facciones desde la última reposición y cuándo toca la siguiente (global).
+    pub mercado: MercadoMercenario,
+    /// Stock de los campamentos tocados (índice del artefacto).
+    pub stock: BTreeMap<u32, StockCampamento>,
+    /// Lo comprado hoy por cada columna residente, por bien con cupo (madera y piedra).
+    pub cupos: BTreeMap<u64, CupoDiario>,
+    /// Columna → campamento donde reside (provisional).
+    pub residencias: BTreeMap<u64, u32>,
+    /// Almacén personal de cada columna residente (provisional; capacidad `ALMACEN_PERSONAL`).
+    pub personal: BTreeMap<u64, Mercancia>,
+    /// Instante del evento de reposición pendiente, si lo hay: sin él no se programa otro.
+    pub pulso: Option<Instante>,
+}
+
+impl Default for EstadoMercenarios {
+    fn default() -> Self {
+        Self { mercado: MercadoMercenario { contadores: BTreeMap::new(), repone_en: 0 }, stock: BTreeMap::new(), cupos: BTreeMap::new(), residencias: BTreeMap::new(), personal: BTreeMap::new(), pulso: None }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,10 +93,12 @@ pub struct EstadoComercio {
     pub reputacion: BTreeMap<u32, Reputacion>,
     /// `Asentamiento.ultimaCaravanaCreadaEn`: el cooldown de creación es por plaza.
     pub ultima_caravana: BTreeMap<u64, Instante>,
-    /// El carro de cada columna (`suministro`): provisional hasta el sistema de héroes y columnas; lo llenan las órdenes de administración.
-    pub suministros: BTreeMap<u64, Mercancia>,
-    /// Caravana adjunta → columna a la que va enganchada (provisional, igual que `suministros`).
-    pub adjuntas: BTreeMap<CaravanaId, u64>,
+    /// La red de caminos que dejan las rutas comerciales (§7.4).
+    pub red: RedCaminos,
+    /// Plazas de origen con un pulso de reparto programado → instante del pulso (no se programa otro mientras tanto).
+    pub reparto: BTreeMap<u64, Instante>,
+    /// El mercado de mercenarios.
+    pub mercenarios: EstadoMercenarios,
     pub siguiente_acuerdo: AcuerdoId,
     pub siguiente_orden: OrdenId,
     pub siguiente_caravana: CaravanaId,
@@ -69,8 +112,9 @@ impl Default for EstadoComercio {
             flota: Vec::new(),
             reputacion: BTreeMap::new(),
             ultima_caravana: BTreeMap::new(),
-            suministros: BTreeMap::new(),
-            adjuntas: BTreeMap::new(),
+            red: RedCaminos::default(),
+            reparto: BTreeMap::new(),
+            mercenarios: EstadoMercenarios::default(),
             siguiente_acuerdo: 1,
             siguiente_orden: 1,
             siguiente_caravana: 1,

@@ -1,7 +1,8 @@
 //! El comercio estático dentro del núcleo (Comercio_Caravanas §4, §8, §12): trueques, órdenes del mercado de una plaza, mostrador y
 //! reputación entre Facciones, con sus plazos como eventos de la cola. Las reglas puras viven en el crate `comercio`; aquí están el estado,
 //! el reloj, la autorización provisional y el traslado de los sucesos a eventos y versiones del núcleo. La flota de caravanas y los cierres
-//! por ruina o conquista están en [`flota`](super::flota).
+//! por ruina o conquista están en [`flota`](super::flota); su viaje y el reparto, en [`viaje`](super::viaje); el mercado de los
+//! campamentos de mercenarios, en [`mercenarios`](super::mercenarios).
 //!
 //! # Los plazos
 //! Un trueque, una orden y el fin de preparación de una caravana son eventos `Carga::Comercio` de prioridad 6, ligados a la generación de
@@ -34,8 +35,8 @@ use comercio::trueque::{podar, AcuerdoTrueque, ErrorTrueque, Vencimiento};
 use comercio::{total, Carga as Mercancia, Lado};
 
 /// Capacidad del carro de una columna (`LOGISTICA.capacidadCarroPorJugador`: 500).
-// DUDA: el núcleo no tiene aún el carro de las columnas (es del sistema de héroes y ejércitos): se guarda como `suministro` provisional y
-// su capacidad es el valor del bloque, sin caravanas adjuntas ni «Carga Ampliada».
+// DUDA: un solo carro por columna hasta que existan los héroes (`participantes × capacidadCarroPorJugador`); la capacidad total de la columna, con
+// las caravanas adjuntas y «Carga Ampliada», es `Nucleo::capacidad_de_carga`.
 pub(super) const CAPACIDAD_CARRO: Mil = 500_000;
 /// Radio de la puerta de una plaza (`MOVIMIENTO.radioPuerta`).
 // DUDA: el bloque dice 10 (TypeScript); el valor vigente tras la calibración de distancias es 2 (Movimiento_Ejercitos §14), que es el que se usa.
@@ -165,7 +166,7 @@ impl Nucleo {
 
     /// El carro (`suministro`) de una columna.
     pub fn suministro(&self, ejercito: u64) -> Mercancia {
-        self.estado.comercio.suministros.get(&ejercito).cloned().unwrap_or_default()
+        self.estado.ejercitos.get(&ejercito).map(|e| e.suministro.clone()).unwrap_or_default()
     }
 
     /// Los cupos de la flota de la plaza (Mercado activo y políticas): `None` si la plaza no existe.
@@ -289,7 +290,11 @@ impl Nucleo {
         match suceso {
             SucesoComercio::CaducaTrueque => self.caduca_trueque(id, t),
             SucesoComercio::CaducaOrden => self.caduca_orden(id, t),
-            SucesoComercio::FinPreparacion => self.fin_de_preparacion(id, t),
+            SucesoComercio::FinPreparacion => self.salida_de_preparacion(id, t),
+            SucesoComercio::LlegadaCaravana => self.llegada_de_caravana(id, t),
+            SucesoComercio::PeajeCaravana => self.peaje_de_caravana(id, t),
+            SucesoComercio::PulsoReparto => self.pulso_de_reparto(id, t),
+            SucesoComercio::ReponeMercenarios => self.repone_mercenarios(t),
         }
     }
 
@@ -360,6 +365,9 @@ impl Nucleo {
                     self.invalidar_comercio(entidad_trueque(*acuerdo));
                     self.programar_comercio(vence, entidad_trueque(*acuerdo), SucesoComercio::CaducaTrueque);
                     self.emitir_comercio(t, EventoComercio::TruequeAceptado { acuerdo: *acuerdo }, vec![a, b], &[]);
+                    // El reparto se reevalúa al aceptar: cada plaza carga lo suyo con sus caravanas libres.
+                    self.reparto_de_plaza(a, t);
+                    self.reparto_de_plaza(b, t);
                 } else {
                     ac.rechazar(t, puede).map_err(de_trueque)?;
                     self.invalidar_comercio(entidad_trueque(*acuerdo));
@@ -434,15 +442,14 @@ impl Nucleo {
                 if *cantidad <= 0 {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
                 }
-                let carro = self.estado.comercio.suministros.entry(*ejercito).or_default();
-                let n = (*cantidad).min((CAPACIDAD_CARRO - total(carro)).max(0));
+                let capacidad = self.capacidad_de_carga(*ejercito).unwrap_or(CAPACIDAD_CARRO);
+                let carro = &mut self.estado.ejercitos.get_mut(ejercito).expect("existe").suministro;
+                let n = (*cantidad).min((capacidad - total(carro)).max(0));
                 if n == 0 {
-                    if carro.is_empty() {
-                        self.estado.comercio.suministros.remove(ejercito);
-                    }
                     return Err(sin_cambios());
                 }
                 *carro.entry(*recurso).or_insert(0) += n;
+                self.tr.tocados.push(*ejercito);
                 Ok(None)
             }
             _ => unreachable!("solo se llama con órdenes de mercado"),
@@ -471,9 +478,10 @@ impl Nucleo {
             factor_comision_externa: factor,
         };
         let faccion_plaza = plaza.faccion;
-        let Estado { comercio, asentamientos, .. } = &mut self.estado;
-        let suministro = comercio.suministros.get(&ejercito).cloned().unwrap_or_default();
-        let carro = Carro { oro: comercio::de(&suministro, Recurso::Oro), recurso: comercio::de(&suministro, recurso), espacio: (CAPACIDAD_CARRO - total(&suministro)).max(0) };
+        let capacidad = self.capacidad_de_carga(ejercito).unwrap_or(CAPACIDAD_CARRO);
+        let Estado { comercio, asentamientos, ejercitos, .. } = &mut self.estado;
+        let suministro = ejercitos.get(&ejercito).map(|e| e.suministro.clone()).unwrap_or_default();
+        let carro = Carro { oro: comercio::de(&suministro, Recurso::Oro), recurso: comercio::de(&suministro, recurso), espacio: (capacidad - total(&suministro)).max(0) };
         let almacen = &mut asentamientos.get_mut(&plaza_id).expect("existe").economia.almacen;
         // Una orden ya cerrada vive en el historial: se comprueba sobre una copia, que `comerciar` rechaza sin tocar.
         let en_pie = comercio.libro.ordenes.iter().position(|o| o.id == orden);
@@ -489,19 +497,18 @@ impl Nucleo {
             let (c, m) = rechazo_de_mostrador(e);
             rechazo(c, m.into())
         })?;
-        let sum = comercio.suministros.entry(ejercito).or_default();
+        let sum = &mut ejercitos.get_mut(&ejercito).expect("existe").suministro;
         *sum.entry(Recurso::Oro).or_insert(0) += s.delta_carro_oro;
         *sum.entry(recurso).or_insert(0) += s.delta_carro_recurso;
         sum.retain(|_, n| *n > 0);
-        if sum.is_empty() {
-            comercio.suministros.remove(&ejercito);
-        }
+        self.tr.tocados.push(ejercito);
         if s.cumplida {
             comercio.libro.archivar_cerradas(&cr.mercado);
             self.estado.generaciones.subir(entidad_orden(orden));
         }
         self.tr.asentamientos.push(plaza_id);
         let entre_facciones = faccion_columna != faccion_plaza;
+        self.registrar_comercio_de_mercenarios(entre_facciones, &[(recurso, s.cantidad)].into_iter().collect());
         self.emitir_comercio(
             t,
             EventoComercio::ComercioEnPlaza { orden, cantidad: s.cantidad, entre_facciones },
@@ -552,6 +559,7 @@ impl Nucleo {
         let facciones = (self.estado.asentamientos.get(&a).map_or(0, |p| p.faccion), self.estado.asentamientos.get(&b).map_or(0, |p| p.faccion));
         let Some(cierre) = self.estado.comercio.acuerdos[i].abonar(lado, carga, facciones) else { return false };
         self.invalidar_comercio(entidad_trueque(acuerdo));
+        self.registrar_comercio_de_mercenarios(cierre.entre_facciones, &cierre.intercambiado);
         let ev = EventoComercio::TruequeCumplido { acuerdo, entre_facciones: cierre.entre_facciones, intercambiado: cierre.intercambiado };
         self.emitir_comercio(t, ev, vec![a, b], &[("trasVencer", cierre.tras_vencer as i64)]);
         for (faccion, suceso) in cierre.reputacion {

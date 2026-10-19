@@ -182,6 +182,8 @@ pub struct Navegacion {
     pub radio_paso_ciudad_min: Mil,
     pub atraccion_por_peso: i64,
     pub atraccion_min: i64,
+    /// `COSTE_MOVIMIENTO.factorCamino` (ppm): sobre una arista de la red de caminos el coste del tramo se multiplica por esto.
+    pub factor_camino: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -313,6 +315,7 @@ impl Reglas {
             radio_paso_ciudad_min: mil(num(&nv, "radioPasoCiudadMin")),
             atraccion_por_peso: ppm(num(&nv, "atraccionPorPeso")),
             atraccion_min: ppm(num(&nv, "atraccionMin")),
+            factor_camino: ppm(num(&b("COSTE_MOVIMIENTO"), "factorCamino")),
         };
         Reglas {
             comision,
@@ -387,7 +390,7 @@ mod pruebas {
         assert_eq!((m.capacidad_almacen_personal, m.capacidad_viveres_por_heroe), (1_000_000, 350_000));
         let n = &r.navegacion;
         assert_eq!((n.espaciado_min, n.separacion_vados_min), (8_000, 100_000));
-        assert_eq!((n.atraccion_por_peso, n.atraccion_min), (100_000, 500_000));
+        assert_eq!((n.atraccion_por_peso, n.atraccion_min, n.factor_camino), (100_000, 500_000, 500_000));
     }
 
     #[test]

@@ -3,10 +3,12 @@
 
 use std::collections::BTreeSet;
 
-use crate::estado::EventoNucleo;
+use crate::estado::{Estado, EventoNucleo};
+use crate::estado_comercio::{entidad_caravana, es_entidad_caravana, id_de_entidad};
 use crate::generadores::{Cx, GeneradorDeEventos};
 use base::{Mil, Plan};
 use cola::Clave;
+use comercio::caravana::EstadoCaravana;
 use encuentros::{Rejilla, PRIORIDAD_ENCUENTROS};
 use vision::{Donde, Movil, Muestra, Observador, Vision};
 
@@ -63,14 +65,19 @@ impl GeneradorDeEventos for GeneradorEncuentros {
         if cx.generacion(otra) as u64 != otra_generacion {
             return;
         }
-        let (Some(a), Some(b)) = (cx.estado().ejercitos.get(&entidad), cx.estado().ejercitos.get(&otra)) else { return };
         let t = cx.ahora();
-        let punto = {
-            let (pa, pb) = (a.plan.posicion_en(t).unwrap_or(a.posicion), b.plan.posicion_en(t).unwrap_or(b.posicion));
-            base::Punto::new((pa.x + pb.x) / 2, (pa.y + pb.y) / 2)
-        };
-        let (fa, fb) = (a.faccion as i64, b.faccion as i64);
+        let (Some((pa, fa)), Some((pb, fb))) = (situar(cx.estado(), entidad, t), situar(cx.estado(), otra, t)) else { return };
+        let punto = base::Punto::new((pa.x + pb.x) / 2, (pa.y + pb.y) / 2);
         let (lo, hi) = (entidad.min(otra), entidad.max(otra));
+        if es_entidad_caravana(entidad) || es_entidad_caravana(otra) {
+            // Un encuentro con una caravana: lo resuelve el sistema militar (combate A/B, Combate.md §7.1); aquí solo se deja el hecho.
+            let columnas: Vec<u64> = [lo, hi].into_iter().filter(|&e| !es_entidad_caravana(e)).collect();
+            let caravanas: Vec<i64> = [lo, hi].into_iter().filter(|&e| es_entidad_caravana(e)).map(|e| id_de_entidad(e) as i64).collect();
+            let mut datos = vec![("faccionA", fa), ("faccionB", fb)];
+            datos.extend(caravanas.iter().enumerate().map(|(i, &c)| (if i == 0 { "caravana" } else { "caravanaB" }, c)));
+            cx.emitir(EventoNucleo { codigo: "caravana.encuentro".into(), en: t, ejercitos: columnas, asentamientos: vec![], punto: Some(punto), datos });
+            return;
+        }
         cx.emitir(EventoNucleo {
             codigo: "ejercito.encuentro".into(),
             en: t,
@@ -80,6 +87,16 @@ impl GeneradorDeEventos for GeneradorEncuentros {
             datos: vec![("faccionA", fa), ("faccionB", fb)],
         });
     }
+}
+
+/// Dónde está y de qué Facción es una entidad de la rejilla de encuentros: una columna o (con la etiqueta de `estado_comercio`) una caravana.
+fn situar(estado: &Estado, entidad: u64, t: base::Instante) -> Option<(base::Punto, i64)> {
+    if es_entidad_caravana(entidad) {
+        let c = estado.comercio.caravana(id_de_entidad(entidad))?;
+        return Some((c.posicion_en(t), estado.asentamientos.get(&(c.origen as u64))?.faccion as i64));
+    }
+    let e = estado.ejercitos.get(&entidad)?;
+    Some((e.plan.posicion_en(t).unwrap_or(e.posicion), e.faccion as i64))
 }
 
 /// Visión muestreada (cada `Ajustes::muestreo_ms`, p. ej. 250 ms): quién ve a quién. Emite solo el **primer contacto**
@@ -124,6 +141,16 @@ impl GeneradorDeEventos for GeneradorVision {
             let donde = if e.marchando() { Donde::Plan(&e.plan) } else { Donde::Fijo(e.posicion) };
             ojos.push(Observador { faccion: e.faccion, radio: self.radio_ojo, donde, graba: true });
             moviles.push(Movil::new(e.id, e.faccion, donde));
+        }
+        // Las caravanas en el mapa se ven como móviles de la Facción de su plaza de origen; una «grande» en tránsito llama la atención a 60.
+        let reglas = &estado.reglas.economia.comercio.flota;
+        for c in estado.comercio.flota.iter().filter(|c| matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando)) {
+            let (Some(plan), Some(origen)) = (c.plan.as_ref(), estado.asentamientos.get(&(c.origen as u64))) else { continue };
+            let mut m = Movil::new(entidad_caravana(c.id), origen.faccion, Donde::Plan(plan));
+            if c.estado == EstadoCaravana::EnTransito && c.es_grande(reglas) {
+                m.atencion = Some(vision::radios::CARAVANA_GRANDE);
+            }
+            moviles.push(m);
         }
         let muestra = self.vision.muestrear(t, &ojos, &moviles);
         let cambios = vision::diff(&self.previa, &muestra);
