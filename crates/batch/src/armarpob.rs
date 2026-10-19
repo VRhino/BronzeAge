@@ -27,17 +27,17 @@ pub struct Entrada<'a> {
     pub pared_total: Duration,
 }
 
-fn pct(a: usize, b: usize) -> Option<f64> {
+pub(crate) fn pct(a: usize, b: usize) -> Option<f64> {
     (b > 0).then(|| 100.0 * a as f64 / b as f64)
 }
 
 /// Percentil `p` (0..1) de una lista; la ordena.
-fn percentil(v: &mut [f64], p: f64) -> Option<f64> {
+pub(crate) fn percentil(v: &mut [f64], p: f64) -> Option<f64> {
     v.sort_by(f64::total_cmp);
     (!v.is_empty()).then(|| v[((v.len() - 1) as f64 * p).round() as usize])
 }
 
-fn mediana(v: &[f64]) -> Option<f64> {
+pub(crate) fn mediana(v: &[f64]) -> Option<f64> {
     percentil(&mut v.to_vec(), 0.5)
 }
 
@@ -544,7 +544,7 @@ fn grafico_sin_sitio_ciudad(x: &Entrada) -> Grafico {
 
 fn mapa(x: &Entrada) -> MapaInforme {
     let u = |v: i64| v as f64 / 1000.0;
-    let capa = |nombre: &str, color: &str, circulos, puntos| Capa { nombre: nombre.into(), color: color.into(), circulos, puntos };
+    let capa = |nombre: &str, color: &str, circulos, puntos| Capa { nombre: nombre.into(), color: color.into(), circulos, puntos, lineas: vec![] };
     let niveles: [(&str, &str, std::ops::RangeInclusive<u32>); 3] = [("Plazas de nivel 1", "#e11d48", 1..=1), ("Plazas de nivel 2", "#2563eb", 2..=2), ("Plazas de nivel 3 o más", "#a21caf", 3..=u32::MAX)];
     let mut capas: Vec<Capa> = niveles
         .iter()

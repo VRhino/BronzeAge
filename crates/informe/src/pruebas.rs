@@ -166,3 +166,13 @@ fn el_mapa_usa_punto_decimal() {
     assert!(h.contains("r=\"12.5\""));
     assert!(!h.contains("r=\"10,"));
 }
+
+#[test]
+fn las_lineas_del_mapa_salen_como_polilineas_y_se_omiten_si_no_son_validas() {
+    let mut i = ejemplo();
+    let p = |x: f64, y: f64| Punto { x, y };
+    i.mapa.as_mut().unwrap().capas[0].lineas = vec![vec![p(1.0, 2.0), p(30.5, 40.0), p(50.0, 60.0)], vec![p(1.0, 1.0)], vec![p(0.0, f64::NAN), p(2.0, 2.0)]];
+    let h = renderizar(&i);
+    assert_eq!(h.matches("<polyline class=\"via\"").count(), 1, "solo la línea de dos o más puntos finitos");
+    assert!(h.contains("points=\"1.0,2.0 30.5,40.0 50.0,60.0\""));
+}

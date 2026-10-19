@@ -333,7 +333,7 @@ pub(crate) fn hex(c: [u8; 3]) -> String {
 
 fn mapa(x: &Entrada, plazas: &[Plaza]) -> Mapa {
     let u = |v: i64| v as f64 / 1000.0;
-    let capa = |nombre: &str, color: &str, circulos, puntos| Capa { nombre: nombre.into(), color: color.into(), circulos, puntos };
+    let capa = |nombre: &str, color: &str, circulos, puntos| Capa { nombre: nombre.into(), color: color.into(), circulos, puntos, lineas: vec![] };
     let punto = |p: base::Punto| Punto { x: u(p.x), y: u(p.y) };
     Mapa {
         ancho: u(x.geo.ancho),

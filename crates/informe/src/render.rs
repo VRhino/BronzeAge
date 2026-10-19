@@ -53,6 +53,7 @@ span.f0{background:var(--s0)}span.f1{background:var(--s1)}span.f2{background:var
 .vacio{color:var(--suave);margin:0}
 .mundo{fill:var(--mundo);stroke:var(--suave);stroke-width:2;vector-effect:non-scaling-stroke}
 .zona{fill-opacity:.15;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.via{fill:none;stroke-width:1.2;vector-effect:non-scaling-stroke;stroke-linecap:round}
 .pie{color:var(--suave);font-size:.85rem;margin:8px 0 0}
 .tarjeta{margin-bottom:12px}
 .tarjeta h3{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}

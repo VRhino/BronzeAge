@@ -4,18 +4,24 @@
 //! - [`territorio`] corre el escenario de «mundo y territorio» y devuelve el [`Informe`].
 //! - [`poblacion`] corre el de «población, construcción y mantenimiento» (plazas del crate `asentamiento` sobre el mundo real, cada una con
 //!   su ciudad real del trazado urbano).
+//! - [`comercio`] corre el de «economía y comercio» (Facciones de varias plazas que comercian sobre el núcleo: trueques, caravanas que viajan por
+//!   el mapa, peajes, red de caminos, mercenarios y pueblos extractores con acarreo).
 //! - [`escribir`] deja `informe.json` e `informe.html` en una carpeta.
 //! - [`fundir_decisiones`] añade a mano el resumen, las anomalías y las decisiones tras leer los resultados.
 
 mod armar;
+mod armarcom;
 mod armarpob;
+mod auditoria;
 mod economia;
 mod fondo;
 mod geo;
 mod medidas;
 mod sim;
+mod simcom;
 mod simpob;
 mod svgciudad;
+mod vigia;
 
 pub use geo::{artefacto_en, cargar, carpeta_por_defecto, Cargado};
 pub use informe::{semaforo, Informe, Semaforo};
@@ -82,6 +88,38 @@ pub fn poblacion_y_ciudad(c: &Cargado, e: &EscenarioPoblacion) -> (Informe, Opti
     let re = nucleo::ReglasEconomia::default();
     let svg = svgciudad::ciudad_ejemplo(&corrida, &re.datos);
     (armarpob::armar(&armarpob::Entrada { c, mapa: &mapa, e, corrida: &corrida, reglas: &re.datos, urb: &re.urbanismo, determinismo, pared_total: t0.elapsed() }), svg)
+}
+
+/// Parámetros del escenario de comercio: plazas fundadas a la vez (en Facciones de cuatro) que comercian sobre el núcleo.
+#[derive(Clone, Debug)]
+pub struct EscenarioComercio {
+    pub plazas: u32,
+    pub dias: u32,
+    pub semilla: u64,
+    /// Repite un escenario reducido y compara las huellas del núcleo (dos veces con la misma semilla; una más con el reloj a pasos).
+    pub verificar_determinismo: bool,
+    /// Repite el escenario sin comercio para medir lo que cuesta.
+    pub medir_coste: bool,
+}
+
+impl Default for EscenarioComercio {
+    fn default() -> Self {
+        Self { plazas: 160, dias: 30, semilla: 42, verificar_determinismo: true, medir_coste: true }
+    }
+}
+
+/// Corre el escenario de comercio sobre el mundo y monta el informe.
+pub fn comercio(c: &Cargado, e: &EscenarioComercio) -> Informe {
+    let t0 = Instant::now();
+    let geo = geo::Geo::de(&c.mundo);
+    let corrida = simcom::simular(c, &geo, e.plazas, e.dias, e.semilla, false, false);
+    let control = e.medir_coste.then(|| simcom::simular(c, &geo, e.plazas, e.dias, e.semilla, true, false));
+    let determinismo = e.verificar_determinismo.then(|| {
+        let reducida = |paso_normal| simcom::huella(&simcom::simular(c, &geo, 20, 4, e.semilla, false, paso_normal));
+        let (a, b, normal) = (reducida(false), reducida(false), reducida(true));
+        (a == b, a == normal)
+    });
+    armarcom::armar(&armarcom::Entrada { c, geo: &geo, e, corrida: &corrida, control: control.as_ref(), determinismo, pared_total: t0.elapsed() })
 }
 
 /// 25 Facciones y 2 días, dos veces: ¿mismo `hash_estado()`?

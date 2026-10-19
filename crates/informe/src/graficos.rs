@@ -247,6 +247,10 @@ pub fn mapa(m: &Mapa) -> Option<String> {
                 c(k.r.abs())
             );
         }
+        for l in cp.lineas.iter().filter(|l| l.len() >= 2 && l.iter().all(|p| p.x.is_finite() && p.y.is_finite())) {
+            let puntos: Vec<String> = l.iter().map(|p| format!("{},{}", c(p.x), c(p.y))).collect();
+            let _ = write!(o, "<polyline class=\"via\" points=\"{}\"/>", puntos.join(" "));
+        }
         for p in cp.puntos.iter().filter(|p| p.x.is_finite() && p.y.is_finite()) {
             let _ = write!(
                 o,

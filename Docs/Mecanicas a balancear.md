@@ -26,6 +26,10 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | 42 | TECNOLOGÍA | Cifras de `AEDAS` (retraso, itinerantes, estancia, precio de venta, residentes, épicas) | batch / playtest |
 | 18 | INTEL | Cifras de `INTEL` (Mirada, Informe, cupos, coste de la Taberna) | batch / playtest |
 | 8 | CARAVANAS | Visibilidad por tamaño: umbral y radio (`VISION.caravanaGrande`) | batch / playtest |
+| 43 | COMERCIO | Peaje y trueque: las repescas que deja el 2 % (3,35 salidas por trueque) | `batch comercio` (decisión C3) |
+| 44 | COMERCIO | Ventana del acarreo en la solvencia del ascenso (el acarreo pierde el 97,6 % contra un almacén lleno) | `batch comercio` (decisión C2) |
+| 45 | COMERCIO | Precio de referencia de los bienes manufacturados y comisión acuñada contra el oro lleno | `batch comercio` (decisión C4) |
+| 46 | COMERCIO | Sumideros de bienes escasos: el comercio se apaga a los 13 días; cupos de la flota (M) | `batch comercio` con bots de la fase 7 (decisión C5) |
 
 ## 20. Tecnología por Eras: calibrar los logros
 
@@ -61,10 +65,28 @@ misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o
 
 ## 40. Campamentos de mercenarios: cifras
 
+**Medido (`batch comercio`, 2026-10-19):** con 218 obras de pueblo (90 de madera cada una) sobre 9 campamentos, el 21,7 % de las compras se rechaza por falta de existencias (pila de 300, reposición cada 3 h) y todas las obras acaban entre los días 5 y 6 con 1 viaje de compra en la mediana; el cupo diario de residentes (60 de madera, 10 de piedra) se respeta y la reposición se disparó 50 veces. Decisión C6 del informe: mantener las cifras hasta medir con bots.
+
 Las cifras de `MERCENARIOS` (`constants.ts`) son placeholder, sin calibrar con batch. Desde el 2026-10-08 la tropa
 prestada sale **completa** (25-30 por escuadra, antes 15): el anillo de bandidos se calculó contra 15 lanceros
 (`typescript-final:Consideraciones/Campamentos_Entrada_Fundacion_Definicion.md` §423) y el cerebro «sin plaza» ya cuenta 50 de poder
 (`PODER_PRESTADO`). Medir si los niveles de bandido siguen siendo un reto.
+
+## 43. Peaje y trueque: repescas
+
+El peaje (2 % de lo que lleva la caravana a cada ciudad ajena que cruza) deja la entrega por debajo de lo pactado y el trueque solo abona lo que llega: en `batch comercio` (2026-10-19) hay 3,35 salidas de caravana por trueque cumplido (esperado 2) y el 24,3 % de los viajes de ida llevan menos de una unidad (repescas de 0,6 u y 0,012 u). Opciones del informe (C3): dar el lado por saldado cuando falta menos de una unidad (recomendada), cobrar el peaje del almacén del origen al salir, que el trueque abone lo que sale, o dejarlo. Es del autor: toca una regla de `Comercio_Caravanas` §4.4 y §7.3.
+
+## 44. Ventana del acarreo en la solvencia del ascenso
+
+`ingreso_bruto` cuenta la producción nominal de los pueblos con carro (Economia_Construccion §11 admite también la media de las llegadas en 24 h, que no se guarda). Medido (`batch comercio`): con la piedra de las madres al 96 % el acarreo pierde el 97,6 % de lo que transporta (ingresan 1,64 de 67,1 millones de u) y aun así cuenta entero para la solvencia; lo que sale es el 89,8 % del nominal. En 30 días nadie llega al nivel 3, así que no bloquea nada todavía. Opciones del informe (C2): media de lo ingresado en 24 h (recomendada; estado nuevo y formato de foto), producción topada al hueco del almacén de la madre, o dejarlo.
+
+## 45. Precio de los bienes manufacturados y comisión acuñada
+
+`PRECIO_BASE` solo tiene madera, piedra, trigo, cobre, estaño, hierro y ganado: las armas de madera, el cuero y los lingotes valen 0 al calcular la comisión. Con el oro de las plazas al 100 % desde el día 3, la comisión que se acuña en el destino se topa por su capacidad: 519 entregas acuñaron 77,8 de oro (`batch comercio`, 2026-10-19). Opciones del informe (C4): precio base para cada bien comerciable (recomendada), dejarlos fuera de la comisión, o decidirlo con bots que los fabriquen y consuman.
+
+## 46. Sumideros de bienes escasos y cupos de la flota
+
+En `batch comercio` los almacenes de madera, piedra, trigo y oro están al 96-100 % desde el día 3; solo comercian el ganado, las armas de madera y los minerales, y el comercio se apaga el día 13 (575 aristas, rutas caducadas a los 3 días, 0 trueques). Las cifras de intensidad (0,035 trueques por plaza y día) no valen para calibrar hasta que haya demanda real (reclutamiento, equipo, obras: fase 7). El cupo del Mercado de nivel 1 (2 caravanas, 3 carros) sobra: una caravana de 2 carros sirve todo el comercio del batch (decisión C5: dejar). Informe: `batch/salida/comercio/informe.html` (`batch comercio --decisiones crates/batch/decisiones/comercio.json`).
 
 ## 8. Caravanas: visibilidad por tamaño
 
@@ -83,6 +105,8 @@ adelantan las adopciones (Era I: nivel 2 a 5,8 días) y si la venta hace irrelev
 Las cifras de `INTEL` y de `EDIFICIO_CATALOGO.taberna` (`constants.ts`) son placeholder, sin calibrar: Mirada (radio 150, 2 h, base 40 de oro + 0,1 por unidad de distancia, cooldown de zona 2 h), Informe (60 de oro por nivel de la plaza mirada, cooldown 6 h por plaza), cupo de Miradas (1 / 2 / 3 por nivel de taberna, 1 en campamento) y el coste del edificio (150 madera + 60 piedra, mejoras 250+120 y 500+250). Es el **sink recurrente de oro** que la economía del oro necesita (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md` §4.5): medir con batch (los bots ya construyen la taberna y compran informes) que `oroMedio` deje de subir sin techo y que el gasto en intel quede entre un tercio y la mitad del ingreso, sin impedir ninguna de las otras ambiciones; y si el precio por distancia basta para que mirar lejos sea una decisión. Plan: `typescript-final:Consideraciones/Taberna_Intel_Definicion.md`.
 
 ## 32. Reputación: cifras
+
+**Medido (`batch comercio`, 2026-10-19, 30 días, 146 plazas, 155 trueques cumplidos):** el bonus de +5 dura 1,74 días con el decaimiento de 0,002/min; la máxima alcanzada es de 78 puntos (no satura), la mediana final entre las Facciones con dato, 15,8, solo el 17,5 % queda en positivo al final y nadie baja de 0 porque ningún trueque se incumple, así que el umbral de −40 no se ha ejercitado. Falta un escenario con incumplimientos (bots de la fase 7). Decisión C1 del informe: dejar las cifras hasta entonces (recomendada), bajar el decaimiento a 0,0005 o subir el umbral a −20.
 
 `REPUTACION` (`constants.ts`) es placeholder: bonus por trueque cumplido (+5) y por liberar a un vasallo (+6), penalizaciones por trueque incumplido (−8), rebelión (−10), romper alianza (−12) y atacar a un aliado (−25), bonus por minuto de alianza (0,05), decaimiento (0,002 por minuto desde el 2026-10-18; era 0,2) y bonus por minuto de alianza (0,0005; era 0,05) y umbrales (−40 para el Embajador y para la comisión, ×1,5). Medir con batch que el score no se sature en ±100 ni quede pegado a 0, y que los umbrales muerdan sin bloquear la diplomacia. Canon: Doc 2.7.
 

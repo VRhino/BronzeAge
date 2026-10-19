@@ -113,6 +113,9 @@ pub struct Capa {
     pub circulos: Vec<Circulo>,
     #[serde(default)]
     pub puntos: Vec<Punto>,
+    /// Polilíneas (caminos, rutas): cada una es una lista de puntos unidos por segmentos.
+    #[serde(default)]
+    pub lineas: Vec<Vec<Punto>>,
 }
 
 fn color_por_defecto() -> String {
