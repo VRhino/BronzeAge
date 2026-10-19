@@ -99,6 +99,23 @@ impl Pueblo {
     }
 }
 
+/// Horas de la ventana con la que el acarreo cuenta en la solvencia del ascenso (Economia_Construccion §11).
+pub const HORAS_VENTANA: i64 = 24;
+
+/// Lo que el acarreo ingresó en el almacén de la plaza durante una hora de mundo. La ventana de 24 h son los cubos con `hora` en
+/// `(ahora − 24, ahora]`: entre 23 y 24 horas de historia, la hora en curso incluida.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IngresoAcarreo {
+    pub recurso: Recurso,
+    /// Hora de mundo (`instante / 3 600 000`).
+    pub hora: i64,
+    pub cantidad: Mil,
+}
+
+fn hora_de(t: Instante) -> i64 {
+    t.div_euclid(60 * MS_POR_MINUTO)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorPueblo {
     /// Solo van por pueblo los minerales y la Cantera.
@@ -233,15 +250,26 @@ impl Asentamiento {
         }
     }
 
-    /// Lo que producen por minuto los pueblos activos **con carro** (los que de verdad entregan), por recurso: es lo que cuenta como acarreo
-    /// en la solvencia del ascenso (Doc 4.5).
-    pub(crate) fn acarreo_por_minuto(&self, r: &Reglas, mano: &Mano, factor_tecnologia: &dyn Fn(Recurso) -> i64, recurso: Recurso) -> Mil {
-        self.pueblos
-            .iter()
-            .filter(|p| p.activo() && p.carro.is_some())
-            .filter_map(|p| r.catalogo.tipo(p.tipo).produccion.filter(|&(rec, _)| rec == recurso))
-            .map(|(_, base)| por(por(base, mano.pesants), factor_tecnologia(recurso)))
-            .sum()
+    /// Anota lo que un carro de acarreo acaba de ingresar de verdad en el almacén de la plaza (lo que cupo, no lo que traía). Suma en la hora
+    /// de `t` y descarta lo que ya salió de la ventana, así el vector no pasa de 24 horas por recurso.
+    pub fn registrar_acarreo(&mut self, t: Instante, recurso: Recurso, ingresado: Mil) {
+        if ingresado <= 0 {
+            return;
+        }
+        let hora = hora_de(t);
+        self.ingresos_acarreo.retain(|i| i.hora > hora - HORAS_VENTANA);
+        match self.ingresos_acarreo.iter_mut().find(|i| i.recurso == recurso && i.hora == hora) {
+            Some(i) => i.cantidad += ingresado,
+            None => self.ingresos_acarreo.push(IngresoAcarreo { recurso, hora, cantidad: ingresado }),
+        }
+    }
+
+    /// Lo que el acarreo ingresa por minuto en el almacén de la plaza, de media en la ventana de las últimas 24 h (`t` es la hora de la
+    /// pregunta): es lo que cuenta como acarreo en la solvencia del ascenso (Doc 4.5). Con el almacén lleno no ingresa nada y no cuenta nada.
+    pub(crate) fn acarreo_por_minuto(&self, t: Instante, recurso: Recurso) -> Mil {
+        let hora = hora_de(t);
+        let total: Mil = self.ingresos_acarreo.iter().filter(|i| i.recurso == recurso && i.hora > hora - HORAS_VENTANA && i.hora <= hora).map(|i| i.cantidad).sum();
+        total / (HORAS_VENTANA * 60)
     }
 }
 
@@ -404,12 +432,35 @@ mod pruebas {
     }
 
     #[test]
-    fn el_acarreo_cuenta_en_la_solvencia_solo_con_carro() {
+    fn el_acarreo_cuenta_en_la_solvencia_lo_que_ingresa_de_media_en_24_horas() {
         let r = Reglas::cargar();
         let mut a = con_pueblo_activo(&r);
-        let mano = mano_de_obra(&r.catalogo, &a.edificios, 20, 0, a.trabajadores_de_pueblos(&r));
-        assert_eq!(a.acarreo_por_minuto(&r, &mano, &|_| UNO, Recurso::Cobre), 0, "sin carro no llega nada");
+        const H: Instante = 60 * MS_POR_MINUTO;
+        assert_eq!(a.acarreo_por_minuto(0, Recurso::Cobre), 0, "sin llegadas no cuenta nada, tenga o no carro");
         a.pueblos[0].carro = Some(9);
-        assert_eq!((a.acarreo_por_minuto(&r, &mano, &|_| UNO, Recurso::Cobre), a.acarreo_por_minuto(&r, &mano, &|_| UNO, Recurso::Oro)), (5_000, 0));
+        assert_eq!(a.acarreo_por_minuto(0, Recurso::Cobre), 0, "la producción nominal ya no cuenta");
+        // 144 u en 3 llegadas (dos en la misma hora): 144 / 1440 min = 0,1 por minuto; otro recurso, aparte; una llegada sin sitio no suma.
+        a.registrar_acarreo(2 * H, Recurso::Cobre, 48_000);
+        a.registrar_acarreo(2 * H + 30 * MS_POR_MINUTO, Recurso::Cobre, 48_000);
+        a.registrar_acarreo(10 * H, Recurso::Cobre, 48_000);
+        a.registrar_acarreo(10 * H, Recurso::Piedra, 1_440_000);
+        a.registrar_acarreo(10 * H, Recurso::Cobre, 0);
+        assert_eq!(a.ingresos_acarreo.len(), 3, "dos cubos de cobre (horas 2 y 10) y uno de piedra");
+        assert_eq!((a.acarreo_por_minuto(10 * H, Recurso::Cobre), a.acarreo_por_minuto(10 * H, Recurso::Piedra)), (100, 1_000));
+        // La ventana: en la hora 25 sigue el cubo de la hora 2 (23 horas atrás); en la 26 ya salió.
+        assert_eq!(a.acarreo_por_minuto(25 * H, Recurso::Cobre), 100);
+        assert_eq!(a.acarreo_por_minuto(26 * H, Recurso::Cobre), 33, "queda el cubo de la hora 10: 48 u / 1440 min");
+        assert_eq!(a.acarreo_por_minuto(34 * H, Recurso::Cobre), 0, "y a las 24 horas de la última llegada, nada");
+    }
+
+    #[test]
+    fn registrar_poda_lo_que_salio_de_la_ventana_y_el_vector_no_crece() {
+        let r = Reglas::cargar();
+        let mut a = con_pueblo_activo(&r);
+        for h in 0..100 {
+            a.registrar_acarreo(h * 60 * MS_POR_MINUTO, Recurso::Cobre, 1_000);
+        }
+        assert_eq!(a.ingresos_acarreo.len(), HORAS_VENTANA as usize, "24 cubos horarios como mucho");
+        assert_eq!(a.ingresos_acarreo.first().map(|i| i.hora), Some(76));
     }
 }

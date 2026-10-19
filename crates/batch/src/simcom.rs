@@ -511,7 +511,7 @@ impl Sim<'_> {
     // ───────────────────────────── Trueques ─────────────────────────────
 
     fn precio(&self, r: Recurso) -> i64 {
-        self.n.estado().reglas.economia.comercio.precio.base.get(&r).copied().unwrap_or(0)
+        self.n.estado().reglas.economia.comercio.precio.base_de(r).unwrap_or(0)
     }
 
     /// Cantidades y capacidades de un almacén.

@@ -154,14 +154,14 @@ fn el_ascenso_informa_todos_los_bloqueos_a_la_vez() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (Asentamiento::fundar(&r, 0, &[(Recurso::Madera, 50_000)], 3), SitiosLibres, SinMundo);
     let x = exterior!(&r, s, w);
-    let b = a.bloqueos_de_ascenso(&r, &x, 0);
+    let b = a.bloqueos_de_ascenso(0, &r, &x, 0);
     assert!(b.contains(&Bloqueo::FaltaPoblacion) && b.contains(&Bloqueo::FaltanEdificios) && b.contains(&Bloqueo::RecursosInsuficientes), "{b:?}");
     assert!(b.iter().any(|x| matches!(x, Bloqueo::Insolvente(_))), "sin Cantera no hay ingreso de piedra para el nivel 2");
     // Sin cupo de Facción: con el cupo del nivel 2 ocupado.
-    assert!(a.bloqueos_de_ascenso(&r, &x, 1).contains(&Bloqueo::SinCupoDeFaccion));
+    assert!(a.bloqueos_de_ascenso(0, &r, &x, 1).contains(&Bloqueo::SinCupoDeFaccion));
     // El techo provisional detiene en el nivel 4.
     a.nivel = 4;
-    assert!(a.bloqueos_de_ascenso(&r, &x, 0).contains(&Bloqueo::NivelMaximo));
+    assert!(a.bloqueos_de_ascenso(0, &r, &x, 0).contains(&Bloqueo::NivelMaximo));
 }
 
 #[test]
@@ -217,14 +217,18 @@ fn lo_que_llega_por_acarreo_cuenta_en_la_solvencia_del_ascenso_y_el_pueblo_paga_
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let insolvente = |a: &Asentamiento, s: &mut SitiosLibres, w: &mut SinMundo| {
         let x = exterior!(&r, *s, *w);
-        a.bloqueos_de_ascenso(&r, &x, 0).into_iter().find_map(|b| if let Bloqueo::Insolvente(v) = b { Some(v) } else { None }).unwrap_or_default()
+        a.bloqueos_de_ascenso(0, &r, &x, 0).into_iter().find_map(|b| if let Bloqueo::Insolvente(v) = b { Some(v) } else { None }).unwrap_or_default()
     };
     // Al subir al nivel 2 se paga también piedra: sin ingreso de piedra no hay solvencia.
     assert!(insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra));
     a.pueblos.push(pueblo_activo(&r, Tipo::Cantera, None));
     assert!(insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra), "un pueblo sin carro no entrega nada");
     a.pueblos[0].carro = Some(3);
-    assert!(!insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra), "con carro, su producción cuenta como acarreo");
+    assert!(insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra), "con carro pero sin que llegue nada, tampoco: la producción nominal no cuenta");
+    a.registrar_acarreo(0, Recurso::Piedra, 0); // el carro llegó a un almacén lleno: no ingresó nada
+    assert!(insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra), "con el almacén lleno un pueblo no hace solvente a nadie");
+    a.registrar_acarreo(0, Recurso::Piedra, 14_400_000); // 10 por minuto de media, lo que sacaba la Cantera
+    assert!(!insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra), "lo que ingresó en las últimas 24 h cuenta como acarreo");
     // Paga mantenimiento como un edificio activo más y pide pesants.
     let sin = Asentamiento::fundar(&r, 0, &[], 3).coste_mantenimiento(&r, 0);
     assert!(a.coste_mantenimiento(&r, 0)[0].1 > sin[0].1);

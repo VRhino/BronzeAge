@@ -3,7 +3,7 @@
 //!
 //! Formato (little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
 //! población{pesants, artesanos, nobleza, nutrición: i64} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
-//! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
+//! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
 //! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64`.
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
@@ -18,7 +18,7 @@ use asentamiento::catalogo::{Tipo, TIPOS};
 use asentamiento::edificio::{Edificio, Estado, Fuente, Mejora};
 use asentamiento::mantenimiento::Medidor;
 use asentamiento::politicas::Activa;
-use asentamiento::pueblos::{EstadoPueblo, Pueblo};
+use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo, Pueblo};
 use asentamiento::recurso::TODOS;
 use asentamiento::{Almacen, Cargo, Costo, Politicas, Poblacion, Recurso};
 
@@ -110,6 +110,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         politicas,
         edificios,
         pueblos,
+        ingresos_acarreo,
         siguiente_edificio,
         ascenso,
         recetas_pausadas,
@@ -188,6 +189,12 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         w.opt_u64(*carro);
         w.bool(*lleno);
     }
+    w.u64(ingresos_acarreo.len() as u64);
+    for IngresoAcarreo { recurso, hora, cantidad } in ingresos_acarreo {
+        w.u8(recurso_a_u8(*recurso));
+        w.i64(*hora);
+        w.i64(*cantidad);
+    }
     w.u32(*siguiente_edificio);
     match ascenso {
         Some(Ascenso { nivel_objetivo, iniciado_en, completa_en }) => {
@@ -253,6 +260,10 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
         };
         pueblos.push(Pueblo { id, tipo, nodo, estado, almacen: leer_almacen(r)?, carro: r.opt_u64()?, lleno: r.bool()? });
     }
+    let mut ingresos_acarreo = Vec::new();
+    for _ in 0..r.cuenta()? {
+        ingresos_acarreo.push(IngresoAcarreo { recurso: recurso_de_u8(r.u8()?)?, hora: r.i64()?, cantidad: r.i64()? });
+    }
     let siguiente_edificio = r.u32()?;
     let ascenso = if r.bool()? { Some(Ascenso { nivel_objetivo: r.u32()?, iniciado_en: r.i64()?, completa_en: r.i64()? }) } else { None };
     let mut recetas_pausadas = Vec::new();
@@ -278,6 +289,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
         politicas: Politicas::desde_activas(activas),
         edificios,
         pueblos,
+        ingresos_acarreo,
         siguiente_edificio,
         ascenso,
         recetas_pausadas,

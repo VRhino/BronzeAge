@@ -357,7 +357,8 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     let reglas = Reglas::default();
     let mut s = Estado::nuevo(reglas.clone(), "h".into(), 1, 0);
     let eco = &s.reglas.economia.datos;
-    let economia = Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
+    let mut economia = Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
+    economia.registrar_acarreo(5_000_000, asentamiento::Recurso::Piedra, 7_000);
     let mut urbe = Urbe::fundar(&s.reglas.economia, 7, 1);
     let mut ids = 5;
     for k in 0..10 {
@@ -366,10 +367,14 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     urbe.set_recintos(vec![Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..4], b"BAN7", "el formato de foto sube a BAN7 con los pueblos extractores (BAN6 traía el viaje de las caravanas)");
+    assert_eq!(&bytes[..4], b"BAN8", "el formato de foto sube a BAN8 con la ventana del acarreo (BAN7 traía los pueblos extractores)");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);
+    assert_eq!(vuelta.asentamientos[&1].economia.ingresos_acarreo.len(), 1, "la ventana del acarreo vuelve de la foto");
+    let mut otro_ingreso = Estado::deserializar(&bytes, &reglas, "h").unwrap();
+    otro_ingreso.asentamientos.get_mut(&1).unwrap().economia.registrar_acarreo(5_000_000, asentamiento::Recurso::Piedra, 1);
+    assert_ne!(otro_ingreso.hash(), s.hash(), "lo ingresado por acarreo entra en el hash");
     let (a, b) = (s.asentamientos[&1].urbe.ciudad(), vuelta.asentamientos[&1].urbe.ciudad());
     assert_eq!((a.calles(), a.caminos(), a.recintos()), (b.calles(), b.caminos(), b.recintos()), "el suelo y la red se derivan igual");
     assert_eq!(a.piezas(), b.piezas());

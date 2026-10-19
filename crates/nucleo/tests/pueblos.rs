@@ -4,7 +4,7 @@
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
 use asentamiento::catalogo::Tipo;
-use asentamiento::pueblos::EstadoPueblo;
+use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo};
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
 use comercio::caravana::{EstadoCaravana, TipoCaravana};
@@ -381,6 +381,9 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     assert!((llega_en - sale_en - esperado).abs() <= MIN, "tarda lo que su ruta a 24 u/min: {} frente a {}", llega_en - sale_en, esperado);
     // El almacén de la madre admite 400 de cada recurso: lo que no cabe se pierde.
     assert_eq!((ingresado, perdido), (400_000, 100_000));
+    // La ventana de la solvencia guarda lo que cupo, no lo que traía el carro, en la hora de la llegada.
+    let eco = e.n.economia(plaza).unwrap();
+    assert_eq!(eco.ingresos_acarreo, vec![IngresoAcarreo { recurso: Cobre, hora: llega_en / HORA, cantidad: 400_000 }]);
     let vuelve = hechos(&e.n, "acarreo.vuelve");
     assert_eq!((dato(&vuelve[0], "caravana"), vuelve[0].0 - llega_en), (carro as i64, llega_en - sale_en), "vuelve vacío por la misma ruta, en el mismo tiempo");
     let c = e.n.caravana(carro).unwrap();
@@ -388,6 +391,27 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     assert!(e.n.caravana(carro).unwrap().contenido.is_empty());
     // Con el carro en casa y el almacén vacío, todo vuelve a empezar; mientras tanto, el almacén de la madre guarda lo que entró.
     assert!(e.almacen(Cobre) >= 400_000 || hechos(&e.n, "acarreo.sale").len() > 1);
+}
+
+#[test]
+fn con_el_almacen_de_la_madre_lleno_el_acarreo_no_ingresa_nada_ni_cuenta_para_la_solvencia() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    e.dar(Cobre, 400_000);
+    assert_eq!(e.almacen(Cobre), 400_000, "el almacén de la madre admite 400 de cada recurso y queda lleno");
+    let id = e.pueblo_levantado();
+    let activo_desde = hechos(&e.n, "pueblo.completado")[0].0;
+    let mut t = activo_desde;
+    while hechos(&e.n, "acarreo.llega").is_empty() {
+        t += 10 * MIN;
+        assert!(t < activo_desde + 12 * HORA, "el carro debería haber llegado");
+        e.n.avanzar_hasta(t);
+    }
+    let llega = &hechos(&e.n, "acarreo.llega")[0];
+    assert_eq!((dato(llega, "carga"), dato(llega, "perdido")), (0, 500_000), "todo se pierde contra un almacén lleno");
+    assert!(e.n.economia(plaza).unwrap().ingresos_acarreo.is_empty(), "y no cuenta como ingreso: la plaza no se hace solvente con un pueblo que se pierde");
+    assert!(e.pueblo(id).carro.is_some());
 }
 
 #[test]

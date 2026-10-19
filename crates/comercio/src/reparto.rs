@@ -45,14 +45,14 @@ pub struct EntornoReparto<'a> {
 ///
 /// - `urgenciaExpiracion = 100 × (1 − max(0, expiraEn − ahora) / (expiraEn − aceptadoEn))`: la urgencia se cuenta **desde la
 ///   aceptación** (decidido el 2026-10-18), no desde la propuesta; 100 si el plazo total es 0.
-/// - `urgenciaVolumen = 100 × min(1, (total − entregado) / total)`, sumando todo el lado.
+/// - `urgenciaVolumen = 100 × min(1, faltante / total)`, sumando todo el lado.
 /// - `cercania = 100 × (1 − min(1, distancia / distanciaReferencia))`.
 pub fn score_asignacion(r: &ReglasAsignacion, a: &AcuerdoTrueque, lado: Lado, ahora: Instante, distancia: Mil) -> i64 {
     let inicio = a.aceptado_en.unwrap_or(a.creado_en);
     let plazo = a.expira_en - inicio;
     let urg_exp = if plazo <= 0 { 100 * UNO } else { 100 * (UNO - razon((a.expira_en - ahora).clamp(0, plazo), plazo)) };
-    let (total, entregado) = a.lineas(lado).iter().fold((0, 0), |(t, e), l| (t + l.cantidad_total, e + l.cantidad_entregada));
-    let urg_vol = if total <= 0 { 0 } else { 100 * razon((total - entregado).clamp(0, total), total) };
+    let (total, falta) = a.lineas(lado).iter().fold((0, 0), |(t, f), l| (t + l.cantidad_total, f + l.faltante()));
+    let urg_vol = if total <= 0 { 0 } else { 100 * razon(falta.clamp(0, total), total) };
     let cercania = 100 * (UNO - razon(distancia.max(0), r.distancia_referencia).min(UNO));
     por(urg_exp, r.peso_urgencia_expiracion) + por(urg_vol, r.peso_urgencia_volumen) + por(cercania, r.peso_cercania)
 }

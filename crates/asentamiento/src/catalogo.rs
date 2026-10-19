@@ -162,6 +162,11 @@ impl Catalogo {
     pub fn tipo(&self, t: Tipo) -> &TipoEdificio {
         &self.tipos[&t]
     }
+
+    /// Todas las recetas de todos los talleres y niveles internos, en el orden del catálogo.
+    pub fn recetas(&self) -> impl Iterator<Item = &Receta> + Clone {
+        self.tipos.values().flat_map(|t| t.niveles.iter().flat_map(|n| n.recetas.iter()))
+    }
 }
 
 fn f(v: &Value, k: &str) -> Option<f64> {

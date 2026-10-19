@@ -78,8 +78,8 @@ mod pruebas {
     fn precios_a_uno(r: &Reglas) -> TablaPrecios {
         // Stock global = objetivo → todos los precios en su base.
         let mut a = Almacen::nuevo(10_000_000);
-        for rec in r.precio.base.keys() {
-            a.poner(*rec, 500_000);
+        for rec in r.precio.cotizados() {
+            a.poner(rec, 500_000);
         }
         TablaPrecios::de(&r.precio, [&a])
     }
@@ -105,6 +105,20 @@ mod pruebas {
         assert_eq!(dest.cantidad(Recurso::Oro), 11_250, "la comisión se acuña en el destino");
         assert_eq!((dest.cantidad(Recurso::Madera), dest.cantidad(Recurso::Cobre)), (100_000, 50_000));
         assert!(e.perdido.is_empty() && e.recargo == 0);
+    }
+
+    #[test]
+    fn un_trueque_de_armas_por_ganado_ya_acuna_comision() {
+        let r = Reglas::cargar();
+        let p = precios_a_uno(&r);
+        // Antes las armas de madera no cotizaban y su mitad del trueque valía 0. 10 armas de madera (2 de oro cada una: 2 de madera de la
+        // receta) = 20; externa a distancia máxima: 12 % = 2,4. Y 10 de ganado (2 cada uno) = 20 → otros 2,4.
+        let mut dest = alm(&[]);
+        let armas = entregar(&r, &carga(&[(Recurso::ArmaMadera, 10_000)]), &mut dest, &datos(&p, false, false, 0, 0));
+        assert_eq!((armas.valor, armas.comision), (20_000, 2_400));
+        let ganado = entregar(&r, &carga(&[(Recurso::Livestock, 10_000)]), &mut dest, &datos(&p, false, false, 0, 0));
+        assert_eq!((ganado.valor, ganado.comision), (20_000, 2_400));
+        assert_eq!(dest.cantidad(Recurso::Oro), 4_800);
     }
 
     #[test]

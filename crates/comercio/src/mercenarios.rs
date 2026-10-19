@@ -14,7 +14,7 @@ const U: Mil = 1_000;
 /// Milisegundos de un día de mundo (el día del cupo es `floor(instante / 86 400 000)`).
 pub const MS_DIA: i64 = 86_400_000;
 
-/// Los bienes en venta: los que tienen `PRECIO_BASE` (el oro no).
+/// Los bienes en venta: los que tienen `PRECIO_BASE` (el oro no, y tampoco los manufacturados, cuyo precio sale de su receta).
 pub fn bienes_en_venta(r: &Reglas) -> Vec<Recurso> {
     r.precio.base.keys().copied().collect()
 }
@@ -259,6 +259,7 @@ mod pruebas {
         assert_eq!((c.de(Madera), c.de(Piedra), c.de(Trigo)), (300_000, 60_000, 300_000), "las pilas sustituyen al stock inicial");
         assert_eq!(c.de(Oro), 0, "el oro no está en venta");
         assert_eq!(bienes_en_venta(&r).len(), 7);
+        assert!(!bienes_en_venta(&r).contains(&Recurso::ArmaMadera), "los manufacturados cotizan (comisión) pero los mercenarios no los venden");
     }
 
     #[test]

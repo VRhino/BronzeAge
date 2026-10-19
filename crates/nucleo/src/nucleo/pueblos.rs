@@ -10,7 +10,7 @@
 //! 2. **Extracción**: dentro del paso de minuto de la plaza (ver `asentamiento::pueblos`); no hay evento por pueblo. Cuando el almacén local se
 //!    llena (`pueblo.almacen_lleno`) el carro sale si está en casa.
 //! 3. **Acarreo**: el carro sale lleno por su ruta fija pueblo → madre (el mismo trazado, plan, peajes y llegada de las caravanas
-//!    comerciales; la red de caminos acelera sus tramos pero no registra la ruta), vuelca en el almacén de la madre y vuelve vacío; si al volver
+//!    comerciales; la red de caminos acelera sus tramos pero no registra la ruta), vuelca en el almacén de la madre (y anota lo que cupo en la ventana de 24 h de la solvencia del ascenso) y vuelve vacío; si al volver
 //!    el almacén está lleno otra vez, sale de nuevo.
 //! 4. **Sin carro**: si el carro se pierde (batalla, destrucción del pueblo), el pueblo acumula hasta llenar su almacén y la extracción para
 //!    hasta que `ReponerCarro` compre otro en la madre.
@@ -282,10 +282,15 @@ impl Nucleo {
         self.emitir_propio(t, "acarreo.sale", vec![plaza], vec![("pueblo", pueblo as i64), ("caravana", carro as i64), ("carga", cantidad)]);
     }
 
-    /// El carro llegó a la madre: vuelca lo que trae en su almacén (topado: lo que no cabe se pierde) y vuelve vacío (su plan ya es el de la vuelta).
+    /// El carro llegó a la madre: vuelca lo que trae en su almacén (topado: lo que no cabe se pierde, ni cuenta para el ascenso) y vuelve vacío (su plan ya es el de la vuelta).
     pub(super) fn acarreo_llega(&mut self, t: Instante, carro: u64, madre: u64, contenido: &Mercancia) {
         let Some(plaza) = self.estado.asentamientos.get_mut(&madre) else { return self.perder_caravana(t, carro) };
-        let ingresado: Mil = contenido.iter().map(|(&r, &n)| plaza.economia.almacen.agregar(r, n)).sum();
+        let mut ingresado: Mil = 0;
+        for (&r, &n) in contenido {
+            let entra = plaza.economia.almacen.agregar(r, n);
+            plaza.economia.registrar_acarreo(t, r, entra);
+            ingresado += entra;
+        }
         self.tr.asentamientos.push(madre);
         self.emitir_propio(t, "acarreo.llega", vec![madre], vec![("caravana", carro as i64), ("carga", ingresado), ("perdido", total(contenido) - ingresado)]);
     }

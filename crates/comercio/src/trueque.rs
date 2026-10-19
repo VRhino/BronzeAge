@@ -17,13 +17,28 @@ pub struct Linea {
     pub cantidad_entregada: Mil,
 }
 
+/// Una unidad entera, en milésimas: si tras entregar algo de una línea falta menos que esto, la línea se da por saldada (§4.4, decidido el
+/// 2026-10-19): el peaje deja cada entrega un 2 % corta y repescar unas décimas de unidad solo cuesta viajes.
+pub const UNIDAD: Mil = 1_000;
+
 impl Linea {
     pub fn nueva(recurso: Recurso, cantidad_total: Mil) -> Self {
         Self { recurso, cantidad_total, cantidad_entregada: 0 }
     }
-    /// Lo que falta por entregar (nunca negativo).
+
+    /// ¿Saldada? Entregada entera, o con algo entregado y menos de una unidad por entregar. Una línea sin tocar nunca se da por saldada, por
+    /// pequeña que sea.
+    pub fn saldada(&self) -> bool {
+        self.cantidad_entregada >= self.cantidad_total || (self.cantidad_entregada > 0 && self.cantidad_total - self.cantidad_entregada < UNIDAD)
+    }
+
+    /// Lo que falta por entregar (nunca negativo; 0 si está saldada, aunque quede un resto de menos de una unidad).
     pub fn faltante(&self) -> Mil {
-        (self.cantidad_total - self.cantidad_entregada).max(0)
+        if self.saldada() {
+            0
+        } else {
+            self.cantidad_total - self.cantidad_entregada
+        }
     }
 }
 
@@ -204,15 +219,16 @@ impl AcuerdoTrueque {
 
     /// ¿Todas las líneas de los dos lados saldadas?
     pub fn saldado(&self) -> bool {
-        self.lineas_a.iter().chain(&self.lineas_b).all(|l| l.cantidad_entregada >= l.cantidad_total)
+        self.lineas_a.iter().chain(&self.lineas_b).all(Linea::saldada)
     }
 
-    /// Fracción (ppm) de lo pactado en `lado` que no se entregó: `1 − Σ min(entregado, total) / Σ total`, sumando cantidades de recursos
+    /// Fracción (ppm) de lo pactado en `lado` que no se entregó: `1 − Σ (total − faltante) / Σ total` (una línea saldada con un resto de menos
+    /// de una unidad cuenta como cumplida), sumando cantidades de recursos
     /// distintos sin ponderar por precio.
     // DUDA: el documento escribe `min(Σ entregado por línea, cantidadTotal)`; se lee línea a línea (lo que sobra en una no tapa lo que
     // falta en otra), que es la lectura que más penaliza.
     pub fn fraccion_incumplida(&self, lado: Lado) -> i64 {
-        let (total, cumplido) = self.lineas(lado).iter().fold((0, 0), |(t, c), l| (t + l.cantidad_total, c + l.cantidad_entregada.min(l.cantidad_total)));
+        let (total, cumplido) = self.lineas(lado).iter().fold((0, 0), |(t, c), l| (t + l.cantidad_total, c + l.cantidad_total - l.faltante()));
         if total <= 0 {
             return 0;
         }
@@ -567,5 +583,53 @@ mod pruebas {
         assert_eq!(podar(&mut v, &r, exp + ret, |_| false), 0, "justo en el límite aún se conserva (es `>`)");
         assert_eq!(podar(&mut v, &r, exp + ret + 1, |id| id == 2), 2, "el citado se queda; el activo nunca se poda");
         assert_eq!(v.iter().map(|a| a.id).collect::<Vec<_>>(), vec![2, 4]);
+    }
+
+    /// Un trueque de `a` de madera por 1 de cobre, ya aceptado.
+    fn activo(madera: Mil) -> AcuerdoTrueque {
+        let r = reglas();
+        let mut a = AcuerdoTrueque::proponer(&r.trueque, 1, 10, 20, &[(Madera, madera)], &[(Cobre, 1_000)], 0, true).unwrap();
+        a.aceptar(&r.trueque, 0, true).unwrap();
+        a
+    }
+
+    #[test]
+    fn un_resto_de_menos_de_una_unidad_salda_el_lado_y_no_pide_repesca() {
+        // 32 u con un peaje del 2 %: llegan 31,36 y faltan 0,64 < 1 u → saldado a la primera, sin una segunda salida.
+        let mut a = activo(32_000);
+        let llega: Carga = [(Madera, 31_360)].into_iter().collect();
+        assert!(a.abonar(Lado::A, &llega, (1, 2)).is_none(), "falta el lado B");
+        assert!(a.pendiente(Lado::A).is_empty(), "el resto de 0,64 u no se repesca");
+        assert_eq!(a.lado_que_debe(1, 1, 2), None);
+        assert_eq!(a.fraccion_incumplida(Lado::A), 0, "y no cuenta como incumplido");
+        let cierre = a.abonar(Lado::B, &[(Cobre, 1_000)].into_iter().collect(), (1, 2)).expect("los dos lados saldados");
+        assert_eq!(a.estado, EstadoTrueque::Cumplido);
+        assert_eq!(cierre.intercambiado[&Madera], 32_000, "lo intercambiado es lo pactado");
+    }
+
+    #[test]
+    fn una_entrega_grande_si_necesita_repesca_y_la_linea_sin_tocar_nunca_se_da_por_saldada() {
+        // 1000 u: el 2 % de peaje deja 980 y faltan 20 u (≥ 1): se repesca; la repesca de 20 u llega con 19,6 y el resto de 0,4 u salda.
+        let mut a = activo(1_000_000);
+        a.abonar(Lado::A, &[(Madera, 980_000)].into_iter().collect(), (1, 2));
+        assert_eq!(a.pendiente(Lado::A), vec![(Madera, 20_000)]);
+        a.abonar(Lado::A, &[(Madera, 19_600)].into_iter().collect(), (1, 2));
+        assert!(a.pendiente(Lado::A).is_empty());
+        // Justo una unidad de resto aún pide repesca; una línea que nada ha tocado, por pequeña que sea, también.
+        let mut b = activo(10_000);
+        b.abonar(Lado::A, &[(Madera, 9_000)].into_iter().collect(), (1, 2));
+        assert_eq!(b.pendiente(Lado::A), vec![(Madera, 1_000)]);
+        assert_eq!(activo(500).pendiente(Lado::A), vec![(Madera, 500)]);
+    }
+
+    #[test]
+    fn la_serie_de_peajes_de_la_corrida_cierra_en_una_sola_salida() {
+        // Dos ciudades ajenas cruzadas (2 % cada una) sobre 32 u: llegan 30,7328 u y falta 1,27 > 1 → una repesca de
+        // 1,27 u que llega con 1,24 y deja un resto de 0,03 u saldado.
+        let mut a = activo(32_000);
+        a.abonar(Lado::A, &[(Madera, 30_733)].into_iter().collect(), (1, 2));
+        assert_eq!(a.pendiente(Lado::A), vec![(Madera, 1_267)]);
+        a.abonar(Lado::A, &[(Madera, 1_242)].into_iter().collect(), (1, 2));
+        assert!(a.pendiente(Lado::A).is_empty());
     }
 }

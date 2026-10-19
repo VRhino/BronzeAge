@@ -14,7 +14,7 @@ use crate::mantenimiento::{self, Medidor};
 use crate::poblacion::{self, Entorno, Poblacion};
 use crate::politicas::Politicas;
 use crate::produccion::{self, Fuentes};
-use crate::pueblos::Pueblo;
+use crate::pueblos::{IngresoAcarreo, Pueblo};
 use crate::recurso::{Costo, Recurso};
 use base::{Instante, Mil, MS_POR_MINUTO};
 
@@ -156,6 +156,9 @@ pub struct Asentamiento {
     pub edificios: Vec<Edificio>,
     /// Los pueblos extractores de la plaza, en cualquier estado, por id ascendente. No son edificios de la ciudad (Doc 4.2.2).
     pub pueblos: Vec<Pueblo>,
+    /// Lo que el acarreo ingresó de verdad en el almacén de la plaza en las últimas horas (ventana de 24 h, por hora y recurso): es lo que
+    /// cuenta como acarreo en la solvencia del ascenso. Solo se escribe cuando llega un carro; un pueblo ocioso no la toca.
+    pub ingresos_acarreo: Vec<IngresoAcarreo>,
     pub siguiente_edificio: u32,
     pub ascenso: Option<Ascenso>,
     pub recetas_pausadas: Vec<Recurso>,
@@ -195,6 +198,7 @@ impl Asentamiento {
             politicas: Politicas::default(),
             edificios,
             pueblos: vec![],
+            ingresos_acarreo: vec![],
             siguiente_edificio: id + 1,
             ascenso: None,
             recetas_pausadas: vec![],

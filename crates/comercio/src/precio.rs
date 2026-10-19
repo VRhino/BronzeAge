@@ -18,9 +18,9 @@ pub fn stock_global<'a>(r: Recurso, almacenes: impl IntoIterator<Item = &'a Alma
 }
 
 /// Precio de referencia de `r` (ppm de oro por unidad) dado el stock global: `base × clamp(objetivo / max(1 unidad, stock), min, max)`.
-/// El oro no tiene precio base y vale 0.
+/// El oro no tiene precio base y vale 0; un manufacturado parte del derivado de su receta (`ReglasPrecio::derivados`).
 pub fn precio_referencia(reglas: &ReglasPrecio, r: Recurso, stock_global: Mil) -> i64 {
-    let Some(&base) = reglas.base.get(&r) else { return 0 };
+    let Some(base) = reglas.base_de(r) else { return 0 };
     let factor = razon(reglas.stock_objetivo_global, stock_global.max(UNA_UNIDAD)).clamp(reglas.factor_min, reglas.factor_max);
     por(base, factor)
 }
@@ -32,9 +32,9 @@ pub struct TablaPrecios {
 }
 
 impl TablaPrecios {
-    /// Calcula el precio de cada recurso con `PRECIO_BASE` sobre el stock global de `almacenes`.
+    /// Calcula el precio de cada recurso con precio base (`PRECIO_BASE` o derivado de su receta) sobre el stock global de `almacenes`.
     pub fn de<'a>(reglas: &ReglasPrecio, almacenes: impl IntoIterator<Item = &'a Almacen> + Clone) -> Self {
-        let precios = reglas.base.keys().map(|&r| (r, precio_referencia(reglas, r, stock_global(r, almacenes.clone())))).collect();
+        let precios = reglas.cotizados().map(|r| (r, precio_referencia(reglas, r, stock_global(r, almacenes.clone())))).collect();
         Self { precios }
     }
 
@@ -123,7 +123,38 @@ mod pruebas {
         // 1000 de stock → ×0,5.
         assert_eq!(precio_referencia(&r, Recurso::Hierro, 1_000_000), 2_000_000);
         assert_eq!(precio_referencia(&r, Recurso::Oro, 123), 0, "el oro no cotiza");
-        assert_eq!(precio_referencia(&r, Recurso::Cuero, 123), 0, "lo que no tiene precio base tampoco");
+        assert_eq!(precio_referencia(&r, Recurso::ChatarraCobre, 123), 0, "lo que no tiene precio base ni receta que lo fabrique tampoco");
+    }
+
+    #[test]
+    fn el_precio_de_un_manufacturado_sale_de_su_receta() {
+        let r = Reglas::cargar().precio;
+        let en_base = |rec| precio_referencia(&r, rec, 500_000);
+        // Receta más barata de cada bien, a precio base (madera 1, ganado 2, cobre 3, estaño 6, hierro 4), en ppm de oro por unidad.
+        assert_eq!(en_base(Recurso::ArmaMadera), 2_000_000, "2 de madera");
+        assert_eq!(en_base(Recurso::LingoteCobre), 6_000_000, "2 de cobre");
+        assert_eq!(en_base(Recurso::LingoteEstano), 30_000_000, "5 de estaño");
+        assert_eq!(en_base(Recurso::LingoteHierro), 9_000_000, "2 de hierro y 1 de madera");
+        assert_eq!(en_base(Recurso::LingoteBronce), 21_600_000, "1,6 de lingote de cobre y 0,4 de estaño: se resuelve en cadena");
+        assert_eq!(en_base(Recurso::ArmaCobre), 7_000_000, "un lingote de cobre y 1 de madera");
+        assert_eq!(en_base(Recurso::Cuero), 500_000, "la receta de la Curtiduría nivel 3 (0,25 de ganado) es la más barata");
+        assert_eq!(en_base(Recurso::ArmaduraBasica), 2_500_000, "5 de cuero");
+        assert_eq!(en_base(Recurso::ArmaduraBronce), 21_600_000 + 5 * 3_500_000, "un lingote de bronce y 5 de cuero de calidad");
+        // Las materias primas conservan su precio de `PRECIO_BASE`, y lo que no se fabrica ni cotiza (oro, chatarra) sigue en 0.
+        assert_eq!(en_base(Recurso::Cobre), 3_000_000);
+        assert_eq!((en_base(Recurso::Oro), en_base(Recurso::ChatarraBronce)), (0, 0));
+    }
+
+    #[test]
+    fn la_tabla_de_precios_cotiza_los_manufacturados_con_su_propio_stock() {
+        let r = Reglas::cargar().precio;
+        let a = [alm(Recurso::ArmaMadera, 1_000_000)];
+        let t = TablaPrecios::de(&r, &a);
+        assert_eq!(t.precio(Recurso::ArmaMadera), 1_000_000, "2 de base × 0,5 (1000 en stock contra 500 de objetivo)");
+        assert_eq!(t.precio(Recurso::ArmaCobre), 21_000_000, "sin stock: ×3");
+        let mut c = Carga::new();
+        c.insert(Recurso::ArmaMadera, 10_000);
+        assert_eq!(t.valor(&c), 10_000, "10 armas a 1 de oro");
     }
 
     #[test]

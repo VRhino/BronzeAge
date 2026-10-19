@@ -31,9 +31,10 @@ pub const PRIO_REPUTACION: u8 = 9;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-/// BAN7: BAN6 más, en la economía de cada plaza, sus pueblos extractores (obra de mapa, almacén local, carro y estado). BAN6 se rechaza.
-const MAGIA: &[u8; 4] = b"BAN7";
-const MAGIA_ANTERIOR: &[u8; 4] = b"BAN6";
+/// BAN8: BAN7 más, en la economía de cada plaza, la ventana de 24 h de lo que el acarreo ingresó en su almacén (solvencia del ascenso). BAN7 se
+/// rechaza (BAN7 traía los pueblos extractores).
+const MAGIA: &[u8; 4] = b"BAN8";
+const MAGIA_ANTERIOR: &[u8; 4] = b"BAN7";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -577,7 +578,7 @@ impl Estado {
         let mut r = Lector::nuevo(bytes);
         match r.magia()? {
             m if m == *MAGIA => {}
-            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN6 (sin pueblos extractores): ya no se admite")),
+            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN7 (sin la ventana del acarreo): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {

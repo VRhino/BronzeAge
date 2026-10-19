@@ -261,7 +261,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
 
     // La política del jugador: cada hora, si nada lo bloquea, pide la subida. Cada plaza es de una Facción distinta (cupo ocupado 0).
     if minuto % CADA_MIN_ASCENSO == 0 && a.ascenso.is_none() {
-        let bloqueos = a.bloqueos_de_ascenso(reglas, &x, 0);
+        let bloqueos = a.bloqueos_de_ascenso(t, reglas, &x, 0);
         if a.nivel == 1 {
             let clases: Vec<usize> = bloqueos.iter().map(clase).collect();
             reg.comprobaciones_n1 += 1;

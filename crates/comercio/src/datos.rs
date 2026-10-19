@@ -56,9 +56,47 @@ pub struct ReglasComision {
     pub distancia_para_bonus_max: Mil,
 }
 
+impl ReglasPrecio {
+    /// Precio base (ppm de oro por unidad) de `r`: el de `PRECIO_BASE` o, si es un manufacturado, el derivado de su receta. El oro no tiene.
+    pub fn base_de(&self, r: Recurso) -> Option<i64> {
+        self.base.get(&r).or_else(|| self.derivados.get(&r)).copied()
+    }
+
+    /// Los recursos con cotización: materias primas y manufacturados.
+    pub fn cotizados(&self) -> impl Iterator<Item = Recurso> + '_ {
+        self.base.keys().chain(self.derivados.keys()).copied()
+    }
+}
+
+/// Precio base de cada bien con receta y sin entrada en `PRECIO_BASE` (Comercio_Caravanas §3.1): lo que consume su receta, a precio base, por
+/// unidad fabricada. Un bien cuyos insumos no cotizan (las chatarras, el oro) no tiene precio; una receta se resuelve en cuanto todos sus
+/// insumos tienen, y se repite hasta que nada cambia (un lingote de bronce necesita antes los de cobre y estaño).
+// DUDA: un mismo bien tiene recetas distintas según el taller y el nivel (cuero con 0,5, 0,33 o 0,25 de ganado); se toma la **más barata**, la
+// más conservadora para una comisión (cotiza menos oro acuñado). Los manufacturados no se venden a los mercenarios (solo `PRECIO_BASE`).
+fn precios_derivados(base: &BTreeMap<Recurso, i64>, catalogo: &asentamiento::Catalogo) -> BTreeMap<Recurso, i64> {
+    let mut derivados: BTreeMap<Recurso, i64> = BTreeMap::new();
+    loop {
+        let mut cambio = false;
+        for rec in catalogo.recetas().filter(|rec| !base.contains_key(&rec.produce)) {
+            // Cantidad en milésimas × precio en ppm = milésimas de milésima de oro por unidad: /1000 devuelve ppm.
+            let suma = rec.consume_por_unidad.iter().map(|&(i, n)| base.get(&i).or_else(|| derivados.get(&i)).map(|&p| n * p / 1_000)).sum::<Option<i64>>();
+            if let Some(p) = suma.filter(|&p| p > 0 && derivados.get(&rec.produce).is_none_or(|&antes| p < antes)) {
+                derivados.insert(rec.produce, p);
+                cambio = true;
+            }
+        }
+        if !cambio {
+            return derivados;
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasPrecio {
+    /// `PRECIO_BASE`: las materias primas (ppm de oro por unidad). Solo estos bienes se venden en los campamentos de mercenarios.
     pub base: BTreeMap<Recurso, i64>,
+    /// Precio base de los bienes manufacturados, derivado de sus recetas (ver [`precios_derivados`]): no está en `PRECIO_BASE`.
+    pub derivados: BTreeMap<Recurso, i64>,
     pub stock_objetivo_global: Mil,
     pub factor_min: i64,
     pub factor_max: i64,
@@ -225,7 +263,8 @@ impl Reglas {
             .map(|(k, v)| (Recurso::desde_nombre(k).unwrap_or_else(|| panic!("recurso «{k}»")), ppm(v.as_f64().expect("precio"))))
             .collect();
         let pr = b("PRECIO_REFERENCIA");
-        let precio = ReglasPrecio { base, stock_objetivo_global: mil(num(&pr, "stockObjetivoGlobal")), factor_min: ppm(num(&pr, "factorMin")), factor_max: ppm(num(&pr, "factorMax")) };
+        let derivados = precios_derivados(&base, &asentamiento::Catalogo::de(&asentamiento::datos::bloque("EDIFICIO_CATALOGO")));
+        let precio = ReglasPrecio { base, derivados, stock_objetivo_global: mil(num(&pr, "stockObjetivoGlobal")), factor_min: ppm(num(&pr, "factorMin")), factor_max: ppm(num(&pr, "factorMax")) };
         let t = b("TRUEQUE");
         let trueque = ReglasTrueque { plazo: num(&t, "plazoMinutosPorDefecto") as i64 * MS_POR_MINUTO, retencion_terminados: num(&t, "retencionTerminadosMinutos") as i64 * MS_POR_MINUTO };
         let a = b("ASIGNACION_CARAVANA");

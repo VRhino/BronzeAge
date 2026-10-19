@@ -25,12 +25,12 @@ pub enum Bloqueo {
 
 impl Asentamiento {
     /// Ingreso bruto por minuto de un recurso (producción de los edificios y, para el oro, la recaudación). Es bruto a propósito: no
-    /// descuenta lo que gasten recetas o tropas. Lo que llega por acarreo cuenta como la producción de los pueblos con carro (Doc 4.5; la
-    /// otra forma que admite el documento, la media de las llegadas en 24 h, no se guarda).
-    fn ingreso_bruto(&self, r: &Reglas, x: &Exterior, recurso: Recurso) -> Mil {
+    /// descuenta lo que gasten recetas o tropas. Lo que llega por acarreo cuenta como la media de lo que **ingresó** en el almacén en las
+    /// últimas 24 h (Doc 4.5, decidido el 2026-10-19): con el almacén lleno un pueblo no hace solvente a nadie. `t` es el instante de la pregunta.
+    fn ingreso_bruto(&self, t: Instante, r: &Reglas, x: &Exterior, recurso: Recurso) -> Mil {
         let (p, a, _) = self.poblacion.enteros();
         let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, p, a, self.trabajadores_de_pueblos(r));
-        let mut total = self.acarreo_por_minuto(r, &mano, x.factor_tecnologia, recurso);
+        let mut total = self.acarreo_por_minuto(t, recurso);
         for e in self.edificios.iter().filter(|e| e.activo()) {
             let def = r.catalogo.tipo(e.tipo);
             match (e.tipo, def.produccion) {
@@ -58,7 +58,7 @@ impl Asentamiento {
 
     /// Todos los bloqueos para pedir la subida al nivel siguiente (vacío = se puede). `cupo_ocupado` es cuántos asentamientos de la
     /// Facción ocupan ya plaza en el nivel objetivo (con ese nivel o con una obra hacia él).
-    pub fn bloqueos_de_ascenso(&self, r: &Reglas, x: &Exterior, cupo_ocupado: u32) -> Vec<Bloqueo> {
+    pub fn bloqueos_de_ascenso(&self, t: Instante, r: &Reglas, x: &Exterior, cupo_ocupado: u32) -> Vec<Bloqueo> {
         let objetivo = self.nivel + 1;
         let mut b = vec![];
         if self.nivel >= r.nivel.nivel_maximo || objetivo > r.nivel.nivel_techo_provisional {
@@ -85,7 +85,7 @@ impl Asentamiento {
         let faltan: Vec<Recurso> = self
             .mantenimiento_en(r, x, objetivo)
             .iter()
-            .filter(|&&(rec, coste)| self.ingreso_bruto(r, x, rec) < coste)
+            .filter(|&&(rec, coste)| self.ingreso_bruto(t, r, x, rec) < coste)
             .map(|&(rec, _)| rec)
             .collect();
         if !faltan.is_empty() {
@@ -96,7 +96,7 @@ impl Asentamiento {
 
     /// `iniciarAscenso`: si no hay bloqueos, cobra el coste entero del almacén y fija la obra.
     pub fn solicitar_ascenso(&mut self, t: Instante, r: &Reglas, x: &Exterior, cupo_ocupado: u32, ev: &mut Vec<Evento>) -> Result<(), Vec<Bloqueo>> {
-        let bloqueos = self.bloqueos_de_ascenso(r, x, cupo_ocupado);
+        let bloqueos = self.bloqueos_de_ascenso(t, r, x, cupo_ocupado);
         if !bloqueos.is_empty() {
             return Err(bloqueos);
         }
