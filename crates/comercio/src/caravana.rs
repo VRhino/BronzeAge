@@ -118,7 +118,10 @@ pub enum Llegada {
     /// `Retornando`: llegada a casa. Hay que volcar `contenido` (solo si vino de `enviarCaravanaAlOrigen`) en el origen; la caravana
     /// queda `Disponible` y limpia, y la escolta vuelve al campamento.
     Casa { contenido: Carga, escolta: Vec<Escuadra> },
-    /// Una caravana no comercial llegó por este camino: se pierde al entregar (la de Fundación y la de acarreo tienen su propio subsistema).
+    /// `EnTransito` de acarreo: hay que **volcar** `contenido` en el almacén de la plaza madre (`destino`), sin comisión ni trueque. La
+    /// caravana ya queda `Retornando`, vacía y con la ruta invertida.
+    Acarreo { destino: AsentamientoId, contenido: Carga },
+    /// Una caravana de otro tipo llegó por este camino: se pierde al entregar (la de Fundación tiene su propio subsistema).
     Perdida { contenido: Carga, escolta: Vec<Escuadra> },
 }
 
@@ -654,6 +657,7 @@ impl Caravana {
     /// - `EnTransito` comercial ⇒ [`Llegada::Entrega`]: la caravana pasa a `Retornando`, vacía, `progreso 0` en el destino, con la
     ///   **misma ruta invertida** y sin marcas de trueque.
     /// - `Retornando` ⇒ [`Llegada::Casa`]: queda `Disponible`, limpia, en la posición de su origen.
+    /// - `EnTransito` de acarreo ⇒ [`Llegada::Acarreo`]: igual que la entrega comercial, sin marcas de trueque.
     /// - `EnTransito` de otro tipo ⇒ [`Llegada::Perdida`].
     pub fn llegar(&mut self, ahora: Instante) -> Result<Llegada, ErrorCaravana> {
         if !matches!(self.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) {
@@ -673,7 +677,7 @@ impl Caravana {
             self.posicion = aqui;
             return Ok(Llegada::Casa { contenido, escolta });
         }
-        if self.tipo != TipoCaravana::Comercial {
+        if !matches!(self.tipo, TipoCaravana::Comercial | TipoCaravana::Acarreo) {
             return Ok(Llegada::Perdida { contenido: std::mem::take(&mut self.contenido), escolta: std::mem::take(&mut self.escolta) });
         }
         let destino = self.destino.ok_or(ErrorCaravana::SinPlan)?;
@@ -686,7 +690,7 @@ impl Caravana {
         self.ruta = invertir_ruta(&self.ruta);
         self.costes.reverse();
         self.peajes.clear();
-        Ok(Llegada::Entrega { destino, contenido, origen_acuerdo })
+        Ok(if self.tipo == TipoCaravana::Acarreo { Llegada::Acarreo { destino, contenido } } else { Llegada::Entrega { destino, contenido, origen_acuerdo } })
     }
 
     /// §6.3: ¿desaparece esta caravana? Sin destino (Fundación, `disponible`, `adjunta`, `aparcada`) se deja pasar; con destino, si su

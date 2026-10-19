@@ -68,14 +68,14 @@ impl Rejilla {
 /// Un nodo finito del mapa.
 pub struct NodoMapa {
     pub pos: Punto,
-    /// `Cantera` (piedra) o `Corral` (ganado).
+    /// El extractor que lo explota: `Cantera` (piedra), `Corral` (ganado) o una mina (oro, cobre, estaño o hierro: solo con un pueblo extractor).
     pub tipo: Tipo,
     pub inicial: Mil,
 }
 
 /// Lo que la economía necesita del artefacto, inmutable.
 pub struct Mapa {
-    /// Piedra y ganado en una sola lista: `Fuente::Nodo(i)` indexa aquí.
+    /// Piedra, ganado y minerales en una sola lista: `Fuente::Nodo(i)` indexa aquí.
     pub nodos: Vec<NodoMapa>,
     pub parcelas: Vec<Parcela>,
     pub total_por_masa: Vec<usize>,
@@ -87,6 +87,7 @@ pub struct Mapa {
     rej_parcelas: Rejilla,
     rej_piedra: Rejilla,
     rej_ganado: Rejilla,
+    rej_minerales: Rejilla,
 }
 
 macro_rules! pt {
@@ -108,6 +109,10 @@ impl Mapa {
                 let tipo = match n.tipo.as_str() {
                     "piedra" => Tipo::Cantera,
                     "livestock" => Tipo::Corral,
+                    "oro" => Tipo::Mina,
+                    "cobre" => Tipo::MinaCobre,
+                    "estano" => Tipo::MinaEstano,
+                    "hierro" => Tipo::MinaHierro,
                     _ => return None,
                 };
                 Some(NodoMapa { pos: pt!(n.posicion), tipo, inicial: n.cantidad_inicial })
@@ -123,8 +128,10 @@ impl Mapa {
         let de_tipo = |t: Tipo| nodos.iter().enumerate().filter(move |(_, n)| n.tipo == t).map(|(i, n)| (i as u32, n.pos)).collect::<Vec<_>>();
         let rej_piedra = Rejilla::nueva(ancho, alto, de_tipo(Tipo::Cantera).into_iter());
         let rej_ganado = Rejilla::nueva(ancho, alto, de_tipo(Tipo::Corral).into_iter());
+        let minerales = nodos.iter().enumerate().filter(|(_, n)| n.tipo.es_de_pueblo() && n.tipo != Tipo::Cantera).map(|(i, n)| (i as u32, n.pos));
+        let rej_minerales = Rejilla::nueva(ancho, alto, minerales);
         let rej_parcelas = Rejilla::nueva(ancho, alto, parcelas.iter().enumerate().map(|(i, p)| (i as u32, p.centro)));
-        Arc::new(Mapa { nodos, parcelas, total_por_masa, densidad_ppm, campamentos, ancho, alto, rej_parcelas, rej_piedra, rej_ganado })
+        Arc::new(Mapa { nodos, parcelas, total_por_masa, densidad_ppm, campamentos, ancho, alto, rej_parcelas, rej_piedra, rej_ganado, rej_minerales })
     }
 
     pub fn parcelas_en(&self, centro: Punto, radio: Mil) -> Vec<u32> {
@@ -137,6 +144,10 @@ impl Mapa {
 
     pub fn ganado_en(&self, centro: Punto, radio: Mil) -> Vec<u32> {
         self.rej_ganado.en_disco(centro, radio, |i| self.nodos[i as usize].pos)
+    }
+
+    pub fn minerales_en(&self, centro: Punto, radio: Mil) -> Vec<u32> {
+        self.rej_minerales.en_disco(centro, radio, |i| self.nodos[i as usize].pos)
     }
 
     fn parcela(&self, centro: Punto, radio: Mil, propias: &BTreeSet<u32>, cuota_pct: u32, libre: &dyn Fn(u32) -> bool, en_zona: &dyn Fn(Punto) -> bool) -> Option<u32> {
@@ -178,7 +189,7 @@ impl Mapa {
             Tipo::Lenera => self.parcela(centro, radio, propias, cuota_pct, parcela_libre, en_zona).map(|p| Some(Fuente::Parcela(p))),
             Tipo::Cantera => self.mas_cercano(self.piedra_en(centro, radio), centro, nodo_libre, en_zona).map(|n| Some(Fuente::Nodo(n))),
             Tipo::Corral => self.mas_cercano(self.ganado_en(centro, radio), centro, nodo_libre, en_zona).map(|n| Some(Fuente::Nodo(n))),
-            // Van por pueblo extractor (Doc 4.2.2), que aún no está implementado.
+            // Van por pueblo extractor (Doc 4.2.2), no por la ciudad.
             Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => None,
             // Sin yacimiento: el sitio lo decide la ciudad de la plaza, no el mapa.
             _ => Some(None),

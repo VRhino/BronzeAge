@@ -31,10 +31,9 @@ pub const PRIO_REPUTACION: u8 = 9;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-/// BAN6: BAN5 más el viaje de las caravanas (costes de ruta, planes, pausa por batalla), la red de caminos, el pulso del reparto, el mercado de
-/// mercenarios y, en cada columna, su carro (`suministro`) y sus caravanas adjuntas. BAN5 se rechaza.
-const MAGIA: &[u8; 4] = b"BAN6";
-const MAGIA_ANTERIOR: &[u8; 4] = b"BAN5";
+/// BAN7: BAN6 más, en la economía de cada plaza, sus pueblos extractores (obra de mapa, almacén local, carro y estado). BAN6 se rechaza.
+const MAGIA: &[u8; 4] = b"BAN7";
+const MAGIA_ANTERIOR: &[u8; 4] = b"BAN6";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -356,8 +355,8 @@ pub struct Estado {
     pub asentamientos: BTreeMap<u64, Asentamiento>,
     /// Parcela de bosque (índice del artefacto) → asentamiento que la explota.
     pub parcelas_ocupadas: BTreeMap<u32, u64>,
-    /// Nodo de piedra o ganado (índice de `economia::Mapa::nodos`) → asentamiento que lo explota. Se reconstruye de las fuentes de los
-    /// edificios, igual que `parcelas_ocupadas` de las parcelas.
+    /// Nodo de piedra, mineral o ganado (índice de `economia::Mapa::nodos`) → asentamiento que lo explota (con un edificio o con un pueblo
+    /// extractor). Se reconstruye de las fuentes de los edificios y de los pueblos, igual que `parcelas_ocupadas` de las parcelas.
     pub nodos_reclamados: BTreeMap<u32, u64>,
     /// Stock de los nodos que alguien ha tocado (los demás tienen su cantidad inicial).
     pub yacimientos: BTreeMap<u32, StockNodo>,
@@ -578,7 +577,7 @@ impl Estado {
         let mut r = Lector::nuevo(bytes);
         match r.magia()? {
             m if m == *MAGIA => {}
-            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN5 (sin viaje de caravanas): ya no se admite")),
+            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN6 (sin pueblos extractores): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
@@ -676,6 +675,9 @@ impl Estado {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
                 }
+            }
+            for p in &economia.pueblos {
+                s.nodos_reclamados.insert(p.nodo, id);
             }
             s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe });
         }

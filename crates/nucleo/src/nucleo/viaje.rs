@@ -198,15 +198,20 @@ impl Nucleo {
         self.camino(origen, destino, None)
     }
 
-    /// `trazarRutaComercial` (§7.2). `None` si no hay ruta por tierra.
+    /// `trazarRutaComercial` (§7.2) entre dos plazas. `None` si no hay ruta por tierra.
     pub(super) fn trazar_ruta_comercial(&mut self, origen: u64, destino: u64, t: Instante) -> Option<Trazado> {
+        let (o, d) = (self.estado.asentamientos.get(&origen)?, self.estado.asentamientos.get(&destino)?);
+        let (po, pd, faccion) = (o.posicion, d.posicion, o.faccion);
+        self.trazar_ruta(origen, destino, po, pd, faccion, t)
+    }
+
+    /// El trazado de §7.2 entre dos puntos de la Facción `faccion`. `origen` y `destino` son las claves de lo que une la ruta (dos plazas, o un
+    /// pueblo extractor y su madre: el carro de acarreo): ni una ni otra cuentan como zona ajena por la que pagar peaje, y el par sin ruta por
+    /// tierra se recuerda con ellas.
+    pub(super) fn trazar_ruta(&mut self, origen: u64, destino: u64, po: Punto, pd: Punto, faccion: u32, t: Instante) -> Option<Trazado> {
         if self.cache.inalcanzables.contains(&(origen, destino)) {
             return None;
         }
-        let (po, pd, faccion) = {
-            let (o, d) = (self.estado.asentamientos.get(&origen)?, self.estado.asentamientos.get(&destino)?);
-            (o.posicion, d.posicion, o.faccion)
-        };
         let atraccion = self.atraccion_de_red(t);
         // Las zonas de las plazas de otra Facción que ni salen ni llegan: por ellas hay que pasar (peaje).
         let todos: Vec<(u64, Disco)> = self.discos();
@@ -388,7 +393,7 @@ impl Nucleo {
 
     /// Cobra los peajes alcanzados (§7.3): el 2 % de lo que lleva en ese momento a cada ciudad ajena que acaba de cruzar. La ciudad que ya no
     /// existe no cobra (la caravana se queda con lo suyo).
-    fn cobrar_peajes(&mut self, id: u64, t: Instante) {
+    pub(super) fn cobrar_peajes(&mut self, id: u64, t: Instante) {
         let tasa = self.estado.reglas.economia.comercio.peaje;
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let cobros = self.estado.comercio.flota[i].cobrar_peajes(t, tasa);
@@ -424,6 +429,7 @@ impl Nucleo {
         if c.llegada_en().is_none_or(|f| f > t) {
             return;
         }
+        let acarreo = c.tipo == TipoCaravana::Acarreo;
         self.cobrar_peajes(id, t);
         let i = self.estado.comercio.posicion_caravana(id).expect("existe");
         let origen = self.estado.comercio.flota[i].origen as u64;
@@ -447,6 +453,16 @@ impl Nucleo {
                 self.emitir_comercio(t, ev, vec![origen, destino], &[("carga", total(&contenido)), ("perdido", total(&entrega.perdido))]);
                 // El trueque pudo quedar a medias: otra caravana libre puede llevar lo que falta.
                 self.reparto_de_plaza(origen, t);
+            }
+            Llegada::Acarreo { destino, contenido } => {
+                if let Some(plan) = self.estado.comercio.flota[i].plan.clone() {
+                    self.instalar_plan(id, plan); // la vuelta: la misma ruta invertida, con una generación nueva
+                }
+                self.acarreo_llega(t, id, destino as u64, &contenido);
+            }
+            Llegada::Casa { .. } if acarreo => {
+                self.retirar_plan(id);
+                self.acarreo_en_casa(t, origen, id);
             }
             Llegada::Casa { contenido, escolta: _ } => {
                 // DUDA: la escolta vuelve al campamento de su héroe, que aún no existe (Heroe_Y_Tropa).

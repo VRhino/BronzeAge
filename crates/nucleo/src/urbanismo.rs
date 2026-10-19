@@ -24,7 +24,7 @@ use asentamiento::datos::bloque_de;
 use asentamiento::edificio::Fuente;
 use base::Punto;
 use std::collections::BTreeMap;
-use trazado::{radio_ciudad, Ancla, Categoria, Ciudad, EntradaFundacion, Huella, OpcionAncla, Parametros, Pedido, Perfil, Recinto, RectLocal, Rol, TipoPieza, CELDA_UL};
+use trazado::{radio_ciudad, Ancla, Categoria, Ciudad, Colocacion, EntradaFundacion, Huella, OpcionAncla, Parametros, Pedido, Perfil, Recinto, Rect, RectLocal, Rol, TipoPieza, CELDA_UL};
 
 /// El documento del Trazado urbano: de él salen las huellas.
 pub const DOC_TRAZADO: &str = include_str!("../../../Docs/Mechanics/Trazado_Urbano.md");
@@ -464,6 +464,37 @@ impl Urbe {
     }
 }
 
+// ───────────────────────────── La planta de un pueblo ─────────────────────────────
+
+/// Casas de la planta de un pueblo ("unas casas").
+// DUDA: el documento no fija cuántas; 4 es un placeholder.
+const CASAS_DE_PUEBLO: u32 = 4;
+/// Radio de la planta de un pueblo, en unidades locales (la ciudad de una plaza nace con 30; un pueblo es una aldea).
+// DUDA: Economia_Construccion §14 dice «como mucho 0,2 de mapa» (8 u. locales) pero el trazado va por celdas de 3 u. con sus calles: la planta
+// resultante es algo mayor. Si el cliente necesita el tope duro, hay que recortar aquí.
+const RADIO_DE_PUEBLO_UL: i32 = 8;
+
+/// La planta de un pueblo (Campamentos_Mercenarios §7, receta de `layoutCampamento`): el trazado de asentamientos **una sola vez**, con la mina
+/// o la cantera (`extractor`) como ancla en el origen, unas casas, el almacén y un corral para el buey. Función pura de la semilla del
+/// núcleo y del id del pueblo: no se guarda y el mismo pueblo da siempre la misma planta. Es lo que se ve dentro y el mapa de su batalla de
+/// saqueo. Los ids de las piezas son sus posiciones en la planta (el ancla es la 0), no ids de edificio de ninguna economía.
+pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_pueblo: u64, extractor: Tipo) -> VistaCiudad {
+    let urb = &reglas.urbanismo;
+    let semilla = trazado::hash(semilla_nucleo, "pueblo", &[id_pueblo as i64]);
+    let params = Parametros { radio_inicial_ul: RADIO_DE_PUEBLO_UL, radio_afueras_min_ul: RADIO_DE_PUEBLO_UL / 2, ancho_banda_afueras_ul: RADIO_DE_PUEBLO_UL / 2, ..urb.parametros(&reglas.datos) };
+    let perfil = Perfil::por_tradicion(semilla);
+    let pedido = |id: u32, tipo: Tipo, categoria: Categoria, rol: Rol| Pedido { id, tipo: tipo_a_u16(tipo), categoria, rol, huella: urb.huella(tipo, 1), permitir_rotacion: true, perfil, radio_ul: RADIO_DE_PUEBLO_UL };
+    let mut ciudad = Ciudad::vacia(semilla, params);
+    let ancla = pedido(0, extractor, Categoria::Residencial, Rol::Centro);
+    ciudad.colocar(&ancla, Colocacion { rect: Rect::desde_centro(Punto::new(0, 0), ancla.huella), rotado: false }).expect("la planta vacía admite su ancla");
+    let resto = std::iter::repeat_n((Tipo::Vivienda, Categoria::Residencial), CASAS_DE_PUEBLO as usize).chain([(Tipo::Almacen, Categoria::Generico), (Tipo::Corral, Categoria::Afueras)]);
+    for (id, (tipo, categoria)) in resto.enumerate() {
+        // Lo que no cabe se queda fuera de la planta: es presentación, no hay nada que cobrar ni que deshacer.
+        ciudad.colocar_siguiente(&pedido(id as u32 + 1, tipo, categoria, Rol::Normal));
+    }
+    Urbe::desde_ciudad(ciudad).vista(RADIO_DE_PUEBLO_UL)
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
@@ -485,5 +516,17 @@ mod pruebas {
         assert_eq!((h(Tipo::PuestoMercado, 1), h(Tipo::PuestoMercado, 2), h(Tipo::PuestoMercado, 3)), ((1, 2), (1, 3), (1, 1)));
         let acumulado: Vec<usize> = (1..=3).scan(1, |piezas, n| { *piezas += u.puestos(n).len(); Some(*piezas) }).collect();
         assert_eq!(acumulado, vec![6, 13, 17], "la zona queda en 6, 13 y 17 piezas contando el Mercado");
+    }
+
+    #[test]
+    fn la_planta_de_un_pueblo_sale_de_su_id_con_la_mina_de_ancla_y_no_se_guarda() {
+        let r = ReglasEconomia::default();
+        let a = planta_de_pueblo(&r, 42, 7, Tipo::MinaCobre);
+        assert_eq!(a, planta_de_pueblo(&r, 42, 7, Tipo::MinaCobre), "función pura");
+        assert_ne!(a, planta_de_pueblo(&r, 42, 8, Tipo::MinaCobre), "cada pueblo tiene la suya");
+        assert_eq!((a.piezas[0].id, a.piezas[0].tipo, a.piezas[0].centro), (0, Tipo::MinaCobre, Punto::new(1_500, 1_500)), "el ancla en el origen");
+        let de = |t: Tipo| a.piezas.iter().filter(|p| p.tipo == t).count();
+        assert_eq!((de(Tipo::Vivienda), de(Tipo::Almacen), de(Tipo::Corral)), (CASAS_DE_PUEBLO as usize, 1, 1), "unas casas, el almacén y el corral del buey");
+        assert!(!a.calles.is_empty() || !a.caminos.is_empty());
     }
 }

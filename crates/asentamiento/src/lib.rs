@@ -1,8 +1,8 @@
 //! Población, economía y construcción de un asentamiento (fase 6, sistema 2). Ver `Docs/Game/4_*` y
 //! `Docs/Mechanics/Economia_Construccion.md`. Reglas puras en enteros: el núcleo guarda el estado y programa los eventos.
 //!
-//! Este crate crece por subsistemas, en el orden de dependencia: recursos y datos, almacén, políticas, población (hecho);
-//! después producción, mantenimiento, obras y cola, auto-construcción y ascenso.
+//! Este crate crece por subsistemas, en el orden de dependencia: recursos y datos, almacén, políticas, población, producción,
+//! mantenimiento, obras y cola, auto-construcción, ascenso y, fuera de la ciudad, los pueblos extractores y sus obras de mapa.
 
 pub mod almacen;
 pub mod ascenso;
@@ -17,6 +17,7 @@ pub mod obras;
 pub mod politicas;
 pub mod poblacion;
 pub mod produccion;
+pub mod pueblos;
 pub mod recurso;
 
 pub use almacen::Almacen;

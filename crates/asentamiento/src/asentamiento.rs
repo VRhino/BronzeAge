@@ -14,6 +14,7 @@ use crate::mantenimiento::{self, Medidor};
 use crate::poblacion::{self, Entorno, Poblacion};
 use crate::politicas::Politicas;
 use crate::produccion::{self, Fuentes};
+use crate::pueblos::Pueblo;
 use crate::recurso::{Costo, Recurso};
 use base::{Instante, Mil, MS_POR_MINUTO};
 
@@ -129,6 +130,17 @@ pub enum Evento {
     Ruinas { faltantes: Vec<Recurso> },
     AscensoIniciado { objetivo: u32 },
     NivelSubio { nivel: u32 },
+    /// Se marcó la obra de un pueblo extractor sobre un nodo (queda pendiente de materiales).
+    PuebloMarcado { id: u64, tipo: Tipo, nodo: u32 },
+    /// Se entregaron materiales a la obra de un pueblo (`cantidad` en total).
+    PuebloEntrega { id: u64, cantidad: Mil },
+    /// Con todos los materiales entregados, arrancó la obra del pueblo.
+    PuebloObraIniciada { id: u64, completa_en: Instante },
+    PuebloCompletado { id: u64 },
+    /// El almacén local del pueblo se llenó: la extracción se para hasta que el carro lo vacíe.
+    PuebloLleno { id: u64 },
+    /// El pueblo (o su obra) se destruyó a mano.
+    PuebloDestruido { id: u64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -142,6 +154,8 @@ pub struct Asentamiento {
     pub politicas: Politicas,
     /// El orden es el historial de crecimiento y nunca se reordena (la cola reordena `prioridad`).
     pub edificios: Vec<Edificio>,
+    /// Los pueblos extractores de la plaza, en cualquier estado, por id ascendente. No son edificios de la ciudad (Doc 4.2.2).
+    pub pueblos: Vec<Pueblo>,
     pub siguiente_edificio: u32,
     pub ascenso: Option<Ascenso>,
     pub recetas_pausadas: Vec<Recurso>,
@@ -180,6 +194,7 @@ impl Asentamiento {
             almacen,
             politicas: Politicas::default(),
             edificios,
+            pueblos: vec![],
             siguiente_edificio: id + 1,
             ascenso: None,
             recetas_pausadas: vec![],
@@ -241,7 +256,7 @@ impl Asentamiento {
 
     /// Coste de mantenimiento ahora (sin recintos).
     pub fn coste_mantenimiento(&self, r: &Reglas, distancia_capital: Mil) -> Costo {
-        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.nivel_actual(), distancia_capital, &vec![])
+        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.pueblos_activos(), self.nivel_actual(), distancia_capital, &vec![])
     }
 
     pub(crate) fn entorno_poblacion(&self, r: &Reglas, x: &Exterior) -> Entorno {
@@ -287,14 +302,16 @@ impl Asentamiento {
         //    hasta el siguiente.
         let ocupadas_al_empezar = self.edificios.cuadrillas_ocupadas();
         self.completar_obras(t, r, x, &mut ev);
+        self.completar_pueblos(t, &mut ev);
         self.arrancar_obras(t, r, ocupadas_al_empezar, &mut ev);
 
         let (pesants, artesanos, _) = self.poblacion.enteros();
-        let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, pesants, artesanos);
+        let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, pesants, artesanos, self.trabajadores_de_pueblos(r));
         let reserva_auto = self.reserva(r, x, true);
         let pausadas = self.recetas_pausadas.clone();
         let ctx = produccion::Contexto { fertilidad: x.fertilidad, factor_trigo: self.politicas.factor(&r.politicas, "factorProduccionTrigo"), factor_talleres: self.politicas.factor(&r.politicas, "factorProduccionTalleres"), factor_tecnologia: x.factor_tecnologia, tiene_tecnologia: x.tiene_tecnologia, recetas_pausadas: &pausadas };
         produccion::extraer_y_cultivar(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, x.fuentes);
+        self.extraer_pueblos(r, &mano, &ctx, x.fuentes, &mut ev);
         produccion::recetas(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, &reserva_auto);
         self.avanzar_mejoras(t, r, x, &reserva_auto, &mut ev);
         if !self.auto_pausada {
@@ -349,7 +366,7 @@ impl Asentamiento {
     /// Para pruebas y proyecciones: ¿cubre la producción de trigo el consumo?
     pub fn trigo_neto_por_minuto(&self, r: &Reglas, x: &Exterior) -> Mil {
         let (p, a, _) = self.poblacion.enteros();
-        let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, p, a);
+        let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, p, a, self.trabajadores_de_pueblos(r));
         let factor = self.politicas.factor(&r.politicas, "factorProduccionTrigo");
         produccion::produccion_trigo_por_minuto(&r.catalogo, &self.edificios, &mano, x.fertilidad, factor)
             - self.poblacion.consumo_por_minuto(&r.poblacion, &self.entorno_poblacion(r, x))

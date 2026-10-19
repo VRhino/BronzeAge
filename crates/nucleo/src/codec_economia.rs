@@ -3,11 +3,13 @@
 //!
 //! Formato (little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
 //! población{pesants, artesanos, nobleza, nutrición: i64} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
-//! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
+//! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
 //! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64`.
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
 //! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool`.
+//! Un pueblo: `id u64 · tipo u8 · nodo u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno n u64 · n × (recurso u8, i64);
+//! 1 en obra → completa_en i64; 2 activo} · almacén{29 × (cantidad i64, capacidad i64)} · carro opt_u64 · lleno bool`.
 //! Los tipos y recursos van por su índice en el enum (`Tipo as u8`, `Recurso::indice`).
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
@@ -16,8 +18,9 @@ use asentamiento::catalogo::{Tipo, TIPOS};
 use asentamiento::edificio::{Edificio, Estado, Fuente, Mejora};
 use asentamiento::mantenimiento::Medidor;
 use asentamiento::politicas::Activa;
+use asentamiento::pueblos::{EstadoPueblo, Pueblo};
 use asentamiento::recurso::TODOS;
-use asentamiento::{Almacen, Cargo, Politicas, Poblacion, Recurso};
+use asentamiento::{Almacen, Cargo, Costo, Politicas, Poblacion, Recurso};
 
 pub(crate) fn tipo_a_u8(t: Tipo) -> u8 {
     t as u8
@@ -64,6 +67,39 @@ fn estado_a_u8(e: Estado) -> u8 {
     }
 }
 
+fn escribir_almacen(w: &mut Escritor, a: &Almacen) {
+    let (cantidad, capacidad) = a.partes();
+    cantidad.iter().zip(capacidad).for_each(|(&c, &k)| {
+        w.i64(c);
+        w.i64(k);
+    });
+}
+
+fn leer_almacen(r: &mut Lector) -> Result<Almacen, ErrorFormato> {
+    let (mut cantidad, mut capacidad) = ([0; 29], [0; 29]);
+    for i in 0..29 {
+        cantidad[i] = r.i64()?;
+        capacidad[i] = r.i64()?;
+    }
+    Ok(Almacen::desde_partes(cantidad, capacidad))
+}
+
+fn escribir_costo(w: &mut Escritor, c: &Costo) {
+    w.u64(c.len() as u64);
+    for &(rec, n) in c {
+        w.u8(recurso_a_u8(rec));
+        w.i64(n);
+    }
+}
+
+fn leer_costo(r: &mut Lector) -> Result<Costo, ErrorFormato> {
+    let mut c = Costo::new();
+    for _ in 0..r.cuenta()? {
+        c.push((recurso_de_u8(r.u8()?)?, r.i64()?));
+    }
+    Ok(c)
+}
+
 pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     let Asentamiento {
         fundado_en,
@@ -73,6 +109,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         almacen,
         politicas,
         edificios,
+        pueblos,
         siguiente_edificio,
         ascenso,
         recetas_pausadas,
@@ -92,11 +129,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     w.u32(*nivel_actual);
     let Poblacion { pesants, artesanos, nobleza, nutricion } = poblacion;
     [pesants, artesanos, nobleza, nutricion].iter().for_each(|&&x| w.i64(x));
-    let (cantidad, capacidad) = almacen.partes();
-    cantidad.iter().zip(capacidad).for_each(|(&c, &k)| {
-        w.i64(c);
-        w.i64(k);
-    });
+    escribir_almacen(w, almacen);
     w.u64(politicas.activas().len() as u64);
     for Activa { id, cargo, expira_en } in politicas.activas() {
         w.texto(id);
@@ -134,6 +167,27 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         }
         w.bool(*pausado_por_almacen);
     }
+    w.u64(pueblos.len() as u64);
+    for Pueblo { id, tipo, nodo, estado, almacen, carro, lleno } in pueblos {
+        w.u64(*id);
+        w.u8(tipo_a_u8(*tipo));
+        w.u32(*nodo);
+        match estado {
+            EstadoPueblo::Pendiente { requerido, entregado } => {
+                w.u8(0);
+                escribir_costo(w, requerido);
+                escribir_costo(w, entregado);
+            }
+            EstadoPueblo::EnObra { completa_en } => {
+                w.u8(1);
+                w.i64(*completa_en);
+            }
+            EstadoPueblo::Activo => w.u8(2),
+        }
+        escribir_almacen(w, almacen);
+        w.opt_u64(*carro);
+        w.bool(*lleno);
+    }
     w.u32(*siguiente_edificio);
     match ascenso {
         Some(Ascenso { nivel_objetivo, iniciado_en, completa_en }) => {
@@ -163,12 +217,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
     let (fundado_en, nivel) = (r.i64()?, r.u32()?);
     let medidor = Medidor { valor: r.i64()?, racha: r.u32()?, nivel_actual: r.u32()? };
     let poblacion = Poblacion { pesants: r.i64()?, artesanos: r.i64()?, nobleza: r.i64()?, nutricion: r.i64()? };
-    let (mut cantidad, mut capacidad) = ([0; 29], [0; 29]);
-    for i in 0..29 {
-        cantidad[i] = r.i64()?;
-        capacidad[i] = r.i64()?;
-    }
-    let almacen = Almacen::desde_partes(cantidad, capacidad);
+    let almacen = leer_almacen(r)?;
     let mut activas = Vec::new();
     for _ in 0..r.cuenta()? {
         activas.push(Activa { id: r.texto()?, cargo: cargo_de_u8(r.u8()?)?, expira_en: r.i64()? });
@@ -192,6 +241,17 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
             _ => return Err(ErrorFormato("fuente de edificio desconocida")),
         };
         edificios.push(Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen: r.bool()? });
+    }
+    let mut pueblos = Vec::new();
+    for _ in 0..r.cuenta()? {
+        let (id, tipo, nodo) = (r.u64()?, tipo_de_u8(r.u8()?)?, r.u32()?);
+        let estado = match r.u8()? {
+            0 => EstadoPueblo::Pendiente { requerido: leer_costo(r)?, entregado: leer_costo(r)? },
+            1 => EstadoPueblo::EnObra { completa_en: r.i64()? },
+            2 => EstadoPueblo::Activo,
+            _ => return Err(ErrorFormato("estado de pueblo desconocido")),
+        };
+        pueblos.push(Pueblo { id, tipo, nodo, estado, almacen: leer_almacen(r)?, carro: r.opt_u64()?, lleno: r.bool()? });
     }
     let siguiente_edificio = r.u32()?;
     let ascenso = if r.bool()? { Some(Ascenso { nivel_objetivo: r.u32()?, iniciado_en: r.i64()?, completa_en: r.i64()? }) } else { None };
@@ -217,6 +277,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
         almacen,
         politicas: Politicas::desde_activas(activas),
         edificios,
+        pueblos,
         siguiente_edificio,
         ascenso,
         recetas_pausadas,

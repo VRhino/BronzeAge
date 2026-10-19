@@ -21,6 +21,8 @@ pub enum ErrorObra {
     TopeAlmacenes,
     TopeViviendas,
     NivelInsuficiente,
+    /// Los minerales y toda Cantera después de la primera solo se explotan con un pueblo extractor (Doc 4.2.2).
+    SoloPorPueblo,
     TopeTransformacion,
     GranFundicion,
     ColaLlena,
@@ -203,6 +205,9 @@ impl Asentamiento {
     pub fn anadir_manual(&mut self, r: &Reglas, x: &mut Exterior, tipo: Tipo, ev: &mut Vec<Evento>) -> Result<u32, ErrorObra> {
         let def = r.catalogo.tipo(tipo);
         let c = &r.construccion;
+        if tipo.es_de_pueblo() && (tipo != Tipo::Cantera || self.edificios.en_cualquier_estado(Tipo::Cantera) > 0) {
+            return Err(ErrorObra::SoloPorPueblo);
+        }
         if def.tecnologia.as_deref().is_some_and(|t| !(x.tiene_tecnologia)(t)) {
             return Err(ErrorObra::TecnologiaFaltante);
         }

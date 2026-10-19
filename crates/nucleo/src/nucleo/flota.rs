@@ -13,7 +13,7 @@ use crate::estado_comercio::{entidad_caravana, entidad_trueque};
 use crate::nucleo::mercado::{id32, nivel_mercado, RADIO_PUERTA};
 use asentamiento::edificio::Edificios;
 use asentamiento::Recurso;
-use comercio::caravana::{caravanas_comerciales_de, carros_en_uso, mover_carro, Caravana, ContextoCarro, ContextoCrear, ErrorCaravana, EstadoCaravana, Lanzamiento};
+use comercio::caravana::{caravanas_comerciales_de, carros_en_uso, mover_carro, Caravana, ContextoCarro, ContextoCrear, ErrorCaravana, EstadoCaravana, Lanzamiento, TipoCaravana};
 use comercio::evento::Evento as EventoComercio;
 use comercio::ruina::{cerrar_dependientes, Accion, AccionCaravana, Motivo, TruequeCancelado};
 use comercio::trueque::EstadoTrueque;
@@ -450,6 +450,9 @@ impl Nucleo {
         self.soltar_de_columnas(id);
         self.retirar_plan(id);
         let origen = c.origen as u64;
+        if c.tipo == TipoCaravana::Acarreo {
+            self.pueblo_sin_carro(origen, id);
+        }
         let plazas = if self.estado.asentamientos.contains_key(&origen) { vec![origen] } else { vec![] };
         self.emitir_comercio(t, EventoComercio::CaravanaPerdida { caravana: id }, plazas, &[("carga", total(&c.contenido))]);
     }

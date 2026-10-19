@@ -86,9 +86,10 @@ pub enum Resultado {
 }
 
 /// `calcularCostoMantenimiento`: madera siempre, piedra desde el nivel 2, oro desde el 3; todo × (1 + edificios/ref) × (1 + dist/escala).
-/// `upkeep_recintos` se suma sin escala (Murallas §9.4).
-pub fn coste(r: &ReglasMantenimiento, edificios: &[Edificio], nivel_actual: u32, distancia_capital: Mil, upkeep_recintos: &Costo) -> Costo {
-    let suma: i64 = edificios
+/// `upkeep_recintos` se suma sin escala (Murallas §9.4). Cada uno de los `pueblos` extractores activos cuenta como un edificio activo más
+/// (Doc 4.2.2).
+pub fn coste(r: &ReglasMantenimiento, edificios: &[Edificio], pueblos: usize, nivel_actual: u32, distancia_capital: Mil, upkeep_recintos: &Costo) -> Costo {
+    let suma = pueblos as i64 * UNO + edificios
         .iter()
         .filter(|e| e.activo())
         .map(|e| {
@@ -100,7 +101,7 @@ pub fn coste(r: &ReglasMantenimiento, edificios: &[Edificio], nivel_actual: u32,
                 UNO
             }
         })
-        .sum();
+        .sum::<i64>();
     // `suma` está en ppm de edificio: 1 edificio = UNO.
     let escala = por(UNO + razon(suma, r.edificios_referencia * UNO), UNO + razon(distancia_capital.max(0), r.escala_distancia));
     let mut c: Costo = vec![(Recurso::Madera, por(r.costo_base_madera, escala))];
@@ -192,18 +193,26 @@ mod pruebas {
         let r = reglas();
         // 4 normales + 2 viviendas (=1) = 5 edificios; 5/50 = 0,1 → ×1,1. Nivel 1: solo madera 1,5 × 1,1 = 1,65.
         let e = activos(&[Tipo::CentroUrbano, Tipo::Granja, Tipo::Lenera, Tipo::Cantera, Tipo::Vivienda, Tipo::Vivienda]);
-        assert_eq!(coste(&r, &e, 1, 0, &vec![]), vec![(Recurso::Madera, 1_650)]);
+        assert_eq!(coste(&r, &e, 0, 1, 0, &vec![]), vec![(Recurso::Madera, 1_650)]);
         // A 80 unidades de la capital el coste se duplica.
-        assert_eq!(coste(&r, &e, 1, 80_000, &vec![]), vec![(Recurso::Madera, 3_300)]);
+        assert_eq!(coste(&r, &e, 0, 1, 80_000, &vec![]), vec![(Recurso::Madera, 3_300)]);
         // Piedra desde el nivel 2 (3 base) y oro desde el 3 (2 base).
-        let c3 = coste(&r, &e, 3, 0, &vec![]);
+        let c3 = coste(&r, &e, 0, 3, 0, &vec![]);
         assert_eq!(c3, vec![(Recurso::Madera, 1_650), (Recurso::Piedra, 3_300), (Recurso::Oro, 2_200)]);
         // Un edificio en cola o en obra no paga mantenimiento.
         let mut e2 = e.clone();
         e2.push(Edificio::nuevo(9, Tipo::Granja, Estado::EnCola));
-        assert_eq!(coste(&r, &e2, 1, 0, &vec![]), vec![(Recurso::Madera, 1_650)]);
+        assert_eq!(coste(&r, &e2, 0, 1, 0, &vec![]), vec![(Recurso::Madera, 1_650)]);
         // El upkeep de recintos se suma sin escala.
-        assert_eq!(coste(&r, &e, 1, 80_000, &vec![(Recurso::Madera, 500)])[0], (Recurso::Madera, 3_800));
+        assert_eq!(coste(&r, &e, 0, 1, 80_000, &vec![(Recurso::Madera, 500)])[0], (Recurso::Madera, 3_800));
+    }
+
+    #[test]
+    fn cada_pueblo_activo_cuenta_como_un_edificio_activo_de_la_madre() {
+        let r = reglas();
+        let e = activos(&[Tipo::CentroUrbano, Tipo::Granja, Tipo::Lenera, Tipo::Cantera, Tipo::Vivienda, Tipo::Vivienda]);
+        // 5 edificios + 2 pueblos = 7; 7/50 = 0,14 → 1,5 × 1,14 = 1,71.
+        assert_eq!(coste(&r, &e, 2, 1, 0, &vec![]), vec![(Recurso::Madera, 1_710)]);
     }
 
     #[test]
@@ -211,7 +220,7 @@ mod pruebas {
         let r = reglas();
         let e = activos(&[Tipo::CentroUrbano, Tipo::Plaza, Tipo::Pozo, Tipo::PuestoMercado]);
         // 1 + 0,5 × 3 = 2,5 edificios → 2,5/50 = 0,05 → 1,5 × 1,05 = 1,575.
-        assert_eq!(coste(&r, &e, 1, 0, &vec![]), vec![(Recurso::Madera, 1_575)]);
+        assert_eq!(coste(&r, &e, 0, 1, 0, &vec![]), vec![(Recurso::Madera, 1_575)]);
     }
 
     #[test]

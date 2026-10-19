@@ -38,7 +38,15 @@ peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ru
 > - **Mercenarios (§9).** `ComprarEnCampamento`, `RepostarEnCampamento` y, como andamiaje, `FijarResidencia` y `DarAlmacenPersonal` (códigos 41-44). El stock solo se guarda de los campamentos tocados; la reposición es una cita a la fase de siempre (`creación + k × 3 h`) que solo se programa si hay contadores o una pila por debajo de su tope. Lo comerciado entre Facciones (trueque cumplido y mostrador) suma a los contadores.
 > - **Batalla.** `Nucleo::caravana_entra_en_batalla`, `caravana_sale_de_batalla` (el plan se desplaza lo que duró la pausa) y `aplicar_perdida_de_carros`; la rejilla de encuentros deja el hecho `caravana.encuentro` entre dos caravanas o con una columna. La resolución (combate A/B) es del sistema militar. Una caravana grande en tránsito se ve a 60 unidades (`VISION.caravanaGrande.radio` vigente).
 > - **Hechos nuevos** (no están en §12): `comercio.caravana_en_casa`, `comercio.caravana_en_batalla`, `comercio.caravana_sale_de_batalla`, `comercio.carros_perdidos`, `caravana.encuentro`, `mercenarios.repuesto`, `ejercito.caravana_adjuntada`, `ejercito.caravana_aparcada`. `comercio.preparacion_terminada` desaparece: el fin de preparación emite `comercio.caravana_sale`.
-> - **Falta (fase 3C):** el carro de acarreo y los pueblos extractores. Del resto de sistemas (héroes, militar, política, niebla, contrato 05): véase «Paridad con TypeScript» en `Docs/Mecanicas a desarrollar.md`. Pruebas: `crates/nucleo/tests/caravanas.rs`.
+> - **Falta:** del resto de sistemas (héroes, militar, política, niebla, contrato 05): véase «Paridad con TypeScript» en `Docs/Mecanicas a desarrollar.md`. Pruebas: `crates/nucleo/tests/caravanas.rs`.
+
+> **Implementado en Rust (2026-10-19, fase 3C: el carro de acarreo).** Los pueblos extractores y su obra están en `Economia_Construccion.md` §14; aquí, el carro. Reglas puras en `crates/comercio/src/acarreo.rs` (funciones sobre una [`Caravana`] de tipo `acarreo`, ya sin la estructura propia de la fase 3A) y, en `Caravana::llegar`, la llegada nueva `Llegada::Acarreo`; integración en `crates/nucleo/src/nucleo/{pueblos,viaje}.rs`. Sin cambio de formato de foto más allá del `BAN7` de los pueblos: el carro es una caravana más de la flota (`TipoCaravana::Acarreo`, ya serializable).
+> - **Es una caravana de la flota de la madre** (origen = la plaza madre, parada en el pueblo), con su plan, su generación y sus eventos `LlegadaCaravana` / `PeajeCaravana`; no cuenta contra `cupoCaravanas` ni `cupoCarros`, ni entra en el reparto automático ni en el trueque, y no le afectan «Carga Ampliada» ni «Rutas Rápidas» (capacidad 500, velocidad 24).
+> - **Sale lleno**, sin evento propio: en el paso de minuto de la plaza en que el almacén local llega a 500 (`pueblo.almacen_lleno`), cuando el carro vuelve a casa y el almacén ya está lleno, o al reponerlo. Carga exactamente la capacidad y emprende la ruta pueblo → madre: el trazado de §7.2 (A\* con la atracción de la red de caminos, peajes de las zonas ajenas que cruce), el plan por tramos de `crates/rutas` y los mismos eventos de llegada y peaje. **No registra su ruta en la red de caminos** (la red es de rutas entre plazas y su poda mira esas plazas) y la ruta se traza en cada salida (el A\* está memorizado) en vez de guardarse «una sola vez».
+> - **Al llegar** vuelca en el almacén de la madre sin comisión ni trueque, **topado por su capacidad** (lo que no cabe se pierde: `acarreo.llega` lleva `perdido`; una plaza con 400 de capacidad por recurso pierde 100 de cada 500), y vuelve vacío desandando el camino (`acarreo.vuelve`). Si la madre ya no existe, el carro se pierde.
+> - **Si se destruye** (batalla, `DestruirPueblo`, ruina de la madre), el pueblo se queda sin carro: acumula hasta llenar el almacén y para. `ReponerCarro` lo compra en la madre (carro + buey) solo si no tiene ninguno.
+> - **Sin ruta por tierra** entre el pueblo y la madre el carro no sale (DUDA).
+> - **Batalla.** Es una caravana normal para `caravana_entra_en_batalla`, `caravana_sale_de_batalla` y `aplicar_perdida_de_carros`, y para la rejilla de encuentros; la resolución (casi siempre B) es del sistema militar. La escolta de residentes de la madre no existe todavía.
 
 ## 2. Modelo de datos
 
@@ -882,6 +890,8 @@ Los bloques de las secciones anteriores son los de este sistema. Además, de otr
 Ninguna abierta. Las del 2026-10-11 se resolvieron: comisión solo entre asentamientos distintos, recargo por reputación, reparto sin atascos, «Carga Ampliada» para toda caravana, reputación solo entre Facciones, código muerto retirado.
 
 ## 12. Carro de acarreo (guerra logística, Doc 3.13.8)
+
+> Implementado en Rust el 2026-10-19 (fase 3C): véase la nota del principio del documento.
 
 Cada pueblo extractor (Economia_Construccion §pueblos) tiene un carro propio: una caravana de tipo `acarreo` ligada al pueblo.
 

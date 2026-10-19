@@ -35,7 +35,7 @@ use territorio::Disco;
 // placeholder: lo dará la fertilidad de la zona del mundo (`fertilidadZona`).
 const FERTILIDAD: i64 = UNO;
 // placeholder: lo darán las tecnologías de la Facción (sin tecnologías adoptadas, sin bonus).
-const SIN_TECNOLOGIA: fn(&str) -> bool = |_| false;
+pub(super) const SIN_TECNOLOGIA: fn(&str) -> bool = |_| false;
 const SIN_BONUS: fn(Recurso) -> i64 = |_| UNO;
 // placeholder: lo dará el sistema de héroes y residentes (ciudadanos con casa en la plaza).
 const CIUDADANOS: u32 = 1;
@@ -60,6 +60,7 @@ fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
         ErrorObra::TopeAlmacenes => (OBRA_TOPE_ALMACENES, "se alcanzó el máximo de Almacenes del nivel"),
         ErrorObra::TopeViviendas => (OBRA_TOPE_VIVIENDAS, "se alcanzó el máximo de Viviendas del nivel"),
         ErrorObra::NivelInsuficiente => (OBRA_NIVEL_INSUFICIENTE, "el nivel de la plaza no alcanza para ese edificio"),
+        ErrorObra::SoloPorPueblo => (OBRA_SOLO_POR_PUEBLO, "los minerales y toda Cantera tras la primera solo se explotan con un pueblo extractor"),
         ErrorObra::TopeTransformacion => (OBRA_TOPE_TRANSFORMACION, "se alcanzó el máximo de talleres de ese tipo del nivel"),
         ErrorObra::GranFundicion => (OBRA_GRAN_FUNDICION, "la Gran Fundición pide nivel de Facción, ser la capital y que no haya otra"),
         ErrorObra::ColaLlena => (OBRA_COLA_LLENA, "la cola de obras está llena"),
@@ -119,6 +120,12 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::Ruinas { faltantes } => ("asentamiento.ruinas", vec![("faltantes", faltantes.iter().fold(0i64, |m, &r| m | 1 << recurso_a_u8(r)))]),
         EventoEco::AscensoIniciado { objetivo } => ("asentamiento.ascenso_iniciado", vec![("objetivo", *objetivo as i64)]),
         EventoEco::NivelSubio { nivel } => ("asentamiento.nivel_subio", vec![("nivel", *nivel as i64)]),
+        EventoEco::PuebloMarcado { id, tipo, nodo } => ("pueblo.marcado", vec![("pueblo", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("nodo", *nodo as i64)]),
+        EventoEco::PuebloEntrega { id, cantidad } => ("pueblo.materiales_entregados", vec![("pueblo", *id as i64), ("cantidad", *cantidad)]),
+        EventoEco::PuebloObraIniciada { id, completa_en } => ("pueblo.obra_iniciada", vec![("pueblo", *id as i64), ("completaEn", *completa_en)]),
+        EventoEco::PuebloCompletado { id } => ("pueblo.completado", vec![("pueblo", *id as i64)]),
+        EventoEco::PuebloLleno { id } => ("pueblo.almacen_lleno", vec![("pueblo", *id as i64)]),
+        EventoEco::PuebloDestruido { id } => ("pueblo.destruido", vec![("pueblo", *id as i64)]),
     };
     EventoNucleo { codigo: codigo.into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos }
 }
@@ -199,6 +206,13 @@ impl Nucleo {
             self.arruinar(id, t);
             return;
         }
+        for s in &sucesos {
+            match s {
+                EventoEco::PuebloCompletado { id: pueblo } => self.dar_carro_a_pueblo(id, *pueblo),
+                EventoEco::PuebloLleno { id: pueblo } => self.salir_acarreo(id, *pueblo, t),
+                _ => {}
+            }
+        }
         // La zona crece 1 unidad por edificio completado, hasta el techo del nivel (Economia_Construccion §3.1).
         let completados = self.estado.asentamientos.get_mut(&id).map_or(0, |a| a.economia.tomar_completados());
         if completados > 0 {
@@ -207,7 +221,7 @@ impl Nucleo {
     }
 
     /// Traslada los sucesos de la economía a eventos del núcleo y marca la plaza como tocada (cierra versión).
-    fn anotar_sucesos(&mut self, id: u64, t: Instante, sucesos: &[EventoEco]) {
+    pub(super) fn anotar_sucesos(&mut self, id: u64, t: Instante, sucesos: &[EventoEco]) {
         if sucesos.is_empty() {
             return;
         }
@@ -228,6 +242,10 @@ impl Nucleo {
             if let Some(Fuente::Nodo(n)) = e.fuente {
                 self.estado.nodos_reclamados.remove(&n);
             }
+        }
+        // Los pueblos desaparecen con su madre (Doc 4.2.2); sus carros, que la tienen por origen, se pierden en la cascada de comercio.
+        for p in &a.economia.pueblos {
+            self.estado.nodos_reclamados.remove(&p.nodo);
         }
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.estado.generaciones.subir(id);
@@ -358,7 +376,7 @@ impl Nucleo {
                 let (r, ev) = self
                     .con_exterior(id, t, |eco, x| {
                         let mut ev = vec![];
-                        (eco.solicitar_ascenso(t, x.reglas, x, cupo, &[], &mut ev), ev)
+                        (eco.solicitar_ascenso(t, x.reglas, x, cupo, &mut ev), ev)
                     })
                     .expect("la plaza existe y hay mundo");
                 if let Err(bloqueos) = r {

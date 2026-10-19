@@ -11,6 +11,8 @@
 //! - [`EstadoComercio`]: el comercio (fases 3B-1 y 3B-2): trueques, órdenes de mercado y mostrador, flota de caravanas que viajan por el mapa
 //!   (plan, peajes, reparto automático, red de caminos), mercado de mercenarios, reputación entre Facciones y sus plazos como eventos de prioridad 6 y 9 (`Carga::Comercio`, `Carga::Reputacion`); las reglas puras son el
 //!   crate `comercio`. Las órdenes están en `Comando` (códigos 21-40) y el cierre por ruina o conquista, en `Nucleo`.
+//! - Pueblos extractores (fase 3C): obra de mapa, extracción contra un almacén local y carro de acarreo hacia la plaza madre; las reglas
+//!   puras son `asentamiento::pueblos` y `comercio::acarreo`, y las órdenes (códigos 45-48), en `Nucleo`.
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;

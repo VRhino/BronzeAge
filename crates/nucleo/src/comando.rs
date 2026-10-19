@@ -121,6 +121,18 @@ pub enum Comando {
     FijarResidencia { ejercito: u64, campamento: Option<u32> },
     /// Añade al almacén personal de una columna residente. Solo administración.
     DarAlmacenPersonal { ejercito: u64, recurso: Recurso, cantidad: Mil },
+    // ── Pueblos extractores y obras de mapa (Economia_Construccion §14, Doc 4.2.2). Las puede dar la administración o el propietario de alguna
+    //    columna de la Facción de la plaza madre (el Gobernador o el Maestro de Obras presentes vendrán del sistema de héroes y residentes); la
+    //    entrega de materiales, el propietario de una columna de esa Facción a la puerta de la obra. ──
+    /// Marca la obra de un pueblo extractor sobre un nodo de la zona de la plaza madre: queda «pendiente de materiales» y ocupa cupo. `creadas`
+    /// lleva el id del pueblo.
+    MarcarPueblo { asentamiento: u64, nodo: u32 },
+    /// La columna entrega a la obra pendiente los materiales que lleva (su carro y sus caravanas adjuntas), con la columna a la puerta.
+    EntregarMateriales { ejercito: u64, pueblo: u64 },
+    /// Cancela la obra o destruye el pueblo a mano: libera el cupo y no recupera nada (ni lo entregado ni lo almacenado).
+    DestruirPueblo { pueblo: u64 },
+    /// Compra en la plaza madre un carro de acarreo nuevo (carro + buey) para un pueblo que se quedó sin él.
+    ReponerCarro { pueblo: u64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -411,6 +423,24 @@ impl Peticion {
                 w.u8(recurso_a_u8(*recurso));
                 w.i64(*cantidad);
             }
+            Comando::MarcarPueblo { asentamiento, nodo } => {
+                w.u8(45);
+                w.u64(*asentamiento);
+                w.u32(*nodo);
+            }
+            Comando::EntregarMateriales { ejercito, pueblo } => {
+                w.u8(46);
+                w.u64(*ejercito);
+                w.u64(*pueblo);
+            }
+            Comando::DestruirPueblo { pueblo } => {
+                w.u8(47);
+                w.u64(*pueblo);
+            }
+            Comando::ReponerCarro { pueblo } => {
+                w.u8(48);
+                w.u64(*pueblo);
+            }
         }
         w.0
     }
@@ -480,6 +510,10 @@ impl Peticion {
                 campamento: r.opt_u64()?.map(u32::try_from).transpose().map_err(|_| ErrorFormato("campamento fuera de rango"))?,
             },
             44 => Comando::DarAlmacenPersonal { ejercito: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            45 => Comando::MarcarPueblo { asentamiento: r.u64()?, nodo: r.u32()? },
+            46 => Comando::EntregarMateriales { ejercito: r.u64()?, pueblo: r.u64()? },
+            47 => Comando::DestruirPueblo { pueblo: r.u64()? },
+            48 => Comando::ReponerCarro { pueblo: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -514,6 +548,7 @@ pub mod rechazos {
     pub const OBRA_TOPE_ALMACENES: &str = "obra.tope_almacenes";
     pub const OBRA_TOPE_VIVIENDAS: &str = "obra.tope_viviendas";
     pub const OBRA_NIVEL_INSUFICIENTE: &str = "obra.nivel_insuficiente";
+    pub const OBRA_SOLO_POR_PUEBLO: &str = "obra.solo_por_pueblo";
     pub const OBRA_TOPE_TRANSFORMACION: &str = "obra.tope_transformacion";
     pub const OBRA_GRAN_FUNDICION: &str = "obra.gran_fundicion";
     pub const OBRA_COLA_LLENA: &str = "obra.cola_llena";
@@ -597,6 +632,22 @@ pub mod rechazos {
     pub const ENTREGA_NO_DEBE: &str = "entrega.no_debe";
     pub const ENTREGA_FUERA_DE_LA_PUERTA: &str = "entrega.fuera_de_la_puerta";
     pub const CANTIDAD_NO_POSITIVA: &str = "cantidad.no_positiva";
+    // Pueblos extractores y obras de mapa (`ErrorPueblo` y lo que el núcleo comprueba sobre el mapa).
+    pub const PUEBLO_DESCONOCIDO: &str = "pueblo.desconocido";
+    pub const PUEBLO_NODO_DESCONOCIDO: &str = "pueblo.nodo_desconocido";
+    /// El nodo es de ganado (el Corral es de la ciudad) o el tipo no va por pueblo.
+    pub const PUEBLO_NODO_NO_EXTRAIBLE: &str = "pueblo.nodo_no_extraible";
+    pub const PUEBLO_NODO_OCUPADO: &str = "pueblo.nodo_ocupado";
+    pub const PUEBLO_FUERA_DE_LA_ZONA: &str = "pueblo.fuera_de_la_zona";
+    pub const PUEBLO_TECNOLOGIA_FALTANTE: &str = "pueblo.tecnologia_faltante";
+    pub const PUEBLO_NIVEL_INSUFICIENTE: &str = "pueblo.nivel_insuficiente";
+    pub const PUEBLO_SIN_CUPO: &str = "pueblo.sin_cupo";
+    pub const PUEBLO_NO_ESTA_PENDIENTE: &str = "pueblo.no_esta_pendiente";
+    pub const PUEBLO_NADA_QUE_ENTREGAR: &str = "pueblo.nada_que_entregar";
+    pub const PUEBLO_FACCION_AJENA: &str = "pueblo.faccion_ajena";
+    pub const PUEBLO_FUERA_DE_LA_PUERTA: &str = "pueblo.fuera_de_la_puerta";
+    pub const PUEBLO_NO_ESTA_ACTIVO: &str = "pueblo.no_esta_activo";
+    pub const PUEBLO_YA_TIENE_CARRO: &str = "pueblo.ya_tiene_carro";
     // Mercado de los campamentos de mercenarios (`ErrorMercenarios`).
     pub const CAMPAMENTO_DESCONOCIDO: &str = "campamento.desconocido";
     pub const CAMPAMENTO_FUERA_DE_LA_PUERTA: &str = "campamento.fuera_de_la_puerta";
@@ -695,6 +746,10 @@ mod pruebas {
             Comando::FijarResidencia { ejercito: 2, campamento: Some(7) },
             Comando::FijarResidencia { ejercito: 2, campamento: None },
             Comando::DarAlmacenPersonal { ejercito: 2, recurso: Recurso::Oro, cantidad: 9 },
+            Comando::MarcarPueblo { asentamiento: 3, nodo: 70_001 },
+            Comando::EntregarMateriales { ejercito: 2, pueblo: 9 },
+            Comando::DestruirPueblo { pueblo: 9 },
+            Comando::ReponerCarro { pueblo: 9 },
         ];
         for c in comandos {
             let p = Peticion { actor: "ana".into(), admin: true, peticion_id: "y".into(), version_esperada: None, comando: c };

@@ -316,7 +316,7 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert_eq!(codigo(&orden(&mut n, "a1", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::CentroUrbano })), rechazos::OBRA_TIPO_NO_MANUAL);
     assert_eq!(codigo(&orden(&mut n, "a2", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Palacio })), rechazos::OBRA_NIVEL_INSUFICIENTE);
     assert_eq!(codigo(&orden(&mut n, "a3", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Maravilla })), rechazos::OBRA_ERA_INSUFICIENTE);
-    assert_eq!(codigo(&orden(&mut n, "a4", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::MinaCobre })), rechazos::OBRA_SIN_SITIO, "las minas van por pueblo extractor");
+    assert_eq!(codigo(&orden(&mut n, "a4", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::MinaCobre })), rechazos::OBRA_SOLO_POR_PUEBLO, "las minas van por pueblo extractor");
     assert_eq!(codigo(&orden(&mut n, "u1", Comando::MejorarEdificio { asentamiento: id, edificio: 9_999 })), rechazos::EDIFICIO_DESCONOCIDO);
     assert_eq!(codigo(&orden(&mut n, "u2", Comando::MejorarEdificio { asentamiento: id, edificio: g })), rechazos::OBRA_NO_MEJORABLE, "aún no está activo");
 

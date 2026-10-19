@@ -36,6 +36,12 @@ impl Tipo {
         matches!(self, Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro | Tipo::Corral)
     }
 
+    /// Los extractores que solo se explotan con un pueblo extractor (Doc 4.2.2): los minerales y la Cantera. La primera Cantera de una
+    /// plaza es la excepción (directa); el Corral, la Leñera y la Granja nunca van por pueblo.
+    pub fn es_de_pueblo(self) -> bool {
+        matches!(self, Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro)
+    }
+
     /// Edificios que piden mano de obra de pesants (`trabajadoresRequeridosTotal`, §5.1).
     pub fn usa_pesants(self) -> bool {
         self.es_extractor() || matches!(self, Tipo::Granja | Tipo::Lenera)
@@ -162,7 +168,7 @@ fn f(v: &Value, k: &str) -> Option<f64> {
     v.get(k).and_then(Value::as_f64)
 }
 
-fn costo(v: Option<&Value>) -> Costo {
+pub(crate) fn costo(v: Option<&Value>) -> Costo {
     v.and_then(Value::as_object)
         .map(|o| o.iter().map(|(k, x)| (Recurso::desde_nombre(k).unwrap_or_else(|| panic!("recurso «{k}»")), mil(x.as_f64().expect("cantidad")))).collect())
         .unwrap_or_default()

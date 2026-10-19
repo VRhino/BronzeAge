@@ -45,10 +45,11 @@ pub struct Mano {
 }
 
 /// `ratioManoObra`: `min(1, pesants / trabajadoresRequeridosTotal)` (1 si no se pide nadie), y lo mismo con los artesanos.
-/// No hay asignación por edificio: es una demanda agregada. Un extractor con el nodo agotado sigue contando.
-pub fn mano_de_obra(cat: &Catalogo, edificios: &[Edificio], pesants_enteros: i64, artesanos_enteros: i64) -> Mano {
+/// No hay asignación por edificio: es una demanda agregada. Un extractor con el nodo agotado sigue contando. `pueblos` son los pesants que
+/// piden los pueblos extractores activos de la plaza (no tienen población propia: trabajan los de la madre).
+pub fn mano_de_obra(cat: &Catalogo, edificios: &[Edificio], pesants_enteros: i64, artesanos_enteros: i64, pueblos: Mil) -> Mano {
     let activos = edificios.iter().filter(|e| e.activo());
-    let requeridos_pesants: Mil = activos.clone().filter(|e| e.tipo.usa_pesants()).map(|e| cat.tipo(e.tipo).trabajadores).sum();
+    let requeridos_pesants: Mil = activos.clone().filter(|e| e.tipo.usa_pesants()).map(|e| cat.tipo(e.tipo).trabajadores).sum::<Mil>() + pueblos;
     let requeridos_artesanos: Mil =
         activos.filter(|e| e.tipo.es_taller()).map(|e| cat.tipo(e.tipo).nivel(e.nivel_interno).map_or(0, |n| n.trabajadores)).sum();
     let ratio = |habitantes: i64, requeridos: Mil| if requeridos <= 0 { UNO } else { razon(habitantes * 1000, requeridos).min(UNO) };
@@ -214,21 +215,21 @@ mod pruebas {
         let cat = Reglas::cargar().catalogo;
         // Granja (4) + Leñera (4) + Cantera (4) piden 12 pesants; con 6 el ratio es 0,5.
         let e = vec![activo(1, Tipo::Granja), activo(2, Tipo::Lenera), activo(3, Tipo::Cantera), activo(4, Tipo::Vivienda)];
-        let m = mano_de_obra(&cat, &e, 6, 0);
+        let m = mano_de_obra(&cat, &e, 6, 0, 0);
         assert_eq!((m.pesants, m.artesanos, m.requeridos_pesants), (500_000, UNO, 12_000));
-        assert_eq!(mano_de_obra(&cat, &e, 20, 0).pesants, UNO, "con pesants de sobra el ratio no pasa de 1");
-        assert_eq!(disponibles_para_reclutar(&mano_de_obra(&cat, &e, 20, 0), 20, 0), (8, 0), "los que sobran son el pool de reclutamiento");
+        assert_eq!(mano_de_obra(&cat, &e, 20, 0, 0).pesants, UNO, "con pesants de sobra el ratio no pasa de 1");
+        assert_eq!(disponibles_para_reclutar(&mano_de_obra(&cat, &e, 20, 0, 0), 20, 0), (8, 0), "los que sobran son el pool de reclutamiento");
         // Un taller pide artesanos según su nivel interno.
         let t = vec![activo(1, Tipo::Fundicion)];
-        assert_eq!(mano_de_obra(&cat, &t, 0, 2).artesanos, 500_000, "2 de los 4 que pide la Fundición de nivel 1");
-        assert_eq!(mano_de_obra(&cat, &[], 0, 0).pesants, UNO);
+        assert_eq!(mano_de_obra(&cat, &t, 0, 2, 0).artesanos, 500_000, "2 de los 4 que pide la Fundición de nivel 1");
+        assert_eq!(mano_de_obra(&cat, &[], 0, 0, 0).pesants, UNO);
     }
 
     #[test]
     fn la_granja_produce_60_de_trigo_a_plena_mano_de_obra_y_el_edicto_la_sube() {
         let cat = Reglas::cargar().catalogo;
         let (mut a, mut e, mut w) = (Almacen::nuevo(400_000), vec![activo(1, Tipo::Granja)], Mundo::default());
-        let m = mano_de_obra(&cat, &e, 20, 0);
+        let m = mano_de_obra(&cat, &e, 20, 0, 0);
         let p = extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
         assert_eq!((a.cantidad(Recurso::Trigo), p), (60_000, vec![(Recurso::Trigo, 60_000)]));
         let c = Contexto { factor_trigo: 1_500_000, fertilidad: 500_000, ..ctx(&[], &[]) };
@@ -244,7 +245,7 @@ mod pruebas {
         let mut cantera = activo(1, Tipo::Cantera);
         cantera.fuente = Some(Fuente::Nodo(7));
         let mut e = vec![cantera];
-        let m = mano_de_obra(&cat, &e, 10, 0);
+        let m = mano_de_obra(&cat, &e, 10, 0, 0);
         a.poner(Recurso::Piedra, 395_000);
         extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
         assert_eq!(a.cantidad(Recurso::Piedra), 400_000);
@@ -266,7 +267,7 @@ mod pruebas {
         let mut cantera = activo(1, Tipo::Cantera);
         cantera.fuente = Some(Fuente::Nodo(1));
         let mut e = vec![cantera];
-        let m = mano_de_obra(&cat, &e, 10, 0);
+        let m = mano_de_obra(&cat, &e, 10, 0, 0);
         let c = Contexto { factor_tecnologia: &|r| if r == Recurso::Piedra { 1_500_000 } else { UNO }, ..ctx(&[], &[]) };
         extraer_y_cultivar(&cat, &mut e, &mut a, &m, &c, &mut w);
         assert_eq!(a.cantidad(Recurso::Piedra), 12_000, "pide 15 con canteria pero el nodo solo tiene 12");
@@ -283,7 +284,7 @@ mod pruebas {
         l.fuente = Some(Fuente::Parcela(3));
         let mut e = vec![l, activo(2, Tipo::Lenera)];
         e[1].fuente = Some(Fuente::Parcela(99));
-        let m = mano_de_obra(&cat, &e, 8, 0);
+        let m = mano_de_obra(&cat, &e, 8, 0, 0);
         extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
         assert_eq!(a.cantidad(Recurso::Madera), 4_000, "5 × 0,8 de la primera; la segunda no tiene parcela");
     }
@@ -293,7 +294,7 @@ mod pruebas {
         let cat = Reglas::cargar().catalogo;
         let mut a = Almacen::nuevo(400_000);
         let mut e = vec![activo(1, Tipo::Fundicion)];
-        let m = mano_de_obra(&cat, &e, 0, 4);
+        let m = mano_de_obra(&cat, &e, 0, 4, 0);
         a.poner(Recurso::Cobre, 6_000);
         let c = ctx(&[], &[]);
         let h = recetas(&cat, &mut e, &mut a, &m, &c, &[0; 29]);
@@ -318,7 +319,7 @@ mod pruebas {
         let mut a = Almacen::nuevo(400_000);
         a.poner(Recurso::Cobre, 100_000);
         let mut e = vec![activo(1, Tipo::Fundicion)];
-        let m = mano_de_obra(&cat, &e, 0, 2);
+        let m = mano_de_obra(&cat, &e, 0, 2, 0);
         recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; 29]);
         assert_eq!(a.cantidad(Recurso::LingoteCobre), 2_500, "ratio 0,5 de los 5 del techo");
         let antes = a.cantidad(Recurso::Cobre);
@@ -333,7 +334,7 @@ mod pruebas {
         let mut f = activo(1, Tipo::Fundicion);
         f.nivel_interno = 2;
         let mut e = vec![f];
-        let m = mano_de_obra(&cat, &e, 0, 8);
+        let m = mano_de_obra(&cat, &e, 0, 8, 0);
         a.poner(Recurso::Estano, 100_000);
         recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; 29]);
         assert_eq!(a.cantidad(Recurso::LingoteEstano), 0, "sin aleacion_bronce no funde estaño");
@@ -359,7 +360,7 @@ mod pruebas {
         let mut g2 = activo(2, Tipo::Granja);
         g2.nivel_interno = 2;
         let e = vec![activo(1, Tipo::Granja), g2, Edificio::nuevo(3, Tipo::Granja, Estado::EnCola)];
-        let m = mano_de_obra(&cat, &e, 20, 0);
+        let m = mano_de_obra(&cat, &e, 20, 0, 0);
         assert_eq!(produccion_trigo_por_minuto(&cat, &e, &m, UNO, UNO), 150_000, "60 + 90; la que está en cola no cuenta");
     }
 }

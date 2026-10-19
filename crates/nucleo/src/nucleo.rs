@@ -43,6 +43,7 @@ mod construccion;
 mod flota;
 mod mercado;
 mod mercenarios;
+mod pueblos;
 mod viaje;
 mod zonas;
 
@@ -748,6 +749,11 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::ComprarEnCampamento { .. } | Comando::RepostarEnCampamento { .. } | Comando::FijarResidencia { .. } | Comando::DarAlmacenPersonal { .. } => match self.ejecutar_mercenarios(t, p) {
+                Ok(Some(creada)) => creadas.push(creada),
+                Ok(None) => {}
+                Err(r) => return r,
+            },
+            Comando::MarcarPueblo { .. } | Comando::EntregarMateriales { .. } | Comando::DestruirPueblo { .. } | Comando::ReponerCarro { .. } => match self.ejecutar_pueblos(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,

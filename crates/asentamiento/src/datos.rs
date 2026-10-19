@@ -143,6 +143,8 @@ pub struct Reglas {
     pub construccion: crate::catalogo::ReglasConstruccion,
     pub mantenimiento: crate::mantenimiento::ReglasMantenimiento,
     pub nivel: crate::nivel::ReglasNivel,
+    /// `PUEBLOS_EXTRACTORES`: los pueblos extractores y sus obras de mapa (Doc 4.2.2).
+    pub pueblos: crate::pueblos::ReglasPueblos,
     /// `FUNDACION.materialesIniciales`: lo que trae una plaza recién fundada.
     pub materiales_iniciales: Vec<(Recurso, Mil)>,
     /// `FUNDACION.viviendasIniciales`.
@@ -226,6 +228,7 @@ impl Reglas {
             construccion: crate::catalogo::ReglasConstruccion::de(b),
             mantenimiento: crate::mantenimiento::ReglasMantenimiento::de(&b("MANTENIMIENTO")),
             nivel: crate::nivel::ReglasNivel::de(&b("NIVEL_ASENTAMIENTO"), &b("ASCENSO_ASENTAMIENTO"), &b("CUPO_NIVEL_ASENTAMIENTO")),
+            pueblos: crate::pueblos::ReglasPueblos::de(&b("PUEBLOS_EXTRACTORES")),
         }
     }
 }

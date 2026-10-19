@@ -1235,15 +1235,15 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..4], b"BAN6");
+    assert_eq!(&bytes[..4], b"BAN7");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
-    // Un formato anterior (BAN5) se rechaza con su motivo, y uno ajeno también.
+    // Un formato anterior (BAN6) se rechaza con su motivo, y uno ajeno también.
     let mut viejo = bytes.clone();
-    viejo[3] = b'5';
-    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN5 no debe admitirse") };
-    assert!(e.to_string().contains("BAN5"), "{e}");
+    viejo[3] = b'6';
+    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN6 no debe admitirse") };
+    assert!(e.to_string().contains("BAN6"), "{e}");
     assert!(Estado::deserializar(b"XXXX", &reglas, "h").is_err());
     // Cada campo del comercio cambia el hash (y ninguno coincide con otro cambio).
     type Cambio = (&'static str, Box<dyn Fn(&mut nucleo::EstadoComercio)>);
