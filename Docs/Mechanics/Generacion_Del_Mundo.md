@@ -844,6 +844,8 @@ Evento `alijo.abierto { heroeId, alijoId, oro }`.
 
 ## 13. Campamentos de bandidos (`engine/bandidos.ts`)
 
+> **Implementado en Rust (2026-10-19, fase 4A-2), solo la parte de decisión:** `crates/combate::bandidos` (nivel al azar, plaza que recibe campamento, campamentos que tocan al anillo, punto del anillo con una validación que pone el mapa, acoso a una caravana, ataque de una columna, botín con rendimientos decrecientes y reaparición). El sitio (el bosque no reclamado más cercano, a ≥ 10 del borde de la zona) y los eventos de aparición son del núcleo. El punto del anillo se sortea en el cuadrado que lo rodea (enteros) y no por ángulo y radio; ver DUDA (5) en `Combate.md`.
+
 > **Además, en la reconstrucción** (decidido el 2026-10-17: el generador regional es la referencia): el artefacto trae un campamento de bandidos de nivel 2-3 sin plaza dueña y un alijo lejano **por cada veta** de estaño y oro (Doc 1.9c), colocados por el generador, no por estos eventos. Lo de abajo describe solo los dos orígenes del motor TypeScript (por asentamiento y anillo de cada campamento de mercenarios).
 
 **No hay ninguno al crear el mundo** (`campamentosBandidos = []`): aparecen por un evento programado al fin del plazo de cada plaza, y solo mientras existan asentamientos o campamentos de mercenarios que los atraigan. Los dos orígenes los evalúa `avanzarSpawnBandidos` cada tick (paso 8, consume el generador de la partida):
@@ -1174,18 +1176,20 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
     "soloExperienciaDesde": 14
   },
   "anillo": {
-    "radioMin": 150,
-    "radioMax": 250,
+    "radioMin": 30,
+    "radioMax": 50,
     "residentesPorBandido": 2,
     "minimo": 1,
     "maximo": 6,
     "reaparicionMinutos": 10
   },
-  "radioAtaqueCaravana": 40,
+  "radioAtaqueCaravana": 7,
   "respawnMinutos": 60
 }
 ```
 <!-- /parametros -->
+
+> **2026-10-19 (fase 4A-2):** este bloque lleva ya los valores **calibrados** de `Calibracion_Distancias_Definicion` §4.3 (anillo de los campamentos de mercenarios 30-50 en vez de 150-250; `radioAtaqueCaravana` 7 en vez de 40), que el motor TypeScript no tenía; el crate `combate` lo lee tal cual.
 
 ## 15. Invariantes
 

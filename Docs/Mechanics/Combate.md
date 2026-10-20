@@ -27,6 +27,10 @@ El motor común es `resolverCombate` (§4), salvo caravana y campamento, que com
 
 > **Decisiones del autor del 2026-10-19 (sistema 4)** que ya están aplicadas en este documento: **el héroe suma 15** al poder de su bando (§3.3, `MILITAR.poderPorHeroe`), **las murallas son una fase propia** posterior al sistema militar (recinto 0 hasta entonces, §6), **la caravana aparcada en una plaza conquistada se destruye** (§8; el código de la fase 3B-2 se corrigió con su prueba), **el equipo de asedio no tiene efecto** en el combate con números y `umbralCapturaCaravana` sale del bloque `MILITAR` (§7.1). La resolución en Rust es la fase 4A-2; las cifras de los bloques ya son las vigentes.
 
+> **Implementado en Rust (2026-10-19, fase 4A-2):** crate `crates/combate`, reglas puras sin depender del núcleo (enteros, `Rng` determinista, cifras de los bloques de este documento, de `Batalla_Unity_Ciclo`, de `OCUPACION` en `Murallas.md` y de `CAMPAMENTOS_BANDIDOS` en `Generacion_Del_Mundo.md`). Módulos: `resolucion` (§3.3-§4: poder, tirada, `resolver_combate`, bajas, chatarra), `seleccion` (§3.1), `botin` (§5), `asedio` (§6), `caravana` (§7.1), `bandidos` (§7.2 y Generacion §13), `pueblo` (§7.3), `avanzada` (§7.4), `conquista` (§8-§10) y, para el ciclo de Unity, `ciclo`, `resultado` y `union` (ver `Batalla_Unity_Ciclo.md`). **Tiradas del generador, por escrito:** 2 en `resolver_combate` (encuentro, asedio con defensores, saqueo de un pueblo y ataque a una avanzada operativa con defensores; el atacante primero), 1 en el asalto a una caravana, en el ataque a un campamento y en el acoso de los bandidos, 1 en `nivel_al_azar`, 2 por intento en `punto_del_anillo`, y 0 en las ramas sin combate (plaza protegida, sin defensores con soldados, sin atacantes, ruinas). Las cifras que el TypeScript escribía en el código están ahora en `COMBATE_NUMERICO` y `AVANZADA` (§12).
+>
+> // DUDA (decidido al implementar, a revisar por el autor): (1) el saqueo de un pueblo aplica la `ventajaAguante` (×1,25) **además** de la ventaja de 1,05 de todo defensor (×1,3125); (2) sin Unity, un asalto de caravana que gana el atacante quita los **últimos** carros de la lista, y un aguante sin carros que quedar elimina la caravana pero devuelve el 30 % salvado para que llegue «con los carreteros»; (3) «sin defensores» en un asedio, un saqueo o una avanzada es no tener **escuadras con soldados**: un héroe sin tropa suma 15 al poder cuando hay combate, pero no basta para abrirlo; (4) para atacar un campamento de bandidos basta un bando que combata (el TypeScript pedía soldados); (5) el punto del anillo de bandidos se sortea en el cuadrado que rodea el anillo y se descarta fuera de él (enteros, sin senos ni cosenos): es uniforme en el área y no en el radio; (6) unas ruinas de ciudadela no tienen invulnerabilidad y atacarlas no las destruye; (7) los bloques de bandidos de `Generacion_Del_Mundo.md` llevan ya los valores calibrados (`radioAtaqueCaravana` 7, anillo 30-50).
+
 Un comando, un objetivo: `ejercito` · `caravana` · `campamento` (de bandidos) · `asentamiento` · `pueblo` · `avanzada`. **Los choques nacen de un encuentro exacto** (dos planes que se acercan a ≤ `radioEncuentro`, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): el servidor ofrece atacar en ese instante y el jugador decide; llegar nunca ataca.
 
 1. El héroe debe estar **sano** (`exigirSano`) y en una columna.
@@ -202,7 +206,36 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
 ```
 <!-- /parametros -->
 
-Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (3) está en `LOGISTICA` ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md)), `radioProteccion` (10) en `MERCENARIOS`, `BATALLA.capacidad.asedio` (15) en [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) y el radio de ataque de los bandidos (`radioAtaqueCaravana`) en `CAMPAMENTOS_BANDIDOS` de [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md). La `ventajaDefensor` del aguante (B) es ×1,25 (placeholder, todavía sin bloque).
+Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (3) está en `LOGISTICA` ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md)), `radioProteccion` (10) en `MERCENARIOS`, `BATALLA.capacidad.asedio` (15) en [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) y el radio de ataque de los bandidos (`radioAtaqueCaravana`) en `CAMPAMENTOS_BANDIDOS` de [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md). La `ventajaDefensor` del aguante (B) es `COMBATE_NUMERICO.ventajaAguante` (×1,25, placeholder).
+
+<!-- parametros:COMBATE_NUMERICO -->
+```json
+{
+  "bajasGanadorBase": 0.05,
+  "bajasGanadorPorRatio": 0.15,
+  "bajasPerdedorBase": 0.3,
+  "bajasPerdedorPorRatio": 0.4,
+  "bajasFijasGanador": 0.05,
+  "bajasFijasPerdedor": 0.25,
+  "ventajaAguante": 1.25,
+  "fraccionCargaPerdidaAguante": 0.7,
+  "fraccionCarrosPerdidos": 0.5,
+  "fraccionProtegidaPueblo": 0.5
+}
+```
+<!-- /parametros -->
+
+`COMBATE_NUMERICO` reúne las cifras que el motor TypeScript tenía escritas en el código (añadido el 2026-10-19 al implementarlo en Rust, fase 4A-2): las bajas de `resolverCombate` (§4: `bajasGanador = base + porRatio · ratio`, `bajasPerdedor = base + porRatio · (1 − ratio)`), las **fijas** de un combate contra una cifra (caravana y campamento: `bajasFijasGanador` al bando que gana y `bajasFijasPerdedor` al que pierde, escolta incluida), la ventaja del aguante (§7.1), el 70 % de carga que pierde un aguante, la fracción de carros que pierde un asalto de caravana (la mitad, hacia arriba) y la parte del almacén de un pueblo que no se puede saquear (§7.3).
+
+<!-- parametros:AVANZADA -->
+```json
+{
+  "invulnerabilidadMinutos": 1440
+}
+```
+<!-- /parametros -->
+
+`AVANZADA.invulnerabilidadMinutos` es el día de invulnerabilidad de un fuerte en ruinas (§7.4, Doc 5.17).
 
 <!-- parametros:HEROE -->
 ```json

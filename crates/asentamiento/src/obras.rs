@@ -49,7 +49,7 @@ impl Asentamiento {
 
     /// El Almacén suma 300 a cada recurso y el Granero suma a la capacidad del trigo; se aplica al entrar en servicio
     /// (`signo` = 1) y se quita al dejar de estarlo (`signo` = −1). Una mejora de Granero suma el delta entre niveles.
-    pub(crate) fn aplicar_capacidad(&mut self, r: &Reglas, tipo: Tipo, nivel: u8, signo: i64) {
+    pub fn aplicar_capacidad(&mut self, r: &Reglas, tipo: Tipo, nivel: u8, signo: i64) {
         let def = r.catalogo.tipo(tipo);
         match tipo {
             Tipo::Almacen => self.almacen.ampliar_todos(signo * def.capacidad_por_recurso),

@@ -22,19 +22,19 @@ pub fn texto_de_parametros() -> String {
     [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS].iter().map(|d| texto_de_parametros_de(d)).collect()
 }
 
-pub(crate) fn bloque(doc: &str, nombre: &str) -> Value {
+pub fn bloque(doc: &str, nombre: &str) -> Value {
     bloque_de(doc, nombre).unwrap_or_else(|e| panic!("{e}"))
 }
 
-fn num(v: &Value, ruta: &str) -> f64 {
+pub fn num(v: &Value, ruta: &str) -> f64 {
     ruta.split('.').try_fold(v, |v, k| v.get(k)).and_then(Value::as_f64).unwrap_or_else(|| panic!("falta el número «{ruta}»"))
 }
 
-fn entero(v: &Value, ruta: &str) -> i64 {
+pub fn entero(v: &Value, ruta: &str) -> i64 {
     num(v, ruta) as i64
 }
 
-fn lista(v: &Value, ruta: &str) -> Vec<f64> {
+pub fn lista(v: &Value, ruta: &str) -> Vec<f64> {
     ruta.split('.').try_fold(v, |v, k| v.get(k)).and_then(Value::as_array).unwrap_or_else(|| panic!("falta la lista «{ruta}»")).iter().map(|x| x.as_f64().expect("número")).collect()
 }
 
