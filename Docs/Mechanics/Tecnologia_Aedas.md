@@ -132,6 +132,8 @@ Un campamento no adopta nada: **desbloquea** cada tecnología —al instante y g
 
 Las de arranque están siempre. «Vivas» son todas las Facciones que conservan algún asentamiento (no se distingue a los bots).
 
+> **Implementado en Rust (2026-10-20, fase 4B-1), provisional:** `militar::datos::ReglasTecnologias` lee las claves del bloque `TECNOLOGIAS` (las que existen y las `deArranque`). Mientras no exista este sistema, la administración da tecnologías a una Facción con `FijarTecnologias` (solo ids que existan); toda Facción tiene las de arranque. El campamento desbloquea una tecnología si es de arranque o si la tienen adoptada al menos `porcentajeFacciones` de las Facciones vivas; el plazo de `horasTrasLaPrimera` (que pide `primeros`) no existe aún. Esas mismas tecnologías son las que miran los requisitos de edificios, recetas, pueblos y tropas.
+
 ## 6. Aedas itinerantes
 
 ### 6.1 Qué saben

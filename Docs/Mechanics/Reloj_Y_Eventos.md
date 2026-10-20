@@ -6,6 +6,8 @@ Cómo avanza el mundo en la reconstrucción: sin tick. Este documento **sustituy
 - **Canon:** Doc 5.15.1 (qué bloquea una batalla), Doc 1.10.6 (presencia).
 - **Lo que no cambia:** las reglas de juego. Cambia *cuándo* se evalúan.
 
+> **Implementado en Rust (2026-10-20, fase 4B-1), en el reloj de los héroes.** La prioridad **1** ya la usa la salida del mundo de quien se desconectó (`Carga::SalidaDelMundo`, `PRIO_SALIDA`, §7). El hambre de la guarnición **no** es un evento: es parte del paso de minuto de la plaza (prioridad 2), que ya existe, justo después de la población (la población come antes): una plaza sin residentes no hace nada y no hay evento por héroe ni por escuadra. Los fines de herido, de petición de unión y de formación siguen sin evento (el herido se lee al mirar).
+
 ## 1. Tiempo
 
 - **Reloj de mundo** = reloj de pared × factor (×1 en producción; ×N para pruebas y para el batch). No hay tick y no existe la unidad «minuto de mundo» como paso: sigue habiendo plazos declarados en minutos, horas y días, y se miden en instantes.

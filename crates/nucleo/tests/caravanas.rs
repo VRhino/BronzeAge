@@ -172,6 +172,12 @@ impl Escenario {
     fn caravana_de(&self, id: u64) -> &comercio::caravana::Caravana {
         self.n.caravana(id).expect("existe la caravana")
     }
+    /// Un héroe de la cuenta, residente en el campamento `casa`, que va en la columna `columna` (la administración lo coloca: aún no hay `salirAlMundo`).
+    fn heroe_en_columna(&mut self, cuenta: &str, casa: u32, columna: u64) -> u64 {
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: casa, controlador: militar::heroe::Controlador::Humano }).creadas[0];
+        self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: militar::presencia::Ubicacion::Columna(columna) });
+        h
+    }
 }
 
 fn fundar(n: &mut Nucleo, t: Instante, nombre: &str, dueno: &str, faccion: u32, p: Punto) -> u64 {
@@ -781,23 +787,26 @@ fn el_mercado_de_mercenarios_vende_reposta_y_se_repone_solo_si_algo_cambio() {
     let t = e.n.ahora();
     let puerta = campamento(&m.0, 0);
     let col = e.n.crear_ejercito(t, "merc", "ana", 1, Punto::new(puerta.x + 1_000, puerta.y), 500, 100_000, 350_000).unwrap();
-    let lejos = e.n.crear_ejercito(t, "lejos", "ana", 1, Punto::new(puerta.x + 10_000, puerta.y), 500, 100_000, 350_000).unwrap();
+    let lejos = e.n.crear_ejercito(t, "lejos", "lejana", 1, Punto::new(puerta.x + 10_000, puerta.y), 500, 100_000, 350_000).unwrap();
+    // «ana» vive en el campamento 1: en el 0 es una visitante con su columna a la puerta. La «lejana» va en una columna lejos.
+    let ana = e.heroe_en_columna("ana", 1, col);
+    let lejana = e.heroe_en_columna("lejana", 1, lejos);
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 300_000 });
-    let comprar = |ejercito, campamento, recurso, cantidad| Comando::ComprarEnCampamento { ejercito, campamento, recurso, cantidad };
+    let comprar = |heroe, campamento, recurso, cantidad| Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad };
     // Rechazos, cada uno con su código.
-    assert_eq!(e.rechazada("ana", comprar(col, 9_999, Cobre, 10_000)), rechazos::CAMPAMENTO_DESCONOCIDO);
-    assert_eq!(e.rechazada("ana", comprar(lejos, 0, Cobre, 10_000)), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
-    assert_eq!(e.rechazada("beto", comprar(col, 0, Cobre, 10_000)), rechazos::NO_AUTORIZADO);
-    assert_eq!(e.rechazada("ana", comprar(99, 0, Cobre, 10_000)), rechazos::EJERCITO_DESCONOCIDO);
-    assert_eq!(e.rechazada("ana", comprar(col, 0, Trigo, 10_000)), rechazos::MERCENARIOS_TRIGO_NO_VA_AL_CARRO, "el trigo nunca va al carro");
-    assert_eq!(e.rechazada("ana", comprar(col, 0, Oro, 10_000)), rechazos::MERCENARIOS_CANTIDAD_INVALIDA);
-    assert_eq!(e.rechazada("ana", comprar(col, 0, Cobre, 900)), rechazos::MERCENARIOS_CANTIDAD_INVALIDA, "menos de una unidad");
-    assert_eq!(e.rechazada("ana", Comando::RepostarEnCampamento { ejercito: lejos, campamento: 0 }), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
+    assert_eq!(e.rechazada("ana", comprar(ana, 9_999, Cobre, 10_000)), rechazos::CAMPAMENTO_DESCONOCIDO);
+    assert_eq!(e.rechazada("lejana", comprar(lejana, 0, Cobre, 10_000)), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
+    assert_eq!(e.rechazada("beto", comprar(ana, 0, Cobre, 10_000)), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("ana", comprar(99, 0, Cobre, 10_000)), rechazos::HEROE_DESCONOCIDO);
+    assert_eq!(e.rechazada("ana", comprar(ana, 0, Trigo, 10_000)), rechazos::MERCENARIOS_TRIGO_NO_VA_AL_CARRO, "el trigo nunca va al carro");
+    assert_eq!(e.rechazada("ana", comprar(ana, 0, Oro, 10_000)), rechazos::MERCENARIOS_CANTIDAD_INVALIDA);
+    assert_eq!(e.rechazada("ana", comprar(ana, 0, Cobre, 900)), rechazos::MERCENARIOS_CANTIDAD_INVALIDA, "menos de una unidad");
+    assert_eq!(e.rechazada("lejana", Comando::RepostarEnCampamento { heroe: lejana, campamento: 0 }), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
     assert!(e.n.mercenarios().pulso.is_none(), "un rechazo no deja rastro");
 
     // Visitante: paga con el oro de su carro, el oro cobrado se destruye y lo comprado va al carro; sin cupo diario.
     let (oro0, cobre0) = (mundo_de(&e.n, Oro), mundo_de(&e.n, Cobre));
-    e.ok("ana", comprar(col, 0, Cobre, 10_900));
+    e.ok("ana", comprar(ana, 0, Cobre, 10_900));
     let h = hechos(&e.n, "mercenarios.comprado");
     let cobrado = dato(&h[0], "oro");
     assert_eq!((h.len(), dato(&h[0], "cantidad"), dato(&h[0], "residente")), (1, 10_000, 0), "solo se sirven unidades enteras");
@@ -811,26 +820,27 @@ fn el_mercado_de_mercenarios_vende_reposta_y_se_repone_solo_si_algo_cambio() {
 
     // Repostar: gratis, hasta el tope de la columna, sin gastar el stock.
     let stock0 = e.n.stock_de_campamento(0).unwrap();
-    e.ok("ana", Comando::RepostarEnCampamento { ejercito: col, campamento: 0 });
+    e.ok("ana", Comando::RepostarEnCampamento { heroe: ana, campamento: 0 });
     let r = hechos(&e.n, "mercenarios.repostado");
     assert_eq!((r.len(), dato(&r[0], "cantidad")), (1, 250_000));
     assert_eq!(e.n.estado().ejercitos[&col].viveres.valor_en(e.n.ahora()), 350_000);
-    assert_eq!(e.rechazada("ana", Comando::RepostarEnCampamento { ejercito: col, campamento: 0 }), rechazos::MERCENARIOS_VIVERES_LLENOS);
+    assert_eq!(e.rechazada("ana", Comando::RepostarEnCampamento { heroe: ana, campamento: 0 }), rechazos::MERCENARIOS_VIVERES_LLENOS);
     assert_eq!(e.n.stock_de_campamento(0).unwrap(), stock0);
 
     // Residente: paga de su almacén personal, compra con cupo diario (madera 60) y el cupo se renueva al día siguiente.
-    assert_eq!(e.rechazada("ana", Comando::FijarResidencia { ejercito: col, campamento: Some(0) }), rechazos::NO_AUTORIZADO);
-    assert_eq!(e.rechazada("admin", Comando::FijarResidencia { ejercito: col, campamento: Some(9_999) }), rechazos::CAMPAMENTO_DESCONOCIDO);
-    assert_eq!(e.rechazada("admin", Comando::DarAlmacenPersonal { ejercito: col, recurso: Oro, cantidad: 1_000 }), rechazos::CAMPAMENTO_DESCONOCIDO, "sin residencia no hay almacén personal");
-    e.ok("admin", Comando::FijarResidencia { ejercito: col, campamento: Some(0) });
-    e.ok("admin", Comando::DarAlmacenPersonal { ejercito: col, recurso: Oro, cantidad: 500_000 });
-    e.ok("ana", comprar(col, 0, Madera, 50_000));
-    let personal = &e.n.mercenarios().personal[&col];
-    assert_eq!(personal[&Madera], 50_000);
+    let residir = |residencia| Comando::FijarResidencia { heroe: ana, residencia };
+    assert_eq!(e.rechazada("ana", residir(Some(militar::heroe::Residencia::Campamento(0)))), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("admin", residir(Some(militar::heroe::Residencia::Campamento(9_999)))), rechazos::CAMPAMENTO_DESCONOCIDO);
+    e.ok("admin", residir(None));
+    assert_eq!(e.rechazada("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Oro, cantidad: 1_000 }), rechazos::HEROE_SIN_RESIDENCIA, "sin residencia no hay almacén personal");
+    e.ok("admin", residir(Some(militar::heroe::Residencia::Campamento(0))));
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Oro, cantidad: 500_000 });
+    e.ok("ana", comprar(ana, 0, Madera, 50_000));
+    assert_eq!(e.n.heroe(ana).unwrap().almacen_personal[&Madera], 50_000);
     assert!(!e.n.suministro(col).contains_key(&Madera), "lo del residente no va al carro");
-    e.ok("ana", comprar(col, 0, Madera, 20_000));
-    assert_eq!(e.n.mercenarios().personal[&col][&Madera], 60_000, "el cupo diario de madera son 60: solo caben 10 de los 20");
-    assert_eq!(e.rechazada("ana", comprar(col, 0, Madera, 1_000)), rechazos::MERCENARIOS_CUPO_AGOTADO);
+    e.ok("ana", comprar(ana, 0, Madera, 20_000));
+    assert_eq!(e.n.heroe(ana).unwrap().almacen_personal[&Madera], 60_000, "el cupo diario de madera son 60: solo caben 10 de los 20");
+    assert_eq!(e.rechazada("ana", comprar(ana, 0, Madera, 1_000)), rechazos::MERCENARIOS_CUPO_AGOTADO);
     // La madera es una pila: bajó de 300 y toca reponerla en la próxima fase de 3 horas.
     let cada = 3 * HORA;
     let proxima = (e.n.ahora() / cada + 1) * cada;
@@ -859,8 +869,8 @@ fn el_mercado_de_mercenarios_vende_reposta_y_se_repone_solo_si_algo_cambio() {
     e.avanzar(3 * DIA);
     assert_eq!(hechos(&e.n, "mercenarios.repuesto").len(), 1);
     // Al día siguiente el cupo vuelve a 60.
-    e.ok("ana", comprar(col, 0, Madera, 40_000));
-    assert_eq!(e.n.mercenarios().personal[&col][&Madera], 100_000);
+    e.ok("ana", comprar(ana, 0, Madera, 40_000));
+    assert_eq!(e.n.heroe(ana).unwrap().almacen_personal[&Madera], 100_000);
 }
 
 // ───────────────────────────── 7. Adjuntas, aparcadas y columnas ─────────────────────────────
@@ -1104,6 +1114,7 @@ fn guion(e: &mut Escenario, m: &M, avanzar: &dyn Fn(&mut Escenario, Instante)) {
         e.n.crear_ejercito(base, "merc", "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 100_000, 350_000).unwrap()
     };
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 50_000 });
+    let ana = e.heroe_en_columna("ana", 1, col);
     let c1 = e.caravana("ana", a, 1, false);
     let _c2 = e.caravana("beto", b, 1, false);
     // El cooldown de creación es de 10 minutos por plaza.
@@ -1111,13 +1122,13 @@ fn guion(e: &mut Escenario, m: &M, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let c3 = e.caravana("ana", a, 2, true);
     e.trueque(&[(Cobre, 60_000)], &[(Estano, 30_000)]);
     avanzar(e, base + 20 * MIN);
-    e.ok_en(base + 20 * MIN, "ana", Comando::ComprarEnCampamento { ejercito: col, campamento: 0, recurso: Cobre, cantidad: 5_000 });
+    e.ok_en(base + 20 * MIN, "ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Cobre, cantidad: 5_000 });
     e.ok_en(base + 20 * MIN, "ana", Comando::PrepararCaravana { caravana: c3, destino: b, carga: vec![(Cobre, 20_000)], salir_en: Some(base + HORA) });
     avanzar(e, base + 30 * MIN);
     e.ok_en(base + 30 * MIN, "ana", Comando::CancelarCaravana { caravana: c3 });
     e.ok_en(base + 30 * MIN, "ana", Comando::PrepararCaravana { caravana: c3, destino: b, carga: vec![(Cobre, 15_000)], salir_en: None });
     avanzar(e, base + 90 * MIN);
-    e.ok_en(base + 90 * MIN, "ana", Comando::RepostarEnCampamento { ejercito: col, campamento: 0 });
+    e.ok_en(base + 90 * MIN, "ana", Comando::RepostarEnCampamento { heroe: ana, campamento: 0 });
     avanzar(e, base + 5 * HORA);
     avanzar(e, base + 7 * HORA);
     e.n.avanzar_hasta(base + 7 * HORA);

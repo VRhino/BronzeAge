@@ -1215,9 +1215,6 @@ fn estado_con_comercio() -> Estado {
     s.comercio.mercenarios.mercado.contadores.insert(Cobre, 7_000);
     s.comercio.mercenarios.mercado.repone_en = 123;
     s.comercio.mercenarios.stock.insert(2, comercio::mercenarios::StockCampamento::nuevo(&cr));
-    s.comercio.mercenarios.cupos.insert(3, comercio::mercenarios::CupoDiario { dia: 4, comprado: [(Madera, 9)].into_iter().collect() });
-    s.comercio.mercenarios.residencias.insert(3, 2);
-    s.comercio.mercenarios.personal.insert(3, [(Oro, 8)].into_iter().collect());
     s.comercio.mercenarios.pulso = Some(999);
     s.comercio.flota[0].costes = vec![7, 8];
     s.comercio.flota[0].pausada_desde = Some(55);
@@ -1234,16 +1231,16 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..4], b"BAN8");
+    assert_eq!(&bytes[..4], b"BAN9");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
-    // El formato anterior (BAN7) se rechaza con su motivo, y uno más viejo o ajeno también.
+    // El formato anterior (BAN8) se rechaza con su motivo, y uno más viejo o ajeno también.
     let mut viejo = bytes.clone();
+    viejo[3] = b'8';
+    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN8 no debe admitirse") };
+    assert!(e.to_string().contains("BAN8"), "{e}");
     viejo[3] = b'7';
-    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN7 no debe admitirse") };
-    assert!(e.to_string().contains("BAN7"), "{e}");
-    viejo[3] = b'6';
     assert!(Estado::deserializar(&viejo, &reglas, "h").is_err());
     assert!(Estado::deserializar(b"XXXX", &reglas, "h").is_err());
     // Cada campo del comercio cambia el hash (y ninguno coincide con otro cambio).
@@ -1315,9 +1312,6 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         ("mercenarios.contadores", Box::new(|c| *c.mercenarios.mercado.contadores.get_mut(&Cobre).unwrap() += 1)),
         ("mercenarios.repone_en", Box::new(|c| c.mercenarios.mercado.repone_en += 1)),
         ("mercenarios.stock", Box::new(|c| *c.mercenarios.stock.get_mut(&2).unwrap().stock.get_mut(&Cobre).unwrap() += 1)),
-        ("mercenarios.cupo", Box::new(|c| c.mercenarios.cupos.get_mut(&3).unwrap().dia += 1)),
-        ("mercenarios.residencia", Box::new(|c| *c.mercenarios.residencias.get_mut(&3).unwrap() = 3)),
-        ("mercenarios.personal", Box::new(|c| *c.mercenarios.personal.get_mut(&3).unwrap().get_mut(&Oro).unwrap() += 1)),
         ("mercenarios.pulso", Box::new(|c| c.mercenarios.pulso = None)),
         ("siguiente_acuerdo", Box::new(|c| c.siguiente_acuerdo += 1)),
         ("siguiente_orden", Box::new(|c| c.siguiente_orden += 1)),
@@ -1340,12 +1334,14 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
 }
 
 #[test]
-fn la_huella_de_las_reglas_incluye_los_bloques_de_comercio() {
+fn la_huella_de_las_reglas_incluye_los_bloques_de_comercio_y_militares() {
     use sha2::{Digest, Sha256};
     let r = Reglas::default();
     let sin_comercio = asentamiento::datos::texto_de_parametros() + &asentamiento::datos::texto_de_parametros_de(nucleo::urbanismo::DOC_TRAZADO);
     let con_comercio = sin_comercio.clone() + &comercio::datos::texto_de_parametros();
-    assert_eq!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_comercio).into()));
+    let con_militar = con_comercio.clone() + &militar::datos::texto_de_parametros();
+    assert_eq!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_militar).into()));
+    assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_comercio).into()), "los bloques militares entran en la huella");
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(sin_comercio).into()));
     // Una foto con otra huella (otras cifras de comercio) se niega.
     let bytes = estado_con_comercio().serializar();

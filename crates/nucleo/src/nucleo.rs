@@ -41,6 +41,7 @@ use std::thread::JoinHandle;
 
 mod construccion;
 mod flota;
+mod heroes;
 mod mercado;
 mod mercenarios;
 mod pueblos;
@@ -393,6 +394,7 @@ impl Nucleo {
             Carga::Minuto => self.minuto_de_plaza(id, t),
             Carga::Comercio { suceso, aplazos } => self.comercio_vence(ev.clave, suceso, aplazos, t),
             Carga::Reputacion(cita) => self.cita_de_reputacion(id, cita, t),
+            Carga::SalidaDelMundo => self.salida_del_mundo(id, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
                 if let Some(g) = gens.get_mut(generador as usize) {
@@ -748,9 +750,34 @@ impl Nucleo {
                 Ok(None) => {}
                 Err(r) => return r,
             },
-            Comando::ComprarEnCampamento { .. } | Comando::RepostarEnCampamento { .. } | Comando::FijarResidencia { .. } | Comando::DarAlmacenPersonal { .. } => match self.ejecutar_mercenarios(t, p) {
-                Ok(Some(creada)) => creadas.push(creada),
-                Ok(None) => {}
+            Comando::ComprarEnCampamento { .. }
+            | Comando::RepostarEnCampamento { .. }
+            | Comando::FijarResidencia { .. }
+            | Comando::DarAlmacenPersonal { .. }
+            | Comando::ReclutarEnCampamento { .. }
+            | Comando::PedirPrestamo { .. }
+            | Comando::ReponerPrestamo { .. } => match self.ejecutar_mercenarios(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::CrearHeroe { .. }
+            | Comando::ReclutarTropa { .. }
+            | Comando::GuardarLoadout { .. }
+            | Comando::BorrarLoadout { .. }
+            | Comando::RepartirPuntos { .. }
+            | Comando::OrdenarEscuadras { .. }
+            | Comando::AsignarGuarnicion { .. }
+            | Comando::RetirarGuarnicion { .. }
+            | Comando::PasarAViveres { .. }
+            | Comando::AsignarEscolta { .. }
+            | Comando::QuitarEscolta { .. }
+            | Comando::Desconectarse { .. }
+            | Comando::Conectarse { .. }
+            | Comando::FijarTecnologias { .. }
+            | Comando::FijarFaccionDeHeroe { .. }
+            | Comando::ColocarHeroe { .. }
+            | Comando::HerirHeroe { .. } => match self.ejecutar_heroes(t, p) {
+                Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
             Comando::MarcarPueblo { .. } | Comando::EntregarMateriales { .. } | Comando::DestruirPueblo { .. } | Comando::ReponerCarro { .. } => match self.ejecutar_pueblos(t, p) {

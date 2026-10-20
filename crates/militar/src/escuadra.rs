@@ -4,7 +4,7 @@
 use crate::catalogo::{Origen, Tropa};
 use crate::datos::Reglas;
 use crate::tipos::{AsentamientoId, BatallaId, CampamentoId, CaravanaId, ColumnaId, EscuadraId, HeroeId};
-use asentamiento::datos::UNO;
+use asentamiento::datos::{por, UNO};
 use base::{Instante, Mil, Ritmo};
 
 /// Moral máxima (100 puntos, en milésimas).
@@ -108,6 +108,17 @@ impl Escuadra {
     pub fn con_racion(&mut self, r: &Reglas, t: Instante, alimentada: bool) {
         let por_minuto = if alimentada { r.militar.regeneracion_moral } else { -r.militar.degradacion_moral };
         self.moral = self.moral.reanclado(t, por_minuto);
+    }
+
+    /// Un paso de hambre de un minuto, tal como lo da la guarnición, que come en el paso de minuto de su plaza: con la ración entera
+    /// (`suministro` = `UNO`) la moral sube `regeneracionMoralPorMinuto`; con una parte `f` de ella (ppm) baja `degradacionMoralSinRacion × (1 − f)`.
+    /// El efecto se anota en `t` y la moral queda quieta hasta el paso siguiente (sin ritmo). No toca nada si la moral no cambia.
+    pub fn paso_de_hambre(&mut self, r: &Reglas, t: Instante, suministro: i64) {
+        let actual = self.moral_en(t);
+        let nueva = if suministro >= UNO { (actual + r.militar.regeneracion_moral).min(MORAL_MAXIMA) } else { (actual - por(r.militar.degradacion_moral, UNO - suministro.max(0))).max(0) };
+        if nueva != actual || self.moral.por_minuto != 0 {
+            self.moral = Ritmo { valor_en_t0: nueva, t0: t, por_minuto: 0, ..self.moral };
+        }
     }
 
     /// Primer instante `>= desde` en que la moral llega a 0 (donde empieza la deserción), si va a llegar.
@@ -231,6 +242,27 @@ mod pruebas {
         assert_eq!(e.moral_en(t + 4 * base::MS_POR_MINUTO), 60_000);
         assert_eq!(e.moral_en(t + 600 * base::MS_POR_MINUTO), 100_000);
         assert_eq!(e.moral_a_cero_en(t), None, "con ración no llega nunca a cero");
+    }
+
+    #[test]
+    fn un_paso_de_hambre_sube_con_la_racion_entera_y_baja_en_proporcion_a_lo_que_falta() {
+        let r = r();
+        let mut e = escuadra(Tropa::Lenadores);
+        e.paso_de_hambre(&r, 60_000, UNO);
+        assert_eq!(e.moral, Ritmo { maximo: Some(MORAL_MAXIMA), minimo: Some(0), ..Ritmo::constante(MORAL_MAXIMA, 0) }, "a moral máxima y con ración no se toca nada");
+        e.paso_de_hambre(&r, 60_000, 0);
+        assert_eq!((e.moral_en(60_000), e.moral.t0), (80_000, 60_000), "sin nada de ración, 20 puntos");
+        e.paso_de_hambre(&r, 120_000, 500_000);
+        assert_eq!(e.moral_en(120_000), 70_000, "con la mitad, la mitad de la pérdida");
+        assert_eq!(e.moral_en(150_000), 70_000, "y quieta hasta el paso siguiente");
+        e.paso_de_hambre(&r, 180_000, UNO);
+        e.paso_de_hambre(&r, 240_000, UNO);
+        assert_eq!(e.moral_en(240_000), 80_000, "con ración entera sube cinco por paso");
+        for k in 0..10 {
+            e.paso_de_hambre(&r, 300_000 + k * 60_000, 0);
+        }
+        assert_eq!(e.moral_en(900_000), 0, "nunca por debajo de cero");
+        assert_eq!(e.desertar(&r, 900_000), 2, "y a cero desertan ceil(30 × 0,05)");
     }
 
     #[test]

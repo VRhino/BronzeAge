@@ -12,7 +12,7 @@
 //!
 //! # Andamiaje de administración (provisional hasta el sistema de héroes)
 //! El oro que lleva el carro de una columna (`DarSuministro`), la residencia y el almacén personal de los sondeos de cupo (`FijarResidencia`,
-//! `DarAlmacenPersonal`) y la Facción de nivel 8 (`FijarNivelFaccion`, nivel 8: cap de fundación 6 y cupo de 3 plazas de nivel 2) salen de la administración. Todo el oro
+//! `DarAlmacenPersonal`, del héroe que va en la columna) y la Facción de nivel 8 (`FijarNivelFaccion`, nivel 8: cap de fundación 6 y cupo de 3 plazas de nivel 2) salen de la administración. Todo el oro
 //! inyectado se suma en `oro_inyectado` y se declara en el informe.
 
 use crate::auditoria::{auditar_cola, Violaciones};
@@ -27,6 +27,8 @@ use base::{Instante, Punto, Rng, MS_POR_MINUTO};
 use comercio::caravana::{Animal, EstadoCaravana, TipoCarro};
 use comercio::red_caminos::Arista;
 use comercio::trueque::EstadoTrueque;
+use militar::heroe::{Controlador, Residencia};
+use militar::presencia::Ubicacion;
 use nucleo::{Comando, Nucleo, Peticion, Resultado};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap};
@@ -90,6 +92,9 @@ pub struct Colocada {
     pub faccion: u32,
     pub pos: Punto,
     pub columna: u64,
+    /// El héroe que va en la columna (sin residencia: visitante en todos los campamentos salvo durante el sondeo del cupo) y su cuenta.
+    pub heroe: u64,
+    pub cuenta: String,
     /// Campamento de mercenarios más cercano (índice del artefacto).
     pub campamento: u32,
 }
@@ -373,9 +378,15 @@ impl Sim<'_> {
             self.admin(t, "DarCaravanaFundacion", Comando::DarCaravanaFundacion { ejercito: columna });
             let r = self.orden(t, &jugador(f), "Fundar", Comando::Fundar { ejercito: columna });
             let Some(&id) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
+            // Su héroe nace en el campamento más cercano y va en la columna; sin residencia, es un visitante de todos los campamentos.
+            let (campamento, cuenta) = (self.campamento_mas_cercano(p), format!("{}-{k}", jugador(f)));
+            let h = self.admin(t, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano });
+            let Some(&heroe) = h.creadas.first().filter(|_| h.aceptada()) else { continue };
+            self.admin(t, "FijarResidencia", Comando::FijarResidencia { heroe, residencia: None });
+            self.admin(t, "ColocarHeroe", Comando::ColocarHeroe { heroe, ubicacion: Ubicacion::Columna(columna) });
             self.facciones[f as usize - 1].push(id);
             self.faccion_de.insert(id, f);
-            let info = Colocada { faccion: f, pos: p, columna, campamento: self.campamento_mas_cercano(p) };
+            let info = Colocada { faccion: f, pos: p, columna, heroe, cuenta, campamento };
             self.pjs.insert(id, Pj { info, vecinas: Vec::new(), mision: None, propuesta: None, obra_pendiente: None, viajes_obra: 0, proxima_obra: 0 });
         }
         // Las vecinas de cada plaza: las más cercanas de las demás, hasta el radio del trueque.
@@ -619,7 +630,7 @@ impl Sim<'_> {
 
     /// Da a la columna el oro del viaje y la manda al campamento. El oro es andamiaje de administración (`DarSuministro`).
     fn empezar(&mut self, t: Instante, id: u64, m: Mision) {
-        let (columna, camp) = (self.pjs[&id].info.columna, self.pjs[&id].info.campamento);
+        let (columna, heroe, camp) = (self.pjs[&id].info.columna, self.pjs[&id].info.heroe, self.pjs[&id].info.campamento);
         let oro = match m.tipo {
             Clase::Pueblo => {
                 let falta = self.falta_del_pueblo(id, m.pueblo.expect("lleva pueblo"));
@@ -639,8 +650,8 @@ impl Sim<'_> {
             }
         }
         if m.tipo == Clase::Cupo {
-            self.admin(t, "FijarResidencia", Comando::FijarResidencia { ejercito: columna, campamento: Some(camp) });
-            let r = self.admin(t, "DarAlmacenPersonal", Comando::DarAlmacenPersonal { ejercito: columna, recurso: Recurso::Oro, cantidad: 400_000 });
+            self.admin(t, "FijarResidencia", Comando::FijarResidencia { heroe, residencia: Some(Residencia::Campamento(camp)) });
+            let r = self.admin(t, "DarAlmacenPersonal", Comando::DarAlmacenPersonal { heroe, recurso: Recurso::Oro, cantidad: 400_000 });
             if r.aceptada() {
                 self.oro_inyectado += 400_000;
             }
@@ -664,7 +675,7 @@ impl Sim<'_> {
     fn terminar(&mut self, t: Instante, id: u64, bien: bool) {
         let Some(p) = self.pjs.get_mut(&id) else { return };
         let Some(m) = p.mision.take() else { return };
-        let columna = p.info.columna;
+        let heroe = p.info.heroe;
         self.misiones.entry(m.tipo.nombre()).or_default().1 += bien as u32;
         if m.tipo == Clase::Pueblo {
             let p = self.pjs.get_mut(&id).expect("existe");
@@ -677,7 +688,7 @@ impl Sim<'_> {
             }
         }
         if m.tipo == Clase::Cupo {
-            self.admin(t, "FijarResidencia", Comando::FijarResidencia { ejercito: columna, campamento: None });
+            self.admin(t, "FijarResidencia", Comando::FijarResidencia { heroe, residencia: None });
         }
     }
 
@@ -686,21 +697,21 @@ impl Sim<'_> {
         if !self.vive(id) {
             return self.terminar(t, id, false);
         }
-        let (columna, camp, faccion, casa) = {
+        let (columna, heroe, camp, faccion, casa) = {
             let i = &self.pjs[&id].info;
-            (i.columna, i.campamento, i.faccion, i.pos)
+            (i.columna, i.heroe, i.campamento, i.faccion, i.pos)
         };
-        let actor = jugador(faccion);
+        let (actor, cuenta) = (jugador(faccion), self.pjs[&id].info.cuenta.clone());
         match (tipo, paso) {
             (_, Paso::Comprar) => {
-                self.orden(t, &actor, "RepostarEnCampamento", Comando::RepostarEnCampamento { ejercito: columna, campamento: camp });
+                self.orden(t, &cuenta, "RepostarEnCampamento", Comando::RepostarEnCampamento { heroe, campamento: camp });
                 let compras: Vec<(Recurso, i64)> = match tipo {
                     Clase::Pueblo => self.falta_del_pueblo(id, pueblo.expect("lleva pueblo")).into_iter().filter(|(r, _)| *r != Recurso::Oro).collect(),
                     Clase::Cupo => vec![(Recurso::Madera, 30_000), (Recurso::Madera, 30_000), (Recurso::Madera, 30_000), (Recurso::Piedra, 6_000), (Recurso::Piedra, 6_000), (Recurso::Piedra, 6_000)],
                     Clase::Minerales => vec![(Recurso::Cobre, 15_000), (Recurso::Estano, 8_000)],
                 };
                 for (recurso, cantidad) in compras {
-                    self.orden(t, &actor, "ComprarEnCampamento", Comando::ComprarEnCampamento { ejercito: columna, campamento: camp, recurso, cantidad });
+                    self.orden(t, &cuenta, "ComprarEnCampamento", Comando::ComprarEnCampamento { heroe, campamento: camp, recurso, cantidad });
                 }
                 match tipo {
                     Clase::Pueblo => {
@@ -792,7 +803,7 @@ impl Sim<'_> {
         e.asentamientos.values().map(|a| a.economia.almacen.cantidad(r)).sum::<i64>()
             + e.ejercitos.values().map(|c| c.suministro.get(&r).copied().unwrap_or(0)).sum::<i64>()
             + e.comercio.flota.iter().map(|c| c.contenido.get(&r).copied().unwrap_or(0)).sum::<i64>()
-            + self.n.mercenarios().personal.values().map(|c| c.get(&r).copied().unwrap_or(0)).sum::<i64>()
+            + self.n.heroes().map(|h| h.almacen_personal.get(&r).copied().unwrap_or(0)).sum::<i64>()
     }
 
     /// Lo que hay de un mineral en el mundo contando lo ya fundido: la Fundición convierte el mineral en lingote sin tecnología (el cobre), y un

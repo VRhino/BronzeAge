@@ -2,6 +2,8 @@
 
 > **Reescrito el 2026-10-13** en lo que cambia con la reconstrucción; el resto es la autorización y la proyección tal como son y pasa al contrato 05. Ver §«Cambios de la reconstrucción» al final.
 
+> **Implementado en Rust (2026-10-20, fase 4B-1), autorización provisional de los héroes.** Cada orden de un héroe la da su `cuenta` (`Peticion.actor`) o la administración; «fuera del mundo» bloquea todo menos `conectarse` (`heroe.fuera_del_mundo`); la presencia que pide `reclutarTropa` es `ubicacion = asentamiento` de esa plaza. Los cargos, la ciudadanía como condición y los vetos son del sistema político; mientras, la cuenta de un héroe ciudadano de la Facción de una plaza **manda en ella** como el propietario de una columna (`manda_en`). Las proyecciones y los canales del héroe son de la fase 4H.
+
 ## 1. Alcance y fuentes
 
 Cubre **quién puede hacer qué** y **qué ve cada uno**: los roles técnicos y las superficies del servidor, el camino de un comando desde la petición hasta el motor, los predicados de pertenencia en los que se apoya la autorización, **la matriz de los 122 comandos**, lo que el servidor proyecta a cada audiencia (administración, jugador, eventos) y cómo se reparte por los canales de tiempo real (foto + delta).

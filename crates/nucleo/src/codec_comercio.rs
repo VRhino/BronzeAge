@@ -6,9 +6,8 @@
 //! reputación{n u64 · n × (facción u32, valor i64, t0 i64, alianzas u32)} · última caravana{n u64 · n × (plaza u64, instante i64)} ·
 //! red{aristas{n u64 · n × (x0,y0,x1,y1 i64)} · rutas{n u64 · n × (origen u32, destino u32, facción u32, aristas{n u64 · n × arista}, último
 //! lanzamiento i64)}} · reparto{n u64 · n × (plaza u64, instante i64)} · mercenarios{contadores{carga} · repone_en i64 · stock{n u64 · n ×
-//! (campamento u32, carga)} · cupos{n u64 · n × (columna u64, día i64, carga)} · residencias{n u64 · n × (columna u64, campamento u32)} ·
-//! personal{n u64 · n × (columna u64, carga)} · pulso opt_i64}`. El carro (`suministro`) y las caravanas adjuntas de cada columna viajan con
-//! la columna (`estado`).
+//! (campamento u32, carga)} · pulso opt_i64}`. El carro (`suministro`) y las caravanas adjuntas de cada columna viajan con la columna
+//! (`estado`); la residencia, el almacén personal y el cupo diario de cada comprador, con su héroe (`codec_militar`).
 //! Un acuerdo: `id u64 · a u32 · b u32 · líneas_a{n u64 · n × (recurso u8, total i64, entregada i64)} · líneas_b · creado_en i64 ·
 //! aceptado_en opt_i64 · expira_en i64 · estado u8`. Una orden: `id u64 · plaza u32 · tipo u8 · recurso u8 · cantidad i64 · cumplida i64 ·
 //! precio i64 · creado_en i64 · expira_en i64 · estado u8`. Una carga: `n u64 · n × (recurso u8, cantidad i64)`. Una caravana: `id u64 ·
@@ -22,7 +21,7 @@ use crate::codec_economia::{recurso_a_u8, recurso_de_u8};
 use crate::estado_comercio::{EstadoComercio, EstadoMercenarios};
 use base::{Plan, Vertice};
 use comercio::caravana::{Animal, Caravana, Carro, Escuadra, EstadoCaravana, TipoCaravana, TipoCarro};
-use comercio::mercenarios::{CupoDiario, MercadoMercenario, StockCampamento};
+use comercio::mercenarios::{MercadoMercenario, StockCampamento};
 use comercio::orden_mercado::{EstadoOrden, LibroOrdenes, OrdenMercado, TipoOrden};
 use comercio::red_caminos::{Arista, RedCaminos, RutaComercial};
 use comercio::reputacion::Reputacion;
@@ -470,7 +469,7 @@ fn red_leer(r: &mut Lector) -> Result<RedCaminos, ErrorFormato> {
 }
 
 fn mercenarios_escribir(w: &mut Escritor, m: &EstadoMercenarios) {
-    let EstadoMercenarios { mercado, stock, cupos, residencias, personal, pulso } = m;
+    let EstadoMercenarios { mercado, stock, pulso } = m;
     let MercadoMercenario { contadores, repone_en } = mercado;
     carga_escribir(w, contadores);
     w.i64(*repone_en);
@@ -478,23 +477,6 @@ fn mercenarios_escribir(w: &mut Escritor, m: &EstadoMercenarios) {
     for (&campamento, s) in stock {
         w.u32(campamento);
         carga_escribir(w, &s.stock);
-    }
-    w.u64(cupos.len() as u64);
-    for (&columna, c) in cupos {
-        let CupoDiario { dia, comprado } = c;
-        w.u64(columna);
-        w.i64(*dia);
-        carga_escribir(w, comprado);
-    }
-    w.u64(residencias.len() as u64);
-    for (&columna, &campamento) in residencias {
-        w.u64(columna);
-        w.u32(campamento);
-    }
-    w.u64(personal.len() as u64);
-    for (&columna, carga) in personal {
-        w.u64(columna);
-        carga_escribir(w, carga);
     }
     w.opt_i64(*pulso);
 }
@@ -504,17 +486,6 @@ fn mercenarios_leer(r: &mut Lector) -> Result<EstadoMercenarios, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         let campamento = r.u32()?;
         m.stock.insert(campamento, StockCampamento { stock: carga_leer(r)? });
-    }
-    for _ in 0..r.cuenta()? {
-        let columna = r.u64()?;
-        m.cupos.insert(columna, CupoDiario { dia: r.i64()?, comprado: carga_leer(r)? });
-    }
-    for _ in 0..r.cuenta()? {
-        m.residencias.insert(r.u64()?, r.u32()?);
-    }
-    for _ in 0..r.cuenta()? {
-        let columna = r.u64()?;
-        m.personal.insert(columna, carga_leer(r)?);
     }
     m.pulso = r.opt_i64()?;
     Ok(m)

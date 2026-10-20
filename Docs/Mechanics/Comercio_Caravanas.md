@@ -46,7 +46,7 @@ peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ru
 > - **Al llegar** vuelca en el almacén de la madre sin comisión ni trueque, **topado por su capacidad** (lo que no cabe se pierde: `acarreo.llega` lleva `perdido`; una plaza con 400 de capacidad por recurso pierde 100 de cada 500), y vuelve vacío desandando el camino (`acarreo.vuelve`). Si la madre ya no existe, el carro se pierde.
 > - **Si se destruye** (batalla, `DestruirPueblo`, ruina de la madre), el pueblo se queda sin carro: acumula hasta llenar el almacén y para. `ReponerCarro` lo compra en la madre (carro + buey) solo si no tiene ninguno.
 > - **Sin ruta por tierra** entre el pueblo y la madre el carro no sale (DUDA).
-> - **Batalla.** Es una caravana normal para `caravana_entra_en_batalla`, `caravana_sale_de_batalla` y `aplicar_perdida_de_carros`, y para la rejilla de encuentros; la resolución (casi siempre B) es del sistema militar. La escolta de residentes de la madre no existe todavía.
+> - **Batalla.** Es una caravana normal para `caravana_entra_en_batalla`, `caravana_sale_de_batalla` y `aplicar_perdida_de_carros`, y para la rejilla de encuentros; la resolución (casi siempre B) es del sistema militar. La escolta cedida por héroes residentes existe desde la fase 4B-1 (§5.5); la del carro de acarreo, sin probar.
 
 > **Batch de comercio (2026-10-19).** `batch comercio [--plazas 160] [--dias 30] [--semilla 42] [--decisiones crates/batch/decisiones/comercio.json]` corre el núcleo real con 146-160 plazas de Facciones de cuatro y un «jugador» mínimo (Mercado, caravana, trueques por doble coincidencia, pueblos de Cantera con materiales comprados a los mercenarios) y deja `batch/salida/comercio/informe.html`. Resultados de la primera corrida: los invariantes del comercio se cumplen (0 violaciones) y la corrida es determinista; lo medido que merece decisión (peaje y repescas, acarreo contra un almacén lleno, comisión de bienes sin precio, reputación que se borra en 1,74 días, comercio que se apaga sin sumideros) está en `Docs/Mecanicas a balancear.md` §43-§46 y en las decisiones C1-C6 del informe.
 
@@ -403,6 +403,8 @@ caravana **adjunta** (`cargarCaravanaAdjunta`), la de una **aparcada** y `capaci
 <!-- /parametros -->
 
 ### 5.5 Escolta cedida (`asignarEscolta`, `quitarEscolta`, y dentro de `prepararCaravana`)
+
+> **Implementado en Rust (2026-10-20, fase 4B-1).** `AsignarEscolta { caravana, heroe, escuadras }` (61) y `QuitarEscolta { caravana, heroe, escuadras }` (62) usan `comercio::caravana::{seleccionar_escolta, asignar_escolta, quitar_escolta}` con las escuadras reales del héroe (`Contenedor::Escolta(caravana)`), el cupo de `Nucleo::cupos_de_flota` y la autorización del héroe (su cuenta o la administración). Las escuadras vuelven al campamento al llegar la caravana a casa (`Llegada::Casa`), al cancelar la preparación, al perderse (ruina o todos sus carros) y al retirarlas su héroe. **Provisional:** ceder la escolta dentro de `prepararCaravana` no existe (se cede antes con `AsignarEscolta`); la baja de soldados de una escolta derrotada será del combate (4D).
 
 - **Seleccionar** (`seleccionarEscoltaCaravana`): el héroe **reside en el origen** (su campamento está ahí) y cada escuadrón es **suyo**, está **en su campamento** (`contenedor.tipo == 'campamento'`),
   **no** en la guarnición y no está aniquilado.

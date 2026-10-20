@@ -5,12 +5,12 @@
 
 use base::Instante;
 use comercio::caravana::{Caravana, TipoCaravana};
-use comercio::mercenarios::{CupoDiario, MercadoMercenario, StockCampamento};
+use comercio::mercenarios::{MercadoMercenario, StockCampamento};
 use comercio::orden_mercado::LibroOrdenes;
 use comercio::red_caminos::RedCaminos;
 use comercio::reputacion::Reputacion;
 use comercio::trueque::AcuerdoTrueque;
-use comercio::{AcuerdoId, CaravanaId, Carga as Mercancia, OrdenId};
+use comercio::{AcuerdoId, CaravanaId, OrdenId};
 use std::collections::BTreeMap;
 
 /// Los ids de comercio (trueques, órdenes, caravanas) y las Facciones comparten con los ejércitos y las plazas la tabla de generaciones
@@ -55,29 +55,21 @@ pub fn es_entidad_caravana(entidad: u64) -> bool {
 }
 
 /// El mercado de los campamentos de mercenarios (Comercio_Caravanas §9, §2.5). Los campamentos son los del artefacto de mundo (por su índice);
-/// solo se guarda el stock de los que ya se tocaron: el que falta tiene el inicial.
-///
-/// Lo provisional (hasta que existan los héroes, su almacén personal y la residencia): la columna hace de héroe. Una columna **reside** en un
-/// campamento si la administración lo fijó (`FijarResidencia`), con un almacén personal propio que también llena la administración.
+/// solo se guarda el stock de los que ya se tocaron: el que falta tiene el inicial. La residencia, el almacén personal y el cupo diario de cada
+/// comprador son de su héroe (`estado_militar`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EstadoMercenarios {
     /// Lo comerciado entre Facciones desde la última reposición y cuándo toca la siguiente (global).
     pub mercado: MercadoMercenario,
     /// Stock de los campamentos tocados (índice del artefacto).
     pub stock: BTreeMap<u32, StockCampamento>,
-    /// Lo comprado hoy por cada columna residente, por bien con cupo (madera y piedra).
-    pub cupos: BTreeMap<u64, CupoDiario>,
-    /// Columna → campamento donde reside (provisional).
-    pub residencias: BTreeMap<u64, u32>,
-    /// Almacén personal de cada columna residente (provisional; capacidad `ALMACEN_PERSONAL`).
-    pub personal: BTreeMap<u64, Mercancia>,
     /// Instante del evento de reposición pendiente, si lo hay: sin él no se programa otro.
     pub pulso: Option<Instante>,
 }
 
 impl Default for EstadoMercenarios {
     fn default() -> Self {
-        Self { mercado: MercadoMercenario { contadores: BTreeMap::new(), repone_en: 0 }, stock: BTreeMap::new(), cupos: BTreeMap::new(), residencias: BTreeMap::new(), personal: BTreeMap::new(), pulso: None }
+        Self { mercado: MercadoMercenario { contadores: BTreeMap::new(), repone_en: 0 }, stock: BTreeMap::new(), pulso: None }
     }
 }
 

@@ -35,7 +35,7 @@ use comercio::trueque::{podar, AcuerdoTrueque, ErrorTrueque, Vencimiento};
 use comercio::{total, Carga as Mercancia, Lado};
 
 /// Capacidad del carro de una columna (`LOGISTICA.capacidadCarroPorJugador`: 500).
-// DUDA: un solo carro por columna hasta que existan los héroes (`participantes × capacidadCarroPorJugador`); la capacidad total de la columna, con
+// DUDA: un solo carro por columna hasta las columnas con participantes (4B-2, `participantes × capacidadCarroPorJugador`); la capacidad total de la columna, con
 // las caravanas adjuntas y «Carga Ampliada», es `Nucleo::capacidad_de_carga`.
 pub(super) const CAPACIDAD_CARRO: Mil = 500_000;
 /// Radio de la puerta de una plaza (`MOVIMIENTO.radioPuerta`).
@@ -463,7 +463,7 @@ impl Nucleo {
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let cr = self.estado.reglas.economia.comercio.clone();
         let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
-        // DUDA: el Líder de la columna es quien la dirige (aún sin héroes): el propietario de la columna; la administración manda en todas.
+        // DUDA: el Líder de la columna es quien la dirige (hasta las columnas con participantes, 4B-2): el propietario de la columna; la administración manda en todas.
         let (es_lider, pos_columna, faccion_columna) = (p.admin || e.propietario == p.actor, e.posicion_en(t), e.faccion);
         let o = self.estado.comercio.libro.buscar(orden).ok_or_else(|| rechazo(rechazos::ORDEN_DESCONOCIDA, format!("orden-{orden}")))?;
         let (plaza_id, recurso) = (o.asentamiento as u64, o.recurso);

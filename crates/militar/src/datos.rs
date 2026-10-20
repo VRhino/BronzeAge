@@ -8,6 +8,7 @@
 
 use crate::catalogo::Catalogo;
 use asentamiento::datos::{bloque_de, mil, ppm, texto_de_parametros_de};
+use asentamiento::Tipo;
 use base::{Mil, MS_POR_MINUTO};
 use serde_json::Value;
 
@@ -16,10 +17,11 @@ pub const MOVIMIENTO: &str = include_str!("../../../Docs/Mechanics/Movimiento_Ej
 pub const COMBATE: &str = include_str!("../../../Docs/Mechanics/Combate.md");
 pub const PRESENCIA: &str = include_str!("../../../Docs/Mechanics/Presencia_Y_Convocatoria.md");
 pub const CAMPAMENTOS: &str = include_str!("../../../Docs/Mechanics/Campamentos_Mercenarios.md");
+pub const TECNOLOGIA: &str = include_str!("../../../Docs/Mechanics/Tecnologia_Aedas.md");
 
 /// Los bloques de parámetros de los documentos, para la identidad de las reglas (hash del núcleo).
 pub fn texto_de_parametros() -> String {
-    [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS].iter().map(|d| texto_de_parametros_de(d)).collect()
+    [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, TECNOLOGIA].iter().map(|d| texto_de_parametros_de(d)).collect()
 }
 
 pub fn bloque(doc: &str, nombre: &str) -> Value {
@@ -154,6 +156,20 @@ pub struct ReglasMercenarios {
     pub valor_equipo_en_oro: Mil,
     pub poblacion_por_vivienda: i64,
     pub poblacion_por_hora: i64,
+    /// Edificios militares entre los que la posición elige el de cada campamento (`edificiosMilitares`, en ese orden).
+    pub edificios_militares: Vec<Tipo>,
+    /// Viviendas de un campamento (las de `edificiosFijos`).
+    pub viviendas: usize,
+    /// Parte de las Facciones vivas que debe tener adoptada una tecnología para que el campamento la desbloquee (ppm).
+    pub porcentaje_facciones: i64,
+}
+
+/// Las tecnologías del juego (el bloque `TECNOLOGIAS`): hasta el sistema 6 solo interesa cuáles existen y cuáles tiene toda Facción desde que
+/// nace.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasTecnologias {
+    pub todas: Vec<String>,
+    pub de_arranque: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -170,6 +186,7 @@ pub struct Reglas {
     pub militar: ReglasMilitar,
     pub presencia: ReglasPresencia,
     pub mercenarios: ReglasMercenarios,
+    pub tecnologias: ReglasTecnologias,
 }
 
 impl Reglas {
@@ -225,9 +242,22 @@ impl Reglas {
                 valor_equipo_en_oro: mil(num(&me, "valorEquipoEnOro")),
                 poblacion_por_vivienda: entero(&me, "poblacionPorVivienda"),
                 poblacion_por_hora: entero(&me, "poblacionPorHora"),
+                edificios_militares: nombres(&me, "edificiosMilitares").iter().map(|n| Tipo::desde_nombre(n).unwrap_or_else(|| panic!("edificio «{n}» desconocido"))).collect(),
+                viviendas: nombres(&me, "edificiosFijos").iter().filter(|n| *n == "vivienda").count(),
+                porcentaje_facciones: ppm(num(&me, "tecnologia.porcentajeFacciones")),
+            },
+            tecnologias: {
+                let t = bloque(TECNOLOGIA, "TECNOLOGIAS");
+                let todas = t.as_object().expect("TECNOLOGIAS es un objeto");
+                ReglasTecnologias { todas: todas.keys().cloned().collect(), de_arranque: todas.iter().filter(|(_, v)| v["deArranque"].as_bool() == Some(true)).map(|(k, _)| k.clone()).collect() }
             },
         }
     }
+}
+
+/// Una lista de textos del bloque.
+fn nombres(v: &Value, ruta: &str) -> Vec<String> {
+    v.get(ruta).and_then(Value::as_array).unwrap_or_else(|| panic!("falta la lista «{ruta}»")).iter().map(|x| x.as_str().expect("texto").to_owned()).collect()
 }
 
 #[cfg(test)]
@@ -252,7 +282,6 @@ mod pruebas {
     #[test]
     fn los_bloques_repetidos_entre_documentos_coinciden() {
         const NIEBLA: &str = include_str!("../../../Docs/Mechanics/Niebla_De_Guerra.md");
-        const TECNOLOGIA: &str = include_str!("../../../Docs/Mechanics/Tecnologia_Aedas.md");
         const BATALLA: &str = include_str!("../../../Docs/Mechanics/Batalla_Unity_Ciclo.md");
         let docs = [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, NIEBLA, TECNOLOGIA, BATALLA, include_str!("../../../Docs/Mechanics/Reloj_Y_Eventos.md")];
         let todos: Vec<_> = docs.iter().map(|d| bloques_de(d)).collect();
@@ -303,6 +332,18 @@ mod pruebas {
         let m = Reglas::cargar().mercenarios;
         assert_eq!((m.recargo, m.descuento_sin_asentamientos, m.nivel_edificios), (1_500_000, 600_000, 3));
         assert_eq!((m.valor_equipo_en_oro, m.poblacion_por_vivienda, m.poblacion_por_hora), (8_000, 10, 10));
+        assert_eq!((m.edificios_militares, m.viviendas, m.porcentaje_facciones), (vec![Tipo::Barracon, Tipo::GaleriaDeTiro, Tipo::Caballerizas], 10, 500_000));
+    }
+
+    #[test]
+    fn las_tecnologias_son_las_del_bloque_y_las_de_arranque_las_dos_del_inicio() {
+        let t = Reglas::cargar().tecnologias;
+        let mut arranque = t.de_arranque.clone();
+        arranque.sort();
+        assert_eq!(arranque, vec!["hostigamiento_tribal".to_owned(), "leva_comunal".to_owned()]);
+        assert!(t.todas.len() > 10 && t.todas.contains(&"leva_comunal".to_owned()) && t.todas.contains(&"arco_compuesto".to_owned()));
+        let r = Reglas::cargar();
+        assert!(r.tropas.iter().all(|d| t.todas.contains(&d.tecnologia)), "toda tropa pide una tecnología que existe");
     }
 
     #[test]

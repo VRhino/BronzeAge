@@ -34,10 +34,9 @@ use territorio::Disco;
 // ── Lo que el Exterior de la economía todavía no tiene (cada uno lo dará su sistema) ──
 // placeholder: lo dará la fertilidad de la zona del mundo (`fertilidadZona`).
 const FERTILIDAD: i64 = UNO;
-// placeholder: lo darán las tecnologías de la Facción (sin tecnologías adoptadas, sin bonus).
-pub(super) const SIN_TECNOLOGIA: fn(&str) -> bool = |_| false;
+// Las tecnologías de la Facción las da la administración (`FijarTecnologias`) hasta el sistema de tecnología; sin ellas, sin bonus.
 const SIN_BONUS: fn(Recurso) -> i64 = |_| UNO;
-// placeholder: lo dará el sistema de héroes y residentes (ciudadanos con casa en la plaza).
+// placeholder: lo darán las casas compradas del sistema político (la nobleza las pide; los héroes residentes de la fase 4B-1 no cuentan).
 const CIUDADANOS: u32 = 1;
 // placeholder: lo dará la geografía de la Facción (distancia a su capital) y el sistema de capitales (`es_capital`, Gran Fundición).
 const DISTANCIA_CAPITAL: Mil = 0;
@@ -45,9 +44,8 @@ const ES_CAPITAL: bool = true;
 const FACCION_TIENE_GRAN_FUNDICION: bool = false;
 // placeholder: lo dará el sistema de Eras del servidor.
 const ORDEN_ERA: u32 = 1;
-// placeholder: lo darán las Murallas (recintos), las guarniciones y la ocupación/Aedas (factores extra).
-const RECINTO_NIVEL: u32 = 0;
-const RACION_GUARNICION: Mil = 0;
+// placeholder: lo darán las Murallas (recintos) y la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
+pub(super) const RECINTO_NIVEL: u32 = 0;
 const FACTOR_EXTRA: i64 = UNO;
 
 fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
@@ -148,11 +146,14 @@ impl Nucleo {
 
     /// Saca la plaza del mapa mientras se trabaja con ella (así el resto de plazas se puede leer: las vecinas que recortan su zona),
     /// le monta el `Exterior` y ejecuta `f`. La vuelve a insertar siempre. `None` si no hay plaza o no hay mundo.
-    fn con_exterior<R>(&mut self, id: u64, t: Instante, f: impl FnOnce(&mut asentamiento::asentamiento::Asentamiento, &mut Exterior) -> R) -> Option<R> {
+    pub(super) fn con_exterior<R>(&mut self, id: u64, t: Instante, f: impl FnOnce(&mut asentamiento::asentamiento::Asentamiento, &mut Exterior) -> R) -> Option<R> {
         let geo = self.geografia.as_ref()?;
+        let racion_guarnicion = self.racion_de_guarnicion(id);
         let mut a = self.estado.asentamientos.remove(&id)?;
         let r = {
-            let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, niveles_faccion, .. } = &mut self.estado;
+            let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, niveles_faccion, militar, .. } = &mut self.estado;
+            let faccion = a.faccion;
+            let tiene_tecnologia = |t: &str| militar.tiene_tecnologia(&reglas.economia.militar, faccion, t);
             let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t };
             let mut sitios = SitiosPlaza {
                 mapa: &geo.mapa,
@@ -173,7 +174,7 @@ impl Nucleo {
                 fuentes: &mut fuentes,
                 sitios: &mut sitios,
                 fertilidad: FERTILIDAD,
-                tiene_tecnologia: &SIN_TECNOLOGIA,
+                tiene_tecnologia: &tiene_tecnologia,
                 factor_tecnologia: &SIN_BONUS,
                 nivel_faccion: niveles_faccion.get(&a.faccion).copied().unwrap_or(1),
                 orden_era: ORDEN_ERA,
@@ -182,7 +183,7 @@ impl Nucleo {
                 ciudadanos: CIUDADANOS,
                 distancia_capital: DISTANCIA_CAPITAL,
                 recinto_nivel: RECINTO_NIVEL,
-                racion_guarnicion: RACION_GUARNICION,
+                racion_guarnicion,
                 felicidad_extra: FACTOR_EXTRA,
                 nobleza_extra: FACTOR_EXTRA,
                 recaudacion_extra: FACTOR_EXTRA,
@@ -213,6 +214,8 @@ impl Nucleo {
                 _ => {}
             }
         }
+        // La guarnición come después de la población (Reloj_Y_Eventos §2).
+        self.alimentar_guarnicion(id, t);
         // La zona crece 1 unidad por edificio completado, hasta el techo del nivel (Economia_Construccion §3.1).
         let completados = self.estado.asentamientos.get_mut(&id).map_or(0, |a| a.economia.tomar_completados());
         if completados > 0 {
@@ -249,19 +252,21 @@ impl Nucleo {
         }
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.estado.generaciones.subir(id);
-        // La cascada de comercio: trueques anulados sin penalizar, caravanas perdidas o devueltas y órdenes de mercado borradas. Los residentes
-        // reubicados, el campamento de bandidos y la Facción derrotada (si era su última plaza) son de otros sistemas y se ejecutarán aquí, en
-        // este orden y en este instante.
+        // La cascada de la ruina, en su orden: los residentes se reubican; después, el comercio (trueques anulados sin penalizar, caravanas perdidas
+        // o devueltas y órdenes de mercado borradas). El campamento de bandidos y la Facción derrotada (si era su última plaza) son de otros
+        // sistemas y se ejecutarán aquí, en este orden y en este instante.
+        self.reubicar_residentes(id, a.posicion, t);
         self.cerrar_comercio(id, comercio::ruina::Motivo::Ruina, t);
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
 
-    /// ¿Puede esta petición mandar en la plaza? Hoy: administración o propietario de alguna columna de la Facción de la plaza. DUDA: los
+    /// ¿Puede esta petición mandar en la plaza? Hoy: administración, propietario de alguna columna de la Facción de la plaza o cuenta de algún
+    /// héroe ciudadano de esa Facción (`FijarFaccionDeHeroe`). DUDA: los
     /// cargos (Gobernador, Maestro de Obras, Tesorero), la residencia y la presencia vendrán del sistema de héroes y residentes; hasta
     /// entonces esto es lo más simple y conservador (como `Fundar`, que exige ser el propietario de la columna).
     pub(super) fn manda_en(&self, p: &Peticion, faccion: u32) -> bool {
-        p.admin || self.estado.ejercitos.values().any(|e| e.faccion == faccion && e.propietario == p.actor)
+        p.admin || self.estado.ejercitos.values().any(|e| e.faccion == faccion && e.propietario == p.actor) || self.heroes().any(|h| h.faccion == Some(faccion) && h.cuenta == p.actor)
     }
 
     /// Plazas de la Facción (salvo `id`) que ocupan un puesto en el nivel `objetivo`: lo tienen como nivel actual o van hacia él.

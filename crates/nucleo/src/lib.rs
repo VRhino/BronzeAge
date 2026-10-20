@@ -13,15 +13,21 @@
 //!   crate `comercio`. Las órdenes están en `Comando` (códigos 21-40) y el cierre por ruina o conquista, en `Nucleo`.
 //! - Pueblos extractores (fase 3C): obra de mapa, extracción contra un almacén local y carro de acarreo hacia la plaza madre; las reglas
 //!   puras son `asentamiento::pueblos` y `comercio::acarreo`, y las órdenes (códigos 45-48), en `Nucleo`.
+//! - Héroes y tropa (fase 4B-1): [`EstadoMilitar`] guarda los héroes con sus escuadras, loadouts y almacén personal, los reclutas de los campamentos de
+//!   mercenarios y las tecnologías que da la administración; reclutar en una plaza y en un campamento, la tropa prestada, la guarnición (que come en
+//!   el paso de minuto de su plaza), la escolta de caravanas, conectarse y desconectarse (prioridad 1, `Carga::SalidaDelMundo`). Las reglas puras son el
+//!   crate `militar` y las órdenes (códigos 41-44 y 49-68), `Nucleo`.
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;
 mod codec_ciudad;
 mod codec_comercio;
 mod codec_economia;
+mod codec_militar;
 mod comando;
 mod estado;
 mod estado_comercio;
+mod estado_militar;
 mod generadores;
 mod nucleo;
 pub mod economia;
@@ -31,9 +37,10 @@ pub mod sesiones;
 pub mod urbanismo;
 
 pub use codec::ErrorFormato;
-pub use comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
-pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, SucesoComercio, PRIO_ASENTAMIENTO, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_UMBRAL};
+pub use comando::{rechazos, AccionReloj, Comando, PagarCon, Peticion, Resultado, Respuesta};
+pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, SucesoComercio, PRIO_ASENTAMIENTO, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
+pub use estado_militar::{EstadoMilitar, HeroeNucleo};
 pub use generadores::{Cx, GeneradorDeEventos};
 pub use nucleo::{Ajustes, Arranque, InformeViabilidad, Metricas, Nucleo};
 

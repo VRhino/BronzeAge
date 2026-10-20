@@ -126,7 +126,7 @@ impl Nucleo {
             .filter_map(|&c| self.estado.comercio.caravana(c))
             .map(|c| c.capacidad_efectiva(r, self.estado.asentamientos.get(&(c.origen as u64)).map_or(UNO, |a| self.factores_de(a).capacidad)))
             .sum();
-        // DUDA: un participante por columna hasta que existan los héroes (`participantes × capacidadCarroPorJugador`).
+        // DUDA: un participante por columna hasta las columnas con participantes (4B-2, `participantes × capacidadCarroPorJugador`).
         Some(CAPACIDAD_CARRO + adjuntas)
     }
 
@@ -464,8 +464,8 @@ impl Nucleo {
                 self.retirar_plan(id);
                 self.acarreo_en_casa(t, origen, id);
             }
-            Llegada::Casa { contenido, escolta: _ } => {
-                // DUDA: la escolta vuelve al campamento de su héroe, que aún no existe (Heroe_Y_Tropa).
+            Llegada::Casa { contenido, escolta } => {
+                self.devolver_escolta(&escolta);
                 self.retirar_plan(id);
                 let volcado = self.estado.asentamientos.get_mut(&origen).map_or(0, |a| contenido.iter().map(|(&r, &n)| a.economia.almacen.agregar(r, n)).sum::<Mil>());
                 self.tr.asentamientos.push(origen);
@@ -473,7 +473,10 @@ impl Nucleo {
                 self.emitir_propio(t, "comercio.caravana_en_casa", vec![origen], vec![("caravana", id as i64), ("volcado", volcado), ("perdido", total(&contenido) - volcado)]);
                 self.reparto_de_plaza(origen, t);
             }
-            Llegada::Perdida { .. } => self.perder_caravana(t, id),
+            Llegada::Perdida { escolta, .. } => {
+                self.devolver_escolta(&escolta);
+                self.perder_caravana(t, id);
+            }
         }
     }
 

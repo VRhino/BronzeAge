@@ -285,8 +285,9 @@ impl Nucleo {
         let almacen = &mut asentamientos.get_mut(&origen).expect("existe").economia.almacen;
         let llevaba = comercio.flota[i].contenido.clone();
         let antes: Mercancia = llevaba.keys().map(|&r| (r, almacen.cantidad(r))).collect();
-        comercio.flota[i].cancelar(almacen)?;
+        let escolta = comercio.flota[i].cancelar(almacen)?;
         let devuelto: Mil = llevaba.keys().map(|&r| almacen.cantidad(r) - antes[&r]).sum();
+        self.devolver_escolta(&escolta);
         Ok((devuelto, total(&llevaba) - devuelto))
     }
 
@@ -446,6 +447,7 @@ impl Nucleo {
     pub(super) fn perder_caravana(&mut self, t: Instante, id: u64) {
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let c = self.estado.comercio.flota.remove(i);
+        self.devolver_escolta(&c.escolta);
         self.soltar_de_columnas(id);
         self.retirar_plan(id);
         let origen = c.origen as u64;

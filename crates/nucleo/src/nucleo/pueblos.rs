@@ -20,7 +20,6 @@
 //! guarnición de mineros y el saqueo son del sistema militar.
 
 use super::*;
-use crate::nucleo::construccion::SIN_TECNOLOGIA;
 use crate::nucleo::mercado::{id32, RADIO_PUERTA};
 use asentamiento::catalogo::Tipo;
 use asentamiento::pueblos::{ErrorPueblo, Pueblo};
@@ -70,7 +69,7 @@ impl Nucleo {
         nodos.extend(geo.mapa.minerales_en(a.posicion, a.radio));
         nodos.sort_unstable();
         let libre = |n: &u32| !self.estado.nodos_reclamados.contains_key(n) && self.en_zona(plaza, geo.mapa.nodos[*n as usize].pos);
-        let alcanzable = |t: Tipo| catalogo.tipo(t).tecnologia.as_deref().is_none_or(SIN_TECNOLOGIA);
+        let alcanzable = |t: Tipo| catalogo.tipo(t).tecnologia.as_deref().is_none_or(|tec| self.tiene_tecnologia(a.faccion, tec));
         nodos.into_iter().filter(libre).map(|n| (n, geo.mapa.nodos[n as usize].tipo)).filter(|&(_, t)| alcanzable(t)).collect()
     }
 
@@ -113,8 +112,10 @@ impl Nucleo {
                 let carro = acarreo::coste_reposicion(&self.estado.reglas.economia.comercio.flota);
                 let id = self.estado.siguiente_id;
                 let mut ev = vec![];
+                let faccion = self.estado.asentamientos[asentamiento].faccion;
+                let (militar, reglas) = (&self.estado.militar, &self.estado.reglas.economia.militar);
                 let eco = &mut self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia;
-                eco.iniciar_pueblo(&datos, &SIN_TECNOLOGIA, id, tipo, *nodo, &carro, &mut ev).map_err(de_pueblo)?;
+                eco.iniciar_pueblo(&datos, &|t: &str| militar.tiene_tecnologia(reglas, faccion, t), id, tipo, *nodo, &carro, &mut ev).map_err(de_pueblo)?;
                 self.estado.siguiente_id += 1;
                 self.estado.nodos_reclamados.insert(*nodo, *asentamiento);
                 self.anotar_sucesos(*asentamiento, t, &ev);

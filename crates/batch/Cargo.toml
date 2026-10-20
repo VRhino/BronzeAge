@@ -12,6 +12,7 @@ nucleo = { path = "../nucleo" }
 territorio = { path = "../territorio" }
 asentamiento = { path = "../asentamiento" }
 comercio = { path = "../comercio" }
+militar = { path = "../militar" }
 trazado = { path = "../trazado" }
 informe = { path = "../informe" }
 serde_json = "1"

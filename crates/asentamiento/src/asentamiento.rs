@@ -106,6 +106,17 @@ pub struct Exterior<'a> {
     pub recaudacion_extra: i64,
 }
 
+/// Lo que el reclutamiento de tropa mira de una plaza (ver [`Asentamiento::resumen_de_reclutamiento`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResumenReclutamiento {
+    /// Pesants y artesanos que no hacen falta para producir y toda la nobleza, en enteros y en ese orden.
+    pub disponibles: [i64; 3],
+    /// `factorCostoReclutamiento` de las políticas (ppm; `UNO` si no hay «Leva Forzosa»).
+    pub factor_costo: i64,
+    /// Trigo por minuto que come la población.
+    pub consumo_poblacion: Mil,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Evento {
     EdificioCompletado { id: u32, tipo: Tipo },
@@ -292,6 +303,18 @@ impl Asentamiento {
             res.iter_mut().zip(self.reserva_manual).for_each(|(a, m)| *a += m);
         }
         res
+    }
+
+    /// Lo que reclutar mira de la plaza (Heroe_Y_Tropa §11): el pool de cada clase, el factor de «Leva Forzosa» y lo que come la población.
+    pub fn resumen_de_reclutamiento(&self, r: &Reglas, x: &Exterior) -> ResumenReclutamiento {
+        let (pesants, artesanos, nobleza) = self.poblacion.enteros();
+        let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, pesants, artesanos, self.trabajadores_de_pueblos(r));
+        let (pesants_libres, artesanos_libres) = produccion::disponibles_para_reclutar(&mano, pesants, artesanos);
+        ResumenReclutamiento {
+            disponibles: [pesants_libres, artesanos_libres, nobleza],
+            factor_costo: self.politicas.factor(&r.politicas, "factorCostoReclutamiento"),
+            consumo_poblacion: self.poblacion.consumo_por_minuto(&r.poblacion, &self.entorno_poblacion(r, x)),
+        }
     }
 
     /// Un minuto de mundo. `t` es el instante del fin del minuto. Devuelve lo que pasó, en orden.

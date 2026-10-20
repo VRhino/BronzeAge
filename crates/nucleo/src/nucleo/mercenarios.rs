@@ -1,26 +1,42 @@
-//! El mercado de los campamentos de mercenarios dentro del núcleo (Comercio_Caravanas §9): comprar, repostar gratis y la reposición cada
-//! `cadaHoras` con lo comerciado entre Facciones. Las cuentas son del crate `comercio::mercenarios`; aquí están el estado, la puerta del
+//! Los campamentos de mercenarios dentro del núcleo (Comercio_Caravanas §9, Campamentos_Mercenarios §4-§6): comprar, repostar gratis, reclutar
+//! con oro, la tropa prestada, la residencia del héroe y la reposición cada `cadaHoras` del mercado con lo comerciado entre Facciones. Las
+//! cuentas son de los crates `comercio::mercenarios` (mercado) y `militar::mercenarios` (reclutas y tropa); aquí están el estado, la puerta del
 //! campamento, el reloj de la reposición y el traslado a eventos.
 //!
 //! # La reposición sin coste por campamento ocioso
 //! No hay evento recurrente mientras nada cambie: el mercado nace lleno y solo se programa la reposición (a la fase de siempre,
 //! `creación + k × cadaHoras`) cuando algo la hace falta: se comerció entre Facciones (contadores > 0) o una compra dejó una pila por debajo
 //! de su tope. Tras reponer, si ya no hay nada que reponer, el evento no se vuelve a programar. El stock de un campamento que nadie ha tocado
-//! no se guarda (es el inicial).
+//! no se guarda (es el inicial); lo mismo vale para sus reclutas, que no se escriben nunca por minuto (valor e instante).
+//!
+//! # Los campamentos y los héroes
+//! Quien compra, reposta o recluta es un héroe, que debe estar dentro del campamento o con su columna a la puerta. El residente (el héroe cuya
+//! residencia es ese campamento) paga de su almacén personal y compra con cupo diario; el visitante, con el oro del carro de su columna. El
+//! edificio militar de un campamento sale de su posición (`edificiosMilitares[huella mod 3]`, Generacion_Del_Mundo §11) y sus viviendas,
+//! de `edificiosFijos`: ninguno se guarda.
 //!
 //! # Lo provisional
-//! La columna hace de héroe (hasta el sistema de héroes): su Líder es su propietario, reside en un campamento si la administración lo fijó
-//! (`FijarResidencia`) y su almacén personal (`DarAlmacenPersonal`) es lo que paga y recibe una compra de residente.
+//! Las tecnologías del campamento (Tecnologia_Aedas §5) son las de arranque más las que tienen adoptadas al menos la mitad de las Facciones
+//! vivas (las que la administración ha dado, `FijarTecnologias`); el plazo de 72 h tras la primera no existe hasta el sistema de tecnología. La
+//! escuadra nueva de un héroe con columna a la puerta nace en el campamento (no «se une a la columna») hasta que la columna guarde sus escuadras.
 
 use super::*;
 use crate::estado::SucesoComercio;
 use crate::estado_comercio::entidad_mercenarios;
+use crate::comando::PagarCon;
 use crate::nucleo::mercado::RADIO_PUERTA;
+use asentamiento::datos::UNO;
 use asentamiento::Recurso;
 use comercio::evento::Evento as EventoComercio;
 use comercio::mercenarios::{comprar_residente, comprar_visitante, precio_unitario, ErrorMercenarios, StockCampamento};
 use comercio::precio::{precio_referencia, stock_global};
 use comercio::{de, total, Carga as Mercancia};
+use militar::catalogo::Tropa;
+use militar::escuadra::Contenedor;
+use militar::guarnicion;
+use militar::heroe::Residencia;
+use militar::mercenarios::{self as leva, Campamento, ErrorMercenarios as ErrorLeva, Pedido, Reclutas};
+use militar::presencia::Ubicacion;
 
 fn rechazo_de_mercenarios(e: ErrorMercenarios) -> (&'static str, &'static str) {
     use rechazos::*;
@@ -36,6 +52,24 @@ fn rechazo_de_mercenarios(e: ErrorMercenarios) -> (&'static str, &'static str) {
     }
 }
 
+fn rechazo_de_leva(e: ErrorLeva) -> (&'static str, String) {
+    use rechazos::*;
+    match e {
+        ErrorLeva::NoResides => (MERCENARIOS_NO_RESIDES, "solo se recluta en el campamento donde se reside".into()),
+        ErrorLeva::Lejos => (CAMPAMENTO_FUERA_DE_LA_PUERTA, "hay que estar dentro del campamento o con la columna a su puerta".into()),
+        ErrorLeva::NoDisponible => (MERCENARIOS_TROPA_NO_DISPONIBLE, "el campamento no ofrece esa tropa".into()),
+        ErrorLeva::YaLaTienesFuera(c) => (MERCENARIOS_YA_LA_TIENES_FUERA, format!("ya tienes esa escuadra y no está aquí ({c:?}): solo se repone donde está")),
+        ErrorLeva::AlTope => (MERCENARIOS_AL_TOPE, "la escuadra ya está completa".into()),
+        ErrorLeva::SinReclutas { hacen_falta, hay } => (MERCENARIOS_SIN_RECLUTAS, format!("hacen falta {hacen_falta} reclutas y el campamento tiene {hay}")),
+        ErrorLeva::SinOro => (MERCENARIOS_SIN_ORO, "no hay oro bastante".into()),
+        ErrorLeva::SinTropas => (MERCENARIOS_PRESTAMO_SIN_TROPAS, "un préstamo pide al menos una tropa".into()),
+        ErrorLeva::NoSePresta => (MERCENARIOS_NO_SE_PRESTA, "solo se presta la tropa de leva comunal".into()),
+        ErrorLeva::Repetida => (MERCENARIOS_PRESTAMO_REPETIDA, "una tropa no puede repetirse en el préstamo".into()),
+        ErrorLeva::YaPrestada => (MERCENARIOS_YA_PRESTADA, "esa tropa ya está prestada".into()),
+        ErrorLeva::NadaQueReponer => (MERCENARIOS_NADA_QUE_REPONER, "no hay tropa prestada que reponer".into()),
+    }
+}
+
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
 
@@ -45,21 +79,98 @@ impl Nucleo {
         ((campamento as usize) < n).then(|| self.estado.comercio.mercenarios.stock.get(&campamento).cloned().unwrap_or_else(|| StockCampamento::nuevo(&self.estado.reglas.economia.comercio)))
     }
 
-    /// El estado del mercado de mercenarios (contadores, cupos, residencias y almacenes personales).
+    /// El estado del mercado de mercenarios (contadores, stock y cita de reposición).
     pub fn mercenarios(&self) -> &crate::estado_comercio::EstadoMercenarios {
         &self.estado.comercio.mercenarios
     }
 
+    /// Los reclutas que tiene el campamento ahora, en milésimas. `None` si no existe.
+    pub fn reclutas_de_campamento(&self, campamento: u32) -> Option<Mil> {
+        self.puerta_de_campamento(campamento)?;
+        Some(self.reclutas_de(campamento).actual(&self.estado.reglas.economia.militar, self.estado.reglas.economia.militar.mercenarios.viviendas, self.estado.ahora))
+    }
+
+    /// Las tropas que ofrece el campamento ahora (su edificio militar, su nivel y la tecnología desbloqueada). `None` si no existe.
+    pub fn tropas_del_campamento(&self, campamento: u32) -> Option<Vec<Tropa>> {
+        let edificio = self.edificio_militar(campamento)?;
+        Some(leva::tropas_del_campamento(&self.estado.reglas.economia.militar, &[edificio], &self.tecnologia_del_campamento()))
+    }
+
+    // ───────────────────────────── Ayudas ─────────────────────────────
+
     /// Dónde está la puerta del campamento `i` del artefacto.
-    fn puerta_de_campamento(&self, campamento: u32) -> Option<Punto> {
+    pub(super) fn puerta_de_campamento(&self, campamento: u32) -> Option<Punto> {
         self.geografia.as_ref()?.mapa.campamentos.get(campamento as usize).copied()
+    }
+
+    /// El edificio militar del campamento, elegido por su posición: `huella = |⌊x⌋·31 + ⌊y⌋·17 + índice|`.
+    fn edificio_militar(&self, campamento: u32) -> Option<asentamiento::Tipo> {
+        let p = self.puerta_de_campamento(campamento)?;
+        let lista = &self.estado.reglas.economia.militar.mercenarios.edificios_militares;
+        let huella = (p.x.div_euclid(1_000) * 31 + p.y.div_euclid(1_000) * 17 + campamento as i64).unsigned_abs();
+        Some(lista[huella as usize % lista.len()])
+    }
+
+    /// Los reclutas del campamento: los guardados, o el campamento lleno si nadie lo ha tocado.
+    fn reclutas_de(&self, campamento: u32) -> Reclutas {
+        let mr = &self.estado.reglas.economia.militar;
+        self.estado.militar.reclutas.get(&campamento).copied().unwrap_or_else(|| Reclutas::llenos(mr, mr.mercenarios.viviendas, 0))
+    }
+
+    /// ¿Desbloquea el campamento esa tecnología? Las de arranque siempre; las demás, si las tienen adoptadas al menos `porcentajeFacciones` de las
+    /// Facciones vivas (las que conservan alguna plaza). Con ninguna viva, solo las de arranque.
+    fn tecnologia_del_campamento(&self) -> impl Fn(&str) -> bool + '_ {
+        let vivas: std::collections::BTreeSet<u32> = self.estado.asentamientos.values().map(|a| a.faccion).collect();
+        move |tecnologia| {
+            let mr = &self.estado.reglas.economia.militar;
+            let adoptan = vivas.iter().filter(|&&f| self.estado.militar.tiene_tecnologia(mr, f, tecnologia)).count() as i64;
+            mr.tecnologias.de_arranque.iter().any(|t| t == tecnologia) || (!vivas.is_empty() && adoptan * UNO >= mr.mercenarios.porcentaje_facciones * vivas.len() as i64)
+        }
+    }
+
+    /// ¿Está el héroe en el campamento? Dentro, o con su columna a la puerta.
+    pub(super) fn esta_en_el_campamento(&self, heroe: u64, campamento: u32, t: Instante) -> bool {
+        let Some(puerta) = self.puerta_de_campamento(campamento) else { return false };
+        match self.heroe(heroe).map(|h| h.heroe.presencia.ubicacion) {
+            Some(Ubicacion::Mercenarios(c)) => c == campamento,
+            Some(Ubicacion::Columna(e)) => self.estado.ejercitos.get(&e).is_some_and(|e| e.posicion_en(t).dist(puerta) <= RADIO_PUERTA),
+            _ => false,
+        }
+    }
+
+    /// El campamento donde reside el héroe, si reside en uno.
+    fn campamento_de_residencia(&self, heroe: u64) -> Option<u32> {
+        match self.heroe(heroe)?.heroe.residencia {
+            Some(Residencia::Campamento(c)) => Some(c),
+            _ => None,
+        }
+    }
+
+    /// Cambia la residencia del héroe: suelta su guarnición y retira la tropa prestada por un campamento donde ya no reside, de donde esté (también
+    /// de la escolta de una caravana). La reubicación forzosa de una ruina y `FijarResidencia` pasan por aquí.
+    pub(super) fn mudar_de_residencia(&mut self, heroe: u64, nueva: Option<Residencia>) {
+        let t = self.estado.ahora;
+        self.estado.militar.mudar(heroe, nueva);
+        let h = &mut self.estado.militar.heroes.get_mut(&heroe).expect("existe").heroe;
+        guarnicion::soltar(h);
+        let retiradas = leva::retirar_prestamos_ajenos(h, &|c| nueva == Some(Residencia::Campamento(c)));
+        for e in &retiradas {
+            if let Contenedor::Escolta(c) = e.contenedor {
+                if let Some(i) = self.estado.comercio.posicion_caravana(c) {
+                    self.estado.comercio.flota[i].escolta.retain(|x| x.id != e.id);
+                }
+            }
+        }
+        if !retiradas.is_empty() {
+            self.emitir_propio(t, "mercenarios.prestamo_retirado", vec![], vec![("heroe", heroe as i64), ("escuadras", retiradas.len() as i64)]);
+        }
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
 
-    /// `comprarEnCampamento`, `repostarEnCampamento` y el andamiaje de residencia. `Ok(Some(n))` = cambió algo y creó `n`; `Ok(None)` = cambió algo;
-    /// los rechazos y «sin cambios» salen como `Err` sin haber tocado el estado.
-    pub(super) fn ejecutar_mercenarios(&mut self, t: Instante, p: &Peticion) -> Result<Option<u64>, Respuesta> {
+    /// Las órdenes de los campamentos y la residencia. `Ok(ids)` = cambió algo y creó esos ids; los rechazos y «sin cambios» salen como `Err` sin
+    /// haber tocado el estado.
+    pub(super) fn ejecutar_mercenarios(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
@@ -67,114 +178,223 @@ impl Nucleo {
             let (c, m) = rechazo_de_mercenarios(e);
             rechazo(c, m.into())
         };
-        let cr = self.estado.reglas.economia.comercio.clone();
-        // La columna: su propietario (el Líder, provisional) o la administración.
-        let columna = |s: &Self, ejercito: u64| -> Result<(), Respuesta> {
-            let e = s.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
-            if p.admin || e.propietario == p.actor {
-                Ok(())
-            } else {
-                Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()))
-            }
+        let de_leva = |e: ErrorLeva| {
+            let (c, m) = rechazo_de_leva(e);
+            rechazo(c, m)
         };
+        let cr = self.estado.reglas.economia.comercio.clone();
+        let mr = self.estado.reglas.economia.militar.clone();
         match &p.comando {
-            Comando::ComprarEnCampamento { ejercito, campamento, recurso, cantidad } => {
-                columna(self, *ejercito)?;
-                let puerta = self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{campamento}")))?;
-                if self.estado.ejercitos[ejercito].posicion_en(t).dist(puerta) > RADIO_PUERTA {
-                    return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "la columna no está en la puerta del campamento".into()));
+            Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{campamento}")))?;
+                if !self.esta_en_el_campamento(*heroe, *campamento, t) {
+                    return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
                 let referencia = precio_referencia(&cr.precio, *recurso, stock_global(*recurso, self.estado.asentamientos.values().map(|a| &a.economia.almacen)));
                 let precio = precio_unitario(&cr.mercenarios, referencia);
                 let stock = self.stock_de_campamento(*campamento).expect("el campamento existe").de(*recurso);
-                let residente = self.estado.comercio.mercenarios.residencias.get(ejercito) == Some(campamento);
+                let residente = self.campamento_de_residencia(*heroe) == Some(*campamento);
+                let h = self.heroe(*heroe).expect("existe");
+                let columna = self.columna_de(*heroe);
                 let compra = if residente {
-                    let m = &self.estado.comercio.mercenarios;
-                    let personal = m.personal.get(ejercito).cloned().unwrap_or_default();
-                    let cupo = m.cupos.get(ejercito).cloned().unwrap_or_default().restante(&cr.mercenarios, *recurso, t);
-                    comprar_residente(*recurso, precio, *cantidad, stock, cupo, de(&personal, Recurso::Oro), cr.mercenarios.capacidad_almacen_personal - total(&personal)).map_err(de_mercenarios)?
+                    let cupo = h.cupo.restante(&cr.mercenarios, *recurso, t);
+                    comprar_residente(*recurso, precio, *cantidad, stock, cupo, de(&h.almacen_personal, Recurso::Oro), cr.mercenarios.capacidad_almacen_personal - total(&h.almacen_personal)).map_err(de_mercenarios)?
                 } else {
-                    let carro = &self.estado.ejercitos[ejercito].suministro;
-                    let libre = self.capacidad_de_carga(*ejercito).unwrap_or(0) - total(carro);
+                    let columna = columna.ok_or_else(|| rechazo(rechazos::HEROE_SIN_COLUMNA, "el visitante paga con el carro de su columna: el héroe no va en ninguna".into()))?;
+                    let carro = &self.estado.ejercitos[&columna].suministro;
+                    let libre = self.capacidad_de_carga(columna).unwrap_or(0) - total(carro);
                     comprar_visitante(*recurso, precio, *cantidad, stock, de(carro, Recurso::Oro), libre).map_err(de_mercenarios)?
                 };
                 // El oro cobrado se destruye (sumidero); la compra va al almacén personal (residente) o al carro (visitante).
-                let destino = if residente { None } else { Some(*ejercito) };
-                let carga = match destino {
-                    Some(e) => &mut self.estado.ejercitos.get_mut(&e).expect("existe").suministro,
-                    None => self.estado.comercio.mercenarios.personal.entry(*ejercito).or_default(),
+                let carga = if residente {
+                    &mut self.estado.militar.heroes.get_mut(heroe).expect("existe").almacen_personal
+                } else {
+                    let columna = columna.expect("el visitante va en una columna");
+                    self.tr.tocados.push(columna);
+                    &mut self.estado.ejercitos.get_mut(&columna).expect("existe").suministro
                 };
                 *carga.entry(Recurso::Oro).or_insert(0) -= compra.oro_cobrado;
                 *carga.entry(*recurso).or_insert(0) += compra.cantidad;
                 carga.retain(|_, n| *n > 0);
-                let m = &mut self.estado.comercio.mercenarios;
                 if residente && cr.mercenarios.cupo_diario.contains_key(recurso) {
-                    m.cupos.entry(*ejercito).or_default().anotar(*recurso, compra.cantidad, t);
+                    self.heroe_mut(*heroe).cupo.anotar(*recurso, compra.cantidad, t);
                 }
+                let m = &mut self.estado.comercio.mercenarios;
                 let mut s = m.stock.get(campamento).cloned().unwrap_or_else(|| StockCampamento::nuevo(&cr));
                 *s.stock.entry(*recurso).or_insert(0) -= compra.cantidad;
                 m.stock.insert(*campamento, s);
-                self.tr.tocados.push(*ejercito);
-                let ev = EventoComercio::MercenariosComprado { campamento: *campamento, heroe: *ejercito, recurso: *recurso, cantidad: compra.cantidad };
+                let ev = EventoComercio::MercenariosComprado { campamento: *campamento, heroe: *heroe, recurso: *recurso, cantidad: compra.cantidad };
                 self.emitir_comercio(t, ev, vec![], &[("oro", compra.oro_cobrado), ("residente", residente as i64)]);
                 self.armar_reposicion(t);
-                Ok(None)
+                Ok(vec![])
             }
-            Comando::RepostarEnCampamento { ejercito, campamento } => {
-                columna(self, *ejercito)?;
-                let puerta = self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{campamento}")))?;
-                let e = &self.estado.ejercitos[ejercito];
-                if e.posicion_en(t).dist(puerta) > RADIO_PUERTA {
-                    return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "la columna no está en la puerta del campamento".into()));
+            Comando::RepostarEnCampamento { heroe, campamento } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{campamento}")))?;
+                if !self.esta_en_el_campamento(*heroe, *campamento, t) {
+                    return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
-                // DUDA: el tope es la capacidad de víveres de la columna (la suma de sus héroes), no `capacidadViveresPorHeroe` suelta.
-                let falta = e.capacidad_viveres - e.viveres.valor_en(t);
+                // DUDA: el tope es la capacidad de víveres de la columna (la suma de sus héroes) o, sin columna, `capacidadViveresPorHeroe` del héroe.
+                let falta = match self.columna_de(*heroe) {
+                    Some(c) => {
+                        let e = &self.estado.ejercitos[&c];
+                        e.capacidad_viveres - e.viveres.valor_en(t)
+                    }
+                    None => mr.logistica.capacidad_viveres - self.heroe(*heroe).expect("existe").heroe.viveres,
+                };
                 if falta <= 0 {
                     return Err(de_mercenarios(ErrorMercenarios::VivereLlenos));
                 }
-                let e = self.estado.ejercitos.get_mut(ejercito).expect("existe");
-                e.viveres = Ritmo { valor_en_t0: e.capacidad_viveres, t0: t, ..e.viveres };
-                self.reprogramar_columna(*ejercito, t);
-                self.evento("mercenarios.repostado", t, *ejercito, None, vec![("campamento", *campamento as i64), ("heroe", *ejercito as i64), ("cantidad", falta)]);
-                Ok(None)
+                let datos = vec![("campamento", *campamento as i64), ("heroe", *heroe as i64), ("cantidad", falta)];
+                match self.columna_de(*heroe) {
+                    Some(c) => {
+                        let e = self.estado.ejercitos.get_mut(&c).expect("existe");
+                        e.viveres = Ritmo { valor_en_t0: e.capacidad_viveres, t0: t, ..e.viveres };
+                        self.reprogramar_columna(c, t);
+                        self.evento("mercenarios.repostado", t, c, None, datos);
+                    }
+                    None => {
+                        self.heroe_mut(*heroe).heroe.viveres = mr.logistica.capacidad_viveres;
+                        self.emitir_propio(t, "mercenarios.repostado", vec![], datos);
+                    }
+                }
+                Ok(vec![])
             }
-            Comando::FijarResidencia { ejercito, campamento } => {
+            Comando::FijarResidencia { heroe, residencia } => {
                 if !p.admin {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
                 }
-                columna(self, *ejercito)?;
-                if let Some(c) = campamento {
-                    self.puerta_de_campamento(*c).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{c}")))?;
+                self.autorizar_heroe(p, *heroe, true)?;
+                match residencia {
+                    Some(Residencia::Asentamiento(a)) => {
+                        self.plaza_o_rechazo(*a as u64)?;
+                    }
+                    Some(Residencia::Campamento(c)) => {
+                        self.puerta_de_campamento(*c).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{c}")))?;
+                    }
+                    None => {}
                 }
-                let m = &mut self.estado.comercio.mercenarios;
-                if m.residencias.get(ejercito).copied() == *campamento {
+                if self.heroe(*heroe).expect("existe").heroe.residencia == *residencia {
                     return Err(sin_cambios());
                 }
-                match campamento {
-                    Some(c) => m.residencias.insert(*ejercito, *c),
-                    None => m.residencias.remove(ejercito),
-                };
-                Ok(None)
+                self.mudar_de_residencia(*heroe, *residencia);
+                Ok(vec![])
             }
-            Comando::DarAlmacenPersonal { ejercito, recurso, cantidad } => {
+            Comando::DarAlmacenPersonal { heroe, recurso, cantidad } => {
                 if !p.admin {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
                 }
-                columna(self, *ejercito)?;
+                self.autorizar_heroe(p, *heroe, true)?;
                 if *cantidad <= 0 {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
                 }
-                let m = &mut self.estado.comercio.mercenarios;
-                if !m.residencias.contains_key(ejercito) {
-                    return Err(rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, "la columna no reside en ningún campamento".into()));
+                let h = self.heroe_mut(*heroe);
+                if h.heroe.residencia.is_none() {
+                    return Err(rechazo(rechazos::HEROE_SIN_RESIDENCIA, "el almacén personal vive donde se reside".into()));
                 }
-                let personal = m.personal.entry(*ejercito).or_default();
-                let n = (*cantidad).min((cr.mercenarios.capacidad_almacen_personal - total(personal)).max(0));
+                let n = (*cantidad).min((cr.mercenarios.capacidad_almacen_personal - total(&h.almacen_personal)).max(0));
                 if n == 0 {
                     return Err(sin_cambios());
                 }
-                *personal.entry(*recurso).or_insert(0) += n;
-                Ok(None)
+                *h.almacen_personal.entry(*recurso).or_insert(0) += n;
+                Ok(vec![])
+            }
+            Comando::ReclutarEnCampamento { heroe, tropa, pagar_con } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let campamento = self.campamento_de_residencia(*heroe).ok_or_else(|| de_leva(ErrorLeva::NoResides))?;
+                let esta = self.esta_en_el_campamento(*heroe, campamento, t);
+                let columna = self.columna_de(*heroe);
+                let (oro_disponible, de_la_columna) = match (pagar_con, columna) {
+                    (PagarCon::AlmacenPersonal, _) => (de(&self.heroe(*heroe).expect("existe").almacen_personal, Recurso::Oro), None),
+                    (PagarCon::Carro, Some(c)) => (de(&self.estado.ejercitos[&c].suministro, Recurso::Oro), Some(c)),
+                    (PagarCon::Carro, None) => return Err(rechazo(rechazos::HEROE_SIN_COLUMNA, "para pagar con el carro el héroe debe ir en una columna".into())),
+                };
+                let faccion = self.heroe(*heroe).expect("existe").faccion;
+                let factor_reputacion = faccion.map_or(UNO, |f| if self.estado.comercio.reputacion_en(f, t) <= cr.reputacion.umbral_bajo_para_comision { cr.reputacion.factor_comision_por_reputacion_baja } else { UNO });
+                let sin_asentamientos = faccion.is_some_and(|f| self.plazas_de(f).next().is_none());
+                let ofrece = self.tropas_del_campamento(campamento).expect("el campamento existe");
+                let mut reclutas = self.reclutas_de(campamento);
+                let puerta = self.puerta_de_campamento(campamento).expect("existe");
+                let Estado { militar, ejercitos, siguiente_id, .. } = &mut self.estado;
+                let h = &mut militar.heroes.get_mut(heroe).expect("existe").heroe;
+                let antes = h.escuadras.len();
+                let distancia = |c: u64| ejercitos.get(&c).map(|e| e.posicion_en(t).dist(puerta));
+                let hecho = leva::reclutar(
+                    &mr,
+                    Campamento { id: campamento, viviendas: mr.mercenarios.viviendas, reclutas: &mut reclutas, ofrece: &ofrece },
+                    Pedido {
+                        heroe: &mut *h,
+                        tropa: *tropa,
+                        reside: true,
+                        esta_en_el_campamento: esta,
+                        distancia_de_columna: &distancia,
+                        oro_disponible,
+                        factor_reputacion,
+                        sin_asentamientos,
+                        columna_del_lider: None,
+                    },
+                    || {
+                        *siguiente_id += 1;
+                        *siguiente_id - 1
+                    },
+                    t,
+                )
+                .map_err(de_leva)?;
+                let nueva = h.escuadras.len() > antes;
+                militar.reclutas.insert(campamento, reclutas);
+                let carga = match de_la_columna {
+                    Some(c) => &mut ejercitos.get_mut(&c).expect("existe").suministro,
+                    None => &mut militar.heroes.get_mut(heroe).expect("existe").almacen_personal,
+                };
+                *carga.entry(Recurso::Oro).or_insert(0) -= hecho.oro;
+                carga.retain(|_, n| *n > 0);
+                if let Some(c) = de_la_columna {
+                    self.tr.tocados.push(c);
+                }
+                self.emitir_propio(
+                    t,
+                    "mercenarios.reclutado",
+                    vec![],
+                    vec![("campamento", campamento as i64), ("heroe", *heroe as i64), ("tropa", crate::codec_militar::tropa_a_u8(*tropa) as i64), ("cantidad", hecho.cantidad), ("oro", hecho.oro), ("escuadra", hecho.escuadra as i64), ("nueva", nueva as i64)],
+                );
+                Ok(if nueva { vec![hecho.escuadra] } else { vec![] })
+            }
+            Comando::PedirPrestamo { heroe, tropas } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let campamento = self.campamento_de_residencia(*heroe).ok_or_else(|| de_leva(ErrorLeva::NoResides))?;
+                if !self.esta_en_el_campamento(*heroe, campamento, t) {
+                    return Err(de_leva(ErrorLeva::Lejos));
+                }
+                let Estado { militar, siguiente_id, .. } = &mut self.estado;
+                let h = &mut militar.heroes.get_mut(heroe).expect("existe").heroe;
+                let creadas = leva::pedir_prestamo(
+                    &mr,
+                    h,
+                    campamento,
+                    tropas,
+                    &mut || {
+                        *siguiente_id += 1;
+                        *siguiente_id - 1
+                    },
+                    t,
+                )
+                .map_err(de_leva)?;
+                self.emitir_propio(t, "mercenarios.prestamo", vec![], vec![("campamento", campamento as i64), ("heroe", *heroe as i64), ("escuadras", creadas.len() as i64)]);
+                Ok(creadas)
+            }
+            Comando::ReponerPrestamo { heroe } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let campamento = self.campamento_de_residencia(*heroe).ok_or_else(|| de_leva(ErrorLeva::NoResides))?;
+                if !self.esta_en_el_campamento(*heroe, campamento, t) {
+                    return Err(de_leva(ErrorLeva::Lejos));
+                }
+                let puerta = self.puerta_de_campamento(campamento).expect("existe");
+                let Estado { militar, ejercitos, .. } = &mut self.estado;
+                let distancia = |c: u64| ejercitos.get(&c).map(|e| e.posicion_en(t).dist(puerta));
+                let repuestas = leva::reponer_prestamo(&mr, &mut militar.heroes.get_mut(heroe).expect("existe").heroe, campamento, &distancia).map_err(de_leva)?;
+                self.emitir_propio(t, "mercenarios.prestamo_repuesto", vec![], vec![("heroe", *heroe as i64), ("repuestas", repuestas as i64)]);
+                Ok(vec![])
             }
             _ => unreachable!("solo se llama con órdenes de los campamentos"),
         }

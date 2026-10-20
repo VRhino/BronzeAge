@@ -5,8 +5,10 @@ use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_ciudad;
 use crate::codec_comercio;
 use crate::codec_economia;
+use crate::codec_militar;
 use crate::economia::StockNodo;
 use crate::estado_comercio::EstadoComercio;
+use crate::estado_militar::EstadoMilitar;
 use crate::urbanismo::{Urbanismo, Urbe};
 use base::{Instante, Mil, Plan, Punto, Ritmo, Rng, Vertice};
 use cola::{Clave, Cola, Evento, Generaciones};
@@ -16,6 +18,9 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::{Arc, OnceLock};
 
+/// Prioridad de la salida del mundo de quien se desconectó: la de «cierre de batallas vencidas y salidas del mundo» (Reloj_Y_Eventos §2). Sale
+/// antes que todo lo demás del mismo instante.
+pub const PRIO_SALIDA: u8 = 1;
 /// Prioridad de los umbrales de víveres: «consumo de población y de tropa» (Reloj_Y_Eventos §2).
 pub const PRIO_UMBRAL: u8 = 3;
 /// Prioridad del comercio: «comercio, trueques, órdenes de mercado, caravanas» (Reloj_Y_Eventos §2). Va después de los mantenimientos y las ruinas
@@ -31,10 +36,11 @@ pub const PRIO_REPUTACION: u8 = 9;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-/// BAN8: BAN7 más, en la economía de cada plaza, la ventana de 24 h de lo que el acarreo ingresó en su almacén (solvencia del ascenso). BAN7 se
-/// rechaza (BAN7 traía los pueblos extractores).
-const MAGIA: &[u8; 4] = b"BAN8";
-const MAGIA_ANTERIOR: &[u8; 4] = b"BAN7";
+/// BAN9: BAN8 más el estado militar (héroes con sus escuadras, loadouts y almacén personal; reclutas de los campamentos; tecnologías dadas por la
+/// administración, `codec_militar`) y la salida del mundo como evento de la cola; el almacén personal, el cupo diario y la residencia salen del
+/// mercado de mercenarios (BAN8 los guardaba por columna). BAN8 se rechaza (BAN8 traía la ventana de 24 h del acarreo).
+const MAGIA: &[u8; 4] = b"BAN9";
+const MAGIA_ANTERIOR: &[u8; 4] = b"BAN8";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -60,7 +66,7 @@ impl Default for Reglas {
 }
 
 /// Las reglas del crate `asentamiento` (datos del documento de Mechanics, ya convertidos a enteros), las huellas del trazado urbano
-/// (bloques del documento `Trazado_Urbano.md`) y las del comercio (crate `comercio`). No se serializan: en las fotos va su **huella**, el
+/// (bloques del documento `Trazado_Urbano.md`), las del comercio (crate `comercio`) y las militares (crate `militar`). No se serializan: en las fotos va su **huella**, el
 /// sha256 de los bloques de parámetros de los documentos incrustados (no de su prosa); recuperar con otras reglas falla igual que con
 /// `ReglasTerritorio`.
 #[derive(Clone, Debug)]
@@ -70,17 +76,22 @@ pub struct ReglasEconomia {
     pub urbanismo: Arc<Urbanismo>,
     /// Las cifras del comercio (precios, comisiones, trueques, mercado, flota, reputación).
     pub comercio: Arc<comercio::Reglas>,
+    /// Las cifras militares (tropas, Liderazgo, guarnición, reclutamiento, ración, presencia, campamentos de mercenarios).
+    pub militar: Arc<militar::Reglas>,
     huella: String,
 }
 
 impl ReglasEconomia {
     /// Carga las cifras de los documentos incrustados (parsea los bloques JSON: hágase una vez).
     pub fn cargar() -> Self {
-        let bloques = asentamiento::datos::texto_de_parametros() + &asentamiento::datos::texto_de_parametros_de(crate::urbanismo::DOC_TRAZADO) + &comercio::datos::texto_de_parametros();
+        let bloques = asentamiento::datos::texto_de_parametros()
+            + &asentamiento::datos::texto_de_parametros_de(crate::urbanismo::DOC_TRAZADO)
+            + &comercio::datos::texto_de_parametros()
+            + &militar::datos::texto_de_parametros();
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), huella }
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -165,7 +176,7 @@ pub struct Ejercito {
     pub caravana_fundacion: bool,
     /// El carro de la columna (`suministro`, Movimiento_Ejercitos §2): botín y materiales; no es lo que se come. Su capacidad es la del
     /// carro de un jugador más la de las caravanas adjuntas (`Nucleo::capacidad_de_carga`).
-    // DUDA: el sistema de héroes traerá los participantes (un carro por héroe) y el reparto por héroe al separarse; hoy hay un solo carro por
+    // DUDA: las columnas con participantes (un carro por héroe) y el reparto por héroe al separarse son la fase 4B-2 (el héroe ya existe, pero una columna lleva como mucho uno); hoy hay un solo carro por
     // columna y lo llena la administración (`DarSuministro`), el mostrador y el campamento de mercenarios.
     pub suministro: Mercancia,
     /// Caravanas enganchadas a la columna (ids ascendentes, §9): viajan con ella y el reparto automático no las ve.
@@ -231,6 +242,9 @@ pub enum Carga {
     Comercio { suceso: SucesoComercio, aplazos: u8 },
     /// Cita de la reputación de una Facción (la entidad): cruza el 0 o sale del umbral bajo. Se recalcula tras cada cambio.
     Reputacion(CitaReputacion),
+    /// Vence la salida del mundo de un héroe que se desconectó (la entidad es el héroe): `desconectarse` la programa a `retardoDesconexionMs` y
+    /// `conectarse` la invalida.
+    SalidaDelMundo,
 }
 
 /// Qué cita de la reputación de una Facción vence (Reputación como ritmo, Comercio_Caravanas §4.6).
@@ -367,6 +381,8 @@ pub struct Estado {
     pub niveles_faccion: BTreeMap<u32, u32>,
     /// Trueques, órdenes de mercado, flota de caravanas y reputación entre Facciones (Comercio_Caravanas §2).
     pub comercio: EstadoComercio,
+    /// Héroes con sus escuadras, reclutas de los campamentos y tecnologías de las Facciones (Heroe_Y_Tropa, Campamentos_Mercenarios).
+    pub militar: EstadoMilitar,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     por_lider: HashMap<String, u64>,
@@ -396,6 +412,7 @@ impl Estado {
             contactos: BTreeSet::new(),
             niveles_faccion: BTreeMap::new(),
             comercio,
+            militar: EstadoMilitar::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             por_lider: HashMap::new(),
@@ -517,6 +534,7 @@ impl Estado {
             w.u32(n);
         }
         codec_comercio::escribir(&mut w, &self.comercio);
+        codec_militar::escribir(&mut w, &self.militar);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -550,6 +568,7 @@ impl Estado {
                     w.u8(5);
                     w.u8(c.a_u8());
                 }
+                Carga::SalidaDelMundo => w.u8(6),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -578,7 +597,7 @@ impl Estado {
         let mut r = Lector::nuevo(bytes);
         match r.magia()? {
             m if m == *MAGIA => {}
-            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN7 (sin la ventana del acarreo): ya no se admite")),
+            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN8 (sin el estado militar): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
@@ -693,6 +712,7 @@ impl Estado {
             s.niveles_faccion.insert(r.u32()?, r.u32()?);
         }
         s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio)?;
+        s.militar = codec_militar::leer(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -711,6 +731,7 @@ impl Estado {
                 3 => Carga::Minuto,
                 4 => Carga::Comercio { suceso: SucesoComercio::de_u8(r.u8()?).ok_or(ErrorFormato("suceso de comercio desconocido"))?, aplazos: r.u8()? },
                 5 => Carga::Reputacion(CitaReputacion::de_u8(r.u8()?).ok_or(ErrorFormato("cita de reputación desconocida"))?),
+                6 => Carga::SalidaDelMundo,
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

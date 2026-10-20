@@ -4,9 +4,13 @@
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
 use crate::codec_comercio::{animal_a_u8, animal_de_u8, tipo_carro_a_u8, tipo_carro_de_u8};
+use crate::codec_militar::{controlador_a_u8, controlador_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
 use comercio::caravana::{Animal, TipoCarro};
+use militar::catalogo::Tropa;
+use militar::heroe::{Controlador, Residencia};
+use militar::presencia::Ubicacion;
 
 /// Acción sobre el reloj de mundo (`OrdenControlarReloj`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,18 +113,19 @@ pub enum Comando {
     AdjuntarCaravana { caravana: u64, ejercito: u64 },
     /// Deja la caravana adjunta aparcada en una plaza de su Facción, con la columna a su puerta (la columna «entra»; Movimiento_Ejercitos §11).
     AparcarCaravana { caravana: u64, asentamiento: u64 },
-    // ── Mercado de los campamentos de mercenarios (Comercio_Caravanas §9). `campamento` es el índice del artefacto de mundo; la columna debe estar
-    //    a la puerta. El Líder es, de momento, el propietario de la columna. ──
-    /// Compra `cantidad` (se sirven unidades enteras) de un bien. Una columna residente paga de su almacén personal y compra con cupo diario; una
-    /// visitante paga con el oro de su carro, lleva la compra al carro y no compra trigo.
-    ComprarEnCampamento { ejercito: u64, campamento: u32, recurso: Recurso, cantidad: Mil },
-    /// Llena los víveres de la columna, gratis y sin gastar el stock del mercado.
-    RepostarEnCampamento { ejercito: u64, campamento: u32 },
-    // ── Andamiaje de administración del mercado de mercenarios, provisional hasta el sistema de héroes (residencia y almacén personal). ──
-    /// Fija (o quita, con `None`) el campamento donde reside la columna. Solo administración.
-    FijarResidencia { ejercito: u64, campamento: Option<u32> },
-    /// Añade al almacén personal de una columna residente. Solo administración.
-    DarAlmacenPersonal { ejercito: u64, recurso: Recurso, cantidad: Mil },
+    // ── Mercado de los campamentos de mercenarios (Comercio_Caravanas §9). `campamento` es el índice del artefacto de mundo; el héroe debe estar
+    //    dentro del campamento o con su columna a la puerta. ──
+    /// Compra `cantidad` (se sirven unidades enteras) de un bien. Un héroe residente paga de su almacén personal y compra con cupo diario; uno
+    /// visitante paga con el oro del carro de su columna, lleva la compra al carro y no compra trigo.
+    ComprarEnCampamento { heroe: u64, campamento: u32, recurso: Recurso, cantidad: Mil },
+    /// Llena los víveres del héroe (los de su columna, si va en una), gratis y sin gastar el stock del mercado.
+    RepostarEnCampamento { heroe: u64, campamento: u32 },
+    // ── Andamiaje de administración, provisional hasta el sistema político (residencia, ciudadanía y almacén personal) y el de columnas. ──
+    /// Fija (o quita, con `None`) la residencia del héroe: una plaza o un campamento. Al mudarse suelta la guarnición y se retira la tropa
+    /// prestada de otro campamento. Solo administración; lo sustituirán `cambiarResidencia`, `residirEnCampamento` y la fundación.
+    FijarResidencia { heroe: u64, residencia: Option<Residencia> },
+    /// Añade al almacén personal de un héroe con residencia. Solo administración; lo sustituirá `guardarEnAlmacenPersonal` con las columnas.
+    DarAlmacenPersonal { heroe: u64, recurso: Recurso, cantidad: Mil },
     // ── Pueblos extractores y obras de mapa (Economia_Construccion §14, Doc 4.2.2). Las puede dar la administración o el propietario de alguna
     //    columna de la Facción de la plaza madre (el Gobernador o el Maestro de Obras presentes vendrán del sistema de héroes y residentes); la
     //    entrega de materiales, el propietario de una columna de esa Facción a la puerta de la obra. ──
@@ -133,6 +138,59 @@ pub enum Comando {
     DestruirPueblo { pueblo: u64 },
     /// Compra en la plaza madre un carro de acarreo nuevo (carro + buey) para un pueblo que se quedó sin él.
     ReponerCarro { pueblo: u64 },
+    // ── Héroes y tropa (Heroe_Y_Tropa, Campamentos_Mercenarios §5-§6). Las da la cuenta del héroe o la administración; la cuenta solo manda en
+    //    los suyos. Un héroe fuera del mundo solo puede conectarse. ──
+    /// Crea el héroe de una cuenta dentro de un campamento de mercenarios, donde reside. `creadas` lleva su id. El controlador `Bot` solo lo
+    /// pone la administración.
+    CrearHeroe { cuenta: String, campamento: u32, controlador: Controlador },
+    /// Recluta tropa en una plaza (las 11 condiciones de `reclutarTropa`) o repone la escuadra que ya se tiene. `creadas` lleva el id de la
+    /// escuadra si es nueva.
+    ReclutarTropa { asentamiento: u64, heroe: u64, tropa: Tropa },
+    /// Recluta tropa en el campamento donde reside el héroe, con el oro de su almacén personal o el de su columna. `creadas` lleva el id de la
+    /// escuadra si es nueva.
+    ReclutarEnCampamento { heroe: u64, tropa: Tropa, pagar_con: PagarCon },
+    /// Pide prestada tropa de leva comunal en el campamento donde reside el héroe (gratis). `creadas` lleva los ids de las escuadras.
+    PedirPrestamo { heroe: u64, tropas: Vec<Tropa> },
+    /// Repone gratis la tropa prestada que está en el campamento o en una columna a su puerta.
+    ReponerPrestamo { heroe: u64 },
+    /// Guarda un loadout (nuevo si `loadout` es `None`) o reescribe uno. `creadas` lleva el id del nuevo.
+    GuardarLoadout { heroe: u64, loadout: Option<u64>, nombre: String, escuadras: Vec<u64>, perks: Vec<u32>, activo: Option<bool> },
+    BorrarLoadout { heroe: u64, loadout: u64 },
+    /// Reparte puntos de atributo (cada punto suma 1). Todo o nada.
+    RepartirPuntos { heroe: u64, fuerza: i64, destreza: i64, armadura: i64, vitalidad: i64 },
+    /// Pone las escuadras pedidas primero, en ese orden: el orden en que entran en combate.
+    OrdenarEscuadras { heroe: u64, escuadras: Vec<u64> },
+    /// Entrega una escuadra del campamento a la guarnición de la plaza donde reside el héroe, dentro de su cupo.
+    AsignarGuarnicion { heroe: u64, escuadra: u64 },
+    RetirarGuarnicion { heroe: u64, escuadra: u64 },
+    /// Pasa trigo del carro a los víveres de la columna del héroe (nunca al revés): `min(pedido, trigo del carro, hueco)`.
+    PasarAViveres { heroe: u64, cantidad: Mil },
+    /// Cede escuadras del héroe (que reside en el origen) como escolta de una caravana parada en su origen.
+    AsignarEscolta { caravana: u64, heroe: u64, escuadras: Vec<u64> },
+    /// Retira la escolta que cedió el héroe (todas sus cedidas si `escuadras` es `None`).
+    QuitarEscolta { caravana: u64, heroe: u64, escuadras: Option<Vec<u64>> },
+    /// Pide salir del mundo: el evento de salida vence a `retardoDesconexionMs`. Solo dentro de una plaza o de un campamento.
+    Desconectarse { heroe: u64 },
+    /// Cancela la salida pendiente o vuelve al mundo.
+    Conectarse { heroe: u64 },
+    // ── Andamiaje de administración, provisional hasta que existan los sistemas que lo sustituyen. ──
+    /// Da a la Facción esas tecnologías (sustituye a las que tenía), además de las de arranque. Solo administración; lo sustituirá el sistema 6.
+    FijarTecnologias { faccion: u32, tecnologias: Vec<String> },
+    /// Fija la Facción de la que es ciudadano el héroe. Solo administración; la ciudadanía es del sistema político.
+    FijarFaccionDeHeroe { heroe: u64, faccion: Option<u32> },
+    /// Coloca al héroe en una plaza, un campamento o una columna (que no lleve ya a otro héroe). Solo administración; lo sustituirán
+    /// `salirAlMundo`, `entrarEnAsentamiento`, `entrarEnCampamento` y `salirDelCampamento` con las columnas.
+    ColocarHeroe { heroe: u64, ubicacion: Ubicacion },
+    /// Hiere al héroe (`heridoMinutos`). Solo administración; lo hará el combate.
+    HerirHeroe { heroe: u64 },
+}
+
+/// De dónde sale el oro al reclutar en un campamento de mercenarios.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PagarCon {
+    AlmacenPersonal,
+    /// Del carro de la columna del héroe, a la puerta del campamento.
+    Carro,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -160,6 +218,15 @@ fn leer_lineas(r: &mut Lector) -> Result<Vec<(Recurso, Mil)>, ErrorFormato> {
         v.push((recurso_de_u8(r.u8()?)?, r.i64()?));
     }
     Ok(v)
+}
+
+fn lista_u64(w: &mut Escritor, v: &[u64]) {
+    w.u64(v.len() as u64);
+    v.iter().for_each(|&x| w.u64(x));
+}
+
+fn leer_lista_u64(r: &mut Lector) -> Result<Vec<u64>, ErrorFormato> {
+    (0..r.cuenta()?).map(|_| r.u64()).collect()
 }
 
 impl Peticion {
@@ -400,26 +467,26 @@ impl Peticion {
                 w.u64(*caravana);
                 w.u64(*asentamiento);
             }
-            Comando::ComprarEnCampamento { ejercito, campamento, recurso, cantidad } => {
+            Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad } => {
                 w.u8(41);
-                w.u64(*ejercito);
+                w.u64(*heroe);
                 w.u32(*campamento);
                 w.u8(recurso_a_u8(*recurso));
                 w.i64(*cantidad);
             }
-            Comando::RepostarEnCampamento { ejercito, campamento } => {
+            Comando::RepostarEnCampamento { heroe, campamento } => {
                 w.u8(42);
-                w.u64(*ejercito);
+                w.u64(*heroe);
                 w.u32(*campamento);
             }
-            Comando::FijarResidencia { ejercito, campamento } => {
+            Comando::FijarResidencia { heroe, residencia } => {
                 w.u8(43);
-                w.u64(*ejercito);
-                w.opt_u64(campamento.map(u64::from));
+                w.u64(*heroe);
+                residencia_escribir(&mut w, residencia);
             }
-            Comando::DarAlmacenPersonal { ejercito, recurso, cantidad } => {
+            Comando::DarAlmacenPersonal { heroe, recurso, cantidad } => {
                 w.u8(44);
-                w.u64(*ejercito);
+                w.u64(*heroe);
                 w.u8(recurso_a_u8(*recurso));
                 w.i64(*cantidad);
             }
@@ -440,6 +507,115 @@ impl Peticion {
             Comando::ReponerCarro { pueblo } => {
                 w.u8(48);
                 w.u64(*pueblo);
+            }
+            Comando::CrearHeroe { cuenta, campamento, controlador } => {
+                w.u8(49);
+                w.texto(cuenta);
+                w.u32(*campamento);
+                w.u8(controlador_a_u8(*controlador));
+            }
+            Comando::ReclutarTropa { asentamiento, heroe, tropa } => {
+                w.u8(50);
+                w.u64(*asentamiento);
+                w.u64(*heroe);
+                w.u8(tropa_a_u8(*tropa));
+            }
+            Comando::ReclutarEnCampamento { heroe, tropa, pagar_con } => {
+                w.u8(51);
+                w.u64(*heroe);
+                w.u8(tropa_a_u8(*tropa));
+                w.u8(*pagar_con as u8);
+            }
+            Comando::PedirPrestamo { heroe, tropas } => {
+                w.u8(52);
+                w.u64(*heroe);
+                w.u64(tropas.len() as u64);
+                tropas.iter().for_each(|&t| w.u8(tropa_a_u8(t)));
+            }
+            Comando::ReponerPrestamo { heroe } => {
+                w.u8(53);
+                w.u64(*heroe);
+            }
+            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo } => {
+                w.u8(54);
+                w.u64(*heroe);
+                w.opt_u64(*loadout);
+                w.texto(nombre);
+                lista_u64(&mut w, escuadras);
+                w.u64(perks.len() as u64);
+                perks.iter().for_each(|&k| w.u32(k));
+                w.u8(activo.map_or(2, u8::from));
+            }
+            Comando::BorrarLoadout { heroe, loadout } => {
+                w.u8(55);
+                w.u64(*heroe);
+                w.u64(*loadout);
+            }
+            Comando::RepartirPuntos { heroe, fuerza, destreza, armadura, vitalidad } => {
+                w.u8(56);
+                w.u64(*heroe);
+                [fuerza, destreza, armadura, vitalidad].into_iter().for_each(|&p| w.i64(p));
+            }
+            Comando::OrdenarEscuadras { heroe, escuadras } => {
+                w.u8(57);
+                w.u64(*heroe);
+                lista_u64(&mut w, escuadras);
+            }
+            Comando::AsignarGuarnicion { heroe, escuadra } => {
+                w.u8(58);
+                w.u64(*heroe);
+                w.u64(*escuadra);
+            }
+            Comando::RetirarGuarnicion { heroe, escuadra } => {
+                w.u8(59);
+                w.u64(*heroe);
+                w.u64(*escuadra);
+            }
+            Comando::PasarAViveres { heroe, cantidad } => {
+                w.u8(60);
+                w.u64(*heroe);
+                w.i64(*cantidad);
+            }
+            Comando::AsignarEscolta { caravana, heroe, escuadras } => {
+                w.u8(61);
+                w.u64(*caravana);
+                w.u64(*heroe);
+                lista_u64(&mut w, escuadras);
+            }
+            Comando::QuitarEscolta { caravana, heroe, escuadras } => {
+                w.u8(62);
+                w.u64(*caravana);
+                w.u64(*heroe);
+                w.bool(escuadras.is_some());
+                lista_u64(&mut w, escuadras.as_deref().unwrap_or_default());
+            }
+            Comando::Desconectarse { heroe } => {
+                w.u8(63);
+                w.u64(*heroe);
+            }
+            Comando::Conectarse { heroe } => {
+                w.u8(64);
+                w.u64(*heroe);
+            }
+            Comando::FijarTecnologias { faccion, tecnologias } => {
+                w.u8(65);
+                w.u32(*faccion);
+                w.u64(tecnologias.len() as u64);
+                tecnologias.iter().for_each(|t| w.texto(t));
+            }
+            Comando::FijarFaccionDeHeroe { heroe, faccion } => {
+                w.u8(66);
+                w.u64(*heroe);
+                w.opt_u64(faccion.map(u64::from));
+            }
+            Comando::ColocarHeroe { heroe, ubicacion } => {
+                w.u8(67);
+                w.u64(*heroe);
+                ubicacion_escribir(&mut w, ubicacion);
+            }
+            Comando::HerirHeroe { heroe } => {
+                w.u8(68);
+                w.u64(*heroe);
             }
         }
         w.0
@@ -503,17 +679,61 @@ impl Peticion {
             38 => Comando::DarSuministro { ejercito: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             39 => Comando::AdjuntarCaravana { caravana: r.u64()?, ejercito: r.u64()? },
             40 => Comando::AparcarCaravana { caravana: r.u64()?, asentamiento: r.u64()? },
-            41 => Comando::ComprarEnCampamento { ejercito: r.u64()?, campamento: r.u32()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
-            42 => Comando::RepostarEnCampamento { ejercito: r.u64()?, campamento: r.u32()? },
-            43 => Comando::FijarResidencia {
-                ejercito: r.u64()?,
-                campamento: r.opt_u64()?.map(u32::try_from).transpose().map_err(|_| ErrorFormato("campamento fuera de rango"))?,
-            },
-            44 => Comando::DarAlmacenPersonal { ejercito: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            41 => Comando::ComprarEnCampamento { heroe: r.u64()?, campamento: r.u32()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            42 => Comando::RepostarEnCampamento { heroe: r.u64()?, campamento: r.u32()? },
+            43 => Comando::FijarResidencia { heroe: r.u64()?, residencia: residencia_leer(&mut r)? },
+            44 => Comando::DarAlmacenPersonal { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             45 => Comando::MarcarPueblo { asentamiento: r.u64()?, nodo: r.u32()? },
             46 => Comando::EntregarMateriales { ejercito: r.u64()?, pueblo: r.u64()? },
             47 => Comando::DestruirPueblo { pueblo: r.u64()? },
             48 => Comando::ReponerCarro { pueblo: r.u64()? },
+            49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)? },
+            50 => Comando::ReclutarTropa { asentamiento: r.u64()?, heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
+            51 => Comando::ReclutarEnCampamento {
+                heroe: r.u64()?,
+                tropa: tropa_de_u8(r.u8()?)?,
+                pagar_con: match r.u8()? {
+                    0 => PagarCon::AlmacenPersonal,
+                    1 => PagarCon::Carro,
+                    _ => return Err(ErrorFormato("forma de pago desconocida")),
+                },
+            },
+            52 => Comando::PedirPrestamo { heroe: r.u64()?, tropas: (0..r.cuenta()?).map(|_| tropa_de_u8(r.u8()?)).collect::<Result<_, _>>()? },
+            53 => Comando::ReponerPrestamo { heroe: r.u64()? },
+            54 => Comando::GuardarLoadout {
+                heroe: r.u64()?,
+                loadout: r.opt_u64()?,
+                nombre: r.texto()?,
+                escuadras: leer_lista_u64(&mut r)?,
+                perks: (0..r.cuenta()?).map(|_| r.u32()).collect::<Result<_, _>>()?,
+                activo: match r.u8()? {
+                    0 => Some(false),
+                    1 => Some(true),
+                    2 => None,
+                    _ => return Err(ErrorFormato("valor de «activo» desconocido")),
+                },
+            },
+            55 => Comando::BorrarLoadout { heroe: r.u64()?, loadout: r.u64()? },
+            56 => Comando::RepartirPuntos { heroe: r.u64()?, fuerza: r.i64()?, destreza: r.i64()?, armadura: r.i64()?, vitalidad: r.i64()? },
+            57 => Comando::OrdenarEscuadras { heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
+            58 => Comando::AsignarGuarnicion { heroe: r.u64()?, escuadra: r.u64()? },
+            59 => Comando::RetirarGuarnicion { heroe: r.u64()?, escuadra: r.u64()? },
+            60 => Comando::PasarAViveres { heroe: r.u64()?, cantidad: r.i64()? },
+            61 => Comando::AsignarEscolta { caravana: r.u64()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
+            62 => {
+                let (caravana, heroe, con_ids) = (r.u64()?, r.u64()?, r.bool()?);
+                let ids = leer_lista_u64(&mut r)?;
+                Comando::QuitarEscolta { caravana, heroe, escuadras: con_ids.then_some(ids) }
+            }
+            63 => Comando::Desconectarse { heroe: r.u64()? },
+            64 => Comando::Conectarse { heroe: r.u64()? },
+            65 => Comando::FijarTecnologias { faccion: r.u32()?, tecnologias: (0..r.cuenta()?).map(|_| r.texto()).collect::<Result<_, _>>()? },
+            66 => Comando::FijarFaccionDeHeroe {
+                heroe: r.u64()?,
+                faccion: r.opt_u64()?.map(u32::try_from).transpose().map_err(|_| ErrorFormato("Facción fuera de rango"))?,
+            },
+            67 => Comando::ColocarHeroe { heroe: r.u64()?, ubicacion: ubicacion_leer(&mut r)? },
+            68 => Comando::HerirHeroe { heroe: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -659,6 +879,58 @@ pub mod rechazos {
     pub const MERCENARIOS_SIN_ORO: &str = "mercenarios.sin_oro";
     pub const MERCENARIOS_SIN_SITIO: &str = "mercenarios.sin_sitio";
     pub const MERCENARIOS_VIVERES_LLENOS: &str = "mercenarios.viveres_llenos";
+    // Reclutar en un campamento (`ErrorMercenarios`) y la tropa prestada.
+    pub const MERCENARIOS_NO_RESIDES: &str = "mercenarios.no_resides";
+    pub const MERCENARIOS_TROPA_NO_DISPONIBLE: &str = "mercenarios.tropa_no_disponible";
+    pub const MERCENARIOS_YA_LA_TIENES_FUERA: &str = "mercenarios.ya_la_tienes_fuera";
+    pub const MERCENARIOS_AL_TOPE: &str = "mercenarios.al_tope";
+    pub const MERCENARIOS_SIN_RECLUTAS: &str = "mercenarios.sin_reclutas";
+    pub const MERCENARIOS_PRESTAMO_SIN_TROPAS: &str = "mercenarios.prestamo_sin_tropas";
+    pub const MERCENARIOS_NO_SE_PRESTA: &str = "mercenarios.no_se_presta";
+    pub const MERCENARIOS_PRESTAMO_REPETIDA: &str = "mercenarios.prestamo_repetida";
+    pub const MERCENARIOS_YA_PRESTADA: &str = "mercenarios.ya_prestada";
+    pub const MERCENARIOS_NADA_QUE_REPONER: &str = "mercenarios.nada_que_reponer";
+    // Reclutar en una plaza (`ErrorReclutamiento`), en el orden en que se comprueban.
+    pub const RECLUTAMIENTO_NO_PUEDES: &str = "reclutamiento.no_puedes";
+    pub const RECLUTAMIENTO_SIN_TECNOLOGIA: &str = "reclutamiento.sin_tecnologia";
+    pub const RECLUTAMIENTO_RESERVADA: &str = "reclutamiento.reservada";
+    pub const RECLUTAMIENTO_YA_LA_TIENES_FUERA: &str = "reclutamiento.ya_la_tienes_fuera";
+    pub const RECLUTAMIENTO_SOLO_REPONER: &str = "reclutamiento.solo_reponer";
+    pub const RECLUTAMIENTO_AL_TOPE: &str = "reclutamiento.al_tope";
+    pub const RECLUTAMIENTO_SIN_POBLACION: &str = "reclutamiento.sin_poblacion";
+    pub const RECLUTAMIENTO_SIN_EDIFICIO: &str = "reclutamiento.sin_edificio";
+    pub const RECLUTAMIENTO_SIN_RECURSOS: &str = "reclutamiento.sin_recursos";
+    pub const RECLUTAMIENTO_SIN_RESERVA_DE_TRIGO: &str = "reclutamiento.sin_reserva_de_trigo";
+    // El héroe, sus puntos, loadouts, escuadras y guarnición (`ErrorHeroe`).
+    pub const HEROE_YA_EXISTE: &str = "heroe.ya_existe";
+    pub const HEROE_CAMPAMENTO_DESCONOCIDO: &str = "heroe.campamento_desconocido";
+    pub const HEROE_PUNTOS_NEGATIVOS: &str = "heroe.puntos_negativos";
+    pub const HEROE_NINGUN_PUNTO: &str = "heroe.ningun_punto";
+    pub const HEROE_PUNTOS_INSUFICIENTES: &str = "heroe.puntos_insuficientes";
+    pub const HEROE_TOPE_DE_ATRIBUTO: &str = "heroe.tope_de_atributo";
+    pub const LOADOUT_SIN_NOMBRE: &str = "loadout.sin_nombre";
+    pub const LOADOUT_DESCONOCIDO: &str = "loadout.desconocido";
+    pub const LOADOUT_PERK_NO_DESBLOQUEADO: &str = "loadout.perk_no_desbloqueado";
+    pub const ESCUADRA_REPETIDA: &str = "escuadra.repetida";
+    pub const ESCUADRA_AJENA: &str = "escuadra.ajena";
+    pub const ESCUADRA_EN_BATALLA: &str = "escuadra.en_batalla";
+    pub const LIDERAZGO_SUPERADO: &str = "liderazgo.superado";
+    pub const GUARNICION_SIN_RESIDENCIA: &str = "guarnicion.sin_residencia";
+    pub const GUARNICION_NO_EN_CAMPAMENTO: &str = "guarnicion.no_en_campamento";
+    pub const GUARNICION_YA_ASIGNADA: &str = "guarnicion.ya_asignada";
+    pub const GUARNICION_SUPERA_EL_CUPO: &str = "guarnicion.supera_el_cupo";
+    pub const GUARNICION_NO_ASIGNADA: &str = "guarnicion.no_asignada";
+    // Presencia: dónde está el héroe y si está en el mundo.
+    pub const HEROE_FUERA_DEL_MUNDO: &str = "heroe.fuera_del_mundo";
+    pub const HEROE_DESCONECTANDOSE: &str = "heroe.desconectandose";
+    pub const HEROE_SIN_COLUMNA: &str = "heroe.sin_columna";
+    pub const HEROE_EN_COLUMNA: &str = "heroe.en_columna";
+    pub const HEROE_NO_ESTA_EN_LA_PLAZA: &str = "heroe.no_esta_en_la_plaza";
+    pub const HEROE_SIN_RESIDENCIA: &str = "heroe.sin_residencia";
+    pub const HEROE_UBICACION_INVALIDA: &str = "heroe.ubicacion_invalida";
+    pub const HEROE_COLUMNA_OCUPADA: &str = "heroe.columna_ocupada";
+    // Tecnologías (andamiaje de administración).
+    pub const TECNOLOGIA_DESCONOCIDA: &str = "tecnologia.desconocida";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -741,11 +1013,8 @@ mod pruebas {
             Comando::DarSuministro { ejercito: 2, recurso: Recurso::Oro, cantidad: 1_000 },
             Comando::AdjuntarCaravana { caravana: 1, ejercito: 2 },
             Comando::AparcarCaravana { caravana: 1, asentamiento: 3 },
-            Comando::ComprarEnCampamento { ejercito: 2, campamento: 7, recurso: Recurso::Cobre, cantidad: 5_000 },
-            Comando::RepostarEnCampamento { ejercito: 2, campamento: 7 },
-            Comando::FijarResidencia { ejercito: 2, campamento: Some(7) },
-            Comando::FijarResidencia { ejercito: 2, campamento: None },
-            Comando::DarAlmacenPersonal { ejercito: 2, recurso: Recurso::Oro, cantidad: 9 },
+            Comando::ComprarEnCampamento { heroe: 2, campamento: 7, recurso: Recurso::Cobre, cantidad: 5_000 },
+            Comando::RepostarEnCampamento { heroe: 2, campamento: 7 },
             Comando::MarcarPueblo { asentamiento: 3, nodo: 70_001 },
             Comando::EntregarMateriales { ejercito: 2, pueblo: 9 },
             Comando::DestruirPueblo { pueblo: 9 },
@@ -758,6 +1027,59 @@ mod pruebas {
         // Un tipo de carro fuera de rango no se decodifica.
         let mut b = Peticion::nueva("a", "i", Comando::AnadirCarro { caravana: 1, tipo: TipoCarro::Basico }).codificar();
         *b.last_mut().unwrap() = 9;
+        assert!(Peticion::decodificar(&b).is_err());
+    }
+
+    #[test]
+    fn las_ordenes_de_heroes_dan_la_vuelta_por_el_registro() {
+        let comandos = vec![
+            Comando::FijarResidencia { heroe: 2, residencia: Some(Residencia::Campamento(7)) },
+            Comando::FijarResidencia { heroe: 2, residencia: Some(Residencia::Asentamiento(3)) },
+            Comando::FijarResidencia { heroe: 2, residencia: None },
+            Comando::DarAlmacenPersonal { heroe: 2, recurso: Recurso::Oro, cantidad: 9 },
+            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Bot },
+            Comando::ReclutarTropa { asentamiento: 3, heroe: 2, tropa: Tropa::Espartiatas },
+            Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::LancerosMimbre, pagar_con: PagarCon::Carro },
+            Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::MiliciaLanceros, pagar_con: PagarCon::AlmacenPersonal },
+            Comando::PedirPrestamo { heroe: 2, tropas: vec![Tropa::Granjeros, Tropa::Mineros] },
+            Comando::ReponerPrestamo { heroe: 2 },
+            Comando::GuardarLoadout { heroe: 2, loadout: None, nombre: "Asalto".into(), escuadras: vec![5, 6], perks: vec![1, 9], activo: None },
+            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![], perks: vec![], activo: Some(true) },
+            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![5], perks: vec![], activo: Some(false) },
+            Comando::BorrarLoadout { heroe: 2, loadout: 8 },
+            Comando::RepartirPuntos { heroe: 2, fuerza: 3, destreza: 0, armadura: 1, vitalidad: -2 },
+            Comando::OrdenarEscuadras { heroe: 2, escuadras: vec![6, 5, 4] },
+            Comando::AsignarGuarnicion { heroe: 2, escuadra: 5 },
+            Comando::RetirarGuarnicion { heroe: 2, escuadra: 5 },
+            Comando::PasarAViveres { heroe: 2, cantidad: 30_000 },
+            Comando::AsignarEscolta { caravana: 1, heroe: 2, escuadras: vec![5, 6] },
+            Comando::QuitarEscolta { caravana: 1, heroe: 2, escuadras: None },
+            Comando::QuitarEscolta { caravana: 1, heroe: 2, escuadras: Some(vec![]) },
+            Comando::QuitarEscolta { caravana: 1, heroe: 2, escuadras: Some(vec![5]) },
+            Comando::Desconectarse { heroe: 2 },
+            Comando::Conectarse { heroe: 2 },
+            Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["arco_compuesto".into(), "leva_comunal".into()] },
+            Comando::FijarFaccionDeHeroe { heroe: 2, faccion: Some(3) },
+            Comando::FijarFaccionDeHeroe { heroe: 2, faccion: None },
+            Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Asentamiento(3) },
+            Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Columna(9) },
+            Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Mercenarios(1) },
+            Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Desconectado(Punto::new(5, -7)) },
+            Comando::HerirHeroe { heroe: 2 },
+        ];
+        for c in comandos {
+            let p = Peticion { actor: "ana".into(), admin: false, peticion_id: "z".into(), version_esperada: Some(3), comando: c };
+            assert_eq!(Peticion::decodificar(&p.codificar()).unwrap(), p);
+        }
+        // Una tropa fuera del catálogo, una forma de pago o un controlador desconocidos no se decodifican.
+        let mut b = Peticion::nueva("a", "i", Comando::ReclutarTropa { asentamiento: 1, heroe: 1, tropa: Tropa::Arqueros }).codificar();
+        *b.last_mut().unwrap() = 200;
+        assert!(Peticion::decodificar(&b).is_err());
+        let mut b = Peticion::nueva("a", "i", Comando::ReclutarEnCampamento { heroe: 1, tropa: Tropa::Arqueros, pagar_con: PagarCon::Carro }).codificar();
+        *b.last_mut().unwrap() = 7;
+        assert!(Peticion::decodificar(&b).is_err());
+        let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano }).codificar();
+        *b.last_mut().unwrap() = 7;
         assert!(Peticion::decodificar(&b).is_err());
     }
 }
