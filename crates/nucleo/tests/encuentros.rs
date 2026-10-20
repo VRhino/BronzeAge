@@ -186,12 +186,13 @@ fn un_herido_y_una_columna_en_batalla_no_tienen_encuentros() {
 }
 
 #[test]
-fn una_columna_en_batalla_sale_del_espacio_no_admite_ordenes_de_movimiento_y_vuelve_quieta() {
+fn una_columna_en_batalla_sale_del_espacio_no_come_no_admite_ordenes_de_movimiento_y_retoma_su_plan() {
     let (mut n, a, b) = frente_a_frente();
     assert_eq!(n.cosas_en_el_espacio(), 2);
     n.aplicar_en(0, marchar("ana", "m1", a, c(39, 2)));
     n.avanzar_hasta(60_000);
     let donde = n.ejercito(a).unwrap().posicion_en(60_000);
+    let (llegada, viveres) = (n.ejercito(a).unwrap().plan.fin().unwrap(), n.ejercito(a).unwrap().columna.viveres.valor_en(60_000));
     assert!(n.columna_entra_en_batalla(60_000, a));
     assert!(!n.columna_entra_en_batalla(60_000, a), "ya estaba apartada");
     assert!(!n.columna_entra_en_batalla(60_000, 9_999));
@@ -205,11 +206,17 @@ fn una_columna_en_batalla_sale_del_espacio_no_admite_ordenes_de_movimiento_y_vue
     assert_eq!(codigo(&perseguir(&mut n, 60_000, "ana", "p", a, Objetivo::Ejercito(b))), rechazos::COLUMNA_EN_BATALLA);
     assert_eq!(codigo(&inspeccionar(&mut n, 60_000, "ana", "i", a, Objetivo::Ejercito(b))), rechazos::COLUMNA_EN_BATALLA);
     assert_eq!((n.version(), n.hash_estado()), (v, hash), "los rechazos no dejan rastro");
-    // Al acabar vuelve al espacio, quieta; el plan que llevaba no se retoma.
+    // Apartada no come: los víveres no bajan mientras dura.
+    assert_eq!(n.ejercito(a).unwrap().columna.viveres.valor_en(90_000), viveres);
+    // Al acabar vuelve al espacio y retoma el plan que llevaba, desplazado lo que duró la batalla (30 s).
     assert!(n.columna_sale_de_batalla(90_000, a));
     assert!(!n.columna_sale_de_batalla(90_000, a));
     assert_eq!((n.cosas_en_el_espacio(), n.en_el_mapa(a)), (2, true));
-    assert!(!n.ejercito(a).unwrap().marchando());
+    let e = n.ejercito(a).unwrap();
+    assert!(e.marchando() && !e.en_batalla && e.plan_en_pausa.is_none());
+    assert_eq!(e.plan.fin(), Some(llegada + 30_000), "llega 30 s más tarde");
+    assert_eq!(e.posicion_en(90_000), donde, "retoma desde donde se quedó");
+    assert!(e.columna.viveres.valor_en(100_000) < viveres, "y vuelve a comer");
     assert_eq!(hechos(&n, "ejercito.en_batalla").len() + hechos(&n, "ejercito.sale_de_batalla").len(), 2);
     assert!(n.aplicar_en(91_000, marchar("ana", "m3", a, c(39, 2))).aceptada());
 }
@@ -448,7 +455,7 @@ fn la_foto_con_una_persecucion_viva_conserva_la_presa_los_informes_las_relacione
     let mut n = nucleo(40, 5);
     let (p, q) = persecucion_viva(&mut n);
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN12");
+    assert_eq!(&bytes[..5], b"BAN13");
     let vuelta = nucleo::Estado::deserializar(&bytes, &comun::reglas(), "hash-de-prueba").expect("deserializa");
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.ejercitos[&p].persiguiendo, Some(q));

@@ -13,7 +13,7 @@ fn part(heroe: HeroeId, controlador: Controlador, escuadras: &[(EscuadraId, i64)
         faccion: Some(heroe as u32),
         controlador,
         casillas_libres: 2,
-        escuadras: escuadras.iter().map(|&(id, efectivos)| EscuadraEnBatalla { id, dueno: Some(heroe), efectivos }).collect(),
+        escuadras: escuadras.iter().map(|&(id, efectivos)| EscuadraEnBatalla { id, tropa: Tropa::MiliciaLanceros, dueno: Some(heroe), efectivos }).collect(),
     }
 }
 
@@ -23,7 +23,7 @@ fn ticket(contexto: Contexto) -> Ticket {
         r(),
         contexto,
         BandoDeTicket::nuevo(Some(1), vec![part(1, Controlador::Humano, &[(10, 25)])], vec![]),
-        BandoDeTicket::nuevo(Some(2), vec![part(2, Controlador::Bot, &[(20, 25)])], vec![EscuadraEnBatalla { id: 30, dueno: None, efectivos: 13 }]),
+        BandoDeTicket::nuevo(Some(2), vec![part(2, Controlador::Bot, &[(20, 25)])], vec![EscuadraEnBatalla { id: 30, tropa: Tropa::MiliciaLanceros, dueno: None, efectivos: 13 }]),
     )
 }
 
@@ -83,7 +83,7 @@ fn el_contexto_decide_capacidad_duracion_y_convocatoria() {
     let resto = [
         CAMPAL,
         Contexto::CampoAbierto { punto: p, solitarios: true },
-        Contexto::Caravana { caravana: 1, punto: p, modalidad: Modalidad::Disputa },
+        Contexto::Caravana { caravana: 1, punto: p, modalidad: Modalidad::Disputa, carros: 3 },
         Contexto::CampamentoBandidos { campamento: 1, punto: p },
         Contexto::SaqueoPueblo { pueblo: 1, punto: p },
     ];
@@ -507,6 +507,28 @@ fn el_tiempo_agotado_lo_gana_el_defensor_y_la_duracion_maxima_es_valida() {
     assert_eq!(b.validar_resultado("srv", &res, &sin_objetos), Ok(()));
     let efectos = b.efectos_del_resultado(&res);
     assert_eq!(efectos.heridos, vec![1], "pierde el atacante");
+}
+
+#[test]
+fn los_carros_perdidos_son_posiciones_de_la_lista_de_una_caravana_sin_repetir() {
+    use ErrorResultado::CarroInexistente;
+    let caravana = Contexto::Caravana { caravana: 1, punto: Punto::default(), modalidad: Modalidad::Disputa, carros: 3 };
+    let b = en_curso(caravana);
+    let con = |carros: &[&str]| {
+        let mut res = resultado(&b);
+        res.carros_perdidos = carros.iter().map(|c| c.to_string()).collect();
+        b.validar_resultado("srv", &res, &sin_objetos).map(|()| b.efectos_del_resultado(&res).carros_perdidos)
+    };
+    assert_eq!(con(&["2", "0"]), Ok(vec![2, 0]));
+    assert_eq!(con(&[]), Ok(vec![]));
+    for malo in [&["3"][..], &["x"], &["1", "1"], &["-1"]] {
+        assert!(matches!(con(malo), Err(CarroInexistente(_))), "{malo:?}");
+    }
+    // Fuera de un asalto de caravana no hay carros que perder.
+    let campal = en_curso(CAMPAL);
+    let mut res = resultado(&campal);
+    res.carros_perdidos = vec!["0".into()];
+    assert_eq!(campal.validar_resultado("srv", &res, &sin_objetos), Err(CarroInexistente("0".into())));
 }
 
 #[test]

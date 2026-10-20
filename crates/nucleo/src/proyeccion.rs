@@ -19,6 +19,15 @@ pub fn parse_id_heroe(s: &str) -> Option<u64> {
     s.strip_prefix("heroe-")?.parse().ok()
 }
 
+/// El id de una escuadra en el contrato (`esc-{id}`): lo que viaja en `SquadSnapshot.squad_id` y en los resultados de la batalla.
+pub fn id_escuadra(id: u64) -> String {
+    format!("esc-{id}")
+}
+
+pub fn parse_id_escuadra(s: &str) -> Option<u64> {
+    s.strip_prefix("esc-")?.parse().ok()
+}
+
 pub fn id_asentamiento(id: u64) -> String {
     format!("as-{id}")
 }

@@ -24,10 +24,14 @@ struct Mundo {
 }
 
 async fn arrancar() -> Mundo {
-    let reloj = RelojCompartido::nuevo(0);
     let mut n = nucleo(30, 30);
     n.crear_ejercito(0, "ana", 1, c(1, 1), 4_000, 350_000).unwrap(); // ej-1, con el héroe 2
     n.crear_ejercito(0, "beto", 2, c(10, 10), 4_000, 350_000).unwrap(); // ej-3, con el héroe 4
+    arrancar_con(n).await
+}
+
+async fn arrancar_con(n: Nucleo) -> Mundo {
+    let reloj = RelojCompartido::nuevo(n.ahora());
     let (tx, rx) = mpsc::channel(1024);
     let actor = sesiones::lanzar(n, reloj.clone(), rx);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -247,4 +251,97 @@ async fn ordenes_no_implementadas_se_rechazan_con_codigo_estable() {
     ana.enviar(marchar_a("y", "nadie", c(1, 1))).await;
     assert_eq!(resultado(&mut ana).await.rechazo.unwrap().codigo, "heroe.desconocido");
     w.parar().await;
+}
+
+// ───────────────────────────── El servidor de batalla ─────────────────────────────
+
+fn de_batalla(cuerpo: pb::mensaje_de_servidor_de_batalla::Cuerpo) -> mc::Cuerpo {
+    mc::Cuerpo::Batalla(pb::MensajeDeServidorDeBatalla { cuerpo: Some(cuerpo) })
+}
+
+async fn aviso(c: &mut ClientePrueba) -> pb::Aviso {
+    match c.esperar().await.cuerpo {
+        Some(ms::Cuerpo::Aviso(a)) => a,
+        o => panic!("se esperaba un Aviso, llegó {o:?}"),
+    }
+}
+
+#[tokio::test]
+async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_los_aplica_con_idempotencia() {
+    use pb::mensaje_de_servidor_de_batalla::Cuerpo;
+    use militar::catalogo::Tropa;
+    use nucleo::{Comando, ObjetivoAtaque, Peticion, Relacion};
+    // Una batalla abierta a los 10 minutos: ana (humana) ataca a beto (bot).
+    let mut n = nucleo_con_batallas();
+    let (ana, beto) = (n.crear_ejercito(0, "ana", 1, c(10, 10), 4_000, 350_000).unwrap(), n.crear_ejercito(0, "beto", 2, base::Punto::new(c(10, 10).x + 2_000, c(10, 10).y), 4_000, 350_000).unwrap());
+    let (h_ana, h_beto) = (n.ejercito(ana).unwrap().columna.lider, n.ejercito(beto).unwrap().columna.lider);
+    for (h, t) in [(h_ana, Tropa::EspadachinesBronce), (h_beto, Tropa::MiliciaLanceros)] {
+        let cantidad = militar::Reglas::cargar().tropas.tropa(t).unidades;
+        assert!(n.aplicar_en(0, Peticion::nueva("admin", &format!("d{h}"), Comando::DarEscuadra { heroe: h, tropa: t, cantidad }).de_admin()).aceptada());
+    }
+    assert!(n.aplicar_en(0, Peticion::nueva("admin", "h", Comando::FijarControlador { heroe: h_ana, controlador: militar::heroe::Controlador::Humano }).de_admin()).aceptada());
+    assert!(n.aplicar_en(0, Peticion::nueva("admin", "g", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) }).de_admin()).aceptada());
+    assert!(n.aplicar_en(10 * 60_000, Peticion::nueva("ana", "a", Comando::Atacar { heroe: h_ana, objetivo: ObjetivoAtaque::Ejercito(beto), declara_guerra: false })).aceptada());
+    let id = n.batallas().next().expect("se abrió").id;
+    let uuid = n.uuid_de_batalla(id);
+    let escuadras: Vec<u64> = n.batalla(id).unwrap().escuadras_de().map(|e| e.id).collect();
+    let w = arrancar_con(n).await;
+    let (mut svc, _) = ClientePrueba::entrar(w.srv.direccion, hola("svc:srv", TipoCliente::ClienteServidorBatalla)).await;
+    foto(&mut svc).await;
+    let inicio = |revision| de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 1, battle_id: uuid.clone(), ticket_revision: revision, intento_asignacion_id: "a1".into() }));
+    let asignacion = de_batalla(Cuerpo::Asignacion(pb::BattleServerAssignment {
+        schema_version: 1,
+        battle_id: uuid.clone(),
+        ticket_revision: 0,
+        intento_asignacion_id: "a1".into(),
+        instancia: Some(pb::InstanciaDeBatalla { host: "10.0.0.1".into(), puerto: 7777, protocolo: "udp".into() }),
+        tokens_participante: vec![pb::TokenParticipante { heroe_id: format!("heroe-{h_ana}"), token: "t".into(), expira_en_ms: 99 }],
+    }));
+    // Lo rechazado vuelve como un aviso con el código estable: inicio sin asignación, batalla que no es de esta partida, esquema de otra versión.
+    svc.enviar(inicio(0)).await;
+    assert_eq!(aviso(&mut svc).await.codigo, "batalla.invalida");
+    svc.enviar(de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 1, battle_id: "00000000-0000-0000-0000-000000000000".into(), ticket_revision: 0, intento_asignacion_id: "a1".into() }))).await;
+    assert_eq!(aviso(&mut svc).await.codigo, "batalla.no_existe");
+    svc.enviar(de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 2, battle_id: uuid.clone(), ticket_revision: 0, intento_asignacion_id: "a1".into() }))).await;
+    assert_eq!(aviso(&mut svc).await.codigo, "batalla.invalida");
+    // Asignación, inicio y resultado se aplican; repetirlos responde bien y no avisa de nada.
+    svc.enviar(asignacion.clone()).await;
+    svc.enviar(asignacion).await;
+    svc.enviar(inicio(0)).await;
+    svc.enviar(inicio(0)).await;
+    let resultado = pb::BattleResult {
+        schema_version: 1,
+        battle_id: uuid.clone(),
+        result_id: "res-1".into(),
+        ticket_revision: 0,
+        intento_asignacion_id: "a1".into(),
+        inicio_ms: 1_000,
+        fin_ms: 61_000,
+        ganador: pb::LadoId::Atacante as i32,
+        razon: pb::RazonVictoria::ObjetivosCapturados as i32,
+        objetivos: vec![pb::ObjetivoResultado { objetivo_id: "bandera".into(), capturado_por: Some(pb::LadoId::Atacante as i32) }],
+        por_escuadra: escuadras.iter().map(|e| pb::ResultadoEscuadra { squad_id: format!("esc-{e}"), desplegados: 5, supervivientes_al_cierre: 5, muertos: 0, xp_ganada: 2 }).collect(),
+        por_heroe: [h_ana, h_beto].iter().map(|h| pb::ResultadoHeroe { heroe_id: format!("heroe-{h}"), participo: true, sobrevivio_al_cierre: true, xp_ganada: 3, derrotado: None, botin: None }).collect(),
+        version_servidor: "v1".into(),
+        carros_perdidos: vec![],
+    };
+    // Con una escuadra que no existe, el resultado se rechaza entero; con unas cifras que no cierran, también.
+    let mut mal = resultado.clone();
+    mal.por_escuadra[0].squad_id = "cualquiera".into();
+    svc.enviar(de_batalla(Cuerpo::Resultado(mal))).await;
+    assert_eq!(aviso(&mut svc).await.codigo, "batalla.invalida");
+    svc.enviar(de_batalla(Cuerpo::Resultado(resultado.clone()))).await; // las cifras (5 + 0 ≠ lo autorizado) no cierran
+    assert_eq!(aviso(&mut svc).await.codigo, "batalla.invalida");
+    silencio(&mut svc).await;
+    let n = w.parar().await;
+    let b = n.batalla(id).unwrap();
+    assert_eq!((b.estado, b.asignacion.as_ref().unwrap().servidor.as_str()), (combate::ciclo::EstadoBatalla::EnCurso, "srv"), "el servidor es el de la sesión");
+    assert!(b.iniciada_en.is_some() && b.resultado.is_none());
+    assert_eq!((n.metricas().ordenes_aceptadas, n.metricas().ordenes_duplicadas), (7 + 2, 2), "las siete preparatorias y los dos mensajes que cambiaron algo; los repetidos son duplicados");
+}
+
+fn nucleo_con_batallas() -> Nucleo {
+    let mut a = arranque(reticula(30, 30));
+    a.reglas.batallas_en_unity = true;
+    Nucleo::nuevo(a)
 }

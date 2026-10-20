@@ -2,7 +2,7 @@
 //! aplica sale de él en una sola pasada. Los tipos son la forma del `BattleResult` del contrato (`battle.proto`), sin los campos que el servidor
 //! solo guarda y no interpreta.
 
-use crate::ciclo::{Batalla, EscuadraEnBatalla};
+use crate::ciclo::{Batalla, Contexto, EscuadraEnBatalla};
 use crate::resolucion::Lado;
 use base::Mil;
 use militar::heroe::Monedas;
@@ -93,6 +93,8 @@ pub enum ErrorResultado {
     ObjetoRepetido(String),
     /// Más objetos que casillas libres tenía el héroe en el ticket.
     SinCasillas(HeroeId),
+    /// Un carro perdido que la caravana no tiene (o repetido), o carros perdidos en una batalla que no es de caravana.
+    CarroInexistente(String),
 }
 
 /// Lo que el núcleo aplica de un resultado ya validado (Batalla_Unity_Ciclo §9, pasos 1-2).
@@ -120,7 +122,8 @@ pub struct Efectos {
     pub heridos: Vec<HeroeId>,
     pub escuadras: Vec<EfectoEscuadra>,
     pub heroes: Vec<EfectoHeroe>,
-    pub carros_perdidos: Vec<String>,
+    /// Posiciones en la lista de carros de la caravana (Unity los nombra por su posición).
+    pub carros_perdidos: Vec<usize>,
     /// Todos los candados de la batalla, que se sueltan.
     pub soltar: Vec<EscuadraId>,
 }
@@ -196,7 +199,24 @@ impl Batalla {
                 return Err(SinCasillas(h.heroe));
             }
         }
-        Ok(())
+        // 8. Carros perdidos (solo en un asalto de caravana): posiciones de la lista, sin repetir.
+        self.carros_perdidos(res).map(|_| ())
+    }
+
+    /// Las posiciones de los carros que Unity da por perdidos. Solo valen en un asalto de caravana y han de existir y no repetirse.
+    fn carros_perdidos(&self, res: &Resultado) -> Result<Vec<usize>, ErrorResultado> {
+        let carros = match self.ticket.contexto {
+            Contexto::Caravana { carros, .. } => carros,
+            _ => 0,
+        };
+        let mut indices: Vec<usize> = vec![];
+        for c in &res.carros_perdidos {
+            match c.parse::<usize>() {
+                Ok(i) if i < carros && !indices.contains(&i) => indices.push(i),
+                _ => return Err(ErrorResultado::CarroInexistente(c.clone())),
+            }
+        }
+        Ok(indices)
     }
 
     /// Lo que hay que aplicar de un resultado **ya validado**.
@@ -214,7 +234,7 @@ impl Batalla {
             heridos,
             escuadras: res.por_escuadra.iter().map(|e| EfectoEscuadra { escuadra: e.escuadra, cantidad: e.supervivientes_al_cierre, xp: e.xp_ganada * 1000 }).collect(),
             heroes: res.por_heroe.iter().map(|h| EfectoHeroe { heroe: h.heroe, xp: h.xp_ganada, botin: h.botin.clone() }).collect(),
-            carros_perdidos: res.carros_perdidos.clone(),
+            carros_perdidos: self.carros_perdidos(res).expect("el resultado ya está validado"),
             soltar: self.escuadras_con_candado(),
         }
     }

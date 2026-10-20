@@ -1,4 +1,4 @@
-//! Serialización canónica del estado militar (`EstadoMilitar`) para el hash y las fotos (formato BAN12, igual que en BAN11). Cada estructura se desestructura
+//! Serialización canónica del estado militar (`EstadoMilitar`) para el hash y las fotos (formato BAN13, igual que en BAN12 y BAN11). Cada estructura se desestructura
 //! **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · convocatorias{n u64 · n × convocatoria} · reclutas{n u64 · n ×

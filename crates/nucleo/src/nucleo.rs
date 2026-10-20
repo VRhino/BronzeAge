@@ -23,6 +23,7 @@
 
 use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
 use crate::estado::{Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, PRIO_LLEGADA, PRIO_UMBRAL};
+use combate::ciclo::Batalla;
 use crate::estado_militar::HeroeNucleo;
 use mundo::Mundo;
 use crate::generadores::{Cx, GeneradorDeEventos, Transicion};
@@ -41,6 +42,7 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 mod bandidos;
+mod batallas;
 mod columnas;
 mod combates;
 mod conquistas;
@@ -60,6 +62,7 @@ mod viaje;
 mod zonas;
 
 use espacio::{Cosa, Motivo};
+pub use batallas::TokenDeJugador;
 pub use zonas::InformeViabilidad;
 
 /// Tipos de entrada del registro.
@@ -171,6 +174,9 @@ pub struct Nucleo {
     espacio: espacio::Espacio,
     /// Las columnas que están rehaciendo su plan por una persecución en este instante (para no repetir una en la misma cascada). Vacío entre órdenes.
     siguiendo: Vec<u64>,
+    /// Las batallas que salieron del estado al cumplir su retención y aún no recogió quien las persiste (`tomar_batallas_retiradas`): no entra en el hash ni
+    /// en las fotos.
+    retiradas: Vec<Batalla>,
 }
 
 impl Nucleo {
@@ -265,6 +271,7 @@ impl Nucleo {
             cache: viaje::CacheViaje::default(),
             espacio: espacio::Espacio::nuevo(),
             siguiendo: Vec::new(),
+            retiradas: Vec::new(),
         };
         n.reconstruir_espacio();
         n.reiniciar_muestreo();
@@ -421,6 +428,7 @@ impl Nucleo {
             Carga::SalidaDelMundo => self.salida_del_mundo(id, t),
             Carga::Militar(suceso) => self.suceso_militar(id, suceso, t),
             Carga::Combate(suceso) => self.suceso_de_combate(id, suceso, t),
+            Carga::Batalla(suceso) => self.suceso_de_batalla(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
@@ -665,6 +673,9 @@ impl Nucleo {
         let v = self.estado.version;
         let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
         let mut creadas = Vec::new();
+        if let Some(r) = self.rechazo_por_batalla(t, p) {
+            return r;
+        }
         match &p.comando {
             Comando::CrearEjercito { cuenta, faccion, posicion, velocidad, viveres } => {
                 if !p.admin {
@@ -852,6 +863,17 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::Atacar { heroe, objetivo, declara_guerra } => match self.atacar(t, p, *heroe, *objetivo, *declara_guerra) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::FijarControlador { .. }
+            | Comando::UnirseABatalla { .. }
+            | Comando::CancelarBatalla { .. }
+            | Comando::RegistrarAsignacion { .. }
+            | Comando::ConfirmarInicio { .. }
+            | Comando::RegistrarTokens { .. }
+            | Comando::RegistrarSalida { .. }
+            | Comando::AplicarResultado { .. } => match self.ejecutar_batallas(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

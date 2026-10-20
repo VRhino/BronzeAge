@@ -367,7 +367,7 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     urbe.set_recintos(vec![Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN12", "el formato de foto es BAN12 (BAN11 no traía el estado del combate ni la protección y la ocupación de las plazas)");
+    assert_eq!(&bytes[..5], b"BAN13", "el formato de foto es BAN13 (BAN12 no traía las batallas de Unity ni el plan en pausa de las columnas apartadas)");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);

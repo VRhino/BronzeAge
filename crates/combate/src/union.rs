@@ -153,7 +153,7 @@ mod pruebas {
     fn la_caravana_el_pueblo_y_la_avanzada_se_reparten_como_el_asedio() {
         let punto = Punto::default();
         for c in [
-            Contexto::Caravana { caravana: 1, punto, modalidad: Modalidad::Disputa },
+            Contexto::Caravana { caravana: 1, punto, modalidad: Modalidad::Disputa, carros: 2 },
             Contexto::SaqueoPueblo { pueblo: 1, punto },
             Contexto::Avanzada { avanzada: 1, etapa: Etapa::Fuerte, punto },
         ] {
@@ -166,7 +166,7 @@ mod pruebas {
 
     #[test]
     fn un_defensor_sin_faccion_no_tiene_aliados() {
-        let mut r = rep(Contexto::Caravana { caravana: 1, punto: Punto::default(), modalidad: Modalidad::Aguante }, false);
+        let mut r = rep(Contexto::Caravana { caravana: 1, punto: Punto::default(), modalidad: Modalidad::Aguante, carros: 2 }, false);
         r.defensor = None;
         assert_eq!(lado_para_unirse(&r, Some(DEFENSOR), false, None), Err(ErrorUnion::NoCombateAqui));
         assert_eq!(lado_para_unirse(&r, Some(ATACANTE), false, None), Ok(Lado::Atacante));

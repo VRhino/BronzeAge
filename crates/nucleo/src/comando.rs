@@ -4,11 +4,15 @@
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
 use crate::codec_comercio::{animal_a_u8, animal_de_u8, tipo_carro_a_u8, tipo_carro_de_u8};
+use crate::codec_batallas::{asignacion_escribir, asignacion_leer, resultado_escribir, resultado_leer, salida_escribir, salida_leer, tokens_escribir, tokens_leer};
 use crate::codec_columna::{politica_a_u8, politica_de_u8};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use crate::estado_militar::Relacion;
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
+use combate::ciclo::{Asignacion, SalidaBatalla, Token};
+use combate::resolucion::Lado;
+use combate::resultado::Resultado as ResultadoDeBatalla;
 use comercio::caravana::{Animal, TipoCarro};
 use militar::catalogo::Tropa;
 use militar::columna::Politica;
@@ -291,6 +295,204 @@ pub enum Comando {
     /// Da al héroe una escuadra de `cantidad` soldados de esa tropa (nivel 1, la moral al máximo), sin pagar ni mirar el Liderazgo: en su columna si va a
     /// bordo y, si no, en su campamento. Solo administración; para escenarios y pruebas, igual que `CrearEjercito`. `creadas` lleva su id.
     DarEscuadra { heroe: u64, tropa: Tropa, cantidad: i64 },
+    // ── Batallas de Unity (Batalla_Unity_Ciclo, fase 4E). No hay orden para abrirlas: las abre `Atacar` cuando el proceso tiene servidores de batalla
+    //    (`Reglas::batallas_en_unity`) y hay un héroe humano en los dos bandos. `batalla` es el id de la partida (`Batalla::id`); el contrato lo nombra con
+    //    su UUID (`uuid_de_batalla`). ──
+    /// Pone a un héroe como humano o como bot. Solo administración; para escenarios y pruebas: los héroes de `CrearEjercito` nacen bot.
+    FijarControlador { heroe: u64, controlador: Controlador },
+    /// La columna del héroe entra en una batalla activa, en el bando que le toca (`lado` solo es obligatorio en una persecución). No lleva candado de batalla.
+    UnirseABatalla { heroe: u64, batalla: u64, lado: Option<Lado> },
+    /// Quien la inició se echa atrás antes de que empiece la partida: nadie pierde nada. No lleva candado de batalla.
+    CancelarBatalla { heroe: u64, batalla: u64 },
+    // Lo que manda el servidor de batalla (§8): no es una orden de jugador sino un mensaje de Conquest con la credencial del servidor, y el actor de la petición
+    // es `batalla-servidor:<id>` (`Peticion::de_servidor_de_batalla`). Repetir uno ya aplicado no cambia nada (`SinCambios`).
+    RegistrarAsignacion { batalla: u64, asignacion: Asignacion },
+    ConfirmarInicio { batalla: u64, intento: String, revision: u32 },
+    RegistrarTokens { batalla: u64, intento: String, tokens: Vec<Token> },
+    RegistrarSalida { batalla: u64, salida: SalidaBatalla },
+    AplicarResultado { batalla: u64, resultado: ResultadoDeBatalla },
+}
+
+/// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
+pub const ACTOR_SERVIDOR_DE_BATALLA: &str = "batalla-servidor:";
+
+/// Lo que un comando toca de las batallas: con qué hace chocar el candado (`Batalla_Unity_Ciclo` §5, `tocaLoBloqueado`).
+#[derive(Default)]
+pub(crate) struct Implicados {
+    pub heroes: Vec<u64>,
+    pub ejercitos: Vec<u64>,
+    pub caravanas: Vec<u64>,
+    pub asentamientos: Vec<u64>,
+    pub pueblos: Vec<u64>,
+    /// Campamentos de bandidos.
+    pub campamentos: Vec<u64>,
+}
+
+impl Comando {
+    /// ¿Lleva el candado de batalla? Todos los comandos salvo los que actúan sobre la propia batalla y conectarse y desconectarse (cerrar el cliente en plena
+    /// batalla tiene que anotarse, y volver a conectarse anular esa petición, §5.1), y los mensajes del servidor de batalla, que no pasan por el registro de
+    /// comandos de jugador.
+    pub(crate) fn lleva_candado(&self) -> bool {
+        !matches!(
+            self,
+            Comando::UnirseABatalla { .. }
+                | Comando::CancelarBatalla { .. }
+                | Comando::Conectarse { .. }
+                | Comando::Desconectarse { .. }
+                | Comando::RegistrarAsignacion { .. }
+                | Comando::ConfirmarInicio { .. }
+                | Comando::RegistrarTokens { .. }
+                | Comando::RegistrarSalida { .. }
+                | Comando::AplicarResultado { .. }
+        )
+    }
+
+    /// Los héroes, columnas, caravanas, plazas, pueblos y campamentos de bandidos que nombra el comando. Cada variante se nombra a propósito (sin `_`): si se
+    /// añade una orden, esto deja de compilar y obliga a decidir qué toca. `Perseguir` e `Inspeccionar` apuntan a una columna o a una caravana; las plazas
+    /// que se inspeccionan o se atacan no se cuentan (la batalla de una plaza la rechaza `atacar`, y marchar hacia una asediada se puede, §5).
+    pub(crate) fn implicados(&self) -> Implicados {
+        let mut i = Implicados::default();
+        match self {
+            Comando::Perseguir { heroe, objetivo } | Comando::Inspeccionar { heroe, objetivo } => {
+                i.heroes.push(*heroe);
+                match *objetivo {
+                    Objetivo::Ejercito(x) => i.ejercitos.push(x),
+                    Objetivo::Caravana(x) => i.caravanas.push(x),
+                    Objetivo::Asentamiento(_) => {}
+                }
+            }
+            Comando::Atacar { heroe, objetivo, declara_guerra: _ } => {
+                i.heroes.push(*heroe);
+                match *objetivo {
+                    ObjetivoAtaque::Ejercito(x) => i.ejercitos.push(x),
+                    ObjetivoAtaque::Caravana(x) => i.caravanas.push(x),
+                    ObjetivoAtaque::Campamento(x) => i.campamentos.push(x),
+                    ObjetivoAtaque::Pueblo(x) => i.pueblos.push(x),
+                    ObjetivoAtaque::Asentamiento(_) | ObjetivoAtaque::Avanzada(_) => {}
+                }
+            }
+            Comando::MarcharA { ejercito, .. } | Comando::Estacionar { ejercito } | Comando::DarCaravanaFundacion { ejercito } | Comando::Fundar { ejercito } | Comando::DarSuministro { ejercito, .. } => i.ejercitos.push(*ejercito),
+            Comando::ComerciarEnPlaza { ejercito, .. } => i.ejercitos.push(*ejercito),
+            Comando::EntregarDeCaravana { ejercito, caravana, .. } | Comando::AdjuntarCaravana { caravana, ejercito } => {
+                i.ejercitos.push(*ejercito);
+                i.caravanas.push(*caravana);
+            }
+            Comando::EntregarMateriales { ejercito, pueblo } => {
+                i.ejercitos.push(*ejercito);
+                i.pueblos.push(*pueblo);
+            }
+            Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } => i.pueblos.push(*pueblo),
+            Comando::AparcarCaravana { caravana, asentamiento } => {
+                i.caravanas.push(*caravana);
+                i.asentamientos.push(*asentamiento);
+            }
+            Comando::AnadirCarro { caravana, .. }
+            | Comando::AnadirAnimal { caravana, .. }
+            | Comando::ReservarCaravana { caravana, .. }
+            | Comando::CancelarCaravana { caravana }
+            | Comando::MoverCargaAparcada { caravana, .. }
+            | Comando::EnviarCaravanaAlOrigen { caravana } => i.caravanas.push(*caravana),
+            Comando::PrepararCaravana { caravana, destino, .. } => {
+                i.caravanas.push(*caravana);
+                i.asentamientos.push(*destino);
+            }
+            Comando::MoverCarro { de, a, .. } => i.caravanas.extend([*de, *a]),
+            Comando::ProponerTrueque { a, b, .. } => i.asentamientos.extend([*a, *b]),
+            Comando::FijarNivelAsentamiento { asentamiento, .. }
+            | Comando::AgrandarZona { asentamiento }
+            | Comando::ReclamarParcela { asentamiento }
+            | Comando::SoltarParcela { asentamiento, .. }
+            | Comando::AnadirEdificio { asentamiento, .. }
+            | Comando::QuitarDeCola { asentamiento, .. }
+            | Comando::MoverEnCola { asentamiento, .. }
+            | Comando::MejorarEdificio { asentamiento, .. }
+            | Comando::AlternarAutoConstruccion { asentamiento, .. }
+            | Comando::AlternarReceta { asentamiento, .. }
+            | Comando::CalibrarReserva { asentamiento, .. }
+            | Comando::SolicitarAscenso { asentamiento }
+            | Comando::ActivarPolitica { asentamiento, .. }
+            | Comando::ColocarOrdenMercado { asentamiento, .. }
+            | Comando::CrearCaravana { asentamiento }
+            | Comando::DarRecursos { asentamiento, .. }
+            | Comando::MarcarPueblo { asentamiento, .. } => i.asentamientos.push(*asentamiento),
+            Comando::ReclutarTropa { asentamiento, heroe, .. }
+            | Comando::EntrarEnAsentamiento { asentamiento, heroe }
+            | Comando::SalirDeAsentamiento { asentamiento, heroe }
+            | Comando::Guarnecer { asentamiento, heroe }
+            | Comando::Repostar { heroe, asentamiento }
+            | Comando::SalirAlMundo { asentamiento, heroe, .. }
+            | Comando::MovilizarEjercito { asentamiento, heroe, .. } => {
+                i.heroes.push(*heroe);
+                i.asentamientos.push(*asentamiento);
+            }
+            Comando::UnirseAEjercito { asentamiento, heroe, ejercito, .. } => {
+                i.heroes.push(*heroe);
+                i.asentamientos.push(*asentamiento);
+                i.ejercitos.push(*ejercito);
+            }
+            Comando::UnirseEnCampo { heroe, ejercito } | Comando::ResponderPeticionDeUnion { heroe, ejercito, .. } => {
+                i.heroes.push(*heroe);
+                i.ejercitos.push(*ejercito);
+            }
+            Comando::AsignarEscolta { caravana, heroe, .. } | Comando::QuitarEscolta { caravana, heroe, .. } => {
+                i.heroes.push(*heroe);
+                i.caravanas.push(*caravana);
+            }
+            Comando::ComprarEnCampamento { heroe, .. }
+            | Comando::RepostarEnCampamento { heroe, .. }
+            | Comando::FijarResidencia { heroe, .. }
+            | Comando::DarAlmacenPersonal { heroe, .. }
+            | Comando::ReclutarEnCampamento { heroe, .. }
+            | Comando::PedirPrestamo { heroe, .. }
+            | Comando::ReponerPrestamo { heroe }
+            | Comando::GuardarLoadout { heroe, .. }
+            | Comando::BorrarLoadout { heroe, .. }
+            | Comando::RepartirPuntos { heroe, .. }
+            | Comando::OrdenarEscuadras { heroe, .. }
+            | Comando::AsignarGuarnicion { heroe, .. }
+            | Comando::RetirarGuarnicion { heroe, .. }
+            | Comando::PasarAViveres { heroe, .. }
+            | Comando::Desconectarse { heroe }
+            | Comando::Conectarse { heroe }
+            | Comando::FijarFaccionDeHeroe { heroe, .. }
+            | Comando::ColocarHeroe { heroe, .. }
+            | Comando::HerirHeroe { heroe }
+            | Comando::SalirDelCampamento { heroe, .. }
+            | Comando::EntrarEnCampamento { heroe, .. }
+            | Comando::SepararseDelEjercito { heroe }
+            | Comando::CederLiderazgo { heroe, .. }
+            | Comando::OrganizarEjercito { heroe, .. }
+            | Comando::CancelarFormacion { heroe }
+            | Comando::ConvocarEjercito { heroe, .. }
+            | Comando::UnirseAConvocatoria { heroe, .. }
+            | Comando::ResponderPeticionDeConvocatoria { heroe, .. }
+            | Comando::CambiarSeleccionDeConvocatoria { heroe, .. }
+            | Comando::SepararseDeConvocatoria { heroe }
+            | Comando::CancelarConvocatoria { heroe }
+            | Comando::PartirConvocatoria { heroe }
+            | Comando::DejarDePerseguir { heroe }
+            | Comando::DarEscuadra { heroe, .. }
+            | Comando::FijarControlador { heroe, .. }
+            | Comando::UnirseABatalla { heroe, .. }
+            | Comando::CancelarBatalla { heroe, .. } => i.heroes.push(*heroe),
+            Comando::CrearEjercito { .. }
+            | Comando::Reloj(_)
+            | Comando::FijarNivelFaccion { .. }
+            | Comando::AceptarTrueque { .. }
+            | Comando::RechazarTrueque { .. }
+            | Comando::CancelarOrdenMercado { .. }
+            | Comando::CrearHeroe { .. }
+            | Comando::FijarTecnologias { .. }
+            | Comando::FijarRelacion { .. }
+            | Comando::ColocarBandidos { .. }
+            | Comando::RegistrarAsignacion { .. }
+            | Comando::ConfirmarInicio { .. }
+            | Comando::RegistrarTokens { .. }
+            | Comando::RegistrarSalida { .. }
+            | Comando::AplicarResultado { .. } => {}
+        }
+        i
+    }
 }
 
 /// De dónde sale el oro al reclutar en un campamento de mercenarios.
@@ -344,6 +546,10 @@ impl Peticion {
     pub fn de_admin(mut self) -> Self {
         self.admin = true;
         self
+    }
+    /// Un mensaje del servidor de batalla `servidor` (su id en `SERVIDORES_BATALLA`): el actor es `batalla-servidor:<id>`, nunca la cuenta de un jugador.
+    pub fn de_servidor_de_batalla(servidor: &str, peticion_id: &str, comando: Comando) -> Self {
+        Self::nueva(&format!("{ACTOR_SERVIDOR_DE_BATALLA}{servidor}"), peticion_id, comando)
     }
 
     pub(crate) fn codificar(&self) -> Vec<u8> {
@@ -886,6 +1092,53 @@ impl Peticion {
                 w.u8(tropa_a_u8(*tropa));
                 w.i64(*cantidad);
             }
+            Comando::FijarControlador { heroe, controlador } => {
+                w.u8(98);
+                w.u64(*heroe);
+                w.u8(controlador_a_u8(*controlador));
+            }
+            Comando::UnirseABatalla { heroe, batalla, lado } => {
+                w.u8(99);
+                w.u64(*heroe);
+                w.u64(*batalla);
+                w.u8(match lado {
+                    None => 0,
+                    Some(Lado::Atacante) => 1,
+                    Some(Lado::Defensor) => 2,
+                });
+            }
+            Comando::CancelarBatalla { heroe, batalla } => {
+                w.u8(100);
+                w.u64(*heroe);
+                w.u64(*batalla);
+            }
+            Comando::RegistrarAsignacion { batalla, asignacion } => {
+                w.u8(101);
+                w.u64(*batalla);
+                asignacion_escribir(&mut w, asignacion);
+            }
+            Comando::ConfirmarInicio { batalla, intento, revision } => {
+                w.u8(102);
+                w.u64(*batalla);
+                w.texto(intento);
+                w.u32(*revision);
+            }
+            Comando::RegistrarTokens { batalla, intento, tokens } => {
+                w.u8(103);
+                w.u64(*batalla);
+                w.texto(intento);
+                tokens_escribir(&mut w, tokens);
+            }
+            Comando::RegistrarSalida { batalla, salida } => {
+                w.u8(104);
+                w.u64(*batalla);
+                salida_escribir(&mut w, salida);
+            }
+            Comando::AplicarResultado { batalla, resultado } => {
+                w.u8(105);
+                w.u64(*batalla);
+                resultado_escribir(&mut w, resultado);
+            }
         }
         w.0
     }
@@ -1027,6 +1280,23 @@ impl Peticion {
             95 => Comando::Atacar { heroe: r.u64()?, objetivo: objetivo_de_ataque_leer(&mut r)?, declara_guerra: r.bool()? },
             96 => Comando::ColocarBandidos { posicion: r.punto()?, nivel: r.u8()? },
             97 => Comando::DarEscuadra { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            98 => Comando::FijarControlador { heroe: r.u64()?, controlador: controlador_de_u8(r.u8()?)? },
+            99 => Comando::UnirseABatalla {
+                heroe: r.u64()?,
+                batalla: r.u64()?,
+                lado: match r.u8()? {
+                    0 => None,
+                    1 => Some(Lado::Atacante),
+                    2 => Some(Lado::Defensor),
+                    _ => return Err(ErrorFormato("lado de batalla desconocido")),
+                },
+            },
+            100 => Comando::CancelarBatalla { heroe: r.u64()?, batalla: r.u64()? },
+            101 => Comando::RegistrarAsignacion { batalla: r.u64()?, asignacion: asignacion_leer(&mut r)? },
+            102 => Comando::ConfirmarInicio { batalla: r.u64()?, intento: r.texto()?, revision: r.u32()? },
+            103 => Comando::RegistrarTokens { batalla: r.u64()?, intento: r.texto()?, tokens: tokens_leer(&mut r)? },
+            104 => Comando::RegistrarSalida { batalla: r.u64()?, salida: salida_leer(&mut r)? },
+            105 => Comando::AplicarResultado { batalla: r.u64()?, resultado: resultado_leer(&mut r)? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1322,6 +1592,42 @@ pub mod rechazos {
     pub const CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO: &str = "bandidos.desconocido";
     pub const BANDIDOS_NIVEL_INVALIDO: &str = "bandidos.nivel_invalido";
     pub const BANDIDOS_SOBRE_UNA_ZONA: &str = "bandidos.sobre_una_zona";
+    // Batallas de Unity (fase 4E; Batalla_Unity_Ciclo §5-§9). El contrato responde `404` a `batalla.no_existe` y `409` al resto.
+    /// Lo que toca la orden está en una batalla activa (§5): ni el héroe, ni su columna, ni la plaza asediada, ni el objetivo reciben órdenes.
+    pub const BATALLA_BLOQUEADO: &str = "batalla.bloqueado";
+    /// No existe, está cerrada o su plazo venció (404).
+    pub const BATALLA_NO_EXISTE: &str = "batalla.no_existe";
+    /// No puede unirse: está herido, ya combate, su columna ya combate, hay que estar a ≤ `radioEncuentro` del punto o el bando está lleno.
+    pub const BATALLA_INVALIDA: &str = "batalla.invalida";
+    pub const BATALLA_SIN_COLUMNA: &str = "batalla.sin_columna";
+    pub const BATALLA_LEJOS: &str = "batalla.lejos";
+    pub const BATALLA_LADO_LLENO: &str = "batalla.lado_lleno";
+    pub const BATALLA_YA_COMBATE: &str = "batalla.ya_combate";
+    pub const BATALLA_YA_SALIO: &str = "batalla.ya_salio";
+    pub const BATALLA_NADIE_DE_FUERA: &str = "batalla.nadie_de_fuera";
+    pub const BATALLA_SOLO_PERSONALES: &str = "batalla.solo_personales";
+    pub const BATALLA_LADO_OBLIGATORIO: &str = "batalla.lado_obligatorio";
+    pub const BATALLA_NADIE_AYUDA_A_BANDIDOS: &str = "batalla.nadie_ayuda_a_bandidos";
+    pub const BATALLA_SIN_FACCION: &str = "batalla.sin_faccion";
+    pub const BATALLA_NO_COMBATE_AQUI: &str = "batalla.no_combate_aqui";
+    pub const BATALLA_LADO_DISTINTO: &str = "batalla.lado_distinto";
+    pub const BATALLA_NO_PUEDE_CANCELAR: &str = "batalla.no_puede_cancelar";
+    /// Otro servidor la tiene: gana la primera asignación.
+    pub const BATALLA_YA_ASIGNADA: &str = "batalla.ya_asignada";
+    pub const BATALLA_EN_CONVOCATORIA: &str = "batalla.en_convocatoria";
+    pub const BATALLA_REVISION_VIEJA: &str = "batalla.revision_vieja";
+    pub const BATALLA_ESTADO_INVALIDO: &str = "batalla.estado_invalido";
+    /// No es el servidor de la asignación activa.
+    pub const BATALLA_SERVIDOR_AJENO: &str = "batalla.servidor_ajeno";
+    /// El mensaje no viene con la credencial de un servidor de batalla (`batalla-servidor:<id>`).
+    pub const BATALLA_SIN_CREDENCIAL: &str = "batalla.sin_credencial";
+    pub const BATALLA_TOKEN_INVALIDO: &str = "batalla.token_invalido";
+    pub const BATALLA_NO_COMBATE: &str = "batalla.no_combate";
+    pub const BATALLA_SALIDA_INVALIDA: &str = "batalla.salida_invalida";
+    /// El checklist de §8.5 rechaza el resultado entero (el mensaje dice cuál de sus puntos).
+    pub const BATALLA_RESULTADO_INVALIDO: &str = "batalla.resultado_invalido";
+    /// «Ya se aplicó con otro resultado» (409).
+    pub const BATALLA_OTRO_RESULTADO: &str = "batalla.otro_resultado";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1355,6 +1661,8 @@ impl Respuesta {
 #[cfg(test)]
 mod pruebas {
     use super::*;
+    use combate::ciclo::{EscuadraDeSalida, Instancia, MotivoSalida};
+    use combate::resultado::{Botin, ObjetoBotin, Razon, ResultadoEscuadra, ResultadoHeroe};
 
     #[test]
     fn las_ordenes_de_economia_dan_la_vuelta_por_el_registro() {
@@ -1494,6 +1802,49 @@ mod pruebas {
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Avanzada(7), declara_guerra: false },
             Comando::ColocarBandidos { posicion: Punto::new(-5, 9_000), nivel: 3 },
             Comando::DarEscuadra { heroe: 4, tropa: Tropa::Arqueros, cantidad: 12 },
+            Comando::FijarControlador { heroe: 4, controlador: Controlador::Humano },
+            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: None },
+            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: Some(Lado::Atacante) },
+            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: Some(Lado::Defensor) },
+            Comando::CancelarBatalla { heroe: 4, batalla: 77 },
+            Comando::RegistrarAsignacion {
+                batalla: 77,
+                asignacion: Asignacion { intento: "a1".into(), servidor: "srv".into(), revision: 2, instancia: Instancia { host: "10.0.0.1".into(), puerto: 7777, protocolo: "udp".into() }, tokens: vec![Token { heroe: 4, token: "t".into(), expira_en: 99 }] },
+            },
+            Comando::ConfirmarInicio { batalla: 77, intento: "a1".into(), revision: 2 },
+            Comando::RegistrarTokens { batalla: 77, intento: "a1".into(), tokens: vec![Token { heroe: 5, token: "u".into(), expira_en: 100 }] },
+            Comando::RegistrarSalida {
+                batalla: 77,
+                salida: SalidaBatalla { intento: "a1".into(), revision: 2, heroe: 4, motivo: MotivoSalida::Eliminado, derrotado: true, escuadras: vec![EscuadraDeSalida { escuadra: 8, supervivientes: 3, muertos: 7 }] },
+            },
+            Comando::AplicarResultado {
+                batalla: 77,
+                resultado: ResultadoDeBatalla {
+                    resultado_id: "r1".into(),
+                    revision: 2,
+                    intento: "a1".into(),
+                    inicio: 10,
+                    fin: 90,
+                    ganador: Lado::Defensor,
+                    razon: Razon::TiempoAgotado,
+                    objetivos: vec![("bandera".into(), None), ("torre".into(), Some(Lado::Atacante))],
+                    por_escuadra: vec![ResultadoEscuadra { escuadra: 8, desplegados: 10, supervivientes_al_cierre: 3, muertos: 7, xp_ganada: 4 }],
+                    por_heroe: vec![
+                        ResultadoHeroe { heroe: 4, participo: true, sobrevivio_al_cierre: false, xp_ganada: 9, derrotado: Some(true), botin: None },
+                        ResultadoHeroe {
+                            heroe: 5,
+                            participo: true,
+                            sobrevivio_al_cierre: true,
+                            xp_ganada: 1,
+                            derrotado: None,
+                            botin: Some(Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }, ObjetoBotin { definicion: "oro".into(), cantidad: 5, instancia: None }], monedas: militar::heroe::Monedas { bronce: 1, plata: 2, oro: 3 } }),
+                        },
+                        ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, xp_ganada: 0, derrotado: Some(false), botin: None },
+                    ],
+                    version_servidor: "v1".into(),
+                    carros_perdidos: vec!["0".into(), "2".into()],
+                },
+            },
         ];
         for c in comandos {
             let p = Peticion { actor: "ana".into(), admin: false, peticion_id: "z".into(), version_esperada: Some(3), comando: c };
@@ -1508,6 +1859,10 @@ mod pruebas {
         assert!(Peticion::decodificar(&b).is_err());
         let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano }).codificar();
         *b.last_mut().unwrap() = 7;
+        assert!(Peticion::decodificar(&b).is_err());
+        // Un lado de batalla desconocido tampoco.
+        let mut b = Peticion::nueva("a", "i", Comando::UnirseABatalla { heroe: 1, batalla: 1, lado: None }).codificar();
+        *b.last_mut().unwrap() = 9;
         assert!(Peticion::decodificar(&b).is_err());
         // Un objetivo de ataque desconocido tampoco.
         let mut b = Peticion::nueva("a", "i", Comando::Atacar { heroe: 1, objetivo: ObjetivoAtaque::Pueblo(3), declara_guerra: false }).codificar();

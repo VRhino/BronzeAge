@@ -2,6 +2,7 @@
 //! que entra en `hash_estado` y en las fotos; lo que no está aquí (sesiones, registro de cambios, métricas) se reconstruye.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
+use crate::codec_batallas;
 use crate::codec_ciudad;
 use crate::codec_columna;
 use crate::codec_combate;
@@ -9,6 +10,7 @@ use crate::codec_comercio;
 use crate::codec_economia;
 use crate::codec_militar;
 use crate::economia::StockNodo;
+use crate::estado_batallas::EstadoBatallas;
 use crate::estado_combate::EstadoCombate;
 use crate::estado_comercio::EstadoComercio;
 use crate::estado_militar::EstadoMilitar;
@@ -24,6 +26,9 @@ use std::sync::{Arc, OnceLock};
 /// Prioridad de la salida del mundo de quien se desconectó: la de «cierre de batallas vencidas y salidas del mundo» (Reloj_Y_Eventos §2). Sale
 /// antes que todo lo demás del mismo instante.
 pub const PRIO_SALIDA: u8 = 1;
+/// Prioridad de los plazos de una batalla de Unity: el fin de la convocatoria, el vencimiento de su estado y la retirada de la cerrada. Es la misma
+/// fila que la salida del mundo (Reloj_Y_Eventos §2): una batalla que vence en un instante ya no bloquea en ese mismo instante.
+pub const PRIO_BATALLA: u8 = 1;
 /// Prioridad de la regeneración, la aparición y el ataque de los bandidos (Reloj_Y_Eventos §2): ven a las columnas tal como estaban antes de moverse
 /// en ese instante (las llegadas y los encuentros son de la 8).
 pub const PRIO_BANDIDOS: u8 = 7;
@@ -43,10 +48,13 @@ pub const PRIO_REPUTACION: u8 = 9;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-/// BAN12: BAN11 más lo de la fase 4D: el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y
-/// lo que cada héroe ha destruido), el fin de la protección y de la ocupación de cada plaza (`protegida_hasta` y `ocupada_hasta`, en el registro de cada
-/// plaza) y una carga nueva de la cola (`Carga::Combate`). BAN11 se rechaza: no traía nada de esto y su huella de reglas no incluía los bloques de `combate`.
-const MAGIA: &[u8; 5] = b"BAN12";
+/// BAN13: BAN12 más lo de la fase 4E: las batallas de Unity (`codec_batallas`: ticket congelado, incorporaciones, salidas, bloqueo, asignación con sus tokens y
+/// resultado), la regla `batallas_en_unity` en la cabecera, el plan en pausa de las columnas apartadas (`codec_columna`), el estado `Apartada` de la ración y
+/// una carga nueva de la cola (`Carga::Batalla`). BAN12 se rechaza: no traía nada de esto y sus columnas apartadas no guardaban su plan.
+///
+/// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
+/// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
+const MAGIA: &[u8; 5] = b"BAN13";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -56,6 +64,10 @@ pub struct Reglas {
     pub viveres_bajos_pct: u32,
     /// Peticiones recordadas para la idempotencia (`INFRA.limiteIdempotencia`).
     pub limite_idempotencia: usize,
+    /// El proceso tiene servidores de batalla (`SERVIDORES_BATALLA`, Batalla_Unity_Ciclo §8): `atacar` abre una batalla de Unity cuando hay al menos un héroe
+    /// `humano` en los dos bandos. Sin ellos —o bot contra bot— el combate se resuelve con números (Combate.md). Es una regla de la partida y no puede
+    /// cambiar entre una foto y su recuperación.
+    pub batallas_en_unity: bool,
     pub territorio: ReglasTerritorio,
     /// Las reglas de población, economía y construcción de las plazas (Economia_Construccion).
     pub economia: ReglasEconomia,
@@ -63,7 +75,7 @@ pub struct Reglas {
 
 impl Default for Reglas {
     fn default() -> Self {
-        Self { viveres_bajos_pct: 25, limite_idempotencia: 500, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
+        Self { viveres_bajos_pct: 25, limite_idempotencia: 500, batallas_en_unity: false, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
     }
 }
 
@@ -188,8 +200,20 @@ pub struct Ejercito {
     /// Apartada por una batalla de Unity (Reloj_Y_Eventos §6): no se mueve, no se la persigue ni se la ataca, no tiene encuentros y no se le dan
     /// órdenes de movimiento. La pone y la quita el sistema militar (`Nucleo::columna_entra_en_batalla`).
     pub en_batalla: bool,
+    /// El plan que llevaba cuando una batalla de Unity la apartó, si marchaba: al acabar la batalla lo retoma desde donde está (`columna_sale_de_batalla`).
+    pub plan_en_pausa: Option<PlanEnPausa>,
     /// Versión de mundo del último cambio.
     pub version: u64,
+}
+
+/// El plan de una columna apartada por una batalla, tal como lo llevaba al entrar.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanEnPausa {
+    /// Cuándo la apartó la batalla.
+    pub desde: Instante,
+    /// La velocidad (por segundo) que llevaba: si cambia con las bajas, el resto del plan se reescala.
+    pub velocidad: Mil,
+    pub plan: Plan,
 }
 
 impl Ejercito {
@@ -270,6 +294,38 @@ pub enum Carga {
     /// Un plazo del combate: la aparición de bandidos, el fin de la protección o de la ocupación de una plaza, la reposición de la guarnición de
     /// un pueblo (la clave de la entidad depende del suceso).
     Combate(SucesoCombate),
+    /// Un plazo de una batalla de Unity (la entidad es `entidad_batalla`; prioridad 1).
+    Batalla(SucesoBatalla),
+}
+
+/// Qué plazo de una batalla de Unity vence (Batalla_Unity_Ciclo §6 y §3.3). Los tres comparten la entidad de la batalla: cada cambio de estado sube su
+/// generación y se reprograman los que sigan haciendo falta, así que a una batalla activa solo le quedan en la cola los suyos y nunca hay uno por entidad ociosa.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SucesoBatalla {
+    /// Acaba la convocatoria de un asedio (`convocatoria_hasta`, 30 s exactos): el ticket ya puede publicarse y asignarse.
+    FinConvocatoria,
+    /// Vence el plazo del estado en que está (`expira_en`): pasa a `fallida` sin que nadie pierda nada.
+    Vence,
+    /// Una cerrada cumple su retención (`conservarCerradasMinutos`): sale del estado.
+    Retira,
+}
+
+impl SucesoBatalla {
+    pub(crate) fn escribir(self, w: &mut Escritor) {
+        w.u8(match self {
+            SucesoBatalla::FinConvocatoria => 0,
+            SucesoBatalla::Vence => 1,
+            SucesoBatalla::Retira => 2,
+        });
+    }
+    pub(crate) fn leer(r: &mut Lector) -> Result<Self, ErrorFormato> {
+        Ok(match r.u8()? {
+            0 => SucesoBatalla::FinConvocatoria,
+            1 => SucesoBatalla::Vence,
+            2 => SucesoBatalla::Retira,
+            _ => return Err(ErrorFormato("suceso de batalla desconocido")),
+        })
+    }
 }
 
 /// Qué plazo del combate vence. Ninguno es recurrente por entidad ociosa: cada uno se programa cuando hay algo que esperar y se detiene solo.
@@ -501,6 +557,8 @@ pub struct Estado {
     pub militar: EstadoMilitar,
     /// Campamentos de bandidos, guarnición de serie de los pueblos y rendimientos de lo que se destruye (Combate, Generacion_Del_Mundo §13).
     pub combate: EstadoCombate,
+    /// Las batallas de Unity abiertas y las cerradas recientes (Batalla_Unity_Ciclo §3).
+    pub batallas: EstadoBatallas,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// `(actor, peticion_id)` en orden de llegada, con la versión que produjeron.
@@ -531,6 +589,7 @@ impl Estado {
             comercio,
             militar: EstadoMilitar::default(),
             combate: EstadoCombate::default(),
+            batallas: EstadoBatallas::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: VecDeque::new(),
@@ -569,6 +628,7 @@ impl Estado {
         let r = &self.reglas;
         w.u32(r.viveres_bajos_pct);
         w.u64(r.limite_idempotencia as u64);
+        w.bool(r.batallas_en_unity);
         let t = &r.territorio;
         w.i64(t.radio_inicial);
         w.u32(t.techos.len() as u32);
@@ -626,6 +686,7 @@ impl Estado {
         codec_comercio::escribir(&mut w, &self.comercio);
         codec_militar::escribir(&mut w, &self.militar);
         codec_combate::escribir(&mut w, &self.combate);
+        codec_batallas::escribir(&mut w, &self.batallas);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -673,6 +734,10 @@ impl Estado {
                     w.u8(9);
                     s.escribir(&mut w);
                 }
+                Carga::Batalla(s) => {
+                    w.u8(10);
+                    s.escribir(&mut w);
+                }
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -699,11 +764,12 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN11`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
+        // La cabecera es de 5 bytes (`BAN13`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
         match (r.magia()? == MAGIA[..4]).then(|| r.u8()).transpose()? {
             Some(f) if f == MAGIA[4] => {}
             Some(b'0') => return Err(ErrorFormato("foto del formato BAN10 (sin persecuciones ni informes de inspección, con los encuentros en un generador externo): ya no se admite")),
             Some(b'1') => return Err(ErrorFormato("foto del formato BAN11 (sin estado de combate, sin protección ni ocupación de las plazas y con una huella de reglas que no incluye las del combate): ya no se admite")),
+            Some(b'2') => return Err(ErrorFormato("foto del formato BAN12 (sin batallas de Unity, sin la regla batallas_en_unity y con las columnas apartadas sin su plan en pausa): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
@@ -712,6 +778,7 @@ impl Estado {
         let guardadas = Reglas {
             viveres_bajos_pct: r.u32()?,
             limite_idempotencia: r.u64()? as usize,
+            batallas_en_unity: r.bool()?,
             territorio: {
                 let radio_inicial = r.i64()?;
                 let mut techos = Vec::new();
@@ -785,6 +852,7 @@ impl Estado {
         s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio)?;
         s.militar = codec_militar::leer(&mut r)?;
         s.combate = codec_combate::leer(&mut r)?;
+        s.batallas = codec_batallas::leer(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -807,6 +875,7 @@ impl Estado {
                 7 => Carga::Militar(SucesoMilitar::leer(&mut r)?),
                 8 => Carga::Encuentro { otra: r.u64()?, otra_generacion: r.u32()? },
                 9 => Carga::Combate(SucesoCombate::leer(&mut r)?),
+                10 => Carga::Batalla(SucesoBatalla::leer(&mut r)?),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

@@ -20,7 +20,8 @@
 //! ejército» (caravanas adjuntas, entregar, materiales) las puede dar cualquier participante.
 
 use super::*;
-use crate::estado::{SucesoMilitar, PRIO_LLEGADA, PRIO_SALIDA, PRIO_UMBRAL};
+use crate::estado::{PlanEnPausa, SucesoMilitar, PRIO_LLEGADA, PRIO_SALIDA, PRIO_UMBRAL};
+use super::viaje::pausar_plan;
 use crate::estado_militar::{entidad_formacion, entidad_peticion_de_union};
 use comercio::caravana::TipoCaravana;
 use militar::columna::{self, Columna, ErrorColumna, TipoColumna};
@@ -272,7 +273,7 @@ impl Nucleo {
 
     /// Una columna nueva nacida de repartir otra (separarse, desarmar, salir del mundo): quieta donde está su origen, sin caravanas.
     pub(super) fn columna_suelta(&self, columna: Columna, posicion: Punto) -> Ejercito {
-        Ejercito { id: columna.id, columna, posicion, plan: Plan::default(), velocidad_fija: None, caravana_fundacion: false, caravanas_adjuntas: vec![], persiguiendo: None, en_batalla: false, version: 0 }
+        Ejercito { id: columna.id, columna, posicion, plan: Plan::default(), velocidad_fija: None, caravana_fundacion: false, caravanas_adjuntas: vec![], persiguiendo: None, en_batalla: false, plan_en_pausa: None, version: 0 }
     }
 
     /// Una columna sin nadie dentro se disuelve (Movimiento_Ejercitos §11): sus caravanas adjuntas, que sí viajan solas, vuelven a su origen
@@ -450,46 +451,75 @@ impl Nucleo {
     // ───────────────────────────── Batalla (hook del sistema militar) ─────────────────────────────
 
     /// La batalla de Unity aparta la columna (Reloj_Y_Eventos §6): se queda donde está, sale del espacio —no tiene encuentros, nadie la persigue ni ella
-    /// persigue— y no admite órdenes de movimiento hasta que acabe. `false` si no existe o ya estaba apartada. Procesa los eventos hasta `t` y cierra la
-    /// versión. La llama el sistema militar (fase 4E); no deja entrada en el registro de peticiones.
-    // DUDA: la columna sigue comiendo a ritmo de acampada; la regla dice que apartada no come. Queda como fila de paridad para la 4E.
+    /// persigue—, no come y no admite órdenes de movimiento hasta que acabe. El plan que llevaba queda en pausa y lo retoma al salir. `false` si no existe
+    /// o ya estaba apartada. Procesa los eventos hasta `t` y cierra la versión. Lo llama el ciclo de la batalla (`Nucleo::abrir_batalla`) y las pruebas;
+    /// no deja entrada en el registro de peticiones.
     pub fn columna_entra_en_batalla(&mut self, t: Instante, id: u64) -> bool {
         let t = t.max(self.estado.ahora);
         self.procesar_hasta(t);
+        let entra = self.apartar_columna(t, id);
+        self.cerrar_version(t, entra);
+        entra
+    }
+
+    /// La batalla acabó: la columna vuelve al espacio donde está y retoma el plan que llevaba, desplazado lo que duró la batalla (si las bajas le han
+    /// cambiado la velocidad, el resto del plan se reescala); quieta si no marchaba. Quien pidió salir del mundo mientras combatía lo reintenta ya. `false`
+    /// si no existe o no estaba apartada.
+    pub fn columna_sale_de_batalla(&mut self, t: Instante, id: u64) -> bool {
+        let t = t.max(self.estado.ahora);
+        self.procesar_hasta(t);
+        let sale = self.reponer_columna(t, id);
+        self.cerrar_version(t, sale);
+        sale
+    }
+
+    /// `columna_entra_en_batalla` dentro de una transición ya abierta (no procesa eventos ni cierra la versión).
+    pub(super) fn apartar_columna(&mut self, t: Instante, id: u64) -> bool {
         let Some(e) = self.estado.ejercitos.get(&id) else { return false };
         if e.en_batalla {
             return false;
         }
-        if e.marchando() {
+        let en_marcha = e.marchando().then(|| (e.plan.clone(), self.velocidad_de_columna(e)));
+        if en_marcha.is_some() {
             self.detener(id, t);
         }
         let e = self.estado.ejercitos.get_mut(&id).expect("existe");
         e.en_batalla = true;
+        e.plan_en_pausa = en_marcha.map(|(plan, velocidad)| PlanEnPausa { desde: t, velocidad, plan });
         let punto = e.posicion;
-        self.tr.tocados.push(id);
-        self.anunciar_columna(id, Motivo::Plan);
+        self.poner_marcha(id, t, EstadoMarcha::Apartada);
+        self.reprogramar_columna(id, t);
         self.evento("ejercito.en_batalla", t, id, Some(punto), vec![]);
-        self.cerrar_version(t, true);
         true
     }
 
-    /// La batalla acabó: la columna vuelve al espacio donde está, quieta (el plan que llevaba no se retoma: hay que dar otra orden). Quien pidió salir del
-    /// mundo mientras combatía lo reintenta ya. `false` si no existe o no estaba apartada.
-    pub fn columna_sale_de_batalla(&mut self, t: Instante, id: u64) -> bool {
-        let t = t.max(self.estado.ahora);
-        self.procesar_hasta(t);
+    /// `columna_sale_de_batalla` dentro de una transición ya abierta.
+    pub(super) fn reponer_columna(&mut self, t: Instante, id: u64) -> bool {
         let Some(e) = self.estado.ejercitos.get_mut(&id).filter(|e| e.en_batalla) else { return false };
         e.en_batalla = false;
-        let (punto, heroes) = (e.posicion, Self::participantes_de(e));
+        let (punto, heroes, pausa) = (e.posicion, Self::participantes_de(e), e.plan_en_pausa.take());
         self.tr.tocados.push(id);
-        self.anunciar_columna(id, Motivo::Plan);
+        match pausa {
+            Some(PlanEnPausa { desde, velocidad, plan }) => {
+                self.estado.ejercitos.get_mut(&id).expect("existe").plan = pausar_plan(&plan, desde, t, punto);
+                self.poner_marcha(id, t, EstadoMarcha::Marchando);
+                // Con las bajas la columna puede marchar a otra velocidad: lo que le queda de plan se escala.
+                let despues = self.velocidad_de_columna(&self.estado.ejercitos[&id]);
+                if !self.reescalar_marcha(id, t, velocidad, despues) {
+                    self.reprogramar_columna(id, t);
+                }
+            }
+            None => {
+                self.poner_marcha(id, t, EstadoMarcha::Estacionada);
+                self.reprogramar_columna(id, t);
+            }
+        }
         let pendientes: Vec<u64> = heroes.into_iter().filter(|&h| self.heroe(h).is_some_and(|x| x.heroe.presencia.desconecta_en.is_some() && !x.heroe.presencia.fuera)).collect();
         for h in pendientes {
             let clave = self.estado.generaciones.clave(h);
             self.estado.cola.programar(t, PRIO_SALIDA, clave, Carga::SalidaDelMundo);
         }
         self.evento("ejercito.sale_de_batalla", t, id, Some(punto), vec![]);
-        self.cerrar_version(t, true);
         true
     }
 

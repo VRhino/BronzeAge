@@ -18,7 +18,11 @@
 use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
 use crate::estado::{CambioVersion, Estado, EventoNucleo};
 use crate::nucleo::Nucleo;
-use crate::proyeccion::{ambito_heroe, cambio_ejercito, clave_ambito_heroe, entidad_ejercito, evento_dominio, id_heroe, parse_id_ejercito, parse_id_heroe};
+use crate::proyeccion::{ambito_heroe, cambio_ejercito, clave_ambito_heroe, entidad_ejercito, evento_dominio, id_heroe, parse_id_ejercito, parse_id_escuadra, parse_id_heroe};
+use combate::ciclo::{Asignacion, EscuadraDeSalida, Instancia, MotivoSalida, SalidaBatalla, Token};
+use combate::resolucion::Lado;
+use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
+use militar::heroe::Monedas;
 use contrato::v1 as pb;
 use pb::orden::Cuerpo;
 use servidor::{ComandoSesion, Difusion, RelojCompartido, SesionId};
@@ -28,6 +32,8 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 const ESPERA_MAXIMA_MS: i64 = 500;
+/// La versión del esquema del contrato de batalla que habla este servidor (`SCHEMA_VERSION`).
+const SCHEMA_VERSION: u32 = 1;
 
 struct Sesion {
     cliente: String,
@@ -137,7 +143,7 @@ impl Actor {
                     s.vista = Some(rect);
                 }
             }
-            ComandoSesion::Batalla { .. } => {}
+            ComandoSesion::Batalla { sesion, mensaje } => self.batalla(sesion, mensaje),
             ComandoSesion::Desconecta { sesion } => self.quitar(sesion),
         }
     }
@@ -292,6 +298,122 @@ impl Actor {
         if cambio_de_reloj {
             self.avisar_reloj();
         }
+    }
+
+    /// Un mensaje del servidor de batalla (Batalla_Unity_Ciclo §8): se aplica como una orden del núcleo con el actor `batalla-servidor:<id>` (el id de su cliente)
+    /// y su respuesta, si es un rechazo, vuelve a esa sesión como un `Aviso` con el código estable (el contrato 05 todavía no tiene un acuse por mensaje: es de la
+    /// fase 4H). Repetir un mensaje ya aplicado no cambia nada ni avisa de nada.
+    fn batalla(&mut self, sesion: SesionId, mensaje: pb::MensajeDeServidorDeBatalla) {
+        let Some(s) = self.sesiones.get(&sesion) else { return };
+        let (servidor, tx) = (s.cliente.clone(), s.tx.clone());
+        let respuesta = match self.traducir_batalla(mensaje) {
+            Ok((peticion_id, comando)) => {
+                let r = self.nucleo.aplicar(Peticion::de_servidor_de_batalla(&servidor, &peticion_id, comando));
+                self.distribuir();
+                r
+            }
+            Err(r) => r,
+        };
+        if let Resultado::Rechazada { codigo, mensaje } = respuesta.resultado {
+            let aviso = pb::Aviso { codigo: codigo.into(), mensaje, reloj: None };
+            if !depositar(&tx, Difusion::Aviso(aviso)) {
+                self.quitar(sesion);
+            }
+        }
+    }
+
+    /// Del mensaje del contrato al comando del núcleo, con el id de petición con que se recuerda (un reintento idéntico responde como duplicado).
+    fn traducir_batalla(&self, m: pb::MensajeDeServidorDeBatalla) -> Result<(String, Comando), Respuesta> {
+        use pb::mensaje_de_servidor_de_batalla::Cuerpo;
+        let v = self.nucleo.version();
+        let invalido = |texto: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, texto, v);
+        let batalla = |uuid: &str| self.nucleo.id_de_batalla(uuid).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, uuid, v));
+        let heroe = |id: &str| parse_id_heroe(id).ok_or_else(|| invalido(&format!("héroe desconocido: {id}")));
+        let escuadra = |id: &str| parse_id_escuadra(id).ok_or_else(|| invalido(&format!("escuadra desconocida: {id}")));
+        let lado = |l: i32| match pb::LadoId::try_from(l) {
+            Ok(pb::LadoId::Atacante) => Ok(Lado::Atacante),
+            Ok(pb::LadoId::Defensor) => Ok(Lado::Defensor),
+            _ => Err(invalido("lado desconocido")),
+        };
+        let entero = |n: u64| i64::try_from(n).map_err(|_| invalido("cifra fuera de rango"));
+        let tokens = |ts: Vec<pb::TokenParticipante>| ts.into_iter().map(|t| Ok(Token { heroe: heroe(&t.heroe_id)?, token: t.token, expira_en: t.expira_en_ms })).collect::<Result<Vec<_>, Respuesta>>();
+        let version_de_esquema = |n: u32| if n == SCHEMA_VERSION { Ok(()) } else { Err(invalido(&format!("schemaVersion {n}: se esperaba {SCHEMA_VERSION}"))) };
+        Ok(match m.cuerpo.ok_or_else(|| invalido("mensaje de batalla vacío"))? {
+            Cuerpo::Asignacion(a) => {
+                version_de_esquema(a.schema_version)?;
+                let instancia = a.instancia.ok_or_else(|| invalido("la asignación no trae instancia"))?;
+                let instancia = Instancia { host: instancia.host, puerto: u16::try_from(instancia.puerto).map_err(|_| invalido("puerto fuera de rango"))?, protocolo: instancia.protocolo };
+                let id = batalla(&a.battle_id)?;
+                let peticion = format!("asignacion:{}:{}", a.battle_id, a.intento_asignacion_id);
+                // El servidor lo pone el núcleo con la credencial del actor.
+                let asignacion = Asignacion { intento: a.intento_asignacion_id, servidor: String::new(), revision: a.ticket_revision, instancia, tokens: tokens(a.tokens_participante)? };
+                (peticion, Comando::RegistrarAsignacion { batalla: id, asignacion })
+            }
+            Cuerpo::Inicio(i) => {
+                version_de_esquema(i.schema_version)?;
+                (format!("inicio:{}:{}:{}", i.battle_id, i.intento_asignacion_id, i.ticket_revision), Comando::ConfirmarInicio { batalla: batalla(&i.battle_id)?, intento: i.intento_asignacion_id, revision: i.ticket_revision })
+            }
+            Cuerpo::Salida(s) => {
+                version_de_esquema(s.schema_version)?;
+                let motivo = match pb::MotivoSalida::try_from(s.motivo) {
+                    Ok(pb::MotivoSalida::SalidaNoConectado) => MotivoSalida::NoConectado,
+                    Ok(pb::MotivoSalida::SalidaEliminado) => MotivoSalida::Eliminado,
+                    Ok(pb::MotivoSalida::SalidaAbandono) => MotivoSalida::Abandono,
+                    Ok(pb::MotivoSalida::SalidaDesconexion) => MotivoSalida::Desconexion,
+                    _ => return Err(invalido("motivo de salida desconocido")),
+                };
+                let escuadras = s.escuadras.into_iter().map(|e| Ok(EscuadraDeSalida { escuadra: escuadra(&e.squad_id)?, supervivientes: i64::from(e.supervivientes), muertos: i64::from(e.muertos) })).collect::<Result<Vec<_>, Respuesta>>()?;
+                let peticion = format!("salida:{}:{}", s.battle_id, s.heroe_id);
+                let salida = SalidaBatalla { intento: s.intento_asignacion_id, revision: s.ticket_revision, heroe: heroe(&s.heroe_id)?, motivo, derrotado: s.derrotado, escuadras };
+                (peticion, Comando::RegistrarSalida { batalla: batalla(&s.battle_id)?, salida })
+            }
+            Cuerpo::Resultado(r) => {
+                version_de_esquema(r.schema_version)?;
+                let razon = match pb::RazonVictoria::try_from(r.razon) {
+                    Ok(pb::RazonVictoria::ObjetivosCapturados) => Razon::ObjetivosCapturados,
+                    Ok(pb::RazonVictoria::Aniquilacion) => Razon::Aniquilacion,
+                    Ok(pb::RazonVictoria::TiempoAgotado) => Razon::TiempoAgotado,
+                    _ => return Err(invalido("razón de victoria desconocida")),
+                };
+                let objetivos = r.objetivos.into_iter().map(|o| Ok((o.objetivo_id, o.capturado_por.map(lado).transpose()?))).collect::<Result<Vec<_>, Respuesta>>()?;
+                let por_escuadra = r
+                    .por_escuadra
+                    .into_iter()
+                    .map(|e| Ok(ResultadoEscuadra { escuadra: escuadra(&e.squad_id)?, desplegados: i64::from(e.desplegados), supervivientes_al_cierre: i64::from(e.supervivientes_al_cierre), muertos: i64::from(e.muertos), xp_ganada: e.xp_ganada }))
+                    .collect::<Result<Vec<_>, Respuesta>>()?;
+                let por_heroe = r
+                    .por_heroe
+                    .into_iter()
+                    .map(|h| {
+                        let botin = h
+                            .botin
+                            .map(|b| {
+                                let m = b.monedas.unwrap_or_default();
+                                let objetos = b.objetos.into_iter().map(|o| ObjetoBotin { definicion: o.item_definition_id, cantidad: i64::from(o.cantidad), instancia: o.item_instance_id }).collect();
+                                Ok(Botin { objetos, monedas: Monedas { bronce: entero(m.bronce)?, plata: entero(m.plata)?, oro: entero(m.oro)? } })
+                            })
+                            .transpose()?;
+                        Ok(ResultadoHeroe { heroe: heroe(&h.heroe_id)?, participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, xp_ganada: h.xp_ganada, derrotado: h.derrotado, botin })
+                    })
+                    .collect::<Result<Vec<_>, Respuesta>>()?;
+                let peticion = format!("resultado:{}:{}", r.battle_id, r.result_id);
+                let resultado = ResultadoDeBatalla {
+                    resultado_id: r.result_id,
+                    revision: r.ticket_revision,
+                    intento: r.intento_asignacion_id,
+                    inicio: r.inicio_ms,
+                    fin: r.fin_ms,
+                    ganador: lado(r.ganador)?,
+                    razon,
+                    objetivos,
+                    por_escuadra,
+                    por_heroe,
+                    version_servidor: r.version_servidor,
+                    carros_perdidos: r.carros_perdidos,
+                };
+                (peticion, Comando::AplicarResultado { batalla: batalla(&r.battle_id)?, resultado })
+            }
+        })
     }
 
     fn avisar_reloj(&mut self) {

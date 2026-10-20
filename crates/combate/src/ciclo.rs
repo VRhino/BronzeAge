@@ -15,6 +15,7 @@ use crate::datos::Reglas;
 use crate::resolucion::Lado;
 use base::{Instante, Punto};
 use militar::heroe::Controlador;
+use militar::Tropa;
 use militar::{AsentamientoId, BatallaId, CampamentoId, CaravanaId, ColumnaId, EscuadraId, FaccionId, HeroeId};
 use std::collections::BTreeSet;
 
@@ -26,7 +27,8 @@ pub enum Contexto {
     Asedio { asentamiento: AsentamientoId },
     /// `solitarios`: persecución entre columnas personales; si no, batalla campal entre ejércitos.
     CampoAbierto { punto: Punto, solitarios: bool },
-    Caravana { caravana: CaravanaId, punto: Punto, modalidad: Modalidad },
+    /// `carros`: cuántos lleva la caravana al abrir; Unity los nombra por su posición en la lista (`carros_perdidos` del resultado).
+    Caravana { caravana: CaravanaId, punto: Punto, modalidad: Modalidad, carros: usize },
     CampamentoBandidos { campamento: CampamentoId, punto: Punto },
     SaqueoPueblo { pueblo: u64, punto: Punto },
     Avanzada { avanzada: u64, etapa: Etapa, punto: Punto },
@@ -66,6 +68,7 @@ impl Contexto {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EscuadraEnBatalla {
     pub id: EscuadraId,
+    pub tropa: Tropa,
     /// El héroe dueño. Las escuadras sin héroe (guarnición, escolta) pueden tener dueño; las de bandidos y carreteros, no.
     pub dueno: Option<HeroeId>,
     pub efectivos: i64,
@@ -647,9 +650,9 @@ impl Bloqueos {
 }
 
 /// `bloqueosDe`: de las batallas **activas** (vencidas no cuentan), los héroes que combaten y lo que se queda quieto.
-pub fn bloqueos_de(batallas: &[Batalla], ahora: Instante) -> Bloqueos {
+pub fn bloqueos_de<'a>(batallas: impl IntoIterator<Item = &'a Batalla>, ahora: Instante) -> Bloqueos {
     let mut b = Bloqueos::default();
-    for x in batallas.iter().filter(|x| x.activa(ahora)) {
+    for x in batallas.into_iter().filter(|x| x.activa(ahora)) {
         b.heroes.extend(x.heroes_que_combaten());
         b.ejercitos.extend(&x.bloqueo.ejercitos);
         b.caravanas.extend(&x.bloqueo.caravanas);

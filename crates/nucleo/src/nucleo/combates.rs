@@ -54,7 +54,7 @@ pub(super) struct DefensaDePlaza {
 type Columnas = Vec<(u64, Mil)>;
 
 /// Las escuadras de su loadout activo que el héroe tiene en el campamento, con soldados y fuera de la guarnición: las que defienden en persona.
-fn loadout_en_el_campamento(h: &HeroeNucleo) -> Vec<&Escuadra> {
+pub(super) fn loadout_en_el_campamento(h: &HeroeNucleo) -> Vec<&Escuadra> {
     let activas = h.heroe.escuadras_del_loadout_activo();
     h.heroe.escuadras.iter().filter(|s| activas.contains(&s.id) && s.contenedor == Contenedor::Campamento && !s.en_guarnicion && s.con_soldados()).collect()
 }
@@ -187,7 +187,7 @@ impl Nucleo {
     }
 
     /// El derrotado pierde la mitad de su carro (`trasDerrota`): devuelve lo robado. Una columna personal que pierde suelta además su presa.
-    fn perder_la_mitad_del_carro(&mut self, columna: u64) -> Mercancia {
+    pub(super) fn perder_la_mitad_del_carro(&mut self, columna: u64) -> Mercancia {
         let cr = self.estado.reglas.economia.combate.clone();
         let Some(e) = self.estado.ejercitos.get_mut(&columna) else { return Mercancia::new() };
         let robado = tras_derrota(&cr, &mut e.columna.carga);
@@ -235,11 +235,11 @@ impl Nucleo {
             return Err(rechazo(rechazos::HEROE_HERIDO, "estás herido: no puedes entrar en batalla"));
         }
         match objetivo {
-            ObjetivoAtaque::Ejercito(x) => self.atacar_columna(t, id, x, declara_guerra)?,
-            ObjetivoAtaque::Caravana(x) => self.atacar_caravana(t, id, x, declara_guerra)?,
-            ObjetivoAtaque::Campamento(x) => self.atacar_campamento(t, id, x)?,
-            ObjetivoAtaque::Asentamiento(x) => self.atacar_plaza(t, id, x, declara_guerra)?,
-            ObjetivoAtaque::Pueblo(x) => self.atacar_pueblo(t, id, x, declara_guerra)?,
+            ObjetivoAtaque::Ejercito(x) => self.atacar_columna(t, heroe, id, x, declara_guerra)?,
+            ObjetivoAtaque::Caravana(x) => self.atacar_caravana(t, heroe, id, x, declara_guerra)?,
+            ObjetivoAtaque::Campamento(x) => self.atacar_campamento(t, heroe, id, x)?,
+            ObjetivoAtaque::Asentamiento(x) => self.atacar_plaza(t, heroe, id, x, declara_guerra)?,
+            ObjetivoAtaque::Pueblo(x) => self.atacar_pueblo(t, heroe, id, x, declara_guerra)?,
             ObjetivoAtaque::Avanzada(_) => return Err(rechazo(rechazos::COMBATE_AVANZADA_NO_EXISTE, "las avanzadas son de la fase 4F: todavía no existe ninguna")),
         }
         Ok(vec![])
@@ -271,7 +271,7 @@ impl Nucleo {
     }
 
     /// Declara la guerra entre dos Facciones (`declara_guerra` de `atacar`): la relación pasa a ser de guerra y se cuenta.
-    fn declarar_guerra(&mut self, t: Instante, atacante: u32, contra: u32) {
+    pub(super) fn declarar_guerra(&mut self, t: Instante, atacante: u32, contra: u32) {
         self.estado.militar.relaciones.insert((atacante.min(contra), atacante.max(contra)), Relacion::Guerra);
         self.emitir_propio(t, "faccion.guerra_declarada", vec![], vec![("atacante", atacante as i64), ("contra", contra as i64)]);
     }
@@ -280,7 +280,7 @@ impl Nucleo {
 
     /// Combate §5. Las dos columnas entran con sus héroes sanos (como mucho 5 por bando) y gana quien dice el poder; el perdedor pierde la mitad de su carro y
     /// todos sus héroes quedan heridos; el ganador carga lo robado y la chatarra hasta donde le quepa.
-    fn atacar_columna(&mut self, t: Instante, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
+    fn atacar_columna(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
         let e = &self.estado.ejercitos[&id];
@@ -298,6 +298,13 @@ impl Nucleo {
             return Err(rechazo(rechazos::COMBATE_SIN_HEROE_SANO, "esa columna solo lleva héroes heridos: no se la puede tocar"));
         }
         let guerra = self.comprobar_agresion(e, t, o.posicion_en(t), o.columna.faccion, declara_guerra)?;
+        if self.estado.reglas.batallas_en_unity {
+            let ap = self.apertura_de_columna(t, heroe, id, x);
+            if ap.hay_humano() {
+                self.abrir_batalla_de_ataque(t, ap, guerra);
+                return Ok(());
+            }
+        }
 
         let cr = self.estado.reglas.economia.combate.clone();
         let (mut atac, mut def) = (self.tropa_de_columna(id, t, cr.batalla.capacidad_resto), self.tropa_de_columna(x, t, cr.batalla.capacidad_resto));
@@ -351,7 +358,7 @@ impl Nucleo {
     /// Combate §7.1. Ver el módulo: tipo A o B por la zona, una tirada contra la defensa. Gana el atacante: el dueño pierde la mitad de los carros (y en B el
     /// 70 % de la carga), el atacante carga lo perdido hasta donde le quepa y la escolta cedida queda a 0 y vuelve al campamento de su héroe. Gana la caravana:
     /// el atacante pierde el 25 %, la escolta el 5 % y los héroes de la columna quedan heridos.
-    fn atacar_caravana(&mut self, t: Instante, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
+    fn atacar_caravana(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
         let e = &self.estado.ejercitos[&id];
@@ -366,8 +373,14 @@ impl Nucleo {
         let guerra = self.comprobar_agresion(e, t, donde, dueno, declara_guerra)?;
 
         let modalidad = asalto::modalidad_de(self.zona_en(donde, dueno));
+        if self.estado.reglas.batallas_en_unity {
+            let ap = self.apertura_de_caravana(t, heroe, id, x, donde, modalidad);
+            if ap.hay_humano() {
+                self.abrir_batalla_de_ataque(t, ap, guerra);
+                return Ok(());
+            }
+        }
         let cr = self.estado.reglas.economia.combate.clone();
-        let flota = self.estado.reglas.economia.comercio.flota.clone();
         let mut atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_resto);
         let columnas = self.columnas_de(&atac.escuadras);
         let participantes = Self::participantes_de(&self.estado.ejercitos[&id]);
@@ -383,34 +396,11 @@ impl Nucleo {
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&escolta);
 
-        let mut perdida = None;
-        if r.gana_atacante {
-            // La caravana cae: sus carros, su carga y su escolta (a 0 y de vuelta al campamento de su héroe).
-            let i = self.estado.comercio.posicion_caravana(x).expect("existe");
-            let c = &mut self.estado.comercio.flota[i];
-            let p = asalto::aplicar_al_dueno(&cr, &flota, c, modalidad, None).expect("los carros que se pierden son los últimos de la lista");
-            let cedidas = c.liberar_escolta();
-            self.devolver_escolta(&cedidas);
-            perdida = Some(p);
-        }
+        let perdida = r.gana_atacante.then(|| self.caer_caravana(t, x, modalidad, None));
         let (carros, cogido, destruida) = match &perdida {
             Some(p) => (p.carros_perdidos as i64, self.cargar_botin_en(id, &p.carga_perdida), p.destruida),
             None => (0, Mercancia::new(), false),
         };
-        if let Some(p) = &perdida {
-            if destruida {
-                // Un aguante que se queda sin carros salva igual el 30 %: llega a casa con los carreteros.
-                // DUDA: Combate §7.1 no dice a dónde; se entrega al almacén de la plaza de origen, hasta donde quepa.
-                if let Some(a) = self.estado.asentamientos.get_mut(&origen) {
-                    p.carga_salvada.iter().for_each(|(&r, &n)| {
-                        a.economia.almacen.agregar(r, n);
-                    });
-                }
-                self.perder_caravana(t, x);
-            } else {
-                self.tr.asentamientos.push(origen);
-            }
-        }
         let heridos = if r.gana_atacante { 0 } else { self.herir_heroes(&participantes, t) };
         self.recomponer_tras_bajas(&columnas, t);
         self.hecho_de_combate(
@@ -435,15 +425,49 @@ impl Nucleo {
         Ok(())
     }
 
+    /// La caravana cae en manos del atacante (Combate §7.1, Batalla_Unity_Ciclo §9): según el tipo pierde la mitad de sus carros con su animal o el 70 % de su
+    /// carga, su escolta cedida queda a 0 y vuelve al campamento de su héroe y, si se queda sin carros, desaparece. `carros` son los que Unity da por perdidos;
+    /// con números se pierden los últimos de la lista. Devuelve lo perdido: la carga se la lleva quien llama.
+    pub(super) fn caer_caravana(&mut self, t: Instante, x: u64, modalidad: asalto::Modalidad, carros: Option<&[usize]>) -> asalto::Perdida {
+        let cr = self.estado.reglas.economia.combate.clone();
+        let flota = self.estado.reglas.economia.comercio.flota.clone();
+        let i = self.estado.comercio.posicion_caravana(x).expect("existe");
+        let c = &mut self.estado.comercio.flota[i];
+        let origen = c.origen as u64;
+        let p = asalto::aplicar_al_dueno(&cr, &flota, c, modalidad, carros).expect("los carros que se pierden existen");
+        let cedidas = c.liberar_escolta();
+        self.devolver_escolta(&cedidas);
+        if p.destruida {
+            // Un aguante que se queda sin carros salva igual el 30 %: llega a casa con los carreteros.
+            // DUDA: Combate §7.1 no dice a dónde; se entrega al almacén de la plaza de origen, hasta donde quepa.
+            if let Some(a) = self.estado.asentamientos.get_mut(&origen) {
+                p.carga_salvada.iter().for_each(|(&r, &n)| {
+                    a.economia.almacen.agregar(r, n);
+                });
+            }
+            self.perder_caravana(t, x);
+        } else {
+            self.tr.asentamientos.push(origen);
+        }
+        p
+    }
+
     // ───────────────────────────── Un campamento de bandidos ─────────────────────────────
 
     /// Combate §7.2. No exige guerra. Una tirada contra el poder de su nivel: si gana, el campamento cae (oro por cada héroe que combatió, a su carro) y se
     /// agenda su reaparición; si no, todos los héroes de la columna quedan heridos y la columna pierde la mitad del carro (nadie se la queda).
-    fn atacar_campamento(&mut self, t: Instante, id: u64, x: u64) -> Result<(), Respuesta> {
+    fn atacar_campamento(&mut self, t: Instante, heroe: u64, id: u64, x: u64) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let b = self.estado.combate.bandidos.get(&x).ok_or_else(|| Respuesta::rechazo(rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO, format!("bandidos-{x}"), v))?;
         let (nivel, donde) = (b.nivel, b.posicion);
         self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, None, false)?;
+        if self.estado.reglas.batallas_en_unity {
+            let ap = self.apertura_de_campamento(t, heroe, id, x);
+            if ap.hay_humano() {
+                self.abrir_batalla_de_ataque(t, ap, None);
+                return Ok(());
+            }
+        }
 
         let cr = self.estado.reglas.economia.combate.clone();
         let mut atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_resto);
@@ -523,7 +547,7 @@ impl Nucleo {
     /// Combate §6. Solo un ejército; la plaza, de otra Facción, a ≤ `radioEncuentro` y no protegida por una conquista reciente. Sin defensores con soldados
     /// cae sin combate y sin tirada. Si cae: heridos sus defensores en persona, chatarra al carro, [`Nucleo::conquistar_plaza`]. Si resiste: heridos todos los
     /// participantes del ejército y la chatarra al almacén de la plaza.
-    fn atacar_plaza(&mut self, t: Instante, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
+    fn atacar_plaza(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
         let plaza = self.plaza_o_rechazo(x)?;
@@ -542,10 +566,20 @@ impl Nucleo {
         if esta_protegida(plaza.protegida_hasta, t) {
             return Err(rechazo(rechazos::COMBATE_PLAZA_PROTEGIDA, "esa plaza está protegida tras su conquista: todavía no se la puede asediar"));
         }
+        if self.bloqueos().asentamientos.contains(&(x as u32)) {
+            return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "esa plaza ya está en una batalla"));
+        }
         let cr = self.estado.reglas.economia.combate.clone();
         let mut atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_asedio);
         if !atac.escuadras.iter().any(Escuadra::con_soldados) {
             return Err(rechazo(rechazos::COMBATE_SIN_ATACANTES, "sin soldados no hay con quién combatir: un héroe solo no abre un asedio"));
+        }
+        if self.estado.reglas.batallas_en_unity {
+            let ap = self.apertura_de_asedio(t, heroe, id, x);
+            if ap.hay_humano() {
+                self.abrir_batalla_de_ataque(t, ap, guerra);
+                return Ok(());
+            }
         }
 
         let mut defensa = self.defensa_de_plaza(x, t);
@@ -594,7 +628,7 @@ impl Nucleo {
     // DUDA: «si cae, se repone» se lee aquí como «si queda por debajo de 30»: el reloj de 6 h empieza en el primer combate que la deja incompleta y no se
     // reinicia mientras corre. Con la guarnición a 0 esperando su reposición el pueblo cae sin combate (como una plaza sin defensores).
     // DUDA: quien «defienda el pueblo» además de los mineros no existe (nadie puede estar en un pueblo); la chatarra, si resiste, va al almacén de la plaza madre.
-    fn atacar_pueblo(&mut self, t: Instante, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
+    fn atacar_pueblo(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
         let (madre, pueblo) = self.pueblo(x).ok_or_else(|| Respuesta::rechazo(rechazos::PUEBLO_DESCONOCIDO, format!("pueblo-{x}"), v))?;
@@ -604,6 +638,9 @@ impl Nucleo {
         }
         if !pueblo.activo() {
             return Err(rechazo(rechazos::COMBATE_PUEBLO_INACTIVO, "el pueblo aún es una obra: no tiene almacén ni guarnición"));
+        }
+        if self.bloqueos().pueblos.contains(&x) {
+            return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "ese pueblo ya está en una batalla"));
         }
         let donde = self.posicion_de_pueblo(x).ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado"))?;
         let faccion_madre = self.estado.asentamientos[&madre].faccion;
@@ -619,6 +656,13 @@ impl Nucleo {
             let sid = self.nuevo_id();
             let escuadra = reglas_pueblo::guarnicion_de_serie(&cr, sid, t);
             self.estado.combate.guarniciones.insert(x, crate::estado_combate::GuarnicionDePueblo { escuadra, repone_en: None });
+        }
+        if self.estado.reglas.batallas_en_unity {
+            let ap = self.apertura_de_pueblo(t, heroe, id, x, madre, donde);
+            if ap.hay_humano() {
+                self.abrir_batalla_de_ataque(t, ap, guerra);
+                return Ok(());
+            }
         }
         let mut mineros = vec![self.estado.combate.guarniciones[&x].escuadra.clone()];
         let columnas = self.columnas_de(&atac.escuadras);
@@ -669,7 +713,7 @@ impl Nucleo {
     }
 
     /// Guarda la guarnición de serie de un pueblo tras un combate y, si quedó incompleta y no tenía ya fecha, programa su reposición a las 6 horas.
-    fn guardar_guarnicion(&mut self, pueblo: u64, escuadra: Escuadra, t: Instante) {
+    pub(super) fn guardar_guarnicion(&mut self, pueblo: u64, escuadra: Escuadra, t: Instante) {
         let cr = self.estado.reglas.economia.combate.clone();
         let incompleta = escuadra.cantidad < cr.pueblos.mineros;
         let g = self.estado.combate.guarniciones.get_mut(&pueblo).expect("existe");

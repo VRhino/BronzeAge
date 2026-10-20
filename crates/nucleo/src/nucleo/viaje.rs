@@ -557,6 +557,22 @@ impl Nucleo {
     pub fn caravana_entra_en_batalla(&mut self, t: Instante, id: u64) -> bool {
         let t = t.max(self.estado.ahora);
         self.procesar_hasta(t);
+        let entra = self.apartar_caravana(t, id);
+        self.cerrar_version(t, entra);
+        entra
+    }
+
+    /// La batalla acabó: la caravana vuelve a lo que hacía con su plan desplazado lo que duró la pausa (ni un metro de más ni de menos).
+    pub fn caravana_sale_de_batalla(&mut self, t: Instante, id: u64) -> bool {
+        let t = t.max(self.estado.ahora);
+        self.procesar_hasta(t);
+        let sale = self.reponer_caravana(t, id);
+        self.cerrar_version(t, sale);
+        sale
+    }
+
+    /// `caravana_entra_en_batalla` dentro de una transición ya abierta (no procesa eventos ni cierra la versión).
+    pub(super) fn apartar_caravana(&mut self, t: Instante, id: u64) -> bool {
         let Some(posicion) = self.posicion_de_caravana(id, t) else { return false };
         let i = self.estado.comercio.posicion_caravana(id).expect("existe");
         let c = &mut self.estado.comercio.flota[i];
@@ -568,14 +584,11 @@ impl Nucleo {
         let origen = c.origen as u64;
         self.retirar_plan(id);
         self.emitir_propio(t, "comercio.caravana_en_batalla", vec![origen], vec![("caravana", id as i64)]);
-        self.cerrar_version(t, true);
         true
     }
 
-    /// La batalla acabó: la caravana vuelve a lo que hacía con su plan desplazado lo que duró la pausa (ni un metro de más ni de menos).
-    pub fn caravana_sale_de_batalla(&mut self, t: Instante, id: u64) -> bool {
-        let t = t.max(self.estado.ahora);
-        self.procesar_hasta(t);
+    /// `caravana_sale_de_batalla` dentro de una transición ya abierta.
+    pub(super) fn reponer_caravana(&mut self, t: Instante, id: u64) -> bool {
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return false };
         let c = &mut self.estado.comercio.flota[i];
         let Some(desde) = c.pausada_desde else { return false };
@@ -592,7 +605,6 @@ impl Nucleo {
             self.instalar_plan(id, plan);
         }
         self.emitir_propio(t, "comercio.caravana_sale_de_batalla", vec![origen], vec![("caravana", id as i64)]);
-        self.cerrar_version(t, true);
         true
     }
 
@@ -771,7 +783,7 @@ fn replanificar_con_camino(plan: &Plan, t: Instante, nuevas: &BTreeSet<Arista>, 
 
 /// El plan de una caravana que estuvo apartada de `desde` a `hasta` en `aqui`: lo vivido se conserva, se queda quieta lo que duró la pausa
 /// y lo que le faltaba se desplaza en esa misma cantidad.
-fn pausar_plan(plan: &Plan, desde: Instante, hasta: Instante, aqui: Punto) -> Plan {
+pub(super) fn pausar_plan(plan: &Plan, desde: Instante, hasta: Instante, aqui: Punto) -> Plan {
     let pausa = (hasta - desde).max(0);
     let mut vertices: Vec<Vertice> = plan.vertices.iter().copied().filter(|v| v.en <= desde).collect();
     vertices.push(Vertice { p: aqui, en: desde });

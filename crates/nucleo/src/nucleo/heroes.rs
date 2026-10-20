@@ -513,11 +513,13 @@ impl Nucleo {
 
     // ───────────────────────────── Eventos ─────────────────────────────
 
-    /// Vence la salida del mundo de un héroe que se desconectó (Reloj_Y_Eventos §7). Si su columna combate espera al fin de la batalla (la reintenta
+    /// Vence la salida del mundo de un héroe que se desconectó (Reloj_Y_Eventos §7). Si combate (su columna o él mismo) espera al fin de la batalla (la reintenta
     /// `columna_sale_de_batalla`); si la persiguen, se aplaza hasta el tope: quien huye desconectándose no gana nada.
     pub(super) fn salida_del_mundo(&mut self, id: u64, t: Instante) {
         let mr = self.estado.reglas.economia.militar.clone();
         let (combate, perseguido) = self.columna_de(id).map_or((false, false), |c| (self.estado.ejercitos.get(&c).is_some_and(|e| e.en_batalla), self.espacio.perseguidores.contains_key(&c)));
+        // Quien combate dentro de una plaza asediada tampoco sale (no va en ninguna columna).
+        let combate = combate || self.heroe_en_batalla(id);
         let Some(h) = self.estado.militar.heroes.get_mut(&id) else { return };
         match h.heroe.presencia.al_vencer_la_salida(&mr, t, combate, perseguido) {
             None | Some(Salida::EsperaAlFinDeLaBatalla) => {}

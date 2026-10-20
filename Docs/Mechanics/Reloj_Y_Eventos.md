@@ -33,6 +33,16 @@ Cómo avanza el mundo en la reconstrucción: sin tick. Este documento **sustituy
 >
 > Ninguno es recurrente por entidad ociosa: cada uno se programa cuando hay algo que esperar y se detiene solo (con los anillos y las plazas satisfechos la cola no guarda ninguna cita de combate). Mientras una plaza está ocupada, su paso de minuto pasa al `Exterior` los factores de la ocupación (`felicidad_extra` = `factorCrecimiento`, `recaudacion_extra` = `factorRecaudacion`) y la economía congela su mantenimiento (`ocupado`). Los plazos de la conquista y el de la guarnición comparten instante con el paso de minuto de la plaza (prioridad 2) y el consumo (3): dentro del mismo instante y prioridad manda la secuencia de la cola, no una regla (fila de paridad). El orden del generador aleatorio es ya parte de las reglas: la aparición de un campamento gasta una tirada de nivel (más dos por intento de punto en un anillo), un combate las suyas, y lo que no tira no gasta.
 
+> **Implementado en Rust (2026-10-21, fase 4E), las batallas de Unity en el reloj.** Una carga nueva de la cola (`Carga::Batalla(SucesoBatalla)`, etiqueta propia por entidad: 13 la batalla) y la prioridad **1** (`PRIO_BATALLA`, la misma fila que la salida del mundo) para los tres plazos de §6 y de [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §3.3:
+>
+> | Evento | Prioridad | Entidad | Cuándo | Qué hace |
+> |---|---|---|---|---|
+> | `FinConvocatoria` | 1 | la batalla (su generación) | `convocatoria_hasta` (solo un asedio, +30 s) | cuenta `batalla.convocatoria_cerrada`: el ticket ya puede publicarse y asignarse |
+> | `Vence` | 1 | la batalla | `expira_en` (cambia con cada estado: +5 min de asignación, +5 de inicio, duración + 5 de margen) | pasa a `fallida` sin castigo: suelta candados y devuelve al mundo lo apartado |
+> | `Retira` | 1 | la batalla | `cerrada_en` + 60 min | la saca del estado (`batalla.retirada`) |
+>
+> Cada cambio de estado sube la generación de la batalla y reprograma lo que siga haciendo falta (una activa tiene en la cola una o dos citas, una cerrada una, y ninguna entidad ociosa programa nada). Como `Vence` es de prioridad 1, **una batalla que vence en un instante ya no bloquea en ese mismo instante**. Una columna apartada **no come** (`militar::racion::Estado::Apartada`: consumo 0) y su plan queda en pausa (`Ejercito::plan_en_pausa`): al volver lo retoma desde donde se quedó, desplazado lo que duró la batalla y escalado a la velocidad que le dejen las bajas. Quien combata, dentro de una columna o de la plaza asediada, no sale del mundo hasta que acaba.
+
 ## 1. Tiempo
 
 - **Reloj de mundo** = reloj de pared × factor (×1 en producción; ×N para pruebas y para el batch). No hay tick y no existe la unidad «minuto de mundo» como paso: sigue habiendo plazos declarados en minutos, horas y días, y se miden en instantes.

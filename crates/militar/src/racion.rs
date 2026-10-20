@@ -11,11 +11,13 @@ use asentamiento::datos::por;
 use asentamiento::Recurso;
 use base::{Instante, Mil, Ritmo};
 
-/// Si la columna camina o está acampada: acampada come una décima parte de lo que come en marcha (nunca cero).
+/// Si la columna camina o está acampada: acampada come una décima parte de lo que come en marcha (nunca cero). Apartada por una batalla de Unity
+/// (Reloj_Y_Eventos §6) no come: nada de lo que dura la partida se gasta.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Estado {
     Marchando,
     Estacionada,
+    Apartada,
 }
 
 /// Soldados en pie de estas escuadras (los que comen y los que cuentan para la visión).
@@ -29,12 +31,13 @@ pub fn racion_guarnicion(r: &Reglas, soldados: i64) -> Mil {
 }
 
 /// Trigo por minuto de una columna: `(soldados × ración + participantes × consumoPorParticipante) × factor`, con el factor de marcha
-/// (¼) y, acampada, además el de estacionamiento (÷10). Los héroes comen aunque no lleven tropa: un viajero no viaja gratis.
+/// (¼) y, acampada, además el de estacionamiento (÷10); apartada por una batalla, nada. Los héroes comen aunque no lleven tropa: un viajero no viaja gratis.
 pub fn racion_columna(r: &Reglas, soldados: i64, participantes: usize, estado: Estado) -> Mil {
     let base = soldados * r.militar.racion_por_soldado + participantes as i64 * r.movimiento.consumo_por_participante;
     let factor = match estado {
         Estado::Marchando => r.logistica.factor_marcha,
         Estado::Estacionada => por(r.logistica.factor_marcha, r.logistica.factor_estacionado),
+        Estado::Apartada => return 0,
     };
     por(base, factor)
 }
@@ -118,6 +121,7 @@ mod pruebas {
         assert_eq!(racion_columna(&r, 100, 2, Estado::Estacionada), 400, "una décima de eso, nunca cero");
         assert_eq!(racion_guarnicion(&r, 100), 15_000, "la guarnición come la ración entera");
         assert_eq!(racion_columna(&r, 0, 1, Estado::Estacionada), 13, "un héroe solo acampado: 0,5 × 0,025");
+        assert_eq!(racion_columna(&r, 100, 2, Estado::Apartada), 0, "apartada por una batalla, no come");
     }
 
     #[test]

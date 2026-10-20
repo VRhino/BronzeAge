@@ -1,0 +1,917 @@
+//! El ciclo de una batalla de Unity dentro del núcleo (Batalla_Unity_Ciclo, Reloj_Y_Eventos §6, fase 4E). **Unity decide todo lo de dentro de la partida**;
+//! BronzeAge solo la abre, congela el ticket, custodia los tokens, bloquea lo que combate, valida el resultado entero y aplica las consecuencias. La máquina de
+//! estados es pura y vive en `combate::{ciclo, resultado, union}`; aquí está lo que toca el mundo: sacar los bandos del estado, reservar las escuadras, apartar
+//! las columnas y las caravanas, programar los plazos y volcar el resultado.
+//!
+//! # Cuándo se abre
+//! La abre `atacar` (no hay otra orden) cuando el proceso tiene servidores de batalla ([`Reglas::batallas_en_unity`](crate::estado::Reglas)) y hay al menos un
+//! héroe `humano` entre los participantes de los dos bandos: después de las mismas validaciones del combate con números (que sigue siendo el camino cuando no hay
+//! servidores o es bot contra bot) y, si procede, de declarar la guerra. Una plaza o un pueblo que ya están en una batalla no se atacan otra vez.
+//!
+//! # Lo que bloquea
+//! Mientras una batalla está activa (`convocando`, `asignada` o `en_curso` y dentro de plazo) sus columnas y caravanas quedan **apartadas** (no se mueven, no
+//! comen, no son perseguidas ni atacadas, `apartar_columna`), sus escuadras con dueño llevan el candado `reserva_batalla`, y **ninguna orden** (salvo las de §5.1)
+//! puede tocar a sus héroes, a la plaza asediada, al pueblo o campamento atacado, ni a nada que esté apartado: `Comando::implicados` dice qué toca cada orden y
+//! [`Nucleo::rechazo_por_batalla`] la rechaza con `batalla.bloqueado`. La administración no lleva candado (sus órdenes son andamiaje de escenarios).
+//!
+//! # Los plazos
+//! Tres citas de prioridad 1 (`Carga::Batalla`), todas de la entidad de la batalla: el fin de la convocatoria de un asedio (`FinConvocatoria`), el vencimiento del
+//! estado en que está (`Vence`, a `expira_en`: pasa a `fallida` sin que nadie pierda nada) y la retirada de la cerrada (`Retira`, a `conservarCerradasMinutos`).
+//! Cada cambio de estado sube la generación de la entidad y reprograma lo que siga haciendo falta, así que a una batalla le quedan en la cola, como mucho, dos.
+//! Como `Vence` es de prioridad 1 y toda orden se aplica con los eventos hasta su instante ya procesados, una batalla vencida está siempre cerrada antes de que
+//! nada pueda mirarla: no hace falta soltar a mano los candados de las vencidas (`sinCandadosVencidos` del TypeScript).
+//!
+//! # Los mensajes del servidor de batalla
+//! `RegistrarAsignacion`, `ConfirmarInicio`, `RegistrarTokens`, `RegistrarSalida` y `AplicarResultado` son órdenes del núcleo con el actor `batalla-servidor:<id>`.
+//! Repetir una ya aplicada no cambia nada (`SinCambios`: ni versión, ni hecho, ni id). Aplicar el resultado es una sola mutación: se valida entero (el checklist
+//! de §8.5) antes de tocar nada.
+
+use super::combates::loadout_en_el_campamento;
+use super::*;
+use crate::comando::Implicados;
+use crate::estado::{SucesoBatalla, PRIO_BATALLA, PRIO_SALIDA, SIN_BANDERA};
+use crate::estado_batallas::entidad_batalla;
+use crate::estado_militar::Relacion;
+use combate::botin::{repartir_botin, CarroDeColumna};
+use combate::caravana::Modalidad;
+use combate::ciclo::{bloqueos_de, uuid_de_batalla, Asignacion, BandoDeTicket, Batalla, Bloqueo, Bloqueos, Contexto, Efecto, EscuadraEnBatalla, ErrorBatalla, Participante, SalidaBatalla, Ticket, Token};
+use combate::resolucion::Lado;
+use combate::resultado::{Efectos, Resultado as ResultadoDeBatalla};
+use combate::union::{lado_para_unirse, ErrorUnion, Reparto};
+use militar::columna::TipoColumna;
+use militar::escuadra::{Contenedor, Escuadra};
+use militar::heroe::Controlador;
+use militar::presencia::Ubicacion;
+use militar::{sumar, Carga as Mercancia};
+use std::collections::BTreeSet;
+
+/// El id de una escuadra que aún no lo tiene (carreteros, bandidos): al abrir la batalla recibe uno de la partida.
+const SIN_ID: u64 = 0;
+
+/// Qué se cuenta de una batalla (Batalla_Unity_Ciclo §10). Contra un campamento de bandidos el prefijo es `evento_pve.` en lugar de `batalla.`.
+#[derive(Clone, Copy)]
+enum Hecho {
+    Abierta,
+    Refuerzos,
+    Asignada,
+    EnCurso,
+    Salida,
+    Revisada,
+    Aplicada,
+    Cancelada,
+    Fallida,
+    /// No está en la lista de §10: acaba la convocatoria de un asedio y el ticket ya puede publicarse (es la cita que el contrato necesita).
+    ConvocatoriaCerrada,
+}
+
+impl Hecho {
+    fn codigo(self, pve: bool) -> &'static str {
+        match (self, pve) {
+            (Hecho::Abierta, false) => "batalla.abierta",
+            (Hecho::Abierta, true) => "evento_pve.abierta",
+            (Hecho::Refuerzos, false) => "batalla.refuerzos",
+            (Hecho::Refuerzos, true) => "evento_pve.refuerzos",
+            (Hecho::Asignada, false) => "batalla.asignada",
+            (Hecho::Asignada, true) => "evento_pve.asignada",
+            (Hecho::EnCurso, false) => "batalla.en_curso",
+            (Hecho::EnCurso, true) => "evento_pve.en_curso",
+            (Hecho::Salida, false) => "batalla.salida",
+            (Hecho::Salida, true) => "evento_pve.salida",
+            (Hecho::Revisada, false) => "batalla.revisada",
+            (Hecho::Revisada, true) => "evento_pve.revisada",
+            (Hecho::Aplicada, false) => "batalla.aplicada",
+            (Hecho::Aplicada, true) => "evento_pve.aplicada",
+            (Hecho::Cancelada, false) => "batalla.cancelada",
+            (Hecho::Cancelada, true) => "evento_pve.cancelada",
+            (Hecho::Fallida, false) => "batalla.fallida",
+            (Hecho::Fallida, true) => "evento_pve.fallida",
+            (Hecho::ConvocatoriaCerrada, _) => "batalla.convocatoria_cerrada",
+        }
+    }
+}
+
+/// Qué es la batalla, como número de un hecho (`contexto`): 0 asedio, 1 campo abierto, 2 caravana, 3 campamento de bandidos, 4 saqueo de pueblo, 5 avanzada.
+fn numero_de_contexto(c: &Contexto) -> i64 {
+    match c {
+        Contexto::Asedio { .. } => 0,
+        Contexto::CampoAbierto { .. } => 1,
+        Contexto::Caravana { .. } => 2,
+        Contexto::CampamentoBandidos { .. } => 3,
+        Contexto::SaqueoPueblo { .. } => 4,
+        Contexto::Avanzada { .. } => 5,
+    }
+}
+
+/// Lo que hace falta para abrir una batalla: qué se disputa, los dos bandos y lo que se queda quieto (`Apertura` del TypeScript).
+pub(super) struct Apertura {
+    contexto: Contexto,
+    punto: Punto,
+    iniciada_por: u64,
+    atacante: BandoDeTicket,
+    defensor: BandoDeTicket,
+    bloqueo: Bloqueo,
+}
+
+impl Apertura {
+    /// Llega a Unity si en toda la batalla hay algún héroe humano (Doc 5.15.6): bot contra bot sigue con números.
+    pub(super) fn hay_humano(&self) -> bool {
+        [&self.atacante, &self.defensor].into_iter().flat_map(|b| b.participantes.iter()).any(|p| p.controlador == Controlador::Humano)
+    }
+}
+
+/// Lo que ve quien pide su token (`GET /jugador/partidas/:g/batallas/:id/asignacion`, §8.7). BronzeAge nunca verifica el token: solo lo custodia y controla
+/// quién lo lee.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TokenDeJugador {
+    /// La batalla no está activa (404).
+    NoExiste,
+    /// El héroe no combate en ella (403).
+    NoCombate,
+    /// Todavía no hay asignación o token para él (404).
+    SinToken,
+    Token { instancia: combate::ciclo::Instancia, token: String, expira_en: i64 },
+}
+
+fn rechazo_de_batalla(e: ErrorBatalla, v: u64) -> Respuesta {
+    use rechazos::*;
+    let (codigo, mensaje) = match e {
+        ErrorBatalla::NoActiva => (BATALLA_NO_EXISTE, "la batalla no existe o ya no está activa".to_string()),
+        ErrorBatalla::YaAsignada => (BATALLA_YA_ASIGNADA, "otro servidor ya tiene esta batalla".into()),
+        ErrorBatalla::EnConvocatoria => (BATALLA_INVALIDA, "un asedio en convocatoria no se publica ni se asigna".into()),
+        ErrorBatalla::RevisionVieja => (BATALLA_INVALIDA, "la revisión del ticket no es la vigente".into()),
+        ErrorBatalla::EstadoInvalido => (BATALLA_INVALIDA, "el estado de la batalla no admite esta operación".into()),
+        ErrorBatalla::ServidorAjeno => (BATALLA_INVALIDA, "no es el servidor de la asignación activa".into()),
+        ErrorBatalla::TokenInvalido(h) => (BATALLA_INVALIDA, format!("el héroe {h} no es un humano de esta batalla: no lleva token")),
+        ErrorBatalla::NoCombate(h) => (BATALLA_INVALIDA, format!("el héroe {h} no combate en esta batalla")),
+        ErrorBatalla::LadoLleno => (BATALLA_INVALIDA, "ese bando está lleno".into()),
+        ErrorBatalla::YaSalio(h) => (BATALLA_INVALIDA, format!("el héroe {h} ya salió de esta batalla y no vuelve a entrar")),
+        ErrorBatalla::YaCombate(h) => (BATALLA_INVALIDA, format!("el héroe {h} ya combate en esta batalla")),
+        ErrorBatalla::NoPuedeCancelar => (BATALLA_INVALIDA, "solo quien la inició puede cancelarla, y antes de que empiece la partida".into()),
+        ErrorBatalla::SalidaInvalida => (BATALLA_INVALIDA, "la salida trae una escuadra que no es del héroe, repetida o que no cierra sobre lo autorizado".into()),
+        ErrorBatalla::Resultado(e) => (BATALLA_INVALIDA, format!("resultado inválido: {e:?}")),
+        ErrorBatalla::OtroResultado => (BATALLA_INVALIDA, "la batalla ya se aplicó con otro resultado".into()),
+    };
+    Respuesta::rechazo(codigo, mensaje, v)
+}
+
+fn rechazo_de_union(e: ErrorUnion, v: u64) -> Respuesta {
+    let mensaje = match e {
+        ErrorUnion::NadieDeFuera => "en una batalla campal entre ejércitos no entra nadie de fuera".to_string(),
+        ErrorUnion::SoloColumnasPersonales => "una persecución solo admite columnas personales".into(),
+        ErrorUnion::LadoObligatorio => "en una persecución hay que elegir bando".into(),
+        ErrorUnion::NadieAyudaALosBandidos => "nadie ayuda a los bandidos".into(),
+        ErrorUnion::SinFaccion => "hace falta Facción para unirse a esta batalla".into(),
+        ErrorUnion::NoCombateAqui => "tu Facción no combate aquí".into(),
+        ErrorUnion::LadoDistinto(l) => format!("a ti te toca el bando {l:?}"),
+    };
+    Respuesta::rechazo(rechazos::BATALLA_INVALIDA, mensaje, v)
+}
+
+fn sin_cambios(v: u64) -> Respuesta {
+    Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] }
+}
+
+fn escuadra_en_batalla(s: &Escuadra) -> EscuadraEnBatalla {
+    EscuadraEnBatalla { id: s.id, tropa: s.tropa, dueno: Some(s.heroe), efectivos: s.cantidad }
+}
+
+impl Nucleo {
+    // ───────────────────────────── Consultas ─────────────────────────────
+
+    /// Una batalla por id, abierta o cerrada reciente.
+    pub fn batalla(&self, id: u64) -> Option<&Batalla> {
+        self.estado.batallas.batallas.get(&id)
+    }
+
+    /// Todas las batallas que conserva el estado, por id.
+    pub fn batallas(&self) -> impl Iterator<Item = &Batalla> {
+        self.estado.batallas.batallas.values()
+    }
+
+    /// Las batallas activas ahora (`convocando`, `asignada` o `en_curso` y dentro de plazo).
+    pub fn batallas_activas(&self) -> impl Iterator<Item = &Batalla> {
+        let t = self.estado.ahora;
+        self.batallas().filter(move |b| b.activa(t))
+    }
+
+    /// Lo que lista `GET /batallas/pendientes`: las `convocando`, activas y fuera de convocatoria. Idempotente y sin efectos.
+    pub fn batallas_pendientes(&self) -> Vec<u64> {
+        let t = self.estado.ahora;
+        self.batallas().filter(|b| b.pendiente_de_asignar(t)).map(|b| b.id).collect()
+    }
+
+    /// `GET /batallas/:id/ticket`: el ticket vigente, recuperable mientras la batalla siga en el estado (también una cerrada, durante la retención). Mientras
+    /// dura la convocatoria de un asedio no se publica (`None`).
+    pub fn ticket_publicado(&self, id: u64) -> Option<&Ticket> {
+        self.batalla(id).filter(|b| !b.en_convocatoria(self.estado.ahora)).map(|b| &b.ticket)
+    }
+
+    /// `GET /batallas/:id/incorporaciones`: las incorporaciones vigentes, en orden de secuencia (sin las de quien salió).
+    pub fn incorporaciones_vigentes(&self, id: u64) -> Vec<&combate::ciclo::Incorporacion> {
+        self.batalla(id).map(|b| b.incorporaciones.iter().filter(|i| !b.salio(i.participante.heroe)).collect()).unwrap_or_default()
+    }
+
+    /// Lo que se bloquea ahora por las batallas activas (`bloqueosDe`).
+    pub fn bloqueos(&self) -> Bloqueos {
+        bloqueos_de(self.batallas(), self.estado.ahora)
+    }
+
+    /// ¿Combate el héroe en alguna batalla activa? (Quien combate no sale del mundo hasta que acaba.)
+    pub fn heroe_en_batalla(&self, heroe: u64) -> bool {
+        self.batallas_activas().any(|b| b.heroes_que_combaten().any(|h| h == heroe))
+    }
+
+    /// El `battleId` del contrato de una batalla: un UUID determinista de la partida (su mundo y su semilla) y del id de la batalla.
+    // DUDA: el núcleo no conoce un `gameId`: se usa el hash del mundo con la semilla, que identifican la partida mientras no haya dos con el mismo mundo y la misma semilla.
+    pub fn uuid_de_batalla(&self, id: u64) -> String {
+        uuid_de_batalla(&format!("{}:{}", self.mundo_hash, self.semilla), id)
+    }
+
+    /// Inversa de [`Nucleo::uuid_de_batalla`]: el id de la partida de un `battleId`, si es de esta partida.
+    pub fn id_de_batalla(&self, uuid: &str) -> Option<u64> {
+        let hex = uuid.rsplit('-').take(2).collect::<Vec<_>>();
+        let id = u64::from_str_radix(&format!("{}{}", hex.get(1)?, hex.first()?), 16).ok()?;
+        (self.uuid_de_batalla(id) == uuid).then_some(id)
+    }
+
+    /// El token del propio jugador (§8.7). `NoExiste` si la batalla no está activa, `NoCombate` si el héroe no combate en ella, `SinToken` mientras no haya
+    /// asignación o token para él.
+    pub fn token_de_jugador(&self, heroe: u64, batalla: u64) -> TokenDeJugador {
+        let Some(b) = self.batalla(batalla).filter(|b| b.activa(self.estado.ahora)) else { return TokenDeJugador::NoExiste };
+        if b.participante(heroe).is_none() {
+            return TokenDeJugador::NoCombate;
+        }
+        match b.asignacion.as_ref().and_then(|a| a.tokens.iter().find(|t| t.heroe == heroe).map(|t| (a, t))) {
+            Some((a, t)) => TokenDeJugador::Token { instancia: a.instancia.clone(), token: t.token.clone(), expira_en: t.expira_en },
+            None => TokenDeJugador::SinToken,
+        }
+    }
+
+    /// Las batallas que salieron del estado al cumplir su retención, para que quien persiste las anexe al histórico de la partida (§3.3). Se vacía al leer;
+    /// no es estado: lo no recogido al cerrar el proceso se pierde.
+    pub fn tomar_batallas_retiradas(&mut self) -> Vec<Batalla> {
+        std::mem::take(&mut self.retiradas)
+    }
+
+    // ───────────────────────────── El candado de las órdenes ─────────────────────────────
+
+    /// `tocaLoBloqueado` (§5): ¿choca la orden con algo que está en una batalla activa? Un héroe que combate no hace nada más, ni quien está dentro de una plaza
+    /// asediada; nadie apunta a una columna, caravana, plaza, pueblo o campamento bloqueados. Marchar hacia una plaza asediada sí se puede. La administración y
+    /// las órdenes de §5.1 no lo llevan. Una orden rechazada no deja rastro.
+    pub(super) fn rechazo_por_batalla(&self, t: Instante, p: &Peticion) -> Option<Respuesta> {
+        if p.admin || !p.comando.lleva_candado() || self.batallas_activas().next().is_none() {
+            return None;
+        }
+        let bloqueos = bloqueos_de(self.batallas(), t);
+        let Implicados { heroes, ejercitos, caravanas, asentamientos, pueblos, campamentos } = p.comando.implicados();
+        let heroe_bloqueado = |id: u64| {
+            let plaza = self.heroe(id).and_then(|h| match h.heroe.presencia.ubicacion {
+                Ubicacion::Asentamiento(a) => Some(a),
+                _ => None,
+            });
+            bloqueos.heroe_bloqueado(id, plaza)
+        };
+        let actor = self.heroe_de_cuenta(&p.actor).map(|h| h.heroe.id);
+        let choca = actor.into_iter().chain(heroes).any(heroe_bloqueado)
+            || asentamientos.iter().any(|a| bloqueos.asentamientos.contains(&(*a as u32)))
+            || ejercitos.iter().any(|e| bloqueos.ejercitos.contains(e))
+            || caravanas.iter().any(|c| bloqueos.caravanas.contains(c))
+            || pueblos.iter().any(|x| bloqueos.pueblos.contains(x))
+            || campamentos.iter().any(|c| bloqueos.campamentos.contains(&(*c as u32)));
+        choca.then(|| Respuesta::rechazo(rechazos::BATALLA_BLOQUEADO, "lo que tocas está en una batalla: ni se mueve ni recibe órdenes hasta que acabe", self.estado.version))
+    }
+
+    // ───────────────────────────── Abrir ─────────────────────────────
+
+    /// Los héroes sanos de una columna con las escuadras suyas que lleva en ella y que tienen efectivos (Doc 5.15.1, 5.16.4).
+    fn heroes_de_columna(&self, columna: u64, t: Instante) -> Vec<Participante> {
+        let e = &self.estado.ejercitos[&columna];
+        e.columna
+            .participantes
+            .iter()
+            .filter_map(|p| self.heroe(p.heroe))
+            .filter(|h| !h.heroe.esta_herido(t))
+            .map(|h| {
+                let suyas = h.heroe.escuadras.iter().filter(|s| s.contenedor == Contenedor::Ejercito(columna) && s.con_soldados());
+                self.participante(h, suyas.map(escuadra_en_batalla).collect())
+            })
+            .collect()
+    }
+
+    fn participante(&self, h: &HeroeNucleo, escuadras: Vec<EscuadraEnBatalla>) -> Participante {
+        // Los héroes todavía no tienen inventario: caben tantos objetos como casillas tiene la mochila (el botín de Unity no tiene dónde caer, CQ-004).
+        Participante { heroe: h.heroe.id, faccion: h.faccion, controlador: h.heroe.controlador, casillas_libres: self.estado.reglas.economia.combate.batalla.casillas_inventario, escuadras }
+    }
+
+    fn bando_de_columna(&self, columna: u64, t: Instante) -> BandoDeTicket {
+        BandoDeTicket::nuevo(self.estado.ejercitos[&columna].columna.faccion, self.heroes_de_columna(columna, t), vec![])
+    }
+
+    /// Una batalla campal (entre ejércitos) o una persecución (entre columnas personales).
+    pub(super) fn apertura_de_columna(&self, t: Instante, heroe: u64, id: u64, x: u64) -> Apertura {
+        let punto = self.estado.ejercitos[&x].posicion_en(t);
+        let solitarios = self.estado.ejercitos[&id].columna.tipo == TipoColumna::Personal;
+        Apertura {
+            contexto: Contexto::CampoAbierto { punto, solitarios },
+            punto,
+            iniciada_por: heroe,
+            atacante: self.bando_de_columna(id, t),
+            defensor: self.bando_de_columna(x, t),
+            bloqueo: Bloqueo { ejercitos: vec![id, x], ..Default::default() },
+        }
+    }
+
+    /// Contra una caravana defiende su escolta cedida y, sin escolta, sus carreteros, que no son de nadie (Doc 3.10, 5.15.4).
+    pub(super) fn apertura_de_caravana(&self, t: Instante, heroe: u64, id: u64, x: u64, punto: Punto, modalidad: Modalidad) -> Apertura {
+        let k = self.estado.comercio.caravana(x).expect("existe");
+        let escolta: Vec<EscuadraEnBatalla> = k.escolta.iter().filter_map(|c| self.escuadra(c.id).map(|(_, s)| s)).filter(|s| s.con_soldados()).map(escuadra_en_batalla).collect();
+        let sin_heroe = if escolta.is_empty() {
+            let (tropa, efectivos) = self.estado.reglas.economia.combate.batalla.carreteros;
+            vec![EscuadraEnBatalla { id: SIN_ID, tropa, dueno: None, efectivos }]
+        } else {
+            escolta
+        };
+        let faccion = self.estado.asentamientos.get(&(k.origen as u64)).map(|a| a.faccion);
+        Apertura {
+            contexto: Contexto::Caravana { caravana: x, punto, modalidad, carros: k.carros.len() },
+            punto,
+            iniciada_por: heroe,
+            atacante: self.bando_de_columna(id, t),
+            defensor: BandoDeTicket::nuevo(faccion, vec![], sin_heroe),
+            bloqueo: Bloqueo { ejercitos: vec![id], caravanas: vec![x], ..Default::default() },
+        }
+    }
+
+    /// Contra un campamento de bandidos defiende una escuadra de milicia con las unidades de su nivel, sin dueño ni Facción.
+    pub(super) fn apertura_de_campamento(&self, t: Instante, heroe: u64, id: u64, x: u64) -> Apertura {
+        let c = &self.estado.combate.bandidos[&x];
+        let unidades = combate::bandidos::nivel_de(&self.estado.reglas.economia.combate, c.nivel).unidades;
+        Apertura {
+            contexto: Contexto::CampamentoBandidos { campamento: x as u32, punto: c.posicion },
+            punto: c.posicion,
+            iniciada_por: heroe,
+            atacante: self.bando_de_columna(id, t),
+            defensor: BandoDeTicket::nuevo(None, vec![], vec![EscuadraEnBatalla { id: SIN_ID, tropa: militar::Tropa::MiliciaLanceros, dueno: None, efectivos: unidades }]),
+            bloqueo: Bloqueo { ejercitos: vec![id], campamento: Some(x as u32), ..Default::default() },
+        }
+    }
+
+    /// En un asedio defienden los residentes sanos y conectados que están **dentro**, con las escuadras de su loadout activo que tienen en el campamento, y la
+    /// guarnición sin héroe (Doc 5.15.1, 5.15.3). Los visitantes no entran de oficio: si quieren, se unen durante la convocatoria. Sin nadie, se juega igual.
+    pub(super) fn apertura_de_asedio(&self, t: Instante, heroe: u64, id: u64, plaza: u64) -> Apertura {
+        let a = &self.estado.asentamientos[&plaza];
+        let dentro = Ubicacion::Asentamiento(plaza as u32);
+        let residentes: Vec<&HeroeNucleo> = self.estado.militar.residentes_de(plaza).collect();
+        let participantes = residentes
+            .iter()
+            .filter(|h| h.heroe.presencia.ubicacion == dentro && !h.heroe.esta_herido(t) && !h.heroe.presencia.fuera)
+            .map(|h| self.participante(h, loadout_en_el_campamento(h).into_iter().map(escuadra_en_batalla).collect()))
+            .collect();
+        let guarnicion = residentes.iter().flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados());
+        Apertura {
+            contexto: Contexto::Asedio { asentamiento: plaza as u32 },
+            punto: a.posicion,
+            iniciada_por: heroe,
+            atacante: self.bando_de_columna(id, t),
+            defensor: BandoDeTicket::nuevo(Some(a.faccion), participantes, guarnicion.map(escuadra_en_batalla).collect()),
+            bloqueo: Bloqueo { ejercitos: vec![id], asentamiento: Some(plaza as u32), ..Default::default() },
+        }
+    }
+
+    /// El saqueo de un pueblo: defiende la guarnición de serie de mineros (sin dueño) y la Facción de la plaza madre. Su escuadra ya existe (nace al primer
+    /// ataque); si está a 0 esperando su reposición, el pueblo no tiene defensores.
+    pub(super) fn apertura_de_pueblo(&self, t: Instante, heroe: u64, id: u64, pueblo: u64, madre: u64, punto: Punto) -> Apertura {
+        let g = &self.estado.combate.guarniciones[&pueblo].escuadra;
+        let mineros = Some(g).filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s) });
+        Apertura {
+            contexto: Contexto::SaqueoPueblo { pueblo, punto },
+            punto,
+            iniciada_por: heroe,
+            atacante: self.bando_de_columna(id, t),
+            defensor: BandoDeTicket::nuevo(Some(self.estado.asentamientos[&madre].faccion), vec![], mineros.into_iter().collect()),
+            bloqueo: Bloqueo { ejercitos: vec![id], pueblo: Some(pueblo), ..Default::default() },
+        }
+    }
+
+    /// Abre la batalla en `convocando` con el ticket congelado: reserva las escuadras con dueño, aparta las columnas y caravanas, programa sus plazos y la
+    /// cuenta. Devuelve su id. La orden que la abre ya comprobó todo y declaró la guerra, si hacía falta.
+    pub(super) fn abrir_batalla(&mut self, t: Instante, mut ap: Apertura) -> u64 {
+        let cr = self.estado.reglas.economia.combate.clone();
+        let id = self.nuevo_id();
+        // Lo que no es de nadie (carreteros, bandidos) no está en ningún héroe, pero el resultado tiene que cubrirlo: lleva un id de la partida.
+        for e in ap.defensor.sin_heroe.iter_mut().filter(|e| e.id == SIN_ID) {
+            e.id = self.nuevo_id();
+        }
+        let ticket = Ticket::nuevo(&cr, ap.contexto, ap.atacante, ap.defensor);
+        let b = Batalla::abrir(&cr, id, ap.iniciada_por, ap.punto, ticket, ap.bloqueo, t);
+        self.reservar(&b.escuadras_con_candado(), Some(id));
+        for c in &b.bloqueo.ejercitos {
+            self.apartar_columna(t, *c);
+        }
+        for k in &b.bloqueo.caravanas {
+            self.apartar_caravana(t, *k);
+        }
+        self.estado.batallas.batallas.insert(id, b);
+        self.programar_batalla(id);
+        self.hecho_de_batalla(t, id, Hecho::Abierta, None);
+        id
+    }
+
+    /// La orden de atacar abre la batalla en lugar de resolver el combate: declara la guerra, si hacía falta y todo lo demás ya valía, y la abre.
+    pub(super) fn abrir_batalla_de_ataque(&mut self, t: Instante, ap: Apertura, guerra: Option<(u32, u32)>) {
+        if let Some((a, b)) = guerra {
+            self.declarar_guerra(t, a, b);
+        }
+        self.abrir_batalla(t, ap);
+    }
+
+    // ───────────────────────────── Ayudas ─────────────────────────────
+
+    /// Pone (`Some`) o quita (`None`) el candado `reservaBatalla` a las escuadras de los héroes indicadas.
+    fn reservar(&mut self, escuadras: &[u64], batalla: Option<u64>) {
+        for h in self.estado.militar.heroes.values_mut() {
+            for s in h.heroe.escuadras.iter_mut().filter(|s| escuadras.contains(&s.id)) {
+                s.reserva_batalla = batalla;
+            }
+        }
+    }
+
+    fn escuadra_mut(&mut self, id: u64) -> Option<&mut Escuadra> {
+        self.estado.militar.heroes.values_mut().find_map(|h| h.heroe.escuadra_mut(id))
+    }
+
+    /// Reprograma los plazos de la batalla con una generación nueva: el fin de la convocatoria (si aún no pasó), el vencimiento de su estado y, cerrada, su
+    /// retirada.
+    fn programar_batalla(&mut self, id: u64) {
+        let t = self.estado.ahora;
+        let Some(b) = self.estado.batallas.batallas.get(&id) else { return };
+        let (cerrada, expira_en, convocatoria, retirada) = (b.cerrada(), b.expira_en, b.convocatoria_hasta, b.cerrada_en.unwrap_or(t) + self.estado.reglas.economia.combate.batalla.conservar_cerradas);
+        let entidad = entidad_batalla(id);
+        self.estado.generaciones.subir(entidad);
+        let clave = self.estado.generaciones.clave(entidad);
+        if cerrada {
+            self.estado.cola.programar(retirada, PRIO_BATALLA, clave, Carga::Batalla(SucesoBatalla::Retira));
+            return;
+        }
+        if let Some(h) = convocatoria.filter(|&h| h > t) {
+            self.estado.cola.programar(h, PRIO_BATALLA, clave, Carga::Batalla(SucesoBatalla::FinConvocatoria));
+        }
+        self.estado.cola.programar(expira_en.max(t), PRIO_BATALLA, clave, Carga::Batalla(SucesoBatalla::Vence));
+    }
+
+    /// Cuenta la batalla: lo oyen las columnas que combaten y las plazas implicadas (la asediada, la madre del pueblo y el origen de cada caravana).
+    fn hecho_de_batalla(&mut self, t: Instante, id: u64, hecho: Hecho, ganador: Option<Lado>) {
+        let b = &self.estado.batallas.batallas[&id];
+        let pve = matches!(b.ticket.contexto, Contexto::CampamentoBandidos { .. });
+        let mut plazas: Vec<u64> = b.bloqueo.asentamiento.map(u64::from).into_iter().collect();
+        plazas.extend(b.bloqueo.caravanas.iter().filter_map(|&k| self.estado.comercio.caravana(k)).map(|k| k.origen as u64));
+        plazas.extend(b.bloqueo.pueblo.and_then(|p| self.pueblo(p)).map(|(madre, _)| madre));
+        plazas.retain(|p| self.estado.asentamientos.contains_key(p));
+        plazas.sort_unstable();
+        plazas.dedup();
+        let bandera = |f: Option<u32>| f.unwrap_or(SIN_BANDERA) as i64;
+        let heroes = |l: Lado| b.heroes_que_combaten().filter(|&h| b.lado_de(h) == Some(l)).count() as i64;
+        let mut datos = vec![
+            ("batalla", id as i64),
+            ("contexto", numero_de_contexto(&b.ticket.contexto)),
+            ("faccionAtacante", bandera(b.ticket.atacante.faccion)),
+            ("faccionDefensora", bandera(b.ticket.defensor.faccion)),
+            ("heroesAtacante", heroes(Lado::Atacante)),
+            ("heroesDefensor", heroes(Lado::Defensor)),
+            ("capacidad", b.ticket.atacante.capacidad as i64),
+        ];
+        if let Some(l) = ganador {
+            datos.push(("ganaElAtacante", (l == Lado::Atacante) as i64));
+        }
+        let ejercitos = b.bloqueo.ejercitos.iter().copied().filter(|e| self.estado.ejercitos.contains_key(e)).collect();
+        let codigo = hecho.codigo(pve);
+        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos, asentamientos: plazas, punto: Some(b.punto), datos });
+    }
+
+    /// Las columnas de un bando que siguen en la batalla, en el orden del bloqueo: la primera es la que abrió o recibió el combate.
+    fn columnas_del_bando(&self, b: &Batalla, lado: Lado) -> Vec<u64> {
+        b.bloqueo.ejercitos.iter().copied().filter(|c| self.estado.ejercitos.get(c).is_some_and(|e| e.columna.participantes.iter().any(|p| b.lado_de(p.heroe) == Some(lado)))).collect()
+    }
+
+    /// El reparto por rondas del botín entre las columnas, hasta donde quepa en cada carro. Devuelve lo que se cargó (lo que no cabe en ninguna se pierde).
+    fn repartir_en_columnas(&mut self, columnas: &[u64], botin: &Mercancia) -> Mercancia {
+        if columnas.is_empty() || botin.is_empty() {
+            return Mercancia::new();
+        }
+        let mut carros: Vec<CarroDeColumna> = columnas.iter().map(|&c| CarroDeColumna { carga: self.estado.ejercitos[&c].columna.carga.clone(), capacidad: self.capacidad_de_carga(c).unwrap_or(0) }).collect();
+        let perdido = repartir_botin(&mut carros, botin);
+        for (&c, carro) in columnas.iter().zip(carros) {
+            self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga = carro.carga;
+            self.tr.tocados.push(c);
+        }
+        let mut cogido = Mercancia::new();
+        for (&r, &n) in botin {
+            sumar(&mut cogido, r, n - perdido.get(&r).copied().unwrap_or(0));
+        }
+        cogido.retain(|_, n| *n > 0);
+        cogido
+    }
+
+    /// La batalla se cierra sin resultado (cancelada o fallida): se sueltan los candados y vuelve al mundo lo que estaba apartado. Reprograma los plazos
+    /// (queda la retirada) y la cuenta.
+    fn cerrar_batalla(&mut self, t: Instante, id: u64, liberar: &[u64], hecho: Hecho) {
+        self.reservar(liberar, None);
+        self.devolver_al_mundo(t, id);
+        self.programar_batalla(id);
+        self.hecho_de_batalla(t, id, hecho, None);
+    }
+
+    /// Lo que la batalla tenía apartado vuelve al espacio y quien pidió salir del mundo mientras combatía lo reintenta ya.
+    fn devolver_al_mundo(&mut self, t: Instante, id: u64) {
+        let b = &self.estado.batallas.batallas[&id];
+        let (columnas, caravanas) = (b.bloqueo.ejercitos.clone(), b.bloqueo.caravanas.clone());
+        let heroes: Vec<u64> = b.ticket.atacante.participantes.iter().chain(&b.ticket.defensor.participantes).chain(b.incorporaciones.iter().map(|i| &i.participante)).map(|p| p.heroe).collect();
+        for c in columnas {
+            self.reponer_columna(t, c);
+        }
+        for k in caravanas {
+            self.reponer_caravana(t, k);
+        }
+        // Los que combatían dentro de una plaza no tienen columna que lo haga por ellos.
+        for h in heroes {
+            let pendiente = self.heroe(h).is_some_and(|x| x.heroe.presencia.desconecta_en.is_some() && !x.heroe.presencia.fuera && !matches!(x.heroe.presencia.ubicacion, Ubicacion::Columna(_)));
+            if pendiente && !self.heroe_en_batalla(h) {
+                let clave = self.estado.generaciones.clave(h);
+                self.estado.cola.programar(t, PRIO_SALIDA, clave, Carga::SalidaDelMundo);
+            }
+        }
+    }
+
+    // ───────────────────────────── Los plazos ─────────────────────────────
+
+    /// Vence un plazo de una batalla (la clave de la cola ya garantiza que no cambió de estado desde que se programó).
+    pub(super) fn suceso_de_batalla(&mut self, id: u64, suceso: SucesoBatalla, t: Instante) {
+        match suceso {
+            SucesoBatalla::FinConvocatoria => {
+                if self.estado.batallas.batallas.get(&id).is_some_and(|b| b.activa(t)) {
+                    self.hecho_de_batalla(t, id, Hecho::ConvocatoriaCerrada, None);
+                }
+            }
+            SucesoBatalla::Vence => {
+                let Some(liberar) = self.estado.batallas.batallas.get_mut(&id).and_then(|b| b.vencer(t)) else { return };
+                self.cerrar_batalla(t, id, &liberar, Hecho::Fallida);
+            }
+            SucesoBatalla::Retira => {
+                let cr = self.estado.reglas.economia.combate.clone();
+                if self.estado.batallas.batallas.get(&id).is_some_and(|b| b.retirable(&cr, t)) {
+                    let b = self.estado.batallas.batallas.remove(&id).expect("existe");
+                    self.retiradas.push(b);
+                    // Sin esto la retirada cambiaría el estado sin dejar versión.
+                    self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed("batalla.retirada"), en: t, ejercitos: vec![], asentamientos: vec![], punto: None, datos: vec![("batalla", id as i64)] });
+                }
+            }
+        }
+    }
+
+    // ───────────────────────────── Las órdenes ─────────────────────────────
+
+    /// Las órdenes del ciclo: unirse y cancelar (de un jugador) y los cinco mensajes del servidor de batalla.
+    pub(super) fn ejecutar_batallas(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        match &p.comando {
+            Comando::FijarControlador { heroe, controlador } => self.fijar_controlador(p, *heroe, *controlador),
+            Comando::UnirseABatalla { heroe, batalla, lado } => self.unirse_a_batalla(t, p, *heroe, *batalla, *lado),
+            Comando::CancelarBatalla { heroe, batalla } => self.cancelar_batalla(t, p, *heroe, *batalla),
+            Comando::RegistrarAsignacion { batalla, asignacion } => {
+                let servidor = self.servidor_de(p)?;
+                let a = Asignacion { servidor, ..asignacion.clone() };
+                let cr = self.estado.reglas.economia.combate.clone();
+                let b = self.batalla_mut(*batalla)?;
+                match b.registrar_asignacion(&cr, t, a).map_err(|e| rechazo_de_batalla(e, v))? {
+                    Efecto::SinCambios => Err(sin_cambios(v)),
+                    Efecto::Aplicado(()) => {
+                        self.programar_batalla(*batalla);
+                        self.hecho_de_batalla(t, *batalla, Hecho::Asignada, None);
+                        Ok(vec![])
+                    }
+                }
+            }
+            Comando::ConfirmarInicio { batalla, intento, revision } => {
+                let servidor = self.servidor_de(p)?;
+                let cr = self.estado.reglas.economia.combate.clone();
+                let b = self.batalla_mut(*batalla)?;
+                match b.confirmar_inicio(&cr, t, intento, &servidor, *revision).map_err(|e| rechazo_de_batalla(e, v))? {
+                    Efecto::SinCambios => Err(sin_cambios(v)),
+                    Efecto::Aplicado(()) => {
+                        self.programar_batalla(*batalla);
+                        self.hecho_de_batalla(t, *batalla, Hecho::EnCurso, None);
+                        Ok(vec![])
+                    }
+                }
+            }
+            Comando::RegistrarTokens { batalla, intento, tokens } => {
+                let servidor = self.servidor_de(p)?;
+                let b = self.batalla_mut(*batalla)?;
+                let antes = ordenados(b.asignacion.as_ref().map(|a| a.tokens.clone()));
+                b.registrar_tokens(t, intento, &servidor, tokens.clone()).map_err(|e| rechazo_de_batalla(e, v))?;
+                // Sin evento: que alguien tenga ya su token no es noticia para nadie más. Repetir los mismos no cambia nada.
+                if ordenados(b.asignacion.as_ref().map(|a| a.tokens.clone())) == antes {
+                    return Err(sin_cambios(v));
+                }
+                Ok(vec![])
+            }
+            Comando::RegistrarSalida { batalla, salida } => {
+                let servidor = self.servidor_de(p)?;
+                self.registrar_salida(t, *batalla, &servidor, salida.clone())
+            }
+            Comando::AplicarResultado { batalla, resultado } => {
+                let servidor = self.servidor_de(p)?;
+                self.aplicar_resultado(t, *batalla, &servidor, resultado.clone())
+            }
+            otra => unreachable!("no es una orden de batalla: {otra:?}"),
+        }
+    }
+
+    /// Quién manda el mensaje: el servidor de batalla cuya credencial lleva el actor (`batalla-servidor:<id>`), nunca la cuenta de un jugador.
+    fn servidor_de(&self, p: &Peticion) -> Result<String, Respuesta> {
+        p.actor.strip_prefix(crate::comando::ACTOR_SERVIDOR_DE_BATALLA).filter(|s| !s.is_empty()).map(str::to_owned).ok_or_else(|| {
+            Respuesta::rechazo(rechazos::BATALLA_SIN_CREDENCIAL, "los mensajes del servidor de batalla llevan la credencial del servidor, no la de un jugador", self.estado.version)
+        })
+    }
+
+    /// Una batalla **activa**; si no existe, está cerrada o su plazo venció, `batalla.no_existe` (404).
+    fn batalla_mut(&mut self, id: u64) -> Result<&mut Batalla, Respuesta> {
+        let (v, t) = (self.estado.version, self.estado.ahora);
+        self.estado.batallas.batallas.get_mut(&id).filter(|b| b.activa(t)).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, format!("batalla-{id}"), v))
+    }
+
+    fn fijar_controlador(&mut self, p: &Peticion, heroe: u64, controlador: Controlador) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        if !p.admin {
+            return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración fija quién controla a un héroe", v));
+        }
+        let h = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, format!("heroe-{heroe}"), v))?;
+        if h.heroe.controlador == controlador {
+            return Err(sin_cambios(v));
+        }
+        self.heroe_mut(heroe).heroe.controlador = controlador;
+        Ok(vec![])
+    }
+
+    /// `unirseABatalla` (§7): la columna del héroe entra, entera, en el bando que le toca.
+    fn unirse_a_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64, pedido: Option<Lado>) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        let invalida = |m: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, m, v);
+        self.autorizar_heroe(p, heroe, false)?;
+        let b = self.batalla_mut(id)?.clone();
+        if self.heroe_herido(heroe) {
+            return Err(invalida("estás herido: no puedes entrar en batalla"));
+        }
+        let bloqueos = self.bloqueos();
+        if bloqueos.heroes.contains(&heroe) {
+            return Err(invalida("ya estás en una batalla"));
+        }
+        let Some(columna) = self.estado.ejercito_de_heroe(heroe) else { return Err(invalida("hay que llegar con tu columna")) };
+        if bloqueos.ejercitos.contains(&columna) {
+            return Err(invalida("tu columna ya está en una batalla"));
+        }
+        let radio = self.estado.reglas.economia.militar.logistica.radio_encuentro;
+        let e = &self.estado.ejercitos[&columna];
+        if e.posicion_en(t).dist(b.punto) > radio {
+            return Err(invalida(&format!("hay que estar a {radio} o menos de la batalla")));
+        }
+        let aliadas = |a: u32, b: u32| matches!(self.estado.militar.relacion(a, b), Some(Relacion::Alianza | Relacion::Vasallaje));
+        // DUDA: «el Rey admite otras Facciones en sus ataques» es política (sistema 5): hasta entonces nadie lo admite.
+        let reparto = Reparto { contexto: b.ticket.contexto, atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false };
+        let lado = lado_para_unirse(&reparto, self.heroe(heroe).and_then(|h| h.faccion), e.columna.tipo == TipoColumna::Personal, pedido).map_err(|e| rechazo_de_union(e, v))?;
+
+        let entran = self.heroes_de_columna(columna, t);
+        let reservadas: Vec<u64> = entran.iter().flat_map(|p| p.escuadras.iter().map(|e| e.id)).collect();
+        let secuencias = self.batalla_mut(id)?.unirse(t, lado, entran, columna).map_err(|e| rechazo_de_batalla(e, v))?;
+        self.reservar(&reservadas, Some(id));
+        self.apartar_columna(t, columna);
+        self.hecho_de_batalla(t, id, Hecho::Refuerzos, None);
+        Ok(secuencias.into_iter().map(u64::from).collect())
+    }
+
+    /// `cancelarBatalla`: quien la inició se echa atrás antes de que empiece la partida; nadie pierde nada.
+    fn cancelar_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        self.autorizar_heroe(p, heroe, false)?;
+        let liberar = self.batalla_mut(id)?.cancelar(t, heroe).map_err(|e| rechazo_de_batalla(e, v))?;
+        self.cerrar_batalla(t, id, &liberar, Hecho::Cancelada);
+        Ok(vec![])
+    }
+
+    /// `registrarSalida` (§8.4, CQ-011): un héroe sale de la batalla. Antes de empezar (`no_conectado`) sin castigo y se reabre la convocatoria o se cancela; con la
+    /// partida en curso se aplican las bajas de sus escuadras y, si lo dan por derrotado, queda herido.
+    fn registrar_salida(&mut self, t: Instante, id: u64, servidor: &str, s: SalidaBatalla) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        let cr = self.estado.reglas.economia.combate.clone();
+        let heroe = s.heroe;
+        let aplicada = match self.batalla_mut(id)?.registrar_salida(&cr, t, servidor, s).map_err(|e| rechazo_de_batalla(e, v))? {
+            Efecto::SinCambios => return Err(sin_cambios(v)),
+            Efecto::Aplicado(a) => a,
+        };
+        // Las bajas de sus escuadras (la columna vuelve a anotar lo que come y a qué velocidad marcha cuando acabe la batalla).
+        for &(escuadra, supervivientes) in &aplicada.bajas {
+            if let Some(e) = self.escuadra_mut(escuadra) {
+                e.cantidad = supervivientes;
+            }
+        }
+        self.reservar(&aplicada.liberar, None);
+        if aplicada.herido {
+            self.herir_heroes(&[heroe], t);
+        }
+        if aplicada.cancelada {
+            self.cerrar_batalla(t, id, &[], Hecho::Cancelada);
+            return Ok(vec![]);
+        }
+        // Su columna deja de estar quieta si no queda nadie más de ella en la batalla.
+        if let Some(columna) = self.estado.ejercito_de_heroe(heroe) {
+            let b = self.estado.batallas.batallas.get_mut(&id).expect("existe");
+            let sigue = self.estado.ejercitos.get(&columna).is_some_and(|e| e.columna.participantes.iter().any(|p| b.lado_de(p.heroe).is_some()));
+            if !sigue && b.bloqueo.ejercitos.contains(&columna) {
+                b.bloqueo.ejercitos.retain(|&c| c != columna);
+                self.reponer_columna(t, columna);
+            }
+        }
+        if aplicada.reabierta {
+            self.programar_batalla(id);
+        }
+        self.hecho_de_batalla(t, id, if aplicada.reabierta { Hecho::Revisada } else { Hecho::Salida }, None);
+        Ok(vec![])
+    }
+
+    // ───────────────────────────── El resultado ─────────────────────────────
+
+    /// `aplicarResultado` (§8.5, §8.6, §9): el checklist entero o nada y, en una sola mutación, las consecuencias. Repetir el mismo resultado sobre una
+    /// `aplicada` responde bien sin cambiar nada; otro distinto se rechaza.
+    fn aplicar_resultado(&mut self, t: Instante, id: u64, servidor: &str, res: ResultadoDeBatalla) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        // Los `itemInstanceId` ya recibidos en otras batallas que se conservan: los héroes aún no tienen inventario donde mirar (CQ-004).
+        let existentes: BTreeSet<String> = self.batallas().filter(|b| b.id != id).filter_map(|b| b.resultado.as_ref()).flat_map(|r| r.por_heroe.iter()).filter_map(|h| h.botin.as_ref()).flat_map(|b| b.objetos.iter()).filter_map(|o| o.instancia.clone()).collect();
+        let b = self.estado.batallas.batallas.get_mut(&id).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, format!("batalla-{id}"), v))?;
+        let efectos = match b.aplicar_resultado(t, servidor, res.clone(), &|i| existentes.contains(i)).map_err(|e| rechazo_de_batalla(e, v))? {
+            Efecto::SinCambios => return Err(sin_cambios(v)),
+            Efecto::Aplicado(e) => e,
+        };
+        let b = self.estado.batallas.batallas[&id].clone();
+        let mr = self.estado.reglas.economia.militar.clone();
+
+        // 1-2. Lo que Unity dice de cada uno: supervivientes y experiencia de cada escuadra (las de los héroes, las de la guarnición de un pueblo), experiencia y
+        // monedas de cada héroe, y los candados fuera. El nivel del héroe no sube (CQ-001) y los objetos del botín no tienen dónde caer (CQ-004).
+        for e in &efectos.escuadras {
+            if let Some(s) = self.escuadra_mut(e.escuadra) {
+                s.cantidad = e.cantidad;
+                s.con_experiencia(&mr, e.xp);
+            } else if let Some((&pueblo, g)) = self.estado.combate.guarniciones.iter().find(|(_, g)| g.escuadra.id == e.escuadra) {
+                // La guarnición de serie de un pueblo no es de ningún héroe: queda por debajo de su número, empieza su reposición gratis.
+                let mut mineros = g.escuadra.clone();
+                mineros.cantidad = e.cantidad;
+                mineros.con_experiencia(&mr, e.xp);
+                self.guardar_guarnicion(pueblo, mineros, t);
+            }
+        }
+        for e in &efectos.heroes {
+            let Some(h) = self.estado.militar.heroes.get_mut(&e.heroe) else { continue };
+            h.heroe.experiencia += e.xp;
+            if let Some(botin) = &e.botin {
+                h.heroe.monedas.bronce += botin.monedas.bronce;
+                h.heroe.monedas.plata += botin.monedas.plata;
+                h.heroe.monedas.oro += botin.monedas.oro;
+            }
+        }
+        self.reservar(&efectos.soltar, None);
+        // 1. Heridos.
+        self.herir_heroes(&efectos.heridos, t);
+        // 4-5. Consecuencias según el contexto y chatarra de los caídos.
+        self.consecuencias_de_batalla(t, &b, &res, &efectos);
+        // Vuelve al mundo lo que estaba apartado (las columnas retoman su plan con la velocidad que les dejan las bajas) y se programa la retirada.
+        self.devolver_al_mundo(t, id);
+        self.programar_batalla(id);
+        self.hecho_de_batalla(t, id, Hecho::Aplicada, Some(res.ganador));
+        Ok(vec![])
+    }
+
+    /// Lo que decide BronzeAge según dónde se combatió (§9, pasos 4 y 5). **Sin** la experiencia de Facción, la reputación por defender a un vasallo ni los
+    /// contadores de logros: son del sistema político y del tecnológico.
+    fn consecuencias_de_batalla(&mut self, t: Instante, b: &Batalla, res: &ResultadoDeBatalla, efectos: &Efectos) {
+        let (ganador, perdedor) = (res.ganador, res.ganador.otro());
+        match b.ticket.contexto {
+            // Un asedio ganado por el atacante es una conquista: la plaza pasa a su Facción con el saqueo de siempre (sin Facción, no se conquista nada). Unity no
+            // reporta daño: lo pone el saqueo. Ganado por el defensor, nada más (no hay pérdida de carro en un asedio).
+            Contexto::Asedio { asentamiento } => {
+                let plaza = asentamiento as u64;
+                if let Some(f) = b.ticket.atacante.faccion.filter(|_| ganador == Lado::Atacante) {
+                    if self.estado.asentamientos.get(&plaza).is_some_and(|a| a.faccion != f) {
+                        let lucharon: Vec<(u64, Vec<u64>)> = self.participantes_del_lado(b, Lado::Defensor).iter().map(|p| (p.heroe, p.escuadras.iter().map(|e| e.id).collect())).collect();
+                        let ejercito = self.columnas_del_bando(b, Lado::Atacante).first().copied().unwrap_or(0);
+                        self.conquistar_plaza(t, plaza, f, ejercito, &lucharon);
+                    }
+                }
+            }
+            Contexto::Avanzada { .. } => {}
+            // Mundo abierto: el bando que pierde entrega la mitad de su carro, que se reparte entre las columnas del que gana, lo que quepa (contra una caravana o un
+            // campamento esa mitad no se la lleva nadie).
+            Contexto::CampoAbierto { .. } | Contexto::Caravana { .. } | Contexto::CampamentoBandidos { .. } => {
+                let mut robado = Mercancia::new();
+                for c in self.columnas_del_bando(b, perdedor) {
+                    for (r, n) in self.perder_la_mitad_del_carro(c) {
+                        sumar(&mut robado, r, n);
+                    }
+                }
+                let ganadoras = self.columnas_del_bando(b, ganador);
+                self.repartir_en_columnas(&ganadoras, &robado);
+                if ganador == Lado::Atacante {
+                    self.captura_de_batalla(t, b, efectos);
+                }
+            }
+            Contexto::SaqueoPueblo { pueblo, .. } if ganador == Lado::Atacante => {
+                if let Some((madre, _)) = self.pueblo(pueblo) {
+                    let cr = self.estado.reglas.economia.combate.clone();
+                    let columnas = self.columnas_del_bando(b, Lado::Atacante);
+                    let mut carros: Vec<CarroDeColumna> = columnas.iter().map(|&c| CarroDeColumna { carga: self.estado.ejercitos[&c].columna.carga.clone(), capacidad: self.capacidad_de_carga(c).unwrap_or(0) }).collect();
+                    let almacen = &mut self.estado.asentamientos.get_mut(&madre).expect("existe").economia.pueblos.iter_mut().find(|p| p.id == pueblo).expect("existe").almacen;
+                    combate::pueblo::saquear(&cr, almacen, &mut carros);
+                    for (&c, carro) in columnas.iter().zip(carros) {
+                        self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga = carro.carga;
+                        self.tr.tocados.push(c);
+                    }
+                    self.tr.asentamientos.push(madre);
+                }
+            }
+            Contexto::SaqueoPueblo { .. } => {}
+        }
+        self.recoger_chatarra(b, res);
+    }
+
+    /// El atacante gana en mundo abierto: la caravana cae (sus carros, su carga y su escolta) o el campamento de bandidos desaparece y paga su oro.
+    fn captura_de_batalla(&mut self, t: Instante, b: &Batalla, efectos: &Efectos) {
+        let atacantes = self.columnas_del_bando(b, Lado::Atacante);
+        match b.ticket.contexto {
+            Contexto::Caravana { caravana, modalidad, .. } => {
+                let Some(k) = self.estado.comercio.caravana(caravana) else { return };
+                // La escolta cae con ella: queda a 0 (Doc 5.15.5) y `caer_caravana` la devuelve al campamento de su héroe.
+                let escolta: Vec<u64> = k.escolta.iter().map(|c| c.id).collect();
+                for id in escolta {
+                    if let Some(s) = self.escuadra_mut(id) {
+                        s.cantidad = 0;
+                    }
+                }
+                let p = self.caer_caravana(t, caravana, modalidad, Some(&efectos.carros_perdidos));
+                self.repartir_en_columnas(&atacantes, &p.carga_perdida);
+            }
+            Contexto::CampamentoBandidos { campamento, .. } => {
+                let campamento = u64::from(campamento);
+                let Some(nivel) = self.estado.combate.bandidos.get(&campamento).map(|c| c.nivel) else { return };
+                let cr = self.estado.reglas.economia.combate.clone();
+                let mut oro = Mercancia::new();
+                for p in self.participantes_del_lado(b, Lado::Atacante) {
+                    let mut recientes = self.estado.combate.destruidos.get(&p.heroe).cloned().unwrap_or_default();
+                    let ganado = combate::bandidos::botin_de_bandidos(&cr, &mut recientes, nivel, t);
+                    self.estado.combate.destruidos.insert(p.heroe, recientes);
+                    sumar(&mut oro, asentamiento::Recurso::Oro, ganado);
+                }
+                self.repartir_en_columnas(&atacantes, &oro);
+                self.destruir_bandidos(campamento, t);
+            }
+            _ => {}
+        }
+    }
+
+    /// Los participantes de un bando que no han salido (los del ticket y las incorporaciones).
+    fn participantes_del_lado<'a>(&self, b: &'a Batalla, lado: Lado) -> Vec<&'a Participante> {
+        let t = &b.ticket;
+        t.bando(lado).participantes.iter().chain(b.incorporaciones.iter().filter(|i| i.lado == lado).map(|i| &i.participante)).filter(|p| !b.salio(p.heroe)).collect()
+    }
+
+    /// La chatarra de las bajas (Doc 4.2.1): el equipo de **todos** los caídos, de los dos bandos, se lo queda quien gana, a los carros de sus columnas (lo que
+    /// quepa); si defiende una plaza y gana, a su almacén. Sin columna que la lleve (caravana o campamento vencedores) se pierde.
+    fn recoger_chatarra(&mut self, b: &Batalla, res: &ResultadoDeBatalla) {
+        let cr = self.estado.reglas.economia.combate.clone();
+        let mut chatarra = Mercancia::new();
+        for e in &res.por_escuadra {
+            let Some(s) = b.escuadras_de().find(|s| s.id == e.escuadra) else { continue };
+            for (r, n) in cr.chatarra.de_muertos(s.tropa, e.muertos) {
+                sumar(&mut chatarra, r, n);
+            }
+        }
+        if chatarra.is_empty() {
+            return;
+        }
+        if let (Contexto::Asedio { asentamiento }, Lado::Defensor) = (b.ticket.contexto, res.ganador) {
+            if let Some(a) = self.estado.asentamientos.get_mut(&(asentamiento as u64)) {
+                chatarra.iter().for_each(|(&r, &n)| {
+                    a.economia.almacen.agregar(r, n);
+                });
+                self.tr.asentamientos.push(asentamiento as u64);
+            }
+            return;
+        }
+        let ganadoras = self.columnas_del_bando(b, res.ganador);
+        self.repartir_en_columnas(&ganadoras, &chatarra);
+    }
+}
+
+/// Los tokens de una asignación en un orden que no depende de cuándo llegó cada uno (para saber si un mensaje cambió algo).
+fn ordenados(tokens: Option<Vec<Token>>) -> Vec<Token> {
+    let mut v = tokens.unwrap_or_default();
+    v.sort_by_key(|t| t.heroe);
+    v
+}
