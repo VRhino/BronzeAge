@@ -184,9 +184,10 @@ impl Nucleo {
                 distancia_capital: DISTANCIA_CAPITAL,
                 recinto_nivel: RECINTO_NIVEL,
                 racion_guarnicion,
-                felicidad_extra: FACTOR_EXTRA,
+                // Una plaza ocupada tras una conquista crece y recauda a la fracción de la ocupación (Combate §8): su mantenimiento ya lo congela `ocupado`.
+                felicidad_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_crecimiento } else { FACTOR_EXTRA },
                 nobleza_extra: FACTOR_EXTRA,
-                recaudacion_extra: FACTOR_EXTRA,
+                recaudacion_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_recaudacion } else { FACTOR_EXTRA },
             };
             f(&mut a.economia, &mut x)
         };
@@ -254,10 +255,14 @@ impl Nucleo {
         self.quitar_plaza(id);
         self.estado.generaciones.subir(id);
         // La cascada de la ruina, en su orden: los residentes se reubican; después, el comercio (trueques anulados sin penalizar, caravanas perdidas
-        // o devueltas y órdenes de mercado borradas). El campamento de bandidos y la Facción derrotada (si era su última plaza) son de otros
-        // sistemas y se ejecutarán aquí, en este orden y en este instante.
+        // o devueltas y órdenes de mercado borradas); su campamento de bandidos desaparece y, si era la última plaza de su Facción, esta queda derrotada
+        // sin que nadie la derrotara.
         self.reubicar_residentes(id, a.posicion, t);
         self.cerrar_comercio(id, comercio::ruina::Motivo::Ruina, t);
+        self.bandidos_de_plaza_arruinada(id);
+        if combate::conquista::faccion_derrotada(self.plazas_de(a.faccion).count()) {
+            self.emitir_propio(t, "faccion.derrotada", vec![], vec![("faccion", a.faccion as i64), ("por", 0)]);
+        }
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────

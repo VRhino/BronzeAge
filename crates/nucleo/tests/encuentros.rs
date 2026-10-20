@@ -448,7 +448,7 @@ fn la_foto_con_una_persecucion_viva_conserva_la_presa_los_informes_las_relacione
     let mut n = nucleo(40, 5);
     let (p, q) = persecucion_viva(&mut n);
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN11");
+    assert_eq!(&bytes[..5], b"BAN12");
     let vuelta = nucleo::Estado::deserializar(&bytes, &comun::reglas(), "hash-de-prueba").expect("deserializa");
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.ejercitos[&p].persiguiendo, Some(q));
@@ -549,8 +549,16 @@ macro_rules! con_mundo {
     };
 }
 
+/// Las reglas por defecto sin acoso ni anillo de bandidos: estos tests miden otra cosa y se calibraron sin ellos (los de `combate.rs` miden los bandidos).
+fn sin_bandidos() -> Reglas {
+    let mut r = Reglas::default();
+    let b = &mut std::sync::Arc::make_mut(&mut r.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    r
+}
+
 fn arranque(m: &M, semilla: u64) -> Arranque {
-    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+    Arranque { reglas: sin_bandidos(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
 }
 
 /// Un sitio verde con mucho bosque cerca del campamento `i`: una plaza que no cae en ruinas por falta de madera.
@@ -595,10 +603,12 @@ fn una_plaza_ajena_es_una_cosa_fija_del_espacio_y_una_columna_hostil_que_llega_d
     let m = con_mundo!();
     let mut n = Nucleo::nuevo(arranque(m, 7));
     let p = sitio_rico(&n, &m.0, 0, 1);
-    assert_eq!(n.cosas_en_el_espacio(), 0);
+    // Los campamentos de bandidos de las vetas ya están en el espacio desde el arranque.
+    let bandidos = n.campamentos_de_bandidos().count();
+    assert_eq!(n.cosas_en_el_espacio(), bandidos);
     let plaza = fundar(&mut n, 0, "ana", 1, p);
     // La columna que fundó sigue en el mapa; la plaza se suma al espacio.
-    assert_eq!(n.cosas_en_el_espacio(), 2);
+    assert_eq!(n.cosas_en_el_espacio(), bandidos + 2);
     // Una de la propia Facción pasa por la puerta sin dejar nada; una hostil, sí.
     let amiga = columna_cerca_de(&mut n, p, 1, "gus");
     let hostil = columna_cerca_de(&mut n, p, 2, "beto");

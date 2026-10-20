@@ -1005,9 +1005,15 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_devuelve_las_caravanas_y_destru
     let tr = e.trueque(&[(Madera, 1_000)], &[(Cobre, 1_000)]);
     let orden = e.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 1_000, precio: Some(PUNTO) }).creadas[0];
 
+    // La conquista de verdad: el ejército de Gus (F2) asedia la plaza A, que no tiene a nadie que la defienda, y cae sin combate (Combate §6).
     let ahora = e.n.ahora();
-    assert!(e.n.cerrar_comercio_por_conquista(ahora, a));
-    assert!(!e.n.cerrar_comercio_por_conquista(ahora, 999));
+    let p = e.n.estado().asentamientos[&a].posicion;
+    let gus = e.n.crear_ejercito(ahora, "gus", 2, Punto::new(p.x + 2_000, p.y), 500, 100_000).unwrap();
+    let heroe_gus = e.n.ejercito(gus).unwrap().columna.lider;
+    let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
+    e.ok("admin", Comando::DarEscuadra { heroe: heroe_gus, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    e.ok("gus", Comando::Atacar { heroe: heroe_gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: true });
+    assert_eq!(e.n.estado().asentamientos[&a].faccion, 2, "la plaza cambió de dueño");
     // La plaza sigue (con su flota y su mercado); el trueque se anula sin penalizar y avisa a la socia.
     assert!(e.n.economia(a).is_some());
     assert_eq!(e.n.acuerdo(tr).unwrap().estado, EstadoTrueque::Expirado);
@@ -1224,7 +1230,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN11");
+    assert_eq!(&bytes[..5], b"BAN12");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
@@ -1232,6 +1238,9 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let viejo = [b"BAN10".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN10 no debe admitirse") };
     assert!(e.to_string().contains("BAN10"), "{e}");
+    let anterior = [b"BAN11".as_slice(), &bytes[5..]].concat();
+    let Err(e) = Estado::deserializar(&anterior, &reglas, "h") else { panic!("BAN11 no debe admitirse") };
+    assert!(e.to_string().contains("BAN11") && e.to_string().contains("combate"), "{e}");
     let viejo = [b"BAN9".as_slice(), &bytes[5..]].concat();
     assert!(Estado::deserializar(&viejo, &reglas, "h").is_err());
     assert!(Estado::deserializar(b"XXXX", &reglas, "h").is_err());
@@ -1352,13 +1361,15 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
 }
 
 #[test]
-fn la_huella_de_las_reglas_incluye_los_bloques_de_comercio_y_militares() {
+fn la_huella_de_las_reglas_incluye_los_bloques_de_comercio_militares_y_combate() {
     use sha2::{Digest, Sha256};
     let r = Reglas::default();
     let sin_comercio = asentamiento::datos::texto_de_parametros() + &asentamiento::datos::texto_de_parametros_de(nucleo::urbanismo::DOC_TRAZADO);
     let con_comercio = sin_comercio.clone() + &comercio::datos::texto_de_parametros();
     let con_militar = con_comercio.clone() + &militar::datos::texto_de_parametros();
-    assert_eq!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_militar).into()));
+    let con_combate = con_militar.clone() + &combate::datos::texto_de_parametros();
+    assert_eq!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_combate).into()));
+    assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_militar).into()), "los bloques del combate entran en la huella");
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_comercio).into()), "los bloques militares entran en la huella");
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(sin_comercio).into()));
     // Una foto con otra huella (otras cifras de comercio) se niega.

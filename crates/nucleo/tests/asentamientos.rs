@@ -40,8 +40,16 @@ macro_rules! con_mundo {
 
 type M = (Arc<Mundo>, Arc<Rutas>);
 
+/// Las reglas por defecto sin acoso ni anillo de bandidos: estos tests miden otra cosa y se calibraron sin ellos (los de `combate.rs` miden los bandidos).
+fn sin_bandidos() -> Reglas {
+    let mut r = Reglas::default();
+    let b = &mut std::sync::Arc::make_mut(&mut r.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    r
+}
+
 fn arranque(m: &M, semilla: u64) -> Arranque {
-    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+    Arranque { reglas: sin_bandidos(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
 }
 
 fn nuevo(m: &M) -> Nucleo {
@@ -179,7 +187,10 @@ fn un_paso_sin_novedades_no_sube_la_version() {
     n.avanzar_hasta(5 * MIN);
     assert_eq!(n.version(), v, "los ritmos no cierran versión");
     assert_ne!(n.hash_estado(), h, "pero el estado sí cambia (población, comida, mantenimiento)");
-    assert_eq!(n.metricas().eventos, 5, "un paso por minuto");
+    // Las citas iniciales de bandidos (una por campamento de mercenarios y una por plaza) se agotan en los primeros minutos; después queda un paso por minuto.
+    let antes = n.metricas().eventos;
+    n.avanzar_hasta(10 * MIN);
+    assert_eq!(n.metricas().eventos - antes, 5, "un paso por minuto");
 }
 
 // ───────────────────────────── 2. Determinismo ─────────────────────────────
@@ -444,7 +455,7 @@ fn estado_con_una_plaza() -> Estado {
     let eco = &s.reglas.economia.datos;
     let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
     let urbe = nucleo::urbanismo::Urbe::fundar(&s.reglas.economia, 7, 1);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe });
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None });
     s
 }
 

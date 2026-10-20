@@ -1,4 +1,4 @@
-//! Serialización canónica del estado militar (`EstadoMilitar`) para el hash y las fotos (formato BAN11). Cada estructura se desestructura
+//! Serialización canónica del estado militar (`EstadoMilitar`) para el hash y las fotos (formato BAN12, igual que en BAN11). Cada estructura se desestructura
 //! **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · convocatorias{n u64 · n × convocatoria} · reclutas{n u64 · n ×
@@ -158,7 +158,7 @@ fn contenedor_leer(r: &mut Lector) -> Result<Contenedor, ErrorFormato> {
     })
 }
 
-fn escuadra_escribir(w: &mut Escritor, e: &Escuadra) {
+pub(crate) fn escuadra_escribir(w: &mut Escritor, e: &Escuadra) {
     let Escuadra { id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia, moral, contenedor, en_guarnicion, reserva_batalla, prestada } = e;
     w.u64(*id);
     w.u64(*heroe);
@@ -179,7 +179,7 @@ fn opt_u32(v: Option<u64>) -> Result<Option<u32>, ErrorFormato> {
     v.map(u32::try_from).transpose().map_err(|_| ErrorFormato("id fuera de rango"))
 }
 
-fn escuadra_leer(r: &mut Lector) -> Result<Escuadra, ErrorFormato> {
+pub(crate) fn escuadra_leer(r: &mut Lector) -> Result<Escuadra, ErrorFormato> {
     let (id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia) = (r.u64()?, r.u64()?, tropa_de_u8(r.u8()?)?, origen_de_u8(r.u8()?)?, opt_u32(r.opt_u64()?)?, r.i64()?, r.u8()?, r.i64()?);
     let moral = ritmo_leer(r)?;
     Ok(Escuadra { id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia, moral, contenedor: contenedor_leer(r)?, en_guarnicion: r.bool()?, reserva_batalla: r.opt_u64()?, prestada: opt_u32(r.opt_u64()?)? })

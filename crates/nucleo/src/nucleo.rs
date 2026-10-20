@@ -40,7 +40,10 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+mod bandidos;
 mod columnas;
+mod combates;
+mod conquistas;
 mod construccion;
 mod convocatorias;
 mod espacio;
@@ -174,7 +177,9 @@ impl Nucleo {
     /// Mundo nuevo, solo en memoria.
     pub fn nuevo(a: Arranque) -> Nucleo {
         let estado = Estado::nuevo(a.reglas.clone(), a.mundo_hash.clone(), a.semilla, a.inicio);
-        Self::construir(a, estado)
+        let mut n = Self::construir(a, estado);
+        n.sembrar_el_mundo();
+        n
     }
 
     /// Abre (o crea) el almacén en `dir`, recupera el mundo (última foto + registro) y sigue escribiendo en él.
@@ -189,6 +194,9 @@ impl Nucleo {
         };
         let recuperado = rec.foto.is_some();
         let mut n = Self::construir(a, estado);
+        if !recuperado {
+            n.sembrar_el_mundo();
+        }
         n.avisos = rec.avisos;
         let (mut repetidas, mut ultimo) = (0u64, foto_instante.unwrap_or(n.estado.ahora));
         for e in rec.entradas_posteriores {
@@ -412,6 +420,7 @@ impl Nucleo {
             Carga::Reputacion(cita) => self.cita_de_reputacion(id, cita, t),
             Carga::SalidaDelMundo => self.salida_del_mundo(id, t),
             Carga::Militar(suceso) => self.suceso_militar(id, suceso, t),
+            Carga::Combate(suceso) => self.suceso_de_combate(id, suceso, t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
@@ -839,6 +848,18 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::FijarRelacion { a, b, relacion } => match self.fijar_relacion(t, p, *a, *b, *relacion) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::Atacar { heroe, objetivo, declara_guerra } => match self.atacar(t, p, *heroe, *objetivo, *declara_guerra) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::ColocarBandidos { posicion, nivel } => match self.colocar_bandidos(t, p, *posicion, *nivel) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::DarEscuadra { heroe, tropa, cantidad } => match self.dar_escuadra(t, p, *heroe, *tropa, *cantidad) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

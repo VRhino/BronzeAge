@@ -429,20 +429,6 @@ impl Nucleo {
         }
     }
 
-    /// La plaza `plaza` cambió de dueño (la llama el sistema militar, una vez cambiada su Facción): su flota pasa con ella, los trueques con
-    /// la plaza se anulan sin penalizar y las caravanas que iban hacia ella regresan. Procesa los eventos hasta `t` y cierra la versión.
-    /// Dentro de una orden o un evento que ya se registra, usa la ruta interna (`cerrar_comercio`) en vez de esta. `false` si la plaza no existe.
-    pub fn cerrar_comercio_por_conquista(&mut self, t: Instante, plaza: u64) -> bool {
-        let t = t.max(self.estado.ahora);
-        self.procesar_hasta(t);
-        if !self.estado.asentamientos.contains_key(&plaza) {
-            return false;
-        }
-        self.cerrar_comercio(plaza, Motivo::Conquista, t);
-        self.cerrar_version(t, true);
-        true
-    }
-
     /// Quita la caravana del mundo (se pierde con su carga) y avisa a la plaza de su origen, si existe.
     pub(super) fn perder_caravana(&mut self, t: Instante, id: u64) {
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };

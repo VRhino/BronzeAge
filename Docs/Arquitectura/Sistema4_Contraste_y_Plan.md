@@ -270,3 +270,5 @@ Recomendada: **A** (es la decisión explícita del 2026-10-13 y la conquista es 
 - Fotos: `BAN9`; la huella de reglas incluirá los bloques de `Combate.md`, `Heroe_Y_Tropa.md`, `Batalla_Unity_Ciclo.md` y `Movimiento_Ejercitos.md` (este último ya entra por comercio).
 - `creadas` de la respuesta y los ámbitos de sesión necesitan tipo de entidad (héroe, escuadra, batalla): se resuelve en 4H, no antes.
 - Una prueba de reproducción por fase que consuma el generador en el orden documentado (2 tiradas por combate, 1 en caravana y campamento, 0 sin combate).
+
+> **Estado (2026-10-20): la fase 4D está implementada** (`Atacar`, conquista con cascada de comercio, bandidos en el espacio, saqueo de pueblo, ganchos de caravana; foto `BAN12`). Quedan 4E (ciclo de Unity), 4F (avanzadas), 4G (batch militar) y 4H (contrato y proyecciones).

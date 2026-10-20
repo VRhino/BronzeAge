@@ -47,8 +47,16 @@ macro_rules! con_mundo {
     };
 }
 
+/// Las reglas por defecto sin acoso ni anillo de bandidos: estos tests miden otra cosa y se calibraron sin ellos (los de `combate.rs` miden los bandidos).
+fn sin_bandidos() -> Reglas {
+    let mut r = Reglas::default();
+    let b = &mut std::sync::Arc::make_mut(&mut r.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    r
+}
+
 fn arranque(m: &M, semilla: u64) -> Arranque {
-    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+    Arranque { reglas: sin_bandidos(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
 }
 
 fn campamento(m: &Mundo, i: usize) -> Punto {
@@ -639,7 +647,14 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     e.avanzar(20 * MIN);
     let ahora = e.n.ahora();
     let donde = e.n.posicion_de_caravana(cb, ahora).unwrap();
-    assert!(e.n.cerrar_comercio_por_conquista(ahora, a));
+    // La conquista de verdad: el ejército de Gus (F2) asedia la plaza A, que no tiene a nadie que la defienda, y cae sin combate.
+    let p = pos(&e.n, a);
+    let gus = e.n.crear_ejercito(ahora, "gus", 2, Punto::new(p.x + 2_000, p.y), 500, 100_000).unwrap();
+    let heroe_gus = e.n.ejercito(gus).unwrap().columna.lider;
+    let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
+    e.ok("admin", Comando::DarEscuadra { heroe: heroe_gus, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    e.ok("gus", Comando::Atacar { heroe: heroe_gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: true });
+    assert_eq!(e.n.estado().asentamientos[&a].faccion, 2, "la plaza cambió de dueño");
 
     // El trueque con la plaza se anula sin penalizar; la plaza sigue y su flota pasa con ella: la suya sigue su camino.
     assert_eq!(e.n.acuerdo(tr).unwrap().estado, EstadoTrueque::Expirado);

@@ -27,6 +27,21 @@ impl Geografia {
         Self { mapa: Mapa::de(&mundo), mundo }
     }
 
+    /// Las masas de bosque del artefacto, en su orden (el índice es el que guarda un campamento de bandidos).
+    pub(super) fn bosques(&self) -> &[contrato::v1::ZonaBosque] {
+        self.mundo.bosques()
+    }
+
+    /// Los campamentos de bandidos que trae el artefacto (junto a las vetas de estaño y oro): posición y nivel (1 a 3), en su orden.
+    pub(super) fn bandidos_del_artefacto(&self) -> Vec<(Punto, u8)> {
+        self.mundo.bandidos_iniciales().iter().filter_map(|b| b.posicion.as_ref().map(|p| (Punto::new(p.x, p.y), b.nivel.clamp(1, 3) as u8))).collect()
+    }
+
+    /// ¿Se puede pisar `p`? Tierra firme dentro del mapa y transitable (ni agua ni cima ni río sin vado).
+    pub(super) fn es_tierra_firme(&self, p: Punto) -> bool {
+        self.terreno(p) == Terreno::Firme
+    }
+
     fn terreno(&self, p: Punto) -> Terreno {
         use contrato::v1::ClaseTerreno as C;
         match self.mundo.terreno_en(p.x, p.y) {
@@ -141,7 +156,7 @@ impl Nucleo {
 
     /// Tras cambiar el radio de `id` (o nacer), anuncia las parejas con una plaza de otra Facción cuyas zonas ya se tocan y
     /// no se habían tocado antes. Las zonas nunca se encogen, así que un contacto no se deshace.
-    fn contactos_nuevos(&mut self, id: u64, t: Instante) {
+    pub(super) fn contactos_nuevos(&mut self, id: u64, t: Instante) {
         let a = &self.estado.asentamientos[&id];
         let (yo, faccion, posicion) = (self.disco_de(a), a.faccion, a.posicion);
         let nuevos: Vec<u64> = self
@@ -334,9 +349,10 @@ impl Nucleo {
         let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, t, &eco.materiales_iniciales, eco.viviendas_iniciales);
         // Su ciudad nace con los mismos edificios iniciales que la economía (ids 0..=viviendas+1).
         let urbe = crate::urbanismo::Urbe::fundar(&self.estado.reglas.economia, self.semilla, id);
-        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe });
+        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None });
         self.situar_plaza(id, punto);
         self.programar_minuto(id, t + base::MS_POR_MINUTO);
+        self.programar_bandidos_de_plaza(id, t);
         self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;
         self.tr.tocados.push(ejercito);
         self.tr.asentamientos.push(id);

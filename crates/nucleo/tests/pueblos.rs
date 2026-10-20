@@ -43,8 +43,16 @@ macro_rules! con_mundo {
     };
 }
 
+/// Las reglas por defecto sin acoso ni anillo de bandidos: estos tests miden otra cosa y se calibraron sin ellos (los de `combate.rs` miden los bandidos).
+fn sin_bandidos() -> Reglas {
+    let mut r = Reglas::default();
+    let b = &mut std::sync::Arc::make_mut(&mut r.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    r
+}
+
 fn arranque(m: &M, semilla: u64) -> Arranque {
-    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+    Arranque { reglas: sin_bandidos(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
 }
 
 fn codigo(r: &Respuesta) -> &'static str {
@@ -573,8 +581,14 @@ fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_s
     let plaza = e.plaza;
     let id = e.pueblo_levantado();
     let carro = hasta_que_el_carro_vaya_cargado(&mut e, id);
-    let t = e.n.ahora();
-    assert!(e.n.cerrar_comercio_por_conquista(t, plaza));
+    // La conquista de verdad: el ejército de Beto (F2) asedia la madre, que no tiene quien la defienda, y cae sin combate.
+    let p = e.n.estado().asentamientos[&plaza].posicion;
+    let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
+    let heroe = e.n.ejercito(beto).unwrap().columna.lider;
+    let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
+    e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     // Los pueblos son de la plaza: pasan con ella (y su zona) al conquistador, y la flota traspasada, también el carro de acarreo.
     assert!(e.n.pueblo(id).is_some_and(|(madre, p)| madre == plaza && p.carro == Some(carro)));
     assert_eq!(e.n.caravana(carro).unwrap().estado, EstadoCaravana::EnTransito);

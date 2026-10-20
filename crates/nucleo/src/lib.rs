@@ -22,17 +22,24 @@
 //!   el hambre con su deserción (un evento por columna con hambre).
 //! - Encuentros, persecución e inspección (fase 4C): el espacio del mundo (`nucleo/espacio.rs`: columnas en el mapa, caravanas y plazas en una rejilla
 //!   espacio-temporal) programa cada encuentro como un evento exacto (`Carga::Encuentro`) y deja un hecho; `perseguir` rehace el plan de quien persigue cada
-//!   vez que la presa cambia el suyo; `inspeccionar` guarda un informe en el héroe (órdenes 91-94, foto `BAN11`).
+//!   vez que la presa cambia el suyo; `inspeccionar` guarda un informe en el héroe (órdenes 91-94).
+//! - Combate con números (fase 4D): `atacar` (orden 95) con sus seis objetivos —columna, caravana (tipo A o B por la zona), campamento de bandidos, plaza,
+//!   pueblo y avanzada, esta última todavía sin existir— y sus consecuencias (heridos, mitad del carro, botín, chatarra, experiencia de escuadra); la conquista
+//!   con su protección y su ocupación como eventos, el desalojo y la cascada del comercio; los bandidos como entidades fijas del espacio, con su aparición, su
+//!   reaparición y su acoso a las caravanas (`PRIO_BANDIDOS`, `Carga::Combate`); y la guarnición de serie de los pueblos. El estado nuevo es [`EstadoCombate`]
+//!   (foto `BAN12`); las reglas puras son el crate `combate`. El ciclo de la batalla de Unity es la fase 4E.
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;
 mod codec_ciudad;
+mod codec_combate;
 mod codec_columna;
 mod codec_comercio;
 mod codec_economia;
 mod codec_militar;
 mod comando;
 mod estado;
+mod estado_combate;
 mod estado_comercio;
 mod estado_militar;
 mod generadores;
@@ -44,8 +51,9 @@ pub mod sesiones;
 pub mod urbanismo;
 
 pub use codec::ErrorFormato;
-pub use comando::{rechazos, AccionReloj, Comando, PagarCon, Peticion, Resultado, Respuesta};
-pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, SucesoComercio, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
+pub use comando::{rechazos, AccionReloj, Comando, ObjetivoAtaque, PagarCon, Peticion, Resultado, Respuesta};
+pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, SucesoComercio, SucesoCombate, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
+pub use estado_combate::{entidad_bandidos, entidad_conquista, entidad_guarnicion, es_entidad_bandidos, CampamentoBandidos, EstadoCombate, GuarnicionDePueblo, OrigenBandidos};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
 pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, EstadoMilitar, HeroeNucleo, Relacion};
 pub use generadores::{Cx, GeneradorDeEventos};

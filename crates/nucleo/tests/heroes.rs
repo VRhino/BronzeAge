@@ -43,8 +43,16 @@ macro_rules! con_mundo {
     };
 }
 
+/// Las reglas por defecto sin acoso ni anillo de bandidos: estos tests miden otra cosa y se calibraron sin ellos (los de `combate.rs` miden los bandidos).
+fn sin_bandidos() -> Reglas {
+    let mut r = Reglas::default();
+    let b = &mut std::sync::Arc::make_mut(&mut r.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    r
+}
+
 fn arranque(m: &M, semilla: u64) -> Arranque {
-    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+    Arranque { reglas: sin_bandidos(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
 }
 
 fn campamento(m: &Mundo, i: usize) -> Punto {
@@ -162,6 +170,8 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     let crear = |cuenta: &str, campamento, controlador| Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador };
+    // Pasada la aparición de los campamentos de bandidos de las plazas, nada más se mueve por sí solo.
+    e.avanzar(HORA);
     let (v0, id0) = (e.n.version(), e.n.estado().siguiente_id);
     assert_eq!(e.rechazada("ana", crear("beto", 0, Controlador::Humano)), rechazos::NO_AUTORIZADO, "nadie crea el héroe de otro");
     assert_eq!(e.rechazada("ana", crear("ana", 0, Controlador::Bot)), rechazos::NO_AUTORIZADO, "el controlador «bot» solo lo pone la administración");
@@ -902,7 +912,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN11");
+    assert_eq!(&bytes[..5], b"BAN12");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

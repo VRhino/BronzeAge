@@ -1,4 +1,4 @@
-//! Serialización canónica de las columnas (`Ejercito`) para el hash y las fotos (formato BAN11). La composición y el mando son de
+//! Serialización canónica de las columnas (`Ejercito`) para el hash y las fotos (formato BAN12, igual que en BAN11). La composición y el mando son de
 //! `militar::columna::Columna`, que se desestructura **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y
 //! obliga a decidir cómo se guarda.
 //!

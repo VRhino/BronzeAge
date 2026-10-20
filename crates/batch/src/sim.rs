@@ -95,9 +95,13 @@ struct Sim<'a> {
 }
 
 /// El núcleo recién arrancado sobre el mundo (semilla del núcleo = semilla del batch).
+/// Sin acoso ni anillo de bandidos: este batch mide la economía y el comercio; los bandidos son del batch militar (4G).
 pub fn nucleo_nuevo(c: &Cargado, semilla: u64) -> Nucleo {
+    let mut reglas = Reglas::default();
+    let bandidos = &mut std::sync::Arc::make_mut(&mut reglas.economia.combate).bandidos;
+    (bandidos.radio_ataque_caravana, bandidos.anillo_minimo, bandidos.anillo_maximo) = (0, 0, 0);
     Nucleo::nuevo(Arranque {
-        reglas: Reglas::default(),
+        reglas,
         ajustes: Ajustes::default(),
         semilla,
         inicio: 0,

@@ -16,6 +16,44 @@ use militar::heroe::{Controlador, Residencia};
 use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
 
+/// Lo que se puede atacar (`OrdenAtacar.Objetivo`, Combate §2): una columna, una caravana, un campamento de bandidos, una plaza, un pueblo extractor o
+/// una avanzada (las avanzadas son de la fase 4F: hoy no existe ninguna).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ObjetivoAtaque {
+    Ejercito(u64),
+    Caravana(u64),
+    Campamento(u64),
+    Asentamiento(u64),
+    Pueblo(u64),
+    Avanzada(u64),
+}
+
+fn objetivo_de_ataque_escribir(w: &mut Escritor, o: &ObjetivoAtaque) {
+    let (tag, id) = match *o {
+        ObjetivoAtaque::Ejercito(x) => (0, x),
+        ObjetivoAtaque::Caravana(x) => (1, x),
+        ObjetivoAtaque::Campamento(x) => (2, x),
+        ObjetivoAtaque::Asentamiento(x) => (3, x),
+        ObjetivoAtaque::Pueblo(x) => (4, x),
+        ObjetivoAtaque::Avanzada(x) => (5, x),
+    };
+    w.u8(tag);
+    w.u64(id);
+}
+
+fn objetivo_de_ataque_leer(r: &mut Lector) -> Result<ObjetivoAtaque, ErrorFormato> {
+    let (tag, id) = (r.u8()?, r.u64()?);
+    Ok(match tag {
+        0 => ObjetivoAtaque::Ejercito(id),
+        1 => ObjetivoAtaque::Caravana(id),
+        2 => ObjetivoAtaque::Campamento(id),
+        3 => ObjetivoAtaque::Asentamiento(id),
+        4 => ObjetivoAtaque::Pueblo(id),
+        5 => ObjetivoAtaque::Avanzada(id),
+        _ => return Err(ErrorFormato("objetivo de ataque desconocido")),
+    })
+}
+
 /// Acción sobre el reloj de mundo (`OrdenControlarReloj`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AccionReloj {
@@ -242,6 +280,17 @@ pub enum Comando {
     Inspeccionar { heroe: u64, objetivo: Objetivo },
     /// Fija (o quita, con `None`) la relación entre dos Facciones. Solo administración; lo sustituirá el sistema político (5).
     FijarRelacion { a: u32, b: u32, relacion: Option<Relacion> },
+    // ── Combate con números (Combate §2-§10, fase 4D). ──
+    /// La columna del héroe (sano y a bordo) ataca lo que tiene delante, a ≤ `radioEncuentro`. Toda agresión entre Facciones exige guerra: sin ella la
+    /// orden se rechaza, salvo con `declara_guerra`, que la declara (sin arrastre hasta el sistema político). Se resuelve con números: no hay batalla de Unity
+    /// hasta la fase 4E. `creadas` va vacío.
+    Atacar { heroe: u64, objetivo: ObjetivoAtaque, declara_guerra: bool },
+    /// Coloca un campamento de bandidos de ese nivel (1 a 3) en el mapa, donde se pida. Solo administración; para escenarios y pruebas (los de verdad
+    /// aparecen solos). `creadas` lleva su id.
+    ColocarBandidos { posicion: Punto, nivel: u8 },
+    /// Da al héroe una escuadra de `cantidad` soldados de esa tropa (nivel 1, la moral al máximo), sin pagar ni mirar el Liderazgo: en su columna si va a
+    /// bordo y, si no, en su campamento. Solo administración; para escenarios y pruebas, igual que `CrearEjercito`. `creadas` lleva su id.
+    DarEscuadra { heroe: u64, tropa: Tropa, cantidad: i64 },
 }
 
 /// De dónde sale el oro al reclutar en un campamento de mercenarios.
@@ -820,6 +869,23 @@ impl Peticion {
                 w.bool(relacion.is_some());
                 w.u8(relacion.map_or(0, relacion_a_u8));
             }
+            Comando::Atacar { heroe, objetivo, declara_guerra } => {
+                w.u8(95);
+                w.u64(*heroe);
+                objetivo_de_ataque_escribir(&mut w, objetivo);
+                w.bool(*declara_guerra);
+            }
+            Comando::ColocarBandidos { posicion, nivel } => {
+                w.u8(96);
+                w.punto(*posicion);
+                w.u8(*nivel);
+            }
+            Comando::DarEscuadra { heroe, tropa, cantidad } => {
+                w.u8(97);
+                w.u64(*heroe);
+                w.u8(tropa_a_u8(*tropa));
+                w.i64(*cantidad);
+            }
         }
         w.0
     }
@@ -958,6 +1024,9 @@ impl Peticion {
                 let (a, b, hay, relacion) = (r.u32()?, r.u32()?, r.bool()?, relacion_de_u8(r.u8()?)?);
                 Comando::FijarRelacion { a, b, relacion: hay.then_some(relacion) }
             }
+            95 => Comando::Atacar { heroe: r.u64()?, objetivo: objetivo_de_ataque_leer(&mut r)?, declara_guerra: r.bool()? },
+            96 => Comando::ColocarBandidos { posicion: r.punto()?, nivel: r.u8()? },
+            97 => Comando::DarEscuadra { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, cantidad: r.i64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1231,6 +1300,28 @@ pub mod rechazos {
     /// La columna está apartada por una batalla: no se mueve ni se le dan órdenes de movimiento, de persecución ni de inspección.
     pub const COLUMNA_EN_BATALLA: &str = "columna.en_batalla";
     pub const RELACION_CONSIGO_MISMA: &str = "relacion.consigo_misma";
+    // Combate con números (fase 4D).
+    pub const HEROE_HERIDO: &str = "heroe.herido";
+    pub const COMBATE_PROTECCION_DE_CAMPAMENTO: &str = "combate.proteccion_de_campamento";
+    pub const COMBATE_LEJOS: &str = "combate.lejos";
+    pub const COMBATE_PROPIA: &str = "combate.propia";
+    pub const COMBATE_ALIADA: &str = "combate.aliada";
+    pub const COMBATE_SIN_GUERRA: &str = "combate.sin_guerra";
+    pub const COMBATE_A_CUBIERTO: &str = "combate.a_cubierto";
+    pub const COMBATE_CLASE_DISTINTA: &str = "combate.clase_distinta";
+    pub const COMBATE_SIN_HEROE_SANO: &str = "combate.sin_heroe_sano";
+    pub const ESCUADRA_CANTIDAD_INVALIDA: &str = "escuadra.cantidad_invalida";
+    pub const COMBATE_SIN_FACCION: &str = "combate.sin_faccion";
+    pub const COMBATE_SIN_ATACANTES: &str = "combate.sin_atacantes";
+    pub const COMBATE_SOLO_UN_EJERCITO: &str = "combate.solo_un_ejercito";
+    pub const COMBATE_CARAVANA_ADJUNTA: &str = "combate.caravana_adjunta";
+    pub const COMBATE_PLAZA_PROTEGIDA: &str = "combate.plaza_protegida";
+    pub const COMBATE_PLAZA_PROPIA: &str = "combate.plaza_propia";
+    pub const COMBATE_PUEBLO_INACTIVO: &str = "combate.pueblo_inactivo";
+    pub const COMBATE_AVANZADA_NO_EXISTE: &str = "combate.avanzada_no_existe";
+    pub const CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO: &str = "bandidos.desconocido";
+    pub const BANDIDOS_NIVEL_INVALIDO: &str = "bandidos.nivel_invalido";
+    pub const BANDIDOS_SOBRE_UNA_ZONA: &str = "bandidos.sobre_una_zona";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1395,6 +1486,14 @@ mod pruebas {
             Comando::Inspeccionar { heroe: 2, objetivo: Objetivo::Asentamiento(5) },
             Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Vasallaje) },
             Comando::FijarRelacion { a: 3, b: 2, relacion: None },
+            Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
+            Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
+            Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },
+            Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Asentamiento(5), declara_guerra: true },
+            Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Pueblo(6), declara_guerra: false },
+            Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Avanzada(7), declara_guerra: false },
+            Comando::ColocarBandidos { posicion: Punto::new(-5, 9_000), nivel: 3 },
+            Comando::DarEscuadra { heroe: 4, tropa: Tropa::Arqueros, cantidad: 12 },
         ];
         for c in comandos {
             let p = Peticion { actor: "ana".into(), admin: false, peticion_id: "z".into(), version_esperada: Some(3), comando: c };
@@ -1409,6 +1508,11 @@ mod pruebas {
         assert!(Peticion::decodificar(&b).is_err());
         let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano }).codificar();
         *b.last_mut().unwrap() = 7;
+        assert!(Peticion::decodificar(&b).is_err());
+        // Un objetivo de ataque desconocido tampoco.
+        let mut b = Peticion::nueva("a", "i", Comando::Atacar { heroe: 1, objetivo: ObjetivoAtaque::Pueblo(3), declara_guerra: false }).codificar();
+        let n = b.len();
+        b[n - 10] = 9;
         assert!(Peticion::decodificar(&b).is_err());
     }
 }

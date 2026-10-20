@@ -171,6 +171,8 @@ pub struct ReglasMercenarios {
     pub edificios_militares: Vec<Tipo>,
     /// Viviendas de un campamento (las de `edificiosFijos`).
     pub viviendas: usize,
+    /// A cuánto de un campamento nadie inicia un combate, ni desde allí ni contra lo que esté allí (`radioProteccion`, Combate §2).
+    pub radio_proteccion: Mil,
     /// Parte de las Facciones vivas que debe tener adoptada una tecnología para que el campamento la desbloquee (ppm).
     pub porcentaje_facciones: i64,
     /// Cada cuánto da el campamento la ración gratis a un residente que sale de él (ms): llena sus víveres si pasó ese plazo desde la última.
@@ -261,6 +263,7 @@ impl Reglas {
                 poblacion_por_hora: entero(&me, "poblacionPorHora"),
                 edificios_militares: nombres(&me, "edificiosMilitares").iter().map(|n| Tipo::desde_nombre(n).unwrap_or_else(|| panic!("edificio «{n}» desconocido"))).collect(),
                 viviendas: nombres(&me, "edificiosFijos").iter().filter(|n| *n == "vivienda").count(),
+                radio_proteccion: mil(num(&me, "radioProteccion")),
                 porcentaje_facciones: ppm(num(&me, "tecnologia.porcentajeFacciones")),
                 racion_cada: entero(&me, "racion.cadaMinutos") * MS_POR_MINUTO,
             },
@@ -352,6 +355,7 @@ mod pruebas {
         assert_eq!((m.valor_equipo_en_oro, m.poblacion_por_vivienda, m.poblacion_por_hora), (8_000, 10, 10));
         assert_eq!((m.edificios_militares, m.viviendas, m.porcentaje_facciones), (vec![Tipo::Barracon, Tipo::GaleriaDeTiro, Tipo::Caballerizas], 10, 500_000));
         assert_eq!(m.racion_cada, 30 * MS_POR_MINUTO, "la ración gratis del campamento, cada 30 minutos");
+        assert_eq!(m.radio_proteccion, 10_000, "nadie inicia un combate a 10 unidades de un campamento");
     }
 
     #[test]

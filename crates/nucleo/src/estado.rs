@@ -4,10 +4,12 @@
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_ciudad;
 use crate::codec_columna;
+use crate::codec_combate;
 use crate::codec_comercio;
 use crate::codec_economia;
 use crate::codec_militar;
 use crate::economia::StockNodo;
+use crate::estado_combate::EstadoCombate;
 use crate::estado_comercio::EstadoComercio;
 use crate::estado_militar::EstadoMilitar;
 use crate::urbanismo::{Urbanismo, Urbe};
@@ -22,6 +24,9 @@ use std::sync::{Arc, OnceLock};
 /// Prioridad de la salida del mundo de quien se desconectó: la de «cierre de batallas vencidas y salidas del mundo» (Reloj_Y_Eventos §2). Sale
 /// antes que todo lo demás del mismo instante.
 pub const PRIO_SALIDA: u8 = 1;
+/// Prioridad de la regeneración, la aparición y el ataque de los bandidos (Reloj_Y_Eventos §2): ven a las columnas tal como estaban antes de moverse
+/// en ese instante (las llegadas y los encuentros son de la 8).
+pub const PRIO_BANDIDOS: u8 = 7;
 /// Prioridad de los umbrales de víveres y de la deserción por hambre: «consumo de población y de tropa» (Reloj_Y_Eventos §2).
 pub const PRIO_UMBRAL: u8 = 3;
 /// Prioridad del comercio: «comercio, trueques, órdenes de mercado, caravanas» (Reloj_Y_Eventos §2). Va después de los mantenimientos y las ruinas
@@ -38,11 +43,10 @@ pub const PRIO_REPUTACION: u8 = 9;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-/// BAN11: BAN10 más lo de la fase 4C: la persecución y el estado «en batalla» de cada columna (`codec_columna`), los informes de inspección de cada
-/// héroe y las relaciones entre Facciones que da la administración (`codec_militar`), y dos cargas de la cola (un encuentro exacto, `Carga::Encuentro`,
-/// y la presa que sale de la vista, `SucesoMilitar::PresaFueraDeVista`). BAN10 se rechaza (BAN10 no traía nada de esto y sus encuentros eran de un
-/// generador externo, `Carga::Externa`, que ya no los programa).
-const MAGIA: &[u8; 5] = b"BAN11";
+/// BAN12: BAN11 más lo de la fase 4D: el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y
+/// lo que cada héroe ha destruido), el fin de la protección y de la ocupación de cada plaza (`protegida_hasta` y `ocupada_hasta`, en el registro de cada
+/// plaza) y una carga nueva de la cola (`Carga::Combate`). BAN11 se rechaza: no traía nada de esto y su huella de reglas no incluía los bloques de `combate`.
+const MAGIA: &[u8; 5] = b"BAN12";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -64,7 +68,7 @@ impl Default for Reglas {
 }
 
 /// Las reglas del crate `asentamiento` (datos del documento de Mechanics, ya convertidos a enteros), las huellas del trazado urbano
-/// (bloques del documento `Trazado_Urbano.md`), las del comercio (crate `comercio`) y las militares (crate `militar`). No se serializan: en las fotos va su **huella**, el
+/// (bloques del documento `Trazado_Urbano.md`), las del comercio (crate `comercio`), las militares (crate `militar`) y las del combate (crate `combate`). No se serializan: en las fotos va su **huella**, el
 /// sha256 de los bloques de parámetros de los documentos incrustados (no de su prosa); recuperar con otras reglas falla igual que con
 /// `ReglasTerritorio`.
 #[derive(Clone, Debug)]
@@ -76,6 +80,8 @@ pub struct ReglasEconomia {
     pub comercio: Arc<comercio::Reglas>,
     /// Las cifras militares (tropas, Liderazgo, guarnición, reclutamiento, ración, presencia, campamentos de mercenarios).
     pub militar: Arc<militar::Reglas>,
+    /// Las cifras del combate (poder, bajas, botín, ocupación, bandidos, pueblos, capacidad de las batallas).
+    pub combate: Arc<combate::Reglas>,
     huella: String,
 }
 
@@ -85,11 +91,12 @@ impl ReglasEconomia {
         let bloques = asentamiento::datos::texto_de_parametros()
             + &asentamiento::datos::texto_de_parametros_de(crate::urbanismo::DOC_TRAZADO)
             + &comercio::datos::texto_de_parametros()
-            + &militar::datos::texto_de_parametros();
+            + &militar::datos::texto_de_parametros()
+            + &combate::datos::texto_de_parametros();
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), huella }
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -217,6 +224,11 @@ pub struct Asentamiento {
     pub economia: asentamiento::asentamiento::Asentamiento,
     /// Su ciudad: dónde está cada edificio de la economía (los mismos ids). Se guarda en las fotos y entra en el hash.
     pub urbe: Urbe,
+    /// Inatacable hasta este instante (`OCUPACION.proteccionMinutos` tras una conquista): un asedio no se admite mientras `ahora < protegida_hasta`.
+    pub protegida_hasta: Option<Instante>,
+    /// Ocupada hasta este instante (`OCUPACION.duracionMinutos`): su recaudación y su crecimiento valen el `factorRecaudacion` y el `factorCrecimiento` de la
+    /// ocupación y su mantenimiento está congelado (`economia.ocupado`). Un evento de la cola la levanta.
+    pub ocupada_hasta: Option<Instante>,
 }
 
 impl Asentamiento {
@@ -255,6 +267,49 @@ pub enum Carga {
     /// cuyo plan acaba de cambiar— y `otra` (una columna, una caravana o una plaza). Vale mientras ninguna de las dos cambie de plan: `otra_generacion`
     /// es la de `otra` al calcularlo (se ignora si `otra` es una plaza, que no se mueve).
     Encuentro { otra: u64, otra_generacion: u32 },
+    /// Un plazo del combate: la aparición de bandidos, el fin de la protección o de la ocupación de una plaza, la reposición de la guarnición de
+    /// un pueblo (la clave de la entidad depende del suceso).
+    Combate(SucesoCombate),
+}
+
+/// Qué plazo del combate vence. Ninguno es recurrente por entidad ociosa: cada uno se programa cuando hay algo que esperar y se detiene solo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SucesoCombate {
+    /// Toca que la plaza (la entidad, con su generación) tenga campamento de bandidos: al fundarla y al vencer el plazo de reaparición del que se
+    /// destruyó. Prioridad 7. Consume el generador de la partida solo si encuentra sitio.
+    BandidosDeLaPlaza,
+    /// Toca mirar si al anillo del campamento de mercenarios (la entidad es `entidad_anillo`) le falta un campamento de bandidos. Prioridad 7. Al
+    /// crear uno programa la siguiente cita a `reaparicionMinutos`; si ya no falta ninguno, se detiene.
+    BandidosDelAnillo,
+    /// Acaba la protección de una plaza conquistada (la entidad es `entidad_conquista`). Prioridad 2.
+    FinProteccion,
+    /// Acaba la ocupación de una plaza conquistada (la entidad es `entidad_conquista`): vuelven su recaudación, su crecimiento y su mantenimiento.
+    /// Prioridad 2.
+    FinOcupacion,
+    /// Se repone la guarnición de serie de un pueblo (la entidad es `entidad_guarnicion`). Prioridad 3 (el consumo de población y de tropa).
+    ReponeGuarnicion,
+}
+
+impl SucesoCombate {
+    pub(crate) fn escribir(self, w: &mut Escritor) {
+        w.u8(match self {
+            SucesoCombate::BandidosDeLaPlaza => 0,
+            SucesoCombate::BandidosDelAnillo => 1,
+            SucesoCombate::FinProteccion => 2,
+            SucesoCombate::FinOcupacion => 3,
+            SucesoCombate::ReponeGuarnicion => 4,
+        });
+    }
+    pub(crate) fn leer(r: &mut Lector) -> Result<Self, ErrorFormato> {
+        Ok(match r.u8()? {
+            0 => SucesoCombate::BandidosDeLaPlaza,
+            1 => SucesoCombate::BandidosDelAnillo,
+            2 => SucesoCombate::FinProteccion,
+            3 => SucesoCombate::FinOcupacion,
+            4 => SucesoCombate::ReponeGuarnicion,
+            _ => return Err(ErrorFormato("suceso de combate desconocido")),
+        })
+    }
 }
 
 /// Qué plazo militar vence. Ninguno es recurrente por entidad ociosa: la deserción solo existe mientras una columna se está quedando sin tropa
@@ -444,6 +499,8 @@ pub struct Estado {
     pub comercio: EstadoComercio,
     /// Héroes con sus escuadras, reclutas de los campamentos y tecnologías de las Facciones (Heroe_Y_Tropa, Campamentos_Mercenarios).
     pub militar: EstadoMilitar,
+    /// Campamentos de bandidos, guarnición de serie de los pueblos y rendimientos de lo que se destruye (Combate, Generacion_Del_Mundo §13).
+    pub combate: EstadoCombate,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// `(actor, peticion_id)` en orden de llegada, con la versión que produjeron.
@@ -473,6 +530,7 @@ impl Estado {
             niveles_faccion: BTreeMap::new(),
             comercio,
             militar: EstadoMilitar::default(),
+            combate: EstadoCombate::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: VecDeque::new(),
@@ -546,6 +604,8 @@ impl Estado {
             w.u64(a.version);
             codec_economia::escribir(&mut w, &a.economia);
             codec_ciudad::escribir(&mut w, a.urbe.ciudad());
+            w.opt_i64(a.protegida_hasta);
+            w.opt_i64(a.ocupada_hasta);
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -565,6 +625,7 @@ impl Estado {
         }
         codec_comercio::escribir(&mut w, &self.comercio);
         codec_militar::escribir(&mut w, &self.militar);
+        codec_combate::escribir(&mut w, &self.combate);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -608,6 +669,10 @@ impl Estado {
                     w.u64(*otra);
                     w.u32(*otra_generacion);
                 }
+                Carga::Combate(s) => {
+                    w.u8(9);
+                    s.escribir(&mut w);
+                }
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -638,6 +703,7 @@ impl Estado {
         match (r.magia()? == MAGIA[..4]).then(|| r.u8()).transpose()? {
             Some(f) if f == MAGIA[4] => {}
             Some(b'0') => return Err(ErrorFormato("foto del formato BAN10 (sin persecuciones ni informes de inspección, con los encuentros en un generador externo): ya no se admite")),
+            Some(b'1') => return Err(ErrorFormato("foto del formato BAN11 (sin estado de combate, sin protección ni ocupación de las plazas y con una huella de reglas que no incluye las del combate): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
@@ -695,6 +761,7 @@ impl Estado {
             let version = r.u64()?;
             let economia = codec_economia::leer(&mut r)?;
             let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r)?);
+            let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -703,7 +770,7 @@ impl Estado {
             for p in &economia.pueblos {
                 s.nodos_reclamados.insert(p.nodo, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;
@@ -717,6 +784,7 @@ impl Estado {
         }
         s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio)?;
         s.militar = codec_militar::leer(&mut r)?;
+        s.combate = codec_combate::leer(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -738,6 +806,7 @@ impl Estado {
                 6 => Carga::SalidaDelMundo,
                 7 => Carga::Militar(SucesoMilitar::leer(&mut r)?),
                 8 => Carga::Encuentro { otra: r.u64()?, otra_generacion: r.u32()? },
+                9 => Carga::Combate(SucesoCombate::leer(&mut r)?),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

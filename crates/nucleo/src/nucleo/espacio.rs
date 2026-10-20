@@ -26,6 +26,7 @@
 
 use super::*;
 use crate::estado::{Asentamiento, SIN_BANDERA};
+use crate::estado_combate::{entidad_bandidos, es_entidad_bandidos};
 use crate::estado_comercio::{entidad_caravana, es_entidad_caravana, id_de_entidad};
 use super::persecuciones::Fin;
 use crate::estado_militar::Relacion;
@@ -129,6 +130,7 @@ impl Nucleo {
         puestos.extend(self.estado.ejercitos.values().filter(|e| self.columna_en_el_mapa(e)).map(|e| (e.id, self.plan_de_columna(e, t))));
         puestos.extend(self.estado.comercio.flota.iter().filter(|k| matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando)).filter_map(|k| Some((entidad_caravana(k.id), k.plan.clone()?))));
         puestos.extend(self.estado.asentamientos.values().map(|a| (a.id, plan_quieto(a.posicion, t, 0))));
+        puestos.extend(self.estado.combate.bandidos.values().map(|b| (entidad_bandidos(b.id), plan_quieto(b.posicion, t, 0))));
         for (entidad, plan) in puestos {
             let g = if self.estado.asentamientos.contains_key(&entidad) { 0 } else { self.estado.generaciones.actual(entidad) };
             self.espacio.rejilla.apuntar(entidad, g, &plan);
@@ -200,6 +202,9 @@ impl Nucleo {
                 self.estado.cola.programar(e.instante.max(t), PRIORIDAD_ENCUENTROS, clave, Carga::Encuentro { otra: e.otra, otra_generacion: e.otra_generacion });
             }
         }
+        if self.atrae_bandidos(entidad) {
+            self.programar_acosos(entidad, &plan, entradas);
+        }
         self.seguir_a(entidad, motivo);
     }
 
@@ -218,6 +223,9 @@ impl Nucleo {
 
     /// Vence el primer acercamiento exacto entre `entidad` y `otra`. La clave de la cola ya garantiza que `entidad` no cambió de plan; falta la otra.
     pub(super) fn encuentro_vence(&mut self, entidad: u64, otra: u64, otra_generacion: u32, t: Instante) {
+        if es_entidad_bandidos(entidad) || es_entidad_bandidos(otra) {
+            return self.acoso_vence(entidad, otra, otra_generacion, t);
+        }
         let (Some(a), Some(b)) = (self.cosa(entidad), self.cosa(otra)) else { return };
         if !matches!(b, Cosa::Plaza(_)) && self.estado.generaciones.actual(otra) != otra_generacion {
             return;

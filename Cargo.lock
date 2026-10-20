@@ -497,6 +497,7 @@ dependencies = [
  "asentamiento",
  "base",
  "cola",
+ "combate",
  "comercio",
  "contrato",
  "encuentros",

@@ -856,3 +856,5 @@ Ninguna abierta.
 - **Mineros** (Doc 5.8): tropa del Centro Urbano (leva, escalón 1, 30 unidades, velocidad 30, 1 de piedra por soldado, sin oro); ya están en `TROPAS_RECLUTABLES`. Entran en la tropa prestada del campamento de mercenarios y son la guarnición de serie de los pueblos extractores.
 - **Asedio**: `BATALLA.capacidad.asedio` = **15**: 15 contra 15.
 
+
+> **Implementado en Rust (2026-10-20, fase 4D).** La foto es `BAN12` (rechaza `BAN11`) y la huella de reglas incluye los bloques de `combate`. `DarEscuadra { heroe, tropa, cantidad }` (97, administración) da una escuadra a un héroe para montar ejércitos sin pasar por el reclutamiento. Los héroes heridos no atacan (`heroe.herido`); el héroe sano suma +15 al poder del bando (decisión Q2, aditivo). `DarSuministro` **se mantiene**: el botín real (`cargar_botin`) llena el carro de la columna vencedora, pero el suministro de la administración sigue siendo útil para montar escenarios y no se retira (fila de paridad).
