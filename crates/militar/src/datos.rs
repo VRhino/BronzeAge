@@ -91,6 +91,8 @@ pub struct ReglasLogistica {
     pub factor_estacionado: i64,
     /// Distancia de encuentro y de unión en campo.
     pub radio_encuentro: Mil,
+    /// Solo se narra repostar si los víveres iban por debajo de esta parte de la capacidad (ppm).
+    pub umbral_narrar_reposte: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -162,6 +164,8 @@ pub struct ReglasMercenarios {
     pub viviendas: usize,
     /// Parte de las Facciones vivas que debe tener adoptada una tecnología para que el campamento la desbloquee (ppm).
     pub porcentaje_facciones: i64,
+    /// Cada cuánto da el campamento la ración gratis a un residente que sale de él (ms): llena sus víveres si pasó ese plazo desde la última.
+    pub racion_cada: i64,
 }
 
 /// Las tecnologías del juego (el bloque `TECNOLOGIAS`): hasta el sistema 6 solo interesa cuáles existen y cuáles tiene toda Facción desde que
@@ -216,6 +220,7 @@ impl Reglas {
                 factor_marcha: ppm(num(&lg, "factorConsumoEnMarcha")),
                 factor_estacionado: ppm(num(&lg, "factorConsumoEstacionado")),
                 radio_encuentro: mil(num(&lg, "radioEncuentro")),
+                umbral_narrar_reposte: ppm(num(&lg, "umbralNarrarReposte")),
             },
             movimiento: ReglasMovimiento {
                 velocidad_jugador: mil(num(&mv, "velocidadJugador")),
@@ -245,6 +250,7 @@ impl Reglas {
                 edificios_militares: nombres(&me, "edificiosMilitares").iter().map(|n| Tipo::desde_nombre(n).unwrap_or_else(|| panic!("edificio «{n}» desconocido"))).collect(),
                 viviendas: nombres(&me, "edificiosFijos").iter().filter(|n| *n == "vivienda").count(),
                 porcentaje_facciones: ppm(num(&me, "tecnologia.porcentajeFacciones")),
+                racion_cada: entero(&me, "racion.cadaMinutos") * MS_POR_MINUTO,
             },
             tecnologias: {
                 let t = bloque(TECNOLOGIA, "TECNOLOGIAS");
@@ -311,6 +317,7 @@ mod pruebas {
         assert_eq!((r.reclutamiento.oro_por_caballo, r.reclutamiento.horizonte_comida), (5_000, 8));
         // Calibración de distancias (Movimiento_Ejercitos §14): los bloques ya traen lo vigente.
         assert_eq!((r.logistica.capacidad_carro, r.logistica.capacidad_viveres, r.logistica.radio_encuentro), (500_000, 350_000, 3_000));
+        assert_eq!(r.logistica.umbral_narrar_reposte, 500_000);
         assert_eq!((r.logistica.factor_marcha, r.logistica.factor_estacionado), (250_000, 100_000));
         assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (33_000, 500, 2_000));
         assert_eq!(r.movimiento.vida_peticion_union, 10_000);
@@ -333,6 +340,7 @@ mod pruebas {
         assert_eq!((m.recargo, m.descuento_sin_asentamientos, m.nivel_edificios), (1_500_000, 600_000, 3));
         assert_eq!((m.valor_equipo_en_oro, m.poblacion_por_vivienda, m.poblacion_por_hora), (8_000, 10, 10));
         assert_eq!((m.edificios_militares, m.viviendas, m.porcentaje_facciones), (vec![Tipo::Barracon, Tipo::GaleriaDeTiro, Tipo::Caballerizas], 10, 500_000));
+        assert_eq!(m.racion_cada, 30 * MS_POR_MINUTO, "la ración gratis del campamento, cada 30 minutos");
     }
 
     #[test]

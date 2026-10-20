@@ -91,7 +91,7 @@ fn dato(h: &Hecho, clave: &str) -> i64 {
 fn mundo_de(n: &Nucleo, r: Recurso) -> i64 {
     let e = n.estado();
     e.asentamientos.values().map(|a| a.economia.almacen.cantidad(r)).sum::<i64>()
-        + e.ejercitos.values().map(|c| c.suministro.get(&r).copied().unwrap_or(0)).sum::<i64>()
+        + e.ejercitos.values().map(|c| c.columna.carga.get(&r).copied().unwrap_or(0)).sum::<i64>()
         + e.comercio.flota.iter().map(|c| c.contenido.get(&r).copied().unwrap_or(0)).sum::<i64>()
 }
 
@@ -181,7 +181,7 @@ impl Escenario {
 }
 
 fn fundar(n: &mut Nucleo, t: Instante, nombre: &str, dueno: &str, faccion: u32, p: Punto) -> u64 {
-    let e = n.crear_ejercito(t, nombre, dueno, faccion, p, 500, 100_000, 100_000).unwrap();
+    let e = n.crear_ejercito(t, dueno, faccion, p, 500, 100_000).unwrap();
     assert!(n.aplicar_en(t, Peticion::nueva("admin", &format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
     let r = n.aplicar_en(t, Peticion::nueva(dueno, &format!("f-{nombre}"), Comando::Fundar { ejercito: e }));
     assert!(r.aceptada(), "{r:?}");
@@ -622,7 +622,7 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     let col_a = {
         let p = pos(&e.n, a);
         let t = e.n.ahora();
-        e.n.crear_ejercito(t, "ana-en-a", "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 100_000, 100_000).unwrap()
+        e.n.crear_ejercito(t, "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 100_000).unwrap()
     };
     // Una de A hacia B, una de B hacia A, y una de C aparcada en A con madera (la deja la columna de Ana, que entra en A).
     let ca = e.caravana("ana", a, 1, true);
@@ -786,8 +786,8 @@ fn el_mercado_de_mercenarios_vende_reposta_y_se_repone_solo_si_algo_cambio() {
     e.avanzar(MIN);
     let t = e.n.ahora();
     let puerta = campamento(&m.0, 0);
-    let col = e.n.crear_ejercito(t, "merc", "ana", 1, Punto::new(puerta.x + 1_000, puerta.y), 500, 100_000, 350_000).unwrap();
-    let lejos = e.n.crear_ejercito(t, "lejos", "lejana", 1, Punto::new(puerta.x + 10_000, puerta.y), 500, 100_000, 350_000).unwrap();
+    let col = e.n.crear_ejercito(t, "ana", 1, Punto::new(puerta.x + 1_000, puerta.y), 500, 100_000).unwrap();
+    let lejos = e.n.crear_ejercito(t, "lejana", 1, Punto::new(puerta.x + 10_000, puerta.y), 500, 100_000).unwrap();
     // «ana» vive en el campamento 1: en el 0 es una visitante con su columna a la puerta. La «lejana» va en una columna lejos.
     let ana = e.heroe_en_columna("ana", 1, col);
     let lejana = e.heroe_en_columna("lejana", 1, lejos);
@@ -820,10 +820,12 @@ fn el_mercado_de_mercenarios_vende_reposta_y_se_repone_solo_si_algo_cambio() {
 
     // Repostar: gratis, hasta el tope de la columna, sin gastar el stock.
     let stock0 = e.n.stock_de_campamento(0).unwrap();
+    // Dos héroes en la columna (su Líder de escenario y «ana»): la capacidad de los víveres es la suma de la de los dos.
+    let antes = e.n.estado().ejercitos[&col].columna.viveres.valor_en(e.n.ahora());
     e.ok("ana", Comando::RepostarEnCampamento { heroe: ana, campamento: 0 });
     let r = hechos(&e.n, "mercenarios.repostado");
-    assert_eq!((r.len(), dato(&r[0], "cantidad")), (1, 250_000));
-    assert_eq!(e.n.estado().ejercitos[&col].viveres.valor_en(e.n.ahora()), 350_000);
+    assert_eq!((r.len(), dato(&r[0], "cantidad")), (1, 700_000 - antes));
+    assert_eq!(e.n.estado().ejercitos[&col].columna.viveres.valor_en(e.n.ahora()), 700_000);
     assert_eq!(e.rechazada("ana", Comando::RepostarEnCampamento { heroe: ana, campamento: 0 }), rechazos::MERCENARIOS_VIVERES_LLENOS);
     assert_eq!(e.n.stock_de_campamento(0).unwrap(), stock0);
 
@@ -882,10 +884,10 @@ fn una_caravana_adjunta_viaja_con_la_columna_a_su_paso_y_entrega_a_la_puerta_del
     let (a, b) = (e.a, e.b);
     let (pa, pb) = (pos(&e.n, a), pos(&e.n, b));
     let t = e.n.ahora();
-    let col = e.n.crear_ejercito(t, "ana-col", "ana", 1, Punto::new(pa.x + 1_000, pa.y), 500, 400_000, 400_000).unwrap();
-    let sola = e.n.crear_ejercito(t, "ana-sola", "ana", 1, Punto::new(pa.x + 1_000, pa.y + 500), 500, 400_000, 400_000).unwrap();
-    let col_beto = e.n.crear_ejercito(t, "beto-col", "beto", 2, Punto::new(pa.x, pa.y + 1_000), 500, 400_000, 400_000).unwrap();
-    let col_lejos = e.n.crear_ejercito(t, "lejos", "ana", 1, Punto::new(pa.x + 20_000, pa.y), 500, 400_000, 400_000).unwrap();
+    let col = e.n.crear_ejercito(t, "ana", 1, Punto::new(pa.x + 1_000, pa.y), 500, 400_000).unwrap();
+    let sola = e.n.crear_ejercito(t, "ana", 1, Punto::new(pa.x + 1_000, pa.y + 500), 500, 400_000).unwrap();
+    let col_beto = e.n.crear_ejercito(t, "beto", 2, Punto::new(pa.x, pa.y + 1_000), 500, 400_000).unwrap();
+    let col_lejos = e.n.crear_ejercito(t, "ana", 1, Punto::new(pa.x + 20_000, pa.y), 500, 400_000).unwrap();
     e.dar(a, Cobre, 100_000);
     let c = e.caravana("ana", a, 1, true);
     let adjuntar = |ejercito| Comando::AdjuntarCaravana { caravana: c, ejercito };
@@ -930,6 +932,44 @@ fn una_caravana_adjunta_viaja_con_la_columna_a_su_paso_y_entrega_a_la_puerta_del
     assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: c, asentamiento: b }), rechazos::CARAVANA_PLAZA_AJENA);
 }
 
+
+#[test]
+fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_las_deja_aparcadas_y_el_que_se_queda_sin_nadie_las_suelta_a_volver() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    let h = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano }).creadas[0];
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(militar::heroe::Residencia::Asentamiento(a as u32)) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: militar::presencia::Ubicacion::Asentamiento(a as u32) });
+    let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: militar::catalogo::Tropa::MiliciaLanceros }).creadas[0];
+    e.dar(a, Cobre, 100_000);
+    let c = e.caravana("ana", a, 1, true);
+    let adjuntar = |ejercito| Comando::AdjuntarCaravana { caravana: c, ejercito };
+    // Una columna personal va a lo suyo: no lleva caravanas.
+    let personal = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![], carga: vec![] }).creadas[0];
+    assert_eq!(e.rechazada("ana", adjuntar(personal)), rechazos::COLUMNA_PERSONAL_SIN_CARAVANAS);
+    e.ok("ana", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+    // Un ejército sí; al guarnecer la plaza de la caravana se queda aparcada en ella.
+    let movilizar = Comando::MovilizarEjercito { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![], politica: militar::columna::Politica::Aceptar };
+    let ej = e.ok("ana", movilizar.clone()).creadas[0];
+    e.ok("ana", adjuntar(ej));
+    assert_eq!(e.n.estado().ejercitos[&ej].caravanas_adjuntas, vec![c]);
+    e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: h });
+    assert!(e.n.ejercito(ej).is_none());
+    assert_eq!((e.caravana_de(c).estado, e.caravana_de(c).anfitriona), (EstadoCaravana::Aparcada, Some(a as u32)));
+    assert_eq!(dato(&hechos(&e.n, "ejercito.guarnece")[0], "caravanasAparcadas"), 1);
+    // Un ejército cuyo último héroe sale del mundo se disuelve y sus caravanas vuelven a su origen por su cuenta.
+    let ej2 = e.ok("ana", movilizar).creadas[0];
+    e.ok("ana", adjuntar(ej2));
+    e.ok("ana", Comando::Desconectarse { heroe: h });
+    e.avanzar(150_000);
+    assert!(e.n.ejercito(ej2).is_none());
+    assert_eq!(e.caravana_de(c).estado, EstadoCaravana::Disponible, "volvió sola: la puerta de su plaza está a un paso");
+    assert_eq!(hechos(&e.n, "ejercito.disuelto").len(), 1);
+    assert_eq!(e.rechazada("ana", adjuntar(ej2)), rechazos::EJERCITO_DESCONOCIDO);
+}
 #[test]
 fn una_arista_que_acaba_de_ser_camino_acelera_a_la_caravana_que_ya_iba_por_ella() {
     let m = con_mundo!();
@@ -939,7 +979,7 @@ fn una_arista_que_acaba_de_ser_camino_acelera_a_la_caravana_que_ya_iba_por_ella(
     let col_a = {
         let p = pos(&e.n, a);
         let t = e.n.ahora();
-        e.n.crear_ejercito(t, "ana-en-a", "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 100_000, 100_000).unwrap()
+        e.n.crear_ejercito(t, "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 100_000).unwrap()
     };
     e.dar(a, Madera, 10_000);
     e.dar(a, Cobre, 10_000);
@@ -1086,7 +1126,7 @@ fn una_caravana_grande_llama_la_atencion_a_60_unidades_y_una_pequena_no() {
         let camino = m.1.ruta(pa, pb, &Opciones::default()).unwrap();
         let v = camino.puntos[camino.puntos.len() / 2];
         let t = e.n.ahora();
-        e.n.crear_ejercito(t, "vigia", "beto", 2, Punto::new(v.x + 45_000, v.y), 500, 100_000, 100_000).unwrap();
+        e.n.crear_ejercito(t, "beto", 2, Punto::new(v.x + 45_000, v.y), 500, 100_000).unwrap();
         // Las dos plazas no cuentan como observadoras: solo la columna del vigía.
         let car = e.caravana("ana", a, carros, true);
         e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
@@ -1111,7 +1151,7 @@ fn guion(e: &mut Escenario, m: &M, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let base = e.n.ahora();
     let col = {
         let p = campamento(&m.0, 0);
-        e.n.crear_ejercito(base, "merc", "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 100_000, 350_000).unwrap()
+        e.n.crear_ejercito(base, "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 100_000).unwrap()
     };
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 50_000 });
     let ana = e.heroe_en_columna("ana", 1, col);
@@ -1227,7 +1267,7 @@ fn poblar_con_caravanas(n: &mut Nucleo, m: &Mundo, plazas: usize) -> Vec<(u64, u
     'fuera: for y in (paso..alto).step_by(paso as usize) {
         for x in (paso..ancho).step_by(paso as usize) {
             let faccion = ids.len() as u32 + 1;
-            let e = n.crear_ejercito(0, &format!("h{x}-{y}"), "ana", faccion, Punto::new(x, y), 500, 100_000, 100_000).unwrap();
+            let e = n.crear_ejercito(0, "ana", faccion, Punto::new(x, y), 500, 100_000).unwrap();
             n.aplicar_en(0, Peticion::nueva("admin", &format!("c{x}-{y}"), Comando::DarCaravanaFundacion { ejercito: e }).de_admin());
             let r = n.aplicar_en(0, Peticion::nueva("ana", &format!("f{x}-{y}"), Comando::Fundar { ejercito: e }));
             if r.aceptada() {

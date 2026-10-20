@@ -17,10 +17,14 @@
 //!   mercenarios y las tecnologías que da la administración; reclutar en una plaza y en un campamento, la tropa prestada, la guarnición (que come en
 //!   el paso de minuto de su plaza), la escolta de caravanas, conectarse y desconectarse (prioridad 1, `Carga::SalidaDelMundo`). Las reglas puras son el
 //!   crate `militar` y las órdenes (códigos 41-44 y 49-68), `Nucleo`.
+//! - Columnas completas (fase 4B-2): [`Ejercito`] es una [`militar::columna::Columna`] con su posición y su plan; salir y entrar en plazas y campamentos,
+//!   unir, separar, ceder el mando, formar un ejército, repostar, las caravanas adjuntas, la desconexión con la columna y las convocatorias (órdenes 69-90),
+//!   el hambre con su deserción (un evento por columna con hambre) y la foto `BAN10` (`codec_columna`).
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;
 mod codec_ciudad;
+mod codec_columna;
 mod codec_comercio;
 mod codec_economia;
 mod codec_militar;
@@ -38,9 +42,9 @@ pub mod urbanismo;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, PagarCon, Peticion, Resultado, Respuesta};
-pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, SucesoComercio, PRIO_ASENTAMIENTO, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
+pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, SucesoComercio, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
-pub use estado_militar::{EstadoMilitar, HeroeNucleo};
+pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, EstadoMilitar, HeroeNucleo};
 pub use generadores::{Cx, GeneradorDeEventos};
 pub use nucleo::{Ajustes, Arranque, InformeViabilidad, Metricas, Nucleo};
 

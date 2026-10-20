@@ -58,8 +58,8 @@ pub fn auditar_contenedores(n: &Nucleo) -> Violaciones {
         }
     }
     for c in e.ejercitos.values() {
-        let total: i64 = c.suministro.values().sum();
-        v.carga += (c.suministro.values().any(|&x| x < 0) || n.capacidad_de_carga(c.id).is_some_and(|cap| total > cap)) as u64;
+        let total: i64 = c.columna.carga.values().sum();
+        v.carga += (c.columna.carga.values().any(|&x| x < 0) || n.capacidad_de_carga(c.id).is_some_and(|cap| total > cap)) as u64;
     }
     let flota = &e.reglas.economia.comercio.flota;
     for c in &e.comercio.flota {

@@ -23,9 +23,10 @@
 
 use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
 use crate::estado::{Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, PRIO_LLEGADA, PRIO_UMBRAL};
+use crate::estado_militar::HeroeNucleo;
 use mundo::Mundo;
 use crate::generadores::{Cx, GeneradorDeEventos, Transicion};
-use base::{Instante, Mil, Plan, Punto, Ritmo};
+use base::{Instante, Mil, Plan, Punto};
 use cola::Evento;
 use comercio::caravana::EstadoCaravana;
 use persistencia::{Almacen, Foto, Fotos};
@@ -39,12 +40,16 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+mod columnas;
 mod construccion;
+mod convocatorias;
 mod flota;
 mod heroes;
 mod mercado;
 mod mercenarios;
 mod pueblos;
+mod salidas;
+mod uniones;
 mod viaje;
 mod zonas;
 
@@ -395,6 +400,7 @@ impl Nucleo {
             Carga::Comercio { suceso, aplazos } => self.comercio_vence(ev.clave, suceso, aplazos, t),
             Carga::Reputacion(cita) => self.cita_de_reputacion(id, cita, t),
             Carga::SalidaDelMundo => self.salida_del_mundo(id, t),
+            Carga::Militar(suceso) => self.suceso_militar(id, suceso, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
                 if let Some(g) = gens.get_mut(generador as usize) {
@@ -453,19 +459,15 @@ impl Nucleo {
 
     // ───────────────────────────── Reglas de las columnas ─────────────────────────────
 
-    fn consumo(&self, marchando: bool) -> Mil {
-        let r = &self.estado.reglas;
-        -(if marchando { r.consumo_marcha } else { r.consumo_estacionado })
-    }
-
     fn evento(&mut self, codigo: &'static str, en: Instante, id: u64, punto: Option<Punto>, datos: Vec<(&'static str, i64)>) {
         self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en, ejercitos: vec![id], asentamientos: vec![], punto, datos });
     }
 
-    /// Programa la llegada (si hay plan) y los umbrales de víveres con la generación vigente. Llamar tras subirla.
+    /// Programa la llegada (si hay plan), los umbrales de víveres y, si la columna pasa hambre, su próxima deserción, con la generación vigente. Llamar tras subirla.
     fn programar_ejercito(&mut self, id: u64, t: Instante) {
         let Some(e) = self.estado.ejercitos.get(&id) else { return };
-        let (fin, viveres, cap) = (e.plan.fin(), e.viveres, e.capacidad_viveres);
+        let (fin, viveres) = (e.plan.fin(), e.columna.viveres);
+        let cap = viveres.maximo.unwrap_or(0);
         let clave = self.estado.generaciones.clave(id);
         if let Some(fin) = fin {
             self.estado.cola.programar(fin.max(t), PRIO_LLEGADA, clave, Carga::Llegada);
@@ -479,6 +481,7 @@ impl Nucleo {
                 }
             }
         }
+        self.programar_desercion(id, t);
     }
 
     fn avisar_plan(&mut self, id: u64, nuevo: bool) {
@@ -500,13 +503,12 @@ impl Nucleo {
 
     /// La columna deja de moverse donde está en `t`: sin plan, víveres al ritmo de acampada, generación nueva.
     fn detener(&mut self, id: u64, t: Instante) {
-        let consumo = self.consumo(false);
         let Some(e) = self.estado.ejercitos.get_mut(&id) else { return };
         e.posicion = e.posicion_en(t);
-        e.viveres = e.viveres.reanclado(t, consumo);
         let g = self.estado.generaciones.subir(id);
         e.plan = Plan { generacion: g, vertices: Vec::new() };
         self.tr.tocados.push(id);
+        self.poner_marcha(id, t, militar::racion::Estado::Estacionada);
         self.programar_ejercito(id, t);
         self.avisar_plan(id, false);
     }
@@ -520,15 +522,15 @@ impl Nucleo {
 
     fn umbral(&mut self, id: u64, objetivo: Mil, t: Instante) {
         let Some(e) = self.estado.ejercitos.get(&id) else { return };
-        let valor = e.viveres.valor_en(t);
+        let valor = e.columna.viveres.valor_en(t);
         if valor > objetivo {
             return; // defensivo: el evento no corresponde al ritmo vigente
         }
-        // Aquí solo se narra el hecho. Qué pasa con la moral y la deserción cuando faltan víveres (Movimiento_Ejercitos §6.3)
-        // es una regla de la fase 6: la columna no se detiene por hambre.
         let punto = e.posicion_en(t);
         if objetivo <= 0 {
+            // Sin víveres la tropa pasa hambre desde ahora (la moral de cada escuadra baja y, a 0, deserta): la columna no se detiene.
             self.evento("ejercito.sin_viveres", t, id, Some(punto), vec![]);
+            self.reprogramar_columna(id, t);
         } else {
             self.evento("ejercito.viveres_bajos", t, id, Some(punto), vec![("viveres", valor)]);
         }
@@ -549,11 +551,11 @@ impl Nucleo {
         self.aplicar_en(t, p)
     }
 
-    /// Alta de una columna por la vía de administración. Devuelve su id.
-    #[allow(clippy::too_many_arguments)]
-    pub fn crear_ejercito(&mut self, t: Instante, lider: &str, propietario: &str, faccion: u32, posicion: Punto, velocidad: Mil, viveres: Mil, capacidad_viveres: Mil) -> Result<u64, Respuesta> {
-        let comando = Comando::CrearEjercito { lider: lider.into(), propietario: propietario.into(), faccion, posicion, velocidad, viveres, capacidad_viveres };
-        let r = self.aplicar_en(t, Peticion::nueva("admin", &format!("crear:{lider}"), comando).de_admin());
+    /// Alta de una columna por la vía de administración, con su héroe de campo (cuenta `cuenta`). Devuelve su id. La velocidad es la fija de la columna
+    /// (30 unidades por minuto = 500) y los víveres, los que lleva al nacer (topados a la capacidad de un héroe).
+    pub fn crear_ejercito(&mut self, t: Instante, cuenta: &str, faccion: u32, posicion: Punto, velocidad: Mil, viveres: Mil) -> Result<u64, Respuesta> {
+        let comando = Comando::CrearEjercito { cuenta: cuenta.into(), faccion, posicion, velocidad, viveres };
+        let r = self.aplicar_en(t, Peticion::nueva("admin", &format!("crear:{}", self.estado.siguiente_id), comando).de_admin());
         match r.creadas.first() {
             Some(&id) if r.aceptada() => Ok(id),
             _ => Err(r),
@@ -621,43 +623,32 @@ impl Nucleo {
         let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
         let mut creadas = Vec::new();
         match &p.comando {
-            Comando::CrearEjercito { lider, propietario, faccion, posicion, velocidad, viveres, capacidad_viveres } => {
+            Comando::CrearEjercito { cuenta, faccion, posicion, velocidad, viveres } => {
                 if !p.admin {
                     return Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración da de alta columnas", v);
                 }
-                if self.estado.ejercito_de_lider(lider).is_some() {
-                    return Respuesta::rechazo(rechazos::LIDER_REPETIDO, format!("{lider} ya dirige una columna"), v);
-                }
-                let id = self.estado.siguiente_id;
-                self.estado.siguiente_id += 1;
-                let viveres = Ritmo { valor_en_t0: *viveres, t0: t, por_minuto: self.consumo(false), maximo: Some(*capacidad_viveres), minimo: Some(0) };
-                self.estado.insertar(Ejercito {
-                    id,
-                    lider: lider.clone(),
-                    propietario: propietario.clone(),
-                    faccion: *faccion,
-                    velocidad: *velocidad,
-                    posicion: *posicion,
-                    plan: Plan::default(),
-                    viveres,
-                    capacidad_viveres: *capacidad_viveres,
-                    caravana_fundacion: false,
-                    suministro: Default::default(),
-                    caravanas_adjuntas: Vec::new(),
-                    version: 0,
-                });
-                self.tr.tocados.push(id);
-                self.programar_ejercito(id, t);
+                // Andamiaje de administración: una columna con un héroe «de campo» (sin residencia ni loadout) de la cuenta dada, a la que obedece.
+                let (id, heroe) = (self.nuevo_id(), self.nuevo_id());
+                let mr = self.estado.reglas.economia.militar.clone();
+                let mut h = militar::heroe::Heroe::nuevo(&mr, heroe, militar::heroe::Controlador::Bot, 0, heroe);
+                h.residencia = None;
+                h.loadouts.clear();
+                h.presencia = militar::presencia::Presencia::nueva(militar::presencia::Ubicacion::Columna(id));
+                self.estado.militar.insertar(HeroeNucleo { sintetico: true, ..HeroeNucleo::nuevo(h, cuenta, Some(*faccion)) });
+                let columna = militar::columna::Columna::salir(&mr, id, Some(*faccion), heroe, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Rechazar, vec![], Default::default(), *viveres, t, &|_| 0);
+                let mut e = self.columna_suelta(columna, *posicion);
+                e.velocidad_fija = Some(*velocidad);
+                self.alta_de_columna(t, e);
                 creadas.push(id);
             }
             Comando::MarcharA { ejercito, destino } => {
                 let Some(e) = self.estado.ejercitos.get(ejercito) else {
                     return Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}"), v);
                 };
-                if !p.admin && e.propietario != p.actor {
-                    return Respuesta::rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya", v);
+                if let Err(r) = self.autorizar_movimiento(p, e) {
+                    return r;
                 }
-                let (id, origen, velocidad, marchando) = (e.id, e.posicion_en(t), self.velocidad_de_columna(e), e.marchando());
+                let (id, origen, velocidad, marchando) = (e.id, e.posicion_en(t), self.velocidad_de_columna(e).max(1), e.marchando());
                 let camino = precalculado.unwrap_or_else(|| {
                     self.metricas.rutas_calculadas += 1;
                     self.rutas.ruta_con(&mut self.escritorio, origen, *destino, &Opciones::default())
@@ -673,13 +664,12 @@ impl Nucleo {
                     self.detener(id, t);
                     self.evento("ejercito.estacionado", t, id, Some(origen), vec![]);
                 } else {
-                    let consumo = self.consumo(true);
                     let g = self.estado.generaciones.subir(id);
                     let e = self.estado.ejercitos.get_mut(&id).expect("existe");
                     e.plan = camino.a_plan(t, velocidad, g);
                     e.posicion = origen;
-                    e.viveres = e.viveres.reanclado(t, consumo);
                     self.tr.tocados.push(id);
+                    self.poner_marcha(id, t, militar::racion::Estado::Marchando);
                     self.programar_ejercito(id, t);
                     self.avisar_plan(id, true);
                 }
@@ -688,8 +678,8 @@ impl Nucleo {
                 let Some(e) = self.estado.ejercitos.get(ejercito) else {
                     return Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}"), v);
                 };
-                if !p.admin && e.propietario != p.actor {
-                    return Respuesta::rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya", v);
+                if let Err(r) = self.autorizar_movimiento(p, e) {
+                    return r;
                 }
                 if !e.marchando() {
                     return sin_cambios();
@@ -777,6 +767,37 @@ impl Nucleo {
             | Comando::FijarFaccionDeHeroe { .. }
             | Comando::ColocarHeroe { .. }
             | Comando::HerirHeroe { .. } => match self.ejecutar_heroes(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::SalirAlMundo { .. }
+            | Comando::MovilizarEjercito { .. }
+            | Comando::SalirDelCampamento { .. }
+            | Comando::EntrarEnAsentamiento { .. }
+            | Comando::SalirDeAsentamiento { .. }
+            | Comando::Guarnecer { .. }
+            | Comando::EntrarEnCampamento { .. } => match self.ejecutar_salidas(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::UnirseAEjercito { .. }
+            | Comando::UnirseEnCampo { .. }
+            | Comando::ResponderPeticionDeUnion { .. }
+            | Comando::SepararseDelEjercito { .. }
+            | Comando::CederLiderazgo { .. }
+            | Comando::OrganizarEjercito { .. }
+            | Comando::CancelarFormacion { .. }
+            | Comando::Repostar { .. } => match self.ejecutar_uniones(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::ConvocarEjercito { .. }
+            | Comando::UnirseAConvocatoria { .. }
+            | Comando::ResponderPeticionDeConvocatoria { .. }
+            | Comando::CambiarSeleccionDeConvocatoria { .. }
+            | Comando::SepararseDeConvocatoria { .. }
+            | Comando::CancelarConvocatoria { .. }
+            | Comando::PartirConvocatoria { .. } => match self.ejecutar_convocatorias(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

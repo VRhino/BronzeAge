@@ -95,7 +95,7 @@ fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
 
 /// Una columna de `faccion` en `p` con caravana, que funda en `t`; devuelve el id de la plaza.
 fn fundar_en(n: &mut Nucleo, t: Instante, nombre: &str, faccion: u32, p: Punto) -> u64 {
-    let e = n.crear_ejercito(t, nombre, "ana", faccion, p, 500, 100_000, 100_000).unwrap();
+    let e = n.crear_ejercito(t, "ana", faccion, p, 500, 100_000).unwrap();
     assert!(n.aplicar_en(t, admin(&format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e })).aceptada());
     let r = n.aplicar_en(t, ana(&format!("f-{nombre}"), Comando::Fundar { ejercito: e }));
     assert!(r.aceptada(), "{r:?}");
@@ -544,7 +544,7 @@ fn las_fotos_se_niegan_con_otras_reglas_de_economia() {
     let pos = sucias.windows(huella.len()).position(|w| w == &huella[..]).expect("la foto lleva la huella");
     sucias[pos] = if sucias[pos] == b'0' { b'1' } else { b'0' };
     assert!(Estado::deserializar(&sucias, &otras, "h").is_err());
-    otras.consumo_marcha += 1;
+    otras.viveres_bajos_pct += 1;
     assert!(Estado::deserializar(&bytes, &otras, "h").is_err());
 }
 
@@ -558,7 +558,7 @@ fn poblar(n: &mut Nucleo, m: &Mundo, plazas: usize) -> usize {
     'fuera: for y in (paso..alto).step_by(paso as usize) {
         for x in (paso..ancho).step_by(paso as usize) {
             let faccion = fundadas as u32 + 1;
-            let e = n.crear_ejercito(0, &format!("h{x}-{y}"), "ana", faccion, Punto::new(x, y), 500, 100_000, 100_000).unwrap();
+            let e = n.crear_ejercito(0, "ana", faccion, Punto::new(x, y), 500, 100_000).unwrap();
             n.aplicar_en(0, admin(&format!("c{x}-{y}"), Comando::DarCaravanaFundacion { ejercito: e }));
             if n.aplicar_en(0, ana(&format!("f{x}-{y}"), Comando::Fundar { ejercito: e })).aceptada() {
                 fundadas += 1;

@@ -14,8 +14,9 @@ use comercio::{AcuerdoId, CaravanaId, OrdenId};
 use std::collections::BTreeMap;
 
 /// Los ids de comercio (trueques, órdenes, caravanas) y las Facciones comparten con los ejércitos y las plazas la tabla de generaciones
-/// de la cola (`u64`): cada clase lleva una etiqueta en los bits altos para que sus claves no choquen con los ids de la partida.
-const ETIQUETA: u64 = 1 << 56;
+/// de la cola (`u64`): cada clase lleva una etiqueta en los bits altos para que sus claves no choquen con los ids de la partida. Las etiquetas 1 a
+/// 5 son de este módulo; las 6 a 8 (formaciones y peticiones de unión), de `estado_militar`.
+pub(crate) const ETIQUETA: u64 = 1 << 56;
 const ETIQUETA_TRUEQUE: u64 = ETIQUETA;
 const ETIQUETA_ORDEN: u64 = 2 * ETIQUETA;
 const ETIQUETA_CARAVANA: u64 = 3 * ETIQUETA;

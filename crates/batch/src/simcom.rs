@@ -373,8 +373,7 @@ impl Sim<'_> {
             minuto += 1;
             let t = minuto * MIN;
             self.n.avanzar_hasta(t);
-            let lider = format!("c{}", k);
-            let Ok(columna) = self.n.crear_ejercito(t, &lider, &jugador(f), f, p, VELOCIDAD, VIVERES, VIVERES) else { continue };
+            let Ok(columna) = self.n.crear_ejercito(t, &jugador(f), f, p, VELOCIDAD, VIVERES) else { continue };
             self.admin(t, "DarCaravanaFundacion", Comando::DarCaravanaFundacion { ejercito: columna });
             let r = self.orden(t, &jugador(f), "Fundar", Comando::Fundar { ejercito: columna });
             let Some(&id) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
@@ -801,7 +800,7 @@ impl Sim<'_> {
     fn en_el_mundo(&self, r: Recurso) -> i64 {
         let e = self.n.estado();
         e.asentamientos.values().map(|a| a.economia.almacen.cantidad(r)).sum::<i64>()
-            + e.ejercitos.values().map(|c| c.suministro.get(&r).copied().unwrap_or(0)).sum::<i64>()
+            + e.ejercitos.values().map(|c| c.columna.carga.get(&r).copied().unwrap_or(0)).sum::<i64>()
             + e.comercio.flota.iter().map(|c| c.contenido.get(&r).copied().unwrap_or(0)).sum::<i64>()
             + self.n.heroes().map(|h| h.almacen_personal.get(&r).copied().unwrap_or(0)).sum::<i64>()
     }

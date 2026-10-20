@@ -3,6 +3,7 @@
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_ciudad;
+use crate::codec_columna;
 use crate::codec_comercio;
 use crate::codec_economia;
 use crate::codec_militar;
@@ -10,9 +11,9 @@ use crate::economia::StockNodo;
 use crate::estado_comercio::EstadoComercio;
 use crate::estado_militar::EstadoMilitar;
 use crate::urbanismo::{Urbanismo, Urbe};
-use base::{Instante, Mil, Plan, Punto, Ritmo, Rng, Vertice};
+use base::{Instante, Mil, Plan, Punto, Rng};
 use cola::{Clave, Cola, Evento, Generaciones};
-use comercio::Carga as Mercancia;
+use militar::columna::Columna;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -21,12 +22,13 @@ use std::sync::{Arc, OnceLock};
 /// Prioridad de la salida del mundo de quien se desconectó: la de «cierre de batallas vencidas y salidas del mundo» (Reloj_Y_Eventos §2). Sale
 /// antes que todo lo demás del mismo instante.
 pub const PRIO_SALIDA: u8 = 1;
-/// Prioridad de los umbrales de víveres: «consumo de población y de tropa» (Reloj_Y_Eventos §2).
+/// Prioridad de los umbrales de víveres y de la deserción por hambre: «consumo de población y de tropa» (Reloj_Y_Eventos §2).
 pub const PRIO_UMBRAL: u8 = 3;
 /// Prioridad del comercio: «comercio, trueques, órdenes de mercado, caravanas» (Reloj_Y_Eventos §2). Va después de los mantenimientos y las ruinas
 /// (5): una plaza arruinada ya no existe para el comercio de ese instante. Dentro de la prioridad el orden es el de [`SucesoComercio::rango`].
 pub const PRIO_COMERCIO: u8 = 6;
-/// Prioridad de las llegadas: «llegadas y encuentros de columnas».
+/// Prioridad de las llegadas: «llegadas y encuentros de columnas». También la de la caducidad de una formación y de una petición de unión (son
+/// asuntos de la columna que no tienen fila propia en la tabla de Reloj_Y_Eventos §2).
 pub const PRIO_LLEGADA: u8 = 8;
 /// Prioridad de la reputación: «diplomacia, tributos, experiencia, reputación».
 pub const PRIO_REPUTACION: u8 = 9;
@@ -36,20 +38,17 @@ pub const PRIO_REPUTACION: u8 = 9;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-/// BAN9: BAN8 más el estado militar (héroes con sus escuadras, loadouts y almacén personal; reclutas de los campamentos; tecnologías dadas por la
-/// administración, `codec_militar`) y la salida del mundo como evento de la cola; el almacén personal, el cupo diario y la residencia salen del
-/// mercado de mercenarios (BAN8 los guardaba por columna). BAN8 se rechaza (BAN8 traía la ventana de 24 h del acarreo).
-const MAGIA: &[u8; 4] = b"BAN9";
-const MAGIA_ANTERIOR: &[u8; 4] = b"BAN8";
+/// BAN10: BAN9 más las columnas completas (`codec_columna`: tipo, participantes, política de unión, peticiones, formación, escuadras, carro y
+/// víveres como los de `militar::columna::Columna`; el consumo ya no es una regla del núcleo, sale de la composición), las convocatorias, la columna
+/// y el carro de salida de cada héroe y su última ración gratis (`codec_militar`), y tres cargas de la cola (deserción, caducidad de una formación y de
+/// una petición de unión, `Carga::Militar`). BAN9 se rechaza (BAN9 traía la columna genérica de un solo participante, con su consumo fijo).
+const MAGIA: &[u8; 5] = b"BAN10";
+const MAGIA_ANTERIOR: &[u8; 4] = b"BAN9";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reglas {
-    /// Víveres que gasta una columna en marcha, en milésimas por minuto (≈ 0,83: Movimiento_Ejercitos §6).
-    pub consumo_marcha: Mil,
-    /// Ídem acampada.
-    pub consumo_estacionado: Mil,
     /// Aviso de víveres bajos al caer por debajo de este porcentaje de la capacidad (0 = sin aviso).
     pub viveres_bajos_pct: u32,
     /// Peticiones recordadas para la idempotencia (`INFRA.limiteIdempotencia`).
@@ -61,7 +60,7 @@ pub struct Reglas {
 
 impl Default for Reglas {
     fn default() -> Self {
-        Self { consumo_marcha: 830, consumo_estacionado: 83, viveres_bajos_pct: 25, limite_idempotencia: 500, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
+        Self { viveres_bajos_pct: 25, limite_idempotencia: 500, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
     }
 }
 
@@ -154,31 +153,27 @@ impl ReglasTerritorio {
     }
 }
 
-/// Una columna mínima: lo justo para demostrar planes (movimiento) y ritmos (víveres).
+/// Bandera que ve la visión y la rejilla de encuentros en una columna sin Facción (`Columna::faccion = None`): una que no coincide con ninguna
+/// Facción real, así que esas columnas no se ven como compañeras de nadie.
+pub const SIN_BANDERA: u32 = u32::MAX;
+
+/// Una columna en el mapa, personal o ejército (Movimiento_Ejercitos §2). Lo que la compone y la manda —tipo, Líder, participantes, política de
+/// unión, escuadras, carro y víveres— es de [`Columna`] (crate `militar`); aquí están su posición y su plan, y lo que solo existe en el mundo.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ejercito {
     pub id: u64,
-    /// Héroe que la dirige (`Orden*.heroe_id`).
-    pub lider: String,
-    /// Cliente (cuenta) al que obedece; solo él (o un administrador) puede darle órdenes.
-    pub propietario: String,
-    pub faccion: u32,
-    /// Milésimas de unidad por segundo, antes del coste del terreno (30 unidades/min = 500).
-    pub velocidad: Mil,
+    pub columna: Columna,
     /// Dónde está cuando no tiene plan.
     pub posicion: Punto,
     /// Sin vértices = quieta en `posicion`.
     pub plan: Plan,
-    pub viveres: Ritmo,
-    pub capacidad_viveres: Mil,
+    /// Solo la administración (`CrearEjercito`): milésimas de unidad por segundo, antes del coste del terreno (30 unidades/min = 500), con las que
+    /// marcha esta columna sea cual sea su composición. Sin ella (`None`, lo normal) la velocidad es el mínimo de sus escuadras con soldados y de
+    /// sus caravanas adjuntas (`Nucleo::velocidad_de_columna`).
+    pub velocidad_fija: Option<Mil>,
     /// Lleva enganchada una Caravana de Fundación (Doc 1.8): puede fundar donde está. La compra y el lanzamiento son de
     /// la economía; hasta entonces la da la administración.
     pub caravana_fundacion: bool,
-    /// El carro de la columna (`suministro`, Movimiento_Ejercitos §2): botín y materiales; no es lo que se come. Su capacidad es la del
-    /// carro de un jugador más la de las caravanas adjuntas (`Nucleo::capacidad_de_carga`).
-    // DUDA: las columnas con participantes (un carro por héroe) y el reparto por héroe al separarse son la fase 4B-2 (el héroe ya existe, pero una columna lleva como mucho uno); hoy hay un solo carro por
-    // columna y lo llena la administración (`DarSuministro`), el mostrador y el campamento de mercenarios.
-    pub suministro: Mercancia,
     /// Caravanas enganchadas a la columna (ids ascendentes, §9): viajan con ella y el reparto automático no las ve.
     pub caravanas_adjuntas: Vec<u64>,
     /// Versión de mundo del último cambio.
@@ -192,6 +187,10 @@ impl Ejercito {
     /// Posición en `t`, evaluada del plan vigente (o la fija si está quieta).
     pub fn posicion_en(&self, t: Instante) -> Punto {
         self.plan.posicion_en(t).unwrap_or(self.posicion)
+    }
+    /// La bandera de la columna para la visión y los encuentros (`SIN_BANDERA` si no tiene Facción).
+    pub fn bandera(&self) -> u32 {
+        self.columna.faccion.unwrap_or(SIN_BANDERA)
     }
 }
 
@@ -245,6 +244,49 @@ pub enum Carga {
     /// Vence la salida del mundo de un héroe que se desconectó (la entidad es el héroe): `desconectarse` la programa a `retardoDesconexionMs` y
     /// `conectarse` la invalida.
     SalidaDelMundo,
+    /// Un plazo de una columna o de una convocatoria (la clave de la entidad depende del suceso).
+    Militar(SucesoMilitar),
+}
+
+/// Qué plazo militar vence. Ninguno es recurrente por entidad ociosa: la deserción solo existe mientras una columna se está quedando sin tropa
+/// por hambre, y los otros tres duran lo que una formación o una petición de unión (10 s y 10 min).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SucesoMilitar {
+    /// Toca desertar a alguna escuadra de la columna sin víveres (la entidad es la columna, con su generación: cualquier cambio de ritmo la
+    /// reprograma, prioridad 3 como el resto del hambre). Cada escuadra deserta en su propia fase (`Escuadra::desercion_a_partir_de`).
+    Desercion,
+    /// Vence el plazo de una formación sin llegar al mínimo (la entidad es `entidad_formacion(columna)`): se deshace.
+    CaducaFormacion,
+    /// Caduca una petición de unión en campo (la entidad es `entidad_peticion_de_union(solicitante)`): se retira y se avisa.
+    CaducaPeticion { columna: u64 },
+    /// Caduca una petición de unión a una convocatoria (la entidad es `entidad_peticion_de_convocatoria(solicitante)`).
+    CaducaPeticionDeConvocatoria { convocatoria: u64 },
+}
+
+impl SucesoMilitar {
+    pub(crate) fn escribir(self, w: &mut Escritor) {
+        match self {
+            SucesoMilitar::Desercion => w.u8(0),
+            SucesoMilitar::CaducaFormacion => w.u8(1),
+            SucesoMilitar::CaducaPeticion { columna } => {
+                w.u8(2);
+                w.u64(columna);
+            }
+            SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria } => {
+                w.u8(3);
+                w.u64(convocatoria);
+            }
+        }
+    }
+    pub(crate) fn leer(r: &mut Lector) -> Result<Self, ErrorFormato> {
+        Ok(match r.u8()? {
+            0 => SucesoMilitar::Desercion,
+            1 => SucesoMilitar::CaducaFormacion,
+            2 => SucesoMilitar::CaducaPeticion { columna: r.u64()? },
+            3 => SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria: r.u64()? },
+            _ => return Err(ErrorFormato("suceso militar desconocido")),
+        })
+    }
 }
 
 /// Qué cita de la reputación de una Facción vence (Reputación como ritmo, Comercio_Caravanas §4.6).
@@ -385,7 +427,6 @@ pub struct Estado {
     pub militar: EstadoMilitar,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
-    por_lider: HashMap<String, u64>,
     /// `(actor, peticion_id)` en orden de llegada, con la versión que produjeron.
     vistos: VecDeque<(String, String)>,
     vistos_version: HashMap<(String, String), u64>,
@@ -415,19 +456,14 @@ impl Estado {
             militar: EstadoMilitar::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
-            por_lider: HashMap::new(),
             vistos: VecDeque::new(),
             vistos_version: HashMap::new(),
         }
     }
 
-    pub fn ejercito_de_lider(&self, lider: &str) -> Option<u64> {
-        self.por_lider.get(lider).copied()
-    }
-
-    pub(crate) fn insertar(&mut self, e: Ejercito) {
-        self.por_lider.insert(e.lider.clone(), e.id);
-        self.ejercitos.insert(e.id, e);
+    /// La columna de un héroe: aquella en la que va o la que dejó aparcada a la puerta del lugar donde entró de visita.
+    pub fn ejercito_de_heroe(&self, heroe: u64) -> Option<u64> {
+        self.militar.heroes.get(&heroe)?.columna
     }
 
     /// Versión que produjo una petición ya aceptada.
@@ -454,8 +490,6 @@ impl Estado {
         w.0.extend_from_slice(MAGIA);
         w.texto(&self.mundo_hash);
         let r = &self.reglas;
-        w.i64(r.consumo_marcha);
-        w.i64(r.consumo_estacionado);
         w.u32(r.viveres_bajos_pct);
         w.u64(r.limite_idempotencia as u64);
         let t = &r.territorio;
@@ -478,30 +512,7 @@ impl Estado {
 
         w.u64(self.ejercitos.len() as u64);
         for e in self.ejercitos.values() {
-            w.u64(e.id);
-            w.texto(&e.lider);
-            w.texto(&e.propietario);
-            w.u32(e.faccion);
-            w.i64(e.velocidad);
-            w.punto(e.posicion);
-            w.u32(e.plan.generacion);
-            w.u32(e.plan.vertices.len() as u32);
-            for v in &e.plan.vertices {
-                w.punto(v.p);
-                w.i64(v.en);
-            }
-            let v = &e.viveres;
-            w.i64(v.valor_en_t0);
-            w.i64(v.t0);
-            w.i64(v.por_minuto);
-            w.opt_i64(v.maximo);
-            w.opt_i64(v.minimo);
-            w.i64(e.capacidad_viveres);
-            w.bool(e.caravana_fundacion);
-            codec_comercio::carga_escribir(&mut w, &e.suministro);
-            w.u32(e.caravanas_adjuntas.len() as u32);
-            e.caravanas_adjuntas.iter().for_each(|&c| w.u64(c));
-            w.u64(e.version);
+            codec_columna::escribir(&mut w, e);
         }
 
         w.u64(self.asentamientos.len() as u64);
@@ -569,6 +580,10 @@ impl Estado {
                     w.u8(c.a_u8());
                 }
                 Carga::SalidaDelMundo => w.u8(6),
+                Carga::Militar(s) => {
+                    w.u8(7);
+                    s.escribir(&mut w);
+                }
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -595,17 +610,16 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
+        // La cabecera es de 5 bytes (`BAN10`): se lee la de 4 del formato anterior y, si empieza como la nueva, el quinto.
         match r.magia()? {
-            m if m == *MAGIA => {}
-            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN8 (sin el estado militar): ya no se admite")),
+            m if m == MAGIA[..4] && r.u8()? == MAGIA[4] => {}
+            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN9 (columnas de un solo participante, con consumo fijo): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));
         }
         let guardadas = Reglas {
-            consumo_marcha: r.i64()?,
-            consumo_estacionado: r.i64()?,
             viveres_bajos_pct: r.u32()?,
             limite_idempotencia: r.u64()? as usize,
             territorio: {
@@ -641,42 +655,8 @@ impl Estado {
         s.siguiente_id = r.u64()?;
 
         for _ in 0..r.cuenta()? {
-            let (id, lider, propietario, faccion, velocidad) = (r.u64()?, r.texto()?, r.texto()?, r.u32()?, r.i64()?);
-            let posicion = r.punto()?;
-            let generacion = r.u32()?;
-            let mut vertices = Vec::new();
-            for _ in 0..r.u32()? {
-                vertices.push(Vertice { p: r.punto()?, en: r.i64()? });
-            }
-            let viveres = Ritmo {
-                valor_en_t0: r.i64()?,
-                t0: r.i64()?,
-                por_minuto: r.i64()?,
-                maximo: r.opt_i64()?,
-                minimo: r.opt_i64()?,
-            };
-            let (capacidad_viveres, caravana_fundacion) = (r.i64()?, r.bool()?);
-            let suministro = codec_comercio::carga_leer(&mut r)?;
-            let mut caravanas_adjuntas = Vec::new();
-            for _ in 0..r.u32()? {
-                caravanas_adjuntas.push(r.u64()?);
-            }
-            let version = r.u64()?;
-            s.insertar(Ejercito {
-                id,
-                lider,
-                propietario,
-                faccion,
-                velocidad,
-                posicion,
-                plan: Plan { generacion, vertices },
-                viveres,
-                capacidad_viveres,
-                caravana_fundacion,
-                suministro,
-                caravanas_adjuntas,
-                version,
-            });
+            let e = codec_columna::leer(&mut r)?;
+            s.ejercitos.insert(e.id, e);
         }
 
         for _ in 0..r.cuenta()? {
@@ -732,6 +712,7 @@ impl Estado {
                 4 => Carga::Comercio { suceso: SucesoComercio::de_u8(r.u8()?).ok_or(ErrorFormato("suceso de comercio desconocido"))?, aplazos: r.u8()? },
                 5 => Carga::Reputacion(CitaReputacion::de_u8(r.u8()?).ok_or(ErrorFormato("cita de reputación desconocida"))?),
                 6 => Carga::SalidaDelMundo,
+                7 => Carga::Militar(SucesoMilitar::leer(&mut r)?),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

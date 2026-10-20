@@ -266,7 +266,7 @@ impl Nucleo {
     /// cargos (Gobernador, Maestro de Obras, Tesorero), la residencia y la presencia vendrán del sistema de héroes y residentes; hasta
     /// entonces esto es lo más simple y conservador (como `Fundar`, que exige ser el propietario de la columna).
     pub(super) fn manda_en(&self, p: &Peticion, faccion: u32) -> bool {
-        p.admin || self.estado.ejercitos.values().any(|e| e.faccion == faccion && e.propietario == p.actor) || self.heroes().any(|h| h.faccion == Some(faccion) && h.cuenta == p.actor)
+        p.admin || self.estado.ejercitos.values().any(|e| e.columna.faccion == Some(faccion) && self.manda_columna(p, e, false)) || self.heroes().any(|h| h.faccion == Some(faccion) && h.cuenta == p.actor)
     }
 
     /// Plazas de la Facción (salvo `id`) que ocupan un puesto en el nivel `objetivo`: lo tienen como nivel actual o van hacia él.

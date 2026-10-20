@@ -105,9 +105,22 @@ impl Escuadra {
 
     /// Anota desde `t` si la escuadra tiene ración (la moral sube `regeneracionMoralPorMinuto`) o no (baja `degradacionMoralSinRacion`). Lo
     /// llama quien cambia el hambre: se acabaron los víveres, se repostó, el trigo de la plaza llegó a 0 o volvió.
+    ///
+    /// Si el ritmo ya es ese no toca nada: reanclar cambiaría `t0`, y de `t0` sale el instante en que la moral llegó a 0 (la fase de la
+    /// deserción, [`Escuadra::desercion_a_partir_de`]).
     pub fn con_racion(&mut self, r: &Reglas, t: Instante, alimentada: bool) {
         let por_minuto = if alimentada { r.militar.regeneracion_moral } else { -r.militar.degradacion_moral };
-        self.moral = self.moral.reanclado(t, por_minuto);
+        if self.moral.por_minuto != por_minuto {
+            self.moral = self.moral.reanclado(t, por_minuto);
+        }
+    }
+
+    /// Deja la moral quieta desde `t` (la escuadra deja de comer de una columna: ahora come en su campamento, que la anota en cada paso de
+    /// hambre de su plaza).
+    pub fn moral_quieta(&mut self, t: Instante) {
+        if self.moral.por_minuto != 0 {
+            self.moral = self.moral.reanclado(t, 0);
+        }
     }
 
     /// Un paso de hambre de un minuto, tal como lo da la guarnición, que come en el paso de minuto de su plaza: con la ración entera
@@ -124,6 +137,22 @@ impl Escuadra {
     /// Primer instante `>= desde` en que la moral llega a 0 (donde empieza la deserción), si va a llegar.
     pub fn moral_a_cero_en(&self, desde: Instante) -> Option<Instante> {
         self.moral.instante_de_valor(0, desde)
+    }
+
+    /// Primer instante `>= desde` en que le toca desertar, si le va a tocar: la moral llega a 0 en `m0` (donde ya deserta una vez) y, **mientras siga
+    /// sin ración**, cada [`INTERVALO_DESERCION`] después. La fase sale solo del ritmo de la moral (no se guarda ni se barre nada): sin
+    /// soldados, o con la moral subiendo, no hay deserción que esperar.
+    pub fn desercion_a_partir_de(&self, desde: Instante) -> Option<Instante> {
+        if self.cantidad <= 0 || self.moral.por_minuto > 0 {
+            return None;
+        }
+        let m0 = self.moral.instante_de_valor(0, self.moral.t0)?;
+        Some(if desde <= m0 { m0 } else { m0 + (desde - m0 + INTERVALO_DESERCION - 1) / INTERVALO_DESERCION * INTERVALO_DESERCION })
+    }
+
+    /// ¿Le toca desertar justo en `t`? (la moral llegó a 0 en `t` o hace un número exacto de [`INTERVALO_DESERCION`]).
+    pub fn deserta_en(&self, t: Instante) -> bool {
+        self.desercion_a_partir_de(t) == Some(t)
     }
 
     /// Un paso de deserción: si la moral está a 0 en `t` y quedan soldados, desertan `ceil(cantidad × fracción)`. Devuelve cuántos.
@@ -280,6 +309,36 @@ mod pruebas {
         assert_eq!(desertores(&r, 0), 0);
         assert_eq!(desertores(&r, 20), 1);
         assert_eq!(desertores(&r, 21), 2);
+    }
+
+    #[test]
+    fn la_desercion_sin_racion_empieza_al_llegar_la_moral_a_cero_y_se_repite_cada_minuto_sin_guardar_nada() {
+        let r = r();
+        let mut e = escuadra(Tropa::MiliciaLanceros);
+        assert_eq!(e.desercion_a_partir_de(0), None, "con la moral al máximo y quieta, no hay deserción que esperar");
+        let t = 2 * base::MS_POR_MINUTO;
+        e.con_racion(&r, t, false);
+        let m0 = t + 5 * base::MS_POR_MINUTO;
+        assert_eq!(e.desercion_a_partir_de(t), Some(m0), "la moral llega a 0 a los 5 minutos y deserta ya");
+        assert_eq!(e.desercion_a_partir_de(m0), Some(m0));
+        assert_eq!(e.desercion_a_partir_de(m0 + 1), Some(m0 + INTERVALO_DESERCION), "después, una vez por minuto");
+        assert_eq!(e.desercion_a_partir_de(m0 + 3 * INTERVALO_DESERCION), Some(m0 + 3 * INTERVALO_DESERCION));
+        assert!(e.deserta_en(m0 + 2 * INTERVALO_DESERCION) && !e.deserta_en(m0 + 2 * INTERVALO_DESERCION + 1));
+        // Repetir el mismo hambre no cambia la fase (por eso `con_racion` no reancla si el ritmo es el mismo).
+        e.con_racion(&r, m0 + 30_000, false);
+        assert_eq!(e.desercion_a_partir_de(m0 + 1), Some(m0 + INTERVALO_DESERCION));
+        // Con ración la moral sube y no se deserta; sin soldados tampoco.
+        e.con_racion(&r, m0 + INTERVALO_DESERCION, true);
+        assert_eq!(e.desercion_a_partir_de(m0 + INTERVALO_DESERCION), None);
+        e.con_racion(&r, m0 + 2 * INTERVALO_DESERCION, false);
+        e.cantidad = 0;
+        assert_eq!(e.desercion_a_partir_de(0), None);
+        // Quieta la moral (campamento) deja de haber deserción de columna; a 0 y quieta, sí la hay desde que se anotó.
+        let mut q = escuadra(Tropa::Arqueros);
+        q.con_racion(&r, 0, false);
+        q.moral_quieta(10 * base::MS_POR_MINUTO);
+        assert_eq!(q.moral_en(20 * base::MS_POR_MINUTO), 0);
+        assert_eq!(q.moral.por_minuto, 0);
     }
 
     #[test]

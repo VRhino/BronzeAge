@@ -196,7 +196,7 @@ impl Sim<'_> {
 
     fn nace(&mut self, t: Instante, f: u32) {
         let campamento = f as usize % self.geo.campamentos.len();
-        let ejercito = self.n.crear_ejercito(t, &format!("h{f}"), "batch", f, self.geo.campamentos[campamento], VELOCIDAD, VIVERES, VIVERES).expect("alta de la columna");
+        let ejercito = self.n.crear_ejercito(t, "batch", f, self.geo.campamentos[campamento], VELOCIDAD, VIVERES).expect("alta de la columna");
         self.admin(t, Comando::DarCaravanaFundacion { ejercito });
         self.facciones.push(Faccion { ejercito, campamento, ocupada: true, plazas: Vec::new(), pausa_hasta: 0 });
         self.programar(t, Accion::Buscar { f, reintento: 0, desde: t, primera: true });

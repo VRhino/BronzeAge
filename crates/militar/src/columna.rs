@@ -256,6 +256,17 @@ impl Columna {
         Ok(())
     }
 
+    /// Mete a un héroe en la columna sin ninguna condición (andamiaje de administración: `colocarHeroe`): participante nuevo con sus `viveres` y su
+    /// capacidad, sin escuadras ni carro. Si ya iba, no cambia nada.
+    pub fn admitir(&mut self, r: &Reglas, heroe: HeroeId, viveres: Mil, ahora: Instante, soldados_de: Soldados) {
+        if self.participa(heroe) {
+            return;
+        }
+        let viveres = self.viveres.valor_en(ahora) + viveres;
+        self.participantes.push(Participante { heroe, unido_en: ahora });
+        self.fijar_viveres(r, ahora, viveres, soldados_de);
+    }
+
     /// Anota la petición de unión de la columna `otra` (política `Preguntar`) y devuelve cuándo caduca (`ahora + vidaPeticionUnion`).
     /// Valida la unión **antes** de anotar (no hacerle perder al Líder los diez segundos con algo que se va a rechazar) y barre de paso las
     /// caducadas y la anterior del mismo solicitante.

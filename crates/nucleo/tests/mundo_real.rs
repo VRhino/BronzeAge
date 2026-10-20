@@ -24,7 +24,7 @@ fn correr(m: &Mundo, rutas: &Arc<Rutas>) -> ([u8; 32], Vec<(Punto, Option<i64>)>
     });
     let camps: Vec<Punto> = m.campamentos().iter().map(|c| c.posicion.map(|p| Punto::new(p.x, p.y)).unwrap()).collect();
     let ids: Vec<u64> = (0..camps.len())
-        .map(|i| n.crear_ejercito(0, &format!("h{i}"), "ana", 1, camps[i], 500, 350_000, 350_000).unwrap())
+        .map(|i| n.crear_ejercito(0, "ana", 1, camps[i], 500, 350_000).unwrap())
         .collect();
     let peticiones = ids.iter().enumerate().map(|(i, &id)| {
         Peticion::nueva("ana", &format!("m{i}"), Comando::MarcharA { ejercito: id, destino: camps[(i + 3) % camps.len()] })

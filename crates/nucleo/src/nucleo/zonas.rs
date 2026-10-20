@@ -309,13 +309,14 @@ impl Nucleo {
         let v = self.estado.version;
         let Some(geo) = &self.geografia else { return Err(Respuesta::rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado", v)) };
         let Some(e) = self.estado.ejercitos.get(&ejercito) else { return Err(Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}"), v)) };
-        if !p.admin && e.propietario != p.actor {
+        if !self.manda_columna(p, e, true) {
             return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya", v));
         }
         if !e.caravana_fundacion {
             return Err(Respuesta::rechazo(rechazos::SIN_CARAVANA, "la columna no lleva una Caravana de Fundación", v));
         }
-        let (punto, faccion) = (e.posicion_en(t), e.faccion);
+        let punto = e.posicion_en(t);
+        let faccion = e.columna.faccion.ok_or_else(|| Respuesta::rechazo(rechazos::FUNDACION_SIN_FACCION, "una columna sin Facción no funda", v))?;
         let r = &self.estado.reglas.territorio;
         let nivel = self.estado.niveles_faccion.get(&faccion).copied().unwrap_or(1);
         let cap = territorio::cap_de_fundacion(nivel, &r.cap_por_nivel) as usize;

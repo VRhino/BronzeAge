@@ -124,9 +124,9 @@ impl Escenario {
         self.n.economia(self.plaza).unwrap().almacen.cantidad(r)
     }
     /// Una columna de `faccion` en `p`.
-    fn columna(&mut self, nombre: &str, dueno: &str, faccion: u32, p: Punto) -> u64 {
+    fn columna(&mut self, dueno: &str, faccion: u32, p: Punto) -> u64 {
         let t = self.n.ahora();
-        self.n.crear_ejercito(t, nombre, dueno, faccion, p, 500, 100_000, 100_000).unwrap()
+        self.n.crear_ejercito(t, dueno, faccion, p, 500, 100_000).unwrap()
     }
     /// Marca un pueblo de cobre en el nodo de la plaza.
     fn marcar(&mut self) -> u64 {
@@ -139,7 +139,7 @@ impl Escenario {
     /// Una columna de Ana en la puerta del pueblo con todo el material de su obra (100 de madera y 12 de oro).
     fn llevar_materiales(&mut self, pueblo: u64) -> u64 {
         let sitio = self.n.posicion_de_pueblo(pueblo).unwrap();
-        let col = self.columna(&format!("carga{}", self.cuenta), "ana", 1, sitio);
+        let col = self.columna("ana", 1, sitio);
         self.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 100_000 });
         self.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 12_000 });
         col
@@ -166,7 +166,7 @@ fn montar_con(mut n: Nucleo, m: &M, nivel: u32) -> Escenario {
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
         .find_map(|i| sitio_junto_a(&n, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
-    let e = n.crear_ejercito(0, "fundadora", "ana", 1, sitio, 500, 100_000, 100_000).unwrap();
+    let e = n.crear_ejercito(0, "ana", 1, sitio, 500, 100_000).unwrap();
     assert!(n.aplicar_en(0, Peticion::nueva("admin", "c", Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
     let r = n.aplicar_en(0, Peticion::nueva("ana", "f", Comando::Fundar { ejercito: e }));
     assert!(r.aceptada(), "{r:?}");
@@ -199,7 +199,7 @@ fn una_obra_de_mapa_se_marca_ocupa_cupo_y_no_pasa_por_la_cola_ni_cuesta_nada_a_l
     let (plaza, cobre) = (e.plaza, e.cobre);
     assert!(e.n.candidatos_de_pueblo(plaza).contains(&(cobre, Tipo::MinaCobre)), "el panel ofrece el nodo de cobre de la zona");
     let (madera, edificios) = (e.almacen(Madera), e.n.economia(plaza).unwrap().edificios.len());
-    e.columna("rival", "beto", 2, Punto::new(1_000, 1_000));
+    e.columna("beto", 2, Punto::new(1_000, 1_000));
     assert_eq!(e.rechazada("beto", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre }), rechazos::NO_AUTORIZADO);
 
     let id = e.marcar();
@@ -270,17 +270,17 @@ fn los_materiales_se_entregan_en_el_sitio_con_una_columna_de_la_faccion_y_con_to
     let mut e = montar(m, 7, 2);
     let id = e.marcar();
     let sitio = e.n.posicion_de_pueblo(id).unwrap();
-    let col = e.columna("carga", "ana", 1, sitio);
+    let col = e.columna("ana", 1, sitio);
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 60_000 });
     // La puerta, la Facción y el propietario de la columna se comprueban.
-    let lejos = e.columna("lejos", "ana", 1, Punto::new(sitio.x + 20_000, sitio.y));
+    let lejos = e.columna("ana", 1, Punto::new(sitio.x + 20_000, sitio.y));
     e.ok("admin", Comando::DarSuministro { ejercito: lejos, recurso: Madera, cantidad: 10_000 });
     assert_eq!(e.rechazada("ana", Comando::EntregarMateriales { ejercito: lejos, pueblo: id }), rechazos::PUEBLO_FUERA_DE_LA_PUERTA);
-    let ajena = e.columna("ajena", "beto", 2, sitio);
+    let ajena = e.columna("beto", 2, sitio);
     e.ok("admin", Comando::DarSuministro { ejercito: ajena, recurso: Madera, cantidad: 10_000 });
     assert_eq!(e.rechazada("beto", Comando::EntregarMateriales { ejercito: ajena, pueblo: id }), rechazos::PUEBLO_FACCION_AJENA);
     assert_eq!(e.rechazada("beto", Comando::EntregarMateriales { ejercito: col, pueblo: id }), rechazos::NO_AUTORIZADO);
-    let vacia = e.columna("vacia", "ana", 1, sitio);
+    let vacia = e.columna("ana", 1, sitio);
     assert_eq!(e.rechazada("ana", Comando::EntregarMateriales { ejercito: vacia, pueblo: id }), rechazos::PUEBLO_NADA_QUE_ENTREGAR);
 
     // Una entrega parcial no arranca nada: se anota lo entregado y el carro de la columna queda vacío.
@@ -328,7 +328,7 @@ fn una_caravana_adjunta_tambien_lleva_materiales() {
     e.ok("ana", Comando::ReservarCaravana { caravana: car, reservada: true });
     // La columna la engancha, entra en la plaza y la deja aparcada para cargarla del almacén; luego la vuelve a enganchar.
     let pos = e.n.estado().asentamientos[&plaza].posicion;
-    let col = e.columna("escolta", "ana", 1, Punto::new(pos.x + 1_000, pos.y));
+    let col = e.columna("ana", 1, Punto::new(pos.x + 1_000, pos.y));
     e.ok("ana", Comando::AdjuntarCaravana { caravana: car, ejercito: col });
     e.ok("ana", Comando::AparcarCaravana { caravana: car, asentamiento: plaza });
     e.ok("ana", Comando::MoverCargaAparcada { caravana: car, recurso: Madera, cantidad: 100_000, cargar: true });

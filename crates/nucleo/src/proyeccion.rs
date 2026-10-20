@@ -3,10 +3,20 @@
 use crate::estado::{Asentamiento, Ejercito, EventoNucleo};
 use base::Instante;
 use contrato::v1 as pb;
+use militar::columna::{Politica, TipoColumna};
 use std::collections::BTreeMap;
 
 pub fn id_ejercito(id: u64) -> String {
     format!("ej-{id}")
+}
+
+/// El id de un héroe en el contrato (`heroe-{id}`): lo que viaja en `Orden*.heroe_id` y en las listas de participantes.
+pub fn id_heroe(id: u64) -> String {
+    format!("heroe-{id}")
+}
+
+pub fn parse_id_heroe(s: &str) -> Option<u64> {
+    s.strip_prefix("heroe-")?.parse().ok()
 }
 
 pub fn id_asentamiento(id: u64) -> String {
@@ -32,22 +42,33 @@ fn punto(p: base::Punto) -> pb::Punto {
 
 /// La columna como entidad del contrato. Lo propio viaja con el plan entero; sin plan, con su `posicion`.
 pub fn entidad_ejercito(e: &Ejercito, t: Instante) -> pb::Entidad {
-    let v = &e.viveres;
+    let c = &e.columna;
+    let v = &c.viveres;
     let plan = e.marchando().then(|| pb::Plan {
         generacion: e.plan.generacion,
         vertices: e.plan.vertices.iter().map(|v| pb::Vertice { p: Some(punto(v.p)), en_ms: v.en }).collect(),
     });
+    let politica = match c.politica {
+        Politica::Rechazar => pb::PoliticaUnion::UnionRechazar,
+        Politica::Aceptar => pb::PoliticaUnion::UnionAceptar,
+        Politica::Preguntar => pb::PoliticaUnion::UnionPreguntar,
+    };
     pb::Entidad {
         cuerpo: Some(pb::entidad::Cuerpo::Ejercito(pb::Ejercito {
             id: id_ejercito(e.id),
             version: e.version,
-            faccion_id: format!("f{}", e.faccion),
-            participantes: vec![pb::Participante { heroe_id: e.lider.clone(), unido_en_ms: 0 }],
-            tipo: pb::TipoColumna::ColumnaPersonal as i32,
-            lider_id: e.lider.clone(),
-            politica_de_union: pb::PoliticaUnion::UnionRechazar as i32,
+            faccion_id: c.faccion.map_or(String::new(), |f| format!("f{f}")),
+            participantes: c.participantes.iter().map(|p| pb::Participante { heroe_id: id_heroe(p.heroe), unido_en_ms: p.unido_en }).collect(),
+            tipo: if c.tipo == TipoColumna::Personal { pb::TipoColumna::ColumnaPersonal } else { pb::TipoColumna::ColumnaEjercito } as i32,
+            lider_id: id_heroe(c.lider),
+            politica_de_union: politica as i32,
+            peticiones_de_union: c.peticiones.iter().map(|p| pb::PeticionUnion { heroe_id: id_heroe(p.heroe), pedido_en_ms: p.pedido_en, expira_en_ms: p.expira_en }).collect(),
+            escuadron_ids: c.escuadras.iter().map(|s| format!("esc-{s}")).collect(),
+            suministro: Some(pb::Cantidades { por_id: c.carga.iter().map(|(r, n)| (r.nombre().to_owned(), *n)).collect() }),
             viveres: Some(pb::Ritmo { valor_en_t0: v.valor_en_t0, t0_ms: v.t0, por_minuto: v.por_minuto, maximo: v.maximo, minimo: v.minimo }),
-            capacidad_viveres: e.capacidad_viveres,
+            capacidad_viveres: v.maximo.unwrap_or(0),
+            formacion_expira_en_ms: c.formacion_expira_en,
+            caravanas_adjuntas_ids: e.caravanas_adjuntas.iter().map(|c| format!("car-{c}")).collect(),
             estado: if e.marchando() { pb::EstadoColumna::ColumnaMarchando } else { pb::EstadoColumna::ColumnaEstacionada } as i32,
             posicion: Some(punto(e.posicion_en(t))),
             plan,

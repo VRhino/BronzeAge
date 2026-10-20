@@ -118,6 +118,8 @@ pub struct Heroe {
     pub herido_hasta: Option<Instante>,
     /// Los víveres que lleva consigo cuando no va en una columna (la columna lleva los suyos mientras marcha).
     pub viveres: Mil,
+    /// Cuándo recibió la última ración gratis del campamento de mercenarios donde reside (`MERCENARIOS.racion.cadaMinutos`).
+    pub racion_en: Option<Instante>,
     /// **Todas** sus escuadras, estén donde estén.
     pub escuadras: Vec<Escuadra>,
 }
@@ -142,6 +144,7 @@ impl Heroe {
             monedas: Monedas { bronce: r.heroe.bronce_inicial, plata: 0, oro: 0 },
             herido_hasta: None,
             viveres: 0,
+            racion_en: None,
             escuadras: vec![],
         }
     }

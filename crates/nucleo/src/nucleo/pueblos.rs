@@ -123,11 +123,11 @@ impl Nucleo {
             }
             Comando::EntregarMateriales { ejercito, pueblo } => {
                 let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
-                if !(p.admin || e.propietario == p.actor) {
+                if !self.manda_columna(p, e, false) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
                 }
                 let (plaza, pu) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
-                if e.faccion != self.estado.asentamientos[&plaza].faccion {
+                if e.columna.faccion != Some(self.estado.asentamientos[&plaza].faccion) {
                     return Err(rechazo(rechazos::PUEBLO_FACCION_AJENA, "la obra es de otra Facción".into()));
                 }
                 let sitio = self.posicion_de_pueblo(pu.id).expect("un pueblo está sobre un nodo del mapa");
@@ -190,7 +190,7 @@ impl Nucleo {
     /// Lo que lleva una columna y vale como material: su carro (`suministro`) y la carga de sus caravanas adjuntas, sumado por recurso.
     fn material_de_columna(&self, ejercito: u64) -> Mercancia {
         let e = &self.estado.ejercitos[&ejercito];
-        let mut todo = e.suministro.clone();
+        let mut todo = e.columna.carga.clone();
         for c in e.caravanas_adjuntas.iter().filter_map(|&c| self.estado.comercio.caravana(c)) {
             for (&r, &n) in &c.contenido {
                 *todo.entry(r).or_insert(0) += n;
@@ -217,7 +217,7 @@ impl Nucleo {
                     }
                 }
             };
-            quitar(&mut e.suministro, &mut falta);
+            quitar(&mut e.columna.carga, &mut falta);
             for &c in &e.caravanas_adjuntas {
                 if falta > 0 {
                     if let Some(i) = comercio.posicion_caravana(c) {

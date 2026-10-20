@@ -141,7 +141,7 @@ impl Escenario {
 }
 
 fn fundar(n: &mut Nucleo, t: Instante, nombre: &str, dueno: &str, faccion: u32, p: Punto) -> u64 {
-    let e = n.crear_ejercito(t, nombre, dueno, faccion, p, 500, 100_000, 100_000).unwrap();
+    let e = n.crear_ejercito(t, dueno, faccion, p, 500, 100_000).unwrap();
     assert!(n.aplicar_en(t, Peticion::nueva("admin", &format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
     let r = n.aplicar_en(t, Peticion::nueva(dueno, &format!("f-{nombre}"), Comando::Fundar { ejercito: e }));
     assert!(r.aceptada(), "{r:?}");
@@ -188,7 +188,7 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     let creados = hechos(&e.n, "heroe.creado");
     assert_eq!((creados.len(), dato(&creados[0], "heroe"), dato(&creados[0], "campamento")), (2, h as i64, 2));
     // El héroe no tiene columna ni plaza: no hay nada que mover en el mapa.
-    assert!(e.n.estado().ejercitos.values().all(|c| c.lider != "ana"));
+    assert_eq!(e.n.estado().ejercito_de_heroe(h), None);
 }
 
 // ───────────────────────────── 2. Reclutar en una plaza ─────────────────────────────
@@ -309,7 +309,7 @@ fn reclutar_en_un_campamento_cobra_oro_del_almacen_personal_o_del_carro_y_gasta_
     // Con el oro del carro de su columna, a la puerta del campamento.
     let puerta = campamento(&m.0, camp as usize);
     let t = e.n.ahora();
-    let col = e.n.crear_ejercito(t, "col-beto", "beto", 2, Punto::new(puerta.x + 1_000, puerta.y), 500, 100_000, 350_000).unwrap();
+    let col = e.n.crear_ejercito(t, "beto", 2, Punto::new(puerta.x + 1_000, puerta.y), 500, 100_000).unwrap();
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 400_000 });
     e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Columna(col) });
     e.ok("beto", honderos(beto, PagarCon::Carro));
@@ -471,19 +471,23 @@ fn desconectarse_programa_la_salida_a_dos_minutos_y_medio_y_conectarse_la_cancel
     assert_eq!(hechos(&e.n, "heroe.vuelve_al_mundo").len(), 1);
     e.ok("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros] });
 
-    // En campo la desconexión es de las columnas: hoy se rechaza.
+    // En campo (andamiaje de administración: el resto de las columnas está en `columnas.rs`): una columna admite a varios héroes, y cada uno va en una.
     let puerta = campamento(&m.0, 0);
     let t = e.n.ahora();
-    let col = e.n.crear_ejercito(t, "col", "ana", 1, puerta, 500, 100_000, 350_000).unwrap();
+    let col = e.n.crear_ejercito(t, "ana", 1, puerta, 500, 100_000).unwrap();
     assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Desconectado(puerta) }), rechazos::HEROE_UBICACION_INVALIDA);
     e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(col) });
-    assert_eq!(e.rechazada("ana", Comando::Desconectarse { heroe: h }), rechazos::HEROE_EN_COLUMNA);
+    assert_eq!(e.ord("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(col) }).resultado, Resultado::SinCambios);
+    assert_eq!(e.n.heroe(h).unwrap().columna, Some(col));
+    let otra = e.n.crear_ejercito(t, "beto", 1, puerta, 500, 100_000).unwrap();
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(otra) }), rechazos::HEROE_YA_EN_COLUMNA);
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Mercenarios(1) }), rechazos::HEROE_EN_COLUMNA, "de una columna se sale entrando en un lugar");
     let otro = e.heroe("beto", 1);
-    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Columna(col) }), rechazos::HEROE_COLUMNA_OCUPADA);
+    e.ok("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Columna(col) });
+    assert_eq!(e.n.ejercito(col).unwrap().columna.participantes.len(), 3, "el héroe de campo de la administración y los dos");
     assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Columna(9_999) }), rechazos::EJERCITO_DESCONOCIDO);
     assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Asentamiento(9_999) }), rechazos::ASENTAMIENTO_DESCONOCIDO);
     assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Mercenarios(9_999) }), rechazos::CAMPAMENTO_DESCONOCIDO);
-    assert_eq!(e.ord("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Mercenarios(1) }).resultado, Resultado::SinCambios);
 }
 
 // ───────────────────────────── 7. Guarnición y ración ─────────────────────────────
@@ -844,6 +848,7 @@ fn estado_con_heroes() -> nucleo::Estado {
     h.monedas.plata = 12;
     h.herido_hasta = Some(120_000);
     h.viveres = 33_000;
+    h.racion_en = Some(40_000);
     for (i, (tropa, contenedor)) in [(Tropa::MiliciaLanceros, Contenedor::Campamento), (Tropa::Arqueros, Contenedor::Ejercito(4)), (Tropa::Honderos, Contenedor::Escolta(7)), (Tropa::Hequetai, Contenedor::Fuera), (Tropa::Granjeros, Contenedor::Campamento)].into_iter().enumerate() {
         let mut e = Escuadra::nueva(&mr, 10 + i as u64, 5, tropa, 5 + i as i64, Some(2), 0);
         e.contenedor = contenedor;
@@ -856,15 +861,33 @@ fn estado_con_heroes() -> nucleo::Estado {
     h.escuadras[0].moral = base::Ritmo { valor_en_t0: 60_000, t0: 10, por_minuto: -20_000, maximo: Some(100_000), minimo: Some(0) };
     h.escuadras[4].prestada = Some(1);
     h.escuadras[4].plaza_origen = None;
-    s.militar.insertar(nucleo::HeroeNucleo { heroe: h, cuenta: "ana".into(), faccion: Some(1), almacen_personal: [(Oro, 8)].into_iter().collect(), cupo: CupoDiario { dia: 4, comprado: [(Madera, 9)].into_iter().collect() } });
+    s.militar.insertar(nucleo::HeroeNucleo { almacen_personal: [(Oro, 8)].into_iter().collect(), cupo: CupoDiario { dia: 4, comprado: [(Madera, 9)].into_iter().collect() }, columna: Some(77), carro_fuera: [(Cobre, 3)].into_iter().collect(), ..nucleo::HeroeNucleo::nuevo(h, "ana", Some(1)) });
     let mut otro = Heroe::nuevo(&mr, 20, Controlador::Bot, 1, 21);
     otro.presencia.ubicacion = Ubicacion::Desconectado(Punto::new(5, -7));
     otro.presencia.fuera = true;
-    s.militar.insertar(nucleo::HeroeNucleo { heroe: otro, cuenta: "bot".into(), faccion: None, almacen_personal: Default::default(), cupo: Default::default() });
+    s.militar.insertar(nucleo::HeroeNucleo::nuevo(otro, "bot", None));
     s.militar.reclutas.insert(2, militar::mercenarios::Reclutas { poblacion: 40_000, en: 1_234 });
+    s.militar.convocatorias.insert(
+        7,
+        militar::convocatoria::Convocatoria {
+            id: 7,
+            faccion: 1,
+            lugar: militar::convocatoria::Lugar::Asentamiento(2),
+            lider: 5,
+            politica: militar::columna::Politica::Preguntar,
+            integrantes: vec![militar::convocatoria::Integrante { heroe: 5, unido_en: 10, seleccion: militar::convocatoria::Seleccion { escuadras: vec![11, 10], carga: [(Oro, 5)].into_iter().collect() } }],
+            peticiones: vec![militar::convocatoria::Peticion { heroe: 20, pedido_en: 1, expira_en: 11, seleccion: Default::default() }],
+            creada_en: 3,
+        },
+    );
     s.militar.tecnologias.insert(1, ["arco_compuesto".to_owned(), "leva_comunal".to_owned()].into_iter().collect());
     let clave = s.generaciones.clave(5);
     s.cola.programar(150_000, nucleo::PRIO_SALIDA, clave, nucleo::Carga::SalidaDelMundo);
+    // Los cuatro plazos militares viajan en la cola.
+    for (i, suceso) in [nucleo::SucesoMilitar::Desercion, nucleo::SucesoMilitar::CaducaFormacion, nucleo::SucesoMilitar::CaducaPeticion { columna: 4 }, nucleo::SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria: 7 }].into_iter().enumerate() {
+        let clave = s.generaciones.clave(40 + i as u64);
+        s.cola.programar(200_000 + i as i64, nucleo::PRIO_UMBRAL, clave, nucleo::Carga::Militar(suceso));
+    }
     let _ = Reclutas::llenos;
     s
 }
@@ -879,7 +902,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..4], b"BAN9");
+    assert_eq!(&bytes[..5], b"BAN10");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");
@@ -917,6 +940,20 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("monedas", Box::new(|m| h5(m).monedas.oro += 1)),
         ("herido_hasta", Box::new(|m| h5(m).herido_hasta = None)),
         ("viveres", Box::new(|m| h5(m).viveres += 1)),
+        ("racion_en", Box::new(|m| h5(m).racion_en = None)),
+        ("columna", Box::new(|m| m.heroes.get_mut(&5).unwrap().columna = None)),
+        ("carro_fuera", Box::new(|m| *m.heroes.get_mut(&5).unwrap().carro_fuera.get_mut(&Cobre).unwrap() += 1)),
+        ("sintetico", Box::new(|m| m.heroes.get_mut(&5).unwrap().sintetico = true)),
+        ("convocatoria.politica", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().politica = militar::columna::Politica::Aceptar)),
+        ("convocatoria.lugar", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().lugar = militar::convocatoria::Lugar::Campamento(2))),
+        ("convocatoria.seleccion.orden", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().integrantes[0].seleccion.escuadras.reverse())),
+        ("convocatoria.seleccion.carga", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().integrantes[0].seleccion.carga.clear())),
+        ("convocatoria.peticion", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().peticiones[0].expira_en += 1)),
+        ("convocatoria.peticion.seleccion", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().peticiones[0].seleccion.escuadras.push(1))),
+        ("convocatoria.cancelada", Box::new(|m| {
+            m.convocatorias.clear();
+        })),
+        ("convocatoria.creada_en", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().creada_en += 1)),
         ("escuadra.cantidad", Box::new(|m| h5(m).escuadras[1].cantidad += 1)),
         ("escuadra.nivel", Box::new(|m| h5(m).escuadras[1].nivel += 1)),
         ("escuadra.experiencia", Box::new(|m| h5(m).escuadras[1].experiencia += 1)),
@@ -932,7 +969,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("otro.ubicacion", Box::new(|m| m.heroes.get_mut(&20).unwrap().heroe.presencia.ubicacion = Ubicacion::Desconectado(Punto::new(5, 7)))),
         ("heroe.nuevo", Box::new(|m| {
             let mr = militar::Reglas::cargar();
-            m.insertar(nucleo::HeroeNucleo { heroe: militar::heroe::Heroe::nuevo(&mr, 30, Controlador::Humano, 0, 31), cuenta: "c".into(), faccion: None, almacen_personal: Default::default(), cupo: Default::default() });
+            m.insertar(nucleo::HeroeNucleo::nuevo(militar::heroe::Heroe::nuevo(&mr, 30, Controlador::Humano, 0, 31), "c", None));
         })),
         ("reclutas.poblacion", Box::new(|m| m.reclutas.get_mut(&2).unwrap().poblacion += 1)),
         ("reclutas.en", Box::new(|m| m.reclutas.get_mut(&2).unwrap().en += 1)),

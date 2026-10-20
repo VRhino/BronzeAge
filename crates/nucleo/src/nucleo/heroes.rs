@@ -1,6 +1,6 @@
 //! Los héroes y su tropa dentro del núcleo (Heroe_Y_Tropa, Presencia_Y_Convocatoria §7, Reloj_Y_Eventos §7, fase 4B-1): crear al héroe, reclutar
 //! en una plaza, loadouts, orden de las escuadras, puntos, guarnición con su ración, escolta de caravanas, conectarse y desconectarse, y el
-//! andamiaje de administración que sustituye al sistema político y al de columnas hasta que lleguen (Facción, tecnologías, colocar y herir). Las
+//! andamiaje de administración que sustituye al sistema político hasta que llegue (Facción, tecnologías, colocar y herir). Las
 //! reglas puras son el crate `militar`; aquí están el estado, el reloj, la autorización provisional y el traslado a eventos y versiones. Reclutar
 //! en un campamento, la tropa prestada y la residencia están en [`mercenarios`](super::mercenarios).
 //!
@@ -14,7 +14,8 @@
 //!
 //! # Lo provisional
 //! Quien manda en un héroe es su cuenta (o la administración). La Facción del héroe, sus tecnologías, dónde está y cuándo se hiere los fija la
-//! administración hasta que existan el sistema político (ciudadanía, cargos, residencia completa), el de tecnología, el de columnas y el combate.
+//! administración hasta que existan el sistema político (ciudadanía, cargos, residencia completa), el de tecnología y el combate. Desconectarse con la
+//! columna en el mapa tiene su regla en [`columnas`](super::columnas) (`sale_del_mundo`).
 
 use super::*;
 use crate::estado::PRIO_SALIDA;
@@ -24,7 +25,6 @@ use asentamiento::datos::UNO;
 use asentamiento::Recurso;
 use comercio::caravana::{CandidataEscolta, Escuadra as EscuadraCedida};
 use comercio::evento::Evento as EventoComercio;
-use comercio::mercenarios::CupoDiario;
 use militar::catalogo::Tropa;
 use militar::escuadra::Contenedor;
 use militar::guarnicion;
@@ -192,7 +192,7 @@ impl Nucleo {
                 let (id, loadout) = (self.estado.siguiente_id, self.estado.siguiente_id + 1);
                 self.estado.siguiente_id += 2;
                 let heroe = Heroe::nuevo(&mr, id, *controlador, *campamento, loadout);
-                self.estado.militar.insertar(HeroeNucleo { heroe, cuenta: cuenta.clone(), faccion: None, almacen_personal: Default::default(), cupo: CupoDiario::default() });
+                self.estado.militar.insertar(HeroeNucleo::nuevo(heroe, cuenta, None));
                 self.emitir_propio(t, "heroe.creado", vec![], vec![("heroe", id as i64), ("campamento", *campamento as i64)]);
                 Ok(vec![id])
             }
@@ -225,12 +225,20 @@ impl Nucleo {
             }
             Comando::OrdenarEscuadras { heroe, escuadras } => {
                 self.autorizar_heroe(p, *heroe, false)?;
-                let h = &mut self.heroe_mut(*heroe).heroe;
+                // Si va en una columna, sus escuadras ocupan en ella los mismos huecos, en el orden nuevo: es el orden en que entran en combate.
+                let columna = self.estado.ejercito_de_heroe(*heroe);
+                let Estado { militar, ejercitos, .. } = &mut self.estado;
+                let h = &mut militar.heroes.get_mut(heroe).expect("existe").heroe;
                 let antes: Vec<u64> = h.escuadras.iter().map(|e| e.id).collect();
-                // DUDA: la columna no guarda los ids de sus escuadras hasta que existan los participantes (4B-2): aquí solo se ordena el héroe.
-                h.ordenar_escuadras(escuadras, None).map_err(de_heroe)?;
-                if h.escuadras.iter().map(|e| e.id).eq(antes) {
+                let ids_columna = columna.and_then(|c| ejercitos.get_mut(&c)).map(|e| &mut e.columna.escuadras);
+                let en_columna_antes = ids_columna.as_ref().map(|v| (*v).clone());
+                h.ordenar_escuadras(escuadras, ids_columna).map_err(de_heroe)?;
+                let columna_igual = columna.and_then(|c| ejercitos.get(&c)).map(|e| &e.columna.escuadras) == en_columna_antes.as_ref();
+                if h.escuadras.iter().map(|e| e.id).eq(antes) && columna_igual {
                     return Err(sin_cambios());
+                }
+                if let Some(c) = columna {
+                    self.tr.tocados.push(c);
                 }
                 Ok(vec![])
             }
@@ -253,7 +261,10 @@ impl Nucleo {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
                 }
                 let e = self.estado.ejercitos.get_mut(&columna).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{columna}")))?;
-                let movido = racion::pasar_a_viveres(&mut e.suministro, &mut e.viveres, t, *cantidad);
+                if e.columna.lider != *heroe {
+                    return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder pasa trigo del carro a los víveres".into()));
+                }
+                let movido = racion::pasar_a_viveres(&mut e.columna.carga, &mut e.columna.viveres, t, *cantidad);
                 if movido == 0 {
                     return Err(sin_cambios());
                 }
@@ -265,10 +276,6 @@ impl Nucleo {
             Comando::QuitarEscolta { caravana, heroe, escuadras } => self.quitar_escolta(t, p, *caravana, *heroe, escuadras.as_deref()),
             Comando::Desconectarse { heroe } => {
                 self.autorizar_heroe(p, *heroe, false)?;
-                if self.columna_de(*heroe).is_some() {
-                    // DUDA: salir del mundo con la columna (y volver a él con otra) es de la fase de columnas; dentro de una plaza o de un campamento solo se pierde el control.
-                    return Err(rechazo(rechazos::HEROE_EN_COLUMNA, "la desconexión en campo llega con las columnas: entra antes en una plaza o un campamento".into()));
-                }
                 let Some(sale_en) = self.heroe_mut(*heroe).heroe.presencia.desconectarse(&mr, t) else { return Err(sin_cambios()) };
                 let clave = self.estado.generaciones.clave(*heroe);
                 self.estado.cola.programar(sale_en, PRIO_SALIDA, clave, Carga::SalidaDelMundo);
@@ -282,7 +289,7 @@ impl Nucleo {
                     Conexion::CancelaLaSalida => {
                         self.estado.generaciones.subir(*heroe);
                     }
-                    Conexion::Vuelve => self.emitir_propio(t, "heroe.vuelve_al_mundo", vec![], vec![("heroe", *heroe as i64)]),
+                    Conexion::Vuelve => return Ok(self.volver_al_mundo(t, *heroe)),
                 }
                 Ok(vec![])
             }
@@ -331,12 +338,27 @@ impl Nucleo {
                         if !self.estado.ejercitos.contains_key(c) {
                             return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{c}")));
                         }
-                        if self.heroes().any(|h| h.heroe.id != *heroe && h.heroe.presencia.ubicacion == Ubicacion::Columna(*c)) {
-                            return Err(rechazo(rechazos::HEROE_COLUMNA_OCUPADA, format!("la columna {c} ya lleva a otro héroe")));
+                        let hn = self.heroe(*heroe).expect("existe");
+                        if hn.columna.is_some_and(|otra| otra != *c) {
+                            return Err(rechazo(rechazos::HEROE_YA_EN_COLUMNA, "un héroe va como mucho en una columna".into()));
                         }
-                        if self.heroe(*heroe).expect("existe").heroe.presencia.desconecta_en.is_some() {
+                        if hn.heroe.presencia.desconecta_en.is_some() {
                             return Err(rechazo(rechazos::HEROE_DESCONECTANDOSE, "un héroe que va a salir del mundo no sale a campo".into()));
                         }
+                        if hn.columna == Some(*c) && hn.heroe.presencia.ubicacion == *ubicacion {
+                            return Err(sin_cambios());
+                        }
+                        // Se suma como participante (con sus víveres) a una columna que no tiene por qué admitirlo; si ya la había aparcado, la retoma.
+                        let antes = self.velocidad_de_ejercito(*c).unwrap_or(0);
+                        let viveres = std::mem::take(&mut self.heroe_mut(*heroe).heroe.viveres);
+                        let Estado { ejercitos, militar, .. } = &mut self.estado;
+                        let e = ejercitos.get_mut(c).expect("existe");
+                        let mut heroes = Self::participantes_de(e);
+                        heroes.push(*heroe);
+                        e.columna.admitir(&mr, *heroe, viveres, t, &|ids| militar.soldados_de(&heroes, ids));
+                        self.ubicar_en_columna(*heroe, *c);
+                        self.recomponer_columna(*c, t, antes);
+                        return Ok(vec![]);
                     }
                     Ubicacion::Mercenarios(c) => {
                         if self.puerta_de_campamento(*c).is_none() {
@@ -348,6 +370,9 @@ impl Nucleo {
                 let h = self.heroe_mut(*heroe);
                 if h.heroe.presencia.ubicacion == *ubicacion {
                     return Err(sin_cambios());
+                }
+                if matches!(h.heroe.presencia.ubicacion, Ubicacion::Columna(_)) {
+                    return Err(rechazo(rechazos::HEROE_EN_COLUMNA, "el héroe va en una columna: entra en un lugar con `entrarEn…` o sepárate antes".into()));
                 }
                 h.heroe.presencia.ubicacion = *ubicacion;
                 Ok(vec![])
@@ -499,10 +524,7 @@ impl Nucleo {
                 let clave = self.estado.generaciones.clave(id);
                 self.estado.cola.programar(hasta, PRIO_SALIDA, clave, Carga::SalidaDelMundo);
             }
-            Some(Salida::Sale) => {
-                h.heroe.presencia.salir_del_mundo(Punto::default());
-                self.emitir_propio(t, "heroe.sale_del_mundo", vec![], vec![("heroe", id as i64)]);
-            }
+            Some(Salida::Sale) => self.sale_del_mundo(id, t),
         }
     }
 

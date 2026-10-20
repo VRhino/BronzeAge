@@ -43,7 +43,7 @@ pub fn reticula(w: i64, h: i64) -> Arc<Rutas> {
 }
 
 pub fn arranque(rutas: Arc<Rutas>) -> Arranque {
-    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla: 42, inicio: 0, rutas, mundo_hash: "hash-de-prueba".into(), mundo: None }
+    Arranque { reglas: reglas(), ajustes: Ajustes::default(), semilla: 42, inicio: 0, rutas, mundo_hash: "hash-de-prueba".into(), mundo: None }
 }
 
 pub fn nucleo(w: i64, h: i64) -> Nucleo {
@@ -69,9 +69,10 @@ impl Escenario {
         (0..self.n)
             .map(|i| {
                 let p = c(rng.por_debajo(self.w as u64) as i64, rng.por_debajo(self.h as u64) as i64);
-                let viveres = 500 + rng.por_debajo(40_000) as i64; // algunas se quedan sin víveres
+                // Una columna come 125 por minuto en marcha y el aviso salta a 3.500: unas se quedan sin víveres y otras cruzan el aviso.
+                let viveres = if i % 2 == 0 { 20 + rng.por_debajo(300) as i64 } else { 3_550 + rng.por_debajo(700) as i64 };
                 nucleo
-                    .crear_ejercito(0, &format!("h{i}"), &format!("c{}", i % 7), (i % 4) as u32, p, 2_000 + rng.por_debajo(4_000) as i64, viveres, 100_000)
+                    .crear_ejercito(0, &format!("c{}", i % 7), (i % 4) as u32, p, 2_000 + rng.por_debajo(4_000) as i64, viveres)
                     .expect("alta")
             })
             .collect()
@@ -90,9 +91,15 @@ impl Escenario {
             let id = ids[rng.por_debajo(ids.len() as u64) as usize];
             let accion = rng.por_debajo(8);
             let destino = c(rng.por_debajo(self.w as u64) as i64, rng.por_debajo(self.h as u64) as i64);
-            let actor = format!("c{}", (id - 1) % 7);
+            let lider = nucleo.estado().ejercitos[&id].columna.lider;
+            let actor = nucleo.estado().militar.heroes[&lider].cuenta.clone();
             let comando = if accion == 0 { Comando::Estacionar { ejercito: id } } else { Comando::MarcharA { ejercito: id, destino } };
             nucleo.aplicar_en(t, Peticion::nueva(&actor, &format!("p{paso}"), comando));
         }
     }
+}
+
+/// Las reglas de `arranque`.
+pub fn reglas() -> Reglas {
+    Reglas { viveres_bajos_pct: 1, ..Reglas::default() }
 }

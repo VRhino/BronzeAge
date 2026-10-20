@@ -10,8 +10,8 @@ fn escena() -> (Nucleo, u64, u64) {
     let mut n = nucleo(40, 5);
     n.agregar_generador(Box::new(GeneradorEncuentros::nuevo()));
     // Dos columnas en la misma fila, una hacia la otra, a 500 milésimas/s (30 unidades/min): se cruzan hacia la mitad.
-    let a = n.crear_ejercito(0, "ha", "ana", 1, c(0, 2), 500, 350_000, 350_000).unwrap();
-    let b = n.crear_ejercito(0, "hb", "beto", 2, c(39, 2), 500, 350_000, 350_000).unwrap();
+    let a = n.crear_ejercito(0, "ana", 1, c(0, 2), 500, 350_000).unwrap();
+    let b = n.crear_ejercito(0, "beto", 2, c(39, 2), 500, 350_000).unwrap();
     (n, a, b)
 }
 
@@ -54,8 +54,8 @@ fn mismo_resultado_al_repetir_y_la_visión_registra_el_primer_contacto() {
         let mut n = Nucleo::nuevo(Arranque { ajustes: Ajustes { muestreo_ms: 250, ..Ajustes::default() }, reglas: Reglas::default(), ..comun::arranque(comun::reticula(40, 5)) });
         n.agregar_generador(Box::new(GeneradorEncuentros::nuevo()));
         n.agregar_generador(Box::new(GeneradorVision::nuevo()));
-        let a = n.crear_ejercito(0, "ha", "ana", 1, c(0, 2), 500, 350_000, 350_000).unwrap();
-        let b = n.crear_ejercito(0, "hb", "beto", 2, c(39, 2), 500, 350_000, 350_000).unwrap();
+        let a = n.crear_ejercito(0, "ana", 1, c(0, 2), 500, 350_000).unwrap();
+        let b = n.crear_ejercito(0, "beto", 2, c(39, 2), 500, 350_000).unwrap();
         n.aplicar_en(0, marchar("ana", "m1", a, c(39, 2)));
         n.aplicar_en(0, marchar("beto", "m2", b, c(0, 2)));
         n.avanzar_hasta(1_200_000);

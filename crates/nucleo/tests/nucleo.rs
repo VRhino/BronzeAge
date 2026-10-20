@@ -15,14 +15,14 @@ fn eventos(n: &Nucleo) -> Vec<(String, Instante, u64)> {
         .collect()
 }
 
-fn alta(n: &mut Nucleo, lider: &str, dueno: &str, p: Punto, velocidad: i64, viveres: i64) -> u64 {
-    n.crear_ejercito(0, lider, dueno, 1, p, velocidad, viveres, 350_000).expect("alta")
+fn alta(n: &mut Nucleo, dueno: &str, p: Punto, velocidad: i64, viveres: i64) -> u64 {
+    n.crear_ejercito(0, dueno, 1, p, velocidad, viveres).expect("alta")
 }
 
 #[test]
 fn marcha_y_llegada_exactas() {
     let mut n = nucleo(12, 12);
-    let id = alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000); // 8.000 milésimas = 2.000 ms
+    let id = alta(&mut n, "ana", c(1, 1), 4_000, 350_000); // 8.000 milésimas = 2.000 ms
     assert_eq!(n.version(), 1, "el alta es la versión 1");
     let r = n.aplicar_en(0, marchar("ana", "m1", id, c(9, 1)));
     assert!(r.aceptada());
@@ -41,15 +41,15 @@ fn marcha_y_llegada_exactas() {
     assert_eq!(n.version(), 3, "la llegada es un cambio de versión");
     assert_eq!(eventos(&n), vec![("ejercito.llega".to_string(), 16_000, id)]);
     // Los víveres pasaron a ritmo de acampada en el instante de la llegada, sin saltos.
-    let v = e.viveres;
-    assert_eq!((v.t0, v.por_minuto), (16_000, -83));
-    assert_eq!(v.valor_en(16_000), Ritmo { valor_en_t0: 350_000, t0: 0, por_minuto: -830, maximo: None, minimo: None }.valor_en(16_000));
+    let v = e.columna.viveres;
+    assert_eq!((v.t0, v.por_minuto), (16_000, -13), "acampada, un héroe solo come 0,5 × ¼ × ⅒ por minuto");
+    assert_eq!(v.valor_en(16_000), Ritmo { valor_en_t0: 350_000, t0: 0, por_minuto: -125, maximo: None, minimo: None }.valor_en(16_000), "en marcha come 0,5 × ¼ por minuto");
 }
 
 #[test]
 fn una_orden_a_mitad_de_camino_parte_de_la_posicion_real_e_invalida_la_llegada_vieja() {
     let mut n = nucleo(12, 12);
-    let id = alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000);
+    let id = alta(&mut n, "ana", c(1, 1), 4_000, 350_000);
     n.aplicar_en(0, marchar("ana", "m1", id, c(9, 1)));
     let plan_viejo = n.estado().ejercitos[&id].plan.clone();
     let t = 7_000;
@@ -74,7 +74,7 @@ fn una_orden_a_mitad_de_camino_parte_de_la_posicion_real_e_invalida_la_llegada_v
 #[test]
 fn estacionar_detiene_donde_esta() {
     let mut n = nucleo(12, 12);
-    let id = alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000);
+    let id = alta(&mut n, "ana", c(1, 1), 4_000, 350_000);
     n.aplicar_en(0, marchar("ana", "m1", id, c(9, 1)));
     let esperado = n.estado().ejercitos[&id].plan.posicion_en(5_000).unwrap();
     let r = n.aplicar_en(5_000, Peticion::nueva("ana", "e1", Comando::Estacionar { ejercito: id }));
@@ -89,36 +89,40 @@ fn estacionar_detiene_donde_esta() {
 
 #[test]
 fn los_viveres_son_un_ritmo_con_eventos_de_umbral() {
-    let mut n = nucleo(60, 4);
-    let id = n.crear_ejercito(0, "h1", "ana", 1, c(1, 1), 400, 1_000, 1_000).unwrap(); // 1 unidad de víveres, 20 s por espaciado
+    let mut ar = arranque(reticula(60, 4));
+    ar.reglas.viveres_bajos_pct = 1; // aviso a 3,5 unidades (el 1 % de los 350 que caben en un héroe)
+    let mut n = Nucleo::nuevo(ar);
+    let id = n.crear_ejercito(0, "ana", 1, c(1, 1), 100, 5_000).unwrap(); // 5 unidades de víveres, 80 s por espaciado
     let r = n.aplicar_en(0, marchar("ana", "m1", id, c(50, 1)));
     assert!(r.aceptada());
     let plan = n.estado().ejercitos[&id].plan.clone();
-    let ritmo = Ritmo { valor_en_t0: 1_000, t0: 0, por_minuto: -830, maximo: Some(1_000), minimo: Some(0) };
-    let (bajo, cero) = (ritmo.instante_de_valor(250, 0).unwrap(), ritmo.instante_de_valor(0, 0).unwrap());
+    let ritmo = Ritmo { valor_en_t0: 5_000, t0: 0, por_minuto: -125, maximo: Some(350_000), minimo: Some(0) };
+    let (bajo, cero) = (ritmo.instante_de_valor(3_500, 0).unwrap(), ritmo.instante_de_valor(0, 0).unwrap());
     assert!(cero < plan.fin().unwrap(), "se queda sin víveres antes de llegar");
 
     n.avanzar_hasta(bajo - 1);
     assert!(eventos(&n).is_empty(), "nada ocurre entre eventos: solo hay que evaluar la fórmula");
-    assert_eq!(n.estado().ejercitos[&id].viveres.valor_en(bajo - 1), 251);
+    assert_eq!(n.estado().ejercitos[&id].columna.viveres.valor_en(bajo - 1), 3_501);
     n.avanzar_hasta(bajo);
     assert_eq!(eventos(&n), vec![("ejercito.viveres_bajos".to_string(), bajo, id)]);
     n.avanzar_hasta(cero);
     assert_eq!(eventos(&n).last().unwrap(), &("ejercito.sin_viveres".to_string(), cero, id));
     let e = &n.estado().ejercitos[&id];
-    assert_eq!(e.viveres.valor_en(cero), 0);
-    assert_eq!(e.viveres.valor_en(cero + 600_000), 0, "el suelo se respeta");
-    assert!(e.marchando(), "el hambre se narra aquí; sus efectos son reglas de la fase 6");
+    assert_eq!(e.columna.viveres.valor_en(cero), 0);
+    assert_eq!(e.columna.viveres.valor_en(cero + 600_000), 0, "el suelo se respeta");
+    assert!(e.marchando(), "la columna no se detiene por hambre (sin tropa no hay a quién desertar)");
     // Cada umbral ocurre una sola vez: tras llegar, la columna acampa con 0 y la cola queda vacía.
     n.avanzar_hasta(plan.fin().unwrap() + 10_000);
     assert_eq!(eventos(&n).iter().map(|e| e.0.as_str()).collect::<Vec<_>>(), ["ejercito.viveres_bajos", "ejercito.sin_viveres", "ejercito.llega"]);
+    // Los umbrales que el alta programó con el ritmo de acampada quedaron invalidados; salen de la cola (descartados) cuando les toca.
+    n.avanzar_hasta(30_000_000);
     assert_eq!(n.eventos_en_cola(), 0);
 }
 
 #[test]
 fn idempotencia_version_esperada_y_autorizacion() {
     let mut n = nucleo(12, 12);
-    let id = alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000);
+    let id = alta(&mut n, "ana", c(1, 1), 4_000, 350_000);
     let primera = n.aplicar_en(0, marchar("ana", "m1", id, c(9, 1)));
     let hash = n.hash_estado();
     let version = n.version();
@@ -142,7 +146,7 @@ fn idempotencia_version_esperada_y_autorizacion() {
 #[test]
 fn rechazadas_y_sin_cambios_no_dejan_rastro() {
     let mut n = nucleo(12, 12);
-    let id = alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000);
+    let id = alta(&mut n, "ana", c(1, 1), 4_000, 350_000);
     n.aplicar_en(0, marchar("ana", "m1", id, c(9, 1)));
     n.avanzar_hasta(1_000);
     let (v, h, sig) = (n.version(), n.hash_estado(), n.estado().siguiente_id);
@@ -154,7 +158,7 @@ fn rechazadas_y_sin_cambios_no_dejan_rastro() {
         marchar("ana", "x2", 999, c(3, 3)),                                             // no existe
         marchar("ana", "x3", id, lejos),                                                // sin ruta
         Peticion::nueva("ana", "x4", Comando::Reloj(AccionReloj::Pausar)),              // no es admin
-        Peticion::nueva("ana", "x5", Comando::CrearEjercito { lider: "h9".into(), propietario: "ana".into(), faccion: 1, posicion: c(2, 2), velocidad: 1, viveres: 1, capacidad_viveres: 1 }),
+        Peticion::nueva("ana", "x5", Comando::CrearEjercito { cuenta: "ana".into(), faccion: 1, posicion: c(2, 2), velocidad: 1, viveres: 1 }),
     ];
     for p in casos {
         let r = n.aplicar_en(1_000, p);
@@ -190,13 +194,13 @@ fn el_estado_se_serializa_y_se_recupera_igual() {
     let ids = esc.crear(&mut n);
     esc.ordenes(&mut n, &ids, 0, 120, &|n, t| n.avanzar_hasta(t));
     let bytes = n.estado().serializar();
-    let e2 = Estado::deserializar(&bytes, &Reglas::default(), "hash-de-prueba").expect("deserializa");
+    let e2 = Estado::deserializar(&bytes, &reglas(), "hash-de-prueba").expect("deserializa");
     assert_eq!(e2.hash(), n.hash_estado());
     assert_eq!(e2.serializar(), bytes);
-    let otras = Reglas { consumo_marcha: 1, ..Reglas::default() };
+    let otras = Reglas { viveres_bajos_pct: 2, ..reglas() };
     assert!(Estado::deserializar(&bytes, &otras, "hash-de-prueba").is_err(), "reglas distintas: se niega");
-    assert!(Estado::deserializar(&bytes, &Reglas::default(), "otro-mundo").is_err(), "otro mundo: se niega");
-    assert!(Estado::deserializar(&bytes[..bytes.len() - 3], &Reglas::default(), "hash-de-prueba").is_err(), "truncado");
+    assert!(Estado::deserializar(&bytes, &reglas(), "otro-mundo").is_err(), "otro mundo: se niega");
+    assert!(Estado::deserializar(&bytes[..bytes.len() - 3], &reglas(), "hash-de-prueba").is_err(), "truncado");
 }
 
 /// Corre el escenario completo y devuelve el hash final.
@@ -232,7 +236,7 @@ fn misma_semilla_y_mismas_ordenes_dan_el_mismo_hash_y_da_igual_como_se_trocee_el
 fn un_lote_con_rutas_en_paralelo_es_idéntico_a_aplicar_una_a_una() {
     let crear = |n: &mut Nucleo| -> Vec<u64> { (0..60).map(|i| alta_en(n, i)).collect() };
     fn alta_en(n: &mut Nucleo, i: i64) -> u64 {
-        n.crear_ejercito(0, &format!("h{i}"), "ana", 1, c(i % 20, i / 20), 3_000, 100_000, 100_000).unwrap()
+        n.crear_ejercito(0, "ana", 1, c(i % 20, i / 20), 3_000, 100_000).unwrap()
     }
     let pet = |ids: &[u64]| -> Vec<Peticion> {
         let mut v: Vec<Peticion> = ids.iter().map(|&id| marchar("ana", &format!("l{id}"), id, c((id as i64 * 7) % 25, (id as i64 * 11) % 25))).collect();
@@ -350,7 +354,7 @@ fn un_generador_programa_eventos_propios_que_se_invalidan_con_el_plan() {
     let mut n = nucleo(12, 12);
     let planes = Arc::new(Mutex::new(Vec::new()));
     n.agregar_generador(Box::new(Espia { planes: planes.clone() }));
-    let (a, b) = (alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000), alta(&mut n, "h2", "ana", c(1, 5), 4_000, 350_000));
+    let (a, b) = (alta(&mut n, "ana", c(1, 1), 4_000, 350_000), alta(&mut n, "ana", c(1, 5), 4_000, 350_000));
     n.aplicar_en(0, marchar("ana", "m1", a, c(9, 1))); // mitad en 8.000
     n.aplicar_en(0, marchar("ana", "m2", b, c(9, 5)));
     n.aplicar_en(4_000, marchar("ana", "m3", b, c(1, 11))); // cambia de plan antes de su mitad: la vieja se invalida
@@ -368,7 +372,7 @@ fn un_generador_programa_eventos_propios_que_se_invalidan_con_el_plan() {
 #[test]
 fn los_generadores_reciben_los_planes_vigentes_al_registrarse() {
     let mut n = nucleo(12, 12);
-    let a = alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000);
+    let a = alta(&mut n, "ana", c(1, 1), 4_000, 350_000);
     n.aplicar_en(0, marchar("ana", "m1", a, c(9, 1)));
     struct Vigente(Arc<Mutex<Vec<u64>>>);
     impl nucleo::GeneradorDeEventos for Vigente {
@@ -404,15 +408,14 @@ fn el_muestreo_es_periodico_en_tiempo_de_mundo() {
 fn el_orden_de_los_eventos_del_mismo_instante_respeta_la_prioridad() {
     // Se queda sin víveres (prioridad 3) en el mismo instante en que llega (prioridad 8): primero los víveres.
     let mut ar = arranque(reticula(12, 12));
-    ar.reglas.consumo_marcha = 60_000; // 1.000 milésimas por segundo
     ar.reglas.viveres_bajos_pct = 0;
     let mut n = Nucleo::nuevo(ar);
-    let id = n.crear_ejercito(0, "h1", "ana", 1, c(1, 1), 4_000, 16_000, 16_000).unwrap(); // 16 s de víveres; el plan dura 16 s
-    n.aplicar_en(0, marchar("ana", "m1", id, c(9, 1)));
-    assert_eq!(n.estado().ejercitos[&id].plan.fin(), Some(16_000));
-    n.avanzar_hasta(20_000);
-    assert_eq!(eventos(&n).iter().map(|e| (e.0.as_str(), e.1)).collect::<Vec<_>>(), [("ejercito.sin_viveres", 16_000), ("ejercito.llega", 16_000)]);
-    assert_eq!(n.estado().ejercitos[&id].posicion, c(9, 1));
+    let id = n.crear_ejercito(0, "ana", 1, c(1, 1), 1_000, 50).unwrap(); // 50 milésimas de víveres a 125 por minuto: se acaban a los 24 s; el plan de 3 espaciados a 1 u/s dura 24 s
+    n.aplicar_en(0, marchar("ana", "m1", id, c(4, 1)));
+    assert_eq!(n.estado().ejercitos[&id].plan.fin(), Some(24_000));
+    n.avanzar_hasta(30_000);
+    assert_eq!(eventos(&n).iter().map(|e| (e.0.as_str(), e.1)).collect::<Vec<_>>(), [("ejercito.sin_viveres", 24_000), ("ejercito.llega", 24_000)]);
+    assert_eq!(n.estado().ejercitos[&id].posicion, c(4, 1));
 }
 
 #[test]
@@ -435,7 +438,7 @@ fn la_memoria_de_idempotencia_es_acotada() {
     let mut ar = arranque(reticula(12, 12));
     ar.reglas.limite_idempotencia = 3;
     let mut n = Nucleo::nuevo(ar);
-    let id = alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000);
+    let id = alta(&mut n, "ana", c(1, 1), 4_000, 350_000);
     for i in 0..4 {
         assert!(n.aplicar_en(i, marchar("ana", &format!("p{i}"), id, c(2 + i, 5))).aceptada());
     }
@@ -451,7 +454,7 @@ fn modo_en_vivo_con_el_reloj_compartido() {
     let reloj = RelojCompartido::nuevo(0);
     let mut n = nucleo(12, 12);
     n.conectar_reloj(reloj.clone());
-    let id = alta(&mut n, "h1", "ana", c(1, 1), 4_000, 350_000);
+    let id = alta(&mut n, "ana", c(1, 1), 4_000, 350_000);
     let admin = |id: &str, a| Peticion::nueva("admin", id, Comando::Reloj(a)).de_admin();
 
     assert!(n.aplicar(admin("r1", AccionReloj::FijarFactor(3_600_000))).aceptada()); // ×3600: 1 ms de pared = 3,6 s de mundo

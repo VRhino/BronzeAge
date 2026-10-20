@@ -17,8 +17,7 @@
 //!
 //! # Lo provisional
 //! Las tecnologías del campamento (Tecnologia_Aedas §5) son las de arranque más las que tienen adoptadas al menos la mitad de las Facciones
-//! vivas (las que la administración ha dado, `FijarTecnologias`); el plazo de 72 h tras la primera no existe hasta el sistema de tecnología. La
-//! escuadra nueva de un héroe con columna a la puerta nace en el campamento (no «se une a la columna») hasta que la columna guarde sus escuadras.
+//! vivas (las que la administración ha dado, `FijarTecnologias`); el plazo de 72 h tras la primera no existe hasta el sistema de tecnología.
 
 use super::*;
 use crate::estado::SucesoComercio;
@@ -37,6 +36,7 @@ use militar::guarnicion;
 use militar::heroe::Residencia;
 use militar::mercenarios::{self as leva, Campamento, ErrorMercenarios as ErrorLeva, Pedido, Reclutas};
 use militar::presencia::Ubicacion;
+use militar::racion;
 
 fn rechazo_de_mercenarios(e: ErrorMercenarios) -> (&'static str, &'static str) {
     use rechazos::*;
@@ -151,15 +151,32 @@ impl Nucleo {
     pub(super) fn mudar_de_residencia(&mut self, heroe: u64, nueva: Option<Residencia>) {
         let t = self.estado.ahora;
         self.estado.militar.mudar(heroe, nueva);
+        let velocidades: std::collections::BTreeMap<u64, Mil> = self.heroe(heroe).map_or_else(Default::default, |h| h.heroe.escuadras.iter().filter_map(|e| if let Contenedor::Ejercito(c) = e.contenedor { Some((c, self.velocidad_de_ejercito(c)?)) } else { None }).collect());
         let h = &mut self.estado.militar.heroes.get_mut(&heroe).expect("existe").heroe;
         guarnicion::soltar(h);
         let retiradas = leva::retirar_prestamos_ajenos(h, &|c| nueva == Some(Residencia::Campamento(c)));
+        let mut columnas = Vec::new();
         for e in &retiradas {
-            if let Contenedor::Escolta(c) = e.contenedor {
-                if let Some(i) = self.estado.comercio.posicion_caravana(c) {
-                    self.estado.comercio.flota[i].escolta.retain(|x| x.id != e.id);
+            match e.contenedor {
+                Contenedor::Escolta(c) => {
+                    if let Some(i) = self.estado.comercio.posicion_caravana(c) {
+                        self.estado.comercio.flota[i].escolta.retain(|x| x.id != e.id);
+                    }
                 }
+                Contenedor::Ejercito(c) => {
+                    if let Some(col) = self.estado.ejercitos.get_mut(&c) {
+                        col.columna.escuadras.retain(|x| *x != e.id);
+                        columnas.push(c);
+                    }
+                }
+                Contenedor::Campamento | Contenedor::Fuera => {}
             }
+        }
+        columnas.sort_unstable();
+        columnas.dedup();
+        // La tropa que se va de una columna cambia lo que come y a qué velocidad marcha.
+        for c in columnas {
+            self.recomponer_columna(c, t, velocidades.get(&c).copied().unwrap_or(0));
         }
         if !retiradas.is_empty() {
             self.emitir_propio(t, "mercenarios.prestamo_retirado", vec![], vec![("heroe", heroe as i64), ("escuadras", retiradas.len() as i64)]);
@@ -202,7 +219,7 @@ impl Nucleo {
                     comprar_residente(*recurso, precio, *cantidad, stock, cupo, de(&h.almacen_personal, Recurso::Oro), cr.mercenarios.capacidad_almacen_personal - total(&h.almacen_personal)).map_err(de_mercenarios)?
                 } else {
                     let columna = columna.ok_or_else(|| rechazo(rechazos::HEROE_SIN_COLUMNA, "el visitante paga con el carro de su columna: el héroe no va en ninguna".into()))?;
-                    let carro = &self.estado.ejercitos[&columna].suministro;
+                    let carro = &self.estado.ejercitos[&columna].columna.carga;
                     let libre = self.capacidad_de_carga(columna).unwrap_or(0) - total(carro);
                     comprar_visitante(*recurso, precio, *cantidad, stock, de(carro, Recurso::Oro), libre).map_err(de_mercenarios)?
                 };
@@ -212,7 +229,7 @@ impl Nucleo {
                 } else {
                     let columna = columna.expect("el visitante va en una columna");
                     self.tr.tocados.push(columna);
-                    &mut self.estado.ejercitos.get_mut(&columna).expect("existe").suministro
+                    &mut self.estado.ejercitos.get_mut(&columna).expect("existe").columna.carga
                 };
                 *carga.entry(Recurso::Oro).or_insert(0) -= compra.oro_cobrado;
                 *carga.entry(*recurso).or_insert(0) += compra.cantidad;
@@ -235,11 +252,10 @@ impl Nucleo {
                 if !self.esta_en_el_campamento(*heroe, *campamento, t) {
                     return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
-                // DUDA: el tope es la capacidad de víveres de la columna (la suma de sus héroes) o, sin columna, `capacidadViveresPorHeroe` del héroe.
                 let falta = match self.columna_de(*heroe) {
                     Some(c) => {
                         let e = &self.estado.ejercitos[&c];
-                        e.capacidad_viveres - e.viveres.valor_en(t)
+                        e.columna.viveres.maximo.unwrap_or(0) - e.columna.viveres.valor_en(t)
                     }
                     None => mr.logistica.capacidad_viveres - self.heroe(*heroe).expect("existe").heroe.viveres,
                 };
@@ -250,7 +266,7 @@ impl Nucleo {
                 match self.columna_de(*heroe) {
                     Some(c) => {
                         let e = self.estado.ejercitos.get_mut(&c).expect("existe");
-                        e.viveres = Ritmo { valor_en_t0: e.capacidad_viveres, t0: t, ..e.viveres };
+                        racion::llenar(&mut e.columna.viveres, t, falta);
                         self.reprogramar_columna(c, t);
                         self.evento("mercenarios.repostado", t, c, None, datos);
                     }
@@ -305,9 +321,11 @@ impl Nucleo {
                 let campamento = self.campamento_de_residencia(*heroe).ok_or_else(|| de_leva(ErrorLeva::NoResides))?;
                 let esta = self.esta_en_el_campamento(*heroe, campamento, t);
                 let columna = self.columna_de(*heroe);
+                let velocidad_antes = columna.and_then(|c| self.velocidad_de_ejercito(c)).unwrap_or(0);
+                let lider_de = columna.filter(|c| self.estado.ejercitos.get(c).is_some_and(|e| e.columna.lider == *heroe));
                 let (oro_disponible, de_la_columna) = match (pagar_con, columna) {
                     (PagarCon::AlmacenPersonal, _) => (de(&self.heroe(*heroe).expect("existe").almacen_personal, Recurso::Oro), None),
-                    (PagarCon::Carro, Some(c)) => (de(&self.estado.ejercitos[&c].suministro, Recurso::Oro), Some(c)),
+                    (PagarCon::Carro, Some(c)) => (de(&self.estado.ejercitos[&c].columna.carga, Recurso::Oro), Some(c)),
                     (PagarCon::Carro, None) => return Err(rechazo(rechazos::HEROE_SIN_COLUMNA, "para pagar con el carro el héroe debe ir en una columna".into())),
                 };
                 let faccion = self.heroe(*heroe).expect("existe").faccion;
@@ -332,7 +350,7 @@ impl Nucleo {
                         oro_disponible,
                         factor_reputacion,
                         sin_asentamientos,
-                        columna_del_lider: None,
+                        columna_del_lider: lider_de,
                     },
                     || {
                         *siguiente_id += 1;
@@ -342,15 +360,23 @@ impl Nucleo {
                 )
                 .map_err(de_leva)?;
                 let nueva = h.escuadras.len() > antes;
+                let contenedor = h.escuadra(hecho.escuadra).map(|e| e.contenedor);
+                if let (Some(c), Some(Contenedor::Ejercito(_))) = (hecho.se_une, contenedor) {
+                    ejercitos.get_mut(&c).expect("existe").columna.escuadras.push(hecho.escuadra);
+                }
                 militar.reclutas.insert(campamento, reclutas);
                 let carga = match de_la_columna {
-                    Some(c) => &mut ejercitos.get_mut(&c).expect("existe").suministro,
+                    Some(c) => &mut ejercitos.get_mut(&c).expect("existe").columna.carga,
                     None => &mut militar.heroes.get_mut(heroe).expect("existe").almacen_personal,
                 };
                 *carga.entry(Recurso::Oro).or_insert(0) -= hecho.oro;
                 carga.retain(|_, n| *n > 0);
                 if let Some(c) = de_la_columna {
                     self.tr.tocados.push(c);
+                }
+                // La escuadra nueva o repuesta que va en la columna cambia lo que come y a qué velocidad marcha.
+                if let Some(Contenedor::Ejercito(c)) = contenedor {
+                    self.recomponer_columna(c, t, velocidad_antes);
                 }
                 self.emitir_propio(
                     t,
@@ -389,10 +415,16 @@ impl Nucleo {
                 if !self.esta_en_el_campamento(*heroe, campamento, t) {
                     return Err(de_leva(ErrorLeva::Lejos));
                 }
+                let columna = self.columna_de(*heroe);
+                let velocidad_antes = columna.and_then(|c| self.velocidad_de_ejercito(c)).unwrap_or(0);
                 let puerta = self.puerta_de_campamento(campamento).expect("existe");
                 let Estado { militar, ejercitos, .. } = &mut self.estado;
                 let distancia = |c: u64| ejercitos.get(&c).map(|e| e.posicion_en(t).dist(puerta));
                 let repuestas = leva::reponer_prestamo(&mr, &mut militar.heroes.get_mut(heroe).expect("existe").heroe, campamento, &distancia).map_err(de_leva)?;
+                // La tropa repuesta que va en la columna a su puerta come más: se vuelve a anotar el consumo.
+                if let Some(c) = columna {
+                    self.recomponer_columna(c, t, velocidad_antes);
+                }
                 self.emitir_propio(t, "mercenarios.prestamo_repuesto", vec![], vec![("heroe", *heroe as i64), ("repuestas", repuestas as i64)]);
                 Ok(vec![])
             }
@@ -400,8 +432,9 @@ impl Nucleo {
         }
     }
 
-    /// Cambió algo de la columna que mueve sus eventos (los víveres): sube su generación y reprograma llegada, umbrales y encuentros.
+    /// Cambió algo de la columna que mueve sus eventos (los víveres, la tropa): anota el hambre de cada escuadra, sube su generación y reprograma llegada, umbrales, deserción y encuentros.
     pub(super) fn reprogramar_columna(&mut self, id: u64, t: Instante) {
+        self.sincronizar_hambre(id, t);
         let g = self.estado.generaciones.subir(id);
         let e = self.estado.ejercitos.get_mut(&id).expect("existe");
         let marchando = e.marchando();

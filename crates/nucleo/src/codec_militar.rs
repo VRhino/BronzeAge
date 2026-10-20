@@ -1,14 +1,18 @@
-//! Serialización canónica del estado militar (`EstadoMilitar`) para el hash y las fotos (formato BAN9). Cada estructura se desestructura
+//! Serialización canónica del estado militar (`EstadoMilitar`) para el hash y las fotos (formato BAN10). Cada estructura se desestructura
 //! **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
-//! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · reclutas{n u64 · n × (campamento u32, población i64, en i64)} ·
-//! tecnologías{n u64 · n × (facción u32, k u64, k × texto)}`.
+//! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · convocatorias{n u64 · n × convocatoria} · reclutas{n u64 · n ×
+//! (campamento u32, población i64, en i64)} · tecnologías{n u64 · n × (facción u32, k u64, k × texto)}`.
 //!
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
 //! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 · puntos de
 //! atributo i64 · puntos de perk i64 · atributos{fuerza, destreza, armadura, vitalidad: 4 × i64} · perks{n u64 · n × u32} · loadouts{n u64 ·
 //! n × (id u64, nombre texto, escuadras{n u64 · n × u64}, perks{n u64 · n × u32}, activo bool)} · monedas{bronce, plata, oro: 3 × i64} ·
-//! herido_hasta opt_i64 · víveres i64 · almacén personal{carga} · cupo{día i64 · carga} · escuadras{n u64 · n × escuadra}`.
+//! herido_hasta opt_i64 · víveres i64 · ración_en opt_i64 · almacén personal{carga} · cupo{día i64 · carga} · columna opt_u64 · carro_fuera{carga} · sintético bool ·
+//! escuadras{n u64 · n × escuadra}`.
+//! Una convocatoria: `id u64 · facción u32 · lugar{u8: 0 plaza, 1 campamento · u32} · líder u64 · política u8 · integrantes{n u64 · n × (héroe u64,
+//! unido_en i64, selección)} · peticiones{n u64 · n × (héroe u64, pedido_en i64, expira_en i64, selección)} · creada_en i64`, con una selección
+//! `escuadras{n u64 · n × u64} · carga{carga}` (el orden de las escuadras es el de salida y de combate).
 //! Una ubicación: `u8 · payload`: 0 plaza (u32), 1 columna (u64), 2 campamento (u32), 3 desconectado (punto).
 //! Una escuadra: `id u64 · héroe u64 · tropa u8 (índice del catálogo) · origen u8 (0 pesants, 1 artesanos, 2 nobleza) · plaza_origen opt_u64 ·
 //! cantidad i64 · nivel u8 · experiencia i64 · moral{valor i64, t0 i64, por_minuto i64, máximo opt_i64, mínimo opt_i64} · contenedor{u8 · u64:
@@ -16,11 +20,12 @@
 //! Una carga: `n u64 · n × (recurso u8, cantidad i64)`.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
+use crate::codec_columna::{politica_a_u8, politica_de_u8, ritmo_escribir, ritmo_leer};
 use crate::codec_comercio::{carga_escribir, carga_leer};
 use crate::estado_militar::{EstadoMilitar, HeroeNucleo};
-use base::Ritmo;
 use comercio::mercenarios::CupoDiario;
 use militar::catalogo::{Origen, Tropa, TROPAS};
+use militar::convocatoria::{Convocatoria, Integrante, Lugar, Peticion, Seleccion};
 use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::{Atributos, Controlador, Heroe, Loadout, Monedas, Residencia};
 use militar::mercenarios::Reclutas;
@@ -156,12 +161,7 @@ fn escuadra_escribir(w: &mut Escritor, e: &Escuadra) {
     w.i64(*cantidad);
     w.u8(*nivel);
     w.i64(*experiencia);
-    let Ritmo { valor_en_t0, t0, por_minuto, maximo, minimo } = moral;
-    w.i64(*valor_en_t0);
-    w.i64(*t0);
-    w.i64(*por_minuto);
-    w.opt_i64(*maximo);
-    w.opt_i64(*minimo);
+    ritmo_escribir(w, moral);
     contenedor_escribir(w, contenedor);
     w.bool(*en_guarnicion);
     w.opt_u64(*reserva_batalla);
@@ -174,7 +174,7 @@ fn opt_u32(v: Option<u64>) -> Result<Option<u32>, ErrorFormato> {
 
 fn escuadra_leer(r: &mut Lector) -> Result<Escuadra, ErrorFormato> {
     let (id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia) = (r.u64()?, r.u64()?, tropa_de_u8(r.u8()?)?, origen_de_u8(r.u8()?)?, opt_u32(r.opt_u64()?)?, r.i64()?, r.u8()?, r.i64()?);
-    let moral = Ritmo { valor_en_t0: r.i64()?, t0: r.i64()?, por_minuto: r.i64()?, maximo: r.opt_i64()?, minimo: r.opt_i64()? };
+    let moral = ritmo_leer(r)?;
     Ok(Escuadra { id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia, moral, contenedor: contenedor_leer(r)?, en_guarnicion: r.bool()?, reserva_batalla: r.opt_u64()?, prestada: opt_u32(r.opt_u64()?)? })
 }
 
@@ -197,8 +197,8 @@ fn lista_u32_leer(r: &mut Lector) -> Result<Vec<u32>, ErrorFormato> {
 }
 
 fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
-    let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo } = h;
-    let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, escuadras } = heroe;
+    let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro_fuera, sintetico } = h;
+    let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras } = heroe;
     w.u64(*id);
     w.texto(cuenta);
     w.opt_u64(faccion.map(u64::from));
@@ -228,10 +228,14 @@ fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
     [bronce, plata, oro].into_iter().for_each(|&m| w.i64(m));
     w.opt_i64(*herido_hasta);
     w.i64(*viveres);
+    w.opt_i64(*racion_en);
     carga_escribir(w, almacen_personal);
     let CupoDiario { dia, comprado } = cupo;
     w.i64(*dia);
     carga_escribir(w, comprado);
+    w.opt_u64(*columna);
+    carga_escribir(w, carro_fuera);
+    w.bool(*sintetico);
     w.u64(escuadras.len() as u64);
     escuadras.iter().for_each(|e| escuadra_escribir(w, e));
 }
@@ -248,20 +252,81 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
         loadouts.push(Loadout { id: r.u64()?, nombre: r.texto()?, escuadras: lista_u64_leer(r)?, perks: lista_u32_leer(r)?, activo: r.bool()? });
     }
     let monedas = Monedas { bronce: r.i64()?, plata: r.i64()?, oro: r.i64()? };
-    let (herido_hasta, viveres, almacen_personal) = (r.opt_i64()?, r.i64()?, carga_leer(r)?);
+    let (herido_hasta, viveres, racion_en, almacen_personal) = (r.opt_i64()?, r.i64()?, r.opt_i64()?, carga_leer(r)?);
     let cupo = CupoDiario { dia: r.i64()?, comprado: carga_leer(r)? };
+    let (columna, carro_fuera, sintetico) = (r.opt_u64()?, carga_leer(r)?, r.bool()?);
     let mut escuadras = Vec::new();
     for _ in 0..r.cuenta()? {
         escuadras.push(escuadra_leer(r)?);
     }
-    let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, escuadras };
-    Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo })
+    let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras };
+    Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro_fuera, sintetico })
+}
+
+fn seleccion_escribir(w: &mut Escritor, s: &Seleccion) {
+    let Seleccion { escuadras, carga } = s;
+    lista_u64_escribir(w, escuadras);
+    carga_escribir(w, carga);
+}
+
+fn seleccion_leer(r: &mut Lector) -> Result<Seleccion, ErrorFormato> {
+    Ok(Seleccion { escuadras: lista_u64_leer(r)?, carga: carga_leer(r)? })
+}
+
+fn convocatoria_escribir(w: &mut Escritor, c: &Convocatoria) {
+    let Convocatoria { id, faccion, lugar, lider, politica, integrantes, peticiones, creada_en } = c;
+    w.u64(*id);
+    w.u32(*faccion);
+    let (tag, lugar) = match lugar {
+        Lugar::Asentamiento(a) => (0, *a),
+        Lugar::Campamento(k) => (1, *k),
+    };
+    w.u8(tag);
+    w.u32(lugar);
+    w.u64(*lider);
+    w.u8(politica_a_u8(*politica));
+    w.u64(integrantes.len() as u64);
+    for Integrante { heroe, unido_en, seleccion } in integrantes {
+        w.u64(*heroe);
+        w.i64(*unido_en);
+        seleccion_escribir(w, seleccion);
+    }
+    w.u64(peticiones.len() as u64);
+    for Peticion { heroe, pedido_en, expira_en, seleccion } in peticiones {
+        w.u64(*heroe);
+        w.i64(*pedido_en);
+        w.i64(*expira_en);
+        seleccion_escribir(w, seleccion);
+    }
+    w.i64(*creada_en);
+}
+
+fn convocatoria_leer(r: &mut Lector) -> Result<Convocatoria, ErrorFormato> {
+    let (id, faccion) = (r.u64()?, r.u32()?);
+    let (tag, lugar) = (r.u8()?, r.u32()?);
+    let lugar = match tag {
+        0 => Lugar::Asentamiento(lugar),
+        1 => Lugar::Campamento(lugar),
+        _ => return Err(ErrorFormato("lugar de convocatoria desconocido")),
+    };
+    let (lider, politica) = (r.u64()?, politica_de_u8(r.u8()?)?);
+    let mut integrantes = Vec::new();
+    for _ in 0..r.cuenta()? {
+        integrantes.push(Integrante { heroe: r.u64()?, unido_en: r.i64()?, seleccion: seleccion_leer(r)? });
+    }
+    let mut peticiones = Vec::new();
+    for _ in 0..r.cuenta()? {
+        peticiones.push(Peticion { heroe: r.u64()?, pedido_en: r.i64()?, expira_en: r.i64()?, seleccion: seleccion_leer(r)? });
+    }
+    Ok(Convocatoria { id, faccion, lugar, lider, politica, integrantes, peticiones, creada_en: r.i64()? })
 }
 
 pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
-    let EstadoMilitar { heroes, reclutas, tecnologias, residentes: _ } = m;
+    let EstadoMilitar { heroes, convocatorias, reclutas, tecnologias, residentes: _ } = m;
     w.u64(heroes.len() as u64);
     heroes.values().for_each(|h| heroe_escribir(w, h));
+    w.u64(convocatorias.len() as u64);
+    convocatorias.values().for_each(|c| convocatoria_escribir(w, c));
     w.u64(reclutas.len() as u64);
     for (&campamento, Reclutas { poblacion, en }) in reclutas {
         w.u32(campamento);
@@ -280,6 +345,10 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
     let mut m = EstadoMilitar::default();
     for _ in 0..r.cuenta()? {
         m.insertar(heroe_leer(r)?);
+    }
+    for _ in 0..r.cuenta()? {
+        let c = convocatoria_leer(r)?;
+        m.convocatorias.insert(c.id, c);
     }
     for _ in 0..r.cuenta()? {
         let campamento = r.u32()?;

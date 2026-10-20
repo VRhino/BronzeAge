@@ -108,7 +108,7 @@ fn main() {
         let velocidad = VELOCIDADES[rng.por_debajo(4) as usize];
         let viveres = 20_000 + rng.por_debajo(330_000) as i64; // algunas se quedan sin víveres durante la hora
         let id = nucleo
-            .crear_ejercito(0, &format!("heroe-{i}"), &format!("bot-{i}"), (i % 4) as u32, *pos, velocidad, viveres, 350_000)
+            .crear_ejercito(0, &format!("bot-{i}"), (i % 4) as u32, *pos, velocidad, viveres)
             .expect("alta");
         ids.push(id);
         grabado.push(vec![(pos.x, pos.y, 0)]);
@@ -219,7 +219,7 @@ fn main() {
     j.push_str("],\"entidades\":[");
     for (i, &id) in ids.iter().enumerate() {
         let e = &nucleo.estado().ejercitos[&id];
-        write!(j, "{}{{\"id\":\"ej-{id}\",\"nombre\":\"Ejército {id}\",\"faccion\":\"f{}\",\"color\":\"{}\",\"radio_vision\":30000,\"plan\":[", if i > 0 { "," } else { "" }, e.faccion + 1, COLORES[e.faccion as usize % 4]).unwrap();
+        write!(j, "{}{{\"id\":\"ej-{id}\",\"nombre\":\"Ejército {id}\",\"faccion\":\"f{}\",\"color\":\"{}\",\"radio_vision\":30000,\"plan\":[", if i > 0 { "," } else { "" }, e.bandera() + 1, COLORES[e.bandera() as usize % 4]).unwrap();
         for (k, (x, y, t)) in recortar(&grabado[i]).iter().enumerate() {
             write!(j, "{}{{\"x\":{x},\"y\":{y},\"t\":{t}}}", if k > 0 { "," } else { "" }).unwrap();
         }

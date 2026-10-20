@@ -297,10 +297,10 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
-        if !(p.admin || e.propietario == p.actor) {
+        if !self.manda_columna(p, e, false) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
         }
-        let (posicion_columna, faccion_columna) = (e.posicion_en(t), e.faccion);
+        let (posicion_columna, faccion_columna) = (e.posicion_en(t), e.bandera());
         let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{caravana}")))?;
         let c = &self.estado.comercio.flota[ci];
         if c.estado != EstadoCaravana::Adjunta || !e.caravanas_adjuntas.contains(&caravana) {

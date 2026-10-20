@@ -8,6 +8,17 @@ Cómo avanza el mundo en la reconstrucción: sin tick. Este documento **sustituy
 
 > **Implementado en Rust (2026-10-20, fase 4B-1), en el reloj de los héroes.** La prioridad **1** ya la usa la salida del mundo de quien se desconectó (`Carga::SalidaDelMundo`, `PRIO_SALIDA`, §7). El hambre de la guarnición **no** es un evento: es parte del paso de minuto de la plaza (prioridad 2), que ya existe, justo después de la población (la población come antes): una plaza sin residentes no hace nada y no hay evento por héroe ni por escuadra. Los fines de herido, de petición de unión y de formación siguen sin evento (el herido se lee al mirar).
 
+> **Implementado en Rust (2026-10-20, fase 4B-2), las columnas en el reloj.** Cuatro plazos nuevos, todos en la cola con generación (`Carga::Militar(SucesoMilitar)`; la clave es la de la entidad, así que contestar, deshacer o cambiar de ritmo la sube y el evento viejo se descarta al salir):
+>
+> | Evento | Prioridad | Entidad (etiqueta sobre `1<<56`) | Cuándo | Qué hace |
+> |---|---|---|---|---|
+> | `Desercion` | 3 (`PRIO_UMBRAL`, el consumo de la tropa) | la columna | la próxima fase de deserción de una escuadra con la moral a 0 (la de cada escuadra es el instante en que su moral llega a 0 y luego cada minuto) | deserta `ceil(5 %)` de cada escuadra cuya fase cae ahora, re-ancla el consumo y se reprograma |
+> | `CaducaFormacion` | 8 (`PRIO_LLEGADA`) | 6: la formación | `formacion_expira_en` | deshace la formación (`columna.formacion_disuelta`) |
+> | `CaducaPeticion { columna }` | 8 | 7: el solicitante | `pedido_en + vidaPeticionUnion` (10 s) | retira la petición (`columna.peticion_caducada`) |
+> | `CaducaPeticionDeConvocatoria { convocatoria }` | 8 | 8: el solicitante | ídem | retira la petición (`convocatoria.peticion_caducada`) |
+>
+> La **deserción es el único evento nuevo ligado al hambre**, y solo existe mientras la columna tiene hambre y soldados: una columna quieta con ración, o sin soldados, no programa nada, y los víveres a 0 siguen siendo el `Umbral(0)` de siempre (prioridad 3). La moral de la tropa es un ritmo que se lee al mirar, y el de la columna con hambre se ancla una vez (`Escuadra::con_racion` no re-ancla si el ritmo ya es el buscado), sin evento por minuto. Una **convocatoria** no tiene plazo; **salirse del mundo** sigue siendo el evento de prioridad 1 de la 4B-1, ahora también para el héroe de una columna. Un evento con la generación vencida **permanece en la cola hasta que su instante pasa** (se descarta al salir; no hay borrado activo): es una fila de paridad.
+
 ## 1. Tiempo
 
 - **Reloj de mundo** = reloj de pared × factor (×1 en producción; ×N para pruebas y para el batch). No hay tick y no existe la unidad «minuto de mundo» como paso: sigue habiendo plazos declarados en minutos, horas y días, y se miden en instantes.

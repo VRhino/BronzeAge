@@ -4,11 +4,13 @@
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
 use crate::codec_comercio::{animal_a_u8, animal_de_u8, tipo_carro_a_u8, tipo_carro_de_u8};
+use crate::codec_columna::{politica_a_u8, politica_de_u8};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
 use comercio::caravana::{Animal, TipoCarro};
 use militar::catalogo::Tropa;
+use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 
@@ -25,8 +27,10 @@ pub enum AccionReloj {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Comando {
-    /// Alta de una columna (la hará `salir_al_mundo` en la fase 6). Solo administración.
-    CrearEjercito { lider: String, propietario: String, faccion: u32, posicion: Punto, velocidad: Mil, viveres: Mil, capacidad_viveres: Mil },
+    /// Alta de una columna con su héroe de campo (de la cuenta dada, sin residencia ni loadout), quieta en `posicion`. Andamiaje de administración para
+    /// escenarios y pruebas: la columna nace como ejército de un participante con la velocidad fija dada (`Ejercito::velocidad_fija`); salir de verdad es
+    /// `SalirAlMundo`, `MovilizarEjercito` y `SalirDelCampamento`. Solo administración.
+    CrearEjercito { cuenta: String, faccion: u32, posicion: Punto, velocidad: Mil, viveres: Mil },
     /// Marcha desde la posición real al instante de la orden.
     MarcharA { ejercito: u64, destino: Punto },
     /// Cancela la marcha: la columna se queda donde está.
@@ -106,7 +110,8 @@ pub enum Comando {
     // ── Andamiaje de administración, provisional hasta que existan los sistemas que lo sustituyen. ──
     /// Añade recursos al almacén de una plaza (fuera del diseño: no es una fuente de juego). Solo administración.
     DarRecursos { asentamiento: u64, recurso: Recurso, cantidad: Mil },
-    /// Añade al carro de una columna (`suministro`). Solo administración; lo sustituirán el sistema de héroes y el botín.
+    /// Añade al carro de una columna. Solo administración: es la fuente de carga de las columnas hasta que el botín del combate (fase 4D) cargue los carros;
+    /// los jugadores cargan su carro al salir de un lugar.
     DarSuministro { ejercito: u64, recurso: Recurso, cantidad: Mil },
     /// Engancha una caravana `disponible` o `aparcada` a una columna de su Facción que está a la puerta de la plaza donde la caravana está
     /// (Movimiento_Ejercitos §9). La columna pasa a viajar a la velocidad de su elemento más lento y la caravana va con ella.
@@ -183,6 +188,48 @@ pub enum Comando {
     ColocarHeroe { heroe: u64, ubicacion: Ubicacion },
     /// Hiere al héroe (`heridoMinutos`). Solo administración; lo hará el combate.
     HerirHeroe { heroe: u64 },
+    // ── Columnas (Movimiento_Ejercitos, Presencia_Y_Convocatoria). Las da la cuenta del héroe o la administración; las que nombran un ejército las da
+    //    su Líder o, donde se dice, cualquiera de sus participantes. Sale y entra el héroe con su columna: `creadas` lleva el id de la columna que nace. ──
+    /// Sale a lo suyo desde su residencia (una plaza): columna personal quieta en la puerta, con las escuadras y la carga que elige (puede salir sin tropa).
+    SalirAlMundo { asentamiento: u64, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)> },
+    /// Sale como ejército desde su residencia (al menos una escuadra), con la política de unión que fija y no cambia.
+    MovilizarEjercito { asentamiento: u64, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica },
+    /// Sale de un campamento de mercenarios: el residente elige tropa y carga de su almacén personal (y recibe la ración gratis); el visitante retoma
+    /// su columna aparcada. Con política distinta de `Rechazar` sale como ejército.
+    SalirDelCampamento { campamento: u32, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica },
+    /// Entra en una plaza con su columna personal a la puerta: en su residencia la columna se deshace dentro; en otra queda aparcada.
+    EntrarEnAsentamiento { asentamiento: u64, heroe: u64 },
+    /// Retoma la columna que dejó aparcada a la puerta de una plaza ajena.
+    SalirDeAsentamiento { asentamiento: u64, heroe: u64 },
+    /// Un ejército de la Facción de la plaza, a su puerta, entra y se desarma; cada héroe entra como lo haría solo. Solo su Líder.
+    Guarnecer { asentamiento: u64, heroe: u64 },
+    /// Entra en un campamento de mercenarios (solo, o el ejército entero desarmándose; solo su Líder).
+    EntrarEnCampamento { campamento: u32, heroe: u64 },
+    /// Se suma, desde su plaza, a un ejército que pasa por su puerta, con las escuadras y la carga que saca.
+    UnirseAEjercito { asentamiento: u64, heroe: u64, ejercito: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)> },
+    /// Se une en campo con su columna personal a un ejército o a una formación (a ≤ `radioEncuentro`); con `Preguntar` deja una petición de 10 s.
+    UnirseEnCampo { heroe: u64, ejercito: u64 },
+    /// El Líder acepta o rechaza la petición de unión de `solicitante`.
+    ResponderPeticionDeUnion { heroe: u64, ejercito: u64, solicitante: u64, aceptar: bool },
+    /// Sale del ejército con lo suyo y nace como columna personal donde estaba. `creadas` lleva la columna.
+    SepararseDelEjercito { heroe: u64 },
+    /// El Líder cede el mando a otro participante.
+    CederLiderazgo { heroe: u64, sucesor: u64 },
+    /// Una columna personal sola organiza un ejército en campo: queda quieta esperando a ser tres.
+    OrganizarEjercito { heroe: u64, politica: Politica },
+    /// El Líder deshace su formación.
+    CancelarFormacion { heroe: u64 },
+    /// El Líder llena los víveres de la columna en la puerta de una plaza que le abre su almacén.
+    Repostar { heroe: u64, asentamiento: u64 },
+    /// Convoca un ejército dentro del lugar donde está. `creadas` lleva la convocatoria.
+    ConvocarEjercito { heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica },
+    UnirseAConvocatoria { heroe: u64, convocatoria: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)> },
+    ResponderPeticionDeConvocatoria { heroe: u64, convocatoria: u64, solicitante: u64, aceptar: bool },
+    CambiarSeleccionDeConvocatoria { heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)> },
+    SepararseDeConvocatoria { heroe: u64 },
+    CancelarConvocatoria { heroe: u64 },
+    /// El Líder parte con los que siguen dentro: todo o nada. `creadas` lleva el ejército.
+    PartirConvocatoria { heroe: u64 },
 }
 
 /// De dónde sale el oro al reclutar en un campamento de mercenarios.
@@ -245,15 +292,13 @@ impl Peticion {
         w.texto(&self.peticion_id);
         w.opt_u64(self.version_esperada);
         match &self.comando {
-            Comando::CrearEjercito { lider, propietario, faccion, posicion, velocidad, viveres, capacidad_viveres } => {
+            Comando::CrearEjercito { cuenta, faccion, posicion, velocidad, viveres } => {
                 w.u8(1);
-                w.texto(lider);
-                w.texto(propietario);
+                w.texto(cuenta);
                 w.u32(*faccion);
                 w.punto(*posicion);
                 w.i64(*velocidad);
                 w.i64(*viveres);
-                w.i64(*capacidad_viveres);
             }
             Comando::MarcharA { ejercito, destino } => {
                 w.u8(2);
@@ -617,6 +662,131 @@ impl Peticion {
                 w.u8(68);
                 w.u64(*heroe);
             }
+            Comando::SalirAlMundo { asentamiento, heroe, escuadras, carga } => {
+                w.u8(69);
+                w.u64(*asentamiento);
+                w.u64(*heroe);
+                lista_u64(&mut w, escuadras);
+                lineas(&mut w, carga);
+            }
+            Comando::MovilizarEjercito { asentamiento, heroe, escuadras, carga, politica } => {
+                w.u8(70);
+                w.u64(*asentamiento);
+                w.u64(*heroe);
+                lista_u64(&mut w, escuadras);
+                lineas(&mut w, carga);
+                w.u8(politica_a_u8(*politica));
+            }
+            Comando::SalirDelCampamento { campamento, heroe, escuadras, carga, politica } => {
+                w.u8(71);
+                w.u32(*campamento);
+                w.u64(*heroe);
+                lista_u64(&mut w, escuadras);
+                lineas(&mut w, carga);
+                w.u8(politica_a_u8(*politica));
+            }
+            Comando::EntrarEnAsentamiento { asentamiento, heroe } => {
+                w.u8(72);
+                w.u64(*asentamiento);
+                w.u64(*heroe);
+            }
+            Comando::SalirDeAsentamiento { asentamiento, heroe } => {
+                w.u8(73);
+                w.u64(*asentamiento);
+                w.u64(*heroe);
+            }
+            Comando::Guarnecer { asentamiento, heroe } => {
+                w.u8(74);
+                w.u64(*asentamiento);
+                w.u64(*heroe);
+            }
+            Comando::EntrarEnCampamento { campamento, heroe } => {
+                w.u8(75);
+                w.u32(*campamento);
+                w.u64(*heroe);
+            }
+            Comando::UnirseAEjercito { asentamiento, heroe, ejercito, escuadras, carga } => {
+                w.u8(76);
+                w.u64(*asentamiento);
+                w.u64(*heroe);
+                w.u64(*ejercito);
+                lista_u64(&mut w, escuadras);
+                lineas(&mut w, carga);
+            }
+            Comando::UnirseEnCampo { heroe, ejercito } => {
+                w.u8(77);
+                w.u64(*heroe);
+                w.u64(*ejercito);
+            }
+            Comando::ResponderPeticionDeUnion { heroe, ejercito, solicitante, aceptar } => {
+                w.u8(78);
+                w.u64(*heroe);
+                w.u64(*ejercito);
+                w.u64(*solicitante);
+                w.bool(*aceptar);
+            }
+            Comando::SepararseDelEjercito { heroe } => {
+                w.u8(79);
+                w.u64(*heroe);
+            }
+            Comando::CederLiderazgo { heroe, sucesor } => {
+                w.u8(80);
+                w.u64(*heroe);
+                w.u64(*sucesor);
+            }
+            Comando::OrganizarEjercito { heroe, politica } => {
+                w.u8(81);
+                w.u64(*heroe);
+                w.u8(politica_a_u8(*politica));
+            }
+            Comando::CancelarFormacion { heroe } => {
+                w.u8(82);
+                w.u64(*heroe);
+            }
+            Comando::Repostar { heroe, asentamiento } => {
+                w.u8(83);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+            }
+            Comando::ConvocarEjercito { heroe, escuadras, carga, politica } => {
+                w.u8(84);
+                w.u64(*heroe);
+                lista_u64(&mut w, escuadras);
+                lineas(&mut w, carga);
+                w.u8(politica_a_u8(*politica));
+            }
+            Comando::UnirseAConvocatoria { heroe, convocatoria, escuadras, carga } => {
+                w.u8(85);
+                w.u64(*heroe);
+                w.u64(*convocatoria);
+                lista_u64(&mut w, escuadras);
+                lineas(&mut w, carga);
+            }
+            Comando::ResponderPeticionDeConvocatoria { heroe, convocatoria, solicitante, aceptar } => {
+                w.u8(86);
+                w.u64(*heroe);
+                w.u64(*convocatoria);
+                w.u64(*solicitante);
+                w.bool(*aceptar);
+            }
+            Comando::CambiarSeleccionDeConvocatoria { heroe, escuadras, carga } => {
+                w.u8(87);
+                w.u64(*heroe);
+                lista_u64(&mut w, escuadras);
+                lineas(&mut w, carga);
+            }
+            Comando::SepararseDeConvocatoria { heroe } => {
+                w.u8(88);
+                w.u64(*heroe);
+            }
+            Comando::CancelarConvocatoria { heroe } => {
+                w.u8(89);
+                w.u64(*heroe);
+            }
+            Comando::PartirConvocatoria { heroe } => {
+                w.u8(90);
+                w.u64(*heroe);
+            }
         }
         w.0
     }
@@ -625,15 +795,7 @@ impl Peticion {
         let mut r = Lector::nuevo(bytes);
         let (actor, admin, peticion_id, version_esperada) = (r.texto()?, r.bool()?, r.texto()?, r.opt_u64()?);
         let comando = match r.u8()? {
-            1 => Comando::CrearEjercito {
-                lider: r.texto()?,
-                propietario: r.texto()?,
-                faccion: r.u32()?,
-                posicion: r.punto()?,
-                velocidad: r.i64()?,
-                viveres: r.i64()?,
-                capacidad_viveres: r.i64()?,
-            },
+            1 => Comando::CrearEjercito { cuenta: r.texto()?, faccion: r.u32()?, posicion: r.punto()?, velocidad: r.i64()?, viveres: r.i64()? },
             2 => Comando::MarcharA { ejercito: r.u64()?, destino: r.punto()? },
             3 => Comando::Estacionar { ejercito: r.u64()? },
             4 => Comando::Reloj(match r.u8()? {
@@ -734,6 +896,28 @@ impl Peticion {
             },
             67 => Comando::ColocarHeroe { heroe: r.u64()?, ubicacion: ubicacion_leer(&mut r)? },
             68 => Comando::HerirHeroe { heroe: r.u64()? },
+            69 => Comando::SalirAlMundo { asentamiento: r.u64()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)? },
+            70 => Comando::MovilizarEjercito { asentamiento: r.u64()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)?, politica: politica_de_u8(r.u8()?)? },
+            71 => Comando::SalirDelCampamento { campamento: r.u32()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)?, politica: politica_de_u8(r.u8()?)? },
+            72 => Comando::EntrarEnAsentamiento { asentamiento: r.u64()?, heroe: r.u64()? },
+            73 => Comando::SalirDeAsentamiento { asentamiento: r.u64()?, heroe: r.u64()? },
+            74 => Comando::Guarnecer { asentamiento: r.u64()?, heroe: r.u64()? },
+            75 => Comando::EntrarEnCampamento { campamento: r.u32()?, heroe: r.u64()? },
+            76 => Comando::UnirseAEjercito { asentamiento: r.u64()?, heroe: r.u64()?, ejercito: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)? },
+            77 => Comando::UnirseEnCampo { heroe: r.u64()?, ejercito: r.u64()? },
+            78 => Comando::ResponderPeticionDeUnion { heroe: r.u64()?, ejercito: r.u64()?, solicitante: r.u64()?, aceptar: r.bool()? },
+            79 => Comando::SepararseDelEjercito { heroe: r.u64()? },
+            80 => Comando::CederLiderazgo { heroe: r.u64()?, sucesor: r.u64()? },
+            81 => Comando::OrganizarEjercito { heroe: r.u64()?, politica: politica_de_u8(r.u8()?)? },
+            82 => Comando::CancelarFormacion { heroe: r.u64()? },
+            83 => Comando::Repostar { heroe: r.u64()?, asentamiento: r.u64()? },
+            84 => Comando::ConvocarEjercito { heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)?, politica: politica_de_u8(r.u8()?)? },
+            85 => Comando::UnirseAConvocatoria { heroe: r.u64()?, convocatoria: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)? },
+            86 => Comando::ResponderPeticionDeConvocatoria { heroe: r.u64()?, convocatoria: r.u64()?, solicitante: r.u64()?, aceptar: r.bool()? },
+            87 => Comando::CambiarSeleccionDeConvocatoria { heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)? },
+            88 => Comando::SepararseDeConvocatoria { heroe: r.u64()? },
+            89 => Comando::CancelarConvocatoria { heroe: r.u64()? },
+            90 => Comando::PartirConvocatoria { heroe: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -751,10 +935,10 @@ pub mod rechazos {
     pub const ORDEN_NO_SOPORTADA: &str = "orden.no_soportada";
     pub const OBJETIVO_NO_SOPORTADO: &str = "objetivo.no_soportado";
     pub const RELOJ_INVALIDO: &str = "reloj.invalido";
-    pub const LIDER_REPETIDO: &str = "heroe.ya_tiene_columna";
     pub const SIN_MUNDO: &str = "mundo.no_cargado";
     pub const ASENTAMIENTO_DESCONOCIDO: &str = "asentamiento.desconocido";
     pub const SIN_CARAVANA: &str = "fundacion.sin_caravana";
+    pub const FUNDACION_SIN_FACCION: &str = "fundacion.sin_faccion";
     pub const CAP_ALCANZADO: &str = "fundacion.cap_alcanzado";
     pub const NIVEL_INVALIDO: &str = "nivel.invalido";
     pub const PARCELA_SIN_LIBRES: &str = "parcela.sin_libres";
@@ -928,9 +1112,68 @@ pub mod rechazos {
     pub const HEROE_NO_ESTA_EN_LA_PLAZA: &str = "heroe.no_esta_en_la_plaza";
     pub const HEROE_SIN_RESIDENCIA: &str = "heroe.sin_residencia";
     pub const HEROE_UBICACION_INVALIDA: &str = "heroe.ubicacion_invalida";
-    pub const HEROE_COLUMNA_OCUPADA: &str = "heroe.columna_ocupada";
     // Tecnologías (andamiaje de administración).
     pub const TECNOLOGIA_DESCONOCIDA: &str = "tecnologia.desconocida";
+    // Columnas (`ErrorColumna`) y convocatorias (`ErrorConvocatoria`).
+    pub const COLUMNA_YA_VAS_EN_ELLA: &str = "columna.ya_vas_en_ella";
+    pub const COLUMNA_NO_ADMITE: &str = "columna.no_admite";
+    pub const COLUMNA_NO_ES_EJERCITO: &str = "columna.no_es_ejercito";
+    pub const COLUMNA_SOLO_UNA_PERSONAL: &str = "columna.solo_una_personal";
+    pub const COLUMNA_OTRA_FACCION: &str = "columna.otra_faccion";
+    pub const COLUMNA_LEJOS: &str = "columna.lejos";
+    pub const COLUMNA_NO_PREGUNTA: &str = "columna.no_pregunta";
+    pub const COLUMNA_NO_VA_DENTRO: &str = "columna.no_va_dentro";
+    pub const COLUMNA_DE_UNA_PERSONAL_NO_TE_SEPARAS: &str = "columna.de_una_personal_no_te_separas";
+    pub const COLUMNA_EL_LIDER_NO_PUEDE: &str = "columna.el_lider_no_puede";
+    pub const COLUMNA_ES_EL_ULTIMO: &str = "columna.es_el_ultimo";
+    pub const COLUMNA_SOLO_EL_LIDER: &str = "columna.solo_el_lider";
+    pub const COLUMNA_YA_ERES_EL_LIDER: &str = "columna.ya_eres_el_lider";
+    pub const COLUMNA_SUCESOR_FUERA: &str = "columna.sucesor_fuera";
+    pub const COLUMNA_NO_HAY_PETICION: &str = "columna.no_hay_peticion";
+    pub const COLUMNA_PETICION_CADUCADA: &str = "columna.peticion_caducada";
+    pub const COLUMNA_YA_ES_EJERCITO: &str = "columna.ya_es_ejercito";
+    pub const COLUMNA_YA_ORGANIZANDO: &str = "columna.ya_organizando";
+    pub const COLUMNA_NO_ESTA_SOLO: &str = "columna.no_esta_solo";
+    pub const COLUMNA_POLITICA_INVALIDA: &str = "columna.politica_invalida";
+    pub const COLUMNA_NO_ES_UNA_FORMACION: &str = "columna.no_es_una_formacion";
+    pub const CONVOCATORIA_DESCONOCIDA: &str = "convocatoria.desconocida";
+    pub const CONVOCATORIA_FUERA_DE_UN_LUGAR: &str = "convocatoria.fuera_de_un_lugar";
+    pub const CONVOCATORIA_SIN_FACCION: &str = "convocatoria.sin_faccion";
+    pub const CONVOCATORIA_YA_EN_ELLA: &str = "convocatoria.ya_en_ella";
+    pub const CONVOCATORIA_POLITICA_INVALIDA: &str = "convocatoria.politica_invalida";
+    pub const CONVOCATORIA_OTRO_LUGAR: &str = "convocatoria.otro_lugar";
+    pub const CONVOCATORIA_OTRA_FACCION: &str = "convocatoria.otra_faccion";
+    pub const CONVOCATORIA_NO_ESTAS: &str = "convocatoria.no_estas";
+    pub const CONVOCATORIA_EL_LIDER_CANCELA: &str = "convocatoria.el_lider_cancela";
+    pub const CONVOCATORIA_SOLO_EL_LIDER: &str = "convocatoria.solo_el_lider";
+    pub const CONVOCATORIA_NO_HAY_PETICION: &str = "convocatoria.no_hay_peticion";
+    pub const CONVOCATORIA_PETICION_CADUCADA: &str = "convocatoria.peticion_caducada";
+    pub const CONVOCATORIA_LIDER_FUERA: &str = "convocatoria.lider_fuera";
+    pub const CONVOCATORIA_NO_PUEDE_SALIR: &str = "convocatoria.no_puede_salir";
+    // Salir y entrar en un lugar, y repostar.
+    pub const HEROE_YA_EN_COLUMNA: &str = "heroe.ya_en_columna";
+    pub const HEROE_EN_CONVOCATORIA: &str = "heroe.en_convocatoria";
+    pub const HEROE_NO_ESTA_EN_EL_CAMPAMENTO: &str = "heroe.no_esta_en_el_campamento";
+    pub const HEROE_DENTRO_DE_UN_LUGAR: &str = "heroe.dentro_de_un_lugar";
+    pub const SALIDA_SOLO_DE_TU_RESIDENCIA: &str = "salida.solo_de_tu_residencia";
+    pub const SALIDA_DESDE_TU_RESIDENCIA: &str = "salida.desde_tu_residencia";
+    pub const SALIDA_SIN_ESCUADRAS: &str = "salida.sin_escuadras";
+    pub const ESCUADRA_ANIQUILADA: &str = "escuadra.aniquilada";
+    pub const ESCUADRA_FUERA_DEL_CAMPAMENTO: &str = "escuadra.fuera_del_campamento";
+    pub const ESCUADRA_EN_LA_GUARNICION: &str = "escuadra.en_la_guarnicion";
+    pub const CARGA_NEGATIVA: &str = "carga.negativa";
+    pub const CARRO_LLENO: &str = "carro.no_cabe";
+    pub const ALMACEN_SIN_EXISTENCIAS: &str = "almacen.sin_existencias";
+    pub const COLUMNA_NO_APARCADA: &str = "columna.no_aparcada";
+    pub const COLUMNA_ES_UN_EJERCITO: &str = "columna.es_un_ejercito";
+    pub const COLUMNA_EN_FORMACION: &str = "columna.en_formacion";
+    pub const COLUMNA_PERSONAL_SIN_CARAVANAS: &str = "columna.personal_sin_caravanas";
+    pub const COLUMNA_VIVERES_LLENOS: &str = "columna.viveres_llenos";
+    pub const ASENTAMIENTO_FUERA_DE_LA_PUERTA: &str = "asentamiento.fuera_de_la_puerta";
+    pub const PUERTA_CERRADA: &str = "puerta.cerrada";
+    pub const CARAVANA_AJENA_AL_LUGAR: &str = "caravana.ajena_al_lugar";
+    pub const REPOSTAR_PLAZA_CERRADA: &str = "repostar.plaza_cerrada";
+    pub const REPOSTAR_SIN_EXISTENCIAS: &str = "repostar.sin_existencias";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1066,6 +1309,29 @@ mod pruebas {
             Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Mercenarios(1) },
             Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Desconectado(Punto::new(5, -7)) },
             Comando::HerirHeroe { heroe: 2 },
+            Comando::SalirAlMundo { asentamiento: 3, heroe: 2, escuadras: vec![5, 6], carga: vec![(Recurso::Madera, 1_000)] },
+            Comando::MovilizarEjercito { asentamiento: 3, heroe: 2, escuadras: vec![5], carga: vec![], politica: Politica::Preguntar },
+            Comando::SalirDelCampamento { campamento: 4, heroe: 2, escuadras: vec![], carga: vec![(Recurso::Oro, 9)], politica: Politica::Aceptar },
+            Comando::EntrarEnAsentamiento { asentamiento: 3, heroe: 2 },
+            Comando::SalirDeAsentamiento { asentamiento: 3, heroe: 2 },
+            Comando::Guarnecer { asentamiento: 3, heroe: 2 },
+            Comando::EntrarEnCampamento { campamento: 4, heroe: 2 },
+            Comando::UnirseAEjercito { asentamiento: 3, heroe: 2, ejercito: 9, escuadras: vec![5], carga: vec![(Recurso::Trigo, 7)] },
+            Comando::UnirseEnCampo { heroe: 2, ejercito: 9 },
+            Comando::ResponderPeticionDeUnion { heroe: 2, ejercito: 9, solicitante: 4, aceptar: true },
+            Comando::ResponderPeticionDeUnion { heroe: 2, ejercito: 9, solicitante: 4, aceptar: false },
+            Comando::SepararseDelEjercito { heroe: 2 },
+            Comando::CederLiderazgo { heroe: 2, sucesor: 3 },
+            Comando::OrganizarEjercito { heroe: 2, politica: Politica::Aceptar },
+            Comando::CancelarFormacion { heroe: 2 },
+            Comando::Repostar { heroe: 2, asentamiento: 3 },
+            Comando::ConvocarEjercito { heroe: 2, escuadras: vec![6, 5], carga: vec![], politica: Politica::Preguntar },
+            Comando::UnirseAConvocatoria { heroe: 2, convocatoria: 8, escuadras: vec![5], carga: vec![(Recurso::Oro, 1)] },
+            Comando::ResponderPeticionDeConvocatoria { heroe: 2, convocatoria: 8, solicitante: 4, aceptar: false },
+            Comando::CambiarSeleccionDeConvocatoria { heroe: 2, escuadras: vec![], carga: vec![] },
+            Comando::SepararseDeConvocatoria { heroe: 2 },
+            Comando::CancelarConvocatoria { heroe: 2 },
+            Comando::PartirConvocatoria { heroe: 2 },
         ];
         for c in comandos {
             let p = Peticion { actor: "ana".into(), admin: false, peticion_id: "z".into(), version_esperada: Some(3), comando: c };

@@ -26,8 +26,8 @@ struct Mundo {
 async fn arrancar() -> Mundo {
     let reloj = RelojCompartido::nuevo(0);
     let mut n = nucleo(30, 30);
-    n.crear_ejercito(0, "heroe-ana", "ana", 1, c(1, 1), 4_000, 350_000, 350_000).unwrap(); // ej-1
-    n.crear_ejercito(0, "heroe-beto", "beto", 2, c(10, 10), 4_000, 350_000, 350_000).unwrap(); // ej-2
+    n.crear_ejercito(0, "ana", 1, c(1, 1), 4_000, 350_000).unwrap(); // ej-1, con el héroe 2
+    n.crear_ejercito(0, "beto", 2, c(10, 10), 4_000, 350_000).unwrap(); // ej-3, con el héroe 4
     let (tx, rx) = mpsc::channel(1024);
     let actor = sesiones::lanzar(n, reloj.clone(), rx);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -122,11 +122,11 @@ async fn conectar_ordenar_marcha_y_ver_llegar() {
     let r = resultado(&mut ana).await;
     assert_eq!((r.resultado, r.rechazo.unwrap().codigo.as_str()), (pb::Resultado::OrdenRechazada as i32, "no_autorizado"));
     // Ni manda columnas ajenas.
-    ana.enviar(marchar_a("m0", "heroe-beto", c(5, 5))).await;
+    ana.enviar(marchar_a("m0", "heroe-4", c(5, 5))).await;
     assert_eq!(resultado(&mut ana).await.rechazo.unwrap().codigo, "no_autorizado");
 
     // La orden de marcha: primero la Delta (con el plan), después el resultado, con la causalidad del contrato.
-    ana.enviar(marchar_a("m1", "heroe-ana", c(9, 1))).await;
+    ana.enviar(marchar_a("m1", "heroe-2", c(9, 1))).await;
     let d = delta(&mut ana).await;
     let r = resultado(&mut ana).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
@@ -140,7 +140,7 @@ async fn conectar_ordenar_marcha_y_ver_llegar() {
 
     // Idempotencia: la misma petición no se ejecuta otra vez. Y la llegada llega sola, sin que nadie pida nada (16 s de
     // mundo ≈ 27 ms con el reloj ×600): puede cruzarse con la respuesta, así que se aceptan en cualquier orden.
-    ana.enviar(marchar_a("m1", "heroe-ana", c(1, 9))).await;
+    ana.enviar(marchar_a("m1", "heroe-2", c(1, 9))).await;
     let (mut dup, mut d2) = (None, None);
     while dup.is_none() || d2.is_none() {
         match ana.esperar().await.cuerpo {
@@ -157,7 +157,7 @@ async fn conectar_ordenar_marcha_y_ver_llegar() {
     assert_eq!(e.posicion.as_ref().map(|p| (p.x, p.y)), Some((c(9, 1).x, c(9, 1).y)));
     assert_eq!(d2.eventos.len(), 1);
     assert_eq!(d2.eventos[0].codigo, "ejercito.llega");
-    assert_eq!(d2.eventos[0].heroes_ids, ["heroe-ana"]);
+    assert_eq!(d2.eventos[0].heroes_ids, ["heroe-2"]);
 
     // Lo de ana no le llega a beto (ni nada en absoluto).
     silencio(&mut beto).await;
@@ -177,7 +177,7 @@ async fn reanudacion_sin_novedad_con_deltas_y_con_foto() {
     // Cambia el mundo sin tocar nada de ana: beto marcha. Ana, al volver, "sin novedad" aunque la versión global avanzó.
     let (mut beto, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:beto", TipoCliente::ClienteUnity)).await;
     foto(&mut beto).await;
-    beto.enviar(marchar_a("b1", "heroe-beto", c(12, 10))).await;
+    beto.enviar(marchar_a("b1", "heroe-4", c(12, 10))).await;
     delta(&mut beto).await;
     assert!(resultado(&mut beto).await.version_tras > f.version);
     let mut h = hola("ok:ana", TipoCliente::ClienteUnity);
@@ -188,7 +188,7 @@ async fn reanudacion_sin_novedad_con_deltas_y_con_foto() {
     ana.cerrar().await;
 
     // Ahora el administrador manda la columna de ana mientras está fuera: al volver recibe un delta consolidado.
-    admin.enviar(marchar_a("a1", "heroe-ana", c(3, 1))).await;
+    admin.enviar(marchar_a("a1", "heroe-2", c(3, 1))).await;
     assert_eq!(resultado(&mut admin).await.resultado, pb::Resultado::OrdenAceptada as i32); // admin no ve lo de ana
     let mut h = hola("ok:ana", TipoCliente::ClienteUnity);
     h.versiones_conocidas.insert("HEROE:ana".into(), f.version);
@@ -222,9 +222,9 @@ async fn el_cliente_lento_se_descarta_sin_bloquear_el_mundo() {
     // El administrador mueve la columna de ana: el actor no puede depositar y la descarta; el mundo sigue.
     let (mut admin, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
     foto(&mut admin).await;
-    admin.enviar(marchar_a("a1", "heroe-ana", c(3, 1))).await;
+    admin.enviar(marchar_a("a1", "heroe-2", c(3, 1))).await;
     assert_eq!(resultado(&mut admin).await.resultado, pb::Resultado::OrdenAceptada as i32);
-    admin.enviar(marchar_a("a2", "heroe-ana", c(5, 1))).await;
+    admin.enviar(marchar_a("a2", "heroe-2", c(5, 1))).await;
     assert_eq!(resultado(&mut admin).await.resultado, pb::Resultado::OrdenAceptada as i32);
 
     assert!(matches!(drx.recv().await, Some(Difusion::Foto(_))), "lo que ya estaba en el canal se entrega");

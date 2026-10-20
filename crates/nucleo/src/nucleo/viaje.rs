@@ -30,7 +30,7 @@ use super::*;
 use crate::estado::SucesoComercio;
 use crate::estado_comercio::entidad_caravana;
 use crate::nucleo::flota::rechazo_de_caravana;
-use crate::nucleo::mercado::{id32, CAPACIDAD_CARRO};
+use crate::nucleo::mercado::id32;
 use asentamiento::datos::UNO;
 use base::{Vertice, MS_POR_MINUTO};
 use comercio::caravana::{candidatas_de_reparto, Caravana, EstadoCaravana, Llegada, PerdidaCarros, TipoCaravana};
@@ -115,8 +115,8 @@ impl Nucleo {
         red.camino_compartido_abierto(&self.estado.reglas.economia.comercio.red, &|p| discos.iter().any(|d| territorio::en_zona(p, d, discos.iter())))
     }
 
-    /// Capacidad de carga de una columna (Movimiento_Ejercitos §9): el carro de un jugador más la capacidad efectiva («Carga Ampliada» del
-    /// origen) de las caravanas adjuntas.
+    /// Capacidad de carga de una columna (Movimiento_Ejercitos §9): el carro de cada uno de sus participantes más la capacidad efectiva («Carga
+    /// Ampliada» del origen) de las caravanas adjuntas.
     pub fn capacidad_de_carga(&self, ejercito: u64) -> Option<Mil> {
         let e = self.estado.ejercitos.get(&ejercito)?;
         let r = &self.estado.reglas.economia.comercio.flota;
@@ -126,15 +126,7 @@ impl Nucleo {
             .filter_map(|&c| self.estado.comercio.caravana(c))
             .map(|c| c.capacidad_efectiva(r, self.estado.asentamientos.get(&(c.origen as u64)).map_or(UNO, |a| self.factores_de(a).capacidad)))
             .sum();
-        // DUDA: un participante por columna hasta las columnas con participantes (4B-2, `participantes × capacidadCarroPorJugador`).
-        Some(CAPACIDAD_CARRO + adjuntas)
-    }
-
-    /// Velocidad de una columna (§4.1), en milésimas por segundo: la menor entre la suya y la de cada caravana adjunta.
-    pub(super) fn velocidad_de_columna(&self, e: &Ejercito) -> Mil {
-        let r = &self.estado.reglas.economia.comercio.flota;
-        let lenta = e.caravanas_adjuntas.iter().filter_map(|&c| self.estado.comercio.caravana(c)).map(|c| c.velocidad(r) / 60).filter(|&v| v > 0).min();
-        lenta.map_or(e.velocidad, |v| e.velocidad.min(v))
+        Some(e.columna.capacidad_de_carga(&self.estado.reglas.economia.militar, adjuntas))
     }
 
     // ───────────────────────────── Red de caminos y rutas ─────────────────────────────
@@ -624,26 +616,27 @@ impl Nucleo {
 
     // ───────────────────────────── Aparcada y adjunta (Movimiento_Ejercitos §9) ─────────────────────────────
 
-    /// Escala el plan de una columna en marcha cuando cambia su velocidad (se engancha o se suelta una caravana): el tiempo que le queda al plan
-    /// es inversamente proporcional a la velocidad. Sube su generación y reprograma llegada, umbrales y encuentros.
-    pub(super) fn reescalar_marcha(&mut self, id: u64, t: Instante, antes: Mil, despues: Mil) {
+    /// Escala el plan de una columna en marcha cuando cambia su velocidad (se engancha o se suelta una caravana, cambia quién va): el tiempo que le
+    /// queda al plan es inversamente proporcional a la velocidad. Sube su generación y reprograma llegada, umbrales, hambre y encuentros. Devuelve si
+    /// lo hizo (si no marcha o la velocidad no cambió, no toca nada).
+    pub(super) fn reescalar_marcha(&mut self, id: u64, t: Instante, antes: Mil, despues: Mil) -> bool {
         if antes == despues || antes <= 0 || despues <= 0 {
-            return;
+            return false;
         }
-        let Some(e) = self.estado.ejercitos.get_mut(&id) else { return };
+        let Some(e) = self.estado.ejercitos.get_mut(&id) else { return false };
         if !e.marchando() {
-            return;
+            return false;
         }
         let g = self.estado.generaciones.subir(id);
         let e = self.estado.ejercitos.get_mut(&id).expect("existe");
-        let (consumo, pos) = (e.viveres.por_minuto, e.posicion_en(t));
+        let pos = e.posicion_en(t);
         let nuevos: Vec<Vertice> = e.plan.vertices.iter().map(|v| if v.en > t { Vertice { p: v.p, en: t + (v.en - t) * antes / despues } } else { *v }).collect();
         e.posicion = pos;
         e.plan = Plan { generacion: g, vertices: nuevos };
-        e.viveres = e.viveres.reanclado(t, consumo);
         self.tr.tocados.push(id);
         self.programar_ejercito(id, t);
         self.avisar_plan(id, true);
+        true
     }
 
     /// La administración salta la comprobación de la puerta (andamiaje de las pruebas y de la operación: coloca una caravana donde haga falta).
@@ -655,8 +648,11 @@ impl Nucleo {
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
         let i = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{caravana}")))?;
-        if !(p.admin || e.propietario == p.actor) {
+        if !self.manda_columna(p, e, false) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
+        }
+        if !Self::es_ejercito(e) {
+            return Err(rechazo(rechazos::COLUMNA_PERSONAL_SIN_CARAVANAS, "solo un ejército lleva caravanas: quien quiere llevar una sale ya como ejército".into()));
         }
         let c = &self.estado.comercio.flota[i];
         if c.tipo != TipoCaravana::Comercial {
@@ -667,7 +663,7 @@ impl Nucleo {
         }
         let lugar = if c.estado == EstadoCaravana::Aparcada { c.anfitriona.map(u64::from) } else { Some(c.origen as u64) };
         let sitio = lugar.and_then(|l| self.estado.asentamientos.get(&l)).ok_or_else(|| rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, "la plaza de la caravana ya no existe".into()))?;
-        if self.estado.asentamientos.get(&(c.origen as u64)).map(|o| o.faccion) != Some(e.faccion) {
+        if self.estado.asentamientos.get(&(c.origen as u64)).map(|o| o.faccion) != e.columna.faccion {
             return Err(rechazo(rechazos::CARAVANA_FACCION_AJENA, "la caravana es de otra Facción".into()));
         }
         if !p.admin && e.posicion_en(t).dist(sitio.posicion) > mercado::RADIO_PUERTA {
@@ -702,7 +698,7 @@ impl Nucleo {
             .find(|(_, e)| e.caravanas_adjuntas.contains(&caravana))
             .map(|(&id, e)| (id, e))
             .ok_or_else(|| rechazo(rechazos::CARAVANA_NO_ESTA_ADJUNTA, "la caravana no va enganchada a ninguna columna".into()))?;
-        if !(p.admin || e.propietario == p.actor) {
+        if !self.manda_columna(p, e, false) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
         }
         let anfitriona = self.plaza_o_rechazo(plaza)?;

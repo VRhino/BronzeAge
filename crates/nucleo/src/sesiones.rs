@@ -18,7 +18,7 @@
 use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
 use crate::estado::{CambioVersion, Estado, EventoNucleo};
 use crate::nucleo::Nucleo;
-use crate::proyeccion::{ambito_heroe, cambio_ejercito, clave_ambito_heroe, entidad_ejercito, evento_dominio, parse_id_ejercito};
+use crate::proyeccion::{ambito_heroe, cambio_ejercito, clave_ambito_heroe, entidad_ejercito, evento_dominio, id_heroe, parse_id_ejercito, parse_id_heroe};
 use contrato::v1 as pb;
 use pb::orden::Cuerpo;
 use servidor::{ComandoSesion, Difusion, RelojCompartido, SesionId};
@@ -60,19 +60,22 @@ pub fn lanzar(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<Com
 /// Lo que cambió para un dueño: sus columnas tocadas y los eventos que nombran a alguna, con la versión que los produjo.
 type Cubo<'r> = (BTreeSet<u64>, Vec<(u64, &'r EventoNucleo)>);
 
-/// Agrupa por dueño (`solo` = uno solo) las columnas tocadas y los eventos de los registros.
+/// Agrupa por dueño (`solo` = uno solo) las columnas tocadas y los eventos de los registros. Una columna es de las cuentas de todos sus participantes.
 fn agrupar<'e, 'r>(estado: &'e Estado, registros: impl Iterator<Item = &'r CambioVersion>, solo: Option<&str>) -> BTreeMap<&'e str, Cubo<'r>> {
     let mut por_dueno: BTreeMap<&'e str, Cubo<'r>> = BTreeMap::new();
-    let dueno = |id: &u64| estado.ejercitos.get(id).map(|e| e.propietario.as_str()).filter(|d| solo.is_none_or(|s| s == *d));
+    let duenos = |id: &u64| -> BTreeSet<&'e str> {
+        let participantes = estado.ejercitos.get(id).into_iter().flat_map(|e| e.columna.participantes.iter());
+        participantes.filter_map(|p| estado.militar.heroes.get(&p.heroe)).map(|h| h.cuenta.as_str()).filter(|d| solo.is_none_or(|s| s == *d)).collect()
+    };
     for cv in registros {
         for id in &cv.ejercitos {
-            if let Some(d) = dueno(id) {
+            for d in duenos(id) {
                 por_dueno.entry(d).or_default().0.insert(*id);
             }
         }
         for ev in &cv.eventos {
-            let duenos: BTreeSet<&str> = ev.ejercitos.iter().filter_map(dueno).collect();
-            for d in duenos {
+            let oyen: BTreeSet<&str> = ev.ejercitos.iter().flat_map(duenos).collect();
+            for d in oyen {
                 por_dueno.entry(d).or_default().1.push((cv.version, ev));
             }
         }
@@ -196,7 +199,7 @@ impl Actor {
     fn reanudar(&self, cliente: &str, conocida: Option<u64>) -> (pb::DecisionReanudacion, u64, Option<Difusion>) {
         let v = self.nucleo.version();
         let foto = || {
-            let entidades = self.nucleo.estado().ejercitos.values().filter(|e| e.propietario == cliente).map(|e| entidad_ejercito(e, self.nucleo.ahora())).collect();
+            let entidades = self.nucleo.estado().ejercitos.values().filter(|e| e.columna.participantes.iter().any(|p| self.nucleo.estado().militar.heroes.get(&p.heroe).is_some_and(|h| h.cuenta == cliente))).map(|e| entidad_ejercito(e, self.nucleo.ahora())).collect();
             (pb::DecisionReanudacion::ReanudaConFoto, v, Some(Difusion::Foto(pb::Foto { ambito: Some(ambito_heroe(cliente)), version: v, entidades, niebla: None })))
         };
         let Some(k) = conocida else { return foto() };
@@ -220,7 +223,7 @@ impl Actor {
         let eventos = eventos
             .into_iter()
             .map(|(version, ev)| {
-                let heroes = ev.ejercitos.iter().filter_map(|id| estado.ejercitos.get(id)).map(|e| e.lider.clone()).collect();
+                let heroes = ev.ejercitos.iter().filter_map(|id| estado.ejercitos.get(id)).flat_map(|e| e.columna.participantes.iter().map(|p| id_heroe(p.heroe))).collect();
                 evento_dominio(ev, version, heroes)
             })
             .collect();
@@ -310,7 +313,7 @@ impl Actor {
                     Some(Tipo::Punto(p)) => base::Punto::new(p.x, p.y),
                     _ => return no(rechazos::OBJETIVO_NO_SOPORTADO, "el núcleo genérico solo marcha a puntos"),
                 };
-                match self.nucleo.estado().ejercito_de_lider(&m.heroe_id) {
+                match parse_id_heroe(&m.heroe_id).and_then(|h| self.nucleo.estado().ejercito_de_heroe(h)) {
                     Some(ejercito) => Comando::MarcharA { ejercito, destino },
                     None => return no(rechazos::HEROE_DESCONOCIDO, &m.heroe_id),
                 }

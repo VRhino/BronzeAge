@@ -69,7 +69,7 @@ fn sitio(n: &Nucleo, m: &Mundo, i: usize, r: i64, grado0: i64, faccion: u32, exi
 
 /// Una columna de `faccion` en `p` con caravana, que funda; devuelve el id de la plaza.
 fn fundar_en(n: &mut Nucleo, t: i64, nombre: &str, faccion: u32, p: Punto) -> u64 {
-    let e = n.crear_ejercito(t, nombre, "ana", faccion, p, 500, 100_000, 100_000).unwrap();
+    let e = n.crear_ejercito(t, "ana", faccion, p, 500, 100_000).unwrap();
     assert!(n.aplicar_en(t, admin(&format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e })).aceptada());
     let r = n.aplicar_en(t, Peticion::nueva("ana", &format!("f-{nombre}"), Comando::Fundar { ejercito: e }));
     assert!(r.aceptada(), "{r:?}");
@@ -92,7 +92,7 @@ fn fundar_y_sus_rechazos() {
     let m = con_mundo!();
     let mut n = nuevo(m);
     let p = sitio(&n, &m.0, 0, 60_000, 0, 1, false);
-    let e = n.crear_ejercito(0, "h1", "ana", 1, p, 500, 100_000, 100_000).unwrap();
+    let e = n.crear_ejercito(0, "ana", 1, p, 500, 100_000).unwrap();
 
     // Sin caravana no se funda; el que no es el propietario tampoco.
     assert_eq!(codigo(&n.aplicar_en(0, Peticion::nueva("ana", "f0", Comando::Fundar { ejercito: e }))), rechazos::SIN_CARAVANA);
@@ -114,18 +114,18 @@ fn fundar_y_sus_rechazos() {
 
     // Cerca de una plaza (a 10) y dentro de su zona (encima).
     for (nombre, q, esperado) in [("cerca", Punto::new(p.x + 10_000, p.y), "fundacion.cerca_de_plaza"), ("encima", p, "fundacion.dentro_de_zona")] {
-        let e2 = n.crear_ejercito(MIN, nombre, "ana", 2, q, 500, 1, 1).unwrap();
+        let e2 = n.crear_ejercito(MIN, "ana", 2, q, 500, 1).unwrap();
         n.aplicar_en(MIN, admin(&format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e2 }));
         let r = n.aplicar_en(MIN, Peticion::nueva("ana", &format!("f-{nombre}"), Comando::Fundar { ejercito: e2 }));
         assert_eq!(codigo(&r), esperado, "{nombre}");
     }
     // Encima de un campamento: la exclusión de 20.
     let c0 = campamento(&m.0, 0);
-    let e3 = n.crear_ejercito(MIN, "campa", "ana", 3, c0, 500, 1, 1).unwrap();
+    let e3 = n.crear_ejercito(MIN, "ana", 3, c0, 500, 1).unwrap();
     n.aplicar_en(MIN, admin("c-campa", Comando::DarCaravanaFundacion { ejercito: e3 }));
     assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f-campa", Comando::Fundar { ejercito: e3 }))), "fundacion.cerca_de_campamento");
     // Fuera del mapa.
-    let e4 = n.crear_ejercito(MIN, "fuera", "ana", 4, Punto::new(-5_000, 0), 500, 1, 1).unwrap();
+    let e4 = n.crear_ejercito(MIN, "ana", 4, Punto::new(-5_000, 0), 500, 1).unwrap();
     n.aplicar_en(MIN, admin("c-fuera", Comando::DarCaravanaFundacion { ejercito: e4 }));
     assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f-fuera", Comando::Fundar { ejercito: e4 }))), "fundacion.fuera_del_mapa");
 }
@@ -137,7 +137,7 @@ fn el_cap_de_fundacion_sube_con_el_nivel_de_faccion() {
     let primera = sitio(&n, &m.0, 0, 60_000, 0, 1, false);
     fundar_en(&mut n, 0, "a", 1, primera);
     let segunda = sitio(&n, &m.0, 0, 90_000, 90, 1, false);
-    let e = n.crear_ejercito(0, "b", "ana", 1, segunda, 500, 1, 1).unwrap();
+    let e = n.crear_ejercito(0, "ana", 1, segunda, 500, 1).unwrap();
     n.aplicar_en(0, admin("cb", Comando::DarCaravanaFundacion { ejercito: e }));
     let intento = |n: &mut Nucleo, id: &str| n.aplicar_en(0, Peticion::nueva("ana", id, Comando::Fundar { ejercito: e }));
     assert_eq!(codigo(&intento(&mut n, "i1")), rechazos::CAP_ALCANZADO, "nivel 1 de Facción: una plaza");

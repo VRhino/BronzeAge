@@ -101,7 +101,7 @@ fn oro(n: &Nucleo) -> i64 {
 fn mundo_de(n: &Nucleo, r: Recurso) -> i64 {
     let e = n.estado();
     e.asentamientos.values().map(|a| a.economia.almacen.cantidad(r)).sum::<i64>()
-        + e.ejercitos.values().map(|c| c.suministro.get(&r).copied().unwrap_or(0)).sum::<i64>()
+        + e.ejercitos.values().map(|c| c.columna.carga.get(&r).copied().unwrap_or(0)).sum::<i64>()
         + e.comercio.flota.iter().map(|c| c.contenido.get(&r).copied().unwrap_or(0)).sum::<i64>()
 }
 
@@ -161,10 +161,10 @@ impl Escenario {
         self.n.avanzar_hasta(t);
     }
     /// Una columna a una unidad de la puerta de la plaza (dentro del radio de la puerta).
-    fn columna_en(&mut self, nombre: &str, dueno: &str, faccion: u32, plaza: u64) -> u64 {
+    fn columna_en(&mut self, dueno: &str, faccion: u32, plaza: u64) -> u64 {
         let p = pos(&self.n, plaza);
         let t = self.n.ahora();
-        self.n.crear_ejercito(t, nombre, dueno, faccion, Punto::new(p.x + 1_000, p.y), 500, 100_000, 100_000).unwrap()
+        self.n.crear_ejercito(t, dueno, faccion, Punto::new(p.x + 1_000, p.y), 500, 100_000).unwrap()
     }
     /// Añade recursos al almacén de la plaza (si ya está lleno no cambia nada, y no importa).
     fn dar(&mut self, plaza: u64, recurso: Recurso, cantidad: i64) {
@@ -207,7 +207,7 @@ impl Escenario {
 }
 
 fn fundar(n: &mut Nucleo, t: Instante, nombre: &str, dueno: &str, faccion: u32, p: Punto) -> u64 {
-    let e = n.crear_ejercito(t, nombre, dueno, faccion, p, 500, 100_000, 100_000).unwrap();
+    let e = n.crear_ejercito(t, dueno, faccion, p, 500, 100_000).unwrap();
     assert!(n.aplicar_en(t, Peticion::nueva("admin", &format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
     let r = n.aplicar_en(t, Peticion::nueva(dueno, &format!("f-{nombre}"), Comando::Fundar { ejercito: e }));
     assert!(r.aceptada(), "{r:?}");
@@ -291,9 +291,9 @@ fn un_trueque_entero_entre_facciones_con_entrega_manual_se_cumple_con_comision_y
     let mut e = escenario(m, 7, true);
     let (a, b) = (e.a, e.b);
     // Las columnas que hacen la entrega: la de Ana a la puerta de B (recibe lo de A) y la de Beto a la puerta de A.
-    let col_ana_en_b = e.columna_en("ana-en-b", "ana", 1, b);
-    let col_beto_en_a = e.columna_en("beto-en-a", "beto", 2, a);
-    let col_ana_en_a = e.columna_en("ana-en-a", "ana", 1, a);
+    let col_ana_en_b = e.columna_en("ana", 1, b);
+    let col_beto_en_a = e.columna_en("beto", 2, a);
+    let col_ana_en_a = e.columna_en("ana", 1, a);
     e.dar(a, Cobre, 100_000);
     e.dar(b, Estano, 100_000);
     let ca = e.caravana_aparcada("ana", a, col_ana_en_b, 1);
@@ -371,7 +371,7 @@ fn un_trueque_entre_plazas_de_la_misma_faccion_cobra_el_3_por_ciento_y_no_toca_l
     let mut e = escenario(m, 7, true);
     let a = e.a;
     let c = tercera_plaza(&mut e, m);
-    let (col_en_c, col_en_a) = (e.columna_en("ana-en-c", "ana", 1, c), e.columna_en("ana-en-a", "ana", 1, a));
+    let (col_en_c, col_en_a) = (e.columna_en("ana", 1, c), e.columna_en("ana", 1, a));
     e.dar(c, Piedra, 100_000);
     let tr = e.ok("ana", Comando::ProponerTrueque { a, b: c, lineas_a: vec![(Madera, 40_000)], lineas_b: vec![(Piedra, 20_000)] }).creadas[0];
     e.ok("ana", Comando::AceptarTrueque { acuerdo: tr });
@@ -442,7 +442,7 @@ fn un_trueque_activo_que_vence_penaliza_en_proporcion_a_lo_no_entregado_y_la_rep
     let m = con_mundo!();
     let mut e = escenario(m, 7, true);
     let (a, b) = (e.a, e.b);
-    let col = e.columna_en("ana-en-b", "ana", 1, b);
+    let col = e.columna_en("ana", 1, b);
     let ca = e.caravana_aparcada("ana", a, col, 1);
     e.cargar("ana", ca, Madera, 100_000);
     let tr = e.trueque_sin_aceptar();
@@ -477,7 +477,7 @@ fn rareza_un_trueque_expirado_que_se_salda_pasa_a_cumplido_y_reparte_la_recompen
     let m = con_mundo!();
     let mut e = escenario(m, 7, true);
     let (a, b) = (e.a, e.b);
-    let (col_a, col_b) = (e.columna_en("ana-en-a", "ana", 1, a), e.columna_en("beto-en-b", "beto", 2, b));
+    let (col_a, col_b) = (e.columna_en("ana", 1, a), e.columna_en("beto", 2, b));
     e.dar(b, Cobre, 100_000);
     let ca = e.caravana_aparcada("ana", a, col_a, 1);
     e.cargar("ana", ca, Madera, 100_000);
@@ -509,7 +509,7 @@ fn las_ordenes_y_el_mostrador_mueven_el_almacen_real_y_conservan_el_oro() {
     let m = con_mundo!();
     let mut e = escenario(m, 7, true);
     let (a, b) = (e.a, e.b);
-    let col = e.columna_en("beto-en-a", "beto", 2, a);
+    let col = e.columna_en("beto", 2, a);
     e.dar(a, Madera, 100_000);
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 300_000 });
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Cobre, cantidad: 50_000 });
@@ -535,7 +535,7 @@ fn las_ordenes_y_el_mostrador_mueven_el_almacen_real_y_conservan_el_oro() {
     assert_eq!(e.rechazada("luis", comerciar(v, 1_000)), rechazos::MOSTRADOR_NO_ES_LIDER);
     assert_eq!(e.rechazada("beto", comerciar(999, 1_000)), rechazos::ORDEN_DESCONOCIDA);
     assert_eq!(e.rechazada("beto", comerciar(v, 0)), rechazos::MOSTRADOR_CANTIDAD_NO_POSITIVA);
-    let lejos = e.columna_en("beto-en-b", "beto", 2, b);
+    let lejos = e.columna_en("beto", 2, b);
     assert_eq!(e.rechazada("beto", Comando::ComerciarEnPlaza { ejercito: lejos, orden: v, cantidad: 1_000 }), rechazos::MOSTRADOR_FUERA_DE_LA_PUERTA);
     let (oro0, madera_mundo0, madera_a0, oro_a0, carro0) = (oro(&e.n), mundo_de(&e.n, Madera), cantidad(&e.n, a, Madera), cantidad(&e.n, a, Oro), e.n.suministro(col));
     e.ok("beto", comerciar(v, 20_000));
@@ -608,7 +608,7 @@ fn el_mostrador_topa_por_el_oro_de_quien_compra_y_el_espacio_del_carro() {
     let m = con_mundo!();
     let mut e = escenario(m, 7, true);
     let a = e.a;
-    let col = e.columna_en("ana-en-a", "ana", 1, a);
+    let col = e.columna_en("ana", 1, a);
     e.dar(a, Madera, 100_000);
     let v = e.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 200_000, precio: Some(PUNTO) }).creadas[0];
     // Misma Facción: 3 %. El carro solo tiene 10 de oro: se sirven 9,708 unidades (10 / 1,03) y nada más.
@@ -769,7 +769,7 @@ fn una_aparcada_se_carga_se_descarga_y_vuelve_vacia_al_origen() {
     let mut e = escenario(m, 7, true);
     let (a, b) = (e.a, e.b);
     e.dar(a, Piedra, 400_000);
-    let col = e.columna_en("ana-en-a", "ana", 1, a);
+    let col = e.columna_en("ana", 1, a);
     let c = e.caravana_aparcada("ana", a, col, 1);
     assert_eq!(e.n.caravana(c).unwrap().anfitriona, Some(a as u32));
     // Cargar: min(pedido, capacidad − lo cargado, lo que hay en el almacén). La capacidad de un carro con buey es 500.
@@ -827,7 +827,7 @@ fn con_mala_reputacion_la_entrega_paga_recargo_del_oro_del_origen_y_la_reputacio
 
     // Una entrega de B a A con la reputación de B en −40: la comisión externa es del 12 % (8 % × 1,5 de distancia máxima) y B paga
     // además el 50 % de esa comisión de su propio oro, que va al almacén de A (se conserva).
-    let col_b_en_a = e.columna_en("beto-en-a", "beto", 2, a);
+    let col_b_en_a = e.columna_en("beto", 2, a);
     // Pasado un día de impuestos, el oro de A está en su tope y no cabría la comisión: A le compra cobre a la columna de Beto (el oro pasa
     // al carro y se conserva) para hacer sitio.
     e.ok("admin", Comando::DarSuministro { ejercito: col_b_en_a, recurso: Cobre, cantidad: 100_000 });
@@ -986,7 +986,7 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_devuelve_las_caravanas_y_destru
     let mut e = escenario(m, 7, true);
     let (a, b) = (e.a, e.b);
     let c = tercera_plaza(&mut e, m);
-    let col_a = e.columna_en("ana-en-a", "ana", 1, a);
+    let col_a = e.columna_en("ana", 1, a);
     // Una de A (se queda con la plaza), una de B en preparación hacia A, y dos de C aparcadas en A (una vacía y otra con carga).
     let ca = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
     let cb = e.ok("beto", Comando::CrearCaravana { asentamiento: b }).creadas[0];
@@ -1036,7 +1036,7 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_devuelve_las_caravanas_y_destru
 /// órdenes (las órdenes llevan su instante, así que sin avances intermedios el mundo es el mismo).
 fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let (a, b) = (e.a, e.b);
-    let col = e.columna_en("beto-en-a", "beto", 2, a);
+    let col = e.columna_en("beto", 2, a);
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 200_000 });
     let base = e.n.ahora();
     let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
@@ -1098,7 +1098,7 @@ fn recuperar_desde_foto_en_mitad_de_un_trueque_da_el_mismo_mundo() {
     // El trueque se propone y acepta antes de la foto; vence después de recuperar. La caravana se prepara a mano y se cancela al final.
     let primera_mitad = |e: &mut Escenario| {
         let (a, b) = (e.a, e.b);
-        let col = e.columna_en("beto-en-a", "beto", 2, a);
+        let col = e.columna_en("beto", 2, a);
         e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 100_000 });
         e.trueque(&[(Madera, 10_000)], &[(Cobre, 10_000)]);
         let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
@@ -1192,22 +1192,15 @@ fn estado_con_comercio() -> Estado {
     s.comercio.reputacion.insert(1, Reputacion::desde(&cr.reputacion, -12 * PUNTO, 500, 2));
     s.comercio.reputacion.insert(7, Reputacion::desde(&cr.reputacion, 40 * PUNTO, 900, 0));
     s.comercio.ultima_caravana.insert(1, 42);
-    let mut col = nucleo::Ejercito {
-        id: 3,
-        lider: "h".into(),
-        propietario: "p".into(),
-        faccion: 1,
-        velocidad: 500,
-        posicion: Punto::new(1, 2),
-        plan: Default::default(),
-        viveres: base::Ritmo::constante(10, 0),
-        capacidad_viveres: 100,
-        caravana_fundacion: false,
-        suministro: [(Oro, 5), (Piedra, 6)].into_iter().collect(),
-        caravanas_adjuntas: vec![6],
-        version: 0,
-    };
+    let mr = militar::Reglas::cargar();
+    let columna = militar::columna::Columna::salir(&mr, 3, Some(1), 40, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Aceptar, vec![], [(Oro, 5), (Piedra, 6)].into_iter().collect(), 10, 0, &|_| 0);
+    let mut col = nucleo::Ejercito { id: 3, columna, posicion: Punto::new(1, 2), plan: Default::default(), velocidad_fija: Some(500), caravana_fundacion: false, caravanas_adjuntas: vec![6], version: 0 };
     col.caravanas_adjuntas.sort();
+    col.columna.participantes.push(militar::columna::Participante { heroe: 41, unido_en: 7 });
+    col.columna.peticiones.push(militar::columna::Peticion { heroe: 42, pedido_en: 5, expira_en: 10_005 });
+    col.columna.formacion_expira_en = Some(600_000);
+    col.columna.escuadras = vec![4, 5];
+    col.columna.estado = militar::racion::Estado::Marchando;
     s.ejercitos.insert(3, col);
     s.comercio.red.registrar_ruta(1, 2, 1, &[Punto::new(1_000, 1_000), Punto::new(9_000, 1_000), Punto::new(9_000, 9_000)], 5);
     s.comercio.red.registrar_ruta(2, 1, 2, &[Punto::new(9_000, 9_000), Punto::new(1_000, 1_000)], 6);
@@ -1231,16 +1224,15 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..4], b"BAN9");
+    assert_eq!(&bytes[..5], b"BAN10");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
-    // El formato anterior (BAN8) se rechaza con su motivo, y uno más viejo o ajeno también.
-    let mut viejo = bytes.clone();
-    viejo[3] = b'8';
-    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN8 no debe admitirse") };
-    assert!(e.to_string().contains("BAN8"), "{e}");
-    viejo[3] = b'7';
+    // El formato anterior (BAN9) se rechaza con su motivo, y uno más viejo o ajeno también.
+    let viejo = [b"BAN9".as_slice(), &bytes[5..]].concat();
+    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN9 no debe admitirse") };
+    assert!(e.to_string().contains("BAN9"), "{e}");
+    let viejo = [b"BAN8".as_slice(), &bytes[5..]].concat();
     assert!(Estado::deserializar(&viejo, &reglas, "h").is_err());
     assert!(Estado::deserializar(b"XXXX", &reglas, "h").is_err());
     // Cada campo del comercio cambia el hash (y ninguno coincide con otro cambio).
@@ -1323,9 +1315,35 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         f(&mut s.comercio);
         assert!(vistos.insert(s.hash()), "el hash no cambió (o coincidió con otro cambio) al tocar {nombre}");
     }
-    // El carro y las caravanas adjuntas viajan con la columna.
+    // El carro, las caravanas adjuntas y todo lo que compone la columna viajan con ella.
     type CambioColumna = (&'static str, Box<dyn Fn(&mut nucleo::Ejercito)>);
-    let columna: Vec<CambioColumna> = vec![("suministro", Box::new(|e| *e.suministro.get_mut(&Oro).unwrap() += 1)), ("adjuntas", Box::new(|e| e.caravanas_adjuntas.push(9)))];
+    let columna: Vec<CambioColumna> = vec![
+        ("carro", Box::new(|e| *e.columna.carga.get_mut(&Oro).unwrap() += 1)),
+        ("adjuntas", Box::new(|e| e.caravanas_adjuntas.push(9))),
+        ("faccion", Box::new(|e| e.columna.faccion = Some(2))),
+        ("tipo", Box::new(|e| e.columna.tipo = militar::columna::TipoColumna::Personal)),
+        ("lider", Box::new(|e| e.columna.lider += 1)),
+        ("politica", Box::new(|e| e.columna.politica = militar::columna::Politica::Preguntar)),
+        ("estado", Box::new(|e| e.columna.estado = militar::racion::Estado::Estacionada)),
+        ("participante.heroe", Box::new(|e| e.columna.participantes[1].heroe += 1)),
+        ("participante.unido_en", Box::new(|e| e.columna.participantes[1].unido_en += 1)),
+        ("participante.orden", Box::new(|e| e.columna.participantes.reverse())),
+        ("peticion.heroe", Box::new(|e| e.columna.peticiones[0].heroe += 1)),
+        ("peticion.pedido_en", Box::new(|e| e.columna.peticiones[0].pedido_en += 1)),
+        ("peticion.expira_en", Box::new(|e| e.columna.peticiones[0].expira_en += 1)),
+        ("formacion", Box::new(|e| e.columna.formacion_expira_en = None)),
+        ("escuadras.orden", Box::new(|e| e.columna.escuadras.reverse())),
+        ("escuadras.una_menos", Box::new(|e| {
+            e.columna.escuadras.pop();
+        })),
+        ("viveres.valor", Box::new(|e| e.columna.viveres.valor_en_t0 += 1)),
+        ("viveres.t0", Box::new(|e| e.columna.viveres.t0 += 1)),
+        ("viveres.ritmo", Box::new(|e| e.columna.viveres.por_minuto -= 1)),
+        ("viveres.maximo", Box::new(|e| e.columna.viveres.maximo = Some(1))),
+        ("posicion", Box::new(|e| e.posicion = Punto::new(3, 2))),
+        ("velocidad_fija", Box::new(|e| e.velocidad_fija = None)),
+        ("caravana_fundacion", Box::new(|e| e.caravana_fundacion = true)),
+    ];
     for (nombre, f) in columna {
         let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();
         f(s.ejercitos.get_mut(&3).unwrap());

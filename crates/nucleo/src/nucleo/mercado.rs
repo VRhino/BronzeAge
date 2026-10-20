@@ -35,8 +35,8 @@ use comercio::trueque::{podar, AcuerdoTrueque, ErrorTrueque, Vencimiento};
 use comercio::{total, Carga as Mercancia, Lado};
 
 /// Capacidad del carro de una columna (`LOGISTICA.capacidadCarroPorJugador`: 500).
-// DUDA: un solo carro por columna hasta las columnas con participantes (4B-2, `participantes × capacidadCarroPorJugador`); la capacidad total de la columna, con
-// las caravanas adjuntas y «Carga Ampliada», es `Nucleo::capacidad_de_carga`.
+/// La capacidad total de la columna (`participantes × capacidadCarroPorJugador`, más las caravanas adjuntas y «Carga Ampliada») es
+/// `Nucleo::capacidad_de_carga`; esta es la de un héroe, que es lo que cabe en el carro con que sale quien sale de un lugar.
 pub(super) const CAPACIDAD_CARRO: Mil = 500_000;
 /// Radio de la puerta de una plaza (`MOVIMIENTO.radioPuerta`).
 // DUDA: el bloque dice 10 (TypeScript); el valor vigente tras la calibración de distancias es 2 (Movimiento_Ejercitos §14), que es el que se usa.
@@ -166,7 +166,7 @@ impl Nucleo {
 
     /// El carro (`suministro`) de una columna.
     pub fn suministro(&self, ejercito: u64) -> Mercancia {
-        self.estado.ejercitos.get(&ejercito).map(|e| e.suministro.clone()).unwrap_or_default()
+        self.estado.ejercitos.get(&ejercito).map(|e| e.columna.carga.clone()).unwrap_or_default()
     }
 
     /// Los cupos de la flota de la plaza (Mercado activo y políticas): `None` si la plaza no existe.
@@ -443,7 +443,7 @@ impl Nucleo {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
                 }
                 let capacidad = self.capacidad_de_carga(*ejercito).unwrap_or(CAPACIDAD_CARRO);
-                let carro = &mut self.estado.ejercitos.get_mut(ejercito).expect("existe").suministro;
+                let carro = &mut self.estado.ejercitos.get_mut(ejercito).expect("existe").columna.carga;
                 let n = (*cantidad).min((capacidad - total(carro)).max(0));
                 if n == 0 {
                     return Err(sin_cambios());
@@ -463,8 +463,8 @@ impl Nucleo {
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let cr = self.estado.reglas.economia.comercio.clone();
         let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
-        // DUDA: el Líder de la columna es quien la dirige (hasta las columnas con participantes, 4B-2): el propietario de la columna; la administración manda en todas.
-        let (es_lider, pos_columna, faccion_columna) = (p.admin || e.propietario == p.actor, e.posicion_en(t), e.faccion);
+        // Dirige la columna su Líder; la administración manda en todas.
+        let (es_lider, pos_columna, faccion_columna) = (self.manda_columna(p, e, true), e.posicion_en(t), e.bandera());
         let o = self.estado.comercio.libro.buscar(orden).ok_or_else(|| rechazo(rechazos::ORDEN_DESCONOCIDA, format!("orden-{orden}")))?;
         let (plaza_id, recurso) = (o.asentamiento as u64, o.recurso);
         let plaza = self.plaza_o_rechazo(plaza_id)?;
@@ -480,7 +480,7 @@ impl Nucleo {
         let faccion_plaza = plaza.faccion;
         let capacidad = self.capacidad_de_carga(ejercito).unwrap_or(CAPACIDAD_CARRO);
         let Estado { comercio, asentamientos, ejercitos, .. } = &mut self.estado;
-        let suministro = ejercitos.get(&ejercito).map(|e| e.suministro.clone()).unwrap_or_default();
+        let suministro = ejercitos.get(&ejercito).map(|e| e.columna.carga.clone()).unwrap_or_default();
         let carro = Carro { oro: comercio::de(&suministro, Recurso::Oro), recurso: comercio::de(&suministro, recurso), espacio: (capacidad - total(&suministro)).max(0) };
         let almacen = &mut asentamientos.get_mut(&plaza_id).expect("existe").economia.almacen;
         // Una orden ya cerrada vive en el historial: se comprueba sobre una copia, que `comerciar` rechaza sin tocar.
@@ -497,7 +497,7 @@ impl Nucleo {
             let (c, m) = rechazo_de_mostrador(e);
             rechazo(c, m.into())
         })?;
-        let sum = &mut ejercitos.get_mut(&ejercito).expect("existe").suministro;
+        let sum = &mut ejercitos.get_mut(&ejercito).expect("existe").columna.carga;
         *sum.entry(Recurso::Oro).or_insert(0) += s.delta_carro_oro;
         *sum.entry(recurso).or_insert(0) += s.delta_carro_recurso;
         sum.retain(|_, n| *n > 0);

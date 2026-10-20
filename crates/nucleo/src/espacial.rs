@@ -96,7 +96,7 @@ fn situar(estado: &Estado, entidad: u64, t: base::Instante) -> Option<(base::Pun
         return Some((c.posicion_en(t), estado.asentamientos.get(&(c.origen as u64))?.faccion as i64));
     }
     let e = estado.ejercitos.get(&entidad)?;
-    Some((e.plan.posicion_en(t).unwrap_or(e.posicion), e.faccion as i64))
+    Some((e.plan.posicion_en(t).unwrap_or(e.posicion), e.bandera() as i64))
 }
 
 /// Visión muestreada (cada `Ajustes::muestreo_ms`, p. ej. 250 ms): quién ve a quién. Emite solo el **primer contacto**
@@ -139,8 +139,8 @@ impl GeneradorDeEventos for GeneradorVision {
         let (mut ojos, mut moviles) = (Vec::new(), Vec::new());
         for e in estado.ejercitos.values() {
             let donde = if e.marchando() { Donde::Plan(&e.plan) } else { Donde::Fijo(e.posicion) };
-            ojos.push(Observador { faccion: e.faccion, radio: self.radio_ojo, donde, graba: true });
-            moviles.push(Movil::new(e.id, e.faccion, donde));
+            ojos.push(Observador { faccion: e.bandera(), radio: self.radio_ojo, donde, graba: true });
+            moviles.push(Movil::new(e.id, e.bandera(), donde));
         }
         // Las caravanas en el mapa se ven como móviles de la Facción de su plaza de origen; una «grande» en tránsito llama la atención a 60.
         let reglas = &estado.reglas.economia.comercio.flota;
@@ -161,8 +161,8 @@ impl GeneradorDeEventos for GeneradorVision {
             self.salidas += c.salen.len() as u64;
             for &visto in &c.entran {
                 let Some(otro) = estado.ejercitos.get(&visto) else { continue };
-                if otro.faccion != *faccion && self.contactos.insert((*faccion, otro.faccion)) {
-                    nuevos.push((*faccion, otro.faccion, visto));
+                if otro.bandera() != *faccion && self.contactos.insert((*faccion, otro.bandera())) {
+                    nuevos.push((*faccion, otro.bandera(), visto));
                 }
             }
         }
