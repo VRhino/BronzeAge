@@ -12,16 +12,26 @@
 //! Cotas de validez (holgadas para el mundo real, 2.667.000 × 2.000.000 milésimas): un tramo que se mueve dura menos de
 //! 2^26 ms (~18 h), los radios son < 2^16 milésimas y las coordenadas < 2^26. Un tramo **quieto** puede durar lo que sea.
 //!
-//! Piezas: [`primer_acercamiento`], [`llegada_a_radio`] / [`salida_de_radio`], [`interceptar`], la [`Rejilla`] y los
-//! eventos para la cola ([`eventos`]).
+//! Piezas: [`primer_acercamiento`] e [`intervalo_de_acercamiento`] (dos tramos), [`interceptar`] (el punto donde un perseguidor alcanza a una presa)
+//! y la [`Rejilla`], que reúne a todo lo que se mueve o está quieto (columnas, caravanas, plazas) y da, por entidad, sus encuentros y la primera
+//! vez que dos de ellas se separan más de un radio. Qué hace el juego con cada uno es del núcleo: aquí solo está la geometría.
 
-pub mod eventos;
 pub mod rejilla;
 
-pub use eventos::{evento_de_persecucion, eventos_de_plan, programar, Programado, Puerta, EventoEspacial, PRIORIDAD_ENCUENTROS};
-pub use rejilla::{Encuentro, Rejilla};
+pub use rejilla::{Encuentro, Entradas, Rejilla};
 
 use base::{interpolar, Instante, Mil, Plan, Punto, Vertice};
+
+/// Prioridad de los encuentros en la cola: «llegadas y encuentros de columnas» (Reloj_Y_Eventos §2).
+pub const PRIORIDAD_ENCUENTROS: u8 = 8;
+
+/// Hasta cuándo se da por quieta a una entidad que está quieta (2^40 ms ≈ 35 años): un tramo quieto puede durar lo que sea.
+pub const HORIZONTE_MS: i64 = 1 << 40;
+
+/// El plan de una entidad quieta en `punto` desde `desde` hasta el horizonte, para apuntarla en la [`Rejilla`]: una columna acampada, una plaza.
+pub fn plan_quieto(punto: Punto, desde: Instante, generacion: u32) -> Plan {
+    Plan::nuevo(generacion, vec![Vertice { p: punto, en: desde }, Vertice { p: punto, en: desde + HORIZONTE_MS }])
+}
 
 /// Un tramo recto recorrido a velocidad constante entre dos vértices (`a.en <= b.en`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -195,37 +205,6 @@ pub fn intervalo_de_acercamiento(a: Tramo, b: Tramo, radio: Mil) -> Option<(Inst
     relativo(&a, &b)?.intervalo(radio, true)
 }
 
-/// Primer instante en que el plan llega a ≤ `radio` de `centro` (p. ej. la puerta de una plaza, radio 2). Si el plan ya
-/// empieza dentro, su inicio. Un plan de un solo vértice solo cuenta en ese instante.
-pub fn llegada_a_radio(plan: &Plan, centro: Punto, radio: Mil) -> Option<Instante> {
-    if let [v] = plan.vertices.as_slice() {
-        return (v.p.dist2(centro) <= (radio as i128).pow(2)).then_some(v.en);
-    }
-    Tramo::del_plan(plan).find_map(|t| primer_acercamiento(t, Tramo::quieto(centro, t.a.en, t.b.en), radio))
-}
-
-/// Primer instante en que el plan, tras haber estado a ≤ `radio` de `centro`, ya está **fuera** (distancia > radio).
-/// `None` si nunca entra o si el plan acaba dentro (se queda ahí).
-pub fn salida_de_radio(plan: &Plan, centro: Punto, radio: Mil) -> Option<Instante> {
-    let mut dentro = false;
-    for t in Tramo::del_plan(plan) {
-        let Some((primero, ultimo)) = intervalo_de_acercamiento(t, Tramo::quieto(centro, t.a.en, t.b.en), radio) else {
-            if dentro {
-                return Some(t.a.en); // no se da: tramos contiguos comparten el vértice. Defensa ante saltos de cero ms.
-            }
-            continue;
-        };
-        if dentro && primero > t.a.en {
-            return Some(t.a.en);
-        }
-        dentro = true;
-        if ultimo < t.b.en {
-            return Some(ultimo + 1);
-        }
-    }
-    None
-}
-
 // --- Persecución ------------------------------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -234,9 +213,6 @@ pub struct Intercepcion {
     /// Dónde está la presa en ese instante.
     pub punto: Punto,
 }
-
-/// Más allá del último vértice la presa se queda quieta; para ese tramo final se usa este horizonte (2^40 ms ≈ 35 años).
-const HORIZONTE_MS: i64 = 1 << 40;
 
 /// Primer `t >= desde` en que `perseguidor`, saliendo en línea recta hacia la presa a `velocidad` (milésimas por
 /// segundo), puede estar a ≤ `radio` de ella: `dist(P, presa(t)) <= velocidad·(t - desde)/1000 + radio`. Es el instante

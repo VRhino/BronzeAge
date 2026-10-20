@@ -37,6 +37,10 @@ pub enum ErrorPersecucion {
     CaravanaAdjunta,
     /// Un ejército no persigue caravanas: las persigue una columna personal.
     UnEjercitoNoPersigueCaravanas,
+    /// La presa no está en el mapa: entró en una plaza o un campamento, va adjunta a un ejército, está en una batalla o es una caravana que no viaja.
+    ACubierto,
+    /// Una columna no se persigue a sí misma (lo comprueba quien conoce las ids: `validar` no las ve).
+    ASiMisma,
     /// La presa no está a la vista de quien persigue.
     FueraDeVista,
 }
@@ -46,9 +50,9 @@ pub fn a_la_vista(distancia: Mil, alcance: Mil) -> bool {
     distancia <= alcance
 }
 
-/// `perseguir`: las condiciones para empezar, en este orden. `distancia` es la de la presa a la columna en este instante y `alcance` el de
-/// vista del perseguidor.
-pub fn validar(perseguidor: &Perseguidor, presa: &Presa, distancia: Mil, alcance: Mil) -> Result<(), ErrorPersecucion> {
+/// `perseguir`: las condiciones para empezar, en este orden. `en_el_mapa`: la presa se puede ver y alcanzar (no está a cubierto). `distancia` es la
+/// de la presa a la columna en este instante y `alcance`, el de vista del perseguidor.
+pub fn validar(perseguidor: &Perseguidor, presa: &Presa, en_el_mapa: bool, distancia: Mil, alcance: Mil) -> Result<(), ErrorPersecucion> {
     if !perseguidor.hay_heroe_sano {
         return Err(ErrorPersecucion::SinHeroeSano);
     }
@@ -76,6 +80,9 @@ pub fn validar(perseguidor: &Perseguidor, presa: &Presa, distancia: Mil, alcance
             }
         }
     }
+    if !en_el_mapa {
+        return Err(ErrorPersecucion::ACubierto);
+    }
     if !a_la_vista(distancia, alcance) {
         return Err(ErrorPersecucion::FueraDeVista);
     }
@@ -102,9 +109,9 @@ mod pruebas {
 
     #[test]
     fn se_persigue_lo_que_se_ve_y_justo_en_el_limite_tambien() {
-        assert_eq!(validar(&YO, &ELLA, 15_000, 15_000), Ok(()));
-        assert_eq!(validar(&YO, &ELLA, 15_001, 15_000), Err(ErrorPersecucion::FueraDeVista));
-        assert_eq!(validar(&YO, &CARAVANA, 29_999, 30_000), Ok(()));
+        assert_eq!(validar(&YO, &ELLA, true, 15_000, 15_000), Ok(()));
+        assert_eq!(validar(&YO, &ELLA, true, 15_001, 15_000), Err(ErrorPersecucion::FueraDeVista));
+        assert_eq!(validar(&YO, &CARAVANA, true, 29_999, 30_000), Ok(()));
         assert!(a_la_vista(30_000, 30_000) && !a_la_vista(30_001, 30_000));
     }
 
@@ -112,34 +119,44 @@ mod pruebas {
     fn un_ejercito_persigue_ejercitos_y_una_personal_personales_o_caravanas() {
         let ejercito = Perseguidor { tipo: TipoColumna::Ejercito, hay_heroe_sano: true };
         let otro = Presa::Columna { tipo: TipoColumna::Ejercito, hay_heroe_sano: true, propia_o_aliada: false };
-        assert_eq!(validar(&ejercito, &otro, 0, 30_000), Ok(()));
-        assert_eq!(validar(&ejercito, &ELLA, 0, 30_000), Err(ErrorPersecucion::ClaseDistinta));
-        assert_eq!(validar(&YO, &otro, 0, 30_000), Err(ErrorPersecucion::ClaseDistinta));
-        assert_eq!(validar(&ejercito, &CARAVANA, 0, 30_000), Err(ErrorPersecucion::UnEjercitoNoPersigueCaravanas));
-        assert_eq!(validar(&YO, &CARAVANA, 0, 30_000), Ok(()));
+        assert_eq!(validar(&ejercito, &otro, true, 0, 30_000), Ok(()));
+        assert_eq!(validar(&ejercito, &ELLA, true, 0, 30_000), Err(ErrorPersecucion::ClaseDistinta));
+        assert_eq!(validar(&YO, &otro, true, 0, 30_000), Err(ErrorPersecucion::ClaseDistinta));
+        assert_eq!(validar(&ejercito, &CARAVANA, true, 0, 30_000), Err(ErrorPersecucion::UnEjercitoNoPersigueCaravanas));
+        assert_eq!(validar(&YO, &CARAVANA, true, 0, 30_000), Ok(()));
     }
 
     #[test]
     fn no_se_persigue_a_los_tuyos_ni_a_un_aliado_ni_a_una_caravana_adjunta() {
         let propia = Presa::Columna { tipo: TipoColumna::Personal, hay_heroe_sano: true, propia_o_aliada: true };
-        assert_eq!(validar(&YO, &propia, 0, 1), Err(ErrorPersecucion::PropiaOAliada));
-        assert_eq!(validar(&YO, &Presa::Caravana { adjunta: false, propia_o_aliada: true }, 0, 1), Err(ErrorPersecucion::PropiaOAliada));
-        assert_eq!(validar(&YO, &Presa::Caravana { adjunta: true, propia_o_aliada: false }, 0, 1), Err(ErrorPersecucion::CaravanaAdjunta));
+        assert_eq!(validar(&YO, &propia, true, 0, 1), Err(ErrorPersecucion::PropiaOAliada));
+        assert_eq!(validar(&YO, &Presa::Caravana { adjunta: false, propia_o_aliada: true }, true, 0, 1), Err(ErrorPersecucion::PropiaOAliada));
+        assert_eq!(validar(&YO, &Presa::Caravana { adjunta: true, propia_o_aliada: false }, true, 0, 1), Err(ErrorPersecucion::CaravanaAdjunta));
     }
 
     #[test]
     fn un_herido_ni_persigue_ni_es_perseguido() {
         let herido = Perseguidor { hay_heroe_sano: false, ..YO };
-        assert_eq!(validar(&herido, &ELLA, 0, 1), Err(ErrorPersecucion::SinHeroeSano));
+        assert_eq!(validar(&herido, &ELLA, true, 0, 1), Err(ErrorPersecucion::SinHeroeSano));
         let presa_herida = Presa::Columna { tipo: TipoColumna::Personal, hay_heroe_sano: false, propia_o_aliada: false };
-        assert_eq!(validar(&YO, &presa_herida, 0, 1), Err(ErrorPersecucion::PresaSinHeroeSano));
+        assert_eq!(validar(&YO, &presa_herida, true, 0, 1), Err(ErrorPersecucion::PresaSinHeroeSano));
+    }
+
+    #[test]
+    fn una_presa_a_cubierto_no_se_persigue_aunque_este_cerca() {
+        assert_eq!(validar(&YO, &ELLA, false, 0, 15_000), Err(ErrorPersecucion::ACubierto));
+        assert_eq!(validar(&YO, &CARAVANA, false, 0, 15_000), Err(ErrorPersecucion::ACubierto));
+        // Lo que se comprueba antes (la clase, los tuyos) sigue mandando; la vista, después.
+        let propia = Presa::Caravana { adjunta: false, propia_o_aliada: true };
+        assert_eq!(validar(&YO, &propia, false, 0, 15_000), Err(ErrorPersecucion::PropiaOAliada));
+        assert_eq!(validar(&YO, &ELLA, false, 99_999, 15_000), Err(ErrorPersecucion::ACubierto));
     }
 
     #[test]
     fn las_condiciones_se_comprueban_antes_de_la_vista() {
         // Una presa propia que además está lejos se rechaza por lo primero, no por la distancia.
         let propia = Presa::Caravana { adjunta: false, propia_o_aliada: true };
-        assert_eq!(validar(&YO, &propia, 99_999, 15_000), Err(ErrorPersecucion::PropiaOAliada));
+        assert_eq!(validar(&YO, &propia, true, 99_999, 15_000), Err(ErrorPersecucion::PropiaOAliada));
     }
 
     #[test]

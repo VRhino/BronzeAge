@@ -1024,8 +1024,7 @@ fn una_arista_que_acaba_de_ser_camino_acelera_a_la_caravana_que_ya_iba_por_ella(
 #[test]
 fn dos_caravanas_que_se_cruzan_dejan_su_encuentro_y_una_en_batalla_no_cambia_mientras_dura() {
     let m = con_mundo!();
-    let mut n = Nucleo::nuevo(arranque(m, 7));
-    n.agregar_generador(Box::new(nucleo::espacial::GeneradorEncuentros::nuevo()));
+    let n = Nucleo::nuevo(arranque(m, 7));
     let mut e = montar(n, m, true, 350_000, false);
     let (a, b) = (e.a, e.b);
     e.dar(a, Cobre, 100_000);
@@ -1039,7 +1038,8 @@ fn dos_caravanas_que_se_cruzan_dejan_su_encuentro_y_una_en_batalla_no_cambia_mie
     let (fin_a, fin_b) = (fin_del_plan(&e, ca), fin_del_plan(&e, cb));
     let (plan_a, plan_b) = (e.caravana_de(ca).plan.clone().unwrap(), e.caravana_de(cb).plan.clone().unwrap());
     e.avanzar_hasta(fin_b.min(fin_a));
-    let enc = hechos(&e.n, "caravana.encuentro");
+    // Una columna hostil junto a la plaza de destino también deja su encuentro con la caravana que llega (`caravana` sola): aquí cuentan las dos caravanas.
+    let enc: Vec<_> = hechos(&e.n, "caravana.encuentro").into_iter().filter(|h| h.2.iter().any(|(k, _)| *k == "caravanaB")).collect();
     assert_eq!(enc.len(), 1, "un solo encuentro");
     let (t_enc, ids) = (enc[0].0, [dato(&enc[0], "caravana"), dato(&enc[0], "caravanaB")]);
     assert!(t_enc > t0 && t_enc < fin_a.min(fin_b));

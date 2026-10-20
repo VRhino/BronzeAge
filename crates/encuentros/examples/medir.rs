@@ -1,7 +1,7 @@
 //! Medición: 10.000 móviles con planes de 20 tramos en el mundo real (2.667.000 × 2.000.000 milésimas).
 //! `CARGO_TARGET_DIR=... cargo run --release -p encuentros --example medir [lado_zona_en_milesimas]`
 use base::{Plan, Punto, Rng, Vertice};
-use encuentros::Rejilla;
+use encuentros::{Entradas, Rejilla};
 use std::time::Instant;
 
 fn plan(rng: &mut Rng, zona: (i64, i64), tramos: usize) -> Plan {
@@ -42,7 +42,7 @@ fn main() {
         rej.apuntar(e, 2, &nuevo);
         n_ap += t.elapsed();
         let t = Instant::now();
-        let enc = rej.encuentros_de(e, &nuevo, 3_000);
+        let enc = rej.encuentros_de(e, &nuevo, 3_000, Entradas::Todas);
         n_enc += t.elapsed();
         cands += rej.candidatos(e).len();
         total_enc += enc.len();

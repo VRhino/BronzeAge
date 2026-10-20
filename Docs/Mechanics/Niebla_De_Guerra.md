@@ -11,6 +11,8 @@ así que la proyección es una frontera de seguridad, no una capa de presentaci�
 - **Canon:** Doc 5.12.7 (qué ve), 5.12.8 (qué recuerda), 5.12.10 (intel), 1.10 (el jugador en el mundo), 1.3 (exploración sin bandera). El documento de diseño que la precedió (`Consideraciones/Niebla_De_Guerra_Definicion.md`) se borró el 2026-10-11 al pasar todo aquí; sigue en el historial de git.
 - **Fuera de alcance aquí:** la inspección de cerca (anillo de 8) → [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md); la proyección de lo que es propio (almacén, cola, etc.) salvo en lo que afecta a la niebla; el terreno, que **lo tapa el cliente** con la máscara (el servidor solo dice qué se ha explorado); el cliente de administración no tapa nada.
 
+> **Implementado en Rust (2026-10-20, fase 4C).** Los **informes de inspección** son del héroe (`Nucleo::informes_de_inspeccion`): uno por objetivo, `INSPECCION.informeMinutos` = 10 minutos, renovables al volver a mirar (`militar::inspeccion`); falta proyectarlos al cliente. La visión muestreada ya da a cada columna su alcance según la tropa en pie: 30 con soldados, 15 sin ellos (§3). Las plazas y las avanzadas siguen sin ser ojos.
+
 ## 1. Idea
 
 **Ver algo es conocerlo.** Hay un solo mecanismo —lo que alcanzan tus ojos queda grabado— y de él salen los tres estados que ve el jugador:

@@ -883,8 +883,8 @@ fn estado_con_heroes() -> nucleo::Estado {
     s.militar.tecnologias.insert(1, ["arco_compuesto".to_owned(), "leva_comunal".to_owned()].into_iter().collect());
     let clave = s.generaciones.clave(5);
     s.cola.programar(150_000, nucleo::PRIO_SALIDA, clave, nucleo::Carga::SalidaDelMundo);
-    // Los cuatro plazos militares viajan en la cola.
-    for (i, suceso) in [nucleo::SucesoMilitar::Desercion, nucleo::SucesoMilitar::CaducaFormacion, nucleo::SucesoMilitar::CaducaPeticion { columna: 4 }, nucleo::SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria: 7 }].into_iter().enumerate() {
+    // Los cinco plazos militares viajan en la cola.
+    for (i, suceso) in [nucleo::SucesoMilitar::Desercion, nucleo::SucesoMilitar::CaducaFormacion, nucleo::SucesoMilitar::CaducaPeticion { columna: 4 }, nucleo::SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria: 7 }, nucleo::SucesoMilitar::PresaFueraDeVista { presa: 9, presa_generacion: 3 }].into_iter().enumerate() {
         let clave = s.generaciones.clave(40 + i as u64);
         s.cola.programar(200_000 + i as i64, nucleo::PRIO_UMBRAL, clave, nucleo::Carga::Militar(suceso));
     }
@@ -902,7 +902,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN10");
+    assert_eq!(&bytes[..5], b"BAN11");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

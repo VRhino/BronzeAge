@@ -335,6 +335,7 @@ impl Nucleo {
         // Su ciudad nace con los mismos edificios iniciales que la economía (ids 0..=viviendas+1).
         let urbe = crate::urbanismo::Urbe::fundar(&self.estado.reglas.economia, self.semilla, id);
         self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe });
+        self.situar_plaza(id, punto);
         self.programar_minuto(id, t + base::MS_POR_MINUTO);
         self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;
         self.tr.tocados.push(ejercito);

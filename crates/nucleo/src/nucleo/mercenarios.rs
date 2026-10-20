@@ -446,6 +446,7 @@ impl Nucleo {
         if marchando {
             self.avisar_plan(id, true);
         }
+        self.anunciar_columna(id, Motivo::Ritmo);
     }
 
     // ───────────────────────────── Reposición ─────────────────────────────

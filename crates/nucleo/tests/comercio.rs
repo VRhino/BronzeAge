@@ -1194,7 +1194,7 @@ fn estado_con_comercio() -> Estado {
     s.comercio.ultima_caravana.insert(1, 42);
     let mr = militar::Reglas::cargar();
     let columna = militar::columna::Columna::salir(&mr, 3, Some(1), 40, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Aceptar, vec![], [(Oro, 5), (Piedra, 6)].into_iter().collect(), 10, 0, &|_| 0);
-    let mut col = nucleo::Ejercito { id: 3, columna, posicion: Punto::new(1, 2), plan: Default::default(), velocidad_fija: Some(500), caravana_fundacion: false, caravanas_adjuntas: vec![6], version: 0 };
+    let mut col = nucleo::Ejercito { id: 3, columna, posicion: Punto::new(1, 2), plan: Default::default(), velocidad_fija: Some(500), caravana_fundacion: false, caravanas_adjuntas: vec![6], persiguiendo: Some(9), en_batalla: true, version: 0 };
     col.caravanas_adjuntas.sort();
     col.columna.participantes.push(militar::columna::Participante { heroe: 41, unido_en: 7 });
     col.columna.peticiones.push(militar::columna::Peticion { heroe: 42, pedido_en: 5, expira_en: 10_005 });
@@ -1224,15 +1224,15 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN10");
+    assert_eq!(&bytes[..5], b"BAN11");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
-    // El formato anterior (BAN9) se rechaza con su motivo, y uno más viejo o ajeno también.
+    // El formato anterior (BAN10) se rechaza con su motivo, y uno más viejo o ajeno también.
+    let viejo = [b"BAN10".as_slice(), &bytes[5..]].concat();
+    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN10 no debe admitirse") };
+    assert!(e.to_string().contains("BAN10"), "{e}");
     let viejo = [b"BAN9".as_slice(), &bytes[5..]].concat();
-    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN9 no debe admitirse") };
-    assert!(e.to_string().contains("BAN9"), "{e}");
-    let viejo = [b"BAN8".as_slice(), &bytes[5..]].concat();
     assert!(Estado::deserializar(&viejo, &reglas, "h").is_err());
     assert!(Estado::deserializar(b"XXXX", &reglas, "h").is_err());
     // Cada campo del comercio cambia el hash (y ninguno coincide con otro cambio).

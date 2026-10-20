@@ -251,6 +251,7 @@ impl Nucleo {
             self.estado.nodos_reclamados.remove(&p.nodo);
         }
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
+        self.quitar_plaza(id);
         self.estado.generaciones.subir(id);
         // La cascada de la ruina, en su orden: los residentes se reubican; después, el comercio (trueques anulados sin penalizar, caravanas perdidas
         // o devueltas y órdenes de mercado borradas). El campamento de bandidos y la Facción derrotada (si era su última plaza) son de otros

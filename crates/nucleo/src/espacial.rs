@@ -1,109 +1,18 @@
-//! Generadores espaciales que se enchufan al núcleo: encuentros exactos entre columnas (`encuentros`) y visión muestreada
-//! (`vision`). Son los dos modos del mundo reactivo: lo que cambia el juego es un evento exacto; lo informativo se muestrea.
+//! Visión muestreada (`vision`): quién ve a quién. Es lo informativo del mundo reactivo —se muestrea, no hay evento exacto—; lo que cambia el juego
+//! (los encuentros y las persecuciones) son eventos exactos del núcleo, en `nucleo/espacio.rs`.
 
 use std::collections::BTreeSet;
 
-use crate::estado::{Estado, EventoNucleo};
-use crate::estado_comercio::{entidad_caravana, es_entidad_caravana, id_de_entidad};
+use crate::estado::EventoNucleo;
+use crate::estado_comercio::entidad_caravana;
 use crate::generadores::{Cx, GeneradorDeEventos};
-use base::{Mil, Plan};
-use cola::Clave;
 use comercio::caravana::EstadoCaravana;
-use encuentros::{Rejilla, PRIORIDAD_ENCUENTROS};
 use vision::{Donde, Movil, Muestra, Observador, Vision};
-
-/// Tipo de evento externo del generador de encuentros: `a` = la otra columna, `b` = su generación al calcular el cruce.
-const TIPO_ENCUENTRO: u16 = 1;
-
-/// Radio de encuentro entre columnas (Movimiento_Ejercitos: 3 unidades estratégicas, en milésimas).
-pub const RADIO_ENCUENTRO: Mil = 3_000;
-
-/// Encuentros exactos: cada vez que una columna cambia de plan se recalculan solo sus pares (rejilla espacio-temporal) y
-/// se programan como eventos de la cola, ligados a la generación de ambas columnas.
-pub struct GeneradorEncuentros {
-    rejilla: Rejilla,
-    radio: Mil,
-}
-
-impl GeneradorEncuentros {
-    pub fn nuevo() -> Self {
-        Self { rejilla: Rejilla::para_mundo_real(), radio: RADIO_ENCUENTRO }
-    }
-}
-
-impl Default for GeneradorEncuentros {
-    fn default() -> Self {
-        Self::nuevo()
-    }
-}
-
-impl GeneradorDeEventos for GeneradorEncuentros {
-    fn plan_vigente(&mut self, ejercito: u64, plan: &Plan) {
-        self.rejilla.apuntar(ejercito, plan.generacion, plan);
-    }
-
-    fn plan_cambiado(&mut self, cx: &mut Cx<'_>, ejercito: u64, plan: &Plan) {
-        self.rejilla.quitar(ejercito);
-        self.rejilla.apuntar(ejercito, plan.generacion, plan);
-        let ahora = cx.ahora();
-        let clave = Clave { entidad: ejercito, generacion: cx.generacion(ejercito) };
-        for e in self.rejilla.encuentros_de(ejercito, plan, self.radio) {
-            // Un cruce que ya empezó antes de este instante (planes que se solapan al emitirse) se trata como «ahora».
-            cx.programar_con(e.instante.max(ahora), PRIORIDAD_ENCUENTROS, clave, TIPO_ENCUENTRO, e.otra, e.otra_generacion as u64);
-        }
-    }
-
-    fn plan_retirado(&mut self, _cx: &mut Cx<'_>, ejercito: u64) {
-        self.rejilla.quitar(ejercito);
-    }
-
-    fn al_vencer(&mut self, cx: &mut Cx<'_>, entidad: u64, tipo: u16, otra: u64, otra_generacion: u64) {
-        if tipo != TIPO_ENCUENTRO {
-            return;
-        }
-        // La clave de la cola ya garantiza que `entidad` no cambió de plan; falta comprobar la otra.
-        if cx.generacion(otra) as u64 != otra_generacion {
-            return;
-        }
-        let t = cx.ahora();
-        let (Some((pa, fa)), Some((pb, fb))) = (situar(cx.estado(), entidad, t), situar(cx.estado(), otra, t)) else { return };
-        let punto = base::Punto::new((pa.x + pb.x) / 2, (pa.y + pb.y) / 2);
-        let (lo, hi) = (entidad.min(otra), entidad.max(otra));
-        if es_entidad_caravana(entidad) || es_entidad_caravana(otra) {
-            // Un encuentro con una caravana: lo resuelve el sistema militar (combate A/B, Combate.md §7.1); aquí solo se deja el hecho.
-            let columnas: Vec<u64> = [lo, hi].into_iter().filter(|&e| !es_entidad_caravana(e)).collect();
-            let caravanas: Vec<i64> = [lo, hi].into_iter().filter(|&e| es_entidad_caravana(e)).map(|e| id_de_entidad(e) as i64).collect();
-            let mut datos = vec![("faccionA", fa), ("faccionB", fb)];
-            datos.extend(caravanas.iter().enumerate().map(|(i, &c)| (if i == 0 { "caravana" } else { "caravanaB" }, c)));
-            cx.emitir(EventoNucleo { codigo: "caravana.encuentro".into(), en: t, ejercitos: columnas, asentamientos: vec![], punto: Some(punto), datos });
-            return;
-        }
-        cx.emitir(EventoNucleo {
-            codigo: "ejercito.encuentro".into(),
-            en: t,
-            ejercitos: vec![lo, hi],
-            asentamientos: vec![],
-            punto: Some(punto),
-            datos: vec![("faccionA", fa), ("faccionB", fb)],
-        });
-    }
-}
-
-/// Dónde está y de qué Facción es una entidad de la rejilla de encuentros: una columna o (con la etiqueta de `estado_comercio`) una caravana.
-fn situar(estado: &Estado, entidad: u64, t: base::Instante) -> Option<(base::Punto, i64)> {
-    if es_entidad_caravana(entidad) {
-        let c = estado.comercio.caravana(id_de_entidad(entidad))?;
-        return Some((c.posicion_en(t), estado.asentamientos.get(&(c.origen as u64))?.faccion as i64));
-    }
-    let e = estado.ejercitos.get(&entidad)?;
-    Some((e.plan.posicion_en(t).unwrap_or(e.posicion), e.bandera() as i64))
-}
 
 /// Visión muestreada (cada `Ajustes::muestreo_ms`, p. ej. 250 ms): quién ve a quién. Emite solo el **primer contacto**
 /// entre dos facciones; el detalle por columna es lo que alimentará los `Delta` del ámbito de vista.
 pub struct GeneradorVision {
     vision: Vision,
-    radio_ojo: Mil,
     previa: Muestra,
     contactos: BTreeSet<(u32, u32)>,
     /// Diagnóstico: muestreos hechos y entradas/salidas de vista acumuladas.
@@ -116,7 +25,6 @@ impl GeneradorVision {
     pub fn nuevo() -> Self {
         Self {
             vision: Vision::new(),
-            radio_ojo: vision::radios::EJERCITO,
             previa: Muestra::default(),
             contactos: BTreeSet::new(),
             muestreos: 0,
@@ -139,7 +47,10 @@ impl GeneradorDeEventos for GeneradorVision {
         let (mut ojos, mut moviles) = (Vec::new(), Vec::new());
         for e in estado.ejercitos.values() {
             let donde = if e.marchando() { Donde::Plan(&e.plan) } else { Donde::Fijo(e.posicion) };
-            ojos.push(Observador { faccion: e.bandera(), radio: self.radio_ojo, donde, graba: true });
+            // Una columna con soldados en pie ve 30; un héroe solo, o con la tropa aniquilada, 15 (Niebla_De_Guerra §3).
+            let participantes: Vec<u64> = e.columna.participantes.iter().map(|p| p.heroe).collect();
+            let radio = vision::radios::columna(estado.militar.soldados_de(&participantes, &e.columna.escuadras) > 0);
+            ojos.push(Observador { faccion: e.bandera(), radio, donde, graba: true });
             moviles.push(Movil::new(e.id, e.bandera(), donde));
         }
         // Las caravanas en el mapa se ven como móviles de la Facción de su plaza de origen; una «grande» en tránsito llama la atención a 60.

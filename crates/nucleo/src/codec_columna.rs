@@ -1,4 +1,4 @@
-//! Serialización canónica de las columnas (`Ejercito`) para el hash y las fotos (formato BAN10). La composición y el mando son de
+//! Serialización canónica de las columnas (`Ejercito`) para el hash y las fotos (formato BAN11). La composición y el mando son de
 //! `militar::columna::Columna`, que se desestructura **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y
 //! obliga a decidir cómo se guarda.
 //!
@@ -7,7 +7,7 @@
 //! peticiones{n u64 · n × (héroe u64, pedido_en i64, expira_en i64)} · formación_expira_en opt_i64 · escuadras{n u64 · n × u64} · carga{n u64 · n ×
 //! (recurso u8, cantidad i64)} · víveres{valor i64, t0 i64, por_minuto i64, máximo opt_i64, mínimo opt_i64} · posición{x i64, y i64} ·
 //! plan{generación u32 · n u32 · n × (punto, instante i64)} · velocidad_fija opt_i64 · caravana_fundación bool · caravanas_adjuntas{n u32 · n ×
-//! u64} · versión u64`.
+//! u64} · persiguiendo opt_u64 · en_batalla bool · versión u64`.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_comercio::{carga_escribir, carga_leer};
@@ -47,7 +47,7 @@ pub(crate) fn ritmo_leer(r: &mut Lector) -> Result<Ritmo, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, e: &Ejercito) {
-    let Ejercito { id, columna, posicion, plan, velocidad_fija, caravana_fundacion, caravanas_adjuntas, version } = e;
+    let Ejercito { id, columna, posicion, plan, velocidad_fija, caravana_fundacion, caravanas_adjuntas, persiguiendo, en_batalla, version } = e;
     let Columna { id: _, faccion, tipo, lider, politica, estado, participantes, peticiones, formacion_expira_en, escuadras, carga, viveres } = columna;
     w.u64(*id);
     w.opt_u64(faccion.map(u64::from));
@@ -88,6 +88,8 @@ pub(crate) fn escribir(w: &mut Escritor, e: &Ejercito) {
     w.bool(*caravana_fundacion);
     w.u32(caravanas_adjuntas.len() as u32);
     caravanas_adjuntas.iter().for_each(|&c| w.u64(c));
+    w.opt_u64(*persiguiendo);
+    w.bool(*en_batalla);
     w.u64(*version);
 }
 
@@ -127,5 +129,6 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Ejercito, ErrorFormato> {
         caravanas_adjuntas.push(r.u64()?);
     }
     let columna = Columna { id, faccion, tipo, lider, politica, estado, participantes, peticiones, formacion_expira_en, escuadras, carga, viveres };
-    Ok(Ejercito { id, columna, posicion, plan: Plan { generacion, vertices }, velocidad_fija, caravana_fundacion, caravanas_adjuntas, version: r.u64()? })
+    let (persiguiendo, en_batalla) = (r.opt_u64()?, r.bool()?);
+    Ok(Ejercito { id, columna, posicion, plan: Plan { generacion, vertices }, velocidad_fija, caravana_fundacion, caravanas_adjuntas, persiguiendo, en_batalla, version: r.u64()? })
 }

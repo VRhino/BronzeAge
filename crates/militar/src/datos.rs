@@ -1,5 +1,5 @@
 //! Las cifras del sistema militar. Fuente única: los bloques `<!-- parametros:NOMBRE -->` de `Docs/Mechanics/{Heroe_Y_Tropa, Movimiento_Ejercitos,
-//! Combate, Presencia_Y_Convocatoria, Campamentos_Mercenarios}.md`, incrustados en el binario. Los decimales pasan una sola vez a enteros:
+//! Combate, Presencia_Y_Convocatoria, Campamentos_Mercenarios, Niebla_De_Guerra}.md`, incrustados en el binario. Los decimales pasan una sola vez a enteros:
 //! **ppm** para tasas y factores, **milésimas** (`Mil`) para cantidades, distancias y velocidades.
 //!
 //! **Los bloques son los valores vigentes** (decisión del autor, 2026-10-19): a diferencia de lo que ocurría en el comercio, no hay
@@ -17,11 +17,12 @@ pub const MOVIMIENTO: &str = include_str!("../../../Docs/Mechanics/Movimiento_Ej
 pub const COMBATE: &str = include_str!("../../../Docs/Mechanics/Combate.md");
 pub const PRESENCIA: &str = include_str!("../../../Docs/Mechanics/Presencia_Y_Convocatoria.md");
 pub const CAMPAMENTOS: &str = include_str!("../../../Docs/Mechanics/Campamentos_Mercenarios.md");
+pub const NIEBLA: &str = include_str!("../../../Docs/Mechanics/Niebla_De_Guerra.md");
 pub const TECNOLOGIA: &str = include_str!("../../../Docs/Mechanics/Tecnologia_Aedas.md");
 
 /// Los bloques de parámetros de los documentos, para la identidad de las reglas (hash del núcleo).
 pub fn texto_de_parametros() -> String {
-    [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, TECNOLOGIA].iter().map(|d| texto_de_parametros_de(d)).collect()
+    [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, NIEBLA, TECNOLOGIA].iter().map(|d| texto_de_parametros_de(d)).collect()
 }
 
 pub fn bloque(doc: &str, nombre: &str) -> Value {
@@ -105,6 +106,8 @@ pub struct ReglasMovimiento {
     pub radio_puerta: Mil,
     /// Cuánto vive una petición de unión (ms).
     pub vida_peticion_union: i64,
+    /// A cuánto se inspecciona una columna, una caravana o una plaza ajena (`MOVIMIENTO.radioInspeccion`).
+    pub radio_inspeccion: Mil,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -136,6 +139,12 @@ pub struct ReglasMilitar {
     pub nivel_maximo: u8,
     /// Experiencia que pide cada nivel para subir al siguiente (milésimas de punto).
     pub experiencia_para_subir: Vec<Mil>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasInspeccion {
+    /// Cuánto se guarda lo que se vio al inspeccionar (ms): `INSPECCION.informeMinutos`.
+    pub informe: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -189,6 +198,7 @@ pub struct Reglas {
     pub vision: ReglasVision,
     pub militar: ReglasMilitar,
     pub presencia: ReglasPresencia,
+    pub inspeccion: ReglasInspeccion,
     pub mercenarios: ReglasMercenarios,
     pub tecnologias: ReglasTecnologias,
 }
@@ -227,6 +237,7 @@ impl Reglas {
                 consumo_por_participante: mil(num(&mv, "consumoPorParticipante")),
                 radio_puerta: mil(num(&mv, "radioPuerta")),
                 vida_peticion_union: entero(&mv, "vidaPeticionUnionSegundos") * 1000,
+                radio_inspeccion: mil(num(&mv, "radioInspeccion")),
             },
             formacion: ReglasFormacion { minimo: entero(&fm, "minimo") as usize, plazo: entero(&fm, "plazoMinutos") * MS_POR_MINUTO },
             vision: ReglasVision { ejercito: mil(num(&vs, "ejercito")), jugador_solo: mil(num(&vs, "jugadorSolo")) },
@@ -240,6 +251,7 @@ impl Reglas {
                 experiencia_para_subir: lista(&mi, "experienciaParaSubirEscuadra").into_iter().map(mil).collect(),
             },
             presencia: ReglasPresencia { retardo_desconexion: entero(&pr, "retardoDesconexionMs"), tope_aplazamiento: entero(&pr, "topeAplazamientoMs") },
+            inspeccion: ReglasInspeccion { informe: entero(&bloque(NIEBLA, "INSPECCION"), "informeMinutos") * MS_POR_MINUTO },
             mercenarios: ReglasMercenarios {
                 recargo: ppm(num(&me, "recargo")),
                 descuento_sin_asentamientos: ppm(num(&me, "descuentoSinAsentamientos")),
@@ -287,7 +299,6 @@ mod pruebas {
 
     #[test]
     fn los_bloques_repetidos_entre_documentos_coinciden() {
-        const NIEBLA: &str = include_str!("../../../Docs/Mechanics/Niebla_De_Guerra.md");
         const BATALLA: &str = include_str!("../../../Docs/Mechanics/Batalla_Unity_Ciclo.md");
         let docs = [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, NIEBLA, TECNOLOGIA, BATALLA, include_str!("../../../Docs/Mechanics/Reloj_Y_Eventos.md")];
         let todos: Vec<_> = docs.iter().map(|d| bloques_de(d)).collect();
@@ -320,7 +331,7 @@ mod pruebas {
         assert_eq!(r.logistica.umbral_narrar_reposte, 500_000);
         assert_eq!((r.logistica.factor_marcha, r.logistica.factor_estacionado), (250_000, 100_000));
         assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (33_000, 500, 2_000));
-        assert_eq!(r.movimiento.vida_peticion_union, 10_000);
+        assert_eq!((r.movimiento.vida_peticion_union, r.movimiento.radio_inspeccion, r.inspeccion.informe), (10_000, 8_000, 10 * MS_POR_MINUTO));
         assert_eq!((r.formacion.minimo, r.formacion.plazo), (3, 10 * MS_POR_MINUTO));
         assert_eq!((r.vision.ejercito, r.vision.jugador_solo), (30_000, 15_000));
         assert_eq!((r.presencia.retardo_desconexion, r.presencia.tope_aplazamiento), (150_000, 300_000));

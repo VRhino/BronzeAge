@@ -328,8 +328,9 @@ impl Nucleo {
         }
     }
 
-    /// Cuenta a los generadores (`encuentros`) que la entidad tiene plan nuevo (`Some`) o ya no se mueve (`None`).
+    /// Cuenta al espacio y a los generadores que la entidad tiene plan nuevo (`Some`) o ya no se mueve (`None`).
     pub(super) fn avisar_plan_entidad(&mut self, entidad: u64, plan: Option<Plan>) {
+        self.anunciar_caravana(entidad, plan.clone());
         if self.generadores.is_empty() {
             return;
         }
@@ -636,6 +637,7 @@ impl Nucleo {
         self.tr.tocados.push(id);
         self.programar_ejercito(id, t);
         self.avisar_plan(id, true);
+        self.anunciar_columna(id, Motivo::Plan);
         true
     }
 

@@ -8,7 +8,7 @@
 //! Módulos, en orden de dependencia: `datos` (cifras de los bloques, **vigentes** sin correcciones en el código), `catalogo` (las 27
 //! tropas), `escuadra` (nivel, moral y deserción), `liderazgo` (Doc 5.11), `presencia` (ubicación y conexión), `heroe` (progresión, loadouts,
 //! orden de escuadras y herido), `guarnicion` (cupo y asignación), `reclutamiento` (en una plaza) y `mercenarios` (en un campamento, y la
-//! tropa prestada), `racion` (víveres como ritmo), `columna` (unirse, separarse, formar, velocidad), `convocatoria` y `persecucion`.
+//! tropa prestada), `racion` (víveres como ritmo), `columna` (unirse, separarse, formar, velocidad), `convocatoria`, `persecucion` e `inspeccion`.
 
 pub mod catalogo;
 pub mod columna;
@@ -17,6 +17,7 @@ pub mod datos;
 pub mod escuadra;
 pub mod guarnicion;
 pub mod heroe;
+pub mod inspeccion;
 pub mod liderazgo;
 pub mod mercenarios;
 pub mod persecucion;

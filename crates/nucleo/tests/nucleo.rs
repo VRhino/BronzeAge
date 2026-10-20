@@ -430,7 +430,7 @@ fn el_escenario_aleatorio_ejercita_todos_los_caminos() {
     assert!(m.eventos > 150, "{m:?}");
     assert!(n.eventos_descartados() > 10, "se invalidaron planes a mitad de camino");
     let codigos: std::collections::BTreeSet<_> = eventos(&n).into_iter().map(|e| e.0).collect();
-    assert_eq!(codigos.into_iter().collect::<Vec<_>>(), ["ejercito.estacionado", "ejercito.llega", "ejercito.sin_viveres", "ejercito.viveres_bajos"]);
+    assert_eq!(codigos.into_iter().collect::<Vec<_>>(), ["ejercito.encuentro", "ejercito.estacionado", "ejercito.llega", "ejercito.sin_viveres", "ejercito.viveres_bajos"]);
 }
 
 #[test]

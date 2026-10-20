@@ -43,16 +43,20 @@ use std::thread::JoinHandle;
 mod columnas;
 mod construccion;
 mod convocatorias;
+mod espacio;
 mod flota;
 mod heroes;
+mod inspecciones;
 mod mercado;
 mod mercenarios;
+mod persecuciones;
 mod pueblos;
 mod salidas;
 mod uniones;
 mod viaje;
 mod zonas;
 
+use espacio::{Cosa, Motivo};
 pub use zonas::InformeViabilidad;
 
 /// Tipos de entrada del registro.
@@ -160,6 +164,10 @@ pub struct Nucleo {
     recuperado: bool,
     /// Memos del viaje de las caravanas (rutas y atracción de la red): funciones puras del estado, no entran en el hash ni en las fotos.
     cache: viaje::CacheViaje,
+    /// El espacio del mundo (rejilla de encuentros y perseguidores): se reconstruye del estado, no entra en el hash ni en las fotos.
+    espacio: espacio::Espacio,
+    /// Las columnas que están rehaciendo su plan por una persecución en este instante (para no repetir una en la misma cascada). Vacío entre órdenes.
+    siguiendo: Vec<u64>,
 }
 
 impl Nucleo {
@@ -247,7 +255,10 @@ impl Nucleo {
             avisos: Vec::new(),
             recuperado: false,
             cache: viaje::CacheViaje::default(),
+            espacio: espacio::Espacio::nuevo(),
+            siguiendo: Vec::new(),
         };
+        n.reconstruir_espacio();
         n.reiniciar_muestreo();
         n
     }
@@ -401,6 +412,7 @@ impl Nucleo {
             Carga::Reputacion(cita) => self.cita_de_reputacion(id, cita, t),
             Carga::SalidaDelMundo => self.salida_del_mundo(id, t),
             Carga::Militar(suceso) => self.suceso_militar(id, suceso, t),
+            Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
                 if let Some(g) = gens.get_mut(generador as usize) {
@@ -501,21 +513,43 @@ impl Nucleo {
         self.generadores = gens;
     }
 
-    /// La columna deja de moverse donde está en `t`: sin plan, víveres al ritmo de acampada, generación nueva.
+    /// La columna deja de moverse donde está en `t`: sin plan, víveres al ritmo de acampada, generación nueva. Una columna quieta no persigue.
     fn detener(&mut self, id: u64, t: Instante) {
         let Some(e) = self.estado.ejercitos.get_mut(&id) else { return };
         e.posicion = e.posicion_en(t);
         let g = self.estado.generaciones.subir(id);
         e.plan = Plan { generacion: g, vertices: Vec::new() };
         self.tr.tocados.push(id);
+        self.fijar_persecucion(id, None);
         self.poner_marcha(id, t, militar::racion::Estado::Estacionada);
         self.programar_ejercito(id, t);
         self.avisar_plan(id, false);
+        self.anunciar_columna(id, Motivo::Plan);
+    }
+
+    /// La columna ha puesto en marcha `camino` desde donde está en `t`, a la velocidad que le da su composición: plan nuevo, generación nueva y todo lo
+    /// que dependía del plan anterior, reprogramado.
+    fn poner_ruta(&mut self, id: u64, t: Instante, camino: Camino) {
+        let e = &self.estado.ejercitos[&id];
+        let (origen, velocidad) = (e.posicion_en(t), self.velocidad_de_columna(e).max(1));
+        let g = self.estado.generaciones.subir(id);
+        let e = self.estado.ejercitos.get_mut(&id).expect("existe");
+        e.plan = camino.a_plan(t, velocidad, g);
+        e.posicion = origen;
+        self.tr.tocados.push(id);
+        self.poner_marcha(id, t, militar::racion::Estado::Marchando);
+        self.programar_ejercito(id, t);
+        self.avisar_plan(id, true);
+        self.anunciar_columna(id, Motivo::Plan);
     }
 
     fn llegada(&mut self, id: u64, t: Instante) {
         let Some(e) = self.estado.ejercitos.get(&id) else { return };
         let Some(ultimo) = e.plan.vertices.last().copied() else { return };
+        // Quien persigue no acampa al llegar al último punto donde vio a su presa: la sigue, a no ser que ya no tenga a quién.
+        if e.persiguiendo.is_some() && self.seguir_presa(id) {
+            return;
+        }
         self.detener(id, t);
         self.evento("ejercito.llega", t, id, Some(ultimo.p), vec![]);
     }
@@ -648,7 +682,7 @@ impl Nucleo {
                 if let Err(r) = self.autorizar_movimiento(p, e) {
                     return r;
                 }
-                let (id, origen, velocidad, marchando) = (e.id, e.posicion_en(t), self.velocidad_de_columna(e).max(1), e.marchando());
+                let (id, origen, marchando) = (e.id, e.posicion_en(t), e.marchando());
                 let camino = precalculado.unwrap_or_else(|| {
                     self.metricas.rutas_calculadas += 1;
                     self.rutas.ruta_con(&mut self.escritorio, origen, *destino, &Opciones::default())
@@ -664,14 +698,9 @@ impl Nucleo {
                     self.detener(id, t);
                     self.evento("ejercito.estacionado", t, id, Some(origen), vec![]);
                 } else {
-                    let g = self.estado.generaciones.subir(id);
-                    let e = self.estado.ejercitos.get_mut(&id).expect("existe");
-                    e.plan = camino.a_plan(t, velocidad, g);
-                    e.posicion = origen;
-                    self.tr.tocados.push(id);
-                    self.poner_marcha(id, t, militar::racion::Estado::Marchando);
-                    self.programar_ejercito(id, t);
-                    self.avisar_plan(id, true);
+                    // Elegir destino es dejar de ir detrás de nadie, y sin avisar.
+                    self.fijar_persecucion(id, None);
+                    self.poner_ruta(id, t, camino);
                 }
             }
             Comando::Estacionar { ejercito } => {
@@ -798,6 +827,18 @@ impl Nucleo {
             | Comando::SepararseDeConvocatoria { .. }
             | Comando::CancelarConvocatoria { .. }
             | Comando::PartirConvocatoria { .. } => match self.ejecutar_convocatorias(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::Perseguir { .. } | Comando::DejarDePerseguir { .. } => match self.ejecutar_persecuciones(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::Inspeccionar { heroe, objetivo } => match self.inspeccionar(t, p, *heroe, *objetivo) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::FijarRelacion { a, b, relacion } => match self.fijar_relacion(t, p, *a, *b, *relacion) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

@@ -1,6 +1,6 @@
 //! El estado militar dentro del núcleo (Heroe_Y_Tropa, Presencia_Y_Convocatoria, Campamentos_Mercenarios): los héroes con todas sus escuadras
 //! (viven en su héroe, estén donde estén), las convocatorias de ejércitos en preparación, los reclutas de los campamentos de mercenarios que
-//! alguien ha tocado y las tecnologías que la administración da a cada Facción hasta que exista el sistema de tecnología. Entra entero en el
+//! alguien ha tocado, las tecnologías y las relaciones que la administración da a cada Facción hasta que existan los sistemas de tecnología y política. Entra entero en el
 //! hash y en las fotos (`codec_militar`). Las reglas puras viven en el crate `militar`; aquí solo está lo que el núcleo guarda.
 //!
 //! Los ids de héroe, escuadra, loadout, columna y convocatoria salen del contador común de la partida (`Estado::siguiente_id`), como los de las
@@ -13,6 +13,7 @@ use comercio::mercenarios::CupoDiario;
 use comercio::Carga as Mercancia;
 use militar::convocatoria::Convocatoria;
 use militar::heroe::{Heroe, Residencia};
+use militar::inspeccion::Informe;
 use militar::mercenarios::Reclutas;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -55,13 +56,27 @@ pub struct HeroeNucleo {
     /// Héroe de campo del andamiaje de administración (`CrearEjercito`): lleva una columna creada a mano. No cuenta como «el héroe de la cuenta»
     /// (`heroe_de_cuenta`, `crearHeroe`), de modo que una cuenta puede tener varias columnas de escenario además de su héroe.
     pub sintetico: bool,
+    /// Lo que ha inspeccionado de cerca (Movimiento_Ejercitos §12): uno por objetivo, hasta `INSPECCION.informeMinutos`. Los vencidos siguen aquí
+    /// hasta que otra inspección los barre; quien lee los filtra por `Informe::vigente`.
+    pub informes: Vec<Informe>,
 }
 
 impl HeroeNucleo {
-    /// Un héroe sin columna, sin almacén personal y sin cupo gastado.
+    /// Un héroe sin columna, sin almacén personal, sin cupo gastado y sin informes.
     pub fn nuevo(heroe: Heroe, cuenta: &str, faccion: Option<u32>) -> Self {
-        Self { heroe, cuenta: cuenta.to_owned(), faccion, almacen_personal: Mercancia::new(), cupo: CupoDiario::default(), columna: None, carro_fuera: Mercancia::new(), sintetico: false }
+        Self { heroe, cuenta: cuenta.to_owned(), faccion, almacen_personal: Mercancia::new(), cupo: CupoDiario::default(), columna: None, carro_fuera: Mercancia::new(), sintetico: false, informes: Vec::new() }
     }
+}
+
+/// Lo que la administración dice que une a dos Facciones, hasta que el sistema político (5) lo decida con alianzas, vasallajes y declaraciones de
+/// guerra. Sin relación, son neutrales. Es de la pareja: no distingue al señor del vasallo (DUDA: el sistema 5 lo pedirá).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Relacion {
+    /// Los aliados no se cruzan: ni se persiguen ni se ofrecen atacarse (Combate §5).
+    Alianza,
+    Vasallaje,
+    /// Se puede atacar sin declarar la guerra (Combate §2, fase 4D).
+    Guerra,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -76,6 +91,8 @@ pub struct EstadoMilitar {
     pub reclutas: BTreeMap<u32, Reclutas>,
     /// Tecnologías que la administración ha dado a cada Facción (`FijarTecnologias`), además de las de arranque, que tiene toda Facción.
     pub tecnologias: BTreeMap<u32, BTreeSet<String>>,
+    /// Las relaciones entre Facciones que da la administración (`FijarRelacion`), por pareja `(menor, mayor)`.
+    pub relaciones: BTreeMap<(u32, u32), Relacion>,
     /// Plaza → héroes que residen en ella. Es un índice de `Heroe::residencia`: se reconstruye al recuperar y solo lo toca [`EstadoMilitar::mudar`].
     /// Con él, el paso de un minuto de una plaza sin residentes cuesta una consulta.
     pub(crate) residentes: BTreeMap<u64, BTreeSet<u64>>,
@@ -125,6 +142,17 @@ impl EstadoMilitar {
     /// ¿Tiene la Facción adoptada esa tecnología? Las de arranque las tiene toda Facción desde que nace.
     pub fn tiene_tecnologia(&self, reglas: &militar::Reglas, faccion: u32, tecnologia: &str) -> bool {
         reglas.tecnologias.de_arranque.iter().any(|t| t == tecnologia) || self.tecnologias.get(&faccion).is_some_and(|s| s.contains(tecnologia))
+    }
+
+    /// La relación entre dos Facciones, si la administración fijó una.
+    pub fn relacion(&self, a: u32, b: u32) -> Option<Relacion> {
+        self.relaciones.get(&(a.min(b), a.max(b))).copied()
+    }
+
+    /// ¿Son aliadas? Solo la alianza: el vasallaje comparte visión pero no es lo que impide perseguir ni atacar (Movimiento_Ejercitos §7). Una
+    /// columna sin Facción no tiene aliados.
+    pub fn aliadas(&self, a: Option<u32>, b: Option<u32>) -> bool {
+        a.zip(b).is_some_and(|(a, b)| self.relacion(a, b) == Some(Relacion::Alianza))
     }
 
     /// Soldados en pie de las escuadras `ids` que llevan los participantes `participantes` (lo que come una columna y lo que la hace ver más lejos).

@@ -3,7 +3,6 @@
 
 use super::*;
 use base::Rng;
-use cola::{Clave, Cola, Generaciones};
 
 fn rango(rng: &mut Rng, lo: i64, hi: i64) -> i64 {
     lo + rng.por_debajo((hi - lo + 1) as u64) as i64
@@ -137,38 +136,6 @@ fn plan_aleatorio(rng: &mut Rng, m: i64, tramos: usize, gen: u32) -> Plan {
     Plan::nuevo(gen, v)
 }
 
-fn dentro_en(plan: &Plan, centro: Punto, radio: Mil, t: Instante) -> bool {
-    let tr = Tramo::del_plan(plan).find(|x| x.b.en >= t).unwrap_or_else(|| Tramo::del_plan(plan).last().unwrap());
-    cerca(exacta(&tr, t), (centro.x as i128, centro.y as i128, 1), radio)
-}
-
-#[test]
-fn llegada_y_salida_de_radio() {
-    let mut rng = Rng::derivado(3, "radio");
-    for caso in 0..3_000 {
-        let plan = plan_aleatorio(&mut rng, 3000, 4, 1);
-        let (centro, radio) = (pt(&mut rng, 3000), rango(&mut rng, 0, 900));
-        let (ini, fin) = (plan.inicio().unwrap(), plan.fin().unwrap());
-        let dentro: Vec<bool> = (ini..=fin).map(|t| dentro_en(&plan, centro, radio, t)).collect();
-        let llegada = dentro.iter().position(|&d| d).map(|i| ini + i as i64);
-        assert_eq!(llegada_a_radio(&plan, centro, radio), llegada, "llegada, caso {caso}");
-        let salida = llegada.and_then(|l| (l..=fin).find(|&t| !dentro[(t - ini) as usize]));
-        assert_eq!(salida_de_radio(&plan, centro, radio), salida, "salida, caso {caso}");
-    }
-    let una = Plan::nuevo(1, vec![Vertice { p: Punto::new(1, 1), en: 50 }]);
-    assert_eq!(llegada_a_radio(&una, Punto::new(0, 0), 2), Some(50));
-    assert_eq!(salida_de_radio(&una, Punto::new(0, 0), 2), None);
-    assert_eq!(llegada_a_radio(&Plan::default(), Punto::new(0, 0), 2), None);
-}
-
-#[test]
-fn llegada_a_la_puerta_de_una_plaza() {
-    // 10 unidades en 10 s hacia una plaza con puerta de radio 2: llega a 2 de la puerta, a los 8 s
-    let plan = Plan::nuevo(1, vec![Vertice { p: Punto::new(0, 0), en: 0 }, Vertice { p: Punto::new(10_000, 0), en: 10_000 }]);
-    assert_eq!(llegada_a_radio(&plan, Punto::new(10_000, 0), 2_000), Some(8_000));
-    assert_eq!(salida_de_radio(&plan, Punto::new(5_000, 0), 1_000), Some(6_001));
-}
-
 // --- Persecución ----------------------------------------------------------------------------------------------------
 
 fn alcanzada(plan: &Plan, p: Punto, desde: Instante, v: Mil, radio: Mil, t: Instante) -> bool {
@@ -256,7 +223,7 @@ fn comprobar(rej: &Rejilla, mundo: &[(u64, Plan)], radio: Mil) {
         let mut esperado: Vec<(Instante, u64)> =
             mundo.iter().filter(|(o, _)| o != e).filter_map(|(o, q)| bruto_planes(plan, q, radio).map(|t| (t, *o))).collect();
         esperado.sort_unstable();
-        let obtenido: Vec<(Instante, u64)> = rej.encuentros_de(*e, plan, radio).iter().map(|x| (x.instante, x.otra)).collect();
+        let obtenido: Vec<(Instante, u64)> = rej.encuentros_de(*e, plan, radio, Entradas::Todas).iter().map(|x| (x.instante, x.otra)).collect();
         assert_eq!(obtenido, esperado, "entidad {e}");
         let cands = rej.candidatos(*e);
         assert!(esperado.iter().all(|(_, o)| cands.contains(o)), "un par con encuentro no es candidato");
@@ -274,7 +241,7 @@ fn rejilla_encuentra_los_mismos_encuentros_que_la_fuerza_bruta() {
     }
     assert_eq!(rej.len(), 70);
     comprobar(&rej, &mundo, radio);
-    let con_encuentro = mundo.iter().filter(|(e, p)| !rej.encuentros_de(*e, p, radio).is_empty()).count();
+    let con_encuentro = mundo.iter().filter(|(e, p)| !rej.encuentros_de(*e, p, radio, Entradas::Todas).is_empty()).count();
     assert!(con_encuentro > 10, "mundo sin encuentros: {con_encuentro}");
     let sin_candidatos = (0..70).filter(|&e| rej.candidatos(e).is_empty()).count();
     assert!(sin_candidatos > 0 || rej.candidatos(0).len() < 69, "la rejilla no filtra nada");
@@ -295,7 +262,7 @@ fn rejilla_encuentra_los_mismos_encuentros_que_la_fuerza_bruta() {
     comprobar(&rej, &quedan, radio);
     // generación del otro en el encuentro
     let (e, p) = &mundo[3];
-    assert!(rej.encuentros_de(*e, p, radio).iter().all(|x| x.otra_generacion == if [14, 21, 40, 41, 69].contains(&x.otra) { 2 } else { 1 }));
+    assert!(rej.encuentros_de(*e, p, radio, Entradas::Todas).iter().all(|x| x.otra_generacion == if [14, 21, 40, 41, 69].contains(&x.otra) { 2 } else { 1 }));
 }
 
 #[test]
@@ -305,46 +272,89 @@ fn encuentro_simetrico_y_con_punto_medio() {
     let b = Plan::nuevo(1, vec![Vertice { p: Punto::new(10_000, 0), en: 0 }, Vertice { p: Punto::new(0, 0), en: 10_000 }]);
     rej.apuntar(1, 1, &a);
     rej.apuntar(2, 1, &b);
-    let (ea, eb) = (rej.encuentros_de(1, &a, 1_000), rej.encuentros_de(2, &b, 1_000));
+    let (ea, eb) = (rej.encuentros_de(1, &a, 1_000, Entradas::Todas), rej.encuentros_de(2, &b, 1_000, Entradas::Todas));
     assert_eq!((ea.len(), eb.len()), (1, 1));
     assert_eq!((ea[0].instante, ea[0].punto), (eb[0].instante, eb[0].punto));
     assert_eq!(ea[0].instante, 4_500, "se acercan a 1.000 mil cuando cada una ha hecho 4.500");
     assert_eq!(ea[0].punto, Punto::new(5_000, 0));
 }
 
-// --- Cola ----------------------------------------------------------------------------------------------------------
+
+// --- Entradas nuevas y salida de la vista ----------------------------------------------------------------------------
+
+/// ¿Están a ≤ `radio` en `t`? Referencia exacta, mirando el tramo de cada plan que contiene `t`.
+fn juntas_en(a: &Plan, b: &Plan, radio: Mil, t: Instante) -> bool {
+    let tramo = |p: &Plan| Tramo::del_plan(p).find(|x| x.b.en >= t).unwrap();
+    cerca(exacta(&tramo(a), t), exacta(&tramo(b), t), radio)
+}
+
+/// La ventana de tiempo común de dos planes, si la hay.
+fn ventana_de(a: &Plan, b: &Plan) -> Option<(Instante, Instante)> {
+    let (t0, t1) = (a.inicio()?.max(b.inicio()?), a.fin()?.min(b.fin()?));
+    (t0 <= t1).then_some((t0, t1))
+}
 
 #[test]
-fn eventos_de_un_plan_nuevo_en_la_cola() {
-    let mut rej = Rejilla::nueva(5_000, 10_000, 3_000);
-    let mut gens = Generaciones::nuevas();
-    let mut cola: Cola<EventoEspacial> = Cola::nueva();
+fn las_entradas_nuevas_ignoran_lo_que_ya_estaba_junto_y_encuentran_el_siguiente_acercamiento() {
+    let mut rng = Rng::derivado(6, "nuevas");
+    let (mut con_dentro_inicial, mut con_reentrada) = (0, 0);
+    for caso in 0..4_000 {
+        let (a, b) = (plan_aleatorio(&mut rng, 700, 4, 2), plan_aleatorio(&mut rng, 700, 4, 1));
+        let radio = rango(&mut rng, 100, 500);
+        let mut rej = Rejilla::nueva(2_000, 1_000, 500);
+        rej.apuntar(2, 1, &b);
+        let Some((t0, t1)) = ventana_de(&a, &b) else { continue };
+        let existia = b.inicio().unwrap() <= a.inicio().unwrap();
+        // Una entrada es un ms dentro cuyo anterior estaba fuera; el primero de la ventana solo lo es si no estaban ya juntas al empezar `a`.
+        let entrada = |t: Instante| juntas_en(&a, &b, radio, t) && (if t == t0 { !(existia && t0 == a.inicio().unwrap()) } else { !juntas_en(&a, &b, radio, t - 1) });
+        let todas = (t0..=t1).find(|&t| juntas_en(&a, &b, radio, t));
+        let nuevas = (t0..=t1).find(|&t| entrada(t));
+        let obtenido = |entradas| rej.encuentros_de(1, &a, radio, entradas).first().map(|e| e.instante);
+        assert_eq!(obtenido(Entradas::Todas), todas, "caso {caso}: todas");
+        assert_eq!(obtenido(Entradas::Nuevas), nuevas, "caso {caso}: nuevas");
+        con_dentro_inicial += (todas == Some(t0) && nuevas != todas) as u32;
+        con_reentrada += (todas == Some(t0) && nuevas.is_some_and(|n| n > t0)) as u32;
+    }
+    assert!(con_dentro_inicial > 100 && con_reentrada > 20, "escenarios poco variados: {con_dentro_inicial} juntas al empezar, {con_reentrada} con reentrada");
+}
 
-    let g2 = gens.subir(2);
-    rej.apuntar(2, g2, &Plan::nuevo(1, vec![Vertice { p: Punto::new(5_000, 0), en: 0 }, Vertice { p: Punto::new(5_000, 0), en: 100_000 }]));
-
-    let g1 = gens.subir(1);
-    let plan = Plan::nuevo(1, vec![Vertice { p: Punto::new(0, 0), en: 0 }, Vertice { p: Punto::new(10_000, 0), en: 10_000 }]);
-    rej.apuntar(1, g1, &plan);
-    let puerta = Puerta { id: 77, centro: Punto::new(10_000, 0), radio: 2_000 };
-    let evs = eventos_de_plan(&rej, 1, g1, &plan, 3_000, &[puerta]);
-    assert_eq!(evs.iter().map(|e| e.instante).collect::<Vec<_>>(), [2_000, 8_000]);
-    assert!(evs.iter().all(|e| e.prioridad == PRIORIDAD_ENCUENTROS && e.clave == Clave { entidad: 1, generacion: g1 }));
-    programar(&mut cola, evs);
-
-    // un persecutor sobre la entidad 2 (quieta en x=5.000)
-    let pers = evento_de_persecucion(9, 0, Punto::new(5_000, 5_000), 0, 1_000, 3_000, 2, g2, &Plan::nuevo(1, vec![Vertice { p: Punto::new(5_000, 0), en: 0 }])).unwrap();
-    assert_eq!(pers.instante, 2_000);
-    programar(&mut cola, [pers]);
-
-    // la entidad 2 cambia de plan: el encuentro con la 1 ya no vale y la intercepción tampoco
-    gens.subir(2);
-    let vigente = |c: Clave| gens.es_vigente(c);
-    let mut salidos = Vec::new();
-    while let Some(e) = cola.siguiente_hasta(i64::MAX, &vigente) {
-        if e.carga.otras_vigentes(&gens) {
-            salidos.push(e.carga);
+#[test]
+fn la_primera_salida_coincide_con_la_fuerza_bruta() {
+    let mut rng = Rng::derivado(7, "salida");
+    let (mut salen, mut sin_salir, mut ya_fuera) = (0, 0, 0);
+    for caso in 0..4_000 {
+        let (a, b) = (plan_aleatorio(&mut rng, 500, 4, 1), plan_aleatorio(&mut rng, 500, 4, 1));
+        let radio = rango(&mut rng, 150, 600);
+        let mut rej = Rejilla::nueva(2_000, 1_000, 500);
+        rej.apuntar(1, 1, &a);
+        rej.apuntar(2, 1, &b);
+        let Some((t0, t1)) = ventana_de(&a, &b) else { continue };
+        let desde = rango(&mut rng, t0, t1);
+        let esperado = (desde..=t1).find(|&t| !juntas_en(&a, &b, radio, t));
+        assert_eq!(rej.primera_salida(1, 2, radio, desde), esperado, "caso {caso}: desde {desde} en [{t0}, {t1}]");
+        match esperado {
+            Some(t) if t == desde => ya_fuera += 1,
+            Some(_) => salen += 1,
+            None => sin_salir += 1,
         }
     }
-    assert!(matches!(salidos.as_slice(), [EventoEspacial::Llegada { entidad: 1, puerta: 77, .. }]), "{salidos:?}");
+    assert!(salen > 300 && sin_salir > 100 && ya_fuera > 300, "escenarios poco variados: {salen} salen, {sin_salir} no salen, {ya_fuera} ya fuera");
+    assert_eq!(rej_vacia().primera_salida(1, 2, 100, 0), None, "sin apuntar no hay salida");
+}
+
+fn rej_vacia() -> Rejilla {
+    Rejilla::nueva(2_000, 1_000, 500)
+}
+
+#[test]
+fn una_plaza_apuntada_como_quieta_es_un_candidato_fijo_de_una_columna_que_pasa() {
+    let mut rej = Rejilla::nueva(5_000, 10_000, 3_000);
+    rej.apuntar(7, 0, &plan_quieto(Punto::new(5_000, 0), 0, 0));
+    let pasa = Plan::nuevo(1, vec![Vertice { p: Punto::new(0, 0), en: 0 }, Vertice { p: Punto::new(10_000, 0), en: 10_000 }]);
+    let e = rej.encuentros_de(1, &pasa, 3_000, Entradas::Todas);
+    assert_eq!(e.iter().map(|x| (x.otra, x.instante)).collect::<Vec<_>>(), [(7, 2_000)]);
+    // una columna acampada junto a la plaza desde hace rato no cuenta como entrada nueva al ponerse en marcha
+    let acampada_junto = plan_quieto(Punto::new(6_000, 0), 5_000, 1);
+    assert!(rej.encuentros_de(2, &acampada_junto, 3_000, Entradas::Nuevas).is_empty());
+    assert_eq!(rej.encuentros_de(2, &acampada_junto, 3_000, Entradas::Todas).len(), 1);
 }

@@ -248,7 +248,6 @@ name = "encuentros"
 version = "0.1.0"
 dependencies = [
  "base",
- "cola",
 ]
 
 [[package]]

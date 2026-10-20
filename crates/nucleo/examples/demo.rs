@@ -10,7 +10,7 @@
 
 use base::{Instante, Punto, Rng};
 use mundo::{Mundo, OpcionesValidacion, TAMANO_CELDA};
-use nucleo::espacial::{GeneradorEncuentros, GeneradorVision};
+use nucleo::espacial::GeneradorVision;
 use nucleo::{Ajustes, Arranque, Comando, EventoNucleo, Nucleo, Peticion, Reglas};
 use rutas::Rutas;
 use std::fmt::Write as _;
@@ -94,7 +94,6 @@ fn main() {
     let ajustes = Ajustes { retencion_cambios: 1 << 20, muestreo_ms: 250, ..Ajustes::default() };
     let mut nucleo = Nucleo::nuevo(Arranque { reglas: Reglas::default(), ajustes, semilla, inicio: 0, rutas, mundo_hash: mundo.hash().to_owned(), mundo: None });
     // Encuentros exactos entre columnas y visión muestreada cada 250 ms (generadores espaciales del núcleo).
-    nucleo.agregar_generador(Box::new(GeneradorEncuentros::nuevo()));
     nucleo.agregar_generador(Box::new(GeneradorVision::nuevo()));
     let campamentos: Vec<(String, Punto)> =
         mundo.campamentos().iter().map(|c| (c.id.clone(), c.posicion.map(|p| Punto::new(p.x, p.y)).expect("campamento con posición"))).collect();

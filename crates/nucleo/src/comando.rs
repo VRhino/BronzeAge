@@ -5,13 +5,15 @@ use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
 use crate::codec_comercio::{animal_a_u8, animal_de_u8, tipo_carro_a_u8, tipo_carro_de_u8};
 use crate::codec_columna::{politica_a_u8, politica_de_u8};
-use crate::codec_militar::{controlador_a_u8, controlador_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
+use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
+use crate::estado_militar::Relacion;
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
 use comercio::caravana::{Animal, TipoCarro};
 use militar::catalogo::Tropa;
 use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
+use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
 
 /// Acción sobre el reloj de mundo (`OrdenControlarReloj`).
@@ -230,6 +232,16 @@ pub enum Comando {
     CancelarConvocatoria { heroe: u64 },
     /// El Líder parte con los que siguen dentro: todo o nada. `creadas` lleva el ejército.
     PartirConvocatoria { heroe: u64 },
+    // ── Encuentros, persecución e inspección (Movimiento_Ejercitos §7 y §12, fase 4C). ──
+    /// El Líder de la columna sale en persecución de otra columna o de una caravana que **ve** (a ≤ el alcance de vista de su columna). `Objetivo::Asentamiento`
+    /// no se persigue.
+    Perseguir { heroe: u64, objetivo: Objetivo },
+    /// Suelta la presa. La columna sigue su plan hasta donde estaba yendo y acampa.
+    DejarDePerseguir { heroe: u64 },
+    /// Mira de cerca (a ≤ `radioInspeccion`) una columna, una caravana o una plaza ajena: queda un informe en el héroe y el observado recibe aviso.
+    Inspeccionar { heroe: u64, objetivo: Objetivo },
+    /// Fija (o quita, con `None`) la relación entre dos Facciones. Solo administración; lo sustituirá el sistema político (5).
+    FijarRelacion { a: u32, b: u32, relacion: Option<Relacion> },
 }
 
 /// De dónde sale el oro al reclutar en un campamento de mercenarios.
@@ -787,6 +799,27 @@ impl Peticion {
                 w.u8(90);
                 w.u64(*heroe);
             }
+            Comando::Perseguir { heroe, objetivo } => {
+                w.u8(91);
+                w.u64(*heroe);
+                objetivo_escribir(&mut w, objetivo);
+            }
+            Comando::DejarDePerseguir { heroe } => {
+                w.u8(92);
+                w.u64(*heroe);
+            }
+            Comando::Inspeccionar { heroe, objetivo } => {
+                w.u8(93);
+                w.u64(*heroe);
+                objetivo_escribir(&mut w, objetivo);
+            }
+            Comando::FijarRelacion { a, b, relacion } => {
+                w.u8(94);
+                w.u32(*a);
+                w.u32(*b);
+                w.bool(relacion.is_some());
+                w.u8(relacion.map_or(0, relacion_a_u8));
+            }
         }
         w.0
     }
@@ -918,6 +951,13 @@ impl Peticion {
             88 => Comando::SepararseDeConvocatoria { heroe: r.u64()? },
             89 => Comando::CancelarConvocatoria { heroe: r.u64()? },
             90 => Comando::PartirConvocatoria { heroe: r.u64()? },
+            91 => Comando::Perseguir { heroe: r.u64()?, objetivo: objetivo_leer(&mut r)? },
+            92 => Comando::DejarDePerseguir { heroe: r.u64()? },
+            93 => Comando::Inspeccionar { heroe: r.u64()?, objetivo: objetivo_leer(&mut r)? },
+            94 => {
+                let (a, b, hay, relacion) = (r.u32()?, r.u32()?, r.bool()?, relacion_de_u8(r.u8()?)?);
+                Comando::FijarRelacion { a, b, relacion: hay.then_some(relacion) }
+            }
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1174,6 +1214,23 @@ pub mod rechazos {
     pub const CARAVANA_AJENA_AL_LUGAR: &str = "caravana.ajena_al_lugar";
     pub const REPOSTAR_PLAZA_CERRADA: &str = "repostar.plaza_cerrada";
     pub const REPOSTAR_SIN_EXISTENCIAS: &str = "repostar.sin_existencias";
+    // Persecución (`ErrorPersecucion`), inspección (`ErrorInspeccion`) y batalla.
+    pub const PERSECUCION_SIN_HEROE_SANO: &str = "persecucion.sin_heroe_sano";
+    pub const PERSECUCION_PRESA_SIN_HEROE_SANO: &str = "persecucion.presa_sin_heroe_sano";
+    pub const PERSECUCION_CLASE_DISTINTA: &str = "persecucion.clase_distinta";
+    pub const PERSECUCION_PROPIA_O_ALIADA: &str = "persecucion.propia_o_aliada";
+    pub const PERSECUCION_CARAVANA_ADJUNTA: &str = "persecucion.caravana_adjunta";
+    pub const PERSECUCION_EJERCITO_SIN_CARAVANAS: &str = "persecucion.ejercito_sin_caravanas";
+    pub const PERSECUCION_A_SI_MISMA: &str = "persecucion.a_si_misma";
+    pub const PERSECUCION_A_CUBIERTO: &str = "persecucion.a_cubierto";
+    pub const PERSECUCION_FUERA_DE_VISTA: &str = "persecucion.fuera_de_vista";
+    pub const INSPECCION_LA_TUYA: &str = "inspeccion.la_tuya";
+    pub const INSPECCION_PLAZA_PROPIA: &str = "inspeccion.plaza_propia";
+    pub const INSPECCION_LEJOS: &str = "inspeccion.lejos";
+    pub const INSPECCION_A_CUBIERTO: &str = "inspeccion.a_cubierto";
+    /// La columna está apartada por una batalla: no se mueve ni se le dan órdenes de movimiento, de persecución ni de inspección.
+    pub const COLUMNA_EN_BATALLA: &str = "columna.en_batalla";
+    pub const RELACION_CONSIGO_MISMA: &str = "relacion.consigo_misma";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1332,6 +1389,12 @@ mod pruebas {
             Comando::SepararseDeConvocatoria { heroe: 2 },
             Comando::CancelarConvocatoria { heroe: 2 },
             Comando::PartirConvocatoria { heroe: 2 },
+            Comando::Perseguir { heroe: 2, objetivo: Objetivo::Ejercito(9) },
+            Comando::Perseguir { heroe: 2, objetivo: Objetivo::Caravana(4) },
+            Comando::DejarDePerseguir { heroe: 2 },
+            Comando::Inspeccionar { heroe: 2, objetivo: Objetivo::Asentamiento(5) },
+            Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Vasallaje) },
+            Comando::FijarRelacion { a: 3, b: 2, relacion: None },
         ];
         for c in comandos {
             let p = Peticion { actor: "ana".into(), admin: false, peticion_id: "z".into(), version_esperada: Some(3), comando: c };

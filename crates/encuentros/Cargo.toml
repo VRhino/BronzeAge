@@ -6,4 +6,3 @@ description = "Encuentros exactos entre planes: rejilla espacio-temporal, persec
 
 [dependencies]
 base = { path = "../base" }
-cola = { path = "../cola" }

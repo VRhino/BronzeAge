@@ -38,12 +38,11 @@ pub const PRIO_REPUTACION: u8 = 9;
 /// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
 pub const PRIO_ASENTAMIENTO: u8 = 2;
 
-/// BAN10: BAN9 más las columnas completas (`codec_columna`: tipo, participantes, política de unión, peticiones, formación, escuadras, carro y
-/// víveres como los de `militar::columna::Columna`; el consumo ya no es una regla del núcleo, sale de la composición), las convocatorias, la columna
-/// y el carro de salida de cada héroe y su última ración gratis (`codec_militar`), y tres cargas de la cola (deserción, caducidad de una formación y de
-/// una petición de unión, `Carga::Militar`). BAN9 se rechaza (BAN9 traía la columna genérica de un solo participante, con su consumo fijo).
-const MAGIA: &[u8; 5] = b"BAN10";
-const MAGIA_ANTERIOR: &[u8; 4] = b"BAN9";
+/// BAN11: BAN10 más lo de la fase 4C: la persecución y el estado «en batalla» de cada columna (`codec_columna`), los informes de inspección de cada
+/// héroe y las relaciones entre Facciones que da la administración (`codec_militar`), y dos cargas de la cola (un encuentro exacto, `Carga::Encuentro`,
+/// y la presa que sale de la vista, `SucesoMilitar::PresaFueraDeVista`). BAN10 se rechaza (BAN10 no traía nada de esto y sus encuentros eran de un
+/// generador externo, `Carga::Externa`, que ya no los programa).
+const MAGIA: &[u8; 5] = b"BAN11";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -176,6 +175,12 @@ pub struct Ejercito {
     pub caravana_fundacion: bool,
     /// Caravanas enganchadas a la columna (ids ascendentes, §9): viajan con ella y el reparto automático no las ve.
     pub caravanas_adjuntas: Vec<u64>,
+    /// A quién persigue (Movimiento_Ejercitos §7): la **entidad** de la presa, que es el id de una columna o, con etiqueta, el de una caravana
+    /// (`entidad_caravana`). Se borra al alcanzarla, perderla de vista o a cubierto, y con `marcharA`, `estacionar` o `dejarDePerseguir`.
+    pub persiguiendo: Option<u64>,
+    /// Apartada por una batalla de Unity (Reloj_Y_Eventos §6): no se mueve, no se la persigue ni se la ataca, no tiene encuentros y no se le dan
+    /// órdenes de movimiento. La pone y la quita el sistema militar (`Nucleo::columna_entra_en_batalla`).
+    pub en_batalla: bool,
     /// Versión de mundo del último cambio.
     pub version: u64,
 }
@@ -246,10 +251,14 @@ pub enum Carga {
     SalidaDelMundo,
     /// Un plazo de una columna o de una convocatoria (la clave de la entidad depende del suceso).
     Militar(SucesoMilitar),
+    /// El primer acercamiento exacto a ≤ `radioEncuentro` (Reloj_Y_Eventos §2, prioridad 8) entre la entidad del evento —la columna o la caravana
+    /// cuyo plan acaba de cambiar— y `otra` (una columna, una caravana o una plaza). Vale mientras ninguna de las dos cambie de plan: `otra_generacion`
+    /// es la de `otra` al calcularlo (se ignora si `otra` es una plaza, que no se mueve).
+    Encuentro { otra: u64, otra_generacion: u32 },
 }
 
 /// Qué plazo militar vence. Ninguno es recurrente por entidad ociosa: la deserción solo existe mientras una columna se está quedando sin tropa
-/// por hambre, y los otros tres duran lo que una formación o una petición de unión (10 s y 10 min).
+/// por hambre, los tres siguientes duran lo que una formación o una petición de unión (10 s y 10 min) y el último, lo que dure una persecución.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SucesoMilitar {
     /// Toca desertar a alguna escuadra de la columna sin víveres (la entidad es la columna, con su generación: cualquier cambio de ritmo la
@@ -261,6 +270,10 @@ pub enum SucesoMilitar {
     CaducaPeticion { columna: u64 },
     /// Caduca una petición de unión a una convocatoria (la entidad es `entidad_peticion_de_convocatoria(solicitante)`).
     CaducaPeticionDeConvocatoria { convocatoria: u64 },
+    /// La presa de la persecución de la columna (la entidad del evento) sale del alcance de vista de quien la persigue (Movimiento_Ejercitos §7): la
+    /// persecución se cancela. Es el primer instante, plan contra plan, en que la distancia pasa de `alcanceDeVista`; se reprograma cada vez que
+    /// cualquiera de las dos cambia de plan. `presa_generacion` es la de la presa al calcularlo (se compara al vencer).
+    PresaFueraDeVista { presa: u64, presa_generacion: u32 },
 }
 
 impl SucesoMilitar {
@@ -276,6 +289,11 @@ impl SucesoMilitar {
                 w.u8(3);
                 w.u64(convocatoria);
             }
+            SucesoMilitar::PresaFueraDeVista { presa, presa_generacion } => {
+                w.u8(4);
+                w.u64(presa);
+                w.u32(presa_generacion);
+            }
         }
     }
     pub(crate) fn leer(r: &mut Lector) -> Result<Self, ErrorFormato> {
@@ -284,6 +302,7 @@ impl SucesoMilitar {
             1 => SucesoMilitar::CaducaFormacion,
             2 => SucesoMilitar::CaducaPeticion { columna: r.u64()? },
             3 => SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria: r.u64()? },
+            4 => SucesoMilitar::PresaFueraDeVista { presa: r.u64()?, presa_generacion: r.u32()? },
             _ => return Err(ErrorFormato("suceso militar desconocido")),
         })
     }
@@ -584,6 +603,11 @@ impl Estado {
                     w.u8(7);
                     s.escribir(&mut w);
                 }
+                Carga::Encuentro { otra, otra_generacion } => {
+                    w.u8(8);
+                    w.u64(*otra);
+                    w.u32(*otra_generacion);
+                }
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -610,10 +634,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN10`): se lee la de 4 del formato anterior y, si empieza como la nueva, el quinto.
-        match r.magia()? {
-            m if m == MAGIA[..4] && r.u8()? == MAGIA[4] => {}
-            m if m == *MAGIA_ANTERIOR => return Err(ErrorFormato("foto del formato BAN9 (columnas de un solo participante, con consumo fijo): ya no se admite")),
+        // La cabecera es de 5 bytes (`BAN11`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
+        match (r.magia()? == MAGIA[..4]).then(|| r.u8()).transpose()? {
+            Some(f) if f == MAGIA[4] => {}
+            Some(b'0') => return Err(ErrorFormato("foto del formato BAN10 (sin persecuciones ni informes de inspección, con los encuentros en un generador externo): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
@@ -713,6 +737,7 @@ impl Estado {
                 5 => Carga::Reputacion(CitaReputacion::de_u8(r.u8()?).ok_or(ErrorFormato("cita de reputación desconocida"))?),
                 6 => Carga::SalidaDelMundo,
                 7 => Carga::Militar(SucesoMilitar::leer(&mut r)?),
+                8 => Carga::Encuentro { otra: r.u64()?, otra_generacion: r.u32()? },
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

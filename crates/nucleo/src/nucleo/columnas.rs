@@ -20,7 +20,7 @@
 //! ejército» (caravanas adjuntas, entregar, materiales) las puede dar cualquier participante.
 
 use super::*;
-use crate::estado::{SucesoMilitar, PRIO_LLEGADA, PRIO_UMBRAL};
+use crate::estado::{SucesoMilitar, PRIO_LLEGADA, PRIO_SALIDA, PRIO_UMBRAL};
 use crate::estado_militar::{entidad_formacion, entidad_peticion_de_union};
 use comercio::caravana::TipoCaravana;
 use militar::columna::{self, Columna, ErrorColumna, TipoColumna};
@@ -136,6 +136,9 @@ impl Nucleo {
         if e.columna.es_formacion() {
             return Err(Respuesta::rechazo(rechazos::COLUMNA_EN_FORMACION, "una formación no se mueve: espera a ser un ejército", v));
         }
+        if e.en_batalla {
+            return Err(Respuesta::rechazo(rechazos::COLUMNA_EN_BATALLA, "la columna está apartada por una batalla: no se la puede tocar", v));
+        }
         if !p.admin {
             let lider = self.heroe(e.columna.lider).map(|h| &h.heroe.presencia);
             if lider.is_some_and(|l| l.fuera) {
@@ -242,29 +245,34 @@ impl Nucleo {
         // Nace con la generación de su id (sin subirla): aún no hay nada programado que invalidar.
         self.sincronizar_hambre(id, t);
         self.programar_ejercito(id, t);
+        self.anunciar_columna(id, Motivo::Plan);
     }
 
-    /// Quita la columna del mundo: sus eventos se descartan y la rejilla de encuentros la olvida. Los participantes, sus escuadras y las
-    /// caravanas son de quien llama.
+    /// Quita la columna del mundo: sus eventos se descartan, el espacio la olvida y quien la perseguía la da por puesta a cubierto. Los participantes,
+    /// sus escuadras y las caravanas son de quien llama.
     pub(super) fn baja_de_columna(&mut self, id: u64) {
+        self.fijar_persecucion(id, None);
         self.estado.ejercitos.remove(&id);
         self.estado.generaciones.subir(id);
         self.estado.generaciones.subir(entidad_formacion(id));
         self.tr.tocados.push(id);
         self.avisar_plan(id, false);
+        self.anunciar_columna(id, Motivo::Plan);
     }
 
     /// Mete a un héroe en una columna como participante nuevo con sus escuadras. Los héroes siguen donde estaban (la ubicación la fija quien llama).
+    /// La columna con alguien a bordo entra en el espacio si no estaba.
     pub(super) fn ubicar_en_columna(&mut self, heroe: u64, columna: u64) {
         if let Some(h) = self.estado.militar.heroes.get_mut(&heroe) {
             h.columna = Some(columna);
             h.heroe.presencia.ubicacion = Ubicacion::Columna(columna);
         }
+        self.anunciar_columna(columna, Motivo::Ritmo);
     }
 
     /// Una columna nueva nacida de repartir otra (separarse, desarmar, salir del mundo): quieta donde está su origen, sin caravanas.
     pub(super) fn columna_suelta(&self, columna: Columna, posicion: Punto) -> Ejercito {
-        Ejercito { id: columna.id, columna, posicion, plan: Plan::default(), velocidad_fija: None, caravana_fundacion: false, caravanas_adjuntas: vec![], version: 0 }
+        Ejercito { id: columna.id, columna, posicion, plan: Plan::default(), velocidad_fija: None, caravana_fundacion: false, caravanas_adjuntas: vec![], persiguiendo: None, en_batalla: false, version: 0 }
     }
 
     /// Una columna sin nadie dentro se disuelve (Movimiento_Ejercitos §11): sus caravanas adjuntas, que sí viajan solas, vuelven a su origen
@@ -302,6 +310,7 @@ impl Nucleo {
             SucesoMilitar::CaducaFormacion => self.caduca_formacion(crate::estado_comercio::id_de_entidad(entidad), t),
             SucesoMilitar::CaducaPeticion { columna } => self.caduca_peticion_de_union(columna, crate::estado_comercio::id_de_entidad(entidad), t),
             SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria } => self.caduca_peticion_de_convocatoria(convocatoria, crate::estado_comercio::id_de_entidad(entidad), t),
+            SucesoMilitar::PresaFueraDeVista { presa, presa_generacion } => self.presa_fuera_de_vista(entidad, presa, presa_generacion, t),
         }
     }
 
@@ -436,6 +445,52 @@ impl Nucleo {
         self.ubicar_en_columna(id, columna_id);
         self.emitir_propio(t, "heroe.vuelve_al_mundo", residencia.into_iter().collect(), vec![("heroe", id as i64), ("columna", columna_id as i64)]);
         vec![columna_id]
+    }
+
+    // ───────────────────────────── Batalla (hook del sistema militar) ─────────────────────────────
+
+    /// La batalla de Unity aparta la columna (Reloj_Y_Eventos §6): se queda donde está, sale del espacio —no tiene encuentros, nadie la persigue ni ella
+    /// persigue— y no admite órdenes de movimiento hasta que acabe. `false` si no existe o ya estaba apartada. Procesa los eventos hasta `t` y cierra la
+    /// versión. La llama el sistema militar (fase 4E); no deja entrada en el registro de peticiones.
+    // DUDA: la columna sigue comiendo a ritmo de acampada; la regla dice que apartada no come. Queda como fila de paridad para la 4E.
+    pub fn columna_entra_en_batalla(&mut self, t: Instante, id: u64) -> bool {
+        let t = t.max(self.estado.ahora);
+        self.procesar_hasta(t);
+        let Some(e) = self.estado.ejercitos.get(&id) else { return false };
+        if e.en_batalla {
+            return false;
+        }
+        if e.marchando() {
+            self.detener(id, t);
+        }
+        let e = self.estado.ejercitos.get_mut(&id).expect("existe");
+        e.en_batalla = true;
+        let punto = e.posicion;
+        self.tr.tocados.push(id);
+        self.anunciar_columna(id, Motivo::Plan);
+        self.evento("ejercito.en_batalla", t, id, Some(punto), vec![]);
+        self.cerrar_version(t, true);
+        true
+    }
+
+    /// La batalla acabó: la columna vuelve al espacio donde está, quieta (el plan que llevaba no se retoma: hay que dar otra orden). Quien pidió salir del
+    /// mundo mientras combatía lo reintenta ya. `false` si no existe o no estaba apartada.
+    pub fn columna_sale_de_batalla(&mut self, t: Instante, id: u64) -> bool {
+        let t = t.max(self.estado.ahora);
+        self.procesar_hasta(t);
+        let Some(e) = self.estado.ejercitos.get_mut(&id).filter(|e| e.en_batalla) else { return false };
+        e.en_batalla = false;
+        let (punto, heroes) = (e.posicion, Self::participantes_de(e));
+        self.tr.tocados.push(id);
+        self.anunciar_columna(id, Motivo::Plan);
+        let pendientes: Vec<u64> = heroes.into_iter().filter(|&h| self.heroe(h).is_some_and(|x| x.heroe.presencia.desconecta_en.is_some() && !x.heroe.presencia.fuera)).collect();
+        for h in pendientes {
+            let clave = self.estado.generaciones.clave(h);
+            self.estado.cola.programar(t, PRIO_SALIDA, clave, Carga::SalidaDelMundo);
+        }
+        self.evento("ejercito.sale_de_batalla", t, id, Some(punto), vec![]);
+        self.cerrar_version(t, true);
+        true
     }
 
     // ───────────────────────────── Velocidad y capacidad ─────────────────────────────

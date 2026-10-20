@@ -4,7 +4,7 @@
 //! - [`Nucleo`]: el bucle (modo acelerado y en vivo), las órdenes con idempotencia y `version_esperada`, la persistencia
 //!   por registro de peticiones + fotos, y `hash_estado()` determinista.
 //! - [`Estado`]: lo que entra en el hash y en las fotos. [`CambioVersion`]: el registro de cambios por versión.
-//! - [`GeneradorDeEventos`]: el hueco para `encuentros` y `vision`.
+//! - [`GeneradorDeEventos`]: el hueco para lo que se enchufa al núcleo (la visión muestreada, `espacial`).
 //! - [`economia`]: cada plaza fundada lleva su economía (crate `asentamiento`) y avanza sola un minuto de mundo por evento
 //!   (`Carga::Minuto`); aquí están el mapa, los yacimientos y los sitios que comparten el núcleo y el batch de población.
 //! - [`urbanismo`]: la ciudad de cada plaza (crate `trazado`): dónde cae cada edificio, anclas, puestos del Mercado y reubicación de la Granja.
@@ -19,7 +19,10 @@
 //!   crate `militar` y las órdenes (códigos 41-44 y 49-68), `Nucleo`.
 //! - Columnas completas (fase 4B-2): [`Ejercito`] es una [`militar::columna::Columna`] con su posición y su plan; salir y entrar en plazas y campamentos,
 //!   unir, separar, ceder el mando, formar un ejército, repostar, las caravanas adjuntas, la desconexión con la columna y las convocatorias (órdenes 69-90),
-//!   el hambre con su deserción (un evento por columna con hambre) y la foto `BAN10` (`codec_columna`).
+//!   el hambre con su deserción (un evento por columna con hambre).
+//! - Encuentros, persecución e inspección (fase 4C): el espacio del mundo (`nucleo/espacio.rs`: columnas en el mapa, caravanas y plazas en una rejilla
+//!   espacio-temporal) programa cada encuentro como un evento exacto (`Carga::Encuentro`) y deja un hecho; `perseguir` rehace el plan de quien persigue cada
+//!   vez que la presa cambia el suyo; `inspeccionar` guarda un informe en el héroe (órdenes 91-94, foto `BAN11`).
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;
@@ -44,7 +47,7 @@ pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, PagarCon, Peticion, Resultado, Respuesta};
 pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, Reglas, ReglasEconomia, ReglasTerritorio, SucesoComercio, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
-pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, EstadoMilitar, HeroeNucleo};
+pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, EstadoMilitar, HeroeNucleo, Relacion};
 pub use generadores::{Cx, GeneradorDeEventos};
 pub use nucleo::{Ajustes, Arranque, InformeViabilidad, Metricas, Nucleo};
 

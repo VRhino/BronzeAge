@@ -351,6 +351,7 @@ impl Nucleo {
                 self.detener(columna, t);
             }
             self.heroe_mut(heroe).heroe.presencia.ubicacion = Ubicacion::Asentamiento(plaza as u32);
+            self.anunciar_columna(columna, Motivo::Plan);
             self.tr.tocados.push(columna);
             self.emitir_propio(t, "jugador.entra_en_asentamiento", vec![plaza], vec![("heroe", heroe as i64), ("ejercito", columna as i64), ("residencia", 0)]);
         }
@@ -402,6 +403,7 @@ impl Nucleo {
             self.reprogramar_columna(columna, t);
         }
         self.heroe_mut(heroe).heroe.presencia.ubicacion = Ubicacion::Mercenarios(campamento);
+        self.anunciar_columna(columna, Motivo::Plan);
         self.emitir_propio(t, "jugador.entra_en_campamento", vec![], vec![("heroe", heroe as i64), ("campamento", campamento as i64), ("ejercito", columna as i64), ("residencia", reside as i64), ("resto", total(&resto))]);
     }
 
