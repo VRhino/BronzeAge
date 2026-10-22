@@ -9,7 +9,8 @@
 //!   que está **en el instante del ataque** ([`Nucleo::en_zona`]): aguante (B) en la zona del dueño o de un aliado, disputa de carros (A) en el resto. Una tirada.
 //! - **Un campamento de bandidos** (`atacar_campamento`): PvE, sin guerra. Una tirada contra el poder de su nivel.
 //! - **Una plaza** (`atacar_plaza`): solo un ejército. Se asedia con la guarnición y los defensores en persona —los que están **dentro**: una columna amiga a la puerta, en el
-//!   mapa, no defiende (2026-10-22)—; si cae, [`conquistas`](super::conquistas).
+//!   mapa, no defiende (2026-10-22)—; el defensor lleva el multiplicador de su muralla ([`Nucleo::multiplicador_de_plaza`]: el recinto de referencia, `1` sin recinto; la columna,
+//!   el pueblo, la caravana y la avanzada no lo tienen); si cae, [`conquistas`](super::conquistas).
 //! - **Un pueblo extractor** (`atacar_pueblo`): un saqueo, nunca una conquista. Defienden los 30 mineros de serie y los héroes que han entrado en él.
 //! - **Una avanzada** (`atacar_avanzada`, en [`avanzadas`](super::avanzadas)): solo un ejército, como un asedio contra su guarnición de serie y la de jugadores y los héroes que han
 //!   entrado en ella; unas ruinas caen sin combate. Si gana el atacante, se lleva el almacén que le quepa y la avanzada se destruye o queda en ruinas.
@@ -30,6 +31,7 @@ use crate::comando::ObjetivoAtaque;
 use crate::estado::{SucesoCombate, PRIO_UMBRAL};
 use crate::estado_combate::entidad_guarnicion;
 use crate::estado_militar::Relacion;
+use asentamiento::recintos;
 use combate::asedio::{self, Asedio};
 use combate::botin::{cargar_botin, tras_derrota, CarroDeColumna};
 use combate::caravana::{self as asalto, Defensa, Zona};
@@ -355,7 +357,7 @@ impl Nucleo {
         if let Some((a, b)) = guerra {
             self.declarar_guerra(t, a, b);
         }
-        let informe = resolver_combate(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut def.escuadras, heroes: &def.heroes }, asedio::SIN_MURALLA, &mut self.estado.rng)
+        let informe = resolver_combate(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut def.escuadras, heroes: &def.heroes }, asedio::SIN_RECINTO, &mut self.estado.rng)
             .expect("los dos bandos llevan al menos un héroe sano");
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&def.escuadras);
@@ -640,13 +642,16 @@ impl Nucleo {
         if let Some((a, b)) = guerra {
             self.declarar_guerra(t, a, b);
         }
-        let resultado = asedio::resolver_asedio(&cr, false, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa.tropa.escuadras, heroes: &defensa.tropa.heroes }, &mut self.estado.rng);
+        // Solo el asedio a una plaza multiplica al defensor con su recinto de referencia (Murallas §9.1); el equipo de asedio no lo reduce (Q7). No consume tirada.
+        let multiplicador = self.multiplicador_de_plaza(x);
+        let muralla_completa = recintos::muralla_completa(&self.estado.asentamientos[&x].economia.recintos);
+        let resultado = asedio::resolver_asedio(&cr, false, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa.tropa.escuadras, heroes: &defensa.tropa.heroes }, multiplicador, &mut self.estado.rng);
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&defensa.tropa.escuadras);
         let conquistada = resultado.conquistada();
         let heridos = self.herir_heroes(&asedio::heridos_del_asedio(&resultado, &participantes), t);
 
-        let mut datos = vec![("faccionAtacante", yo as i64), ("faccionDefensora", faccion_vieja as i64)];
+        let mut datos = vec![("faccionAtacante", yo as i64), ("faccionDefensora", faccion_vieja as i64), ("multiplicadorMuralla", multiplicador), ("murallaCompleta", muralla_completa as i64)];
         let mut chatarra = Mercancia::new();
         if let Asedio::Combate(i) = &resultado {
             chatarra = i.chatarra.clone();

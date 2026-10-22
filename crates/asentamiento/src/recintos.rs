@@ -254,6 +254,12 @@ pub fn nivel_del_mejor_completo(recintos: &[Recinto]) -> u32 {
     recintos.iter().filter(|r| r.completo()).map(|r| r.nivel as u32).max().unwrap_or(0)
 }
 
+/// ¿Tiene la plaza una **muralla completa**? Al menos un recinto con integridad ≥ 1 (el predicado de las tecnologías de Carpintería, `asedios.contraMurallaCompleta` y
+/// `conquistas.conMurallaCompleta`). Una mejora en curso no lo quita (el anillo en pie sigue entero); un recinto dañado, sí. Se mira **antes** del daño de la conquista.
+pub fn muralla_completa(recintos: &[Recinto]) -> bool {
+    recintos.iter().any(Recinto::completo)
+}
+
 /// El mantenimiento de los recintos por minuto, sin escala de población ni de distancia: `upkeepPorCelda[nivel] × celdas en pie` de cada anillo, con su
 /// nivel y su avance (una mejora en curso no lo cambia).
 pub fn upkeep(r: &ReglasMuralla, recintos: &[Recinto]) -> Costo {
@@ -796,6 +802,20 @@ mod pruebas {
         // Un recinto pequeño: floor(0,3 × 3) = 0, no pierde nada.
         let mut chico = vec![recinto(1, 1, anillo(3, &[], 0), 2, true)];
         assert!(!danar_por_conquista(&mut chico, 300_000));
+    }
+
+    #[test]
+    fn muralla_completa_es_tener_un_recinto_con_integridad_uno_aunque_se_mejore_o_se_amplie() {
+        assert!(!muralla_completa(&[]));
+        let mut piedra = recinto(1, 2, anillo(20, &[0], 0), 19, true);
+        assert!(muralla_completa(&[piedra.clone()]));
+        piedra.mejora = Some(Mejora { nivel: 3, avance: 2 });
+        assert!(muralla_completa(&[piedra.clone()]), "una mejora en curso no quita el anillo en pie");
+        assert!(muralla_completa(&[piedra.clone(), recinto(2, 1, anillo(40, &[0], 0), 5, false)]), "ni una ampliación a medio hacer");
+        assert!(!muralla_completa(&[recinto(1, 1, anillo(20, &[0], 0), 18, false)]), "a falta de una celda no está completa");
+        piedra.mejora = None;
+        piedra.avance = 13;
+        assert!(!muralla_completa(&[piedra]), "uno dañado por una conquista deja de contar hasta repararse");
     }
 
     #[test]

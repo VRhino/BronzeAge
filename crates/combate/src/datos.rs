@@ -69,6 +69,8 @@ pub struct ReglasOcupacion {
     pub saqueo_poblacion: i64,
     pub edificios_danados: i64,
     pub coste_reconstruccion: i64,
+    /// Fracción de las celdas de cada recinto completo (y sin mejora en curso) que pierde la muralla al caer la plaza (ppm).
+    pub dano_muralla: i64,
     pub factor_recaudacion: i64,
     pub factor_crecimiento: i64,
 }
@@ -264,6 +266,7 @@ impl Reglas {
                 saqueo_poblacion: ppm(num(&oc, "fraccionSaqueoPoblacion")),
                 edificios_danados: ppm(num(&oc, "fraccionEdificiosDanados")),
                 coste_reconstruccion: ppm(num(&oc, "fraccionCosteReconstruccion")),
+                dano_muralla: ppm(num(&oc, "fraccionDanoMuralla")),
                 factor_recaudacion: ppm(num(&oc, "factorRecaudacion")),
                 factor_crecimiento: ppm(num(&oc, "factorCrecimiento")),
             },
@@ -344,7 +347,7 @@ mod pruebas {
     fn la_ocupacion_y_el_ciclo_de_la_batalla() {
         let r = r();
         assert_eq!((r.ocupacion.proteccion, r.ocupacion.duracion), (1440 * MS_POR_MINUTO, 90 * MS_POR_MINUTO));
-        assert_eq!((r.ocupacion.saqueo_poblacion, r.ocupacion.edificios_danados, r.ocupacion.coste_reconstruccion), (250_000, 250_000, 500_000));
+        assert_eq!((r.ocupacion.saqueo_poblacion, r.ocupacion.edificios_danados, r.ocupacion.coste_reconstruccion, r.ocupacion.dano_muralla), (250_000, 250_000, 500_000, 300_000));
         let b = &r.batalla;
         assert_eq!((b.capacidad_asedio, b.capacidad_resto), (15, 5), "15 contra 15 en el asedio (2026-10-13)");
         assert_eq!((b.duracion_asedio, b.duracion_resto), (30 * MS_POR_MINUTO, 15 * MS_POR_MINUTO));

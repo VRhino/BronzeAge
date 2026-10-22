@@ -6,13 +6,15 @@
 //! - la flota, los trueques y las caravanas aparcadas se cierran con `comercio::ruina::cerrar_dependientes(Motivo::Conquista, …)` (la aparcada se
 //!   destruye, decidido el 2026-10-19);
 //! - los pueblos extractores y las avanzadas de la plaza pasan al conquistador con su zona (la ruina de la madre los hace desaparecer);
-//! - los recintos de muralla pierden `fraccionDanoMuralla` de avance (`asentamiento::recintos::danar_por_conquista`, ya hecho; falta cablearlo aquí: paso 5 de la fase de Murallas).
+//! - los recintos de muralla pierden `fraccionDanoMuralla` de avance (`asentamiento::recintos::danar_por_conquista`, lo aplica [`aplicar_conquista`]); la reparación es la obra
+//!   normal de la plaza, que programa el núcleo.
 
 use crate::datos::Reglas;
 use asentamiento::asentamiento::Asentamiento;
 use asentamiento::catalogo::Tipo;
 use asentamiento::datos::UNO;
 use asentamiento::edificio::Estado;
+use asentamiento::recintos;
 use base::{Instante, Mil};
 use militar::escuadra::Contenedor;
 use militar::heroe::{Heroe, Residencia};
@@ -34,6 +36,10 @@ pub struct Conquistada {
     pub edificios_danados: Vec<u32>,
     /// Población que se perdió: pesants, artesanos y nobleza (personas).
     pub poblacion_perdida: (i64, i64, i64),
+    /// ¿Tenía la plaza una muralla completa justo **antes** del daño? (el predicado de los contadores de logros, `recintos::muralla_completa`).
+    pub muralla_completa: bool,
+    /// ¿Perdió algún recinto celdas? Si es así quedan por reparar (la obra normal, a costa del nuevo dueño) y la ciudad debe rehacerse.
+    pub muralla_danada: bool,
 }
 
 /// `aplicarConquista`: el saqueo determinista de la ciudad.
@@ -44,6 +50,8 @@ pub struct Conquistada {
 ///   Granero dañado deja de aportar capacidad y lo guardado que ya no cabe se pierde.
 /// - La **obra de ascenso** en curso se pierde sin devolución y las **decisiones del gobierno derrotado** caen: políticas, reserva manual,
 ///   pausa de la auto-construcción y recetas paradas.
+/// - Cada **recinto de muralla completo y sin mejora en curso** pierde `fraccionDanoMuralla` de sus celdas ([`asentamiento::recintos::danar_por_conquista`]); el predicado
+///   «muralla completa» se toma **antes** del daño. Un recinto en obra o en mejora no recibe daño.
 /// - `medidorMantenimiento` vuelve a su valor inicial (100) y la plaza queda `ocupada`.
 pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut Asentamiento, ahora: Instante) -> Conquistada {
     let queda = UNO - r.ocupacion.saqueo_poblacion;
@@ -70,6 +78,9 @@ pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut As
         edificios_danados.push(id);
     }
 
+    let muralla_completa = recintos::muralla_completa(&a.recintos);
+    let muralla_danada = recintos::danar_por_conquista(&mut a.recintos, r.ocupacion.dano_muralla);
+
     a.ascenso = None;
     a.politicas = Default::default();
     a.reserva_manual = [0; 29];
@@ -82,6 +93,8 @@ pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut As
         ocupacion_hasta: ahora + r.ocupacion.duracion,
         edificios_danados,
         poblacion_perdida: (antes.0 - a.poblacion.pesants, antes.1 - a.poblacion.artesanos, antes.2 - a.poblacion.nobleza),
+        muralla_completa,
+        muralla_danada,
     }
 }
 
@@ -264,6 +277,32 @@ mod pruebas {
         assert!(a.ocupado);
         assert_eq!(c.protegida_hasta, 3 * MS_POR_MINUTO + 1440 * MS_POR_MINUTO);
         assert_eq!(c.ocupacion_hasta, 3 * MS_POR_MINUTO + 90 * MS_POR_MINUTO);
+    }
+
+    #[test]
+    fn la_conquista_daña_los_recintos_completos_un_30_por_ciento_y_el_predicado_se_toma_antes() {
+        use asentamiento::recintos::Recinto;
+        use trazado::{Celda, CeldaMuro, ClaseCelda};
+        let anillo = |n: i32| (0..n).map(|k| CeldaMuro { celda: Celda::new(k, 0), clase: ClaseCelda::Muro }).collect::<Vec<_>>();
+        let recinto = |id: u32, nivel: u8, n: i32, avance: i32, cerrado: bool| Recinto { id, nivel, celdas: anillo(n), avance, mejora: None, siguiente_celda_en: Some(99), comprometido_en: 0, completado_en: cerrado.then_some(1) };
+        let r = r();
+        let mut a = plaza(&[Tipo::CentroUrbano]);
+        a.recintos = vec![recinto(1, 2, 40, 39, true), recinto(2, 3, 40, 39, true), recinto(3, 3, 40, 10, false)];
+        a.recintos[1].mejora = Some(asentamiento::recintos::Mejora { nivel: 3, avance: 4 });
+        let c = aplicar_conquista(r, economia(), &mut a, 0);
+        assert!(c.muralla_completa && c.muralla_danada, "tenía muralla completa y perdió celdas");
+        // El completo pierde floor(0,3 × 40) = 12 celdas y queda sin cita; el que se mejora y el que está en obra no reciben daño.
+        assert_eq!((a.recintos[0].avance, a.recintos[1].avance, a.recintos[2].avance), (27, 39, 10));
+        assert_eq!((a.recintos[0].siguiente_celda_en, a.recintos[1].siguiente_celda_en), (None, Some(99)));
+        assert!(a.recintos[0].danado() && !recintos::muralla_completa(&a.recintos[..1]), "dañado ya no es una muralla completa");
+        assert!(recintos::muralla_completa(&a.recintos), "el que se mejoraba sigue entero");
+        // Una plaza sin murallas no tiene ni muralla completa ni daño; y un recinto que nunca se cerró tampoco cuenta como completa.
+        let c = aplicar_conquista(r, economia(), &mut plaza(&[Tipo::CentroUrbano]), 0);
+        assert!(!c.muralla_completa && !c.muralla_danada);
+        let mut b = plaza(&[Tipo::CentroUrbano]);
+        b.recintos = vec![recinto(1, 1, 40, 38, false)];
+        let c = aplicar_conquista(r, economia(), &mut b, 0);
+        assert!(!c.muralla_completa && !c.muralla_danada && b.recintos[0].avance == 38);
     }
 
     #[test]

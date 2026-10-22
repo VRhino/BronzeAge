@@ -1442,6 +1442,59 @@ fn un_asedio_que_gana_el_defensor_no_conquista_hiere_al_atacante_y_la_chatarra_s
     assert!(hechos(&e.n, "asentamiento.conquistada").is_empty());
 }
 
+/// Un asedio de Unity ganado por el atacante contra una plaza con su empalizada completa: la conquista daña el anillo igual que con números (Murallas §9.6) y la
+/// reparación sigue sola. La plaza B lleva almacenes enormes, nivel 2 y la empalizada cerrada antes de que llegue el ejército.
+#[test]
+fn por_unity_la_conquista_daña_la_muralla_un_30_por_ciento_igual_que_con_numeros() {
+    let m = con_mundo!();
+    let mut reglas = reglas_unity();
+    std::sync::Arc::make_mut(&mut reglas.economia.datos).capacidad_inicial = 100_000_000;
+    let mut n = Nucleo::nuevo(Arranque { reglas, ..arranque_mundo(m, 7) });
+    let (pa, pb) = (sitio_rico(&n, &m.0, 0, 1), sitio_rico(&n, &m.0, 3, 2));
+    let (a, b) = (fundar(&mut n, 0, "a", "ana", 1, pa), fundar(&mut n, 0, "b", "beto", 2, pb));
+    let mut e = Esc { n, a, b, cuenta: 0 };
+    for plaza in [a, b] {
+        e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
+    }
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: b, nivel: 2 });
+    for r in [Madera, Piedra, Oro] {
+        e.dar(b, r, 5_000_000);
+    }
+    e.n.avanzar_hasta(HORA + 30_000);
+    e.ok("beto", Comando::ComprometerRecinto { asentamiento: b, cargo: asentamiento::Cargo::MaestroObras, nivel: 1 });
+    while !e.n.economia(b).unwrap().recintos[0].completo() {
+        let r = &e.n.economia(b).unwrap().recintos[0];
+        let ahora = e.n.ahora();
+        e.n.avanzar_hasta(r.siguiente_celda_en.filter(|&s| s > ahora).unwrap_or(ahora + MIN));
+    }
+    let antes = e.n.economia(b).unwrap().recintos[0].clone();
+    let (celdas, perdidas) = (antes.celdas.len(), antes.celdas.len() * 300_000 / 1_000_000);
+
+    let beto = e.heroe_en(&m.0, "beto", 2, b);
+    e.defensor(beto, &[Tropa::MiliciaLanceros]);
+    let ana = e.ejercito("ana", 1, e.pos(b), &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
+    let t = e.n.ahora();
+    assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    assert!(e.n.aplicar_en(t + 1_000, Peticion::nueva("beto", "ub", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None })).aceptada());
+    e.n.avanzar_hasta(t + 40_000);
+    en_curso(&mut e.n, id, t + 40_000, &[ana.1, beto]);
+    // Unity no resuelve la muralla con un multiplicador: el recinto no se toca hasta que se aplica el resultado.
+    assert_eq!(e.n.economia(b).unwrap().recintos[0], antes);
+    let res = resultado(&e.n, id, Lado::Atacante, 4);
+    let ahora = t + 5 * MIN;
+    assert!(aplicar(&mut e.n, ahora, "res", id, res).aceptada());
+    let a = &e.n.estado().asentamientos[&b];
+    assert_eq!(a.faccion, 1, "la plaza cae");
+    let c = &hechos(&e.n, "asentamiento.conquistada")[0];
+    assert_eq!((dato(c, "murallaCompleta"), dato(c, "murallaDanada")), (1, 1));
+    let rec = &a.economia.recintos[0];
+    assert_eq!(rec.levantadas(), celdas - perdidas + 1, "pierde el 30 % de las celdas y la reparación levanta ya la primera");
+    assert!(rec.danado() && rec.completado_en == antes.completado_en);
+    assert_eq!(rec.siguiente_celda_en, Some(ahora + 15 * MIN));
+    assert!(!e.n.ciudad(b).unwrap().recintos()[0].completo, "la ciudad ya no ve el anillo completo");
+}
+
 #[test]
 fn el_visitante_amigo_que_se_une_a_defender_y_pierde_deja_la_mitad_del_carro_y_quien_no_se_une_no_pierde_nada() {
     let m = con_mundo!();

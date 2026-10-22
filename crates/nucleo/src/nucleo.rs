@@ -66,7 +66,7 @@ mod zonas;
 
 use espacio::{Cosa, Motivo};
 pub use batallas::TokenDeJugador;
-pub use murallas::{ErrorPresupuesto, Presupuesto};
+pub use murallas::{ErrorPresupuesto, Presupuesto, RecintoEnPie};
 pub use zonas::InformeViabilidad;
 
 /// Tipos de entrada del registro.

@@ -167,7 +167,8 @@ pub fn ganador_de(poder_atacante: Mil, poder_defensor: Mil) -> Lado {
 /// gana A solo si poderA > poderD (el empate es del defensor)
 /// ```
 ///
-/// `multiplicador_defensor` (ppm) es la muralla (1,0 mientras el asedio no use `recintos::multiplicador_defensivo`) o la ventaja del aguante en el saqueo de un pueblo.
+/// `multiplicador_defensor` (ppm) es el del recinto de la plaza asediada (`asentamiento::recintos::multiplicador_defensivo`), 1,0 donde no hay recinto que valga, o la ventaja del
+/// aguante en el saqueo de un pueblo.
 // DUDA: el poder de los héroes entra en la suma antes de la cohesión, la tirada y las ventajas (Combate §3.3), y la cohesión cuenta solo escuadras.
 pub fn resolver_combate(r: &Reglas, atacante: Bando, defensor: Bando, multiplicador_defensor: i64, rng: &mut Rng) -> Result<Informe, CombateInvalido> {
     if bando_vacio(&atacante) {

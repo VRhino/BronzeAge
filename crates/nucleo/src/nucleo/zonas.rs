@@ -115,7 +115,7 @@ impl Nucleo {
     pub fn vista_ciudad(&self, id: u64) -> Option<crate::urbanismo::VistaCiudad> {
         let a = self.estado.asentamientos.get(&id)?;
         let u = a.economia.urbano(&self.estado.reglas.economia.datos);
-        Some(a.urbe.vista(a.urbe.radio_ul(&u)))
+        Some(a.urbe.vista(a.urbe.radio_ul(&u), &a.economia.recintos))
     }
 
     /// Plazas vigentes de una Facción.

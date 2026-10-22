@@ -24,7 +24,7 @@ use asentamiento::datos::bloque_de;
 use asentamiento::edificio::Fuente;
 use base::Punto;
 use std::collections::BTreeMap;
-use trazado::{radio_ciudad, Ancla, Categoria, CeldaMuro, Ciudad, Colocacion, EntradaFundacion, Huella, OpcionAncla, Parametros, ParametrosMuralla, Pedido, Perfil, Recinto, Rect, RectLocal, Rol, TipoPieza, CELDA_UL};
+use trazado::{fusionar_celdas, radio_ciudad, Ancla, Categoria, CeldaMuro, ClaseCelda, Ciudad, Colocacion, EntradaFundacion, Huella, OpcionAncla, Parametros, ParametrosMuralla, Pedido, Perfil, Recinto, Rect, RectLocal, Rol, TipoPieza, CELDA_UL};
 
 /// El documento del Trazado urbano: de él salen las huellas.
 pub const DOC_TRAZADO: &str = include_str!("../../../Docs/Mechanics/Trazado_Urbano.md");
@@ -441,7 +441,45 @@ pub struct PiezaVista {
     pub rotado: bool,
 }
 
-/// Todo lo que un cliente necesita para dibujar la ciudad de una plaza (T §10): piezas, calles y caminos en unidades locales.
+/// Un recinto de muralla como lo dibuja un cliente (Murallas §9.1, Trazado_Urbano §10): las celdas **en pie** fusionadas por clase en rectángulos y las que aún están por
+/// levantar aparte (ocupan suelo igual, pero no defienden). Todo en unidades locales, como el resto de la vista.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecintoVista {
+    /// `n` del id de texto `recinto-<plaza>-<n>` del contrato.
+    pub id: u32,
+    /// El nivel del anillo en pie: 1 empalizada, 2 muro de piedra, 3 muralla con adarve.
+    pub nivel: u8,
+    /// El nivel al que se está mejorando, si hay una mejora en curso (el anillo en pie sigue siendo el de `nivel`).
+    pub mejorando_a: Option<u8>,
+    /// Las celdas levantadas, por clase.
+    pub muros: Vec<RectLocal>,
+    pub torres: Vec<RectLocal>,
+    pub puertas: Vec<RectLocal>,
+    /// Las celdas del anillo congelado que todavía no se han levantado, de cualquier clase.
+    pub planificadas: Vec<RectLocal>,
+}
+
+/// Lo que un cliente dibuja de los recintos de una plaza, del más interior al más exterior.
+fn vista_de_recintos(recintos: &[asentamiento::recintos::Recinto]) -> Vec<RecintoVista> {
+    let celdas = |cs: &[CeldaMuro], clase: ClaseCelda| fusionar_celdas(&cs.iter().filter(|c| c.clase == clase).map(|c| c.celda).collect::<Vec<_>>());
+    recintos
+        .iter()
+        .map(|r| {
+            let (en_pie, por_levantar) = r.celdas.split_at(r.levantadas());
+            RecintoVista {
+                id: r.id,
+                nivel: r.nivel,
+                mejorando_a: r.mejora.map(|m| m.nivel),
+                muros: celdas(en_pie, ClaseCelda::Muro),
+                torres: celdas(en_pie, ClaseCelda::Torre),
+                puertas: celdas(en_pie, ClaseCelda::Puerta),
+                planificadas: fusionar_celdas(&por_levantar.iter().map(|c| c.celda).collect::<Vec<_>>()),
+            }
+        })
+        .collect()
+}
+
+/// Todo lo que un cliente necesita para dibujar la ciudad de una plaza (T §10): piezas, calles, caminos y murallas en unidades locales.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VistaCiudad {
     /// `radioCiudad` actual, en unidades locales (el disco urbano).
@@ -449,10 +487,12 @@ pub struct VistaCiudad {
     pub piezas: Vec<PiezaVista>,
     pub calles: Vec<RectLocal>,
     pub caminos: Vec<RectLocal>,
+    pub murallas: Vec<RecintoVista>,
 }
 
 impl Urbe {
-    pub fn vista(&self, radio_ul: i32) -> VistaCiudad {
+    /// La vista de la ciudad; los `recintos` son los de la economía de la plaza (la ciudad solo guarda su proyección, sin niveles ni avance).
+    pub fn vista(&self, radio_ul: i32, recintos: &[asentamiento::recintos::Recinto]) -> VistaCiudad {
         let piezas = self
             .ciudad
             .piezas()
@@ -467,7 +507,7 @@ impl Urbe {
                 rotado: p.rotado,
             })
             .collect();
-        VistaCiudad { radio_ul, piezas, calles: self.ciudad.calles_rectangulos(), caminos: self.ciudad.caminos_rectangulos() }
+        VistaCiudad { radio_ul, piezas, calles: self.ciudad.calles_rectangulos(), caminos: self.ciudad.caminos_rectangulos(), murallas: vista_de_recintos(recintos) }
     }
 
     /// `radioCiudad` de la plaza con ese contexto.
@@ -504,7 +544,7 @@ pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_
         // Lo que no cabe se queda fuera de la planta: es presentación, no hay nada que cobrar ni que deshacer.
         ciudad.colocar_siguiente(&pedido(id as u32 + 1, tipo, categoria, Rol::Normal));
     }
-    Urbe::desde_ciudad(ciudad).vista(RADIO_DE_PUEBLO_UL)
+    Urbe::desde_ciudad(ciudad).vista(RADIO_DE_PUEBLO_UL, &[])
 }
 
 #[cfg(test)]

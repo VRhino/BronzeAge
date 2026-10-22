@@ -9,7 +9,7 @@
 //!
 //! **En ruinas no funciona nada** (ni visión, ni guarnición, ni reabastecimiento): una avanzada en ruinas no tiene defensores.
 
-use crate::asedio::{resolver_asedio, Asedio};
+use crate::asedio::{resolver_asedio, Asedio, SIN_RECINTO};
 use crate::botin::{repartir_botin, CarroDeColumna};
 use crate::datos::Reglas;
 use crate::resolucion::{Bando, SIN_DUENO};
@@ -42,7 +42,8 @@ pub fn resolver_ataque(r: &Reglas, estado: Estado, ahora: Instante, atacante: Ba
                 Asedio::SinAtacantes
             }
         }
-        _ => resolver_asedio(r, rebota, atacante, defensor, rng),
+        // Una avanzada no tiene recintos (su fortaleza son sus guarniciones de serie, Combate §7.4): multiplicador 1.
+        _ => resolver_asedio(r, rebota, atacante, defensor, SIN_RECINTO, rng),
     }
 }
 
@@ -251,5 +252,16 @@ mod pruebas {
         let res = resolver_ataque(r, Estado::Operativa, 0, Bando { escuadras: &mut a, heroes: &[1] }, Bando { escuadras: &mut g, heroes: &[] }, &mut Rng::nuevo(2));
         assert!(matches!(res, Asedio::Combate(_)) && res.conquistada());
         assert_eq!(tras_ataque(r, Etapa::Atalaya, Estado::Operativa, 0, res.conquistada()), Estado::Destruida);
+    }
+
+    #[test]
+    fn una_avanzada_no_tiene_recintos_y_su_ataque_es_el_asedio_con_multiplicador_uno() {
+        let r = r();
+        let (a0, g0) = ([escuadra(1, 1, Tropa::ArquerosCompuesto), escuadra(2, 1, Tropa::ArquerosCompuesto)], [escuadra(3, 0, Tropa::MiliciaLanceros)]);
+        let (mut a, mut g, mut rng) = (a0.clone(), g0.clone(), Rng::nuevo(2));
+        let ataque = resolver_ataque(r, Estado::Operativa, 0, Bando { escuadras: &mut a, heroes: &[1] }, Bando { escuadras: &mut g, heroes: &[] }, &mut rng);
+        let (mut a2, mut g2, mut rng2) = (a0, g0, Rng::nuevo(2));
+        let asedio = resolver_asedio(r, false, Bando { escuadras: &mut a2, heroes: &[1] }, Bando { escuadras: &mut g2, heroes: &[] }, SIN_RECINTO, &mut rng2);
+        assert_eq!((ataque, rng.estado()), (asedio, rng2.estado()), "mismas tiradas y mismo resultado que un asedio sin recinto");
     }
 }

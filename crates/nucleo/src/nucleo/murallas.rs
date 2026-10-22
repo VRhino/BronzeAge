@@ -1,6 +1,7 @@
-//! Los recintos de muralla dentro del núcleo (`Docs/Mechanics/Murallas.md`, fase de Murallas, segunda tanda): las órdenes `ComprometerRecinto`,
-//! `MejorarRecinto` y `AbandonarRecinto` (123-125), la consulta de presupuesto y la sincronía con la ciudad de la plaza. Las reglas de la economía
-//! —coste, obra, mejora, defensa, mantenimiento— son `asentamiento::recintos`; el trazo, `trazado::muralla`; aquí está lo que las une.
+//! Los recintos de muralla dentro del núcleo (`Docs/Mechanics/Murallas.md`, fase de Murallas, tandas segunda y tercera): las órdenes `ComprometerRecinto`,
+//! `MejorarRecinto` y `AbandonarRecinto` (123-125), la consulta de presupuesto, la sincronía con la ciudad de la plaza y lo que los recintos valen fuera de la economía: el
+//! multiplicador del asedio con números y la geometría que viaja a Unity. Las reglas de la economía —coste, obra, mejora, defensa, mantenimiento, daño de la
+//! conquista— son `asentamiento::recintos`; el trazo, `trazado::muralla`; aquí está lo que las une.
 //!
 //! # El trazo lo calcula el núcleo
 //! La economía no conoce la ciudad. Al comprometer, el núcleo traza el anillo con la ciudad de la plaza (`trazar_recinto`), comprueba el arrabal y que envuelva
@@ -25,7 +26,8 @@ use crate::comando::rechazos::*;
 use asentamiento::asentamiento::Evento as EventoEco;
 use asentamiento::recintos::{self, ErrorRecinto, Recinto};
 use asentamiento::{Cargo, Costo};
-use trazado::{contiene_a, edificios_extramuros, interior_de, trazar_recinto, Ciudad, ErrorMuralla, Trazo};
+use combate::asedio;
+use trazado::{contiene_a, edificios_extramuros, interior_de, trazar_recinto, CeldaMuro, Ciudad, ErrorMuralla, Trazo};
 
 /// Lo que costaría y abarcaría un recinto de un nivel si se comprometiera ahora (Murallas §4: el número de puertas es irreversible y se enseña antes de pagar).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,6 +41,17 @@ pub struct Presupuesto {
     pub extramuros: usize,
     /// Si ya hay recintos, si el anillo nuevo envuelve estrictamente al exterior (sin eso no se puede ampliar); `true` si no hay ninguno.
     pub envuelve: bool,
+}
+
+/// Un recinto como lo ve una batalla de Unity: la geometría que está **en pie** (Batalla_Unity_Ciclo §3.3). Lo que la muralla vale dentro de la partida lo decide Unity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecintoEnPie {
+    /// `n` del id de texto `recinto-<plaza>-<n>` del contrato.
+    pub id: u32,
+    /// El nivel físico en pie (una mejora en curso no lo cambia, Q1).
+    pub nivel: u8,
+    /// Las celdas levantadas, en su orden de recorrido, con la clase que tienen en el anillo en pie (muro, puerta o torre).
+    pub celdas: Vec<CeldaMuro>,
 }
 
 /// Por qué no hay presupuesto.
@@ -96,6 +109,20 @@ impl Nucleo {
             envuelve: anterior.map_or(true, |r| contiene_a(&trazo.celdas, &r.celdas)),
             trazo,
         })
+    }
+
+    /// El multiplicador del defensor (ppm) cuando la plaza se asedia con números: el del recinto de referencia (Murallas §9.1, `1 + (bono − 1) × integridad / puertas`) o 1,0 sin
+    /// recinto. Defiende lo que está en pie (Q1): una mejora o una ampliación en curso no lo quita. Una plaza que no existe no multiplica nada.
+    pub fn multiplicador_de_plaza(&self, plaza: u64) -> i64 {
+        self.estado.asentamientos.get(&plaza).map_or(asedio::SIN_RECINTO, |a| recintos::multiplicador_defensivo(&self.estado.reglas.economia.datos.muralla, &a.economia.recintos))
+    }
+
+    /// Los recintos que viajan a una batalla de Unity (Murallas §9.1): por cada uno con alguna celda en pie, su id, su nivel físico y **solo** las celdas levantadas
+    /// (`celdas[0..=avance]`). Una mejora en curso no cambia nada y uno sin celdas en pie no viaja. Del más interior al más exterior. El `layoutVersion` es
+    /// [`trazado::LAYOUT_VERSION`] y las `unidadesPorCelda`, [`trazado::CELDA_UL`]. El ticket del asedio los congela en el contrato (4H).
+    pub fn recintos_en_pie(&self, plaza: u64) -> Vec<RecintoEnPie> {
+        let Some(a) = self.estado.asentamientos.get(&plaza) else { return vec![] };
+        a.economia.recintos.iter().filter(|r| r.levantadas() > 0).map(|r| RecintoEnPie { id: r.id, nivel: r.nivel, celdas: r.celdas[..r.levantadas()].to_vec() }).collect()
     }
 
     // ───────────────────────────── La ciudad es un derivado ─────────────────────────────

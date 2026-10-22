@@ -29,7 +29,7 @@ fn ejemplo(c: &Corrida) -> Option<&Villa> {
 pub fn ciudad_ejemplo(c: &Corrida, reglas: &asentamiento::Reglas) -> Option<String> {
     let v = ejemplo(c)?;
     let radio = v.urbe.radio_ul(&v.a.urbano(reglas));
-    let vista = v.urbe.vista(radio);
+    let vista = v.urbe.vista(radio, &v.a.recintos);
     // Encuadre: todas las piezas y el disco urbano, con margen.
     let (mut x0, mut y0, mut x1, mut y1) = (-radio, -radio, radio, radio);
     for p in &vista.piezas {

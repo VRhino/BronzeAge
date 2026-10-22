@@ -20,10 +20,15 @@
 //! se limpia el campo y se cuenta. Mientras la plaza está ocupada, el paso de minuto de su economía pasa los factores de la ocupación al `Exterior`
 //! (`felicidad_extra` y `recaudacion_extra`, que existían para esto) y `Asentamiento::ocupado` congela su mantenimiento. Nada recurre por plaza.
 //!
+//! # La muralla
+//! Cada recinto **completo y sin mejora en curso** pierde `fraccionDanoMuralla` (30 %) de sus celdas (`combate::conquista::aplicar_conquista`); uno en obra o en mejora no recibe daño y
+//! lo sigue el nuevo dueño. El recinto dañado deja de contar (multiplicador, cupo de guarnición, requisito del nivel 4) hasta repararse y se repara solo, por la obra normal de la
+//! plaza, a costa del nuevo dueño (Q2); la ciudad se rehace sin la preferencia intramuros. La conquista es la misma por los números y por el resultado de Unity: el daño no
+//! depende de cómo se resolvió el asedio.
+//!
 //! # Lo provisional
 //! Los cargos, los fundadores y las casas compradas quedan vacíos cuando existan (sistema 5: hoy no hay nada que vaciar). La derrota de la Facción solo se
-//! cuenta (`faccion.derrotada`); qué hace después quien la gobierna, la reputación y la experiencia de Facción por conquistar son del sistema político. Los
-//! recintos de muralla todavía no pierden avance (`recintos::danar_por_conquista` existe; lo cablea el paso 5 de la fase de Murallas). El traslado de los residentes no mira el cupo de viviendas del destino (Combate §9).
+//! cuenta (`faccion.derrotada`); qué hace después quien la gobierna, la reputación y la experiencia de Facción por conquistar son del sistema político. El traslado de los residentes no mira el cupo de viviendas del destino (Combate §9).
 
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO};
@@ -90,6 +95,9 @@ impl Nucleo {
             (a.protegida_hasta, a.ocupada_hasta) = (Some(c.protegida_hasta), Some(c.ocupacion_hasta));
             c
         };
+        if c.muralla_danada {
+            self.reparar_muralla_danada(t, plaza);
+        }
         let entidad = entidad_conquista(plaza);
         self.estado.generaciones.subir(entidad);
         let clave = self.estado.generaciones.clave(entidad);
@@ -153,10 +161,27 @@ impl Nucleo {
                 ("pesantsPerdidos", c.poblacion_perdida.0),
                 ("artesanosPerdidos", c.poblacion_perdida.1),
                 ("noblezaPerdida", c.poblacion_perdida.2),
+                ("murallaCompleta", c.muralla_completa as i64),
+                ("murallaDanada", c.muralla_danada as i64),
                 ("carroPerdido", total(&robado)),
             ],
         );
         robado
+    }
+
+    /// La conquista dejó celdas por levantar en algún recinto (`recintos::danar_por_conquista`): la ciudad se rehace con la muralla incompleta (ya no hay preferencia intramuros)
+    /// y empieza la reparación, que es la obra normal de la plaza a costa del nuevo dueño (Murallas §9.6, Q2): la primera celda sale en este instante, si hay con qué, y deja la cita de
+    /// la siguiente; si no hay materiales o se bajaría de la reserva, no hay cita y el paso de minuto lo reintenta. La plaza ocupada tiene el mantenimiento congelado, pero la obra sigue.
+    // DUDA: el TypeScript dejaba la reparación a la pasada de obra siguiente; aquí empieza en el instante de la conquista (la cita de la primera celda, como al comprometer).
+    fn reparar_muralla_danada(&mut self, t: Instante, plaza: u64) {
+        self.sincronizar_recintos(plaza);
+        let sucesos = self.con_exterior(plaza, t, |eco, x| {
+            let mut ev = vec![];
+            eco.levantar_recintos(t, x, &mut ev);
+            ev
+        });
+        // Sin mundo cargado no hay `Exterior` (ni plazas fundadas): no hay nada que reparar.
+        self.anotar_sucesos(plaza, t, &sucesos.unwrap_or_default());
     }
 
     /// Quien estaba dentro y no trajo columna sale a la calle con todo lo suyo (Combate §9, Entrar con todo): nace una columna personal quieta en `posicion`, con el
