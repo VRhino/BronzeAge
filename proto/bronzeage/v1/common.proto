@@ -14,7 +14,7 @@
 //  * IDENTIFICADORES de entidad: cadenas `<prefijo>-<n>`, todas con la misma forma, la Facción también: `f-3` Facción, `as-7` asentamiento,
 //    `heroe-4`, `esc-9` escuadrón, `ej-2` ejército (columna), `car-5` caravana, `conv-1` convocatoria, `camp-0` campamento de mercenarios
 //    (índice del artefacto de mundo), `band-6` campamento de bandidos, `acu-3` trueque, `ord-8` orden de mercado, `pueblo-5`, `av-5`,
-//    `obra-5`, `loadout-2`. Lo que solo existe dentro de una plaza lleva la plaza: `ed-<plaza>-<n>` (edificio), `recinto-<plaza>-<n>`.
+//    `obra-5`, `loadout-2`, `nodo-12` (el índice del nodo en el artefacto de mundo). Lo que solo existe dentro de una plaza lleva la plaza: `ed-<plaza>-<n>` (edificio), `recinto-<plaza>-<n>`.
 //    La batalla es la excepción: su id es un UUID (el contrato v1 de Unity). Un id nunca se reutiliza dentro de una partida.
 //  * Los nombres de campo son snake_case en español (el dominio); los mensajes de batalla compartidos con Unity
 //    conservan los nombres en inglés del contrato v1 (BattleTicket, BattleResult...).

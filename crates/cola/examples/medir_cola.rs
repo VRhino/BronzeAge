@@ -1,4 +1,4 @@
-//! Mide eventos/s: `cargo run --release -p cola --example medir`.
+//! Mide eventos/s: `cargo run --release -p cola --example medir_cola`.
 use base::Rng;
 use cola::{Clave, Cola};
 use std::time::Instant;

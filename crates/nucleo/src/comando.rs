@@ -1587,7 +1587,16 @@ pub mod rechazos {
     pub const EJERCITO_DESCONOCIDO: &str = "ejercito.desconocido";
     pub const HEROE_DESCONOCIDO: &str = "heroe.desconocido";
     pub const RUTA_IMPOSIBLE: &str = "ruta.imposible";
+    /// Una orden vacía (sin cuerpo).
     pub const ORDEN_NO_SOPORTADA: &str = "orden.no_soportada";
+    /// Una orden del contrato que el núcleo aún no tiene (política, tecnología, Aedas, intel, refundación, caravanas a mano y almacén personal): se rechaza con este código estable en vez de descartarse.
+    pub const ORDEN_NO_DISPONIBLE: &str = "orden.no_disponible";
+    /// Un valor de la orden fuera de su catálogo cerrado, o un id que no tiene la forma de ninguna entidad (`orden.forma_invalida`).
+    pub const ORDEN_FORMA_INVALIDA: &str = "orden.forma_invalida";
+    /// `obra-N` no es ningún pueblo ni ninguna avanzada.
+    pub const OBRA_DE_MAPA_DESCONOCIDA: &str = "obra_de_mapa.desconocida";
+    /// `repostar` sin `lugar_id` y sin ninguna plaza ni avanzada operativa a la puerta de la columna.
+    pub const REPOSTAR_SIN_LUGAR: &str = "repostar.sin_lugar";
     pub const OBJETIVO_NO_SOPORTADO: &str = "objetivo.no_soportado";
     pub const RELOJ_INVALIDO: &str = "reloj.invalido";
     pub const SIN_MUNDO: &str = "mundo.no_cargado";

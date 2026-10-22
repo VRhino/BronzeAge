@@ -3,48 +3,24 @@
 mod comun;
 
 use base::Punto;
+use comun::sesion::*;
 use comun::*;
 use contrato::v1::{
-    self as pb, mensaje_de_cliente as mc, mensaje_de_servidor as ms, orden, orden_marchar_a, DecisionReanudacion, Entidad, Orden,
+    self as pb, mensaje_de_cliente as mc, mensaje_de_servidor as ms, orden, orden_marchar_a, DecisionReanudacion, Orden,
     OrdenControlarReloj, OrdenMarcharA, TipoCliente,
 };
-use nucleo::{sesiones, Nucleo};
+use nucleo::Nucleo;
 use servidor::{
-    prueba::{hola, AutenticadorDePrueba, ClientePrueba},
-    servir, ComandoSesion, Config, Difusion, RelojCompartido, Servidor,
+    prueba::{hola, ClientePrueba},
+    ComandoSesion, Difusion,
 };
-use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinHandle;
 
-struct Mundo {
-    srv: Servidor,
-    tx: mpsc::Sender<ComandoSesion>,
-    actor: JoinHandle<Nucleo>,
-}
-
-async fn arrancar() -> Mundo {
+async fn arrancar() -> Servicio {
     let mut n = nucleo(30, 30);
     n.crear_ejercito(0, "ana", 1, c(1, 1), 4_000, 350_000).unwrap(); // ej-1, con el héroe 2
     n.crear_ejercito(0, "beto", 2, c(10, 10), 4_000, 350_000).unwrap(); // ej-3, con el héroe 4
     arrancar_con(n).await
-}
-
-async fn arrancar_con(n: Nucleo) -> Mundo {
-    let reloj = RelojCompartido::nuevo(n.ahora());
-    let (tx, rx) = mpsc::channel(1024);
-    let actor = sesiones::lanzar(n, reloj.clone(), rx);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let srv = servir(listener, tx.clone(), AutenticadorDePrueba, reloj, Config::default()).await;
-    Mundo { srv, tx, actor }
-}
-
-impl Mundo {
-    async fn parar(self) -> Nucleo {
-        self.srv.detener().await;
-        drop(self.tx);
-        self.actor.await.unwrap()
-    }
 }
 
 fn marchar_a(peticion: &str, heroe: &str, p: Punto) -> mc::Cuerpo {
@@ -64,35 +40,6 @@ fn reloj_orden(peticion: &str, accion: &str, factor: Option<i64>) -> mc::Cuerpo 
         cuerpo: Some(orden::Cuerpo::ControlarReloj(OrdenControlarReloj { accion: accion.into(), factor_milesimas: factor, hasta_ms: None })),
         ..Default::default()
     })
-}
-
-fn ejercito(e: &Entidad) -> &pb::Ejercito {
-    match e.cuerpo.as_ref() {
-        Some(pb::entidad::Cuerpo::Ejercito(x)) => x,
-        _ => panic!("se esperaba un Ejercito"),
-    }
-}
-
-async fn foto(c: &mut ClientePrueba) -> pb::Foto {
-    match c.esperar().await.cuerpo {
-        Some(ms::Cuerpo::Foto(f)) => f,
-        o => panic!("se esperaba Foto, llegó {o:?}"),
-    }
-}
-async fn delta(c: &mut ClientePrueba) -> pb::Delta {
-    match c.esperar().await.cuerpo {
-        Some(ms::Cuerpo::Delta(d)) => d,
-        o => panic!("se esperaba Delta, llegó {o:?}"),
-    }
-}
-async fn resultado(c: &mut ClientePrueba) -> pb::ResultadoOrden {
-    match c.esperar().await.cuerpo {
-        Some(ms::Cuerpo::Resultado(r)) => r,
-        o => panic!("se esperaba Resultado, llegó {o:?}"),
-    }
-}
-async fn silencio(c: &mut ClientePrueba) {
-    assert!(tokio::time::timeout(Duration::from_millis(300), c.recibir()).await.is_err(), "no debía llegar nada");
 }
 
 #[tokio::test]
@@ -237,19 +184,20 @@ async fn el_cliente_lento_se_descarta_sin_bloquear_el_mundo() {
 }
 
 #[tokio::test]
-async fn ordenes_no_implementadas_se_rechazan_con_codigo_estable() {
+async fn lo_que_el_contrato_no_puede_traducir_se_rechaza_con_un_codigo_estable() {
     let w = arrancar().await;
-    let (mut ana, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:ana", TipoCliente::ClienteUnity)).await;
-    foto(&mut ana).await;
-    ana.enviar(mc::Cuerpo::Orden(Orden {
-        peticion_id: "x".into(),
-        cuerpo: Some(orden::Cuerpo::Fundar(pb::OrdenFundar {})),
-        ..Default::default()
-    }))
-    .await;
+    let (mut ana, _) = w.entrar("ana", TipoCliente::ClienteUnity).await;
+    // Una orden del contrato que el núcleo aún no tiene no se descarta: se rechaza con su código.
+    let (deltas, r) = dar(&mut ana, "x", orden::Cuerpo::CrearFaccion(pb::OrdenCrearFaccion::default())).await;
+    assert_eq!((deltas.len(), rechazo(&r)), (0, "orden.no_disponible"));
+    // Una orden vacía, tampoco.
+    ana.enviar(mc::Cuerpo::Orden(Orden { peticion_id: "v".into(), ..Default::default() })).await;
     assert_eq!(resultado(&mut ana).await.rechazo.unwrap().codigo, "orden.no_soportada");
+    // Un id que no es de ningún héroe, y la orden de administración de quien no administra.
     ana.enviar(marchar_a("y", "nadie", c(1, 1))).await;
     assert_eq!(resultado(&mut ana).await.rechazo.unwrap().codigo, "heroe.desconocido");
+    let (_, r) = dar(&mut ana, "z", orden::Cuerpo::Administracion(pb::OrdenDeAdministracion { codigo: "herir_heroe".into(), parametros: None })).await;
+    assert_eq!(rechazo(&r), "no_autorizado");
     w.parar().await;
 }
 
@@ -257,13 +205,6 @@ async fn ordenes_no_implementadas_se_rechazan_con_codigo_estable() {
 
 fn de_batalla(cuerpo: pb::mensaje_de_servidor_de_batalla::Cuerpo) -> mc::Cuerpo {
     mc::Cuerpo::Batalla(pb::MensajeDeServidorDeBatalla { cuerpo: Some(cuerpo) })
-}
-
-async fn aviso(c: &mut ClientePrueba) -> pb::Aviso {
-    match c.esperar().await.cuerpo {
-        Some(ms::Cuerpo::Aviso(a)) => a,
-        o => panic!("se esperaba un Aviso, llegó {o:?}"),
-    }
 }
 
 #[tokio::test]

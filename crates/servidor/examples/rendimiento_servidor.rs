@@ -1,4 +1,4 @@
-//! `cargo run -p servidor --release --example rendimiento [sesiones] [ordenes_por_sesion]`
+//! `cargo run -p servidor --release --example rendimiento_servidor [sesiones] [ordenes_por_sesion]`
 //! Mide mensajes/s del servidor de sesiones con un núcleo falso, todo en el mismo proceso (el cliente de prueba comparte CPU).
 
 #[tokio::main]

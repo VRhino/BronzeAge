@@ -7,6 +7,8 @@ use nucleo::{Ajustes, Arranque, Comando, Nucleo, Peticion, Reglas};
 use rutas::Rutas;
 use std::sync::Arc;
 
+pub mod sesion;
+
 pub const ESP: i64 = 8_000;
 
 /// Centro de la celda `(x, y)` de la retícula.

@@ -29,6 +29,7 @@ ids! {
     u64, "av", avanzada, parse_avanzada;
     u64, "obra", obra, parse_obra;
     u64, "loadout", loadout, parse_loadout;
+    u32, "nodo", nodo, parse_nodo;
 }
 
 pub fn edificio(plaza: u64, n: u32) -> String {
@@ -68,6 +69,7 @@ mod pruebas {
         assert_eq!(parse_avanzada(&avanzada(9)), Some(9));
         assert_eq!(parse_caravana(&caravana(2)), Some(2));
         assert_eq!(parse_campamento(&campamento(4)), Some(4));
+        assert_eq!(parse_nodo(&nodo(12)), Some(12));
         assert_eq!(parse_edificio(&edificio(5, 11)), Some((5, 11)));
         assert_eq!(parse_recinto(&recinto(5, 2)), Some((5, 2)));
         // Un prefijo no se toma por otro (`as-` no es `av-`; `ej-` no es `esc-`) ni se acepta basura.

@@ -1,5 +1,5 @@
 //! Medición: 10.000 móviles con planes de 20 tramos en el mundo real (2.667.000 × 2.000.000 milésimas).
-//! `CARGO_TARGET_DIR=... cargo run --release -p encuentros --example medir [lado_zona_en_milesimas]`
+//! `CARGO_TARGET_DIR=... cargo run --release -p encuentros --example medir_encuentros [lado_zona_en_milesimas]`
 use base::{Plan, Punto, Rng, Vertice};
 use encuentros::{Entradas, Rejilla};
 use std::time::Instant;

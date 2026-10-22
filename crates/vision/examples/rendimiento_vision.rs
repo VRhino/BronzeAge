@@ -1,5 +1,5 @@
 //! Mide el muestreo con 10.000 móviles y 200 Facciones en el mundo real (2.667 × 2.000 u):
-//! `cargo run --release -p vision --example rendimiento [-- ruta/mundo.bin]`
+//! `cargo run --release -p vision --example rendimiento_vision [-- ruta/mundo.bin]`
 //! Con ruta, la rejilla de la niebla sale del artefacto; sin ella, 667 × 500 (las del mundo real).
 use base::{Plan, Punto, Rng, Vertice};
 use std::time::Instant;

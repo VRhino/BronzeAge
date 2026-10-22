@@ -11,14 +11,20 @@
 //! ámbito, que avanza al recibir una `Delta`). El ámbito `VISTA` (lo ajeno, con niebla) lo servirá `vision`; mientras tanto
 //! `CambiarVista` solo se recuerda.
 //!
+//! # Órdenes
+//! `ordenes::traducir` lleva cada orden del jugador del contrato (`orders.proto`, 145 órdenes) a su `Comando` del núcleo; el núcleo aplica la autorización. Las que el núcleo aún no
+//! tiene se rechazan con `orden.no_disponible`; `OrdenDeAdministracion` solo vale en una sesión de administración.
+//!
 //! # Reloj
 //! El actor es quien gobierna el [`RelojCompartido`]: duerme hasta el próximo evento de la cola (convertido a pared con el
 //! factor vigente) o, como mucho, 500 ms, y al despertar avanza el núcleo hasta el instante de mundo.
 
-use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
+mod ordenes;
+
+use crate::comando::{rechazos, Comando, Peticion, Resultado, Respuesta};
 use crate::estado::{CambioVersion, Clase, Estado, EventoNucleo};
 use crate::nucleo::Nucleo;
-use crate::proyeccion::ids::{self, parse_ejercito, parse_escuadra, parse_heroe};
+use crate::proyeccion::ids::{self, parse_escuadra, parse_heroe};
 use crate::proyeccion::{ambito_heroe, cambio_ejercito, clave_ambito_heroe, detalle_de_rechazo, entidad_ejercito, evento_dominio, referencia_creada};
 use combate::ciclo::{Asignacion, EscuadraDeSalida, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
@@ -283,7 +289,7 @@ impl Actor {
         let Some(s) = self.sesiones.get(&sesion) else { return };
         let (cliente, admin, tx) = (s.cliente.clone(), s.admin, s.tx.clone());
         let id = orden.peticion_id.clone();
-        let respuesta = match self.traducir(&orden, &cliente, admin) {
+        let respuesta = match ordenes::traducir(&self.nucleo, &orden, &cliente, admin) {
             Ok(p) => {
                 let r = self.nucleo.aplicar(p);
                 // Causalidad: primero TODAS las Delta (las de eventos que vencieron justo antes y las de esta orden)...
@@ -431,42 +437,6 @@ impl Actor {
         for id in lentas {
             self.quitar(id);
         }
-    }
-
-    /// De la orden del contrato a la petición del núcleo. `Err` = rechazo sin pasar por el núcleo (no deja rastro).
-    fn traducir(&self, orden: &pb::Orden, cliente: &str, admin: bool) -> Result<Peticion, Respuesta> {
-        let v = self.nucleo.version();
-        let no = |codigo, m: &str| Err(Respuesta::rechazo(codigo, m, v));
-        let comando = match &orden.cuerpo {
-            Some(Cuerpo::MarcharA(m)) => {
-                use pb::orden_marchar_a::objetivo::Tipo;
-                let destino = match m.objetivo.as_ref().and_then(|o| o.tipo.as_ref()) {
-                    Some(Tipo::Punto(p)) => base::Punto::new(p.x, p.y),
-                    _ => return no(rechazos::OBJETIVO_NO_SOPORTADO, "el núcleo genérico solo marcha a puntos"),
-                };
-                match parse_heroe(&m.heroe_id).and_then(|h| self.nucleo.estado().ejercito_de_heroe(h)) {
-                    Some(ejercito) => Comando::MarcharA { ejercito, destino },
-                    None => return no(rechazos::HEROE_DESCONOCIDO, &m.heroe_id),
-                }
-            }
-            Some(Cuerpo::EstacionarEjercito(e)) => match parse_ejercito(&e.ejercito_id) {
-                Some(ejercito) => Comando::Estacionar { ejercito },
-                None => return no(rechazos::EJERCITO_DESCONOCIDO, &e.ejercito_id),
-            },
-            Some(Cuerpo::ControlarReloj(c)) => Comando::Reloj(match (c.accion.as_str(), c.factor_milesimas, c.hasta_ms) {
-                ("pausar", ..) => AccionReloj::Pausar,
-                ("reanudar", ..) => AccionReloj::Reanudar,
-                ("fijar_factor", Some(f), _) => match u32::try_from(f) {
-                    Ok(f) => AccionReloj::FijarFactor(f),
-                    Err(_) => return no(rechazos::RELOJ_INVALIDO, "factor fuera de rango"),
-                },
-                ("avanzar_hasta", _, Some(h)) => AccionReloj::AvanzarHasta(h),
-                _ => return no(rechazos::RELOJ_INVALIDO, "acción de reloj desconocida o incompleta"),
-            }),
-            Some(_) => return no(rechazos::ORDEN_NO_SOPORTADA, "el núcleo genérico aún no implementa esta orden (fase 6)"),
-            None => return no(rechazos::ORDEN_NO_SOPORTADA, "orden vacía"),
-        };
-        Ok(Peticion { actor: cliente.into(), admin, peticion_id: orden.peticion_id.clone(), version_esperada: orden.version_esperada, comando })
     }
 }
 

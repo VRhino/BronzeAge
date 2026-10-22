@@ -24,6 +24,11 @@ impl Cargo {
             Cargo::Sacerdote => "sacerdote",
         }
     }
+
+    /// El cargo de una clave de los datos (`"maestroObras"`): la inversa de [`Cargo::clave`].
+    pub fn desde_clave(clave: &str) -> Option<Cargo> {
+        [Cargo::Gobernador, Cargo::Tesorero, Cargo::General, Cargo::MaestroObras, Cargo::Sacerdote].into_iter().find(|c| c.clave() == clave)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

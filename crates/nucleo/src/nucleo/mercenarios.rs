@@ -138,6 +138,17 @@ impl Nucleo {
         }
     }
 
+    /// El campamento donde está el héroe cuando la orden no lo dice (`comprar_en_campamento` y `repostar_en_campamento` sin `campamento_id`): aquel en el que está dentro
+    /// o, si va en su columna, el más cercano a cuya puerta está. `None` si no está en ninguno.
+    pub fn campamento_del_heroe(&self, heroe: u64) -> Option<u32> {
+        if let Ubicacion::Mercenarios(c) = self.heroe(heroe)?.heroe.presencia.ubicacion {
+            return Some(c);
+        }
+        let aqui = self.columna_del_heroe(heroe)?.posicion_en(self.estado.ahora);
+        let todos = 0..u32::try_from(self.geografia.as_ref()?.mapa.campamentos.len()).ok()?;
+        todos.filter_map(|c| Some((aqui.dist(self.puerta_de_campamento(c)?), c))).filter(|&(d, _)| d <= RADIO_PUERTA).min().map(|(_, c)| c)
+    }
+
     /// El campamento donde reside el héroe, si reside en uno.
     fn campamento_de_residencia(&self, heroe: u64) -> Option<u32> {
         match self.heroe(heroe)?.heroe.residencia {
