@@ -450,7 +450,7 @@ escala    = (1 + edificios/edificiosReferencia) × (1 + distancia a la capital/e
 coste.madera = costoBase.madera × escala
 si nivel ≥ nivelParaPiedra: coste.piedra = piedraBase × escala
 si nivel ≥ nivelParaOro:    coste.oro    = oroBase × escala
-+ upkeepDeRecintos(recintos)   (Murallas.md §9.4, sumado sin escala)
++ upkeepDeRecintos(recintos)   (Murallas.md §9.4: las celdas en pie de cada anillo a su nivel, sumado sin escala)
 ```
 
 El **trigo no forma parte** del coste (se descuenta una sola vez, donde se consume). La **capital** (`encontrarCapital`) es la designada (`capitalDeFaccionId == faccionId` y con un Palacio activo, `capitalDesignada`) y, si no hay,
@@ -492,7 +492,7 @@ bandidos se dispersa, sus trueques se cancelan sin penalizar y las caravanas que
 ```
 poblacion = pesants ≥ req.pesants ∧ artesanos ≥ req.artesanos           (la nobleza no cuenta; la población es entera desde el 2026-10-22, así que ya no hay que redondear: antes se leía redondeada al entero más cercano)
 construidos = nº de tipos de req.edificios con algún edificio ACTIVO cuyo nivelInterno ≥ req.nivelInternoMinimo[tipo] (por defecto 1)
-cumpleRecinto = req.recintoCompletoNivelMinimo indefinido ∨ algún recinto con nivel ≥ ese mínimo e integridad ≥ 1
+cumpleRecinto = req.recintoCompletoNivelMinimo indefinido ∨ algún recinto con nivel ≥ ese mínimo e integridad ≥ 1      ; una mejora o una ampliación en obra no lo quita: cuenta el anillo en pie con su nivel de antes (Murallas.md §9.3)
 edificios = construidos ≥ (req.edificiosMinimo ?? req.edificios.length) ∧ cumpleRecinto
 ```
 

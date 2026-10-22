@@ -11,6 +11,8 @@
 //!    [`Ciudad::colocar_siguiente`] con un [`Pedido`] (tipo, categoría y huella los pone el catálogo).
 //! 3. Con recintos de muralla: [`Ciudad::set_recintos`] (muros bloquean, puertas son transitables).
 //! 4. Para dibujar: [`Ciudad::piezas`], [`Ciudad::calles_rectangulos`], [`Ciudad::caminos_rectangulos`].
+//! 5. Para trazar la muralla: [`trazar_recinto`] (el anillo, sus puertas y torres), y con el anillo congelado [`interior_de`],
+//!    [`contiene_a`], [`edificios_extramuros`] y [`marcar_torres`] (módulo `muralla`; Murallas.md).
 //!
 //! # Versión de geometría
 //! [`LAYOUT_VERSION`] = 3 (T usaba 2). `pseudoAleatorio` con `sin` (T §3) se sustituyó por un hash entero (FNV-1a de 64 bits
@@ -18,7 +20,8 @@
 //! el trazado de TypeScript. El perfil activo solo afecta a colocaciones nuevas; nada se recoloca nunca.
 //!
 //! # No cubierto aquí
-//! Trazo, coste y levantamiento de recintos (Murallas.md): el llamador pasa sus celdas ([`Recinto`]). La tabla de huellas por
+//! Coste y levantamiento de recintos (Murallas.md): el llamador pasa las celdas ya trazadas ([`Recinto`], con
+//! [`Recinto::desde_celdas`]); las tarifas, la obra celda a celda y la defensa viven en `asentamiento` y `nucleo`. La tabla de huellas por
 //! tipo (vive en `nucleo::urbanismo`, leída de los bloques de T §2.4) y los cachés LRU de T §9 (la red es incremental y el suelo es un
 //! estado de la `Ciudad`; el núcleo cachea por plaza las preguntas «¿cabe?»).
 
@@ -28,10 +31,15 @@ mod ciudad;
 mod colocacion;
 mod fundacion;
 mod geom;
+mod muralla;
 mod tipos;
 
 pub use azar::{cos_sen_1000, hash, sorteo};
 pub use ciudad::{Ciudad, MITAD};
 pub use fundacion::{fusionar_celdas, EntradaFundacion, RectLocal, TipoPieza};
 pub use geom::{Celda, Huella, Rect, CELDA_UL, HUELLA_POR_DEFECTO};
+pub use muralla::{
+    contiene_a, edificios_extramuros, interior_de, marcar_torres, trazar_recinto, CeldaMuro, ClaseCelda, ErrorMuralla, Interior,
+    ParametrosMuralla, Trazo,
+};
 pub use tipos::*;

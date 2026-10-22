@@ -467,21 +467,29 @@ impl Ciudad {
                 anillo[i] = true;
             }
         }
-        let mut dentro = vec![false; CELDAS];
         let inicio = idx(Celda::new(cu.col, cu.row))?;
-        if anillo[inicio] {
-            return None;
+        (!anillo[inicio]).then(|| inundar([inicio], |i| !anillo[i]))
+    }
+}
+
+/// Inundación 4-conexa en la rejilla de la ventana: las celdas alcanzables desde `semillas` pasando solo por celdas con `pasa`
+/// (una semilla que no pasa no cuenta). Ningún orden decide nada.
+pub(crate) fn inundar(semillas: impl IntoIterator<Item = usize>, pasa: impl Fn(usize) -> bool) -> Vec<bool> {
+    let mut vistas = vec![false; CELDAS];
+    let mut pila = Vec::new();
+    for s in semillas {
+        if pasa(s) && !vistas[s] {
+            vistas[s] = true;
+            pila.push(s);
         }
-        dentro[inicio] = true;
-        let mut pila = vec![inicio];
-        while let Some(i) = pila.pop() {
-            for n in vecinos_i(i).into_iter().flatten() {
-                if !dentro[n] && !anillo[n] {
-                    dentro[n] = true;
-                    pila.push(n);
-                }
+    }
+    while let Some(i) = pila.pop() {
+        for n in vecinos_i(i).into_iter().flatten() {
+            if !vistas[n] && pasa(n) {
+                vistas[n] = true;
+                pila.push(n);
             }
         }
-        Some(dentro)
     }
+    vistas
 }

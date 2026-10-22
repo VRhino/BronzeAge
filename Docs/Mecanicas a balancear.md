@@ -151,6 +151,8 @@ Con 30 bots, semilla 7, 120 960 ticks (y 60 480 con trigo ×3) el batch sale id�
 La empalizada se abre en el nivel 2, el muro de piedra en el 3 y el adarve en el 4 (antes, todo desde el 3). Los bots comprometen el recinto de nivel 1 en cuanto pueden, así que ahora lo harán antes. Medir con batch cuánto retrasa el
 crecimiento de una ciudad de nivel 2 pagar la empalizada (≈2.100 de madera, upkeep en madera) y si llega a tiempo de subirla a piedra antes del nivel 4. Ver `Docs/Mechanics/Murallas.md`.
 
+**Tarifas acumuladas (2026-10-22, Q4).** Las tarifas por celda llana son 22 (empalizada), 52 (piedra) y 82 (adarve): construir directamente un nivel cuesta lo mismo que subir uno a uno (antes, 22 / 30 / 30, importadas del TypeScript, con el adarve más barato que la piedra). La empalizada de una ciudad de 60-90 celdas cuesta unas 1.200-2.000 de madera (20 por celda, con las puertas a ×4) (la cifra de ≈2.100 era del diseño antiguo). Siguen siendo placeholder: medir tiempo, coste, upkeep frente al mantenimiento y reparación tras una conquista cuando el autor pida el batch.
+
 ## Economía: piezas gratuitas, almacén lleno y sin penalización por distancia (2026-10-11)
 
 Los puestos del Mercado y las anclas pagan mantenimiento a la mitad (antes no contaban nada especial: peso 1); un almacén lleno pausa extractores y talleres en vez de desperdiciar; la Gran Fundición cuenta como mano de obra de artesanos; y desaparece la penalización por distancia de las recetas (que daba ×0,688 a toda la cadena de metal). Todo empuja a más producción y menos coste: medir con batch si la economía se acelera de más. Ver `Docs/Mechanics/Economia_Construccion.md`.

@@ -18,7 +18,7 @@ edificios. El nivel es monótono (nunca baja).
 |---|---|---|---|
 | 2 | 200 | 0 | 3 de 7 tipos de extracción (cantera, leñera, granja, mina, mina de cobre, mina de estaño, corral) |
 | 3 | 500 | 200 | **los 5**: armería, curtiduría, fundición, barracón, galería de tiro |
-| 4 | 1000 | 400 | un **recinto terminado** (la empalizada basta) |
+| 4 | 1000 | 400 | un **recinto terminado de piedra o superior** (la empalizada no basta: decidido el 2026-10-09, `Murallas.md` §9.3; esta tabla era la propuesta antigua) |
 | 5 | 2000 | 800 | **Palacio** |
 
 Las cifras de los niveles 4 y 5 están marcadas como PLACEHOLDER en el propio código, sin calibrar.
@@ -278,7 +278,7 @@ Y como el tope de Viviendas se calcula desde el gate siguiente, tocar los umbral
 | Umbrales de población por nivel | `NIVEL_ASENTAMIENTO.requisitos[n].pesants/.artesanos` | 200/0 · 500/200 · 1000/400 · 2000/800 |
 | Edificios exigidos por nivel | `.edificios` y `.edificiosMinimo` | 3 de 7 extractores · los 5 de transformación y militares · recinto · Palacio |
 | Gate de construcción de cada edificio exigido | `requisitoNivelAsentamientoConstruccion` | encadena niveles: el Palacio pide nivel 4 y es el gate del 5 |
-| Nivel mínimo para levantar recinto | `MURALLA.nivelMinimoConstruccion` | 3 |
+| Nivel mínimo para levantar recinto | `MURALLA.nivelMinimoConstruccion` | 3 (obsoleto: el gate es `nivelAsentamientoPorNivelDeRecinto`, 2 / 3 / 4, `Murallas.md`) |
 
 ### 7.4 La obra: cuánto se tarda en construir
 

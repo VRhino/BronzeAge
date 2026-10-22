@@ -23,7 +23,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
 > - **La plaza entra por un resumen**, no por el `Asentamiento` entero: el pool de reclutamiento por clase (de `asentamiento::produccion::disponibles_para_reclutar`), el factor de «Leva Forzosa», el trigo que come la población y los soldados del campamento. `reclutar` valida en el orden de §11.2 y **no cambia nada si rechaza** (ni gasta el id de la escuadra).
 > - La **residencia** es mínima (una plaza o un campamento, `Residencia`); la ciudadanía, los cargos, las casas compradas y el cooldown son del sistema político. El veto, la Facción y la tecnología adoptada llegan como datos del llamador.
 > - La escuadra guarda la **plaza donde se reclutó** (`plaza_origen`) para atribuirle los avisos de deserción: en TypeScript salía del id de texto.
-> - El **cupo de guarnición** recibe el nivel del mejor recinto completo (hoy siempre 0: las murallas son una fase propia posterior al sistema militar, decidido el 2026-10-19) y el extra de «Levas de guarnición» como números.
+> - El **cupo de guarnición** recibe el nivel del mejor recinto completo (hoy siempre 0: las murallas son una fase propia posterior al sistema militar, decidido el 2026-10-19) y el extra de «Levas de guarnición» como números (la fase de Murallas, en curso desde el 2026-10-22, le dará el nivel real).
 > - DUDA: el **XP** de una escuadra se guarda en milésimas de punto (el 0,5 de una derrota no cabe en un entero); el nivel de un **héroe** no sube (CQ-001).
 
 > **Implementado en Rust (2026-10-20, fase 4B-1: héroes y tropa en el núcleo).** `crates/nucleo` integra `crates/militar`. Las columnas (salir al mundo, unir, separar, formar, convocar, desarmar) son la fase 4B-2 (nota de más abajo), la persecución es la 4C y el combate, la 4D.
@@ -213,7 +213,7 @@ muralla   = el MAYOR nivel de entre los recintos con integridad ≥ 1  →  GUAR
 cupo      = edificios + muralla + cupoGuarnicionExtra(plaza)                  ; la política «Levas de guarnición»
 ```
 
-Un recinto en mejora vuelve a integridad 0 y mientras tanto no suma.
+Un recinto en mejora **sigue sumando con su nivel de antes** (la mejora no baja su integridad; decidido el 2026-10-22, [`Murallas.md`](Murallas.md) §6 y §9.2) y lo mismo vale mientras se levanta una ampliación: solo cuenta el nuevo al cerrarse. Un recinto dañado por una conquista (integridad < 1) no suma hasta repararse. El bloque `GUARNICION` vive solo aquí (antes estaba repetido en `Murallas.md`).
 
 **`asignarGuarnicion(heroe, residencia, squadId)`** — la `residencia` es el asentamiento donde el héroe es residente (`esResidente`); rechaza (`heroe.invalido`): sin residencia en un asentamiento; escuadra que no es suya; que esté **reservada para una batalla** (`reservaBatalla`); que no esté en `contenedor: campamento`; que ya esté en la guarnición;
 o que `guarnicionOcupada(heroe) + costeLiderazgo(esa tropa) > cupo` (`guarnicionOcupada` = Liderazgo de sus escuadras con `enGuarnicion`). Marca `enGuarnicion = true`. **Si el cupo baja después, lo asignado se queda**: solo impide asignar más.

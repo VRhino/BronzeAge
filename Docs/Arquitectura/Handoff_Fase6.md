@@ -24,7 +24,7 @@ Hecho y commiteado: sistema 1 (mundo y territorio), 2 (población y construcció
 
 ## Siguiente, en este orden
 
-1. **Murallas** como fase propia (hoy recinto 0): empalizada nv2, piedra nv3, adarve nv4. Ver `Docs/Mechanics` de murallas y `Combate.md` §6.
+1. **Murallas** como fase propia (hoy recinto 0): empalizada nv2, piedra nv3, adarve nv4. Ver `Docs/Mechanics` de murallas y `Combate.md` §6. **En curso (2026-10-22):** pasos 0 (documentos con las decisiones Q1-Q5) y 1 (geometría `trazado::muralla`) hechos, sin commitear; siguen los pasos 2-8 de `Murallas_Contraste_y_Plan.md`.
 2. **4G batch militar** (`batch militar`, patrón de `batch comercio` en `crates/batch`) y volver a medir comercio tras C2-C4 (fila en «Paridad»).
 3. **4H contrato y proyecciones**: mapear al Protobuf (`proto/bronzeage/v1/`, contrato 05) las órdenes del núcleo; hoy solo `MarcharA`, `Estacionar` y `Reloj` están mapeadas en `sesiones::traducir`. Incluye snapshots del ticket de batalla y envío a Unity.
 4. **Sistema 5 (política)**: cargos, residencia completa, relaciones y guerra, XP de Facción, derrota y traslado. Sustituye los stubs de administración (`FijarFaccionDeHeroe`, `FijarRelacion`, `FijarResidencia`, `DarAlmacenPersonal`, `ColocarHeroe`, `CrearEjercito`, `DarSuministro`). Para cada uno haz contraste canon/Mechanics antes y lanza las preguntas al autor.
