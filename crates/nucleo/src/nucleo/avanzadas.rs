@@ -716,7 +716,7 @@ impl Nucleo {
         }
         // Los residentes de la madre que defendieron en persona y perdieron pierden la mitad del carro (antes de que la avanzada los saque al mapa).
         // DUDA: «avanzada que resiste o cae sin conquista» (decisión del autor, 2026-10-22) se lee como «gana el atacante»: si gana el defensor no hay derrota que castigar.
-        let robado = if gana && matches!(resultado, Asedio::Combate(_)) { self.pierden_la_mitad_del_carro(&dentro.tropa.heroes, madre) } else { Mercancia::new() };
+        let robado = if gana && matches!(resultado, Asedio::Combate(_)) { self.pierden_la_mitad_del_carro(&dentro.tropa.heroes) } else { Mercancia::new() };
         let (codigo, saqueado) = if gana {
             let (nuevo, llevado) = self.cae_avanzada(t, x, &[id]);
             chatarra = self.cargar_botin_en(id, &chatarra);

@@ -5,14 +5,14 @@
 //! última plaza de su Facción, se anota la derrota.
 //!
 //! # Quien estaba dentro (Entrar con todo, 2026-10-22)
-//! Defienden los de dentro que son de la misma Facción, aliados o vasallos (la defensa los cuenta antes, en `defensa_de_plaza` o en la convocatoria de Unity) y
-//! quedan sujetos al resultado: heridos si la plaza cae, con las bajas que hayan sufrido, y los que **residen** en ella pierden la mitad de su carro, que va al botín del
-//! vencedor (Doc 5.15.5 no dice que lo conserven entero; el visitante que defendió sale con su columna sin perder el carro). Los demás —neutrales y enemigos a los que su dueño abrió la puerta— no
-//! defienden nunca y **no pierden nada**: salen al mapa con la columna con la que entraron (tropa, carro, víveres y caravanas), y el residente que no trajo
+//! Defienden los de dentro que son de la misma Facción, aliados o vasallos y se han unido (la defensa los cuenta antes, en `defensa_de_plaza` o en la batalla de Unity) y
+//! quedan sujetos al resultado: heridos si la plaza cae, con las bajas que hayan sufrido, y **todos** pierden la mitad de su carro, residentes o visitantes amigos (tercera ronda), que va
+//! al botín del vencedor. Los demás —neutrales y enemigos a los que su dueño abrió la puerta, y los amigos que no se unieron— no defienden y **no pierden nada**: salen al mapa con la columna con la que entraron (tropa, carro, víveres y caravanas), y el residente que no trajo
 //! columna sale con una nueva con su carro y sus víveres. Cada héroe defensor queda fuera con las escuadras con las que combatió y sobrevivieron (en una columna nueva o, si
 //! conservaba la suya para llevar caravanas, sumadas a ella); el resto del campamento de los residentes, guarnición incluida, queda a 0 y se va con ellos a la plaza más cercana
-//! de su Facción (sin ninguna, al campamento de mercenarios más cercano), donde pasan a residir; no hay captura de guarnición. Nadie queda dentro de una plaza que cambia de dueño,
-//! ni dentro de sus pueblos y avanzadas, que pasan al conquistador: salen al mapa con lo suyo (`dentro`).
+//! de su Facción (sin ninguna, al campamento de mercenarios más cercano), donde pasan a residir; no hay captura de guarnición. Nadie queda dentro de una plaza que cambia de dueño.
+//! Sus pueblos y avanzadas pasan al conquistador con el acceso heredado de la plaza (`dentro`): salen al mapa con lo suyo solo quienes ese acceso ya no deja entrar (sus enemigos y los
+//! que cierra); los demás se quedan dentro.
 //!
 //! # La protección y la ocupación son eventos
 //! La plaza guarda `protegida_hasta` (inatacable un día) y `ocupada_hasta` (hora y media con la recaudación y el crecimiento a la mitad y el mantenimiento
@@ -28,7 +28,6 @@
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO};
 use crate::estado_combate::entidad_conquista;
-use super::dentro::MOTIVO_CAMBIA_DE_DUENO;
 use combate::conquista::{aplicar_conquista, aplicar_desalojo, faccion_derrotada, planear_desalojo, refugio, residencia_tras_desalojo, Afectado, Salida};
 use comercio::ruina::Motivo as MotivoDeCierre;
 use militar::columna::{Columna, Politica, TipoColumna};
@@ -99,13 +98,12 @@ impl Nucleo {
         self.avanzadas_de_la_madre_conquistada(plaza, t);
         // La plaza cambió de bandera: sus fronteras con otras Facciones se miran de nuevo.
         self.contactos_nuevos(plaza, t);
-        // Sus pueblos y avanzadas pasan al conquistador: nadie queda dentro de lo enemigo, todos salen al mapa con lo suyo.
-        // DUDA: salen todos, también los que el conquistador habría dejado entrar (el canon solo dice que nadie queda dentro de una plaza enemiga).
-        let (pueblos, avanzadas) = self.sitios_de(plaza);
-        self.vaciar_pueblos_y_avanzadas(t, plaza, &pueblos, &avanzadas, MOTIVO_CAMBIA_DE_DUENO);
-        // Quien defendió y perdió: el residente pierde la mitad del carro que llevaba (antes de que salga a la calle con él).
+        // Sus pueblos y avanzadas pasan al conquistador con el acceso heredado: salen al mapa con lo suyo solo quienes ya no podrían entrar; los demás se quedan dentro.
+        // DUDA: el acceso de la plaza no se reinicia al conquistarla (el conquistador hereda la decisión del dueño anterior hasta que la cambie con `FijarAcceso`).
+        self.vaciar_tras_conquista(t, plaza);
+        // Quien defendió y perdió, sea residente o visitante amigo, pierde la mitad del carro que llevaba (antes de que salga a la calle con él).
         let defensores: Vec<u64> = lucharon.iter().map(|(h, _)| *h).collect();
-        let robado = self.pierden_la_mitad_del_carro(&defensores, plaza);
+        let robado = self.pierden_la_mitad_del_carro(&defensores);
 
         // 3. Los residentes y quien estaba dentro (Combate §9).
         let refugio_de = refugio(&self.estado.asentamientos.values().filter(|a| a.faccion == vieja && a.id != plaza).map(|a| (a.id as u32, a.posicion.dist(posicion))).collect::<Vec<_>>());

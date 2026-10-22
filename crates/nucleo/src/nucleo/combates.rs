@@ -15,8 +15,8 @@
 //!   entrado en ella; unas ruinas caen sin combate. Si gana el atacante, se lleva el almacén que le quepa y la avanzada se destruye o queda en ruinas.
 //!
 //! # Quien defiende y pierde (Entrar con todo, 2026-10-22)
-//! Los defensores en persona quedan heridos, y los que **residen** en la plaza (la madre, en un pueblo o una avanzada) pierden la mitad del carro, que es del vencedor
-//! ([`Nucleo::pierden_la_mitad_del_carro`]); el visitante amigo que defendió conserva el suyo. A un bando solo se une quien está en su sitio: dentro para defender, fuera para atacar.
+//! Los defensores en persona quedan heridos y **todos** pierden la mitad del carro, residentes o visitantes amigos que defendieron desde dentro (tercera ronda, 2026-10-22); es del
+//! vencedor ([`Nucleo::pierden_la_mitad_del_carro`]). A un bando solo se une quien está en su sitio: dentro para defender, fuera para atacar.
 //!
 //! # Lo que se mira antes (en este orden)
 //! El héroe (sano, a bordo, columna fuera de batalla), el objetivo (existe, está en el mapa), el alcance (`radioEncuentro`), la protección de los campamentos
@@ -211,16 +211,13 @@ impl Nucleo {
         robado
     }
 
-    /// Los defensores en persona que residen en la plaza `plaza` y pierden, pierden la mitad de su carro (Entrar con todo, 2026-10-22): lo que llevaban consigo —el carro que no
-    /// vaciaron y, si conservan una columna, el de esa columna— queda a la mitad, hacia abajo. Devuelve lo robado, para el botín del vencedor. Los visitantes que defendieron no lo
-    /// pierden.
-    // DUDA: el autor habla del «residente defensor»; el visitante amigo que defiende y pierde conserva su carro (en la conquista, Doc 5.15.5 le deja salir con la columna con
-    // la que entró, sin perder nada). Si hubiera que quitárselo, es aquí: basta quitar el filtro de la residencia.
-    pub(super) fn pierden_la_mitad_del_carro(&mut self, defensores: &[u64], plaza: u64) -> Mercancia {
+    /// Todo defensor en persona que pierde, sea residente o visitante amigo que defendió desde dentro, pierde la mitad de su carro (Entrar con todo, 2026-10-22, tercera ronda): lo
+    /// que llevaba consigo —el carro que no vació y, si conserva una columna, el de esa columna— queda a la mitad, hacia abajo. Devuelve lo robado, para el botín del vencedor.
+    pub(super) fn pierden_la_mitad_del_carro(&mut self, defensores: &[u64]) -> Mercancia {
         let cr = self.estado.reglas.economia.combate.clone();
         let (mut robado, mut columnas) = (Mercancia::new(), std::collections::BTreeSet::new());
         for &h in defensores {
-            let Some(hn) = self.estado.militar.heroes.get_mut(&h).filter(|hn| hn.heroe.residencia == Some(militar::heroe::Residencia::Asentamiento(plaza as u32))) else { continue };
+            let Some(hn) = self.estado.militar.heroes.get_mut(&h) else { continue };
             for (r, n) in tras_derrota(&cr, &mut hn.carro) {
                 sumar(&mut robado, r, n);
             }
@@ -776,7 +773,7 @@ impl Nucleo {
         // Los defensores en persona quedan heridos si el pueblo cae en el saqueo (sin combate, nadie); si no, todo el ejército. El residente pierde la mitad del carro.
         let (heridos, carro_perdido) = match (gana, &informe) {
             (false, _) => (self.herir_heroes(&participantes, t), Mercancia::new()),
-            (true, Some(_)) => (self.herir_heroes(&dentro.tropa.heroes, t), self.pierden_la_mitad_del_carro(&dentro.tropa.heroes, madre)),
+            (true, Some(_)) => (self.herir_heroes(&dentro.tropa.heroes, t), self.pierden_la_mitad_del_carro(&dentro.tropa.heroes)),
             (true, None) => (0, Mercancia::new()),
         };
         self.entregar_lo_robado(id, &carro_perdido);

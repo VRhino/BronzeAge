@@ -11,9 +11,10 @@
 //! # Salir a la fuerza
 //! Quien está dentro sale al mapa **al instante y con todo lo suyo** —su columna tal cual, a la puerta; o una nueva con su carro y sus víveres si no trajo ninguna— cuando:
 //! - el dueño cierra la puerta a su relación (`fijarAcceso`: en la plaza y en los pueblos y avanzadas que la heredan; la misma Facción y los residentes no se expulsan);
-//! - el lugar desaparece (un pueblo destruido a mano, una avanzada destruida o en ruinas, la plaza madre en ruinas) o cambia de dueño (la madre conquistada).
+//! - el lugar desaparece (un pueblo destruido a mano, una avanzada destruida o en ruinas, la plaza madre en ruinas);
+//! - el lugar cambia de dueño (la madre conquistada): salen solo quienes el acceso heredado ya no deja entrar con el dueño nuevo, sus enemigos y los que cierra; los demás se quedan.
 //!
-//! Quien defendió y perdió queda sujeto a lo que le pase en la defensa (heridas, bajas y la mitad del carro del residente, en `combates`); aquí solo se le saca.
+//! Quien defendió y perdió queda sujeto a lo que le pase en la defensa (heridas, bajas y la mitad del carro, en `combates`); aquí solo se le saca.
 
 use super::mercado::RADIO_PUERTA;
 use super::*;
@@ -208,14 +209,30 @@ impl Nucleo {
         self.expulsar(t, dentro, lugar, puerta, plaza, motivo);
     }
 
-    /// La plaza madre desaparece o cambia de dueño: se vacían sus pueblos y sus avanzadas (`(id, puerta)` de cada uno).
-    pub(super) fn vaciar_pueblos_y_avanzadas(&mut self, t: Instante, plaza: u64, pueblos: &[(u64, Punto)], avanzadas: &[(u64, Punto)], motivo: i64) {
+    /// La plaza madre desaparece (cae en ruinas): se vacían sus pueblos y sus avanzadas (`(id, puerta)` de cada uno) y todos los de dentro salen al mapa con lo suyo.
+    pub(super) fn vaciar_pueblos_y_avanzadas(&mut self, t: Instante, plaza: u64, pueblos: &[(u64, Punto)], avanzadas: &[(u64, Punto)]) {
         for &(x, puerta) in pueblos {
-            self.vaciar_lugar(t, Ubicacion::Pueblo(x), puerta, plaza, motivo);
+            self.vaciar_lugar(t, Ubicacion::Pueblo(x), puerta, plaza, MOTIVO_DESAPARECE);
         }
         for &(x, puerta) in avanzadas {
-            self.vaciar_lugar(t, Ubicacion::Avanzada(x), puerta, plaza, motivo);
+            self.vaciar_lugar(t, Ubicacion::Avanzada(x), puerta, plaza, MOTIVO_DESAPARECE);
         }
+    }
+
+    /// La plaza madre acaba de cambiar de dueño: sus pueblos y sus avanzadas pasan al conquistador con el acceso heredado de la plaza. Salen al mapa, con todo lo suyo, solo quienes ese
+    /// acceso ya no deja entrar con el dueño nuevo (sus enemigos y los que cierra); los demás se quedan dentro (2026-10-22, tercera ronda). Se mira sin la excepción de la residencia: quien
+    /// residía en la madre la pierde con la conquista.
+    pub(super) fn vaciar_tras_conquista(&mut self, t: Instante, plaza: u64) {
+        let (pueblos, avanzadas) = self.sitios_de(plaza);
+        for (lugar, puerta) in Self::ubicaciones(pueblos, avanzadas) {
+            let fuera: Vec<u64> = self.dentro_de(lugar).into_iter().filter(|&h| !self.acceso_deja_pasar(h, plaza)).collect();
+            self.expulsar(t, fuera, lugar, puerta, plaza, MOTIVO_CAMBIA_DE_DUENO);
+        }
+    }
+
+    /// Los pueblos y las avanzadas de `sitios_de` como lugares con su puerta.
+    fn ubicaciones(pueblos: Vec<(u64, Punto)>, avanzadas: Vec<(u64, Punto)>) -> Vec<(Ubicacion, Punto)> {
+        pueblos.into_iter().map(|(x, p)| (Ubicacion::Pueblo(x), p)).chain(avanzadas.into_iter().map(|(x, p)| (Ubicacion::Avanzada(x), p))).collect()
     }
 
     /// ¿Está en una batalla activa algún pueblo o alguna avanzada de la plaza?
@@ -236,7 +253,7 @@ impl Nucleo {
     pub(super) fn cerrar_la_puerta(&mut self, t: Instante, plaza: u64) {
         let (pueblos, avanzadas) = self.sitios_de(plaza);
         let puerta = self.estado.asentamientos[&plaza].posicion;
-        let sitios = [(Ubicacion::Asentamiento(plaza as u32), puerta)].into_iter().chain(pueblos.into_iter().map(|(x, pos)| (Ubicacion::Pueblo(x), pos))).chain(avanzadas.into_iter().map(|(x, pos)| (Ubicacion::Avanzada(x), pos)));
+        let sitios = [(Ubicacion::Asentamiento(plaza as u32), puerta)].into_iter().chain(Self::ubicaciones(pueblos, avanzadas));
         for (lugar, puerta) in sitios.collect::<Vec<_>>() {
             let fuera: Vec<u64> = self.dentro_de(lugar).into_iter().filter(|&h| !self.puede_entrar_en_plaza(h, plaza)).collect();
             self.expulsar(t, fuera, lugar, puerta, plaza, MOTIVO_PUERTA_CERRADA);

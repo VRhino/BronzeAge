@@ -148,7 +148,7 @@ th { font: 600 12px var(--f-body); color: var(--muted); background: var(--panel2
       <label>Mi Facción<select id="b-fac"><option value="D">La del defensor</option><option value="A">La del atacante</option><option value="L">Aliada o vasalla del defensor</option><option value="O">Otra, sin relación</option><option value="">Ninguna</option></select></label>
       <label>Bando que pido<select id="b-pedido"><option value="">(no pido ninguno)</option><option value="atacante">atacante</option><option value="defensor">defensor</option></select></label>
     </div>
-    <label class="tog" style="margin-top:8px"><input type="checkbox" id="b-admite"><span>El Rey de la Facción atacante admite a otras Facciones en sus ataques</span></label>
+    <label class="tog" style="margin-top:8px"><input type="checkbox" id="b-admite"><span>El Rey de la Facción atacante admite a otras Facciones en sus ataques (solo cuenta en el asalto de caravana: un asedio, un pueblo o una avanzada admiten desde fuera a neutrales y enemigos del dueño sin el Rey; defender exige estar dentro y atacar, fuera)</span></label>
     <div class="veredicto" id="b-res"></div>
   </div>
   <div class="panel" style="margin-top:12px"><h3>Y además tiene que cumplirse</h3>
@@ -184,7 +184,7 @@ th { font: 600 12px var(--f-body); color: var(--muted); background: var(--panel2
 </div>
 
 <script>
-// Port a JS de session/entradaEnBatalla.ts (ladoParaUnirse). Devuelve { lado } o { error }.
+// Port a JS de session/entradaEnBatalla.ts (ladoParaUnirse), con la regla del 2026-10-22: un asedio admite en el ataque a quien no es amigo del defensor. Devuelve { lado } o { error }.
 // c = { tipo, columnas?, atacanteFaccion, defensorFaccion }  h = { faccion, columnaTipo, relacionConDefensor: 'propia'|'aliada'|'otra', admite }
 function ladoParaUnirse(c, h, pedido) {
   const no = (error) => ({ error });
@@ -195,7 +195,7 @@ function ladoParaUnirse(c, h, pedido) {
   }
   if (c.tipo === 'campamento_bandidos') return pedido === 'defensor' ? no('Nadie puede ayudar a los bandidos.') : { lado: 'atacante' };
   if (!h.faccion) return no('Hace falta una Facción para unirse a esta batalla.');
-  const lado = h.faccion === c.atacanteFaccion ? 'atacante' : c.defensorFaccion && (h.faccion === c.defensorFaccion || h.relacionConDefensor === 'aliada') ? 'defensor' : h.admite ? 'atacante' : undefined;
+  const lado = h.faccion === c.atacanteFaccion ? 'atacante' : c.defensorFaccion && (h.faccion === c.defensorFaccion || h.relacionConDefensor === 'aliada') ? 'defensor' : (h.admite || c.tipo === 'asedio') ? 'atacante' : undefined;
   if (!lado) return no('Tu Facción no combate en esta batalla.');
   if (pedido && pedido !== lado) return no('No puedes unirte a ese bando.');
   return { lado };

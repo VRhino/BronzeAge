@@ -865,7 +865,7 @@ fn cerrar_la_puerta_de_la_plaza_saca_tambien_de_su_pueblo_a_quien_ya_no_puede_en
 }
 
 #[test]
-fn si_la_madre_cae_en_ruinas_o_es_conquistada_quien_esta_dentro_de_su_pueblo_sale_al_mapa_con_lo_suyo() {
+fn si_la_madre_cae_en_ruinas_salen_todos_de_su_pueblo_y_si_es_conquistada_solo_los_que_el_acceso_heredado_ya_no_deja_entrar() {
     let m = con_mundo!();
     // Ruina: sin auto-construcción ni madera que repongan el mantenimiento, la plaza acaba cayendo en ruinas.
     let mut e = montar(m, 7, 2);
@@ -888,12 +888,19 @@ fn si_la_madre_cae_en_ruinas_o_es_conquistada_quien_esta_dentro_de_su_pueblo_sal
     let echado = &hechos(&e.n, "heroe.expulsado")[0];
     assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), dato(echado, "id"), echado.1.clone()), (1, 1, pueblo as i64, vec![]), "el hecho no nombra a la plaza que ya no está");
 
-    // Conquista: el pueblo pasa al conquistador y nadie queda dentro de lo enemigo.
+    // Conquista: el pueblo pasa al conquistador (F2) con el acceso heredado. Dentro hay un neutral (F3, que el acceso por defecto deja entrar), un aliado del conquistador (F5) y un enemigo
+    // suyo (F4, en guerra con F2, que el acceso por defecto cierra): salen solo los que ya no podrían entrar, es decir, el enemigo.
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
     let pueblo = e.pueblo_levantado();
-    let (col, h) = e.visita("neu", 3, pueblo);
-    e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
+    e.ok("admin", Comando::FijarRelacion { a: 2, b: 5, relacion: Some(nucleo::Relacion::Alianza) });
+    e.ok("admin", Comando::FijarRelacion { a: 2, b: 4, relacion: Some(nucleo::Relacion::Guerra) });
+    let mut visitas = vec![];
+    for (cuenta, faccion) in [("neu", 3), ("alia", 5), ("ene", 4)] {
+        let (col, h) = e.visita(cuenta, faccion, pueblo);
+        e.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe: h });
+        visitas.push((col, h));
+    }
     let p = e.n.estado().asentamientos[&plaza].posicion;
     let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
     let heroe = e.n.ejercito(beto).unwrap().columna.lider;
@@ -902,9 +909,36 @@ fn si_la_madre_cae_en_ruinas_o_es_conquistada_quien_esta_dentro_de_su_pueblo_sal
     e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     assert!(e.n.pueblo(pueblo).is_some_and(|(madre, _)| madre == plaza));
-    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true), "sale al mapa con la columna con la que entró");
-    let echado = &hechos(&e.n, "heroe.expulsado")[0];
-    assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), echado.1.clone()), (2, 1, vec![plaza]), "cambia de dueño");
+    let [(col_neu, neu), (col_alia, alia), (col_ene, ene)] = visitas[..] else { unreachable!() };
+    assert_eq!((e.ubicacion(neu), e.ubicacion(alia)), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)), "el neutral y el aliado del conquistador se quedan dentro");
+    assert!(!e.n.en_el_mapa(col_neu) && !e.n.en_el_mapa(col_alia));
+    assert_eq!((e.ubicacion(ene), e.n.en_el_mapa(col_ene)), (Ubicacion::Columna(col_ene), true), "el enemigo del conquistador sale al mapa con la columna con la que entró");
+    let echados = hechos(&e.n, "heroe.expulsado");
+    assert_eq!(echados.len(), 1);
+    assert_eq!((dato(&echados[0], "motivo"), dato(&echados[0], "lugar"), dato(&echados[0], "heroe"), echados[0].1.clone()), (2, 1, ene as i64, vec![plaza]), "cambia de dueño");
+}
+
+/// Si el antiguo dueño había cerrado la puerta a los neutrales, el acceso se hereda tal cual: con el conquistador, el neutral que ya estaba dentro (aliado del dueño viejo) ya no podría entrar y sale.
+#[test]
+fn al_conquistar_la_madre_el_acceso_heredado_que_cierra_a_los_neutrales_los_saca_del_pueblo() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let pueblo = e.pueblo_levantado();
+    // F3 es aliada del dueño (F1): entra aunque se cierre a los neutrales; con F2, que no tiene relación con ella, es neutral.
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(nucleo::Relacion::Alianza) });
+    e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    let (col, h) = e.visita("alia", 3, pueblo);
+    e.ok("alia", Comando::EntrarEnPueblo { pueblo, heroe: h });
+    assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo));
+    let p = e.n.estado().asentamientos[&plaza].posicion;
+    let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
+    let heroe = e.n.ejercito(beto).unwrap().columna.lider;
+    let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
+    e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
+    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true), "el acceso heredado cierra a los neutrales: sale con lo suyo");
 }
 
 // ───────────────────────────── 7. Un guion con héroes dentro: determinismo y foto ─────────────────────────────

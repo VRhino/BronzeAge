@@ -1427,7 +1427,7 @@ fn en_un_pueblo_defienden_los_de_dentro_de_la_faccion_de_la_madre_y_los_aliados_
 }
 
 #[test]
-fn el_residente_que_defiende_un_pueblo_y_pierde_queda_herido_y_pierde_la_mitad_del_carro_y_el_visitante_amigo_no() {
+fn el_residente_y_el_visitante_amigo_que_defienden_un_pueblo_y_pierden_quedan_heridos_y_pierden_la_mitad_del_carro() {
     let m = con_mundo!();
     let (mut e, pueblo) = con_pueblo(m, 7);
     let madre = e.a;
@@ -1448,14 +1448,14 @@ fn el_residente_que_defiende_un_pueblo_y_pierde_queda_herido_y_pierde_la_mitad_d
     assert!(e.atacar("beto", beto.1, ObjetivoAtaque::Pueblo(pueblo), false).aceptada());
     let h = &hechos(&e.n, "combate.pueblo_saqueado")[0];
     assert_eq!((h.0, dato(h, "pueblo"), dato(h, "heridos")), (t, pueblo as i64, 2), "gana el atacante y los dos defensores en persona quedan heridos");
-    // El pueblo no cae: siguen dentro, con su columna. El residente pierde la mitad (hacia abajo) de la madera que llevaba; el visitante conserva la piedra entera.
+    // El pueblo no cae: siguen dentro, con su columna. Los dos pierden la mitad (hacia abajo) de lo que llevaban: el residente la madera y el visitante amigo la piedra, misma regla para todos.
     assert_eq!((e.n.heroe(res.1).unwrap().heroe.presencia.ubicacion, e.n.heroe(vis.1).unwrap().heroe.presencia.ubicacion), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
     assert_eq!(e.carga_de_columna(res.0, Madera), 30_001 - 15_000);
-    assert_eq!(e.carga_de_columna(vis.0, Piedra), 30_001, "el visitante amigo no pierde el carro");
+    assert_eq!(e.carga_de_columna(vis.0, Piedra), 30_001 - 15_000, "el visitante amigo que defendió también pierde la mitad");
     assert!(e.n.heroe_herido(res.1) && e.n.heroe_herido(vis.1) && !e.n.heroe_herido(beto.1));
     // Lo robado es del vencedor, hasta donde le quepa: el saqueo del almacén y la chatarra ya llenan parte de su carro.
-    assert_eq!(dato(h, "carroPerdido"), 15_000);
-    assert!(e.carga_de_columna(beto.0, Madera) >= 15_000, "la mitad de la madera del residente va a su carro");
+    assert_eq!(dato(h, "carroPerdido"), 30_000, "15 000 de madera y 15 000 de piedra");
+    assert!(e.carga_de_columna(beto.0, Madera) + e.carga_de_columna(beto.0, Piedra) >= 15_000, "la mitad robada va a su carro, hasta donde quepa");
 }
 
 #[test]

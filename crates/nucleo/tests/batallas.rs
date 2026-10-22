@@ -1250,18 +1250,22 @@ fn en_la_convocatoria_defienden_los_aliados_y_los_vasallos_que_estan_dentro_y_lo
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
     let id = e.n.batallas().next().unwrap().id;
     let t = e.n.ahora();
+    // Nadie entra de oficio, tampoco el residente que está dentro: el ticket solo trae la guarnición (aquí no hay) y cada uno se une si quiere.
+    assert!(e.n.batalla(id).unwrap().ticket.defensor.participantes.is_empty());
+    let r = e.n.aplicar_en(t + 500, Peticion::nueva("beto", "ub", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None }));
+    assert!(r.aceptada(), "el residente que está dentro defiende si se une: {r:?}");
     for (k, (cuenta, faccion, col)) in gente.iter().enumerate() {
         let r = e.n.aplicar_en(t + 1_000 * (k as i64 + 1), Peticion::nueva(cuenta, &format!("u{k}"), Comando::UnirseABatalla { heroe: col.1, batalla: id, lado: None }));
         if matches!(faccion, 4 | 5) {
             assert!(r.aceptada(), "{cuenta} (F{faccion}), aliado o vasallo y dentro, defiende: {r:?}");
         } else {
             assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA, "{cuenta} (F{faccion}) no defiende nunca");
-            assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("no combate aquí")), "{r:?}");
+            assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar fuera")), "desde dentro no se ataca: {r:?}");
             assert!(!e.n.ejercito(col.0).unwrap().en_batalla, "su columna sigue libre");
         }
     }
     let defensores: Vec<u64> = e.n.batalla(id).unwrap().ticket.defensor.participantes.iter().map(|p| p.heroe).collect();
-    assert_eq!(defensores, vec![beto, gente[0].2 .1, gente[1].2 .1], "el residente que estaba dentro y los dos aliados que se unieron");
+    assert_eq!(defensores, vec![beto, gente[0].2 .1, gente[1].2 .1], "el residente que se unió y los dos aliados que se unieron");
 }
 
 #[test]
@@ -1292,8 +1296,7 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     assert_eq!((bt.convocatoria_hasta, bt.expira_en), (Some(t + 30_000), t + 30_000 + 5 * MIN));
     assert_eq!((bt.ticket.duracion_maxima, bt.ticket.atacante.capacidad), (30 * MIN, 15), "asedio de 15 contra 15, 30 minutos");
     assert_eq!(bt.ticket.defensor.faccion, Some(2));
-    assert_eq!(bt.ticket.defensor.participantes.iter().map(|p| p.heroe).collect::<Vec<_>>(), vec![beto], "defiende el residente que está dentro, con su loadout");
-    assert_eq!(bt.ticket.defensor.participantes[0].escuadras.len(), 1);
+    assert!(bt.ticket.defensor.participantes.is_empty(), "al abrir no entra nadie de oficio, ni el residente que está dentro: solo la guarnición");
     assert_eq!(bt.bloqueo.asentamiento, Some(e.b as u32));
     assert_eq!(citas_de_batalla(&e.n), vec![(t + 30_000, nucleo::PRIO_BATALLA, SucesoBatalla::FinConvocatoria), (t + 30_000 + 5 * MIN, nucleo::PRIO_BATALLA, SucesoBatalla::Vence)]);
     // La plaza sigue produciendo, pero nadie dentro da órdenes, ni se la asedia otra vez, ni se marcha su ejército.
@@ -1305,6 +1308,11 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     assert!(e.n.batallas_pendientes().is_empty() && e.n.ticket_publicado(id).is_none(), "el ticket no se publica durante la convocatoria");
     let revision = e.n.batalla(id).unwrap().ticket.revision;
     assert_eq!(rechazado(&mut e.n, t + 10_000, "as0", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", revision, &[ana.1]) }), rechazos::BATALLA_INVALIDA);
+    // El residente que está dentro no entra de oficio: se une él, con su loadout, y en la convocatoria entra en el ticket.
+    e.n.avanzar_hasta(t + 10_000);
+    let r = e.n.aplicar_en(t + 10_000, Peticion::nueva("beto", "ub", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None }));
+    assert!(r.aceptada() && r.creadas.is_empty(), "{r:?}");
+    assert_eq!(e.n.batalla(id).unwrap().ticket.defensor.participantes[0].escuadras.len(), 1, "con el loadout que tiene en el campamento");
     // Carla (de la Facción del defensor) se une: durante la convocatoria entra EN EL TICKET, como una de las del principio (revisión 0, sin incorporación).
     e.n.avanzar_hasta(t + 10_000);
     let r = e.n.aplicar_en(t + 10_000, Peticion::nueva("carla", "u1", Comando::UnirseABatalla { heroe: visitante.1, batalla: id, lado: None }));
@@ -1312,7 +1320,7 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     assert!(r.creadas.is_empty(), "sin secuencia: no es una incorporación");
     let bt = e.n.batalla(id).unwrap();
     assert_eq!((bt.ticket.revision, bt.incorporaciones.len(), bt.ticket.defensor.participantes.len()), (0, 0, 2));
-    assert_eq!(hechos(&e.n, "batalla.refuerzos").len(), 1);
+    assert_eq!(hechos(&e.n, "batalla.refuerzos").len(), 2, "beto y carla");
     // Fede es de la Facción del defensor y está a la puerta, a ≤ radioEncuentro de la batalla, pero en el mapa no se defiende: hay que estar dentro.
     let ticket_antes = e.n.batalla(id).unwrap().ticket.clone();
     let r = e.n.aplicar_en(t + 10_500, Peticion::nueva("fede", "u1b", Comando::UnirseABatalla { heroe: a_la_puerta.1, batalla: id, lado: None }));
@@ -1321,10 +1329,10 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     let r = e.n.aplicar_en(t + 10_600, Peticion::nueva("fede", "u1c", Comando::UnirseABatalla { heroe: a_la_puerta.1, batalla: id, lado: Some(Lado::Defensor) }));
     assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA, "pedir el bando que le toca tampoco lo salva");
     assert!(e.n.batalla(id).unwrap().ticket == ticket_antes && !e.n.ejercito(a_la_puerta.0).unwrap().en_batalla, "su columna sigue libre y el ticket no cambió");
-    // Una Facción que no es de nadie en el asedio no combate aquí.
+    // Un neutral que entró en la plaza no defiende (no es amigo del dueño) ni ataca desde dentro: no se une a ningún bando.
     let r = e.n.aplicar_en(t + 11_000, Peticion::nueva("nora", "u2", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None }));
     assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
-    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("no combate aquí")), "{r:?}");
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar fuera")), "{r:?}");
     // La convocatoria acaba en un evento exacto: ya se publica, y el ticket no se asignaba hasta entonces.
     e.n.avanzar_hasta(t + 30_000 - 1);
     assert!(e.n.batallas_pendientes().is_empty() && hechos(&e.n, "batalla.convocatoria_cerrada").is_empty());
@@ -1375,6 +1383,8 @@ fn un_asedio_que_gana_el_defensor_no_conquista_hiere_al_atacante_y_la_chatarra_s
     let t = e.n.ahora();
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
     let id = e.n.batallas().next().unwrap().id;
+    // El residente no entra de oficio: se une él, y entonces es de los que defienden.
+    assert!(e.n.aplicar_en(t + 1_000, Peticion::nueva("beto", "ub", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None })).aceptada());
     e.n.avanzar_hasta(t + 40_000);
     en_curso(&mut e.n, id, t + 40_000, &[ana.1, beto]);
     let res = resultado(&e.n, id, Lado::Defensor, 6);
@@ -1386,6 +1396,105 @@ fn un_asedio_que_gana_el_defensor_no_conquista_hiere_al_atacante_y_la_chatarra_s
     let metal: i64 = [ChatarraCobre, ChatarraBronce, ChatarraHierro].iter().map(|&r| e.n.economia(b).unwrap().almacen.cantidad(r)).sum();
     assert!(metal > metal0, "la chatarra de los caídos, al almacén de la plaza que resiste");
     assert!(hechos(&e.n, "asentamiento.conquistada").is_empty());
+}
+
+#[test]
+fn el_visitante_amigo_que_se_une_a_defender_y_pierde_deja_la_mitad_del_carro_y_quien_no_se_une_no_pierde_nada() {
+    let m = con_mundo!();
+    let Asedio { mut e, beto, ana } = asedio(m, 7);
+    let b = e.b;
+    // «carla» y «dora», de la Facción del dueño (F2), entran de visita con 30 001 de madera y de piedra en el carro; «beto» reside dentro y tampoco se une.
+    let carla = e.ejercito("carla", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
+    let dora = e.ejercito("dora", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
+    e.ok("admin", Comando::DarSuministro { ejercito: carla.0, recurso: Madera, cantidad: 30_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: dora.0, recurso: Piedra, cantidad: 30_001 });
+    for (cuenta, h) in [("carla", carla.1), ("dora", dora.1)] {
+        e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: h });
+    }
+    let t = e.n.ahora();
+    assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    let bt = e.n.batalla(id).unwrap();
+    assert!(bt.ticket.defensor.participantes.is_empty() && bt.lado_de(beto).is_none() && bt.lado_de(carla.1).is_none(), "nadie de dentro está en el ticket al abrir");
+    // Solo «carla» acepta, con la tropa de su columna; «dora» y «beto» no combaten.
+    let r = e.n.aplicar_en(t + 1_000, Peticion::nueva("carla", "uc", Comando::UnirseABatalla { heroe: carla.1, batalla: id, lado: None }));
+    assert!(r.aceptada(), "{r:?}");
+    let bt = e.n.batalla(id).unwrap();
+    assert_eq!((bt.lado_de(carla.1), bt.lado_de(dora.1), bt.lado_de(beto)), (Some(Lado::Defensor), None, None));
+    assert_eq!(bt.participante(carla.1).unwrap().escuadras.len(), 1);
+    // Gana el atacante: la plaza cae; «carla» pierde la mitad del carro (hacia abajo), que es del vencedor; «dora» y «beto» no combatieron y no pierden nada.
+    en_curso(&mut e.n, id, t + 40_000, &[ana.1, carla.1]);
+    let res = resultado(&e.n, id, Lado::Atacante, 4);
+    let r = aplicar(&mut e.n, t + 5 * MIN, "res", id, res);
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(e.n.estado().asentamientos[&b].faccion, 1);
+    let Ubicacion::Columna(sale) = e.n.heroe(carla.1).unwrap().heroe.presencia.ubicacion else { panic!("«carla» sale a la calle") };
+    assert_eq!(e.carga(sale, Madera), 30_001 - 15_000);
+    assert_eq!(dato(&hechos(&e.n, "asentamiento.conquistada")[0], "carroPerdido"), 15_000);
+    assert!(e.carga(ana.0, Madera) > 0, "lo robado es del vencedor");
+    assert_eq!((e.carga(dora.0, Piedra), e.n.heroe_herido(dora.1), e.n.heroe_herido(beto)), (30_001, false, false), "quien no se unió no pierde nada");
+}
+
+#[test]
+fn un_bot_que_asedia_abre_batalla_en_unity_solo_si_dentro_hay_un_humano_que_pueda_defender() {
+    let m = con_mundo!();
+    for (humano_dentro, abre) in [(true, true), (false, false)] {
+        let Asedio { mut e, beto, ana } = asedio(m, 7);
+        let b = e.b;
+        e.ok("admin", Comando::FijarControlador { heroe: ana.1, controlador: Controlador::Bot });
+        if !humano_dentro {
+            e.ok("admin", Comando::FijarControlador { heroe: beto, controlador: Controlador::Bot });
+        }
+        let r = e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true);
+        assert!(r.aceptada(), "{r:?}");
+        assert_eq!(e.n.batallas().count(), abre as usize, "con un humano dentro que puede defender la batalla es suya si quiere; bot contra bot sigue con números");
+        assert_eq!(hechos(&e.n, "combate.asedio_conquista").len() + hechos(&e.n, "combate.asedio_resistido").len(), !abre as usize);
+    }
+}
+
+/// Un asedio por Unity con quien está dentro uniéndose a la defensa (el residente en la convocatoria, la visitante después, como incorporación) y la conquista: las órdenes llevan
+/// su instante y `avanzar` solo decide cómo se mueve el reloj entre ellas.
+fn guion_de_asedio(m: &'static M, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucleo {
+    let Asedio { mut e, beto, ana } = asedio(m, 7);
+    let b = e.b;
+    let carla = e.ejercito("carla", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
+    e.ok("carla", Comando::Guarnecer { asentamiento: b, heroe: carla.1 });
+    let t = e.n.ahora();
+    avanzar(&mut e.n, t + MIN);
+    assert!(atacar(&mut e.n, t + MIN, "ana", "g1", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    avanzar(&mut e.n, t + MIN + 10_000);
+    assert!(e.n.aplicar_en(t + MIN + 10_000, Peticion::nueva("beto", "g2", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None })).aceptada());
+    avanzar(&mut e.n, t + 2 * MIN);
+    assert!(e.n.aplicar_en(t + 2 * MIN, Peticion::nueva("carla", "g3", Comando::UnirseABatalla { heroe: carla.1, batalla: id, lado: None })).aceptada());
+    avanzar(&mut e.n, t + 3 * MIN);
+    en_curso(&mut e.n, id, t + 3 * MIN, &[ana.1, beto]);
+    avanzar(&mut e.n, t + 8 * MIN);
+    let res = resultado(&e.n, id, Lado::Atacante, 4);
+    assert!(aplicar(&mut e.n, t + 8 * MIN, "res", id, res).aceptada());
+    e.n.avanzar_hasta(t + 3 * HORA);
+    e.n
+}
+
+#[test]
+fn unirse_a_la_defensa_desde_dentro_da_el_mismo_hash_normal_acelerado_y_a_trozos() {
+    let m = con_mundo!();
+    let normal = guion_de_asedio(m, &|n, t| n.avanzar_hasta(t));
+    assert_eq!(normal.hash_estado(), guion_de_asedio(m, &|n, t| n.avanzar_hasta(t)).hash_estado(), "repetible");
+    assert_eq!(normal.hash_estado(), guion_de_asedio(m, &|_, _| {}).hash_estado(), "acelerado: las órdenes llevan su instante");
+    let a_trozos = guion_de_asedio(m, &|n, t| {
+        let ahora = n.ahora();
+        for s in 1..=5 {
+            n.avanzar_hasta(ahora + (t - ahora).max(0) * s * s / 25);
+        }
+    });
+    assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares, como el modo en vivo");
+    assert_eq!(hechos(&normal, "batalla.refuerzos").len(), 2);
+    assert_eq!(hechos(&normal, "asentamiento.conquistada").len(), 1);
+    // La foto de después de la conquista recupera lo mismo.
+    let bytes = normal.estado().serializar();
+    let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
+    assert_eq!(vuelta.serializar(), bytes);
 }
 
 // ───────────────────────────── Caravanas ─────────────────────────────
@@ -1598,12 +1707,19 @@ fn al_ataque_solo_se_une_quien_esta_fuera_y_el_residente_que_defiende_y_pierde_e
     // «olga», de la Facción atacante (F1), entra en la plaza como neutral (la puerta se cierra solo a los enemigos): está dentro. «pablo», también de F1, se queda en el mapa a la puerta.
     let intruso = e.ejercito("olga", 1, e.pos(b), &[Tropa::MiliciaLanceros]);
     e.ok("olga", Comando::Guarnecer { asentamiento: b, heroe: intruso.1 });
+    // Desde fuera, en el mapa, se une al ataque quien no es amigo del dueño: un neutral (F3, sin relación con F2) y un enemigo (F6, en guerra con F2) que no son de la Facción atacante; un amigo del dueño (F2) no.
+    e.ok("admin", Comando::FijarRelacion { a: 2, b: 6, relacion: Some(Relacion::Guerra) });
+    let neutral = e.ejercito("neus", 3, e.pos(b), &[Tropa::MiliciaLanceros]);
+    let enemigo = e.ejercito("enri", 6, e.pos(b), &[Tropa::MiliciaLanceros]);
+    let amigo = e.ejercito("fede", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
     let refuerzo = e.ejercito("pablo", 1, e.pos(b), &[Tropa::MiliciaLanceros]);
     assert!(!e.n.en_el_mapa(intruso.0) && e.n.en_el_mapa(refuerzo.0));
     let soldados_intruso = e.n.soldados_de_columna(intruso.0).unwrap();
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
     let id = e.n.batallas().next().unwrap().id;
     let t = e.n.ahora();
+    // El residente no entra de oficio: se une él a la defensa.
+    assert!(e.n.aplicar_en(t + 500, Peticion::nueva("beto", "ub", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None })).aceptada());
 
     // Al atacante solo se une quien está fuera, en el mapa: «olga», de la propia Facción atacante pero dentro, no ataca desde dentro; «pablo» sí.
     let ticket_antes = e.n.batalla(id).unwrap().ticket.clone();
@@ -1616,6 +1732,18 @@ fn al_ataque_solo_se_une_quien_esta_fuera_y_el_residente_que_defiende_y_pierde_e
     let r = e.n.aplicar_en(t + 3_000, Peticion::nueva("pablo", "p1", Comando::UnirseABatalla { heroe: refuerzo.1, batalla: id, lado: None }));
     assert!(r.aceptada(), "{r:?}");
     assert!(e.n.batalla(id).unwrap().ticket.atacante.participantes.iter().any(|p| p.heroe == refuerzo.1), "«pablo» entra en el bando atacante");
+    // El neutral y el enemigo del dueño se unen al ataque desde fuera, aunque no sean de la Facción atacante; el amigo del dueño, fuera, no: a la puerta solo se ataca.
+    for (k, (cuenta, col)) in [("neus", neutral), ("enri", enemigo)].into_iter().enumerate() {
+        let r = e.n.aplicar_en(t + 3_500 + 100 * k as i64, Peticion::nueva(cuenta, &format!("n{k}"), Comando::UnirseABatalla { heroe: col.1, batalla: id, lado: None }));
+        assert!(r.aceptada(), "{cuenta} es neutral o enemigo del dueño y está fuera: {r:?}");
+        assert_eq!(e.n.batalla(id).unwrap().lado_de(col.1), Some(Lado::Atacante));
+    }
+    let r = e.n.aplicar_en(t + 3_700, Peticion::nueva("fede", "a1", Comando::UnirseABatalla { heroe: amigo.1, batalla: id, lado: Some(Lado::Atacante) }));
+    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar dentro")), "el amigo del dueño solo defiende, y desde dentro: {r:?}");
+    assert_eq!(e.n.batalla(id).unwrap().lado_de(amigo.1), None);
+    // Y el estado de asedio se ve desde fuera.
+    assert_eq!(e.n.batalla_sobre(Ubicacion::Asentamiento(b as u32)).map(|x| x.id), Some(id));
 
     // Gana el atacante: la plaza cae, «beto» (defensor en persona) pierde la mitad del carro, que se reparte entre las columnas atacantes; «olga» sale con lo suyo sin perder nada.
     en_curso(&mut e.n, id, t + 50_000, &[ana.1, beto]);
@@ -1627,12 +1755,12 @@ fn al_ataque_solo_se_une_quien_esta_fuera_y_el_residente_que_defiende_y_pierde_e
     assert_eq!(e.carga(sale, Madera), 40_001 - 20_000, "la mitad, hacia abajo");
     let conquista = &hechos(&e.n, "asentamiento.conquistada")[0];
     assert_eq!(dato(conquista, "carroPerdido"), 20_000);
-    assert!(e.carga(ana.0, Madera) + e.carga(refuerzo.0, Madera) >= 20_000, "lo robado, repartido entre las columnas del vencedor");
+    assert!([ana.0, refuerzo.0, neutral.0, enemigo.0].iter().map(|&c| e.carga(c, Madera)).sum::<i64>() >= 20_000, "lo robado, repartido entre las columnas del vencedor (también las de los neutrales y enemigos que se unieron al ataque)");
     assert_eq!((e.n.heroe(intruso.1).unwrap().heroe.presencia.ubicacion, e.n.en_el_mapa(intruso.0), e.n.soldados_de_columna(intruso.0).unwrap(), e.n.heroe_herido(intruso.1)), (Ubicacion::Columna(intruso.0), true, soldados_intruso, false));
 }
 
 #[test]
-fn en_el_saqueo_de_un_pueblo_por_unity_defienden_de_oficio_los_residentes_de_dentro_los_amigos_se_unen_y_el_residente_que_pierde_deja_la_mitad_del_carro() {
+fn en_el_saqueo_de_un_pueblo_por_unity_de_oficio_solo_defienden_los_mineros_y_se_unen_los_residentes_y_los_amigos_de_dentro_y_el_residente_que_pierde_deja_la_mitad_del_carro() {
     let m = con_mundo!();
     let (mut e, madre, pueblo, sitio) = con_pueblo(m);
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
@@ -1649,20 +1777,23 @@ fn en_el_saqueo_de_un_pueblo_por_unity_defienden_de_oficio_los_residentes_de_den
     let t = e.n.ahora();
     assert!(e.atacar("beto", saqueador.1, ObjetivoAtaque::Pueblo(pueblo), true).aceptada());
     let id = e.n.batallas().next().unwrap().id;
-    // De oficio defiende el residente que está dentro, con las escuadras de su columna, y los mineros; el aliado no está en el ticket pero se une.
+    // De oficio solo defienden los mineros: ni el residente que está dentro ni el aliado están en el ticket; los dos se unen, con las escuadras de su columna.
     let defensor = &e.n.batalla(id).unwrap().ticket.defensor;
-    assert_eq!((defensor.participantes.iter().map(|p| p.heroe).collect::<Vec<_>>(), defensor.participantes[0].escuadras.len(), defensor.sin_heroe.len()), (vec![res.1], 1, 1));
+    assert_eq!((defensor.participantes.len(), defensor.sin_heroe.len()), (0, 1));
     assert_eq!(codigo(&e.ord("alia", Comando::SalirDePueblo { pueblo, heroe: alia.1 })), rechazos::BATALLA_BLOQUEADO, "quien está dentro de un pueblo atacado no da órdenes");
-    let r = e.n.aplicar_en(t + 1_000, Peticion::nueva("alia", "u1", Comando::UnirseABatalla { heroe: alia.1, batalla: id, lado: None }));
-    assert!(r.aceptada(), "{r:?}");
-    assert_eq!(e.n.batalla(id).unwrap().lado_de(alia.1), Some(Lado::Defensor));
-    // Gana el atacante: el pueblo es saqueado (no cae), los dos siguen dentro, y el residente pierde la mitad del carro; el aliado, no.
+    for (k, (cuenta, h)) in [("res", res.1), ("alia", alia.1)].into_iter().enumerate() {
+        let r = e.n.aplicar_en(t + 1_000 * (k as i64 + 1), Peticion::nueva(cuenta, &format!("u{k}"), Comando::UnirseABatalla { heroe: h, batalla: id, lado: None }));
+        assert!(r.aceptada(), "{r:?}");
+        assert_eq!(e.n.batalla(id).unwrap().lado_de(h), Some(Lado::Defensor));
+        assert_eq!(e.n.batalla(id).unwrap().participante(h).unwrap().escuadras.len(), 1, "con la escuadra de su columna");
+    }
+    // Gana el atacante: el pueblo es saqueado (no cae), los dos siguen dentro, y los dos defensores, residente y visitante amigo, pierden la mitad del carro.
     en_curso(&mut e.n, id, t + MIN, &[saqueador.1, res.1]);
     let res_final = resultado(&e.n, id, Lado::Atacante, 10);
     assert!(aplicar(&mut e.n, t + 2 * MIN, "res", id, res_final).aceptada());
     assert_eq!((e.n.heroe(res.1).unwrap().heroe.presencia.ubicacion, e.n.heroe(alia.1).unwrap().heroe.presencia.ubicacion), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
     assert_eq!(e.carga(res.0, Madera), 30_001 - 15_000, "el residente pierde la mitad, hacia abajo");
-    assert_eq!(e.carga(alia.0, Piedra), 30_001, "el visitante amigo conserva su carro");
-    assert!(e.carga(saqueador.0, Madera) >= 15_000, "lo robado es del vencedor");
+    assert_eq!(e.carga(alia.0, Piedra), 30_001 - 15_000, "el visitante amigo que defendió también: misma regla para todos");
+    assert!(e.carga(saqueador.0, Madera) + e.carga(saqueador.0, Piedra) >= 15_000, "lo robado, de los dos, es del vencedor (lo que le quepa en el carro)");
     assert_eq!(e.n.estado().asentamientos[&madre].faccion, 1);
 }

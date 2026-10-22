@@ -283,7 +283,7 @@ No es una política de las que expiran (Doc 4.4): una puerta que se abre sola a 
 
 **Desconectado es tener el cliente cerrado.** Abrirlo te trae al mundo; cerrarlo —o perder la conexión— te desconecta. Con el juego abierto en dos sitios, cerrar uno no te desconecta. Apagar el servidor no desconecta a nadie: no es que los jugadores se hayan ido.
 
-**Dentro de una plaza o de un campamento de mercenarios no se mueve nada.** El héroe sigue donde está y sus escuadras también; solo deja de dar órdenes y **no defiende en persona**. La defensa no cambia por eso: la guarnición defiende siempre con la IA, las escuadras libres no defienden, y un héroe conectado, dentro y sano entra a defender con su loadout (Doc 5.15). Al volver, sigue ahí.
+**Dentro de una plaza o de un campamento de mercenarios no se mueve nada.** El héroe sigue donde está y sus escuadras también; solo deja de dar órdenes y **no defiende en persona**. La defensa no cambia por eso: la guarnición defiende siempre con la IA, las escuadras libres no defienden, y un héroe conectado, dentro y sano defiende con su loadout: de oficio con números y, en una batalla de Unity, uniéndose él (Doc 5.15, 2026-10-22). Al volver, sigue ahí.
 
 **Con la columna en el mapa, sale del mundo con ella**: el héroe y todo lo que carga —sus escuadrones, la tropa prestada por un campamento y su carro— entran y salen del mundo juntos. Al volver aparece con ellos en el último sitio donde estuvo, lo que le da la oportunidad de alcanzar a los suyos si iba en un ejército. **Lo cedido se queda**: la guarnición sigue en su plaza y la escolta cedida a una caravana sigue con ella.
 

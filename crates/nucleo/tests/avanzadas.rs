@@ -1767,7 +1767,7 @@ fn en_una_avanzada_defienden_los_de_dentro_de_la_faccion_de_la_madre_y_los_aliad
 }
 
 #[test]
-fn el_residente_que_defiende_una_avanzada_y_la_pierde_queda_herido_pierde_la_mitad_del_carro_y_sale_al_mapa_con_el_visitante_amigo_que_no_lo_pierde() {
+fn el_residente_y_el_visitante_amigo_que_defienden_una_avanzada_y_la_pierden_quedan_heridos_pierden_la_mitad_del_carro_y_salen_al_mapa() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let (plaza, pos) = (e.plaza, e.sitio());
@@ -1796,7 +1796,7 @@ fn el_residente_que_defiende_una_avanzada_y_la_pierde_queda_herido_pierde_la_mit
     assert_eq!((e.ubicacion(ana), e.ubicacion(vis.1)), (Ubicacion::Columna(col), Ubicacion::Columna(vis.0)));
     assert!(e.n.en_el_mapa(col) && e.n.en_el_mapa(vis.0));
     assert_eq!(e.carga_en(col, Madera), con_madera - con_madera / 2, "la residente pierde la mitad de lo que llevaba su carro, hacia abajo, recurso a recurso");
-    assert_eq!(e.carga_en(vis.0, Piedra), 30_001, "el visitante amigo conserva su carro");
+    assert_eq!(e.carga_en(vis.0, Piedra), 30_001 - 30_001 / 2, "el visitante amigo que defendió también pierde la mitad: misma regla para todos");
     // La mitad perdida es del vencedor, hasta donde le quepa (el almacén de la avanzada y la chatarra ya llenan parte de su carro).
     assert!(dato(h, "carroPerdido") > 0 && e.carga_en(cb, Madera) > 0);
     assert_eq!(hechos(&e.n, "heroe.expulsado").iter().map(|x| (dato(x, "heroe"), dato(x, "lugar"), dato(x, "motivo"), x.2.clone())).collect::<Vec<_>>(), vec![(ana as i64, 2, 1, vec![plaza]), (vis.1 as i64, 2, 1, vec![plaza])]);
@@ -1818,20 +1818,31 @@ fn destruir_a_mano_una_avanzada_saca_al_mapa_a_quien_esta_dentro_con_lo_suyo() {
 }
 
 #[test]
-fn si_la_madre_es_conquistada_o_cae_en_ruinas_quien_esta_dentro_de_su_avanzada_sale_al_mapa_con_lo_suyo() {
+fn si_la_madre_es_conquistada_solo_sale_de_su_avanzada_quien_el_acceso_heredado_ya_no_deja_entrar_y_si_cae_en_ruinas_salen_todos_con_lo_suyo() {
     let m = con_mundo!();
-    // Conquista de la madre (sin defensores: cae sin combate).
+    // Conquista de la madre (sin defensores: cae sin combate). La avanzada pasa al conquistador (F2) con el acceso heredado: dentro hay un neutral (F3, que el acceso por defecto deja
+    // entrar), un aliado del conquistador (F5) y un enemigo suyo (F4, en guerra con F2, que el acceso por defecto cierra). Salen solo los que ya no podrían entrar: el enemigo.
     let mut e = montar(m, 7, 2);
     let (plaza, centro) = (e.plaza, e.centro);
     let (av, _, _) = e.avanzada_de(Etapa::Fuerte);
-    let (cn, neutral) = e.visita("neu", 3, &[Tropa::MiliciaLanceros]);
-    e.ok("neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: neutral });
+    e.ok("admin", Comando::FijarRelacion { a: 2, b: 5, relacion: Some(Relacion::Alianza) });
+    e.ok("admin", Comando::FijarRelacion { a: 2, b: 4, relacion: Some(Relacion::Guerra) });
+    let mut visitas = vec![];
+    for (cuenta, faccion) in [("neu", 3), ("alia", 5), ("ene", 4)] {
+        let (c, h) = e.visita(cuenta, faccion, &[Tropa::MiliciaLanceros]);
+        e.ok(cuenta, Comando::EntrarEnAvanzada { avanzada: av, heroe: h });
+        visitas.push((c, h));
+    }
+    let [(cn_neu, neutral), (cn_alia, aliado), (cn_ene, enemigo)] = visitas[..] else { unreachable!() };
     let (_, beto) = e.atacante(Punto::new(centro.x + 1_000, centro.y), &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
     e.ok("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
-    assert_eq!((e.ubicacion(neutral), e.n.en_el_mapa(cn)), (Ubicacion::Columna(cn), true), "nadie queda dentro de lo que cambia de dueño");
-    let echado = &hechos(&e.n, "heroe.expulsado")[0];
-    assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), echado.2.clone()), (2, 2, vec![plaza]));
+    assert_eq!((e.ubicacion(neutral), e.ubicacion(aliado)), (Ubicacion::Avanzada(av), Ubicacion::Avanzada(av)), "el neutral y el aliado del conquistador se quedan dentro");
+    assert!(!e.n.en_el_mapa(cn_neu) && !e.n.en_el_mapa(cn_alia));
+    assert_eq!((e.ubicacion(enemigo), e.n.en_el_mapa(cn_ene)), (Ubicacion::Columna(cn_ene), true), "el enemigo del conquistador sale al mapa con la columna con la que entró");
+    let echados = hechos(&e.n, "heroe.expulsado");
+    assert_eq!(echados.len(), 1);
+    assert_eq!((dato(&echados[0], "heroe"), dato(&echados[0], "motivo"), dato(&echados[0], "lugar"), echados[0].2.clone()), (enemigo as i64, 2, 2, vec![plaza]));
 
     // Ruina de la madre: una ciudadela queda como ruina sin dueño y la atalaya desaparece; los dos sitios se vacían.
     let mut e = montar(m, 7, 3);
@@ -1861,7 +1872,7 @@ fn si_la_madre_es_conquistada_o_cae_en_ruinas_quien_esta_dentro_de_su_avanzada_s
 // ───────────────────────────── 13. Unity: defender una avanzada desde dentro ─────────────────────────────
 
 #[test]
-fn por_unity_defienden_de_oficio_los_residentes_de_dentro_los_demas_amigos_se_unen_y_al_ataque_solo_se_une_quien_esta_fuera() {
+fn por_unity_de_oficio_solo_defiende_la_guarnicion_los_amigos_de_dentro_se_unen_y_al_ataque_solo_se_une_quien_esta_fuera() {
     let m = con_mundo!();
     let mut e = montar_con(Nucleo::nuevo(arranque_unity(m, 7)), m, 2);
     let (plaza, pos) = (e.plaza, e.sitio());
@@ -1889,19 +1900,22 @@ fn por_unity_defienden_de_oficio_los_residentes_de_dentro_los_demas_amigos_se_un
     assert!(r.aceptada(), "{r:?}");
     let id = e.n.batallas().next().expect("se abrió una batalla").id;
     let b = e.n.batalla(id).unwrap();
-    // De oficio defiende la residente que está dentro, con las escuadras de su columna, y la guarnición de serie; el aliado y el neutral no están en el ticket.
+    // De oficio solo defiende la guarnición de serie: ni la residente que está dentro ni el aliado ni el neutral están en el ticket. Hay un humano dentro que puede defender, así que se abre en Unity.
     let defensor = &b.ticket.defensor;
-    assert_eq!(defensor.participantes.iter().map(|p| p.heroe).collect::<Vec<_>>(), vec![ana]);
-    assert_eq!(defensor.participantes[0].escuadras.len(), ELITE.len());
+    assert!(defensor.participantes.is_empty());
     assert_eq!(defensor.sin_heroe.iter().filter(|s| s.dueno.is_none()).count(), 5);
     // Quien está dentro de la avanzada atacada no da órdenes mientras dura: ni salir.
     assert_eq!(e.rechazada("alia", Comando::SalirDeAvanzada { avanzada: av, heroe: aliado.1 }), rechazos::BATALLA_BLOQUEADO);
     assert_eq!(e.rechazada("neu", Comando::SalirDeAvanzada { avanzada: av, heroe: neutral.1 }), rechazos::BATALLA_BLOQUEADO);
-    // El aliado dentro se une a la defensa; el neutral no combate aquí; el de la Facción atacante que está dentro no se une al ataque desde dentro.
+    // La residente y el aliado, dentro, se unen a la defensa (la residente con las escuadras de su columna); el neutral no es amigo del dueño y desde dentro no ataca; el de la Facción atacante
+    // que está dentro no se une al ataque desde dentro.
+    let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None });
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(e.n.batalla(id).unwrap().participante(ana).unwrap().escuadras.len(), ELITE.len());
     let r = e.ord("alia", Comando::UnirseABatalla { heroe: aliado.1, batalla: id, lado: None });
     assert!(r.aceptada(), "{r:?}");
     let r = e.ord("neu", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None });
-    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("no combate aquí")), "{r:?}");
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar fuera")), "{r:?}");
     let r = e.ord("intr", Comando::UnirseABatalla { heroe: intruso.1, batalla: id, lado: None });
     assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
     assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar fuera")), "{r:?}");
@@ -1911,9 +1925,9 @@ fn por_unity_defienden_de_oficio_los_residentes_de_dentro_los_demas_amigos_se_un
     let r = e.ord("beto", Comando::UnirseABatalla { heroe: refuerzo, batalla: id, lado: None });
     assert!(r.aceptada(), "{r:?}");
     let b = e.n.batalla(id).unwrap();
-    assert_eq!((b.lado_de(aliado.1), b.lado_de(refuerzo), b.lado_de(intruso.1), b.lado_de(neutral.1)), (Some(Lado::Defensor), Some(Lado::Atacante), None, None));
+    assert_eq!((b.lado_de(ana), b.lado_de(aliado.1), b.lado_de(refuerzo), b.lado_de(intruso.1), b.lado_de(neutral.1)), (Some(Lado::Defensor), Some(Lado::Defensor), Some(Lado::Atacante), None, None));
 
-    // Gana el atacante: el fuerte queda en ruinas, la residente pierde la mitad del carro (es del vencedor), el aliado que se unió no, y todos salen al mapa con lo suyo.
+    // Gana el atacante: el fuerte queda en ruinas, todos los defensores, la residente y el aliado que se unió, pierden la mitad del carro (es del vencedor), y todos salen al mapa con lo suyo.
     let t = e.n.ahora() + MIN;
     en_curso(&mut e.n, id, t, &[beto, ana]);
     let res = resultado(&e.n, id, Lado::Atacante, 2);

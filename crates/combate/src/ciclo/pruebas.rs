@@ -189,20 +189,29 @@ fn quien_esta_dentro_de_la_plaza_asediada_tampoco_da_ordenes() {
 #[test]
 fn unirse_en_la_convocatoria_entra_en_el_ticket_sin_subir_la_revision() {
     let mut b = batalla(ASEDIO);
-    let sec = b.unirse(1_010, Lado::Defensor, vec![part(3, Controlador::Humano, &[(40, 25)])], 300).unwrap();
+    let sec = b.unirse(1_010, Lado::Defensor, vec![part(3, Controlador::Humano, &[(40, 25)])], Some(300)).unwrap();
     assert!(sec.is_empty() && b.incorporaciones.is_empty());
     assert_eq!((b.ticket.defensor.participantes.len(), b.ticket.revision), (2, 0));
     assert!(b.bloqueo.ejercitos.contains(&300) && b.escuadras_con_candado().contains(&40));
-    b.unirse(1_011, Lado::Defensor, vec![part(4, Controlador::Bot, &[])], 300).unwrap();
+    b.unirse(1_011, Lado::Defensor, vec![part(4, Controlador::Bot, &[])], Some(300)).unwrap();
     assert_eq!(b.bloqueo.ejercitos.iter().filter(|&&c| c == 300).count(), 1, "la columna no se duplica");
+}
+
+#[test]
+fn quien_se_une_desde_dentro_sin_columna_no_aparta_ninguna() {
+    let mut b = batalla(ASEDIO);
+    let columnas = b.bloqueo.ejercitos.clone();
+    b.unirse(1_010, Lado::Defensor, vec![part(3, Controlador::Humano, &[(40, 25)])], None).unwrap();
+    assert_eq!(b.bloqueo.ejercitos, columnas, "un residente dentro de su plaza no tiene columna que apartar");
+    assert!(b.escuadras_con_candado().contains(&40) && b.lado_de(3) == Some(Lado::Defensor));
 }
 
 #[test]
 fn unirse_despues_es_una_incorporacion_con_secuencia_y_el_ticket_no_cambia() {
     let mut b = batalla(CAMPAL);
     let antes = b.ticket.clone();
-    let s1 = b.unirse(2_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[(40, 25)]), part(4, Controlador::Humano, &[])], 300).unwrap();
-    let s2 = b.unirse(2_001, Lado::Atacante, vec![part(5, Controlador::Bot, &[])], 301).unwrap();
+    let s1 = b.unirse(2_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[(40, 25)]), part(4, Controlador::Humano, &[])], Some(300)).unwrap();
+    let s2 = b.unirse(2_001, Lado::Atacante, vec![part(5, Controlador::Bot, &[])], Some(301)).unwrap();
     assert_eq!((s1, s2), (vec![1, 2], vec![3]));
     assert_eq!(b.ticket, antes, "ni cambia ni sube de revisión");
     assert_eq!(b.incorporaciones.iter().map(|i| (i.secuencia, i.lado, i.participante.heroe)).collect::<Vec<_>>(), vec![(1, Lado::Atacante, 3), (2, Lado::Atacante, 4), (3, Lado::Atacante, 5)]);
@@ -213,26 +222,26 @@ fn unirse_despues_es_una_incorporacion_con_secuencia_y_el_ticket_no_cambia() {
 #[test]
 fn un_bando_lleno_no_admite_a_nadie_y_la_cola_es_solo_de_los_del_principio() {
     let mut b = batalla(CAMPAL); // 1 atacante dentro, capacidad 5
-    b.unirse(2_000, Lado::Atacante, (3..=6).map(|h| part(h, Controlador::Bot, &[])).collect(), 300).unwrap();
-    assert_eq!(b.unirse(2_001, Lado::Atacante, vec![part(7, Controlador::Bot, &[])], 301), Err(ErrorBatalla::LadoLleno));
+    b.unirse(2_000, Lado::Atacante, (3..=6).map(|h| part(h, Controlador::Bot, &[])).collect(), Some(300)).unwrap();
+    assert_eq!(b.unirse(2_001, Lado::Atacante, vec![part(7, Controlador::Bot, &[])], Some(301)), Err(ErrorBatalla::LadoLleno));
     assert!(!b.bloqueo.ejercitos.contains(&301), "rechazado no bloquea nada");
-    assert!(b.unirse(2_001, Lado::Defensor, vec![part(7, Controlador::Bot, &[])], 301).is_ok(), "el otro bando tiene sitio");
+    assert!(b.unirse(2_001, Lado::Defensor, vec![part(7, Controlador::Bot, &[])], Some(301)).is_ok(), "el otro bando tiene sitio");
 }
 
 #[test]
 fn un_heroe_no_entra_dos_veces() {
     let mut b = batalla(CAMPAL);
-    assert_eq!(b.unirse(2_000, Lado::Defensor, vec![part(1, Controlador::Bot, &[])], 300), Err(ErrorBatalla::YaCombate(1)), "ya combate en el otro bando");
-    assert_eq!(b.unirse(2_000, Lado::Atacante, vec![part(3, Controlador::Bot, &[]), part(3, Controlador::Bot, &[])], 300), Err(ErrorBatalla::YaCombate(3)), "repetido en la misma columna");
+    assert_eq!(b.unirse(2_000, Lado::Defensor, vec![part(1, Controlador::Bot, &[])], Some(300)), Err(ErrorBatalla::YaCombate(1)), "ya combate en el otro bando");
+    assert_eq!(b.unirse(2_000, Lado::Atacante, vec![part(3, Controlador::Bot, &[]), part(3, Controlador::Bot, &[])], Some(300)), Err(ErrorBatalla::YaCombate(3)), "repetido en la misma columna");
     assert!(b.incorporaciones.is_empty() && !b.bloqueo.ejercitos.contains(&300));
 }
 
 #[test]
 fn no_se_une_a_una_cerrada_ni_vencida_ni_quien_ya_salio() {
     let mut b = batalla(CAMPAL);
-    assert_eq!(b.unirse(b.expira_en, Lado::Atacante, vec![part(3, Controlador::Bot, &[])], 300), Err(ErrorBatalla::NoActiva));
+    assert_eq!(b.unirse(b.expira_en, Lado::Atacante, vec![part(3, Controlador::Bot, &[])], Some(300)), Err(ErrorBatalla::NoActiva));
     b.salidas.push(Salida { heroe: 3, motivo: MotivoSalida::NoConectado, derrotado: false, en: 1 });
-    assert_eq!(b.unirse(2_000, Lado::Atacante, vec![part(3, Controlador::Bot, &[])], 300), Err(ErrorBatalla::YaSalio(3)));
+    assert_eq!(b.unirse(2_000, Lado::Atacante, vec![part(3, Controlador::Bot, &[])], Some(300)), Err(ErrorBatalla::YaSalio(3)));
 }
 
 #[test]
@@ -282,7 +291,7 @@ fn un_asedio_dura_30_minutos_mas_el_margen() {
 #[test]
 fn un_token_nuevo_del_mismo_heroe_sustituye_al_anterior() {
     let mut b = en_curso(CAMPAL);
-    b.unirse(3_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[])], 300).unwrap();
+    b.unirse(3_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[])], Some(300)).unwrap();
     let nuevo = |h, t: &str| Token { heroe: h, token: t.into(), expira_en: 1 };
     b.registrar_tokens(3_001, "a1", "srv", vec![nuevo(3, "x"), nuevo(1, "y")]).unwrap();
     let toks = &b.asignacion.as_ref().unwrap().tokens;
@@ -307,7 +316,7 @@ fn salida(heroe: HeroeId, motivo: MotivoSalida, derrotado: bool, escuadras: &[(E
 
 fn asignada_con_tres() -> Batalla {
     let mut b = batalla(CAMPAL);
-    b.unirse(1_500, Lado::Atacante, vec![part(3, Controlador::Humano, &[(40, 25)])], 300).unwrap();
+    b.unirse(1_500, Lado::Atacante, vec![part(3, Controlador::Humano, &[(40, 25)])], Some(300)).unwrap();
     b.registrar_asignacion(r(), 2_000, asignacion("a1", "srv", 0, &[1, 3])).unwrap();
     b
 }
@@ -363,7 +372,7 @@ fn si_no_queda_ningun_humano_o_el_atacante_se_queda_sin_heroes_se_cancela_sin_ca
 #[test]
 fn eliminado_en_curso_aplica_las_bajas_hiere_si_derrotado_y_no_toca_el_ticket() {
     let mut b = en_curso(CAMPAL);
-    b.unirse(3_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[(40, 25)])], 300).unwrap();
+    b.unirse(3_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[(40, 25)])], Some(300)).unwrap();
     let ticket = b.ticket.clone();
     let Ok(Efecto::Aplicado(s)) = b.registrar_salida(r(), 4_000, "srv", salida(3, MotivoSalida::Eliminado, true, &[(40, 9, 16)], 0)) else { panic!() };
     assert_eq!((s.bajas, s.liberar, s.herido, s.cancelada, s.reabierta), (vec![(40, 9)], vec![40], true, false, false));
@@ -400,7 +409,7 @@ fn el_motivo_tiene_que_corresponder_al_estado_y_el_heroe_combatir() {
 #[test]
 fn si_sale_quien_la_inicio_pasa_al_primer_atacante_que_queda() {
     let mut b = en_curso(CAMPAL);
-    b.unirse(3_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[]), part(4, Controlador::Bot, &[])], 300).unwrap();
+    b.unirse(3_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[]), part(4, Controlador::Bot, &[])], Some(300)).unwrap();
     b.registrar_salida(r(), 4_000, "srv", salida(1, MotivoSalida::Desconexion, false, &[], 0)).unwrap();
     assert_eq!(b.iniciada_por, 3);
     b.registrar_salida(r(), 4_001, "srv", salida(2, MotivoSalida::Abandono, false, &[], 0)).unwrap();
@@ -610,7 +619,7 @@ fn ninguna_secuencia_de_mensajes_deja_la_batalla_incoherente() {
             let lado = if rng.por_debajo(2) == 0 { Lado::Atacante } else { Lado::Defensor };
             let revision = if rng.por_debajo(4) == 0 { 9 } else { b.ticket.revision };
             let cambio = match rng.por_debajo(9) {
-                0 | 1 => b.unirse(ahora, lado, vec![part(heroe + 2, if heroe % 2 == 0 { Controlador::Humano } else { Controlador::Bot }, &[(100 + heroe, 25)])], 300 + heroe).is_ok(),
+                0 | 1 => b.unirse(ahora, lado, vec![part(heroe + 2, if heroe % 2 == 0 { Controlador::Humano } else { Controlador::Bot }, &[(100 + heroe, 25)])], Some(300 + heroe)).is_ok(),
                 2 => {
                     intento += 1;
                     matches!(b.registrar_asignacion(r(), ahora, asignacion(&format!("a{intento}"), "srv", revision, &[1])), Ok(Efecto::Aplicado(_)))

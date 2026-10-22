@@ -358,8 +358,15 @@ impl Nucleo {
     /// ¿Le abre la plaza su puerta? Quien reside en ella y los de su Facción, siempre; el resto, según el acceso que fijó su dueño para su relación (aliada o
     /// vasalla, neutral, enemiga). `false` si el héroe o la plaza no existen.
     pub fn puede_entrar_en_plaza(&self, heroe: u64, plaza: u64) -> bool {
+        let Some(hn) = self.heroe(heroe).filter(|_| self.estado.asentamientos.contains_key(&plaza)) else { return false };
+        hn.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32)) || self.acceso_deja_pasar(heroe, plaza)
+    }
+
+    /// ¿Deja pasar el acceso de la plaza, con su dueño de ahora, a la relación del héroe? Es `puede_entrar_en_plaza` sin la excepción de la residencia: la mira quien ha de saber
+    /// si seguiría abriéndose la puerta a alguien que deja de residir en ella (la conquista de la madre).
+    pub(super) fn acceso_deja_pasar(&self, heroe: u64, plaza: u64) -> bool {
         let (Some(hn), Some(a)) = (self.heroe(heroe), self.estado.asentamientos.get(&plaza)) else { return false };
-        hn.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32)) || a.acceso.permite(self.estado.militar.trato(a.faccion, hn.faccion))
+        a.acceso.permite(self.estado.militar.trato(a.faccion, hn.faccion))
     }
 
     /// ¿Le abriría su puerta un pueblo extractor? Hereda el acceso de su plaza madre (`None` si el pueblo no existe). Se entra con `EntrarEnPueblo` (`dentro`).

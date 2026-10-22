@@ -402,12 +402,12 @@ impl Batalla {
         self.participantes().filter(|(l, _)| *l == lado).count()
     }
 
-    /// Un héroe se une con su columna entera (`entran`: sus héroes sanos, con lo que llevan en ella). Durante la convocatoria entran **en el
+    /// Un héroe se une con su columna entera (`entran`: sus héroes sanos, con lo que llevan en ella); quien está dentro de un lugar y no tiene columna (un residente) se une sin ella (`columna: None`). Durante la convocatoria entran **en el
     /// ticket** como uno de los del principio; después, cada uno es una **incorporación** y el ticket no cambia ni sube de revisión. Si el
     /// bando está lleno, no entra: `yaDentro + entran > capacidad`. Devuelve las secuencias asignadas (vacío en la convocatoria).
     ///
     /// El lado (`lado_para_unirse`) y las condiciones del mundo (herido, ya en otra batalla, distancia) las comprueba quien llama.
-    pub fn unirse(&mut self, ahora: Instante, lado: Lado, entran: Vec<Participante>, columna: ColumnaId) -> Result<Vec<u32>, ErrorBatalla> {
+    pub fn unirse(&mut self, ahora: Instante, lado: Lado, entran: Vec<Participante>, columna: Option<ColumnaId>) -> Result<Vec<u32>, ErrorBatalla> {
         if !self.activa(ahora) {
             return Err(ErrorBatalla::NoActiva);
         }
@@ -420,8 +420,8 @@ impl Batalla {
         if self.en_el_lado(lado) + entran.len() > self.ticket.bando(lado).capacidad {
             return Err(ErrorBatalla::LadoLleno);
         }
-        if !self.bloqueo.ejercitos.contains(&columna) {
-            self.bloqueo.ejercitos.push(columna);
+        if let Some(c) = columna.filter(|c| !self.bloqueo.ejercitos.contains(c)) {
+            self.bloqueo.ejercitos.push(c);
         }
         if self.en_convocatoria(ahora) {
             self.ticket.bando_mut(lado).participantes.extend(entran);
