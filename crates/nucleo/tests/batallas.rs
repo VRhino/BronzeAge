@@ -1760,6 +1760,192 @@ fn si_unity_da_por_perdidos_todos_los_carros_la_caravana_desaparece() {
     let _ = b;
 }
 
+// ───────────────────────────── Bandidos que acosan (quinta ronda) ─────────────────────────────
+
+/// El primer instante (en pasos de un segundo) en que el plan está a ≤ `radioAtaqueCaravana` de `donde`.
+fn llegada_al_radio(plan: &base::Plan, donde: Punto, desde: Instante) -> Instante {
+    let radio = combate::Reglas::cargar().bandidos.radio_ataque_caravana;
+    (desde..).step_by(1_000).find(|&t| plan.posicion_en(t).unwrap().dist(donde) <= radio).expect("el plan cruza el radio")
+}
+
+/// Un trozo de tierra libre cerca de A donde marchar 60 u hacia el este sin acercarse a ningún campamento de bandidos de los que ya hay (los de las plazas y los de las vetas también
+/// acosan: la prueba solo quiere el suyo). Devuelve su inicio y su fin.
+fn tramo_sin_bandidos(e: &Esc) -> (Punto, Punto) {
+    let ya: Vec<Punto> = e.n.campamentos_de_bandidos().map(|b| b.posicion).collect();
+    let libre = |p: Punto| e.n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none()) && ya.iter().all(|b| b.dist(p) > 45_000);
+    let centro = e.pos(e.a);
+    for r in (80..=240).step_by(20).map(|k| k * 1_000) {
+        for g in (0..360).step_by(15) {
+            let a = (g as f64).to_radians();
+            let p = Punto::new(centro.x + (r as f64 * a.cos()) as i64, centro.y + (r as f64 * a.sin()) as i64);
+            let (medio, fin) = (Punto::new(p.x + 30_000, p.y), Punto::new(p.x + 60_000, p.y));
+            if [p, medio, fin].into_iter().all(libre) {
+                return (p, fin);
+            }
+        }
+    }
+    panic!("sin un tramo libre de bandidos cerca de A");
+}
+
+/// Una columna de ana con esas tropas y su héroe humano, con una caravana de A (un carro) enganchada y 40 001 de madera en el carro, que marcha 60 u por un tramo libre de bandidos, y un
+/// campamento de bandidos de ese nivel al 40 % del camino. Devuelve la columna, la caravana, el campamento y el instante exacto en que el plan entra a ≤ 7 u de él.
+fn columna_hacia_bandidos(e: &mut Esc, tropas: &[Tropa], nivel: u8) -> ((u64, u64), u64, u64, Instante) {
+    let (inicio, fin_del_tramo) = tramo_sin_bandidos(e);
+    let a = e.a;
+    let ca = e.caravana("ana", a, 1);
+    let col = columna(&mut e.n, "ana", 1, inicio);
+    for &t in tropas {
+        e.ok("admin", Comando::DarEscuadra { heroe: col.1, tropa: t, cantidad: completa(t) });
+    }
+    humano(&mut e.n, col.1);
+    e.ok("admin", Comando::DarSuministro { ejercito: col.0, recurso: Madera, cantidad: 40_001 });
+    e.ok("admin", Comando::AdjuntarCaravana { caravana: ca, ejercito: col.0 });
+    e.ok("ana", Comando::MarcharA { ejercito: col.0, destino: fin_del_tramo });
+    let plan = e.n.ejercito(col.0).unwrap().plan.clone();
+    let (t0, fin) = (plan.inicio().unwrap(), plan.fin().unwrap());
+    let donde = plan.posicion_en(t0 + (fin - t0) * 4 / 10).unwrap();
+    let campamento = e.ok("admin", Comando::ColocarBandidos { posicion: donde, nivel }).creadas[0];
+    (col, ca, campamento, llegada_al_radio(&plan, donde, e.n.ahora()))
+}
+
+#[test]
+fn los_bandidos_que_acosan_una_caravana_adjunta_a_una_columna_con_heroes_la_juegan_en_unity_y_el_resultado_se_aplica() {
+    let m = con_mundo!();
+    // Gana el bandido o gana la columna, con un humano a bordo o con un bot (también va a Unity, sin tokens).
+    for (gana_el_bandido, humano) in [(true, true), (false, true), (true, false)] {
+        let mut e = montar(m, 7);
+        let (col, ca, camp, llegada) = columna_hacia_bandidos(&mut e, &[Tropa::EspadachinesBronce], 3);
+        if !humano {
+            e.ok("admin", Comando::FijarControlador { heroe: col.1, controlador: Controlador::Bot });
+        }
+        e.n.avanzar_hasta(llegada - 1_000);
+        assert!(e.n.batallas().next().is_none(), "aún no ha llegado al radio");
+        e.n.avanzar_hasta(llegada + 1_000);
+
+        // Con servidores de batalla y héroes a bordo no se tira con números: se abre una batalla de caravana en la que atacan los bandidos y defienden los héroes de la columna.
+        let con_numeros = hechos(&e.n, "bandidos.caravana_interceptada").len() + hechos(&e.n, "bandidos.caravana_escapa").len();
+        assert_eq!((con_numeros, hechos(&e.n, "evento_pve.abierta").len(), e.n.batallas().count()), (0, 0, 1), "una batalla de caravana, sin tirada con números ni evento pve");
+        let bt = e.n.batallas().next().unwrap();
+        let id = bt.id;
+        assert!(matches!(bt.ticket.contexto, combate::ciclo::Contexto::Caravana { caravana, modalidad: combate::caravana::Modalidad::Disputa, carros: 1, .. } if caravana == ca));
+        assert_eq!(bt.iniciada_por, 0, "nadie la inicia: ningún héroe puede cancelarla");
+        let (atacante, defensor) = (&bt.ticket.atacante, &bt.ticket.defensor);
+        assert_eq!((atacante.faccion, atacante.participantes.len(), atacante.sin_heroe.len()), (None, 0, 1), "los bandidos no son de nadie ni llevan héroes");
+        let bandidos = &atacante.sin_heroe[0];
+        assert_eq!((bandidos.tropa, bandidos.dueno, bandidos.efectivos), (Tropa::MiliciaLanceros, None, combate::Reglas::cargar().bandidos.niveles[2].unidades));
+        assert!(bandidos.id > col.1, "con un id de la partida");
+        assert_eq!((defensor.faccion, defensor.participantes.iter().map(|p| p.heroe).collect::<Vec<_>>(), defensor.sin_heroe.len()), (Some(1), vec![col.1], 0));
+        assert_eq!((bt.bloqueo.ejercitos.clone(), bt.bloqueo.caravanas.clone(), bt.bloqueo.campamento), (vec![col.0], vec![ca], Some(camp as u32)));
+        assert_eq!(hechos(&e.n, "batalla.abierta").len(), 1);
+        assert_eq!(dato(&hechos(&e.n, "batalla.abierta")[0], "contexto"), 2);
+        assert_eq!((e.n.caravana(ca).unwrap().estado, e.n.ejercito(col.0).unwrap().en_batalla), (EstadoCaravana::EnBatalla, true));
+        let r = e.ord("ana", Comando::CancelarBatalla { heroe: col.1, batalla: id });
+        assert!(!r.aceptada(), "ni el defensor la cancela: {r:?}");
+        let a = e.a;
+        assert_eq!(codigo(&e.ord("ana", Comando::MarcharA { ejercito: col.0, destino: e.pos(a) })), rechazos::BATALLA_BLOQUEADO);
+
+        // Unity decide: el resultado se aplica con las consecuencias de una caravana tomada o defendida.
+        let t = e.n.ahora() + MIN;
+        let humanos: Vec<u64> = if humano { vec![col.1] } else { vec![] };
+        en_curso(&mut e.n, id, t, &humanos);
+        let mut res = resultado(&e.n, id, if gana_el_bandido { Lado::Atacante } else { Lado::Defensor }, 5);
+        if gana_el_bandido {
+            res.carros_perdidos = vec!["0".into()];
+        }
+        assert!(aplicar(&mut e.n, t + MIN, "res", id, res).aceptada());
+        let ej = e.n.ejercito(col.0).unwrap();
+        assert!(!ej.en_batalla && ej.marchando(), "la columna retoma su camino");
+        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 20_001 } else { 40_001 }, "el bando que pierde entrega la mitad de su carro; los bandidos no tienen columna que lo cargue");
+        if gana_el_bandido {
+            assert!(e.n.caravana(ca).is_none() && !ej.caravanas_adjuntas.contains(&ca), "Unity dio por perdido su único carro: la caravana desaparece");
+            assert!(hechos(&e.n, "comercio.caravana_perdida").iter().any(|h| dato(h, "caravana") == ca as i64));
+        } else {
+            assert_eq!((e.n.caravana(ca).unwrap().estado, ej.caravanas_adjuntas.clone()), (EstadoCaravana::Adjunta, vec![ca]), "sigue enganchada a su columna");
+        }
+        assert!(e.n.campamento_de_bandidos(camp).is_some(), "el campamento sigue donde estaba: no es una batalla contra él");
+        // Y el cruce acabó ahí: los bandidos no la acosan otra vez.
+        e.n.avanzar_hasta(t + 20 * MIN);
+        assert_eq!(e.n.batallas().filter(|b| b.id != id).count(), 0, "no se abre otra batalla");
+        assert_eq!(hechos(&e.n, "batalla.abierta").len(), 1);
+    }
+}
+
+#[test]
+fn los_bandidos_que_acosan_una_caravana_sin_heroes_la_resuelven_con_numeros_aunque_haya_servidores_de_batalla() {
+    let m = con_mundo!();
+    // Suelta, con una escolta de tropa cedida pero sin héroe a bordo.
+    let mut e = montar(m, 7);
+    let a = e.a;
+    let ca = e.caravana("ana", a, 2);
+    let carla = e.heroe_en(&m.0, "carla", 1, a);
+    let milicia = e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
+    e.ok("carla", Comando::AsignarEscolta { caravana: ca, heroe: carla, escuadras: vec![milicia] });
+    let t0 = e.lanzar(ca);
+    let plan = e.n.caravana(ca).unwrap().plan.clone().unwrap();
+    let fin = plan.fin().unwrap();
+    let donde = plan.posicion_en(t0 + (fin - t0) * 4 / 10).unwrap();
+    let camp = e.ok("admin", Comando::ColocarBandidos { posicion: donde, nivel: 3 }).creadas[0];
+    let llegada = llegada_al_radio(&plan, donde, e.n.ahora());
+    e.n.avanzar_hasta(llegada - 1_000);
+    let rng0 = e.n.estado().rng.estado();
+    e.n.avanzar_hasta(llegada + 1_000);
+    let suyos = |e: &Esc, c: &str| hechos(&e.n, c).into_iter().filter(|h| dato(h, "campamento") == camp as i64).count();
+    assert_eq!(suyos(&e, "bandidos.caravana_interceptada") + suyos(&e, "bandidos.caravana_escapa"), 1, "una tirada con números");
+    assert_eq!(e.n.batallas().count(), 0, "ninguna batalla de Unity");
+    assert_ne!(e.n.estado().rng.estado(), rng0, "gastó la tirada");
+
+    // Adjunta a una columna cuyos héroes están todos heridos: tampoco hay héroes que defiendan.
+    let mut e = montar(m, 7);
+    let (col, _, camp, llegada) = columna_hacia_bandidos(&mut e, &[Tropa::EspadachinesBronce], 3);
+    e.n.avanzar_hasta(llegada - 2_000);
+    e.ok("admin", Comando::HerirHeroe { heroe: col.1 });
+    e.n.avanzar_hasta(llegada + 1_000);
+    let suyos = |e: &Esc, c: &str| hechos(&e.n, c).into_iter().filter(|h| dato(h, "campamento") == camp as i64).count();
+    assert_eq!(suyos(&e, "bandidos.caravana_interceptada") + suyos(&e, "bandidos.caravana_escapa"), 1);
+    assert_eq!(e.n.batallas().count(), 0);
+}
+
+/// Una batalla de caravana contra bandidos de principio a fin con las órdenes en instantes fijos: `avanzar` solo decide cómo se mueve el reloj hasta el cruce.
+fn guion_de_acoso(m: &'static M, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucleo {
+    let mut e = montar(m, 7);
+    let (col, _, _, llegada) = columna_hacia_bandidos(&mut e, &[Tropa::EspadachinesBronce], 3);
+    avanzar(&mut e.n, llegada - 1_000);
+    e.n.avanzar_hasta(llegada + MIN);
+    let id = e.n.batallas().next().expect("el acoso abrió una batalla").id;
+    let t = llegada + MIN;
+    let revision = e.n.batalla(id).unwrap().ticket.revision;
+    let r = msg(&mut e.n, t, "as", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", revision, &[col.1]) });
+    assert!(r.aceptada(), "{r:?}");
+    avanzar(&mut e.n, t + MIN);
+    assert!(msg(&mut e.n, t + MIN, "in", Comando::ConfirmarInicio { batalla: id, intento: "a1".into(), revision }).aceptada());
+    avanzar(&mut e.n, t + 3 * MIN);
+    let mut res = resultado(&e.n, id, Lado::Atacante, 4);
+    res.carros_perdidos = vec!["0".into()];
+    assert!(aplicar(&mut e.n, t + 3 * MIN, "res", id, res).aceptada());
+    e.n.avanzar_hasta(t + 3 * HORA);
+    e.n
+}
+
+#[test]
+fn el_acoso_de_bandidos_por_unity_da_el_mismo_hash_normal_acelerado_y_a_trozos_y_su_foto_vuelve_igual() {
+    let m = con_mundo!();
+    let normal = guion_de_acoso(m, &|n, t| n.avanzar_hasta(t));
+    assert_eq!(normal.hash_estado(), guion_de_acoso(m, &|n, t| n.avanzar_hasta(t)).hash_estado(), "repetible");
+    assert_eq!(normal.hash_estado(), guion_de_acoso(m, &|_, _| {}).hash_estado(), "acelerado: las órdenes llevan su instante");
+    let a_trozos = guion_de_acoso(m, &|n, t| {
+        let ahora = n.ahora();
+        for s in 1..=5 {
+            n.avanzar_hasta(ahora + (t - ahora).max(0) * s * s / 25);
+        }
+    });
+    assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares, como el modo en vivo");
+    assert_eq!((hechos(&normal, "batalla.abierta").len(), hechos(&normal, "batalla.aplicada").len(), hechos(&normal, "batalla.retirada").len()), (1, 1, 1));
+    assert!(normal.batallas().next().is_none() && citas_de_batalla(&normal).is_empty(), "aplicada y retirada, sin citas pendientes");
+    let bytes = normal.estado().serializar();
+    let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
+    assert_eq!(vuelta.serializar(), bytes);
+}
+
 // ───────────────────────────── Pueblos ─────────────────────────────
 
 fn sitio_junto_a(n: &Nucleo, c: Punto, r: i64) -> Option<Punto> {

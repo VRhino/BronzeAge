@@ -21,6 +21,12 @@
 //! bandido si `poder × tirada > defensa` (la escolta cedida, o los carreteros); la caravana desaparece con su carga y su escolta queda a 0 y vuelve al
 //! campamento de su héroe. Una caravana que se salva no vuelve a ser acosada por ese campamento hasta que cambie de plan. Las caravanas adjuntas a un ejército
 //! se defienden con el poder de la columna, que no sufre bajas: el cruce lo programa la columna en marcha que las lleva.
+//!
+//! # Con servidores de batalla (quinta ronda de Entrar con todo, 2026-10-22)
+//! Los bandidos no son bots ni jugadores. Si el acoso es a una caravana **adjunta a una columna con algún héroe sano** y el proceso tiene servidores de batalla, no se tira: se abre una
+//! batalla de caravana ([`Nucleo::apertura_de_acoso`]) en la que atacan los bandidos y defienden los héroes de la columna, y Unity decide (haya humanos o no). Una caravana sin héroes
+//! —suelta, con escolta de tropa cedida o sin ella, o adjunta a una columna sin héroes sanos— se resuelve **siempre con números**, haya servidores o no. Un campamento no vuelve a
+//! acosar a la misma columna mientras se conserve su batalla ([`Nucleo::acoso_ya_jugado`]).
 
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_BANDIDOS};
@@ -223,18 +229,23 @@ impl Nucleo {
         if es_entidad_caravana(presa) {
             let idk = crate::estado_comercio::id_de_entidad(presa);
             self.acosar(idc, idk, None, t);
-        } else if let Some(e) = self.estado.ejercitos.get(&presa).filter(|e| self.columna_en_el_mapa(e)) {
-            // Cada caravana adjunta tiene su propia tirada, en orden de id, y se defiende con el poder de la columna.
+        } else if let Some(e) = self.estado.ejercitos.get(&presa).filter(|e| self.columna_en_el_mapa(e) && !self.acoso_ya_jugado(idc, e.id)) {
+            // Cada caravana adjunta tiene su propia tirada, en orden de id, y se defiende con el poder de la columna; si el acoso abre una batalla de Unity, la columna queda apartada y ahí
+            // acaba el cruce.
             for idk in e.caravanas_adjuntas.clone() {
-                self.acosar(idc, idk, Some(presa), t);
+                if self.acosar(idc, idk, Some(presa), t) {
+                    break;
+                }
             }
         }
     }
 
-    /// Una tirada del campamento `idc` contra la caravana `idk`, que se defiende sola (con su escolta cedida o con los carreteros) o, si va adjunta a la
-    /// columna `ejercito`, con el poder de esa columna (que no sufre bajas).
-    fn acosar(&mut self, idc: u64, idk: u64, ejercito: Option<u64>, t: Instante) {
-        let (Some(b), Some(k)) = (self.estado.combate.bandidos.get(&idc), self.estado.comercio.caravana(idk)) else { return };
+    /// El campamento `idc` acosa a la caravana `idk`, que se defiende sola (con su escolta cedida o con los carreteros) o, si va adjunta a la columna `ejercito`, con el poder de esa
+    /// columna (que no sufre bajas). Es una tirada con números salvo que haya servidores de batalla y la columna lleve algún héroe sano: entonces los bandidos y la columna se juegan la
+    /// caravana en una batalla de Unity (quinta ronda de Entrar con todo, 2026-10-22). Una caravana sin héroes, suelta o con escolta de tropa, se resuelve siempre con números, y los
+    /// bandidos no son bots ni jugadores. Devuelve si se abrió esa batalla.
+    fn acosar(&mut self, idc: u64, idk: u64, ejercito: Option<u64>, t: Instante) -> bool {
+        let (Some(b), Some(k)) = (self.estado.combate.bandidos.get(&idc), self.estado.comercio.caravana(idk)) else { return false };
         let (nivel, origen, estado) = (b.nivel, k.origen as u64, k.estado);
         let donde = match ejercito {
             Some(c) => self.estado.ejercitos[&c].posicion_en(t),
@@ -243,7 +254,12 @@ impl Nucleo {
         let cr = self.estado.reglas.economia.combate.clone();
         // La distancia ya la garantiza el evento (exacto); la de las posiciones redondeadas podría pasarse de una milésima.
         if !puede_acosar(&cr, estado, 0, self.zona_en(donde, None) != Zona::Ninguna, self.en_proteccion_de_campamento(donde)) {
-            return;
+            return false;
+        }
+        // DUDA: con varias caravanas adjuntas la batalla de Unity pone en juego solo la primera (su contexto nombra una caravana); las demás siguen enganchadas y no se tiran (con números, cada una tiene su tirada).
+        if let Some(ap) = ejercito.filter(|_| self.estado.reglas.batallas_en_unity).and_then(|c| self.apertura_de_acoso(t, idc, c, idk, donde)) {
+            self.abrir_batalla(t, ap);
+            return true;
         }
         let mut escolta: Vec<Escuadra> = k.escolta.iter().filter_map(|c| self.escuadra(c.id).map(|(_, s)| s.clone())).collect();
         let de_la_columna: Vec<Escuadra> = ejercito.map(|c| self.escuadras_de_columna(c).into_iter().cloned().collect()).unwrap_or_default();
@@ -252,7 +268,6 @@ impl Nucleo {
             None if escolta.iter().any(Escuadra::con_soldados) => Defensa::Escolta(&mut escolta),
             None => Defensa::Base,
         };
-        // DUDA: el acoso es un evento del mundo, no una orden `atacar`: se resuelve con números aunque haya servidores de batalla (cuarta ronda de Entrar con todo: «toda batalla va a Unity» queda por decidir para los bandidos).
         let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
         self.volcar_escuadras(&escolta);
         let plazas = vec![origen].into_iter().filter(|o| self.estado.asentamientos.contains_key(o)).collect();
@@ -262,6 +277,7 @@ impl Nucleo {
             // La caravana desaparece con su carga; su escolta (a 0) vuelve al campamento de su héroe al perderse.
             self.perder_caravana(t, idk);
         }
+        false
     }
 
     // ───────────────────────────── La orden de administración ─────────────────────────────

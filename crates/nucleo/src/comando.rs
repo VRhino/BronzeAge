@@ -396,8 +396,8 @@ impl Comando {
     /// ¿Es una orden de salir de un lugar al mapa? Es lo único que puede dar, durante un asedio, un saqueo o un ataque, quien está dentro y no se ha unido a la defensa
     /// (Entrar con todo, cuarta ronda): `SalirDeAsentamiento`, `SalirDePueblo`, `SalirDeAvanzada` y, para el residente de su propia plaza, que no sale con `SalirDeAsentamiento` sino
     /// eligiendo tropa y carga, `SalirAlMundo`. El candado no mira entonces el lugar ni que se esté dentro; sí que se combata.
-    // DUDA: el autor habla de «la orden de salir del lugar (al mapa, con todo lo suyo)»; `SalirAlMundo` del residente se admite también porque es su única salida (lo conservador sería
-    // dejarlo dentro sin poder salir). Lo que reservó la batalla (la guarnición con dueño) sigue sin poder llevarse.
+    // `SalirAlMundo` del residente cuenta como salir del lugar (decisión del autor, quinta ronda, 2026-10-22): es su única salida. Lo que reservó la batalla (la guarnición con dueño) sigue
+    // sin poder llevarse.
     pub(crate) fn es_salida_de_lugar(&self) -> bool {
         matches!(self, Comando::SalirDeAsentamiento { .. } | Comando::SalirDePueblo { .. } | Comando::SalirDeAvanzada { .. } | Comando::SalirAlMundo { .. })
     }

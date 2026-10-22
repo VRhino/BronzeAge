@@ -56,6 +56,9 @@ use std::collections::BTreeSet;
 /// El id de una escuadra que aún no lo tiene (carreteros, bandidos): al abrir la batalla recibe uno de la partida.
 const SIN_ID: u64 = 0;
 
+/// El «héroe» que inicia una batalla que nadie ha pedido (los bandidos que acosan a una caravana): los ids de la partida empiezan en 1, así que no es de nadie y nadie la cancela.
+const SIN_HEROE: u64 = 0;
+
 /// Qué se cuenta de una batalla (Batalla_Unity_Ciclo §10). Contra un campamento de bandidos el prefijo es `evento_pve.` en lugar de `batalla.`.
 #[derive(Clone, Copy)]
 enum Hecho {
@@ -373,18 +376,50 @@ impl Nucleo {
         }
     }
 
+    /// La escuadra de milicia con las unidades del nivel de un campamento de bandidos, sin dueño ni Facción.
+    fn bandidos_en_batalla(&self, campamento: u64) -> EscuadraEnBatalla {
+        let nivel = self.estado.combate.bandidos[&campamento].nivel;
+        let unidades = combate::bandidos::nivel_de(&self.estado.reglas.economia.combate, nivel).unidades;
+        EscuadraEnBatalla { id: SIN_ID, tropa: militar::Tropa::MiliciaLanceros, dueno: None, efectivos: unidades }
+    }
+
     /// Contra un campamento de bandidos defiende una escuadra de milicia con las unidades de su nivel, sin dueño ni Facción.
     pub(super) fn apertura_de_campamento(&self, t: Instante, heroe: u64, id: u64, x: u64) -> Apertura {
         let c = &self.estado.combate.bandidos[&x];
-        let unidades = combate::bandidos::nivel_de(&self.estado.reglas.economia.combate, c.nivel).unidades;
         Apertura {
             contexto: Contexto::CampamentoBandidos { campamento: x as u32, punto: c.posicion },
             punto: c.posicion,
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
-            defensor: BandoDeTicket::nuevo(None, vec![], vec![EscuadraEnBatalla { id: SIN_ID, tropa: militar::Tropa::MiliciaLanceros, dueno: None, efectivos: unidades }]),
+            defensor: BandoDeTicket::nuevo(None, vec![], vec![self.bandidos_en_batalla(x)]),
             bloqueo: Bloqueo { ejercitos: vec![id], campamento: Some(x as u32), ..Default::default() },
         }
+    }
+
+    /// ¿Se jugó ya (y se conserva) en Unity el acoso de este campamento a esta columna? Al volver al espacio tras la batalla la columna sigue en el radio del campamento y, por el
+    /// redondeo de su posición, puede contar como una entrada nueva: sin esto los bandidos la acosarían otra vez, y otra, cada vez que acabara una batalla.
+    pub(super) fn acoso_ya_jugado(&self, campamento: u64, columna: u64) -> bool {
+        self.batallas().any(|b| b.iniciada_por == SIN_HEROE && b.bloqueo.campamento == Some(campamento as u32) && b.bloqueo.ejercitos.contains(&columna))
+    }
+
+    /// Los bandidos del campamento `campamento` acosan a la caravana `caravana`, adjunta a la `columna` (quinta ronda, 2026-10-22): una batalla de caravana en la que los bandidos atacan
+    /// (una escuadra de milicia sin dueño, sin héroes ni tokens) y defienden los héroes sanos de la columna con lo que llevan. `None` si la columna no lleva ningún héroe sano: sin
+    /// héroes el acoso se resuelve siempre con números. Nadie inicia la batalla (`SIN_HEROE`): ningún jugador puede cancelarla.
+    pub(super) fn apertura_de_acoso(&self, t: Instante, campamento: u64, columna: u64, caravana: u64, punto: Punto) -> Option<Apertura> {
+        let defensor = self.bando_de_columna(columna, t);
+        if defensor.participantes.is_empty() {
+            return None;
+        }
+        let carros = self.estado.comercio.caravana(caravana)?.carros.len();
+        Some(Apertura {
+            // El acoso no ocurre dentro de una zona de influencia, así que es siempre una disputa de carros.
+            contexto: Contexto::Caravana { caravana, punto, modalidad: Modalidad::Disputa, carros },
+            punto,
+            iniciada_por: SIN_HEROE,
+            atacante: BandoDeTicket::nuevo(None, vec![], vec![self.bandidos_en_batalla(campamento)]),
+            defensor,
+            bloqueo: Bloqueo { ejercitos: vec![columna], caravanas: vec![caravana], campamento: Some(campamento as u32), ..Default::default() },
+        })
     }
 
     /// En un asedio defiende de oficio solo la guarnición sin héroe (Doc 5.15.1, 5.15.3). Los residentes y los amigos que están **dentro** (la Facción dueña, aliados, vasallos) no
@@ -451,7 +486,7 @@ impl Nucleo {
         let cr = self.estado.reglas.economia.combate.clone();
         let id = self.nuevo_id();
         // Lo que no es de nadie (carreteros, bandidos) no está en ningún héroe, pero el resultado tiene que cubrirlo: lleva un id de la partida.
-        for e in ap.defensor.sin_heroe.iter_mut().filter(|e| e.id == SIN_ID) {
+        for e in ap.atacante.sin_heroe.iter_mut().chain(ap.defensor.sin_heroe.iter_mut()).filter(|e| e.id == SIN_ID) {
             e.id = self.nuevo_id();
         }
         let ticket = Ticket::nuevo(&cr, ap.contexto, ap.atacante, ap.defensor);

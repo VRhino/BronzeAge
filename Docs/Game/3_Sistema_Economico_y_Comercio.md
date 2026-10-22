@@ -88,7 +88,7 @@ No hay un sistema que detecte explícitamente "cortar una ruta" como evento de g
   - **B**: si gana el atacante, el dueño pierde el **70 %** de la carga, recurso a recurso; el **30 % se salva siempre** y llega a su destino en los carros que queden o, si no queda ninguno, con los carreteros. Si gana el defensor, no se pierde nada.
   - **Bot contra bot** (5.2.5): B usa una `ventajaDefensor` ×1,25 (placeholder) y A ×1; el atacante tira una sola vez (Combate §7.1; corregido el 2026-10-18). Si gana el atacante, en A pierde la mitad de los carros, redondeando hacia arriba (placeholder); en B, el 70 % de la carga y la mitad de los carros.
 - Atacar una caravana de otra Facción **exige guerra con su dueño en cualquier sitio, o la declara** (2.4.1), de modo que el paso forzoso por una ciudad ajena (peaje, Doc 1.6) no se convierte en una trampa.
-- **Los bandidos** (Doc 1.9) atacan las caravanas que pasan cerca de su campamento, con la misma resolución numérica.
+- **Los bandidos** (Doc 1.9) atacan las caravanas que pasan cerca de su campamento, con la misma resolución numérica. Los bandidos no son bots ni jugadores: si la caravana va escoltada por héroes (adjunta a una columna con algún héroe a bordo) y hay servidores de batalla, es una batalla de caravana en Unity; una caravana sin héroes —de un bot o de un jugador, aunque lleve escolta de tropa cedida— se resuelve siempre con números, haya o no servidores.
 - Los bandidos **siguen sin actuar dentro de ninguna zona**; la regla entre Facciones de arriba no se aplica al PvE.
 
 **ESCOLTA POR EJÉRCITO (Doc 5.13.3).** Una caravana puede ir **adjunta a un ejército** y hacer su entrega normal mientras marcha con él. Deja de defenderse con la defensa base fija y pasa a estar protegida por el poder de combate real del ejército. Se autoequilibra con la regla de velocidad (Doc 5.12.5): el ejército va al ritmo de su integrante más lento, así que escoltar una caravana comercial (24) frena a un ejército ligero (30) y le quita la capacidad de cazar otras caravanas — **no se puede escoltar y depredar a la vez**. Si el ejército es derrotado, la caravana escoltada se pierde con él.
@@ -226,8 +226,8 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
   vuelve a su campamento al acabar el viaje como siempre. Lanzarla a mano con más escuadras suma lo ya cedido al cupo. Nadie cede ni retira a
   nombre de otro y hay que residir en el origen.
 - **Combate**: la escolta combate manejada por la IA del juego. Contra un héroe que intercepta la caravana
-  (3.10) es una batalla de Unity; contra bandidos (Doc 1.9), sin ningún héroe humano en juego, se resuelve con
-  números (Doc 5.15.6). Sus bajas son permanentes y no queda herida: los escuadrones no tienen ese estado (Doc
+  (3.10) es una batalla de Unity; contra bandidos (Doc 1.9), una caravana sin héroes se resuelve siempre con
+  números (Doc 5.15.6, 5.2.5). Sus bajas son permanentes y no queda herida: los escuadrones no tienen ese estado (Doc
   5.16).
 
 ### 3.13.5 Reparto automático vs preparación manual
