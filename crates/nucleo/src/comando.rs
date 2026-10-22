@@ -160,7 +160,8 @@ pub enum Comando {
     /// Engancha una caravana `disponible` o `aparcada` a una columna de su Facción que está a la puerta de la plaza donde la caravana está
     /// (Movimiento_Ejercitos §9). La columna pasa a viajar a la velocidad de su elemento más lento y la caravana va con ella.
     AdjuntarCaravana { caravana: u64, ejercito: u64 },
-    /// Deja la caravana adjunta aparcada en una plaza de su Facción, con la columna a su puerta (la columna «entra»; Movimiento_Ejercitos §11).
+    /// Deja la caravana adjunta aparcada en una plaza de su Facción, con la columna a su puerta o dentro de ella (Doc 3.13.7; Movimiento_Ejercitos §11). Es una orden
+    /// explícita: entrar en un lugar no aparca las caravanas, entran con la columna.
     AparcarCaravana { caravana: u64, asentamiento: u64 },
     // ── Mercado de los campamentos de mercenarios (Comercio_Caravanas §9). `campamento` es el índice del artefacto de mundo; el héroe debe estar
     //    dentro del campamento o con su columna a la puerta. ──
@@ -238,16 +239,18 @@ pub enum Comando {
     SalirAlMundo { asentamiento: u64, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)> },
     /// Sale como ejército desde su residencia (al menos una escuadra), con la política de unión que fija y no cambia.
     MovilizarEjercito { asentamiento: u64, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica },
-    /// Sale de un campamento de mercenarios: el residente elige tropa y carga de su almacén personal (y recibe la ración gratis); el visitante retoma
-    /// su columna aparcada. Con política distinta de `Rechazar` sale como ejército.
+    /// Sale de un campamento de mercenarios: el residente elige tropa y carga de su almacén personal (y recibe la ración gratis) y se lleva el carro que
+    /// trajo; el visitante sale con todo lo que entró (su columna). Con política distinta de `Rechazar` sale como ejército.
     SalirDelCampamento { campamento: u32, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica },
-    /// Entra en una plaza con su columna personal a la puerta: en su residencia la columna se deshace dentro; en otra queda aparcada.
+    /// Entra en una plaza, a cuya puerta está, con todo lo suyo (tropa, carro, víveres y caravanas adjuntas): si la plaza le abre su puerta según su relación (la
+    /// misma Facción y los residentes, siempre). En su residencia la tropa vuelve al campamento y el carro se queda con él; de visita todo queda en su columna, dentro.
     EntrarEnAsentamiento { asentamiento: u64, heroe: u64 },
-    /// Retoma la columna que dejó aparcada a la puerta de una plaza ajena.
+    /// Sale de una plaza ajena con todo lo que entró (su columna vuelve al mapa, en la puerta).
     SalirDeAsentamiento { asentamiento: u64, heroe: u64 },
-    /// Un ejército de la Facción de la plaza, a su puerta, entra y se desarma; cada héroe entra como lo haría solo. Solo su Líder.
+    /// Un ejército, a la puerta de una plaza que le abre su puerta, entra con todo (caravanas adjuntas incluidas, sean de donde sean) y se desarma; cada héroe entra
+    /// como lo haría solo. Solo su Líder.
     Guarnecer { asentamiento: u64, heroe: u64 },
-    /// Entra en un campamento de mercenarios (solo, o el ejército entero desarmándose; solo su Líder).
+    /// Entra en un campamento de mercenarios con todo lo suyo (solo, o el ejército entero desarmándose; solo su Líder).
     EntrarEnCampamento { campamento: u32, heroe: u64 },
     /// Se suma, desde su plaza, a un ejército que pasa por su puerta, con las escuadras y la carga que saca.
     UnirseAEjercito { asentamiento: u64, heroe: u64, ejercito: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)> },
@@ -337,6 +340,12 @@ pub enum Comando {
     /// Cancela la mejora o la reparación de la avanzada, en marcha o pendiente de materiales: sin reembolso (lo entregado se pierde) y la avanzada sigue como estaba. La
     /// primera obra no se cancela así: se destruye la avanzada.
     CancelarObraDeAvanzada { heroe: u64, avanzada: u64 },
+    // ── Entrar con todo (2026-10-22). ──
+    /// Quien manda en la plaza decide quién puede entrar en ella según su relación: aliados y vasallos, neutrales, enemigos. La misma Facción entra siempre; las
+    /// avanzadas y los pueblos de la plaza lo heredan. Hasta el sistema político manda quien manda hoy en la plaza (`manda_en`).
+    FijarAcceso { asentamiento: u64, aliados: bool, neutrales: bool, enemigos: bool },
+    /// El héroe vacía el carro que trajo a su residencia en su almacén personal, hasta donde quepa; lo que no cabe se queda en el carro.
+    VaciarCarro { heroe: u64 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -457,6 +466,7 @@ impl Comando {
             | Comando::AlternarReceta { asentamiento, .. }
             | Comando::CalibrarReserva { asentamiento, .. }
             | Comando::SolicitarAscenso { asentamiento }
+            | Comando::FijarAcceso { asentamiento, .. }
             | Comando::ActivarPolitica { asentamiento, .. }
             | Comando::ColocarOrdenMercado { asentamiento, .. }
             | Comando::CrearCaravana { asentamiento }
@@ -501,6 +511,7 @@ impl Comando {
             | Comando::PasarAViveres { heroe, .. }
             | Comando::Desconectarse { heroe }
             | Comando::Conectarse { heroe }
+            | Comando::VaciarCarro { heroe }
             | Comando::FijarFaccionDeHeroe { heroe, .. }
             | Comando::ColocarHeroe { heroe, .. }
             | Comando::HerirHeroe { heroe }
@@ -1247,6 +1258,17 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u64(*avanzada);
             }
+            Comando::FijarAcceso { asentamiento, aliados, neutrales, enemigos } => {
+                w.u8(117);
+                w.u64(*asentamiento);
+                w.bool(*aliados);
+                w.bool(*neutrales);
+                w.bool(*enemigos);
+            }
+            Comando::VaciarCarro { heroe } => {
+                w.u8(118);
+                w.u64(*heroe);
+            }
         }
         w.0
     }
@@ -1416,6 +1438,8 @@ impl Peticion {
             114 => Comando::RepostarEnAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
             115 => Comando::DepositarEnAvanzada { ejercito: r.u64()?, avanzada: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             116 => Comando::CancelarObraDeAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
+            117 => Comando::FijarAcceso { asentamiento: r.u64()?, aliados: r.bool()?, neutrales: r.bool()?, enemigos: r.bool()? },
+            118 => Comando::VaciarCarro { heroe: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1695,14 +1719,14 @@ pub mod rechazos {
     pub const CARGA_NEGATIVA: &str = "carga.negativa";
     pub const CARRO_LLENO: &str = "carro.no_cabe";
     pub const ALMACEN_SIN_EXISTENCIAS: &str = "almacen.sin_existencias";
-    pub const COLUMNA_NO_APARCADA: &str = "columna.no_aparcada";
     pub const COLUMNA_ES_UN_EJERCITO: &str = "columna.es_un_ejercito";
     pub const COLUMNA_EN_FORMACION: &str = "columna.en_formacion";
     pub const COLUMNA_PERSONAL_SIN_CARAVANAS: &str = "columna.personal_sin_caravanas";
     pub const COLUMNA_VIVERES_LLENOS: &str = "columna.viveres_llenos";
     pub const ASENTAMIENTO_FUERA_DE_LA_PUERTA: &str = "asentamiento.fuera_de_la_puerta";
     pub const PUERTA_CERRADA: &str = "puerta.cerrada";
-    pub const CARAVANA_AJENA_AL_LUGAR: &str = "caravana.ajena_al_lugar";
+    pub const VACIAR_SOLO_EN_TU_RESIDENCIA: &str = "carro.vaciar_solo_en_tu_residencia";
+    pub const ALMACEN_PERSONAL_LLENO: &str = "almacen_personal.lleno";
     pub const REPOSTAR_PLAZA_CERRADA: &str = "repostar.plaza_cerrada";
     pub const REPOSTAR_SIN_EXISTENCIAS: &str = "repostar.sin_existencias";
     // Persecución (`ErrorPersecucion`), inspección (`ErrorInspeccion`) y batalla.
@@ -1988,6 +2012,8 @@ mod pruebas {
             Comando::Inspeccionar { heroe: 2, objetivo: Objetivo::Asentamiento(5) },
             Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Vasallaje) },
             Comando::FijarRelacion { a: 3, b: 2, relacion: None },
+            Comando::FijarAcceso { asentamiento: 3, aliados: true, neutrales: false, enemigos: true },
+            Comando::VaciarCarro { heroe: 2 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

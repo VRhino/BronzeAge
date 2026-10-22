@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN16");
+    assert_eq!(&bytes[..5], b"BAN17");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -718,7 +718,7 @@ fn una_plaza_sin_defensores_con_soldados_cae_sin_combate_ni_tirada_y_sin_heridos
     assert_eq!(s.e.n.estado().asentamientos[&b].faccion, 1);
     assert!(!s.e.n.heroe_herido(beto), "sin combate no hiere a nadie");
     assert!(!s.e.n.heroe_herido(ana.1));
-    // Beto estaba dentro y sin columna aparcada: sale a la calle sin escuadras.
+    // Beto estaba dentro y no trajo columna: sale a la calle sin escuadras.
     assert!(matches!(s.e.n.heroe(beto).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(_)));
 }
 
@@ -1174,16 +1174,16 @@ fn una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que
 // ───────────────────────────── 8. Conquista con visitantes, foto y determinismo ─────────────────────────────
 
 #[test]
-fn solo_defiende_quien_esta_dentro_el_visitante_con_su_columna_aparcada_si_y_la_aliada_a_la_puerta_no() {
+fn solo_defiende_quien_esta_dentro_el_visitante_con_su_columna_si_y_la_de_la_misma_faccion_a_la_puerta_no() {
     let m = con_mundo!();
     let mut s = asedio(m, 7, &[Tropa::MiliciaLanceros], &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
     let (b, beto, ana) = (s.e.b, s.beto, s.ana);
-    // Un héroe de la Facción 2 llega de visita con su columna y la deja aparcada a la puerta; defiende con ella, en el cupo que dejan los residentes.
+    // Un héroe de la Facción 2 llega de visita con su columna y entra con todo (queda dentro, fuera del mapa); defiende con ella, en el cupo que dejan los residentes.
     let visita = s.e.ejercito("carla", 2, s.e.pos(b), &[Tropa::MiliciaLanceros]);
     s.e.ok("carla", Comando::Guarnecer { asentamiento: b, heroe: visita.1 });
     let hq = s.e.n.heroe(visita.1).unwrap().heroe.escuadras[0].id;
     assert_eq!(s.e.n.heroe(visita.1).unwrap().heroe.presencia.ubicacion, Ubicacion::Asentamiento(b as u32));
-    assert!(!s.e.n.en_el_mapa(visita.0), "la columna aparcada no está en el mapa");
+    assert!(!s.e.n.en_el_mapa(visita.0), "la columna que entró no está en el mapa");
     let antes = s.e.n.heroe(visita.1).unwrap().heroe.escuadra(hq).unwrap().cantidad;
     // Otro héroe de la Facción 2 se queda con su columna en el mapa, a la puerta, sin entrar: no está dentro y no defiende (2026-10-22).
     let a_la_puerta = s.e.ejercito("fede", 2, s.e.pos(b), &[Tropa::MiliciaLanceros]);
@@ -1194,16 +1194,61 @@ fn solo_defiende_quien_esta_dentro_el_visitante_con_su_columna_aparcada_si_y_la_
     let h = &hechos(&s.e.n, "combate.asedio_conquista");
     assert_eq!(h.len(), 1, "la plaza cae pese a la ayuda");
     let tras = s.e.n.heroe(visita.1).unwrap();
-    assert!(tras.heroe.escuadra(hq).unwrap().cantidad < antes, "la escuadra de la columna aparcada sufrió bajas: defendió");
+    assert!(tras.heroe.escuadra(hq).unwrap().cantidad < antes, "la escuadra de la columna que entró sufrió bajas: defendió");
     let fuera = s.e.n.heroe(a_la_puerta.1).unwrap();
-    assert_eq!(fuera.heroe.escuadra(hf).unwrap().cantidad, antes_fuera, "la columna aliada a la puerta, en el mapa, no defendió: ni una baja");
+    assert_eq!(fuera.heroe.escuadra(hf).unwrap().cantidad, antes_fuera, "la columna de la misma Facción a la puerta, en el mapa, no defendió: ni una baja");
     assert!(!s.e.n.heroe_herido(a_la_puerta.1) && s.e.n.en_el_mapa(a_la_puerta.0));
     assert!(s.e.n.heroe_herido(visita.1) && s.e.n.heroe_herido(beto), "los dos defensores en persona quedan heridos");
-    // Vuelve a su columna aparcada, que ya está otra vez en el mapa, y no es residente: no cambia de casa.
+    // Sale con la columna con la que entró, que ya está otra vez en el mapa, y no es residente: no cambia de casa.
     assert_eq!(tras.heroe.presencia.ubicacion, Ubicacion::Columna(visita.0));
     assert!(s.e.n.en_el_mapa(visita.0));
     assert_ne!(tras.heroe.residencia, s.e.n.heroe(beto).unwrap().heroe.residencia);
     assert_eq!(s.e.n.ejercito(visita.0).unwrap().columna.faccion, Some(2));
+}
+
+#[test]
+fn dentro_defienden_la_misma_faccion_los_aliados_y_los_vasallos_y_los_neutrales_y_los_enemigos_no_y_salen_intactos_al_caer_la_plaza() {
+    let m = con_mundo!();
+    let mut s = asedio(m, 7, &[Tropa::MiliciaLanceros], &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
+    let (b, ana) = (s.e.b, s.ana);
+    // La plaza B es de la Facción 2: la 4 es su aliada, la 5 su vasalla, la 3 no tiene relación con ella y la 6 está en guerra con ella.
+    for (x, r) in [(4, Relacion::Alianza), (5, Relacion::Vasallaje), (6, Relacion::Guerra)] {
+        s.e.ok("admin", Comando::FijarRelacion { a: 2, b: x, relacion: Some(r) });
+    }
+    // Por defecto la puerta se cierra a los enemigos; «beto», que manda en la plaza, se la abre al de la Facción 6 para comprobar que ni dentro defiende.
+    let (cuentas, mut dentro) = ([("alia", 4), ("vasa", 5), ("pepe", 2), ("nora", 3), ("enri", 6)], vec![]);
+    let enemigo_cerrado = s.e.ejercito("cerr", 6, s.e.pos(b), &[Tropa::MiliciaLanceros]);
+    assert_eq!(s.e.rechazada("cerr", Comando::Guarnecer { asentamiento: b, heroe: enemigo_cerrado.1 }), rechazos::PUERTA_CERRADA, "por defecto la puerta se cierra a los enemigos");
+    s.e.ok("beto", Comando::FijarAcceso { asentamiento: b, aliados: true, neutrales: true, enemigos: true });
+    for (cuenta, faccion) in cuentas {
+        let col = s.e.ejercito(cuenta, faccion, s.e.pos(b), &[Tropa::MiliciaLanceros]);
+        s.e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: col.1 });
+        let escuadra = s.e.n.heroe(col.1).unwrap().heroe.escuadras[0].id;
+        assert!(!s.e.n.en_el_mapa(col.0), "{cuenta} está dentro");
+        dentro.push((cuenta, faccion, col, escuadra, soldados(&s.e.n, col.1, escuadra)));
+    }
+    let a_la_puerta = s.e.ejercito("fede", 4, s.e.pos(b), &[Tropa::MiliciaLanceros]);
+    let hf = s.e.n.heroe(a_la_puerta.1).unwrap().heroe.escuadras[0].id;
+
+    assert!(s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    assert_eq!(hechos(&s.e.n, "combate.asedio_conquista").len(), 1, "la plaza cae pese a la ayuda de los suyos");
+    for (cuenta, faccion, col, escuadra, antes) in dentro {
+        let h = s.e.n.heroe(col.1).unwrap();
+        let ahora = h.heroe.escuadra(escuadra).unwrap().cantidad;
+        // Salen al mapa con su columna (nadie queda en una plaza conquistada); los que defendieron, con las bajas y heridos; los demás, intactos.
+        assert_eq!((h.heroe.presencia.ubicacion, s.e.n.en_el_mapa(col.0)), (nucleo_ubicacion_columna(col.0), true), "{cuenta} sale al mapa con su columna");
+        if matches!(faccion, 2 | 4 | 5) {
+            assert!(ahora < antes && s.e.n.heroe_herido(col.1), "{cuenta} (F{faccion}) defendió: bajas {antes} -> {ahora} y herido");
+        } else {
+            assert!(ahora == antes && !s.e.n.heroe_herido(col.1), "{cuenta} (F{faccion}) no defiende nunca, aunque estuviera dentro: sale sin perder nada ({antes} -> {ahora})");
+        }
+    }
+    assert_eq!(soldados(&s.e.n, a_la_puerta.1, hf), completa(Tropa::MiliciaLanceros), "la aliada a la puerta, en el mapa, no defendió");
+    assert!(!s.e.n.heroe_herido(a_la_puerta.1));
+}
+
+fn nucleo_ubicacion_columna(c: u64) -> militar::presencia::Ubicacion {
+    militar::presencia::Ubicacion::Columna(c)
 }
 
 /// El mismo guion de dos asedios con bandidos y un anillo a su alrededor, con las órdenes en instantes fijos: `avanzar` solo decide cómo se mueve el reloj entre

@@ -346,8 +346,10 @@ color de la orla.
 Facción dueña** (no tiene que estar presente), y manda el último. `vetarJugador(plaza, vetado, vetar)`: añade o quita de `vetadosIds` (ordenado); solo el Gobernador residente y presente; **a un residente no se le
 veta**. El grupo `aedas` lo usa `Tecnologia_Aedas.md`.
 
-`cruzarLaPuerta` (entrar): solo en columna personal, a ≤ `MOVIMIENTO.radioPuerta` y con `puedeEntrarEn`; en la propia residencia la columna se disuelve (tropa al campamento, carro al almacén), en otra se queda
-aparcada a la puerta. Detalle en `Movimiento_Ejercitos.md`.
+`cruzarLaPuerta` (entrar): solo en columna personal, a ≤ `MOVIMIENTO.radioPuerta` y con `puedeEntrarEn`; en la propia residencia la columna se disuelve (tropa al campamento; el carro se queda con el héroe, desde el
+2026-10-22), en otra entra con todo y queda dentro. Detalle en `Movimiento_Ejercitos.md`.
+
+> **Implementado en Rust (2026-10-22, entrar con todo): la puerta provisional.** Hasta el sistema político (5) no existen `fijarPuerta`, los vetos ni los grupos `aedas`. En su lugar `FijarAcceso { asentamiento, aliados, neutrales, enemigos }` (117) deja que quien manda en la plaza (`manda_en`: la administración o un ciudadano de su Facción) decida por **relación** (las de `FijarRelacion`: alianza o vasallaje → `aliados`; guerra → `enemigos`; el resto, y quien no tiene Facción, → `neutrales`) quién puede entrar; la misma Facción y los residentes pasan siempre. **Por defecto entran todos menos los enemigos** (la decisión del autor del 2026-10-22; el `PUERTA.cerradaAPorDefecto` del bloque, neutrales y enemigos, es del sistema político y no se aplica todavía). Los pueblos extractores y las avanzadas heredan el acceso de su plaza madre (`puede_entrar_en_pueblo`, `puede_entrar_en_avanzada`; hoy sin orden de entrar). Cerrar la puerta no echa a quien ya está dentro. Ver [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md).
 
 <!-- parametros:CIUDADANIA -->
 ```json

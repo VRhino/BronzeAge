@@ -4,7 +4,7 @@
 //! # Qué está en la rejilla
 //! La [`Rejilla`] de `encuentros` reúne todo lo que cuenta en el mapa, cada cosa con su plan:
 //! - una **columna en el mapa**, en marcha (su plan) o acampada (quieta hasta el horizonte). Está en el mapa si alguno de sus héroes va a bordo y no está
-//!   apartada por una batalla. Una columna que queda aparcada a la puerta de un lugar —su gente dentro— o en batalla **sale**, y con ella se van sus
+//!   apartada por una batalla. Una columna que ha entrado en un lugar —su gente dentro, con todo lo suyo— o está en batalla **sale**, y con ella se van sus
 //!   encuentros y sus perseguidores (`columna.presa_a_cubierto`);
 //! - una **caravana** en tránsito o de regreso (su plan; las adjuntas viajan con su columna y no están);
 //! - una **plaza**, fija desde que se funda hasta que cae en ruinas;

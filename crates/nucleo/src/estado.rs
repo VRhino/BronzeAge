@@ -13,7 +13,7 @@ use crate::economia::StockNodo;
 use crate::estado_batallas::EstadoBatallas;
 use crate::estado_combate::EstadoCombate;
 use crate::estado_comercio::EstadoComercio;
-use crate::estado_militar::EstadoMilitar;
+use crate::estado_militar::{Acceso, EstadoMilitar};
 use crate::urbanismo::{Urbanismo, Urbe};
 use base::{Instante, Mil, Plan, Punto, Rng};
 use cola::{Clave, Cola, Evento, Generaciones};
@@ -58,6 +58,9 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// Anotada en `Docs/Mecanicas a desarrollar.md`, sección de paridad.
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN17: BAN16 más el acceso de cada plaza (`Asentamiento::acceso`: aliados, neutrales y enemigos; Entrar con todo, 2026-10-22). El resto del formato es el mismo: el carro que
+/// un héroe lleva sin columna (`HeroeNucleo::carro`, antes `carro_fuera`) ya estaba en la foto. BAN16 se rechaza: sus plazas no traen acceso.
+///
 /// BAN16: BAN15 con el fin de la obra de una avanzada en una cita propia (`SucesoCombate::FinObraAvanzada`, de la entidad `entidad_obra_de_avanzada`) en lugar de la
 /// cita de fin de obras de su plaza (`Carga::FinDeObras`): así cancelarla, o perderla con la avanzada, la descarta sin tocar nada más. Las cifras del bloque `AVANZADAS`
 /// cambian (la huella de reglas). BAN15 se rechaza: sus obras de avanzada esperaban en la cita de la plaza y su huella de reglas no es la de hoy.
@@ -77,7 +80,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN16";
+const MAGIA: &[u8; 5] = b"BAN17";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -276,6 +279,9 @@ pub struct Asentamiento {
     /// Ocupada hasta este instante (`OCUPACION.duracionMinutos`): su recaudación y su crecimiento valen el `factorRecaudacion` y el `factorCrecimiento` de la
     /// ocupación y su mantenimiento está congelado (`economia.ocupado`). Un evento de la cola la levanta.
     pub ocupada_hasta: Option<Instante>,
+    /// Quién puede entrar en la plaza, por relación con su Facción (Entrar con todo, 2026-10-22). Lo fija quien manda en ella (`FijarAcceso`) y lo heredan sus pueblos
+    /// extractores y sus avanzadas.
+    pub acceso: Acceso,
 }
 
 impl Asentamiento {
@@ -639,7 +645,7 @@ impl Estado {
         }
     }
 
-    /// La columna de un héroe: aquella en la que va o la que dejó aparcada a la puerta del lugar donde entró de visita.
+    /// La columna de un héroe: aquella en la que va o con la que entró de visita en un lugar ajeno (dentro, fuera del mapa).
     pub fn ejercito_de_heroe(&self, heroe: u64) -> Option<u64> {
         self.militar.heroes.get(&heroe)?.columna
     }
@@ -708,6 +714,9 @@ impl Estado {
             codec_ciudad::escribir(&mut w, a.urbe.ciudad());
             w.opt_i64(a.protegida_hasta);
             w.opt_i64(a.ocupada_hasta);
+            w.bool(a.acceso.aliados);
+            w.bool(a.acceso.neutrales);
+            w.bool(a.acceso.enemigos);
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -808,7 +817,7 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN16`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
+        // La cabecera es de 5 bytes (`BAN17`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
         match (r.magia()? == MAGIA[..4]).then(|| r.u8()).transpose()? {
             Some(f) if f == MAGIA[4] => {}
             Some(b'0') => return Err(ErrorFormato("foto del formato BAN10 (sin persecuciones ni informes de inspección, con los encuentros en un generador externo): ya no se admite")),
@@ -817,6 +826,7 @@ impl Estado {
             Some(b'3') => return Err(ErrorFormato("foto del formato BAN13 (población continua en milésimas, sin resto ni marca de recuperación del hambre y sin las citas de fin de obra y de política): ya no se admite")),
             Some(b'4') => return Err(ErrorFormato("foto del formato BAN14 (sin avanzadas, sin guarnición de avanzada en las escuadras y con una huella de reglas que no incluye las cifras de las avanzadas): ya no se admite")),
             Some(b'5') => return Err(ErrorFormato("foto del formato BAN15 (el fin de la obra de una avanzada espera en la cita de su plaza, sin cita propia que se pueda cancelar, y con las cifras de las avanzadas de antes de su tamaño): ya no se admite")),
+            Some(b'6') => return Err(ErrorFormato("foto del formato BAN16 (las plazas no traen el acceso por relación de Entrar con todo): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
@@ -876,6 +886,7 @@ impl Estado {
             let economia = codec_economia::leer(&mut r)?;
             let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r)?);
             let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
+            let acceso = Acceso { aliados: r.bool()?, neutrales: r.bool()?, enemigos: r.bool()? };
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -884,7 +895,7 @@ impl Estado {
             for p in &economia.pueblos {
                 s.nodos_reclamados.insert(p.nodo, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, acceso });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;

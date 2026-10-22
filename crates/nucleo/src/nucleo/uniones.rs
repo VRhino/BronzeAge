@@ -9,7 +9,6 @@
 use super::*;
 use crate::estado_militar::{entidad_formacion, entidad_peticion_de_union};
 use crate::estado::{SucesoMilitar, PRIO_LLEGADA};
-use crate::nucleo::mercado::id32;
 use crate::nucleo::mercado::RADIO_PUERTA;
 use crate::nucleo::salidas::Destino;
 use asentamiento::datos::UNO;
@@ -56,8 +55,9 @@ impl Nucleo {
         Ok(completa)
     }
 
-    /// Desarma la columna (una formación, o un ejército que entra en un lugar): el Líder se queda con la columna, que vuelve a ser personal, y cada otro
-    /// nace como columna personal donde estaba con lo suyo (`Columna::desarmar`). Para quieta, si marchaba. Devuelve los ids de las columnas nuevas.
+    /// Desarma la columna (una formación, o un ejército que entra en un lugar): el Líder se queda con la columna, que vuelve a ser personal (salvo que lleve
+    /// caravanas adjuntas), y cada otro nace como columna personal donde estaba con lo suyo (`Columna::desarmar`). Para quieta, si marchaba. Devuelve los ids de las
+    /// columnas nuevas.
     pub(super) fn desarmar_columna(&mut self, t: Instante, id: u64) -> Vec<u64> {
         let mr = self.estado.reglas.economia.militar.clone();
         if self.estado.ejercitos[&id].marchando() {
@@ -67,6 +67,8 @@ impl Nucleo {
         let posicion = self.estado.ejercitos[&id].posicion_en(t);
         let Estado { ejercitos, militar, siguiente_id, .. } = &mut self.estado;
         let e = ejercitos.get_mut(&id).expect("existe");
+        // Un ejército que entra en un lugar con caravanas adjuntas las conserva con su Líder, y una personal no las lleva: sigue siendo un ejército mientras las lleve.
+        let (tipo, politica) = (e.columna.tipo, e.columna.politica);
         let heroes = Self::participantes_de(e);
         let suyas_de = |h: u64| militar.heroes.get(&h).map_or(vec![], |hn| hn.heroe.escuadras.iter().filter(|s| s.contenedor == Contenedor::Ejercito(id)).map(|s| s.id).collect());
         let nuevas = e.columna.desarmar(
@@ -79,6 +81,9 @@ impl Nucleo {
             &suyas_de,
             &|ids| militar.soldados_de(&heroes, ids),
         );
+        if !e.caravanas_adjuntas.is_empty() {
+            (e.columna.tipo, e.columna.politica) = (tipo, politica);
+        }
         let ids: Vec<u64> = nuevas.iter().map(|c| c.id).collect();
         for c in nuevas {
             let heroe = c.lider;
@@ -96,29 +101,6 @@ impl Nucleo {
     pub(super) fn deshacer_formacion(&mut self, id: u64, t: Instante) {
         let sueltas = self.desarmar_columna(t, id);
         self.evento_de_columna("columna.formacion_disuelta", t, id, vec![], vec![("columnas", sueltas.len() as i64 + 1)]);
-    }
-
-    // ───────────────────────────── Caravanas al entrar ─────────────────────────────
-
-    /// Solo entra en una plaza un ejército cuyas caravanas adjuntas son **todas** de esa plaza (Movimiento_Ejercitos §11).
-    pub(super) fn caravanas_del_lugar(&self, e: &Ejercito, plaza: u64) -> Result<(), Respuesta> {
-        let ajena = e.caravanas_adjuntas.iter().filter_map(|&c| self.estado.comercio.caravana(c)).find(|c| c.origen as u64 != plaza);
-        match ajena {
-            Some(c) => Err(Respuesta::rechazo(rechazos::CARAVANA_AJENA_AL_LUGAR, format!("la caravana {} no es de este lugar: hay que soltarla o llevarla a su origen antes de entrar", c.id), self.estado.version)),
-            None => Ok(()),
-        }
-    }
-
-    /// Las caravanas adjuntas de la columna quedan aparcadas en la plaza donde entra.
-    pub(super) fn aparcar_todas(&mut self, t: Instante, columna: u64, plaza: u64, posicion: Punto) {
-        let adjuntas = std::mem::take(&mut self.estado.ejercitos.get_mut(&columna).expect("existe").caravanas_adjuntas);
-        for c in adjuntas {
-            if let Some(i) = self.estado.comercio.posicion_caravana(c) {
-                if self.estado.comercio.flota[i].aparcar(id32(plaza), posicion).is_ok() {
-                    self.evento("ejercito.caravana_aparcada", t, columna, None, vec![("caravana", c as i64), ("plaza", plaza as i64)]);
-                }
-            }
-        }
     }
 
     // ───────────────────────────── Las órdenes ─────────────────────────────

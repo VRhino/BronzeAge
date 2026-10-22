@@ -379,7 +379,7 @@ fn marchar_come_un_cuarto_de_racion_la_velocidad_es_la_de_la_tropa_mas_lenta_y_a
 // ───────────────────────────── 3. Entrar en un lugar ─────────────────────────────
 
 #[test]
-fn entrar_en_la_propia_residencia_deshace_la_columna_y_en_otra_plaza_la_deja_aparcada() {
+fn entrar_en_la_propia_residencia_deja_el_carro_con_el_heroe_y_en_otra_plaza_la_columna_entra_con_el_visitante() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     e.avanzar(24 * HORA);
@@ -389,21 +389,31 @@ fn entrar_en_la_propia_residencia_deshace_la_columna_y_en_otra_plaza_la_deja_apa
     let col = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![(Madera, 40_000)] }).creadas[0];
     let viveres = e.viveres(col);
     let entrar = Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h };
-    // Entrar en la propia residencia: la columna se deshace dentro.
+    // Entrar en la propia residencia: la columna se deshace dentro, la tropa vuelve al campamento y el carro NO se vacía: se queda con el héroe (Entrar con todo).
     e.ok("ana", entrar.clone());
     assert!(e.n.ejercito(col).is_none(), "la columna desaparece");
     let hn = e.n.heroe(h).unwrap();
     assert_eq!((hn.columna, hn.heroe.presencia.ubicacion, hn.heroe.viveres), (None, Ubicacion::Asentamiento(a as u32), viveres), "los víveres siguen con el héroe");
+    assert_eq!(hn.carro[&Madera], 40_000, "el carro entra con él");
     assert_eq!(e.escuadra(h, milicia).contenedor, Contenedor::Campamento);
-    assert_eq!(e.almacen(Madera), madera0, "el carro vuelve al almacén");
+    assert_eq!(e.almacen(Madera), madera0 - 40_000, "el almacén de la plaza no recibe el carro (antes se vaciaba solo)");
     assert_eq!(hechos(&e.n, "jugador.entra_en_asentamiento").len(), 1);
-    assert_eq!(e.rechazada("ana", entrar), rechazos::HEROE_SIN_COLUMNA, "dentro de la plaza ya no va en ninguna columna");
+    assert_eq!(e.rechazada("ana", entrar.clone()), rechazos::HEROE_SIN_COLUMNA, "dentro de la plaza ya no va en ninguna columna");
 
-    // Volver a salir: los víveres que lleva el héroe pasan a la columna nueva.
+    // Volver a salir: los víveres que lleva el héroe y el carro que trajo pasan a la columna nueva.
     let col2 = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![], carga: vec![] }).creadas[0];
     assert!(e.viveres(col2) >= viveres.min(350_000));
+    assert_eq!((e.ejercito(col2).columna.carga[&Madera], e.n.heroe(h).unwrap().carro.is_empty()), (40_000, true), "sale con el carro que trajo");
+    // Entrar de nuevo y vaciarlo con la orden explícita: el almacén personal lo recibe.
+    e.ok("ana", entrar.clone());
+    e.ok("ana", Comando::VaciarCarro { heroe: h });
+    let hn = e.n.heroe(h).unwrap();
+    assert_eq!((hn.almacen_personal[&Madera], hn.carro.is_empty()), (40_000, true));
+    assert_eq!(e.ord("ana", Comando::VaciarCarro { heroe: h }).resultado, Resultado::SinCambios, "con el carro vacío no hay nada que hacer");
+    let col2 = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![], carga: vec![] }).creadas[0];
+    assert!(e.ejercito(col2).columna.carga.is_empty());
 
-    // De visita: un ciudadano de la misma Facción que reside en un campamento entra con su columna y esta queda aparcada.
+    // De visita: un ciudadano de la misma Facción que reside en un campamento entra con su columna, que queda dentro.
     let (b, ids) = e.con_prestamo("beto", 0);
     let cb = e.ok("beto", Comando::SalirDelCampamento { campamento: 0, heroe: b, escuadras: ids.clone(), carga: vec![], politica: Politica::Rechazar }).creadas[0];
     let destino = e.plaza();
@@ -411,17 +421,18 @@ fn entrar_en_la_propia_residencia_deshace_la_columna_y_en_otra_plaza_la_deja_apa
     e.ok("beto", Comando::MarcharA { ejercito: cb, destino });
     let fin = e.ejercito(cb).plan.fin().unwrap();
     e.n.avanzar_hasta(fin);
-    // Un extranjero (Facción 2) o sin Facción no entra: la puerta está cerrada a neutrales.
+    // Un extranjero (Facción 2): por defecto la puerta solo se cierra a los enemigos, así que entraría; el dueño decide cerrarla a los neutrales (`fijarAcceso`).
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: b, faccion: Some(2) });
+    e.ok("ana", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: false, enemigos: false });
     assert_eq!(e.rechazada("beto", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: b }), rechazos::PUERTA_CERRADA);
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: b, faccion: Some(1) });
     e.ok("beto", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: b });
     let hb = e.n.heroe(b).unwrap();
-    assert_eq!((hb.columna, hb.heroe.presencia.ubicacion), (Some(cb), Ubicacion::Asentamiento(a as u32)), "su columna sigue siendo suya, aparcada a la puerta");
-    assert!(e.n.ejercito(cb).is_some());
+    assert_eq!((hb.columna, hb.heroe.presencia.ubicacion), (Some(cb), Ubicacion::Asentamiento(a as u32)), "su columna sigue siendo suya: entra con él, dentro, fuera del mapa");
+    assert!(e.n.ejercito(cb).is_some() && !e.n.en_el_mapa(cb));
     assert_eq!(e.rechazada("beto", Comando::MarcharA { ejercito: cb, destino: campamento(&m.0, 0) }), rechazos::HEROE_DENTRO_DE_UN_LUGAR, "dentro de un lugar no se dirige la columna");
-    assert_eq!(e.escuadra(b, ids[0]).contenedor, Contenedor::Ejercito(cb), "la tropa no se mueve de la columna aparcada");
-    // Retomarla: desde la plaza ajena, sin elegir nada; desde la propia residencia no (allí se sale al mundo).
+    assert_eq!(e.escuadra(b, ids[0]).contenedor, Contenedor::Ejercito(cb), "la tropa no se mueve de su columna");
+    // Salir con todo lo que entró: desde la plaza ajena, sin elegir nada; desde la propia residencia no (allí se sale al mundo).
     assert_eq!(e.rechazada("ana", Comando::SalirDeAsentamiento { asentamiento: a, heroe: h }), rechazos::SALIDA_DESDE_TU_RESIDENCIA, "desde la propia residencia se sale al mundo");
     e.ok("beto", Comando::SalirDeAsentamiento { asentamiento: a, heroe: b });
     assert_eq!(e.n.heroe(b).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(cb));
@@ -431,7 +442,7 @@ fn entrar_en_la_propia_residencia_deshace_la_columna_y_en_otra_plaza_la_deja_apa
 // ───────────────────────────── 4. Salir de un campamento y entrar en él ─────────────────────────────
 
 #[test]
-fn salir_del_campamento_da_la_racion_gratis_cada_media_hora_y_el_visitante_retoma_su_columna() {
+fn salir_del_campamento_da_la_racion_gratis_cada_media_hora_y_entrar_en_el_deja_el_carro_con_el_heroe() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     let (h, ids) = e.con_prestamo("ana", 0);
@@ -452,32 +463,28 @@ fn salir_del_campamento_da_la_racion_gratis_cada_media_hora_y_el_visitante_retom
     assert_eq!((e.viveres(col), e.ejercito(col).posicion), (350_000, campamento(&m.0, 0)));
     assert_eq!(hechos(&e.n, "jugador.sale_de_campamento").len(), 1);
 
-    // Entrar de nuevo en su campamento: la tropa vuelve a él, el carro se vuelca en el almacén personal y los víveres siguen con el héroe.
+    // Entrar de nuevo en su campamento: la tropa vuelve a él y los víveres siguen con el héroe, pero el carro NO se vuelca en el almacén personal: se queda con él
+    // (Entrar con todo). `vaciarCarro` lo pasa al almacén.
     e.ok("ana", Comando::EntrarEnCampamento { campamento: 0, heroe: h });
     assert!(e.n.ejercito(col).is_none());
     let hn = e.n.heroe(h).unwrap();
-    assert_eq!((hn.almacen_personal[&Oro], hn.heroe.viveres, hn.heroe.presencia.ubicacion, hn.columna), (50_000, 350_000, Ubicacion::Mercenarios(0), None));
+    assert_eq!((hn.almacen_personal[&Oro], hn.carro[&Oro], hn.heroe.viveres, hn.heroe.presencia.ubicacion, hn.columna), (30_000, 20_000, 350_000, Ubicacion::Mercenarios(0), None));
     assert_eq!(e.escuadra(h, ids[0]).contenedor, Contenedor::Campamento);
-    // La ración gratis es cada 30 minutos y no se acumula: si no ha pasado el plazo, sale con los víveres que lleva (los del héroe).
+    // La ración gratis es cada 30 minutos y no se acumula: si no ha pasado el plazo, sale con los víveres que lleva (los del héroe) y con el carro que trajo.
     let col2 = e.ok("ana", salir(&ids, &[], Politica::Rechazar)).creadas[0];
-    assert_eq!(e.viveres(col2), 350_000, "los que traía el héroe");
+    assert_eq!((e.viveres(col2), e.ejercito(col2).columna.carga[&Oro]), (350_000, 20_000), "los víveres que traía el héroe y el carro con el que entró");
     assert_eq!(e.n.heroe(h).unwrap().heroe.racion_en, Some(t), "la ración no se renovó: no pasaron 30 minutos");
 
-    // Lo que no cabe en el almacén personal se queda en el carro: la columna sigue aparcada a la puerta, sin escuadras, y se retoma al salir.
-    e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 1_000_000 });
+    // Lo que no cabe en el almacén personal se queda en el carro, que sale con el héroe: el almacén queda a 10 000 de su tope (1 000 000) y el carro lleva 20 000.
     e.ok("ana", Comando::EntrarEnCampamento { campamento: 0, heroe: h });
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 960_000 });
+    assert_eq!(e.n.heroe(h).unwrap().almacen_personal[&Oro], 990_000);
+    e.ok("ana", Comando::VaciarCarro { heroe: h });
     let h0 = e.n.heroe(h).unwrap();
-    assert_eq!(h0.almacen_personal[&Oro], 1_000_000, "lleno");
-    let col3 = e.ok("ana", salir(&ids, &[(Oro, 500_000)], Politica::Rechazar)).creadas[0];
-    e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 500_000 });
-    e.ok("ana", Comando::EntrarEnCampamento { campamento: 0, heroe: h });
-    let resto = e.ejercito(col3);
-    assert_eq!((resto.columna.escuadras.len(), resto.columna.carga[&Oro]), (0, 500_000), "el oro que no cupo queda en el carro");
-    assert_eq!(e.n.heroe(h).unwrap().columna, Some(col3));
-    assert_eq!(e.escuadra(h, ids[0]).contenedor, Contenedor::Campamento);
-    let r = e.ok("ana", salir(&ids, &[], Politica::Rechazar));
-    assert!(r.creadas.is_empty(), "retoma la misma columna: no nace otra");
-    assert_eq!((e.ejercito(col3).columna.escuadras.clone(), e.ejercito(col3).columna.carga[&Oro]), (ids.clone(), 500_000));
+    assert_eq!((h0.almacen_personal[&Oro], h0.carro[&Oro]), (1_000_000, 10_000), "lleno: lo que no cabe se queda en el carro");
+    assert_eq!(e.rechazada("ana", Comando::VaciarCarro { heroe: h }), rechazos::ALMACEN_PERSONAL_LLENO);
+    let col3 = e.ok("ana", salir(&ids, &[], Politica::Rechazar)).creadas[0];
+    assert_eq!((e.ejercito(col3).columna.escuadras.clone(), e.ejercito(col3).columna.carga[&Oro]), (ids.clone(), 10_000), "se lleva lo que no cupo");
     assert_eq!(e.n.heroe(h).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(col3));
 }
 
@@ -708,7 +715,7 @@ fn quien_se_desconecta_en_campo_se_lleva_lo_suyo_el_mando_pasa_al_mas_antiguo_y_
 // ───────────────────────────── 8. Guarnecer, entrar en el campamento y unirse desde la plaza ─────────────────────────────
 
 #[test]
-fn guarnecer_desarma_el_ejercito_en_la_puerta_el_residente_entra_normal_y_el_de_visita_deja_su_columna_aparcada() {
+fn guarnecer_desarma_el_ejercito_en_la_puerta_el_residente_entra_con_su_carro_y_el_de_visita_con_su_columna_dentro() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     e.avanzar(24 * HORA);
@@ -731,19 +738,20 @@ fn guarnecer_desarma_el_ejercito_en_la_puerta_el_residente_entra_normal_y_el_de_
     let (v, hash) = (e.n.version(), e.n.hash_estado());
     e.ok("ana", guarnecer(a));
     assert_ne!((v, hash), (e.n.version(), e.n.hash_estado()));
-    // «ana» reside aquí: la tropa vuelve al campamento y el carro al almacén, y la columna desaparece.
+    // «ana» reside aquí: la tropa vuelve al campamento y la columna desaparece, pero el carro no se vacía: se queda con ella.
     let hn = e.n.heroe(a).unwrap();
     assert_eq!((hn.columna, hn.heroe.presencia.ubicacion), (None, Ubicacion::Asentamiento(pl as u32)));
     assert_eq!(e.escuadra(a, milicia).contenedor, Contenedor::Campamento);
     assert!(e.n.ejercito(ej).is_none());
-    assert_eq!(e.almacen(Madera) - madera0, 10_000, "el carro se reparte entre los dos héroes y el de ana vuelve al almacén");
-    // «beto» entra de visita: su columna personal queda aparcada a la puerta con su tropa.
+    assert_eq!((e.almacen(Madera), e.n.heroe(a).unwrap().carro[&Madera]), (madera0, 10_000), "el carro se reparte entre los dos héroes y el de ana se queda con ella");
+    // «beto» entra de visita: su columna personal queda dentro con su tropa.
     let hb = e.n.heroe(b).unwrap();
     let suya = hb.columna.expect("su columna sigue siendo suya");
     assert_eq!(e.ejercito(suya).columna.carga[&Madera], 10_000);
     assert_eq!(hb.heroe.presencia.ubicacion, Ubicacion::Asentamiento(pl as u32));
     assert_eq!((e.ejercito(suya).columna.tipo, e.ejercito(suya).columna.escuadras.clone()), (TipoColumna::Personal, ib));
     assert_eq!(hechos(&e.n, "ejercito.guarnece").len(), 1);
+    assert!(!e.n.en_el_mapa(suya), "su columna está dentro, fuera del mapa");
     assert_eq!(e.rechazada("ana", guarnecer(a)), rechazos::HEROE_SIN_COLUMNA);
 
     // Una personal no guarnece: entra con `entrarEnAsentamiento`.
@@ -752,7 +760,7 @@ fn guarnecer_desarma_el_ejercito_en_la_puerta_el_residente_entra_normal_y_el_de_
 }
 
 #[test]
-fn un_ejercito_entra_entero_en_su_campamento_y_no_con_una_caravana_enganchada() {
+fn un_ejercito_entra_entero_en_su_campamento_con_todo() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     let ((a, ej, ia), (b, _, ib)) = ejercito_y_viajero(&mut e, Politica::Aceptar);

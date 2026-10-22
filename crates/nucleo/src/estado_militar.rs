@@ -47,12 +47,14 @@ pub struct HeroeNucleo {
     pub almacen_personal: Mercancia,
     /// Lo comprado hoy en el mercado de su campamento de residencia, por bien con cupo (madera y piedra).
     pub cupo: CupoDiario,
-    /// La columna en la que es participante: aquella en la que va (`ubicacion = columna`) o la que dejó aparcada a la puerta del lugar donde
-    /// entró de visita. Una columna lista a sus participantes y este campo la nombra: se mantienen juntos (`Nucleo::meter_en_columna`).
+    /// La columna en la que es participante: aquella en la que va (`ubicacion = columna`) o con la que entró **dentro** de un lugar ajeno (Entrar con todo,
+    /// 2026-10-22: no está en el mapa; es lo que trajo consigo y sale con él). Una columna lista a sus participantes y este campo la nombra: se mantienen
+    /// juntos (`Nucleo::meter_en_columna`).
     pub columna: Option<u64>,
-    /// El carro con el que salió del mundo (Presencia_Y_Convocatoria §7): sus escuadras están `fuera` con él, y al conectarse nace su columna con
-    /// ese carro. Vacío si no salió con una columna.
-    pub carro_fuera: Mercancia,
+    /// El carro que lleva sin columna: el de antes de salir del mundo con ella (Presencia_Y_Convocatoria §7: sus escuadras están `fuera` con él, y al
+    /// conectarse nace su columna con ese carro) o el que trajo a **su residencia** (entrar en ella no lo vacía; `VaciarCarro` lo pasa al almacén personal y
+    /// al salir se lo lleva). Vacío en cualquier otro momento: un visitante tiene el suyo en su columna.
+    pub carro: Mercancia,
     /// Héroe de campo del andamiaje de administración (`CrearEjercito`): lleva una columna creada a mano. No cuenta como «el héroe de la cuenta»
     /// (`heroe_de_cuenta`, `crearHeroe`), de modo que una cuenta puede tener varias columnas de escenario además de su héroe.
     pub sintetico: bool,
@@ -64,7 +66,7 @@ pub struct HeroeNucleo {
 impl HeroeNucleo {
     /// Un héroe sin columna, sin almacén personal, sin cupo gastado y sin informes.
     pub fn nuevo(heroe: Heroe, cuenta: &str, faccion: Option<u32>) -> Self {
-        Self { heroe, cuenta: cuenta.to_owned(), faccion, almacen_personal: Mercancia::new(), cupo: CupoDiario::default(), columna: None, carro_fuera: Mercancia::new(), sintetico: false, informes: Vec::new() }
+        Self { heroe, cuenta: cuenta.to_owned(), faccion, almacen_personal: Mercancia::new(), cupo: CupoDiario::default(), columna: None, carro: Mercancia::new(), sintetico: false, informes: Vec::new() }
     }
 }
 
@@ -77,6 +79,47 @@ pub enum Relacion {
     Vasallaje,
     /// Se puede atacar sin declarar la guerra (Combate §2, fase 4D).
     Guerra,
+}
+
+/// Cómo trata una plaza a quien llega, según la relación de su Facción con la de la plaza (Entrar con todo, 2026-10-22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trato {
+    /// La misma Facción: siempre entra, y defiende.
+    Propia,
+    /// Aliada o vasalla: entra si el dueño lo permite, y defiende.
+    Aliada,
+    /// Sin relación (o sin Facción): entra si el dueño lo permite; nunca defiende.
+    Neutral,
+    /// En guerra: entra si el dueño lo permite (por defecto no); nunca defiende.
+    Enemiga,
+}
+
+/// Quién puede entrar en una plaza, por relación con su Facción: el dueño lo decide (`FijarAcceso`) y los pueblos extractores y las avanzadas de la plaza lo
+/// heredan. La misma Facción entra siempre. Por defecto, hasta el sistema político, entran todos menos los enemigos.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Acceso {
+    /// Aliados y vasallos.
+    pub aliados: bool,
+    pub neutrales: bool,
+    pub enemigos: bool,
+}
+
+impl Default for Acceso {
+    fn default() -> Self {
+        Self { aliados: true, neutrales: true, enemigos: false }
+    }
+}
+
+impl Acceso {
+    /// ¿Deja pasar a quien se le trata así? La misma Facción pasa siempre.
+    pub fn permite(&self, trato: Trato) -> bool {
+        match trato {
+            Trato::Propia => true,
+            Trato::Aliada => self.aliados,
+            Trato::Neutral => self.neutrales,
+            Trato::Enemiga => self.enemigos,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -147,6 +190,26 @@ impl EstadoMilitar {
     /// La relación entre dos Facciones, si la administración fijó una.
     pub fn relacion(&self, a: u32, b: u32) -> Option<Relacion> {
         self.relaciones.get(&(a.min(b), a.max(b))).copied()
+    }
+
+    /// Cómo trata una plaza de la Facción `plaza` a alguien de la Facción `visitante` (sin Facción: neutral). Es la relación del stub de administración
+    /// (`FijarRelacion`): alianza y vasallaje cuentan igual; la guerra es «enemiga».
+    pub fn trato(&self, plaza: u32, visitante: Option<u32>) -> Trato {
+        match visitante {
+            Some(f) if f == plaza => Trato::Propia,
+            Some(f) => match self.relacion(f, plaza) {
+                Some(Relacion::Alianza | Relacion::Vasallaje) => Trato::Aliada,
+                Some(Relacion::Guerra) => Trato::Enemiga,
+                None => Trato::Neutral,
+            },
+            None => Trato::Neutral,
+        }
+    }
+
+    /// ¿Defendería a una plaza de la Facción `plaza` quien es de la Facción `visitante` estando dentro? Solo la misma Facción, los aliados y los vasallos
+    /// (neutrales y enemigos nunca, aunque estén dentro).
+    pub fn defiende_a(&self, plaza: u32, visitante: Option<u32>) -> bool {
+        matches!(self.trato(plaza, visitante), Trato::Propia | Trato::Aliada)
     }
 
     /// ¿Son aliadas? Solo la alianza: el vasallaje comparte visión pero no es lo que impide perseguir ni atacar (Movimiento_Ejercitos §7). Una

@@ -9,7 +9,7 @@
 //! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 · puntos de
 //! atributo i64 · puntos de perk i64 · atributos{fuerza, destreza, armadura, vitalidad: 4 × i64} · perks{n u64 · n × u32} · loadouts{n u64 ·
 //! n × (id u64, nombre texto, escuadras{n u64 · n × u64}, perks{n u64 · n × u32}, activo bool)} · monedas{bronce, plata, oro: 3 × i64} ·
-//! herido_hasta opt_i64 · víveres i64 · ración_en opt_i64 · almacén personal{carga} · cupo{día i64 · carga} · columna opt_u64 · carro_fuera{carga} · sintético bool ·
+//! herido_hasta opt_i64 · víveres i64 · ración_en opt_i64 · almacén personal{carga} · cupo{día i64 · carga} · columna opt_u64 · carro{carga} · sintético bool ·
 //! informes{n u64 · n × informe} ·
 //! escuadras{n u64 · n × escuadra}`.
 //! Una convocatoria: `id u64 · facción u32 · lugar{u8: 0 plaza, 1 campamento · u32} · líder u64 · política u8 · integrantes{n u64 · n × (héroe u64,
@@ -206,7 +206,7 @@ fn lista_u32_leer(r: &mut Lector) -> Result<Vec<u32>, ErrorFormato> {
 }
 
 fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
-    let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro_fuera, sintetico, informes } = h;
+    let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes } = h;
     let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras } = heroe;
     w.u64(*id);
     w.texto(cuenta);
@@ -243,7 +243,7 @@ fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
     w.i64(*dia);
     carga_escribir(w, comprado);
     w.opt_u64(*columna);
-    carga_escribir(w, carro_fuera);
+    carga_escribir(w, carro);
     w.bool(*sintetico);
     w.u64(informes.len() as u64);
     informes.iter().for_each(|i| informe_escribir(w, i));
@@ -265,14 +265,14 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
     let monedas = Monedas { bronce: r.i64()?, plata: r.i64()?, oro: r.i64()? };
     let (herido_hasta, viveres, racion_en, almacen_personal) = (r.opt_i64()?, r.i64()?, r.opt_i64()?, carga_leer(r)?);
     let cupo = CupoDiario { dia: r.i64()?, comprado: carga_leer(r)? };
-    let (columna, carro_fuera, sintetico) = (r.opt_u64()?, carga_leer(r)?, r.bool()?);
+    let (columna, carro, sintetico) = (r.opt_u64()?, carga_leer(r)?, r.bool()?);
     let informes = (0..r.cuenta()?).map(|_| informe_leer(r)).collect::<Result<_, _>>()?;
     let mut escuadras = Vec::new();
     for _ in 0..r.cuenta()? {
         escuadras.push(escuadra_leer(r)?);
     }
     let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras };
-    Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro_fuera, sintetico, informes })
+    Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes })
 }
 
 pub(crate) fn relacion_a_u8(r: Relacion) -> u8 {

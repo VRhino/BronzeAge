@@ -321,6 +321,28 @@ fn montar_con(mut n: Nucleo, m: &M, nivel: u32) -> Esc {
     esc
 }
 
+// ───────────────────────────── 0. El acceso se hereda de la plaza madre ─────────────────────────────
+
+#[test]
+fn una_avanzada_hereda_el_acceso_de_su_plaza_madre() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let p = e.sitio();
+    let (av, _, _) = e.colocar_en(p);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Alianza) });
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 4, relacion: Some(Relacion::Guerra) });
+    let heroes: Vec<u64> = [("pro", 1), ("ali", 2), ("neu", 3), ("ene", 4)].into_iter().map(|(c, f)| e.columna(c, f, p).1).collect();
+    let de_la_avanzada = |e: &Esc| heroes.iter().map(|&h| e.n.puede_entrar_en_avanzada(h, av)).collect::<Vec<_>>();
+    let de_la_madre = |e: &Esc| heroes.iter().map(|&h| Some(e.n.puede_entrar_en_plaza(h, plaza))).collect::<Vec<_>>();
+    assert_eq!(de_la_avanzada(&e), vec![Some(true), Some(true), Some(true), Some(false)], "por defecto, todos menos los enemigos");
+    assert_eq!(de_la_avanzada(&e), de_la_madre(&e));
+    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: true, enemigos: true });
+    assert_eq!(de_la_avanzada(&e), vec![Some(true), Some(false), Some(true), Some(true)]);
+    assert_eq!(de_la_avanzada(&e), de_la_madre(&e));
+    assert_eq!(e.n.puede_entrar_en_avanzada(heroes[0], 9_999), None, "una avanzada que no existe no tiene puerta");
+}
+
 // ───────────────────────────── 1. Colocar ─────────────────────────────
 
 #[test]
@@ -1509,7 +1531,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN16");
+    assert_eq!(&bytes[..5], b"BAN17");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");

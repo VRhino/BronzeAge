@@ -828,6 +828,8 @@ impl Nucleo {
             | Comando::EntrarEnAsentamiento { .. }
             | Comando::SalirDeAsentamiento { .. }
             | Comando::Guarnecer { .. }
+            | Comando::FijarAcceso { .. }
+            | Comando::VaciarCarro { .. }
             | Comando::EntrarEnCampamento { .. } => match self.ejecutar_salidas(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,

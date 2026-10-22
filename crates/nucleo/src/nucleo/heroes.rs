@@ -355,7 +355,7 @@ impl Nucleo {
                         if hn.columna == Some(*c) && hn.heroe.presencia.ubicacion == *ubicacion {
                             return Err(sin_cambios());
                         }
-                        // Se suma como participante (con sus víveres) a una columna que no tiene por qué admitirlo; si ya la había aparcado, la retoma.
+                        // Se suma como participante (con sus víveres) a una columna que no tiene por qué admitirlo; si ya la tenía, la retoma.
                         let antes = self.velocidad_de_ejercito(*c).unwrap_or(0);
                         let viveres = std::mem::take(&mut self.heroe_mut(*heroe).heroe.viveres);
                         let Estado { ejercitos, militar, .. } = &mut self.estado;
@@ -581,7 +581,8 @@ impl Nucleo {
     // ───────────────────────────── Ruina de la plaza ─────────────────────────────
 
     /// Una plaza cae en ruinas (Diplomacia_Facciones §4.2): sus residentes pasan a la plaza de su Facción más cercana a la ruina si queda alguna y, si
-    /// no, al campamento de mercenarios más cercano; los héroes que estaban dentro quedan en ese campamento. Sueltan la guarnición.
+    /// no, al campamento de mercenarios más cercano; sueltan la guarnición. Quien estaba dentro, residente o de visita, **sale al mapa con todo lo suyo** (Entrar con
+    /// todo, 2026-10-22): con la columna con la que entró o, si no trajo ninguna, con una columna nueva con su carro y sus víveres; nadie pierde nada.
     pub(super) fn reubicar_residentes(&mut self, plaza: u64, posicion: Punto, t: Instante) {
         let dentro: Vec<u64> = self.heroes().filter(|h| h.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32)) || h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(plaza as u32)).map(|h| h.heroe.id).collect();
         if dentro.is_empty() {
@@ -596,12 +597,20 @@ impl Nucleo {
             if residia {
                 self.mudar_de_residencia(id, nueva);
             }
-            if self.heroe(id).expect("existe").heroe.presencia.ubicacion == Ubicacion::Asentamiento(plaza as u32) {
-                if let Some(c) = campamento {
-                    self.heroe_mut(id).heroe.presencia.ubicacion = Ubicacion::Mercenarios(c);
+            let estaba_dentro = self.heroe(id).expect("existe").heroe.presencia.ubicacion == Ubicacion::Asentamiento(plaza as u32);
+            if estaba_dentro {
+                // Las ruinas no se habitan: sale al mapa con su columna (la plaza ya no existe, pero la columna guarda dónde estaba su puerta) o con una nueva.
+                match self.heroe(id).expect("existe").columna {
+                    Some(c) => {
+                        self.ubicar_en_columna(id, c);
+                        self.tr.tocados.push(c);
+                    }
+                    None => {
+                        self.columna_de_salida(t, id, posicion, residia.then_some(faccion).flatten(), &[]);
+                    }
                 }
             }
-            self.emitir_propio(t, "heroe.reubicado", vec![], vec![("heroe", id as i64), ("ruina", plaza as i64)]);
+            self.emitir_propio(t, "heroe.reubicado", vec![], vec![("heroe", id as i64), ("ruina", plaza as i64), ("alMapa", estaba_dentro as i64)]);
         }
     }
 }

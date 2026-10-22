@@ -885,7 +885,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN16");
+    assert_eq!(&bytes[..5], b"BAN17");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1233,6 +1233,38 @@ fn asedio(m: &'static M, semilla: u64) -> Asedio {
 }
 
 #[test]
+fn en_la_convocatoria_defienden_los_aliados_y_los_vasallos_que_estan_dentro_y_los_neutrales_y_los_enemigos_no_aunque_esten_dentro() {
+    let m = con_mundo!();
+    let Asedio { mut e, beto, ana } = asedio(m, 7);
+    let b = e.b;
+    // La plaza B es de la Facción 2: la 4 es su aliada, la 5 su vasalla, la 3 no tiene relación con ella y la 6 está en guerra con ella (a esta, «beto» le abre la puerta).
+    for (x, r) in [(4, Relacion::Alianza), (5, Relacion::Vasallaje), (6, Relacion::Guerra)] {
+        e.ok("admin", Comando::FijarRelacion { a: 2, b: x, relacion: Some(r) });
+    }
+    e.ok("beto", Comando::FijarAcceso { asentamiento: b, aliados: true, neutrales: true, enemigos: true });
+    let gente: Vec<(&str, u32, (u64, u64))> = [("alia", 4), ("vasa", 5), ("nora", 3), ("enri", 6)].into_iter().map(|(c, f)| (c, f, e.ejercito(c, f, e.pos(b), &[Tropa::MiliciaLanceros]))).collect();
+    for (cuenta, _, col) in &gente {
+        e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: col.1 });
+        assert_eq!(e.n.heroe(col.1).unwrap().heroe.presencia.ubicacion, Ubicacion::Asentamiento(b as u32), "{cuenta} está dentro");
+    }
+    assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    let t = e.n.ahora();
+    for (k, (cuenta, faccion, col)) in gente.iter().enumerate() {
+        let r = e.n.aplicar_en(t + 1_000 * (k as i64 + 1), Peticion::nueva(cuenta, &format!("u{k}"), Comando::UnirseABatalla { heroe: col.1, batalla: id, lado: None }));
+        if matches!(faccion, 4 | 5) {
+            assert!(r.aceptada(), "{cuenta} (F{faccion}), aliado o vasallo y dentro, defiende: {r:?}");
+        } else {
+            assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA, "{cuenta} (F{faccion}) no defiende nunca");
+            assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("no combate aquí")), "{r:?}");
+            assert!(!e.n.ejercito(col.0).unwrap().en_batalla, "su columna sigue libre");
+        }
+    }
+    let defensores: Vec<u64> = e.n.batalla(id).unwrap().ticket.defensor.participantes.iter().map(|p| p.heroe).collect();
+    assert_eq!(defensores, vec![beto, gente[0].2 .1, gente[1].2 .1], "el residente que estaba dentro y los dos aliados que se unieron");
+}
+
+#[test]
 fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y_si_gana_el_atacante_hay_conquista() {
     let m = con_mundo!();
     let Asedio { mut e, beto, ana } = asedio(m, 7);
@@ -1241,8 +1273,8 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     let neutral = e.ejercito("nora", 3, e.pos(b), &[Tropa::MiliciaLanceros]);
     let tarde = e.ejercito("dora", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
     let a_la_puerta = e.ejercito("fede", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
-    // Solo defiende quien está dentro: Carla y Dora, de la Facción del defensor, entran de visita con su ejército (que se desarma en la puerta y queda aparcado); Fede, de la misma Facción, se queda en el mapa a la puerta.
-    for (cuenta, h) in [("carla", visitante.1), ("dora", tarde.1)] {
+    // Solo defiende quien está dentro: Carla y Dora, de la Facción del defensor, entran de visita con su ejército (que se desarma en la puerta y entra con todo); Fede, de la misma Facción, se queda en el mapa a la puerta. Nora, de una Facción sin relación con ella, entra también (la puerta se cierra solo a los enemigos), pero dentro tampoco defiende.
+    for (cuenta, h) in [("carla", visitante.1), ("dora", tarde.1), ("nora", neutral.1)] {
         e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: h });
     }
     assert!(!e.n.en_el_mapa(visitante.0) && !e.n.en_el_mapa(tarde.0) && e.n.en_el_mapa(a_la_puerta.0));

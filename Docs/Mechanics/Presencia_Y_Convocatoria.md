@@ -41,6 +41,14 @@ UbicacionHeroe = asentamiento { asentamientoId }      dentro de una plaza
 Residir es otra cosa (ciudadanía, Doc 2.5); un héroe de campaña sigue residiendo en su plaza aunque esté en el camino. **Solo los comandos de esta sección escriben la ubicación** (más `fundar`, que deja a la columna dentro de la plaza recién levantada).
 
 **Ubicación deducida** (`ubicacionDeducida`) cuando no hay registro (un héroe que nunca actuó, o una partida anterior a la mecánica): *la columna gana a la residencia* —si va en alguna columna, `columna`—; si no, `asentamiento` de la plaza donde reside; si no, `desconectado` en `(0, 0)` (un punto de relleno).
+> **Implementado en Rust (2026-10-22, entrar con todo).** Decisión del autor ([`Consideraciones/Entrar_Con_Todo_Definicion.md`](../../Consideraciones/Entrar_Con_Todo_Definicion.md)): **desaparece la «columna aparcada a la puerta»** del TypeScript. A la puerta se está **fuera**, en el mapa, muy cerca, y no se defiende; **dentro** es haber hecho la interacción de entrar. Quien entra en un lugar fuera del mapa entra **con todo lo suyo** —tropa, carro, víveres y **todas** sus caravanas adjuntas, sean del origen que sean— y al salir se lo lleva. Foto **`BAN17`** (las plazas guardan su acceso). `crates/nucleo/src/nucleo/salidas.rs`; pruebas en `crates/nucleo/tests/entrar.rs`.
+> - **De visita** (otra plaza; un campamento que no es su residencia) todo queda en su **columna**, que sigue existiendo pero ya no está en el mapa (no se la ve, ni se la persigue, ni se la ataca: sale de la rejilla de `encuentros`). La tropa de un visitante **come de sus víveres** como un ejército acampado y la plaza anfitriona no gasta trigo por sus visitas (solo da de comer a la guarnición de sus residentes). Salir (`SalirDeAsentamiento`, `SalirDelCampamento`) devuelve la columna al mapa tal cual; quien no trajo columna (lo colocó la administración) sale solo con sus víveres. `columna.no_aparcada` desaparece. A quien no trajo nada no se le deja sacar tropa ni carga de un lugar donde no reside (`salida.solo_de_tu_residencia`): su campamento y su almacén personal están en su residencia.
+> - **En su residencia** la tropa vuelve al campamento y los víveres al héroe, pero el **carro no se vacía**: se queda con él (`HeroeNucleo::carro`, el campo de antes `carro_fuera`, que ya estaba en la foto) y al salir se lo lleva; capacidad de 500 u. del carro (`CAPACIDAD_CARRO`), contando lo que ya trae al volver a salir. `VaciarCarro { heroe }` (**118**) lo pasa al **almacén personal** hasta `ALMACEN_PERSONAL.capacidad`, recurso a recurso y por orden; lo que no cabe se queda en el carro (`almacen_personal.lleno` si no cabe nada; sin cambios si no hay carro; `carro.vaciar_solo_en_tu_residencia` fuera de ella). Ya no se vuelca solo ni en un campamento ni en una plaza. Hecho `heroe.vacia_el_carro`.
+> - **Caravanas adjuntas**: entrar ya no rechaza por caravanas de otro origen (`caravana.ajena_al_lugar` desaparece) ni las aparca: viajan con la columna. Un ejército que entra (`guarnecer`, `entrarEnCampamento`) se desarma como antes y **su Líder se queda con la columna y las caravanas** (sigue siendo un ejército mientras las lleve); si es residente, la columna sigue dentro, sin tropa, solo para llevarlas, y el carro se queda en ella. Aparcar una caravana en su plaza (Doc 3.13.7) es una orden explícita (`AparcarCaravana`) que no cambia.
+> - **Quién entra** (`FijarAcceso { asentamiento, aliados, neutrales, enemigos }`, **117**): el dueño de la plaza decide por **relación** quién puede entrar. La misma Facción y los residentes entran **siempre**. Aliados y vasallos, neutrales (también quien no tiene Facción) y enemigos (en guerra) según lo que fije; **por defecto, hasta el sistema político, entran todos menos los enemigos**. Los pueblos extractores y las avanzadas **heredan** el acceso de su plaza madre (`puede_entrar_en_pueblo`, `puede_entrar_en_avanzada`); hoy no existe la orden de entrar en ellos (fila de paridad). Autorización provisional: `manda_en` (administración o ciudadano de la Facción). Cerrar la puerta no echa a quien ya está dentro. `EntrarEnAsentamiento` rechaza con `puerta.cerrada`; `Guarnecer` mira a **cada héroe** del ejército. El campamento de mercenarios no es de nadie y está abierto a todos. Hecho `asentamiento.acceso`.
+> - **Defensa** ([`Combate.md`](Combate.md) §3.2, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §7.1): defienden los de dentro de la misma Facción, aliados o vasallos; **neutrales y enemigos no defienden nunca**, aunque estén dentro, ni quien está a la puerta. **Si el lugar cae** (conquista o ruina) quien estaba dentro sin poder defender **sale al mapa con lo suyo sin perder nada** (con la columna con la que entró; el residente sin columna, con una nueva con su carro y sus víveres) y los defensores quedan sujetos al resultado. En una **ruina** salen todos los de dentro al mapa (antes quedaban en el campamento más cercano); el hecho `heroe.reubicado` lleva `alMapa`.
+> - **Convocatorias**: quien parte lo hace con todo lo que trajo; el residente, con el carro que no vació; el de visita, con su columna entera, que se funde con la del Líder (`columna.solo_una_personal` si lleva caravanas o es un ejército).
+
 `estaEnAsentamiento(heroes, id, plaza, …)` = `(registrada ?? deducida)` es `asentamiento` de esa plaza.
 
 ### 2.1 El diagrama de transiciones
@@ -49,11 +57,11 @@ Residir es otra cosa (ciudadanía, Doc 2.5); un héroe de campaña sigue residie
 |---|---|---|
 | (nada) → `mercenarios` | `crearHeroe` | No tiene columna: nace dentro, como residente. |
 | `asentamiento` (su residencia) → `columna` | `salirAlMundo` (o `movilizarEjercito`) | Nace una columna con lo que elige. |
-| `columna` → `asentamiento` (su residencia) | `entrarEnAsentamiento` | La columna **se deshace** dentro. |
-| `columna` → `asentamiento` (otra) | `entrarEnAsentamiento` | La columna **queda aparcada** a la puerta. |
-| `asentamiento` (otra) → `columna` | `salirDeAsentamiento` | Retoma la aparcada. |
-| `columna` → `mercenarios` | `entrarEnCampamento` | En el propio, se deshace; en otro, queda a la puerta. |
-| `mercenarios` → `columna` | `salirDelCampamento` | Residente: elige tropa y carga; visitante: retoma la aparcada. |
+| `columna` → `asentamiento` (su residencia) | `entrarEnAsentamiento` | La columna **se deshace** dentro: la tropa al campamento, los víveres al héroe; el **carro se queda con él** (`vaciarCarro` lo pasa al almacén personal). |
+| `columna` → `asentamiento` (otra) | `entrarEnAsentamiento` | Entra **con todo** (tropa, carro, víveres, caravanas): la columna queda **dentro**, fuera del mapa, si la puerta le abre. |
+| `asentamiento` (otra) → `columna` | `salirDeAsentamiento` | Sale con todo lo que entró: la columna vuelve al mapa. |
+| `columna` → `mercenarios` | `entrarEnCampamento` | En el propio, se deshace (el carro con él); en otro, la columna entra entera. |
+| `mercenarios` → `columna` | `salirDelCampamento` | Residente: elige tropa y carga y se lleva el carro; visitante: sale con todo lo que entró. |
 | `columna` (ejército) → `asentamiento` | `guarnecer` | El ejército se desarma en la puerta y cada héroe entra. |
 | `columna` → `asentamiento` | `fundar` | La columna se deshace en la plaza que funda. |
 | cualquiera → `desconectado` / de vuelta | `desconectarse` + tick / `conectarse` | Ver §7. |
@@ -79,24 +87,24 @@ Exige tener columna (`jugador.sin_columna`). Cuatro condiciones, en este orden (
 
 1. **La columna es personal**: «Vas en un ejército: hay que separarse antes de entrar en una plaza». (Un ejército entra por `guarnecer`, §4.3.)
 2. **En la puerta**: `distancia(columna, plaza) ≤ MOVIMIENTO.radioPuerta` (**2** calibrado; 10 en el bloque TypeScript). Entrar es un acto, no un roce.
-3. **Con permiso**: `puedeEntrarEn(plaza, héroe, columna.faccionId, relaciones)`: un residente entra siempre; luego manda el veto; luego el grupo (la propia Facción nunca se bloquea). Detalle en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (`PUERTA.cerradaAPorDefecto`).
+3. **Con permiso**: `puedeEntrarEn(plaza, héroe, columna.faccionId, relaciones)`: un residente entra siempre; la propia Facción nunca se bloquea; el resto, según lo que el dueño haya fijado para su relación (aliados y vasallos, neutrales, enemigos; por defecto todos menos los enemigos, `fijarAcceso`); el veto individual y los grupos (`fijarPuerta`) son del sistema político. Detalle en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (`PUERTA.cerradaAPorDefecto`).
 4. **Residencia o no**:
-   - **Su residencia**: la columna **se deshace** (`absorberColumna(…, devolverSuministro = true)`): las escuadras vuelven al campamento (`contenedor: campamento`) y el carro entero al almacén de la plaza (hasta donde quepa); la columna desaparece.
-   - **Cualquier otra**: la columna **se queda aparcada** a la puerta, intacta.
+   - **Su residencia**: la columna **se deshace** (`absorberColumna`): las escuadras vuelven al campamento (`contenedor: campamento`), los víveres al héroe y el **carro se queda con él** (decidido el 2026-10-22: antes se volcaba entero en el almacén de la plaza, y lo que no cabía se perdía); la columna desaparece salvo que lleve caravanas adjuntas.
+   - **Cualquier otra**: entra **con todo**: la columna queda **dentro**, fuera del mapa, intacta (tropa, carro, víveres y caravanas).
 
-Después `ubicacion = asentamiento`. Evento `jugador.entra_en_asentamiento`. De la segunda rama salen gratis dos casos: si conquistan la plaza mientras estás dentro, tu columna está fuera y la retomas; y si te la destruyen aparcada, sales a pie.
+Después `ubicacion = asentamiento`. Evento `jugador.entra_en_asentamiento`. De la segunda rama sale gratis un caso: si conquistan la plaza (o la arruinan) mientras estás dentro, sales al mapa con tu columna y sin perder nada.
 
 ### 4.2 `salirDeAsentamiento { asentamientoId, heroeId }`
 
-Retoma la columna aparcada de una plaza **ajena**, sin pantalla de equipamiento. Rechaza **a propósito** desde la propia residencia (manda a `salirAlMundo`). Exige tener columna. Pone `ubicacion = columna` y emite `jugador.sale_de_asentamiento`. No comprueba la geometría ni que el héroe estuviera dentro de *esa* plaza: lo único que mira de la plaza es si reside en ella. Envuelto en `sinConvocatoria`.
+Sale de una plaza **ajena** con todo lo que entró (su columna vuelve al mapa), sin pantalla de equipamiento. Rechaza **a propósito** desde la propia residencia (manda a `salirAlMundo`). Exige tener columna. Pone `ubicacion = columna` y emite `jugador.sale_de_asentamiento`. No comprueba la geometría ni que el héroe estuviera dentro de *esa* plaza: lo único que mira de la plaza es si reside en ella. Envuelto en `sinConvocatoria`.
 
 ### 4.3 `guarnecer { asentamientoId, heroeId }` (un ejército vuelve a una plaza propia)
 
-1. `exigirPuedeGuarnecer`: es un **ejército** (`tipo = ejercito`), de la **Facción de la plaza**, a `≤ radioPuerta`; si no, error.
-2. `caravanasAlEntrar`: solo entra si **todas** las caravanas adjuntas son de esa plaza; pasan a `aparcada` (Movimiento §11).
+1. `exigirPuedeGuarnecer`: es un **ejército** (`tipo = ejercito`) a `≤ radioPuerta` de una plaza que le abre su puerta (a cada uno de sus héroes: la misma Facción siempre, el resto según el acceso); si no, error. (Antes solo guarnecía su propia Facción.)
+2. `caravanasAlEntrar`: entra con **todas** sus caravanas adjuntas, sean de donde sean; **no se aparcan** (decidido el 2026-10-22): se quedan con la columna del Líder (Movimiento §11). (Antes solo entraba si todas eran de esa plaza y pasaban a `aparcada`.)
 3. `desarmarAlEntrar`: **solo su Líder** hace entrar al ejército; se deshacen las formaciones: cada héroe queda en una columna personal (el Líder con el resto del carro, los demás con su parte a prorrata).
 4. Cada héroe de la columna **entra como lo haría solo** (§4.1): el residente deja su tropa y su carro; el que no reside entra de visita con su columna a la puerta.
-5. Eventos: uno `jugador.entra_en_asentamiento` por héroe y `ejercito.guarnece { asentamientoId, ejercitoId, escuadrones, caravanasAparcadas }`.
+5. Eventos: uno `jugador.entra_en_asentamiento` por héroe y `ejercito.guarnece { asentamientoId, ejercitoId, escuadrones, caravanas }`.
 
 ## 5. Entrar y salir de un campamento de mercenarios
 
@@ -105,9 +113,9 @@ Retoma la columna aparcada de una plaza **ajena**, sin pantalla de equipamiento.
 Exige columna. Si la columna es **personal con un solo participante**, entra él solo (`entrarEnCampamento` del motor); si no —un ejército, o una personal con compañía— entra el ejército entero, ordenado por su Líder:
 
 - **Solo (motor)**: error si no es el Líder de una columna de un participante; error si no está a `≤ radioPuerta` (2) del campamento. `ubicacion = mercenarios`.
-  - **No residente** (visitante): su columna queda a la puerta, intacta, sin tocar nada.
-  - **Residente**: vuelca el carro al almacén personal **hasta `ALMACEN_PERSONAL.capacidad`**, recurso a recurso en el orden del carro; lo que no cabe **se queda en el carro** (la columna sigue aparcada a la puerta, sin escuadras y solo con ese resto); las escuadras vuelven al campamento (`alCampamento`).
-- **Ejército**: debe estar a la puerta; `desarmarAlEntrar` (como `guarnecer`: solo el Líder, caravanas solo de este campamento, cada héroe en su columna personal) y cada héroe entra como lo haría solo. Evento `ejercito.entra_en_campamento`.
+  - **No residente** (visitante): entra **con todo**; su columna queda dentro, fuera del mapa, intacta, sin tocar nada.
+  - **Residente**: las escuadras vuelven al campamento (`alCampamento`) y el **carro se queda con él**: ya no se vuelca solo en el almacén personal (decidido el 2026-10-22; lo hace `vaciarCarro`, hasta `ALMACEN_PERSONAL.capacidad`, y lo que no cabe se queda en el carro).
+- **Ejército**: debe estar a la puerta; `desarmarAlEntrar` (como `guarnecer`: solo el Líder, cada héroe en su columna personal, con **todas** las caravanas, que se quedan con la columna del Líder) y cada héroe entra como lo haría solo. Evento `ejercito.entra_en_campamento`.
 Evento por héroe: `jugador.entra_en_campamento`.
 
 ### 5.2 `salirDelCampamento`
@@ -165,8 +173,8 @@ Convocar, unirse, aceptar una petición y cambiar la selección **simulan la sal
 
 | Lugar | Reside en él | No reside |
 |---|---|---|
-| Plaza | `salirAlMundo` con su selección | `salirDeAsentamiento` (su selección **se ignora**: sale con la columna que dejó aparcada) |
-| Campamento | `salirDelCampamento` con su selección | `salirDelCampamento` (retoma la aparcada; la selección se ignora) |
+| Plaza | `salirAlMundo` con su selección | `salirDeAsentamiento` (su selección **se ignora**: sale con todo lo que entró, su columna) |
+| Campamento | `salirDelCampamento` con su selección | `salirDelCampamento` (sale con su columna; la selección se ignora) |
 
 Si no puede, falla con el motivo concreto: «{héroe} no puede salir con lo elegido: …». Reutilizar la salida garantiza que tropa, Liderazgo, carga y víveres se validen igual que al salir solo.
 
@@ -241,12 +249,13 @@ Un héroe `fuera` del mundo: solo `conectarse` (§7).
 | Invariante | Test que lo vigila |
 |---|---|
 | `salirAlMundo`: saca con las tropas y la carga que elige, sin tropas también, rechaza carga que no cabe (tope sobre el total), no deja a la plaza sin la comida de su guarnición, no se sale dos veces | `session/__tests__/comandosPresencia.test.ts` |
-| `entrarEnAsentamiento`: volver a la residencia deshace la columna; en otra queda aparcada; no desde lejos; no en un ejército; quien no está en el mundo no tiene puerta | `comandosPresencia.test.ts` |
+| `entrarEnAsentamiento`: volver a la residencia deshace la columna (el carro se queda con el héroe); en otra entra con todo; no desde lejos; no en un ejército; quien no está en el mundo no tiene puerta | `comandosPresencia.test.ts`; en Rust, `columnas.rs` y `entrar.rs` |
+| Entrar con todo (Rust): el visitante entra con su columna entera y come de sus víveres; las caravanas de otro origen entran y salen con el ejército; el residente no vacía el carro al entrar y `vaciarCarro` deja lo que no cabe; el acceso por relación y su herencia a pueblos y avanzadas; defensa de los de dentro (aliado sí, neutral y enemigo no, aliado a la puerta no); salida sin pérdidas al caer el lugar; foto y determinismo | `crates/nucleo/tests/{entrar,combate,batallas,pueblos,avanzadas,heroes}.rs` |
 | `salirDeAsentamiento`: devuelve a su columna con lo que llevaba; se rechaza desde la propia residencia | `comandosPresencia.test.ts` |
-| `guarnecer` vuelca la tropa, consume el ejército y deja al jugador dentro; una columna personal no guarnece | `comandosPresencia.test.ts` |
+| `guarnecer` vuelca la tropa, consume el ejército y deja al jugador dentro (con sus caravanas); una columna personal no guarnece | `comandosPresencia.test.ts` |
 | `marcharA`: pone en marcha, se rectifica, lo dirige el Líder, sin destino sale quieto, no desde dentro de una plaza, no por mar | `comandosPresencia.test.ts` |
 | La puerta la controlan Gobernador y Rey; por defecto deja entrar a los suyos; el veto pesa más que el grupo y se levanta con el mismo comando; un residente entra aunque esté cerrada y no se le veta | `comandosPresencia.test.ts`, `engine/__tests__/puerta.test.ts` |
-| Campamentos: sale con tropa y carga, al volver se deshace; lo que no cabe en el almacén queda en el carro; otro campamento aparca; lejos no se entra | `session/__tests__/entrarSalirCampamento.test.ts` |
+| Campamentos: sale con tropa y carga, al volver se deshace (el carro se queda con el héroe y `vaciarCarro` lo pasa al almacén); otro campamento: entra con todo; lejos no se entra | `session/__tests__/entrarSalirCampamento.test.ts` |
 | Desconectarse: dentro de la plaza no se mueve nada; en campo se lleva tropa y carro; se aplaza si le persiguen hasta el tope; el Líder cede el mando al conectado más antiguo; volver antes de 2:30 cancela | `session/__tests__/presenciaEnElMundo.test.ts` |
 | Convocatoria en plaza: convocar no saca a nadie; parten como un ejército quieto; el Líder lo dirige; cancelar no mueve nada; separarse; política `preguntar`; no se sale por su cuenta ni se une a dos; no se convoca con carga que no podría salir; quien salió queda fuera al partir | `session/__tests__/convocatoria.test.ts` |
 | Convocatoria en campamento; cambiar la selección (cada uno la suya, el orden es el de salida); la proyección; los avisos nombran a todos | `convocatoria.test.ts` |
@@ -258,11 +267,11 @@ Un héroe `fuera` del mundo: solo `conectarse` (§7).
 
 - **Una convocatoria no caduca ni se limpia sola**: si su Líder se desconecta, desaparece de la plaza o es expulsado, sigue ahí hasta que él la cancele. Cancelar no mira el lugar: el Líder puede hacerlo desde donde esté, siempre que no esté `fuera` del mundo (entonces nadie puede, y la convocatoria espera a que vuelva).
 - **Partir exige que el Líder siga dentro**; los demás pueden haberse ido (se quedan fuera) pero el Líder no.
-- **La selección de un visitante se ignora al partir**: un no residente sale con la columna que dejó aparcada, elija lo que elija; la comprobación de «saldría» es solo que tiene esa columna.
-- **Entrar a tu residencia con carga que no cabe pierde lo que desborda la capacidad del almacén de la plaza**: `agregarRecurso` topa por capacidad; en un campamento, en cambio, el resto se queda en el carro aparcado.
-- **El almacén personal se llena en orden de recurso del carro**, no por prioridad: el último que no cabe es el que se queda fuera.
+- **La selección de un visitante se ignora al partir**: un no residente sale con su columna, la que trajo, elija lo que elija; si no trajo ninguna y elige tropa o carga, `salida.solo_de_tu_residencia` (en Rust; ya no hay `columna.no_aparcada`).
+- ~~Entrar a tu residencia con carga que no cabe pierde lo que desborda la capacidad del almacén de la plaza~~ (TypeScript): **corregido el 2026-10-22**, el carro entra con el héroe y no se vuelca solo; no se pierde nada al entrar.
+- **El almacén personal se llena en orden de recurso del carro** (`vaciarCarro`), no por prioridad: el último que no cabe es el que se queda en el carro.
 - **`salirDeAsentamiento` no comprueba el lugar**: basta tener columna y no residir en esa plaza; es inocuo (la ubicación pasa a su columna) pero no valida que estuviera dentro.
-- **El ejército entra por `guarnecer` solo a plazas propias**; a una ajena entra cada héroe con su columna personal, separado antes.
+- **El ejército entra por `guarnecer` a toda plaza que le abra la puerta** (antes solo a plazas propias); se desarma y cada héroe entra como lo haría solo. Una personal entra por `entrarEnAsentamiento`.
 - **Desconectado no es ausente**: dentro de una plaza se queda donde está, defiende la guarnición y no él en persona (Combate §3.2); en el mapa, sale con su columna y no se le puede cazar.
 - **`vetarJugador` solo lo hace el Gobernador, `fijarPuerta` también el Rey**: el Rey puede cerrar grupos pero no vetar a un jugador concreto.
 

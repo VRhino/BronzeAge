@@ -1,8 +1,14 @@
 //! Conquista, desalojo, protección y ocupación (Combate §8-§10, Murallas `OCUPACION`, Reloj_Y_Eventos §3.1, fase 4D). Cuando un asedio con números tumba una
 //! plaza, [`Nucleo::conquistar_plaza`] ejecuta, en este orden y en el mismo instante: la ciudad cambia de dueño y se saquea (`combate::conquista`: población,
 //! edificios dañados, obra de ascenso y decisiones del gobierno perdidas), queda protegida y ocupada, los héroes de dentro y los residentes se desalojan,
-//! el comercio se cierra con la plaza (`Motivo::Conquista`: su flota pasa al conquistador, los trueques se anulan, la caravana aparcada se destruye) y, si era la
+//! el comercio se cierra con la plaza (`Motivo::Conquista`: su flota pasa al conquistador, los trueques se anulan, la caravana aparcada **en la plaza** se destruye) y, si era la
 //! última plaza de su Facción, se anota la derrota.
+//!
+//! # Quien estaba dentro (Entrar con todo, 2026-10-22)
+//! Defienden los de dentro que son de la misma Facción, aliados o vasallos (la defensa los cuenta antes, en `defensa_de_plaza` o en la convocatoria de Unity) y
+//! quedan sujetos al resultado: heridos si la plaza cae, con las bajas que hayan sufrido. Los demás —neutrales y enemigos a los que su dueño abrió la puerta— no
+//! defienden nunca y **no pierden nada**: salen al mapa con la columna con la que entraron (tropa, carro, víveres y caravanas), y el residente que no trajo
+//! columna sale con una nueva con su carro y sus víveres. Nadie queda dentro de una plaza que cambia de dueño.
 //!
 //! # La protección y la ocupación son eventos
 //! La plaza guarda `protegida_hasta` (inatacable un día) y `ocupada_hasta` (hora y media con la recaudación y el crecimiento a la mitad y el mantenimiento
@@ -62,7 +68,7 @@ impl Nucleo {
                     heroe: id,
                     residente: h.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32)),
                     dentro: h.heroe.presencia.ubicacion == dentro,
-                    columna_aparcada: h.columna,
+                    columna: h.columna,
                     lucharon: lucharon.iter().find(|(l, _)| *l == id).map(|(_, ids)| sobrevivieron(ids)).unwrap_or_default(),
                 }
             })
@@ -100,7 +106,9 @@ impl Nucleo {
             match &d.salida {
                 None => {}
                 Some(Salida::ALaColumna(columna)) => self.ubicar_en_columna(d.heroe, *columna),
-                Some(Salida::ColumnaNueva { con_faccion_de_la_plaza, escuadras }) => self.columna_de_salida(t, d.heroe, posicion, con_faccion_de_la_plaza.then_some(vieja), escuadras),
+                Some(Salida::ColumnaNueva { con_faccion_de_la_plaza, escuadras }) => {
+                    self.columna_de_salida(t, d.heroe, posicion, con_faccion_de_la_plaza.then_some(vieja), escuadras);
+                }
             }
             self.emitir_propio(t, "heroe.desalojado", vec![plaza], vec![("heroe", d.heroe as i64), ("residente", d.residencia.is_some() as i64), ("dentro", d.salida.is_some() as i64)]);
         }
@@ -131,18 +139,20 @@ impl Nucleo {
         );
     }
 
-    /// Quien estaba dentro y no tiene columna a la puerta sale a la calle (Combate §9): nace una columna personal quieta en la plaza, con el carro vacío, los
-    /// víveres que llevaba el héroe y las escuadras con que defendió y sobrevivieron. Su Facción es la de la plaza si residía; un visitante sale sin bandera.
-    fn columna_de_salida(&mut self, t: Instante, heroe: u64, posicion: Punto, faccion: Option<u32>, escuadras: &[u64]) {
+    /// Quien estaba dentro y no trajo columna sale a la calle con todo lo suyo (Combate §9, Entrar con todo): nace una columna personal quieta en `posicion`, con el
+    /// carro que llevaba (el de su residencia), los víveres del héroe y las escuadras con que defendió y sobrevivieron. Devuelve su id.
+    pub(super) fn columna_de_salida(&mut self, t: Instante, heroe: u64, posicion: Punto, faccion: Option<u32>, escuadras: &[u64]) -> u64 {
         let mr = self.estado.reglas.economia.militar.clone();
         let id = self.nuevo_id();
-        let viveres = std::mem::take(&mut self.heroe_mut(heroe).heroe.viveres);
+        let hn = self.heroe_mut(heroe);
+        let (viveres, carro) = (std::mem::take(&mut hn.heroe.viveres), std::mem::take(&mut hn.carro));
         let heroes = [heroe];
         let militar = &self.estado.militar;
-        let columna = Columna::salir(&mr, id, faccion, heroe, TipoColumna::Personal, Politica::Rechazar, escuadras.to_vec(), militar::Carga::new(), viveres, t, &|ids| militar.soldados_de(&heroes, ids));
+        let columna = Columna::salir(&mr, id, faccion, heroe, TipoColumna::Personal, Politica::Rechazar, escuadras.to_vec(), carro, viveres, t, &|ids| militar.soldados_de(&heroes, ids));
         let e = self.columna_suelta(columna, posicion);
         self.alta_de_columna(t, e);
         self.ubicar_en_columna(heroe, id);
+        id
     }
 
     // ───────────────────────────── Los plazos ─────────────────────────────

@@ -783,15 +783,21 @@ fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_
     assert_eq!(h(ana).residencia, Some(Residencia::Asentamiento(c as u32)));
     assert_eq!(h(carla).residencia, Some(Residencia::Campamento(cercano)));
     assert_eq!(h(beto).residencia, Some(Residencia::Campamento(3)), "el que estaba de visita conserva su casa");
-    // Los que estaban dentro quedan en el campamento más cercano (no hay plaza a la que volver).
+    // Los que estaban dentro (Entrar con todo, 2026-10-22: antes quedaban en el campamento más cercano) salen al mapa, donde estaba la plaza, cada uno con su columna
+    // personal y sin perder nada; ya no hay lugar donde quedarse.
     for id in [ana, carla, beto] {
-        assert_eq!(h(id).presencia.ubicacion, Ubicacion::Mercenarios(cercano));
+        let Ubicacion::Columna(c) = h(id).presencia.ubicacion else { panic!("el héroe {id} sale al mapa") };
+        let col = e.n.ejercito(c).expect("su columna");
+        assert_eq!((col.posicion, e.n.estado().militar.heroes[&id].columna), (pa, Some(c)));
+        assert!(e.n.en_el_mapa(c));
     }
+    assert_eq!(e.n.ejercito(e.n.heroe(ana).unwrap().columna.unwrap()).unwrap().columna.faccion, Some(1), "el residente sale con la bandera de su Facción");
+    assert_eq!(e.n.ejercito(e.n.heroe(beto).unwrap().columna.unwrap()).unwrap().columna.faccion, None, "el de visita sale sin bandera");
     assert!(e.n.estado().militar.residentes_de(a).next().is_none());
     assert_eq!(e.n.estado().militar.residentes_de(c).map(|x| x.heroe.id).collect::<Vec<_>>(), vec![ana]);
     let reubicados = hechos(&e.n, "heroe.reubicado");
     assert_eq!(reubicados.len(), 3);
-    assert!(reubicados.iter().all(|r| r.0 == ruina && dato(r, "ruina") == a as i64));
+    assert!(reubicados.iter().all(|r| r.0 == ruina && dato(r, "ruina") == a as i64 && dato(r, "alMapa") == 1));
 }
 
 // ───────────────────────────── 10. Las tecnologías de la administración y quién manda en la plaza ─────────────────────────────
@@ -876,7 +882,7 @@ fn estado_con_heroes() -> nucleo::Estado {
     h.escuadras[0].moral = base::Ritmo { valor_en_t0: 60_000, t0: 10, por_minuto: -20_000, maximo: Some(100_000), minimo: Some(0) };
     h.escuadras[4].prestada = Some(1);
     h.escuadras[4].plaza_origen = None;
-    s.militar.insertar(nucleo::HeroeNucleo { almacen_personal: [(Oro, 8)].into_iter().collect(), cupo: CupoDiario { dia: 4, comprado: [(Madera, 9)].into_iter().collect() }, columna: Some(77), carro_fuera: [(Cobre, 3)].into_iter().collect(), ..nucleo::HeroeNucleo::nuevo(h, "ana", Some(1)) });
+    s.militar.insertar(nucleo::HeroeNucleo { almacen_personal: [(Oro, 8)].into_iter().collect(), cupo: CupoDiario { dia: 4, comprado: [(Madera, 9)].into_iter().collect() }, columna: Some(77), carro: [(Cobre, 3)].into_iter().collect(), ..nucleo::HeroeNucleo::nuevo(h, "ana", Some(1)) });
     let mut otro = Heroe::nuevo(&mr, 20, Controlador::Bot, 1, 21);
     otro.presencia.ubicacion = Ubicacion::Desconectado(Punto::new(5, -7));
     otro.presencia.fuera = true;
@@ -917,7 +923,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN16");
+    assert_eq!(&bytes[..5], b"BAN17");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");
@@ -957,7 +963,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("viveres", Box::new(|m| h5(m).viveres += 1)),
         ("racion_en", Box::new(|m| h5(m).racion_en = None)),
         ("columna", Box::new(|m| m.heroes.get_mut(&5).unwrap().columna = None)),
-        ("carro_fuera", Box::new(|m| *m.heroes.get_mut(&5).unwrap().carro_fuera.get_mut(&Cobre).unwrap() += 1)),
+        ("carro", Box::new(|m| *m.heroes.get_mut(&5).unwrap().carro.get_mut(&Cobre).unwrap() += 1)),
         ("sintetico", Box::new(|m| m.heroes.get_mut(&5).unwrap().sintetico = true)),
         ("convocatoria.politica", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().politica = militar::columna::Politica::Aceptar)),
         ("convocatoria.lugar", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().lugar = militar::convocatoria::Lugar::Campamento(2))),

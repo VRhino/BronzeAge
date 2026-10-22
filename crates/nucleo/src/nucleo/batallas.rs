@@ -673,7 +673,7 @@ impl Nucleo {
     }
 
     /// `unirseABatalla` (§7): la columna del héroe entra, entera, en el bando que le toca. Para defender una plaza hay que estar dentro (el héroe ha entrado; su columna
-    /// aparcada es lo que trajo consigo): una columna en el mapa, a la puerta, solo puede atacar.
+    /// dentro es lo que trajo consigo): una columna en el mapa, a la puerta, solo puede atacar.
     fn unirse_a_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64, pedido: Option<Lado>) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let invalida = |m: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, m, v);

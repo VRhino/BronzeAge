@@ -949,7 +949,7 @@ fn una_caravana_adjunta_viaja_con_la_columna_a_su_paso_y_entrega_a_la_puerta_del
 
 
 #[test]
-fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_las_deja_aparcadas_y_el_que_se_queda_sin_nadie_las_suelta_a_volver() {
+fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_entra_con_ellas_y_sale_con_ellas_y_el_que_se_queda_sin_nadie_las_suelta_a_volver() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     e.avanzar(24 * HORA);
@@ -966,24 +966,33 @@ fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_las_deja_aparcadas_y
     let personal = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![], carga: vec![] }).creadas[0];
     assert_eq!(e.rechazada("ana", adjuntar(personal)), rechazos::COLUMNA_PERSONAL_SIN_CARAVANAS);
     e.ok("ana", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
-    // Un ejército sí; al guarnecer la plaza de la caravana se queda aparcada en ella.
+    // Un ejército sí. Al guarnecer entra con todo (Entrar con todo, 2026-10-22): la caravana ya no se queda aparcada en la plaza; sigue enganchada y la columna del
+    // Líder, un ejército mientras la lleve, se queda dentro (sin tropa: la milicia vuelve a su campamento).
     let movilizar = Comando::MovilizarEjercito { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![], politica: militar::columna::Politica::Aceptar };
     let ej = e.ok("ana", movilizar.clone()).creadas[0];
     e.ok("ana", adjuntar(ej));
     assert_eq!(e.n.estado().ejercitos[&ej].caravanas_adjuntas, vec![c]);
     e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: h });
-    assert!(e.n.ejercito(ej).is_none());
+    assert!(e.n.ejercito(ej).is_some() && !e.n.en_el_mapa(ej), "la columna sigue, dentro, para llevar su caravana");
+    assert_eq!((e.caravana_de(c).estado, e.n.estado().ejercitos[&ej].caravanas_adjuntas.clone()), (EstadoCaravana::Adjunta, vec![c]));
+    assert_eq!(e.n.ejercito(ej).unwrap().columna.tipo, militar::columna::TipoColumna::Ejercito);
+    assert_eq!(dato(&hechos(&e.n, "ejercito.guarnece")[0], "caravanas"), 1);
+    // Sale con todo: la misma columna, con su tropa (sacada de su campamento) y su caravana.
+    let r = e.ok("ana", movilizar);
+    assert!(r.creadas.is_empty(), "sale con la columna con la que entró");
+    assert_eq!((e.n.estado().ejercitos[&ej].caravanas_adjuntas.clone(), e.n.ejercito(ej).unwrap().columna.escuadras.clone()), (vec![c], vec![milicia]));
+    assert!(e.n.en_el_mapa(ej));
+    // Aparcar la caravana en su plaza sigue siendo una orden explícita (Doc 3.13.7), y se puede volver a enganchar.
+    e.ok("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a });
     assert_eq!((e.caravana_de(c).estado, e.caravana_de(c).anfitriona), (EstadoCaravana::Aparcada, Some(a as u32)));
-    assert_eq!(dato(&hechos(&e.n, "ejercito.guarnece")[0], "caravanasAparcadas"), 1);
+    e.ok("ana", adjuntar(ej));
     // Un ejército cuyo último héroe sale del mundo se disuelve y sus caravanas vuelven a su origen por su cuenta.
-    let ej2 = e.ok("ana", movilizar).creadas[0];
-    e.ok("ana", adjuntar(ej2));
     e.ok("ana", Comando::Desconectarse { heroe: h });
     e.avanzar(150_000);
-    assert!(e.n.ejercito(ej2).is_none());
+    assert!(e.n.ejercito(ej).is_none());
     assert_eq!(e.caravana_de(c).estado, EstadoCaravana::Disponible, "volvió sola: la puerta de su plaza está a un paso");
     assert_eq!(hechos(&e.n, "ejercito.disuelto").len(), 1);
-    assert_eq!(e.rechazada("ana", adjuntar(ej2)), rechazos::EJERCITO_DESCONOCIDO);
+    assert_eq!(e.rechazada("ana", adjuntar(ej)), rechazos::EJERCITO_DESCONOCIDO);
 }
 #[test]
 fn una_arista_que_acaba_de_ser_camino_acelera_a_la_caravana_que_ya_iba_por_ella() {

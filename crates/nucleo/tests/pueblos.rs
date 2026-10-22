@@ -193,6 +193,35 @@ fn montar_con(mut n: Nucleo, m: &M, nivel: u32) -> Escenario {
 }
 
 #[test]
+fn un_pueblo_hereda_el_acceso_de_su_plaza_madre() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let pueblo = e.marcar();
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    // Un héroe de cada relación con la Facción 1: la propia, una aliada, una sin relación y una en guerra.
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(nucleo::Relacion::Alianza) });
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 4, relacion: Some(nucleo::Relacion::Guerra) });
+    let mut heroes = vec![];
+    for (c, f) in [("pro", 1), ("ali", 2), ("neu", 3), ("ene", 4)] {
+        let col = e.columna(c, f, sitio);
+        heroes.push(e.n.ejercito(col).unwrap().columna.lider);
+    }
+    let del_pueblo = |e: &Escenario| heroes.iter().map(|&h| e.n.puede_entrar_en_pueblo(h, pueblo)).collect::<Vec<_>>();
+    let de_la_madre = |e: &Escenario| heroes.iter().map(|&h| Some(e.n.puede_entrar_en_plaza(h, plaza))).collect::<Vec<_>>();
+    // Por defecto entran todos menos los enemigos, y el pueblo dice lo mismo que su plaza madre.
+    assert_eq!(del_pueblo(&e), vec![Some(true), Some(true), Some(true), Some(false)]);
+    assert_eq!(del_pueblo(&e), de_la_madre(&e));
+    // Lo que el dueño de la plaza decide cambia a la vez a la plaza y a su pueblo.
+    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: true });
+    assert_eq!(del_pueblo(&e), vec![Some(true), Some(true), Some(false), Some(true)]);
+    assert_eq!(del_pueblo(&e), de_la_madre(&e));
+    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: false, enemigos: false });
+    assert_eq!(del_pueblo(&e), vec![Some(true), Some(false), Some(false), Some(false)], "la misma Facción entra siempre");
+    assert_eq!(e.n.puede_entrar_en_pueblo(heroes[0], 9_999), None, "un pueblo que no existe no tiene puerta");
+}
+
+#[test]
 fn el_almacen_local_del_pueblo_es_del_tamano_del_carro_de_acarreo() {
     let r = Reglas::default().economia;
     assert_eq!(r.datos.pueblos.capacidad_almacen, comercio::acarreo::capacidad(&r.comercio.flota), "con un almacén menor que el carro, «sale lleno» no se dispararía nunca");

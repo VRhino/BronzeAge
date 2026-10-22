@@ -65,6 +65,10 @@ pub fn auditar_contenedores(n: &Nucleo) -> Violaciones {
         let total: i64 = c.columna.carga.values().sum();
         v.carga += (c.columna.carga.values().any(|&x| x < 0) || n.capacidad_de_carga(c.id).is_some_and(|cap| total > cap)) as u64;
     }
+    // El carro que un héroe trae a su residencia (su capacidad se comprueba al entrar y al salir).
+    for h in n.heroes() {
+        v.carga += h.carro.values().any(|&x| x < 0) as u64;
+    }
     let flota = &e.reglas.economia.comercio.flota;
     for c in &e.comercio.flota {
         let total: i64 = c.contenido.values().sum();

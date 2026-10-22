@@ -16,7 +16,7 @@
 //!
 //! # Quién manda
 //! La cuenta (el cliente) de una columna es la de su Líder, que es un héroe; la administración manda en todas. Las órdenes de movimiento
-//! (`MarcharA`, `Estacionar`) son del Líder y de que vaya a bordo (un héroe dentro de un lugar no dirige su columna aparcada); las de «dentro de un
+//! (`MarcharA`, `Estacionar`) son del Líder y de que vaya a bordo (un héroe dentro de un lugar no dirige su columna, que está dentro con él); las de «dentro de un
 //! ejército» (caravanas adjuntas, entregar, materiales) las puede dar cualquier participante.
 
 use super::*;
@@ -67,7 +67,7 @@ impl Nucleo {
         self.estado.ejercitos.get(&id)
     }
 
-    /// La columna de un héroe: aquella en la que va o la que dejó aparcada a la puerta del lugar donde entró de visita.
+    /// La columna de un héroe: aquella en la que va o con la que entró de visita en un lugar ajeno (dentro, fuera del mapa).
     pub fn columna_del_heroe(&self, heroe: u64) -> Option<&Ejercito> {
         self.estado.ejercitos.get(&self.estado.ejercito_de_heroe(heroe)?)
     }
@@ -128,7 +128,7 @@ impl Nucleo {
     }
 
     /// Quién puede mover la columna (`marcharA`, `estacionarEjercito`): su Líder, que además tiene que ir a bordo (un héroe dentro de un lugar no
-    /// dirige su columna aparcada), y nunca una formación, que no se mueve. La administración puede con todas las demás.
+    /// dirige su columna, que está dentro con él), y nunca una formación, que no se mueve. La administración puede con todas las demás.
     pub(super) fn autorizar_movimiento(&self, p: &Peticion, e: &Ejercito) -> Result<(), Respuesta> {
         let v = self.estado.version;
         if !self.manda_columna(p, e, true) {
@@ -406,7 +406,7 @@ impl Nucleo {
                 self.poner_escuadras_en(&[id], &suyas, Contenedor::Fuera, t);
         let cap = mr.logistica.capacidad_viveres;
         let hn = self.heroe_mut(id);
-        hn.carro_fuera = carro;
+        hn.carro = carro;
         hn.heroe.viveres = viveres.min(cap);
         hn.columna = None;
         hn.heroe.presencia.salir_del_mundo(posicion);
@@ -433,13 +433,13 @@ impl Nucleo {
             return vec![];
         };
         let escuadras: Vec<u64> = hn.heroe.escuadras.iter().filter(|e| e.contenedor == Contenedor::Fuera).map(|e| e.id).collect();
-        let (faccion, carro, viveres) = (hn.faccion, hn.carro_fuera.clone(), hn.heroe.viveres);
+        let (faccion, carro, viveres) = (hn.faccion, hn.carro.clone(), hn.heroe.viveres);
         let columna_id = self.nuevo_id();
         let heroes = [id];
         let militar = &self.estado.militar;
         let columna = Columna::salir(&mr, columna_id, faccion, id, TipoColumna::Personal, militar::columna::Politica::Rechazar, escuadras, carro, viveres, t, &|ids| militar.soldados_de(&heroes, ids));
         let hn = self.heroe_mut(id);
-        hn.carro_fuera.clear();
+        hn.carro.clear();
         hn.heroe.viveres = 0;
         let e = self.columna_suelta(columna, punto);
         self.alta_de_columna(t, e);

@@ -61,7 +61,7 @@ pub(super) fn loadout_en_el_campamento(h: &HeroeNucleo) -> Vec<&Escuadra> {
     h.heroe.escuadras.iter().filter(|s| activas.contains(&s.id) && s.contenedor == Contenedor::Campamento && !s.en_guarnicion && s.con_soldados()).collect()
 }
 
-/// Las escuadras con soldados del héroe que van en una columna (la que dejó aparcada a la puerta, si es un visitante): con las que defiende de visita.
+/// Las escuadras con soldados del héroe que van en una columna (la que trajo dentro, si es un visitante): con las que defiende de visita.
 fn de_su_columna(h: &HeroeNucleo) -> Vec<&Escuadra> {
     h.heroe.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) && s.con_soldados()).collect()
 }
@@ -514,8 +514,8 @@ impl Nucleo {
 
     /// Quién defiende la plaza con números (Combate §3.2): su guarnición (siempre, aunque su dueño esté herido), los residentes que están dentro, sanos y
     /// conectados con las escuadras de su loadout activo que tengan en el campamento (como mucho 15) y, en el cupo que dejan, los visitantes de la propia Facción o de
-    /// una aliada, con las escuadras de la columna que dejaron aparcada al entrar (no está en el mapa: es lo que trajeron). **Solo defiende lo que está dentro** (2026-10-22):
-    /// una columna amiga en el mapa, a la puerta, no cuenta.
+    /// una aliada, con las escuadras de la columna con la que entraron (no está en el mapa: es lo que trajeron). **Solo defiende lo que está dentro** (2026-10-22):
+    /// una columna amiga en el mapa, a la puerta, no cuenta; y un neutral o un enemigo dentro, tampoco.
     pub(super) fn defensa_de_plaza(&self, plaza: u64, t: Instante) -> DefensaDePlaza {
         let cr = &self.estado.reglas.economia.combate;
         let a = &self.estado.asentamientos[&plaza];
@@ -534,7 +534,8 @@ impl Nucleo {
             escuadras.extend(suyas.into_iter().cloned());
         }
 
-        let amiga = |f: Option<u32>| f.is_some_and(|f| f == a.faccion || matches!(self.estado.militar.relacion(f, a.faccion), Some(Relacion::Alianza | Relacion::Vasallaje)));
+        // Defienden los de la misma Facción, los aliados y los vasallos, y solo si están dentro: neutrales y enemigos nunca, aunque la puerta les haya abierto (Entrar con todo).
+        let amiga = |f: Option<u32>| self.estado.militar.defiende_a(a.faccion, f);
         let cupo = tope.saturating_sub(residentes_que_entran.len());
         let visitantes: Vec<Candidato> = if cupo == 0 {
             vec![]

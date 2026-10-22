@@ -1,20 +1,35 @@
 //! Salir al mundo y entrar en un lugar (Presencia_Y_Convocatoria §2-§5, Movimiento_Ejercitos §3 y §11): `salirAlMundo`, `movilizarEjercito`,
-//! `salirDelCampamento`, `entrarEnAsentamiento`, `salirDeAsentamiento`, `guarnecer` y `entrarEnCampamento`. Una salida es siempre la misma
+//! `salirDelCampamento`, `entrarEnAsentamiento`, `salirDeAsentamiento`, `guarnecer`, `entrarEnCampamento`, y las dos de Entrar con todo: `fijarAcceso` y
+//! `vaciarCarro`. Una salida es siempre la misma
 //! operación en dos tiempos: [`PlanDeSalida`] comprueba **todo** sin tocar nada (tropa, Liderazgo, carro, reserva de trigo, víveres) y
 //! `aplicar_salida` la ejecuta; las convocatorias simulan la salida de cada integrante con el primer tiempo y parten con el segundo, de modo
 //! que «saldría con lo que eligió» y «sale» no pueden discrepar (Presencia §9.2).
 //!
-//! # Dónde están los víveres
-//! Los víveres son del héroe (Movimiento_Ejercitos §6.1). Dentro de un lugar los lleva él (`Heroe::viveres`); en una columna son un único montón de
-//! la columna (`Columna::viveres`, capacidad de la suma de sus héroes). Al salir pasan a la columna y al entrar en su residencia —donde la columna
-//! se deshace— vuelven al héroe; una columna que queda aparcada a la puerta (de visita) los conserva y sigue comiendo a ritmo de acampada.
+//! # Se entra con todo y se sale con todo (decidido el 2026-10-22)
+//! Quien entra en un lugar lleva consigo todo lo suyo —tropa, carro, víveres y **todas** sus caravanas adjuntas, sean del origen que sean— y al salir se lo
+//! lleva. No hay «columna aparcada a la puerta»: a la puerta se está fuera, en el mapa, y no defiende; **dentro** es haber hecho la interacción de entrar.
+//! - **De visita** (otra plaza, o un campamento que no es su residencia) todo queda en su columna, que sigue existiendo pero ya no está en el mapa (ni se la ve,
+//!   ni se la persigue, ni se la ataca): la tropa come de **sus** víveres como un ejército acampado y la plaza anfitriona no gasta trigo por ella. Al salir la
+//!   columna vuelve al mapa tal cual.
+//! - **En su residencia** la tropa vuelve al campamento y los víveres al héroe (`Heroe::viveres`), pero el carro **se queda con él** ([`HeroeNucleo::carro`]):
+//!   entrar no lo vacía. `vaciarCarro` lo pasa al almacén personal hasta donde quepa (lo que no cabe se queda en el carro) y al salir se lo lleva. Solo si
+//!   entra con caravanas adjuntas su columna sigue existiendo (sin tropa ni carro) para llevarlas.
+//!
+//! Los víveres son del héroe (Movimiento_Ejercitos §6.1). Dentro de su residencia los lleva él (`Heroe::viveres`); en una columna son un único montón de
+//! la columna (`Columna::viveres`, capacidad de la suma de sus héroes).
+//!
+//! # Quién entra
+//! El dueño de la plaza decide por relación quién puede entrar (`fijarAcceso`, [`Acceso`]): la misma Facción y los residentes siempre; los aliados y vasallos,
+//! los neutrales y los enemigos según lo que fije (por defecto, hasta el sistema político, todos menos los enemigos). Los pueblos extractores y las avanzadas
+//! heredan el acceso de su plaza madre. Un campamento de mercenarios no es de nadie y está abierto a todos.
 //!
 //! # Lo provisional
-//! La puerta de una plaza (`fijarPuerta`, vetos, grupos) es del sistema político: hasta que exista, entra en una plaza quien reside en ella o es
-//! ciudadano de su Facción (los aliados, que dependen de las relaciones, no entran). `Fundar` todavía no deshace la columna dentro de la plaza nueva.
+//! La puerta completa de una plaza (`fijarPuerta` por grupos, vetos individuales) es del sistema político (5). Hoy nadie puede entrar en un pueblo extractor ni en
+//! una avanzada (no existe esa interacción): su acceso se hereda y se consulta ([`Nucleo::puede_entrar_en_pueblo`], [`Nucleo::puede_entrar_en_avanzada`]) pero
+//! no hay orden de entrar. `Fundar` todavía no deshace la columna dentro de la plaza nueva.
 
 use super::*;
-use crate::estado_militar::HeroeNucleo;
+use crate::estado_militar::Acceso;
 use crate::nucleo::mercado::RADIO_PUERTA;
 use crate::nucleo::mercado::CAPACIDAD_CARRO;
 use asentamiento::almacen::Almacen;
@@ -42,7 +57,7 @@ pub(super) struct PlanDeSalida {
     pub trigo: Mil,
     /// La ración gratis del campamento: llena sus víveres y estampa `racion_en`.
     pub racion_gratis: bool,
-    /// La columna que retoma: la que dejó aparcada a la puerta de un lugar ajeno, o el resto que dejó al entrar en su campamento.
+    /// La columna con la que sale: la que trajo dentro de un lugar ajeno, o la que conserva en su residencia para llevar sus caravanas. Sin ella, nace una.
     pub retoma: Option<u64>,
     /// Liderazgo que ocupan las escuadras que saca (para el hecho).
     pub liderazgo: i64,
@@ -75,31 +90,36 @@ impl Nucleo {
     // ───────────────────────────── Salir ─────────────────────────────
 
     /// Comprueba una salida entera sin tocar el estado (Presencia §9.2): `elegidas` son las escuadras del campamento que saca, en orden, y
-    /// `carga` lo que carga en el carro. Quien reside en el lugar elige; quien está de visita retoma la columna que dejó aparcada (su elección se
-    /// ignora). `reservas` acumula lo que gastan las salidas simuladas antes de esta en el mismo lugar.
+    /// `carga` lo que carga en el carro. Quien reside en el lugar elige (y se lleva el carro que trajo); quien está de visita sale con todo lo que entró, su
+    /// columna (su elección se ignora). `reservas` acumula lo que gastan las salidas simuladas antes de esta en el mismo lugar.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn validar_salida(&mut self, t: Instante, heroe: u64, lugar: Lugar, elegidas: &[u64], carga: &[(Recurso, Mil)], exigir_escuadras: bool, reservas: &mut Reservas) -> Result<PlanDeSalida, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let mr = self.estado.reglas.economia.militar.clone();
         let hn = self.heroe(heroe).expect("el héroe existe");
-        let propios = hn.heroe.viveres;
         let (reside, presente, no_esta) = match lugar {
             Lugar::Asentamiento(a) => (hn.heroe.residencia == Some(Residencia::Asentamiento(a)), hn.heroe.presencia.ubicacion == Ubicacion::Asentamiento(a), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA),
             Lugar::Campamento(c) => (hn.heroe.residencia == Some(Residencia::Campamento(c)), hn.heroe.presencia.ubicacion == Ubicacion::Mercenarios(c), rechazos::HEROE_NO_ESTA_EN_EL_CAMPAMENTO),
         };
-        // Quien ya va fuera, en una plaza, no sale otra vez; en un campamento, lo que tiene fuera es el resto que dejó al entrar (se retoma).
-        let columna = hn.columna.filter(|_| !matches!(lugar, Lugar::Asentamiento(_)) || !reside);
-        if hn.columna.is_some() && columna.is_none() {
+        // Quien ya va fuera, en una plaza, no sale otra vez.
+        let columna = hn.columna;
+        if matches!(lugar, Lugar::Asentamiento(_)) && reside && columna.is_some() && matches!(hn.heroe.presencia.ubicacion, Ubicacion::Columna(_)) {
             return Err(rechazo(rechazos::HEROE_YA_EN_COLUMNA, "ya estás fuera: no se puede salir dos veces".into()));
         }
         if !presente {
             return Err(rechazo(no_esta, format!("el héroe no está dentro de {lugar:?}")));
         }
         if !reside {
-            let retoma = columna.ok_or_else(|| rechazo(rechazos::COLUMNA_NO_APARCADA, "tu columna ya no está a la puerta".into()))?;
-            return Ok(PlanDeSalida { heroe, lugar, escuadras: vec![], carga: Mercancia::new(), trigo: 0, racion_gratis: false, retoma: Some(retoma), liderazgo: 0 });
+            // De visita se sale con todo lo que se entró: la columna tal cual (su elección se ignora). Quien no trajo ninguna sale solo, con sus víveres; no puede sacar
+            // tropa ni carro que no tiene aquí (su campamento y su almacén personal están en su residencia).
+            if columna.is_none() && (!elegidas.is_empty() || carga.iter().any(|(_, n)| *n != 0)) {
+                return Err(rechazo(rechazos::SALIDA_SOLO_DE_TU_RESIDENCIA, "no tienes tropa ni carro en este lugar: están en tu residencia".into()));
+            }
+            return Ok(PlanDeSalida { heroe, lugar, escuadras: vec![], carga: Mercancia::new(), trigo: 0, racion_gratis: false, retoma: columna, liderazgo: 0 });
         }
+        // Los víveres que ya lleva: los suyos y, si conserva su columna, los que quedaron en ella.
+        let propios = hn.heroe.viveres + columna.and_then(|c| self.estado.ejercitos.get(&c)).map_or(0, |c| c.columna.viveres.valor_en(t));
 
         // Las escuadras: existen, son suyas, están en su campamento, con soldados, fuera de la guarnición y sin candado de batalla.
         let mut vistas = std::collections::BTreeSet::new();
@@ -142,9 +162,11 @@ impl Nucleo {
         if pedido.values().any(|&n| n < 0) {
             return Err(rechazo(rechazos::CARGA_NEGATIVA, "no se puede cargar una cantidad negativa".into()));
         }
-        let ocupado = columna.and_then(|c| self.estado.ejercitos.get(&c)).map_or(0, |c| total(&c.columna.carga));
-        if total(&pedido) > CAPACIDAD_CARRO - ocupado {
-            return Err(rechazo(rechazos::CARRO_LLENO, format!("el carro admite {} y se piden {}", CAPACIDAD_CARRO - ocupado, total(&pedido))));
+        // El carro nunca lleva más de su capacidad: cuenta el que trajo a su residencia (y, si conserva su columna, lo que ella lleve).
+        let ocupado = total(&hn.carro) + columna.and_then(|c| self.estado.ejercitos.get(&c)).map_or(0, |c| total(&c.columna.carga));
+        let hueco = (CAPACIDAD_CARRO - ocupado).max(0);
+        if total(&pedido) > hueco {
+            return Err(rechazo(rechazos::CARRO_LLENO, format!("el carro admite {hueco} y se piden {}", total(&pedido))));
         }
         match lugar {
             Lugar::Asentamiento(a) => {
@@ -181,7 +203,7 @@ impl Nucleo {
     }
 
     /// Ejecuta una salida ya comprobada y devuelve la columna en la que va el héroe. Con `Destino::Unirse` el héroe se suma al ejército dado
-    /// (los integrantes de una convocatoria que parte) con lo que saca; si no, nace una columna (o se retoma la aparcada).
+    /// (los integrantes de una convocatoria que parte) con lo que saca; si no, nace una columna (o se sale con la que trajo).
     pub(super) fn aplicar_salida(&mut self, t: Instante, plan: &PlanDeSalida, destino: Destino) -> u64 {
         let mr = self.estado.reglas.economia.militar.clone();
         let PlanDeSalida { heroe, lugar, escuadras, carga, trigo, racion_gratis, retoma, .. } = plan;
@@ -201,10 +223,15 @@ impl Nucleo {
                 personal.retain(|_, n| *n > 0);
             }
         }
-        // 2. Los víveres que lleva: los suyos, más lo que llenó. La ración gratis los lleva al tope.
+        // 2. Los víveres que lleva: los suyos, más lo que llenó. La ración gratis los lleva al tope. Y el carro que trajo a su residencia, con lo que saca ahora.
         let hn = self.heroe_mut(*heroe);
         let propios = std::mem::take(&mut hn.heroe.viveres);
         let faccion = hn.faccion;
+        let mut carga = carga.clone();
+        for (r, n) in std::mem::take(&mut hn.carro) {
+            *carga.entry(r).or_insert(0) += n;
+        }
+        let carga = &carga;
         if *racion_gratis {
             hn.heroe.racion_en = Some(t);
         }
@@ -212,7 +239,7 @@ impl Nucleo {
         let posicion = self.puerta_de(*lugar).expect("el lugar existe");
         let columna = match (retoma, destino) {
             (Some(c0), Destino::Columna { tipo, politica }) => {
-                // Retomar: la aparcada tal cual (de visita) o el resto con lo que se le suma (en su campamento).
+                // Sale con la columna que trajo: tal cual (de visita) o con lo que se le suma (si la conservaba en su residencia).
                 self.tras_retomar(t, *c0, escuadras, carga, comida, tipo, politica);
                 *c0
             }
@@ -226,7 +253,10 @@ impl Nucleo {
                 id
             }
             (Some(c0), Destino::Unirse(base)) => {
-                // Un visitante que parte con el ejército: su columna aparcada se funde con la del Líder.
+                // Quien parte con el ejército llevando su columna (de visita, o la que conservaba en su residencia): se le suma lo que saca ahora y se funde con la del Líder.
+                if !escuadras.is_empty() || !carga.is_empty() || comida > 0 {
+                    self.tras_retomar(t, *c0, escuadras, carga, comida, TipoColumna::Personal, Politica::Rechazar);
+                }
                 self.fusionar_columna(t, base, *c0).expect("la convocatoria comprobó que se puede fundir");
                 base
             }
@@ -247,13 +277,13 @@ impl Nucleo {
         columna
     }
 
-    /// Retomar la columna `c0`: si el héroe deja en ella un resto (reside en el campamento), se le suman las escuadras, la carga y los víveres.
+    /// Salir con la columna `c0`: si el héroe la conservaba en su residencia, se le suman las escuadras, la carga y los víveres que saca.
     #[allow(clippy::too_many_arguments)]
     fn tras_retomar(&mut self, t: Instante, c0: u64, escuadras: &[u64], carga: &Mercancia, comida: Mil, tipo: TipoColumna, politica: Politica) {
         let heroes = self.estado.ejercitos.get(&c0).map(Self::participantes_de).unwrap_or_default();
         {
             let Estado { ejercitos, .. } = &mut self.estado;
-            let c = &mut ejercitos.get_mut(&c0).expect("la columna aparcada existe").columna;
+            let c = &mut ejercitos.get_mut(&c0).expect("la columna con la que sale existe").columna;
             c.escuadras.extend_from_slice(escuadras);
             carga.iter().for_each(|(&r, &n)| *c.carga.entry(r).or_insert(0) += n);
             if comida > 0 {
@@ -318,96 +348,113 @@ impl Nucleo {
         }
     }
 
-    // ───────────────────────────── Entrar ─────────────────────────────
+    // ───────────────────────────── Quién entra ─────────────────────────────
 
-    /// ¿Entra el héroe en esa plaza? Un residente, siempre; si no, quien es ciudadano de su Facción (provisional: véase el módulo).
-    fn permiso_de_entrada(&self, hn: &HeroeNucleo, plaza: u64) -> bool {
-        hn.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32)) || hn.faccion.is_some_and(|f| f == self.estado.asentamientos[&plaza].faccion)
+    /// El acceso de una plaza: lo que su dueño ha decidido que se permita a cada relación (por defecto, todos menos los enemigos).
+    pub fn acceso_de_plaza(&self, plaza: u64) -> Option<Acceso> {
+        self.estado.asentamientos.get(&plaza).map(|a| a.acceso)
     }
 
-    /// El héroe entra en la plaza «como lo haría solo» (Presencia §4.1): en su residencia su columna se deshace dentro (la tropa vuelve al
-    /// campamento, el carro al almacén hasta donde quepa y los víveres quedan con él); en otra plaza entra de visita y su columna queda aparcada
-    /// a la puerta, parada.
+    /// ¿Le abre la plaza su puerta? Quien reside en ella y los de su Facción, siempre; el resto, según el acceso que fijó su dueño para su relación (aliada o
+    /// vasalla, neutral, enemiga). `false` si el héroe o la plaza no existen.
+    pub fn puede_entrar_en_plaza(&self, heroe: u64, plaza: u64) -> bool {
+        let (Some(hn), Some(a)) = (self.heroe(heroe), self.estado.asentamientos.get(&plaza)) else { return false };
+        hn.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32)) || a.acceso.permite(self.estado.militar.trato(a.faccion, hn.faccion))
+    }
+
+    /// ¿Le abriría su puerta un pueblo extractor? Hereda el acceso de su plaza madre (`None` si el pueblo no existe). Hoy no hay orden de entrar en un pueblo.
+    pub fn puede_entrar_en_pueblo(&self, heroe: u64, pueblo: u64) -> Option<bool> {
+        let (madre, _) = self.pueblo(pueblo)?;
+        Some(self.puede_entrar_en_plaza(heroe, madre))
+    }
+
+    /// ¿Le abriría su puerta una avanzada? Hereda el acceso de su plaza madre (`None` si no existe o es una ruina sin dueño). Hoy no hay orden de entrar en una
+    /// avanzada.
+    pub fn puede_entrar_en_avanzada(&self, heroe: u64, avanzada: u64) -> Option<bool> {
+        let (madre, _) = self.avanzada(avanzada)?;
+        Some(self.puede_entrar_en_plaza(heroe, madre?))
+    }
+
+    // ───────────────────────────── Entrar ─────────────────────────────
+
+    /// El residente entra en su residencia con su columna: la tropa vuelve al campamento, el carro se queda con él y, si no lleva caravanas, la columna se
+    /// disuelve (los víveres vuelven al héroe). Con caravanas adjuntas la columna sigue —quieta, sin tropa— para llevarlas, y el carro se queda en ella (su capacidad
+    /// es la de la columna con sus caravanas). Devuelve lo que carga el carro y si la columna sigue.
+    fn recoger_en_residencia(&mut self, t: Instante, heroe: u64, columna: u64, ubicacion: Ubicacion) -> (Mil, bool) {
+        let sigue = !self.estado.ejercitos[&columna].caravanas_adjuntas.is_empty();
+        if sigue && self.estado.ejercitos[&columna].marchando() {
+            self.detener(columna, t);
+        }
+        let propios = self.escuadras_de_heroe_en(heroe, columna);
+        let e = self.estado.ejercitos.get_mut(&columna).expect("existe");
+        let en_el_carro = total(&e.columna.carga);
+        let carga = if sigue { Mercancia::new() } else { std::mem::take(&mut e.columna.carga) };
+        e.columna.escuadras.retain(|s| !propios.contains(s));
+        let viveres = e.columna.viveres.valor_en(t);
+        self.poner_escuadras_en(&[heroe], &propios, Contenedor::Campamento, t);
+        let cap = self.estado.reglas.economia.militar.logistica.capacidad_viveres;
+        let hn = self.heroe_mut(heroe);
+        for (&r, &n) in &carga {
+            *hn.carro.entry(r).or_insert(0) += n;
+        }
+        hn.heroe.presencia.ubicacion = ubicacion;
+        if sigue {
+            self.reanclar_consumo(columna, t);
+            self.reprogramar_columna(columna, t);
+        } else {
+            hn.heroe.viveres = (hn.heroe.viveres + viveres).min(cap);
+            hn.columna = None;
+            self.baja_de_columna(columna);
+        }
+        (en_el_carro, sigue)
+    }
+
+    /// El héroe entra en la plaza con todo lo suyo (Entrar con todo, 2026-10-22): en su residencia la tropa vuelve al campamento, los víveres al héroe y el carro se
+    /// queda con él (`vaciarCarro` lo pasa al almacén personal); en otra plaza entra de visita y su columna entera —tropa, carro, víveres y caravanas— queda
+    /// dentro, fuera del mapa.
     pub(super) fn entrar_en_plaza(&mut self, t: Instante, heroe: u64, plaza: u64) {
         let columna = self.estado.ejercito_de_heroe(heroe).expect("va en una columna");
         let reside = self.heroe(heroe).expect("existe").heroe.residencia == Some(Residencia::Asentamiento(plaza as u32));
+        let dentro = Ubicacion::Asentamiento(plaza as u32);
         if reside {
-            let e = self.estado.ejercitos.get(&columna).expect("existe");
-            let (propios, viveres) = (self.escuadras_de_heroe_en(heroe, columna), e.columna.viveres.valor_en(t));
-            let carga = e.columna.carga.clone();
-            let almacen = &mut self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.almacen;
-            let admitido: Mil = carga.iter().map(|(&r, &n)| almacen.agregar(r, n)).sum();
+            let (carro, sigue) = self.recoger_en_residencia(t, heroe, columna, dentro);
             self.tr.asentamientos.push(plaza);
-            self.poner_escuadras_en(&[heroe], &propios, Contenedor::Campamento, t);
-            let cap = self.estado.reglas.economia.militar.logistica.capacidad_viveres;
-            let hn = self.heroe_mut(heroe);
-            hn.heroe.viveres = (hn.heroe.viveres + viveres).min(cap);
-            hn.columna = None;
-            hn.heroe.presencia.ubicacion = Ubicacion::Asentamiento(plaza as u32);
-            self.baja_de_columna(columna);
-            self.emitir_propio(t, "jugador.entra_en_asentamiento", vec![plaza], vec![("heroe", heroe as i64), ("ejercito", columna as i64), ("residencia", 1), ("perdido", total(&carga) - admitido)]);
+            self.anunciar_columna(columna, Motivo::Plan);
+            self.emitir_propio(t, "jugador.entra_en_asentamiento", vec![plaza], vec![("heroe", heroe as i64), ("ejercito", columna as i64), ("residencia", 1), ("carro", carro), ("columnaSigue", sigue as i64)]);
         } else {
             if self.estado.ejercitos[&columna].marchando() {
                 self.detener(columna, t);
             }
-            self.heroe_mut(heroe).heroe.presencia.ubicacion = Ubicacion::Asentamiento(plaza as u32);
+            self.heroe_mut(heroe).heroe.presencia.ubicacion = dentro;
             self.anunciar_columna(columna, Motivo::Plan);
             self.tr.tocados.push(columna);
-            self.emitir_propio(t, "jugador.entra_en_asentamiento", vec![plaza], vec![("heroe", heroe as i64), ("ejercito", columna as i64), ("residencia", 0)]);
+            let caravanas = self.estado.ejercitos[&columna].caravanas_adjuntas.len() as i64;
+            self.emitir_propio(t, "jugador.entra_en_asentamiento", vec![plaza], vec![("heroe", heroe as i64), ("ejercito", columna as i64), ("residencia", 0), ("caravanas", caravanas)]);
         }
     }
 
-    /// El héroe entra en el campamento (Presencia §5.1). El residente deja la tropa y vuelca el carro en su almacén personal hasta la capacidad: lo
-    /// que no cabe se queda en el carro, y la columna sigue aparcada a la puerta con ese resto, sin escuadras. El visitante entra con su columna
-    /// intacta a la puerta.
+    /// El héroe entra en el campamento con todo lo suyo (Presencia §5.1). El residente deja la tropa y se queda con el carro, como en una plaza; el visitante entra con
+    /// su columna entera, que queda dentro.
     pub(super) fn entrar_en_campamento(&mut self, t: Instante, heroe: u64, campamento: u32) {
         let columna = self.estado.ejercito_de_heroe(heroe).expect("va en una columna");
         let reside = self.heroe(heroe).expect("existe").heroe.residencia == Some(Residencia::Campamento(campamento));
-        let cap_personal = self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal;
-        let mut resto = Mercancia::new();
+        let dentro = Ubicacion::Mercenarios(campamento);
+        let mut carro = 0;
         if reside {
-            let propios = self.escuadras_de_heroe_en(heroe, columna);
-            let carga = self.estado.ejercitos[&columna].columna.carga.clone();
-            let hn = self.heroe_mut(heroe);
-            let mut libre = (cap_personal - total(&hn.almacen_personal)).max(0);
-            for (&r, &n) in &carga {
-                let cabe = n.min(libre);
-                if cabe > 0 {
-                    *hn.almacen_personal.entry(r).or_insert(0) += cabe;
-                }
-                if n - cabe > 0 {
-                    resto.insert(r, n - cabe);
-                }
-                libre -= cabe;
-            }
-            self.poner_escuadras_en(&[heroe], &propios, Contenedor::Campamento, t);
-            let e = self.estado.ejercitos.get_mut(&columna).expect("existe");
-            e.columna.carga = resto.clone();
-            e.columna.escuadras.retain(|s| !propios.contains(s));
-        }
-        let e = &self.estado.ejercitos[&columna];
-        let (marchando, queda) = (e.marchando(), !reside || !resto.is_empty());
-        if marchando {
-            self.detener(columna, t);
-        }
-        if !queda {
-            // Sin resto, la columna se deshace dentro y los víveres quedan con el héroe.
-            let viveres = self.estado.ejercitos[&columna].columna.viveres.valor_en(t);
-            let cap = self.estado.reglas.economia.militar.logistica.capacidad_viveres;
-            let hn = self.heroe_mut(heroe);
-            hn.heroe.viveres = (hn.heroe.viveres + viveres).min(cap);
-            hn.columna = None;
-            self.baja_de_columna(columna);
+            carro = self.recoger_en_residencia(t, heroe, columna, dentro).0;
         } else {
+            if self.estado.ejercitos[&columna].marchando() {
+                self.detener(columna, t);
+            }
             self.reanclar_consumo(columna, t);
             self.reprogramar_columna(columna, t);
+            self.heroe_mut(heroe).heroe.presencia.ubicacion = dentro;
         }
-        self.heroe_mut(heroe).heroe.presencia.ubicacion = Ubicacion::Mercenarios(campamento);
         self.anunciar_columna(columna, Motivo::Plan);
-        self.emitir_propio(t, "jugador.entra_en_campamento", vec![], vec![("heroe", heroe as i64), ("campamento", campamento as i64), ("ejercito", columna as i64), ("residencia", reside as i64), ("resto", total(&resto))]);
+        self.emitir_propio(t, "jugador.entra_en_campamento", vec![], vec![("heroe", heroe as i64), ("campamento", campamento as i64), ("ejercito", columna as i64), ("residencia", reside as i64), ("carro", carro)]);
     }
 
-    /// `entrarEnAsentamiento`, `salirDeAsentamiento`, `guarnecer`, `entrarEnCampamento` y las tres salidas.
+    /// `entrarEnAsentamiento`, `salirDeAsentamiento`, `guarnecer`, `entrarEnCampamento`, las tres salidas, `fijarAcceso` y `vaciarCarro`.
     pub(super) fn ejecutar_salidas(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -420,7 +467,7 @@ impl Nucleo {
             Comando::EntrarEnAsentamiento { asentamiento, heroe } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?.posicion;
                 self.autorizar_heroe(p, *heroe, false)?;
-                let (columna, e) = self.columna_a_bordo(*heroe)?;
+                let (_, e) = self.columna_a_bordo(*heroe)?;
                 if e.columna.tipo != TipoColumna::Personal {
                     return Err(rechazo(rechazos::COLUMNA_ES_UN_EJERCITO, "vas en un ejército: un ejército entra con `guarnecer`; para entrar solo, sepárate antes".into()));
                 }
@@ -430,10 +477,9 @@ impl Nucleo {
                 if !p.admin && e.posicion_en(t).dist(plaza) > RADIO_PUERTA {
                     return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
                 }
-                if !self.permiso_de_entrada(self.heroe(*heroe).expect("existe"), *asentamiento) {
+                if !self.puede_entrar_en_plaza(*heroe, *asentamiento) {
                     return Err(rechazo(rechazos::PUERTA_CERRADA, "la plaza no te abre su puerta".into()));
                 }
-                let _ = columna;
                 self.entrar_en_plaza(t, *heroe, *asentamiento);
                 Ok(vec![])
             }
@@ -448,16 +494,100 @@ impl Nucleo {
                 if hn.heroe.presencia.ubicacion != Ubicacion::Asentamiento(*asentamiento as u32) {
                     return Err(rechazo(rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, format!("el héroe no está dentro de as-{asentamiento}")));
                 }
-                let columna = hn.columna.ok_or_else(|| rechazo(rechazos::COLUMNA_NO_APARCADA, "tu columna ya no está a la puerta".into()))?;
-                self.ubicar_en_columna(*heroe, columna);
-                self.tr.tocados.push(columna);
+                // Sale con todo lo que entró: su columna vuelve al mapa tal cual. Quien no trajo ninguna (lo colocó la administración) sale solo, con sus víveres.
+                let (columna, faccion) = (hn.columna, hn.faccion);
+                let columna = match columna {
+                    Some(c) => {
+                        self.ubicar_en_columna(*heroe, c);
+                        self.tr.tocados.push(c);
+                        c
+                    }
+                    None => {
+                        let posicion = self.puerta_de(Lugar::Asentamiento(*asentamiento as u32)).expect("la plaza existe");
+                        self.columna_de_salida(t, *heroe, posicion, faccion, &[])
+                    }
+                };
                 self.emitir_propio(t, "jugador.sale_de_asentamiento", vec![*asentamiento], vec![("heroe", *heroe as i64), ("ejercito", columna as i64)]);
                 Ok(vec![])
             }
             Comando::Guarnecer { asentamiento, heroe } => self.guarnecer(t, p, *asentamiento, *heroe),
             Comando::EntrarEnCampamento { campamento, heroe } => self.entrar_en_el_campamento(t, p, *campamento, *heroe),
+            Comando::FijarAcceso { asentamiento, aliados, neutrales, enemigos } => {
+                let plaza = self.plaza_o_rechazo(*asentamiento)?;
+                if !self.manda_en(p, plaza.faccion) {
+                    return Err(rechazo(rechazos::NO_AUTORIZADO, "solo quien manda en la plaza decide quién entra".into()));
+                }
+                let nuevo = Acceso { aliados: *aliados, neutrales: *neutrales, enemigos: *enemigos };
+                if plaza.acceso == nuevo {
+                    return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+                }
+                // DUDA: cerrar la puerta no echa a quien ya está dentro (el acceso solo decide quién entra); lo expulsa, en su caso, el sistema político.
+                self.estado.asentamientos.get_mut(asentamiento).expect("existe").acceso = nuevo;
+                self.tr.asentamientos.push(*asentamiento);
+                self.emitir_propio(t, "asentamiento.acceso", vec![*asentamiento], vec![("aliados", nuevo.aliados as i64), ("neutrales", nuevo.neutrales as i64), ("enemigos", nuevo.enemigos as i64)]);
+                Ok(vec![])
+            }
+            Comando::VaciarCarro { heroe } => self.vaciar_carro(t, p, *heroe),
             _ => unreachable!("solo se llama con órdenes de salir y entrar"),
         }
+    }
+
+    /// `vaciarCarro`: dentro de su residencia, el héroe pasa el carro que trajo a su almacén personal (`ALMACEN_PERSONAL.capacidad`), recurso a recurso y por orden,
+    /// hasta donde quepa. Lo que no cabe se queda en el carro (en la columna que conserva para llevar sus caravanas, si el carro estaba en ella). Entrar en la
+    /// residencia no lo hace solo.
+    // DUDA: el almacén personal de quien reside en una plaza tiene la capacidad del de un campamento de mercenarios (hasta que la residencia completa del sistema 5 diga otra).
+    fn vaciar_carro(&mut self, t: Instante, p: &Peticion, heroe: u64) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        self.autorizar_heroe(p, heroe, false)?;
+        let hn = self.heroe(heroe).expect("existe");
+        let (en_residencia, plaza) = match (hn.heroe.residencia, hn.heroe.presencia.ubicacion) {
+            (Some(Residencia::Asentamiento(a)), Ubicacion::Asentamiento(b)) => (a == b, vec![a as u64]),
+            (Some(Residencia::Campamento(a)), Ubicacion::Mercenarios(b)) => (a == b, vec![]),
+            _ => (false, vec![]),
+        };
+        if !en_residencia {
+            return Err(rechazo(rechazos::VACIAR_SOLO_EN_TU_RESIDENCIA, "el carro se vacía dentro de tu residencia, donde está tu almacén personal".into()));
+        }
+        // El carro está con el héroe y, si conserva una columna para llevar sus caravanas, también en ella.
+        let columna = hn.columna.filter(|c| self.estado.ejercitos.contains_key(c));
+        if hn.carro.is_empty() && columna.is_none_or(|c| self.estado.ejercitos[&c].columna.carga.is_empty()) {
+            return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+        }
+        let cap = self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal;
+        let mut libre = (cap - total(&hn.almacen_personal)).max(0);
+        if libre == 0 {
+            return Err(rechazo(rechazos::ALMACEN_PERSONAL_LLENO, "tu almacén personal está lleno: no cabe nada del carro".into()));
+        }
+        let mut origenes = vec![std::mem::take(&mut self.heroe_mut(heroe).carro)];
+        if let Some(c) = columna {
+            origenes.push(std::mem::take(&mut self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga));
+        }
+        let (mut movido, mut restos) = (0, Vec::new());
+        for origen in origenes {
+            let mut resto = Mercancia::new();
+            for (r, n) in origen {
+                let cabe = n.min(libre);
+                if cabe > 0 {
+                    *self.heroe_mut(heroe).almacen_personal.entry(r).or_insert(0) += cabe;
+                    libre -= cabe;
+                    movido += cabe;
+                }
+                if n > cabe {
+                    resto.insert(r, n - cabe);
+                }
+            }
+            restos.push(resto);
+        }
+        let quedan: Mil = restos.iter().map(total).sum();
+        let mut restos = restos.into_iter();
+        self.heroe_mut(heroe).carro = restos.next().expect("el del héroe");
+        if let (Some(c), Some(resto)) = (columna, restos.next()) {
+            self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga = resto;
+            self.tr.tocados.push(c);
+        }
+        self.emitir_propio(t, "heroe.vacia_el_carro", plaza, vec![("heroe", heroe as i64), ("movido", movido), ("resto", quedan)]);
+        Ok(vec![])
     }
 
     /// La columna en la que va el héroe, a bordo (`ubicacion = columna`).
@@ -472,20 +602,17 @@ impl Nucleo {
         }
     }
 
-    /// `guarnecer` (Presencia §4.3): un ejército de la Facción de la plaza, a su puerta, entra: solo lo ordena su Líder, solo si todas sus caravanas
-    /// adjuntas son de esa plaza (quedan aparcadas en ella), se desarma y cada héroe entra como lo haría solo.
+    /// `guarnecer` (Presencia §4.3): un ejército, a la puerta de una plaza que le abre su puerta (a todos sus héroes), entra con todo —incluidas sus caravanas
+    /// adjuntas, sean de donde sean—: solo lo ordena su Líder; se desarma y cada héroe entra como lo haría solo. Las caravanas se quedan con la columna del Líder,
+    /// que sigue siendo un ejército mientras las lleve.
     fn guarnecer(&mut self, t: Instante, p: &Peticion, asentamiento: u64, heroe: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let plaza = self.plaza_o_rechazo(asentamiento)?;
-        let (faccion_plaza, posicion) = (plaza.faccion, plaza.posicion);
+        let posicion = self.plaza_o_rechazo(asentamiento)?.posicion;
         self.autorizar_heroe(p, heroe, false)?;
         let (id, e) = self.columna_a_bordo(heroe)?;
         if !Self::es_ejercito(e) {
             return Err(rechazo(rechazos::COLUMNA_NO_ES_EJERCITO, "solo un ejército guarnece: una columna personal entra con `entrarEnAsentamiento`".into()));
-        }
-        if e.columna.faccion != Some(faccion_plaza) {
-            return Err(rechazo(rechazos::COLUMNA_OTRA_FACCION, "solo se guarnece una plaza de tu propia Facción".into()));
         }
         if !p.admin && e.posicion_en(t).dist(posicion) > RADIO_PUERTA {
             return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
@@ -493,21 +620,22 @@ impl Nucleo {
         if e.columna.lider != heroe {
             return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder hace entrar al ejército".into()));
         }
-        self.caravanas_del_lugar(e, asentamiento)?;
-        let adjuntas = e.caravanas_adjuntas.clone();
         let antes = Self::participantes_de(e);
+        if let Some(h) = antes.iter().find(|&&h| !self.puede_entrar_en_plaza(h, asentamiento)) {
+            return Err(rechazo(rechazos::PUERTA_CERRADA, format!("la plaza no abre su puerta al héroe {h} del ejército")));
+        }
+        let adjuntas = e.caravanas_adjuntas.len();
         let escuadrones = e.columna.escuadras.len();
-        self.aparcar_todas(t, id, asentamiento, posicion);
         self.desarmar_columna(t, id);
         for h in antes.iter().copied() {
             self.entrar_en_plaza(t, h, asentamiento);
         }
-        self.emitir_propio(t, "ejercito.guarnece", vec![asentamiento], vec![("ejercito", id as i64), ("escuadrones", escuadrones as i64), ("caravanasAparcadas", adjuntas.len() as i64), ("heroes", antes.len() as i64)]);
+        self.emitir_propio(t, "ejercito.guarnece", vec![asentamiento], vec![("ejercito", id as i64), ("escuadrones", escuadrones as i64), ("caravanas", adjuntas as i64), ("heroes", antes.len() as i64)]);
         Ok(vec![])
     }
 
     /// `entrarEnCampamento` (Presencia §5.1): quien va solo en una columna personal entra; un ejército (o una personal con compañía) entra entero,
-    /// ordenado por su Líder, se desarma y cada héroe entra como lo haría solo.
+    /// ordenado por su Líder, con todo —caravanas incluidas—, se desarma y cada héroe entra como lo haría solo.
     fn entrar_en_el_campamento(&mut self, t: Instante, p: &Peticion, campamento: u32, heroe: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -523,11 +651,6 @@ impl Nucleo {
         }
         if !p.admin && e.posicion_en(t).dist(puerta) > RADIO_PUERTA {
             return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta del campamento".into()));
-        }
-        // Las caravanas comerciales son de una plaza, nunca de un campamento: con alguna enganchada no se entra (la Caravana de Fundación,
-        // que sí podría, todavía no es una caravana de la flota).
-        if let Some(&c) = e.caravanas_adjuntas.first() {
-            return Err(rechazo(rechazos::CARAVANA_AJENA_AL_LUGAR, format!("la caravana {c} no es de este campamento: hay que soltarla o llevarla a su origen antes de entrar")));
         }
         if solo {
             self.entrar_en_campamento(t, heroe, campamento);

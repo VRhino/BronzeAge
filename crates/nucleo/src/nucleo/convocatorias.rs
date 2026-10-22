@@ -7,8 +7,9 @@
 //! # Partir es todo o nada
 //! `partir` simula a todos los que siguen dentro, en orden, acumulando lo que gastan (`Reservas`): el almacén de la plaza lo comparten, y lo que saca el
 //! primero no lo tiene el segundo. Si alguien no puede salir no sale nadie y se dice quién y por qué. Si todos pueden, el Líder sale como un ejército
-//! quieto en la puerta con la política de la convocatoria y los demás se suman a él con lo que eligieron (un integrante de visita se suma con la
-//! columna que dejó aparcada, que ha de poder fundirse con la del Líder: personal, de la misma Facción y sin formación).
+//! quieto en la puerta con la política de la convocatoria y los demás se suman a él con lo que eligieron. Quien parte lo hace con todo lo que trajo (Entrar
+//! con todo, 2026-10-22): el residente, con el carro que no vació; el de visita, con su columna entera (tropa, carro, víveres), que ha de poder fundirse con
+//! la del Líder: personal, de la misma Facción y sin formación.
 //!
 //! # Los plazos
 //! Lo único con instante es la petición de unión de un integrante potencial (10 s con la política `Preguntar`, el silencio vale como un no): un evento
@@ -178,7 +179,7 @@ impl Nucleo {
         let (mut planes, mut reservas) = (Vec::new(), Reservas::default());
         let resultado = c.partir(heroe, &|h| dentro.contains(&h), &mut |i| {
             let plan = self.validar_salida(t, i.heroe, c.lugar, &i.seleccion.escuadras, &Self::lineas_de(&i.seleccion.carga), false, &mut reservas)?;
-            // Un integrante de visita se suma con la columna que dejó aparcada: ha de poder fundirse con la del Líder.
+            // Quien parte con su columna —de visita, o la que conserva en su residencia para llevar sus caravanas— la suma al ejército: ha de poder fundirse con la del Líder.
             if let Some(retomada) = plan.retoma.and_then(|r| self.estado.ejercitos.get(&r)).filter(|_| i.heroe != c.lider) {
                 let cc = &retomada.columna;
                 let error = if cc.tipo != TipoColumna::Personal || cc.es_formacion() {
@@ -189,7 +190,7 @@ impl Nucleo {
                     None
                 };
                 if let Some(codigo) = error {
-                    return Err(Respuesta::rechazo(codigo, "su columna aparcada no se puede fundir con el ejército", v));
+                    return Err(Respuesta::rechazo(codigo, "su columna no se puede fundir con el ejército", v));
                 }
             }
             planes.push(plan);

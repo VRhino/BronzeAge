@@ -91,15 +91,15 @@ pub struct Afectado {
     pub heroe: HeroeId,
     pub residente: bool,
     pub dentro: bool,
-    /// La columna que dejó aparcada a la puerta, si es un visitante.
-    pub columna_aparcada: Option<ColumnaId>,
+    /// La columna con la que entró (tropa, carro, víveres y caravanas), si es un visitante: sale con ella al mapa, sin perder nada.
+    pub columna: Option<ColumnaId>,
     /// Las escuadras con las que defendió y sobrevivieron (con soldados). Un residente herido no defendió: vacío.
     pub lucharon: Vec<EscuadraId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Salida {
-    /// Vuelve a la columna que dejó aparcada.
+    /// Vuelve al mapa con la columna con la que entró.
     ALaColumna(ColumnaId),
     /// Nace una **columna personal** estacionada en la plaza, con el carro vacío y esas escuadras. Su Facción es la de la plaza si era residente,
     /// ninguna si era visitante.
@@ -127,14 +127,14 @@ pub fn residencia_tras_desalojo(refugio: Option<AsentamientoId>, campamento_mas_
     refugio.map_or(Residencia::Campamento(campamento_mas_cercano), Residencia::Asentamiento)
 }
 
-/// `desalojarResidentes`: qué le pasa a cada afectado. Quien estaba dentro sale (a su columna aparcada, o a una columna nueva con lo que le
+/// `desalojarResidentes`: qué le pasa a cada afectado. Quien estaba dentro sale (con la columna con la que entró, o a una columna nueva con lo que le
 /// sobrevivió); todos los residentes pasan a residir en `residencia_nueva`.
 pub fn planear_desalojo(afectados: &[Afectado], residencia_nueva: Residencia) -> Vec<Desalojo> {
     afectados
         .iter()
         .map(|a| Desalojo {
             heroe: a.heroe,
-            salida: a.dentro.then(|| match a.columna_aparcada {
+            salida: a.dentro.then(|| match a.columna {
                 Some(c) => Salida::ALaColumna(c),
                 None => Salida::ColumnaNueva { con_faccion_de_la_plaza: a.residente, escuadras: a.lucharon.clone() },
             }),
@@ -295,11 +295,11 @@ mod pruebas {
     fn nadie_se_queda_dentro_y_los_residentes_se_mudan() {
         let nueva = Residencia::Asentamiento(4);
         let afectados = [
-            Afectado { heroe: 1, residente: true, dentro: true, columna_aparcada: None, lucharon: vec![10, 11] },
-            Afectado { heroe: 2, residente: true, dentro: true, columna_aparcada: None, lucharon: vec![] },
-            Afectado { heroe: 3, residente: true, dentro: false, columna_aparcada: None, lucharon: vec![] },
-            Afectado { heroe: 4, residente: false, dentro: true, columna_aparcada: Some(77), lucharon: vec![] },
-            Afectado { heroe: 5, residente: false, dentro: true, columna_aparcada: None, lucharon: vec![] },
+            Afectado { heroe: 1, residente: true, dentro: true, columna: None, lucharon: vec![10, 11] },
+            Afectado { heroe: 2, residente: true, dentro: true, columna: None, lucharon: vec![] },
+            Afectado { heroe: 3, residente: true, dentro: false, columna: None, lucharon: vec![] },
+            Afectado { heroe: 4, residente: false, dentro: true, columna: Some(77), lucharon: vec![] },
+            Afectado { heroe: 5, residente: false, dentro: true, columna: None, lucharon: vec![] },
         ];
         let plan = planear_desalojo(&afectados, nueva);
         assert_eq!(plan[0], Desalojo { heroe: 1, salida: Some(Salida::ColumnaNueva { con_faccion_de_la_plaza: true, escuadras: vec![10, 11] }), residencia: Some(nueva) });

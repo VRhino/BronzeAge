@@ -796,13 +796,14 @@ impl Sim<'_> {
         self.comprobar_periodico();
     }
 
-    /// Lo que hay de un recurso en todos los contenedores del mundo: almacenes, carros de las columnas, caravanas y almacenes personales.
+    /// Lo que hay de un recurso en todos los contenedores del mundo: almacenes, carros de las columnas, caravanas, almacenes personales y el carro que un héroe lleva
+    /// sin columna (el de su residencia, Entrar con todo).
     fn en_el_mundo(&self, r: Recurso) -> i64 {
         let e = self.n.estado();
         e.asentamientos.values().map(|a| a.economia.almacen.cantidad(r)).sum::<i64>()
             + e.ejercitos.values().map(|c| c.columna.carga.get(&r).copied().unwrap_or(0)).sum::<i64>()
             + e.comercio.flota.iter().map(|c| c.contenido.get(&r).copied().unwrap_or(0)).sum::<i64>()
-            + self.n.heroes().map(|h| h.almacen_personal.get(&r).copied().unwrap_or(0)).sum::<i64>()
+            + self.n.heroes().map(|h| h.almacen_personal.get(&r).copied().unwrap_or(0) + h.carro.get(&r).copied().unwrap_or(0)).sum::<i64>()
     }
 
     /// Lo que hay de un mineral en el mundo contando lo ya fundido: la Fundición convierte el mineral en lingote sin tecnología (el cobre), y un

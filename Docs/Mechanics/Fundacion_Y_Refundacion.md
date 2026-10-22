@@ -32,7 +32,7 @@ La caravana de fundación es una `Caravana` de `tipo: 'construccion'`. Campos pr
 | `titularId` | Quien la lleva y funda. Ver §4. |
 | `caducaEn?` | Instante en que, suelta, caduca. |
 | `aportes?` | Solo la de un campamento: `heroeId → recurso → cantidad` que puso cada aportante (para devolvérselo). |
-| `estado`, `ruta`, `progreso`, `posicionActual` | `disponible` (parada) · `adjunta` (en una columna) · `retornando` (vuelve sola a su origen) · `aparcada` (dejada en una plaza al guarnecer). |
+| `estado`, `ruta`, `progreso`, `posicionActual` | `disponible` (parada) · `adjunta` (en una columna) · `retornando` (vuelve sola a su origen) · `aparcada` (dejada en una plaza con la orden de soltarla; desde el 2026-10-22 entrar con la columna ya no la aparca, entra con ella). |
 
 **Fondo de refundación:** `CampamentoMercenarios.fondos`: `heroeId → recurso → cantidad`. Lo aportado por cada héroe en ese campamento.
 
@@ -87,7 +87,7 @@ Sin ninguna caravana con titular, no hace nada. Para cada caravana con `titularI
 - **`adjunta`**: busca su columna. Se queda si **la columna existe, el titular va en ella y sigue siendo ciudadano** de la Facción. Si no (otro la lleva, el titular dejó la Facción o salió del mundo, la columna ya no existe): se **quita de la columna** y calcula la ruta de vuelta (`calcularRuta` desde donde está hasta su origen).
   Con ruta: pasa a `retornando` (`progreso 0`), evento `fundacion.caravana_vuelve`. Sin ruta o sin origen: se **pierde** (`fundacion.caravana_perdida`). Mientras vuelve, otro ciudadano puede **reclamarla** (`adjuntarCaravana`) y pasa a ser titular.
 - **`retornando`**: avanza `CARAVANA_CATALOGO.construccion.velocidad` (10) por la ruta con `avanzarPosicionEnRuta`; al llegar (`progreso ≥ 1`) **se desarma y devuelve** (`fundacion.caravana_devuelta`).
-- **`aparcada` sin `caducaEn`** (la dejó una columna al guarnecer): pasa a `disponible` y le empieza a correr `caducaEn = ahora + 48 h`.
+- **`aparcada` sin `caducaEn`** (la dejó una columna dentro de una plaza; desde el 2026-10-22 guarnecer ya no la aparca, queda enganchada a la columna del Líder hasta que se suelte a mano): pasa a `disponible` y le empieza a correr `caducaEn = ahora + 48 h`.
 - **`disponible` con `caducaEn` vencido** (`ahora ≥ caducaEn`): **caduca y devuelve**.
 - Cualquier otra: sigue.
 
@@ -193,7 +193,7 @@ A partir de ahí es la misma entidad: se engancha, se funda con `fundar` (§5), 
 - **Quien deja la Facción pierde su aporte**: `devolverAportes` y `fondoDeFaccion` solo cuentan ciudadanos.
 - **Gastar por orden de ciudadanía, no por quién aportó primero**: el fondo se consume de los ciudadanos en el orden de `faccion.ciudadanosIds`, hasta cubrir cada recurso.
 - **El titular es único y no se cambia comprándola de nuevo**: solo otro ciudadano que la reclama por el camino (mientras vuelve sola) se convierte en titular.
-- **Aparcada ≠ caducando**: la caravana que una columna deja aparcada al guarnecer empieza a caducar cuando el evento de aparcado la registra (entonces pasa a `disponible` con `caducaEn = ahora + 48 h`), no desde que se aparcó; hasta entonces no tiene `caducaEn`.
+- **Aparcada ≠ caducando** (la del TypeScript, que aparcaba al guarnecer; hoy se aparca solo a mano): la caravana que una columna deja aparcada empieza a caducar cuando el evento de aparcado la registra (entonces pasa a `disponible` con `caducaEn = ahora + 48 h`), no desde que se aparcó; hasta entonces no tiene `caducaEn`.
 - **Sin camino de vuelta, se pierde**: no hay teletransporte; una isla o un enclave sin ruta pierde lo que costó la caravana.
 - **La plaza fundada no se mira como zona de nadie**: el punto no puede caer en la zona de **ninguna** plaza existente, ni la de la propia Facción.
 - **`minFundadoresParaFaccionNueva` = 1 y `exigeCiudadaniaPrevia` = false** son configuración de las primeras pruebas; el comando pasa `yaFueCiudadano = true`, así que esa segunda exigencia nunca se evalúa hoy.
