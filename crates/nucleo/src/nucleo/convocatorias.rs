@@ -93,6 +93,7 @@ impl Nucleo {
                 self.estado.siguiente_id += 1;
                 self.emitir_propio(t, "convocatoria.convocada", Self::plazas_del_lugar(c.lugar), vec![("convocatoria", id as i64), ("lider", *heroe as i64), ("politica", crate::codec_columna::politica_a_u8(*politica) as i64)]);
                 self.estado.militar.convocatorias.insert(id, c);
+                self.tr.tocar(Clase::Convocatoria, id);
                 Ok(vec![id])
             }
             Comando::UnirseAConvocatoria { heroe, convocatoria, escuadras, carga } => {
@@ -105,6 +106,7 @@ impl Nucleo {
                 self.comprobar_seleccion(t, *heroe, c.lugar, &seleccion)?;
                 let plazas = Self::plazas_del_lugar(c.lugar);
                 self.estado.militar.convocatorias.insert(*convocatoria, c);
+                self.tr.tocar(Clase::Convocatoria, *convocatoria);
                 match union {
                     Union::Unido => self.emitir_propio(t, "convocatoria.unido", plazas, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64)]),
                     Union::Pedida { expira_en } => {
@@ -123,12 +125,13 @@ impl Nucleo {
                 let plazas = Self::plazas_del_lugar(c.lugar);
                 if *aceptar {
                     // Se revalida todo con la selección de la petición: sigue dentro del lugar, es de la misma Facción y puede salir.
-                    let hn = self.heroe(*solicitante).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, format!("heroe-{solicitante}"), v))?;
+                    let hn = self.heroe(*solicitante).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(*solicitante), v))?;
                     let aspirante = Aspirante { heroe: *solicitante, lugar: self.lugar_del_heroe(*solicitante), faccion: hn.faccion, ya_en_convocatoria: self.estado.militar.convocatoria_de(*solicitante).is_some() };
                     c.aceptar(&aspirante, peticion.seleccion.clone(), t).map_err(de_convocatoria)?;
                     self.comprobar_seleccion(t, *solicitante, c.lugar, &peticion.seleccion)?;
                 }
                 self.estado.militar.convocatorias.insert(*convocatoria, c);
+                self.tr.tocar(Clase::Convocatoria, *convocatoria);
                 self.estado.generaciones.subir(entidad_peticion_de_convocatoria(*solicitante));
                 let codigo = if *aceptar { "convocatoria.unido" } else { "convocatoria.union_rechazada" };
                 self.emitir_propio(t, codigo, plazas, vec![("convocatoria", *convocatoria as i64), ("heroe", *solicitante as i64)]);
@@ -142,6 +145,7 @@ impl Nucleo {
                 self.comprobar_seleccion(t, *heroe, c.lugar, &seleccion)?;
                 let (id, plazas) = (c.id, Self::plazas_del_lugar(c.lugar));
                 self.estado.militar.convocatorias.insert(id, c);
+                self.tr.tocar(Clase::Convocatoria, id);
                 self.emitir_propio(t, "convocatoria.seleccion_cambiada", plazas, vec![("convocatoria", id as i64), ("heroe", *heroe as i64)]);
                 Ok(vec![])
             }
@@ -151,6 +155,7 @@ impl Nucleo {
                 c.separarse(*heroe).map_err(de_convocatoria)?;
                 let (id, plazas) = (c.id, Self::plazas_del_lugar(c.lugar));
                 self.estado.militar.convocatorias.insert(id, c);
+                self.tr.tocar(Clase::Convocatoria, id);
                 self.emitir_propio(t, "convocatoria.separado", plazas, vec![("convocatoria", id as i64), ("heroe", *heroe as i64)]);
                 Ok(vec![])
             }
@@ -159,6 +164,7 @@ impl Nucleo {
                 let c = self.convocatoria_del_heroe(*heroe)?.clone();
                 let avisados = c.cancelar(*heroe).map_err(de_convocatoria)?;
                 self.estado.militar.convocatorias.remove(&c.id);
+                self.tr.tocar(Clase::Convocatoria, c.id);
                 c.peticiones.iter().for_each(|x| {
                     self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
                 });
@@ -199,7 +205,7 @@ impl Nucleo {
         match resultado {
             Err(ErrorPartir::SoloElLider) => Err(respuesta_de(v, ErrorConvocatoria::SoloElLider)),
             Err(ErrorPartir::LiderFuera) => Err(Respuesta::rechazo(rechazos::CONVOCATORIA_LIDER_FUERA, "el Líder ya no está dentro del lugar", v)),
-            Err(ErrorPartir::NoPuedeSalir { heroe: h, motivo: Respuesta { resultado: Resultado::Rechazada { codigo, mensaje }, .. } }) => {
+            Err(ErrorPartir::NoPuedeSalir { heroe: h, motivo: Respuesta { resultado: Resultado::Rechazada { codigo, mensaje, .. }, .. } }) => {
                 Err(Respuesta::rechazo(rechazos::CONVOCATORIA_NO_PUEDE_SALIR, format!("el héroe {h} no puede salir con lo elegido ({codigo}): {mensaje}"), v))
             }
             Err(ErrorPartir::NoPuedeSalir { .. }) => unreachable!("la simulación solo rechaza"),
@@ -210,6 +216,7 @@ impl Nucleo {
                     self.aplicar_salida(t, plan, Destino::Unirse(base));
                 }
                 self.estado.militar.convocatorias.remove(&c.id);
+                self.tr.tocar(Clase::Convocatoria, c.id);
                 c.peticiones.iter().for_each(|x| {
                     self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
                 });
@@ -227,6 +234,7 @@ impl Nucleo {
         if c.peticiones.len() == antes {
             return;
         }
+        self.tr.tocar(Clase::Convocatoria, convocatoria);
         let plazas = Self::plazas_del_lugar(c.lugar);
         self.emitir_propio(t, "convocatoria.peticion_caducada", plazas, vec![("convocatoria", convocatoria as i64), ("heroe", solicitante as i64)]);
     }

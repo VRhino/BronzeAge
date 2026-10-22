@@ -60,13 +60,14 @@ message CambiarVista {
   Rectangulo rectangulo = 1;
 }
 
-// Sesión de servidor de batalla (cliente = CLIENTE_SERVIDOR_BATALLA): mensajes de ida.
+// Sesión de servidor de batalla (cliente = CLIENTE_SERVIDOR_BATALLA): mensajes de ida. Cada uno recibe su `AcuseBatalla`.
 message MensajeDeServidorDeBatalla {
   oneof cuerpo {
     BattleServerAssignment asignacion = 1;
     InicioBatalla inicio = 2;
     SalidaBatalla salida = 3;
     BattleResult resultado = 4;
+    TokensBatalla tokens = 5;            // los tokens de los humanos que se unieron después de la asignación
   }
 }
 
@@ -131,6 +132,16 @@ message Bienvenida {
   Reloj reloj = 5;
   repeated AmbitoSuscrito ambitos = 6;
   uint32 maximo_ordenes_pendientes = 7;
+  // Jugador sin héroe: dónde puede nacer (de CADA campamento de mercenarios). Es lo único que ve hasta que da `crear_heroe`. Vacío si ya tiene héroe.
+  repeated CampamentoParaElegir campamentos_para_elegir = 8;
+}
+
+message CampamentoParaElegir {
+  string campamento_id = 1;
+  Punto posicion = 2;
+  uint32 origen = 3;
+  uint32 eligieron_como_inicial = 4;
+  uint32 residentes = 5;                 // cuántos héroes viven ya allí
 }
 
 enum TipoCambio {
@@ -139,8 +150,7 @@ enum TipoCambio {
   CAMBIO_QUITA = 2;
 }
 
-// Entidad con identidad. Una actualización PARCIAL trae solo los campos que cambiaron (presencia de Protobuf); los campos
-// repetidos y los mapas, cuando cambian, vienen COMPLETOS. Para borrar un campo opcional, su nombre en `campos_borrados`.
+// Entidad con identidad.
 message Entidad {
   oneof cuerpo {
     Faccion faccion = 1;
@@ -172,15 +182,26 @@ message Entidad {
     TecnologiasFaccion tecnologias = 27;
     EstadoTecnologia estado_tecnologia = 28;
     ZonaFaccion zona_faccion = 29;
+    InformeInspeccion informe_inspeccion = 30;
   }
 }
 
+// FORMA DE UN CAMBIO (decisión del autor, 2026-10-22: híbrida). Hay dos formas y la elige `reemplaza`:
+//  * `reemplaza = true` (la de TODAS las entidades salvo el asentamiento): `datos` es la entidad COMPLETA y sustituye a la que el cliente tenía; los
+//    campos que no vengan han vuelto a su valor por defecto. `campos` y `campos_borrados` van vacíos.
+//  * `reemplaza = false` (solo `Asentamiento`, la plaza y su ciudad, que son grandes): `datos` trae solo los campos de la máscara `campos`
+//    (nombres de campo de `Asentamiento`, snake_case: `almacen`, `edificios`, `trazado`...); lo que no esté en la máscara no cambia. Un campo
+//    de la máscara con su valor por defecto SÍ lo pone a ese valor, y un `optional` de la máscara que no venga en `datos` se borra. Los
+//    repetidos y los mapas de la máscara vienen completos.
+// `QUITA` no lleva `datos`. (v1 decía «parcial por presencia» para todo; con proto3, un escalar a 0 no se distinguía de uno sin cambio.)
 message Cambio {
   TipoCambio tipo = 1;
   TipoEntidad entidad = 2;
   string id = 3;                         // identidad de la entidad (para QUITA y para localizar la actualización)
   optional Entidad datos = 4;            // en ACTUALIZA
-  repeated string campos_borrados = 5;
+  repeated string campos_borrados = 5;   // v1: nombres de campos opcionales a borrar. Con la máscara `campos`, un opcional ausente ya se borra
+  bool reemplaza = 6;                    // true: la entidad completa sustituye; false: parcial con máscara (solo Asentamiento) o semántica v1
+  repeated string campos = 7;            // máscara de campos de una actualización parcial (con `reemplaza = false`)
 }
 
 // Foto completa de un ámbito (al suscribirse, al reanudar tarde, tras un `Revocado` o un hueco de secuencia).
@@ -212,9 +233,13 @@ enum Resultado {
 message RechazoOrden {
   string codigo = 1;                     // estable: «ascenso.invalido», «no_autorizado», «fuera_del_mundo», «guerra.confirmar»...
   string mensaje = 2;                    // texto de diagnóstico (no localizado)
-  google.protobuf.Struct detalle = 3;    // p. ej. las consecuencias de declarar una guerra
+  // Lo que el cliente necesita para decidir. `guerra.confirmar` (atacar sin guerra y sin `declara_guerra`):
+  // `{ objetivo: "f-N" (la Facción contra la que quedaría en guerra), facciones: ["f-N"...] (las que entrarían por arrastre; vacío hasta el sistema político) }`.
+  google.protobuf.Struct detalle = 3;
 }
 
+// Lo que creó una orden: una clase de entidad por orden. P. ej. `anadir_edificio_manualmente` → EDIFICIO `ed-<plaza>-<n>`; `comprometer_recinto` → RECINTO;
+// `marcar_pueblo` y `colocar_avanzada` → OBRA_DE_MAPA; `reclutar_tropa` → ESCUADRON; `guardar_loadout` (nuevo) → LOADOUT; `salir_al_mundo` → EJERCITO.
 message ReferenciaCreada {
   TipoEntidad entidad = 1;
   string id = 2;
@@ -253,7 +278,16 @@ message MensajeParaServidorDeBatalla {
     BattleTicket ticket = 1;
     IncorporacionBatalla incorporacion = 2;
     TokensBatalla tokens = 3;
+    AcuseBatalla acuse = 4;              // la respuesta a un `MensajeDeServidorDeBatalla` suyo
   }
+}
+
+// La respuesta del servidor a un mensaje del servidor de batalla (antes un `Aviso` cuando era un rechazo; ahora también se sabe lo aceptado).
+message AcuseBatalla {
+  string mensaje = 1;                    // cuál: asignacion | inicio | tokens | salida | resultado
+  string battle_id = 2;
+  Resultado resultado = 3;               // ORDEN_ACEPTADA | ORDEN_RECHAZADA | ORDEN_SIN_CAMBIOS (repetir uno ya aplicado) | ORDEN_DUPLICADA
+  optional RechazoOrden rechazo = 4;     // «batalla.ya_asignada», «batalla.revision_vieja»...
 }
 
 message MensajeDeServidor {

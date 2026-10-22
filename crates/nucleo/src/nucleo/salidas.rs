@@ -215,7 +215,7 @@ impl Nucleo {
                     almacen.quitar(r, n);
                 });
                 almacen.quitar(Recurso::Trigo, *trigo);
-                self.tr.asentamientos.push(*a as u64);
+                self.tr.tocar(Clase::Asentamiento, *a as u64);
             }
             Lugar::Campamento(_) => {
                 let personal = &mut self.heroe_mut(*heroe).almacen_personal;
@@ -273,7 +273,7 @@ impl Nucleo {
             }
         };
         self.ubicar_en_columna(*heroe, columna);
-        self.tr.tocados.push(columna);
+        self.tr.tocar(Clase::Ejercito, columna);
         columna
     }
 
@@ -317,7 +317,7 @@ impl Nucleo {
             self.plaza_o_rechazo(a as u64)?;
         }
         if let Lugar::Campamento(c) = lugar {
-            self.puerta_de_campamento(c).ok_or_else(|| Respuesta::rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{c}"), v))?;
+            self.puerta_de_campamento(c).ok_or_else(|| Respuesta::rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, ids::campamento(c), v))?;
         }
         self.autorizar_heroe(p, heroe, false)?;
         self.sin_convocatoria(heroe)?;
@@ -424,7 +424,7 @@ impl Nucleo {
         let dentro = Ubicacion::Asentamiento(plaza as u32);
         if reside {
             let (carro, sigue) = self.recoger_en_residencia(t, heroe, columna, dentro);
-            self.tr.asentamientos.push(plaza);
+            self.tr.tocar(Clase::Asentamiento, plaza);
             self.anunciar_columna(columna, Motivo::Plan);
             self.emitir_propio(t, "jugador.entra_en_asentamiento", vec![plaza], vec![("heroe", heroe as i64), ("ejercito", columna as i64), ("residencia", 1), ("carro", carro), ("columnaSigue", sigue as i64)]);
         } else {
@@ -510,14 +510,14 @@ impl Nucleo {
                 }
                 let nuevo = Acceso { aliados: *aliados, neutrales: *neutrales, enemigos: *enemigos };
                 if plaza.acceso == nuevo {
-                    return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+                    return Err(Respuesta::sin_cambios(v));
                 }
                 // Un pueblo o una avanzada de la plaza en batalla no recibe órdenes, y echar a quien combate dentro sería una (la administración no lleva candado).
                 if !p.admin && self.sitios_en_batalla(*asentamiento) {
                     return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "un pueblo o una avanzada de la plaza está en una batalla: la puerta no se toca hasta que acabe".into()));
                 }
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").acceso = nuevo;
-                self.tr.asentamientos.push(*asentamiento);
+                self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 // Cerrar la puerta echa al mapa, al instante y con todo lo suyo, a quien ya está dentro y ya no puede entrar.
                 self.cerrar_la_puerta(t, *asentamiento);
                 self.emitir_propio(t, "asentamiento.acceso", vec![*asentamiento], vec![("aliados", nuevo.aliados as i64), ("neutrales", nuevo.neutrales as i64), ("enemigos", nuevo.enemigos as i64)]);
@@ -548,7 +548,7 @@ impl Nucleo {
         // El carro está con el héroe y, si conserva una columna para llevar sus caravanas, también en ella.
         let columna = hn.columna.filter(|c| self.estado.ejercitos.contains_key(c));
         if hn.carro.is_empty() && columna.is_none_or(|c| self.estado.ejercitos[&c].columna.carga.is_empty()) {
-            return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+            return Err(Respuesta::sin_cambios(v));
         }
         let cap = self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal;
         let mut libre = (cap - total(&hn.almacen_personal)).max(0);
@@ -580,7 +580,7 @@ impl Nucleo {
         self.heroe_mut(heroe).carro = restos.next().expect("el del héroe");
         if let (Some(c), Some(resto)) = (columna, restos.next()) {
             self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga = resto;
-            self.tr.tocados.push(c);
+            self.tr.tocar(Clase::Ejercito, c);
         }
         self.emitir_propio(t, "heroe.vacia_el_carro", plaza, vec![("heroe", heroe as i64), ("movido", movido), ("resto", quedan)]);
         Ok(vec![])
@@ -592,7 +592,7 @@ impl Nucleo {
         match self.heroe(heroe).map(|h| h.heroe.presencia.ubicacion) {
             Some(Ubicacion::Columna(c)) => match self.estado.ejercitos.get(&c) {
                 Some(e) => Ok((c, e)),
-                None => Err(Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{c}"), v)),
+                None => Err(Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(c), v)),
             },
             _ => Err(Respuesta::rechazo(rechazos::HEROE_SIN_COLUMNA, "el héroe no va en ninguna columna", v)),
         }
@@ -635,7 +635,7 @@ impl Nucleo {
     fn entrar_en_el_campamento(&mut self, t: Instante, p: &Peticion, campamento: u32, heroe: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let puerta = self.puerta_de_campamento(campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{campamento}")))?;
+        let puerta = self.puerta_de_campamento(campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, ids::campamento(campamento)))?;
         self.autorizar_heroe(p, heroe, false)?;
         let (id, e) = self.columna_a_bordo(heroe)?;
         let solo = e.columna.tipo == TipoColumna::Personal && e.columna.participantes.len() == 1;

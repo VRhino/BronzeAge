@@ -1,0 +1,1 @@
+{"secuencia":"10","foto":{"ambito":{"tipo":"AMBITO_FACCION","id":"f-1"},"version":"64","entidades":[{"obra":{"id":"obra-7","version":"64","asentamientoMadreId":"as-3","tipo":"OBRA_AVANZADA","posicion":{"x":"140000","y":"360000"},"destinoId":"av-6","requerido":{"porId":{"madera":"40000"}},"entregado":{"porId":{"madera":"10000"}},"iniciaEnMs":"9000000","terminaEnMs":"12600000"}}]}}

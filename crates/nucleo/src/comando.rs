@@ -2,6 +2,7 @@
 //! en orden, en sus instantes, reconstruyen el mismo mundo.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
+use crate::estado::Clase;
 use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
 use crate::codec_comercio::{animal_a_u8, animal_de_u8, tipo_carro_a_u8, tipo_carro_de_u8};
 use crate::codec_batallas::{asignacion_escribir, asignacion_leer, resultado_escribir, resultado_leer, salida_escribir, salida_leer, tokens_escribir, tokens_leer};
@@ -387,6 +388,30 @@ impl Comando {
     /// ¿Lleva el candado de batalla? Todos los comandos salvo los que actúan sobre la propia batalla y conectarse y desconectarse (cerrar el cliente en plena
     /// batalla tiene que anotarse, y volver a conectarse anular esa petición, §5.1), y los mensajes del servidor de batalla, que no pasan por el registro de
     /// comandos de jugador.
+    /// Qué entidad crea la orden, si crea alguna: es la clase de los ids de `Respuesta::creadas`.
+    pub(crate) fn tipo_creado(&self) -> Option<TipoCreado> {
+        use TipoCreado::*;
+        Some(match self {
+            Comando::CrearEjercito { .. } | Comando::SalirAlMundo { .. } | Comando::MovilizarEjercito { .. } | Comando::SalirDelCampamento { .. } | Comando::SepararseDelEjercito { .. } | Comando::PartirConvocatoria { .. } | Comando::Conectarse { .. } => Ejercito,
+            Comando::Fundar { .. } => Asentamiento,
+            Comando::ReclamarParcela { .. } => Parcela,
+            Comando::AnadirEdificio { asentamiento, .. } => Edificio { plaza: *asentamiento },
+            Comando::ComprometerRecinto { asentamiento, .. } => Recinto { plaza: *asentamiento },
+            Comando::ProponerTrueque { .. } => Acuerdo,
+            Comando::ColocarOrdenMercado { .. } => OrdenMercado,
+            Comando::CrearCaravana { .. } => Caravana,
+            Comando::MarcarPueblo { .. } => Pueblo,
+            Comando::ColocarAvanzada { .. } => Avanzada,
+            Comando::CrearHeroe { .. } => Heroe,
+            Comando::ReclutarTropa { .. } | Comando::ReclutarEnCampamento { .. } | Comando::PedirPrestamo { .. } | Comando::DarEscuadra { .. } => Escuadra,
+            Comando::GuardarLoadout { .. } => Loadout,
+            Comando::UnirseABatalla { batalla, .. } => Incorporacion { batalla: *batalla },
+            Comando::ConvocarEjercito { .. } => Convocatoria,
+            Comando::ColocarBandidos { .. } => CampamentoBandidos,
+            _ => return None,
+        })
+    }
+
     pub(crate) fn lleva_candado(&self) -> bool {
         !matches!(
             self,
@@ -587,6 +612,33 @@ impl Comando {
             | Comando::AplicarResultado { .. } => {}
         }
         i
+    }
+}
+
+impl Comando {
+    /// Las entidades que la orden nombra y su ejecución puede cambiar, para el registro de cambios: las de [`Comando::implicados`] (héroes, caravanas, pueblos y avanzadas;
+    /// las columnas y las plazas las anota cada regla) y las que el candado de batalla no mira: trueques, órdenes de mercado y campamentos de mercenarios.
+    pub(crate) fn nombradas(&self) -> Vec<(Clase, u64)> {
+        let i = self.implicados();
+        let mut v: Vec<(Clase, u64)> = [(Clase::Heroe, i.heroes), (Clase::Caravana, i.caravanas), (Clase::Pueblo, i.pueblos), (Clase::Avanzada, i.avanzadas)]
+            .into_iter()
+            .flat_map(|(clase, ids)| ids.into_iter().map(move |id| (clase, id)))
+            .collect();
+        match self {
+            Comando::AceptarTrueque { acuerdo } | Comando::RechazarTrueque { acuerdo } | Comando::EntregarDeCaravana { acuerdo, .. } => v.push((Clase::Acuerdo, *acuerdo)),
+            Comando::CancelarOrdenMercado { orden } | Comando::ComerciarEnPlaza { orden, .. } => v.push((Clase::OrdenMercado, *orden)),
+            Comando::ComprarEnCampamento { campamento, .. }
+            | Comando::RepostarEnCampamento { campamento, .. }
+            | Comando::EntrarEnCampamento { campamento, .. }
+            | Comando::SalirDelCampamento { campamento, .. }
+            | Comando::CrearHeroe { campamento, .. }
+            | Comando::FijarResidencia { residencia: Some(Residencia::Campamento(campamento)), .. } => v.push((Clase::Campamento, u64::from(*campamento))),
+            Comando::FijarNivelFaccion { faccion, .. } | Comando::FijarTecnologias { faccion, .. } | Comando::CrearEjercito { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
+            Comando::FijarRelacion { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b))]),
+            Comando::FijarFaccionDeHeroe { faccion: Some(faccion), .. } => v.push((Clase::Faccion, u64::from(*faccion))),
+            _ => {}
+        }
+        v
     }
 }
 
@@ -1857,7 +1909,8 @@ pub mod rechazos {
     pub const COMBATE_LEJOS: &str = "combate.lejos";
     pub const COMBATE_PROPIA: &str = "combate.propia";
     pub const COMBATE_ALIADA: &str = "combate.aliada";
-    pub const COMBATE_SIN_GUERRA: &str = "combate.sin_guerra";
+    /// `atacar` contra una Facción con la que no se está en guerra y sin `declara_guerra`: el cliente tiene que confirmarla (`Detalle::Guerra` dice contra quién).
+    pub const GUERRA_CONFIRMAR: &str = "guerra.confirmar";
     pub const COMBATE_A_CUBIERTO: &str = "combate.a_cubierto";
     pub const COMBATE_CLASE_DISTINTA: &str = "combate.clase_distinta";
     pub const COMBATE_SIN_HEROE_SANO: &str = "combate.sin_heroe_sano";
@@ -1917,14 +1970,72 @@ pub mod rechazos {
     pub const BATALLA_OTRO_RESULTADO: &str = "batalla.otro_resultado";
 }
 
+/// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Detalle {
+    /// `guerra.confirmar`: la Facción contra la que quedaría en guerra quien ataca y las que entrarían por arrastre (aliados y vasallos; vacía hasta el sistema 5).
+    Guerra { objetivo: u32, arrastre: Vec<u32> },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Resultado {
     Aceptada,
-    Rechazada { codigo: &'static str, mensaje: String },
+    Rechazada { codigo: &'static str, mensaje: String, detalle: Option<Detalle> },
     /// Válida pero no cambió nada: no sube la versión.
     SinCambios,
     /// Misma `peticion_id` ya aceptada: no se ejecuta otra vez.
     Duplicada,
+}
+
+/// Qué es lo que lleva `Respuesta::creadas` (cada orden crea, como mucho, una clase de entidad). Los ids son los del núcleo; el contrato los nombra con `proyeccion::ids`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TipoCreado {
+    Ejercito,
+    Asentamiento,
+    Heroe,
+    Escuadra,
+    Caravana,
+    Convocatoria,
+    CampamentoBandidos,
+    Acuerdo,
+    OrdenMercado,
+    /// Un pueblo extractor recién marcado: mientras está «pendiente de materiales» el contrato lo anuncia como `ObraDeMapa` (`proyeccion::referencia_creada`).
+    Pueblo,
+    /// Una avanzada recién marcada, igual que el pueblo.
+    Avanzada,
+    Loadout,
+    /// Una parcela de bosque (andamiaje de administración): el contrato no la tiene como entidad, no sale en `ResultadoOrden.creadas`.
+    Parcela,
+    /// El edificio encolado, con la plaza a la que pertenece (los ids de edificio son de cada plaza).
+    Edificio { plaza: u64 },
+    /// El recinto comprometido, con su plaza.
+    Recinto { plaza: u64 },
+    /// Las incorporaciones (por su secuencia) de quien se unió a esa batalla.
+    Incorporacion { batalla: u64 },
+}
+
+impl TipoCreado {
+    /// Las entidades que la orden toca al crear `ids` (el núcleo las anota en el registro de cambios).
+    pub(crate) fn tocadas(self, ids: &[u64]) -> Vec<(Clase, u64)> {
+        let de = |c: Clase| ids.iter().map(|&i| (c, i)).collect();
+        match self {
+            TipoCreado::Ejercito => de(Clase::Ejercito),
+            TipoCreado::Asentamiento => de(Clase::Asentamiento),
+            TipoCreado::Heroe => de(Clase::Heroe),
+            TipoCreado::Escuadra => de(Clase::Escuadra),
+            TipoCreado::Caravana => de(Clase::Caravana),
+            TipoCreado::Convocatoria => de(Clase::Convocatoria),
+            TipoCreado::CampamentoBandidos => de(Clase::Bandidos),
+            TipoCreado::Acuerdo => de(Clase::Acuerdo),
+            TipoCreado::OrdenMercado => de(Clase::OrdenMercado),
+            TipoCreado::Pueblo => de(Clase::Pueblo),
+            TipoCreado::Avanzada => de(Clase::Avanzada),
+            TipoCreado::Incorporacion { batalla } => vec![(Clase::Batalla, batalla)],
+            TipoCreado::Edificio { plaza } | TipoCreado::Recinto { plaza } => vec![(Clase::Asentamiento, plaza)],
+            // El loadout vive en el héroe que la orden nombra y la parcela, en la plaza que la orden nombra: ya van en `Comando::implicados`.
+            TipoCreado::Loadout | TipoCreado::Parcela => vec![],
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1932,13 +2043,28 @@ pub struct Respuesta {
     pub resultado: Resultado,
     /// Versión de mundo con los efectos ya aplicados.
     pub version_tras: u64,
-    /// Ejércitos o plazas creados por la orden.
+    /// Los ids de lo que creó la orden, de la clase `tipo_creadas`.
     pub creadas: Vec<u64>,
+    /// La clase de `creadas`; `None` si no creó nada.
+    pub tipo_creadas: Option<TipoCreado>,
 }
 
 impl Respuesta {
     pub(crate) fn rechazo(codigo: &'static str, mensaje: impl Into<String>, version: u64) -> Self {
-        Self { resultado: Resultado::Rechazada { codigo, mensaje: mensaje.into() }, version_tras: version, creadas: vec![] }
+        Self::rechazo_con(codigo, mensaje, version, None)
+    }
+    pub(crate) fn rechazo_con(codigo: &'static str, mensaje: impl Into<String>, version: u64, detalle: Option<Detalle>) -> Self {
+        Self { resultado: Resultado::Rechazada { codigo, mensaje: mensaje.into(), detalle }, version_tras: version, creadas: vec![], tipo_creadas: None }
+    }
+    pub(crate) fn sin_cambios(version: u64) -> Self {
+        Self { resultado: Resultado::SinCambios, version_tras: version, creadas: vec![], tipo_creadas: None }
+    }
+    pub(crate) fn duplicada(version: u64) -> Self {
+        Self { resultado: Resultado::Duplicada, version_tras: version, creadas: vec![], tipo_creadas: None }
+    }
+    pub(crate) fn aceptada_con(version: u64, creadas: Vec<u64>, tipo: Option<TipoCreado>) -> Self {
+        let tipo_creadas = tipo.filter(|_| !creadas.is_empty());
+        Self { resultado: Resultado::Aceptada, version_tras: version, creadas, tipo_creadas }
     }
     pub fn aceptada(&self) -> bool {
         self.resultado == Resultado::Aceptada

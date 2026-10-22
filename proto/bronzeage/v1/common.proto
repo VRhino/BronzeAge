@@ -8,8 +8,14 @@
 //  * CANTIDADES de juego (recursos, víveres, oro, ritmos): enteros en MILÉSIMAS, `sint64`.
 //  * IDENTIFICADORES de catálogo (recursos, edificios, tropas, tecnologías, políticas): cadenas estables del archivo
 //    común de datos de juego, no enumeraciones: añadir contenido no cambia el contrato.
-//  * PRESENCIA: los campos `optional` y los mensajes distinguen «no viene» de «valor por defecto». Para BORRAR un campo
-//    en una actualización parcial se lista su nombre en `Cambio.campos_borrados`.
+//  * PRESENCIA: los campos `optional` y los mensajes distinguen «no viene» de «valor por defecto». Una entidad viaja COMPLETA y sustituye
+//    a la anterior (`Cambio.reemplaza`); solo el `Asentamiento` puede ir parcial, con la máscara `Cambio.campos` (decisión del autor,
+//    2026-10-22). `Cambio.campos_borrados` es la forma de v1 para borrar un campo opcional en una actualización parcial.
+//  * IDENTIFICADORES de entidad: cadenas `<prefijo>-<n>`, todas con la misma forma, la Facción también: `f-3` Facción, `as-7` asentamiento,
+//    `heroe-4`, `esc-9` escuadrón, `ej-2` ejército (columna), `car-5` caravana, `conv-1` convocatoria, `camp-0` campamento de mercenarios
+//    (índice del artefacto de mundo), `band-6` campamento de bandidos, `acu-3` trueque, `ord-8` orden de mercado, `pueblo-5`, `av-5`,
+//    `obra-5`, `loadout-2`. Lo que solo existe dentro de una plaza lleva la plaza: `ed-<plaza>-<n>` (edificio), `recinto-<plaza>-<n>`.
+//    La batalla es la excepción: su id es un UUID (el contrato v1 de Unity). Un id nunca se reutiliza dentro de una partida.
 //  * Los nombres de campo son snake_case en español (el dominio); los mensajes de batalla compartidos con Unity
 //    conservan los nombres en inglés del contrato v1 (BattleTicket, BattleResult...).
 syntax = "proto3";
@@ -40,12 +46,18 @@ message Plan {
 
 // Ritmo: valor(t) = clamp(valor_en_t0 + por_minuto * (t - t0) / 60000, minimo, maximo).
 // Todas las cantidades en milésimas. Sirve para almacenes, víveres, población, medidor, reputación...
+//
+// ESCALONES (economía por minuto, decisión del autor del 2026-10-22): con `en_escalones = true` el valor NO es una recta, sino un
+// escalón que el servidor renueva en cada paso de minuto de la plaza: el cliente NO interpola, muestra `valor_en_t0` tal cual y
+// rotula `por_minuto` como TENDENCIA «+N/min» (el neto real del último paso: producción − consumo − mantenimiento, ya con los gastos
+// de ese minuto; no el de cada orden). Con `en_escalones = false` (por defecto, la semántica v1) se evalúa la recta en cada fotograma.
 message Ritmo {
   sint64 valor_en_t0 = 1;
   int64 t0_ms = 2;
   sint64 por_minuto = 3;
   optional sint64 maximo = 4;
   optional sint64 minimo = 5;
+  bool en_escalones = 6;
 }
 
 // Un recurso almacenado: cantidad (como ritmo) y capacidad.
@@ -100,6 +112,13 @@ enum TipoEntidad {
   RED_CAMINOS = 25;
   TECNOLOGIA_FACCION = 26;
   ZONA_FACCION = 27;
+  INFORME_INSPECCION = 28;
+  // Solo para `ResultadoOrden.creadas` (no son entidades sueltas del almacén del cliente: el edificio y el recinto viven dentro de su
+  // `Asentamiento`; la incorporación, dentro de su `Batalla`; el loadout, dentro de su `Heroe`):
+  EDIFICIO = 29;
+  RECINTO = 30;
+  INCORPORACION = 31;                    // id `<battle_id>:<secuencia>`
+  LOADOUT = 32;
 }
 
 // Ámbito de suscripción de una sesión. El servidor suscribe solo lo que corresponde al héroe (jamás lo pide el cliente):

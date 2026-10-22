@@ -67,7 +67,7 @@ impl Nucleo {
     /// La caravana, su posición en la flota y la plaza de su origen; el actor debe mandar en esa plaza (residente del origen, §11).
     fn caravana_de_orden(&self, p: &Peticion, id: u64) -> Result<(usize, u64), Respuesta> {
         let v = self.estado.version;
-        let i = self.estado.comercio.posicion_caravana(id).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{id}"), v))?;
+        let i = self.estado.comercio.posicion_caravana(id).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(id), v))?;
         let origen = self.estado.comercio.flota[i].origen as u64;
         let faccion = self.plaza_o_rechazo(origen)?.faccion;
         if !self.manda_en(p, faccion) {
@@ -81,13 +81,13 @@ impl Nucleo {
     pub(super) fn ejecutar_flota(&mut self, t: Instante, p: &Peticion) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
+        let sin_cambios = || Respuesta::sin_cambios(v);
         let cr = self.estado.reglas.economia.comercio.clone();
         let de_caravana = |e: ErrorCaravana| {
             let (c, m) = rechazo_de_caravana(e);
             rechazo(c, m.into())
         };
-        let desconocida = |id: u64| rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{id}"));
+        let desconocida = |id: u64| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(id));
         match &p.comando {
             Comando::CrearCaravana { asentamiento } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
@@ -119,7 +119,7 @@ impl Nucleo {
                 let Estado { comercio, asentamientos, .. } = &mut self.estado;
                 let almacen = &mut asentamientos.get_mut(&origen).expect("existe").economia.almacen;
                 comercio.flota[i].agregar_carro(&cr.flota, *tipo, &ctx, almacen).map_err(de_caravana)?;
-                self.tr.asentamientos.push(origen);
+                self.tr.tocar(Clase::Asentamiento, origen);
                 self.emitir_comercio(t, EventoComercio::CaravanaCarroAgregado { caravana: *caravana }, vec![origen], &[]);
                 Ok(None)
             }
@@ -128,7 +128,7 @@ impl Nucleo {
                 let Estado { comercio, asentamientos, .. } = &mut self.estado;
                 let almacen = &mut asentamientos.get_mut(&origen).expect("existe").economia.almacen;
                 comercio.flota[i].comprar_animal(&cr.flota, *carro as usize, *animal, almacen).map_err(de_caravana)?;
-                self.tr.asentamientos.push(origen);
+                self.tr.tocar(Clase::Asentamiento, origen);
                 self.emitir_comercio(t, EventoComercio::CaravanaAnimalComprado { caravana: *caravana }, vec![origen], &[]);
                 self.reparto_de_plaza(origen, t);
                 Ok(None)
@@ -170,7 +170,7 @@ impl Nucleo {
                 let (i, origen) = self.caravana_de_orden(p, *caravana)?;
                 let (devuelto, perdido) = self.cancelar_preparacion(i, origen).map_err(de_caravana)?;
                 self.invalidar_comercio(entidad_caravana(*caravana));
-                self.tr.asentamientos.push(origen);
+                self.tr.tocar(Clase::Asentamiento, origen);
                 self.emitir_comercio(t, EventoComercio::CaravanaCancelada { caravana: *caravana }, vec![origen], &[("devuelto", devuelto), ("perdido", perdido)]);
                 self.reparto_de_plaza(origen, t);
                 Ok(None)
@@ -191,7 +191,7 @@ impl Nucleo {
                 let c = &mut comercio.flota[i];
                 let movido = if *cargar { c.cargar_aparcada(&cr.flota, factor, almacen, *recurso, *cantidad) } else { c.descargar_aparcada(almacen, *recurso, *cantidad) };
                 let n = movido.map_err(de_caravana)?;
-                self.tr.asentamientos.push(anfitriona);
+                self.tr.tocar(Clase::Asentamiento, anfitriona);
                 self.emitir_comercio(t, EventoComercio::CargaCaravanaAparcada { caravana: *caravana }, vec![anfitriona], &[("cantidad", n), ("cargar", *cargar as i64)]);
                 Ok(None)
             }
@@ -264,7 +264,7 @@ impl Nucleo {
         copia.costes = trazado.costes.clone();
         self.estado.comercio.flota[i] = copia;
         self.estado.asentamientos.get_mut(&origen_id).expect("existe").economia.almacen = almacen;
-        self.tr.asentamientos.push(origen_id);
+        self.tr.tocar(Clase::Asentamiento, origen_id);
         if preparacion.estado == EstadoCaravana::Preparando {
             self.programar_comercio(preparacion.sale_en, entidad_caravana(caravana), SucesoComercio::FinPreparacion);
         } else {
@@ -296,12 +296,12 @@ impl Nucleo {
     fn entregar_de_caravana(&mut self, t: Instante, p: &Peticion, ejercito: u64, caravana: u64, acuerdo: u64) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
+        let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(ejercito)))?;
         if !self.manda_columna(p, e, false) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
         }
         let (posicion_columna, faccion_columna) = (e.posicion_en(t), e.bandera());
-        let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{caravana}")))?;
+        let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana)))?;
         let c = &self.estado.comercio.flota[ci];
         if c.estado != EstadoCaravana::Adjunta || !e.caravanas_adjuntas.contains(&caravana) {
             return Err(rechazo(rechazos::CARAVANA_NO_ESTA_ADJUNTA, "la caravana no va enganchada a esa columna".into()));
@@ -357,6 +357,7 @@ impl Nucleo {
             self.estado.comercio.flota[i].contenido = contenido;
             return None;
         };
+        self.tr.tocar(Clase::Caravana, caravana);
         if let Some((acuerdo, lado)) = vinculo {
             self.abonar_a_trueque(t, acuerdo, lado, &contenido);
         }
@@ -397,6 +398,7 @@ impl Nucleo {
             cerrar_dependientes(motivo, pid, &mut comercio.acuerdos, &comercio.flota, &existe, &|c| caminos.contains(&c.id))
         };
         for TruequeCancelado { acuerdo, socia } in cierre.trueques {
+            self.tr.tocar(Clase::Acuerdo, acuerdo);
             self.invalidar_comercio(entidad_trueque(acuerdo));
             self.emitir_comercio(t, EventoComercio::TruequeCancelado { acuerdo, socia }, vec![socia as u64], &[]);
         }
@@ -412,16 +414,19 @@ impl Nucleo {
             Motivo::Ruina => {
                 let libro = &mut self.estado.comercio.libro;
                 let activas: Vec<u64> = libro.ordenes.iter().filter(|o| o.asentamiento == pid).map(|o| o.id).collect();
+                let borradas: Vec<u64> = libro.ordenes.iter().chain(&libro.historial).filter(|o| o.asentamiento == pid).map(|o| o.id).collect();
                 libro.ordenes.retain(|o| o.asentamiento != pid);
                 libro.historial.retain(|o| o.asentamiento != pid);
                 for orden in activas {
                     self.invalidar_comercio(crate::estado_comercio::entidad_orden(orden));
                 }
+                self.tr.tocar_todos(Clase::OrdenMercado, borradas);
                 self.estado.comercio.ultima_caravana.remove(&plaza);
                 self.estado.comercio.reparto.remove(&plaza);
             }
             Motivo::Conquista => {
                 if !cierre.flota_traspasada.is_empty() {
+                    self.tr.tocar_todos(Clase::Caravana, cierre.flota_traspasada.iter().map(|&c| c as u64));
                     let n = cierre.flota_traspasada.len() as i64;
                     self.emitir_propio(t, "comercio.flota_traspasada", vec![plaza], vec![("caravanas", n)]);
                 }
@@ -433,6 +438,7 @@ impl Nucleo {
     pub(super) fn perder_caravana(&mut self, t: Instante, id: u64) {
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let c = self.estado.comercio.flota.remove(i);
+        self.tr.tocar(Clase::Caravana, id);
         self.devolver_escolta(&c.escolta);
         self.soltar_de_columnas(id);
         self.retirar_plan(id);
@@ -452,8 +458,9 @@ impl Nucleo {
             return self.perder_caravana(t, id);
         }
         let Ok((devuelto, perdido)) = self.cancelar_preparacion(i, origen) else { return };
+        self.tr.tocar(Clase::Caravana, id);
         self.invalidar_comercio(entidad_caravana(id));
-        self.tr.asentamientos.push(origen);
+        self.tr.tocar(Clase::Asentamiento, origen);
         self.emitir_comercio(t, EventoComercio::CaravanaVuelve { caravana: id }, vec![origen], &[("devuelto", devuelto), ("perdido", perdido)]);
         self.reparto_de_plaza(origen, t);
     }
@@ -469,6 +476,7 @@ impl Nucleo {
         if c.regresar_a_origen(ruina, plan.clone()).is_err() {
             return;
         }
+        self.tr.tocar(Clase::Caravana, id);
         (c.ruta, c.costes, c.posicion) = (camino.puntos, camino.costes, aqui);
         let carga = total(&c.contenido);
         self.instalar_plan(id, plan);

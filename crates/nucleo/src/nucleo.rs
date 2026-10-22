@@ -22,11 +22,12 @@
 //! aplica después en orden: mismo resultado, menos tiempo.
 
 use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
-use crate::estado::{Carga, CambioVersion, Ejercito, Estado, EventoNucleo, Reglas, PRIO_LLEGADA, PRIO_UMBRAL};
+use crate::estado::{Carga, CambioVersion, Clase, Ejercito, Tocados, Estado, EventoNucleo, Reglas, PRIO_LLEGADA, PRIO_UMBRAL};
 use combate::ciclo::Batalla;
 use crate::estado_militar::HeroeNucleo;
 use mundo::Mundo;
 use crate::generadores::{Cx, GeneradorDeEventos, Transicion};
+use crate::proyeccion::ids;
 use base::{Instante, Mil, Plan, Punto};
 use cola::Evento;
 use comercio::caravana::EstadoCaravana;
@@ -34,13 +35,14 @@ use persistencia::{Almacen, Foto, Fotos};
 use rutas::{Camino, Escritorio, Opciones, Peticion as PeticionRuta, Rutas};
 use servidor::RelojCompartido;
 use std::borrow::Cow;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::io;
 use std::path::Path;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+mod auditoria;
 mod avanzadas;
 mod bandidos;
 mod batallas;
@@ -86,11 +88,14 @@ pub struct Ajustes {
     pub latido_ms: i64,
     /// Entradas del registro entre fotos (0 = sin fotos automáticas).
     pub foto_cada: u64,
+    /// Comprueba en cada versión que ninguna entidad cambia sin quedar en el registro de cambios (`nucleo/auditoria.rs`). Caro: solo para pruebas.
+    /// Por defecto, desactivado; en compilaciones de depuración lo activa la variable de entorno `BRONZEAGE_AUDITAR_CAMBIOS`.
+    pub auditar_cambios: bool,
 }
 
 impl Default for Ajustes {
     fn default() -> Self {
-        Self { retencion_cambios: 65_536, muestreo_ms: 0, latido_ms: 10_000, foto_cada: 10_000 }
+        Self { retencion_cambios: 65_536, muestreo_ms: 0, latido_ms: 10_000, foto_cada: 10_000, auditar_cambios: cfg!(debug_assertions) && std::env::var_os("BRONZEAGE_AUDITAR_CAMBIOS").is_some() }
     }
 }
 
@@ -167,6 +172,15 @@ pub struct Nucleo {
     /// Un registro por versión, contiguos: el de la versión `v` está en la posición `v - base_registro - 1`.
     registro: VecDeque<CambioVersion>,
     base_registro: u64,
+    /// Versión en que cambió por última vez cada entidad que no la lleva en su estado (todas salvo columnas y plazas). No se persiste: tras un reinicio una entidad
+    /// no tocada desde entonces vale `version_de_arranque`, que no puede ser menor que la que un cliente conserva.
+    versiones: BTreeMap<(Clase, u64), u64>,
+    /// La versión de mundo con la que arrancó el proceso (la recuperada de la foto y el registro, o 0 en un mundo nuevo).
+    version_de_arranque: u64,
+    /// La huella de cada entidad en la última comprobación de `Ajustes::auditar_cambios`.
+    huellas_auditadas: Option<auditoria::Huellas>,
+    /// Lo último que el núcleo estaba aplicando (una orden o un evento), para decir en la auditoría qué cambió algo sin marcarlo.
+    causa_auditada: String,
     persist: Option<Persistencia>,
     proxima_muestra: Option<Instante>,
     metricas: Metricas,
@@ -189,6 +203,7 @@ impl Nucleo {
         let estado = Estado::nuevo(a.reglas.clone(), a.mundo_hash.clone(), a.semilla, a.inicio);
         let mut n = Self::construir(a, estado);
         n.sembrar_el_mundo();
+        n.rebasar_auditoria();
         n
     }
 
@@ -207,6 +222,7 @@ impl Nucleo {
         if !recuperado {
             n.sembrar_el_mundo();
         }
+        n.rebasar_auditoria();
         n.avisos = rec.avisos;
         let (mut repetidas, mut ultimo) = (0u64, foto_instante.unwrap_or(n.estado.ahora));
         for e in rec.entradas_posteriores {
@@ -267,6 +283,10 @@ impl Nucleo {
             tr: Transicion::default(),
             registro: VecDeque::new(),
             base_registro,
+            versiones: BTreeMap::new(),
+            version_de_arranque: base_registro,
+            huellas_auditadas: None,
+            causa_auditada: String::new(),
             persist: None,
             proxima_muestra: None,
             metricas: Metricas::default(),
@@ -423,6 +443,9 @@ impl Nucleo {
         self.estado.ahora = t;
         self.metricas.eventos += 1;
         let id = ev.clave.entidad;
+        if self.ajustes.auditar_cambios {
+            self.causa_auditada = format!("el evento {:?} de la entidad {id}", ev.carga);
+        }
         match ev.carga {
             Carga::Llegada => self.llegada(id, t),
             Carga::Umbral(objetivo) => self.umbral(id, objetivo, t),
@@ -461,35 +484,50 @@ impl Nucleo {
 
     /// La ÚNICA función que sube la versión: si la transición cambió algo (o se fuerza), cierra un registro de cambios.
     fn cerrar_version(&mut self, t: Instante, forzar: bool) -> bool {
-        if self.tr.tocados.is_empty() && self.tr.asentamientos.is_empty() && self.tr.eventos.is_empty() && !forzar {
+        // Las escuadras de un héroe tocado viajan con él.
+        let escuadras: Vec<u64> = self.tr.tocados.de(Clase::Heroe).iter().filter_map(|h| self.estado.militar.heroes.get(h)).flat_map(|h| h.heroe.escuadras.iter().map(|e| e.id)).collect();
+        self.tr.tocar_todos(Clase::Escuadra, escuadras);
+        self.auditar_cambios();
+        if self.tr.tocados.esta_vacio() && self.tr.eventos.is_empty() && !forzar {
             return false;
         }
         self.estado.version += 1;
         let v = self.estado.version;
-        let mut ids = std::mem::take(&mut self.tr.tocados);
-        ids.sort_unstable();
-        ids.dedup();
-        for id in &ids {
+        let mut tocados = std::mem::take(&mut self.tr.tocados);
+        tocados.cerrar();
+        for id in tocados.de(Clase::Ejercito) {
             if let Some(e) = self.estado.ejercitos.get_mut(id) {
                 e.version = v;
             }
         }
-        let mut asentamientos = std::mem::take(&mut self.tr.asentamientos);
-        asentamientos.sort_unstable();
-        asentamientos.dedup();
-        for id in &asentamientos {
+        for id in tocados.de(Clase::Asentamiento) {
             if let Some(a) = self.estado.asentamientos.get_mut(id) {
                 a.version = v;
             }
         }
+        for clase in Clase::TODAS.into_iter().filter(|c| !matches!(c, Clase::Ejercito | Clase::Asentamiento)) {
+            self.versiones.extend(tocados.de(clase).iter().map(|&id| ((clase, id), v)));
+        }
         let eventos = std::mem::take(&mut self.tr.eventos);
-        self.registro.push_back(CambioVersion { version: v, en: t, ejercitos: ids, asentamientos, eventos });
+        self.registro.push_back(CambioVersion { version: v, en: t, tocados, eventos });
         if self.registro.len() > self.ajustes.retencion_cambios {
             if let Some(c) = self.registro.pop_front() {
                 self.base_registro = c.version;
             }
         }
+        self.rebasar_auditoria();
         true
+    }
+
+    /// La versión de mundo en que cambió por última vez una entidad (la de su estado, si lo lleva; si no, la del registro de cambios). Una entidad que no ha cambiado desde
+    /// que arrancó el proceso vale la versión de arranque: nunca es menor que la que un cliente conserva de antes.
+    pub fn version_de(&self, clase: Clase, id: u64) -> u64 {
+        match clase {
+            Clase::Ejercito => self.estado.ejercitos.get(&id).map(|e| e.version),
+            Clase::Asentamiento => self.estado.asentamientos.get(&id).map(|a| a.version),
+            _ => self.versiones.get(&(clase, id)).copied(),
+        }
+        .unwrap_or(self.version_de_arranque)
     }
 
     // ───────────────────────────── Reglas de las columnas ─────────────────────────────
@@ -542,7 +580,7 @@ impl Nucleo {
         e.posicion = e.posicion_en(t);
         let g = self.estado.generaciones.subir(id);
         e.plan = Plan { generacion: g, vertices: Vec::new() };
-        self.tr.tocados.push(id);
+        self.tr.tocar(Clase::Ejercito, id);
         self.fijar_persecucion(id, None);
         self.poner_marcha(id, t, militar::racion::Estado::Estacionada);
         self.programar_ejercito(id, t);
@@ -559,7 +597,7 @@ impl Nucleo {
         let e = self.estado.ejercitos.get_mut(&id).expect("existe");
         e.plan = camino.a_plan(t, velocidad, g);
         e.posicion = origen;
-        self.tr.tocados.push(id);
+        self.tr.tocar(Clase::Ejercito, id);
         self.poner_marcha(id, t, militar::racion::Estado::Marchando);
         self.programar_ejercito(id, t);
         self.avisar_plan(id, true);
@@ -649,10 +687,13 @@ impl Nucleo {
     fn aplicar_interno(&mut self, t: Instante, p: Peticion, precalculado: Option<Option<Camino>>) -> Respuesta {
         if let Some(v) = self.estado.visto(&p.actor, &p.peticion_id) {
             self.metricas.ordenes_duplicadas += 1;
-            return Respuesta { resultado: Resultado::Duplicada, version_tras: v, creadas: vec![] };
+            return Respuesta::duplicada(v);
         }
         let t = t.max(self.estado.ahora);
         self.procesar_hasta(t);
+        if self.ajustes.auditar_cambios {
+            self.causa_auditada = format!("la orden {:?}", p.comando);
+        }
         let r = match p.version_esperada {
             Some(v) if self.estado.version > v => Respuesta::rechazo(
                 rechazos::VERSION_OBSOLETA,
@@ -661,6 +702,10 @@ impl Nucleo {
             ),
             _ => self.ejecutar(t, &p, precalculado),
         };
+        // Una orden que no se acepta no deja rastro: lo que marcó antes de rechazarse no cuenta como cambio.
+        if r.resultado != Resultado::Aceptada {
+            self.tr.tocados = Tocados::default();
+        }
         match &r.resultado {
             Resultado::Aceptada => {
                 self.metricas.ordenes_aceptadas += 1;
@@ -677,7 +722,7 @@ impl Nucleo {
     /// Valida y ejecuta. Una orden rechazada o sin cambios no deja rastro: ni versión, ni ids, ni eventos.
     fn ejecutar(&mut self, t: Instante, p: &Peticion, precalculado: Option<Option<Camino>>) -> Respuesta {
         let v = self.estado.version;
-        let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
+        let sin_cambios = || Respuesta::sin_cambios(v);
         let mut creadas = Vec::new();
         if let Some(r) = self.rechazo_por_batalla(t, p) {
             return r;
@@ -695,6 +740,7 @@ impl Nucleo {
                 h.loadouts.clear();
                 h.presencia = militar::presencia::Presencia::nueva(militar::presencia::Ubicacion::Columna(id));
                 self.estado.militar.insertar(HeroeNucleo { sintetico: true, ..HeroeNucleo::nuevo(h, cuenta, Some(*faccion)) });
+                self.tr.tocar(Clase::Heroe, heroe);
                 let columna = militar::columna::Columna::salir(&mr, id, Some(*faccion), heroe, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Rechazar, vec![], Default::default(), *viveres, t, &|_| 0);
                 let mut e = self.columna_suelta(columna, *posicion);
                 e.velocidad_fija = Some(*velocidad);
@@ -703,7 +749,7 @@ impl Nucleo {
             }
             Comando::MarcharA { ejercito, destino } => {
                 let Some(e) = self.estado.ejercitos.get(ejercito) else {
-                    return Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}"), v);
+                    return Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito), v);
                 };
                 if let Err(r) = self.autorizar_movimiento(p, e) {
                     return r;
@@ -731,7 +777,7 @@ impl Nucleo {
             }
             Comando::Estacionar { ejercito } => {
                 let Some(e) = self.estado.ejercitos.get(ejercito) else {
-                    return Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}"), v);
+                    return Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito), v);
                 };
                 if let Err(r) = self.autorizar_movimiento(p, e) {
                     return r;
@@ -930,8 +976,14 @@ impl Nucleo {
                 }
             }
         }
+        let tipo = p.comando.tipo_creado();
+        debug_assert!(creadas.is_empty() || tipo.is_some(), "{:?} crea {creadas:?} sin declarar qué (`Comando::tipo_creado`)", p.comando);
+        if let Some(tipo) = tipo {
+            tipo.tocadas(&creadas).into_iter().for_each(|(clase, id)| self.tr.tocar(clase, id));
+        }
+        p.comando.nombradas().into_iter().for_each(|(clase, id)| self.tr.tocar(clase, id));
         self.cerrar_version(t, true);
-        Respuesta { resultado: Resultado::Aceptada, version_tras: self.estado.version, creadas }
+        Respuesta::aceptada_con(self.estado.version, creadas, tipo)
     }
 
     /// `Err(None)` = sin cambios; `Err(Some(r))` = rechazo.

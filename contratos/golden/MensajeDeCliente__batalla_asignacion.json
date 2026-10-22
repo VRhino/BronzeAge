@@ -1,0 +1,1 @@
+{"batalla":{"asignacion":{"schemaVersion":1,"battleId":"b-2","ticketRevision":1,"intentoAsignacionId":"a1","instancia":{"host":"unity-1.example","puerto":7777,"protocolo":"udp"},"tokensParticipante":[{"heroeId":"heroe-3","token":"tok-3","expiraEnMs":"999"}]}}}

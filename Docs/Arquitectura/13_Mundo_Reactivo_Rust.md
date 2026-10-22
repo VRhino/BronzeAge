@@ -107,7 +107,8 @@ clientes ─┤ WS/HTTP · auth · parseo y validación sin estado       │
 - **Lo ajeno:** el plan entero revelaría el destino (intención, hoy protegida en 02 §4.1). Se manda **solo el tramo
   dentro de tu vista y con horizonte corto** (p. ej. los próximos 30 s), renovado: fluido y sin filtrar intención.
 - **Economía, obras, colas:** «cantidad en t₀ + ritmo» y «termina en t». El cliente anima barras y contadores; el
-  servidor no envía nada hasta que un ritmo cambia.
+  servidor no envía nada hasta que un ritmo cambia. **Salvo el almacén y la población de una plaza** (2026-10-22, contrato 05 §5): van en escalones por
+  minuto (`Ritmo.en_escalones`), el cliente no interpola y `por_minuto` es la tendencia «+N/min».
 - **Se conserva del contrato 03:** fotos + deltas por canal, agrupación por clave de visión, serialización única por
   grupo, `resync`/`revocado`. Lo que cambia es lo que viaja dentro: planes y ritmos en vez de progreso por tick.
 

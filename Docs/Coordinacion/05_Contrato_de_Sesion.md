@@ -1,6 +1,7 @@
 # Contrato 05: la sesión en tiempo real
 
-> **Estado (2026-10-13): diseño cerrado de la fase 2, sin código.** Sustituye a los contratos 02 (HTTP) y 03 (tiempo real por
+> **Estado (2026-10-22): el esquema de 4H (T1) está en `proto/`; la sesión del servidor Rust todavía proyecta poco** (ver `Docs/Arquitectura/4H_Contraste_y_Plan.md`).
+> **Diseño cerrado de la fase 2 (2026-10-13), sin código.** Sustituye a los contratos 02 (HTTP) y 03 (tiempo real por
 > segmentos) del servidor TypeScript, que quedan en `typescript-final`. El esquema vive en [`proto/bronzeage/v1/`](../../proto/bronzeage/v1/)
 > (Protobuf, D8) y es **la fuente de verdad**: este documento explica el protocolo y las garantías; si se contradicen, gana el `.proto`.
 > Contexto y problemas que resuelve: [`Consideraciones/Reconstruccion_Definicion.md`](../../Consideraciones/Reconstruccion_Definicion.md) §2.1, P3, P5, P12.
@@ -15,7 +16,7 @@ los bots (Rust, sin privilegios: el mismo contrato que un jugador) y los servido
 |---|---|
 | `common.proto` | Convenciones, `Punto`, `Plan`, `Ritmo`, `Existencia`, `Sigilo`, `Ambito` |
 | `entities.proto` | **Modelo de datos completo**: todas las entidades del dominio (ver [`01_Modelo_de_datos.md`](01_Modelo_de_datos.md)) |
-| `orders.proto` | Las 135 órdenes del cliente y la envoltura `Orden` |
+| `orders.proto` | Las 145 órdenes del cliente (135 de la fase 2 y 10 de 4H, `Orden.cuerpo` 145-154; la última es la orden genérica de administración) y la envoltura `Orden` |
 | `events.proto` | `EventoDominio` |
 | `battle.proto` | Ciclo de batalla de Unity (ticket, asignación, tokens, inicio, salida, resultado) y la entidad `Batalla` |
 | `session.proto` | Mensajes de cliente y de servidor, foto/delta, resultado causal, reloj, reanudación |
@@ -29,7 +30,9 @@ los bots (Rust, sin privilegios: el mismo contrato que un jugador) y los servido
   `Hola`. Un token inválido o caducado cierra la sesión con `ErrorSesion{token_invalido, fatal}`.
 - **El primer mensaje del cliente es `Hola`**; el servidor responde `Bienvenida` (sesión, héroe, Facción, `InfoMundo`, reloj
   y los ámbitos suscritos con la decisión de reanudación). Cualquier otra cosa antes de `Hola` cierra la sesión.
+- **Jugador sin héroe**: `Bienvenida.heroe_id` ausente y `campamentos_para_elegir` (de cada campamento de mercenarios: id, posición, origen, cuántos lo eligieron como inicial y cuántos héroes viven allí). Es lo único que ve hasta que da `crear_heroe`.
 - **Versión de protocolo** (`version_protocolo` = 1). Reglas de evolución en §11.
+- **Identificadores**: todas las entidades se nombran `<prefijo>-<n>` (la Facción también: `f-3`; ver `common.proto`). Dentro de una plaza, `ed-<plaza>-<n>` y `recinto-<plaza>-<n>`. La batalla, un UUID.
 - **El artefacto de mundo no viaja por la sesión**: el cliente lo descarga por hash desde `InfoMundo.url_artefacto` (Unity, desde
   `url_paquete_unity`) y lo guarda en disco. Si ya tiene el hash vigente (`Hola.mundo_hash_conocido`), no descarga nada. Si el
   hash cambió, el cliente no puede entrar hasta tener el nuevo.
@@ -62,7 +65,7 @@ indica si está parado.
 3. Con `rtt = recepcion - cliente_envio_ms` estima `desfase = reloj.mundo_ms - (cliente_envio_ms + rtt/2)` y lo suaviza con el
    mínimo de las últimas muestras. La hora de mundo local es `reloj_local_monotono + desfase`.
 4. Con esa hora **el cliente evalúa los planes y los ritmos en cada fotograma**: `posicion(t)` interpola el `Plan`; una cantidad es
-   `valor(t)` del `Ritmo`. El servidor no manda posiciones ni cantidades por intervalo.
+   `valor(t)` del `Ritmo` (salvo los `Ritmo.en_escalones`, que se muestran tal cual: §5). El servidor no manda posiciones ni cantidades por intervalo.
 5. Un cambio de factor o una pausa llegan como `Aviso{reloj.cambiado, reloj}`.
 
 ## 5. Foto, delta y cambios parciales
@@ -71,22 +74,31 @@ indica si está parado.
   y tras un `Revocado` seguido de una nueva suscripción.
 - **`Delta{ambito, desde, hasta, cambios, eventos}`**: lo que cambió entre dos versiones. `desde` es la última versión que el
   cliente tiene de ese ámbito: si no coincide con la suya, el cliente pide reanudar.
-- **`Cambio`**: `ACTUALIZA` (crea o actualiza) o `QUITA`. Una actualización es **parcial**: solo los campos que cambiaron
-  (presencia de Protobuf). Los campos repetidos y los mapas, cuando cambian, vienen **completos**. Un campo opcional se borra
-  listándolo en `campos_borrados`. Esto elimina por diseño los «campos borrados que llegan como `undefined`».
+- **`Cambio`** (forma **híbrida**, decisión del autor del 2026-10-22): `ACTUALIZA` (crea o actualiza) o `QUITA`. Hay dos formas de actualizar y las distingue `reemplaza`:
+  - **Entidad completa** (`reemplaza = true`): para todas las entidades menos el asentamiento. `datos` es la entidad entera y **sustituye** a la que el cliente tenía; lo que no
+    venga ha vuelto a su valor por defecto. No hay diff por entidad que calcular ni aplicar.
+  - **Parcial con máscara** (`reemplaza = false`): solo para el `Asentamiento` (la plaza y su ciudad, que son grandes). `campos` lista los campos de `Asentamiento` que el cambio
+    actualiza (`almacen`, `edificios`, `trazado`...); lo que no está en la máscara no cambia. Un campo de la máscara con su valor por defecto **sí** se pone a ese valor (con proto3 un `0` y
+    un «sin cambio» no se distinguen, por eso hay máscara) y un `optional` de la máscara que no viene en `datos` se borra. Los repetidos y los mapas de la máscara vienen completos.
+  - `reemplaza = false` con `campos` vacío es la semántica de v1 (parcial por presencia, `campos_borrados` para borrar un opcional); el servidor Rust ya no la emite.
 - **`Entidad.version`**: cada entidad lleva la versión de mundo en que cambió por última vez; el almacén normalizado del cliente
   descarta cualquier actualización con `version` menor que la que ya tiene.
 - Cada `Delta` y cada `Foto` pueden llevar `NieblaProyectada` (dos máscaras: explorado y visible ahora).
 - **Qué viaja de un movimiento**: lo propio, el `Plan` completo una sola vez (un cambio de plan llega como plan nuevo que empieza
   donde está la columna: ni parada ni salto); lo ajeno, solo el **tramo** del plan dentro de la vista y con horizonte corto (~30 s),
   renovado. Una columna que anda no cuesta ningún mensaje mientras anda.
-- **Economía, obras y colas**: `Ritmo` («cantidad en t₀ + ritmo») y «termina en t». El servidor no manda nada hasta que un ritmo cambia.
+- **Economía, obras y colas**: `Ritmo` («cantidad en t₀ + ritmo») y «termina en t». El servidor no manda nada hasta que un ritmo cambia. **La economía de una plaza no es continua**
+  (decisión del autor del 2026-10-22, «economía por minuto»): el almacén y la población cambian en escalones, en el paso de minuto de la plaza, y sus `Ritmo` vienen con
+  `en_escalones = true`: el cliente **no interpola**, muestra `valor_en_t0` y rotula `por_minuto` como tendencia «+N/min» (el neto real del último paso de minuto, guardado por plaza).
+  Los demás ritmos (víveres de una columna, medidor, reputación) siguen siendo rectas que se evalúan en cada fotograma.
+- **Población entera**: cada clase tiene habitantes enteros (`valor_en_t0` múltiplo de 1.000); el crecimiento fraccionario entre persona y persona (el «resto oculto») no viaja.
 
 ## 6. Órdenes y respuesta causal
 
 ```
 cliente → Orden { peticion_id, version_esperada?, cuerpo }
 servidor → [Delta* con los cambios que produjo]  →  ResultadoOrden { peticion_id, resultado, version_tras, rechazo?, creadas[], datos? }
+creadas[] = ReferenciaCreada { entidad: TipoEntidad, id }   (una clase de entidad por orden; p. ej. EDIFICIO `ed-7-12`, RECINTO, OBRA_DE_MAPA, ESCUADRON, EJERCITO, LOADOUT, INCORPORACION `<battle_id>:<n>`)
 ```
 
 - **Causalidad**: el servidor envía `ResultadoOrden` **después** de toda `Delta` con `hasta ≤ version_tras` que afecte a los
@@ -101,7 +113,11 @@ servidor → [Delta* con los cambios que produjo]  →  ResultadoOrden { peticio
 - **Rechazos**: aparte de la validación de forma (la hace el parseo del `.proto`), el núcleo rechaza por autorización
   (`no_autorizado`, `fuera_del_mundo`, `batalla.bloqueado`), por reglas del dominio (códigos estables como `ascenso.invalido`)
   y por la regla de guerra: `atacar` sin `declara_guerra: true` contra quien no está en guerra se rechaza con el código
-  `guerra.confirmar` y en `detalle` las consecuencias (contra quién queda la Facción en guerra y quién entra por arrastre).
+  `guerra.confirmar` y en `detalle` las consecuencias: `{ objetivo: "f-N", facciones: ["f-N"...] }`, la Facción contra la que quedaría en guerra y las que entrarían por arrastre
+  (aliados y vasallos; vacía hasta que exista el sistema político). El cliente confirma repitiendo la orden con `declara_guerra: true`.
+- **Orden de administración**: `OrdenDeAdministracion{codigo, parametros}` es una sola orden genérica para el andamiaje provisional del núcleo (crear ejércitos, dar recursos,
+  fijar relaciones...); solo la acepta una sesión `CLIENTE_ADMIN_WEB` y desaparece cuando los sistemas político y de tecnología sustituyan lo que da (decisión del autor, 2026-10-22).
+- **Duplicadas**: `ORDEN_DUPLICADA` devuelve solo la versión (no repite `creadas`): un cliente que reintenta ya recibió el estado nuevo por el delta.
 - **Límite de pendientes**: `Bienvenida.maximo_ordenes_pendientes`; pasarse es `ErrorSesion{demasiadas_ordenes}`.
 
 ## 7. Reanudación por versión
@@ -124,6 +140,12 @@ La reapertura de Unity pinta el último estado desde la caché local **antes** d
 `Delta`. Llevan `codigo` (`familia.nombre`), `version`, `en_ms`, `asentamiento_id` (quién lo oye) y `heroes_ids` (los nombrados lo oyen
 aunque no vean la plaza), y un `payload` estructurado.
 
+- **Dos formas a la vez** (decisión del autor, 2026-10-22): todo evento lleva el `payload` genérico (`Struct`: número, texto o lista) y los **quince** que mueven la interfaz llevan además un
+  mensaje tipado en `EventoDominio.tipado`: `BatallaAbierta` (`batalla.abierta`), `BatallaAsignada` (`batalla.asignada`), `BatallaCerrada` (`batalla.aplicada`, `cancelada`, `fallida`),
+  `PlazaConquistada` (`asentamiento.conquistada`), `PlazaEnRuinas` (`asentamiento.ruinas`), `AsedioResistido` (`combate.asedio_resistido`), `UnionPedida` (`columna.union_pedida`,
+  `convocatoria.union_pedida`), `ConvocatoriaConvocada`, `ConvocatoriaPartio`, `HeroeExpulsado` (`heroe.expulsado`, `heroe.desalojado`), `ColumnaConHambre` (`ejercito.viveres_bajos`,
+  `ejercito.sin_viveres`), `DesercionPorHambre` (`tropas.desercion`), `GuerraDeclarada` (`faccion.guerra_declarada`), `ObraTerminada` (edificio, mejora, recinto, pueblo o avanzada
+  completados) y `HeroeHerido`. Contra un campamento de bandidos el prefijo es `evento_pve.` y se tipan igual. El resto de los códigos solo tienen `payload`.
 - **El catálogo de códigos y la forma del payload de cada uno son las tablas de eventos de cada documento de `Docs/Mechanics`**
   (p. ej. `Movimiento_Ejercitos` §13.1, `Comercio_Caravanas` §13, `Presencia_Y_Convocatoria`, `Diplomacia_Facciones`). Un test del
   contrato exigirá que todo código emitido figure en el catálogo del archivo común de datos de juego.
@@ -137,9 +159,14 @@ aunque no vean la plaza), y un `payload` estructurado.
 ## 9. Sesión de servidor de batalla
 
 Un servidor de batalla de Unity abre una sesión con `Hola.cliente = CLIENTE_SERVIDOR_BATALLA` y un token de servicio. Recibe
-`MensajeDeServidor.batalla` (`BattleTicket`, `IncorporacionBatalla`, `TokensBatalla`) y responde con `MensajeDeCliente.batalla`
-(`BattleServerAssignment`, `InicioBatalla`, `SalidaBatalla`, `BattleResult`). El ciclo (estados, plazos, candado de escuadras,
-idempotencia del resultado) es el de [`Mechanics/Batalla_Unity_Ciclo.md`](../Mechanics/Batalla_Unity_Ciclo.md); el terreno de la batalla se
+`MensajeDeServidor.batalla` (`BattleTicket`, `IncorporacionBatalla`, `TokensBatalla`, y el `AcuseBatalla` de cada mensaje suyo) y responde con `MensajeDeCliente.batalla`
+(`BattleServerAssignment`, `InicioBatalla`, `SalidaBatalla`, `BattleResult` y `TokensBatalla`, los de quienes se unieron tras la asignación). El acuse dice cuál era el mensaje, su `battle_id` y
+`ORDEN_ACEPTADA`, `ORDEN_SIN_CAMBIOS` (repetir uno ya aplicado), `ORDEN_DUPLICADA` o `ORDEN_RECHAZADA` con su `RechazoOrden` (`batalla.ya_asignada`: gana la primera asignación; `batalla.revision_vieja`...).
+El ticket se publica a todos los servidores de batalla conectados y gana la primera asignación (decisión del autor, 2026-10-22).
+Una batalla sin humanos (bot contra bot) o sin iniciador (`Batalla.iniciada_por` vacío: los bandidos) se asigna igual, con `tokens_participante` vacío. El ciclo (estados, plazos, candado de escuadras,
+idempotencia del resultado) es el de [`Mechanics/Batalla_Unity_Ciclo.md`](../Mechanics/Batalla_Unity_Ciclo.md). **El token del propio jugador** (antes un `GET`) viaja en la proyección: `Batalla.asignacion_propia{instancia, token, expira_en_ms}`, solo al
+propio combatiente. **Asedio visible desde fuera**: `Asentamiento`, `Pueblo` y `Avanzada` llevan `batalla_id` mientras se juega una batalla contra ellos y `Batalla.lado_para_unirse` dice, por espectador, a qué lado podría
+unirse. **Caravanas**: `ContextoCaravana.caravanas` lista todas las que se juegan (con los acosadores entran todas las adjuntas) y los carros se nombran `"<caravana_id>:<posición>"` (también en `BattleResult.carros_perdidos`). El terreno de la batalla se
 toma del artefacto de mundo (`BattleMapReference.mapa_id` = hash). **Modalidades nuevas**: asalto de caravana `disputa` / `aguante`,
 saqueo de pueblo y ataque a una avanzada ([`Combate.md`](../Mechanics/Combate.md) §7). Unity decide lo de dentro; el mundo sigue mientras se lucha.
 
@@ -174,8 +201,6 @@ saqueo de pueblo y ataque a una avanzada ([`Combate.md`](../Mechanics/Combate.md
 
 ## 13. Decisiones abiertas
 
-1. **Payload de los eventos**: hoy `google.protobuf.Struct` con los campos documentados por código. La alternativa es un mensaje
-   Protobuf tipado por cada uno de los ≈180 eventos. Recomiendo `Struct` ahora (son narración, no estado) y tipar solo los que un cliente
-   necesite interpretar para actuar.
+1. ~~**Payload de los eventos**~~ — **cerrada (2026-10-22)**: `Struct` genérico para todos y quince mensajes tipados para los que mueven la interfaz (§8).
 2. **Autenticación y acceso** (registro, claves, roles): fase 3, junto al servidor.
 3. **Retención de deltas y tamaño del registro**: se fijan al construir el núcleo con mediciones.

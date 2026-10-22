@@ -9,9 +9,9 @@
 ## 1. Reglas del modelo
 
 1. **Entidad con identidad** = mensaje con `id` y `version` (la versión de mundo del último cambio). Es lo que el almacén del cliente guarda por id.
-2. **Movimiento = `Plan`** (vértices con su instante de paso). **Cantidades que crecen o se gastan = `Ritmo`** (valor en t₀ + ritmo por minuto). Ninguna entidad guarda «progreso por tick».
+2. **Movimiento = `Plan`** (vértices con su instante de paso). **Cantidades que crecen o se gastan = `Ritmo`** (valor en t₀ + ritmo por minuto). Ninguna entidad guarda «progreso por tick». La excepción es la economía de una plaza (almacén y población), que cambia en escalones en el paso de minuto: su `Ritmo` lleva `en_escalones = true`, el cliente no interpola y `por_minuto` es la tendencia «+N/min».
 3. **Tiempo** en ms de mundo (`*_ms`); **espacio** en milésimas de unidad estratégica; **cantidades** de juego en milésimas.
-4. **Presencia de campos**: lo opcional es `optional`; borrar es explícito (`campos_borrados`).
+4. **Presencia de campos**: lo opcional es `optional`. Un cambio de entidad viaja **completo** (sustituye a la anterior) salvo el `Asentamiento`, que puede ir parcial con máscara de campos (`Cambio.reemplaza` y `Cambio.campos`, contrato 05 §5).
 5. **Catálogos** (recursos, edificios, tropas, tecnologías, políticas): ids de cadena del archivo común de datos de juego, no enumeraciones.
 6. **Lo derivado** (zona de un asentamiento, cupo de guarnición, liderazgo total de un loadout) viaja marcado como derivado y no se escribe.
 7. **Nada de la antigua cadena por tick**: no existen `ruta`/`progreso`, `origenAsentamientoId`, el estado `regresando`, `extractoresTicksSinCupo` ni las caravanas `militar` y `contrabando`.
@@ -37,10 +37,11 @@
 - Una escuadra tiene **un** contenedor. **La tropa que va con su héroe se queda con él; la prestada** (guarnición, escolta) **vuelve sin viaje al campamento de su héroe** cuando no puede seguir donde está (Doc 5.15.2b).
 - Un ejército es un conjunto de héroes con sus columnas y caravanas adjuntas: **no guarda tropa por su cuenta** y **no tiene destino fijo ni vuelve solo**.
 - Una caravana adjunta está en `caravanas_adjuntas_ids` de **exactamente** un ejército y su posición es la de él; una caravana aparcada en una plaza que cae **se destruye**.
-- El almacén nunca baja de 0 ni supera su capacidad; la población es continua y se lee entera; el medidor de mantenimiento ∈ [0, 100]; la reputación ∈ [−100, 100]; `nivel` es monótono.
+- El almacén nunca baja de 0 ni supera su capacidad y cambia en escalones (paso de minuto); la población es **entera** (habitantes enteros, con un resto de crecimiento oculto que no viaja); el medidor de mantenimiento ∈ [0, 100]; la reputación ∈ [−100, 100]; `nivel` es monótono.
 - Un pueblo extractor o una avanzada **cuenta como edificio activo de su plaza madre**; los pueblos pasan al conquistador con la madre y desaparecen con su ruina.
 - Los `Plan` son monótonos en el tiempo (`en_ms` no decrece) y su primera posición es la de la entidad en el instante en que se emite.
-- Un identificador nunca se reutiliza dentro de una partida.
+- Un identificador nunca se reutiliza dentro de una partida. Todos son `<prefijo>-<n>` (la Facción, `f-3`; ver `common.proto`).
+- Un héroe puede estar además **dentro de un pueblo extractor o de una avanzada** (`UbicacionHeroe.pueblo_id`/`avanzada_id`); la columna que entró en un lugar queda fuera del mapa (`Ejercito.dentro_de`).
 
 ## 4. Cierre de las propuestas BA
 

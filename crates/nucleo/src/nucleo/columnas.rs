@@ -166,6 +166,7 @@ impl Nucleo {
     /// (`sincronizar_hambre`); fuera de una columna queda quieta.
     pub(super) fn poner_escuadras_en(&mut self, heroes: &[u64], ids: &[u64], contenedor: Contenedor, t: Instante) {
         for h in heroes {
+            self.tr.tocar(Clase::Heroe, *h);
             let Some(h) = self.estado.militar.heroes.get_mut(h) else { continue };
             for e in h.heroe.escuadras.iter_mut().filter(|e| ids.contains(&e.id)) {
                 e.contenedor = contenedor;
@@ -199,6 +200,7 @@ impl Nucleo {
         let come = e.columna.viveres.valor_en(t) > 0;
         for p in &e.columna.participantes {
             let Some(h) = militar.heroes.get_mut(&p.heroe) else { continue };
+            self.tr.tocar(Clase::Heroe, p.heroe);
             for esc in h.heroe.escuadras.iter_mut().filter(|s| s.contenedor == Contenedor::Ejercito(id)) {
                 esc.con_racion(&reglas.economia.militar, t, come);
             }
@@ -238,11 +240,12 @@ impl Nucleo {
         for h in &heroes {
             if let Some(h) = self.estado.militar.heroes.get_mut(h) {
                 h.columna = Some(id);
+                self.tr.tocar(Clase::Heroe, h.heroe.id);
             }
         }
         self.estado.ejercitos.insert(id, e);
         self.poner_escuadras_en(&heroes, &escuadras, Contenedor::Ejercito(id), t);
-        self.tr.tocados.push(id);
+        self.tr.tocar(Clase::Ejercito, id);
         // Nace con la generación de su id (sin subirla): aún no hay nada programado que invalidar.
         self.sincronizar_hambre(id, t);
         self.programar_ejercito(id, t);
@@ -256,7 +259,7 @@ impl Nucleo {
         self.estado.ejercitos.remove(&id);
         self.estado.generaciones.subir(id);
         self.estado.generaciones.subir(entidad_formacion(id));
-        self.tr.tocados.push(id);
+        self.tr.tocar(Clase::Ejercito, id);
         self.avisar_plan(id, false);
         self.anunciar_columna(id, Motivo::Plan);
     }
@@ -265,6 +268,7 @@ impl Nucleo {
     /// La columna con alguien a bordo entra en el espacio si no estaba.
     pub(super) fn ubicar_en_columna(&mut self, heroe: u64, columna: u64) {
         if let Some(h) = self.estado.militar.heroes.get_mut(&heroe) {
+            self.tr.tocar(Clase::Heroe, heroe);
             h.columna = Some(columna);
             h.heroe.presencia.ubicacion = Ubicacion::Columna(columna);
         }
@@ -324,6 +328,7 @@ impl Nucleo {
         let mut bajas = Vec::new();
         for h in heroes {
             let Some(hn) = self.estado.militar.heroes.get_mut(&h) else { continue };
+            self.tr.tocar(Clase::Heroe, h);
             for s in hn.heroe.escuadras.iter_mut().filter(|s| s.contenedor == Contenedor::Ejercito(id) && s.deserta_en(t)) {
                 let n = s.desertar(&mr, t);
                 if n > 0 {
@@ -354,7 +359,7 @@ impl Nucleo {
         if e.columna.peticiones.len() == antes {
             return;
         }
-        self.tr.tocados.push(columna);
+        self.tr.tocar(Clase::Ejercito, columna);
         self.evento_de_columna("columna.peticion_caducada", t, columna, vec![], vec![("solicitante", solicitante as i64)]);
     }
 
@@ -498,7 +503,7 @@ impl Nucleo {
         let Some(e) = self.estado.ejercitos.get_mut(&id).filter(|e| e.en_batalla) else { return false };
         e.en_batalla = false;
         let (punto, heroes, pausa) = (e.posicion, Self::participantes_de(e), e.plan_en_pausa.take());
-        self.tr.tocados.push(id);
+        self.tr.tocar(Clase::Ejercito, id);
         match pausa {
             Some(PlanEnPausa { desde, velocidad, plan }) => {
                 self.estado.ejercitos.get_mut(&id).expect("existe").plan = pausar_plan(&plan, desde, t, punto);

@@ -33,7 +33,7 @@ impl Nucleo {
         // Qué se mira: dónde está, si es de los suyos, lo que se ve y a quién se avisa.
         let (donde, propio, contenido, aviso) = match objetivo {
             Objetivo::Ejercito(x) => {
-                let o = self.estado.ejercitos.get(&x).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{x}")))?;
+                let o = self.estado.ejercitos.get(&x).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(x)))?;
                 if !self.columna_en_el_mapa(o) {
                     return Err(a_cubierto());
                 }
@@ -42,7 +42,7 @@ impl Nucleo {
                 (o.posicion_en(t), x == id, Contenido::Columna { faccion: o.columna.faccion, heroes, escuadras }, ("columna.observada", Some(x), vec![]))
             }
             Objetivo::Caravana(x) => {
-                let k = self.estado.comercio.caravana(x).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{x}")))?;
+                let k = self.estado.comercio.caravana(x).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(x)))?;
                 if !matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando | EstadoCaravana::Adjunta) {
                     return Err(a_cubierto());
                 }

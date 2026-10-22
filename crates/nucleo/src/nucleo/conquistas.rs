@@ -103,7 +103,7 @@ impl Nucleo {
         let clave = self.estado.generaciones.clave(entidad);
         self.estado.cola.programar(c.protegida_hasta, PRIO_ASENTAMIENTO, clave, Carga::Combate(SucesoCombate::FinProteccion));
         self.estado.cola.programar(c.ocupacion_hasta, PRIO_ASENTAMIENTO, clave, Carga::Combate(SucesoCombate::FinOcupacion));
-        self.tr.asentamientos.push(plaza);
+        self.tr.tocar(Clase::Asentamiento, plaza);
         // Sus avanzadas pasan con ella: la guarnición de jugadores de los antiguos residentes se va (derrota) y la de serie se reinicia.
         self.avanzadas_de_la_madre_conquistada(plaza, t);
         // La plaza cambió de bandera: sus fronteras con otras Facciones se miran de nuevo.
@@ -206,7 +206,7 @@ impl Nucleo {
     pub(super) fn fin_de_proteccion(&mut self, plaza: u64, t: Instante) {
         let Some(a) = self.estado.asentamientos.get_mut(&plaza) else { return };
         a.protegida_hasta = None;
-        self.tr.asentamientos.push(plaza);
+        self.tr.tocar(Clase::Asentamiento, plaza);
         self.emitir_propio(t, "asentamiento.proteccion_terminada", vec![plaza], vec![]);
     }
 
@@ -214,7 +214,7 @@ impl Nucleo {
     pub(super) fn fin_de_ocupacion(&mut self, plaza: u64, t: Instante) {
         let Some(a) = self.estado.asentamientos.get_mut(&plaza) else { return };
         (a.ocupada_hasta, a.economia.ocupado) = (None, false);
-        self.tr.asentamientos.push(plaza);
+        self.tr.tocar(Clase::Asentamiento, plaza);
         self.emitir_propio(t, "asentamiento.ocupacion_terminada", vec![plaza], vec![]);
     }
 }

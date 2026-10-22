@@ -137,7 +137,7 @@ impl Nucleo {
     /// La orden de un héroe: el héroe existe, es de quien la da (o de la administración) y está en el mundo.
     pub(super) fn autorizar_heroe(&self, p: &Peticion, id: u64, aunque_este_fuera: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
-        let h = self.heroe(id).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, format!("heroe-{id}"), v))?;
+        let h = self.heroe(id).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(id), v))?;
         if !p.admin && h.cuenta != p.actor {
             return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "el héroe no es tuyo", v));
         }
@@ -149,6 +149,7 @@ impl Nucleo {
 
     /// El héroe de una orden ya autorizada.
     pub(super) fn heroe_mut(&mut self, id: u64) -> &mut HeroeNucleo {
+        self.tr.tocar(Clase::Heroe, id);
         self.estado.militar.heroes.get_mut(&id).expect("el héroe existe")
     }
 
@@ -165,6 +166,7 @@ impl Nucleo {
         for EscuadraCedida { id, heroe, .. } in escolta {
             if let Some(e) = self.estado.militar.heroes.get_mut(heroe).and_then(|h| h.heroe.escuadra_mut(*id)) {
                 if matches!(e.contenedor, Contenedor::Escolta(_)) {
+                    self.tr.tocar(Clase::Heroe, *heroe);
                     e.contenedor = Contenedor::Campamento;
                 }
             }
@@ -178,7 +180,7 @@ impl Nucleo {
     pub(super) fn ejecutar_heroes(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
+        let sin_cambios = || Respuesta::sin_cambios(v);
         let solo_admin = || (!p.admin).then(|| rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
         let mr = self.estado.reglas.economia.militar.clone();
         let de_heroe = |e: ErrorHeroe| {
@@ -194,7 +196,7 @@ impl Nucleo {
                     return Err(rechazo(rechazos::HEROE_YA_EXISTE, format!("{cuenta} ya tiene su héroe")));
                 }
                 if self.puerta_de_campamento(*campamento).is_none() {
-                    return Err(rechazo(rechazos::HEROE_CAMPAMENTO_DESCONOCIDO, format!("campamento-{campamento}")));
+                    return Err(rechazo(rechazos::HEROE_CAMPAMENTO_DESCONOCIDO, ids::campamento(*campamento)));
                 }
                 let (id, loadout) = (self.estado.siguiente_id, self.estado.siguiente_id + 1);
                 self.estado.siguiente_id += 2;
@@ -245,7 +247,7 @@ impl Nucleo {
                     return Err(sin_cambios());
                 }
                 if let Some(c) = columna {
-                    self.tr.tocados.push(c);
+                    self.tr.tocar(Clase::Ejercito, c);
                 }
                 Ok(vec![])
             }
@@ -267,7 +269,7 @@ impl Nucleo {
                 if *cantidad <= 0 {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
                 }
-                let e = self.estado.ejercitos.get_mut(&columna).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{columna}")))?;
+                let e = self.estado.ejercitos.get_mut(&columna).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(columna)))?;
                 if e.columna.lider != *heroe {
                     return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder pasa trigo del carro a los víveres".into()));
                 }
@@ -329,7 +331,8 @@ impl Nucleo {
                 if h.faccion == *faccion {
                     return Err(sin_cambios());
                 }
-                h.faccion = *faccion;
+                let anterior = std::mem::replace(&mut h.faccion, *faccion);
+                self.tr.tocar_todos(Clase::Faccion, anterior.map(u64::from));
                 Ok(vec![])
             }
             Comando::ColocarHeroe { heroe, ubicacion } => {
@@ -343,7 +346,7 @@ impl Nucleo {
                     }
                     Ubicacion::Columna(c) => {
                         if !self.estado.ejercitos.contains_key(c) {
-                            return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{c}")));
+                            return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*c)));
                         }
                         let hn = self.heroe(*heroe).expect("existe");
                         if hn.columna.is_some_and(|otra| otra != *c) {
@@ -369,7 +372,7 @@ impl Nucleo {
                     }
                     Ubicacion::Mercenarios(c) => {
                         if self.puerta_de_campamento(*c).is_none() {
-                            return Err(rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{c}")));
+                            return Err(rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, ids::campamento(*c)));
                         }
                     }
                     Ubicacion::Desconectado(_) => return Err(rechazo(rechazos::HEROE_UBICACION_INVALIDA, "se sale del mundo desconectándose".into())),
@@ -452,7 +455,7 @@ impl Nucleo {
             let (c, m) = rechazo_de_reclutamiento(e);
             Respuesta::rechazo(c, m, v)
         })?;
-        self.tr.asentamientos.push(asentamiento);
+        self.tr.tocar(Clase::Asentamiento, asentamiento);
         self.emitir_propio(
             t,
             "tropas.reclutadas",
@@ -472,7 +475,7 @@ impl Nucleo {
             let (c, m) = rechazo_de_caravana(e);
             Respuesta::rechazo(c, m, v)
         };
-        let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{caravana}"), v))?;
+        let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana), v))?;
         self.autorizar_heroe(p, heroe, false)?;
         let origen = self.estado.comercio.flota[ci].origen as u64;
         let cupo = self.cupos_de(self.plaza_o_rechazo(origen)?).escolta;
@@ -504,14 +507,14 @@ impl Nucleo {
     /// `quitarEscolta`: solo con la caravana parada en su origen; cada héroe retira únicamente las suyas (todas las suyas si no se dice cuáles).
     fn quitar_escolta(&mut self, t: Instante, p: &Peticion, caravana: u64, heroe: u64, escuadras: Option<&[u64]>) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
-        let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{caravana}"), v))?;
+        let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana), v))?;
         self.autorizar_heroe(p, heroe, false)?;
         let quitadas = self.estado.comercio.flota[ci].quitar_escolta(heroe, escuadras).map_err(|e| {
             let (c, m) = rechazo_de_caravana(e);
             Respuesta::rechazo(c, m, v)
         })?;
         if quitadas.is_empty() {
-            return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+            return Err(Respuesta::sin_cambios(v));
         }
         self.devolver_escolta(&quitadas);
         let origen = self.estado.comercio.flota[ci].origen as u64;
@@ -529,6 +532,7 @@ impl Nucleo {
         // Quien combate dentro de una plaza asediada tampoco sale (no va en ninguna columna).
         let combate = combate || self.heroe_en_batalla(id);
         let Some(h) = self.estado.militar.heroes.get_mut(&id) else { return };
+        self.tr.tocar(Clase::Heroe, id);
         match h.heroe.presencia.al_vencer_la_salida(&mr, t, combate, perseguido) {
             None | Some(Salida::EsperaAlFinDeLaBatalla) => {}
             Some(Salida::AplazadaHasta(hasta)) => {
@@ -563,6 +567,7 @@ impl Nucleo {
         let ids: Vec<u64> = militar.residentes_de(plaza).map(|h| h.heroe.id).collect();
         let mut deserciones = Vec::new();
         for id in ids {
+            self.tr.tocar(Clase::Heroe, id);
             for e in militar.heroes.get_mut(&id).expect("existe").heroe.escuadras.iter_mut().filter(|e| come_de_la_plaza(e) && e.cantidad > 0) {
                 e.paso_de_hambre(&mr, t, suministro);
                 let desertores = e.desertar(&mr, t);
@@ -572,7 +577,7 @@ impl Nucleo {
             }
         }
         if !deserciones.is_empty() {
-            self.tr.asentamientos.push(plaza);
+            self.tr.tocar(Clase::Asentamiento, plaza);
         }
         for (origen, heroe, escuadra, desertores) in deserciones {
             self.emitir_propio(t, "tropas.desercion", vec![origen], vec![("heroe", heroe as i64), ("escuadra", escuadra as i64), ("desertores", desertores)]);
@@ -604,7 +609,7 @@ impl Nucleo {
                 match self.heroe(id).expect("existe").columna {
                     Some(c) => {
                         self.ubicar_en_columna(id, c);
-                        self.tr.tocados.push(c);
+                        self.tr.tocar(Clase::Ejercito, c);
                     }
                     None => {
                         self.columna_de_salida(t, id, posicion, residia.then_some(faccion).flatten(), &[]);

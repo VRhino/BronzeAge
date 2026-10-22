@@ -181,7 +181,7 @@ fn las_ordenes_que_no_valen_se_rechazan_sin_rastro_y_en_su_orden() {
     // Alcance: a más de radioEncuentro (3).
     assert_eq!(con(&mut x, "ana", "r5", ataque(ObjetivoAtaque::Ejercito(lejana.0), ana.1)), rechazos::COMBATE_LEJOS);
     // Los míos y los aliados.
-    assert_eq!(con(&mut x, "ana", "r6", ataque(ObjetivoAtaque::Ejercito(otra.0), ana.1)), rechazos::COMBATE_SIN_GUERRA, "sin guerra no se ataca a otra Facción");
+    assert_eq!(con(&mut x, "ana", "r6", ataque(ObjetivoAtaque::Ejercito(otra.0), ana.1)), rechazos::GUERRA_CONFIRMAR, "sin guerra no se ataca a otra Facción");
     assert!(x.n.aplicar_en(20 * MIN, admin("alianza", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) })).aceptada());
     assert_eq!(con(&mut x, "ana", "r7", Comando::Atacar { heroe: ana.1, objetivo: ObjetivoAtaque::Ejercito(otra.0), declara_guerra: true }), rechazos::COMBATE_ALIADA, "ni con declaración se ataca a un aliado");
     // La clase: un ejército y una columna personal no combaten entre sí (las de administración nacen ejército).
@@ -215,7 +215,7 @@ fn declarar_la_guerra_al_atacar_la_deja_en_guerra_pero_solo_si_la_orden_vale() {
     assert_eq!(codigo(&atacar(&mut n, MIN, "ana", "a0", ana.1, ObjetivoAtaque::Ejercito(lejos.0), true)), rechazos::COMBATE_LEJOS);
     assert_eq!(n.relacion(1, 3), None, "no se declaró la guerra");
     // Sin la declaración, no.
-    assert_eq!(codigo(&atacar(&mut n, MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false)), rechazos::COMBATE_SIN_GUERRA);
+    assert_eq!(codigo(&atacar(&mut n, MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false)), rechazos::GUERRA_CONFIRMAR);
     // Con ella, ataca y la guerra queda.
     let r = atacar(&mut n, MIN, "ana", "a2", ana.1, ObjetivoAtaque::Ejercito(beto.0), true);
     assert!(r.aceptada(), "{r:?}");
@@ -612,7 +612,7 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     let (v0, rastro0) = (s.e.n.version(), rastro(&s.e.n));
 
     // Sin guerra no se asedia; con la declaración, sí.
-    assert_eq!(codigo(&s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), false)), rechazos::COMBATE_SIN_GUERRA);
+    assert_eq!(codigo(&s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), false)), rechazos::GUERRA_CONFIRMAR);
     assert_eq!(rastro(&s.e.n), rastro0, "el rechazo no dejó rastro");
     let rng_antes = s.e.n.estado().rng.estado();
     let r = s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true);
@@ -847,7 +847,7 @@ fn si_la_caravana_resiste_el_atacante_pierde_el_25_por_ciento_y_sus_heroes_queda
     e.n.avanzar_hasta(t0);
     // Un héroe solo (15 de poder, 17,25 como mucho) no vence a los carreteros (26).
     let rastro0 = rastro(&e.n);
-    assert_eq!(codigo(&e.atacar("beto", solo.1, ObjetivoAtaque::Caravana(ca), false)), rechazos::COMBATE_SIN_GUERRA);
+    assert_eq!(codigo(&e.atacar("beto", solo.1, ObjetivoAtaque::Caravana(ca), false)), rechazos::GUERRA_CONFIRMAR);
     assert_eq!(rastro(&e.n), rastro0, "sin guerra no se ataca y no deja rastro");
     let r = e.atacar("beto", solo.1, ObjetivoAtaque::Caravana(ca), true);
     assert!(r.aceptada(), "{r:?}");
@@ -919,7 +919,7 @@ fn saquear_un_pueblo_se_lleva_lo_que_hay_por_encima_de_la_mitad_y_la_guarnicion_
     // Un héroe sin soldados no saquea; sin guerra tampoco; el pueblo propio, menos.
     assert_eq!(codigo(&e.atacar("gus", solo.1, ObjetivoAtaque::Pueblo(pueblo), true)), rechazos::COMBATE_SIN_ATACANTES);
     let rastro0 = rastro(&e.n);
-    assert_eq!(codigo(&e.atacar("beto", saqueador.1, ObjetivoAtaque::Pueblo(pueblo), false)), rechazos::COMBATE_SIN_GUERRA);
+    assert_eq!(codigo(&e.atacar("beto", saqueador.1, ObjetivoAtaque::Pueblo(pueblo), false)), rechazos::GUERRA_CONFIRMAR);
     assert_eq!(codigo(&e.atacar("beto", saqueador.1, ObjetivoAtaque::Pueblo(9_999), true)), rechazos::PUEBLO_DESCONOCIDO);
     assert_eq!(rastro(&e.n), rastro0, "los rechazos no dejan rastro (ni la guarnición de serie)");
     let rng0 = e.n.estado().rng.estado();

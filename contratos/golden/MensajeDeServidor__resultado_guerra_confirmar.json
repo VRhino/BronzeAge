@@ -1,0 +1,1 @@
+{"secuencia":"26","resultado":{"peticionId":"req-4","resultado":"ORDEN_RECHAZADA","versionTras":"81","rechazo":{"codigo":"guerra.confirmar","mensaje":"la Facción 1 no está en guerra con la 2","detalle":{"objetivo":"f-2"}}}}

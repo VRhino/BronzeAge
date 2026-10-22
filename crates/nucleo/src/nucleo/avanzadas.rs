@@ -134,7 +134,7 @@ impl Nucleo {
     fn con_madre(&self, id: u64) -> Result<(u64, &Avanzada), Respuesta> {
         match self.avanzada(id) {
             Some((Some(madre), v)) => Ok((madre, v)),
-            _ => Err(Respuesta::rechazo(rechazos::AVANZADA_DESCONOCIDA, format!("avanzada-{id}"), self.estado.version)),
+            _ => Err(Respuesta::rechazo(rechazos::AVANZADA_DESCONOCIDA, ids::avanzada(id), self.estado.version)),
         }
     }
 
@@ -150,7 +150,7 @@ impl Nucleo {
     /// Cuenta un hecho de la avanzada: lo oye la plaza madre, si la hay.
     fn hecho_de_avanzada(&mut self, t: Instante, codigo: &'static str, madre: Option<u64>, punto: Punto, datos: Vec<(&'static str, i64)>) {
         self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: vec![], asentamientos: madre.into_iter().collect(), punto: Some(punto), datos });
-        self.tr.asentamientos.extend(madre);
+        self.tr.tocar_todos(Clase::Asentamiento, madre);
     }
 
     /// Una avanzada terminada es una cosa fija del espacio: ahí la encuentran las columnas (el hecho `avanzada.encuentro` solo salta si además se puede atacar).
@@ -162,13 +162,19 @@ impl Nucleo {
     /// Las escuadras de jugadores dejan la avanzada y vuelven al campamento de su héroe, con 0 soldados si la causa es una derrota (Doc 5.15.2b). Devuelve cuántas.
     fn liberar_guarnicion_de_jugadores(&mut self, avanzada: u64, derrota: bool) -> usize {
         let mut liberadas = 0;
-        for e in self.estado.militar.heroes.values_mut().flat_map(|h| h.heroe.escuadras.iter_mut()).filter(|e| e.contenedor == Contenedor::Avanzada(avanzada)) {
-            e.contenedor = Contenedor::Campamento;
-            e.en_guarnicion = false;
-            if derrota {
-                e.cantidad = 0;
+        for h in self.estado.militar.heroes.values_mut() {
+            let antes = liberadas;
+            for e in h.heroe.escuadras.iter_mut().filter(|e| e.contenedor == Contenedor::Avanzada(avanzada)) {
+                e.contenedor = Contenedor::Campamento;
+                e.en_guarnicion = false;
+                if derrota {
+                    e.cantidad = 0;
+                }
+                liberadas += 1;
             }
-            liberadas += 1;
+            if liberadas > antes {
+                self.tr.tocar(Clase::Heroe, h.heroe.id);
+            }
         }
         liberadas
     }
@@ -181,6 +187,7 @@ impl Nucleo {
             return;
         }
         let Estado { combate, siguiente_id, reglas, .. } = &mut self.estado;
+        self.tr.tocar(Clase::Avanzada, id);
         let g = combate.avanzadas.entry(id).or_default();
         g.escuadras = regla::guarnicion_de_serie(&reglas.economia.combate, etapa, &g.elegidas, || { *siguiente_id += 1; *siguiente_id - 1 }, t);
     }
@@ -189,6 +196,7 @@ impl Nucleo {
     pub(super) fn guardar_guarnicion_de_avanzada(&mut self, id: u64, escuadras: Vec<Escuadra>, t: Instante) {
         let cr = self.estado.reglas.economia.combate.clone();
         let Some(g) = self.estado.combate.avanzadas.get_mut(&id) else { return };
+        self.tr.tocar(Clase::Avanzada, id);
         g.escuadras = escuadras;
         if g.repone_en.is_none() && regla::incompleta(&cr, &g.escuadras) {
             let en = regla::reposicion_en(&cr, t);
@@ -206,6 +214,7 @@ impl Nucleo {
             return;
         }
         g.escuadras.clear();
+        self.tr.tocar(Clase::Avanzada, id);
         if let Some((_, v)) = self.avanzada(id) {
             let etapa = v.etapa;
             self.asegurar_guarnicion(id, etapa, t);
@@ -218,6 +227,7 @@ impl Nucleo {
         let id = id_de_entidad(entidad);
         let Some(g) = self.estado.combate.avanzadas.get_mut(&id).filter(|g| g.repone_en == Some(t)) else { return };
         g.repone_en = None;
+        self.tr.tocar(Clase::Avanzada, id);
         let Some((madre, v)) = self.avanzada(id) else { return };
         let (etapa, punto) = (v.etapa, v.posicion);
         let cr = self.estado.reglas.economia.combate.clone();
@@ -242,6 +252,7 @@ impl Nucleo {
         }
         v.estado = EstadoAvanzada::EnRuinas { invulnerable_hasta: None };
         let punto = v.posicion;
+        self.tr.tocar(Clase::Avanzada, id);
         self.hecho_de_avanzada(t, "avanzada.invulnerabilidad_terminada", Some(madre), punto, vec![("avanzada", id as i64)]);
     }
 
@@ -266,7 +277,7 @@ impl Nucleo {
     pub(super) fn ejecutar_avanzadas(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
+        let sin_cambios = || Respuesta::sin_cambios(v);
         let de_avanzada = |e: ErrorAvanzada| {
             let (c, m) = rechazo_de_avanzada(e);
             rechazo(c, m.into())
@@ -292,7 +303,7 @@ impl Nucleo {
                 Ok(vec![id])
             }
             Comando::EntregarMaterialesAAvanzada { ejercito, avanzada } => {
-                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
+                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)))?;
                 if !self.manda_columna(p, e, false) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
                 }
@@ -308,7 +319,7 @@ impl Nucleo {
                 let eco = &mut self.estado.asentamientos.get_mut(&madre).expect("existe").economia;
                 let tomado = eco.entregar_a_avanzada(t, &datos, *avanzada, &disponible, &mut ev).map_err(de_avanzada)?;
                 self.quitar_de_columna(*ejercito, &tomado);
-                self.tr.tocados.push(*ejercito);
+                self.tr.tocar(Clase::Ejercito, *ejercito);
                 self.anotar_sucesos(madre, t, &ev);
                 Ok(vec![])
             }
@@ -403,7 +414,7 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::DepositarEnAvanzada { ejercito, avanzada, recurso, cantidad } => {
-                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
+                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)))?;
                 if !self.manda_columna(p, e, false) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
                 }
@@ -433,7 +444,7 @@ impl Nucleo {
                 let punto = av.posicion;
                 let metido = self.estado.asentamientos.get_mut(&madre).and_then(|a| a.economia.avanzadas.iter_mut().find(|v| v.id == *avanzada)).expect("existe").almacen.agregar(*recurso, (*cantidad).min(lleva));
                 self.quitar_de_columna(*ejercito, &vec![(*recurso, metido)]);
-                self.tr.tocados.push(*ejercito);
+                self.tr.tocar(Clase::Ejercito, *ejercito);
                 self.hecho_de_avanzada(t, "avanzada.deposito", Some(madre), punto, vec![("avanzada", *avanzada as i64), ("recurso", crate::codec_economia::recurso_a_u8(*recurso) as i64), ("cantidad", metido)]);
                 Ok(vec![])
             }
@@ -456,6 +467,7 @@ impl Nucleo {
 
     /// Vence la cita de fin de la obra de una avanzada: la plaza madre cumple lo que acaba en ese instante (la primera obra, la mejora o la reparación).
     pub(super) fn fin_de_obra_de_avanzada(&mut self, entidad: u64, t: Instante) {
+        self.tr.tocar(Clase::Avanzada, id_de_entidad(entidad));
         if let Some((Some(madre), _)) = self.avanzada(id_de_entidad(entidad)) {
             self.fines_de_plaza(madre, t);
         }
@@ -479,7 +491,7 @@ impl Nucleo {
                 let madre = self.estado.asentamientos.values().find(|a| a.faccion == faccion && self.en_zona(a.id, posicion)).map(|a| a.id);
                 (madre.ok_or_else(|| rechazo(rechazos::AVANZADA_FUERA_DE_LA_ZONA, "ninguna plaza de tu Facción tiene ahora la zona de esas ruinas".into()))?, Some(ruinas.clone()))
             }
-            None => return Err(rechazo(rechazos::AVANZADA_DESCONOCIDA, format!("avanzada-{avanzada}"))),
+            None => return Err(rechazo(rechazos::AVANZADA_DESCONOCIDA, ids::avanzada(avanzada))),
         };
         self.autorizar_ciudadano(p, heroe, self.estado.asentamientos[&madre].faccion)?;
         let mut ev = vec![];
@@ -548,7 +560,7 @@ impl Nucleo {
         let ids: Vec<u64> = vistas.iter().copied().collect();
         self.poner_escuadras_en(&[heroe], &ids, Contenedor::Avanzada(avanzada), t);
         self.recomponer_columna(cid, t, antes);
-        self.tr.tocados.push(cid);
+        self.tr.tocar(Clase::Ejercito, cid);
         self.hecho_de_avanzada(t, "avanzada.guarnecida", Some(madre), punto, vec![("avanzada", avanzada as i64), ("heroe", heroe as i64), ("escuadras", ids.len() as i64), ("liderazgo", ocupado)]);
         Ok(vec![])
     }
@@ -593,7 +605,7 @@ impl Nucleo {
         self.poner_escuadras_en(&[heroe], &ids, Contenedor::Ejercito(cid), t);
         self.sincronizar_hambre(cid, t);
         self.recomponer_columna(cid, t, antes);
-        self.tr.tocados.push(cid);
+        self.tr.tocar(Clase::Ejercito, cid);
         self.hecho_de_avanzada(t, "avanzada.guarnicion_retirada", Some(madre), posicion, vec![("avanzada", avanzada as i64), ("heroe", heroe as i64), ("escuadras", ids.len() as i64)]);
         Ok(vec![])
     }
@@ -606,6 +618,7 @@ impl Nucleo {
         for mut av in avanzadas {
             self.liberar_guarnicion_de_jugadores(av.id, false);
             self.quitar_avanzada(av.id);
+            self.tr.tocar(Clase::Avanzada, av.id);
             let id = av.id as i64;
             if av.etapa == Etapa::Ciudadela {
                 (av.estado, av.obra) = (EstadoAvanzada::EnRuinas { invulnerable_hasta: None }, None);
@@ -624,6 +637,7 @@ impl Nucleo {
         for av in self.avanzadas_de(madre).iter().map(|v| (v.id, v.posicion)).collect::<Vec<_>>() {
             self.liberar_guarnicion_de_jugadores(av.0, true);
             self.estado.combate.avanzadas.remove(&av.0);
+            self.tr.tocar(Clase::Avanzada, av.0);
             self.hecho_de_avanzada(t, "avanzada.traspasada", Some(madre), av.1, vec![("avanzada", av.0 as i64), ("faccion", faccion)]);
         }
     }
@@ -665,7 +679,7 @@ impl Nucleo {
         }
         // Unas ruinas de ciudadela ya saqueadas no tienen nada que dar ni nada que derribar: la orden no cambia el mundo.
         if etapa == Etapa::Ciudadela && estado == (EstadoAvanzada::EnRuinas { invulnerable_hasta: None }) && vacia {
-            return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+            return Err(Respuesta::sin_cambios(v));
         }
 
         let operativa = estado == EstadoAvanzada::Operativa;
@@ -731,7 +745,7 @@ impl Nucleo {
                     a.economia.almacen.agregar(r, n);
                 });
             }
-            self.tr.asentamientos.push(madre);
+            self.tr.tocar(Clase::Asentamiento, madre);
             ("combate.avanzada_resiste", Mercancia::new())
         };
         self.recomponer_tras_bajas(&columnas, t);
@@ -754,7 +768,7 @@ impl Nucleo {
         let llevado = regla::saquear(&mut eco.avanzadas.iter_mut().find(|v| v.id == x).expect("existe").almacen, &mut carros);
         for (&c, carro) in columnas.iter().zip(carros) {
             self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga = carro.carga;
-            self.tr.tocados.push(c);
+            self.tr.tocar(Clase::Ejercito, c);
         }
         let nuevo = regla::tras_ataque(&cr, etapa, antes, t, true);
         if nuevo != antes {
@@ -787,7 +801,7 @@ impl Nucleo {
                 EstadoAvanzada::EnConstruccion | EstadoAvanzada::Operativa => unreachable!("un ataque ganado solo deja ruinas o nada"),
             }
         }
-        self.tr.asentamientos.push(madre);
+        self.tr.tocar(Clase::Asentamiento, madre);
         (nuevo, llevado)
     }
 }

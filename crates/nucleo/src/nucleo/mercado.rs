@@ -177,7 +177,7 @@ impl Nucleo {
     // ───────────────────────────── Ayudas ─────────────────────────────
 
     pub(super) fn plaza_o_rechazo(&self, id: u64) -> Result<&Asentamiento, Respuesta> {
-        self.estado.asentamientos.get(&id).ok_or_else(|| Respuesta::rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, format!("as-{id}"), self.estado.version))
+        self.estado.asentamientos.get(&id).ok_or_else(|| Respuesta::rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id), self.estado.version))
     }
 
     pub(super) fn factores_de(&self, a: &Asentamiento) -> FactoresPolitica {
@@ -213,13 +213,28 @@ impl Nucleo {
         self.estado.generaciones.subir(entidad);
     }
 
+    /// Los ids de todas las órdenes del libro, en pie o en el historial.
+    fn ordenes_del_libro(&self) -> std::collections::BTreeSet<u64> {
+        let libro = &self.estado.comercio.libro;
+        libro.ordenes.iter().chain(&libro.historial).map(|o| o.id).collect()
+    }
+
+    /// Anota en el registro de cambios las órdenes dadas y las que estaban en el libro (`antes`) y ya no están (podadas del historial).
+    fn anotar_ordenes_cambiadas(&mut self, antes: &std::collections::BTreeSet<u64>, cambiadas: &[u64]) {
+        let ahora = self.ordenes_del_libro();
+        self.tr.tocar_todos(Clase::OrdenMercado, antes.difference(&ahora).copied().chain(cambiadas.iter().copied()));
+    }
+
     /// `podarAcuerdosTerminados` (§4.7): se hace al tocar los trueques, no en cada paso (no hay tick).
     // DUDA: el documento poda al final de cada tick; sin tick, la poda es perezosa (al proponer, vencer o cerrar un trueque) y solo cambia
     // cuánto tiempo se conservan los terminados en memoria, no ninguna regla.
     fn podar_trueques(&mut self, t: Instante) {
         let cr = self.estado.reglas.economia.comercio.clone();
         let EstadoComercio { acuerdos, flota, .. } = &mut self.estado.comercio;
+        let antes: Vec<u64> = acuerdos.iter().map(|a| a.id).collect();
         podar(acuerdos, &cr, t, |id| flota.iter().any(|c| c.origen_acuerdo.is_some_and(|(a, _)| a == id)));
+        let podados: Vec<u64> = antes.into_iter().filter(|&id| acuerdos.binary_search_by_key(&id, |a| a.id).is_err()).collect();
+        self.tr.tocar_todos(Clase::Acuerdo, podados);
     }
 
     // ───────────────────────────── Reputación ─────────────────────────────
@@ -229,6 +244,7 @@ impl Nucleo {
         let cr = self.estado.reglas.economia.comercio.clone();
         let rep = self.estado.comercio.reputacion.entry(faccion).or_insert_with(|| comercio::reputacion::Reputacion::nueva(t));
         let antes = rep.valor_en(t);
+        self.tr.tocar(Clase::Faccion, u64::from(faccion));
         rep.aplicar(&cr.reputacion, t, suceso);
         let despues = rep.valor_en(t);
         let umbral = cr.reputacion.umbral_bajo_para_comision;
@@ -271,6 +287,7 @@ impl Nucleo {
         let cr = self.estado.reglas.economia.comercio.clone();
         let Some(rep) = self.estado.comercio.reputacion.get_mut(&faccion) else { return };
         let valor = rep.valor_en(t);
+        self.tr.tocar(Clase::Faccion, u64::from(faccion));
         rep.reanclar(&cr.reputacion, t);
         if cita == CitaReputacion::SalidaDelUmbral {
             self.emitir_propio(t, "reputacion.umbral_bajo", vec![], vec![("faccion", faccion as i64), ("entra", 0), ("valor", valor)]);
@@ -305,6 +322,7 @@ impl Nucleo {
         let (a, b) = (self.estado.comercio.acuerdos[i].a as u64, self.estado.comercio.acuerdos[i].b as u64);
         let facciones = (self.estado.asentamientos.get(&a).map_or(0, |p| p.faccion), self.estado.asentamientos.get(&b).map_or(0, |p| p.faccion));
         let Some(vencimiento) = self.estado.comercio.acuerdos[i].vencer(t, facciones) else { return };
+        self.tr.tocar(Clase::Acuerdo, id);
         self.emitir_comercio(t, EventoComercio::TruequeExpirado { acuerdo: id }, vec![a, b], &[("incumplido", matches!(vencimiento, Vencimiento::Incumplido { .. }) as i64)]);
         if let Vencimiento::Incumplido { reputacion } = vencimiento {
             for (faccion, suceso) in reputacion {
@@ -317,7 +335,9 @@ impl Nucleo {
     /// Caducan las órdenes activas vencidas y las cerradas pasan al historial.
     fn caduca_orden(&mut self, _id: u64, t: Instante) {
         let cr = self.estado.reglas.economia.comercio.clone();
+        let antes = self.ordenes_del_libro();
         let expiradas = self.estado.comercio.libro.caducar(&cr.mercado, t);
+        self.anotar_ordenes_cambiadas(&antes, &expiradas);
         for orden in expiradas {
             let plaza = self.estado.comercio.libro.buscar(orden).map(|o| o.asentamiento as u64);
             self.emitir_comercio(t, EventoComercio::OrdenExpirada { orden }, plaza.into_iter().collect(), &[]);
@@ -331,7 +351,7 @@ impl Nucleo {
     pub(super) fn ejecutar_mercado(&mut self, t: Instante, p: &Peticion) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
+        let sin_cambios = || Respuesta::sin_cambios(v);
         let solo_admin = || (!p.admin).then(|| rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
         let cr = self.estado.reglas.economia.comercio.clone();
         let de_trueque = |e: ErrorTrueque| {
@@ -399,9 +419,9 @@ impl Nucleo {
                 Ok(Some(id))
             }
             Comando::CancelarOrdenMercado { orden } => {
-                let Some(o) = self.estado.comercio.libro.buscar(*orden) else { return Err(rechazo(rechazos::ORDEN_DESCONOCIDA, format!("orden-{orden}"))) };
+                let Some(o) = self.estado.comercio.libro.buscar(*orden) else { return Err(rechazo(rechazos::ORDEN_DESCONOCIDA, ids::orden_de_mercado(*orden))) };
                 if o.estado != EstadoOrden::Activa || self.estado.comercio.libro.orden(*orden).is_none() {
-                    return Err(rechazo(rechazos::ORDEN_NO_ACTIVA, format!("orden-{orden} ya no está activa")));
+                    return Err(rechazo(rechazos::ORDEN_NO_ACTIVA, format!("{} ya no está activa", ids::orden_de_mercado(*orden))));
                 }
                 let plaza = o.asentamiento as u64;
                 let faccion = self.plaza_o_rechazo(plaza)?.faccion;
@@ -410,8 +430,10 @@ impl Nucleo {
                 }
                 // DUDA: no figura en Comercio_Caravanas §8.2 («nada cierra una orden salvo el mostrador o el plazo»); la retira antes de plazo como una
                 // expirada (no hay estado «cancelada») y avisa con su propio hecho.
+                let antes = self.ordenes_del_libro();
                 self.estado.comercio.libro.orden_mut(*orden).expect("está en pie").estado = EstadoOrden::Expirada;
                 self.estado.comercio.libro.archivar_cerradas(&cr.mercado);
+                self.anotar_ordenes_cambiadas(&antes, &[*orden]);
                 self.invalidar_comercio(entidad_orden(*orden));
                 self.emitir_propio(t, "mercado.orden_cancelada", vec![plaza], vec![("orden", *orden as i64)]);
                 Ok(None)
@@ -429,7 +451,7 @@ impl Nucleo {
                 if entra == 0 {
                     return Err(sin_cambios());
                 }
-                self.tr.asentamientos.push(*asentamiento);
+                self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 Ok(None)
             }
             Comando::DarSuministro { ejercito, recurso, cantidad } => {
@@ -437,7 +459,7 @@ impl Nucleo {
                     return Err(r);
                 }
                 if !self.estado.ejercitos.contains_key(ejercito) {
-                    return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")));
+                    return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)));
                 }
                 if *cantidad <= 0 {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
@@ -449,7 +471,7 @@ impl Nucleo {
                     return Err(sin_cambios());
                 }
                 *carro.entry(*recurso).or_insert(0) += n;
-                self.tr.tocados.push(*ejercito);
+                self.tr.tocar(Clase::Ejercito, *ejercito);
                 Ok(None)
             }
             _ => unreachable!("solo se llama con órdenes de mercado"),
@@ -462,10 +484,10 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let cr = self.estado.reglas.economia.comercio.clone();
-        let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
+        let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(ejercito)))?;
         // Dirige la columna su Líder; la administración manda en todas.
         let (es_lider, pos_columna, faccion_columna) = (self.manda_columna(p, e, true), e.posicion_en(t), e.bandera());
-        let o = self.estado.comercio.libro.buscar(orden).ok_or_else(|| rechazo(rechazos::ORDEN_DESCONOCIDA, format!("orden-{orden}")))?;
+        let o = self.estado.comercio.libro.buscar(orden).ok_or_else(|| rechazo(rechazos::ORDEN_DESCONOCIDA, ids::orden_de_mercado(orden)))?;
         let (plaza_id, recurso) = (o.asentamiento as u64, o.recurso);
         let plaza = self.plaza_o_rechazo(plaza_id)?;
         let factor = self.factores_de(plaza).comision_externa;
@@ -478,6 +500,7 @@ impl Nucleo {
             factor_comision_externa: factor,
         };
         let faccion_plaza = plaza.faccion;
+        let antes = self.ordenes_del_libro();
         let capacidad = self.capacidad_de_carga(ejercito).unwrap_or(CAPACIDAD_CARRO);
         let Estado { comercio, asentamientos, ejercitos, .. } = &mut self.estado;
         let suministro = ejercitos.get(&ejercito).map(|e| e.columna.carga.clone()).unwrap_or_default();
@@ -501,12 +524,13 @@ impl Nucleo {
         *sum.entry(Recurso::Oro).or_insert(0) += s.delta_carro_oro;
         *sum.entry(recurso).or_insert(0) += s.delta_carro_recurso;
         sum.retain(|_, n| *n > 0);
-        self.tr.tocados.push(ejercito);
+        self.tr.tocar(Clase::Ejercito, ejercito);
         if s.cumplida {
             comercio.libro.archivar_cerradas(&cr.mercado);
             self.estado.generaciones.subir(entidad_orden(orden));
         }
-        self.tr.asentamientos.push(plaza_id);
+        self.anotar_ordenes_cambiadas(&antes, &[orden]);
+        self.tr.tocar(Clase::Asentamiento, plaza_id);
         let entre_facciones = faccion_columna != faccion_plaza;
         self.registrar_comercio_de_mercenarios(entre_facciones, &[(recurso, s.cantidad)].into_iter().collect());
         self.emitir_comercio(
@@ -547,7 +571,7 @@ impl Nucleo {
             self.estado.asentamientos.get_mut(&origen)?.economia.almacen.quitar(Recurso::Oro, res.recargo);
             res
         };
-        self.tr.asentamientos.extend([origen, destino]);
+        self.tr.tocar_todos(Clase::Asentamiento, [origen, destino]);
         Some(res)
     }
 
@@ -557,7 +581,9 @@ impl Nucleo {
         let Some(i) = self.estado.comercio.posicion_acuerdo(acuerdo) else { return false };
         let (a, b) = (self.estado.comercio.acuerdos[i].a as u64, self.estado.comercio.acuerdos[i].b as u64);
         let facciones = (self.estado.asentamientos.get(&a).map_or(0, |p| p.faccion), self.estado.asentamientos.get(&b).map_or(0, |p| p.faccion));
-        let Some(cierre) = self.estado.comercio.acuerdos[i].abonar(lado, carga, facciones) else { return false };
+        let cierre = self.estado.comercio.acuerdos[i].abonar(lado, carga, facciones);
+        self.tr.tocar(Clase::Acuerdo, acuerdo);
+        let Some(cierre) = cierre else { return false };
         self.invalidar_comercio(entidad_trueque(acuerdo));
         self.registrar_comercio_de_mercenarios(cierre.entre_facciones, &cierre.intercambiado);
         let ev = EventoComercio::TruequeCumplido { acuerdo, entre_facciones: cierre.entre_facciones, intercambiado: cierre.intercambiado };

@@ -27,7 +27,7 @@
 
 use super::persecuciones::Fin;
 use super::*;
-use crate::comando::ObjetivoAtaque;
+use crate::comando::{Detalle, ObjetivoAtaque};
 use crate::estado::{SucesoCombate, PRIO_UMBRAL};
 use crate::estado_combate::entidad_guarnicion;
 use crate::estado_militar::Relacion;
@@ -157,6 +157,7 @@ impl Nucleo {
         for s in escuadras.iter().filter(|s| s.heroe != SIN_DUENO) {
             if let Some(slot) = self.estado.militar.heroes.get_mut(&s.heroe).and_then(|h| h.heroe.escuadra_mut(s.id)) {
                 *slot = s.clone();
+                self.tr.tocar(Clase::Heroe, s.heroe);
             }
         }
     }
@@ -178,6 +179,7 @@ impl Nucleo {
         let mut columnas = std::collections::BTreeSet::new();
         for &h in heroes {
             let Some(hn) = self.estado.militar.heroes.get_mut(&h) else { continue };
+            self.tr.tocar(Clase::Heroe, h);
             heridos += hn.heroe.herir(&mr, t) as usize;
             columnas.extend(hn.columna);
         }
@@ -196,7 +198,7 @@ impl Nucleo {
         let capacidad = self.capacidad_de_carga(columna).unwrap_or(0);
         let Some(e) = self.estado.ejercitos.get_mut(&columna) else { return Mercancia::new() };
         let cogido = cargar_botin(&mut e.columna.carga, botin, capacidad);
-        self.tr.tocados.push(columna);
+        self.tr.tocar(Clase::Ejercito, columna);
         cogido
     }
 
@@ -206,7 +208,7 @@ impl Nucleo {
         let Some(e) = self.estado.ejercitos.get_mut(&columna) else { return Mercancia::new() };
         let robado = tras_derrota(&cr, &mut e.columna.carga);
         let personal = e.columna.tipo == militar::columna::TipoColumna::Personal;
-        self.tr.tocados.push(columna);
+        self.tr.tocar(Clase::Ejercito, columna);
         if personal {
             self.fijar_persecucion(columna, None);
         }
@@ -220,6 +222,7 @@ impl Nucleo {
         let (mut robado, mut columnas) = (Mercancia::new(), std::collections::BTreeSet::new());
         for &h in defensores {
             let Some(hn) = self.estado.militar.heroes.get_mut(&h) else { continue };
+            self.tr.tocar(Clase::Heroe, h);
             for (r, n) in tras_derrota(&cr, &mut hn.carro) {
                 sumar(&mut robado, r, n);
             }
@@ -230,7 +233,7 @@ impl Nucleo {
             for (r, n) in tras_derrota(&cr, &mut e.columna.carga) {
                 sumar(&mut robado, r, n);
             }
-            self.tr.tocados.push(c);
+            self.tr.tocar(Clase::Ejercito, c);
         }
         robado
     }
@@ -312,13 +315,19 @@ impl Nucleo {
             Some(Relacion::Alianza) => Err(rechazo(rechazos::COMBATE_ALIADA, "no se ataca a un aliado".into())),
             Some(Relacion::Guerra) => Ok(None),
             _ if declara_guerra => Ok(Some((yo, otra))),
-            _ => Err(rechazo(rechazos::COMBATE_SIN_GUERRA, format!("la Facción {yo} no está en guerra con la {otra}: atacar con `declara_guerra` la declara (y la deja en guerra con ella, sin arrastre de aliados ni vasallos)"))),
+            _ => Err(Respuesta::rechazo_con(
+                rechazos::GUERRA_CONFIRMAR,
+                format!("la Facción {yo} no está en guerra con la {otra}: atacar con `declara_guerra` la declara (y la deja en guerra con ella, sin arrastre de aliados ni vasallos)"),
+                v,
+                Some(Detalle::Guerra { objetivo: otra, arrastre: vec![] }),
+            )),
         }
     }
 
     /// Declara la guerra entre dos Facciones (`declara_guerra` de `atacar`): la relación pasa a ser de guerra y se cuenta.
     pub(super) fn declarar_guerra(&mut self, t: Instante, atacante: u32, contra: u32) {
         self.estado.militar.relaciones.insert((atacante.min(contra), atacante.max(contra)), Relacion::Guerra);
+        self.tr.tocar_todos(Clase::Faccion, [u64::from(atacante), u64::from(contra)]);
         self.emitir_propio(t, "faccion.guerra_declarada", vec![], vec![("atacante", atacante as i64), ("contra", contra as i64)]);
     }
 
@@ -330,7 +339,7 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
         let e = &self.estado.ejercitos[&id];
-        let o = self.estado.ejercitos.get(&x).ok_or_else(|| Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{x}"), v))?;
+        let o = self.estado.ejercitos.get(&x).ok_or_else(|| Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(x), v))?;
         if x == id {
             return Err(rechazo(rechazos::COMBATE_PROPIA, "esa columna es la tuya"));
         }
@@ -406,7 +415,7 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
         let e = &self.estado.ejercitos[&id];
-        let k = self.estado.comercio.caravana(x).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{x}"), v))?;
+        let k = self.estado.comercio.caravana(x).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(x), v))?;
         match k.estado {
             EstadoCaravana::Adjunta => return Err(rechazo(rechazos::COMBATE_CARAVANA_ADJUNTA, "esa caravana va adjunta a un ejército: se ataca al ejército")),
             EstadoCaravana::EnTransito | EstadoCaravana::Retornando => {}
@@ -489,7 +498,7 @@ impl Nucleo {
             }
             self.perder_caravana(t, x);
         } else {
-            self.tr.asentamientos.push(origen);
+            self.tr.tocar(Clase::Asentamiento, origen);
         }
         p
     }
@@ -664,7 +673,7 @@ impl Nucleo {
             chatarra.iter().for_each(|(&r, &n)| {
                 a.agregar(r, n);
             });
-            self.tr.asentamientos.push(x);
+            self.tr.tocar(Clase::Asentamiento, x);
             Mercancia::new()
         };
         self.recomponer_tras_bajas(&columnas, t);
@@ -692,7 +701,7 @@ impl Nucleo {
     fn atacar_pueblo(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
-        let (madre, pueblo) = self.pueblo(x).ok_or_else(|| Respuesta::rechazo(rechazos::PUEBLO_DESCONOCIDO, format!("pueblo-{x}"), v))?;
+        let (madre, pueblo) = self.pueblo(x).ok_or_else(|| Respuesta::rechazo(rechazos::PUEBLO_DESCONOCIDO, ids::pueblo(x), v))?;
         let e = &self.estado.ejercitos[&id];
         if !Self::es_ejercito(e) {
             return Err(rechazo(rechazos::COMBATE_SOLO_UN_EJERCITO, "solo un ejército saquea un pueblo"));
@@ -717,6 +726,7 @@ impl Nucleo {
             let sid = self.nuevo_id();
             let escuadra = reglas_pueblo::guarnicion_de_serie(&cr, sid, t);
             self.estado.combate.guarniciones.insert(x, crate::estado_combate::GuarnicionDePueblo { escuadra, repone_en: None });
+            self.tr.tocar(Clase::Pueblo, x);
         }
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_pueblo(t, heroe, id, x, madre, donde);
@@ -755,7 +765,7 @@ impl Nucleo {
             llevado = reglas_pueblo::saquear(&cr, almacen, &mut carros);
             let [CarroDeColumna { carga, .. }] = carros;
             self.estado.ejercitos.get_mut(&id).expect("existe").columna.carga = carga;
-            self.tr.tocados.push(id);
+            self.tr.tocar(Clase::Ejercito, id);
             let chatarra_cogida = self.cargar_botin_en(id, &chatarra);
             chatarra = chatarra_cogida;
         } else {
@@ -764,7 +774,7 @@ impl Nucleo {
                 a.agregar(r, n);
             });
         }
-        self.tr.asentamientos.push(madre);
+        self.tr.tocar(Clase::Asentamiento, madre);
         // Los defensores en persona quedan heridos si el pueblo cae en el saqueo (sin combate, nadie); si no, todo el ejército. El residente pierde la mitad del carro.
         let (heridos, carro_perdido) = match (gana, &informe) {
             (false, _) => (self.herir_heroes(&participantes, t), Mercancia::new()),
@@ -786,6 +796,7 @@ impl Nucleo {
         let cr = self.estado.reglas.economia.combate.clone();
         let incompleta = escuadra.cantidad < cr.pueblos.mineros;
         let g = self.estado.combate.guarniciones.get_mut(&pueblo).expect("existe");
+        self.tr.tocar(Clase::Pueblo, pueblo);
         g.escuadra = escuadra;
         if incompleta && g.repone_en.is_none() {
             let en = reglas_pueblo::reposicion_en(&cr, t);
@@ -800,10 +811,11 @@ impl Nucleo {
         let pueblo = crate::estado_comercio::id_de_entidad(entidad);
         let cr = self.estado.reglas.economia.combate.clone();
         let Some(g) = self.estado.combate.guarniciones.get_mut(&pueblo) else { return };
+        self.tr.tocar(Clase::Pueblo, pueblo);
         reglas_pueblo::reponer(&cr, &mut g.escuadra);
         g.repone_en = None;
         if let Some((madre, _)) = self.pueblo(pueblo) {
-            self.tr.asentamientos.push(madre);
+            self.tr.tocar(Clase::Asentamiento, madre);
             self.emitir_propio(t, "pueblo.guarnicion_repuesta", vec![madre], vec![("pueblo", pueblo as i64)]);
         }
     }
@@ -816,7 +828,7 @@ impl Nucleo {
         if !p.admin {
             return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración da escuadras", v));
         }
-        let hn = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, format!("heroe-{heroe}"), v))?;
+        let hn = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(heroe), v))?;
         let mr = self.estado.reglas.economia.militar.clone();
         if cantidad < 1 || cantidad > mr.tropas.tropa(tropa).unidades {
             return Err(Respuesta::rechazo(rechazos::ESCUADRA_CANTIDAD_INVALIDA, format!("una escuadra de esa tropa lleva de 1 a {} soldados", mr.tropas.tropa(tropa).unidades), v));

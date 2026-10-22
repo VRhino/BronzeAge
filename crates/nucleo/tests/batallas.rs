@@ -272,7 +272,7 @@ fn las_validaciones_del_combate_con_numeros_valen_tambien_para_abrir_y_una_recha
     // Sin guerra (la Facción 3 no está en guerra con la 1), lejos y con un herido: nada de eso abre una batalla.
     let tercera = columna(&mut x.n, "gus", 3, Punto::new(c(10, 2).x, c(10, 2).y + 1_000));
     let antes_tercera = rastro(&x.n);
-    assert_eq!(codigo(&atacar(&mut x.n, 10 * MIN, "ana", "r1", ana.1, ObjetivoAtaque::Ejercito(tercera.0), false)), rechazos::COMBATE_SIN_GUERRA);
+    assert_eq!(codigo(&atacar(&mut x.n, 10 * MIN, "ana", "r1", ana.1, ObjetivoAtaque::Ejercito(tercera.0), false)), rechazos::GUERRA_CONFIRMAR);
     assert_eq!(codigo(&atacar(&mut x.n, 10 * MIN, "ana", "r2", ana.1, ObjetivoAtaque::Ejercito(lejana.0), true)), rechazos::COMBATE_LEJOS);
     assert!(x.n.aplicar_en(10 * MIN, admin("h", Comando::HerirHeroe { heroe: ana.1 })).aceptada());
     assert_eq!(codigo(&atacar(&mut x.n, 10 * MIN, "ana", "r3", ana.1, ObjetivoAtaque::Ejercito(beto.0), false)), rechazos::HEROE_HERIDO);
@@ -588,7 +588,7 @@ fn una_batalla_que_nadie_asigna_falla_a_los_cinco_minutos_sin_castigo_y_a_su_hor
     assert!(x.n.aplicar_en(15 * MIN, Peticion::nueva("ana", "m", Comando::MarcharA { ejercito: x.ana.0, destino: c(20, 2) })).aceptada());
     // Queda la retirada, a la hora de retención desde el cierre, y nada más.
     assert_eq!(citas_de_batalla(&x.n), vec![(15 * MIN + HORA, nucleo::PRIO_BATALLA, SucesoBatalla::Retira)]);
-    assert_eq!(msg(&mut x.n, 16 * MIN, "tarde", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", 0, &[x.ana.1]) }).resultado, Resultado::Rechazada { codigo: rechazos::BATALLA_NO_EXISTE, mensaje: format!("batalla-{id}") });
+    assert_eq!(msg(&mut x.n, 16 * MIN, "tarde", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", 0, &[x.ana.1]) }).resultado, Resultado::Rechazada { codigo: rechazos::BATALLA_NO_EXISTE, mensaje: format!("batalla-{id}"), detalle: None });
 }
 
 #[test]

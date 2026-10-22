@@ -106,7 +106,7 @@ impl Nucleo {
         if let Some(nueva) = presa {
             self.espacio.perseguidores.entry(nueva).or_default().insert(id);
         }
-        self.tr.tocados.push(id);
+        self.tr.tocar(Clase::Ejercito, id);
     }
 
     /// La persecución de `perseguidor` termina y se cuenta.
@@ -279,7 +279,7 @@ impl Nucleo {
         }
         let Some(objetivo) = objetivo else {
             if e.persiguiendo.is_none() {
-                return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+                return Err(Respuesta::sin_cambios(v));
             }
             self.fijar_persecucion(id, None);
             self.evento_de_columna("columna.persecucion_abandonada", t, id, vec![], vec![("heroe", heroe as i64)]);
@@ -290,11 +290,11 @@ impl Nucleo {
         let (presa, info, en_el_mapa, donde) = match objetivo {
             Objetivo::Asentamiento(_) => return Err(rechazo(rechazos::OBJETIVO_NO_SOPORTADO, "a una plaza no se la persigue: se inspecciona o se asedia")),
             Objetivo::Ejercito(x) => {
-                let o = self.estado.ejercitos.get(&x).ok_or_else(|| Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{x}"), v))?;
+                let o = self.estado.ejercitos.get(&x).ok_or_else(|| Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(x), v))?;
                 (x, self.presa_de(e.columna.faccion, x, t).expect("existe"), self.columna_en_el_mapa(o), o.posicion_en(t))
             }
             Objetivo::Caravana(x) => {
-                let k = self.estado.comercio.caravana(x).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{x}"), v))?;
+                let k = self.estado.comercio.caravana(x).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(x), v))?;
                 let entidad = entidad_caravana(x);
                 (entidad, self.presa_de(e.columna.faccion, entidad, t).expect("existe"), matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando), self.posicion_de_caravana(x, t).unwrap_or(k.posicion))
             }
@@ -310,7 +310,7 @@ impl Nucleo {
         let perseguidor = Perseguidor { tipo: e.columna.tipo, hay_heroe_sano: self.tiene_heroe_sano(e, t) };
         persecucion::validar(&perseguidor, &info, en_el_mapa, distancia, alcance).map_err(de_error)?;
         if e.persiguiendo == Some(presa) {
-            return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+            return Err(Respuesta::sin_cambios(v));
         }
 
         // Ya está al alcance: la persecución empieza y termina en el mismo instante, sin moverse.

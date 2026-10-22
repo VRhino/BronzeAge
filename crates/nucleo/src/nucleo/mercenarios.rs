@@ -150,6 +150,14 @@ impl Nucleo {
     /// de la escolta de una caravana). La reubicación forzosa de una ruina y `FijarResidencia` pasan por aquí.
     pub(super) fn mudar_de_residencia(&mut self, heroe: u64, nueva: Option<Residencia>) {
         let t = self.estado.ahora;
+        let antes = self.heroe(heroe).and_then(|h| h.heroe.residencia);
+        for r in [antes, nueva].into_iter().flatten() {
+            match r {
+                Residencia::Campamento(c) => self.tr.tocar(Clase::Campamento, u64::from(c)),
+                Residencia::Asentamiento(a) => self.tr.tocar(Clase::Asentamiento, u64::from(a)),
+            }
+        }
+        self.tr.tocar(Clase::Heroe, heroe);
         self.estado.militar.mudar(heroe, nueva);
         let velocidades: std::collections::BTreeMap<u64, Mil> = self.heroe(heroe).map_or_else(Default::default, |h| h.heroe.escuadras.iter().filter_map(|e| if let Contenedor::Ejercito(c) = e.contenedor { Some((c, self.velocidad_de_ejercito(c)?)) } else { None }).collect());
         let h = &mut self.estado.militar.heroes.get_mut(&heroe).expect("existe").heroe;
@@ -157,17 +165,20 @@ impl Nucleo {
         // La guarnición de una avanzada es también de la plaza donde se reside: al mudarse, esas escuadras vuelven al campamento, intactas (final normal).
         h.escuadras.iter_mut().filter(|e| matches!(e.contenedor, Contenedor::Avanzada(_))).for_each(|e| e.contenedor = Contenedor::Campamento);
         let retiradas = leva::retirar_prestamos_ajenos(h, &|c| nueva == Some(Residencia::Campamento(c)));
+        self.tr.tocar_todos(Clase::Escuadra, retiradas.iter().map(|e| e.id));
         let mut columnas = Vec::new();
         for e in &retiradas {
             match e.contenedor {
                 Contenedor::Escolta(c) => {
                     if let Some(i) = self.estado.comercio.posicion_caravana(c) {
                         self.estado.comercio.flota[i].escolta.retain(|x| x.id != e.id);
+                        self.tr.tocar(Clase::Caravana, c);
                     }
                 }
                 Contenedor::Ejercito(c) => {
                     if let Some(col) = self.estado.ejercitos.get_mut(&c) {
                         col.columna.escuadras.retain(|x| *x != e.id);
+                        self.tr.tocar(Clase::Ejercito, c);
                         columnas.push(c);
                     }
                 }
@@ -192,7 +203,7 @@ impl Nucleo {
     pub(super) fn ejecutar_mercenarios(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
+        let sin_cambios = || Respuesta::sin_cambios(v);
         let de_mercenarios = |e: ErrorMercenarios| {
             let (c, m) = rechazo_de_mercenarios(e);
             rechazo(c, m.into())
@@ -206,7 +217,7 @@ impl Nucleo {
         match &p.comando {
             Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad } => {
                 self.autorizar_heroe(p, *heroe, false)?;
-                self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{campamento}")))?;
+                self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, ids::campamento(*campamento)))?;
                 if !self.esta_en_el_campamento(*heroe, *campamento, t) {
                     return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
@@ -230,7 +241,7 @@ impl Nucleo {
                     &mut self.estado.militar.heroes.get_mut(heroe).expect("existe").almacen_personal
                 } else {
                     let columna = columna.expect("el visitante va en una columna");
-                    self.tr.tocados.push(columna);
+                    self.tr.tocar(Clase::Ejercito, columna);
                     &mut self.estado.ejercitos.get_mut(&columna).expect("existe").columna.carga
                 };
                 *carga.entry(Recurso::Oro).or_insert(0) -= compra.oro_cobrado;
@@ -250,7 +261,7 @@ impl Nucleo {
             }
             Comando::RepostarEnCampamento { heroe, campamento } => {
                 self.autorizar_heroe(p, *heroe, false)?;
-                self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{campamento}")))?;
+                self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, ids::campamento(*campamento)))?;
                 if !self.esta_en_el_campamento(*heroe, *campamento, t) {
                     return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
@@ -289,7 +300,7 @@ impl Nucleo {
                         self.plaza_o_rechazo(*a as u64)?;
                     }
                     Some(Residencia::Campamento(c)) => {
-                        self.puerta_de_campamento(*c).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, format!("campamento-{c}")))?;
+                        self.puerta_de_campamento(*c).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, ids::campamento(*c)))?;
                     }
                     None => {}
                 }
@@ -374,7 +385,7 @@ impl Nucleo {
                 *carga.entry(Recurso::Oro).or_insert(0) -= hecho.oro;
                 carga.retain(|_, n| *n > 0);
                 if let Some(c) = de_la_columna {
-                    self.tr.tocados.push(c);
+                    self.tr.tocar(Clase::Ejercito, c);
                 }
                 // La escuadra nueva o repuesta que va en la columna cambia lo que come y a qué velocidad marcha.
                 if let Some(Contenedor::Ejercito(c)) = contenedor {
@@ -443,7 +454,7 @@ impl Nucleo {
         if marchando {
             e.plan.generacion = g;
         }
-        self.tr.tocados.push(id);
+        self.tr.tocar(Clase::Ejercito, id);
         self.programar_ejercito(id, t);
         if marchando {
             self.avisar_plan(id, true);
@@ -453,9 +464,16 @@ impl Nucleo {
 
     // ───────────────────────────── Reposición ─────────────────────────────
 
+    /// El mercado de mercenarios es uno solo (sus contadores y su próxima reposición): lo que lo cambia toca a todos los campamentos.
+    fn tocar_todos_los_campamentos(&mut self) {
+        let n = self.geografia.as_ref().map_or(0, |g| g.mapa.campamentos.len() as u64);
+        self.tr.tocar_todos(Clase::Campamento, 0..n);
+    }
+
     /// Anota lo comerciado entre Facciones en los contadores de reposición (§9.3) y, si cuenta, arma la reposición.
     pub(super) fn registrar_comercio_de_mercenarios(&mut self, entre_facciones: bool, carga: &Mercancia) {
         self.estado.comercio.mercenarios.mercado.registrar_comercio(entre_facciones, carga);
+        self.tocar_todos_los_campamentos();
         if entre_facciones && !carga.is_empty() {
             let t = self.estado.ahora;
             self.armar_reposicion(t);
@@ -482,6 +500,7 @@ impl Nucleo {
         }
         let due = m.mercado.repone_en;
         m.pulso = Some(due);
+        self.tocar_todos_los_campamentos();
         self.programar_comercio(due, entidad_mercenarios(), SucesoComercio::ReponeMercenarios);
     }
 
@@ -501,6 +520,7 @@ impl Nucleo {
                     m.stock.insert(i as u32, s);
                 }
             }
+            self.tocar_todos_los_campamentos();
             self.emitir_propio(t, "mercenarios.repuesto", vec![], vec![("campamentos", n as i64)]);
         }
         self.armar_reposicion(t);

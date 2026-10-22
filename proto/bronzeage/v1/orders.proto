@@ -7,12 +7,17 @@
 // Las cantidades (recursos, oro, víveres) viajan en MILÉSIMAS (sint64); las coordenadas, en milésimas de unidad de mapa.
 // Los campos que eran cadenas de un catálogo cerrado se mantienen como string; los valores admitidos van en el comentario.
 //
+// 4H (2026-10-22): se añaden, al final de `Orden.cuerpo` y sin tocar nada de lo anterior, las órdenes del jugador que el núcleo ya tiene y faltaban
+// (cancelar una orden de mercado, aparcar una caravana, retirar de y depositar en una avanzada, vaciar el carro, entrar y salir de pueblos y avanzadas),
+// `OrdenRepostar.lugar_id` y la orden genérica de administración.
+//
 // Frontera: esto valida la FORMA. Que una entidad exista o que una cantidad esté en rango lo rechaza el núcleo con su
 // propio código de error (RechazoOrden en session.proto), no el parseo.
 syntax = "proto3";
 
 package bronzeage.v1;
 
+import "google/protobuf/struct.proto";
 import "bronzeage/v1/common.proto";
 
 option csharp_namespace = "BronzeAge.Contract.V1";
@@ -655,6 +660,9 @@ message OrdenReponerPrestamo {
 
 message OrdenRepostar {
   string heroe_id = 1;
+  // La plaza (`as-N`) o la avanzada (`av-N`) donde repostar. Si falta, el servidor busca la plaza o avanzada operativa a `radioPuerta` de la columna (la más
+  // cercana); sin ninguna, `repostar.sin_lugar`.
+  optional string lugar_id = 2;
 }
 
 message OrdenRepostarEnCampamento {
@@ -819,6 +827,74 @@ message OrdenVetarJugador {
   bool vetar = 4;
 }
 
+// ───────────────────────────── Órdenes de 4H ─────────────────────────────
+
+message OrdenCancelarOrdenMercado {
+  string orden_id = 1;
+}
+
+// Deja la caravana adjunta aparcada en una plaza de su Facción, con la columna a su puerta o dentro de ella.
+message OrdenAparcarCaravana {
+  string caravana_id = 1;
+  string asentamiento_id = 2;
+}
+
+// Recoge de la guarnición de la avanzada escuadras del héroe (con su columna a la puerta).
+message OrdenRetirarDeAvanzada {
+  string heroe_id = 1;
+  string avanzada_id = 2;
+  repeated string escuadron_ids = 3;
+}
+
+// La columna, a la puerta de la avanzada, descarga `cantidad` (milésimas) de un recurso de su carro en el almacén, hasta donde quepa.
+message OrdenDepositarEnAvanzada {
+  string ejercito_id = 1;
+  string avanzada_id = 2;
+  string recurso = 3;  // id de catálogo
+  sint64 cantidad = 4;
+}
+
+// El residente vacía en su almacén personal el carro que trajo a su residencia, hasta donde quepa.
+message OrdenVaciarCarro {
+  string heroe_id = 1;
+}
+
+message OrdenEntrarEnPueblo {
+  string pueblo_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenSalirDePueblo {
+  string pueblo_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenEntrarEnAvanzada {
+  string avanzada_id = 1;
+  string heroe_id = 2;
+}
+
+message OrdenSalirDeAvanzada {
+  string avanzada_id = 1;
+  string heroe_id = 2;
+}
+
+// Orden de ADMINISTRACIÓN (decisión del autor, 2026-10-22): una sola orden genérica para el andamiaje provisional del núcleo, SOLO para sesiones
+// `CLIENTE_ADMIN_WEB` (cualquier otro cliente recibe `no_autorizado`). Desaparece cuando los sistemas 5 (política) y 6 (tecnología y Aedas) sustituyan
+// estas órdenes. `codigo` es el nombre de la orden y `parametros` sus campos (los ids como en el resto del contrato; las cantidades en milésimas):
+//   crear_ejercito {cuenta, faccion_id, posicion{x,y}, velocidad, viveres}    fijar_nivel_faccion {faccion_id, nivel}
+//   dar_caravana_fundacion {ejercito_id}                                       fijar_nivel_asentamiento {asentamiento_id, nivel}
+//   agrandar_zona {asentamiento_id}   reclamar_parcela {asentamiento_id}   soltar_parcela {asentamiento_id, parcela}
+//   dar_recursos {asentamiento_id, recurso, cantidad}   dar_suministro {ejercito_id, recurso, cantidad}   dar_almacen_personal {heroe_id, recurso, cantidad}
+//   fijar_residencia {heroe_id, residencia?}   fijar_tecnologias {faccion_id, tecnologias[]}   fijar_faccion_de_heroe {heroe_id, faccion_id?}
+//   colocar_heroe {heroe_id, ubicacion}   herir_heroe {heroe_id}   fijar_relacion {faccion_a_id, faccion_b_id, relacion?}
+//   colocar_bandidos {posicion{x,y}, nivel}   dar_escuadra {heroe_id, tropa_id, cantidad}   fijar_controlador {heroe_id, controlador}
+// Las formas exactas las fija el núcleo al traducirlas (`Docs/Mechanics/Comandos_Parametros.md`, sección de administración).
+message OrdenDeAdministracion {
+  string codigo = 1;
+  google.protobuf.Struct parametros = 2;
+}
+
 // Una orden del cliente. `peticion_id` es único por sesión y sirve de clave de idempotencia: reenviar la misma
 // petición (p. ej. tras reconectar) no la ejecuta dos veces. `version_esperada`, si viene, rechaza la orden cuando el
 // mundo ya cambió más allá de esa versión (para acciones que dependen de lo que el jugador estaba viendo).
@@ -961,5 +1037,16 @@ message Orden {
     OrdenUnirseAEjercito unirse_a_ejercito = 142;
     OrdenUnirseEnCampo unirse_en_campo = 143;
     OrdenVetarJugador vetar_jugador = 144;
+    // 4H (aditivas):
+    OrdenCancelarOrdenMercado cancelar_orden_mercado = 145;
+    OrdenAparcarCaravana aparcar_caravana = 146;
+    OrdenRetirarDeAvanzada retirar_de_avanzada = 147;
+    OrdenDepositarEnAvanzada depositar_en_avanzada = 148;
+    OrdenVaciarCarro vaciar_carro = 149;
+    OrdenEntrarEnPueblo entrar_en_pueblo = 150;
+    OrdenSalirDePueblo salir_de_pueblo = 151;
+    OrdenEntrarEnAvanzada entrar_en_avanzada = 152;
+    OrdenSalirDeAvanzada salir_de_avanzada = 153;
+    OrdenDeAdministracion administracion = 154;
   }
 }

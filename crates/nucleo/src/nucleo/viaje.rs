@@ -310,6 +310,7 @@ impl Nucleo {
             c.posicion = v.p;
         }
         c.plan = Some(plan.clone());
+        self.tr.tocar(Clase::Caravana, id);
         self.programar_viaje(id);
         self.avisar_plan_entidad(entidad, Some(plan));
     }
@@ -378,7 +379,7 @@ impl Nucleo {
             return;
         }
         self.instalar_plan(id, plan);
-        self.tr.asentamientos.push(origen);
+        self.tr.tocar(Clase::Asentamiento, origen);
         self.emitir_comercio(t, EventoComercio::CaravanaSale { caravana: id }, [Some(origen), destino].into_iter().flatten().collect(), &[]);
     }
 
@@ -390,6 +391,9 @@ impl Nucleo {
         let tasa = self.estado.reglas.economia.comercio.peaje;
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let cobros = self.estado.comercio.flota[i].cobrar_peajes(t, tasa);
+        if !cobros.is_empty() {
+            self.tr.tocar(Clase::Caravana, id);
+        }
         for CobroPeaje { ciudad, cobrado } in cobros {
             let ciudad_id = ciudad as u64;
             let Some(plaza) = self.estado.asentamientos.get_mut(&ciudad_id) else {
@@ -401,7 +405,7 @@ impl Nucleo {
             for (&r, &n) in &cobrado {
                 plaza.economia.almacen.agregar(r, n);
             }
-            self.tr.asentamientos.push(ciudad_id);
+            self.tr.tocar(Clase::Asentamiento, ciudad_id);
             self.emitir_comercio(t, EventoComercio::PeajePaso { caravana: id, ciudad, cobrado }, vec![ciudad_id], &[]);
         }
     }
@@ -427,6 +431,7 @@ impl Nucleo {
         let i = self.estado.comercio.posicion_caravana(id).expect("existe");
         let origen = self.estado.comercio.flota[i].origen as u64;
         let Ok(llegada) = self.estado.comercio.flota[i].llegar(t) else { return };
+        self.tr.tocar(Clase::Caravana, id);
         match llegada {
             Llegada::Entrega { destino, contenido, origen_acuerdo } => {
                 // El regreso: la misma ruta invertida, con una generación nueva.
@@ -461,7 +466,7 @@ impl Nucleo {
                 self.devolver_escolta(&escolta);
                 self.retirar_plan(id);
                 let volcado = self.estado.asentamientos.get_mut(&origen).map_or(0, |a| contenido.iter().map(|(&r, &n)| a.economia.almacen.agregar(r, n)).sum::<Mil>());
-                self.tr.asentamientos.push(origen);
+                self.tr.tocar(Clase::Asentamiento, origen);
                 // DUDA: el hecho de llegar a casa no está en Comercio_Caravanas §12.
                 self.emitir_propio(t, "comercio.caravana_en_casa", vec![origen], vec![("caravana", id as i64), ("volcado", volcado), ("perdido", total(&contenido) - volcado)]);
                 self.reparto_de_plaza(origen, t);
@@ -508,7 +513,7 @@ impl Nucleo {
         let salidas = asignar_origen(id32(origen), &pendientes, &candidatas, &mut almacen, &mut |o, d| self.trazar_ruta_comercial(o as u64, d as u64, t));
         if !salidas.is_empty() {
             self.estado.asentamientos.get_mut(&origen).expect("existe").economia.almacen = almacen;
-            self.tr.asentamientos.push(origen);
+            self.tr.tocar(Clase::Asentamiento, origen);
             let lanzadas: Vec<u64> = salidas.iter().map(|s| s.caravana).collect();
             for s in salidas {
                 let (id, destino, tz) = (s.caravana, s.destino as u64, s.trazado);
@@ -582,6 +587,7 @@ impl Nucleo {
         c.pausada_desde = Some(t);
         c.posicion = posicion;
         let origen = c.origen as u64;
+        self.tr.tocar(Clase::Caravana, id);
         self.retirar_plan(id);
         self.emitir_propio(t, "comercio.caravana_en_batalla", vec![origen], vec![("caravana", id as i64)]);
         true
@@ -597,6 +603,7 @@ impl Nucleo {
             return false;
         }
         c.pausada_desde = None;
+        self.tr.tocar(Clase::Caravana, id);
         let plan = match (&c.plan, c.estado) {
             (Some(p), EstadoCaravana::EnTransito | EstadoCaravana::Retornando) => Some(pausar_plan(p, desde, t, aqui)),
             _ => None,
@@ -618,6 +625,7 @@ impl Nucleo {
         let flota = self.estado.reglas.economia.comercio.flota.clone();
         let origen = self.estado.comercio.flota[i].origen as u64;
         let perdida = self.estado.comercio.flota[i].aplicar_perdida_de_carros(&flota, perdidos).ok()?;
+        self.tr.tocar(Clase::Caravana, id);
         if perdida.destruida {
             self.perder_caravana(t, id);
         } else {
@@ -646,7 +654,7 @@ impl Nucleo {
         let nuevos: Vec<Vertice> = e.plan.vertices.iter().map(|v| if v.en > t { Vertice { p: v.p, en: t + (v.en - t) * antes / despues } } else { *v }).collect();
         e.posicion = pos;
         e.plan = Plan { generacion: g, vertices: nuevos };
-        self.tr.tocados.push(id);
+        self.tr.tocar(Clase::Ejercito, id);
         self.programar_ejercito(id, t);
         self.avisar_plan(id, true);
         self.anunciar_columna(id, Motivo::Plan);
@@ -660,8 +668,8 @@ impl Nucleo {
     pub(super) fn adjuntar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, ejercito: u64) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
-        let i = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{caravana}")))?;
+        let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(ejercito)))?;
+        let i = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana)))?;
         if !self.manda_columna(p, e, false) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
         }
@@ -695,7 +703,7 @@ impl Nucleo {
         e.version = v;
         let despues = self.velocidad_de_columna(&self.estado.ejercitos[&ejercito]);
         self.reescalar_marcha(ejercito, t, antes, despues);
-        self.tr.tocados.push(ejercito);
+        self.tr.tocar(Clase::Ejercito, ejercito);
         self.evento("ejercito.caravana_adjuntada", t, ejercito, None, vec![("caravana", caravana as i64)]);
         Ok(None)
     }
@@ -704,7 +712,7 @@ impl Nucleo {
     pub(super) fn aparcar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, plaza: u64) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let i = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, format!("caravana-{caravana}")))?;
+        let i = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana)))?;
         let (ejercito, e) = self
             .estado
             .ejercitos
@@ -733,7 +741,7 @@ impl Nucleo {
         e.version = v;
         let despues = self.velocidad_de_columna(&self.estado.ejercitos[&ejercito]);
         self.reescalar_marcha(ejercito, t, antes, despues);
-        self.tr.tocados.push(ejercito);
+        self.tr.tocar(Clase::Ejercito, ejercito);
         self.evento("ejercito.caravana_aparcada", t, ejercito, None, vec![("caravana", caravana as i64), ("plaza", plaza as i64)]);
         Ok(None)
     }
@@ -747,7 +755,7 @@ impl Nucleo {
             self.estado.ejercitos.get_mut(&id).expect("existe").caravanas_adjuntas.retain(|&c| c != caravana);
             let despues = self.velocidad_de_columna(&self.estado.ejercitos[&id]);
             self.reescalar_marcha(id, ahora, antes, despues);
-            self.tr.tocados.push(id);
+            self.tr.tocar(Clase::Ejercito, id);
         }
     }
 

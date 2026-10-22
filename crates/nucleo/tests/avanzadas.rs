@@ -944,7 +944,7 @@ fn atacar_una_avanzada_se_rechaza_sin_rastro_y_en_su_orden() {
     assert_eq!(e.rechazada("beto", atacar(beto, pendiente, false)), rechazos::COMBATE_AVANZADA_EN_OBRA, "una obra pendiente se ve pero no se ataca");
     e.acabar_obra(pendiente, col);
     assert_eq!(e.rechazada("ana", atacar(heroe, pendiente, false)), rechazos::COMBATE_PROPIA, "los tuyos no");
-    assert_eq!(e.rechazada("beto", atacar(beto, pendiente, false)), rechazos::COMBATE_SIN_GUERRA, "sin guerra se rechaza y no la declara");
+    assert_eq!(e.rechazada("beto", atacar(beto, pendiente, false)), rechazos::GUERRA_CONFIRMAR, "sin guerra se rechaza y no la declara");
     assert_eq!(e.rechazada("beto", atacar(lejos_h, pendiente, true)), rechazos::COMBATE_LEJOS);
     assert_eq!(e.rechazada("beto", atacar(sin_tropa, pendiente, true)), rechazos::COMBATE_SIN_ATACANTES, "un héroe solo no ataca una avanzada");
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Alianza) });

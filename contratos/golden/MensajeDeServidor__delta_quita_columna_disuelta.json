@@ -1,0 +1,1 @@
+{"secuencia":"21","delta":{"ambito":{"tipo":"AMBITO_FACCION","id":"f-1"},"desde":"74","hasta":"75","cambios":[{"tipo":"CAMBIO_QUITA","entidad":"EJERCITO","id":"ej-2","reemplaza":true},{"tipo":"CAMBIO_QUITA","entidad":"CONVOCATORIA","id":"conv-8"}]}}

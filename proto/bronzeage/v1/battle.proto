@@ -37,6 +37,8 @@ enum ModalidadCaravana {
   MODALIDAD_AGUANTE = 2;
 }
 
+// Un carro de una caravana. `carro_id` = `"<caravana_id>:<posición>"` (p. ej. `"car-7:0"`): la posición es la del carro en la lista de la caravana; es como
+// Unity nombra los carros perdidos en `BattleResult.carros_perdidos`.
 message CarroEnBatalla {
   string carro_id = 1;
   Cantidades carga = 2;
@@ -51,11 +53,20 @@ message ContextoCampoAbierto {
   bool solitarios = 2;                   // persecución entre columnas personales; si no, campal entre ejércitos
 }
 
+// Una caravana que se juega en la batalla.
+message CaravanaEnJuego {
+  string caravana_id = 1;
+  repeated CarroEnBatalla carros = 2;
+}
+
+// Batalla de caravana. Si la acosan los bandidos entran TODAS las caravanas adjuntas a la columna: `caravanas` las lista (siempre viene, con una
+// sola si un ejército asalta una). `caravana_id` y `carros` son los de v1: la PRIMERA de la lista.
 message ContextoCaravana {
   string caravana_id = 1;
   Punto punto = 2;
   ModalidadCaravana modalidad = 3;
   repeated CarroEnBatalla carros = 4;
+  repeated CaravanaEnJuego caravanas = 5;
 }
 
 message ContextoCampamentoBandidos {
@@ -121,6 +132,8 @@ message BattleParticipantSnapshot {
   repeated SquadSnapshot escuadras = 5;
 }
 
+// Un bando. Sin Facción ni héroes (los bandidos, que no son bots ni jugadores) es válido: `faccion_id` ausente, `participantes` vacío y, en su lugar,
+// `escuadras_sin_heroe`.
 message BattleSide {
   optional string faccion_id = 1;
   uint32 capacidad_maxima = 2;           // asedio: 15
@@ -202,6 +215,7 @@ message InstanciaDeBatalla {
   string protocolo = 3;
 }
 
+// Una batalla sin humanos (bot contra bot, bandidos contra una columna de bots) se asigna igual, con `tokens_participante` vacío.
 message BattleServerAssignment {
   uint32 schema_version = 1;
   string battle_id = 2;
@@ -305,9 +319,18 @@ message BattleResult {
   repeated ResultadoEscuadra por_escuadra = 11;
   repeated ResultadoHeroe por_heroe = 12;
   string version_servidor = 13;
-  // Guerra logística: Unity responde qué carros se perdieron (modalidades disputa y aguante). Los carros no cambian de
-  // manos en el mundo: solo la carga. El servidor calcula la carga perdida y destruye esos carros con su animal.
+  // Guerra logística: Unity responde qué carros se perdieron (modalidades disputa y aguante), con el id de `CarroEnBatalla.carro_id`
+  // (`"<caravana_id>:<posición>"`, p. ej. `"car-7:0"`). Los carros no cambian de manos en el mundo: solo la carga. El servidor calcula la
+  // carga perdida y destruye esos carros con su animal.
   repeated string carros_perdidos = 14;
+}
+
+// Cómo conecta el propio combatiente con el servidor de batalla (antes `GET .../batallas/:id/asignacion`). Es el token de ESE héroe: solo viaja a
+// su dueño, jamás a un espectador ni al administrador. BronzeAge no lo verifica: lo verifica Unity.
+message AsignacionPropia {
+  InstanciaDeBatalla instancia = 1;
+  string token = 2;
+  int64 expira_en_ms = 3;
 }
 
 // Estado de una batalla tal como lo guarda el servidor y lo proyecta a los clientes.
@@ -315,7 +338,7 @@ message Batalla {
   string id = 1;
   uint64 version = 2;
   EstadoBatalla estado = 3;
-  string iniciada_por = 4;
+  string iniciada_por = 4;               // vacío = sin iniciador (los bandidos que acosan una caravana, el mundo)
   Punto punto = 5;
   BattleTicket ticket = 6;
   repeated IncorporacionBatalla incorporaciones = 7;
@@ -330,4 +353,9 @@ message Batalla {
   optional int64 aplicada_en_ms = 16;
   optional int64 cerrada_en_ms = 17;
   optional LadoId lado_propio = 18;      // solo en la proyección
+  // Solo en la proyección y por espectador: el lado al que el espectador PODRÍA unirse ahora (la regla de relación y de sitio de
+  // `unirse_a_batalla`). Ausente si no puede (ya combate, no llega, no es de ninguno). Con él el cliente ofrece la opción.
+  optional LadoId lado_para_unirse = 19;
+  // Solo en la proyección y solo al propio combatiente, cuando la batalla ya tiene asignación y token para él.
+  optional AsignacionPropia asignacion_propia = 20;
 }

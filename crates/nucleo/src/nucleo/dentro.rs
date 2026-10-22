@@ -59,7 +59,7 @@ impl Nucleo {
     /// El pueblo como sitio. Para entrar ha de estar activo (una obra no tiene puerta).
     fn sitio_de_pueblo(&self, pueblo: u64, para_entrar: bool) -> Result<Sitio, Respuesta> {
         let v = self.estado.version;
-        let (madre, pu) = self.pueblo(pueblo).ok_or_else(|| Respuesta::rechazo(rechazos::PUEBLO_DESCONOCIDO, format!("pueblo-{pueblo}"), v))?;
+        let (madre, pu) = self.pueblo(pueblo).ok_or_else(|| Respuesta::rechazo(rechazos::PUEBLO_DESCONOCIDO, ids::pueblo(pueblo), v))?;
         if para_entrar && !pu.activo() {
             return Err(Respuesta::rechazo(rechazos::PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún es una obra: no tiene puerta", v));
         }
@@ -70,8 +70,8 @@ impl Nucleo {
     /// La avanzada como sitio. Para entrar ha de ser operativa (en obra o en ruinas no funciona nada).
     fn sitio_de_avanzada(&self, avanzada: u64, para_entrar: bool) -> Result<Sitio, Respuesta> {
         let v = self.estado.version;
-        let (Some(madre), av) = self.avanzada(avanzada).ok_or_else(|| Respuesta::rechazo(rechazos::AVANZADA_DESCONOCIDA, format!("avanzada-{avanzada}"), v))? else {
-            return Err(Respuesta::rechazo(rechazos::AVANZADA_DESCONOCIDA, format!("avanzada-{avanzada}"), v));
+        let (Some(madre), av) = self.avanzada(avanzada).ok_or_else(|| Respuesta::rechazo(rechazos::AVANZADA_DESCONOCIDA, ids::avanzada(avanzada), v))? else {
+            return Err(Respuesta::rechazo(rechazos::AVANZADA_DESCONOCIDA, ids::avanzada(avanzada), v));
         };
         if para_entrar && !av.operativa() {
             return Err(Respuesta::rechazo(rechazos::AVANZADA_NO_OPERATIVA, "en obra o en ruinas no funciona nada, ni la puerta", v));
@@ -167,7 +167,7 @@ impl Nucleo {
         }
         self.heroe_mut(heroe).heroe.presencia.ubicacion = dentro;
         self.anunciar_columna(columna, Motivo::Plan);
-        self.tr.tocados.push(columna);
+        self.tr.tocar(Clase::Ejercito, columna);
     }
 
     /// El héroe que está dentro de un lugar sale al mapa con todo lo suyo: su columna (la que trajo) vuelve al mapa tal cual; si no trajo ninguna nace una columna personal quieta en
@@ -178,7 +178,7 @@ impl Nucleo {
         match columna {
             Some(c) => {
                 self.ubicar_en_columna(heroe, c);
-                self.tr.tocados.push(c);
+                self.tr.tocar(Clase::Ejercito, c);
                 c
             }
             None => self.columna_de_salida(t, heroe, puerta, faccion, &[]),

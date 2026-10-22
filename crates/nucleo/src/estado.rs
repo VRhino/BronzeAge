@@ -575,15 +575,80 @@ pub struct EventoNucleo {
     pub datos: Vec<(&'static str, i64)>,
 }
 
+/// La clase de una entidad con identidad propia en el contrato 05 (las que un cambio de estado puede tocar). Los ids son los del núcleo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Clase {
+    Ejercito,
+    Asentamiento,
+    /// Su nivel, reputación, tecnologías, relaciones y ciudadanos.
+    Faccion,
+    Heroe,
+    /// Las escuadras de un héroe tocado se dan por tocadas (viajan con él).
+    Escuadra,
+    Caravana,
+    Acuerdo,
+    OrdenMercado,
+    Pueblo,
+    Avanzada,
+    /// Campamento de mercenarios (su índice del artefacto de mundo).
+    Campamento,
+    Bandidos,
+    Convocatoria,
+    Batalla,
+}
+
+impl Clase {
+    pub const TODAS: [Clase; 14] = [
+        Clase::Ejercito,
+        Clase::Asentamiento,
+        Clase::Faccion,
+        Clase::Heroe,
+        Clase::Escuadra,
+        Clase::Caravana,
+        Clase::Acuerdo,
+        Clase::OrdenMercado,
+        Clase::Pueblo,
+        Clase::Avanzada,
+        Clase::Campamento,
+        Clase::Bandidos,
+        Clase::Convocatoria,
+        Clase::Batalla,
+    ];
+}
+
+/// Las entidades cuyo estado cambió en una versión, por clase. Al cerrar la versión cada lista queda ordenada y sin repetir.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Tocados([Vec<u64>; 14]);
+
+impl Tocados {
+    pub fn marcar(&mut self, clase: Clase, id: u64) {
+        self.0[clase as usize].push(id);
+    }
+    pub fn de(&self, clase: Clase) -> &[u64] {
+        &self.0[clase as usize]
+    }
+    pub fn esta_vacio(&self) -> bool {
+        self.0.iter().all(Vec::is_empty)
+    }
+    /// Ordena y quita los repetidos de cada lista.
+    pub(crate) fn cerrar(&mut self) {
+        for ids in &mut self.0 {
+            ids.sort_unstable();
+            ids.dedup();
+        }
+    }
+    pub fn contiene(&self, clase: Clase, id: u64) -> bool {
+        self.de(clase).contains(&id)
+    }
+}
+
 /// Registro de cambios de una versión: lo que alimenta `Delta` y `Foto`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CambioVersion {
     pub version: u64,
     pub en: Instante,
-    /// Ejércitos cuyo estado cambió (ordenados, sin repetir).
-    pub ejercitos: Vec<u64>,
-    /// Plazas cuyo estado cambió (ordenadas, sin repetir).
-    pub asentamientos: Vec<u64>,
+    /// Las entidades cuyo estado cambió, por clase (ordenadas, sin repetir).
+    pub tocados: Tocados,
     pub eventos: Vec<EventoNucleo>,
 }
 

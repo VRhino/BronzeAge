@@ -342,7 +342,7 @@ fn la_plaza_se_proyecta_al_contrato() {
     let id = fundar_en(&mut n, 5 * MIN, "a", 1, p);
     let a = &n.estado().asentamientos[&id];
     let Some(pb::entidad::Cuerpo::Asentamiento(e)) = nucleo::proyeccion::entidad_asentamiento(a, &n.poligono_zona(id)).cuerpo else { panic!("no es un asentamiento") };
-    assert_eq!((e.id.as_str(), e.faccion_id.as_str(), e.nivel), (format!("as-{id}").as_str(), "f1", 1));
+    assert_eq!((e.id.as_str(), e.faccion_id.as_str(), e.nivel), (format!("as-{id}").as_str(), "f-1", 1));
     assert_eq!(e.radio_potencial, 6_000);
     assert_eq!(e.zona.len(), 48, "sin vecinas, el polígono es el disco entero");
 }

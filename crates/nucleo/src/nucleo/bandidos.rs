@@ -76,6 +76,7 @@ impl Nucleo {
         let id = self.estado.combate.siguiente_bandidos;
         self.estado.combate.siguiente_bandidos += 1;
         self.estado.combate.bandidos.insert(id, CampamentoBandidos { id, posicion, nivel, origen, bosque });
+        self.tr.tocar(Clase::Bandidos, id);
         let entidad = entidad_bandidos(id);
         let plan = plan_quieto(posicion, t, 0);
         self.espacio.rejilla.apuntar(entidad, self.estado.generaciones.actual(entidad), &plan);
@@ -86,6 +87,7 @@ impl Nucleo {
     /// Destruye un campamento: sale del mapa y del espacio, sus citas pendientes mueren con su generación y, según de dónde saliera, se agenda el siguiente.
     pub(super) fn destruir_bandidos(&mut self, id: u64, t: Instante) {
         let Some(b) = self.estado.combate.bandidos.remove(&id) else { return };
+        self.tr.tocar(Clase::Bandidos, id);
         let entidad = entidad_bandidos(id);
         self.estado.generaciones.subir(entidad);
         self.espacio.rejilla.quitar(entidad);
@@ -109,6 +111,7 @@ impl Nucleo {
         let suyos: Vec<u64> = self.estado.combate.bandidos.values().filter(|b| b.origen == OrigenBandidos::Plaza(plaza)).map(|b| b.id).collect();
         for id in suyos {
             self.estado.combate.bandidos.remove(&id);
+            self.tr.tocar(Clase::Bandidos, id);
             self.estado.generaciones.subir(entidad_bandidos(id));
             self.espacio.rejilla.quitar(entidad_bandidos(id));
         }

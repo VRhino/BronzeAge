@@ -89,7 +89,8 @@ fn delta(cliente: &str, desde: u64, hasta: u64) -> Delta {
             entidad: TipoEntidad::Heroe as i32,
             id: cliente.into(),
             datos: Some(heroe(cliente, hasta)),
-            campos_borrados: vec![],
+            reemplaza: true,
+            ..Default::default()
         }],
         ..Default::default()
     }

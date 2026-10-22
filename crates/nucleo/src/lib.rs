@@ -3,7 +3,8 @@
 //!
 //! - [`Nucleo`]: el bucle (modo acelerado y en vivo), las órdenes con idempotencia y `version_esperada`, la persistencia
 //!   por registro de peticiones + fotos, y `hash_estado()` determinista.
-//! - [`Estado`]: lo que entra en el hash y en las fotos. [`CambioVersion`]: el registro de cambios por versión.
+//! - [`Estado`]: lo que entra en el hash y en las fotos. [`CambioVersion`]: el registro de cambios por versión. Lleva las entidades tocadas por clase ([`Clase`], [`Tocados`]) y `Nucleo::version_de` da la versión en que cambió
+//!   cada una; `Ajustes::auditar_cambios` (o `BRONZEAGE_AUDITAR_CAMBIOS=1` en las pruebas) comprueba que ninguna cambie sin quedar marcada.
 //! - [`GeneradorDeEventos`]: el hueco para lo que se enchufa al núcleo (la visión muestreada, `espacial`).
 //! - [`economia`]: cada plaza fundada lleva su economía (crate `asentamiento`) y avanza sola un minuto de mundo por evento
 //!   (`Carga::Minuto`); aquí están el mapa, los yacimientos y los sitios que comparten el núcleo y el batch de población.
@@ -76,8 +77,8 @@ pub mod sesiones;
 pub mod urbanismo;
 
 pub use codec::ErrorFormato;
-pub use comando::{rechazos, AccionReloj, Comando, ObjetivoAtaque, PagarCon, Peticion, Resultado, Respuesta, ACTOR_SERVIDOR_DE_BATALLA};
-pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_CADUCA_POLITICA, PRIO_COMERCIO, PRIO_FIN_DE_OBRAS, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
+pub use comando::{rechazos, AccionReloj, Comando, Detalle, ObjetivoAtaque, PagarCon, Peticion, Resultado, Respuesta, TipoCreado, ACTOR_SERVIDOR_DE_BATALLA};
+pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Clase, Tocados, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_CADUCA_POLITICA, PRIO_COMERCIO, PRIO_FIN_DE_OBRAS, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
 pub use estado_batallas::{entidad_batalla, EstadoBatallas};
 pub use estado_combate::{entidad_avanzada, entidad_bandidos, entidad_conquista, entidad_guarnicion, es_entidad_avanzada, es_entidad_bandidos, CampamentoBandidos, EstadoCombate, GuarnicionDeAvanzada, GuarnicionDePueblo, OrigenBandidos};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};

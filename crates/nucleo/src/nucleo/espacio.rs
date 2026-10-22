@@ -312,7 +312,7 @@ impl Nucleo {
             return Err(Respuesta::rechazo(rechazos::RELACION_CONSIGO_MISMA, "una Facción no tiene relación consigo misma", v));
         }
         if self.estado.militar.relacion(a, b) == relacion {
-            return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
+            return Err(Respuesta::sin_cambios(v));
         }
         let clave = (a.min(b), a.max(b));
         match relacion {

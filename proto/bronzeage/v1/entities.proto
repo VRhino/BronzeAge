@@ -5,8 +5,9 @@
 // «militar» y «contrabando») NO existe aquí. Movimiento = `Plan`; economía y crecimiento = `Ritmo`.
 //
 // Cada entidad con identidad lleva `version` (la versión de mundo en que cambió por última vez): es lo que permite la
-// reanudación por versión (session.proto). Las entidades se actualizan con mensajes PARCIALES (ver `Cambio` en
-// session.proto): solo vienen los campos que cambiaron.
+// reanudación por versión (session.proto). FORMA DE UN CAMBIO (decisión del autor, 2026-10-22; ver `Cambio` en session.proto):
+// casi todas las entidades viajan COMPLETAS y sustituyen a la anterior; solo las dos grandes, el `Asentamiento` (la plaza y su
+// ciudad), se pueden actualizar de forma PARCIAL, con la máscara `Cambio.campos`.
 syntax = "proto3";
 
 package bronzeage.v1;
@@ -142,6 +143,10 @@ message Edificio {
   optional uint32 prioridad = 13;
   bool pausado_por_almacen_lleno = 14;
   bool danado = 15;
+  // Huella en UNIDADES LOCALES con la rotación ya aplicada (`rotado`): la pieza ocupa `posicion` ± la mitad. Es lo que el cliente dibuja
+  // (no ve celdas) junto con `TrazadoUrbano`.
+  uint32 ancho = 16;
+  uint32 alto = 17;
 }
 
 enum ClaseCelda {
@@ -158,7 +163,7 @@ message CeldaMuro {
 }
 
 message Recinto {
-  string id = 1;
+  string id = 1;                         // `recinto-<plaza>-<n>`
   uint32 nivel = 2;
   repeated CeldaMuro celdas = 3;
   uint32 avance = 4;                     // celdas levantadas
@@ -198,8 +203,12 @@ message AscensoEnCurso {
   int64 completa_en_ms = 3;
 }
 
+// La población es ENTERA (economía por minuto, decisión del autor del 2026-10-22): cada clase guarda habitantes enteros, así que
+// `valor_en_t0` es siempre múltiplo de 1.000 (milésimas de persona) y no hay nada que redondear. El crecimiento fraccionario que la
+// plaza lleva entre persona y persona (el «resto oculto») NO viaja. Cambia en el paso de minuto: `en_escalones = true` y `por_minuto`
+// es la tendencia de ese paso. (Sustituye a la regla v1 «continua, se lee entera con suelo».)
 message Poblacion {
-  Ritmo pesants = 1;                     // la población es CONTINUA; se lee entera (suelo)
+  Ritmo pesants = 1;
   Ritmo artesanos = 2;
   Ritmo nobleza = 3;
 }
@@ -218,7 +227,9 @@ message Asentamiento {
   sint64 radio_potencial = 11;           // zona de influencia, en milésimas de unidad de mapa
   repeated Punto zona = 12;              // polígono real recortado por fronteras (derivado, solo lectura)
   Poblacion poblacion = 13;
-  map<string, Existencia> almacen = 14;  // por id de recurso
+  // Por id de recurso. Cambia en el paso de minuto: cada `Existencia.cantidad` viene `en_escalones = true`, con su tendencia «+N/min»
+  // en `por_minuto` (el cliente muestra el valor del servidor y esa tendencia, no interpola).
+  map<string, Existencia> almacen = 14;
   repeated Edificio edificios = 15;
   repeated Recinto recintos = 16;
   Cargos cargos = 17;
@@ -241,6 +252,29 @@ message Asentamiento {
   // Guerra logística (Doc 4.2.2, 5.17):
   repeated string pueblos_ids = 34;
   repeated string avanzadas_ids = 35;
+  // La ciudad que el cliente dibuja: la calcula el servidor (el cliente no recalcula nada). Ausente en las plazas ajenas redactadas.
+  optional TrazadoUrbano trazado = 36;
+  // Asedio visible (3.ª ronda de «entrar con todo»): la batalla que se juega ahora contra esta plaza. Con ella el cliente ofrece unirse
+  // (`Batalla.lado_para_unirse`).
+  optional string batalla_id = 37;
+}
+
+// Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.
+message RectLocal {
+  sint32 x = 1;
+  sint32 y = 2;
+  uint32 ancho = 3;
+  uint32 alto = 4;
+}
+
+// Lo que el cliente necesita para dibujar la ciudad (Trazado_Urbano §10); los edificios con su huella están en `Asentamiento.edificios`
+// (`ancho`/`alto`) y los recintos de muralla en `Asentamiento.recintos` (sus celdas, de `unidades_por_celda` de lado).
+message TrazadoUrbano {
+  uint32 layout_version = 1;             // versión del algoritmo de trazado: un cliente que no la conozca dibuja, no recalcula
+  uint32 unidades_por_celda = 2;         // 3
+  sint32 radio_ul = 3;                   // `radioCiudad` actual: el disco urbano
+  repeated RectLocal calles = 4;
+  repeated RectLocal caminos = 5;
 }
 
 // Pueblo extractor: extractor de mapa + almacén local + carro de acarreo + guarnición de serie. No es un asentamiento.
@@ -255,6 +289,7 @@ message Pueblo {
   optional string carro_acarreo_id = 8;  // caravana de tipo acarreo; ausente = hay que reponerlo
   optional string guarnicion_escuadron_id = 9;
   optional int64 guarnicion_repone_en_ms = 10;
+  optional string batalla_id = 11;       // asedio visible: el saqueo que se juega ahora
 }
 
 enum EstadoAvanzada {
@@ -273,8 +308,11 @@ message Avanzada {
   sint64 radio_vision = 7;               // 12 unidades (en milésimas), fijo
   Existencia almacen = 8;                // fuerte y ciudadela; la atalaya no tiene
   repeated string guarnicion_serie_ids = 9;    // escuadras de serie (IA, fuera de cupo)
-  optional string tropa_elegida_escalon2 = 10; // la elige el Gobernador de la madre
+  optional string tropa_elegida_escalon2 = 10; // la elige el Gobernador de la madre (= `tropa_elegida_por_escalon[2]`; se conserva por v1)
   optional int64 invulnerable_hasta_ms = 11;   // fuerte en ruinas: 1 día
+  map<uint32, string> tropa_elegida_por_escalon = 12; // escalón (2, 3 o 4) → tropa elegida de las que la madre recluta
+  repeated string guarnicion_jugadores_ids = 13;      // escuadrones de jugadores dejados con `guarnecer_avanzada` (dentro del cupo)
+  optional string batalla_id = 14;       // asedio visible: el ataque que se juega ahora
 }
 
 enum TipoObra {
@@ -392,6 +430,8 @@ message UbicacionHeroe {
     string ejercito_id = 2;              // en el mapa, en su columna
     string campamento_id = 3;            // dentro de un campamento de mercenarios
     Punto desconectado_en = 4;           // fuera del mundo (solo si salió con su columna)
+    string pueblo_id = 5;                // dentro de un pueblo extractor (entrar con todo: su columna queda fuera del mapa)
+    string avanzada_id = 6;              // dentro de una avanzada
   }
 }
 
@@ -539,6 +579,11 @@ message Ejercito {
   Punto posicion = 17;                   // posición cuando no hay plan
   optional Plan plan = 18;               // lo propio viaja entero; lo ajeno, solo el tramo visible (horizonte corto)
   bool te_sigue = 19;                    // solo en la proyección: persigue a una columna tuya
+  // La columna que entró en un lugar (plaza `as-N`, pueblo `pueblo-N`, avanzada `av-N` o campamento `camp-N`) ya no está en el mapa:
+  // queda dentro con todo lo suyo hasta que sale. Sin plan ni `posicion` válida mientras tanto.
+  optional string dentro_de = 20;
+  bool en_batalla = 21;                  // apartada por una batalla de Unity: no se mueve ni recibe órdenes
+  optional string batalla_id = 22;
 }
 
 enum EstadoCaravana {
@@ -826,6 +871,44 @@ message InformePlaza {
   repeated RecintoInforme recintos = 9;
   repeated GuarnicionInforme guarnicion = 10;
   repeated string heroes_ids = 11;
+}
+
+// Lo que un héroe sacó de mirar de cerca (`inspeccionar`, Doc 5.12.3): una columna ajena, una caravana o la defensa de una plaza. Vale
+// 10 minutos (`expira_en_ms`) y lo ve solo quien lo hizo. Lo que se ve envejece: el cliente lo enseña con su fecha y con `donde`.
+message InformeInspeccion {
+  string id = 1;                         // `insp-<heroe>-<objetivo>`: uno por héroe y objetivo (el último sustituye)
+  uint64 version = 2;
+  string heroe_id = 3;                   // quien inspeccionó
+  string objetivo_id = 4;                // `ej-N`, `car-N` o `as-N`
+  int64 visto_en_ms = 5;
+  int64 expira_en_ms = 6;
+  Punto donde = 7;                       // dónde estaba el objetivo cuando se miró
+  oneof contenido {
+    InspeccionColumna columna = 10;
+    InspeccionCaravana caravana = 11;
+    InspeccionPlaza plaza = 12;
+  }
+}
+
+message InspeccionColumna {
+  optional string faccion_id = 1;
+  repeated string heroes_ids = 2;
+  repeated GuarnicionInforme escuadras = 3;   // cada escuadra con soldados en pie: tropa, cantidad y héroe; sin nivel, moral ni experiencia
+}
+
+// Nunca cuánto: solo qué recursos lleva y si va escoltada.
+message InspeccionCaravana {
+  bool escoltada = 1;
+  repeated string recursos = 2;
+}
+
+// La defensa de una plaza ajena: sus residentes con tropa en guarnición, los héroes que hay dentro y los recintos de muralla (con su avance).
+// El almacén, no.
+message InspeccionPlaza {
+  string faccion_id = 1;
+  repeated string heroes_ids = 2;
+  repeated GuarnicionInforme guarnicion = 3;
+  repeated RecintoInforme recintos = 4;
 }
 
 // Ficha de una plaza ajena que la Facción vio alguna vez (última foto, con su fecha).

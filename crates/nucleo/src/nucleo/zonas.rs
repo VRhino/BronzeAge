@@ -171,7 +171,7 @@ impl Nucleo {
             let (fa, fb) = (faccion as i64, b.faccion as i64);
             let punto = Punto::new((posicion.x + b.posicion.x) / 2, (posicion.y + b.posicion.y) / 2);
             self.estado.contactos.insert((id.min(otra), id.max(otra)));
-            self.tr.asentamientos.extend([id, otra]);
+            self.tr.tocar_todos(Clase::Asentamiento, [id, otra]);
             self.tr.eventos.push(EventoNucleo {
                 codigo: "zona.frontera".into(),
                 en: t,
@@ -193,7 +193,7 @@ impl Nucleo {
             return false;
         }
         a.radio = nuevo;
-        self.tr.asentamientos.push(id);
+        self.tr.tocar(Clase::Asentamiento, id);
         self.contactos_nuevos(id, t);
         true
     }
@@ -205,9 +205,9 @@ impl Nucleo {
     pub(super) fn ejecutar_territorio(&mut self, t: Instante, p: &Peticion) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
+        let sin_cambios = || Respuesta::sin_cambios(v);
         let solo_admin = || (!p.admin).then(|| rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
-        let existe = |s: &Self, id: u64| s.estado.asentamientos.contains_key(&id).then_some(()).ok_or_else(|| rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, format!("as-{id}")));
+        let existe = |s: &Self, id: u64| s.estado.asentamientos.contains_key(&id).then_some(()).ok_or_else(|| rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id)));
         match &p.comando {
             Comando::FijarNivelFaccion { faccion, nivel } => {
                 if let Some(r) = solo_admin() {
@@ -227,12 +227,12 @@ impl Nucleo {
                 if let Some(r) = solo_admin() {
                     return Err(r);
                 }
-                let Some(e) = self.estado.ejercitos.get_mut(ejercito) else { return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}"))) };
+                let Some(e) = self.estado.ejercitos.get_mut(ejercito) else { return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito))) };
                 if e.caravana_fundacion {
                     return Err(sin_cambios());
                 }
                 e.caravana_fundacion = true;
-                self.tr.tocados.push(*ejercito);
+                self.tr.tocar(Clase::Ejercito, *ejercito);
                 Ok(None)
             }
             Comando::Fundar { ejercito } => self.fundar(t, p, *ejercito),
@@ -256,7 +256,7 @@ impl Nucleo {
                 if eco.ascenso.is_some_and(|s| s.nivel_objetivo <= *nivel) {
                     eco.ascenso = None;
                 }
-                self.tr.asentamientos.push(*asentamiento);
+                self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 self.tr.eventos.push(EventoNucleo { codigo: "asentamiento.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("nivel", *nivel as i64)] });
                 Ok(None)
             }
@@ -297,7 +297,7 @@ impl Nucleo {
                 let centro = geo.mapa.parcelas[parcela as usize].centro;
                 self.estado.parcelas_ocupadas.insert(parcela, *asentamiento);
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").parcelas.insert(parcela);
-                self.tr.asentamientos.push(*asentamiento);
+                self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 self.tr.eventos.push(EventoNucleo { codigo: "parcela.reclamada".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: Some(centro), datos: vec![("parcela", parcela as i64)] });
                 Ok(Some(parcela as u64))
             }
@@ -311,7 +311,7 @@ impl Nucleo {
                 }
                 self.estado.parcelas_ocupadas.remove(parcela);
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").parcelas.remove(parcela);
-                self.tr.asentamientos.push(*asentamiento);
+                self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 self.tr.eventos.push(EventoNucleo { codigo: "parcela.liberada".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("parcela", *parcela as i64)] });
                 Ok(None)
             }
@@ -323,7 +323,7 @@ impl Nucleo {
     fn fundar(&mut self, t: Instante, p: &Peticion, ejercito: u64) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let Some(geo) = &self.geografia else { return Err(Respuesta::rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado", v)) };
-        let Some(e) = self.estado.ejercitos.get(&ejercito) else { return Err(Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}"), v)) };
+        let Some(e) = self.estado.ejercitos.get(&ejercito) else { return Err(Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(ejercito), v)) };
         if !self.manda_columna(p, e, true) {
             return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya", v));
         }
@@ -354,8 +354,8 @@ impl Nucleo {
         self.programar_minuto(id, t + base::MS_POR_MINUTO);
         self.programar_bandidos_de_plaza(id, t);
         self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;
-        self.tr.tocados.push(ejercito);
-        self.tr.asentamientos.push(id);
+        self.tr.tocar(Clase::Ejercito, ejercito);
+        self.tr.tocar(Clase::Asentamiento, id);
         self.tr.eventos.push(EventoNucleo {
             codigo: "fundacion.asentamiento_fundado".into(),
             en: t,

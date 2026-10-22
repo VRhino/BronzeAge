@@ -121,7 +121,7 @@ impl Nucleo {
                 let (faccion, posicion) = (plaza.faccion, plaza.posicion);
                 self.autorizar_heroe(p, *heroe, false)?;
                 self.sin_convocatoria(*heroe)?;
-                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
+                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)))?;
                 if self.heroe(*heroe).expect("existe").heroe.residencia != Some(militar::heroe::Residencia::Asentamiento(*asentamiento as u32)) {
                     return Err(rechazo(rechazos::SALIDA_SOLO_DE_TU_RESIDENCIA, "solo un residente puede sacar tropas de esta plaza".into()));
                 }
@@ -145,7 +145,7 @@ impl Nucleo {
             Comando::UnirseEnCampo { heroe, ejercito } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 let (propia, e1) = self.columna_a_bordo(*heroe)?;
-                let objetivo = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
+                let objetivo = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)))?;
                 let distancia = e1.posicion_en(t).dist(objetivo.posicion_en(t));
                 let preguntar = objetivo.columna.politica == Politica::Preguntar;
                 objetivo.columna.validar_union_en_campo(&mr, &e1.columna, distancia).map_err(de_columna)?;
@@ -159,13 +159,13 @@ impl Nucleo {
                 let expira_en = self.estado.ejercitos.get_mut(ejercito).expect("existe").columna.pedir_union(&mr, &otra, distancia, t).map_err(de_columna)?;
                 self.estado.generaciones.subir(entidad_peticion_de_union(*heroe));
                 self.programar_caducidad_de_peticion(*ejercito, *heroe, expira_en);
-                self.tr.tocados.push(*ejercito);
+                self.tr.tocar(Clase::Ejercito, *ejercito);
                 self.evento_de_columna("columna.union_pedida", t, *ejercito, vec![], vec![("heroe", *heroe as i64), ("expiraEn", expira_en)]);
                 Ok(vec![])
             }
             Comando::ResponderPeticionDeUnion { heroe, ejercito, solicitante, aceptar } => {
                 self.autorizar_heroe(p, *heroe, false)?;
-                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
+                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)))?;
                 // Se comprueba todo sobre una copia: la petición se retira, y si se acepta, el solicitante tiene que seguir junto a la columna.
                 let mut copia = e.columna.clone();
                 copia.retirar_peticion(*heroe, *solicitante, t).map_err(de_columna)?;
@@ -179,7 +179,7 @@ impl Nucleo {
                 };
                 self.estado.ejercitos.get_mut(ejercito).expect("existe").columna.retirar_peticion(*heroe, *solicitante, t).expect("comprobado");
                 self.estado.generaciones.subir(entidad_peticion_de_union(*solicitante));
-                self.tr.tocados.push(*ejercito);
+                self.tr.tocar(Clase::Ejercito, *ejercito);
                 match propia {
                     Some(otra) => {
                         self.fusionar_columna(t, *ejercito, otra).expect("comprobado");
@@ -215,7 +215,7 @@ impl Nucleo {
                 self.autorizar_heroe(p, *heroe, false)?;
                 let (id, _) = self.columna_a_bordo(*heroe)?;
                 self.estado.ejercitos.get_mut(&id).expect("existe").columna.ceder_liderazgo(*heroe, *sucesor).map_err(de_columna)?;
-                self.tr.tocados.push(id);
+                self.tr.tocar(Clase::Ejercito, id);
                 self.evento_de_columna("columna.liderazgo_cedido", t, id, vec![], vec![("anterior", *heroe as i64), ("sucesor", *sucesor as i64)]);
                 Ok(vec![])
             }
@@ -288,7 +288,7 @@ impl Nucleo {
         let e = self.estado.ejercitos.get_mut(&id).expect("existe");
         let tomado = racion::llenar(&mut e.columna.viveres, t, de_sobra);
         self.estado.asentamientos.get_mut(&asentamiento).expect("existe").economia.almacen.quitar(Recurso::Trigo, tomado);
-        self.tr.asentamientos.push(asentamiento);
+        self.tr.tocar(Clase::Asentamiento, asentamiento);
         self.reprogramar_columna(id, t);
         // Solo es noticia lo que llena unos víveres que iban por debajo del umbral; el goteo no.
         if llevaba < cap * mr.logistica.umbral_narrar_reposte / UNO {

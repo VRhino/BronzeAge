@@ -16,15 +16,17 @@
 //! factor vigente) o, como mucho, 500 ms, y al despertar avanza el núcleo hasta el instante de mundo.
 
 use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
-use crate::estado::{CambioVersion, Estado, EventoNucleo};
+use crate::estado::{CambioVersion, Clase, Estado, EventoNucleo};
 use crate::nucleo::Nucleo;
-use crate::proyeccion::{ambito_heroe, cambio_ejercito, clave_ambito_heroe, entidad_ejercito, evento_dominio, id_heroe, parse_id_ejercito, parse_id_escuadra, parse_id_heroe};
+use crate::proyeccion::ids::{self, parse_ejercito, parse_escuadra, parse_heroe};
+use crate::proyeccion::{ambito_heroe, cambio_ejercito, clave_ambito_heroe, detalle_de_rechazo, entidad_ejercito, evento_dominio, referencia_creada};
 use combate::ciclo::{Asignacion, EscuadraDeSalida, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
 use militar::heroe::Monedas;
 use contrato::v1 as pb;
 use pb::orden::Cuerpo;
+use sha2::{Digest, Sha256};
 use servidor::{ComandoSesion, Difusion, RelojCompartido, SesionId};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
@@ -74,7 +76,7 @@ fn agrupar<'e, 'r>(estado: &'e Estado, registros: impl Iterator<Item = &'r Cambi
         participantes.filter_map(|p| estado.militar.heroes.get(&p.heroe)).map(|h| h.cuenta.as_str()).filter(|d| solo.is_none_or(|s| s == *d)).collect()
     };
     for cv in registros {
-        for id in &cv.ejercitos {
+        for id in cv.tocados.de(Clase::Ejercito) {
             for d in duenos(id) {
                 por_dueno.entry(d).or_default().0.insert(*id);
             }
@@ -229,7 +231,7 @@ impl Actor {
         let eventos = eventos
             .into_iter()
             .map(|(version, ev)| {
-                let heroes = ev.ejercitos.iter().filter_map(|id| estado.ejercitos.get(id)).flat_map(|e| e.columna.participantes.iter().map(|p| id_heroe(p.heroe))).collect();
+                let heroes = ev.ejercitos.iter().filter_map(|id| estado.ejercitos.get(id)).flat_map(|e| e.columna.participantes.iter().map(|p| ids::heroe(p.heroe))).collect();
                 evento_dominio(ev, version, heroes)
             })
             .collect();
@@ -292,7 +294,7 @@ impl Actor {
         };
         let cambio_de_reloj = respuesta.aceptada() && matches!(orden.cuerpo, Some(Cuerpo::ControlarReloj(_)));
         // ...y después el resultado.
-        if !depositar(&tx, Difusion::Resultado(resultado_orden(&id, &respuesta))) {
+        if !depositar(&tx, Difusion::Resultado(resultado_orden(&id, &respuesta, &|b| self.nucleo.uuid_de_batalla(b)))) {
             self.quitar(sesion);
         }
         if cambio_de_reloj {
@@ -314,7 +316,7 @@ impl Actor {
             }
             Err(r) => r,
         };
-        if let Resultado::Rechazada { codigo, mensaje } = respuesta.resultado {
+        if let Resultado::Rechazada { codigo, mensaje, .. } = respuesta.resultado {
             let aviso = pb::Aviso { codigo: codigo.into(), mensaje, reloj: None };
             if !depositar(&tx, Difusion::Aviso(aviso)) {
                 self.quitar(sesion);
@@ -328,8 +330,8 @@ impl Actor {
         let v = self.nucleo.version();
         let invalido = |texto: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, texto, v);
         let batalla = |uuid: &str| self.nucleo.id_de_batalla(uuid).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, uuid, v));
-        let heroe = |id: &str| parse_id_heroe(id).ok_or_else(|| invalido(&format!("héroe desconocido: {id}")));
-        let escuadra = |id: &str| parse_id_escuadra(id).ok_or_else(|| invalido(&format!("escuadra desconocida: {id}")));
+        let heroe = |id: &str| parse_heroe(id).ok_or_else(|| invalido(&format!("héroe desconocido: {id}")));
+        let escuadra = |id: &str| parse_escuadra(id).ok_or_else(|| invalido(&format!("escuadra desconocida: {id}")));
         let lado = |l: i32| match pb::LadoId::try_from(l) {
             Ok(pb::LadoId::Atacante) => Ok(Lado::Atacante),
             Ok(pb::LadoId::Defensor) => Ok(Lado::Defensor),
@@ -348,6 +350,13 @@ impl Actor {
                 // El servidor lo pone el núcleo con la credencial del actor.
                 let asignacion = Asignacion { intento: a.intento_asignacion_id, servidor: String::new(), revision: a.ticket_revision, instancia, tokens: tokens(a.tokens_participante)? };
                 (peticion, Comando::RegistrarAsignacion { batalla: id, asignacion })
+            }
+            Cuerpo::Tokens(t) => {
+                version_de_esquema(t.schema_version)?;
+                // La petición se recuerda por su contenido: unos tokens nuevos del mismo intento no son un reintento del mensaje anterior.
+                let huella = t.tokens_participante.iter().fold(Sha256::new(), |h, k| h.chain_update(k.heroe_id.as_bytes()).chain_update(k.token.as_bytes()).chain_update(k.expira_en_ms.to_le_bytes()));
+                let peticion = format!("tokens:{}:{}:{}", t.battle_id, t.intento_asignacion_id, crate::hex(&huella.finalize().into()));
+                (peticion, Comando::RegistrarTokens { batalla: batalla(&t.battle_id)?, intento: t.intento_asignacion_id, tokens: tokens(t.tokens_participante)? })
             }
             Cuerpo::Inicio(i) => {
                 version_de_esquema(i.schema_version)?;
@@ -435,12 +444,12 @@ impl Actor {
                     Some(Tipo::Punto(p)) => base::Punto::new(p.x, p.y),
                     _ => return no(rechazos::OBJETIVO_NO_SOPORTADO, "el núcleo genérico solo marcha a puntos"),
                 };
-                match parse_id_heroe(&m.heroe_id).and_then(|h| self.nucleo.estado().ejercito_de_heroe(h)) {
+                match parse_heroe(&m.heroe_id).and_then(|h| self.nucleo.estado().ejercito_de_heroe(h)) {
                     Some(ejercito) => Comando::MarcharA { ejercito, destino },
                     None => return no(rechazos::HEROE_DESCONOCIDO, &m.heroe_id),
                 }
             }
-            Some(Cuerpo::EstacionarEjercito(e)) => match parse_id_ejercito(&e.ejercito_id) {
+            Some(Cuerpo::EstacionarEjercito(e)) => match parse_ejercito(&e.ejercito_id) {
                 Some(ejercito) => Comando::Estacionar { ejercito },
                 None => return no(rechazos::EJERCITO_DESCONOCIDO, &e.ejercito_id),
             },
@@ -461,13 +470,13 @@ impl Actor {
     }
 }
 
-pub fn resultado_orden(peticion_id: &str, r: &Respuesta) -> pb::ResultadoOrden {
+pub fn resultado_orden(peticion_id: &str, r: &Respuesta, uuid_de_batalla: &dyn Fn(u64) -> String) -> pb::ResultadoOrden {
     let (resultado, rechazo) = match &r.resultado {
         Resultado::Aceptada => (pb::Resultado::OrdenAceptada, None),
         Resultado::SinCambios => (pb::Resultado::OrdenSinCambios, None),
         Resultado::Duplicada => (pb::Resultado::OrdenDuplicada, None),
-        Resultado::Rechazada { codigo, mensaje } => {
-            (pb::Resultado::OrdenRechazada, Some(pb::RechazoOrden { codigo: (*codigo).into(), mensaje: mensaje.clone(), detalle: None }))
+        Resultado::Rechazada { codigo, mensaje, detalle } => {
+            (pb::Resultado::OrdenRechazada, Some(pb::RechazoOrden { codigo: (*codigo).into(), mensaje: mensaje.clone(), detalle: detalle.as_ref().map(detalle_de_rechazo) }))
         }
     };
     pb::ResultadoOrden {
@@ -475,7 +484,7 @@ pub fn resultado_orden(peticion_id: &str, r: &Respuesta) -> pb::ResultadoOrden {
         resultado: resultado as i32,
         version_tras: r.version_tras,
         rechazo,
-        creadas: r.creadas.iter().map(|&id| pb::ReferenciaCreada { entidad: pb::TipoEntidad::Ejercito as i32, id: crate::proyeccion::id_ejercito(id) }).collect(),
+        creadas: r.tipo_creadas.map_or_else(Vec::new, |tipo| r.creadas.iter().filter_map(|&id| referencia_creada(tipo, id, uuid_de_batalla)).collect()),
         datos: None,
     }
 }

@@ -173,7 +173,7 @@ fn rechazo_de_union(e: ErrorUnion, v: u64) -> Respuesta {
 }
 
 fn sin_cambios(v: u64) -> Respuesta {
-    Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] }
+    Respuesta::sin_cambios(v)
 }
 
 /// Dónde está quien quiere unirse a una batalla respecto de lo que se disputa: en el mapa con su columna, dentro de la plaza, el pueblo o la avanzada que se disputa, o dentro de
@@ -505,6 +505,7 @@ impl Nucleo {
             self.apartar_caravana(t, *k);
         }
         self.estado.batallas.batallas.insert(id, b);
+        self.tr.tocar(Clase::Batalla, id);
         self.programar_batalla(id);
         self.hecho_de_batalla(t, id, Hecho::Abierta, None);
         id
@@ -523,6 +524,9 @@ impl Nucleo {
     /// Pone (`Some`) o quita (`None`) el candado `reservaBatalla` a las escuadras de los héroes indicadas.
     fn reservar(&mut self, escuadras: &[u64], batalla: Option<u64>) {
         for h in self.estado.militar.heroes.values_mut() {
+            if h.heroe.escuadras.iter().any(|s| escuadras.contains(&s.id)) {
+                self.tr.tocar(Clase::Heroe, h.heroe.id);
+            }
             for s in h.heroe.escuadras.iter_mut().filter(|s| escuadras.contains(&s.id)) {
                 s.reserva_batalla = batalla;
             }
@@ -530,7 +534,9 @@ impl Nucleo {
     }
 
     fn escuadra_mut(&mut self, id: u64) -> Option<&mut Escuadra> {
-        self.estado.militar.heroes.values_mut().find_map(|h| h.heroe.escuadra_mut(id))
+        let h = self.estado.militar.heroes.values_mut().find(|h| h.heroe.escuadras.iter().any(|e| e.id == id))?;
+        self.tr.tocar(Clase::Heroe, h.heroe.id);
+        h.heroe.escuadra_mut(id)
     }
 
     /// Reprograma los plazos de la batalla con una generación nueva: el fin de la convocatoria (si aún no pasó), el vencimiento de su estado y, cerrada, su
@@ -596,7 +602,7 @@ impl Nucleo {
         let perdido = repartir_botin(&mut carros, botin);
         for (&c, carro) in columnas.iter().zip(carros) {
             self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga = carro.carga;
-            self.tr.tocados.push(c);
+            self.tr.tocar(Clase::Ejercito, c);
         }
         let mut cogido = Mercancia::new();
         for (&r, &n) in botin {
@@ -648,12 +654,14 @@ impl Nucleo {
             }
             SucesoBatalla::Vence => {
                 let Some(liberar) = self.estado.batallas.batallas.get_mut(&id).and_then(|b| b.vencer(t)) else { return };
+                self.tr.tocar(Clase::Batalla, id);
                 self.cerrar_batalla(t, id, &liberar, Hecho::Fallida);
             }
             SucesoBatalla::Retira => {
                 let cr = self.estado.reglas.economia.combate.clone();
                 if self.estado.batallas.batallas.get(&id).is_some_and(|b| b.retirable(&cr, t)) {
                     let b = self.estado.batallas.batallas.remove(&id).expect("existe");
+                    self.tr.tocar(Clase::Batalla, id);
                     self.retiradas.push(b);
                     // Sin esto la retirada cambiaría el estado sin dejar versión.
                     self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed("batalla.retirada"), en: t, ejercitos: vec![], asentamientos: vec![], punto: None, datos: vec![("batalla", id as i64)] });
@@ -731,6 +739,7 @@ impl Nucleo {
     /// Una batalla **activa**; si no existe, está cerrada o su plazo venció, `batalla.no_existe` (404).
     fn batalla_mut(&mut self, id: u64) -> Result<&mut Batalla, Respuesta> {
         let (v, t) = (self.estado.version, self.estado.ahora);
+        self.tr.tocar(Clase::Batalla, id);
         self.estado.batallas.batallas.get_mut(&id).filter(|b| b.activa(t)).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, format!("batalla-{id}"), v))
     }
 
@@ -739,7 +748,7 @@ impl Nucleo {
         if !p.admin {
             return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración fija quién controla a un héroe", v));
         }
-        let h = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, format!("heroe-{heroe}"), v))?;
+        let h = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(heroe), v))?;
         if h.heroe.controlador == controlador {
             return Err(sin_cambios(v));
         }
@@ -831,6 +840,7 @@ impl Nucleo {
         }
         // Su columna deja de estar quieta si no queda nadie más de ella en la batalla.
         if let Some(columna) = self.estado.ejercito_de_heroe(heroe) {
+            self.tr.tocar(Clase::Batalla, id);
             let b = self.estado.batallas.batallas.get_mut(&id).expect("existe");
             let sigue = self.estado.ejercitos.get(&columna).is_some_and(|e| e.columna.participantes.iter().any(|p| b.lado_de(p.heroe).is_some()));
             if !sigue && b.bloqueo.ejercitos.contains(&columna) {
@@ -853,6 +863,7 @@ impl Nucleo {
         let v = self.estado.version;
         // Los `itemInstanceId` ya recibidos en otras batallas que se conservan: los héroes aún no tienen inventario donde mirar (CQ-004).
         let existentes: BTreeSet<String> = self.batallas().filter(|b| b.id != id).filter_map(|b| b.resultado.as_ref()).flat_map(|r| r.por_heroe.iter()).filter_map(|h| h.botin.as_ref()).flat_map(|b| b.objetos.iter()).filter_map(|o| o.instancia.clone()).collect();
+        self.tr.tocar(Clase::Batalla, id);
         let b = self.estado.batallas.batallas.get_mut(&id).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, format!("batalla-{id}"), v))?;
         let efectos = match b.aplicar_resultado(t, servidor, res.clone(), &|i| existentes.contains(i)).map_err(|e| rechazo_de_batalla(e, v))? {
             Efecto::SinCambios => return Err(sin_cambios(v)),
@@ -884,6 +895,7 @@ impl Nucleo {
         }
         for e in &efectos.heroes {
             let Some(h) = self.estado.militar.heroes.get_mut(&e.heroe) else { continue };
+            self.tr.tocar(Clase::Heroe, e.heroe);
             h.heroe.experiencia += e.xp;
             if let Some(botin) = &e.botin {
                 h.heroe.monedas.bronce += botin.monedas.bronce;
@@ -956,9 +968,9 @@ impl Nucleo {
                     combate::pueblo::saquear(&cr, almacen, &mut carros);
                     for (&c, carro) in columnas.iter().zip(carros) {
                         self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga = carro.carga;
-                        self.tr.tocados.push(c);
+                        self.tr.tocar(Clase::Ejercito, c);
                     }
-                    self.tr.asentamientos.push(madre);
+                    self.tr.tocar(Clase::Asentamiento, madre);
                     self.castigo_a_los_defensores(b);
                 }
             }
@@ -1048,7 +1060,7 @@ impl Nucleo {
                 chatarra.iter().for_each(|(&r, &n)| {
                     a.economia.almacen.agregar(r, n);
                 });
-                self.tr.asentamientos.push(plaza);
+                self.tr.tocar(Clase::Asentamiento, plaza);
             }
             return;
         }

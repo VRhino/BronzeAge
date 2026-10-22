@@ -1,6 +1,6 @@
 # Forma de los parámetros de cada comando
 
-**Alcance y fuentes.** La forma de `params` de los 122 comandos, tal como la valida el servidor en el borde (`src/session/comandos/esquemas.ts`,
+**Alcance y fuentes.** La forma de `params` de los 122 comandos **del motor TypeScript** (el núcleo Rust numera 125 comandos y el contrato 05 trae 145 órdenes: ver el último apartado), tal como la valida el servidor en el borde (`src/session/comandos/esquemas.ts`,
 `ESQUEMAS_PARAMS`, verificado contra `b8f7a3d`). Es la base de los mensajes de orden del contrato 05 (Protobuf). Quién puede ejecutar cada comando y qué
 rechaza el motor están en [`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md) y en el documento de cada sistema.
 
@@ -149,3 +149,22 @@ Esta tabla es la del motor TypeScript. En el contrato 05 (Protobuf):
 - **Órdenes de entrar en un pueblo o en una avanzada del núcleo Rust (2026-10-22, segunda ronda; sin mapear aún al contrato 05):** `EntrarEnPueblo { pueblo, heroe }` (119), `SalirDePueblo { pueblo, heroe }` (120), `EntrarEnAvanzada { avanzada, heroe }` (121) y `SalirDeAvanzada { avanzada, heroe }` (122), a continuación de la 118. Entran con todo, de visita, con el acceso de la plaza madre (`puerta.cerrada`); un ejército entra por su Líder. Rechazos nuevos: `heroe.no_esta_en_el_pueblo`, `heroe.no_esta_en_la_avanzada` (más los que ya existían: `pueblo.desconocido`, `pueblo.no_esta_activo`, `pueblo.fuera_de_la_puerta`, `avanzada.desconocida`, `avanzada.no_operativa`, `avanzada.fuera_de_la_puerta`, `puerta.cerrada`, `columna.en_formacion`, `columna.solo_el_lider`, `batalla.bloqueado`). `FijarAcceso` (117) ahora también saca al mapa a quien ya no puede entrar y se rechaza con `batalla.bloqueado` si un pueblo o una avanzada de la plaza está en una batalla. `UnirseABatalla` rechaza con `batalla.invalida` («para atacar hay que estar fuera…») a quien está dentro. Hechos nuevos: `jugador.entra_en_pueblo`, `ejercito.entra_en_pueblo`, `jugador.sale_de_pueblo`, `jugador.entra_en_avanzada`, `ejercito.entra_en_avanzada`, `jugador.sale_de_avanzada`, `heroe.expulsado`; `carroPerdido` en `asentamiento.conquistada`, `combate.pueblo_saqueado`/`pueblo_resiste` y los de avanzada. Foto `BAN18`.
 - **`UnirseABatalla` en la tercera ronda de «entrar con todo» (2026-10-22):** ni comando nuevo ni rechazo nuevo ni cambio de foto (`BAN18`). Quien está **dentro** de la plaza asediada, del pueblo saqueado o de la avanzada atacada y es de la Facción dueña, aliado o vasallo se une a la defensa (sin columna ni distancia: es el único participante, con lo que lleva encima); desde **fuera**, a ≤ `radioEncuentro`, se une al ataque la Facción atacante y los neutrales y enemigos del dueño. Los rechazos siguen siendo `batalla.invalida`, con otros mensajes: «para defender hay que estar dentro…» (un amigo del dueño desde fuera) y «para atacar hay que estar fuera…» (un neutral o un enemigo dentro, que antes recibía «tu Facción no combate aquí»; este mensaje queda para las caravanas). No hay hecho de invitación: el cliente muestra la opción por elegibilidad, y el estado de asedio es consultable con `Nucleo::batalla_sobre` (su proyección al contrato es la 4H).
 
+## Órdenes del contrato en 4H (T1, 2026-10-22)
+
+Cambios **aditivos** a `orders.proto` (ningún número ni campo anterior cambia; el contrato pasa de 135 a 145 órdenes, `Orden.cuerpo` 145-154). Sirven al núcleo Rust, que ya tiene los comandos; su traducción en `sesiones::traducir` es la tanda T2.
+
+| Orden (`Orden.cuerpo`) | Campos | Comando del núcleo |
+|---|---|---|
+| `cancelar_orden_mercado` (145) | `orden_id` | `CancelarOrdenMercado` (25) |
+| `aparcar_caravana` (146) | `caravana_id`, `asentamiento_id` | `AparcarCaravana` (40) |
+| `retirar_de_avanzada` (147) | `heroe_id`, `avanzada_id`, `escuadron_ids[]` | `RetirarDeAvanzada` (113) |
+| `depositar_en_avanzada` (148) | `ejercito_id`, `avanzada_id`, `recurso`, `cantidad` (milésimas) | `DepositarEnAvanzada` (115) |
+| `vaciar_carro` (149) | `heroe_id` | `VaciarCarro` (118) |
+| `entrar_en_pueblo` (150), `salir_de_pueblo` (151) | `pueblo_id`, `heroe_id` | `EntrarEnPueblo` (119), `SalirDePueblo` (120) |
+| `entrar_en_avanzada` (152), `salir_de_avanzada` (153) | `avanzada_id`, `heroe_id` | `EntrarEnAvanzada` (121), `SalirDeAvanzada` (122) |
+| `administracion` (154) | `codigo`, `parametros` (`Struct`) | el andamiaje de administración (abajo) |
+
+- `repostar` gana `lugar_id?` (plaza `as-N` o avanzada `av-N`): cubre las órdenes 83 (`Repostar`, plaza) y 114 (`RepostarEnAvanzada`); sin él, el servidor busca la plaza o avanzada operativa más cercana a `radioPuerta` de la columna y, sin ninguna, rechaza con `repostar.sin_lugar`.
+- El código 103 (`RegistrarTokens`) no es una orden de jugador: es el mensaje `TokensBatalla` de `MensajeDeServidorDeBatalla.tokens` (sesión de servidor de batalla).
+- **`OrdenDeAdministracion { codigo, parametros }`** (decisión del autor, 2026-10-22): una sola orden genérica, solo para sesiones `CLIENTE_ADMIN_WEB` y temporal (desaparece con los sistemas político y de tecnología). Cubre los 19 comandos de andamiaje del núcleo sin orden propia: `crear_ejercito` (1), `fijar_nivel_faccion` (5), `dar_caravana_fundacion` (6), `fijar_nivel_asentamiento` (8), `agrandar_zona` (9), `reclamar_parcela` (10), `soltar_parcela` (11), `dar_recursos` (37), `dar_suministro` (38), `fijar_residencia` (43), `dar_almacen_personal` (44), `fijar_tecnologias` (65), `fijar_faccion_de_heroe` (66), `colocar_heroe` (67), `herir_heroe` (68), `fijar_relacion` (94), `colocar_bandidos` (96), `dar_escuadra` (97) y `fijar_controlador` (98). Los `parametros` llevan los campos del comando con los ids del contrato (`f-N`, `as-N`, `heroe-N`...) y las cantidades en milésimas; la forma exacta la fija T2.
+- **Numeración:** el núcleo Rust numera **125** comandos (los códigos de `Comando`, 1-125); el contrato, **145** órdenes (135 + 10). No son la misma lista: 46 y 107 comparten `entregar_en_obra`, 83 y 114 comparten `repostar`, y hay órdenes del contrato sin comando (política, tecnología, refundación...).

@@ -124,7 +124,7 @@ impl Nucleo {
                 Ok(Some(id))
             }
             Comando::EntregarMateriales { ejercito, pueblo } => {
-                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, format!("ej-{ejercito}")))?;
+                let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)))?;
                 if !self.manda_columna(p, e, false) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
                 }
@@ -141,7 +141,7 @@ impl Nucleo {
                 let eco = &mut self.estado.asentamientos.get_mut(&plaza).expect("existe").economia;
                 let tomado = eco.entregar_a_pueblo(t, &datos, *pueblo, &disponible, &mut ev).map_err(de_pueblo)?;
                 self.quitar_de_columna(*ejercito, &tomado);
-                self.tr.tocados.push(*ejercito);
+                self.tr.tocar(Clase::Ejercito, *ejercito);
                 self.anotar_sucesos(plaza, t, &ev);
                 Ok(None)
             }
@@ -183,7 +183,8 @@ impl Nucleo {
                 })?;
                 self.estado.comercio.siguiente_caravana += 1;
                 self.estado.comercio.flota.push(carro);
-                self.tr.asentamientos.push(plaza);
+                self.tr.tocar(Clase::Caravana, id);
+                self.tr.tocar(Clase::Asentamiento, plaza);
                 self.enlazar_carro(plaza, *pueblo, id);
                 self.emitir_propio(t, "acarreo.carro_repuesto", vec![plaza], vec![("pueblo", *pueblo as i64), ("caravana", id as i64)]);
                 self.salir_acarreo(plaza, *pueblo, t);
@@ -227,7 +228,11 @@ impl Nucleo {
             for &c in &e.caravanas_adjuntas {
                 if falta > 0 {
                     if let Some(i) = comercio.posicion_caravana(c) {
+                        let antes = falta;
                         quitar(&mut comercio.flota[i].contenido, &mut falta);
+                        if falta < antes {
+                            self.tr.tocar(Clase::Caravana, c);
+                        }
                     }
                 }
             }
@@ -240,6 +245,7 @@ impl Nucleo {
     fn enlazar_carro(&mut self, plaza: u64, pueblo: u64, carro: u64) {
         if let Some(pu) = self.estado.asentamientos.get_mut(&plaza).and_then(|a| a.economia.pueblos.iter_mut().find(|p| p.id == pueblo)) {
             pu.carro = Some(carro);
+            self.tr.tocar(Clase::Pueblo, pueblo);
         }
     }
 
@@ -249,14 +255,18 @@ impl Nucleo {
         let id = self.estado.comercio.siguiente_caravana;
         self.estado.comercio.siguiente_caravana += 1;
         self.estado.comercio.flota.push(acarreo::nuevo_carro(id, id32(plaza), posicion));
+        self.tr.tocar(Clase::Caravana, id);
         self.enlazar_carro(plaza, pueblo, id);
     }
 
     /// El carro `carro` de la plaza `plaza` desapareció (destruido, perdido en una batalla...): su pueblo se queda sin él.
     pub(super) fn pueblo_sin_carro(&mut self, plaza: u64, carro: u64) {
         let Some(a) = self.estado.asentamientos.get_mut(&plaza) else { return };
-        a.economia.pueblos.iter_mut().filter(|p| p.carro == Some(carro)).for_each(|p| p.carro = None);
-        self.tr.asentamientos.push(plaza);
+        for p in a.economia.pueblos.iter_mut().filter(|p| p.carro == Some(carro)) {
+            p.carro = None;
+            self.tr.tocar(Clase::Pueblo, p.id);
+        }
+        self.tr.tocar(Clase::Asentamiento, plaza);
     }
 
     /// El carro del pueblo sale hacia la madre **si está en casa y el almacén local está lleno** (nada recurre por pueblo ocioso: se llama cuando
@@ -279,13 +289,14 @@ impl Nucleo {
         let Some(tz) = self.trazar_ruta(pueblo, plaza, pos_pueblo, pos_madre, faccion, t) else { return };
         let cantidad = acarreo::capacidad(&flota);
         self.estado.asentamientos.get_mut(&plaza).and_then(|a| a.economia.pueblos.iter_mut().find(|p| p.id == pueblo)).expect("existe").almacen.quitar(recurso, cantidad);
+        self.tr.tocar(Clase::Pueblo, pueblo);
         let i = self.estado.comercio.posicion_caravana(carro).expect("existe");
         let plan = self.plan_de(&self.estado.comercio.flota[i], &tz.puntos, &tz.costes, t);
         let peajes = peajes_de_paradas(&tz.paradas, longitud_ruta(&tz.puntos));
         let carga: Mercancia = [(recurso, cantidad)].into_iter().collect();
         acarreo::salir(&mut self.estado.comercio.flota[i], id32(plaza), carga, tz.puntos, tz.costes, peajes, plan.clone()).expect("el carro está en casa");
         self.instalar_plan(carro, plan);
-        self.tr.asentamientos.push(plaza);
+        self.tr.tocar(Clase::Asentamiento, plaza);
         self.emitir_propio(t, "acarreo.sale", vec![plaza], vec![("pueblo", pueblo as i64), ("caravana", carro as i64), ("carga", cantidad)]);
     }
 
@@ -298,7 +309,7 @@ impl Nucleo {
             plaza.economia.registrar_acarreo(t, r, entra);
             ingresado += entra;
         }
-        self.tr.asentamientos.push(madre);
+        self.tr.tocar(Clase::Asentamiento, madre);
         self.emitir_propio(t, "acarreo.llega", vec![madre], vec![("caravana", carro as i64), ("carga", ingresado), ("perdido", total(contenido) - ingresado)]);
     }
 

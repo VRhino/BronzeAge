@@ -278,9 +278,23 @@ impl Nucleo {
         for s in sucesos {
             match s {
                 EventoEco::ObraIniciada { completa_en, .. } | EventoEco::MejoraIniciada { completa_en, .. } | EventoEco::AscensoIniciado { completa_en, .. } => self.programar_fin(id, *completa_en),
-                EventoEco::AvanzadaObraIniciada { id: avanzada, completa_en, .. } => self.programar_fin_de_avanzada(*avanzada, *completa_en),
+                EventoEco::AvanzadaObraIniciada { id: avanzada, completa_en, .. } => {
+                    self.programar_fin_de_avanzada(*avanzada, *completa_en);
+                    self.tr.tocar(Clase::Avanzada, *avanzada);
+                }
                 // Cada celda de una muralla deja la cita de la siguiente (la obra de un recinto no ocupa cuadrilla ni es recurrente).
                 EventoEco::RecintoCelda { siguiente_en: Some(en), .. } => self.programar_fin(id, *en),
+                EventoEco::PuebloMarcado { id: pueblo, .. }
+                | EventoEco::PuebloEntrega { id: pueblo, .. }
+                | EventoEco::PuebloObraIniciada { id: pueblo, .. }
+                | EventoEco::PuebloCompletado { id: pueblo }
+                | EventoEco::PuebloLleno { id: pueblo }
+                | EventoEco::PuebloDestruido { id: pueblo } => self.tr.tocar(Clase::Pueblo, *pueblo),
+                EventoEco::AvanzadaObraMarcada { id: avanzada, .. }
+                | EventoEco::AvanzadaEntrega { id: avanzada, .. }
+                | EventoEco::AvanzadaCompletada { id: avanzada, .. }
+                | EventoEco::AvanzadaDestruida { id: avanzada }
+                | EventoEco::AvanzadaObraCancelada { id: avanzada, .. } => self.tr.tocar(Clase::Avanzada, *avanzada),
                 _ => {}
             }
         }
@@ -291,7 +305,7 @@ impl Nucleo {
         let Some(a) = self.estado.asentamientos.get(&id) else { return };
         let (punto, reglas) = (a.posicion, &self.estado.reglas.economia.datos);
         self.tr.eventos.extend(sucesos.iter().map(|e| evento_nucleo(id, t, punto, e, reglas)));
-        self.tr.asentamientos.push(id);
+        self.tr.tocar(Clase::Asentamiento, id);
     }
 
     /// Una plaza cayó en ruinas: desaparece del estado y libera sus parcelas y nodos. Sube su generación (descarta el paso de minuto ya
@@ -310,6 +324,7 @@ impl Nucleo {
         // fuerte desaparecen y la ciudadela queda como ruina sin dueño (Doc 5.17).
         for p in &a.economia.pueblos {
             self.estado.nodos_reclamados.remove(&p.nodo);
+            self.tr.tocar(Clase::Pueblo, p.id);
         }
         // Quien estaba dentro de sus pueblos o avanzadas sale al mapa con lo suyo, a la puerta de cada uno.
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
@@ -367,7 +382,7 @@ impl Nucleo {
     pub(super) fn ejecutar_economia(&mut self, t: Instante, p: &Peticion) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let sin_cambios = || Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] };
+        let sin_cambios = || Respuesta::sin_cambios(v);
         let (Comando::AnadirEdificio { asentamiento, .. }
         | Comando::QuitarDeCola { asentamiento, .. }
         | Comando::MoverEnCola { asentamiento, .. }
@@ -381,7 +396,7 @@ impl Nucleo {
             unreachable!("solo se llama con órdenes de economía")
         };
         let id = *asentamiento;
-        let Some(plaza) = self.estado.asentamientos.get(&id) else { return Err(rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, format!("as-{id}"))) };
+        let Some(plaza) = self.estado.asentamientos.get(&id) else { return Err(rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id))) };
         let faccion = plaza.faccion;
         if !self.manda_en(p, faccion) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{id}")));
@@ -484,7 +499,7 @@ impl Nucleo {
             _ => unreachable!("solo se llama con órdenes de economía"),
         }
         self.anotar_sucesos(id, t, &sucesos);
-        self.tr.asentamientos.push(id);
+        self.tr.tocar(Clase::Asentamiento, id);
         Ok(creada)
     }
 }

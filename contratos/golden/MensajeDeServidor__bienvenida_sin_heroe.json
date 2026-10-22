@@ -1,0 +1,1 @@
+{"secuencia":"1","bienvenida":{"sesionId":"s7","mundo":{"hash":"hash-del-mundo"},"reloj":{"mundoMs":"0","factorMilesimas":1000,"servidorMs":"9"},"maximoOrdenesPendientes":32,"campamentosParaElegir":[{"campamentoId":"camp-0","posicion":{"x":"100000","y":"200000"},"origen":1,"eligieronComoInicial":3,"residentes":5}]}}

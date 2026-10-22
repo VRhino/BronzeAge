@@ -4,13 +4,19 @@
 // entidades (entities.proto) en la misma `Delta`. Un cliente no necesita interpretar eventos para estar al día.
 // El catálogo de códigos (≈180, familia.nombre: comercio.*, diplomacia.*, construccion.*, ejercito.*, columna.*, aedas.*,
 // jugador.*, asentamiento.*, mercenarios.*, combate.*, faccion.*, heroe.*, fundacion.*, bandidos.*, tecnologia.*...) y la forma
-// del payload de cada uno viven en Docs/Coordinacion/05_Contrato_de_Sesion.md §Eventos. El payload es una estructura
-// (google.protobuf.Struct) con los campos documentados para cada código.
+// del payload de cada uno viven en Docs/Coordinacion/05_Contrato_de_Sesion.md §Eventos.
+//
+// FORMA (decisión del autor, 2026-10-22): TODOS los eventos llevan el `payload` genérico (`google.protobuf.Struct` con los campos
+// documentados para cada código: texto, número o lista). Además, los QUINCE que mueven la interfaz llevan un mensaje TIPADO en
+// `tipado` (el cliente actúa con él sin interpretar el Struct). El tipado y el payload dicen lo mismo: quien no quiera el
+// tipado (la crónica, un cliente simple) usa el payload.
 syntax = "proto3";
 
 package bronzeage.v1;
 
 import "google/protobuf/struct.proto";
+import "bronzeage/v1/battle.proto";
+import "bronzeage/v1/common.proto";
 
 option csharp_namespace = "BronzeAge.Contract.V1";
 
@@ -21,4 +27,120 @@ message EventoDominio {
   optional string asentamiento_id = 4;   // a quién se atribuye (decide quién lo oye)
   repeated string heroes_ids = 5;        // héroes nombrados: lo oyen aunque no vean la plaza
   google.protobuf.Struct payload = 6;
+  // El mensaje tipado de los eventos que mueven la interfaz (ausente en el resto). Código → mensaje:
+  oneof tipado {
+    BatallaAbierta batalla_abierta = 10;             // batalla.abierta, evento_pve.abierta
+    BatallaAsignada batalla_asignada = 11;           // batalla.asignada, evento_pve.asignada
+    BatallaCerrada batalla_cerrada = 12;             // batalla.aplicada | cancelada | fallida (y evento_pve.*)
+    PlazaConquistada plaza_conquistada = 13;         // asentamiento.conquistada
+    PlazaEnRuinas plaza_en_ruinas = 14;              // asentamiento.ruinas
+    AsedioResistido asedio_resistido = 15;           // combate.asedio_resistido
+    UnionPedida union_pedida = 16;                   // columna.union_pedida, convocatoria.union_pedida
+    ConvocatoriaConvocada convocatoria_convocada = 17;  // convocatoria.convocada
+    ConvocatoriaPartio convocatoria_partio = 18;     // convocatoria.partio
+    HeroeExpulsado heroe_expulsado = 19;             // heroe.expulsado, heroe.desalojado
+    ColumnaConHambre columna_con_hambre = 20;        // ejercito.viveres_bajos, ejercito.sin_viveres
+    DesercionPorHambre desercion_por_hambre = 21;    // tropas.desercion
+    GuerraDeclarada guerra_declarada = 22;           // faccion.guerra_declarada
+    ObraTerminada obra_terminada = 23;               // construccion.edificio_completado | mejora_completada | recinto_completado, pueblo.completado, avanzada.completada
+    HeroeHerido heroe_herido = 24;                   // heroe.herido
+  }
+}
+
+// Una batalla de Unity se abrió. Con `contexto` de asedio y `convocatoria_hasta_ms` el cliente ofrece unirse (mira `Batalla.lado_para_unirse`).
+message BatallaAbierta {
+  string battle_id = 1;
+  ContextoEstrategico contexto = 2;
+  Punto punto = 3;
+  optional string iniciada_por = 4;      // ausente si no la inició nadie (los bandidos)
+  optional string atacante_faccion_id = 5;
+  optional string defensor_faccion_id = 6;
+  optional int64 convocatoria_hasta_ms = 7;
+}
+
+// La batalla tiene servidor: sus combatientes ya pueden pedir su token (`Batalla.asignacion_propia`) y conectar con Unity.
+message BatallaAsignada {
+  string battle_id = 1;
+}
+
+message BatallaCerrada {
+  string battle_id = 1;
+  EstadoBatalla estado = 2;              // BATALLA_APLICADA | BATALLA_CANCELADA | BATALLA_FALLIDA
+  optional LadoId ganador = 3;           // solo si se aplicó un resultado
+  optional RazonVictoria razon = 4;
+}
+
+message PlazaConquistada {
+  string asentamiento_id = 1;
+  optional string atacante_faccion_id = 2;
+  optional string defensor_faccion_id = 3;   // la dueña anterior
+}
+
+// La plaza perdió lo que necesita para vivir y quedó en ruinas.
+message PlazaEnRuinas {
+  string asentamiento_id = 1;
+  repeated string recursos_faltantes = 2;
+}
+
+message AsedioResistido {
+  string asentamiento_id = 1;
+  optional string atacante_faccion_id = 2;
+}
+
+// Alguien pide unirse a un ejército o a una convocatoria: el Líder responde con `responder_peticion_de_union` o `responder_peticion_de_convocatoria`.
+message UnionPedida {
+  string destino_id = 1;                 // `ej-N` o `conv-N`
+  bool destino_es_convocatoria = 2;
+  string solicitante_id = 3;
+  int64 expira_en_ms = 4;
+}
+
+message ConvocatoriaConvocada {
+  string convocatoria_id = 1;
+  string lugar_id = 2;                   // `as-N` o `camp-N`
+  bool lugar_es_campamento = 3;
+  string lider_id = 4;
+}
+
+// El Líder partió: los integrantes salieron como un ejército.
+message ConvocatoriaPartio {
+  string convocatoria_id = 1;
+  string ejercito_id = 2;
+}
+
+// Un héroe dejó de estar donde estaba sin querer: cerraron la puerta, cayó el lugar o se le echó.
+message HeroeExpulsado {
+  string heroe_id = 1;
+  string lugar_id = 2;                   // `as-N`, `pueblo-N`, `av-N` o `camp-N`
+  string motivo = 3;                     // puerta_cerrada | conquista | ruina | desalojo
+  optional string ejercito_id = 4;       // la columna con la que salió al mapa, si salió
+}
+
+message ColumnaConHambre {
+  string ejercito_id = 1;
+  bool sin_viveres = 2;                  // false: quedan pocos (aviso); true: se acabaron (empiezan las deserciones)
+}
+
+message DesercionPorHambre {
+  string heroe_id = 1;
+  string escuadra_id = 2;
+  uint32 desertores = 3;
+}
+
+message GuerraDeclarada {
+  string atacante_faccion_id = 1;
+  string contra_faccion_id = 2;
+  repeated string arrastradas_ids = 3;   // Facciones que entran por arrastre (vacío hasta el sistema político)
+}
+
+message ObraTerminada {
+  string asentamiento_id = 1;            // la plaza a la que pertenece (la madre, para un pueblo o una avanzada)
+  string clase = 2;                      // edificio | mejora | recinto | pueblo | avanzada
+  string objeto_id = 3;                  // `ed-<plaza>-<n>`, `recinto-<plaza>-<n>`, `pueblo-N` o `av-N`
+  optional uint32 nivel = 4;             // el nivel alcanzado, si la clase lo tiene
+}
+
+message HeroeHerido {
+  string heroe_id = 1;
+  int64 hasta_ms = 2;
 }

@@ -147,7 +147,7 @@ impl Nucleo {
             unreachable!("solo se llama con órdenes de murallas")
         };
         let id = *asentamiento;
-        let Some(plaza) = self.estado.asentamientos.get(&id) else { return Err(rechazo(ASENTAMIENTO_DESCONOCIDO, format!("as-{id}"))) };
+        let Some(plaza) = self.estado.asentamientos.get(&id) else { return Err(rechazo(ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id))) };
         if !self.manda_en(p, plaza.faccion) {
             return Err(rechazo(NO_AUTORIZADO, format!("no mandas en as-{id}")));
         }
@@ -206,7 +206,7 @@ impl Nucleo {
             .expect("la plaza existe y hay mundo"));
         }
         self.anotar_sucesos(id, t, &sucesos);
-        self.tr.asentamientos.push(id);
+        self.tr.tocar(Clase::Asentamiento, id);
         Ok(creada)
     }
 }

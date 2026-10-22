@@ -11,16 +11,24 @@
 //! registrarlo, el núcleo le pasa los planes vigentes con `plan_vigente` (sin `Cx`: solo para rehacer su índice; los
 //! eventos que programó antes de una caída ya están en la cola recuperada).
 
-use crate::estado::{Carga, Estado, EventoNucleo};
+use crate::estado::{Carga, Clase, Estado, EventoNucleo, Tocados};
 use base::{Instante, Plan};
 use cola::Clave;
 
-/// Lo que produce una transición: ejércitos tocados y eventos de dominio, que se cierran en una versión.
+/// Lo que produce una transición: las entidades tocadas y los eventos de dominio, que se cierran en una versión.
 #[derive(Default)]
 pub(crate) struct Transicion {
-    pub tocados: Vec<u64>,
-    pub asentamientos: Vec<u64>,
+    pub tocados: Tocados,
     pub eventos: Vec<EventoNucleo>,
+}
+
+impl Transicion {
+    pub fn tocar(&mut self, clase: Clase, id: u64) {
+        self.tocados.marcar(clase, id);
+    }
+    pub fn tocar_todos(&mut self, clase: Clase, ids: impl IntoIterator<Item = u64>) {
+        ids.into_iter().for_each(|id| self.tocados.marcar(clase, id));
+    }
 }
 
 /// Qué puede hacer un generador en cada llamada: leer el estado, programar eventos propios y emitir eventos de dominio.
