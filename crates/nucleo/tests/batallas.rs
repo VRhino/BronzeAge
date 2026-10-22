@@ -237,15 +237,21 @@ fn atacar_con_un_humano_y_servidores_de_batalla_abre_una_batalla_en_lugar_de_res
 }
 
 #[test]
-fn bot_contra_bot_y_sin_servidores_de_batalla_siguen_con_numeros() {
-    // Bot contra bot, aunque haya servidores de batalla.
+fn bot_contra_bot_abre_batalla_en_unity_y_sin_servidores_de_batalla_se_resuelve_con_numeros() {
+    // Bot contra bot, con servidores de batalla: va a Unity igual (decisión del autor, cuarta ronda). Sin tokens, porque no hay ningún humano.
     let mut x = choque();
     let (ana, beto) = (x.ana, x.beto);
     assert!(x.n.aplicar_en(MIN, admin("bot", Comando::FijarControlador { heroe: ana.1, controlador: Controlador::Bot })).aceptada());
     assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
-    assert_eq!((x.n.batallas().count(), hechos(&x.n, "combate.resuelto").len()), (0, 1), "se resolvió con números");
-    assert!(!x.n.ejercito(ana.0).unwrap().en_batalla);
-    // Con un humano pero sin servidores de batalla (el interruptor es una regla de la partida), también.
+    assert_eq!((x.n.batallas().count(), hechos(&x.n, "combate.resuelto").len()), (1, 0), "se abrió una batalla de Unity y no se resolvió con números");
+    assert!(x.n.ejercito(ana.0).unwrap().en_batalla);
+    let id = x.n.batallas().next().unwrap().id;
+    en_curso(&mut x.n, id, 11 * MIN, &[]);
+    let res = resultado(&x.n, id, Lado::Atacante, 1);
+    assert!(aplicar(&mut x.n, 12 * MIN, "res", id, res).aceptada());
+    assert_eq!(x.n.batalla(id).unwrap().estado, EstadoBatalla::Aplicada);
+    assert!(!x.n.ejercito(ana.0).unwrap().en_batalla, "al aplicar el resultado la columna vuelve al mundo");
+    // Sin servidores de batalla (el interruptor es una regla de la partida) se resuelve con números, con o sin humanos.
     let mut n = comun::nucleo(40, 5);
     let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y)));
     dar(&mut n, "d1", ana.1, Tropa::EspadachinesBronce);
@@ -1062,6 +1068,44 @@ fn mismas_ordenes_dan_el_mismo_hash_normal_acelerado_y_a_trozos() {
     assert_eq!(hechos(&normal, "batalla.retirada").len(), 2);
 }
 
+/// Una batalla de bot contra bot (también va a Unity, sin tokens) con las órdenes en instantes fijos.
+fn guion_de_bots(avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucleo {
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    assert!(x.n.aplicar_en(MIN, admin("bot", Comando::FijarControlador { heroe: ana.1, controlador: Controlador::Bot })).aceptada());
+    avanzar(&mut x.n, 10 * MIN);
+    assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    let id = x.n.batallas().next().unwrap().id;
+    avanzar(&mut x.n, 11 * MIN);
+    let revision = x.n.batalla(id).unwrap().ticket.revision;
+    assert!(msg(&mut x.n, 11 * MIN, "as", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", revision, &[]) }).aceptada());
+    avanzar(&mut x.n, 12 * MIN);
+    assert!(msg(&mut x.n, 12 * MIN, "in", Comando::ConfirmarInicio { batalla: id, intento: "a1".into(), revision }).aceptada());
+    avanzar(&mut x.n, 14 * MIN);
+    let res = resultado(&x.n, id, Lado::Atacante, 4);
+    assert!(aplicar(&mut x.n, 14 * MIN, "res", id, res).aceptada());
+    x.n.avanzar_hasta(3 * HORA);
+    x.n
+}
+
+#[test]
+fn una_batalla_de_bot_contra_bot_da_el_mismo_hash_normal_acelerado_y_a_trozos_y_su_foto_vuelve_igual() {
+    let normal = guion_de_bots(&|n, t| n.avanzar_hasta(t));
+    assert_eq!(normal.hash_estado(), guion_de_bots(&|_, _| {}).hash_estado(), "acelerado");
+    let a_trozos = guion_de_bots(&|n, t| {
+        let ahora = n.ahora();
+        for s in 1..=5 {
+            n.avanzar_hasta(ahora + (t - ahora).max(0) * s * s / 25);
+        }
+    });
+    assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares");
+    assert!(normal.batallas().next().is_none() && citas_de_batalla(&normal).is_empty(), "aplicada y retirada, sin citas pendientes");
+    assert_eq!((hechos(&normal, "batalla.aplicada").len(), hechos(&normal, "combate.resuelto").len()), (1, 0));
+    let bytes = normal.estado().serializar();
+    let vuelta = nucleo::Estado::deserializar(&bytes, &reglas_unity(), "hash-de-prueba").unwrap();
+    assert_eq!(vuelta.serializar(), bytes);
+}
+
 // ═════════════════════════════ El mundo real ═════════════════════════════
 
 use asentamiento::catalogo::Tipo;
@@ -1435,20 +1479,94 @@ fn el_visitante_amigo_que_se_une_a_defender_y_pierde_deja_la_mitad_del_carro_y_q
     assert_eq!((e.carga(dora.0, Piedra), e.n.heroe_herido(dora.1), e.n.heroe_herido(beto)), (30_001, false, false), "quien no se unió no pierde nada");
 }
 
+/// Durante un asedio quien está dentro y no se ha unido a la defensa solo puede salir (cuarta ronda): cualquier otra orden sigue bloqueada, la salida es al mapa con todo lo suyo y,
+/// una vez fuera, el neutral puede unirse al ataque; el amigo que se unió a defender no sale hasta que acaba y el residente sale con `SalirAlMundo`.
 #[test]
-fn un_bot_que_asedia_abre_batalla_en_unity_solo_si_dentro_hay_un_humano_que_pueda_defender() {
+fn durante_un_asedio_quien_esta_dentro_y_no_se_unio_solo_puede_salir_y_el_defensor_unido_no_sale() {
     let m = con_mundo!();
-    for (humano_dentro, abre) in [(true, true), (false, false)] {
+    let Asedio { mut e, beto, ana } = asedio(m, 7);
+    let b = e.b;
+    let carla = e.ejercito("carla", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
+    let dora = e.ejercito("dora", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
+    let nora = e.ejercito("nora", 3, e.pos(b), &[Tropa::MiliciaLanceros]);
+    for (cuenta, h) in [("carla", carla.1), ("dora", dora.1), ("nora", nora.1)] {
+        e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: h });
+    }
+    let t = e.n.ahora();
+    assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    // «carla», amiga del dueño, se une a defender: desde ese momento combate y no sale hasta que acaba.
+    assert!(e.n.aplicar_en(t + 500, Peticion::nueva("carla", "uc", Comando::UnirseABatalla { heroe: carla.1, batalla: id, lado: None })).aceptada());
+    let antes = rastro(&e.n);
+    let r = e.ord("carla", Comando::SalirDeAsentamiento { asentamiento: b, heroe: carla.1 });
+    assert_eq!((codigo(&r), rastro(&e.n)), (rechazos::BATALLA_BLOQUEADO, antes), "el defensor unido no sale y el rechazo no deja rastro");
+    // Quien no se unió solo puede salir: cualquier otra orden se rechaza, también para el neutral.
+    for (cuenta, h) in [("dora", dora.1), ("nora", nora.1)] {
+        let antes = rastro(&e.n);
+        let r = e.ord(cuenta, Comando::VaciarCarro { heroe: h });
+        assert_eq!((codigo(&r), rastro(&e.n)), (rechazos::BATALLA_BLOQUEADO, antes), "{cuenta} dentro solo puede salir");
+    }
+    // El neutral sale al mapa con todo lo suyo (su columna) y, fuera, la regla de la tercera ronda le deja unirse al ataque.
+    e.ok("nora", Comando::SalirDeAsentamiento { asentamiento: b, heroe: nora.1 });
+    assert_eq!((e.n.heroe(nora.1).unwrap().heroe.presencia.ubicacion, e.n.en_el_mapa(nora.0)), (Ubicacion::Columna(nora.0), true));
+    let r = e.n.aplicar_en(t + 1_000, Peticion::nueva("nora", "un", Comando::UnirseABatalla { heroe: nora.1, batalla: id, lado: None }));
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(e.n.batalla(id).unwrap().lado_de(nora.1), Some(Lado::Atacante));
+    // La amiga que no se unió también sale, pero fuera ya no puede defender: «para defender hay que estar dentro».
+    e.ok("dora", Comando::SalirDeAsentamiento { asentamiento: b, heroe: dora.1 });
+    assert_eq!(e.n.heroe(dora.1).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(dora.0));
+    let r = e.n.aplicar_en(t + 2_000, Peticion::nueva("dora", "ud", Comando::UnirseABatalla { heroe: dora.1, batalla: id, lado: None }));
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("para defender hay que estar dentro")), "{r:?}");
+    // El residente que no se unió sale con `SalirAlMundo`, que no es otra cosa que su salida.
+    e.ok("beto", Comando::SalirAlMundo { asentamiento: b, heroe: beto, escuadras: vec![], carga: vec![] });
+    assert!(matches!(e.n.heroe(beto).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(_)));
+}
+
+/// Lo mismo en el saqueo de un pueblo: quien está dentro y no se unió puede salir (`SalirDePueblo`); quien se unió a la defensa, no.
+#[test]
+fn durante_el_saqueo_de_un_pueblo_quien_esta_dentro_y_no_se_unio_solo_puede_salir_y_el_defensor_unido_no_sale() {
+    let m = con_mundo!();
+    let (mut e, _madre, pueblo, sitio) = con_pueblo(m);
+    let res = e.ejercito("res", 1, sitio, &[Tropa::Lenadores]);
+    let neu = e.ejercito("neu", 3, sitio, &[Tropa::Lenadores]);
+    for (cuenta, h) in [("res", res.1), ("neu", neu.1)] {
+        e.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe: h });
+    }
+    let saqueador = e.ejercito("beto", 2, sitio, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
+    let t = e.n.ahora();
+    assert!(e.atacar("beto", saqueador.1, ObjetivoAtaque::Pueblo(pueblo), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    assert!(e.n.aplicar_en(t + 500, Peticion::nueva("res", "ur", Comando::UnirseABatalla { heroe: res.1, batalla: id, lado: None })).aceptada());
+    assert_eq!(codigo(&e.ord("res", Comando::SalirDePueblo { pueblo, heroe: res.1 })), rechazos::BATALLA_BLOQUEADO, "el defensor unido no sale");
+    assert_eq!(codigo(&e.ord("neu", Comando::VaciarCarro { heroe: neu.1 })), rechazos::BATALLA_BLOQUEADO, "dentro, sin unirse, solo se puede salir");
+    e.ok("neu", Comando::SalirDePueblo { pueblo, heroe: neu.1 });
+    assert_eq!((e.n.heroe(neu.1).unwrap().heroe.presencia.ubicacion, e.n.en_el_mapa(neu.0)), (Ubicacion::Columna(neu.0), true));
+    let r = e.n.aplicar_en(t + 1_000, Peticion::nueva("neu", "un", Comando::UnirseABatalla { heroe: neu.1, batalla: id, lado: None }));
+    assert!(r.aceptada(), "fuera, el neutral se une al ataque: {r:?}");
+}
+
+#[test]
+fn con_servidores_de_batalla_un_bot_que_asedia_abre_batalla_en_unity_haya_o_no_un_humano_en_algun_bando_y_unity_la_resuelve() {
+    let m = con_mundo!();
+    for humano_dentro in [true, false] {
         let Asedio { mut e, beto, ana } = asedio(m, 7);
         let b = e.b;
         e.ok("admin", Comando::FijarControlador { heroe: ana.1, controlador: Controlador::Bot });
         if !humano_dentro {
             e.ok("admin", Comando::FijarControlador { heroe: beto, controlador: Controlador::Bot });
         }
+        let t = e.n.ahora();
         let r = e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true);
         assert!(r.aceptada(), "{r:?}");
-        assert_eq!(e.n.batallas().count(), abre as usize, "con un humano dentro que puede defender la batalla es suya si quiere; bot contra bot sigue con números");
-        assert_eq!(hechos(&e.n, "combate.asedio_conquista").len() + hechos(&e.n, "combate.asedio_resistido").len(), !abre as usize);
+        assert_eq!(e.n.batallas().count(), 1, "toda batalla va a Unity, también bot contra bot (humano dentro: {humano_dentro})");
+        assert_eq!(hechos(&e.n, "combate.asedio_conquista").len() + hechos(&e.n, "combate.asedio_resistido").len(), 0, "BronzeAge no la resuelve con números");
+        // Sin ningún humano en el ticket nadie lleva token: Unity la toma, la juega como pueda y manda el resultado.
+        let id = e.n.batallas().next().unwrap().id;
+        assert!(e.n.batalla(id).unwrap().ticket.atacante.participantes.iter().all(|p| p.controlador == Controlador::Bot));
+        en_curso(&mut e.n, id, t + MIN, &[]);
+        let res = resultado(&e.n, id, Lado::Atacante, 4);
+        assert!(aplicar(&mut e.n, t + 2 * MIN, "res", id, res).aceptada());
+        assert_eq!(hechos(&e.n, "asentamiento.conquistada").len(), 1);
     }
 }
 
@@ -1459,16 +1577,25 @@ fn guion_de_asedio(m: &'static M, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nu
     let b = e.b;
     let carla = e.ejercito("carla", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
     e.ok("carla", Comando::Guarnecer { asentamiento: b, heroe: carla.1 });
+    // Â«noraÂ», neutral, entra tambiÃ©n; el dueÃ±o abre la puerta a todos, enemigos incluidos (la conquista lo devolverÃ¡ al de por defecto).
+    let nora = e.ejercito("nora", 3, e.pos(b), &[Tropa::MiliciaLanceros]);
+    e.ok("nora", Comando::Guarnecer { asentamiento: b, heroe: nora.1 });
+    e.ok("beto", Comando::FijarAcceso { asentamiento: b, aliados: true, neutrales: true, enemigos: true });
     let t = e.n.ahora();
     avanzar(&mut e.n, t + MIN);
     assert!(atacar(&mut e.n, t + MIN, "ana", "g1", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
     let id = e.n.batallas().next().unwrap().id;
     avanzar(&mut e.n, t + MIN + 10_000);
     assert!(e.n.aplicar_en(t + MIN + 10_000, Peticion::nueva("beto", "g2", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None })).aceptada());
+    // Â«noraÂ», dentro y sin unirse, sale durante la convocatoria y, fuera, se une al ataque.
+    avanzar(&mut e.n, t + MIN + 20_000);
+    assert!(e.n.aplicar_en(t + MIN + 20_000, Peticion::nueva("nora", "g4", Comando::SalirDeAsentamiento { asentamiento: b, heroe: nora.1 })).aceptada());
+    avanzar(&mut e.n, t + MIN + 25_000);
+    assert!(e.n.aplicar_en(t + MIN + 25_000, Peticion::nueva("nora", "g5", Comando::UnirseABatalla { heroe: nora.1, batalla: id, lado: None })).aceptada());
     avanzar(&mut e.n, t + 2 * MIN);
     assert!(e.n.aplicar_en(t + 2 * MIN, Peticion::nueva("carla", "g3", Comando::UnirseABatalla { heroe: carla.1, batalla: id, lado: None })).aceptada());
     avanzar(&mut e.n, t + 3 * MIN);
-    en_curso(&mut e.n, id, t + 3 * MIN, &[ana.1, beto]);
+    en_curso(&mut e.n, id, t + 3 * MIN, &[ana.1, beto, nora.1]);
     avanzar(&mut e.n, t + 8 * MIN);
     let res = resultado(&e.n, id, Lado::Atacante, 4);
     assert!(aplicar(&mut e.n, t + 8 * MIN, "res", id, res).aceptada());
@@ -1489,8 +1616,10 @@ fn unirse_a_la_defensa_desde_dentro_da_el_mismo_hash_normal_acelerado_y_a_trozos
         }
     });
     assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares, como el modo en vivo");
-    assert_eq!(hechos(&normal, "batalla.refuerzos").len(), 2);
+    assert_eq!(hechos(&normal, "batalla.refuerzos").len(), 3);
     assert_eq!(hechos(&normal, "asentamiento.conquistada").len(), 1);
+    let b = hechos(&normal, "asentamiento.conquistada")[0].2[0];
+    assert_eq!(normal.acceso_de_plaza(b), Some(nucleo::Acceso::default()), "al conquistarla su acceso vuelve al de por defecto");
     // La foto de después de la conquista recupera lo mismo.
     let bytes = normal.estado().serializar();
     let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
@@ -1780,7 +1909,7 @@ fn en_el_saqueo_de_un_pueblo_por_unity_de_oficio_solo_defienden_los_mineros_y_se
     // De oficio solo defienden los mineros: ni el residente que está dentro ni el aliado están en el ticket; los dos se unen, con las escuadras de su columna.
     let defensor = &e.n.batalla(id).unwrap().ticket.defensor;
     assert_eq!((defensor.participantes.len(), defensor.sin_heroe.len()), (0, 1));
-    assert_eq!(codigo(&e.ord("alia", Comando::SalirDePueblo { pueblo, heroe: alia.1 })), rechazos::BATALLA_BLOQUEADO, "quien está dentro de un pueblo atacado no da órdenes");
+    assert_eq!(codigo(&e.ord("alia", Comando::VaciarCarro { heroe: alia.1 })), rechazos::BATALLA_BLOQUEADO, "quien está dentro de un pueblo atacado y no se ha unido solo puede salir: cualquier otra orden se rechaza");
     for (k, (cuenta, h)) in [("res", res.1), ("alia", alia.1)].into_iter().enumerate() {
         let r = e.n.aplicar_en(t + 1_000 * (k as i64 + 1), Peticion::nueva(cuenta, &format!("u{k}"), Comando::UnirseABatalla { heroe: h, batalla: id, lado: None }));
         assert!(r.aceptada(), "{r:?}");

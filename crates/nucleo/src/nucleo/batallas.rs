@@ -4,22 +4,23 @@
 //! las columnas y las caravanas, programar los plazos y volcar el resultado.
 //!
 //! # Cuándo se abre
-//! La abre `atacar` (no hay otra orden) cuando el proceso tiene servidores de batalla ([`Reglas::batallas_en_unity`](crate::estado::Reglas)) y hay al menos un
-//! héroe `humano` entre los participantes de los dos bandos: después de las mismas validaciones del combate con números (que sigue siendo el camino cuando no hay
-//! servidores o es bot contra bot) y, si procede, de declarar la guerra. Una plaza o un pueblo que ya están en una batalla no se atacan otra vez.
+//! La abre `atacar` (no hay otra orden) siempre que el proceso tiene servidores de batalla ([`Reglas::batallas_en_unity`](crate::estado::Reglas)): **toda** batalla va a Unity, también
+//! bot contra bot (decisión del autor, cuarta ronda, 2026-10-22), y Unity la resuelve como pueda; sin servidores se resuelve con números. Se abre después de las mismas validaciones del
+//! combate con números y, si procede, de declarar la guerra. Una plaza o un pueblo que ya están en una batalla no se atacan otra vez.
 //!
 //! # Quién defiende y quién ataca (2026-10-22, tercera ronda)
 //! Al abrirse entra de oficio solo la guarnición (la de serie, la de jugadores y los mineros); **nadie más está en el ticket**, ni los residentes. Quien está **dentro** del
 //! asedio, del pueblo o de la avanzada y es de la Facción dueña, aliado o vasallo puede unirse a la defensa con `UnirseABatalla`, con las escuadras que lleva encima (el loadout activo si
 //! reside en su plaza, las de su columna si no), durante la convocatoria o después; quien no se une no combate. Desde **fuera**, a ≤ `radioEncuentro`, se une al ataque la Facción
-//! atacante y los neutrales y enemigos del dueño, no sus amigos; que el elemento está en asedio lo dice [`Nucleo::batalla_sobre`]. La batalla se abre en Unity también si el único humano
-//! es uno que podría defender (`Apertura::hay_humano`).
+//! atacante y los neutrales y enemigos del dueño, no sus amigos; que el elemento está en asedio lo dice [`Nucleo::batalla_sobre`].
 //!
 //! # Lo que bloquea
 //! Mientras una batalla está activa (`convocando`, `asignada` o `en_curso` y dentro de plazo) sus columnas y caravanas quedan **apartadas** (no se mueven, no
 //! comen, no son perseguidas ni atacadas, `apartar_columna`), sus escuadras con dueño llevan el candado `reserva_batalla`, y **ninguna orden** (salvo las de §5.1)
 //! puede tocar a sus héroes, a la plaza asediada, al pueblo o campamento atacado, ni a nada que esté apartado: `Comando::implicados` dice qué toca cada orden y
-//! [`Nucleo::rechazo_por_batalla`] la rechaza con `batalla.bloqueado`. La administración no lleva candado (sus órdenes son andamiaje de escenarios).
+//! [`Nucleo::rechazo_por_batalla`] la rechaza con `batalla.bloqueado`. La administración no lleva candado (sus órdenes son andamiaje de escenarios). **Quien está dentro del lugar disputado y no se ha unido a la defensa
+//! solo puede salir** (cuarta ronda): las órdenes de salir del lugar al mapa (`Comando::es_salida_de_lugar`) no chocan con el lugar ni con estar dentro, y sí con combatir (quien se
+//! unió a la defensa no sale hasta que acaba).
 //!
 //! # Los plazos
 //! Tres citas de prioridad 1 (`Carga::Batalla`), todas de la entidad de la batalla: el fin de la convocatoria de un asedio (`FinConvocatoria`), el vencimiento del
@@ -116,20 +117,8 @@ pub(super) struct Apertura {
     iniciada_por: u64,
     atacante: BandoDeTicket,
     defensor: BandoDeTicket,
-    /// Hay dentro de lo que se defiende un humano que puede unirse a la defensa (Facción dueña, aliado o vasallo): no está en el ticket, pero la batalla es suya si quiere.
-    humano_por_defender: bool,
     bloqueo: Bloqueo,
 }
-
-impl Apertura {
-    /// Llega a Unity si en toda la batalla hay algún héroe humano (Doc 5.15.6) o, dentro de lo que se defiende, alguien humano que pueda unirse a la defensa: bot contra bot sigue con
-    /// números.
-    // DUDA: lo conservador es abrir en Unity cuando antes lo hacía el residente humano que defendía de oficio; si nadie se une, juega la guarnición.
-    pub(super) fn hay_humano(&self) -> bool {
-        self.humano_por_defender || [&self.atacante, &self.defensor].into_iter().flat_map(|b| b.participantes.iter()).any(|p| p.controlador == Controlador::Humano)
-    }
-}
-
 /// Lo que ve quien pide su token (`GET /jugador/partidas/:g/batallas/:id/asignacion`, §8.7). BronzeAge nunca verifica el token: solo lo custodia y controla
 /// quién lo lee.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -287,22 +276,30 @@ impl Nucleo {
     // ───────────────────────────── El candado de las órdenes ─────────────────────────────
 
     /// `tocaLoBloqueado` (§5): ¿choca la orden con algo que está en una batalla activa? Un héroe que combate no hace nada más, ni quien está dentro de una plaza
-    /// asediada; nadie apunta a una columna, caravana, plaza, pueblo o campamento bloqueados. Marchar hacia una plaza asediada sí se puede. La administración y
+    /// asediada, salvo para salir (cuarta ronda); nadie apunta a una columna, caravana, plaza, pueblo o campamento bloqueados. Marchar hacia una plaza asediada sí se puede. La administración y
     /// las órdenes de §5.1 no lo llevan. Una orden rechazada no deja rastro.
     pub(super) fn rechazo_por_batalla(&self, t: Instante, p: &Peticion) -> Option<Respuesta> {
         if p.admin || !p.comando.lleva_candado() || self.batallas_activas().next().is_none() {
             return None;
         }
         let bloqueos = bloqueos_de(self.batallas(), t);
-        let Implicados { heroes, ejercitos, caravanas, asentamientos, pueblos, avanzadas, campamentos } = p.comando.implicados();
-        // Un héroe dentro de la plaza asediada, del pueblo saqueado o de la avanzada atacada tampoco da órdenes.
+        let Implicados { heroes, ejercitos, caravanas, mut asentamientos, mut pueblos, mut avanzadas, campamentos } = p.comando.implicados();
+        // Quien está dentro del lugar disputado y no se ha unido a la defensa solo puede salir (cuarta ronda): la orden de salir no toca el lugar ni cuenta el estar dentro; solo la detiene
+        // combatir (quien se unió a la defensa no sale hasta que acaba).
+        let salida = p.comando.es_salida_de_lugar();
+        if salida {
+            (asentamientos, pueblos, avanzadas) = Default::default();
+        }
+        // Un héroe dentro de la plaza asediada, del pueblo saqueado o de la avanzada atacada tampoco da otras órdenes.
         let heroe_bloqueado = |id: u64| {
             let dentro = self.heroe(id).map(|h| h.heroe.presencia.ubicacion);
             let plaza = match dentro {
                 Some(Ubicacion::Asentamiento(a)) => Some(a),
                 _ => None,
             };
-            bloqueos.heroe_bloqueado(id, plaza) || matches!(dentro, Some(Ubicacion::Pueblo(x)) if bloqueos.pueblos.contains(&x)) || matches!(dentro, Some(Ubicacion::Avanzada(x)) if bloqueos.avanzadas.contains(&x))
+            bloqueos.heroes.contains(&id)
+                || (!salida
+                    && (bloqueos.heroe_bloqueado(id, plaza) || matches!(dentro, Some(Ubicacion::Pueblo(x)) if bloqueos.pueblos.contains(&x)) || matches!(dentro, Some(Ubicacion::Avanzada(x)) if bloqueos.avanzadas.contains(&x))))
         };
         let actor = self.heroe_de_cuenta(&p.actor).map(|h| h.heroe.id);
         let choca = actor.into_iter().chain(heroes).any(heroe_bloqueado)
@@ -351,7 +348,6 @@ impl Nucleo {
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
             defensor: self.bando_de_columna(x, t),
-            humano_por_defender: false,
             bloqueo: Bloqueo { ejercitos: vec![id, x], ..Default::default() },
         }
     }
@@ -373,7 +369,6 @@ impl Nucleo {
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(faccion, vec![], sin_heroe),
-            humano_por_defender: false,
             bloqueo: Bloqueo { ejercitos: vec![id], caravanas: vec![x], ..Default::default() },
         }
     }
@@ -388,7 +383,6 @@ impl Nucleo {
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(None, vec![], vec![EscuadraEnBatalla { id: SIN_ID, tropa: militar::Tropa::MiliciaLanceros, dueno: None, efectivos: unidades }]),
-            humano_por_defender: false,
             bloqueo: Bloqueo { ejercitos: vec![id], campamento: Some(x as u32), ..Default::default() },
         }
     }
@@ -405,15 +399,8 @@ impl Nucleo {
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(Some(a.faccion), vec![], guarnicion.map(escuadra_en_batalla).collect()),
-            humano_por_defender: self.defensores_posibles(Ubicacion::Asentamiento(plaza as u32), a.faccion, t).any(|h| h.heroe.controlador == Controlador::Humano),
             bloqueo: Bloqueo { ejercitos: vec![id], asentamiento: Some(plaza as u32), ..Default::default() },
         }
-    }
-
-    /// Los héroes que están dentro de `dentro` (una plaza, un pueblo o una avanzada), sanos y conectados, y que pueden unirse a su defensa: los de la Facción `faccion` dueña del
-    /// lugar, sus aliados y sus vasallos. Neutrales y enemigos no defienden nunca, aunque la puerta les haya abierto.
-    fn defensores_posibles(&self, dentro: Ubicacion, faccion: u32, t: Instante) -> impl Iterator<Item = &HeroeNucleo> {
-        self.heroes().filter(move |h| h.heroe.presencia.ubicacion == dentro && !h.heroe.esta_herido(t) && !h.heroe.presencia.fuera && self.estado.militar.defiende_a(faccion, h.faccion))
     }
 
     /// Quien se une a defender desde dentro, con lo que lleva encima: el residente en su plaza, las escuadras de su loadout activo que tiene en el campamento; el resto (un visitante,
@@ -436,7 +423,6 @@ impl Nucleo {
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(Some(faccion), vec![], mineros.into_iter().collect()),
-            humano_por_defender: self.defensores_posibles(Ubicacion::Pueblo(pueblo), faccion, t).any(|h| h.heroe.controlador == Controlador::Humano),
             bloqueo: Bloqueo { ejercitos: vec![id], pueblo: Some(pueblo), ..Default::default() },
         }
     }
@@ -455,7 +441,6 @@ impl Nucleo {
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(Some(faccion), vec![], serie.chain(jugadores).collect()),
-            humano_por_defender: self.defensores_posibles(Ubicacion::Avanzada(avanzada), faccion, t).any(|h| h.heroe.controlador == Controlador::Humano),
             bloqueo: Bloqueo { ejercitos: vec![id], avanzada: Some(avanzada), ..Default::default() },
         }
     }

@@ -11,7 +11,7 @@
 //! columna sale con una nueva con su carro y sus víveres. Cada héroe defensor queda fuera con las escuadras con las que combatió y sobrevivieron (en una columna nueva o, si
 //! conservaba la suya para llevar caravanas, sumadas a ella); el resto del campamento de los residentes, guarnición incluida, queda a 0 y se va con ellos a la plaza más cercana
 //! de su Facción (sin ninguna, al campamento de mercenarios más cercano), donde pasan a residir; no hay captura de guarnición. Nadie queda dentro de una plaza que cambia de dueño.
-//! Sus pueblos y avanzadas pasan al conquistador con el acceso heredado de la plaza (`dentro`): salen al mapa con lo suyo solo quienes ese acceso ya no deja entrar (sus enemigos y los
+//! Sus pueblos y avanzadas pasan al conquistador con el acceso heredado de la plaza (`dentro`), que **vuelve al de por defecto** al conquistarla (todos menos enemigos, respecto al dueño nuevo; él lo cambia luego con `FijarAcceso`): salen al mapa con lo suyo solo quienes ese acceso ya no deja entrar (sus enemigos y los
 //! que cierra); los demás se quedan dentro.
 //!
 //! # La protección y la ocupación son eventos
@@ -28,6 +28,7 @@
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO};
 use crate::estado_combate::entidad_conquista;
+use crate::estado_militar::Acceso;
 use combate::conquista::{aplicar_conquista, aplicar_desalojo, faccion_derrotada, planear_desalojo, refugio, residencia_tras_desalojo, Afectado, Salida};
 use comercio::ruina::Motivo as MotivoDeCierre;
 use militar::columna::{Columna, Politica, TipoColumna};
@@ -84,6 +85,7 @@ impl Nucleo {
         let c = {
             let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");
             a.faccion = conquistador;
+            a.acceso = Acceso::default();
             let c = aplicar_conquista(&cr, &datos, &mut a.economia, t);
             (a.protegida_hasta, a.ocupada_hasta) = (Some(c.protegida_hasta), Some(c.ocupacion_hasta));
             c
@@ -98,8 +100,7 @@ impl Nucleo {
         self.avanzadas_de_la_madre_conquistada(plaza, t);
         // La plaza cambió de bandera: sus fronteras con otras Facciones se miran de nuevo.
         self.contactos_nuevos(plaza, t);
-        // Sus pueblos y avanzadas pasan al conquistador con el acceso heredado: salen al mapa con lo suyo solo quienes ya no podrían entrar; los demás se quedan dentro.
-        // DUDA: el acceso de la plaza no se reinicia al conquistarla (el conquistador hereda la decisión del dueño anterior hasta que la cambie con `FijarAcceso`).
+        // Sus pueblos y avanzadas pasan al conquistador con el acceso heredado de la plaza, ya reiniciado: salen al mapa con lo suyo solo quienes ya no podrían entrar con él; los demás se quedan dentro.
         self.vaciar_tras_conquista(t, plaza);
         // Quien defendió y perdió, sea residente o visitante amigo, pierde la mitad del carro que llevaba (antes de que salga a la calle con él).
         let defensores: Vec<u64> = lucharon.iter().map(|(h, _)| *h).collect();

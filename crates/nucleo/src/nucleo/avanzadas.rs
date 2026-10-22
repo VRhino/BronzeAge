@@ -16,9 +16,9 @@
 //!    eligió el dueño para cada uno entre las que la madre puede reclutar (tecnología y edificio), y se repone gratis a las 6 horas (`reposicionMinutos`) de quedar incompleta
 //!    (un evento, `SucesoCombate::ReponeAvanzada`); la de jugadores son escuadras de héroes residentes de la madre dejadas a la puerta (`Contenedor::Avanzada`), que comen el
 //!    trigo de la madre.
-//! 5. **Ataque** (`Atacar` con `ObjetivoAtaque::Avanzada`): solo un ejército. Con números se resuelve como un asedio; con servidores de batalla y un humano en los dos
-//!    bandos abre una batalla de Unity (capacidad de asedio, sin convocatoria). Defienden **solo los que están dentro**: las guarniciones y los héroes que han entrado en la
-//!    avanzada (`EntrarEnAvanzada`: de la Facción de la madre, aliados o vasallos, con las escuadras de su columna; los residentes de la madre defienden de oficio en Unity y los
+//! 5. **Ataque** (`Atacar` con `ObjetivoAtaque::Avanzada`): solo un ejército. Con números se resuelve como un asedio; con servidores de batalla abre siempre
+//!    una batalla de Unity (capacidad de asedio, sin convocatoria). Defienden **solo los que están dentro**: las guarniciones y los héroes que han entrado en la
+//!    avanzada (`EntrarEnAvanzada`: de la Facción de la madre, aliados o vasallos, con las escuadras de su columna; en Unity entra de oficio solo la guarnición y los
 //!    demás se unen), y una columna amiga a su puerta, en el mapa, no defiende (ni con números ni uniéndose a la batalla). Si gana el atacante: se lleva del almacén lo que le quepa en los carros y la atalaya queda
 //!    destruida, el fuerte en ruinas con un día de invulnerabilidad (`SucesoCombate::FinInvulnerabilidad`; si pasado ese día lo atacan y gana el atacante, destruido) y la
 //!    ciudadela en ruinas, que nunca se destruye. En ruinas no funciona nada: la guarnición de jugadores vuelve a 0 al campamento de su héroe y quien estaba dentro sale al mapa con
@@ -675,10 +675,8 @@ impl Nucleo {
             let con_defensa = self.estado.combate.avanzadas[&x].escuadras.iter().any(Escuadra::con_soldados) || self.guarnicion_de_jugadores_de_avanzada(x).iter().any(|s| s.con_soldados());
             if con_defensa && self.estado.reglas.batallas_en_unity {
                 let ap = self.apertura_de_avanzada(t, heroe, id, x, madre);
-                if ap.hay_humano() {
-                    self.abrir_batalla_de_ataque(t, ap, guerra);
-                    return Ok(());
-                }
+                self.abrir_batalla_de_ataque(t, ap, guerra);
+                return Ok(());
             }
         }
 

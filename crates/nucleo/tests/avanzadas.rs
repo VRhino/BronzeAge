@@ -1194,15 +1194,20 @@ fn unas_ruinas_no_abren_batalla_de_unity_porque_no_tienen_defensores() {
     let (av, _, _) = e.fuerte_guarnecido();
     let (_, beto) = e.ejercito_fuerte(pos);
     e.guerra();
-    // Con números primero (el ataque cuando no hay humano), para dejarla en ruinas; después, con un humano, caen sin batalla.
+    // La primera batalla, de un bot contra la guarnición (también va a Unity), la gana el atacante y deja el fuerte en ruinas; después, sin defensores, caen sin batalla.
     assert!(e.atacar(beto, ObjetivoAtaque::Avanzada(av)).aceptada());
+    let id = e.n.batallas().next().expect("un bot contra la guarnición también abre batalla en Unity").id;
+    let t = e.n.ahora() + MIN;
+    en_curso(&mut e.n, id, t, &[]);
+    let res = resultado(&e.n, id, Lado::Atacante, 999);
+    assert!(msg(&mut e.n, t + MIN, "res", Comando::AplicarResultado { batalla: id, resultado: res }).aceptada());
     assert!(matches!(e.estado_de(av), EstadoAvanzada::EnRuinas { .. }));
     e.avanzar(DIA);
-    // Un ejército nuevo con un humano (el primero lleva un día sin ración).
+    let abiertas = e.n.batallas().count();
+    // Un ejército nuevo (el primero lleva un día sin ración).
     let (_, segundo) = e.ejercito_fuerte(pos);
-    humano(&mut e, segundo);
     assert!(e.atacar(segundo, ObjetivoAtaque::Avanzada(av)).aceptada());
-    assert_eq!(e.n.batallas().count(), 0, "unas ruinas caen sin batalla");
+    assert_eq!(e.n.batallas().count(), abiertas, "unas ruinas caen sin batalla");
     assert!(e.n.avanzada(av).is_none());
 }
 
@@ -1900,13 +1905,13 @@ fn por_unity_de_oficio_solo_defiende_la_guarnicion_los_amigos_de_dentro_se_unen_
     assert!(r.aceptada(), "{r:?}");
     let id = e.n.batallas().next().expect("se abrió una batalla").id;
     let b = e.n.batalla(id).unwrap();
-    // De oficio solo defiende la guarnición de serie: ni la residente que está dentro ni el aliado ni el neutral están en el ticket. Hay un humano dentro que puede defender, así que se abre en Unity.
+    // De oficio solo defiende la guarnición de serie: ni la residente que está dentro ni el aliado ni el neutral están en el ticket. Se abre en Unity aunque el atacante sea un bot (toda batalla va a Unity con servidores).
     let defensor = &b.ticket.defensor;
     assert!(defensor.participantes.is_empty());
     assert_eq!(defensor.sin_heroe.iter().filter(|s| s.dueno.is_none()).count(), 5);
-    // Quien está dentro de la avanzada atacada no da órdenes mientras dura: ni salir.
-    assert_eq!(e.rechazada("alia", Comando::SalirDeAvanzada { avanzada: av, heroe: aliado.1 }), rechazos::BATALLA_BLOQUEADO);
-    assert_eq!(e.rechazada("neu", Comando::SalirDeAvanzada { avanzada: av, heroe: neutral.1 }), rechazos::BATALLA_BLOQUEADO);
+    // Quien está dentro de la avanzada atacada y no se ha unido a la defensa solo puede salir (cuarta ronda): cualquier otra orden sigue bloqueada hasta que acabe.
+    assert_eq!(e.rechazada("alia", Comando::VaciarCarro { heroe: aliado.1 }), rechazos::BATALLA_BLOQUEADO);
+    assert_eq!(e.rechazada("neu", Comando::VaciarCarro { heroe: neutral.1 }), rechazos::BATALLA_BLOQUEADO);
     // La residente y el aliado, dentro, se unen a la defensa (la residente con las escuadras de su columna); el neutral no es amigo del dueño y desde dentro no ataca; el de la Facción atacante
     // que está dentro no se une al ataque desde dentro.
     let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None });
@@ -1943,6 +1948,36 @@ fn por_unity_de_oficio_solo_defiende_la_guarnicion_los_amigos_de_dentro_se_unen_
     assert_eq!(hechos(&e.n, "heroe.expulsado").len(), 4);
     assert_eq!(hechos(&e.n, "batalla.aplicada")[0].2, vec![plaza]);
     let _ = pos;
+}
+
+/// Lo mismo en una avanzada atacada: el aliado que se une a defender no sale hasta que acaba; el neutral, dentro y sin unirse, solo puede salir (cualquier otra orden se rechaza) y,
+/// fuera, se une al ataque.
+#[test]
+fn durante_el_ataque_a_una_avanzada_quien_esta_dentro_y_no_se_unio_solo_puede_salir_y_el_defensor_unido_no_sale() {
+    let m = con_mundo!();
+    let mut e = montar_con(Nucleo::nuevo(arranque_unity(m, 7)), m, 2);
+    let pos = e.sitio();
+    let (av, _, _) = e.avanzada_de(Etapa::Fuerte);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
+    let aliado = e.visita("alia", 3, &[Tropa::MiliciaLanceros]);
+    let neutral = e.visita("neu", 4, &[Tropa::MiliciaLanceros]);
+    for (cuenta, h) in [("alia", aliado.1), ("neu", neutral.1)] {
+        e.ok(cuenta, Comando::EntrarEnAvanzada { avanzada: av, heroe: h });
+    }
+    let (_, beto) = e.ejercito_fuerte(pos);
+    e.guerra();
+    let r = e.atacar(beto, ObjetivoAtaque::Avanzada(av));
+    assert!(r.aceptada(), "{r:?}");
+    let id = e.n.batallas().next().expect("se abrió una batalla").id;
+    let r = e.ord("alia", Comando::UnirseABatalla { heroe: aliado.1, batalla: id, lado: None });
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(e.rechazada("alia", Comando::SalirDeAvanzada { avanzada: av, heroe: aliado.1 }), rechazos::BATALLA_BLOQUEADO, "el defensor unido no sale");
+    assert_eq!(e.rechazada("neu", Comando::VaciarCarro { heroe: neutral.1 }), rechazos::BATALLA_BLOQUEADO, "dentro, sin unirse, solo se puede salir");
+    e.ok("neu", Comando::SalirDeAvanzada { avanzada: av, heroe: neutral.1 });
+    assert_eq!((e.ubicacion(neutral.1), e.n.en_el_mapa(neutral.0)), (Ubicacion::Columna(neutral.0), true));
+    let r = e.ord("neu", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None });
+    assert!(r.aceptada(), "fuera, el neutral se une al ataque: {r:?}");
+    assert_eq!(e.n.batalla(id).unwrap().lado_de(neutral.1), Some(Lado::Atacante));
 }
 
 // ───────────────────────────── 14. Un guion con gente dentro: determinismo y foto ─────────────────────────────

@@ -64,7 +64,7 @@ Estado de un Héroe tras perder una batalla. Lo sufre **todo héroe que Unity da
 Los escuadrones nunca quedan heridos: sus bajas son siempre permanentes.
 
 ## Batalla
-Un combate en el que interviene algún héroe humano se juega como una partida aparte en Unity; bot contra bot se resuelve con números (Doc 5.10). Mientras dura, **el mundo sigue**: solo queda bloqueado lo que interviene —la plaza asediada, o las columnas y la caravana que combaten, que en el mapa se ven como la batalla en su punto— y los héroes que combaten. Los héroes de la Facción de un bando pueden **unirse** a él mientras quede sitio. Quien la inició puede cancelarla antes de que empiece la partida (Doc 5.15.1). Los héroes del bando que pierde quedan **Heridos**.
+Con servidores de batalla, todo combate se juega como una partida aparte en Unity, también bot contra bot; sin ellos se resuelve con números (Doc 5.10). Mientras dura, **el mundo sigue**: solo queda bloqueado lo que interviene —la plaza asediada, o las columnas y la caravana que combaten, que en el mapa se ven como la batalla en su punto— y los héroes que combaten. Los héroes de la Facción de un bando pueden **unirse** a él mientras quede sitio. Quien la inició puede cancelarla antes de que empiece la partida (Doc 5.15.1). Los héroes del bando que pierde quedan **Heridos**.
 
 ## Huérfano
 **Ya no existe** (2026-10-02). Era el héroe sin residencia ni campamento. Ahora quien pierde su casa —por conquista, ruina o dejándola— pasa en el acto a residir en el campamento de mercenarios más cercano al sitio que perdió (Doc 1.9b, 5.15.5), con sus escuadrones. Solo quedan sin campamento los héroes aún sin Facción.

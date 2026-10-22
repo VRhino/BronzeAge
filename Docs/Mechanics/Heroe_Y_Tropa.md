@@ -77,7 +77,7 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 | Campo | Significado |
 |---|---|
 | `id`, `jugadorId` | `heroe-{n}` (siguiente id de la partida) y la identidad de la cuenta (`acceso/`). La acción de un jugador sin héroe aún usa su `jugadorId` como actor (solo `crearHeroe`). |
-| `controlador` | `'humano'` por defecto; `'bot'` solo lo pone el servidor (no admite el esquema HTTP). Decide si una batalla lleva Unity (hay algún humano) o se resuelve con números. |
+| `controlador` | `'humano'` por defecto; `'bot'` solo lo pone el servidor (no admite el esquema HTTP). Ya no decide si una batalla lleva Unity (con servidores toda batalla va a Unity, también bot contra bot, desde la cuarta ronda de Entrar con todo en Rust): solo si el héroe lleva token (los bots no se conectan). |
 | `displayName`, `classDefinitionId`, `genero`, `avatar` | Identidad y aspecto. El motor no los interpreta: la clase y el catálogo de cabezas, pelo, barba y cejas son de Conquest. |
 | `liderazgoBase` | Puntos de Liderazgo (§5). Nace en `LIDERAZGO.base`; **nada lo modifica hoy**. |
 | `ubicacion` | `asentamiento` · `columna` · `mercenarios` · `desconectado`. Ver [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md). |

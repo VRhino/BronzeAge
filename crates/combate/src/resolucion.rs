@@ -1,4 +1,4 @@
-//! La resolución numérica (Combate §3.3 y §4): el motor común de un choque que el servidor calcula con números (bot contra bot, sin
+//! La resolución numérica (Combate §3.3 y §4): el motor común de un choque que el servidor calcula con números (sin
 //! servidores de batalla). Dos tiradas del generador, **atacante primero**; las ramas sin combate no tocan el generador.
 //!
 //! Todo en enteros: poder en milésimas (`Escuadra::poder`), factores en ppm. Las bajas y la experiencia se aplican **en el sitio**, sobre las

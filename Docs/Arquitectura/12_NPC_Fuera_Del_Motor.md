@@ -315,7 +315,7 @@ plaza. El batch actual (estado crudo + `avanzarNpcGobernanza`) no sirve para est
 - **Asimetrías del motor que caen con D52** (no hace falta decisión nueva: «un bot no puede hacer nada que un
   jugador no pueda hacer»): el asedio automático al llegar y el combate automático al alcanzar a la presa de las
   columnas sin humanos (`engine/ejercitos.ts`), y las reglas solo-NPC de derrota (`session/derrotas.ts`, D59). Lo
-  que se queda: un combate sin humanos se resuelve con números y no en Unity (`hayHumano`), porque eso decide
+  que se queda (decisión del TypeScript, **revocada en Rust el 2026-10-22**: con servidores de batalla toda batalla va a Unity, también bot contra bot): un combate sin humanos se resuelve con números y no en Unity (`hayHumano`), porque eso decide
   *dónde* se juega, no *quién* puede hacerlo.
 
 ### 10.2 Cómo se implementa

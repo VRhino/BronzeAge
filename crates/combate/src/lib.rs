@@ -5,7 +5,7 @@
 //! (`Asentamiento`, `Almacen`). El azar es el `base::Rng` de la partida, con las tiradas documentadas en `Combate.md`; las ramas sin combate no
 //! lo tocan. El núcleo guarda el estado, programa los eventos y llama a estas funciones.
 //!
-//! **Unity decide lo de dentro de la partida**: aquí van el combate numérico (bot contra bot, sin servidores de batalla) y las consecuencias,
+//! **Unity decide lo de dentro de la partida**: aquí van el combate numérico (sin servidores de batalla) y las consecuencias,
 //! que son las mismas por los dos caminos.
 //!
 //! Módulos, en orden de dependencia: `datos` (cifras de los bloques, **vigentes** sin correcciones en el código), `resolucion` (poder, tirada,

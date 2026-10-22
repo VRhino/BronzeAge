@@ -1,4 +1,4 @@
-//! Atacar (Combate §2-§7, fase 4D): `atacar` con sus seis objetivos y la resolución con números —bot contra bot, sin batalla de Unity, que es de la fase
+//! Atacar (Combate §2-§7, fase 4D): `atacar` con sus seis objetivos y la resolución con números —sin servidores de batalla; la batalla de Unity es de la fase
 //! 4E— con todas sus consecuencias: bajas permanentes y experiencia de escuadra, chatarra, heridos, la mitad del carro que pierde el derrotado y el botín
 //! que se lleva el vencedor. Las reglas puras son el crate `combate`; aquí se mira el estado, se comprueba **todo** antes de tocar nada o de gastar una
 //! tirada (una orden rechazada no deja rastro) y se vuelcan los resultados.
@@ -344,10 +344,8 @@ impl Nucleo {
         let guerra = self.comprobar_agresion(e, t, o.posicion_en(t), o.columna.faccion, declara_guerra)?;
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_columna(t, heroe, id, x);
-            if ap.hay_humano() {
-                self.abrir_batalla_de_ataque(t, ap, guerra);
-                return Ok(());
-            }
+            self.abrir_batalla_de_ataque(t, ap, guerra);
+            return Ok(());
         }
 
         let cr = self.estado.reglas.economia.combate.clone();
@@ -419,10 +417,8 @@ impl Nucleo {
         let modalidad = asalto::modalidad_de(self.zona_en(donde, dueno));
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_caravana(t, heroe, id, x, donde, modalidad);
-            if ap.hay_humano() {
-                self.abrir_batalla_de_ataque(t, ap, guerra);
-                return Ok(());
-            }
+            self.abrir_batalla_de_ataque(t, ap, guerra);
+            return Ok(());
         }
         let cr = self.estado.reglas.economia.combate.clone();
         let mut atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_resto);
@@ -507,10 +503,8 @@ impl Nucleo {
         self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, None, false)?;
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_campamento(t, heroe, id, x);
-            if ap.hay_humano() {
-                self.abrir_batalla_de_ataque(t, ap, None);
-                return Ok(());
-            }
+            self.abrir_batalla_de_ataque(t, ap, None);
+            return Ok(());
         }
 
         let cr = self.estado.reglas.economia.combate.clone();
@@ -635,10 +629,8 @@ impl Nucleo {
         }
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_asedio(t, heroe, id, x);
-            if ap.hay_humano() {
-                self.abrir_batalla_de_ataque(t, ap, guerra);
-                return Ok(());
-            }
+            self.abrir_batalla_de_ataque(t, ap, guerra);
+            return Ok(());
         }
 
         let mut defensa = self.defensa_de_plaza(x, t);
@@ -723,10 +715,8 @@ impl Nucleo {
         }
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_pueblo(t, heroe, id, x, madre, donde);
-            if ap.hay_humano() {
-                self.abrir_batalla_de_ataque(t, ap, guerra);
-                return Ok(());
-            }
+            self.abrir_batalla_de_ataque(t, ap, guerra);
+            return Ok(());
         }
         let dentro = self.defensores_de_dentro(Ubicacion::Pueblo(x), faccion_madre, None, cr.batalla.capacidad_resto, t);
         let mut defensa = vec![self.estado.combate.guarniciones[&x].escuadra.clone()];

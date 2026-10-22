@@ -299,7 +299,7 @@ pub enum Comando {
     /// bordo y, si no, en su campamento. Solo administración; para escenarios y pruebas, igual que `CrearEjercito`. `creadas` lleva su id.
     DarEscuadra { heroe: u64, tropa: Tropa, cantidad: i64 },
     // ── Batallas de Unity (Batalla_Unity_Ciclo, fase 4E). No hay orden para abrirlas: las abre `Atacar` cuando el proceso tiene servidores de batalla
-    //    (`Reglas::batallas_en_unity`) y hay un héroe humano en los dos bandos. `batalla` es el id de la partida (`Batalla::id`); el contrato lo nombra con
+    //    (`Reglas::batallas_en_unity`), sea cual sea quien combata (bot contra bot también). `batalla` es el id de la partida (`Batalla::id`); el contrato lo nombra con
     //    su UUID (`uuid_de_batalla`). ──
     /// Pone a un héroe como humano o como bot. Solo administración; para escenarios y pruebas: los héroes de `CrearEjercito` nacen bot.
     FijarControlador { heroe: u64, controlador: Controlador },
@@ -391,6 +391,15 @@ impl Comando {
                 | Comando::RegistrarSalida { .. }
                 | Comando::AplicarResultado { .. }
         )
+    }
+
+    /// ¿Es una orden de salir de un lugar al mapa? Es lo único que puede dar, durante un asedio, un saqueo o un ataque, quien está dentro y no se ha unido a la defensa
+    /// (Entrar con todo, cuarta ronda): `SalirDeAsentamiento`, `SalirDePueblo`, `SalirDeAvanzada` y, para el residente de su propia plaza, que no sale con `SalirDeAsentamiento` sino
+    /// eligiendo tropa y carga, `SalirAlMundo`. El candado no mira entonces el lugar ni que se esté dentro; sí que se combata.
+    // DUDA: el autor habla de «la orden de salir del lugar (al mapa, con todo lo suyo)»; `SalirAlMundo` del residente se admite también porque es su única salida (lo conservador sería
+    // dejarlo dentro sin poder salir). Lo que reservó la batalla (la guarnición con dueño) sigue sin poder llevarse.
+    pub(crate) fn es_salida_de_lugar(&self) -> bool {
+        matches!(self, Comando::SalirDeAsentamiento { .. } | Comando::SalirDePueblo { .. } | Comando::SalirDeAvanzada { .. } | Comando::SalirAlMundo { .. })
     }
 
     /// Los héroes, columnas, caravanas, plazas, pueblos, avanzadas y campamentos de bandidos que nombra el comando. Cada variante se nombra a propósito (sin `_`): si se

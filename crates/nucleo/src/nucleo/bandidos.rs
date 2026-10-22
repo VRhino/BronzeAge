@@ -252,6 +252,7 @@ impl Nucleo {
             None if escolta.iter().any(Escuadra::con_soldados) => Defensa::Escolta(&mut escolta),
             None => Defensa::Base,
         };
+        // DUDA: el acoso es un evento del mundo, no una orden `atacar`: se resuelve con números aunque haya servidores de batalla (cuarta ronda de Entrar con todo: «toda batalla va a Unity» queda por decidir para los bandidos).
         let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
         self.volcar_escuadras(&escolta);
         let plazas = vec![origen].into_iter().filter(|o| self.estado.asentamientos.contains_key(o)).collect();

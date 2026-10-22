@@ -918,9 +918,10 @@ fn si_la_madre_cae_en_ruinas_salen_todos_de_su_pueblo_y_si_es_conquistada_solo_l
     assert_eq!((dato(&echados[0], "motivo"), dato(&echados[0], "lugar"), dato(&echados[0], "heroe"), echados[0].1.clone()), (2, 1, ene as i64, vec![plaza]), "cambia de dueño");
 }
 
-/// Si el antiguo dueño había cerrado la puerta a los neutrales, el acceso se hereda tal cual: con el conquistador, el neutral que ya estaba dentro (aliado del dueño viejo) ya no podría entrar y sale.
+/// Al conquistar la plaza su acceso vuelve al de por defecto (todos menos enemigos, respecto al dueño nuevo): lo que el dueño viejo había cerrado a los neutrales ya no cuenta, el neutral que
+/// estaba dentro del pueblo se queda, y el dueño nuevo lo cambia luego con `FijarAcceso` (cerrar la puerta a los neutrales lo saca).
 #[test]
-fn al_conquistar_la_madre_el_acceso_heredado_que_cierra_a_los_neutrales_los_saca_del_pueblo() {
+fn al_conquistar_la_madre_su_acceso_vuelve_al_de_por_defecto_y_el_pueblo_lo_hereda() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
@@ -938,7 +939,33 @@ fn al_conquistar_la_madre_el_acceso_heredado_que_cierra_a_los_neutrales_los_saca
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
     e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
-    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true), "el acceso heredado cierra a los neutrales: sale con lo suyo");
+    assert_eq!(e.n.acceso_de_plaza(plaza), Some(nucleo::Acceso { aliados: true, neutrales: true, enemigos: false }), "el acceso vuelve al de por defecto");
+    assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo), "con el acceso reiniciado el neutral (respecto al dueño nuevo) puede entrar: se queda dentro");
+    // El dueño nuevo lo cambia cuando quiere: si cierra a los neutrales, sale al mapa con lo suyo.
+    e.ok("beto", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true));
+}
+
+/// El acceso reiniciado sigue cerrando la puerta a los enemigos del dueño nuevo: el visitante del pueblo que está en guerra con el conquistador sale al mapa con lo suyo.
+#[test]
+fn al_conquistar_la_madre_con_el_acceso_por_defecto_salen_del_pueblo_los_enemigos_del_conquistador() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let pueblo = e.pueblo_levantado();
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(nucleo::Relacion::Alianza) });
+    e.ok("admin", Comando::FijarRelacion { a: 2, b: 3, relacion: Some(nucleo::Relacion::Guerra) });
+    let (col, h) = e.visita("alia", 3, pueblo);
+    e.ok("alia", Comando::EntrarEnPueblo { pueblo, heroe: h });
+    assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo));
+    let p = e.n.estado().asentamientos[&plaza].posicion;
+    let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
+    let heroe = e.n.ejercito(beto).unwrap().columna.lider;
+    let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
+    e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
+    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true), "el acceso por defecto no deja entrar a los enemigos del dueño nuevo: sale con lo suyo");
 }
 
 // ───────────────────────────── 7. Un guion con héroes dentro: determinismo y foto ─────────────────────────────

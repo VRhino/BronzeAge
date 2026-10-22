@@ -93,8 +93,8 @@ pub struct Reglas {
     pub viveres_bajos_pct: u32,
     /// Peticiones recordadas para la idempotencia (`INFRA.limiteIdempotencia`).
     pub limite_idempotencia: usize,
-    /// El proceso tiene servidores de batalla (`SERVIDORES_BATALLA`, Batalla_Unity_Ciclo §8): `atacar` abre una batalla de Unity cuando hay al menos un héroe
-    /// `humano` en los dos bandos. Sin ellos —o bot contra bot— el combate se resuelve con números (Combate.md). Es una regla de la partida y no puede
+    /// El proceso tiene servidores de batalla (`SERVIDORES_BATALLA`, Batalla_Unity_Ciclo §8): `atacar` abre siempre una batalla de Unity, también bot contra bot
+    /// (cuarta ronda de Entrar con todo, 2026-10-22). Sin ellos el combate se resuelve con números (Combate.md). Es una regla de la partida y no puede
     /// cambiar entre una foto y su recuperación.
     pub batallas_en_unity: bool,
     pub territorio: ReglasTerritorio,
