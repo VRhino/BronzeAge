@@ -1,9 +1,9 @@
 //! Serialización canónica de la economía de una plaza (`asentamiento::Asentamiento`) para el hash y las fotos. Cada estructura se
 //! desestructura **entera** (sin `..`): si el crate añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
-//! Formato (BAN19, igual que BAN15: BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
+//! Formato (BAN20: BAN15 más los recintos de muralla de cada plaza, que ya no se guardan con su ciudad; BAN15 era BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
 //! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
-//! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
+//! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · recintos{n u64 · n × recinto} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
 //! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64`.
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
@@ -12,6 +12,8 @@
 //! 1 en obra → completa_en i64; 2 activo} · almacén{29 × (cantidad i64, capacidad i64)} · carro opt_u64 · lleno bool`.
 //! Una avanzada: `id u64 · posición punto · etapa u8 (0 atalaya, 1 fuerte, 2 ciudadela) · estado{u8: 0 en construcción, 1 operativa, 2 en ruinas → invulnerable_hasta opt_i64} ·
 //! obra{opt: tipo u8 (0 construir, 1 mejorar, 2 reparar) · requerido y entregado, cada uno n u64 · n × (recurso u8, i64) · completa_en opt_i64} · almacén{29 × (cantidad i64, capacidad i64)}`.
+//! Un recinto: `id u32 · nivel u8 · celdas{n u64 · n × (col i32, row i32, clase u8: 0 muro, 1 puerta, 2 torre)} · avance i32 · mejora{opt: nivel u8, avance i32} ·
+//! siguiente_celda_en opt_i64 · comprometido_en i64 · completado_en opt_i64`. La ciudad de la plaza (`codec_ciudad`) no guarda recintos: se derivan de estos al leer.
 //! Los tipos y recursos van por su índice en el enum (`Tipo as u8`, `Recurso::indice`).
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
@@ -22,8 +24,10 @@ use asentamiento::edificio::{Edificio, Estado, Fuente, Mejora};
 use asentamiento::mantenimiento::Medidor;
 use asentamiento::politicas::Activa;
 use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo, Pueblo};
+use asentamiento::recintos::{Mejora as MejoraDeRecinto, Recinto};
 use asentamiento::recurso::TODOS;
 use asentamiento::{Almacen, Cargo, Costo, Politicas, Poblacion, Recurso};
+use trazado::{Celda, CeldaMuro, ClaseCelda};
 
 pub(crate) fn tipo_a_u8(t: Tipo) -> u8 {
     t as u8
@@ -153,6 +157,68 @@ fn leer_costo(r: &mut Lector) -> Result<Costo, ErrorFormato> {
     Ok(c)
 }
 
+fn clase_a_u8(c: ClaseCelda) -> u8 {
+    match c {
+        ClaseCelda::Muro => 0,
+        ClaseCelda::Puerta => 1,
+        ClaseCelda::Torre => 2,
+    }
+}
+
+fn clase_de_u8(i: u8) -> Result<ClaseCelda, ErrorFormato> {
+    Ok(match i {
+        0 => ClaseCelda::Muro,
+        1 => ClaseCelda::Puerta,
+        2 => ClaseCelda::Torre,
+        _ => return Err(ErrorFormato("clase de celda de muralla desconocida")),
+    })
+}
+
+fn escribir_recinto(w: &mut Escritor, r: &Recinto) {
+    let Recinto { id, nivel, celdas, avance, mejora, siguiente_celda_en, comprometido_en, completado_en } = r;
+    w.u32(*id);
+    w.u8(*nivel);
+    w.u64(celdas.len() as u64);
+    for CeldaMuro { celda: Celda { col, row }, clase } in celdas {
+        w.i32(*col);
+        w.i32(*row);
+        w.u8(clase_a_u8(*clase));
+    }
+    w.i32(*avance);
+    match mejora {
+        Some(MejoraDeRecinto { nivel, avance }) => {
+            w.bool(true);
+            w.u8(*nivel);
+            w.i32(*avance);
+        }
+        None => w.bool(false),
+    }
+    w.opt_i64(*siguiente_celda_en);
+    w.i64(*comprometido_en);
+    w.opt_i64(*completado_en);
+}
+
+fn leer_recinto(r: &mut Lector) -> Result<Recinto, ErrorFormato> {
+    let (id, nivel) = (r.u32()?, r.u8()?);
+    if !(1..=3).contains(&nivel) {
+        return Err(ErrorFormato("nivel de recinto desconocido"));
+    }
+    let mut celdas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        celdas.push(CeldaMuro { celda: Celda::new(r.i32()?, r.i32()?), clase: clase_de_u8(r.u8()?)? });
+    }
+    if celdas.is_empty() {
+        return Err(ErrorFormato("recinto sin celdas"));
+    }
+    let ultima = celdas.len() as i32 - 1;
+    let avance = r.i32()?;
+    let mejora = if r.bool()? { Some(MejoraDeRecinto { nivel: r.u8()?, avance: r.i32()? }) } else { None };
+    if !(-1..=ultima).contains(&avance) || mejora.is_some_and(|m| m.nivel != nivel + 1 || m.nivel > 3 || !(-1..ultima).contains(&m.avance)) {
+        return Err(ErrorFormato("avance de recinto fuera del anillo"));
+    }
+    Ok(Recinto { id, nivel, celdas, avance, mejora, siguiente_celda_en: r.opt_i64()?, comprometido_en: r.i64()?, completado_en: r.opt_i64()? })
+}
+
 pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     let Asentamiento {
         fundado_en,
@@ -164,6 +230,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         edificios,
         pueblos,
         avanzadas,
+        recintos,
         ingresos_acarreo,
         siguiente_edificio,
         ascenso,
@@ -248,6 +315,8 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     }
     w.u64(avanzadas.len() as u64);
     avanzadas.iter().for_each(|av| escribir_avanzada(w, av));
+    w.u64(recintos.len() as u64);
+    recintos.iter().for_each(|rec| escribir_recinto(w, rec));
     w.u64(ingresos_acarreo.len() as u64);
     for IngresoAcarreo { recurso, hora, cantidad } in ingresos_acarreo {
         w.u8(recurso_a_u8(*recurso));
@@ -325,6 +394,10 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         avanzadas.push(leer_avanzada(r)?);
     }
+    let mut recintos = Vec::new();
+    for _ in 0..r.cuenta()? {
+        recintos.push(leer_recinto(r)?);
+    }
     let mut ingresos_acarreo = Vec::new();
     for _ in 0..r.cuenta()? {
         ingresos_acarreo.push(IngresoAcarreo { recurso: recurso_de_u8(r.u8()?)?, hora: r.i64()?, cantidad: r.i64()? });
@@ -355,6 +428,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
         edificios,
         pueblos,
         avanzadas,
+        recintos,
         ingresos_acarreo,
         siguiente_edificio,
         ascenso,

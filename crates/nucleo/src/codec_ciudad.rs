@@ -1,15 +1,14 @@
 //! Serialización canónica de la ciudad de una plaza (`trazado::Ciudad`) para el hash y las fotos. Se guarda lo único persistente
-//! (semilla, parámetros, piezas en su orden de construcción, recintos); el suelo ocupado y la red de calles se **derivan** al leer
-//! (`Ciudad::desde_partes`). Cada estructura se desestructura **entera** (sin `..`): si el crate añade un campo, esto deja de compilar y
+//! (semilla, parámetros, piezas en su orden de construcción); el suelo ocupado y la red de calles se **derivan** al leer
+//! (`Ciudad::desde_partes`). Los **recintos de muralla no se guardan aquí** (desde BAN20): viven en la economía de la plaza (`codec_economia`) y la ciudad los
+//! recibe, ya proyectados, al leerla (`leer`). Cada estructura se desestructura **entera** (sin `..`): si el crate añade un campo, esto deja de compilar y
 //! obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `layout_version u32 · semilla u64 · parámetros{largo_fila_min i32, largo_fila_max i32,
 //! radio_afueras_min_ul i32, ancho_banda_afueras_ul i32, separacion_minima_anclas i32, separacion_seguridad_anclas i32, ancho_calle i32,
 //! cap_corredor_urbano u16, cap_corredor_afueras u16, fondo_manzana i32, nivel_gate_anclas u8, radio_inicial_ul i32,
-//! crecimiento_por_edificio_ul i32, maximo_por_nivel_ul 5 × i32, viviendas_iniciales u32} · piezas{n u64 · n × pieza} ·
-//! recintos{n u64 · n × recinto}`. Una pieza: `id u32 · tipo u16 · categoría u8 · rol u8 · rect{col i32, row i32, ancho i32, alto i32} ·
-//! rotado bool · ancla_llena bool · semilla_saturada bool`. Un recinto: `muros{n u64 · n × (col i32, row i32)} · puertas{ídem} ·
-//! completo bool`.
+//! crecimiento_por_edificio_ul i32, maximo_por_nivel_ul 5 × i32, viviendas_iniciales u32} · piezas{n u64 · n × pieza}`. Una pieza: `id u32 · tipo u16 ·
+//! categoría u8 · rol u8 · rect{col i32, row i32, ancho i32, alto i32} · rotado bool · ancla_llena bool · semilla_saturada bool`.
 //! Categoría: Afueras 0, Genérico 1, Residencial 2, Industria 3, Militar 4, Mercado 5. Rol: Normal 0, Centro 1, Ancla primaria 2, Ancla
 //! de saturación 3.
 //!
@@ -17,7 +16,7 @@
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use asentamiento::catalogo::TIPOS;
-use trazado::{Categoria, Celda, Ciudad, Parametros, Pieza, Recinto, Rect, Rol, LAYOUT_VERSION};
+use trazado::{Categoria, Ciudad, Parametros, Pieza, Recinto, Rect, Rol, LAYOUT_VERSION};
 
 fn categoria_a_u8(c: Categoria) -> u8 {
     match c {
@@ -59,24 +58,6 @@ fn rol_de_u8(i: u8) -> Result<Rol, ErrorFormato> {
         3 => Rol::AnclaSaturacion,
         _ => return Err(ErrorFormato("rol de pieza desconocido")),
     })
-}
-
-fn celda(w: &mut Escritor, c: &Celda) {
-    w.i32(c.col);
-    w.i32(c.row);
-}
-
-fn celdas(w: &mut Escritor, v: &[Celda]) {
-    w.u64(v.len() as u64);
-    v.iter().for_each(|c| celda(w, c));
-}
-
-fn leer_celdas(r: &mut Lector) -> Result<Vec<Celda>, ErrorFormato> {
-    let mut v = Vec::new();
-    for _ in 0..r.cuenta()? {
-        v.push(Celda::new(r.i32()?, r.i32()?));
-    }
-    Ok(v)
 }
 
 pub(crate) fn escribir(w: &mut Escritor, c: &Ciudad) {
@@ -122,16 +103,10 @@ pub(crate) fn escribir(w: &mut Escritor, c: &Ciudad) {
         w.bool(*ancla_llena);
         w.bool(*semilla_saturada);
     }
-    w.u64(c.recintos().len() as u64);
-    for rec in c.recintos() {
-        let Recinto { muros, puertas, completo } = rec;
-        celdas(w, muros);
-        celdas(w, puertas);
-        w.bool(*completo);
-    }
 }
 
-pub(crate) fn leer(r: &mut Lector) -> Result<Ciudad, ErrorFormato> {
+/// Lee la ciudad con los `recintos` ya derivados de la economía de la plaza (`asentamiento::recintos::proyeccion`).
+pub(crate) fn leer(r: &mut Lector, recintos: Vec<Recinto>) -> Result<Ciudad, ErrorFormato> {
     let version = r.u32()?;
     if version != LAYOUT_VERSION {
         return Err(ErrorFormato("la foto guarda una ciudad con otra revisión de la geometría (LAYOUT_VERSION)"));
@@ -170,10 +145,6 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Ciudad, ErrorFormato> {
             return Err(ErrorFormato("pieza sin superficie"));
         }
         piezas.push(Pieza { id, tipo, categoria, rol, rect, rotado: r.bool()?, ancla_llena: r.bool()?, semilla_saturada: r.bool()? });
-    }
-    let mut recintos = Vec::new();
-    for _ in 0..r.cuenta()? {
-        recintos.push(Recinto { muros: leer_celdas(r)?, puertas: leer_celdas(r)?, completo: r.bool()? });
     }
     Ciudad::desde_partes(semilla, params, version, piezas, recintos).map_err(|_| ErrorFormato("la ciudad guardada es incoherente (piezas repetidas, superpuestas o fuera de la ventana)"))
 }

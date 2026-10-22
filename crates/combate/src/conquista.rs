@@ -6,7 +6,7 @@
 //! - la flota, los trueques y las caravanas aparcadas se cierran con `comercio::ruina::cerrar_dependientes(Motivo::Conquista, …)` (la aparcada se
 //!   destruye, decidido el 2026-10-19);
 //! - los pueblos extractores y las avanzadas de la plaza pasan al conquistador con su zona (la ruina de la madre los hace desaparecer);
-//! - los recintos de muralla pierden `fraccionDanoMuralla` de avance cuando existan (fase de Murallas; hoy no hay recintos).
+//! - los recintos de muralla pierden `fraccionDanoMuralla` de avance (`asentamiento::recintos::danar_por_conquista`, ya hecho; falta cablearlo aquí: paso 5 de la fase de Murallas).
 
 use crate::datos::Reglas;
 use asentamiento::asentamiento::Asentamiento;

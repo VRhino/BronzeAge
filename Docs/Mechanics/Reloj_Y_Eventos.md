@@ -62,6 +62,14 @@ Cómo avanza el mundo en la reconstrucción: sin tick global (la economía de ca
 >
 > Una avanzada ociosa (operativa, sin guarnición mermada ni ruinas) **no programa nada**: la cola no guarda ninguna cita por ella. La avanzada no sube la generación de `entidad_avanzada` al cambiar de estado: sus plazos son idempotentes y comprueban el estado al vencer (una cita que llega con la avanzada ya destruida, reparada o rehecha no encuentra nada que cumplir). Los encuentros de las columnas con una avanzada son los `Carga::Encuentro` de prioridad 8 de siempre (`avanzada.encuentro`). El mantenimiento de la madre cuenta las avanzadas operativas en su paso de minuto, sin evento propio; la ración de la guarnición de jugadores, también (come en el paso de minuto de la madre).
 
+> **Implementado en Rust (2026-10-22, murallas, segunda tanda), la obra de un recinto en el reloj.** Una cita por **celda**, que reutiliza `Carga::FinDeObras` (prioridad **1**, antes del paso de minuto de la plaza del mismo instante) y la generación de la plaza (la ruina las descarta); no hay carga ni prioridad nuevas.
+>
+> | Evento | Prioridad | Entidad | Cuándo | Qué hace |
+> |---|---|---|---|---|
+> | `FinDeObras` por una celda de muralla | 1 (`PRIO_FIN_DE_OBRAS`) | la plaza | `siguiente_celda_en` del recinto: la primera celda se levanta **en el instante de la orden** (`ComprometerRecinto`, `MejorarRecinto`) y cada celda deja la cita de la siguiente a `minutosPorCelda[nivel] × factorTiempoMuralla` | `Asentamiento::cumplir_fines` → `levantar_recintos`: paga y levanta **una celda** de cada recinto en obra, dañado o con mejora que ya toque; la cita se programa a partir de `Evento::RecintoCelda { siguiente_en }` en `anotar_sucesos`, como las demás |
+>
+> Lo que no sale como una cita es el **reintento**: si al llegar la cita faltan materiales, o pagar dejaría un recurso por debajo de la reserva, no se levanta nada **ni se programa otra cita** (un recinto parado no deja nada en la cola, ni siquiera una cita por plaza ociosa), y el **paso de minuto** de la plaza lo reintenta después de la auto-construcción y con la misma reserva (Paso 8 de la cadena, `Economia_Construccion.md` §1); la cadencia de la celda siguiente cuenta desde el instante en que se levantó de verdad. Un recinto cerrado o sin mejora no programa nada. Ninguna cita es recurrente, y el batch las vigila (`inv_fines` incluye la celda que espera cada recinto). El orden dentro de un mismo instante es el de siempre: la celda (1) va antes del paso de minuto (2).
+
 ## 1. Tiempo
 
 - **Reloj de mundo** = reloj de pared × factor (×1 en producción; ×N para pruebas y para el batch). No hay tick y no existe la unidad «minuto de mundo» como paso: sigue habiendo plazos declarados en minutos, horas y días, y se miden en instantes.
@@ -77,7 +85,7 @@ Cómo avanza el mundo en la reconstrucción: sin tick global (la economía de ca
 
 | Prioridad | Qué | Por qué en ese orden (regla que se conserva) |
 |---|---|---|
-| 1 | Cierre de batallas vencidas, salidas del mundo y **fin de obras, de mejoras y de ascensos de las plazas, y de las obras de mapa de sus avanzadas** | una batalla que vence no bloquea en ese mismo instante; el edificio terminado y el nivel nuevo cuentan en el paso de minuto del mismo instante |
+| 1 | Cierre de batallas vencidas, salidas del mundo y **fin de obras, de mejoras y de ascensos de las plazas, de cada celda de sus murallas y de las obras de mapa de sus avanzadas** | una batalla que vence no bloquea en ese mismo instante; el edificio terminado y el nivel nuevo cuentan en el paso de minuto del mismo instante |
 | 2 | **Paso de minuto de la plaza** (producción, comida y hambre, crecimiento, recaudación, mantenimiento y ruinas, en ese orden y de forma atómica); fin de la protección y de la ocupación; fin de la invulnerabilidad de un fuerte en ruinas | la población come **antes** que las tropas; la recaudación usa la población ya crecida; el oro recaudado paga el mantenimiento |
 | 3 | Consumo de tropa, **caducidad de políticas** y reposición gratuita de la guarnición de serie de pueblos y avanzadas | la población (2) come antes que las tropas; una política todavía se aplica en su último minuto |
 | 4 | (dentro de la fila 2) crecimiento de población y recaudación de oro | no tienen evento propio: van en el paso de minuto de la plaza |

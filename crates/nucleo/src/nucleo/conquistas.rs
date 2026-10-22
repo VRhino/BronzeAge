@@ -23,7 +23,7 @@
 //! # Lo provisional
 //! Los cargos, los fundadores y las casas compradas quedan vacíos cuando existan (sistema 5: hoy no hay nada que vaciar). La derrota de la Facción solo se
 //! cuenta (`faccion.derrotada`); qué hace después quien la gobierna, la reputación y la experiencia de Facción por conquistar son del sistema político. Los
-//! recintos de muralla no existen (fase propia): no pierden avance. El traslado de los residentes no mira el cupo de viviendas del destino (Combate §9).
+//! recintos de muralla todavía no pierden avance (`recintos::danar_por_conquista` existe; lo cablea el paso 5 de la fase de Murallas). El traslado de los residentes no mira el cupo de viviendas del destino (Combate §9).
 
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO};

@@ -1,8 +1,9 @@
 //! El asedio de una plaza con números (Combate §6): el orden de las ramas y a quién hiere. Las consecuencias de que la plaza caiga (saqueo,
 //! desalojo, derrota de Facción) están en `conquista`.
 //!
-//! Las **murallas son una fase propia** posterior al sistema militar (decisión del autor, 2026-10-19): el recinto es 0, el multiplicador del
-//! defensor vale 1 ([`SIN_MURALLA`]) y no hay cupo de muralla en la guarnición.
+//! Las **murallas son una fase propia** posterior al sistema militar (decisión del autor, 2026-10-19). Sus recintos y su multiplicador ya existen
+//! (`asentamiento::recintos::multiplicador_defensivo`, fase de Murallas, segunda tanda), pero este asedio todavía no lo usa (paso 5 del plan): el multiplicador del
+//! defensor vale 1 ([`SIN_MURALLA`]).
 
 use crate::datos::Reglas;
 use crate::resolucion::{resolver_combate, Bando, Informe};

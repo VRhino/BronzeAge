@@ -67,7 +67,6 @@ macro_rules! exterior {
             faccion_tiene_gran_fundicion: false,
             ciudadanos: 0,
             distancia_capital: 0,
-            recinto_nivel: 0,
             racion_guarnicion: 0,
             felicidad_extra: UNO,
             nobleza_extra: UNO,

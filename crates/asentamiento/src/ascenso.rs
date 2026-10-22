@@ -8,6 +8,7 @@ use crate::datos::{por, Reglas};
 use crate::mantenimiento;
 use crate::nivel::Falta;
 use crate::produccion;
+use crate::recintos;
 use crate::recurso::{Costo, Recurso};
 use base::{Instante, Mil, MS_POR_MINUTO};
 
@@ -53,7 +54,7 @@ impl Asentamiento {
 
     /// Mantenimiento que pagaría en el nivel `objetivo` (con ese nivel como operativo).
     fn mantenimiento_en(&self, r: &Reglas, x: &Exterior, objetivo: u32) -> Costo {
-        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.elementos_de_mapa_activos(), objetivo, x.distancia_capital, &vec![])
+        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.elementos_de_mapa_activos(), objetivo, x.distancia_capital, &recintos::upkeep(&r.muralla, &self.recintos))
     }
 
     /// Todos los bloqueos para pedir la subida al nivel siguiente (vacío = se puede). `cupo_ocupado` es cuántos asentamientos de la
@@ -68,7 +69,7 @@ impl Asentamiento {
             b.push(Bloqueo::AscensoEnCurso);
         }
         let (pesants, artesanos, _) = self.poblacion.enteros();
-        for f in r.nivel.gates(objetivo, &self.edificios, pesants, artesanos, x.recinto_nivel).unwrap_or_default() {
+        for f in r.nivel.gates(objetivo, &self.edificios, pesants, artesanos, recintos::nivel_del_mejor_completo(&self.recintos)).unwrap_or_default() {
             b.push(match f {
                 Falta::Poblacion => Bloqueo::FaltaPoblacion,
                 Falta::Edificios => Bloqueo::FaltanEdificios,

@@ -115,7 +115,7 @@ impl Nucleo {
     pub fn cupo_de_guarnicion(&self, plaza: u64) -> Option<i64> {
         let eco = &self.estado.asentamientos.get(&plaza)?.economia;
         let extra = eco.politicas.suma(&self.estado.reglas.economia.datos.politicas, "cupoGuarnicionExtra");
-        Some(guarnicion::cupo(&self.estado.reglas.economia.militar, &eco.edificios, construccion::RECINTO_NIVEL, extra))
+        Some(guarnicion::cupo(&self.estado.reglas.economia.militar, &eco.edificios, asentamiento::recintos::nivel_del_mejor_completo(&eco.recintos), extra))
     }
 
     /// Soldados en pie del campamento de la plaza: las escuadras en el campamento de los héroes que residen en ella y las que dejaron en la guarnición de sus avanzadas

@@ -44,6 +44,11 @@
 //! - Entrar en un pueblo o en una avanzada (2026-10-22): `EntrarEnPueblo`/`SalirDePueblo` (119, 120) y `EntrarEnAvanzada`/`SalirDeAvanzada` (121, 122) con el acceso de su plaza
 //!   madre; dentro se defiende con la regla de relación; cerrar la puerta (`FijarAcceso`) expulsa a quien ya no puede entrar; al atacante solo se une quien está fuera y al
 //!   defensor quien está dentro; el residente que defiende y pierde pierde la mitad de su carro. Foto `BAN18`.
+//! - Murallas (2026-10-22, segunda tanda): los recintos son parte de la economía de cada plaza (`asentamiento::recintos`) y se levantan celda a celda, cada una con su cita de fin
+//!   de obras (`Evento::RecintoCelda`), reintentada por el paso de minuto si faltan materiales. `ComprometerRecinto` (123, también amplía), `MejorarRecinto` (124) y
+//!   `AbandonarRecinto` (125), con rechazos `murallas.*`; `Nucleo::presupuesto_de_recinto` enseña el trazo y su coste antes de comprometer. La ciudad de la plaza guarda una
+//!   proyección derivada de sus recintos (no los persiste). El cupo de guarnición, el requisito del nivel 4 y el mantenimiento ya los leen de ahí. Foto `BAN20`.
+//!   Aún no: el multiplicador en el asedio con números, el daño de una conquista, el dibujo y Unity (pasos 4-6 de `Docs/Arquitectura/Murallas_Contraste_y_Plan.md`).
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;
@@ -76,7 +81,7 @@ pub use estado_combate::{entidad_avanzada, entidad_bandidos, entidad_conquista, 
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
 pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, Acceso, EstadoMilitar, HeroeNucleo, Relacion, Trato};
 pub use generadores::{Cx, GeneradorDeEventos};
-pub use nucleo::{Ajustes, Arranque, InformeViabilidad, Metricas, Nucleo, TokenDeJugador};
+pub use nucleo::{Ajustes, Arranque, ErrorPresupuesto, InformeViabilidad, Metricas, Nucleo, Presupuesto, TokenDeJugador};
 
 /// sha256 en hexadecimal minúsculas.
 pub fn hex(h: &[u8; 32]) -> String {

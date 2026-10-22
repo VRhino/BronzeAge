@@ -52,8 +52,7 @@ const ES_CAPITAL: bool = true;
 const FACCION_TIENE_GRAN_FUNDICION: bool = false;
 // placeholder: lo dará el sistema de Eras del servidor.
 const ORDEN_ERA: u32 = 1;
-// placeholder: lo darán las Murallas (recintos) y la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
-pub(super) const RECINTO_NIVEL: u32 = 0;
+// placeholder: lo darán la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
 const FACTOR_EXTRA: i64 = UNO;
 
 fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
@@ -138,6 +137,12 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::AvanzadaCompletada { id, tipo, etapa } => ("avanzada.completada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("etapa", etapa.indice() as i64)]),
         EventoEco::AvanzadaDestruida { id } => ("avanzada.destruida", vec![("avanzada", *id as i64), ("motivo", 0)]),
         EventoEco::AvanzadaObraCancelada { id, tipo } => ("avanzada.obra_cancelada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64)]),
+        EventoEco::RecintoComprometido { recinto, nivel, celdas, puertas } => ("construccion.recinto_comprometido", vec![("recinto", *recinto as i64), ("nivel", *nivel as i64), ("celdas", *celdas as i64), ("puertas", *puertas as i64)]),
+        EventoEco::RecintoMejoraIniciada { recinto, nivel } => ("construccion.recinto_mejora_iniciada", vec![("recinto", *recinto as i64), ("nivel", *nivel as i64)]),
+        EventoEco::RecintoAbandonado { recinto } => ("construccion.recinto_abandonado", vec![("recinto", *recinto as i64)]),
+        EventoEco::RecintoCelda { recinto, levantadas, siguiente_en } => ("construccion.recinto_celda", vec![("recinto", *recinto as i64), ("levantadas", *levantadas as i64), ("siguienteEn", siguiente_en.unwrap_or(-1))]),
+        EventoEco::RecintoCompletado { recinto, nivel, celdas, puertas } => ("construccion.recinto_completado", vec![("recinto", *recinto as i64), ("nivel", *nivel as i64), ("celdas", *celdas as i64), ("puertas", *puertas as i64)]),
+        EventoEco::RecintoMejorado { recinto, nivel, celdas, puertas } => ("construccion.recinto_mejorado", vec![("recinto", *recinto as i64), ("nivel", *nivel as i64), ("celdas", *celdas as i64), ("puertas", *puertas as i64)]),
     };
     EventoNucleo { codigo: codigo.into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos }
 }
@@ -208,7 +213,6 @@ impl Nucleo {
                 faccion_tiene_gran_fundicion: FACCION_TIENE_GRAN_FUNDICION,
                 ciudadanos: CIUDADANOS,
                 distancia_capital: DISTANCIA_CAPITAL,
-                recinto_nivel: RECINTO_NIVEL,
                 racion_guarnicion,
                 // Una plaza ocupada tras una conquista crece y recauda a la fracción de la ocupación (Combate §8): su mantenimiento ya lo congela `ocupado`.
                 felicidad_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_crecimiento } else { FACTOR_EXTRA },
@@ -275,8 +279,14 @@ impl Nucleo {
             match s {
                 EventoEco::ObraIniciada { completa_en, .. } | EventoEco::MejoraIniciada { completa_en, .. } | EventoEco::AscensoIniciado { completa_en, .. } => self.programar_fin(id, *completa_en),
                 EventoEco::AvanzadaObraIniciada { id: avanzada, completa_en, .. } => self.programar_fin_de_avanzada(*avanzada, *completa_en),
+                // Cada celda de una muralla deja la cita de la siguiente (la obra de un recinto no ocupa cuadrilla ni es recurrente).
+                EventoEco::RecintoCelda { siguiente_en: Some(en), .. } => self.programar_fin(id, *en),
                 _ => {}
             }
+        }
+        // La ciudad guarda una proyección de los recintos: se rehace cuando el anillo cambia (al comprometer, abandonar o cerrarse una celda final).
+        if sucesos.iter().any(|s| matches!(s, EventoEco::RecintoComprometido { .. } | EventoEco::RecintoAbandonado { .. } | EventoEco::RecintoCelda { .. })) {
+            self.sincronizar_recintos(id);
         }
         let Some(a) = self.estado.asentamientos.get(&id) else { return };
         let (punto, reglas) = (a.posicion, &self.estado.reglas.economia.datos);

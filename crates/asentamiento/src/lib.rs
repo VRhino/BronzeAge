@@ -2,7 +2,8 @@
 //! `Docs/Mechanics/Economia_Construccion.md`. Reglas puras en enteros: el núcleo guarda el estado y programa los eventos.
 //!
 //! Este crate crece por subsistemas, en el orden de dependencia: recursos y datos, almacén, políticas, población, producción,
-//! mantenimiento, obras y cola, auto-construcción, ascenso y, fuera de la ciudad, los pueblos extractores, las avanzadas y sus obras de mapa.
+//! mantenimiento, obras y cola, auto-construcción, ascenso, los recintos de muralla (reglas y obra; su trazo es geometría de `trazado`) y, fuera de la ciudad,
+//! los pueblos extractores, las avanzadas y sus obras de mapa.
 
 pub mod almacen;
 pub mod ascenso;
@@ -19,6 +20,7 @@ pub mod politicas;
 pub mod poblacion;
 pub mod produccion;
 pub mod pueblos;
+pub mod recintos;
 pub mod recurso;
 
 pub use almacen::Almacen;

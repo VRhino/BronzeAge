@@ -56,6 +56,7 @@ mod heroes;
 mod inspecciones;
 mod mercado;
 mod mercenarios;
+mod murallas;
 mod persecuciones;
 mod pueblos;
 mod salidas;
@@ -65,6 +66,7 @@ mod zonas;
 
 use espacio::{Cosa, Motivo};
 pub use batallas::TokenDeJugador;
+pub use murallas::{ErrorPresupuesto, Presupuesto};
 pub use zonas::InformeViabilidad;
 
 /// Tipos de entrada del registro.
@@ -761,6 +763,11 @@ impl Nucleo {
             | Comando::CalibrarReserva { .. }
             | Comando::SolicitarAscenso { .. }
             | Comando::ActivarPolitica { .. } => match self.ejecutar_economia(t, p) {
+                Ok(Some(creada)) => creadas.push(creada),
+                Ok(None) => {}
+                Err(r) => return r,
+            },
+            Comando::ComprometerRecinto { .. } | Comando::MejorarRecinto { .. } | Comando::AbandonarRecinto { .. } => match self.ejecutar_murallas(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,

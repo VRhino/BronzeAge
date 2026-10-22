@@ -24,7 +24,7 @@ use asentamiento::datos::bloque_de;
 use asentamiento::edificio::Fuente;
 use base::Punto;
 use std::collections::BTreeMap;
-use trazado::{radio_ciudad, Ancla, Categoria, Ciudad, Colocacion, EntradaFundacion, Huella, OpcionAncla, Parametros, Pedido, Perfil, Recinto, Rect, RectLocal, Rol, TipoPieza, CELDA_UL};
+use trazado::{radio_ciudad, Ancla, Categoria, CeldaMuro, Ciudad, Colocacion, EntradaFundacion, Huella, OpcionAncla, Parametros, ParametrosMuralla, Pedido, Perfil, Recinto, Rect, RectLocal, Rol, TipoPieza, CELDA_UL};
 
 /// El documento del Trazado urbano: de él salen las huellas.
 pub const DOC_TRAZADO: &str = include_str!("../../../Docs/Mechanics/Trazado_Urbano.md");
@@ -238,10 +238,19 @@ impl Urbe {
         &self.ciudad
     }
 
-    /// Reemplaza los recintos de muralla (las celdas de muro bloquean). Hoy nadie los traza (Murallas está fuera del núcleo); es el gancho.
+    /// Reemplaza los recintos de muralla (las celdas de muro bloquean y se recalcula la red entera: es caro, así que solo cuando la proyección cambia). Lo que
+    /// recibe es **derivado** de los recintos de la economía de la plaza (`asentamiento::recintos::proyeccion`): la ciudad no los guarda en la foto.
     pub fn set_recintos(&mut self, recintos: Vec<Recinto>) {
         self.ciudad.set_recintos(recintos);
         self.rev += 1;
+    }
+
+    /// Vuelve a marcar las torres de un anillo ya trazado para `nivel`, con el interior que le da esta ciudad (Murallas §3). Sin Centro Urbano, o si el anillo lo
+    /// pisa, no cambia nada.
+    pub fn reclasificar_torres(&self, celdas: &mut [CeldaMuro], nivel: u8, p: &ParametrosMuralla) {
+        if let Some(interior) = trazado::interior_de(&self.ciudad, celdas) {
+            trazado::marcar_torres(celdas, &interior, p, nivel);
+        }
     }
 
     /// Un edificio sale de la cola sin haberse levantado: su pieza desaparece.
@@ -410,6 +419,9 @@ impl Sitios for SitiosUrbe<'_> {
     }
     fn reubicar(&mut self, id: u32, tipo: Tipo, nivel: u8, u: &Urbano) -> bool {
         self.urbe.reubicar(self.urbanismo, id, tipo, nivel, u)
+    }
+    fn reclasificar_torres(&mut self, celdas: &mut [CeldaMuro], nivel: u8, p: &ParametrosMuralla) {
+        self.urbe.reclasificar_torres(celdas, nivel, p);
     }
 }
 

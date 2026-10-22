@@ -327,4 +327,8 @@ impl Sitios for SitiosPlaza<'_> {
     fn reubicar(&mut self, id: u32, tipo: Tipo, nivel: u8, u: &Urbano) -> bool {
         self.urbe.reubicar(self.urbanismo, id, tipo, nivel, u)
     }
+
+    fn reclasificar_torres(&mut self, celdas: &mut [trazado::CeldaMuro], nivel: u8, p: &trazado::ParametrosMuralla) {
+        self.urbe.reclasificar_torres(celdas, nivel, p);
+    }
 }

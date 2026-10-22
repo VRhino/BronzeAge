@@ -17,7 +17,7 @@ use nucleo::{Ajustes, Arranque, Comando, Estado, Nucleo, Peticion, Reglas, Regla
 use rutas::Rutas;
 use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, OnceLock};
-use trazado::{Categoria, Celda, Ciudad, Recinto, Rol, CELDA_UL};
+use trazado::{Categoria, Celda, CeldaMuro, Ciudad, ClaseCelda, Recinto, Rol, CELDA_UL};
 
 const MIN: i64 = MS_POR_MINUTO;
 const HORA: i64 = 60 * MIN;
@@ -63,7 +63,6 @@ fn con_ciudad<R>(re: &ReglasEconomia, urbe: &mut Urbe, f: impl FnOnce(&mut Exter
         faccion_tiene_gran_fundicion: false,
         ciudadanos: 1,
         distancia_capital: 0,
-        recinto_nivel: 0,
         racion_guarnicion: 0,
         felicidad_extra: UNO,
         nobleza_extra: UNO,
@@ -369,10 +368,14 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     for k in 0..10 {
         urbe.tomar(&s.reglas.economia.urbanismo, 5 + k, Tipo::Vivienda, &urbano(1), &mut ids).unwrap();
     }
-    urbe.set_recintos(vec![Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
+    // Los recintos viven en la economía de la plaza; la ciudad guarda solo su proyección y la foto no la persiste.
+    let anillo = vec![CeldaMuro { celda: Celda::new(40, 40), clase: ClaseCelda::Muro }, CeldaMuro { celda: Celda::new(41, 40), clase: ClaseCelda::Muro }, CeldaMuro { celda: Celda::new(42, 40), clase: ClaseCelda::Puerta }];
+    economia.recintos.push(asentamiento::recintos::Recinto { id: 1, nivel: 1, celdas: anillo, avance: 2, mejora: Some(asentamiento::recintos::Mejora { nivel: 2, avance: 0 }), siguiente_celda_en: Some(77), comprometido_en: 5, completado_en: Some(9) });
+    urbe.set_recintos(asentamiento::recintos::proyeccion(&economia.recintos));
+    assert_eq!(urbe.ciudad().recintos(), &[Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default() });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN19", "el formato de foto es BAN19 (BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
+    assert_eq!(&bytes[..5], b"BAN20", "el formato de foto es BAN20 (BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);

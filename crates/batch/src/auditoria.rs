@@ -123,7 +123,7 @@ pub fn auditar_cola(n: &Nucleo) -> Violaciones {
     for (&id, a) in &e.asentamientos {
         let eco = &a.economia;
         let obras = eco.edificios.iter().filter(|x| x.estado == EstadoEdificio::EnConstruccion).filter_map(|x| x.completa_en);
-        let esperadas = obras.chain(eco.edificios.iter().filter_map(|x| x.mejora.map(|m| m.completa_en))).chain(eco.ascenso.map(|s| s.completa_en));
+        let esperadas = obras.chain(eco.edificios.iter().filter_map(|x| x.mejora.map(|m| m.completa_en))).chain(eco.ascenso.map(|s| s.completa_en)).chain(eco.recintos.iter().filter_map(|r| r.siguiente_celda_en));
         v.fines += esperadas.filter(|&f| f > n.ahora() && !fines.contains(&(id, f))).count() as u64;
         v.fines += eco.politicas.activas().iter().filter(|p| p.expira_en > n.ahora() && !caducan.contains(&(id, p.expira_en))).count() as u64;
     }

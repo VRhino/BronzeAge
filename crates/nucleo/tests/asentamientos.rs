@@ -482,6 +482,15 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     use asentamiento::asentamiento::Ascenso;
     use asentamiento::edificio::{Edificio, Estado as EstadoEdificio, Fuente, Mejora};
     use asentamiento::politicas::Activa;
+    use asentamiento::recintos::{Mejora as MejoraDeRecinto, Recinto};
+    use trazado::{Celda, CeldaMuro, ClaseCelda};
+    // Un recinto de cuatro celdas, a medio levantar y con una mejora en curso; cada variante cambia un solo campo.
+    fn anillo(f: fn(&mut Recinto)) -> Recinto {
+        let celdas = [(ClaseCelda::Puerta, 0), (ClaseCelda::Muro, 1), (ClaseCelda::Torre, 2), (ClaseCelda::Muro, 3)].map(|(clase, col)| CeldaMuro { celda: Celda::new(col, -7), clase });
+        let mut r = Recinto { id: 1, nivel: 1, celdas: celdas.to_vec(), avance: 3, mejora: Some(MejoraDeRecinto { nivel: 2, avance: 0 }), siguiente_celda_en: Some(31), comprometido_en: 5, completado_en: Some(9) };
+        f(&mut r);
+        r
+    }
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
@@ -505,6 +514,8 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         e.extractor_minutos_sin_cupo = vec![(Tipo::Corral, 3)];
         e.reserva_manual[3] = 42;
         (e.poblacion.restos, e.poblacion.recuperando) = ([250, -400, 999], true);
+        e.recintos = vec![anillo(|_| {}), anillo(|r| (r.id, r.nivel, r.avance, r.mejora, r.completado_en) = (2, 2, 1, None, None))];
+        a.urbe.set_recintos(asentamiento::recintos::proyeccion(&a.economia.recintos));
     }
     rica.yacimientos.insert(3, nucleo::economia::StockNodo { stock: 5, vacio_desde: Some(77) });
     let rb = rica.serializar();
@@ -554,6 +565,17 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         ("completados_pendientes", eco(|e| e.completados_pendientes += 1)),
         ("destruido", eco(|e| e.destruido = true)),
         ("ultimo_minuto", eco(|e| e.ultimo_minuto += 1)),
+        ("recintos.nuevo", eco(|e| e.recintos.push(anillo(|_| {})))),
+        ("recintos.id", eco(|e| e.recintos.push(anillo(|r| r.id = 2)))),
+        ("recintos.nivel", eco(|e| e.recintos.push(anillo(|r| r.nivel = 2)))),
+        ("recintos.celda", eco(|e| e.recintos.push(anillo(|r| r.celdas[1].celda.col += 1)))),
+        ("recintos.clase", eco(|e| e.recintos.push(anillo(|r| r.celdas[1].clase = ClaseCelda::Torre)))),
+        ("recintos.avance", eco(|e| e.recintos.push(anillo(|r| r.avance = 2)))),
+        ("recintos.mejora", eco(|e| e.recintos.push(anillo(|r| r.mejora = None)))),
+        ("recintos.mejora.avance", eco(|e| e.recintos.push(anillo(|r| r.mejora = Some(MejoraDeRecinto { nivel: 2, avance: 1 }))))),
+        ("recintos.siguiente_celda_en", eco(|e| e.recintos.push(anillo(|r| r.siguiente_celda_en = None)))),
+        ("recintos.comprometido_en", eco(|e| e.recintos.push(anillo(|r| r.comprometido_en = 6)))),
+        ("recintos.completado_en", eco(|e| e.recintos.push(anillo(|r| r.completado_en = None)))),
         ("yacimientos", Box::new(|s| {
             s.yacimientos.insert(0, nucleo::economia::StockNodo { stock: 1, vacio_desde: None });
         })),
@@ -909,7 +931,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN19");
+    assert_eq!(&bytes[..5], b"BAN20");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

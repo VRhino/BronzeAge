@@ -356,6 +356,15 @@ pub enum Comando {
     EntrarEnAvanzada { avanzada: u64, heroe: u64 },
     /// Sale de una avanzada con todo lo que entró.
     SalirDeAvanzada { avanzada: u64, heroe: u64 },
+    // ── Murallas (2026-10-22, segunda tanda; Murallas.md §4-§8). Misma autorización provisional que las demás órdenes de plaza (`manda_en`); el cargo que se invoca se da por ocupado. ──
+    /// Compromete un recinto de `nivel` (1 empalizada, 2 muro de piedra, 3 muralla con adarve): traza el anillo, lo congela y empieza a levantarlo celda a celda (comprometer es gratis; cada
+    /// celda se paga al levantarla). Con recintos ya hechos es una **ampliación** (arrabal de 6 edificios extramuros y el anillo nuevo envuelve al exterior). `creadas` lleva el id del recinto.
+    /// El cargo solo puede ser el Gobernador o el Maestro de Obras.
+    ComprometerRecinto { asentamiento: u64, cargo: Cargo, nivel: u8 },
+    /// Empieza a mejorar un recinto completo al nivel siguiente (el anillo en pie sigue defendiendo con su nivel de antes). Mismo cargo que comprometer.
+    MejorarRecinto { asentamiento: u64, cargo: Cargo, recinto: u32 },
+    /// Abandona un recinto que nunca se cerró: se borra entero, sin devolución. Murallas lo reserva al Gobernador; hasta el sistema 5 lo autoriza `manda_en`.
+    AbandonarRecinto { asentamiento: u64, recinto: u32 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -493,6 +502,9 @@ impl Comando {
             | Comando::SolicitarAscenso { asentamiento }
             | Comando::FijarAcceso { asentamiento, .. }
             | Comando::ActivarPolitica { asentamiento, .. }
+            | Comando::ComprometerRecinto { asentamiento, .. }
+            | Comando::MejorarRecinto { asentamiento, .. }
+            | Comando::AbandonarRecinto { asentamiento, .. }
             | Comando::ColocarOrdenMercado { asentamiento, .. }
             | Comando::CrearCaravana { asentamiento }
             | Comando::DarRecursos { asentamiento, .. }
@@ -1314,6 +1326,23 @@ impl Peticion {
                 w.u8(118);
                 w.u64(*heroe);
             }
+            Comando::ComprometerRecinto { asentamiento, cargo, nivel } => {
+                w.u8(123);
+                w.u64(*asentamiento);
+                w.u8(cargo_a_u8(*cargo));
+                w.u8(*nivel);
+            }
+            Comando::MejorarRecinto { asentamiento, cargo, recinto } => {
+                w.u8(124);
+                w.u64(*asentamiento);
+                w.u8(cargo_a_u8(*cargo));
+                w.u32(*recinto);
+            }
+            Comando::AbandonarRecinto { asentamiento, recinto } => {
+                w.u8(125);
+                w.u64(*asentamiento);
+                w.u32(*recinto);
+            }
         }
         w.0
     }
@@ -1489,6 +1518,9 @@ impl Peticion {
             120 => Comando::SalirDePueblo { pueblo: r.u64()?, heroe: r.u64()? },
             121 => Comando::EntrarEnAvanzada { avanzada: r.u64()?, heroe: r.u64()? },
             122 => Comando::SalirDeAvanzada { avanzada: r.u64()?, heroe: r.u64()? },
+            123 => Comando::ComprometerRecinto { asentamiento: r.u64()?, cargo: cargo_de_u8(r.u8()?)?, nivel: r.u8()? },
+            124 => Comando::MejorarRecinto { asentamiento: r.u64()?, cargo: cargo_de_u8(r.u8()?)?, recinto: r.u32()? },
+            125 => Comando::AbandonarRecinto { asentamiento: r.u64()?, recinto: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1656,6 +1688,28 @@ pub mod rechazos {
     pub const AVANZADA_TROPA_SIN_TECNOLOGIA: &str = "avanzada.tropa_sin_tecnologia";
     /// La plaza madre no tiene el edificio activo, al nivel que pide la tropa, para reclutarla.
     pub const AVANZADA_TROPA_SIN_EDIFICIO: &str = "avanzada.tropa_sin_edificio";
+    // Murallas (`ErrorRecinto` del crate `asentamiento` y `ErrorMuralla` del trazo), en el orden en que se comprueban.
+    /// El cargo que se invoca no es el Gobernador ni el Maestro de Obras.
+    pub const MURALLAS_SIN_CARGO: &str = "murallas.sin_cargo";
+    pub const MURALLAS_NIVEL_INEXISTENTE: &str = "murallas.nivel_inexistente";
+    /// La plaza no tiene el nivel operativo que pide el nivel de recinto (empalizada 2, piedra 3, adarve 4).
+    pub const MURALLAS_NIVEL_DE_PLAZA: &str = "murallas.nivel_de_plaza";
+    /// Hay un recinto sin cerrar (en obra, o dañado por una conquista).
+    pub const MURALLAS_EN_OBRA: &str = "murallas.en_obra";
+    /// Ampliar exige 6 edificios fuera del recinto exterior.
+    pub const MURALLAS_ARRABAL: &str = "murallas.arrabal";
+    pub const MURALLAS_SIN_CENTRO_URBANO: &str = "murallas.sin_centro_urbano";
+    pub const MURALLAS_NO_SE_PUEDE_CERRAR: &str = "murallas.no_se_puede_cerrar";
+    pub const MURALLAS_FUERA_DE_LA_VENTANA: &str = "murallas.fuera_de_la_ventana";
+    /// El anillo nuevo no envuelve estrictamente al anterior.
+    pub const MURALLAS_NO_ENVUELVE: &str = "murallas.no_envuelve";
+    pub const MURALLAS_RECINTO_DESCONOCIDO: &str = "murallas.recinto_desconocido";
+    /// Mejorar un recinto sin cerrar.
+    pub const MURALLAS_INCOMPLETO: &str = "murallas.incompleto";
+    pub const MURALLAS_YA_MEJORANDO: &str = "murallas.ya_mejorando";
+    pub const MURALLAS_EN_EL_MAXIMO: &str = "murallas.en_el_maximo";
+    /// Abandonar un recinto que alguna vez estuvo completo.
+    pub const MURALLAS_YA_CERRADO: &str = "murallas.ya_cerrado";
     // Mercado de los campamentos de mercenarios (`ErrorMercenarios`).
     pub const CAMPAMENTO_DESCONOCIDO: &str = "campamento.desconocido";
     pub const CAMPAMENTO_FUERA_DE_LA_PUERTA: &str = "campamento.fuera_de_la_puerta";
@@ -2071,6 +2125,9 @@ mod pruebas {
             Comando::SalirDePueblo { pueblo: 6, heroe: 2 },
             Comando::EntrarEnAvanzada { avanzada: 7, heroe: 2 },
             Comando::SalirDeAvanzada { avanzada: 7, heroe: 2 },
+            Comando::ComprometerRecinto { asentamiento: 3, cargo: Cargo::MaestroObras, nivel: 2 },
+            Comando::MejorarRecinto { asentamiento: 3, cargo: Cargo::Gobernador, recinto: 1 },
+            Comando::AbandonarRecinto { asentamiento: 3, recinto: 2 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

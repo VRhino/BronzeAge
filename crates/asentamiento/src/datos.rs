@@ -12,6 +12,9 @@ use std::collections::BTreeMap;
 /// El documento incrustado: de él salen todas las cifras.
 pub const ECONOMIA: &str = include_str!("../../../Docs/Mechanics/Economia_Construccion.md");
 
+/// El documento de los recintos de muralla: de él sale el bloque `MURALLA` (sus costes, su obra y su bono defensivo).
+pub const MURALLAS: &str = include_str!("../../../Docs/Mechanics/Murallas.md");
+
 /// 1,0 en ppm.
 pub const UNO: i64 = 1_000_000;
 
@@ -27,9 +30,10 @@ pub fn bloque_de(doc: &str, nombre: &str) -> Result<Value, String> {
 }
 
 /// Los bloques `<!-- parametros:... -->` del documento, uno tras otro y sin la prosa que los rodea: es lo que define las reglas, así que
-/// su hash es la identidad de las reglas (editar el texto del documento no la cambia; editar una cifra, sí).
+/// su hash es la identidad de las reglas (editar el texto del documento no la cambia; editar una cifra, sí). Con el bloque `MURALLA` de los recintos.
 pub fn texto_de_parametros() -> String {
-    texto_de_parametros_de(ECONOMIA)
+    let muralla = bloque_de(MURALLAS, "MURALLA").unwrap_or_else(|e| panic!("{e}"));
+    texto_de_parametros_de(ECONOMIA) + &format!("<!-- parametros:MURALLA -->\n{muralla}\n<!-- /parametros -->\n")
 }
 
 /// Lo mismo para cualquier documento de Mechanics (el núcleo suma así los bloques del Trazado urbano a la identidad de las reglas).
@@ -147,6 +151,8 @@ pub struct Reglas {
     pub pueblos: crate::pueblos::ReglasPueblos,
     /// `AVANZADAS`: las obras de mapa de las avanzadas (Doc 5.17).
     pub avanzadas: crate::avanzadas::ReglasAvanzadas,
+    /// `MURALLA` (de `Murallas.md`): los recintos de muralla, su coste, su obra y su bono defensivo.
+    pub muralla: crate::recintos::ReglasMuralla,
     /// `FUNDACION.materialesIniciales`: lo que trae una plaza recién fundada.
     pub materiales_iniciales: Vec<(Recurso, Mil)>,
     /// `FUNDACION.viviendasIniciales`.
@@ -155,7 +161,7 @@ pub struct Reglas {
 
 impl Reglas {
     pub fn cargar() -> Self {
-        Self::de(&|n| bloque(n))
+        Self::de(&|n| if n == "MURALLA" { bloque_de(MURALLAS, n).unwrap_or_else(|e| panic!("{e}")) } else { bloque(n) })
     }
 
     fn de(b: &dyn Fn(&str) -> Value) -> Self {
@@ -232,6 +238,7 @@ impl Reglas {
             nivel: crate::nivel::ReglasNivel::de(&b("NIVEL_ASENTAMIENTO"), &b("ASCENSO_ASENTAMIENTO"), &b("CUPO_NIVEL_ASENTAMIENTO")),
             pueblos: crate::pueblos::ReglasPueblos::de(&b("PUEBLOS_EXTRACTORES")),
             avanzadas: crate::avanzadas::ReglasAvanzadas::de(&b("AVANZADAS")),
+            muralla: crate::recintos::ReglasMuralla::de(&b("MURALLA")),
         }
     }
 }

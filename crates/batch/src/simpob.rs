@@ -249,7 +249,6 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
         faccion_tiene_gran_fundicion: false,
         ciudadanos: 1,
         distancia_capital: 0,
-        recinto_nivel: 0,
         racion_guarnicion: 0,
         felicidad_extra: UNO,
         nobleza_extra: UNO,

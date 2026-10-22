@@ -17,9 +17,11 @@ use crate::mantenimiento::{self, Medidor};
 use crate::poblacion::{self, Entorno, Poblacion};
 use crate::politicas::Politicas;
 use crate::produccion::{self, Fuentes};
+use crate::recintos::{self, Recinto};
 use crate::pueblos::{IngresoAcarreo, Pueblo};
 use crate::recurso::{Costo, Recurso};
 use base::{Instante, Mil, Punto, MS_POR_MINUTO};
+use trazado::{CeldaMuro, ParametrosMuralla};
 
 /// Una obra de ascenso en curso (Doc 4.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,6 +80,9 @@ pub trait Sitios {
     fn reubicar(&mut self, _id: u32, _tipo: Tipo, _nivel: u8, _u: &Urbano) -> bool {
         true
     }
+    /// Una mejora de recinto terminó: vuelve a marcar las torres del anillo (sobre sus celdas de muro, sin juntar las del nivel anterior) para `nivel`, con
+    /// el interior que le da la ciudad. Sin ciudad no cambia nada.
+    fn reclasificar_torres(&mut self, _celdas: &mut [CeldaMuro], _nivel: u8, _p: &ParametrosMuralla) {}
 }
 
 /// Lo que el asentamiento necesita del resto del mundo en cada minuto.
@@ -99,8 +104,6 @@ pub struct Exterior<'a> {
     pub ciudadanos: u32,
     /// Distancia a la capital de la Facción (milésimas de unidad de mapa); 0 si es la capital o no hay.
     pub distancia_capital: Mil,
-    /// Nivel del mejor recinto completo de muralla (0 = ninguno, 2 = de piedra).
-    pub recinto_nivel: u32,
     /// Trigo por minuto de la ración de la guarnición (otro sistema); entra en el déficit y en la reserva de comida.
     pub racion_guarnicion: Mil,
     /// Multiplicadores de otros sistemas (ocupación, Aedas), ppm; `UNO` si no hay.
@@ -168,6 +171,18 @@ pub enum Evento {
     AvanzadaDestruida { id: u64 },
     /// Se canceló a mano la mejora o la reparación de la avanzada: los materiales entregados se perdieron.
     AvanzadaObraCancelada { id: u64, tipo: TipoObra },
+    /// Se comprometió un recinto de muralla (gratis): el anillo queda trazado y sus celdas ocupan suelo; la obra empieza con la primera celda.
+    RecintoComprometido { recinto: u32, nivel: u8, celdas: usize, puertas: usize },
+    /// Empezó la mejora de un recinto completo al `nivel` (destino).
+    RecintoMejoraIniciada { recinto: u32, nivel: u8 },
+    /// Se abandonó un recinto que nunca se había cerrado.
+    RecintoAbandonado { recinto: u32 },
+    /// Se levantó una celda del recinto (de su anillo, de su mejora o de su reparación): `levantadas` celdas hechas y la cita de la siguiente, si queda alguna.
+    RecintoCelda { recinto: u32, levantadas: usize, siguiente_en: Option<Instante> },
+    /// El anillo se cerró por primera vez.
+    RecintoCompletado { recinto: u32, nivel: u8, celdas: usize, puertas: usize },
+    /// Terminó la mejora: el recinto está al `nivel` nuevo.
+    RecintoMejorado { recinto: u32, nivel: u8, celdas: usize, puertas: usize },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -185,6 +200,8 @@ pub struct Asentamiento {
     pub pueblos: Vec<Pueblo>,
     /// Las avanzadas de la plaza, en cualquier estado, por id ascendente (Doc 5.17). Tampoco son edificios de la ciudad.
     pub avanzadas: Vec<Avanzada>,
+    /// Los recintos de muralla de la plaza, del más interior al más exterior (Murallas.md). Ver [`crate::recintos`].
+    pub recintos: Vec<Recinto>,
     /// Lo que el acarreo ingresó de verdad en el almacén de la plaza en las últimas horas (ventana de 24 h, por hora y recurso): es lo que
     /// cuenta como acarreo en la solvencia del ascenso. Solo se escribe cuando llega un carro; un pueblo ocioso no la toca.
     pub ingresos_acarreo: Vec<IngresoAcarreo>,
@@ -228,6 +245,7 @@ impl Asentamiento {
             edificios,
             pueblos: vec![],
             avanzadas: vec![],
+            recintos: vec![],
             ingresos_acarreo: vec![],
             siguiente_edificio: id + 1,
             ascenso: None,
@@ -288,9 +306,9 @@ impl Asentamiento {
         (p, a, n)
     }
 
-    /// Coste de mantenimiento ahora (sin recintos).
+    /// Coste de mantenimiento ahora, con el de los recintos (las celdas en pie, sin escala).
     pub fn coste_mantenimiento(&self, r: &Reglas, distancia_capital: Mil) -> Costo {
-        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.elementos_de_mapa_activos(), self.nivel_actual(), distancia_capital, &vec![])
+        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.elementos_de_mapa_activos(), self.nivel_actual(), distancia_capital, &recintos::upkeep(&r.muralla, &self.recintos))
     }
 
     pub(crate) fn entorno_poblacion(&self, r: &Reglas, x: &Exterior) -> Entorno {
@@ -362,6 +380,10 @@ impl Asentamiento {
         if !self.auto_pausada {
             self.evaluar_necesidades(t, x, &mano, &reserva_auto, &mut ev);
         }
+        // La obra de los recintos, con la misma reserva: reintenta la celda que esperaba materiales (las que tienen cita las levanta `cumplir_fines`).
+        if self.recintos.iter().any(|r| r.vence(t)) {
+            self.avanzar_recintos(t, x, &reserva_auto, &mut ev);
+        }
 
         // 2. Comida y hambre, crecimiento y recaudación.
         let entorno = self.entorno_poblacion(r, x);
@@ -410,6 +432,7 @@ impl Asentamiento {
         self.terminar_mejoras(t, r, x, &mut ev);
         self.terminar_ascenso(t, &mut ev);
         self.cumplir_avanzadas(t, r, &mut ev);
+        self.levantar_recintos(t, x, &mut ev);
         if ev.iter().any(|e| matches!(e, Evento::EdificioCompletado { .. } | Evento::MejoraCompletada { .. })) {
             self.arrancar_obras(t, r, &mut ev);
         }
@@ -427,7 +450,7 @@ impl Asentamiento {
     pub fn avanzar_hasta(&mut self, t: Instante, x: &mut Exterior) -> Vec<Evento> {
         let desde = self.ultimo_minuto;
         let obras = self.edificios.iter().filter(|e| e.estado == Estado::EnConstruccion).filter_map(|e| e.completa_en);
-        let mut instantes: Vec<Instante> = obras.chain(self.edificios.iter().filter_map(|e| e.mejora.map(|m| m.completa_en))).chain(self.ascenso.map(|a| a.completa_en)).chain(self.fines_de_avanzadas()).filter(|&f| f > desde && f <= t).collect();
+        let mut instantes: Vec<Instante> = obras.chain(self.edificios.iter().filter_map(|e| e.mejora.map(|m| m.completa_en))).chain(self.ascenso.map(|a| a.completa_en)).chain(self.fines_de_avanzadas()).chain(self.fines_de_recintos()).filter(|&f| f > desde && f <= t).collect();
         instantes.sort_unstable();
         instantes.dedup();
         let mut ev: Vec<Evento> = instantes.into_iter().flat_map(|f| self.cumplir_fines(f, x)).collect();
