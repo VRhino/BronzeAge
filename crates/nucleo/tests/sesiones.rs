@@ -23,15 +23,15 @@ async fn arrancar() -> Servicio {
     arrancar_con(n).await
 }
 
-fn marchar_a(peticion: &str, heroe: &str, p: Punto) -> mc::Cuerpo {
-    mc::Cuerpo::Orden(Orden {
-        peticion_id: peticion.into(),
-        cuerpo: Some(orden::Cuerpo::MarcharA(OrdenMarcharA {
-            heroe_id: heroe.into(),
-            objetivo: Some(orden_marchar_a::Objetivo { tipo: Some(orden_marchar_a::objetivo::Tipo::Punto(pb::Punto { x: p.x, y: p.y })) }),
-        })),
-        ..Default::default()
+fn marchar_a_cuerpo(heroe: &str, p: Punto) -> orden::Cuerpo {
+    orden::Cuerpo::MarcharA(OrdenMarcharA {
+        heroe_id: heroe.into(),
+        objetivo: Some(orden_marchar_a::Objetivo { tipo: Some(orden_marchar_a::objetivo::Tipo::Punto(pb::Punto { x: p.x, y: p.y })) }),
     })
+}
+
+fn marchar_a(peticion: &str, heroe: &str, p: Punto) -> mc::Cuerpo {
+    orden_de(peticion, marchar_a_cuerpo(heroe, p))
 }
 
 fn reloj_orden(peticion: &str, accion: &str, factor: Option<i64>) -> mc::Cuerpo {
@@ -45,19 +45,20 @@ fn reloj_orden(peticion: &str, accion: &str, factor: Option<i64>) -> mc::Cuerpo 
 #[tokio::test]
 async fn conectar_ordenar_marcha_y_ver_llegar() {
     let w = arrancar().await;
-    let (mut ana, b) = ClientePrueba::entrar(w.srv.direccion, hola("ok:ana", TipoCliente::ClienteUnity)).await;
-    assert_eq!(b.heroe_id.as_deref(), Some("ana"));
+    let (mut ana, b, mensajes) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    assert_eq!((b.heroe_id.as_deref(), b.faccion_id.as_deref()), (Some("heroe-2"), Some("f-1")));
     assert_eq!(b.mundo.unwrap().hash, "hash-de-prueba");
-    assert_eq!(b.ambitos[0].decision, DecisionReanudacion::ReanudaConFoto as i32);
-    let f = foto(&mut ana).await;
-    assert_eq!((f.entidades.len(), f.ambito.unwrap().id.as_str()), (1, "ana"), "solo lo suyo");
+    // Dos ámbitos, el del héroe (con su columna) y el de su Facción (sin contenido todavía), los dos con foto.
+    let ambitos: Vec<_> = b.ambitos.iter().map(|a| (a.ambito.as_ref().unwrap().id.as_str(), a.decision)).collect();
+    assert_eq!(ambitos, [("heroe-2", DecisionReanudacion::ReanudaConFoto as i32), ("f-1", DecisionReanudacion::ReanudaConFoto as i32)]);
+    let ms::Cuerpo::Foto(f) = &mensajes[0] else { panic!("se esperaba la Foto del héroe") };
+    assert_eq!((f.entidades.len(), f.ambito.as_ref().unwrap().id.as_str()), (1, "heroe-2"), "solo lo suyo");
     let e = ejercito(&f.entidades[0]);
     assert_eq!((e.id.as_str(), e.estado, e.plan.is_none()), ("ej-1", pb::EstadoColumna::ColumnaEstacionada as i32, true));
 
-    let (mut beto, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:beto", TipoCliente::ClienteUnity)).await;
-    foto(&mut beto).await;
-    let (mut admin, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
-    assert!(foto(&mut admin).await.entidades.is_empty());
+    let (mut beto, _) = w.entrar("beto", TipoCliente::ClienteUnity).await;
+    let (mut admin, f_admin) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    assert_eq!((f_admin.ambito.unwrap().tipo, f_admin.entidades.len()), (pb::AmbitoTipo::AmbitoAdmin as i32, 2), "la administración lo ve todo");
 
     // El administrador acelera el reloj ×600: el resultado y luego el aviso a todos.
     admin.enviar(reloj_orden("r1", "fijar_factor", Some(600_000))).await;
@@ -119,51 +120,48 @@ async fn conectar_ordenar_marcha_y_ver_llegar() {
 #[tokio::test]
 async fn reanudacion_sin_novedad_con_deltas_y_con_foto() {
     let w = arrancar().await;
-    let (mut admin, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
-    foto(&mut admin).await;
-    let (mut ana, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:ana", TipoCliente::ClienteUnity)).await;
-    let f = foto(&mut ana).await;
+    let (mut admin, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    let (ana, f) = w.entrar("ana", TipoCliente::ClienteUnity).await;
     ana.cerrar().await;
+    // Lo que ana conserva: la versión de sus dos ámbitos (el del héroe y el de su Facción, que nacieron en la misma).
+    let conoce = |v: u64| {
+        let mut h = hola("ok:ana", TipoCliente::ClienteUnity);
+        h.versiones_conocidas.extend([("HEROE:heroe-2".to_owned(), v), ("FACCION:f-1".to_owned(), v)]);
+        h
+    };
+    let decisiones = |b: &pb::Bienvenida| b.ambitos.iter().map(|a| a.decision).collect::<Vec<_>>();
 
-    // Cambia el mundo sin tocar nada de ana: beto marcha. Ana, al volver, "sin novedad" aunque la versión global avanzó.
-    let (mut beto, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:beto", TipoCliente::ClienteUnity)).await;
-    foto(&mut beto).await;
+    // Cambia el mundo sin tocar nada de ana: beto marcha. Ana, al volver, "sin novedad" en los dos aunque la versión global avanzó.
+    let (mut beto, _) = w.entrar("beto", TipoCliente::ClienteUnity).await;
     beto.enviar(marchar_a("b1", "heroe-4", c(12, 10))).await;
     delta(&mut beto).await;
     assert!(resultado(&mut beto).await.version_tras > f.version);
-    let mut h = hola("ok:ana", TipoCliente::ClienteUnity);
-    h.versiones_conocidas.insert("HEROE:ana".into(), f.version);
-    let (mut ana, b) = ClientePrueba::entrar(w.srv.direccion, h).await;
-    assert_eq!(b.ambitos[0].decision, DecisionReanudacion::ReanudaSinNovedad as i32);
+    let (mut ana, b, mensajes) = w.conectar(conoce(f.version)).await;
+    assert_eq!(decisiones(&b), [DecisionReanudacion::ReanudaSinNovedad as i32; 2]);
+    assert!(mensajes.is_empty());
     silencio(&mut ana).await;
     ana.cerrar().await;
 
     // Ahora el administrador manda la columna de ana mientras está fuera: al volver recibe un delta consolidado.
-    admin.enviar(marchar_a("a1", "heroe-2", c(3, 1))).await;
-    assert_eq!(resultado(&mut admin).await.resultado, pb::Resultado::OrdenAceptada as i32); // admin no ve lo de ana
-    let mut h = hola("ok:ana", TipoCliente::ClienteUnity);
-    h.versiones_conocidas.insert("HEROE:ana".into(), f.version);
-    let (mut ana, b) = ClientePrueba::entrar(w.srv.direccion, h).await;
+    let (_, r) = dar(&mut admin, "a1", marchar_a_cuerpo("heroe-2", c(3, 1))).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    let (_, b, mensajes) = w.conectar(conoce(f.version)).await;
     assert_eq!(b.ambitos[0].decision, DecisionReanudacion::ReanudaConDeltas as i32);
-    let d = delta(&mut ana).await;
-    assert_eq!(d.desde, f.version);
-    assert_eq!(d.hasta, b.ambitos[0].version_actual);
-    assert_eq!(d.cambios.len(), 1);
+    let ms::Cuerpo::Delta(d) = &mensajes[0] else { panic!("se esperaba la Delta del héroe") };
+    assert_eq!((d.desde, d.hasta, d.cambios.len()), (f.version, b.ambitos[0].version_actual, 1));
 
     // Una versión del futuro (el servidor volvió de una copia vieja) o ninguna: foto.
-    let mut h = hola("ok:ana", TipoCliente::ClienteUnity);
-    h.versiones_conocidas.insert("HEROE:ana".into(), 999_999);
-    let (mut ana, b) = ClientePrueba::entrar(w.srv.direccion, h).await;
-    assert_eq!(b.ambitos[0].decision, DecisionReanudacion::ReanudaConFoto as i32);
-    foto(&mut ana).await;
+    let (_, b, mensajes) = w.conectar(conoce(999_999)).await;
+    assert_eq!(decisiones(&b), [DecisionReanudacion::ReanudaConFoto as i32; 2]);
+    assert!(mensajes.iter().all(|m| matches!(m, ms::Cuerpo::Foto(_))));
     w.parar().await;
 }
 
 #[tokio::test]
 async fn el_cliente_lento_se_descarta_sin_bloquear_el_mundo() {
     let w = arrancar().await;
-    // Sesión directa con un canal de capacidad 1 que nadie lee: la Foto lo llena.
-    let (dtx, mut drx) = mpsc::channel(1);
+    // Sesión directa con un canal de capacidad 2 que nadie lee: las dos Foto de ana (su héroe y su Facción) lo llenan.
+    let (dtx, mut drx) = mpsc::channel(2);
     let (rtx, rrx) = oneshot::channel();
     let h = hola("ok:ana", TipoCliente::ClienteUnity);
     let identidad = servidor::Identidad { cliente_id: "ana".into(), roles: vec![TipoCliente::ClienteUnity] };
@@ -171,14 +169,13 @@ async fn el_cliente_lento_se_descarta_sin_bloquear_el_mundo() {
     rrx.await.unwrap().expect("bienvenida");
 
     // El administrador mueve la columna de ana: el actor no puede depositar y la descarta; el mundo sigue.
-    let (mut admin, _) = ClientePrueba::entrar(w.srv.direccion, hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
-    foto(&mut admin).await;
-    admin.enviar(marchar_a("a1", "heroe-2", c(3, 1))).await;
-    assert_eq!(resultado(&mut admin).await.resultado, pb::Resultado::OrdenAceptada as i32);
-    admin.enviar(marchar_a("a2", "heroe-2", c(5, 1))).await;
-    assert_eq!(resultado(&mut admin).await.resultado, pb::Resultado::OrdenAceptada as i32);
+    let (mut admin, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    for (peticion, destino) in [("a1", c(3, 1)), ("a2", c(5, 1))] {
+        let (_, r) = dar(&mut admin, peticion, marchar_a_cuerpo("heroe-2", destino)).await;
+        assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    }
 
-    assert!(matches!(drx.recv().await, Some(Difusion::Foto(_))), "lo que ya estaba en el canal se entrega");
+    assert!(matches!(drx.recv().await, Some(Difusion::Foto(_))) && matches!(drx.recv().await, Some(Difusion::Foto(_))), "lo que ya estaba en el canal se entrega");
     assert!(drx.recv().await.is_none(), "después, el canal se cierra: la sesión se descartó");
     w.parar().await;
 }
@@ -227,8 +224,9 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
     let uuid = n.uuid_de_batalla(id);
     let escuadras: Vec<u64> = n.batalla(id).unwrap().escuadras_de().map(|e| e.id).collect();
     let w = arrancar_con(n).await;
-    let (mut svc, _) = ClientePrueba::entrar(w.srv.direccion, hola("svc:srv", TipoCliente::ClienteServidorBatalla)).await;
-    foto(&mut svc).await;
+    // Un servidor de batalla no tiene ningún ámbito: no recibe fotos.
+    let (mut svc, b) = ClientePrueba::entrar(w.srv.direccion, hola("svc:srv", TipoCliente::ClienteServidorBatalla)).await;
+    assert!(b.ambitos.is_empty() && b.heroe_id.is_none());
     let inicio = |revision| de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 1, battle_id: uuid.clone(), ticket_revision: revision, intento_asignacion_id: "a1".into() }));
     let asignacion = de_batalla(Cuerpo::Asignacion(pb::BattleServerAssignment {
         schema_version: 1,

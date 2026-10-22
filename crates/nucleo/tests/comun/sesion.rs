@@ -33,10 +33,21 @@ impl Servicio {
         self.actor.await.unwrap()
     }
 
-    /// Conecta a `cliente` (con el tipo dado) y recoge su `Foto` inicial.
+    /// Conecta con el `Hola` dado y recoge lo que el servidor manda tras la `Bienvenida`: un mensaje (`Foto` o `Delta`) por cada ámbito que no reanuda sin novedad.
+    pub async fn conectar(&self, hola: pb::Hola) -> (ClientePrueba, pb::Bienvenida, Vec<ms::Cuerpo>) {
+        let (mut c, b) = ClientePrueba::entrar(self.srv.direccion, hola).await;
+        let n = b.ambitos.iter().filter(|a| a.decision != pb::DecisionReanudacion::ReanudaSinNovedad as i32).count();
+        let mut mensajes = Vec::new();
+        for _ in 0..n {
+            mensajes.push(c.esperar().await.cuerpo.expect("un mensaje con cuerpo"));
+        }
+        (c, b, mensajes)
+    }
+
+    /// Conecta a `cliente` (con el tipo dado) y recoge la `Foto` de su primer ámbito (la vacía si no tiene ninguno); las de los demás ámbitos se leen y se descartan.
     pub async fn entrar(&self, cliente: &str, tipo: TipoCliente) -> (ClientePrueba, pb::Foto) {
-        let (mut c, _) = ClientePrueba::entrar(self.srv.direccion, hola(&format!("ok:{cliente}"), tipo)).await;
-        let f = foto(&mut c).await;
+        let (c, _, mensajes) = self.conectar(hola(&format!("ok:{cliente}"), tipo)).await;
+        let f = mensajes.into_iter().find_map(|m| if let ms::Cuerpo::Foto(f) = m { Some(f) } else { None }).unwrap_or_default();
         (c, f)
     }
 }
@@ -45,22 +56,33 @@ pub fn orden_de(peticion: &str, cuerpo: orden::Cuerpo) -> mc::Cuerpo {
     mc::Cuerpo::Orden(Orden { peticion_id: peticion.into(), cuerpo: Some(cuerpo), ..Default::default() })
 }
 
-/// Da una orden y espera su resultado. Devuelve las `Delta` que llegaron antes, que cumplen la causalidad: ninguna pasa de la versión del resultado.
-pub async fn dar(c: &mut ClientePrueba, peticion: &str, cuerpo: orden::Cuerpo) -> (Vec<pb::Delta>, pb::ResultadoOrden) {
+/// Da una orden y espera su resultado. Devuelve lo que llegó antes (`Delta`, `Foto` y `Revocado`, en orden), que cumple la causalidad: nada pasa de la versión del resultado.
+pub async fn dar_todo(c: &mut ClientePrueba, peticion: &str, cuerpo: orden::Cuerpo) -> (Vec<ms::Cuerpo>, pb::ResultadoOrden) {
     c.enviar(orden_de(peticion, cuerpo)).await;
-    let mut deltas = Vec::new();
+    let mut previos = Vec::new();
     loop {
         match c.esperar().await.cuerpo {
-            Some(ms::Cuerpo::Delta(d)) => deltas.push(d),
+            Some(m @ (ms::Cuerpo::Delta(_) | ms::Cuerpo::Foto(_) | ms::Cuerpo::Revocado(_))) => previos.push(m),
             Some(ms::Cuerpo::Resultado(r)) => {
                 assert_eq!(r.peticion_id, peticion);
-                assert!(deltas.iter().all(|d| d.hasta <= r.version_tras), "una Delta llegó después del resultado de la orden que la causó");
-                return (deltas, r);
+                let version = |m: &ms::Cuerpo| match m {
+                    ms::Cuerpo::Delta(d) => d.hasta,
+                    ms::Cuerpo::Foto(f) => f.version,
+                    _ => 0,
+                };
+                assert!(previos.iter().all(|m| version(m) <= r.version_tras), "un mensaje de ámbito llegó después del resultado de la orden que lo causó");
+                return (previos, r);
             }
             Some(ms::Cuerpo::Aviso(_)) => {}
             o => panic!("llegó {o:?}"),
         }
     }
+}
+
+/// Da una orden y espera su resultado. Devuelve las `Delta` que llegaron antes (las `Foto` y `Revocado`, si los hubo, se descartan).
+pub async fn dar(c: &mut ClientePrueba, peticion: &str, cuerpo: orden::Cuerpo) -> (Vec<pb::Delta>, pb::ResultadoOrden) {
+    let (previos, r) = dar_todo(c, peticion, cuerpo).await;
+    (previos.into_iter().filter_map(|m| if let ms::Cuerpo::Delta(d) = m { Some(d) } else { None }).collect(), r)
 }
 
 /// El código de rechazo de un resultado (falla si se aceptó).

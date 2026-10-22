@@ -27,7 +27,8 @@
 //!   hace que la sesión cierre con `interno`). Un `send().await` del núcleo contra una sesión lenta podría bloquear el mundo
 //!   entero, y además puede interbloquearse con el `send` de la sesión hacia el núcleo.
 //! - Contestar el `oneshot` de `Conecta` con la `Bienvenida` (el servidor la envía la primera, con `secuencia` 1) y, si procede,
-//!   depositar a continuación la `Foto`/`Delta` de reanudación en el canal de la sesión.
+//!   depositar a continuación la `Foto`/`Delta` de reanudación de cada ámbito en el canal de la sesión (uno por ámbito que no reanuda sin novedad).
+//! - Avisar con `Revocado` cuando una sesión pierde el derecho a un ámbito (el cliente descarta sus entidades).
 //!
 //! # Compresión
 //! `zstd` se negocia con `Hola.compresiones`. Como el `.proto` no tiene campo de respuesta, cada trama **se autodescribe**: una

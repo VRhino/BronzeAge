@@ -37,6 +37,11 @@ impl Geografia {
         self.mundo.bandidos_iniciales().iter().filter_map(|b| b.posicion.as_ref().map(|p| (Punto::new(p.x, p.y), b.nivel.clamp(1, 3) as u8))).collect()
     }
 
+    /// Los campamentos de mercenarios del artefacto: su puerta y su origen, en su orden (el índice es el del campamento).
+    pub(super) fn campamentos_del_artefacto(&self) -> Vec<(Punto, u32)> {
+        self.mundo.campamentos().iter().filter_map(|c| c.posicion.as_ref().map(|p| (Punto::new(p.x, p.y), c.origen))).collect()
+    }
+
     /// ¿Se puede pisar `p`? Tierra firme dentro del mapa y transitable (ni agua ni cima ni río sin vado).
     pub(super) fn es_tierra_firme(&self, p: Punto) -> bool {
         self.terreno(p) == Terreno::Firme

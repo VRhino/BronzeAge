@@ -1,15 +1,16 @@
-//! El actor de sesiones: consume los `ComandoSesion` de `servidor`, aplica las órdenes en el núcleo y reparte `Foto`, `Delta`
+//! El actor de sesiones: consume los `ComandoSesion` de `servidor`, aplica las órdenes en el núcleo y reparte `Foto`, `Delta`, `Revocado`
 //! y `ResultadoOrden` por el canal de cada sesión, cumpliendo las obligaciones documentadas en `servidor`:
 //! - **`try_send` siempre**: si el canal de una sesión está lleno (cliente lento) o cerrado, la sesión se descarta (se suelta
 //!   su `Sender`, y el servidor la cierra con `interno`). Nunca se bloquea el mundo por un cliente.
 //! - **Causalidad**: antes del `ResultadoOrden` de una orden se reparten TODAS las `Delta` con `hasta <= version_tras`.
-//! - **Conecta**: se contesta el `oneshot` con la `Bienvenida` y a continuación se deposita la `Foto` o la `Delta` de reanudación.
+//! - **Conecta**: se contesta el `oneshot` con la `Bienvenida` y a continuación se depositan la `Foto` o la `Delta` de reanudación de cada ámbito.
 //!
 //! # Ámbitos
-//! Cada sesión recibe el ámbito `HEROE:<cliente>` con sus columnas. `Delta.desde` es la última versión que esa sesión tiene
-//! del ámbito: las versiones que no tocan nada suyo no le cuestan ningún mensaje (cada sesión lleva su propia versión del
-//! ámbito, que avanza al recibir una `Delta`). El ámbito `VISTA` (lo ajeno, con niebla) lo servirá `vision`; mientras tanto
-//! `CambiarVista` solo se recuerda.
+//! Cada sesión recibe los ámbitos del contrato 05 §3 a los que tiene derecho (`ambitos`): `HEROE:<héroe>`, `FACCION:<facción>`, `ASENTAMIENTO:<plaza>` y `CAMPAMENTO:<campamento>` mientras está
+//! dentro, `VISTA:<facción>` desde que fija su rectángulo con `CambiarVista`, y `ADMIN:` en una sesión de administración. El servidor decide: cuando el estado cambia el derecho (el héroe sale de la
+//! plaza, cambia de Facción...) manda `Revocado` del ámbito que pierde y la `Foto` del que gana. `Delta.desde` es la última versión que esa sesión tiene del ámbito: las versiones que no tocan nada
+//! suyo no le cuestan ningún mensaje (cada sesión lleva su propia versión de cada ámbito, que avanza al recibir una `Delta` o una `Foto`). Al reconectar, `Hola.versiones_conocidas` decide por
+//! ámbito: sin novedad, deltas si el registro de cambios alcanza esa versión, foto si no.
 //!
 //! # Órdenes
 //! `ordenes::traducir` lleva cada orden del jugador del contrato (`orders.proto`, 145 órdenes) a su `Comando` del núcleo; el núcleo aplica la autorización. Las que el núcleo aún no
@@ -19,13 +20,17 @@
 //! El actor es quien gobierna el [`RelojCompartido`]: duerme hasta el próximo evento de la cola (convertido a pared con el
 //! factor vigente) o, como mucho, 500 ms, y al despertar avanza el núcleo hasta el instante de mundo.
 
+mod ambitos;
 mod ordenes;
 
 use crate::comando::{rechazos, Comando, Peticion, Resultado, Respuesta};
-use crate::estado::{CambioVersion, Clase, Estado, EventoNucleo};
+use crate::estado::CambioVersion;
 use crate::nucleo::Nucleo;
+use crate::proyeccion::ambito::Ambito;
 use crate::proyeccion::ids::{self, parse_escuadra, parse_heroe};
-use crate::proyeccion::{ambito_heroe, cambio_ejercito, clave_ambito_heroe, detalle_de_rechazo, entidad_ejercito, evento_dominio, referencia_creada};
+use crate::proyeccion::{detalle_de_rechazo, referencia_creada};
+use ambitos::{cambia_derechos, delta, derechos, es_jugador, foto, reanudable, Mesa, Sesion};
+use base::Punto;
 use combate::ciclo::{Asignacion, EscuadraDeSalida, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
@@ -34,7 +39,7 @@ use contrato::v1 as pb;
 use pb::orden::Cuerpo;
 use sha2::{Digest, Sha256};
 use servidor::{ComandoSesion, Difusion, RelojCompartido, SesionId};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -43,21 +48,10 @@ const ESPERA_MAXIMA_MS: i64 = 500;
 /// La versión del esquema del contrato de batalla que habla este servidor (`SCHEMA_VERSION`).
 const SCHEMA_VERSION: u32 = 1;
 
-struct Sesion {
-    cliente: String,
-    admin: bool,
-    tx: mpsc::Sender<Difusion>,
-    /// Última versión del ámbito `HEROE:<cliente>` que tiene el cliente.
-    version: u64,
-    #[allow(dead_code)] // ponytail: solo se recuerda; `vision` lo usará para filtrar la VISTA
-    vista: Option<pb::Rectangulo>,
-}
-
 struct Actor {
     nucleo: Nucleo,
     reloj: RelojCompartido,
-    sesiones: HashMap<SesionId, Sesion>,
-    por_cliente: HashMap<String, SesionId>,
+    mesa: Mesa,
     /// Última versión cuyos cambios ya se repartieron.
     entregada: u64,
 }
@@ -67,34 +61,8 @@ struct Actor {
 pub fn lanzar(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<ComandoSesion>) -> JoinHandle<Nucleo> {
     nucleo.conectar_reloj(reloj.clone());
     let entregada = nucleo.version();
-    let actor = Actor { nucleo, reloj, sesiones: HashMap::new(), por_cliente: HashMap::new(), entregada };
+    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), entregada };
     tokio::spawn(actor.correr(rx))
-}
-
-/// Lo que cambió para un dueño: sus columnas tocadas y los eventos que nombran a alguna, con la versión que los produjo.
-type Cubo<'r> = (BTreeSet<u64>, Vec<(u64, &'r EventoNucleo)>);
-
-/// Agrupa por dueño (`solo` = uno solo) las columnas tocadas y los eventos de los registros. Una columna es de las cuentas de todos sus participantes.
-fn agrupar<'e, 'r>(estado: &'e Estado, registros: impl Iterator<Item = &'r CambioVersion>, solo: Option<&str>) -> BTreeMap<&'e str, Cubo<'r>> {
-    let mut por_dueno: BTreeMap<&'e str, Cubo<'r>> = BTreeMap::new();
-    let duenos = |id: &u64| -> BTreeSet<&'e str> {
-        let participantes = estado.ejercitos.get(id).into_iter().flat_map(|e| e.columna.participantes.iter());
-        participantes.filter_map(|p| estado.militar.heroes.get(&p.heroe)).map(|h| h.cuenta.as_str()).filter(|d| solo.is_none_or(|s| s == *d)).collect()
-    };
-    for cv in registros {
-        for id in cv.tocados.de(Clase::Ejercito) {
-            for d in duenos(id) {
-                por_dueno.entry(d).or_default().0.insert(*id);
-            }
-        }
-        for ev in &cv.eventos {
-            let oyen: BTreeSet<&str> = ev.ejercitos.iter().flat_map(duenos).collect();
-            for d in oyen {
-                por_dueno.entry(d).or_default().1.push((cv.version, ev));
-            }
-        }
-    }
-    por_dueno
 }
 
 fn depositar(tx: &mpsc::Sender<Difusion>, d: Difusion) -> bool {
@@ -142,25 +110,23 @@ impl Actor {
     fn manejar(&mut self, c: ComandoSesion) {
         match c {
             ComandoSesion::Conecta { sesion, identidad, hola, difusion, respuesta } => {
-                let admin = hola.cliente() == pb::TipoCliente::ClienteAdminWeb;
-                self.conecta(sesion, identidad.cliente_id, admin, hola, difusion, respuesta);
+                let rol = hola.cliente();
+                self.conecta(sesion, identidad.cliente_id, rol, hola, difusion, respuesta);
             }
             ComandoSesion::Orden { sesion, orden } => self.orden(sesion, orden),
-            ComandoSesion::Vista { sesion, rect } => {
-                if let Some(s) = self.sesiones.get_mut(&sesion) {
-                    s.vista = Some(rect);
-                }
-            }
+            ComandoSesion::Vista { sesion, rect } => self.vista(sesion, rect),
             ComandoSesion::Batalla { sesion, mensaje } => self.batalla(sesion, mensaje),
-            ComandoSesion::Desconecta { sesion } => self.quitar(sesion),
+            ComandoSesion::Desconecta { sesion } => {
+                self.mesa.quitar(sesion);
+            }
         }
     }
 
-    fn quitar(&mut self, sesion: SesionId) {
-        if let Some(s) = self.sesiones.remove(&sesion) {
-            if self.por_cliente.get(&s.cliente) == Some(&sesion) {
-                self.por_cliente.remove(&s.cliente);
-            }
+    /// Un `Aviso` suelto a una sesión (un rechazo que no es de una orden).
+    fn avisar(&mut self, sesion: SesionId, codigo: &str, mensaje: String) {
+        let Some(s) = self.mesa.get(sesion) else { return };
+        if !depositar(&s.tx, Difusion::Aviso(pb::Aviso { codigo: codigo.into(), mensaje, reloj: None })) {
+            self.mesa.quitar(sesion);
         }
     }
 
@@ -170,7 +136,7 @@ impl Actor {
         &mut self,
         sesion: SesionId,
         cliente: String,
-        admin: bool,
+        rol: pb::TipoCliente,
         hola: pb::Hola,
         tx: mpsc::Sender<Difusion>,
         respuesta: oneshot::Sender<Result<pb::Bienvenida, pb::ErrorSesion>>,
@@ -181,73 +147,105 @@ impl Actor {
             return;
         }
         self.avanzar();
-        if let Some(vieja) = self.por_cliente.remove(&cliente) {
-            self.sesiones.remove(&vieja);
+        if let Some(vieja) = self.mesa.de_cliente(&cliente) {
+            self.mesa.quitar(vieja);
         }
-        let conocida = hola.versiones_conocidas.get(&clave_ambito_heroe(&cliente)).copied();
-        let (decision, version, msg) = self.reanudar(&cliente, conocida);
+        let v = self.nucleo.version();
+        let mut s = Sesion::nueva(&self.nucleo, cliente, rol, tx.clone());
+        // Por cada ámbito al que tiene derecho: reanuda si el cliente conserva una versión que el registro alcanza; si no, foto.
+        let derechos = derechos(&self.nucleo, &s);
+        let mut reanudan: BTreeMap<Ambito, u64> = BTreeMap::new();
+        for &a in &derechos {
+            let k = hola.versiones_conocidas.get(&a.clave()).copied().filter(|&k| reanudable(&self.nucleo, &s, a, k));
+            s.abiertos.insert(a, k.unwrap_or(v));
+            reanudan.extend(k.map(|k| (a, k)));
+        }
+        let heroe = s.heroe.and_then(|h| self.nucleo.heroe(h));
+        let (heroe_id, faccion_id) = (heroe.map(|h| ids::heroe(h.heroe.id)), heroe.and_then(|h| h.faccion).map(ids::faccion));
+        let campamentos = if heroe.is_none() && es_jugador(rol) { self.campamentos_para_elegir() } else { Vec::new() };
+        self.mesa.insertar(sesion, s);
+        // El tramo que le falta a lo que reanuda, de la versión más vieja que conserva.
+        let mut cubos = match reanudan.values().min() {
+            Some(&k) => self.mesa.repartir(&self.nucleo, self.nucleo.cambios_desde(k).into_iter().flatten(), Some(sesion)),
+            None => BTreeMap::new(),
+        };
+        let (mut ambitos, mut mensajes, mut avances) = (Vec::new(), Vec::new(), Vec::new());
+        for a in derechos {
+            let s = self.mesa.get(sesion).expect("recién insertada");
+            let (decision, mensaje) = match (reanudan.get(&a), cubos.remove(&(sesion, a))) {
+                (None, _) => (pb::DecisionReanudacion::ReanudaConFoto, Some(Difusion::Foto(foto(&self.nucleo, s, a, v)))),
+                (Some(&k), Some(cubo)) => (pb::DecisionReanudacion::ReanudaConDeltas, Some(Difusion::Delta(delta(&self.nucleo, s, a, k, v, cubo)))),
+                (Some(_), None) => (pb::DecisionReanudacion::ReanudaSinNovedad, None),
+            };
+            if decision == pb::DecisionReanudacion::ReanudaConDeltas {
+                avances.push(a);
+            }
+            ambitos.push(pb::AmbitoSuscrito { ambito: Some(a.a_contrato()), version_actual: v, decision: decision as i32 });
+            mensajes.extend(mensaje);
+        }
+        for a in avances {
+            self.mesa.avanzar(sesion, a, v);
+        }
         let bienvenida = pb::Bienvenida {
             sesion_id: format!("s{sesion}"),
-            heroe_id: Some(cliente.clone()),
+            heroe_id,
+            faccion_id,
             mundo: Some(pb::InfoMundo { hash: self.nucleo.mundo_hash().into(), ..Default::default() }),
             reloj: Some(self.reloj.reloj()),
-            ambitos: vec![pb::AmbitoSuscrito {
-                ambito: Some(ambito_heroe(&cliente)),
-                version_actual: self.nucleo.version(),
-                decision: decision as i32,
-            }],
+            ambitos,
+            campamentos_para_elegir: campamentos,
             ..Default::default()
         };
-        if respuesta.send(Ok(bienvenida)).is_err() {
-            return;
-        }
-        let vivo = msg.is_none_or(|m| depositar(&tx, m));
-        if vivo {
-            self.por_cliente.insert(cliente.clone(), sesion);
-            self.sesiones.insert(sesion, Sesion { cliente, admin, tx, version, vista: None });
+        if respuesta.send(Ok(bienvenida)).is_err() || mensajes.into_iter().any(|m| !depositar(&tx, m)) {
+            self.mesa.quitar(sesion);
         }
     }
 
-    /// Decide cómo reanudar el ámbito del cliente desde la versión `conocida`. Devuelve la decisión, la versión del ámbito
-    /// que tendrá el cliente al aplicar el mensaje y el mensaje (foto o delta) si procede.
-    fn reanudar(&self, cliente: &str, conocida: Option<u64>) -> (pb::DecisionReanudacion, u64, Option<Difusion>) {
-        let v = self.nucleo.version();
-        let foto = || {
-            let entidades = self.nucleo.estado().ejercitos.values().filter(|e| e.columna.participantes.iter().any(|p| self.nucleo.estado().militar.heroes.get(&p.heroe).is_some_and(|h| h.cuenta == cliente))).map(|e| entidad_ejercito(e, self.nucleo.ahora())).collect();
-            (pb::DecisionReanudacion::ReanudaConFoto, v, Some(Difusion::Foto(pb::Foto { ambito: Some(ambito_heroe(cliente)), version: v, entidades, niebla: None })))
-        };
-        let Some(k) = conocida else { return foto() };
-        let Some(registros) = self.nucleo.cambios_desde(k) else { return foto() };
-        match self.delta_de(cliente, k, v, registros) {
-            Some(d) => (pb::DecisionReanudacion::ReanudaConDeltas, v, Some(Difusion::Delta(d))),
-            None => (pb::DecisionReanudacion::ReanudaSinNovedad, k, None),
-        }
-    }
-
-    /// La `Delta` consolidada `desde → hasta` con lo del cliente, o `None` si nada de lo registrado le toca.
-    fn delta_de<'a>(&self, cliente: &str, desde: u64, hasta: u64, registros: impl Iterator<Item = &'a CambioVersion>) -> Option<pb::Delta> {
-        let cubo = agrupar(self.nucleo.estado(), registros, Some(cliente)).remove(cliente)?;
-        Some(self.armar(cliente, desde, hasta, cubo))
-    }
-
-    fn armar(&self, cliente: &str, desde: u64, hasta: u64, (ids, eventos): Cubo<'_>) -> pb::Delta {
-        let estado = self.nucleo.estado();
-        let t = self.nucleo.ahora();
-        let cambios = ids.iter().filter_map(|id| estado.ejercitos.get(id)).map(|e| cambio_ejercito(e, t)).collect();
-        let eventos = eventos
+    /// Lo que ve un jugador sin héroe: de cada campamento de mercenarios, dónde está y cuántos viven en él (`Bienvenida.campamentos_para_elegir`). DUDA: `eligieron_como_inicial` va a 0 (no se guarda aún).
+    fn campamentos_para_elegir(&self) -> Vec<pb::CampamentoParaElegir> {
+        let elegibles = self.nucleo.campamentos_para_elegir();
+        elegibles
             .into_iter()
-            .map(|(version, ev)| {
-                let heroes = ev.ejercitos.iter().filter_map(|id| estado.ejercitos.get(id)).flat_map(|e| e.columna.participantes.iter().map(|p| ids::heroe(p.heroe))).collect();
-                evento_dominio(ev, version, heroes)
+            .map(|(c, puerta, origen, residentes)| pb::CampamentoParaElegir {
+                campamento_id: ids::campamento(c),
+                posicion: Some(pb::Punto { x: puerta.x, y: puerta.y }),
+                origen,
+                eligieron_como_inicial: 0,
+                residentes: residentes as u32,
             })
-            .collect();
-        pb::Delta { ambito: Some(ambito_heroe(cliente)), desde, hasta, cambios, eventos, niebla: None }
+            .collect()
+    }
+
+    // ───────────────────────────── El interés en el mapa ─────────────────────────────
+
+    /// `CambiarVista`: fija el rectángulo y manda la `Foto` nueva de `VISTA` (otra vez si ya estaba abierta: el cliente descarta lo que tenía). Sin Facción, o en una sesión que no es
+    /// de jugador, no hay `VISTA`: `Aviso{vista.sin_derecho}`; un rectángulo al revés o incompleto: `Aviso{vista.invalida}`.
+    /// DUDA: `VISTA` no viaja en la `Bienvenida` ni se reanuda (el rectángulo es de la sesión) y el cliente no puede cerrarla; una columna que sigue en marcha y sale del rectángulo no se retira hasta que
+    /// se toque (T3d renueva el tramo de lo visible).
+    fn vista(&mut self, sesion: SesionId, rect: pb::Rectangulo) {
+        let esquinas = match (rect.min, rect.max) {
+            (Some(a), Some(b)) if a.x <= b.x && a.y <= b.y => (Punto::new(a.x, a.y), Punto::new(b.x, b.y)),
+            _ => return self.avisar(sesion, "vista.invalida", "el rectángulo necesita sus dos esquinas, la mínima antes que la máxima".into()),
+        };
+        let Some(s) = self.mesa.get_mut(sesion) else { return };
+        s.vista = Some(esquinas);
+        let abiertas: Vec<Ambito> = s.abiertos.keys().filter(|a| matches!(a, Ambito::Vista(_))).copied().collect();
+        for a in abiertas {
+            self.mesa.cerrar(sesion, a);
+        }
+        let mut envios = Vec::new();
+        self.mesa.sincronizar(&self.nucleo, sesion, false, &mut envios);
+        let abierta = self.mesa.get(sesion).is_some_and(|s| s.abiertos.keys().any(|a| matches!(a, Ambito::Vista(_))));
+        self.mesa.entregar(envios);
+        if !abierta {
+            self.avisar(sesion, "vista.sin_derecho", "la vista del mundo es de la Facción: hace falta un héroe con Facción".into());
+        }
     }
 
     // ───────────────────────────── Reparto de cambios ─────────────────────────────
 
-    /// Reparte a cada sesión lo que cambió desde la última entrega, en una sola `Delta` por sesión. Una pasada por los
-    /// registros agrupa por dueño (no se recorre el registro una vez por sesión).
+    /// Reparte a cada sesión lo que cambió desde la última entrega. Primero los derechos (`Revocado` y `Foto` de los ámbitos que cambian) y después, de cada ámbito abierto, una sola `Delta`
+    /// con todo lo que le toca: una pasada por los registros agrupa por ámbito (no se recorre el registro una vez por sesión).
     fn distribuir(&mut self) {
         let hasta = self.nucleo.version();
         if hasta == self.entregada {
@@ -256,38 +254,39 @@ impl Actor {
         let mut envios: Vec<(SesionId, Difusion)> = Vec::new();
         match self.nucleo.cambios_desde(self.entregada) {
             Some(registros) => {
-                for (cliente, cubo) in agrupar(self.nucleo.estado(), registros, None) {
-                    let Some(&id) = self.por_cliente.get(cliente) else { continue };
-                    envios.push((id, Difusion::Delta(self.armar(cliente, self.sesiones[&id].version, hasta, cubo))));
+                let registros: Vec<&CambioVersion> = registros.collect();
+                self.mesa.reasignar_heroes(&self.nucleo, registros.iter().copied());
+                if registros.iter().any(|cv| cambia_derechos(cv)) {
+                    for id in self.mesa.ids() {
+                        self.mesa.sincronizar(&self.nucleo, id, false, &mut envios);
+                    }
+                }
+                let mut avances = Vec::new();
+                for ((id, a), cubo) in self.mesa.repartir(&self.nucleo, registros.iter().copied(), None) {
+                    let Some(s) = self.mesa.get(id) else { continue };
+                    envios.push((id, Difusion::Delta(delta(&self.nucleo, s, a, s.abiertos[&a], hasta, cubo))));
+                    avances.push((id, a));
+                }
+                for (id, a) in avances {
+                    self.mesa.avanzar(id, a, hasta);
                 }
             }
             None => {
-                // Se perdió registro (no debería ocurrir en vivo): foto completa a todos.
-                for (&id, s) in &self.sesiones {
-                    envios.push((id, self.reanudar(&s.cliente, None).2.expect("la foto siempre existe")));
+                // Se perdió registro (no debería ocurrir en vivo): foto completa de todos los ámbitos a todos.
+                for id in self.mesa.ids() {
+                    self.mesa.sincronizar(&self.nucleo, id, true, &mut envios);
                 }
             }
         }
         self.entregada = hasta;
-        for (id, d) in envios {
-            let hasta_envio = match &d {
-                Difusion::Delta(x) => x.hasta,
-                Difusion::Foto(x) => x.version,
-                _ => hasta,
-            };
-            let Some(s) = self.sesiones.get_mut(&id) else { continue };
-            s.version = hasta_envio;
-            if !depositar(&s.tx, d) {
-                self.quitar(id);
-            }
-        }
+        self.mesa.entregar(envios);
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
 
     fn orden(&mut self, sesion: SesionId, orden: pb::Orden) {
-        let Some(s) = self.sesiones.get(&sesion) else { return };
-        let (cliente, admin, tx) = (s.cliente.clone(), s.admin, s.tx.clone());
+        let Some(s) = self.mesa.get(sesion) else { return };
+        let (cliente, admin, tx) = (s.cliente.clone(), s.es_admin(), s.tx.clone());
         let id = orden.peticion_id.clone();
         let respuesta = match ordenes::traducir(&self.nucleo, &orden, &cliente, admin) {
             Ok(p) => {
@@ -301,7 +300,7 @@ impl Actor {
         let cambio_de_reloj = respuesta.aceptada() && matches!(orden.cuerpo, Some(Cuerpo::ControlarReloj(_)));
         // ...y después el resultado.
         if !depositar(&tx, Difusion::Resultado(resultado_orden(&id, &respuesta, &|b| self.nucleo.uuid_de_batalla(b)))) {
-            self.quitar(sesion);
+            self.mesa.quitar(sesion);
         }
         if cambio_de_reloj {
             self.avisar_reloj();
@@ -312,8 +311,8 @@ impl Actor {
     /// y su respuesta, si es un rechazo, vuelve a esa sesión como un `Aviso` con el código estable (el contrato 05 todavía no tiene un acuse por mensaje: es de la
     /// fase 4H). Repetir un mensaje ya aplicado no cambia nada ni avisa de nada.
     fn batalla(&mut self, sesion: SesionId, mensaje: pb::MensajeDeServidorDeBatalla) {
-        let Some(s) = self.sesiones.get(&sesion) else { return };
-        let (servidor, tx) = (s.cliente.clone(), s.tx.clone());
+        let Some(s) = self.mesa.get(sesion) else { return };
+        let servidor = s.cliente.clone();
         let respuesta = match self.traducir_batalla(mensaje) {
             Ok((peticion_id, comando)) => {
                 let r = self.nucleo.aplicar(Peticion::de_servidor_de_batalla(&servidor, &peticion_id, comando));
@@ -323,10 +322,7 @@ impl Actor {
             Err(r) => r,
         };
         if let Resultado::Rechazada { codigo, mensaje, .. } = respuesta.resultado {
-            let aviso = pb::Aviso { codigo: codigo.into(), mensaje, reloj: None };
-            if !depositar(&tx, Difusion::Aviso(aviso)) {
-                self.quitar(sesion);
-            }
+            self.avisar(sesion, codigo, mensaje);
         }
     }
 
@@ -433,9 +429,9 @@ impl Actor {
 
     fn avisar_reloj(&mut self) {
         let aviso = pb::Aviso { codigo: "reloj.cambiado".into(), mensaje: "el reloj de mundo cambió".into(), reloj: Some(self.reloj.reloj()) };
-        let lentas: Vec<SesionId> = self.sesiones.iter().filter(|(_, s)| !depositar(&s.tx, Difusion::Aviso(aviso.clone()))).map(|(&id, _)| id).collect();
+        let lentas: Vec<SesionId> = self.mesa.sesiones().filter(|(_, s)| !depositar(&s.tx, Difusion::Aviso(aviso.clone()))).map(|(id, _)| id).collect();
         for id in lentas {
-            self.quitar(id);
+            self.mesa.quitar(id);
         }
     }
 }

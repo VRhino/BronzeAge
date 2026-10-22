@@ -7,16 +7,8 @@ use contrato::v1 as pb;
 use militar::columna::{Politica, TipoColumna};
 use std::collections::BTreeMap;
 
+pub mod ambito;
 pub mod ids;
-
-pub fn ambito_heroe(cliente: &str) -> pb::Ambito {
-    pb::Ambito { tipo: pb::AmbitoTipo::AmbitoHeroe as i32, id: cliente.into() }
-}
-
-/// Clave de `Hola.versiones_conocidas` del ámbito del héroe.
-pub fn clave_ambito_heroe(cliente: &str) -> String {
-    format!("HEROE:{cliente}")
-}
 
 fn punto(p: base::Punto) -> pb::Punto {
     pb::Punto { x: p.x, y: p.y }
@@ -86,6 +78,23 @@ pub fn cambio_ejercito(e: &Ejercito, t: Instante) -> pb::Cambio {
         reemplaza: true,
         ..Default::default()
     }
+}
+
+/// La plaza como cambio. DUDA: entera y con `reemplaza` mientras la entidad sea la ficha de 9 campos; en T3c pasa a la forma parcial con máscara (`reemplaza = false`, `campos`), que es la de la plaza.
+pub fn cambio_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Cambio {
+    pb::Cambio {
+        tipo: pb::TipoCambio::CambioActualiza as i32,
+        entidad: pb::TipoEntidad::Asentamiento as i32,
+        id: ids::asentamiento(a.id),
+        datos: Some(entidad_asentamiento(a, zona)),
+        reemplaza: true,
+        ..Default::default()
+    }
+}
+
+/// La entidad deja de formar parte del ámbito (`QUITA`: sin datos).
+pub fn cambio_quita(entidad: pb::TipoEntidad, id: String) -> pb::Cambio {
+    pb::Cambio { tipo: pb::TipoCambio::CambioQuita as i32, entidad: entidad as i32, id, ..Default::default() }
 }
 
 fn numero(n: f64) -> prost_types::Value {

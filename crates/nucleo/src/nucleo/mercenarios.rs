@@ -103,6 +103,14 @@ impl Nucleo {
         self.geografia.as_ref()?.mapa.campamentos.get(campamento as usize).copied()
     }
 
+    /// Los campamentos donde un jugador sin héroe puede nacer (`Bienvenida.campamentos_para_elegir`): de cada uno del artefacto, su índice, su puerta, su origen y cuántos héroes residen
+    /// en él. DUDA: `eligieronComoInicial` no se guarda todavía (fila de paridad «Militar y combate (4B-1)»); la sesión lo manda a 0.
+    pub fn campamentos_para_elegir(&self) -> Vec<(u32, Punto, u32, usize)> {
+        let Some(g) = self.geografia.as_ref() else { return Vec::new() };
+        let residentes = |c: u32| self.heroes().filter(|h| h.heroe.residencia == Some(Residencia::Campamento(c))).count();
+        g.campamentos_del_artefacto().into_iter().zip(0u32..).map(|((puerta, origen), c)| (c, puerta, origen, residentes(c))).collect()
+    }
+
     /// El edificio militar del campamento, elegido por su posición: `huella = |⌊x⌋·31 + ⌊y⌋·17 + índice|`.
     fn edificio_militar(&self, campamento: u32) -> Option<asentamiento::Tipo> {
         let p = self.puerta_de_campamento(campamento)?;

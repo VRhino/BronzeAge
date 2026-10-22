@@ -1,6 +1,6 @@
 # Contrato 05: la sesión en tiempo real
 
-> **Estado (2026-10-22): el esquema de 4H (T1) está en `proto/`; la sesión del servidor Rust todavía proyecta poco** (ver `Docs/Arquitectura/4H_Contraste_y_Plan.md`).
+> **Estado (2026-10-23): el esquema de 4H (T1) está en `proto/`, las órdenes se traducen (T2) y la sesión abre los ámbitos con su autorización, `Revocado` y reanudación por versión (T3a); lo que lleva cada ámbito se completa en T3b-T3e, así que la sesión todavía proyecta poco: columnas y la ficha de la plaza** (ver `Docs/Arquitectura/4H_Contraste_y_Plan.md`).
 > **Diseño cerrado de la fase 2 (2026-10-13), sin código.** Sustituye a los contratos 02 (HTTP) y 03 (tiempo real por
 > segmentos) del servidor TypeScript, que quedan en `typescript-final`. El esquema vive en [`proto/bronzeage/v1/`](../../proto/bronzeage/v1/)
 > (Protobuf, D8) y es **la fuente de verdad**: este documento explica el protocolo y las garantías; si se contradicen, gana el `.proto`.
@@ -30,7 +30,7 @@ los bots (Rust, sin privilegios: el mismo contrato que un jugador) y los servido
   `Hola`. Un token inválido o caducado cierra la sesión con `ErrorSesion{token_invalido, fatal}`.
 - **El primer mensaje del cliente es `Hola`**; el servidor responde `Bienvenida` (sesión, héroe, Facción, `InfoMundo`, reloj
   y los ámbitos suscritos con la decisión de reanudación). Cualquier otra cosa antes de `Hola` cierra la sesión.
-- **Jugador sin héroe**: `Bienvenida.heroe_id` ausente y `campamentos_para_elegir` (de cada campamento de mercenarios: id, posición, origen, cuántos lo eligieron como inicial y cuántos héroes viven allí). Es lo único que ve hasta que da `crear_heroe`.
+- **Jugador sin héroe**: `Bienvenida.heroe_id` ausente, sin ámbitos y `campamentos_para_elegir` (de cada campamento de mercenarios: id, posición, origen, cuántos lo eligieron como inicial y cuántos héroes viven allí; el servidor Rust manda `eligieron_como_inicial = 0` hasta que el núcleo lo guarde). Es lo único que ve hasta que da `crear_heroe`, que le abre su ámbito en la misma sesión. Con héroe, `heroe_id` es su id (`heroe-N`) y `faccion_id`, la de su ciudadanía.
 - **Versión de protocolo** (`version_protocolo` = 1). Reglas de evolución en §11.
 - **Identificadores**: todas las entidades se nombran `<prefijo>-<n>` (la Facción también: `f-3`; ver `common.proto`). Dentro de una plaza, `ed-<plaza>-<n>` y `recinto-<plaza>-<n>`. La batalla, un UUID.
 - **El artefacto de mundo no viaja por la sesión**: el cliente lo descarga por hash desde `InfoMundo.url_artefacto` (Unity, desde
@@ -39,21 +39,25 @@ los bots (Rust, sin privilegios: el mismo contrato que un jugador) y los servido
 
 ## 3. Ámbitos y qué recibe cada cliente
 
-El servidor suscribe el cliente a los ámbitos que le corresponden; **el cliente nunca los elige** (salvo el interés del mapa):
+El servidor suscribe el cliente a los ámbitos que le corresponden; **el cliente nunca los elige** (salvo el interés del mapa). Cada ámbito se nombra `TIPO:id` con los ids de §2 (esa misma cadena es la clave de `Hola.versiones_conocidas`):
 
-| Ámbito | Contenido | Cuándo |
+| Ámbito | Contenido | Cuándo (autorización) |
 |---|---|---|
-| `HEROE` (id) | el héroe propio, sus escuadras, loadouts, inventario | siempre |
-| `FACCION` (id) | la Facción propia, sus relaciones, propuestas, tecnologías, memoria de la niebla, sus plazas y pueblos | si tiene Facción |
-| `ASENTAMIENTO` (id) | la plaza completa (almacén, cola, edificios, cargos, mercado) | mientras el héroe está dentro |
-| `CAMPAMENTO` (id) | el campamento de mercenarios (mercado, planta, residentes) | mientras está dentro |
-| `BATALLA` (id) | la batalla en la que combate | mientras combate |
-| `VISTA` | el mundo visible a la Facción, filtrado por la niebla, **dentro del rectángulo que fija `CambiarVista`** | siempre |
-| `ADMIN` | todo el estado, sin niebla | solo sesiones de administración |
+| `HEROE:heroe-N` | el héroe propio, sus escuadras, loadouts, inventario y las columnas en que va | siempre que la cuenta tenga héroe (el de verdad; si solo tiene héroes de campo del andamiaje de administración, el primero) |
+| `FACCION:f-N` | la Facción propia, sus relaciones, propuestas, tecnologías, memoria de la niebla, sus plazas y pueblos | si el héroe tiene Facción |
+| `ASENTAMIENTO:as-N` | la plaza completa (almacén, cola, edificios, cargos, mercado) | mientras el héroe está dentro **y** es ciudadano de la Facción dueña (dentro de una plaza ajena no se ve ningún interior) |
+| `CAMPAMENTO:camp-N` | el campamento de mercenarios (mercado, planta, residentes) | mientras está dentro |
+| `BATALLA:<uuid>` | la batalla en la que combate | mientras combate (T4; aún no existe en el servidor Rust) |
+| `VISTA:f-N` | el mundo visible a la Facción, filtrado por la niebla, **dentro del rectángulo que fija `CambiarVista`** | desde el primer `CambiarVista` válido de un jugador con Facción (no viaja en la `Bienvenida`: el rectángulo es de la sesión) |
+| `ADMIN:` | todo el estado, sin niebla | solo sesiones de administración (que no tienen ninguno de los demás); un servidor de batalla no tiene ámbitos |
 
-Al salir de la plaza o del campamento, o al acabar la batalla, el servidor manda `Revocado{ambito}` y el cliente **descarta**
-las entidades de ese ámbito. La visibilidad de lo ajeno la decide el servidor ([`Mechanics/Niebla_De_Guerra.md`](../Mechanics/Niebla_De_Guerra.md)):
-la plaza ve solo su zona, las avanzadas ven 12, una columna ve 30 (15 si va sola), y lo ajeno solo se manda si se ve.
+Los derechos se calculan del estado y se reevalúan cuando cambia el héroe (su sitio, su Facción), una plaza o una Facción: al **perder** uno el servidor manda `Revocado{ambito, motivo}` (`sin_derecho`; `ya_no_existe` si la plaza cayó en ruinas) y el cliente **descarta** las entidades de ese ámbito; al **ganar** uno manda su `Foto`. Primero van los `Revocado` y después las `Foto` nuevas, y todo antes del `ResultadoOrden` de la orden que lo causó. Salir de la plaza o del campamento, que la plaza caiga o el desalojo de una conquista son el mismo caso: el héroe cambia de sitio. Cambiar la Facción pierde a la vez la Facción vieja, la plaza (ya no es ciudadano) y la vista, y gana la nueva.
+
+`CambiarVista` (el único ámbito que pide el cliente): fija el rectángulo (`min` ≤ `max`, en milésimas) y el servidor manda la `Foto` de `VISTA` con lo que cae dentro, otra vez en cada cambio de rectángulo (la foto sustituye a la anterior). Sin Facción, o en una sesión de administración, no hay vista: `Aviso{vista.sin_derecho}`; con un rectángulo incompleto o al revés: `Aviso{vista.invalida}`. Una columna que se toca fuera del rectángulo sale con `QUITA`. No hay mensaje para cerrar la vista.
+
+Qué lleva cada ámbito hoy (T3a; el resto es de T3b-T3e): `HEROE`, las columnas en que participa alguna cuenta del héroe; `ASENTAMIENTO`, la plaza como ficha; `VISTA`, las columnas de la propia Facción dentro del rectángulo (sin niebla todavía: nunca lo ajeno); `ADMIN`, todas las columnas y todas las plazas; `FACCION` y `CAMPAMENTO`, nada aún. Los eventos solo llegan por `HEROE` (T5 les da audiencia).
+
+La visibilidad de lo ajeno la decide el servidor ([`Mechanics/Niebla_De_Guerra.md`](../Mechanics/Niebla_De_Guerra.md)): la plaza ve solo su zona, las avanzadas ven 12, una columna ve 30 (15 si va sola), y lo ajeno solo se manda si se ve.
 
 ## 4. El reloj sincronizado
 
@@ -124,8 +128,8 @@ creadas[] = ReferenciaCreada { entidad: TipoEntidad, id }   (una clase de entida
 
 1. El cliente guarda, por ámbito, la última versión que aplicó y su estado normalizado en caché local.
 2. Al reconectar manda `Hola.versiones_conocidas` (clave `"TIPO:id"`).
-3. Por cada ámbito el servidor decide y lo anuncia en `Bienvenida.ambitos`: `REANUDA_SIN_NOVEDAD`, `REANUDA_CON_DELTAS` (manda
-   el tramo) o `REANUDA_CON_FOTO` (versión demasiado vieja, ámbito nuevo o cambio de grupo de visión).
+3. Por cada ámbito al que **tiene derecho ahora** (lo que el cliente diga conocer de otro no le abre nada) el servidor decide y lo anuncia en `Bienvenida.ambitos`: `REANUDA_SIN_NOVEDAD`, `REANUDA_CON_DELTAS` (manda
+   el tramo consolidado `k → hoy`) o `REANUDA_CON_FOTO` (versión que el registro de cambios no alcanza o del futuro, ámbito nuevo, o un ámbito que depende del sitio del héroe —`FACCION`, `ASENTAMIENTO`, `CAMPAMENTO`— si el héroe cambió desde esa versión: el servidor no sabe qué descartó el cliente entre tanto). Tras la `Bienvenida` llega un mensaje (`Foto` o `Delta`) por cada ámbito que no reanuda sin novedad, en el orden de la lista. `VISTA` no se reanuda: se abre con `CambiarVista`.
 4. Para poder mandar deltas, el servidor conserva en memoria las deltas de cada ámbito durante un tiempo de retención y, más allá,
    las reconstruye del registro de eventos; si no puede, foto.
 5. Un cliente que detecta un hueco de `secuencia` **cierra la conexión y reconecta** con el mismo procedimiento (nuevo `Hola` con `versiones_conocidas`). No hay reanudación a mitad de sesión: `Hola` solo puede ser el primer mensaje, y un segundo `Hola` es `ErrorSesion{hola_repetido}` (no fatal; se ignora).

@@ -52,7 +52,7 @@
 //!   Tercera tanda: el asedio a una plaza con números multiplica al defensor con su recinto de referencia (`Nucleo::multiplicador_de_plaza`; la columna, el pueblo, la caravana y
 //!   la avanzada siguen con 1), la conquista daña el 30 % de cada recinto completo y sin mejora (por números y por Unity) y la plaza repara sola, `Nucleo::recintos_en_pie` da a
 //!   Unity la geometría en pie y `VistaCiudad.murallas` la dibuja. El ticket del asedio y el informe de inspección con los recintos son de 4H (`Docs/Arquitectura/Murallas_Contraste_y_Plan.md`).
-//! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación). `sesiones::ordenes` traduce las 145 órdenes del contrato 05 a los 125 comandos del núcleo
+//! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación). Cada sesión abre los ámbitos del contrato 05 §3 a los que tiene derecho (4H T3a, `sesiones/ambitos.rs`: `HEROE`, `FACCION`, `ASENTAMIENTO`, `CAMPAMENTO`, `VISTA`, `ADMIN`), con `Revocado` al perderlos y reanudación por versión de cada uno. `sesiones::ordenes` traduce las 145 órdenes del contrato 05 a los 125 comandos del núcleo
 //!   (99 órdenes del jugador, la de administración y 45 que se rechazan con `orden.no_disponible` hasta que existan sus sistemas; `Docs/Mechanics/Comandos_Parametros.md`).
 
 mod codec;

@@ -67,6 +67,7 @@ pub enum ComandoSesion {
         respuesta: oneshot::Sender<Result<Bienvenida, ErrorSesion>>,
     },
     Orden { sesion: SesionId, orden: Orden },
+    /// `CambiarVista`: el interés en el mapa. El núcleo abre (o rehace) el ámbito `VISTA` con una `Foto` nueva, o avisa de por qué no puede (`Aviso{vista.invalida | vista.sin_derecho}`).
     Vista { sesion: SesionId, rect: Rectangulo },
     /// Mensaje de un servidor de batalla (solo si la sesión es `CLIENTE_SERVIDOR_BATALLA`).
     Batalla { sesion: SesionId, mensaje: MensajeDeServidorDeBatalla },
