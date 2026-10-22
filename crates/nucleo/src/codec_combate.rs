@@ -1,4 +1,4 @@
-//! Serialización canónica del estado del combate (`EstadoCombate`) para el hash y las fotos (formato BAN18; de BAN13 a BAN18 es igual que en BAN12, salvo las avanzadas de BAN15). Cada estructura se desestructura
+//! Serialización canónica del estado del combate (`EstadoCombate`) para el hash y las fotos (formato BAN19; de BAN13 a BAN19 es igual que en BAN12, salvo las avanzadas de BAN15). Cada estructura se desestructura
 //! **entera** (sin `..`): si el estado gana un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `bandidos{n u64 · n × campamento} · siguiente_bandidos u64 · reaparecen{n u64 · n × (plaza u64, en i64)}

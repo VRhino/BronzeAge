@@ -1,5 +1,5 @@
 //! Serialización canónica de las batallas de Unity (`EstadoBatallas`) para el hash, las fotos y el registro de las órdenes que traen un mensaje del
-//! servidor de batalla (formato BAN13). Cada estructura se desestructura **entera** (sin `..`): si `combate::ciclo` gana un campo, esto deja de
+//! servidor de batalla (formato BAN13; el contexto de caravana desde BAN19). Cada estructura se desestructura **entera** (sin `..`): si `combate::ciclo` gana un campo, esto deja de
 //! compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `batallas{n u64 · n × batalla}`.
@@ -8,8 +8,8 @@
 //!   expira_en i64 · convocatoria_hasta opt_i64 · iniciada_en opt_i64 · aplicada_en opt_i64 · cerrada_en opt_i64 · asignación opt{bool · asignación} ·
 //!   resultado opt{bool · resultado}`.
 //! - Ticket: `revisión u32 · contexto · duración_máxima i64 · atacante bando · defensor bando`. Lado: 0 atacante, 1 defensor.
-//! - Contexto: `tag u8` y, según él, `0 asedio: plaza u32 · 1 campo abierto: punto, solitarios bool · 2 caravana: caravana u64, punto, modalidad u8 (0 disputa,
-//!   1 aguante), carros u64 · 3 campamento de bandidos: campamento u32, punto · 4 saqueo de pueblo: pueblo u64, punto · 5 avanzada: avanzada u64, etapa u8 (0 atalaya,
+//! - Contexto: `tag u8` y, según él, `0 asedio: plaza u32 · 1 campo abierto: punto, solitarios bool · 2 caravana: caravanas{n u64 · n × (caravana u64, carros u64)}, punto, modalidad u8 (0 disputa,
+//!   1 aguante) · 3 campamento de bandidos: campamento u32, punto · 4 saqueo de pueblo: pueblo u64, punto · 5 avanzada: avanzada u64, etapa u8 (0 atalaya,
 //!   1 fuerte, 2 ciudadela), punto`.
 //! - Bando: `facción opt_u64 · capacidad u64 · participantes{n u64 · n × participante} · sin_héroe{n u64 · n × escuadra}`.
 //! - Participante: `héroe u64 · facción opt_u64 · controlador u8 (el de `codec_militar`) · casillas_libres u32 · escuadras{n u64 · n × escuadra}`.
@@ -28,7 +28,7 @@ use crate::codec_militar::{controlador_a_u8, controlador_de_u8, tropa_a_u8, trop
 use crate::estado_batallas::EstadoBatallas;
 use combate::avanzada::Etapa;
 use combate::caravana::Modalidad;
-use combate::ciclo::{Asignacion, Batalla, BandoDeTicket, Bloqueo, Contexto, EscuadraDeSalida, EscuadraEnBatalla, EstadoBatalla, Incorporacion, Instancia, MotivoSalida, Participante, Salida, SalidaBatalla, Ticket, Token};
+use combate::ciclo::{Asignacion, Batalla, BandoDeTicket, Bloqueo, CaravanaEnBatalla, Contexto, EscuadraDeSalida, EscuadraEnBatalla, EstadoBatalla, Incorporacion, Instancia, MotivoSalida, Participante, Salida, SalidaBatalla, Ticket, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado, ResultadoEscuadra, ResultadoHeroe};
 use militar::heroe::Monedas;
@@ -116,15 +116,18 @@ fn contexto_escribir(w: &mut Escritor, c: &Contexto) {
             w.punto(punto);
             w.bool(solitarios);
         }
-        Contexto::Caravana { caravana, punto, modalidad, carros } => {
+        Contexto::Caravana { ref caravanas, punto, modalidad } => {
             w.u8(2);
-            w.u64(caravana);
+            w.u64(caravanas.len() as u64);
+            for k in caravanas {
+                w.u64(k.id);
+                w.u64(k.carros as u64);
+            }
             w.punto(punto);
             w.u8(match modalidad {
                 Modalidad::Disputa => 0,
                 Modalidad::Aguante => 1,
             });
-            w.u64(carros as u64);
         }
         Contexto::CampamentoBandidos { campamento, punto } => {
             w.u8(3);
@@ -154,13 +157,14 @@ fn contexto_leer(r: &mut Lector) -> Result<Contexto, ErrorFormato> {
         0 => Contexto::Asedio { asentamiento: r.u32()? },
         1 => Contexto::CampoAbierto { punto: r.punto()?, solitarios: r.bool()? },
         2 => {
-            let (caravana, punto) = (r.u64()?, r.punto()?);
+            let caravanas = (0..r.cuenta()?).map(|_| Ok(CaravanaEnBatalla { id: r.u64()?, carros: r.u64()? as usize })).collect::<Result<_, ErrorFormato>>()?;
+            let punto = r.punto()?;
             let modalidad = match r.u8()? {
                 0 => Modalidad::Disputa,
                 1 => Modalidad::Aguante,
                 _ => return Err(ErrorFormato("modalidad de caravana desconocida")),
             };
-            Contexto::Caravana { caravana, punto, modalidad, carros: r.u64()? as usize }
+            Contexto::Caravana { caravanas, punto, modalidad }
         }
         3 => Contexto::CampamentoBandidos { campamento: r.u32()?, punto: r.punto()? },
         4 => Contexto::SaqueoPueblo { pueblo: r.u64()?, punto: r.punto()? },

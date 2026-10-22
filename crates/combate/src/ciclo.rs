@@ -21,14 +21,22 @@ use std::collections::BTreeSet;
 
 pub use crate::resultado::{Efectos, ErrorResultado, Resultado};
 
-/// El contexto estratégico (el «tipo» de batalla): dónde y contra qué se juega.
+/// Una caravana que se juega en una batalla de caravana. `carros`: cuántos lleva al abrir; Unity los nombra por su posición en su lista (`"<caravana>:<posición>"` en
+/// `carros_perdidos` del resultado).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CaravanaEnBatalla {
+    pub id: CaravanaId,
+    pub carros: usize,
+}
+
+/// El contexto estratégico (el «tipo» de batalla): dónde y contra qué se juega.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Contexto {
     Asedio { asentamiento: AsentamientoId },
     /// `solitarios`: persecución entre columnas personales; si no, batalla campal entre ejércitos.
     CampoAbierto { punto: Punto, solitarios: bool },
-    /// `carros`: cuántos lleva la caravana al abrir; Unity los nombra por su posición en la lista (`carros_perdidos` del resultado).
-    Caravana { caravana: CaravanaId, punto: Punto, modalidad: Modalidad, carros: usize },
+    /// Las caravanas en juego: una si un ejército asalta una, todas las adjuntas a la columna si la acosan los bandidos (quinta ronda de Entrar con todo, 2026-10-22).
+    Caravana { caravanas: Vec<CaravanaEnBatalla>, punto: Punto, modalidad: Modalidad },
     CampamentoBandidos { campamento: CampamentoId, punto: Punto },
     SaqueoPueblo { pueblo: u64, punto: Punto },
     Avanzada { avanzada: u64, etapa: Etapa, punto: Punto },
@@ -118,7 +126,8 @@ impl Ticket {
     pub fn nuevo(r: &Reglas, contexto: Contexto, mut atacante: BandoDeTicket, mut defensor: BandoDeTicket) -> Self {
         atacante.capacidad = contexto.capacidad(r);
         defensor.capacidad = contexto.capacidad(r);
-        Self { revision: 0, contexto, duracion_maxima: contexto.duracion(r), atacante, defensor }
+        let duracion_maxima = contexto.duracion(r);
+        Self { revision: 0, contexto, duracion_maxima, atacante, defensor }
     }
 
     pub fn bando(&self, lado: Lado) -> &BandoDeTicket {

@@ -2,11 +2,11 @@
 //! aplica sale de él en una sola pasada. Los tipos son la forma del `BattleResult` del contrato (`battle.proto`), sin los campos que el servidor
 //! solo guarda y no interpreta.
 
-use crate::ciclo::{Batalla, Contexto, EscuadraEnBatalla};
+use crate::ciclo::{Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla};
 use crate::resolucion::Lado;
 use base::Mil;
 use militar::heroe::Monedas;
-use militar::{EscuadraId, HeroeId};
+use militar::{CaravanaId, EscuadraId, HeroeId};
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,7 +66,7 @@ pub struct Resultado {
     pub por_escuadra: Vec<ResultadoEscuadra>,
     pub por_heroe: Vec<ResultadoHeroe>,
     pub version_servidor: String,
-    /// Asalto de caravana: los carros que Unity da por perdidos (el servidor los destruye con su animal y calcula la carga).
+    /// Asalto de caravana: los carros que Unity da por perdidos, cada uno como `"<caravana>:<posición>"` (el servidor los destruye con su animal y calcula la carga).
     pub carros_perdidos: Vec<String>,
 }
 
@@ -93,7 +93,7 @@ pub enum ErrorResultado {
     ObjetoRepetido(String),
     /// Más objetos que casillas libres tenía el héroe en el ticket.
     SinCasillas(HeroeId),
-    /// Un carro perdido que la caravana no tiene (o repetido), o carros perdidos en una batalla que no es de caravana.
+    /// Un carro perdido que la caravana no tiene (o repetido), de una caravana que no está en la batalla, mal escrito, o carros perdidos en una batalla que no es de caravana.
     CarroInexistente(String),
 }
 
@@ -122,8 +122,8 @@ pub struct Efectos {
     pub heridos: Vec<HeroeId>,
     pub escuadras: Vec<EfectoEscuadra>,
     pub heroes: Vec<EfectoHeroe>,
-    /// Posiciones en la lista de carros de la caravana (Unity los nombra por su posición).
-    pub carros_perdidos: Vec<usize>,
+    /// Los carros perdidos: la caravana y la posición en su lista de carros (Unity los nombra por su posición).
+    pub carros_perdidos: Vec<(CaravanaId, usize)>,
     /// Todos los candados de la batalla, que se sueltan.
     pub soltar: Vec<EscuadraId>,
 }
@@ -203,20 +203,21 @@ impl Batalla {
         self.carros_perdidos(res).map(|_| ())
     }
 
-    /// Las posiciones de los carros que Unity da por perdidos. Solo valen en un asalto de caravana y han de existir y no repetirse.
-    fn carros_perdidos(&self, res: &Resultado) -> Result<Vec<usize>, ErrorResultado> {
-        let carros = match self.ticket.contexto {
-            Contexto::Caravana { carros, .. } => carros,
-            _ => 0,
+    /// Los carros que Unity da por perdidos, como (caravana, posición en su lista). Solo valen en una batalla de caravana y han de ser de una caravana en juego, existir y no repetirse.
+    fn carros_perdidos(&self, res: &Resultado) -> Result<Vec<(CaravanaId, usize)>, ErrorResultado> {
+        let caravanas: &[CaravanaEnBatalla] = match &self.ticket.contexto {
+            Contexto::Caravana { caravanas, .. } => caravanas,
+            _ => &[],
         };
-        let mut indices: Vec<usize> = vec![];
+        let mut perdidos: Vec<(CaravanaId, usize)> = vec![];
         for c in &res.carros_perdidos {
-            match c.parse::<usize>() {
-                Ok(i) if i < carros && !indices.contains(&i) => indices.push(i),
+            let carro = c.split_once(':').and_then(|(k, i)| Some((k.parse::<CaravanaId>().ok()?, i.parse::<usize>().ok()?)));
+            match carro {
+                Some((k, i)) if caravanas.iter().any(|x| x.id == k && i < x.carros) && !perdidos.contains(&(k, i)) => perdidos.push((k, i)),
                 _ => return Err(ErrorResultado::CarroInexistente(c.clone())),
             }
         }
-        Ok(indices)
+        Ok(perdidos)
     }
 
     /// Lo que hay que aplicar de un resultado **ya validado**.

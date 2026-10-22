@@ -119,6 +119,7 @@ mod pruebas {
     use super::*;
     use crate::avanzada::Etapa;
     use crate::caravana::Modalidad;
+    use crate::ciclo::CaravanaEnBatalla;
     use base::Punto;
 
     const ATACANTE: FaccionId = 1;
@@ -146,18 +147,18 @@ mod pruebas {
     #[test]
     fn la_batalla_campal_no_admite_a_nadie_de_fuera() {
         let c = Contexto::CampoAbierto { punto: Punto::default(), solitarios: false };
-        assert_eq!(lado_para_unirse(&rep(c, true), Some(OTRA), true, Some(Lado::Atacante)), Err(ErrorUnion::NadieDeFuera));
+        assert_eq!(lado_para_unirse(&rep(c.clone(), true), Some(OTRA), true, Some(Lado::Atacante)), Err(ErrorUnion::NadieDeFuera));
     }
 
     #[test]
     fn la_persecucion_es_libre_pero_solo_para_columnas_personales_y_con_lado() {
         let c = Contexto::CampoAbierto { punto: Punto::default(), solitarios: true };
-        let r = rep(c, false);
+        let r = rep(c.clone(), false);
         assert_eq!(lado_para_unirse(&r, Some(OTRA), true, Some(Lado::Defensor)), Ok(Lado::Defensor));
         assert_eq!(lado_para_unirse(&r, None, true, Some(Lado::Atacante)), Ok(Lado::Atacante), "también sin Facción");
         assert_eq!(lado_para_unirse(&r, Some(OTRA), true, None), Err(ErrorUnion::LadoObligatorio));
         assert_eq!(lado_para_unirse(&r, Some(OTRA), false, Some(Lado::Atacante)), Err(ErrorUnion::SoloColumnasPersonales), "un ejército no se une");
-        let desde_dentro = Reparto { donde: Donde::Dentro, ..rep(c, false) };
+        let desde_dentro = Reparto { donde: Donde::Dentro, ..rep(c.clone(), false) };
         assert_eq!(lado_para_unirse(&desde_dentro, Some(OTRA), true, Some(Lado::Atacante)), Err(ErrorUnion::HayQueEstarFuera), "quien está dentro de un lugar no se une a una persecución del mapa");
     }
 
@@ -188,9 +189,9 @@ mod pruebas {
         // Los amigos del defensor no atacan: desde fuera solo les queda esperar a entrar; los neutrales y enemigos de dentro tampoco atacan desde dentro.
         assert_eq!(lado_para_unirse(&rep(ASEDIO, false), Some(ALIADA_DEL_DEFENSOR), false, None), Err(ErrorUnion::HayQueEstarDentro));
         assert_eq!(lado_para_unirse(&dentro(ASEDIO), Some(OTRA), false, None), Err(ErrorUnion::HayQueEstarFuera));
-        let caravana = Contexto::Caravana { caravana: 1, punto: Punto::default(), modalidad: Modalidad::Disputa, carros: 2 };
-        assert_eq!(lado_para_unirse(&rep(caravana, false), Some(OTRA), false, None), Err(ErrorUnion::NoCombateAqui), "tu Facción no combate aquí");
-        assert_eq!(lado_para_unirse(&rep(caravana, true), Some(OTRA), false, None), Ok(Lado::Atacante));
+        let caravana = Contexto::Caravana { caravanas: vec![CaravanaEnBatalla { id: 1, carros: 2 }], punto: Punto::default(), modalidad: Modalidad::Disputa };
+        assert_eq!(lado_para_unirse(&rep(caravana.clone(), false), Some(OTRA), false, None), Err(ErrorUnion::NoCombateAqui), "tu Facción no combate aquí");
+        assert_eq!(lado_para_unirse(&rep(caravana.clone(), true), Some(OTRA), false, None), Ok(Lado::Atacante));
         // Nunca un aliado del defensor, aunque el Rey admita a todos.
         let dentro_con_rey = Reparto { donde: Donde::Dentro, ..rep(ASEDIO, true) };
         assert_eq!(lado_para_unirse(&dentro_con_rey, Some(ALIADA_DEL_DEFENSOR), false, Some(Lado::Atacante)), Err(ErrorUnion::LadoDistinto(Lado::Defensor)));
@@ -207,14 +208,14 @@ mod pruebas {
     fn la_caravana_el_pueblo_y_la_avanzada_se_reparten_como_el_asedio() {
         let punto = Punto::default();
         for c in [
-            Contexto::Caravana { caravana: 1, punto, modalidad: Modalidad::Disputa, carros: 2 },
+            Contexto::Caravana { caravanas: vec![CaravanaEnBatalla { id: 1, carros: 2 }], punto, modalidad: Modalidad::Disputa },
             Contexto::SaqueoPueblo { pueblo: 1, punto },
             Contexto::Avanzada { avanzada: 1, etapa: Etapa::Fuerte, punto },
         ] {
             // Una caravana va por el mapa (los dos lados están fuera); el pueblo y la avanzada se defienden desde dentro.
-            let defendiendo = if matches!(c, Contexto::Caravana { .. }) { rep(c, false) } else { dentro(c) };
+            let defendiendo = if matches!(c, Contexto::Caravana { .. }) { rep(c.clone(), false) } else { dentro(c.clone()) };
             assert_eq!(lado_para_unirse(&defendiendo, Some(ALIADA_DEL_DEFENSOR), false, None), Ok(Lado::Defensor));
-            let r = rep(c, false);
+            let r = rep(c.clone(), false);
             if matches!(c, Contexto::Caravana { .. }) {
                 assert_eq!(lado_para_unirse(&r, Some(ALIADA_DEL_ATACANTE), false, None), Err(ErrorUnion::NoCombateAqui), "una caravana no admite a un aliado del atacante sin el Rey");
             } else {
@@ -228,31 +229,31 @@ mod pruebas {
     fn defender_una_plaza_un_pueblo_o_una_avanzada_exige_estar_dentro_y_atacar_exige_estar_fuera() {
         let punto = Punto::default();
         for c in [ASEDIO, Contexto::SaqueoPueblo { pueblo: 1, punto }, Contexto::Avanzada { avanzada: 1, etapa: Etapa::Fuerte, punto }] {
-            let en_el_mapa = rep(c, false);
+            let en_el_mapa = rep(c.clone(), false);
             // Ni la propia Facción ni una aliada defienden desde la puerta, aunque pidan el bando que les toca; ni desde otro lugar.
             assert_eq!(lado_para_unirse(&en_el_mapa, Some(DEFENSOR), false, None), Err(ErrorUnion::HayQueEstarDentro));
             assert_eq!(lado_para_unirse(&en_el_mapa, Some(ALIADA_DEL_DEFENSOR), true, Some(Lado::Defensor)), Err(ErrorUnion::HayQueEstarDentro));
-            let en_otro_lugar = Reparto { donde: Donde::EnOtroLugar, ..rep(c, false) };
+            let en_otro_lugar = Reparto { donde: Donde::EnOtroLugar, ..rep(c.clone(), false) };
             assert_eq!(lado_para_unirse(&en_otro_lugar, Some(DEFENSOR), false, None), Err(ErrorUnion::HayQueEstarDentro));
             // Dentro sí; y el ataque solo desde el mapa: quien está dentro de lo que se ataca (entró como neutral, p. ej.) o de otro lugar no ataca.
-            assert_eq!(lado_para_unirse(&dentro(c), Some(DEFENSOR), false, None), Ok(Lado::Defensor));
+            assert_eq!(lado_para_unirse(&dentro(c.clone()), Some(DEFENSOR), false, None), Ok(Lado::Defensor));
             assert_eq!(lado_para_unirse(&en_el_mapa, Some(ATACANTE), false, None), Ok(Lado::Atacante));
-            assert_eq!(lado_para_unirse(&dentro(c), Some(ATACANTE), false, None), Err(ErrorUnion::HayQueEstarFuera), "un héroe de la Facción atacante que está dentro no se une al ataque desde dentro");
+            assert_eq!(lado_para_unirse(&dentro(c.clone()), Some(ATACANTE), false, None), Err(ErrorUnion::HayQueEstarFuera), "un héroe de la Facción atacante que está dentro no se une al ataque desde dentro");
             assert_eq!(lado_para_unirse(&en_otro_lugar, Some(ATACANTE), false, None), Err(ErrorUnion::HayQueEstarFuera));
-            let con_rey = Reparto { donde: Donde::Dentro, ..rep(c, true) };
+            let con_rey = Reparto { donde: Donde::Dentro, ..rep(c.clone(), true) };
             assert_eq!(lado_para_unirse(&con_rey, Some(OTRA), false, None), Err(ErrorUnion::HayQueEstarFuera), "tampoco el neutral que el Rey admite");
             assert_eq!(lado_para_unirse(&en_el_mapa, Some(OTRA), false, None), Ok(Lado::Atacante), "un neutral o un enemigo del dueño, desde fuera, se une al ataque aunque no sea de la Facción atacante");
         }
         // Una caravana va por el mapa: no hay puerta ni dentro, así que los dos lados se unen desde fuera.
-        let caravana = Contexto::Caravana { caravana: 1, punto, modalidad: Modalidad::Aguante, carros: 2 };
-        assert_eq!(lado_para_unirse(&rep(caravana, false), Some(DEFENSOR), false, None), Ok(Lado::Defensor));
-        assert_eq!(lado_para_unirse(&dentro(caravana), Some(DEFENSOR), false, None), Err(ErrorUnion::HayQueEstarFuera));
-        assert_eq!(lado_para_unirse(&dentro(caravana), Some(ATACANTE), false, None), Err(ErrorUnion::HayQueEstarFuera));
+        let caravana = Contexto::Caravana { caravanas: vec![CaravanaEnBatalla { id: 1, carros: 2 }], punto, modalidad: Modalidad::Aguante };
+        assert_eq!(lado_para_unirse(&rep(caravana.clone(), false), Some(DEFENSOR), false, None), Ok(Lado::Defensor));
+        assert_eq!(lado_para_unirse(&dentro(caravana.clone()), Some(DEFENSOR), false, None), Err(ErrorUnion::HayQueEstarFuera));
+        assert_eq!(lado_para_unirse(&dentro(caravana.clone()), Some(ATACANTE), false, None), Err(ErrorUnion::HayQueEstarFuera));
     }
 
     #[test]
     fn un_defensor_sin_faccion_no_tiene_aliados() {
-        let mut r = rep(Contexto::Caravana { caravana: 1, punto: Punto::default(), modalidad: Modalidad::Aguante, carros: 2 }, false);
+        let mut r = rep(Contexto::Caravana { caravanas: vec![CaravanaEnBatalla { id: 1, carros: 2 }], punto: Punto::default(), modalidad: Modalidad::Aguante }, false);
         r.defensor = None;
         assert_eq!(lado_para_unirse(&r, Some(DEFENSOR), false, None), Err(ErrorUnion::NoCombateAqui));
         assert_eq!(lado_para_unirse(&r, Some(ATACANTE), false, None), Ok(Lado::Atacante));

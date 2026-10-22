@@ -42,7 +42,7 @@ use crate::estado_batallas::entidad_batalla;
 use crate::estado_militar::Relacion;
 use combate::botin::{repartir_botin, CarroDeColumna};
 use combate::caravana::Modalidad;
-use combate::ciclo::{bloqueos_de, uuid_de_batalla, Asignacion, BandoDeTicket, Batalla, Bloqueo, Bloqueos, Contexto, Efecto, EscuadraEnBatalla, ErrorBatalla, Participante, SalidaBatalla, Ticket, Token};
+use combate::ciclo::{bloqueos_de, uuid_de_batalla, Asignacion, BandoDeTicket, Batalla, Bloqueo, Bloqueos, CaravanaEnBatalla, Contexto, Efecto, EscuadraEnBatalla, ErrorBatalla, Participante, SalidaBatalla, Ticket, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Efectos, Resultado as ResultadoDeBatalla};
 use combate::union::{lado_para_unirse, Donde, ErrorUnion, Reparto};
@@ -178,12 +178,12 @@ fn sin_cambios(v: u64) -> Respuesta {
 
 /// Dónde está quien quiere unirse a una batalla respecto de lo que se disputa: en el mapa con su columna, dentro de la plaza, el pueblo o la avanzada que se disputa, o dentro de
 /// cualquier otro lugar (Entrar con todo, 2026-10-22).
-fn donde_esta(ubicacion: Ubicacion, contexto: Contexto) -> Donde {
+fn donde_esta(ubicacion: Ubicacion, contexto: &Contexto) -> Donde {
     match (ubicacion, contexto) {
         (Ubicacion::Columna(_), _) => Donde::Fuera,
-        (Ubicacion::Asentamiento(a), Contexto::Asedio { asentamiento }) if a == asentamiento => Donde::Dentro,
-        (Ubicacion::Pueblo(x), Contexto::SaqueoPueblo { pueblo, .. }) if x == pueblo => Donde::Dentro,
-        (Ubicacion::Avanzada(x), Contexto::Avanzada { avanzada, .. }) if x == avanzada => Donde::Dentro,
+        (Ubicacion::Asentamiento(a), Contexto::Asedio { asentamiento }) if a == *asentamiento => Donde::Dentro,
+        (Ubicacion::Pueblo(x), Contexto::SaqueoPueblo { pueblo, .. }) if x == *pueblo => Donde::Dentro,
+        (Ubicacion::Avanzada(x), Contexto::Avanzada { avanzada, .. }) if x == *avanzada => Donde::Dentro,
         _ => Donde::EnOtroLugar,
     }
 }
@@ -236,7 +236,7 @@ impl Nucleo {
     /// La batalla activa que disputa una plaza, un pueblo o una avanzada (`Ubicacion::Asentamiento`, `Pueblo` o `Avanzada`), si la hay: es lo que el mapa enseña como «en asedio», para
     /// que desde fuera se vea y los neutrales y enemigos del dueño puedan unirse al ataque (`UnirseABatalla`). Su proyección al contrato es de la fase 4H.
     pub fn batalla_sobre(&self, lugar: Ubicacion) -> Option<&Batalla> {
-        self.batallas_activas().find(|b| donde_esta(lugar, b.ticket.contexto) == Donde::Dentro)
+        self.batallas_activas().find(|b| donde_esta(lugar, &b.ticket.contexto) == Donde::Dentro)
     }
 
     /// ¿Combate el héroe en alguna batalla activa? (Quien combate no sale del mundo hasta que acaba.)
@@ -367,7 +367,7 @@ impl Nucleo {
         };
         let faccion = self.estado.asentamientos.get(&(k.origen as u64)).map(|a| a.faccion);
         Apertura {
-            contexto: Contexto::Caravana { caravana: x, punto, modalidad, carros: k.carros.len() },
+            contexto: Contexto::Caravana { caravanas: vec![CaravanaEnBatalla { id: x, carros: k.carros.len() }], punto, modalidad },
             punto,
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
@@ -402,23 +402,29 @@ impl Nucleo {
         self.batallas().any(|b| b.iniciada_por == SIN_HEROE && b.bloqueo.campamento == Some(campamento as u32) && b.bloqueo.ejercitos.contains(&columna))
     }
 
-    /// Los bandidos del campamento `campamento` acosan a la caravana `caravana`, adjunta a la `columna` (quinta ronda, 2026-10-22): una batalla de caravana en la que los bandidos atacan
-    /// (una escuadra de milicia sin dueño, sin héroes ni tokens) y defienden los héroes sanos de la columna con lo que llevan. `None` si la columna no lleva ningún héroe sano: sin
-    /// héroes el acoso se resuelve siempre con números. Nadie inicia la batalla (`SIN_HEROE`): ningún jugador puede cancelarla.
-    pub(super) fn apertura_de_acoso(&self, t: Instante, campamento: u64, columna: u64, caravana: u64, punto: Punto) -> Option<Apertura> {
+    /// Los bandidos del campamento `campamento` acosan a la columna `columna` (quinta ronda, 2026-10-22): una batalla de caravana en la que los bandidos atacan (una escuadra de milicia
+    /// sin dueño, sin héroes ni tokens) y defienden los héroes sanos de la columna con lo que llevan. **Todas** las caravanas adjuntas que son presa están en juego (decisión del autor,
+    /// 2026-10-22): son parte del combate, y Unity nombra los carros perdidos de cada una. `None` si la columna no lleva ningún héroe sano o ninguna de sus caravanas es presa: sin héroes el
+    /// acoso se resuelve siempre con números. Nadie inicia la batalla (`SIN_HEROE`): ningún jugador puede cancelarla.
+    pub(super) fn apertura_de_acoso(&self, t: Instante, campamento: u64, columna: u64, punto: Punto) -> Option<Apertura> {
         let defensor = self.bando_de_columna(columna, t);
         if defensor.participantes.is_empty() {
             return None;
         }
-        let carros = self.estado.comercio.caravana(caravana)?.carros.len();
+        let caravanas: Vec<CaravanaEnBatalla> =
+            self.estado.ejercitos[&columna].caravanas_adjuntas.iter().filter_map(|&k| self.estado.comercio.caravana(k)).filter(|k| self.es_presa_de_bandidos(k.estado, punto)).map(|k| CaravanaEnBatalla { id: k.id, carros: k.carros.len() }).collect();
+        if caravanas.is_empty() {
+            return None;
+        }
+        let bloqueadas = caravanas.iter().map(|k| k.id).collect();
         Some(Apertura {
             // El acoso no ocurre dentro de una zona de influencia, así que es siempre una disputa de carros.
-            contexto: Contexto::Caravana { caravana, punto, modalidad: Modalidad::Disputa, carros },
+            contexto: Contexto::Caravana { caravanas, punto, modalidad: Modalidad::Disputa },
             punto,
             iniciada_por: SIN_HEROE,
             atacante: BandoDeTicket::nuevo(None, vec![], vec![self.bandidos_en_batalla(campamento)]),
             defensor,
-            bloqueo: Bloqueo { ejercitos: vec![columna], caravanas: vec![caravana], campamento: Some(campamento as u32), ..Default::default() },
+            bloqueo: Bloqueo { ejercitos: vec![columna], caravanas: bloqueadas, campamento: Some(campamento as u32), ..Default::default() },
         })
     }
 
@@ -757,7 +763,7 @@ impl Nucleo {
             return Err(invalida("ya estás en una batalla"));
         }
         let hn = self.heroe(heroe).expect("autorizado");
-        let donde = donde_esta(hn.heroe.presencia.ubicacion, b.ticket.contexto);
+        let donde = donde_esta(hn.heroe.presencia.ubicacion, &b.ticket.contexto);
         let columna = self.estado.ejercito_de_heroe(heroe);
         // Quien está fuera llega con su columna y a su alcance; quien está dentro está donde se disputa y no necesita ni columna ni distancia.
         if donde != Donde::Dentro {
@@ -773,7 +779,7 @@ impl Nucleo {
         let aliadas = |a: u32, b: u32| matches!(self.estado.militar.relacion(a, b), Some(Relacion::Alianza | Relacion::Vasallaje));
         let personal = columna.is_some_and(|c| self.estado.ejercitos[&c].columna.tipo == TipoColumna::Personal);
         // DUDA: «el Rey admite otras Facciones en sus ataques» es política (sistema 5) y solo cuenta ya para las caravanas: hasta entonces nadie lo admite.
-        let reparto = Reparto { contexto: b.ticket.contexto, atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false, donde };
+        let reparto = Reparto { contexto: b.ticket.contexto.clone(), atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false, donde };
         let lado = lado_para_unirse(&reparto, hn.faccion, personal, pedido).map_err(|e| rechazo_de_union(e, v))?;
 
         let entran = match donde {
@@ -901,10 +907,10 @@ impl Nucleo {
     /// contadores de logros: son del sistema político y del tecnológico.
     fn consecuencias_de_batalla(&mut self, t: Instante, b: &Batalla, res: &ResultadoDeBatalla, efectos: &Efectos) {
         let (ganador, perdedor) = (res.ganador, res.ganador.otro());
-        match b.ticket.contexto {
+        match &b.ticket.contexto {
             // Un asedio ganado por el atacante es una conquista: la plaza pasa a su Facción con el saqueo de siempre (sin Facción, no se conquista nada). Unity no
             // reporta daño: lo pone el saqueo. Ganado por el defensor, nada más (no hay pérdida de carro en un asedio).
-            Contexto::Asedio { asentamiento } => {
+            &Contexto::Asedio { asentamiento } => {
                 let plaza = asentamiento as u64;
                 if let Some(f) = b.ticket.atacante.faccion.filter(|_| ganador == Lado::Atacante) {
                     if self.estado.asentamientos.get(&plaza).is_some_and(|a| a.faccion != f) {
@@ -918,7 +924,7 @@ impl Nucleo {
             }
             // Una avanzada atacada y ganada por el atacante cae como con números: se lleva el almacén que le quepa y queda destruida o en ruinas. Si ya no existe (su madre
             // cayó en ruinas durante la batalla) no queda nada que aplicar.
-            Contexto::Avanzada { avanzada, .. } if ganador == Lado::Atacante => {
+            &Contexto::Avanzada { avanzada, .. } if ganador == Lado::Atacante => {
                 if matches!(self.avanzada(avanzada), Some((Some(_), _))) {
                     self.castigo_a_los_defensores(b);
                 }
@@ -941,7 +947,7 @@ impl Nucleo {
                     self.captura_de_batalla(t, b, efectos);
                 }
             }
-            Contexto::SaqueoPueblo { pueblo, .. } if ganador == Lado::Atacante => {
+            &Contexto::SaqueoPueblo { pueblo, .. } if ganador == Lado::Atacante => {
                 if let Some((madre, _)) = self.pueblo(pueblo) {
                     let cr = self.estado.reglas.economia.combate.clone();
                     let columnas = self.columnas_del_bando(b, Lado::Atacante);
@@ -973,20 +979,27 @@ impl Nucleo {
     /// El atacante gana en mundo abierto: la caravana cae (sus carros, su carga y su escolta) o el campamento de bandidos desaparece y paga su oro.
     fn captura_de_batalla(&mut self, t: Instante, b: &Batalla, efectos: &Efectos) {
         let atacantes = self.columnas_del_bando(b, Lado::Atacante);
-        match b.ticket.contexto {
-            Contexto::Caravana { caravana, modalidad, .. } => {
-                let Some(k) = self.estado.comercio.caravana(caravana) else { return };
-                // La escolta cae con ella: queda a 0 (Doc 5.15.5) y `caer_caravana` la devuelve al campamento de su héroe.
-                let escolta: Vec<u64> = k.escolta.iter().map(|c| c.id).collect();
-                for id in escolta {
-                    if let Some(s) = self.escuadra_mut(id) {
-                        s.cantidad = 0;
+        match &b.ticket.contexto {
+            Contexto::Caravana { caravanas, modalidad, .. } => {
+                // Cada caravana en juego cae por su cuenta: pierde los carros que dice Unity (y desaparece si se queda sin ninguno) y su escolta cedida queda a 0.
+                let mut perdida = Mercancia::new();
+                for caravana in caravanas.iter().map(|k| k.id) {
+                    let Some(k) = self.estado.comercio.caravana(caravana) else { continue };
+                    // La escolta cae con ella: queda a 0 (Doc 5.15.5) y `caer_caravana` la devuelve al campamento de su héroe.
+                    let escolta: Vec<u64> = k.escolta.iter().map(|c| c.id).collect();
+                    for id in escolta {
+                        if let Some(s) = self.escuadra_mut(id) {
+                            s.cantidad = 0;
+                        }
+                    }
+                    let carros: Vec<usize> = efectos.carros_perdidos.iter().filter(|&&(k, _)| k == caravana).map(|&(_, i)| i).collect();
+                    for (r, n) in self.caer_caravana(t, caravana, *modalidad, Some(&carros)).carga_perdida {
+                        sumar(&mut perdida, r, n);
                     }
                 }
-                let p = self.caer_caravana(t, caravana, modalidad, Some(&efectos.carros_perdidos));
-                self.repartir_en_columnas(&atacantes, &p.carga_perdida);
+                self.repartir_en_columnas(&atacantes, &perdida);
             }
-            Contexto::CampamentoBandidos { campamento, .. } => {
+            &Contexto::CampamentoBandidos { campamento, .. } => {
                 let campamento = u64::from(campamento);
                 let Some(nivel) = self.estado.combate.bandidos.get(&campamento).map(|c| c.nivel) else { return };
                 let cr = self.estado.reglas.economia.combate.clone();
@@ -1025,9 +1038,9 @@ impl Nucleo {
             return;
         }
         // Si defiende una plaza o una avanzada y gana, la chatarra va al almacén de la plaza (la madre, en una avanzada).
-        let plaza = match (b.ticket.contexto, res.ganador) {
-            (Contexto::Asedio { asentamiento }, Lado::Defensor) => Some(asentamiento as u64),
-            (Contexto::Avanzada { avanzada, .. }, Lado::Defensor) => self.avanzada(avanzada).and_then(|(madre, _)| madre),
+        let plaza = match (&b.ticket.contexto, res.ganador) {
+            (&Contexto::Asedio { asentamiento }, Lado::Defensor) => Some(asentamiento as u64),
+            (&Contexto::Avanzada { avanzada, .. }, Lado::Defensor) => self.avanzada(avanzada).and_then(|(madre, _)| madre),
             _ => None,
         };
         if let Some(plaza) = plaza {
