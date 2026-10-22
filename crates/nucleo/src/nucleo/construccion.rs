@@ -12,7 +12,8 @@
 //! instante exacto, con una cita propia en la cola y la generación de la plaza (la ruina las descarta): `Carga::FinDeObras` por cada obra,
 //! mejora y ascenso en curso (prioridad [`PRIO_FIN_DE_OBRAS`], antes del paso del mismo instante) y `Carga::CaducaPolitica` por cada política
 //! activa (prioridad [`PRIO_CADUCA_POLITICA`], después del paso). Se programan al empezar lo que esperan (en `anotar_sucesos`, a partir de
-//! `ObraIniciada`, `MejoraIniciada` y `AscensoIniciado`) y desaparecen al cumplirse: ninguna es recurrente. Al acabar una obra la zona crece y la
+//! `ObraIniciada`, `MejoraIniciada` y `AscensoIniciado`) y desaparecen al cumplirse: ninguna es recurrente. La obra de una avanzada tiene la suya, ligada a la avanzada y no a la
+//! plaza (`SucesoCombate::FinObraAvanzada`), para poder cancelarla. Al acabar una obra la zona crece y la
 //! cuadrilla se libera en ese mismo instante, y la siguiente de la cola arranca entonces; una obra encargada a mano arranca al instante de la orden.
 //! Una cita que llega con la plaza ya cambiada (una conquista descartó el ascenso) no encuentra nada que cumplir.
 //!
@@ -24,7 +25,8 @@
 use super::*;
 use crate::codec_economia::{recurso_a_u8, tipo_a_u8};
 use crate::economia::{FuentesMundo, SitiosPlaza};
-use crate::estado::{PRIO_ASENTAMIENTO, PRIO_CADUCA_POLITICA, PRIO_FIN_DE_OBRAS};
+use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO, PRIO_CADUCA_POLITICA, PRIO_FIN_DE_OBRAS};
+use crate::estado_combate::entidad_obra_de_avanzada;
 use base::MS_POR_MINUTO;
 use asentamiento::asentamiento::{Evento as EventoEco, Exterior};
 use asentamiento::ascenso::Bloqueo;
@@ -135,6 +137,7 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::AvanzadaObraIniciada { id, tipo, completa_en } => ("avanzada.obra_iniciada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("completaEn", *completa_en)]),
         EventoEco::AvanzadaCompletada { id, tipo, etapa } => ("avanzada.completada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("etapa", etapa.indice() as i64)]),
         EventoEco::AvanzadaDestruida { id } => ("avanzada.destruida", vec![("avanzada", *id as i64), ("motivo", 0)]),
+        EventoEco::AvanzadaObraCancelada { id, tipo } => ("avanzada.obra_cancelada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64)]),
     };
     EventoNucleo { codigo: codigo.into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos }
 }
@@ -153,6 +156,12 @@ impl Nucleo {
     pub(super) fn programar_minuto(&mut self, id: u64, en: Instante) {
         let clave = self.estado.generaciones.clave(id);
         self.estado.cola.programar(en, PRIO_ASENTAMIENTO, clave, Carga::Minuto);
+    }
+
+    /// Programa la cita de fin de la obra de la avanzada `id` en `en`, con la generación vigente de su obra: cancelarla la sube y la descarta (prioridad de fin de obras).
+    fn programar_fin_de_avanzada(&mut self, id: u64, en: Instante) {
+        let clave = self.estado.generaciones.clave(entidad_obra_de_avanzada(id));
+        self.estado.cola.programar(en, PRIO_FIN_DE_OBRAS, clave, Carga::Combate(SucesoCombate::FinObraAvanzada));
     }
 
     /// Programa la cita de fin de obra, mejora o ascenso de la plaza en `en`, con su generación vigente.
@@ -263,8 +272,10 @@ impl Nucleo {
             return;
         }
         for s in sucesos {
-            if let EventoEco::ObraIniciada { completa_en, .. } | EventoEco::MejoraIniciada { completa_en, .. } | EventoEco::AscensoIniciado { completa_en, .. } | EventoEco::AvanzadaObraIniciada { completa_en, .. } = s {
-                self.programar_fin(id, *completa_en);
+            match s {
+                EventoEco::ObraIniciada { completa_en, .. } | EventoEco::MejoraIniciada { completa_en, .. } | EventoEco::AscensoIniciado { completa_en, .. } => self.programar_fin(id, *completa_en),
+                EventoEco::AvanzadaObraIniciada { id: avanzada, completa_en, .. } => self.programar_fin_de_avanzada(*avanzada, *completa_en),
+                _ => {}
             }
         }
         let Some(a) = self.estado.asentamientos.get(&id) else { return };
@@ -290,7 +301,7 @@ impl Nucleo {
         for p in &a.economia.pueblos {
             self.estado.nodos_reclamados.remove(&p.nodo);
         }
-        self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas.clone(), t);
+        self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas, t);
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.quitar_plaza(id);
         self.estado.generaciones.subir(id);

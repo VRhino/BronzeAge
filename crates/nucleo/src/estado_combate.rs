@@ -21,6 +21,7 @@ const ETIQUETA_CONQUISTA: u64 = 10 * ETIQUETA;
 const ETIQUETA_ANILLO: u64 = 11 * ETIQUETA;
 const ETIQUETA_GUARNICION: u64 = 12 * ETIQUETA;
 const ETIQUETA_AVANZADA: u64 = 14 * ETIQUETA;
+const ETIQUETA_OBRA_DE_AVANZADA: u64 = 15 * ETIQUETA;
 
 /// Clave de entidad (de generación, de cola y de la rejilla de encuentros) de un campamento de bandidos.
 pub fn entidad_bandidos(id: u64) -> u64 {
@@ -48,6 +49,11 @@ pub fn entidad_guarnicion(pueblo: u64) -> u64 {
 /// guarnición de serie) y su sitio en el espacio. Cambiar de estado la sube y descarta los plazos del anterior.
 pub fn entidad_avanzada(id: u64) -> u64 {
     ETIQUETA_AVANZADA | id
+}
+/// Clave de entidad de la cita de fin de la obra de una avanzada (primera obra, mejora o reparación). Aparte de [`entidad_avanzada`] para poder cancelarla sin llevarse
+/// la reposición de la guarnición ni el fin de la invulnerabilidad: cancelar la obra, o perderla con la avanzada, sube su generación.
+pub fn entidad_obra_de_avanzada(id: u64) -> u64 {
+    ETIQUETA_OBRA_DE_AVANZADA | id
 }
 /// ¿Es esta clave de entidad la de una avanzada? (la rejilla mezcla columnas, caravanas, plazas, bandidos y avanzadas).
 pub fn es_entidad_avanzada(entidad: u64) -> bool {

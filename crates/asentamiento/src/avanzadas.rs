@@ -1,12 +1,12 @@
 //! Las avanzadas (Doc 5.17, Economia_Construccion §14.1): puestos fortificados de la plaza madre, en el mapa. Tres etapas, que son sus tres niveles
 //! (atalaya → fuerte → ciudadela); siempre se empieza por la atalaya y se sube de una en una. Es la otra **obra de mapa** además del pueblo
 //! extractor (`pueblos`): no pasa por la cola de construcción, queda **pendiente de materiales** (ocupa cupo desde que se marca), los materiales se
-//! entregan en el sitio y, con todo entregado, arranca la obra, que acaba en su instante exacto (el núcleo le da una cita propia en la cola de la
-//! plaza madre: no espera al paso de minuto). Una avanzada operativa cuenta como un edificio activo de la madre en el mantenimiento.
+//! entregan en el sitio y, con todo entregado, arranca la obra, que acaba en su instante exacto (el núcleo le da una cita propia, ligada a la avanzada
+//! para poder cancelarla: no espera al paso de minuto). Una avanzada operativa cuenta como un edificio activo de la madre en el mantenimiento.
 //!
-//! Aquí están el estado de la avanzada (etapa, obra, almacén, ruinas), el cupo, los costes y las órdenes sobre la obra. Lo que tiene que ver con
-//! el combate (guarnición de serie y de jugadores, el ataque y qué queda tras él) es del núcleo y del crate `combate`: la avanzada solo dice si
-//! está operativa, en obra o en ruinas.
+//! Aquí están el estado de la avanzada (etapa, obra, almacén, ruinas), el cupo, los costes, dónde cabe una nueva y las órdenes sobre la obra (marcarla, entregarla,
+//! cancelarla). Lo que tiene que ver con el combate (guarnición de serie y de jugadores, el ataque y qué queda tras él) es del núcleo y del crate `combate`: la
+//! avanzada solo dice si está operativa, en obra o en ruinas.
 
 use crate::almacen::Almacen;
 use crate::asentamiento::{Asentamiento, Evento};
@@ -123,8 +123,11 @@ pub struct ReglasAvanzadas {
     pub cupo_por_nivel: u32,
     /// Cabida por recurso del almacén de cada etapa.
     pub capacidad_almacen: [Mil; 3],
-    /// Distancia mínima al centro de la plaza madre.
-    pub distancia_minima: Mil,
+    /// Lo que mide un elemento nuevo del mapa (Doc 4.2.2, 5.17: «como mucho 0,2 de mapa»): ocupa un disco de ese diámetro, así que dos elementos no se pisan si
+    /// sus centros distan `tamano` o más.
+    pub tamano: Mil,
+    /// Lo que mide la ciudad de la plaza madre en el mapa, como fracción del radio de su zona (ppm): «la ciudad nunca pasa de una décima de su provincia».
+    pub ciudad_de_la_zona: i64,
     /// Parte del coste de la etapa que cuesta reparar unas ruinas (ppm).
     pub fraccion_reparacion: i64,
     /// Coste y duración (ms) de cada paso: construir la atalaya, mejorarla a fuerte, mejorar el fuerte a ciudadela.
@@ -145,7 +148,8 @@ impl ReglasAvanzadas {
             nivel_madre: nivel,
             cupo_por_nivel: numero(&b["cupoPorNivelDeLaMadre"]) as u32,
             capacidad_almacen: capacidad,
-            distancia_minima: mil(numero(&b["distanciaMinimaAlAsentamiento"])),
+            tamano: mil(numero(&b["tamano"])),
+            ciudad_de_la_zona: ppm(numero(&b["fraccionCiudadDeLaZona"])),
             fraccion_reparacion: ppm(numero(&b["fraccionReparacion"])),
             obras,
         }
@@ -159,6 +163,24 @@ impl ReglasAvanzadas {
     /// Lo que dura ese paso (ms).
     pub fn duracion(&self, etapa: Etapa) -> i64 {
         self.obras[etapa.indice()].1
+    }
+
+    /// Lo que mide la ciudad de una plaza cuya zona tiene ese radio.
+    pub fn radio_de_ciudad(&self, radio_de_zona: Mil) -> Mil {
+        por(radio_de_zona, self.ciudad_de_la_zona)
+    }
+
+    /// Dónde cabe una avanzada nueva (Doc 5.17, 4.2.2): sin pisar la ciudad de su madre (la distancia a su centro es la de su radio más la mitad del tamaño de la
+    /// avanzada) ni ningún otro elemento del mapa (`otros` son los centros de los demás: avanzadas, pueblos, campamentos). Que esté en la zona y que el héroe esté en el
+    /// sitio lo mira el núcleo.
+    pub fn comprobar_sitio(&self, plaza: Punto, radio_de_zona: Mil, sitio: Punto, otros: impl IntoIterator<Item = Punto>) -> Result<(), ErrorAvanzada> {
+        if sitio.dist(plaza) < self.radio_de_ciudad(radio_de_zona) + self.tamano / 2 {
+            return Err(ErrorAvanzada::DentroDelAsentamiento);
+        }
+        if otros.into_iter().any(|o| sitio.dist(o) < self.tamano) {
+            return Err(ErrorAvanzada::PisaOtroElemento);
+        }
+        Ok(())
     }
 
     /// Lo que cuesta reparar unas ruinas de esa etapa: la fracción del coste de construirla.
@@ -185,6 +207,12 @@ pub enum ErrorAvanzada {
     NadaQueEntregar,
     /// La ciudadela no se destruye a mano.
     NoSeDestruyeALaMano,
+    /// El sitio cae sobre la ciudad de la plaza madre.
+    DentroDelAsentamiento,
+    /// El sitio pisa otro elemento del mapa.
+    PisaOtroElemento,
+    /// No hay una mejora ni una reparación en marcha que cancelar.
+    NadaQueCancelar,
 }
 
 impl Asentamiento {
@@ -291,6 +319,16 @@ impl Asentamiento {
         Ok(tomado)
     }
 
+    /// Cancela la mejora o la reparación en marcha (o pendiente de materiales) de una avanzada: sin reembolso, los materiales entregados se pierden, y la avanzada sigue como
+    /// estaba (operativa en su etapa, o en ruinas). La primera obra no se cancela así: se destruye la avanzada.
+    pub fn cancelar_obra_de_avanzada(&mut self, id: u64, ev: &mut Vec<Evento>) -> Result<(), ErrorAvanzada> {
+        let a = self.avanzadas.iter_mut().find(|a| a.id == id).ok_or(ErrorAvanzada::NoExiste)?;
+        let Some(Obra { tipo, .. }) = a.obra.as_ref().filter(|o| o.tipo != TipoObra::Construir) else { return Err(ErrorAvanzada::NadaQueCancelar) };
+        ev.push(Evento::AvanzadaObraCancelada { id, tipo: *tipo });
+        a.obra = None;
+        Ok(())
+    }
+
     /// Destruye la avanzada a mano (o cancela su primera obra): libera el cupo y no recupera nada. La ciudadela no se destruye a mano. Devuelve la
     /// avanzada para que el núcleo libere lo suyo (guarnición, rejilla).
     pub fn destruir_avanzada(&mut self, id: u64, ev: &mut Vec<Evento>) -> Result<Avanzada, ErrorAvanzada> {
@@ -358,7 +396,7 @@ mod pruebas {
     fn las_cifras_salen_del_documento() {
         let r = Reglas::cargar().avanzadas;
         assert_eq!((r.nivel_madre, r.cupo_por_nivel, r.capacidad_almacen), ([2, 2, 3], 1, [0, 2_000_000, 10_000_000]));
-        assert_eq!((r.distancia_minima, r.fraccion_reparacion), (2_000, 500_000));
+        assert_eq!((r.tamano, r.ciudad_de_la_zona, r.fraccion_reparacion), (200, 100_000, 500_000), "elemento de 0,2; ciudad de una décima de la zona; reparar cuesta la mitad");
         assert_eq!(r.costo(Etapa::Atalaya), &vec![(Madera, 200_000), (Piedra, 100_000)], "200 madera + 100 piedra, obra de 2 h");
         assert_eq!(r.duracion(Etapa::Atalaya), 120 * MIN);
         assert_eq!(r.costo(Etapa::Fuerte), &vec![(Madera, 600_000), (Oro, 50_000), (Piedra, 400_000)]);
@@ -478,6 +516,68 @@ mod pruebas {
         assert_eq!(marcar(&mut a, &r, 3), Ok(()), "el cupo quedó libre");
         a.avanzadas[0].etapa = Etapa::Ciudadela;
         assert_eq!(a.destruir_avanzada(2, &mut vec![]), Err(ErrorAvanzada::NoSeDestruyeALaMano));
+    }
+
+    #[test]
+    fn el_sitio_no_pisa_la_ciudad_de_la_madre_ni_otro_elemento_del_mapa() {
+        let r = Reglas::cargar().avanzadas;
+        let plaza = Punto::new(100_000, 100_000);
+        let a = |dx: i64, dy: i64| Punto::new(plaza.x + dx, plaza.y + dy);
+        // La ciudad mide una décima de la zona (zona 15 → 1,5) y la avanzada pide además la mitad de su tamaño (0,1): 1,6 de centro a centro.
+        assert_eq!((r.radio_de_ciudad(6_000), r.radio_de_ciudad(15_000)), (600, 1_500));
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(1_599, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(0, -1_599), []), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(1_600, 0), []), Ok(()), "justo fuera, sin pisarla");
+        // Con una zona mayor la ciudad es mayor: lo que valía deja de valer.
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(2_000, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(3_100, 0), []), Ok(()));
+        // Otro elemento (una avanzada, un pueblo, un campamento) a menos de su tamaño (0,2) se pisa; a 0,2 justo, no.
+        let sitio = a(8_000, 0);
+        let otros = [a(8_199, 0), a(20_000, 0)];
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, otros), Err(ErrorAvanzada::PisaOtroElemento));
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [a(8_000, 200), a(7_800, 0)]), Ok(()));
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [sitio]), Err(ErrorAvanzada::PisaOtroElemento), "ni encima");
+        // La ciudad se mira antes que los demás elementos.
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(500, 0), [a(500, 0)]), Err(ErrorAvanzada::DentroDelAsentamiento));
+    }
+
+    #[test]
+    fn cancelar_una_mejora_o_una_reparacion_pierde_lo_entregado_y_deja_la_avanzada_como_estaba() {
+        let r = Reglas::cargar();
+        let mut a = madre(&r, 3);
+        marcar(&mut a, &r, 1).unwrap();
+        let mut ev = vec![];
+        // Sin obra o con la primera obra no hay nada que cancelar (la primera se destruye).
+        assert_eq!(a.cancelar_obra_de_avanzada(9, &mut ev), Err(ErrorAvanzada::NoExiste));
+        assert_eq!(a.cancelar_obra_de_avanzada(1, &mut ev), Err(ErrorAvanzada::NadaQueCancelar), "la primera obra se cancela destruyendo la avanzada");
+        entregar_todo(&mut a, &r, 0, 1);
+        a.cumplir_avanzadas(120 * MIN, &r, &mut vec![]);
+        assert_eq!(a.cancelar_obra_de_avanzada(1, &mut ev), Err(ErrorAvanzada::NadaQueCancelar), "operativa y sin obra");
+        assert!(ev.is_empty());
+        // Una mejora a medio entregar: se cancela, el almacén de la plaza no recibe nada y la avanzada sigue operativa en su etapa.
+        a.mejorar_avanzada(&r, 1, &mut vec![]).unwrap();
+        a.entregar_a_avanzada(130 * MIN, &r, 1, &[(Madera, 100_000)], &mut vec![]).unwrap();
+        let almacen = a.almacen.clone();
+        a.cancelar_obra_de_avanzada(1, &mut ev).unwrap();
+        assert_eq!(ev, vec![Evento::AvanzadaObraCancelada { id: 1, tipo: TipoObra::Mejorar }]);
+        let av = a.avanzada(1).unwrap();
+        assert_eq!((av.obra.is_none(), av.operativa(), av.etapa, &a.almacen), (true, true, Etapa::Atalaya, &almacen), "no hay reembolso");
+        assert_eq!(a.cancelar_obra_de_avanzada(1, &mut ev), Err(ErrorAvanzada::NadaQueCancelar), "ya no queda nada");
+        // Una mejora con todo entregado y en marcha también se cancela, y su fin deja de contar.
+        a.mejorar_avanzada(&r, 1, &mut vec![]).unwrap();
+        entregar_todo(&mut a, &r, 200 * MIN, 1);
+        assert_eq!(a.fines_de_avanzadas().count(), 1);
+        a.cancelar_obra_de_avanzada(1, &mut ev).unwrap();
+        assert_eq!(a.fines_de_avanzadas().count(), 0);
+        a.cumplir_avanzadas(10_000 * MIN, &r, &mut vec![]);
+        assert_eq!(a.avanzada(1).unwrap().etapa, Etapa::Atalaya, "la mejora cancelada no acaba");
+        // Una reparación: las ruinas siguen siéndolo.
+        a.avanzadas[0].etapa = Etapa::Fuerte;
+        a.avanzadas[0].estado = Estado::EnRuinas { invulnerable_hasta: None };
+        a.reparar_avanzada(&r, 1, &mut vec![]).unwrap();
+        a.cancelar_obra_de_avanzada(1, &mut ev).unwrap();
+        assert_eq!(ev.last(), Some(&Evento::AvanzadaObraCancelada { id: 1, tipo: TipoObra::Reparar }));
+        assert!(a.avanzada(1).unwrap().en_ruinas() && a.avanzada(1).unwrap().obra.is_none());
     }
 
     #[test]

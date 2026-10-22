@@ -334,6 +334,9 @@ pub enum Comando {
     RepostarEnAvanzada { heroe: u64, avanzada: u64 },
     /// La columna, a la puerta de la avanzada, descarga `cantidad` de un recurso de su carro (y de sus caravanas adjuntas) en el almacén, hasta donde quepa.
     DepositarEnAvanzada { ejercito: u64, avanzada: u64, recurso: Recurso, cantidad: Mil },
+    /// Cancela la mejora o la reparación de la avanzada, en marcha o pendiente de materiales: sin reembolso (lo entregado se pierde) y la avanzada sigue como estaba. La
+    /// primera obra no se cancela así: se destruye la avanzada.
+    CancelarObraDeAvanzada { heroe: u64, avanzada: u64 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -418,6 +421,7 @@ impl Comando {
             Comando::MejorarAvanzada { heroe, avanzada }
             | Comando::RepararAvanzada { heroe, avanzada }
             | Comando::DestruirAvanzada { heroe, avanzada }
+            | Comando::CancelarObraDeAvanzada { heroe, avanzada }
             | Comando::ElegirTropaDeAvanzada { heroe, avanzada, .. }
             | Comando::GuarnecerAvanzada { heroe, avanzada, .. }
             | Comando::RetirarDeAvanzada { heroe, avanzada, .. }
@@ -1238,6 +1242,11 @@ impl Peticion {
                 w.u8(recurso_a_u8(*recurso));
                 w.i64(*cantidad);
             }
+            Comando::CancelarObraDeAvanzada { heroe, avanzada } => {
+                w.u8(116);
+                w.u64(*heroe);
+                w.u64(*avanzada);
+            }
         }
         w.0
     }
@@ -1406,6 +1415,7 @@ impl Peticion {
             113 => Comando::RetirarDeAvanzada { heroe: r.u64()?, avanzada: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
             114 => Comando::RepostarEnAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
             115 => Comando::DepositarEnAvanzada { ejercito: r.u64()?, avanzada: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            116 => Comando::CancelarObraDeAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1545,7 +1555,12 @@ pub mod rechazos {
     pub const AVANZADA_NIVEL_INSUFICIENTE: &str = "avanzada.nivel_insuficiente";
     pub const AVANZADA_SIN_CUPO: &str = "avanzada.sin_cupo";
     pub const AVANZADA_FUERA_DE_LA_ZONA: &str = "avanzada.fuera_de_la_zona";
+    /// El sitio cae sobre la ciudad de la plaza madre (su radio es una décima del de su zona).
     pub const AVANZADA_DENTRO_DEL_ASENTAMIENTO: &str = "avanzada.dentro_del_asentamiento";
+    /// El sitio pisa otra avanzada, un pueblo o un campamento (cada elemento del mapa mide 0,2).
+    pub const AVANZADA_PISA_OTRO_ELEMENTO: &str = "avanzada.pisa_otro_elemento";
+    /// No hay una mejora ni una reparación que cancelar.
+    pub const AVANZADA_NADA_QUE_CANCELAR: &str = "avanzada.nada_que_cancelar";
     /// La columna del héroe no está en el sitio donde se pide colocarla.
     pub const AVANZADA_FUERA_DEL_SITIO: &str = "avanzada.fuera_del_sitio";
     pub const AVANZADA_FACCION_AJENA: &str = "avanzada.faccion_ajena";
@@ -1566,6 +1581,8 @@ pub mod rechazos {
     pub const AVANZADA_ESCUADRA_NO_ESTA: &str = "avanzada.escuadra_no_esta";
     pub const AVANZADA_TROPA_NO_ELEGIBLE: &str = "avanzada.tropa_no_elegible";
     pub const AVANZADA_TROPA_SIN_TECNOLOGIA: &str = "avanzada.tropa_sin_tecnologia";
+    /// La plaza madre no tiene el edificio activo, al nivel que pide la tropa, para reclutarla.
+    pub const AVANZADA_TROPA_SIN_EDIFICIO: &str = "avanzada.tropa_sin_edificio";
     // Mercado de los campamentos de mercenarios (`ErrorMercenarios`).
     pub const CAMPAMENTO_DESCONOCIDO: &str = "campamento.desconocido";
     pub const CAMPAMENTO_FUERA_DE_LA_PUERTA: &str = "campamento.fuera_de_la_puerta";
@@ -1883,6 +1900,7 @@ mod pruebas {
             Comando::RetirarDeAvanzada { heroe: 2, avanzada: 12, escuadras: vec![6] },
             Comando::RepostarEnAvanzada { heroe: 2, avanzada: 12 },
             Comando::DepositarEnAvanzada { ejercito: 9, avanzada: 12, recurso: Recurso::Trigo, cantidad: 40_000 },
+            Comando::CancelarObraDeAvanzada { heroe: 2, avanzada: 12 },
         ];
         for c in comandos {
             let p = Peticion { actor: "ana".into(), admin: false, peticion_id: "av".into(), version_esperada: Some(4), comando: c };
@@ -1895,6 +1913,7 @@ mod pruebas {
         for c in [
             Comando::EntregarMaterialesAAvanzada { ejercito: 9, avanzada: 12 },
             Comando::MejorarAvanzada { heroe: 2, avanzada: 12 },
+            Comando::CancelarObraDeAvanzada { heroe: 2, avanzada: 12 },
             Comando::GuarnecerAvanzada { heroe: 2, avanzada: 12, escuadras: vec![] },
             Comando::DepositarEnAvanzada { ejercito: 9, avanzada: 12, recurso: Recurso::Oro, cantidad: 1 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Avanzada(12), declara_guerra: false },

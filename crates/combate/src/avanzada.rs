@@ -47,9 +47,7 @@ pub fn resolver_ataque(r: &Reglas, estado: Estado, ahora: Instante, atacante: Ba
 }
 
 /// Las tropas de la guarnición de serie de una etapa, una por escuadra y por orden de escalón: la que el Gobernador eligió para cada escalón o, si no
-/// eligió, `tropaPorDefecto`.
-// DUDA: el documento solo da el defecto del escalón 2 (milicia de lanceros); aquí vale para los tres escalones, de modo que una ciudadela sin
-// elecciones no queda sin defensores.
+/// eligió, `tropaPorDefecto`, la del escalón 2 del canon (milicia de lanceros) en los tres escalones.
 pub fn composicion(r: &Reglas, etapa: Etapa, elegidas: &BTreeMap<u8, Tropa>) -> Vec<Tropa> {
     let a = &r.avanzada;
     a.guarnicion_de_serie[etapa.indice()].iter().flat_map(|&(escalon, n)| std::iter::repeat_n(elegidas.get(&escalon).copied().unwrap_or(a.tropa_por_defecto), n)).collect()
@@ -80,7 +78,8 @@ pub fn cupo_de_guarnicion(r: &Reglas, etapa: Etapa) -> i64 {
     r.avanzada.cupo_guarnicion[etapa.indice()]
 }
 
-/// ¿Puede el Gobernador elegir esta tropa para la guarnición de serie? Solo los escalones que usa alguna etapa (el 2, el 3 y el 4); devuelve su escalón.
+/// ¿Puede el Gobernador elegir esta tropa para la guarnición de serie? Solo los escalones que usa alguna etapa (el 2, el 3 y el 4); devuelve su escalón. Que la
+/// plaza madre pueda reclutarla (tecnología y edificio) lo mira el núcleo.
 pub fn escalon_elegible(r: &Reglas, tropa: Tropa) -> Option<u8> {
     let escalon = r.militar.tropas.tropa(tropa).escalon;
     r.avanzada.guarnicion_de_serie.iter().flatten().any(|&(e, _)| e == escalon).then_some(escalon)

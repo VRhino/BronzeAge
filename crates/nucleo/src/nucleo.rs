@@ -898,6 +898,7 @@ impl Nucleo {
             | Comando::MejorarAvanzada { .. }
             | Comando::RepararAvanzada { .. }
             | Comando::DestruirAvanzada { .. }
+            | Comando::CancelarObraDeAvanzada { .. }
             | Comando::ElegirTropaDeAvanzada { .. }
             | Comando::GuarnecerAvanzada { .. }
             | Comando::RetirarDeAvanzada { .. }

@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN15");
+    assert_eq!(&bytes[..5], b"BAN16");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1174,7 +1174,7 @@ fn una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que
 // ───────────────────────────── 8. Conquista con visitantes, foto y determinismo ─────────────────────────────
 
 #[test]
-fn el_visitante_amigo_defiende_con_su_columna_aparcada_y_si_la_plaza_cae_vuelve_a_ella() {
+fn solo_defiende_quien_esta_dentro_el_visitante_con_su_columna_aparcada_si_y_la_aliada_a_la_puerta_no() {
     let m = con_mundo!();
     let mut s = asedio(m, 7, &[Tropa::MiliciaLanceros], &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
     let (b, beto, ana) = (s.e.b, s.beto, s.ana);
@@ -1185,12 +1185,19 @@ fn el_visitante_amigo_defiende_con_su_columna_aparcada_y_si_la_plaza_cae_vuelve_
     assert_eq!(s.e.n.heroe(visita.1).unwrap().heroe.presencia.ubicacion, Ubicacion::Asentamiento(b as u32));
     assert!(!s.e.n.en_el_mapa(visita.0), "la columna aparcada no está en el mapa");
     let antes = s.e.n.heroe(visita.1).unwrap().heroe.escuadra(hq).unwrap().cantidad;
+    // Otro héroe de la Facción 2 se queda con su columna en el mapa, a la puerta, sin entrar: no está dentro y no defiende (2026-10-22).
+    let a_la_puerta = s.e.ejercito("fede", 2, s.e.pos(b), &[Tropa::MiliciaLanceros]);
+    let hf = s.e.n.heroe(a_la_puerta.1).unwrap().heroe.escuadras[0].id;
+    let antes_fuera = s.e.n.heroe(a_la_puerta.1).unwrap().heroe.escuadra(hf).unwrap().cantidad;
 
     assert!(s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
     let h = &hechos(&s.e.n, "combate.asedio_conquista");
     assert_eq!(h.len(), 1, "la plaza cae pese a la ayuda");
     let tras = s.e.n.heroe(visita.1).unwrap();
     assert!(tras.heroe.escuadra(hq).unwrap().cantidad < antes, "la escuadra de la columna aparcada sufrió bajas: defendió");
+    let fuera = s.e.n.heroe(a_la_puerta.1).unwrap();
+    assert_eq!(fuera.heroe.escuadra(hf).unwrap().cantidad, antes_fuera, "la columna aliada a la puerta, en el mapa, no defendió: ni una baja");
+    assert!(!s.e.n.heroe_herido(a_la_puerta.1) && s.e.n.en_el_mapa(a_la_puerta.0));
     assert!(s.e.n.heroe_herido(visita.1) && s.e.n.heroe_herido(beto), "los dos defensores en persona quedan heridos");
     // Vuelve a su columna aparcada, que ya está otra vez en el mapa, y no es residente: no cambia de casa.
     assert_eq!(tras.heroe.presencia.ubicacion, Ubicacion::Columna(visita.0));

@@ -111,6 +111,12 @@ pub fn costo(r: &Reglas, def: &DefTropa, cantidad: i64, factor_costo: i64) -> Co
     c
 }
 
+/// ¿Tiene la plaza activo el edificio que pide la tropa, al nivel que pide? Es la infraestructura de las cuatro puertas (Doc 6.1): la única condición de plaza de
+/// reclutar que no depende del stock del momento.
+pub fn edificio_basta(def: &DefTropa, edificios: &[Edificio]) -> bool {
+    edificios.iter().find(|e| e.tipo == def.edificio && e.activo()).is_some_and(|e| e.nivel_interno >= def.nivel_requerido)
+}
+
 /// Trigo que la plaza no puede tocar: lo que come su gente durante `horizonteMinutosComida` minutos (población + tropas, con la que se va a
 /// reclutar ya sumada).
 pub fn reserva_de_trigo(r: &Reglas, consumo_poblacion: Mil, soldados: i64) -> Mil {
@@ -154,8 +160,7 @@ pub fn reclutar(r: &Reglas, plaza: Plaza, pedido: Pedido, nuevo_id: impl FnOnce(
     if disponibles < cantidad {
         return Err(ErrorReclutamiento::SinPoblacion { origen, hacen_falta: cantidad, disponibles });
     }
-    let edificio_basta = plaza.edificios.iter().find(|e| e.tipo == def.edificio && e.activo()).is_some_and(|e| e.nivel_interno >= def.nivel_requerido);
-    if !edificio_basta {
+    if !edificio_basta(def, plaza.edificios) {
         return Err(ErrorReclutamiento::SinEdificio);
     }
     let costo = costo(r, def, cantidad, plaza.factor_costo);
@@ -318,6 +323,25 @@ mod pruebas {
         assert_eq!((e.cantidad, e.nivel, e.experiencia, e.contenedor, e.en_guarnicion, e.plaza_origen), (25, 1, 0, Contenedor::Campamento, false, Some(4)));
         assert_eq!(e.moral_en(5_000), 100_000);
         assert_eq!(e.tropa, Tropa::MiliciaLanceros);
+    }
+
+    #[test]
+    fn el_edificio_basta_si_esta_activo_y_con_el_nivel_que_pide_la_tropa() {
+        let r = r();
+        let mundo = mundo();
+        let lanceros = r.tropas.tropa(Tropa::LancerosMimbre);
+        assert!(edificio_basta(r.tropas.tropa(Tropa::MiliciaLanceros), &mundo.edificios), "el Centro Urbano nace activo");
+        assert!(edificio_basta(lanceros, &mundo.edificios));
+        assert!(!edificio_basta(lanceros, &mundo.edificios[..1]), "sin el barracón");
+        let mut en_obra = mundo.edificios.clone();
+        en_obra[1].estado = Estado::EnConstruccion;
+        assert!(!edificio_basta(lanceros, &en_obra), "un barracón en obra no recluta");
+        // Los carros de guerra piden Caballerizas de nivel 2.
+        let carros = r.tropas.tropa(Tropa::CarrosGuerra);
+        assert!(edificio_basta(carros, &mundo.edificios));
+        let mut bajo = mundo.edificios;
+        bajo[3].nivel_interno = 1;
+        assert!(!edificio_basta(carros, &bajo), "por debajo del nivel que pide la tropa no basta");
     }
 
     #[test]

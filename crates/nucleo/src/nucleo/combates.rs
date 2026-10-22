@@ -8,7 +8,8 @@
 //! - **Una caravana** (`atacar_caravana`): la que viaja suelta (no la adjunta a un ejército: se ataca al ejército). El servidor decide el tipo por la zona en
 //!   que está **en el instante del ataque** ([`Nucleo::en_zona`]): aguante (B) en la zona del dueño o de un aliado, disputa de carros (A) en el resto. Una tirada.
 //! - **Un campamento de bandidos** (`atacar_campamento`): PvE, sin guerra. Una tirada contra el poder de su nivel.
-//! - **Una plaza** (`atacar_plaza`): solo un ejército. Se asedia con la guarnición y los defensores en persona; si cae, [`conquistas`](super::conquistas).
+//! - **Una plaza** (`atacar_plaza`): solo un ejército. Se asedia con la guarnición y los defensores en persona —los que están **dentro**: una columna amiga a la puerta, en el
+//!   mapa, no defiende (2026-10-22)—; si cae, [`conquistas`](super::conquistas).
 //! - **Un pueblo extractor** (`atacar_pueblo`): un saqueo, nunca una conquista. Defienden los 30 mineros de serie.
 //! - **Una avanzada** (`atacar_avanzada`, en [`avanzadas`](super::avanzadas)): solo un ejército, como un asedio contra su guarnición de serie y la de jugadores; unas ruinas
 //!   caen sin combate. Si gana el atacante, se lleva el almacén que le quepa y la avanzada se destruye o queda en ruinas.
@@ -217,6 +218,7 @@ impl Nucleo {
             SucesoCombate::ReponeGuarnicion => self.repone_guarnicion(entidad, t),
             SucesoCombate::FinInvulnerabilidad => self.fin_de_invulnerabilidad(entidad, t),
             SucesoCombate::ReponeAvanzada => self.repone_avanzada(entidad, t),
+            SucesoCombate::FinObraAvanzada => self.fin_de_obra_de_avanzada(entidad, t),
         }
     }
 
@@ -512,7 +514,8 @@ impl Nucleo {
 
     /// Quién defiende la plaza con números (Combate §3.2): su guarnición (siempre, aunque su dueño esté herido), los residentes que están dentro, sanos y
     /// conectados con las escuadras de su loadout activo que tengan en el campamento (como mucho 15) y, en el cupo que dejan, los visitantes de la propia Facción o de
-    /// una aliada, con las escuadras de la columna que dejaron aparcada a la puerta.
+    /// una aliada, con las escuadras de la columna que dejaron aparcada al entrar (no está en el mapa: es lo que trajeron). **Solo defiende lo que está dentro** (2026-10-22):
+    /// una columna amiga en el mapa, a la puerta, no cuenta.
     pub(super) fn defensa_de_plaza(&self, plaza: u64, t: Instante) -> DefensaDePlaza {
         let cr = &self.estado.reglas.economia.combate;
         let a = &self.estado.asentamientos[&plaza];
@@ -630,7 +633,8 @@ impl Nucleo {
     /// saqueo: el pueblo no cambia de dueño ni se destruye. La guarnición que queda por debajo de su número de serie se repone gratis a las 6 horas.
     // DUDA: «si cae, se repone» se lee aquí como «si queda por debajo de 30»: el reloj de 6 h empieza en el primer combate que la deja incompleta y no se
     // reinicia mientras corre. Con la guarnición a 0 esperando su reposición el pueblo cae sin combate (como una plaza sin defensores).
-    // DUDA: quien «defienda el pueblo» además de los mineros no existe (nadie puede estar en un pueblo); la chatarra, si resiste, va al almacén de la plaza madre.
+    // Solo defiende lo que está dentro (decisión del autor, 2026-10-22) y nadie puede entrar aún en un pueblo: una columna amiga a su puerta, en el mapa, no cuenta.
+    // DUDA: la chatarra, si resiste, va al almacén de la plaza madre.
     fn atacar_pueblo(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);

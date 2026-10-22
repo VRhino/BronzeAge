@@ -69,7 +69,7 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 - **Almacén local**: 500 (placeholder). Lo extraído se queda ahí; con el almacén lleno, la extracción para.
 - **Nodo agotado**: espera a que se regenere (`REGENERACION_NODOS`) sin mudarse. Los pueblos no entran en el reemplazo automático ni en `EXTRACCION_MAXIMOS`.
 - **Destruirlo a mano** libera el cupo y no recupera nada.
-- **Tamaño**: como mucho **0,2 de mapa**; vale para todo elemento nuevo del mapa. Se recuerda como una ciudad y no aporta visión propia.
+- **Tamaño**: como mucho **0,2 de mapa**; vale para todo elemento nuevo del mapa, y dos elementos no se pisan (sus centros distan 0,2 o más; la ciudad de una plaza mide una décima del radio de su zona). Se recuerda como una ciudad y no aporta visión propia.
 - **Trazado**: como el campamento de mercenarios, con la mina (o la cantera) como ancla, unas casas, el almacén y un corral para el buey; sale del id del pueblo y se coloca una sola vez.
 - **Conquista de la madre**: sus pueblos pasan al conquistador con la zona. **Ruina de la madre**: desaparecen.
 
@@ -82,7 +82,7 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 2. La obra aparece en el mapa **«pendiente de materiales»**, con la lista de lo que necesita, y ocupa cupo desde ese momento.
 3. **Los materiales se llevan físicamente**, en los carros de las columnas o en caravanas que van en un ejército, y se entregan con la columna a `radioPuerta`: es una acción de entrega, no un destino de caravana. Pueden entregar los ciudadanos de la Facción.
 4. Con todo entregado arranca la obra, corta. Al acabar, el elemento queda activo.
-5. Cancelar o destruir a mano no recupera nada. Pendiente, la obra se ve en el mapa pero no se puede atacar.
+5. Cancelar o destruir a mano no recupera nada (una mejora o una reparación de avanzada en marcha se puede cancelar; la primera obra se cancela destruyendo). Pendiente, la obra se ve en el mapa pero no se puede atacar.
 
 Costes (placeholder, medidos en viajes de carro de 500): pueblo = coste de su extractor + 50 madera + carro (20 madera) + buey (12 oro), obra de 4-8 h (una mina de cobre: 100 madera + 12 oro).
 

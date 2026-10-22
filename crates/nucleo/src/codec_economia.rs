@@ -1,7 +1,7 @@
 //! Serialización canónica de la economía de una plaza (`asentamiento::Asentamiento`) para el hash y las fotos. Cada estructura se
 //! desestructura **entera** (sin `..`): si el crate añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
-//! Formato (BAN15: BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
+//! Formato (BAN16, igual que BAN15: BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
 //! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
 //! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado

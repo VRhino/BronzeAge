@@ -885,7 +885,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN15");
+    assert_eq!(&bytes[..5], b"BAN16");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1239,6 +1239,13 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     let b = e.b;
     let visitante = e.ejercito("carla", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
     let neutral = e.ejercito("nora", 3, e.pos(b), &[Tropa::MiliciaLanceros]);
+    let tarde = e.ejercito("dora", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
+    let a_la_puerta = e.ejercito("fede", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
+    // Solo defiende quien está dentro: Carla y Dora, de la Facción del defensor, entran de visita con su ejército (que se desarma en la puerta y queda aparcado); Fede, de la misma Facción, se queda en el mapa a la puerta.
+    for (cuenta, h) in [("carla", visitante.1), ("dora", tarde.1)] {
+        e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: h });
+    }
+    assert!(!e.n.en_el_mapa(visitante.0) && !e.n.en_el_mapa(tarde.0) && e.n.en_el_mapa(a_la_puerta.0));
     e.n.avanzar_hasta(e.n.ahora() + MIN);
     let t = e.n.ahora();
     // Abre `atacar` (con la guerra declarada): una batalla de asedio con convocatoria, sin gastar una tirada ni resolver nada.
@@ -1274,6 +1281,14 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     let bt = e.n.batalla(id).unwrap();
     assert_eq!((bt.ticket.revision, bt.incorporaciones.len(), bt.ticket.defensor.participantes.len()), (0, 0, 2));
     assert_eq!(hechos(&e.n, "batalla.refuerzos").len(), 1);
+    // Fede es de la Facción del defensor y está a la puerta, a ≤ radioEncuentro de la batalla, pero en el mapa no se defiende: hay que estar dentro.
+    let ticket_antes = e.n.batalla(id).unwrap().ticket.clone();
+    let r = e.n.aplicar_en(t + 10_500, Peticion::nueva("fede", "u1b", Comando::UnirseABatalla { heroe: a_la_puerta.1, batalla: id, lado: None }));
+    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar dentro")), "{r:?}");
+    let r = e.n.aplicar_en(t + 10_600, Peticion::nueva("fede", "u1c", Comando::UnirseABatalla { heroe: a_la_puerta.1, batalla: id, lado: Some(Lado::Defensor) }));
+    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA, "pedir el bando que le toca tampoco lo salva");
+    assert!(e.n.batalla(id).unwrap().ticket == ticket_antes && !e.n.ejercito(a_la_puerta.0).unwrap().en_batalla, "su columna sigue libre y el ticket no cambió");
     // Una Facción que no es de nadie en el asedio no combate aquí.
     let r = e.n.aplicar_en(t + 11_000, Peticion::nueva("nora", "u2", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None }));
     assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
@@ -1285,8 +1300,7 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     assert_eq!(e.n.batallas_pendientes(), vec![id]);
     assert!(e.n.ticket_publicado(id).is_some());
     assert_eq!(hechos(&e.n, "batalla.convocatoria_cerrada")[0].0, t + 30_000);
-    // Quien llega después entra como incorporación: el ticket no cambia.
-    let tarde = e.ejercito("dora", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
+    // Quien está dentro y llega después entra como incorporación: el ticket no cambia.
     let ticket0 = e.n.batalla(id).unwrap().ticket.clone();
     let r = e.n.aplicar_en(t + 40_000, Peticion::nueva("dora", "u3", Comando::UnirseABatalla { heroe: tarde.1, batalla: id, lado: None }));
     assert!(r.aceptada(), "{r:?}");

@@ -166,6 +166,8 @@ pub enum Evento {
     AvanzadaCompletada { id: u64, tipo: TipoObra, etapa: crate::avanzadas::Etapa },
     /// La avanzada (o su primera obra) se destruyó a mano.
     AvanzadaDestruida { id: u64 },
+    /// Se canceló a mano la mejora o la reparación de la avanzada: los materiales entregados se perdieron.
+    AvanzadaObraCancelada { id: u64, tipo: TipoObra },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

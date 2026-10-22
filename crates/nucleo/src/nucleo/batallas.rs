@@ -163,6 +163,7 @@ fn rechazo_de_union(e: ErrorUnion, v: u64) -> Respuesta {
         ErrorUnion::SinFaccion => "hace falta Facción para unirse a esta batalla".into(),
         ErrorUnion::NoCombateAqui => "tu Facción no combate aquí".into(),
         ErrorUnion::LadoDistinto(l) => format!("a ti te toca el bando {l:?}"),
+        ErrorUnion::HayQueEstarDentro => "para defender hay que estar dentro (haber entrado): a la puerta, en el mapa, solo se ataca".into(),
     };
     Respuesta::rechazo(rechazos::BATALLA_INVALIDA, mensaje, v)
 }
@@ -671,7 +672,8 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// `unirseABatalla` (§7): la columna del héroe entra, entera, en el bando que le toca.
+    /// `unirseABatalla` (§7): la columna del héroe entra, entera, en el bando que le toca. Para defender una plaza hay que estar dentro (el héroe ha entrado; su columna
+    /// aparcada es lo que trajo consigo): una columna en el mapa, a la puerta, solo puede atacar.
     fn unirse_a_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64, pedido: Option<Lado>) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let invalida = |m: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, m, v);
@@ -694,8 +696,13 @@ impl Nucleo {
             return Err(invalida(&format!("hay que estar a {radio} o menos de la batalla")));
         }
         let aliadas = |a: u32, b: u32| matches!(self.estado.militar.relacion(a, b), Some(Relacion::Alianza | Relacion::Vasallaje));
+        // Solo defiende quien está dentro (2026-10-22): quien ha entrado en la plaza. Una columna en el mapa, a la puerta, no; y en un pueblo o una avanzada nadie puede entrar aún.
+        let dentro = match b.ticket.contexto {
+            Contexto::Asedio { asentamiento } => self.heroe(heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(asentamiento)),
+            _ => false,
+        };
         // DUDA: «el Rey admite otras Facciones en sus ataques» es política (sistema 5): hasta entonces nadie lo admite.
-        let reparto = Reparto { contexto: b.ticket.contexto, atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false };
+        let reparto = Reparto { contexto: b.ticket.contexto, atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false, dentro };
         let lado = lado_para_unirse(&reparto, self.heroe(heroe).and_then(|h| h.faccion), e.columna.tipo == TipoColumna::Personal, pedido).map_err(|e| rechazo_de_union(e, v))?;
 
         let entran = self.heroes_de_columna(columna, t);

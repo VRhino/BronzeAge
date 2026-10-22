@@ -5,17 +5,20 @@
 //! héroes y la cola.
 //!
 //! # El ciclo
-//! 1. **Colocar** (`ColocarAvanzada`): un héroe con su columna en el sitio, dentro de la zona de su plaza madre y fuera del asentamiento. Deja una obra «pendiente de
-//!    materiales» que ocupa cupo, no se ve, no ve y no se ataca.
+//! 1. **Colocar** (`ColocarAvanzada`): un héroe con su columna en el sitio, dentro de la zona de su plaza madre, sin pisar su ciudad (cuyo radio es una décima del de su
+//!    zona) ni otro elemento del mapa (avanzadas, pueblos, campamentos: cada uno mide 0,2). Deja una obra «pendiente de materiales» que ocupa cupo, no se ve, no ve y no se ataca.
 //! 2. **Entregar** (`EntregarMaterialesAAvanzada`): lo que lleva la columna a la puerta. Con todo entregado arranca la obra y su fin tiene **cita propia**:
-//!    `Carga::FinDeObras` de la plaza madre (prioridad 1, antes del paso de minuto), en su instante exacto. Al acabar la primera obra la atalaya entra en la rejilla de
-//!    encuentros como entidad fija y ve a 12.
-//! 3. **Mejorar / reparar**: otra obra de mapa; la avanzada sigue funcionando (mejora) o en ruinas (reparación) hasta que acaba. Un ataque que la derriba pierde la obra.
-//! 4. **Guarnición**: la de serie (IA, fuera de cupo) nace completa la primera vez que se la necesita y se repone gratis a las `reposicionMinutos` de quedar incompleta
+//!    `SucesoCombate::FinObraAvanzada` (prioridad 1, antes del paso de minuto), en su instante exacto y ligada a la avanzada para poder cancelarla. Al acabar la primera obra
+//!    la atalaya entra en la rejilla de encuentros como entidad fija y ve a 12.
+//! 3. **Mejorar / reparar / cancelar**: otra obra de mapa; la avanzada sigue funcionando (mejora) o en ruinas (reparación) hasta que acaba. `CancelarObraDeAvanzada` la
+//!    abandona sin reembolso (lo entregado se pierde) y descarta su cita; un ataque que derriba la avanzada también pierde la obra.
+//! 4. **Guarnición**: la de serie (IA, fuera de cupo) nace completa la primera vez que se la necesita, con la milicia de lanceros del canon en los tres escalones o la tropa que
+//!    eligió el dueño para cada uno entre las que la madre puede reclutar (tecnología y edificio), y se repone gratis a las 6 horas (`reposicionMinutos`) de quedar incompleta
 //!    (un evento, `SucesoCombate::ReponeAvanzada`); la de jugadores son escuadras de héroes residentes de la madre dejadas a la puerta (`Contenedor::Avanzada`), que comen el
 //!    trigo de la madre.
 //! 5. **Ataque** (`Atacar` con `ObjetivoAtaque::Avanzada`): solo un ejército. Con números se resuelve como un asedio; con servidores de batalla y un humano en los dos
-//!    bandos abre una batalla de Unity (capacidad de asedio, sin convocatoria). Si gana el atacante: se lleva del almacén lo que le quepa en los carros y la atalaya queda
+//!    bandos abre una batalla de Unity (capacidad de asedio, sin convocatoria). Defienden **solo los que están dentro**: las guarniciones. Nadie puede entrar todavía en una
+//!    avanzada, y una columna amiga a su puerta, en el mapa, no defiende (ni con números ni uniéndose a la batalla). Si gana el atacante: se lleva del almacén lo que le quepa en los carros y la atalaya queda
 //!    destruida, el fuerte en ruinas con un día de invulnerabilidad (`SucesoCombate::FinInvulnerabilidad`; si pasado ese día lo atacan y gana el atacante, destruido) y la
 //!    ciudadela en ruinas, que nunca se destruye. En ruinas no funciona nada y la guarnición de jugadores vuelve a 0 al campamento de su héroe.
 //! 6. **La madre**: si cae por conquista, las avanzadas pasan al conquistador (su guarnición de jugadores se va con el desalojo y la de serie y las elecciones se reinician);
@@ -25,13 +28,14 @@
 //!
 //! # Lo provisional
 //! La autorización es la de las demás órdenes de plaza: el héroe ha de ser ciudadano de la Facción de la madre (los cargos de Gobernador y Maestro de Obras son del
-//! sistema político). Con ruinas o sin ellas, las elecciones de tropa solo comprueban la tecnología de la Facción al elegir.
+//! sistema político). Las elecciones de tropa se comprueban al elegir (tecnología y edificio de la madre) y no se revisan después: si la Facción pierde la tecnología o la madre
+//! el edificio, la elección sigue.
 
 use super::combates::caidos;
 use super::mercado::RADIO_PUERTA;
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO, PRIO_UMBRAL};
-use crate::estado_combate::entidad_avanzada;
+use crate::estado_combate::{entidad_avanzada, entidad_obra_de_avanzada};
 use crate::estado_comercio::id_de_entidad;
 use ::encuentros::plan_quieto;
 use asentamiento::asentamiento::Evento as EventoEco;
@@ -44,7 +48,7 @@ use combate::resolucion::Bando;
 use militar::catalogo::Tropa;
 use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::Residencia;
-use militar::{liderazgo, racion, total, Carga as Mercancia};
+use militar::{liderazgo, racion, reclutamiento, total, Carga as Mercancia};
 use std::collections::BTreeMap;
 
 fn rechazo_de_avanzada(e: ErrorAvanzada) -> (&'static str, &'static str) {
@@ -59,6 +63,9 @@ fn rechazo_de_avanzada(e: ErrorAvanzada) -> (&'static str, &'static str) {
         ErrorAvanzada::NoEstaPendiente => (AVANZADA_NO_ESTA_PENDIENTE, "la obra no está pendiente de materiales"),
         ErrorAvanzada::NadaQueEntregar => (AVANZADA_NADA_QUE_ENTREGAR, "la columna no lleva nada que la obra necesite"),
         ErrorAvanzada::NoSeDestruyeALaMano => (AVANZADA_CIUDADELA_NO_SE_DESTRUYE, "una ciudadela no se destruye a mano"),
+        ErrorAvanzada::DentroDelAsentamiento => (AVANZADA_DENTRO_DEL_ASENTAMIENTO, "una avanzada no se coloca sobre la ciudad de la plaza madre"),
+        ErrorAvanzada::PisaOtroElemento => (AVANZADA_PISA_OTRO_ELEMENTO, "el sitio pisa otro elemento del mapa (una avanzada, un pueblo o un campamento)"),
+        ErrorAvanzada::NadaQueCancelar => (AVANZADA_NADA_QUE_CANCELAR, "no hay una mejora ni una reparación que cancelar (la primera obra se cancela destruyendo la avanzada)"),
     }
 }
 
@@ -107,6 +114,17 @@ impl Nucleo {
     }
 
     // ───────────────────────────── Ayudas ─────────────────────────────
+
+    /// Los centros de lo que ya ocupa el mapa y mide lo mismo que una avanzada (Doc 4.2.2): las avanzadas en cualquier estado (también unas ruinas sin dueño), los pueblos
+    /// extractores sobre su nodo y los campamentos de mercenarios y de bandidos.
+    fn elementos_de_mapa(&self) -> Vec<Punto> {
+        let (asentamientos, combate) = (&self.estado.asentamientos, &self.estado.combate);
+        let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
+        let avanzadas = asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).chain(combate.huerfanas.values()).map(|v| v.posicion);
+        let pueblos = asentamientos.values().flat_map(|a| a.economia.pueblos.iter()).filter_map(|p| nodos.get(p.nodo as usize)).map(|n| n.pos);
+        let mercenarios = self.geografia.iter().flat_map(|g| g.mapa.campamentos.iter().copied());
+        avanzadas.chain(pueblos).chain(mercenarios).chain(combate.bandidos.values().map(|b| b.posicion)).collect()
+    }
 
     /// La avanzada y su plaza madre; las ruinas sin dueño no tienen madre y no reciben órdenes (salvo repararlas).
     fn con_madre(&self, id: u64) -> Result<(u64, &Avanzada), Respuesta> {
@@ -253,7 +271,7 @@ impl Nucleo {
         match &p.comando {
             Comando::ColocarAvanzada { asentamiento, heroe, posicion } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                let (faccion, centro) = (plaza.faccion, plaza.posicion);
+                let (faccion, centro, radio) = (plaza.faccion, plaza.posicion, plaza.radio);
                 self.autorizar_ciudadano(p, *heroe, faccion)?;
                 let (_, e) = self.columna_a_bordo(*heroe)?;
                 if !p.admin && e.posicion_en(t).dist(*posicion) > RADIO_PUERTA {
@@ -262,9 +280,7 @@ impl Nucleo {
                 if !self.en_zona(*asentamiento, *posicion) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_ZONA, format!("el sitio cae fuera de la zona de as-{asentamiento}")));
                 }
-                if posicion.dist(centro) <= datos.avanzadas.distancia_minima {
-                    return Err(rechazo(rechazos::AVANZADA_DENTRO_DEL_ASENTAMIENTO, "una avanzada no se coloca dentro del asentamiento".into()));
-                }
+                datos.avanzadas.comprobar_sitio(centro, radio, *posicion, self.elementos_de_mapa()).map_err(de_avanzada)?;
                 let (id, mut ev) = (self.estado.siguiente_id, vec![]);
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia.iniciar_avanzada(&datos, id, *posicion, &mut ev).map_err(de_avanzada)?;
                 self.estado.siguiente_id += 1;
@@ -311,15 +327,28 @@ impl Nucleo {
                 self.anotar_sucesos(madre, t, &ev);
                 Ok(vec![])
             }
+            Comando::CancelarObraDeAvanzada { heroe, avanzada } => {
+                let (madre, _) = self.con_madre(*avanzada)?;
+                self.autorizar_ciudadano(p, *heroe, self.estado.asentamientos[&madre].faccion)?;
+                let mut ev = vec![];
+                self.estado.asentamientos.get_mut(&madre).expect("existe").economia.cancelar_obra_de_avanzada(*avanzada, &mut ev).map_err(de_avanzada)?;
+                self.perder_obra(*avanzada);
+                self.anotar_sucesos(madre, t, &ev);
+                Ok(vec![])
+            }
             Comando::ElegirTropaDeAvanzada { heroe, avanzada, tropa } => {
                 let (madre, v) = self.con_madre(*avanzada)?;
                 let (faccion, punto) = (self.estado.asentamientos[&madre].faccion, v.posicion);
                 self.autorizar_ciudadano(p, *heroe, faccion)?;
                 let cr = self.estado.reglas.economia.combate.clone();
                 let escalon = regla::escalon_elegible(&cr, *tropa).ok_or_else(|| rechazo(rechazos::AVANZADA_TROPA_NO_ELEGIBLE, "la guarnición de serie solo usa tropas de los escalones 2, 3 y 4".into()))?;
-                let tecnologia = &cr.militar.tropas.tropa(*tropa).tecnologia;
-                if !self.tiene_tecnologia(faccion, tecnologia) {
+                // Solo lo que la plaza madre puede reclutar: la tecnología de la Facción y el edificio activo al nivel que pide la tropa.
+                let def = cr.militar.tropas.tropa(*tropa);
+                if !self.tiene_tecnologia(faccion, &def.tecnologia) {
                     return Err(rechazo(rechazos::AVANZADA_TROPA_SIN_TECNOLOGIA, "la Facción no tiene la tecnología de esa tropa".into()));
+                }
+                if !reclutamiento::edificio_basta(def, &self.estado.asentamientos[&madre].economia.edificios) {
+                    return Err(rechazo(rechazos::AVANZADA_TROPA_SIN_EDIFICIO, "la plaza madre no tiene el edificio de esa tropa, activo y al nivel que pide".into()));
                 }
                 let vigente = self.estado.combate.avanzadas.get(avanzada).and_then(|g| g.elegidas.get(&escalon)).copied().unwrap_or(cr.avanzada.tropa_por_defecto);
                 if vigente == *tropa {
@@ -332,8 +361,7 @@ impl Nucleo {
             }
             Comando::GuarnecerAvanzada { heroe, avanzada, escuadras } => self.guarnecer_avanzada(t, p, *heroe, *avanzada, escuadras),
             Comando::RetirarDeAvanzada { heroe, avanzada, escuadras } => self.retirar_de_avanzada(t, p, *heroe, *avanzada, escuadras),
-            // DUDA: el documento dice «un ejército de la Facción»; como `repostar` en una plaza, vale para cualquier columna de la Facción cuyo Líder lo pida (una personal
-            // reposta sola en la zona, pero el repostar automático por zona no existe todavía).
+            // Como `repostar` en una plaza, vale para cualquier columna de la Facción cuyo Líder lo pida, personal o ejército (decisión del autor, 2026-10-22).
             Comando::RepostarEnAvanzada { heroe, avanzada } => {
                 let (madre, av) = self.con_madre(*avanzada)?;
                 let (faccion, posicion) = (self.estado.asentamientos[&madre].faccion, av.posicion);
@@ -407,10 +435,24 @@ impl Nucleo {
         }
     }
 
-    /// Una destrucción (a mano o por un ataque) saca la avanzada del espacio y borra su guarnición de serie; sus plazos pendientes encuentran el estado cambiado y no hacen nada.
+    /// Una destrucción (a mano o por un ataque) saca la avanzada del espacio, borra su guarnición de serie y pierde su obra en marcha; los demás plazos pendientes
+    /// encuentran el estado cambiado y no hacen nada.
     fn quitar_avanzada(&mut self, id: u64) {
         self.espacio.rejilla.quitar(entidad_avanzada(id));
         self.estado.combate.avanzadas.remove(&id);
+        self.perder_obra(id);
+    }
+
+    /// La obra de la avanzada se abandona o se pierde con ella: su cita de fin deja de ser vigente (sube la generación de su entidad) y no se cumple.
+    fn perder_obra(&mut self, id: u64) {
+        self.estado.generaciones.subir(entidad_obra_de_avanzada(id));
+    }
+
+    /// Vence la cita de fin de la obra de una avanzada: la plaza madre cumple lo que acaba en ese instante (la primera obra, la mejora o la reparación).
+    pub(super) fn fin_de_obra_de_avanzada(&mut self, entidad: u64, t: Instante) {
+        if let Some((Some(madre), _)) = self.avanzada(id_de_entidad(entidad)) {
+            self.fines_de_plaza(madre, t);
+        }
     }
 
     /// `repararAvanzada`: unas ruinas de fuerte o ciudadela. Una ciudadela sin dueño pasa antes a la plaza de la Facción del héroe que tiene ahora su zona (si cabe en su cupo).
@@ -585,7 +627,7 @@ impl Nucleo {
     /// Combate §7.4. Solo un ejército, de otra Facción que la de la madre, a ≤ `radioEncuentro`, contra una avanzada que no sea una obra ni esté en su día de
     /// invulnerabilidad. Se resuelve como un asedio: defienden la guarnición de serie y la de jugadores (dos tiradas); unas ruinas no tienen defensores y caen sin combate
     /// ni tirada. Si gana el atacante, [`Nucleo::cae_avanzada`]; si no, quedan heridos todos los participantes del ejército y la chatarra va al almacén de la madre.
-    // DUDA: quien «defiende» una avanzada además de su guarnición (columnas amigas a su puerta) no cuenta con números: la avanzada no tiene dentro.
+    /// Solo defiende lo que está dentro (decisión del autor, 2026-10-22): nadie puede entrar aún en una avanzada, así que una columna amiga a su puerta, en el mapa, no cuenta.
     pub(super) fn atacar_avanzada(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
@@ -714,6 +756,7 @@ impl Nucleo {
                 EstadoAvanzada::EnRuinas { invulnerable_hasta } => {
                     let v = self.estado.asentamientos.get_mut(&madre).and_then(|a| a.economia.avanzadas.iter_mut().find(|v| v.id == x)).expect("existe");
                     (v.estado, v.obra) = (nuevo, None);
+                    self.perder_obra(x);
                     // Sin guarnición de serie en ruinas: renace completa al repararla. Las tropas elegidas se conservan.
                     if let Some(g) = self.estado.combate.avanzadas.get_mut(&x) {
                         (g.escuadras, g.repone_en) = (vec![], None);

@@ -1,5 +1,8 @@
 //! A qué bando se une quien llega a una batalla (Batalla_Unity_Ciclo §7.1, Doc 5.15.1b). Es puro: las relaciones entre Facciones (aliadas para
-//! batalla, el Rey que admite otras en los ataques) son del sistema político y entran como datos.
+//! batalla, el Rey que admite otras en los ataques) y si quien llega está dentro de lo que se defiende son del mundo y entran como datos.
+//!
+//! **Solo defiende quien está dentro** (decisión del autor, 2026-10-22): una columna en el mapa, a la puerta de una plaza, un pueblo o una avanzada, no se une a su
+//! defensa; hay que haber entrado en el elemento. Se une, en cambio, al ataque.
 
 use crate::ciclo::Contexto;
 use crate::resolucion::Lado;
@@ -21,6 +24,8 @@ pub enum ErrorUnion {
     NoCombateAqui,
     /// Pidió un bando distinto del que le toca.
     LadoDistinto(Lado),
+    /// Le toca defender una plaza, un pueblo o una avanzada y no está dentro: a la puerta, en el mapa, no se defiende.
+    HayQueEstarDentro,
 }
 
 /// Quién combate en la batalla y qué relaciones cuentan.
@@ -33,6 +38,9 @@ pub struct Reparto<'a> {
     pub aliadas_en_batalla: &'a dyn Fn(FaccionId, FaccionId) -> bool,
     /// El Rey de la Facción atacante admite otras Facciones en sus ataques (`admiteOtrasEnAtaques`).
     pub rey_admite_otras: bool,
+    /// Quien se une está **dentro** de lo que se disputa (ha entrado en la plaza; nadie puede entrar aún en un pueblo ni en una avanzada). Solo se mira para
+    /// defender un asedio, un pueblo o una avanzada; en el resto (campo abierto, caravana) no hay dentro.
+    pub dentro: bool,
 }
 
 /// `ladoParaUnirse`. `columna_personal`: quien se une va en una columna personal (no en un ejército).
@@ -43,6 +51,8 @@ pub struct Reparto<'a> {
 /// | persecución | solo columnas personales, de cualquier Facción, y `lado` obligatorio |
 /// | campamento de bandidos | cualquiera, también sin Facción, **siempre atacante** |
 /// | asedio, caravana, pueblo, avanzada | hace falta Facción: **defensor** si es la del defensor o aliada para batalla; **atacante** si es la del atacante o, si su Rey lo admite, de cualquier otra que no sea del defensor ni aliada suya |
+///
+/// Defender un asedio, un pueblo o una avanzada exige además estar **dentro** (`Reparto::dentro`): quien llega a la puerta solo puede atacar.
 pub fn lado_para_unirse(rep: &Reparto, faccion: Option<FaccionId>, columna_personal: bool, pedido: Option<Lado>) -> Result<Lado, ErrorUnion> {
     let lado = match rep.contexto {
         Contexto::CampoAbierto { solitarios: false, .. } => return Err(ErrorUnion::NadieDeFuera),
@@ -62,6 +72,10 @@ pub fn lado_para_unirse(rep: &Reparto, faccion: Option<FaccionId>, columna_perso
             let f = faccion.ok_or(ErrorUnion::SinFaccion)?;
             let del_defensor = rep.defensor.is_some_and(|d| d == f || (rep.aliadas_en_batalla)(f, d));
             if del_defensor {
+                // Una caravana no tiene dentro (va por el mapa); lo demás se defiende desde dentro.
+                if !rep.dentro && !matches!(rep.contexto, Contexto::Caravana { .. }) {
+                    return Err(ErrorUnion::HayQueEstarDentro);
+                }
                 Lado::Defensor
             } else if rep.atacante == Some(f) || rep.rey_admite_otras {
                 Lado::Atacante
@@ -94,7 +108,7 @@ mod pruebas {
     }
 
     fn rep(contexto: Contexto, rey: bool) -> Reparto<'static> {
-        Reparto { contexto, atacante: Some(ATACANTE), defensor: Some(DEFENSOR), aliadas_en_batalla: &aliadas, rey_admite_otras: rey }
+        Reparto { contexto, atacante: Some(ATACANTE), defensor: Some(DEFENSOR), aliadas_en_batalla: &aliadas, rey_admite_otras: rey, dentro: true }
     }
 
     const ASEDIO: Contexto = Contexto::Asedio { asentamiento: 1 };
@@ -162,6 +176,24 @@ mod pruebas {
             assert_eq!(lado_para_unirse(&r, Some(ALIADA_DEL_ATACANTE), false, None), Err(ErrorUnion::NoCombateAqui), "un aliado del atacante tampoco entra sin el Rey");
             assert_eq!(lado_para_unirse(&r, None, false, None), Err(ErrorUnion::SinFaccion));
         }
+    }
+
+    #[test]
+    fn defender_una_plaza_un_pueblo_o_una_avanzada_exige_estar_dentro_y_la_caravana_no_tiene_dentro() {
+        let punto = Punto::default();
+        let a_la_puerta = |c: Contexto| Reparto { dentro: false, ..rep(c, false) };
+        for c in [ASEDIO, Contexto::SaqueoPueblo { pueblo: 1, punto }, Contexto::Avanzada { avanzada: 1, etapa: Etapa::Fuerte, punto }] {
+            let fuera = a_la_puerta(c);
+            // Ni la propia Facción ni una aliada defienden desde la puerta, aunque pidan el bando que les toca.
+            assert_eq!(lado_para_unirse(&fuera, Some(DEFENSOR), false, None), Err(ErrorUnion::HayQueEstarDentro));
+            assert_eq!(lado_para_unirse(&fuera, Some(ALIADA_DEL_DEFENSOR), true, Some(Lado::Defensor)), Err(ErrorUnion::HayQueEstarDentro));
+            // Dentro sí; y el ataque no pide estar dentro de nada.
+            assert_eq!(lado_para_unirse(&rep(c, false), Some(DEFENSOR), false, None), Ok(Lado::Defensor));
+            assert_eq!(lado_para_unirse(&fuera, Some(ATACANTE), false, None), Ok(Lado::Atacante));
+            assert_eq!(lado_para_unirse(&fuera, Some(OTRA), false, None), Err(ErrorUnion::NoCombateAqui), "lo demás no cambia");
+        }
+        let caravana = a_la_puerta(Contexto::Caravana { caravana: 1, punto, modalidad: Modalidad::Aguante, carros: 2 });
+        assert_eq!(lado_para_unirse(&caravana, Some(DEFENSOR), false, None), Ok(Lado::Defensor), "una caravana va por el mapa: no hay puerta ni dentro");
     }
 
     #[test]

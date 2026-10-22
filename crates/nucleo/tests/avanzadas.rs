@@ -1,5 +1,5 @@
 //! Las avanzadas en el núcleo (fase 4F; Doc 5.17, Economia_Construccion §14.1, Combate §7.4): colocarlas con el héroe en el sitio, entregar los materiales,
-//! el fin exacto de la obra, mejorarlas, repararlas y destruirlas, la guarnición de serie y de jugadores, el almacén, la visión, el ataque con números y por
+//! el fin exacto de la obra, mejorarlas, repararlas, cancelar esas obras y destruirlas, dónde caben, la guarnición de serie y de jugadores, el almacén, la visión, el ataque con números y por
 //! Unity, las ruinas con su invulnerabilidad, la conquista y la ruina de la madre, la foto, el determinismo y el hash. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
@@ -267,6 +267,24 @@ impl Esc {
             assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
         }
     }
+    /// Levanta un Barracón en la madre (el tiempo que haga falta): con él se reclutan los lanceros de mimbre.
+    fn con_barracon(&mut self) {
+        let plaza = self.plaza;
+        self.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Barracon });
+        let activo = |e: &Esc| e.n.economia(plaza).unwrap().edificios.iter().any(|x| x.tipo == Tipo::Barracon && x.activo());
+        for _ in 0..80 {
+            if activo(self) {
+                break;
+            }
+            self.avanzar(HORA);
+        }
+        assert!(activo(self), "el Barracón acaba por levantarse");
+    }
+    /// Las citas de fin de obra de avanzada que siguen vigentes, por instante.
+    fn fines_de_avanzada(&self) -> Vec<Instante> {
+        let e = self.n.estado();
+        e.cola.volcar().iter().filter(|ev| matches!(ev.carga, Carga::Combate(SucesoCombate::FinObraAvanzada)) && e.generaciones.es_vigente(ev.clave)).map(|ev| ev.instante).collect()
+    }
     /// Una columna de Beto (F2) con esas tropas, a `p`: (columna, héroe).
     fn atacante(&mut self, p: Punto, tropas: &[Tropa]) -> (u64, u64) {
         let (col, heroe) = self.columna("beto", 2, p);
@@ -348,9 +366,9 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     let lejos = Punto::new(e.centro.x + 25_000, e.centro.y);
     let (_, h2) = e.columna("ana", 1, lejos);
     assert_eq!(e.rechazada("ana", colocar(plaza, h2, lejos)), rechazos::AVANZADA_FUERA_DE_LA_ZONA, "la zona de nivel 2 llega a 15 u");
-    let dentro = Punto::new(e.centro.x + 2_000, e.centro.y);
+    let dentro = Punto::new(e.centro.x + 1_599, e.centro.y);
     let (_, h3) = e.columna("ana", 1, dentro);
-    assert_eq!(e.rechazada("ana", colocar(plaza, h3, dentro)), rechazos::AVANZADA_DENTRO_DEL_ASENTAMIENTO, "a 2 u (la puerta) ya es el asentamiento");
+    assert_eq!(e.rechazada("ana", colocar(plaza, h3, dentro)), rechazos::AVANZADA_DENTRO_DEL_ASENTAMIENTO, "la ciudad mide una décima de la zona (1,5) y la avanzada pide su media anchura (0,1) más");
     // Con la plaza de nivel 1 no hay avanzadas.
     let mut uno = montar(m, 7, 1);
     let (p1, centro) = (uno.plaza, uno.centro);
@@ -365,6 +383,39 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     let tercero = Punto::new(e.centro.x, e.centro.y + 8_000);
     let (_, h5) = e.columna("ana", 1, tercero);
     assert_eq!(e.rechazada("ana", colocar(plaza, h5, tercero)), rechazos::AVANZADA_SIN_CUPO);
+}
+
+#[test]
+fn colocar_respeta_la_ciudad_de_la_madre_y_no_pisa_otro_elemento_del_mapa() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (plaza, centro) = (e.plaza, e.centro);
+    let colocar = |heroe: u64, posicion: Punto| Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion };
+    // La ciudad mide una décima de la zona (la de nivel 2 son 15: 1,5) y la avanzada pide además su media anchura (0,1): justo fuera de 1,6 sí cabe.
+    let primera = Punto::new(centro.x + 1_600, centro.y);
+    let (_, h1) = e.columna("ana", 1, primera);
+    e.ok("ana", colocar(h1, primera));
+    // Otro elemento del mapa mide 0,2: a menos de eso de la primera se pisa (también con ella aún pendiente de materiales); a 0,2 justo, no.
+    let pisa = Punto::new(primera.x + 199, primera.y);
+    let (_, h2) = e.columna("ana", 1, pisa);
+    assert_eq!(e.rechazada("ana", colocar(h2, pisa)), rechazos::AVANZADA_PISA_OTRO_ELEMENTO);
+    let cabe = Punto::new(primera.x + 200, primera.y);
+    let (_, h3) = e.columna("ana", 1, cabe);
+    e.ok("ana", colocar(h3, cabe));
+    assert_eq!(e.n.avanzadas_de(plaza).len(), 2);
+
+    // Un pueblo extractor también es un elemento del mapa: sobre su nodo no se coloca, a 0,2 de él sí.
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let cobre = e.n.candidatos_de_pueblo(plaza).into_iter().find(|&(_, t)| t == Tipo::MinaCobre).expect("la plaza se fundó junto a una mina de cobre").0;
+    let nodo = Mapa::de(&m.0).nodos[cobre as usize].pos;
+    e.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre });
+    let encima = Punto::new(nodo.x + 100, nodo.y);
+    let (_, h) = e.columna("ana", 1, encima);
+    assert_eq!(e.rechazada("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: h, posicion: encima }), rechazos::AVANZADA_PISA_OTRO_ELEMENTO);
+    let al_lado = Punto::new(nodo.x + 200, nodo.y);
+    let (_, h) = e.columna("ana", 1, al_lado);
+    e.ok("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: h, posicion: al_lado });
 }
 
 // ───────────────────────────── 2. Entregar y el fin exacto ─────────────────────────────
@@ -509,6 +560,72 @@ fn destruir_a_mano_libera_el_cupo_el_espacio_y_la_guarnicion_y_no_recupera_nada_
 }
 
 
+#[test]
+fn cancelar_una_mejora_o_una_reparacion_pierde_lo_entregado_descarta_su_cita_y_deja_la_avanzada_como_estaba() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (plaza, pos) = (e.plaza, e.sitio());
+    let (av, col, heroe) = e.colocar_en(pos);
+    let cancelar = |heroe: u64, avanzada: u64| Comando::CancelarObraDeAvanzada { heroe, avanzada };
+    let (_, beto) = e.columna("beto", 2, pos);
+    assert_eq!(e.rechazada("ana", cancelar(heroe, 9_999)), rechazos::AVANZADA_DESCONOCIDA);
+    assert_eq!(e.rechazada("beto", cancelar(beto, av)), rechazos::NO_AUTORIZADO, "ciudadano de otra Facción");
+    assert_eq!(e.rechazada("ana", cancelar(heroe, av)), rechazos::AVANZADA_NADA_QUE_CANCELAR, "la primera obra se cancela destruyendo la avanzada");
+    e.acabar_obra(av, col);
+    assert_eq!(e.rechazada("ana", cancelar(heroe, av)), rechazos::AVANZADA_NADA_QUE_CANCELAR, "operativa y sin obra");
+    assert!(e.fines_de_avanzada().is_empty());
+
+    // Una mejora con todo entregado y en marcha: se cancela, no hay reembolso, su cita deja de valer y la atalaya sigue operativa.
+    e.ok("ana", Comando::MejorarAvanzada { heroe, avanzada: av });
+    e.entregar_todo(av, col);
+    let fin = e.avanzada(av).obra.as_ref().and_then(|o| o.completa_en).expect("arrancó");
+    assert_eq!(e.fines_de_avanzada(), vec![fin]);
+    let (madera, v0) = (e.almacen(Madera), e.n.version());
+    e.ok("ana", cancelar(heroe, av));
+    assert_eq!(e.n.version(), v0 + 1, "una orden aceptada sube la versión una vez");
+    let a = e.avanzada(av);
+    assert_eq!((a.obra.is_none(), a.etapa, a.estado), (true, Etapa::Atalaya, EstadoAvanzada::Operativa));
+    assert!(e.fines_de_avanzada().is_empty(), "la cita de fin ya no es vigente");
+    assert_eq!(e.almacen(Madera), madera, "lo entregado se pierde: ni vuelve a la plaza ni a la columna");
+    let h = &hechos(&e.n, "avanzada.obra_cancelada")[0];
+    assert_eq!((dato(h, "avanzada"), dato(h, "tipo"), h.2.clone()), (av as i64, 1, vec![plaza]));
+    assert_eq!(e.rechazada("ana", cancelar(heroe, av)), rechazos::AVANZADA_NADA_QUE_CANCELAR, "ya no queda nada");
+    // Llega el instante del fin cancelado: la cita sale de la cola sin cumplirse.
+    let descartados = e.n.eventos_descartados();
+    e.hasta(fin + MIN);
+    assert_eq!((e.avanzada(av).etapa, hechos(&e.n, "avanzada.completada").len()), (Etapa::Atalaya, 1), "solo la primera obra se completó");
+    assert_eq!(e.n.eventos_descartados(), descartados + 1);
+    // Se puede volver a mejorar: la cita nueva sí vale y se cumple.
+    e.ok("ana", Comando::MejorarAvanzada { heroe, avanzada: av });
+    e.acabar_obra(av, col);
+    assert_eq!(e.avanzada(av).etapa, Etapa::Fuerte);
+
+    // Una reparación: el fuerte, derribado a ruinas por un ataque, se repara a medias y se abandona; las ruinas siguen siéndolo.
+    let (_, atacante) = e.ejercito_fuerte(pos);
+    e.guerra();
+    assert!(e.atacar(atacante, ObjetivoAtaque::Avanzada(av)).aceptada());
+    assert!(e.avanzada(av).en_ruinas());
+    e.ok("ana", Comando::RepararAvanzada { heroe, avanzada: av });
+    e.entregar_todo(av, col);
+    let fin = e.avanzada(av).obra.as_ref().and_then(|o| o.completa_en).expect("arrancó");
+    assert_eq!(e.fines_de_avanzada(), vec![fin]);
+    e.ok("ana", cancelar(heroe, av));
+    assert!(e.avanzada(av).en_ruinas() && e.avanzada(av).obra.is_none() && e.fines_de_avanzada().is_empty());
+    assert_eq!(dato(&hechos(&e.n, "avanzada.obra_cancelada")[1], "tipo"), 2);
+    e.hasta(fin + MIN);
+    assert!(e.avanzada(av).en_ruinas(), "la reparación cancelada no acaba");
+
+    // Perder la avanzada con la obra en marcha también descarta su cita: destruirla a mano, aquí.
+    let otro = Punto::new(e.centro.x - 8_000, e.centro.y);
+    let (segunda, col2, h2) = e.colocar_en(otro);
+    e.acabar_obra(segunda, col2);
+    e.ok("ana", Comando::MejorarAvanzada { heroe: h2, avanzada: segunda });
+    e.entregar_todo(segunda, col2);
+    assert_eq!(e.fines_de_avanzada().len(), 1);
+    e.ok("ana", Comando::DestruirAvanzada { heroe: h2, avanzada: segunda });
+    assert!(e.fines_de_avanzada().is_empty());
+}
+
 // ───────────────────────────── 4. Elegir tropa ─────────────────────────────
 
 #[test]
@@ -524,6 +641,9 @@ fn el_gobernador_elige_la_tropa_de_cada_escalon_entre_las_que_tiene_la_faccion()
     assert_eq!(e.rechazada("ana", elegir(Tropa::LancerosMimbre)), rechazos::AVANZADA_TROPA_SIN_TECNOLOGIA);
     e.sin_cambios("ana", elegir(Tropa::MiliciaLanceros));
     e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] });
+    // Solo entre lo que la madre puede reclutar: con la tecnología pero sin el Barracón, los lanceros de mimbre no se eligen.
+    assert_eq!(e.rechazada("ana", elegir(Tropa::LancerosMimbre)), rechazos::AVANZADA_TROPA_SIN_EDIFICIO);
+    e.con_barracon();
     e.ok("ana", elegir(Tropa::LancerosMimbre));
     assert_eq!(e.n.tropas_elegidas_de_avanzada(av).get(&2), Some(&Tropa::LancerosMimbre));
     let h = &hechos(&e.n, "avanzada.tropa_elegida")[0];
@@ -951,6 +1071,11 @@ fn con_un_humano_el_ataque_abre_una_batalla_de_unity_sin_convocatoria_con_capaci
     assert_eq!(e.rechazada("ana", Comando::RepostarEnAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
     let (_, otro) = e.atacante(Punto::new(pos.x + 2_000, pos.y), &[Tropa::MiliciaLanceros]);
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: otro, objetivo: ObjetivoAtaque::Avanzada(av), declara_guerra: false }), rechazos::BATALLA_BLOQUEADO);
+    // Una columna amiga a su puerta, en el mapa, no defiende: hay que estar dentro, y en una avanzada nadie puede entrar aún.
+    let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None });
+    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar dentro")), "{r:?}");
+    assert!(e.n.batalla(id).unwrap().ticket.defensor.participantes.is_empty() && e.n.batalla(id).unwrap().incorporaciones.is_empty());
 }
 
 #[test]
@@ -1125,6 +1250,7 @@ fn si_la_madre_es_conquistada_sus_avanzadas_pasan_con_ella_y_su_guarnicion_y_ele
     let plaza = e.plaza;
     let (av, heroe, escuadra) = e.fuerte_guarnecido();
     e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] });
+    e.con_barracon();
     e.ok("ana", Comando::ElegirTropaDeAvanzada { heroe, avanzada: av, tropa: Tropa::LancerosMimbre });
     // El ejército de Beto asedia la madre, que no tiene quien la defienda (el héroe está dentro pero sin loadout), y cae sin combate.
     let centro = e.centro;
@@ -1244,14 +1370,22 @@ fn guion(e: &mut Esc, avanzar: &dyn Fn(&mut Esc, Instante)) {
     e.ok_en(4 * HORA, "ana", Comando::MejorarAvanzada { heroe, avanzada: av });
     avanzar(e, 5 * HORA);
     e.ok_en(5 * HORA, "ana", Comando::GuarnecerAvanzada { heroe, avanzada: av, escuadras: vec![escuadra] });
-    avanzar(e, 6 * HORA);
     // El fuerte pide 600 de madera, 400 de piedra y 50 de oro: tres viajes del carro de 500.
-    for viaje in [vec![(Madera, 500_000)], vec![(Piedra, 400_000), (Oro, 50_000)], vec![(Madera, 100_000)]] {
-        for (r, n) in viaje {
-            e.ok_en(6 * HORA, "admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: n });
+    let entrega_del_fuerte = |e: &mut Esc, t: Instante| {
+        for viaje in [vec![(Madera, 500_000)], vec![(Piedra, 400_000), (Oro, 50_000)], vec![(Madera, 100_000)]] {
+            for (r, n) in viaje {
+                e.ok_en(t, "admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: n });
+            }
+            e.ok_en(t, "ana", Comando::EntregarMaterialesAAvanzada { ejercito: col, avanzada: av });
         }
-        e.ok_en(6 * HORA, "ana", Comando::EntregarMaterialesAAvanzada { ejercito: col, avanzada: av });
-    }
+    };
+    // Un primer intento de mejora arranca y se abandona media hora después: su cita se descarta y la mejora se vuelve a marcar.
+    entrega_del_fuerte(e, 5 * HORA);
+    avanzar(e, 5 * HORA + 30 * MIN);
+    e.ok_en(5 * HORA + 30 * MIN, "ana", Comando::CancelarObraDeAvanzada { heroe, avanzada: av });
+    e.ok_en(5 * HORA + 30 * MIN, "ana", Comando::MejorarAvanzada { heroe, avanzada: av });
+    avanzar(e, 6 * HORA);
+    entrega_del_fuerte(e, 6 * HORA);
     avanzar(e, 9 * HORA);
     e.ok_en(9 * HORA, "admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
     let beto = e.n.crear_ejercito(9 * HORA, "beto", 2, Punto::new(pos.x + 1_000, pos.y), 500, 100_000).unwrap();
@@ -1282,7 +1416,8 @@ fn mismas_ordenes_dan_el_mismo_hash_normal_acelerado_y_a_trozos() {
     });
     assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares, como el modo en vivo");
     assert_ne!(normal.hash_estado(), correr(m, 4, &|e, t| e.n.avanzar_hasta(t)).hash_estado(), "otra semilla, otro mundo");
-    // El guion hizo de verdad lo que se espera: levantó, mejoró, guarneció y luchó.
+    // El guion hizo de verdad lo que se espera: levantó, mejoró (tras abandonar un primer intento), guarneció y luchó.
+    assert_eq!(hechos(&normal, "avanzada.obra_cancelada").len(), 1);
     assert_eq!(hechos(&normal, "avanzada.completada").len(), 2);
     assert_eq!(hechos(&normal, "avanzada.guarnecida").len(), 1);
     assert_eq!(hechos(&normal, "combate.avanzada_resiste").len(), 1);
@@ -1374,7 +1509,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN15");
+    assert_eq!(&bytes[..5], b"BAN16");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1402,22 +1537,25 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
         f(&mut s.combate);
         assert!(vistos.insert(s.hash()), "el hash no cambió (o coincidió con otro cambio) al tocar {nombre}");
     }
-    // Los dos plazos nuevos de la cola van y vuelven, cada uno con su instante.
+    // Los tres plazos de la cola van y vuelven, cada uno con su instante.
     let mut con_cola = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
-    for (i, s) in [SucesoCombate::FinInvulnerabilidad, SucesoCombate::ReponeAvanzada].into_iter().enumerate() {
+    for (i, s) in [SucesoCombate::FinInvulnerabilidad, SucesoCombate::ReponeAvanzada, SucesoCombate::FinObraAvanzada].into_iter().enumerate() {
         con_cola.cola.programar(100 + i as i64, nucleo::PRIO_BANDIDOS, con_cola.generaciones.clave(i as u64 + 1), Carga::Combate(s));
     }
     let b2 = con_cola.serializar();
     let otra = nucleo::Estado::deserializar(&b2, &reglas, "h").unwrap();
-    assert_eq!((otra.serializar(), otra.cola.len()), (b2, 2));
+    assert_eq!((otra.serializar(), otra.cola.len()), (b2, 3));
     // Una escuadra en la guarnición de una avanzada también va y vuelve.
     let mut s = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     s.combate.avanzadas.get_mut(&9).unwrap().escuadras[0].contenedor = Contenedor::Avanzada(5);
     assert_eq!(s.combate.avanzadas[&9].escuadras[0].contenedor, Contenedor::Avanzada(5));
-    // El formato anterior se rechaza con su motivo.
+    // Los formatos anteriores se rechazan con su motivo.
     let viejo = [b"BAN14".as_slice(), &bytes[5..]].concat();
     let Err(e) = nucleo::Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN14 no debe admitirse") };
     assert!(e.to_string().contains("BAN14") && e.to_string().contains("avanzadas"), "{e}");
+    let viejo = [b"BAN15".as_slice(), &bytes[5..]].concat();
+    let Err(e) = nucleo::Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN15 no debe admitirse") };
+    assert!(e.to_string().contains("BAN15") && e.to_string().contains("cita"), "{e}");
 }
 
 #[test]
