@@ -27,10 +27,10 @@
 //!   pueblo y avanzada, esta última todavía sin existir— y sus consecuencias (heridos, mitad del carro, botín, chatarra, experiencia de escuadra); la conquista
 //!   con su protección y su ocupación como eventos, el desalojo y la cascada del comercio; los bandidos como entidades fijas del espacio, con su aparición, su
 //!   reaparición y su acoso a las caravanas (`PRIO_BANDIDOS`, `Carga::Combate`); y la guarnición de serie de los pueblos. El estado nuevo es [`EstadoCombate`]
-//!   (foto `BAN12`, hoy `BAN13`); las reglas puras son el crate `combate`.
+//!   (foto `BAN12`, hoy `BAN14`); las reglas puras son el crate `combate`.
 //! - Ciclo de la batalla de Unity (fase 4E): `atacar` abre una batalla en lugar de resolver con números cuando el proceso tiene servidores de batalla
 //!   (`Reglas::batallas_en_unity`) y hay un héroe humano en los dos bandos. [`EstadoBatallas`] guarda el ticket congelado, las incorporaciones, la asignación y
-//!   el resultado de cada batalla (foto `BAN13`); mientras dura, sus columnas y caravanas quedan apartadas (no se mueven, no comen, no se las toca), sus
+//!   el resultado de cada batalla (foto `BAN13`, hoy `BAN14`); mientras dura, sus columnas y caravanas quedan apartadas (no se mueven, no comen, no se las toca), sus
 //!   escuadras llevan el candado `reserva_batalla` y ninguna orden puede tocar lo que combate (`rechazos::BATALLA_BLOQUEADO`). Sus plazos son eventos de
 //!   prioridad 1 (`Carga::Batalla`) y los cinco mensajes del servidor de batalla, órdenes con el actor `batalla-servidor:<id>` (códigos 101-105; unirse, cancelar y
 //!   el andamiaje `FijarControlador`, 98-100). Las reglas puras son `combate::{ciclo, resultado, union}`.
@@ -60,7 +60,7 @@ pub mod urbanismo;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, ObjetivoAtaque, PagarCon, Peticion, Resultado, Respuesta, ACTOR_SERVIDOR_DE_BATALLA};
-pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_COMERCIO, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
+pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_CADUCA_POLITICA, PRIO_COMERCIO, PRIO_FIN_DE_OBRAS, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
 pub use estado_batallas::{entidad_batalla, EstadoBatallas};
 pub use estado_combate::{entidad_bandidos, entidad_conquista, entidad_guarnicion, es_entidad_bandidos, CampamentoBandidos, EstadoCombate, GuarnicionDePueblo, OrigenBandidos};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};

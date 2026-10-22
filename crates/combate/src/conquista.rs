@@ -32,16 +32,13 @@ pub struct Conquistada {
     pub ocupacion_hasta: Instante,
     /// Los edificios que pasaron a `en_cola` dañados, por id.
     pub edificios_danados: Vec<u32>,
-    /// Población que se perdió: pesants, artesanos y nobleza (milésimas).
-    pub poblacion_perdida: (Mil, Mil, Mil),
-}
-
-fn floor_a_personas(n: Mil) -> Mil {
-    n.div_euclid(1000) * 1000
+    /// Población que se perdió: pesants, artesanos y nobleza (personas).
+    pub poblacion_perdida: (i64, i64, i64),
 }
 
 /// `aplicarConquista`: el saqueo determinista de la ciudad.
-/// - **Población**: pesants, artesanos y nobleza pierden `fraccionSaqueoPoblacion`; lo que queda se redondea hacia abajo a personas.
+/// - **Población**: pesants, artesanos y nobleza pierden `fraccionSaqueoPoblacion`; lo que queda se redondea hacia abajo a personas y los
+///   restos ocultos de crecimiento y de muertes se borran.
 /// - **Edificios**: de los `activo`, por id, exentos el Centro Urbano y la **primera Granja y la primera Leñera** activas, los primeros
 ///   `ceil(fraccionEdificiosDanados × n)` pasan a `en_cola` marcados `danado` (se reconstruyen por `fraccionCosteReconstruccion`). Un Almacén o
 ///   Granero dañado deja de aportar capacidad y lo guardado que ya no cabe se pierde.
@@ -50,9 +47,10 @@ fn floor_a_personas(n: Mil) -> Mil {
 /// - `medidorMantenimiento` vuelve a su valor inicial (100) y la plaza queda `ocupada`.
 pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut Asentamiento, ahora: Instante) -> Conquistada {
     let queda = UNO - r.ocupacion.saqueo_poblacion;
-    let tras = |n: Mil| floor_a_personas((n as i128 * queda as i128 / UNO as i128) as Mil);
+    let tras = |n: i64| (n as i128 * queda as i128 / UNO as i128) as i64;
     let antes = (a.poblacion.pesants, a.poblacion.artesanos, a.poblacion.nobleza);
     (a.poblacion.pesants, a.poblacion.artesanos, a.poblacion.nobleza) = (tras(antes.0), tras(antes.1), tras(antes.2));
+    a.poblacion.restos = [0; 3];
 
     let mut activos: Vec<usize> = (0..a.edificios.len()).filter(|&i| a.edificios[i].estado == Estado::Activo).collect();
     activos.sort_by_key(|&i| a.edificios[i].id);
@@ -190,10 +188,11 @@ mod pruebas {
     fn la_poblacion_pierde_el_25_por_ciento_y_se_redondea_a_personas_hacia_abajo() {
         let r = r();
         let mut a = plaza(&[Tipo::CentroUrbano]);
-        (a.poblacion.pesants, a.poblacion.artesanos, a.poblacion.nobleza) = (10_500, 100_000, 3_000);
+        (a.poblacion.pesants, a.poblacion.artesanos, a.poblacion.nobleza) = (10, 100, 3);
+        a.poblacion.restos = [500, 0, -300];
         let c = aplicar_conquista(r, economia(), &mut a, 0);
-        assert_eq!((a.poblacion.pesants, a.poblacion.artesanos, a.poblacion.nobleza), (7_000, 75_000, 2_000), "7,875 → 7; 75; 2,25 → 2");
-        assert_eq!(c.poblacion_perdida, (3_500, 25_000, 1_000));
+        assert_eq!((a.poblacion.pesants, a.poblacion.artesanos, a.poblacion.nobleza, a.poblacion.restos), (7, 75, 2, [0; 3]), "7,5 → 7; 75; 2,25 → 2, y sin restos");
+        assert_eq!(c.poblacion_perdida, (3, 25, 1));
     }
 
     #[test]

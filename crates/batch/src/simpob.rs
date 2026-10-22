@@ -54,8 +54,8 @@ pub struct Registro {
     pub ruinas: Option<i64>,
     /// Recursos que no pudo pagar al caer en ruinas.
     pub ruinas_faltantes: Vec<Recurso>,
-    /// Habitantes muertos de hambre, en milésimas.
-    pub muertes: Mil,
+    /// Habitantes muertos de hambre.
+    pub muertes: i64,
     pub min_deficit_trigo: u64,
     pub pasos: u64,
     pub nutricion_min: Mil,
@@ -63,10 +63,10 @@ pub struct Registro {
     /// Cuánto bajó como mucho el nivel operativo respecto del alcanzado (0 = nunca).
     pub degradacion_max: u32,
     pub colapsos: u32,
-    pub pesants_max: Mil,
+    pub pesants_max: i64,
     pub pesants_200: Option<i64>,
-    /// Pesants al final de cada día (milésimas), del 0 al último.
-    pub pesants_dia: Vec<Mil>,
+    /// Pesants al final de cada día, del 0 al último.
+    pub pesants_dia: Vec<i64>,
     pub viviendas_dia: Vec<u32>,
     /// Edificios activos por tipo en cada día de foto (el de la primera foto y el final).
     pub edificios_a: BTreeMap<Tipo, u32>,
@@ -256,7 +256,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
         recaudacion_extra: UNO,
     };
     let (nivel_antes, nutricion_antes) = (a.nivel, a.poblacion.nutricion);
-    let mut ev = a.avanzar_minuto(t, &mut x);
+    let mut ev = a.avanzar_hasta(t, &mut x);
     reg.pasos += 1;
 
     // La política del jugador: cada hora, si nada lo bloquea, pide la subida. Cada plaza es de una Facción distinta (cupo ocupado 0).
@@ -308,7 +308,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     reg.medidor_min = reg.medidor_min.min(a.medidor.valor);
     reg.degradacion_max = reg.degradacion_max.max(a.nivel.saturating_sub(a.medidor.nivel_actual));
     reg.pesants_max = reg.pesants_max.max(a.poblacion.pesants);
-    if a.poblacion.pesants >= 200_000 {
+    if a.poblacion.pesants >= 200 {
         reg.pesants_200.get_or_insert(minuto);
     }
     viol.almacen += TODOS.iter().filter(|&&r| a.almacen.cantidad(r) < 0 || a.almacen.cantidad(r) > a.almacen.capacidad(r)).count() as u64;
@@ -424,6 +424,7 @@ pub fn hash_estado(c: &Corrida) -> u64 {
     for v in &c.villas {
         let (a, p) = (&v.a, &v.a.poblacion);
         (v.pos.x, v.pos.y, v.radio, a.nivel, a.medidor.valor, a.medidor.nivel_actual, p.pesants, p.artesanos, p.nobleza, p.nutricion, a.destruido, a.ascenso.map(|s| s.completa_en)).hash(&mut h);
+        (p.restos, p.recuperando).hash(&mut h);
         TODOS.iter().for_each(|&r| a.almacen.cantidad(r).hash(&mut h));
         a.edificios.iter().for_each(|e| (e.id, e.tipo, e.estado as u8, e.nivel_interno, e.completa_en, e.fuente.map(|f| format!("{f:?}"))).hash(&mut h));
         v.parcelas.iter().for_each(|p| p.hash(&mut h));

@@ -1230,7 +1230,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN13");
+    assert_eq!(&bytes[..5], b"BAN14");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);

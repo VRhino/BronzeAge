@@ -76,7 +76,7 @@ fn con_ciudad<R>(re: &ReglasEconomia, urbe: &mut Urbe, f: impl FnOnce(&mut Exter
 fn avanzar(re: &ReglasEconomia, a: &mut Asentamiento, urbe: &mut Urbe, desde: i64, hasta: i64) -> Vec<Evento> {
     let mut ev = vec![];
     for minuto in desde + 1..=hasta {
-        ev.extend(con_ciudad(re, urbe, |x| a.avanzar_minuto(minuto * MIN, x)));
+        ev.extend(con_ciudad(re, urbe, |x| a.avanzar_hasta(minuto * MIN, x)));
     }
     ev
 }
@@ -148,13 +148,13 @@ fn una_obra_de_industria_en_nivel_2_crea_su_ancla_como_edificio_gratuito_y_activ
     a.nivel = 2;
     a.medidor.nivel_actual = 2;
     let mut ev = vec![];
-    let id = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(&re.datos, x, Tipo::Fundicion, &mut ev)).expect("cabe");
+    let id = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(0, &re.datos, x, Tipo::Fundicion, &mut ev)).expect("cabe");
     assert_eq!(id, 5, "el id del proyecto sale antes que el del ancla");
     let patio = a.edificios.iter().find(|e| e.tipo == Tipo::PatioDeGremios).expect("el trazado creó el ancla");
     assert_eq!((patio.id, patio.estado, patio.nivel_interno), (6, EstadoEdificio::Activo, 1));
     assert_eq!(a.siguiente_edificio, 7);
     assert!(ev.contains(&Evento::EdificioGratuito { id: 6, tipo: Tipo::PatioDeGremios, nivel: 1 }), "{ev:?}");
-    assert_eq!(a.edificio(id).unwrap().estado, EstadoEdificio::EnCola);
+    assert_eq!(a.edificio(id).unwrap().estado, EstadoEdificio::EnConstruccion, "hay cuadrilla libre: arranca en el instante de la orden");
     ciudad_y_economia_cuadran(&re, &a, urbe.ciudad());
     // Las anclas son piezas gratuitas: cuentan a la mitad en el mantenimiento y no agrandan la ciudad.
     assert!(re.datos.mantenimiento.piezas_gratuitas.contains(&Tipo::PatioDeGremios));
@@ -166,7 +166,12 @@ fn una_obra_de_industria_en_nivel_2_crea_su_ancla_como_edificio_gratuito_y_activ
 fn quitar_un_proyecto_de_la_cola_libera_su_sitio_en_la_ciudad() {
     let re = ReglasEconomia::default();
     let (mut a, mut urbe) = plaza_rica(&re);
-    let id = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(&re.datos, x, Tipo::Vivienda, &mut vec![])).unwrap();
+    // Las dos cuadrillas ocupadas: lo siguiente espera en la cola (una obra en curso no se quita).
+    for _ in 0..2 {
+        con_ciudad(&re, &mut urbe, |x| a.anadir_manual(0, &re.datos, x, Tipo::Vivienda, &mut vec![])).unwrap();
+    }
+    let id = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(0, &re.datos, x, Tipo::Vivienda, &mut vec![])).unwrap();
+    assert_eq!(a.edificio(id).unwrap().estado, EstadoEdificio::EnCola);
     let con = urbe.ciudad().clone();
     assert!(con.pieza(id).is_some());
     // La baja es del núcleo (economía y ciudad a la vez): aquí, lo que hace su orden.
@@ -182,7 +187,7 @@ fn los_puestos_del_mercado_nacen_gratis_y_activos_al_completarse_y_al_mejorar() 
     let re = ReglasEconomia::default();
     let (mut a, mut urbe) = plaza_rica(&re);
     let mut ev = vec![];
-    let mercado = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(&re.datos, x, Tipo::Mercado, &mut ev)).expect("el Mercado cabe");
+    let mercado = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(0, &re.datos, x, Tipo::Mercado, &mut ev)).expect("el Mercado cabe");
     let m = urbe.ciudad().pieza(mercado).unwrap();
     assert_eq!((m.rol, m.categoria), (Rol::AnclaPrimaria, Categoria::Mercado), "el Mercado es su propia ancla");
     let puestos = |a: &Asentamiento| a.edificios.iter().filter(|e| e.tipo == Tipo::PuestoMercado).map(|e| (e.nivel_interno, e.estado)).collect::<Vec<_>>();
@@ -211,7 +216,7 @@ fn los_puestos_del_mercado_nacen_gratis_y_activos_al_completarse_y_al_mejorar() 
     // Mejorar el Mercado al nivel 2 (pide el nivel 2 de asentamiento): al terminar, siete puestos más (1·1·2·2·3·3·3).
     a.nivel = 2;
     a.medidor.nivel_actual = 2;
-    con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(482 * MIN, &re.datos, x, mercado)).expect("se puede mejorar");
+    con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(482 * MIN, &re.datos, x, mercado, &mut vec![])).expect("se puede mejorar");
     let termina = a.edificio(mercado).unwrap().mejora.unwrap().completa_en / MIN;
     let ev = avanzar(&re, &mut a, &mut urbe, 481, termina + 1);
     assert!(ev.contains(&Evento::MejoraCompletada { id: mercado, nivel: 2 }));
@@ -224,7 +229,7 @@ fn los_puestos_del_mercado_nacen_gratis_y_activos_al_completarse_y_al_mejorar() 
 fn un_puesto_sin_sitio_se_salta_en_silencio() {
     let re = ReglasEconomia::default();
     let (mut a, mut urbe) = plaza_rica(&re);
-    let mercado = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(&re.datos, x, Tipo::Mercado, &mut vec![])).unwrap();
+    let mercado = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(0, &re.datos, x, Tipo::Mercado, &mut vec![])).unwrap();
     // Todo el suelo del anillo del Mercado lo ocupa un muro: ningún puesto cabe, y la plaza sigue.
     let c = urbe.ciudad();
     let m = c.pieza(mercado).unwrap().rect;
@@ -269,7 +274,7 @@ fn la_mejora_de_la_granja_la_muda_a_un_hueco_de_su_huella_nueva() {
     let antes = urbe.ciudad().pieza(granja).unwrap().clone();
     assert_eq!((antes.rect.ancho, antes.rect.alto), (2, 2));
     let posicion = urbe.ciudad().piezas().iter().position(|p| p.id == granja).unwrap();
-    con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(0, &re.datos, x, granja)).expect("hay hueco");
+    con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(0, &re.datos, x, granja, &mut vec![])).expect("hay hueco");
     let termina = a.edificio(granja).unwrap().mejora.unwrap().completa_en / MIN;
     avanzar(&re, &mut a, &mut urbe, 0, termina - 1);
     assert_eq!(urbe.ciudad().pieza(granja).unwrap().rect, antes.rect, "mientras se mejora sigue donde estaba");
@@ -291,12 +296,12 @@ fn la_mejora_de_la_granja_espera_su_hueco_y_la_manual_lo_exige() {
     // Manual sin hueco: se rechaza antes de cobrar nada.
     urbe.set_recintos(vec![Recinto { muros: muros_menos(urbe.ciudad(), granja), puertas: vec![], completo: false }]);
     let madera = a.almacen.cantidad(asentamiento::Recurso::Madera);
-    assert_eq!(con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(0, &re.datos, x, granja)), Err(ErrorObra::SinSitio));
+    assert_eq!(con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(0, &re.datos, x, granja, &mut vec![])), Err(ErrorObra::SinSitio));
     assert_eq!((a.almacen.cantidad(asentamiento::Recurso::Madera), a.edificio(granja).unwrap().mejora), (madera, None), "ni cobra ni arranca");
 
     // Con hueco arranca; si el hueco desaparece antes de acabar, la mejora espera conservando su cuadrilla.
     urbe.set_recintos(vec![]);
-    con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(0, &re.datos, x, granja)).expect("ahora sí hay hueco");
+    con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(0, &re.datos, x, granja, &mut vec![])).expect("ahora sí hay hueco");
     let completa_en = a.edificio(granja).unwrap().mejora.unwrap().completa_en;
     let termina = completa_en / MIN;
     urbe.set_recintos(vec![Recinto { muros: muros_menos(urbe.ciudad(), granja), puertas: vec![], completo: false }]);
@@ -367,7 +372,7 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     urbe.set_recintos(vec![Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN13", "el formato de foto es BAN13 (BAN12 no traía las batallas de Unity ni el plan en pausa de las columnas apartadas)");
+    assert_eq!(&bytes[..5], b"BAN14", "el formato de foto es BAN14 (BAN13 tenía la población continua y no traía las citas de fin de obra)");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);
@@ -570,6 +575,13 @@ fn encolar_y_quitar_un_edificio_en_la_plaza_viva_coloca_y_libera_su_pieza() {
     let p = sitio_verde(&n, &m.0, 0, 1);
     let id = fundar_en(&mut n, 0, "a", 1, p);
     assert!(n.aplicar_en(0, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true })).aceptada());
+    for (recurso, cantidad) in [(asentamiento::Recurso::Madera, 300_000), (asentamiento::Recurso::Piedra, 300_000)] {
+        assert!(n.aplicar_en(0, admin(&format!("dar-{recurso:?}"), Comando::DarRecursos { asentamiento: id, recurso, cantidad })).aceptada());
+    }
+    // Las dos cuadrillas ocupadas: lo siguiente espera en la cola (una obra en curso no se quita).
+    for k in 0..2 {
+        assert!(n.aplicar_en(0, ana(&format!("t{k}"), Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda })).aceptada());
+    }
     let (hash0, piezas0) = (n.hash_estado(), n.ciudad(id).unwrap().piezas().len());
     let r = n.aplicar_en(0, ana("v1", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda }));
     assert!(r.aceptada(), "{r:?}");

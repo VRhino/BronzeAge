@@ -209,7 +209,7 @@ fn salud(x: &Entrada) -> Vec<Metrica> {
     vec![
         metrica("ruinas_pct", "Plazas en ruinas", "%", max(0.0), pct(en_ruinas.len(), v.len()), "Economia_Construccion §10.4 (ruinas)", &nota),
         metrica("hambre_pct", "Plazas con muertes por hambre", "%", max(5.0), pct(hambre, v.len()), "Economia_Construccion §9.2 (hambruna)", "Plazas con al menos un minuto de `Hambruna` (nutrición en el umbral de muerte)."),
-        metrica("muertes_totales", "Muertes por hambre (total de habitantes)", "habitantes", INFO, Some(muertes as f64 / 1000.0), "Economia_Construccion §9.2", "Suma de pesants, artesanos y nobles muertos por hambre en todas las plazas."),
+        metrica("muertes_totales", "Muertes por hambre (total de habitantes)", "habitantes", INFO, Some(muertes as f64), "Economia_Construccion §9.2", "Suma de pesants, artesanos y nobles muertos por hambre en todas las plazas."),
     ]
 }
 
@@ -262,13 +262,13 @@ fn construccion(x: &Entrada) -> Vec<Metrica> {
 fn poblacion(x: &Entrada) -> Vec<Metrica> {
     let c = x.corrida;
     let v = &c.villas;
-    let en_dia = |d: usize| mediana(&v.iter().map(|p| p.reg.pesants_dia.get(d).copied().unwrap_or(0) as f64 / 1000.0).collect::<Vec<_>>());
+    let en_dia = |d: usize| mediana(&v.iter().map(|p| p.reg.pesants_dia.get(d).copied().unwrap_or(0) as f64).collect::<Vec<_>>());
     let con200 = v.iter().filter(|p| p.reg.pesants_200.is_some()).count();
     let p200 = dias_de(v, |p| p.reg.pesants_200);
     vec![
         metrica("pesants_dia_foto", &format!("Pesants a los {} días (mediana)", c.dia_foto), "habitantes", INFO, en_dia(c.dia_foto as usize), "Economia_Construccion §9.1 (crecimiento logístico)", "Pesants enteros al final del día, mediana de las plazas."),
         metrica("pesants_fin", &format!("Pesants a los {} días (mediana)", x.e.dias), "habitantes", INFO, en_dia(x.e.dias as usize), "Economia_Construccion §9.1", "Pesants al final de la simulación, mediana de las plazas."),
-        metrica("artesanos_max", "Artesanos de la plaza que más tiene al final", "habitantes", INFO, v.iter().map(|p| p.a.poblacion.artesanos).max().map(|m| m as f64 / 1000.0), "Doc 4.5 (el nivel 3 pide 400 artesanos)", "Artesanos con decimales (el requisito mira los enteros). El cupo de artesanos de 40 Viviendas es justo 400, el mismo número que pide el nivel 3."),
+        metrica("artesanos_max", "Artesanos de la plaza que más tiene al final", "habitantes", INFO, v.iter().map(|p| p.a.poblacion.artesanos).max().map(|m| m as f64), "Doc 4.5 (el nivel 3 pide 400 artesanos)", "Artesanos enteros. El cupo de artesanos de 40 Viviendas es justo 400, el mismo número que pide el nivel 3."),
         metrica("nivel3_pct", "Plazas que llegan al nivel 3", "%", INFO, pct(v.iter().filter(|p| p.reg.nivel3.is_some()).count(), v.len()), "Doc 4.5 (ritmo de niveles 2-3 aprobado)", "Este batch no da órdenes manuales ni sube la Facción de nivel 1: Barracón y Galería de tiro solo se añaden a mano y el cupo de nivel 3 de una Facción de nivel 1 es 0. Informativa."),
         metrica("pesants_200_pct", "Plazas que alcanzan 200 pesants", "%", INFO, pct(con200, v.len()), "Doc 4.5 (requisito del nivel 2: 200 pesants)", "Pesants máximos ≥ 200 en algún momento."),
         metrica("pesants_200_mediana_dias", "Día mediano en que se alcanzan los 200 pesants", "días", INFO, mediana_censurada(&p200, MIN_POR_DIA, x.e.dias as f64), "Doc 4.5", "Las que nunca llegan cuentan como el tope."),

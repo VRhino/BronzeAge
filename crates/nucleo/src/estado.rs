@@ -42,19 +42,33 @@ pub const PRIO_COMERCIO: u8 = 6;
 pub const PRIO_LLEGADA: u8 = 8;
 /// Prioridad de la reputación: «diplomacia, tributos, experiencia, reputación».
 pub const PRIO_REPUTACION: u8 = 9;
-/// Prioridad del paso de un minuto de una plaza: la de «fin de obras, de ascensos y de políticas» (Reloj_Y_Eventos §2). El paso es
-/// atómico y, dentro de él, el crate `asentamiento` ya respeta el orden de la regla: construcción y políticas, ascenso, comida,
-/// crecimiento y recaudación, y por último mantenimiento y ruinas. Con la prioridad 2 una obra que acaba en el instante del paso usa las
-/// políticas antes de que expiren, y la plaza come antes que las tropas (3) y que el comercio (6), que aún no existen.
+/// Prioridad del fin de una obra, una mejora o un ascenso de una plaza (`Carga::FinDeObras`, Reloj_Y_Eventos §2): la fila 1, compartida con las
+/// batallas y las salidas del mundo (no interactúan con ellas). Sale **antes** del paso de minuto de la plaza del mismo instante, para que el
+/// edificio terminado (o el nivel nuevo) cuente en ese minuto, como siempre.
+pub const PRIO_FIN_DE_OBRAS: u8 = 1;
+/// Prioridad del paso de un minuto de una plaza (Reloj_Y_Eventos §2). El paso es atómico y, dentro de él, el crate `asentamiento` ya respeta el
+/// orden de la regla: pueblos y arranque de la cola, producción y recetas, auto-construcción, comida, crecimiento y recaudación, y por último
+/// mantenimiento y ruinas. La plaza come antes que las tropas (3) y que el comercio (6).
 pub const PRIO_ASENTAMIENTO: u8 = 2;
+/// Prioridad de la caducidad de una política (`Carga::CaducaPolitica`): **después** del paso de minuto de la plaza (2), para que una política de
+/// `d` minutos se aplique en los `d` pasos de su duración, incluido el que cae en su instante de caducidad. Comparte fila con el consumo (3).
+///
+/// DUDA: la definición del 2026-10-22 decía que «el fin va antes del paso» para todas las citas (pensando en el edificio terminado); para la política
+/// se conserva el orden de siempre (`caducar` iba después de producir), que es el que evita acortar en un minuto toda política activada en un paso.
+/// Anotada en `Docs/Mecanicas a desarrollar.md`, sección de paridad.
+pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
-/// BAN13: BAN12 más lo de la fase 4E: las batallas de Unity (`codec_batallas`: ticket congelado, incorporaciones, salidas, bloqueo, asignación con sus tokens y
+/// BAN14: BAN13 más la economía por minuto con fines exactos (2026-10-22): la población es entera con un resto oculto por clase y una marca de
+/// recuperación del hambre (`codec_economia`), y dos cargas nuevas de la cola, `Carga::FinDeObras` y `Carga::CaducaPolitica`. BAN13 se rechaza: su
+/// población era continua (milésimas de habitante, sin resto ni marca) y no traía las citas de fin de obra, de mejora, de ascenso y de política.
+///
+/// Del BAN13 (fase 4E) vienen: las batallas de Unity (`codec_batallas`: ticket congelado, incorporaciones, salidas, bloqueo, asignación con sus tokens y
 /// resultado), la regla `batallas_en_unity` en la cabecera, el plan en pausa de las columnas apartadas (`codec_columna`), el estado `Apartada` de la ración y
 /// una carga nueva de la cola (`Carga::Batalla`). BAN12 se rechaza: no traía nada de esto y sus columnas apartadas no guardaban su plan.
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN13";
+const MAGIA: &[u8; 5] = b"BAN14";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -275,6 +289,11 @@ pub enum Carga {
     Umbral(Mil),
     /// Paso de un minuto de la economía de la plaza (la entidad del evento). Recurrente: cada paso programa el siguiente.
     Minuto,
+    /// Acaba una obra, una mejora o un ascenso de la plaza (la entidad del evento; prioridad [`PRIO_FIN_DE_OBRAS`]): cumple lo que vence, libera la
+    /// cuadrilla y arranca la cola en ese instante. Una por obra, mejora o ascenso en curso, programada al empezar; no es recurrente.
+    FinDeObras,
+    /// Caduca una política de la plaza (la entidad del evento; prioridad [`PRIO_CADUCA_POLITICA`]). Una por política activa, programada al activarla.
+    CaducaPolitica,
     /// Evento de un [`GeneradorDeEventos`](crate::GeneradorDeEventos): `generador` es su posición en la lista.
     Externa { generador: u16, tipo: u16, a: u64, b: u64 },
     /// Un plazo del comercio (la entidad del evento es el trueque, la orden o la caravana, con la etiqueta de `estado_comercio`).
@@ -711,6 +730,8 @@ impl Estado {
                     w.i64(*v);
                 }
                 Carga::Minuto => w.u8(3),
+                Carga::FinDeObras => w.u8(11),
+                Carga::CaducaPolitica => w.u8(12),
                 Carga::Comercio { suceso, aplazos } => {
                     w.u8(4);
                     w.u8(suceso.a_u8());
@@ -764,12 +785,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN13`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
+        // La cabecera es de 5 bytes (`BAN14`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
         match (r.magia()? == MAGIA[..4]).then(|| r.u8()).transpose()? {
             Some(f) if f == MAGIA[4] => {}
             Some(b'0') => return Err(ErrorFormato("foto del formato BAN10 (sin persecuciones ni informes de inspección, con los encuentros en un generador externo): ya no se admite")),
             Some(b'1') => return Err(ErrorFormato("foto del formato BAN11 (sin estado de combate, sin protección ni ocupación de las plazas y con una huella de reglas que no incluye las del combate): ya no se admite")),
             Some(b'2') => return Err(ErrorFormato("foto del formato BAN12 (sin batallas de Unity, sin la regla batallas_en_unity y con las columnas apartadas sin su plan en pausa): ya no se admite")),
+            Some(b'3') => return Err(ErrorFormato("foto del formato BAN13 (población continua en milésimas, sin resto ni marca de recuperación del hambre y sin las citas de fin de obra y de política): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
@@ -869,6 +891,8 @@ impl Estado {
                 0 => Carga::Llegada,
                 1 => Carga::Umbral(r.i64()?),
                 3 => Carga::Minuto,
+                11 => Carga::FinDeObras,
+                12 => Carga::CaducaPolitica,
                 4 => Carga::Comercio { suceso: SucesoComercio::de_u8(r.u8()?).ok_or(ErrorFormato("suceso de comercio desconocido"))?, aplazos: r.u8()? },
                 5 => Carga::Reputacion(CitaReputacion::de_u8(r.u8()?).ok_or(ErrorFormato("cita de reputación desconocida"))?),
                 6 => Carga::SalidaDelMundo,

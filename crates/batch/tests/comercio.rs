@@ -45,7 +45,7 @@ fn el_escenario_pequeno_produce_el_informe_completo() {
     assert_eq!(ids.len(), i.metricas.len(), "ids repetidos");
     for id in [
         "colocadas", "mercado_pct", "flota_pct", "trueques_propuestos", "trueques_cumplimiento_pct", "viajes_por_trueque", "caravanas_lanzadas", "caravanas_perdidas", "peajes_cobros", "rep_max_alcanzada", "red_aristas", "red_aceleracion", "merc_compras", "merc_cupo_madera_max",
-        "pueblos_marcados", "acarreo_perdido_pct", "inv_almacen", "inv_carga", "inv_trueque", "inv_sin_plan", "inv_cola", "inv_plaza_ociosa", "inv_minuto", "inv_registro", "inv_conservacion", "pared_total", "eventos", "us_por_evento_de_comercio", "determinismo", "determinismo_normal",
+        "pueblos_marcados", "acarreo_perdido_pct", "inv_almacen", "inv_carga", "inv_trueque", "inv_sin_plan", "inv_cola", "inv_plaza_ociosa", "inv_minuto", "inv_fines", "inv_registro", "inv_conservacion", "pared_total", "eventos", "us_por_evento_de_comercio", "determinismo", "determinismo_normal",
     ] {
         assert!(i.metricas.iter().any(|m| m.id == id), "falta la métrica «{id}»");
     }
@@ -63,7 +63,7 @@ fn el_escenario_pequeno_produce_el_informe_completo() {
 fn los_invariantes_y_el_determinismo_se_cumplen() {
     let c = con_mundo!();
     let i = comercio(c, &pequeno());
-    for id in ["inv_almacen", "inv_carga", "inv_trueque", "inv_sin_plan", "inv_cola", "inv_plaza_ociosa", "inv_minuto", "inv_registro", "inv_conservacion", "determinismo", "determinismo_normal"] {
+    for id in ["inv_almacen", "inv_carga", "inv_trueque", "inv_sin_plan", "inv_cola", "inv_plaza_ociosa", "inv_minuto", "inv_fines", "inv_registro", "inv_conservacion", "determinismo", "determinismo_normal"] {
         let m = i.metricas.iter().find(|m| m.id == id).unwrap();
         assert_eq!(semaforo(m), Semaforo::Verde, "{id}: {:?}", m.medido);
     }
@@ -87,7 +87,7 @@ fn con_comercio_hay_trueques_caravanas_y_pueblos_y_cuadran_las_cuentas() {
     assert_eq!(medida(&i, "caravanas_lanzadas"), medida(&i, "caravanas_entregadas"), "toda caravana lanzada entrega");
     assert!(medida(&i, "pueblos_completados") > 0.0 && medida(&i, "acarreo_viajes") > 0.0, "ningún pueblo con acarreo");
     assert!(medida(&i, "merc_compras") > 0.0 && medida(&i, "red_aristas") > 0.0);
-    for id in ["inv_almacen", "inv_carga", "inv_trueque", "inv_sin_plan", "inv_cola", "inv_plaza_ociosa", "inv_minuto", "inv_registro", "inv_conservacion"] {
+    for id in ["inv_almacen", "inv_carga", "inv_trueque", "inv_sin_plan", "inv_cola", "inv_plaza_ociosa", "inv_minuto", "inv_fines", "inv_registro", "inv_conservacion"] {
         assert_eq!(medida(&i, id), 0.0, "{id}");
     }
 }

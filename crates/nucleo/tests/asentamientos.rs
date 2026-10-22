@@ -153,14 +153,22 @@ fn una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2() {
     assert!(de_tipo(Tipo::Lenera) >= 1 && de_tipo(Tipo::Cantera) >= 1, "construye su Leñera y su Cantera sola: {completados:?}");
     assert!(eventos(&n, "asentamiento.nivel_subio").iter().any(|(_, _, d)| d.contains(&("nivel", 2))), "sube al nivel 2 pidiéndolo");
     assert_eq!((eco.nivel, eco.nivel_actual()), (2, 2));
-    assert!(eco.poblacion.pesants > 20_000, "la población crece: {}", eco.poblacion.pesants);
+    assert!(eco.poblacion.pesants > 20, "la población crece: {}", eco.poblacion.pesants);
     assert!(eco.almacen.cantidad(Recurso::Madera) >= 0);
-    // Los pasos caen en `fundado_en + k·60 s`, mirando o no.
-    for codigo in ["construccion.edificio_completado", "construccion.necesidad_detectada", "asentamiento.nivel_subio"] {
-        for (en, ..) in eventos(&n, codigo) {
-            assert_eq!((en - fundada) % MIN, 0, "{codigo} en {en}");
-        }
+    // Los pasos de minuto caen en `fundado_en + k·60 s`, mirando o no; lo que acaba no espera al paso: cae en el instante exacto que dijo al empezar.
+    for (en, ..) in eventos(&n, "construccion.necesidad_detectada") {
+        assert_eq!((en - fundada) % MIN, 0, "necesidad_detectada en {en}");
     }
+    let dato = |d: &[(&str, i64)], k: &str| d.iter().find(|(c, _)| *c == k).map(|&(_, v)| v);
+    let iniciadas = eventos(&n, "construccion.obra_iniciada");
+    for (en, _, d) in &completados {
+        let promesa = iniciadas.iter().find(|(_, _, i)| dato(i, "edificio") == dato(d, "edificio")).and_then(|(_, _, i)| dato(i, "completaEn"));
+        assert_eq!(Some(*en), promesa, "el edificio {:?} acaba en el instante que prometió", dato(d, "edificio"));
+    }
+    let promesas: Vec<i64> = eventos(&n, "asentamiento.ascenso_iniciado").iter().filter_map(|(_, _, d)| dato(d, "completaEn")).collect();
+    let subidas = eventos(&n, "asentamiento.nivel_subio");
+    assert!(!subidas.is_empty() && subidas.iter().all(|(en, ..)| promesas.contains(en)), "el nivel sube en el milisegundo de su obra: {subidas:?} frente a {promesas:?}");
+    assert!(subidas.iter().any(|(en, ..)| (en - fundada) % MIN != 0), "el ascenso se pidió a una hora en punto y acaba a esa hora más sus minutos: no cae en el paso de minuto de la plaza");
     // La zona creció 1 unidad por edificio completado, sin pasar del techo del nivel alcanzado; el tiempo solo no la agranda.
     let r = &n.estado().reglas.territorio;
     let esperado = (r.radio_inicial + completados.len() as i64 * r.crecimiento_por_edificio).min(r.techo(2));
@@ -301,7 +309,6 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     let id = fundar_en(&mut n, 0, "a", 1, p);
     let t = 0;
     let orden = |n: &mut Nucleo, i: &str, c: Comando| n.aplicar_en(t, ana(i, c));
-    let madera0 = n.economia(id).unwrap().almacen.cantidad(Recurso::Madera);
 
     // Autorización y existencia.
     let casi = |actor: &str, i: &str, c: Comando| Peticion::nueva(actor, i, c);
@@ -311,7 +318,16 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert_eq!(orden(&mut n, "x4", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true }).resultado, Resultado::SinCambios);
     assert!(orden(&mut n, "x5", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: false }).aceptada());
 
-    // Añadir, reordenar, quitar (con reembolso) y los errores de obra.
+    // Añadir, reordenar, quitar (con reembolso) y los errores de obra. Las dos cuadrillas se ocupan primero: una obra encargada a mano
+    // arranca en el instante de la orden si hay cuadrilla libre, y solo las que esperan están en la cola.
+    assert!(n.aplicar_en(t, admin("madera", Comando::DarRecursos { asentamiento: id, recurso: Recurso::Madera, cantidad: 200_000 })).aceptada());
+    for (i, tipo) in [(0, Tipo::Vivienda), (1, Tipo::Vivienda)] {
+        let r = orden(&mut n, &format!("t{i}"), Comando::AnadirEdificio { asentamiento: id, tipo });
+        assert!(r.aceptada(), "{r:?}");
+        let e = n.economia(id).unwrap().edificio(r.creadas[0] as u32).unwrap();
+        assert_eq!((e.estado, e.completa_en.is_some()), (asentamiento::edificio::Estado::EnConstruccion, true), "arranca al instante de la orden");
+    }
+    let madera0 = n.economia(id).unwrap().almacen.cantidad(Recurso::Madera);
     let r1 = orden(&mut n, "v1", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda });
     assert!(r1.aceptada(), "{r1:?}");
     let v1 = r1.creadas[0] as u32;
@@ -364,15 +380,17 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert_eq!(codigo(&n.aplicar_en(t, pol("p4", "racionamiento", Cargo::Sacerdote))), rechazos::POLITICA_YA_ACTIVA);
     assert_eq!(codigo(&n.aplicar_en(t, pol("p5", "culto_fertilidad", Cargo::Sacerdote))), rechazos::POLITICA_SIN_SLOT);
     assert_eq!(n.economia(id).unwrap().politicas.activas().len(), 1);
-    // Caduca sola a su hora (150 min de la duración por defecto), con precisión de un minuto.
-    n.avanzar_hasta(151 * MIN);
+    // Caduca sola a su hora exacta (150 min de la duración por defecto), con su cita en la cola.
+    n.avanzar_hasta(150 * MIN - 1);
+    assert_eq!(n.economia(id).unwrap().politicas.activas().len(), 1, "un milisegundo antes sigue activa");
+    n.avanzar_hasta(150 * MIN);
     assert!(n.economia(id).unwrap().politicas.activas().is_empty());
-    assert_eq!(eventos(&n, "politica.expirada").len(), 1);
+    assert_eq!(eventos(&n, "politica.expirada").iter().map(|(en, ..)| *en).collect::<Vec<_>>(), vec![150 * MIN]);
 
     // Una orden rechazada o sin cambios no deja rastro; las aceptadas, sí (versión y plaza tocada).
     let v = n.version();
     let h = n.hash_estado();
-    assert_eq!(codigo(&n.aplicar_en(151 * MIN, ana("z1", Comando::QuitarDeCola { asentamiento: id, edificio: 9_999 }))), rechazos::EDIFICIO_DESCONOCIDO);
+    assert_eq!(codigo(&n.aplicar_en(150 * MIN, ana("z1", Comando::QuitarDeCola { asentamiento: id, edificio: 9_999 }))), rechazos::EDIFICIO_DESCONOCIDO);
     assert_eq!((n.version(), n.hash_estado()), (v, h));
 }
 
@@ -486,6 +504,7 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         e.recetas_pausadas = vec![Recurso::Cuero, Recurso::ArmaBronce];
         e.extractor_minutos_sin_cupo = vec![(Tipo::Corral, 3)];
         e.reserva_manual[3] = 42;
+        (e.poblacion.restos, e.poblacion.recuperando) = ([250, -400, 999], true);
     }
     rica.yacimientos.insert(3, nucleo::economia::StockNodo { stock: 5, vacio_desde: Some(77) });
     let rb = rica.serializar();
@@ -507,6 +526,10 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         ("poblacion.pesants", eco(|e| e.poblacion.pesants += 1)),
         ("poblacion.artesanos", eco(|e| e.poblacion.artesanos += 1)),
         ("poblacion.nobleza", eco(|e| e.poblacion.nobleza += 1)),
+        ("poblacion.resto_pesants", eco(|e| e.poblacion.restos[0] += 1)),
+        ("poblacion.resto_artesanos", eco(|e| e.poblacion.restos[1] += 1)),
+        ("poblacion.resto_nobleza", eco(|e| e.poblacion.restos[2] += 1)),
+        ("poblacion.recuperando", eco(|e| e.poblacion.recuperando = true)),
         ("poblacion.nutricion", eco(|e| e.poblacion.nutricion -= 1)),
         ("almacen.cantidad", eco(|e| e.almacen.poner(Recurso::Hierro, 1))),
         ("almacen.capacidad", eco(|e| e.almacen.ampliar(Recurso::Hierro, 1))),
@@ -608,3 +631,301 @@ fn rendimiento_de_mil_plazas_tres_dias() {
     medir(1_000, 3);
 }
 
+
+// ───────────────────── Economía por minuto con fines exactos (2026-10-22) ─────────────────────
+
+/// Los instantes de las citas de fin (obra, mejora, ascenso) y de caducidad de política que siguen vigentes en la cola de la plaza, sin repetidos.
+fn citas_de_la_plaza(n: &Nucleo, id: u64) -> (Vec<Instante>, Vec<Instante>) {
+    let e = n.estado();
+    let vigentes: Vec<_> = e.cola.volcar().into_iter().filter(|ev| ev.clave.entidad == id && e.generaciones.es_vigente(ev.clave)).collect();
+    let de = |carga: nucleo::Carga| {
+        let mut v: Vec<Instante> = vigentes.iter().filter(|ev| ev.carga == carga).map(|ev| ev.instante).collect();
+        v.sort_unstable();
+        v.dedup();
+        v
+    };
+    (de(nucleo::Carga::FinDeObras), de(nucleo::Carga::CaducaPolitica))
+}
+
+/// Invariante: todo lo que está en curso (obra, mejora, ascenso, política) y aún no vencido tiene su cita en la cola, y no hay citas sin nada que cumplir.
+fn las_citas_cuadran(n: &Nucleo, id: u64) {
+    let ahora = n.ahora();
+    let eco = n.economia(id).unwrap();
+    let mut fines: Vec<Instante> = eco.edificios.iter().filter_map(|e| e.completa_en.filter(|_| e.estado == asentamiento::edificio::Estado::EnConstruccion)).collect();
+    fines.extend(eco.edificios.iter().filter_map(|e| e.mejora.map(|m| m.completa_en)));
+    fines.extend(eco.ascenso.map(|a| a.completa_en));
+    fines.retain(|&f| f > ahora);
+    fines.sort_unstable();
+    fines.dedup();
+    let mut caducan: Vec<Instante> = eco.politicas.activas().iter().map(|p| p.expira_en).filter(|&f| f > ahora).collect();
+    caducan.sort_unstable();
+    caducan.dedup();
+    assert_eq!(citas_de_la_plaza(n, id), (fines, caducan), "citas de la plaza en {ahora}");
+}
+
+/// Una plaza que no construye ni mejora por su cuenta (auto-construcción pausada y una reserva manual al máximo, que bloquea las mejoras
+/// automáticas), con recursos de sobra para lo que se encargue a mano, fundada en una fase que no es múltiplo de minuto.
+fn plaza_quieta(m: &M, fundada: Instante) -> (Nucleo, u64) {
+    let mut n = nuevo(m);
+    let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
+    let id = fundar_en(&mut n, fundada, "a", 1, p);
+    assert!(n.aplicar_en(fundada, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true })).aceptada());
+    for (recurso, cantidad) in [(Recurso::Madera, 300_000), (Recurso::Piedra, 300_000)] {
+        assert!(n.aplicar_en(fundada, admin(&format!("dar-{recurso:?}"), Comando::DarRecursos { asentamiento: id, recurso, cantidad })).aceptada());
+        assert!(n.aplicar_en(fundada, ana(&format!("res-{recurso:?}"), Comando::CalibrarReserva { asentamiento: id, recurso, valor: 999_000 })).aceptada());
+    }
+    (n, id)
+}
+
+fn dato(d: &[(&str, i64)], k: &str) -> Option<i64> {
+    d.iter().find(|(c, _)| *c == k).map(|&(_, v)| v)
+}
+
+fn minutos_de(n: &Nucleo, tipo: Tipo) -> i64 {
+    n.estado().reglas.economia.datos.catalogo.tipo(tipo).tiempo_minutos
+}
+
+#[test]
+fn una_obra_encargada_a_mano_arranca_al_clic_y_acaba_en_su_milisegundo_agrandando_la_zona() {
+    let m = con_mundo!();
+    let (mut n, id) = plaza_quieta(m, 90_123);
+    let clic = 10 * MIN + 777;
+    n.avanzar_hasta(clic);
+    let r = n.aplicar_en(clic, ana("v", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda }));
+    assert!(r.aceptada(), "{r:?}");
+    let v = r.creadas[0] as u32;
+    let fin = clic + minutos_de(&n, Tipo::Vivienda) * MIN;
+    // Arranca en el instante de la orden, no en el paso de minuto siguiente.
+    let e = n.economia(id).unwrap().edificio(v).unwrap();
+    assert_eq!((e.estado, e.completa_en), (asentamiento::edificio::Estado::EnConstruccion, Some(fin)));
+    let iniciadas = eventos(&n, "construccion.obra_iniciada");
+    assert_eq!(iniciadas.iter().map(|(en, _, d)| (*en, dato(d, "edificio"), dato(d, "completaEn"))).collect::<Vec<_>>(), vec![(clic, Some(v as i64), Some(fin))]);
+    las_citas_cuadran(&n, id);
+    assert_eq!(citas_de_la_plaza(&n, id).0, vec![fin], "una cita de fin, a su instante");
+
+    // Un milisegundo antes sigue en obra; en su milisegundo está activa y la zona ya creció.
+    let radio = n.radio_zona(id).unwrap();
+    n.avanzar_hasta(fin - 1);
+    assert_eq!(n.economia(id).unwrap().edificio(v).unwrap().estado, asentamiento::edificio::Estado::EnConstruccion);
+    assert_eq!((n.radio_zona(id).unwrap(), eventos(&n, "construccion.edificio_completado").len()), (radio, 0));
+    n.avanzar_hasta(fin);
+    assert!(n.economia(id).unwrap().edificio(v).unwrap().activo());
+    let hechas = eventos(&n, "construccion.edificio_completado");
+    assert_eq!(hechas.iter().map(|(en, _, d)| (*en, dato(d, "edificio"))).collect::<Vec<_>>(), vec![(fin, Some(v as i64))], "completado en su milisegundo");
+    assert_eq!(n.radio_zona(id).unwrap(), radio + n.estado().reglas.territorio.crecimiento_por_edificio, "la zona crece en ese mismo instante");
+    las_citas_cuadran(&n, id);
+    assert_eq!(citas_de_la_plaza(&n, id).0, Vec::<Instante>::new(), "la cita se cumplió y no queda ninguna recurrente");
+}
+
+#[test]
+fn la_cuadrilla_liberada_arranca_la_siguiente_obra_de_la_cola_en_ese_mismo_instante() {
+    use asentamiento::edificio::Estado as E;
+    let m = con_mundo!();
+    let (mut n, id) = plaza_quieta(m, 0);
+    let clic = 3 * MIN + 41;
+    n.avanzar_hasta(clic);
+    // Dos cuadrillas: las dos primeras viviendas arrancan al clic y la tercera espera en la cola.
+    let ids: Vec<u32> = (0..3).map(|k| n.aplicar_en(clic, ana(&format!("v{k}"), Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda })).creadas[0] as u32).collect();
+    let fin = clic + minutos_de(&n, Tipo::Vivienda) * MIN;
+    let estado = |n: &Nucleo, i: u32| n.economia(id).unwrap().edificio(i).unwrap().estado;
+    assert_eq!((estado(&n, ids[0]), estado(&n, ids[1]), estado(&n, ids[2])), (E::EnConstruccion, E::EnConstruccion, E::EnCola));
+    las_citas_cuadran(&n, id);
+    n.avanzar_hasta(fin - 1);
+    assert_eq!(estado(&n, ids[2]), E::EnCola, "mientras haya obras en curso la cola espera");
+    n.avanzar_hasta(fin);
+    assert_eq!((estado(&n, ids[0]), estado(&n, ids[1])), (E::Activo, E::Activo));
+    let e3 = n.economia(id).unwrap().edificio(ids[2]).unwrap();
+    assert_eq!((e3.estado, e3.completa_en), (E::EnConstruccion, Some(fin + minutos_de(&n, Tipo::Vivienda) * MIN)), "la tercera arranca en el milisegundo en que se libera la cuadrilla");
+    let iniciada = eventos(&n, "construccion.obra_iniciada").into_iter().find(|(_, _, d)| dato(d, "edificio") == Some(ids[2] as i64)).expect("arrancó");
+    assert_eq!(iniciada.0, fin);
+    las_citas_cuadran(&n, id);
+    let fin3 = e3.completa_en.unwrap();
+    assert_eq!(citas_de_la_plaza(&n, id).0, vec![fin3], "y tiene su propia cita");
+    n.avanzar_hasta(fin3);
+    assert!(n.economia(id).unwrap().edificio(ids[2]).unwrap().activo());
+}
+
+#[test]
+fn una_mejora_y_una_politica_acaban_en_su_milisegundo() {
+    let m = con_mundo!();
+    let (mut n, id) = plaza_quieta(m, 0);
+    let granja = n.economia(id).unwrap().edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
+    let clic = 5 * MIN + 903;
+    n.avanzar_hasta(clic);
+    let r = n.aplicar_en(clic, ana("mej", Comando::MejorarEdificio { asentamiento: id, edificio: granja }));
+    assert!(r.aceptada(), "{r:?}");
+    let r = n.aplicar_en(clic + 7, ana("pol", Comando::ActivarPolitica { asentamiento: id, politica: "racionamiento".into(), cargo: Cargo::Sacerdote }));
+    assert!(r.aceptada(), "{r:?}");
+    let eco = n.economia(id).unwrap();
+    let fin_mejora = eco.edificio(granja).unwrap().mejora.expect("mejorando").completa_en;
+    let expira = eco.politicas.activas()[0].expira_en;
+    assert_eq!(expira, clic + 7 + 150 * MIN);
+    let promesa = eventos(&n, "construccion.mejora_iniciada");
+    assert_eq!(promesa.iter().map(|(en, _, d)| (*en, dato(d, "completaEn"))).collect::<Vec<_>>(), vec![(clic, Some(fin_mejora))]);
+    las_citas_cuadran(&n, id);
+    assert_eq!(citas_de_la_plaza(&n, id), (vec![fin_mejora], vec![expira]));
+
+    // La política caduca antes (150 min) que la mejora (240).
+    n.avanzar_hasta(expira - 1);
+    assert_eq!(n.economia(id).unwrap().politicas.activas().len(), 1);
+    n.avanzar_hasta(expira);
+    assert!(n.economia(id).unwrap().politicas.activas().is_empty());
+    assert_eq!(eventos(&n, "politica.expirada").iter().map(|(en, ..)| *en).collect::<Vec<_>>(), vec![expira]);
+    las_citas_cuadran(&n, id);
+
+    n.avanzar_hasta(fin_mejora - 1);
+    assert_eq!(n.economia(id).unwrap().edificio(granja).unwrap().nivel_interno, 1);
+    n.avanzar_hasta(fin_mejora);
+    assert_eq!(n.economia(id).unwrap().edificio(granja).unwrap().nivel_interno, 2);
+    assert_eq!(eventos(&n, "construccion.mejora_completada").iter().map(|(en, ..)| *en).collect::<Vec<_>>(), vec![fin_mejora]);
+    assert_eq!(n.economia(id).unwrap().edificios.iter().filter(|e| e.ocupa_cuadrilla()).count(), 0, "la cuadrilla queda libre");
+    las_citas_cuadran(&n, id);
+}
+
+#[test]
+fn una_ruina_descarta_las_citas_de_la_plaza() {
+    let m = con_mundo!();
+    // Primera pasada: cuándo cae en ruinas una plaza sin Leñera (sin madera no paga el mantenimiento) y sin construir nada.
+    let preparar = || {
+        let mut n = nuevo(m);
+        let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
+        let id = fundar_en(&mut n, 0, "a", 1, p);
+        assert!(n.aplicar_en(0, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true })).aceptada());
+        (n, id)
+    };
+    let (mut n, id) = preparar();
+    let mut dia = 0;
+    while n.economia(id).is_some() {
+        dia += 1;
+        assert!(dia <= 60, "debería haber caído en ruinas");
+        n.avanzar_hasta(dia * DIA);
+    }
+    let caida = eventos(&n, "asentamiento.ruinas")[0].0;
+
+    // Segunda pasada, idéntica: a dos minutos de la caída se activa una política (cuesta nada y dura 150 min), que no llega a caducar.
+    let (mut n, id) = preparar();
+    let clic = caida - 2 * MIN;
+    n.avanzar_hasta(clic);
+    assert!(n.economia(id).is_some(), "todavía en pie");
+    let r = n.aplicar_en(clic, ana("pol", Comando::ActivarPolitica { asentamiento: id, politica: "racionamiento".into(), cargo: Cargo::Sacerdote }));
+    assert!(r.aceptada(), "{r:?}");
+    let expira = clic + 150 * MIN;
+    las_citas_cuadran(&n, id);
+    assert_eq!(citas_de_la_plaza(&n, id).1, vec![expira]);
+    let descartados = n.eventos_descartados();
+    n.avanzar_hasta(expira + 2 * MIN);
+    assert!(n.economia(id).is_none(), "la plaza cayó en ruinas con la política vigente");
+    assert!(eventos(&n, "politica.expirada").is_empty(), "la política de una plaza arruinada no caduca");
+    assert_eq!(citas_de_la_plaza(&n, id), (vec![], vec![]), "la generación nueva invalida las citas");
+    assert!(n.eventos_descartados() >= descartados + 2, "se descartaron el paso de minuto y la cita de caducidad");
+}
+
+#[test]
+fn la_foto_a_mitad_de_obra_conserva_las_citas_y_recuperar_no_cambia_el_mundo() {
+    let m = con_mundo!();
+    let dir = tempfile::tempdir().unwrap();
+    let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
+    let con = |ajustes: Ajustes| Arranque { ajustes, ..arranque(m, 9) };
+    // Las mismas órdenes en instantes que no son de minuto: dos obras, una en cola y una política en curso en el momento de la foto.
+    let arrancar = |n: &mut Nucleo| {
+        let p = sitio(n, &m.0, 0, 50_000, 0, 1, true);
+        let id = fundar_en(n, 0, "a", 1, p);
+        assert!(n.aplicar_en(0, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true })).aceptada());
+        n.avanzar_hasta(4 * MIN + 55);
+        for (recurso, cantidad) in [(Recurso::Madera, 300_000), (Recurso::Piedra, 300_000)] {
+            n.aplicar_en(4 * MIN + 55, admin(&format!("dar-{recurso:?}"), Comando::DarRecursos { asentamiento: id, recurso, cantidad }));
+        }
+        for k in 0..3 {
+            assert!(n.aplicar_en(4 * MIN + 55, ana(&format!("v{k}"), Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda })).aceptada());
+        }
+        assert!(n.aplicar_en(4 * MIN + 56, ana("pol", Comando::ActivarPolitica { asentamiento: id, politica: "racionamiento".into(), cargo: Cargo::Sacerdote })).aceptada());
+        id
+    };
+    let sin_parar = {
+        let mut n = Nucleo::nuevo(con(ajustes.clone()));
+        let id = arrancar(&mut n);
+        n.avanzar_hasta(DIA);
+        (n.hash_estado(), n.economia(id).unwrap().edificios.len())
+    };
+    let (id, a_mitad, citas) = {
+        let mut n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
+        let id = arrancar(&mut n);
+        n.avanzar_hasta(30 * MIN + 17);
+        las_citas_cuadran(&n, id);
+        let citas = citas_de_la_plaza(&n, id);
+        assert!(!citas.0.is_empty() && !citas.1.is_empty(), "obras y política en curso: {citas:?}");
+        n.foto_ahora();
+        n.apagar().unwrap();
+        (id, n.hash_estado(), citas)
+    };
+    let mut n = Nucleo::con_persistencia(con(ajustes), dir.path(), Default::default()).unwrap();
+    assert!(n.recuperado());
+    assert_eq!(n.hash_estado(), a_mitad, "foto + registro reconstruyen el mismo mundo");
+    assert_eq!(citas_de_la_plaza(&n, id), citas, "las citas de fin vuelven con la foto");
+    las_citas_cuadran(&n, id);
+    n.avanzar_hasta(DIA);
+    assert_eq!((n.hash_estado(), n.economia(id).unwrap().edificios.len()), sin_parar, "recuperar a mitad de obra no cambia el mundo");
+    n.apagar().unwrap();
+}
+
+#[test]
+fn con_ordenes_fuera_de_minuto_el_modo_normal_el_acelerado_y_a_trozos_dan_el_mismo_mundo() {
+    let m = con_mundo!();
+    let correr = |avanzar: &dyn Fn(&mut Nucleo, Instante)| {
+        let mut n = Nucleo::nuevo(arranque(m, 5));
+        let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
+        let id = fundar_en(&mut n, 31_000, "a", 1, p);
+        for hora in 1..=2 * 24 {
+            let t = hora * HORA + 13_579; // nunca coincide con un paso de minuto de la plaza
+            avanzar(&mut n, t);
+            n.aplicar_en(t, ana(&format!("asc-{hora}"), Comando::SolicitarAscenso { asentamiento: id }));
+            if hora % 3 == 0 {
+                n.aplicar_en(t + 9, ana(&format!("viv-{hora}"), Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda }));
+            }
+            if hora == 5 {
+                n.aplicar_en(t + 11, ana("pol", Comando::ActivarPolitica { asentamiento: id, politica: "racionamiento".into(), cargo: Cargo::Sacerdote }));
+            }
+        }
+        avanzar(&mut n, 2 * DIA + 2 * HORA);
+        n.avanzar_hasta(2 * DIA + 3 * HORA);
+        (n.hash_estado(), eventos(&n, "construccion.edificio_completado").len(), eventos(&n, "construccion.obra_iniciada").len())
+    };
+    let normal = correr(&|n, t| n.avanzar_hasta(t));
+    assert!(normal.1 > 3 && normal.2 > 3, "hubo obras: {normal:?}");
+    assert_eq!(normal, correr(&|n, t| n.avanzar_hasta(t)), "repetible");
+    assert_eq!(normal, correr(&|_, _| {}), "acelerado de un golpe: solo avanza lo que pide cada orden al entrar");
+    let a_trozos = correr(&|n, t| {
+        let ahora = n.ahora();
+        for s in 1..=7 {
+            n.avanzar_hasta(ahora + (t - ahora).max(0) * s * s / 49);
+        }
+    });
+    assert_eq!(normal, a_trozos);
+}
+
+#[test]
+fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se_rechaza() {
+    use nucleo::Carga;
+    let reglas = Reglas::default();
+    let base = estado_con_una_plaza();
+    let bytes = base.serializar();
+    assert_eq!(&bytes[..5], b"BAN14");
+    let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
+    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
+    assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");
+    let con = |carga: Carga, prioridad: u8, en: Instante| {
+        let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();
+        let clave = s.generaciones.clave(1);
+        s.cola.programar(en, prioridad, clave, carga);
+        s
+    };
+    let (fin, caduca, fin2) = (con(Carga::FinDeObras, nucleo::PRIO_FIN_DE_OBRAS, 5_000), con(Carga::CaducaPolitica, nucleo::PRIO_CADUCA_POLITICA, 5_000), con(Carga::FinDeObras, nucleo::PRIO_FIN_DE_OBRAS, 5_001));
+    let hashes = [base.hash(), fin.hash(), caduca.hash(), fin2.hash()];
+    assert!(hashes.iter().collect::<std::collections::HashSet<_>>().len() == 4, "cada cita y cada instante cambian el hash");
+    for s in [&fin, &caduca] {
+        let b = s.serializar();
+        let vuelta = Estado::deserializar(&b, &reglas, "h").unwrap();
+        assert_eq!(vuelta.serializar(), b);
+        assert_eq!(vuelta.cola.volcar().iter().filter(|e| matches!(e.carga, Carga::FinDeObras | Carga::CaducaPolitica)).count(), 1);
+    }
+}

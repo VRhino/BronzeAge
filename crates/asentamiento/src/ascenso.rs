@@ -67,7 +67,7 @@ impl Asentamiento {
         if self.ascenso.is_some() {
             b.push(Bloqueo::AscensoEnCurso);
         }
-        let (pesants, artesanos, _) = self.poblacion.redondeados();
+        let (pesants, artesanos, _) = self.poblacion.enteros();
         for f in r.nivel.gates(objetivo, &self.edificios, pesants, artesanos, x.recinto_nivel).unwrap_or_default() {
             b.push(match f {
                 Falta::Poblacion => Bloqueo::FaltaPoblacion,
@@ -103,8 +103,9 @@ impl Asentamiento {
         let objetivo = self.nivel + 1;
         let a = &r.nivel.ascenso[&objetivo];
         self.almacen.pagar(&a.costo);
-        self.ascenso = Some(Ascenso { nivel_objetivo: objetivo, iniciado_en: t, completa_en: t + a.obra_minutos * MS_POR_MINUTO });
-        ev.push(Evento::AscensoIniciado { objetivo });
+        let completa_en = t + a.obra_minutos * MS_POR_MINUTO;
+        self.ascenso = Some(Ascenso { nivel_objetivo: objetivo, iniciado_en: t, completa_en });
+        ev.push(Evento::AscensoIniciado { objetivo, completa_en });
         Ok(())
     }
 

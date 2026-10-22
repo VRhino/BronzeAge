@@ -885,7 +885,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN13");
+    assert_eq!(&bytes[..5], b"BAN14");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);

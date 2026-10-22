@@ -1,6 +1,6 @@
 # El reloj de mundo y los eventos
 
-Cómo avanza el mundo en la reconstrucción: sin tick. Este documento **sustituye** a `Tick.md` (el «cómo funcionaba» del servidor TypeScript, con su cadena de 24 pasos por minuto, vive en `typescript-final:Docs/Mechanics/Tick.md`). Fija el reloj, la cola de eventos, cómo cada paso de la antigua cadena pasa a ser un **ritmo**, un **evento programado** o un **muestreo**, qué orden se conserva cuando varios eventos caen en el mismo instante y cómo se usa el generador aleatorio. Diseño de fondo: [`Arquitectura/13_Mundo_Reactivo_Rust.md`](../Arquitectura/13_Mundo_Reactivo_Rust.md).
+Cómo avanza el mundo en la reconstrucción: sin tick global (la economía de cada plaza da un paso de un minuto, ver la nota del 2026-10-22). Este documento **sustituye** a `Tick.md` (el «cómo funcionaba» del servidor TypeScript, con su cadena de 24 pasos por minuto, vive en `typescript-final:Docs/Mechanics/Tick.md`). Fija el reloj, la cola de eventos, cómo cada paso de la antigua cadena pasa a ser un **ritmo**, un **evento programado** o un **muestreo**, qué orden se conserva cuando varios eventos caen en el mismo instante y cómo se usa el generador aleatorio. Diseño de fondo: [`Arquitectura/13_Mundo_Reactivo_Rust.md`](../Arquitectura/13_Mundo_Reactivo_Rust.md).
 
 - **Estado (2026-10-13):** reescritura de la fase 1; los detalles de cada regla viven en el documento de su sistema (también en reescritura).
 - **Canon:** Doc 5.15.1 (qué bloquea una batalla), Doc 1.10.6 (presencia).
@@ -43,6 +43,15 @@ Cómo avanza el mundo en la reconstrucción: sin tick. Este documento **sustituy
 >
 > Cada cambio de estado sube la generación de la batalla y reprograma lo que siga haciendo falta (una activa tiene en la cola una o dos citas, una cerrada una, y ninguna entidad ociosa programa nada). Como `Vence` es de prioridad 1, **una batalla que vence en un instante ya no bloquea en ese mismo instante**. Una columna apartada **no come** (`militar::racion::Estado::Apartada`: consumo 0) y su plan queda en pausa (`Ejercito::plan_en_pausa`): al volver lo retoma desde donde se quedó, desplazado lo que duró la batalla y escalado a la velocidad que le dejen las bajas. Quien combata, dentro de una columna o de la plaza asediada, no sale del mundo hasta que acaba.
 
+> **Implementado en Rust (2026-10-22), la economía por minuto con fines exactos** ([`Economia_Por_Minuto_Definicion.md`](../../Consideraciones/Economia_Por_Minuto_Definicion.md), que corrige el «sin tick, tampoco para la economía» de este documento y del 13). El paso de un minuto de cada plaza (`Carga::Minuto`, prioridad 2, recurrente con la fase de su fundación) **se queda**: producción, recetas, consumo de comida, hambre, crecimiento, recaudación, mantenimiento, guarnición, pueblos y evaluación de la auto-construcción. Lo que el jugador nota sale del paso y tiene su **cita propia** en la cola, con la generación de la plaza (la ruina las descarta), una por cosa en curso, programada al empezar y borrada al cumplirse (ninguna recurrente, ninguna por plaza ociosa):
+>
+> | Evento | Prioridad | Entidad | Cuándo | Qué hace |
+> |---|---|---|---|---|
+> | `FinDeObras` (`PRIO_FIN_DE_OBRAS`) | **1** | la plaza | el `completaEn` de cada obra, mejora o ascenso que empieza | `Asentamiento::cumplir_fines`: activa lo que vence, libera la cuadrilla y **arranca en ese mismo instante** la siguiente obra de la cola; el núcleo agranda la zona uno por edificio completado |
+> | `CaducaPolitica` (`PRIO_CADUCA_POLITICA`) | **3** | la plaza | el `expiraEn` de cada política activada | `Asentamiento::caducar_politicas` |
+>
+> Una **obra encargada a mano** arranca en el instante de la orden si hay cuadrilla libre (`ObraIniciada` sale en la misma respuesta). **Orden dentro de un mismo instante:** el fin de obra, de mejora y de ascenso (1) va **antes** del paso de minuto de la plaza (2), para que el edificio terminado y el nivel nuevo cuenten en ese minuto, como ya hacía `completar_obras`, que iba primero; la caducidad de política (3) va **después**, para que una política de `d` minutos se aplique en `d` pasos (el último minuto de una política todavía la aplica, como antes). Comparte fila con las batallas y las salidas del mundo (1) y con el consumo de tropa (3) sin interactuar con ellos. Las citas son idempotentes (una que llega con la plaza ya cambiada no encuentra nada) y el batch comprueba que todo lo que está en curso tiene la suya (`inv_fines`). La foto es `BAN14`.
+
 ## 1. Tiempo
 
 - **Reloj de mundo** = reloj de pared × factor (×1 en producción; ×N para pruebas y para el batch). No hay tick y no existe la unidad «minuto de mundo» como paso: sigue habiendo plazos declarados en minutos, horas y días, y se miden en instantes.
@@ -58,11 +67,11 @@ Cómo avanza el mundo en la reconstrucción: sin tick. Este documento **sustituy
 
 | Prioridad | Qué | Por qué en ese orden (regla que se conserva) |
 |---|---|---|
-| 1 | Cierre de batallas vencidas y salidas del mundo | una batalla que vence no bloquea en ese mismo instante |
-| 2 | Fin de obras, de ascensos y de políticas | la obra usa las políticas antes de que expiren |
-| 3 | Consumo de población y de tropa | la población come **antes** que las tropas |
-| 4 | Crecimiento de población y recaudación de oro | la recaudación usa la población ya crecida |
-| 5 | Mantenimiento y ruinas | una ruina deja de existir para el comercio, los bandidos y los ejércitos en ese instante |
+| 1 | Cierre de batallas vencidas, salidas del mundo y **fin de obras, de mejoras y de ascensos de las plazas** | una batalla que vence no bloquea en ese mismo instante; el edificio terminado y el nivel nuevo cuentan en el paso de minuto del mismo instante |
+| 2 | **Paso de minuto de la plaza** (producción, comida y hambre, crecimiento, recaudación, mantenimiento y ruinas, en ese orden y de forma atómica); fin de la protección y de la ocupación | la población come **antes** que las tropas; la recaudación usa la población ya crecida; el oro recaudado paga el mantenimiento |
+| 3 | Consumo de tropa y **caducidad de políticas** | la población (2) come antes que las tropas; una política todavía se aplica en su último minuto |
+| 4 | (dentro de la fila 2) crecimiento de población y recaudación de oro | no tienen evento propio: van en el paso de minuto de la plaza |
+| 5 | (dentro de la fila 2) mantenimiento y ruinas | una ruina deja de existir para el comercio, los bandidos y los ejércitos en ese instante |
 | 6 | Comercio, trueques, órdenes de mercado, caravanas | |
 | 7 | Regeneración, aparición y ataques de bandidos | los bandidos ven a los ejércitos tal como estaban antes de moverse |
 | 8 | Llegadas y encuentros de columnas | |
@@ -79,15 +88,16 @@ Tres clases. **Ritmo**: el estado guarda `(valor en t₀, ritmo)` y el valor se 
 
 | Antes (por minuto) | Ahora | Eventos que programa |
 |---|---|---|
-| Obras, recetas, producción, mejoras | **Ritmo** neto por recurso; las obras y mejoras son eventos con su instante de fin | almacén lleno (cambia el ritmo), recurso a 0, obra terminada, mejora terminada |
-| Auto-construcción (decidir qué se encola) | **Se reevalúa por dependencia**: cuando cambia lo que mira (almacén, cola, población, nivel, políticas), no cada minuto | — |
-| Políticas expiradas | **Evento** a su caducidad | política caduca |
-| Obra de ascenso | **Evento** a su fin | ascenso completado |
-| Nutrición y consumo de comida | **Ritmo** de consumo; la nutrición cambia por umbrales de reserva | reserva a 0, nutrición cruza umbral |
-| Mantenimiento de tropas (ración de la guarnición) | **Ritmo** de consumo; moral y deserción por umbrales | despensa a 0, deserción |
-| Crecimiento de población | **Ritmo** logístico contra el cupo (la población se guarda continua) | población cruza un cupo o un umbral de nivel |
-| Recaudación de oro | **Ritmo** (impuesto × población por clase) | almacén de oro lleno |
-| Mantenimiento (costes, medidor, bajar nivel, ruina) | **Ritmo** de coste y de medidor | medidor cruza un umbral, baja el nivel, ruina |
+| Recetas, producción, extracción | **Paso de minuto** de la plaza (decidido el 2026-10-22; el «ritmo» continuo del 2026-10-13 se descartó) | — |
+| Obras y mejoras | **Evento** con su instante de fin (`FinDeObras`); la obra encargada a mano arranca al instante de la orden y la cola arranca al liberarse la cuadrilla | obra terminada, mejora terminada |
+| Auto-construcción (decidir qué se encola) | Se evalúa en el **paso de minuto** | — |
+| Políticas expiradas | **Evento** a su caducidad (`CaducaPolitica`) | política caduca |
+| Obra de ascenso | **Evento** a su fin (`FinDeObras`) | ascenso completado |
+| Nutrición y consumo de comida | **Paso de minuto** (el hambre y su recuperación, §9.2 de Economia_Construccion) | — |
+| Mantenimiento de tropas (ración de la guarnición) | **Ritmo** de consumo; moral y deserción por umbrales (la guarnición come en el paso de la plaza) | despensa a 0, deserción |
+| Crecimiento de población | **Paso de minuto**, siempre entera (resto oculto por clase) | — |
+| Recaudación de oro | **Paso de minuto** (impuesto × población entera por clase) | — |
+| Mantenimiento (costes, medidor, bajar nivel, ruina) | **Paso de minuto** | ruina |
 | Fin de ocupación y de protección | **Evento** a su instante | ocupación terminada |
 
 ### 3.2 Global
@@ -176,7 +186,7 @@ Cifras de **infraestructura** (en `constantsInfra.ts`; no alteran el resultado d
 
 ## 10. Decisiones (2026-10-13)
 
-1. **La población es continua.** Se guarda como número continuo (valor en t₀ y ritmo logístico) y se **lee en entero (suelo)**, salvo los **requisitos de nivel de asentamiento**, que se leen **redondeados al entero más cercano** (decidido el 2026-10-18: con el suelo una clase que se acerca al cupo sin tocarlo, como 399,997 de 400, no los cumpliría nunca). Se elimina la tirada del redondeo estocástico: el crecimiento deja de consumir el generador aleatorio.
+1. **La población es siempre entera** (corregido el 2026-10-22; antes era continua, con decimales leídos con suelo y, para los requisitos de nivel, redondeados). Cada clase guarda habitantes enteros y un resto oculto en milésimas; el crecimiento de un minuto y las muertes por hambre se suman al resto, y entra o muere una persona entera cuando el resto llega a 1. Se elimina la tirada del redondeo estocástico: el crecimiento deja de consumir el generador aleatorio.
 2. **Tras una caída del servidor, el mundo no se recupera.** El reloj de mundo **se congela mientras el servidor está apagado** (regla del autor del 2026-09-05): al arrancar, el instante de mundo es el último guardado, no se procesan eventos que "vencieron" durante la caída y los plazos conservan el tiempo que les quedaba. (Sustituye a la lectura de Arquitectura/13 §6; ver su corrección.)
 3. **Las órdenes a mitad de camino parten de la posición real en el instante de la orden**, no de la del inicio de un minuto.
 

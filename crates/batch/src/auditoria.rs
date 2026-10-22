@@ -1,8 +1,9 @@
 //! Los invariantes del comercio que el batch comprueba sobre el estado y la cola del núcleo (todos deben ser 0): contenedores dentro de su
 //! capacidad, trueques coherentes, ninguna caravana en camino sin plan ni sin su evento de llegada, ningún evento vigente de una entidad
-//! que ya no corresponde y ningún reparto programado en una plaza ociosa.
+//! que ya no corresponde, ningún reparto programado en una plaza ociosa y ninguna obra, mejora, ascenso o política en curso sin su cita de fin.
 
 use asentamiento::datos::UNO;
+use asentamiento::edificio::Estado as EstadoEdificio;
 use asentamiento::recurso::TODOS;
 use comercio::caravana::{EstadoCaravana, TipoCaravana};
 use comercio::trueque::EstadoTrueque;
@@ -28,6 +29,8 @@ pub struct Violaciones {
     pub ociosa: u64,
     /// Una plaza sin su evento de minuto, o un evento de minuto sin plaza.
     pub minuto: u64,
+    /// Una obra, mejora, ascenso o política en curso que aún no vence y no tiene en la cola la cita que la cumplirá en su instante exacto.
+    pub fines: u64,
     /// Versiones del registro de cambios perdidas antes de leerse.
     pub registro: u64,
     /// Un mineral cuyo total en el mundo no es lo comprado a los mercenarios.
@@ -43,6 +46,7 @@ impl Violaciones {
         self.cola += o.cola;
         self.ociosa += o.ociosa;
         self.minuto += o.minuto;
+        self.fines += o.fines;
         self.registro += o.registro;
         self.conservacion += o.conservacion;
     }
@@ -75,15 +79,18 @@ pub fn auditar_contenedores(n: &Nucleo) -> Violaciones {
 }
 
 /// La cola de eventos frente al estado: cada evento de comercio vigente tiene a su entidad en el estado que lo justifica, cada caravana en
-/// camino tiene el suyo, y cada plaza tiene exactamente un minuto.
+/// camino tiene el suyo, cada plaza tiene exactamente un minuto y todo lo que está en curso en ella tiene su cita de fin.
 pub fn auditar_cola(n: &Nucleo) -> Violaciones {
     let (e, mut v) = (n.estado(), Violaciones::default());
     let mut por_suceso: [BTreeSet<u64>; 5] = Default::default();
     let mut minutos: Vec<u64> = Vec::new();
+    let (mut fines, mut caducan): (BTreeSet<(u64, i64)>, BTreeSet<(u64, i64)>) = Default::default();
     for ev in e.cola.volcar().iter().filter(|ev| e.generaciones.es_vigente(ev.clave)) {
         let id = ev.clave.entidad & ID_DE_ENTIDAD;
         match &ev.carga {
             Carga::Minuto => minutos.push(ev.clave.entidad),
+            Carga::FinDeObras => drop(fines.insert((ev.clave.entidad, ev.instante))),
+            Carga::CaducaPolitica => drop(caducan.insert((ev.clave.entidad, ev.instante))),
             Carga::Comercio { suceso: SucesoComercio::LlegadaCaravana, .. } => drop(por_suceso[0].insert(id)),
             Carga::Comercio { suceso: SucesoComercio::PeajeCaravana, .. } => drop(por_suceso[1].insert(id)),
             Carga::Comercio { suceso: SucesoComercio::FinPreparacion, .. } => drop(por_suceso[2].insert(id)),
@@ -109,6 +116,13 @@ pub fn auditar_cola(n: &Nucleo) -> Violaciones {
     minutos.sort_unstable();
     let plazas: Vec<u64> = e.asentamientos.keys().copied().collect();
     v.minuto += (minutos != plazas) as u64;
+    for (&id, a) in &e.asentamientos {
+        let eco = &a.economia;
+        let obras = eco.edificios.iter().filter(|x| x.estado == EstadoEdificio::EnConstruccion).filter_map(|x| x.completa_en);
+        let esperadas = obras.chain(eco.edificios.iter().filter_map(|x| x.mejora.map(|m| m.completa_en))).chain(eco.ascenso.map(|s| s.completa_en));
+        v.fines += esperadas.filter(|&f| f > n.ahora() && !fines.contains(&(id, f))).count() as u64;
+        v.fines += eco.politicas.activas().iter().filter(|p| p.expira_en > n.ahora() && !caducan.contains(&(id, p.expira_en))).count() as u64;
+    }
     v
 }
 

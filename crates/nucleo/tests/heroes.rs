@@ -84,6 +84,11 @@ fn codigo(r: &Respuesta) -> &'static str {
 
 type Hecho = (Instante, Vec<u64>, Vec<(&'static str, i64)>);
 
+/// Eventos en la cola salvo las citas de fin de obra, mejora, ascenso y política de las plazas, que nacen y se cumplen solas mientras el mundo avanza.
+fn en_cola(n: &Nucleo) -> usize {
+    n.estado().cola.volcar().iter().filter(|e| !matches!(e.carga, nucleo::Carga::FinDeObras | nucleo::Carga::CaducaPolitica)).count()
+}
+
 fn hechos(n: &Nucleo, codigo: &str) -> Vec<Hecho> {
     n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).filter(|e| e.codigo == codigo).map(|e| (e.en, e.asentamientos.clone(), e.datos.clone())).collect()
 }
@@ -226,16 +231,16 @@ fn reclutar_en_una_plaza_valida_en_orden_paga_del_almacen_y_resta_poblacion() {
     assert_eq!(e.rechazada("ana", reclutar(h, Tropa::LancerosMimbre)), rechazos::RECLUTAMIENTO_SIN_EDIFICIO, "la plaza no tiene Barracón");
 
     // Milicia del Centro Urbano: 25 pesants y 2 de madera por soldado; la leva de arranque no pide tecnología.
-    let (madera0, pesants0, ids0, cola0) = (e.almacen(Madera), e.n.economia(a).unwrap().poblacion.pesants, e.n.estado().siguiente_id, e.n.eventos_en_cola());
+    let (madera0, pesants0, ids0, cola0) = (e.almacen(Madera), e.n.economia(a).unwrap().poblacion.pesants, e.n.estado().siguiente_id, en_cola(&e.n));
     let r = e.ok("ana", reclutar(h, Tropa::MiliciaLanceros));
     assert_eq!(r.creadas.len(), 1);
     let esc = e.n.heroe(h).unwrap().heroe.escuadra(r.creadas[0]).unwrap().clone();
     assert_eq!((esc.tropa, esc.cantidad, esc.nivel, esc.contenedor, esc.en_guarnicion, esc.plaza_origen), (Tropa::MiliciaLanceros, 25, 1, Contenedor::Campamento, false, Some(a as u32)));
     assert_eq!(esc.moral_en(e.n.ahora()), 100_000);
     assert_eq!(madera0 - e.almacen(Madera), 50_000, "2 de madera por soldado");
-    assert_eq!(pesants0 - e.n.economia(a).unwrap().poblacion.pesants, 25_000, "los soldados salen de la población de su clase");
+    assert_eq!(pesants0 - e.n.economia(a).unwrap().poblacion.pesants, 25, "los soldados salen de la población de su clase");
     assert_eq!(e.n.estado().siguiente_id, ids0 + 1, "una escuadra nueva gasta un id");
-    assert_eq!(e.n.eventos_en_cola(), cola0, "reclutar no programa ningún evento");
+    assert_eq!(en_cola(&e.n), cola0, "reclutar no programa ningún evento");
     let h1 = hechos(&e.n, "tropas.reclutadas");
     assert_eq!((h1.len(), h1[0].1.clone(), dato(&h1[0], "reclutados"), dato(&h1[0], "nueva")), (1, vec![a], 25, 1));
     assert_eq!(e.n.soldados_del_campamento(a), 25);
@@ -311,10 +316,10 @@ fn reclutar_en_un_campamento_cobra_oro_del_almacen_personal_o_del_carro_y_gasta_
     assert_eq!((reclutado.len(), dato(&reclutado[0], "cantidad"), dato(&reclutado[0], "oro")), (1, 20, precio));
     assert_eq!(e.rechazada("ana", honderos(h, personal)), rechazos::MERCENARIOS_AL_TOPE);
     // Los reclutas se recuperan a 10 por hora, sin ningún evento.
-    let cola = e.n.eventos_en_cola();
+    let cola = en_cola(&e.n);
     e.avanzar(HORA);
     assert_eq!(e.n.reclutas_de_campamento(camp), Some(90_000));
-    assert!(e.n.eventos_en_cola() <= cola, "reponer los reclutas no programa nada");
+    assert!(en_cola(&e.n) <= cola, "reponer los reclutas no programa nada");
 
     // Con el oro del carro de su columna, a la puerta del campamento.
     let puerta = campamento(&m.0, camp as usize);
@@ -431,11 +436,11 @@ fn un_heroe_herido_lo_esta_dos_minutos_y_se_lee_al_mirar_sin_ningun_evento() {
     assert_eq!(e.rechazada("admin", Comando::HerirHeroe { heroe: 99 }), rechazos::HEROE_DESCONOCIDO);
     e.avanzar(10 * MIN);
     let t = e.n.ahora();
-    let cola = e.n.eventos_en_cola();
+    let cola = en_cola(&e.n);
     e.ok("admin", Comando::HerirHeroe { heroe: h });
     assert_eq!(e.n.heroe(h).unwrap().heroe.herido_hasta, Some(t + 2 * MIN));
     assert!(e.n.heroe_herido(h));
-    assert_eq!(e.n.eventos_en_cola(), cola, "curarse no programa nada: se mira al leer");
+    assert_eq!(en_cola(&e.n), cola, "curarse no programa nada: se mira al leer");
     assert_eq!(e.ord("admin", Comando::HerirHeroe { heroe: h }).resultado, Resultado::SinCambios, "a un herido no se le alarga");
     e.n.avanzar_hasta(t + 2 * MIN - 1);
     assert!(e.n.heroe_herido(h));
@@ -451,10 +456,10 @@ fn desconectarse_programa_la_salida_a_dos_minutos_y_medio_y_conectarse_la_cancel
     let mut e = escenario(m, 7);
     let h = e.heroe("ana", 0);
     let t = e.n.ahora();
-    let cola = e.n.eventos_en_cola();
+    let cola = en_cola(&e.n);
     e.ok("ana", Comando::Desconectarse { heroe: h });
     assert_eq!(e.n.heroe(h).unwrap().heroe.presencia.desconecta_en, Some(t + 150_000));
-    assert_eq!(e.n.eventos_en_cola(), cola + 1, "un solo evento, con prioridad 1");
+    assert_eq!(en_cola(&e.n), cola + 1, "un solo evento, con prioridad 1");
     assert!(e.n.estado().cola.volcar().iter().any(|ev| matches!(ev.carga, nucleo::Carga::SalidaDelMundo) && ev.prioridad == nucleo::PRIO_SALIDA && ev.instante == t + 150_000));
     assert_eq!(e.ord("ana", Comando::Desconectarse { heroe: h }).resultado, Resultado::SinCambios, "pedirlo dos veces no cambia nada");
     // Conectarse antes de que venza la cancela, sin eventos, y el evento viejo no hace nada.
@@ -574,14 +579,14 @@ fn el_campamento_de_la_plaza_come_del_almacen_justo_despues_de_la_poblacion_y_si
     };
     let (mut poco, mut mucho) = (hasta(2_000), hasta(4_000));
     assert_eq!(poco.n.soldados_del_campamento(poco.a), 55);
-    let (cola, antes) = (mucho.n.eventos_en_cola(), poco.almacen(Trigo));
+    let (cola, antes) = (en_cola(&mucho.n), poco.almacen(Trigo));
     assert_eq!(antes, mucho.almacen(Trigo), "hasta reclutar son idénticos");
     for k in 1..=8 {
         poco.avanzar(MIN);
         mucho.avanzar(MIN);
         assert_eq!(poco.almacen(Trigo) - mucho.almacen(Trigo), k * 55 * 2_000, "la guarnición come 55 soldados × ración por minuto, ni más ni menos ({k} min)");
     }
-    assert_eq!(mucho.n.eventos_en_cola(), cola, "comer no programa ningún evento: lo hace el paso de minuto que ya existe");
+    assert_eq!(en_cola(&mucho.n), cola, "comer no programa ningún evento: lo hace el paso de minuto que ya existe");
     assert_eq!(mucho.n.economia(mucho.a).unwrap().poblacion, poco.n.economia(poco.a).unwrap().poblacion, "la población come antes y no nota la ración");
 }
 
@@ -912,7 +917,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN13");
+    assert_eq!(&bytes[..5], b"BAN14");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

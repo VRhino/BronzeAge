@@ -75,8 +75,9 @@ impl Asentamiento {
         let entorno = (cap_p, cap_a, cap_n);
         let consumo_hab = |hab: Mil| por(hab, r.poblacion.consumo_por_habitante);
         let factor_consumo = self.politicas.factor(&r.politicas, "factorConsumoComida");
-        let consumo_actual = por(consumo_hab(pop.total()), factor_consumo) + x.racion_guarnicion;
-        let objetivo = pop.pesants.max(entorno.0) + pop.artesanos.max(entorno.1) + pop.nobleza.max(entorno.2);
+        let (hab_p, hab_a, hab_n) = (pop.pesants * 1000, pop.artesanos * 1000, pop.nobleza * 1000);
+        let consumo_actual = por(consumo_hab(pop.total() * 1000), factor_consumo) + x.racion_guarnicion;
+        let objetivo = hab_p.max(entorno.0) + hab_a.max(entorno.1) + hab_n.max(entorno.2);
         let consumo_objetivo = por(consumo_hab(objetivo), factor_consumo) + x.racion_guarnicion;
         let produccion = produccion::produccion_trigo_por_minuto(&r.catalogo, &self.edificios, mano, x.fertilidad, self.politicas.factor(&r.politicas, "factorProduccionTrigo"));
         let en_deficit = produccion < consumo_actual;
@@ -124,7 +125,7 @@ impl Asentamiento {
 
         // 4. Vivienda: cuando la ocupación llega al umbral (o no hay cupo de pesants) y no se alcanzó el tope del nivel.
         let ocup = |hab: Mil, cap: Mil| if cap <= 0 { UNO } else { razon(hab, cap) };
-        let ocupacion_viviendas = ocup(pop.pesants, cap_p).max(ocup(pop.artesanos, cap_a));
+        let ocupacion_viviendas = ocup(hab_p, cap_p).max(ocup(hab_a, cap_a));
         if (cap_p == 0 || ocupacion_viviendas >= n.umbral_vivienda_ocupada)
             && !self.pendiente(Tipo::Vivienda)
             && (self.edificios.en_cualquier_estado(Tipo::Vivienda) as u32) < self.maximo_viviendas(r)

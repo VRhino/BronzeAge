@@ -24,7 +24,7 @@ Separación limpia:
 
 ## 2. Modelo de tiempo: simulación por eventos discretos
 
-- **Reloj de mundo** = reloj de pared × factor (×1 en producción, ×N en pruebas). No hay tick.
+- **Reloj de mundo** = reloj de pared × factor (×1 en producción, ×N en pruebas). No hay tick global. (La economía de cada plaza sí da un paso de un minuto por diseño, con los fines de obra, mejora, ascenso y política en su instante exacto: §2.1 y [`Economia_Por_Minuto_Definicion.md`](../../Consideraciones/Economia_Por_Minuto_Definicion.md).)
 - **Cola de eventos** con instante absoluto (montículo o rueda de temporizadores jerárquica). Cada evento lleva la
   **generación** de su entidad: si la entidad cambia de plan, sube la generación y los eventos viejos se descartan
   al salir de la cola (invalidación perezosa, sin buscar ni borrar).
@@ -35,9 +35,10 @@ Separación limpia:
 | Cosa | Se guarda | Se calcula al vuelo | Eventos que programa |
 |---|---|---|---|
 | Columna, caravana, Aeda | **plan**: vértices de la ruta con el instante de paso por cada uno | `posición(t)` interpolando el plan | llegada, fin de víveres, cambio de plan |
-| Almacén y producción | cantidad en t₀ y **ritmo** neto por recurso | `min(tope, c₀ + ritmo·(t − t₀))` | almacén lleno, recurso a 0 |
-| Obra, cola, investigación | instante de fin | progreso = (t − inicio) / duración | terminada |
-| Población, moral, reputación | valor en t₀ y ritmo | ídem | umbrales |
+| Almacén y producción de una plaza | cantidad tras el **último paso de un minuto** de la plaza (corregido el 2026-10-22: la economía va por minuto por diseño, no por ritmos continuos) | el valor guardado, sin extrapolar; el cliente muestra escalones con la tendencia «+N/min» | — (el paso de minuto, `Carga::Minuto`, es recurrente por plaza) |
+| Obra, mejora, ascenso, política | instante de fin | progreso = (t − inicio) / duración | **cita propia** en su instante exacto (`FinDeObras`, `CaducaPolitica`); la obra a mano arranca al clic |
+| Población de una plaza | habitantes **enteros** por clase y un resto oculto, tras el último paso de minuto | los enteros | — |
+| Moral, reputación | valor en t₀ y ritmo | `valor₀ + ritmo·(t − t₀)` | umbrales |
 | Mirada de taberna, propuesta, veto | instante de caducidad | — | caduca |
 
 ### 2.2 Planes de movimiento calculados de una vez
@@ -125,7 +126,9 @@ clientes ─┤ WS/HTTP · auth · parseo y validación sin estado       │
 ## 8. Riesgos y decisiones abiertas
 
 1. **Reglas que hoy dependen del tick** (consumo de víveres, deserción por hambre, mantenimiento, producción por
-   tick, bandidos, catch-up): hay que reescribirlas como ritmos + eventos de umbral. Es el grueso del trabajo y es
+   tick, bandidos, catch-up): hay que reescribirlas como ritmos + eventos de umbral (**salvo la economía de cada plaza:
+   producción, consumo de comida, recaudación, mantenimiento y población quedan en un paso de un minuto por plaza,
+   decidido el 2026-10-22**). Es el grueso del trabajo y es
    **trabajo de reglas**: cada una se valida contra `Docs/Game/` y las simulaciones batch antes de darla por buena.
 2. **Órdenes a mitad de camino:** en un mundo continuo se aplican desde la posición real del instante de la orden
    (hoy, desde la del inicio del tick). Cambia sutilmente el resultado de algunas jugadas; decisión de diseño.

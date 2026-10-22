@@ -7,8 +7,14 @@
 //! o no; no hay tick global. Prioridad [`PRIO_ASENTAMIENTO`]. Cada paso programa el siguiente **antes** de avanzar: si la plaza cae en
 //! ruinas, subir su generación descarta ese evento sin que la plaza exista ya.
 //!
-//! **Límite: precisión de un minuto.** Las obras, mejoras, políticas y ascensos que el crate resuelve dentro del paso se aplican en el
-//! primer paso con `t >= completa_en`: hasta 59,999 s después de su instante exacto. No se programa un evento aparte por cada fin.
+//! # Lo que no espera al paso (2026-10-22)
+//! La economía va por minuto por diseño (producción, consumo, recaudación, mantenimiento, población), pero lo que el jugador nota va en su
+//! instante exacto, con una cita propia en la cola y la generación de la plaza (la ruina las descarta): `Carga::FinDeObras` por cada obra,
+//! mejora y ascenso en curso (prioridad [`PRIO_FIN_DE_OBRAS`], antes del paso del mismo instante) y `Carga::CaducaPolitica` por cada política
+//! activa (prioridad [`PRIO_CADUCA_POLITICA`], después del paso). Se programan al empezar lo que esperan (en `anotar_sucesos`, a partir de
+//! `ObraIniciada`, `MejoraIniciada` y `AscensoIniciado`) y desaparecen al cumplirse: ninguna es recurrente. Al acabar una obra la zona crece y la
+//! cuadrilla se libera en ese mismo instante, y la siguiente de la cola arranca entonces; una obra encargada a mano arranca al instante de la orden.
+//! Una cita que llega con la plaza ya cambiada (una conquista descartó el ascenso) no encuentra nada que cumplir.
 //!
 //! # Política de versión
 //! La población, el almacén y el medidor cambian en cada paso: son **ritmos**, cambian el hash pero no la versión. El paso cierra
@@ -18,7 +24,7 @@
 use super::*;
 use crate::codec_economia::{recurso_a_u8, tipo_a_u8};
 use crate::economia::{FuentesMundo, SitiosPlaza};
-use crate::estado::PRIO_ASENTAMIENTO;
+use crate::estado::{PRIO_ASENTAMIENTO, PRIO_CADUCA_POLITICA, PRIO_FIN_DE_OBRAS};
 use base::MS_POR_MINUTO;
 use asentamiento::asentamiento::{Evento as EventoEco, Exterior};
 use asentamiento::ascenso::Bloqueo;
@@ -102,7 +108,7 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::EdificioCompletado { id, tipo } => ("construccion.edificio_completado", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64)]),
         EventoEco::EdificioGratuito { id, tipo, nivel } => ("construccion.edificio_gratuito", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("nivel", *nivel as i64)]),
         EventoEco::ObraIniciada { id, tipo, completa_en } => ("construccion.obra_iniciada", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("completaEn", *completa_en)]),
-        EventoEco::MejoraIniciada { id, nivel } => ("construccion.mejora_iniciada", vec![("edificio", *id as i64), ("nivel", *nivel as i64)]),
+        EventoEco::MejoraIniciada { id, nivel, completa_en } => ("construccion.mejora_iniciada", vec![("edificio", *id as i64), ("nivel", *nivel as i64), ("completaEn", *completa_en)]),
         EventoEco::MejoraCompletada { id, nivel } => ("construccion.mejora_completada", vec![("edificio", *id as i64), ("nivel", *nivel as i64)]),
         EventoEco::NecesidadDetectada { id, tipo, prioridad } => ("construccion.necesidad_detectada", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("prioridad", *prioridad)]),
         EventoEco::Encolada { id, tipo } => ("construccion.encolada", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64)]),
@@ -116,7 +122,7 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::MantenimientoColapsado { nivel } => ("mantenimiento.colapsado", vec![("nivel", *nivel as i64)]),
         EventoEco::MantenimientoRecuperado { nivel } => ("mantenimiento.recuperado", vec![("nivel", *nivel as i64)]),
         EventoEco::Ruinas { faltantes } => ("asentamiento.ruinas", vec![("faltantes", faltantes.iter().fold(0i64, |m, &r| m | 1 << recurso_a_u8(r)))]),
-        EventoEco::AscensoIniciado { objetivo } => ("asentamiento.ascenso_iniciado", vec![("objetivo", *objetivo as i64)]),
+        EventoEco::AscensoIniciado { objetivo, completa_en } => ("asentamiento.ascenso_iniciado", vec![("objetivo", *objetivo as i64), ("completaEn", *completa_en)]),
         EventoEco::NivelSubio { nivel } => ("asentamiento.nivel_subio", vec![("nivel", *nivel as i64)]),
         EventoEco::PuebloMarcado { id, tipo, nodo } => ("pueblo.marcado", vec![("pueblo", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("nodo", *nodo as i64)]),
         EventoEco::PuebloEntrega { id, cantidad } => ("pueblo.materiales_entregados", vec![("pueblo", *id as i64), ("cantidad", *cantidad)]),
@@ -142,6 +148,12 @@ impl Nucleo {
     pub(super) fn programar_minuto(&mut self, id: u64, en: Instante) {
         let clave = self.estado.generaciones.clave(id);
         self.estado.cola.programar(en, PRIO_ASENTAMIENTO, clave, Carga::Minuto);
+    }
+
+    /// Programa la cita de fin de obra, mejora o ascenso de la plaza en `en`, con su generación vigente.
+    fn programar_fin(&mut self, id: u64, en: Instante) {
+        let clave = self.estado.generaciones.clave(id);
+        self.estado.cola.programar(en, PRIO_FIN_DE_OBRAS, clave, Carga::FinDeObras);
     }
 
     /// Saca la plaza del mapa mientras se trabaja con ella (así el resto de plazas se puede leer: las vecinas que recortan su zona),
@@ -217,6 +229,13 @@ impl Nucleo {
         }
         // La guarnición come después de la población (Reloj_Y_Eventos §2).
         self.alimentar_guarnicion(id, t);
+    }
+
+    /// Acaba una obra, una mejora o un ascenso de la plaza `id` en `t` (el evento `Carga::FinDeObras`): el edificio pasa a activo, la zona crece
+    /// uno por cada edificio completado y la cuadrilla liberada arranca la siguiente obra de la cola en este mismo instante.
+    pub(super) fn fines_de_plaza(&mut self, id: u64, t: Instante) {
+        let Some(sucesos) = self.con_exterior(id, t, |eco, x| eco.cumplir_fines(t, x)) else { return };
+        self.anotar_sucesos(id, t, &sucesos);
         // La zona crece 1 unidad por edificio completado, hasta el techo del nivel (Economia_Construccion §3.1).
         let completados = self.estado.asentamientos.get_mut(&id).map_or(0, |a| a.economia.tomar_completados());
         if completados > 0 {
@@ -224,10 +243,23 @@ impl Nucleo {
         }
     }
 
-    /// Traslada los sucesos de la economía a eventos del núcleo y marca la plaza como tocada (cierra versión).
+    /// Caduca una política de la plaza `id` en `t` (el evento `Carga::CaducaPolitica`).
+    pub(super) fn caduca_politica(&mut self, id: u64, t: Instante) {
+        let Some(a) = self.estado.asentamientos.get_mut(&id) else { return };
+        let sucesos = a.economia.caducar_politicas(t);
+        self.anotar_sucesos(id, t, &sucesos);
+    }
+
+    /// Traslada los sucesos de la economía a eventos del núcleo y marca la plaza como tocada (cierra versión). Programa también la cita de fin
+    /// de cada obra, mejora y ascenso que acaba de empezar.
     pub(super) fn anotar_sucesos(&mut self, id: u64, t: Instante, sucesos: &[EventoEco]) {
         if sucesos.is_empty() {
             return;
+        }
+        for s in sucesos {
+            if let EventoEco::ObraIniciada { completa_en, .. } | EventoEco::MejoraIniciada { completa_en, .. } | EventoEco::AscensoIniciado { completa_en, .. } = s {
+                self.programar_fin(id, *completa_en);
+            }
         }
         let Some(a) = self.estado.asentamientos.get(&id) else { return };
         let (punto, reglas) = (a.posicion, &self.estado.reglas.economia.datos);
@@ -329,16 +361,15 @@ impl Nucleo {
         let mut sucesos: Vec<EventoEco> = vec![];
         match &p.comando {
             Comando::AnadirEdificio { tipo, .. } => {
-                let (nuevo, gratuitos) = self
+                let (nuevo, eventos) = self
                     .con_exterior(id, t, |eco, x| {
                         let mut ev = vec![];
-                        (eco.anadir_manual(x.reglas, x, *tipo, &mut ev), ev)
+                        (eco.anadir_manual(t, x.reglas, x, *tipo, &mut ev), ev)
                     })
                     .expect("la plaza existe y hay mundo");
                 let eid = nuevo.map_err(rechazo_obra)?;
                 creada = Some(eid as u64);
-                sucesos.extend(gratuitos); // las anclas que el trazado creó antes de colocarlo
-                sucesos.push(EventoEco::Encolada { id: eid, tipo: *tipo });
+                sucesos.extend(eventos); // las anclas que el trazado creó antes de colocarlo, la orden encolada y, si había cuadrilla, la obra iniciada
             }
             Comando::QuitarDeCola { edificio, .. } => {
                 let plaza = self.estado.asentamientos.get_mut(&id).expect("existe");
@@ -358,10 +389,14 @@ impl Nucleo {
                 sucesos.push(EventoEco::ColaReordenada);
             }
             Comando::MejorarEdificio { edificio, .. } => {
-                let r = self.con_exterior(id, t, |eco, x| eco.mejorar_ahora(t, x.reglas, x, *edificio)).expect("la plaza existe y hay mundo");
+                let (r, ev) = self
+                    .con_exterior(id, t, |eco, x| {
+                        let mut ev = vec![];
+                        (eco.mejorar_ahora(t, x.reglas, x, *edificio, &mut ev), ev)
+                    })
+                    .expect("la plaza existe y hay mundo");
                 r.map_err(rechazo_obra)?;
-                let nivel = self.estado.asentamientos[&id].economia.edificio(*edificio).and_then(|e| e.mejora).map_or(0, |m| m.nivel_objetivo);
-                sucesos.push(EventoEco::MejoraIniciada { id: *edificio, nivel });
+                sucesos.extend(ev);
             }
             Comando::AlternarAutoConstruccion { pausada, .. } => {
                 if !self.estado.asentamientos.get_mut(&id).expect("existe").economia.alternar_auto_construccion(*pausada) {
@@ -409,6 +444,8 @@ impl Nucleo {
                 let punto = self.estado.asentamientos[&id].posicion;
                 let indice = datos.politicas.catalogo.iter().position(|q| &q.id == politica).map_or(-1, |i| i as i64);
                 self.tr.eventos.push(EventoNucleo { codigo: "politica.activada".into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos: vec![("politica", indice), ("expiraEn", expira)] });
+                let clave = self.estado.generaciones.clave(id);
+                self.estado.cola.programar(expira, PRIO_CADUCA_POLITICA, clave, Carga::CaducaPolitica);
             }
             _ => unreachable!("solo se llama con órdenes de economía"),
         }

@@ -175,7 +175,7 @@ pub fn reclutar(r: &Reglas, plaza: Plaza, pedido: Pedido, nuevo_id: impl FnOnce(
         Origen::Artesanos => &mut plaza.poblacion.artesanos,
         Origen::Nobleza => &mut plaza.poblacion.nobleza,
     };
-    *clase -= cantidad * 1_000;
+    *clase -= cantidad;
     let (escuadra, nueva) = match heroe.escuadras.iter_mut().find(|e| e.tropa == tropa && e.prestada.is_none()) {
         Some(e) => {
             e.cantidad += cantidad;
@@ -232,7 +232,7 @@ mod pruebas {
         Mundo {
             edificios: vec![edificio(0, Tipo::CentroUrbano, 1), edificio(1, Tipo::Barracon, 2), edificio(2, Tipo::GaleriaDeTiro, 1), edificio(3, Tipo::Caballerizas, 2)],
             almacen,
-            poblacion: Poblacion { pesants: 200_000, artesanos: 100_000, nobleza: 50_000, nutricion: 100_000 },
+            poblacion: Poblacion { pesants: 200, artesanos: 100, nobleza: 50, restos: [0; 3], nutricion: 100_000, recuperando: false },
             heroe,
             disponibles: [200, 100, 50],
             factor_costo: UNO,
@@ -313,7 +313,7 @@ mod pruebas {
         assert_eq!(res.costo, vec![(Recurso::Madera, 50_000)]);
         assert_eq!(m.almacen.cantidad(Recurso::Madera), 10_000_000 - 50_000);
         assert_eq!(m.almacen.cantidad(Recurso::Trigo), trigo0, "reclutar no gasta el trigo: solo exige la reserva");
-        assert_eq!(m.poblacion.pesants, 200_000 - 25_000);
+        assert_eq!(m.poblacion.pesants, 200 - 25);
         let e = m.heroe.escuadra(77).unwrap();
         assert_eq!((e.cantidad, e.nivel, e.experiencia, e.contenedor, e.en_guarnicion, e.plaza_origen), (25, 1, 0, Contenedor::Campamento, false, Some(4)));
         assert_eq!(e.moral_en(5_000), 100_000);
@@ -324,9 +324,9 @@ mod pruebas {
     fn la_poblacion_sale_de_la_clase_del_escalon() {
         let mut m = mundo();
         reclutar_de(&mut m, Tropa::HacherosLigeros).unwrap(); // escalón 3: 18 artesanos
-        assert_eq!((m.poblacion.pesants, m.poblacion.artesanos, m.poblacion.nobleza), (200_000, 100_000 - 18_000, 50_000));
+        assert_eq!((m.poblacion.pesants, m.poblacion.artesanos, m.poblacion.nobleza), (200, 100 - 18, 50));
         reclutar_de(&mut m, Tropa::CarrosGuerra).unwrap(); // escalón 4: 15 nobles
-        assert_eq!(m.poblacion.nobleza, 50_000 - 15_000);
+        assert_eq!(m.poblacion.nobleza, 50 - 15);
     }
 
     #[test]
@@ -420,7 +420,7 @@ mod pruebas {
         m.almacen.poner(Recurso::Trigo, 1_000);
         assert!(matches!(reclutar_de(&mut m, Tropa::MiliciaLanceros), Err(ErrorReclutamiento::SinReservaDeTrigo { hay: 1_000, .. })));
         assert_eq!(m.heroe.escuadras.len(), 0, "un rechazo no deja rastro");
-        assert_eq!(m.poblacion.pesants, 200_000);
+        assert_eq!(m.poblacion.pesants, 200);
         assert_eq!(m.almacen.cantidad(Recurso::Madera), 10_000_000);
     }
 

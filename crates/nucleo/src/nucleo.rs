@@ -423,6 +423,8 @@ impl Nucleo {
             Carga::Llegada => self.llegada(id, t),
             Carga::Umbral(objetivo) => self.umbral(id, objetivo, t),
             Carga::Minuto => self.minuto_de_plaza(id, t),
+            Carga::FinDeObras => self.fines_de_plaza(id, t),
+            Carga::CaducaPolitica => self.caduca_politica(id, t),
             Carga::Comercio { suceso, aplazos } => self.comercio_vence(ev.clave, suceso, aplazos, t),
             Carga::Reputacion(cita) => self.cita_de_reputacion(id, cita, t),
             Carga::SalidaDelMundo => self.salida_del_mundo(id, t),

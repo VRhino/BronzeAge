@@ -1,10 +1,10 @@
 //! Las órdenes de los jugadores sobre un asentamiento: cola manual, reembolsos, mejoras y bloqueos del ascenso.
 
-use asentamiento::asentamiento::{Asentamiento, Evento, Exterior, Gratuito, Sitios, SitiosLibres, Urbano};
+use asentamiento::asentamiento::{Ascenso, Asentamiento, Evento, Exterior, Gratuito, Sitios, SitiosLibres, Urbano};
 use asentamiento::ascenso::Bloqueo;
 use asentamiento::catalogo::Tipo;
 use asentamiento::datos::{Reglas, UNO};
-use asentamiento::edificio::{Edificios, Estado, Fuente};
+use asentamiento::edificio::{Edificio, Edificios, Estado, Fuente};
 use asentamiento::obras::ErrorObra;
 use asentamiento::produccion::Fuentes;
 use asentamiento::pueblos::{EstadoPueblo, Pueblo};
@@ -43,6 +43,15 @@ fn rico(r: &Reglas) -> Asentamiento {
     a
 }
 
+/// Ocupa todas las cuadrillas con obras que no acabarán (así lo que se encargue después espera en la cola).
+fn ocupar_cuadrillas(a: &mut Asentamiento, r: &Reglas) {
+    for k in 0..r.construccion.necesidades.maximo_en_construccion_simultanea as u32 {
+        let mut e = Edificio::nuevo(900 + k, Tipo::Vivienda, Estado::EnConstruccion);
+        e.completa_en = Some(i64::MAX / 2);
+        a.edificios.push(e);
+    }
+}
+
 macro_rules! exterior {
     ($r:expr, $sitios:expr, $mundo:expr) => {
         Exterior {
@@ -71,23 +80,24 @@ macro_rules! exterior {
 fn la_cola_manual_paga_al_encolar_respeta_los_topes_y_se_reembolsa_entera_al_quitar() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    ocupar_cuadrillas(&mut a, &r);
     let mut x = exterior!(&r, s, w);
     let antes = a.almacen.cantidad(Recurso::Madera);
-    let id = a.anadir_manual(&r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap();
+    let id = a.anadir_manual(0, &r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap();
     assert_eq!(a.almacen.cantidad(Recurso::Madera), antes - 10_000, "paga los 10 de madera al encolar");
     assert_eq!(a.edificio(id).unwrap().prioridad, 900, "banda «manual»");
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::CentroUrbano, &mut vec![]), Err(ErrorObra::TipoNoManual));
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Palacio, &mut vec![]), Err(ErrorObra::NivelInsuficiente), "el Palacio pide nivel 2");
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Maravilla, &mut vec![]), Err(ErrorObra::EraInsuficiente));
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::CentroUrbano, &mut vec![]), Err(ErrorObra::TipoNoManual));
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Palacio, &mut vec![]), Err(ErrorObra::NivelInsuficiente), "el Palacio pide nivel 2");
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Maravilla, &mut vec![]), Err(ErrorObra::EraInsuficiente));
     a.quitar_de_cola(&r, id).unwrap();
     assert_eq!(a.almacen.cantidad(Recurso::Madera), antes, "se devuelve el coste completo");
     assert!(a.edificio(id).is_none());
     assert_eq!(a.quitar_de_cola(&r, id), Err(ErrorObra::NoExiste));
     // Cola de cuatro: la quinta se rechaza.
     for _ in 0..4 {
-        a.anadir_manual(&r, &mut x, Tipo::Granja, &mut vec![]).unwrap();
+        a.anadir_manual(0, &r, &mut x, Tipo::Granja, &mut vec![]).unwrap();
     }
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Granja, &mut vec![]), Err(ErrorObra::ColaLlena));
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Granja, &mut vec![]), Err(ErrorObra::ColaLlena));
 }
 
 #[test]
@@ -97,23 +107,24 @@ fn los_tipos_unicos_y_los_topes_de_nivel_se_hacen_cumplir() {
     a.medidor.nivel_actual = 2;
     a.nivel = 2;
     let mut x = exterior!(&r, s, w);
-    a.anadir_manual(&r, &mut x, Tipo::Taberna, &mut vec![]).unwrap();
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Taberna, &mut vec![]), Err(ErrorObra::Unico));
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::GranFundicion, &mut vec![]), Err(ErrorObra::NivelInsuficiente), "pide capital de nivel 4");
+    a.anadir_manual(0, &r, &mut x, Tipo::Taberna, &mut vec![]).unwrap();
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Taberna, &mut vec![]), Err(ErrorObra::Unico));
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::GranFundicion, &mut vec![]), Err(ErrorObra::NivelInsuficiente), "pide capital de nivel 4");
     // Tres Fundiciones en el nivel 2; la cuarta choca con el tope de transformación.
     for _ in 0..3 {
-        let id = a.anadir_manual(&r, &mut x, Tipo::Fundicion, &mut vec![]).unwrap();
+        let id = a.anadir_manual(0, &r, &mut x, Tipo::Fundicion, &mut vec![]).unwrap();
         a.edificios.iter_mut().find(|e| e.id == id).unwrap().estado = Estado::EnConstruccion; // libera el cupo de la cola
     }
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Fundicion, &mut vec![]), Err(ErrorObra::TopeTransformacion));
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Fundicion, &mut vec![]), Err(ErrorObra::TopeTransformacion));
 }
 
 #[test]
 fn mover_en_cola_intercambia_prioridades_con_el_vecino() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    ocupar_cuadrillas(&mut a, &r);
     let mut x = exterior!(&r, s, w);
-    let ids: Vec<u32> = (0..3).map(|_| a.anadir_manual(&r, &mut x, Tipo::Granja, &mut vec![]).unwrap()).collect();
+    let ids: Vec<u32> = (0..3).map(|_| a.anadir_manual(0, &r, &mut x, Tipo::Granja, &mut vec![]).unwrap()).collect();
     for (k, &id) in ids.iter().enumerate() {
         a.edificios.iter_mut().find(|e| e.id == id).unwrap().prioridad = 900 - k as i64; // orden: 0, 1, 2
     }
@@ -132,9 +143,9 @@ fn una_mejora_manual_paga_ocupa_cuadrilla_y_sube_el_nivel_al_terminar() {
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
     let mut x = exterior!(&r, s, w);
-    a.mejorar_ahora(0, &r, &mut x, granja).unwrap();
+    a.mejorar_ahora(0, &r, &mut x, granja, &mut vec![]).unwrap();
     assert_eq!(a.edificios.cuadrillas_ocupadas(), 1);
-    assert_eq!(a.mejorar_ahora(0, &r, &mut x, granja), Err(ErrorObra::NoEsMejorable), "ya se está mejorando");
+    assert_eq!(a.mejorar_ahora(0, &r, &mut x, granja, &mut vec![]), Err(ErrorObra::NoEsMejorable), "ya se está mejorando");
     // La obra base de la Granja son 120 minutos; el nivel 2 tarda ×2 = 240.
     let m = a.edificio(granja).unwrap().mejora.unwrap();
     assert_eq!((m.nivel_objetivo, m.completa_en), (2, 240 * MS_POR_MINUTO));
@@ -143,7 +154,7 @@ fn una_mejora_manual_paga_ocupa_cuadrilla_y_sube_el_nivel_al_terminar() {
     let mut w2 = SinMundo;
     let mut x2 = exterior!(&r, s2, w2);
     for minuto in 1..=240 {
-        ev.extend(a.avanzar_minuto(minuto * MS_POR_MINUTO, &mut x2));
+        ev.extend(a.avanzar_hasta(minuto * MS_POR_MINUTO, &mut x2));
     }
     assert!(ev.contains(&Evento::MejoraCompletada { id: granja, nivel: 2 }));
     assert_eq!(a.edificio(granja).unwrap().nivel_interno, 2);
@@ -191,19 +202,20 @@ impl Sitios for ConCantera {
 fn los_minerales_y_la_segunda_cantera_solo_van_por_pueblo() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (rico(&r), ConCantera, SinMundo);
+    ocupar_cuadrillas(&mut a, &r);
     a.medidor.nivel_actual = 2;
     a.nivel = 2;
     let mut x = exterior!(&r, s, w);
     for t in [Tipo::Mina, Tipo::MinaCobre, Tipo::MinaEstano, Tipo::MinaHierro] {
-        assert_eq!(a.anadir_manual(&r, &mut x, t, &mut vec![]), Err(ErrorObra::SoloPorPueblo), "{t:?}");
+        assert_eq!(a.anadir_manual(0, &r, &mut x, t, &mut vec![]), Err(ErrorObra::SoloPorPueblo), "{t:?}");
     }
     // La primera Cantera es directa; la segunda ya no (en cualquier estado cuenta la primera).
-    let id = a.anadir_manual(&r, &mut x, Tipo::Cantera, &mut vec![]).unwrap();
-    assert_eq!(a.anadir_manual(&r, &mut x, Tipo::Cantera, &mut vec![]), Err(ErrorObra::SoloPorPueblo));
+    let id = a.anadir_manual(0, &r, &mut x, Tipo::Cantera, &mut vec![]).unwrap();
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Cantera, &mut vec![]), Err(ErrorObra::SoloPorPueblo));
     // El Corral y la Leñera siguen dentro de la ciudad: no son de pueblo.
     assert!(!Tipo::Corral.es_de_pueblo() && !Tipo::Lenera.es_de_pueblo());
     a.quitar_de_cola(&r, id).unwrap();
-    assert!(a.anadir_manual(&r, &mut x, Tipo::Cantera, &mut vec![]).is_ok(), "si la primera se retira, vuelve a haber primera");
+    assert!(a.anadir_manual(0, &r, &mut x, Tipo::Cantera, &mut vec![]).is_ok(), "si la primera se retira, vuelve a haber primera");
 }
 
 /// Un pueblo activo de ese tipo sobre el nodo 1, sin pasar por la obra.
@@ -239,4 +251,122 @@ fn lo_que_llega_por_acarreo_cuenta_en_la_solvencia_del_ascenso_y_el_pueblo_paga_
     assert!(!ev.iter().any(|e| matches!(e, Evento::PuebloLleno { .. })));
     assert_eq!(a.pueblos[0].almacen.cantidad(Recurso::Piedra), 10_000, "10 por minuto de la Cantera, con pesants de sobra");
     assert!(a.almacen.cantidad(Recurso::Piedra) <= 5_000_000, "lo extraído no entra en el almacén de la plaza (la mejora automática de la Granja sí gasta piedra)");
+}
+
+// ───────────────────── Economía por minuto con fines exactos (2026-10-22) ─────────────────────
+
+#[test]
+fn una_obra_manual_arranca_en_el_instante_de_la_orden_si_hay_cuadrilla_libre() {
+    let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    let mut x = exterior!(&r, s, w);
+    let t = 7 * MS_POR_MINUTO + 1_234;
+    let mut ev = vec![];
+    let id = a.anadir_manual(t, &r, &mut x, Tipo::Vivienda, &mut ev).unwrap();
+    let completa_en = t + r.catalogo.tipo(Tipo::Vivienda).tiempo_minutos * MS_POR_MINUTO;
+    let e = a.edificio(id).unwrap();
+    assert_eq!((e.estado, e.completa_en), (Estado::EnConstruccion, Some(completa_en)), "arranca en el instante exacto de la orden, no en el paso siguiente");
+    assert_eq!(ev, vec![Evento::Encolada { id, tipo: Tipo::Vivienda }, Evento::ObraIniciada { id, tipo: Tipo::Vivienda, completa_en }], "en este orden");
+    assert_eq!(a.edificios.cuadrillas_ocupadas(), 1);
+
+    // Sin cuadrilla libre se queda en la cola, sin suceso de arranque.
+    let (mut b, mut s2, mut w2) = (rico(&r), SitiosLibres, SinMundo);
+    ocupar_cuadrillas(&mut b, &r);
+    let mut x2 = exterior!(&r, s2, w2);
+    let mut ev = vec![];
+    let id = b.anadir_manual(t, &r, &mut x2, Tipo::Vivienda, &mut ev).unwrap();
+    assert_eq!((b.edificio(id).unwrap().estado, ev), (Estado::EnCola, vec![Evento::Encolada { id, tipo: Tipo::Vivienda }]));
+}
+
+#[test]
+fn el_fin_de_una_obra_libera_la_cuadrilla_y_arranca_la_siguiente_en_ese_mismo_instante() {
+    let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    let mut x = exterior!(&r, s, w);
+    let cuadrillas = r.construccion.necesidades.maximo_en_construccion_simultanea;
+    let t0 = 3_000;
+    let ids: Vec<u32> = (0..=cuadrillas).map(|_| a.anadir_manual(t0, &r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap()).collect();
+    let (en_obra, espera) = (&ids[..cuadrillas], ids[cuadrillas]);
+    let fin = t0 + r.catalogo.tipo(Tipo::Vivienda).tiempo_minutos * MS_POR_MINUTO;
+    assert!(en_obra.iter().all(|&i| a.edificio(i).unwrap().completa_en == Some(fin)));
+    assert_eq!(a.edificio(espera).unwrap().estado, Estado::EnCola, "la cuadrilla está ocupada");
+
+    assert!(a.cumplir_fines(fin - 1, &mut x).is_empty(), "un milisegundo antes no acaba nada");
+    assert_eq!(a.edificio(espera).unwrap().estado, Estado::EnCola);
+    let ev = a.cumplir_fines(fin, &mut x);
+    assert_eq!(ev.iter().filter(|e| matches!(e, Evento::EdificioCompletado { .. })).count(), cuadrillas, "{ev:?}");
+    assert!(en_obra.iter().all(|&i| a.edificio(i).unwrap().activo()));
+    assert_eq!(a.tomar_completados(), cuadrillas as u32, "la zona crece uno por edificio, en ese instante");
+    let nueva_fin = fin + r.catalogo.tipo(Tipo::Vivienda).tiempo_minutos * MS_POR_MINUTO;
+    assert_eq!((a.edificio(espera).unwrap().estado, e_fin(&a, espera)), (Estado::EnConstruccion, nueva_fin), "la siguiente de la cola empieza en el mismo milisegundo");
+    assert!(ev.contains(&Evento::ObraIniciada { id: espera, tipo: Tipo::Vivienda, completa_en: nueva_fin }));
+    assert!(a.cumplir_fines(fin, &mut x).is_empty(), "idempotente: una cita repetida no encuentra nada");
+}
+
+fn e_fin(a: &Asentamiento, id: u32) -> i64 {
+    a.edificio(id).unwrap().completa_en.unwrap()
+}
+
+#[test]
+fn una_mejora_y_un_ascenso_acaban_en_su_instante_exacto_y_el_paso_de_minuto_ya_no_los_cierra() {
+    let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
+    let mut x = exterior!(&r, s, w);
+    let t = 90_500;
+    let mut ev = vec![];
+    a.mejorar_ahora(t, &r, &mut x, granja, &mut ev).unwrap();
+    let fin = t + 240 * MS_POR_MINUTO;
+    assert_eq!(ev, vec![Evento::MejoraIniciada { id: granja, nivel: 2, completa_en: fin }]);
+    // El ascenso a mano, con la obra puesta a un instante que no es de minuto.
+    let fin_ascenso = fin - 777;
+    a.ascenso = Some(Ascenso { nivel_objetivo: 2, iniciado_en: t, completa_en: fin_ascenso });
+
+    assert!(a.cumplir_fines(fin_ascenso - 1, &mut x).is_empty());
+    assert_eq!(a.cumplir_fines(fin_ascenso, &mut x), vec![Evento::NivelSubio { nivel: 2 }], "el nivel sube en su milisegundo");
+    assert_eq!((a.nivel, a.ascenso), (2, None));
+    assert!(a.cumplir_fines(fin - 1, &mut x).is_empty());
+    assert_eq!(a.cumplir_fines(fin, &mut x), vec![Evento::MejoraCompletada { id: granja, nivel: 2 }]);
+    assert_eq!(a.edificios.cuadrillas_ocupadas(), 0, "la cuadrilla queda libre");
+
+    // El paso de minuto no cierra obras: lo que vence entre pasos tiene su cita.
+    let mut b = rico(&r);
+    let id = b.anadir_manual(0, &r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap();
+    let fin_obra = e_fin(&b, id);
+    b.avanzar_minuto(fin_obra + 5 * MS_POR_MINUTO, &mut x);
+    assert_eq!(b.edificio(id).unwrap().estado, Estado::EnConstruccion, "avanzar_minuto no completa nada: lo hace cumplir_fines en su instante");
+}
+
+#[test]
+fn una_politica_caduca_en_su_instante_exacto() {
+    use asentamiento::politicas::{Activador, Cargo};
+    let r = Reglas::cargar();
+    let mut a = rico(&r);
+    let id = &r.politicas.catalogo.iter().find(|p| p.cargo == Cargo::Gobernador.clave()).expect("hay políticas del Gobernador").id;
+    let activador = Activador { cargo: Cargo::Gobernador, cargo_ocupado: true, nivel_faccion: 1, sala_consejo: false };
+    let t = 12_345;
+    let expira = a.politicas.activar(&r.politicas, id, &activador, t).unwrap();
+    assert_eq!(expira, t + r.politicas.duracion_minutos * MS_POR_MINUTO);
+    assert!(a.caducar_politicas(expira - 1).is_empty());
+    assert_eq!(a.caducar_politicas(expira), vec![Evento::PoliticaExpirada { id: id.clone() }]);
+    assert!(a.politicas.activas().is_empty());
+}
+
+#[test]
+fn avanzar_hasta_cumple_los_fines_en_su_instante_y_deja_el_paso_en_el_minuto() {
+    let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    let mut x = exterior!(&r, s, w);
+    a.auto_pausada = true;
+    let t0 = 30_000;
+    let id = a.anadir_manual(t0, &r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap();
+    let fin = e_fin(&a, id);
+    let minuto_del_fin = (fin / MS_POR_MINUTO + 1) * MS_POR_MINUTO;
+    // Los pasos anteriores no la cierran; el que pasa por `fin` la cumple (en `fin`, no en el minuto) y luego da su paso.
+    for m in 1..minuto_del_fin / MS_POR_MINUTO {
+        assert!(!a.avanzar_hasta(m * MS_POR_MINUTO, &mut x).iter().any(|e| matches!(e, Evento::EdificioCompletado { .. })), "minuto {m}");
+    }
+    let ev = a.avanzar_hasta(minuto_del_fin, &mut x);
+    assert!(ev.contains(&Evento::EdificioCompletado { id, tipo: Tipo::Vivienda }) && a.edificio(id).unwrap().activo());
+    assert_eq!(a.ultimo_minuto, minuto_del_fin);
 }

@@ -61,7 +61,7 @@ impl Asentamiento {
         }
     }
 
-    /// Paso 1: las obras cuyo instante llegó pasan a activas. Un Mercado que se completa levanta sus puestos del nivel 1 (gratis y activos).
+    /// Las obras cuyo instante llegó pasan a activas. Un Mercado que se completa levanta sus puestos del nivel 1 (gratis y activos).
     pub(crate) fn completar_obras(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, ev: &mut Vec<Evento>) {
         let hechos: Vec<usize> = (0..self.edificios.len()).filter(|&i| self.edificios[i].estado == Estado::EnConstruccion && self.edificios[i].completa_en.map_or(true, |c| t >= c)).collect();
         for i in hechos {
@@ -86,10 +86,10 @@ impl Asentamiento {
         self.alta_gratuitos(gratuitos, ev);
     }
 
-    /// Paso 2: arranque de obra con las cuadrillas libres (medidas al empezar el minuto). Una reconstrucción tras saqueo no ocupa
-    /// cuadrilla ni espera turno.
-    pub(crate) fn arrancar_obras(&mut self, t: Instante, r: &Reglas, ocupadas_al_empezar: usize, ev: &mut Vec<Evento>) {
-        let mut cupo = r.construccion.necesidades.maximo_en_construccion_simultanea.saturating_sub(ocupadas_al_empezar);
+    /// Arranque de obra con las cuadrillas libres **en el instante `t`**: una obra que acaba libera su cuadrilla en el mismo instante y la
+    /// siguiente de la cola la toma entonces. Una reconstrucción tras saqueo no ocupa cuadrilla ni espera turno.
+    pub(crate) fn arrancar_obras(&mut self, t: Instante, r: &Reglas, ev: &mut Vec<Evento>) {
+        let mut cupo = r.construccion.necesidades.maximo_en_construccion_simultanea.saturating_sub(self.edificios.cuadrillas_ocupadas());
         let mut cola: Vec<usize> = (0..self.edificios.len()).filter(|&i| self.edificios[i].estado == Estado::EnCola).collect();
         cola.sort_by_key(|&i| std::cmp::Reverse(self.edificios[i].prioridad)); // estable: a igual prioridad, el orden de la lista
         let factor_tiempo = self.politicas.factor(&r.politicas, "factorTiempoConstruccion");
@@ -139,15 +139,11 @@ impl Asentamiento {
         minutos(base, self.politicas.factor(&r.politicas, "factorTiempoConstruccion"))
     }
 
-    /// Paso 5: terminar las mejoras y empezar las automáticas (siempre dejando una cuadrilla libre para construir).
+    /// Termina las mejoras cuyo instante llegó (la cita de fin de la plaza; el paso de minuto reintenta las que esperaban hueco).
     ///
     /// Una mejora que cambia la huella (la Granja) necesita un hueco de su tamaño nuevo: si no lo hay, **espera** conservando la mejora y
-    /// su cuadrilla, y se reintenta en el minuto siguiente.
-    ///
-    /// DUDA: el documento exige el hueco por adelantado solo a la mejora manual; la automática arranca sin comprobarlo (como en TypeScript),
-    /// así que una Granja sin hueco puede retener su cuadrilla indefinidamente. Lo conservador era seguir el documento al pie de la letra;
-    /// si en las pruebas con bots pasa a menudo, comprobar el hueco también al arrancar la automática.
-    pub(crate) fn avanzar_mejoras(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, reserva: &[Mil; 29], ev: &mut Vec<Evento>) {
+    /// su cuadrilla, y se reintenta en el paso de minuto siguiente.
+    pub(crate) fn terminar_mejoras(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, ev: &mut Vec<Evento>) {
         for i in 0..self.edificios.len() {
             let Some(m) = self.edificios[i].mejora else { continue };
             if t < m.completa_en {
@@ -171,6 +167,14 @@ impl Asentamiento {
                 self.levantar_puestos(r, x, m.nivel_objetivo, ev);
             }
         }
+    }
+
+    /// Empieza las mejoras automáticas (siempre dejando una cuadrilla libre para construir).
+    ///
+    /// DUDA: el documento exige el hueco por adelantado solo a la mejora manual; la automática arranca sin comprobarlo (como en TypeScript),
+    /// así que una Granja sin hueco puede retener su cuadrilla indefinidamente. Lo conservador era seguir el documento al pie de la letra;
+    /// si en las pruebas con bots pasa a menudo, comprobar el hueco también al arrancar la automática.
+    pub(crate) fn iniciar_mejoras_automaticas(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, reserva: &[Mil; 29], ev: &mut Vec<Evento>) {
         let maxc = r.construccion.necesidades.maximo_en_construccion_simultanea;
         let mut libres = maxc.saturating_sub(self.edificios.cuadrillas_ocupadas()).saturating_sub(1);
         for i in 0..self.edificios.len() {
@@ -188,7 +192,7 @@ impl Asentamiento {
             let completa_en = t + self.minutos_de_mejora(r, &self.edificios[i]) * MS_POR_MINUTO;
             let e = &mut self.edificios[i];
             e.mejora = Some(Mejora { nivel_objetivo: nivel + 1, completa_en });
-            ev.push(Evento::MejoraIniciada { id: e.id, nivel: nivel + 1 });
+            ev.push(Evento::MejoraIniciada { id: e.id, nivel: nivel + 1, completa_en });
             libres -= 1;
         }
     }
@@ -201,8 +205,10 @@ impl Asentamiento {
     }
 
     /// `anadirEdificioManualmente`: el Gobernador o el Maestro de Obras encolan cualquier edificio del catálogo salvo el Centro
-    /// Urbano y los puestos del Mercado. Paga el coste completo al encolar (con la reserva dinámica, sin la manual). Devuelve el id.
-    pub fn anadir_manual(&mut self, r: &Reglas, x: &mut Exterior, tipo: Tipo, ev: &mut Vec<Evento>) -> Result<u32, ErrorObra> {
+    /// Urbano y los puestos del Mercado. Paga el coste completo al encolar (con la reserva dinámica, sin la manual) y, si hay una cuadrilla
+    /// libre, la obra **arranca en el instante `t` de la orden**. Devuelve el id; en `ev` quedan los edificios gratuitos que creó el
+    /// trazado, `Encolada` y, si arrancó, `ObraIniciada`.
+    pub fn anadir_manual(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, tipo: Tipo, ev: &mut Vec<Evento>) -> Result<u32, ErrorObra> {
         let def = r.catalogo.tipo(tipo);
         let c = &r.construccion;
         if tipo.es_de_pueblo() && (tipo != Tipo::Cantera || self.edificios.en_cualquier_estado(Tipo::Cantera) > 0) {
@@ -257,6 +263,8 @@ impl Asentamiento {
         e.prioridad = c.bandas.manual;
         e.fuente = fuente;
         self.edificios.push(e);
+        ev.push(Evento::Encolada { id, tipo });
+        self.arrancar_obras(t, r, ev);
         Ok(id)
     }
 
@@ -309,7 +317,7 @@ impl Asentamiento {
 
     /// `mejorarEdificioManualmente`: exige que el edificio sea elegible y que se pueda pagar con la reserva dinámica; puede tomar la
     /// última cuadrilla.
-    pub fn mejorar_ahora(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, id: u32) -> Result<(), ErrorObra> {
+    pub fn mejorar_ahora(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, id: u32, ev: &mut Vec<Evento>) -> Result<(), ErrorObra> {
         let i = self.edificios.iter().position(|e| e.id == id).ok_or(ErrorObra::NoExiste)?;
         if !self.elegible_para_mejora(r, &self.edificios[i], x) {
             return Err(ErrorObra::NoEsMejorable);
@@ -330,6 +338,7 @@ impl Asentamiento {
         self.almacen.pagar(&costo);
         let completa_en = t + self.minutos_de_mejora(r, &self.edificios[i]) * MS_POR_MINUTO;
         self.edificios[i].mejora = Some(Mejora { nivel_objetivo: nivel + 1, completa_en });
+        ev.push(Evento::MejoraIniciada { id, nivel: nivel + 1, completa_en });
         Ok(())
     }
 

@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN13");
+    assert_eq!(&bytes[..5], b"BAN14");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -629,7 +629,7 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     assert_eq!(a.faccion, 1);
     assert_eq!((a.protegida_hasta, a.ocupada_hasta), (Some(t + 24 * HORA), Some(t + 90 * MIN)));
     assert!(a.economia.ocupado && s.e.n.plaza_protegida(b));
-    assert!(a.economia.poblacion.pesants <= poblacion.pesants * 3 / 4 + 1_000 && a.economia.poblacion.pesants % 1_000 == 0, "pierde el 25 % y queda en personas enteras");
+    assert!(a.economia.poblacion.pesants <= poblacion.pesants * 3 / 4 && a.economia.poblacion.restos == [0; 3], "pierde el 25 % y queda en personas enteras, sin restos");
     assert!(a.economia.edificios.iter().any(|x| x.danado), "algún edificio queda dañado");
     assert!(a.economia.edificios.iter().filter(|x| x.activo()).count() < edificios_activos);
     assert_eq!(a.radio, vieja_zona, "la zona no cambia");

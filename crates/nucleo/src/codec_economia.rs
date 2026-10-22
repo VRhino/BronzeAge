@@ -1,8 +1,8 @@
 //! Serialización canónica de la economía de una plaza (`asentamiento::Asentamiento`) para el hash y las fotos. Cada estructura se
 //! desestructura **entera** (sin `..`): si el crate añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
-//! Formato (little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
-//! población{pesants, artesanos, nobleza, nutrición: i64} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
+//! Formato (BAN14: la población es entera, con restos y marca de recuperación del hambre; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
+//! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
 //! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
 //! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64`.
@@ -128,8 +128,11 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     w.i64(*valor);
     w.u32(*racha);
     w.u32(*nivel_actual);
-    let Poblacion { pesants, artesanos, nobleza, nutricion } = poblacion;
-    [pesants, artesanos, nobleza, nutricion].iter().for_each(|&&x| w.i64(x));
+    let Poblacion { pesants, artesanos, nobleza, restos, nutricion, recuperando } = poblacion;
+    [pesants, artesanos, nobleza].iter().for_each(|&&x| w.i64(x));
+    restos.iter().for_each(|&x| w.i64(x));
+    w.i64(*nutricion);
+    w.bool(*recuperando);
     escribir_almacen(w, almacen);
     w.u64(politicas.activas().len() as u64);
     for Activa { id, cargo, expira_en } in politicas.activas() {
@@ -223,7 +226,9 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
 pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
     let (fundado_en, nivel) = (r.i64()?, r.u32()?);
     let medidor = Medidor { valor: r.i64()?, racha: r.u32()?, nivel_actual: r.u32()? };
-    let poblacion = Poblacion { pesants: r.i64()?, artesanos: r.i64()?, nobleza: r.i64()?, nutricion: r.i64()? };
+    let (pesants, artesanos, nobleza) = (r.i64()?, r.i64()?, r.i64()?);
+    let restos = [r.i64()?, r.i64()?, r.i64()?];
+    let poblacion = Poblacion { pesants, artesanos, nobleza, restos, nutricion: r.i64()?, recuperando: r.bool()? };
     let almacen = leer_almacen(r)?;
     let mut activas = Vec::new();
     for _ in 0..r.cuenta()? {

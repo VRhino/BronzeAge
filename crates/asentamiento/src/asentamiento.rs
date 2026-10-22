@@ -1,10 +1,12 @@
 //! El asentamiento: el estado de una plaza y su paso de **un minuto de mundo** (Economia_Construccion §1, con la decisión del
 //! 2026-10-18: cada asentamiento avanza un minuto por evento recurrente, se mire o no, en enteros y sin tick global).
 //!
-//! El orden dentro de un minuto es el de las reglas de Mechanics: obras (completar, arrancar), producción, recetas, mejoras,
-//! auto-construcción; luego políticas que caducan, ascenso, comida y hambre, crecimiento, recaudación y mantenimiento. Las órdenes
-//! de los jugadores (cola, mejoras, ascenso, políticas) están en `obras`, `ascenso` y aquí; la geometría (dónde cae cada edificio) y los
-//! yacimientos del mapa entran por los traits [`Sitios`] y [`Fuentes`].
+//! El orden dentro de un minuto es el de las reglas de Mechanics: pueblos, arranque de la cola, producción, recetas, mejoras
+//! automáticas, auto-construcción; luego comida y hambre, crecimiento, recaudación y mantenimiento. **Lo que termina** (obra, mejora,
+//! ascenso) **y las políticas que caducan no esperan al paso**: tienen su cita en su instante exacto ([`Asentamiento::cumplir_fines`] y
+//! [`Asentamiento::caducar_politicas`], que programa quien lleva la cola). Las órdenes de los jugadores (cola, mejoras, ascenso,
+//! políticas) están en `obras`, `ascenso` y aquí; la geometría (dónde cae cada edificio) y los yacimientos del mapa entran por los
+//! traits [`Sitios`] y [`Fuentes`].
 
 use crate::almacen::Almacen;
 use crate::catalogo::Tipo;
@@ -123,7 +125,7 @@ pub enum Evento {
     /// Nació un edificio gratuito y activo (ancla de saturación, puesto del Mercado). `nivel` es su forma si es un puesto.
     EdificioGratuito { id: u32, tipo: Tipo, nivel: u8 },
     ObraIniciada { id: u32, tipo: Tipo, completa_en: Instante },
-    MejoraIniciada { id: u32, nivel: u8 },
+    MejoraIniciada { id: u32, nivel: u8, completa_en: Instante },
     MejoraCompletada { id: u32, nivel: u8 },
     /// La auto-construcción comprometió un proyecto.
     NecesidadDetectada { id: u32, tipo: Tipo, prioridad: i64 },
@@ -133,13 +135,14 @@ pub enum Evento {
     ColaReordenada,
     PrimerosArtesanos,
     PrimerosNobles,
-    Hambruna { pesants: Mil, artesanos: Mil, nobleza: Mil },
+    /// Personas que murieron de hambre en el minuto, por clase.
+    Hambruna { pesants: i64, artesanos: i64, nobleza: i64 },
     PoliticaExpirada { id: String },
     MantenimientoDeficit,
     MantenimientoColapsado { nivel: u32 },
     MantenimientoRecuperado { nivel: u32 },
     Ruinas { faltantes: Vec<Recurso> },
-    AscensoIniciado { objetivo: u32 },
+    AscensoIniciado { objetivo: u32, completa_en: Instante },
     NivelSubio { nivel: u32 },
     /// Se marcó la obra de un pueblo extractor sobre un nodo (queda pendiente de materiales).
     PuebloMarcado { id: u64, tipo: Tipo, nodo: u32 },
@@ -325,12 +328,11 @@ impl Asentamiento {
         }
         let r = x.reglas;
 
-        // 1. Construcción. Las cuadrillas se miden con el estado de principio de minuto: una obra que acaba ahora no libera hueco
-        //    hasta el siguiente.
-        let ocupadas_al_empezar = self.edificios.cuadrillas_ocupadas();
-        self.completar_obras(t, r, x, &mut ev);
+        // 1. Construcción. Lo que acaba ya acabó en su instante (`cumplir_fines`); aquí arrancan las obras que esperaban (las que la
+        //    auto-construcción comprometió en el minuto anterior, las reconstrucciones) y se reintentan las mejoras que esperaban hueco.
         self.completar_pueblos(t, &mut ev);
-        self.arrancar_obras(t, r, ocupadas_al_empezar, &mut ev);
+        self.terminar_mejoras(t, r, x, &mut ev);
+        self.arrancar_obras(t, r, &mut ev);
 
         let (pesants, artesanos, _) = self.poblacion.enteros();
         let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, pesants, artesanos, self.trabajadores_de_pueblos(r));
@@ -340,19 +342,12 @@ impl Asentamiento {
         produccion::extraer_y_cultivar(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, x.fuentes);
         self.extraer_pueblos(r, &mano, &ctx, x.fuentes, &mut ev);
         produccion::recetas(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, &reserva_auto);
-        self.avanzar_mejoras(t, r, x, &reserva_auto, &mut ev);
+        self.iniciar_mejoras_automaticas(t, r, x, &reserva_auto, &mut ev);
         if !self.auto_pausada {
             self.evaluar_necesidades(t, x, &mano, &reserva_auto, &mut ev);
         }
 
-        // 2. Políticas que caducan (después de la construcción: el último minuto de una política todavía la aplica).
-        for p in self.politicas.caducar(t) {
-            ev.push(Evento::PoliticaExpirada { id: p.id });
-        }
-        // 3. Ascenso.
-        self.terminar_ascenso(t, &mut ev);
-
-        // 4. Comida y hambre, crecimiento y recaudación.
+        // 2. Comida y hambre, crecimiento y recaudación.
         let entorno = self.entorno_poblacion(r, x);
         let mut sucesos = vec![];
         let comido = self.poblacion.nutrir(&r.poblacion, &entorno, self.almacen.cantidad(Recurso::Trigo), &mut sucesos);
@@ -367,7 +362,7 @@ impl Asentamiento {
             });
         }
 
-        // 5. Mantenimiento.
+        // 3. Mantenimiento.
         let coste = self.coste_mantenimiento(r, x.distancia_capital);
         let vida = (t - self.fundado_en) / MS_POR_MINUTO;
         let antes = self.medidor.valor;
@@ -382,6 +377,45 @@ impl Asentamiento {
             _ => {}
         }
         self.ultimo_minuto = t;
+        ev
+    }
+
+    /// Lo que vence en el instante `t`: las obras que acaban (el edificio pasa a activo), las mejoras, el ascenso. Si acabó una obra o una mejora
+    /// se libera su cuadrilla y la cola arranca **en ese mismo instante** lo que esperaba. Es idempotente: una cita que llega con la plaza ya
+    /// cambiada (una conquista descartó el ascenso, por ejemplo) no encuentra nada que hacer. Quien lleva la cola programa una cita en el
+    /// `completa_en` de cada `ObraIniciada`, `MejoraIniciada` y `AscensoIniciado`.
+    pub fn cumplir_fines(&mut self, t: Instante, x: &mut Exterior) -> Vec<Evento> {
+        let mut ev = vec![];
+        if self.destruido {
+            return ev;
+        }
+        let r = x.reglas;
+        self.completar_obras(t, r, x, &mut ev);
+        self.terminar_mejoras(t, r, x, &mut ev);
+        self.terminar_ascenso(t, &mut ev);
+        if ev.iter().any(|e| matches!(e, Evento::EdificioCompletado { .. } | Evento::MejoraCompletada { .. })) {
+            self.arrancar_obras(t, r, &mut ev);
+        }
+        ev
+    }
+
+    /// Las políticas que vencen en `t` caducan (cita propia, después del paso de minuto de la plaza: el último minuto de una política todavía
+    /// la aplica).
+    pub fn caducar_politicas(&mut self, t: Instante) -> Vec<Evento> {
+        self.politicas.caducar(t).into_iter().map(|p| Evento::PoliticaExpirada { id: p.id }).collect()
+    }
+
+    /// Para quien no lleva una cola de eventos (pruebas y batch): cumple en su instante exacto los fines que caen en `(ultimo_minuto, t]`, da
+    /// el paso de minuto de `t` y caduca las políticas que vencen en `t`. Es el orden de las citas del núcleo con un paso por minuto.
+    pub fn avanzar_hasta(&mut self, t: Instante, x: &mut Exterior) -> Vec<Evento> {
+        let desde = self.ultimo_minuto;
+        let obras = self.edificios.iter().filter(|e| e.estado == Estado::EnConstruccion).filter_map(|e| e.completa_en);
+        let mut instantes: Vec<Instante> = obras.chain(self.edificios.iter().filter_map(|e| e.mejora.map(|m| m.completa_en))).chain(self.ascenso.map(|a| a.completa_en)).filter(|&f| f > desde && f <= t).collect();
+        instantes.sort_unstable();
+        instantes.dedup();
+        let mut ev: Vec<Evento> = instantes.into_iter().flat_map(|f| self.cumplir_fines(f, x)).collect();
+        ev.extend(self.avanzar_minuto(t, x));
+        ev.extend(self.caducar_politicas(t));
         ev
     }
 

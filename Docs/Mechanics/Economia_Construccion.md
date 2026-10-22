@@ -1,9 +1,10 @@
 # Economía y construcción de un asentamiento
 
 Cómo nace un asentamiento, qué produce, cómo se construye y se mejora, cómo crece y come su gente, qué cuesta mantenerlo y cómo sube (o baja) de nivel. Es el
-sistema que corre **dentro de cada asentamiento, de forma continua (ritmos y eventos, sin tick)**; lo que ocurre entre asentamientos (comercio, caravanas) y la guerra están en otros documentos.
+sistema que corre **dentro de cada asentamiento, con un paso de un minuto por plaza y los fines (obra, mejora, ascenso, política) en su instante exacto**; lo que ocurre entre asentamientos (comercio, caravanas) y la guerra están en otros documentos.
 
 - **Reescrito el 2026-10-13** para el mundo reactivo: §1 pasa de «orden dentro del tick» a ritmos y eventos, el crecimiento de población es continuo (sin redondeo estocástico) y se añaden los pueblos extractores y la calibración (§14). Las fórmulas «por tick» de las demás secciones son **ritmos por minuto**, idénticos; donde el texto diga «cada tick» léase «continuamente, con eventos en los umbrales». El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Economia_Construccion.md`.
+- **Corregido el 2026-10-22** ([`Economia_Por_Minuto_Definicion.md`](../../Consideraciones/Economia_Por_Minuto_Definicion.md)): la economía **no** es continua. Sustituye al plan de «economía continua», descartado ese día. Se queda **un paso de un minuto por plaza** (producción, consumo, recaudación, mantenimiento, población y evaluación de la auto-construcción) y solo lo que el jugador nota va en su instante exacto: el inicio de una obra encargada a mano (al clic), el fin de obra, de mejora y de ascenso, y la caducidad de política. La población es **siempre entera**, con un resto oculto, y el hambre sigue D7 y D8 (§9.2). Donde el texto de abajo diga «ritmo» o «continuo» (reescritura del 2026-10-13) léase «por minuto»; §1 y §9 están al día.
 - **Verificado contra:** `d406eed` (2026-10-10) y revisado el 2026-10-11 con las decisiones del usuario sobre las divergencias (piezas gratuitas, almacén lleno, Gran Fundición, reembolso de dañados, sin líneas de producción).
 - **Módulos:** `src/engine/construction.ts` (≈1.870 líneas: cola de obras, auto-construcción, producción, recetas, mejoras, comandos manuales),
   `settlement.ts` (fundación y viabilidad), `almacen.ts` (primitivas de almacén), `asentamientoQuery.ts` (cupos, mano de obra, progreso de nivel),
@@ -15,31 +16,32 @@ sistema que corre **dentro de cada asentamiento, de forma continua (ritmos y eve
   la guarnición y las tropas (`avanzarMantenimientoTropas`, reclutar) → combate/militar; el comercio; el orden global del tick; la fertilidad y los nodos del mapa
   (los genera `worldgen`, aquí son una caja negra: `fertilidadEn`, `bosque`, `stock`).
 
-> **Unidades.** No hay tick. Toda tasa «por minuto» es un **ritmo**: el estado guarda `(valor en t₀, ritmo)` y el valor en un instante `t` es `min(tope, valor₀ + ritmo × (t − t₀))`. Los tiempos de obra y de mejora son instantes de fin (eventos).
+> **Unidades.** La economía de una plaza avanza de **un minuto de mundo** en un minuto (el evento recurrente `Carga::Minuto`, con la fase de su fundación): toda tasa «por minuto» se aplica entera en cada paso, y un cambio a mitad de minuto (edificio terminado, política, reclutamiento) cuenta el minuto entero en el paso siguiente. Los tiempos de obra, mejora, ascenso y política son **instantes de fin con su propio evento** (§1).
 
-## 1. Cómo corre un asentamiento (ritmos y eventos)
+## 1. Cómo corre un asentamiento (un paso por minuto y fines exactos)
 
-| Antes (un paso por minuto) | Ahora | Evento que programa |
-|---|---|---|
-| `avanzarConstruccion`: obras, producción, recetas, mejoras, auto-construcción, recintos (§6) | **Ritmo** neto por recurso de la producción y las recetas; **evento** de fin de cada obra y de cada mejora; la auto-construcción se **reevalúa por dependencia** | almacén lleno, recurso a 0, obra terminada, mejora terminada |
-| `avanzarPoliticas` | **Evento** a la caducidad de cada política | política caduca |
-| `avanzarAscenso` (§11.4) | **Evento** al fin de la obra de ascenso | ascenso completado |
-| `avanzarNutricionPoblacion` (§9.2) | **Ritmo** de consumo de comida; la nutrición cambia por umbrales de reserva | reserva a 0, nutrición cruza umbral |
-| `avanzarMantenimientoTropas` | **Ritmo** de consumo de la guarnición (otro documento) | despensa a 0, deserción |
-| `crecerPoblacion` (§9.1) | **Ritmo** logístico continuo | población cruza un cupo o el techo de nivel |
-| Recaudación de oro (§9.3) | **Ritmo** (impuesto por clase × población) | almacén de oro lleno |
-| `avanzarMantenimiento` (§10) | **Ritmo** de coste y de medidor | medidor cruza un umbral, baja el nivel, ruina |
-| Fin de ocupación y de protección | **Evento** a su instante | ocupación terminada |
+Decidido por el autor el 2026-10-22 ([`Economia_Por_Minuto_Definicion.md`](../../Consideraciones/Economia_Por_Minuto_Definicion.md)): la economía no se convierte en curvas continuas (cuesta ~5 s de CPU por día con 1.000 plazas y no afecta a la experiencia). Se corrige solo lo que el jugador nota.
 
-> **Implementado en Rust (2026-10-18).** Reglas puras en `crates/asentamiento` (población, almacén, producción, obras, auto-construcción, mantenimiento, ascenso, políticas); su estado y su reloj en `crates/nucleo`: `economia.rs` (mapa, yacimientos y sitios sobre el mundo real, compartidos con el batch), `codec_economia.rs` (serialización para el hash y las fotos), `nucleo/construccion.rs` (el paso y las órdenes) y `nucleo/zonas.rs` (la zona crece con cada edificio completado). **Límite de precisión: un minuto.** Cada plaza avanza con un evento recurrente `Carga::Minuto` (prioridad 2, fase = su instante de fundación); los fines de obra, mejora, política y ascenso se aplican en el primer paso con `t >= completaEn`, hasta 59,999 s después del instante exacto, y no tienen evento propio. Población, almacén y medidor son ritmos que cambian el hash pero no la versión del mundo; esta solo sube si el paso deja algo discreto (obra, mejora, ascenso, política, hambruna, déficit...) o cambia la zona. Aún sin trazado urbano (todo edificio sin yacimiento «cabe»), con los pueblos extractores en la sección 14 y con el resto del `Exterior` fijo (fertilidad 1,0, sin tecnologías, un ciudadano, capital sin distancia, sin recintos ni guarnición).
+| Qué | Cuándo |
+|---|---|
+| Gastos y entradas discretas: órdenes (pagar obra o mejora, reclutar, comprar), caravanas, entregas, botín, saqueo, acarreo | al instante de la orden o del evento |
+| **Inicio de una obra encargada a mano**, si hay cuadrilla libre | **al instante de la orden** |
+| **Fin de obra, de mejora y de ascenso** | **en su instante exacto**, con una cita propia en la cola (`Carga::FinDeObras`, prioridad 1: antes del paso de minuto del mismo instante) |
+| **Caducidad de política** | **en su instante exacto**, con cita propia (`Carga::CaducaPolitica`, prioridad 3: después del paso de minuto del mismo instante) |
+| **Cuadrilla liberada y siguiente obra de la cola** | **en el mismo instante del fin** |
+| Producción, extracción, recetas, consumo de comida, recaudación, mantenimiento, guarnición, pueblos | en el paso de minuto |
+| Evaluación de necesidades de auto-construcción, mejoras automáticas, arranque de las obras comprometidas | en el paso de minuto |
+| Población (crecimiento y muertes) | en el paso de minuto, **siempre entera** (§9) |
 
-**Desempate del mismo instante** (prioridad de tipo, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): la obra usa las políticas antes de que expiren; la población come antes que las tropas; la recaudación usa la población ya crecida; el oro recaudado paga el mantenimiento del mismo instante; una ruina deja de existir para el comercio y los ejércitos de ese instante.
+> **Implementado en Rust (2026-10-18; fines exactos y población entera, 2026-10-22).** Reglas puras en `crates/asentamiento` (población, almacén, producción, obras, auto-construcción, mantenimiento, ascenso, políticas); su estado y su reloj en `crates/nucleo`: `economia.rs` (mapa, yacimientos y sitios sobre el mundo real, compartidos con el batch), `codec_economia.rs` (serialización para el hash y las fotos), `nucleo/construccion.rs` (el paso, las citas y las órdenes) y `nucleo/zonas.rs` (la zona crece con cada edificio completado). Cada plaza avanza con un evento recurrente `Carga::Minuto` (prioridad 2, fase = su instante de fundación). **Fines exactos:** cada obra, mejora o ascenso que empieza programa una cita `Carga::FinDeObras` en su `completaEn` (la programa `anotar_sucesos` a partir de `ObraIniciada`, `MejoraIniciada` y `AscensoIniciado`, que ahora llevan `completaEn`) y cada política activada, una `Carga::CaducaPolitica` en su `expiraEn`; ambas llevan la generación de la plaza (la ruina las descarta), no son recurrentes y desaparecen al cumplirse. La cita llama a `Asentamiento::cumplir_fines` (obras, mejoras, ascenso y, si acabó una obra o una mejora, el arranque de la cola con la cuadrilla recién libre) o a `caducar_politicas`, y el núcleo agranda la zona por los edificios completados en ese mismo instante. Son idempotentes: una cita que llega con la plaza ya cambiada (una conquista descartó el ascenso, `FijarNivelAsentamiento` también) no encuentra nada que cumplir. Quien no tiene cola (pruebas y batch) usa `Asentamiento::avanzar_hasta`, que cumple los fines de `(ultimo_minuto, t]` en su instante y da el paso. Una **mejora que espera hueco** (la Granja) conserva su cuadrilla y la reintenta el paso de minuto. Población, almacén y medidor cambian el hash pero no la versión del mundo; esta solo sube si el paso o la cita dejan algo discreto (obra, mejora, ascenso, política, hambruna, déficit...) o cambia la zona. La foto es `BAN14`. Parte del `Exterior` sigue fija en el núcleo (fertilidad 1,0, un ciudadano, capital sin distancia, sin recintos); la tecnología de la Facción, la ración de la guarnición y los factores de la ocupación ya vienen de sus sistemas.
 
-**Auto-construcción por dependencia**: `evaluarNecesidades` (§6.2) no corre cada minuto. Se reevalúa cuando cambia algo de lo que mira: el almacén (cruza la reserva o un umbral), la cola o las cuadrillas (termina una obra), la población (cruza un cupo), el nivel, las políticas o la pausa. Un candidato que no se compromete no deja rastro y se reevalúa en el siguiente cambio de esas entradas.
+**Desempate del mismo instante** (prioridad de tipo, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): el fin de una obra, mejora o ascenso va **antes** del paso de minuto de la plaza (el edificio terminado cuenta ese minuto, como siempre: `completar_obras` iba primero); la caducidad de una política va **después** (una política de `d` minutos se aplica en `d` pasos, incluido el que cae en su instante de caducidad); la población come antes que las tropas; la recaudación usa la población ya crecida; el oro recaudado paga el mantenimiento del mismo instante; una ruina deja de existir para el comercio y los ejércitos de ese instante.
 
-**Consecuencias de la continuidad sobre los pasos de §6**:
-- Una obra comprometida arranca **en el mismo instante** de comprometerla (si hay hueco); termina en `completaEn = inicio + duración`. Ya no hay «arranca en t+1».
-- La medida de cuadrillas (§6.1) usa el estado **en el instante del evento**; una obra que termina libera su hueco en ese mismo instante.
+**Auto-construcción:** `evaluarNecesidades` (§6.2) corre en el paso de minuto, con el estado al empezar el paso, y compromete proyectos (pagados, en cola) que arrancan en el paso siguiente si hay cuadrilla. Una obra encargada **a mano** no espera: arranca en el instante de la orden.
+
+**Consecuencias sobre los pasos de §6:**
+- Una obra encargada a mano arranca **en el instante de la orden** si hay cuadrilla libre; una comprometida por la auto-construcción en el paso *t* arranca en *t+1 min* (o antes, si una cuadrilla se libera a mitad del minuto); termina en `completaEn = inicio + duración`, en ese instante.
+- La medida de cuadrillas (§6.1) usa el estado **en el instante del evento**; una obra o una mejora que termina libera su cuadrilla en ese mismo instante y la **siguiente obra de la cola** (por prioridad) arranca entonces. **Ruptura de paridad con el TypeScript, decidida por el autor:** allí el Paso 2 medía las cuadrillas «al empezar el tick» y una obra que acababa no liberaba hueco hasta el tick siguiente (`ocupadasAlEmpezar`).
 - La experiencia de Facción por edificio completado y por ascenso se aplica **al ocurrir** el evento.
 - Los recintos ven su obra (Murallas §5) como cualquier otra obra de fin programado.
 
@@ -248,10 +250,12 @@ Paso 8 — avanzarObraDeRecintos (Murallas.md §5), con la misma reserva.
 Resultado: edificios = [edificiosBase, ...nuevosProyectos]   (el orden del array es el historial de crecimiento: NO se reordena, ver Trazado_Urbano.md)
 ```
 
-Consecuencias de orden que conviene saber:
+> **En Rust (2026-10-22) los pasos 1 y 2 ya no son un bloque del paso de minuto**, y el bloque de arriba es el del TypeScript. Completar las obras (Paso 1) y terminar mejoras (Paso 5, primera mitad) y ascenso ocurren en su instante exacto con su cita (§1); el Paso 2 se ejecuta al fin de una obra o mejora (con la cuadrilla que libera), al encargar una obra a mano y en el paso de minuto (las comprometidas por la auto-construcción y las reconstrucciones), y **mide las cuadrillas en ese instante**, no «al empezar el tick» (`cupo = max(0, maximoEnConstruccionSimultanea − cuadrillasOcupadas ahora)`). Los pasos 3 a 8 siguen en el paso de minuto en ese orden.
+
+Consecuencias de orden que conviene saber (TypeScript):
 
 - Un proyecto comprometido en el tick *t* arranca como pronto en *t+1*; una obra de *m* minutos que arranca en *t+1* se completa en el primer tick con `instante ≥ completaEn` (= *t+1+m*).
-- El Paso 2 mide las cuadrillas con el estado **de principio de tick**: una obra que se completa en el Paso 1 no libera hueco hasta el tick siguiente. En cambio las mejoras (Paso 5) ven el estado ya actualizado.
+- El Paso 2 mide las cuadrillas con el estado **de principio de tick**: una obra que se completa en el Paso 1 no libera hueco hasta el tick siguiente. En cambio las mejoras (Paso 5) ven el estado ya actualizado. *(En Rust no: el hueco se libera en el instante del fin, §1.)*
 - `cuadrillasOcupadas` = edificios `en_construccion` **no `danado`** + edificios con `mejora` en curso.
 - El radio crece también por **reconstrucciones** terminadas, y estas también dan experiencia de Facción: `edificiosCompletados` no distingue.
 - Las **mejoras** que terminan no suman al radio ni a la experiencia.
@@ -364,10 +368,10 @@ la Facción tiene `siguiente.requiereTecnologia`; si hay `requiereEdificio`, **a
 **Duración** (`minutosDeMejora`): `max(1, round( (niveles[siguiente].obraMinutos ?? tiempoConstruccionMinutos × MEJORA_EDIFICIO.multiplicadorPorNivel^(siguiente − 1)) × factorTiempoConstruccion ))`.
 O sea, la obra base ×2 para el nivel 2, ×4 para el 3, ×8 para el 4, salvo los `obraMinutos` propios (Taberna, Palacio).
 
-**Cada tick** (`avanzarMejoras`), dos pasos:
+**Cada tick** (`avanzarMejoras`), dos pasos *(en Rust, el primero ocurre en el instante de fin de la mejora y el segundo en el paso de minuto)*:
 
 1. **Terminar**: para cada edificio con `mejora` y `instante ≥ completaEn` → `aplicarMejoraTerminada`: si la huella cambia de tamaño (hoy solo la Granja: 2×2, 2×3, 4×3, 6×6) se muda a un hueco con `reubicarPorTamano`;
-   **si no hay hueco, la mejora espera** (conserva `mejora` y su cuadrilla) y se reintenta el tick siguiente. Al terminar sube `nivelInterno`, borra `mejora`, y: Mercado → crea los puestos del nivel nuevo; Granero → `ampliarCapacidad(trigo, capacidadTrigo[nuevo] − capacidadTrigo[viejo])`.
+   **si no hay hueco, la mejora espera** (conserva `mejora` y su cuadrilla) y se reintenta el tick siguiente *(en Rust: el paso de minuto siguiente)*. Al terminar sube `nivelInterno`, borra `mejora`, y: Mercado → crea los puestos del nivel nuevo; Granero → `ampliarCapacidad(trigo, capacidadTrigo[nuevo] − capacidadTrigo[viejo])`.
    Evento `construccion.mejora_completada`.
 2. **Empezar las automáticas**: `cuadrillasLibres = maximoEnConstruccionSimultanea − cuadrillasOcupadas − 1` (**siempre deja una libre para construir**). Recorre los edificios en orden del array mientras `cuadrillasLibres > 0`:
    si es elegible y `puedeIniciarConstruccion(costoMejora)` (con la reserva), **paga**, fija `mejora = {nivelObjetivo, completaEn: instante + minutos}`, `cuadrillasLibres −= 1`, evento `construccion.mejora_iniciada`. Se mejora todo lo que se pueda pagar, de cualquier tipo.
@@ -387,7 +391,7 @@ Quitar de la cola un `danado` devuelve la mitad del coste y de las mejoras (§6.
 
 ### 9.1 Crecimiento (`crecerPoblacion`)
 
-Las tres clases usan la misma forma: `esperado = actual × tasa`, con `tasa = tasaBase × comidaFactor × espacioFactor × estabilidad(1) × felicidad`, y **población continua**: el estado guarda la población como número continuo con su ritmo y se **lee entera (suelo)**; **no hay tirada** (decisión del 2026-10-13, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §10). El incremento es el ritmo `actual × tasa` integrado en el tiempo.
+Las tres clases usan la misma forma: `esperado = actual × tasa`, con `tasa = tasaBase × comidaFactor × espacioFactor × estabilidad(1) × felicidad`, y **población siempre entera** (decisión del 2026-10-22, que sustituye a la «población continua» del 2026-10-13): cada clase guarda **habitantes enteros y un resto oculto** en milésimas de habitante; **no hay tirada**. En cada paso de un minuto el incremento `actual × tasa` (con `actual` = habitantes **más su resto**, que es la población continua de siempre, así que el ritmo de crecimiento es el mismo) se suma al resto, y **entra una persona entera cada vez que el resto llega a 1**. Requisitos de nivel, mano de obra, recaudación y consumo leen los habitantes enteros (el resto no lo lee nadie).
 
 ```
 comidaFactor = factorCrecimientoMinimo + (1 − factorCrecimientoMinimo) × nutricion/100
@@ -401,8 +405,9 @@ Nobleza:   solo si casasCompradas.length ≥ nobleza.minCiudadanos ∧ hay Palac
            si nobleza = 0 → +1 sin dado (evento poblacion.primeros_nobles);  si no, tasa = nobleza.tasaCrecimientoBase × comida × espacio × felicidad × factorCrecimientoNobleza × (1 + AEDAS.residentes.bonoNobleza × aedasResidentes)
 Techo:     techo = techoPoblacion[nivel ALCANZADO];  espacioBajoTecho = max(0, techo − población total)
            crecimientoBruto = suma de las tres;  factorTecho = (bruto > espacioBajoTecho ∧ bruto > 0) ? espacioBajoTecho/bruto : 1
-           cada clase += floor(incremento × factorTecho)       (nunca purga población ya asentada)
+           resto de cada clase += incremento × factorTecho;  habitantes += resto entero;  resto = lo que sobra (0 ≤ resto < 1)       (nunca purga población ya asentada)
 ```
+Crecen las tres clases **solo** si la plaza puede crecer (§9.2: nutrición mayor que 0 y fuera de la recuperación del hambre). Los «+1 sin dado» de artesanos y nobleza son una persona entera.
 
 **El crecimiento no consume el generador aleatorio.** Los eventos «primeros artesanos» y «primeros nobles» (+1 sin dado) se disparan al cumplirse la condición.
 
@@ -423,7 +428,11 @@ si nutricion ≤ umbralMuertePorHambre (0):
 
 La nutrición **no** degrada el medidor de mantenimiento: son dos medidores independientes.
 
-**Sin tick (decidido el 2026-10-18).** El bloque anterior es el de TypeScript. En el mundo reactivo, mientras `nutricion = 0` la población decae de forma **continua y determinista**: pesants y artesanos a `−ln(1 − fraccionMuertePorMinutoHambre)` por minuto (≈5,13 %), la nobleza a `−ln(1 − fraccionMuertePorMinutoHambreNobleza)` (≈1,01 %), sin redondeo ni tirada. La cobertura de un minuto con déficit parcial es `stock > 0 ? 1 : min(1, producción/consumo)`. Cómo se emite `poblacion.hambruna_muerte` (por unidad entera cruzada o agregado) se fija al implementarlo.
+**Mortalidad entera y simétrica (2026-10-22).** El bloque anterior es el del TypeScript. En Rust, mientras `nutricion = 0`, cada minuto muere la fracción `fraccionMuertePorMinutoHambre` de los pesants y de los artesanos enteros (5 %) y `fraccionMuertePorMinutoHambreNobleza` de la nobleza entera (1 %), **sin redondear hacia arriba**: la fracción se suma al resto de la clase con el signo cambiado y **muere una persona entera cuando el resto llega a −1**. Con 10 habitantes y el 5 % por minuto muere una persona cada dos minutos. Un resto del signo contrario (de antes de que cambiara el régimen) se descarta. El suceso `poblacion.hambruna` lleva las **personas** muertas ese minuto por clase (`pesants`, `artesanos`, `nobleza`) y solo se emite si murió alguien. La cobertura de un minuto con déficit parcial es `stock > 0 ? 1 : min(1, producción/consumo)`.
+
+**Hambre: D7 y D8 (aprobadas por el autor el 2026-10-21).**
+- **D7.** Con nutrición 0 **no crece ninguna clase** (ni aparecen los primeros artesanos o nobles): solo hay mortalidad. El factor de crecimiento `factorCrecimientoMinimo` (0,2) solo se aplica con nutrición positiva (mayor que 0 y fuera de la recuperación).
+- **D8.** Al tocar nutrición 0 la plaza entra en **recuperación** y **no vuelve a crecer hasta recuperar la nutrición 100** (20 minutos con comida completa: `regeneracionPorMinuto` = 5). La mortalidad es solo mientras la nutrición esté en 0; **durante la recuperación con nutrición positiva la población queda quieta**. Si la nutrición vuelve a 0, vuelve la mortalidad y sigue pendiente llegar a 100. Una plaza que **no ha pasado hambre** crece con la nutrición intermedia como siempre (`comidaFactor` entre 0,2 y 1). La marca de recuperación (`recuperando`) se guarda en el estado (foto y hash); no se deduce de la nutrición.
 
 ### 9.3 Recaudación de oro
 
@@ -481,7 +490,7 @@ bandidos se dispersa, sus trueques se cancelan sin penalizar y las caravanas que
 ### 11.1 Gates (`evaluarGatesDeNivel(a, nivelObjetivo)`)
 
 ```
-poblacion = pesants ≥ req.pesants ∧ artesanos ≥ req.artesanos           (la nobleza no cuenta; se leen **redondeados al entero más cercano**, no el suelo: decidido el 2026-10-18)
+poblacion = pesants ≥ req.pesants ∧ artesanos ≥ req.artesanos           (la nobleza no cuenta; la población es entera desde el 2026-10-22, así que ya no hay que redondear: antes se leía redondeada al entero más cercano)
 construidos = nº de tipos de req.edificios con algún edificio ACTIVO cuyo nivelInterno ≥ req.nivelInternoMinimo[tipo] (por defecto 1)
 cumpleRecinto = req.recintoCompletoNivelMinimo indefinido ∨ algún recinto con nivel ≥ ese mínimo e integridad ≥ 1
 edificios = construidos ≥ (req.edificiosMinimo ?? req.edificios.length) ∧ cumpleRecinto
