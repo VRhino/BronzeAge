@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN17");
+    assert_eq!(&bytes[..5], b"BAN18");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1362,4 +1362,116 @@ fn una_foto_con_la_conquista_en_proteccion_recupera_el_mismo_mundo_y_los_plazos_
     assert_eq!(tras.guarniciones, antes.guarniciones);
     assert_eq!(e.n.hash_estado(), sin_parar.0);
     e.n.apagar().unwrap();
+}
+
+// ───────────────────────────── 9. Defender un pueblo desde dentro (Entrar con todo, 2026-10-22) ─────────────────────────────
+
+/// Tropa de élite para el que defiende: con ella dentro, el pueblo resiste a un ejército que sin ella saquea.
+const ELITE: [Tropa; 4] = [Tropa::Shardana, Tropa::Shardana, Tropa::Hequetai, Tropa::Hequetai];
+
+/// Un héroe de esa Facción, con sus tropas, entra en el pueblo con su columna: (columna, héroe).
+fn entra_en_el_pueblo(e: &mut Esc, cuenta: &str, faccion: u32, pueblo: u64, tropas: &[Tropa]) -> (u64, u64) {
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    let (col, h) = e.ejercito(cuenta, faccion, sitio, tropas);
+    e.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe: h });
+    (col, h)
+}
+
+fn saqueo(e: &mut Esc, pueblo: u64) -> (u64, u64) {
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    let saqueador = e.ejercito("beto", 2, sitio, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
+    saqueador
+}
+
+#[test]
+fn en_un_pueblo_defienden_los_de_dentro_de_la_faccion_de_la_madre_y_los_aliados_y_no_los_neutrales_ni_los_que_estan_a_la_puerta() {
+    let m = con_mundo!();
+    // Referencia: solo con los mineros, el mismo ejército lo saquea.
+    {
+        let (mut e, pueblo) = con_pueblo(m, 7);
+        let beto = saqueo(&mut e, pueblo);
+        assert!(e.atacar("beto", beto.1, ObjetivoAtaque::Pueblo(pueblo), false).aceptada());
+        assert_eq!(hechos(&e.n, "combate.pueblo_saqueado").len(), 1, "sin nadie dentro, los mineros no bastan");
+    }
+    // 1. Un aliado dentro defiende con la tropa de su columna: el pueblo resiste, el atacante queda herido y él no.
+    for (cuenta, faccion, relacion, defiende) in [("alia", 3, Some(Relacion::Alianza), true), ("vasa", 3, Some(Relacion::Vasallaje), true), ("propia", 1, None, true), ("neu", 3, None, false)] {
+        let (mut e, pueblo) = con_pueblo(m, 7);
+        if let Some(r) = relacion {
+            e.ok("admin", Comando::FijarRelacion { a: 1, b: faccion, relacion: Some(r) });
+        }
+        let amigo = entra_en_el_pueblo(&mut e, cuenta, faccion, pueblo, &ELITE);
+        let soldados0 = e.n.soldados_de_columna(amigo.0).unwrap();
+        assert!(!e.n.en_el_mapa(amigo.0));
+        let beto = saqueo(&mut e, pueblo);
+        assert!(e.atacar("beto", beto.1, ObjetivoAtaque::Pueblo(pueblo), false).aceptada());
+        let (resiste, saquea) = (hechos(&e.n, "combate.pueblo_resiste").len(), hechos(&e.n, "combate.pueblo_saqueado").len());
+        assert_eq!((resiste, saquea), (defiende as usize, !defiende as usize), "{cuenta}: ¿defiende dentro del pueblo?");
+        // El pueblo no cae nunca: quien está dentro sigue dentro. Quien defendió sufre bajas; el que no, ni una.
+        assert_eq!(e.n.heroe(amigo.1).unwrap().heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
+        assert_eq!(e.n.soldados_de_columna(amigo.0).unwrap() < soldados0, defiende, "{cuenta}: bajas solo si defendió");
+        assert_eq!(e.n.heroe_herido(beto.1), defiende, "el atacante queda herido si pierde");
+        assert!(!e.n.heroe_herido(amigo.1), "{cuenta}: quien defiende y gana no queda herido, y el neutral no pierde nada");
+    }
+    // 2. A la puerta, en el mapa, no se defiende aunque sea de la propia Facción y esté a un paso.
+    {
+        let (mut e, pueblo) = con_pueblo(m, 7);
+        let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+        let fuera = e.ejercito("pro", 1, sitio, &ELITE);
+        let beto = saqueo(&mut e, pueblo);
+        let soldados0 = e.n.soldados_de_columna(fuera.0).unwrap();
+        assert!(e.atacar("beto", beto.1, ObjetivoAtaque::Pueblo(pueblo), false).aceptada());
+        assert_eq!(hechos(&e.n, "combate.pueblo_saqueado").len(), 1, "la columna a la puerta no defiende");
+        assert_eq!((e.n.soldados_de_columna(fuera.0).unwrap(), e.n.heroe_herido(fuera.1), e.n.en_el_mapa(fuera.0)), (soldados0, false, true));
+    }
+}
+
+#[test]
+fn el_residente_que_defiende_un_pueblo_y_pierde_queda_herido_y_pierde_la_mitad_del_carro_y_el_visitante_amigo_no() {
+    let m = con_mundo!();
+    let (mut e, pueblo) = con_pueblo(m, 7);
+    let madre = e.a;
+    e.avanzar(HORA);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
+    // Dentro del pueblo: un residente de la madre con tropa floja y 30 001 de madera en el carro, y un aliado visitante con tropa floja y 30 001 de piedra.
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    let res = e.ejercito("res", 1, sitio, &[Tropa::Lenadores]);
+    e.ok("admin", Comando::FijarResidencia { heroe: res.1, residencia: Some(Residencia::Asentamiento(madre as u32)) });
+    e.ok("admin", Comando::DarSuministro { ejercito: res.0, recurso: Madera, cantidad: 30_001 });
+    let vis = e.ejercito("vis", 3, sitio, &[Tropa::Lenadores]);
+    e.ok("admin", Comando::DarSuministro { ejercito: vis.0, recurso: Piedra, cantidad: 30_001 });
+    for (cuenta, h) in [("res", res.1), ("vis", vis.1)] {
+        e.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe: h });
+    }
+    let beto = saqueo(&mut e, pueblo);
+    let t = e.n.ahora();
+    assert!(e.atacar("beto", beto.1, ObjetivoAtaque::Pueblo(pueblo), false).aceptada());
+    let h = &hechos(&e.n, "combate.pueblo_saqueado")[0];
+    assert_eq!((h.0, dato(h, "pueblo"), dato(h, "heridos")), (t, pueblo as i64, 2), "gana el atacante y los dos defensores en persona quedan heridos");
+    // El pueblo no cae: siguen dentro, con su columna. El residente pierde la mitad (hacia abajo) de la madera que llevaba; el visitante conserva la piedra entera.
+    assert_eq!((e.n.heroe(res.1).unwrap().heroe.presencia.ubicacion, e.n.heroe(vis.1).unwrap().heroe.presencia.ubicacion), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
+    assert_eq!(e.carga_de_columna(res.0, Madera), 30_001 - 15_000);
+    assert_eq!(e.carga_de_columna(vis.0, Piedra), 30_001, "el visitante amigo no pierde el carro");
+    assert!(e.n.heroe_herido(res.1) && e.n.heroe_herido(vis.1) && !e.n.heroe_herido(beto.1));
+    // Lo robado es del vencedor, hasta donde le quepa: el saqueo del almacén y la chatarra ya llenan parte de su carro.
+    assert_eq!(dato(h, "carroPerdido"), 15_000);
+    assert!(e.carga_de_columna(beto.0, Madera) >= 15_000, "la mitad de la madera del residente va a su carro");
+}
+
+#[test]
+fn quien_esta_dentro_de_la_plaza_asediada_no_se_une_al_ataque_aunque_sea_de_la_faccion_atacante() {
+    let m = con_mundo!();
+    let mut s = asedio(m, 7, &[Tropa::MiliciaLanceros], &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
+    let (b, ana) = (s.e.b, s.ana);
+    // Un héroe de la Facción atacante (F1) entra en la plaza B como neutral (la puerta se cierra solo a los enemigos) con tropa de élite: ni defiende ni ataca desde dentro.
+    let dentro = s.e.ejercito("olga", 1, s.e.pos(b), &ELITE);
+    s.e.ok("olga", Comando::Guarnecer { asentamiento: b, heroe: dentro.1 });
+    assert!(!s.e.n.en_el_mapa(dentro.0));
+    let soldados0 = s.e.n.soldados_de_columna(dentro.0).unwrap();
+    assert!(s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    // La plaza cae con los atacantes de siempre: la élite de dentro no combatió en ningún bando, y sale al mapa con su columna intacta.
+    assert_eq!(hechos(&s.e.n, "combate.asedio_conquista").len(), 1);
+    assert_eq!((s.e.n.soldados_de_columna(dentro.0).unwrap(), s.e.n.heroe_herido(dentro.1), s.e.n.en_el_mapa(dentro.0)), (soldados0, false, true));
+    let h = &hechos(&s.e.n, "combate.asedio_conquista")[0];
+    assert_eq!((dato(h, "faccionAtacante"), dato(h, "faccionDefensora")), (1, 2));
 }

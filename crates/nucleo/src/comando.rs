@@ -346,6 +346,16 @@ pub enum Comando {
     FijarAcceso { asentamiento: u64, aliados: bool, neutrales: bool, enemigos: bool },
     /// El héroe vacía el carro que trajo a su residencia en su almacén personal, hasta donde quepa; lo que no cabe se queda en el carro.
     VaciarCarro { heroe: u64 },
+    // ── Entrar en un pueblo extractor o en una avanzada (2026-10-22). ──
+    /// Entra en un pueblo extractor, a su puerta y activo, si el acceso de su plaza madre se lo permite, con todo lo suyo (solo, o el ejército entero desarmándose; solo
+    /// su Líder). Dentro defiende con la regla de relación. Fuera del mapa, come de sus víveres.
+    EntrarEnPueblo { pueblo: u64, heroe: u64 },
+    /// Sale de un pueblo extractor con todo lo que entró: su columna vuelve al mapa tal cual.
+    SalirDePueblo { pueblo: u64, heroe: u64 },
+    /// Entra en una avanzada operativa, como en un pueblo.
+    EntrarEnAvanzada { avanzada: u64, heroe: u64 },
+    /// Sale de una avanzada con todo lo que entró.
+    SalirDeAvanzada { avanzada: u64, heroe: u64 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -419,6 +429,10 @@ impl Comando {
                 i.pueblos.push(*pueblo);
             }
             Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } => i.pueblos.push(*pueblo),
+            Comando::EntrarEnPueblo { pueblo, heroe } | Comando::SalirDePueblo { pueblo, heroe } => {
+                i.heroes.push(*heroe);
+                i.pueblos.push(*pueblo);
+            }
             Comando::EntregarMaterialesAAvanzada { ejercito, avanzada } | Comando::DepositarEnAvanzada { ejercito, avanzada, .. } => {
                 i.ejercitos.push(*ejercito);
                 i.avanzadas.push(*avanzada);
@@ -434,7 +448,9 @@ impl Comando {
             | Comando::ElegirTropaDeAvanzada { heroe, avanzada, .. }
             | Comando::GuarnecerAvanzada { heroe, avanzada, .. }
             | Comando::RetirarDeAvanzada { heroe, avanzada, .. }
-            | Comando::RepostarEnAvanzada { heroe, avanzada } => {
+            | Comando::RepostarEnAvanzada { heroe, avanzada }
+            | Comando::EntrarEnAvanzada { avanzada, heroe }
+            | Comando::SalirDeAvanzada { avanzada, heroe } => {
                 i.heroes.push(*heroe);
                 i.avanzadas.push(*avanzada);
             }
@@ -1258,6 +1274,26 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u64(*avanzada);
             }
+            Comando::EntrarEnPueblo { pueblo, heroe } => {
+                w.u8(119);
+                w.u64(*pueblo);
+                w.u64(*heroe);
+            }
+            Comando::SalirDePueblo { pueblo, heroe } => {
+                w.u8(120);
+                w.u64(*pueblo);
+                w.u64(*heroe);
+            }
+            Comando::EntrarEnAvanzada { avanzada, heroe } => {
+                w.u8(121);
+                w.u64(*avanzada);
+                w.u64(*heroe);
+            }
+            Comando::SalirDeAvanzada { avanzada, heroe } => {
+                w.u8(122);
+                w.u64(*avanzada);
+                w.u64(*heroe);
+            }
             Comando::FijarAcceso { asentamiento, aliados, neutrales, enemigos } => {
                 w.u8(117);
                 w.u64(*asentamiento);
@@ -1440,6 +1476,10 @@ impl Peticion {
             116 => Comando::CancelarObraDeAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
             117 => Comando::FijarAcceso { asentamiento: r.u64()?, aliados: r.bool()?, neutrales: r.bool()?, enemigos: r.bool()? },
             118 => Comando::VaciarCarro { heroe: r.u64()? },
+            119 => Comando::EntrarEnPueblo { pueblo: r.u64()?, heroe: r.u64()? },
+            120 => Comando::SalirDePueblo { pueblo: r.u64()?, heroe: r.u64()? },
+            121 => Comando::EntrarEnAvanzada { avanzada: r.u64()?, heroe: r.u64()? },
+            122 => Comando::SalirDeAvanzada { avanzada: r.u64()?, heroe: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1725,6 +1765,8 @@ pub mod rechazos {
     pub const COLUMNA_VIVERES_LLENOS: &str = "columna.viveres_llenos";
     pub const ASENTAMIENTO_FUERA_DE_LA_PUERTA: &str = "asentamiento.fuera_de_la_puerta";
     pub const PUERTA_CERRADA: &str = "puerta.cerrada";
+    pub const HEROE_NO_ESTA_EN_EL_PUEBLO: &str = "heroe.no_esta_en_el_pueblo";
+    pub const HEROE_NO_ESTA_EN_LA_AVANZADA: &str = "heroe.no_esta_en_la_avanzada";
     pub const VACIAR_SOLO_EN_TU_RESIDENCIA: &str = "carro.vaciar_solo_en_tu_residencia";
     pub const ALMACEN_PERSONAL_LLENO: &str = "almacen_personal.lleno";
     pub const REPOSTAR_PLAZA_CERRADA: &str = "repostar.plaza_cerrada";
@@ -1982,6 +2024,8 @@ mod pruebas {
             Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Columna(9) },
             Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Mercenarios(1) },
             Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Desconectado(Punto::new(5, -7)) },
+            Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Pueblo(6) },
+            Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Avanzada(7) },
             Comando::HerirHeroe { heroe: 2 },
             Comando::SalirAlMundo { asentamiento: 3, heroe: 2, escuadras: vec![5, 6], carga: vec![(Recurso::Madera, 1_000)] },
             Comando::MovilizarEjercito { asentamiento: 3, heroe: 2, escuadras: vec![5], carga: vec![], politica: Politica::Preguntar },
@@ -2014,6 +2058,10 @@ mod pruebas {
             Comando::FijarRelacion { a: 3, b: 2, relacion: None },
             Comando::FijarAcceso { asentamiento: 3, aliados: true, neutrales: false, enemigos: true },
             Comando::VaciarCarro { heroe: 2 },
+            Comando::EntrarEnPueblo { pueblo: 6, heroe: 2 },
+            Comando::SalirDePueblo { pueblo: 6, heroe: 2 },
+            Comando::EntrarEnAvanzada { avanzada: 7, heroe: 2 },
+            Comando::SalirDeAvanzada { avanzada: 7, heroe: 2 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

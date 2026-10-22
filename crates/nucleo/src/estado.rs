@@ -58,6 +58,9 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// Anotada en `Docs/Mecanicas a desarrollar.md`, sección de paridad.
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN18: BAN17 con dos ubicaciones nuevas del héroe, dentro de un pueblo extractor y dentro de una avanzada (`Ubicacion::Pueblo` y `Ubicacion::Avanzada`, etiquetas 4 y 5 en
+/// `codec_militar`; Entrar con todo, 2026-10-22). El resto del formato es el mismo. BAN17 se rechaza: sus héroes solo podían estar dentro de una plaza o un campamento.
+///
 /// BAN17: BAN16 más el acceso de cada plaza (`Asentamiento::acceso`: aliados, neutrales y enemigos; Entrar con todo, 2026-10-22). El resto del formato es el mismo: el carro que
 /// un héroe lleva sin columna (`HeroeNucleo::carro`, antes `carro_fuera`) ya estaba en la foto. BAN16 se rechaza: sus plazas no traen acceso.
 ///
@@ -80,7 +83,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN17";
+const MAGIA: &[u8; 5] = b"BAN18";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -817,7 +820,7 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN17`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
+        // La cabecera es de 5 bytes (`BAN18`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
         match (r.magia()? == MAGIA[..4]).then(|| r.u8()).transpose()? {
             Some(f) if f == MAGIA[4] => {}
             Some(b'0') => return Err(ErrorFormato("foto del formato BAN10 (sin persecuciones ni informes de inspección, con los encuentros en un generador externo): ya no se admite")),
@@ -827,6 +830,7 @@ impl Estado {
             Some(b'4') => return Err(ErrorFormato("foto del formato BAN14 (sin avanzadas, sin guarnición de avanzada en las escuadras y con una huella de reglas que no incluye las cifras de las avanzadas): ya no se admite")),
             Some(b'5') => return Err(ErrorFormato("foto del formato BAN15 (el fin de la obra de una avanzada espera en la cita de su plaza, sin cita propia que se pueda cancelar, y con las cifras de las avanzadas de antes de su tamaño): ya no se admite")),
             Some(b'6') => return Err(ErrorFormato("foto del formato BAN16 (las plazas no traen el acceso por relación de Entrar con todo): ya no se admite")),
+            Some(b'7') => return Err(ErrorFormato("foto del formato BAN17 (los héroes no pueden estar dentro de un pueblo extractor ni de una avanzada): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {

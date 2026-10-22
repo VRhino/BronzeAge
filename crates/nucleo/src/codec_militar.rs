@@ -79,6 +79,14 @@ pub(crate) fn ubicacion_escribir(w: &mut Escritor, u: &Ubicacion) {
             w.u8(3);
             w.punto(*p);
         }
+        Ubicacion::Pueblo(x) => {
+            w.u8(4);
+            w.u64(*x);
+        }
+        Ubicacion::Avanzada(x) => {
+            w.u8(5);
+            w.u64(*x);
+        }
     }
 }
 
@@ -88,6 +96,8 @@ pub(crate) fn ubicacion_leer(r: &mut Lector) -> Result<Ubicacion, ErrorFormato> 
         1 => Ubicacion::Columna(r.u64()?),
         2 => Ubicacion::Mercenarios(r.u32()?),
         3 => Ubicacion::Desconectado(r.punto()?),
+        4 => Ubicacion::Pueblo(r.u64()?),
+        5 => Ubicacion::Avanzada(r.u64()?),
         _ => return Err(ErrorFormato("ubicación desconocida")),
     })
 }

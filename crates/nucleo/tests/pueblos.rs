@@ -10,7 +10,9 @@ use base::{Instante, Punto, MS_POR_MINUTO};
 use comercio::caravana::{EstadoCaravana, TipoCaravana};
 use mundo::{Mundo, OpcionesValidacion};
 use nucleo::economia::Mapa;
-use nucleo::{rechazos, Ajustes, Arranque, Comando, Nucleo, Peticion, Reglas, Resultado, Respuesta};
+use militar::heroe::Residencia;
+use militar::presencia::Ubicacion;
+use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Nucleo, Peticion, Reglas, Resultado, Respuesta, SucesoMilitar};
 use rutas::Rutas;
 use std::sync::{Arc, OnceLock};
 
@@ -717,4 +719,278 @@ fn una_foto_a_mitad_de_obra_y_otra_con_el_carro_en_camino_recuperan_el_mismo_mun
         assert_eq!(e.n.estado().comercio, referencia.1);
         e.n.apagar().unwrap();
     }
+}
+
+// ───────────────────────────── 6. Entrar en un pueblo (Entrar con todo, 2026-10-22) ─────────────────────────────
+
+impl Escenario {
+    /// Una columna de esa Facción (un ejército de un héroe) en la puerta del pueblo: (columna, héroe).
+    fn visita(&mut self, cuenta: &str, faccion: u32, pueblo: u64) -> (u64, u64) {
+        let sitio = self.n.posicion_de_pueblo(pueblo).unwrap();
+        let col = self.columna(cuenta, faccion, sitio);
+        (col, self.n.ejercito(col).unwrap().columna.lider)
+    }
+    fn ubicacion(&self, heroe: u64) -> Ubicacion {
+        self.n.heroe(heroe).unwrap().heroe.presencia.ubicacion
+    }
+    fn viveres(&self, columna: u64) -> i64 {
+        self.n.ejercito(columna).unwrap().columna.viveres.valor_en(self.n.ahora())
+    }
+    fn carga(&self, columna: u64) -> std::collections::BTreeMap<Recurso, i64> {
+        self.n.ejercito(columna).unwrap().columna.carga.clone()
+    }
+}
+
+#[test]
+fn se_entra_en_un_pueblo_con_todo_con_el_acceso_de_la_madre_se_come_de_los_viveres_y_se_sale_con_todo() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let pueblo = e.marcar();
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    let (c0, h0) = e.visita("ana", 1, pueblo);
+    // Una obra no tiene puerta: hasta que se levanta no se entra.
+    assert_eq!(e.rechazada("ana", Comando::EntrarEnPueblo { pueblo, heroe: h0 }), rechazos::PUEBLO_NO_ESTA_ACTIVO);
+    let materiales = e.llevar_materiales(pueblo);
+    e.ok("ana", Comando::EntregarMateriales { ejercito: materiales, pueblo });
+    let EstadoPueblo::EnObra { completa_en } = e.pueblo(pueblo).estado else { panic!("debía estar en obra") };
+    e.n.avanzar_hasta(completa_en + MIN);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(nucleo::Relacion::Alianza) });
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 4, relacion: Some(nucleo::Relacion::Guerra) });
+
+    // Los rechazos, en su orden y sin dejar rastro.
+    let lejos = e.columna("lia", 1, Punto::new(sitio.x + 5_000, sitio.y));
+    let lia = e.n.ejercito(lejos).unwrap().columna.lider;
+    let (_, enemigo) = e.visita("eno", 4, pueblo);
+    e.avanzar(0); // lo que ya vencía en este instante, procesado: así «sin rastro» mide solo las órdenes
+    let (v, hash) = (e.n.version(), e.n.hash_estado());
+    assert_eq!(e.rechazada("ana", Comando::EntrarEnPueblo { pueblo: 9_999, heroe: h0 }), rechazos::PUEBLO_DESCONOCIDO);
+    assert_eq!(e.rechazada("beto", Comando::EntrarEnPueblo { pueblo, heroe: h0 }), rechazos::NO_AUTORIZADO, "el héroe es de otro");
+    assert_eq!(e.rechazada("lia", Comando::EntrarEnPueblo { pueblo, heroe: lia }), rechazos::PUEBLO_FUERA_DE_LA_PUERTA, "a más de radioPuerta no se entra");
+    assert_eq!(e.rechazada("eno", Comando::EntrarEnPueblo { pueblo, heroe: enemigo }), rechazos::PUERTA_CERRADA, "la plaza madre no abre su puerta a los enemigos");
+    assert_eq!(e.rechazada("ana", Comando::SalirDePueblo { pueblo, heroe: h0 }), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO);
+    assert_eq!(e.rechazada("ana", Comando::SalirDePueblo { pueblo: 9_999, heroe: h0 }), rechazos::PUEBLO_DESCONOCIDO);
+    assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash));
+
+    // Entra con todo lo suyo: tropa, carro y víveres quedan en su columna, que sigue existiendo pero fuera del mapa.
+    e.ok("admin", Comando::DarSuministro { ejercito: c0, recurso: Madera, cantidad: 30_000 });
+    let escuadra = e.ok("admin", Comando::DarEscuadra { heroe: h0, tropa: militar::catalogo::Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
+    let (carga0, viveres0) = (e.carga(c0), e.viveres(c0));
+    let t = e.n.ahora();
+    e.ok("ana", Comando::EntrarEnPueblo { pueblo, heroe: h0 });
+    assert_eq!(e.ubicacion(h0), Ubicacion::Pueblo(pueblo));
+    assert!(!e.n.en_el_mapa(c0), "dentro no está en el mapa: nadie la ve ni la ataca");
+    assert_eq!((e.carga(c0), e.n.ejercito(c0).unwrap().columna.escuadras.clone()), (carga0.clone(), vec![escuadra]));
+    let h = &hechos(&e.n, "jugador.entra_en_pueblo")[0];
+    assert_eq!((h.0, h.1.clone(), dato(h, "heroe"), dato(h, "pueblo"), dato(h, "ejercito")), (t, vec![plaza], h0 as i64, pueblo as i64, c0 as i64));
+    e.avanzar(HORA);
+    assert!(e.viveres(c0) < viveres0, "come de sus propios víveres, como un ejército acampado");
+    let dentro = e.viveres(c0);
+    e.ok("ana", Comando::SalirDePueblo { pueblo, heroe: h0 });
+    assert_eq!(e.ubicacion(h0), Ubicacion::Columna(c0));
+    assert!(e.n.en_el_mapa(c0));
+    assert_eq!((e.carga(c0), e.n.ejercito(c0).unwrap().posicion, e.viveres(c0)), (carga0, sitio, dentro), "sale con todo, a la puerta");
+    assert_eq!(dato(&hechos(&e.n, "jugador.sale_de_pueblo")[0], "pueblo"), pueblo as i64);
+    assert_eq!(e.rechazada("ana", Comando::SalirDePueblo { pueblo, heroe: h0 }), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO);
+
+    // El aliado y quien no tiene relación entran (por defecto la puerta solo se cierra a los enemigos); un ejército entero entra por orden de su Líder y se desarma.
+    let (_, aliado) = e.visita("alia", 2, pueblo);
+    let (cn, neutral) = e.visita("neu", 3, pueblo);
+    let segundo = e.ok("bia", Comando::CrearHeroe { cuenta: "bia".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano }).creadas[0];
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: segundo, faccion: Some(3) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: segundo, ubicacion: Ubicacion::Columna(cn) });
+    e.ok("alia", Comando::EntrarEnPueblo { pueblo, heroe: aliado });
+    assert_eq!(e.rechazada("bia", Comando::EntrarEnPueblo { pueblo, heroe: segundo }), rechazos::COLUMNA_SOLO_EL_LIDER, "un ejército entra por orden de su Líder");
+    e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: neutral });
+    assert_eq!((e.ubicacion(aliado), e.ubicacion(neutral), e.ubicacion(segundo)), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
+    let ej = hechos(&e.n, "ejercito.entra_en_pueblo").into_iter().find(|h| dato(h, "ejercito") == cn as i64).expect("el ejército de «neu»");
+    assert_eq!((dato(&ej, "heroes"), dato(&ej, "pueblo")), (2, pueblo as i64));
+    let c2 = e.n.heroe(segundo).unwrap().columna.expect("al desarmarse cada héroe conserva su columna");
+    assert!(c2 != cn && !e.n.en_el_mapa(c2) && !e.n.en_el_mapa(cn));
+    e.ok("bia", Comando::SalirDePueblo { pueblo, heroe: segundo });
+    assert!(e.n.en_el_mapa(c2) && !e.n.en_el_mapa(cn), "cada uno sale por su cuenta");
+}
+
+#[test]
+fn cerrar_la_puerta_de_la_plaza_saca_tambien_de_su_pueblo_a_quien_ya_no_puede_entrar_y_destruirlo_saca_a_los_demas() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let pueblo = e.pueblo_levantado();
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    let centro = e.n.estado().asentamientos[&plaza].posicion;
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(nucleo::Relacion::Alianza) });
+    // Dentro del pueblo: un neutral (F3), un aliado (F2), uno de la propia Facción (F1) y un residente de la plaza (F1). Dentro de la plaza: otro neutral.
+    let mut dentro = std::collections::BTreeMap::new();
+    for (cuenta, faccion) in [("neu", 3), ("alia", 2), ("pro", 1), ("res", 1)] {
+        let (col, h) = e.visita(cuenta, faccion, pueblo);
+        e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
+        if cuenta == "res" {
+            e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
+        }
+        e.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe: h });
+        dentro.insert(cuenta, (col, h));
+    }
+    let colp = e.columna("nep", 3, centro);
+    let nep = e.n.ejercito(colp).unwrap().columna.lider;
+    e.ok("nep", Comando::Guarnecer { asentamiento: plaza, heroe: nep });
+    assert_eq!(e.ubicacion(nep), Ubicacion::Asentamiento(plaza as u32));
+
+    // Se cierra a los neutrales: salen el del pueblo y el de la plaza, cada uno con su columna y su carga y a la puerta de su sitio; los demás siguen.
+    let t = e.n.ahora();
+    e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    let (col_n, neu) = dentro["neu"];
+    assert_eq!((e.ubicacion(neu), e.n.en_el_mapa(col_n), e.n.ejercito(col_n).unwrap().posicion, e.carga(col_n).get(&Madera).copied()), (Ubicacion::Columna(col_n), true, sitio, Some(10_000)));
+    assert_eq!((e.ubicacion(nep), e.n.en_el_mapa(colp), e.n.ejercito(colp).unwrap().posicion), (Ubicacion::Columna(colp), true, centro));
+    for cuenta in ["alia", "pro", "res"] {
+        assert_eq!(e.ubicacion(dentro[cuenta].1), Ubicacion::Pueblo(pueblo), "{cuenta} sigue dentro");
+    }
+    let echados = hechos(&e.n, "heroe.expulsado");
+    assert_eq!(echados.iter().map(|h| (dato(h, "heroe"), dato(h, "lugar"), dato(h, "id"), dato(h, "motivo"), h.0, h.1.clone())).collect::<Vec<_>>(), vec![(nep as i64, 0, plaza as i64, 0, t, vec![plaza]), (neu as i64, 1, pueblo as i64, 0, t, vec![plaza])]);
+
+    // Se cierra también a los aliados: sale «alia»; la misma Facción y el residente se quedan.
+    e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: false, enemigos: false });
+    assert_eq!(e.ubicacion(dentro["alia"].1), Ubicacion::Columna(dentro["alia"].0));
+    assert_eq!((e.ubicacion(dentro["pro"].1), e.ubicacion(dentro["res"].1)), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
+
+    // Destruir el pueblo a mano saca a los que quedan con lo suyo, a su puerta.
+    e.ok("ana", Comando::DestruirPueblo { pueblo });
+    assert!(e.n.pueblo(pueblo).is_none());
+    for cuenta in ["pro", "res"] {
+        let (col, h) = dentro[cuenta];
+        assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col), e.n.ejercito(col).unwrap().posicion, e.carga(col).get(&Madera).copied()), (Ubicacion::Columna(col), true, sitio, Some(10_000)), "{cuenta}");
+    }
+    let ultimos: Vec<_> = hechos(&e.n, "heroe.expulsado").into_iter().filter(|h| dato(h, "motivo") == 1).collect();
+    assert_eq!(ultimos.iter().map(|h| (dato(h, "lugar"), dato(h, "id"))).collect::<Vec<_>>(), vec![(1, pueblo as i64); 2], "el lugar desaparece");
+}
+
+#[test]
+fn si_la_madre_cae_en_ruinas_o_es_conquistada_quien_esta_dentro_de_su_pueblo_sale_al_mapa_con_lo_suyo() {
+    let m = con_mundo!();
+    // Ruina: sin auto-construcción ni madera que repongan el mantenimiento, la plaza acaba cayendo en ruinas.
+    let mut e = montar(m, 7, 2);
+    let (plaza, cobre) = (e.plaza, e.cobre);
+    let pueblo = e.pueblo_levantado();
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    let (col, h) = e.visita("neu", 3, pueblo);
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
+    e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
+    for dia in 1..=150 {
+        let t = e.n.ahora().max(dia * 24 * HORA);
+        e.n.avanzar_hasta(t);
+        if e.n.economia(plaza).is_none() {
+            break;
+        }
+    }
+    assert!(e.n.economia(plaza).is_none() && e.n.pueblo(pueblo).is_none(), "la plaza cayó en ruinas y se llevó su pueblo");
+    assert!(!e.n.estado().nodos_reclamados.contains_key(&cobre));
+    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col), e.n.ejercito(col).unwrap().posicion, e.carga(col).get(&Madera).copied()), (Ubicacion::Columna(col), true, sitio, Some(10_000)));
+    let echado = &hechos(&e.n, "heroe.expulsado")[0];
+    assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), dato(echado, "id"), echado.1.clone()), (1, 1, pueblo as i64, vec![]), "el hecho no nombra a la plaza que ya no está");
+
+    // Conquista: el pueblo pasa al conquistador y nadie queda dentro de lo enemigo.
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let pueblo = e.pueblo_levantado();
+    let (col, h) = e.visita("neu", 3, pueblo);
+    e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
+    let p = e.n.estado().asentamientos[&plaza].posicion;
+    let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
+    let heroe = e.n.ejercito(beto).unwrap().columna.lider;
+    let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
+    e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
+    assert!(e.n.pueblo(pueblo).is_some_and(|(madre, _)| madre == plaza));
+    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true), "sale al mapa con la columna con la que entró");
+    let echado = &hechos(&e.n, "heroe.expulsado")[0];
+    assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), echado.1.clone()), (2, 1, vec![plaza]), "cambia de dueño");
+}
+
+// ───────────────────────────── 7. Un guion con héroes dentro: determinismo y foto ─────────────────────────────
+
+/// Un guion con un pueblo y gente dentro: se levanta, un aliado y un neutral entran con su columna, se cierra la puerta a los neutrales (sale uno) y el aliado sale por su cuenta.
+/// Cada orden lleva su instante: `avanzar` solo decide cómo se mueve el reloj entre ellas.
+fn guion_con_gente(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
+    let plaza = e.plaza;
+    let id = e.marcar();
+    let col = e.llevar_materiales(id);
+    e.ok_en(0, "ana", Comando::EntregarMateriales { ejercito: col, pueblo: id });
+    e.ok_en(0, "admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(nucleo::Relacion::Alianza) });
+    // Las columnas de los visitantes nacen al principio, en el mismo instante sea cual sea el modo de avanzar.
+    let (_, aliado) = e.visita("alia", 2, id);
+    let (_, neutral) = e.visita("neu", 3, id);
+    avanzar(e, 8 * HORA);
+    e.ok_en(8 * HORA, "alia", Comando::EntrarEnPueblo { pueblo: id, heroe: aliado });
+    e.ok_en(8 * HORA, "neu", Comando::EntrarEnPueblo { pueblo: id, heroe: neutral });
+    avanzar(e, 9 * HORA);
+    e.ok_en(9 * HORA, "ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    avanzar(e, 10 * HORA);
+    e.ok_en(10 * HORA, "alia", Comando::SalirDePueblo { pueblo: id, heroe: aliado });
+    avanzar(e, 20 * HORA);
+}
+
+fn correr_con_gente(m: &M, semilla: u64, avanzar: &dyn Fn(&mut Escenario, Instante)) -> Nucleo {
+    let mut e = montar(m, semilla, 2);
+    guion_con_gente(&mut e, avanzar);
+    e.n.avanzar_hasta(20 * HORA);
+    e.n
+}
+
+#[test]
+fn entrar_y_salir_de_un_pueblo_da_el_mismo_hash_normal_acelerado_y_a_trozos() {
+    let m = con_mundo!();
+    let normal = correr_con_gente(m, 3, &|e, t| e.n.avanzar_hasta(t));
+    assert_eq!(normal.hash_estado(), correr_con_gente(m, 3, &|e, t| e.n.avanzar_hasta(t)).hash_estado(), "repetible");
+    assert_eq!(normal.hash_estado(), correr_con_gente(m, 3, &|_, _| {}).hash_estado(), "acelerado de un golpe");
+    let a_trozos = correr_con_gente(m, 3, &|e, t| {
+        let ahora = e.n.ahora();
+        for s in 1..=5 {
+            e.n.avanzar_hasta(ahora + (t - ahora).max(0) * s * s / 25);
+        }
+    });
+    assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares, como el modo en vivo");
+    // El guion hizo de verdad lo que se espera.
+    assert_eq!(hechos(&normal, "jugador.entra_en_pueblo").len(), 2);
+    assert_eq!(hechos(&normal, "heroe.expulsado").len(), 1);
+    assert_eq!(hechos(&normal, "jugador.sale_de_pueblo").len(), 1);
+    // Nada recurre por una entidad ociosa: como mucho un evento de deserción vigente por columna, esté dentro de un pueblo o en el mapa.
+    let vigentes = normal.estado().cola.volcar().iter().filter(|ev| normal.estado().generaciones.es_vigente(ev.clave) && matches!(ev.carga, Carga::Militar(SucesoMilitar::Desercion))).count();
+    assert!(vigentes <= normal.estado().ejercitos.len(), "{vigentes} deserciones vigentes");
+}
+
+#[test]
+fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaza() {
+    let m = con_mundo!();
+    let dir = tempfile::tempdir().unwrap();
+    let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
+    let con = |ajustes: Ajustes| Arranque { ajustes, ..arranque(m, 9) };
+    let n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
+    let mut e = montar_con(n, m, 2);
+    let pueblo = e.pueblo_levantado();
+    let (col, h) = e.visita("neu", 3, pueblo);
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
+    e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
+    let bytes = e.n.estado().serializar();
+    assert_eq!(&bytes[..5], b"BAN18");
+    let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
+    assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
+    let viejo = [b"BAN17".as_slice(), &bytes[5..]].concat();
+    assert!(nucleo::Estado::deserializar(&viejo, &Reglas::default(), &e.n.estado().mundo_hash).is_err(), "BAN17 no traía héroes dentro de un pueblo");
+    // Foto + registro: se recupera con el héroe dentro y sigue igual que el que no se interrumpió.
+    e.n.foto_ahora();
+    e.avanzar(HORA);
+    let (hash, ubicacion, plaza, cuenta) = (e.n.hash_estado(), e.ubicacion(h), e.plaza, e.cuenta);
+    e.n.apagar().unwrap();
+    assert_eq!(ubicacion, Ubicacion::Pueblo(pueblo));
+    let n = Nucleo::con_persistencia(con(ajustes), dir.path(), Default::default()).unwrap();
+    assert!(n.recuperado());
+    assert_eq!(n.hash_estado(), hash, "foto + registro reconstruyen el mismo mundo, con el héroe dentro del pueblo");
+    let cobre = n.pueblo(pueblo).unwrap().1.nodo;
+    let mut e = Escenario { n, plaza, cobre, mapa: Mapa::de(&m.0), cuenta };
+    assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo));
+    e.ok("neu", Comando::SalirDePueblo { pueblo, heroe: h });
+    assert!(e.n.en_el_mapa(col));
+    e.n.apagar().unwrap();
 }

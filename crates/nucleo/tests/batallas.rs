@@ -885,7 +885,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN17");
+    assert_eq!(&bytes[..5], b"BAN18");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1530,9 +1530,8 @@ fn sitio_junto_a(n: &Nucleo, c: Punto, r: i64) -> Option<Punto> {
     })
 }
 
-#[test]
-fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarnicion_se_repone_a_las_6_horas() {
-    let m = con_mundo!();
+/// La plaza madre de «ana» (F1, nivel 2) con un pueblo de cobre levantado y activo, una hora después de acabar su obra: (escenario, madre, pueblo, sitio del pueblo).
+fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
     let mut n = Nucleo::nuevo(arranque_mundo(m, 7));
     let mapa = nucleo::economia::Mapa::de(&m.0);
     let (cobre, sitio) = (0..mapa.nodos.len())
@@ -1554,6 +1553,13 @@ fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarn
     e.ok("ana", Comando::EntregarMateriales { ejercito: col, pueblo });
     let EstadoPueblo::EnObra { completa_en } = e.n.pueblo(pueblo).unwrap().1.estado else { panic!("debía estar en obra") };
     e.n.avanzar_hasta(completa_en + HORA);
+    (e, madre, pueblo, sitio)
+}
+
+#[test]
+fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarnicion_se_repone_a_las_6_horas() {
+    let m = con_mundo!();
+    let (mut e, madre, pueblo, sitio) = con_pueblo(m);
     let guardado = e.n.pueblo(pueblo).unwrap().1.almacen.cantidad(Cobre);
     let saqueador = e.ejercito("beto", 2, sitio, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
     let t = e.n.ahora();
@@ -1577,4 +1583,86 @@ fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarn
     assert_eq!(e.n.estado().asentamientos[&madre].faccion, 1);
     e.n.avanzar_hasta(t + 2 * MIN + 6 * HORA);
     assert_eq!(e.n.estado().combate.guarniciones[&pueblo].escuadra.cantidad, 30);
+}
+
+#[test]
+fn al_ataque_solo_se_une_quien_esta_fuera_y_el_residente_que_defiende_y_pierde_el_asedio_por_unity_pierde_la_mitad_del_carro() {
+    let m = con_mundo!();
+    let Asedio { mut e, beto, ana } = asedio(m, 7);
+    let b = e.b;
+    // «beto», residente, trae a su plaza 40 001 de madera en el carro (entrar en la residencia no lo vacía).
+    e.dar(b, Madera, 100_000);
+    let salida = e.ok("beto", Comando::SalirAlMundo { asentamiento: b, heroe: beto, escuadras: vec![], carga: vec![(Madera, 40_001)] }).creadas[0];
+    e.ok("beto", Comando::EntrarEnAsentamiento { asentamiento: b, heroe: beto });
+    assert!(e.n.ejercito(salida).is_none() && e.n.heroe(beto).unwrap().carro.get(&Madera) == Some(&40_001));
+    // «olga», de la Facción atacante (F1), entra en la plaza como neutral (la puerta se cierra solo a los enemigos): está dentro. «pablo», también de F1, se queda en el mapa a la puerta.
+    let intruso = e.ejercito("olga", 1, e.pos(b), &[Tropa::MiliciaLanceros]);
+    e.ok("olga", Comando::Guarnecer { asentamiento: b, heroe: intruso.1 });
+    let refuerzo = e.ejercito("pablo", 1, e.pos(b), &[Tropa::MiliciaLanceros]);
+    assert!(!e.n.en_el_mapa(intruso.0) && e.n.en_el_mapa(refuerzo.0));
+    let soldados_intruso = e.n.soldados_de_columna(intruso.0).unwrap();
+    assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    let t = e.n.ahora();
+
+    // Al atacante solo se une quien está fuera, en el mapa: «olga», de la propia Facción atacante pero dentro, no ataca desde dentro; «pablo» sí.
+    let ticket_antes = e.n.batalla(id).unwrap().ticket.clone();
+    for (k, lado) in [None, Some(Lado::Atacante)].into_iter().enumerate() {
+        let r = e.n.aplicar_en(t + 1_000 * (k as i64 + 1), Peticion::nueva("olga", &format!("o{k}"), Comando::UnirseABatalla { heroe: intruso.1, batalla: id, lado }));
+        assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
+        assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar fuera")), "{r:?}");
+    }
+    assert!(e.n.batalla(id).unwrap().ticket == ticket_antes && !e.n.ejercito(intruso.0).unwrap().en_batalla, "su columna sigue libre y el ticket no cambió");
+    let r = e.n.aplicar_en(t + 3_000, Peticion::nueva("pablo", "p1", Comando::UnirseABatalla { heroe: refuerzo.1, batalla: id, lado: None }));
+    assert!(r.aceptada(), "{r:?}");
+    assert!(e.n.batalla(id).unwrap().ticket.atacante.participantes.iter().any(|p| p.heroe == refuerzo.1), "«pablo» entra en el bando atacante");
+
+    // Gana el atacante: la plaza cae, «beto» (defensor en persona) pierde la mitad del carro, que se reparte entre las columnas atacantes; «olga» sale con lo suyo sin perder nada.
+    en_curso(&mut e.n, id, t + 50_000, &[ana.1, beto]);
+    let res = resultado(&e.n, id, Lado::Atacante, 4);
+    let r = aplicar(&mut e.n, t + 5 * MIN, "res", id, res);
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(e.n.estado().asentamientos[&b].faccion, 1);
+    let Ubicacion::Columna(sale) = e.n.heroe(beto).unwrap().heroe.presencia.ubicacion else { panic!("«beto» sale a la calle") };
+    assert_eq!(e.carga(sale, Madera), 40_001 - 20_000, "la mitad, hacia abajo");
+    let conquista = &hechos(&e.n, "asentamiento.conquistada")[0];
+    assert_eq!(dato(conquista, "carroPerdido"), 20_000);
+    assert!(e.carga(ana.0, Madera) + e.carga(refuerzo.0, Madera) >= 20_000, "lo robado, repartido entre las columnas del vencedor");
+    assert_eq!((e.n.heroe(intruso.1).unwrap().heroe.presencia.ubicacion, e.n.en_el_mapa(intruso.0), e.n.soldados_de_columna(intruso.0).unwrap(), e.n.heroe_herido(intruso.1)), (Ubicacion::Columna(intruso.0), true, soldados_intruso, false));
+}
+
+#[test]
+fn en_el_saqueo_de_un_pueblo_por_unity_defienden_de_oficio_los_residentes_de_dentro_los_amigos_se_unen_y_el_residente_que_pierde_deja_la_mitad_del_carro() {
+    let m = con_mundo!();
+    let (mut e, madre, pueblo, sitio) = con_pueblo(m);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
+    // Dentro del pueblo: un residente de la madre con 30 001 de madera en el carro y un aliado visitante con 30 001 de piedra, los dos con tropa floja.
+    let res = e.ejercito("res", 1, sitio, &[Tropa::Lenadores]);
+    e.ok("admin", Comando::FijarResidencia { heroe: res.1, residencia: Some(Residencia::Asentamiento(madre as u32)) });
+    e.ok("admin", Comando::DarSuministro { ejercito: res.0, recurso: Madera, cantidad: 30_001 });
+    let alia = e.ejercito("alia", 3, sitio, &[Tropa::Lenadores]);
+    e.ok("admin", Comando::DarSuministro { ejercito: alia.0, recurso: Piedra, cantidad: 30_001 });
+    for (cuenta, h) in [("res", res.1), ("alia", alia.1)] {
+        e.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe: h });
+    }
+    let saqueador = e.ejercito("beto", 2, sitio, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
+    let t = e.n.ahora();
+    assert!(e.atacar("beto", saqueador.1, ObjetivoAtaque::Pueblo(pueblo), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    // De oficio defiende el residente que está dentro, con las escuadras de su columna, y los mineros; el aliado no está en el ticket pero se une.
+    let defensor = &e.n.batalla(id).unwrap().ticket.defensor;
+    assert_eq!((defensor.participantes.iter().map(|p| p.heroe).collect::<Vec<_>>(), defensor.participantes[0].escuadras.len(), defensor.sin_heroe.len()), (vec![res.1], 1, 1));
+    assert_eq!(codigo(&e.ord("alia", Comando::SalirDePueblo { pueblo, heroe: alia.1 })), rechazos::BATALLA_BLOQUEADO, "quien está dentro de un pueblo atacado no da órdenes");
+    let r = e.n.aplicar_en(t + 1_000, Peticion::nueva("alia", "u1", Comando::UnirseABatalla { heroe: alia.1, batalla: id, lado: None }));
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(e.n.batalla(id).unwrap().lado_de(alia.1), Some(Lado::Defensor));
+    // Gana el atacante: el pueblo es saqueado (no cae), los dos siguen dentro, y el residente pierde la mitad del carro; el aliado, no.
+    en_curso(&mut e.n, id, t + MIN, &[saqueador.1, res.1]);
+    let res_final = resultado(&e.n, id, Lado::Atacante, 10);
+    assert!(aplicar(&mut e.n, t + 2 * MIN, "res", id, res_final).aceptada());
+    assert_eq!((e.n.heroe(res.1).unwrap().heroe.presencia.ubicacion, e.n.heroe(alia.1).unwrap().heroe.presencia.ubicacion), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
+    assert_eq!(e.carga(res.0, Madera), 30_001 - 15_000, "el residente pierde la mitad, hacia abajo");
+    assert_eq!(e.carga(alia.0, Piedra), 30_001, "el visitante amigo conserva su carro");
+    assert!(e.carga(saqueador.0, Madera) >= 15_000, "lo robado es del vencedor");
+    assert_eq!(e.n.estado().asentamientos[&madre].faccion, 1);
 }

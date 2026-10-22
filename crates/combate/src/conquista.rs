@@ -99,8 +99,9 @@ pub struct Afectado {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Salida {
-    /// Vuelve al mapa con la columna con la que entró.
-    ALaColumna(ColumnaId),
+    /// Vuelve al mapa con la columna con la que entró. Un residente que conservaba su columna para llevar sus caravanas (Entrar con todo, 2026-10-22) suma a ella las escuadras con
+    /// las que defendió y sobrevivieron, que estaban en su campamento; en un visitante van vacías (las suyas ya van en la columna).
+    ALaColumna { columna: ColumnaId, escuadras: Vec<EscuadraId> },
     /// Nace una **columna personal** estacionada en la plaza, con el carro vacío y esas escuadras. Su Facción es la de la plaza si era residente,
     /// ninguna si era visitante.
     ColumnaNueva { con_faccion_de_la_plaza: bool, escuadras: Vec<EscuadraId> },
@@ -135,7 +136,7 @@ pub fn planear_desalojo(afectados: &[Afectado], residencia_nueva: Residencia) ->
         .map(|a| Desalojo {
             heroe: a.heroe,
             salida: a.dentro.then(|| match a.columna {
-                Some(c) => Salida::ALaColumna(c),
+                Some(columna) => Salida::ALaColumna { columna, escuadras: if a.residente { a.lucharon.clone() } else { vec![] } },
                 None => Salida::ColumnaNueva { con_faccion_de_la_plaza: a.residente, escuadras: a.lucharon.clone() },
             }),
             residencia: a.residente.then_some(residencia_nueva),
@@ -145,12 +146,12 @@ pub fn planear_desalojo(afectados: &[Afectado], residencia_nueva: Residencia) ->
 
 /// Aplica el desalojo a un héroe residente: pasa a residir donde dice el plan y **el resto de su campamento** (guarnición incluida: tropa
 /// prestada que ya no puede seguir donde está, Doc 5.15.2b) queda a 0 y se va con él, suyo, con su nivel y su experiencia. Lo que llevaba fuera
-/// (en su columna o de escolta) no se toca, ni las escuadras con las que sale a la calle (`Salida::ColumnaNueva`): esas las mueve el núcleo.
+/// (en su columna o de escolta) no se toca, ni las escuadras con las que sale a la calle (`Salida::ColumnaNueva` o `Salida::ALaColumna`): esas las mueve el núcleo.
 pub fn aplicar_desalojo(heroe: &mut Heroe, d: &Desalojo) {
     let Some(residencia) = d.residencia else { return };
     let salen: &[EscuadraId] = match &d.salida {
-        Some(Salida::ColumnaNueva { escuadras, .. }) => escuadras,
-        _ => &[],
+        Some(Salida::ColumnaNueva { escuadras, .. } | Salida::ALaColumna { escuadras, .. }) => escuadras,
+        None => &[],
     };
     heroe.residencia = Some(residencia);
     for e in heroe.escuadras.iter_mut().filter(|e| e.contenedor == Contenedor::Campamento && !salen.contains(&e.id)) {
@@ -305,7 +306,7 @@ mod pruebas {
         assert_eq!(plan[0], Desalojo { heroe: 1, salida: Some(Salida::ColumnaNueva { con_faccion_de_la_plaza: true, escuadras: vec![10, 11] }), residencia: Some(nueva) });
         assert_eq!(plan[1].salida, Some(Salida::ColumnaNueva { con_faccion_de_la_plaza: true, escuadras: vec![] }), "un herido sale solo");
         assert_eq!(plan[2], Desalojo { heroe: 3, salida: None, residencia: Some(nueva) }, "un residente fuera solo se muda");
-        assert_eq!(plan[3], Desalojo { heroe: 4, salida: Some(Salida::ALaColumna(77)), residencia: None }, "el visitante vuelve a su columna y no cambia de casa");
+        assert_eq!(plan[3], Desalojo { heroe: 4, salida: Some(Salida::ALaColumna { columna: 77, escuadras: vec![] }), residencia: None }, "el visitante vuelve a su columna y no cambia de casa");
         assert_eq!(plan[4].salida, Some(Salida::ColumnaNueva { con_faccion_de_la_plaza: false, escuadras: vec![] }), "un visitante sin columna sale sin bandera");
         assert!(afectados.iter().zip(&plan).all(|(a, p)| (p.salida.is_some()) == a.dentro), "sale quien estaba dentro, y solo ellos");
     }
@@ -340,8 +341,23 @@ mod pruebas {
         let mut h = Heroe::nuevo(&r.militar, 4, Controlador::Bot, 3, 1);
         h.escuadras = vec![escuadra(1, 4, Tropa::Arqueros)];
         let antes = h.clone();
-        aplicar_desalojo(&mut h, &Desalojo { heroe: 4, salida: Some(Salida::ALaColumna(7)), residencia: None });
+        aplicar_desalojo(&mut h, &Desalojo { heroe: 4, salida: Some(Salida::ALaColumna { columna: 7, escuadras: vec![] }), residencia: None });
         assert_eq!(h, antes);
+    }
+
+    #[test]
+    fn un_residente_con_su_columna_para_las_caravanas_sale_con_ella_y_con_las_escuadras_que_defendieron() {
+        let r = r();
+        let nueva = Residencia::Asentamiento(4);
+        let mut h = Heroe::nuevo(&r.militar, 1, Controlador::Humano, 3, 1);
+        h.residencia = Some(Residencia::Asentamiento(9));
+        h.escuadras = vec![escuadra(10, 1, Tropa::MiliciaLanceros), escuadra(11, 1, Tropa::Arqueros)];
+        let residente = Afectado { heroe: 1, residente: true, dentro: true, columna: Some(77), lucharon: vec![10] };
+        let plan = planear_desalojo(&[residente], nueva);
+        assert_eq!(plan[0], Desalojo { heroe: 1, salida: Some(Salida::ALaColumna { columna: 77, escuadras: vec![10] }), residencia: Some(nueva) });
+        aplicar_desalojo(&mut h, &plan[0]);
+        let cantidades: Vec<i64> = h.escuadras.iter().map(|e| e.cantidad).collect();
+        assert_eq!(cantidades, vec![r.militar.tropas.tropa(Tropa::MiliciaLanceros).unidades, 0], "la que defendió sale con él; el resto del campamento, a 0");
     }
 
     #[test]

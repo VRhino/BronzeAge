@@ -27,20 +27,23 @@
 //!   pueblo y avanzada— y sus consecuencias (heridos, mitad del carro, botín, chatarra, experiencia de escuadra); la conquista
 //!   con su protección y su ocupación como eventos, el desalojo y la cascada del comercio; los bandidos como entidades fijas del espacio, con su aparición, su
 //!   reaparición y su acoso a las caravanas (`PRIO_BANDIDOS`, `Carga::Combate`); y la guarnición de serie de los pueblos. El estado nuevo es [`EstadoCombate`]
-//!   (foto `BAN12`, hoy `BAN17`); las reglas puras son el crate `combate`.
+//!   (foto `BAN12`, hoy `BAN18`); las reglas puras son el crate `combate`.
 //! - Ciclo de la batalla de Unity (fase 4E): `atacar` abre una batalla en lugar de resolver con números cuando el proceso tiene servidores de batalla
 //!   (`Reglas::batallas_en_unity`) y hay un héroe humano en los dos bandos. [`EstadoBatallas`] guarda el ticket congelado, las incorporaciones, la asignación y
-//!   el resultado de cada batalla (foto `BAN13`, hoy `BAN17`); mientras dura, sus columnas y caravanas quedan apartadas (no se mueven, no comen, no se las toca), sus
+//!   el resultado de cada batalla (foto `BAN13`, hoy `BAN18`); mientras dura, sus columnas y caravanas quedan apartadas (no se mueven, no comen, no se las toca), sus
 //!   escuadras llevan el candado `reserva_batalla` y ninguna orden puede tocar lo que combate (`rechazos::BATALLA_BLOQUEADO`). Sus plazos son eventos de
 //!   prioridad 1 (`Carga::Batalla`) y los cinco mensajes del servidor de batalla, órdenes con el actor `batalla-servidor:<id>` (códigos 101-105; unirse, cancelar y
 //!   el andamiaje `FijarControlador`, 98-100). Las reglas puras son `combate::{ciclo, resultado, union}`.
 //! - Avanzadas (fase 4F): puestos fortificados de la plaza madre (atalaya, fuerte, ciudadela), levantados como obra de mapa con su fin exacto en una cita propia (cancelable),
 //!   con visión de 12, almacén, guarnición de serie y de jugadores (`Contenedor::Avanzada`), ruinas con un día de invulnerabilidad (`SucesoCombate::FinInvulnerabilidad`) y
 //!   su sitio en la rejilla de encuentros como entidad fija. Se atacan con `atacar` (con números o con una batalla de Unity, capacidad de asedio y sin convocatoria).
-//!   Las órdenes son los códigos 106-116; la foto es `BAN17`. Las reglas puras son `asentamiento::avanzadas` y `combate::avanzada`.
+//!   Las órdenes son los códigos 106-116; la foto es `BAN18`. Las reglas puras son `asentamiento::avanzadas` y `combate::avanzada`.
 //! - Entrar con todo (2026-10-22): quien entra en un lugar lleva consigo tropa, carro, víveres y todas sus caravanas y al salir se lo lleva (no hay «columna aparcada a la
 //!   puerta»); el residente conserva su carro (`HeroeNucleo::carro`, `VaciarCarro` 118); el dueño de la plaza decide por relación quién entra (`FijarAcceso` 117,
 //!   [`Acceso`]; pueblos y avanzadas lo heredan); defienden los de dentro de la misma Facción, aliados o vasallos; al caer el lugar salen al mapa con lo suyo. Foto `BAN17`.
+//! - Entrar en un pueblo o en una avanzada (2026-10-22): `EntrarEnPueblo`/`SalirDePueblo` (119, 120) y `EntrarEnAvanzada`/`SalirDeAvanzada` (121, 122) con el acceso de su plaza
+//!   madre; dentro se defiende con la regla de relación; cerrar la puerta (`FijarAcceso`) expulsa a quien ya no puede entrar; al atacante solo se une quien está fuera y al
+//!   defensor quien está dentro; el residente que defiende y pierde pierde la mitad de su carro. Foto `BAN18`.
 //! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación).
 
 mod codec;

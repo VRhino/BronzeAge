@@ -19,12 +19,13 @@ pub enum Lugar {
     Campamento(CampamentoId),
 }
 
-/// Dónde está dentro un héroe, si está dentro de algo. Una columna en el mapa, o fuera del mundo, no es un lugar.
+/// Dónde está dentro un héroe, si está dentro de una plaza o un campamento. Una columna en el mapa, fuera del mundo o dentro de un pueblo o una avanzada (donde no se
+/// convoca) no es un lugar.
 pub fn lugar_de(ubicacion: Ubicacion) -> Option<Lugar> {
     match ubicacion {
         Ubicacion::Asentamiento(id) => Some(Lugar::Asentamiento(id)),
         Ubicacion::Mercenarios(id) => Some(Lugar::Campamento(id)),
-        Ubicacion::Columna(_) | Ubicacion::Desconectado(_) => None,
+        Ubicacion::Columna(_) | Ubicacion::Pueblo(_) | Ubicacion::Avanzada(_) | Ubicacion::Desconectado(_) => None,
     }
 }
 
@@ -266,6 +267,7 @@ mod pruebas {
         assert_eq!(lugar_de(Ubicacion::Mercenarios(2)), Some(Lugar::Campamento(2)));
         assert_eq!(lugar_de(Ubicacion::Columna(9)), None, "una columna en el mapa no es un lugar");
         assert_eq!(lugar_de(Ubicacion::Desconectado(Punto::default())), None);
+        assert_eq!((lugar_de(Ubicacion::Pueblo(7)), lugar_de(Ubicacion::Avanzada(8))), (None, None), "en un pueblo o una avanzada no se convoca");
     }
 
     #[test]

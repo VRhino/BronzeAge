@@ -373,6 +373,7 @@ impl Nucleo {
                         }
                     }
                     Ubicacion::Desconectado(_) => return Err(rechazo(rechazos::HEROE_UBICACION_INVALIDA, "se sale del mundo desconectándose".into())),
+                    Ubicacion::Pueblo(_) | Ubicacion::Avanzada(_) => return Err(rechazo(rechazos::HEROE_UBICACION_INVALIDA, "en un pueblo o una avanzada se entra con `entrarEnPueblo` o `entrarEnAvanzada`".into())),
                 }
                 let h = self.heroe_mut(*heroe);
                 if h.heroe.presencia.ubicacion == *ubicacion {

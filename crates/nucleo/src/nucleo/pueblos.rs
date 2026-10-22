@@ -24,9 +24,11 @@ use crate::nucleo::mercado::{id32, RADIO_PUERTA};
 use asentamiento::catalogo::Tipo;
 use asentamiento::pueblos::{ErrorPueblo, Pueblo};
 use asentamiento::Costo;
+use super::dentro::MOTIVO_DESAPARECE;
 use comercio::acarreo;
 use comercio::viaje::{longitud_ruta, peajes_de_paradas};
 use comercio::{total, Carga as Mercancia};
+use militar::presencia::Ubicacion;
 
 fn rechazo_de_pueblo(e: ErrorPueblo) -> (&'static str, &'static str) {
     use rechazos::*;
@@ -149,6 +151,10 @@ impl Nucleo {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{plaza}")));
                 }
                 let mut ev = vec![];
+                // Quien estaba dentro sale al mapa con lo suyo, a la puerta del pueblo que desaparece.
+                if let Some(puerta) = self.posicion_de_pueblo(*pueblo) {
+                    self.vaciar_lugar(t, Ubicacion::Pueblo(*pueblo), puerta, plaza, MOTIVO_DESAPARECE);
+                }
                 let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(*pueblo, &mut ev).expect("existe");
                 self.estado.nodos_reclamados.remove(&destruido.nodo);
                 if let Some(carro) = destruido.carro {

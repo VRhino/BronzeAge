@@ -26,7 +26,7 @@
 //! Repetir una ya aplicada no cambia nada (`SinCambios`: ni versión, ni hecho, ni id). Aplicar el resultado es una sola mutación: se valida entero (el checklist
 //! de §8.5) antes de tocar nada.
 
-use super::combates::loadout_en_el_campamento;
+use super::combates::{de_su_columna, loadout_en_el_campamento};
 use super::*;
 use crate::comando::Implicados;
 use crate::estado::{SucesoBatalla, PRIO_BATALLA, PRIO_SALIDA, SIN_BANDERA};
@@ -37,7 +37,7 @@ use combate::caravana::Modalidad;
 use combate::ciclo::{bloqueos_de, uuid_de_batalla, Asignacion, BandoDeTicket, Batalla, Bloqueo, Bloqueos, Contexto, Efecto, EscuadraEnBatalla, ErrorBatalla, Participante, SalidaBatalla, Ticket, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Efectos, Resultado as ResultadoDeBatalla};
-use combate::union::{lado_para_unirse, ErrorUnion, Reparto};
+use combate::union::{lado_para_unirse, Donde, ErrorUnion, Reparto};
 use militar::columna::TipoColumna;
 use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::Controlador;
@@ -164,12 +164,25 @@ fn rechazo_de_union(e: ErrorUnion, v: u64) -> Respuesta {
         ErrorUnion::NoCombateAqui => "tu Facción no combate aquí".into(),
         ErrorUnion::LadoDistinto(l) => format!("a ti te toca el bando {l:?}"),
         ErrorUnion::HayQueEstarDentro => "para defender hay que estar dentro (haber entrado): a la puerta, en el mapa, solo se ataca".into(),
+        ErrorUnion::HayQueEstarFuera => "para atacar hay que estar fuera, en el mapa: desde dentro de un lugar no se ataca".into(),
     };
     Respuesta::rechazo(rechazos::BATALLA_INVALIDA, mensaje, v)
 }
 
 fn sin_cambios(v: u64) -> Respuesta {
     Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] }
+}
+
+/// Dónde está quien quiere unirse a una batalla respecto de lo que se disputa: en el mapa con su columna, dentro de la plaza, el pueblo o la avanzada que se disputa, o dentro de
+/// cualquier otro lugar (Entrar con todo, 2026-10-22).
+fn donde_esta(ubicacion: Ubicacion, contexto: Contexto) -> Donde {
+    match (ubicacion, contexto) {
+        (Ubicacion::Columna(_), _) => Donde::Fuera,
+        (Ubicacion::Asentamiento(a), Contexto::Asedio { asentamiento }) if a == asentamiento => Donde::Dentro,
+        (Ubicacion::Pueblo(x), Contexto::SaqueoPueblo { pueblo, .. }) if x == pueblo => Donde::Dentro,
+        (Ubicacion::Avanzada(x), Contexto::Avanzada { avanzada, .. }) if x == avanzada => Donde::Dentro,
+        _ => Donde::EnOtroLugar,
+    }
 }
 
 fn escuadra_en_batalla(s: &Escuadra) -> EscuadraEnBatalla {
@@ -265,12 +278,14 @@ impl Nucleo {
         }
         let bloqueos = bloqueos_de(self.batallas(), t);
         let Implicados { heroes, ejercitos, caravanas, asentamientos, pueblos, avanzadas, campamentos } = p.comando.implicados();
+        // Un héroe dentro de la plaza asediada, del pueblo saqueado o de la avanzada atacada tampoco da órdenes.
         let heroe_bloqueado = |id: u64| {
-            let plaza = self.heroe(id).and_then(|h| match h.heroe.presencia.ubicacion {
-                Ubicacion::Asentamiento(a) => Some(a),
+            let dentro = self.heroe(id).map(|h| h.heroe.presencia.ubicacion);
+            let plaza = match dentro {
+                Some(Ubicacion::Asentamiento(a)) => Some(a),
                 _ => None,
-            });
-            bloqueos.heroe_bloqueado(id, plaza)
+            };
+            bloqueos.heroe_bloqueado(id, plaza) || matches!(dentro, Some(Ubicacion::Pueblo(x)) if bloqueos.pueblos.contains(&x)) || matches!(dentro, Some(Ubicacion::Avanzada(x)) if bloqueos.avanzadas.contains(&x))
         };
         let actor = self.heroe_de_cuenta(&p.actor).map(|h| h.heroe.id);
         let choca = actor.into_iter().chain(heroes).any(heroe_bloqueado)
@@ -380,8 +395,15 @@ impl Nucleo {
         }
     }
 
-    /// El saqueo de un pueblo: defiende la guarnición de serie de mineros (sin dueño) y la Facción de la plaza madre. Su escuadra ya existe (nace al primer
-    /// ataque); si está a 0 esperando su reposición, el pueblo no tiene defensores.
+    /// Los residentes de la plaza madre que están dentro del pueblo o de la avanzada `dentro`, sanos y conectados, con las escuadras con soldados de la columna con la que
+    /// entraron: defienden de oficio. Los demás amigos que están dentro (la misma Facción, aliados, vasallos) se unen durante la batalla (`unirse_a_batalla`).
+    fn residentes_dentro(&self, madre: u64, dentro: Ubicacion, t: Instante) -> Vec<Participante> {
+        let sanos = self.estado.militar.residentes_de(madre).filter(|h| h.heroe.presencia.ubicacion == dentro && !h.heroe.esta_herido(t) && !h.heroe.presencia.fuera);
+        sanos.map(|h| self.participante(h, de_su_columna(h).into_iter().map(escuadra_en_batalla).collect())).collect()
+    }
+
+    /// El saqueo de un pueblo: defienden los residentes de la plaza madre que están dentro, la guarnición de serie de mineros (sin dueño) y la Facción de la plaza madre. Su
+    /// escuadra ya existe (nace al primer ataque); si está a 0 esperando su reposición y no hay nadie dentro, el pueblo no tiene defensores.
     pub(super) fn apertura_de_pueblo(&self, t: Instante, heroe: u64, id: u64, pueblo: u64, madre: u64, punto: Punto) -> Apertura {
         let g = &self.estado.combate.guarniciones[&pueblo].escuadra;
         let mineros = Some(g).filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s) });
@@ -390,13 +412,14 @@ impl Nucleo {
             punto,
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
-            defensor: BandoDeTicket::nuevo(Some(self.estado.asentamientos[&madre].faccion), vec![], mineros.into_iter().collect()),
+            defensor: BandoDeTicket::nuevo(Some(self.estado.asentamientos[&madre].faccion), self.residentes_dentro(madre, Ubicacion::Pueblo(pueblo), t), mineros.into_iter().collect()),
             bloqueo: Bloqueo { ejercitos: vec![id], pueblo: Some(pueblo), ..Default::default() },
         }
     }
 
-    /// El ataque a una avanzada se juega como un asedio, sin convocatoria: defiende la guarnición de serie (sin dueño) y la de jugadores (escuadras de los héroes
-    /// residentes de la madre, que no están dentro: no hay participantes) y la Facción de la plaza madre. La guarnición de serie ya existe (nace al primer ataque).
+    /// El ataque a una avanzada se juega como un asedio, sin convocatoria: defienden la guarnición de serie (sin dueño), la de jugadores (escuadras de los héroes residentes
+    /// de la madre, sin su héroe: la maneja la IA), los residentes de la madre que están dentro y la Facción de la plaza madre. La guarnición de serie ya existe (nace al primer
+    /// ataque).
     pub(super) fn apertura_de_avanzada(&self, t: Instante, heroe: u64, id: u64, avanzada: u64, madre: u64) -> Apertura {
         let (_, v) = self.avanzada(avanzada).expect("existe");
         let serie = self.guarnicion_de_serie_de_avanzada(avanzada).iter().filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s) });
@@ -406,7 +429,7 @@ impl Nucleo {
             punto: v.posicion,
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
-            defensor: BandoDeTicket::nuevo(Some(self.estado.asentamientos[&madre].faccion), vec![], serie.chain(jugadores).collect()),
+            defensor: BandoDeTicket::nuevo(Some(self.estado.asentamientos[&madre].faccion), self.residentes_dentro(madre, Ubicacion::Avanzada(avanzada), t), serie.chain(jugadores).collect()),
             bloqueo: Bloqueo { ejercitos: vec![id], avanzada: Some(avanzada), ..Default::default() },
         }
     }
@@ -672,8 +695,8 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// `unirseABatalla` (§7): la columna del héroe entra, entera, en el bando que le toca. Para defender una plaza hay que estar dentro (el héroe ha entrado; su columna
-    /// dentro es lo que trajo consigo): una columna en el mapa, a la puerta, solo puede atacar.
+    /// `unirseABatalla` (§7): la columna del héroe entra, entera, en el bando que le toca. Para defender una plaza, un pueblo o una avanzada hay que estar dentro (el héroe ha
+    /// entrado; su columna dentro es lo que trajo consigo) y para atacar, fuera: una columna en el mapa, a la puerta, solo puede atacar, y quien está dentro no ataca.
     fn unirse_a_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64, pedido: Option<Lado>) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let invalida = |m: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, m, v);
@@ -696,13 +719,11 @@ impl Nucleo {
             return Err(invalida(&format!("hay que estar a {radio} o menos de la batalla")));
         }
         let aliadas = |a: u32, b: u32| matches!(self.estado.militar.relacion(a, b), Some(Relacion::Alianza | Relacion::Vasallaje));
-        // Solo defiende quien está dentro (2026-10-22): quien ha entrado en la plaza. Una columna en el mapa, a la puerta, no; y en un pueblo o una avanzada nadie puede entrar aún.
-        let dentro = match b.ticket.contexto {
-            Contexto::Asedio { asentamiento } => self.heroe(heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(asentamiento)),
-            _ => false,
-        };
+        // Solo defiende quien está dentro de lo que se disputa (haber entrado en la plaza, el pueblo o la avanzada) y solo ataca quien está fuera, en el mapa (2026-10-22): una
+        // columna a la puerta no defiende, y quien está dentro —aunque sea de la Facción atacante— no ataca desde dentro.
+        let donde = donde_esta(self.heroe(heroe).expect("autorizado").heroe.presencia.ubicacion, b.ticket.contexto);
         // DUDA: «el Rey admite otras Facciones en sus ataques» es política (sistema 5): hasta entonces nadie lo admite.
-        let reparto = Reparto { contexto: b.ticket.contexto, atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false, dentro };
+        let reparto = Reparto { contexto: b.ticket.contexto, atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false, donde };
         let lado = lado_para_unirse(&reparto, self.heroe(heroe).and_then(|h| h.faccion), e.columna.tipo == TipoColumna::Personal, pedido).map_err(|e| rechazo_de_union(e, v))?;
 
         let entran = self.heroes_de_columna(columna, t);
@@ -833,14 +854,19 @@ impl Nucleo {
                 if let Some(f) = b.ticket.atacante.faccion.filter(|_| ganador == Lado::Atacante) {
                     if self.estado.asentamientos.get(&plaza).is_some_and(|a| a.faccion != f) {
                         let lucharon: Vec<(u64, Vec<u64>)> = self.participantes_del_lado(b, Lado::Defensor).iter().map(|p| (p.heroe, p.escuadras.iter().map(|e| e.id).collect())).collect();
-                        let ejercito = self.columnas_del_bando(b, Lado::Atacante).first().copied().unwrap_or(0);
-                        self.conquistar_plaza(t, plaza, f, ejercito, &lucharon);
+                        let atacantes = self.columnas_del_bando(b, Lado::Atacante);
+                        let robado = self.conquistar_plaza(t, plaza, f, atacantes.first().copied().unwrap_or(0), &lucharon);
+                        // La mitad del carro de los residentes que defendieron y perdieron es del vencedor, repartida entre sus columnas hasta donde quepa.
+                        self.repartir_en_columnas(&atacantes, &robado);
                     }
                 }
             }
             // Una avanzada atacada y ganada por el atacante cae como con números: se lleva el almacén que le quepa y queda destruida o en ruinas. Si ya no existe (su madre
             // cayó en ruinas durante la batalla) no queda nada que aplicar.
             Contexto::Avanzada { avanzada, .. } if ganador == Lado::Atacante => {
+                if let Some((Some(madre), _)) = self.avanzada(avanzada) {
+                    self.castigo_a_los_defensores(b, madre);
+                }
                 let atacantes = self.columnas_del_bando(b, Lado::Atacante);
                 self.cae_avanzada(t, avanzada, &atacantes);
             }
@@ -872,11 +898,21 @@ impl Nucleo {
                         self.tr.tocados.push(c);
                     }
                     self.tr.asentamientos.push(madre);
+                    self.castigo_a_los_defensores(b, madre);
                 }
             }
             Contexto::SaqueoPueblo { .. } => {}
         }
         self.recoger_chatarra(b, res);
+    }
+
+    /// Los defensores de un pueblo o de una avanzada han perdido sin que haya conquista: los que residen en la plaza madre pierden la mitad de su carro, que se reparte entre las
+    /// columnas atacantes hasta donde quepa (Entrar con todo, 2026-10-22).
+    fn castigo_a_los_defensores(&mut self, b: &Batalla, madre: u64) {
+        let defensores: Vec<u64> = self.participantes_del_lado(b, Lado::Defensor).iter().map(|p| p.heroe).collect();
+        let robado = self.pierden_la_mitad_del_carro(&defensores, madre);
+        let atacantes = self.columnas_del_bando(b, Lado::Atacante);
+        self.repartir_en_columnas(&atacantes, &robado);
     }
 
     /// El atacante gana en mundo abierto: la caravana cae (sus carros, su carga y su escolta) o el campamento de bandidos desaparece y paga su oro.

@@ -6,9 +6,13 @@
 //!
 //! # Quien estaba dentro (Entrar con todo, 2026-10-22)
 //! Defienden los de dentro que son de la misma Facción, aliados o vasallos (la defensa los cuenta antes, en `defensa_de_plaza` o en la convocatoria de Unity) y
-//! quedan sujetos al resultado: heridos si la plaza cae, con las bajas que hayan sufrido. Los demás —neutrales y enemigos a los que su dueño abrió la puerta— no
+//! quedan sujetos al resultado: heridos si la plaza cae, con las bajas que hayan sufrido, y los que **residen** en ella pierden la mitad de su carro, que va al botín del
+//! vencedor (Doc 5.15.5 no dice que lo conserven entero; el visitante que defendió sale con su columna sin perder el carro). Los demás —neutrales y enemigos a los que su dueño abrió la puerta— no
 //! defienden nunca y **no pierden nada**: salen al mapa con la columna con la que entraron (tropa, carro, víveres y caravanas), y el residente que no trajo
-//! columna sale con una nueva con su carro y sus víveres. Nadie queda dentro de una plaza que cambia de dueño.
+//! columna sale con una nueva con su carro y sus víveres. Cada héroe defensor queda fuera con las escuadras con las que combatió y sobrevivieron (en una columna nueva o, si
+//! conservaba la suya para llevar caravanas, sumadas a ella); el resto del campamento de los residentes, guarnición incluida, queda a 0 y se va con ellos a la plaza más cercana
+//! de su Facción (sin ninguna, al campamento de mercenarios más cercano), donde pasan a residir; no hay captura de guarnición. Nadie queda dentro de una plaza que cambia de dueño,
+//! ni dentro de sus pueblos y avanzadas, que pasan al conquistador: salen al mapa con lo suyo (`dentro`).
 //!
 //! # La protección y la ocupación son eventos
 //! La plaza guarda `protegida_hasta` (inatacable un día) y `ocupada_hasta` (hora y media con la recaudación y el crecimiento a la mitad y el mantenimiento
@@ -24,11 +28,13 @@
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO};
 use crate::estado_combate::entidad_conquista;
+use super::dentro::MOTIVO_CAMBIA_DE_DUENO;
 use combate::conquista::{aplicar_conquista, aplicar_desalojo, faccion_derrotada, planear_desalojo, refugio, residencia_tras_desalojo, Afectado, Salida};
 use comercio::ruina::Motivo as MotivoDeCierre;
 use militar::columna::{Columna, Politica, TipoColumna};
 use militar::heroe::Residencia;
 use militar::presencia::Ubicacion;
+use militar::{total, Carga as Mercancia};
 use std::collections::BTreeSet;
 
 impl Nucleo {
@@ -47,8 +53,9 @@ impl Nucleo {
     // ───────────────────────────── La conquista ─────────────────────────────
 
     /// La plaza cae en manos de `conquistador` (la Facción del ejército `ejercito`). `lucharon` son los héroes que la defendieron en persona con las
-    /// escuadras con que lo hicieron: si sobreviven, salen con ellos. La llama el asedio con números; la de Unity (4E) llamará a la misma.
-    pub(super) fn conquistar_plaza(&mut self, t: Instante, plaza: u64, conquistador: u32, ejercito: u64, lucharon: &[(u64, Vec<u64>)]) {
+    /// escuadras con que lo hicieron: si sobreviven, salen con ellos. La llaman el asedio con números y el resultado de una batalla de Unity. Devuelve la mitad del carro que
+    /// pierden los residentes que defendieron, para el botín de quien la cobra.
+    pub(super) fn conquistar_plaza(&mut self, t: Instante, plaza: u64, conquistador: u32, ejercito: u64, lucharon: &[(u64, Vec<u64>)]) -> Mercancia {
         let cr = self.estado.reglas.economia.combate.clone();
         let datos = self.estado.reglas.economia.datos.clone();
         let (vieja, posicion) = {
@@ -92,6 +99,13 @@ impl Nucleo {
         self.avanzadas_de_la_madre_conquistada(plaza, t);
         // La plaza cambió de bandera: sus fronteras con otras Facciones se miran de nuevo.
         self.contactos_nuevos(plaza, t);
+        // Sus pueblos y avanzadas pasan al conquistador: nadie queda dentro de lo enemigo, todos salen al mapa con lo suyo.
+        // DUDA: salen todos, también los que el conquistador habría dejado entrar (el canon solo dice que nadie queda dentro de una plaza enemiga).
+        let (pueblos, avanzadas) = self.sitios_de(plaza);
+        self.vaciar_pueblos_y_avanzadas(t, plaza, &pueblos, &avanzadas, MOTIVO_CAMBIA_DE_DUENO);
+        // Quien defendió y perdió: el residente pierde la mitad del carro que llevaba (antes de que salga a la calle con él).
+        let defensores: Vec<u64> = lucharon.iter().map(|(h, _)| *h).collect();
+        let robado = self.pierden_la_mitad_del_carro(&defensores, plaza);
 
         // 3. Los residentes y quien estaba dentro (Combate §9).
         let refugio_de = refugio(&self.estado.asentamientos.values().filter(|a| a.faccion == vieja && a.id != plaza).map(|a| (a.id as u32, a.posicion.dist(posicion))).collect::<Vec<_>>());
@@ -105,7 +119,12 @@ impl Nucleo {
             }
             match &d.salida {
                 None => {}
-                Some(Salida::ALaColumna(columna)) => self.ubicar_en_columna(d.heroe, *columna),
+                Some(Salida::ALaColumna { columna, escuadras }) => {
+                    if !escuadras.is_empty() {
+                        self.tras_retomar(t, *columna, escuadras, &Mercancia::new(), 0, TipoColumna::Personal, Politica::Rechazar);
+                    }
+                    self.ubicar_en_columna(d.heroe, *columna);
+                }
                 Some(Salida::ColumnaNueva { con_faccion_de_la_plaza, escuadras }) => {
                     self.columna_de_salida(t, d.heroe, posicion, con_faccion_de_la_plaza.then_some(vieja), escuadras);
                 }
@@ -135,8 +154,10 @@ impl Nucleo {
                 ("pesantsPerdidos", c.poblacion_perdida.0),
                 ("artesanosPerdidos", c.poblacion_perdida.1),
                 ("noblezaPerdida", c.poblacion_perdida.2),
+                ("carroPerdido", total(&robado)),
             ],
         );
+        robado
     }
 
     /// Quien estaba dentro y no trajo columna sale a la calle con todo lo suyo (Combate §9, Entrar con todo): nace una columna personal quieta en `posicion`, con el

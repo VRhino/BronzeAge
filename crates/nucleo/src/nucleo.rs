@@ -49,6 +49,7 @@ mod combates;
 mod conquistas;
 mod construccion;
 mod convocatorias;
+mod dentro;
 mod espacio;
 mod flota;
 mod heroes;
@@ -831,6 +832,10 @@ impl Nucleo {
             | Comando::FijarAcceso { .. }
             | Comando::VaciarCarro { .. }
             | Comando::EntrarEnCampamento { .. } => match self.ejecutar_salidas(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::EntrarEnPueblo { .. } | Comando::SalirDePueblo { .. } | Comando::EntrarEnAvanzada { .. } | Comando::SalirDeAvanzada { .. } => match self.ejecutar_dentro(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

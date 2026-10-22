@@ -10,9 +10,13 @@
 //! - **Un campamento de bandidos** (`atacar_campamento`): PvE, sin guerra. Una tirada contra el poder de su nivel.
 //! - **Una plaza** (`atacar_plaza`): solo un ejército. Se asedia con la guarnición y los defensores en persona —los que están **dentro**: una columna amiga a la puerta, en el
 //!   mapa, no defiende (2026-10-22)—; si cae, [`conquistas`](super::conquistas).
-//! - **Un pueblo extractor** (`atacar_pueblo`): un saqueo, nunca una conquista. Defienden los 30 mineros de serie.
-//! - **Una avanzada** (`atacar_avanzada`, en [`avanzadas`](super::avanzadas)): solo un ejército, como un asedio contra su guarnición de serie y la de jugadores; unas ruinas
-//!   caen sin combate. Si gana el atacante, se lleva el almacén que le quepa y la avanzada se destruye o queda en ruinas.
+//! - **Un pueblo extractor** (`atacar_pueblo`): un saqueo, nunca una conquista. Defienden los 30 mineros de serie y los héroes que han entrado en él.
+//! - **Una avanzada** (`atacar_avanzada`, en [`avanzadas`](super::avanzadas)): solo un ejército, como un asedio contra su guarnición de serie y la de jugadores y los héroes que han
+//!   entrado en ella; unas ruinas caen sin combate. Si gana el atacante, se lleva el almacén que le quepa y la avanzada se destruye o queda en ruinas.
+//!
+//! # Quien defiende y pierde (Entrar con todo, 2026-10-22)
+//! Los defensores en persona quedan heridos, y los que **residen** en la plaza (la madre, en un pueblo o una avanzada) pierden la mitad del carro, que es del vencedor
+//! ([`Nucleo::pierden_la_mitad_del_carro`]); el visitante amigo que defendió conserva el suyo. A un bando solo se une quien está en su sitio: dentro para defender, fuera para atacar.
 //!
 //! # Lo que se mira antes (en este orden)
 //! El héroe (sano, a bordo, columna fuera de batalla), el objetivo (existe, está en el mapa), el alcance (`radioEncuentro`), la protección de los campamentos
@@ -45,11 +49,17 @@ pub(super) struct Tropa {
     pub heroes: Vec<u64>,
 }
 
-/// Quién defiende una plaza con números (Combate §3.2).
-pub(super) struct DefensaDePlaza {
+/// Quién defiende con números lo que hay dentro de una plaza, un pueblo o una avanzada (Combate §3.2): los héroes de dentro y las escuadras con las que luchan.
+pub(super) struct DefensoresDeDentro {
     pub tropa: Tropa,
     /// Cada héroe que defiende en persona con las escuadras con las que lucha: si la plaza cae, salen con él.
     pub lucharon: Vec<(u64, Vec<u64>)>,
+}
+
+impl DefensoresDeDentro {
+    pub(super) fn nadie() -> Self {
+        Self { tropa: Tropa { escuadras: vec![], heroes: vec![] }, lucharon: vec![] }
+    }
 }
 
 /// Lo que cambia con unas bajas: las columnas cuyas escuadras combatieron y la velocidad que llevaban (para recomponer su consumo y su marcha).
@@ -62,7 +72,7 @@ pub(super) fn loadout_en_el_campamento(h: &HeroeNucleo) -> Vec<&Escuadra> {
 }
 
 /// Las escuadras con soldados del héroe que van en una columna (la que trajo dentro, si es un visitante): con las que defiende de visita.
-fn de_su_columna(h: &HeroeNucleo) -> Vec<&Escuadra> {
+pub(super) fn de_su_columna(h: &HeroeNucleo) -> Vec<&Escuadra> {
     h.heroe.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) && s.con_soldados()).collect()
 }
 
@@ -199,6 +209,38 @@ impl Nucleo {
             self.fijar_persecucion(columna, None);
         }
         robado
+    }
+
+    /// Los defensores en persona que residen en la plaza `plaza` y pierden, pierden la mitad de su carro (Entrar con todo, 2026-10-22): lo que llevaban consigo —el carro que no
+    /// vaciaron y, si conservan una columna, el de esa columna— queda a la mitad, hacia abajo. Devuelve lo robado, para el botín del vencedor. Los visitantes que defendieron no lo
+    /// pierden.
+    // DUDA: el autor habla del «residente defensor»; el visitante amigo que defiende y pierde conserva su carro (en la conquista, Doc 5.15.5 le deja salir con la columna con
+    // la que entró, sin perder nada). Si hubiera que quitárselo, es aquí: basta quitar el filtro de la residencia.
+    pub(super) fn pierden_la_mitad_del_carro(&mut self, defensores: &[u64], plaza: u64) -> Mercancia {
+        let cr = self.estado.reglas.economia.combate.clone();
+        let (mut robado, mut columnas) = (Mercancia::new(), std::collections::BTreeSet::new());
+        for &h in defensores {
+            let Some(hn) = self.estado.militar.heroes.get_mut(&h).filter(|hn| hn.heroe.residencia == Some(militar::heroe::Residencia::Asentamiento(plaza as u32))) else { continue };
+            for (r, n) in tras_derrota(&cr, &mut hn.carro) {
+                sumar(&mut robado, r, n);
+            }
+            columnas.extend(hn.columna);
+        }
+        for c in columnas {
+            let Some(e) = self.estado.ejercitos.get_mut(&c) else { continue };
+            for (r, n) in tras_derrota(&cr, &mut e.columna.carga) {
+                sumar(&mut robado, r, n);
+            }
+            self.tr.tocados.push(c);
+        }
+        robado
+    }
+
+    /// El vencedor carga en el carro de su columna, hasta donde le quepa, lo que el derrotado perdió (nada si no hubo nada).
+    pub(super) fn entregar_lo_robado(&mut self, columna: u64, robado: &Mercancia) {
+        if !robado.is_empty() {
+            self.cargar_botin_en(columna, robado);
+        }
     }
 
     pub(super) fn hecho_de_combate(&mut self, codigo: &'static str, t: Instante, columnas: Vec<u64>, plazas: Vec<u64>, punto: Punto, datos: Vec<(&'static str, i64)>) {
@@ -516,7 +558,7 @@ impl Nucleo {
     /// conectados con las escuadras de su loadout activo que tengan en el campamento (como mucho 15) y, en el cupo que dejan, los visitantes de la propia Facción o de
     /// una aliada, con las escuadras de la columna con la que entraron (no está en el mapa: es lo que trajeron). **Solo defiende lo que está dentro** (2026-10-22):
     /// una columna amiga en el mapa, a la puerta, no cuenta; y un neutral o un enemigo dentro, tampoco.
-    pub(super) fn defensa_de_plaza(&self, plaza: u64, t: Instante) -> DefensaDePlaza {
+    pub(super) fn defensa_de_plaza(&self, plaza: u64, t: Instante) -> DefensoresDeDentro {
         let cr = &self.estado.reglas.economia.combate;
         let a = &self.estado.asentamientos[&plaza];
         let tope = cr.batalla.capacidad_asedio;
@@ -535,20 +577,33 @@ impl Nucleo {
         }
 
         // Defienden los de la misma Facción, los aliados y los vasallos, y solo si están dentro: neutrales y enemigos nunca, aunque la puerta les haya abierto (Entrar con todo).
-        let amiga = |f: Option<u32>| self.estado.militar.defiende_a(a.faccion, f);
         let cupo = tope.saturating_sub(residentes_que_entran.len());
-        let visitantes: Vec<Candidato> = if cupo == 0 {
+        let visitantes = self.defensores_de_dentro(dentro, a.faccion, Some(plaza as u32), cupo, t);
+        escuadras.extend(visitantes.tropa.escuadras);
+        lucharon.extend(visitantes.lucharon);
+        DefensoresDeDentro { tropa: Tropa { escuadras, heroes: [residentes_que_entran, visitantes.tropa.heroes].concat() }, lucharon }
+    }
+
+    /// Los héroes que están dentro de `dentro` (una plaza, un pueblo o una avanzada) y lo defienden con números: sanos y conectados, de la Facción `faccion` del lugar, aliados o
+    /// vasallos —neutrales y enemigos nunca, aunque la puerta les haya abierto—, hasta `cupo` y por nivel y poder, con las escuadras de la columna con la que entraron (no está
+    /// en el mapa: es lo que trajeron y cuenta como dentro). `residentes_de` son los de esa plaza, que la defensa de la plaza cuenta aparte.
+    pub(super) fn defensores_de_dentro(&self, dentro: Ubicacion, faccion: u32, residentes_de: Option<u32>, cupo: usize, t: Instante) -> DefensoresDeDentro {
+        let cr = &self.estado.reglas.economia.combate;
+        let candidatos: Vec<Candidato> = if cupo == 0 {
             vec![]
         } else {
-            self.heroes().filter(|h| h.heroe.residencia != Some(militar::heroe::Residencia::Asentamiento(plaza as u32)) && h.heroe.presencia.ubicacion == dentro && sana_y_conectada(h) && amiga(h.faccion)).map(|h| Candidato::de(cr, &h.heroe, &de_su_columna(h))).collect()
+            let propio = |h: &HeroeNucleo| residentes_de.is_some_and(|p| h.heroe.residencia == Some(militar::heroe::Residencia::Asentamiento(p)));
+            let sano_y_conectado = |h: &HeroeNucleo| !h.heroe.esta_herido(t) && !h.heroe.presencia.fuera;
+            self.heroes().filter(|h| !propio(h) && h.heroe.presencia.ubicacion == dentro && sano_y_conectado(h) && self.estado.militar.defiende_a(faccion, h.faccion)).map(|h| Candidato::de(cr, &h.heroe, &de_su_columna(h))).collect()
         };
-        let visitantes_que_entran = seleccionar(&visitantes, cupo).entran;
-        for &h in &visitantes_que_entran {
+        let (mut escuadras, mut lucharon) = (vec![], vec![]);
+        let heroes = seleccionar(&candidatos, cupo).entran;
+        for &h in &heroes {
             let suyas = de_su_columna(self.heroe(h).expect("existe"));
             lucharon.push((h, suyas.iter().map(|s| s.id).collect()));
             escuadras.extend(suyas.into_iter().cloned());
         }
-        DefensaDePlaza { tropa: Tropa { escuadras, heroes: [residentes_que_entran, visitantes_que_entran].concat() }, lucharon }
+        DefensoresDeDentro { tropa: Tropa { escuadras, heroes }, lucharon }
     }
 
     /// Combate §6. Solo un ejército; la plaza, de otra Facción, a ≤ `radioEncuentro` y no protegida por una conquista reciente. Sin defensores con soldados
@@ -622,19 +677,23 @@ impl Nucleo {
         datos.extend([("heridos", heridos as i64), ("chatarra", total(&chatarra)), ("botin", total(&llevada))]);
         self.hecho_de_combate(if conquistada { "combate.asedio_conquista" } else { "combate.asedio_resistido" }, t, vec![id], if conquistada { vec![] } else { vec![x] }, punto, datos);
         if conquistada {
-            self.conquistar_plaza(t, x, yo, id, &defensa.lucharon);
+            // Los residentes que defendieron pierden la mitad del carro: es del vencedor, hasta donde le quepa.
+            let robado = self.conquistar_plaza(t, x, yo, id, &defensa.lucharon);
+            self.entregar_lo_robado(id, &robado);
         }
         Ok(())
     }
 
     // ───────────────────────────── Un pueblo extractor ─────────────────────────────
 
-    /// Combate §7.3. Solo un ejército, de otra Facción que la de la plaza madre. Defienden los 30 mineros de serie (sin dueño, fuera de cupo) con la ventaja del
-    /// aguante. Si gana el atacante se lleva, hasta donde le quepa, lo que el almacén del pueblo guarda por encima de la mitad de su capacidad; si no, nada. Es un
-    /// saqueo: el pueblo no cambia de dueño ni se destruye. La guarnición que queda por debajo de su número de serie se repone gratis a las 6 horas.
+    /// Combate §7.3. Solo un ejército, de otra Facción que la de la plaza madre. Defienden los 30 mineros de serie (sin dueño, fuera de cupo) y los héroes que están
+    /// **dentro** del pueblo —de la Facción de la plaza madre, aliados o vasallos, hasta 5, con las escuadras de su columna—, con la ventaja del aguante. Si gana el atacante
+    /// se lleva, hasta donde le quepa, lo que el almacén del pueblo guarda por encima de la mitad de su capacidad; si no, nada; los defensores en persona quedan heridos y los
+    /// que residen en la plaza madre pierden la mitad de su carro (Entrar con todo, 2026-10-22). Es un saqueo: el pueblo no cambia de dueño ni se destruye. La guarnición que
+    /// queda por debajo de su número de serie se repone gratis a las 6 horas.
     // DUDA: «si cae, se repone» se lee aquí como «si queda por debajo de 30»: el reloj de 6 h empieza en el primer combate que la deja incompleta y no se
     // reinicia mientras corre. Con la guarnición a 0 esperando su reposición el pueblo cae sin combate (como una plaza sin defensores).
-    // Solo defiende lo que está dentro (decisión del autor, 2026-10-22) y nadie puede entrar aún en un pueblo: una columna amiga a su puerta, en el mapa, no cuenta.
+    // Solo defiende lo que está dentro (decisión del autor, 2026-10-22): una columna amiga a su puerta, en el mapa, no cuenta.
     // DUDA: la chatarra, si resiste, va al almacén de la plaza madre.
     fn atacar_pueblo(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
@@ -672,21 +731,25 @@ impl Nucleo {
                 return Ok(());
             }
         }
-        let mut mineros = vec![self.estado.combate.guarniciones[&x].escuadra.clone()];
-        let columnas = self.columnas_de(&atac.escuadras);
+        let dentro = self.defensores_de_dentro(Ubicacion::Pueblo(x), faccion_madre, None, cr.batalla.capacidad_resto, t);
+        let mut defensa = vec![self.estado.combate.guarniciones[&x].escuadra.clone()];
+        defensa.extend(dentro.tropa.escuadras.iter().cloned());
+        let columnas = [self.columnas_de(&atac.escuadras), self.columnas_de(&dentro.tropa.escuadras)].concat();
         let participantes = Self::participantes_de(&self.estado.ejercitos[&id]);
         let punto = self.estado.ejercitos[&id].posicion_en(t);
         if let Some((a, b)) = guerra {
             self.declarar_guerra(t, a, b);
         }
-        let (gana, informe): (bool, Option<Informe>) = if mineros[0].con_soldados() {
-            let i = reglas_pueblo::resolver_saqueo(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut mineros, heroes: &[] }, &mut self.estado.rng).expect("los dos bandos tienen quién combata");
+        let (gana, informe): (bool, Option<Informe>) = if defensa.iter().any(Escuadra::con_soldados) {
+            let i = reglas_pueblo::resolver_saqueo(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa, heroes: &dentro.tropa.heroes }, &mut self.estado.rng)
+                .expect("los dos bandos tienen quién combata");
             (i.ganador == Lado::Atacante, Some(i))
         } else {
             (true, None)
         };
         self.volcar_escuadras(&atac.escuadras);
-        self.guardar_guarnicion(x, mineros.remove(0), t);
+        self.volcar_escuadras(&defensa);
+        self.guardar_guarnicion(x, defensa.remove(0), t);
 
         let (mut llevado, mut chatarra) = (Mercancia::new(), Mercancia::new());
         if let Some(i) = &informe {
@@ -710,9 +773,15 @@ impl Nucleo {
             });
         }
         self.tr.asentamientos.push(madre);
-        let heridos = if gana { 0 } else { self.herir_heroes(&participantes, t) };
+        // Los defensores en persona quedan heridos si el pueblo cae en el saqueo (sin combate, nadie); si no, todo el ejército. El residente pierde la mitad del carro.
+        let (heridos, carro_perdido) = match (gana, &informe) {
+            (false, _) => (self.herir_heroes(&participantes, t), Mercancia::new()),
+            (true, Some(_)) => (self.herir_heroes(&dentro.tropa.heroes, t), self.pierden_la_mitad_del_carro(&dentro.tropa.heroes, madre)),
+            (true, None) => (0, Mercancia::new()),
+        };
+        self.entregar_lo_robado(id, &carro_perdido);
         self.recomponer_tras_bajas(&columnas, t);
-        let mut datos = vec![("pueblo", x as i64), ("saqueado", total(&llevado)), ("chatarra", total(&chatarra)), ("heridos", heridos as i64)];
+        let mut datos = vec![("pueblo", x as i64), ("saqueado", total(&llevado)), ("chatarra", total(&chatarra)), ("heridos", heridos as i64), ("carroPerdido", total(&carro_perdido))];
         if let Some(i) = &informe {
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }

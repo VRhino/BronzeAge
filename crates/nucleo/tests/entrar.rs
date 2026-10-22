@@ -510,12 +510,16 @@ fn la_orden_de_entrar_la_respeta_un_enemigo_a_la_puerta_no_entra_hasta_que_se_le
     assert_eq!(e.rechazada("en", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: en }), rechazos::PUERTA_CERRADA);
     assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash), "el rechazo no deja rastro");
     assert!(e.n.en_el_mapa(ce), "se queda fuera, en el mapa");
-    // El aliado y el ciudadano entran; cerrar la puerta a los aliados no echa al que ya está dentro, pero el siguiente ya no entra.
+    // El aliado y el ciudadano entran; cerrar la puerta a los aliados echa al mapa, al instante, al que ya estaba dentro (cambia desde el 2026-10-22: antes sólo decidía quién
+    // entraba) y el siguiente ya no entra. El ciudadano, que es de la misma Facción, no se echa nunca.
     e.ok("al", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: al });
+    assert!(!e.n.en_el_mapa(ca));
     e.ok("ci", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: true, enemigos: false });
-    assert_eq!(e.n.heroe(al).unwrap().heroe.presencia.ubicacion, Ubicacion::Asentamiento(a as u32), "el que ya estaba dentro sigue");
+    assert_eq!(e.n.heroe(al).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(ca), "el que estaba dentro sale al mapa con su columna");
+    assert!(e.n.en_el_mapa(ca));
+    assert_eq!(e.rechazada("al", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: al }), rechazos::PUERTA_CERRADA, "y ya no vuelve a entrar");
     e.ok("ci", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: ci });
-    assert!(!e.n.en_el_mapa(ca) && !e.n.en_el_mapa(cc));
+    assert!(e.n.en_el_mapa(ca) && !e.n.en_el_mapa(cc));
     // Se abre la puerta a los enemigos y el enemigo entra.
     e.ok("ci", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true });
     e.ok("en", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: en });
@@ -529,13 +533,17 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN17");
+    assert_eq!(&bytes[..5], b"BAN18");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].acceso, Acceso { aliados: false, neutrales: true, enemigos: true });
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
     let viejo = [b"BAN16".as_slice(), &bytes[5..]].concat();
     let Err(err) = nucleo::Estado::deserializar(&viejo, &Reglas::default(), &e.n.estado().mundo_hash) else { panic!("BAN16 no debe admitirse") };
     assert!(err.to_string().contains("BAN16") && err.to_string().contains("acceso"), "{err}");
+    // BAN17 (sin héroes dentro de pueblos ni avanzadas) tampoco se admite, y dice por qué.
+    let viejo = [b"BAN17".as_slice(), &bytes[5..]].concat();
+    let Err(err) = nucleo::Estado::deserializar(&viejo, &Reglas::default(), &e.n.estado().mundo_hash) else { panic!("BAN17 no debe admitirse") };
+    assert!(err.to_string().contains("BAN17") && err.to_string().contains("pueblo") && err.to_string().contains("avanzada"), "{err}");
 }
 
 // ───────────────────────────── 5. Cuando el lugar cae en ruinas ─────────────────────────────
@@ -725,4 +733,223 @@ fn una_foto_con_un_visitante_dentro_y_un_carro_en_la_residencia_recupera_el_mism
     assert_eq!(e.n.hash_estado(), sin_parar.0);
     assert_eq!(e.n.estado().serializar(), sin_parar.1, "el estado recuperado sigue igual que el que no se interrumpió");
     e.n.apagar().unwrap();
+}
+
+// ───────────────────────────── 7. Cerrar la puerta expulsa ─────────────────────────────
+
+#[test]
+fn cerrar_la_puerta_saca_al_mapa_al_instante_y_con_todo_lo_suyo_a_quien_ya_no_puede_entrar_pero_no_a_la_misma_faccion_ni_a_los_residentes() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    for (x, y, r) in [(1, 2, Relacion::Alianza), (1, 5, Relacion::Guerra)] {
+        e.ok("admin", Comando::FijarRelacion { a: x, b: y, relacion: Some(r) });
+    }
+    // Con la puerta abierta a todos entran de visita, con su columna, un aliado (F2), un neutral (F4), un enemigo (F5) y uno de la propia Facción (F1).
+    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true });
+    let mut visitas = vec![];
+    for (cuenta, faccion) in [("al", 2), ("ne", 4), ("en", 5), ("ci", 1)] {
+        let (h, ids) = e.con_prestamo(cuenta, faccion);
+        e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 30_000 });
+        let col = e.viaja_a_la_plaza(cuenta, h, &ids, &[(Oro, 20_000)], Politica::Rechazar);
+        e.ok(cuenta, Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+        visitas.push((cuenta, h, col));
+    }
+    let [(_, al, cal), (_, ne, cne), (_, en, cen), (_, ci, cci)] = visitas[..] else { unreachable!() };
+    // Un residente dentro y un neutral que la administración colocó dentro sin columna (no trajo nada).
+    let (res, _) = e.con_milicia("res");
+    let sf = e.ciudadano("sf", Some(4));
+    e.ok("admin", Comando::ColocarHeroe { heroe: sf, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    let foto = |e: &Escenario, col: u64| (e.ejercito(col).columna.carga.clone(), e.ejercito(col).columna.escuadras.clone(), e.viveres(col));
+    let (f_ne, f_en) = (foto(&e, cne), foto(&e, cen));
+    let dentro = |e: &Escenario, h: u64| e.n.heroe(h).unwrap().heroe.presencia.ubicacion == Ubicacion::Asentamiento(a as u32);
+    assert!([al, ne, en, ci, sf, res].iter().all(|&h| dentro(&e, h)));
+
+    // Se cierra a neutrales y enemigos: salen los dos visitantes con su columna y el que no trajo ninguna con una nueva; los demás siguen dentro.
+    let (t, v) = (e.n.ahora(), e.n.version());
+    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: false, enemigos: false });
+    assert_eq!(e.n.version(), v + 1, "una sola mutación");
+    assert!([al, ci, res].iter().all(|&h| dentro(&e, h)), "el aliado, el de la propia Facción y el residente siguen");
+    assert!(!e.n.en_el_mapa(cal) && !e.n.en_el_mapa(cci));
+    for (h, col, antes) in [(ne, cne, f_ne), (en, cen, f_en)] {
+        assert_eq!(e.n.heroe(h).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(col), "sale con la columna con la que entró");
+        assert!(e.n.en_el_mapa(col));
+        assert_eq!((foto(&e, col), e.ejercito(col).posicion), (antes, e.plaza()), "con la tropa, el carro y los víveres de antes, a la puerta");
+    }
+    let hs = e.n.heroe(sf).unwrap();
+    let Ubicacion::Columna(nueva) = hs.heroe.presencia.ubicacion else { panic!("sale al mapa: {:?}", hs.heroe.presencia.ubicacion) };
+    assert_eq!((hs.columna, e.ejercito(nueva).columna.faccion, e.ejercito(nueva).columna.tipo, e.ejercito(nueva).posicion), (Some(nueva), Some(4), TipoColumna::Personal, e.plaza()));
+    let echados = hechos(&e.n, "heroe.expulsado");
+    assert_eq!(echados.iter().map(|h| dato(h, "heroe")).collect::<Vec<_>>(), vec![ne as i64, en as i64, sf as i64], "por id, en el mismo instante");
+    assert!(echados.iter().all(|h| (h.0, h.1.clone(), dato(h, "lugar"), dato(h, "id"), dato(h, "motivo")) == (t, vec![a], 0, a as i64, 0)));
+    // Quien salió no vuelve a entrar.
+    assert_eq!(e.rechazada("ne", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: ne }), rechazos::PUERTA_CERRADA);
+
+    // Se cierra también a los aliados: sale «al»; la misma Facción y el residente nunca.
+    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: false, enemigos: false });
+    assert_eq!(e.n.heroe(al).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(cal));
+    assert!(e.n.en_el_mapa(cal) && dentro(&e, ci) && dentro(&e, res) && !e.n.en_el_mapa(cci));
+    assert_eq!(hechos(&e.n, "heroe.expulsado").len(), 4);
+
+    // Abrir la puerta no saca a nadie, y repetir lo mismo no cambia nada.
+    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true });
+    assert_eq!(e.ord("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true }).resultado, Resultado::SinCambios);
+    assert_eq!((hechos(&e.n, "heroe.expulsado").len(), dentro(&e, ci), dentro(&e, res)), (4, true, true));
+}
+
+// ───────────────────────────── 8. Cuando el lugar cae por conquista (Doc 5 §5.4 y §5.15.5, Combate §9) ─────────────────────────────
+
+impl Escenario {
+    /// Un ejército de «gus» (Facción 2) a 2 u de la puerta de la plaza `a`, con esas tropas: (columna, héroe).
+    fn atacante(&mut self, tropas: &[Tropa]) -> (u64, u64) {
+        let (t, p) = (self.n.ahora(), self.plaza());
+        let col = self.n.crear_ejercito(t, "gus", 2, Punto::new(p.x + 2_000, p.y), 500, 100_000).unwrap();
+        let h = self.ejercito(col).columna.lider;
+        for &tropa in tropas {
+            self.ok("admin", Comando::DarEscuadra { heroe: h, tropa, cantidad: mr().tropas.tropa(tropa).unidades });
+        }
+        (col, h)
+    }
+    /// El loadout activo del héroe lleva esas escuadras: las que defienden en persona.
+    fn loadout(&mut self, h: u64, escuadras: Vec<u64>) {
+        let loadout = self.n.heroe(h).unwrap().heroe.loadouts[0].id;
+        self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras, perks: vec![], activo: Some(true) });
+    }
+    /// Un Barracón en la plaza (que sube a nivel 2): el cupo de 7 de Liderazgo para la guarnición.
+    fn con_barracon(&mut self) {
+        let a = self.a;
+        self.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+        self.dar(a, Madera, 1_000_000);
+        self.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: Tipo::Barracon });
+        let activo = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == Tipo::Barracon && x.activo());
+        for _ in 0..80 {
+            if activo(self) {
+                break;
+            }
+            self.avanzar(HORA);
+        }
+        assert!(activo(self), "el Barracón acaba por levantarse");
+    }
+    /// El héroe sale con la carga dada y vuelve a entrar en su residencia sin vaciarla: su carro se queda con él.
+    fn con_carro(&mut self, cuenta: &str, h: u64, carga: &[(Recurso, i64)]) {
+        let a = self.a;
+        let col = self.ok(cuenta, Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![], carga: carga.to_vec() }).creadas[0];
+        self.ok(cuenta, Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+        assert!(self.n.ejercito(col).is_none());
+    }
+}
+
+#[test]
+fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_el_resto_a_cero_a_la_plaza_mas_cercana_y_el_residente_pierde_la_mitad_del_carro() {
+    let m = con_mundo!();
+    let (mut e, c) = dos_plazas(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    e.con_barracon();
+    // «ana», residente: una milicia que defiende (en su loadout), unos peltastas que se quedan en el campamento, unos leñadores en la guarnición y 40 001 de madera y 10 000 de piedra en el carro.
+    let (ana, milicia) = e.con_milicia("ana");
+    let peltastas = e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::Peltastas, cantidad: 10 }).creadas[0];
+    let lenadores = e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::Lenadores, cantidad: 30 }).creadas[0];
+    e.ok("ana", Comando::AsignarGuarnicion { heroe: ana, escuadra: lenadores });
+    e.loadout(ana, vec![milicia]);
+    e.dar(a, Madera, 100_000);
+    e.dar(a, Piedra, 100_000);
+    e.con_carro("ana", ana, &[(Madera, 40_001), (Piedra, 10_000)]);
+    // «bea», residente que está fuera (en el mapa, con su milicia en la columna): solo cambia de casa. «cai», residente dentro pero herida: no defiende y sale con su carro entero.
+    let bea = e.residente("bea");
+    let mb = e.ok("admin", Comando::DarEscuadra { heroe: bea, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
+    let cb = e.ok("bea", Comando::SalirAlMundo { asentamiento: a, heroe: bea, escuadras: vec![mb], carga: vec![] }).creadas[0];
+    let cai = e.residente("cai");
+    let mc = e.ok("admin", Comando::DarEscuadra { heroe: cai, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
+    e.loadout(cai, vec![mc]);
+    e.con_carro("cai", cai, &[(Madera, 30_000)]);
+    // «vis», de otra Facción, de visita con su columna y 20 000 de oro: sale con ella sin perder nada.
+    let (vis, ids) = e.con_prestamo("vis", 3);
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: vis, recurso: Oro, cantidad: 30_000 });
+    let cv = e.viaja_a_la_plaza("vis", vis, &ids, &[(Oro, 20_000)], Politica::Rechazar);
+    e.ok("vis", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: vis });
+    e.ok("admin", Comando::HerirHeroe { heroe: cai });
+    let personal = e.n.heroe(ana).unwrap().almacen_personal.clone();
+    let (carro_ana, carro_cai, carga_vis) = (e.n.heroe(ana).unwrap().carro.clone(), e.n.heroe(cai).unwrap().carro.clone(), e.ejercito(cv).columna.carga.clone());
+    assert_eq!(carro_ana.get(&Madera), Some(&40_001));
+
+    // Un ejército de F2 asedia la plaza y gana.
+    let (cg, gus) = e.atacante(&[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
+    let t = e.n.ahora();
+    e.ok("gus", Comando::Atacar { heroe: gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: false });
+    let conquista = &hechos(&e.n, "asentamiento.conquistada")[0];
+    assert_eq!((conquista.0, dato(conquista, "faccion")), (t, 2), "la plaza cae");
+
+    // 1. Cada héroe defensor queda fuera, en el mundo, con las escuadras que usó en la batalla (las que sobrevivieron), en su propia columna y con su carro.
+    let ha = e.n.heroe(ana).unwrap();
+    let Ubicacion::Columna(sale) = ha.heroe.presencia.ubicacion else { panic!("«ana» queda fuera: {:?}", ha.heroe.presencia.ubicacion) };
+    assert_eq!((e.ejercito(sale).columna.escuadras.clone(), e.ejercito(sale).posicion, e.ejercito(sale).columna.faccion), (vec![milicia], e.plaza(), Some(1)));
+    let usada = e.escuadra(ana, milicia);
+    assert!(usada.cantidad > 0 && usada.cantidad < 25 && usada.contenedor == Contenedor::Ejercito(sale), "sobrevivió con bajas y va en su columna: {usada:?}");
+    assert!(e.n.heroe_herido(ana), "los defensores en persona quedan heridos");
+    // 2. Su residencia pasa a la plaza más cercana de su Facción (la otra plaza F1), con todo su campamento a 0: lo que no usó y la guarnición, sin captura.
+    assert_eq!(ha.heroe.residencia, Some(Residencia::Asentamiento(c as u32)), "el asentamiento más cercano de su Facción");
+    for (id, que) in [(peltastas, "los peltastas del campamento"), (lenadores, "los leñadores de la guarnición")] {
+        let s = e.escuadra(ana, id);
+        assert_eq!((s.cantidad, s.contenedor, s.en_guarnicion), (0, Contenedor::Campamento, false), "{que} quedan a 0 y vuelven a su campamento: no hay captura");
+    }
+    assert_eq!(ha.almacen_personal, personal, "su almacén personal viaja con ella");
+    // 3. El carro del residente que defendió: pierde la mitad (hacia abajo, recurso a recurso) y es del vencedor; la regla del derrotado, que el canon no desmiente.
+    let carga_sale = e.ejercito(sale).columna.carga.clone();
+    assert_eq!((carga_sale.get(&Madera).copied(), carga_sale.get(&Piedra).copied()), (Some(40_001 - 20_000), Some(5_000)), "40 001 de madera → 20 001; 10 000 de piedra → 5 000");
+    assert!(e.n.heroe(ana).unwrap().carro.is_empty(), "el carro de su residencia pasó a la columna con la que sale");
+    let robado = 20_000 + 5_000;
+    assert_eq!(dato(conquista, "carroPerdido"), robado);
+    let del_vencedor = e.ejercito(cg).columna.carga.clone();
+    assert_eq!((del_vencedor.get(&Piedra).copied().unwrap_or(0) >= 5_000, del_vencedor.get(&Madera).copied().unwrap_or(0) >= 20_000), (true, true), "el vencedor carga lo robado (y la chatarra): {del_vencedor:?}");
+    // 4. «bea», fuera, solo se muda: su columna y su milicia no se tocan; su campamento, a 0. «cai», herida, no defendió: sale con su carro entero.
+    assert_eq!(e.n.heroe(bea).unwrap().heroe.residencia, Some(Residencia::Asentamiento(c as u32)));
+    assert_eq!((e.n.heroe(bea).unwrap().heroe.presencia.ubicacion, e.escuadra(bea, mb).cantidad), (Ubicacion::Columna(cb), 25));
+    let hc = e.n.heroe(cai).unwrap();
+    let Ubicacion::Columna(sale_cai) = hc.heroe.presencia.ubicacion else { panic!("«cai» sale al mapa") };
+    assert_eq!((e.ejercito(sale_cai).columna.carga.clone(), e.ejercito(sale_cai).columna.escuadras.is_empty(), hc.heroe.residencia), (carro_cai, true, Some(Residencia::Asentamiento(c as u32))), "sale sola con su carro entero");
+    assert_eq!(e.escuadra(cai, mc).cantidad, 0, "su milicia, que no combatió, corre la suerte del resto del campamento");
+    // 5. El visitante sale con la columna con la que entró, sin perder nada ni cambiar de casa.
+    assert_eq!((e.n.heroe(vis).unwrap().heroe.presencia.ubicacion, e.ejercito(cv).columna.carga.clone(), e.n.en_el_mapa(cv)), (Ubicacion::Columna(cv), carga_vis, true));
+    assert_eq!(e.n.heroe(vis).unwrap().heroe.residencia, Some(Residencia::Campamento(0)));
+    // Nadie queda dentro de la plaza conquistada y se cuenta a cada uno.
+    assert!(e.n.heroes().all(|h| h.heroe.presencia.ubicacion != Ubicacion::Asentamiento(a as u32)));
+    assert_eq!(hechos(&e.n, "heroe.desalojado").len(), 4, "ana, bea, cai y vis");
+}
+
+#[test]
+fn un_residente_que_conservaba_su_columna_para_las_caravanas_y_defiende_sale_con_ella_y_con_las_escuadras_que_uso() {
+    let m = con_mundo!();
+    let (mut e, c) = dos_plazas(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    let (ana, milicia) = e.con_milicia("ana");
+    e.loadout(ana, vec![milicia]);
+    // La plaza C levanta un Mercado (sin él no hay caravanas) y «ana» entra en A con una caravana de C: su columna sigue (sin tropa) para llevarla.
+    e.dar(c, Madera, 350_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: c, tipo: Tipo::Mercado });
+    e.avanzar(9 * HORA);
+    let k = e.caravana(c);
+    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Madera, cantidad: 30_000 });
+    e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
+    assert_eq!((e.n.heroe(ana).unwrap().columna, e.escuadra(ana, milicia).contenedor), (Some(ej), Contenedor::Campamento), "la milicia vuelve al campamento y defiende desde allí");
+
+    let (_, gus) = e.atacante(&[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
+    e.ok("gus", Comando::Atacar { heroe: gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: false });
+    assert_eq!(e.n.estado().asentamientos[&a].faccion, 2, "la plaza cae");
+    // Sale con la columna que conservaba —la caravana sigue enganchada— y con la milicia que defendió y sobrevivió; la mitad del carro, para el vencedor.
+    let ha = e.n.heroe(ana).unwrap();
+    assert_eq!((ha.heroe.presencia.ubicacion, ha.columna, ha.heroe.residencia), (Ubicacion::Columna(ej), Some(ej), Some(Residencia::Asentamiento(c as u32))));
+    assert!(e.n.en_el_mapa(ej));
+    assert_eq!((e.ejercito(ej).caravanas_adjuntas.clone(), e.estado_de(k)), (vec![k], EstadoCaravana::Adjunta));
+    let s = e.escuadra(ana, milicia);
+    assert!(s.cantidad > 0 && s.cantidad < 25 && s.contenedor == Contenedor::Ejercito(ej), "la milicia que defendió va en su columna: {s:?}");
+    assert_eq!(e.ejercito(ej).columna.escuadras, vec![milicia]);
+    assert_eq!(e.ejercito(ej).columna.carga.get(&Madera).copied(), Some(15_000), "la mitad de los 30 000 del carro");
+    assert!(e.n.heroe(ana).unwrap().carro.is_empty());
 }

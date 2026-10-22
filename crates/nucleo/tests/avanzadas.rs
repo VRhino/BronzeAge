@@ -13,9 +13,10 @@ use combate::resultado::{Razon, Resultado as ResultadoDeBatalla, ResultadoEscuad
 use militar::catalogo::Tropa;
 use militar::escuadra::Contenedor;
 use militar::heroe::{Controlador, Residencia};
+use militar::presencia::Ubicacion;
 use mundo::{Mundo, OpcionesValidacion};
 use nucleo::economia::Mapa;
-use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Nucleo, ObjetivoAtaque, Peticion, Relacion, Reglas, Resultado, Respuesta, SucesoCombate};
+use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Nucleo, ObjetivoAtaque, Peticion, Relacion, Reglas, Resultado, Respuesta, SucesoCombate, SucesoMilitar};
 use rutas::Rutas;
 use std::sync::{Arc, OnceLock};
 
@@ -1093,7 +1094,7 @@ fn con_un_humano_el_ataque_abre_una_batalla_de_unity_sin_convocatoria_con_capaci
     assert_eq!(e.rechazada("ana", Comando::RepostarEnAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
     let (_, otro) = e.atacante(Punto::new(pos.x + 2_000, pos.y), &[Tropa::MiliciaLanceros]);
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: otro, objetivo: ObjetivoAtaque::Avanzada(av), declara_guerra: false }), rechazos::BATALLA_BLOQUEADO);
-    // Una columna amiga a su puerta, en el mapa, no defiende: hay que estar dentro, y en una avanzada nadie puede entrar aún.
+    // Una columna amiga a su puerta, en el mapa, no defiende: hay que estar dentro (haber entrado con `EntrarEnAvanzada`).
     let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None });
     assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
     assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar dentro")), "{r:?}");
@@ -1531,7 +1532,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN17");
+    assert_eq!(&bytes[..5], b"BAN18");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1615,4 +1616,433 @@ fn cada_campo_de_la_avanzada_de_una_plaza_cambia_el_hash() {
     assert_eq!(s.serializar(), bytes);
     let obra = s.asentamientos[&plaza].economia.avanzada(otra_av).unwrap().obra.clone().unwrap();
     assert_eq!((obra.tipo, obra.falta()), (TipoObra::Construir, vec![(Madera, 100_000), (Piedra, 100_000)]));
+}
+
+// ───────────────────────────── 12. Entrar en una avanzada (Entrar con todo, 2026-10-22) ─────────────────────────────
+
+/// Tropa de élite para el que defiende desde dentro.
+const ELITE: [Tropa; 4] = [Tropa::Shardana, Tropa::Shardana, Tropa::Hequetai, Tropa::Hequetai];
+
+/// Las tropas del ejército fuerte de Beto.
+const FUERTE: [Tropa; 5] = [Tropa::EspadachinesBronce, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto, Tropa::ArquerosCompuesto, Tropa::HacherosArmados];
+
+impl Esc {
+    /// Una columna de administración que nace en el instante `t`, en `p`, con esas tropas: (columna, héroe).
+    fn columna_en(&mut self, t: Instante, dueno: &str, faccion: u32, p: Punto, tropas: &[Tropa]) -> (u64, u64) {
+        let id = self.n.crear_ejercito(t, dueno, faccion, p, 500, 100_000).unwrap();
+        let h = self.n.ejercito(id).unwrap().columna.lider;
+        for &tropa in tropas {
+            self.ok_en(t, "admin", Comando::DarEscuadra { heroe: h, tropa, cantidad: completa(tropa) });
+        }
+        (id, h)
+    }
+    /// Un héroe de esa Facción con una columna a la puerta de la avanzada y esas tropas: (columna, héroe).
+    fn visita(&mut self, cuenta: &str, faccion: u32, tropas: &[Tropa]) -> (u64, u64) {
+        let pos = self.sitio();
+        let (col, h) = self.columna(cuenta, faccion, pos);
+        tropas.iter().for_each(|&t| {
+            self.dar_escuadra(h, t);
+        });
+        (col, h)
+    }
+    fn ubicacion(&self, heroe: u64) -> Ubicacion {
+        self.n.heroe(heroe).unwrap().heroe.presencia.ubicacion
+    }
+    fn carga_en(&self, columna: u64, r: Recurso) -> i64 {
+        self.n.ejercito(columna).unwrap().columna.carga.get(&r).copied().unwrap_or(0)
+    }
+    fn soldados(&self, columna: u64) -> i64 {
+        self.n.soldados_de_columna(columna).unwrap()
+    }
+}
+
+#[test]
+fn se_entra_en_una_avanzada_operativa_con_el_acceso_de_la_madre_y_se_sale_con_todo() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (plaza, pos) = (e.plaza, e.sitio());
+    // Una obra no tiene puerta: ni se ve, ni se entra.
+    let (av, col, ana) = e.colocar_en(pos);
+    assert_eq!(e.rechazada("ana", Comando::EntrarEnAvanzada { avanzada: av, heroe: ana }), rechazos::AVANZADA_NO_OPERATIVA);
+    e.acabar_obra(av, col);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 4, relacion: Some(Relacion::Guerra) });
+
+    // Los rechazos, en su orden y sin dejar rastro.
+    let (_, enemigo) = e.visita("eno", 4, &[]);
+    let lejos = e.columna("lia", 1, Punto::new(pos.x + 5_000, pos.y));
+    let lia = e.n.ejercito(lejos.0).unwrap().columna.lider;
+    assert_eq!(e.rechazada("ana", Comando::EntrarEnAvanzada { avanzada: 9_999, heroe: ana }), rechazos::AVANZADA_DESCONOCIDA);
+    assert_eq!(e.rechazada("beto", Comando::EntrarEnAvanzada { avanzada: av, heroe: ana }), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("lia", Comando::EntrarEnAvanzada { avanzada: av, heroe: lia }), rechazos::AVANZADA_FUERA_DE_LA_PUERTA);
+    assert_eq!(e.rechazada("eno", Comando::EntrarEnAvanzada { avanzada: av, heroe: enemigo }), rechazos::PUERTA_CERRADA, "la madre no abre su puerta a los enemigos");
+    assert_eq!(e.rechazada("ana", Comando::SalirDeAvanzada { avanzada: av, heroe: ana }), rechazos::HEROE_NO_ESTA_EN_LA_AVANZADA);
+    assert_eq!(e.rechazada("ana", Comando::SalirDeAvanzada { avanzada: 9_999, heroe: ana }), rechazos::AVANZADA_DESCONOCIDA);
+
+    // Entra con todo y sale con todo; dentro no está en el mapa y come de sus víveres.
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 30_000 });
+    let escuadra = e.dar_escuadra(ana, Tropa::MiliciaLanceros);
+    let (carga0, viveres0, t) = (e.carga_en(col, Madera), e.n.ejercito(col).unwrap().columna.viveres.valor_en(e.n.ahora()), e.n.ahora());
+    e.ok("ana", Comando::EntrarEnAvanzada { avanzada: av, heroe: ana });
+    assert_eq!(e.ubicacion(ana), Ubicacion::Avanzada(av));
+    assert!(!e.n.en_el_mapa(col));
+    assert_eq!((e.carga_en(col, Madera), e.n.ejercito(col).unwrap().columna.escuadras.clone()), (carga0, vec![escuadra]));
+    let h = &hechos(&e.n, "jugador.entra_en_avanzada")[0];
+    assert_eq!((h.0, h.2.clone(), dato(h, "heroe"), dato(h, "avanzada"), dato(h, "ejercito")), (t, vec![plaza], ana as i64, av as i64, col as i64));
+    e.avanzar(HORA);
+    assert!(e.n.ejercito(col).unwrap().columna.viveres.valor_en(e.n.ahora()) < viveres0, "come de sus propios víveres");
+    e.ok("ana", Comando::SalirDeAvanzada { avanzada: av, heroe: ana });
+    assert_eq!(e.ubicacion(ana), Ubicacion::Columna(col));
+    assert!(e.n.en_el_mapa(col));
+    assert_eq!((e.carga_en(col, Madera), e.n.ejercito(col).unwrap().posicion), (carga0, pos), "sale con todo, a la puerta");
+    assert_eq!(dato(&hechos(&e.n, "jugador.sale_de_avanzada")[0], "avanzada"), av as i64);
+
+    // El aliado y quien no tiene relación entran por defecto; el mismo ejército entra por orden de su Líder.
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Alianza) });
+    let (_, aliado) = e.visita("alia", 2, &[]);
+    let (_, neutral) = e.visita("neu", 3, &[]);
+    e.ok("alia", Comando::EntrarEnAvanzada { avanzada: av, heroe: aliado });
+    e.ok("neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: neutral });
+    assert_eq!((e.ubicacion(aliado), e.ubicacion(neutral)), (Ubicacion::Avanzada(av), Ubicacion::Avanzada(av)));
+
+    // Cerrar la puerta a los neutrales saca al mapa a «neu», con su columna, y a nadie más.
+    let colneu = e.n.heroe(neutral).unwrap().columna.unwrap();
+    e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    assert_eq!((e.ubicacion(neutral), e.n.en_el_mapa(colneu), e.ubicacion(aliado)), (Ubicacion::Columna(colneu), true, Ubicacion::Avanzada(av)));
+    let echado = &hechos(&e.n, "heroe.expulsado")[0];
+    assert_eq!((dato(echado, "heroe"), dato(echado, "lugar"), dato(echado, "id"), dato(echado, "motivo"), echado.2.clone()), (neutral as i64, 2, av as i64, 0, vec![plaza]));
+}
+
+#[test]
+fn en_una_avanzada_defienden_los_de_dentro_de_la_faccion_de_la_madre_y_los_aliados_y_no_los_neutrales_ni_los_que_estan_a_la_puerta() {
+    let m = con_mundo!();
+    // (cuenta, Facción, relación con F1, ¿entra?, ¿defiende?): un neutral dentro no defiende; un aliado a la puerta, tampoco; un vasallo y un aliado dentro, sí.
+    for (cuenta, faccion, relacion, entra, defiende) in [
+        ("alia", 3, Some(Relacion::Alianza), true, true),
+        ("vasa", 3, Some(Relacion::Vasallaje), true, true),
+        ("ana", 1, None, true, true),
+        ("neu", 3, None, true, false),
+        ("puerta", 3, Some(Relacion::Alianza), false, false),
+    ] {
+        let mut e = montar(m, 7, 2);
+        let (plaza, pos) = (e.plaza, e.sitio());
+        let (av, col, ana) = e.avanzada_de(Etapa::Fuerte);
+        if let Some(r) = relacion {
+            e.ok("admin", Comando::FijarRelacion { a: 1, b: faccion, relacion: Some(r) });
+        }
+        // La de «ana» es la columna con la que se levantó; las demás, una nueva. Todas con la élite.
+        let (c, h) = if cuenta == "ana" {
+            ELITE.iter().for_each(|&t| {
+                e.dar_escuadra(ana, t);
+            });
+            (col, ana)
+        } else {
+            e.visita(cuenta, faccion, &ELITE)
+        };
+        if entra {
+            e.ok(cuenta, Comando::EntrarEnAvanzada { avanzada: av, heroe: h });
+            assert!(!e.n.en_el_mapa(c));
+        }
+        let (_, beto) = e.ejercito_fuerte(pos);
+        e.guerra();
+        let soldados0 = e.soldados(c);
+        let (cosas, v0) = (e.n.cosas_en_el_espacio(), e.n.version());
+        assert!(e.atacar(beto, ObjetivoAtaque::Avanzada(av)).aceptada());
+        assert_eq!(e.n.version(), v0 + 1);
+        let (resiste, ruinas) = (hechos(&e.n, "combate.avanzada_resiste").len(), hechos(&e.n, "combate.avanzada_en_ruinas").len());
+        assert_eq!((resiste, ruinas), (defiende as usize, !defiende as usize), "{cuenta}: ¿defiende?");
+        let _ = (plaza, cosas);
+        assert_eq!(e.n.heroe_herido(beto), defiende, "{cuenta}: el atacante queda herido si pierde");
+        assert!(!e.n.heroe_herido(h), "{cuenta}: quien defiende y gana no queda herido y el que no defiende no pierde nada");
+        if defiende {
+            assert_eq!(e.estado_de(av), EstadoAvanzada::Operativa);
+            assert_eq!(e.ubicacion(h), Ubicacion::Avanzada(av), "la avanzada resiste: el defensor sigue dentro");
+            assert!(e.soldados(c) < soldados0, "{cuenta}: sufrió bajas defendiendo");
+        } else {
+            // Cae en ruinas: quien estaba dentro sale al mapa con su columna intacta (nadie queda dentro de unas ruinas).
+            assert!(matches!(e.estado_de(av), EstadoAvanzada::EnRuinas { .. }));
+            assert_eq!((e.ubicacion(h), e.n.en_el_mapa(c), e.soldados(c)), (Ubicacion::Columna(c), true, soldados0), "{cuenta}: sale al mapa sin perder nada");
+            assert_eq!(hechos(&e.n, "heroe.expulsado").len(), entra as usize);
+        }
+    }
+}
+
+#[test]
+fn el_residente_que_defiende_una_avanzada_y_la_pierde_queda_herido_pierde_la_mitad_del_carro_y_sale_al_mapa_con_el_visitante_amigo_que_no_lo_pierde() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (plaza, pos) = (e.plaza, e.sitio());
+    let (av, col, ana) = e.avanzada_de(Etapa::Fuerte);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
+    // Dentro: la residente «ana» (tropa floja y 30 001 de madera) y un aliado visitante (tropa floja y 30 001 de piedra).
+    e.residir(ana);
+    e.dar_escuadra(ana, Tropa::Lenadores);
+    let antes = e.carga_en(col, Madera);
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 30_001 });
+    let vis = e.visita("alia", 3, &[Tropa::Lenadores]);
+    e.ok("admin", Comando::DarSuministro { ejercito: vis.0, recurso: Piedra, cantidad: 30_001 });
+    e.ok("ana", Comando::EntrarEnAvanzada { avanzada: av, heroe: ana });
+    e.ok("alia", Comando::EntrarEnAvanzada { avanzada: av, heroe: vis.1 });
+    let con_madera = e.carga_en(col, Madera);
+    assert_eq!(con_madera, antes + 30_001);
+    let (cb, beto) = e.ejercito_fuerte(pos);
+    e.guerra();
+    let t = e.n.ahora();
+    assert!(e.atacar(beto, ObjetivoAtaque::Avanzada(av)).aceptada());
+    // Gana el atacante: el fuerte queda en ruinas (invulnerable un día), los dos defensores en persona quedan heridos y salen al mapa con su columna.
+    let h = &hechos(&e.n, "combate.avanzada_en_ruinas")[0];
+    assert_eq!((h.0, dato(h, "heridos")), (t, 2));
+    assert!(matches!(e.estado_de(av), EstadoAvanzada::EnRuinas { invulnerable_hasta: Some(_) }));
+    assert!(e.n.heroe_herido(ana) && e.n.heroe_herido(vis.1) && !e.n.heroe_herido(beto));
+    assert_eq!((e.ubicacion(ana), e.ubicacion(vis.1)), (Ubicacion::Columna(col), Ubicacion::Columna(vis.0)));
+    assert!(e.n.en_el_mapa(col) && e.n.en_el_mapa(vis.0));
+    assert_eq!(e.carga_en(col, Madera), con_madera - con_madera / 2, "la residente pierde la mitad de lo que llevaba su carro, hacia abajo, recurso a recurso");
+    assert_eq!(e.carga_en(vis.0, Piedra), 30_001, "el visitante amigo conserva su carro");
+    // La mitad perdida es del vencedor, hasta donde le quepa (el almacén de la avanzada y la chatarra ya llenan parte de su carro).
+    assert!(dato(h, "carroPerdido") > 0 && e.carga_en(cb, Madera) > 0);
+    assert_eq!(hechos(&e.n, "heroe.expulsado").iter().map(|x| (dato(x, "heroe"), dato(x, "lugar"), dato(x, "motivo"), x.2.clone())).collect::<Vec<_>>(), vec![(ana as i64, 2, 1, vec![plaza]), (vis.1 as i64, 2, 1, vec![plaza])]);
+}
+
+#[test]
+fn destruir_a_mano_una_avanzada_saca_al_mapa_a_quien_esta_dentro_con_lo_suyo() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (av, _, ana) = e.atalaya();
+    let (cn, neutral) = e.visita("neu", 3, &[Tropa::MiliciaLanceros]);
+    e.ok("neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: neutral });
+    assert!(!e.n.en_el_mapa(cn));
+    let pos = e.sitio();
+    e.ok("ana", Comando::DestruirAvanzada { heroe: ana, avanzada: av });
+    assert!(e.n.avanzada(av).is_none());
+    assert_eq!((e.ubicacion(neutral), e.n.en_el_mapa(cn), e.n.ejercito(cn).unwrap().posicion), (Ubicacion::Columna(cn), true, pos));
+    assert_eq!(dato(&hechos(&e.n, "heroe.expulsado")[0], "motivo"), 1);
+}
+
+#[test]
+fn si_la_madre_es_conquistada_o_cae_en_ruinas_quien_esta_dentro_de_su_avanzada_sale_al_mapa_con_lo_suyo() {
+    let m = con_mundo!();
+    // Conquista de la madre (sin defensores: cae sin combate).
+    let mut e = montar(m, 7, 2);
+    let (plaza, centro) = (e.plaza, e.centro);
+    let (av, _, _) = e.avanzada_de(Etapa::Fuerte);
+    let (cn, neutral) = e.visita("neu", 3, &[Tropa::MiliciaLanceros]);
+    e.ok("neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: neutral });
+    let (_, beto) = e.atacante(Punto::new(centro.x + 1_000, centro.y), &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
+    e.ok("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
+    assert_eq!((e.ubicacion(neutral), e.n.en_el_mapa(cn)), (Ubicacion::Columna(cn), true), "nadie queda dentro de lo que cambia de dueño");
+    let echado = &hechos(&e.n, "heroe.expulsado")[0];
+    assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), echado.2.clone()), (2, 2, vec![plaza]));
+
+    // Ruina de la madre: una ciudadela queda como ruina sin dueño y la atalaya desaparece; los dos sitios se vacían.
+    let mut e = montar(m, 7, 3);
+    let plaza = e.plaza;
+    let (ciudadela, _, _) = e.avanzada_de(Etapa::Ciudadela);
+    let otra = Punto::new(e.centro.x - 8_000, e.centro.y);
+    let (atalaya, col2, _) = e.colocar_en(otra);
+    e.acabar_obra(atalaya, col2);
+    let (c1, h1) = e.visita("uno", 3, &[]);
+    let (c2, h2) = e.columna("dos", 3, otra);
+    let h2 = e.n.ejercito(c2).unwrap().columna.lider.max(h2);
+    e.ok("uno", Comando::EntrarEnAvanzada { avanzada: ciudadela, heroe: h1 });
+    e.ok("dos", Comando::EntrarEnAvanzada { avanzada: atalaya, heroe: h2 });
+    for dia in 1..=200 {
+        let t = e.n.ahora().max(dia * DIA);
+        e.n.avanzar_hasta(t);
+        if e.n.economia(plaza).is_none() {
+            break;
+        }
+    }
+    assert!(e.n.economia(plaza).is_none(), "la plaza cayó en ruinas");
+    assert_eq!((e.ubicacion(h1), e.n.en_el_mapa(c1), e.ubicacion(h2), e.n.en_el_mapa(c2)), (Ubicacion::Columna(c1), true, Ubicacion::Columna(c2), true));
+    assert!(hechos(&e.n, "heroe.expulsado").iter().all(|x| dato(x, "motivo") == 1 && dato(x, "lugar") == 2 && x.2.is_empty()), "el hecho no nombra a la plaza que ya no está");
+    assert_eq!(hechos(&e.n, "heroe.expulsado").len(), 2);
+}
+
+// ───────────────────────────── 13. Unity: defender una avanzada desde dentro ─────────────────────────────
+
+#[test]
+fn por_unity_defienden_de_oficio_los_residentes_de_dentro_los_demas_amigos_se_unen_y_al_ataque_solo_se_une_quien_esta_fuera() {
+    let m = con_mundo!();
+    let mut e = montar_con(Nucleo::nuevo(arranque_unity(m, 7)), m, 2);
+    let (plaza, pos) = (e.plaza, e.sitio());
+    let (av, col, ana) = e.avanzada_de(Etapa::Fuerte);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
+    // Dentro: la residente «ana» con su élite y 30 000 de madera; un aliado (F3) y un neutral (F4) de visita; y un héroe de la Facción 2 (la atacante) que entró como neutral.
+    e.residir(ana);
+    ELITE.iter().for_each(|&t| {
+        e.dar_escuadra(ana, t);
+    });
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 30_000 });
+    let madera0 = e.carga_en(col, Madera);
+    let aliado = e.visita("alia", 3, &[Tropa::MiliciaLanceros]);
+    let neutral = e.visita("neu", 4, &[Tropa::MiliciaLanceros]);
+    let intruso = e.visita("intr", 2, &[Tropa::MiliciaLanceros]);
+    for (cuenta, h) in [("ana", ana), ("alia", aliado.1), ("neu", neutral.1), ("intr", intruso.1)] {
+        e.ok(cuenta, Comando::EntrarEnAvanzada { avanzada: av, heroe: h });
+    }
+    let (cb, beto) = e.ejercito_fuerte(pos);
+    let (_, refuerzo) = e.atacante(Punto::new(pos.x + 1_500, pos.y), &[Tropa::MiliciaLanceros]);
+    e.guerra();
+    humano(&mut e, beto);
+    humano(&mut e, ana);
+    let r = e.atacar(beto, ObjetivoAtaque::Avanzada(av));
+    assert!(r.aceptada(), "{r:?}");
+    let id = e.n.batallas().next().expect("se abrió una batalla").id;
+    let b = e.n.batalla(id).unwrap();
+    // De oficio defiende la residente que está dentro, con las escuadras de su columna, y la guarnición de serie; el aliado y el neutral no están en el ticket.
+    let defensor = &b.ticket.defensor;
+    assert_eq!(defensor.participantes.iter().map(|p| p.heroe).collect::<Vec<_>>(), vec![ana]);
+    assert_eq!(defensor.participantes[0].escuadras.len(), ELITE.len());
+    assert_eq!(defensor.sin_heroe.iter().filter(|s| s.dueno.is_none()).count(), 5);
+    // Quien está dentro de la avanzada atacada no da órdenes mientras dura: ni salir.
+    assert_eq!(e.rechazada("alia", Comando::SalirDeAvanzada { avanzada: av, heroe: aliado.1 }), rechazos::BATALLA_BLOQUEADO);
+    assert_eq!(e.rechazada("neu", Comando::SalirDeAvanzada { avanzada: av, heroe: neutral.1 }), rechazos::BATALLA_BLOQUEADO);
+    // El aliado dentro se une a la defensa; el neutral no combate aquí; el de la Facción atacante que está dentro no se une al ataque desde dentro.
+    let r = e.ord("alia", Comando::UnirseABatalla { heroe: aliado.1, batalla: id, lado: None });
+    assert!(r.aceptada(), "{r:?}");
+    let r = e.ord("neu", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None });
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("no combate aquí")), "{r:?}");
+    let r = e.ord("intr", Comando::UnirseABatalla { heroe: intruso.1, batalla: id, lado: None });
+    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar fuera")), "{r:?}");
+    let r = e.ord("intr", Comando::UnirseABatalla { heroe: intruso.1, batalla: id, lado: Some(Lado::Atacante) });
+    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA, "pedir el bando atacante tampoco lo salva");
+    // Quien está fuera, en el mapa, de la Facción atacante sí se une al ataque.
+    let r = e.ord("beto", Comando::UnirseABatalla { heroe: refuerzo, batalla: id, lado: None });
+    assert!(r.aceptada(), "{r:?}");
+    let b = e.n.batalla(id).unwrap();
+    assert_eq!((b.lado_de(aliado.1), b.lado_de(refuerzo), b.lado_de(intruso.1), b.lado_de(neutral.1)), (Some(Lado::Defensor), Some(Lado::Atacante), None, None));
+
+    // Gana el atacante: el fuerte queda en ruinas, la residente pierde la mitad del carro (es del vencedor), el aliado que se unió no, y todos salen al mapa con lo suyo.
+    let t = e.n.ahora() + MIN;
+    en_curso(&mut e.n, id, t, &[beto, ana]);
+    let res = resultado(&e.n, id, Lado::Atacante, 2);
+    let r = msg(&mut e.n, t + 5 * MIN, "res", Comando::AplicarResultado { batalla: id, resultado: res });
+    assert!(r.aceptada(), "{r:?}");
+    assert!(matches!(e.estado_de(av), EstadoAvanzada::EnRuinas { .. }));
+    assert_eq!(e.carga_en(col, Madera), madera0 - madera0 / 2, "la residente pierde la mitad de su carro");
+    assert!(e.carga_en(cb, Madera) > 0, "y es del vencedor");
+    assert_eq!(e.carga_en(aliado.0, Madera), 0);
+    for (nombre, c, h) in [("ana", col, ana), ("alia", aliado.0, aliado.1), ("neu", neutral.0, neutral.1), ("intr", intruso.0, intruso.1)] {
+        assert_eq!((e.ubicacion(h), e.n.en_el_mapa(c)), (Ubicacion::Columna(c), true), "{nombre} sale al mapa con su columna");
+    }
+    assert_eq!(hechos(&e.n, "heroe.expulsado").len(), 4);
+    assert_eq!(hechos(&e.n, "batalla.aplicada")[0].2, vec![plaza]);
+    let _ = pos;
+}
+
+// ───────────────────────────── 14. Un guion con gente dentro: determinismo y foto ─────────────────────────────
+
+/// Una atalaya con gente dentro: se levanta, un aliado con su élite y un neutral entran, se cierra la puerta a los neutrales (sale uno) y un ejército fuerte la ataca (resiste
+/// el aliado desde dentro); el aliado sale, entra la residente con su carro y otro ejército la derriba (ella pierde la mitad del carro y sale al mapa). Cada orden lleva su
+/// instante: `avanzar` solo decide cómo se mueve el reloj entre ellas.
+fn guion_con_gente(e: &mut Esc, avanzar: &dyn Fn(&mut Esc, Instante)) {
+    let (plaza, pos) = (e.plaza, e.sitio());
+    // Cada columna nace en el instante en que se usa, sea cual sea el modo de avanzar (una columna de administración, sin ración, se muere de hambre en minutos).
+    let (col, ana) = e.columna_en(0, "ana", 1, pos, &[Tropa::Lenadores]);
+    e.residir(ana);
+    let av = e.ok_en(MIN, "ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: ana, posicion: pos }).creadas[0];
+    e.ok_en(MIN, "admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
+    avanzar(e, 20 * MIN);
+    for (r, n) in [(Madera, 200_000), (Piedra, 100_000)] {
+        e.ok_en(20 * MIN, "admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: n });
+    }
+    e.ok_en(20 * MIN + 17_345, "ana", Comando::EntregarMaterialesAAvanzada { ejercito: col, avanzada: av });
+    e.ok_en(20 * MIN + 17_345, "admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 30_001 });
+    avanzar(e, 4 * HORA);
+    let (_, aliado) = e.columna_en(4 * HORA, "alia", 3, pos, &ELITE);
+    let (_, neutral) = e.columna_en(4 * HORA, "neu", 4, pos, &[Tropa::MiliciaLanceros]);
+    e.ok_en(4 * HORA, "alia", Comando::EntrarEnAvanzada { avanzada: av, heroe: aliado });
+    e.ok_en(4 * HORA, "neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: neutral });
+    avanzar(e, 5 * HORA);
+    e.ok_en(5 * HORA, "ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    avanzar(e, 9 * HORA);
+    let (_, primero) = e.columna_en(9 * HORA, "beto", 2, Punto::new(pos.x + 1_000, pos.y), &FUERTE);
+    e.ok_en(9 * HORA, "admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
+    e.ok_en(9 * HORA, "beto", Comando::Atacar { heroe: primero, objetivo: ObjetivoAtaque::Avanzada(av), declara_guerra: false });
+    avanzar(e, 10 * HORA);
+    e.ok_en(10 * HORA, "alia", Comando::SalirDeAvanzada { avanzada: av, heroe: aliado });
+    e.ok_en(10 * HORA, "ana", Comando::EntrarEnAvanzada { avanzada: av, heroe: ana });
+    avanzar(e, 12 * HORA);
+    let (_, segundo) = e.columna_en(12 * HORA, "beto", 2, Punto::new(pos.x + 1_000, pos.y), &FUERTE);
+    e.ok_en(12 * HORA, "beto", Comando::Atacar { heroe: segundo, objetivo: ObjetivoAtaque::Avanzada(av), declara_guerra: false });
+    avanzar(e, 20 * HORA);
+}
+
+fn correr_con_gente(m: &M, semilla: u64, avanzar: &dyn Fn(&mut Esc, Instante)) -> Nucleo {
+    let mut e = montar(m, semilla, 2);
+    guion_con_gente(&mut e, avanzar);
+    e.n.avanzar_hasta(20 * HORA);
+    e.n
+}
+
+#[test]
+fn entrar_defender_y_ser_echado_de_una_avanzada_da_el_mismo_hash_normal_acelerado_y_a_trozos() {
+    let m = con_mundo!();
+    let normal = correr_con_gente(m, 3, &|e, t| e.n.avanzar_hasta(t));
+    assert_eq!(normal.hash_estado(), correr_con_gente(m, 3, &|e, t| e.n.avanzar_hasta(t)).hash_estado(), "repetible");
+    assert_eq!(normal.hash_estado(), correr_con_gente(m, 3, &|_, _| {}).hash_estado(), "acelerado de un golpe");
+    let a_trozos = correr_con_gente(m, 3, &|e, t| {
+        let ahora = e.n.ahora();
+        for s in 1..=5 {
+            e.n.avanzar_hasta(ahora + (t - ahora).max(0) * s * s / 25);
+        }
+    });
+    assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares, como el modo en vivo");
+    assert_ne!(normal.hash_estado(), correr_con_gente(m, 4, &|e, t| e.n.avanzar_hasta(t)).hash_estado(), "otra semilla, otro mundo");
+    // El guion hizo de verdad lo que se espera.
+    assert_eq!(hechos(&normal, "jugador.entra_en_avanzada").len(), 3);
+    assert_eq!(hechos(&normal, "jugador.sale_de_avanzada").len(), 1);
+    assert_eq!(hechos(&normal, "combate.avanzada_resiste").len(), 1, "el aliado defiende desde dentro");
+    assert_eq!(hechos(&normal, "combate.avanzada_destruida").len(), 1);
+    assert_eq!(hechos(&normal, "heroe.expulsado").iter().map(|h| (dato(h, "lugar"), dato(h, "motivo"))).collect::<Vec<_>>(), vec![(2, 0), (2, 1)], "el neutral al cerrar la puerta y la residente al caer");
+    // Nada recurre por una entidad ociosa: como mucho un evento de deserción vigente por columna, esté dentro de una avanzada o en el mapa.
+    let vigentes = normal.estado().cola.volcar().iter().filter(|ev| normal.estado().generaciones.es_vigente(ev.clave) && matches!(ev.carga, Carga::Militar(SucesoMilitar::Desercion))).count();
+    assert!(vigentes <= normal.estado().ejercitos.len(), "{vigentes} deserciones vigentes");
+}
+
+#[test]
+fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el_mundo_sin_interrumpir() {
+    let m = con_mundo!();
+    let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
+    let con = |ajustes: Ajustes| Arranque { ajustes, ..arranque(m, 9) };
+    let guion = |e: &mut Esc| {
+        let (av, _, _) = e.atalaya();
+        let (col, h) = e.visita("neu", 3, &[Tropa::MiliciaLanceros]);
+        e.ok("neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: h });
+        (av, col, h)
+    };
+    // Sin parar: la referencia.
+    let referencia = {
+        let mut e = montar(m, 9, 2);
+        let (av, _, h) = guion(&mut e);
+        e.avanzar(HORA);
+        e.ok("neu", Comando::SalirDeAvanzada { avanzada: av, heroe: h });
+        e.avanzar(HORA);
+        e.n.hash_estado()
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let (a_mitad, plaza, centro, cuenta, av, col, h) = {
+        let n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
+        let mut e = montar_con(n, m, 2);
+        let (av, col, h) = guion(&mut e);
+        let bytes = e.n.estado().serializar();
+        assert_eq!(&bytes[..5], b"BAN18");
+        let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+        assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
+        assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));
+        e.n.foto_ahora();
+        e.avanzar(HORA);
+        e.n.apagar().unwrap();
+        (e.n.hash_estado(), e.plaza, e.centro, e.cuenta, av, col, h)
+    };
+    let n = Nucleo::con_persistencia(con(ajustes), dir.path(), Default::default()).unwrap();
+    assert!(n.recuperado());
+    assert_eq!(n.hash_estado(), a_mitad, "foto + registro reconstruyen el mismo mundo, con el héroe dentro de la avanzada");
+    let mut e = Esc { n, plaza, centro, cuenta };
+    assert!(!e.n.en_el_mapa(col));
+    e.ok("neu", Comando::SalirDeAvanzada { avanzada: av, heroe: h });
+    e.avanzar(HORA);
+    assert_eq!(e.n.hash_estado(), referencia, "el mundo recuperado sigue igual que el que no se interrumpió");
+    e.n.apagar().unwrap();
 }

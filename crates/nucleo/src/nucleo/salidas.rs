@@ -24,9 +24,9 @@
 //! heredan el acceso de su plaza madre. Un campamento de mercenarios no es de nadie y está abierto a todos.
 //!
 //! # Lo provisional
-//! La puerta completa de una plaza (`fijarPuerta` por grupos, vetos individuales) es del sistema político (5). Hoy nadie puede entrar en un pueblo extractor ni en
-//! una avanzada (no existe esa interacción): su acceso se hereda y se consulta ([`Nucleo::puede_entrar_en_pueblo`], [`Nucleo::puede_entrar_en_avanzada`]) pero
-//! no hay orden de entrar. `Fundar` todavía no deshace la columna dentro de la plaza nueva.
+//! La puerta completa de una plaza (`fijarPuerta` por grupos, vetos individuales) es del sistema político (5). Cerrar la puerta (`fijarAcceso`) saca al mapa, al instante y con
+//! todo lo suyo, a quien ya está dentro y ya no puede entrar (en la plaza y en los pueblos y avanzadas que heredan su acceso: [`dentro`](super::dentro)). Entrar en un pueblo o en
+//! una avanzada también vive en `dentro`. `Fundar` todavía no deshace la columna dentro de la plaza nueva.
 
 use super::*;
 use crate::estado_militar::Acceso;
@@ -279,7 +279,7 @@ impl Nucleo {
 
     /// Salir con la columna `c0`: si el héroe la conservaba en su residencia, se le suman las escuadras, la carga y los víveres que saca.
     #[allow(clippy::too_many_arguments)]
-    fn tras_retomar(&mut self, t: Instante, c0: u64, escuadras: &[u64], carga: &Mercancia, comida: Mil, tipo: TipoColumna, politica: Politica) {
+    pub(super) fn tras_retomar(&mut self, t: Instante, c0: u64, escuadras: &[u64], carga: &Mercancia, comida: Mil, tipo: TipoColumna, politica: Politica) {
         let heroes = self.estado.ejercitos.get(&c0).map(Self::participantes_de).unwrap_or_default();
         {
             let Estado { ejercitos, .. } = &mut self.estado;
@@ -362,14 +362,13 @@ impl Nucleo {
         hn.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32)) || a.acceso.permite(self.estado.militar.trato(a.faccion, hn.faccion))
     }
 
-    /// ¿Le abriría su puerta un pueblo extractor? Hereda el acceso de su plaza madre (`None` si el pueblo no existe). Hoy no hay orden de entrar en un pueblo.
+    /// ¿Le abriría su puerta un pueblo extractor? Hereda el acceso de su plaza madre (`None` si el pueblo no existe). Se entra con `EntrarEnPueblo` (`dentro`).
     pub fn puede_entrar_en_pueblo(&self, heroe: u64, pueblo: u64) -> Option<bool> {
         let (madre, _) = self.pueblo(pueblo)?;
         Some(self.puede_entrar_en_plaza(heroe, madre))
     }
 
-    /// ¿Le abriría su puerta una avanzada? Hereda el acceso de su plaza madre (`None` si no existe o es una ruina sin dueño). Hoy no hay orden de entrar en una
-    /// avanzada.
+    /// ¿Le abriría su puerta una avanzada? Hereda el acceso de su plaza madre (`None` si no existe o es una ruina sin dueño). Se entra con `EntrarEnAvanzada` (`dentro`).
     pub fn puede_entrar_en_avanzada(&self, heroe: u64, avanzada: u64) -> Option<bool> {
         let (madre, _) = self.avanzada(avanzada)?;
         Some(self.puede_entrar_en_plaza(heroe, madre?))
@@ -422,12 +421,7 @@ impl Nucleo {
             self.anunciar_columna(columna, Motivo::Plan);
             self.emitir_propio(t, "jugador.entra_en_asentamiento", vec![plaza], vec![("heroe", heroe as i64), ("ejercito", columna as i64), ("residencia", 1), ("carro", carro), ("columnaSigue", sigue as i64)]);
         } else {
-            if self.estado.ejercitos[&columna].marchando() {
-                self.detener(columna, t);
-            }
-            self.heroe_mut(heroe).heroe.presencia.ubicacion = dentro;
-            self.anunciar_columna(columna, Motivo::Plan);
-            self.tr.tocados.push(columna);
+            self.quedar_dentro_de_visita(t, heroe, columna, dentro);
             let caravanas = self.estado.ejercitos[&columna].caravanas_adjuntas.len() as i64;
             self.emitir_propio(t, "jugador.entra_en_asentamiento", vec![plaza], vec![("heroe", heroe as i64), ("ejercito", columna as i64), ("residencia", 0), ("caravanas", caravanas)]);
         }
@@ -495,18 +489,8 @@ impl Nucleo {
                     return Err(rechazo(rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, format!("el héroe no está dentro de as-{asentamiento}")));
                 }
                 // Sale con todo lo que entró: su columna vuelve al mapa tal cual. Quien no trajo ninguna (lo colocó la administración) sale solo, con sus víveres.
-                let (columna, faccion) = (hn.columna, hn.faccion);
-                let columna = match columna {
-                    Some(c) => {
-                        self.ubicar_en_columna(*heroe, c);
-                        self.tr.tocados.push(c);
-                        c
-                    }
-                    None => {
-                        let posicion = self.puerta_de(Lugar::Asentamiento(*asentamiento as u32)).expect("la plaza existe");
-                        self.columna_de_salida(t, *heroe, posicion, faccion, &[])
-                    }
-                };
+                let posicion = self.puerta_de(Lugar::Asentamiento(*asentamiento as u32)).expect("la plaza existe");
+                let columna = self.salir_al_mapa(t, *heroe, posicion);
                 self.emitir_propio(t, "jugador.sale_de_asentamiento", vec![*asentamiento], vec![("heroe", *heroe as i64), ("ejercito", columna as i64)]);
                 Ok(vec![])
             }
@@ -521,9 +505,14 @@ impl Nucleo {
                 if plaza.acceso == nuevo {
                     return Err(Respuesta { resultado: Resultado::SinCambios, version_tras: v, creadas: vec![] });
                 }
-                // DUDA: cerrar la puerta no echa a quien ya está dentro (el acceso solo decide quién entra); lo expulsa, en su caso, el sistema político.
+                // Un pueblo o una avanzada de la plaza en batalla no recibe órdenes, y echar a quien combate dentro sería una (la administración no lleva candado).
+                if !p.admin && self.sitios_en_batalla(*asentamiento) {
+                    return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "un pueblo o una avanzada de la plaza está en una batalla: la puerta no se toca hasta que acabe".into()));
+                }
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").acceso = nuevo;
                 self.tr.asentamientos.push(*asentamiento);
+                // Cerrar la puerta echa al mapa, al instante y con todo lo suyo, a quien ya está dentro y ya no puede entrar.
+                self.cerrar_la_puerta(t, *asentamiento);
                 self.emitir_propio(t, "asentamiento.acceso", vec![*asentamiento], vec![("aliados", nuevo.aliados as i64), ("neutrales", nuevo.neutrales as i64), ("enemigos", nuevo.enemigos as i64)]);
                 Ok(vec![])
             }

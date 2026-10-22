@@ -27,6 +27,7 @@ use crate::codec_economia::{recurso_a_u8, tipo_a_u8};
 use crate::economia::{FuentesMundo, SitiosPlaza};
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO, PRIO_CADUCA_POLITICA, PRIO_FIN_DE_OBRAS};
 use crate::estado_combate::entidad_obra_de_avanzada;
+use super::dentro::MOTIVO_DESAPARECE;
 use base::MS_POR_MINUTO;
 use asentamiento::asentamiento::{Evento as EventoEco, Exterior};
 use asentamiento::ascenso::Bloqueo;
@@ -301,6 +302,11 @@ impl Nucleo {
         for p in &a.economia.pueblos {
             self.estado.nodos_reclamados.remove(&p.nodo);
         }
+        // Quien estaba dentro de sus pueblos o avanzadas sale al mapa con lo suyo, a la puerta de cada uno.
+        let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
+        let pueblos: Vec<(u64, Punto)> = a.economia.pueblos.iter().filter_map(|p| nodos.get(p.nodo as usize).map(|n| (p.id, n.pos))).collect();
+        let avanzadas: Vec<(u64, Punto)> = a.economia.avanzadas.iter().map(|v| (v.id, v.posicion)).collect();
+        self.vaciar_pueblos_y_avanzadas(t, id, &pueblos, &avanzadas, MOTIVO_DESAPARECE);
         self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas, t);
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.quitar_plaza(id);

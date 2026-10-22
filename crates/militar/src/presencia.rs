@@ -2,10 +2,10 @@
 //! conexión; qué ocurre con la columna al salir del mundo o volver a él es del núcleo.
 
 use crate::datos::Reglas;
-use crate::tipos::{AsentamientoId, CampamentoId, ColumnaId};
+use crate::tipos::{AsentamientoId, AvanzadaId, CampamentoId, ColumnaId};
 use base::{Instante, Punto};
 
-/// Los cuatro sitios posibles de un héroe.
+/// Los sitios posibles de un héroe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ubicacion {
     /// Dentro de una plaza.
@@ -14,6 +14,10 @@ pub enum Ubicacion {
     Columna(ColumnaId),
     /// Dentro de un campamento de mercenarios.
     Mercenarios(CampamentoId),
+    /// Dentro de un pueblo extractor (Entrar con todo, 2026-10-22): con su columna entera, fuera del mapa, como una visita a una plaza.
+    Pueblo(u64),
+    /// Dentro de una avanzada (Entrar con todo, 2026-10-22): igual que en un pueblo.
+    Avanzada(AvanzadaId),
     /// Fuera del mundo, solo si salió con su columna: dónde reaparecerá.
     Desconectado(Punto),
 }

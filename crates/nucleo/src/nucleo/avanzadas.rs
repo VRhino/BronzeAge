@@ -17,10 +17,12 @@
 //!    (un evento, `SucesoCombate::ReponeAvanzada`); la de jugadores son escuadras de héroes residentes de la madre dejadas a la puerta (`Contenedor::Avanzada`), que comen el
 //!    trigo de la madre.
 //! 5. **Ataque** (`Atacar` con `ObjetivoAtaque::Avanzada`): solo un ejército. Con números se resuelve como un asedio; con servidores de batalla y un humano en los dos
-//!    bandos abre una batalla de Unity (capacidad de asedio, sin convocatoria). Defienden **solo los que están dentro**: las guarniciones. Nadie puede entrar todavía en una
-//!    avanzada, y una columna amiga a su puerta, en el mapa, no defiende (ni con números ni uniéndose a la batalla). Si gana el atacante: se lleva del almacén lo que le quepa en los carros y la atalaya queda
+//!    bandos abre una batalla de Unity (capacidad de asedio, sin convocatoria). Defienden **solo los que están dentro**: las guarniciones y los héroes que han entrado en la
+//!    avanzada (`EntrarEnAvanzada`: de la Facción de la madre, aliados o vasallos, con las escuadras de su columna; los residentes de la madre defienden de oficio en Unity y los
+//!    demás se unen), y una columna amiga a su puerta, en el mapa, no defiende (ni con números ni uniéndose a la batalla). Si gana el atacante: se lleva del almacén lo que le quepa en los carros y la atalaya queda
 //!    destruida, el fuerte en ruinas con un día de invulnerabilidad (`SucesoCombate::FinInvulnerabilidad`; si pasado ese día lo atacan y gana el atacante, destruido) y la
-//!    ciudadela en ruinas, que nunca se destruye. En ruinas no funciona nada y la guarnición de jugadores vuelve a 0 al campamento de su héroe.
+//!    ciudadela en ruinas, que nunca se destruye. En ruinas no funciona nada: la guarnición de jugadores vuelve a 0 al campamento de su héroe y quien estaba dentro sale al mapa con
+//!    lo suyo; los defensores en persona quedan heridos y los que residen en la madre pierden la mitad de su carro, que es del vencedor.
 //! 6. **La madre**: si cae por conquista, las avanzadas pasan al conquistador (su guarnición de jugadores se va con el desalojo y la de serie y las elecciones se reinician);
 //!    si cae en ruinas, la atalaya y el fuerte desaparecen y la ciudadela queda como ruina sin dueño, que repara quien tenga después su zona.
 //!
@@ -31,7 +33,8 @@
 //! sistema político). Las elecciones de tropa se comprueban al elegir (tecnología y edificio de la madre) y no se revisan después: si la Facción pierde la tecnología o la madre
 //! el edificio, la elección sigue.
 
-use super::combates::caidos;
+use super::combates::{caidos, DefensoresDeDentro};
+use super::dentro::MOTIVO_DESAPARECE;
 use super::mercado::RADIO_PUERTA;
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO, PRIO_UMBRAL};
@@ -48,6 +51,7 @@ use combate::resolucion::Bando;
 use militar::catalogo::Tropa;
 use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::Residencia;
+use militar::presencia::Ubicacion;
 use militar::{liderazgo, racion, reclutamiento, total, Carga as Mercancia};
 use std::collections::BTreeMap;
 
@@ -318,10 +322,12 @@ impl Nucleo {
             }
             Comando::RepararAvanzada { heroe, avanzada } => self.reparar_avanzada(t, p, *heroe, *avanzada),
             Comando::DestruirAvanzada { heroe, avanzada } => {
-                let (madre, _) = self.con_madre(*avanzada)?;
+                let (madre, av) = self.con_madre(*avanzada)?;
+                let posicion = av.posicion;
                 self.autorizar_ciudadano(p, *heroe, self.estado.asentamientos[&madre].faccion)?;
                 let mut ev = vec![];
                 self.estado.asentamientos.get_mut(&madre).expect("existe").economia.destruir_avanzada(*avanzada, &mut ev).map_err(de_avanzada)?;
+                self.vaciar_lugar(t, Ubicacion::Avanzada(*avanzada), posicion, madre, MOTIVO_DESAPARECE);
                 self.quitar_avanzada(*avanzada);
                 self.liberar_guarnicion_de_jugadores(*avanzada, false);
                 self.anotar_sucesos(madre, t, &ev);
@@ -627,7 +633,7 @@ impl Nucleo {
     /// Combate §7.4. Solo un ejército, de otra Facción que la de la madre, a ≤ `radioEncuentro`, contra una avanzada que no sea una obra ni esté en su día de
     /// invulnerabilidad. Se resuelve como un asedio: defienden la guarnición de serie y la de jugadores (dos tiradas); unas ruinas no tienen defensores y caen sin combate
     /// ni tirada. Si gana el atacante, [`Nucleo::cae_avanzada`]; si no, quedan heridos todos los participantes del ejército y la chatarra va al almacén de la madre.
-    /// Solo defiende lo que está dentro (decisión del autor, 2026-10-22): nadie puede entrar aún en una avanzada, así que una columna amiga a su puerta, en el mapa, no cuenta.
+    /// Solo defiende lo que está dentro (decisión del autor, 2026-10-22): una columna amiga a su puerta, en el mapa, no cuenta.
     pub(super) fn atacar_avanzada(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
@@ -679,17 +685,21 @@ impl Nucleo {
         let serie = if operativa { self.estado.combate.avanzadas[&x].escuadras.clone() } else { vec![] };
         let n = serie.len();
         let mut defensa = serie;
+        // Defienden además los héroes que están dentro (de la Facción de la madre, aliados o vasallos, con las escuadras de su columna).
+        let mut dentro = DefensoresDeDentro::nadie();
         if operativa {
             defensa.extend(self.guarnicion_de_jugadores_de_avanzada(x).into_iter().cloned());
+            dentro = self.defensores_de_dentro(Ubicacion::Avanzada(x), faccion_madre, None, cr.batalla.capacidad_asedio, t);
+            defensa.extend(dentro.tropa.escuadras.iter().cloned());
         }
-        let columnas = self.columnas_de(&atac.escuadras);
+        let columnas = [self.columnas_de(&atac.escuadras), self.columnas_de(&dentro.tropa.escuadras)].concat();
         let participantes = Self::participantes_de(&self.estado.ejercitos[&id]);
         let punto = self.estado.ejercitos[&id].posicion_en(t);
         let yo = self.estado.ejercitos[&id].columna.faccion.expect("comprobado");
         if let Some((a, b)) = guerra {
             self.declarar_guerra(t, a, b);
         }
-        let resultado = regla::resolver_ataque(&cr, estado, t, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa, heroes: &[] }, &mut self.estado.rng);
+        let resultado = regla::resolver_ataque(&cr, estado, t, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa, heroes: &dentro.tropa.heroes }, &mut self.estado.rng);
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&defensa[n..]);
         if operativa {
@@ -704,9 +714,13 @@ impl Nucleo {
             chatarra = i.chatarra.clone();
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }
+        // Los residentes de la madre que defendieron en persona y perdieron pierden la mitad del carro (antes de que la avanzada los saque al mapa).
+        // DUDA: «avanzada que resiste o cae sin conquista» (decisión del autor, 2026-10-22) se lee como «gana el atacante»: si gana el defensor no hay derrota que castigar.
+        let robado = if gana && matches!(resultado, Asedio::Combate(_)) { self.pierden_la_mitad_del_carro(&dentro.tropa.heroes, madre) } else { Mercancia::new() };
         let (codigo, saqueado) = if gana {
             let (nuevo, llevado) = self.cae_avanzada(t, x, &[id]);
             chatarra = self.cargar_botin_en(id, &chatarra);
+            self.entregar_lo_robado(id, &robado);
             let codigo = match nuevo {
                 EstadoAvanzada::Destruida => "combate.avanzada_destruida",
                 _ if nuevo == estado => "combate.avanzada_saqueada",
@@ -723,7 +737,7 @@ impl Nucleo {
             ("combate.avanzada_resiste", Mercancia::new())
         };
         self.recomponer_tras_bajas(&columnas, t);
-        datos.extend([("heridos", heridos as i64), ("chatarra", total(&chatarra)), ("saqueado", total(&saqueado))]);
+        datos.extend([("heridos", heridos as i64), ("chatarra", total(&chatarra)), ("saqueado", total(&saqueado)), ("carroPerdido", total(&robado))]);
         self.hecho_de_combate(codigo, t, vec![id], vec![madre], punto, datos);
         Ok(())
     }
@@ -746,6 +760,8 @@ impl Nucleo {
         }
         let nuevo = regla::tras_ataque(&cr, etapa, antes, t, true);
         if nuevo != antes {
+            // Un puesto destruido o en ruinas no funciona: quien estaba dentro sale al mapa con lo suyo.
+            self.vaciar_lugar(t, Ubicacion::Avanzada(x), posicion, madre, MOTIVO_DESAPARECE);
             self.liberar_guarnicion_de_jugadores(x, true);
             match nuevo {
                 EstadoAvanzada::Destruida => {
