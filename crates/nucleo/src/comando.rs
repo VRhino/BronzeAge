@@ -21,7 +21,7 @@ use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
 
 /// Lo que se puede atacar (`OrdenAtacar.Objetivo`, Combate §2): una columna, una caravana, un campamento de bandidos, una plaza, un pueblo extractor o
-/// una avanzada (las avanzadas son de la fase 4F: hoy no existe ninguna).
+/// una avanzada.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ObjetivoAtaque {
     Ejercito(u64),
@@ -311,6 +311,29 @@ pub enum Comando {
     RegistrarTokens { batalla: u64, intento: String, tokens: Vec<Token> },
     RegistrarSalida { batalla: u64, salida: SalidaBatalla },
     AplicarResultado { batalla: u64, resultado: ResultadoDeBatalla },
+    // ── Avanzadas (Doc 5.17, Economia_Construccion §14.1, fase 4F). Las da el héroe (ciudadano de la Facción de la plaza madre) o la administración; la entrega
+    //    y el depósito, el propietario de una columna de esa Facción a la puerta de la avanzada. `avanzada` es su id de mundo. ──
+    /// Marca la atalaya de una avanzada nueva en `posicion`, con la columna del héroe en el sitio: queda «pendiente de materiales» y ocupa cupo. `creadas` lleva
+    /// su id.
+    ColocarAvanzada { asentamiento: u64, heroe: u64, posicion: Punto },
+    /// La columna entrega a la obra de la avanzada (primera obra, mejora o reparación) los materiales que lleva, con la columna a su puerta.
+    EntregarMaterialesAAvanzada { ejercito: u64, avanzada: u64 },
+    /// Marca la mejora de una avanzada operativa a la etapa siguiente.
+    MejorarAvanzada { heroe: u64, avanzada: u64 },
+    /// Marca la reparación de unas ruinas de fuerte o ciudadela (también una ciudadela sin dueño, que pasa a la plaza que tiene ahora su zona).
+    RepararAvanzada { heroe: u64, avanzada: u64 },
+    /// Destruye la avanzada a mano (o cancela su primera obra) para reubicarla: no recupera nada. La ciudadela no.
+    DestruirAvanzada { heroe: u64, avanzada: u64 },
+    /// El Gobernador de la madre elige la tropa de la guarnición de serie para el escalón al que pertenece (2, 3 o 4), entre las que tiene la Facción.
+    ElegirTropaDeAvanzada { heroe: u64, avanzada: u64, tropa: Tropa },
+    /// Deja escuadras del héroe (residente de la madre, con su columna a la puerta) en la guarnición de jugadores de la avanzada, dentro de su cupo.
+    GuarnecerAvanzada { heroe: u64, avanzada: u64, escuadras: Vec<u64> },
+    /// Recoge de la guarnición de la avanzada escuadras del héroe, con su columna a la puerta.
+    RetirarDeAvanzada { heroe: u64, avanzada: u64, escuadras: Vec<u64> },
+    /// El Líder de la columna, a la puerta de una avanzada con almacén, llena sus víveres con el trigo del almacén.
+    RepostarEnAvanzada { heroe: u64, avanzada: u64 },
+    /// La columna, a la puerta de la avanzada, descarga `cantidad` de un recurso de su carro (y de sus caravanas adjuntas) en el almacén, hasta donde quepa.
+    DepositarEnAvanzada { ejercito: u64, avanzada: u64, recurso: Recurso, cantidad: Mil },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -324,6 +347,7 @@ pub(crate) struct Implicados {
     pub caravanas: Vec<u64>,
     pub asentamientos: Vec<u64>,
     pub pueblos: Vec<u64>,
+    pub avanzadas: Vec<u64>,
     /// Campamentos de bandidos.
     pub campamentos: Vec<u64>,
 }
@@ -347,7 +371,7 @@ impl Comando {
         )
     }
 
-    /// Los héroes, columnas, caravanas, plazas, pueblos y campamentos de bandidos que nombra el comando. Cada variante se nombra a propósito (sin `_`): si se
+    /// Los héroes, columnas, caravanas, plazas, pueblos, avanzadas y campamentos de bandidos que nombra el comando. Cada variante se nombra a propósito (sin `_`): si se
     /// añade una orden, esto deja de compilar y obliga a decidir qué toca. `Perseguir` e `Inspeccionar` apuntan a una columna o a una caravana; las plazas
     /// que se inspeccionan o se atacan no se cuentan (la batalla de una plaza la rechaza `atacar`, y marchar hacia una asediada se puede, §5).
     pub(crate) fn implicados(&self) -> Implicados {
@@ -368,7 +392,8 @@ impl Comando {
                     ObjetivoAtaque::Caravana(x) => i.caravanas.push(x),
                     ObjetivoAtaque::Campamento(x) => i.campamentos.push(x),
                     ObjetivoAtaque::Pueblo(x) => i.pueblos.push(x),
-                    ObjetivoAtaque::Asentamiento(_) | ObjetivoAtaque::Avanzada(_) => {}
+                    ObjetivoAtaque::Avanzada(x) => i.avanzadas.push(x),
+                    ObjetivoAtaque::Asentamiento(_) => {}
                 }
             }
             Comando::MarcharA { ejercito, .. } | Comando::Estacionar { ejercito } | Comando::DarCaravanaFundacion { ejercito } | Comando::Fundar { ejercito } | Comando::DarSuministro { ejercito, .. } => i.ejercitos.push(*ejercito),
@@ -382,6 +407,24 @@ impl Comando {
                 i.pueblos.push(*pueblo);
             }
             Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } => i.pueblos.push(*pueblo),
+            Comando::EntregarMaterialesAAvanzada { ejercito, avanzada } | Comando::DepositarEnAvanzada { ejercito, avanzada, .. } => {
+                i.ejercitos.push(*ejercito);
+                i.avanzadas.push(*avanzada);
+            }
+            Comando::ColocarAvanzada { asentamiento, heroe, .. } => {
+                i.heroes.push(*heroe);
+                i.asentamientos.push(*asentamiento);
+            }
+            Comando::MejorarAvanzada { heroe, avanzada }
+            | Comando::RepararAvanzada { heroe, avanzada }
+            | Comando::DestruirAvanzada { heroe, avanzada }
+            | Comando::ElegirTropaDeAvanzada { heroe, avanzada, .. }
+            | Comando::GuarnecerAvanzada { heroe, avanzada, .. }
+            | Comando::RetirarDeAvanzada { heroe, avanzada, .. }
+            | Comando::RepostarEnAvanzada { heroe, avanzada } => {
+                i.heroes.push(*heroe);
+                i.avanzadas.push(*avanzada);
+            }
             Comando::AparcarCaravana { caravana, asentamiento } => {
                 i.caravanas.push(*caravana);
                 i.asentamientos.push(*asentamiento);
@@ -1139,6 +1182,62 @@ impl Peticion {
                 w.u64(*batalla);
                 resultado_escribir(&mut w, resultado);
             }
+            Comando::ColocarAvanzada { asentamiento, heroe, posicion } => {
+                w.u8(106);
+                w.u64(*asentamiento);
+                w.u64(*heroe);
+                w.punto(*posicion);
+            }
+            Comando::EntregarMaterialesAAvanzada { ejercito, avanzada } => {
+                w.u8(107);
+                w.u64(*ejercito);
+                w.u64(*avanzada);
+            }
+            Comando::MejorarAvanzada { heroe, avanzada } => {
+                w.u8(108);
+                w.u64(*heroe);
+                w.u64(*avanzada);
+            }
+            Comando::RepararAvanzada { heroe, avanzada } => {
+                w.u8(109);
+                w.u64(*heroe);
+                w.u64(*avanzada);
+            }
+            Comando::DestruirAvanzada { heroe, avanzada } => {
+                w.u8(110);
+                w.u64(*heroe);
+                w.u64(*avanzada);
+            }
+            Comando::ElegirTropaDeAvanzada { heroe, avanzada, tropa } => {
+                w.u8(111);
+                w.u64(*heroe);
+                w.u64(*avanzada);
+                w.u8(tropa_a_u8(*tropa));
+            }
+            Comando::GuarnecerAvanzada { heroe, avanzada, escuadras } => {
+                w.u8(112);
+                w.u64(*heroe);
+                w.u64(*avanzada);
+                lista_u64(&mut w, escuadras);
+            }
+            Comando::RetirarDeAvanzada { heroe, avanzada, escuadras } => {
+                w.u8(113);
+                w.u64(*heroe);
+                w.u64(*avanzada);
+                lista_u64(&mut w, escuadras);
+            }
+            Comando::RepostarEnAvanzada { heroe, avanzada } => {
+                w.u8(114);
+                w.u64(*heroe);
+                w.u64(*avanzada);
+            }
+            Comando::DepositarEnAvanzada { ejercito, avanzada, recurso, cantidad } => {
+                w.u8(115);
+                w.u64(*ejercito);
+                w.u64(*avanzada);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
         }
         w.0
     }
@@ -1297,6 +1396,16 @@ impl Peticion {
             103 => Comando::RegistrarTokens { batalla: r.u64()?, intento: r.texto()?, tokens: tokens_leer(&mut r)? },
             104 => Comando::RegistrarSalida { batalla: r.u64()?, salida: salida_leer(&mut r)? },
             105 => Comando::AplicarResultado { batalla: r.u64()?, resultado: resultado_leer(&mut r)? },
+            106 => Comando::ColocarAvanzada { asentamiento: r.u64()?, heroe: r.u64()?, posicion: r.punto()? },
+            107 => Comando::EntregarMaterialesAAvanzada { ejercito: r.u64()?, avanzada: r.u64()? },
+            108 => Comando::MejorarAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
+            109 => Comando::RepararAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
+            110 => Comando::DestruirAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
+            111 => Comando::ElegirTropaDeAvanzada { heroe: r.u64()?, avanzada: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
+            112 => Comando::GuarnecerAvanzada { heroe: r.u64()?, avanzada: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
+            113 => Comando::RetirarDeAvanzada { heroe: r.u64()?, avanzada: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
+            114 => Comando::RepostarEnAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
+            115 => Comando::DepositarEnAvanzada { ejercito: r.u64()?, avanzada: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1431,6 +1540,32 @@ pub mod rechazos {
     pub const PUEBLO_FUERA_DE_LA_PUERTA: &str = "pueblo.fuera_de_la_puerta";
     pub const PUEBLO_NO_ESTA_ACTIVO: &str = "pueblo.no_esta_activo";
     pub const PUEBLO_YA_TIENE_CARRO: &str = "pueblo.ya_tiene_carro";
+    // Avanzadas (`ErrorAvanzada` y lo que el núcleo comprueba sobre el mapa, la columna y la guarnición; fase 4F).
+    pub const AVANZADA_DESCONOCIDA: &str = "avanzada.desconocida";
+    pub const AVANZADA_NIVEL_INSUFICIENTE: &str = "avanzada.nivel_insuficiente";
+    pub const AVANZADA_SIN_CUPO: &str = "avanzada.sin_cupo";
+    pub const AVANZADA_FUERA_DE_LA_ZONA: &str = "avanzada.fuera_de_la_zona";
+    pub const AVANZADA_DENTRO_DEL_ASENTAMIENTO: &str = "avanzada.dentro_del_asentamiento";
+    /// La columna del héroe no está en el sitio donde se pide colocarla.
+    pub const AVANZADA_FUERA_DEL_SITIO: &str = "avanzada.fuera_del_sitio";
+    pub const AVANZADA_FACCION_AJENA: &str = "avanzada.faccion_ajena";
+    pub const AVANZADA_FUERA_DE_LA_PUERTA: &str = "avanzada.fuera_de_la_puerta";
+    pub const AVANZADA_NO_ESTA_PENDIENTE: &str = "avanzada.no_esta_pendiente";
+    pub const AVANZADA_NADA_QUE_ENTREGAR: &str = "avanzada.nada_que_entregar";
+    pub const AVANZADA_NO_MEJORABLE: &str = "avanzada.no_mejorable";
+    pub const AVANZADA_NO_REPARABLE: &str = "avanzada.no_reparable";
+    pub const AVANZADA_YA_HAY_OBRA: &str = "avanzada.ya_hay_obra";
+    pub const AVANZADA_CIUDADELA_NO_SE_DESTRUYE: &str = "avanzada.ciudadela_no_se_destruye";
+    /// Solo funciona una avanzada operativa (no una obra ni unas ruinas).
+    pub const AVANZADA_NO_OPERATIVA: &str = "avanzada.no_operativa";
+    pub const AVANZADA_SIN_ALMACEN: &str = "avanzada.sin_almacen";
+    pub const AVANZADA_ALMACEN_LLENO: &str = "avanzada.almacen_lleno";
+    pub const AVANZADA_NADA_QUE_DEPOSITAR: &str = "avanzada.nada_que_depositar";
+    pub const AVANZADA_NO_RESIDES: &str = "avanzada.no_resides";
+    pub const AVANZADA_ESCUADRA_FUERA_DE_TU_COLUMNA: &str = "avanzada.escuadra_fuera_de_tu_columna";
+    pub const AVANZADA_ESCUADRA_NO_ESTA: &str = "avanzada.escuadra_no_esta";
+    pub const AVANZADA_TROPA_NO_ELEGIBLE: &str = "avanzada.tropa_no_elegible";
+    pub const AVANZADA_TROPA_SIN_TECNOLOGIA: &str = "avanzada.tropa_sin_tecnologia";
     // Mercado de los campamentos de mercenarios (`ErrorMercenarios`).
     pub const CAMPAMENTO_DESCONOCIDO: &str = "campamento.desconocido";
     pub const CAMPAMENTO_FUERA_DE_LA_PUERTA: &str = "campamento.fuera_de_la_puerta";
@@ -1589,6 +1724,12 @@ pub mod rechazos {
     pub const COMBATE_PLAZA_PROPIA: &str = "combate.plaza_propia";
     pub const COMBATE_PUEBLO_INACTIVO: &str = "combate.pueblo_inactivo";
     pub const COMBATE_AVANZADA_NO_EXISTE: &str = "combate.avanzada_no_existe";
+    /// La avanzada aún es una obra pendiente de materiales o en marcha: se ve en el mapa, pero no se puede atacar (Doc 4.2.2).
+    pub const COMBATE_AVANZADA_EN_OBRA: &str = "combate.avanzada_en_obra";
+    /// Un fuerte en ruinas es invulnerable un día (Doc 5.17).
+    pub const COMBATE_AVANZADA_INVULNERABLE: &str = "combate.avanzada_invulnerable";
+    /// Unas ruinas de ciudadela sin dueño: no hay Facción con la que estar en guerra ni nada que defender.
+    pub const COMBATE_AVANZADA_SIN_DUENO: &str = "combate.avanzada_sin_dueno";
     pub const CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO: &str = "bandidos.desconocido";
     pub const BANDIDOS_NIVEL_INVALIDO: &str = "bandidos.nivel_invalido";
     pub const BANDIDOS_SOBRE_UNA_ZONA: &str = "bandidos.sobre_una_zona";
@@ -1727,6 +1868,40 @@ mod pruebas {
         let mut b = Peticion::nueva("a", "i", Comando::AnadirCarro { caravana: 1, tipo: TipoCarro::Basico }).codificar();
         *b.last_mut().unwrap() = 9;
         assert!(Peticion::decodificar(&b).is_err());
+    }
+
+    #[test]
+    fn las_ordenes_de_avanzadas_dan_la_vuelta_por_el_registro() {
+        let comandos = vec![
+            Comando::ColocarAvanzada { asentamiento: 3, heroe: 2, posicion: Punto::new(-5, 77_000) },
+            Comando::EntregarMaterialesAAvanzada { ejercito: 9, avanzada: 12 },
+            Comando::MejorarAvanzada { heroe: 2, avanzada: 12 },
+            Comando::RepararAvanzada { heroe: 2, avanzada: 12 },
+            Comando::DestruirAvanzada { heroe: 2, avanzada: 12 },
+            Comando::ElegirTropaDeAvanzada { heroe: 2, avanzada: 12, tropa: Tropa::LancerosMimbre },
+            Comando::GuarnecerAvanzada { heroe: 2, avanzada: 12, escuadras: vec![5, 6] },
+            Comando::RetirarDeAvanzada { heroe: 2, avanzada: 12, escuadras: vec![6] },
+            Comando::RepostarEnAvanzada { heroe: 2, avanzada: 12 },
+            Comando::DepositarEnAvanzada { ejercito: 9, avanzada: 12, recurso: Recurso::Trigo, cantidad: 40_000 },
+        ];
+        for c in comandos {
+            let p = Peticion { actor: "ana".into(), admin: false, peticion_id: "av".into(), version_esperada: Some(4), comando: c };
+            assert_eq!(Peticion::decodificar(&p.codificar()).unwrap(), p);
+        }
+        // Una tropa fuera del catálogo no se decodifica, y cada orden nombra la avanzada que toca para el candado de las batallas.
+        let mut b = Peticion::nueva("a", "i", Comando::ElegirTropaDeAvanzada { heroe: 1, avanzada: 1, tropa: Tropa::Arqueros }).codificar();
+        *b.last_mut().unwrap() = 200;
+        assert!(Peticion::decodificar(&b).is_err());
+        for c in [
+            Comando::EntregarMaterialesAAvanzada { ejercito: 9, avanzada: 12 },
+            Comando::MejorarAvanzada { heroe: 2, avanzada: 12 },
+            Comando::GuarnecerAvanzada { heroe: 2, avanzada: 12, escuadras: vec![] },
+            Comando::DepositarEnAvanzada { ejercito: 9, avanzada: 12, recurso: Recurso::Oro, cantidad: 1 },
+            Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Avanzada(12), declara_guerra: false },
+        ] {
+            assert_eq!(c.implicados().avanzadas, vec![12], "{c:?}");
+        }
+        assert!(Comando::ColocarAvanzada { asentamiento: 3, heroe: 2, posicion: Punto::new(0, 0) }.implicados().avanzadas.is_empty());
     }
 
     #[test]

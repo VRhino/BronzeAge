@@ -10,7 +10,8 @@
 //! - **Un campamento de bandidos** (`atacar_campamento`): PvE, sin guerra. Una tirada contra el poder de su nivel.
 //! - **Una plaza** (`atacar_plaza`): solo un ejército. Se asedia con la guarnición y los defensores en persona; si cae, [`conquistas`](super::conquistas).
 //! - **Un pueblo extractor** (`atacar_pueblo`): un saqueo, nunca una conquista. Defienden los 30 mineros de serie.
-//! - **Una avanzada**: todavía no existen (fase 4F); la orden se rechaza.
+//! - **Una avanzada** (`atacar_avanzada`, en [`avanzadas`](super::avanzadas)): solo un ejército, como un asedio contra su guarnición de serie y la de jugadores; unas ruinas
+//!   caen sin combate. Si gana el atacante, se lleva el almacén que le quepa y la avanzada se destruye o queda en ruinas.
 //!
 //! # Lo que se mira antes (en este orden)
 //! El héroe (sano, a bordo, columna fuera de batalla), el objetivo (existe, está en el mapa), el alcance (`radioEncuentro`), la protección de los campamentos
@@ -64,7 +65,7 @@ fn de_su_columna(h: &HeroeNucleo) -> Vec<&Escuadra> {
     h.heroe.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) && s.con_soldados()).collect()
 }
 
-fn caidos(bajas: &[Baja]) -> i64 {
+pub(super) fn caidos(bajas: &[Baja]) -> i64 {
     bajas.iter().map(|b| b.antes - b.despues).sum()
 }
 
@@ -130,7 +131,7 @@ impl Nucleo {
     }
 
     /// Las columnas de las escuadras dadas y la velocidad que llevan ahora.
-    fn columnas_de(&self, escuadras: &[Escuadra]) -> Columnas {
+    pub(super) fn columnas_de(&self, escuadras: &[Escuadra]) -> Columnas {
         let mut v: Columnas = escuadras.iter().filter_map(|s| if let Contenedor::Ejercito(c) = s.contenedor { Some(c) } else { None }).collect::<std::collections::BTreeSet<_>>().into_iter().map(|c| (c, 0)).collect();
         for (c, vel) in v.iter_mut() {
             *vel = self.velocidad_de_ejercito(*c).unwrap_or(0);
@@ -148,7 +149,7 @@ impl Nucleo {
     }
 
     /// Tras unas bajas, cada columna vuelve a anotar lo que come y a qué velocidad marcha.
-    fn recomponer_tras_bajas(&mut self, columnas: &Columnas, t: Instante) {
+    pub(super) fn recomponer_tras_bajas(&mut self, columnas: &Columnas, t: Instante) {
         for &(c, antes) in columnas {
             if self.estado.ejercitos.contains_key(&c) {
                 self.recomponer_columna(c, t, antes);
@@ -199,7 +200,7 @@ impl Nucleo {
         robado
     }
 
-    fn hecho_de_combate(&mut self, codigo: &'static str, t: Instante, columnas: Vec<u64>, plazas: Vec<u64>, punto: Punto, datos: Vec<(&'static str, i64)>) {
+    pub(super) fn hecho_de_combate(&mut self, codigo: &'static str, t: Instante, columnas: Vec<u64>, plazas: Vec<u64>, punto: Punto, datos: Vec<(&'static str, i64)>) {
         self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: columnas, asentamientos: plazas, punto: Some(punto), datos });
     }
 
@@ -214,6 +215,8 @@ impl Nucleo {
             SucesoCombate::FinProteccion => self.fin_de_proteccion(id, t),
             SucesoCombate::FinOcupacion => self.fin_de_ocupacion(id, t),
             SucesoCombate::ReponeGuarnicion => self.repone_guarnicion(entidad, t),
+            SucesoCombate::FinInvulnerabilidad => self.fin_de_invulnerabilidad(entidad, t),
+            SucesoCombate::ReponeAvanzada => self.repone_avanzada(entidad, t),
         }
     }
 
@@ -240,14 +243,14 @@ impl Nucleo {
             ObjetivoAtaque::Campamento(x) => self.atacar_campamento(t, heroe, id, x)?,
             ObjetivoAtaque::Asentamiento(x) => self.atacar_plaza(t, heroe, id, x, declara_guerra)?,
             ObjetivoAtaque::Pueblo(x) => self.atacar_pueblo(t, heroe, id, x, declara_guerra)?,
-            ObjetivoAtaque::Avanzada(_) => return Err(rechazo(rechazos::COMBATE_AVANZADA_NO_EXISTE, "las avanzadas son de la fase 4F: todavía no existe ninguna")),
+            ObjetivoAtaque::Avanzada(x) => self.atacar_avanzada(t, heroe, id, x, declara_guerra)?,
         }
         Ok(vec![])
     }
 
     /// Lo que toda agresión comprueba: el alcance (`radioEncuentro`), la protección de los campamentos y la guerra. Devuelve la guerra que hay que declarar
     /// (entre las dos Facciones) si falta una y la orden la pide; no declara nada: eso se hace cuando todo lo demás ya vale.
-    fn comprobar_agresion(&self, e: &Ejercito, t: Instante, donde: Punto, contra: Option<u32>, declara_guerra: bool) -> Result<Option<(u32, u32)>, Respuesta> {
+    pub(super) fn comprobar_agresion(&self, e: &Ejercito, t: Instante, donde: Punto, contra: Option<u32>, declara_guerra: bool) -> Result<Option<(u32, u32)>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let aqui = e.posicion_en(t);

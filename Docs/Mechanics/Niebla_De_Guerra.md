@@ -11,7 +11,7 @@ así que la proyección es una frontera de seguridad, no una capa de presentaci�
 - **Canon:** Doc 5.12.7 (qué ve), 5.12.8 (qué recuerda), 5.12.10 (intel), 1.10 (el jugador en el mundo), 1.3 (exploración sin bandera). El documento de diseño que la precedió (`Consideraciones/Niebla_De_Guerra_Definicion.md`) se borró el 2026-10-11 al pasar todo aquí; sigue en el historial de git.
 - **Fuera de alcance aquí:** la inspección de cerca (anillo de 8) → [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md); la proyección de lo que es propio (almacén, cola, etc.) salvo en lo que afecta a la niebla; el terreno, que **lo tapa el cliente** con la máscara (el servidor solo dice qué se ha explorado); el cliente de administración no tapa nada.
 
-> **Implementado en Rust (2026-10-20, fase 4C).** Los **informes de inspección** son del héroe (`Nucleo::informes_de_inspeccion`): uno por objetivo, `INSPECCION.informeMinutos` = 10 minutos, renovables al volver a mirar (`militar::inspeccion`); falta proyectarlos al cliente. La visión muestreada ya da a cada columna su alcance según la tropa en pie: 30 con soldados, 15 sin ellos (§3). Las plazas y las avanzadas siguen sin ser ojos.
+> **Implementado en Rust (2026-10-20, fase 4C).** Los **informes de inspección** son del héroe (`Nucleo::informes_de_inspeccion`): uno por objetivo, `INSPECCION.informeMinutos` = 10 minutos, renovables al volver a mirar (`militar::inspeccion`); falta proyectarlos al cliente. La visión muestreada ya da a cada columna su alcance según la tropa en pie: 30 con soldados, 15 sin ellos (§3). Las plazas siguen sin ser ojos; las avanzadas operativas sí lo son desde la fase 4F (ver abajo).
 
 ## 1. Idea
 
@@ -70,6 +70,8 @@ Una celda cuenta como vista cuando lo está **su centro** (la niebla se retira u
 
 `{ tamanoCelda, columnas, filas, celdas, visibles }`: **dos** máscaras sobre la misma rejilla, más su geometría (el cliente no debe ir a buscarla a otro sitio: bastaría una versión desfasada para pintar la niebla corrida).
 `celdas` = lo explorado alguna vez (incluye lo que se ve con ojos propios); `visibles` = lo que se ve ahora, que **puede incluir celdas que no están en `celdas`** (la visión prestada por aliados y Miradas no se explora, §4.4).
+
+> **Implementado en Rust (2026-10-22, fase 4F).** `GeneradorVision` suma como ojo a cada avanzada **operativa** (`Observador::fijo` con `vision::radios::AVANZADA` = 12, igual en las tres etapas, `distancia ≤ radio`, no estricto): una obra pendiente, unas ruinas o una avanzada destruida no ven. Por lo demás la visión es la de siempre (el único hecho que emite sigue siendo `vision.contacto`). Una columna aparcada a la puerta de un lugar cuyo héroe entró sigue siendo un ojo del muestreo (comportamiento anterior a la fase 4F, anotado en la tabla de paridad). Falta la memoria de las avanzadas ajenas «como una ciudad» y el resto de la proyección.
 
 ## 3. Los ojos
 

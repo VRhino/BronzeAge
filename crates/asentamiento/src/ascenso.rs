@@ -53,7 +53,7 @@ impl Asentamiento {
 
     /// Mantenimiento que pagaría en el nivel `objetivo` (con ese nivel como operativo).
     fn mantenimiento_en(&self, r: &Reglas, x: &Exterior, objetivo: u32) -> Costo {
-        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.pueblos_activos(), objetivo, x.distancia_capital, &vec![])
+        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.elementos_de_mapa_activos(), objetivo, x.distancia_capital, &vec![])
     }
 
     /// Todos los bloqueos para pedir la subida al nivel siguiente (vacío = se puede). `cupo_ocupado` es cuántos asentamientos de la

@@ -8,6 +8,7 @@ pub type HeroeId = u64;
 pub type EscuadraId = u64;
 pub type ColumnaId = u64;
 pub type CaravanaId = u64;
+pub type AvanzadaId = u64;
 pub type BatallaId = u64;
 pub type AsentamientoId = u32;
 pub type CampamentoId = u32;

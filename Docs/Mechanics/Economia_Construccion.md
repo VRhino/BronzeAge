@@ -2102,7 +2102,7 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 > - **Ruina y conquista de la madre.** Los pueblos son de la plaza: en la ruina desaparecen con ella (sus nodos quedan libres y sus carros, que la tienen por origen, se pierden en la cascada de comercio); en la conquista pasan con la plaza (y su carro, en la flota traspasada) a quien la tenga.
 > - **Planta del pueblo.** `Nucleo::planta_de_pueblo(id)` / `urbanismo::planta_de_pueblo`: función pura del id (`hash(semilla, "pueblo", [id])`), no se guarda; el trazado de asentamientos una sola vez con el extractor como ancla en el origen, 4 casas, el almacén y el corral del buey.
 > - **Hechos nuevos** (datos entre paréntesis): `pueblo.marcado` (pueblo, tipo, nodo), `pueblo.materiales_entregados` (pueblo, cantidad), `pueblo.obra_iniciada` (pueblo, completaEn), `pueblo.completado`, `pueblo.almacen_lleno`, `pueblo.destruido` (pueblo), `acarreo.sale` (pueblo, caravana, carga), `acarreo.llega` (caravana, carga, perdido), `acarreo.vuelve` (pueblo, caravana) y `acarreo.carro_repuesto` (pueblo, caravana). Rechazos nuevos: `obra.solo_por_pueblo` y `pueblo.*` (desconocido, nodo_desconocido, nodo_no_extraible, nodo_ocupado, fuera_de_la_zona, tecnologia_faltante, nivel_insuficiente, sin_cupo, no_esta_pendiente, nada_que_entregar, faccion_ajena, fuera_de_la_puerta, no_esta_activo, ya_tiene_carro).
-> - **Provisional (DUDA en el código y filas de paridad en `Docs/Mecanicas a desarrollar.md`).** Los cargos y los ciudadanos de la Facción no existen: manda `manda_en` (administración, propietario de una columna o cuenta de un héroe ciudadano de la Facción) y entrega el propietario de una columna. Desde la fase 4B-1 las tecnologías de la Facción (requisitos de edificios, recetas y pueblos) las da la administración (`FijarTecnologias`) y la ración de la guarnición de los residentes entra en el `Exterior` de la plaza. La guarnición de 30 mineros (el dato está en el bloque) y el saqueo son del sistema militar. Las avanzadas (§5.17) no están. Un pueblo completado no agranda la zona de la madre. La planta no garantiza el tope de 0,2 de mapa.
+> - **Provisional (DUDA en el código y filas de paridad en `Docs/Mecanicas a desarrollar.md`).** Los cargos y los ciudadanos de la Facción no existen: manda `manda_en` (administración, propietario de una columna o cuenta de un héroe ciudadano de la Facción) y entrega el propietario de una columna. Desde la fase 4B-1 las tecnologías de la Facción (requisitos de edificios, recetas y pueblos) las da la administración (`FijarTecnologias`) y la ración de la guarnición de los residentes entra en el `Exterior` de la plaza. La guarnición de 30 mineros (el dato está en el bloque) y el saqueo son del sistema militar. Las avanzadas (§5.17) son la fase 4F (§14.1). Un pueblo completado no agranda la zona de la madre. La planta no garantiza el tope de 0,2 de mapa.
 
 **La extracción mineral sale de la ciudad.** Los minerales (cobre, estaño, hierro, oro) y toda Cantera **después de la primera** solo se explotan con un **pueblo extractor**; Granja, Leñera y Corral siguen dentro. La **primera Cantera** sigue siendo directa (sin piedra no hay obra de ascenso al nivel 2). En nivel 1 ya no hay minas; el oro de esa etapa sale de la recaudación por población.
 
@@ -2140,7 +2140,67 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 ```
 <!-- /parametros -->
 
-## 15. Calibración de distancias (valores vigentes)
+### 14.1 Avanzadas (Doc 5.17, fase 4F)
+
+Una avanzada es la otra obra de mapa (§14, «Obras de mapa»). Reglas puras en `crates/asentamiento/src/avanzadas.rs` (la avanzada vive en `Asentamiento.avanzadas` de su plaza madre, como los pueblos); el ataque, las ruinas y la guarnición son de [`Combate.md`](Combate.md) §7.4 (bloque `AVANZADA`) y el núcleo las une en `crates/nucleo/src/nucleo/avanzadas.rs`.
+
+<!-- parametros:AVANZADAS -->
+```json
+{
+  "nivelMadre": {
+    "atalaya": 2,
+    "fuerte": 2,
+    "ciudadela": 3
+  },
+  "cupoPorNivelDeLaMadre": 1,
+  "capacidadAlmacen": {
+    "atalaya": 0,
+    "fuerte": 2000,
+    "ciudadela": 10000
+  },
+  "distanciaMinimaAlAsentamiento": 2,
+  "fraccionReparacion": 0.5,
+  "obras": {
+    "atalaya": {
+      "costo": {
+        "madera": 200,
+        "piedra": 100
+      },
+      "minutos": 120
+    },
+    "fuerte": {
+      "costo": {
+        "madera": 600,
+        "piedra": 400,
+        "oro": 50
+      },
+      "minutos": 720
+    },
+    "ciudadela": {
+      "costo": {
+        "madera": 1500,
+        "piedra": 2000,
+        "oro": 300
+      },
+      "minutos": 2880
+    }
+  }
+}
+```
+<!-- /parametros -->
+
+Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras` es el coste de **cada paso** (construir la atalaya, mejorarla a fuerte, mejorar el fuerte a ciudadela), con su duración en minutos de mundo: los «viajes de carro de 500» del documento son unidades de mapa, a **placeholder**. `nivelMadre` es el nivel operativo mínimo de la plaza madre para tener esa etapa y `cupoPorNivelDeLaMadre`, cuántas avanzadas admite por nivel (2 en el nivel 2 … 5 en el 5, contando las pendientes y las que están en ruinas). `capacidadAlmacen` es la cabida **por recurso** de cada etapa (la atalaya no tiene almacén). `distanciaMinimaAlAsentamiento` es la distancia mínima a la plaza madre, en unidades de mapa («no dentro del asentamiento»: se toma el radio de su puerta). `fraccionReparacion` es el 50 % del coste de la etapa que cuesta reparar unas ruinas.
+
+> **Implementado en Rust (2026-10-22, fase 4F).** Foto `BAN15`.
+> - **Colocar** (`ColocarAvanzada { asentamiento, heroe, posicion }`, 106): el héroe, ciudadano de la Facción de la madre (o la administración), con su columna **en el sitio** (a ≤ `radioPuerta` de `posicion`), la marca dentro de la zona real de la madre y a más de `distanciaMinimaAlAsentamiento` de su centro. La madre ha de tener nivel operativo ≥ 2 y cupo. La obra queda **«pendiente de materiales»** (no se ve como puesto, no se ataca, no ve, ocupa cupo), no cobra nada al almacén y no pasa por la cola de construcción.
+> - **Entregar** (`EntregarMaterialesAAvanzada { ejercito, avanzada }`, 107): con la columna a la puerta de la obra y de la misma Facción, lo que lleva su carro y sus caravanas adjuntas, recurso a recurso, como en un pueblo. Con todo entregado arranca la obra y su **fin tiene cita propia** (`Carga::FinDeObras` de la plaza madre, prioridad 1, en su instante exacto: no espera al paso de minuto).
+> - **Mejorar** (108) y **reparar** (109) son la misma obra con otro coste: pasar a la etapa siguiente (a nivel de la madre suficiente) o reparar unas ruinas de fuerte o ciudadela (la mitad del coste de la etapa, la duración entera). Mientras se mejora la avanzada sigue funcionando; mientras se repara sigue en ruinas. Un ataque que la derriba pierde la obra.
+> - **Destruir a mano** (110): atalaya y fuerte, también si solo es una obra pendiente; la ciudadela no. No recupera nada.
+> - **Mantenimiento**: una avanzada operativa cuenta como un edificio activo de la madre (como un pueblo activo). Pendiente, en obra o en ruinas, no cuenta.
+> - **Almacén y guarnición**: `DepositarEnAvanzada` (115) y `RepostarEnAvanzada` (114) llenan y vacían el almacén ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §8); `GuarnecerAvanzada` (112), `RetirarDeAvanzada` (113) y `ElegirTropaDeAvanzada` (111) manejan la guarnición ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md), [`Combate.md`](Combate.md) §7.4).
+> - **Ruinas y la madre**: una avanzada en ruinas no funciona (ni visión, ni guarnición, ni almacén, ni mantenimiento) y sigue ocupando cupo. Si la madre es **conquistada**, las avanzadas pasan con ella (su guarnición de jugadores se va con el desalojo y se reinician la de serie y las elecciones del Gobernador). Si la madre **cae en ruinas**, la atalaya y el fuerte desaparecen (la guarnición de jugadores vuelve intacta a su campamento) y la ciudadela queda como **ruina sin dueño** (`EstadoCombate::huerfanas`, con su almacén), que repara (`RepararAvanzada`) un héroe ciudadano de la Facción que tenga ahora su zona: la ruina pasa a esa plaza si tiene el nivel (3) y el cupo.
+> - **Hechos nuevos** (datos entre paréntesis): `avanzada.obra_marcada` (avanzada, tipo 0 construir / 1 mejorar / 2 reparar, x, y), `avanzada.materiales_entregados` (avanzada, cantidad), `avanzada.obra_iniciada` (avanzada, tipo, completaEn), `avanzada.completada` (avanzada, tipo, etapa), `avanzada.destruida` (avanzada, motivo: 0 a mano, 1 un ataque, 2 la ruina de la madre), `avanzada.sin_dueno`, `avanzada.adoptada`, `avanzada.tropa_elegida`, `avanzada.guarnecida` / `avanzada.guarnicion_retirada`, `avanzada.deposito`, `avanzada.reabastecimiento`, `avanzada.traspasada` (avanzada, faccion), `avanzada.encuentro` (una columna ajena junto a una avanzada que se puede atacar). Rechazos nuevos: `avanzada.*` (desconocida, nivel_insuficiente, sin_cupo, fuera_de_la_zona, dentro_del_asentamiento, fuera_del_sitio, faccion_ajena, fuera_de_la_puerta, no_esta_pendiente, nada_que_entregar, no_mejorable, no_reparable, ya_hay_obra, ciudadela_no_se_destruye, no_operativa, sin_almacen, almacen_lleno, nada_que_depositar, no_resides, escuadra_fuera_de_tu_columna, escuadra_no_esta, tropa_no_elegible, tropa_sin_tecnologia) y `combate.avanzada_*`.
+> - **Provisional** (filas de paridad): manda un héroe ciudadano de la Facción de la madre, sin Gobernador ni Maestro de Obras presentes ni panel; el almacén es **por recurso** (DUDA: el canon dice «unos 2.000» y «unos 10.000» sin decir si es por recurso o en total); no hay planta de avanzada ni el tope de 0,2 de mapa.
 
 Los bloques de parámetros de este documento son los del motor TypeScript. Valores vigentes para la reconstrucción (Calibracion_Distancias_Definicion §4.2):
 

@@ -130,6 +130,11 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::PuebloCompletado { id } => ("pueblo.completado", vec![("pueblo", *id as i64)]),
         EventoEco::PuebloLleno { id } => ("pueblo.almacen_lleno", vec![("pueblo", *id as i64)]),
         EventoEco::PuebloDestruido { id } => ("pueblo.destruido", vec![("pueblo", *id as i64)]),
+        EventoEco::AvanzadaObraMarcada { id, tipo, posicion } => ("avanzada.obra_marcada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("x", posicion.x), ("y", posicion.y)]),
+        EventoEco::AvanzadaEntrega { id, cantidad } => ("avanzada.materiales_entregados", vec![("avanzada", *id as i64), ("cantidad", *cantidad)]),
+        EventoEco::AvanzadaObraIniciada { id, tipo, completa_en } => ("avanzada.obra_iniciada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("completaEn", *completa_en)]),
+        EventoEco::AvanzadaCompletada { id, tipo, etapa } => ("avanzada.completada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("etapa", etapa.indice() as i64)]),
+        EventoEco::AvanzadaDestruida { id } => ("avanzada.destruida", vec![("avanzada", *id as i64), ("motivo", 0)]),
     };
     EventoNucleo { codigo: codigo.into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos }
 }
@@ -236,6 +241,7 @@ impl Nucleo {
     pub(super) fn fines_de_plaza(&mut self, id: u64, t: Instante) {
         let Some(sucesos) = self.con_exterior(id, t, |eco, x| eco.cumplir_fines(t, x)) else { return };
         self.anotar_sucesos(id, t, &sucesos);
+        self.avanzada_completada(id, &sucesos, t);
         // La zona crece 1 unidad por edificio completado, hasta el techo del nivel (Economia_Construccion §3.1).
         let completados = self.estado.asentamientos.get_mut(&id).map_or(0, |a| a.economia.tomar_completados());
         if completados > 0 {
@@ -257,7 +263,7 @@ impl Nucleo {
             return;
         }
         for s in sucesos {
-            if let EventoEco::ObraIniciada { completa_en, .. } | EventoEco::MejoraIniciada { completa_en, .. } | EventoEco::AscensoIniciado { completa_en, .. } = s {
+            if let EventoEco::ObraIniciada { completa_en, .. } | EventoEco::MejoraIniciada { completa_en, .. } | EventoEco::AscensoIniciado { completa_en, .. } | EventoEco::AvanzadaObraIniciada { completa_en, .. } = s {
                 self.programar_fin(id, *completa_en);
             }
         }
@@ -279,10 +285,12 @@ impl Nucleo {
                 self.estado.nodos_reclamados.remove(&n);
             }
         }
-        // Los pueblos desaparecen con su madre (Doc 4.2.2); sus carros, que la tienen por origen, se pierden en la cascada de comercio.
+        // Los pueblos desaparecen con su madre (Doc 4.2.2); sus carros, que la tienen por origen, se pierden en la cascada de comercio. Con las avanzadas, la atalaya y el
+        // fuerte desaparecen y la ciudadela queda como ruina sin dueño (Doc 5.17).
         for p in &a.economia.pueblos {
             self.estado.nodos_reclamados.remove(&p.nodo);
         }
+        self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas.clone(), t);
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.quitar_plaza(id);
         self.estado.generaciones.subir(id);

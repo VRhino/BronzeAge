@@ -82,6 +82,8 @@ impl Nucleo {
         self.estado.cola.programar(c.protegida_hasta, PRIO_ASENTAMIENTO, clave, Carga::Combate(SucesoCombate::FinProteccion));
         self.estado.cola.programar(c.ocupacion_hasta, PRIO_ASENTAMIENTO, clave, Carga::Combate(SucesoCombate::FinOcupacion));
         self.tr.asentamientos.push(plaza);
+        // Sus avanzadas pasan con ella: la guarnición de jugadores de los antiguos residentes se va (derrota) y la de serie se reinicia.
+        self.avanzadas_de_la_madre_conquistada(plaza, t);
         // La plaza cambió de bandera: sus fronteras con otras Facciones se miran de nuevo.
         self.contactos_nuevos(plaza, t);
 

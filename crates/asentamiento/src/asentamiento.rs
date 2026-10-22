@@ -9,6 +9,7 @@
 //! traits [`Sitios`] y [`Fuentes`].
 
 use crate::almacen::Almacen;
+use crate::avanzadas::{Avanzada, TipoObra};
 use crate::catalogo::Tipo;
 use crate::datos::{por, Reglas};
 use crate::edificio::{Edificio, Edificios, Estado, Fuente};
@@ -18,7 +19,7 @@ use crate::politicas::Politicas;
 use crate::produccion::{self, Fuentes};
 use crate::pueblos::{IngresoAcarreo, Pueblo};
 use crate::recurso::{Costo, Recurso};
-use base::{Instante, Mil, MS_POR_MINUTO};
+use base::{Instante, Mil, Punto, MS_POR_MINUTO};
 
 /// Una obra de ascenso en curso (Doc 4.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,6 +156,16 @@ pub enum Evento {
     PuebloLleno { id: u64 },
     /// El pueblo (o su obra) se destruyó a mano.
     PuebloDestruido { id: u64 },
+    /// Se marcó la obra de una avanzada (levantar la atalaya, mejorarla o repararla): queda pendiente de materiales.
+    AvanzadaObraMarcada { id: u64, tipo: TipoObra, posicion: Punto },
+    /// Se entregaron materiales a la obra de una avanzada (`cantidad` en total).
+    AvanzadaEntrega { id: u64, cantidad: Mil },
+    /// Con todos los materiales entregados, arrancó la obra de la avanzada.
+    AvanzadaObraIniciada { id: u64, tipo: TipoObra, completa_en: Instante },
+    /// Acabó la obra de la avanzada: ya es operativa (primera obra o reparación) o ha subido de etapa (mejora).
+    AvanzadaCompletada { id: u64, tipo: TipoObra, etapa: crate::avanzadas::Etapa },
+    /// La avanzada (o su primera obra) se destruyó a mano.
+    AvanzadaDestruida { id: u64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -170,6 +181,8 @@ pub struct Asentamiento {
     pub edificios: Vec<Edificio>,
     /// Los pueblos extractores de la plaza, en cualquier estado, por id ascendente. No son edificios de la ciudad (Doc 4.2.2).
     pub pueblos: Vec<Pueblo>,
+    /// Las avanzadas de la plaza, en cualquier estado, por id ascendente (Doc 5.17). Tampoco son edificios de la ciudad.
+    pub avanzadas: Vec<Avanzada>,
     /// Lo que el acarreo ingresó de verdad en el almacén de la plaza en las últimas horas (ventana de 24 h, por hora y recurso): es lo que
     /// cuenta como acarreo en la solvencia del ascenso. Solo se escribe cuando llega un carro; un pueblo ocioso no la toca.
     pub ingresos_acarreo: Vec<IngresoAcarreo>,
@@ -212,6 +225,7 @@ impl Asentamiento {
             politicas: Politicas::default(),
             edificios,
             pueblos: vec![],
+            avanzadas: vec![],
             ingresos_acarreo: vec![],
             siguiente_edificio: id + 1,
             ascenso: None,
@@ -274,7 +288,7 @@ impl Asentamiento {
 
     /// Coste de mantenimiento ahora (sin recintos).
     pub fn coste_mantenimiento(&self, r: &Reglas, distancia_capital: Mil) -> Costo {
-        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.pueblos_activos(), self.nivel_actual(), distancia_capital, &vec![])
+        mantenimiento::coste(&r.mantenimiento, &self.edificios, self.elementos_de_mapa_activos(), self.nivel_actual(), distancia_capital, &vec![])
     }
 
     pub(crate) fn entorno_poblacion(&self, r: &Reglas, x: &Exterior) -> Entorno {
@@ -393,6 +407,7 @@ impl Asentamiento {
         self.completar_obras(t, r, x, &mut ev);
         self.terminar_mejoras(t, r, x, &mut ev);
         self.terminar_ascenso(t, &mut ev);
+        self.cumplir_avanzadas(t, r, &mut ev);
         if ev.iter().any(|e| matches!(e, Evento::EdificioCompletado { .. } | Evento::MejoraCompletada { .. })) {
             self.arrancar_obras(t, r, &mut ev);
         }
@@ -410,7 +425,7 @@ impl Asentamiento {
     pub fn avanzar_hasta(&mut self, t: Instante, x: &mut Exterior) -> Vec<Evento> {
         let desde = self.ultimo_minuto;
         let obras = self.edificios.iter().filter(|e| e.estado == Estado::EnConstruccion).filter_map(|e| e.completa_en);
-        let mut instantes: Vec<Instante> = obras.chain(self.edificios.iter().filter_map(|e| e.mejora.map(|m| m.completa_en))).chain(self.ascenso.map(|a| a.completa_en)).filter(|&f| f > desde && f <= t).collect();
+        let mut instantes: Vec<Instante> = obras.chain(self.edificios.iter().filter_map(|e| e.mejora.map(|m| m.completa_en))).chain(self.ascenso.map(|a| a.completa_en)).chain(self.fines_de_avanzadas()).filter(|&f| f > desde && f <= t).collect();
         instantes.sort_unstable();
         instantes.dedup();
         let mut ev: Vec<Evento> = instantes.into_iter().flat_map(|f| self.cumplir_fines(f, x)).collect();

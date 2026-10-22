@@ -42,9 +42,20 @@ El motor común es `resolverCombate` (§4), salvo caravana y campamento, que com
 > - **Campamento de bandidos** (§7.2): sin guerra; basta una columna con un héroe sano (no hace falta tropa). Una tirada. Cae: el oro del nivel para **cada héroe que combatió** (hasta 5; `botin_de_bandidos` con la ventana de 24 h por héroe, en `EstadoCombate.destruidos`) va al carro y se agenda su reaparición; aguanta: todos los participantes heridos y la mitad del carro perdida. Hechos: `combate.campamento_destruido` / `combate.ataque_campamento_fallido`.
 > - **Plaza** (§6): solo un ejército con soldados, de otra Facción, a ≤ `radioEncuentro`. Una plaza protegida **se rechaza** (`combate.plaza_protegida`, sin rastro) en vez de «rebotar» con un hecho. Defienden (`defensa_de_plaza`) la guarnición de los residentes (siempre), los residentes dentro, sanos y conectados con su loadout activo (hasta 15) y, en el cupo que dejan, los visitantes de la propia Facción o de una aliada o vasalla con las escuadras de su columna aparcada. Sin defensores con soldados cae **sin combate ni tirada**. Heridos: sus defensores en persona si cae, todos los participantes del ejército si resiste; la chatarra va al carro del ejército si cae y al almacén de la plaza si resiste. Hechos: `combate.asedio_conquista` / `combate.asedio_resistido`. El ejército sigue fuera; murallas con recinto 0 (multiplicador 1) y equipo de asedio sin efecto.
 > - **Pueblo extractor** (§7.3): un ejército de otra Facción que la de la madre; el pueblo ha de estar activo. La guarnición de serie nace completa la primera vez que se la necesita (`EstadoCombate.guarniciones`) y se repone a las 6 horas con un evento (`SucesoCombate::ReponeGuarnicion`, prioridad 3, ligado a `entidad_guarnicion`). Si el atacante gana se lleva `saquear`: lo que el almacén guarda por encima de la mitad, hasta lo que cabe en el carro; si no, quedan heridos todos sus participantes. // DUDA: el reloj de 6 h empieza en el primer combate que deja la guarnición por debajo de 30 (no solo si «cae») y no se reinicia mientras corre; con la guarnición a 0 esperando su reposición, el pueblo se saquea sin combate ni tirada; la chatarra, si el pueblo resiste, va al almacén de la madre. Hechos: `combate.pueblo_saqueado` / `combate.pueblo_resiste`.
-> - **Avanzada**: la orden se rechaza (`combate.avanzada_no_existe`); son de la fase 4F.
+> - **Avanzada**: ver la nota de la fase 4F, más abajo.
 >
 > Las tiradas son las del documento: 2 en columna, plaza con defensores y pueblo con guarnición; 1 en caravana, campamento y acoso; 0 en las ramas sin combate. La experiencia de escuadra (`aplicar_bajas`) y las bajas se vuelcan al estado, y cada columna que combatió **re-anota su consumo y su velocidad** (`recomponer_columna`, también reprograma su deserción). Sin Unity (la fase 4E la añade) todo se resuelve con números.
+
+> **Implementado en Rust (2026-10-22, fase 4F): las avanzadas.** `nucleo/avanzadas.rs` (`atacar_avanzada`, `cae_avanzada`) sobre `combate::avanzada` y `asentamiento::avanzadas`; foto `BAN15`. La obra de mapa (colocar, entregar, mejorar, reparar, destruir a mano) está en [`Economia_Construccion.md`](Economia_Construccion.md) §14.1.
+>
+> - **Se valida antes de tocar nada ni gastar una tirada**, en este orden: la avanzada existe (`combate.avanzada_no_existe`) y tiene dueño (`combate.avanzada_sin_dueno`: unas ruinas de ciudadela sin dueño no tienen Facción con la que estar en guerra); el atacante es un ejército (`combate.solo_un_ejercito`) con Facción; la avanzada no es una obra pendiente (`combate.avanzada_en_obra`: se ve pero no se ataca) ni un fuerte en su día de invulnerabilidad (`combate.avanzada_invulnerable`); el alcance (`radioEncuentro`), la protección de los campamentos de mercenarios y la guerra de siempre (`comprobar_agresion`: a los tuyos y a un aliado no se les ataca ni con `declara_guerra`; la guerra solo se declara cuando todo lo demás vale); que no esté en una batalla de Unity; y que el ejército lleve soldados. Unas ruinas de ciudadela que ya no tienen almacén son «sin cambios».
+> - **Defienden** la guarnición de serie y la de jugadores (escuadras de héroes residentes de la madre dejadas a su puerta, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §7): sin héroes, porque nadie está dentro, así que no suma el `poderPorHeroe` del defensor. Se resuelve como un asedio (`resolver_ataque`): dos tiradas con defensores en pie; **unas ruinas no tienen defensores** y caen sin combate ni tirada; una operativa con toda su guarnición aniquilada esperando la reposición cae igual, sin combate. El atacante es la columna del héroe (tope de 15 héroes, como un asedio).
+> - **La guarnición de serie** nace completa la primera vez que se la necesita: las escuadras de la tabla de `AVANZADA.guarnicionDeSerie` con la tropa que eligió el Gobernador para cada escalón (`ElegirTropaDeAvanzada`, 111) o `tropaPorDefecto` (milicia de lanceros). Mermada, se repone gratis a las `reposicionMinutos` del primer combate que la deja incompleta (un evento, `SucesoCombate::ReponeAvanzada`, prioridad 3; no se reinicia mientras corre); la reposición rehace la composición si desde entonces se eligió otra tropa o la avanzada subió de etapa. Elegir tropa o subir de etapa con la guarnición completa la rehace al instante; con la guarnición mermada, llega con la reposición (cambiar de tropa no cura a nadie).
+> - **Si gana el atacante** (`cae_avanzada`, la misma por los dos caminos): se lleva **del almacén lo que le quepa en los carros** de sus columnas (por rondas, `combate::avanzada::saquear`) y, con lo que sobre, la chatarra de las bajas; la **atalaya** queda destruida (sale del cupo, del espacio y del estado); el **fuerte** queda en ruinas con `invulnerable_hasta = ahora + 1 día` (con su cita `SucesoCombate::FinInvulnerabilidad`, prioridad 2) y, si ya estaba en ruinas, pasado el día, queda destruido; la **ciudadela** queda en ruinas sin invulnerabilidad y no se destruye nunca (atacarla otra vez solo saquea lo que quede). Al perderse el puesto: la guarnición de jugadores queda a 0 y vuelve al campamento de su héroe (derrota, Doc 5.15.2b), la obra de mejora o reparación en marcha se pierde y la guarnición de serie se borra (renace completa al repararla; las elecciones del Gobernador se conservan). Si **resiste**: heridos todos los participantes del ejército, la chatarra al almacén de la madre y la guarnición de serie mermada, con su experiencia.
+> - **Hechos:** `combate.avanzada_destruida`, `combate.avanzada_en_ruinas`, `combate.avanzada_saqueada` (unas ruinas de ciudadela que siguen siéndolo) y `combate.avanzada_resiste` (datos: avanzada, etapa, facciones, poderes y bajas, heridos, chatarra, saqueado), más `avanzada.destruida` (`motivo` 1) y `avanzada.en_ruinas` (`invulnerableHasta`), `avanzada.invulnerabilidad_terminada` y `avanzada.guarnicion_repuesta`.
+> - **Con Unity** (`batallas_en_unity` y un humano en la columna atacante): se abre una batalla de contexto `avanzada` (5) con capacidad de asedio (15 por bando), 30 minutos y **sin convocatoria** (decisión del autor, 2026-10-22); ver [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md). Unas ruinas no abren batalla.
+>
+> // DUDA (decidido al implementar, a revisar por el autor): (1) quien «defienda» una avanzada además de su guarnición (columnas amigas a su puerta) no cuenta con números: la avanzada no tiene dentro; (2) la reposición de la guarnición de serie es un placeholder de 6 h («unas horas» en el canon); (3) el defecto de la tropa es el del escalón 2 (milicia de lanceros) para los tres escalones, de modo que una ciudadela sin elecciones no queda sin defensores; (4) el atacante que gana se lleva el almacén entero que le quepa (el pueblo protege el 50 %, la avanzada no); (5) la chatarra de una avanzada que resiste va al almacén de la madre, como la del pueblo.
 
 Un comando, un objetivo: `ejercito` · `caravana` · `campamento` (de bandidos) · `asentamiento` · `pueblo` · `avanzada`. **Los choques nacen de un encuentro exacto** (dos planes que se acercan a ≤ `radioEncuentro`, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): el servidor ofrece atacar en ese instante y el jugador decide; llegar nunca ataca.
 
@@ -245,12 +256,32 @@ Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (3
 <!-- parametros:AVANZADA -->
 ```json
 {
-  "invulnerabilidadMinutos": 1440
+  "invulnerabilidadMinutos": 1440,
+  "cupoGuarnicion": {
+    "atalaya": 14,
+    "fuerte": 45,
+    "ciudadela": 90
+  },
+  "guarnicionDeSerie": {
+    "atalaya": {
+      "2": 1
+    },
+    "fuerte": {
+      "2": 3,
+      "3": 2
+    },
+    "ciudadela": {
+      "3": 5,
+      "4": 3
+    }
+  },
+  "tropaPorDefecto": "milicia_lanceros",
+  "reposicionMinutos": 360
 }
 ```
 <!-- /parametros -->
 
-`AVANZADA.invulnerabilidadMinutos` es el día de invulnerabilidad de un fuerte en ruinas (§7.4, Doc 5.17).
+`AVANZADA.invulnerabilidadMinutos` es el día de invulnerabilidad de un fuerte en ruinas (§7.4, Doc 5.17). `cupoGuarnicion` es el cupo de la guarnición de jugadores **por héroe residente de la madre y por avanzada**, en puntos de Liderazgo (14 / 45 / 90). `guarnicionDeSerie` dice cuántas escuadras de IA, fuera de cupo, defienden cada etapa en cada escalón (Doc 5.17). `tropaPorDefecto` es la tropa de cada escalón mientras el Gobernador no elija otra, y `reposicionMinutos` lo que tarda en reponerse gratis esa guarnición (**placeholder**: el canon dice «unas horas»; se toma lo de los mineros de un pueblo, 6 h). Las cifras de la obra, el cupo de avanzadas y el almacén están en `AVANZADAS` de [`Economia_Construccion.md`](Economia_Construccion.md) §14.
 
 <!-- parametros:HEROE -->
 ```json

@@ -3,7 +3,7 @@
 
 use crate::catalogo::{Origen, Tropa};
 use crate::datos::Reglas;
-use crate::tipos::{AsentamientoId, BatallaId, CampamentoId, CaravanaId, ColumnaId, EscuadraId, HeroeId};
+use crate::tipos::{AsentamientoId, AvanzadaId, BatallaId, CampamentoId, CaravanaId, ColumnaId, EscuadraId, HeroeId};
 use asentamiento::datos::{por, UNO};
 use base::{Instante, Mil, Ritmo};
 
@@ -23,6 +23,8 @@ pub enum Contenedor {
     Escolta(CaravanaId),
     /// Fuera del mundo, con su héroe desconectado.
     Fuera,
+    /// En la guarnición de una avanzada de la plaza donde reside su héroe (Doc 5.17): prestada, come del almacén de la madre y defiende la avanzada.
+    Avanzada(AvanzadaId),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

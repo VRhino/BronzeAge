@@ -1,19 +1,22 @@
 //! Serialización canónica de la economía de una plaza (`asentamiento::Asentamiento`) para el hash y las fotos. Cada estructura se
 //! desestructura **entera** (sin `..`): si el crate añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
-//! Formato (BAN14: la población es entera, con restos y marca de recuperación del hambre; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
+//! Formato (BAN15: BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
 //! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
-//! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
+//! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
 //! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64`.
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
 //! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool`.
 //! Un pueblo: `id u64 · tipo u8 · nodo u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno n u64 · n × (recurso u8, i64);
 //! 1 en obra → completa_en i64; 2 activo} · almacén{29 × (cantidad i64, capacidad i64)} · carro opt_u64 · lleno bool`.
+//! Una avanzada: `id u64 · posición punto · etapa u8 (0 atalaya, 1 fuerte, 2 ciudadela) · estado{u8: 0 en construcción, 1 operativa, 2 en ruinas → invulnerable_hasta opt_i64} ·
+//! obra{opt: tipo u8 (0 construir, 1 mejorar, 2 reparar) · requerido y entregado, cada uno n u64 · n × (recurso u8, i64) · completa_en opt_i64} · almacén{29 × (cantidad i64, capacidad i64)}`.
 //! Los tipos y recursos van por su índice en el enum (`Tipo as u8`, `Recurso::indice`).
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use asentamiento::asentamiento::{Ascenso, Asentamiento};
+use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada, Etapa, Obra, TipoObra};
 use asentamiento::catalogo::{Tipo, TIPOS};
 use asentamiento::edificio::{Edificio, Estado, Fuente, Mejora};
 use asentamiento::mantenimiento::Medidor;
@@ -84,6 +87,56 @@ fn leer_almacen(r: &mut Lector) -> Result<Almacen, ErrorFormato> {
     Ok(Almacen::desde_partes(cantidad, capacidad))
 }
 
+pub(crate) fn escribir_avanzada(w: &mut Escritor, a: &Avanzada) {
+    let Avanzada { id, posicion, etapa, estado, obra, almacen } = a;
+    w.u64(*id);
+    w.punto(*posicion);
+    w.u8(etapa.indice() as u8);
+    match estado {
+        EstadoAvanzada::EnConstruccion => w.u8(0),
+        EstadoAvanzada::Operativa => w.u8(1),
+        EstadoAvanzada::EnRuinas { invulnerable_hasta } => {
+            w.u8(2);
+            w.opt_i64(*invulnerable_hasta);
+        }
+        EstadoAvanzada::Destruida => unreachable!("una avanzada destruida sale del estado: no se guarda"),
+    }
+    match obra {
+        Some(Obra { tipo, requerido, entregado, completa_en }) => {
+            w.bool(true);
+            w.u8(*tipo as u8);
+            escribir_costo(w, requerido);
+            escribir_costo(w, entregado);
+            w.opt_i64(*completa_en);
+        }
+        None => w.bool(false),
+    }
+    escribir_almacen(w, almacen);
+}
+
+pub(crate) fn leer_avanzada(r: &mut Lector) -> Result<Avanzada, ErrorFormato> {
+    let (id, posicion) = (r.u64()?, r.punto()?);
+    let etapa = Etapa::TODAS.get(r.u8()? as usize).copied().ok_or(ErrorFormato("etapa de avanzada desconocida"))?;
+    let estado = match r.u8()? {
+        0 => EstadoAvanzada::EnConstruccion,
+        1 => EstadoAvanzada::Operativa,
+        2 => EstadoAvanzada::EnRuinas { invulnerable_hasta: r.opt_i64()? },
+        _ => return Err(ErrorFormato("estado de avanzada desconocido")),
+    };
+    let obra = if r.bool()? {
+        let tipo = match r.u8()? {
+            0 => TipoObra::Construir,
+            1 => TipoObra::Mejorar,
+            2 => TipoObra::Reparar,
+            _ => return Err(ErrorFormato("tipo de obra de avanzada desconocido")),
+        };
+        Some(Obra { tipo, requerido: leer_costo(r)?, entregado: leer_costo(r)?, completa_en: r.opt_i64()? })
+    } else {
+        None
+    };
+    Ok(Avanzada { id, posicion, etapa, estado, obra, almacen: leer_almacen(r)? })
+}
+
 fn escribir_costo(w: &mut Escritor, c: &Costo) {
     w.u64(c.len() as u64);
     for &(rec, n) in c {
@@ -110,6 +163,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         politicas,
         edificios,
         pueblos,
+        avanzadas,
         ingresos_acarreo,
         siguiente_edificio,
         ascenso,
@@ -192,6 +246,8 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         w.opt_u64(*carro);
         w.bool(*lleno);
     }
+    w.u64(avanzadas.len() as u64);
+    avanzadas.iter().for_each(|av| escribir_avanzada(w, av));
     w.u64(ingresos_acarreo.len() as u64);
     for IngresoAcarreo { recurso, hora, cantidad } in ingresos_acarreo {
         w.u8(recurso_a_u8(*recurso));
@@ -265,6 +321,10 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
         };
         pueblos.push(Pueblo { id, tipo, nodo, estado, almacen: leer_almacen(r)?, carro: r.opt_u64()?, lleno: r.bool()? });
     }
+    let mut avanzadas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        avanzadas.push(leer_avanzada(r)?);
+    }
     let mut ingresos_acarreo = Vec::new();
     for _ in 0..r.cuenta()? {
         ingresos_acarreo.push(IngresoAcarreo { recurso: recurso_de_u8(r.u8()?)?, hora: r.i64()?, cantidad: r.i64()? });
@@ -294,6 +354,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
         politicas: Politicas::desde_activas(activas),
         edificios,
         pueblos,
+        avanzadas,
         ingresos_acarreo,
         siguiente_edificio,
         ascenso,

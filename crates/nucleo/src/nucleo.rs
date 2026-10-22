@@ -41,6 +41,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+mod avanzadas;
 mod bandidos;
 mod batallas;
 mod columnas;
@@ -890,6 +891,19 @@ impl Nucleo {
             Comando::MarcarPueblo { .. } | Comando::EntregarMateriales { .. } | Comando::DestruirPueblo { .. } | Comando::ReponerCarro { .. } => match self.ejecutar_pueblos(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
+                Err(r) => return r,
+            },
+            Comando::ColocarAvanzada { .. }
+            | Comando::EntregarMaterialesAAvanzada { .. }
+            | Comando::MejorarAvanzada { .. }
+            | Comando::RepararAvanzada { .. }
+            | Comando::DestruirAvanzada { .. }
+            | Comando::ElegirTropaDeAvanzada { .. }
+            | Comando::GuarnecerAvanzada { .. }
+            | Comando::RetirarDeAvanzada { .. }
+            | Comando::RepostarEnAvanzada { .. }
+            | Comando::DepositarEnAvanzada { .. } => match self.ejecutar_avanzadas(t, p) {
+                Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
             Comando::Reloj(accion) => {

@@ -7,7 +7,9 @@
 //!   apartada por una batalla. Una columna que queda aparcada a la puerta de un lugar —su gente dentro— o en batalla **sale**, y con ella se van sus
 //!   encuentros y sus perseguidores (`columna.presa_a_cubierto`);
 //! - una **caravana** en tránsito o de regreso (su plan; las adjuntas viajan con su columna y no están);
-//! - una **plaza**, fija desde que se funda hasta que cae en ruinas.
+//! - una **plaza**, fija desde que se funda hasta que cae en ruinas;
+//! - una **avanzada** (fase 4F), fija desde que acaba su primera obra hasta que la destruyen o su madre cae en ruinas (con sus ruinas, que un ataque puede derribar
+//!   pasado el día de invulnerabilidad, y sin las ruinas de ciudadela sin dueño).
 //!
 //! No es estado: se reconstruye de [`Estado`] al abrir el núcleo (`reconstruir_espacio`), así que ni entra en el hash ni en las fotos. Los encuentros
 //! que ya estaban programados viajan en la cola (`Carga::Encuentro`).
@@ -20,18 +22,21 @@
 //!
 //! # Qué deja un encuentro
 //! Solo un **hecho**. Se filtra al vencer, con el estado de ese instante exacto, y solo lo ven columnas en el mapa y con algún héroe sano, de Facciones
-//! distintas y no aliadas, de la misma clase (personal con personal, ejército con ejército): una caravana o una plaza no tienen clase. No abre ningún
+//! distintas y no aliadas, de la misma clase (personal con personal, ejército con ejército): una caravana, una plaza o una avanzada no tienen clase. No abre ningún
 //! combate: la orden de atacar es del jugador o del bot y se resuelve en la fase 4D. Los hechos: `ejercito.encuentro` (dos columnas),
-//! `caravana.encuentro` (una caravana con una columna o con otra caravana) y `asentamiento.encuentro` (una columna junto a una plaza ajena).
+//! `caravana.encuentro` (una caravana con una columna o con otra caravana), `asentamiento.encuentro` (una columna junto a una plaza ajena) y `avanzada.encuentro`
+//! (una columna junto a una avanzada ajena que se puede atacar ahora: ni una obra, ni unas ruinas invulnerables).
 
 use super::*;
 use crate::estado::{Asentamiento, SIN_BANDERA};
-use crate::estado_combate::{entidad_bandidos, es_entidad_bandidos};
+use crate::estado_combate::{entidad_avanzada, entidad_bandidos, es_entidad_avanzada, es_entidad_bandidos};
 use crate::estado_comercio::{entidad_caravana, es_entidad_caravana, id_de_entidad};
 use super::persecuciones::Fin;
 use crate::estado_militar::Relacion;
 use ::encuentros::{plan_quieto, Entradas, Rejilla, PRIORIDAD_ENCUENTROS};
+use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada};
 use cola::Clave;
+use combate::avanzada::atacable;
 use comercio::caravana::Caravana;
 use militar::presencia::Ubicacion;
 use std::collections::{BTreeMap, BTreeSet};
@@ -61,6 +66,8 @@ pub(super) enum Cosa<'a> {
     Columna(&'a Ejercito),
     Caravana(&'a Caravana),
     Plaza(&'a Asentamiento),
+    /// Una avanzada con su plaza madre.
+    Avanzada(&'a Avanzada, &'a Asentamiento),
 }
 
 impl Nucleo {
@@ -94,6 +101,10 @@ impl Nucleo {
         if es_entidad_caravana(entidad) {
             return self.estado.comercio.caravana(id_de_entidad(entidad)).map(Cosa::Caravana);
         }
+        if es_entidad_avanzada(entidad) {
+            let id = id_de_entidad(entidad);
+            return self.estado.asentamientos.values().find_map(|a| a.economia.avanzada(id).map(|v| Cosa::Avanzada(v, a)));
+        }
         self.estado.ejercitos.get(&entidad).map(Cosa::Columna).or_else(|| self.estado.asentamientos.get(&entidad).map(Cosa::Plaza))
     }
 
@@ -101,7 +112,7 @@ impl Nucleo {
     pub(super) fn faccion_de(&self, c: &Cosa<'_>) -> Option<u32> {
         match c {
             Cosa::Columna(e) => e.columna.faccion,
-            Cosa::Plaza(a) => Some(a.faccion),
+            Cosa::Plaza(a) | Cosa::Avanzada(_, a) => Some(a.faccion),
             Cosa::Caravana(k) => self.estado.asentamientos.get(&(k.origen as u64)).map(|a| a.faccion),
         }
     }
@@ -111,6 +122,7 @@ impl Nucleo {
         match c {
             Cosa::Columna(e) => e.posicion_en(t),
             Cosa::Plaza(a) => a.posicion,
+            Cosa::Avanzada(v, _) => v.posicion,
             Cosa::Caravana(k) => self.posicion_de_caravana(k.id, t).unwrap_or(k.posicion),
         }
     }
@@ -130,6 +142,8 @@ impl Nucleo {
         puestos.extend(self.estado.ejercitos.values().filter(|e| self.columna_en_el_mapa(e)).map(|e| (e.id, self.plan_de_columna(e, t))));
         puestos.extend(self.estado.comercio.flota.iter().filter(|k| matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando)).filter_map(|k| Some((entidad_caravana(k.id), k.plan.clone()?))));
         puestos.extend(self.estado.asentamientos.values().map(|a| (a.id, plan_quieto(a.posicion, t, 0))));
+        let puestos_de_mapa = self.estado.asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).filter(|v| v.estado != EstadoAvanzada::EnConstruccion);
+        puestos.extend(puestos_de_mapa.map(|v| (entidad_avanzada(v.id), plan_quieto(v.posicion, t, 0))));
         puestos.extend(self.estado.combate.bandidos.values().map(|b| (entidad_bandidos(b.id), plan_quieto(b.posicion, t, 0))));
         for (entidad, plan) in puestos {
             let g = if self.estado.asentamientos.contains_key(&entidad) { 0 } else { self.estado.generaciones.actual(entidad) };
@@ -212,7 +226,7 @@ impl Nucleo {
     /// noticia: lo de la misma Facción y una caravana junto a una plaza. El resto se decide al vencer, con el estado de ese instante.
     fn interesa(&self, entidad: u64, otra: u64) -> bool {
         let (Some(a), Some(b)) = (self.cosa(entidad), self.cosa(otra)) else { return false };
-        if matches!((&a, &b), (Cosa::Caravana(_), Cosa::Plaza(_))) {
+        if matches!((&a, &b), (Cosa::Caravana(_), Cosa::Plaza(_) | Cosa::Avanzada(..))) {
             return false;
         }
         let (fa, fb) = (self.faccion_de(&a), self.faccion_de(&b));
@@ -260,6 +274,10 @@ impl Nucleo {
                 let (fc, fp) = if matches!(a, Cosa::Columna(_)) { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
                 EventoNucleo { codigo: "asentamiento.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![p.id], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fp)] }
             }
+            (Cosa::Columna(c), Cosa::Avanzada(v, m)) | (Cosa::Avanzada(v, m), Cosa::Columna(c)) => {
+                let (fc, fm) = if matches!(a, Cosa::Columna(_)) { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
+                EventoNucleo { codigo: "avanzada.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![m.id], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fm), ("avanzada", v.id as i64)] }
+            }
             _ => return,
         };
         self.tr.eventos.push(evento);
@@ -270,12 +288,14 @@ impl Nucleo {
         }
     }
 
-    /// ¿Cuenta la cosa para un encuentro en `t`? Una columna, en el mapa y con algún héroe sano; una caravana, mientras viaja; una plaza, siempre.
+    /// ¿Cuenta la cosa para un encuentro en `t`? Una columna, en el mapa y con algún héroe sano; una caravana, mientras viaja; una plaza, siempre; una avanzada, mientras se
+    /// puede atacar.
     fn en_juego(&self, c: &Cosa<'_>, t: Instante) -> bool {
         match c {
             Cosa::Columna(e) => self.columna_en_el_mapa(e) && self.tiene_heroe_sano(e, t),
             Cosa::Caravana(k) => matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando),
             Cosa::Plaza(_) => true,
+            Cosa::Avanzada(v, _) => atacable(v.estado, t),
         }
     }
 

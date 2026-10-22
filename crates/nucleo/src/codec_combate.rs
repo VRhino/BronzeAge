@@ -1,15 +1,17 @@
-//! Serialización canónica del estado del combate (`EstadoCombate`) para el hash y las fotos (formato BAN13, igual que en BAN12). Cada estructura se desestructura
+//! Serialización canónica del estado del combate (`EstadoCombate`) para el hash y las fotos (formato BAN15; en BAN13 y BAN14 es igual que en BAN12). Cada estructura se desestructura
 //! **entera** (sin `..`): si el estado gana un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `bandidos{n u64 · n × campamento} · siguiente_bandidos u64 · reaparecen{n u64 · n × (plaza u64, en i64)}
 //! · anillos{n u64 · n × (campamento u32, en i64)} · guarniciones{n u64 · n × (pueblo u64, escuadra, repone_en opt_i64)} · destruidos{n u64 ·
-//! n × (héroe u64, k u64, k × instante i64)}`.
+//! n × (héroe u64, k u64, k × instante i64)} · avanzadas{n u64 · n × (avanzada u64, elegidas{k u64 · k × (escalón u8, tropa u8)}, escuadras{k u64 · k × escuadra}, repone_en opt_i64)} ·
+//! huérfanas{n u64 · n × avanzada}`.
 //! Un campamento de bandidos: `id u64 · posición punto · nivel u8 · origen{u8 · u64: 0 plaza, 1 anillo, 2 veta, 3 administración} · bosque opt_u64`.
-//! Una escuadra, como en el estado militar (`codec_militar`).
+//! Una escuadra, como en el estado militar (`codec_militar`); una avanzada, como en la economía de la plaza (`codec_economia`).
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
-use crate::codec_militar::{escuadra_escribir, escuadra_leer};
-use crate::estado_combate::{CampamentoBandidos, EstadoCombate, GuarnicionDePueblo, OrigenBandidos};
+use crate::codec_economia::{escribir_avanzada, leer_avanzada};
+use crate::codec_militar::{escuadra_escribir, escuadra_leer, tropa_a_u8, tropa_de_u8};
+use crate::estado_combate::{CampamentoBandidos, EstadoCombate, GuarnicionDeAvanzada, GuarnicionDePueblo, OrigenBandidos};
 
 fn origen_escribir(w: &mut Escritor, o: OrigenBandidos) {
     let (tag, valor) = match o {
@@ -35,7 +37,7 @@ fn origen_leer(r: &mut Lector) -> Result<OrigenBandidos, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, c: &EstadoCombate) {
-    let EstadoCombate { bandidos, siguiente_bandidos, reaparecen, anillos, guarniciones, destruidos } = c;
+    let EstadoCombate { bandidos, siguiente_bandidos, reaparecen, anillos, guarniciones, avanzadas, huerfanas, destruidos } = c;
     w.u64(bandidos.len() as u64);
     for b in bandidos.values() {
         let CampamentoBandidos { id, posicion, nivel, origen, bosque } = b;
@@ -63,6 +65,21 @@ pub(crate) fn escribir(w: &mut Escritor, c: &EstadoCombate) {
         escuadra_escribir(w, escuadra);
         w.opt_i64(*repone_en);
     }
+    w.u64(avanzadas.len() as u64);
+    for (&avanzada, g) in avanzadas {
+        let GuarnicionDeAvanzada { elegidas, escuadras, repone_en } = g;
+        w.u64(avanzada);
+        w.u64(elegidas.len() as u64);
+        for (&escalon, &tropa) in elegidas {
+            w.u8(escalon);
+            w.u8(tropa_a_u8(tropa));
+        }
+        w.u64(escuadras.len() as u64);
+        escuadras.iter().for_each(|e| escuadra_escribir(w, e));
+        w.opt_i64(*repone_en);
+    }
+    w.u64(huerfanas.len() as u64);
+    huerfanas.values().for_each(|a| escribir_avanzada(w, a));
     w.u64(destruidos.len() as u64);
     for (&heroe, instantes) in destruidos {
         w.u64(heroe);
@@ -90,6 +107,23 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoCombate, ErrorFormato> {
         let pueblo = r.u64()?;
         let escuadra = escuadra_leer(r)?;
         c.guarniciones.insert(pueblo, GuarnicionDePueblo { escuadra, repone_en: r.opt_i64()? });
+    }
+    for _ in 0..r.cuenta()? {
+        let avanzada = r.u64()?;
+        let mut g = GuarnicionDeAvanzada::default();
+        for _ in 0..r.cuenta()? {
+            let escalon = r.u8()?;
+            g.elegidas.insert(escalon, tropa_de_u8(r.u8()?)?);
+        }
+        for _ in 0..r.cuenta()? {
+            g.escuadras.push(escuadra_leer(r)?);
+        }
+        g.repone_en = r.opt_i64()?;
+        c.avanzadas.insert(avanzada, g);
+    }
+    for _ in 0..r.cuenta()? {
+        let a = leer_avanzada(r)?;
+        c.huerfanas.insert(a.id, a);
     }
     for _ in 0..r.cuenta()? {
         let heroe = r.u64()?;

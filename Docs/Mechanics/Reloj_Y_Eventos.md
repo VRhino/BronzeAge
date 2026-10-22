@@ -52,6 +52,16 @@ Cómo avanza el mundo en la reconstrucción: sin tick global (la economía de ca
 >
 > Una **obra encargada a mano** arranca en el instante de la orden si hay cuadrilla libre (`ObraIniciada` sale en la misma respuesta). **Orden dentro de un mismo instante:** el fin de obra, de mejora y de ascenso (1) va **antes** del paso de minuto de la plaza (2), para que el edificio terminado y el nivel nuevo cuenten en ese minuto, como ya hacía `completar_obras`, que iba primero; la caducidad de política (3) va **después**, para que una política de `d` minutos se aplique en `d` pasos (el último minuto de una política todavía la aplica, como antes). Comparte fila con las batallas y las salidas del mundo (1) y con el consumo de tropa (3) sin interactuar con ellos. Las citas son idempotentes (una que llega con la plaza ya cambiada no encuentra nada) y el batch comprueba que todo lo que está en curso tiene la suya (`inv_fines`). La foto es `BAN14`.
 
+> **Implementado en Rust (2026-10-22, fase 4F), las avanzadas en el reloj.** Dos plazos de combate nuevos y ninguno recurrente; el fin de la obra de mapa **reutiliza** la cita de la plaza madre:
+>
+> | Evento | Prioridad | Entidad | Cuándo | Qué hace |
+> |---|---|---|---|---|
+> | `FinDeObras` (el de la plaza madre) | 1 | la plaza | el `completaEn` de la obra de una avanzada (construirla, mejorarla o repararla), que arranca al entregar el último material | `Asentamiento::cumplir_fines` también cumple las avanzadas: la primera obra la deja operativa (y la apunta en la rejilla de encuentros), la mejora sube de etapa y de almacén, la reparación la saca de ruinas. Antes del paso de minuto del mismo instante, como el resto de fines |
+> | `FinInvulnerabilidad` | 2 | `entidad_avanzada(id)` | `invulnerable_hasta` de un fuerte que acaba de caer en ruinas (+1 día) | quita la invulnerabilidad (`avanzada.invulnerabilidad_terminada`); es idempotente |
+> | `ReponeAvanzada` | 3 | `entidad_avanzada(id)` | `repone_en`: `reposicionMinutos` (6 h, placeholder) después del primer combate que dejó incompleta la guarnición de serie | la deja completa (con la composición vigente) y cuenta `avanzada.guarnicion_repuesta` |
+>
+> Una avanzada ociosa (operativa, sin guarnición mermada ni ruinas) **no programa nada**: la cola no guarda ninguna cita por ella. La avanzada no sube la generación de su entidad al cambiar de estado: sus plazos son idempotentes y comprueban el estado al vencer (una cita que llega con la avanzada ya destruida, reparada o rehecha no encuentra nada que cumplir). Los encuentros de las columnas con una avanzada son los `Carga::Encuentro` de prioridad 8 de siempre (`avanzada.encuentro`). El mantenimiento de la madre cuenta las avanzadas operativas en su paso de minuto, sin evento propio; la ración de la guarnición de jugadores, también (come en el paso de minuto de la madre).
+
 ## 1. Tiempo
 
 - **Reloj de mundo** = reloj de pared × factor (×1 en producción; ×N para pruebas y para el batch). No hay tick y no existe la unidad «minuto de mundo» como paso: sigue habiendo plazos declarados en minutos, horas y días, y se miden en instantes.
@@ -67,9 +77,9 @@ Cómo avanza el mundo en la reconstrucción: sin tick global (la economía de ca
 
 | Prioridad | Qué | Por qué en ese orden (regla que se conserva) |
 |---|---|---|
-| 1 | Cierre de batallas vencidas, salidas del mundo y **fin de obras, de mejoras y de ascensos de las plazas** | una batalla que vence no bloquea en ese mismo instante; el edificio terminado y el nivel nuevo cuentan en el paso de minuto del mismo instante |
-| 2 | **Paso de minuto de la plaza** (producción, comida y hambre, crecimiento, recaudación, mantenimiento y ruinas, en ese orden y de forma atómica); fin de la protección y de la ocupación | la población come **antes** que las tropas; la recaudación usa la población ya crecida; el oro recaudado paga el mantenimiento |
-| 3 | Consumo de tropa y **caducidad de políticas** | la población (2) come antes que las tropas; una política todavía se aplica en su último minuto |
+| 1 | Cierre de batallas vencidas, salidas del mundo y **fin de obras, de mejoras y de ascensos de las plazas, y de las obras de mapa de sus avanzadas** | una batalla que vence no bloquea en ese mismo instante; el edificio terminado y el nivel nuevo cuentan en el paso de minuto del mismo instante |
+| 2 | **Paso de minuto de la plaza** (producción, comida y hambre, crecimiento, recaudación, mantenimiento y ruinas, en ese orden y de forma atómica); fin de la protección y de la ocupación; fin de la invulnerabilidad de un fuerte en ruinas | la población come **antes** que las tropas; la recaudación usa la población ya crecida; el oro recaudado paga el mantenimiento |
+| 3 | Consumo de tropa, **caducidad de políticas** y reposición gratuita de la guarnición de serie de pueblos y avanzadas | la población (2) come antes que las tropas; una política todavía se aplica en su último minuto |
 | 4 | (dentro de la fila 2) crecimiento de población y recaudación de oro | no tienen evento propio: van en el paso de minuto de la plaza |
 | 5 | (dentro de la fila 2) mantenimiento y ruinas | una ruina deja de existir para el comercio, los bandidos y los ejércitos en ese instante |
 | 6 | Comercio, trueques, órdenes de mercado, caravanas | |

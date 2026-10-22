@@ -263,7 +263,7 @@ impl Nucleo {
             return None;
         }
         let bloqueos = bloqueos_de(self.batallas(), t);
-        let Implicados { heroes, ejercitos, caravanas, asentamientos, pueblos, campamentos } = p.comando.implicados();
+        let Implicados { heroes, ejercitos, caravanas, asentamientos, pueblos, avanzadas, campamentos } = p.comando.implicados();
         let heroe_bloqueado = |id: u64| {
             let plaza = self.heroe(id).and_then(|h| match h.heroe.presencia.ubicacion {
                 Ubicacion::Asentamiento(a) => Some(a),
@@ -277,6 +277,7 @@ impl Nucleo {
             || ejercitos.iter().any(|e| bloqueos.ejercitos.contains(e))
             || caravanas.iter().any(|c| bloqueos.caravanas.contains(c))
             || pueblos.iter().any(|x| bloqueos.pueblos.contains(x))
+            || avanzadas.iter().any(|x| bloqueos.avanzadas.contains(x))
             || campamentos.iter().any(|c| bloqueos.campamentos.contains(&(*c as u32)));
         choca.then(|| Respuesta::rechazo(rechazos::BATALLA_BLOQUEADO, "lo que tocas está en una batalla: ni se mueve ni recibe órdenes hasta que acabe", self.estado.version))
     }
@@ -393,6 +394,22 @@ impl Nucleo {
         }
     }
 
+    /// El ataque a una avanzada se juega como un asedio, sin convocatoria: defiende la guarnición de serie (sin dueño) y la de jugadores (escuadras de los héroes
+    /// residentes de la madre, que no están dentro: no hay participantes) y la Facción de la plaza madre. La guarnición de serie ya existe (nace al primer ataque).
+    pub(super) fn apertura_de_avanzada(&self, t: Instante, heroe: u64, id: u64, avanzada: u64, madre: u64) -> Apertura {
+        let (_, v) = self.avanzada(avanzada).expect("existe");
+        let serie = self.guarnicion_de_serie_de_avanzada(avanzada).iter().filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s) });
+        let jugadores = self.guarnicion_de_jugadores_de_avanzada(avanzada).into_iter().filter(|s| s.con_soldados()).map(escuadra_en_batalla);
+        Apertura {
+            contexto: Contexto::Avanzada { avanzada, etapa: v.etapa, punto: v.posicion },
+            punto: v.posicion,
+            iniciada_por: heroe,
+            atacante: self.bando_de_columna(id, t),
+            defensor: BandoDeTicket::nuevo(Some(self.estado.asentamientos[&madre].faccion), vec![], serie.chain(jugadores).collect()),
+            bloqueo: Bloqueo { ejercitos: vec![id], avanzada: Some(avanzada), ..Default::default() },
+        }
+    }
+
     /// Abre la batalla en `convocando` con el ticket congelado: reserva las escuadras con dueño, aparta las columnas y caravanas, programa sus plazos y la
     /// cuenta. Devuelve su id. La orden que la abre ya comprobó todo y declaró la guerra, si hacía falta.
     pub(super) fn abrir_batalla(&mut self, t: Instante, mut ap: Apertura) -> u64 {
@@ -466,6 +483,7 @@ impl Nucleo {
         let mut plazas: Vec<u64> = b.bloqueo.asentamiento.map(u64::from).into_iter().collect();
         plazas.extend(b.bloqueo.caravanas.iter().filter_map(|&k| self.estado.comercio.caravana(k)).map(|k| k.origen as u64));
         plazas.extend(b.bloqueo.pueblo.and_then(|p| self.pueblo(p)).map(|(madre, _)| madre));
+        plazas.extend(b.bloqueo.avanzada.and_then(|a| self.avanzada(a)).and_then(|(madre, _)| madre));
         plazas.retain(|p| self.estado.asentamientos.contains_key(p));
         plazas.sort_unstable();
         plazas.dedup();
@@ -766,6 +784,13 @@ impl Nucleo {
                 mineros.cantidad = e.cantidad;
                 mineros.con_experiencia(&mr, e.xp);
                 self.guardar_guarnicion(pueblo, mineros, t);
+            } else if let Some((&avanzada, g)) = self.estado.combate.avanzadas.iter().find(|(_, g)| g.escuadras.iter().any(|s| s.id == e.escuadra)) {
+                // Lo mismo con la guarnición de serie de una avanzada.
+                let mut escuadras = g.escuadras.clone();
+                let s = escuadras.iter_mut().find(|s| s.id == e.escuadra).expect("está");
+                s.cantidad = e.cantidad;
+                s.con_experiencia(&mr, e.xp);
+                self.guardar_guarnicion_de_avanzada(avanzada, escuadras, t);
             }
         }
         for e in &efectos.heroes {
@@ -805,6 +830,12 @@ impl Nucleo {
                         self.conquistar_plaza(t, plaza, f, ejercito, &lucharon);
                     }
                 }
+            }
+            // Una avanzada atacada y ganada por el atacante cae como con números: se lleva el almacén que le quepa y queda destruida o en ruinas. Si ya no existe (su madre
+            // cayó en ruinas durante la batalla) no queda nada que aplicar.
+            Contexto::Avanzada { avanzada, .. } if ganador == Lado::Atacante => {
+                let atacantes = self.columnas_del_bando(b, Lado::Atacante);
+                self.cae_avanzada(t, avanzada, &atacantes);
             }
             Contexto::Avanzada { .. } => {}
             // Mundo abierto: el bando que pierde entrega la mitad de su carro, que se reparte entre las columnas del que gana, lo que quepa (contra una caravana o un
@@ -895,12 +926,18 @@ impl Nucleo {
         if chatarra.is_empty() {
             return;
         }
-        if let (Contexto::Asedio { asentamiento }, Lado::Defensor) = (b.ticket.contexto, res.ganador) {
-            if let Some(a) = self.estado.asentamientos.get_mut(&(asentamiento as u64)) {
+        // Si defiende una plaza o una avanzada y gana, la chatarra va al almacén de la plaza (la madre, en una avanzada).
+        let plaza = match (b.ticket.contexto, res.ganador) {
+            (Contexto::Asedio { asentamiento }, Lado::Defensor) => Some(asentamiento as u64),
+            (Contexto::Avanzada { avanzada, .. }, Lado::Defensor) => self.avanzada(avanzada).and_then(|(madre, _)| madre),
+            _ => None,
+        };
+        if let Some(plaza) = plaza {
+            if let Some(a) = self.estado.asentamientos.get_mut(&plaza) {
                 chatarra.iter().for_each(|(&r, &n)| {
                     a.economia.almacen.agregar(r, n);
                 });
-                self.tr.asentamientos.push(asentamiento as u64);
+                self.tr.asentamientos.push(plaza);
             }
             return;
         }

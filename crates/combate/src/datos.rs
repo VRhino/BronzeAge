@@ -122,6 +122,21 @@ pub struct ReglasBandidos {
     pub respawn: i64,
 }
 
+/// Las avanzadas en combate (`AVANZADA`, Doc 5.17): lo que defiende cada etapa y cuánto cabe en su guarnición de jugadores.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasAvanzada {
+    /// Cuánto es invulnerable un fuerte en ruinas (ms).
+    pub invulnerabilidad: i64,
+    /// Cupo de la guarnición de jugadores por héroe residente de la madre y por avanzada, en puntos de Liderazgo (atalaya, fuerte, ciudadela).
+    pub cupo_guarnicion: [i64; 3],
+    /// Escuadras de serie de cada etapa por escalón, de menor a mayor escalón.
+    pub guarnicion_de_serie: [Vec<(u8, usize)>; 3],
+    /// La tropa de cada escalón mientras el Gobernador no elija otra.
+    pub tropa_por_defecto: Tropa,
+    /// Lo que tarda en reponerse gratis la guarnición de serie que cayó (ms).
+    pub reposicion: i64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasPueblos {
     /// Mineros de la guarnición de serie y lo que tarda en reponerse gratis (ms).
@@ -201,8 +216,7 @@ pub struct Reglas {
     pub batalla: ReglasBatalla,
     pub bandidos: ReglasBandidos,
     pub pueblos: ReglasPueblos,
-    /// Cuánto es invulnerable un fuerte en ruinas (ms).
-    pub invulnerabilidad_avanzada: i64,
+    pub avanzada: ReglasAvanzada,
 }
 
 fn nivel_de_bandidos(b: &Value, nivel: &str) -> NivelBandidos {
@@ -282,7 +296,16 @@ impl Reglas {
                 respawn: minutos(&bd, "respawnMinutos"),
             },
             pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, reposicion: pueblos.reposicion_mineros_min * MS_POR_MINUTO },
-            invulnerabilidad_avanzada: minutos(&av, "invulnerabilidadMinutos"),
+            avanzada: ReglasAvanzada {
+                invulnerabilidad: minutos(&av, "invulnerabilidadMinutos"),
+                cupo_guarnicion: ["atalaya", "fuerte", "ciudadela"].map(|e| entero(&av, &format!("cupoGuarnicion.{e}"))),
+                guarnicion_de_serie: ["atalaya", "fuerte", "ciudadela"].map(|e| {
+                    let por_escalon = av["guarnicionDeSerie"][e].as_object().unwrap_or_else(|| panic!("guarnicionDeSerie.{e}"));
+                    por_escalon.iter().map(|(k, n)| (k.parse().expect("escalón"), n.as_u64().expect("escuadras") as usize)).collect()
+                }),
+                tropa_por_defecto: Tropa::desde_nombre(av["tropaPorDefecto"].as_str().expect("tropaPorDefecto")).expect("tropa por defecto de la guarnición de serie"),
+                reposicion: minutos(&av, "reposicionMinutos"),
+            },
             militar,
         }
     }
@@ -306,7 +329,15 @@ mod pruebas {
         assert_eq!((n.bajas_fijas_ganador, n.bajas_fijas_perdedor), (50_000, 250_000));
         assert_eq!((n.ventaja_aguante, n.carga_perdida_aguante, n.carros_perdidos, n.protegida_pueblo), (1_250_000, 700_000, 500_000, 500_000));
         assert_eq!(r.fraccion_robada, 500_000);
-        assert_eq!(r.invulnerabilidad_avanzada, 1440 * MS_POR_MINUTO);
+        assert_eq!(r.avanzada.invulnerabilidad, 1440 * MS_POR_MINUTO);
+    }
+
+    #[test]
+    fn las_avanzadas_traen_la_guarnicion_de_serie_y_el_cupo_del_canon() {
+        let a = r().avanzada;
+        assert_eq!(a.cupo_guarnicion, [14, 45, 90]);
+        assert_eq!(a.guarnicion_de_serie, [vec![(2, 1)], vec![(2, 3), (3, 2)], vec![(3, 5), (4, 3)]]);
+        assert_eq!((a.tropa_por_defecto, a.reposicion), (Tropa::MiliciaLanceros, 360 * MS_POR_MINUTO));
     }
 
     #[test]

@@ -57,8 +57,8 @@ impl Contexto {
         }
     }
 
-    /// Solo un asedio tiene convocatoria; los demás salen hacia Unity al abrirse.
-    // DUDA: una avanzada «se juega como asedio» pero el documento solo da la convocatoria al asedio. Si el autor quiere que la tenga, es esta línea.
+    /// Solo un asedio tiene convocatoria; los demás salen hacia Unity al abrirse. Una avanzada se juega como un asedio en capacidad y duración, pero sin
+    /// convocatoria (decisión del autor, 2026-10-22).
     pub fn tiene_convocatoria(&self) -> bool {
         matches!(self, Contexto::Asedio { .. })
     }

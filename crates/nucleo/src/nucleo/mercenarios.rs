@@ -154,6 +154,8 @@ impl Nucleo {
         let velocidades: std::collections::BTreeMap<u64, Mil> = self.heroe(heroe).map_or_else(Default::default, |h| h.heroe.escuadras.iter().filter_map(|e| if let Contenedor::Ejercito(c) = e.contenedor { Some((c, self.velocidad_de_ejercito(c)?)) } else { None }).collect());
         let h = &mut self.estado.militar.heroes.get_mut(&heroe).expect("existe").heroe;
         guarnicion::soltar(h);
+        // La guarnición de una avanzada es también de la plaza donde se reside: al mudarse, esas escuadras vuelven al campamento, intactas (final normal).
+        h.escuadras.iter_mut().filter(|e| matches!(e.contenedor, Contenedor::Avanzada(_))).for_each(|e| e.contenedor = Contenedor::Campamento);
         let retiradas = leva::retirar_prestamos_ajenos(h, &|c| nueva == Some(Residencia::Campamento(c)));
         let mut columnas = Vec::new();
         for e in &retiradas {
@@ -169,7 +171,7 @@ impl Nucleo {
                         columnas.push(c);
                     }
                 }
-                Contenedor::Campamento | Contenedor::Fuera => {}
+                Contenedor::Campamento | Contenedor::Fuera | Contenedor::Avanzada(_) => {}
             }
         }
         columnas.sort_unstable();

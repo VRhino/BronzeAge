@@ -188,7 +188,7 @@ impl Nucleo {
     }
 
     /// Lo que lleva una columna y vale como material: su carro (`suministro`) y la carga de sus caravanas adjuntas, sumado por recurso.
-    fn material_de_columna(&self, ejercito: u64) -> Mercancia {
+    pub(super) fn material_de_columna(&self, ejercito: u64) -> Mercancia {
         let e = &self.estado.ejercitos[&ejercito];
         let mut todo = e.columna.carga.clone();
         for c in e.caravanas_adjuntas.iter().filter_map(|&c| self.estado.comercio.caravana(c)) {
@@ -200,7 +200,7 @@ impl Nucleo {
     }
 
     /// Quita de la columna lo que entregó: primero de su carro y, si no basta, de sus caravanas adjuntas por orden de id.
-    fn quitar_de_columna(&mut self, ejercito: u64, tomado: &Costo) {
+    pub(super) fn quitar_de_columna(&mut self, ejercito: u64, tomado: &Costo) {
         let Estado { ejercitos, comercio, .. } = &mut self.estado;
         let e = ejercitos.get_mut(&ejercito).expect("existe");
         for &(r, n) in tomado {

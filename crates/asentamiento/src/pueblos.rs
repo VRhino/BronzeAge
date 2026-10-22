@@ -93,10 +93,30 @@ impl Pueblo {
     /// Lo que todavía falta entregar a una obra pendiente (vacío si no lo está o ya está todo).
     pub fn falta(&self) -> Costo {
         match &self.estado {
-            EstadoPueblo::Pendiente { requerido, entregado } => requerido.iter().zip(entregado).map(|(&(rec, pide), &(_, hay))| (rec, pide - hay)).filter(|&(_, n)| n > 0).collect(),
+            EstadoPueblo::Pendiente { requerido, entregado } => falta_de(requerido, entregado),
             _ => vec![],
         }
     }
+}
+
+/// Lo que falta de `requerido` por haberse entregado `entregado` (los mismos recursos, en el mismo orden): solo lo que aún pide la obra.
+pub(crate) fn falta_de(requerido: &Costo, entregado: &Costo) -> Costo {
+    requerido.iter().zip(entregado).map(|(&(rec, pide), &(_, hay))| (rec, pide - hay)).filter(|&(_, n)| n > 0).collect()
+}
+
+/// Toma de `disponible` lo que falta a una obra de mapa, recurso a recurso, y lo anota en `entregado`. Devuelve lo tomado, para que quien entrega lo
+/// quite de donde lo llevaba. Es la entrega de materiales de un pueblo y de una avanzada.
+pub(crate) fn tomar_materiales(requerido: &Costo, entregado: &mut Costo, disponible: &[(Recurso, Mil)]) -> Costo {
+    let mut tomado = Costo::new();
+    for (&(rec, pide), (_, hay)) in requerido.iter().zip(entregado.iter_mut()) {
+        let ofrece = disponible.iter().filter(|&&(d, _)| d == rec).map(|&(_, n)| n).sum::<Mil>();
+        let toma = (pide - *hay).min(ofrece);
+        if toma > 0 {
+            *hay += toma;
+            tomado.push((rec, toma));
+        }
+    }
+    tomado
 }
 
 /// Horas de la ventana con la que el acarreo cuenta en la solvencia del ascenso (Economia_Construccion §11).
@@ -195,15 +215,7 @@ impl Asentamiento {
     pub fn entregar_a_pueblo(&mut self, t: Instante, r: &Reglas, id: u64, disponible: &[(Recurso, Mil)], ev: &mut Vec<Evento>) -> Result<Costo, ErrorPueblo> {
         let p = self.pueblos.iter_mut().find(|p| p.id == id).ok_or(ErrorPueblo::NoExiste)?;
         let EstadoPueblo::Pendiente { requerido, entregado } = &mut p.estado else { return Err(ErrorPueblo::NoEstaPendiente) };
-        let mut tomado = Costo::new();
-        for (&(rec, pide), (_, hay)) in requerido.iter().zip(entregado.iter_mut()) {
-            let ofrece = disponible.iter().filter(|&&(d, _)| d == rec).map(|&(_, n)| n).sum::<Mil>();
-            let toma = (pide - *hay).min(ofrece);
-            if toma > 0 {
-                *hay += toma;
-                tomado.push((rec, toma));
-            }
-        }
+        let tomado = tomar_materiales(requerido, entregado, disponible);
         if tomado.is_empty() {
             return Err(ErrorPueblo::NadaQueEntregar);
         }

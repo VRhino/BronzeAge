@@ -5,7 +5,8 @@
 //! en un campamento, la tropa prestada y la residencia están en [`mercenarios`](super::mercenarios).
 //!
 //! # La ración de la guarnición sin coste por plaza ociosa
-//! El «campamento» de una plaza son las escuadras en `Contenedor::Campamento` de los héroes que residen en ella. Come de su almacén en el paso de
+//! El «campamento» de una plaza son las escuadras en `Contenedor::Campamento` de los héroes que residen en ella, más las que dejaron en la guarnición de sus avanzadas
+//! (`Contenedor::Avanzada`: comen el trigo de la madre, Doc 5.17). Come de su almacén en el paso de
 //! un minuto de la plaza (que ya existe), justo después de la población: no hay evento nuevo por plaza ni por héroe. Una plaza sin residentes no
 //! hace nada (una consulta al índice de residentes). La ración entra además en el `Exterior` de la economía, de modo que la reserva de la
 //! auto-construcción y el déficit de trigo cuentan con ella. Con trigo para toda la ración la moral sube; con menos, baja en proporción a lo que
@@ -72,6 +73,11 @@ fn rechazo_de_reclutamiento(e: ErrorReclutamiento) -> (&'static str, String) {
     }
 }
 
+/// ¿Come esta escuadra del almacén de la plaza donde reside su héroe? La del campamento y la que guarnece una avanzada de la plaza.
+fn come_de_la_plaza(e: &militar::escuadra::Escuadra) -> bool {
+    matches!(e.contenedor, Contenedor::Campamento | Contenedor::Avanzada(_))
+}
+
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
 
@@ -112,9 +118,10 @@ impl Nucleo {
         Some(guarnicion::cupo(&self.estado.reglas.economia.militar, &eco.edificios, construccion::RECINTO_NIVEL, extra))
     }
 
-    /// Soldados en pie del campamento de la plaza: las escuadras en el campamento de los héroes que residen en ella (lo que come de su almacén).
+    /// Soldados en pie del campamento de la plaza: las escuadras en el campamento de los héroes que residen en ella y las que dejaron en la guarnición de sus avanzadas
+    /// (lo que come de su almacén).
     pub fn soldados_del_campamento(&self, plaza: u64) -> i64 {
-        self.estado.militar.residentes_de(plaza).flat_map(|h| h.heroe.escuadras.iter()).filter(|e| e.contenedor == Contenedor::Campamento).map(|e| e.cantidad.max(0)).sum()
+        self.estado.militar.residentes_de(plaza).flat_map(|h| h.heroe.escuadras.iter()).filter(|e| come_de_la_plaza(e)).map(|e| e.cantidad.max(0)).sum()
     }
 
     /// Trigo por minuto que come la guarnición de la plaza (ración entera, sin participantes).
@@ -555,7 +562,7 @@ impl Nucleo {
         let ids: Vec<u64> = militar.residentes_de(plaza).map(|h| h.heroe.id).collect();
         let mut deserciones = Vec::new();
         for id in ids {
-            for e in militar.heroes.get_mut(&id).expect("existe").heroe.escuadras.iter_mut().filter(|e| e.contenedor == Contenedor::Campamento && e.cantidad > 0) {
+            for e in militar.heroes.get_mut(&id).expect("existe").heroe.escuadras.iter_mut().filter(|e| come_de_la_plaza(e) && e.cantidad > 0) {
                 e.paso_de_hambre(&mr, t, suministro);
                 let desertores = e.desertar(&mr, t);
                 if desertores > 0 {

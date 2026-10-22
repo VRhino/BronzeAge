@@ -58,6 +58,11 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// Anotada en `Docs/Mecanicas a desarrollar.md`, sección de paridad.
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN15: BAN14 más las avanzadas (fase 4F, 2026-10-22): cada plaza guarda las suyas en su economía (`codec_economia`: etapa, estado, obra de mapa y almacén), el
+/// estado del combate guarda su guarnición de serie con las tropas que eligió el Gobernador y las ruinas de ciudadela sin dueño (`codec_combate`), las escuadras
+/// pueden estar en la guarnición de una avanzada (`Contenedor::Avanzada`, `codec_militar`) y la cola gana dos plazos de combate (`SucesoCombate::FinInvulnerabilidad` y
+/// `ReponeAvanzada`). BAN14 se rechaza: no traía nada de esto y su huella de reglas no incluye las cifras de las avanzadas.
+///
 /// BAN14: BAN13 más la economía por minuto con fines exactos (2026-10-22): la población es entera con un resto oculto por clase y una marca de
 /// recuperación del hambre (`codec_economia`), y dos cargas nuevas de la cola, `Carga::FinDeObras` y `Carga::CaducaPolitica`. BAN13 se rechaza: su
 /// población era continua (milésimas de habitante, sin resto ni marca) y no traía las citas de fin de obra, de mejora, de ascenso y de política.
@@ -68,7 +73,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN14";
+const MAGIA: &[u8; 5] = b"BAN15";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -363,6 +368,11 @@ pub enum SucesoCombate {
     FinOcupacion,
     /// Se repone la guarnición de serie de un pueblo (la entidad es `entidad_guarnicion`). Prioridad 3 (el consumo de población y de tropa).
     ReponeGuarnicion,
+    /// Acaba la invulnerabilidad de un fuerte en ruinas (la entidad es `entidad_avanzada`): vuelve a poder atacarse. Prioridad 2, como el fin de la protección
+    /// de una plaza conquistada.
+    FinInvulnerabilidad,
+    /// Se repone la guarnición de serie de una avanzada (la entidad es `entidad_avanzada`). Prioridad 3, como la de un pueblo.
+    ReponeAvanzada,
 }
 
 impl SucesoCombate {
@@ -373,6 +383,8 @@ impl SucesoCombate {
             SucesoCombate::FinProteccion => 2,
             SucesoCombate::FinOcupacion => 3,
             SucesoCombate::ReponeGuarnicion => 4,
+            SucesoCombate::FinInvulnerabilidad => 5,
+            SucesoCombate::ReponeAvanzada => 6,
         });
     }
     pub(crate) fn leer(r: &mut Lector) -> Result<Self, ErrorFormato> {
@@ -382,6 +394,8 @@ impl SucesoCombate {
             2 => SucesoCombate::FinProteccion,
             3 => SucesoCombate::FinOcupacion,
             4 => SucesoCombate::ReponeGuarnicion,
+            5 => SucesoCombate::FinInvulnerabilidad,
+            6 => SucesoCombate::ReponeAvanzada,
             _ => return Err(ErrorFormato("suceso de combate desconocido")),
         })
     }
@@ -785,13 +799,14 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN14`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
+        // La cabecera es de 5 bytes (`BAN15`): los cuatro primeros son «BAN1» y el quinto dice el formato; el `0` es el BAN10 de antes.
         match (r.magia()? == MAGIA[..4]).then(|| r.u8()).transpose()? {
             Some(f) if f == MAGIA[4] => {}
             Some(b'0') => return Err(ErrorFormato("foto del formato BAN10 (sin persecuciones ni informes de inspección, con los encuentros en un generador externo): ya no se admite")),
             Some(b'1') => return Err(ErrorFormato("foto del formato BAN11 (sin estado de combate, sin protección ni ocupación de las plazas y con una huella de reglas que no incluye las del combate): ya no se admite")),
             Some(b'2') => return Err(ErrorFormato("foto del formato BAN12 (sin batallas de Unity, sin la regla batallas_en_unity y con las columnas apartadas sin su plan en pausa): ya no se admite")),
             Some(b'3') => return Err(ErrorFormato("foto del formato BAN13 (población continua en milésimas, sin resto ni marca de recuperación del hambre y sin las citas de fin de obra y de política): ya no se admite")),
+            Some(b'4') => return Err(ErrorFormato("foto del formato BAN14 (sin avanzadas, sin guarnición de avanzada en las escuadras y con una huella de reglas que no incluye las cifras de las avanzadas): ya no se admite")),
             _ => return Err(ErrorFormato("no es un estado del núcleo")),
         }
         if r.texto()? != mundo_hash {
