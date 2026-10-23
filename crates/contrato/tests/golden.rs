@@ -63,6 +63,9 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe") else { panic!() };
     let Some(entidad::Cuerpo::Heroe(h)) = f.entidades[0].cuerpo.clone() else { panic!() };
     assert_eq!(h.ubicacion.unwrap().donde, Some(ubicacion_heroe::Donde::PuebloId("pueblo-5".into())));
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe_con_residencia") else { panic!() };
+    let Some(entidad::Cuerpo::Heroe(h)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    assert_eq!((h.residencia_id.as_deref(), h.ubicacion.unwrap().donde), (Some("as-7"), Some(ubicacion_heroe::Donde::AsentamientoId("as-7".into()))), "la residencia es aparte de dónde está");
     let ms::Cuerpo::Foto(f) = de_servidor("foto_ejercito_dentro") else { panic!() };
     let Some(entidad::Cuerpo::Ejercito(e)) = f.entidades[0].cuerpo.clone() else { panic!() };
     assert_eq!((e.dentro_de.as_deref(), e.en_batalla, e.batalla_id.is_some()), (Some("pueblo-5"), true, true));

@@ -474,6 +474,8 @@ message Heroe {
   uint32 cupo_guarnicion = 31;           // derivado
   bytes exploracion_personal = 32;       // máscara de lo explorado sin bandera
   map<string, InteriorRecordado> plazas_recordadas = 33;
+  // Dónde reside (4H T3b): la plaza (`as-N`) o el campamento de mercenarios (`camp-N`) donde guarda su almacén personal y cuenta su cupo diario. Ausente si no reside en ninguno.
+  optional string residencia_id = 34;
 }
 
 // Foto del interior de una plaza al salir de ella.

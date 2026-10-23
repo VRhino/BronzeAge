@@ -60,6 +60,7 @@ mod mercado;
 mod mercenarios;
 mod murallas;
 mod persecuciones;
+mod pertenencias;
 mod pueblos;
 mod salidas;
 mod uniones;
@@ -179,6 +180,10 @@ pub struct Nucleo {
     version_de_arranque: u64,
     /// La huella de cada entidad en la última comprobación de `Ajustes::auditar_cambios`.
     huellas_auditadas: Option<auditoria::Huellas>,
+    /// A qué ámbitos de jugador pertenece cada entidad que viaja a ellos (`pertenencias.rs`). Solo se lleva si hay sesiones (`seguir_pertenencias`); no se persiste: se rehace del estado.
+    pertenencias: Option<pertenencias::Mapa>,
+    /// Desde qué versión llevan pertenencias los registros de cambios (la de `seguir_pertenencias`): las anteriores no dicen a qué ámbito iba cada entidad y no se pueden reanudar por deltas.
+    pertenencias_desde: u64,
     /// Lo último que el núcleo estaba aplicando (una orden o un evento), para decir en la auditoría qué cambió algo sin marcarlo.
     causa_auditada: String,
     persist: Option<Persistencia>,
@@ -286,6 +291,8 @@ impl Nucleo {
             versiones: BTreeMap::new(),
             version_de_arranque: base_registro,
             huellas_auditadas: None,
+            pertenencias: None,
+            pertenencias_desde: 0,
             causa_auditada: String::new(),
             persist: None,
             proxima_muestra: None,
@@ -495,6 +502,7 @@ impl Nucleo {
         let v = self.estado.version;
         let mut tocados = std::mem::take(&mut self.tr.tocados);
         tocados.cerrar();
+        let pertenencias = self.cerrar_pertenencias(&tocados);
         for id in tocados.de(Clase::Ejercito) {
             if let Some(e) = self.estado.ejercitos.get_mut(id) {
                 e.version = v;
@@ -509,7 +517,7 @@ impl Nucleo {
             self.versiones.extend(tocados.de(clase).iter().map(|&id| ((clase, id), v)));
         }
         let eventos = std::mem::take(&mut self.tr.eventos);
-        self.registro.push_back(CambioVersion { version: v, en: t, tocados, eventos });
+        self.registro.push_back(CambioVersion { version: v, en: t, tocados, pertenencias, eventos });
         if self.registro.len() > self.ajustes.retencion_cambios {
             if let Some(c) = self.registro.pop_front() {
                 self.base_registro = c.version;

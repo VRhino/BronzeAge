@@ -328,6 +328,7 @@ impl Nucleo {
     pub(super) fn declarar_guerra(&mut self, t: Instante, atacante: u32, contra: u32) {
         self.estado.militar.relaciones.insert((atacante.min(contra), atacante.max(contra)), Relacion::Guerra);
         self.tr.tocar_todos(Clase::Faccion, [u64::from(atacante), u64::from(contra)]);
+        self.tr.tocar(Clase::Relacion, Clase::par(atacante, contra));
         self.emitir_propio(t, "faccion.guerra_declarada", vec![], vec![("atacante", atacante as i64), ("contra", contra as i64)]);
     }
 

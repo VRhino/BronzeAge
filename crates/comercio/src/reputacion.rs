@@ -87,6 +87,11 @@ impl Reputacion {
         self.alianzas
     }
 
+    /// El ritmo con que se mueve (ppm de punto), para quien lo proyecta.
+    pub fn ritmo(&self) -> Ritmo {
+        self.ritmo
+    }
+
     /// El ancla del ritmo `(valor en t0, t0)`, en ppm de punto: lo que una foto guarda para restaurarla con [`Reputacion::desde`].
     pub fn ancla(&self) -> (i64, Instante) {
         (self.ritmo.valor_en_t0, self.ritmo.t0)

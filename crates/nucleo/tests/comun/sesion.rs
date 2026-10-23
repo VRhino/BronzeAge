@@ -141,3 +141,18 @@ pub async fn esperar_hecho(c: &mut ClientePrueba, codigo: &str) -> pb::Delta {
         }
     }
 }
+
+/// Las columnas (`Ejercito`) de una lista de entidades: el resto de un ámbito (el héroe, sus escuadras...) no es de las pruebas de columnas.
+pub fn columnas<'a>(entidades: impl IntoIterator<Item = &'a Entidad>) -> Vec<&'a pb::Ejercito> {
+    entidades.into_iter().filter_map(|e| if let Some(pb::entidad::Cuerpo::Ejercito(x)) = e.cuerpo.as_ref() { Some(x) } else { None }).collect()
+}
+
+/// Las columnas que actualiza una `Delta`.
+pub fn columnas_de(d: &pb::Delta) -> Vec<&pb::Ejercito> {
+    columnas(d.cambios.iter().filter_map(|c| c.datos.as_ref()))
+}
+
+/// De las `Delta` que llegaron antes de un resultado, las del ámbito del héroe.
+pub fn del_heroe(deltas: &[pb::Delta]) -> Vec<&pb::Delta> {
+    deltas.iter().filter(|d| d.ambito.as_ref().is_some_and(|a| a.tipo == pb::AmbitoTipo::AmbitoHeroe as i32)).collect()
+}

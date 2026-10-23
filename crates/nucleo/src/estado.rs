@@ -14,6 +14,7 @@ use crate::estado_batallas::EstadoBatallas;
 use crate::estado_combate::EstadoCombate;
 use crate::estado_comercio::EstadoComercio;
 use crate::estado_militar::{Acceso, EstadoMilitar};
+use crate::proyeccion::ambito::Ambito;
 use crate::urbanismo::{Urbanismo, Urbe};
 use base::{Instante, Mil, Plan, Punto, Rng};
 use cola::{Clave, Cola, Evento, Generaciones};
@@ -595,10 +596,22 @@ pub enum Clase {
     Bandidos,
     Convocatoria,
     Batalla,
+    /// Una relación entre dos Facciones (el stub de administración `FijarRelacion`): su id es el par `(menor, mayor)` empaquetado por [`Clase::par`].
+    Relacion,
 }
 
 impl Clase {
-    pub const TODAS: [Clase; 14] = [
+    /// El id de una relación entre dos Facciones: `(menor << 32) | mayor`.
+    pub fn par(a: u32, b: u32) -> u64 {
+        (u64::from(a.min(b)) << 32) | u64::from(a.max(b))
+    }
+
+    /// Las dos Facciones de una relación (la inversa de [`Clase::par`]).
+    pub fn facciones_del_par(par: u64) -> (u32, u32) {
+        ((par >> 32) as u32, par as u32)
+    }
+
+    pub const TODAS: [Clase; 15] = [
         Clase::Ejercito,
         Clase::Asentamiento,
         Clase::Faccion,
@@ -613,12 +626,13 @@ impl Clase {
         Clase::Bandidos,
         Clase::Convocatoria,
         Clase::Batalla,
+        Clase::Relacion,
     ];
 }
 
 /// Las entidades cuyo estado cambió en una versión, por clase. Al cerrar la versión cada lista queda ordenada y sin repetir.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Tocados([Vec<u64>; 14]);
+pub struct Tocados([Vec<u64>; 15]);
 
 impl Tocados {
     pub fn marcar(&mut self, clase: Clase, id: u64) {
@@ -642,6 +656,17 @@ impl Tocados {
     }
 }
 
+/// A qué ámbitos pertenece una entidad al cerrarse una versión y de cuáles salió (4H, T3b): es lo que dice **quién recibe qué**. Solo entran las entidades que viajan a los ámbitos de
+/// un jugador (`HEROE`, `FACCION`, y `VISTA` para las columnas) y solo las tocadas en la versión o las que cambiaron de ámbito sin que nadie las tocara (los pueblos de una plaza
+/// que cambia de dueño). `quitan` son los ámbitos que tenían la entidad antes y ya no (porque desapareció o porque dejó de ser suya): reciben un `QUITA`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pertenencia {
+    pub clase: Clase,
+    pub id: u64,
+    pub ahora: Vec<Ambito>,
+    pub quitan: Vec<Ambito>,
+}
+
 /// Registro de cambios de una versión: lo que alimenta `Delta` y `Foto`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CambioVersion {
@@ -649,6 +674,8 @@ pub struct CambioVersion {
     pub en: Instante,
     /// Las entidades cuyo estado cambió, por clase (ordenadas, sin repetir).
     pub tocados: Tocados,
+    /// A qué ámbitos de jugador pertenece cada entidad que viaja a ellos y de cuáles salió, por clase e id.
+    pub pertenencias: Vec<Pertenencia>,
     pub eventos: Vec<EventoNucleo>,
 }
 

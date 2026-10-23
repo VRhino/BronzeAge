@@ -1,6 +1,6 @@
 # Contrato 05: la sesión en tiempo real
 
-> **Estado (2026-10-23): el esquema de 4H (T1) está en `proto/`, las órdenes se traducen (T2) y la sesión abre los ámbitos con su autorización, `Revocado` y reanudación por versión (T3a); lo que lleva cada ámbito se completa en T3b-T3e, así que la sesión todavía proyecta poco: columnas y la ficha de la plaza** (ver `Docs/Arquitectura/4H_Contraste_y_Plan.md`).
+> **Estado (2026-10-23): el esquema de 4H (T1) está en `proto/`, las órdenes se traducen (T2), la sesión abre los ámbitos con su autorización, `Revocado` y reanudación por versión (T3a) y `HEROE` y `FACCION` llevan ya su contenido completo, con `QUITA` (T3b); falta el de `ASENTAMIENTO`, `CAMPAMENTO`, `VISTA`, `ADMIN` y `BATALLA` (T3c-T3e, T4)** (ver `Docs/Arquitectura/4H_Contraste_y_Plan.md`).
 > **Diseño cerrado de la fase 2 (2026-10-13), sin código.** Sustituye a los contratos 02 (HTTP) y 03 (tiempo real por
 > segmentos) del servidor TypeScript, que quedan en `typescript-final`. El esquema vive en [`proto/bronzeage/v1/`](../../proto/bronzeage/v1/)
 > (Protobuf, D8) y es **la fuente de verdad**: este documento explica el protocolo y las garantías; si se contradicen, gana el `.proto`.
@@ -43,8 +43,8 @@ El servidor suscribe el cliente a los ámbitos que le corresponden; **el cliente
 
 | Ámbito | Contenido | Cuándo (autorización) |
 |---|---|---|
-| `HEROE:heroe-N` | el héroe propio, sus escuadras, loadouts, inventario y las columnas en que va | siempre que la cuenta tenga héroe (el de verdad; si solo tiene héroes de campo del andamiaje de administración, el primero) |
-| `FACCION:f-N` | la Facción propia, sus relaciones, propuestas, tecnologías, memoria de la niebla, sus plazas y pueblos | si el héroe tiene Facción |
+| `HEROE:heroe-N` | el héroe propio (con sus loadouts), sus escuadras, las columnas en que participa, las caravanas que lleva en su columna o que escolta con una escuadra suya y las batallas en que combate (inventario y equipo, vacíos hasta el catálogo de Conquest) | siempre que la cuenta tenga héroe (el de verdad; si solo tiene héroes de campo del andamiaje de administración, el primero) |
+| `FACCION:f-N` | la Facción propia con sus ciudadanos, sus relaciones y sus tecnologías, sus plazas en resumen, su flota de caravanas, sus pueblos y avanzadas (y las obras de mapa que aún no lo son), sus trueques, sus órdenes de mercado y sus convocatorias (propuestas y memoria de la niebla: sistemas 5 y T3d) | si el héroe tiene Facción |
 | `ASENTAMIENTO:as-N` | la plaza completa (almacén, cola, edificios, cargos, mercado) | mientras el héroe está dentro **y** es ciudadano de la Facción dueña (dentro de una plaza ajena no se ve ningún interior) |
 | `CAMPAMENTO:camp-N` | el campamento de mercenarios (mercado, planta, residentes) | mientras está dentro |
 | `BATALLA:<uuid>` | la batalla en la que combate | mientras combate (T4; aún no existe en el servidor Rust) |
@@ -55,7 +55,24 @@ Los derechos se calculan del estado y se reevalúan cuando cambia el héroe (su 
 
 `CambiarVista` (el único ámbito que pide el cliente): fija el rectángulo (`min` ≤ `max`, en milésimas) y el servidor manda la `Foto` de `VISTA` con lo que cae dentro, otra vez en cada cambio de rectángulo (la foto sustituye a la anterior). Sin Facción, o en una sesión de administración, no hay vista: `Aviso{vista.sin_derecho}`; con un rectángulo incompleto o al revés: `Aviso{vista.invalida}`. Una columna que se toca fuera del rectángulo sale con `QUITA`. No hay mensaje para cerrar la vista.
 
-Qué lleva cada ámbito hoy (T3a; el resto es de T3b-T3e): `HEROE`, las columnas en que participa alguna cuenta del héroe; `ASENTAMIENTO`, la plaza como ficha; `VISTA`, las columnas de la propia Facción dentro del rectángulo (sin niebla todavía: nunca lo ajeno); `ADMIN`, todas las columnas y todas las plazas; `FACCION` y `CAMPAMENTO`, nada aún. Los eventos solo llegan por `HEROE` (T5 les da audiencia).
+Qué lleva cada ámbito hoy: `HEROE` y `FACCION`, su contenido completo (T3b, abajo); `ASENTAMIENTO`, la plaza como ficha; `VISTA`, las columnas de la propia Facción dentro del rectángulo (sin niebla todavía: nunca lo ajeno); `ADMIN`, todas las columnas y todas las plazas; `CAMPAMENTO`, nada aún (T3c-T3e). Los eventos solo llegan por `HEROE` (T5 les da audiencia).
+
+**Qué pertenece a `HEROE` y a `FACCION` (T3b).** El núcleo apunta, al cerrar cada versión, a qué ámbitos pertenece cada entidad que cambia y de cuáles salió (`CambioVersion.pertenencias`; la regla es `proyeccion::audiencia`), así que cada `Delta` lleva `ACTUALIZA` de lo que le pertenece y `QUITA` de lo que desapareció o dejó de ser suyo. Todas viajan **completas** (`reemplaza = true`) y una misma entidad puede estar en dos ámbitos (una caravana adjunta a tu columna es de `HEROE` y de `FACCION`; el cliente la descarta cuando ningún ámbito la tiene):
+
+| Entidad | Ámbito | Cuándo |
+|---|---|---|
+| `Heroe`, `Escuadron` | `HEROE` | solo el héroe de la sesión y sus escuadras (también las prestadas y las cedidas como escolta). Nombre, clase, género y avatar, por defecto (decisión 4: «Héroe N», `default`) |
+| `Ejercito` | `HEROE` | las columnas en que participa algún héroe de la cuenta; con `persiguiendo`, `en_batalla`, `batalla_id` y `dentro_de` (`te_sigue` es de la vista del perseguido: T3d) |
+| `Caravana` | `HEROE` y `FACCION` | `FACCION`: toda la flota de las plazas de la Facción (también el carro de acarreo de un pueblo); `HEROE`: las adjuntas a una columna en que participa y las que escolta con una escuadra suya |
+| `Convocatoria` | `FACCION` | las de la Facción; el Líder ve todas las peticiones y cada solicitante la suya (los demás, ninguna) |
+| `Batalla` | `HEROE` | las de los héroes que combaten, sin ticket, incorporaciones ni asignación (T4), con `lado_propio` |
+| `Faccion`, `TecnologiasFaccion`, `RelacionPolitica` | `FACCION` | la propia; las relaciones del andamiaje `FijarRelacion` (`rel-<menor>-<mayor>`, la menor figura como `a`) llegan a las dos Facciones y se quitan con `QUITA` |
+| `Asentamiento` | `FACCION` | en resumen (la ficha: Facción, sitio, nivel, zona y los ids de sus pueblos y avanzadas); el interior es de `ASENTAMIENTO` |
+| `Pueblo`, `Avanzada`, `ObraDeMapa` | `FACCION` | un pueblo o una avanzada que se está levantando es una `ObraDeMapa` (`obra-N`), no un `Pueblo`/`Avanzada`; al terminar, la obra se quita y llega el pueblo o la avanzada. Una avanzada que se mejora o se repara es las dos cosas |
+| `AcuerdoTrueque`, `OrdenMercado` | `FACCION` | un trueque es de las Facciones de sus dos plazas; las órdenes (también las cerradas del historial), de la de su plaza |
+
+Una plaza que cambia de dueño se quita de la Facción vieja y llega a la nueva con todo lo que depende de ella (sus pueblos, avanzadas, órdenes, trueques y flota). La reanudación por versión de `HEROE` y `FACCION` es **siempre por deltas** si el registro alcanza la versión del cliente: el registro dice a qué ámbito pertenecía cada entidad en cada versión, también si el héroe estuvo fuera, y los `QUITA` de lo que desapareció mientras tanto vienen en la delta.
+
 
 La visibilidad de lo ajeno la decide el servidor ([`Mechanics/Niebla_De_Guerra.md`](../Mechanics/Niebla_De_Guerra.md)): la plaza ve solo su zona, las avanzadas ven 12, una columna ve 30 (15 si va sola), y lo ajeno solo se manda si se ve.
 

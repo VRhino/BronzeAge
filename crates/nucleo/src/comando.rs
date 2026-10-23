@@ -634,7 +634,7 @@ impl Comando {
             | Comando::CrearHeroe { campamento, .. }
             | Comando::FijarResidencia { residencia: Some(Residencia::Campamento(campamento)), .. } => v.push((Clase::Campamento, u64::from(*campamento))),
             Comando::FijarNivelFaccion { faccion, .. } | Comando::FijarTecnologias { faccion, .. } | Comando::CrearEjercito { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
-            Comando::FijarRelacion { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b))]),
+            Comando::FijarRelacion { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b)), (Clase::Relacion, Clase::par(*a, *b))]),
             Comando::FijarFaccionDeHeroe { faccion: Some(faccion), .. } => v.push((Clase::Faccion, u64::from(*faccion))),
             _ => {}
         }

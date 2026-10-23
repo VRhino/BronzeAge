@@ -32,6 +32,11 @@ ids! {
     u32, "nodo", nodo, parse_nodo;
 }
 
+/// Una relación entre dos Facciones (`rel-<menor>-<mayor>`).
+pub fn relacion(a: u32, b: u32) -> String {
+    format!("rel-{}-{}", a.min(b), a.max(b))
+}
+
 pub fn edificio(plaza: u64, n: u32) -> String {
     format!("ed-{plaza}-{n}")
 }

@@ -282,14 +282,14 @@ async fn el_heroe_nuevo_abre_su_ambito_en_caliente_y_gana_la_faccion_cuando_se_l
     let (previos, r) = dar_todo(&mut nueva, "c1", crear).await;
     let heroe = r.creadas[0].id.clone();
     assert_eq!(etiquetas(&previos), [format!("foto HEROE:{heroe}"), format!("foto CAMPAMENTO:{}", ids::campamento(0))]);
-    assert!(foto_de(&previos[0]).entidades.is_empty());
+    assert!(matches!(foto_de(&previos[0]).entidades[..], [pb::Entidad { cuerpo: Some(pb::entidad::Cuerpo::Heroe(_)) }]), "su ámbito es su héroe recién nacido, sin Facción ni escuadras");
 
     // La administración le da Facción: llega la foto de su ámbito. Y quien no administra no da Facción a nadie.
     let (_, r) = dar(&mut nueva, "c2", admin("fijar_faccion_de_heroe", &[("heroe_id", &heroe), ("faccion_id", "f-1")])).await;
     assert_eq!(rechazo(&r), "no_autorizado");
     let (_, r) = dar(&mut admin_c, "c3", admin("fijar_faccion_de_heroe", &[("heroe_id", &heroe), ("faccion_id", "f-1")])).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
-    assert_eq!(etiquetas(&siguientes(&mut nueva, 1).await), ["foto FACCION:f-1"]);
+    assert_eq!(etiquetas(&siguientes(&mut nueva, 2).await), ["foto FACCION:f-1".to_owned(), format!("delta HEROE:{heroe}")]);
     assert!(pendiente(&mut nueva).await.is_empty());
     w.parar().await;
 }
@@ -310,8 +310,8 @@ async fn al_perder_un_derecho_llega_revocado_y_al_ganar_otro_su_foto_con_las_ord
     // Sale de la plaza para entrar en un campamento: pierde la plaza, gana el campamento (primero el Revocado, después la Foto).
     let (_, r) = dar(&mut admin_c, "a1", colocar(ana_id, &camp)).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
-    let recibidos = siguientes(&mut ana, 2).await;
-    assert_eq!(etiquetas(&recibidos), [format!("revocado ASENTAMIENTO:{as_}"), format!("foto CAMPAMENTO:{camp}")]);
+    let recibidos = siguientes(&mut ana, 3).await;
+    assert_eq!(etiquetas(&recibidos), [format!("revocado ASENTAMIENTO:{as_}"), format!("foto CAMPAMENTO:{camp}"), format!("delta HEROE:{h_ana}")], "el héroe cambió de sitio: su ficha viaja tras los derechos");
     let ms::Cuerpo::Revocado(rev) = &recibidos[0] else { unreachable!() };
     assert_eq!(rev.motivo, "sin_derecho");
     assert!(pendiente(&mut ana).await.is_empty());
@@ -319,15 +319,15 @@ async fn al_perder_un_derecho_llega_revocado_y_al_ganar_otro_su_foto_con_las_ord
     // Y vuelve: pierde el campamento y recupera la plaza, otra vez con su foto entera.
     let (_, r) = dar(&mut admin_c, "a2", colocar(ana_id, &as_)).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
-    let recibidos = siguientes(&mut ana, 2).await;
-    assert_eq!(etiquetas(&recibidos), [format!("revocado CAMPAMENTO:{camp}"), format!("foto ASENTAMIENTO:{as_}")]);
+    let recibidos = siguientes(&mut ana, 3).await;
+    assert_eq!(etiquetas(&recibidos), [format!("revocado CAMPAMENTO:{camp}"), format!("foto ASENTAMIENTO:{as_}"), format!("delta HEROE:{h_ana}")]);
     assert_eq!(plazas_de_foto(foto_de(&recibidos[1])), [as_.as_str()]);
 
     // Por una orden suya: salir al mundo desde su residencia le cuesta la plaza (y le nace la columna); entrar otra vez se la devuelve.
     let salir = orden::Cuerpo::SalirAlMundo(pb::OrdenSalirAlMundo { asentamiento_id: as_.clone(), heroe_id: h_ana.clone(), escuadron_ids: vec![], carga: None });
     let (previos, r) = dar_todo(&mut ana, "s1", salir).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
-    assert_eq!(etiquetas(&previos), [format!("revocado ASENTAMIENTO:{as_}"), format!("delta HEROE:{h_ana}")]);
+    assert_eq!(etiquetas(&previos), [format!("revocado ASENTAMIENTO:{as_}"), format!("delta HEROE:{h_ana}"), "delta FACCION:f-1".to_owned()], "la plaza, tocada porque su guarnición sale, viaja en resumen a su Facción");
     let entrar = orden::Cuerpo::EntrarEnAsentamiento(pb::OrdenEntrarEnAsentamiento { asentamiento_id: as_.clone(), heroe_id: h_ana.clone() });
     let (previos, r) = dar_todo(&mut ana, "s2", entrar).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
@@ -336,8 +336,8 @@ async fn al_perder_un_derecho_llega_revocado_y_al_ganar_otro_su_foto_con_las_ord
     // Cambia de Facción: deja de ser ciudadano de la plaza, así que pierde la Facción y la plaza juntas; gana la otra Facción.
     let (_, r) = dar(&mut admin_c, "a3", admin("fijar_faccion_de_heroe", &[("heroe_id", &h_ana), ("faccion_id", "f-2")])).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
-    let recibidos = siguientes(&mut ana, 3).await;
-    assert_eq!(etiquetas(&recibidos), ["revocado FACCION:f-1".to_owned(), format!("revocado ASENTAMIENTO:{as_}"), "foto FACCION:f-2".to_owned()]);
+    let recibidos = siguientes(&mut ana, 4).await;
+    assert_eq!(etiquetas(&recibidos), ["revocado FACCION:f-1".to_owned(), format!("revocado ASENTAMIENTO:{as_}"), "foto FACCION:f-2".to_owned(), format!("delta HEROE:{h_ana}")]);
     assert!(pendiente(&mut ana).await.is_empty());
     let n = w.parar().await;
     assert_eq!(n.estado().asentamientos[&plaza].faccion, 1);
@@ -367,14 +367,16 @@ async fn al_reconectar_cada_ambito_se_reanuda_sin_novedad_con_deltas_o_con_foto(
     silencio(&mut ana).await;
     ana.cerrar().await;
 
-    // Cambia la plaza y nada más: el ámbito de la plaza se reanuda con la delta consolidada; el del héroe y el de la Facción, sin novedad.
+    // Cambia la plaza y nada más: el ámbito de la plaza se reanuda con la delta consolidada, y el de la Facción también (la plaza viaja a ella en resumen); el del héroe, sin novedad.
     let (_, r) = dar(&mut admin_c, "r1", dar_madera(plaza, 1_000)).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
     let (_, r) = dar(&mut admin_c, "r2", dar_madera(plaza, 2_000)).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
     let (ana, b, mensajes) = w.conectar(conoce(v)).await;
-    assert_eq!(decisiones(&b), [D::ReanudaSinNovedad as i32, D::ReanudaSinNovedad as i32, D::ReanudaConDeltas as i32]);
-    let d = delta_de(&mensajes[0]);
+    assert_eq!(decisiones(&b), [D::ReanudaSinNovedad as i32, D::ReanudaConDeltas as i32, D::ReanudaConDeltas as i32]);
+    assert_eq!(etiquetas(&mensajes), [format!("delta {k_faccion}"), format!("delta {k_plaza}")]);
+    assert_eq!(plazas_de_delta(delta_de(&mensajes[0])), [as_.clone()]);
+    let d = delta_de(&mensajes[1]);
     assert_eq!((ambito(&d.ambito), d.desde, d.hasta, plazas_de_delta(d)), (k_plaza.clone(), v, b.ambitos[2].version_actual, vec![as_.clone()]), "una sola delta de v a hoy, con la plaza una vez");
     assert!(d.hasta >= r.version_tras);
     ana.cerrar().await;
@@ -385,14 +387,14 @@ async fn al_reconectar_cada_ambito_se_reanuda_sin_novedad_con_deltas_o_con_foto(
     assert!(mensajes.iter().all(|m| matches!(m, ms::Cuerpo::Foto(_))) && mensajes.len() == 3);
     ana.cerrar().await;
 
-    // Si el héroe salió de la plaza y volvió mientras tanto, el servidor no sabe qué descartó el cliente: foto de lo que depende del sitio (la Facción y la plaza), sin novedad lo que no.
+    // Si el héroe salió de la plaza y volvió mientras tanto, el servidor no sabe qué descartó el cliente de la plaza: foto de ella. El héroe y la Facción siguen por deltas: el registro dice a qué ámbito pertenecía cada cosa en cada versión.
     let (_, r) = dar(&mut admin_c, "r3", colocar(ana_id, &ids::campamento(0))).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
     let (_, r) = dar(&mut admin_c, "r4", colocar(ana_id, &as_)).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
     let (_, b, mensajes) = w.conectar(conoce(v)).await;
-    assert_eq!(decisiones(&b), [D::ReanudaSinNovedad as i32, D::ReanudaConFoto as i32, D::ReanudaConFoto as i32]);
-    assert_eq!(etiquetas(&mensajes), ["foto FACCION:f-1".to_owned(), format!("foto {k_plaza}")]);
+    assert_eq!(decisiones(&b), [D::ReanudaConDeltas as i32, D::ReanudaConDeltas as i32, D::ReanudaConFoto as i32]);
+    assert_eq!(etiquetas(&mensajes), [format!("delta {k_heroe}"), format!("delta {k_faccion}"), format!("foto {k_plaza}")]);
     w.parar().await;
 }
 
@@ -466,8 +468,8 @@ async fn el_cambio_de_una_plaza_llega_a_todos_los_que_la_tienen_abierta_en_orden
         assert!(recibidas.windows(2).all(|p| p[0].1 == p[1].0), "{quien}: cadena rota {recibidas:?}");
     }
 
-    // Quien no tiene el ámbito, ni de su Facción (beto, en el campamento) ni de otra (gus), no recibe nada de la plaza.
-    assert!(pendiente(&mut beto).await.is_empty());
+    // Quien no tiene el ámbito de la plaza, ni de su Facción (beto, en el campamento) ni de otra (gus), no recibe su interior: beto, de la misma Facción, solo la ve en resumen en el ámbito de su Facción, y gus no recibe nada.
+    assert!(etiquetas(&pendiente(&mut beto).await).iter().all(|e| e == "delta FACCION:f-1"));
     assert!(pendiente(&mut gus).await.is_empty());
     w.parar().await;
 }

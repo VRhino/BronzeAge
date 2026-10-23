@@ -139,7 +139,7 @@ fn aceptada(r: &pb::ResultadoOrden) {
 
 /// Los ids de las columnas de una `Delta`.
 fn ejercitos_de(d: &pb::Delta) -> Vec<String> {
-    d.cambios.iter().map(|c| ejercito(c.datos.as_ref().unwrap()).id.clone()).collect()
+    columnas_de(d).iter().map(|e| e.id.clone()).collect()
 }
 
 fn id(x: u64, prefijo: &str) -> String {
@@ -187,7 +187,7 @@ async fn un_jugador_nuevo_crea_su_heroe_pide_tropa_sale_del_campamento_y_marcha_
     aceptada(&r);
     let columna = creadas(&r)[0].clone();
     assert_eq!(columna.0, TipoEntidad::Ejercito);
-    assert_eq!((deltas.len(), ejercitos_de(&deltas[0])), (1, vec![columna.1.clone()]));
+    assert_eq!((del_heroe(&deltas).len(), ejercitos_de(del_heroe(&deltas)[0])), (1, vec![columna.1.clone()]));
     let (_, r) = dar(&mut carla, "o5", orden::Cuerpo::EntrarEnCampamento(pb::OrdenEntrarEnCampamento { campamento_id: s("camp-0"), heroe_id: heroe.1.clone() })).await;
     aceptada(&r);
     // Dentro del campamento puede pedir salir del mundo y arrepentirse.
@@ -204,7 +204,7 @@ async fn un_jugador_nuevo_crea_su_heroe_pide_tropa_sale_del_campamento_y_marcha_
     let otro_campamento = campamento(&m.0, 1);
     let (deltas, r) = dar(&mut carla, "o9", marchar_a(&heroe.1, otro_campamento)).await;
     aceptada(&r);
-    assert_eq!(ejercito(deltas.last().unwrap().cambios[0].datos.as_ref().unwrap()).estado, pb::EstadoColumna::ColumnaMarchando as i32);
+    assert_eq!(columnas_de(del_heroe(&deltas).last().unwrap())[0].estado, pb::EstadoColumna::ColumnaMarchando as i32);
     let (_, r) = dar(&mut carla, "o10", orden::Cuerpo::EstacionarEjercito(pb::OrdenEstacionarEjercito { ejercito_id: columna.1.clone() })).await;
     aceptada(&r);
     let (_, r) = dar(&mut carla, "o11", orden::Cuerpo::RepostarEnCampamento(pb::OrdenRepostarEnCampamento { campamento_id: None })).await;
@@ -310,8 +310,8 @@ async fn un_pueblo_se_marca_se_entrega_y_se_destruye_por_el_contrato_con_la_obra
     // Entregar los materiales a esa obra: el resultado llega con la `Delta` de la columna, que ya no los lleva.
     let (deltas, r) = dar(&mut ana, "p2", orden::Cuerpo::EntregarEnObra(pb::OrdenEntregarEnObra { heroe_id: h.clone(), obra_id: obra.1.clone(), materiales: None })).await;
     aceptada(&r);
-    assert_eq!(deltas.len(), 1);
-    assert!(ejercito(deltas[0].cambios[0].datos.as_ref().unwrap()).suministro.as_ref().unwrap().por_id.is_empty(), "la columna entregó todo lo que llevaba");
+    assert_eq!(del_heroe(&deltas).len(), 1);
+    assert!(columnas_de(del_heroe(&deltas)[0])[0].suministro.as_ref().unwrap().por_id.is_empty(), "la columna entregó todo lo que llevaba");
     // La obra de un pueblo no se cancela con `cancelar_obra`; se destruye.
     let (_, r) = dar(&mut ana, "p3", orden::Cuerpo::CancelarObra(pb::OrdenCancelarObra { heroe_id: h.clone(), obra_id: obra.1.clone() })).await;
     assert_eq!(rechazo(&r), "objetivo.no_soportado");
@@ -477,7 +477,7 @@ async fn repostar_sin_lugar_busca_la_plaza_a_la_puerta_de_la_columna_y_sin_ningu
     assert_eq!(rechazo(&r), "repostar.sin_lugar", "a 12 u de la plaza no hay ninguna a la puerta");
     let (deltas, r) = dar(&mut ana, "r2", repostar(h_cerca, None)).await;
     aceptada(&r);
-    assert_eq!(deltas.len(), 1, "la columna llega con más víveres antes del resultado");
+    assert_eq!(del_heroe(&deltas).len(), 1, "la columna llega con más víveres antes del resultado");
     // Con el lugar dicho vale lo mismo (la columna ya está llena: lo dice el núcleo), y una avanzada que no existe no se inventa.
     let (_, r) = dar(&mut ana, "r3", repostar(h_cerca, Some(&id(plaza, "as")))).await;
     assert_eq!(rechazo(&r), "columna.viveres_llenos");

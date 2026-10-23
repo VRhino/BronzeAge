@@ -11,6 +11,7 @@
 //! plaza, cambia de Facción...) manda `Revocado` del ámbito que pierde y la `Foto` del que gana. `Delta.desde` es la última versión que esa sesión tiene del ámbito: las versiones que no tocan nada
 //! suyo no le cuestan ningún mensaje (cada sesión lleva su propia versión de cada ámbito, que avanza al recibir una `Delta` o una `Foto`). Al reconectar, `Hola.versiones_conocidas` decide por
 //! ámbito: sin novedad, deltas si el registro de cambios alcanza esa versión, foto si no.
+//! Lo que viaja a `HEROE` y `FACCION` lo dice el registro de cambios (`CambioVersion.pertenencias`, `proyeccion::audiencia`): a qué ámbitos pertenece cada entidad tocada y de cuáles salió (`QUITA`).
 //!
 //! # Órdenes
 //! `ordenes::traducir` lleva cada orden del jugador del contrato (`orders.proto`, 145 órdenes) a su `Comando` del núcleo; el núcleo aplica la autorización. Las que el núcleo aún no
@@ -60,6 +61,7 @@ struct Actor {
 /// Conecta el reloj al núcleo: a partir de aquí el mundo avanza al ritmo del reloj.
 pub fn lanzar(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<ComandoSesion>) -> JoinHandle<Nucleo> {
     nucleo.conectar_reloj(reloj.clone());
+    nucleo.seguir_pertenencias();
     let entregada = nucleo.version();
     let actor = Actor { nucleo, reloj, mesa: Mesa::default(), entregada };
     tokio::spawn(actor.correr(rx))

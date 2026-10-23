@@ -51,21 +51,12 @@ impl Nucleo {
         let residentes = |c: u32| e.militar.heroes.values().filter(|h| h.heroe.residencia == Some(Residencia::Campamento(c))).map(|h| h.heroe.id).collect::<Vec<_>>();
         m.extend((0..n).map(|c| ((Clase::Campamento, c as u64), huella(&(e.comercio.mercenarios.stock.get(&c).unwrap_or(&inicial), &e.comercio.mercenarios.mercado, residentes(c))))));
         // Una Facción es su nivel, su reputación, sus tecnologías, sus relaciones y sus ciudadanos.
-        let facciones: BTreeSet<u32> = e
-            .niveles_faccion
-            .keys()
-            .chain(e.comercio.reputacion.keys())
-            .chain(e.militar.tecnologias.keys())
-            .chain(e.militar.relaciones.keys().flat_map(|(a, b)| [a, b]))
-            .copied()
-            .chain(e.militar.heroes.values().filter_map(|h| h.faccion))
-            .chain(e.asentamientos.values().map(|a| a.faccion))
-            .collect();
-        m.extend(facciones.into_iter().map(|f| {
+        m.extend(crate::proyeccion::audiencia::facciones(e).into_iter().map(|f| {
             let relaciones: Vec<_> = e.militar.relaciones.iter().filter(|((a, b), _)| *a == f || *b == f).collect();
             let ciudadanos: Vec<u64> = e.militar.heroes.values().filter(|h| h.faccion == Some(f)).map(|h| h.heroe.id).collect();
             ((Clase::Faccion, f as u64), huella(&(e.niveles_faccion.get(&f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones, ciudadanos)))
         }));
+        m.extend(e.militar.relaciones.iter().map(|(&(a, b), r)| ((Clase::Relacion, Clase::par(a, b)), huella(r))));
         m
     }
 

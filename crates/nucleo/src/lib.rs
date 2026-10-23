@@ -52,7 +52,7 @@
 //!   Tercera tanda: el asedio a una plaza con números multiplica al defensor con su recinto de referencia (`Nucleo::multiplicador_de_plaza`; la columna, el pueblo, la caravana y
 //!   la avanzada siguen con 1), la conquista daña el 30 % de cada recinto completo y sin mejora (por números y por Unity) y la plaza repara sola, `Nucleo::recintos_en_pie` da a
 //!   Unity la geometría en pie y `VistaCiudad.murallas` la dibuja. El ticket del asedio y el informe de inspección con los recintos son de 4H (`Docs/Arquitectura/Murallas_Contraste_y_Plan.md`).
-//! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación). Cada sesión abre los ámbitos del contrato 05 §3 a los que tiene derecho (4H T3a, `sesiones/ambitos.rs`: `HEROE`, `FACCION`, `ASENTAMIENTO`, `CAMPAMENTO`, `VISTA`, `ADMIN`), con `Revocado` al perderlos y reanudación por versión de cada uno. `sesiones::ordenes` traduce las 145 órdenes del contrato 05 a los 125 comandos del núcleo
+//! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación). Cada sesión abre los ámbitos del contrato 05 §3 a los que tiene derecho (4H T3a, `sesiones/ambitos.rs`: `HEROE`, `FACCION`, `ASENTAMIENTO`, `CAMPAMENTO`, `VISTA`, `ADMIN`), con `Revocado` al perderlos y reanudación por versión de cada uno. `HEROE` y `FACCION` llevan su contenido completo (4H T3b): el núcleo apunta en el registro de cambios a qué ámbito pertenece cada entidad tocada y de cuáles salió (`Pertenencia`, `Nucleo::seguir_pertenencias`, `proyeccion::{audiencia, propios}`) y la sesión reparte `ACTUALIZA` y `QUITA` con ello. `sesiones::ordenes` traduce las 145 órdenes del contrato 05 a los 125 comandos del núcleo
 //!   (99 órdenes del jugador, la de administración y 45 que se rechazan con `orden.no_disponible` hasta que existan sus sistemas; `Docs/Mechanics/Comandos_Parametros.md`).
 
 mod codec;
@@ -79,7 +79,7 @@ pub mod urbanismo;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Comando, Detalle, ObjetivoAtaque, PagarCon, Peticion, Resultado, Respuesta, TipoCreado, ACTOR_SERVIDOR_DE_BATALLA};
-pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Clase, Tocados, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_CADUCA_POLITICA, PRIO_COMERCIO, PRIO_FIN_DE_OBRAS, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
+pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Clase, Pertenencia, Tocados, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_CADUCA_POLITICA, PRIO_COMERCIO, PRIO_FIN_DE_OBRAS, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
 pub use estado_batallas::{entidad_batalla, EstadoBatallas};
 pub use estado_combate::{entidad_avanzada, entidad_bandidos, entidad_conquista, entidad_guarnicion, es_entidad_avanzada, es_entidad_bandidos, CampamentoBandidos, EstadoCombate, GuarnicionDeAvanzada, GuarnicionDePueblo, OrigenBandidos};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};

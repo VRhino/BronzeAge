@@ -48,11 +48,12 @@ async fn conectar_ordenar_marcha_y_ver_llegar() {
     let (mut ana, b, mensajes) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
     assert_eq!((b.heroe_id.as_deref(), b.faccion_id.as_deref()), (Some("heroe-2"), Some("f-1")));
     assert_eq!(b.mundo.unwrap().hash, "hash-de-prueba");
-    // Dos ámbitos, el del héroe (con su columna) y el de su Facción (sin contenido todavía), los dos con foto.
+    // Dos ámbitos, el del héroe (con su columna) y el de su Facción, los dos con foto.
     let ambitos: Vec<_> = b.ambitos.iter().map(|a| (a.ambito.as_ref().unwrap().id.as_str(), a.decision)).collect();
     assert_eq!(ambitos, [("heroe-2", DecisionReanudacion::ReanudaConFoto as i32), ("f-1", DecisionReanudacion::ReanudaConFoto as i32)]);
     let ms::Cuerpo::Foto(f) = &mensajes[0] else { panic!("se esperaba la Foto del héroe") };
-    assert_eq!((f.entidades.len(), f.ambito.as_ref().unwrap().id.as_str()), (1, "heroe-2"), "solo lo suyo");
+    assert_eq!((f.entidades.len(), f.ambito.as_ref().unwrap().id.as_str()), (2, "heroe-2"), "solo lo suyo: su columna y su héroe");
+    assert!(matches!(f.entidades[1].cuerpo, Some(pb::entidad::Cuerpo::Heroe(_))));
     let e = ejercito(&f.entidades[0]);
     assert_eq!((e.id.as_str(), e.estado, e.plan.is_none()), ("ej-1", pb::EstadoColumna::ColumnaEstacionada as i32, true));
 

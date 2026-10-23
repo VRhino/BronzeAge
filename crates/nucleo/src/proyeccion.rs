@@ -1,4 +1,7 @@
 //! Del estado del núcleo a las entidades del contrato 05 (`Cambio`, `Entidad`, `EventoDominio`).
+//!
+//! - [`ambito`]: los ámbitos de la sesión. [`ids`]: los ids de las entidades.
+//! - [`propios`]: las entidades de los ámbitos `HEROE` y `FACCION`. [`audiencia`]: a qué ámbito pertenece cada entidad del registro de cambios.
 
 use crate::comando::{Detalle, TipoCreado};
 use crate::estado::{Asentamiento, Ejercito, EventoNucleo};
@@ -8,50 +11,57 @@ use militar::columna::{Politica, TipoColumna};
 use std::collections::BTreeMap;
 
 pub mod ambito;
+pub mod audiencia;
 pub mod ids;
+pub mod propios;
 
 fn punto(p: base::Punto) -> pb::Punto {
     pb::Punto { x: p.x, y: p.y }
 }
 
-/// La columna como entidad del contrato. Lo propio viaja con el plan entero; sin plan, con su `posicion`.
-pub fn entidad_ejercito(e: &Ejercito, t: Instante) -> pb::Entidad {
-    let c = &e.columna;
-    let v = &c.viveres;
-    let plan = e.marchando().then(|| pb::Plan {
-        generacion: e.plan.generacion,
-        vertices: e.plan.vertices.iter().map(|v| pb::Vertice { p: Some(punto(v.p)), en_ms: v.en }).collect(),
-    });
-    let politica = match c.politica {
+fn plan(p: &base::Plan) -> pb::Plan {
+    pb::Plan { generacion: p.generacion, vertices: p.vertices.iter().map(|v| pb::Vertice { p: Some(punto(v.p)), en_ms: v.en }).collect() }
+}
+
+fn ritmo(r: base::Ritmo) -> pb::Ritmo {
+    pb::Ritmo { valor_en_t0: r.valor_en_t0, t0_ms: r.t0, por_minuto: r.por_minuto, maximo: r.maximo, minimo: r.minimo, ..Default::default() }
+}
+
+fn politica(p: Politica) -> pb::PoliticaUnion {
+    match p {
         Politica::Rechazar => pb::PoliticaUnion::UnionRechazar,
         Politica::Aceptar => pb::PoliticaUnion::UnionAceptar,
         Politica::Preguntar => pb::PoliticaUnion::UnionPreguntar,
-    };
-    pb::Entidad {
-        cuerpo: Some(pb::entidad::Cuerpo::Ejercito(pb::Ejercito {
-            id: ids::ejercito(e.id),
-            version: e.version,
-            faccion_id: c.faccion.map_or(String::new(), ids::faccion),
-            participantes: c.participantes.iter().map(|p| pb::Participante { heroe_id: ids::heroe(p.heroe), unido_en_ms: p.unido_en }).collect(),
-            tipo: if c.tipo == TipoColumna::Personal { pb::TipoColumna::ColumnaPersonal } else { pb::TipoColumna::ColumnaEjercito } as i32,
-            lider_id: ids::heroe(c.lider),
-            politica_de_union: politica as i32,
-            peticiones_de_union: c.peticiones.iter().map(|p| pb::PeticionUnion { heroe_id: ids::heroe(p.heroe), pedido_en_ms: p.pedido_en, expira_en_ms: p.expira_en }).collect(),
-            escuadron_ids: c.escuadras.iter().map(|s| ids::escuadra(*s)).collect(),
-            suministro: Some(pb::Cantidades { por_id: c.carga.iter().map(|(r, n)| (r.nombre().to_owned(), *n)).collect() }),
-            viveres: Some(pb::Ritmo { valor_en_t0: v.valor_en_t0, t0_ms: v.t0, por_minuto: v.por_minuto, maximo: v.maximo, minimo: v.minimo, ..Default::default() }),
-            capacidad_viveres: v.maximo.unwrap_or(0),
-            formacion_expira_en_ms: c.formacion_expira_en,
-            caravanas_adjuntas_ids: e.caravanas_adjuntas.iter().map(|c| ids::caravana(*c)).collect(),
-            estado: if e.marchando() { pb::EstadoColumna::ColumnaMarchando } else { pb::EstadoColumna::ColumnaEstacionada } as i32,
-            posicion: Some(punto(e.posicion_en(t))),
-            plan,
-            ..Default::default()
-        })),
     }
 }
 
-/// La plaza como entidad del contrato. `zona` es el polígono real recortado (`Nucleo::poligono_zona`).
+/// La columna como entidad del contrato, sin lo que depende del resto del mundo (`propios::ejercito` lo completa). Lo propio viaja con el plan entero; sin plan, con su `posicion`.
+fn ejercito_base(e: &Ejercito, t: Instante) -> pb::Ejercito {
+    let c = &e.columna;
+    let v = &c.viveres;
+    pb::Ejercito {
+        id: ids::ejercito(e.id),
+        version: e.version,
+        faccion_id: c.faccion.map_or(String::new(), ids::faccion),
+        participantes: c.participantes.iter().map(|p| pb::Participante { heroe_id: ids::heroe(p.heroe), unido_en_ms: p.unido_en }).collect(),
+        tipo: if c.tipo == TipoColumna::Personal { pb::TipoColumna::ColumnaPersonal } else { pb::TipoColumna::ColumnaEjercito } as i32,
+        lider_id: ids::heroe(c.lider),
+        politica_de_union: politica(c.politica) as i32,
+        peticiones_de_union: c.peticiones.iter().map(|p| pb::PeticionUnion { heroe_id: ids::heroe(p.heroe), pedido_en_ms: p.pedido_en, expira_en_ms: p.expira_en }).collect(),
+        escuadron_ids: c.escuadras.iter().map(|s| ids::escuadra(*s)).collect(),
+        suministro: Some(pb::Cantidades { por_id: c.carga.iter().map(|(r, n)| (r.nombre().to_owned(), *n)).collect() }),
+        viveres: Some(pb::Ritmo { valor_en_t0: v.valor_en_t0, t0_ms: v.t0, por_minuto: v.por_minuto, maximo: v.maximo, minimo: v.minimo, ..Default::default() }),
+        capacidad_viveres: v.maximo.unwrap_or(0),
+        formacion_expira_en_ms: c.formacion_expira_en,
+        caravanas_adjuntas_ids: e.caravanas_adjuntas.iter().map(|c| ids::caravana(*c)).collect(),
+        estado: if e.marchando() { pb::EstadoColumna::ColumnaMarchando } else { pb::EstadoColumna::ColumnaEstacionada } as i32,
+        posicion: Some(punto(e.posicion_en(t))),
+        plan: e.marchando().then(|| plan(&e.plan)),
+        ..Default::default()
+    }
+}
+
+/// La plaza como entidad del contrato. `zona` es el polígono real recortado (`Nucleo::poligono_zona`). Es la ficha: id, Facción, sitio, nivel, zona y los ids de sus pueblos y avanzadas.
 pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Entidad {
     pb::Entidad {
         cuerpo: Some(pb::entidad::Cuerpo::Asentamiento(pb::Asentamiento {
@@ -64,31 +74,10 @@ pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Entid
             fundado_en_ms: a.fundado_en,
             radio_potencial: a.radio,
             zona: zona.iter().map(|&p| punto(p)).collect(),
+            pueblos_ids: a.economia.pueblos.iter().map(|p| ids::pueblo(p.id)).collect(),
+            avanzadas_ids: a.economia.avanzadas.iter().map(|v| ids::avanzada(v.id)).collect(),
             ..Default::default()
         })),
-    }
-}
-
-pub fn cambio_ejercito(e: &Ejercito, t: Instante) -> pb::Cambio {
-    pb::Cambio {
-        tipo: pb::TipoCambio::CambioActualiza as i32,
-        entidad: pb::TipoEntidad::Ejercito as i32,
-        id: ids::ejercito(e.id),
-        datos: Some(entidad_ejercito(e, t)),
-        reemplaza: true,
-        ..Default::default()
-    }
-}
-
-/// La plaza como cambio. DUDA: entera y con `reemplaza` mientras la entidad sea la ficha de 9 campos; en T3c pasa a la forma parcial con máscara (`reemplaza = false`, `campos`), que es la de la plaza.
-pub fn cambio_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Cambio {
-    pb::Cambio {
-        tipo: pb::TipoCambio::CambioActualiza as i32,
-        entidad: pb::TipoEntidad::Asentamiento as i32,
-        id: ids::asentamiento(a.id),
-        datos: Some(entidad_asentamiento(a, zona)),
-        reemplaza: true,
-        ..Default::default()
     }
 }
 

@@ -65,11 +65,11 @@ async fn la_administracion_monta_un_mundo_por_el_contrato_y_los_jugadores_lo_jue
     assert_eq!((creadas(&r), deltas.len()), (vec![(TipoEntidad::Ejercito, "ej-1")], 1), "la administración lo ve todo (ámbito ADMIN)");
     // La dueña no tenía héroe, así que no tenía ámbitos: con su héroe de campo se le abren el suyo, con su columna, y el de su Facción.
     let f = foto(&mut ana).await;
-    assert_eq!((f.ambito.unwrap().id.as_str(), f.entidades.iter().map(|e| ejercito(e).id.as_str()).collect::<Vec<_>>()), ("heroe-2", vec!["ej-1"]), "la dueña recibe su columna");
+    assert_eq!((f.ambito.unwrap().id.as_str(), columnas(&f.entidades).iter().map(|e| e.id.as_str()).collect::<Vec<_>>()), ("heroe-2", vec!["ej-1"]), "la dueña recibe su columna");
     assert_eq!(foto(&mut ana).await.ambito.unwrap().id, "f-1");
     let (_, r) = dar(&mut admin_c, "m2", crear("beto", "f-2", Punto::new(c(10, 10).x + 2_000, c(10, 10).y))).await;
     assert_eq!(creadas(&r), [(TipoEntidad::Ejercito, "ej-3")]);
-    assert_eq!(foto(&mut beto).await.entidades.iter().map(|e| ejercito(e).id.as_str()).collect::<Vec<_>>(), ["ej-3"]);
+    assert_eq!(columnas(&foto(&mut beto).await.entidades).iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["ej-3"]);
     assert_eq!(foto(&mut beto).await.ambito.unwrap().id, "f-2");
     // Las columnas de ana y beto están a 2 u: el mundo programa su encuentro (un hecho, `ejercito.encuentro`) para el instante en que se vean, unos milisegundos de reloj después de crearlas. Llega a los dos
     // por su cuenta, no por una orden; si no se espera aquí, según el reloj se junta con la `Delta` de la orden siguiente o llega suelta y la cuenta de `Delta` de esa orden cambia.
@@ -87,13 +87,13 @@ async fn la_administracion_monta_un_mundo_por_el_contrato_y_los_jugadores_lo_jue
     // Columnas: ana marcha; su plan llega en la Delta que precede al resultado. Beto no puede mandar su columna.
     let (deltas, r) = dar(&mut ana, "p1", marchar_a_punto("heroe-2", Punto::new(c(10, 10).x, c(10, 10).y + 4_000))).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
-    assert_eq!(deltas.len(), 1);
-    assert_eq!(ejercito(deltas[0].cambios[0].datos.as_ref().unwrap()).estado, pb::EstadoColumna::ColumnaMarchando as i32);
+    assert_eq!(del_heroe(&deltas).len(), 1);
+    assert_eq!(columnas_de(del_heroe(&deltas)[0])[0].estado, pb::EstadoColumna::ColumnaMarchando as i32);
     let (_, r) = dar(&mut beto, "b0", marchar_a_punto("heroe-2", c(1, 1))).await;
     assert_eq!(rechazo(&r), "no_autorizado");
     let (deltas, r) = dar(&mut ana, "p2", orden::Cuerpo::EstacionarEjercito(pb::OrdenEstacionarEjercito { ejercito_id: "ej-1".into() })).await;
-    assert_eq!((r.resultado, deltas.len()), (pb::Resultado::OrdenAceptada as i32, 1));
-    assert_eq!(ejercito(deltas[0].cambios[0].datos.as_ref().unwrap()).estado, pb::EstadoColumna::ColumnaEstacionada as i32);
+    assert_eq!((r.resultado, del_heroe(&deltas).len()), (pb::Resultado::OrdenAceptada as i32, 1));
+    assert_eq!(columnas_de(del_heroe(&deltas)[0])[0].estado, pb::EstadoColumna::ColumnaEstacionada as i32);
 
     // Combate: ana ataca a beto (las Facciones ya están en guerra, no hace falta declararla); el resultado es del núcleo y beto no manda el héroe de ana.
     let (_, r) = dar(&mut ana, "p3", atacar_ejercito("heroe-2", "ej-3", None)).await;
