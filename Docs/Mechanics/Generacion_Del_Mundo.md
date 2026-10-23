@@ -1252,3 +1252,15 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
 ## 17. Divergencias
 
 No hay divergencias abiertas. Resueltas el 2026-10-12 al escribir este documento: se borró del canon la sección de chokepoints (1.5, sin renumerar) y la línea del spawn de jugadores; la regeneración del ganado se documenta como 3 frente a 10 minutos; se aceptó que un bosque admita 2 o 3 Leñeras (nunca 1) y se actualizaron los comentarios de calibración; la tabla de oro por nivel del canon 1.9 se corrigió a 30/33/36.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 1 (`mapa.yacimiento_regenerado`).
+
+<!-- eventos -->
+```json
+[
+  "bandidos.campamento_aparece", "bandidos.campamento_disperso", "bandidos.caravana_escapa", "bandidos.caravana_interceptada", "mapa.yacimiento_regenerado"
+]
+```
+<!-- /eventos -->

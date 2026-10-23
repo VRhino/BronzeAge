@@ -3,16 +3,17 @@
 //! - [`ambito`]: los ámbitos de la sesión. [`ids`]: los ids de las entidades.
 //! - [`interior`]: la plaza y el campamento de mercenarios vistos desde dentro (los ámbitos `ASENTAMIENTO` y `CAMPAMENTO`), con la máscara de campos de los cambios parciales de la plaza.
 //! - [`propios`]: las entidades de los ámbitos `HEROE` y `FACCION` (y la `Batalla` y el informe de inspección). [`audiencia`]: a qué ámbito pertenece cada entidad del registro de cambios. [`batalla`]: el ticket, las incorporaciones y el resultado de una batalla de Unity.
+//! - [`eventos`]: los hechos del núcleo como `EventoDominio`, con su payload y, en los quince que mueven la interfaz, su mensaje tipado.
 
 use crate::comando::{Detalle, TipoCreado};
-use crate::estado::{Asentamiento, Ejercito, EventoNucleo};
+use crate::estado::{Asentamiento, Ejercito};
 use contrato::v1 as pb;
 use militar::columna::{Politica, TipoColumna};
-use std::collections::BTreeMap;
 
 pub mod ambito;
 pub mod audiencia;
 pub mod batalla;
+pub mod eventos;
 pub mod ids;
 pub mod interior;
 pub mod propios;
@@ -90,10 +91,6 @@ pub fn cambio_quita(entidad: pb::TipoEntidad, id: String) -> pb::Cambio {
     pb::Cambio { tipo: pb::TipoCambio::CambioQuita as i32, entidad: entidad as i32, id, ..Default::default() }
 }
 
-fn numero(n: f64) -> prost_types::Value {
-    prost_types::Value { kind: Some(prost_types::value::Kind::NumberValue(n)) }
-}
-
 fn texto(s: String) -> prost_types::Value {
     prost_types::Value { kind: Some(prost_types::value::Kind::StringValue(s)) }
 }
@@ -130,29 +127,6 @@ pub fn referencia_creada(tipo: TipoCreado, id: u64, uuid_de_batalla: &dyn Fn(u64
         TipoCreado::Parcela => return None,
     };
     Some(pb::ReferenciaCreada { entidad: entidad as i32, id })
-}
-
-pub fn evento_dominio(ev: &EventoNucleo, version: u64, heroes: Vec<String>) -> pb::EventoDominio {
-    let mut campos: BTreeMap<String, prost_types::Value> = BTreeMap::new();
-    if let Some(&id) = ev.ejercitos.first() {
-        campos.insert("ejercitoId".into(), texto(ids::ejercito(id)));
-    }
-    if let Some(p) = ev.punto {
-        campos.insert("x".into(), numero(p.x as f64));
-        campos.insert("y".into(), numero(p.y as f64));
-    }
-    for (k, v) in &ev.datos {
-        campos.insert((*k).into(), numero(*v as f64));
-    }
-    pb::EventoDominio {
-        codigo: ev.codigo.to_string(),
-        version,
-        en_ms: ev.en,
-        asentamiento_id: ev.asentamientos.first().map(|&id| ids::asentamiento(id)),
-        heroes_ids: heroes,
-        payload: Some(prost_types::Struct { fields: campos }),
-        ..Default::default()
-    }
 }
 
 #[cfg(test)]

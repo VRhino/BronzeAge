@@ -574,18 +574,76 @@ impl SucesoComercio {
     }
 }
 
-/// Un hecho ocurrido (crónica y avisos), no el cambio de estado: ese viaja en las entidades.
+/// Un dato de un hecho que no es un entero suelto (los enteros van en `EventoNucleo::datos`): un texto o una lista (de números, textos o listas). Viaja en el `payload` como su valor de `Struct`.
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Dato {
+    Numero(i64),
+    Texto(String),
+    Lista(Vec<Dato>),
+}
+
+/// Las claves de `datos` que nombran a un héroe: lo oye aunque no vea la plaza (como `heroesNombrados` del TypeScript: `heroeId` y `liderId`).
+const NOMBRAN_HEROE: [&str; 2] = ["heroe", "lider"];
+/// La clave de `datos` que nombra la columna de la que trata el hecho (la que entra, la que conquista...): la oyen sus participantes, como las de `ejercitos`.
+const NOMBRA_COLUMNA: &str = "ejercito";
+/// Las claves de `datos` que nombran a una Facción: la oye entera (los dos bandos de un combate o de un encuentro, la Facción de un ajuste de reputación...).
+const NOMBRAN_FACCION: [&str; 6] = ["faccion", "faccionA", "faccionB", "faccionAtacante", "faccionDefensora", "faccionAnterior"];
+
+/// Un hecho ocurrido (crónica y avisos), no el cambio de estado: ese viaja en las entidades.
+///
+/// **Quién lo oye** (contrato 05 §8, 4H T5) lo dicen `heroes`, `facciones`, `asentamientos` y `publico`, que se completan al emitirlo ([`EventoNucleo::completar`], con el estado de ese instante: una
+/// columna que se disuelve en la misma transición sigue nombrando a sus héroes): los héroes de las columnas que nombra (en `ejercitos` y en la clave `ejercito` de `datos`) y los de las claves `heroe` y
+/// `lider`, y las Facciones dueñas de sus plazas y las de las claves de Facción de `datos`. Un hecho sin nadie a quien contárselo solo lo oye la administración; los de todos (`publico`) son solo los que no revelan nada que oculte la niebla.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EventoNucleo {
     /// `familia.nombre`, como `ejercito.llega`.
     pub codigo: Cow<'static, str>,
     pub en: Instante,
-    /// Columnas implicadas: deciden quién lo oye.
+    /// Columnas implicadas: sus participantes lo oyen.
     pub ejercitos: Vec<u64>,
-    /// Plazas implicadas.
+    /// Plazas a las que se atribuye: lo oyen su Facción y quien está dentro.
     pub asentamientos: Vec<u64>,
     pub punto: Option<Punto>,
     pub datos: Vec<(&'static str, i64)>,
+    /// Los datos que no son un entero suelto (textos y listas).
+    pub valores: Vec<(&'static str, Dato)>,
+    /// Los héroes nombrados (ordenados, sin repetir): lo oyen aunque no vean la plaza.
+    pub heroes: Vec<u64>,
+    /// Las Facciones que lo oyen enteras (ordenadas, sin repetir).
+    pub facciones: Vec<u32>,
+    /// Lo oyen todos los jugadores: solo los hechos públicos (la crónica, la reposición de los mercados), que no nombran a nadie ni dicen dónde.
+    pub publico: bool,
+}
+
+impl EventoNucleo {
+    /// Un hecho con sus datos enteros y sin nadie más a quien contárselo que lo que se le añada.
+    pub fn nuevo(codigo: impl Into<Cow<'static, str>>, en: Instante, datos: Vec<(&'static str, i64)>) -> Self {
+        EventoNucleo { codigo: codigo.into(), en, datos, ..Default::default() }
+    }
+
+    /// El dato entero `clave`, si lo lleva.
+    pub fn dato(&self, clave: &str) -> Option<i64> {
+        self.datos.iter().find(|(k, _)| *k == clave).map(|&(_, v)| v)
+    }
+
+    /// Completa a quién se cuenta con el estado del instante en que ocurre: los participantes de sus columnas y los héroes que nombran sus datos, que existan; las Facciones dueñas de sus plazas (también
+    /// la de una plaza que acaba de caer en ruinas en la misma transición, `arruinadas`) y las que nombran sus datos (no la «sin bandera» de los bandidos).
+    pub(crate) fn completar(&mut self, e: &Estado, arruinadas: &[(u64, u32)]) {
+        let columna = self.dato(NOMBRA_COLUMNA).map(|c| c as u64);
+        let participantes = self.ejercitos.iter().chain(&columna).filter_map(|id| e.ejercitos.get(id)).flat_map(|x| x.columna.participantes.iter().map(|p| p.heroe));
+        let nombrados = self.datos.iter().filter(|(k, _)| NOMBRAN_HEROE.contains(k)).map(|&(_, v)| v as u64);
+        let heroes: Vec<u64> = participantes.chain(nombrados).filter(|h| e.militar.heroes.contains_key(h)).collect();
+        self.heroes.extend(heroes);
+        self.heroes.sort_unstable();
+        self.heroes.dedup();
+        let duena = |p: &u64| e.asentamientos.get(p).map(|a| a.faccion).or_else(|| arruinadas.iter().find(|(x, _)| x == p).map(|&(_, f)| f));
+        let duenas = self.asentamientos.iter().filter_map(duena);
+        let nombradas = self.datos.iter().filter(|(k, _)| NOMBRAN_FACCION.contains(k)).filter_map(|&(_, v)| u32::try_from(v).ok());
+        let facciones: Vec<u32> = duenas.chain(nombradas).filter(|&f| f != SIN_BANDERA).collect();
+        self.facciones.extend(facciones);
+        self.facciones.sort_unstable();
+        self.facciones.dedup();
+    }
 }
 
 /// La clase de una entidad con identidad propia en el contrato 05 (las que un cambio de estado puede tocar). Los ids son los del núcleo.

@@ -46,7 +46,8 @@ use crate::proyeccion::ambito::Ambito;
 use crate::proyeccion::audiencia::{heroe_de_sesion, principal};
 use crate::proyeccion::propios::Espectador;
 use crate::proyeccion::vista::{Clave, Mirada, Perspectiva, Sello};
-use crate::proyeccion::{cambio_quita, evento_dominio, ids, interior, propios};
+use crate::proyeccion::eventos::{batalla_de, evento_dominio};
+use crate::proyeccion::{cambio_quita, interior, propios};
 use base::Punto;
 use contrato::v1 as pb;
 use militar::presencia::Ubicacion;
@@ -245,7 +246,6 @@ pub(super) struct Entrega {
 /// `QUITA`. La plaza de `ASENTAMIENTO` y las de `ADMIN` viajan como cambio parcial con máscara contra la que el cliente ya tiene ([`Sesion::plazas`]; si no
 /// se sabe, entera). Sin nada que contar no hay `Delta`: un cambio que no mueve nada de lo que ve el cliente (la ficha de la plaza sin cambios) no cuesta un mensaje.
 pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, cubo: Cubo<'_>) -> Entrega {
-    let estado = n.estado();
     let (mut plazas, mut cambios) = (Vec::new(), Vec::new());
     for (&(clase, id), &pertenece) in &cubo.entidades {
         if clase == Clase::Asentamiento && matches!(a, Ambito::Asentamiento(_) | Ambito::Admin) {
@@ -256,14 +256,7 @@ pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, c
         }
         cambios.extend(propios::cambios(n, s.espectador(), clase, id, pertenece));
     }
-    let eventos: Vec<pb::EventoDominio> = cubo
-        .eventos
-        .into_iter()
-        .map(|(version, ev)| {
-            let heroes = ev.ejercitos.iter().filter_map(|id| estado.ejercitos.get(id)).flat_map(|e| e.columna.participantes.iter().map(|p| ids::heroe(p.heroe))).collect();
-            evento_dominio(ev, version, heroes)
-        })
-        .collect();
+    let eventos: Vec<pb::EventoDominio> = cubo.eventos.into_iter().map(|(version, ev)| evento_dominio(n, ev, version)).collect();
     let delta = (!cambios.is_empty() || !eventos.is_empty()).then(|| pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta, cambios, eventos, niebla: None });
     Entrega { delta, plazas }
 }
@@ -420,11 +413,37 @@ impl Mesa {
         self.suscriptores.get(&a).into_iter().flatten().map(move |&s| (s, a))
     }
 
-    /// Los ámbitos `HEROE` de las sesiones de las cuentas que participan en la columna.
-    fn heroes_de_columna(&self, n: &Nucleo, columna: u64) -> Vec<(SesionId, Ambito)> {
-        let Some(e) = n.estado().ejercitos.get(&columna) else { return Vec::new() };
-        let cuentas: BTreeSet<&str> = e.columna.participantes.iter().filter_map(|p| n.heroe(p.heroe)).map(|h| h.cuenta.as_str()).collect();
-        cuentas.into_iter().filter_map(|c| self.por_cliente.get(c)).filter_map(|&id| Some((id, Ambito::Heroe(self.sesiones.get(&id)?.heroe?)))).filter(|(id, a)| self.suscriptores.get(a).is_some_and(|s| s.contains(id))).collect()
+    /// A quién se cuenta un hecho (contrato 05 §8, 4H T5) y por qué ámbito: a cada sesión **una sola vez**, por el primero de sus ámbitos abiertos que lo oye, en este orden: la plaza a la que se
+    /// atribuye (`ASENTAMIENTO`, quien está dentro), la batalla del hecho (`BATALLA`, quien combate), los héroes nombrados (`HEROE`), las Facciones que lo oyen (`FACCION`) y, para un hecho de batalla,
+    /// la `VISTA` de quien tiene esa batalla en su mapa (la ve bajo la niebla: el hecho no le dice nada que no vea). Un hecho público llega a todo jugador con héroe, por su `HEROE`. Nada más: un hecho
+    /// sin plaza que nombra a alguien no es de todos (no puede revelar lo que oculta la niebla). La administración, que lo oye todo, no pasa por aquí.
+    fn oyentes(&self, n: &Nucleo, ev: &EventoNucleo) -> BTreeMap<SesionId, Ambito> {
+        let e = n.estado();
+        let mut oyen = BTreeMap::new();
+        let batalla = batalla_de(ev);
+        let heroes = ev.heroes.iter().filter_map(|h| e.militar.heroes.get(h)).filter_map(|h| principal(e, h)).map(Ambito::Heroe);
+        let ambitos = ev.asentamientos.iter().map(|&p| Ambito::Asentamiento(p)).chain(batalla.map(Ambito::Batalla)).chain(heroes).chain(ev.facciones.iter().map(|&f| Ambito::Faccion(f)));
+        for a in ambitos {
+            for (s, a) in self.suscritos(a) {
+                oyen.entry(s).or_insert(a);
+            }
+        }
+        if let Some(b) = batalla {
+            let clave = (pb::TipoEntidad::Batalla as i32, n.uuid_de_batalla(b));
+            let vistas = self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Vista(_))).flat_map(|(&a, ss)| ss.iter().map(move |&s| (s, a)));
+            for (s, a) in vistas {
+                if self.sesiones.get(&s).and_then(|x| x.mapa.as_ref()).is_some_and(|m| m.tiene.contains_key(&clave)) {
+                    oyen.entry(s).or_insert(a);
+                }
+            }
+        }
+        if ev.publico {
+            let todos = self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Heroe(_))).flat_map(|(&a, ss)| ss.iter().map(move |&s| (s, a)));
+            for (s, a) in todos {
+                oyen.entry(s).or_insert(a);
+            }
+        }
+        oyen
     }
 
     /// Agrupa por `(sesión, ámbito)` lo que cambió en los registros y le toca al cliente (`solo` = una sola sesión). Una pasada por los registros, no una por sesión.
@@ -465,8 +484,7 @@ impl Mesa {
                 }
             }
             for ev in &cv.eventos {
-                let oyen: BTreeSet<(SesionId, Ambito)> = ev.ejercitos.iter().flat_map(|&id| self.heroes_de_columna(n, id)).collect();
-                for (s, a) in oyen {
+                for (s, a) in self.oyentes(n, ev) {
                     if self.recibe(solo, s, a, v) {
                         cubos.entry((s, a)).or_default().eventos.push((v, ev));
                     }

@@ -83,13 +83,10 @@ impl GeneradorDeEventos for GeneradorVision {
         }
         self.previa = muestra;
         for (a, b, visto) in nuevos {
+            // Lo oye la Facción que ve, no la vista (no sabe que la vieron): la columna vista va en los datos (`visto`), no en `ejercitos`.
             cx.emitir(EventoNucleo {
-                codigo: "vision.contacto".into(),
-                en: t,
-                ejercitos: vec![visto],
-                asentamientos: vec![],
-                punto: None,
-                datos: vec![("faccionQueVe", a as i64), ("faccionVista", b as i64)],
+                facciones: vec![a],
+                ..EventoNucleo::nuevo("vision.contacto", t, vec![("faccionQueVe", a as i64), ("faccionVista", b as i64), ("visto", visto as i64)])
             });
         }
     }

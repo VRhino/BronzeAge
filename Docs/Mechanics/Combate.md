@@ -133,6 +133,8 @@ Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Un
 4. **Botín**: lo robado + la chatarra de las bajas va al carro del ganador (`cargarBotin`) hasta `capacidadCargaDe(ganador, caravanas)`; **lo que no cabe se pierde**.
 5. Eventos: `combate.resuelto`, `combate.encuentro`; se narran a los **dos** hogares.
 
+> **Implementado en Rust (2026-10-23, 4H T5).** Columna contra columna emite, tras `combate.resuelto` (que oyen los héroes de las dos columnas), `combate.encuentro { ejercitoA, ejercitoB, faccionA, faccionB, ganador }` (`ganador` = la columna que gana), que oyen además las dos Facciones enteras. `faccion.guerra_declarada` (al atacar con `declara_guerra`) la oyen las dos Facciones y la canta la crónica; los hechos del combate y de la conquista con `faccionAtacante`/`faccionDefensora` o `faccion`/`faccionAnterior` en los datos los oyen las dos (la plaza conquistada ya es del conquistador cuando se cuenta `asentamiento.conquistada`, y la que la tenía lo oye por `faccionAnterior`).
+
 ## 6. Asedio de una plaza (`asediarPlaza` → `asediarConEjercito`)
 
 Validaciones (`validarAsedio`): atacante **ejército** (una columna personal no abre un asedio); plaza de **otra Facción**; a ≤ 3 con héroe sano; plaza **no protegida** tras su conquista.
@@ -350,3 +352,19 @@ Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (3
 ## 15. Divergencias
 
 Ninguna abierta.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
+
+<!-- eventos -->
+```json
+[
+  "asentamiento.conquistada", "asentamiento.ocupacion_terminada", "asentamiento.proteccion_terminada", "avanzada.destruida", "avanzada.en_ruinas",
+  "avanzada.guarnicion_repuesta", "avanzada.invulnerabilidad_terminada", "combate.asedio_conquista", "combate.asedio_resistido", "combate.ataque_campamento_fallido",
+  "combate.avanzada_destruida", "combate.avanzada_en_ruinas", "combate.avanzada_resiste", "combate.avanzada_saqueada", "combate.campamento_destruido",
+  "combate.caravana_interceptada", "combate.caravana_resiste", "combate.encuentro", "combate.pueblo_resiste", "combate.pueblo_saqueado", "combate.resuelto",
+  "faccion.derrotada", "faccion.guerra_declarada", "pueblo.guarnicion_repuesta"
+]
+```
+<!-- /eventos -->

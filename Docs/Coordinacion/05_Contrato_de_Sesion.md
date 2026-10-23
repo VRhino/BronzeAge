@@ -55,7 +55,7 @@ Los derechos se calculan del estado y se reevalúan cuando cambia el héroe (su 
 
 `CambiarVista` (el único ámbito que pide el cliente): fija el rectángulo (`min` ≤ `max`, en milésimas) y el servidor manda la `Foto` de `VISTA` con lo que cae dentro, otra vez en cada cambio de rectángulo (la foto sustituye a la anterior). Sin héroe, o en una sesión de administración, no hay vista: `Aviso{vista.sin_derecho}`; con un rectángulo incompleto o al revés: `Aviso{vista.invalida}`. Lo que sale del rectángulo o de la vista sale con `QUITA`. No hay mensaje para cerrar la vista.
 
-Qué lleva cada ámbito hoy: `HEROE`, `FACCION` y `BATALLA`, su contenido completo (T3b y T4, abajo); `ASENTAMIENTO` y `CAMPAMENTO`, el interior completo (T3c, abajo); `VISTA`, el mundo visible con niebla (T3d, abajo); `ADMIN`, todo (T3e, abajo). Los eventos llegan por `HEROE` y, todos, por `ADMIN` (T5 da audiencia al resto).
+Qué lleva cada ámbito hoy: `HEROE`, `FACCION` y `BATALLA`, su contenido completo (T3b y T4, abajo); `ASENTAMIENTO` y `CAMPAMENTO`, el interior completo (T3c, abajo); `VISTA`, el mundo visible con niebla (T3d, abajo); `ADMIN`, todo (T3e, abajo). Los eventos llegan a cada sesión una vez, por el primero de sus ámbitos que los oye (`ASENTAMIENTO`, `BATALLA`, `HEROE`, `FACCION`, `VISTA`), y todos por `ADMIN` (T5, §8).
 
 **La administración (T3e).** `ADMIN` lleva todo el mundo tal como es, con las mismas entidades que los ámbitos de jugador y sin redactar nada: cada `Asentamiento` **con su interior** (como en `ASENTAMIENTO`: almacén y población en escalones, edificios, recintos, trazado, quiénes están dentro...; con su secuencia interior, cambio parcial con máscara en cada paso de minuto), todas las `Ejercito` enteras (composición, Líder, suministro, víveres y el plan hasta el destino), todos los `Heroe` enteros con sus `Escuadron`, sus loadouts y sus `InformeInspeccion`, todas las `Faccion` con sus `TecnologiasFaccion` y sus `RelacionPolitica`, toda la flota de `Caravana`, los `Pueblo`, `Avanzada` y `ObraDeMapa` (también las avanzadas huérfanas), los `AcuerdoTrueque`, las `OrdenMercado` con su historial, las `Convocatoria` con **todas** sus peticiones, todos los `CampamentoMercenarios` y todos los `CampamentoBandidos`, y las `Batalla` que conserva el núcleo **enteras** (ticket, incorporaciones, resultado) más la asignación que ganó en `Batalla.asignacion` (intento, revisión e instancia) **con `tokens_participante` vacío**: ningún token de batalla viaja a la administración (ni el de la asignación, ni los de las incorporaciones, ni `asignacion_propia`). No lleva lo que es de la perspectiva de un jugador (`NieblaProyectada`, `FichaConocida`, `ZonaFaccion`, `RedCaminos`, `lado_propio`, `lado_para_unirse`) ni, de momento, la memoria de cada Facción, las Miradas y los Informes de plaza (DUDA, T3e). Sale del registro de cambios: cada `Delta` lleva `ACTUALIZA` de todo lo que la versión tocó (`QUITA` de lo que ya no existe), las caravanas que lleva una columna tocada y todos los hechos de la versión; no necesita reconciliar por sellos como `VISTA` porque nada entra ni sale de `ADMIN` sin que cambie el estado. Se reanuda por deltas como `HEROE`: la secuencia interior de cada plaza va en `Hola.versiones_interiores_conocidas` con la clave de su ámbito (`ASENTAMIENTO:as-N`), y la plaza cuya secuencia no es la de hoy (o que no se declara) llega entera. No se revoca nunca y no tiene vista (`CambiarVista` → `Aviso{vista.sin_derecho}`). Las órdenes de administración (`OrdenDeAdministracion`, `controlar_reloj`) siguen siendo solo de esta clase de cliente (`no_autorizado` en cualquier otra).
 
@@ -200,8 +200,8 @@ La reapertura de Unity pinta el último estado desde la caché local **antes** d
 ## 8. Eventos de dominio
 
 `EventoDominio` es un **hecho ocurrido** (crónica, avisos, narración), nunca el cambio de estado: ese viaja como entidades en la misma
-`Delta`. Llevan `codigo` (`familia.nombre`), `version`, `en_ms`, `asentamiento_id` (quién lo oye) y `heroes_ids` (los nombrados lo oyen
-aunque no vean la plaza), y un `payload` estructurado.
+`Delta`. Llevan `codigo` (`familia.nombre`), `version`, `en_ms`, `asentamiento_id` (quién lo oye), `heroes_ids` (los nombrados lo oyen
+aunque no vean la plaza), `facciones_ids` (las Facciones que lo oyen enteras, 4H T5) y un `payload` estructurado.
 
 - **Dos formas a la vez** (decisión del autor, 2026-10-22): todo evento lleva el `payload` genérico (`Struct`: número, texto o lista) y los **quince** que mueven la interfaz llevan además un
   mensaje tipado en `EventoDominio.tipado`: `BatallaAbierta` (`batalla.abierta`), `BatallaAsignada` (`batalla.asignada`), `BatallaCerrada` (`batalla.aplicada`, `cancelada`, `fallida`),
@@ -209,15 +209,32 @@ aunque no vean la plaza), y un `payload` estructurado.
   `convocatoria.union_pedida`), `ConvocatoriaConvocada`, `ConvocatoriaPartio`, `HeroeExpulsado` (`heroe.expulsado`, `heroe.desalojado`), `ColumnaConHambre` (`ejercito.viveres_bajos`,
   `ejercito.sin_viveres`), `DesercionPorHambre` (`tropas.desercion`), `GuerraDeclarada` (`faccion.guerra_declarada`), `ObraTerminada` (edificio, mejora, recinto, pueblo o avanzada
   completados) y `HeroeHerido`. Contra un campamento de bandidos el prefijo es `evento_pve.` y se tipan igual. El resto de los códigos solo tienen `payload`.
-- **El catálogo de códigos y la forma del payload de cada uno son las tablas de eventos de cada documento de `Docs/Mechanics`**
-  (p. ej. `Movimiento_Ejercitos` §13.1, `Comercio_Caravanas` §13, `Presencia_Y_Convocatoria`, `Diplomacia_Facciones`). Un test del
-  contrato exigirá que todo código emitido figure en el catálogo del archivo común de datos de juego.
-- **Códigos nuevos de la reconstrucción**: `guerra.declarada_por_ataque`, `caravana.disputa`, `caravana.aguante`, `pueblo.marcado`,
-  `pueblo.completado`, `pueblo.saqueado`, `pueblo.destruido`, `acarreo.sale`, `acarreo.llega`, `acarreo.perdido`, `avanzada.colocada`,
-  `avanzada.mejorada`, `avanzada.en_ruinas`, `avanzada.destruida`, `obra.material_entregado`, `obra.cancelada`. Se retiran
-  `ejercito.repliegue` y `ejercito.regresa`.
-- **Audiencia** (quién oye cada evento): los sin plaza son globales; los de una plaza, para su Facción y para quien esté dentro; los
-  que nombran a un héroe, para él; la administración los oye **todos** (`ADMIN`, T3e; como `admin/eventos` del TypeScript). Sin cambios respecto al motor anterior.
+- **El catálogo de códigos y la forma del payload de cada uno son los documentos de `Docs/Mechanics`**: sus tablas de eventos (p. ej. `Movimiento_Ejercitos` §13.1, `Comercio_Caravanas` §12,
+  `Presencia_Y_Convocatoria`, `Diplomacia_Facciones` §9) y, desde 4H T5, el bloque `<!-- eventos -->` de la sección «Catálogo de eventos» de cada uno, la lista de códigos que manda. La prueba
+  `crates/nucleo/tests/catalogo.rs` exige que todo código que emite el núcleo esté en el bloque de algún documento y que los que aún no emite figuren como paridad pendiente en
+  `Docs/Mecanicas a desarrollar.md` (hoy 290 códigos: 223 emitidos y 67 pendientes de los sistemas 5 y 6, la refundación, las caravanas a mano y los yacimientos).
+- **Códigos de la reconstrucción**: los de pueblos, acarreo, avanzadas y obras de mapa son los de `Economia_Construccion` (`pueblo.marcado`, `pueblo.completado`, `pueblo.destruido`, `acarreo.sale`,
+  `acarreo.llega`, `avanzada.obra_marcada`, `avanzada.materiales_entregados`, `avanzada.obra_cancelada`, `avanzada.en_ruinas`, `avanzada.destruida`...), los del combate los de `Combate`
+  (`combate.pueblo_saqueado`, `combate.caravana_interceptada`/`_resiste` con su modalidad, `faccion.guerra_declarada` al declarar la guerra atacando). Se retiran `ejercito.repliegue` y `ejercito.regresa`.
+- **Audiencia** (quién oye cada evento): los de una plaza, su Facción y quien esté dentro; los que nombran a un héroe, él; los de una Facción, ella entera; los públicos, todos; la administración
+  los oye **todos** (`ADMIN`, T3e; como `admin/eventos` del TypeScript). «Sin plaza, global» del motor anterior se estrecha por la niebla (abajo).
+
+**Cómo lo hace el servidor Rust (4H T5, 2026-10-23).**
+
+- **A quién se cuenta se decide al emitir el hecho**, con el estado de ese instante (`EventoNucleo::completar`): los participantes de las columnas que nombra (y de la clave `ejercito` de sus datos),
+  los héroes de las claves `heroe` y `lider` (como `heroesNombrados` del TypeScript), las Facciones dueñas de sus plazas (también la de una plaza que cae en ruinas en la misma transición) y las de las
+  claves de Facción de los datos (`faccion`, `faccionA`/`faccionB`, `faccionAtacante`/`faccionDefensora`, `faccionAnterior`). Así una columna disuelta en la misma transición sigue nombrando a sus
+  héroes, y la versión, el hash y los hechos (con sus oyentes) son los mismos con sesiones y sin ellas: los hechos no se guardan en la foto.
+- **Por qué ámbito**: a cada sesión **una sola vez**, por el primero de sus ámbitos abiertos que lo oye, en este orden: `ASENTAMIENTO` de la plaza (quien está dentro, que es ciudadano de su
+  Facción), `BATALLA` del hecho de batalla (quien combate), `HEROE` del héroe nombrado, `FACCION` de una Facción que lo oye y, para un hecho de batalla, la `VISTA` de quien tiene esa batalla en su
+  mapa (la ve bajo la niebla). `ADMIN` los lleva todos.
+- **La niebla**: un hecho sin plaza que nombra a alguien llega **solo** a los nombrados (en el TypeScript era global: «el ejército X llega a su destino» lo oía todo el mundo); solo son de todos los
+  hechos **públicos** (`publico`: la crónica y la reposición de los mercados de mercenarios), que no nombran a nadie ni dicen dónde. Un hecho sin nadie a quien contárselo solo lo oye la administración.
+  `vision.contacto` lo oye la Facción que ve, no la vista; `jugador.marcha_fijada` (con el destino), solo quien marcha.
+- **Payload**: `ejercitoId` (la primera columna), `x`/`y` (dónde), los datos enteros (los ids del núcleo como números, con la clave de cada documento), los textos y las listas (`valores`) y, en los hechos de
+  batalla, `battleId` con el id del contrato. **Tipados**: los quince de arriba, con el mismo contenido en ids del contrato (`proyeccion::eventos`).
+- **La crónica** (Tecnologia_Aedas §8): no es estado; al cerrar cada versión se deriva de sus hechos un `cronica.entrada { tipo, faccionIds, asentamientoId?, nivel? }` público (la conquista, las ruinas,
+  la fundación, la guerra declarada y la primera plaza del mundo en llegar a cada nivel desde el 3). La frase la compone el cliente.
 
 ## 9. Sesión de servidor de batalla
 

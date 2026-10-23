@@ -51,6 +51,7 @@ mod combates;
 mod conquistas;
 mod construccion;
 mod convocatorias;
+mod cronica;
 mod dentro;
 mod espacio;
 mod exploracion;
@@ -538,7 +539,11 @@ impl Nucleo {
         for clase in Clase::TODAS.into_iter().filter(|c| !matches!(c, Clase::Ejercito | Clase::Asentamiento)) {
             self.versiones.extend(tocados.de(clase).iter().map(|&id| ((clase, id), v)));
         }
-        let eventos = std::mem::take(&mut self.tr.eventos);
+        let mut eventos = std::mem::take(&mut self.tr.eventos);
+        self.tr.arruinadas.clear();
+        // La crónica es una vista de los hechos de la versión (Tecnologia_Aedas §8): sus entradas públicas van con ellos.
+        let cronica = self.cronica(&eventos);
+        eventos.extend(cronica);
         self.registro.push_back(CambioVersion { version: v, en: t, tocados, pertenencias, eventos });
         if self.registro.len() > self.ajustes.retencion_cambios {
             if let Some(c) = self.registro.pop_front() {
@@ -573,7 +578,7 @@ impl Nucleo {
     // ───────────────────────────── Reglas de las columnas ─────────────────────────────
 
     fn evento(&mut self, codigo: &'static str, en: Instante, id: u64, punto: Option<Punto>, datos: Vec<(&'static str, i64)>) {
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en, ejercitos: vec![id], asentamientos: vec![], punto, datos });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en, ejercitos: vec![id], asentamientos: vec![], punto, datos, ..Default::default() });
     }
 
     /// Programa la llegada (si hay plan), los umbrales de víveres y, si la columna pasa hambre, su próxima deserción, con la generación vigente. Llamar tras subirla.
@@ -794,7 +799,7 @@ impl Nucleo {
                 if let Err(r) = self.autorizar_movimiento(p, e) {
                     return r;
                 }
-                let (id, origen, marchando) = (e.id, e.posicion_en(t), e.marchando());
+                let (id, origen, marchando, lider) = (e.id, e.posicion_en(t), e.marchando(), e.columna.lider);
                 let camino = precalculado.unwrap_or_else(|| {
                     self.metricas.rutas_calculadas += 1;
                     self.rutas.ruta_con(&mut self.escritorio, origen, *destino, &Opciones::default())
@@ -813,6 +818,9 @@ impl Nucleo {
                     // Elegir destino es dejar de ir detrás de nadie, y sin avisar.
                     self.fijar_persecucion(id, None);
                     self.poner_ruta(id, t, camino);
+                    // Presencia_Y_Convocatoria §6: `rectifica` si la columna ya marchaba; el objetivo es el punto de destino (el contrato lleva a una plaza como su posición).
+                    let datos = vec![("heroe", lider as i64), ("rectifica", marchando as i64), ("objetivoX", destino.x), ("objetivoY", destino.y)];
+                    self.evento("jugador.marcha_fijada", t, id, Some(origen), datos);
                 }
             }
             Comando::Estacionar { ejercito } => {

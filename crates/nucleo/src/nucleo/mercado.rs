@@ -198,8 +198,13 @@ impl Nucleo {
 
     /// Un hecho del núcleo que el documento de comercio no nombra (reputación, experiencia, administración...).
     pub(super) fn emitir_propio(&mut self, t: Instante, codigo: &'static str, plazas: Vec<u64>, datos: Vec<(&'static str, i64)>) {
+        self.emitir_nombrando(t, codigo, plazas, vec![], datos);
+    }
+
+    /// Como [`Nucleo::emitir_propio`], nombrando además a `heroes`: los de una columna que acaba de desarmarse para entrar en un lugar ya no la tienen, y sin esto no lo oirían.
+    pub(super) fn emitir_nombrando(&mut self, t: Instante, codigo: &'static str, plazas: Vec<u64>, heroes: Vec<u64>, datos: Vec<(&'static str, i64)>) {
         let punto = plazas.first().and_then(|p| self.estado.asentamientos.get(p)).map(|a| a.posicion);
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: vec![], asentamientos: plazas, punto, datos });
+        self.tr.emitir(&self.estado, EventoNucleo { asentamientos: plazas, punto, heroes, ..EventoNucleo::nuevo(codigo, t, datos) });
     }
 
     /// Programa un plazo de comercio con la generación vigente de su entidad.

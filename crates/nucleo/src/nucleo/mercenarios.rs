@@ -546,7 +546,8 @@ impl Nucleo {
                 }
             }
             self.tocar_todos_los_campamentos();
-            self.emitir_propio(t, "mercenarios.repuesto", vec![], vec![("campamentos", n as i64)]);
+            // Es público: los mercados de todos los campamentos se reponen a la vez, no dice nada que oculte la niebla.
+            self.tr.emitir(&self.estado, EventoNucleo { publico: true, ..EventoNucleo::nuevo("mercenarios.repuesto", t, vec![("campamentos", n as i64)]) });
         }
         self.armar_reposicion(t);
     }

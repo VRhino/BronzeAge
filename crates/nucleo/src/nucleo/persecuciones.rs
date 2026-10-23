@@ -118,7 +118,7 @@ impl Nucleo {
         columnas.extend(Some(presa).filter(|p| !caravana && self.estado.ejercitos.contains_key(p)));
         let punto = self.estado.ejercitos[&perseguidor].posicion_en(t);
         let id = if caravana { id_de_entidad(presa) } else { presa };
-        self.tr.eventos.push(EventoNucleo { codigo: fin.codigo().into(), en: t, ejercitos: columnas, asentamientos: vec![], punto: Some(punto), datos: vec![("presa", id as i64), ("caravana", caravana as i64)] });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: fin.codigo().into(), en: t, ejercitos: columnas, asentamientos: vec![], punto: Some(punto), datos: vec![("presa", id as i64), ("caravana", caravana as i64)], ..Default::default() });
     }
 
     /// La presa sale del mapa: quienes la persiguen la dan por puesta a cubierto.

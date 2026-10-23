@@ -627,3 +627,21 @@ La crónica de los Aedas canta la anexión, la fusión, la liberación de vasall
 
 ## 13. Divergencias
 Anotadas en [`Divergencias.md`](Divergencias.md).
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 37 (`asentamiento.veto`, `cargo.embajador_asignado`, `cargo.local_asignado`, `cargo.rey_asignado`, `ciudadania.residencia_cambiada`, `ciudadania.residencia_dejada`, `ciudadania.residencia_en_campamento`, `diplomacia.anexion`, `diplomacia.anexion_propuesta`, `diplomacia.anexion_rechazada`, `diplomacia.anexion_retirada`, `diplomacia.fusion`, `diplomacia.fusion_propuesta`, `diplomacia.fusion_rechazada`, `diplomacia.fusion_retirada`, `diplomacia.guerra_declarada`, `diplomacia.paz_firmada`, `diplomacia.paz_propuesta`, `diplomacia.rebelion_vasallo`, `diplomacia.relacion_aceptada`, `diplomacia.relacion_propuesta`, `diplomacia.relacion_rechazada`, `diplomacia.relacion_retirada`, `diplomacia.relacion_rota`, `diplomacia.tributo_pagado`, `diplomacia.vasallo_conquistado`, `diplomacia.vasallo_liberado`, `faccion.abandonada`, `faccion.admision_en_ataques`, `faccion.capital_designada`, `faccion.ciudadania_union`, `faccion.creada`, `faccion.nivel_subio`, `faccion.solicitud_denegada`, `faccion.solicitud_ingreso`, `titulo.cambia_manos`, `titulo.nace`).
+
+<!-- eventos -->
+```json
+[
+  "asentamiento.veto", "cargo.embajador_asignado", "cargo.local_asignado", "cargo.rey_asignado", "ciudadania.residencia_cambiada", "ciudadania.residencia_dejada",
+  "ciudadania.residencia_en_campamento", "diplomacia.anexion", "diplomacia.anexion_propuesta", "diplomacia.anexion_rechazada", "diplomacia.anexion_retirada",
+  "diplomacia.fusion", "diplomacia.fusion_propuesta", "diplomacia.fusion_rechazada", "diplomacia.fusion_retirada", "diplomacia.guerra_declarada", "diplomacia.paz_firmada",
+  "diplomacia.paz_propuesta", "diplomacia.rebelion_vasallo", "diplomacia.relacion_aceptada", "diplomacia.relacion_propuesta", "diplomacia.relacion_rechazada",
+  "diplomacia.relacion_retirada", "diplomacia.relacion_rota", "diplomacia.tributo_pagado", "diplomacia.vasallo_conquistado", "diplomacia.vasallo_liberado",
+  "faccion.abandonada", "faccion.admision_en_ataques", "faccion.capital_designada", "faccion.ciudadania_union", "faccion.creada", "faccion.nivel_subio",
+  "faccion.solicitud_denegada", "faccion.solicitud_ingreso", "titulo.cambia_manos", "titulo.nace"
+]
+```
+<!-- /eventos -->

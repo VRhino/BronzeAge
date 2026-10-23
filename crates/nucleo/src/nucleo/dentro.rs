@@ -139,7 +139,7 @@ impl Nucleo {
         if !solo {
             let codigo = if sitio.es_pueblo() { "ejercito.entra_en_pueblo" } else { "ejercito.entra_en_avanzada" };
             let clave = if sitio.es_pueblo() { "pueblo" } else { "avanzada" };
-            self.emitir_propio(t, codigo, vec![sitio.madre], vec![("ejercito", id as i64), (clave, sitio.id as i64), ("heroes", antes.len() as i64), ("caravanas", caravanas)]);
+            self.emitir_nombrando(t, codigo, vec![sitio.madre], antes.clone(), vec![("ejercito", id as i64), (clave, sitio.id as i64), ("heroes", antes.len() as i64), ("caravanas", caravanas)]);
         }
         Ok(vec![])
     }

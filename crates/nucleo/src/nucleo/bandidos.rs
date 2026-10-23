@@ -106,10 +106,12 @@ impl Nucleo {
         }
     }
 
-    /// La plaza cae en ruinas: su campamento de bandidos desaparece con ella (sin reaparecer) y su plazo de reaparición también.
-    pub(super) fn bandidos_de_plaza_arruinada(&mut self, plaza: u64) {
-        let suyos: Vec<u64> = self.estado.combate.bandidos.values().filter(|b| b.origen == OrigenBandidos::Plaza(plaza)).map(|b| b.id).collect();
-        for id in suyos {
+    /// La plaza cae en ruinas: su campamento de bandidos desaparece con ella (sin reaparecer, `bandidos.campamento_disperso`, Comercio_Caravanas §10) y su plazo de reaparición también.
+    pub(super) fn bandidos_de_plaza_arruinada(&mut self, plaza: u64, t: Instante) {
+        let suyos: Vec<(u64, Punto)> = self.estado.combate.bandidos.values().filter(|b| b.origen == OrigenBandidos::Plaza(plaza)).map(|b| (b.id, b.posicion)).collect();
+        for (id, punto) in suyos {
+            let datos = vec![("campamento", id as i64), ("asentamientoArruinado", plaza as i64)];
+            self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![plaza], punto: Some(punto), ..EventoNucleo::nuevo("bandidos.campamento_disperso", t, datos) });
             self.estado.combate.bandidos.remove(&id);
             self.tr.tocar(Clase::Bandidos, id);
             self.estado.generaciones.subir(entidad_bandidos(id));
@@ -191,7 +193,7 @@ impl Nucleo {
     fn aparecio(&mut self, id: u64, t: Instante, plazas: Vec<u64>) {
         let b = &self.estado.combate.bandidos[&id];
         let (punto, nivel) = (b.posicion, b.nivel);
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed("bandidos.campamento_aparece"), en: t, ejercitos: vec![], asentamientos: plazas, punto: Some(punto), datos: vec![("campamento", id as i64), ("nivel", nivel as i64)] });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed("bandidos.campamento_aparece"), en: t, ejercitos: vec![], asentamientos: plazas, punto: Some(punto), datos: vec![("campamento", id as i64), ("nivel", nivel as i64)], ..Default::default() });
     }
 
     // ───────────────────────────── El acoso ─────────────────────────────
@@ -283,7 +285,7 @@ impl Nucleo {
         self.volcar_escuadras(&escolta);
         let plazas = vec![origen].into_iter().filter(|o| self.estado.asentamientos.contains_key(o)).collect();
         let datos = vec![("campamento", idc as i64), ("caravana", idk as i64), ("poderBandido", acoso.poder_bandido), ("defensa", acoso.defensa), ("bajasEscolta", acoso.bajas_escolta.iter().map(|b| b.antes - b.despues).sum())];
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(if acoso.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" }), en: t, ejercitos: ejercito.into_iter().collect(), asentamientos: plazas, punto: Some(donde), datos });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(if acoso.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" }), en: t, ejercitos: ejercito.into_iter().collect(), asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
         if acoso.gana_el_bandido {
             // La caravana desaparece con su carga; su escolta (a 0) vuelve al campamento de su héroe al perderse.
             self.perder_caravana(t, idk);

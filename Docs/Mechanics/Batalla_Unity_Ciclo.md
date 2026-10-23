@@ -305,6 +305,8 @@ Los efectos de una batalla en curso sobre las plazas (construir, mejorar…) se 
 
 **La proyección** (`BatallaVisible`): `{ battleId, estado, contexto, punto, bandos, ladoPropio? }`; sin tokens, sin escuadras. Se ve la batalla en el mapa si combate el héroe **o** su punto cae bajo la niebla (`seVeAhora`); **las columnas y caravanas que están en una no viajan** en los avistados: la batalla las sustituye. Solo las **activas** viajan. Detalle de capas y canales: [`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md) §6.
 
+> **Implementado en Rust (2026-10-23, 4H T5).** Los hechos de batalla llevan en el payload el `battleId` del contrato y los datos de §10 (`contexto`, las Facciones de los dos bandos, los héroes y la capacidad de cada uno; `ganaElAtacante` al aplicarse); los oyen los héroes de las columnas bloqueadas, las plazas implicadas, **las Facciones de los dos bandos** (la plaza de una batalla de campo abierto no basta para que se entere el otro hogar), quien combate por su `BATALLA` y quien ve la batalla en su `VISTA`. `batalla.abierta`, `.asignada` y `.aplicada`/`.cancelada`/`.fallida` (y sus `evento_pve.`) van además tipados (`BatallaAbierta` con el contexto del ticket, `BatallaAsignada`, `BatallaCerrada` con estado, ganador y razón). `batalla.retirada` la oyen las Facciones de los dos bandos.
+
 ## 11. Parámetros
 
 > **2026-10-19:** el bloque `BATALLA` es el vigente: `capacidad.asedio` vale **15** (el motor TypeScript tenía 5) y se usa también en la avanzada; el saqueo de un pueblo usa `capacidad.resto`.
@@ -432,3 +434,16 @@ El ticket y el contrato de resultado (v1) se amplían, siempre en aditivo, con l
 - Toda agresión entre Facciones exige guerra o la declara; unirse como atacante a un asedio ajeno no la declara.
 - No se envía nada de esto a Conquest sin permiso del usuario.
 
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
+
+<!-- eventos -->
+```json
+[
+  "batalla.abierta", "batalla.aplicada", "batalla.asignada", "batalla.cancelada", "batalla.convocatoria_cerrada", "batalla.en_curso", "batalla.fallida",
+  "batalla.refuerzos", "batalla.retirada", "batalla.revisada", "batalla.salida", "evento_pve.abierta", "evento_pve.aplicada", "evento_pve.asignada",
+  "evento_pve.cancelada", "evento_pve.en_curso", "evento_pve.fallida", "evento_pve.refuerzos", "evento_pve.revisada", "evento_pve.salida"
+]
+```
+<!-- /eventos -->

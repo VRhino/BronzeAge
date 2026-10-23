@@ -20,6 +20,8 @@ use cola::Clave;
 pub(crate) struct Transicion {
     pub tocados: Tocados,
     pub eventos: Vec<EventoNucleo>,
+    /// Las plazas que cayeron en ruinas en esta transición, con su Facción: ya no están en el estado y los hechos de su cascada siguen llegando a su Facción.
+    pub arruinadas: Vec<(u64, u32)>,
 }
 
 impl Transicion {
@@ -28,6 +30,11 @@ impl Transicion {
     }
     pub fn tocar_todos(&mut self, clase: Clase, ids: impl IntoIterator<Item = u64>) {
         ids.into_iter().for_each(|id| self.tocados.marcar(clase, id));
+    }
+    /// Emite un hecho y completa, con el estado de este instante, a quién se cuenta ([`EventoNucleo::completar`]). Todo hecho entra por aquí.
+    pub fn emitir(&mut self, estado: &Estado, mut evento: EventoNucleo) {
+        evento.completar(estado, &self.arruinadas);
+        self.eventos.push(evento);
     }
 }
 
@@ -60,9 +67,9 @@ impl Cx<'_> {
         let carga = Carga::Externa { generador: self.generador, tipo, a, b };
         self.estado.cola.programar(instante, prioridad, clave, carga);
     }
-    /// Emite un hecho (crónica): se cierra en una versión nueva y llega a quien oye a las columnas que nombra.
+    /// Emite un hecho (crónica): se cierra en una versión nueva y llega a quien nombra (`EventoNucleo::completar`).
     pub fn emitir(&mut self, evento: EventoNucleo) {
-        self.tr.eventos.push(evento);
+        self.tr.emitir(self.estado, evento);
     }
 }
 

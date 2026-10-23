@@ -201,3 +201,16 @@ A partir de ahí es la misma entidad: se engancha, se funda con `fundar` (§5), 
 ## 13. Divergencias
 
 Ninguna abierta.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 7 (`expansion.caravana_desarmada`, `expansion.caravana_lanzada`, `fundacion.caravana_devuelta`, `fundacion.caravana_perdida`, `fundacion.caravana_vuelve`, `mercenarios.caravana_refundacion`, `mercenarios.fondo_refundacion`).
+
+<!-- eventos -->
+```json
+[
+  "expansion.caravana_desarmada", "expansion.caravana_lanzada", "fundacion.asentamiento_fundado", "fundacion.caravana_devuelta", "fundacion.caravana_perdida",
+  "fundacion.caravana_vuelve", "mercenarios.caravana_refundacion", "mercenarios.fondo_refundacion"
+]
+```
+<!-- /eventos -->

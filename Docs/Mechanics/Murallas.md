@@ -369,3 +369,16 @@ Los valores de `tarifaPorCelda` (acumuladas desde el 2026-10-22; antes eran las 
 > **Aún no:** el batch y la calibración (paso 7: `batch población` sigue sin recintos), el predicado «muralla completa» en los contadores de logros (sistema 6) y las cuatro proyecciones al Protobuf (4H). Pruebas: `asentamiento::recintos` (predicado), `combate::{asedio, conquista}` (multiplicador y daño) y, en el núcleo, `crates/nucleo/tests/murallas_asedio.rs` (asedio con y sin anillo con las mismas tiradas, mejora en curso, columna, daño y reparación con su cita, mejora y obra sin daño, `recintos_en_pie`, `VistaCiudad.murallas`, colocación con recintos reales y determinismo normal/acelerado/a trozos) y `crates/nucleo/tests/batallas.rs` (la conquista por Unity).
 
 > **Implementado en Rust (2026-10-23, 4H T4: el ticket y el informe).** Foto `BAN21`. El ticket de un asedio congela la plaza al abrir (`combate::ciclo::Ticket.plaza`: edificios internos y, por cada recinto con alguna celda en pie, su nivel físico y solo esas celdas, con `layoutVersion` y `unidadesPorCelda`; `Nucleo::recintos_en_pie`) y se proyecta como `SettlementBattleSnapshot`; el informe de inspección de una plaza ajena trae sus recintos con alguna celda levantada (`militar::inspeccion::RecintoAvistado`: nivel, anillo entero y `avance`) como `RecintoInforme`. Pruebas: `crates/nucleo/tests/batalla_unity.rs` (el ticket con una empalizada completa y el informe de la plaza). Ver [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §3.3 y su última nota.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
+
+<!-- eventos -->
+```json
+[
+  "construccion.recinto_abandonado", "construccion.recinto_celda", "construccion.recinto_completado", "construccion.recinto_comprometido",
+  "construccion.recinto_mejora_iniciada", "construccion.recinto_mejorado"
+]
+```
+<!-- /eventos -->

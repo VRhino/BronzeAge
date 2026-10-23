@@ -39,7 +39,7 @@ fn marcha_y_llegada_exactas() {
     assert!(!e.marchando());
     assert_eq!(e.posicion, c(9, 1));
     assert_eq!(n.version(), 3, "la llegada es un cambio de versión");
-    assert_eq!(eventos(&n), vec![("ejercito.llega".to_string(), 16_000, id)]);
+    assert_eq!(eventos(&n), vec![("jugador.marcha_fijada".to_string(), 0, id), ("ejercito.llega".to_string(), 16_000, id)], "la orden cuenta la marcha y el reloj la llegada");
     // Los víveres pasaron a ritmo de acampada en el instante de la llegada, sin saltos.
     let v = e.columna.viveres;
     assert_eq!((v.t0, v.por_minuto), (16_000, -13), "acampada, un héroe solo come 0,5 × ¼ × ⅒ por minuto");
@@ -101,19 +101,21 @@ fn los_viveres_son_un_ritmo_con_eventos_de_umbral() {
     assert!(cero < plan.fin().unwrap(), "se queda sin víveres antes de llegar");
 
     n.avanzar_hasta(bajo - 1);
-    assert!(eventos(&n).is_empty(), "nada ocurre entre eventos: solo hay que evaluar la fórmula");
+    // Lo que hace el reloj: sin el hecho de la orden de marchar.
+    let del_reloj = |n: &Nucleo| eventos(n).into_iter().filter(|e| e.0 != "jugador.marcha_fijada").collect::<Vec<_>>();
+    assert!(del_reloj(&n).is_empty(), "nada ocurre entre eventos: solo hay que evaluar la fórmula");
     assert_eq!(n.estado().ejercitos[&id].columna.viveres.valor_en(bajo - 1), 3_501);
     n.avanzar_hasta(bajo);
-    assert_eq!(eventos(&n), vec![("ejercito.viveres_bajos".to_string(), bajo, id)]);
+    assert_eq!(del_reloj(&n), vec![("ejercito.viveres_bajos".to_string(), bajo, id)]);
     n.avanzar_hasta(cero);
-    assert_eq!(eventos(&n).last().unwrap(), &("ejercito.sin_viveres".to_string(), cero, id));
+    assert_eq!(del_reloj(&n).last().unwrap(), &("ejercito.sin_viveres".to_string(), cero, id));
     let e = &n.estado().ejercitos[&id];
     assert_eq!(e.columna.viveres.valor_en(cero), 0);
     assert_eq!(e.columna.viveres.valor_en(cero + 600_000), 0, "el suelo se respeta");
     assert!(e.marchando(), "la columna no se detiene por hambre (sin tropa no hay a quién desertar)");
     // Cada umbral ocurre una sola vez: tras llegar, la columna acampa con 0 y la cola queda vacía.
     n.avanzar_hasta(plan.fin().unwrap() + 10_000);
-    assert_eq!(eventos(&n).iter().map(|e| e.0.as_str()).collect::<Vec<_>>(), ["ejercito.viveres_bajos", "ejercito.sin_viveres", "ejercito.llega"]);
+    assert_eq!(del_reloj(&n).iter().map(|e| e.0.as_str()).collect::<Vec<_>>(), ["ejercito.viveres_bajos", "ejercito.sin_viveres", "ejercito.llega"]);
     // Los umbrales que el alta programó con el ritmo de acampada quedaron invalidados; salen de la cola (descartados) cuando les toca.
     n.avanzar_hasta(30_000_000);
     assert_eq!(n.eventos_en_cola(), 0);
@@ -345,7 +347,7 @@ impl nucleo::GeneradorDeEventos for Espia {
     fn al_vencer(&mut self, cx: &mut nucleo::Cx<'_>, entidad: u64, tipo: u16, _a: u64, _b: u64) {
         assert_eq!(tipo, 1);
         let punto = cx.estado().ejercitos[&entidad].plan.posicion_en(cx.ahora());
-        cx.emitir(nucleo::EventoNucleo { codigo: "espia.medio".into(), en: cx.ahora(), ejercitos: vec![entidad], asentamientos: vec![], punto, datos: vec![] });
+        cx.emitir(nucleo::EventoNucleo { codigo: "espia.medio".into(), en: cx.ahora(), ejercitos: vec![entidad], asentamientos: vec![], punto, datos: vec![], ..Default::default() });
     }
 }
 
@@ -414,7 +416,7 @@ fn el_orden_de_los_eventos_del_mismo_instante_respeta_la_prioridad() {
     n.aplicar_en(0, marchar("ana", "m1", id, c(4, 1)));
     assert_eq!(n.estado().ejercitos[&id].plan.fin(), Some(24_000));
     n.avanzar_hasta(30_000);
-    assert_eq!(eventos(&n).iter().map(|e| (e.0.as_str(), e.1)).collect::<Vec<_>>(), [("ejercito.sin_viveres", 24_000), ("ejercito.llega", 24_000)]);
+    assert_eq!(eventos(&n).iter().map(|e| (e.0.as_str(), e.1)).collect::<Vec<_>>(), [("jugador.marcha_fijada", 0), ("ejercito.sin_viveres", 24_000), ("ejercito.llega", 24_000)]);
     assert_eq!(n.estado().ejercitos[&id].posicion, c(4, 1));
 }
 
@@ -430,7 +432,7 @@ fn el_escenario_aleatorio_ejercita_todos_los_caminos() {
     assert!(m.eventos > 150, "{m:?}");
     assert!(n.eventos_descartados() > 10, "se invalidaron planes a mitad de camino");
     let codigos: std::collections::BTreeSet<_> = eventos(&n).into_iter().map(|e| e.0).collect();
-    assert_eq!(codigos.into_iter().collect::<Vec<_>>(), ["ejercito.encuentro", "ejercito.estacionado", "ejercito.llega", "ejercito.sin_viveres", "ejercito.viveres_bajos"]);
+    assert_eq!(codigos.into_iter().collect::<Vec<_>>(), ["ejercito.encuentro", "ejercito.estacionado", "ejercito.llega", "ejercito.sin_viveres", "ejercito.viveres_bajos", "jugador.marcha_fijada"]);
 }
 
 #[test]

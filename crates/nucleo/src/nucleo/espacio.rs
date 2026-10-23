@@ -259,28 +259,28 @@ impl Nucleo {
         let evento = match (&a, &b) {
             (Cosa::Columna(_), Cosa::Columna(_)) => {
                 let (fa, fb) = if entidad < otra { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
-                EventoNucleo { codigo: "ejercito.encuentro".into(), en: t, ejercitos: vec![lo, hi], asentamientos: vec![], punto: Some(punto), datos: vec![("faccionA", fa), ("faccionB", fb)] }
+                EventoNucleo { codigo: "ejercito.encuentro".into(), en: t, ejercitos: vec![lo, hi], asentamientos: vec![], punto: Some(punto), datos: vec![("faccionA", fa), ("faccionB", fb)], ..Default::default() }
             }
             (Cosa::Columna(c), Cosa::Caravana(k)) | (Cosa::Caravana(k), Cosa::Columna(c)) => {
                 let (fc, fk) = if matches!(a, Cosa::Columna(_)) { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
-                EventoNucleo { codigo: "caravana.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fk), ("caravana", k.id as i64)] }
+                EventoNucleo { codigo: "caravana.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fk), ("caravana", k.id as i64)], ..Default::default() }
             }
             (Cosa::Caravana(x), Cosa::Caravana(y)) => {
                 let (x, y) = if entidad < otra { (x, y) } else { (y, x) };
                 let (fx, fy) = if entidad < otra { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
-                EventoNucleo { codigo: "caravana.encuentro".into(), en: t, ejercitos: vec![], asentamientos: vec![], punto: Some(punto), datos: vec![("faccionA", fx), ("faccionB", fy), ("caravana", x.id as i64), ("caravanaB", y.id as i64)] }
+                EventoNucleo { codigo: "caravana.encuentro".into(), en: t, ejercitos: vec![], asentamientos: vec![], punto: Some(punto), datos: vec![("faccionA", fx), ("faccionB", fy), ("caravana", x.id as i64), ("caravanaB", y.id as i64)], ..Default::default() }
             }
             (Cosa::Columna(c), Cosa::Plaza(p)) | (Cosa::Plaza(p), Cosa::Columna(c)) => {
                 let (fc, fp) = if matches!(a, Cosa::Columna(_)) { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
-                EventoNucleo { codigo: "asentamiento.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![p.id], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fp)] }
+                EventoNucleo { codigo: "asentamiento.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![p.id], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fp)], ..Default::default() }
             }
             (Cosa::Columna(c), Cosa::Avanzada(v, m)) | (Cosa::Avanzada(v, m), Cosa::Columna(c)) => {
                 let (fc, fm) = if matches!(a, Cosa::Columna(_)) { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
-                EventoNucleo { codigo: "avanzada.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![m.id], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fm), ("avanzada", v.id as i64)] }
+                EventoNucleo { codigo: "avanzada.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![m.id], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fm), ("avanzada", v.id as i64)], ..Default::default() }
             }
             _ => return,
         };
-        self.tr.eventos.push(evento);
+        self.tr.emitir(&self.estado, evento);
         for (perseguidor, presa) in [(entidad, otra), (otra, entidad)] {
             if self.estado.ejercitos.get(&perseguidor).is_some_and(|e| e.persiguiendo == Some(presa)) {
                 self.presa_alcanzada(perseguidor, presa, t);

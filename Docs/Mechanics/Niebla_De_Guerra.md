@@ -188,6 +188,8 @@ Reglas transversales:
 
 `eventosVisiblesParaJugador`: a un jugador le llegan los eventos **sin plaza** (globales), los de **una plaza propia** (`asentamientoId` de su Facción) y los que **nombran a su héroe** (`heroesNombrados`). El historial completo no viaja en las lecturas de estado: se pide con un cursor (`desde` = última versión vista).
 
+> **Implementado en Rust (2026-10-23, 4H T5).** Un hecho no revela lo que la niebla oculta: los «sin plaza» que nombran a alguien (una columna que llega, una marcha con su destino, un héroe que se desconecta) los oyen solo los nombrados, no todo el mundo; los de todos son solo los públicos (la crónica, la reposición de los mercados). `vision.contacto` lo oye la Facción que ve (`faccionQueVe`), no la vista; un hecho de batalla lo oye también quien tiene la batalla en su `VISTA`. Comprar una Mirada no emite hecho (§6.1: no avisa a nadie). Detalle: contrato 05 §8.
+
 ## 6. Intel: lo que se compra en la taberna
 
 Dos productos, **exactos en el instante de la compra** (sin ruido ni datos falsos):
@@ -314,3 +316,15 @@ efecto:  memoria[mi Facción].informes[plaza] = informe;  evento asentamiento.in
 ## 10. Divergencias
 
 Ninguna abierta.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
+
+<!-- eventos -->
+```json
+[
+  "asentamiento.informe_pedido", "vision.contacto"
+]
+```
+<!-- /eventos -->

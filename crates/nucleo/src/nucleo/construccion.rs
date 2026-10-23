@@ -168,7 +168,7 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::RecintoCompletado { recinto, nivel, celdas, puertas } => ("construccion.recinto_completado", vec![("recinto", *recinto as i64), ("nivel", *nivel as i64), ("celdas", *celdas as i64), ("puertas", *puertas as i64)]),
         EventoEco::RecintoMejorado { recinto, nivel, celdas, puertas } => ("construccion.recinto_mejorado", vec![("recinto", *recinto as i64), ("nivel", *nivel as i64), ("celdas", *celdas as i64), ("puertas", *puertas as i64)]),
     };
-    EventoNucleo { codigo: codigo.into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos }
+    EventoNucleo { codigo: codigo.into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos, ..Default::default() }
 }
 
 impl Nucleo {
@@ -336,7 +336,9 @@ impl Nucleo {
         }
         let Some(a) = self.estado.asentamientos.get(&id) else { return };
         let (punto, reglas) = (a.posicion, &self.estado.reglas.economia.datos);
-        self.tr.eventos.extend(sucesos.iter().map(|e| evento_nucleo(id, t, punto, e, reglas)));
+        for e in sucesos {
+            self.tr.emitir(&self.estado, evento_nucleo(id, t, punto, e, reglas));
+        }
         self.tr.tocar(Clase::Asentamiento, id);
     }
 
@@ -344,6 +346,8 @@ impl Nucleo {
     /// programado) y el evento `asentamiento.ruinas` ya se anotó.
     fn arruinar(&mut self, id: u64, t: Instante) {
         let Some(a) = self.estado.asentamientos.remove(&id) else { return };
+        // Los hechos de la cascada que se atribuyen a la plaza (sus caravanas perdidas, su campamento de bandidos...) siguen llegando a su Facción.
+        self.tr.arruinadas.push((id, a.faccion));
         for p in &a.parcelas {
             self.estado.parcelas_ocupadas.remove(p);
         }
@@ -372,7 +376,7 @@ impl Nucleo {
         // sin que nadie la derrotara.
         self.reubicar_residentes(id, a.posicion, t);
         self.cerrar_comercio(id, comercio::ruina::Motivo::Ruina, t);
-        self.bandidos_de_plaza_arruinada(id);
+        self.bandidos_de_plaza_arruinada(id, t);
         if combate::conquista::faccion_derrotada(self.plazas_de(a.faccion).count()) {
             self.emitir_propio(t, "faccion.derrotada", vec![], vec![("faccion", a.faccion as i64), ("por", 0)]);
         }
@@ -477,17 +481,20 @@ impl Nucleo {
                     })
                     .expect("la plaza existe y hay mundo");
                 r.map_err(rechazo_obra)?;
+                self.emitir_propio(t, "construccion.mejora_forzada", vec![id], vec![("edificio", *edificio as i64)]);
                 sucesos.extend(ev);
             }
             Comando::AlternarAutoConstruccion { pausada, .. } => {
                 if !self.estado.asentamientos.get_mut(&id).expect("existe").economia.alternar_auto_construccion(*pausada) {
                     return Err(sin_cambios());
                 }
+                self.emitir_propio(t, "construccion.auto_alternada", vec![id], vec![("pausada", *pausada as i64)]);
             }
             Comando::AlternarReceta { recurso, pausada, .. } => {
                 if !self.estado.asentamientos.get_mut(&id).expect("existe").economia.alternar_receta(*recurso, *pausada) {
                     return Err(sin_cambios());
                 }
+                self.emitir_propio(t, "construccion.receta_alternada", vec![id], vec![("recurso", recurso_a_u8(*recurso) as i64), ("pausada", *pausada as i64)]);
             }
             Comando::CalibrarReserva { recurso, valor, .. } => {
                 let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
@@ -524,7 +531,7 @@ impl Nucleo {
                 })?;
                 let punto = self.estado.asentamientos[&id].posicion;
                 let indice = datos.politicas.catalogo.iter().position(|q| &q.id == politica).map_or(-1, |i| i as i64);
-                self.tr.eventos.push(EventoNucleo { codigo: "politica.activada".into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos: vec![("politica", indice), ("expiraEn", expira)] });
+                self.tr.emitir(&self.estado, EventoNucleo { codigo: "politica.activada".into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos: vec![("politica", indice), ("expiraEn", expira)], ..Default::default() });
                 let clave = self.estado.generaciones.clave(id);
                 self.estado.cola.programar(expira, PRIO_CADUCA_POLITICA, clave, Carga::CaducaPolitica);
             }

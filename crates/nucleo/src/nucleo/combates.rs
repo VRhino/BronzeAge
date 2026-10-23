@@ -246,7 +246,7 @@ impl Nucleo {
     }
 
     pub(super) fn hecho_de_combate(&mut self, codigo: &'static str, t: Instante, columnas: Vec<u64>, plazas: Vec<u64>, punto: Punto, datos: Vec<(&'static str, i64)>) {
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: columnas, asentamientos: plazas, punto: Some(punto), datos });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: columnas, asentamientos: plazas, punto: Some(punto), datos, ..Default::default() });
     }
 
     // ───────────────────────────── Los plazos ─────────────────────────────
@@ -329,7 +329,8 @@ impl Nucleo {
         self.estado.militar.relaciones.insert((atacante.min(contra), atacante.max(contra)), Relacion::Guerra);
         self.tr.tocar_todos(Clase::Faccion, [u64::from(atacante), u64::from(contra)]);
         self.tr.tocar(Clase::Relacion, Clase::par(atacante, contra));
-        self.emitir_propio(t, "faccion.guerra_declarada", vec![], vec![("atacante", atacante as i64), ("contra", contra as i64)]);
+        let datos = vec![("atacante", atacante as i64), ("contra", contra as i64)];
+        self.tr.emitir(&self.estado, EventoNucleo { facciones: vec![atacante, contra], ..EventoNucleo::nuevo("faccion.guerra_declarada", t, datos) });
     }
 
     // ───────────────────────────── Columna contra columna ─────────────────────────────
@@ -404,6 +405,10 @@ impl Nucleo {
                 ("botin", total(&cogido)),
             ],
         );
+        // El cruce y quién ganó, para los dos hogares (Combate §5, paso 5).
+        let banderas = (self.estado.ejercitos[&id].bandera() as i64, self.estado.ejercitos[&x].bandera() as i64);
+        let datos = vec![("ejercitoA", id as i64), ("ejercitoB", x as i64), ("faccionA", banderas.0), ("faccionB", banderas.1), ("ganador", ganador as i64)];
+        self.hecho_de_combate("combate.encuentro", t, vec![id, x], vec![], punto, datos);
         Ok(())
     }
 

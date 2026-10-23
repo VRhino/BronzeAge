@@ -122,6 +122,13 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     assert_eq!(d.eventos.len(), 15);
     assert!(d.eventos.iter().all(|e| e.tipado.is_some() && e.payload.is_some()));
     assert!(matches!(&d.eventos[2].tipado, Some(evento_dominio::Tipado::BatallaCerrada(c)) if c.estado == EstadoBatalla::BatallaAplicada as i32 && c.ganador == Some(LadoId::Atacante as i32)));
+    // T5: las Facciones que oyen un hecho y un payload con una lista de textos (la entrada pública de la crónica, sin plaza ni nombrados).
+    let ms::Cuerpo::Delta(d) = de_servidor("delta_eventos_de_facciones_y_publico") else { panic!() };
+    assert_eq!(d.eventos[0].facciones_ids, ["f-1", "f-2"]);
+    let cronica = &d.eventos[1];
+    assert!(cronica.asentamiento_id.is_none() && cronica.heroes_ids.is_empty() && cronica.facciones_ids.is_empty() && cronica.tipado.is_none());
+    let Some(prost_types::value::Kind::ListValue(l)) = &cronica.payload.as_ref().unwrap().fields["faccionIds"].kind else { panic!() };
+    assert_eq!(l.values.len(), 2);
 
     // El informe de inspección con recintos, lo creado con su clase, el detalle del rechazo de guerra y el campamento para nacer.
     let ms::Cuerpo::Foto(f) = de_servidor("foto_informe_inspeccion_plaza") else { panic!() };

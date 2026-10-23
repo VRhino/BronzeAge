@@ -146,6 +146,8 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
 - Efecto: `estado = marchando`, `objetivo`, un **plan nuevo calculado desde la posición real en ese instante** ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §4.2: vértices con su instante de paso) y se **abandona la persecución** (marchar a un punto y perseguir a la vez no existe). El plan anterior queda invalidado (sube la generación).
 - `rectifica = (la columna ya estaba marchando)`. Evento `jugador.marcha_fijada { ejercitoId, heroeId, objetivo, rectifica }`.
 
+> **Implementado en Rust (2026-10-23, 4H T5).** `MarcharA` emite `jugador.marcha_fijada` con `heroe` (el Líder), `rectifica` y el destino como `objetivoX`/`objetivoY` (en Rust se marcha a un punto; a una plaza, a su posición). Lo oyen solo los participantes de la columna: el destino es lo que la niebla oculta a los demás (Niebla §5.4).
+
 ## 7. Conectarse y desconectarse
 
 - **`desconectarse { heroeId }`**: si ya está `fuera` o ya tiene `desconectaEn`, no hace nada. Si no: `desconectaEn = ahora + PRESENCIA.retardoDesconexionMs` (150 000 ms = 2 min 30 s) y **se programa el evento de salida a ese instante**. Evento `jugador.se_desconecta`. El héroe sigue en el mundo esos dos minutos y medio, moviéndose como iba (su plan sigue).
@@ -229,6 +231,8 @@ la convocatoria se elimina
 
 ### 9.6 Lo que ve cada uno (proyección)
 
+> **Implementado en Rust (2026-10-23, 4H T5).** Los hechos de la convocatoria (`convocatoria.convocada`, `.unido`, `.union_pedida`, `.union_rechazada`, `.seleccion_cambiada`, `.separado`, `.cancelada`, `.peticion_caducada`) los oye **la Facción de la convocatoria** entera y quien está dentro de su plaza, también si se convoca en un campamento (entonces llevan `campamento` en los datos): «a su lugar y su Facción». `convocatoria.partio` lo oyen los de la columna que sale y la plaza del lugar.
+
 `convocatoriasDelLugar`: las convocatorias **de la propia Facción del héroe en el mismo lugar**, más la suya aunque ya no esté. Cada una trae sus integrantes dentro (con tropa nombrada, nivel, moral y cantidad, **en el orden elegido**) y las **peticiones vivas** solo para el Líder y para quien las hizo. `soyLider`, `soyIntegrante` y `miConvocatoriaId` se derivan por héroe. Nada sale del lugar.
 
 ## 10. Autorización
@@ -292,3 +296,19 @@ Un héroe `fuera` del mundo: solo `conectarse` (§7).
 ## 14. Divergencias
 
 Ninguna abierta.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
+
+<!-- eventos -->
+```json
+[
+  "asentamiento.acceso", "convocatoria.cancelada", "convocatoria.convocada", "convocatoria.partio", "convocatoria.peticion_caducada", "convocatoria.seleccion_cambiada",
+  "convocatoria.separado", "convocatoria.unido", "convocatoria.union_pedida", "convocatoria.union_rechazada", "ejercito.entra_en_avanzada", "ejercito.entra_en_campamento",
+  "ejercito.entra_en_pueblo", "ejercito.guarnece", "heroe.desalojado", "heroe.expulsado", "heroe.vacia_el_carro", "jugador.entra_en_asentamiento",
+  "jugador.entra_en_avanzada", "jugador.entra_en_campamento", "jugador.entra_en_pueblo", "jugador.marcha_fijada", "jugador.sale_al_mundo", "jugador.sale_de_asentamiento",
+  "jugador.sale_de_avanzada", "jugador.sale_de_campamento", "jugador.sale_de_pueblo"
+]
+```
+<!-- /eventos -->

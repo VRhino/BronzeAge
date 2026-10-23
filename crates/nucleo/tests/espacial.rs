@@ -57,10 +57,10 @@ fn mismo_resultado_al_repetir_y_la_visión_registra_el_primer_contacto() {
         n.aplicar_en(0, marchar("ana", "m1", a, c(39, 2)));
         n.aplicar_en(0, marchar("beto", "m2", b, c(0, 2)));
         n.avanzar_hasta(1_200_000);
-        let contactos: Vec<(i64, Vec<u64>)> = n
+        let contactos: Vec<(i64, Option<i64>)> = n
             .cambios_desde(0)
             .unwrap()
-            .flat_map(|cv| cv.eventos.iter().filter(|e| e.codigo == "vision.contacto").map(|e| (e.en, e.ejercitos.clone())))
+            .flat_map(|cv| cv.eventos.iter().filter(|e| e.codigo == "vision.contacto").map(|e| (e.en, e.dato("visto"))))
             .collect();
         (n.hash_estado(), contactos)
     };

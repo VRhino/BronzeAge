@@ -22,7 +22,7 @@ Cubre cómo se **mueve, come, se junta y se separa** una columna en el mapa: sal
 > - **Una columna sin nadie se disuelve (§11).** Sus caravanas adjuntas vuelven solas a su origen por tierra o se pierden si no hay camino (`ejercito.disuelto`). Un héroe que se desconecta en campo (`Presencia_Y_Convocatoria.md` §7) se lleva sus escuadras, su parte del carro y de los víveres y el mando pasa al más antiguo conectado.
 > - **Caravanas adjuntas (§9).** `adjuntarCaravana` exige un **ejército** (una columna personal no las lleva: `columna.personal_sin_caravanas`). Se sueltan (`aparcarCaravana`) solo dentro de una plaza (Q3). Siguen en `Comercio_Caravanas.md` §8 y en la fila de paridad de `Docs/Mecanicas a desarrollar.md` la Caravana de Fundación como caravana de verdad (adjuntar/soltar en campamento, `reclamarCaravana`).
 > - **Repostar (§8)** es `Repostar { heroe, asentamiento }` (83): el Líder, con la columna a `radioPuerta` de una plaza de su Facción, rellena los víveres sin bajar de la reserva de trigo (`columna.viveres_llenos`, `repostar.sin_existencias`, `repostar.plaza_cerrada`). **Mientras no exista el polígono de la zona** como entrada/salida de columnas, la misma orden vale para una columna personal (que en el TypeScript reposta sola dentro de la zona); `puedeRepostarEn` solo conoce la plaza propia (las aliadas, `permiteReabastecerAliados`, son del sistema político). Ambos recortes están como filas de paridad.
-> - **Fuera de esta fase:** la derrota de la columna con sus caravanas y el botín (4D), `cargarCaravana`, `alternarReabastecerAliados`, el evento `jugador.marcha_fijada` (no se emite) y la puerta/vetos de las plazas (sistema 5: mientras, entra quien reside o es de la Facción, y los demás según el acceso por relación que fija el dueño, 2026-10-22).
+> - **Fuera de esta fase:** la derrota de la columna con sus caravanas y el botín (4D), `cargarCaravana`, `alternarReabastecerAliados`, el evento `jugador.marcha_fijada` (lo emite desde 4H T5) y la puerta/vetos de las plazas (sistema 5: mientras, entra quien reside o es de la Facción, y los demás según el acceso por relación que fija el dueño, 2026-10-22).
 
 > **Implementado en Rust (2026-10-20, fase 4C: encuentros, persecución e inspección).** `crates/nucleo/src/nucleo/{espacio,persecuciones,inspecciones}.rs`, `crates/militar/src/inspeccion.rs` y `crates/encuentros`; formato de foto **`BAN11`** (`BAN10` se rechaza). Órdenes **91-94**: `Perseguir`, `DejarDePerseguir`, `Inspeccionar` y el andamiaje de administración `FijarRelacion` (alianza, vasallaje, guerra por pareja de Facciones, hasta el sistema 5; solo la alianza cuenta en la 4C).
 >
@@ -255,6 +255,8 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 
 `ejercito.repliegue` y `replegarEjercito` **se retiran** (no hay vuelta a casa).
 
+> **Implementado en Rust (2026-10-23, 4H T5).** «Sin plaza, global del héroe» es, en Rust, **del héroe**: un hecho de columna sin plaza lo oyen los participantes de la columna (los de `ejercitos` y los de la clave `ejercito`, resueltos al emitirlo, así que la columna que se disuelve en la misma orden sigue nombrándolos) y el héroe de las claves `heroe` y `lider`, no todo el mundo (la niebla: contrato 05 §8). Los encuentros los oyen además las dos Facciones de sus claves `faccionA`/`faccionB`; `faccion.relacion`, las dos Facciones. Sigue sin emitirse `ejercito.caravana_cargada`/`_soltada` (no hay `cargarCaravana` ni `soltarCaravana`) ni `ejercito.caravanas_perdidas` (fila de paridad «Eventos (4H, T5)»).
+
 ## 14. Parámetros
 
 **Los bloques de este documento son los valores vigentes de la reconstrucción** (reescritos el 2026-10-19, decisión del autor para el sistema 4): ya no copian `constants.ts`. Respecto al motor TypeScript cambian, tras la calibración (Calibracion_Distancias_Definicion §4):
@@ -365,3 +367,21 @@ Con el motor TypeScript (a rehacer en Rust): `regresando`, `origenAsentamientoId
 > **Implementado en Rust (2026-10-20, fase 4D: atacar).** `Atacar { heroe, objetivo, declara_guerra }` (95) con seis objetivos (`Ejercito`, `Caravana`, `Campamento`, `Asentamiento`, `Pueblo`, `Avanzada`): el héroe sano de la columna ataca lo que tiene a su alcance (el encuentro de 4C o el radio de ataque) y el combate se resuelve al instante con `combate::resolver_*`; el encuentro hostil que una orden pide pasa a combate numérico. Las consecuencias (heridos, mitad del carro del derrotado, botín, chatarra, experiencia de escuadra, deserción) se aplican a las columnas reales; la escolta de una caravana derrotada pierde soldados. Sin Unity (4E) se pierden los últimos carros. Rechazos nuevos `combate.*` y `heroe.herido`. **Recortes:** atacar a un aliado se rechaza, la guerra se declara por pareja de Facciones sin arrastrar aliados y sustituye al vasallaje (anotado en las filas de paridad); el asedio no reúne varias columnas (sin convocatoria).
 
 > **Implementado en Rust (2026-10-23, 4H T4: el informe de inspección en el contrato).** Foto `BAN21`. El informe de una plaza ajena guarda también sus recintos de muralla con alguna celda levantada (nivel, anillo entero y celdas levantadas) y los tres informes (columna, caravana, plaza) llegan al ámbito `HEROE` de quien inspeccionó como `InformeInspeccion` (`insp-<héroe>-<objetivo>`, hasta su `expira_en_ms`; el cliente lo descarta al caducar). Ver el contrato 05 §9.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 4 (`ejercito.caravana_cargada`, `ejercito.caravana_soltada`, `ejercito.caravanas_perdidas`, `logistica.reabastecer_aliados`).
+
+<!-- eventos -->
+```json
+[
+  "asentamiento.encuentro", "asentamiento.observado", "avanzada.encuentro", "caravana.encuentro", "caravana.observada", "columna.formacion_completada",
+  "columna.formacion_disuelta", "columna.formacion_iniciada", "columna.liderazgo_cedido", "columna.observada", "columna.persecucion_abandonada",
+  "columna.persecucion_iniciada", "columna.peticion_caducada", "columna.presa_a_cubierto", "columna.presa_alcanzada", "columna.presa_perdida", "columna.separacion",
+  "columna.union_en_campo", "columna.union_pedida", "columna.union_rechazada", "ejercito.caravana_adjuntada", "ejercito.caravana_aparcada", "ejercito.caravana_cargada",
+  "ejercito.caravana_soltada", "ejercito.caravanas_perdidas", "ejercito.disuelto", "ejercito.en_batalla", "ejercito.encuentro", "ejercito.estacionado", "ejercito.llega",
+  "ejercito.movilizado", "ejercito.reabastecido", "ejercito.refuerzo", "ejercito.sale_de_batalla", "ejercito.sin_viveres", "ejercito.viveres_bajos", "faccion.relacion",
+  "logistica.reabastecer_aliados"
+]
+```
+<!-- /eventos -->

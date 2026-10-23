@@ -254,3 +254,15 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 ## 12. Divergencias
 
 Ninguna abierta.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
+
+<!-- eventos -->
+```json
+[
+  "mercenarios.prestamo", "mercenarios.prestamo_repuesto", "mercenarios.prestamo_retirado", "mercenarios.reclutado", "mercenarios.repostado"
+]
+```
+<!-- /eventos -->

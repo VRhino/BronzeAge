@@ -182,13 +182,14 @@ impl Nucleo {
             let punto = Punto::new((posicion.x + b.posicion.x) / 2, (posicion.y + b.posicion.y) / 2);
             self.estado.contactos.insert((id.min(otra), id.max(otra)));
             self.tr.tocar_todos(Clase::Asentamiento, [id, otra]);
-            self.tr.eventos.push(EventoNucleo {
+            self.tr.emitir(&self.estado, EventoNucleo {
                 codigo: "zona.frontera".into(),
                 en: t,
                 ejercitos: vec![],
                 asentamientos: vec![id.min(otra), id.max(otra)],
                 punto: Some(punto),
                 datos: vec![("faccionA", fa), ("faccionB", fb)],
+                ..Default::default()
             });
         }
     }
@@ -233,7 +234,7 @@ impl Nucleo {
                     return Err(sin_cambios());
                 }
                 self.estado.niveles_faccion.insert(*faccion, *nivel);
-                self.tr.eventos.push(EventoNucleo { codigo: "faccion.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![], punto: None, datos: vec![("faccion", *faccion as i64), ("nivel", *nivel as i64)] });
+                self.tr.emitir(&self.estado, EventoNucleo { codigo: "faccion.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![], punto: None, datos: vec![("faccion", *faccion as i64), ("nivel", *nivel as i64)], ..Default::default() });
                 Ok(None)
             }
             Comando::DarCaravanaFundacion { ejercito } => {
@@ -270,7 +271,7 @@ impl Nucleo {
                     eco.ascenso = None;
                 }
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
-                self.tr.eventos.push(EventoNucleo { codigo: "asentamiento.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("nivel", *nivel as i64)] });
+                self.tr.emitir(&self.estado, EventoNucleo { codigo: "asentamiento.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("nivel", *nivel as i64)], ..Default::default() });
                 Ok(None)
             }
             Comando::AgrandarZona { asentamiento } => {
@@ -311,7 +312,7 @@ impl Nucleo {
                 self.estado.parcelas_ocupadas.insert(parcela, *asentamiento);
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").parcelas.insert(parcela);
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
-                self.tr.eventos.push(EventoNucleo { codigo: "parcela.reclamada".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: Some(centro), datos: vec![("parcela", parcela as i64)] });
+                self.tr.emitir(&self.estado, EventoNucleo { codigo: "parcela.reclamada".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: Some(centro), datos: vec![("parcela", parcela as i64)], ..Default::default() });
                 Ok(Some(parcela as u64))
             }
             Comando::SoltarParcela { asentamiento, parcela } => {
@@ -325,7 +326,7 @@ impl Nucleo {
                 self.estado.parcelas_ocupadas.remove(parcela);
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").parcelas.remove(parcela);
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
-                self.tr.eventos.push(EventoNucleo { codigo: "parcela.liberada".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("parcela", *parcela as i64)] });
+                self.tr.emitir(&self.estado, EventoNucleo { codigo: "parcela.liberada".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("parcela", *parcela as i64)], ..Default::default() });
                 Ok(None)
             }
             _ => unreachable!("solo se llama con órdenes de territorio"),
@@ -369,13 +370,14 @@ impl Nucleo {
         self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;
         self.tr.tocar(Clase::Ejercito, ejercito);
         self.tr.tocar(Clase::Asentamiento, id);
-        self.tr.eventos.push(EventoNucleo {
+        self.tr.emitir(&self.estado, EventoNucleo {
             codigo: "fundacion.asentamiento_fundado".into(),
             en: t,
             ejercitos: vec![ejercito],
             asentamientos: vec![id],
             punto: Some(punto),
             datos: vec![("faccion", faccion as i64)],
+            ..Default::default()
         });
         self.contactos_nuevos(id, t);
         Ok(Some(id))

@@ -544,6 +544,8 @@ Los factores se **multiplican** entre las políticas activas del asentamiento (`
 | `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre vacío = volver a mostrar el id. `asentamiento.renombrado` |
 | `solicitarAscenso { asentamientoId }` | `gobernador` | §11.2. Error `ascenso.invalido` con todos los bloqueos |
 
+> **Implementado en Rust (2026-10-23, 4H T5).** `AlternarAutoConstruccion` emite `construccion.auto_alternada { pausada }`, `AlternarReceta` `construccion.receta_alternada { recurso, pausada }` (el recurso por su índice) y `MejorarEdificio` (`mejorarEdificioAhora`) `construccion.mejora_forzada { edificio }` antes de su `construccion.mejora_iniciada`; los oyen la Facción de la plaza y quien está dentro. Sigue sin emitirse `construccion.yacimiento_agotado` (los yacimientos no se agotan en Rust) ni `asentamiento.renombrado` (sistema 5).
+
 La pausa de la auto-construcción detiene solo la **detección de necesidades nuevas** (§6.2); lo ya pagado, las mejoras automáticas, las recetas y la obra de recintos siguen.
 
 ## 14. Parámetros
@@ -2224,3 +2226,23 @@ Los bloques de parámetros de este documento son los del motor TypeScript. Valor
 | Ritmo de niveles 2-3 | — | aprobado (Doc 4.5); niveles 4-5 con las Eras IV-V, pospuestos |
 
 > **Implementado en Rust (2026-10-23, fase 4H T3c), el interior de la plaza por la sesión.** El almacén y la población se proyectan **en escalones** (sin interpolar): `Existencia.cantidad` con `en_escalones = true`, su tendencia «+N/min» en `por_minuto` y la población entera por clase (`Poblacion`, con la marca de recuperación del hambre). La tendencia es el **neto real del último paso de minuto** de la plaza —producción, recaudación, consumo, mantenimiento y lo que come la guarnición, no el gasto de las órdenes— y se guarda por plaza (`asentamiento::asentamiento::Tendencia` (campo `tendencia` de la economía de la plaza), foto `BAN22`; 29 recursos y 3 clases). Lo escribe `minuto_de_plaza` al cerrar el paso (la diferencia entre el estado antes y después de todo el paso) y ese paso **no marca nada ni sube la versión del mundo**, con sesiones o sin ellas (decisión del autor, 2026-10-23): lo que cambia dentro de la plaza (almacén, población, medidor, nutrición, edificios parados, tendencia y almacén local de sus pueblos) lleva su propia secuencia por plaza, `Nucleo::version_interior` = `(ultimo_minuto − fundado_en) / 60 s`, que viaja en `Asentamiento.version_interior` y sirve a la reanudación de `ASENTAMIENTO`; el contador `version` y el hash del mundo son los mismos con y sin sesiones. Los gastos de órdenes, el fin de obra y el fin de mejora, ascenso o política (en su instante) marcan la plaza como siempre y llegan en su milisegundo.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 2 (`asentamiento.renombrado`, `construccion.yacimiento_agotado`).
+
+<!-- eventos -->
+```json
+[
+  "acarreo.carro_repuesto", "acarreo.llega", "acarreo.sale", "acarreo.vuelve", "asentamiento.ascenso_iniciado", "asentamiento.nivel", "asentamiento.nivel_subio",
+  "asentamiento.renombrado", "asentamiento.ruinas", "avanzada.adoptada", "avanzada.completada", "avanzada.deposito", "avanzada.guarnecida", "avanzada.guarnicion_retirada",
+  "avanzada.materiales_entregados", "avanzada.obra_cancelada", "avanzada.obra_iniciada", "avanzada.obra_marcada", "avanzada.reabastecimiento", "avanzada.sin_dueno",
+  "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.cola_reordenada", "construccion.desencolada",
+  "construccion.edificio_completado", "construccion.edificio_gratuito", "construccion.encolada", "construccion.mejora_completada", "construccion.mejora_forzada",
+  "construccion.mejora_iniciada", "construccion.necesidad_detectada", "construccion.obra_iniciada", "construccion.receta_alternada", "construccion.yacimiento_agotado",
+  "faccion.experiencia", "faccion.nivel", "mantenimiento.colapsado", "mantenimiento.deficit", "mantenimiento.recuperado", "parcela.liberada", "parcela.reclamada",
+  "poblacion.hambruna", "poblacion.primeros_artesanos", "poblacion.primeros_nobles", "politica.activada", "politica.expirada", "pueblo.almacen_lleno", "pueblo.completado",
+  "pueblo.destruido", "pueblo.marcado", "pueblo.materiales_entregados", "pueblo.obra_iniciada", "zona.frontera"
+]
+```
+<!-- /eventos -->

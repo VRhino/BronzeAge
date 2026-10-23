@@ -626,7 +626,7 @@ impl Nucleo {
         for h in antes.iter().copied() {
             self.entrar_en_plaza(t, h, asentamiento);
         }
-        self.emitir_propio(t, "ejercito.guarnece", vec![asentamiento], vec![("ejercito", id as i64), ("escuadrones", escuadrones as i64), ("caravanas", adjuntas as i64), ("heroes", antes.len() as i64)]);
+        self.emitir_nombrando(t, "ejercito.guarnece", vec![asentamiento], antes.clone(), vec![("ejercito", id as i64), ("escuadrones", escuadrones as i64), ("caravanas", adjuntas as i64), ("heroes", antes.len() as i64)]);
         Ok(vec![])
     }
 
@@ -656,7 +656,7 @@ impl Nucleo {
             for h in antes.iter().copied() {
                 self.entrar_en_campamento(t, h, campamento);
             }
-            self.emitir_propio(t, "ejercito.entra_en_campamento", vec![], vec![("ejercito", id as i64), ("campamento", campamento as i64), ("heroes", antes.len() as i64)]);
+            self.emitir_nombrando(t, "ejercito.entra_en_campamento", vec![], antes.clone(), vec![("ejercito", id as i64), ("campamento", campamento as i64), ("heroes", antes.len() as i64)]);
         }
         Ok(vec![])
     }

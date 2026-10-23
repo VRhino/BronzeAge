@@ -228,7 +228,7 @@ impl Nucleo {
     /// Un hecho de la columna: lo oye quien oye a la columna y, si se dan, las plazas a las que se atribuye.
     pub(super) fn evento_de_columna(&mut self, codigo: &'static str, t: Instante, id: u64, plazas: Vec<u64>, datos: Vec<(&'static str, i64)>) {
         let punto = self.estado.ejercitos.get(&id).map(|e| e.posicion_en(t));
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: vec![id], asentamientos: plazas, punto, datos });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: vec![id], asentamientos: plazas, punto, datos, ..Default::default() });
     }
 
     // ───────────────────────────── Alta y baja ─────────────────────────────
@@ -360,7 +360,9 @@ impl Nucleo {
             return;
         }
         self.tr.tocar(Clase::Ejercito, columna);
-        self.evento_de_columna("columna.peticion_caducada", t, columna, vec![], vec![("solicitante", solicitante as i64)]);
+        // Lo oyen la columna y quien lo pidió.
+        let punto = self.estado.ejercitos.get(&columna).map(|e| e.posicion_en(t));
+        self.tr.emitir(&self.estado, EventoNucleo { ejercitos: vec![columna], heroes: vec![solicitante], punto, ..EventoNucleo::nuevo("columna.peticion_caducada", t, vec![("solicitante", solicitante as i64)]) });
     }
 
     /// Programa la caducidad de una petición de unión en campo a su `expira_en`.

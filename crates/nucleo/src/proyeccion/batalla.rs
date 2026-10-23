@@ -88,7 +88,7 @@ fn carros(n: &Nucleo, caravana: u64) -> Vec<pb::CarroEnBatalla> {
         .collect()
 }
 
-fn contexto(n: &Nucleo, c: &Contexto) -> pb::ContextoEstrategico {
+pub(super) fn contexto(n: &Nucleo, c: &Contexto) -> pb::ContextoEstrategico {
     use pb::contexto_estrategico::Tipo;
     let tipo = match c {
         Contexto::Asedio { asentamiento } => Tipo::Asedio(pb::ContextoAsedio { asentamiento_id: ids::asentamiento(u64::from(*asentamiento)) }),
@@ -191,13 +191,17 @@ pub fn asignacion_sin_tokens(n: &Nucleo, b: &Batalla, a: &Asignacion) -> pb::Bat
     }
 }
 
-/// El resultado aplicado, tal como lo mandó Unity (se guarda entero en la batalla).
-pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
-    let razon = match r.razon {
+/// Por qué ganó el que ganó.
+pub(super) fn razon(r: Razon) -> pb::RazonVictoria {
+    match r {
         Razon::ObjetivosCapturados => pb::RazonVictoria::ObjetivosCapturados,
         Razon::Aniquilacion => pb::RazonVictoria::Aniquilacion,
         Razon::TiempoAgotado => pb::RazonVictoria::TiempoAgotado,
-    };
+    }
+}
+
+/// El resultado aplicado, tal como lo mandó Unity (se guarda entero en la batalla).
+pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
     let botin = |b: &Botin| pb::Botin {
         objetos: b.objetos.iter().map(|o| pb::ObjetoBotin { item_definition_id: o.definicion.clone(), cantidad: o.cantidad.max(0) as u32, item_instance_id: o.instancia.clone(), estadisticas: Vec::new() }).collect(),
         monedas: Some(pb::Monedas { bronce: b.monedas.bronce.max(0) as u64, plata: b.monedas.plata.max(0) as u64, oro: b.monedas.oro.max(0) as u64 }),
@@ -211,7 +215,7 @@ pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
         inicio_ms: r.inicio,
         fin_ms: r.fin,
         ganador: lado(r.ganador) as i32,
-        razon: razon as i32,
+        razon: razon(r.razon) as i32,
         objetivos: r.objetivos.iter().map(|(id, por)| pb::ObjetivoResultado { objetivo_id: id.clone(), capturado_por: por.map(|l| lado(l) as i32) }).collect(),
         por_escuadra: r
             .por_escuadra

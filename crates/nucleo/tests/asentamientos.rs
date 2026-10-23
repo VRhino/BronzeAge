@@ -476,6 +476,16 @@ fn una_plaza_que_se_arruina_libera_sus_parcelas_y_nodos_y_su_evento_de_minuto_se
     assert_eq!(ruinas.len(), 1);
     assert_eq!(ruinas[0].1, vec![id]);
     assert!(ruinas[0].2[0].1 != 0, "lleva los recursos que no pudo pagar");
+    // Los hechos de la cascada de la ruina siguen llegando a la Facción de la plaza, que ya no está en el estado (4H T5), y la crónica canta las ruinas.
+    let hechos: Vec<&nucleo::EventoNucleo> = n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).collect();
+    let de = |codigo: &str| hechos.iter().filter(|e| e.codigo == codigo).copied().collect::<Vec<_>>();
+    assert_eq!(de("asentamiento.ruinas")[0].facciones, vec![1]);
+    let disperso = de("bandidos.campamento_disperso");
+    assert!(disperso.len() == 1 && disperso[0].facciones == vec![1] && disperso[0].dato("asentamientoArruinado") == Some(id as i64), "su campamento de bandidos se dispersa: {disperso:?}");
+    let derrota = de("faccion.derrotada");
+    assert!(derrota.len() == 1 && derrota[0].facciones == vec![1], "{derrota:?}");
+    let canto = de("cronica.entrada").into_iter().find(|e| e.valores.iter().any(|(_, d)| d == &nucleo::Dato::Texto("asentamiento.ruinas".into()))).expect("la crónica canta las ruinas");
+    assert!(canto.publico && canto.facciones.is_empty());
 
     // La plaza desapareció y liberó todo lo suyo.
     assert!(!n.estado().asentamientos.contains_key(&id));

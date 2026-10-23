@@ -2,9 +2,10 @@
 //
 // Un evento es un HECHO que ya ocurrió (narración, avisos, crónica), no el cambio de estado: el estado viaja como
 // entidades (entities.proto) en la misma `Delta`. Un cliente no necesita interpretar eventos para estar al día.
-// El catálogo de códigos (≈180, familia.nombre: comercio.*, diplomacia.*, construccion.*, ejercito.*, columna.*, aedas.*,
-// jugador.*, asentamiento.*, mercenarios.*, combate.*, faccion.*, heroe.*, fundacion.*, bandidos.*, tecnologia.*...) y la forma
-// del payload de cada uno viven en Docs/Coordinacion/05_Contrato_de_Sesion.md §Eventos.
+// El catálogo de códigos (familia.nombre: comercio.*, diplomacia.*, construccion.*, ejercito.*, columna.*, aedas.*, jugador.*,
+// asentamiento.*, mercenarios.*, combate.*, faccion.*, heroe.*, fundacion.*, bandidos.*, tecnologia.*...) es el bloque
+// `<!-- eventos -->` de cada documento de Docs/Mechanics, y la forma del payload de cada uno, sus tablas de eventos
+// (Docs/Coordinacion/05_Contrato_de_Sesion.md §8).
 //
 // FORMA (decisión del autor, 2026-10-22): TODOS los eventos llevan el `payload` genérico (`google.protobuf.Struct` con los campos
 // documentados para cada código: texto, número o lista). Además, los QUINCE que mueven la interfaz llevan un mensaje TIPADO en
@@ -27,6 +28,7 @@ message EventoDominio {
   optional string asentamiento_id = 4;   // a quién se atribuye (decide quién lo oye)
   repeated string heroes_ids = 5;        // héroes nombrados: lo oyen aunque no vean la plaza
   google.protobuf.Struct payload = 6;
+  repeated string facciones_ids = 7;     // Facciones que lo oyen enteras (la dueña de la plaza, los dos bandos de un combate...)
   // El mensaje tipado de los eventos que mueven la interfaz (ausente en el resto). Código → mensaje:
   oneof tipado {
     BatallaAbierta batalla_abierta = 10;             // batalla.abierta, evento_pve.abierta

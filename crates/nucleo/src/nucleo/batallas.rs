@@ -631,7 +631,7 @@ impl Nucleo {
         }
         let ejercitos = b.bloqueo.ejercitos.iter().copied().filter(|e| self.estado.ejercitos.contains_key(e)).collect();
         let codigo = hecho.codigo(pve);
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos, asentamientos: plazas, punto: Some(b.punto), datos });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos, asentamientos: plazas, punto: Some(b.punto), datos, ..Default::default() });
     }
 
     /// Las columnas de un bando que siguen en la batalla, en el orden del bloqueo: la primera es la que abrió o recibió el combate.
@@ -708,9 +708,10 @@ impl Nucleo {
                 if self.estado.batallas.batallas.get(&id).is_some_and(|b| b.retirable(&cr, t)) {
                     let b = self.estado.batallas.batallas.remove(&id).expect("existe");
                     self.tr.tocar(Clase::Batalla, id);
+                    // Sin esto la retirada cambiaría el estado sin dejar versión. Lo oyen las Facciones de los dos bandos, que la tenían.
+                    let facciones = [b.ticket.atacante.faccion, b.ticket.defensor.faccion].into_iter().flatten().collect();
                     self.retiradas.push(b);
-                    // Sin esto la retirada cambiaría el estado sin dejar versión.
-                    self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed("batalla.retirada"), en: t, ejercitos: vec![], asentamientos: vec![], punto: None, datos: vec![("batalla", id as i64)] });
+                    self.tr.emitir(&self.estado, EventoNucleo { facciones, ..EventoNucleo::nuevo("batalla.retirada", t, vec![("batalla", id as i64)]) });
                 }
             }
         }

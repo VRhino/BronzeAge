@@ -54,6 +54,17 @@ impl Nucleo {
         }
     }
 
+    /// Un hecho de la convocatoria `(faccion, lugar)`: lo oyen su Facción (el canon la reparte «a su lugar y su Facción»: también si se convoca en un campamento) y quien está dentro de su plaza.
+    /// En un campamento, `campamento` dice cuál.
+    fn hecho_de_convocatoria(&mut self, t: Instante, codigo: &'static str, (faccion, lugar): (u32, Lugar), mut datos: Vec<(&'static str, i64)>) {
+        if let Lugar::Campamento(c) = lugar {
+            datos.push(("campamento", c as i64));
+        }
+        let asentamientos = Self::plazas_del_lugar(lugar);
+        let punto = asentamientos.first().and_then(|p| self.estado.asentamientos.get(p)).map(|a| a.posicion);
+        self.tr.emitir(&self.estado, EventoNucleo { asentamientos, punto, facciones: vec![faccion], ..EventoNucleo::nuevo(codigo, t, datos) });
+    }
+
     fn lugar_del_heroe(&self, heroe: u64) -> Option<Lugar> {
         lugar_de(self.heroe(heroe)?.heroe.presencia.ubicacion)
     }
@@ -91,7 +102,7 @@ impl Nucleo {
                 let c = Convocatoria::convocar(&todas, id, *heroe, lugar, faccion, *politica, seleccion.clone(), t).map_err(de_convocatoria)?;
                 self.comprobar_seleccion(t, *heroe, c.lugar, &seleccion)?;
                 self.estado.siguiente_id += 1;
-                self.emitir_propio(t, "convocatoria.convocada", Self::plazas_del_lugar(c.lugar), vec![("convocatoria", id as i64), ("lider", *heroe as i64), ("politica", crate::codec_columna::politica_a_u8(*politica) as i64)]);
+                self.hecho_de_convocatoria(t, "convocatoria.convocada", (c.faccion, c.lugar), vec![("convocatoria", id as i64), ("lider", *heroe as i64), ("politica", crate::codec_columna::politica_a_u8(*politica) as i64)]);
                 self.estado.militar.convocatorias.insert(id, c);
                 self.tr.tocar(Clase::Convocatoria, id);
                 Ok(vec![id])
@@ -104,16 +115,16 @@ impl Nucleo {
                 let seleccion = Self::lineas_a_seleccion(escuadras, carga);
                 let union = c.unirse(&mr, &aspirante, seleccion.clone(), t).map_err(de_convocatoria)?;
                 self.comprobar_seleccion(t, *heroe, c.lugar, &seleccion)?;
-                let plazas = Self::plazas_del_lugar(c.lugar);
+                let del = (c.faccion, c.lugar);
                 self.estado.militar.convocatorias.insert(*convocatoria, c);
                 self.tr.tocar(Clase::Convocatoria, *convocatoria);
                 match union {
-                    Union::Unido => self.emitir_propio(t, "convocatoria.unido", plazas, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64)]),
+                    Union::Unido => self.hecho_de_convocatoria(t, "convocatoria.unido", del, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64)]),
                     Union::Pedida { expira_en } => {
                         self.estado.generaciones.subir(entidad_peticion_de_convocatoria(*heroe));
                         let clave = self.estado.generaciones.clave(entidad_peticion_de_convocatoria(*heroe));
                         self.estado.cola.programar(expira_en, PRIO_LLEGADA, clave, Carga::Militar(SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria: *convocatoria }));
-                        self.emitir_propio(t, "convocatoria.union_pedida", plazas, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64), ("expiraEn", expira_en)]);
+                        self.hecho_de_convocatoria(t, "convocatoria.union_pedida", del, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64), ("expiraEn", expira_en)]);
                     }
                 }
                 Ok(vec![])
@@ -122,7 +133,7 @@ impl Nucleo {
                 self.autorizar_heroe(p, *heroe, false)?;
                 let mut c = self.estado.militar.convocatorias.get(convocatoria).cloned().ok_or_else(|| Respuesta::rechazo(rechazos::CONVOCATORIA_DESCONOCIDA, format!("convocatoria-{convocatoria}"), v))?;
                 let peticion = c.retirar_peticion(*heroe, *solicitante, t).map_err(de_convocatoria)?;
-                let plazas = Self::plazas_del_lugar(c.lugar);
+                let del = (c.faccion, c.lugar);
                 if *aceptar {
                     // Se revalida todo con la selección de la petición: sigue dentro del lugar, es de la misma Facción y puede salir.
                     let hn = self.heroe(*solicitante).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(*solicitante), v))?;
@@ -134,7 +145,7 @@ impl Nucleo {
                 self.tr.tocar(Clase::Convocatoria, *convocatoria);
                 self.estado.generaciones.subir(entidad_peticion_de_convocatoria(*solicitante));
                 let codigo = if *aceptar { "convocatoria.unido" } else { "convocatoria.union_rechazada" };
-                self.emitir_propio(t, codigo, plazas, vec![("convocatoria", *convocatoria as i64), ("heroe", *solicitante as i64)]);
+                self.hecho_de_convocatoria(t, codigo, del, vec![("convocatoria", *convocatoria as i64), ("heroe", *solicitante as i64)]);
                 Ok(vec![])
             }
             Comando::CambiarSeleccionDeConvocatoria { heroe, escuadras, carga } => {
@@ -143,20 +154,20 @@ impl Nucleo {
                 let seleccion = Self::lineas_a_seleccion(escuadras, carga);
                 c.cambiar_seleccion(*heroe, seleccion.clone()).map_err(de_convocatoria)?;
                 self.comprobar_seleccion(t, *heroe, c.lugar, &seleccion)?;
-                let (id, plazas) = (c.id, Self::plazas_del_lugar(c.lugar));
+                let (id, del) = (c.id, (c.faccion, c.lugar));
                 self.estado.militar.convocatorias.insert(id, c);
                 self.tr.tocar(Clase::Convocatoria, id);
-                self.emitir_propio(t, "convocatoria.seleccion_cambiada", plazas, vec![("convocatoria", id as i64), ("heroe", *heroe as i64)]);
+                self.hecho_de_convocatoria(t, "convocatoria.seleccion_cambiada", del, vec![("convocatoria", id as i64), ("heroe", *heroe as i64)]);
                 Ok(vec![])
             }
             Comando::SepararseDeConvocatoria { heroe } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 let mut c = self.convocatoria_del_heroe(*heroe)?.clone();
                 c.separarse(*heroe).map_err(de_convocatoria)?;
-                let (id, plazas) = (c.id, Self::plazas_del_lugar(c.lugar));
+                let (id, del) = (c.id, (c.faccion, c.lugar));
                 self.estado.militar.convocatorias.insert(id, c);
                 self.tr.tocar(Clase::Convocatoria, id);
-                self.emitir_propio(t, "convocatoria.separado", plazas, vec![("convocatoria", id as i64), ("heroe", *heroe as i64)]);
+                self.hecho_de_convocatoria(t, "convocatoria.separado", del, vec![("convocatoria", id as i64), ("heroe", *heroe as i64)]);
                 Ok(vec![])
             }
             Comando::CancelarConvocatoria { heroe } => {
@@ -168,7 +179,7 @@ impl Nucleo {
                 c.peticiones.iter().for_each(|x| {
                     self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
                 });
-                self.emitir_propio(t, "convocatoria.cancelada", Self::plazas_del_lugar(c.lugar), vec![("convocatoria", c.id as i64), ("lider", *heroe as i64), ("avisados", avisados.len() as i64)]);
+                self.hecho_de_convocatoria(t, "convocatoria.cancelada", (c.faccion, c.lugar), vec![("convocatoria", c.id as i64), ("lider", *heroe as i64), ("avisados", avisados.len() as i64)]);
                 Ok(vec![])
             }
             Comando::PartirConvocatoria { heroe } => self.partir_convocatoria(t, p, *heroe),
@@ -235,8 +246,8 @@ impl Nucleo {
             return;
         }
         self.tr.tocar(Clase::Convocatoria, convocatoria);
-        let plazas = Self::plazas_del_lugar(c.lugar);
-        self.emitir_propio(t, "convocatoria.peticion_caducada", plazas, vec![("convocatoria", convocatoria as i64), ("heroe", solicitante as i64)]);
+        let del = (c.faccion, c.lugar);
+        self.hecho_de_convocatoria(t, "convocatoria.peticion_caducada", del, vec![("convocatoria", convocatoria as i64), ("heroe", solicitante as i64)]);
     }
 }
 

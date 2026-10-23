@@ -751,7 +751,7 @@ Las cifras de `MERCENARIOS.mercado` (`cadaHoras`, `proporcionRepone`, `topePorBi
 
 En el instante del evento de ruina (antes de cualquier evento de comercio del mismo instante, prioridad 5 frente a 6), para la plaza `R` destruida:
 
-- Su **campamento de bandidos** (el que nació de esa plaza, `asentamientoId = R`) desaparece con el evento `bandidos.campamento_disperso { campamentoId, asentamientoArruinadoId }`.
+- Su **campamento de bandidos** (el que nació de esa plaza, `asentamientoId = R`) desaparece con el evento `bandidos.campamento_disperso { campamentoId, asentamientoArruinadoId }`. **Implementado en Rust (2026-10-23, 4H T5):** se emite (`campamento`, `asentamientoArruinado` y su sitio); lo oye la Facción de la plaza arruinada, como el resto de la cascada: el núcleo recuerda durante la transición de quién era la plaza que ya no está (`Transicion::arruinadas`).
 - Sus **trueques** `activo` o `propuesto` pasan a `expirado` **sin penalizar a nadie** (evento `comercio.trueque_cancelado` a la plaza socia).
 - Las caravanas, salvo las `construccion` y las `adjunta` (siguen su propio camino):
   - **Salían de `R`** ⇒ se **pierden** (`comercio.caravana_perdida`), su escolta vuelve al campamento.
@@ -923,3 +923,21 @@ Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_
 > **Implementado en Rust (2026-10-22, decisiones del autor sobre la quinta ronda).** Foto `BAN19`. Cuando el acoso de bandidos va a Unity, entran **todas** las caravanas adjuntas a la columna que son presa, no solo una: todas quedan `EnBatalla`, Unity dice los carros perdidos de cada una, la que pierde todos desaparece (con su carga, que no se lleva nadie) y la escolta cedida de todas ellas queda a 0 si ganan los bandidos. Al acabar, las que siguen vuelven a `Adjunta`. Ver [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4.
 
 > **Implementado en Rust (2026-10-21, fase 4E).** Contra una caravana atacada por un humano la batalla se juega en Unity: la caravana queda apartada (`apartar_caravana`: plan en pausa, `EnBatalla`) y al acabar vuelve a su viaje con el plan desplazado; si gana el atacante, Unity dice qué carros se pierden (`carros_perdidos`, por su posición en la lista de carros) y el servidor aplica `caer_caravana` con ellos: en una disputa (A) los carros perdidos con su animal y su carga, en un aguante (B) el 70 % de la carga y la mitad de los carros, la escolta a 0 y de vuelta al campamento de su héroe y, sin carros, la caravana desaparece (con el 30 % salvado del aguante al almacén de su plaza). Detalle: [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md).
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
+
+<!-- eventos -->
+```json
+[
+  "comercio.caravana_animal_comprado", "comercio.caravana_cancelada", "comercio.caravana_carro_agregado", "comercio.caravana_carro_movido", "comercio.caravana_construida",
+  "comercio.caravana_en_batalla", "comercio.caravana_en_casa", "comercio.caravana_enviada_al_origen", "comercio.caravana_escolta_cedida",
+  "comercio.caravana_escolta_retirada", "comercio.caravana_llega", "comercio.caravana_perdida", "comercio.caravana_preparando", "comercio.caravana_reserva",
+  "comercio.caravana_sale", "comercio.caravana_sale_de_batalla", "comercio.caravana_vuelve", "comercio.carga_caravana_aparcada", "comercio.carros_perdidos",
+  "comercio.entrega_escoltada", "comercio.flota_traspasada", "comercio.peaje_paso", "comercio.trueque_aceptado", "comercio.trueque_cancelado", "comercio.trueque_cumplido",
+  "comercio.trueque_expirado", "comercio.trueque_propuesto", "comercio.trueque_rechazado", "mercado.comercio_en_plaza", "mercado.orden_cancelada",
+  "mercado.orden_colocada", "mercado.orden_expirada", "mercenarios.comprado", "mercenarios.repuesto", "reputacion.cambio", "reputacion.umbral_bajo"
+]
+```
+<!-- /eventos -->

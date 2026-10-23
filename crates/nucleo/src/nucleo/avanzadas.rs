@@ -149,7 +149,7 @@ impl Nucleo {
 
     /// Cuenta un hecho de la avanzada: lo oye la plaza madre, si la hay.
     fn hecho_de_avanzada(&mut self, t: Instante, codigo: &'static str, madre: Option<u64>, punto: Punto, datos: Vec<(&'static str, i64)>) {
-        self.tr.eventos.push(EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: vec![], asentamientos: madre.into_iter().collect(), punto: Some(punto), datos });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: vec![], asentamientos: madre.into_iter().collect(), punto: Some(punto), datos, ..Default::default() });
         self.tr.tocar_todos(Clase::Asentamiento, madre);
     }
 

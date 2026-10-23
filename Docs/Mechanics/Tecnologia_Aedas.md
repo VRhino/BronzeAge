@@ -244,6 +244,8 @@ No es estado: es una **vista de los eventos**. Se calcula en `exito` sobre los h
 
 La variante de una frase es determinista: `hash(clave) mod nº de opciones`, con `h = (h·31 + código del carácter) mod 2³²`.
 
+> **Implementado en Rust (2026-10-23, 4H T5).** `nucleo/cronica.rs`: al cerrar cada versión, de sus hechos sale `cronica.entrada { tipo, faccionIds, asentamientoId?, nivel? }` **público** (lo oyen todos; sin sitio ni nombrados), de `asentamiento.conquistada` (la conquista por números y por Unity: la de Unity no emite `combate.asedio_conquista`), `asentamiento.ruinas`, `fundacion.asentamiento_fundado`, `faccion.guerra_declarada` (el equivalente de `diplomacia.guerra_declarada` mientras no haya sistema político) y `asentamiento.nivel_subio` con la regla de la primera plaza del mundo desde el nivel 3. El contrato no lleva texto: la frase y su variante las compone el cliente. Faltan las fuentes de la diplomacia (sistema 5) y los públicos de la tecnología y los Aedas (sistema 6).
+
 ## 9. Comandos y permisos
 
 | Comando | Quién | Qué |
@@ -1423,3 +1425,17 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
 ## 14. Divergencias
 
 Ninguna abierta. Las **Eras IV y V** son diseño a medias aún sin implementar (no es una divergencia: el código solo llega a la III).
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 15 (`aedas.canta_descubrimiento`, `aedas.epica_abandonada`, `aedas.epica_capitulo`, `aedas.epica_cumplida`, `aedas.epica_empieza`, `aedas.epica_tecnologia`, `aedas.residente_llega`, `aedas.residente_se_va`, `aedas.revela`, `aedas.venta`, `alijo.abierto`, `era.comienza`, `tecnologia.adoptada`, `tecnologia.aparece`, `tecnologia.logro`).
+
+<!-- eventos -->
+```json
+[
+  "aedas.canta_descubrimiento", "aedas.epica_abandonada", "aedas.epica_capitulo", "aedas.epica_cumplida", "aedas.epica_empieza", "aedas.epica_tecnologia",
+  "aedas.residente_llega", "aedas.residente_se_va", "aedas.revela", "aedas.venta", "alijo.abierto", "cronica.entrada", "era.comienza", "faccion.tecnologias",
+  "tecnologia.adoptada", "tecnologia.aparece", "tecnologia.logro"
+]
+```
+<!-- /eventos -->
