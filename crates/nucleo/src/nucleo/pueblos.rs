@@ -20,7 +20,7 @@
 //! guarnición de mineros y el saqueo son del sistema militar.
 
 use super::*;
-use crate::nucleo::mercado::{id32, RADIO_PUERTA};
+use crate::nucleo::mercado::id32;
 use asentamiento::catalogo::Tipo;
 use asentamiento::pueblos::{ErrorPueblo, Pueblo};
 use asentamiento::Costo;
@@ -111,6 +111,11 @@ impl Nucleo {
                 if !self.en_zona(*asentamiento, pos) {
                     return Err(rechazo(rechazos::PUEBLO_FUERA_DE_LA_ZONA, format!("el nodo {nodo} cae fuera de la zona de as-{asentamiento}")));
                 }
+                // Sin ruta por tierra a la madre el carro no podría acarrear nunca: no se funda (decisión del autor, 2026-10-23).
+                let madre = self.estado.asentamientos[asentamiento].posicion;
+                if self.camino_sin_red(pos, madre).is_none() {
+                    return Err(rechazo(rechazos::PUEBLO_SIN_RUTA, format!("el nodo {nodo} no tiene ruta por tierra hasta as-{asentamiento}")));
+                }
                 let carro = acarreo::coste_reposicion(&self.estado.reglas.economia.comercio.flota);
                 let id = self.estado.siguiente_id;
                 let mut ev = vec![];
@@ -133,7 +138,7 @@ impl Nucleo {
                     return Err(rechazo(rechazos::PUEBLO_FACCION_AJENA, "la obra es de otra Facción".into()));
                 }
                 let sitio = self.posicion_de_pueblo(pu.id).expect("un pueblo está sobre un nodo del mapa");
-                if e.posicion_en(t).dist(sitio) > RADIO_PUERTA {
+                if e.posicion_en(t).dist(sitio) > self.radio_puerta() {
                     return Err(rechazo(rechazos::PUEBLO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la obra".into()));
                 }
                 let disponible: Costo = self.material_de_columna(*ejercito).into_iter().collect();
@@ -270,10 +275,8 @@ impl Nucleo {
     }
 
     /// El carro del pueblo sale hacia la madre **si está en casa y el almacén local está lleno** (nada recurre por pueblo ocioso: se llama cuando
-    /// el almacén se llena, cuando el carro vuelve y cuando se repone). Lleva la capacidad entera, por la ruta fija pueblo → madre. Sin ruta
-    /// por tierra no sale.
-    // DUDA: un pueblo sin ruta por tierra a su madre queda parado (el almacén lleno avisa una sola vez y nada reintenta); el relieve de la
-    // zona de una plaza casi siempre la permite.
+    /// el almacén se llena, cuando el carro vuelve y cuando se repone). Lleva la capacidad entera, por la ruta fija pueblo → madre (fundarlo ya exige
+    /// que la haya: `pueblo.sin_ruta`).
     pub(super) fn salir_acarreo(&mut self, plaza: u64, pueblo: u64, t: Instante) {
         let Some(a) = self.estado.asentamientos.get(&plaza) else { return };
         let Some(pu) = a.economia.pueblo(pueblo) else { return };

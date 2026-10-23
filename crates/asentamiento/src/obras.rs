@@ -169,11 +169,8 @@ impl Asentamiento {
         }
     }
 
-    /// Empieza las mejoras automáticas (siempre dejando una cuadrilla libre para construir).
-    ///
-    /// DUDA: el documento exige el hueco por adelantado solo a la mejora manual; la automática arranca sin comprobarlo (como en TypeScript),
-    /// así que una Granja sin hueco puede retener su cuadrilla indefinidamente. Lo conservador era seguir el documento al pie de la letra;
-    /// si en las pruebas con bots pasa a menudo, comprobar el hueco también al arrancar la automática.
+    /// Empieza las mejoras automáticas (siempre dejando una cuadrilla libre para construir). Como la manual, exige el hueco de la huella
+    /// nueva al arrancar (Economia_Construccion §7): una Granja sin hueco no arranca y no retiene cuadrilla.
     pub(crate) fn iniciar_mejoras_automaticas(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, reserva: &[Mil; 29], ev: &mut Vec<Evento>) {
         let maxc = r.construccion.necesidades.maximo_en_construccion_simultanea;
         let mut libres = maxc.saturating_sub(self.edificios.cuadrillas_ocupadas()).saturating_sub(1);
@@ -186,7 +183,8 @@ impl Asentamiento {
             }
             let (tipo, nivel) = (self.edificios[i].tipo, self.edificios[i].nivel_interno);
             let costo = r.catalogo.tipo(tipo).nivel(nivel + 1).map(|n| n.costo_mejora.clone()).unwrap_or_default();
-            if !self.puede_iniciar(r, tipo, &costo, reserva) || !self.almacen.pagar(&costo) {
+            let id = self.edificios[i].id;
+            if !self.puede_iniciar(r, tipo, &costo, reserva) || !x.sitios.hueco_al_mejorar(id, tipo, nivel + 1, &self.urbano(r)) || !self.almacen.pagar(&costo) {
                 continue;
             }
             let completa_en = t + self.minutos_de_mejora(r, &self.edificios[i]) * MS_POR_MINUTO;
@@ -244,11 +242,12 @@ impl Asentamiento {
         if self.edificios.en_cola() >= c.necesidades.maximo_en_cola {
             return Err(ErrorObra::ColaLlena);
         }
-        let Some(fuente) = x.sitios.proponer(tipo, &self.urbano(r)) else { return Err(ErrorObra::SinSitio) };
+        // Los recursos antes que el sitio: preguntar por sitio puede crear un ancla, y una orden rechazada no deja rastro.
         let reserva = self.reserva(r, x, false);
         if !self.puede_iniciar(r, tipo, &def.costo, &reserva) {
             return Err(ErrorObra::RecursosInsuficientes);
         }
+        let Some(fuente) = self.proponer(x, tipo, &self.urbano(r), ev) else { return Err(ErrorObra::SinSitio) };
         // El sitio se toma antes de pagar: si ya no queda, no se cobra.
         let id = self.siguiente_edificio;
         self.siguiente_edificio += 1;

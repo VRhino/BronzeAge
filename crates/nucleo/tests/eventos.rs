@@ -121,6 +121,22 @@ fn hecho(codigo: &'static str, plaza: Option<u64>, columna: Option<u64>, datos: 
     EventoNucleo { asentamientos: plaza.into_iter().collect(), ejercitos: columna.into_iter().collect(), ..EventoNucleo::nuevo(codigo, 1_000, datos) }
 }
 
+/// El payload genérico lleva los ids del contrato, con la clave terminada en `Id`, como los tipados (decisión del autor, 2026-10-24); lo que no nombra una entidad, tal cual.
+#[test]
+fn el_payload_generico_lleva_los_ids_del_contrato() {
+    let n = comun::nucleo(5, 5);
+    let campo = |ev: &EventoNucleo, k: &str| nucleo::proyeccion::eventos::evento_dominio(&n, ev, 1).payload.unwrap().fields.get(k).and_then(|v| v.kind.clone());
+    let texto = |s: &str| Some(Kind::StringValue(s.into()));
+    let ev = hecho("tropas.reclutadas", Some(3), Some(7), vec![("heroe", 5), ("escuadra", 9), ("reclutados", 12), ("faccion", 2)]);
+    assert_eq!((campo(&ev, "heroeId"), campo(&ev, "escuadraId"), campo(&ev, "faccionId"), campo(&ev, "ejercitoId")), (texto("heroe-5"), texto("esc-9"), texto("f-2"), texto("ej-7")));
+    assert_eq!((campo(&ev, "heroe"), campo(&ev, "reclutados")), (None, Some(Kind::NumberValue(12.0))), "sin el número suelto; lo que no es un id, tal cual");
+    // Un campamento es de bandidos en sus hechos y de mercenarios en los demás; un edificio, de la plaza del hecho.
+    assert_eq!(campo(&hecho("bandidos.campamento_aparece", None, None, vec![("campamento", 4)]), "campamentoId"), texto("band-4"));
+    assert_eq!(campo(&hecho("heroe.creado", None, None, vec![("campamento", 4)]), "campamentoId"), texto("camp-4"));
+    assert_eq!(campo(&hecho("construccion.edificio_completado", Some(3), None, vec![("edificio", 8)]), "edificioId"), texto("ed-3-8"));
+    assert_eq!(campo(&hecho("batalla.asignada", None, None, vec![("batalla", 4)]), "battleId"), Some(Kind::StringValue(n.uuid_de_batalla(4))));
+}
+
 /// Cada uno de los quince mensajes tipados sale de su código (los de batalla también con el prefijo `evento_pve.`) con lo que dicen sus datos traducido a ids del contrato, y el
 /// `EventoDominio` entero vuelve igual de sus bytes. Un hecho que no mueve la interfaz no lleva tipado.
 #[test]
@@ -412,6 +428,23 @@ async fn cada_hecho_llega_una_sola_vez_a_quien_lo_oye_y_por_su_ambito() {
     let codigos = |quien: &str| suyos(quien).into_iter().map(|(_, c)| c).collect::<std::collections::BTreeSet<_>>();
     assert!(["ana", "beto", "gus", "hugo"].iter().all(|q| codigos(q).is_subset(&codigos("admin"))), "la administración lo oye todo");
     assert_eq!(codigos("gus"), ["cronica.entrada".to_owned(), "faccion.relacion".to_owned()].into_iter().collect());
+    w.parar().await;
+}
+
+/// Los hechos de una plaza los oye también quien está dentro sin ser de su Facción (un visitante, aliado o neutral), por su `HEROE` (decisión del autor, 2026-10-24).
+#[tokio::test]
+async fn el_visitante_que_esta_dentro_de_una_plaza_oye_sus_hechos() {
+    let m = con_mundo!();
+    let mut x = escenario(m);
+    let (a, gus) = (x.a, x.gus);
+    x.ok("admin", Comando::ColocarHeroe { heroe: gus, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    let w = arrancar_con(x.n).await;
+    let (mut ana_c, _, _) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    let (mut gus_c, _, _) = w.conectar(hola("ok:gus", TipoCliente::ClienteUnity)).await;
+    let (_, r) = dar_todo(&mut ana_c, "p1", orden::Cuerpo::AlternarAutoConstruccion(pb::OrdenAlternarAutoConstruccion { asentamiento_id: ids::asentamiento(a), pausada: false })).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    let oido = oidos(&pendiente(&mut gus_c).await);
+    assert_eq!(oido.iter().filter(|(_, c)| c == "construccion.auto_alternada").map(|(a, _)| a.clone()).collect::<Vec<_>>(), [format!("HEROE:{}", ids::heroe(gus))], "{oido:?}");
     w.parar().await;
 }
 

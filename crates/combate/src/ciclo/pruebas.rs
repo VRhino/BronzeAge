@@ -397,6 +397,19 @@ fn una_salida_con_escuadras_ajenas_repetidas_o_que_no_cierran_se_rechaza_sin_cam
 }
 
 #[test]
+fn una_salida_en_curso_que_omite_una_escuadra_autorizada_se_rechaza_entera() {
+    let mut b = en_curso(CAMPAL);
+    b.unirse(3_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[(40, 25), (41, 10)])], Some(300)).unwrap();
+    let foto = b.clone();
+    for escuadras in [&[][..], &[(40, 20, 5)], &[(41, 10, 0)]] {
+        assert_eq!(b.registrar_salida(r(), 4_000, "srv", salida(3, MotivoSalida::Eliminado, true, escuadras, 0)), Err(ErrorBatalla::SalidaIncompleta), "{escuadras:?}");
+    }
+    assert_eq!(b, foto, "nada cambia");
+    let Ok(Efecto::Aplicado(s)) = b.registrar_salida(r(), 4_000, "srv", salida(3, MotivoSalida::Eliminado, true, &[(41, 10, 0), (40, 20, 5)], 0)) else { panic!() };
+    assert_eq!(s.bajas, vec![(41, 10), (40, 20)], "con todas, en cualquier orden");
+}
+
+#[test]
 fn el_motivo_tiene_que_corresponder_al_estado_y_el_heroe_combatir() {
     let mut asignada = asignada_con_tres();
     assert_eq!(asignada.registrar_salida(r(), 2_100, "srv", salida(3, MotivoSalida::Eliminado, true, &[], 0)), Err(ErrorBatalla::EstadoInvalido), "eliminado solo con la partida en curso");
@@ -411,9 +424,9 @@ fn el_motivo_tiene_que_corresponder_al_estado_y_el_heroe_combatir() {
 fn si_sale_quien_la_inicio_pasa_al_primer_atacante_que_queda() {
     let mut b = en_curso(CAMPAL);
     b.unirse(3_000, Lado::Atacante, vec![part(3, Controlador::Humano, &[]), part(4, Controlador::Bot, &[])], Some(300)).unwrap();
-    b.registrar_salida(r(), 4_000, "srv", salida(1, MotivoSalida::Desconexion, false, &[], 0)).unwrap();
+    b.registrar_salida(r(), 4_000, "srv", salida(1, MotivoSalida::Desconexion, false, &[(10, 25, 0)], 0)).unwrap();
     assert_eq!(b.iniciada_por, 3);
-    b.registrar_salida(r(), 4_001, "srv", salida(2, MotivoSalida::Abandono, false, &[], 0)).unwrap();
+    b.registrar_salida(r(), 4_001, "srv", salida(2, MotivoSalida::Abandono, false, &[(20, 25, 0)], 0)).unwrap();
     assert_eq!(b.iniciada_por, 3, "si sale otro, no cambia");
 }
 
@@ -631,7 +644,8 @@ fn ninguna_secuencia_de_mensajes_deja_la_batalla_incoherente() {
                 3 => matches!(b.confirmar_inicio(r(), ahora, &format!("a{intento}"), "srv", revision), Ok(Efecto::Aplicado(_))),
                 4 => {
                     let motivo = [MotivoSalida::NoConectado, MotivoSalida::Eliminado, MotivoSalida::Abandono][rng.por_debajo(3) as usize];
-                    matches!(b.registrar_salida(r(), ahora, "srv", SalidaBatalla { intento: format!("a{intento}"), revision, heroe, motivo, derrotado: false, escuadras: vec![] }), Ok(Efecto::Aplicado(_)))
+                    let escuadras = b.participante(heroe).map_or(vec![], |p| p.escuadras.iter().map(|e| EscuadraDeSalida { escuadra: e.id, supervivientes: e.efectivos, muertos: 0 }).collect());
+                    matches!(b.registrar_salida(r(), ahora, "srv", SalidaBatalla { intento: format!("a{intento}"), revision, heroe, motivo, derrotado: false, escuadras }), Ok(Efecto::Aplicado(_)))
                 }
                 5 => b.cancelar(ahora, 1 + rng.por_debajo(3)).is_ok(),
                 6 => b.vencer(ahora).is_some(),

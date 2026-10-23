@@ -339,7 +339,7 @@ impl Ctx<'_> {
             Cuerpo::Fundar(_) => Comando::Fundar { ejercito: self.columna(self.mi_heroe()?)? },
             Cuerpo::SalirAlMundo(o) => Comando::SalirAlMundo { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, escuadras: self.escuadras(&o.escuadron_ids)?, carga: self.cantidades(o.carga.as_ref())? },
             Cuerpo::MovilizarEjercito(o) => {
-                // DUDA: el ejército sale sin destino (Convocatoria y sin destino fijo): el `objetivo` de la orden se rechaza en vez de ignorarse; después, `marchar_a`.
+                // El ejército sale sin destino (Presencia_Y_Convocatoria): el `objetivo` de la orden se rechaza en vez de ignorarse; después, `marchar_a`.
                 if o.objetivo.is_some() {
                     return Err(self.no(rechazos::OBJETIVO_NO_SOPORTADO, "el ejército sale sin destino: después, marchar_a"));
                 }
@@ -367,7 +367,7 @@ impl Ctx<'_> {
             Cuerpo::SalirDeAsentamiento(o) => Comando::SalirDeAsentamiento { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)? },
             Cuerpo::Guarnecer(o) => Comando::Guarnecer { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)? },
             Cuerpo::EntrarEnCampamento(o) => Comando::EntrarEnCampamento { campamento: self.campamento(&o.campamento_id)?, heroe: self.heroe(&o.heroe_id)? },
-            // DUDA: `OrdenUnirseAEjercito` no trae carga (la del TypeScript tampoco): se une sin sacarla de su plaza.
+            // `OrdenUnirseAEjercito` no trae carga (la del TypeScript tampoco): se une sin sacarla de su plaza.
             Cuerpo::UnirseAEjercito(o) => {
                 Comando::UnirseAEjercito { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, ejercito: self.ejercito(&o.ejercito_id)?, escuadras: self.escuadras(&o.escuadron_ids)?, carga: vec![] }
             }
@@ -459,7 +459,7 @@ impl Ctx<'_> {
                 let heroe = self.heroe(&o.heroe_id)?;
                 match self.obra(&o.obra_id)? {
                     (Obra::Avanzada, avanzada) => Comando::CancelarObraDeAvanzada { heroe, avanzada },
-                    // DUDA: la obra de un pueblo ya tiene su orden (`destruir_pueblo`, que además lo derriba una vez levantado): aquí se rechaza en vez de duplicarla.
+                    // La obra de un pueblo ya tiene su orden (`destruir_pueblo`, que además lo derriba una vez levantado): aquí se rechaza en vez de duplicarla.
                     (Obra::Pueblo, _) => return Err(self.no(rechazos::OBJETIVO_NO_SOPORTADO, "la obra de un pueblo se cancela con destruir_pueblo")),
                 }
             }

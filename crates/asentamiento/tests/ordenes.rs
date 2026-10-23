@@ -159,6 +159,35 @@ fn una_mejora_manual_paga_ocupa_cuadrilla_y_sube_el_nivel_al_terminar() {
     assert_eq!(a.edificio(granja).unwrap().nivel_interno, 2);
 }
 
+/// Una ciudad donde la Granja no puede crecer: no hay hueco para su huella nueva.
+struct SinHuecoParaCrecer;
+impl Sitios for SinHuecoParaCrecer {
+    fn proponer(&mut self, tipo: Tipo, u: &Urbano, ids: &mut u32, anclas: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
+        SitiosLibres.proponer(tipo, u, ids, anclas)
+    }
+    fn tomar(&mut self, _: u32, _: Tipo, _: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {
+        Some(vec![])
+    }
+    fn hueco_al_mejorar(&mut self, _: u32, tipo: Tipo, _: u8, _: &Urbano) -> bool {
+        tipo != Tipo::Granja
+    }
+}
+
+#[test]
+fn la_mejora_automatica_no_arranca_sin_hueco_para_la_huella_nueva() {
+    let r = Reglas::cargar();
+    let arranca = |sitios: &mut dyn Sitios| {
+        let mut a = rico(&r);
+        let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
+        let mut w = SinMundo;
+        let mut x = exterior!(&r, *sitios, w);
+        a.avanzar_minuto(MS_POR_MINUTO, &mut x);
+        a.edificio(granja).unwrap().mejora.is_some()
+    };
+    assert!(arranca(&mut SitiosLibres), "con hueco, la Granja mejora sola");
+    assert!(!arranca(&mut SinHuecoParaCrecer), "sin hueco no arranca (como la manual) y no retiene cuadrilla");
+}
+
 #[test]
 fn el_ascenso_informa_todos_los_bloqueos_a_la_vez() {
     let r = Reglas::cargar();
@@ -189,7 +218,7 @@ fn pausar_la_auto_construccion_y_las_recetas_es_idempotente() {
 /// Una plaza con un nodo de piedra libre: la Cantera tiene sitio, las minas no.
 struct ConCantera;
 impl Sitios for ConCantera {
-    fn proponer(&mut self, tipo: Tipo, _: &Urbano) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, _: &Urbano, _: &mut u32, _: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
         (tipo == Tipo::Cantera).then_some(Some(Fuente::Nodo(0)))
     }
     fn tomar(&mut self, _: u32, _: Tipo, _: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {

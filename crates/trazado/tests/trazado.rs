@@ -49,6 +49,65 @@ fn red_incremental_igual_a_reconstruida_desde_las_piezas() {
     }
 }
 
+// ---- versión 4: las reglas de colocación del TypeScript (decisiones del autor, 2026-10-23) ----
+
+/// Distancia al cuadrado entre dos centros, en milésimas.
+fn d2(a: base::Punto, b: base::Punto) -> i64 {
+    (a.x - b.x).pow(2) + (a.y - b.y).pow(2)
+}
+
+#[test]
+fn las_anclas_y_sus_satelites_no_se_limitan_al_disco_urbano() {
+    // Viviendas pedidas con un `radioCiudad` de 15 u.l. en nivel 2: el núcleo del Centro llega más allá (hasta unas 21 u.l.) y, lleno, nace un
+    // ancla residencial por el árbol de anclas (a 18 u.l. o más), aunque se salga del disco (T §6.5, §7.2). La versión 3 lo limitaba todo a 15.
+    let mut s = Sim::nueva(11, Perfil::Nucleos, 2);
+    for _ in 0..80 {
+        let ped = Pedido { radio_ul: 15, ..s.pedido(T_VIVIENDA, s.sig_id) };
+        if let Ancla::Creada(_) = s.c.asegurar_ancla_para(&ped, s.sig_id, 2, opciones(Categoria::Residencial)) {
+            s.sig_id += 1;
+        }
+        if s.c.colocar_siguiente(&Pedido { id: s.sig_id, ..ped }).is_some() {
+            s.sig_id += 1;
+        }
+    }
+    let fuera = |p: &&Pieza| d2(p.posicion(), base::Punto::new(0, 0)) > 15_000i64.pow(2);
+    assert!(s.c.piezas().iter().any(|p| p.rol == Rol::AnclaSaturacion && fuera(&p)), "un ancla nueva fuera del disco");
+    assert!(s.c.piezas().iter().any(|p| p.rol == Rol::Normal && p.categoria == Categoria::Residencial && fuera(&p)), "y satélites fuera del disco");
+    verificar(&s.c, 15);
+}
+
+#[test]
+fn el_nucleo_de_un_ancla_se_barre_con_su_circulo_y_no_con_el_cuadrado() {
+    // Los candidatos de un satélite del Centro (4×4) caen a ≤ (2 + 4 + 1) celdas de su centro: las esquinas del cuadrado del núcleo, no.
+    let s = Sim::nueva(5, Perfil::Nucleos, 1);
+    let centro = s.c.piezas()[0].posicion();
+    let margen = 7 * 3_000i64;
+    let sitios = s.c.sitios_para(&s.pedido(T_VIVIENDA, 99));
+    assert!(!sitios.is_empty());
+    for x in &sitios {
+        assert!(d2(x.rect.centro(), centro) <= margen * margen, "{:?} fuera del círculo del núcleo", x.rect);
+    }
+    // Las esquinas a dos celdas del anillo de calle (que sí entran en el cuadrado) se quedan fuera.
+    let esquina = Rect::new(-2 - 1 - 3, -2 - 1 - 3, 1, 1);
+    assert!(!sitios.iter().any(|x| x.rect == esquina));
+}
+
+#[test]
+fn un_ancla_queda_llena_en_cuanto_no_cabe_la_huella_que_se_pide() {
+    // Se llena el núcleo del Centro con piezas residenciales de 2×2 hasta que no cabe otra; entre ellas aún quedan huecos de 1×1.
+    let mut s = Sim::nueva(9, Perfil::Nucleos, 1);
+    let grande = |s: &Sim| Pedido { huella: Huella::new(2, 2), permitir_rotacion: false, ..s.pedido(T_VIVIENDA, s.sig_id) };
+    while let Some(sitio) = s.c.siguiente_sitio(&grande(&s)) {
+        s.c.colocar(&grande(&s), sitio).unwrap();
+        s.sig_id += 1;
+    }
+    assert!(s.c.siguiente_sitio(&s.pedido(T_VIVIENDA, s.sig_id)).is_some(), "una de 1×1 aún cabe");
+    assert!(!s.c.piezas()[0].ancla_llena);
+    // Pedir otra de 2×2 (nivel 1: no se crea ancla nueva) marca el Centro lleno, como el TypeScript; la versión 3 esperaba a que no cupiera ni una celda.
+    assert_eq!(s.c.asegurar_ancla_para(&grande(&s), s.sig_id, 1, opciones(Categoria::Residencial)), Ancla::Ninguna);
+    assert!(s.c.piezas()[0].ancla_llena, "el latch es permanente: ya no recibe satélites");
+}
+
 #[test]
 fn una_version_de_geometria_distinta_se_rechaza() {
     let s = Sim::nueva(1, Perfil::Nucleos, 1);
@@ -57,7 +116,7 @@ fn una_version_de_geometria_distinta_se_rechaza() {
 }
 
 #[test]
-fn ciudad_de_150_edificios_se_llena_sin_solaparse_ni_salirse_del_disco() {
+fn ciudad_de_150_edificios_se_llena_sin_solaparse_y_con_los_genericos_en_el_disco() {
     for (semilla, perfil) in [(5u64, Perfil::Nucleos), (6, Perfil::Caminera), (7, Perfil::Compacta), (8, Perfil::Gremial)] {
         let s = ciudad_de(semilla, perfil, 150);
         assert!(s.c.piezas().len() >= 120, "{perfil:?}: solo {} piezas ({} fallos)", s.c.piezas().len(), s.fallos);

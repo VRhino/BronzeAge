@@ -20,8 +20,8 @@
 //! - §4.4: la visión prestada nunca se graba. §2.2: una celda cuenta como vista cuando lo está su centro, salvo la del
 //!   propio ojo, que siempre. §2.3: la máscara que viaja es `celdas` (explorado ∪ ojos propios ahora) y `visibles`
 //!   ([`niebla_proyectada`]).
-//! - §5.4 Ejércitos ajenos / Doc 13 §5: de lo ajeno solo viaja el tramo dentro de la vista y del horizonte
-//!   corto ([`tramo_visible`]).
+//! - §5.4 Ejércitos ajenos / Doc 13 §5: de lo ajeno solo viaja el tramo al alcance de los ojos que lo ven y dentro del
+//!   horizonte corto ([`tramo_visible`]).
 //!
 //! # Suposiciones (el documento no las fija)
 //!
@@ -31,8 +31,8 @@
 //! 3. Quién es observador (plaza, avanzada, columna según tropa, Mirada vigente) y qué móviles se omiten (en batalla,
 //!    caravana propia con destino propio, etc.) lo decide el núcleo al armar las listas; aquí solo se mide.
 //! 4. Un [`FaccionId`] distinto por cada héroe huérfano (su `exploracionPersonal`) lo asigna el llamante.
-//! 5. `tramo_visible` devuelve solo el primer pedazo contiguo dentro del rectángulo; si el plan sale y vuelve a entrar
-//!    en menos de 30 s, el resto llega en el siguiente muestreo.
+//! 5. `tramo_visible` devuelve solo el primer pedazo contiguo al alcance de los ojos (la unión de sus discos); si el plan
+//!    sale y vuelve a entrar en menos de 30 s, el resto llega en el siguiente muestreo.
 
 mod niebla;
 mod tramo;

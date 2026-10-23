@@ -379,6 +379,7 @@ impl Nucleo {
         self.bandidos_de_plaza_arruinada(id, t);
         if combate::conquista::faccion_derrotada(self.plazas_de(a.faccion).count()) {
             self.emitir_propio(t, "faccion.derrotada", vec![], vec![("faccion", a.faccion as i64), ("por", 0)]);
+            self.reprogramar_anillos(t);
         }
     }
 

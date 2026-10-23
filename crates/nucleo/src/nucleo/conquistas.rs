@@ -146,6 +146,7 @@ impl Nucleo {
         let quedan = self.plazas_de(vieja).count();
         if faccion_derrotada(quedan) {
             self.emitir_propio(t, "faccion.derrotada", vec![plaza], vec![("faccion", vieja as i64), ("por", conquistador as i64)]);
+            self.reprogramar_anillos(t);
         }
         self.emitir_propio(
             t,
@@ -172,7 +173,7 @@ impl Nucleo {
     /// La conquista dejó celdas por levantar en algún recinto (`recintos::danar_por_conquista`): la ciudad se rehace con la muralla incompleta (ya no hay preferencia intramuros)
     /// y empieza la reparación, que es la obra normal de la plaza a costa del nuevo dueño (Murallas §9.6, Q2): la primera celda sale en este instante, si hay con qué, y deja la cita de
     /// la siguiente; si no hay materiales o se bajaría de la reserva, no hay cita y el paso de minuto lo reintenta. La plaza ocupada tiene el mantenimiento congelado, pero la obra sigue.
-    // DUDA: el TypeScript dejaba la reparación a la pasada de obra siguiente; aquí empieza en el instante de la conquista (la cita de la primera celda, como al comprometer).
+    /// La reparación empieza en el instante de la conquista (el TypeScript la dejaba a la pasada de obra siguiente; decisión del autor, 2026-10-23).
     fn reparar_muralla_danada(&mut self, t: Instante, plaza: u64) {
         self.sincronizar_recintos(plaza);
         let sucesos = self.con_exterior(plaza, t, |eco, x| {

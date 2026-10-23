@@ -170,12 +170,17 @@ fn montar(m: &M, semilla: u64, nivel: u32) -> Escenario {
     montar_con(Nucleo::nuevo(arranque(m, semilla)), m, nivel)
 }
 
-fn montar_con(mut n: Nucleo, m: &M, nivel: u32) -> Escenario {
+fn montar_con(n: Nucleo, m: &M, nivel: u32) -> Escenario {
     let mapa = Mapa::de(&m.0);
     let (cobre, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
         .find_map(|i| sitio_junto_a(&n, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
+    montar_en(n, mapa, nivel, cobre, sitio)
+}
+
+/// La plaza madre de Ana fundada en `sitio`, con el nodo `nodo` como el de su pueblo (ver [`montar`]).
+fn montar_en(mut n: Nucleo, mapa: Arc<Mapa>, nivel: u32, cobre: u32, sitio: Punto) -> Escenario {
     let e = n.crear_ejercito(0, "ana", 1, sitio, 500, 100_000).unwrap();
     assert!(n.aplicar_en(0, Peticion::nueva("admin", "c", Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
     let r = n.aplicar_en(0, Peticion::nueva("ana", "f", Comando::Fundar { ejercito: e }));
@@ -260,6 +265,30 @@ fn una_obra_de_mapa_se_marca_ocupa_cupo_y_no_pasa_por_la_cola_ni_cuesta_nada_a_l
     assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: ganado }), rechazos::PUEBLO_NODO_NO_EXTRAIBLE);
     let lejos = (0..e.mapa.nodos.len()).find(|&i| e.mapa.nodos[i].tipo == Tipo::MinaEstano && !e.n.en_zona(plaza, e.mapa.nodos[i].pos)).unwrap() as u32;
     assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: lejos }), rechazos::PUEBLO_FUERA_DE_LA_ZONA);
+}
+
+#[test]
+fn un_nodo_sin_ruta_por_tierra_hasta_la_madre_no_admite_pueblo() {
+    let m = con_mundo!();
+    let n = Nucleo::nuevo(arranque(m, 7));
+    let mapa = Mapa::de(&m.0);
+    // Un nodo de pueblo y un sitio fundable a unas unidades sin camino por tierra entre los dos (un río o un barranco de por medio).
+    let sin_ruta = |i: usize| {
+        let nodo = mapa.nodos[i].pos;
+        (5..=11).step_by(2).flat_map(|d| (0..24).map(move |g| (d * 1_000, g))).find_map(|(d, g)| {
+            let a = ((g * 15) as f64).to_radians();
+            let p = Punto::new(nodo.x + (d as f64 * a.cos()) as i64, nodo.y + (d as f64 * a.sin()) as i64);
+            (m.1.ruta(nodo, p, &rutas::Opciones::default()).is_none() && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none())).then_some(p)
+        })
+    };
+    let (nodo, sitio) = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo.es_de_pueblo()).find_map(|i| sin_ruta(i).map(|p| (i as u32, p))).expect("algún nodo sin ruta hasta un sitio fundable");
+    let mut e = montar_en(n, mapa, 2, nodo, sitio);
+    let plaza = e.plaza;
+    assert!(e.n.en_zona(plaza, e.mapa.nodos[nodo as usize].pos), "el nodo cae en la zona");
+    let rastro = e.n.hash_estado();
+    assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo }), rechazos::PUEBLO_SIN_RUTA, "su carro no podría acarrear nunca");
+    assert_eq!(e.n.hash_estado(), rastro, "el rechazo no deja rastro");
+    assert!(e.n.pueblos_de(plaza).is_empty());
 }
 
 #[test]
@@ -547,9 +576,9 @@ fn la_planta_del_pueblo_es_una_funcion_de_su_id_y_no_se_guarda() {
     assert!(planta.piezas.iter().any(|p| p.tipo == Tipo::Almacen) && planta.piezas.iter().any(|p| p.tipo == Tipo::Corral));
     assert_eq!(e.n.hash_estado(), hash, "es presentación: no toca el estado");
     assert!(e.n.planta_de_pueblo(u64::MAX).is_none());
-    // La guarnición de serie la pondrá el sistema militar; su dato (30 mineros, 6 h) está en las reglas.
+    // La guarnición de serie la pone el sistema militar; su dato (30 mineros, uno cada 12 min) está en las reglas.
     let p = Reglas::default().economia.datos.pueblos.clone();
-    assert_eq!((p.mineros, p.reposicion_mineros_min), (30, 360));
+    assert_eq!((p.mineros, p.minutos_por_minero), (30, 12));
 }
 
 // ───────────────────────────── 4. Destruirlo, la ruina y la conquista de la madre ─────────────────────────────
@@ -1033,7 +1062,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN23");
+    assert_eq!(&bytes[..5], b"BAN24");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1057,6 +1086,30 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
 }
 
 // ───────────────────────────── La niebla: el pueblo ajeno se recuerda «como una ciudad» (4H T3d) ─────────────────────────────
+
+#[test]
+fn el_pueblo_ajeno_que_se_vio_en_obra_se_recuerda_en_obra_aunque_despues_se_termine() {
+    use nucleo::memoria::{EstadoSitio, Sitio};
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let pueblo = e.marcar();
+    let col = e.llevar_materiales(pueblo);
+    e.ok("ana", Comando::EntregarMateriales { ejercito: col, pueblo });
+    let EstadoPueblo::EnObra { completa_en } = e.pueblo(pueblo).estado else { panic!("debía estar en obra") };
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    // Una columna de F2 lo ve en obra al pasar y se va lejos antes de que acabe.
+    let tierra = |r: i64| (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(sitio.x + (r as f64 * a.cos()) as i64, sitio.y + (r as f64 * a.sin()) as i64)).find(|q| m.0.transitable_en(q.x, q.y)).expect("tierra");
+    let (junto, lejos) = (tierra(10_000), tierra(60_000));
+    let beto = e.columna("beto", 2, junto);
+    e.avanzar(MIN);
+    e.ok("beto", Comando::MarcharA { ejercito: beto, destino: lejos });
+    let ficha = |n: &Nucleo| n.estado().memoria.fichas[&2][&Sitio::Pueblo(pueblo)].datos.estado;
+    assert_eq!(ficha(&e.n), EstadoSitio::EnObra, "lo vio en obra");
+    let fin = e.n.ejercito(beto).unwrap().plan.fin().unwrap();
+    e.n.avanzar_hasta(fin.max(completa_en) + MIN);
+    assert!(e.pueblo(pueblo).activo());
+    assert_eq!(ficha(&e.n), EstadoSitio::EnObra, "se recuerda como estaba cuando se vio, no como está");
+}
 
 #[test]
 fn el_pueblo_ajeno_se_recuerda_como_una_ciudad_y_se_olvida_cuando_se_vuelve_a_mirar_su_sitio_y_ya_no_esta() {
@@ -1083,7 +1136,7 @@ fn el_pueblo_ajeno_se_recuerda_como_una_ciudad_y_se_olvida_cuando_se_vuelve_a_mi
         Mirada::de(n, Perspectiva::Faccion(2)).contenido(None, rect, &Default::default()).into_iter().find(|v| v.clave == (TipoEntidad::FichaConocida as i32, id.clone())).and_then(|v| v.cuerpo())
     };
     let Some(Cuerpo::FichaConocida(f)) = recordado(&e.n) else { panic!("la vista lo recuerda") };
-    assert_eq!((f.tipo, f.faccion_id.as_str(), f.nivel, f.radio_potencial), (TipoEntidad::Pueblo as i32, "f-1", 0, None));
+    assert_eq!((f.tipo, f.faccion_id.as_str(), f.nivel, f.radio_potencial, f.estado), (TipoEntidad::Pueblo as i32, "f-1", 0, None, contrato::v1::EstadoSitio::SitioActivo as i32));
 
     // Ana lo destruye: mientras F2 no vuelva a mirar el sitio, la foto vieja se queda.
     e.ok("ana", Comando::DestruirPueblo { pueblo });

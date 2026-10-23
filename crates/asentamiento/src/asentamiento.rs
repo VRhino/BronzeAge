@@ -61,8 +61,9 @@ pub struct Gratuito {
 /// (con el trazado urbano y el mundo); las pruebas, con un doble.
 pub trait Sitios {
     /// ¿Hay sitio para este tipo? `Some(fuente)` si lo hay (la fuente libre más cercana en la zona si el tipo ligue a una), `None` si no.
-    /// No toma nada: solo mira.
-    fn proponer(&mut self, tipo: Tipo, u: &Urbano) -> Option<Option<Fuente>>;
+    /// No toma ninguna fuente ni coloca el edificio. Si para tener sitio el barrio necesita un ancla de saturación, el trazado la crea
+    /// **ya** (Trazado_Urbano §7.1, al proponer): su id sale de `ids` y vuelve en `anclas`, y se queda aunque el proyecto no se comprometa.
+    fn proponer(&mut self, tipo: Tipo, u: &Urbano, ids: &mut u32, anclas: &mut Vec<Gratuito>) -> Option<Option<Fuente>>;
     /// El proyecto se comprometió con el id `id`: la fuente queda tomada y el edificio, colocado en la ciudad. Si hay que crear antes un
     /// ancla (edificio gratuito), su id sale de `ids` (el contador de ids de la plaza, ya por delante de `id`) y vuelve en el resultado.
     /// `None` = ya no hay sitio (otro proyecto de la misma pasada se lo quedó): no se toca nada y el proyecto no se compromete.
@@ -279,15 +280,23 @@ impl Asentamiento {
     /// Lo que el trazado urbano pregunta a la plaza (ver [`Urbano`]). Los edificios de la fundación son los de id menor que
     /// `viviendas iniciales + 2` (Centro Urbano, Viviendas y Granja).
     ///
-    /// DUDA: el documento dice que el `radioCiudad` crece «por edificio completado» sin precisar cuáles. Aquí cuentan los que pasaron por
-    /// la cola (los mismos que agrandan la zona del mapa): ni los de la fundación (la ciudad nace con su radio inicial, sin salto) ni los
-    /// gratuitos (anclas y puestos del Mercado, que nacen sin obra). Y el techo por nivel usa el nivel alcanzado, como la zona; el gate de
-    /// las anclas, el operativo (`nivelActual`, como en Economia_Construccion §6.2).
+    /// El `radioCiudad` crece con los edificios que pasaron por la cola, no con los de la fundación ni con los gratuitos, y topa por el
+    /// nivel alcanzado; el gate de las anclas usa el operativo (Trazado_Urbano §2.1).
     pub fn urbano<'r>(&self, r: &'r Reglas) -> Urbano<'r> {
         let fundacion = r.viviendas_iniciales + 2;
         let gratuitas = &r.mantenimiento.piezas_gratuitas;
         let completados = self.edificios.iter().filter(|e| e.activo() && e.id >= fundacion && !gratuitas.contains(&e.tipo)).count() as u32;
         Urbano { nivel: self.nivel, nivel_operativo: self.nivel_actual(), completados, perfil: self.politicas.perfil_trazado(&r.politicas), siguiente_id: self.siguiente_edificio }
+    }
+
+    /// Pregunta a `x.sitios` si hay sitio para `tipo` ([`Sitios::proponer`]): las anclas que el trazado cree para ello se dan de alta ya en la
+    /// economía, como edificios gratuitos, aunque el proyecto no llegue a comprometerse (así toda pieza de la ciudad tiene su edificio). El id del
+    /// ancla sale del contador de la plaza, no de `u.siguiente_id`.
+    pub(crate) fn proponer(&mut self, x: &mut Exterior, tipo: Tipo, u: &Urbano, ev: &mut Vec<Evento>) -> Option<Option<Fuente>> {
+        let mut anclas = vec![];
+        let fuente = x.sitios.proponer(tipo, u, &mut self.siguiente_edificio, &mut anclas);
+        self.alta_gratuitos(anclas, ev);
+        fuente
     }
 
     /// Da de alta edificios gratuitos ya activos (con su suceso). No cuentan como «completados»: no agrandan la zona.
@@ -491,7 +500,7 @@ impl Asentamiento {
 pub struct SitiosLibres;
 
 impl Sitios for SitiosLibres {
-    fn proponer(&mut self, tipo: Tipo, _: &Urbano) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, _: &Urbano, _: &mut u32, _: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
         (!tipo.es_extractor() && tipo != Tipo::Lenera).then_some(None)
     }
     fn tomar(&mut self, _: u32, _: Tipo, _: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {

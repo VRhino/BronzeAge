@@ -442,6 +442,8 @@ De ahí salen los tres estados en que el jugador ve el mundo:
 
 **Lo recordado no caduca, se refresca — salvo que ya no exista.** No hace falta un plazo de caducidad porque el dato viejo se delata solo: la foto viaja con el instante en que se tomó, y la interfaz puede decir "última información: hace 3 horas". El jugador juzga si fiarse. Volver a ver la plaza actualiza la foto; borrar información que el jugador ya sabe se sentiría arbitrario, dejarla envejecer a la vista no. La única excepción es una plaza que **ya no existe** (cayó en ruinas): su ficha, y el informe que se hubiera comprado de ella, se olvidan en cuanto la Facción **vuelve a ver el sitio** y no está (decidido el 2026-10-11); mientras no se vuelva a mirar, la foto vieja se queda.
 
+**Se recuerda todo lo que se vio, tal como estaba.** Un pueblo o una avanzada ajenos quedan en la foto con su nivel o etapa y su estado de entonces (activo, en obra, en ruinas), y unas ruinas de ciudadela sin dueño también se recuerdan; lo que cambie después no se sabe hasta volver a verlo (decidido el 2026-10-24).
+
 **La memoria es de la FACCIÓN, no del ciudadano.** Lo que uno explora lo saben todos los suyos — es lo coherente con que la Facción propia ya se vea entera desde dentro. Un héroe sin Facción lleva su propia memoria, que se funde con la de la Facción al entrar en una o al fundarla (Doc 1.3).
 
 **Lo que se ve gana a lo que se recuerda.** Cuando una plaza está a la vez avistada y en la memoria, lo que llega es la información en vivo: estar mirándola es mejor información que acordarse de ella.
@@ -574,7 +576,7 @@ Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de ca
 - Mientras va enganchada **viaja con el ejército**: su posición es la de la columna, no una ruta propia.
 - **Entran en el `min` de velocidad.** Una caravana comercial va a 24, así que adjuntarla baja un ejército ligero de 30 a 24 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
 - **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.
-- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. **No** se pierden si la columna se queda sin nadie dentro porque su gente se desconectó: la caravana, que sí viaja por sí sola, vuelve a su origen (Doc 1.10.6, 3.10).
+- **Si el ejército es derrotado, cada caravana adjunta pierde la mitad de sus carros con su carga**, que van al botín del vencedor; la que se queda sin carros desaparece. Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. **No** se pierden si la columna se queda sin nadie dentro porque su gente se desconectó: la caravana, que sí viaja por sí sola, vuelve a su origen (Doc 1.10.6, 3.10).
 
 ### 5.13.3 Escolta de caravanas
 

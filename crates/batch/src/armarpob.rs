@@ -89,7 +89,7 @@ pub fn armar(x: &Entrada) -> Informe {
         Some(ciudades.total() as f64),
         "Trazado_Urbano §13 (Invariantes)",
         &format!(
-            "Se comprueban al final en las {} plazas que siguen en pie: piezas que se pisan ({}), piezas sobre una celda de calle o camino ({}), fuera del disco urbano de su `radioCiudad` o, en las afueras, fuera de su banda de 60 u.l. a max(radio, 96) ({}), sin ninguna calle o camino pegado, es decir, sin salida a la red ({}), y desacuerdos entre la ciudad y la economía (pieza sin su edificio con el mismo id y tipo, o edificio con huella en la rejilla sin pieza) ({}). Entre paréntesis, las violaciones de cada una.",
+            "Se comprueban al final en las {} plazas que siguen en pie: piezas que se pisan ({}), piezas sobre una celda de calle o camino ({}), genéricos fuera del disco urbano de su `radioCiudad` o, en las afueras, fuera de su banda de 60 u.l. a max(radio, 96) ({}), sin ninguna calle o camino pegado, es decir, sin salida a la red ({}), y desacuerdos entre la ciudad y la economía (pieza sin su edificio con el mismo id y tipo, o edificio con huella en la rejilla sin pieza) ({}). Entre paréntesis, las violaciones de cada una.",
             ciudades.plazas, ciudades.solape, ciudades.suelo, ciudades.disco, ciudades.sin_salida, ciudades.economia
         ),
     ));

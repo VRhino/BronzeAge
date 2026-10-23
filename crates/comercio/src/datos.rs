@@ -71,8 +71,8 @@ impl ReglasPrecio {
 /// Precio base de cada bien con receta y sin entrada en `PRECIO_BASE` (Comercio_Caravanas §3.1): lo que consume su receta, a precio base, por
 /// unidad fabricada. Un bien cuyos insumos no cotizan (las chatarras, el oro) no tiene precio; una receta se resuelve en cuanto todos sus
 /// insumos tienen, y se repite hasta que nada cambia (un lingote de bronce necesita antes los de cobre y estaño).
-// DUDA: un mismo bien tiene recetas distintas según el taller y el nivel (cuero con 0,5, 0,33 o 0,25 de ganado); se toma la **más barata**, la
-// más conservadora para una comisión (cotiza menos oro acuñado). Los manufacturados no se venden a los mercenarios (solo `PRECIO_BASE`).
+/// Si un bien tiene recetas distintas según el taller y el nivel (cuero con 0,5, 0,33 o 0,25 de ganado), cotiza la **más barata** (Comercio_Caravanas
+/// §3.1). Los manufacturados no se venden a los mercenarios (solo `PRECIO_BASE`).
 fn precios_derivados(base: &BTreeMap<Recurso, i64>, catalogo: &asentamiento::Catalogo) -> BTreeMap<Recurso, i64> {
     let mut derivados: BTreeMap<Recurso, i64> = BTreeMap::new();
     loop {

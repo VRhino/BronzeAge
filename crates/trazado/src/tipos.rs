@@ -82,9 +82,11 @@ impl Perfil {
 
 /// Revisión de la geometría. Se sube al cambiar cualquier huella, el tamaño de celda, el fondo de manzana, una constante de
 /// [`Parametros`] que mueva lo ya colocado o el algoritmo de determinismo. Un `Ciudad` guardado con otra revisión debe
-/// rechazarse al cargar. **3**: `pseudoAleatorio` con `sin` sustituido por hash entero (FNV-1a + SplitMix64), tabla de
-/// senos entera para las ranuras, y el disco urbano limita también a satélites y anclas.
-pub const LAYOUT_VERSION: u32 = 3;
+/// rechazarse al cargar. **3**: `pseudoAleatorio` con `sin` sustituido por hash entero (FNV-1a + SplitMix64) y tabla de
+/// senos entera para las ranuras. **4** (2026-10-23, como el TypeScript): sin disco urbano para anclas ni satélites, el círculo de
+/// barrido del núcleo de un ancla, el ancla llena en cuanto no cabe la huella pedida, la Granja que crece busca sitio conservando
+/// su camino y el ancla que nace al proponer.
+pub const LAYOUT_VERSION: u32 = 4;
 
 /// Constantes de T §2.1 y §12 más las dos locales (`FONDO_MANZANA`, `NIVEL_GATE_ANCLAS`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -202,6 +202,8 @@ impl Nucleo {
                 self.estado.siguiente_id += 2;
                 let heroe = Heroe::nuevo(&mr, id, *controlador, *campamento, loadout);
                 self.estado.militar.insertar(HeroeNucleo::nuevo(heroe, cuenta, None));
+                // Un residente nuevo, sin Facción: pide bandidos en el anillo de su campamento.
+                self.reprogramar_anillo(*campamento, t);
                 self.emitir_propio(t, "heroe.creado", vec![], vec![("heroe", id as i64), ("campamento", *campamento as i64)]);
                 Ok(vec![id])
             }

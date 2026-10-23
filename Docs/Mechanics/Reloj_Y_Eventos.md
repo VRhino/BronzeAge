@@ -29,7 +29,7 @@ Cómo avanza el mundo en la reconstrucción: sin tick global (la economía de ca
 > | `BandidosDelAnillo` | 7 | `entidad_anillo(campamento)` | al nacer la partida (una por campamento de mercenarios), a `reaparicionMinutos` tras crear uno o si no hubo sitio, y al destruirse uno del anillo | crea un campamento en el anillo si faltan según los residentes sin plaza; si no falta ninguno no se vuelve a programar |
 > | acoso | 7 | la caravana (o la columna con caravanas adjuntas) o el campamento: el mismo `Carga::Encuentro` de la 4C, con prioridad 7 | el primer instante en que el plan de la caravana queda a ≤ `radioAtaqueCaravana` (7) de un campamento | una tirada contra la defensa; ganar la hace desaparecer. Con servidores de batalla y una caravana adjunta a una columna con algún héroe sano, abre una batalla de caravana en Unity en lugar de tirar |
 > | `FinProteccion` / `FinOcupacion` | 2 | `entidad_conquista(plaza)` (una conquista nueva descarta los de la anterior) | `protegida_hasta` (+1 día) y `ocupada_hasta` (+90 min) | limpian el campo de la plaza y lo cuentan; la ocupación devuelve su recaudación, su crecimiento y su mantenimiento |
-> | `ReponeGuarnicion` | 3 | `entidad_guarnicion(pueblo)` | 6 h tras el primer combate que dejó incompleta la guarnición de serie | la deja de nuevo completa, con su experiencia |
+> | `ReponeGuarnicion` | 3 | `entidad_guarnicion(pueblo)` | 12 min (`minutosPorMinero`) tras el combate que dejó incompleta la guarnición de serie y, mientras falte alguno, tras el minero anterior | vuelve un minero, con la experiencia de la escuadra; si aún falta alguno, cita el siguiente |
 >
 > Ninguno es recurrente por entidad ociosa: cada uno se programa cuando hay algo que esperar y se detiene solo (con los anillos y las plazas satisfechos la cola no guarda ninguna cita de combate). Mientras una plaza está ocupada, su paso de minuto pasa al `Exterior` los factores de la ocupación (`felicidad_extra` = `factorCrecimiento`, `recaudacion_extra` = `factorRecaudacion`) y la economía congela su mantenimiento (`ocupado`). Los plazos de la conquista y el de la guarnición comparten instante con el paso de minuto de la plaza (prioridad 2) y el consumo (3): dentro del mismo instante y prioridad manda la secuencia de la cola, no una regla (fila de paridad). El orden del generador aleatorio es ya parte de las reglas: la aparición de un campamento gasta una tirada de nivel (más dos por intento de punto en un anillo), un combate las suyas, y lo que no tira no gasta.
 
@@ -76,6 +76,7 @@ Cómo avanza el mundo en la reconstrucción: sin tick global (la economía de ca
 - **Instante** = milisegundos de mundo desde la época (`2026-01-01T00:00:00.000Z`), en entero de 64 bits. Todos los `*En`, `*Hasta` y `expiraEn` son instantes. «Vence» significa `instante ≥ vencimiento`.
 - El reloj de pared **no entra en el estado**: dos partidas con la misma semilla y las mismas órdenes en los mismos instantes de mundo dan el mismo mundo.
 - **Modo acelerado**: el batch procesa la cola sin esperar al reloj de pared; el factor es solo una forma de la misma regla.
+- **Parar el reloj** (`ControlarReloj` de administración: pausa o factor 0) es **solo para mantenimiento o como último recurso de la administración, y en pruebas** (decisión del autor, 2026-10-24): el juego en vivo no se para. Al pararlo o reanudarlo se avisa a todas las sesiones. Con el reloj parado no hay muestreo de visión que esperar: lo que cambia una orden se reconcilia al momento en todas las vistas.
 
 ## 2. La cola de eventos
 
@@ -139,7 +140,7 @@ Tres clases. **Ritmo**: el estado guarda `(valor en t₀, ritmo)` y el valor se 
 
 ## 4. Lo informativo se muestrea
 
-Qué ve cada Facción, la niebla explorada, la memoria de plazas y la exploración personal se recalculan en paralelo cada **250 ms** (valor inicial) sobre la rejilla espacio-temporal, por clave de visión. No hace falta el instante exacto en que algo entra en la vista. Lo que sí tiene efecto de juego (una columna entra en la zona de otra, alcanza una puerta, intercepta una caravana) es un evento exacto.
+Qué ve cada Facción, la niebla explorada, la memoria de plazas y la exploración personal se recalculan en paralelo cada **250 ms** (valor inicial) sobre la rejilla espacio-temporal, por clave de visión. *(En Rust la memoria se graba al cerrar cada versión, Niebla_De_Guerra §4.1, y el muestreo de 250 ms es el de las vistas de las sesiones: tras una orden se pone al día al momento solo la vista de quien la dio y las demás en el muestreo siguiente; decisión del autor, 2026-10-24.)* No hace falta el instante exacto en que algo entra en la vista. Lo que sí tiene efecto de juego (una columna entra en la zona de otra, alcanza una puerta, intercepta una caravana) es un evento exacto.
 
 ## 5. Una orden (la antigua transacción)
 
@@ -190,13 +191,13 @@ El reloj de mundo ya no tiene tick. `SIMULACION.duracionTickMs` (60 000) queda s
 ```
 <!-- /parametros -->
 
-Cifras de **infraestructura** (en `constantsInfra.ts`; no alteran el resultado de una simulación). `ticksMaximosPorPasada` pertenece al reloj por tick y desaparece; `limiteIdempotencia` (claves que recuerda el servidor por partida) y `eventosMaximosEnMemoria` (recorte del registro en memoria) se conservan.
+Cifras de **infraestructura** (en `constantsInfra.ts`; no alteran el resultado de una simulación). `ticksMaximosPorPasada` pertenece al reloj por tick y desaparece; `limiteIdempotenciaPorCuenta` (claves que el servidor recuerda **de cada cuenta**: las últimas 64; en el TypeScript, `limiteIdempotencia`, 500 por partida; decisión del autor, 2026-10-24, para que un reintento tras reconectar no se aplique dos veces por muchos jugadores que haya; va en la foto, `BAN24`) y `eventosMaximosEnMemoria` (recorte del registro en memoria) se conservan.
 
 <!-- parametros:INFRA -->
 ```json
 {
   "ticksMaximosPorPasada": 5,
-  "limiteIdempotencia": 500,
+  "limiteIdempotenciaPorCuenta": 64,
   "eventosMaximosEnMemoria": 5000
 }
 ```

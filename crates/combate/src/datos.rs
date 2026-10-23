@@ -144,9 +144,9 @@ pub struct ReglasAvanzada {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasPueblos {
-    /// Mineros de la guarnición de serie y lo que tarda en reponerse gratis (ms).
+    /// Mineros de la guarnición de serie y lo que tarda en volver cada uno, gratis (ms).
     pub mineros: i64,
-    pub reposicion: i64,
+    pub cada_minero: i64,
 }
 
 /// El metal del equipo de cada tropa convertido en chatarra por soldado muerto (Doc 4.2.1): para cada tropa, `(recurso de chatarra,
@@ -303,7 +303,7 @@ impl Reglas {
                 radio_ataque_caravana: mil(num(&bd, "radioAtaqueCaravana")),
                 respawn: minutos(&bd, "respawnMinutos"),
             },
-            pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, reposicion: pueblos.reposicion_mineros_min * MS_POR_MINUTO },
+            pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, cada_minero: pueblos.minutos_por_minero * MS_POR_MINUTO },
             avanzada: ReglasAvanzada {
                 invulnerabilidad: minutos(&av, "invulnerabilidadMinutos"),
                 cupo_guarnicion: ["atalaya", "fuerte", "ciudadela"].map(|e| entero(&av, &format!("cupoGuarnicion.{e}"))),
@@ -372,7 +372,7 @@ mod pruebas {
 
     #[test]
     fn los_mineros_del_pueblo() {
-        assert_eq!(r().pueblos, ReglasPueblos { mineros: 30, reposicion: 360 * MS_POR_MINUTO });
+        assert_eq!(r().pueblos, ReglasPueblos { mineros: 30, cada_minero: 12 * MS_POR_MINUTO });
     }
 
     #[test]

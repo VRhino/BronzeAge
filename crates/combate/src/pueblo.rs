@@ -1,6 +1,7 @@
 //! El saqueo de un pueblo extractor (Combate §7.3, Doc 4.2.2): una batalla propia de saqueo, **nunca de conquista**. Defienden los 30 mineros de
 //! serie (IA, sin dueño, fuera de cupo) y quien lo defienda; el pueblo **protege el 50 % de su capacidad** y el atacante se lleva solo lo que
-//! esté por encima, recurso a recurso, hasta lo que le quepa en los carros. La guarnición de serie, si cae, se repone gratis en 6 horas.
+//! esté por encima, recurso a recurso, hasta lo que le quepa en los carros. La guarnición de serie que pierde mineros se repone gratis, uno a
+//! uno (un minero cada 12 minutos: 30 en 6 horas), desde la primera baja.
 
 use crate::botin::{repartir_botin, CarroDeColumna};
 use crate::datos::Reglas;
@@ -18,19 +19,19 @@ pub fn guarnicion_de_serie(r: &Reglas, id: EscuadraId, ahora: Instante) -> Escua
     Escuadra::nueva(&r.militar, id, SIN_DUENO, Tropa::Mineros, r.pueblos.mineros, None, ahora)
 }
 
-/// Cuándo se repone gratis la guarnición de serie que cayó.
-pub fn reposicion_en(r: &Reglas, cayo_en: Instante) -> Instante {
-    cayo_en + r.pueblos.reposicion
+/// Cuándo vuelve el siguiente minero de una guarnición mermada (desde la baja o desde el minero anterior).
+pub fn reposicion_en(r: &Reglas, desde: Instante) -> Instante {
+    desde + r.pueblos.cada_minero
 }
 
-/// Repone la guarnición de serie: de nuevo completa, con su identidad. La experiencia y el nivel que ganó se conservan.
-pub fn reponer(r: &Reglas, guarnicion: &mut Escuadra) {
-    guarnicion.cantidad = r.pueblos.mineros;
+/// Vuelve un minero a la guarnición de serie, con su identidad (la experiencia y el nivel que ganó se conservan). `true` si ya está completa.
+pub fn reponer(r: &Reglas, guarnicion: &mut Escuadra) -> bool {
+    guarnicion.cantidad = (guarnicion.cantidad + 1).min(r.pueblos.mineros);
+    guarnicion.cantidad >= r.pueblos.mineros
 }
 
-/// El combate de un saqueo: `resolverCombate` con la **ventaja del defensor del aguante** (×1,25) como multiplicador del defensor.
-// DUDA: Combate.md dice «con `resolverCombate` y la ventaja del defensor de B» sin decir si sustituye o se suma a la ventaja de 1,05 de todo
-// defensor. Aquí se suma (×1,25 × 1,05 = ×1,3125): lo más favorable al pueblo, que siempre tiene mineros. Un solo cambio en esta función.
+/// El combate de un saqueo: `resolverCombate` con la **ventaja del defensor del aguante** (×1,25) como multiplicador del defensor, que se suma a la
+/// ventaja de 1,05 de todo defensor: ×1,3125 (Combate §7.3).
 pub fn resolver_saqueo(r: &Reglas, atacante: Bando, defensor: Bando, rng: &mut Rng) -> Result<Informe, CombateInvalido> {
     resolver_combate(r, atacante, defensor, r.numericas.ventaja_aguante, rng)
 }
@@ -88,13 +89,21 @@ mod pruebas {
     }
 
     #[test]
-    fn la_reposicion_gratuita_tarda_seis_horas_y_deja_la_escuadra_completa() {
+    fn la_reposicion_gratuita_es_un_minero_cada_12_minutos_y_30_en_seis_horas() {
         let r = r();
-        assert_eq!(reposicion_en(r, 10), 10 + 6 * 60 * MS_POR_MINUTO);
+        assert_eq!(reposicion_en(r, 10), 10 + 12 * MS_POR_MINUTO);
         let mut g = guarnicion_de_serie(r, 5, 0);
         g.cantidad = 0;
         g.experiencia = 7_000;
-        reponer(r, &mut g);
+        let (mut t, mut citas) = (0, 0);
+        loop {
+            t = reposicion_en(r, t);
+            citas += 1;
+            if reponer(r, &mut g) {
+                break;
+            }
+        }
+        assert_eq!((citas, t), (30, 6 * 60 * MS_POR_MINUTO), "una cita por minero; desde 0, completa a las 6 h");
         assert_eq!((g.cantidad, g.experiencia), (30, 7_000), "conserva su experiencia");
     }
 

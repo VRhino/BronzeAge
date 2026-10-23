@@ -280,9 +280,8 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
 /// `(fila, columna)`), por vecindad 8 probando `dr` y `dc` de −1 a 1. En un punto grueso (una esquina de la capa 4-adyacente) el
 /// paseo puede quedar sin salida dejando celdas atrás: entonces sigue desde la celda sin visitar más cercana (Chebyshev, y a
 /// igual distancia la de menor `(fila, columna)`), de modo que no se pierde ninguna y el desorden se queda en un salto local.
-/// Recibe las celdas ya en orden de índice.
-// DUDA: Murallas.md (y el TypeScript) añadían todo lo que faltara por (fila, columna) al final, lo que en un anillo con un punto
-// grueso temprano dejaba más de la mitad de la obra en desorden; el salto al más cercano conserva el recorrido en lo demás.
+/// Recibe las celdas ya en orden de índice. El TypeScript añadía al final lo que faltara por `(fila, columna)`; el orden del Rust es el que
+/// vale (decisión del autor, 2026-10-23, Murallas §3).
 fn ordenar_anillo(celdas: Vec<CeldaMuro>) -> Vec<CeldaMuro> {
     if celdas.is_empty() {
         return celdas;

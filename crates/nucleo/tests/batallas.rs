@@ -699,6 +699,7 @@ fn con_la_partida_en_curso_la_salida_aplica_las_bajas_hiere_al_derrotado_y_el_re
     assert_eq!(codigo(&sale(&mut x, "s1", mala(vec![e(fuerte0, 1, 1)]))), rechazos::BATALLA_INVALIDA, "la escuadra es de ana");
     assert_eq!(codigo(&sale(&mut x, "s2", mala(vec![e(debil, 1, 1), e(debil, 1, 1)]))), rechazos::BATALLA_INVALIDA, "repetida");
     assert_eq!(codigo(&sale(&mut x, "s3", mala(vec![e(debil, 1, 1)]))), rechazos::BATALLA_INVALIDA, "no cierra sobre lo autorizado");
+    assert_eq!(codigo(&sale(&mut x, "s3b", mala(vec![]))), rechazos::BATALLA_SALIDA_INCOMPLETA, "tiene que nombrar todas sus escuadras");
     assert_eq!(codigo(&sale(&mut x, "s4", salida("a1", 0, beto.1, MotivoSalida::NoConectado, false, vec![]))), rechazos::BATALLA_INVALIDA, "no_conectado solo antes de empezar");
     assert_eq!(rastro(&x.n), antes);
     let r = sale(&mut x, "s5", mala(vec![e(debil, 10, autorizadas - 10)]));
@@ -891,7 +892,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN23");
+    assert_eq!(&bytes[..5], b"BAN24");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -2010,7 +2011,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN23");
+        assert_eq!(&bytes[..5], b"BAN24");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();
@@ -2146,13 +2147,13 @@ fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarn
     en_curso(&mut e.n, id, t + MIN, &[saqueador.1]);
     let res = resultado(&e.n, id, Lado::Atacante, 10);
     assert!(aplicar(&mut e.n, t + 2 * MIN, "res", id, res).aceptada());
-    // Se lleva lo que está por encima de la mitad; la guarnición de serie queda en 20 y se repone a las 6 horas.
+    // Se lleva lo que está por encima de la mitad; la guarnición de serie queda en 20 y vuelve un minero cada 12 minutos.
     assert_eq!(e.carga(saqueador.0, Cobre), guardado - 250_000, "lo saqueado");
     assert_eq!(e.n.pueblo(pueblo).unwrap().1.almacen.cantidad(Cobre), 250_000, "el pueblo conserva la mitad protegida");
     let g = &e.n.estado().combate.guarniciones[&pueblo];
-    assert_eq!((g.escuadra.cantidad, g.repone_en), (20, Some(t + 2 * MIN + 6 * HORA)));
+    assert_eq!((g.escuadra.cantidad, g.repone_en), (20, Some(t + 2 * MIN + 12 * MIN)));
     assert_eq!(e.n.estado().asentamientos[&madre].faccion, 1);
-    e.n.avanzar_hasta(t + 2 * MIN + 6 * HORA);
+    e.n.avanzar_hasta(t + 2 * MIN + 10 * 12 * MIN);
     assert_eq!(e.n.estado().combate.guarniciones[&pueblo].escuadra.cantidad, 30);
 }
 

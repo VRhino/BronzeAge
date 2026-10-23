@@ -1,8 +1,8 @@
 //! Los hechos del núcleo como `EventoDominio` del contrato 05 §8 (4H T5): el `payload` genérico de todos y el mensaje **tipado** de los quince que mueven la interfaz (decisión 8 del autor).
 //!
 //! - **A quién se atribuye**: `asentamiento_id` (la primera plaza), `heroes_ids` (los héroes nombrados) y `facciones_ids` (las Facciones que lo oyen enteras), lo que `EventoNucleo::completar` dejó al emitirlo.
-//! - **`payload`**: `ejercitoId` (la primera columna que nombra), `x`/`y` (dónde ocurrió), los datos enteros tal cual (los ids del núcleo como números, como en el resto del núcleo), los valores de
-//!   texto y lista y, en los hechos de batalla (`batalla.*` y `evento_pve.*`), `battleId` con el id de la batalla en el contrato.
+//! - **`payload`**: `ejercitoId` (la primera columna que nombra), `x`/`y` (dónde ocurrió), los datos enteros y los valores de texto y lista. Los datos que nombran una entidad viajan **con el id del
+//!   contrato** y la clave con `Id` (`heroe: 3` → `heroeId: "heroe-3"`, como en los tipados; decisión del autor, 2026-10-24, [`id_del_contrato`]); la batalla, como `battleId`.
 //! - **`tipado`**, con el mismo contenido que el payload ya traducido a ids del contrato:
 //!
 //! | Mensaje | Códigos |
@@ -75,6 +75,38 @@ fn valor(d: &Dato) -> Value {
     }
 }
 
+/// El id del contrato de un dato entero que nombra una entidad (`None`: es un número que no nombra nada, o una marca, y viaja tal cual). Las claves son las de los hechos del núcleo; un
+/// campamento es de bandidos en sus hechos ([`de_bandidos`]) y de mercenarios en los demás; un edificio y un recinto, de la plaza del hecho.
+fn id_del_contrato(n: &Nucleo, ev: &EventoNucleo, clave: &str, v: i64) -> Option<String> {
+    let (u, plaza) = (v as u64, ev.asentamientos.first().copied());
+    let faccion = || u32::try_from(v).ok().filter(|&f| f > 0).map(ids::faccion).unwrap_or_default();
+    Some(match clave {
+        "heroe" | "lider" | "sucesor" | "solicitante" | "observador" => ids::heroe(u),
+        "ejercito" | "ejercitoA" | "ejercitoB" | "columna" | "presa" => ids::ejercito(u),
+        "caravana" | "caravanaB" => ids::caravana(u),
+        "plaza" | "ciudad" | "destino" | "socia" | "asentamientoArruinado" => ids::asentamiento(u),
+        "faccion" | "faccionA" | "faccionB" | "faccionAtacante" | "faccionDefensora" | "faccionAnterior" | "faccionVista" | "faccionQueVe" | "contra" | "por" => faccion(),
+        "pueblo" => ids::pueblo(u),
+        "avanzada" => ids::avanzada(u),
+        "convocatoria" => ids::convocatoria(u),
+        "acuerdo" => ids::acuerdo(u),
+        "orden" => ids::orden_de_mercado(u),
+        "escuadra" => ids::escuadra(u),
+        "nodo" => ids::nodo(v as u32),
+        "campamento" if de_bandidos(&ev.codigo) => ids::bandidos(u),
+        "campamento" => ids::campamento(v as u32),
+        "edificio" => ids::edificio(plaza?, v as u32),
+        "recinto" => ids::recinto(plaza?, v as u32),
+        "batalla" => return Some(n.uuid_de_batalla(u)),
+        _ => return None,
+    })
+}
+
+/// ¿Es un hecho de un campamento de bandidos (su aparición, su ataque, su batalla)?
+fn de_bandidos(codigo: &str) -> bool {
+    codigo.starts_with("bandidos.") || codigo.starts_with("evento_pve.") || matches!(codigo, "combate.campamento_destruido" | "combate.ataque_campamento_fallido")
+}
+
 fn payload(n: &Nucleo, ev: &EventoNucleo) -> Struct {
     let mut campos = std::collections::BTreeMap::new();
     if let Some(&id) = ev.ejercitos.first() {
@@ -84,11 +116,14 @@ fn payload(n: &Nucleo, ev: &EventoNucleo) -> Struct {
         campos.insert("x".to_owned(), numero(p.x));
         campos.insert("y".to_owned(), numero(p.y));
     }
-    campos.extend(ev.datos.iter().map(|&(k, v)| (k.to_owned(), numero(v))));
-    campos.extend(ev.valores.iter().map(|(k, d)| ((*k).to_owned(), valor(d))));
-    if let Some(b) = batalla_de(ev) {
-        campos.insert("battleId".to_owned(), texto(n.uuid_de_batalla(b)));
+    for &(k, v) in &ev.datos {
+        match id_del_contrato(n, ev, k, v) {
+            Some(id) if k == "batalla" => campos.insert("battleId".to_owned(), texto(id)),
+            Some(id) => campos.insert(format!("{k}Id"), texto(id)),
+            None => campos.insert(k.to_owned(), numero(v)),
+        };
     }
+    campos.extend(ev.valores.iter().map(|(k, d)| ((*k).to_owned(), valor(d))));
     Struct { fields: campos }
 }
 

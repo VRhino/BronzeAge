@@ -5,20 +5,20 @@
 //!   más las que dejará lo andado).
 //! - [`Mirada::contenido`] dice qué entidades tiene que tener el cliente, cada una con su [`Sello`] (lo que, si cambia, obliga a mandarla otra vez) y su cuerpo, que solo se calcula si hace falta.
 //!   Lo **propio** (las columnas de la Facción y en las que va la cuenta, las caravanas de sus plazas o con destino en ellas, sus plazas, pueblos, avanzadas y obras) viaja como en `FACCION` y `HEROE`;
-//!   lo **ajeno** que se ve, redactado (§5.4, D15): la columna sin composición y solo con el tramo del plan dentro del rectángulo y de un horizonte de 30 s (que el muestreo renueva cuando le quedan
-//!   menos de 10 s, decisión 6; nunca el destino), la caravana sin cantidades, la plaza como ficha con su zona recortada y sus edificios activos, el pueblo y la avanzada sin almacén ni guarnición,
+//!   lo **ajeno** que se ve, redactado (§5.4, D15): la columna sin composición y solo con el tramo del plan al alcance de los ojos que la ven y dentro de un horizonte de 30 s (que el muestreo
+//!   renueva cuando le quedan menos de 10 s, decisión 6; nunca el destino), la caravana sin cantidades, la plaza como ficha con su zona recortada y sus edificios activos, el pueblo y la avanzada sin almacén ni guarnición,
 //!   el héroe solo con lo público (`HeroePublico`); lo **recordado** (un sitio ajeno que se vio y ya no se ve), como `FichaConocida`. Además: los campamentos de bandidos que se ven, los de
 //!   mercenarios explorados (o donde reside o está), las batallas que se ven o en que está su Facción (como las ve él: `propios::batalla`), la zona de la Facción, los caminos explorados y la
 //!   intel de la taberna: las Miradas de la Facción (abiertas o enfriando su zona) y sus Informes de plaza. Una Mirada abierta, suya o de un aliado, es un ojo prestado: ve, no explora.
 //!
-//! DUDA: «el tramo dentro de tu vista» se recorta al rectángulo de la vista, no a los discos de los ojos: el tramo puede enseñar hasta 30 s de camino fuera del alcance (≤ 15 u a la marcha de
-//! una columna); la columna se retira en el muestreo siguiente a que deje de verse.
+//! El tramo de lo ajeno se recorta a la unión de los discos de los ojos (decisión del autor, 2026-10-23: no al rectángulo de la vista, que enseñaría camino fuera del alcance); una caravana
+//! grande que solo se ve por llamar la atención, a sus 60 u. La columna se retira en el muestreo siguiente a que deje de verse.
 
 use super::propios::{self, Proyectada};
 use super::{ficha_de_asentamiento, ids, interior, plan, punto};
 use crate::estado::{Clase, Ejercito};
 use crate::estado_militar::Relacion;
-use crate::memoria::{DatosSitio, Ficha, InformeDePlaza, Mirada as MiradaIntel, OrigenIntel, Sitio};
+use crate::memoria::{DatosSitio, EstadoSitio, Ficha, InformeDePlaza, Mirada as MiradaIntel, OrigenIntel, Sitio};
 use crate::nucleo::Nucleo;
 use asentamiento::edificio::Estado as EstadoEdificio;
 use base::{Instante, Mil, Plan, Punto, Vertice};
@@ -29,6 +29,9 @@ use militar::presencia::Ubicacion;
 use pb::entidad::Cuerpo;
 use std::collections::{BTreeMap, BTreeSet};
 use vision::{radios, tramo_visible, Mascara, Rect};
+
+/// Un ojo: su centro y su alcance.
+type Ojo = (Punto, Mil);
 
 /// Desde dónde se mira: la Facción del héroe o, sin bandera, el héroe solo (su niebla personal). Es el id del ámbito (`VISTA:f-N`, `VISTA:heroe-N`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -71,7 +74,7 @@ pub struct Mirada<'n> {
     /// Todas las columnas con su posición en `t`: se calcula una vez por perspectiva y no una por sesión (4H T6).
     columnas: Vec<(&'n Ejercito, Punto)>,
     /// Los ojos propios y los de los aliados en `t`: centro y alcance.
-    ojos: Vec<(Punto, Mil)>,
+    ojos: Vec<Ojo>,
     /// Las columnas propias: las de la Facción o, sin bandera, en las que va el héroe.
     propias: BTreeSet<u64>,
     /// Lo explorado (con lo que lleva andado cada columna propia). `None` sin rejilla de niebla.
@@ -127,7 +130,7 @@ impl<'n> Mirada<'n> {
             .collect();
         let grupo: Vec<u32> = faccion.into_iter().chain(faccion.map(|f| aliados(n, f)).unwrap_or_default()).collect();
         let columnas: Vec<(&Ejercito, Punto)> = e.ejercitos.values().map(|x| (x, x.posicion_en(t))).collect();
-        let mut ojos: Vec<(Punto, Mil)> = columnas.iter().filter(|(x, _)| propias.contains(&x.id) || x.columna.faccion.is_some_and(|f| grupo.contains(&f))).map(|&(x, p)| (p, n.radio_de_vista(x))).collect();
+        let mut ojos: Vec<Ojo> = columnas.iter().filter(|(x, _)| propias.contains(&x.id) || x.columna.faccion.is_some_and(|f| grupo.contains(&f))).map(|&(x, p)| (p, n.radio_de_vista(x))).collect();
         for a in e.asentamientos.values().filter(|a| grupo.contains(&a.faccion)) {
             ojos.push((a.posicion, a.radio));
             ojos.extend(a.economia.avanzadas.iter().filter(|v| v.operativa()).map(|v| (v.posicion, radios::AVANZADA)));
@@ -209,9 +212,9 @@ impl<'n> Mirada<'n> {
             if propia(x) {
                 v.push(visible(pb::TipoEntidad::Ejercito, id, Sello(x.version, 0), move || Some(Cuerpo::Ejercito(propios::ejercito(n, x)))));
             } else if !x.en_batalla && self.ve(p) {
-                let tramo = self.tramo(&x.plan, x.version, tiene.get(&(pb::TipoEntidad::Ejercito as i32, id.clone())), rect);
+                let tramo = self.tramo(&x.plan, x.version, tiene.get(&(pb::TipoEntidad::Ejercito as i32, id.clone())), &self.ojos);
                 let sello = Sello(x.version, tramo.as_ref().map_or_else(|v| *v, |t| t.last().map_or(0, |v| v.en)));
-                v.push(visible(pb::TipoEntidad::Ejercito, id, sello, move || Some(Cuerpo::Ejercito(self.ejercito_avistado(x, rect)))));
+                v.push(visible(pb::TipoEntidad::Ejercito, id, sello, move || Some(Cuerpo::Ejercito(self.ejercito_avistado(x)))));
             } else {
                 continue;
             }
@@ -235,9 +238,11 @@ impl<'n> Mirada<'n> {
             let atencion = c.es_grande(flota) && matches!(c.estado, EstadoCaravana::Preparando | EstadoCaravana::EnTransito) && self.ojos.iter().any(|&(o, _)| crate::nucleo::cerca(o, p, radios::CARAVANA_GRANDE));
             if self.ve(p) || atencion {
                 let plan = c.plan.clone().filter(|_| matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando)).unwrap_or_default();
-                let tramo = self.tramo(&plan, version, tiene.get(&(pb::TipoEntidad::Caravana as i32, id.clone())), rect);
+                // La caravana grande llama la atención a 60 u: hasta ahí se ve su tramo.
+                let grande: Option<Vec<Ojo>> = atencion.then(|| self.ojos.iter().map(|&(o, r)| (o, r.max(radios::CARAVANA_GRANDE))).collect());
+                let tramo = self.tramo(&plan, version, tiene.get(&(pb::TipoEntidad::Caravana as i32, id.clone())), grande.as_deref().unwrap_or(&self.ojos));
                 let sello = Sello(version, tramo.as_ref().map_or_else(|v| *v, |t| t.last().map_or(0, |v| v.en)));
-                v.push(visible(pb::TipoEntidad::Caravana, id, sello, move || Some(Cuerpo::Caravana(self.caravana_avistada(c, p, &plan, rect)))));
+                v.push(visible(pb::TipoEntidad::Caravana, id, sello, move || Some(Cuerpo::Caravana(self.caravana_avistada(c, p, &plan, grande.as_deref().unwrap_or(&self.ojos))))));
             }
         }
 
@@ -271,6 +276,7 @@ impl<'n> Mirada<'n> {
             }
         }
         for x in n.avanzadas_huerfanas().filter(|x| rect.contiene(x.posicion) && self.ve(x.posicion)) {
+            vistos.insert(Sitio::Avanzada(x.id));
             v.extend(self.avanzada_avistada(None, x, n.version_de(Clase::Avanzada, x.id)));
         }
         for (&s, &f) in self.fichas.iter().filter(|(s, f)| !vistos.contains(s) && rect.contiene(f.datos.posicion)) {
@@ -280,7 +286,7 @@ impl<'n> Mirada<'n> {
                 Sitio::Avanzada(x) => ids::avanzada(x),
             };
             let d = f.datos;
-            let sello = Sello(u64::from(d.faccion) << 32 | u64::from(d.nivel), f.conocido_en ^ d.radio.rotate_left(20));
+            let sello = Sello(u64::from(d.faccion) << 32 | u64::from(d.nivel) << 2 | d.estado as u64, f.conocido_en ^ d.radio.rotate_left(20));
             v.push(visible(pb::TipoEntidad::FichaConocida, id.clone(), sello, move || Some(Cuerpo::FichaConocida(ficha_conocida(s, id.clone(), f)))));
         }
 
@@ -347,8 +353,8 @@ impl<'n> Mirada<'n> {
     }
 
     /// El tramo de un plan ajeno que toca mandar: el que el cliente ya tiene (`Err(dónde acaba)`) si es de la misma versión y le dura aún [`radios::RENOVAR_MS`] o más, o el plan llega a su fin
-    /// dentro de él; si no, el tramo nuevo dentro del rectángulo y del horizonte de 30 s.
-    fn tramo(&self, plan: &Plan, version: u64, tiene: Option<&Sello>, rect: Rect) -> Result<Vec<Vertice>, i64> {
+    /// dentro de él; si no, el tramo nuevo al alcance de los ojos y dentro del horizonte de 30 s.
+    fn tramo(&self, plan: &Plan, version: u64, tiene: Option<&Sello>, ojos: &[Ojo]) -> Result<Vec<Vertice>, i64> {
         if plan.vertices.is_empty() {
             return Ok(Vec::new());
         }
@@ -357,7 +363,7 @@ impl<'n> Mirada<'n> {
                 return Err(hasta);
             }
         }
-        Ok(tramo_visible(plan, self.t, radios::HORIZONTE_MS, rect))
+        Ok(tramo_visible(plan, self.t, radios::HORIZONTE_MS, ojos))
     }
 
     /// Lo propio de una clase (las mismas entidades que en `FACCION`: la ficha de la plaza; el pueblo, la avanzada y sus obras).
@@ -368,8 +374,8 @@ impl<'n> Mirada<'n> {
 
     /// La columna ajena (`EjercitoAvistado`): quién es, de quién, de qué tipo, quiénes van (los rombos), si está en formación, dónde está y el tramo visible de su plan; `te_sigue` si persigue a una
     /// columna propia. Ni composición, ni carro, ni víveres, ni Líder, ni destino.
-    fn ejercito_avistado(&self, x: &Ejercito, rect: Rect) -> pb::Ejercito {
-        let tramo = tramo_visible(&x.plan, self.t, radios::HORIZONTE_MS, rect);
+    fn ejercito_avistado(&self, x: &Ejercito) -> pb::Ejercito {
+        let tramo = tramo_visible(&x.plan, self.t, radios::HORIZONTE_MS, &self.ojos);
         pb::Ejercito {
             id: ids::ejercito(x.id),
             version: x.version,
@@ -386,9 +392,9 @@ impl<'n> Mirada<'n> {
     }
 
     /// La caravana ajena (`CaravanaAvistada`): de qué Facción (la de su plaza de origen), dónde está, el tramo visible de su plan, si va escoltada y qué recursos lleva, sin cantidades.
-    fn caravana_avistada(&self, c: &Caravana, p: Punto, plan_: &Plan, rect: Rect) -> pb::Caravana {
+    fn caravana_avistada(&self, c: &Caravana, p: Punto, plan_: &Plan, ojos: &[Ojo]) -> pb::Caravana {
         let e = self.n.estado();
-        let tramo = if plan_.vertices.is_empty() { Vec::new() } else { tramo_visible(plan_, self.t, radios::HORIZONTE_MS, rect) };
+        let tramo = if plan_.vertices.is_empty() { Vec::new() } else { tramo_visible(plan_, self.t, radios::HORIZONTE_MS, ojos) };
         let mut recursos: Vec<String> = c.contenido.iter().filter(|(_, &q)| q > 0).map(|(r, _)| r.nombre().to_owned()).collect();
         recursos.sort();
         pb::Caravana {
@@ -585,15 +591,21 @@ fn ficha_conocida(s: Sitio, id: String, f: Ficha) -> pb::FichaConocida {
         Sitio::Pueblo(_) => pb::TipoEntidad::Pueblo,
         Sitio::Avanzada(_) => pb::TipoEntidad::Avanzada,
     };
+    let estado = match f.datos.estado {
+        EstadoSitio::Activo => pb::EstadoSitio::SitioActivo,
+        EstadoSitio::EnObra => pb::EstadoSitio::SitioEnObra,
+        EstadoSitio::EnRuinas => pb::EstadoSitio::SitioEnRuinas,
+    };
     pb::FichaConocida {
         asentamiento_id: id,
         nombre: None,
-        faccion_id: ids::faccion(f.datos.faccion),
+        faccion_id: (f.datos.faccion > 0).then(|| ids::faccion(f.datos.faccion)).unwrap_or_default(),
         posicion: Some(punto(f.datos.posicion)),
         nivel: f.datos.nivel,
         conocido_en_ms: f.conocido_en,
         radio_potencial: matches!(s, Sitio::Plaza(_)).then_some(f.datos.radio),
         tipo: tipo as i32,
+        estado: estado as i32,
     }
 }
 

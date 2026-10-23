@@ -2,16 +2,16 @@
 
 > **Reescrito el 2026-10-13**: el **servidor calcula el trazado** de cada asentamiento una vez, con este algoritmo, y lo entrega; Unity solo lo dibuja (decisión del usuario). El espacio local de la ciudad y el mapa del mundo son **dos espacios separados, sin conversión entre ellos** (Doc 1.0a; la escala de transición `ESCALA` se borró). Los algoritmos de este documento no cambian. El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Trazado_Urbano.md`.
 
-> **Implementado en Rust (2026-10-18).** La geometría es el crate `crates/trazado` (reglas puras en enteros; `LAYOUT_VERSION` = 3, no 2: `pseudoAleatorio` con `sin` se sustituyó por un hash entero, así que **no reproduce el trazado de TypeScript**). Su integración en el núcleo:
+> **Implementado en Rust (2026-10-18).** La geometría es el crate `crates/trazado` (reglas puras en enteros; `LAYOUT_VERSION` = 4, no 2: `pseudoAleatorio` con `sin` se sustituyó por un hash entero, así que **no reproduce el trazado de TypeScript**). **Versión 4 (2026-10-23, decisiones del autor tras el laboratorio del trazado):** las reglas de colocación vuelven a ser las del TypeScript en lo que la versión 3 había cambiado: **sin disco urbano para anclas ni satélites** (§6.5, §7.2: solo los genéricos lo miran), el núcleo de un ancla se barre con **su círculo** (§6.5), un ancla queda **llena en cuanto no cabe la huella pedida** (§7.1), la Granja que crece busca sitio **sin su suelo pero conservando su camino** (§6.7) y **el ancla nace al proponer** (§7.1, ver «Cuándo se coloca»). No se adoptan (decisión del autor): la semilla fuera de la separación del ancla nueva ni `continuaFila` con calles. La muralla conserva el orden del Rust ([`Murallas.md`](Murallas.md) §3). Su integración en el núcleo:
 >
 > - `crates/nucleo/src/urbanismo.rs`: la tabla tipo → huella y categoría (las huellas salen de los bloques `EDIFICIO_TAMANO_POR_DEFECTO`, `EDIFICIO_TAMANO`, `PUESTO_MERCADO_FORMA` y `MERCADO_PUESTOS_POR_NIVEL` de este documento, incrustado con `include_str!`, y del `tamano` de cada nivel de la Granja en `EDIFICIO_CATALOGO`; **esos bloques entran en la huella de las reglas de las fotos**; la categoría de cada tipo es §6.1), la `Urbe` de cada plaza (la `Ciudad` más el caché de consultas) y `SitiosUrbe`. Cada plaza del núcleo lleva su `Urbe` (`nucleo::Asentamiento.urbe`); `Nucleo::ciudad(id)` y `Nucleo::vista_ciudad(id)` la entregan para pintar (piezas con su rectángulo en unidades locales, calles y caminos).
 > - `crates/nucleo/src/codec_ciudad.rs`: serialización para el hash y las fotos (formato de la ciudad introducido en `BAN4` y vigente en `BAN5`: semilla, `Parametros`, piezas en su orden de construcción y recintos; suelo y red se derivan al leer). Una foto con otra `LAYOUT_VERSION` se rechaza.
 > - `crates/asentamiento`: el trait `Sitios` coloca (`proponer`, `tomar(id, …)`, `puestos_de_mercado`, `hueco_al_mejorar`, `reubicar`) y recibe un `Urbano` (nivel, nivel operativo, edificios completados, perfil de la ordenanza, id siguiente). Las anclas de saturación y los puestos del Mercado entran en la economía como edificios activos y gratuitos (`Evento::EdificioGratuito`, cuentan a la mitad en el mantenimiento, no agrandan la zona ni la ciudad).
 > - **Semilla** de cada ciudad: `hash(semilla del núcleo, "ciudad", [id de la plaza])`. **Perfil**: el de la ordenanza activa (`Politicas::perfil_trazado`) o, si no hay, el de la tradición de la plaza; solo afecta a lo que se coloca después. **Radio de la ciudad**: `radio_ciudad` con los edificios que pasaron por la cola y el nivel alcanzado; la zona del mapa es otro espacio y crece por su regla.
-> - **Cuándo se coloca**: al *comprometer* el proyecto (al encolar, manual o automático), no al completarlo; quitarlo de la cola libera su sitio. Si el barrio no tiene ancla con hueco y el nivel operativo es ≥ 2, el trazado crea antes el ancla (un edificio gratuito más). Un proyecto que se queda sin sitio entre la pregunta y el compromiso (otro de la misma pasada se lo llevó) no se cobra ni se compromete. Los puestos del Mercado nacen al completarse y al mejorar a cada nivel; la Granja se muda al terminar su mejora y, si no hay hueco, la mejora espera conservando su cuadrilla (la mejora manual lo comprueba antes).
+> - **Cuándo se coloca**: al *comprometer* el proyecto (al encolar, manual o automático), no al completarlo; quitarlo de la cola libera su sitio. **El ancla, en cambio, nace al proponer** (`Urbe::proponer`, como `asegurarAnclaPara` del TypeScript; decisión del autor, 2026-10-23): si el barrio no tiene ancla con hueco y el nivel operativo es ≥ 2, el trazado la crea al preguntar por sitio, con el id siguiente de la plaza, y **la economía la da de alta en ese momento como edificio gratuito** (`Sitios::proponer` la devuelve y `Asentamiento::proponer` la registra), así que se queda —con sus marcas de «llena»— aunque el proyecto no llegue a comprometerse y toda pieza de la ciudad sigue teniendo su edificio. La orden manual comprueba los recursos antes de preguntar por sitio: un rechazo no deja ancla. Si entre la pregunta y el compromiso otro proyecto de la misma pasada llenó el ancla, `tomar` la crea entonces, como antes. Un proyecto que se queda sin sitio entre la pregunta y el compromiso (otro de la misma pasada se lo llevó) no se cobra ni se compromete. Los puestos del Mercado nacen al completarse y al mejorar a cada nivel; la Granja se muda al terminar su mejora y, si no hay hueco, la mejora espera conservando su cuadrilla (la mejora manual lo comprueba antes).
 > - **Caché**: cada `Urbe` guarda «¿cabe este tipo?» y «¿cabe esta mejora?» con lo único de lo que depende (revisión de la ciudad, radio, id siguiente y gate donde se crean anclas, perfil); no entra en el hash ni en las fotos y no cambia ningún resultado.
-> - **Pueblos extractores** (2026-10-19, fase 3C): su planta es `urbanismo::planta_de_pueblo(reglas, semilla, id, extractor)`, una función pura del id que no se guarda (el extractor como ancla en el origen, 4 casas, el almacén y el corral, con un radio de 8 u. locales); el pueblo no tiene pieza en la ciudad de su madre ni pasa por la cola (`Economia_Construccion.md` §14).
-- **Recintos de muralla** (2026-10-22, fase de Murallas, paso 1): el **trazo** vive en el mismo crate, módulo `trazado::muralla` (`trazar_recinto`, `interior_de`, `contiene_a`, `edificios_extramuros`, `marcar_torres`; ver [`Murallas.md`](Murallas.md) §3 y la nota de implementación al final). El anillo se calcula sobre la red de la ciudad **sin recintos** y sobre la misma ventana de ±96 celdas (se rechaza si no cabe). Desde la segunda tanda el núcleo traza y compromete recintos y `Urbe::set_recintos` recibe una proyección derivada de los recintos de la economía (`codec_ciudad` ya no los persiste). Desde la tercera, la colocación se prueba con recintos reales (`crates/nucleo/tests/murallas_asedio.rs`: los edificios nuevos no pisan el anillo, levantado o no, y con el anillo completo los urbanos caen intramuros) y `VistaCiudad.murallas` es el dibujo (§10). El batch de población sigue sin ciudad (todo cabe). Las `DUDA` abiertas están anotadas en el código (`crates/nucleo/src/urbanismo.rs`, `crates/asentamiento/src/{asentamiento,obras}.rs` y `crates/trazado`).
+> - **Pueblos extractores** (2026-10-19, fase 3C): su planta es `urbanismo::planta_de_pueblo(reglas, semilla, id, extractor)`, una función pura del id que no se guarda (el extractor como ancla en el origen, `PUEBLOS_EXTRACTORES.casasDeLaPlanta` casas —6—, el almacén y el corral, con el radio que necesiten sus piezas: se traza desde 8 u. locales, crece de `RADIO_CIUDAD.crecimientoPorEdificio` en `crecimientoPorEdificio` si alguna no cabe, y la vista lleva el disco que las contiene todas; decisión del autor, 2026-10-23. En el mapa del mundo el pueblo sigue ocupando 0,2); el pueblo no tiene pieza en la ciudad de su madre ni pasa por la cola (`Economia_Construccion.md` §14).
+- **Recintos de muralla** (2026-10-22, fase de Murallas, paso 1): el **trazo** vive en el mismo crate, módulo `trazado::muralla` (`trazar_recinto`, `interior_de`, `contiene_a`, `edificios_extramuros`, `marcar_torres`; ver [`Murallas.md`](Murallas.md) §3 y la nota de implementación al final). El anillo se calcula sobre la red de la ciudad **sin recintos** y sobre la misma ventana de ±96 celdas (se rechaza si no cabe). Desde la segunda tanda el núcleo traza y compromete recintos y `Urbe::set_recintos` recibe una proyección derivada de los recintos de la economía (`codec_ciudad` ya no los persiste). Desde la tercera, la colocación se prueba con recintos reales (`crates/nucleo/tests/murallas_asedio.rs`: los edificios nuevos no pisan el anillo, levantado o no, y con el anillo completo los urbanos caen intramuros) y `VistaCiudad.murallas` es el dibujo (§10). El batch de población sigue sin ciudad (todo cabe). La única `DUDA` abierta del trazado es la de la Granja inicial que no cupiera al fundar (`crates/nucleo/src/urbanismo.rs`, `crates/trazado/src/fundacion.rs`; inalcanzable en una ciudad vacía, pendiente de confirmar por el autor); las demás se cerraron el 2026-10-23 (`Consideraciones/Dudas_Del_Codigo_Decisiones.md`).
 
 Cómo se decide **dónde va cada edificio** de un asentamiento y por dónde pasan sus calles. Es una geometría pura sobre una rejilla, determinista y sin
 estado propio: lo único que se guarda de ella son las posiciones de los edificios (y los recintos, ver [`Murallas.md`](Murallas.md)).
@@ -38,9 +38,10 @@ Las manzanas no existen como dato: son el espacio que queda encerrado cuando las
 - **Espacio local** de cada asentamiento: plano, centrado en el Centro Urbano, `(0,0)` = su centro. Unidades «locales».
 - **Celda** = `REJILLA_ASENTAMIENTO.tamanoCelda` = **3 unidades locales** de lado. Una calle mide una celda (`TRAZADO.anchoCalle = 1`).
 - `radioMapa = 220` es solo presentación (zoom del lienzo); no interviene en ninguna decisión.
-- `LAYOUT_VERSION = 2`: revisión de la geometría. **Un snapshot de otra revisión se rechaza al cargar** (`cargarPartida`), porque las huellas y la red se *derivan* de las tablas y se
+- `LAYOUT_VERSION = 4` (2 en el TypeScript; ver la nota de implementación): revisión de la geometría. **Un snapshot de otra revisión se rechaza al cargar** (`cargarPartida`), porque las huellas y la red se *derivan* de las tablas y se
   reinterpretarían en silencio. Se sube al cambiar cualquier huella, el tamaño de celda, `FONDO_MANZANA` o una constante de `TRAZADO` que mueva lo ya colocado.
-- El espacio local de la ciudad y el mapa del mundo son **espacios separados**: la ciudad no se mide contra el exterior (decidido el 2026-10-17; `ESCALA` y `radioUrbanoDe` se borraron). Su tamaño es **propio e interno**: `radioCiudad`, en unidades locales, nace en `TRAZADO.radioCiudad.inicial` (30), crece `TRAZADO.radioCiudad.crecimientoPorEdificio` (5) por edificio completado y topa en `radioCiudad.maximoPorNivel` (60 / 90 / 120 / 150 / 180 para los niveles 1-5). No se deriva del radio de la zona de influencia ni de ninguna cifra del mapa; los valores son los de siempre, así que el trazado no cambia.
+- El espacio local de la ciudad y el mapa del mundo son **espacios separados**: la ciudad no se mide contra el exterior (decidido el 2026-10-17; `ESCALA` y `radioUrbanoDe` se borraron). Su tamaño es **propio e interno**: `radioCiudad`, en unidades locales, nace en `RADIO_CIUDAD.inicial` (30), crece `RADIO_CIUDAD.crecimientoPorEdificio` (5) por edificio completado y topa en `RADIO_CIUDAD.maximoPorNivel` (60 / 90 / 120 / 150 / 180 para los niveles 1-5; bloque en §12). No se deriva del radio de la zona de influencia ni de ninguna cifra del mapa; los valores son los de siempre, así que el trazado no cambia.
+  **Qué edificios cuentan** (decisión del autor, 2026-10-23): solo los que pasaron por la cola y están activos (los mismos que agrandan la zona del mapa); ni los de la fundación (la ciudad nace con su radio inicial, sin salto) ni los gratuitos (anclas y puestos del Mercado, que nacen sin obra). El tope por nivel usa el nivel **alcanzado**, como la zona; el gate de las anclas, el operativo (`nivelActual`, Economia_Construccion §6.2).
 
 ### 2.2 Celda, rectángulo y posición
 
@@ -384,6 +385,7 @@ Sin ancla ni barrio: todos los candidatos del radio urbano con `distanciaMinima 
      - `hueco`: celdas hasta el ancla. · `nivel`: el de §6.2. · `borde`: `bordeCompartido` con `rectConAnillo` (largo de lado compartido; 0 si solo se tocan en diagonal; solo discrimina con hueco 0).
      - `bordeAfin`: celdas de `celdasAfines` ortogonalmente adyacentes al perímetro del candidato. · `centro`: distancia del punto al origen.
    - Vacío = el núcleo está geométricamente lleno.
+   - *En Rust (versión 4):* el radio de escaneo es un **círculo** centro a centro con el ancla desnuda (`(FONDO_MANZANA + max(lado ancla) + max(lado satélite)) × T`), y el satélite **no** se limita al disco urbano (`radioCiudad`): crece con su ancla.
 4. Preferencia intramuros (§6.6).
 
 El **mercado** y sus **puestos** son un caso de §6.5 con ancla = `mercado`: los puestos comparten categoría con él y se agrupan a su alrededor sin ninguna regla extra.
@@ -396,7 +398,7 @@ anillo (puertas incluidas). Sin recinto completo, no hace nada.
 
 ### 6.7 Reubicación de un edificio que crece (`reubicarPorTamano`)
 
-Hoy solo la granja al mejorar. Se busca un sitio para la huella nueva con el suelo ocupado **sin el propio edificio**, con las reglas de afueras si procede. Entre los candidatos:
+Hoy solo la granja al mejorar. Se busca un sitio para la huella nueva con el suelo ocupado **sin el propio edificio** (`sueloOcupado(…, excluirId)`): se libera solo su suelo y la red se queda la que da **con** él, así que su camino sigue sirviendo de frente (en Rust desde la versión 4), con las reglas de afueras si procede. Entre los candidatos:
 1. los que **no acercan** su borde interior al centro respecto al actual, y de ellos el **más cercano a la posición actual**;
 2. si ninguno cumple, el más cercano a la posición actual (la mejora manda sobre la dirección);
 3. `null` solo si no cabe en ningún sitio (entonces la mejora no se aplica).
@@ -449,7 +451,7 @@ devolver null
 ```
 
 - `huecoEnDireccion`: prueba radios de `radioInicialRanura() = separacionMinimaAnclas` (6) a `radioMaximoRanura() = 3 × separacionMinimaAnclas` (18) celdas, de `FONDO_MANZANA` en `FONDO_MANZANA`; el rectángulo centrado en
-  `origen + dirección × radio × T` debe estar libre y a `gapCeldas ≥ separacionSeguridadAnclas` (3, **piso duro**) de **todas** las demás anclas.
+  `origen + dirección × radio × T` debe estar libre y a `gapCeldas ≥ separacionSeguridadAnclas` (3, **piso duro**) de **todas** las demás anclas. **Sin disco urbano**: el árbol de anclas crece por sus ranuras, no por el `radioCiudad` (la versión 3 del Rust lo limitaba; la 4 vuelve a esto).
 - `ranuraOcupada(centroSemilla, dirección, otras)`: hay un ancla a una distancia entre `radioInicialRanura − 2` y `radioMaximoRanura + 2` celdas y con un ángulo a menos de `0,55 × media ranura` de la dirección.
 - Un ancla recién creada con el **mercado** como tipo usa este mismo camino (es su propia ancla primaria).
 
@@ -486,7 +488,7 @@ La clave es el contenido exacto, no un hash: una colisión daría una red equivo
 ## 11. Fundación
 
 `edificiosIniciales`: el Centro Urbano en `(0,0)`; `FUNDACION.viviendasIniciales` (3) viviendas colocadas con `sitioEnBarrio` (cada una ve las anteriores); la granja inicial con `sitioEnBarrio` (si no cabe, **cae al
-origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto de colocación `{ id, radioCiudad: TRAZADO.radioCiudad.inicial }`.
+origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto de colocación `{ id, radioCiudad: RADIO_CIUDAD.inicial }`.
 
 ## 12. Parámetros
 
@@ -499,9 +501,19 @@ origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto 
 ```
 <!-- /parametros -->
 
+<!-- parametros:RADIO_CIUDAD -->
+```json
+{
+  "inicial": 30,
+  "crecimientoPorEdificio": 5,
+  "maximoPorNivel": [60, 90, 120, 150, 180]
+}
+```
+<!-- /parametros -->
+
 <!-- parametros:LAYOUT_VERSION -->
 ```json
-2
+4
 ```
 <!-- /parametros -->
 
@@ -551,6 +563,7 @@ origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto 
 ## 14. Decisiones que parecen raras
 
 - **Las anclas tienen un anillo de calle**, así que un satélite nunca *toca* al ancla: el hueco se mide contra el ancla *con su anillo*. Medir contra el ancla desnuda hacía imposible `hueco 0`.
-- **`anclaLlena` y `semillaSaturada` son latches permanentes** (nada libera celdas). Por eso un ancla solo se marca llena cuando su banda no tiene ni un hueco geométrico, aunque no quede ninguno con frente de calle.
+- **`anclaLlena` y `semillaSaturada` son latches permanentes** (nada libera celdas). Un ancla se marca llena **en cuanto no cabe en su núcleo la huella que se pide** (`anclaActivaParaCategoria`; en Rust desde la versión 4, que antes esperaba a que no cupiera ni una celda): un edificio grande puede así cerrar un núcleo que aún admitiría uno pequeño, y el siguiente pequeño irá a otra ancla.
+- **Solo los genéricos viven dentro del disco urbano.** Las anclas y sus satélites no lo miran (§6.5, §7.2): la ciudad crece por su árbol de anclas y el `radioCiudad` limita lo que se coloca suelto.
 - **`nextId()` se consume por candidato propuesto** en la auto-construcción, aunque luego no se comprometa; por eso la búsqueda de sitio no puede filtrarse por «¿puedo pagarlo?» sin cambiar el comportamiento.
 - **Una granja envuelta por la ciudad** queda intramuros: ya no son las afueras (ver [`Murallas.md`](Murallas.md) §3).

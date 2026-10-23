@@ -34,9 +34,8 @@ pub struct ResultadoEntrega {
 }
 
 /// Entrega `contenido` en el almacén del destino: cada recurso con `agregar` (lo que no cabe se pierde), luego la comisión (se acuña,
-/// topada) y, si procede, el recargo por reputación (conservado: no se acuña).
-// DUDA: el documento topa la comisión por la capacidad de oro del destino pero no dice qué pasa con el recargo si ya no cabe; para que el
-// oro se conserve (invariante de §14), el recargo se topa también por el hueco que deja la comisión, y el origen solo paga lo que entró.
+/// topada) y, si procede, el recargo por reputación (conservado: no se acuña), topado también por el hueco de oro que deja la comisión: el origen
+/// solo paga lo que entró (Comercio_Caravanas §3.3).
 pub fn entregar(r: &Reglas, contenido: &Carga, destino: &mut Almacen, d: &DatosEntrega) -> ResultadoEntrega {
     let mut ingresado = Carga::new();
     let mut perdido = Carga::new();

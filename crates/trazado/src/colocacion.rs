@@ -191,9 +191,8 @@ impl Ciudad {
     fn sitios_satelite(&self, p: &Pedido) -> Vec<Colocacion> {
         let campo = self.suelo.campo(self.params().cap_corredor_urbano);
         let afines = self.mapa_de_afines(p);
-        // DUDA: T §6.5 toma «la ancla más cercana no llena» y, si su núcleo no tiene sitio, devuelve vacío. Aquí se pasa a la
-        // siguiente ancla con sitio para esta huella (una huella grande no debe quedar bloqueada por un núcleo lleno para ella
-        // pero abierto para las pequeñas). Con anclas bien marcadas (`asegurar_ancla_para`) coincide con el doc.
+        // T §6.5 toma «la ancla más cercana no llena». Tras `asegurar_ancla_para`, que marca llenas las que no admiten esta huella, esa
+        // es la primera con sitio; recorrerlas todas solo cambia algo si se pregunta sin asegurar antes.
         for a in self.anclas_activas(p.categoria) {
             let mut cands = self.atraccion_dura(&a.rect, p, &afines, &campo);
             if !cands.is_empty() {
@@ -204,16 +203,24 @@ impl Ciudad {
         Vec::new()
     }
 
-    /// `sitiosPorAtraccionDura`: candidatos del núcleo del ancla (hueco ≤ fondo de manzana), ordenados por el perfil.
+    /// `sitiosPorAtraccionDura`: candidatos del núcleo del ancla (hueco ≤ fondo de manzana), ordenados por el perfil. Como T §6.5, sin
+    /// disco urbano y dentro del círculo de barrido del TypeScript (`candidatosLibres(rectAncla, margen·T)`): centro a centro con el
+    /// ancla desnuda, a ≤ `fondo + lado mayor del ancla + lado mayor del pedido` celdas.
     pub(crate) fn atraccion_dura(&self, ancla: &Rect, p: &Pedido, afines: &[bool], campo: &[u16]) -> Vec<Cand> {
         let prm = self.params();
         let rca = ancla.ensanchado(prm.ancho_calle);
         let fondo = prm.fondo_manzana;
+        let margen = (fondo + ancla.ancho.max(ancla.alto) + p.huella.ancho.max(p.huella.alto)) as i64 * CELDA_MIL;
+        let ca = ancla.centro();
+        let en_circulo = |r: &Rect| {
+            let c = r.centro();
+            (c.x - ca.x).pow(2) + (c.y - ca.y).pow(2) <= margen * margen
+        };
         let mut cands = Vec::new();
         for (h, rotado) in Self::orientaciones(p) {
             let cols = (rca.col - h.ancho - fondo, rca.fin_col() + fondo);
             let rows = (rca.row - h.alto - fondo, rca.fin_row() + fondo);
-            let filtro = |r: &Rect| r.hueco(&rca) <= fondo && en_disco(r, p.radio_ul);
+            let filtro = |r: &Rect| r.hueco(&rca) <= fondo && en_circulo(r);
             cands.extend(self.barrido(h, rotado, cols, rows, campo, &filtro));
         }
         for c in &mut cands {
@@ -322,6 +329,38 @@ mod pruebas {
         };
         let borde_actual = actual.dist2_borde_al_origen();
         validos.iter().filter(|s| s.rect.dist2_borde_al_origen() >= borde_actual).min_by_key(|s| dist(s)).or_else(|| validos.iter().min_by_key(|s| dist(s))).copied()
+    }
+
+    /// Una ciudad recién fundada con unas granjas y casas más (el suelo de las pruebas de reubicación).
+    fn ciudad_con_granjas(semilla: u64) -> (Ciudad, u32) {
+        let tp = |tipo, a, h| crate::fundacion::TipoPieza { tipo, huella: Huella::new(a, h) };
+        let mut c = Ciudad::fundar(&crate::fundacion::EntradaFundacion {
+            semilla,
+            params: Parametros::default(),
+            perfil: Perfil::por_tradicion(semilla),
+            primer_id: 0,
+            centro: tp(1, 4, 4),
+            vivienda: tp(2, 1, 1),
+            granja: tp(3, 2, 2),
+        });
+        let granja = c.piezas().iter().find(|p| p.categoria == Categoria::Afueras).map(|p| p.id).expect("la fundación pone la granja");
+        for (k, (cat, h)) in [(Categoria::Afueras, (2, 2)), (Categoria::Residencial, (1, 1)), (Categoria::Afueras, (4, 3)), (Categoria::Generico, (2, 1))].into_iter().cycle().take(24).enumerate() {
+            let ped = Pedido { id: 100 + k as u32, tipo: 9, categoria: cat, rol: Rol::Normal, huella: Huella::new(h.0, h.1), permitir_rotacion: cat != Categoria::Afueras || h != (2, 2), perfil: Perfil::Nucleos, radio_ul: 60 };
+            c.colocar_siguiente(&ped);
+        }
+        (c, granja)
+    }
+
+    #[test]
+    fn la_granja_que_crece_busca_sitio_sin_su_suelo_pero_con_su_camino() {
+        for semilla in [3u64, 8, 21] {
+            let (c, granja) = ciudad_con_granjas(semilla);
+            let sin = c.sin_pieza(granja);
+            assert!(!c.caminos().is_empty(), "las granjas llegan a la red por un camino");
+            assert_eq!((sin.calles(), sin.caminos()), (c.calles(), c.caminos()), "semilla {semilla}: la red es la que da con la granja (T §6.7)");
+            assert!(sin.suelo.rect_libre(&c.pieza(granja).unwrap().rect), "semilla {semilla}: su suelo queda libre");
+            assert!(sin.pieza(granja).is_none());
+        }
     }
 
     #[test]

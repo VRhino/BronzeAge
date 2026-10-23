@@ -125,42 +125,37 @@ pub struct Perdida {
     pub carros_perdidos: usize,
     /// La carga perdida: lo que el atacante puede llevarse, hasta lo que le quepa (el resto se destruye).
     pub carga_perdida: Carga,
-    /// No quedan carros: la caravana se elimina (y su escolta vuelve al campamento).
+    /// No quedan carros: la caravana se elimina (y su escolta vuelve al campamento). Nunca en un aguante.
     pub destruida: bool,
-    /// Solo en un aguante que se queda sin carros: el 30 % que se salva siempre y llega a su destino con los carreteros. Vacío si la caravana sigue.
-    pub carga_salvada: Carga,
 }
 
 /// Las consecuencias para el dueño cuando **gana el atacante**. `carros` son los índices de los carros perdidos si los dice Unity; sin ellos
-/// (combate con números) se pierden los últimos `carros_a_perder`.
-// DUDA: el documento no dice qué carros se pierden con números; se pierden los últimos de la lista (los añadidos más tarde). Con Unity decide Unity.
-// DUDA: un aguante que pierde todos los carros elimina la caravana pero el 30 % salvado «llega con los carreteros»: se devuelve para que el
-// núcleo lo entregue (si hace falta una caravana de carreteros hasta el destino, es decisión del autor).
+/// (combate con números) se pierden los últimos `carros_a_perder` de la lista, los añadidos más tarde (Combate §7.1). En un **aguante nunca se
+/// pierde el último carro**: si se perderían todos, el primero de la lista se queda y lleva el 30 % que se salva.
 pub fn aplicar_al_dueno(r: &Reglas, flota: &ReglasFlota, caravana: &mut Caravana, modalidad: Modalidad, carros: Option<&[usize]>) -> Result<Perdida, ErrorCaravana> {
     let n = caravana.carros.len();
-    let indices: Vec<usize> = match carros {
+    let mut indices: Vec<usize> = match carros {
         Some(c) => c.to_vec(),
         None => (n - carros_a_perder(r, n).min(n)..n).collect(),
     };
     match modalidad {
         Modalidad::Disputa => {
             let p = caravana.aplicar_perdida_de_carros(flota, &indices)?;
-            Ok(Perdida { carros_perdidos: p.carros_perdidos, carga_perdida: p.carga_perdida, destruida: p.destruida, carga_salvada: Carga::new() })
+            Ok(Perdida { carros_perdidos: p.carros_perdidos, carga_perdida: p.carga_perdida, destruida: p.destruida })
         }
         Modalidad::Aguante => {
             if indices.iter().enumerate().any(|(i, &x)| x >= n || indices[..i].contains(&x)) {
                 return Err(ErrorCaravana::CarroInexistente);
             }
+            if indices.len() == n {
+                indices.retain(|&x| x != 0);
+            }
             let carga_perdida = caravana.perder_fraccion_de_carga(r.numericas.carga_perdida_aguante);
             let salvada = caravana.contenido.clone();
             let p = caravana.aplicar_perdida_de_carros(flota, &indices)?;
             // El 30 % se salva siempre: los carros que se van no se llevan nada más.
-            if p.destruida {
-                Ok(Perdida { carros_perdidos: p.carros_perdidos, carga_perdida, destruida: true, carga_salvada: salvada })
-            } else {
-                caravana.contenido = salvada;
-                Ok(Perdida { carros_perdidos: p.carros_perdidos, carga_perdida, destruida: false, carga_salvada: Carga::new() })
-            }
+            caravana.contenido = salvada;
+            Ok(Perdida { carros_perdidos: p.carros_perdidos, carga_perdida, destruida: false })
         }
     }
 }
@@ -315,16 +310,22 @@ mod pruebas {
         assert_eq!(c.carros.len(), 2, "también la mitad de los carros");
         assert_eq!(c.contenido.get(&Madera), Some(&300), "el 30 % no se lo llevan los carros que se pierden");
         assert_eq!(c.contenido.get(&Piedra), Some(&30));
-        assert!(!p.destruida && p.carga_salvada.is_empty());
+        assert!(!p.destruida);
     }
 
     #[test]
-    fn un_aguante_que_pierde_todos_los_carros_devuelve_el_30_por_ciento_para_los_carreteros() {
+    fn en_un_aguante_nunca_se_pierde_el_ultimo_carro_y_el_30_por_ciento_sigue_en_el() {
         let r = r();
         let mut c = caravana(1, &[(Madera, 1_000)]);
         let p = aplicar_al_dueno(r, &flota(), &mut c, Modalidad::Aguante, None).unwrap();
-        assert!(p.destruida);
-        assert_eq!((p.carga_perdida.get(&Madera), p.carga_salvada.get(&Madera)), (Some(&700), Some(&300)));
+        assert!(!p.destruida && p.carros_perdidos == 0, "con un carro, la mitad hacia arriba sería el único");
+        assert_eq!((p.carga_perdida.get(&Madera), c.carros.len(), c.contenido.get(&Madera)), (Some(&700), 1, Some(&300)));
+        // Unity tampoco puede quitarlos todos: se queda el primero de la lista.
+        let mut c = caravana(3, &[(Madera, 1_000)]);
+        c.carros[0].tipo = TipoCarro::Reforzado;
+        let p = aplicar_al_dueno(r, &flota(), &mut c, Modalidad::Aguante, Some(&[2, 0, 1])).unwrap();
+        assert_eq!((p.carros_perdidos, p.destruida), (2, false));
+        assert_eq!((c.carros[0].tipo, c.contenido.get(&Madera)), (TipoCarro::Reforzado, Some(&300)));
     }
 
     #[test]

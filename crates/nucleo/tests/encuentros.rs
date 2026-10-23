@@ -241,7 +241,8 @@ fn perseguir_empieza_con_la_presa_a_la_vista_la_alcanza_en_un_instante_exacto_y_
     assert_eq!(n.perseguidores_de(Objetivo::Ejercito(q)), vec![p]);
     assert!(n.ejercito(p).unwrap().marchando(), "sale en marcha hacia la intercepción");
     let iniciada = hechos(&n, "columna.persecucion_iniciada");
-    assert_eq!((iniciada.len(), iniciada[0].1.clone(), dato(&iniciada[0], "presa"), dato(&iniciada[0], "caravana")), (1, vec![p], q as i64, 0));
+    assert_eq!((iniciada.len(), iniciada[0].1.clone(), dato(&iniciada[0], "presa")), (1, vec![p], q as i64));
+    assert!(iniciada[0].3.iter().all(|(k, _)| *k != "caravana"), "la presa es una columna");
     // Misma orden otra vez: sin cambios.
     assert_eq!(perseguir(&mut n, 0, "ana", "p2", p, Objetivo::Ejercito(q)).resultado, Resultado::SinCambios);
 
@@ -455,7 +456,7 @@ fn la_foto_con_una_persecucion_viva_conserva_la_presa_los_informes_las_relacione
     let mut n = nucleo(40, 5);
     let (p, q) = persecucion_viva(&mut n);
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN23");
+    assert_eq!(&bytes[..5], b"BAN24");
     let vuelta = nucleo::Estado::deserializar(&bytes, &comun::reglas(), "hash-de-prueba").expect("deserializa");
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.ejercitos[&p].persiguiendo, Some(q));

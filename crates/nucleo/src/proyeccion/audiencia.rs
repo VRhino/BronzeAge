@@ -13,8 +13,8 @@
 //! | `Faccion` | `FACCION` de la propia |
 //! | `Relacion` | `FACCION` de las dos Facciones, mientras exista |
 //!
-//! DUDA: la convocatoria va a la Facción entera (el canon la reparte a «su lugar y su Facción», pero solo puede unirse quien es de la Facción) y no a `HEROE`; una entidad puede estar en dos
-//! ámbitos a la vez (una caravana adjunta a tu columna, en `HEROE` y en `FACCION`) y `QUITA` significa «ya no es de este ámbito».
+//! La convocatoria va a la Facción entera y no a `HEROE` (solo puede unirse quien es de la Facción: Presencia_Y_Convocatoria §9.6). Una entidad puede estar en dos ámbitos a la vez (una caravana
+//! adjunta a tu columna, en `HEROE` y en `FACCION`) y `QUITA` significa «ya no es de este ámbito».
 //!
 //! El héroe de una sesión es el de verdad de la cuenta y, si solo tiene héroes de campo del andamiaje de administración, el primero ([`heroe_de_sesion`]): los demás héroes de la cuenta
 //! no tienen ámbito `HEROE`, pero sus columnas se ven en el del héroe de la sesión.

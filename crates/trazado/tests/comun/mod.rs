@@ -169,7 +169,7 @@ pub fn verificar(c: &Ciudad, radio_ul: i32) {
             assert!(a.rect.hueco(&b.rect) >= prm.separacion_seguridad_anclas, "anclas {} y {} demasiado juntas", a.id, b.id);
         }
     }
-    // dentro del disco urbano; las afueras, fuera de las afueras mínimas y dentro de su banda
+    // los genéricos, dentro del disco urbano; las afueras, fuera de las afueras mínimas (anclas y satélites no miran el disco: T §6.5, §7.2)
     let banda = prm.radio_afueras_min_ul.max(0) as i64 * 1000;
     for p in piezas {
         let c0 = p.rect.centro();
@@ -179,7 +179,7 @@ pub fn verificar(c: &Ciudad, radio_ul: i32) {
             let (y0, y1) = (p.rect.row as i64 * 3000, p.rect.fin_row() as i64 * 3000);
             let (dx, dy) = (x0.max(-x1).max(0), y0.max(-y1).max(0));
             assert!(dx * dx + dy * dy >= banda * banda, "afuera {} dentro de las afueras mínimas", p.id);
-        } else {
+        } else if p.categoria == Categoria::Generico {
             let r = radio_ul as i64 * 1000;
             assert!(d2 <= r * r, "la pieza {} ({:?}) se sale del disco de {radio_ul} u.l.", p.id, p.rect);
         }

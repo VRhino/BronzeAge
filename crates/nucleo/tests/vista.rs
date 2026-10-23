@@ -422,6 +422,59 @@ async fn con_el_reloj_en_marcha_el_muestreo_renueva_el_tramo_ajeno_sin_ninguna_o
     w.parar().await;
 }
 
+/// Lee lo que llegue durante `ms` de pared y lo descarta (avisos del reloj y lo que el muestreo tuviera pendiente).
+async fn vaciar(c: &mut ClientePrueba, ms: u64) {
+    while tokio::time::timeout(std::time::Duration::from_millis(ms), c.recibir()).await.is_ok() {}
+}
+
+#[tokio::test]
+async fn tras_una_orden_solo_la_vista_de_quien_la_da_se_pone_al_dia_y_las_demas_en_el_muestreo() {
+    let m = con_mundo!();
+    let mut x = escenario(m);
+    let (centro, radio, gus_col) = (x.centro, x.radio, x.gus);
+    let gus = x.n.ejercito(gus_col).unwrap().columna.lider;
+    // Gus dentro de la zona de F1: Ana lo ve.
+    let dentro = en_tierra(&m.0, centro, -radio + 5 * U, 0);
+    x.ok("gus", Comando::MarcharA { ejercito: gus_col, destino: dentro });
+    let llega = x.n.ejercito(gus_col).unwrap().plan.fin().unwrap();
+    x.n.avanzar_hasta(llega);
+    let ej = ids::ejercito(gus_col);
+    let w = arrancar_con(x.n).await;
+    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    let (mut ana_c, _, _) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    let (mut gus_c, _, _) = w.conectar(hola("ok:gus", TipoCliente::ClienteUnity)).await;
+    let todo = rect(Punto::new(0, 0), Punto::new(2_667_000, 2_000_000));
+    for c in [&mut ana_c, &mut gus_c] {
+        c.enviar(todo.clone()).await;
+        c.esperar().await;
+    }
+    // El reloj en marcha, pero tan despacio (×0,001) que no llega ningún muestreo de 250 ms de mundo durante la prueba.
+    for (id, accion, factor) in [("lento", "fijar_factor", Some(1)), ("marcha", "reanudar", None)] {
+        let (_, r) = dar_todo(&mut admin_c, id, orden::Cuerpo::ControlarReloj(pb::OrdenControlarReloj { accion: accion.into(), factor_milesimas: factor, hasta_ms: None })).await;
+        assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    }
+    vaciar(&mut ana_c, 300).await;
+    vaciar(&mut gus_c, 300).await;
+    // Gus cambia de destino: su vista se pone al día antes del resultado de su orden...
+    let (previos, r) = dar_todo(&mut gus_c, "g1", marchar(gus, en_tierra(&m.0, centro, radio + 40 * U, 0))).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    let es_la_columna = |d: &pb::Delta| d.cambios.iter().any(|c| c.id == ej);
+    assert!(previos.iter().any(|m| matches!(m, ms::Cuerpo::Delta(d) if ambito(&d.ambito) == "VISTA:f-2" && es_la_columna(d))), "la vista de quien da la orden, al momento");
+    // ...y la de Ana espera al muestreo: con el reloj casi quieto, nada llega.
+    silencio(&mut ana_c).await;
+    // Con el reloj a ×1, el muestreo siguiente le trae la columna con su plan nuevo.
+    let (_, r) = dar_todo(&mut admin_c, "normal", orden::Cuerpo::ControlarReloj(pb::OrdenControlarReloj { accion: "fijar_factor".into(), factor_milesimas: Some(1_000), hasta_ms: None })).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    loop {
+        match ana_c.esperar().await.cuerpo {
+            Some(ms::Cuerpo::Delta(d)) if ambito(&d.ambito) == "VISTA:f-1" && es_la_columna(&d) => break,
+            Some(_) => {}
+            None => panic!("sin mensaje"),
+        }
+    }
+    w.parar().await;
+}
+
 // ───────────────────────────── 3. Aliados, rectángulo, sin Facción y reanudación ─────────────────────────────
 
 #[tokio::test]

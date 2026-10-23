@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN23");
+    assert_eq!(&bytes[..5], b"BAN24");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -866,6 +866,30 @@ fn si_la_caravana_resiste_el_atacante_pierde_el_25_por_ciento_y_sus_heroes_queda
     assert_eq!(codigo(&e.atacar("gus", tercero.1, ObjetivoAtaque::Caravana(cb), true)), rechazos::COMBATE_CARAVANA_ADJUNTA);
 }
 
+#[test]
+fn con_numeros_la_columna_derrotada_pierde_la_mitad_de_los_carros_de_cada_caravana_adjunta() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, true);
+    let a = e.a;
+    let una = e.caravana("ana", a, 1);
+    e.avanzar(10 * MIN); // el cooldown de creación de la plaza
+    let dos = e.caravana("ana", a, 2);
+    let col = e.ejercito("ana", 1, e.pos(a), &[Tropa::MiliciaLanceros]);
+    for k in [una, dos] {
+        e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: col.0 });
+    }
+    let fuerte = e.ejercito("gus", 3, e.pos(a), &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::EspadachinesBronce]);
+    assert!(e.atacar("gus", fuerte.1, ObjetivoAtaque::Ejercito(col.0), true).aceptada());
+    let r = &hechos(&e.n, "combate.resuelto")[0];
+    assert_eq!(dato(r, "ganaElAtacante"), 1, "gana la columna fuerte");
+    // La de un carro lo pierde y desaparece; la de dos pierde uno (la mitad, hacia arriba) y sigue adjunta.
+    assert!(e.n.caravana(una).is_none());
+    assert_eq!(e.n.caravana(dos).map(|k| k.carros.len()), Some(1));
+    assert_eq!(e.n.ejercito(col.0).unwrap().caravanas_adjuntas, vec![dos]);
+    let h = &hechos(&e.n, "ejercito.caravanas_perdidas")[0];
+    assert_eq!((dato(h, "caravanas"), dato(h, "carros")), (2, 2));
+}
+
 // ───────────────────────────── 6. Pueblos extractores ─────────────────────────────
 
 use asentamiento::pueblos::EstadoPueblo;
@@ -905,7 +929,7 @@ fn con_pueblo(m: &M, semilla: u64) -> (Esc, u64) {
 }
 
 #[test]
-fn saquear_un_pueblo_se_lleva_lo_que_hay_por_encima_de_la_mitad_y_la_guarnicion_de_serie_se_repone_a_las_6_horas() {
+fn saquear_un_pueblo_se_lleva_lo_que_hay_por_encima_de_la_mitad_y_la_guarnicion_de_serie_se_repone_minero_a_minero() {
     let m = con_mundo!();
     let (mut e, pueblo) = con_pueblo(m, 7);
     let madre = e.a;
@@ -938,17 +962,24 @@ fn saquear_un_pueblo_se_lleva_lo_que_hay_por_encima_de_la_mitad_y_la_guarnicion_
     assert_eq!(e.n.pueblo(pueblo).unwrap().1.almacen.cantidad(Cobre), 250_000);
     assert_eq!(e.carga_de_columna(saqueador.0, Cobre), guardado - 250_000);
     assert_eq!(e.n.estado().asentamientos[&madre].faccion, 1);
-    // Los mineros: caen entre un 30 % y un 70 % y se reponen a las 6 horas, sin que nada recurra mientras tanto.
-    let g = &e.n.estado().combate.guarniciones[&pueblo];
-    assert!((1..30).contains(&g.escuadra.cantidad), "quedan mineros: {}", g.escuadra.cantidad);
-    assert_eq!(g.repone_en, Some(t + 6 * HORA));
-    e.n.avanzar_hasta(t + 6 * HORA - 1);
-    assert!(e.n.estado().combate.guarniciones[&pueblo].escuadra.cantidad < 30);
-    e.n.avanzar_hasta(t + 6 * HORA);
+    // Los mineros: caen entre un 30 % y un 70 % y vuelven uno a uno, uno cada 12 minutos desde la baja (una cita por minero, ninguna por pueblo ocioso).
+    let mineros = |e: &Esc| e.n.estado().combate.guarniciones[&pueblo].escuadra.cantidad;
+    let quedan = mineros(&e);
+    assert!((1..30).contains(&quedan), "quedan mineros: {quedan}");
+    assert_eq!(e.n.estado().combate.guarniciones[&pueblo].repone_en, Some(t + 12 * MIN));
+    e.n.avanzar_hasta(t + 12 * MIN - 1);
+    assert_eq!(mineros(&e), quedan);
+    e.n.avanzar_hasta(t + 12 * MIN);
+    assert_eq!((mineros(&e), e.n.estado().combate.guarniciones[&pueblo].repone_en), (quedan + 1, Some(t + 24 * MIN)), "vuelve uno y se cita el siguiente");
+    let completa = t + (30 - quedan) * 12 * MIN;
+    e.n.avanzar_hasta(completa - 1);
+    assert_eq!(mineros(&e), 29);
+    e.n.avanzar_hasta(completa);
     let g = &e.n.estado().combate.guarniciones[&pueblo];
     assert_eq!((g.escuadra.cantidad, g.repone_en), (30, None));
     assert!(g.escuadra.experiencia > 0, "conserva la experiencia que ganó");
-    assert_eq!(hechos(&e.n, "pueblo.guarnicion_repuesta")[0].0, t + 6 * HORA);
+    let repuesta = hechos(&e.n, "pueblo.guarnicion_repuesta");
+    assert_eq!((repuesta.len(), repuesta[0].0), (1, completa), "un solo hecho, al quedar completa");
 }
 
 #[test]
@@ -1064,6 +1095,74 @@ fn toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_rea
     assert!(nuevo.id != ca.id && e.n.estado().combate.reaparecen.get(&a).is_none());
     assert_eq!(hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![a]).map(|h| h.0).collect::<Vec<_>>(), vec![0, t + 60 * MIN]);
     assert!(de_combate_pendientes(&e.n).is_empty());
+}
+
+#[test]
+fn la_cita_del_anillo_se_rehace_cuando_llega_o_se_va_un_residente() {
+    let m = con_mundo!();
+    let mut n = Nucleo::nuevo(arranque(m, 11));
+    n.avanzar_hasta(11 * MIN);
+    assert!(de_combate_pendientes(&n).is_empty(), "satisfechos los anillos, sin citas");
+    let del_anillo = |n: &Nucleo| n.campamentos_de_bandidos().filter(|b| b.origen == nucleo::OrigenBandidos::Anillo(0)).count();
+    assert_eq!(del_anillo(&n), 1);
+    // Llegan tres residentes sin Facción al campamento 0: le tocan ceil(3 / 2) = 2 y la cita vuelve en ese instante (su plazo ya venció).
+    let t = n.ahora();
+    let heroes: Vec<u64> = (0..3)
+        .map(|i| {
+            let r = n.aplicar_en(t, admin(&format!("h{i}"), Comando::CrearHeroe { cuenta: format!("res{i}"), campamento: 0, controlador: Controlador::Humano }));
+            assert!(r.aceptada(), "{r:?}");
+            r.creadas[0]
+        })
+        .collect();
+    assert_eq!(de_combate_pendientes(&n), vec![(t, nucleo::SucesoCombate::BandidosDelAnillo)], "una sola cita, aunque llegaran tres");
+    // Se van antes de que venza: la demanda vuelve a 1 y la cita muere.
+    for (i, &h) in heroes.iter().enumerate() {
+        assert!(n.aplicar_en(t, admin(&format!("fuera{i}"), Comando::FijarResidencia { heroe: h, residencia: None })).aceptada());
+    }
+    assert!(de_combate_pendientes(&n).is_empty(), "con la demanda cubierta no queda cita");
+    // Vuelven: el anillo gana su segundo campamento, en el sitio que permita el sorteo.
+    for (i, &h) in heroes.iter().enumerate() {
+        assert!(n.aplicar_en(t, admin(&format!("vuelta{i}"), Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) })).aceptada());
+    }
+    n.avanzar_hasta(t + HORA);
+    assert_eq!(del_anillo(&n), 2, "el residente que llega adelanta la cita");
+}
+
+#[test]
+fn una_plaza_sin_bosque_libre_recibe_su_campamento_en_cuanto_se_libera_uno() {
+    let m = con_mundo!();
+    let mut n = Nucleo::nuevo(arranque(m, 7));
+    // Plazas hasta agotar los bosques: la última que llega se queda esperando el suyo, sin cita.
+    let (ancho, alto) = m.0.tamano();
+    let suyo = |n: &Nucleo, plaza: u64| n.campamentos_de_bandidos().find(|c| c.origen == nucleo::OrigenBandidos::Plaza(plaza)).cloned();
+    let esperan = |n: &Nucleo| n.estado().asentamientos.keys().copied().filter(|&p| suyo(n, p).is_none()).collect::<Vec<_>>();
+    let mut faccion = 0;
+    'poblar: for y in (31_000..alto).step_by(31_000) {
+        for x in (31_000..ancho).step_by(31_000) {
+            faccion += 1;
+            let e = n.crear_ejercito(0, "ana", faccion, Punto::new(x, y), 500, 100_000).unwrap();
+            n.aplicar_en(0, admin(&format!("c{x}-{y}"), Comando::DarCaravanaFundacion { ejercito: e }));
+            n.aplicar_en(0, Peticion::nueva("ana", &format!("f{x}-{y}"), Comando::Fundar { ejercito: e }));
+            n.avanzar_hasta(0);
+            if !esperan(&n).is_empty() {
+                break 'poblar;
+            }
+        }
+    }
+    let espera = esperan(&n)[0];
+    assert!(!de_combate_pendientes(&n).iter().any(|&(_, s)| s == nucleo::SucesoCombate::BandidosDeLaPlaza), "sin bosque que valga no se reintenta por tiempo");
+    // Se destruye un campamento cuyo bosque sigue fuera de toda zona: queda libre y la que esperaba lo recibe en ese instante.
+    let valido = |n: &Nucleo, c: &nucleo::CampamentoBandidos| n.estado().asentamientos.values().all(|a| a.posicion.dist(c.posicion) >= a.radio + 10_000) && !n.en_proteccion_de_campamento(c.posicion);
+    let libre = n.campamentos_de_bandidos().find(|c| matches!(c.origen, nucleo::OrigenBandidos::Plaza(_)) && valido(&n, c)).cloned().expect("un campamento de plaza con su bosque válido");
+    let (a, b) = (*n.estado().asentamientos.keys().next().unwrap(), espera);
+    let mut e = Esc { n, a, b, cuenta: 0, fijo: None };
+    let atacante = e.ejercito("gus", 9_999, libre.posicion, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
+    let t = e.n.ahora();
+    assert!(e.atacar("gus", atacante.1, ObjetivoAtaque::Campamento(libre.id), false).aceptada());
+    e.n.avanzar_hasta(t + 1);
+    let nuevo = suyo(&e.n, espera).expect("la plaza que esperaba recibe el bosque que quedó libre");
+    assert_eq!((nuevo.bosque, nuevo.posicion), (libre.bosque, libre.posicion));
+    assert_eq!(hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![espera]).map(|h| h.0).collect::<Vec<_>>(), vec![t]);
 }
 
 #[test]

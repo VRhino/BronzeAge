@@ -45,7 +45,7 @@ Una columna nacida de **salir con su Líder** (con política de unión) desde un
 
 Un Ejército **nunca se queda vacío en campo abierto**: el último miembro es siempre su Líder y el Líder no puede separarse, así que para deshacerlo se entra en una plaza o campamento (Doc 5.14).
 
-Mientras está en campaña, un ejército **no come del almacén de su asentamiento**: lleva sus víveres (tope por Héroe, Doc 5.13) y, aparte, un carro de carga por Héroe, de capacidad fija. Puede además llevar **caravanas adjuntas** que amplían su alcance, y que pueden ir cargadas de mercancía (escolta de caravanas, Doc 5.13.2-5.13.3). Si el ejército es derrotado, entrega la mitad de su carro y las caravanas adjuntas se pierden con él.
+Mientras está en campaña, un ejército **no come del almacén de su asentamiento**: lleva sus víveres (tope por Héroe, Doc 5.13) y, aparte, un carro de carga por Héroe, de capacidad fija. Puede además llevar **caravanas adjuntas** que amplían su alcance, y que pueden ir cargadas de mercancía (escolta de caravanas, Doc 5.13.2-5.13.3). Si el ejército es derrotado, entrega la mitad de su carro y cada caravana adjunta pierde la mitad de sus carros con su carga, que van al botín del vencedor (la que se queda sin carros desaparece).
 
 Cancelar la marcha **detiene la columna donde está** (no hay vuelta automática); para deshacerla se entra en una plaza o campamento (Doc 5.12.6).
 

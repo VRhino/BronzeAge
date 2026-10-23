@@ -35,7 +35,6 @@
 
 use super::combates::{caidos, DefensoresDeDentro};
 use super::dentro::MOTIVO_DESAPARECE;
-use super::mercado::RADIO_PUERTA;
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO, PRIO_UMBRAL};
 use crate::estado_combate::{entidad_avanzada, entidad_obra_de_avanzada};
@@ -289,7 +288,7 @@ impl Nucleo {
                 let (faccion, centro, radio) = (plaza.faccion, plaza.posicion, plaza.radio);
                 self.autorizar_ciudadano(p, *heroe, faccion)?;
                 let (_, e) = self.columna_a_bordo(*heroe)?;
-                if !p.admin && e.posicion_en(t).dist(*posicion) > RADIO_PUERTA {
+                if !p.admin && e.posicion_en(t).dist(*posicion) > self.radio_puerta() {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DEL_SITIO, "la columna del héroe no está en el sitio donde se coloca la avanzada".into()));
                 }
                 if !self.en_zona(*asentamiento, *posicion) {
@@ -311,7 +310,7 @@ impl Nucleo {
                 if e.columna.faccion != Some(self.estado.asentamientos[&madre].faccion) {
                     return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "la obra es de otra Facción".into()));
                 }
-                if e.posicion_en(t).dist(av.posicion) > RADIO_PUERTA {
+                if e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la obra".into()));
                 }
                 let disponible: asentamiento::Costo = self.material_de_columna(*ejercito).into_iter().collect();
@@ -390,7 +389,7 @@ impl Nucleo {
                 if e.columna.faccion != Some(faccion) {
                     return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "esa avanzada no abre su almacén a esta columna".into()));
                 }
-                if !p.admin && e.posicion_en(t).dist(posicion) > RADIO_PUERTA {
+                if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la avanzada".into()));
                 }
                 if !av.operativa() {
@@ -422,7 +421,7 @@ impl Nucleo {
                 if e.columna.faccion != Some(self.estado.asentamientos[&madre].faccion) {
                     return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "esa avanzada es de otra Facción".into()));
                 }
-                if e.posicion_en(t).dist(av.posicion) > RADIO_PUERTA {
+                if e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la avanzada".into()));
                 }
                 if *cantidad <= 0 {
@@ -520,7 +519,7 @@ impl Nucleo {
         let (faccion, posicion, etapa, punto) = (self.estado.asentamientos[&madre].faccion, av.posicion, av.etapa, av.posicion);
         self.autorizar_ciudadano(p, heroe, faccion)?;
         let (cid, e) = self.columna_a_bordo(heroe)?;
-        if !p.admin && e.posicion_en(t).dist(posicion) > RADIO_PUERTA {
+        if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada".into()));
         }
         if !av.operativa() {
@@ -574,7 +573,7 @@ impl Nucleo {
         let (faccion, posicion) = (self.estado.asentamientos[&madre].faccion, av.posicion);
         self.autorizar_ciudadano(p, heroe, faccion)?;
         let (cid, e) = self.columna_a_bordo(heroe)?;
-        if !p.admin && e.posicion_en(t).dist(posicion) > RADIO_PUERTA {
+        if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada".into()));
         }
         if escuadras.is_empty() {
@@ -727,7 +726,7 @@ impl Nucleo {
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }
         // Los residentes de la madre que defendieron en persona y perdieron pierden la mitad del carro (antes de que la avanzada los saque al mapa).
-        // DUDA: «avanzada que resiste o cae sin conquista» (decisión del autor, 2026-10-22) se lee como «gana el atacante»: si gana el defensor no hay derrota que castigar.
+        // Solo si gana el atacante: si gana el defensor no hay derrota que castigar (Combate §7.4).
         let robado = if gana && matches!(resultado, Asedio::Combate(_)) { self.pierden_la_mitad_del_carro(&dentro.tropa.heroes) } else { Mercancia::new() };
         let (codigo, saqueado) = if gana {
             let (nuevo, llevado) = self.cae_avanzada(t, x, &[id]);

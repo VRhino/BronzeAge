@@ -23,7 +23,6 @@ use super::*;
 use crate::estado::SucesoComercio;
 use crate::estado_comercio::entidad_mercenarios;
 use crate::comando::PagarCon;
-use crate::nucleo::mercado::RADIO_PUERTA;
 use asentamiento::datos::UNO;
 use asentamiento::Recurso;
 use comercio::evento::Evento as EventoComercio;
@@ -151,7 +150,7 @@ impl Nucleo {
         let Some(puerta) = self.puerta_de_campamento(campamento) else { return false };
         match self.heroe(heroe).map(|h| h.heroe.presencia.ubicacion) {
             Some(Ubicacion::Mercenarios(c)) => c == campamento,
-            Some(Ubicacion::Columna(e)) => self.estado.ejercitos.get(&e).is_some_and(|e| e.posicion_en(t).dist(puerta) <= RADIO_PUERTA),
+            Some(Ubicacion::Columna(e)) => self.estado.ejercitos.get(&e).is_some_and(|e| e.posicion_en(t).dist(puerta) <= self.radio_puerta()),
             _ => false,
         }
     }
@@ -164,7 +163,7 @@ impl Nucleo {
         }
         let aqui = self.columna_del_heroe(heroe)?.posicion_en(self.estado.ahora);
         let todos = 0..u32::try_from(self.geografia.as_ref()?.mapa.campamentos.len()).ok()?;
-        todos.filter_map(|c| Some((aqui.dist(self.puerta_de_campamento(c)?), c))).filter(|&(d, _)| d <= RADIO_PUERTA).min().map(|(_, c)| c)
+        todos.filter_map(|c| Some((aqui.dist(self.puerta_de_campamento(c)?), c))).filter(|&(d, _)| d <= self.radio_puerta()).min().map(|(_, c)| c)
     }
 
     /// El campamento donde reside el héroe, si reside en uno.
@@ -188,6 +187,10 @@ impl Nucleo {
         }
         self.tr.tocar(Clase::Heroe, heroe);
         self.estado.militar.mudar(heroe, nueva);
+        // Llega o se va un residente de un campamento: cambia la demanda de bandidos de su anillo.
+        for c in [antes, nueva].into_iter().flatten().filter_map(|r| if let Residencia::Campamento(c) = r { Some(c) } else { None }) {
+            self.reprogramar_anillo(c, t);
+        }
         let velocidades: std::collections::BTreeMap<u64, Mil> = self.heroe(heroe).map_or_else(Default::default, |h| h.heroe.escuadras.iter().filter_map(|e| if let Contenedor::Ejercito(c) = e.contenedor { Some((c, self.velocidad_de_ejercito(c)?)) } else { None }).collect());
         let h = &mut self.estado.militar.heroes.get_mut(&heroe).expect("existe").heroe;
         guarnicion::soltar(h);

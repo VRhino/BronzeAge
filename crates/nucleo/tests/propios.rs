@@ -1062,7 +1062,11 @@ async fn quien_cambia_de_faccion_pierde_la_vieja_con_todo_lo_suyo_y_recibe_solo_
     let (mut gus, _, _) = w.conectar(hola_con("gus", TipoCliente::ClienteUnity, &[])).await;
     let orden_en = |plaza: u64| orden::Cuerpo::ColocarOrdenMercado(pb::OrdenColocarOrdenMercado { asentamiento_id: ids::asentamiento(plaza), tipo: "compra".into(), recurso: "oro".into(), cantidad: 1_000, precio: None });
     aceptada(&dar_todo(&mut dora, "f2", orden_en(a)).await.1);
-    assert!(pendiente(&mut ana).await.is_empty(), "lo de F1 ya no es asunto suyo");
+    // Sigue dentro de A: como visitante oye los hechos de la plaza (decisión del autor, 2026-10-24), por su `HEROE`, pero nada de lo de F1.
+    let llega = pendiente(&mut ana).await;
+    assert_eq!(etiquetas(&llega), [format!("delta HEROE:{h_ana}")]);
+    let ms::Cuerpo::Delta(d) = &llega[0] else { panic!("{llega:?}") };
+    assert!(d.cambios.is_empty() && !d.eventos.is_empty() && d.eventos.iter().all(|e| e.asentamiento_id.as_deref() == Some(ids::asentamiento(a).as_str())), "lo de F1 ya no es asunto suyo: {d:?}");
     aceptada(&dar_todo(&mut gus, "f3", orden_en(b)).await.1);
     assert_eq!(etiquetas(&pendiente(&mut ana).await), ["delta FACCION:f-2"]);
     w.parar().await;

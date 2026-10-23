@@ -252,47 +252,46 @@ fn ultima_vez_da_el_instante_en_que_el_punto_salio_de_la_vista() {
     assert_eq!(ultima_vez(&r, pt(80 * U, 0), 30 * U), Some(50_000));
 }
 
-fn rect(x0: Mil, y0: Mil, x1: Mil, y1: Mil) -> Rect {
-    Rect { min: pt(x0, y0), max: pt(x1, y1) }
-}
-
 #[test]
 fn tramo_visible_corta_en_el_horizonte_y_no_revela_el_destino() {
     // De (0,0) a (1000,0) unidades en 1000 s. Con horizonte 30 s en t=100 s solo se ve de x=100 a x=130.
     let p = plan(&[(0, 0, 0), (1000 * U, 0, 1_000_000)]);
-    let todo = rect(-10_000 * U, -10_000 * U, 10_000 * U, 10_000 * U);
-    let tr = tramo_visible(&p, 100_000, 30_000, todo);
+    let tr = tramo_visible(&p, 100_000, 30_000, &[(pt(100 * U, 0), 10_000 * U)]);
     assert_eq!(tr, vec![Vertice { p: pt(100 * U, 0), en: 100_000 }, Vertice { p: pt(130 * U, 0), en: 130_000 }]);
     assert!(tr.iter().all(|v| v.p.x < 1000 * U), "ningún vértice llega al destino");
 }
 
 #[test]
-fn tramo_visible_recorta_a_la_vista_y_conserva_vertices_intermedios() {
+fn tramo_visible_se_recorta_al_alcance_de_los_ojos_y_conserva_vertices_intermedios() {
     let p = plan(&[(0, 0, 0), (100 * U, 0, 100_000), (100 * U, 100 * U, 200_000)]);
-    // Vista x ∈ [40,80]: en t=0 con horizonte 60 s, entra en x=40 (t=40 s) y sale en x=60? No: el horizonte acaba en t=60 s.
-    let r = rect(40 * U, -U, 80 * U, 10 * U);
-    let tr = tramo_visible(&p, 0, 60_000, r);
-    assert_eq!(tr, vec![Vertice { p: pt(40 * U, 0), en: 40_000 }, Vertice { p: pt(60 * U, 0), en: 60_000 }]);
-    // Con horizonte 150 s: sale por x=80 (t=80 s) y no llega a ver la vuelta.
-    let tr = tramo_visible(&p, 0, 150_000, r);
-    assert_eq!(tr.first().unwrap().en, 40_000);
-    assert_eq!(tr.last(), Some(&Vertice { p: pt(80 * U, 0), en: 80_000 }));
-    // Plan que dobla dentro de la vista: el vértice de la esquina se conserva.
-    let grande = rect(0, -U, 200 * U, 200 * U);
-    let tr = tramo_visible(&p, 50_000, 100_000, grande);
+    // Un ojo de alcance 30 en el origen: se ve hasta x = 30 (t = 30 s), no hasta donde llegue el rectángulo de la vista.
+    assert_eq!(tramo_visible(&p, 0, 60_000, &[(pt(0, 0), 30 * U)]), vec![Vertice { p: pt(0, 0), en: 0 }, Vertice { p: pt(30 * U, 0), en: 30_000 }]);
+    // Dos ojos que se solapan son un solo alcance: de x = −30 a x = 80, cortado por el horizonte de 60 s.
+    let dos = [(pt(0, 0), 30 * U), (pt(50 * U, 0), 30 * U)];
+    assert_eq!(tramo_visible(&p, 0, 60_000, &dos), vec![Vertice { p: pt(0, 0), en: 0 }, Vertice { p: pt(60 * U, 0), en: 60_000 }]);
+    assert_eq!(tramo_visible(&p, 0, 150_000, &dos).last(), Some(&Vertice { p: pt(80 * U, 0), en: 80_000 }), "sale del segundo por x = 80");
+    // Un ojo más adelante: el primer pedazo que ve empieza cuando entra en su alcance (x = 40) y acaba cuando sale (x = 60).
+    assert_eq!(tramo_visible(&p, 0, 100_000, &[(pt(50 * U, 0), 10 * U)]), vec![Vertice { p: pt(40 * U, 0), en: 40_000 }, Vertice { p: pt(60 * U, 0), en: 60_000 }]);
+    // Plan que dobla al alcance: el vértice de la esquina se conserva.
+    let tr = tramo_visible(&p, 50_000, 100_000, &[(pt(100 * U, 0), 60 * U)]);
     assert_eq!(tr.len(), 3);
     assert_eq!(tr[1], Vertice { p: pt(100 * U, 0), en: 100_000 });
     assert_eq!(tr[2], Vertice { p: pt(100 * U, 50 * U), en: 150_000 });
+    // En diagonal el corte cae en el borde del disco (sin pasarse): de (0,0) hacia (100,100), alcance 50 en el origen → 35,35 de cada eje.
+    let d = plan(&[(0, 0, 0), (100 * U, 100 * U, 100_000)]);
+    let fin = *tramo_visible(&d, 0, 100_000, &[(pt(0, 0), 50 * U)]).last().unwrap();
+    assert!(fin.en == 35_355 && (fin.p.x as i128).pow(2) + (fin.p.y as i128).pow(2) <= (50 * U as i128).pow(2), "{fin:?}");
 }
 
 #[test]
-fn tramo_visible_vacio_fuera_de_la_vista_o_del_horizonte() {
+fn tramo_visible_vacio_fuera_del_alcance_o_del_horizonte() {
     let p = plan(&[(0, 0, 0), (1000 * U, 0, 1_000_000)]);
-    assert!(tramo_visible(&p, 0, 30_000, rect(500 * U, -U, 600 * U, U)).is_empty(), "entra después del horizonte");
-    assert!(tramo_visible(&p, 0, 30_000, rect(0, 100 * U, 50 * U, 200 * U)).is_empty(), "lejos de la vista");
-    assert!(tramo_visible(&Plan::default(), 0, 30_000, rect(0, 0, U, U)).is_empty());
-    // Parado (plan acabado): un vértice en t si está dentro.
+    assert!(tramo_visible(&p, 0, 30_000, &[(pt(550 * U, 0), 50 * U)]).is_empty(), "entra después del horizonte");
+    assert!(tramo_visible(&p, 0, 30_000, &[(pt(20 * U, 150 * U), 50 * U)]).is_empty(), "lejos de los ojos");
+    assert!(tramo_visible(&p, 0, 30_000, &[]).is_empty(), "sin ojos no se ve nada");
+    assert!(tramo_visible(&Plan::default(), 0, 30_000, &[(pt(0, 0), U)]).is_empty());
+    // Parado (plan acabado): un vértice en t si está al alcance.
     let q = plan(&[(5 * U, 5 * U, 0)]);
-    assert_eq!(tramo_visible(&q, 99, 30_000, rect(0, 0, 10 * U, 10 * U)), vec![Vertice { p: pt(5 * U, 5 * U), en: 99 }]);
-    assert!(tramo_visible(&q, 99, 30_000, rect(6 * U, 6 * U, 10 * U, 10 * U)).is_empty());
+    assert_eq!(tramo_visible(&q, 99, 30_000, &[(pt(0, 0), 10 * U)]), vec![Vertice { p: pt(5 * U, 5 * U), en: 99 }]);
+    assert!(tramo_visible(&q, 99, 30_000, &[(pt(20 * U, 20 * U), 10 * U)]).is_empty());
 }

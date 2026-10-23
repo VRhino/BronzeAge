@@ -163,7 +163,7 @@ ritmo de consumo (por minuto) = Σ(cantidad de soldados) × MILITAR.racionPorSol
 - **`reclamarCaravana`**: en mundo abierto, un héroe de la misma Facción, junto a la **Caravana de Fundación que vuelve sola** a su origen, la reclama: pasa a su columna. **Reclamarla convierte al instante su columna personal en un ejército**, con él de Líder y la política de unión que elija; si ya iba en un ejército, la suma a ese. Vale solo para ella: las caravanas comerciales no quedan sueltas en el mapa.
 - **`cargarCaravana { ejercitoId, caravanaId, asentamientoId, recurso, cantidad }`**: carga de una plaza con el ejército **en su puerta** y donde pueda repostar; `min(pedido, espacio, disponible)`; sin reserva. Devuelve `{ cargado }` y emite `ejercito.caravana_cargada`. Rechaza si la caravana no va con ese ejército, la cantidad no es positiva, la plaza no abre su almacén (`puedeRepostarEn`) o la caravana va llena (capacidad efectiva, con «Carga Ampliada» del origen).
 - **Capacidad de carga** del ejército = `participantes × capacidadCarroPorJugador` + Σ `capacidadCaravana` de las adjuntas.
-- Si el ejército es **derrotado**, las adjuntas se pierden (`ejercito.caravanas_perdidas`). Si su gente se desconecta y se queda sin nadie, vuelven solas a su origen (Doc 1.10.6, 3.10).
+- Si el ejército es **derrotado**, cada adjunta pierde la mitad de sus carros con su carga (`ejercito.caravanas_perdidas`; la que se queda sin carros desaparece; decisión del autor, 2026-10-24, Combate §5). Si su gente se desconecta y se queda sin nadie, vuelven solas a su origen (Doc 1.10.6, 3.10).
 
 ## 10. Juntar y separar
 
@@ -245,8 +245,8 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 | `columna.formacion_iniciada` | `organizarEjercito` | la de la formación | `{ ejercitoId, liderId }` |
 | `columna.separacion` | `separarseDelEjercito` | la del ejército | `{ ejercitoId, columnaId, heroeId }` |
 | `columna.liderazgo_cedido` | `cederLiderazgo` | la del ejército | `{ ejercitoId, anteriorId, sucesorId }` |
-| `columna.persecucion_iniciada` | `perseguir` | — | `{ heroe, presa, caravana }` |
-| `columna.presa_alcanzada` / `columna.presa_perdida` / `columna.presa_a_cubierto` | el encuentro exacto con la presa / la presa sale de la vista o no hay camino / la presa sale del mapa | — (oyen las dos columnas) | `{ presa, caravana }` (`caravana` = 1 si la presa es una caravana; `presa` es su id) |
+| `columna.persecucion_iniciada` | `perseguir` | — | `{ heroe, presa }` (una columna) o `{ heroe, caravana }` (una caravana) |
+| `columna.presa_alcanzada` / `columna.presa_perdida` / `columna.presa_a_cubierto` | el encuentro exacto con la presa / la presa sale de la vista o no hay camino / la presa sale del mapa | — (oyen las dos columnas) | `{ presa }` (una columna) o `{ caravana }` (una caravana), con su id (2026-10-24) |
 | `columna.persecucion_abandonada` | `dejarDePerseguir` | — | `{ heroe }` |
 | `ejercito.encuentro` / `caravana.encuentro` / `asentamiento.encuentro` | un cruce exacto a ≤ `radioEncuentro` (§13) | la plaza, en la última | `{ faccionA, faccionB }` más `caravana` (y `caravanaB`) si la hay |
 | `ejercito.en_batalla` / `ejercito.sale_de_batalla` | el hook de la 4E | — | `{}` |
@@ -255,7 +255,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 
 `ejercito.repliegue` y `replegarEjercito` **se retiran** (no hay vuelta a casa).
 
-> **Implementado en Rust (2026-10-23, 4H T5).** «Sin plaza, global del héroe» es, en Rust, **del héroe**: un hecho de columna sin plaza lo oyen los participantes de la columna (los de `ejercitos` y los de la clave `ejercito`, resueltos al emitirlo, así que la columna que se disuelve en la misma orden sigue nombrándolos) y el héroe de las claves `heroe` y `lider`, no todo el mundo (la niebla: contrato 05 §8). Los encuentros los oyen además las dos Facciones de sus claves `faccionA`/`faccionB`; `faccion.relacion`, las dos Facciones. Sigue sin emitirse `ejercito.caravana_cargada`/`_soltada` (no hay `cargarCaravana` ni `soltarCaravana`) ni `ejercito.caravanas_perdidas` (fila de paridad «Eventos (4H, T5)»).
+> **Implementado en Rust (2026-10-23, 4H T5).** «Sin plaza, global del héroe» es, en Rust, **del héroe**: un hecho de columna sin plaza lo oyen los participantes de la columna (los de `ejercitos` y los de la clave `ejercito`, resueltos al emitirlo, así que la columna que se disuelve en la misma orden sigue nombrándolos) y el héroe de las claves `heroe` y `lider`, no todo el mundo (la niebla: contrato 05 §8). Los encuentros los oyen además las dos Facciones de sus claves `faccionA`/`faccionB`; `faccion.relacion`, las dos Facciones. Sigue sin emitirse `ejercito.caravana_cargada`/`_soltada` (no hay `cargarCaravana` ni `soltarCaravana`; fila de paridad «Eventos (4H, T5)»). `ejercito.caravanas_perdidas` se emite desde el 2026-10-24 (Combate §5).
 
 ## 14. Parámetros
 
@@ -370,7 +370,7 @@ Con el motor TypeScript (a rehacer en Rust): `regresando`, `origenAsentamientoId
 
 ## Catálogo de eventos
 
-Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 4 (`ejercito.caravana_cargada`, `ejercito.caravana_soltada`, `ejercito.caravanas_perdidas`, `logistica.reabastecer_aliados`).
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 3 (`ejercito.caravana_cargada`, `ejercito.caravana_soltada`, `logistica.reabastecer_aliados`).
 
 <!-- eventos -->
 ```json

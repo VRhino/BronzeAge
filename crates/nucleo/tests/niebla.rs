@@ -1,5 +1,5 @@
 //! La niebla en el núcleo (4H T3d, Niebla_De_Guerra §2-§5): lo que graba cada ojo en la memoria de su Facción al cerrar las versiones (lo explorado por una columna, las fichas de lo ajeno con
-//! el último instante en que se vio, lo de un héroe sin bandera), la foto `BAN23` y que todo es lo mismo con sesiones y sin ellas; y lo que proyecta la vista de una Facción
+//! el último instante en que se vio, lo de un héroe sin bandera), la foto (`BAN24`) y que todo es lo mismo con sesiones y sin ellas; y lo que proyecta la vista de una Facción
 //! (`proyeccion::vista::Mirada`): lo propio entero, lo ajeno redactado, lo recordado como ficha, lo que ven los aliados y el tramo ajeno que se renueva. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
@@ -368,6 +368,28 @@ fn lo_ajeno_se_ve_redactado_y_el_tramo_ajeno_se_renueva_solo_cuando_le_quedan_me
     assert!(de_vista(&v, TipoEntidad::Asentamiento, &nucleo::proyeccion::ids::asentamiento(plaza)).is_some_and(|c| matches!(c, Cuerpo::Asentamiento(a) if a.almacen.is_empty() && a.poblacion.is_none() && a.pueblos_ids.is_empty() && a.trazado.is_none() && a.edificios.iter().all(|b| b.estado == pb::EstadoEdificio::EdificioActivo as i32) && !a.zona.is_empty())), "la columna de F2 ve la plaza de F1 como ficha con su zona: {v:?}");
 }
 
+#[test]
+fn el_tramo_ajeno_se_recorta_al_alcance_de_los_ojos_y_no_al_rectangulo_de_la_vista() {
+    let m = con_mundo!();
+    let mut e = Esc { n: nucleo(m), peticiones: 0 };
+    let sitio = sitio_rico(&e.n, &m.0, 0, 1);
+    let plaza = e.plaza("ana", 1, sitio);
+    let radio = e.n.estado().asentamientos[&plaza].radio;
+    // Una columna de F2 junto al borde de lo que ve F1, saliendo hacia fuera: deja de verse mucho antes del horizonte.
+    let col = e.columna("gus", 2, en_tierra(&m.0, sitio, radio - 2 * U, 0));
+    e.marchar("gus", col, en_tierra(&m.0, sitio, radio + 100 * U, 0));
+    e.avanzar(500);
+    let t = e.n.ahora();
+    let id = nucleo::proyeccion::ids::ejercito(col);
+    let Some(Cuerpo::Ejercito(av)) = de_vista(&vista(&e.n, Perspectiva::Faccion(1), None, todo()), TipoEntidad::Ejercito, &id) else { panic!("F1 la ve") };
+    let fin = av.plan.as_ref().expect("con su tramo").vertices.last().cloned().unwrap();
+    let (p, plan) = (fin.p.unwrap(), e.n.ejercito(col).unwrap().plan.clone());
+    let mirada = Mirada::de(&e.n, Perspectiva::Faccion(1));
+    assert!(fin.en_ms > t && fin.en_ms < t + vision::radios::HORIZONTE_MS, "acaba antes del horizonte, aunque el rectángulo sea el mapa entero: {} desde {t}", fin.en_ms);
+    assert!(mirada.ve(Punto::new(p.x, p.y)), "lo último del tramo aún se ve: {p:?}");
+    assert!(!mirada.ve(plan.posicion_en(fin.en_ms + 1_000).unwrap()), "un segundo después del tramo, la columna ya está fuera del alcance de todos los ojos");
+}
+
 // ───────────────────────────── 6. La foto y el determinismo ─────────────────────────────
 
 /// Un escenario con marchas, una plaza ajena y un héroe sin bandera, con las mismas órdenes a las mismas horas.
@@ -406,13 +428,16 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     assert!(mem.exploracion.contains_key(&1) && mem.fichas.contains_key(&1) && !mem.personal.is_empty() && !mem.vigias.is_empty(), "la partida graba de todo");
 
     let bytes = a.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN23");
+    assert_eq!(&bytes[..5], b"BAN24");
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);
     let vieja = [b"BAN22".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN22 no debe admitirse") };
     assert!(e.to_string().contains("BAN22") && e.to_string().contains("niebla"), "{e}");
+    let vieja = [b"BAN23".as_slice(), &bytes[5..]].concat();
+    let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN23 no debe admitirse") };
+    assert!(e.to_string().contains("BAN23") && e.to_string().contains("LAYOUT_VERSION 3"), "{e}");
 }
 
 #[test]

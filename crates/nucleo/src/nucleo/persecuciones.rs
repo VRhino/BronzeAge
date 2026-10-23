@@ -117,8 +117,8 @@ impl Nucleo {
         let mut columnas = vec![perseguidor];
         columnas.extend(Some(presa).filter(|p| !caravana && self.estado.ejercitos.contains_key(p)));
         let punto = self.estado.ejercitos[&perseguidor].posicion_en(t);
-        let id = if caravana { id_de_entidad(presa) } else { presa };
-        self.tr.emitir(&self.estado, EventoNucleo { codigo: fin.codigo().into(), en: t, ejercitos: columnas, asentamientos: vec![], punto: Some(punto), datos: vec![("presa", id as i64), ("caravana", caravana as i64)], ..Default::default() });
+        let presa_dato = if caravana { ("caravana", id_de_entidad(presa) as i64) } else { ("presa", presa as i64) };
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: fin.codigo().into(), en: t, ejercitos: columnas, asentamientos: vec![], punto: Some(punto), datos: vec![presa_dato], ..Default::default() });
     }
 
     /// La presa sale del mapa: quienes la persiguen la dan por puesta a cubierto.
@@ -314,7 +314,8 @@ impl Nucleo {
         }
 
         // Ya está al alcance: la persecución empieza y termina en el mismo instante, sin moverse.
-        let datos = vec![("heroe", heroe as i64), ("presa", if es_entidad_caravana(presa) { id_de_entidad(presa) } else { presa } as i64), ("caravana", es_entidad_caravana(presa) as i64)];
+        // La presa es una columna (`presa`) o una caravana (`caravana`).
+        let datos = vec![("heroe", heroe as i64), if es_entidad_caravana(presa) { ("caravana", id_de_entidad(presa) as i64) } else { ("presa", presa as i64) }];
         if persecucion::alcanzada(&self.estado.reglas.economia.militar, &info, distancia) {
             self.fijar_persecucion(id, Some(presa));
             self.evento_de_columna("columna.persecucion_iniciada", t, id, vec![], datos);

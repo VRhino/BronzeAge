@@ -38,9 +38,6 @@ use comercio::{total, Carga as Mercancia, Lado};
 /// La capacidad total de la columna (`participantes × capacidadCarroPorJugador`, más las caravanas adjuntas y «Carga Ampliada») es
 /// `Nucleo::capacidad_de_carga`; esta es la de un héroe, que es lo que cabe en el carro con que sale quien sale de un lugar.
 pub(super) const CAPACIDAD_CARRO: Mil = 500_000;
-/// Radio de la puerta de una plaza (`MOVIMIENTO.radioPuerta`).
-// DUDA: el bloque dice 10 (TypeScript); el valor vigente tras la calibración de distancias es 2 (Movimiento_Ejercitos §14), que es el que se usa.
-pub(super) const RADIO_PUERTA: Mil = 2_000;
 
 /// Los ids de plaza del crate `comercio` son `u32`; los del núcleo, `u64` de un contador que no llega a ese tope.
 pub(super) fn id32(id: u64) -> u32 {
@@ -131,6 +128,12 @@ fn datos_de(ev: &EventoComercio) -> Vec<(&'static str, i64)> {
 }
 
 impl Nucleo {
+    /// Radio de la puerta de una plaza, de un pueblo, de una avanzada o de un campamento (`MOVIMIENTO.radioPuerta`: 2 tras la calibración de distancias,
+    /// Movimiento_Ejercitos §14).
+    pub(super) fn radio_puerta(&self) -> Mil {
+        self.estado.reglas.economia.militar.movimiento.radio_puerta
+    }
+
     // ───────────────────────────── Consultas ─────────────────────────────
 
     /// Un trueque por id (también los terminados que aún no se podaron).
@@ -157,9 +160,8 @@ impl Nucleo {
         self.estado.comercio.libro.escaparate(id32(plaza), self.estado.ahora)
     }
 
-    /// La reputación de una Facción ahora (ppm de punto: 1 punto = 1.000.000; de −100 a +100 puntos; 0 si no consta).
-    // DUDA: el crate modela la reputación como un número por Facción (el que paga el recargo de su comisión), no como una relación entre
-    // dos Facciones; por eso la consulta es de una sola.
+    /// La reputación de una Facción ahora (ppm de punto: 1 punto = 1.000.000; de −100 a +100 puntos; 0 si no consta). Es un número por Facción, no
+    /// una relación entre dos (Comercio_Caravanas §15).
     pub fn reputacion(&self, faccion: u32) -> i64 {
         self.estado.comercio.reputacion_en(faccion, self.estado.ahora)
     }
@@ -266,9 +268,8 @@ impl Nucleo {
         self.emitir_propio(t, "faccion.experiencia", vec![], vec![("faccion", faccion as i64), ("motivo", motivo)]);
     }
 
-    /// Recalcula la cita de la reputación de una Facción desde `t`: la anterior se invalida y se programa la próxima, si hay.
-    // DUDA: el encargo hablaba de los umbrales de ±40, pero `REPUTACION` solo tiene el bajo (`umbralBajoParaComision` y `umbralBajoParaEmbajador`, −40):
-    // no hay umbral alto en ninguna regla, así que solo se anuncian el cruce del 0 y la entrada y salida del −40.
+    /// Recalcula la cita de la reputación de una Facción desde `t`: la anterior se invalida y se programa la próxima, si hay. Solo hay umbral bajo (−40): se
+    /// anuncian el cruce del 0 y la entrada y salida del −40 (Comercio_Caravanas §15).
     fn programar_reputacion(&mut self, faccion: u32, t: Instante) {
         let entidad = entidad_reputacion(faccion);
         self.estado.generaciones.subir(entidad);
@@ -433,8 +434,7 @@ impl Nucleo {
                 if !self.manda_en(p, faccion) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{plaza}")));
                 }
-                // DUDA: no figura en Comercio_Caravanas §8.2 («nada cierra una orden salvo el mostrador o el plazo»); la retira antes de plazo como una
-                // expirada (no hay estado «cancelada») y avisa con su propio hecho.
+                // Retirarla antes de plazo la deja como una expirada (no hay estado «cancelada») y avisa con su propio hecho (Comercio_Caravanas §8.2).
                 let antes = self.ordenes_del_libro();
                 self.estado.comercio.libro.orden_mut(*orden).expect("está en pie").estado = EstadoOrden::Expirada;
                 self.estado.comercio.libro.archivar_cerradas(&cr.mercado);
@@ -499,7 +499,7 @@ impl Nucleo {
         let ctx = ContextoMostrador {
             ahora: t,
             es_lider,
-            en_puerta: pos_columna.dist(plaza.posicion) <= RADIO_PUERTA,
+            en_puerta: pos_columna.dist(plaza.posicion) <= self.radio_puerta(),
             mercado_activo: nivel_mercado(plaza).is_some(),
             misma_faccion: faccion_columna == plaza.faccion,
             factor_comision_externa: factor,

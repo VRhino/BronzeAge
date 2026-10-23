@@ -453,6 +453,11 @@ impl Mesa {
             let vistas = self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Vista(_))).flat_map(|(&a, ss)| ss.iter().map(move |&s| (s, a)));
             vistas.filter(|(s, _)| self.sesiones.get(s).and_then(|x| x.mapa.as_ref()).is_some_and(|m| m.tiene.contains_key(&clave))).for_each(&mut oir);
         }
+        // Quien está dentro de una plaza del hecho lo oye por su `HEROE`, sea de su Facción o visitante, aliado o neutral (decisión del autor, 2026-10-24).
+        if !ev.asentamientos.is_empty() {
+            let dentro = |h: u64| e.militar.heroes.get(&h).is_some_and(|x| matches!(x.heroe.presencia.ubicacion, Ubicacion::Asentamiento(p) if ev.asentamientos.contains(&u64::from(p))));
+            self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Heroe(h) if dentro(*h))).flat_map(|(&a, ss)| ss.iter().map(move |&s| (s, a))).for_each(&mut oir);
+        }
         if ev.publico {
             self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Heroe(_))).flat_map(|(&a, ss)| ss.iter().map(move |&s| (s, a))).for_each(&mut oir);
         }
@@ -530,9 +535,13 @@ impl Mesa {
     /// comparten la última de su perspectiva (`Mesa::nieblas`), así que compararla es comparar punteros, y a quien tiene la anterior le llega solo lo que cambió (`vista::cambio_de_niebla`, calculado una
     /// vez por perspectiva).
     // ponytail: cada perspectiva recorre todas las entidades del mundo y cada sesión las de su rectángulo en cada muestreo (O(entidades) por sesión); una rejilla espacial si el mundo crece mucho más.
-    pub(super) fn reconciliar_vistas(&mut self, n: &Nucleo, envios: &mut Vec<(SesionId, Difusion)>) {
-        let abiertas: Vec<(SesionId, Perspectiva)> =
-            self.suscriptores.iter().filter_map(|(a, ss)| if let Ambito::Vista(p) = a { Some(ss.iter().map(|&s| (s, *p)).collect::<Vec<_>>()) } else { None }).flatten().collect();
+    pub(super) fn reconciliar_vistas(&mut self, n: &Nucleo, solo: Option<SesionId>, envios: &mut Vec<(SesionId, Difusion)>) {
+        let abiertas: Vec<(SesionId, Perspectiva)> = self
+            .suscriptores
+            .iter()
+            .filter_map(|(a, ss)| if let Ambito::Vista(p) = a { Some(ss.iter().filter(|s| solo.is_none_or(|x| x == **s)).map(|&s| (s, *p)).collect::<Vec<_>>()) } else { None })
+            .flatten()
+            .collect();
         let mut miradas: BTreeMap<Perspectiva, (Mirada<'_>, Option<Arc<pb::NieblaProyectada>>)> = BTreeMap::new();
         // El cambio de la niebla de cada perspectiva para las sesiones que tienen la anterior de la perspectiva (casi todas): se calcula una vez.
         let mut cambios_de_niebla: BTreeMap<Perspectiva, pb::NieblaProyectada> = BTreeMap::new();
@@ -574,7 +583,16 @@ impl Mesa {
             s.abiertos.insert(a, v);
             s.mapa = Some(Mapa { tiene, niebla: niebla.clone() });
         }
-        self.nieblas = miradas.into_iter().filter_map(|(p, (_, niebla))| Some((p, niebla?))).collect();
+        // La niebla de cada perspectiva que se miró queda como la última entregada; con todas las vistas, las de perspectivas que ya nadie mira se olvidan.
+        if solo.is_none() {
+            self.nieblas.clear();
+        }
+        for (p, (_, niebla)) in miradas {
+            match niebla {
+                Some(x) => drop(self.nieblas.insert(p, x)),
+                None => drop(self.nieblas.remove(&p)),
+            }
+        }
     }
 
     /// ¿Tiene alguna sesión su `VISTA` abierta? (Si no, no hay nada que muestrear.)

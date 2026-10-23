@@ -237,8 +237,8 @@ pub fn informe_de_inspeccion(n: &Nucleo, heroe: u64, i: &Informe) -> pb::Informe
 
 // ───────────────────────────── Columnas, caravanas, convocatorias, batallas ─────────────────────────────
 
-/// La columna, completa: con lo que persigue, si una batalla la tiene apartada y dentro de qué lugar está. DUDA: `te_sigue` es de la vista del perseguido (T3d): depende de otras columnas
-/// y no está en el registro de cambios.
+/// La columna, completa: con lo que persigue, si una batalla la tiene apartada y dentro de qué lugar está. `te_sigue` no va aquí: es de lo ajeno, y lo pone la vista del perseguido
+/// (`vista::Mirada`, en la columna ajena que persigue a una propia).
 pub fn ejercito(n: &Nucleo, e: &Ejercito) -> pb::Ejercito {
     let mut x = super::ejercito_base(e);
     x.version = e.version;
@@ -349,8 +349,8 @@ pub fn convocatoria(c: &Convocatoria, quien: Espectador, version: u64) -> pb::Co
 /// La batalla tal como la ve `quien`. Quien combate en ella la ve entera: el ticket congelado, las incorporaciones, el resultado, su bando y, si ya hay asignación y
 /// token para él, cómo conectar con el servidor de batalla (`asignacion_propia`, solo suyo). Quien no combate ve lo que hace falta para decidir si se une: el estado, lo que se bloquea y, si podría unirse, a
 /// qué bando (`lado_para_unirse`). La administración la ve entera como quien combate, más la asignación que ganó, y **nunca** un token (ni el propio de nadie ni los de la asignación).
-// DUDA: `lado_para_unirse` se calcula al proyectar (cuando la batalla cambia o la sesión pide la foto): si el espectador se acerca o se aleja después, no se actualiza hasta el siguiente cambio de la
-// batalla; la orden `unirse_a_batalla` vuelve a comprobarlo.
+/// `lado_para_unirse` se calcula al proyectar (cuando la batalla cambia o la sesión pide la foto): si el espectador se acerca o se aleja después, no se actualiza hasta el siguiente cambio de la
+/// batalla, y la orden `unirse_a_batalla` vuelve a comprobarlo (Batalla_Unity_Ciclo §7.1).
 pub fn batalla(n: &Nucleo, b: &Batalla, quien: Espectador) -> pb::Batalla {
     let estado = match b.estado {
         EstadoBatalla::Convocando => pb::EstadoBatalla::BatallaConvocando,

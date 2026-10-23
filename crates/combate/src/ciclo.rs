@@ -317,6 +317,8 @@ pub enum ErrorBatalla {
     NoPuedeCancelar,
     /// Un escuadra de la salida que no es suya, repetida, o que no cierra sobre lo autorizado.
     SalidaInvalida,
+    /// La salida de una partida en curso no nombra todas las escuadras autorizadas del héroe.
+    SalidaIncompleta,
     Resultado(ErrorResultado),
     /// «Ya se aplicó con otro resultado» (409).
     OtroResultado,
@@ -615,8 +617,9 @@ impl Batalla {
     ///   ticket no cambia.
     ///
     /// En los dos casos se liberan sus escuadras. Si salió quien la inició, `iniciada_por` pasa al primer atacante que queda.
-    // DUDA: el documento pide que `supervivientes + muertos` cierre sobre lo autorizado, que cada escuadra sea suya y que no se repitan, pero no
-    // que la salida cubra todas las suyas. Aquí no se exige: las que no vienen conservan su cantidad (y se liberan igualmente).
+    ///
+    /// Con la partida en curso la salida nombra **todas** las escuadras que el héroe tiene autorizadas (decisión del autor, 2026-10-23): si
+    /// omite alguna se rechaza entera ([`ErrorBatalla::SalidaIncompleta`]).
     pub fn registrar_salida(&mut self, r: &Reglas, ahora: Instante, servidor: &str, s: SalidaBatalla) -> Result<Efecto<SalidaAplicada>, ErrorBatalla> {
         if !self.activa(ahora) {
             return Err(ErrorBatalla::NoActiva);
@@ -638,6 +641,9 @@ impl Batalla {
                     return Err(ErrorBatalla::SalidaInvalida);
                 }
                 bajas.push((e.escuadra, e.supervivientes));
+            }
+            if bajas.len() != suyas.len() {
+                return Err(ErrorBatalla::SalidaIncompleta);
             }
         }
         let liberar: Vec<EscuadraId> = suyas.iter().map(|e| e.id).collect();

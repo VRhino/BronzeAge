@@ -951,15 +951,24 @@ message InspeccionPlaza {
 }
 
 // Ficha de un sitio ajeno que la Facción vio alguna vez (última foto, con su fecha): una plaza, un pueblo o una avanzada («se recuerdan como una ciudad»).
+// Cómo estaba un sitio recordado cuando se vio (4H, decisión del autor del 2026-10-24; Niebla_De_Guerra §4.1).
+enum EstadoSitio {
+  ESTADO_SITIO_NO_ESPECIFICADO = 0;
+  SITIO_ACTIVO = 1;
+  SITIO_EN_OBRA = 2;                     // un pueblo o una avanzada que se levanta, o una avanzada que se mejora o se repara
+  SITIO_EN_RUINAS = 3;                   // una avanzada arruinada (fuerte o ciudadela)
+}
+
 message FichaConocida {
   string asentamiento_id = 1;            // el id del sitio: `as-N`, `pueblo-N` o `av-N` (4H T3d; v1 decía solo plazas)
   optional string nombre = 2;
-  string faccion_id = 3;
+  string faccion_id = 3;                 // vacío: no es de nadie (las ruinas de una ciudadela sin dueño)
   Punto posicion = 4;
   uint32 nivel = 5;                      // de una plaza, su nivel; de una avanzada, su etapa (1 atalaya, 2 fuerte, 3 ciudadela); de un pueblo, 0
   int64 conocido_en_ms = 6;
   optional sint64 radio_potencial = 7;   // solo de una plaza: hasta dónde llegaba su zona cuando se vio
   TipoEntidad tipo = 8;                  // ASENTAMIENTO, PUEBLO o AVANZADA (sin especificar = ASENTAMIENTO, la de v1)
+  EstadoSitio estado = 9;                // tal como estaba cuando se vio
 }
 
 // Memoria de la Facción: lo explorado y lo conocido. Lo explorado es una máscara de bits sobre la rejilla (celda de 5

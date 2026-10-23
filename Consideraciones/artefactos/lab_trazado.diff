@@ -1,0 +1,263 @@
+diff --git a/crates/nucleo/src/codec_ciudad.rs b/crates/nucleo/src/codec_ciudad.rs
+index ddfef03..aa130d5 100644
+--- a/crates/nucleo/src/codec_ciudad.rs
++++ b/crates/nucleo/src/codec_ciudad.rs
+@@ -79,6 +79,7 @@ pub(crate) fn escribir(w: &mut Escritor, c: &Ciudad) {
+         crecimiento_por_edificio_ul,
+         maximo_por_nivel_ul,
+         viviendas_iniciales,
++        lab: _,
+     } = c.params();
+     [largo_fila_min, largo_fila_max, radio_afueras_min_ul, ancho_banda_afueras_ul, separacion_minima_anclas, separacion_seguridad_anclas, ancho_calle].iter().for_each(|&&x| w.i32(x));
+     w.u16(*cap_corredor_urbano);
+@@ -128,6 +129,7 @@ pub(crate) fn leer(r: &mut Lector, recintos: Vec<Recinto>) -> Result<Ciudad, Err
+         crecimiento_por_edificio_ul: r.i32()?,
+         maximo_por_nivel_ul: [r.i32()?, r.i32()?, r.i32()?, r.i32()?, r.i32()?],
+         viviendas_iniciales: r.u32()?,
++        lab: trazado::Lab::default(),
+     };
+     // Valores con los que la geometría dividiría por cero o no avanzaría: una foto así está corrupta.
+     if params.largo_fila_min < 1 || params.largo_fila_max < params.largo_fila_min || params.ancho_calle < 1 || params.fondo_manzana < 1 || params.separacion_minima_anclas < 1 {
+diff --git a/crates/nucleo/src/urbanismo.rs b/crates/nucleo/src/urbanismo.rs
+index ecf2d49..780c687 100644
+--- a/crates/nucleo/src/urbanismo.rs
++++ b/crates/nucleo/src/urbanismo.rs
+@@ -312,6 +312,29 @@ impl Urbe {
+         cabe
+     }
+ 
++    /// LABORATORIO (variante C, `trazado::Lab::ancla_al_proponer`): proponer como el TS (`asegurarAnclaPara` en
++    /// `construction.ts`). Con C, si el barrio no tiene ancla con hueco el ancla nace **ya**, en la ciudad de verdad, con el id
++    /// `*ids` (que avanza), y se queda aunque el edificio no se llegue a comprometer; las marcas de «llena» también se quedan.
++    /// Sin C es [`Urbe::cabe`] tal cual. Devuelve si cabe y las anclas creadas (edificios gratuitos).
++    pub fn proponer_lab(&mut self, urb: &Urbanismo, tipo: Tipo, u: &Urbano, ids: &mut u32) -> (bool, Vec<Gratuito>) {
++        let Some(clase) = urb.clase(tipo) else { return (true, vec![]) };
++        if !self.ciudad.params().lab.ancla_al_proponer || clase.rol != Rol::Normal || !clase.categoria.tiene_barrio() {
++            return (self.cabe(urb, tipo, u), vec![]);
++        }
++        let k = self.clave(u, Some(clase));
++        let ped = Self::pedido(urb, clase, *ids, tipo, 1, &k);
++        let antes = self.ciudad.piezas().to_vec();
++        let mut gratuitos = vec![];
++        if let Ancla::Creada(a) = self.ciudad.asegurar_ancla_para(&ped, *ids, u.nivel_operativo.min(255) as u8, &urb.opciones_ancla(clase.categoria)) {
++            gratuitos.push(Gratuito { id: a, tipo: TIPOS[self.ciudad.pieza(a).map_or(0, |p| p.tipo) as usize], nivel_interno: 1 });
++            *ids += 1;
++        }
++        if self.ciudad.piezas() != antes.as_slice() {
++            self.rev += 1;
++        }
++        (self.ciudad.siguiente_sitio(&ped).is_some(), gratuitos)
++    }
++
+     /// Coloca el edificio `id` en la ciudad. Antes, si hace falta, el trazado crea el ancla de saturación de su barrio (un edificio
+     /// gratuito más, con su id de `ids`). `None` = ya no hay sitio y la ciudad queda intacta.
+     pub fn tomar(&mut self, urb: &Urbanismo, id: u32, tipo: Tipo, u: &Urbano, ids: &mut u32) -> Option<Vec<Gratuito>> {
+diff --git a/crates/trazado/src/anclas.rs b/crates/trazado/src/anclas.rs
+index a1be848..0a70e50 100644
+--- a/crates/trazado/src/anclas.rs
++++ b/crates/trazado/src/anclas.rs
+@@ -12,10 +12,6 @@ use base::isqrt;
+ const RANURAS: i32 = 5;
+ 
+ impl Ciudad {
+-    fn rects_de_anclas(&self) -> Vec<Rect> {
+-        self.piezas().iter().filter(|a| a.rol.es_ancla()).map(|a| a.rect).collect()
+-    }
+-
+     /// `ranuraOcupada`: hay un ancla entre `radioInicial − 2` y `radioMáximo + 2` celdas y a menos de `0,55 × media ranura`
+     /// (19,8°) de la dirección. El coseno se compara con 0,9409 en enteros: sin trigonometría.
+     fn ranura_ocupada(&self, semilla: &Rect, dir: (i32, i32), otras: &[Rect]) -> bool {
+@@ -46,11 +42,10 @@ impl Ciudad {
+             let col = (cx - h.ancho as i64 * 500 + 500).div_euclid(1000) as i32;
+             let row = (cy - h.alto as i64 * 500 + 500).div_euclid(1000) as i32;
+             let rect = Rect::new(col, row, h.ancho, h.alto);
+-            // DUDA: T §7.2 no limita el ancla nueva al disco urbano; aquí sí (centro a ≤ radio_ul), para que el invariante «nada fuera
+-            // del disco» valga también para los núcleos que cuelgan de ella.
++            // LAB base (1): como T §7.2, sin disco urbano para el ancla nueva. Sin la base, el centro a ≤ radio_ul (la versión 3).
+             if en_ventana(&rect, 1)
+                 && self.suelo.rect_libre(&rect)
+-                && en_disco(&rect, radio_ul)
++                && (prm.lab.base || en_disco(&rect, radio_ul))
+                 && otras.iter().all(|o| rect.hueco(o) >= prm.separacion_seguridad_anclas)
+             {
+                 return Some(rect);
+@@ -64,7 +59,6 @@ impl Ciudad {
+     /// por el camino (para marcarlas `semilla_saturada` si el llamador la acepta).
+     pub(crate) fn crear_ancla_nueva(&self, p: &Pedido) -> (Option<Colocacion>, Vec<u32>) {
+         let prm = self.params();
+-        let otras = self.rects_de_anclas();
+         let mut excluidas: Vec<u32> = Vec::new();
+         loop {
+             // la ancla real no saturada y no excluida más cercana al origen
+@@ -76,6 +70,13 @@ impl Ciudad {
+             else {
+                 return (None, excluidas);
+             };
++            // LAB c: como el TS (`otrasAnclas` sin la semilla), la semilla no cuenta en la separación del ancla nueva.
++            let otras: Vec<Rect> = self
++                .piezas()
++                .iter()
++                .filter(|a| a.rol.es_ancla() && !(prm.lab.sin_semilla_en_separacion && a.id == semilla.id))
++                .map(|a| a.rect)
++                .collect();
+             // 5 ranuras a 72°, la primera hacia el norte (−y) más la rotación del asentamiento (0..71°), barajadas por semilla
+             let rot = sorteo(self.semilla(), "rotacion-eje", &[], 72) as i32;
+             let mut orden: [i32; RANURAS as usize] = [0, 1, 2, 3, 4];
+@@ -114,8 +115,9 @@ impl Ciudad {
+             if !self.atraccion_dura(&a.rect, p, afines, campo).is_empty() {
+                 return (Some(a.id), llenas);
+             }
+-            // el latch es permanente: solo se marca llena si ni una celda de 1×1 cabe en su banda
+-            if self.atraccion_dura(&a.rect, &uno, afines, campo).is_empty() {
++            // el latch es permanente. LAB base (a): como el TS, llena en cuanto no cabe la huella pedida; sin la base, solo si ni
++            // una celda de 1×1 cabe en su banda.
++            if self.params().lab.base || self.atraccion_dura(&a.rect, &uno, afines, campo).is_empty() {
+                 llenas.push(a.id);
+             }
+         }
+diff --git a/crates/trazado/src/ciudad.rs b/crates/trazado/src/ciudad.rs
+index c2dfa9d..72d3b53 100644
+--- a/crates/trazado/src/ciudad.rs
++++ b/crates/trazado/src/ciudad.rs
+@@ -342,10 +342,21 @@ impl Ciudad {
+         true
+     }
+ 
++    /// La ciudad sin la pieza `id`, para buscarle sitio nuevo. LAB base (3): como el TS (`sueloOcupado(…, excluirId)`), la red se
++    /// queda la que da **con** la pieza (su camino sigue sirviendo de frente) y solo se libera su suelo; sin la base, la red se
++    /// recalcula sin ella.
+     pub(crate) fn sin_pieza(&self, id: u32) -> Ciudad {
+         let mut c = self.clone();
++        let rect = self.pieza(id).map(|p| p.rect);
+         c.piezas.retain(|p| p.id != id);
+-        c.reconstruir();
++        match rect {
++            Some(r) if self.params.lab.base => {
++                for i in r.celdas().filter_map(idx) {
++                    c.suelo.ocup[i] = false;
++                }
++            }
++            _ => c.reconstruir(),
++        }
+         c
+     }
+ 
+diff --git a/crates/trazado/src/colocacion.rs b/crates/trazado/src/colocacion.rs
+index 83c347b..394f99b 100644
+--- a/crates/trazado/src/colocacion.rs
++++ b/crates/trazado/src/colocacion.rs
+@@ -99,9 +99,11 @@ impl Ciudad {
+     }
+ 
+     /// Alguna celda de red pegada al rectángulo tiene, entre sus otras vecinas, una ocupada: otro edificio da a la misma calle.
++    /// LAB D: como el TS (`ocupadas` con la red), cuenta también una vecina que sea calle o camino.
+     fn continua_fila(&self, r: &Rect) -> bool {
++        let con_red = self.params().lab.fila_con_calles;
+         r.adyacentes().into_iter().filter_map(idx).filter(|&i| self.suelo.red[i] != 0).any(|i| {
+-            vecinos_i(i).into_iter().flatten().any(|n| self.suelo.ocup[n] && !r.contiene(celda_de(n)))
++            vecinos_i(i).into_iter().flatten().any(|n| (self.suelo.ocup[n] || (con_red && self.suelo.red[n] != 0)) && !r.contiene(celda_de(n)))
+         })
+     }
+ 
+@@ -209,11 +211,19 @@ impl Ciudad {
+         let prm = self.params();
+         let rca = ancla.ensanchado(prm.ancho_calle);
+         let fondo = prm.fondo_manzana;
++        // LAB b: el círculo de barrido del TS (`candidatosLibres(rectAncla, margen·T)`), centro a centro con el ancla desnuda.
++        let margen = (fondo + ancla.ancho.max(ancla.alto) + p.huella.ancho.max(p.huella.alto)) as i64 * CELDA_MIL;
++        let ca = ancla.centro();
++        let en_circulo = |r: &Rect| {
++            let c = r.centro();
++            !prm.lab.circulo_nucleo || (c.x - ca.x).pow(2) + (c.y - ca.y).pow(2) <= margen * margen
++        };
+         let mut cands = Vec::new();
+         for (h, rotado) in Self::orientaciones(p) {
+             let cols = (rca.col - h.ancho - fondo, rca.fin_col() + fondo);
+             let rows = (rca.row - h.alto - fondo, rca.fin_row() + fondo);
+-            let filtro = |r: &Rect| r.hueco(&rca) <= fondo && en_disco(r, p.radio_ul);
++            // LAB base (1): como el TS, el satélite no se limita al disco urbano.
++            let filtro = |r: &Rect| r.hueco(&rca) <= fondo && en_circulo(r) && (prm.lab.base || en_disco(r, p.radio_ul));
+             cands.extend(self.barrido(h, rotado, cols, rows, campo, &filtro));
+         }
+         for c in &mut cands {
+diff --git a/crates/trazado/src/muralla.rs b/crates/trazado/src/muralla.rs
+index 71dd6e5..bae1cb6 100644
+--- a/crates/trazado/src/muralla.rs
++++ b/crates/trazado/src/muralla.rs
+@@ -258,7 +258,7 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
+     let por_celda = (0..CELDAS)
+         .filter(|&i| muro[i])
+         .map(|i| CeldaMuro { celda: celda_de(i), clase: if en_red[i] { ClaseCelda::Puerta } else { ClaseCelda::Muro } });
+-    let mut celdas = ordenar_anillo(por_celda.collect());
++    let mut celdas = ordenar_anillo(por_celda.collect(), ciudad.params().lab.anillo_ts);
+     colapsar_puertas(&mut celdas, &region, &muro, &en_red);
+     let interior = Interior(region);
+     marcar_torres(&mut celdas, &interior, p, nivel);
+@@ -283,7 +283,8 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
+ /// Recibe las celdas ya en orden de índice.
+ // DUDA: Murallas.md (y el TypeScript) añadían todo lo que faltara por (fila, columna) al final, lo que en un anillo con un punto
+ // grueso temprano dejaba más de la mitad de la obra en desorden; el salto al más cercano conserva el recorrido en lo demás.
+-fn ordenar_anillo(celdas: Vec<CeldaMuro>) -> Vec<CeldaMuro> {
++// LAB `anillo_ts`: el orden del TS (`muralla.ts` `ordenarAnillo`), para contar puertas y torres con los dos.
++fn ordenar_anillo(celdas: Vec<CeldaMuro>, anillo_ts: bool) -> Vec<CeldaMuro> {
+     if celdas.is_empty() {
+         return celdas;
+     }
+@@ -304,6 +305,11 @@ fn ordenar_anillo(celdas: Vec<CeldaMuro>) -> Vec<CeldaMuro> {
+             .filter_map(|(dc, dr)| idx(Celda::new(col + dc, row + dr)).map(|i| pos[i]))
+             .find(|&q| q != usize::MAX && !visitada[q]);
+         let distancia = |k: usize| (celdas[k].celda.col - col).abs().max((celdas[k].celda.row - row).abs());
++        if anillo_ts && vecina.is_none() {
++            // las celdas llegan en orden de índice = (fila, columna)
++            orden.extend((0..celdas.len()).filter(|&k| !visitada[k]).map(|k| celdas[k]));
++            return orden;
++        }
+         match vecina.or_else(|| (0..celdas.len()).filter(|&k| !visitada[k]).min_by_key(|&k| distancia(k))) {
+             Some(k) => actual = k,
+             None => return orden,
+diff --git a/crates/trazado/src/tipos.rs b/crates/trazado/src/tipos.rs
+index 173f19c..2204cb2 100644
+--- a/crates/trazado/src/tipos.rs
++++ b/crates/trazado/src/tipos.rs
+@@ -110,6 +110,33 @@ pub struct Parametros {
+     pub maximo_por_nivel_ul: [i32; 5],
+     /// Viviendas que trae la fundación (T §11).
+     pub viviendas_iniciales: u32,
++    /// LABORATORIO: variantes del trazado frente al TypeScript (no se guarda en la foto). Retirar al decidir.
++    pub lab: Lab,
++}
++
++/// LABORATORIO del trazado (`lab_trazado.html`, ejemplo `nucleo/examples/lab_trazado.rs`): cada interruptor acerca una regla al
++/// TypeScript de `typescript-final`. Por defecto, solo la base (lo ya decidido por el autor). Es temporal: se retira al elegir.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Lab {
++    /// Base decidida: (1) sin disco urbano para anclas ni satélites; (a) un ancla queda llena en cuanto no cabe la huella pedida;
++    /// (3) la Granja que crece busca sitio sin su suelo pero conservando su camino (TS `sueloOcupado(…, excluirId)`).
++    pub base: bool,
++    /// b: los candidatos de un satélite se recortan con el círculo del TS (`candidatosLibres(rectAncla, margen·T)`).
++    pub circulo_nucleo: bool,
++    /// c: al separar un ancla nueva, su propia semilla no cuenta (TS `otrasAnclas` sin la semilla).
++    pub sin_semilla_en_separacion: bool,
++    /// C: el ancla nace al **proponer** y se queda aunque el edificio no se comprometa (`nucleo::urbanismo::Urbe::proponer_lab`).
++    pub ancla_al_proponer: bool,
++    /// D: `continua_fila` mira también calles y caminos (TS `ocupadas` con la red).
++    pub fila_con_calles: bool,
++    /// Muralla: orden del anillo del TS (al atascarse el paseo, lo que falta por fila y columna al final).
++    pub anillo_ts: bool,
++}
++
++impl Default for Lab {
++    fn default() -> Self {
++        Self { base: true, circulo_nucleo: false, sin_semilla_en_separacion: false, ancla_al_proponer: false, fila_con_calles: false, anillo_ts: false }
++    }
+ }
+ 
+ impl Default for Parametros {
+@@ -130,6 +157,7 @@ impl Default for Parametros {
+             crecimiento_por_edificio_ul: 5,
+             maximo_por_nivel_ul: [60, 90, 120, 150, 180],
+             viviendas_iniciales: 3,
++            lab: Lab::default(),
+         }
+     }
+ }

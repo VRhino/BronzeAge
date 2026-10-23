@@ -450,6 +450,26 @@ fn la_memoria_de_idempotencia_es_acotada() {
 }
 
 #[test]
+fn la_memoria_de_idempotencia_es_de_cada_cuenta() {
+    let mut ar = arranque(reticula(12, 12));
+    ar.reglas.limite_idempotencia = 3;
+    let mut n = Nucleo::nuevo(ar);
+    let (ana, beto) = (alta(&mut n, "ana", c(1, 1), 4_000, 350_000), alta(&mut n, "beto", c(1, 3), 4_000, 350_000));
+    assert!(n.aplicar_en(0, marchar("ana", "a0", ana, c(2, 5))).aceptada());
+    // Muchas órdenes de otra cuenta no le quitan a Ana las suyas: cada cuenta recuerda sus últimas 3.
+    for i in 0..10 {
+        assert!(n.aplicar_en(i, marchar("beto", &format!("b{i}"), beto, c(2 + i % 8, 7))).aceptada());
+    }
+    assert_eq!(n.aplicar_en(20, marchar("ana", "a0", ana, c(9, 9))).resultado, Resultado::Duplicada, "el reintento de Ana sigue siendo un duplicado");
+    assert_eq!(n.aplicar_en(20, marchar("beto", "b9", beto, c(9, 9))).resultado, Resultado::Duplicada);
+    assert!(n.aplicar_en(20, marchar("beto", "b0", beto, c(9, 9))).aceptada(), "la de Beto más vieja ya salió de su memoria");
+    // Y la memoria va en la foto, por cuenta.
+    let vuelta = nucleo::Estado::deserializar(&n.estado().serializar(), &n.estado().reglas, &n.estado().mundo_hash).unwrap();
+    assert_eq!((vuelta.visto("ana", "a0"), vuelta.visto("beto", "b1")), (n.estado().visto("ana", "a0"), None));
+    assert!(vuelta.visto("ana", "a0").is_some());
+}
+
+#[test]
 fn modo_en_vivo_con_el_reloj_compartido() {
     use servidor::RelojCompartido;
     use std::{thread::sleep, time::Duration};

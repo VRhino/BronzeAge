@@ -30,7 +30,6 @@
 
 use super::*;
 use crate::estado_militar::Acceso;
-use crate::nucleo::mercado::RADIO_PUERTA;
 use crate::nucleo::mercado::CAPACIDAD_CARRO;
 use asentamiento::almacen::Almacen;
 use asentamiento::Recurso;
@@ -475,7 +474,7 @@ impl Nucleo {
                 if e.columna.es_formacion() {
                     return Err(rechazo(rechazos::COLUMNA_EN_FORMACION, "cancela antes la formación".into()));
                 }
-                if !p.admin && e.posicion_en(t).dist(plaza) > RADIO_PUERTA {
+                if !p.admin && e.posicion_en(t).dist(plaza) > self.radio_puerta() {
                     return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
                 }
                 if !self.puede_entrar_en_plaza(*heroe, *asentamiento) {
@@ -610,7 +609,7 @@ impl Nucleo {
         if !Self::es_ejercito(e) {
             return Err(rechazo(rechazos::COLUMNA_NO_ES_EJERCITO, "solo un ejército guarnece: una columna personal entra con `entrarEnAsentamiento`".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(posicion) > RADIO_PUERTA {
+        if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
         }
         if e.columna.lider != heroe {
@@ -645,7 +644,7 @@ impl Nucleo {
         if !solo && e.columna.lider != heroe {
             return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder hace entrar al ejército".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(puerta) > RADIO_PUERTA {
+        if !p.admin && e.posicion_en(t).dist(puerta) > self.radio_puerta() {
             return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta del campamento".into()));
         }
         if solo {

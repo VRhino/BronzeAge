@@ -150,7 +150,7 @@ pub struct SitiosVilla<'a> {
 }
 
 impl Sitios for SitiosVilla<'_> {
-    fn proponer(&mut self, tipo: Tipo, u: &Urbano) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, u: &Urbano, ids: &mut u32, anclas: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
         let reclamos = &*self.reclamos;
         let propuesta = self.mapa.proponer(
             tipo,
@@ -171,7 +171,9 @@ impl Sitios for SitiosVilla<'_> {
             }
             return None;
         };
-        if self.urbe.cabe(self.urbanismo, tipo, u) {
+        let (cabe, nuevas) = self.urbe.proponer(self.urbanismo, tipo, u, ids);
+        anclas.extend(nuevas);
+        if cabe {
             Some(fuente)
         } else {
             *self.ciudad.denegadas.entry(tipo).or_default() += 1;
@@ -298,14 +300,14 @@ mod pruebas {
         let (mut rec, mut propias, mut otras) = (Reclamos::nuevo(&m), BTreeSet::new(), BTreeSet::new());
         let (mut ss1, mut ss2) = (SinSitio::default(), SinSitio::default());
         let (mut p1, mut p2) = (Plaza::nueva(), Plaza::nueva());
-        let p = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).proponer(Tipo::Cantera, &U);
+        let p = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).proponer(Tipo::Cantera, &U, &mut 100, &mut vec![]);
         assert_eq!(p, Some(Some(Fuente::Nodo(0))), "la más cercana");
         sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).tomar(0, Tipo::Cantera, Some(Fuente::Nodo(0)), &U, &mut 1);
         // Otra plaza con el mismo disco recibe la segunda, y luego ninguna.
         let mut s2 = sitios(&m, &mut rec, 1, 10_000, &mut otras, &mut ss2, &mut p2);
-        assert_eq!(s2.proponer(Tipo::Cantera, &U), Some(Some(Fuente::Nodo(1))));
+        assert_eq!(s2.proponer(Tipo::Cantera, &U, &mut 100, &mut vec![]), Some(Some(Fuente::Nodo(1))));
         s2.tomar(0, Tipo::Cantera, Some(Fuente::Nodo(1)), &U, &mut 1);
-        assert_eq!(s2.proponer(Tipo::Cantera, &U), None);
+        assert_eq!(s2.proponer(Tipo::Cantera, &U, &mut 100, &mut vec![]), None);
         assert_eq!((ss2.sin_ninguno[1], ss2.total[1]), (0, 1), "ya tenía una: la denegación no cuenta como «sin ninguno»");
     }
 
@@ -315,8 +317,8 @@ mod pruebas {
         let (mut rec, mut propias, mut ss, mut plaza) = (Reclamos::nuevo(&m), BTreeSet::new(), SinSitio::default(), Plaza::nueva());
         let mut s = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss, &mut plaza);
         // El Centro Urbano no se coloca nunca: el mapa no se opone (no liga a un yacimiento) pero la ciudad dice que no cabe.
-        assert_eq!(s.proponer(Tipo::CentroUrbano, &U), None);
-        assert_eq!(s.proponer(Tipo::CentroUrbano, &U), None);
+        assert_eq!(s.proponer(Tipo::CentroUrbano, &U, &mut 100, &mut vec![]), None);
+        assert_eq!(s.proponer(Tipo::CentroUrbano, &U, &mut 100, &mut vec![]), None);
         assert_eq!(plaza.ciudad.denegadas.get(&Tipo::CentroUrbano), Some(&2));
         assert_eq!((ss.total, plaza.ciudad.denegadas.len()), ([0; 3], 1), "no se confunde con la falta de yacimiento");
     }
@@ -327,11 +329,11 @@ mod pruebas {
         let (mut rec, mut propias, mut ss, mut plaza) = (Reclamos::nuevo(&m), BTreeSet::new(), SinSitio::default(), Plaza::nueva());
         let mut s = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss, &mut plaza);
         // Masa de 2 parcelas, cuota 50 % = 1: una Leñera y no más.
-        let Some(Some(Fuente::Parcela(p))) = s.proponer(Tipo::Lenera, &U) else { panic!("hay parcela") };
+        let Some(Some(Fuente::Parcela(p))) = s.proponer(Tipo::Lenera, &U, &mut 100, &mut vec![]) else { panic!("hay parcela") };
         s.tomar(100, Tipo::Lenera, Some(Fuente::Parcela(p)), &U, &mut 101);
-        assert_eq!(s.proponer(Tipo::Lenera, &U), None, "cupo de la masa agotado");
-        assert_eq!(s.proponer(Tipo::MinaEstano, &U), None);
-        assert_eq!(s.proponer(Tipo::Vivienda, &U), Some(None), "en una ciudad recién fundada cabe una Vivienda");
+        assert_eq!(s.proponer(Tipo::Lenera, &U, &mut 100, &mut vec![]), None, "cupo de la masa agotado");
+        assert_eq!(s.proponer(Tipo::MinaEstano, &U, &mut 100, &mut vec![]), None);
+        assert_eq!(s.proponer(Tipo::Vivienda, &U, &mut 100, &mut vec![]), Some(None), "en una ciudad recién fundada cabe una Vivienda");
         assert_eq!((ss.sin_ninguno[0], ss.total[0], ss.tiene[0]), (0, 1, true));
         assert_eq!(rec.parcela.iter().flatten().count(), 1);
     }

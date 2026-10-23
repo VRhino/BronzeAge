@@ -5,12 +5,13 @@
 //! Todo es un evento de prioridad 7 (`PRIO_BANDIDOS`: los bandidos ven a las columnas tal como estaban antes de moverse), uno por cosa que espera y ninguno por
 //! cosa ociosa:
 //! - **Uno por plaza, siempre** (`SucesoCombate::BandidosDeLaPlaza`): al fundarla, y al vencer el plazo de reaparición (`respawnMinutos`) del que se destruyó.
-//!   En el bosque no reclamado más cercano a ella, sin campamento encima y con el centro fuera de toda zona. Sin bosque que valga no gasta tirada ni reintenta
-//!   (DUDA: el TypeScript volvía a mirar cada tick).
+//!   En el bosque no reclamado más cercano a ella, sin campamento encima y con el centro a ≥ 10 u del borde de toda zona (`MARGEN_DE_ZONA`). Sin bosque que
+//!   valga no gasta tirada y espera: cuando un bosque queda libre o válido (se va un campamento de bandidos que lo ocupaba o una plaza cae en ruinas y su zona
+//!   desaparece), las plazas que esperan el suyo lo vuelven a buscar en ese instante, por orden de id (el TypeScript volvía a mirar cada tick).
 //! - **En el anillo de cada campamento de mercenarios** (`SucesoCombate::BandidosDelAnillo`): `clamp(ceil(residentes sin plaza / 2), 1, 6)` campamentos, uno cada
-//!   `reaparicionMinutos` mientras falten. La cita arranca con el mundo, se renueva al crear uno o al destruirse uno del anillo, y se detiene cuando no falta ninguno
-//!   (DUDA: un residente que llega a un campamento no adelanta la cita; el TypeScript miraba la demanda cada tick). Sin sitio válido tras `INTENTOS_ANILLO` intentos
-//!   (dos tiradas cada uno) reintenta a los `reaparicionMinutos`.
+//!   `reaparicionMinutos` mientras falten. La cita arranca con el mundo, se renueva al crear uno o al destruirse uno del anillo, se **rehace al cambiar la demanda**
+//!   (llega o se va un residente del campamento, o una Facción se queda sin plazas; [`Nucleo::reprogramar_anillo`]) y se detiene cuando no falta ninguno (el
+//!   TypeScript miraba la demanda cada tick). Sin sitio válido tras `INTENTOS_ANILLO` intentos (dos tiradas cada uno) reintenta a los `reaparicionMinutos`.
 //! - **Los del mundo**: el artefacto trae los campamentos de las vetas de estaño y oro (`bandidos_iniciales`); nacen con la partida, no reaparecen.
 //! - **Los de administración** (`ColocarBandidos`): para escenarios y pruebas.
 //!
@@ -36,10 +37,10 @@ use ::encuentros::{plan_quieto, Entradas};
 use combate::bandidos::{aparece_junto_a_plaza, campamentos_que_tocan, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso};
 use combate::caravana::{Defensa, Zona};
 use militar::escuadra::Escuadra;
+use std::collections::BTreeSet;
 
-/// Cuánto más lejos del borde de la zona que el propio centro del bosque (mil. = 10 u): el sitio de una plaza no pega a una frontera.
-// DUDA: Generacion_Del_Mundo §13 dice «el centro del bosque fuera de toda zona» y la nota de la 4A-2 añade «a ≥ 10 del borde de la zona»; se aplica la
-// segunda, que contiene a la primera (el disco de la zona contiene a su polígono).
+/// Cuánto más lejos del borde de la zona que el propio centro del bosque (mil. = 10 u): el sitio de una plaza no pega a una frontera. Se mide contra el
+/// disco de la zona, que contiene a su polígono (Generacion_Del_Mundo §13).
 const MARGEN_DE_ZONA: Mil = 10_000;
 
 impl Nucleo {
@@ -104,6 +105,9 @@ impl Nucleo {
             }
             OrigenBandidos::Veta(_) | OrigenBandidos::Admin => {}
         }
+        if b.bosque.is_some() {
+            self.plazas_sin_bosque_buscan(t);
+        }
     }
 
     /// La plaza cae en ruinas: su campamento de bandidos desaparece con ella (sin reaparecer, `bandidos.campamento_disperso`, Comercio_Caravanas §10) y su plazo de reaparición también.
@@ -118,6 +122,8 @@ impl Nucleo {
             self.espacio.rejilla.quitar(entidad_bandidos(id));
         }
         self.estado.combate.reaparecen.remove(&plaza);
+        // Su zona ya no está (y quizá tampoco su campamento): algún bosque puede valer ahora para otra plaza.
+        self.plazas_sin_bosque_buscan(t);
     }
 
     // ───────────────────────────── Las citas ─────────────────────────────
@@ -134,14 +140,54 @@ impl Nucleo {
         self.estado.cola.programar(en, PRIO_BANDIDOS, clave, Carga::Combate(SucesoCombate::BandidosDelAnillo));
     }
 
+    /// La demanda del anillo de `c` cambió: su cita se rehace (la pendiente muere con la generación). Si con la demanda de ahora falta algún campamento,
+    /// vence en cuanto lo permita su plazo (`bandidosEn`); si no, no queda ninguna.
+    pub(super) fn reprogramar_anillo(&mut self, c: u32, t: Instante) {
+        self.estado.generaciones.subir(entidad_anillo(c));
+        if self.faltan_en_el_anillo(c) {
+            let desde = self.estado.combate.anillos.get(&c).copied().unwrap_or(t).max(t);
+            self.programar_anillo(c, desde);
+        }
+    }
+
+    /// Una Facción se quedó sin plazas: sus residentes en los campamentos de mercenarios pasan a pedir bandidos.
+    pub(super) fn reprogramar_anillos(&mut self, t: Instante) {
+        let n = self.geografia.as_ref().map_or(0, |g| g.mapa.campamentos.len() as u32);
+        for c in 0..n {
+            self.reprogramar_anillo(c, t);
+        }
+    }
+
+    /// Cuentan los residentes cuya Facción no tiene plazas o que no tienen Facción: son los que necesitan bandidos que los acosen.
+    fn residentes_sin_plaza(&self, c: u32) -> i64 {
+        self.heroes().filter(|h| h.heroe.residencia == Some(militar::heroe::Residencia::Campamento(c)) && h.faccion.is_none_or(|f| self.plazas_de(f).next().is_none())).count() as i64
+    }
+
+    /// ¿Le faltan campamentos al anillo de `c` con la demanda de ahora?
+    fn faltan_en_el_anillo(&self, c: u32) -> bool {
+        let existentes = self.estado.combate.bandidos.values().filter(|b| b.origen == OrigenBandidos::Anillo(c)).count() as i64;
+        existentes < campamentos_que_tocan(&self.estado.reglas.economia.combate, self.residentes_sin_plaza(c))
+    }
+
+    /// Un bosque pudo quedar libre o válido: la primera plaza (por id) que esperaba el suyo —sin campamento y con su plazo vencido o sin plazo— lo vuelve a buscar
+    /// en este instante. Si lo encuentra, su aparición llama otra vez aquí y busca la siguiente; la que no encuentra nada sigue esperando, sin gastar tirada.
+    fn plazas_sin_bosque_buscan(&mut self, t: Instante) {
+        let con_campamento: BTreeSet<u64> = self.estado.combate.bandidos.values().filter_map(|b| if let OrigenBandidos::Plaza(p) = b.origen { Some(p) } else { None }).collect();
+        let reaparecen = &self.estado.combate.reaparecen;
+        let primera = self.estado.asentamientos.keys().copied().find(|p| !con_campamento.contains(p) && aparece_junto_a_plaza(false, reaparecen.get(p).copied(), t));
+        if let Some(plaza) = primera {
+            self.programar_bandidos_de_plaza(plaza, t);
+        }
+    }
+
     /// El bosque no reclamado más cercano a `desde`: sin campamento de bandidos encima y con el centro fuera de la zona de toda plaza (más el margen). Devuelve su
     /// índice y su centro. No gasta tiradas.
     fn bosque_libre_mas_cercano(&self, desde: Punto) -> Option<(u32, Punto)> {
         let geo = self.geografia.as_ref()?;
         let mut candidatos: Vec<(i128, u32, Punto)> = geo.bosques().iter().enumerate().filter_map(|(i, b)| b.centro.as_ref().map(|c| (Punto::new(c.x, c.y).dist2(desde), i as u32, Punto::new(c.x, c.y)))).collect();
         candidatos.sort_by_key(|&(d, i, _)| (d, i));
-        let ocupado = |i: u32| self.estado.combate.bandidos.values().any(|b| b.bosque == Some(i));
-        candidatos.into_iter().find(|&(_, i, centro)| !ocupado(i) && !self.estado.asentamientos.values().any(|a| a.posicion.dist(centro) < a.radio + MARGEN_DE_ZONA)).map(|(_, i, c)| (i, c))
+        let ocupados: BTreeSet<u32> = self.estado.combate.bandidos.values().filter_map(|b| b.bosque).collect();
+        candidatos.into_iter().find(|&(_, i, centro)| !ocupados.contains(&i) && !self.estado.asentamientos.values().any(|a| a.posicion.dist(centro) < a.radio + MARGEN_DE_ZONA)).map(|(_, i, c)| (i, c))
     }
 
     /// Vence la cita de aparición del campamento de la plaza.
@@ -157,6 +203,8 @@ impl Nucleo {
         self.estado.combate.reaparecen.remove(&plaza);
         let id = self.poner_bandidos(centro, nivel, OrigenBandidos::Plaza(plaza), Some(bosque), t);
         self.aparecio(id, t, vec![plaza]);
+        // Quizá quedaba otro bosque para la siguiente que espera (una ruina pudo dejar válidos varios).
+        self.plazas_sin_bosque_buscan(t);
     }
 
     /// Vence la cita del anillo del campamento de mercenarios `c`.
@@ -165,13 +213,10 @@ impl Nucleo {
         if self.estado.combate.anillos.get(&c).is_some_and(|&desde| t < desde) {
             return;
         }
-        let cr = self.estado.reglas.economia.combate.clone();
-        // Cuentan los residentes cuya Facción no tiene plazas o que no tienen Facción: son los que necesitan bandidos que los acosen.
-        let sin_plaza = self.heroes().filter(|h| h.heroe.residencia == Some(militar::heroe::Residencia::Campamento(c)) && h.faccion.is_none_or(|f| self.plazas_de(f).next().is_none())).count() as i64;
-        let existentes = self.estado.combate.bandidos.values().filter(|b| b.origen == OrigenBandidos::Anillo(c)).count() as i64;
-        if existentes >= campamentos_que_tocan(&cr, sin_plaza) {
+        if !self.faltan_en_el_anillo(c) {
             return;
         }
+        let cr = self.estado.reglas.economia.combate.clone();
         let valido = |s: &Self, p: Punto| s.geografia.as_ref().is_some_and(|g| g.es_tierra_firme(p)) && s.zona_en(p, None) == Zona::Ninguna && !s.en_proteccion_de_campamento(p);
         // El sorteo del punto presta el generador de la partida: se saca del estado mientras se mira el mapa y se devuelve con lo que gastó.
         let mut rng = std::mem::replace(&mut self.estado.rng, base::Rng::nuevo(0));

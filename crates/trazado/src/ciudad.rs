@@ -342,10 +342,16 @@ impl Ciudad {
         true
     }
 
+    /// La ciudad sin la pieza `id`, para buscarle sitio nuevo (T §6.7, `sueloOcupado(…, excluirId)`): solo se libera su suelo; la red
+    /// se queda la que da **con** ella, así que su camino sigue sirviendo de frente.
     pub(crate) fn sin_pieza(&self, id: u32) -> Ciudad {
         let mut c = self.clone();
         c.piezas.retain(|p| p.id != id);
-        c.reconstruir();
+        if let Some(p) = self.pieza(id) {
+            for i in p.rect.celdas().filter_map(idx) {
+                c.suelo.ocup[i] = false;
+            }
+        }
         c
     }
 

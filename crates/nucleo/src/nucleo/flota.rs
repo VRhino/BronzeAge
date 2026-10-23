@@ -10,7 +10,7 @@
 use super::*;
 use crate::estado::SucesoComercio;
 use crate::estado_comercio::{entidad_caravana, entidad_trueque};
-use crate::nucleo::mercado::{id32, nivel_mercado, RADIO_PUERTA};
+use crate::nucleo::mercado::{id32, nivel_mercado};
 use asentamiento::edificio::Edificios;
 use asentamiento::Recurso;
 use comercio::caravana::{caravanas_comerciales_de, carros_en_uso, mover_carro, Caravana, ContextoCarro, ContextoCrear, ErrorCaravana, EstadoCaravana, Lanzamiento, TipoCaravana};
@@ -315,7 +315,7 @@ impl Nucleo {
         let (faccion_a, faccion_b) = (self.plaza_o_rechazo(a)?.faccion, self.plaza_o_rechazo(b)?.faccion);
         let lado = ac.lado_que_debe(faccion_columna, faccion_a, faccion_b).ok_or_else(|| rechazo(rechazos::ENTREGA_NO_DEBE, "tu Facción no debe nada a ese trueque".into()))?;
         let (origen, destino) = (ac.origen_de(lado) as u64, ac.destino_de(lado) as u64);
-        if posicion_columna.dist(self.plaza_o_rechazo(destino)?.posicion) > RADIO_PUERTA {
+        if posicion_columna.dist(self.plaza_o_rechazo(destino)?.posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::ENTREGA_FUERA_DE_LA_PUERTA, "la columna no está en la puerta de la plaza que recibe".into()));
         }
         let entregable = ac.entregable(lado, &c.contenido);

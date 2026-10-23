@@ -1,13 +1,13 @@
 //! La memoria de la niebla (Niebla_De_Guerra §2, §4 y §6, 4H T3d): lo que cada Facción ha explorado, la última ficha de cada sitio ajeno que vio, lo que explora un héroe sin bandera, hasta
 //! dónde tiene grabado cada columna lo que ve, y la intel de las tabernas (las Miradas compradas y el último Informe de cada plaza). Es estado de juego (lo explorado decide qué se proyecta;
-//! las fichas y las Miradas, qué se conoce y qué se puede comprar): entra en el hash y en la foto (`BAN23`).
+//! las fichas y las Miradas, qué se conoce y qué se puede comprar): entra en el hash y en la foto (`BAN24`).
 //!
 //! Lo graba el núcleo al cerrar cada versión (`nucleo/exploracion.rs`), nunca un muestreo: una columna barre su recorrido exacto desde su último [`Vigia`] cuando algo la toca, y lo que
 //! lleva andado desde entonces se deriva de su plan (la proyección lo suma). Así la memoria es la misma con sesiones y sin ellas y no depende de cada cuánto se mire.
 //!
 //! Codificación (little endian, la de `codec`): `rejilla{hay bool · columnas u64 · filas u64 · tamaño i64} · exploración{n · n × (facción u32, bytes)} · personal{n · n × (héroe u64, bytes)} ·
 //! fichas{n · n × (facción u32 · m · m × (sitio, datos, conocido_en i64))} · vigías{n · n × (columna u64, desde i64, radio i64)} · sitios{n · n × (sitio, desde i64)}`, con
-//! `sitio = (clase u8: 0 plaza, 1 pueblo, 2 avanzada; id u64)` y `datos = (facción u32, posición, nivel u32, radio i64)`; detrás, `miradas{n · n × (id u64, facción u32, origen, centro, radio i64,
+//! `sitio = (clase u8: 0 plaza, 1 pueblo, 2 avanzada; id u64)` y `datos = (facción u32, posición, nivel u32, radio i64, estado u8: 0 activo, 1 en obra, 2 en ruinas)`; detrás, `miradas{n · n × (id u64, facción u32, origen, centro, radio i64,
 //! comprada_en i64, expira_en i64, libre_en i64)} · informes{n · n × (facción u32 · m · m × (plaza u64, nivel u32, posición, conocido_en i64, edificios{k · k × (tipo u8, en_obra bool, nivel u8,
 //! hay bool, sitio)}, defensa))}`, con `origen = (0 plaza u64 | 1 campamento u32)`, el sitio de un edificio en milésimas de unidad local y la defensa como el contenido de un informe de inspección.
 
@@ -28,14 +28,24 @@ pub enum Sitio {
     Avanzada(u64),
 }
 
-/// Lo que se ve de un sitio desde fuera y se guarda en su ficha: de quién es, dónde está, su nivel (la etapa de una avanzada; 0 en un pueblo) y su radio (el de la zona de una plaza; 0 en los
-/// demás).
+/// Cómo estaba un sitio cuando se vio (Niebla_De_Guerra §4.1, decisión del autor del 2026-10-24): en uso, en obra (un pueblo o una avanzada que se levanta, o una avanzada que se mejora o se
+/// repara) o en ruinas (una avanzada arruinada).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EstadoSitio {
+    Activo,
+    EnObra,
+    EnRuinas,
+}
+
+/// Lo que se ve de un sitio desde fuera y se guarda en su ficha: de quién es (0: de nadie, las ruinas de una ciudadela sin dueño), dónde está, su nivel (la etapa de una avanzada; 0 en un pueblo),
+/// su radio (el de la zona de una plaza; 0 en los demás) y su estado.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DatosSitio {
     pub faccion: u32,
     pub posicion: Punto,
     pub nivel: u32,
     pub radio: Mil,
+    pub estado: EstadoSitio,
 }
 
 /// La última foto de un sitio ajeno (`FichaConocida`): sus datos de cuando se vio por última vez y ese instante.
@@ -170,11 +180,12 @@ pub(crate) fn escribir(w: &mut Escritor, m: &Memoria) {
         w.u64(de.len() as u64);
         for (&s, ficha) in de {
             sitio_escribir(w, s);
-            let Ficha { datos: DatosSitio { faccion, posicion, nivel, radio }, conocido_en } = *ficha;
+            let Ficha { datos: DatosSitio { faccion, posicion, nivel, radio, estado }, conocido_en } = *ficha;
             w.u32(faccion);
             w.punto(posicion);
             w.u32(nivel);
             w.i64(radio);
+            w.u8(estado as u8);
             w.i64(conocido_en);
         }
     }
@@ -253,7 +264,14 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Memoria, ErrorFormato> {
         let de = m.fichas.entry(faccion).or_default();
         for _ in 0..r.cuenta()? {
             let s = sitio_leer(r)?;
-            let datos = DatosSitio { faccion: r.u32()?, posicion: r.punto()?, nivel: r.u32()?, radio: r.i64()? };
+            let (faccion, posicion, nivel, radio) = (r.u32()?, r.punto()?, r.u32()?, r.i64()?);
+            let estado = match r.u8()? {
+                0 => EstadoSitio::Activo,
+                1 => EstadoSitio::EnObra,
+                2 => EstadoSitio::EnRuinas,
+                _ => return Err(ErrorFormato("estado de una ficha desconocido")),
+            };
+            let datos = DatosSitio { faccion, posicion, nivel, radio, estado };
             de.insert(s, Ficha { datos, conocido_en: r.i64()? });
         }
     }

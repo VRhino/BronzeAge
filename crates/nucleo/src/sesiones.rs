@@ -126,7 +126,7 @@ impl Actor {
 
     fn avanzar(&mut self) {
         self.nucleo.pulso();
-        self.distribuir();
+        self.distribuir(None);
     }
 
     fn manejar(&mut self, c: ComandoSesion) {
@@ -276,8 +276,8 @@ impl Actor {
 
     /// `CambiarVista`: fija el rectángulo y manda la `Foto` nueva de `VISTA` (otra vez si ya estaba abierta: el cliente descarta lo que tenía). Sin Facción, o en una sesión que no es
     /// de jugador, no hay `VISTA`: `Aviso{vista.sin_derecho}`; un rectángulo al revés o incompleto: `Aviso{vista.invalida}`.
-    /// DUDA: `VISTA` no viaja en la `Bienvenida` ni se reanuda (el rectángulo es de la sesión) y el cliente no puede cerrarla; una columna que sigue en marcha y sale del rectángulo no se retira hasta que
-    /// se toque (T3d renueva el tramo de lo visible).
+    /// `VISTA` no viaja en la `Bienvenida` ni se reanuda (el rectángulo es de la sesión: al reconectar, el cliente la vuelve a pedir) y el cliente no puede cerrarla. Lo que se ve se reconcilia tras cada
+    /// reparto y en el muestreo de [`MUESTREO_VISTA_MS`]: lo que sale del rectángulo o deja de verse, aunque nada lo toque, sale con `QUITA` en el muestreo siguiente.
     fn vista(&mut self, sesion: SesionId, rect: pb::Rectangulo) {
         let esquinas = match (rect.min, rect.max) {
             (Some(a), Some(b)) if a.x <= b.x && a.y <= b.y => (Punto::new(a.x, a.y), Punto::new(b.x, b.y)),
@@ -301,8 +301,8 @@ impl Actor {
     // ───────────────────────────── Reparto de cambios ─────────────────────────────
 
     /// Reparte a cada sesión lo que cambió desde la última entrega. Primero los derechos (`Revocado` y `Foto` de los ámbitos que cambian) y después, de cada ámbito abierto, una sola `Delta`
-    /// con todo lo que le toca: una pasada por los registros agrupa por ámbito (no se recorre el registro una vez por sesión).
-    fn distribuir(&mut self) {
+    /// con todo lo que le toca: una pasada por los registros agrupa por ámbito (no se recorre el registro una vez por sesión). `causante` es la sesión cuya orden se acaba de aplicar.
+    fn distribuir(&mut self, causante: Option<SesionId>) {
         let hasta = self.nucleo.version();
         let mut envios: Vec<(SesionId, Difusion)> = Vec::new();
         // El mundo puede no haber avanzado y el interior de una plaza sí (el paso de minuto no sube la versión): los registros que faltan son los de `entregada` a `hasta`, quizá ninguno.
@@ -338,13 +338,15 @@ impl Actor {
                 }
             }
         }
-        // Lo que se ve: tras cualquier cambio del mundo y en cada muestreo (lo que anda entra y sale de la vista, a lo ajeno se le acaba el tramo).
-        // DUDA (4H T6): con 450 sesiones con vista esto cuesta ≈ 15 ms por orden (un techo de ≈ 65 órdenes/s); tras una orden bastaría la vista de quien la dio (la causalidad es suya) y las demás en
-        // el muestreo siguiente, pero cambia cuándo ven los demás (05 §3): lo decide el autor.
+        // Lo que se ve (05 §3, decisión del autor del 2026-10-24): en cada muestreo, todas las vistas; tras una orden, al momento solo la de quien la dio (la causalidad es suya) y las demás
+        // en el muestreo siguiente; tras un cambio que no viene de una orden, o con el reloj parado (no hay muestreo que esperar), todas al momento.
         let ahora = self.nucleo.ahora();
-        if hasta != self.entregada || ahora >= self.proxima_vista {
-            self.mesa.reconciliar_vistas(&self.nucleo, &mut envios);
+        let parado = self.reloj.con(|r, _| r.pausado() || r.factor_milesimas() == 0);
+        if ahora >= self.proxima_vista || (hasta != self.entregada && (causante.is_none() || parado)) {
+            self.mesa.reconciliar_vistas(&self.nucleo, None, &mut envios);
             self.proxima_vista = siguiente_muestreo(ahora);
+        } else if hasta != self.entregada {
+            self.mesa.reconciliar_vistas(&self.nucleo, causante, &mut envios);
         }
         self.entregada = hasta;
         self.mesa.entregar(envios);
@@ -361,7 +363,7 @@ impl Actor {
             Ok(p) => {
                 let r = self.nucleo.aplicar(p);
                 // Causalidad: primero TODAS las Delta (las de eventos que vencieron justo antes y las de esta orden)...
-                self.distribuir();
+                self.distribuir(Some(sesion));
                 r
             }
             Err(r) => r,
@@ -387,7 +389,7 @@ impl Actor {
             Ok((peticion_id, comando)) => {
                 let r = self.nucleo.aplicar(Peticion::de_servidor_de_batalla(&servidor, &peticion_id, comando));
                 // Lo que el mensaje cambió (una revisión nueva del ticket, por ejemplo) sale antes del acuse.
-                self.distribuir();
+                self.distribuir(Some(sesion));
                 r
             }
             Err(r) => r,

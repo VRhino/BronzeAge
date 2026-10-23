@@ -133,7 +133,7 @@ pub struct ViolacionesCiudad {
     pub solape: u64,
     /// Piezas sobre una celda de calle o de camino.
     pub suelo: u64,
-    /// Piezas fuera del disco urbano (o, en las afueras, fuera de su banda).
+    /// Genéricos fuera del disco urbano o, en las afueras, piezas fuera de su banda (anclas y satélites no miran el disco: Trazado_Urbano §6.5, §7.2).
     pub disco: u64,
     /// Piezas sin ninguna celda de calle o camino pegada.
     pub sin_salida: u64,
@@ -354,12 +354,14 @@ fn comprobar_ciudades(villas: &[Villa], re: &ReglasEconomia, out: &mut Violacion
             out.solape += ps[..k].iter().filter(|q| q.rect.solapa(&p.rect)).count() as u64;
             out.suelo += p.rect.celdas().any(|cl| c.es_calle(cl) || c.es_camino(cl)) as u64;
             let centro2 = p.rect.dist2_centro_al_origen();
-            let dentro = if p.categoria == Categoria::Afueras {
+            let dentro = match p.categoria {
                 // T §6.3: el campo vive en la banda de las afueras, a >= `radioAfuerasMin` del centro (borde) y hasta `max(radio, 60 + 36)` más la semidiagonal.
-                let tope = radio.max(afueras_min + banda) * 1000 + media_diagonal_mil(&p.rect);
-                centro2 <= tope * tope && p.rect.dist2_borde_al_origen() >= (afueras_min * 1000).pow(2)
-            } else {
-                centro2 <= (radio * 1000).pow(2)
+                Categoria::Afueras => {
+                    let tope = radio.max(afueras_min + banda) * 1000 + media_diagonal_mil(&p.rect);
+                    centro2 <= tope * tope && p.rect.dist2_borde_al_origen() >= (afueras_min * 1000).pow(2)
+                }
+                Categoria::Generico => centro2 <= (radio * 1000).pow(2),
+                _ => true,
             };
             out.disco += !dentro as u64;
             out.sin_salida += !p.rect.adyacentes().into_iter().any(|cl| c.es_calle(cl) || c.es_camino(cl)) as u64;
@@ -458,13 +460,13 @@ mod pruebas {
         let re = ReglasEconomia::default();
         let mut v = villa(&re);
         assert_eq!(comprobar(&v, &re), ViolacionesCiudad { plazas: 1, ..Default::default() }, "una plaza recién fundada cumple todo");
-        // Una Vivienda en la economía y en la ciudad, pero lejos del disco y de cualquier calle.
+        // Un Almacén (genérico) en la economía y en la ciudad, pero lejos del disco y de cualquier calle.
         let c = v.urbe.ciudad();
         let mut piezas = c.piezas().to_vec();
-        let pieza = |id, col| Pieza { id, tipo: Tipo::Vivienda as u8 as u16, categoria: Categoria::Residencial, rol: Rol::Normal, rect: Rect::new(col, 0, 1, 1), rotado: false, ancla_llena: false, semilla_saturada: false };
+        let pieza = |id, col| Pieza { id, tipo: Tipo::Almacen as u8 as u16, categoria: Categoria::Generico, rol: Rol::Normal, rect: Rect::new(col, 0, 1, 1), rotado: false, ancla_llena: false, semilla_saturada: false };
         piezas.push(pieza(50, 60));
         v.urbe = Urbe::desde_ciudad(Ciudad::desde_partes(c.semilla(), *c.params(), trazado::LAYOUT_VERSION, piezas, vec![]).unwrap());
-        v.a.edificios.push(Edificio::nuevo(50, Tipo::Vivienda, Estado::Activo));
+        v.a.edificios.push(Edificio::nuevo(50, Tipo::Almacen, Estado::Activo));
         let o = comprobar(&v, &re);
         assert_eq!((o.disco, o.sin_salida, o.solape, o.suelo, o.economia), (1, 1, 0, 0, 0), "{o:?}");
         // Sin su edificio, la pieza desacuerda con la economía.

@@ -231,7 +231,7 @@ la convocatoria se elimina
 
 ### 9.6 Lo que ve cada uno (proyección)
 
-> **Implementado en Rust (2026-10-23, 4H T5).** Los hechos de la convocatoria (`convocatoria.convocada`, `.unido`, `.union_pedida`, `.union_rechazada`, `.seleccion_cambiada`, `.separado`, `.cancelada`, `.peticion_caducada`) los oye **la Facción de la convocatoria** entera y quien está dentro de su plaza, también si se convoca en un campamento (entonces llevan `campamento` en los datos): «a su lugar y su Facción». `convocatoria.partio` lo oyen los de la columna que sale y la plaza del lugar.
+> **Implementado en Rust (2026-10-23, 4H T5).** Los hechos de la convocatoria (`convocatoria.convocada`, `.unido`, `.union_pedida`, `.union_rechazada`, `.seleccion_cambiada`, `.separado`, `.cancelada`, `.peticion_caducada`) los oye **la Facción de la convocatoria** entera y quien está dentro de su plaza, también si se convoca en un campamento (entonces llevan `campamento` en los datos): «a su lugar y su Facción». **La convocatoria como entidad viaja en el ámbito `FACCION`, a la Facción entera, y no en `HEROE`** (solo puede unirse quien es de la Facción; decisión del autor, 2026-10-23). `convocatoria.partio` lo oyen los de la columna que sale y la plaza del lugar.
 
 `convocatoriasDelLugar`: las convocatorias **de la propia Facción del héroe en el mismo lugar**, más la suya aunque ya no esté. Cada una trae sus integrantes dentro (con tropa nombrada, nivel, moral y cantidad, **en el orden elegido**) y las **peticiones vivas** solo para el Líder y para quien las hizo. `soyLider`, `soyIntegrante` y `miConvocatoriaId` se derivan por héroe. Nada sale del lugar.
 
@@ -285,6 +285,7 @@ Un héroe `fuera` del mundo: solo `conectarse` (§7).
 
 - **Una convocatoria no caduca ni se limpia sola**: si su Líder se desconecta, desaparece de la plaza o es expulsado, sigue ahí hasta que él la cancele. Cancelar no mira el lugar: el Líder puede hacerlo desde donde esté, siempre que no esté `fuera` del mundo (entonces nadie puede, y la convocatoria espera a que vuelva).
 - **Partir exige que el Líder siga dentro**; los demás pueden haberse ido (se quedan fuera) pero el Líder no.
+- **Contrato 05, decisiones del autor del 2026-10-23** (se quedan como estaban): `movilizar_ejercito` (`CrearEjercito` de jugador) **rechaza** un `objetivo` (`objetivo.no_soportado`): el ejército sale sin destino y luego se le da `marchar_a`; `unirse_a_ejercito` no trae carga: el héroe se une sin sacarla de su plaza; `cancelar_obra` sobre la obra de un **pueblo** se rechaza (`objetivo.no_soportado`): esa obra se cancela con `destruir_pueblo`.
 - **La selección de un visitante se ignora al partir**: un no residente sale con su columna, la que trajo, elija lo que elija; si no trajo ninguna y elige tropa o carga, `salida.solo_de_tu_residencia` (en Rust; ya no hay `columna.no_aparcada`).
 - ~~Entrar a tu residencia con carga que no cabe pierde lo que desborda la capacidad del almacén de la plaza~~ (TypeScript): **corregido el 2026-10-22**, el carro entra con el héroe y no se vuelca solo; no se pierde nada al entrar.
 - **El almacén personal se llena en orden de recurso del carro** (`vaciarCarro`), no por prioridad: el último que no cabe es el que se queda en el carro.

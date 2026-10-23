@@ -154,6 +154,7 @@ fn rechazo_de_batalla(e: ErrorBatalla, v: u64) -> Respuesta {
         ErrorBatalla::YaCombate(h) => (BATALLA_INVALIDA, format!("el héroe {h} ya combate en esta batalla")),
         ErrorBatalla::NoPuedeCancelar => (BATALLA_INVALIDA, "solo quien la inició puede cancelarla, y antes de que empiece la partida".into()),
         ErrorBatalla::SalidaInvalida => (BATALLA_INVALIDA, "la salida trae una escuadra que no es del héroe, repetida o que no cierra sobre lo autorizado".into()),
+        ErrorBatalla::SalidaIncompleta => (BATALLA_SALIDA_INCOMPLETA, "la salida no nombra todas las escuadras autorizadas del héroe".into()),
         ErrorBatalla::Resultado(e) => (BATALLA_INVALIDA, format!("resultado inválido: {e:?}")),
         ErrorBatalla::OtroResultado => (BATALLA_INVALIDA, "la batalla ya se aplicó con otro resultado".into()),
     };
@@ -862,8 +863,8 @@ impl Nucleo {
     }
 
     /// El bando al que `heroe` podría unirse ahora a la batalla `id` (`Batalla.lado_para_unirse`): el de las mismas condiciones que `UnirseABatalla`, sin elegir bando. `None` si no puede: la batalla no
-    /// está activa, ya combate (en ella o en otra), salió de ella, no llega o no es de ninguno.
-    // DUDA: no mira si el bando está lleno (`capacidadMaxima`): la orden lo rechaza al intentarlo, y la capacidad de un asedio es 15.
+    /// está activa, ya combate (en ella o en otra), salió de ella, no llega o no es de ninguno. No mira si el bando está lleno (`capacidadMaxima`): lo rechaza la
+    /// orden al intentarlo (Batalla_Unity_Ciclo §7).
     pub fn lado_para_unirse(&self, heroe: u64, id: u64) -> Option<Lado> {
         let t = self.estado.ahora;
         let b = self.batalla(id).filter(|b| b.activa(t) && !b.salio(heroe))?;

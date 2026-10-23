@@ -1757,6 +1757,8 @@ pub mod rechazos {
     pub const PUEBLO_NODO_NO_EXTRAIBLE: &str = "pueblo.nodo_no_extraible";
     pub const PUEBLO_NODO_OCUPADO: &str = "pueblo.nodo_ocupado";
     pub const PUEBLO_FUERA_DE_LA_ZONA: &str = "pueblo.fuera_de_la_zona";
+    /// El nodo no tiene ruta por tierra hasta la plaza madre: su carro no podría acarrear.
+    pub const PUEBLO_SIN_RUTA: &str = "pueblo.sin_ruta";
     pub const PUEBLO_TECNOLOGIA_FALTANTE: &str = "pueblo.tecnologia_faltante";
     pub const PUEBLO_NIVEL_INSUFICIENTE: &str = "pueblo.nivel_insuficiente";
     pub const PUEBLO_SIN_CUPO: &str = "pueblo.sin_cupo";
@@ -2046,6 +2048,8 @@ pub mod rechazos {
     pub const BATALLA_TOKEN_INVALIDO: &str = "batalla.token_invalido";
     pub const BATALLA_NO_COMBATE: &str = "batalla.no_combate";
     pub const BATALLA_SALIDA_INVALIDA: &str = "batalla.salida_invalida";
+    /// La salida de una partida en curso omite alguna de las escuadras autorizadas del héroe (Batalla_Unity_Ciclo §8.4).
+    pub const BATALLA_SALIDA_INCOMPLETA: &str = "batalla.salida_incompleta";
     /// El checklist de §8.5 rechaza el resultado entero (el mensaje dice cuál de sus puntos).
     pub const BATALLA_RESULTADO_INVALIDO: &str = "batalla.resultado_invalido";
     /// «Ya se aplicó con otro resultado» (409).

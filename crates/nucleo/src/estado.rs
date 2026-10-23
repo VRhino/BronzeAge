@@ -22,7 +22,7 @@ use cola::{Clave, Cola, Evento, Generaciones};
 use militar::columna::Columna;
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, OnceLock};
 
 /// Prioridad de la salida del mundo de quien se desconectó: la de «cierre de batallas vencidas y salidas del mundo» (Reloj_Y_Eventos §2). Sale
@@ -55,11 +55,17 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// Prioridad de la caducidad de una política (`Carga::CaducaPolitica`): **después** del paso de minuto de la plaza (2), para que una política de
 /// `d` minutos se aplique en los `d` pasos de su duración, incluido el que cae en su instante de caducidad. Comparte fila con el consumo (3).
 ///
-/// DUDA: la definición del 2026-10-22 decía que «el fin va antes del paso» para todas las citas (pensando en el edificio terminado); para la política
-/// se conserva el orden de siempre (`caducar` iba después de producir), que es el que evita acortar en un minuto toda política activada en un paso.
-/// Anotada en `Docs/Mecanicas a desarrollar.md`, sección de paridad.
+/// Es la regla (decisión del autor, 2026-10-23, Economia_Construccion §1): el fin de obra va antes del paso y la caducidad de una política, después, como
+/// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN24: BAN23 con la memoria de la idempotencia **por actor** (las últimas 64 peticiones de cada cuenta, no 500 de toda la partida; decisión del autor del 2026-10-24), las fichas
+/// de la niebla con el **estado** del sitio tal como se vio (activo, en obra, en ruinas; también las de unas ruinas sin dueño: Niebla_De_Guerra §4.1, 2026-10-24) y
+/// dos estados que ya no significan lo mismo (2026-10-23, decisiones del autor sobre las dudas del código): la ciudad de cada plaza es de la geometría `LAYOUT_VERSION` 4
+/// (anclas y satélites sin disco urbano, el ancla que nace al proponer y queda en la economía) y la `repone_en` de la guarnición de un pueblo es la vuelta del siguiente
+/// minero (uno cada 12 minutos), no la de la guarnición entera. BAN23 se rechaza: su ciudad es de otra geometría, su guarnición volvería entera de golpe, sus
+/// peticiones recordadas no van por actor y sus fichas no traen el estado.
+///
 /// BAN23: BAN22 con la memoria de la niebla (4H T3d, `memoria`): lo explorado por cada Facción y por cada héroe sin bandera (máscaras de bits sobre la rejilla de celdas de 5 unidades), la última ficha de cada
 /// sitio ajeno que vio cada Facción (plazas, pueblos y avanzadas, con el instante en que se vio), desde cuándo tiene grabado cada columna lo que ve (su vigía) y desde cuándo vale lo que se ve de cada sitio.
 /// BAN22 se rechaza: no trae lo explorado, que no se puede deducir del estado.
@@ -104,7 +110,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN23";
+const MAGIA: &[u8; 5] = b"BAN24";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -112,8 +118,8 @@ const MAGIA: &[u8; 5] = b"BAN23";
 pub struct Reglas {
     /// Aviso de víveres bajos al caer por debajo de este porcentaje de la capacidad (0 = sin aviso).
     pub viveres_bajos_pct: u32,
-    /// Peticiones recordadas para la idempotencia (`INFRA.limiteIdempotencia`). DUDA (4H T6): son las últimas de toda la partida, no de cada cuenta: con 500 jugadores a una orden cada 10 s
-    /// alcanzan ≈ 10 s, y un reintento tras reconectar más tarde se aplicaría otra vez.
+    /// Peticiones que se recuerdan **de cada actor** (cuenta o servidor de batalla) para la idempotencia (`INFRA.limiteIdempotenciaPorCuenta`, 64; decisión del
+    /// autor, 2026-10-24): un reintento de cualquiera de sus últimas órdenes responde `Duplicada`, por muchos jugadores que haya.
     pub limite_idempotencia: usize,
     /// El proceso tiene servidores de batalla (`SERVIDORES_BATALLA`, Batalla_Unity_Ciclo §8): `atacar` abre siempre una batalla de Unity, también bot contra bot
     /// (cuarta ronda de Entrar con todo, 2026-10-22). Sin ellos el combate se resuelve con números (Combate.md). Es una regla de la partida y no puede
@@ -126,7 +132,7 @@ pub struct Reglas {
 
 impl Default for Reglas {
     fn default() -> Self {
-        Self { viveres_bajos_pct: 25, limite_idempotencia: 500, batallas_en_unity: false, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
+        Self { viveres_bajos_pct: 25, limite_idempotencia: 64, batallas_en_unity: false, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
     }
 }
 
@@ -791,9 +797,8 @@ pub struct Estado {
     pub memoria: Memoria,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
-    /// `(actor, peticion_id)` en orden de llegada, con la versión que produjeron.
-    vistos: VecDeque<(String, String)>,
-    vistos_version: HashMap<(String, String), u64>,
+    /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
+    vistos: BTreeMap<String, VecDeque<(String, u64)>>,
 }
 
 impl Estado {
@@ -823,8 +828,7 @@ impl Estado {
             memoria: Memoria::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
-            vistos: VecDeque::new(),
-            vistos_version: HashMap::new(),
+            vistos: BTreeMap::new(),
         }
     }
 
@@ -835,18 +839,17 @@ impl Estado {
 
     /// Versión que produjo una petición ya aceptada.
     pub fn visto(&self, actor: &str, peticion_id: &str) -> Option<u64> {
-        self.vistos_version.get(&(actor.to_owned(), peticion_id.to_owned())).copied()
+        self.vistos.get(actor)?.iter().find(|(p, _)| p == peticion_id).map(|&(_, v)| v)
     }
 
     pub(crate) fn recordar(&mut self, actor: &str, peticion_id: &str, version: u64) {
-        let clave = (actor.to_owned(), peticion_id.to_owned());
-        if self.vistos_version.insert(clave.clone(), version).is_none() {
-            self.vistos.push_back(clave);
+        let suyas = self.vistos.entry(actor.to_owned()).or_default();
+        match suyas.iter_mut().find(|(p, _)| p == peticion_id) {
+            Some(x) => x.1 = version,
+            None => suyas.push_back((peticion_id.to_owned(), version)),
         }
-        while self.vistos.len() > self.reglas.limite_idempotencia {
-            if let Some(vieja) = self.vistos.pop_front() {
-                self.vistos_version.remove(&vieja);
-            }
+        while suyas.len() > self.reglas.limite_idempotencia {
+            suyas.pop_front();
         }
     }
 
@@ -986,10 +989,13 @@ impl Estado {
         }
 
         w.u64(self.vistos.len() as u64);
-        for clave in &self.vistos {
-            w.texto(&clave.0);
-            w.texto(&clave.1);
-            w.u64(self.vistos_version[clave]);
+        for (actor, suyas) in &self.vistos {
+            w.texto(actor);
+            w.u64(suyas.len() as u64);
+            for (peticion, version) in suyas {
+                w.texto(peticion);
+                w.u64(*version);
+            }
         }
         w.0
     }
@@ -1001,11 +1007,12 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN23`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 23, y solo el 23 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN24`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 24, y solo el 24 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'3' => {}
+                b'4' => {}
+                b'3' => return Err(ErrorFormato("foto del formato BAN23 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 3, la guarnición de un pueblo se reponía entera a las 6 h, la idempotencia no iba por cuenta y las fichas de la niebla no traían el estado del sitio): ya no se admite")),
                 b'2' => return Err(ErrorFormato("foto del formato BAN22 (sin la memoria de la niebla: lo explorado por cada Facción y las fichas de lo ajeno que vio, que no se pueden deducir del estado): ya no se admite")),
                 b'1' => return Err(ErrorFormato("foto del formato BAN21 (las plazas no traen la tendencia «+N/min» del último paso de minuto, que no se puede deducir del estado): ya no se admite")),
                 b'0' => return Err(ErrorFormato("foto del formato BAN20 (el ticket de una batalla no congela la plaza del asedio ni el nivel, la experiencia y la moral de cada escuadra, y el informe de inspección de una plaza no trae sus recintos): ya no se admite")),
@@ -1142,8 +1149,11 @@ impl Estado {
         s.cola = Cola::restaurar(eventos, siguiente_secuencia);
 
         for _ in 0..r.cuenta()? {
-            let (actor, peticion, version) = (r.texto()?, r.texto()?, r.u64()?);
-            s.recordar(&actor, &peticion, version);
+            let actor = r.texto()?;
+            for _ in 0..r.cuenta()? {
+                let (peticion, version) = (r.texto()?, r.u64()?);
+                s.recordar(&actor, &peticion, version);
+            }
         }
         r.fin()?;
         Ok(s)

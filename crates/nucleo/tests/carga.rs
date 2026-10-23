@@ -338,29 +338,47 @@ async fn carga_de_500_sesiones_coste_del_reparto_muestreo_de_la_vista_y_bytes_po
     assert_eq!((n500.version(), n500.hash_estado()), (n1.version(), n1.hash_estado()), "la versión y el hash no dependen de las sesiones");
     let versiones = n500.version();
 
-    // 4. Una orden por jugador del mapa (cambia de destino) con las 500 conectadas.
+    // 4. Una orden por jugador del mapa (cambia de destino) con las 500 conectadas: con el reloj parado (todas las vistas al momento tras cada orden) y en marcha a ×1 (al momento solo la
+    // de quien la da; las demás, en el muestreo de 250 ms: decisión del autor del 2026-10-24).
     let m = real::mundo().unwrap();
     let mut b = arrancar(n500).await;
     conectar_499(&mut b, &mapa, &en_plaza).await;
     b.recoger();
-    let i_ordenes = Pared::now();
     let mut rng = Rng::nuevo(23);
-    for (k, (_, _, h)) in mapa.iter().enumerate() {
-        let c = campamento(&m.0, (k % FACCIONES as usize) % m.0.campamentos().len());
-        let destino = en_tierra(&m.0, c, rng.por_debajo(300 * U as u64) as Mil - 150 * U, rng.por_debajo(300 * U as u64) as Mil - 150 * U);
-        use pb::orden_marchar_a::{objetivo::Tipo, Objetivo};
-        let cuerpo = orden::Cuerpo::MarcharA(pb::OrdenMarcharA { heroe_id: ids::heroe(*h), objetivo: Some(Objetivo { tipo: Some(Tipo::Punto(pb::Punto { x: destino.x, y: destino.y })) }) });
-        b.orden(k as u64 + 1 + ADMINS as u64 + EN_PLAZA as u64, cuerpo).await;
+    let mut ronda = || {
+        let ordenes: Vec<(u64, orden::Cuerpo)> = mapa
+            .iter()
+            .enumerate()
+            .map(|(k, (_, _, h))| {
+                let c = campamento(&m.0, (k % FACCIONES as usize) % m.0.campamentos().len());
+                let destino = en_tierra(&m.0, c, rng.por_debajo(300 * U as u64) as Mil - 150 * U, rng.por_debajo(300 * U as u64) as Mil - 150 * U);
+                use pb::orden_marchar_a::{objetivo::Tipo, Objetivo};
+                (k as u64 + 1 + ADMINS as u64 + EN_PLAZA as u64, orden::Cuerpo::MarcharA(pb::OrdenMarcharA { heroe_id: ids::heroe(*h), objetivo: Some(Objetivo { tipo: Some(Tipo::Punto(pb::Punto { x: destino.x, y: destino.y })) }) }))
+            })
+            .collect();
+        ordenes
+    };
+    let i_ordenes = Pared::now();
+    for (sesion, cuerpo) in ronda() {
+        b.orden(sesion, cuerpo).await;
     }
     barrera(&mut b).await;
     let ordenes = i_ordenes.elapsed().as_secs_f64();
     let por_orden = b.recoger();
+    b.orden(1, orden::Cuerpo::ControlarReloj(pb::OrdenControlarReloj { accion: "reanudar".into(), factor_milesimas: None, hasta_ms: None })).await;
+    let i_en_marcha = Pared::now();
+    for (sesion, cuerpo) in ronda() {
+        b.orden(sesion, cuerpo).await;
+    }
+    barrera(&mut b).await;
+    let ordenes_en_marcha = i_en_marcha.elapsed().as_secs_f64();
+    b.recoger();
     drop(b.tx);
     b.actor.await.unwrap();
 
     println!("pared, {MINUTOS} min de mundo en pasos de {PASO_MS} ms: núcleo solo {solo:.2} s; actor con 1 administración {un_admin:.2} s; actor con 500 sesiones {quinientas:.2} s");
     println!("versiones al acabar el guion: {versiones} (iguales con 1 sesión y con 500, y el hash)");
-    println!("conectar las 499 (Bienvenida, fotos y vistas): {conexion:.2} s; {} órdenes de marcha con las 500 conectadas: {ordenes:.2} s ({:.0} µs por orden)", mapa.len(), ordenes * 1e6 / mapa.len() as f64);
+    println!("conectar las 499 (Bienvenida, fotos y vistas): {conexion:.2} s; {} órdenes de marcha con las 500 conectadas: {ordenes:.2} s ({:.0} µs por orden) con el reloj parado, {ordenes_en_marcha:.2} s ({:.0} µs por orden, con los muestreos de 250 ms) en marcha a ×1", mapa.len(), ordenes * 1e6 / mapa.len() as f64, ordenes_en_marcha * 1e6 / mapa.len() as f64);
     imprimir("fotos al conectar (KB por sesión, no por minuto):", &fotos, 1.0);
     imprimir("con 1 administración:", &solo_admin, MINUTOS as f64);
     imprimir("con 500 sesiones:", &en_marcha, MINUTOS as f64);

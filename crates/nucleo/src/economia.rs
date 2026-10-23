@@ -290,14 +290,16 @@ impl SitiosPlaza<'_> {
 impl Sitios for SitiosPlaza<'_> {
     /// Hay sitio si lo hay en el mapa (los que ligan a un yacimiento) y en la ciudad (caché). Se mira antes el mapa, que es barato: una
     /// Leñera sin parcela libre o un Corral sin ganado no tienen sitio, y no hace falta barrer la ciudad para saberlo.
-    fn proponer(&mut self, tipo: Tipo, u: &Urbano) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, u: &Urbano, ids: &mut u32, anclas: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
         let yo = self.yo;
         // Solo los tipos que ligan a un yacimiento miran la geometría de la zona.
         let ligado = matches!(tipo, Tipo::Lenera | Tipo::Cantera | Tipo::Corral);
         let vecinos: &[Disco] = if ligado { self.vecinos() } else { &[] };
         let (po, nr) = (&*self.parcelas_ocupadas, &*self.nodos_reclamados);
         let fuente = self.mapa.proponer(tipo, yo.centro, yo.radio, self.parcelas, self.cuota_pct, &|i| !po.contains_key(&i), &|n| !nr.contains_key(&n), &|c| territorio::en_zona(c, &yo, vecinos))?;
-        self.urbe.cabe(self.urbanismo, tipo, u).then_some(fuente)
+        let (cabe, nuevas) = self.urbe.proponer(self.urbanismo, tipo, u, ids);
+        anclas.extend(nuevas);
+        cabe.then_some(fuente)
     }
 
     /// Coloca el edificio en la ciudad y, solo si cabe, toma su yacimiento. `None` = otro proyecto de la misma pasada se quedó el sitio.

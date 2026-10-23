@@ -5,17 +5,20 @@
 //!   la memoria todavía: lo deriva quien proyecta ([`Nucleo::recorrido_pendiente`], [`Nucleo::avistados_pendientes`]) y es exactamente lo que se grabará.
 //! - **Ojos fijos** (la zona de una plaza, que ve su disco entero, y una avanzada operativa, 12): se graban al cambiar (nacer, crecer, cambiar de dueño, caer); mientras no cambian ven siempre lo
 //!   mismo.
-//! - **Sitios** (plazas, pueblos y avanzadas): cuando cambia lo que se ve de uno (su dueño, su nivel, su radio, que exista), primero se graba con lo de **antes** lo que cada ojo ajeno vio de él
+//! - **Sitios** (plazas, pueblos y avanzadas, también las ruinas de una ciudadela sin dueño): cuando cambia lo que se ve de uno (su dueño, su nivel o su etapa, su radio, su estado —activo, en
+//!   obra, en ruinas—, que exista), primero se graba con lo de **antes** lo que cada ojo ajeno vio de él
 //!   desde la última vez que se grabó, y desde ese instante su ficha vale lo de ahora (`Memoria::sitios`): así ninguna ficha guarda algo que su Facción no llegó a ver. Quien lo ve en ese mismo
 //!   instante se lleva lo de ahora; si desapareció y alguien mira su sitio, la ficha se olvida (§4.1).
 //!
 //! Lo que el núcleo recuerda de cada ojo y de cada sitio al cerrar la última versión ([`Ojos`]) no se persiste: entre versiones es lo mismo que dice el estado, y se rehace de él al arrancar o
 //! recuperar. Sin artefacto de mundo (`Memoria::rejilla` vacía) no se graba nada.
 //!
-//! DUDA: el alcance con que se barre lo andado es el que la columna tenía al empezar a grabar (su vigía): si pierde los soldados sin que nada la toque, sigue grabando 30 hasta el próximo cambio.
+//! El alcance con que se barre lo andado es el que la columna tenía al empezar a grabar (su vigía, Niebla_De_Guerra §4.1): si pierde los soldados sin que nada la toque, sigue grabando 30 hasta el
+//! próximo cambio.
 
 use super::*;
-use crate::memoria::{DatosSitio, Ficha, Memoria, Sitio, Vigia};
+use crate::memoria::{DatosSitio, EstadoSitio, Ficha, Memoria, Sitio, Vigia};
+use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada};
 use base::Vertice;
 use militar::columna;
 use std::collections::BTreeSet;
@@ -159,24 +162,50 @@ fn avistados<'a>(r: &'a [Vertice], radio: Mil, sitios: impl Iterator<Item = (Sit
     })
 }
 
+/// Lo que se ve de una plaza.
+fn datos_de_plaza(a: &crate::estado::Asentamiento) -> DatosSitio {
+    DatosSitio { faccion: a.faccion, posicion: a.posicion, nivel: a.nivel(), radio: a.radio, estado: EstadoSitio::Activo }
+}
+
+/// Lo que se ve de un pueblo de la Facción `faccion` en `posicion`: activo o, mientras espera materiales o se levanta, en obra.
+fn datos_de_pueblo(faccion: u32, posicion: Punto, p: &asentamiento::pueblos::Pueblo) -> DatosSitio {
+    DatosSitio { faccion, posicion, nivel: 0, radio: 0, estado: if p.activo() { EstadoSitio::Activo } else { EstadoSitio::EnObra } }
+}
+
+/// Lo que se ve de una avanzada de la Facción `faccion` (0: unas ruinas sin dueño): su etapa y, con una obra en marcha (levantarla, mejorarla o repararla), en obra; si no, en ruinas o activa.
+fn datos_de_avanzada(faccion: u32, x: &Avanzada) -> DatosSitio {
+    let estado = if x.obra.is_some() || x.estado == EstadoAvanzada::EnConstruccion {
+        EstadoSitio::EnObra
+    } else if x.en_ruinas() {
+        EstadoSitio::EnRuinas
+    } else {
+        EstadoSitio::Activo
+    };
+    DatosSitio { faccion, posicion: x.posicion, nivel: x.etapa.indice() as u32 + 1, radio: 0, estado }
+}
+
 impl Nucleo {
     /// El alcance de vista de una columna ahora: 30 con soldados en pie, 15 sin ellos (§3).
     pub(crate) fn radio_de_vista(&self, e: &Ejercito) -> Mil {
         columna::alcance_de_vista(&self.estado.reglas.economia.militar, self.escuadras_de_columna(e.id))
     }
 
-    /// Lo que se ve desde fuera de un sitio (su ficha): `None` si ya no existe o si no es de nadie (unas ruinas de ciudadela sin dueño).
+    /// Lo que se ve desde fuera de un sitio (su ficha): `None` si ya no existe. Unas ruinas de ciudadela sin dueño son de la Facción 0.
     pub(crate) fn datos_de_sitio(&self, s: Sitio) -> Option<DatosSitio> {
         let e = &self.estado;
         match s {
-            Sitio::Plaza(id) => e.asentamientos.get(&id).map(|a| DatosSitio { faccion: a.faccion, posicion: a.posicion, nivel: a.nivel(), radio: a.radio }),
+            Sitio::Plaza(id) => e.asentamientos.get(&id).map(datos_de_plaza),
             Sitio::Pueblo(id) => {
-                let (madre, _) = self.pueblo(id)?;
-                Some(DatosSitio { faccion: e.asentamientos.get(&madre)?.faccion, posicion: self.posicion_de_pueblo(id)?, nivel: 0, radio: 0 })
+                let (madre, p) = self.pueblo(id)?;
+                Some(datos_de_pueblo(e.asentamientos.get(&madre)?.faccion, self.posicion_de_pueblo(id)?, p))
             }
             Sitio::Avanzada(id) => {
                 let (madre, v) = self.avanzada(id)?;
-                Some(DatosSitio { faccion: e.asentamientos.get(&madre?)?.faccion, posicion: v.posicion, nivel: v.etapa.indice() as u32 + 1, radio: 0 })
+                let faccion = match madre {
+                    Some(m) => e.asentamientos.get(&m)?.faccion,
+                    None => 0,
+                };
+                Some(datos_de_avanzada(faccion, v))
             }
         }
     }
@@ -184,9 +213,9 @@ impl Nucleo {
     /// Una plaza y sus pueblos y avanzadas, con lo que se ve de cada uno.
     fn sitios_con_datos(&self, a: &crate::estado::Asentamiento) -> Vec<(Sitio, DatosSitio)> {
         let nodos = self.geografia.as_ref().map(|g| &g.mapa.nodos);
-        let mut v = vec![(Sitio::Plaza(a.id), DatosSitio { faccion: a.faccion, posicion: a.posicion, nivel: a.nivel(), radio: a.radio })];
-        v.extend(a.economia.pueblos.iter().filter_map(|p| Some((Sitio::Pueblo(p.id), DatosSitio { faccion: a.faccion, posicion: nodos?.get(p.nodo as usize)?.pos, nivel: 0, radio: 0 }))));
-        v.extend(a.economia.avanzadas.iter().map(|x| (Sitio::Avanzada(x.id), DatosSitio { faccion: a.faccion, posicion: x.posicion, nivel: x.etapa.indice() as u32 + 1, radio: 0 })));
+        let mut v = vec![(Sitio::Plaza(a.id), datos_de_plaza(a))];
+        v.extend(a.economia.pueblos.iter().filter_map(|p| Some((Sitio::Pueblo(p.id), datos_de_pueblo(a.faccion, nodos?.get(p.nodo as usize)?.pos, p)))));
+        v.extend(a.economia.avanzadas.iter().map(|x| (Sitio::Avanzada(x.id), datos_de_avanzada(a.faccion, x))));
         v
     }
 
@@ -251,6 +280,9 @@ impl Nucleo {
             self.sitios_con_datos(a).into_iter().for_each(|(s, d)| ojos.sitio(s, Some(d)));
             Self::fijos_de(a).into_iter().for_each(|(s, o)| ojos.fijo(s, Some(o)));
         }
+        for x in self.estado.combate.huerfanas.values() {
+            ojos.sitio(Sitio::Avanzada(x.id), Some(datos_de_avanzada(0, x)));
+        }
         self.ojos = Some(ojos);
         let t = self.estado.ahora;
         let nuevas: Vec<(u64, Mil)> = self.estado.ejercitos.values().filter(|e| !self.estado.memoria.vigias.contains_key(&e.id)).map(|e| (e.id, self.radio_de_vista(e))).collect();
@@ -292,6 +324,14 @@ impl Nucleo {
             }
         }
         sitios.extend(nuevos_sitios.keys().copied());
+        // Lo que ya no es de ninguna plaza tocada (las ruinas de la ciudadela de una plaza que cae, que quedan sin dueño) se mira suelto.
+        for &s in &sitios {
+            if !nuevos_sitios.contains_key(&s) {
+                if let Some(d) = self.datos_de_sitio(s) {
+                    nuevos_sitios.insert(s, d);
+                }
+            }
+        }
         let cambiados: Vec<(Sitio, Option<DatosSitio>, Option<DatosSitio>)> =
             sitios.iter().map(|&s| (s, viejos.sitios.get(&s).copied(), nuevos_sitios.get(&s).copied())).filter(|(_, antes, ahora)| antes != ahora).collect();
         let fijos: Vec<(Sitio, Option<Fijo>, Option<Fijo>)> =

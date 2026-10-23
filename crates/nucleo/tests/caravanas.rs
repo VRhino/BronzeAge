@@ -1125,6 +1125,32 @@ fn los_carros_perdidos_en_batalla_se_llevan_su_parte_de_la_carga_y_sin_carros_no
     assert_eq!(hechos(&e.n, "comercio.caravana_llega").len(), 1, "la destruida no llega");
 }
 
+#[test]
+fn si_en_la_batalla_se_pierde_el_animal_mas_lento_el_plan_en_pausa_sigue_a_la_velocidad_nueva() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    e.dar(a, Cobre, 200_000);
+    e.dar(a, Oro, 300_000);
+    // Un carro con buey (24) y otro con caballo (36): la caravana va a 24.
+    let car = e.caravana("ana", a, 1, true);
+    e.ok("ana", Comando::AnadirCarro { caravana: car, tipo: TipoCarro::Basico });
+    e.ok("ana", Comando::AnadirAnimal { caravana: car, carro: 1, animal: Animal::Caballo });
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
+    e.avanzar(5 * MIN);
+    let t = e.n.ahora();
+    let queda = fin_del_plan(&e, car) - t;
+    assert!(e.n.caravana_entra_en_batalla(t, car));
+    // Pierde el carro del buey: ahora va a 36, y lo que le quedaba dura 24 / 36.
+    assert!(!e.n.aplicar_perdida_de_carros(t, car, &[0]).unwrap().destruida);
+    assert_eq!(e.caravana_de(car).velocidad(&Reglas::default().economia.comercio.flota), 36_000);
+    assert!(e.n.caravana_sale_de_batalla(t + MIN, car));
+    let nuevo = fin_del_plan(&e, car) - (t + MIN);
+    assert!((nuevo - queda * 24 / 36).abs() <= 1, "le quedaban {queda} ms a 24; a 36 son {nuevo}");
+    e.avanzar_hasta(fin_del_plan(&e, car));
+    assert!(hechos(&e.n, "comercio.caravana_llega").iter().any(|h| dato(h, "caravana") == car as i64), "llega a su hora nueva");
+}
+
 /// Un generador de visión que cuenta lo que ve (el de `espacial` guarda sus contadores dentro de la caja).
 struct Espia(nucleo::espacial::GeneradorVision, Arc<std::sync::Mutex<(u64, u64)>>);
 

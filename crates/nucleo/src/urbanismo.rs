@@ -47,6 +47,8 @@ pub struct Urbanismo {
     puestos_por_nivel: BTreeMap<u8, Vec<u8>>,
     /// Huella de la Granja por nivel interno (índice = nivel − 1).
     granja: Vec<Huella>,
+    /// `RADIO_CIUDAD` (T §12): inicial, crecimiento por edificio y tope por nivel, en unidades locales.
+    radio: (i32, i32, [i32; 5]),
 }
 
 fn huella_de(v: &serde_json::Value) -> Huella {
@@ -73,7 +75,11 @@ impl Urbanismo {
             .map(|(k, v)| (k.parse().expect("nivel numérico"), v.as_array().expect("lista").iter().map(|f| f.as_u64().expect("forma") as u8).collect()))
             .collect();
         let granja = eco.catalogo.tipo(Tipo::Granja).niveles.iter().map(|n| n.tamano.map_or(defecto, |(a, h)| Huella::new(a, h))).collect();
-        Self { defecto, por_tipo, forma_puesto, puestos_por_nivel, granja }
+        let rc = b("RADIO_CIUDAD");
+        let ul = |v: &serde_json::Value| v.as_i64().expect("RADIO_CIUDAD en unidades locales enteras") as i32;
+        let topes: Vec<i32> = rc["maximoPorNivel"].as_array().expect("maximoPorNivel es una lista").iter().map(ul).collect();
+        let radio = (ul(&rc["inicial"]), ul(&rc["crecimientoPorEdificio"]), topes.try_into().expect("maximoPorNivel: un tope por nivel 1-5"));
+        Self { defecto, por_tipo, forma_puesto, puestos_por_nivel, granja, radio }
     }
 
     /// Huella sin girar de un tipo a ese nivel interno: la Granja por nivel, el puesto del Mercado por su forma, el resto por tipo.
@@ -124,12 +130,17 @@ impl Urbanismo {
     }
 
     /// Los parámetros de la geometría con los valores de la economía que los comparten (el gate de las anclas y las Viviendas de la
-    /// fundación); el resto, los de T §12.
-    ///
-    /// DUDA: las cifras del `radioCiudad` (30 / 5 / 60-180) están en la prosa de T §2.1, no en un bloque `<!-- parametros -->`, así que
-    /// salen de los valores por defecto del crate `trazado` y no de las reglas incrustadas (cambiarlas en el documento no las cambia aquí).
+    /// fundación) y el `RADIO_CIUDAD` del documento; el resto, los de T §12.
     pub fn parametros(&self, eco: &asentamiento::Reglas) -> Parametros {
-        Parametros { nivel_gate_anclas: eco.construccion.necesidades.nivel_gate_anclas as u8, viviendas_iniciales: eco.viviendas_iniciales, ..Parametros::default() }
+        let (radio_inicial_ul, crecimiento_por_edificio_ul, maximo_por_nivel_ul) = self.radio;
+        Parametros {
+            nivel_gate_anclas: eco.construccion.necesidades.nivel_gate_anclas as u8,
+            viviendas_iniciales: eco.viviendas_iniciales,
+            radio_inicial_ul,
+            crecimiento_por_edificio_ul,
+            maximo_por_nivel_ul,
+            ..Parametros::default()
+        }
     }
 }
 
@@ -287,33 +298,41 @@ impl Urbe {
         Pedido { id, tipo: tipo_a_u16(tipo), categoria: c.categoria, rol: c.rol, huella: urb.huella(tipo, nivel_interno), permitir_rotacion: c.rota, perfil: k.perfil, radio_ul: k.radio }
     }
 
-    /// ¿Hay sitio en la ciudad para este tipo? No toca la ciudad. Un tipo que ya tiene sitio libre, o que lo tendría si el trazado
-    /// creara antes un ancla (con el nivel que abre el gate), cabe. Los tipos de ámbito de mapa (Cantera, minas) siempre caben.
-    pub fn cabe(&mut self, urb: &Urbanismo, tipo: Tipo, u: &Urbano) -> bool {
-        let Some(clase) = urb.clase(tipo) else { return true };
+    /// ¿Hay sitio en la ciudad para este tipo? Como el TypeScript al proponer (`asegurarAnclaPara`, T §7.1): para un tipo con barrio
+    /// el trazado marca antes las anclas llenas y, si no queda ninguna con hueco y el gate de nivel está abierto, crea **ya** el ancla de
+    /// saturación con el id `*ids` (que avanza). El ancla y las marcas se quedan aunque el proyecto no se llegue a comprometer, y el ancla
+    /// vuelve como edificio gratuito para la economía. No coloca el edificio. Los tipos de ámbito de mapa (Cantera, minas) siempre caben.
+    pub fn proponer(&mut self, urb: &Urbanismo, tipo: Tipo, u: &Urbano, ids: &mut u32) -> (bool, Vec<Gratuito>) {
+        let Some(clase) = urb.clase(tipo) else { return (true, vec![]) };
         if clase.rol == Rol::Centro {
-            return false;
+            return (false, vec![]);
         }
-        let k = self.clave(u, Some(clase));
+        let u = Urbano { siguiente_id: *ids, ..*u };
+        let k = self.clave(&u, Some(clase));
         if let Some(r) = self.cache.buscar(Consulta::Cabe(tipo), k) {
-            return r;
+            return (r, vec![]);
         }
-        let ped = Self::pedido(urb, clase, u.siguiente_id, tipo, 1, &k);
-        let mut cabe = self.ciudad.siguiente_sitio(&ped).is_some();
-        // Sin ancla con hueco, el trazado crearía una (gate de nivel): se prueba sobre una copia, con el mismo id que tendría.
-        if !cabe && k.gate_abierto {
-            let mut copia = self.ciudad.clone();
-            let opciones = urb.opciones_ancla(clase.categoria);
-            if let Ancla::Creada(_) = copia.asegurar_ancla_para(&ped, u.siguiente_id + 1, u.nivel_operativo.min(255) as u8, &opciones) {
-                cabe = copia.siguiente_sitio(&ped).is_some();
+        let ped = Self::pedido(urb, clase, *ids, tipo, 1, &k);
+        let mut anclas = vec![];
+        if clase.rol == Rol::Normal && clase.categoria.tiene_barrio() {
+            let antes = self.ciudad.piezas().to_vec();
+            if let Ancla::Creada(a) = self.ciudad.asegurar_ancla_para(&ped, *ids, u.nivel_operativo.min(255) as u8, &urb.opciones_ancla(clase.categoria)) {
+                anclas.push(Gratuito { id: a, tipo: TIPOS[self.ciudad.pieza(a).expect("recién creada").tipo as usize], nivel_interno: 1 });
+                *ids += 1;
+            }
+            if self.ciudad.piezas() != antes.as_slice() {
+                self.rev += 1;
             }
         }
+        let cabe = self.ciudad.siguiente_sitio(&ped).is_some();
+        let k = self.clave(&Urbano { siguiente_id: *ids, ..u }, Some(clase));
         self.cache.poner(Consulta::Cabe(tipo), k, cabe);
-        cabe
+        (cabe, anclas)
     }
 
-    /// Coloca el edificio `id` en la ciudad. Antes, si hace falta, el trazado crea el ancla de saturación de su barrio (un edificio
-    /// gratuito más, con su id de `ids`). `None` = ya no hay sitio y la ciudad queda intacta.
+    /// Coloca el edificio `id` en la ciudad. Antes, si hace falta (otro proyecto de la misma pasada llenó el ancla que [`Urbe::proponer`]
+    /// le dio), el trazado crea el ancla de saturación de su barrio (un edificio gratuito más, con su id de `ids`). `None` = ya no hay sitio
+    /// y la ciudad queda intacta.
     pub fn tomar(&mut self, urb: &Urbanismo, id: u32, tipo: Tipo, u: &Urbano, ids: &mut u32) -> Option<Vec<Gratuito>> {
         let Some(clase) = urb.clase(tipo) else { return Some(vec![]) };
         let k = self.clave(u, Some(clase));
@@ -405,8 +424,13 @@ pub struct SitiosUrbe<'a> {
 }
 
 impl Sitios for SitiosUrbe<'_> {
-    fn proponer(&mut self, tipo: Tipo, u: &Urbano) -> Option<Option<Fuente>> {
-        (!tipo.es_extractor() && tipo != Tipo::Lenera && self.urbe.cabe(self.urbanismo, tipo, u)).then_some(None)
+    fn proponer(&mut self, tipo: Tipo, u: &Urbano, ids: &mut u32, anclas: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
+        if tipo.es_extractor() || tipo == Tipo::Lenera {
+            return None;
+        }
+        let (cabe, nuevas) = self.urbe.proponer(self.urbanismo, tipo, u, ids);
+        anclas.extend(nuevas);
+        cabe.then_some(None)
     }
     fn tomar(&mut self, id: u32, tipo: Tipo, _: Option<Fuente>, u: &Urbano, ids: &mut u32) -> Option<Vec<Gratuito>> {
         self.urbe.tomar(self.urbanismo, id, tipo, u, ids)
@@ -518,33 +542,46 @@ impl Urbe {
 
 // ───────────────────────────── La planta de un pueblo ─────────────────────────────
 
-/// Casas de la planta de un pueblo ("unas casas").
-// DUDA: el documento no fija cuántas; 4 es un placeholder.
-const CASAS_DE_PUEBLO: u32 = 4;
-/// Radio de la planta de un pueblo, en unidades locales (la ciudad de una plaza nace con 30; un pueblo es una aldea).
-// DUDA: Economia_Construccion §14 dice «como mucho 0,2 de mapa» (8 u. locales) pero el trazado va por celdas de 3 u. con sus calles: la planta
-// resultante es algo mayor. Si el cliente necesita el tope duro, hay que recortar aquí.
-const RADIO_DE_PUEBLO_UL: i32 = 8;
+/// Radio con el que se empieza a trazar la planta de un pueblo, en unidades locales (la ciudad de una plaza nace con 30; un pueblo es una aldea).
+/// Crece de `RADIO_CIUDAD.crecimientoPorEdificio` en `crecimientoPorEdificio` hasta que caben todas sus piezas.
+const RADIO_MINIMO_DE_PUEBLO_UL: i32 = 8;
+
+/// El radio del disco centrado en el origen que contiene todas las piezas, en unidades locales (hacia arriba).
+fn radio_que_ocupan(piezas: &[PiezaVista]) -> i32 {
+    let esquinas = piezas.iter().flat_map(|p| [(p.rect.x, p.rect.y), (p.rect.x + p.rect.ancho, p.rect.y), (p.rect.x, p.rect.y + p.rect.alto), (p.rect.x + p.rect.ancho, p.rect.y + p.rect.alto)]);
+    let d2 = esquinas.map(|(x, y)| x as i128 * x as i128 + y as i128 * y as i128).max().unwrap_or(0);
+    let r = base::isqrt(d2);
+    (if r * r < d2 { r + 1 } else { r }) as i32
+}
 
 /// La planta de un pueblo (Campamentos_Mercenarios §7, receta de `layoutCampamento`): el trazado de asentamientos **una sola vez**, con la mina
-/// o la cantera (`extractor`) como ancla en el origen, unas casas, el almacén y un corral para el buey. Función pura de la semilla del
-/// núcleo y del id del pueblo: no se guarda y el mismo pueblo da siempre la misma planta. Es lo que se ve dentro y el mapa de su batalla de
-/// saqueo. Los ids de las piezas son sus posiciones en la planta (el ancla es la 0), no ids de edificio de ninguna economía.
+/// o la cantera (`extractor`) como ancla en el origen, `PUEBLOS_EXTRACTORES.casasDeLaPlanta` casas, el almacén y un corral para el buey, con
+/// **el radio que necesiten sus piezas** (Economia_Construccion §14: la planta es un espacio interno; en el mapa el pueblo sigue ocupando 0,2).
+/// Función pura de la semilla del núcleo y del id del pueblo: no se guarda y el mismo pueblo da siempre la misma planta. Es lo que se ve dentro
+/// y el mapa de su batalla de saqueo. Los ids de las piezas son sus posiciones en la planta (el ancla es la 0), no ids de edificio de ninguna
+/// economía.
 pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_pueblo: u64, extractor: Tipo) -> VistaCiudad {
     let urb = &reglas.urbanismo;
     let semilla = trazado::hash(semilla_nucleo, "pueblo", &[id_pueblo as i64]);
-    let params = Parametros { radio_inicial_ul: RADIO_DE_PUEBLO_UL, radio_afueras_min_ul: RADIO_DE_PUEBLO_UL / 2, ancho_banda_afueras_ul: RADIO_DE_PUEBLO_UL / 2, ..urb.parametros(&reglas.datos) };
     let perfil = Perfil::por_tradicion(semilla);
-    let pedido = |id: u32, tipo: Tipo, categoria: Categoria, rol: Rol| Pedido { id, tipo: tipo_a_u16(tipo), categoria, rol, huella: urb.huella(tipo, 1), permitir_rotacion: true, perfil, radio_ul: RADIO_DE_PUEBLO_UL };
-    let mut ciudad = Ciudad::vacia(semilla, params);
-    let ancla = pedido(0, extractor, Categoria::Residencial, Rol::Centro);
-    ciudad.colocar(&ancla, Colocacion { rect: Rect::desde_centro(Punto::new(0, 0), ancla.huella), rotado: false }).expect("la planta vacía admite su ancla");
-    let resto = std::iter::repeat_n((Tipo::Vivienda, Categoria::Residencial), CASAS_DE_PUEBLO as usize).chain([(Tipo::Almacen, Categoria::Generico), (Tipo::Corral, Categoria::Afueras)]);
-    for (id, (tipo, categoria)) in resto.enumerate() {
-        // Lo que no cabe se queda fuera de la planta: es presentación, no hay nada que cobrar ni que deshacer.
-        ciudad.colocar_siguiente(&pedido(id as u32 + 1, tipo, categoria, Rol::Normal));
-    }
-    Urbe::desde_ciudad(ciudad).vista(RADIO_DE_PUEBLO_UL, &[])
+    let base = urb.parametros(&reglas.datos);
+    let casas = reglas.datos.pueblos.casas_de_la_planta as usize;
+    let resto: Vec<(Tipo, Categoria)> = std::iter::repeat_n((Tipo::Vivienda, Categoria::Residencial), casas).chain([(Tipo::Almacen, Categoria::Generico), (Tipo::Corral, Categoria::Afueras)]).collect();
+    let trazar = |radio_ul: i32| {
+        let params = Parametros { radio_inicial_ul: radio_ul, radio_afueras_min_ul: radio_ul / 2, ancho_banda_afueras_ul: radio_ul / 2, ..base };
+        let pedido = |id: u32, tipo: Tipo, categoria: Categoria, rol: Rol| Pedido { id, tipo: tipo_a_u16(tipo), categoria, rol, huella: urb.huella(tipo, 1), permitir_rotacion: true, perfil, radio_ul };
+        let mut ciudad = Ciudad::vacia(semilla, params);
+        let ancla = pedido(0, extractor, Categoria::Residencial, Rol::Centro);
+        ciudad.colocar(&ancla, Colocacion { rect: Rect::desde_centro(Punto::new(0, 0), ancla.huella), rotado: false }).expect("la planta vacía admite su ancla");
+        let todas = resto.iter().enumerate().all(|(id, &(tipo, categoria))| ciudad.colocar_siguiente(&pedido(id as u32 + 1, tipo, categoria, Rol::Normal)).is_some());
+        todas.then(|| {
+            let mut vista = Urbe::desde_ciudad(ciudad).vista(radio_ul, &[]);
+            vista.radio_ul = radio_ul.max(radio_que_ocupan(&vista.piezas));
+            vista
+        })
+    };
+    let tope = base.maximo_por_nivel_ul[4];
+    (RADIO_MINIMO_DE_PUEBLO_UL..=tope).step_by(base.crecimiento_por_edificio_ul as usize).find_map(trazar).expect("las piezas de un pueblo caben en una ciudad de nivel 5")
 }
 
 #[cfg(test)]
@@ -578,7 +615,23 @@ mod pruebas {
         assert_ne!(a, planta_de_pueblo(&r, 42, 8, Tipo::MinaCobre), "cada pueblo tiene la suya");
         assert_eq!((a.piezas[0].id, a.piezas[0].tipo, a.piezas[0].centro), (0, Tipo::MinaCobre, Punto::new(1_500, 1_500)), "el ancla en el origen");
         let de = |t: Tipo| a.piezas.iter().filter(|p| p.tipo == t).count();
-        assert_eq!((de(Tipo::Vivienda), de(Tipo::Almacen), de(Tipo::Corral)), (CASAS_DE_PUEBLO as usize, 1, 1), "unas casas, el almacén y el corral del buey");
+        assert_eq!((de(Tipo::Vivienda), de(Tipo::Almacen), de(Tipo::Corral)), (6, 1, 1), "6 casas, el almacén y el corral del buey");
         assert!(!a.calles.is_empty() || !a.caminos.is_empty());
+    }
+
+    #[test]
+    fn la_planta_de_un_pueblo_toma_el_radio_que_necesitan_sus_piezas() {
+        let r = ReglasEconomia::default();
+        for id in 0..40 {
+            let a = planta_de_pueblo(&r, 42, id, Tipo::MinaHierro);
+            assert_eq!(a.piezas.len(), 1 + 6 + 2, "pueblo {id}: caben todas, también el corral de las afueras");
+            // El radio de la planta cubre todas sus piezas (sin el tope de 8 u.): ninguna esquina queda fuera del disco.
+            assert!(a.radio_ul > RADIO_MINIMO_DE_PUEBLO_UL, "pueblo {id}: 9 piezas con sus calles no caben en 8 u. ({} u.)", a.radio_ul);
+            for p in &a.piezas {
+                for (x, y) in [(p.rect.x, p.rect.y), (p.rect.x + p.rect.ancho, p.rect.y), (p.rect.x, p.rect.y + p.rect.alto), (p.rect.x + p.rect.ancho, p.rect.y + p.rect.alto)] {
+                    assert!((x as i64).pow(2) + (y as i64).pow(2) <= (a.radio_ul as i64).pow(2), "pueblo {id}: {:?} fuera de {} u.", p.rect, a.radio_ul);
+                }
+            }
+        }
     }
 }

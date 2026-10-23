@@ -9,7 +9,6 @@
 use super::*;
 use crate::estado_militar::{entidad_formacion, entidad_peticion_de_union};
 use crate::estado::{SucesoMilitar, PRIO_LLEGADA};
-use crate::nucleo::mercado::RADIO_PUERTA;
 use crate::nucleo::salidas::Destino;
 use asentamiento::datos::UNO;
 use asentamiento::Recurso;
@@ -128,7 +127,7 @@ impl Nucleo {
                 if e.columna.faccion != Some(faccion) {
                     return Err(de_columna(ErrorColumna::OtraFaccion));
                 }
-                if !p.admin && e.posicion_en(t).dist(posicion) > RADIO_PUERTA {
+                if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
                     return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "el ejército no está a la puerta de la plaza".into()));
                 }
                 if !Self::es_ejercito(e) {
@@ -269,7 +268,7 @@ impl Nucleo {
         if e.columna.lider != heroe {
             return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder reposta".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(posicion) > RADIO_PUERTA {
+        if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
         }
         if e.columna.faccion != Some(faccion) {
@@ -297,12 +296,12 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// Dónde reposta el Líder cuando la orden no lo dice (`repostar` sin `lugar_id`): la plaza o la avanzada operativa más cercana a la puerta (`RADIO_PUERTA`) de la columna
+    /// Dónde reposta el Líder cuando la orden no lo dice (`repostar` sin `lugar_id`): la plaza o la avanzada operativa más cercana a la puerta (`radioPuerta`) de la columna
     /// del héroe, con las plazas antes que las avanzadas y el menor id si empatan. `None` si no hay ninguna: la orden se rechaza con `repostar.sin_lugar`.
     pub fn lugar_de_repostar(&self, heroe: u64) -> Option<Ubicacion> {
         let aqui = self.columna_del_heroe(heroe)?.posicion_en(self.estado.ahora);
         let plazas = self.estado.asentamientos.values().map(|a| (aqui.dist(a.posicion), 0, a.id, Ubicacion::Asentamiento(a.id as u32)));
         let avanzadas = self.estado.asentamientos.values().flat_map(|a| &a.economia.avanzadas).filter(|v| v.operativa()).map(|v| (aqui.dist(v.posicion), 1, v.id, Ubicacion::Avanzada(v.id)));
-        plazas.chain(avanzadas).filter(|&(d, ..)| d <= RADIO_PUERTA).min_by_key(|&(d, rango, id, _)| (d, rango, id)).map(|(.., lugar)| lugar)
+        plazas.chain(avanzadas).filter(|&(d, ..)| d <= self.radio_puerta()).min_by_key(|&(d, rango, id, _)| (d, rango, id)).map(|(.., lugar)| lugar)
     }
 }

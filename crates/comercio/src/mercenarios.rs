@@ -93,9 +93,8 @@ impl MercadoMercenario {
     }
 }
 
-/// El cupo diario de un héroe en un campamento: lo comprado hoy de cada bien con tope (madera y piedra).
-// DUDA: el documento da `Heroe.cupoCampamento?: {dia, comprado}` con un solo contador, pero el tope es por bien (madera 60, piedra 10); aquí
-// el contador es por recurso, que es la lectura coherente con los topes distintos.
+/// El cupo diario de un héroe en un campamento: lo comprado hoy de cada bien con tope (madera y piedra), un contador por recurso
+/// (Comercio_Caravanas §9.2).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CupoDiario {
     pub dia: i64,

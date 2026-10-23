@@ -178,8 +178,7 @@ impl AcuerdoTrueque {
         if !puede_contestar {
             return Err(ErrorTrueque::NoAutorizado);
         }
-        // DUDA: el TypeScript solo cerraba la propuesta en el paso del reparto, así que entre `expira_en` y ese paso aún se podía aceptar. Aquí
-        // «vence» es `ahora >= expira_en` (Reloj_Y_Eventos §1): no se acepta lo que ya venció.
+        // Lo que ya venció (`ahora >= expira_en`) no se acepta, aunque aún no se haya cerrado (el TypeScript lo cerraba en el paso del reparto; §4.2).
         if ahora >= self.expira_en {
             return Err(ErrorTrueque::PropuestaVencida);
         }
@@ -224,9 +223,7 @@ impl AcuerdoTrueque {
 
     /// Fracción (ppm) de lo pactado en `lado` que no se entregó: `1 − Σ (total − faltante) / Σ total` (una línea saldada con un resto de menos
     /// de una unidad cuenta como cumplida), sumando cantidades de recursos
-    /// distintos sin ponderar por precio.
-    // DUDA: el documento escribe `min(Σ entregado por línea, cantidadTotal)`; se lee línea a línea (lo que sobra en una no tapa lo que
-    // falta en otra), que es la lectura que más penaliza.
+    /// distintos sin ponderar por precio. Línea a línea: lo que sobra en una no tapa lo que falta en otra (Comercio_Caravanas §4.3).
     pub fn fraccion_incumplida(&self, lado: Lado) -> i64 {
         let (total, cumplido) = self.lineas(lado).iter().fold((0, 0), |(t, c), l| (t + l.cantidad_total, c + l.cantidad_total - l.faltante()));
         if total <= 0 {
@@ -304,7 +301,7 @@ impl AcuerdoTrueque {
     /// recurso; lo que ninguna línea pide no suma. No mira el estado salvo para no reabrir lo cerrado: un `activo` o un `expirado` que se
     /// salda pasa a `cumplido` (rareza (a) de §15, decisión del 2026-10-11) y reparte la recompensa aunque ya se hubiera penalizado.
     pub fn abonar(&mut self, lado: Lado, carga: &Carga, facciones: (FaccionId, FaccionId)) -> Option<Cierre> {
-        // DUDA: en TypeScript un abono sobre un acuerdo ya `cumplido` volvía a emitir el cierre; aquí no se reemite (lo cumplido no se reabre).
+        // Lo cumplido no se reabre ni vuelve a anunciar su cierre (el TypeScript lo reemitía; Comercio_Caravanas §15).
         if !matches!(self.estado, EstadoTrueque::Activo | EstadoTrueque::Expirado) {
             return None;
         }

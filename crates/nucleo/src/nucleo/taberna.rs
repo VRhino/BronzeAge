@@ -10,7 +10,6 @@
 
 use super::*;
 use crate::memoria::{EdificioVisto, InformeDePlaza, Mirada, OrigenIntel, Sitio};
-use crate::nucleo::mercado::RADIO_PUERTA;
 use asentamiento::catalogo::Tipo;
 use asentamiento::edificio::Estado as EstadoEdificio;
 use asentamiento::Recurso;
@@ -61,7 +60,7 @@ impl Nucleo {
         self.autorizar_heroe(p, heroe, false)?;
         let h = self.heroe(heroe).expect("autorizado");
         let faccion = h.faccion.ok_or_else(|| rechazo(rechazos::INTEL_SIN_FACCION, "la intel se compra para una Facción: hay que pertenecer a una".into()))?;
-        let a_la_puerta = |puerta: Punto| self.estado.ejercito_de_heroe(heroe).and_then(|c| self.estado.ejercitos.get(&c)).is_some_and(|e| e.posicion_en(t).dist(puerta) <= RADIO_PUERTA);
+        let a_la_puerta = |puerta: Punto| self.estado.ejercito_de_heroe(heroe).and_then(|c| self.estado.ejercitos.get(&c)).is_some_and(|e| e.posicion_en(t).dist(puerta) <= self.radio_puerta());
         match origen {
             OrigenIntel::Plaza(x) => {
                 let a = self.plaza_o_rechazo(x)?;

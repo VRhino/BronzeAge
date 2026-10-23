@@ -811,9 +811,8 @@ impl Caravana {
 
     /// Hook del sistema militar (Doc 3.10, «los carros no cambian de manos en el mundo: solo la carga»): quita los carros `perdidos`
     /// (índices; con su animal) y la parte de la carga que viajaba en ellos, **proporcional a su capacidad** sobre la de todos los carros
-    /// con animal. Sin carros restantes, la caravana se destruye con toda su carga.
-    // DUDA: el documento dice «la carga perdida es la de los carros perdidos» sin fijar cómo se reparte la carga entre carros; se reparte
-    // proporcionalmente a su capacidad (floor), y el tope de lo que se lleva el atacante (lo que le quepa) lo aplica el sistema militar.
+    /// con animal (hacia abajo; Comercio_Caravanas §15). Sin carros restantes, la caravana se destruye con toda su carga. El tope de lo que se
+    /// lleva el atacante (lo que le quepa) lo aplica el sistema militar.
     pub fn aplicar_perdida_de_carros(&mut self, r: &ReglasFlota, perdidos: &[usize]) -> Result<PerdidaCarros, ErrorCaravana> {
         if perdidos.iter().enumerate().any(|(i, &p)| p >= self.carros.len() || perdidos[..i].contains(&p)) {
             return Err(ErrorCaravana::CarroInexistente);
@@ -844,7 +843,7 @@ impl Caravana {
     }
 
     /// Lo que lleva cada carro, en el orden de la lista: la carga repartida proporcionalmente a su capacidad (floor, como en la pérdida de carros), que es como Unity recibe los carros de una batalla.
-    // DUDA: la carga no está asignada a carros concretos; se reparte por capacidad y lo que deja el redondeo (menos de una milésima por recurso y carro) no se asigna a ninguno. Un carro sin animal no lleva nada.
+    /// La carga no está asignada a carros concretos: lo que deja el redondeo (menos de una milésima por recurso y carro) no va en ninguno, y un carro sin animal no lleva nada.
     pub fn carga_por_carro(&self, r: &ReglasFlota) -> Vec<Carga> {
         let capacidad_de = |c: &Carro| c.animal.map_or(0, |a| por(r.carro(c.tipo).capacidad_base, r.animal(a).factor_carga));
         let cap_total: Mil = self.carros.iter().map(capacidad_de).sum();

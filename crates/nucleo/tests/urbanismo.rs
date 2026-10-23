@@ -112,35 +112,41 @@ fn la_fundacion_pone_en_la_ciudad_los_mismos_edificios_iniciales_que_en_la_econo
 }
 
 #[test]
-fn el_gate_de_anclas_sin_ancla_de_industria_no_hay_sitio_en_nivel_1_y_en_el_nivel_2_se_crea() {
+fn el_gate_de_anclas_sin_ancla_de_industria_no_hay_sitio_en_nivel_1_y_en_el_nivel_2_nace_al_proponer() {
     let re = ReglasEconomia::default();
     let mut urbe = Urbe::fundar(&re, 7, 1);
     for t in [Tipo::Fundicion, Tipo::Armeria, Tipo::Curtiduria, Tipo::Barracon, Tipo::Carpinteria] {
-        assert!(!urbe.cabe(&re.urbanismo, t, &urbano(1)), "{t:?}: sin ancla de su barrio no hay sitio en el nivel 1");
+        let mut ids = 100;
+        let (cabe, anclas) = urbe.proponer(&re.urbanismo, t, &urbano(1), &mut ids);
+        assert!(!cabe && anclas.is_empty() && ids == 100, "{t:?}: sin ancla de su barrio no hay sitio en el nivel 1, ni se crea");
     }
     // El Almacén y la Vivienda no tienen ancla que esperar (genérico y residencial: el Centro Urbano es su ancla).
-    assert!(urbe.cabe(&re.urbanismo, Tipo::Almacen, &urbano(1)) && urbe.cabe(&re.urbanismo, Tipo::Vivienda, &urbano(1)));
-    // En el nivel 2 cabe porque el trazado crearía antes el ancla (y lo dice sin tocar la ciudad).
-    let antes = urbe.ciudad().piezas().len();
-    for t in [Tipo::Fundicion, Tipo::Armeria] {
-        assert!(urbe.cabe(&re.urbanismo, t, &urbano(2)), "{t:?}: con el gate abierto cabe");
+    for t in [Tipo::Almacen, Tipo::Vivienda] {
+        assert_eq!(urbe.proponer(&re.urbanismo, t, &urbano(1), &mut 100), (true, vec![]), "{t:?}");
     }
-    assert_eq!(urbe.ciudad().piezas().len(), antes, "preguntar no coloca nada");
-    // Y al comprometerlo, el ancla nace como edificio gratuito con el id siguiente.
-    let mut ids = 51;
-    let gratuitos = urbe.tomar(&re.urbanismo, 50, Tipo::Fundicion, &urbano(2), &mut ids).expect("hay sitio");
-    assert_eq!(gratuitos.len(), 1);
-    assert_eq!((gratuitos[0].id, gratuitos[0].tipo, ids), (51, Tipo::PatioDeGremios, 52));
-    let c = urbe.ciudad();
-    let ancla = c.pieza(51).unwrap();
+    // En el nivel 2, preguntar ya crea el ancla (como el TypeScript al proponer): un edificio gratuito con el id siguiente, que se queda
+    // aunque el proyecto no se llegue a comprometer.
+    let antes = urbe.ciudad().piezas().len();
+    let mut ids = 50;
+    let (cabe, anclas) = urbe.proponer(&re.urbanismo, Tipo::Fundicion, &urbano(2), &mut ids);
+    assert!(cabe);
+    assert_eq!((anclas.len(), anclas[0].id, anclas[0].tipo, ids), (1, 50, Tipo::PatioDeGremios, 51));
+    assert_eq!(urbe.ciudad().piezas().len(), antes + 1, "el ancla ya está en la ciudad");
+    let ancla = urbe.ciudad().pieza(50).unwrap();
     assert_eq!((ancla.rol, ancla.categoria), (Rol::AnclaSaturacion, Categoria::Industria));
-    assert_eq!(c.pieza(50).unwrap().categoria, Categoria::Industria);
+    // Quien pregunta después encuentra el ancla: no nace otra.
+    assert_eq!(urbe.proponer(&re.urbanismo, Tipo::Armeria, &urbano(2), &mut ids), (true, vec![]));
+    assert_eq!(ids, 51);
+    // Al comprometer, la Fundición se coloca en su núcleo sin crear nada más.
+    let gratuitos = urbe.tomar(&re.urbanismo, 51, Tipo::Fundicion, &urbano(2), &mut 52).expect("hay sitio");
+    assert!(gratuitos.is_empty());
+    assert_eq!(urbe.ciudad().pieza(51).unwrap().categoria, Categoria::Industria);
     // Con el ancla puesta, la Armería ya cabe también en el nivel 1 (el gate solo vale para crear anclas).
-    assert!(urbe.cabe(&re.urbanismo, Tipo::Armeria, &urbano(1)));
+    assert!(urbe.proponer(&re.urbanismo, Tipo::Armeria, &urbano(1), &mut 52).0);
 }
 
 #[test]
-fn una_obra_de_industria_en_nivel_2_crea_su_ancla_como_edificio_gratuito_y_activo() {
+fn una_obra_de_industria_en_nivel_2_crea_su_ancla_al_proponer_como_edificio_gratuito_y_activo() {
     let re = ReglasEconomia::default();
     let (mut a, mut urbe) = plaza_rica(&re);
     // En el nivel 1 la economía ni lo intenta (nivel insuficiente); en el 2, sí.
@@ -148,17 +154,35 @@ fn una_obra_de_industria_en_nivel_2_crea_su_ancla_como_edificio_gratuito_y_activ
     a.medidor.nivel_actual = 2;
     let mut ev = vec![];
     let id = con_ciudad(&re, &mut urbe, |x| a.anadir_manual(0, &re.datos, x, Tipo::Fundicion, &mut ev)).expect("cabe");
-    assert_eq!(id, 5, "el id del proyecto sale antes que el del ancla");
+    assert_eq!(id, 6, "el ancla nace al proponer: su id va antes que el del proyecto");
     let patio = a.edificios.iter().find(|e| e.tipo == Tipo::PatioDeGremios).expect("el trazado creó el ancla");
-    assert_eq!((patio.id, patio.estado, patio.nivel_interno), (6, EstadoEdificio::Activo, 1));
+    assert_eq!((patio.id, patio.estado, patio.nivel_interno), (5, EstadoEdificio::Activo, 1));
     assert_eq!(a.siguiente_edificio, 7);
-    assert!(ev.contains(&Evento::EdificioGratuito { id: 6, tipo: Tipo::PatioDeGremios, nivel: 1 }), "{ev:?}");
+    assert!(ev.contains(&Evento::EdificioGratuito { id: 5, tipo: Tipo::PatioDeGremios, nivel: 1 }), "{ev:?}");
     assert_eq!(a.edificio(id).unwrap().estado, EstadoEdificio::EnConstruccion, "hay cuadrilla libre: arranca en el instante de la orden");
     ciudad_y_economia_cuadran(&re, &a, urbe.ciudad());
     // Las anclas son piezas gratuitas: cuentan a la mitad en el mantenimiento y no agrandan la ciudad.
     assert!(re.datos.mantenimiento.piezas_gratuitas.contains(&Tipo::PatioDeGremios));
     assert_eq!(a.urbano(&re.datos).completados, 0, "ni los edificios de la fundación ni los gratuitos agrandan la ciudad");
     assert_eq!(a.tomar_completados(), 0, "ni la zona del mapa");
+}
+
+#[test]
+fn con_las_anclas_naciendo_al_proponer_cada_pieza_tiene_su_edificio_y_cada_edificio_su_pieza() {
+    let re = ReglasEconomia::default();
+    let (mut a, mut urbe) = plaza_rica(&re);
+    // Nivel 3 con la auto-construcción en marcha: propone cada minuto (muchas veces sin comprometer: la cola, la reserva, la cuadrilla), y cada
+    // pregunta que necesita ancla la crea en ese momento.
+    (a.nivel, a.medidor.nivel_actual, a.auto_pausada) = (3, 3, false);
+    let mut gratuitas = 0;
+    for hora in 0..48 {
+        let ev = avanzar(&re, &mut a, &mut urbe, hora * 60, (hora + 1) * 60);
+        gratuitas += ev.iter().filter(|e| matches!(e, Evento::EdificioGratuito { tipo: Tipo::Plaza | Tipo::Pozo | Tipo::Parque | Tipo::PatioDeGremios | Tipo::PlazaDeArmas, .. })).count();
+        ciudad_y_economia_cuadran(&re, &a, urbe.ciudad());
+    }
+    let anclas = urbe.ciudad().piezas().iter().filter(|p| p.rol == Rol::AnclaSaturacion).count();
+    assert!(anclas > 0, "en dos días a nivel 3 la ciudad necesita anclas de saturación");
+    assert_eq!(gratuitas, anclas, "cada ancla entró en la economía como edificio gratuito, una vez");
 }
 
 #[test]
@@ -375,7 +399,7 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     assert_eq!(urbe.ciudad().recintos(), &[Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default() });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN23", "el formato de foto es BAN23 (BAN22 no traía la memoria de la niebla; BAN21 no traía la tendencia «+N/min» de las plazas; BAN20 no congelaba la plaza de un asedio en el ticket de la batalla; BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
+    assert_eq!(&bytes[..5], b"BAN24", "el formato de foto es BAN24 (BAN23 era de la geometría 3 y reponía la guarnición de un pueblo de golpe; BAN22 no traía la memoria de la niebla; BAN21 no traía la tendencia «+N/min» de las plazas; BAN20 no congelaba la plaza de un asedio en el ticket de la batalla; BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);

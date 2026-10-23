@@ -35,10 +35,12 @@ pub struct ReglasPueblos {
     pub capacidad_almacen: Mil,
     /// Lo que la obra cuesta además del extractor y del carro con su buey.
     pub coste_adicional: Costo,
+    /// Casas de la planta del pueblo (presentación, `nucleo::urbanismo::planta_de_pueblo`).
+    pub casas_de_la_planta: u32,
     /// Guarnición de serie: mineros sin dueño de la IA, fuera de cupo (el sistema militar los pondrá).
     pub mineros: u32,
-    /// Minutos que tarda en reponerse gratis esa guarnición si cae.
-    pub reposicion_mineros_min: i64,
+    /// Minutos que tarda en volver cada minero de esa guarnición, uno a uno, desde la primera baja.
+    pub minutos_por_minero: i64,
 }
 
 impl ReglasPueblos {
@@ -49,8 +51,9 @@ impl ReglasPueblos {
             cupo_por_nivel: b["cupoPorNivel"].as_object().expect("cupoPorNivel").iter().map(|(k, v)| (k.parse().expect("nivel"), v.as_u64().expect("cupo") as u32)).collect(),
             capacidad_almacen: mil(num(b, "capacidadAlmacenLocal")),
             coste_adicional: costo(b.get("costeAdicional")),
+            casas_de_la_planta: num(b, "casasDeLaPlanta") as u32,
             mineros: num(&b["mineros"], "escuadra") as u32,
-            reposicion_mineros_min: num(&b["mineros"], "reposicionMinutos") as i64,
+            minutos_por_minero: num(&b["mineros"], "minutosPorMinero") as i64,
         }
     }
 }
@@ -330,7 +333,7 @@ mod pruebas {
     #[test]
     fn las_cifras_salen_del_documento() {
         let r = Reglas::cargar().pueblos;
-        assert_eq!((r.nivel_madre_minimo, r.capacidad_almacen, r.mineros, r.reposicion_mineros_min), (2, 500_000, 30, 360));
+        assert_eq!((r.nivel_madre_minimo, r.capacidad_almacen, r.mineros, r.minutos_por_minero, r.casas_de_la_planta), (2, 500_000, 30, 12, 6));
         assert_eq!(r.cupo_por_nivel.values().copied().collect::<Vec<_>>(), vec![2, 3, 4, 5]);
         assert_eq!(r.coste_adicional, vec![(Recurso::Madera, 50_000)]);
     }

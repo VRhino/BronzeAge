@@ -266,7 +266,7 @@ impl Nucleo {
                 let eco = &mut self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia;
                 eco.nivel = *nivel;
                 eco.medidor.nivel_actual = *nivel;
-                // DUDA: una obra de ascenso hacia un nivel que el atajo ya concede no tiene sentido (al acabar bajaría el nivel): se descarta.
+                // Una obra de ascenso hacia un nivel que el atajo ya concede se descarta: al acabar bajaría el nivel (Economia_Construccion §11).
                 if eco.ascenso.is_some_and(|s| s.nivel_objetivo <= *nivel) {
                     eco.ascenso = None;
                 }

@@ -60,20 +60,16 @@ pub fn proxima_aparicion_en_el_anillo(r: &Reglas, ahora: Instante) -> Instante {
 pub const INTENTOS_ANILLO: usize = 20;
 
 /// Un punto del anillo (`anillo.radioMin`‥`radioMax`) alrededor de `centro` que cumpla `valido` (tierra firme, fuera de toda zona y de la
-/// protección de cualquier campamento: lo sabe el núcleo). Hasta [`INTENTOS_ANILLO`] intentos de **dos** tiradas cada uno; sin sitio, `None` (y se
-/// reintenta en la próxima cita, gastando tiradas).
-// DUDA: el motor TypeScript sorteaba ángulo y radio con seno y coseno de coma flotante. Aquí el punto se sortea en el cuadrado que rodea el
-// anillo y se descarta si cae fuera: entero y reproducible entre máquinas, pero uniforme en el área en vez de en el radio (más campamentos
-// lejos del centro que cerca). Si el autor quiere lo otro, el sitio es esta función.
+/// protección de cualquier campamento: lo sabe el núcleo). Como el TypeScript (`puntoDelAnillo`), cada intento sortea primero el ángulo y
+/// luego el radio, uniforme en el radio; en enteros, con el ángulo en grados enteros y la tabla de senos del trazado. Hasta
+/// [`INTENTOS_ANILLO`] intentos de **dos** tiradas cada uno; sin sitio, `None` (y se reintenta en la próxima cita, gastando tiradas).
 pub fn punto_del_anillo(r: &Reglas, centro: Punto, rng: &mut Rng, mut valido: impl FnMut(Punto) -> bool) -> Option<Punto> {
-    let (min, max) = (r.bandidos.anillo_min as i128, r.bandidos.anillo_max as i128);
-    let lado = 2 * r.bandidos.anillo_max as u64 + 1;
+    let (min, max) = (r.bandidos.anillo_min, r.bandidos.anillo_max);
     for _ in 0..INTENTOS_ANILLO {
-        let dx = rng.por_debajo(lado) as i64 - r.bandidos.anillo_max;
-        let dy = rng.por_debajo(lado) as i64 - r.bandidos.anillo_max;
-        let d2 = dx as i128 * dx as i128 + dy as i128 * dy as i128;
-        let p = Punto::new(centro.x + dx, centro.y + dy);
-        if (min * min..=max * max).contains(&d2) && valido(p) {
+        let (cos, sen) = trazado::cos_sen_1000(rng.por_debajo(360) as i32);
+        let radio = min + rng.por_debajo((max - min + 1) as u64) as i64;
+        let p = Punto::new(centro.x + radio * cos as i64 / 1000, centro.y + radio * sen as i64 / 1000);
+        if valido(p) {
             return Some(p);
         }
     }
@@ -129,8 +125,9 @@ pub struct AtaqueACampamento {
     pub heridos: Vec<HeroeId>,
 }
 
-/// Una columna ataca un campamento: `poder × tirada > poder del nivel` con **una** tirada. Gana → bajas del 5 %; pierde → del 25 %.
-// DUDA: el motor TypeScript exigía soldados en la columna; con el héroe sumando 15 (decisión del autor, 2026-10-19) basta con un bando que combata.
+/// Una columna ataca un campamento: `poder × tirada > poder del nivel` con **una** tirada. Gana → bajas del 5 %; pierde → del 25 %. Basta con
+/// un bando que combata (el TypeScript pedía soldados): un héroe solo puede atacar, pero nunca destruye ningún campamento (15 × 1,15 < 20,
+/// Combate §7.2).
 pub fn resolver_campamento(r: &Reglas, atacante: Bando, nivel: u8, rng: &mut Rng) -> Result<AtaqueACampamento, CombateInvalido> {
     if atacante.escuadras.iter().all(|e| !e.con_soldados()) && atacante.heroes.is_empty() {
         return Err(CombateInvalido::BandoVacio(Lado::Atacante));
@@ -216,11 +213,22 @@ mod pruebas {
         let r = r();
         let centro = Punto::new(1_000_000, -2_000_000);
         for semilla in 0..300 {
-            let p = punto_del_anillo(r, centro, &mut Rng::nuevo(semilla), |_| true).expect("el anillo ocupa la mitad del cuadrado");
+            let p = punto_del_anillo(r, centro, &mut Rng::nuevo(semilla), |_| true).expect("sin restricciones, el primer intento vale");
             let d = p.dist(centro);
-            assert!((30_000..=50_000).contains(&d), "{d}");
+            assert!((29_990..=50_010).contains(&d), "{d} (la tabla de senos redondea a la milésima)");
             assert_eq!(Some(p), punto_del_anillo(r, centro, &mut Rng::nuevo(semilla), |_| true));
         }
+    }
+
+    #[test]
+    fn el_punto_del_anillo_es_uniforme_en_el_radio_como_el_typescript() {
+        let r = r();
+        let mut rng = Rng::nuevo(5);
+        let n = 20_000;
+        let cerca = (0..n).filter(|_| punto_del_anillo(r, Punto::default(), &mut rng, |_| true).unwrap().dist(Punto::default()) < 40_000).count();
+        // Uniforme en el radio, la mitad interior (30-40) recibe la mitad; uniforme en el área recibiría (40² − 30²) / (50² − 30²) = 43,75 %.
+        let pct = cerca as f64 * 100.0 / n as f64;
+        assert!((pct - 50.0).abs() < 1.5, "{pct} %");
     }
 
     #[test]

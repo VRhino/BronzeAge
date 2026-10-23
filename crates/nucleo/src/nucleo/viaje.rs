@@ -467,7 +467,6 @@ impl Nucleo {
                 self.retirar_plan(id);
                 let volcado = self.estado.asentamientos.get_mut(&origen).map_or(0, |a| contenido.iter().map(|(&r, &n)| a.economia.almacen.agregar(r, n)).sum::<Mil>());
                 self.tr.tocar(Clase::Asentamiento, origen);
-                // DUDA: el hecho de llegar a casa no está en Comercio_Caravanas §12.
                 self.emitir_propio(t, "comercio.caravana_en_casa", vec![origen], vec![("caravana", id as i64), ("volcado", volcado), ("perdido", total(&contenido) - volcado)]);
                 self.reparto_de_plaza(origen, t);
             }
@@ -616,23 +615,39 @@ impl Nucleo {
     }
 
     /// El sistema militar declara los carros que se pierden en una batalla (`aplicar_perdida_de_carros`, Doc 3.10): se van con su animal y la
-    /// parte proporcional de la carga; sin carros, la caravana se destruye. `None` si la caravana no existe o algún índice no es válido.
-    // DUDA: la velocidad de la caravana puede cambiar al perder el animal más lento; el plan en pausa no se reescala (solo se desplaza al salir).
+    /// parte proporcional de la carga; sin carros, la caravana se destruye. `None` si la caravana no existe o algún índice no es válido. Si se
+    /// fue el animal más lento, el plan en pausa se reajusta a la velocidad nueva ([`Nucleo::reajustar_plan_en_pausa`]).
     pub fn aplicar_perdida_de_carros(&mut self, t: Instante, id: u64, perdidos: &[usize]) -> Option<PerdidaCarros> {
         let t = t.max(self.estado.ahora);
         self.procesar_hasta(t);
         let i = self.estado.comercio.posicion_caravana(id)?;
         let flota = self.estado.reglas.economia.comercio.flota.clone();
-        let origen = self.estado.comercio.flota[i].origen as u64;
+        let (origen, antes) = (self.estado.comercio.flota[i].origen as u64, self.estado.comercio.flota[i].velocidad(&flota));
         let perdida = self.estado.comercio.flota[i].aplicar_perdida_de_carros(&flota, perdidos).ok()?;
         self.tr.tocar(Clase::Caravana, id);
         if perdida.destruida {
             self.perder_caravana(t, id);
         } else {
+            self.reajustar_plan_en_pausa(id, antes);
             self.emitir_propio(t, "comercio.carros_perdidos", vec![origen], vec![("caravana", id as i64), ("carros", perdida.carros_perdidos as i64), ("carga", total(&perdida.carga_perdida))]);
         }
         self.cerrar_version(t, true);
         Some(perdida)
+    }
+
+    /// La caravana perdió carros en una batalla y su velocidad era `antes`: si se fue el animal más lento, lo que le queda al plan en pausa desde el
+    /// instante de la pausa dura en proporción inversa a la velocidad nueva (decisión del autor, 2026-10-23; Comercio_Caravanas, nota de la 3B-2). Al salir de la
+    /// batalla, [`pausar_plan`] lo desplaza como siempre. Sin plan en pausa o sin cambio de velocidad, no toca nada.
+    pub(super) fn reajustar_plan_en_pausa(&mut self, id: u64, antes: Mil) {
+        let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
+        let despues = self.estado.comercio.flota[i].velocidad(&self.estado.reglas.economia.comercio.flota);
+        let c = &mut self.estado.comercio.flota[i];
+        let (Some(desde), Some(plan)) = (c.pausada_desde, &c.plan) else { return };
+        if antes == despues || antes <= 0 || despues <= 0 {
+            return;
+        }
+        c.plan = Some(reescalar_plan(plan, desde, c.posicion, antes, despues));
+        self.tr.tocar(Clase::Caravana, id);
     }
 
     // ───────────────────────────── Aparcada y adjunta (Movimiento_Ejercitos §9) ─────────────────────────────
@@ -688,7 +703,7 @@ impl Nucleo {
         if self.estado.asentamientos.get(&(c.origen as u64)).map(|o| o.faccion) != e.columna.faccion {
             return Err(rechazo(rechazos::CARAVANA_FACCION_AJENA, "la caravana es de otra Facción".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(sitio.posicion) > mercado::RADIO_PUERTA {
+        if !p.admin && e.posicion_en(t).dist(sitio.posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "la columna no está en la puerta de la plaza donde está la caravana".into()));
         }
         let antes = self.velocidad_de_columna(e);
@@ -728,7 +743,7 @@ impl Nucleo {
         if self.estado.asentamientos.get(&origen).map(|o| o.faccion) != Some(anfitriona.faccion) {
             return Err(rechazo(rechazos::CARAVANA_PLAZA_AJENA, "una caravana solo se aparca en una plaza de su Facción".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(anfitriona.posicion) > mercado::RADIO_PUERTA {
+        if !p.admin && e.posicion_en(t).dist(anfitriona.posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "la columna no está en la puerta de la plaza".into()));
         }
         let (antes, posicion) = (self.velocidad_de_columna(e), anfitriona.posicion);
@@ -787,6 +802,16 @@ fn replanificar_con_camino(plan: &Plan, t: Instante, nuevas: &BTreeSet<Arista>, 
         nuevo.push(Vertice { p: v[j].p, en });
     }
     Some(Plan::nuevo(0, nuevo))
+}
+
+/// El plan con lo que le queda desde `desde` (donde está en `aqui`) recorrido a la velocidad `despues` en vez de `antes`: cada vértice posterior tarda
+/// `antes / despues` veces lo que tardaba.
+fn reescalar_plan(plan: &Plan, desde: Instante, aqui: Punto, antes: Mil, despues: Mil) -> Plan {
+    let mut vertices: Vec<Vertice> = plan.vertices.iter().copied().filter(|v| v.en <= desde).collect();
+    vertices.push(Vertice { p: aqui, en: desde });
+    vertices.extend(plan.vertices.iter().filter(|v| v.en > desde).map(|v| Vertice { p: v.p, en: desde + (v.en - desde) * antes / despues }));
+    vertices.dedup();
+    Plan::nuevo(plan.generacion, vertices)
 }
 
 /// El plan de una caravana que estuvo apartada de `desde` a `hasta` en `aqui`: lo vivido se conserva, se queda quieta lo que duró la pausa

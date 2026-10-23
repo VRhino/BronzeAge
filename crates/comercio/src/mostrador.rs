@@ -52,9 +52,8 @@ pub enum ErrorMostrador {
     CantidadNoPositiva,
     /// `precioUnitario <= 0` (también el de una orden sobre el oro sin precio de referencia): no se liquida.
     PrecioNoPositivo,
-    /// Una orden sobre el oro no tiene sentido en el mostrador (el oro es a la vez lo que se paga y lo que se compra).
-    // DUDA: el TypeScript solo la frenaba por el precio de referencia 0; una orden sobre el oro con precio explícito > 0 se liquidaría
-    // mezclando el oro del pago con la mercancía. Se rechaza, que es lo más conservador.
+    /// Una orden sobre el oro no tiene sentido en el mostrador (el oro es a la vez lo que se paga y lo que se compra): se rechaza aunque lleve
+    /// precio (el TypeScript solo la frenaba por el precio de referencia 0; Comercio_Caravanas §8.3).
     RecursoOro,
     /// Ninguno de los topes deja servir nada (sin stock, sin oro, sin sitio…).
     NadaQueServir,
@@ -139,8 +138,7 @@ pub fn comerciar(
     let mut q = pedida.min(orden.pendiente());
     if vende {
         q = q.min(plaza.cantidad(orden.recurso)).min(max_por_oro(carro.oro, precio_neto));
-        // DUDA: el documento no topa por el oro que cabe en el almacén de la plaza; sin este tope parte del oro cobrado se perdería y no
-        // se conservaría (invariante de §14).
+        // Topado también por el oro que cabe en el almacén de la plaza: si no, parte del oro cobrado se perdería (Comercio_Caravanas §8.3).
         q = q.min(max_por_oro(plaza.espacio(Recurso::Oro), precio_neto));
     } else {
         q = q.min(carro.recurso).min(plaza.espacio(orden.recurso)).min(max_por_oro(plaza.cantidad(Recurso::Oro), precio_neto));

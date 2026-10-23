@@ -52,7 +52,7 @@ struct Terreno {
 }
 
 impl Sitios for Terreno {
-    fn proponer(&mut self, tipo: Tipo, _: &Urbano) -> Option<Option<Fuente>> {
+    fn proponer(&mut self, tipo: Tipo, _: &Urbano, _: &mut u32, _: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
         match tipo {
             Tipo::Lenera => self.parcelas_libres.first().map(|&p| Some(Fuente::Parcela(p))),
             Tipo::Cantera => self.cantera_libre.then_some(Some(Fuente::Nodo(1))),

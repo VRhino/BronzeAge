@@ -1344,9 +1344,13 @@ fn si_la_madre_cae_en_ruinas_la_atalaya_y_el_fuerte_desaparecen_y_la_ciudadela_q
     assert_eq!(e.rechazada("ana", Comando::MejorarAvanzada { heroe, avanzada: ciudadela }), rechazos::AVANZADA_DESCONOCIDA);
     assert_eq!(e.rechazada("ana", Comando::GuarnecerAvanzada { heroe, avanzada: ciudadela, escuadras: vec![escuadra] }), rechazos::AVANZADA_DESCONOCIDA);
     let pos = e.n.posicion_de_avanzada(ciudadela).unwrap();
-    let (_, beto) = e.atacante(Punto::new(pos.x + 1_000, pos.y), &[Tropa::EspadachinesBronce]);
+    let (col_beto, beto) = e.atacante(Punto::new(pos.x + 1_000, pos.y), &[Tropa::EspadachinesBronce]);
     e.guerra();
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Avanzada(ciudadela), declara_guerra: false }), rechazos::COMBATE_AVANZADA_SIN_DUENO);
+    // Pero se recuerdan como se vieron (Niebla_De_Guerra §4.1, decisión del autor del 2026-10-24): F2 pasa junto a ellas y su ficha dice ciudadela, de nadie, en ruinas.
+    e.ok("beto", Comando::MarcharA { ejercito: col_beto, destino: Punto::new(pos.x + 3_000, pos.y) });
+    let ficha = e.n.estado().memoria.fichas[&2][&nucleo::memoria::Sitio::Avanzada(ciudadela)];
+    assert_eq!((ficha.datos.faccion, ficha.datos.nivel, ficha.datos.estado), (0, 3, nucleo::memoria::EstadoSitio::EnRuinas));
     // Quien tenga después esa zona la repara: una plaza nueva de Ana en el sitio de la antigua, de nivel 3, la adopta con su cupo.
     assert_eq!(e.rechazada("ana", Comando::RepararAvanzada { heroe, avanzada: ciudadela }), rechazos::AVANZADA_FUERA_DE_LA_ZONA, "todavía ninguna plaza de su Facción tiene esa zona");
     let nueva = e.fundar_otra_en(centro);
@@ -1541,7 +1545,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN23");
+    assert_eq!(&bytes[..5], b"BAN24");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -2080,7 +2084,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN23");
+        assert_eq!(&bytes[..5], b"BAN24");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));

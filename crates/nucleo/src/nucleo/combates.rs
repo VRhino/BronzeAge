@@ -384,6 +384,7 @@ impl Nucleo {
         let robado = self.perder_la_mitad_del_carro(perdedor);
         let mut botin = robado.clone();
         informe.chatarra.iter().for_each(|(&r, &n)| sumar(&mut botin, r, n));
+        self.adjuntas_de_la_derrotada(t, perdedor).iter().for_each(|(&r, &n)| sumar(&mut botin, r, n));
         let cogido = self.cargar_botin_en(ganador, &botin);
         let heridos = self.herir_heroes(&vencidos, t);
         self.recomponer_tras_bajas(&columnas, t);
@@ -410,6 +411,26 @@ impl Nucleo {
         let datos = vec![("ejercitoA", id as i64), ("ejercitoB", x as i64), ("faccionA", banderas.0), ("faccionB", banderas.1), ("ganador", ganador as i64)];
         self.hecho_de_combate("combate.encuentro", t, vec![id, x], vec![], punto, datos);
         Ok(())
+    }
+
+    /// La columna derrotada con números lleva caravanas adjuntas: cada una pierde la mitad de sus carros, hacia arriba, con su carga (la que se queda sin carros
+    /// desaparece), como en una disputa y como con Unity (decisión del autor, 2026-10-24; Combate §5). Avisa con `ejercito.caravanas_perdidas` y devuelve lo perdido,
+    /// que es botín del vencedor.
+    fn adjuntas_de_la_derrotada(&mut self, t: Instante, columna: u64) -> Mercancia {
+        let adjuntas = self.estado.ejercitos[&columna].caravanas_adjuntas.clone();
+        let mut perdida = Mercancia::new();
+        if adjuntas.is_empty() {
+            return perdida;
+        }
+        let mut carros = 0;
+        for &k in &adjuntas {
+            let p = self.caer_caravana(t, k, asalto::Modalidad::Disputa, None);
+            carros += p.carros_perdidos as i64;
+            p.carga_perdida.iter().for_each(|(&r, &n)| sumar(&mut perdida, r, n));
+        }
+        let datos = vec![("caravanas", adjuntas.len() as i64), ("carros", carros), ("carga", total(&perdida))];
+        self.evento_de_columna("ejercito.caravanas_perdidas", t, columna, vec![], datos);
+        perdida
     }
 
     // ───────────────────────────── Interceptar una caravana ─────────────────────────────
@@ -483,27 +504,22 @@ impl Nucleo {
     }
 
     /// La caravana cae en manos del atacante (Combate §7.1, Batalla_Unity_Ciclo §9): según el tipo pierde la mitad de sus carros con su animal o el 70 % de su
-    /// carga, su escolta cedida queda a 0 y vuelve al campamento de su héroe y, si se queda sin carros, desaparece. `carros` son los que Unity da por perdidos;
+    /// carga (sin perder nunca el último carro), su escolta cedida queda a 0 y vuelve al campamento de su héroe y, si se queda sin carros, desaparece. `carros` son los que Unity da por perdidos;
     /// con números se pierden los últimos de la lista. Devuelve lo perdido: la carga se la lleva quien llama.
     pub(super) fn caer_caravana(&mut self, t: Instante, x: u64, modalidad: asalto::Modalidad, carros: Option<&[usize]>) -> asalto::Perdida {
         let cr = self.estado.reglas.economia.combate.clone();
         let flota = self.estado.reglas.economia.comercio.flota.clone();
         let i = self.estado.comercio.posicion_caravana(x).expect("existe");
         let c = &mut self.estado.comercio.flota[i];
-        let origen = c.origen as u64;
+        let (origen, antes) = (c.origen as u64, c.velocidad(&flota));
         let p = asalto::aplicar_al_dueno(&cr, &flota, c, modalidad, carros).expect("los carros que se pierden existen");
         let cedidas = c.liberar_escolta();
         self.devolver_escolta(&cedidas);
         if p.destruida {
-            // Un aguante que se queda sin carros salva igual el 30 %: llega a casa con los carreteros.
-            // DUDA: Combate §7.1 no dice a dónde; se entrega al almacén de la plaza de origen, hasta donde quepa.
-            if let Some(a) = self.estado.asentamientos.get_mut(&origen) {
-                p.carga_salvada.iter().for_each(|(&r, &n)| {
-                    a.economia.almacen.agregar(r, n);
-                });
-            }
             self.perder_caravana(t, x);
         } else {
+            self.reajustar_plan_en_pausa(x, antes);
+            self.tr.tocar(Clase::Caravana, x);
             self.tr.tocar(Clase::Asentamiento, origen);
         }
         p
@@ -699,11 +715,9 @@ impl Nucleo {
     /// **dentro** del pueblo —de la Facción de la plaza madre, aliados o vasallos, hasta 5, con las escuadras de su columna—, con la ventaja del aguante. Si gana el atacante
     /// se lleva, hasta donde le quepa, lo que el almacén del pueblo guarda por encima de la mitad de su capacidad; si no, nada; los defensores en persona quedan heridos y los
     /// que residen en la plaza madre pierden la mitad de su carro (Entrar con todo, 2026-10-22). Es un saqueo: el pueblo no cambia de dueño ni se destruye. La guarnición que
-    /// queda por debajo de su número de serie se repone gratis a las 6 horas.
-    // DUDA: «si cae, se repone» se lee aquí como «si queda por debajo de 30»: el reloj de 6 h empieza en el primer combate que la deja incompleta y no se
-    // reinicia mientras corre. Con la guarnición a 0 esperando su reposición el pueblo cae sin combate (como una plaza sin defensores).
-    // Solo defiende lo que está dentro (decisión del autor, 2026-10-22): una columna amiga a su puerta, en el mapa, no cuenta.
-    // DUDA: la chatarra, si resiste, va al almacén de la plaza madre.
+    /// queda por debajo de su número de serie se repone gratis, un minero cada 12 minutos desde la primera baja ([`Nucleo::guardar_guarnicion`]); con la guarnición a 0 el
+    /// pueblo cae sin combate (como una plaza sin defensores). Solo defiende lo que está dentro (decisión del autor, 2026-10-22): una columna amiga a su puerta, en el mapa,
+    /// no cuenta. La chatarra, si resiste, va al almacén de la plaza madre (Combate §7.3).
     fn atacar_pueblo(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
@@ -797,7 +811,8 @@ impl Nucleo {
         Ok(())
     }
 
-    /// Guarda la guarnición de serie de un pueblo tras un combate y, si quedó incompleta y no tenía ya fecha, programa su reposición a las 6 horas.
+    /// Guarda la guarnición de serie de un pueblo tras un combate y, si quedó incompleta y no se estaba reponiendo, programa la vuelta del primer minero (Combate
+    /// §7.3: uno cada 12 minutos desde la primera baja; un combate durante la reposición no la reinicia).
     pub(super) fn guardar_guarnicion(&mut self, pueblo: u64, escuadra: Escuadra, t: Instante) {
         let cr = self.estado.reglas.economia.combate.clone();
         let incompleta = escuadra.cantidad < cr.pueblos.mineros;
@@ -805,21 +820,27 @@ impl Nucleo {
         self.tr.tocar(Clase::Pueblo, pueblo);
         g.escuadra = escuadra;
         if incompleta && g.repone_en.is_none() {
-            let en = reglas_pueblo::reposicion_en(&cr, t);
-            g.repone_en = Some(en);
-            let clave = self.estado.generaciones.clave(entidad_guarnicion(pueblo));
-            self.estado.cola.programar(en, PRIO_UMBRAL, clave, Carga::Combate(SucesoCombate::ReponeGuarnicion));
+            self.programar_minero(pueblo, reglas_pueblo::reposicion_en(&cr, t));
         }
     }
 
-    /// Vence la reposición de la guarnición de serie de un pueblo: de nuevo completa, con su nivel y su experiencia.
+    /// La cita de la vuelta del siguiente minero de la guarnición de serie de un pueblo.
+    fn programar_minero(&mut self, pueblo: u64, en: Instante) {
+        self.estado.combate.guarniciones.get_mut(&pueblo).expect("existe").repone_en = Some(en);
+        let clave = self.estado.generaciones.clave(entidad_guarnicion(pueblo));
+        self.estado.cola.programar(en, PRIO_UMBRAL, clave, Carga::Combate(SucesoCombate::ReponeGuarnicion));
+    }
+
+    /// Vuelve un minero a la guarnición de serie de un pueblo, con su nivel y su experiencia; si aún falta alguno, se cita el siguiente. Completa, lo dice.
     pub(super) fn repone_guarnicion(&mut self, entidad: u64, t: Instante) {
         let pueblo = crate::estado_comercio::id_de_entidad(entidad);
         let cr = self.estado.reglas.economia.combate.clone();
         let Some(g) = self.estado.combate.guarniciones.get_mut(&pueblo) else { return };
         self.tr.tocar(Clase::Pueblo, pueblo);
-        reglas_pueblo::reponer(&cr, &mut g.escuadra);
         g.repone_en = None;
+        if !reglas_pueblo::reponer(&cr, &mut g.escuadra) {
+            return self.programar_minero(pueblo, reglas_pueblo::reposicion_en(&cr, t));
+        }
         if let Some((madre, _)) = self.pueblo(pueblo) {
             self.tr.tocar(Clase::Asentamiento, madre);
             self.emitir_propio(t, "pueblo.guarnicion_repuesta", vec![madre], vec![("pueblo", pueblo as i64)]);

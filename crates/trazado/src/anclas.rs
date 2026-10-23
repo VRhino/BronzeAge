@@ -3,7 +3,6 @@
 
 use crate::azar::{cos_sen_1000, sorteo};
 use crate::ciudad::{en_ventana, Ciudad};
-use crate::colocacion::en_disco;
 use crate::geom::{Huella, Rect};
 use crate::tipos::*;
 use base::isqrt;
@@ -35,8 +34,9 @@ impl Ciudad {
     }
 
     /// `huecoEnDireccion`: prueba radios de `separacionMinimaAnclas` a `3×` en saltos de `fondoManzana` celdas; el rectángulo
-    /// centrado ahí debe estar libre, dentro del disco urbano y a `separacionSeguridadAnclas` (piso duro) de todas las anclas.
-    fn hueco_en_direccion(&self, s: &Rect, dir: (i32, i32), h: Huella, otras: &[Rect], radio_ul: i32) -> Option<Rect> {
+    /// centrado ahí debe estar libre y a `separacionSeguridadAnclas` (piso duro) de todas las anclas. Como T §7.2, sin disco urbano:
+    /// el árbol de anclas crece por sus ranuras, no por el `radioCiudad`.
+    fn hueco_en_direccion(&self, s: &Rect, dir: (i32, i32), h: Huella, otras: &[Rect]) -> Option<Rect> {
         let prm = self.params();
         let (cx2, cy2) = ((2 * s.col + s.ancho) as i64, (2 * s.row + s.alto) as i64);
         let mut r = prm.separacion_minima_anclas;
@@ -46,12 +46,7 @@ impl Ciudad {
             let col = (cx - h.ancho as i64 * 500 + 500).div_euclid(1000) as i32;
             let row = (cy - h.alto as i64 * 500 + 500).div_euclid(1000) as i32;
             let rect = Rect::new(col, row, h.ancho, h.alto);
-            // DUDA: T §7.2 no limita el ancla nueva al disco urbano; aquí sí (centro a ≤ radio_ul), para que el invariante «nada fuera
-            // del disco» valga también para los núcleos que cuelgan de ella.
-            if en_ventana(&rect, 1)
-                && self.suelo.rect_libre(&rect)
-                && en_disco(&rect, radio_ul)
-                && otras.iter().all(|o| rect.hueco(o) >= prm.separacion_seguridad_anclas)
+            if en_ventana(&rect, 1) && self.suelo.rect_libre(&rect) && otras.iter().all(|o| rect.hueco(o) >= prm.separacion_seguridad_anclas)
             {
                 return Some(rect);
             }
@@ -96,7 +91,7 @@ impl Ciudad {
             };
             for dir in libres.into_iter().chain(usadas) {
                 for &(h, rotado) in &orientaciones {
-                    let Some(rect) = self.hueco_en_direccion(&semilla.rect, dir, h, &otras, p.radio_ul) else { continue };
+                    let Some(rect) = self.hueco_en_direccion(&semilla.rect, dir, h, &otras) else { continue };
                     if self.suelo.tiene_frente(&rect) || self.suelo.corredor(&rect, prm.cap_corredor_urbano).is_some() {
                         return (Some(Colocacion { rect, rotado }), excluidas);
                     }
@@ -106,18 +101,15 @@ impl Ciudad {
         }
     }
 
-    /// Primera ancla de la categoría con hueco para el pedido y las que se probaron y quedaron geométricamente llenas.
+    /// Primera ancla de la categoría con hueco para el pedido y las que se probaron antes y quedaron llenas. Como T §7.1, un ancla
+    /// queda **llena en cuanto no cabe la huella pedida** en su núcleo (el latch es permanente: no vuelve a recibir satélites).
     fn ancla_activa(&self, p: &Pedido, campo: &[u16], afines: &[bool]) -> (Option<u32>, Vec<u32>) {
-        let uno = Pedido { huella: Huella::new(1, 1), permitir_rotacion: false, ..*p };
         let mut llenas = Vec::new();
         for a in self.anclas_activas(p.categoria) {
             if !self.atraccion_dura(&a.rect, p, afines, campo).is_empty() {
                 return (Some(a.id), llenas);
             }
-            // el latch es permanente: solo se marca llena si ni una celda de 1×1 cabe en su banda
-            if self.atraccion_dura(&a.rect, &uno, afines, campo).is_empty() {
-                llenas.push(a.id);
-            }
+            llenas.push(a.id);
         }
         (None, llenas)
     }
