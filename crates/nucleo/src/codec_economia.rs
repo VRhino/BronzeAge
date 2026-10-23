@@ -174,16 +174,25 @@ fn clase_de_u8(i: u8) -> Result<ClaseCelda, ErrorFormato> {
     })
 }
 
-fn escribir_recinto(w: &mut Escritor, r: &Recinto) {
-    let Recinto { id, nivel, celdas, avance, mejora, siguiente_celda_en, comprometido_en, completado_en } = r;
-    w.u32(*id);
-    w.u8(*nivel);
+/// Las celdas de un anillo: `n u64 · n × (col i32, fila i32, clase u8)`.
+pub(crate) fn escribir_celdas(w: &mut Escritor, celdas: &[CeldaMuro]) {
     w.u64(celdas.len() as u64);
     for CeldaMuro { celda: Celda { col, row }, clase } in celdas {
         w.i32(*col);
         w.i32(*row);
         w.u8(clase_a_u8(*clase));
     }
+}
+
+pub(crate) fn leer_celdas(r: &mut Lector) -> Result<Vec<CeldaMuro>, ErrorFormato> {
+    (0..r.cuenta()?).map(|_| Ok(CeldaMuro { celda: Celda::new(r.i32()?, r.i32()?), clase: clase_de_u8(r.u8()?)? })).collect()
+}
+
+fn escribir_recinto(w: &mut Escritor, r: &Recinto) {
+    let Recinto { id, nivel, celdas, avance, mejora, siguiente_celda_en, comprometido_en, completado_en } = r;
+    w.u32(*id);
+    w.u8(*nivel);
+    escribir_celdas(w, celdas);
     w.i32(*avance);
     match mejora {
         Some(MejoraDeRecinto { nivel, avance }) => {
@@ -203,10 +212,7 @@ fn leer_recinto(r: &mut Lector) -> Result<Recinto, ErrorFormato> {
     if !(1..=3).contains(&nivel) {
         return Err(ErrorFormato("nivel de recinto desconocido"));
     }
-    let mut celdas = Vec::new();
-    for _ in 0..r.cuenta()? {
-        celdas.push(CeldaMuro { celda: Celda::new(r.i32()?, r.i32()?), clase: clase_de_u8(r.u8()?)? });
-    }
+    let celdas = leer_celdas(r)?;
     if celdas.is_empty() {
         return Err(ErrorFormato("recinto sin celdas"));
     }

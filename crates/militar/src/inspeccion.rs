@@ -9,6 +9,7 @@ use crate::datos::Reglas;
 use crate::tipos::{FaccionId, HeroeId};
 use asentamiento::Recurso;
 use base::{Instante, Mil, Punto};
+use trazado::CeldaMuro;
 
 /// A qué se apunta con `inspeccionar` o `perseguir`: una columna (`ejercito` en el contrato, sea personal o ejército), una caravana o una plaza.
 /// Las ids son las del mundo (`u64`).
@@ -27,6 +28,17 @@ pub struct Avistada {
     pub heroe: HeroeId,
 }
 
+/// Un recinto de muralla visto de cerca (Murallas §9.1): su anillo entero y cuántas celdas hay levantadas. Solo se ven los que ya tienen alguna.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecintoAvistado {
+    /// El nivel del anillo en pie.
+    pub nivel: u8,
+    /// Todas las celdas del anillo, en su orden de recorrido, con su clase.
+    pub celdas: Vec<CeldaMuro>,
+    /// Las celdas levantadas (`celdas[..avance]`).
+    pub avance: u32,
+}
+
 /// Lo que se saca de mirar de cerca.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Contenido {
@@ -34,8 +46,8 @@ pub enum Contenido {
     Columna { faccion: Option<FaccionId>, heroes: Vec<HeroeId>, escuadras: Vec<Avistada> },
     /// Una caravana: si va escoltada y **qué** recursos lleva (nombres, ordenados), nunca cuánto.
     Caravana { escoltada: bool, recursos: Vec<Recurso> },
-    /// La defensa de una plaza ajena: la guarnición de sus residentes y los héroes que hay dentro. El almacén, no.
-    Plaza { faccion: FaccionId, heroes: Vec<HeroeId>, guarnicion: Vec<Avistada> },
+    /// La defensa de una plaza ajena: la guarnición de sus residentes, los héroes que hay dentro y sus recintos de muralla. El almacén, no.
+    Plaza { faccion: FaccionId, heroes: Vec<HeroeId>, guarnicion: Vec<Avistada>, recintos: Vec<RecintoAvistado> },
 }
 
 /// Lo último que inspeccionó un héroe de un objetivo.
@@ -121,7 +133,7 @@ mod pruebas {
         let c = informes.iter().find(|i| i.objetivo == Objetivo::Caravana(7)).unwrap();
         assert_eq!((c.visto_en, c.expira_en, c.donde, &c.contenido), (6 * MS_POR_MINUTO, 16 * MS_POR_MINUTO, Punto::new(5, 6), &caravana(true)));
         // Al anotar a los 15 minutos se barre el que venció (la columna, a los 14).
-        anotar(&r, &mut informes, Objetivo::Asentamiento(1), 15 * MS_POR_MINUTO, Punto::new(0, 0), Contenido::Plaza { faccion: 2, heroes: vec![], guarnicion: vec![] });
+        anotar(&r, &mut informes, Objetivo::Asentamiento(1), 15 * MS_POR_MINUTO, Punto::new(0, 0), Contenido::Plaza { faccion: 2, heroes: vec![], guarnicion: vec![], recintos: vec![] });
         assert_eq!(informes.iter().map(|i| i.objetivo).collect::<Vec<_>>(), [Objetivo::Caravana(7), Objetivo::Asentamiento(1)]);
     }
 }

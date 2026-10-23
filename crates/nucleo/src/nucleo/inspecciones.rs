@@ -3,12 +3,12 @@
 //! y se avisa al observado: obtener información cuesta ser visto.
 //!
 //! Lo que se ve es lo que la niebla niega de lejos y nada más: de una columna, sus héroes y cada escuadra con soldados (tropa, cuántos, de quién); de una
-//! caravana, si va escoltada y **qué** recursos lleva (nunca cuántos); de una plaza, la guarnición de sus residentes y los héroes que hay dentro (nunca su
-//! almacén). El informe dura `INSPECCION.informeMinutos` y se lee con [`Nucleo::informes_de_inspeccion`].
+//! caravana, si va escoltada y **qué** recursos lleva (nunca cuántos); de una plaza, la guarnición de sus residentes, los héroes que hay dentro y sus recintos de muralla con
+//! cuántas celdas hay levantadas (nunca su almacén). El informe dura `INSPECCION.informeMinutos` y se lee con [`Nucleo::informes_de_inspeccion`].
 
 use super::*;
 use militar::escuadra::Contenedor;
-use militar::inspeccion::{self, Avistada, Contenido, ErrorInspeccion, Informe, Objetivo};
+use militar::inspeccion::{self, Avistada, Contenido, ErrorInspeccion, Informe, Objetivo, RecintoAvistado};
 use militar::presencia::Ubicacion;
 
 impl Nucleo {
@@ -55,7 +55,9 @@ impl Nucleo {
                 let dentro = self.heroes().filter(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(x as u32)).map(|h| h.heroe.id).collect();
                 let guarnicion = self.estado.militar.residentes_de(x).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados());
                 let guarnicion = guarnicion.map(|s| Avistada { tropa: s.tropa, cantidad: s.cantidad, heroe: s.heroe }).collect();
-                (a.posicion, faccion == Some(a.faccion), Contenido::Plaza { faccion: a.faccion, heroes: dentro, guarnicion }, ("asentamiento.observado", None, vec![x]))
+                // Los recintos con alguna celda levantada: todo su anillo y cuántas hay en pie (el que solo está trazado no defiende).
+                let recintos = a.economia.recintos.iter().filter(|r| r.levantadas() > 0).map(|r| RecintoAvistado { nivel: r.nivel, celdas: r.celdas.clone(), avance: r.levantadas() as u32 }).collect();
+                (a.posicion, faccion == Some(a.faccion), Contenido::Plaza { faccion: a.faccion, heroes: dentro, guarnicion, recintos }, ("asentamiento.observado", None, vec![x]))
             }
         };
         let mr = self.estado.reglas.economia.militar.clone();

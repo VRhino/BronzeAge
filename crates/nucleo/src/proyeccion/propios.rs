@@ -8,16 +8,15 @@
 //! (decisión 4: «Héroe N», clase `default`), nombre y sigilo de la Facción (sistema 5), inventario y equipo (Conquest, CQ-004), peajes y titular de una caravana, y el almacén de una avanzada
 //! (el contrato trae una sola `Existencia` y el núcleo un almacén de 29 recursos).
 
-use super::{audiencia, ids, plan, punto, ritmo};
+use super::{audiencia, batalla, ids, plan, punto, ritmo};
 use crate::estado::{Clase, Ejercito};
 use crate::estado_militar::{HeroeNucleo, Relacion};
-use crate::nucleo::Nucleo;
+use crate::nucleo::{Nucleo, TokenDeJugador};
 use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada, TipoObra};
 use asentamiento::pueblos::{EstadoPueblo, Pueblo};
 use asentamiento::{Almacen, Recurso};
 use base::Mil;
 use combate::ciclo::{Batalla, EstadoBatalla};
-use combate::resolucion::Lado;
 use comercio::caravana::{Animal, Caravana, EstadoCaravana, TipoCaravana, TipoCarro};
 use comercio::orden_mercado::{EstadoOrden, OrdenMercado, TipoOrden};
 use comercio::trueque::{AcuerdoTrueque, EstadoTrueque, Linea};
@@ -25,6 +24,7 @@ use contrato::v1 as pb;
 use militar::convocatoria::{Convocatoria, Lugar, Seleccion};
 use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::Residencia;
+use militar::inspeccion::{Avistada, Contenido, Informe, Objetivo};
 use militar::presencia::Ubicacion;
 use militar::tipos::Carga;
 use pb::entidad::Cuerpo;
@@ -50,7 +50,40 @@ fn existencia(a: &Almacen, r: Recurso) -> pb::Existencia {
     pb::Existencia { cantidad: Some(pb::Ritmo { en_escalones: true, maximo: Some(a.capacidad(r)), ..constante(a.cantidad(r)) }), capacidad: a.capacidad(r) }
 }
 
+/// Las celdas de un anillo de muralla en el contrato (columna, fila y clase).
+pub(super) fn celdas(cs: &[trazado::CeldaMuro]) -> Vec<pb::CeldaMuro> {
+    cs.iter()
+        .map(|c| pb::CeldaMuro {
+            col: c.celda.col,
+            fila: c.celda.row,
+            clase: match c.clase {
+                trazado::ClaseCelda::Muro => pb::ClaseCelda::CeldaMuro,
+                trazado::ClaseCelda::Puerta => pb::ClaseCelda::CeldaPuerta,
+                trazado::ClaseCelda::Torre => pb::ClaseCelda::CeldaTorre,
+            } as i32,
+        })
+        .collect()
+}
+
+/// El id de la batalla que se juega ahora contra un lugar (la plaza, el pueblo o la avanzada), si la hay: el asedio visible.
+pub(super) fn batalla_sobre(n: &Nucleo, lugar: Ubicacion) -> Option<String> {
+    n.batalla_sobre(lugar).map(|b| n.uuid_de_batalla(b.id))
+}
+
 // ───────────────────────────── Héroe, escuadras, loadouts ─────────────────────────────
+
+/// La clase de un héroe hasta que Conquest publique su catálogo (decisión 4 del autor).
+pub(super) const CLASE_POR_DEFECTO: &str = "default";
+
+/// El nombre de un héroe hasta que Conquest publique su catálogo (decisión 4 del autor).
+pub(super) fn nombre_de_heroe(id: u64) -> String {
+    format!("Héroe {id}")
+}
+
+/// Los atributos base de un héroe (sin equipo: el efectivo es el base hasta CQ-004).
+pub(super) fn atributos(h: &militar::heroe::Heroe) -> pb::Atributos {
+    pb::Atributos { fuerza: h.atributos.fuerza.max(0) as u32, destreza: h.atributos.destreza.max(0) as u32, armadura: h.atributos.armadura.max(0) as u32, vitalidad: h.atributos.vitalidad.max(0) as u32 }
+}
 
 /// El héroe propio. DUDA: nombre, clase, género y avatar por defecto hasta que Conquest publique su catálogo (decisión 4 del autor); inventario, equipo y exploración personal, vacíos.
 pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
@@ -91,19 +124,14 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         version: n.version_de(Clase::Heroe, h.heroe.id),
         jugador_id: (!h.sintetico).then(|| h.cuenta.clone()),
         es_bot: h.heroe.controlador == militar::heroe::Controlador::Bot,
-        display_name: format!("Héroe {}", h.heroe.id),
-        class_definition_id: "default".into(),
+        display_name: nombre_de_heroe(h.heroe.id),
+        class_definition_id: CLASE_POR_DEFECTO.into(),
         avatar: Some(pb::Avatar::default()),
         nivel: h.heroe.nivel,
         experiencia_hacia_siguiente_nivel: h.heroe.experiencia.max(0) as u64,
         puntos_de_atributo_sin_gastar: h.heroe.puntos_de_atributo.max(0) as u32,
         puntos_de_perk_sin_gastar: h.heroe.puntos_de_perk.max(0) as u32,
-        atributos_base: Some(pb::Atributos {
-            fuerza: h.heroe.atributos.fuerza.max(0) as u32,
-            destreza: h.heroe.atributos.destreza.max(0) as u32,
-            armadura: h.heroe.atributos.armadura.max(0) as u32,
-            vitalidad: h.heroe.atributos.vitalidad.max(0) as u32,
-        }),
+        atributos_base: Some(atributos(&h.heroe)),
         perks_desbloqueados: h.heroe.perks_desbloqueados.clone(),
         liderazgo_base: h.heroe.liderazgo_base.max(0) as u32,
         ubicacion: Some(pb::UbicacionHeroe { donde: Some(ubicacion) }),
@@ -157,6 +185,43 @@ pub fn escuadron(n: &Nucleo, e: &Escuadra) -> pb::Escuadron {
         reserva_batalla: e.reserva_batalla.map(|b| pb::ReservaBatalla { battle_id: n.uuid_de_batalla(b) }),
         prestada_por_campamento_id: e.prestada.map(ids::campamento),
         ..Default::default()
+    }
+}
+
+// ───────────────────────────── Informes de inspección ─────────────────────────────
+
+fn avistadas(a: &[Avistada]) -> Vec<pb::GuarnicionInforme> {
+    a.iter().map(|x| pb::GuarnicionInforme { tropa_id: x.tropa.nombre().to_owned(), cantidad: x.cantidad.max(0) as u32, heroe_id: ids::heroe(x.heroe) }).collect()
+}
+
+/// Lo que un héroe sacó de mirar de cerca (`inspeccionar`): una columna, una caravana o la defensa de una plaza con sus recintos. Lo ve solo quien lo hizo y vale hasta `expira_en_ms`: el cliente lo
+/// descarta solo (no hay `QUITA` al caducar, no pasa nada en el mundo).
+pub fn informe_de_inspeccion(n: &Nucleo, heroe: u64, i: &Informe) -> pb::InformeInspeccion {
+    use pb::informe_inspeccion::Contenido as C;
+    let objetivo = match i.objetivo {
+        Objetivo::Ejercito(x) => ids::ejercito(x),
+        Objetivo::Caravana(x) => ids::caravana(x),
+        Objetivo::Asentamiento(x) => ids::asentamiento(x),
+    };
+    let contenido = match &i.contenido {
+        Contenido::Columna { faccion, heroes, escuadras } => C::Columna(pb::InspeccionColumna { faccion_id: faccion.map(ids::faccion), heroes_ids: heroes.iter().map(|&h| ids::heroe(h)).collect(), escuadras: avistadas(escuadras) }),
+        Contenido::Caravana { escoltada, recursos } => C::Caravana(pb::InspeccionCaravana { escoltada: *escoltada, recursos: recursos.iter().map(|r| r.nombre().to_owned()).collect() }),
+        Contenido::Plaza { faccion, heroes, guarnicion, recintos } => C::Plaza(pb::InspeccionPlaza {
+            faccion_id: ids::faccion(*faccion),
+            heroes_ids: heroes.iter().map(|&h| ids::heroe(h)).collect(),
+            guarnicion: avistadas(guarnicion),
+            recintos: recintos.iter().map(|r| pb::RecintoInforme { nivel: u32::from(r.nivel), celdas: celdas(&r.celdas), avance: r.avance }).collect(),
+        }),
+    };
+    pb::InformeInspeccion {
+        id: ids::informe(heroe, &objetivo),
+        version: n.version_de(Clase::Heroe, heroe),
+        heroe_id: ids::heroe(heroe),
+        objetivo_id: objetivo,
+        visto_en_ms: i.visto_en,
+        expira_en_ms: i.expira_en,
+        donde: Some(punto(i.donde)),
+        contenido: Some(contenido),
     }
 }
 
@@ -267,7 +332,11 @@ pub fn convocatoria(c: &Convocatoria, viewer: Option<u64>, version: u64) -> pb::
     }
 }
 
-/// La batalla sin su ticket (T4 lo trae completo, con la asignación y los tokens): lo que el combatiente necesita para saber que combate y por qué. `lado_propio`, el de `viewer`.
+/// La batalla tal como la ve `viewer` (el héroe de la sesión). Quien combate en ella la ve entera: el ticket congelado, las incorporaciones, el resultado, su bando y, si ya hay asignación y
+/// token para él, cómo conectar con el servidor de batalla (`asignacion_propia`, solo suyo). Quien no combate ve lo que hace falta para decidir si se une: el estado, lo que se bloquea y, si podría unirse, a
+/// qué bando (`lado_para_unirse`).
+// DUDA: `lado_para_unirse` se calcula al proyectar (cuando la batalla cambia o la sesión pide la foto): si el espectador se acerca o se aleja después, no se actualiza hasta el siguiente cambio de la
+// batalla; la orden `unirse_a_batalla` vuelve a comprobarlo.
 pub fn batalla(n: &Nucleo, b: &Batalla, viewer: Option<u64>) -> pb::Batalla {
     let estado = match b.estado {
         EstadoBatalla::Convocando => pb::EstadoBatalla::BatallaConvocando,
@@ -277,15 +346,21 @@ pub fn batalla(n: &Nucleo, b: &Batalla, viewer: Option<u64>) -> pb::Batalla {
         EstadoBatalla::Cancelada => pb::EstadoBatalla::BatallaCancelada,
         EstadoBatalla::Fallida => pb::EstadoBatalla::BatallaFallida,
     };
-    // El bando del espectador: el de cualquiera de los héroes de la batalla cuya sesión sea la suya (el de campo de una cuenta combate por ella).
+    // El héroe del espectador que combate en ella: el suyo o, en una cuenta con columnas de campo, el de campo que combate por la cuenta.
     let e = n.estado();
-    let lado = viewer.and_then(|v| b.heroes_que_combaten().find(|&h| e.militar.heroes.get(&h).is_some_and(|x| audiencia::principal(e, x) == Some(v)))).and_then(|h| b.lado_de(h)).map(|l| if l == Lado::Atacante { pb::LadoId::Atacante } else { pb::LadoId::Defensor } as i32);
+    let propio = viewer.and_then(|v| b.heroes_que_combaten().find(|&h| e.militar.heroes.get(&h).is_some_and(|x| audiencia::principal(e, x) == Some(v))));
+    let asignacion_propia = propio.filter(|_| b.activa(n.ahora())).and_then(|h| match n.token_de_jugador(h, b.id) {
+        TokenDeJugador::Token { instancia, token, expira_en } => Some(pb::AsignacionPropia { instancia: Some(pb::InstanciaDeBatalla { host: instancia.host, puerto: u32::from(instancia.puerto), protocolo: instancia.protocolo }), token, expira_en_ms: expira_en }),
+        _ => None,
+    });
     pb::Batalla {
         id: n.uuid_de_batalla(b.id),
         version: n.version_de(Clase::Batalla, b.id),
         estado: estado as i32,
         iniciada_por: if n.heroe(b.iniciada_por).is_some() { ids::heroe(b.iniciada_por) } else { String::new() },
         punto: Some(punto(b.punto)),
+        ticket: propio.map(|_| batalla::ticket(n, b)),
+        incorporaciones: propio.map_or_else(Vec::new, |_| b.incorporaciones.iter().map(|i| batalla::incorporacion(n, b, i)).collect()),
         bloqueo_ejercito_ids: b.bloqueo.ejercitos.iter().map(|&e| ids::ejercito(e)).collect(),
         bloqueo_caravana_ids: b.bloqueo.caravanas.iter().map(|&c| ids::caravana(c)).collect(),
         bloqueo_asentamiento_id: b.bloqueo.asentamiento.map(|a| ids::asentamiento(u64::from(a))),
@@ -293,10 +368,12 @@ pub fn batalla(n: &Nucleo, b: &Batalla, viewer: Option<u64>) -> pb::Batalla {
         expira_en_ms: b.expira_en,
         convocatoria_hasta_ms: b.convocatoria_hasta,
         iniciada_en_ms: b.iniciada_en,
+        resultado: propio.and(b.resultado.as_ref()).map(|r| batalla::resultado(n, b, r)),
         aplicada_en_ms: b.aplicada_en,
         cerrada_en_ms: b.cerrada_en,
-        lado_propio: lado,
-        ..Default::default()
+        lado_propio: propio.and_then(|h| b.lado_de(h)).map(|l| batalla::lado(l) as i32),
+        lado_para_unirse: propio.is_none().then(|| viewer.and_then(|v| n.lado_para_unirse(v, b.id))).flatten().map(|l| batalla::lado(l) as i32),
+        asignacion_propia,
     }
 }
 
@@ -362,7 +439,7 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         carro_acarreo_id: p.carro.map(ids::caravana),
         guarnicion_escuadron_id: guarnicion.map(|g| ids::escuadra(g.escuadra.id)),
         guarnicion_repone_en_ms: guarnicion.and_then(|g| g.repone_en),
-        ..Default::default()
+        batalla_id: batalla_sobre(n, Ubicacion::Pueblo(p.id)),
     }
 }
 
@@ -392,7 +469,7 @@ pub fn obra_de_pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::ObraDeMapa {
 }
 
 /// La avanzada que ya es un puesto (operativa o en ruinas). La primera obra, la mejora y la reparación van aparte, en [`obra_de_avanzada`].
-/// DUDA: sin `almacen` (el contrato trae una sola `Existencia` y el núcleo un almacén de 29 recursos) ni `batalla_id` (T4).
+/// DUDA: sin `almacen` (el contrato trae una sola `Existencia` y el núcleo un almacén de 29 recursos) (`batalla_id` sí: el asedio visible).
 pub fn avanzada(n: &Nucleo, madre: Option<u64>, v: &Avanzada) -> pb::Avanzada {
     let e = n.estado();
     let g = e.combate.avanzadas.get(&v.id);
@@ -413,6 +490,7 @@ pub fn avanzada(n: &Nucleo, madre: Option<u64>, v: &Avanzada) -> pb::Avanzada {
         },
         tropa_elegida_por_escalon: g.into_iter().flat_map(|g| &g.elegidas).map(|(&k, t)| (u32::from(k), t.nombre().to_owned())).collect::<BTreeMap<_, _>>().into_iter().collect(),
         guarnicion_jugadores_ids: n.guarnicion_de_jugadores_de_avanzada(v.id).iter().map(|s| ids::escuadra(s.id)).collect(),
+        batalla_id: batalla_sobre(n, Ubicacion::Avanzada(v.id)),
         ..Default::default()
     }
 }
@@ -503,8 +581,14 @@ pub fn proyectar(n: &Nucleo, viewer: Option<u64>, clase: Clase, id: u64) -> Proy
     let un = |tipo: T, id: String, cuerpo: Option<Cuerpo>| Proyeccion { posibles: vec![(tipo, id.clone())], existen: cuerpo.into_iter().map(|c| (tipo, id.clone(), c)).collect() };
     match clase {
         Clase::Ejercito => un(T::Ejercito, ids::ejercito(id), e.ejercitos.get(&id).map(|x| Cuerpo::Ejercito(ejercito(n, x)))),
-        Clase::Asentamiento => un(T::Asentamiento, ids::asentamiento(id), e.asentamientos.get(&id).and_then(|a| super::entidad_asentamiento(a, &n.poligono_zona(a.id)).cuerpo)),
-        Clase::Heroe => un(T::Heroe, ids::heroe(id), n.heroe(id).map(|h| Cuerpo::Heroe(heroe(n, h)))),
+        Clase::Asentamiento => un(T::Asentamiento, ids::asentamiento(id), e.asentamientos.get(&id).and_then(|a| super::entidad_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32))).cuerpo)),
+        Clase::Heroe => {
+            // El héroe y sus informes de inspección vigentes (los vencidos los descarta el cliente por su `expira_en_ms`).
+            let mut p = un(T::Heroe, ids::heroe(id), n.heroe(id).map(|h| Cuerpo::Heroe(heroe(n, h))));
+            let informes = n.informes_de_inspeccion(id).into_iter().map(|i| informe_de_inspeccion(n, id, i));
+            p.existen.extend(informes.map(|i| (T::InformeInspeccion, i.id.clone(), Cuerpo::InformeInspeccion(i))));
+            p
+        }
         Clase::Escuadra => un(T::Escuadron, ids::escuadra(id), n.escuadra(id).map(|(_, s)| Cuerpo::Escuadron(escuadron(n, s)))),
         Clase::Caravana => un(T::Caravana, ids::caravana(id), e.comercio.caravana(id).map(|c| Cuerpo::Caravana(caravana(n, c)))),
         Clase::Convocatoria => un(T::Convocatoria, ids::convocatoria(id), e.militar.convocatorias.get(&id).map(|c| Cuerpo::Convocatoria(convocatoria(c, viewer, n.version_de(Clase::Convocatoria, id))))),

@@ -843,6 +843,20 @@ impl Caravana {
         Ok(PerdidaCarros { carros_perdidos: perdidos.len(), carga_perdida: perdido, destruida })
     }
 
+    /// Lo que lleva cada carro, en el orden de la lista: la carga repartida proporcionalmente a su capacidad (floor, como en la pérdida de carros), que es como Unity recibe los carros de una batalla.
+    // DUDA: la carga no está asignada a carros concretos; se reparte por capacidad y lo que deja el redondeo (menos de una milésima por recurso y carro) no se asigna a ninguno. Un carro sin animal no lleva nada.
+    pub fn carga_por_carro(&self, r: &ReglasFlota) -> Vec<Carga> {
+        let capacidad_de = |c: &Carro| c.animal.map_or(0, |a| por(r.carro(c.tipo).capacidad_base, r.animal(a).factor_carga));
+        let cap_total: Mil = self.carros.iter().map(capacidad_de).sum();
+        self.carros
+            .iter()
+            .map(|c| {
+                let cap = capacidad_de(c);
+                self.contenido.iter().filter(|_| cap_total > 0).map(|(&rec, &n)| (rec, (n as i128 * cap as i128 / cap_total as i128) as Mil)).filter(|&(_, l)| l > 0).collect()
+            })
+            .collect()
+    }
+
     /// Hook del sistema militar para el tipo B (Aguante): el dueño pierde `fraccion` (ppm) de la carga, recurso a recurso, hacia abajo.
     /// Devuelve lo perdido.
     pub fn perder_fraccion_de_carga(&mut self, fraccion: i64) -> Carga {
@@ -1495,6 +1509,16 @@ mod pruebas {
         assert!(p.destruida, "sin carros la caravana se elimina");
         assert_eq!(p.carga_perdida[&Recurso::Madera], 500_000, "con toda su carga");
         assert!(c.contenido.is_empty());
+    }
+
+    #[test]
+    fn la_carga_por_carro_es_proporcional_a_su_capacidad_y_un_carro_sin_animal_no_lleva_nada() {
+        let r = r();
+        let mut c = con(&[(TipoCarro::Basico, Some(Animal::Buey)), (TipoCarro::Basico, Some(Animal::Buey)), (TipoCarro::Reforzado, None)]);
+        c.contenido.insert(Recurso::Madera, 1_000_000);
+        let por_carro = c.carga_por_carro(&r);
+        assert_eq!(por_carro.iter().map(|k| k.get(&Recurso::Madera).copied().unwrap_or(0)).collect::<Vec<_>>(), [500_000, 500_000, 0], "como en la pérdida de carros: dos iguales se reparten la carga, el que no tira nadie no lleva nada");
+        assert!(con(&[]).carga_por_carro(&r).is_empty() && con(&[(TipoCarro::Basico, None)]).carga_por_carro(&r)[0].is_empty());
     }
 
     #[test]

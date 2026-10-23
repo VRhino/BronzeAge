@@ -37,6 +37,11 @@ pub fn relacion(a: u32, b: u32) -> String {
     format!("rel-{}-{}", a.min(b), a.max(b))
 }
 
+/// Un informe de inspección (`insp-<héroe>-<objetivo>`, con el id del contrato del objetivo: `ej-N`, `car-N` o `as-N`): uno por héroe y objetivo.
+pub fn informe(heroe: u64, objetivo: &str) -> String {
+    format!("insp-{heroe}-{objetivo}")
+}
+
 pub fn edificio(plaza: u64, n: u32) -> String {
     format!("ed-{plaza}-{n}")
 }
@@ -77,6 +82,7 @@ mod pruebas {
         assert_eq!(parse_nodo(&nodo(12)), Some(12));
         assert_eq!(parse_edificio(&edificio(5, 11)), Some((5, 11)));
         assert_eq!(parse_recinto(&recinto(5, 2)), Some((5, 2)));
+        assert_eq!(informe(3, &ejercito(5)), "insp-3-ej-5");
         // Un prefijo no se toma por otro (`as-` no es `av-`; `ej-` no es `esc-`) ni se acepta basura.
         assert_eq!(parse_avanzada("as-9"), None);
         assert_eq!(parse_escuadra("ej-1"), None);

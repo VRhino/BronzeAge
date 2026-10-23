@@ -1,5 +1,5 @@
 //! Serialización canónica de las batallas de Unity (`EstadoBatallas`) para el hash, las fotos y el registro de las órdenes que traen un mensaje del
-//! servidor de batalla (formato BAN13; el contexto de caravana desde BAN19). Cada estructura se desestructura **entera** (sin `..`): si `combate::ciclo` gana un campo, esto deja de
+//! servidor de batalla (formato BAN13; el contexto de caravana desde BAN19; la plaza congelada y los datos congelados de cada escuadra, desde BAN21). Cada estructura se desestructura **entera** (sin `..`): si `combate::ciclo` gana un campo, esto deja de
 //! compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `batallas{n u64 · n × batalla}`.
@@ -7,13 +7,15 @@
 //!   incorporaciones{n u64 · n × (secuencia u32, lado u8, participante)} · salidas{n u64 · n × (héroe u64, motivo u8, derrotado bool, en i64)} · bloqueo ·
 //!   expira_en i64 · convocatoria_hasta opt_i64 · iniciada_en opt_i64 · aplicada_en opt_i64 · cerrada_en opt_i64 · asignación opt{bool · asignación} ·
 //!   resultado opt{bool · resultado}`.
-//! - Ticket: `revisión u32 · contexto · duración_máxima i64 · atacante bando · defensor bando`. Lado: 0 atacante, 1 defensor.
+//! - Ticket: `revisión u32 · contexto · duración_máxima i64 · atacante bando · defensor bando · plaza opt{bool · plaza}`. Plaza congelada (un asedio): `layout_version u32 · unidades_por_celda u32 ·
+//!   edificios{n u64 · n × (id u32, tipo texto, centro punto, ancho u32, alto u32, nivel_interno u8, estado u8: 0 en cola, 1 en construcción, 2 activo, dañado bool)} ·
+//!   recintos{n u64 · n × (id u32, nivel u8, celdas{n u64 · n × (col i32, fila i32, clase u8)})}`. Lado: 0 atacante, 1 defensor.
 //! - Contexto: `tag u8` y, según él, `0 asedio: plaza u32 · 1 campo abierto: punto, solitarios bool · 2 caravana: caravanas{n u64 · n × (caravana u64, carros u64)}, punto, modalidad u8 (0 disputa,
 //!   1 aguante) · 3 campamento de bandidos: campamento u32, punto · 4 saqueo de pueblo: pueblo u64, punto · 5 avanzada: avanzada u64, etapa u8 (0 atalaya,
 //!   1 fuerte, 2 ciudadela), punto`.
 //! - Bando: `facción opt_u64 · capacidad u64 · participantes{n u64 · n × participante} · sin_héroe{n u64 · n × escuadra}`.
 //! - Participante: `héroe u64 · facción opt_u64 · controlador u8 (el de `codec_militar`) · casillas_libres u32 · escuadras{n u64 · n × escuadra}`.
-//!   Escuadra de batalla: `id u64 · tropa u8 · dueño opt_u64 · efectivos i64`.
+//!   Escuadra de batalla: `id u64 · tropa u8 · dueño opt_u64 · efectivos i64 · nivel u8 · experiencia i64 · moral i64` (los tres últimos, del instante de abrir).
 //! - Bloqueo: `ejércitos{n u64 · n × u64} · caravanas{n u64 · n × u64} · asentamiento opt_u64 · campamento opt_u64 · pueblo opt_u64 · avanzada opt_u64`.
 //! - Asignación: `intento texto · servidor texto · revisión u32 · instancia{host texto, puerto u16, protocolo texto} · tokens{n u64 · n × (héroe u64, token texto,
 //!   expira_en i64)}`.
@@ -24,11 +26,13 @@
 //!   instancia opt{bool · texto})} · monedas{bronce, plata, oro: i64}`.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
+use crate::codec_economia::{escribir_celdas, leer_celdas};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, tropa_a_u8, tropa_de_u8};
 use crate::estado_batallas::EstadoBatallas;
+use asentamiento::edificio::Estado as EstadoEdificio;
 use combate::avanzada::Etapa;
 use combate::caravana::Modalidad;
-use combate::ciclo::{Asignacion, Batalla, BandoDeTicket, Bloqueo, CaravanaEnBatalla, Contexto, EscuadraDeSalida, EscuadraEnBatalla, EstadoBatalla, Incorporacion, Instancia, MotivoSalida, Participante, Salida, SalidaBatalla, Ticket, Token};
+use combate::ciclo::{Asignacion, Batalla, BandoDeTicket, Bloqueo, CaravanaEnBatalla, Contexto, EdificioCongelado, EscuadraDeSalida, EscuadraEnBatalla, EstadoBatalla, Incorporacion, Instancia, MotivoSalida, Participante, PlazaCongelada, RecintoCongelado, Salida, SalidaBatalla, Ticket, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado, ResultadoEscuadra, ResultadoHeroe};
 use militar::heroe::Monedas;
@@ -183,15 +187,18 @@ fn contexto_leer(r: &mut Lector) -> Result<Contexto, ErrorFormato> {
 }
 
 fn escuadra_escribir(w: &mut Escritor, e: &EscuadraEnBatalla) {
-    let EscuadraEnBatalla { id, tropa, dueno, efectivos } = e;
+    let EscuadraEnBatalla { id, tropa, dueno, efectivos, nivel, experiencia, moral } = e;
     w.u64(*id);
     w.u8(tropa_a_u8(*tropa));
     w.opt_u64(*dueno);
     w.i64(*efectivos);
+    w.u8(*nivel);
+    w.i64(*experiencia);
+    w.i64(*moral);
 }
 
 fn escuadra_leer(r: &mut Lector) -> Result<EscuadraEnBatalla, ErrorFormato> {
-    Ok(EscuadraEnBatalla { id: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, dueno: r.opt_u64()?, efectivos: r.i64()? })
+    Ok(EscuadraEnBatalla { id: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, dueno: r.opt_u64()?, efectivos: r.i64()?, nivel: r.u8()?, experiencia: r.i64()?, moral: r.i64()? })
 }
 
 fn participante_escribir(w: &mut Escritor, p: &Participante) {
@@ -230,17 +237,71 @@ fn bando_leer(r: &mut Lector) -> Result<BandoDeTicket, ErrorFormato> {
     Ok(BandoDeTicket { faccion, capacidad, participantes, sin_heroe })
 }
 
+fn plaza_escribir(w: &mut Escritor, p: &PlazaCongelada) {
+    let PlazaCongelada { layout_version, unidades_por_celda, edificios, recintos } = p;
+    w.u32(*layout_version);
+    w.u32(*unidades_por_celda);
+    w.u64(edificios.len() as u64);
+    for EdificioCongelado { id, tipo, centro, ancho, alto, nivel_interno, estado, danado } in edificios {
+        w.u32(*id);
+        w.texto(tipo);
+        w.punto(*centro);
+        w.u32(*ancho);
+        w.u32(*alto);
+        w.u8(*nivel_interno);
+        w.u8(match estado {
+            EstadoEdificio::EnCola => 0,
+            EstadoEdificio::EnConstruccion => 1,
+            EstadoEdificio::Activo => 2,
+        });
+        w.bool(*danado);
+    }
+    w.u64(recintos.len() as u64);
+    for RecintoCongelado { id, nivel, celdas } in recintos {
+        w.u32(*id);
+        w.u8(*nivel);
+        escribir_celdas(w, celdas);
+    }
+}
+
+fn plaza_leer(r: &mut Lector) -> Result<PlazaCongelada, ErrorFormato> {
+    let (layout_version, unidades_por_celda) = (r.u32()?, r.u32()?);
+    let edificios = (0..r.cuenta()?)
+        .map(|_| {
+            let (id, tipo, centro, ancho, alto, nivel_interno) = (r.u32()?, r.texto()?, r.punto()?, r.u32()?, r.u32()?, r.u8()?);
+            let estado = match r.u8()? {
+                0 => EstadoEdificio::EnCola,
+                1 => EstadoEdificio::EnConstruccion,
+                2 => EstadoEdificio::Activo,
+                _ => return Err(ErrorFormato("estado de edificio congelado desconocido")),
+            };
+            Ok(EdificioCongelado { id, tipo, centro, ancho, alto, nivel_interno, estado, danado: r.bool()? })
+        })
+        .collect::<Result<_, _>>()?;
+    let recintos = (0..r.cuenta()?).map(|_| Ok(RecintoCongelado { id: r.u32()?, nivel: r.u8()?, celdas: leer_celdas(r)? })).collect::<Result<_, ErrorFormato>>()?;
+    Ok(PlazaCongelada { layout_version, unidades_por_celda, edificios, recintos })
+}
+
 fn ticket_escribir(w: &mut Escritor, t: &Ticket) {
-    let Ticket { revision, contexto, duracion_maxima, atacante, defensor } = t;
+    let Ticket { revision, contexto, duracion_maxima, atacante, defensor, plaza } = t;
     w.u32(*revision);
     contexto_escribir(w, contexto);
     w.i64(*duracion_maxima);
     bando_escribir(w, atacante);
     bando_escribir(w, defensor);
+    match plaza {
+        Some(p) => {
+            w.bool(true);
+            plaza_escribir(w, p);
+        }
+        None => w.bool(false),
+    }
 }
 
 fn ticket_leer(r: &mut Lector) -> Result<Ticket, ErrorFormato> {
-    Ok(Ticket { revision: r.u32()?, contexto: contexto_leer(r)?, duracion_maxima: r.i64()?, atacante: bando_leer(r)?, defensor: bando_leer(r)? })
+    let (revision, contexto, duracion_maxima, atacante, defensor) = (r.u32()?, contexto_leer(r)?, r.i64()?, bando_leer(r)?, bando_leer(r)?);
+    let plaza = if r.bool()? { Some(plaza_leer(r)?) } else { None };
+    Ok(Ticket { revision, contexto, duracion_maxima, atacante, defensor, plaza })
 }
 
 // ───────────────────────────── Asignación, salida y resultado (también en las órdenes del servidor de batalla) ─────────────────────────────

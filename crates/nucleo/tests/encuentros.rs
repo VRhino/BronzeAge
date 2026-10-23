@@ -455,7 +455,7 @@ fn la_foto_con_una_persecucion_viva_conserva_la_presa_los_informes_las_relacione
     let mut n = nucleo(40, 5);
     let (p, q) = persecucion_viva(&mut n);
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN20");
+    assert_eq!(&bytes[..5], b"BAN21");
     let vuelta = nucleo::Estado::deserializar(&bytes, &comun::reglas(), "hash-de-prueba").expect("deserializa");
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.ejercitos[&p].persiguiendo, Some(q));
@@ -642,7 +642,7 @@ fn inspeccionar_una_plaza_ajena_guarda_su_defensa_y_avisa_a_la_plaza() {
     let ho = heroe(&n, obs);
     let informes = n.informes_de_inspeccion(ho);
     assert_eq!(informes.len(), 1);
-    assert_eq!(informes[0].contenido, Contenido::Plaza { faccion: 1, heroes: vec![], guarnicion: vec![] });
+    assert_eq!(informes[0].contenido, Contenido::Plaza { faccion: 1, heroes: vec![], guarnicion: vec![], recintos: vec![] });
     let aviso = hechos(&n, "asentamiento.observado");
     assert_eq!((aviso.len(), aviso[0].2.clone()), (1, vec![plaza]));
 }

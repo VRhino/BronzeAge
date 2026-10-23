@@ -1,6 +1,6 @@
 # Contrato 05: la sesión en tiempo real
 
-> **Estado (2026-10-23): el esquema de 4H (T1) está en `proto/`, las órdenes se traducen (T2), la sesión abre los ámbitos con su autorización, `Revocado` y reanudación por versión (T3a) y `HEROE` y `FACCION` llevan ya su contenido completo, con `QUITA` (T3b); falta el de `ASENTAMIENTO`, `CAMPAMENTO`, `VISTA`, `ADMIN` y `BATALLA` (T3c-T3e, T4)** (ver `Docs/Arquitectura/4H_Contraste_y_Plan.md`).
+> **Estado (2026-10-23): el esquema de 4H (T1) está en `proto/`, las órdenes se traducen (T2), la sesión abre los ámbitos con su autorización, `Revocado` y reanudación por versión (T3a), `HEROE` y `FACCION` llevan su contenido completo, con `QUITA` (T3b) y la batalla de Unity va de extremo a extremo por el contrato (T4: ámbito `BATALLA`, ticket congelado, publicación a los servidores de batalla, acuses, token propio, asedio visible e informe de inspección); falta el contenido de `ASENTAMIENTO`, `CAMPAMENTO`, `VISTA` y `ADMIN` (T3c-T3e)** (ver `Docs/Arquitectura/4H_Contraste_y_Plan.md`).
 > **Diseño cerrado de la fase 2 (2026-10-13), sin código.** Sustituye a los contratos 02 (HTTP) y 03 (tiempo real por
 > segmentos) del servidor TypeScript, que quedan en `typescript-final`. El esquema vive en [`proto/bronzeage/v1/`](../../proto/bronzeage/v1/)
 > (Protobuf, D8) y es **la fuente de verdad**: este documento explica el protocolo y las garantías; si se contradicen, gana el `.proto`.
@@ -43,11 +43,11 @@ El servidor suscribe el cliente a los ámbitos que le corresponden; **el cliente
 
 | Ámbito | Contenido | Cuándo (autorización) |
 |---|---|---|
-| `HEROE:heroe-N` | el héroe propio (con sus loadouts), sus escuadras, las columnas en que participa, las caravanas que lleva en su columna o que escolta con una escuadra suya y las batallas en que combate (inventario y equipo, vacíos hasta el catálogo de Conquest) | siempre que la cuenta tenga héroe (el de verdad; si solo tiene héroes de campo del andamiaje de administración, el primero) |
-| `FACCION:f-N` | la Facción propia con sus ciudadanos, sus relaciones y sus tecnologías, sus plazas en resumen, su flota de caravanas, sus pueblos y avanzadas (y las obras de mapa que aún no lo son), sus trueques, sus órdenes de mercado y sus convocatorias (propuestas y memoria de la niebla: sistemas 5 y T3d) | si el héroe tiene Facción |
+| `HEROE:heroe-N` | el héroe propio (con sus loadouts), sus escuadras, las columnas en que participa, las caravanas que lleva en su columna o que escolta con una escuadra suya y sus informes de inspección vigentes (inventario y equipo, vacíos hasta el catálogo de Conquest) | siempre que la cuenta tenga héroe (el de verdad; si solo tiene héroes de campo del andamiaje de administración, el primero) |
+| `FACCION:f-N` | la Facción propia con sus ciudadanos, sus relaciones y sus tecnologías, sus plazas en resumen, su flota de caravanas, sus pueblos y avanzadas (y las obras de mapa que aún no lo son), sus trueques, sus órdenes de mercado, sus convocatorias y las batallas de los dos bandos en que está su Facción, resumidas si no combate (propuestas y memoria de la niebla: sistemas 5 y T3d) | si el héroe tiene Facción |
 | `ASENTAMIENTO:as-N` | la plaza completa (almacén, cola, edificios, cargos, mercado) | mientras el héroe está dentro **y** es ciudadano de la Facción dueña (dentro de una plaza ajena no se ve ningún interior) |
 | `CAMPAMENTO:camp-N` | el campamento de mercenarios (mercado, planta, residentes) | mientras está dentro |
-| `BATALLA:<uuid>` | la batalla en la que combate | mientras combate (T4; aún no existe en el servidor Rust) |
+| `BATALLA:<uuid>` | la batalla en la que combate, entera: ticket congelado, incorporaciones, resultado, su bando y su token (`asignacion_propia`) | mientras combate (el héroe de la sesión o el de campo de su cuenta) y el núcleo conserve la batalla (así ve el resultado); `Revocado{sin_derecho}` si sale y `Revocado{ya_no_existe}` al retirarse |
 | `VISTA:f-N` | el mundo visible a la Facción, filtrado por la niebla, **dentro del rectángulo que fija `CambiarVista`** | desde el primer `CambiarVista` válido de un jugador con Facción (no viaja en la `Bienvenida`: el rectángulo es de la sesión) |
 | `ADMIN:` | todo el estado, sin niebla | solo sesiones de administración (que no tienen ninguno de los demás); un servidor de batalla no tiene ámbitos |
 
@@ -55,7 +55,7 @@ Los derechos se calculan del estado y se reevalúan cuando cambia el héroe (su 
 
 `CambiarVista` (el único ámbito que pide el cliente): fija el rectángulo (`min` ≤ `max`, en milésimas) y el servidor manda la `Foto` de `VISTA` con lo que cae dentro, otra vez en cada cambio de rectángulo (la foto sustituye a la anterior). Sin Facción, o en una sesión de administración, no hay vista: `Aviso{vista.sin_derecho}`; con un rectángulo incompleto o al revés: `Aviso{vista.invalida}`. Una columna que se toca fuera del rectángulo sale con `QUITA`. No hay mensaje para cerrar la vista.
 
-Qué lleva cada ámbito hoy: `HEROE` y `FACCION`, su contenido completo (T3b, abajo); `ASENTAMIENTO`, la plaza como ficha; `VISTA`, las columnas de la propia Facción dentro del rectángulo (sin niebla todavía: nunca lo ajeno); `ADMIN`, todas las columnas y todas las plazas; `CAMPAMENTO`, nada aún (T3c-T3e). Los eventos solo llegan por `HEROE` (T5 les da audiencia).
+Qué lleva cada ámbito hoy: `HEROE`, `FACCION` y `BATALLA`, su contenido completo (T3b y T4, abajo); `ASENTAMIENTO`, la plaza como ficha (con su `batalla_id`); `VISTA`, las columnas de la propia Facción dentro del rectángulo (sin niebla todavía: nunca lo ajeno); `ADMIN`, todas las columnas y todas las plazas; `CAMPAMENTO`, nada aún (T3c-T3e). Los eventos solo llegan por `HEROE` (T5 les da audiencia).
 
 **Qué pertenece a `HEROE` y a `FACCION` (T3b).** El núcleo apunta, al cerrar cada versión, a qué ámbitos pertenece cada entidad que cambia y de cuáles salió (`CambioVersion.pertenencias`; la regla es `proyeccion::audiencia`), así que cada `Delta` lleva `ACTUALIZA` de lo que le pertenece y `QUITA` de lo que desapareció o dejó de ser suyo. Todas viajan **completas** (`reemplaza = true`) y una misma entidad puede estar en dos ámbitos (una caravana adjunta a tu columna es de `HEROE` y de `FACCION`; el cliente la descarta cuando ningún ámbito la tiene):
 
@@ -65,7 +65,7 @@ Qué lleva cada ámbito hoy: `HEROE` y `FACCION`, su contenido completo (T3b, ab
 | `Ejercito` | `HEROE` | las columnas en que participa algún héroe de la cuenta; con `persiguiendo`, `en_batalla`, `batalla_id` y `dentro_de` (`te_sigue` es de la vista del perseguido: T3d) |
 | `Caravana` | `HEROE` y `FACCION` | `FACCION`: toda la flota de las plazas de la Facción (también el carro de acarreo de un pueblo); `HEROE`: las adjuntas a una columna en que participa y las que escolta con una escuadra suya |
 | `Convocatoria` | `FACCION` | las de la Facción; el Líder ve todas las peticiones y cada solicitante la suya (los demás, ninguna) |
-| `Batalla` | `HEROE` | las de los héroes que combaten, sin ticket, incorporaciones ni asignación (T4), con `lado_propio` |
+| `Batalla` | `BATALLA` y `FACCION` | `BATALLA`: la de quien combate, entera. `FACCION`: las de las Facciones de los dos bandos y de quienes combaten; la ve entera quien combate en ella y resumida (sin ticket ni token) el resto, con `lado_para_unirse` si podría unirse. Ya no va a `HEROE` |
 | `Faccion`, `TecnologiasFaccion`, `RelacionPolitica` | `FACCION` | la propia; las relaciones del andamiaje `FijarRelacion` (`rel-<menor>-<mayor>`, la menor figura como `a`) llegan a las dos Facciones y se quitan con `QUITA` |
 | `Asentamiento` | `FACCION` | en resumen (la ficha: Facción, sitio, nivel, zona y los ids de sus pueblos y avanzadas); el interior es de `ASENTAMIENTO` |
 | `Pueblo`, `Avanzada`, `ObraDeMapa` | `FACCION` | un pueblo o una avanzada que se está levantando es una `ObraDeMapa` (`obra-N`), no un `Pueblo`/`Avanzada`; al terminar, la obra se quita y llega el pueblo o la avanzada. Una avanzada que se mejora o se repara es las dos cosas |
@@ -190,6 +190,15 @@ propio combatiente. **Asedio visible desde fuera**: `Asentamiento`, `Pueblo` y `
 unirse. **Caravanas**: `ContextoCaravana.caravanas` lista todas las que se juegan (con los acosadores entran todas las adjuntas) y los carros se nombran `"<caravana_id>:<posición>"` (también en `BattleResult.carros_perdidos`). El terreno de la batalla se
 toma del artefacto de mundo (`BattleMapReference.mapa_id` = hash). **Modalidades nuevas**: asalto de caravana `disputa` / `aguante`,
 saqueo de pueblo y ataque a una avanzada ([`Combate.md`](../Mechanics/Combate.md) §7). Unity decide lo de dentro; el mundo sigue mientras se lucha.
+
+**Cómo lo hace el servidor Rust (4H T4, 2026-10-23).**
+
+- **Qué publica y cuándo.** El ticket sale, a **todas** las sesiones de servidor de batalla conectadas, cuando la batalla queda *pendiente de asignar* con una revisión que aún no se mandó: al abrirse (todos los contextos salvo el asedio), al acabar la convocatoria de un asedio (a los 30 s de mundo) y de nuevo, con la revisión subida, tras una salida `no_conectado` anterior al inicio. Las `IncorporacionBatalla` (con su `secuencia`) salen a todos mientras nadie tiene la batalla y solo al servidor de la asignación después. Un servidor que se conecta recibe, tras la `Bienvenida`, el ticket y las incorporaciones vigentes de las batallas que esperan servidor y de las que ya tiene asignadas.
+- **Quién gana.** La primera `BattleServerAssignment` que procesa el núcleo; las demás reciben un `AcuseBatalla` con `ORDEN_RECHAZADA` y `batalla.ya_asignada`. Los tokens (`tokens_participante` de la asignación y `TokensBatalla` posteriores) los custodia el núcleo; el mensaje saliente `MensajeParaServidorDeBatalla.tokens` no se usa.
+- **Acuses.** Cada mensaje del servidor de batalla recibe su `AcuseBatalla{mensaje, battle_id, resultado, rechazo}` después de lo que ese mensaje haya provocado (p. ej. el ticket nuevo de una salida previa al inicio): `ORDEN_ACEPTADA`, `ORDEN_SIN_CAMBIOS`, `ORDEN_DUPLICADA` (el mismo mensaje otra vez) o `ORDEN_RECHAZADA` con el código (`batalla.invalida`, `batalla.no_existe`, `batalla.ya_asignada`...).
+- **Qué ve cada uno.** `BATALLA:<uuid>` lleva la `Batalla` entera a quien combate: `ticket` (el `BattleTicket` de arriba, congelado: la plaza de un asedio con sus edificios y las celdas de muralla en pie, el nivel, la experiencia y la moral de cada escuadra), `incorporaciones`, `resultado` (una vez aplicado), `lado_propio` y `asignacion_propia` (solo el token de **su** héroe). Quien no combate pero es de la Facción de un bando la ve en `FACCION`, resumida: sin ticket ni token y con `lado_para_unirse` si podría unirse. `Asentamiento`, `Pueblo` y `Avanzada` llevan `batalla_id` mientras se juega la batalla contra ellos.
+- **Pendiente.** Quien no es de la Facción de ningún bando (un neutral que podría unirse al ataque desde fuera) la verá por la `VISTA` con niebla (T3d); hasta entonces la orden `unirse_a_batalla` le sirve si conoce el id.
+- **Informes de inspección.** `InformeInspeccion` (`insp-<héroe>-<objetivo>`) llega a `HEROE` del que inspeccionó, uno por objetivo (`ej-N`, `car-N`, `as-N`), y vale hasta su `expira_en_ms`: el cliente lo descarta al caducar. El de una plaza trae los recintos con alguna celda levantada (`RecintoInforme`: nivel, anillo entero y `avance`).
 
 ## 10. Errores de sesión
 

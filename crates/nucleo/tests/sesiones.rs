@@ -205,6 +205,28 @@ fn de_batalla(cuerpo: pb::mensaje_de_servidor_de_batalla::Cuerpo) -> mc::Cuerpo 
     mc::Cuerpo::Batalla(pb::MensajeDeServidorDeBatalla { cuerpo: Some(cuerpo) })
 }
 
+/// El siguiente mensaje para el servidor de batalla.
+async fn para_el_servidor(c: &mut ClientePrueba) -> pb::mensaje_para_servidor_de_batalla::Cuerpo {
+    match c.esperar().await.cuerpo {
+        Some(ms::Cuerpo::Batalla(m)) => m.cuerpo.expect("un mensaje de batalla con cuerpo"),
+        o => panic!("se esperaba un mensaje de batalla, llegó {o:?}"),
+    }
+}
+
+async fn acuse(c: &mut ClientePrueba) -> pb::AcuseBatalla {
+    match para_el_servidor(c).await {
+        pb::mensaje_para_servidor_de_batalla::Cuerpo::Acuse(a) => a,
+        o => panic!("se esperaba un acuse, llegó {o:?}"),
+    }
+}
+
+/// El código del rechazo que trae el siguiente acuse.
+async fn rechazo_del_acuse(c: &mut ClientePrueba) -> String {
+    let a = acuse(c).await;
+    assert_eq!(a.resultado, pb::Resultado::OrdenRechazada as i32, "{a:?}");
+    a.rechazo.expect("un rechazo trae su código").codigo
+}
+
 #[tokio::test]
 async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_los_aplica_con_idempotencia() {
     use pb::mensaje_de_servidor_de_batalla::Cuerpo;
@@ -228,6 +250,9 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
     // Un servidor de batalla no tiene ningún ámbito: no recibe fotos.
     let (mut svc, b) = ClientePrueba::entrar(w.srv.direccion, hola("svc:srv", TipoCliente::ClienteServidorBatalla)).await;
     assert!(b.ambitos.is_empty() && b.heroe_id.is_none());
+    // La batalla abierta espera servidor: al conectar recibe su ticket.
+    let pb::mensaje_para_servidor_de_batalla::Cuerpo::Ticket(t) = para_el_servidor(&mut svc).await else { panic!("se esperaba el ticket") };
+    assert_eq!((t.battle_id.as_str(), t.ticket_revision), (uuid.as_str(), 0));
     let inicio = |revision| de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 1, battle_id: uuid.clone(), ticket_revision: revision, intento_asignacion_id: "a1".into() }));
     let asignacion = de_batalla(Cuerpo::Asignacion(pb::BattleServerAssignment {
         schema_version: 1,
@@ -239,16 +264,19 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
     }));
     // Lo rechazado vuelve como un aviso con el código estable: inicio sin asignación, batalla que no es de esta partida, esquema de otra versión.
     svc.enviar(inicio(0)).await;
-    assert_eq!(aviso(&mut svc).await.codigo, "batalla.invalida");
+    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.invalida");
     svc.enviar(de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 1, battle_id: "00000000-0000-0000-0000-000000000000".into(), ticket_revision: 0, intento_asignacion_id: "a1".into() }))).await;
-    assert_eq!(aviso(&mut svc).await.codigo, "batalla.no_existe");
+    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.no_existe");
     svc.enviar(de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 2, battle_id: uuid.clone(), ticket_revision: 0, intento_asignacion_id: "a1".into() }))).await;
-    assert_eq!(aviso(&mut svc).await.codigo, "batalla.invalida");
+    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.invalida");
     // Asignación, inicio y resultado se aplican; repetirlos responde bien y no avisa de nada.
     svc.enviar(asignacion.clone()).await;
     svc.enviar(asignacion).await;
     svc.enviar(inicio(0)).await;
     svc.enviar(inicio(0)).await;
+    for esperado in [pb::Resultado::OrdenAceptada, pb::Resultado::OrdenDuplicada, pb::Resultado::OrdenAceptada, pb::Resultado::OrdenDuplicada] {
+        assert_eq!(acuse(&mut svc).await.resultado, esperado as i32, "asignación y inicio se aplican y repetirlos es un duplicado");
+    }
     let resultado = pb::BattleResult {
         schema_version: 1,
         battle_id: uuid.clone(),
@@ -269,9 +297,9 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
     let mut mal = resultado.clone();
     mal.por_escuadra[0].squad_id = "cualquiera".into();
     svc.enviar(de_batalla(Cuerpo::Resultado(mal))).await;
-    assert_eq!(aviso(&mut svc).await.codigo, "batalla.invalida");
+    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.invalida");
     svc.enviar(de_batalla(Cuerpo::Resultado(resultado.clone()))).await; // las cifras (5 + 0 ≠ lo autorizado) no cierran
-    assert_eq!(aviso(&mut svc).await.codigo, "batalla.invalida");
+    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.invalida");
     silencio(&mut svc).await;
     let n = w.parar().await;
     let b = n.batalla(id).unwrap();

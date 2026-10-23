@@ -21,20 +21,20 @@
 //! 0 campamento, 1 columna, 2 escolta de una caravana, 3 fuera} · en_guarnicion bool · reserva_batalla opt_u64 · prestada opt_u64`.
 //! Un informe de inspección: `objetivo{u8: 0 columna, 1 caravana, 2 plaza · u64} · visto_en i64 · expira_en i64 · donde punto · contenido{u8 · payload}`: 0
 //! columna `facción opt_u64 · héroes{n u64 · n × u64} · escuadras{n u64 · n × avistada}`, 1 caravana `escoltada bool · recursos{n u64 · n × u8}`, 2 plaza
-//! `facción u32 · héroes · guarnición{n u64 · n × avistada}`, con una avistada `tropa u8 · cantidad i64 · héroe u64`.
+//! `facción u32 · héroes · guarnición{n u64 · n × avistada} · recintos{n u64 · n × (nivel u8, celdas{n u64 · n × (col i32, fila i32, clase u8)}, avance u32)}` (BAN21), con una avistada `tropa u8 · cantidad i64 · héroe u64`.
 //! Una carga: `n u64 · n × (recurso u8, cantidad i64)`.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_columna::{politica_a_u8, politica_de_u8, ritmo_escribir, ritmo_leer};
 use crate::codec_comercio::{carga_escribir, carga_leer};
-use crate::codec_economia::{recurso_a_u8, recurso_de_u8};
+use crate::codec_economia::{escribir_celdas, leer_celdas, recurso_a_u8, recurso_de_u8};
 use crate::estado_militar::{EstadoMilitar, HeroeNucleo, Relacion};
 use comercio::mercenarios::CupoDiario;
 use militar::catalogo::{Origen, Tropa, TROPAS};
 use militar::convocatoria::{Convocatoria, Integrante, Lugar, Peticion, Seleccion};
 use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::{Atributos, Controlador, Heroe, Loadout, Monedas, Residencia};
-use militar::inspeccion::{Avistada, Contenido, Informe, Objetivo};
+use militar::inspeccion::{Avistada, Contenido, Informe, Objetivo, RecintoAvistado};
 use militar::mercenarios::Reclutas;
 use militar::presencia::{Presencia, Ubicacion};
 
@@ -355,11 +355,17 @@ fn informe_escribir(w: &mut Escritor, i: &Informe) {
             w.u64(recursos.len() as u64);
             recursos.iter().for_each(|&r| w.u8(recurso_a_u8(r)));
         }
-        Contenido::Plaza { faccion, heroes, guarnicion } => {
+        Contenido::Plaza { faccion, heroes, guarnicion, recintos } => {
             w.u8(2);
             w.u32(*faccion);
             lista_u64_escribir(w, heroes);
             avistadas_escribir(w, guarnicion);
+            w.u64(recintos.len() as u64);
+            for RecintoAvistado { nivel, celdas, avance } in recintos {
+                w.u8(*nivel);
+                escribir_celdas(w, celdas);
+                w.u32(*avance);
+            }
         }
     }
 }
@@ -370,7 +376,11 @@ fn informe_leer(r: &mut Lector) -> Result<Informe, ErrorFormato> {
     let contenido = match r.u8()? {
         0 => Contenido::Columna { faccion: opt_u32(r.opt_u64()?)?, heroes: lista_u64_leer(r)?, escuadras: avistadas_leer(r)? },
         1 => Contenido::Caravana { escoltada: r.bool()?, recursos: (0..r.cuenta()?).map(|_| recurso_de_u8(r.u8()?)).collect::<Result<_, _>>()? },
-        2 => Contenido::Plaza { faccion: r.u32()?, heroes: lista_u64_leer(r)?, guarnicion: avistadas_leer(r)? },
+        2 => {
+            let (faccion, heroes, guarnicion) = (r.u32()?, lista_u64_leer(r)?, avistadas_leer(r)?);
+            let recintos = (0..r.cuenta()?).map(|_| Ok(RecintoAvistado { nivel: r.u8()?, celdas: leer_celdas(r)?, avance: r.u32()? })).collect::<Result<_, ErrorFormato>>()?;
+            Contenido::Plaza { faccion, heroes, guarnicion, recintos }
+        }
         _ => return Err(ErrorFormato("contenido de informe desconocido")),
     };
     Ok(Informe { objetivo, visto_en, expira_en, donde, contenido })

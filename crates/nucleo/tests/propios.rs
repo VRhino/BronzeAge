@@ -975,7 +975,7 @@ fn la_columna_dice_a_quien_persigue_y_en_que_lugar_esta_dentro() {
 // ───────────────────────────── 10. Batallas ─────────────────────────────
 
 #[tokio::test]
-async fn la_batalla_de_unity_llega_a_sus_combatientes_sin_ticket_y_con_su_bando() {
+async fn la_batalla_de_unity_llega_a_sus_combatientes_en_su_ambito_y_resumida_a_las_facciones_de_los_dos_bandos() {
     let m = con_mundo!();
     let mut x = escenario_con(m, true);
     // Dos ejércitos de campo (los héroes de campo de ana y de gus, humanos y con tropa) a 2 u uno de otro, lejos de las plazas.
@@ -1001,22 +1001,30 @@ async fn la_batalla_de_unity_llega_a_sus_combatientes_sin_ticket_y_con_su_bando(
     let atacar = orden::Cuerpo::Atacar(pb::OrdenAtacar { heroe_id: ids::heroe(h_ana_campo), objetivo: Some(pb::orden_atacar::Objetivo { tipo: Some(pb::orden_atacar::objetivo::Tipo::EjercitoId(ids::ejercito(c_gus))) }), declara_guerra: Some(true) });
     let (previos, r) = dar_todo(&mut ana, "b1", atacar).await;
     aceptada(&r);
+    // La batalla va a su ámbito propio, `BATALLA:<uuid>`, y no al del héroe; lo que cambia en la columna y en las escuadras sí va al héroe.
     let d = deltas_de(&previos, &format!("HEROE:{h_ana}"));
     assert_eq!(d.len(), 1, "{:?}", etiquetas(&previos));
-    let b = batallas(nuevas(d[0]));
+    assert!(batallas(nuevas(d[0])).is_empty());
+    let columna = ejercitos(nuevas(d[0])).into_iter().find(|c| c.id == ids::ejercito(c_ana)).expect("su columna");
+    let foto_b = previos.iter().find_map(|m| if let ms::Cuerpo::Foto(f) = m { Some(f).filter(|f| ambito(&f.ambito).starts_with("BATALLA:")) } else { None }).expect("la foto de su batalla");
+    let b = batallas(&foto_b.entidades);
     assert_eq!(b.len(), 1);
     let (batalla, uuid) = (b[0], b[0].id.clone());
+    assert_eq!(ambito(&foto_b.ambito), format!("BATALLA:{uuid}"));
     assert_eq!((batalla.estado, batalla.lado_propio, batalla.iniciada_por.as_str()), (pb::EstadoBatalla::BatallaConvocando as i32, Some(pb::LadoId::Atacante as i32), ids::heroe(h_ana_campo).as_str()));
-    assert!(batalla.ticket.is_none() && batalla.incorporaciones.is_empty() && batalla.asignacion_propia.is_none(), "el ticket y la asignación son de T4");
+    assert!(batalla.ticket.is_some() && batalla.asignacion_propia.is_none() && batalla.lado_para_unirse.is_none(), "el combatiente ve el ticket; aún no hay asignación");
     assert_eq!(batalla.bloqueo_ejercito_ids.len(), 2);
-    let columna = ejercitos(nuevas(d[0])).into_iter().find(|c| c.id == ids::ejercito(c_ana)).expect("su columna");
     assert_eq!((columna.en_batalla, columna.batalla_id.as_deref()), (true, Some(uuid.as_str())));
     assert!(escuadrones(nuevas(d[0])).iter().all(|e| e.reserva_batalla.as_ref().is_some_and(|r| r.battle_id == uuid)), "las escuadras que combaten llevan su candado");
-    // gus la ve desde el otro bando; beto, que no combate, no la ve.
+    // gus la ve desde el otro bando; beto, que no combate pero es de F1, la ve resumida por su Facción: sin ticket y sin bando.
     let de_gus = pendiente(&mut gus).await;
-    let b = batallas(nuevas(deltas_de(&de_gus, &format!("HEROE:{h_gus}"))[0]));
+    let b = batallas(&foto_de(&de_gus, &format!("BATALLA:{uuid}")).entidades);
     assert_eq!((b[0].id.as_str(), b[0].lado_propio), (uuid.as_str(), Some(pb::LadoId::Defensor as i32)));
-    assert!(pendiente(&mut beto).await.iter().all(|m| !etiqueta(m).starts_with("delta HEROE")));
+    assert!(deltas_de(&de_gus, &format!("HEROE:{h_gus}")).iter().all(|d| batallas(nuevas(d)).is_empty()));
+    let de_beto = pendiente(&mut beto).await;
+    assert!(de_beto.iter().all(|m| !etiqueta(m).starts_with("foto BATALLA")), "no combate: no tiene su ámbito");
+    let b = batallas(nuevas(deltas_de(&de_beto, "FACCION:f-1")[0]));
+    assert_eq!((b.len(), b[0].id.as_str(), b[0].lado_propio, b[0].ticket.is_none()), (1, uuid.as_str(), None, true));
     w.parar().await;
 }
 

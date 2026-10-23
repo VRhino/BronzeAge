@@ -6,7 +6,7 @@
 //! | `Heroe`, `Escuadra` | `HEROE` del héroe (si es el de su cuenta) |
 //! | `Ejercito` | `HEROE` de cada participante; `VISTA` de su Facción (candidata: la sesión filtra por su rectángulo) |
 //! | `Caravana` | `FACCION` de su plaza de origen; `HEROE` de los participantes de la columna a la que va adjunta y de quienes ceden escolta |
-//! | `Batalla` | `HEROE` de cada héroe que combate en ella |
+//! | `Batalla` | su propio ámbito `BATALLA` (al que tienen derecho los que combaten en ella, `sesiones/ambitos.rs`) y `FACCION` de las Facciones de los dos bandos y de quienes combaten (el asedio visible) |
 //! | `Asentamiento`, `Pueblo`, `Avanzada`, `OrdenMercado`, `Convocatoria` | `FACCION` del dueño (de la plaza madre, de la plaza o de la Facción de la convocatoria) |
 //! | `Acuerdo` | `FACCION` de las dos plazas |
 //! | `Faccion` | `FACCION` de la propia |
@@ -82,7 +82,13 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
                 v.extend(faccion_de_plaza(e, u64::from(c.origen)));
             }
         }
-        Clase::Batalla => v = e.batallas.batallas.get(&id).map(|b| heroes_de(e, b.heroes_que_combaten())).unwrap_or_default(),
+        Clase::Batalla => {
+            if let Some(b) = e.batallas.batallas.get(&id) {
+                let combatientes = b.heroes_que_combaten().filter_map(|h| e.militar.heroes.get(&h)).filter_map(|h| h.faccion);
+                v.push(Ambito::Batalla(id));
+                v.extend(b.ticket.atacante.faccion.into_iter().chain(b.ticket.defensor.faccion).chain(combatientes).map(Ambito::Faccion));
+            }
+        }
         Clase::Asentamiento => v.extend(faccion_de_plaza(e, id)),
         Clase::Pueblo => v.extend(e.asentamientos.values().find(|a| a.economia.pueblo(id).is_some()).map(|a| Ambito::Faccion(a.faccion))),
         Clase::Avanzada => v.extend(e.asentamientos.values().find(|a| a.economia.avanzada(id).is_some()).map(|a| Ambito::Faccion(a.faccion))),

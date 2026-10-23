@@ -1,7 +1,7 @@
 //! Del estado del núcleo a las entidades del contrato 05 (`Cambio`, `Entidad`, `EventoDominio`).
 //!
 //! - [`ambito`]: los ámbitos de la sesión. [`ids`]: los ids de las entidades.
-//! - [`propios`]: las entidades de los ámbitos `HEROE` y `FACCION`. [`audiencia`]: a qué ámbito pertenece cada entidad del registro de cambios.
+//! - [`propios`]: las entidades de los ámbitos `HEROE` y `FACCION` (y la `Batalla` y el informe de inspección). [`audiencia`]: a qué ámbito pertenece cada entidad del registro de cambios. [`batalla`]: el ticket, las incorporaciones y el resultado de una batalla de Unity.
 
 use crate::comando::{Detalle, TipoCreado};
 use crate::estado::{Asentamiento, Ejercito, EventoNucleo};
@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 
 pub mod ambito;
 pub mod audiencia;
+pub mod batalla;
 pub mod ids;
 pub mod propios;
 
@@ -61,8 +62,9 @@ fn ejercito_base(e: &Ejercito, t: Instante) -> pb::Ejercito {
     }
 }
 
-/// La plaza como entidad del contrato. `zona` es el polígono real recortado (`Nucleo::poligono_zona`). Es la ficha: id, Facción, sitio, nivel, zona y los ids de sus pueblos y avanzadas.
-pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Entidad {
+/// La plaza como entidad del contrato. `zona` es el polígono real recortado (`Nucleo::poligono_zona`) y `batalla_id`, la batalla que se juega ahora contra ella (el asedio visible). Es la ficha: id, Facción,
+/// sitio, nivel, zona, los ids de sus pueblos y avanzadas y el asedio.
+pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id: Option<String>) -> pb::Entidad {
     pb::Entidad {
         cuerpo: Some(pb::entidad::Cuerpo::Asentamiento(pb::Asentamiento {
             id: ids::asentamiento(a.id),
@@ -76,6 +78,7 @@ pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto]) -> pb::Entid
             zona: zona.iter().map(|&p| punto(p)).collect(),
             pueblos_ids: a.economia.pueblos.iter().map(|p| ids::pueblo(p.id)).collect(),
             avanzadas_ids: a.economia.avanzadas.iter().map(|v| ids::avanzada(v.id)).collect(),
+            batalla_id,
             ..Default::default()
         })),
     }

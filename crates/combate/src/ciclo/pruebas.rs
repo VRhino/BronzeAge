@@ -13,7 +13,7 @@ fn part(heroe: HeroeId, controlador: Controlador, escuadras: &[(EscuadraId, i64)
         faccion: Some(heroe as u32),
         controlador,
         casillas_libres: 2,
-        escuadras: escuadras.iter().map(|&(id, efectivos)| EscuadraEnBatalla { id, tropa: Tropa::MiliciaLanceros, dueno: Some(heroe), efectivos }).collect(),
+        escuadras: escuadras.iter().map(|&(id, efectivos)| EscuadraEnBatalla { dueno: Some(heroe), ..EscuadraEnBatalla::sin_dueno(id, Tropa::MiliciaLanceros, efectivos) }).collect(),
     }
 }
 
@@ -23,7 +23,7 @@ fn ticket(contexto: Contexto) -> Ticket {
         r(),
         contexto,
         BandoDeTicket::nuevo(Some(1), vec![part(1, Controlador::Humano, &[(10, 25)])], vec![]),
-        BandoDeTicket::nuevo(Some(2), vec![part(2, Controlador::Bot, &[(20, 25)])], vec![EscuadraEnBatalla { id: 30, tropa: Tropa::MiliciaLanceros, dueno: None, efectivos: 13 }]),
+        BandoDeTicket::nuevo(Some(2), vec![part(2, Controlador::Bot, &[(20, 25)])], vec![EscuadraEnBatalla::sin_dueno(30, Tropa::MiliciaLanceros, 13)]),
     )
 }
 

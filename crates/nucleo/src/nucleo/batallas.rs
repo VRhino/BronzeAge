@@ -42,7 +42,7 @@ use crate::estado_batallas::entidad_batalla;
 use crate::estado_militar::Relacion;
 use combate::botin::{repartir_botin, CarroDeColumna};
 use combate::caravana::Modalidad;
-use combate::ciclo::{bloqueos_de, uuid_de_batalla, Asignacion, BandoDeTicket, Batalla, Bloqueo, Bloqueos, CaravanaEnBatalla, Contexto, Efecto, EscuadraEnBatalla, ErrorBatalla, Participante, SalidaBatalla, Ticket, Token};
+use combate::ciclo::{bloqueos_de, uuid_de_batalla, Asignacion, BandoDeTicket, Batalla, Bloqueo, Bloqueos, CaravanaEnBatalla, Contexto, EdificioCongelado, Efecto, EscuadraEnBatalla, ErrorBatalla, Participante, PlazaCongelada, RecintoCongelado, SalidaBatalla, Ticket, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Efectos, Resultado as ResultadoDeBatalla};
 use combate::union::{lado_para_unirse, Donde, ErrorUnion, Reparto};
@@ -121,7 +121,10 @@ pub(super) struct Apertura {
     atacante: BandoDeTicket,
     defensor: BandoDeTicket,
     bloqueo: Bloqueo,
+    /// Solo un asedio: la plaza como está al abrir.
+    plaza: Option<PlazaCongelada>,
 }
+
 /// Lo que ve quien pide su token (`GET /jugador/partidas/:g/batallas/:id/asignacion`, §8.7). BronzeAge nunca verifica el token: solo lo custodia y controla
 /// quién lo lee.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,8 +191,9 @@ fn donde_esta(ubicacion: Ubicacion, contexto: &Contexto) -> Donde {
     }
 }
 
-fn escuadra_en_batalla(s: &Escuadra) -> EscuadraEnBatalla {
-    EscuadraEnBatalla { id: s.id, tropa: s.tropa, dueno: Some(s.heroe), efectivos: s.cantidad }
+/// Una escuadra como entra en el ticket: con su nivel, su experiencia y su moral de `t`, el instante de abrir.
+fn escuadra_en_batalla(s: &Escuadra, t: Instante) -> EscuadraEnBatalla {
+    EscuadraEnBatalla { id: s.id, tropa: s.tropa, dueno: Some(s.heroe), efectivos: s.cantidad, nivel: s.nivel, experiencia: s.experiencia, moral: s.moral_en(t) }
 }
 
 impl Nucleo {
@@ -247,7 +251,12 @@ impl Nucleo {
     /// El `battleId` del contrato de una batalla: un UUID determinista de la partida (su mundo y su semilla) y del id de la batalla.
     // DUDA: el núcleo no conoce un `gameId`: se usa el hash del mundo con la semilla, que identifican la partida mientras no haya dos con el mismo mundo y la misma semilla.
     pub fn uuid_de_batalla(&self, id: u64) -> String {
-        uuid_de_batalla(&format!("{}:{}", self.mundo_hash, self.semilla), id)
+        uuid_de_batalla(&self.id_de_partida(), id)
+    }
+
+    /// El `gameId` del contrato de batalla: el hash del mundo y la semilla.
+    pub fn id_de_partida(&self) -> String {
+        format!("{}:{}", self.mundo_hash, self.semilla)
     }
 
     /// Inversa de [`Nucleo::uuid_de_batalla`]: el id de la partida de un `battleId`, si es de esta partida.
@@ -327,7 +336,7 @@ impl Nucleo {
             .filter(|h| !h.heroe.esta_herido(t))
             .map(|h| {
                 let suyas = h.heroe.escuadras.iter().filter(|s| s.contenedor == Contenedor::Ejercito(columna) && s.con_soldados());
-                self.participante(h, suyas.map(escuadra_en_batalla).collect())
+                self.participante(h, suyas.map(|s| escuadra_en_batalla(s, t)).collect())
             })
             .collect()
     }
@@ -352,16 +361,17 @@ impl Nucleo {
             atacante: self.bando_de_columna(id, t),
             defensor: self.bando_de_columna(x, t),
             bloqueo: Bloqueo { ejercitos: vec![id, x], ..Default::default() },
+            plaza: None,
         }
     }
 
     /// Contra una caravana defiende su escolta cedida y, sin escolta, sus carreteros, que no son de nadie (Doc 3.10, 5.15.4).
     pub(super) fn apertura_de_caravana(&self, t: Instante, heroe: u64, id: u64, x: u64, punto: Punto, modalidad: Modalidad) -> Apertura {
         let k = self.estado.comercio.caravana(x).expect("existe");
-        let escolta: Vec<EscuadraEnBatalla> = k.escolta.iter().filter_map(|c| self.escuadra(c.id).map(|(_, s)| s)).filter(|s| s.con_soldados()).map(escuadra_en_batalla).collect();
+        let escolta: Vec<EscuadraEnBatalla> = k.escolta.iter().filter_map(|c| self.escuadra(c.id).map(|(_, s)| s)).filter(|s| s.con_soldados()).map(|s| escuadra_en_batalla(s, t)).collect();
         let sin_heroe = if escolta.is_empty() {
             let (tropa, efectivos) = self.estado.reglas.economia.combate.batalla.carreteros;
-            vec![EscuadraEnBatalla { id: SIN_ID, tropa, dueno: None, efectivos }]
+            vec![EscuadraEnBatalla::sin_dueno(SIN_ID, tropa, efectivos)]
         } else {
             escolta
         };
@@ -373,6 +383,7 @@ impl Nucleo {
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(faccion, vec![], sin_heroe),
             bloqueo: Bloqueo { ejercitos: vec![id], caravanas: vec![x], ..Default::default() },
+            plaza: None,
         }
     }
 
@@ -380,7 +391,7 @@ impl Nucleo {
     fn bandidos_en_batalla(&self, campamento: u64) -> EscuadraEnBatalla {
         let nivel = self.estado.combate.bandidos[&campamento].nivel;
         let unidades = combate::bandidos::nivel_de(&self.estado.reglas.economia.combate, nivel).unidades;
-        EscuadraEnBatalla { id: SIN_ID, tropa: militar::Tropa::MiliciaLanceros, dueno: None, efectivos: unidades }
+        EscuadraEnBatalla::sin_dueno(SIN_ID, militar::Tropa::MiliciaLanceros, unidades)
     }
 
     /// Contra un campamento de bandidos defiende una escuadra de milicia con las unidades de su nivel, sin dueño ni Facción.
@@ -393,6 +404,7 @@ impl Nucleo {
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(None, vec![], vec![self.bandidos_en_batalla(x)]),
             bloqueo: Bloqueo { ejercitos: vec![id], campamento: Some(x as u32), ..Default::default() },
+            plaza: None,
         }
     }
 
@@ -425,6 +437,7 @@ impl Nucleo {
             atacante: BandoDeTicket::nuevo(None, vec![], vec![self.bandidos_en_batalla(campamento)]),
             defensor,
             bloqueo: Bloqueo { ejercitos: vec![columna], caravanas: bloqueadas, campamento: Some(campamento as u32), ..Default::default() },
+            plaza: None,
         })
     }
 
@@ -439,24 +452,38 @@ impl Nucleo {
             punto: a.posicion,
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
-            defensor: BandoDeTicket::nuevo(Some(a.faccion), vec![], guarnicion.map(escuadra_en_batalla).collect()),
+            defensor: BandoDeTicket::nuevo(Some(a.faccion), vec![], guarnicion.map(|s| escuadra_en_batalla(s, t)).collect()),
             bloqueo: Bloqueo { ejercitos: vec![id], asentamiento: Some(plaza as u32), ..Default::default() },
+            plaza: Some(self.plaza_congelada(plaza)),
         }
+    }
+
+    /// El mapa de un asedio (`SettlementBattleSnapshot`, Batalla_Unity_Ciclo §3.3): los edificios internos de la plaza y los recintos con solo las celdas en pie, tal como están al abrir. La
+    /// posición de cada edificio es el centro de su huella en milésimas de unidad local, y su huella, en celdas con la rotación ya aplicada.
+    fn plaza_congelada(&self, plaza: u64) -> PlazaCongelada {
+        let a = &self.estado.asentamientos[&plaza];
+        let celda = trazado::CELDA_UL;
+        let edificios = self.vista_ciudad(plaza).into_iter().flat_map(|v| v.piezas).filter_map(|p| {
+            let e = a.economia.edificio(p.id)?;
+            Some(EdificioCongelado { id: p.id, tipo: p.tipo.nombre().to_owned(), centro: p.centro, ancho: (p.rect.ancho / celda) as u32, alto: (p.rect.alto / celda) as u32, nivel_interno: e.nivel_interno, estado: e.estado, danado: e.danado })
+        });
+        let recintos = self.recintos_en_pie(plaza).into_iter().map(|r| RecintoCongelado { id: r.id, nivel: r.nivel, celdas: r.celdas });
+        PlazaCongelada { layout_version: trazado::LAYOUT_VERSION, unidades_por_celda: celda as u32, edificios: edificios.collect(), recintos: recintos.collect() }
     }
 
     /// Quien se une a defender desde dentro, con lo que lleva encima: el residente en su plaza, las escuadras de su loadout activo que tiene en el campamento; el resto (un visitante,
     /// o un residente dentro de un pueblo o una avanzada), las de la columna con la que entró. Su liderazgo ya dice cuántas lleva.
-    fn defensor_de_dentro(&self, h: &HeroeNucleo, dentro: Ubicacion) -> Participante {
+    fn defensor_de_dentro(&self, t: Instante, h: &HeroeNucleo, dentro: Ubicacion) -> Participante {
         let en_su_plaza = matches!(dentro, Ubicacion::Asentamiento(a) if h.heroe.residencia == Some(Residencia::Asentamiento(a)));
         let escuadras = if en_su_plaza { loadout_en_el_campamento(h) } else { de_su_columna(h) };
-        self.participante(h, escuadras.into_iter().map(escuadra_en_batalla).collect())
+        self.participante(h, escuadras.into_iter().map(|s| escuadra_en_batalla(s, t)).collect())
     }
 
     /// El saqueo de un pueblo: defienden de oficio la guarnición de serie de mineros (sin dueño) y la Facción de la plaza madre; los de dentro se unen ellos (`UnirseABatalla`). Su
     /// escuadra ya existe (nace al primer ataque); si está a 0 esperando su reposición y nadie se une, el pueblo no tiene defensores.
     pub(super) fn apertura_de_pueblo(&self, t: Instante, heroe: u64, id: u64, pueblo: u64, madre: u64, punto: Punto) -> Apertura {
         let g = &self.estado.combate.guarniciones[&pueblo].escuadra;
-        let mineros = Some(g).filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s) });
+        let mineros = Some(g).filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s, t) });
         let faccion = self.estado.asentamientos[&madre].faccion;
         Apertura {
             contexto: Contexto::SaqueoPueblo { pueblo, punto },
@@ -465,6 +492,7 @@ impl Nucleo {
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(Some(faccion), vec![], mineros.into_iter().collect()),
             bloqueo: Bloqueo { ejercitos: vec![id], pueblo: Some(pueblo), ..Default::default() },
+            plaza: None,
         }
     }
 
@@ -473,8 +501,8 @@ impl Nucleo {
     /// ataque).
     pub(super) fn apertura_de_avanzada(&self, t: Instante, heroe: u64, id: u64, avanzada: u64, madre: u64) -> Apertura {
         let (_, v) = self.avanzada(avanzada).expect("existe");
-        let serie = self.guarnicion_de_serie_de_avanzada(avanzada).iter().filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s) });
-        let jugadores = self.guarnicion_de_jugadores_de_avanzada(avanzada).into_iter().filter(|s| s.con_soldados()).map(escuadra_en_batalla);
+        let serie = self.guarnicion_de_serie_de_avanzada(avanzada).iter().filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s, t) });
+        let jugadores = self.guarnicion_de_jugadores_de_avanzada(avanzada).into_iter().filter(|s| s.con_soldados()).map(|s| escuadra_en_batalla(s, t));
         let faccion = self.estado.asentamientos[&madre].faccion;
         Apertura {
             contexto: Contexto::Avanzada { avanzada, etapa: v.etapa, punto: v.posicion },
@@ -483,6 +511,7 @@ impl Nucleo {
             atacante: self.bando_de_columna(id, t),
             defensor: BandoDeTicket::nuevo(Some(faccion), vec![], serie.chain(jugadores).collect()),
             bloqueo: Bloqueo { ejercitos: vec![id], avanzada: Some(avanzada), ..Default::default() },
+            plaza: None,
         }
     }
 
@@ -495,7 +524,7 @@ impl Nucleo {
         for e in ap.atacante.sin_heroe.iter_mut().chain(ap.defensor.sin_heroe.iter_mut()).filter(|e| e.id == SIN_ID) {
             e.id = self.nuevo_id();
         }
-        let ticket = Ticket::nuevo(&cr, ap.contexto, ap.atacante, ap.defensor);
+        let ticket = Ticket { plaza: ap.plaza, ..Ticket::nuevo(&cr, ap.contexto, ap.atacante, ap.defensor) };
         let b = Batalla::abrir(&cr, id, ap.iniciada_por, ap.punto, ticket, ap.bloqueo, t);
         self.reservar(&b.escuadras_con_candado(), Some(id));
         for c in &b.bloqueo.ejercitos {
@@ -506,6 +535,7 @@ impl Nucleo {
         }
         self.estado.batallas.batallas.insert(id, b);
         self.tr.tocar(Clase::Batalla, id);
+        self.tocar_lo_disputado(id);
         self.programar_batalla(id);
         self.hecho_de_batalla(t, id, Hecho::Abierta, None);
         id
@@ -550,12 +580,28 @@ impl Nucleo {
         let clave = self.estado.generaciones.clave(entidad);
         if cerrada {
             self.estado.cola.programar(retirada, PRIO_BATALLA, clave, Carga::Batalla(SucesoBatalla::Retira));
+            self.tocar_lo_disputado(id);
             return;
         }
         if let Some(h) = convocatoria.filter(|&h| h > t) {
             self.estado.cola.programar(h, PRIO_BATALLA, clave, Carga::Batalla(SucesoBatalla::FinConvocatoria));
         }
         self.estado.cola.programar(expira_en.max(t), PRIO_BATALLA, clave, Carga::Batalla(SucesoBatalla::Vence));
+    }
+
+    /// Marca lo que la batalla disputa (la plaza asediada, el pueblo saqueado o la avanzada atacada): su `batalla_id` cambia al abrirse la batalla y al cerrarse.
+    fn tocar_lo_disputado(&mut self, id: u64) {
+        let Some(b) = self.estado.batallas.batallas.get(&id) else { return };
+        let (plaza, pueblo, avanzada) = (b.bloqueo.asentamiento, b.bloqueo.pueblo, b.bloqueo.avanzada);
+        if let Some(plaza) = plaza {
+            self.tr.tocar(Clase::Asentamiento, u64::from(plaza));
+        }
+        if let Some(pueblo) = pueblo {
+            self.tr.tocar(Clase::Pueblo, pueblo);
+        }
+        if let Some(avanzada) = avanzada {
+            self.tr.tocar(Clase::Avanzada, avanzada);
+        }
     }
 
     /// Cuenta la batalla: lo oyen las columnas que combaten y las plazas implicadas (la asediada, la madre del pueblo y el origen de cada caravana).
@@ -761,9 +807,31 @@ impl Nucleo {
     /// a los neutrales y enemigos del dueño, no a sus amigos (2026-10-22, tercera ronda). Quien está dentro de otro lugar no se une a ninguno de los dos bandos.
     fn unirse_a_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64, pedido: Option<Lado>) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
-        let invalida = |m: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, m, v);
         self.autorizar_heroe(p, heroe, false)?;
         let b = self.batalla_mut(id)?.clone();
+        let (lado, donde, columna) = self.elegibilidad(t, heroe, &b, pedido)?;
+        let hn = self.heroe(heroe).expect("autorizado");
+        let entran = match donde {
+            Donde::Dentro => vec![self.defensor_de_dentro(t, hn, hn.heroe.presencia.ubicacion)],
+            _ => self.heroes_de_columna(columna.expect("comprobado"), t),
+        };
+        let reservadas: Vec<u64> = entran.iter().flat_map(|p| p.escuadras.iter().map(|e| e.id)).collect();
+        let secuencias = self.batalla_mut(id)?.unirse(t, lado, entran, columna).map_err(|e| rechazo_de_batalla(e, v))?;
+        self.reservar(&reservadas, Some(id));
+        if let Some(c) = columna {
+            self.apartar_columna(t, c);
+        }
+        self.hecho_de_batalla(t, id, Hecho::Refuerzos, None);
+        Ok(secuencias.into_iter().map(u64::from).collect())
+    }
+
+    /// Las condiciones de §7 para que `heroe` se una a `b`, en su orden: sano, sin estar ya en una batalla, a su alcance (con su columna si está fuera; dentro de lo que se disputa no hace falta
+    /// ni columna ni distancia), con su columna libre y con un bando que le toque. Devuelve el bando, dónde está respecto de lo que se disputa y su columna. No toca nada, así que también sirve para
+    /// saber qué podría hacer ([`Nucleo::lado_para_unirse`]).
+    fn elegibilidad(&self, t: Instante, heroe: u64, b: &Batalla, pedido: Option<Lado>) -> Result<(Lado, Donde, Option<u64>), Respuesta> {
+        let v = self.estado.version;
+        let invalida = |m: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, m, v);
+        let hn = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(heroe), v))?;
         if self.heroe_herido(heroe) {
             return Err(invalida("estás herido: no puedes entrar en batalla"));
         }
@@ -771,7 +839,6 @@ impl Nucleo {
         if bloqueos.heroes.contains(&heroe) {
             return Err(invalida("ya estás en una batalla"));
         }
-        let hn = self.heroe(heroe).expect("autorizado");
         let donde = donde_esta(hn.heroe.presencia.ubicacion, &b.ticket.contexto);
         let columna = self.estado.ejercito_de_heroe(heroe);
         // Quien está fuera llega con su columna y a su alcance; quien está dentro está donde se disputa y no necesita ni columna ni distancia.
@@ -790,19 +857,16 @@ impl Nucleo {
         // DUDA: «el Rey admite otras Facciones en sus ataques» es política (sistema 5) y solo cuenta ya para las caravanas: hasta entonces nadie lo admite.
         let reparto = Reparto { contexto: b.ticket.contexto.clone(), atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false, donde };
         let lado = lado_para_unirse(&reparto, hn.faccion, personal, pedido).map_err(|e| rechazo_de_union(e, v))?;
+        Ok((lado, donde, columna))
+    }
 
-        let entran = match donde {
-            Donde::Dentro => vec![self.defensor_de_dentro(hn, hn.heroe.presencia.ubicacion)],
-            _ => self.heroes_de_columna(columna.expect("comprobado"), t),
-        };
-        let reservadas: Vec<u64> = entran.iter().flat_map(|p| p.escuadras.iter().map(|e| e.id)).collect();
-        let secuencias = self.batalla_mut(id)?.unirse(t, lado, entran, columna).map_err(|e| rechazo_de_batalla(e, v))?;
-        self.reservar(&reservadas, Some(id));
-        if let Some(c) = columna {
-            self.apartar_columna(t, c);
-        }
-        self.hecho_de_batalla(t, id, Hecho::Refuerzos, None);
-        Ok(secuencias.into_iter().map(u64::from).collect())
+    /// El bando al que `heroe` podría unirse ahora a la batalla `id` (`Batalla.lado_para_unirse`): el de las mismas condiciones que `UnirseABatalla`, sin elegir bando. `None` si no puede: la batalla no
+    /// está activa, ya combate (en ella o en otra), salió de ella, no llega o no es de ninguno.
+    // DUDA: no mira si el bando está lleno (`capacidadMaxima`): la orden lo rechaza al intentarlo, y la capacidad de un asedio es 15.
+    pub fn lado_para_unirse(&self, heroe: u64, id: u64) -> Option<Lado> {
+        let t = self.estado.ahora;
+        let b = self.batalla(id).filter(|b| b.activa(t) && !b.salio(heroe))?;
+        self.elegibilidad(t, heroe, b, None).ok().map(|(lado, _, _)| lado)
     }
 
     /// `cancelarBatalla`: quien la inició se echa atrás antes de que empiece la partida; nadie pierde nada.

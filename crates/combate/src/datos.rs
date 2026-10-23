@@ -91,6 +91,9 @@ pub struct ReglasBatalla {
     /// La defensa de una caravana sin escolta cuando juega Unity: tropa y soldados.
     pub carreteros: (Tropa, i64),
     pub casillas_inventario: u32,
+    /// Las versiones de los catálogos de Conquest que el ticket declara (`versionCatalogoHeroe` y `versionCatalogoObjetos`).
+    pub version_catalogo_heroe: String,
+    pub version_catalogo_objetos: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -282,6 +285,8 @@ impl Reglas {
                 conservar_cerradas: minutos(&ba, "conservarCerradasMinutos"),
                 carreteros,
                 casillas_inventario: entero(&ba, "casillasInventario") as u32,
+                version_catalogo_heroe: ba["versionCatalogoHeroe"].as_str().expect("versionCatalogoHeroe").to_owned(),
+                version_catalogo_objetos: ba["versionCatalogoObjetos"].as_str().expect("versionCatalogoObjetos").to_owned(),
             },
             bandidos: ReglasBandidos {
                 niveles: [nivel_de_bandidos(&bd, "1"), nivel_de_bandidos(&bd, "2"), nivel_de_bandidos(&bd, "3")],

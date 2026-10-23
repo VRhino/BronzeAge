@@ -1086,6 +1086,10 @@ fn con_un_humano_el_ataque_abre_una_batalla_de_unity_sin_convocatoria_con_capaci
     assert_eq!(e.n.heroe(heroe).unwrap().heroe.escuadra(escuadra).unwrap().reserva_batalla, Some(id), "el candado");
     assert_eq!(dato(&hechos(&e.n, "batalla.abierta")[0], "contexto"), 5);
     assert_eq!(hechos(&e.n, "batalla.abierta")[0].2, vec![plaza]);
+    // El asedio se ve desde fuera: la avanzada lleva el id de la batalla que se juega contra ella.
+    let ficha = |n: &Nucleo| { let (madre, v) = n.avanzada(av).unwrap(); nucleo::proyeccion::propios::avanzada(n, madre, v).batalla_id };
+    assert_eq!(ficha(&e.n), Some(e.n.uuid_de_batalla(id)));
+    assert_eq!(e.n.batalla_sobre(Ubicacion::Avanzada(av)).map(|b| b.id), Some(id));
     // La avanzada no se toca mientras dura: ni mejorarla ni destruirla ni guarnecerla ni atacarla otra vez.
     let (_, ana) = e.columna("ana", 1, pos);
     assert_eq!(e.rechazada("ana", Comando::MejorarAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
@@ -1537,7 +1541,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN20");
+    assert_eq!(&bytes[..5], b"BAN21");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -2076,7 +2080,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN20");
+        assert_eq!(&bytes[..5], b"BAN21");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));

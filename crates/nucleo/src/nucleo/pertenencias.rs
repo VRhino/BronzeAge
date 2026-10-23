@@ -92,7 +92,7 @@ impl Nucleo {
             revisar.extend([Clase::Pueblo, Clase::Avanzada, Clase::OrdenMercado, Clase::Acuerdo, Clase::Caravana]);
         }
         if cambia(Clase::Heroe, &cuenta_con_varios) {
-            revisar.extend([Clase::Ejercito, Clase::Escuadra, Clase::Caravana, Clase::Batalla]);
+            revisar.extend([Clase::Ejercito, Clase::Escuadra, Clase::Caravana]);
         }
         for clase in revisar {
             let conocidas: Vec<u64> = mapa.range((clase, 0)..=(clase, u64::MAX)).map(|(&(_, id), _)| id).collect();

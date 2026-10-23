@@ -891,7 +891,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN20");
+    assert_eq!(&bytes[..5], b"BAN21");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -919,6 +919,10 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
         ("casillas", batalla(|b| b.ticket.atacante.participantes[0].casillas_libres -= 1)),
         ("efectivos", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].efectivos -= 1)),
         ("tropa", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].tropa = Tropa::Arqueros)),
+        ("escuadra.nivel", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].nivel += 1)),
+        ("escuadra.experiencia", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].experiencia += 1)),
+        ("escuadra.moral", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].moral -= 1)),
+        ("plaza", batalla(|b| b.ticket.plaza = Some(combate::ciclo::PlazaCongelada { layout_version: 3, unidades_por_celda: 3, edificios: vec![], recintos: vec![] }))),
         ("sin_heroe", batalla(|b| b.ticket.defensor.sin_heroe[0].efectivos -= 1)),
         ("incorporacion.lado", batalla(|b| b.incorporaciones[0].lado = Lado::Defensor)),
         ("incorporacion.secuencia", batalla(|b| b.incorporaciones[0].secuencia += 1)),
@@ -2006,7 +2010,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN20");
+        assert_eq!(&bytes[..5], b"BAN21");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();
@@ -2135,6 +2139,8 @@ fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarn
     assert_eq!((bt.ticket.defensor.faccion, bt.ticket.defensor.sin_heroe.len(), bt.ticket.defensor.sin_heroe[0].efectivos), (Some(1), 1, 30), "los 30 mineros de serie, con la Facción de la plaza madre");
     assert_eq!(bt.bloqueo.pueblo, Some(pueblo));
     assert_eq!(codigo(&e.ord("ana", Comando::DestruirPueblo { pueblo })), rechazos::BATALLA_BLOQUEADO, "un pueblo en una batalla no recibe órdenes");
+    let uuid = e.n.uuid_de_batalla(id);
+    assert_eq!(nucleo::proyeccion::propios::pueblo(&e.n, madre, e.n.pueblo(pueblo).unwrap().1).batalla_id, Some(uuid), "el asedio se ve desde fuera: el pueblo lleva la batalla que se juega contra él");
     let otro = e.ejercito("gus", 3, sitio, &[Tropa::EspadachinesBronce]);
     assert_eq!(codigo(&e.atacar("gus", otro.1, ObjetivoAtaque::Pueblo(pueblo), true)), rechazos::BATALLA_BLOQUEADO);
     en_curso(&mut e.n, id, t + MIN, &[saqueador.1]);

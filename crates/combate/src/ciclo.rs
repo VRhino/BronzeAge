@@ -13,11 +13,14 @@ use crate::avanzada::Etapa;
 use crate::caravana::Modalidad;
 use crate::datos::Reglas;
 use crate::resolucion::Lado;
-use base::{Instante, Punto};
+use asentamiento::edificio::Estado as EstadoEdificio;
+use base::{Instante, Mil, Punto};
+use militar::escuadra::MORAL_MAXIMA;
 use militar::heroe::Controlador;
 use militar::Tropa;
 use militar::{AsentamientoId, BatallaId, CampamentoId, CaravanaId, ColumnaId, EscuadraId, FaccionId, HeroeId};
 use std::collections::BTreeSet;
+use trazado::CeldaMuro;
 
 pub use crate::resultado::{Efectos, ErrorResultado, Resultado};
 
@@ -72,7 +75,8 @@ impl Contexto {
     }
 }
 
-/// Una escuadra autorizada para la batalla: `efectivos` es la **cantidad al abrir**, la fuerza reservada; el resultado cierra sobre esto.
+/// Una escuadra autorizada para la batalla: `efectivos` es la **cantidad al abrir**, la fuerza reservada; el resultado cierra sobre esto. Su nivel, su experiencia y su moral son los
+/// del instante de abrir (el `SquadSnapshot` congelado del ticket).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EscuadraEnBatalla {
     pub id: EscuadraId,
@@ -80,6 +84,18 @@ pub struct EscuadraEnBatalla {
     /// El héroe dueño. Las escuadras sin héroe (guarnición, escolta) pueden tener dueño; las de bandidos y carreteros, no.
     pub dueno: Option<HeroeId>,
     pub efectivos: i64,
+    pub nivel: u8,
+    /// Experiencia acumulada, en milésimas de punto.
+    pub experiencia: Mil,
+    /// 0 a 100, en milésimas.
+    pub moral: Mil,
+}
+
+impl EscuadraEnBatalla {
+    /// Una escuadra que no es de nadie (carreteros, bandidos): nivel 1, sin experiencia y con la moral al máximo; no persiste entre batallas.
+    pub fn sin_dueno(id: EscuadraId, tropa: Tropa, efectivos: i64) -> Self {
+        Self { id, tropa, dueno: None, efectivos, nivel: 1, experiencia: 0, moral: MORAL_MAXIMA }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,6 +124,41 @@ impl BandoDeTicket {
     }
 }
 
+/// Un edificio interno de la plaza como estaba al abrirse el asedio (`EdificioEnBatalla`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EdificioCongelado {
+    /// `n` del id de texto `ed-<plaza>-<n>` del contrato.
+    pub id: u32,
+    /// El nombre del tipo en el catálogo.
+    pub tipo: String,
+    /// Centro de la huella, en milésimas de unidad local (origen en el centro del Centro Urbano, `y` hacia abajo).
+    pub centro: Punto,
+    /// Huella en celdas, con la rotación ya aplicada.
+    pub ancho: u32,
+    pub alto: u32,
+    pub nivel_interno: u8,
+    pub estado: EstadoEdificio,
+    pub danado: bool,
+}
+
+/// Un recinto de muralla con solo las celdas que estaban en pie al abrirse el asedio y el nivel que tenían en pie.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecintoCongelado {
+    /// `n` del id de texto `recinto-<plaza>-<n>` del contrato.
+    pub id: u32,
+    pub nivel: u8,
+    pub celdas: Vec<CeldaMuro>,
+}
+
+/// El mapa de un asedio (`SettlementBattleSnapshot`): la plaza como estaba al abrirse. Lo que se construye o se mejora mientras dura se aplica a la plaza real, no a esto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlazaCongelada {
+    pub layout_version: u32,
+    pub unidades_por_celda: u32,
+    pub edificios: Vec<EdificioCongelado>,
+    pub recintos: Vec<RecintoCongelado>,
+}
+
 /// El `BattleTicket`, congelado al abrir.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ticket {
@@ -118,6 +169,8 @@ pub struct Ticket {
     pub duracion_maxima: i64,
     pub atacante: BandoDeTicket,
     pub defensor: BandoDeTicket,
+    /// Solo un asedio: la plaza congelada. Los demás contextos se juegan en el mapa del mundo.
+    pub plaza: Option<PlazaCongelada>,
 }
 
 impl Ticket {
@@ -127,7 +180,7 @@ impl Ticket {
         atacante.capacidad = contexto.capacidad(r);
         defensor.capacidad = contexto.capacidad(r);
         let duracion_maxima = contexto.duracion(r);
-        Self { revision: 0, contexto, duracion_maxima, atacante, defensor }
+        Self { revision: 0, contexto, duracion_maxima, atacante, defensor, plaza: None }
     }
 
     pub fn bando(&self, lado: Lado) -> &BandoDeTicket {

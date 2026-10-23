@@ -59,6 +59,10 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// Anotada en `Docs/Mecanicas a desarrollar.md`, sección de paridad.
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN21: BAN20 con lo que 4H (T4) congela en el ticket de una batalla de Unity (`codec_batallas`): la plaza de un asedio (`Ticket::plaza`: edificios internos y recintos con las celdas en pie, `layoutVersion` y
+/// `unidadesPorCelda`) y el nivel, la experiencia y la moral de cada escuadra al abrir (`EscuadraEnBatalla`); y, en el informe de inspección de una plaza ajena, sus recintos con el anillo entero
+/// y cuántas celdas están levantadas (`codec_militar`). BAN20 se rechaza: su ticket no congelaba nada de esto.
+///
 /// BAN20: BAN19 con los recintos de muralla (fase de Murallas, segunda tanda, 2026-10-22): cada plaza los guarda en su economía (`codec_economia`: id, nivel y celdas del anillo en pie con su
 /// clase, avance, mejora aparte, cita de la siguiente celda, cuándo se comprometió y cuándo se cerró por primera vez) y la ciudad de la plaza (`codec_ciudad`) **deja de guardarlos**: los
 /// recibe derivados al leerla. El bloque `MURALLA` entra en la huella de las reglas. BAN19 se rechaza: su ciudad guardaba solo muros, puertas y un «completo» por recinto, sin nivel, avance ni mejora.
@@ -92,7 +96,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN20";
+const MAGIA: &[u8; 5] = b"BAN21";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -920,11 +924,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN20`): los cuatro primeros dicen la familia («BAN2» es la vigente; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN21`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 y 21, y solo el 21 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
-            if r.u8()? != MAGIA[4] {
-                return Err(ErrorFormato("no es un estado del núcleo"));
+            match r.u8()? {
+                b'1' => {}
+                b'0' => return Err(ErrorFormato("foto del formato BAN20 (el ticket de una batalla no congela la plaza del asedio ni el nivel, la experiencia y la moral de cada escuadra, y el informe de inspección de una plaza no trae sus recintos): ya no se admite")),
+                _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else {
             match (magia == *b"BAN1").then(|| r.u8()).transpose()? {

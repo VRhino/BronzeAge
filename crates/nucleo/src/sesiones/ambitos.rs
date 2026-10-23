@@ -18,7 +18,7 @@ use super::depositar;
 use crate::estado::{CambioVersion, Clase, EventoNucleo};
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ambito::Ambito;
-use crate::proyeccion::audiencia::heroe_de_sesion;
+use crate::proyeccion::audiencia::{heroe_de_sesion, principal};
 use crate::proyeccion::{evento_dominio, ids, propios};
 use base::Punto;
 use contrato::v1 as pb;
@@ -88,6 +88,9 @@ pub(super) fn derechos(n: &Nucleo, s: &Sesion) -> BTreeSet<Ambito> {
         }
         _ => {}
     }
+    // Las batallas en que combate (el suyo o el héroe de campo de su cuenta), también las cerradas mientras el núcleo las conserve: así ve el resultado.
+    let e = n.estado();
+    d.extend(n.batallas().filter(|b| b.heroes_que_combaten().any(|c| e.militar.heroes.get(&c).is_some_and(|x| principal(e, x) == Some(h.heroe.id)))).map(|b| Ambito::Batalla(b.id)));
     d
 }
 
@@ -98,7 +101,7 @@ pub(super) fn derechos(n: &Nucleo, s: &Sesion) -> BTreeSet<Ambito> {
 pub(super) fn reanudable(n: &Nucleo, s: &Sesion, a: Ambito, k: u64) -> bool {
     let Some(mut registros) = n.cambios_desde(k) else { return false };
     match a {
-        Ambito::Heroe(_) | Ambito::Faccion(_) => k >= n.pertenencias_desde(),
+        Ambito::Heroe(_) | Ambito::Faccion(_) | Ambito::Batalla(_) => k >= n.pertenencias_desde(),
         Ambito::Admin => true,
         _ => s.heroe.is_some_and(|h| registros.all(|cv| !cv.tocados.contiene(Clase::Heroe, h))),
     }
@@ -109,20 +112,21 @@ pub(super) fn foto(n: &Nucleo, s: &Sesion, a: Ambito, version: u64) -> pb::Foto 
     let (estado, t) = (n.estado(), n.ahora());
     let de = |clase: Clase, ids: Vec<u64>| ids.into_iter().flat_map(|id| propios::proyectar(n, s.heroe, clase, id).existen).map(|(_, _, cuerpo)| pb::Entidad { cuerpo: Some(cuerpo) }).collect::<Vec<_>>();
     let entidades = match a {
-        Ambito::Heroe(_) | Ambito::Faccion(_) => n.entidades_de(a).into_iter().flat_map(|(clase, id)| de(clase, vec![id])).collect(),
+        Ambito::Heroe(_) | Ambito::Faccion(_) | Ambito::Batalla(_) => n.entidades_de(a).into_iter().flat_map(|(clase, id)| de(clase, vec![id])).collect(),
         Ambito::Vista(f) => de(Clase::Ejercito, estado.ejercitos.values().filter(|e| e.columna.faccion == Some(f) && s.ve(e.posicion_en(t))).map(|e| e.id).collect()),
         Ambito::Asentamiento(id) => de(Clase::Asentamiento, vec![id]),
         Ambito::Admin => de(Clase::Ejercito, estado.ejercitos.keys().copied().collect()).into_iter().chain(de(Clase::Asentamiento, estado.asentamientos.keys().copied().collect())).collect(),
         // T3c.
         Ambito::Campamento(_) => Vec::new(),
     };
-    pb::Foto { ambito: Some(a.a_contrato()), version, entidades, niebla: None }
+    pb::Foto { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), version, entidades, niebla: None }
 }
 
 /// Por qué se revoca un ámbito.
 fn motivo(n: &Nucleo, a: Ambito) -> &'static str {
     match a {
         Ambito::Asentamiento(p) if !n.estado().asentamientos.contains_key(&p) => "ya_no_existe",
+        Ambito::Batalla(b) if n.batalla(b).is_none() => "ya_no_existe",
         _ => "sin_derecho",
     }
 }
@@ -151,12 +155,12 @@ pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, c
             evento_dominio(ev, version, heroes)
         })
         .collect();
-    pb::Delta { ambito: Some(a.a_contrato()), desde, hasta, cambios: cambios.collect(), eventos, niebla: None }
+    pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta, cambios: cambios.collect(), eventos, niebla: None }
 }
 
 /// ¿Cambia algo de lo que decide los derechos de una sesión (el héroe, su Facción, su plaza, su campamento)?
 pub(super) fn cambia_derechos(cv: &CambioVersion) -> bool {
-    [Clase::Heroe, Clase::Faccion, Clase::Asentamiento, Clase::Campamento].into_iter().any(|c| !cv.tocados.de(c).is_empty())
+    [Clase::Heroe, Clase::Faccion, Clase::Asentamiento, Clase::Campamento, Clase::Batalla].into_iter().any(|c| !cv.tocados.de(c).is_empty())
 }
 
 /// Las sesiones abiertas y el índice de quién tiene abierto cada ámbito: ninguna se abre ni se cierra sin pasar por aquí, así que el índice siempre coincide con `abiertos`.
@@ -186,6 +190,11 @@ impl Mesa {
 
     pub(super) fn sesiones(&self) -> impl Iterator<Item = (SesionId, &Sesion)> {
         self.sesiones.iter().map(|(&id, s)| (id, s))
+    }
+
+    /// Las sesiones de servidores de batalla (`CLIENTE_SERVIDOR_BATALLA`): reciben los tickets y no tienen ningún ámbito.
+    pub(super) fn servidores(&self) -> impl Iterator<Item = (SesionId, &Sesion)> {
+        self.sesiones().filter(|(_, s)| s.rol == pb::TipoCliente::ClienteServidorBatalla)
     }
 
     pub(super) fn insertar(&mut self, id: SesionId, s: Sesion) {
@@ -258,7 +267,7 @@ impl Mesa {
         let version = n.version();
         for a in perdidos {
             self.cerrar(id, a);
-            envios.push((id, Difusion::Revocado(pb::Revocado { ambito: Some(a.a_contrato()), motivo: motivo(n, a).into() })));
+            envios.push((id, Difusion::Revocado(pb::Revocado { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), motivo: motivo(n, a).into() })));
         }
         for a in nuevos {
             let Some(s) = self.sesiones.get(&id) else { return };

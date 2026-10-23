@@ -462,6 +462,7 @@ dependencies = [
  "asentamiento",
  "base",
  "serde_json",
+ "trazado",
 ]
 
 [[package]]

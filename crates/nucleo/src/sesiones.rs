@@ -6,7 +6,7 @@
 //! - **Conecta**: se contesta el `oneshot` con la `Bienvenida` y a continuación se depositan la `Foto` o la `Delta` de reanudación de cada ámbito.
 //!
 //! # Ámbitos
-//! Cada sesión recibe los ámbitos del contrato 05 §3 a los que tiene derecho (`ambitos`): `HEROE:<héroe>`, `FACCION:<facción>`, `ASENTAMIENTO:<plaza>` y `CAMPAMENTO:<campamento>` mientras está
+//! Cada sesión recibe los ámbitos del contrato 05 §3 a los que tiene derecho (`ambitos`): `HEROE:<héroe>`, `FACCION:<facción>`, `BATALLA:<uuid>` de cada batalla en que combate, `ASENTAMIENTO:<plaza>` y `CAMPAMENTO:<campamento>` mientras está
 //! dentro, `VISTA:<facción>` desde que fija su rectángulo con `CambiarVista`, y `ADMIN:` en una sesión de administración. El servidor decide: cuando el estado cambia el derecho (el héroe sale de la
 //! plaza, cambia de Facción...) manda `Revocado` del ámbito que pierde y la `Foto` del que gana. `Delta.desde` es la última versión que esa sesión tiene del ámbito: las versiones que no tocan nada
 //! suyo no le cuestan ningún mensaje (cada sesión lleva su propia versión de cada ámbito, que avanza al recibir una `Delta` o una `Foto`). Al reconectar, `Hola.versiones_conocidas` decide por
@@ -28,11 +28,12 @@ use crate::comando::{rechazos, Comando, Peticion, Resultado, Respuesta};
 use crate::estado::CambioVersion;
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ambito::Ambito;
+use crate::proyeccion::batalla::{incorporacion, ticket, SCHEMA_VERSION};
 use crate::proyeccion::ids::{self, parse_escuadra, parse_heroe};
 use crate::proyeccion::{detalle_de_rechazo, referencia_creada};
 use ambitos::{cambia_derechos, delta, derechos, es_jugador, foto, reanudable, Mesa, Sesion};
 use base::Punto;
-use combate::ciclo::{Asignacion, EscuadraDeSalida, Instancia, MotivoSalida, SalidaBatalla, Token};
+use combate::ciclo::{Asignacion, Batalla, EscuadraDeSalida, EstadoBatalla, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
 use militar::heroe::Monedas;
@@ -46,13 +47,19 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 const ESPERA_MAXIMA_MS: i64 = 500;
-/// La versión del esquema del contrato de batalla que habla este servidor (`SCHEMA_VERSION`).
-const SCHEMA_VERSION: u32 = 1;
+
+/// Lo que se mandó a los servidores de batalla de una batalla: la revisión de su ticket y la última incorporación (su secuencia).
+struct Publicada {
+    revision: u32,
+    incorporacion: u32,
+}
 
 struct Actor {
     nucleo: Nucleo,
     reloj: RelojCompartido,
     mesa: Mesa,
+    /// Lo que ya se mandó a los servidores de batalla de cada batalla activa.
+    publicadas: BTreeMap<u64, Publicada>,
     /// Última versión cuyos cambios ya se repartieron.
     entregada: u64,
 }
@@ -63,7 +70,7 @@ pub fn lanzar(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<Com
     nucleo.conectar_reloj(reloj.clone());
     nucleo.seguir_pertenencias();
     let entregada = nucleo.version();
-    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), entregada };
+    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada };
     tokio::spawn(actor.correr(rx))
 }
 
@@ -153,12 +160,13 @@ impl Actor {
             self.mesa.quitar(vieja);
         }
         let v = self.nucleo.version();
+        let servidor_de_batalla = (rol == pb::TipoCliente::ClienteServidorBatalla).then(|| cliente.clone());
         let mut s = Sesion::nueva(&self.nucleo, cliente, rol, tx.clone());
         // Por cada ámbito al que tiene derecho: reanuda si el cliente conserva una versión que el registro alcanza; si no, foto.
         let derechos = derechos(&self.nucleo, &s);
         let mut reanudan: BTreeMap<Ambito, u64> = BTreeMap::new();
         for &a in &derechos {
-            let k = hola.versiones_conocidas.get(&a.clave()).copied().filter(|&k| reanudable(&self.nucleo, &s, a, k));
+            let k = hola.versiones_conocidas.get(&a.clave(&|b| self.nucleo.uuid_de_batalla(b))).copied().filter(|&k| reanudable(&self.nucleo, &s, a, k));
             s.abiertos.insert(a, k.unwrap_or(v));
             reanudan.extend(k.map(|k| (a, k)));
         }
@@ -182,11 +190,15 @@ impl Actor {
             if decision == pb::DecisionReanudacion::ReanudaConDeltas {
                 avances.push(a);
             }
-            ambitos.push(pb::AmbitoSuscrito { ambito: Some(a.a_contrato()), version_actual: v, decision: decision as i32 });
+            ambitos.push(pb::AmbitoSuscrito { ambito: Some(a.a_contrato(&|b| self.nucleo.uuid_de_batalla(b))), version_actual: v, decision: decision as i32 });
             mensajes.extend(mensaje);
         }
         for a in avances {
             self.mesa.avanzar(sesion, a, v);
+        }
+        // Un servidor de batalla que llega recibe las batallas que esperan servidor y las que ya tenía asignadas.
+        if let Some(servidor) = servidor_de_batalla {
+            mensajes.extend(self.batallas_de(&servidor).into_iter().map(Difusion::Batalla));
         }
         let bienvenida = pb::Bienvenida {
             sesion_id: format!("s{sesion}"),
@@ -282,6 +294,7 @@ impl Actor {
         }
         self.entregada = hasta;
         self.mesa.entregar(envios);
+        self.publicar_batallas();
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -314,18 +327,65 @@ impl Actor {
     /// fase 4H). Repetir un mensaje ya aplicado no cambia nada ni avisa de nada.
     fn batalla(&mut self, sesion: SesionId, mensaje: pb::MensajeDeServidorDeBatalla) {
         let Some(s) = self.mesa.get(sesion) else { return };
-        let servidor = s.cliente.clone();
+        let (servidor, tx) = (s.cliente.clone(), s.tx.clone());
+        let (nombre, battle_id) = identificar(&mensaje);
         let respuesta = match self.traducir_batalla(mensaje) {
             Ok((peticion_id, comando)) => {
                 let r = self.nucleo.aplicar(Peticion::de_servidor_de_batalla(&servidor, &peticion_id, comando));
+                // Lo que el mensaje cambió (una revisión nueva del ticket, por ejemplo) sale antes del acuse.
                 self.distribuir();
                 r
             }
             Err(r) => r,
         };
-        if let Resultado::Rechazada { codigo, mensaje, .. } = respuesta.resultado {
-            self.avisar(sesion, codigo, mensaje);
+        let (resultado, rechazo) = resultado_y_rechazo(&respuesta);
+        let acuse = pb::AcuseBatalla { mensaje: nombre.into(), battle_id, resultado: resultado as i32, rechazo };
+        if !depositar(&tx, Difusion::Batalla(pb::MensajeParaServidorDeBatalla { cuerpo: Some(pb::mensaje_para_servidor_de_batalla::Cuerpo::Acuse(acuse)) })) {
+            self.mesa.quitar(sesion);
         }
+    }
+
+    // ───────────────────────────── Tickets para los servidores de batalla ─────────────────────────────
+
+    /// El ticket vigente de una batalla y sus incorporaciones vigentes con secuencia mayor que `desde`.
+    fn mensajes_de(&self, b: &Batalla, con_ticket: bool, desde: u32) -> Vec<pb::MensajeParaServidorDeBatalla> {
+        use pb::mensaje_para_servidor_de_batalla::Cuerpo;
+        let mensaje = |c| pb::MensajeParaServidorDeBatalla { cuerpo: Some(c) };
+        let nuevas = self.nucleo.incorporaciones_vigentes(b.id).into_iter().filter(|i| i.secuencia > desde);
+        con_ticket.then(|| mensaje(Cuerpo::Ticket(ticket(&self.nucleo, b)))).into_iter().chain(nuevas.map(|i| mensaje(Cuerpo::Incorporacion(incorporacion(&self.nucleo, b, i))))).collect()
+    }
+
+    /// Lo que un servidor de batalla que acaba de conectar necesita: las batallas que esperan servidor y las que ya tenía asignadas, cada una con su ticket y sus incorporaciones.
+    fn batallas_de(&self, servidor: &str) -> Vec<pb::MensajeParaServidorDeBatalla> {
+        let t = self.nucleo.ahora();
+        let suyas = |b: &&Batalla| b.pendiente_de_asignar(t) || (b.activa(t) && b.asignacion.as_ref().is_some_and(|a| a.servidor == servidor));
+        self.nucleo.batallas().filter(suyas).flat_map(|b| self.mensajes_de(b, true, 0)).collect()
+    }
+
+    /// Publica a los servidores de batalla conectados lo que cambió en las batallas activas (decisión 7 del autor: el ticket va a todos y gana la primera asignación). El ticket sale cuando la
+    /// batalla queda pendiente de asignar con una revisión que aún no se mandó (al abrirse, al acabar la convocatoria de un asedio y al reabrirse tras una salida previa al inicio); las
+    /// incorporaciones, a todos mientras nadie la tiene y solo al servidor de la asignación después. Lo que se publica con ningún servidor conectado lo recoge el que llegue (`batallas_de`).
+    fn publicar_batallas(&mut self) {
+        let t = self.nucleo.ahora();
+        self.publicadas.retain(|id, _| self.nucleo.batalla(*id).is_some_and(|b| b.activa(t)));
+        let mut envios: Vec<(SesionId, Difusion)> = Vec::new();
+        for b in self.nucleo.batallas_activas() {
+            let publicada = self.publicadas.get(&b.id);
+            let ticket_nuevo = b.pendiente_de_asignar(t) && publicada.is_none_or(|p| p.revision != b.ticket.revision);
+            if publicada.is_none() && !ticket_nuevo {
+                continue;
+            }
+            let desde = if ticket_nuevo { 0 } else { publicada.map_or(0, |p| p.incorporacion) };
+            let mensajes = self.mensajes_de(b, ticket_nuevo, desde);
+            let hasta = self.nucleo.incorporaciones_vigentes(b.id).iter().map(|i| i.secuencia).max().unwrap_or(0).max(desde);
+            // Con la batalla asignada, solo el servidor que la tiene oye sus incorporaciones.
+            let dueno = b.asignacion.as_ref().filter(|_| b.estado != EstadoBatalla::Convocando).map(|a| a.servidor.as_str());
+            for (sesion, _) in self.mesa.servidores().filter(|(_, s)| dueno.is_none_or(|d| s.cliente == d)) {
+                envios.extend(mensajes.iter().map(|m| (sesion, Difusion::Batalla(m.clone()))));
+            }
+            self.publicadas.insert(b.id, Publicada { revision: b.ticket.revision, incorporacion: hasta });
+        }
+        self.mesa.entregar(envios);
     }
 
     /// Del mensaje del contrato al comando del núcleo, con el id de petición con que se recuerda (un reintento idéntico responde como duplicado).
@@ -438,15 +498,33 @@ impl Actor {
     }
 }
 
-pub fn resultado_orden(peticion_id: &str, r: &Respuesta, uuid_de_batalla: &dyn Fn(u64) -> String) -> pb::ResultadoOrden {
-    let (resultado, rechazo) = match &r.resultado {
+/// El resultado de una orden (o de un mensaje del servidor de batalla) en el contrato, y su rechazo si lo hubo.
+fn resultado_y_rechazo(r: &Respuesta) -> (pb::Resultado, Option<pb::RechazoOrden>) {
+    match &r.resultado {
         Resultado::Aceptada => (pb::Resultado::OrdenAceptada, None),
         Resultado::SinCambios => (pb::Resultado::OrdenSinCambios, None),
         Resultado::Duplicada => (pb::Resultado::OrdenDuplicada, None),
         Resultado::Rechazada { codigo, mensaje, detalle } => {
             (pb::Resultado::OrdenRechazada, Some(pb::RechazoOrden { codigo: (*codigo).into(), mensaje: mensaje.clone(), detalle: detalle.as_ref().map(detalle_de_rechazo) }))
         }
-    };
+    }
+}
+
+/// Qué mensaje es y de qué batalla (para el acuse, aunque el mensaje no se pueda traducir).
+fn identificar(m: &pb::MensajeDeServidorDeBatalla) -> (&'static str, String) {
+    use pb::mensaje_de_servidor_de_batalla::Cuerpo;
+    match &m.cuerpo {
+        Some(Cuerpo::Asignacion(a)) => ("asignacion", a.battle_id.clone()),
+        Some(Cuerpo::Inicio(i)) => ("inicio", i.battle_id.clone()),
+        Some(Cuerpo::Tokens(t)) => ("tokens", t.battle_id.clone()),
+        Some(Cuerpo::Salida(s)) => ("salida", s.battle_id.clone()),
+        Some(Cuerpo::Resultado(r)) => ("resultado", r.battle_id.clone()),
+        None => ("", String::new()),
+    }
+}
+
+pub fn resultado_orden(peticion_id: &str, r: &Respuesta, uuid_de_batalla: &dyn Fn(u64) -> String) -> pb::ResultadoOrden {
+    let (resultado, rechazo) = resultado_y_rechazo(r);
     pb::ResultadoOrden {
         peticion_id: peticion_id.into(),
         resultado: resultado as i32,
