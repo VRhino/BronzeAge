@@ -682,6 +682,36 @@ fn tramo_sin_bandidos(e: &Esc) -> (Punto, Punto) {
     panic!("sin un tramo libre de bandidos cerca de A");
 }
 
+/// La administración (`ADMIN`, 4H T3e) ve la batalla entera —el ticket, las incorporaciones y la asignación que ganó, con su instancia— y **nunca** un token: ni el de la asignación, ni el de las
+/// incorporaciones, ni el propio de nadie. Los jugadores, al revés: su token y no la asignación.
+#[tokio::test]
+async fn la_administracion_ve_la_batalla_entera_con_su_asignacion_y_nunca_un_token() {
+    use prost::Message;
+    let m = con_mundo!();
+    let Asedio { w, uuid, mut ana, mut carla, mut admin, a, h, .. } = asedio_listo(m).await;
+    let [h_ana, h_beto, h_carla, h_nora, _] = &h;
+    let mut sa = a;
+    aceptado(&sa.mandar(asignacion(&uuid, "intento-a", 0, &[h_ana, h_beto, h_nora])).await, "asignacion");
+    aceptada(&dar_todo(&mut carla, "u-carla", unirse(&uuid, h_carla)).await.1);
+    assert_eq!(sa.incorporacion().await.participante.unwrap().heroe_id, *h_carla);
+    aceptado(&sa.mandar(tokens(&uuid, "intento-a", &[h_carla])).await, "tokens");
+    let suya = batalla_hasta(&mut ana, &format!("BATALLA:{uuid}"), |b| b.asignacion_propia.is_some()).await;
+    assert!(suya.asignacion.is_none(), "un jugador ve su token, nunca la asignación");
+
+    // Todo lo que le llegó a la administración desde la asignación, y la foto de una sesión de administración nueva.
+    let mut recibido = pendiente(&mut admin).await;
+    let ultima = batallas_de(&recibido, "ADMIN:").last().copied().cloned().expect("la batalla llega a la administración");
+    let (_, _, foto) = w.conectar(hola("ok:admin2", TipoCliente::ClienteAdminWeb)).await;
+    assert_eq!(batallas_de(&foto, "ADMIN:"), [&ultima], "foto + deltas = foto nueva");
+    recibido.extend(foto);
+    let asignada = ultima.asignacion.as_ref().expect("con la asignación que ganó");
+    assert_eq!((asignada.intento_asignacion_id.as_str(), asignada.instancia.as_ref().unwrap().host.as_str(), asignada.tokens_participante.len()), ("intento-a", "unity-intento-a.test", 0));
+    assert!(ultima.ticket.is_some() && ultima.incorporaciones.len() == 1 && ultima.asignacion_propia.is_none() && ultima.lado_propio.is_none() && ultima.lado_para_unirse.is_none(), "{ultima:?}");
+    let bytes: Vec<u8> = recibido.into_iter().flat_map(|c| pb::MensajeDeServidor { cuerpo: Some(c), ..Default::default() }.encode_to_vec()).collect();
+    assert!(!bytes.windows(4).any(|w| w == b"tok-"), "ningún token de batalla viaja a la administración");
+    w.parar().await;
+}
+
 #[tokio::test]
 async fn los_bandidos_que_acosan_a_una_columna_de_bots_juegan_una_batalla_sin_humanos_y_sin_iniciador_que_el_servidor_toma_sin_tokens() {
     let m = con_mundo!();

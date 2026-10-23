@@ -358,4 +358,7 @@ message Batalla {
   optional LadoId lado_para_unirse = 19;
   // Solo en la proyección y solo al propio combatiente, cuando la batalla ya tiene asignación y token para él.
   optional AsignacionPropia asignacion_propia = 20;
+  // Solo en el ámbito ADMIN (4H T3e): la asignación que ganó (intento, revisión e instancia del servidor de batalla), con `tokens_participante`
+  // SIEMPRE vacío: los tokens son de cada combatiente y ni la administración los ve.
+  optional BattleServerAssignment asignacion = 21;
 }

@@ -287,7 +287,7 @@ impl<'n> Mirada<'n> {
 
         // Campamentos de bandidos que se ven ahora (sin memoria: aparecen y desaparecen).
         for b in e.combate.bandidos.values().filter(|b| rect.contiene(b.posicion) && self.ve(b.posicion)) {
-            v.push(visible(pb::TipoEntidad::CampamentoBandidos, ids::bandidos(b.id), Sello(n.version_de(Clase::Bandidos, b.id), 0), move || Some(Cuerpo::CampamentoBandidos(campamento_bandidos(n, b)))));
+            v.push(visible(pb::TipoEntidad::CampamentoBandidos, ids::bandidos(b.id), Sello(n.version_de(Clase::Bandidos, b.id), 0), move || Some(Cuerpo::CampamentoBandidos(propios::campamento_bandidos(n, b)))));
         }
 
         // Campamentos de mercenarios explorados, o donde el héroe reside o está.
@@ -302,7 +302,7 @@ impl<'n> Mirada<'n> {
         for b in n.batallas_activas() {
             let suya = self.faccion.is_some_and(|f| [b.ticket.atacante.faccion, b.ticket.defensor.faccion].contains(&Some(f)));
             if rect.contiene(b.punto) && (suya || self.ve(b.punto)) {
-                v.push(visible(pb::TipoEntidad::Batalla, n.uuid_de_batalla(b.id), Sello(n.version_de(Clase::Batalla, b.id), 0), move || Some(Cuerpo::Batalla(propios::batalla(n, b, viewer)))));
+                v.push(visible(pb::TipoEntidad::Batalla, n.uuid_de_batalla(b.id), Sello(n.version_de(Clase::Batalla, b.id), 0), move || Some(Cuerpo::Batalla(propios::batalla(n, b, propios::Espectador::Heroe(viewer))))));
             }
         }
 
@@ -354,7 +354,7 @@ impl<'n> Mirada<'n> {
     /// Lo propio de una clase (las mismas entidades que en `FACCION`: la ficha de la plaza; el pueblo, la avanzada y sus obras).
     fn propias_de(&self, clase: Clase, id: u64, version: u64) -> Vec<Visible<'_>> {
         let n = self.n;
-        propios::proyectar(n, None, clase, id).existen.into_iter().map(|(tipo, eid, cuerpo)| visible(tipo, eid, Sello(version, 0), move || Some(cuerpo.clone()))).collect()
+        propios::proyectar(n, propios::Espectador::Heroe(None), clase, id).existen.into_iter().map(|(tipo, eid, cuerpo)| visible(tipo, eid, Sello(version, 0), move || Some(cuerpo.clone()))).collect()
     }
 
     /// La columna ajena (`EjercitoAvistado`): quién es, de quién, de qué tipo, quiénes van (los rombos), si está en formación, dónde está y el tramo visible de su plan; `te_sigue` si persigue a una
@@ -585,23 +585,6 @@ fn ficha_conocida(s: Sitio, id: String, f: Ficha) -> pb::FichaConocida {
         conocido_en_ms: f.conocido_en,
         radio_potencial: matches!(s, Sitio::Plaza(_)).then_some(f.datos.radio),
         tipo: tipo as i32,
-    }
-}
-
-/// Un campamento de bandidos tal cual: dónde, su nivel y su poder, su bosque y de dónde salió (su plaza, el anillo de un campamento o una veta).
-fn campamento_bandidos(n: &Nucleo, b: &crate::estado_combate::CampamentoBandidos) -> pb::CampamentoBandidos {
-    use crate::estado_combate::OrigenBandidos;
-    let r = &n.estado().reglas.economia.combate;
-    pb::CampamentoBandidos {
-        id: ids::bandidos(b.id),
-        version: n.version_de(Clase::Bandidos, b.id),
-        posicion: Some(punto(b.posicion)),
-        bosque_id: b.bosque.map(|x| format!("bosque-{x}")).unwrap_or_default(),
-        asentamiento_id: if let OrigenBandidos::Plaza(a) = b.origen { Some(ids::asentamiento(a)) } else { None },
-        campamento_mercenarios_id: if let OrigenBandidos::Anillo(c) = b.origen { Some(ids::campamento(c)) } else { None },
-        veta_id: if let OrigenBandidos::Veta(v) = b.origen { Some(format!("veta-{v}")) } else { None },
-        nivel: u32::from(b.nivel),
-        poder: (combate::bandidos::nivel_de(r, b.nivel).poder / 1000).max(0) as u32,
     }
 }
 

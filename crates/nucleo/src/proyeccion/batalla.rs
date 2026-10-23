@@ -11,7 +11,7 @@ use super::propios::{atributos, celdas, nombre_de_heroe, CLASE_POR_DEFECTO};
 use super::{ids, punto};
 use crate::nucleo::Nucleo;
 use combate::caravana::Modalidad;
-use combate::ciclo::{BandoDeTicket, Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla, Incorporacion, Participante, PlazaCongelada};
+use combate::ciclo::{Asignacion, BandoDeTicket, Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla, Incorporacion, Participante, PlazaCongelada};
 use combate::resolucion::Lado;
 use combate::resultado::{Botin, Razon, Resultado};
 use contrato::v1 as pb;
@@ -176,6 +176,19 @@ pub fn ticket(n: &Nucleo, b: &Batalla) -> pb::BattleTicket {
 /// Quien se unió después del ticket.
 pub fn incorporacion(n: &Nucleo, b: &Batalla, i: &Incorporacion) -> pb::IncorporacionBatalla {
     pb::IncorporacionBatalla { schema_version: SCHEMA_VERSION, battle_id: n.uuid_de_batalla(b.id), secuencia: i.secuencia, lado: lado(i.lado) as i32, participante: Some(participante(n, &i.participante)) }
+}
+
+/// La asignación que ganó, **sin los tokens** (`tokens_participante` vacío): lo que ve la administración (`ADMIN`). Los tokens son de cada combatiente (`Batalla.asignacion_propia`).
+pub fn asignacion_sin_tokens(n: &Nucleo, b: &Batalla, a: &Asignacion) -> pb::BattleServerAssignment {
+    let i = &a.instancia;
+    pb::BattleServerAssignment {
+        schema_version: SCHEMA_VERSION,
+        battle_id: n.uuid_de_batalla(b.id),
+        ticket_revision: a.revision,
+        intento_asignacion_id: a.intento.clone(),
+        instancia: Some(pb::InstanciaDeBatalla { host: i.host.clone(), puerto: u32::from(i.puerto), protocolo: i.protocolo.clone() }),
+        tokens_participante: Vec::new(),
+    }
 }
 
 /// El resultado aplicado, tal como lo mandó Unity (se guarda entero en la batalla).

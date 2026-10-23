@@ -1,6 +1,7 @@
 //! Las entidades de los ámbitos propios, `HEROE` y `FACCION` (contrato 05 §3, 4H T3b), y el campamento de mercenarios (`CAMPAMENTO`): el héroe con sus escuadras y loadouts, las columnas en que participa, las caravanas que le
 //! tocan, las convocatorias y las batallas en que combate; y de la Facción, sus plazas en resumen, su flota, sus relaciones y tecnologías, sus pueblos y avanzadas (con sus obras),
-//! sus trueques y sus órdenes de mercado. Cada función va del estado del núcleo a la entidad del contrato; [`proyectar`] reúne las de una clase del registro de cambios.
+//! sus trueques y sus órdenes de mercado; y los campamentos de bandidos. Cada función va del estado del núcleo a la entidad del contrato; [`proyectar`] reúne las de una clase del registro de cambios.
+//! `ADMIN` (T3e) usa estas mismas proyecciones para todo el mundo, con [`Espectador::Admin`].
 //!
 //! Qué ámbito recibe qué lo decide [`super::audiencia`]; aquí solo se dice **qué es** cada cosa en el contrato. Las entidades viajan completas (`reemplaza = true`, decisión 2).
 //!
@@ -32,6 +33,14 @@ use std::collections::BTreeMap;
 
 /// Una entidad del contrato lista para viajar: su clase, su id y su cuerpo.
 pub type Proyectada = (pb::TipoEntidad, String, Cuerpo);
+
+/// Quién mira: el héroe de una sesión de jugador (`None` sin héroe) o la administración (`ADMIN`), que lo ve todo sin redactar menos lo que es secreto de cada jugador (los tokens de batalla).
+/// Decide lo que de una entidad depende de quién la mira: las peticiones de una convocatoria y lo que se ve de una batalla.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Espectador {
+    Heroe(Option<u64>),
+    Admin,
+}
 
 pub(super) fn cantidades(c: impl IntoIterator<Item = (Recurso, Mil)>) -> pb::Cantidades {
     pb::Cantidades { por_id: c.into_iter().map(|(r, n)| (r.nombre().to_owned(), n)).collect() }
@@ -308,8 +317,12 @@ fn seleccion(s: &Seleccion) -> pb::SeleccionDeSalida {
     pb::SeleccionDeSalida { escuadron_ids: s.escuadras.iter().map(|&e| ids::escuadra(e)).collect(), carga: Some(carga(&s.carga)) }
 }
 
-/// La convocatoria tal como la ve `viewer`: su Líder ve todas las peticiones y cada solicitante la suya.
-pub fn convocatoria(c: &Convocatoria, viewer: Option<u64>, version: u64) -> pb::Convocatoria {
+/// La convocatoria tal como la ve `quien`: su Líder y la administración ven todas las peticiones y cada solicitante la suya.
+pub fn convocatoria(c: &Convocatoria, quien: Espectador, version: u64) -> pb::Convocatoria {
+    let ve = |heroe: u64| match quien {
+        Espectador::Admin => true,
+        Espectador::Heroe(v) => v == Some(c.lider) || v == Some(heroe),
+    };
     let (lugar_es_campamento, lugar_id) = match c.lugar {
         Lugar::Asentamiento(a) => (false, ids::asentamiento(u64::from(a))),
         Lugar::Campamento(k) => (true, ids::campamento(k)),
@@ -326,19 +339,19 @@ pub fn convocatoria(c: &Convocatoria, viewer: Option<u64>, version: u64) -> pb::
         peticiones: c
             .peticiones
             .iter()
-            .filter(|p| viewer == Some(c.lider) || viewer == Some(p.heroe))
+            .filter(|p| ve(p.heroe))
             .map(|p| pb::PeticionConvocatoria { heroe_id: ids::heroe(p.heroe), pedido_en_ms: p.pedido_en, expira_en_ms: p.expira_en, seleccion: Some(seleccion(&p.seleccion)) })
             .collect(),
         creada_en_ms: c.creada_en,
     }
 }
 
-/// La batalla tal como la ve `viewer` (el héroe de la sesión). Quien combate en ella la ve entera: el ticket congelado, las incorporaciones, el resultado, su bando y, si ya hay asignación y
+/// La batalla tal como la ve `quien`. Quien combate en ella la ve entera: el ticket congelado, las incorporaciones, el resultado, su bando y, si ya hay asignación y
 /// token para él, cómo conectar con el servidor de batalla (`asignacion_propia`, solo suyo). Quien no combate ve lo que hace falta para decidir si se une: el estado, lo que se bloquea y, si podría unirse, a
-/// qué bando (`lado_para_unirse`).
+/// qué bando (`lado_para_unirse`). La administración la ve entera como quien combate, más la asignación que ganó, y **nunca** un token (ni el propio de nadie ni los de la asignación).
 // DUDA: `lado_para_unirse` se calcula al proyectar (cuando la batalla cambia o la sesión pide la foto): si el espectador se acerca o se aleja después, no se actualiza hasta el siguiente cambio de la
 // batalla; la orden `unirse_a_batalla` vuelve a comprobarlo.
-pub fn batalla(n: &Nucleo, b: &Batalla, viewer: Option<u64>) -> pb::Batalla {
+pub fn batalla(n: &Nucleo, b: &Batalla, quien: Espectador) -> pb::Batalla {
     let estado = match b.estado {
         EstadoBatalla::Convocando => pb::EstadoBatalla::BatallaConvocando,
         EstadoBatalla::Asignada => pb::EstadoBatalla::BatallaAsignada,
@@ -349,7 +362,12 @@ pub fn batalla(n: &Nucleo, b: &Batalla, viewer: Option<u64>) -> pb::Batalla {
     };
     // El héroe del espectador que combate en ella: el suyo o, en una cuenta con columnas de campo, el de campo que combate por la cuenta.
     let e = n.estado();
+    let (viewer, admin) = match quien {
+        Espectador::Heroe(v) => (v, false),
+        Espectador::Admin => (None, true),
+    };
     let propio = viewer.and_then(|v| b.heroes_que_combaten().find(|&h| e.militar.heroes.get(&h).is_some_and(|x| audiencia::principal(e, x) == Some(v))));
+    let entera = admin || propio.is_some();
     let asignacion_propia = propio.filter(|_| b.activa(n.ahora())).and_then(|h| match n.token_de_jugador(h, b.id) {
         TokenDeJugador::Token { instancia, token, expira_en } => Some(pb::AsignacionPropia { instancia: Some(pb::InstanciaDeBatalla { host: instancia.host, puerto: u32::from(instancia.puerto), protocolo: instancia.protocolo }), token, expira_en_ms: expira_en }),
         _ => None,
@@ -360,8 +378,8 @@ pub fn batalla(n: &Nucleo, b: &Batalla, viewer: Option<u64>) -> pb::Batalla {
         estado: estado as i32,
         iniciada_por: if n.heroe(b.iniciada_por).is_some() { ids::heroe(b.iniciada_por) } else { String::new() },
         punto: Some(punto(b.punto)),
-        ticket: propio.map(|_| batalla::ticket(n, b)),
-        incorporaciones: propio.map_or_else(Vec::new, |_| b.incorporaciones.iter().map(|i| batalla::incorporacion(n, b, i)).collect()),
+        ticket: entera.then(|| batalla::ticket(n, b)),
+        incorporaciones: if entera { b.incorporaciones.iter().map(|i| batalla::incorporacion(n, b, i)).collect() } else { Vec::new() },
         bloqueo_ejercito_ids: b.bloqueo.ejercitos.iter().map(|&e| ids::ejercito(e)).collect(),
         bloqueo_caravana_ids: b.bloqueo.caravanas.iter().map(|&c| ids::caravana(c)).collect(),
         bloqueo_asentamiento_id: b.bloqueo.asentamiento.map(|a| ids::asentamiento(u64::from(a))),
@@ -369,12 +387,13 @@ pub fn batalla(n: &Nucleo, b: &Batalla, viewer: Option<u64>) -> pb::Batalla {
         expira_en_ms: b.expira_en,
         convocatoria_hasta_ms: b.convocatoria_hasta,
         iniciada_en_ms: b.iniciada_en,
-        resultado: propio.and(b.resultado.as_ref()).map(|r| batalla::resultado(n, b, r)),
+        resultado: b.resultado.as_ref().filter(|_| entera).map(|r| batalla::resultado(n, b, r)),
         aplicada_en_ms: b.aplicada_en,
         cerrada_en_ms: b.cerrada_en,
         lado_propio: propio.and_then(|h| b.lado_de(h)).map(|l| batalla::lado(l) as i32),
         lado_para_unirse: propio.is_none().then(|| viewer.and_then(|v| n.lado_para_unirse(v, b.id))).flatten().map(|l| batalla::lado(l) as i32),
         asignacion_propia,
+        asignacion: b.asignacion.as_ref().filter(|_| admin).map(|a| batalla::asignacion_sin_tokens(n, b, a)),
     }
 }
 
@@ -520,6 +539,25 @@ pub fn obra_de_avanzada(n: &Nucleo, madre: Option<u64>, v: &Avanzada) -> Option<
     })
 }
 
+// ───────────────────────────── Bandidos ─────────────────────────────
+
+/// Un campamento de bandidos tal cual: dónde, su nivel y su poder, su bosque y de dónde salió (su plaza, el anillo de un campamento o una veta).
+pub fn campamento_bandidos(n: &Nucleo, b: &crate::estado_combate::CampamentoBandidos) -> pb::CampamentoBandidos {
+    use crate::estado_combate::OrigenBandidos;
+    let r = &n.estado().reglas.economia.combate;
+    pb::CampamentoBandidos {
+        id: ids::bandidos(b.id),
+        version: n.version_de(Clase::Bandidos, b.id),
+        posicion: Some(punto(b.posicion)),
+        bosque_id: b.bosque.map(|x| format!("bosque-{x}")).unwrap_or_default(),
+        asentamiento_id: if let OrigenBandidos::Plaza(a) = b.origen { Some(ids::asentamiento(a)) } else { None },
+        campamento_mercenarios_id: if let OrigenBandidos::Anillo(c) = b.origen { Some(ids::campamento(c)) } else { None },
+        veta_id: if let OrigenBandidos::Veta(v) = b.origen { Some(format!("veta-{v}")) } else { None },
+        nivel: u32::from(b.nivel),
+        poder: (combate::bandidos::nivel_de(r, b.nivel).poder / 1000).max(0) as u32,
+    }
+}
+
 // ───────────────────────────── Comercio ─────────────────────────────
 
 fn lineas(ls: &[Linea]) -> Vec<pb::LineaTrueque> {
@@ -577,8 +615,8 @@ pub struct Proyeccion {
     pub posibles: Vec<(pb::TipoEntidad, String)>,
 }
 
-/// Proyecta la entidad `(clase, id)` para `viewer` (el héroe de la sesión, que decide qué peticiones y qué bando ve). Las clases que no viajan a `HEROE` ni a `FACCION` no tienen proyección.
-pub fn proyectar(n: &Nucleo, viewer: Option<u64>, clase: Clase, id: u64) -> Proyeccion {
+/// Proyecta la entidad `(clase, id)` para `quien` (el héroe de la sesión, que decide qué peticiones y qué bando ve, o la administración). `Interior` no es una entidad: es la plaza (`interior`).
+pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyeccion {
     use pb::TipoEntidad as T;
     let e = n.estado();
     let un = |tipo: T, id: String, cuerpo: Option<Cuerpo>| Proyeccion { posibles: vec![(tipo, id.clone())], existen: cuerpo.into_iter().map(|c| (tipo, id.clone(), c)).collect() };
@@ -594,14 +632,14 @@ pub fn proyectar(n: &Nucleo, viewer: Option<u64>, clase: Clase, id: u64) -> Proy
         }
         Clase::Escuadra => un(T::Escuadron, ids::escuadra(id), n.escuadra(id).map(|(_, s)| Cuerpo::Escuadron(escuadron(n, s)))),
         Clase::Caravana => un(T::Caravana, ids::caravana(id), e.comercio.caravana(id).map(|c| Cuerpo::Caravana(caravana(n, c)))),
-        Clase::Convocatoria => un(T::Convocatoria, ids::convocatoria(id), e.militar.convocatorias.get(&id).map(|c| Cuerpo::Convocatoria(convocatoria(c, viewer, n.version_de(Clase::Convocatoria, id))))),
+        Clase::Convocatoria => un(T::Convocatoria, ids::convocatoria(id), e.militar.convocatorias.get(&id).map(|c| Cuerpo::Convocatoria(convocatoria(c, quien, n.version_de(Clase::Convocatoria, id))))),
         Clase::Acuerdo => un(T::AcuerdoTrueque, ids::acuerdo(id), e.comercio.acuerdo(id).map(|a| Cuerpo::AcuerdoTrueque(trueque(n, a)))),
         Clase::OrdenMercado => un(
             T::OrdenMercado,
             ids::orden_de_mercado(id),
             e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).find(|o| o.id == id).map(|o| Cuerpo::OrdenMercado(orden_de_mercado(n, o))),
         ),
-        Clase::Batalla => un(T::Batalla, n.uuid_de_batalla(id), n.batalla(id).map(|b| Cuerpo::Batalla(batalla(n, b, viewer)))),
+        Clase::Batalla => un(T::Batalla, n.uuid_de_batalla(id), n.batalla(id).map(|b| Cuerpo::Batalla(batalla(n, b, quien)))),
         Clase::Relacion => {
             let (a, b) = Clase::facciones_del_par(id);
             un(T::RelacionPolitica, ids::relacion(a, b), e.militar.relacion(a, b).map(|r| Cuerpo::Relacion(relacion(n, id, r))))
@@ -631,13 +669,28 @@ pub fn proyectar(n: &Nucleo, viewer: Option<u64>, clase: Clase, id: u64) -> Proy
             Proyeccion { posibles: vec![(T::Avanzada, av_id), (T::ObraDeMapa, obra_id)], existen }
         }
         Clase::Campamento => un(T::CampamentoMercenarios, ids::campamento(id as u32), super::interior::campamento(n, id as u32).map(Cuerpo::CampamentoMercenarios)),
-        Clase::Bandidos | Clase::Interior => Proyeccion { existen: Vec::new(), posibles: Vec::new() },
+        Clase::Bandidos => un(T::CampamentoBandidos, ids::bandidos(id), e.combate.bandidos.get(&id).map(|b| Cuerpo::CampamentoBandidos(campamento_bandidos(n, b)))),
+        Clase::Interior => Proyeccion { existen: Vec::new(), posibles: Vec::new() },
     }
 }
 
-/// Los cambios de `(clase, id)` para `viewer`: `ACTUALIZA` de lo que existe si `pertenece`, y `QUITA` de lo demás (todo, si la entidad ya no es del ámbito o ya no existe).
-pub fn cambios(n: &Nucleo, viewer: Option<u64>, clase: Clase, id: u64, pertenece: bool) -> Vec<pb::Cambio> {
-    let Proyeccion { existen, posibles } = proyectar(n, viewer, clase, id);
+/// Todo lo que hay en el mundo menos las plazas (que `ADMIN` lleva con su interior, `interior::asentamiento`), por clase e id: lo que [`proyectar`] da a la administración.
+///
+/// DUDA: no están la memoria de la niebla de cada Facción (lo explorado, las fichas, las Miradas y los Informes de plaza: no tienen clase en el registro de cambios), la red de caminos, los
+/// precios de referencia ni el historial de cada héroe (ni, cuando existan, los títulos y las Aedas), que el `admin/partida` del TypeScript sí llevaba (fila «Contrato (4H, T3e)»).
+pub fn todo_menos_plazas(n: &Nucleo) -> Vec<(Clase, u64)> {
+    let e = n.estado();
+    let mut v: Vec<(Clase, u64)> = audiencia::CLASES.into_iter().filter(|c| !matches!(c, Clase::Asentamiento | Clase::Escuadra)).flat_map(|c| audiencia::todas(e, c).into_iter().map(move |id| (c, id))).collect();
+    v.extend(e.militar.heroes.values().flat_map(|h| &h.heroe.escuadras).map(|s| (Clase::Escuadra, s.id)));
+    v.extend(n.avanzadas_huerfanas().map(|x| (Clase::Avanzada, x.id)));
+    v.extend(n.campamentos_para_elegir().into_iter().map(|(c, ..)| (Clase::Campamento, u64::from(c))));
+    v.extend(e.combate.bandidos.keys().map(|&b| (Clase::Bandidos, b)));
+    v
+}
+
+/// Los cambios de `(clase, id)` para `quien`: `ACTUALIZA` de lo que existe si `pertenece`, y `QUITA` de lo demás (todo, si la entidad ya no es del ámbito o ya no existe).
+pub fn cambios(n: &Nucleo, quien: Espectador, clase: Clase, id: u64, pertenece: bool) -> Vec<pb::Cambio> {
+    let Proyeccion { existen, posibles } = proyectar(n, quien, clase, id);
     let existen = if pertenece { existen } else { Vec::new() };
     let actualiza = existen.iter().map(|(tipo, id, cuerpo)| pb::Cambio {
         tipo: pb::TipoCambio::CambioActualiza as i32,

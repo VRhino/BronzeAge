@@ -38,7 +38,7 @@ fn dorados() {
         }
         n += 1;
     }
-    assert!(n >= 69, "faltan ficheros dorados: {n}");
+    assert!(n >= 70, "faltan ficheros dorados: {n}");
 }
 
 /// Lo que los dorados de 4H dicen, leído por Rust: cada campo nuevo está donde el esquema lo pone (el JSON es la fuente; aquí se comprueba el significado, no solo los bytes).
@@ -159,6 +159,14 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     assert_eq!((d.ambito.as_ref().unwrap().id.as_str(), d.desde, d.hasta, d.niebla.is_some()), ("heroe-3", 81, 81, true));
     assert_eq!((d.cambios[0].tipo, d.cambios[1].entidad), (TipoCambio::CambioQuita as i32, TipoEntidad::FichaConocida as i32));
     assert!(matches!(d.cambios[1].datos.as_ref().and_then(|e| e.cuerpo.as_ref()), Some(entidad::Cuerpo::FichaConocida(a)) if a.tipo == TipoEntidad::Avanzada as i32 && a.nivel == 2));
+
+    // `ADMIN` (T3e): la batalla entera con la asignación que ganó, sin tokens ni el token propio de nadie.
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_admin_batalla") else { panic!() };
+    assert_eq!(f.ambito.as_ref().map(|a| (a.tipo, a.id.as_str())), Some((AmbitoTipo::AmbitoAdmin as i32, "")));
+    let Some(entidad::Cuerpo::Batalla(b)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    let a = b.asignacion.expect("la asignación");
+    assert_eq!((a.intento_asignacion_id.as_str(), a.instancia.unwrap().host.as_str(), a.tokens_participante.len()), ("intento-a", "unity-1.example", 0));
+    assert!(b.ticket.is_some() && b.asignacion_propia.is_none() && b.lado_propio.is_none());
 
     // Las órdenes nuevas.
     let orden_de = |nombre: &str| match de_cliente(nombre) {

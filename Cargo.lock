@@ -507,6 +507,7 @@ dependencies = [
  "militar",
  "mundo",
  "persistencia",
+ "prost",
  "prost-types",
  "rutas",
  "serde_json",

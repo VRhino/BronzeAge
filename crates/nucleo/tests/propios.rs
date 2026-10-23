@@ -492,6 +492,7 @@ async fn una_convocatoria_llega_a_su_faccion_con_las_peticiones_redactadas_y_la_
     let (mut dora, _, _) = w.conectar(hola_con("dora", TipoCliente::ClienteUnity, &[])).await;
     let (mut beto, _, _) = w.conectar(hola_con("beto", TipoCliente::ClienteUnity, &[])).await;
     let (mut gus, _, _) = w.conectar(hola_con("gus", TipoCliente::ClienteUnity, &[])).await;
+    let (mut admin_c, _, _) = w.conectar(hola_con("admin", TipoCliente::ClienteAdminWeb, &[])).await;
     let faccion = "FACCION:f-1";
 
     // ana convoca en su plaza, preguntando: la convocatoria es de la Facción, la ven los tres de F1 y no gus.
@@ -516,6 +517,9 @@ async fn una_convocatoria_llega_a_su_faccion_con_las_peticiones_redactadas_y_la_
     assert_eq!(peticiones(&previos), [h_dora.clone()]);
     assert_eq!(peticiones(&pendiente(&mut ana).await), [h_dora.clone()], "el Líder ve todas las peticiones");
     assert!(peticiones(&pendiente(&mut beto).await).is_empty(), "un miembro de la Facción que no es Líder ni solicitante no ve la petición");
+    let de_admin = pendiente(&mut admin_c).await;
+    let en_admin: Vec<String> = deltas_de(&de_admin, "ADMIN:").into_iter().flat_map(|d| convocatorias(nuevas(d))).flat_map(|c| c.peticiones.iter().map(|p| p.heroe_id.clone())).collect();
+    assert!(en_admin.ends_with(std::slice::from_ref(&h_dora)), "la administración ve todas las peticiones (4H T3e): {en_admin:?}");
 
     // ana la acepta y parte: la convocatoria desaparece (QUITA para toda la Facción) y la columna con los dos nace en el ámbito de cada uno.
     let responder = orden::Cuerpo::ResponderPeticionDeConvocatoria(pb::OrdenResponderPeticionDeConvocatoria { heroe_id: h_ana.clone(), convocatoria_id: convocatoria.id.clone(), solicitante_id: h_dora.clone(), aceptar: true });

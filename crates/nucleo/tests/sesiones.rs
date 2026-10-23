@@ -59,7 +59,8 @@ async fn conectar_ordenar_marcha_y_ver_llegar() {
 
     let (mut beto, _) = w.entrar("beto", TipoCliente::ClienteUnity).await;
     let (mut admin, f_admin) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
-    assert_eq!((f_admin.ambito.unwrap().tipo, f_admin.entidades.len()), (pb::AmbitoTipo::AmbitoAdmin as i32, 2), "la administración lo ve todo");
+    let heroes = f_admin.entidades.iter().filter(|e| matches!(e.cuerpo, Some(pb::entidad::Cuerpo::Heroe(_)))).count();
+    assert_eq!((f_admin.ambito.unwrap().tipo, columnas(&f_admin.entidades).len(), heroes), (pb::AmbitoTipo::AmbitoAdmin as i32, 2, 2), "la administración lo ve todo");
 
     // El administrador acelera el reloj ×600: el resultado y luego el aviso a todos.
     admin.enviar(reloj_orden("r1", "fijar_factor", Some(600_000))).await;
