@@ -5,7 +5,7 @@
 //! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
 //! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · recintos{n u64 · n × recinto} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
-//! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64`.
+//! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén 29 × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
 //! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool`.
 //! Un pueblo: `id u64 · tipo u8 · nodo u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno n u64 · n × (recurso u8, i64);
@@ -17,7 +17,7 @@
 //! Los tipos y recursos van por su índice en el enum (`Tipo as u8`, `Recurso::indice`).
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
-use asentamiento::asentamiento::{Ascenso, Asentamiento};
+use asentamiento::asentamiento::{Ascenso, Asentamiento, Tendencia};
 use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada, Etapa, Obra, TipoObra};
 use asentamiento::catalogo::{Tipo, TIPOS};
 use asentamiento::edificio::{Edificio, Estado, Fuente, Mejora};
@@ -248,6 +248,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         completados_pendientes,
         destruido,
         ultimo_minuto,
+        tendencia,
     } = a;
     w.i64(*fundado_en);
     w.u32(*nivel);
@@ -352,6 +353,8 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     w.u32(*completados_pendientes);
     w.bool(*destruido);
     w.i64(*ultimo_minuto);
+    tendencia.almacen.iter().for_each(|&x| w.i64(x));
+    tendencia.poblacion.iter().for_each(|&x| w.i64(x));
 }
 
 pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
@@ -446,5 +449,15 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
         completados_pendientes: r.u32()?,
         destruido: r.bool()?,
         ultimo_minuto: r.i64()?,
+        tendencia: {
+            let mut t = Tendencia::default();
+            for x in &mut t.almacen {
+                *x = r.i64()?;
+            }
+            for x in &mut t.poblacion {
+                *x = r.i64()?;
+            }
+            t
+        },
     })
 }

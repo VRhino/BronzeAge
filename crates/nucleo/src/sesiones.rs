@@ -30,6 +30,7 @@ use crate::nucleo::Nucleo;
 use crate::proyeccion::ambito::Ambito;
 use crate::proyeccion::batalla::{incorporacion, ticket, SCHEMA_VERSION};
 use crate::proyeccion::ids::{self, parse_escuadra, parse_heroe};
+use crate::proyeccion::interior;
 use crate::proyeccion::{detalle_de_rechazo, referencia_creada};
 use ambitos::{cambia_derechos, delta, derechos, es_jugador, foto, reanudable, Mesa, Sesion};
 use base::Punto;
@@ -166,7 +167,7 @@ impl Actor {
         let derechos = derechos(&self.nucleo, &s);
         let mut reanudan: BTreeMap<Ambito, u64> = BTreeMap::new();
         for &a in &derechos {
-            let k = hola.versiones_conocidas.get(&a.clave(&|b| self.nucleo.uuid_de_batalla(b))).copied().filter(|&k| reanudable(&self.nucleo, &s, a, k));
+            let k = hola.versiones_conocidas.get(&a.clave(&|b| self.nucleo.uuid_de_batalla(b))).copied().filter(|&k| reanudable(&self.nucleo, a, k));
             s.abiertos.insert(a, k.unwrap_or(v));
             reanudan.extend(k.map(|k| (a, k)));
         }
@@ -180,13 +181,25 @@ impl Actor {
             None => BTreeMap::new(),
         };
         let (mut ambitos, mut mensajes, mut avances) = (Vec::new(), Vec::new(), Vec::new());
+        // La plaza como el cliente la tiene al terminar de reanudar (la `Foto`, la entera de la `Delta` o la que ya tenía): contra ella se calculan los cambios que vienen.
+        let mut plaza = None;
         for a in derechos {
             let s = self.mesa.get(sesion).expect("recién insertada");
             let (decision, mensaje) = match (reanudan.get(&a), cubos.remove(&(sesion, a))) {
                 (None, _) => (pb::DecisionReanudacion::ReanudaConFoto, Some(Difusion::Foto(foto(&self.nucleo, s, a, v)))),
-                (Some(&k), Some(cubo)) => (pb::DecisionReanudacion::ReanudaConDeltas, Some(Difusion::Delta(delta(&self.nucleo, s, a, k, v, cubo)))),
+                (Some(&k), Some(cubo)) => match delta(&self.nucleo, s, a, k, v, cubo) {
+                    Some((d, despues)) => {
+                        plaza = despues.or(plaza);
+                        (pb::DecisionReanudacion::ReanudaConDeltas, Some(Difusion::Delta(d)))
+                    }
+                    // Lo tocado no cambió nada que el cliente vea (la ficha de la plaza sin cambios): nada que mandar.
+                    None => (pb::DecisionReanudacion::ReanudaSinNovedad, None),
+                },
                 (Some(_), None) => (pb::DecisionReanudacion::ReanudaSinNovedad, None),
             };
+            if let (Ambito::Asentamiento(p), pb::DecisionReanudacion::ReanudaConFoto | pb::DecisionReanudacion::ReanudaSinNovedad) = (a, decision) {
+                plaza = interior::asentamiento(&self.nucleo, p);
+            }
             if decision == pb::DecisionReanudacion::ReanudaConDeltas {
                 avances.push(a);
             }
@@ -194,7 +207,10 @@ impl Actor {
             mensajes.extend(mensaje);
         }
         for a in avances {
-            self.mesa.avanzar(sesion, a, v);
+            self.mesa.avanzar(sesion, a, v, None);
+        }
+        if let Some(s) = self.mesa.get_mut(sesion) {
+            s.plaza = plaza;
         }
         // Un servidor de batalla que llega recibe las batallas que esperan servidor y las que ya tenía asignadas.
         if let Some(servidor) = servidor_de_batalla {
@@ -278,11 +294,12 @@ impl Actor {
                 let mut avances = Vec::new();
                 for ((id, a), cubo) in self.mesa.repartir(&self.nucleo, registros.iter().copied(), None) {
                     let Some(s) = self.mesa.get(id) else { continue };
-                    envios.push((id, Difusion::Delta(delta(&self.nucleo, s, a, s.abiertos[&a], hasta, cubo))));
-                    avances.push((id, a));
+                    let Some((d, plaza)) = delta(&self.nucleo, s, a, s.abiertos[&a], hasta, cubo) else { continue };
+                    envios.push((id, Difusion::Delta(d)));
+                    avances.push((id, a, plaza));
                 }
-                for (id, a) in avances {
-                    self.mesa.avanzar(id, a, hasta);
+                for (id, a, plaza) in avances {
+                    self.mesa.avanzar(id, a, hasta, plaza);
                 }
             }
             None => {

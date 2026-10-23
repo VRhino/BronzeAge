@@ -62,7 +62,7 @@ yacimiento dentro de agua. Un artefacto que no pasa **no se carga**.
 - La escala: mapa 2.667 × 2.000 (×12 en Unity), ciudad un 80 % más pequeña, zonas 6-30 (`Calibracion_Distancias_Definicion` y canon 1.0a-1.2).
 - El trazado urbano lo calcula el **servidor** y viaja por la sesión (unidades locales; 200 por unidad de mapa); Unity solo lo dibuja
   (decisión del usuario, 2026-10-13). Desde 4H (2026-10-22) viaja en `Asentamiento.trazado` (`TrazadoUrbano`: radio, calles, caminos, `layout_version` y `unidades_por_celda`), con la huella
-  de cada edificio en `Edificio.ancho`/`alto` y los recintos de muralla en `Asentamiento.recintos`.
+  de cada edificio en `Edificio.ancho`/`alto` y los recintos de muralla en `Asentamiento.recintos`. Desde 4H T3c (2026-10-23) lo manda la sesión de verdad: el ámbito `ASENTAMIENTO` lleva la plaza con su `trazado` (`TrazadoUrbano` de `Nucleo::vista_ciudad`, que se vuelve a mandar —con el resto del cambio parcial, solo si cambió— cuando la ciudad crece), la posición y la huella de cada edificio (`Edificio.posicion` = centro de su huella en milésimas de unidad local, `ancho`/`alto` en unidades locales) y los recintos con su anillo entero y su avance (`VistaCiudad.murallas`, que es una derivada de ellos: las celdas en pie son las `avance` primeras).
 
 ## 6. Pruebas
 

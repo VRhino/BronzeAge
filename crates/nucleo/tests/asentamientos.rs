@@ -628,10 +628,14 @@ fn poblar(n: &mut Nucleo, m: &Mundo, plazas: usize) -> usize {
 }
 
 /// Mide el coste de un paso de minuto con muchas plazas. En `cargo test` corre pequeño; el de 1.000 plazas × 3 días es
-/// `cargo test --release -p nucleo --test asentamientos rendimiento -- --ignored --nocapture`.
-fn medir(plazas: usize, dias: i64) {
+/// `cargo test --release -p nucleo --test asentamientos rendimiento -- --ignored --nocapture` (con y sin sesiones; con ellas cada paso que cambia algo cierra una versión).
+fn medir(plazas: usize, dias: i64, con_sesiones: bool) {
     let m = con_mundo!();
     let mut n = nuevo(m);
+    if con_sesiones {
+        // Como con un actor de sesiones delante: cada paso de minuto que cambia algo marca el interior de su plaza y cierra una versión.
+        n.seguir_pertenencias();
+    }
     let fundadas = poblar(&mut n, &m.0, plazas);
     assert!(fundadas >= plazas.min(30), "se fundaron {fundadas}");
     let (e0, t0) = (n.metricas().eventos, std::time::Instant::now());
@@ -644,13 +648,19 @@ fn medir(plazas: usize, dias: i64) {
 
 #[test]
 fn rendimiento_de_muchas_plazas_pequeno() {
-    medir(30, 1);
+    medir(30, 1, false);
 }
 
 #[test]
 #[ignore = "mide 1.000 plazas × 3 días; en release"]
 fn rendimiento_de_mil_plazas_tres_dias() {
-    medir(1_000, 3);
+    medir(1_000, 3, false);
+}
+
+#[test]
+#[ignore = "mide 1.000 plazas × 3 días con sesiones (cada paso de minuto marca su interior); en release"]
+fn rendimiento_de_mil_plazas_tres_dias_con_sesiones() {
+    medir(1_000, 3, true);
 }
 
 
@@ -931,7 +941,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN21");
+    assert_eq!(&bytes[..5], b"BAN22");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");
@@ -950,4 +960,52 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
         assert_eq!(vuelta.serializar(), b);
         assert_eq!(vuelta.cola.volcar().iter().filter(|e| matches!(e.carga, Carga::FinDeObras | Carga::CaducaPolitica)).count(), 1);
     }
+}
+
+
+// ───────────────────── El interior de la plaza para las sesiones (4H T3c) ─────────────────────
+
+#[test]
+fn el_paso_de_minuto_guarda_su_tendencia_y_solo_marca_el_interior_si_hay_sesiones() {
+    use nucleo::Clase;
+    let m = con_mundo!();
+    let mut n = nuevo(m);
+    let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
+    let id = fundar_en(&mut n, 0, "a", 1, p);
+    assert!(n.aplicar_en(0, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true })).aceptada());
+    n.avanzar_hasta(5 * MIN);
+    let estado = |n: &Nucleo| {
+        let e = n.economia(id).unwrap();
+        let (a, b, c) = e.poblacion.enteros();
+        (*e.almacen.partes().0, [a, b, c])
+    };
+
+    // Sin sesiones: el paso guarda lo que cambió cada recurso y cada clase de la población, y no sube la versión.
+    let ((almacen, poblacion), v0) = (estado(&n), n.version());
+    n.avanzar_hasta(6 * MIN);
+    let ((almacen2, poblacion2), t) = (estado(&n), n.estado().asentamientos[&id].economia.tendencia);
+    assert!((0..29).all(|i| t.almacen[i] == almacen2[i] - almacen[i]) && (0..3).all(|i| t.poblacion[i] == poblacion2[i] - poblacion[i]), "la tendencia es el neto del último paso: {t:?}");
+    assert!(t.almacen.iter().any(|&x| x != 0), "algo cambia en un minuto: la granja produce y la población come");
+    assert_eq!(n.version(), v0, "sin sesiones el paso de minuto no cierra versión");
+
+    // La tendencia viaja en la foto y se rechaza la del formato anterior (que no la traía).
+    let bytes = n.estado().serializar();
+    let reglas = Reglas::default();
+    let vuelta = Estado::deserializar(&bytes, &reglas, &m.0.hash().to_string()).expect("la foto vuelve");
+    assert_eq!(vuelta.asentamientos[&id].economia.tendencia, t);
+    assert_eq!(vuelta.serializar(), bytes);
+    let viejo = [b"BAN21".as_slice(), &bytes[5..]].concat();
+    let Err(e) = Estado::deserializar(&viejo, &reglas, &m.0.hash().to_string()) else { panic!("BAN21 no debe admitirse") };
+    assert!(e.to_string().contains("BAN21") && e.to_string().contains("tendencia"), "{e}");
+
+    // Con sesiones: cada paso que cambia algo marca el interior de la plaza (y no su ficha), y la versión de la plaza es la de ese paso.
+    n.seguir_pertenencias();
+    let v1 = n.version();
+    n.avanzar_hasta(7 * MIN);
+    let registros: Vec<_> = n.cambios_desde(v1).unwrap().collect();
+    assert_eq!(registros.len(), 1, "una versión por paso");
+    assert!(registros[0].tocados.contiene(Clase::Interior, id) && !registros[0].tocados.contiene(Clase::Asentamiento, id));
+    assert_eq!(n.version_de(nucleo::Clase::Asentamiento, id), n.version());
+    let (almacen3, tendencia3) = (estado(&n).0, n.estado().asentamientos[&id].economia.tendencia);
+    assert!((0..29).all(|i| tendencia3.almacen[i] == almacen3[i] - almacen2[i]), "la tendencia es la del paso nuevo");
 }

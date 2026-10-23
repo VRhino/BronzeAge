@@ -335,13 +335,12 @@ fn el_territorio_sobrevive_a_la_foto_y_al_registro() {
 
 #[test]
 fn la_plaza_se_proyecta_al_contrato() {
-    use contrato::v1 as pb;
     let m = con_mundo!();
     let mut n = nuevo(m);
     let p = sitio(&n, &m.0, 0, 60_000, 0, 1, false);
     let id = fundar_en(&mut n, 5 * MIN, "a", 1, p);
     let a = &n.estado().asentamientos[&id];
-    let Some(pb::entidad::Cuerpo::Asentamiento(e)) = nucleo::proyeccion::entidad_asentamiento(a, &n.poligono_zona(id), None).cuerpo else { panic!("no es un asentamiento") };
+    let e = nucleo::proyeccion::ficha_de_asentamiento(a, &n.poligono_zona(id), None);
     assert_eq!((e.id.as_str(), e.faccion_id.as_str(), e.nivel), (format!("as-{id}").as_str(), "f-1", 1));
     assert_eq!(e.radio_potencial, 6_000);
     assert_eq!(e.zona.len(), 48, "sin vecinas, el polígono es el disco entero");

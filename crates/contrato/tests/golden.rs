@@ -38,7 +38,7 @@ fn dorados() {
         }
         n += 1;
     }
-    assert!(n >= 60, "faltan ficheros dorados: {n}");
+    assert!(n >= 65, "faltan ficheros dorados: {n}");
 }
 
 /// Lo que los dorados de 4H dicen, leído por Rust: cada campo nuevo está donde el esquema lo pone (el JSON es la fuente; aquí se comprueba el significado, no solo los bytes).
@@ -58,6 +58,25 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     assert_eq!((t.layout_version, t.unidades_por_celda, t.radio_ul, t.calles.len(), t.caminos.len()), (2, 3, 30, 1, 1));
     assert_eq!(a.recintos[0].id, "recinto-3-1");
     assert!(a.batalla_id.is_some());
+
+    // El interior de la plaza (T3c): la tendencia en el contador, la recuperación del hambre, la cola con su prioridad, la guarnición y quién está dentro.
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_asentamiento_interior") else { panic!() };
+    let Some(entidad::Cuerpo::Asentamiento(a)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    let trigo = a.almacen["trigo"].cantidad.as_ref().unwrap();
+    assert_eq!((trigo.valor_en_t0, trigo.por_minuto, trigo.en_escalones), (88_000, -2_500, true), "valor del servidor y tendencia «-N/min»");
+    assert!(a.poblacion.as_ref().unwrap().en_recuperacion);
+    assert_eq!((a.edificios[0].prioridad, a.edificios[1].mejora.as_ref().unwrap().nivel_objetivo), (Some(120), 3));
+    assert_eq!((a.guarnicion_ids.len(), a.cupo_guarnicion, a.presentes_ids.len(), a.caravanas_aparcadas_ids.len(), a.flota_ids.len()), (2, 24, 2, 1, 2));
+    assert_eq!((a.politicas_activas[0].cargo.as_str(), a.ascenso.unwrap().nivel_objetivo), ("sacerdote", 3));
+    // El paso de minuto manda solo lo que cambia, con su máscara.
+    let ms::Cuerpo::Delta(d) = de_servidor("delta_paso_de_minuto") else { panic!() };
+    assert!(!d.cambios[0].reemplaza);
+    assert_eq!(d.cambios[0].campos, ["version", "poblacion", "almacen", "nutricion"]);
+    // El campamento visto desde dentro.
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_campamento_mercenarios") else { panic!() };
+    let Some(entidad::Cuerpo::CampamentoMercenarios(c)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    assert_eq!((c.presentes_ids.len(), c.prestamos_ids.as_slice(), c.tropas_ofrecidas.len()), (2, &["esc-31".to_owned()][..], 2));
+    assert_eq!(c.cupo_diario.unwrap().por_id["madera"], 60_000);
 
     // La ubicación dentro de un pueblo, la columna dentro de un lugar y la avanzada con sus elecciones por escalón.
     let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe") else { panic!() };

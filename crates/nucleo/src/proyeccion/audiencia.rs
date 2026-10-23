@@ -7,7 +7,8 @@
 //! | `Ejercito` | `HEROE` de cada participante; `VISTA` de su Facción (candidata: la sesión filtra por su rectángulo) |
 //! | `Caravana` | `FACCION` de su plaza de origen; `HEROE` de los participantes de la columna a la que va adjunta y de quienes ceden escolta |
 //! | `Batalla` | su propio ámbito `BATALLA` (al que tienen derecho los que combaten en ella, `sesiones/ambitos.rs`) y `FACCION` de las Facciones de los dos bandos y de quienes combaten (el asedio visible) |
-//! | `Asentamiento`, `Pueblo`, `Avanzada`, `OrdenMercado`, `Convocatoria` | `FACCION` del dueño (de la plaza madre, de la plaza o de la Facción de la convocatoria) |
+//! | `Asentamiento`, `Avanzada`, `OrdenMercado`, `Convocatoria` | `FACCION` del dueño (de la plaza madre, de la plaza o de la Facción de la convocatoria) |
+//! | `Pueblo` | `FACCION` del dueño y `ASENTAMIENTO` de su plaza madre (con su almacén local, que el paso de minuto refresca) |
 //! | `Acuerdo` | `FACCION` de las dos plazas |
 //! | `Faccion` | `FACCION` de la propia |
 //! | `Relacion` | `FACCION` de las dos Facciones, mientras exista |
@@ -90,7 +91,11 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
             }
         }
         Clase::Asentamiento => v.extend(faccion_de_plaza(e, id)),
-        Clase::Pueblo => v.extend(e.asentamientos.values().find(|a| a.economia.pueblo(id).is_some()).map(|a| Ambito::Faccion(a.faccion))),
+        Clase::Pueblo => {
+            if let Some(a) = e.asentamientos.values().find(|a| a.economia.pueblo(id).is_some()) {
+                v.extend([Ambito::Faccion(a.faccion), Ambito::Asentamiento(a.id)]);
+            }
+        }
         Clase::Avanzada => v.extend(e.asentamientos.values().find(|a| a.economia.avanzada(id).is_some()).map(|a| Ambito::Faccion(a.faccion))),
         Clase::OrdenMercado => v.extend(e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).find(|o| o.id == id).and_then(|o| faccion_de_plaza(e, u64::from(o.asentamiento)))),
         Clase::Convocatoria => v.extend(e.militar.convocatorias.get(&id).map(|c| Ambito::Faccion(c.faccion))),
@@ -102,7 +107,7 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
                 v.extend([Ambito::Faccion(a), Ambito::Faccion(b)]);
             }
         }
-        Clase::Campamento | Clase::Bandidos => {}
+        Clase::Campamento | Clase::Bandidos | Clase::Interior => {}
     }
     v.sort_unstable();
     v.dedup();
@@ -138,6 +143,6 @@ pub fn todas(e: &Estado, clase: Clase) -> Vec<u64> {
         Clase::Convocatoria => e.militar.convocatorias.keys().copied().collect(),
         Clase::Batalla => e.batallas.batallas.keys().copied().collect(),
         Clase::Relacion => e.militar.relaciones.keys().map(|&(a, b)| Clase::par(a, b)).collect(),
-        Clase::Campamento | Clase::Bandidos => Vec::new(),
+        Clase::Campamento | Clase::Bandidos | Clase::Interior => Vec::new(),
     }
 }

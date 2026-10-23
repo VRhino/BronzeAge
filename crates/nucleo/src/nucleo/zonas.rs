@@ -199,6 +199,9 @@ impl Nucleo {
         }
         a.radio = nuevo;
         self.tr.tocar(Clase::Asentamiento, id);
+        // Las plazas con las que se toca recortan su zona contra esta: su polígono cambia con el radio.
+        let vecinas: Vec<u64> = self.estado.contactos.iter().filter_map(|&(x, y)| if x == id { Some(y) } else { (y == id).then_some(x) }).collect();
+        self.tr.tocar_todos(Clase::Asentamiento, vecinas);
         self.contactos_nuevos(id, t);
         true
     }

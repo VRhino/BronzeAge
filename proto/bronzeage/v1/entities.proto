@@ -211,6 +211,8 @@ message Poblacion {
   Ritmo pesants = 1;
   Ritmo artesanos = 2;
   Ritmo nobleza = 3;
+  // La plaza tocó nutrición 0 y no vuelve a crecer hasta recuperar 100 (D8, economía por minuto): la marca de recuperación, que el cliente rotula junto a la nutrición. Es estado de juego (no se deduce de la nutrición).
+  bool en_recuperacion = 4;
 }
 
 message Asentamiento {
@@ -257,6 +259,12 @@ message Asentamiento {
   // Asedio visible (3.ª ronda de «entrar con todo»): la batalla que se juega ahora contra esta plaza. Con ella el cliente ofrece unirse
   // (`Batalla.lado_para_unirse`).
   optional string batalla_id = 37;
+  // El interior visto desde dentro (4H T3c), todo en ids del contrato:
+  repeated string guarnicion_ids = 38;           // las escuadras (`esc-N`) en la guarnición de la plaza: las de sus residentes que se quedan dentro
+  uint32 cupo_guarnicion = 39;                   // cuántos soldados admite la guarnición (nivel, recintos completos, Palacio, políticas)
+  repeated string presentes_ids = 40;            // los héroes que están dentro ahora: residentes y visitantes (su ficha pública llega por `VISTA`; aquí solo quiénes)
+  repeated string caravanas_aparcadas_ids = 41;  // las caravanas aparcadas en la plaza, de quien sean
+  repeated string flota_ids = 42;                // las caravanas de la plaza (su origen), estén donde estén
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.
@@ -708,6 +716,11 @@ message CampamentoMercenarios {
   int64 creado_en_ms = 12;
   int64 repone_en_ms = 13;               // próxima reposición del mercado
   map<string, uint32> contadores_mercado = 14;
+  // El campamento visto desde dentro (4H T3c):
+  repeated string presentes_ids = 15;    // los héroes que están dentro ahora: residentes y visitantes
+  repeated string prestamos_ids = 16;    // las escuadras (`esc-N`) que este campamento tiene prestadas, estén donde estén
+  repeated string tropas_ofrecidas = 17; // las tropas que se pueden reclutar (su edificio militar, su nivel y las tecnologías desbloqueadas)
+  Cantidades cupo_diario = 18;           // el tope diario por bien con cupo (lo comprado hoy de cada héroe está en `Heroe.cupo_campamento`)
 }
 
 // ───────────────────────────── Comercio ─────────────────────────────

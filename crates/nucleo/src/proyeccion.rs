@@ -1,6 +1,7 @@
 //! Del estado del núcleo a las entidades del contrato 05 (`Cambio`, `Entidad`, `EventoDominio`).
 //!
 //! - [`ambito`]: los ámbitos de la sesión. [`ids`]: los ids de las entidades.
+//! - [`interior`]: la plaza y el campamento de mercenarios vistos desde dentro (los ámbitos `ASENTAMIENTO` y `CAMPAMENTO`), con la máscara de campos de los cambios parciales de la plaza.
 //! - [`propios`]: las entidades de los ámbitos `HEROE` y `FACCION` (y la `Batalla` y el informe de inspección). [`audiencia`]: a qué ámbito pertenece cada entidad del registro de cambios. [`batalla`]: el ticket, las incorporaciones y el resultado de una batalla de Unity.
 
 use crate::comando::{Detalle, TipoCreado};
@@ -14,6 +15,7 @@ pub mod ambito;
 pub mod audiencia;
 pub mod batalla;
 pub mod ids;
+pub mod interior;
 pub mod propios;
 
 fn punto(p: base::Punto) -> pb::Punto {
@@ -62,25 +64,23 @@ fn ejercito_base(e: &Ejercito, t: Instante) -> pb::Ejercito {
     }
 }
 
-/// La plaza como entidad del contrato. `zona` es el polígono real recortado (`Nucleo::poligono_zona`) y `batalla_id`, la batalla que se juega ahora contra ella (el asedio visible). Es la ficha: id, Facción,
+/// La plaza como ficha del contrato (la que va a `FACCION`; el interior es de `proyeccion::interior`). `zona` es el polígono real recortado (`Nucleo::poligono_zona`) y `batalla_id`, la batalla que se juega ahora contra ella (el asedio visible). Es la ficha: id, Facción,
 /// sitio, nivel, zona, los ids de sus pueblos y avanzadas y el asedio.
-pub fn entidad_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id: Option<String>) -> pb::Entidad {
-    pb::Entidad {
-        cuerpo: Some(pb::entidad::Cuerpo::Asentamiento(pb::Asentamiento {
-            id: ids::asentamiento(a.id),
-            version: a.version,
-            faccion_id: ids::faccion(a.faccion),
-            posicion: Some(punto(a.posicion)),
-            nivel: a.nivel(),
-            nivel_actual: a.nivel_actual(),
-            fundado_en_ms: a.fundado_en,
-            radio_potencial: a.radio,
-            zona: zona.iter().map(|&p| punto(p)).collect(),
-            pueblos_ids: a.economia.pueblos.iter().map(|p| ids::pueblo(p.id)).collect(),
-            avanzadas_ids: a.economia.avanzadas.iter().map(|v| ids::avanzada(v.id)).collect(),
-            batalla_id,
-            ..Default::default()
-        })),
+pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id: Option<String>) -> pb::Asentamiento {
+    pb::Asentamiento {
+        id: ids::asentamiento(a.id),
+        version: a.version,
+        faccion_id: ids::faccion(a.faccion),
+        posicion: Some(punto(a.posicion)),
+        nivel: a.nivel(),
+        nivel_actual: a.nivel_actual(),
+        fundado_en_ms: a.fundado_en,
+        radio_potencial: a.radio,
+        zona: zona.iter().map(|&p| punto(p)).collect(),
+        pueblos_ids: a.economia.pueblos.iter().map(|p| ids::pueblo(p.id)).collect(),
+        avanzadas_ids: a.economia.avanzadas.iter().map(|v| ids::avanzada(v.id)).collect(),
+        batalla_id,
+        ..Default::default()
     }
 }
 

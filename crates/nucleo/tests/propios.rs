@@ -921,11 +921,11 @@ async fn el_heroe_y_la_faccion_se_reanudan_por_deltas_aunque_el_heroe_cambiara_y
     aceptada(&dar_todo(&mut admin_c, "a3", colocar(ana_id, &ids::campamento(0))).await.1);
     aceptada(&dar_todo(&mut admin_c, "a4", colocar(ana_id, &as_a)).await.1);
 
-    // Al volver, la Facción y el héroe siguen por deltas: el héroe cambió, pero el registro dice a qué ámbito pertenecía cada cosa en cada versión. La plaza no: es de las que dependen del sitio.
+    // Al volver, los tres siguen por deltas: el héroe cambió, pero el registro dice a qué ámbito pertenecía cada cosa en cada versión y qué cambió en la plaza.
     let (_, b, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[(&k_heroe, v), (&k_faccion, v), (&k_plaza, v)])).await;
     let decisiones: Vec<i32> = b.ambitos.iter().map(|a| a.decision).collect();
-    assert_eq!(decisiones, [D::ReanudaConDeltas as i32, D::ReanudaConDeltas as i32, D::ReanudaConFoto as i32]);
-    assert_eq!(etiquetas(&mensajes), [format!("delta {k_heroe}"), format!("delta {k_faccion}"), format!("foto {k_plaza}")]);
+    assert_eq!(decisiones, [D::ReanudaConDeltas as i32; 3]);
+    assert_eq!(etiquetas(&mensajes), [format!("delta {k_heroe}"), format!("delta {k_faccion}"), format!("delta {k_plaza}")]);
     let (d_heroe, d_faccion) = (deltas_de(&mensajes, &k_heroe)[0], deltas_de(&mensajes, &k_faccion)[0]);
     assert_eq!((d_heroe.desde, d_faccion.desde), (v, v));
     assert_eq!(escuadrones(nuevas(d_heroe)).len(), 1, "la escuadra que le dieron");

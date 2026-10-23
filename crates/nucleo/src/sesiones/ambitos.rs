@@ -9,17 +9,22 @@
 //!   cambió en medio; el registro de cambios por clase de T0 dice qué entidades se tocaron en cada versión.
 //! - **Reparto** ([`Mesa::repartir`]): por cada entidad tocada se busca quién tiene abierto un ámbito que la contiene, con un índice de suscriptores por ámbito.
 //!
-//! Qué lleva cada ámbito (el resto es de T3c-T3e): `HEROE` y `FACCION`, lo que el registro de cambios dice que les pertenece (`proyeccion::audiencia`): del héroe, su ficha con sus
+//! Qué lleva cada ámbito (el resto es de T3d-T3e): `HEROE` y `FACCION`, lo que el registro de cambios dice que les pertenece (`proyeccion::audiencia`): del héroe, su ficha con sus
 //! loadouts, sus escuadras, las columnas en que participa, las caravanas que le tocan y las batallas en que combate; de la Facción, su ficha, sus relaciones y tecnologías, sus plazas en
-//! resumen, su flota, sus pueblos y avanzadas con sus obras, sus trueques, sus órdenes de mercado y sus convocatorias; `ASENTAMIENTO`, la plaza (la ficha de hoy); `VISTA`, las columnas
-//! de la Facción dentro del rectángulo; `ADMIN`, todas las columnas y todas las plazas; `CAMPAMENTO`, nada todavía.
+//! resumen, su flota, sus pueblos y avanzadas con sus obras, sus trueques, sus órdenes de mercado y sus convocatorias; `ASENTAMIENTO`, la plaza completa vista desde dentro
+//! (`proyeccion::interior`) con los pueblos de la plaza, y `CAMPAMENTO`, el campamento de mercenarios completo (T3c); `VISTA`, las columnas de la Facción dentro del rectángulo; `ADMIN`, todas
+//! las columnas y todas las plazas (en ficha).
+//!
+//! La plaza viaja como **cambio parcial con máscara de campos** (decisión 2): la sesión recuerda la plaza tal como el cliente la tiene ([`Sesion::plaza`]) y cada `Delta` lleva solo los campos que
+//! cambiaron respecto de ella (el paso de minuto: el almacén y la población; una obra: los edificios...). Una reanudación, que no sabe qué tiene el cliente, la manda entera; el campamento
+//! y todo lo demás viajan completos. Una `Delta` sin nada que contar no se manda.
 
 use super::depositar;
 use crate::estado::{CambioVersion, Clase, EventoNucleo};
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ambito::Ambito;
 use crate::proyeccion::audiencia::{heroe_de_sesion, principal};
-use crate::proyeccion::{evento_dominio, ids, propios};
+use crate::proyeccion::{evento_dominio, ids, interior, propios};
 use base::Punto;
 use contrato::v1 as pb;
 use militar::presencia::Ubicacion;
@@ -38,12 +43,14 @@ pub(super) struct Sesion {
     pub(super) abiertos: BTreeMap<Ambito, u64>,
     /// El interés en el mapa que fijó `CambiarVista`.
     pub(super) vista: Option<(Punto, Punto)>,
+    /// La plaza del ámbito `ASENTAMIENTO` abierto, tal como el cliente la tiene: contra ella se calcula la máscara de campos de cada cambio.
+    pub(super) plaza: Option<pb::Asentamiento>,
 }
 
 impl Sesion {
     pub(super) fn nueva(n: &Nucleo, cliente: String, rol: pb::TipoCliente, tx: mpsc::Sender<Difusion>) -> Self {
         let heroe = es_jugador(rol).then(|| heroe_de_cuenta(n, &cliente)).flatten();
-        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None }
+        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plaza: None }
     }
 
     pub(super) fn es_admin(&self) -> bool {
@@ -94,17 +101,17 @@ pub(super) fn derechos(n: &Nucleo, s: &Sesion) -> BTreeSet<Ambito> {
     d
 }
 
-/// ¿Puede el cliente que tiene el ámbito en la versión `k` seguir con él por deltas? El registro tiene que alcanzar `k`. `HEROE`, `FACCION` y `ADMIN` se reanudan siempre así: el registro
-/// dice a qué ámbito pertenece cada entidad en cada versión (también cuando el héroe no lo tenía abierto), así que los cambios de `k` a hoy, `QUITA` incluido, son exactos aunque el héroe
-/// haya salido y vuelto (siempre que `k` no sea anterior a las pertenencias: `Nucleo::pertenencias_desde`). `ASENTAMIENTO` y `CAMPAMENTO` no: su contenido cambia sin que el registro lo diga (el paso de minuto de la plaza) y se ganan y se pierden con el sitio del héroe,
-/// así que si el héroe cambió desde `k` el cliente no sabe qué descartó (foto). DUDA: conservador, también fuerza foto cualquier cambio del héroe que no sea de sitio; T3c lo afina.
-pub(super) fn reanudable(n: &Nucleo, s: &Sesion, a: Ambito, k: u64) -> bool {
-    let Some(mut registros) = n.cambios_desde(k) else { return false };
-    match a {
-        Ambito::Heroe(_) | Ambito::Faccion(_) | Ambito::Batalla(_) => k >= n.pertenencias_desde(),
-        Ambito::Admin => true,
-        _ => s.heroe.is_some_and(|h| registros.all(|cv| !cv.tocados.contiene(Clase::Heroe, h))),
-    }
+/// ¿Puede el cliente que tiene el ámbito en la versión `k` seguir con él por deltas? El registro tiene que alcanzar `k`. Todos los ámbitos que se abren al conectar se reanudan así: el registro dice qué
+/// entidad cambió en cada versión y a qué ámbito pertenecía (también cuando el héroe no lo tenía abierto), así que los cambios de `k` a hoy, `QUITA` incluido, son exactos aunque el héroe haya salido y
+/// vuelto (siempre que `k` no sea anterior a las pertenencias: `Nucleo::pertenencias_desde`). Desde T3c eso vale también para `ASENTAMIENTO` y `CAMPAMENTO`: el paso de minuto de la plaza y quién entra y sale
+/// marcan el interior en el registro. `VISTA` no se reanuda: se abre con `CambiarVista`.
+pub(super) fn reanudable(n: &Nucleo, a: Ambito, k: u64) -> bool {
+    n.cambios_desde(k).is_some()
+        && match a {
+            Ambito::Heroe(_) | Ambito::Faccion(_) | Ambito::Batalla(_) | Ambito::Asentamiento(_) | Ambito::Campamento(_) => k >= n.pertenencias_desde(),
+            Ambito::Admin => true,
+            Ambito::Vista(_) => false,
+        }
 }
 
 /// La `Foto` de un ámbito en la versión `version`.
@@ -114,10 +121,9 @@ pub(super) fn foto(n: &Nucleo, s: &Sesion, a: Ambito, version: u64) -> pb::Foto 
     let entidades = match a {
         Ambito::Heroe(_) | Ambito::Faccion(_) | Ambito::Batalla(_) => n.entidades_de(a).into_iter().flat_map(|(clase, id)| de(clase, vec![id])).collect(),
         Ambito::Vista(f) => de(Clase::Ejercito, estado.ejercitos.values().filter(|e| e.columna.faccion == Some(f) && s.ve(e.posicion_en(t))).map(|e| e.id).collect()),
-        Ambito::Asentamiento(id) => de(Clase::Asentamiento, vec![id]),
+        Ambito::Asentamiento(id) => interior::asentamiento(n, id).map(|p| pb::Entidad { cuerpo: Some(pb::entidad::Cuerpo::Asentamiento(p)) }).into_iter().chain(n.entidades_de(a).into_iter().flat_map(|(clase, id)| de(clase, vec![id]))).collect(),
         Ambito::Admin => de(Clase::Ejercito, estado.ejercitos.keys().copied().collect()).into_iter().chain(de(Clase::Asentamiento, estado.asentamientos.keys().copied().collect())).collect(),
-        // T3c.
-        Ambito::Campamento(_) => Vec::new(),
+        Ambito::Campamento(c) => de(Clase::Campamento, vec![u64::from(c)]),
     };
     pb::Foto { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), version, entidades, niebla: None }
 }
@@ -139,15 +145,24 @@ pub(super) struct Cubo<'r> {
     eventos: Vec<(u64, &'r EventoNucleo)>,
 }
 
-/// La `Delta` `desde → hasta` de un ámbito con lo que cambió. Una entidad que ya no es del ámbito, o que ya no existe, sale con `QUITA`; en `VISTA`, también la columna que ya no está dentro
-/// del rectángulo.
-pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, cubo: Cubo<'_>) -> pb::Delta {
+/// La `Delta` `desde → hasta` de un ámbito con lo que cambió, y la plaza que el cliente tendrá después si el ámbito es `ASENTAMIENTO`. Una entidad que ya no es del ámbito, o que ya no existe, sale con
+/// `QUITA`; en `VISTA`, también la columna que ya no está dentro del rectángulo. La plaza de `ASENTAMIENTO` viaja como cambio parcial con máscara contra la que el cliente ya tiene ([`Sesion::plaza`]; si no
+/// se sabe, entera). `None` si no hay nada que contar: un cambio que no mueve nada de lo que ve el cliente (la ficha de la plaza sin cambios) no cuesta un mensaje.
+pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, cubo: Cubo<'_>) -> Option<(pb::Delta, Option<pb::Asentamiento>)> {
     let (estado, t) = (n.estado(), n.ahora());
-    let cambios = cubo.entidades.iter().flat_map(|(&(clase, id), &pertenece)| {
+    let mut plaza = if matches!(a, Ambito::Asentamiento(_)) { s.plaza.clone() } else { None };
+    let mut cambios = Vec::new();
+    for (&(clase, id), &pertenece) in &cubo.entidades {
+        if let (Ambito::Asentamiento(_), Clase::Asentamiento) = (a, clase) {
+            let (cambio, despues) = interior::cambio_de_plaza(n, id, plaza.as_ref());
+            cambios.extend(cambio);
+            plaza = despues;
+            continue;
+        }
         let a_la_vista = !matches!(a, Ambito::Vista(_)) || estado.ejercitos.get(&id).is_some_and(|e| s.ve(e.posicion_en(t)));
-        propios::cambios(n, s.heroe, clase, id, pertenece && a_la_vista)
-    });
-    let eventos = cubo
+        cambios.extend(propios::cambios(n, s.heroe, clase, id, pertenece && a_la_vista));
+    }
+    let eventos: Vec<pb::EventoDominio> = cubo
         .eventos
         .into_iter()
         .map(|(version, ev)| {
@@ -155,7 +170,7 @@ pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, c
             evento_dominio(ev, version, heroes)
         })
         .collect();
-    pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta, cambios: cambios.collect(), eventos, niebla: None }
+    (!cambios.is_empty() || !eventos.is_empty()).then(|| (pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta, cambios, eventos, niebla: None }, plaza))
 }
 
 /// ¿Cambia algo de lo que decide los derechos de una sesión (el héroe, su Facción, su plaza, su campamento)?
@@ -226,23 +241,35 @@ impl Mesa {
         }
     }
 
-    fn abrir(&mut self, id: SesionId, a: Ambito, version: u64) {
+    /// Abre el ámbito `a` en la versión `version`; el de una plaza recuerda cómo la tiene el cliente (la `Foto` que acaba de recibir).
+    fn abrir(&mut self, n: &Nucleo, id: SesionId, a: Ambito, version: u64) {
         if let Some(s) = self.sesiones.get_mut(&id) {
             s.abiertos.insert(a, version);
+            if let Ambito::Asentamiento(p) = a {
+                s.plaza = interior::asentamiento(n, p);
+            }
             self.suscriptores.entry(a).or_default().insert(id);
         }
     }
 
     pub(super) fn cerrar(&mut self, id: SesionId, a: Ambito) {
         if self.sesiones.get_mut(&id).is_some_and(|s| s.abiertos.remove(&a).is_some()) {
+            if matches!(a, Ambito::Asentamiento(_)) {
+                self.sesiones.get_mut(&id).expect("existe").plaza = None;
+            }
             self.baja(a, id);
         }
     }
 
-    /// Anota la versión que el cliente tiene ahora de un ámbito abierto.
-    pub(super) fn avanzar(&mut self, id: SesionId, a: Ambito, version: u64) {
-        if let Some(v) = self.sesiones.get_mut(&id).and_then(|s| s.abiertos.get_mut(&a)) {
-            *v = version;
+    /// Anota la versión que el cliente tiene ahora de un ámbito abierto y, en el de una plaza, la plaza que tiene.
+    pub(super) fn avanzar(&mut self, id: SesionId, a: Ambito, version: u64, plaza: Option<pb::Asentamiento>) {
+        if let Some(s) = self.sesiones.get_mut(&id) {
+            if let Some(v) = s.abiertos.get_mut(&a) {
+                *v = version;
+                if matches!(a, Ambito::Asentamiento(_)) {
+                    s.plaza = plaza;
+                }
+            }
         }
     }
 
@@ -272,7 +299,7 @@ impl Mesa {
         for a in nuevos {
             let Some(s) = self.sesiones.get(&id) else { return };
             envios.push((id, Difusion::Foto(foto(n, s, a, version))));
-            self.abrir(id, a, version);
+            self.abrir(n, id, a, version);
         }
     }
 
@@ -309,10 +336,12 @@ impl Mesa {
                     }
                 }
             }
-            // La plaza llega a quien está dentro y la administración lo ve todo: una columna o una plaza que ya no existe sale con `QUITA`.
+            // La plaza y el campamento llegan a quien está dentro (la plaza, cuando cambia la ficha o el interior: el paso de minuto, quién entra y sale...) y la administración lo ve todo: una columna
+            // o una plaza que ya no existe sale con `QUITA`.
             let admin = |clase: Clase, ids: &[u64]| ids.iter().flat_map(|&id| self.suscritos(Ambito::Admin).map(move |sa| (clase, id, sa))).collect::<Vec<_>>();
-            let plazas = cv.tocados.de(Clase::Asentamiento).iter().flat_map(|&id| self.suscritos(Ambito::Asentamiento(id)).map(move |sa| (Clase::Asentamiento, id, sa)));
-            for (clase, id, (s, a)) in admin(Clase::Ejercito, cv.tocados.de(Clase::Ejercito)).into_iter().chain(admin(Clase::Asentamiento, cv.tocados.de(Clase::Asentamiento))).chain(plazas) {
+            let plazas = cv.tocados.de(Clase::Asentamiento).iter().chain(cv.tocados.de(Clase::Interior)).flat_map(|&id| self.suscritos(Ambito::Asentamiento(id)).map(move |sa| (Clase::Asentamiento, id, sa)));
+            let campamentos = cv.tocados.de(Clase::Campamento).iter().flat_map(|&c| self.suscritos(Ambito::Campamento(c as u32)).map(move |sa| (Clase::Campamento, c, sa)));
+            for (clase, id, (s, a)) in admin(Clase::Ejercito, cv.tocados.de(Clase::Ejercito)).into_iter().chain(admin(Clase::Asentamiento, cv.tocados.de(Clase::Asentamiento))).chain(plazas).chain(campamentos) {
                 if self.recibe(solo, s, a, v) {
                     cubos.entry((s, a)).or_default().entidades.insert((clase, id), true);
                 }

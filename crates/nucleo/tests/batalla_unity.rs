@@ -518,7 +518,8 @@ async fn el_ticket_del_asedio_es_completo_congelado_y_va_a_todos_los_servidores_
     let ficha = |msgs: &[ms::Cuerpo], ambito_buscado: &str| {
         msgs.iter()
             .filter_map(|m| if let ms::Cuerpo::Delta(d) = m { Some(d).filter(|d| ambito(&d.ambito) == ambito_buscado) } else { None })
-            .flat_map(|d| d.cambios.iter().filter_map(|c| c.datos.as_ref()))
+            // Un cambio parcial de la plaza solo trae los campos de su máscara: `batalla_id` cuenta si la máscara lo nombra (o si la plaza viene entera).
+            .flat_map(|d| d.cambios.iter().filter(|c| c.reemplaza || c.campos.iter().any(|campo| campo == "batalla_id")).filter_map(|c| c.datos.as_ref()))
             .filter_map(|e| if let Some(Cuerpo::Asentamiento(p)) = e.cuerpo.as_ref() { Some(p.batalla_id.clone()) } else { None })
             .next_back()
     };
@@ -841,7 +842,7 @@ async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_
 /// La foto de un núcleo con un ticket de asedio congelado (plaza, edificios, recintos) y con un informe de inspección de una plaza vuelve igual; la de antes del cambio, no.
 fn la_foto_vuelve_igual(n: &Nucleo, m: &M) {
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN21");
+    assert_eq!(&bytes[..5], b"BAN22");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(false), &m.0.hash().to_string()).expect("la foto vuelve");
     assert_eq!(vuelta.serializar(), bytes);
     let viejo = [b"BAN20".as_slice(), &bytes[5..]].concat();

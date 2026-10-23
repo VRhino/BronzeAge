@@ -1,4 +1,4 @@
-//! Las entidades de los ámbitos propios, `HEROE` y `FACCION` (contrato 05 §3, 4H T3b): el héroe con sus escuadras y loadouts, las columnas en que participa, las caravanas que le
+//! Las entidades de los ámbitos propios, `HEROE` y `FACCION` (contrato 05 §3, 4H T3b), y el campamento de mercenarios (`CAMPAMENTO`): el héroe con sus escuadras y loadouts, las columnas en que participa, las caravanas que le
 //! tocan, las convocatorias y las batallas en que combate; y de la Facción, sus plazas en resumen, su flota, sus relaciones y tecnologías, sus pueblos y avanzadas (con sus obras),
 //! sus trueques y sus órdenes de mercado. Cada función va del estado del núcleo a la entidad del contrato; [`proyectar`] reúne las de una clase del registro de cambios.
 //!
@@ -33,7 +33,7 @@ use std::collections::BTreeMap;
 /// Una entidad del contrato lista para viajar: su clase, su id y su cuerpo.
 pub type Proyectada = (pb::TipoEntidad, String, Cuerpo);
 
-fn cantidades(c: impl IntoIterator<Item = (Recurso, Mil)>) -> pb::Cantidades {
+pub(super) fn cantidades(c: impl IntoIterator<Item = (Recurso, Mil)>) -> pb::Cantidades {
     pb::Cantidades { por_id: c.into_iter().map(|(r, n)| (r.nombre().to_owned(), n)).collect() }
 }
 
@@ -42,12 +42,13 @@ fn carga(c: &Carga) -> pb::Cantidades {
 }
 
 /// El ritmo constante de una cifra que solo cambia a saltos: como no tiene pendiente, su `t0` no importa y vale 0, así que la proyección es una función del estado y no del instante en que se pide.
-fn constante(valor: Mil) -> pb::Ritmo {
+pub(super) fn constante(valor: Mil) -> pb::Ritmo {
     ritmo(base::Ritmo::constante(valor, 0))
 }
 
-fn existencia(a: &Almacen, r: Recurso) -> pb::Existencia {
-    pb::Existencia { cantidad: Some(pb::Ritmo { en_escalones: true, maximo: Some(a.capacidad(r)), ..constante(a.cantidad(r)) }), capacidad: a.capacidad(r) }
+/// Lo que hay de un recurso, en escalones (la economía va por minuto): `tendencia` es el neto del último paso de minuto, «+N/min»; un almacén sin tendencia (el de un pueblo) la lleva a 0.
+pub(super) fn existencia(a: &Almacen, r: Recurso, tendencia: Mil) -> pb::Existencia {
+    pb::Existencia { cantidad: Some(pb::Ritmo { en_escalones: true, maximo: Some(a.capacidad(r)), por_minuto: tendencia, ..constante(a.cantidad(r)) }), capacidad: a.capacidad(r) }
 }
 
 /// Las celdas de un anillo de muralla en el contrato (columna, fila y clase).
@@ -435,7 +436,7 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         nodo_id: ids::nodo(p.nodo),
         tipo_extractor: p.tipo.nombre().into(),
         posicion: n.posicion_de_pueblo(p.id).map(punto),
-        almacen_local: Some(existencia(&p.almacen, recurso)),
+        almacen_local: Some(existencia(&p.almacen, recurso, 0)),
         carro_acarreo_id: p.carro.map(ids::caravana),
         guarnicion_escuadron_id: guarnicion.map(|g| ids::escuadra(g.escuadra.id)),
         guarnicion_repone_en_ms: guarnicion.and_then(|g| g.repone_en),
@@ -581,7 +582,7 @@ pub fn proyectar(n: &Nucleo, viewer: Option<u64>, clase: Clase, id: u64) -> Proy
     let un = |tipo: T, id: String, cuerpo: Option<Cuerpo>| Proyeccion { posibles: vec![(tipo, id.clone())], existen: cuerpo.into_iter().map(|c| (tipo, id.clone(), c)).collect() };
     match clase {
         Clase::Ejercito => un(T::Ejercito, ids::ejercito(id), e.ejercitos.get(&id).map(|x| Cuerpo::Ejercito(ejercito(n, x)))),
-        Clase::Asentamiento => un(T::Asentamiento, ids::asentamiento(id), e.asentamientos.get(&id).and_then(|a| super::entidad_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32))).cuerpo)),
+        Clase::Asentamiento => un(T::Asentamiento, ids::asentamiento(id), e.asentamientos.get(&id).map(|a| Cuerpo::Asentamiento(super::ficha_de_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32)))))),
         Clase::Heroe => {
             // El héroe y sus informes de inspección vigentes (los vencidos los descarta el cliente por su `expira_en_ms`).
             let mut p = un(T::Heroe, ids::heroe(id), n.heroe(id).map(|h| Cuerpo::Heroe(heroe(n, h))));
@@ -627,7 +628,8 @@ pub fn proyectar(n: &Nucleo, viewer: Option<u64>, clase: Clase, id: u64) -> Proy
             }
             Proyeccion { posibles: vec![(T::Avanzada, av_id), (T::ObraDeMapa, obra_id)], existen }
         }
-        Clase::Campamento | Clase::Bandidos => Proyeccion { existen: Vec::new(), posibles: Vec::new() },
+        Clase::Campamento => un(T::CampamentoMercenarios, ids::campamento(id as u32), super::interior::campamento(n, id as u32).map(Cuerpo::CampamentoMercenarios)),
+        Clase::Bandidos | Clase::Interior => Proyeccion { existen: Vec::new(), posibles: Vec::new() },
     }
 }
 

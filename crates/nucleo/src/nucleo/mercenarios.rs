@@ -99,7 +99,7 @@ impl Nucleo {
     // ───────────────────────────── Ayudas ─────────────────────────────
 
     /// Dónde está la puerta del campamento `i` del artefacto.
-    pub(super) fn puerta_de_campamento(&self, campamento: u32) -> Option<Punto> {
+    pub fn puerta_de_campamento(&self, campamento: u32) -> Option<Punto> {
         self.geografia.as_ref()?.mapa.campamentos.get(campamento as usize).copied()
     }
 
@@ -111,8 +111,13 @@ impl Nucleo {
         g.campamentos_del_artefacto().into_iter().zip(0u32..).map(|((puerta, origen), c)| (c, puerta, origen, residentes(c))).collect()
     }
 
+    /// El origen cultural del campamento `c` del artefacto (el de su dueño por defecto: `Bienvenida.campamentos_para_elegir`).
+    pub fn origen_de_campamento(&self, campamento: u32) -> Option<u32> {
+        self.geografia.as_ref()?.campamentos_del_artefacto().get(campamento as usize).map(|&(_, origen)| origen)
+    }
+
     /// El edificio militar del campamento, elegido por su posición: `huella = |⌊x⌋·31 + ⌊y⌋·17 + índice|`.
-    fn edificio_militar(&self, campamento: u32) -> Option<asentamiento::Tipo> {
+    pub fn edificio_militar(&self, campamento: u32) -> Option<asentamiento::Tipo> {
         let p = self.puerta_de_campamento(campamento)?;
         let lista = &self.estado.reglas.economia.militar.mercenarios.edificios_militares;
         let huella = (p.x.div_euclid(1_000) * 31 + p.y.div_euclid(1_000) * 17 + campamento as i64).unsigned_abs();
@@ -120,7 +125,7 @@ impl Nucleo {
     }
 
     /// Los reclutas del campamento: los guardados, o el campamento lleno si nadie lo ha tocado.
-    fn reclutas_de(&self, campamento: u32) -> Reclutas {
+    pub fn reclutas_de(&self, campamento: u32) -> Reclutas {
         let mr = &self.estado.reglas.economia.militar;
         self.estado.militar.reclutas.get(&campamento).copied().unwrap_or_else(|| Reclutas::llenos(mr, mr.mercenarios.viviendas, 0))
     }
@@ -397,6 +402,7 @@ impl Nucleo {
                     ejercitos.get_mut(&c).expect("existe").columna.escuadras.push(hecho.escuadra);
                 }
                 militar.reclutas.insert(campamento, reclutas);
+                self.tr.tocar(Clase::Campamento, u64::from(campamento));
                 let carga = match de_la_columna {
                     Some(c) => &mut ejercitos.get_mut(&c).expect("existe").columna.carga,
                     None => &mut militar.heroes.get_mut(heroe).expect("existe").almacen_personal,
@@ -484,7 +490,7 @@ impl Nucleo {
     // ───────────────────────────── Reposición ─────────────────────────────
 
     /// El mercado de mercenarios es uno solo (sus contadores y su próxima reposición): lo que lo cambia toca a todos los campamentos.
-    fn tocar_todos_los_campamentos(&mut self) {
+    pub(super) fn tocar_todos_los_campamentos(&mut self) {
         let n = self.geografia.as_ref().map_or(0, |g| g.mapa.campamentos.len() as u64);
         self.tr.tocar_todos(Clase::Campamento, 0..n);
     }

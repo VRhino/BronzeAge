@@ -375,7 +375,7 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     assert_eq!(urbe.ciudad().recintos(), &[Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default() });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN21", "el formato de foto es BAN21 (BAN20 no congelaba la plaza de un asedio en el ticket de la batalla; BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
+    assert_eq!(&bytes[..5], b"BAN22", "el formato de foto es BAN22 (BAN21 no traía la tendencia «+N/min» de las plazas; BAN20 no congelaba la plaza de un asedio en el ticket de la batalla; BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);

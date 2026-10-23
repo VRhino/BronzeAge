@@ -41,3 +41,7 @@ La economía **no** se convierte en curvas continuas. Se queda el paso de un min
 - Foto nueva (población entera, restos, marca de recuperación, citas), rechazo de la anterior y huella.
 - Tests ajustados a los instantes exactos; volver a medir `batch poblacion` y `batch comercio` (la cuadrilla al instante, la población entera y D7/D8 cambian el balance) cuando el autor pida medir.
 - Actualizar `Economia_Construccion.md` (la nota «Límite de precisión: un minuto»), `Reloj_Y_Eventos.md`, el doc 13, la definición de la reconstrucción y la tabla de paridad.
+
+## Implementado: el contador del cliente (4H T3c, 2026-10-23)
+
+La «decisión de presentación» de la tabla (escalones + tendencia «+N/min») está hecha: el almacén y la población viajan por la sesión en escalones, con la tendencia —el neto real del último paso de minuto de la plaza, guardado por plaza— en `Ritmo.por_minuto`. Foto `BAN22` (`asentamiento::asentamiento::Tendencia`, campo `tendencia` de la economía de la plaza). Ver `Docs/Mechanics/Economia_Construccion.md` (última nota) y `Docs/Coordinacion/05_Contrato_de_Sesion.md` §3.

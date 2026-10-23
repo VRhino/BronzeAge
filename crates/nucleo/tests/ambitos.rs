@@ -387,14 +387,14 @@ async fn al_reconectar_cada_ambito_se_reanuda_sin_novedad_con_deltas_o_con_foto(
     assert!(mensajes.iter().all(|m| matches!(m, ms::Cuerpo::Foto(_))) && mensajes.len() == 3);
     ana.cerrar().await;
 
-    // Si el héroe salió de la plaza y volvió mientras tanto, el servidor no sabe qué descartó el cliente de la plaza: foto de ella. El héroe y la Facción siguen por deltas: el registro dice a qué ámbito pertenecía cada cosa en cada versión.
+    // Si el héroe salió de la plaza y volvió mientras tanto, los tres siguen por deltas: el registro dice qué cambió en cada ámbito en cada versión (desde T3c ya no se pide foto de la plaza por eso).
     let (_, r) = dar(&mut admin_c, "r3", colocar(ana_id, &ids::campamento(0))).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
     let (_, r) = dar(&mut admin_c, "r4", colocar(ana_id, &as_)).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
     let (_, b, mensajes) = w.conectar(conoce(v)).await;
-    assert_eq!(decisiones(&b), [D::ReanudaConDeltas as i32, D::ReanudaConDeltas as i32, D::ReanudaConFoto as i32]);
-    assert_eq!(etiquetas(&mensajes), [format!("delta {k_heroe}"), format!("delta {k_faccion}"), format!("foto {k_plaza}")]);
+    assert_eq!(decisiones(&b), [D::ReanudaConDeltas as i32; 3]);
+    assert_eq!(etiquetas(&mensajes), [format!("delta {k_heroe}"), format!("delta {k_faccion}"), format!("delta {k_plaza}")]);
     w.parar().await;
 }
 

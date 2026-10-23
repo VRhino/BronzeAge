@@ -319,6 +319,8 @@ impl Nucleo {
                 } else {
                     self.estado.militar.tecnologias.insert(*faccion, nuevas);
                 }
+                // Lo que un campamento ofrece depende de las tecnologías de las Facciones vivas.
+                self.tocar_todos_los_campamentos();
                 self.emitir_propio(t, "faccion.tecnologias", vec![], vec![("faccion", *faccion as i64), ("tecnologias", tecnologias.len() as i64)]);
                 Ok(vec![])
             }
@@ -562,6 +564,8 @@ impl Nucleo {
         let almacen = &mut a.economia.almacen;
         let consumido = racion.min(almacen.cantidad(Recurso::Trigo));
         almacen.quitar(Recurso::Trigo, consumido);
+        // Lo que come la guarnición es parte del paso de minuto: cuenta en la tendencia «+N/min» del trigo.
+        a.economia.tendencia.almacen[Recurso::Trigo.indice()] -= consumido;
         // La parte de la ración que se pudo dar (ppm): con ella entera la moral sube y con menos baja en proporción a lo que faltó.
         let suministro = consumido * UNO / racion;
         let ids: Vec<u64> = militar.residentes_de(plaza).map(|h| h.heroe.id).collect();

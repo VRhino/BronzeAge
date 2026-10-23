@@ -56,6 +56,7 @@ mod espacio;
 mod flota;
 mod heroes;
 mod inspecciones;
+mod interiores;
 mod mercado;
 mod mercenarios;
 mod murallas;
@@ -182,6 +183,8 @@ pub struct Nucleo {
     huellas_auditadas: Option<auditoria::Huellas>,
     /// A qué ámbitos de jugador pertenece cada entidad que viaja a ellos (`pertenencias.rs`). Solo se lleva si hay sesiones (`seguir_pertenencias`); no se persiste: se rehace del estado.
     pertenencias: Option<pertenencias::Mapa>,
+    /// Dónde está cada héroe y cada caravana respecto de las plazas (`interiores.rs`). Solo se lleva si hay sesiones o se audita; no se persiste.
+    interiores: Option<interiores::Interiores>,
     /// Desde qué versión llevan pertenencias los registros de cambios (la de `seguir_pertenencias`): las anteriores no dicen a qué ámbito iba cada entidad y no se pueden reanudar por deltas.
     pertenencias_desde: u64,
     /// Lo último que el núcleo estaba aplicando (una orden o un evento), para decir en la auditoría qué cambió algo sin marcarlo.
@@ -292,6 +295,7 @@ impl Nucleo {
             version_de_arranque: base_registro,
             huellas_auditadas: None,
             pertenencias: None,
+            interiores: None,
             pertenencias_desde: 0,
             causa_auditada: String::new(),
             persist: None,
@@ -491,6 +495,8 @@ impl Nucleo {
 
     /// La ÚNICA función que sube la versión: si la transición cambió algo (o se fuerza), cierra un registro de cambios.
     fn cerrar_version(&mut self, t: Instante, forzar: bool) -> bool {
+        // Quien entra, sale, se muda o aparca marca el interior de su plaza (solo con sesiones).
+        self.marcar_interiores();
         // Las escuadras de un héroe tocado viajan con él.
         let escuadras: Vec<u64> = self.tr.tocados.de(Clase::Heroe).iter().filter_map(|h| self.estado.militar.heroes.get(h)).flat_map(|h| h.heroe.escuadras.iter().map(|e| e.id)).collect();
         self.tr.tocar_todos(Clase::Escuadra, escuadras);
@@ -532,7 +538,8 @@ impl Nucleo {
     pub fn version_de(&self, clase: Clase, id: u64) -> u64 {
         match clase {
             Clase::Ejercito => self.estado.ejercitos.get(&id).map(|e| e.version),
-            Clase::Asentamiento => self.estado.asentamientos.get(&id).map(|a| a.version),
+            // La ficha de la plaza y su interior (lo que cambia con el paso de minuto) son una sola entidad en el contrato: vale lo último que cambió de las dos.
+            Clase::Asentamiento => self.estado.asentamientos.get(&id).map(|a| a.version.max(self.versiones.get(&(Clase::Interior, id)).copied().unwrap_or(0))),
             _ => self.versiones.get(&(clase, id)).copied(),
         }
         .unwrap_or(self.version_de_arranque)

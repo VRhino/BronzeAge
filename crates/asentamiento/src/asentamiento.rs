@@ -185,6 +185,15 @@ pub enum Evento {
     RecintoMejorado { recinto: u32, nivel: u8, celdas: usize, puertas: usize },
 }
 
+/// La tendencia «+N/min» de una plaza (4H T3c, decisión 3 del autor): el neto **real** del último paso de minuto —producción, consumo, recaudación, mantenimiento y lo que come la guarnición; no el gasto
+/// de las órdenes—, por recurso del almacén (milésimas) y por clase de la población (personas enteras: pesants, artesanos, nobleza). Vale 0 hasta el primer paso. Lo escribe quien lleva el reloj de la plaza
+/// (el núcleo, que cierra el paso entero); el crate no lo toca, así que el batch no paga nada por ella.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Tendencia {
+    pub almacen: [Mil; 29],
+    pub poblacion: [i64; 3],
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Asentamiento {
     pub fundado_en: Instante,
@@ -220,6 +229,8 @@ pub struct Asentamiento {
     pub destruido: bool,
     /// El último minuto integrado.
     pub ultimo_minuto: Instante,
+    /// Lo que cambió el último paso de minuto (la tendencia «+N/min» del interior).
+    pub tendencia: Tendencia,
 }
 
 impl Asentamiento {
@@ -257,6 +268,7 @@ impl Asentamiento {
             completados_pendientes: 0,
             destruido: false,
             ultimo_minuto: fundado_en,
+            tendencia: Tendencia::default(),
         }
     }
 
