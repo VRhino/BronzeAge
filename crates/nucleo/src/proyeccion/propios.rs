@@ -424,7 +424,8 @@ pub fn relacion(n: &Nucleo, par: u64, r: Relacion) -> pb::RelacionPolitica {
 // ───────────────────────────── Pueblos, avanzadas y sus obras ─────────────────────────────
 
 /// El pueblo extractor activo. Mientras es una obra (pendiente de materiales o levantándose) el cliente lo ve como [`obra_de_pueblo`].
-/// DUDA: el paso de minuto no marca el pueblo, así que su almacén local solo se refresca cuando otra cosa lo toca (T3c, con la tendencia).
+/// El paso de minuto refresca su almacén local sin avanzar la versión del mundo: `version_interior` es la secuencia de su plaza madre y dice de qué minuto es (en `ASENTAMIENTO` llega con cada
+/// cambio del interior; en `FACCION` solo con el último cambio discreto del pueblo: DUDA, T3c).
 pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
     let e = n.estado();
     let recurso = p.recurso(&e.reglas.economia.datos);
@@ -441,6 +442,7 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         guarnicion_escuadron_id: guarnicion.map(|g| ids::escuadra(g.escuadra.id)),
         guarnicion_repone_en_ms: guarnicion.and_then(|g| g.repone_en),
         batalla_id: batalla_sobre(n, Ubicacion::Pueblo(p.id)),
+        version_interior: n.version_interior(madre).unwrap_or(0),
     }
 }
 

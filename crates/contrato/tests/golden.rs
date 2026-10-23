@@ -38,7 +38,7 @@ fn dorados() {
         }
         n += 1;
     }
-    assert!(n >= 65, "faltan ficheros dorados: {n}");
+    assert!(n >= 67, "faltan ficheros dorados: {n}");
 }
 
 /// Lo que los dorados de 4H dicen, leído por Rust: cada campo nuevo está donde el esquema lo pone (el JSON es la fuente; aquí se comprueba el significado, no solo los bytes).
@@ -65,13 +65,24 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     let trigo = a.almacen["trigo"].cantidad.as_ref().unwrap();
     assert_eq!((trigo.valor_en_t0, trigo.por_minuto, trigo.en_escalones), (88_000, -2_500, true), "valor del servidor y tendencia «-N/min»");
     assert!(a.poblacion.as_ref().unwrap().en_recuperacion);
+    assert_eq!(a.version_interior, 361);
     assert_eq!((a.edificios[0].prioridad, a.edificios[1].mejora.as_ref().unwrap().nivel_objetivo), (Some(120), 3));
     assert_eq!((a.guarnicion_ids.len(), a.cupo_guarnicion, a.presentes_ids.len(), a.caravanas_aparcadas_ids.len(), a.flota_ids.len()), (2, 24, 2, 1, 2));
     assert_eq!((a.politicas_activas[0].cargo.as_str(), a.ascenso.unwrap().nivel_objetivo), ("sacerdote", 3));
     // El paso de minuto manda solo lo que cambia, con su máscara.
     let ms::Cuerpo::Delta(d) = de_servidor("delta_paso_de_minuto") else { panic!() };
     assert!(!d.cambios[0].reemplaza);
-    assert_eq!(d.cambios[0].campos, ["version", "poblacion", "almacen", "nutricion"]);
+    assert_eq!(d.cambios[0].campos, ["version", "version_interior", "poblacion", "almacen", "nutricion"]);
+    // La secuencia propia del interior: el paso de minuto no sube la versión del mundo (`desde == hasta`) y la plaza y su pueblo dicen de qué minuto son.
+    assert_eq!((d.desde, d.hasta), (90, 90));
+    let Some(entidad::Cuerpo::Asentamiento(a)) = d.cambios[0].datos.clone().and_then(|e| e.cuerpo) else { panic!() };
+    let Some(entidad::Cuerpo::Pueblo(p)) = d.cambios[1].datos.clone().and_then(|e| e.cuerpo) else { panic!() };
+    assert_eq!((a.version, a.version_interior, p.version_interior), (90, 362, 362));
+    // Y la reanudación la lleva en los dos sentidos: lo que el cliente conserva y lo que el servidor tiene.
+    let mc::Cuerpo::Hola(h) = de_cliente("hola_reanudando_la_plaza") else { panic!() };
+    assert_eq!((h.versiones_conocidas["ASENTAMIENTO:as-3"], h.versiones_interiores_conocidas["ASENTAMIENTO:as-3"]), (90, 361));
+    let ms::Cuerpo::Bienvenida(b) = de_servidor("bienvenida_reanudando_la_plaza") else { panic!() };
+    assert_eq!(b.ambitos.iter().map(|x| (x.decision, x.version_interior_actual)).collect::<Vec<_>>(), [(DecisionReanudacion::ReanudaSinNovedad as i32, 0), (DecisionReanudacion::ReanudaConDeltas as i32, 362)]);
     // El campamento visto desde dentro.
     let ms::Cuerpo::Foto(f) = de_servidor("foto_campamento_mercenarios") else { panic!() };
     let Some(entidad::Cuerpo::CampamentoMercenarios(c)) = f.entidades[0].cuerpo.clone() else { panic!() };

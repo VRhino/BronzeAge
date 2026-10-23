@@ -545,6 +545,15 @@ impl Nucleo {
         .unwrap_or(self.version_de_arranque)
     }
 
+    /// La secuencia propia del interior de la plaza `id`: cuántos pasos de minuto lleva dados (`(ultimo_minuto - fundado_en) / 60 s`, porque los pasos caen en `fundado_en + k·60 s`). Lo que cambia el paso de
+    /// minuto dentro de la plaza (almacén, población, medidor, nutrición, edificios parados, tendencia y almacén local de sus pueblos) **no sube la versión del mundo**: sube esta secuencia, que viaja
+    /// en `Asentamiento.version_interior` y sirve a la reanudación de `ASENTAMIENTO` (4H T3c, decisión del autor 2026-10-23). Es función del estado que ya se persiste (no añade nada a la foto) y vale
+    /// lo mismo con sesiones y sin ellas, así que el contador `version` y el hash tampoco dependen de si alguien escucha. `None` si la plaza no existe.
+    pub fn version_interior(&self, id: u64) -> Option<u64> {
+        let eco = &self.estado.asentamientos.get(&id)?.economia;
+        Some(((eco.ultimo_minuto - eco.fundado_en) / base::MS_POR_MINUTO).max(0) as u64)
+    }
+
     // ───────────────────────────── Reglas de las columnas ─────────────────────────────
 
     fn evento(&mut self, codigo: &'static str, en: Instante, id: u64, punto: Option<Punto>, datos: Vec<(&'static str, i64)>) {

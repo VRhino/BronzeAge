@@ -7,6 +7,7 @@
 
 mod comun;
 
+use asentamiento::catalogo::Tipo;
 use asentamiento::Recurso::*;
 use base::{Instante, Punto, MS_POR_MINUTO};
 use comun::sesion::*;
@@ -77,6 +78,8 @@ struct Aldea {
     beto: u64,
     /// Ciudadano de la Facción 2, residente del campamento 0 y dentro de él, con almacén personal.
     gus: u64,
+    /// El pueblo de cobre levantado de la plaza (solo en `aldea_con(.., true)`).
+    pueblo: u64,
     peticiones: u64,
 }
 
@@ -103,14 +106,52 @@ impl Aldea {
     }
 }
 
-/// La plaza en nivel 2 y con la zona agrandada (admite recintos), con de todo en el almacén y sin construcción automática; ana tiene una escuadra de lanceros en el campamento de la plaza.
+/// Un sitio fundable, verde y con mucho bosque, a `r` del punto `c`.
+fn sitio_junto_a(n: &Nucleo, c: Punto, r: i64) -> Option<Punto> {
+    (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
+        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada)
+    })
+}
+
+/// Cómo se prepara la aldea de una prueba.
+#[derive(Default)]
+struct Opc<'a> {
+    /// El núcleo persiste en este directorio (y deja una foto al terminar de prepararse, porque la preparación no pasa por el registro).
+    dir: Option<&'a std::path::Path>,
+    /// La plaza se funda junto a una mina de cobre y tiene su pueblo levantado.
+    pueblo: bool,
+    /// Ana no tiene escuadra: sin tropa que coma, el paso de minuto no toca a ningún héroe y no cierra versión por sí solo.
+    sin_tropa: bool,
+}
+
 fn aldea(m: &M) -> Aldea {
+    aldea_con(m, Opc::default())
+}
+
+/// La plaza en nivel 2 y con la zona agrandada (admite recintos), con de todo en el almacén y sin construcción automática; ana tiene una escuadra de lanceros en el campamento de la plaza.
+fn aldea_con(m: &M, Opc { dir, pueblo, sin_tropa }: Opc) -> Aldea {
     let mut reglas = Reglas::default();
     let b = &mut Arc::make_mut(&mut reglas.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
-    let n = Nucleo::nuevo(Arranque { reglas, ajustes: Ajustes::default(), semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) });
-    let mut x = Aldea { n, plaza: 0, ana: 0, dora: 0, beto: 0, gus: 0, peticiones: 0 };
-    let sitio = sitio_rico(&x.n, &m.0, 1);
+    let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
+    let arranque = Arranque { reglas, ajustes, semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) };
+    let n = match dir {
+        Some(d) => Nucleo::con_persistencia(arranque, d, Default::default()).expect("el almacén se abre"),
+        None => Nucleo::nuevo(arranque),
+    };
+    let mut x = Aldea { n, plaza: 0, ana: 0, dora: 0, beto: 0, gus: 0, pueblo: 0, peticiones: 0 };
+    let mut nodo_cobre = 0;
+    let sitio = if pueblo {
+        let mapa = nucleo::economia::Mapa::de(&m.0);
+        let (cobre, sitio) = (0..mapa.nodos.len())
+            .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
+            .find_map(|i| sitio_junto_a(&x.n, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+            .expect("hay un nodo de cobre junto a un sitio rico");
+        nodo_cobre = cobre;
+        sitio
+    } else {
+        sitio_rico(&x.n, &m.0, 1)
+    };
     let columna = x.n.crear_ejercito(0, "fundador", 1, sitio, 500, 100_000).unwrap();
     x.ok("admin", Comando::DarCaravanaFundacion { ejercito: columna });
     x.plaza = x.ok("fundador", Comando::Fundar { ejercito: columna }).creadas[0];
@@ -129,7 +170,9 @@ fn aldea(m: &M) -> Aldea {
     x.beto = x.heroe("beto", 1, en_el_campamento, None);
     x.gus = x.heroe("gus", 2, None, None);
     let ana = x.ana;
-    x.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::Lenadores, cantidad: militar::Reglas::cargar().tropas.tropa(Tropa::Lenadores).unidades });
+    if !sin_tropa {
+        x.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::Lenadores, cantidad: militar::Reglas::cargar().tropas.tropa(Tropa::Lenadores).unidades });
+    }
     // Las dos Facciones adoptan todas las tecnologías de la tropa: el campamento ofrece lo que su edificio militar admite.
     let tecnologias: Vec<String> = militar::Reglas::cargar().tropas.iter().map(|d| d.tecnologia.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
     for faccion in [1, 2] {
@@ -140,9 +183,24 @@ fn aldea(m: &M) -> Aldea {
             x.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: r, cantidad: c });
         }
     }
+    if pueblo {
+        x.pueblo = x.ok("fundador", Comando::MarcarPueblo { asentamiento: plaza, nodo: nodo_cobre }).creadas[0];
+        let puerta = x.n.posicion_de_pueblo(x.pueblo).unwrap();
+        let t = x.n.ahora();
+        let obrera = x.n.crear_ejercito(t, "fundador", 1, puerta, 500, 100_000).unwrap();
+        x.ok("admin", Comando::DarSuministro { ejercito: obrera, recurso: Madera, cantidad: 100_000 });
+        x.ok("admin", Comando::DarSuministro { ejercito: obrera, recurso: Oro, cantidad: 12_000 });
+        let pueblo = x.pueblo;
+        x.ok("fundador", Comando::EntregarMateriales { ejercito: obrera, pueblo });
+        let asentamiento::pueblos::EstadoPueblo::EnObra { completa_en } = x.n.pueblo(pueblo).unwrap().1.estado else { panic!("debía estar en obra") };
+        x.n.avanzar_hasta(completa_en + MIN);
+        assert!(x.n.pueblo(pueblo).unwrap().1.activo());
+    }
     // El mundo, un segundo después de un minuto de pared: nada del reloj del mundo cae entre medias (las pruebas lo pausan nada más conectar).
     let ahora = x.n.ahora();
     x.n.avanzar_hasta((ahora / MIN + 1) * MIN + 1_000);
+    // La preparación (columna, fundación, héroes) no pasa por el registro: una foto la recoge.
+    x.n.foto_ahora();
     x
 }
 
@@ -219,7 +277,10 @@ impl Dentro {
     async fn entrar(w: &Servicio, cuenta: &str, anterior: Option<&Recuerdo>) -> (Dentro, pb::Bienvenida) {
         let conocidas: Vec<(String, u64)> = anterior.iter().map(|a| (format!("ASENTAMIENTO:{}", a.plaza.id), a.version)).collect();
         let conocidas: Vec<(&str, u64)> = conocidas.iter().map(|(k, v)| (k.as_str(), *v)).collect();
-        let (c, b, mensajes) = w.conectar(hola_con(cuenta, TipoCliente::ClienteUnity, &conocidas)).await;
+        let mut hola = hola_con(cuenta, TipoCliente::ClienteUnity, &conocidas);
+        // La secuencia interior que conserva (4H T3c): con ella el servidor sabe si la plaza avanzó por pasos de minuto desde que se fue.
+        hola.versiones_interiores_conocidas.extend(anterior.iter().map(|a| (format!("ASENTAMIENTO:{}", a.plaza.id), a.plaza.version_interior)));
+        let (c, b, mensajes) = w.conectar(hola).await;
         let mut d = Dentro { c, plaza: anterior.map(|a| a.plaza.clone()).unwrap_or_default(), pueblos: anterior.map(|a| a.pueblos.clone()).unwrap_or_default(), version: anterior.map_or(0, |a| a.version) };
         for m in mensajes {
             match m {
@@ -396,8 +457,11 @@ async fn el_paso_de_minuto_manda_solo_lo_que_cambia_con_su_mascara_y_la_tendenci
     assert_eq!(deltas.len(), 1, "una delta por paso");
     let cambio = &deltas[0].cambios[0];
     assert_eq!((cambio.id.as_str(), cambio.reemplaza), (as_.as_str(), false));
-    assert_eq!(cambio.campos[0], "version");
-    let permitidos = ["version", "almacen", "poblacion", "nutricion", "medidor_mantenimiento", "racha_mantenimiento_sano"];
+    assert_eq!(cambio.campos[..2], ["version", "version_interior"]);
+    // El paso de minuto avanza la secuencia propia del interior (de uno en uno) y no la versión de la plaza (que sale en la misma máscara).
+    assert_eq!(ana.plaza.version_interior, antes.version_interior + 1);
+    assert_eq!(ana.plaza.version, antes.version, "la ficha de la plaza no cambió: la versión de la plaza es la del mundo en que cambió por última vez");
+    let permitidos = ["version", "version_interior", "almacen", "poblacion", "nutricion", "medidor_mantenimiento", "racha_mantenimiento_sano"];
     assert!(cambio.campos.iter().all(|c| permitidos.contains(&c.as_str())), "solo el almacén y la población, no la ciudad: {:?}", cambio.campos);
     assert!(cambio.campos.iter().any(|c| c == "almacen"));
     let datos = match cambio.datos.as_ref().unwrap().cuerpo.as_ref().unwrap() {
@@ -430,9 +494,56 @@ async fn el_paso_de_minuto_manda_solo_lo_que_cambia_con_su_mascara_y_la_tendenci
         let (a, n) = (antes.almacen[r].cantidad.as_ref().unwrap(), e.cantidad.as_ref().unwrap());
         assert_eq!(n.valor_en_t0 - a.valor_en_t0, n.por_minuto, "tendencia de {r} en el segundo paso");
     }
+    assert_eq!(ana.plaza.version_interior, antes.version_interior + 1);
     let n = w.parar().await;
     iguales(&proyeccion(&n, plaza), &ana.plaza, "plaza");
+    assert_eq!(ana.plaza.version_interior, n.version_interior(plaza).unwrap());
     assert_eq!(n.estado().asentamientos[&plaza].economia.tendencia.almacen[Trigo.indice()], existencia(&ana.plaza, "trigo").por_minuto, "la tendencia que viaja es la guardada");
+}
+
+
+// ───────────────────────────── 2b. El almacén local de los pueblos con el paso de minuto ─────────────────────────────
+
+/// El pueblo de la plaza viaja con ella: el paso de minuto refresca su almacén local sin subir la versión del mundo, con la secuencia interior de su plaza madre (`Pueblo.version_interior`); la Facción, en
+/// cambio, no lo recibe por minuto (DUDA de T3c: su almacén local llega con el último cambio discreto del pueblo).
+#[tokio::test]
+async fn el_almacen_local_del_pueblo_se_refresca_en_el_paso_de_minuto_por_el_interior_de_la_plaza() {
+    let m = con_mundo!();
+    let x = aldea_con(m, Opc { pueblo: true, sin_tropa: true, ..Default::default() });
+    let (plaza, pueblo) = (x.plaza, x.pueblo);
+    let (as_, pueblo_id, paso) = (ids::asentamiento(plaza), ids::pueblo(pueblo), proximo_paso(&x.n, plaza));
+    let w = arrancar_con(x.n).await;
+    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    pausar(&mut admin_c).await;
+    let (mut ana, _) = Dentro::entrar(&w, "ana", None).await;
+    assert_eq!(ana.pueblos.len(), 1, "el pueblo viene en la foto de la plaza: {:?}", ana.pueblos.keys());
+    assert_eq!(ana.pueblos[&pueblo_id].asentamiento_madre_id, as_);
+    assert_eq!(ana.pueblos[&pueblo_id].version_interior, ana.plaza.version_interior);
+    let almacen = |c: &Dentro| c.pueblos[&pueblo_id].almacen_local.as_ref().unwrap().cantidad.as_ref().unwrap().valor_en_t0;
+    let (inicial, version_inicial) = (almacen(&ana), ana.plaza.version_interior);
+
+    // Tres pasos de minuto: la plaza trae el pueblo con su almacén y la secuencia de cada paso; a la Facción no le llega ningún pueblo.
+    for (i, k) in [paso, paso + MIN, paso + 2 * MIN].into_iter().enumerate() {
+        avanzar_hasta(&mut admin_c, &format!("m{i}"), k).await;
+        let mut de_plaza = 0;
+        for m in pendiente(&mut ana.c).await {
+            let ms::Cuerpo::Delta(d) = m else { continue };
+            if es_de(&d, pb::AmbitoTipo::AmbitoAsentamiento) {
+                assert!(d.cambios.iter().any(|c| c.entidad == pb::TipoEntidad::Pueblo as i32 && c.id == pueblo_id), "el pueblo viaja con el interior: {:?}", d.cambios.iter().map(|c| (c.entidad, &c.id)).collect::<Vec<_>>());
+                ana.aplicar(&d);
+                de_plaza += 1;
+            } else if es_de(&d, pb::AmbitoTipo::AmbitoFaccion) {
+                assert!(d.cambios.iter().all(|c| c.entidad != pb::TipoEntidad::Pueblo as i32), "a la Facción no le llega el almacén local por minuto");
+            }
+        }
+        assert_eq!(de_plaza, 1, "una delta de la plaza por paso");
+        // La plaza de este escenario tiene el almacén lleno y nada visible cambia en su paso (su máscara va vacía y no se manda): el pueblo, en cambio, dice de qué minuto es su almacén.
+        assert_eq!(ana.pueblos[&pueblo_id].version_interior, version_inicial + i as u64 + 1, "el pueblo lleva la secuencia de su plaza en el paso {i}");
+    }
+    assert!(almacen(&ana) > inicial, "el pueblo extrae: {inicial} -> {}", almacen(&ana));
+    let n = w.parar().await;
+    let (_, real) = n.pueblo(pueblo).unwrap();
+    assert_eq!(ana.pueblos[&pueblo_id], nucleo::proyeccion::propios::pueblo(&n, plaza, real), "foto + deltas = el pueblo del núcleo");
 }
 
 // ───────────────────────────── 3. Obras, mejoras y recintos en su instante ─────────────────────────────
@@ -499,6 +610,39 @@ async fn una_obra_termina_en_su_instante_con_la_cola_y_la_mejora_y_el_recinto_vi
     dora.al_dia().await;
     let n = w.parar().await;
     assert_eq!((ana.plaza.clone(), dora.plaza), (proyeccion(&n, plaza), proyeccion(&n, plaza)));
+}
+
+
+// ───────────────────────────── 3b. La versión del mundo no depende de las sesiones ─────────────────────────────
+
+/// Decisión del autor (2026-10-23): el paso de minuto lleva su propia secuencia por plaza y no sube la versión del mundo. Con el mismo registro de órdenes, el contador `version` y el hash son idénticos con
+/// sesiones (el núcleo lleva pertenencias e interiores, como con el actor delante) y sin ellas, minuto a minuto, con héroes que entran y salen y obras.
+#[test]
+fn con_las_mismas_ordenes_la_version_y_el_hash_son_los_mismos_con_sesiones_y_sin_ellas() {
+    let m = con_mundo!();
+    let sin_tropa = || aldea_con(m, Opc { sin_tropa: true, ..Default::default() });
+    let (mut sin, mut con) = (sin_tropa(), sin_tropa());
+    con.n.seguir_pertenencias();
+    assert_eq!((sin.n.version(), sin.n.hash_estado()), (con.n.version(), con.n.hash_estado()), "partida igual");
+    let (plaza, ana) = (sin.plaza, sin.ana);
+    for paso in 1..=12 {
+        for x in [&mut sin, &mut con] {
+            let t = x.n.ahora() + 20_000;
+            x.n.avanzar_hasta(t);
+            match paso {
+                2 => drop(x.ok("admin", Comando::ColocarHeroe { heroe: ana, ubicacion: Ubicacion::Mercenarios(0) })),
+                3 => drop(x.ok("admin", Comando::ColocarHeroe { heroe: ana, ubicacion: Ubicacion::Asentamiento(plaza as u32) })),
+                5 => drop(x.ok("admin", Comando::DarRecursos { asentamiento: plaza, recurso: Trigo, cantidad: 50_000 })),
+                7 => drop(x.ok("ana", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Vivienda })),
+                _ => {}
+            }
+            x.n.avanzar_hasta(x.n.ahora() + MIN);
+        }
+        assert_eq!((sin.n.version(), sin.n.hash_estado()), (con.n.version(), con.n.hash_estado()), "tras el paso {paso}");
+        assert_eq!(sin.n.version_interior(plaza), con.n.version_interior(plaza));
+    }
+    // Pasaron muchos minutos y la versión del mundo no cuenta los pasos: solo las órdenes y los sucesos.
+    assert!(sin.n.version_interior(plaza).unwrap() >= 12 && sin.n.version() < 12 + 60, "versión {}", sin.n.version());
 }
 
 // ───────────────────────────── 4. Política, guarnición, visitantes y acceso ─────────────────────────────
@@ -759,6 +903,77 @@ async fn al_reconectar_la_plaza_y_el_campamento_se_reanudan_por_deltas_aunque_el
 
     let n = w.parar().await;
     assert_eq!(nueva.plaza, proyeccion(&n, plaza));
+}
+
+
+// ───────────────────────────── 6b. Recuperar el registro con una sesión conectada ─────────────────────────────
+
+/// El problema que cerró la secuencia propia del interior (duda 1 de T3c): con sesiones el paso de minuto cerraba una versión por plaza y minuto y la repetición del registro sin sesiones acababa en una
+/// versión menor, de modo que un cliente que conservaba la de antes se veía «del futuro» y recibía una foto. Ahora el núcleo recuperado tiene la misma versión, el mismo hash y la misma secuencia interior que
+/// el que se apagó, y el cliente reanuda `ASENTAMIENTO`: sin novedad si está al día, con la plaza entera si su secuencia es más vieja y con foto solo si es mayor que la de hoy.
+#[tokio::test]
+async fn al_recuperar_el_registro_la_sesion_reanuda_la_plaza_sin_verse_del_futuro() {
+    let m = con_mundo!();
+    let dir = tempfile::tempdir().unwrap();
+    let x = aldea_con(m, Opc { dir: Some(dir.path()), sin_tropa: true, ..Default::default() });
+    let (plaza, as_) = (x.plaza, ids::asentamiento(x.plaza));
+    let paso = proximo_paso(&x.n, plaza);
+    let w = arrancar_con(x.n).await;
+    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    pausar(&mut admin_c).await;
+    let (mut ana, _) = Dentro::entrar(&w, "ana", None).await;
+    let (mut dora, _) = Dentro::entrar(&w, "dora", None).await;
+
+    // Pasan minutos (solo interior), después dora encarga una vivienda (sube la versión del mundo) y pasan dos minutos más: ana queda al día de las dos secuencias.
+    avanzar_hasta(&mut admin_c, "r1", paso + 2 * MIN).await;
+    let (_, r) = dora.dar("r2", orden::Cuerpo::AnadirEdificioManualmente(pb::OrdenAnadirEdificioManualmente { asentamiento_id: as_.clone(), cargo: s("gobernador"), tipo: s("vivienda") })).await;
+    aceptada(&r);
+    avanzar_hasta(&mut admin_c, "r3", paso + 4 * MIN).await;
+    ana.al_dia().await;
+    dora.cerrar().await;
+    let (k, ki) = (ana.version, ana.plaza.version_interior);
+    let recuerdo = ana.cerrar().await;
+    let n = w.parar().await;
+    let vivo = (n.version(), n.hash_estado(), n.version_interior(plaza).unwrap());
+    assert!(k <= vivo.0 && ki == vivo.2, "ana tenía la secuencia de la plaza al día ({ki}) y una versión del mundo no posterior ({k} <= {})", vivo.0);
+    assert!(ki >= 5, "pasaron al menos cinco pasos de minuto: {ki}");
+    drop(n);
+
+    // Se recupera el registro (foto + entradas, sin sesiones): es el mismo mundo, con la misma versión, el mismo hash y la misma secuencia interior.
+    let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
+    let mut reglas = Reglas::default();
+    let b = &mut Arc::make_mut(&mut reglas.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    let arranque = Arranque { reglas, ajustes, semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) };
+    let recuperado = Nucleo::con_persistencia(arranque, dir.path(), Default::default()).expect("se recupera");
+    assert!(recuperado.recuperado());
+    assert_eq!((recuperado.version(), recuperado.hash_estado(), recuperado.version_interior(plaza).unwrap()), vivo, "la versión, el hash y la secuencia interior no dependen de si había sesiones");
+    let w = arrancar_con(recuperado).await;
+    // El reloj sigue pausado (el estado de pausa viaja con el registro): nada cae entre medias.
+    let decision = |b: &pb::Bienvenida| b.ambitos.iter().find(|x| ambito(&x.ambito) == format!("ASENTAMIENTO:{as_}")).map(|x| (x.decision, x.version_interior_actual)).expect("el ámbito está en la bienvenida");
+
+    // Al día: sin novedad y sin un mensaje de la plaza (ni foto ni delta).
+    let (mut ana, b) = Dentro::entrar(&w, "ana", Some(&recuerdo)).await;
+    assert_eq!(decision(&b), (D::ReanudaSinNovedad as i32, ki));
+    assert!(pendiente(&mut ana.c).await.iter().all(|m| !matches!(m, ms::Cuerpo::Foto(_)) && !matches!(m, ms::Cuerpo::Delta(d) if es_de(d, pb::AmbitoTipo::AmbitoAsentamiento))));
+    ana.cerrar().await;
+
+    // Con una secuencia interior más vieja (se perdió algún paso de minuto): por deltas, con la plaza entera, que es la de hoy.
+    let vieja = Recuerdo { plaza: pb::Asentamiento { version_interior: ki - 3, ..recuerdo.plaza.clone() }, pueblos: recuerdo.pueblos.clone(), version: k };
+    let (ana, b) = Dentro::entrar(&w, "ana", Some(&vieja)).await;
+    assert_eq!(decision(&b), (D::ReanudaConDeltas as i32, ki));
+    assert_eq!(ana.plaza.version_interior, ki);
+    let entera = ana.plaza.clone();
+    ana.cerrar().await;
+
+    // Con una mayor que la de hoy sí sería «del futuro»: foto.
+    let futura = Recuerdo { plaza: pb::Asentamiento { version_interior: ki + 1, ..recuerdo.plaza.clone() }, pueblos: recuerdo.pueblos.clone(), version: k };
+    let (ana, b) = Dentro::entrar(&w, "ana", Some(&futura)).await;
+    assert_eq!(decision(&b), (D::ReanudaConFoto as i32, ki));
+    assert_eq!(ana.plaza.version_interior, ki);
+    ana.cerrar().await;
+    let n = w.parar().await;
+    iguales(&proyeccion(&n, plaza), &entera, "la plaza entera de la reanudación por deltas");
 }
 
 // ───────────────────────────── 7. Coste de proyectar ─────────────────────────────

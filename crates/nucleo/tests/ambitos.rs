@@ -356,8 +356,15 @@ async fn al_reconectar_cada_ambito_se_reanuda_sin_novedad_con_deltas_o_con_foto(
     let (k_heroe, k_faccion, k_plaza) = (format!("HEROE:{h_ana}"), "FACCION:f-1".to_owned(), format!("ASENTAMIENTO:{as_}"));
     let v = b.ambitos[0].version_actual;
     assert!(b.ambitos.iter().all(|a| a.version_actual == v));
+    // Un cliente de la plaza conserva también la secuencia interior de la plaza (4H T3c): `version_interior_actual` de su ámbito.
+    let vi = b.ambitos[2].version_interior_actual;
+    assert!(b.ambitos[..2].iter().all(|a| a.version_interior_actual == 0), "solo ASENTAMIENTO lleva secuencia interior");
     ana.cerrar().await;
-    let conoce = |v: u64| hola_con("ana", TipoCliente::ClienteUnity, &[(&k_heroe, v), (&k_faccion, v), (&k_plaza, v)]);
+    let conoce = |v: u64| {
+        let mut h = hola_con("ana", TipoCliente::ClienteUnity, &[(&k_heroe, v), (&k_faccion, v), (&k_plaza, v)]);
+        h.versiones_interiores_conocidas.insert(k_plaza.clone(), vi);
+        h
+    };
     let decisiones = |b: &pb::Bienvenida| b.ambitos.iter().map(|a| a.decision).collect::<Vec<_>>();
 
     // Nada cambió: los tres sin novedad y sin un solo mensaje.

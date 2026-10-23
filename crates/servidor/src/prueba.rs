@@ -110,7 +110,7 @@ fn reanudar(version: u64, cliente: &str, conocidas: &BTreeMap<String, u64>, tx: 
             DecisionReanudacion::ReanudaConFoto
         }
     };
-    AmbitoSuscrito { ambito: Some(ambito_heroe(cliente)), version_actual: version, decision: decision as i32 }
+    AmbitoSuscrito { ambito: Some(ambito_heroe(cliente)), version_actual: version, decision: decision as i32, version_interior_actual: 0 }
 }
 
 impl NucleoFalso {

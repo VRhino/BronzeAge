@@ -20,7 +20,10 @@
 //! # Política de versión
 //! La población, el almacén y el medidor cambian en cada paso: son **ritmos**, cambian el hash pero no la versión. El paso cierra
 //! versión (y marca la plaza como tocada) solo si dejó algo discreto: algún suceso del crate (obra, mejora, ascenso, política,
-//! hambruna, déficit...) o un cambio de la zona. Un paso sin novedades no sube la versión.
+//! hambruna, déficit...) o un cambio de la zona. Un paso sin novedades no sube la versión, **con o sin sesiones**: lo que el paso
+//! cambia dentro de la plaza (almacén, población, medidor, nutrición, edificios parados, tendencia y almacén local de sus pueblos) lleva su
+//! propia secuencia por plaza, [`Nucleo::version_interior`] (4H T3c, decisión del autor 2026-10-23), que el actor de sesiones compara con la
+//! que tiene cada cliente; el contador `version` y el hash del mundo no dependen de si alguien escucha.
 
 use super::*;
 use crate::codec_economia::{recurso_a_u8, tipo_a_u8};
@@ -33,7 +36,6 @@ use asentamiento::ascenso::Bloqueo;
 use asentamiento::catalogo::Tipo;
 use asentamiento::datos::UNO;
 use asentamiento::edificio::{Edificios, Fuente};
-use asentamiento::mantenimiento::Medidor;
 use asentamiento::obras::ErrorObra;
 use asentamiento::politicas::{Activador, ErrorPolitica};
 use asentamiento::Recurso;
@@ -56,36 +58,16 @@ const ORDEN_ERA: u32 = 1;
 // placeholder: lo darán la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
 const FACTOR_EXTRA: i64 = UNO;
 
-/// Lo que del interior de una plaza cambia con el paso de minuto: el almacén y la población entera (los restos ocultos no viajan), que son la base de la tendencia «+N/min», y, si hay sesiones, el resto de lo que
-/// el cliente ve y el paso puede cambiar, para saber si hay algo que contar.
-#[derive(Clone, PartialEq, Eq)]
+/// Lo que del interior de una plaza cambia con el paso de minuto y es la base de la tendencia «+N/min»: el almacén y la población entera (los restos ocultos no viajan).
 struct Contadores {
     almacen: [Mil; 29],
     poblacion: [i64; 3],
-    resto: Option<Resto>,
-}
-
-#[derive(Clone, PartialEq, Eq)]
-struct Resto {
-    medidor: Medidor,
-    nutricion: Mil,
-    recuperando: bool,
-    /// Qué edificios tienen la producción parada por el almacén lleno (un resumen: el paso de minuto lo cambia sin cambiar el almacén).
-    pausados: u64,
-    tendencia: Tendencia,
 }
 
 impl Contadores {
-    fn de(e: &asentamiento::asentamiento::Asentamiento, con_sesiones: bool) -> Self {
+    fn de(e: &asentamiento::asentamiento::Asentamiento) -> Self {
         let (pesants, artesanos, nobleza) = e.poblacion.enteros();
-        let resto = con_sesiones.then(|| Resto {
-            medidor: e.medidor.clone(),
-            nutricion: e.poblacion.nutricion,
-            recuperando: e.poblacion.recuperando,
-            pausados: e.edificios.iter().filter(|b| b.pausado_por_almacen).fold(0, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b.id) + 1)),
-            tendencia: e.tendencia,
-        });
-        Contadores { almacen: *e.almacen.partes().0, poblacion: [pesants, artesanos, nobleza], resto }
+        Contadores { almacen: *e.almacen.partes().0, poblacion: [pesants, artesanos, nobleza] }
     }
 
     /// Lo que cambió desde `antes`: el neto de un paso de minuto.
@@ -272,15 +254,13 @@ impl Nucleo {
         if !self.estado.asentamientos.contains_key(&id) {
             return;
         }
-        let sesiones = self.con_sesiones();
-        let pueblos = sesiones.then(|| self.almacenes_de_pueblos(id));
         self.programar_minuto(id, t + MS_POR_MINUTO);
         // La tendencia «+N/min» es lo que cambió el almacén y la población en el paso entero (el de la guarnición, que come después, se le suma en `alimentar_guarnicion`).
-        let Some((sucesos, antes)) = self.con_exterior(id, t, |eco, x| {
-            let antes = Contadores::de(eco, sesiones);
+        let Some(sucesos) = self.con_exterior(id, t, |eco, x| {
+            let antes = Contadores::de(eco);
             let sucesos = eco.avanzar_minuto(t, x);
-            eco.tendencia = Contadores::de(eco, false).tendencia(&antes);
-            (sucesos, antes)
+            eco.tendencia = Contadores::de(eco).tendencia(&antes);
+            sucesos
         }) else {
             return;
         };
@@ -299,29 +279,6 @@ impl Nucleo {
         }
         // La guarnición come después de la población (Reloj_Y_Eventos §2).
         self.alimentar_guarnicion(id, t);
-        if let Some(pueblos) = pueblos {
-            self.marcar_minuto(id, &antes, pueblos);
-        }
-    }
-
-    /// Lo que cada pueblo de la plaza tiene en su almacén local, para saber si el paso de minuto lo cambió.
-    fn almacenes_de_pueblos(&self, plaza: u64) -> Vec<(u64, Mil)> {
-        let datos = &self.estado.reglas.economia.datos;
-        self.estado.asentamientos.get(&plaza).map_or_else(Vec::new, |a| a.economia.pueblos.iter().map(|p| (p.id, p.almacen.cantidad(p.recurso(datos)))).collect())
-    }
-
-    /// Con sesiones, marca lo que cambió el paso de minuto de la plaza: su interior (`Clase::Interior`, si cambió algo que el cliente ve) y los pueblos cuyo almacén local cambió. Sin sesiones no se marca
-    /// nada (el paso solo guarda la tendencia): el batch y las pruebas del motor no suben versión por minuto.
-    ///
-    /// DUDA: así la versión del mundo depende de si hay sesiones (con ellas sube una por minuto y plaza): el estado de juego es el mismo, pero el hash y el contador `version` no. Un registro que se
-    /// reproduce al recuperar (sin sesiones) acaba en una versión menor que la que tenía el proceso vivo; un cliente que conserve una mayor la trata como «del futuro» (foto) mientras no la alcance.
-    fn marcar_minuto(&mut self, id: u64, antes: &Contadores, pueblos: Vec<(u64, Mil)>) {
-        let Some(a) = self.estado.asentamientos.get(&id) else { return };
-        if &Contadores::de(&a.economia, true) != antes {
-            self.tr.tocar(Clase::Interior, id);
-        }
-        let ahora_pueblos = self.almacenes_de_pueblos(id);
-        self.tr.tocar_todos(Clase::Pueblo, pueblos.into_iter().filter(|p| !ahora_pueblos.contains(p)).map(|(p, _)| p));
     }
 
     /// Acaba una obra, una mejora o un ascenso de la plaza `id` en `t` (el evento `Carga::FinDeObras`): el edificio pasa a activo, la zona crece

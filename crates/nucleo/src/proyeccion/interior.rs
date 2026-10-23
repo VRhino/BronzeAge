@@ -44,6 +44,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     let ciudad = n.vista_ciudad(id)?;
     let mut p = ficha_de_asentamiento(a, &n.poligono_zona(id), batalla_sobre(n, Ubicacion::Asentamiento(id as u32)));
     p.version = n.version_de(Clase::Asentamiento, id);
+    p.version_interior = n.version_interior(id)?;
 
     p.racha_mantenimiento_sano = Some(eco.medidor.racha);
     let (t, entera) = (&eco.tendencia, |v: i64| v * 1_000);
@@ -136,20 +137,21 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     Some(p)
 }
 
-/// Define a la vez [`mascara`], [`aplicar`] y [`todos_los_campos`] sobre la lista de campos de `Asentamiento` (sin `id` ni `version`, que siempre viajan). El literal de `mascara` nombra todos los
+/// Define a la vez [`mascara`], [`aplicar`] y [`todos_los_campos`] sobre la lista de campos de `Asentamiento` (sin `id`, `version` ni `version_interior`, que siempre viajan). El literal de `mascara` nombra todos los
 /// campos sin `..`: un campo nuevo del contrato no compila hasta entrar en la lista.
 macro_rules! campos_de_la_plaza {
     ($($c:ident),* $(,)?) => {
-        /// Del cambio de la plaza de `antes` a `ahora`, los campos que cambiaron (con `version` delante) y la plaza con solo esos campos; `None` si nada cambió.
+        /// Del cambio de la plaza de `antes` a `ahora`, los campos que cambiaron (con `version` y `version_interior` delante) y la plaza con solo esos campos; `None` si nada cambió (las dos versiones solas no son un cambio).
         pub fn mascara(antes: &pb::Asentamiento, ahora: &pb::Asentamiento) -> Option<(Vec<String>, pb::Asentamiento)> {
             let mut campos = Vec::new();
             let datos = pb::Asentamiento {
                 id: ahora.id.clone(),
                 version: ahora.version,
+                version_interior: ahora.version_interior,
                 $($c: if antes.$c != ahora.$c { campos.push(stringify!($c).to_owned()); ahora.$c.clone() } else { Default::default() },)*
             };
             (!campos.is_empty()).then(|| {
-                campos.insert(0, "version".to_owned());
+                campos.splice(0..0, ["version".to_owned(), "version_interior".to_owned()]);
                 (campos, datos)
             })
         }
@@ -159,6 +161,7 @@ macro_rules! campos_de_la_plaza {
             for c in campos {
                 match c.as_str() {
                     "version" => destino.version = datos.version,
+                    "version_interior" => destino.version_interior = datos.version_interior,
                     $(stringify!($c) => destino.$c = datos.$c.clone(),)*
                     _ => {}
                 }
@@ -167,7 +170,7 @@ macro_rules! campos_de_la_plaza {
 
         /// La máscara que lo cambia todo: la de quien no sabe qué tiene el cliente (la reanudación por deltas).
         pub fn todos_los_campos() -> Vec<String> {
-            vec!["version".to_owned(), $(stringify!($c).to_owned()),*]
+            vec!["version".to_owned(), "version_interior".to_owned(), $(stringify!($c).to_owned()),*]
         }
     };
 }
@@ -280,17 +283,18 @@ mod pruebas {
 
     #[test]
     fn la_mascara_lleva_solo_lo_que_cambia_y_aplicarla_da_la_plaza_nueva() {
-        let antes = pb::Asentamiento { id: "as-1".into(), version: 3, nivel: 2, edificios: vec![pb::Edificio { id: "ed-1-0".into(), ..Default::default() }], batalla_id: Some("b".into()), ..Default::default() };
+        let antes = pb::Asentamiento { id: "as-1".into(), version: 3, version_interior: 7, nivel: 2, edificios: vec![pb::Edificio { id: "ed-1-0".into(), ..Default::default() }], batalla_id: Some("b".into()), ..Default::default() };
         // Cambia un escalar, se borra un opcional y un campo vuelve a su valor por defecto.
-        let ahora = pb::Asentamiento { id: "as-1".into(), version: 4, nivel: 3, edificios: vec![pb::Edificio { id: "ed-1-0".into(), ..Default::default() }], batalla_id: None, nivel_actual: 0, ..Default::default() };
+        let ahora = pb::Asentamiento { id: "as-1".into(), version: 4, version_interior: 8, nivel: 3, edificios: vec![pb::Edificio { id: "ed-1-0".into(), ..Default::default() }], batalla_id: None, nivel_actual: 0, ..Default::default() };
         let (campos, datos) = mascara(&antes, &ahora).expect("hay cambios");
-        assert_eq!(campos, ["version", "nivel", "batalla_id"]);
+        assert_eq!(campos, ["version", "version_interior", "nivel", "batalla_id"]);
         assert!(datos.edificios.is_empty(), "lo que no cambia no viaja");
         let mut cliente = antes.clone();
         aplicar(&mut cliente, &datos, &campos);
         assert_eq!(cliente, ahora);
-        // Sin cambios no hay máscara, aunque la versión sea otra.
-        assert_eq!(mascara(&ahora, &pb::Asentamiento { version: 9, ..ahora.clone() }), None);
+        assert_eq!((cliente.version, cliente.version_interior), (4, 8));
+        // Sin cambios no hay máscara, aunque las versiones sean otras.
+        assert_eq!(mascara(&ahora, &pb::Asentamiento { version: 9, version_interior: 12, ..ahora.clone() }), None);
         // La máscara de todo lo copia todo.
         let mut vacio = pb::Asentamiento::default();
         aplicar(&mut vacio, &ahora, &todos_los_campos());

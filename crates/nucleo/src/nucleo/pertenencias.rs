@@ -53,12 +53,6 @@ impl Nucleo {
         self.seguir_interiores();
     }
 
-    /// ¿Hay sesiones leyendo los cambios? Solo entonces el paso de minuto de una plaza marca su interior y sus pueblos (4H T3c): cuesta una versión por minuto y plaza, que el batch, las pruebas del
-    /// motor y la auditoría de cambios (que no debe cambiar las versiones) no pagan.
-    pub(super) fn con_sesiones(&self) -> bool {
-        self.pertenencias.is_some()
-    }
-
     /// La primera versión cuyo registro de cambios lleva pertenencias: un cliente que conserve una anterior (de antes de arrancar las sesiones, o de la repetición del registro al recuperar) no puede reanudar por deltas.
     pub fn pertenencias_desde(&self) -> u64 {
         self.pertenencias_desde

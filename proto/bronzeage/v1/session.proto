@@ -49,6 +49,9 @@ message Hola {
   map<string, uint64> versiones_conocidas = 7;
   repeated string compresiones = 8;      // "zstd"
   int64 reloj_cliente_ms = 9;            // reloj monótono local en el momento de enviar (para el primer cálculo de desfase)
+  // Reanudación del interior de una plaza: la secuencia interior (`Asentamiento.version_interior`) que el cliente tiene de cada
+  // `ASENTAMIENTO:<id>` abierto, con la misma clave que `versiones_conocidas`. Ausente = 0 (no la conoce: se le manda la plaza entera).
+  map<string, uint64> versiones_interiores_conocidas = 10;
 }
 
 message Ping {
@@ -112,6 +115,8 @@ message AmbitoSuscrito {
   Ambito ambito = 1;
   uint64 version_actual = 2;
   DecisionReanudacion decision = 3;
+  // Solo en `ASENTAMIENTO`: la secuencia interior de la plaza en este momento (0 en los demás ámbitos).
+  uint64 version_interior_actual = 4;
 }
 
 message InfoMundo {

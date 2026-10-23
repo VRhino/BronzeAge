@@ -265,6 +265,11 @@ message Asentamiento {
   repeated string presentes_ids = 40;            // los héroes que están dentro ahora: residentes y visitantes (su ficha pública llega por `VISTA`; aquí solo quiénes)
   repeated string caravanas_aparcadas_ids = 41;  // las caravanas aparcadas en la plaza, de quien sean
   repeated string flota_ids = 42;                // las caravanas de la plaza (su origen), estén donde estén
+  // La secuencia propia del interior de la plaza (el contador de pasos de minuto): lo que cambia el paso de minuto (almacén, población, medidor,
+  // nutrición, edificios parados, tendencia y el almacén local de los pueblos) NO avanza `version` (la del mundo) sino esta. Avanza de uno en uno
+  // en cada paso de minuto de la plaza, igual con sesiones y sin ellas; un cambio parcial del paso de minuto la lleva siempre (máscara
+  // `version_interior`, detrás de `version`) y una reanudación la compara con la del cliente (`Hola.versiones_interiores_conocidas`).
+  uint64 version_interior = 43;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.
@@ -298,6 +303,10 @@ message Pueblo {
   optional string guarnicion_escuadron_id = 9;
   optional int64 guarnicion_repone_en_ms = 10;
   optional string batalla_id = 11;       // asedio visible: el saqueo que se juega ahora
+  // La secuencia interior de su plaza madre (`Asentamiento.version_interior`) en el momento en que se proyectó: el paso de minuto refresca el
+  // almacén local sin avanzar `version`, así que esta dice de qué minuto es. Solo `ASENTAMIENTO` lo refresca por minuto (en `FACCION` el
+  // almacén local llega con el último cambio discreto del pueblo).
+  uint64 version_interior = 12;
 }
 
 enum EstadoAvanzada {

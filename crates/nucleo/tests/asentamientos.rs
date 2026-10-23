@@ -205,12 +205,22 @@ fn un_paso_sin_novedades_no_sube_la_version() {
 
 /// Dos plazas, tres días, órdenes a horas fijas; `avanzar` decide cómo se trocea el avance entre órdenes.
 fn correr(m: &M, semilla: u64, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucleo {
+    correr_con(m, semilla, false, avanzar).0
+}
+
+/// Lo mismo, con o sin sesiones (`seguir_pertenencias`, que es lo que hace el actor al arrancar), y con la versión del mundo al llegar cada hora.
+fn correr_con(m: &M, semilla: u64, sesiones: bool, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> (Nucleo, Vec<u64>) {
     let mut n = Nucleo::nuevo(arranque(m, semilla));
     let (pa, pb) = (sitio(&n, &m.0, 0, 50_000, 0, 1, true), sitio(&n, &m.0, 3, 50_000, 0, 2, true));
     let (a, b) = (fundar_en(&mut n, 0, "a", 1, pa), fundar_en(&mut n, 17 * MIN + 5, "b", 2, pb));
+    if sesiones {
+        n.seguir_pertenencias();
+    }
+    let mut versiones = Vec::new();
     for hora in 1..=3 * 24 {
         let t = hora * HORA;
         avanzar(&mut n, t);
+        versiones.push(n.version());
         for (id, x) in [(a, "a"), (b, "b")] {
             n.aplicar_en(t, ana(&format!("asc-{x}-{hora}"), Comando::SolicitarAscenso { asentamiento: id }));
         }
@@ -223,7 +233,7 @@ fn correr(m: &M, semilla: u64, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucle
         }
     }
     n.avanzar_hasta(3 * DIA + 7 * MIN);
-    n
+    (n, versiones)
 }
 
 #[test]
@@ -242,6 +252,25 @@ fn mismas_ordenes_dan_el_mismo_hash_y_da_igual_como_se_trocee_el_avance() {
     });
     assert_eq!(normal.hash_estado(), a_trozos.hash_estado());
     assert_ne!(normal.hash_estado(), correr(m, 4, &|n, t| n.avanzar_hasta(t)).hash_estado(), "otra semilla, otro mundo");
+}
+
+/// 4H T3c (decisión del autor 2026-10-23): lo que el paso de minuto cambia dentro de la plaza lleva su propia secuencia y no sube la versión del mundo, así que el contador `version` y el hash son los mismos
+/// con sesiones que sin ellas (antes, con ellas el paso cerraba una versión por plaza y minuto y una repetición del registro sin sesiones acababa en otra versión).
+#[test]
+fn la_version_y_el_hash_son_los_mismos_con_sesiones_y_sin_ellas() {
+    let m = con_mundo!();
+    let (sin, v_sin) = correr_con(m, 3, false, &|n, t| n.avanzar_hasta(t));
+    let (con, v_con) = correr_con(m, 3, true, &|n, t| n.avanzar_hasta(t));
+    assert_eq!(v_sin, v_con, "la versión del mundo al llegar cada hora");
+    assert_eq!((sin.version(), sin.hash_estado()), (con.version(), con.hash_estado()));
+    assert!(sin.version() > 0 && sin.version() < 3 * 24 * 60, "las órdenes y los sucesos suben versión, no los 4.320 pasos de minuto: {}", sin.version());
+    // La secuencia interior, en cambio, es la misma y cuenta los pasos: la plaza `a` se fundó en 0 y la `b` cinco milisegundos después de los 17 minutos.
+    let plazas: Vec<u64> = sin.estado().asentamientos.keys().copied().collect();
+    for id in plazas {
+        assert_eq!(sin.version_interior(id), con.version_interior(id));
+        let pasos = (3 * DIA + 7 * MIN - sin.estado().asentamientos[&id].fundado_en) / MIN;
+        assert_eq!(sin.version_interior(id), Some(pasos as u64), "un paso por minuto vivido");
+    }
 }
 
 // ───────────────────────────── 3. Recuperación desde foto ─────────────────────────────
@@ -628,12 +657,12 @@ fn poblar(n: &mut Nucleo, m: &Mundo, plazas: usize) -> usize {
 }
 
 /// Mide el coste de un paso de minuto con muchas plazas. En `cargo test` corre pequeño; el de 1.000 plazas × 3 días es
-/// `cargo test --release -p nucleo --test asentamientos rendimiento -- --ignored --nocapture` (con y sin sesiones; con ellas cada paso que cambia algo cierra una versión).
+/// `cargo test --release -p nucleo --test asentamientos rendimiento -- --ignored --nocapture` (con y sin sesiones: el paso de minuto cuesta lo mismo y deja la misma versión).
 fn medir(plazas: usize, dias: i64, con_sesiones: bool) {
     let m = con_mundo!();
     let mut n = nuevo(m);
     if con_sesiones {
-        // Como con un actor de sesiones delante: cada paso de minuto que cambia algo marca el interior de su plaza y cierra una versión.
+        // Como con un actor de sesiones delante: el núcleo lleva las pertenencias, pero el paso de minuto no marca nada (el interior tiene su propia secuencia).
         n.seguir_pertenencias();
     }
     let fundadas = poblar(&mut n, &m.0, plazas);
@@ -658,7 +687,7 @@ fn rendimiento_de_mil_plazas_tres_dias() {
 }
 
 #[test]
-#[ignore = "mide 1.000 plazas × 3 días con sesiones (cada paso de minuto marca su interior); en release"]
+#[ignore = "mide 1.000 plazas × 3 días con sesiones; en release"]
 fn rendimiento_de_mil_plazas_tres_dias_con_sesiones() {
     medir(1_000, 3, true);
 }
@@ -966,8 +995,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
 // ───────────────────── El interior de la plaza para las sesiones (4H T3c) ─────────────────────
 
 #[test]
-fn el_paso_de_minuto_guarda_su_tendencia_y_solo_marca_el_interior_si_hay_sesiones() {
-    use nucleo::Clase;
+fn el_paso_de_minuto_guarda_su_tendencia_y_no_sube_la_version_con_o_sin_sesiones() {
     let m = con_mundo!();
     let mut n = nuevo(m);
     let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
@@ -998,14 +1026,18 @@ fn el_paso_de_minuto_guarda_su_tendencia_y_solo_marca_el_interior_si_hay_sesione
     let Err(e) = Estado::deserializar(&viejo, &reglas, &m.0.hash().to_string()) else { panic!("BAN21 no debe admitirse") };
     assert!(e.to_string().contains("BAN21") && e.to_string().contains("tendencia"), "{e}");
 
-    // Con sesiones: cada paso que cambia algo marca el interior de la plaza (y no su ficha), y la versión de la plaza es la de ese paso.
+    // Con sesiones, igual (decisión del autor 2026-10-23): el paso de minuto no marca el interior ni sube la versión, y la secuencia propia de la plaza (`version_interior`) avanza de uno en uno,
+    // los mismos pasos con sesiones que sin ellas.
+    assert_eq!(n.version_interior(id), Some(6), "seis pasos de minuto desde la fundación en el instante 0");
     n.seguir_pertenencias();
     let v1 = n.version();
     n.avanzar_hasta(7 * MIN);
-    let registros: Vec<_> = n.cambios_desde(v1).unwrap().collect();
-    assert_eq!(registros.len(), 1, "una versión por paso");
-    assert!(registros[0].tocados.contiene(Clase::Interior, id) && !registros[0].tocados.contiene(Clase::Asentamiento, id));
-    assert_eq!(n.version_de(nucleo::Clase::Asentamiento, id), n.version());
+    assert_eq!(n.version(), v1, "con sesiones el paso de minuto tampoco cierra versión");
+    assert_eq!(n.version_interior(id), Some(7));
+    n.avanzar_hasta(9 * MIN + 59_999);
+    assert_eq!(n.version_interior(id), Some(9), "los pasos de los minutos 8 y 9; el décimo aún no llegó");
+    assert_eq!(n.version_interior(id + 1000), None, "una plaza que no existe no tiene secuencia");
     let (almacen3, tendencia3) = (estado(&n).0, n.estado().asentamientos[&id].economia.tendencia);
-    assert!((0..29).all(|i| tendencia3.almacen[i] == almacen3[i] - almacen2[i]), "la tendencia es la del paso nuevo");
+    assert_ne!(almacen3, almacen2);
+    assert!(tendencia3.almacen.iter().any(|&x| x != 0), "la tendencia es la del último paso");
 }

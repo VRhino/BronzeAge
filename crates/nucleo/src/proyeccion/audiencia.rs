@@ -8,7 +8,7 @@
 //! | `Caravana` | `FACCION` de su plaza de origen; `HEROE` de los participantes de la columna a la que va adjunta y de quienes ceden escolta |
 //! | `Batalla` | su propio ámbito `BATALLA` (al que tienen derecho los que combaten en ella, `sesiones/ambitos.rs`) y `FACCION` de las Facciones de los dos bandos y de quienes combaten (el asedio visible) |
 //! | `Asentamiento`, `Avanzada`, `OrdenMercado`, `Convocatoria` | `FACCION` del dueño (de la plaza madre, de la plaza o de la Facción de la convocatoria) |
-//! | `Pueblo` | `FACCION` del dueño y `ASENTAMIENTO` de su plaza madre (con su almacén local, que el paso de minuto refresca) |
+//! | `Pueblo` | `FACCION` del dueño y `ASENTAMIENTO` de su plaza madre (con su almacén local, que el paso de minuto refresca por la secuencia interior de la plaza, `Mesa::repartir_interior`, no por este registro) |
 //! | `Acuerdo` | `FACCION` de las dos plazas |
 //! | `Faccion` | `FACCION` de la propia |
 //! | `Relacion` | `FACCION` de las dos Facciones, mientras exista |

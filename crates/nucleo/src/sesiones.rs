@@ -32,7 +32,7 @@ use crate::proyeccion::batalla::{incorporacion, ticket, SCHEMA_VERSION};
 use crate::proyeccion::ids::{self, parse_escuadra, parse_heroe};
 use crate::proyeccion::interior;
 use crate::proyeccion::{detalle_de_rechazo, referencia_creada};
-use ambitos::{cambia_derechos, delta, derechos, es_jugador, foto, reanudable, Mesa, Sesion};
+use ambitos::{cambia_derechos, delta, derechos, es_jugador, foto, reanudable, Entrega, Mesa, Sesion};
 use base::Punto;
 use combate::ciclo::{Asignacion, Batalla, EscuadraDeSalida, EstadoBatalla, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
@@ -167,7 +167,9 @@ impl Actor {
         let derechos = derechos(&self.nucleo, &s);
         let mut reanudan: BTreeMap<Ambito, u64> = BTreeMap::new();
         for &a in &derechos {
-            let k = hola.versiones_conocidas.get(&a.clave(&|b| self.nucleo.uuid_de_batalla(b))).copied().filter(|&k| reanudable(&self.nucleo, a, k));
+            let clave = a.clave(&|b| self.nucleo.uuid_de_batalla(b));
+            let ki = hola.versiones_interiores_conocidas.get(&clave).copied().unwrap_or(0);
+            let k = hola.versiones_conocidas.get(&clave).copied().filter(|&k| reanudable(&self.nucleo, a, k, ki));
             s.abiertos.insert(a, k.unwrap_or(v));
             reanudan.extend(k.map(|k| (a, k)));
         }
@@ -180,6 +182,15 @@ impl Actor {
             Some(&k) => self.mesa.repartir(&self.nucleo, self.nucleo.cambios_desde(k).into_iter().flatten(), Some(sesion)),
             None => BTreeMap::new(),
         };
+        // La plaza cuyo interior avanzó desde la secuencia que trae el cliente (el paso de minuto no está en el registro del mundo) se le manda entera.
+        for &a in reanudan.keys() {
+            if let Ambito::Asentamiento(p) = a {
+                let ki = hola.versiones_interiores_conocidas.get(&a.clave(&|b| self.nucleo.uuid_de_batalla(b))).copied().unwrap_or(0);
+                if self.nucleo.version_interior(p).is_some_and(|actual| ki < actual) {
+                    cubos.entry((sesion, a)).or_default().interior_de(&self.nucleo, p);
+                }
+            }
+        }
         let (mut ambitos, mut mensajes, mut avances) = (Vec::new(), Vec::new(), Vec::new());
         // La plaza como el cliente la tiene al terminar de reanudar (la `Foto`, la entera de la `Delta` o la que ya tenía): contra ella se calculan los cambios que vienen.
         let mut plaza = None;
@@ -188,12 +199,12 @@ impl Actor {
             let (decision, mensaje) = match (reanudan.get(&a), cubos.remove(&(sesion, a))) {
                 (None, _) => (pb::DecisionReanudacion::ReanudaConFoto, Some(Difusion::Foto(foto(&self.nucleo, s, a, v)))),
                 (Some(&k), Some(cubo)) => match delta(&self.nucleo, s, a, k, v, cubo) {
-                    Some((d, despues)) => {
+                    Entrega { delta: Some(d), plaza: despues } => {
                         plaza = despues.or(plaza);
                         (pb::DecisionReanudacion::ReanudaConDeltas, Some(Difusion::Delta(d)))
                     }
                     // Lo tocado no cambió nada que el cliente vea (la ficha de la plaza sin cambios): nada que mandar.
-                    None => (pb::DecisionReanudacion::ReanudaSinNovedad, None),
+                    Entrega { delta: None, .. } => (pb::DecisionReanudacion::ReanudaSinNovedad, None),
                 },
                 (Some(_), None) => (pb::DecisionReanudacion::ReanudaSinNovedad, None),
             };
@@ -203,7 +214,8 @@ impl Actor {
             if decision == pb::DecisionReanudacion::ReanudaConDeltas {
                 avances.push(a);
             }
-            ambitos.push(pb::AmbitoSuscrito { ambito: Some(a.a_contrato(&|b| self.nucleo.uuid_de_batalla(b))), version_actual: v, decision: decision as i32 });
+            let version_interior_actual = if let Ambito::Asentamiento(p) = a { self.nucleo.version_interior(p).unwrap_or(0) } else { 0 };
+            ambitos.push(pb::AmbitoSuscrito { ambito: Some(a.a_contrato(&|b| self.nucleo.uuid_de_batalla(b))), version_actual: v, decision: decision as i32, version_interior_actual });
             mensajes.extend(mensaje);
         }
         for a in avances {
@@ -278,28 +290,31 @@ impl Actor {
     /// con todo lo que le toca: una pasada por los registros agrupa por ámbito (no se recorre el registro una vez por sesión).
     fn distribuir(&mut self) {
         let hasta = self.nucleo.version();
-        if hasta == self.entregada {
-            return;
-        }
         let mut envios: Vec<(SesionId, Difusion)> = Vec::new();
-        match self.nucleo.cambios_desde(self.entregada) {
+        // El mundo puede no haber avanzado y el interior de una plaza sí (el paso de minuto no sube la versión): los registros que faltan son los de `entregada` a `hasta`, quizá ninguno.
+        let registros = if hasta == self.entregada { Some(Vec::new()) } else { self.nucleo.cambios_desde(self.entregada).map(|r| r.collect::<Vec<&CambioVersion>>()) };
+        match registros {
             Some(registros) => {
-                let registros: Vec<&CambioVersion> = registros.collect();
                 self.mesa.reasignar_heroes(&self.nucleo, registros.iter().copied());
                 if registros.iter().any(|cv| cambia_derechos(cv)) {
                     for id in self.mesa.ids() {
                         self.mesa.sincronizar(&self.nucleo, id, false, &mut envios);
                     }
                 }
+                let mut cubos = self.mesa.repartir(&self.nucleo, registros.iter().copied(), None);
+                self.mesa.repartir_interior(&self.nucleo, &mut cubos);
                 let mut avances = Vec::new();
-                for ((id, a), cubo) in self.mesa.repartir(&self.nucleo, registros.iter().copied(), None) {
+                for ((id, a), cubo) in cubos {
                     let Some(s) = self.mesa.get(id) else { continue };
-                    let Some((d, plaza)) = delta(&self.nucleo, s, a, s.abiertos[&a], hasta, cubo) else { continue };
-                    envios.push((id, Difusion::Delta(d)));
-                    avances.push((id, a, plaza));
+                    let k = s.abiertos[&a];
+                    let Entrega { delta: d, plaza } = delta(&self.nucleo, s, a, k, hasta, cubo);
+                    // Sin `Delta` el cliente sigue en la versión que tenía; la plaza que se recuerda sí avanza (su secuencia interior), para no compararla otra vez hasta el paso siguiente.
+                    let version = if d.is_some() { hasta } else { k };
+                    envios.extend(d.map(|d| (id, Difusion::Delta(d))));
+                    avances.push((id, a, version, plaza));
                 }
-                for (id, a, plaza) in avances {
-                    self.mesa.avanzar(id, a, hasta, plaza);
+                for (id, a, version, plaza) in avances {
+                    self.mesa.avanzar(id, a, version, plaza);
                 }
             }
             None => {

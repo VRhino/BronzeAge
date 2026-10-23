@@ -28,8 +28,8 @@ fn diferencia(antes: Option<&String>, ahora: Option<&String>) -> String {
 impl Nucleo {
     /// Lo que ve de una plaza quien está dentro (`proyeccion::interior`), sin proyectarlo (la proyección entera, con su ciudad y su polígono, es demasiado cara para mirarla en cada versión de cada plaza
     /// en una compilación sin optimizar): la ficha, los edificios con su cola, los recintos, las políticas, el ascenso, lo configurable, quién vive, está dentro y guarda la plaza, las caravanas y el asedio.
-    /// Falta lo que cambia el paso de minuto (el almacén, la población, el medidor, la nutrición y los edificios parados por el almacén lleno): ese paso solo marca con sesiones, y la auditoría no debe
-    /// cambiar las versiones.
+    /// Falta lo que cambia el paso de minuto (el almacén, la población, el medidor, la nutrición y los edificios parados por el almacén lleno): ese paso no marca nada, lleva su propia secuencia por plaza
+    /// (`Nucleo::version_interior`).
     fn huella_de_plaza(&self, a: &Asentamiento) -> String {
         let (e, eco) = (&self.estado, &a.economia);
         let edificios: Vec<_> = eco.edificios.iter().map(|b| (b.id, b.tipo, b.estado, b.completa_en, b.prioridad, b.nivel_interno, b.mejora, b.danado, b.fuente)).collect();
@@ -71,7 +71,7 @@ impl Nucleo {
         m.extend(e.comercio.acuerdos.iter().map(|a| ((Clase::Acuerdo, a.id), huella(a))));
         m.extend(e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).map(|o| ((Clase::OrdenMercado, o.id), huella(o))));
         for a in e.asentamientos.values() {
-            // Cualquier cambio de lo que ve quien está dentro marca la plaza o su interior (`huella_de_plaza`). Tampoco se mira el almacén de un pueblo ni su marca `lleno`: los marca el paso de minuto solo con sesiones.
+            // Cualquier cambio de lo que ve quien está dentro marca la plaza o su interior (`huella_de_plaza`). Tampoco se mira el almacén de un pueblo ni su marca `lleno`: los cambia el paso de minuto, que no marca nada (va por la secuencia interior de la plaza).
             m.insert((Clase::Asentamiento, a.id), self.huella_de_plaza(a));
             m.extend(a.economia.pueblos.iter().map(|p| ((Clase::Pueblo, p.id), huella(&(a.id, p.tipo, p.nodo, &p.estado, p.carro, e.combate.guarniciones.get(&p.id))))));
             m.extend(a.economia.avanzadas.iter().map(|v| ((Clase::Avanzada, v.id), huella(&(a.id, v, e.combate.avanzadas.get(&v.id))))));

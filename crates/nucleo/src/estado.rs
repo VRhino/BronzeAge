@@ -588,8 +588,10 @@ pub struct EventoNucleo {
 pub enum Clase {
     Ejercito,
     Asentamiento,
-    /// Lo que cambia del interior de una plaza sin cambiar su ficha (id de la plaza): lo que hace el paso de minuto (almacén, población, medidor y tendencia) y quién y qué hay dentro (los héroes presentes, los residentes, la guarnición, las caravanas aparcadas y la flota). Solo lo lee `ASENTAMIENTO`, así que no mueve la ficha de `FACCION`
-    /// ni los derechos. Solo se marca si hay sesiones (`Nucleo::seguir_pertenencias`).
+    /// Lo que cambia del interior de una plaza sin cambiar su ficha (id de la plaza): quién y qué hay dentro (los héroes presentes, los residentes, la guarnición, las caravanas aparcadas y la flota). Solo lo lee
+    /// `ASENTAMIENTO`, así que no mueve la ficha de `FACCION` ni los derechos. Solo se marca si hay sesiones (`Nucleo::seguir_pertenencias`) y siempre dentro de una versión que ya se cierra por otra razón (un héroe o una
+    /// caravana tocados). **No lo marca el paso de minuto**: lo que este cambia en la plaza (almacén, población, medidor, nutrición, tendencia, almacén local de sus pueblos) lleva su propia secuencia por plaza,
+    /// `Nucleo::version_interior`, y no sube la versión del mundo.
     Interior,
     /// Su nivel, reputación, tecnologías, relaciones y ciudadanos.
     Faccion,

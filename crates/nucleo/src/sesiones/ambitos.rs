@@ -18,6 +18,10 @@
 //! La plaza viaja como **cambio parcial con máscara de campos** (decisión 2): la sesión recuerda la plaza tal como el cliente la tiene ([`Sesion::plaza`]) y cada `Delta` lleva solo los campos que
 //! cambiaron respecto de ella (el paso de minuto: el almacén y la población; una obra: los edificios...). Una reanudación, que no sabe qué tiene el cliente, la manda entera; el campamento
 //! y todo lo demás viajan completos. Una `Delta` sin nada que contar no se manda.
+//!
+//! **El interior tiene su propia secuencia** (decisión del autor 2026-10-23): lo que cambia el paso de minuto dentro de la plaza no sube la versión del mundo ni entra en su registro de cambios
+//! (con o sin sesiones el contador `version` y el hash son los mismos) sino que avanza `Nucleo::version_interior`, que viaja en `Asentamiento.version_interior`. La sesión compara la de la plaza que
+//! recuerda con la de hoy ([`Mesa::repartir_interior`]) y manda la `Delta` del interior sin que el mundo haya avanzado.
 
 use super::depositar;
 use crate::estado::{CambioVersion, Clase, EventoNucleo};
@@ -103,12 +107,15 @@ pub(super) fn derechos(n: &Nucleo, s: &Sesion) -> BTreeSet<Ambito> {
 
 /// ¿Puede el cliente que tiene el ámbito en la versión `k` seguir con él por deltas? El registro tiene que alcanzar `k`. Todos los ámbitos que se abren al conectar se reanudan así: el registro dice qué
 /// entidad cambió en cada versión y a qué ámbito pertenecía (también cuando el héroe no lo tenía abierto), así que los cambios de `k` a hoy, `QUITA` incluido, son exactos aunque el héroe haya salido y
-/// vuelto (siempre que `k` no sea anterior a las pertenencias: `Nucleo::pertenencias_desde`). Desde T3c eso vale también para `ASENTAMIENTO` y `CAMPAMENTO`: el paso de minuto de la plaza y quién entra y sale
-/// marcan el interior en el registro. `VISTA` no se reanuda: se abre con `CambiarVista`.
-pub(super) fn reanudable(n: &Nucleo, a: Ambito, k: u64) -> bool {
+/// vuelto (siempre que `k` no sea anterior a las pertenencias: `Nucleo::pertenencias_desde`). Desde T3c eso vale también para `ASENTAMIENTO` y `CAMPAMENTO`: quién entra y sale marca el interior en el registro.
+/// El interior de la plaza que cambia el paso de minuto no está en el registro del mundo sino en su propia secuencia (`Nucleo::version_interior`): `ki` es la que el cliente conserva (0 si no trae
+/// ninguna) y no puede ser mayor que la de hoy (un cliente «del futuro», p. ej. tras recuperar un registro más corto que el proceso vivo, recibe la foto). Que sea menor no cuesta la reanudación por deltas:
+/// la plaza se manda entera, sin hacer falta un registro del interior. `VISTA` no se reanuda: se abre con `CambiarVista`.
+pub(super) fn reanudable(n: &Nucleo, a: Ambito, k: u64, ki: u64) -> bool {
     n.cambios_desde(k).is_some()
         && match a {
-            Ambito::Heroe(_) | Ambito::Faccion(_) | Ambito::Batalla(_) | Ambito::Asentamiento(_) | Ambito::Campamento(_) => k >= n.pertenencias_desde(),
+            Ambito::Asentamiento(p) => k >= n.pertenencias_desde() && n.version_interior(p).is_some_and(|actual| ki <= actual),
+            Ambito::Heroe(_) | Ambito::Faccion(_) | Ambito::Batalla(_) | Ambito::Campamento(_) => k >= n.pertenencias_desde(),
             Ambito::Admin => true,
             Ambito::Vista(_) => false,
         }
@@ -145,10 +152,30 @@ pub(super) struct Cubo<'r> {
     eventos: Vec<(u64, &'r EventoNucleo)>,
 }
 
-/// La `Delta` `desde → hasta` de un ámbito con lo que cambió, y la plaza que el cliente tendrá después si el ámbito es `ASENTAMIENTO`. Una entidad que ya no es del ámbito, o que ya no existe, sale con
+impl Cubo<'_> {
+    /// El interior de la plaza `id` avanzó (pasos de minuto, que no suben la versión del mundo): la plaza y sus pueblos activos (su almacén local es parte del paso) entran en lo que hay que contar.
+    ///
+    /// DUDA: los pueblos van completos en cada delta del interior aunque su almacén no haya cambiado (la sesión no recuerda cómo los tiene el cliente, solo la plaza): unas decenas de bytes por pueblo y
+    /// minuto. Si el tráfico de T6 lo pide, la sesión puede recordar también el último pueblo mandado y comparar. Y una delta solo del interior lleva como `hasta` la versión del mundo de ese momento
+    /// (que puede ser igual a `desde`): el contrato 05 §7 lo dice, pero ningún cliente real lo ha leído aún.
+    pub(super) fn interior_de(&mut self, n: &Nucleo, id: u64) {
+        self.entidades.insert((Clase::Asentamiento, id), true);
+        self.entidades.extend(n.pueblos_de(id).iter().filter(|p| p.activo()).map(|p| ((Clase::Pueblo, p.id), true)));
+    }
+}
+
+/// Lo que se manda a una sesión de un ámbito: la `Delta` si hay algo que contar, y la plaza que tendrá el cliente después si el ámbito es `ASENTAMIENTO` (aunque no haya `Delta`: la plaza que se recuerda
+/// avanza su secuencia interior para no volver a compararla hasta el paso siguiente).
+pub(super) struct Entrega {
+    pub(super) delta: Option<pb::Delta>,
+    pub(super) plaza: Option<pb::Asentamiento>,
+}
+
+/// La `Delta` `desde → hasta` de un ámbito con lo que cambió (`hasta` es la versión del mundo: un tramo solo del interior, que no la sube, va de la que tiene el cliente a la misma o a una posterior sin que haya
+/// cambiado nada más suyo), y la plaza que el cliente tendrá después si el ámbito es `ASENTAMIENTO`. Una entidad que ya no es del ámbito, o que ya no existe, sale con
 /// `QUITA`; en `VISTA`, también la columna que ya no está dentro del rectángulo. La plaza de `ASENTAMIENTO` viaja como cambio parcial con máscara contra la que el cliente ya tiene ([`Sesion::plaza`]; si no
-/// se sabe, entera). `None` si no hay nada que contar: un cambio que no mueve nada de lo que ve el cliente (la ficha de la plaza sin cambios) no cuesta un mensaje.
-pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, cubo: Cubo<'_>) -> Option<(pb::Delta, Option<pb::Asentamiento>)> {
+/// se sabe, entera). Sin nada que contar no hay `Delta`: un cambio que no mueve nada de lo que ve el cliente (la ficha de la plaza sin cambios) no cuesta un mensaje.
+pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, cubo: Cubo<'_>) -> Entrega {
     let (estado, t) = (n.estado(), n.ahora());
     let mut plaza = if matches!(a, Ambito::Asentamiento(_)) { s.plaza.clone() } else { None };
     let mut cambios = Vec::new();
@@ -170,7 +197,8 @@ pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, c
             evento_dominio(ev, version, heroes)
         })
         .collect();
-    (!cambios.is_empty() || !eventos.is_empty()).then(|| (pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta, cambios, eventos, niebla: None }, plaza))
+    let delta = (!cambios.is_empty() || !eventos.is_empty()).then(|| pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta, cambios, eventos, niebla: None });
+    Entrega { delta, plaza }
 }
 
 /// ¿Cambia algo de lo que decide los derechos de una sesión (el héroe, su Facción, su plaza, su campamento)?
@@ -336,7 +364,7 @@ impl Mesa {
                     }
                 }
             }
-            // La plaza y el campamento llegan a quien está dentro (la plaza, cuando cambia la ficha o el interior: el paso de minuto, quién entra y sale...) y la administración lo ve todo: una columna
+            // La plaza y el campamento llegan a quien está dentro (la plaza, cuando cambia la ficha o quién entra y sale; el paso de minuto no está aquí: lo reparte `repartir_interior`) y la administración lo ve todo: una columna
             // o una plaza que ya no existe sale con `QUITA`.
             let admin = |clase: Clase, ids: &[u64]| ids.iter().flat_map(|&id| self.suscritos(Ambito::Admin).map(move |sa| (clase, id, sa))).collect::<Vec<_>>();
             let plazas = cv.tocados.de(Clase::Asentamiento).iter().chain(cv.tocados.de(Clase::Interior)).flat_map(|&id| self.suscritos(Ambito::Asentamiento(id)).map(move |sa| (Clase::Asentamiento, id, sa)));
@@ -356,6 +384,20 @@ impl Mesa {
             }
         }
         cubos
+    }
+
+    /// Suma a los cubos el interior de las plazas que avanzaron su secuencia (pasos de minuto: no suben la versión del mundo, así que no están en ningún registro de cambios) desde la que cada cliente tiene,
+    /// que es la de la plaza que se recuerda ([`Sesion::plaza`]). Solo recorre las plazas abiertas (una consulta por plaza y sesión; la proyección, solo si hay algo nuevo).
+    pub(super) fn repartir_interior<'r>(&self, n: &Nucleo, cubos: &mut BTreeMap<(SesionId, Ambito), Cubo<'r>>) {
+        for (&a, sesiones) in self.suscriptores.range(Ambito::Asentamiento(0)..=Ambito::Asentamiento(u64::MAX)) {
+            let Ambito::Asentamiento(plaza) = a else { continue };
+            let Some(actual) = n.version_interior(plaza) else { continue };
+            for &s in sesiones {
+                if self.sesiones.get(&s).and_then(|x| x.plaza.as_ref()).is_some_and(|p| p.version_interior < actual) {
+                    cubos.entry((s, a)).or_default().interior_de(n, plaza);
+                }
+            }
+        }
     }
 
     /// Deposita los envíos en el orden dado; las sesiones lentas o cerradas se descartan.
