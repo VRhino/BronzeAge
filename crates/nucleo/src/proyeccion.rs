@@ -6,7 +6,6 @@
 
 use crate::comando::{Detalle, TipoCreado};
 use crate::estado::{Asentamiento, Ejercito, EventoNucleo};
-use base::Instante;
 use contrato::v1 as pb;
 use militar::columna::{Politica, TipoColumna};
 use std::collections::BTreeMap;
@@ -17,6 +16,7 @@ pub mod batalla;
 pub mod ids;
 pub mod interior;
 pub mod propios;
+pub mod vista;
 
 fn punto(p: base::Punto) -> pb::Punto {
     pb::Punto { x: p.x, y: p.y }
@@ -38,8 +38,9 @@ fn politica(p: Politica) -> pb::PoliticaUnion {
     }
 }
 
-/// La columna como entidad del contrato, sin lo que depende del resto del mundo (`propios::ejercito` lo completa). Lo propio viaja con el plan entero; sin plan, con su `posicion`.
-fn ejercito_base(e: &Ejercito, t: Instante) -> pb::Ejercito {
+/// La columna como entidad del contrato, sin lo que depende del resto del mundo (`propios::ejercito` lo completa). Lo propio viaja con el plan entero; sin plan, con su `posicion` (con plan, la de
+/// su primer vértice: así la proyección es función del estado y no del instante en que se pide, y una columna que anda no hay que mandarla otra vez).
+fn ejercito_base(e: &Ejercito) -> pb::Ejercito {
     let c = &e.columna;
     let v = &c.viveres;
     pb::Ejercito {
@@ -58,7 +59,7 @@ fn ejercito_base(e: &Ejercito, t: Instante) -> pb::Ejercito {
         formacion_expira_en_ms: c.formacion_expira_en,
         caravanas_adjuntas_ids: e.caravanas_adjuntas.iter().map(|c| ids::caravana(*c)).collect(),
         estado: if e.marchando() { pb::EstadoColumna::ColumnaMarchando } else { pb::EstadoColumna::ColumnaEstacionada } as i32,
-        posicion: Some(punto(e.posicion_en(t))),
+        posicion: Some(punto(e.plan.vertices.first().map_or(e.posicion, |v| v.p))),
         plan: e.marchando().then(|| plan(&e.plan)),
         ..Default::default()
     }
@@ -125,6 +126,7 @@ pub fn referencia_creada(tipo: TipoCreado, id: u64, uuid_de_batalla: &dyn Fn(u64
         TipoCreado::Edificio { plaza } => (T::Edificio, ids::edificio(plaza, u32::try_from(id).ok()?)),
         TipoCreado::Recinto { plaza } => (T::Recinto, ids::recinto(plaza, u32::try_from(id).ok()?)),
         TipoCreado::Incorporacion { batalla } => (T::Incorporacion, format!("{}:{id}", uuid_de_batalla(batalla))),
+        TipoCreado::Mirada => (T::MiradaIntel, ids::mirada(id)),
         TipoCreado::Parcela => return None,
     };
     Some(pb::ReferenciaCreada { entidad: entidad as i32, id })
@@ -178,6 +180,7 @@ mod pruebas {
         assert_eq!(ref_de(TipoCreado::Edificio { plaza: 3 }, 14), Some((T::Edificio, "ed-3-14".into())));
         assert_eq!(ref_de(TipoCreado::Recinto { plaza: 3 }, 2), Some((T::Recinto, "recinto-3-2".into())));
         assert_eq!(ref_de(TipoCreado::Incorporacion { batalla: 15 }, 1), Some((T::Incorporacion, "uuid-15:1".into())));
+        assert_eq!(ref_de(TipoCreado::Mirada, 16), Some((T::MiradaIntel, "mirada-16".into())));
         // Un id de edificio que no cabe en 32 bits no es de ninguna plaza; la parcela del administrador no es una entidad del contrato.
         assert_eq!(ref_de(TipoCreado::Edificio { plaza: 3 }, u64::MAX), None);
         assert_eq!(ref_de(TipoCreado::Parcela, 1), None);

@@ -14,16 +14,19 @@
 //! - §5.1 / §5.4: lo **propio** se ve siempre (las columnas propias viajan enteras); lo ajeno, solo si cae en un ojo.
 //! - §5.2: la visión se **comparte** con alianza o vasallaje activos (cualquier dirección) → [`Vision::con_alianzas`].
 //!   Los aliados suman a lo visible, no a lo explorado.
-//! - §4.1: la exploración de una Facción la graban sus ojos **propios**; los aliados y las Miradas no
-//!   ([`Observador::graba`]). La memoria solo crece.
+//! - §4.1: la exploración de una Facción la graban sus ojos **propios**; los aliados y las Miradas no. La memoria solo
+//!   crece. No se muestrea: se **barre** el recorrido exacto de cada ojo entre dos instantes ([`Mascara::barrer`],
+//!   [`recorrido`]), así que lo explorado no depende de cada cuánto se mire (lo hace el núcleo al cerrar sus versiones).
 //! - §4.4: la visión prestada nunca se graba. §2.2: una celda cuenta como vista cuando lo está su centro, salvo la del
-//!   propio ojo, que siempre. §2.3: la máscara que viaja es `celdas` (explorado ∪ ojos propios ahora) y `visibles`.
+//!   propio ojo, que siempre. §2.3: la máscara que viaja es `celdas` (explorado ∪ ojos propios ahora) y `visibles`
+//!   ([`niebla_proyectada`]).
 //! - §5.4 Ejércitos ajenos / Doc 13 §5: de lo ajeno solo viaja el tramo dentro de la vista y del horizonte
 //!   corto ([`tramo_visible`]).
 //!
 //! # Suposiciones (el documento no las fija)
 //!
-//! 1. Celda de la niebla = la del raster del mundo (4000 milésimas), no las 5 unidades del bloque `EXPLORACION`.
+//! 1. La rejilla de la niebla tiene la celda del bloque `EXPLORACION` (5 unidades) y la deriva de los límites del mapa quien
+//!    la usa ([`rejilla`]).
 //! 2. La alianza no es transitiva: una Facción comparte con sus aliados directos.
 //! 3. Quién es observador (plaza, avanzada, columna según tropa, Mirada vigente) y qué móviles se omiten (en batalla,
 //!    caravana propia con destino propio, etc.) lo decide el núcleo al armar las listas; aquí solo se mide.
@@ -34,7 +37,7 @@
 mod niebla;
 mod tramo;
 
-pub use niebla::{Mascara, Niebla};
+pub use niebla::{niebla_proyectada, recorrido, rejilla, ultima_vez, Mascara};
 pub use tramo::{tramo_visible, Rect};
 
 use base::{Instante, Mil, Plan, Punto};
@@ -53,6 +56,8 @@ pub mod radios {
     pub const CARAVANA_GRANDE: Mil = 60_000;
     /// Horizonte corto del plan ajeno (contrato 05).
     pub const HORIZONTE_MS: i64 = 30_000;
+    /// Cuánto tramo ajeno le queda al cliente cuando el muestreo le manda el siguiente (decisión 6 del autor, 2026-10-22).
+    pub const RENOVAR_MS: i64 = 10_000;
     /// Columna con soldados en pie ve `EJERCITO`; sin ellos, `JUGADOR_SOLO` (§3).
     pub fn columna(con_soldados: bool) -> Mil {
         if con_soldados { EJERCITO } else { JUGADOR_SOLO }
@@ -82,20 +87,14 @@ pub struct Observador<'a> {
     pub faccion: FaccionId,
     pub radio: Mil,
     pub donde: Donde<'a>,
-    /// `true` si lo que ve se graba como explorado de la Facción (plaza, avanzada, columna); `false` para una Mirada.
-    pub graba: bool,
 }
 
 impl<'a> Observador<'a> {
     pub fn fijo(faccion: FaccionId, centro: Punto, radio: Mil) -> Self {
-        Self { faccion, radio, donde: Donde::Fijo(centro), graba: true }
+        Self { faccion, radio, donde: Donde::Fijo(centro) }
     }
     pub fn movil(faccion: FaccionId, plan: &'a Plan, radio: Mil) -> Self {
-        Self { faccion, radio, donde: Donde::Plan(plan), graba: true }
-    }
-    /// Una Mirada comprada: ve pero no explora.
-    pub fn mirada(faccion: FaccionId, centro: Punto, radio: Mil) -> Self {
-        Self { faccion, radio, donde: Donde::Fijo(centro), graba: false }
+        Self { faccion, radio, donde: Donde::Plan(plan) }
     }
 }
 
@@ -269,30 +268,6 @@ impl Vision {
             })
             .collect();
         Muestra { t, por_faccion }
-    }
-
-    /// Máscara de niebla que viaja a un jugador de `faccion` (§2.3, §5.3): `celdas` = explorado de la Facción ∪ lo que ven
-    /// ahora sus ojos propios (`graba`); `visibles` = todos sus ojos más los de sus aliados y las Miradas.
-    pub fn niebla_proyectada(
-        &self,
-        niebla: &Niebla,
-        faccion: FaccionId,
-        t: Instante,
-        observadores: &[Observador],
-    ) -> contrato::v1::NieblaProyectada {
-        let mut grupo = self.aliados(faccion);
-        grupo.push(faccion);
-        let (mut propios, mut prestados) = (Vec::new(), Vec::new());
-        for o in observadores.iter().filter(|o| grupo.contains(&o.faccion)) {
-            if let Some(p) = o.donde.en(t) {
-                if o.faccion == faccion && o.graba {
-                    propios.push((p, o.radio))
-                } else {
-                    prestados.push((p, o.radio))
-                }
-            }
-        }
-        niebla.proyectar(faccion, &propios, &prestados)
     }
 }
 

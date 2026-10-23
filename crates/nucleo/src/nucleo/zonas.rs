@@ -27,6 +27,11 @@ impl Geografia {
         Self { mapa: Mapa::de(&mundo), mundo }
     }
 
+    /// Ancho y alto del mapa, en milésimas.
+    pub(super) fn tamano(&self) -> (i64, i64) {
+        self.mundo.tamano()
+    }
+
     /// Las masas de bosque del artefacto, en su orden (el índice es el que guarda un campamento de bandidos).
     pub(super) fn bosques(&self) -> &[contrato::v1::ZonaBosque] {
         self.mundo.bosques()

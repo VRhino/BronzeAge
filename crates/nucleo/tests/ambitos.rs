@@ -487,8 +487,9 @@ fn rect(a: Punto, b: Punto) -> mc::Cuerpo {
     mc::Cuerpo::Vista(pb::CambiarVista { rectangulo: Some(pb::Rectangulo { min: Some(pb::Punto { x: a.x, y: a.y }), max: Some(pb::Punto { x: b.x, y: b.y }) }) })
 }
 
+/// Las columnas de una foto de la vista (el resto —los héroes que van en ellas, la niebla...— no es de esta prueba).
 fn ids_de_columnas(f: &[pb::Entidad]) -> Vec<&str> {
-    f.iter().map(|e| ejercito(e).id.as_str()).collect()
+    columnas(f).into_iter().map(|e| e.id.as_str()).collect()
 }
 
 fn marchar(heroe: &str, p: Punto) -> orden::Cuerpo {
@@ -518,17 +519,15 @@ async fn cambiar_vista_abre_la_vista_de_la_faccion_con_lo_que_cae_en_el_rectangu
     let ms::Cuerpo::Foto(f) = gus.esperar().await.cuerpo.unwrap() else { panic!("se esperaba la Foto de la vista") };
     assert_eq!((ambito(&f.ambito), ids_de_columnas(&f.entidades)), ("VISTA:f-2".to_owned(), vec!["ej-5"]));
 
-    // Beto marcha: su columna, de la Facción de ana, está fuera del rectángulo de ana, así que ana recibe un QUITA (no se arrastra lo que cae fuera) y nada más; gus, nada.
-    let (_, r) = dar(&mut beto, "b1", marchar("heroe-4", c(12, 10))).await;
+    // Beto marcha: su columna, de la Facción de ana, anda fuera del rectángulo de ana, así que a ana no le llega nada (la vista no arrastra lo que cae fuera: desde T3d ni siquiera un QUITA de lo que nunca
+    // tuvo); gus, nada. Beto anda sin salir del rectángulo que ana mirará después.
+    let (_, r) = dar(&mut beto, "b1", marchar("heroe-4", c(13, 2))).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
-    let recibidos = pendiente(&mut ana).await;
-    assert_eq!(etiquetas(&recibidos), ["delta VISTA:f-1"]);
-    let cambios = &delta_de(&recibidos[0]).cambios;
-    assert_eq!((cambios.len(), cambios[0].tipo, cambios[0].id.as_str(), cambios[0].datos.is_none()), (1, pb::TipoCambio::CambioQuita as i32, "ej-3", true));
+    assert!(pendiente(&mut ana).await.is_empty(), "lo que cae fuera del rectángulo no llega a la vista");
     assert!(pendiente(&mut gus).await.is_empty(), "lo de otra Facción no llega a su vista");
 
-    // Ana marcha: su columna cae dentro y llega entera a su héroe y a su vista; gus sigue sin recibir nada.
-    let (previos, r) = dar_todo(&mut ana, "a1", marchar("heroe-2", c(2, 10))).await;
+    // Ana marcha sin salir de su rectángulo: su columna llega entera a su héroe y a su vista; gus sigue sin recibir nada.
+    let (previos, r) = dar_todo(&mut ana, "a1", marchar("heroe-2", c(3, 3))).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
     assert_eq!(etiquetas(&previos), ["delta HEROE:heroe-2", "delta VISTA:f-1"]);
     let cambios = &delta_de(&previos[1]).cambios;

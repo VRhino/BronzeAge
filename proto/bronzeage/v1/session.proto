@@ -188,6 +188,7 @@ message Entidad {
     EstadoTecnologia estado_tecnologia = 28;
     ZonaFaccion zona_faccion = 29;
     InformeInspeccion informe_inspeccion = 30;
+    FichaConocida ficha_conocida = 31;   // VISTA: lo que se recuerda de un sitio ajeno que ya no se ve
   }
 }
 

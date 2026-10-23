@@ -12,6 +12,17 @@ use militar::inspeccion::{self, Avistada, Contenido, ErrorInspeccion, Informe, O
 use militar::presencia::Ubicacion;
 
 impl Nucleo {
+    /// La defensa de una plaza tal como se ve de cerca (o la cuenta un Informe de la taberna): la guarnición de sus residentes, los héroes que hay dentro y los recintos con alguna celda levantada
+    /// (todo su anillo y cuántas hay en pie: el que solo está trazado no defiende). Nunca su almacén.
+    pub(super) fn defensa_vista(&self, x: u64) -> Contenido {
+        let a = &self.estado.asentamientos[&x];
+        let dentro = self.heroes().filter(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(x as u32)).map(|h| h.heroe.id).collect();
+        let guarnicion = self.estado.militar.residentes_de(x).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados());
+        let guarnicion = guarnicion.map(|s| Avistada { tropa: s.tropa, cantidad: s.cantidad, heroe: s.heroe }).collect();
+        let recintos = a.economia.recintos.iter().filter(|r| r.levantadas() > 0).map(|r| RecintoAvistado { nivel: r.nivel, celdas: r.celdas.clone(), avance: r.levantadas() as u32 }).collect();
+        Contenido::Plaza { faccion: a.faccion, heroes: dentro, guarnicion, recintos }
+    }
+
     /// Los informes de inspección vigentes de un héroe, en el orden en que los hizo.
     pub fn informes_de_inspeccion(&self, heroe: u64) -> Vec<&Informe> {
         self.heroe(heroe).into_iter().flat_map(|h| h.informes.iter()).filter(|i| i.vigente(self.estado.ahora)).collect()
@@ -52,12 +63,7 @@ impl Nucleo {
             }
             Objetivo::Asentamiento(x) => {
                 let a = self.plaza_o_rechazo(x)?;
-                let dentro = self.heroes().filter(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(x as u32)).map(|h| h.heroe.id).collect();
-                let guarnicion = self.estado.militar.residentes_de(x).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados());
-                let guarnicion = guarnicion.map(|s| Avistada { tropa: s.tropa, cantidad: s.cantidad, heroe: s.heroe }).collect();
-                // Los recintos con alguna celda levantada: todo su anillo y cuántas hay en pie (el que solo está trazado no defiende).
-                let recintos = a.economia.recintos.iter().filter(|r| r.levantadas() > 0).map(|r| RecintoAvistado { nivel: r.nivel, celdas: r.celdas.clone(), avance: r.levantadas() as u32 }).collect();
-                (a.posicion, faccion == Some(a.faccion), Contenido::Plaza { faccion: a.faccion, heroes: dentro, guarnicion, recintos }, ("asentamiento.observado", None, vec![x]))
+                (a.posicion, faccion == Some(a.faccion), self.defensa_vista(x), ("asentamiento.observado", None, vec![x]))
             }
         };
         let mr = self.estado.reglas.economia.militar.clone();

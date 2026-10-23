@@ -493,6 +493,16 @@ message Heroe {
   map<string, InteriorRecordado> plazas_recordadas = 33;
   // Dónde reside (4H T3b): la plaza (`as-N`) o el campamento de mercenarios (`camp-N`) donde guarda su almacén personal y cuenta su cupo diario. Ausente si no reside en ninguno.
   optional string residencia_id = 34;
+  // El héroe ajeno visto en la `VISTA` (4H T3d, `HeroePublico`, Doc 5.16.7): solo `id`, `version`, `display_name`, `class_definition_id`, `avatar`, `nivel`,
+  // `herido_hasta_ms` y las escuadras que lleva consigo en su columna (tropa, cantidad y nivel). Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
+  repeated EscuadraQueLleva escuadras_que_lleva = 35;
+}
+
+// Una escuadra que un héroe ajeno lleva en su columna, tal como se ve (`HeroePublico.escuadrasQueLleva`).
+message EscuadraQueLleva {
+  string tropa_id = 1;
+  uint32 cantidad = 2;
+  uint32 nivel = 3;
 }
 
 // Foto del interior de una plaza al salir de ella.
@@ -595,7 +605,7 @@ message Ejercito {
   optional Persecucion persiguiendo = 14;
   repeated string caravanas_adjuntas_ids = 15;
   EstadoColumna estado = 16;
-  Punto posicion = 17;                   // posición cuando no hay plan
+  Punto posicion = 17;                   // posición cuando no hay plan; con plan, la de su primer vértice (lo ajeno: donde empieza el tramo visible)
   optional Plan plan = 18;               // lo propio viaja entero; lo ajeno, solo el tramo visible (horizonte corto)
   bool te_sigue = 19;                    // solo en la proyección: persigue a una columna tuya
   // La columna que entró en un lugar (plaza `as-N`, pueblo `pueblo-N`, avanzada `av-N` o campamento `camp-N`) ya no está en el mapa:
@@ -657,6 +667,9 @@ message Caravana {
   optional string pueblo_id = 22;        // acarreo
   // Solo en la proyección: «llama la atención» (caravana grande), tramo visible, recursos sin cantidades.
   bool escoltada = 23;
+  // La caravana ajena vista en la `VISTA` (4H T3d, `CaravanaAvistada`): solo `id`, `version`, `faccion_id`, `posicion`, el tramo visible del plan, `escoltada` y los
+  // recursos que lleva, por nombre, sin cantidades y ordenados (`contenido` va vacío).
+  repeated string recursos_avistados = 24;
 }
 
 message SeleccionDeSalida {
@@ -851,6 +864,7 @@ message AedaItinerante {
   repeated string recientes = 8;
 }
 
+// Una Mirada de la taberna (Niebla_De_Guerra §6.1): viaja en la `VISTA` de su Facción mientras su zona se enfría (`libre_en_ms`); ve mientras `expira_en_ms` no ha pasado.
 message MiradaIntel {
   string id = 1;
   uint64 version = 2;
@@ -883,6 +897,7 @@ message GuarnicionInforme {
   string heroe_id = 3;
 }
 
+// El último Informe de una plaza ajena que compró la Facción (§6.2), con su fecha: viaja en su `VISTA` (id `as-N`, clase `INFORME_PLAZA`).
 message InformePlaza {
   string asentamiento_id = 1;
   uint64 version = 2;
@@ -935,15 +950,16 @@ message InspeccionPlaza {
   repeated RecintoInforme recintos = 4;
 }
 
-// Ficha de una plaza ajena que la Facción vio alguna vez (última foto, con su fecha).
+// Ficha de un sitio ajeno que la Facción vio alguna vez (última foto, con su fecha): una plaza, un pueblo o una avanzada («se recuerdan como una ciudad»).
 message FichaConocida {
-  string asentamiento_id = 1;
+  string asentamiento_id = 1;            // el id del sitio: `as-N`, `pueblo-N` o `av-N` (4H T3d; v1 decía solo plazas)
   optional string nombre = 2;
   string faccion_id = 3;
   Punto posicion = 4;
-  uint32 nivel = 5;
+  uint32 nivel = 5;                      // de una plaza, su nivel; de una avanzada, su etapa (1 atalaya, 2 fuerte, 3 ciudadela); de un pueblo, 0
   int64 conocido_en_ms = 6;
-  optional sint64 radio_potencial = 7;
+  optional sint64 radio_potencial = 7;   // solo de una plaza: hasta dónde llegaba su zona cuando se vio
+  TipoEntidad tipo = 8;                  // ASENTAMIENTO, PUEBLO o AVANZADA (sin especificar = ASENTAMIENTO, la de v1)
 }
 
 // Memoria de la Facción: lo explorado y lo conocido. Lo explorado es una máscara de bits sobre la rejilla (celda de 5

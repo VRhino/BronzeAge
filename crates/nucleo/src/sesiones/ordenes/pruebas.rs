@@ -216,6 +216,15 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(ComprometerRecinto, OrdenComprometerRecinto, asentamiento_id: s("as-3"), cargo: s("gobernador"), nivel: s("2")), Comando::ComprometerRecinto { asentamiento: 3, cargo: Cargo::Gobernador, nivel: 2 }),
         (orden!(MejorarRecinto, OrdenMejorarRecinto, asentamiento_id: s("as-3"), cargo: s("maestroObras"), recinto_id: s("recinto-3-1")), Comando::MejorarRecinto { asentamiento: 3, cargo: Cargo::MaestroObras, recinto: 1 }),
         (orden!(AbandonarRecinto, OrdenAbandonarRecinto, asentamiento_id: s("as-3"), recinto_id: s("recinto-3-1")), Comando::AbandonarRecinto { asentamiento: 3, recinto: 1 }),
+        // ── La intel de las tabernas (4H T3d): el héroe es el de la cuenta ──
+        (
+            orden!(ComprarMirada, OrdenComprarMirada, origen: Some(pb::orden_comprar_mirada::Origen { tipo: s("campamento"), id: s("camp-2") }), centro: Some(pb::Punto { x: 40_000, y: 9_000 })),
+            Comando::ComprarMirada { heroe: 7, origen: OrigenIntel::Campamento(2), centro: Punto::new(40_000, 9_000) },
+        ),
+        (
+            orden!(ComprarInformePlaza, OrdenComprarInformePlaza, origen: Some(pb::orden_comprar_informe_plaza::Origen { tipo: s("asentamiento"), id: s("as-3") }), asentamiento_id: s("as-8")),
+            Comando::ComprarInformePlaza { heroe: 7, origen: OrigenIntel::Plaza(3), asentamiento: 8 },
+        ),
         // ── Economía y construcción ──
         (orden!(AnadirEdificioManualmente, OrdenAnadirEdificioManualmente, asentamiento_id: s("as-3"), cargo: s("gobernador"), tipo: s("granja")), Comando::AnadirEdificio { asentamiento: 3, tipo: Tipo::Granja }),
         (orden!(QuitarDeCola, OrdenQuitarDeCola, asentamiento_id: s("as-3"), cargo: s("gobernador"), edificio_id: s("ed-3-7")), Comando::QuitarDeCola { asentamiento: 3, edificio: 7 }),
@@ -278,7 +287,7 @@ fn ordenes_no_disponibles() -> Vec<Cuerpo> {
         ResponderRelacion, RetirarRelacion, ProponerAnexion, ResponderAnexion, RetirarAnexion, ProponerFusion, ResponderFusion, RetirarFusion, ProponerPaz, RomperRelacion, RebelionVasallo,
         DeclararGuerra, VetarJugador, RenombrarAsentamiento, AlternarReabastecerAliados, CambiarResidencia, ResidirEnCampamento, DejarResidencia,
         // tecnología, Aedas e intel (sistema 6)
-        AdoptarTecnologia, EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda, ComprarMirada, ComprarInformePlaza, AbrirAlijo,
+        AdoptarTecnologia, EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda, AbrirAlijo,
         // refundación
         AportarARefundacion, RetirarDeRefundacion, ComprarCaravanaDeRefundacion, LanzarCaravanaFundacion, DesarmarCaravanaFundacion,
         // caravanas a mano y almacén personal
@@ -345,7 +354,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 45);
+    assert_eq!(sin_comando.len(), 43);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -459,6 +468,9 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(SalirAlMundo, OrdenSalirAlMundo, asentamiento_id: s("as-3"), heroe_id: h(), carga: carga(&[("mithril", 1)])), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(GuardarLoadout, OrdenGuardarLoadout, display_name: s("x"), perks_seleccionados: vec![-1]), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ColocarAvanzada, OrdenColocarAvanzada, asentamiento_id: s("as-3"), heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ComprarMirada, OrdenComprarMirada, centro: Some(pb::Punto { x: 1, y: 2 })), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ComprarMirada, OrdenComprarMirada, origen: Some(pb::orden_comprar_mirada::Origen { tipo: s("muelle"), id: s("as-3") }), centro: Some(pb::Punto { x: 1, y: 2 })), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ComprarInformePlaza, OrdenComprarInformePlaza, origen: Some(pb::orden_comprar_informe_plaza::Origen { tipo: s("campamento"), id: s("as-3") }), asentamiento_id: s("as-8")), rechazos::CAMPAMENTO_DESCONOCIDO),
     ];
     for (cuerpo, codigo) in casos {
         assert_eq!(traduce(cuerpo.clone(), false), Err(codigo), "{cuerpo:?}");
@@ -488,7 +500,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (125, 101, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (127, 103, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();

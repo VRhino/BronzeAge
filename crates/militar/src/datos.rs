@@ -123,6 +123,8 @@ pub struct ReglasVision {
     /// Alcance de vista de una columna con soldados y de un héroe solo.
     pub ejercito: Mil,
     pub jugador_solo: Mil,
+    /// Lado de la celda de la rejilla de lo explorado (`EXPLORACION.tamanoCelda`, Niebla_De_Guerra §7).
+    pub tamano_celda: Mil,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -145,6 +147,24 @@ pub struct ReglasMilitar {
 pub struct ReglasInspeccion {
     /// Cuánto se guarda lo que se vio al inspeccionar (ms): `INSPECCION.informeMinutos`.
     pub informe: i64,
+}
+
+/// La intel de las tabernas (`INTEL`, Niebla_De_Guerra §6-§7), en enteros: distancias y oro en milésimas, plazos en ms.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasIntel {
+    /// Alcance de una Mirada (y radio de su enfriamiento por zona).
+    pub radio_mirada: Mil,
+    /// Cuánto dura una Mirada abierta, y cuánto se enfría su zona después.
+    pub duracion_mirada: i64,
+    pub enfriamiento_mirada: i64,
+    /// Precio de una Mirada: `oroBase` más `oroPorUnidad` por unidad de distancia a los ojos propios (milésimas de oro por unidad).
+    pub oro_base: Mil,
+    pub oro_por_unidad: Mil,
+    /// Precio de un Informe de plaza por nivel de la plaza, y cuánto hay que esperar para pedir otro de la misma plaza.
+    pub oro_por_nivel: Mil,
+    pub enfriamiento_informe: i64,
+    /// Miradas abiertas a la vez que admite la taberna de un campamento, por Facción.
+    pub cupo_campamento: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -201,6 +221,7 @@ pub struct Reglas {
     pub militar: ReglasMilitar,
     pub presencia: ReglasPresencia,
     pub inspeccion: ReglasInspeccion,
+    pub intel: ReglasIntel,
     pub mercenarios: ReglasMercenarios,
     pub tecnologias: ReglasTecnologias,
 }
@@ -242,7 +263,7 @@ impl Reglas {
                 radio_inspeccion: mil(num(&mv, "radioInspeccion")),
             },
             formacion: ReglasFormacion { minimo: entero(&fm, "minimo") as usize, plazo: entero(&fm, "plazoMinutos") * MS_POR_MINUTO },
-            vision: ReglasVision { ejercito: mil(num(&vs, "ejercito")), jugador_solo: mil(num(&vs, "jugadorSolo")) },
+            vision: ReglasVision { ejercito: mil(num(&vs, "ejercito")), jugador_solo: mil(num(&vs, "jugadorSolo")), tamano_celda: mil(num(&bloque(NIEBLA, "EXPLORACION"), "tamanoCelda")) },
             militar: ReglasMilitar {
                 racion_por_soldado: mil(num(&mi, "racionPorSoldadoPorMinuto")),
                 regeneracion_moral: mil(num(&mi, "regeneracionMoralPorMinuto")),
@@ -254,6 +275,19 @@ impl Reglas {
             },
             presencia: ReglasPresencia { retardo_desconexion: entero(&pr, "retardoDesconexionMs"), tope_aplazamiento: entero(&pr, "topeAplazamientoMs") },
             inspeccion: ReglasInspeccion { informe: entero(&bloque(NIEBLA, "INSPECCION"), "informeMinutos") * MS_POR_MINUTO },
+            intel: {
+                let i = bloque(NIEBLA, "INTEL");
+                ReglasIntel {
+                    radio_mirada: mil(num(&i, "mirada.radio")),
+                    duracion_mirada: entero(&i, "mirada.duracionMinutos") * MS_POR_MINUTO,
+                    enfriamiento_mirada: entero(&i, "mirada.cooldownMinutos") * MS_POR_MINUTO,
+                    oro_base: mil(num(&i, "mirada.oroBase")),
+                    oro_por_unidad: mil(num(&i, "mirada.oroPorUnidad")),
+                    oro_por_nivel: mil(num(&i, "informe.oroPorNivel")),
+                    enfriamiento_informe: entero(&i, "informe.cooldownMinutos") * MS_POR_MINUTO,
+                    cupo_campamento: entero(&i, "campamento.cupoMiradas") as u32,
+                }
+            },
             mercenarios: ReglasMercenarios {
                 recargo: ppm(num(&me, "recargo")),
                 descuento_sin_asentamientos: ppm(num(&me, "descuentoSinAsentamientos")),

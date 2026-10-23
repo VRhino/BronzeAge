@@ -19,7 +19,8 @@
 //!
 //! # Reloj
 //! El actor es quien gobierna el [`RelojCompartido`]: duerme hasta el próximo evento de la cola (convertido a pared con el
-//! factor vigente) o, como mucho, 500 ms, y al despertar avanza el núcleo hasta el instante de mundo.
+//! factor vigente) o, como mucho, 500 ms, y al despertar avanza el núcleo hasta el instante de mundo. Con alguna `VISTA` abierta despierta
+//! además en cada muestreo de visión (cada [`MUESTREO_VISTA_MS`] de mundo) para poner al día lo que se ve: no cambia el estado del núcleo ni su versión.
 
 mod ambitos;
 mod ordenes;
@@ -49,6 +50,9 @@ use tokio::task::JoinHandle;
 
 const ESPERA_MAXIMA_MS: i64 = 500;
 
+/// Cada cuánto (ms de mundo) se pone al día lo que ve cada `VISTA` abierta (Niebla_De_Guerra §4.1; decisión 6 del autor: este muestreo renueva el tramo ajeno).
+pub const MUESTREO_VISTA_MS: i64 = 250;
+
 /// Lo que se mandó a los servidores de batalla de una batalla: la revisión de su ticket y la última incorporación (su secuencia).
 struct Publicada {
     revision: u32,
@@ -63,6 +67,13 @@ struct Actor {
     publicadas: BTreeMap<u64, Publicada>,
     /// Última versión cuyos cambios ya se repartieron.
     entregada: u64,
+    /// El instante de mundo del próximo muestreo de las vistas.
+    proxima_vista: base::Instante,
+}
+
+/// El primer instante de muestreo de las vistas después de `t`.
+fn siguiente_muestreo(t: base::Instante) -> base::Instante {
+    (t.div_euclid(MUESTREO_VISTA_MS) + 1) * MUESTREO_VISTA_MS
 }
 
 /// Arranca el actor del núcleo. Termina (devolviendo el [`Nucleo`], ya apagado) cuando se cierran todos los emisores de `rx`.
@@ -70,8 +81,8 @@ struct Actor {
 pub fn lanzar(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<ComandoSesion>) -> JoinHandle<Nucleo> {
     nucleo.conectar_reloj(reloj.clone());
     nucleo.seguir_pertenencias();
-    let entregada = nucleo.version();
-    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada };
+    let (entregada, proxima_vista) = (nucleo.version(), siguiente_muestreo(nucleo.ahora()));
+    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada, proxima_vista };
     tokio::spawn(actor.correr(rx))
 }
 
@@ -99,9 +110,10 @@ impl Actor {
         self.nucleo
     }
 
-    /// Milisegundos de pared hasta el próximo evento de la cola (tope 500; al menos 1 si ya vencía).
+    /// Milisegundos de pared hasta el próximo evento de la cola o, con alguna vista abierta, hasta el próximo muestreo de las vistas (tope 500; al menos 1 si ya vencía).
     fn espera_ms(&self) -> i64 {
-        let Some(t) = self.nucleo.proximo_instante() else { return ESPERA_MAXIMA_MS };
+        let muestreo = self.mesa.hay_vistas().then_some(self.proxima_vista);
+        let Some(t) = self.nucleo.proximo_instante().into_iter().chain(muestreo).min() else { return ESPERA_MAXIMA_MS };
         let ms = self.reloj.con(|r, pared| {
             if r.pausado() || r.factor_milesimas() == 0 {
                 None
@@ -323,6 +335,12 @@ impl Actor {
                     self.mesa.sincronizar(&self.nucleo, id, true, &mut envios);
                 }
             }
+        }
+        // Lo que se ve: tras cualquier cambio del mundo y en cada muestreo (lo que anda entra y sale de la vista, a lo ajeno se le acaba el tramo).
+        let ahora = self.nucleo.ahora();
+        if hasta != self.entregada || ahora >= self.proxima_vista {
+            self.mesa.reconciliar_vistas(&self.nucleo, &mut envios);
+            self.proxima_vista = siguiente_muestreo(ahora);
         }
         self.entregada = hasta;
         self.mesa.entregar(envios);

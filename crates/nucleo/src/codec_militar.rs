@@ -342,6 +342,11 @@ fn informe_escribir(w: &mut Escritor, i: &Informe) {
     w.i64(*visto_en);
     w.i64(*expira_en);
     w.punto(*donde);
+    contenido_escribir(w, contenido);
+}
+
+/// Lo que se vio de cerca (el informe de inspección; la defensa de un Informe de plaza de la taberna, en `memoria`).
+pub(crate) fn contenido_escribir(w: &mut Escritor, contenido: &Contenido) {
     match contenido {
         Contenido::Columna { faccion, heroes, escuadras } => {
             w.u8(0);
@@ -373,7 +378,11 @@ fn informe_escribir(w: &mut Escritor, i: &Informe) {
 fn informe_leer(r: &mut Lector) -> Result<Informe, ErrorFormato> {
     let objetivo = objetivo_leer(r)?;
     let (visto_en, expira_en, donde) = (r.i64()?, r.i64()?, r.punto()?);
-    let contenido = match r.u8()? {
+    Ok(Informe { objetivo, visto_en, expira_en, donde, contenido: contenido_leer(r)? })
+}
+
+pub(crate) fn contenido_leer(r: &mut Lector) -> Result<Contenido, ErrorFormato> {
+    Ok(match r.u8()? {
         0 => Contenido::Columna { faccion: opt_u32(r.opt_u64()?)?, heroes: lista_u64_leer(r)?, escuadras: avistadas_leer(r)? },
         1 => Contenido::Caravana { escoltada: r.bool()?, recursos: (0..r.cuenta()?).map(|_| recurso_de_u8(r.u8()?)).collect::<Result<_, _>>()? },
         2 => {
@@ -382,8 +391,7 @@ fn informe_leer(r: &mut Lector) -> Result<Informe, ErrorFormato> {
             Contenido::Plaza { faccion, heroes, guarnicion, recintos }
         }
         _ => return Err(ErrorFormato("contenido de informe desconocido")),
-    };
-    Ok(Informe { objetivo, visto_en, expira_en, donde, contenido })
+    })
 }
 
 fn seleccion_escribir(w: &mut Escritor, s: &Seleccion) {

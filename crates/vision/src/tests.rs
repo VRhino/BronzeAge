@@ -54,30 +54,6 @@ fn aliados_comparten_lo_visible_pero_no_lo_explorado() {
     let m = con.muestrear(0, &obs, &mov);
     assert_eq!((m.de(1), m.de(2)), (&[9u64][..], &[9u64][..]));
     assert_eq!(con.aliados(1), vec![2]);
-
-    // Niebla: A solo explora lo suyo; lo de B entra en `visibles`, no en `celdas`.
-    let mut n = Niebla::nueva(667, 500);
-    n.grabar(0, &obs);
-    let p = con.niebla_proyectada(&n, 1, 0, &obs);
-    let (celdas, visibles) = (&p.celdas, &p.visibles);
-    let bit = |m: &Vec<u8>, c: usize, f: usize| m[(f * 667 + c) >> 3] >> ((f * 667 + c) & 7) & 1 == 1;
-    assert!(bit(celdas, 0, 0) && bit(visibles, 0, 0));
-    assert!(!bit(celdas, 125, 125), "lo que ve el aliado no se explora");
-    assert!(bit(visibles, 125, 125), "pero sí se ve ahora");
-    assert!(!n.explorada(1, 125, 125) && n.explorada(2, 125, 125));
-    assert_eq!((p.tamano_celda, p.columnas, p.filas, p.celdas.len()), (4000, 667, 500, (667 * 500usize).div_ceil(8)));
-}
-
-#[test]
-fn mirada_ve_pero_no_explora() {
-    let obs = [Observador::mirada(1, pt(100 * U, 100 * U), radios::MIRADA)];
-    let mut n = Niebla::nueva(667, 500);
-    n.grabar(0, &obs);
-    assert!(!n.explorado_en(1, pt(100 * U, 100 * U)));
-    let mov = [Movil::new(5, 2, Donde::Fijo(pt(110 * U, 100 * U)))];
-    assert_eq!(Vision::new().muestrear(0, &obs, &mov).de(1), &[5]);
-    let p = Vision::new().niebla_proyectada(&n, 1, 0, &obs);
-    assert!(p.celdas.iter().all(|&b| b == 0) && p.visibles.iter().any(|&b| b != 0));
 }
 
 #[test]
@@ -188,77 +164,92 @@ fn el_orden_de_entrada_no_cambia_la_muestra() {
     assert_eq!(a, v.muestrear(60_000, &obs2, &mov2));
 }
 
+const T: i64 = 4000; // celda de las pruebas de la máscara
+
+fn marcadas(m: &Mascara) -> Vec<(usize, usize)> {
+    (0..m.filas()).flat_map(|f| (0..m.columnas()).map(move |c| (c, f))).filter(|&(c, f)| m.get(c, f)).collect()
+}
+
 #[test]
 fn niebla_reglas_del_documento() {
-    let mut n = Niebla::nueva(10, 10);
+    let mut n = Mascara::nueva(10, 10, T);
     // Radio 0 en el centro de la celda (2,3): marca solo la propia celda del ojo.
-    assert!(n.descubrir(1, pt(2 * 4000 + 2000, 3 * 4000 + 2000), 0));
-    assert!(n.explorada(1, 2, 3) && !n.explorada(1, 3, 3));
-    assert!(!n.descubrir(1, pt(2 * 4000 + 2000, 3 * 4000 + 2000), 0), "sin novedad: false");
+    assert!(n.marcar_vision(pt(2 * T + 2000, 3 * T + 2000), 0));
+    assert!(n.get(2, 3) && !n.get(3, 3));
+    assert!(!n.marcar_vision(pt(2 * T + 2000, 3 * T + 2000), 0), "sin novedad: false");
     // La celda del ojo se marca aunque el radio no alcance su centro; el vecino (3,3) solo si su centro está a ≤ radio.
-    let mut m = Niebla::nueva(10, 10);
-    m.descubrir(1, pt(2 * 4000 + 100, 3 * 4000 + 100), 100);
-    assert!(m.explorada(1, 2, 3) && !m.explorada(1, 3, 3) && !m.explorada(1, 2, 4));
-    // Desde el centro de la celda (5,5) con radio 4000: el centro de las 4 vecinas está a exactamente 4000 → entran;
-    // las diagonales (5657) no.
-    let mut k = Niebla::nueva(10, 10);
-    k.descubrir(1, pt(5 * 4000 + 2000, 5 * 4000 + 2000), 4000);
-    let marcadas: Vec<_> = (0..10).flat_map(|f| (0..10).map(move |c| (c, f))).filter(|&(c, f)| k.explorada(1, c, f)).collect();
-    assert_eq!(marcadas.len(), 5);
-    assert!(k.explorada(1, 4, 5) && k.explorada(1, 6, 5) && k.explorada(1, 5, 4) && k.explorada(1, 5, 6) && !k.explorada(1, 4, 4));
+    let mut m = Mascara::nueva(10, 10, T);
+    m.marcar_vision(pt(2 * T + 100, 3 * T + 100), 100);
+    assert!(m.get(2, 3) && !m.get(3, 3) && !m.get(2, 4));
+    // Desde el centro de la celda (5,5) con radio 4000: el centro de las 4 vecinas está a exactamente 4000 → entran; las diagonales (5657) no.
+    let mut k = Mascara::nueva(10, 10, T);
+    k.marcar_vision(pt(5 * T + 2000, 5 * T + 2000), 4000);
+    assert_eq!(marcadas(&k), vec![(5, 4), (4, 5), (5, 5), (6, 5), (5, 6)]);
     // Ojo fuera del mapa: sin pánico, y el disco que entra en el mapa se marca.
-    k.descubrir(1, pt(-1000, -1000), 50_000);
-    assert!(k.explorada(1, 0, 0));
-    assert!(!k.explorada(2, 0, 0), "otra Facción no ha visto nada");
+    k.marcar_vision(pt(-1000, -1000), 50_000);
+    assert!(k.get(0, 0) && k.explorado_en(pt(10, 10)) && !k.explorado_en(pt(-1, 10)));
 }
 
 #[test]
 fn niebla_orden_de_bits_volcado_y_restauracion() {
-    let mut n = Niebla::nueva(10, 10);
-    n.descubrir(1, pt(9 * 4000 + 2000, 2000), 0); // celda i=9 → byte 1, bit 1
-    let b = n.volcar(1);
-    assert_eq!(b.len(), 13);
-    assert_eq!((b[0], b[1]), (0, 0b10));
-    n.descubrir(1, pt(2000, 2000), 0); // i=0
-    let b = n.volcar(1);
-    assert_eq!((b[0], b[1]), (1, 0b10));
-    let mut r = Niebla::nueva(10, 10);
-    r.restaurar(1, &b);
-    assert_eq!(r.volcar(1), b);
+    let mut n = Mascara::nueva(10, 10, T);
+    n.marcar_vision(pt(9 * T + 2000, 2000), 0); // celda i=9 → byte 1, bit 1
+    assert_eq!(n.bytes().len(), 13);
+    assert_eq!((n.bytes()[0], n.bytes()[1]), (0, 0b10));
+    n.marcar_vision(pt(2000, 2000), 0); // i=0
+    assert_eq!((n.bytes()[0], n.bytes()[1]), (1, 0b10));
+    assert_eq!(Mascara::desde_bytes(10, 10, T, n.bytes()), n);
     // Más corta: el resto sin explorar. Más larga: se trunca y se limpian los bits sobrantes del último byte.
-    r.restaurar(2, &[0xff]);
-    assert_eq!(r.volcar(2).iter().map(|x| x.count_ones()).sum::<u32>(), 8);
-    r.restaurar(3, &[0xff; 40]);
-    assert_eq!(r.volcar(3).iter().map(|x| x.count_ones()).sum::<u32>(), 100);
-    assert_eq!(r.volcar(99), Vec::<u8>::new());
+    assert_eq!(Mascara::desde_bytes(10, 10, T, &[0xff]).contar(), 8);
+    assert_eq!(Mascara::desde_bytes(10, 10, T, &[0xff; 40]).contar(), 100);
+    let mut a = Mascara::desde_bytes(10, 10, T, &[0b1]);
+    a.fundir(&Mascara::desde_bytes(10, 10, T, &[0b10]));
+    assert_eq!(a.bytes()[0], 0b11, "fundir es el OR de lo explorado");
+    assert_eq!(rejilla(2_667_000, 2_000_000, 5_000), (534, 400), "la rejilla del mapa real con celdas de 5 unidades");
 }
 
 #[test]
-fn niebla_fundir_une_y_borra_el_origen() {
-    let mut n = Niebla::nueva(10, 10);
-    n.descubrir(100, pt(2000, 2000), 0);
-    n.descubrir(1, pt(6000, 2000), 0);
-    n.fundir(100, 1);
-    assert!(n.explorada(1, 0, 0) && n.explorada(1, 1, 0));
-    assert!(!n.explorada(100, 0, 0));
-    assert_eq!(n.facciones().collect::<Vec<_>>(), vec![1]);
+fn barrer_marca_lo_que_vio_por_el_camino_y_nada_mas() {
+    // Una columna en diagonal y en zigzag, con alcance 30: lo barrido contiene lo que se ve desde cada punto del camino (muestreado cada 0,1 u) y no pasa del alcance más 0,1 u.
+    let p = plan(&[(20 * U, 30 * U, 0), (180 * U, 150 * U, 200_000), (60 * U, 210 * U, 330_000)]);
+    let r = recorrido(&p, pt(0, 0), 0, 400_000);
+    assert!(r.windows(2).all(|w| (w[1].p.x - w[0].p.x).abs().max((w[1].p.y - w[0].p.y).abs()) <= 100 * U), "los tramos largos se parten");
+    let mut barrido = Mascara::nueva(60, 60, T);
+    assert!(barrido.barrer(&r, 30 * U));
+    let (mut dentro, mut fuera) = (Mascara::nueva(60, 60, T), Mascara::nueva(60, 60, T));
+    for t in (0..=330_000).step_by(100) {
+        let q = p.posicion_en(t).unwrap();
+        dentro.marcar_vision(q, 30 * U);
+        fuera.marcar_vision(q, 30 * U + 100);
+    }
+    let mut union = barrido.clone();
+    union.fundir(&dentro);
+    assert_eq!(union, barrido, "todo lo que se ve desde el camino queda barrido");
+    let mut techo = fuera.clone();
+    techo.fundir(&barrido);
+    assert_eq!(techo, fuera, "y nada que no se viera");
+    assert!(!barrido.barrer(&r, 30 * U), "barrer dos veces lo mismo no descubre nada");
+    // Quieto (sin plan): el disco en su sitio.
+    let mut quieto = Mascara::nueva(60, 60, T);
+    quieto.barrer(&recorrido(&Plan::default(), pt(100 * U, 100 * U), 0, 50_000), 15 * U);
+    let mut disco = Mascara::nueva(60, 60, T);
+    disco.marcar_vision(pt(100 * U, 100 * U), 15 * U);
+    assert_eq!(quieto, disco);
 }
 
 #[test]
-fn grabar_es_determinista_con_1_y_8_hilos() {
-    let n_fac = 20;
-    let (_, po, _) = mundo_aleatorio(11, 400, n_fac);
-    let (obs, _) = armar(&[], &po, &[], n_fac);
-    let hacer = || {
-        let mut n = Niebla::nueva(667, 500);
-        for t in [0, 60_000, 120_000] {
-            n.grabar(t, &obs);
-        }
-        (0..n_fac).map(|f| n.volcar(f)).collect::<Vec<_>>()
-    };
-    let (a, b) = (con_hilos(1, hacer), con_hilos(8, hacer));
-    assert_eq!(a, b);
-    assert!(a.iter().all(|v| v.iter().any(|&x| x != 0)));
+fn ultima_vez_da_el_instante_en_que_el_punto_salio_de_la_vista() {
+    // De (0,0) a (100,0) en 100 s y luego quieto. Un punto en (50,10) con alcance 30 se ve mientras |x − 50| ≤ √800 = 28,28: hasta x = 78,28 (t = 78,28 s).
+    let p = plan(&[(0, 0, 0), (100 * U, 0, 100_000)]);
+    let r = recorrido(&p, pt(0, 0), 0, 200_000);
+    let t = ultima_vez(&r, pt(50 * U, 10 * U), 30 * U).unwrap();
+    assert!((78_283..=78_285).contains(&t), "{t}");
+    assert_eq!(ultima_vez(&r, pt(50 * U, 31 * U), 30 * U), None, "nunca a menos de 30");
+    assert_eq!(ultima_vez(&r, pt(100 * U, 20 * U), 30 * U), Some(200_000), "lo ve todavía al acabar el recorrido");
+    assert_eq!(ultima_vez(&r, pt(-30 * U, 0), 30 * U), Some(0), "solo en el primer instante (no estricto)");
+    // Sobre un recorrido que solo empieza a verlo al final del primer tramo.
+    let r = recorrido(&p, pt(0, 0), 0, 50_000);
+    assert_eq!(ultima_vez(&r, pt(80 * U, 0), 30 * U), Some(50_000));
 }
 
 fn rect(x0: Mil, y0: Mil, x1: Mil, y1: Mil) -> Rect {

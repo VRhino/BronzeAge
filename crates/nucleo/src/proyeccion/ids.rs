@@ -30,6 +30,7 @@ ids! {
     u64, "obra", obra, parse_obra;
     u64, "loadout", loadout, parse_loadout;
     u32, "nodo", nodo, parse_nodo;
+    u64, "mirada", mirada, parse_mirada;
 }
 
 /// Una relación entre dos Facciones (`rel-<menor>-<mayor>`).

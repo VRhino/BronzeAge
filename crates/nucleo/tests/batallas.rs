@@ -891,7 +891,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN22");
+    assert_eq!(&bytes[..5], b"BAN23");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -2010,7 +2010,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN22");
+        assert_eq!(&bytes[..5], b"BAN23");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();
@@ -2258,4 +2258,36 @@ fn en_el_saqueo_de_un_pueblo_por_unity_de_oficio_solo_defienden_los_mineros_y_se
     assert_eq!(e.carga(alia.0, Piedra), 30_001 - 15_000, "el visitante amigo que defendió también: misma regla para todos");
     assert!(e.carga(saqueador.0, Madera) + e.carga(saqueador.0, Piedra) >= 15_000, "lo robado, de los dos, es del vencedor (lo que le quepa en el carro)");
     assert_eq!(e.n.estado().asentamientos[&madre].faccion, 1);
+}
+
+// ───────────────────────────── La batalla bajo la niebla (4H T3d) ─────────────────────────────
+
+/// Un espectador que no es de ninguno de los dos bandos recibe la batalla por su `VISTA` si ve su punto (resumida: sin ticket ni token); quien no la ve, no. Quien combate la ve entera también en
+/// su vista, y las columnas que la batalla aparta no viajan como avistadas (la batalla las sustituye).
+#[test]
+fn la_batalla_se_ve_bajo_la_niebla_resumida_para_un_espectador_de_otra_faccion_y_entera_para_quien_combate() {
+    use contrato::v1::{entidad::Cuerpo, TipoEntidad};
+    use nucleo::proyeccion::vista::{Mirada, Perspectiva};
+    let (mut x, id) = batalla_abierta();
+    let punto = x.n.batalla(id).unwrap().punto;
+    let cerca = columna(&mut x.n, "nora", 3, Punto::new(punto.x + 10_000, punto.y));
+    columna(&mut x.n, "lejos", 4, Punto::new(punto.x + 100_000, punto.y));
+    let uuid = x.n.uuid_de_batalla(id);
+    let rect = vision::Rect { min: Punto::new(-1_000_000, -1_000_000), max: Punto::new(10_000_000, 10_000_000) };
+    let ver = |n: &Nucleo, f: u32, viewer: u64| {
+        let mirada = Mirada::de(n, Perspectiva::Faccion(f));
+        let contenido = mirada.contenido(Some(viewer), rect, &Default::default());
+        let batalla = contenido.iter().find(|v| v.clave == (TipoEntidad::Batalla as i32, uuid.clone())).and_then(|v| v.cuerpo());
+        let columnas: Vec<String> = contenido.iter().filter(|v| v.clave.0 == TipoEntidad::Ejercito as i32).map(|v| v.clave.1.clone()).collect();
+        (batalla, columnas)
+    };
+    let (b, columnas) = ver(&x.n, 3, cerca.1);
+    let Some(Cuerpo::Batalla(b)) = b else { panic!("la espectadora de F3 ve la batalla") };
+    assert!(b.ticket.is_none() && b.asignacion_propia.is_none() && b.lado_propio.is_none(), "resumida: {b:?}");
+    let apartadas = [nucleo::proyeccion::ids::ejercito(x.ana.0), nucleo::proyeccion::ids::ejercito(x.beto.0)];
+    assert!(columnas.iter().all(|c| !apartadas.contains(c)), "las columnas en la batalla no viajan como avistadas: {columnas:?}");
+    assert!(ver(&x.n, 4, 0).0.is_none(), "a 100 u no se ve");
+    let (b, _) = ver(&x.n, 1, x.ana.1);
+    let Some(Cuerpo::Batalla(b)) = b else { panic!("quien combate la ve en su vista") };
+    assert!(b.ticket.is_some() && b.lado_propio.is_some(), "entera para quien combate");
 }

@@ -55,6 +55,10 @@ impl Escritor {
         self.bool(v.is_some());
         self.u64(v.unwrap_or(0));
     }
+    pub fn bytes(&mut self, b: &[u8]) {
+        self.u64(b.len() as u64);
+        self.0.extend_from_slice(b);
+    }
 }
 
 pub(crate) struct Lector<'a> {
@@ -110,6 +114,10 @@ impl<'a> Lector<'a> {
     pub fn opt_u64(&mut self) -> Result<Option<u64>, ErrorFormato> {
         let (hay, v) = (self.bool()?, self.u64()?);
         Ok(hay.then_some(v))
+    }
+    pub fn bytes(&mut self) -> Result<&'a [u8], ErrorFormato> {
+        let n = self.cuenta()?;
+        self.tomar(n)
     }
     /// Cuenta de elementos, acotada por los bytes que quedan (una cuenta absurda no reserva memoria).
     pub fn cuenta(&mut self) -> Result<usize, ErrorFormato> {

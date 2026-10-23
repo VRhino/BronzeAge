@@ -1541,7 +1541,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN22");
+    assert_eq!(&bytes[..5], b"BAN23");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -2080,7 +2080,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN22");
+        assert_eq!(&bytes[..5], b"BAN23");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));
@@ -2098,4 +2098,31 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
     e.avanzar(HORA);
     assert_eq!(e.n.hash_estado(), referencia, "el mundo recuperado sigue igual que el que no se interrumpió");
     e.n.apagar().unwrap();
+}
+
+// ───────────────────────────── La niebla: la avanzada es un ojo de 12 (4H T3d) ─────────────────────────────
+
+#[test]
+fn la_avanzada_operativa_ve_12_explora_su_disco_y_deja_de_ver_al_destruirla() {
+    use contrato::v1::TipoEntidad;
+    use nucleo::proyeccion::vista::{Mirada, Perspectiva};
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (av, col, heroe) = e.atalaya();
+    let pos = e.avanzada(av).posicion;
+    assert!(e.n.estado().memoria.exploracion[&1].explorado_en(Punto::new(pos.x + 11_500, pos.y)), "la avanzada explora su disco al quedar operativa");
+    // La columna de Ana se va lejos: solo la plaza (15 alrededor de su centro, a 8 u al oeste) y la avanzada (12) ven por F1.
+    e.ok("ana", Comando::MarcharA { ejercito: col, destino: Punto::new(e.centro.x - 80_000, e.centro.y) });
+    let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();
+    e.hasta(fin + MIN);
+    let (cerca, lejos) = (e.columna("beto", 2, Punto::new(pos.x + 11_500, pos.y)).0, e.columna("gus", 3, Punto::new(pos.x + 13_000, pos.y)).0);
+    let ve = |e: &Esc| {
+        let rect = vision::Rect { min: Punto::new(0, 0), max: Punto::new(2_667_000, 2_000_000) };
+        let m = Mirada::de(&e.n, Perspectiva::Faccion(1));
+        let ids: Vec<String> = m.contenido(None, rect, &Default::default()).into_iter().filter(|v| v.clave.0 == TipoEntidad::Ejercito as i32).map(|v| v.clave.1).collect();
+        (ids.contains(&nucleo::proyeccion::ids::ejercito(cerca)), ids.contains(&nucleo::proyeccion::ids::ejercito(lejos)))
+    };
+    assert_eq!(ve(&e), (true, false), "a 11,5 de la avanzada se ve; a 13, no");
+    e.ok("ana", Comando::DestruirAvanzada { heroe, avanzada: av });
+    assert_eq!(ve(&e), (false, false), "destruida, no ve");
 }

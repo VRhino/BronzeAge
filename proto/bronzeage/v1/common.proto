@@ -119,11 +119,15 @@ enum TipoEntidad {
   RECINTO = 30;
   INCORPORACION = 31;                    // id `<battle_id>:<secuencia>`
   LOADOUT = 32;
+  // La última foto de un sitio ajeno que la Facción vio y ya no ve (4H T3d, ámbito `VISTA`): su id es el del sitio (`as-N`, `pueblo-N`, `av-N`). Un sitio
+  // que se ve viaja como su entidad (`ASENTAMIENTO`, `PUEBLO`, `AVANZADA`, `OBRA_DE_MAPA`); el que solo se recuerda, como ficha: nunca los dos a la vez.
+  FICHA_CONOCIDA = 33;
 }
 
 // Ámbito de suscripción de una sesión. El servidor suscribe solo lo que corresponde al héroe (jamás lo pide el cliente):
 //   HEROE (el propio), ASENTAMIENTO (donde está dentro), CAMPAMENTO (donde está dentro), BATALLA (en la que combate),
-//   FACCION (la propia), VISTA (el mundo visible a la Facción, filtrado por niebla).
+//   FACCION (la propia), VISTA (el mundo visible a la Facción, filtrado por niebla; `VISTA:f-N`, o `VISTA:heroe-N` para el héroe sin Facción, que
+//   ve con su niebla personal).
 // `ADMIN` solo para sesiones de administración.
 enum AmbitoTipo {
   AMBITO_NO_ESPECIFICADO = 0;

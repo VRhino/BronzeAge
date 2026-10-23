@@ -191,7 +191,7 @@ pub fn escuadron(n: &Nucleo, e: &Escuadra) -> pb::Escuadron {
 
 // ───────────────────────────── Informes de inspección ─────────────────────────────
 
-fn avistadas(a: &[Avistada]) -> Vec<pb::GuarnicionInforme> {
+pub(super) fn avistadas(a: &[Avistada]) -> Vec<pb::GuarnicionInforme> {
     a.iter().map(|x| pb::GuarnicionInforme { tropa_id: x.tropa.nombre().to_owned(), cantidad: x.cantidad.max(0) as u32, heroe_id: ids::heroe(x.heroe) }).collect()
 }
 
@@ -231,7 +231,7 @@ pub fn informe_de_inspeccion(n: &Nucleo, heroe: u64, i: &Informe) -> pb::Informe
 /// La columna, completa: con lo que persigue, si una batalla la tiene apartada y dentro de qué lugar está. DUDA: `te_sigue` es de la vista del perseguido (T3d): depende de otras columnas
 /// y no está en el registro de cambios.
 pub fn ejercito(n: &Nucleo, e: &Ejercito) -> pb::Ejercito {
-    let mut x = super::ejercito_base(e, n.ahora());
+    let mut x = super::ejercito_base(e);
     x.version = e.version;
     x.persiguiendo = e.persiguiendo.map(|presa| {
         let es_caravana = crate::estado_comercio::es_entidad_caravana(presa);

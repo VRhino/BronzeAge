@@ -4,7 +4,7 @@
 //! | Clase | Ámbitos |
 //! |---|---|
 //! | `Heroe`, `Escuadra` | `HEROE` del héroe (si es el de su cuenta) |
-//! | `Ejercito` | `HEROE` de cada participante; `VISTA` de su Facción (candidata: la sesión filtra por su rectángulo) |
+//! | `Ejercito` | `HEROE` de cada participante (la `VISTA` no sale de aquí: la decide la niebla en cada muestreo, `proyeccion::vista`) |
 //! | `Caravana` | `FACCION` de su plaza de origen; `HEROE` de los participantes de la columna a la que va adjunta y de quienes ceden escolta |
 //! | `Batalla` | su propio ámbito `BATALLA` (al que tienen derecho los que combaten en ella, `sesiones/ambitos.rs`) y `FACCION` de las Facciones de los dos bandos y de quienes combaten (el asedio visible) |
 //! | `Asentamiento`, `Avanzada`, `OrdenMercado`, `Convocatoria` | `FACCION` del dueño (de la plaza madre, de la plaza o de la Facción de la convocatoria) |
@@ -71,7 +71,6 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
         Clase::Ejercito => {
             if let Some(x) = e.ejercitos.get(&id) {
                 v = heroes_de(e, x.columna.participantes.iter().map(|p| p.heroe));
-                v.extend(x.columna.faccion.map(Ambito::Vista));
             }
         }
         Clase::Heroe => v.extend(e.militar.heroes.get(&id).filter(|h| principal(e, h) == Some(id)).map(|_| Ambito::Heroe(id))),

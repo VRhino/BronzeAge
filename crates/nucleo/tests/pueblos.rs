@@ -1033,7 +1033,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN22");
+    assert_eq!(&bytes[..5], b"BAN23");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1054,4 +1054,45 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("neu", Comando::SalirDePueblo { pueblo, heroe: h });
     assert!(e.n.en_el_mapa(col));
     e.n.apagar().unwrap();
+}
+
+// ───────────────────────────── La niebla: el pueblo ajeno se recuerda «como una ciudad» (4H T3d) ─────────────────────────────
+
+#[test]
+fn el_pueblo_ajeno_se_recuerda_como_una_ciudad_y_se_olvida_cuando_se_vuelve_a_mirar_su_sitio_y_ya_no_esta() {
+    use contrato::v1::{entidad::Cuerpo, TipoEntidad};
+    use nucleo::memoria::Sitio;
+    use nucleo::proyeccion::vista::{Mirada, Perspectiva};
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let pueblo = e.pueblo_levantado();
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    // Una columna de F2 (un héroe solo: ve 15) espera a 10 u del pueblo y se va lejos.
+    let tierra = |r: i64| (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(sitio.x + (r as f64 * a.cos()) as i64, sitio.y + (r as f64 * a.sin()) as i64)).find(|q| m.0.transitable_en(q.x, q.y)).expect("tierra");
+    let (junto, lejos) = (tierra(10_000), tierra(60_000));
+    let col = e.columna("beto", 2, junto);
+    e.avanzar(MIN);
+    e.ok("beto", Comando::MarcharA { ejercito: col, destino: lejos });
+    let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();
+    e.n.avanzar_hasta(fin + MIN);
+    let ficha = e.n.estado().memoria.fichas[&2][&Sitio::Pueblo(pueblo)];
+    assert_eq!((ficha.datos.faccion, ficha.datos.posicion), (1, sitio), "lo vio al pasar y lo recuerda");
+    let id = nucleo::proyeccion::ids::pueblo(pueblo);
+    let recordado = |n: &Nucleo| {
+        let rect = vision::Rect { min: Punto::new(0, 0), max: Punto::new(2_667_000, 2_000_000) };
+        Mirada::de(n, Perspectiva::Faccion(2)).contenido(None, rect, &Default::default()).into_iter().find(|v| v.clave == (TipoEntidad::FichaConocida as i32, id.clone())).and_then(|v| v.cuerpo())
+    };
+    let Some(Cuerpo::FichaConocida(f)) = recordado(&e.n) else { panic!("la vista lo recuerda") };
+    assert_eq!((f.tipo, f.faccion_id.as_str(), f.nivel, f.radio_potencial), (TipoEntidad::Pueblo as i32, "f-1", 0, None));
+
+    // Ana lo destruye: mientras F2 no vuelva a mirar el sitio, la foto vieja se queda.
+    e.ok("ana", Comando::DestruirPueblo { pueblo });
+    assert!(e.n.estado().memoria.fichas[&2].contains_key(&Sitio::Pueblo(pueblo)));
+    assert!(recordado(&e.n).is_some());
+    // La columna vuelve a su sitio: ya no está, y se olvida (una ciudad que no existe no es vieja, es falsa).
+    e.ok("beto", Comando::MarcharA { ejercito: col, destino: junto });
+    let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();
+    e.n.avanzar_hasta(fin + MIN);
+    assert!(e.n.estado().memoria.fichas.get(&2).is_none_or(|f| !f.contains_key(&Sitio::Pueblo(pueblo))), "olvidado");
+    assert!(recordado(&e.n).is_none());
 }

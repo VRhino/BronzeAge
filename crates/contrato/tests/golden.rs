@@ -38,7 +38,7 @@ fn dorados() {
         }
         n += 1;
     }
-    assert!(n >= 67, "faltan ficheros dorados: {n}");
+    assert!(n >= 69, "faltan ficheros dorados: {n}");
 }
 
 /// Lo que los dorados de 4H dicen, leído por Rust: cada campo nuevo está donde el esquema lo pone (el JSON es la fuente; aquí se comprueba el significado, no solo los bytes).
@@ -144,6 +144,21 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     assert!(matches!(m.cuerpo, Some(mensaje_de_servidor_de_batalla::Cuerpo::Resultado(r)) if r.carros_perdidos == ["car-7:0", "car-7:1"]));
     let mc::Cuerpo::Batalla(m) = de_cliente("batalla_asignacion_sin_humanos") else { panic!() };
     assert!(matches!(m.cuerpo, Some(mensaje_de_servidor_de_batalla::Cuerpo::Asignacion(a)) if a.tokens_participante.is_empty()), "una batalla sin humanos se asigna sin tokens");
+
+    // La vista con niebla (T3d): lo ajeno redactado (la columna con su tramo y `te_sigue`, la caravana con sus recursos sin cantidades, el héroe con lo público), lo recordado como ficha
+    // (una plaza con su radio y un pueblo) y la vista de un héroe sin Facción, con el `QUITA` de lo que deja de verse y la ficha de una avanzada en una delta que no sube la versión.
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_vista_con_lo_ajeno") else { panic!() };
+    assert_eq!(f.niebla.as_ref().map(|n| (n.celdas.as_slice(), n.visibles.as_slice())), Some((&[0xff, 0x0f][..], &[0x06, 0x00][..])));
+    let cuerpos: Vec<entidad::Cuerpo> = f.entidades.into_iter().filter_map(|e| e.cuerpo).collect();
+    let [entidad::Cuerpo::Ejercito(x), entidad::Cuerpo::Caravana(c), entidad::Cuerpo::Heroe(h), entidad::Cuerpo::FichaConocida(plaza), entidad::Cuerpo::FichaConocida(pueblo)] = cuerpos.as_slice() else { panic!("{cuerpos:?}") };
+    assert!(x.te_sigue && x.escuadron_ids.is_empty() && x.plan.as_ref().unwrap().vertices.len() == 2);
+    assert_eq!((c.recursos_avistados.as_slice(), c.contenido.is_none()), (&["madera".to_owned(), "trigo".to_owned()][..], true));
+    assert_eq!((h.escuadras_que_lleva[0].tropa_id.as_str(), h.escuadras_que_lleva[0].cantidad, h.jugador_id.is_none()), ("miliciaLanceros", 40, true));
+    assert_eq!((plaza.tipo, plaza.radio_potencial, pueblo.tipo, pueblo.radio_potencial), (TipoEntidad::Asentamiento as i32, Some(15_000), TipoEntidad::Pueblo as i32, None));
+    let ms::Cuerpo::Delta(d) = de_servidor("delta_vista_sin_faccion") else { panic!() };
+    assert_eq!((d.ambito.as_ref().unwrap().id.as_str(), d.desde, d.hasta, d.niebla.is_some()), ("heroe-3", 81, 81, true));
+    assert_eq!((d.cambios[0].tipo, d.cambios[1].entidad), (TipoCambio::CambioQuita as i32, TipoEntidad::FichaConocida as i32));
+    assert!(matches!(d.cambios[1].datos.as_ref().and_then(|e| e.cuerpo.as_ref()), Some(entidad::Cuerpo::FichaConocida(a)) if a.tipo == TipoEntidad::Avanzada as i32 && a.nivel == 2));
 
     // Las órdenes nuevas.
     let orden_de = |nombre: &str| match de_cliente(nombre) {

@@ -50,7 +50,7 @@ impl GeneradorDeEventos for GeneradorVision {
             // Una columna con soldados en pie ve 30; un héroe solo, o con la tropa aniquilada, 15 (Niebla_De_Guerra §3).
             let participantes: Vec<u64> = e.columna.participantes.iter().map(|p| p.heroe).collect();
             let radio = vision::radios::columna(estado.militar.soldados_de(&participantes, &e.columna.escuadras) > 0);
-            ojos.push(Observador { faccion: e.bandera(), radio, donde, graba: true });
+            ojos.push(Observador { faccion: e.bandera(), radio, donde });
             moviles.push(Movil::new(e.id, e.bandera(), donde));
         }
         // Las avanzadas operativas ven 12 alrededor de sí, fijo en las tres etapas (Niebla_De_Guerra §3); en obra o en ruinas no ven nada.

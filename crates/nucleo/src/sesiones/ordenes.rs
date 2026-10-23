@@ -12,7 +12,7 @@
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
 
-use crate::comando::{rechazos, AccionReloj, Comando, ObjetivoAtaque, PagarCon, Peticion, Respuesta};
+use crate::comando::{rechazos, AccionReloj, Comando, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta};
 use crate::estado_militar::Relacion;
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ids;
@@ -246,6 +246,16 @@ impl Ctx<'_> {
 
     fn punto(&self, p: Option<&pb::Punto>) -> R<Punto> {
         p.map_or_else(|| self.forma("falta la posición"), |p| Ok(Punto::new(p.x, p.y)))
+    }
+
+    /// La taberna de una compra de intel: `{tipo: asentamiento | campamento, id}`.
+    fn origen_de_intel(&self, o: Option<(&str, &str)>) -> R<OrigenIntel> {
+        match o {
+            Some(("asentamiento", id)) => Ok(OrigenIntel::Plaza(self.plaza(id)?)),
+            Some(("campamento", id)) => Ok(OrigenIntel::Campamento(self.campamento(id)?)),
+            Some((otro, _)) => self.forma(format!("taberna desconocida: {otro}")),
+            None => self.forma("falta la taberna (origen)"),
+        }
     }
 
     // ───────────────────────────── El comando de cada orden ─────────────────────────────
@@ -626,9 +636,11 @@ impl Ctx<'_> {
             | Cuerpo::EmpezarEpica(_)
             | Cuerpo::AbandonarEpica(_)
             | Cuerpo::ComprarTecnologiaAeda(_)
-            | Cuerpo::ComprarMirada(_)
-            | Cuerpo::ComprarInformePlaza(_)
-            | Cuerpo::AbrirAlijo(_) => return self.no_disponible("tecnología, Aedas e intel de la Taberna (sistema 6)"),
+            | Cuerpo::AbrirAlijo(_) => return self.no_disponible("tecnología, Aedas y alijos (sistema 6)"),
+            Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
+            Cuerpo::ComprarInformePlaza(o) => {
+                Comando::ComprarInformePlaza { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, asentamiento: self.plaza(&o.asentamiento_id)? }
+            }
             Cuerpo::AportarARefundacion(_)
             | Cuerpo::RetirarDeRefundacion(_)
             | Cuerpo::ComprarCaravanaDeRefundacion(_)

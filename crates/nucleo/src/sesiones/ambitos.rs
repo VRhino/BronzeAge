@@ -12,8 +12,8 @@
 //! Qué lleva cada ámbito (el resto es de T3d-T3e): `HEROE` y `FACCION`, lo que el registro de cambios dice que les pertenece (`proyeccion::audiencia`): del héroe, su ficha con sus
 //! loadouts, sus escuadras, las columnas en que participa, las caravanas que le tocan y las batallas en que combate; de la Facción, su ficha, sus relaciones y tecnologías, sus plazas en
 //! resumen, su flota, sus pueblos y avanzadas con sus obras, sus trueques, sus órdenes de mercado y sus convocatorias; `ASENTAMIENTO`, la plaza completa vista desde dentro
-//! (`proyeccion::interior`) con los pueblos de la plaza, y `CAMPAMENTO`, el campamento de mercenarios completo (T3c); `VISTA`, las columnas de la Facción dentro del rectángulo; `ADMIN`, todas
-//! las columnas y todas las plazas (en ficha).
+//! (`proyeccion::interior`) con los pueblos de la plaza, y `CAMPAMENTO`, el campamento de mercenarios completo (T3c); `VISTA`, el mundo que ve su Facción (o él, sin bandera) dentro del rectángulo,
+//! filtrado por la niebla (T3d, abajo); `ADMIN`, todas las columnas y todas las plazas (en ficha).
 //!
 //! La plaza viaja como **cambio parcial con máscara de campos** (decisión 2): la sesión recuerda la plaza tal como el cliente la tiene ([`Sesion::plaza`]) y cada `Delta` lleva solo los campos que
 //! cambiaron respecto de ella (el paso de minuto: el almacén y la población; una obra: los edificios...). Una reanudación, que no sabe qué tiene el cliente, la manda entera; el campamento
@@ -22,19 +22,26 @@
 //! **El interior tiene su propia secuencia** (decisión del autor 2026-10-23): lo que cambia el paso de minuto dentro de la plaza no sube la versión del mundo ni entra en su registro de cambios
 //! (con o sin sesiones el contador `version` y el hash son los mismos) sino que avanza `Nucleo::version_interior`, que viaja en `Asentamiento.version_interior`. La sesión compara la de la plaza que
 //! recuerda con la de hoy ([`Mesa::repartir_interior`]) y manda la `Delta` del interior sin que el mundo haya avanzado.
+//!
+//! **La `VISTA` no sale del registro de cambios** (T3d): lo que se ve cambia sin que nada del mundo cambie (una columna que anda entra en el alcance de un ojo, a una columna ajena se le acaba el tramo
+//! que se le mandó). La sesión recuerda qué entidades tiene el cliente en su vista y con qué sello ([`Mapa`]) y [`Mesa::reconciliar_vistas`] le manda lo que cambió respecto de lo que se ve ahora
+//! (`proyeccion::vista::Mirada`, una por perspectiva para todas sus sesiones): tras cada reparto y en cada muestreo de 250 ms de mundo. La `NieblaProyectada` viaja con la `Foto` y con la `Delta`
+//! en que cambia; una `Delta` solo de la vista va de la versión que tiene el cliente a la del mundo (puede ser la misma).
 
 use super::depositar;
 use crate::estado::{CambioVersion, Clase, EventoNucleo};
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ambito::Ambito;
 use crate::proyeccion::audiencia::{heroe_de_sesion, principal};
-use crate::proyeccion::{evento_dominio, ids, interior, propios};
+use crate::proyeccion::vista::{Clave, Mirada, Perspectiva, Sello};
+use crate::proyeccion::{cambio_quita, evento_dominio, ids, interior, propios};
 use base::Punto;
 use contrato::v1 as pb;
 use militar::presencia::Ubicacion;
 use servidor::{Difusion, SesionId};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use tokio::sync::mpsc;
+use vision::Rect;
 
 /// Una sesión abierta.
 pub(super) struct Sesion {
@@ -49,21 +56,29 @@ pub(super) struct Sesion {
     pub(super) vista: Option<(Punto, Punto)>,
     /// La plaza del ámbito `ASENTAMIENTO` abierto, tal como el cliente la tiene: contra ella se calcula la máscara de campos de cada cambio.
     pub(super) plaza: Option<pb::Asentamiento>,
+    /// Lo que el cliente tiene de su `VISTA` abierta.
+    pub(super) mapa: Option<Mapa>,
+}
+
+/// Lo que el cliente tiene de su `VISTA`: cada entidad con el sello con que se le mandó y la última niebla.
+pub(super) struct Mapa {
+    tiene: BTreeMap<Clave, Sello>,
+    niebla: Option<pb::NieblaProyectada>,
 }
 
 impl Sesion {
     pub(super) fn nueva(n: &Nucleo, cliente: String, rol: pb::TipoCliente, tx: mpsc::Sender<Difusion>) -> Self {
         let heroe = es_jugador(rol).then(|| heroe_de_cuenta(n, &cliente)).flatten();
-        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plaza: None }
+        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plaza: None, mapa: None }
     }
 
     pub(super) fn es_admin(&self) -> bool {
         self.rol == pb::TipoCliente::ClienteAdminWeb
     }
 
-    /// ¿Está `p` dentro del rectángulo de su vista?
-    fn ve(&self, p: Punto) -> bool {
-        self.vista.is_some_and(|(a, b)| (a.x..=b.x).contains(&p.x) && (a.y..=b.y).contains(&p.y))
+    /// El rectángulo de su vista.
+    fn rect(&self) -> Option<Rect> {
+        self.vista.map(|(min, max)| Rect { min, max })
     }
 }
 
@@ -84,11 +99,10 @@ pub(super) fn derechos(n: &Nucleo, s: &Sesion) -> BTreeSet<Ambito> {
     }
     let Some(h) = s.heroe.and_then(|h| n.heroe(h)) else { return BTreeSet::new() };
     let mut d = BTreeSet::from([Ambito::Heroe(h.heroe.id)]);
-    if let Some(f) = h.faccion {
-        d.insert(Ambito::Faccion(f));
-        if s.vista.is_some() {
-            d.insert(Ambito::Vista(f));
-        }
+    d.extend(h.faccion.map(Ambito::Faccion));
+    // La vista es de su Facción o, sin bandera, la suya (su niebla personal).
+    if s.vista.is_some() {
+        d.insert(Ambito::Vista(h.faccion.map_or(Perspectiva::Heroe(h.heroe.id), Perspectiva::Faccion)));
     }
     match h.heroe.presencia.ubicacion {
         Ubicacion::Asentamiento(a) if n.estado().asentamientos.get(&u64::from(a)).is_some_and(|p| Some(p.faccion) == h.faccion) => {
@@ -123,16 +137,31 @@ pub(super) fn reanudable(n: &Nucleo, a: Ambito, k: u64, ki: u64) -> bool {
 
 /// La `Foto` de un ámbito en la versión `version`.
 pub(super) fn foto(n: &Nucleo, s: &Sesion, a: Ambito, version: u64) -> pb::Foto {
-    let (estado, t) = (n.estado(), n.ahora());
+    let estado = n.estado();
     let de = |clase: Clase, ids: Vec<u64>| ids.into_iter().flat_map(|id| propios::proyectar(n, s.heroe, clase, id).existen).map(|(_, _, cuerpo)| pb::Entidad { cuerpo: Some(cuerpo) }).collect::<Vec<_>>();
     let entidades = match a {
         Ambito::Heroe(_) | Ambito::Faccion(_) | Ambito::Batalla(_) => n.entidades_de(a).into_iter().flat_map(|(clase, id)| de(clase, vec![id])).collect(),
-        Ambito::Vista(f) => de(Clase::Ejercito, estado.ejercitos.values().filter(|e| e.columna.faccion == Some(f) && s.ve(e.posicion_en(t))).map(|e| e.id).collect()),
+        Ambito::Vista(p) => return foto_de_vista(n, s, p, version).0,
         Ambito::Asentamiento(id) => interior::asentamiento(n, id).map(|p| pb::Entidad { cuerpo: Some(pb::entidad::Cuerpo::Asentamiento(p)) }).into_iter().chain(n.entidades_de(a).into_iter().flat_map(|(clase, id)| de(clase, vec![id]))).collect(),
         Ambito::Admin => de(Clase::Ejercito, estado.ejercitos.keys().copied().collect()).into_iter().chain(de(Clase::Asentamiento, estado.asentamientos.keys().copied().collect())).collect(),
         Ambito::Campamento(c) => de(Clase::Campamento, vec![u64::from(c)]),
     };
     pb::Foto { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), version, entidades, niebla: None }
+}
+
+/// La `Foto` de la `VISTA` desde la perspectiva `p` (con su `NieblaProyectada`) y lo que el cliente tendrá con ella.
+fn foto_de_vista(n: &Nucleo, s: &Sesion, p: Perspectiva, version: u64) -> (pb::Foto, Mapa) {
+    let m = Mirada::de(n, p);
+    let rect = s.rect().expect("la vista se abre con su rectángulo");
+    let (mut entidades, mut tiene) = (Vec::new(), BTreeMap::new());
+    for x in m.contenido(s.heroe, rect, &BTreeMap::new()) {
+        if let Some(c) = x.cuerpo() {
+            entidades.push(pb::Entidad { cuerpo: Some(c) });
+            tiene.insert(x.clave, x.sello);
+        }
+    }
+    let niebla = m.niebla().cloned();
+    (pb::Foto { ambito: Some(Ambito::Vista(p).a_contrato(&|b| n.uuid_de_batalla(b))), version, entidades, niebla: niebla.clone() }, Mapa { tiene, niebla })
 }
 
 /// Por qué se revoca un ámbito.
@@ -173,10 +202,10 @@ pub(super) struct Entrega {
 
 /// La `Delta` `desde → hasta` de un ámbito con lo que cambió (`hasta` es la versión del mundo: un tramo solo del interior, que no la sube, va de la que tiene el cliente a la misma o a una posterior sin que haya
 /// cambiado nada más suyo), y la plaza que el cliente tendrá después si el ámbito es `ASENTAMIENTO`. Una entidad que ya no es del ámbito, o que ya no existe, sale con
-/// `QUITA`; en `VISTA`, también la columna que ya no está dentro del rectángulo. La plaza de `ASENTAMIENTO` viaja como cambio parcial con máscara contra la que el cliente ya tiene ([`Sesion::plaza`]; si no
+/// `QUITA`. La plaza de `ASENTAMIENTO` viaja como cambio parcial con máscara contra la que el cliente ya tiene ([`Sesion::plaza`]; si no
 /// se sabe, entera). Sin nada que contar no hay `Delta`: un cambio que no mueve nada de lo que ve el cliente (la ficha de la plaza sin cambios) no cuesta un mensaje.
 pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, cubo: Cubo<'_>) -> Entrega {
-    let (estado, t) = (n.estado(), n.ahora());
+    let estado = n.estado();
     let mut plaza = if matches!(a, Ambito::Asentamiento(_)) { s.plaza.clone() } else { None };
     let mut cambios = Vec::new();
     for (&(clase, id), &pertenece) in &cubo.entidades {
@@ -186,8 +215,7 @@ pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, c
             plaza = despues;
             continue;
         }
-        let a_la_vista = !matches!(a, Ambito::Vista(_)) || estado.ejercitos.get(&id).is_some_and(|e| s.ve(e.posicion_en(t)));
-        cambios.extend(propios::cambios(n, s.heroe, clase, id, pertenece && a_la_vista));
+        cambios.extend(propios::cambios(n, s.heroe, clase, id, pertenece));
     }
     let eventos: Vec<pb::EventoDominio> = cubo
         .eventos
@@ -282,8 +310,11 @@ impl Mesa {
 
     pub(super) fn cerrar(&mut self, id: SesionId, a: Ambito) {
         if self.sesiones.get_mut(&id).is_some_and(|s| s.abiertos.remove(&a).is_some()) {
-            if matches!(a, Ambito::Asentamiento(_)) {
-                self.sesiones.get_mut(&id).expect("existe").plaza = None;
+            let s = self.sesiones.get_mut(&id).expect("existe");
+            match a {
+                Ambito::Asentamiento(_) => s.plaza = None,
+                Ambito::Vista(_) => s.mapa = None,
+                _ => {}
             }
             self.baja(a, id);
         }
@@ -326,8 +357,18 @@ impl Mesa {
         }
         for a in nuevos {
             let Some(s) = self.sesiones.get(&id) else { return };
-            envios.push((id, Difusion::Foto(foto(n, s, a, version))));
+            let (f, mapa) = match a {
+                Ambito::Vista(p) => {
+                    let (f, m) = foto_de_vista(n, s, p, version);
+                    (f, Some(m))
+                }
+                _ => (foto(n, s, a, version), None),
+            };
+            envios.push((id, Difusion::Foto(f)));
             self.abrir(n, id, a, version);
+            if let (Some(m), Some(s)) = (mapa, self.sesiones.get_mut(&id)) {
+                s.mapa = Some(m);
+            }
         }
     }
 
@@ -398,6 +439,46 @@ impl Mesa {
                 }
             }
         }
+    }
+
+    /// Pone al día la `VISTA` de cada sesión que la tiene abierta con lo que se ve ahora: `ACTUALIZA` de lo que entra o cambió (su sello), `QUITA` de lo que ya no se ve o salió del rectángulo y la niebla
+    /// si cambió, en una sola `Delta` de la versión que tiene el cliente a la de ahora. Lo que se ve se calcula una vez por perspectiva (`Mirada`) para todas sus sesiones.
+    // ponytail: cada perspectiva recorre todas las entidades del mundo y cada ojo en cada muestreo (O(entidades × ojos)); una rejilla espacial si T6 lo pide con 500 sesiones.
+    pub(super) fn reconciliar_vistas(&mut self, n: &Nucleo, envios: &mut Vec<(SesionId, Difusion)>) {
+        let abiertas: Vec<(SesionId, Perspectiva)> =
+            self.suscriptores.iter().filter_map(|(a, ss)| if let Ambito::Vista(p) = a { Some(ss.iter().map(|&s| (s, *p)).collect::<Vec<_>>()) } else { None }).flatten().collect();
+        let mut miradas: BTreeMap<Perspectiva, Mirada<'_>> = BTreeMap::new();
+        let v = n.version();
+        for (id, p) in abiertas {
+            let m = miradas.entry(p).or_insert_with(|| Mirada::de(n, p));
+            let Some(s) = self.sesiones.get_mut(&id) else { continue };
+            let (Some(rect), Some(mapa)) = (s.rect(), s.mapa.as_ref()) else { continue };
+            let a = Ambito::Vista(p);
+            let (mut cambios, mut tiene) = (Vec::new(), BTreeMap::new());
+            for x in m.contenido(s.heroe, rect, &mapa.tiene) {
+                if mapa.tiene.get(&x.clave) != Some(&x.sello) {
+                    let Some(c) = x.cuerpo() else { continue };
+                    cambios.push(pb::Cambio { tipo: pb::TipoCambio::CambioActualiza as i32, entidad: x.clave.0, id: x.clave.1.clone(), datos: Some(pb::Entidad { cuerpo: Some(c) }), reemplaza: true, ..Default::default() });
+                }
+                tiene.insert(x.clave, x.sello);
+            }
+            cambios.extend(mapa.tiene.keys().filter(|c| !tiene.contains_key(*c)).map(|(tipo, eid)| cambio_quita(pb::TipoEntidad::try_from(*tipo).unwrap_or_default(), eid.clone())));
+            let niebla = m.niebla();
+            let nueva_niebla = niebla != mapa.niebla.as_ref();
+            if cambios.is_empty() && !nueva_niebla {
+                continue;
+            }
+            let desde = s.abiertos[&a];
+            let delta = pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta: v, cambios, eventos: Vec::new(), niebla: niebla.filter(|_| nueva_niebla).cloned() };
+            envios.push((id, Difusion::Delta(delta)));
+            s.abiertos.insert(a, v);
+            s.mapa = Some(Mapa { tiene, niebla: niebla.cloned() });
+        }
+    }
+
+    /// ¿Tiene alguna sesión su `VISTA` abierta? (Si no, no hay nada que muestrear.)
+    pub(super) fn hay_vistas(&self) -> bool {
+        self.suscriptores.keys().any(|a| matches!(a, Ambito::Vista(_)))
     }
 
     /// Deposita los envíos en el orden dado; las sesiones lentas o cerradas se descartan.

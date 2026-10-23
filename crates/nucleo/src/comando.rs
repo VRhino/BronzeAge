@@ -9,6 +9,7 @@ use crate::codec_batallas::{asignacion_escribir, asignacion_leer, resultado_escr
 use crate::codec_columna::{politica_a_u8, politica_de_u8};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use crate::estado_militar::Relacion;
+pub use crate::memoria::OrigenIntel;
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
 use combate::ciclo::{Asignacion, SalidaBatalla, Token};
@@ -366,6 +367,12 @@ pub enum Comando {
     MejorarRecinto { asentamiento: u64, cargo: Cargo, recinto: u32 },
     /// Abandona un recinto que nunca se cerró: se borra entero, sin devolución. Murallas lo reserva al Gobernador; hasta el sistema 5 lo autoriza `manda_en`.
     AbandonarRecinto { asentamiento: u64, recinto: u32 },
+    // ── La intel de las tabernas (4H T3d; Niebla_De_Guerra §6). La da la cuenta del héroe, que tiene que estar dentro del lugar de la taberna: una plaza de su Facción (paga su almacén) o un
+    //    campamento de mercenarios (paga él: su almacén personal si reside allí; si no, el carro de su columna). ──
+    /// Compra una Mirada sobre `centro` para la Facción del héroe: ve (no explora) `INTEL.mirada.radio` alrededor durante `duracionMinutos`; `creadas` lleva su id.
+    ComprarMirada { heroe: u64, origen: OrigenIntel, centro: Punto },
+    /// Compra el Informe de la plaza ajena `asentamiento`, que la Facción tiene que conocer: la foto, fechada, de sus edificios, sus recintos y su defensa, que se guarda en la memoria de la Facción.
+    ComprarInformePlaza { heroe: u64, origen: OrigenIntel, asentamiento: u64 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -408,6 +415,7 @@ impl Comando {
             Comando::UnirseABatalla { batalla, .. } => Incorporacion { batalla: *batalla },
             Comando::ConvocarEjercito { .. } => Convocatoria,
             Comando::ColocarBandidos { .. } => CampamentoBandidos,
+            Comando::ComprarMirada { .. } => Mirada,
             _ => return None,
         })
     }
@@ -500,6 +508,12 @@ impl Comando {
             Comando::AparcarCaravana { caravana, asentamiento } => {
                 i.caravanas.push(*caravana);
                 i.asentamientos.push(*asentamiento);
+            }
+            Comando::ComprarMirada { heroe, origen, .. } | Comando::ComprarInformePlaza { heroe, origen, .. } => {
+                i.heroes.push(*heroe);
+                if let OrigenIntel::Plaza(a) = origen {
+                    i.asentamientos.push(*a);
+                }
             }
             Comando::AnadirCarro { caravana, .. }
             | Comando::AnadirAnimal { caravana, .. }
@@ -675,6 +689,28 @@ fn leer_lineas(r: &mut Lector) -> Result<Vec<(Recurso, Mil)>, ErrorFormato> {
         v.push((recurso_de_u8(r.u8()?)?, r.i64()?));
     }
     Ok(v)
+}
+
+/// La taberna de una compra de intel: `0 · plaza u64` o `1 · campamento u32`.
+fn origen_escribir(w: &mut Escritor, o: OrigenIntel) {
+    match o {
+        OrigenIntel::Plaza(a) => {
+            w.u8(0);
+            w.u64(a);
+        }
+        OrigenIntel::Campamento(c) => {
+            w.u8(1);
+            w.u32(c);
+        }
+    }
+}
+
+fn origen_leer(r: &mut Lector) -> Result<OrigenIntel, ErrorFormato> {
+    Ok(match r.u8()? {
+        0 => OrigenIntel::Plaza(r.u64()?),
+        1 => OrigenIntel::Campamento(r.u32()?),
+        _ => return Err(ErrorFormato("taberna de una compra de intel desconocida")),
+    })
 }
 
 fn lista_u64(w: &mut Escritor, v: &[u64]) {
@@ -1395,6 +1431,18 @@ impl Peticion {
                 w.u64(*asentamiento);
                 w.u32(*recinto);
             }
+            Comando::ComprarMirada { heroe, origen, centro } => {
+                w.u8(126);
+                w.u64(*heroe);
+                origen_escribir(&mut w, *origen);
+                w.punto(*centro);
+            }
+            Comando::ComprarInformePlaza { heroe, origen, asentamiento } => {
+                w.u8(127);
+                w.u64(*heroe);
+                origen_escribir(&mut w, *origen);
+                w.u64(*asentamiento);
+            }
         }
         w.0
     }
@@ -1573,6 +1621,8 @@ impl Peticion {
             123 => Comando::ComprometerRecinto { asentamiento: r.u64()?, cargo: cargo_de_u8(r.u8()?)?, nivel: r.u8()? },
             124 => Comando::MejorarRecinto { asentamiento: r.u64()?, cargo: cargo_de_u8(r.u8()?)?, recinto: r.u32()? },
             125 => Comando::AbandonarRecinto { asentamiento: r.u64()?, recinto: r.u32()? },
+            126 => Comando::ComprarMirada { heroe: r.u64()?, origen: origen_leer(&mut r)?, centro: r.punto()? },
+            127 => Comando::ComprarInformePlaza { heroe: r.u64()?, origen: origen_leer(&mut r)?, asentamiento: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1909,6 +1959,29 @@ pub mod rechazos {
     pub const INSPECCION_PLAZA_PROPIA: &str = "inspeccion.plaza_propia";
     pub const INSPECCION_LEJOS: &str = "inspeccion.lejos";
     pub const INSPECCION_A_CUBIERTO: &str = "inspeccion.a_cubierto";
+    // La intel de las tabernas (4H T3d; Niebla_De_Guerra §6).
+    /// Quien compra intel tiene que ser ciudadano de una Facción (es para ella).
+    pub const INTEL_SIN_FACCION: &str = "intel.sin_faccion";
+    /// La taberna es de una plaza de otra Facción.
+    pub const INTEL_PLAZA_AJENA: &str = "intel.plaza_ajena";
+    /// Hay que estar dentro del lugar de la taberna.
+    pub const INTEL_NO_PRESENTE: &str = "intel.no_presente";
+    /// La plaza no tiene una Taberna levantada.
+    pub const INTEL_SIN_TABERNA: &str = "intel.sin_taberna";
+    pub const INTEL_FUERA_DEL_MAPA: &str = "intel.fuera_del_mapa";
+    /// La taberna no admite Miradas (cupo 0).
+    pub const INTEL_SIN_CUPO: &str = "intel.sin_cupo";
+    /// La taberna ya tiene abiertas todas las Miradas que admite.
+    pub const INTEL_CUPO_LLENO: &str = "intel.cupo_lleno";
+    /// La Facción miró esa zona hace poco: hay que esperar a que se enfríe.
+    pub const INTEL_ZONA_RECIENTE: &str = "intel.zona_reciente";
+    pub const INTEL_PLAZA_PROPIA: &str = "intel.plaza_propia";
+    /// La Facción no conoce esa plaza: ni tiene su ficha ni cae en una Mirada abierta.
+    pub const INTEL_PLAZA_DESCONOCIDA: &str = "intel.plaza_desconocida";
+    /// Ya tiene un Informe reciente de esa plaza.
+    pub const INTEL_INFORME_RECIENTE: &str = "intel.informe_reciente";
+    /// No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro).
+    pub const INTEL_SIN_ORO: &str = "intel.sin_oro";
     /// La columna está apartada por una batalla: no se mueve ni se le dan órdenes de movimiento, de persecución ni de inspección.
     pub const COLUMNA_EN_BATALLA: &str = "columna.en_batalla";
     pub const RELACION_CONSIGO_MISMA: &str = "relacion.consigo_misma";
@@ -2021,6 +2094,8 @@ pub enum TipoCreado {
     Recinto { plaza: u64 },
     /// Las incorporaciones (por su secuencia) de quien se unió a esa batalla.
     Incorporacion { batalla: u64 },
+    /// Una Mirada de la taberna: vive en la memoria de la Facción (la `VISTA` la enseña; no es una entidad del registro de cambios).
+    Mirada,
 }
 
 impl TipoCreado {
@@ -2041,8 +2116,8 @@ impl TipoCreado {
             TipoCreado::Avanzada => de(Clase::Avanzada),
             TipoCreado::Incorporacion { batalla } => vec![(Clase::Batalla, batalla)],
             TipoCreado::Edificio { plaza } | TipoCreado::Recinto { plaza } => vec![(Clase::Asentamiento, plaza)],
-            // El loadout vive en el héroe que la orden nombra y la parcela, en la plaza que la orden nombra: ya van en `Comando::implicados`.
-            TipoCreado::Loadout | TipoCreado::Parcela => vec![],
+            // El loadout vive en el héroe que la orden nombra y la parcela, en la plaza que la orden nombra: ya van en `Comando::implicados`. La Mirada es de la memoria de la Facción.
+            TipoCreado::Loadout | TipoCreado::Parcela | TipoCreado::Mirada => vec![],
         }
     }
 }
@@ -2263,6 +2338,10 @@ mod pruebas {
             Comando::ComprometerRecinto { asentamiento: 3, cargo: Cargo::MaestroObras, nivel: 2 },
             Comando::MejorarRecinto { asentamiento: 3, cargo: Cargo::Gobernador, recinto: 1 },
             Comando::AbandonarRecinto { asentamiento: 3, recinto: 2 },
+            Comando::ComprarMirada { heroe: 2, origen: OrigenIntel::Plaza(3), centro: Punto::new(40_000, -7) },
+            Comando::ComprarMirada { heroe: 2, origen: OrigenIntel::Campamento(1), centro: Punto::new(0, 9) },
+            Comando::ComprarInformePlaza { heroe: 2, origen: OrigenIntel::Campamento(4), asentamiento: 5 },
+            Comando::ComprarInformePlaza { heroe: 2, origen: OrigenIntel::Plaza(3), asentamiento: 6 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

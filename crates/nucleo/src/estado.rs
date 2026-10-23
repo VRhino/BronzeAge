@@ -10,6 +10,7 @@ use crate::codec_comercio;
 use crate::codec_economia;
 use crate::codec_militar;
 use crate::economia::StockNodo;
+use crate::memoria::{self, Memoria};
 use crate::estado_batallas::EstadoBatallas;
 use crate::estado_combate::EstadoCombate;
 use crate::estado_comercio::EstadoComercio;
@@ -59,6 +60,10 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// Anotada en `Docs/Mecanicas a desarrollar.md`, sección de paridad.
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN23: BAN22 con la memoria de la niebla (4H T3d, `memoria`): lo explorado por cada Facción y por cada héroe sin bandera (máscaras de bits sobre la rejilla de celdas de 5 unidades), la última ficha de cada
+/// sitio ajeno que vio cada Facción (plazas, pueblos y avanzadas, con el instante en que se vio), desde cuándo tiene grabado cada columna lo que ve (su vigía) y desde cuándo vale lo que se ve de cada sitio.
+/// BAN22 se rechaza: no trae lo explorado, que no se puede deducir del estado.
+///
 /// BAN22: BAN21 con la tendencia «+N/min» de cada plaza (4H T3c, `asentamiento::Asentamiento::tendencia`, en `codec_economia`): lo que cambió cada recurso del almacén y cada clase de la población en el
 /// último paso de minuto (`asentamiento::asentamiento::Tendencia`), que el contador del cliente rotula junto al valor en escalones. BAN21 se rechaza: sus plazas no traen la tendencia (y no se puede deducir del estado).
 ///
@@ -99,7 +104,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN22";
+const MAGIA: &[u8; 5] = b"BAN23";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -670,7 +675,7 @@ impl Tocados {
 }
 
 /// A qué ámbitos pertenece una entidad al cerrarse una versión y de cuáles salió (4H, T3b): es lo que dice **quién recibe qué**. Solo entran las entidades que viajan a los ámbitos de
-/// un jugador (`HEROE`, `FACCION`, y `VISTA` para las columnas) y solo las tocadas en la versión o las que cambiaron de ámbito sin que nadie las tocara (los pueblos de una plaza
+/// un jugador (`HEROE`, `FACCION`, `ASENTAMIENTO` y `BATALLA`; la `VISTA` la decide la niebla, no el registro) y solo las tocadas en la versión o las que cambiaron de ámbito sin que nadie las tocara (los pueblos de una plaza
 /// que cambia de dueño). `quitan` son los ámbitos que tenían la entidad antes y ya no (porque desapareció o porque dejó de ser suya): reciben un `QUITA`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pertenencia {
@@ -723,6 +728,8 @@ pub struct Estado {
     pub combate: EstadoCombate,
     /// Las batallas de Unity abiertas y las cerradas recientes (Batalla_Unity_Ciclo §3).
     pub batallas: EstadoBatallas,
+    /// Lo que cada Facción ha explorado y recuerda de lo ajeno (Niebla_De_Guerra §2, §4).
+    pub memoria: Memoria,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// `(actor, peticion_id)` en orden de llegada, con la versión que produjeron.
@@ -754,6 +761,7 @@ impl Estado {
             militar: EstadoMilitar::default(),
             combate: EstadoCombate::default(),
             batallas: EstadoBatallas::default(),
+            memoria: Memoria::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: VecDeque::new(),
@@ -854,6 +862,7 @@ impl Estado {
         codec_militar::escribir(&mut w, &self.militar);
         codec_combate::escribir(&mut w, &self.combate);
         codec_batallas::escribir(&mut w, &self.batallas);
+        memoria::escribir(&mut w, &self.memoria);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -933,11 +942,12 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN22`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 22, y solo el 22 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN23`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 23, y solo el 23 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'2' => {}
+                b'3' => {}
+                b'2' => return Err(ErrorFormato("foto del formato BAN22 (sin la memoria de la niebla: lo explorado por cada Facción y las fichas de lo ajeno que vio, que no se pueden deducir del estado): ya no se admite")),
                 b'1' => return Err(ErrorFormato("foto del formato BAN21 (las plazas no traen la tendencia «+N/min» del último paso de minuto, que no se puede deducir del estado): ya no se admite")),
                 b'0' => return Err(ErrorFormato("foto del formato BAN20 (el ticket de una batalla no congela la plaza del asedio ni el nivel, la experiencia y la moral de cada escuadra, y el informe de inspección de una plaza no trae sus recintos): ya no se admite")),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
@@ -1039,6 +1049,7 @@ impl Estado {
         s.militar = codec_militar::leer(&mut r)?;
         s.combate = codec_combate::leer(&mut r)?;
         s.batallas = codec_batallas::leer(&mut r)?;
+        s.memoria = memoria::leer(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {

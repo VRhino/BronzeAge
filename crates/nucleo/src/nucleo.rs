@@ -53,6 +53,7 @@ mod construccion;
 mod convocatorias;
 mod dentro;
 mod espacio;
+mod exploracion;
 mod flota;
 mod heroes;
 mod inspecciones;
@@ -64,11 +65,13 @@ mod persecuciones;
 mod pertenencias;
 mod pueblos;
 mod salidas;
+mod taberna;
 mod uniones;
 mod viaje;
 mod zonas;
 
 use espacio::{Cosa, Motivo};
+pub(crate) use exploracion::cerca;
 pub use batallas::TokenDeJugador;
 pub use murallas::{ErrorPresupuesto, Presupuesto, RecintoEnPie};
 pub use zonas::InformeViabilidad;
@@ -185,6 +188,8 @@ pub struct Nucleo {
     pertenencias: Option<pertenencias::Mapa>,
     /// Dónde está cada héroe y cada caravana respecto de las plazas (`interiores.rs`). Solo se lleva si hay sesiones o se audita; no se persiste.
     interiores: Option<interiores::Interiores>,
+    /// Los ojos y los sitios como estaban al cerrar la última versión (`exploracion.rs`): con ellos se graba lo que vieron. No se persiste: entre versiones es lo que dice el estado. Sin rejilla de niebla, nada.
+    ojos: Option<exploracion::Ojos>,
     /// Desde qué versión llevan pertenencias los registros de cambios (la de `seguir_pertenencias`): las anteriores no dicen a qué ámbito iba cada entidad y no se pueden reanudar por deltas.
     pertenencias_desde: u64,
     /// Lo último que el núcleo estaba aplicando (una orden o un evento), para decir en la auditoría qué cambió algo sin marcarlo.
@@ -296,6 +301,7 @@ impl Nucleo {
             huellas_auditadas: None,
             pertenencias: None,
             interiores: None,
+            ojos: None,
             pertenencias_desde: 0,
             causa_auditada: String::new(),
             persist: None,
@@ -310,6 +316,14 @@ impl Nucleo {
         };
         n.reconstruir_espacio();
         n.reiniciar_muestreo();
+        // La rejilla de lo explorado sale de los límites del mapa (`EXPLORACION.tamanoCelda`); sin artefacto de mundo no se graba nada.
+        if let (None, Some(g)) = (n.estado.memoria.rejilla, &n.geografia) {
+            let t = n.estado.reglas.economia.militar.vision.tamano_celda;
+            let (ancho, alto) = g.tamano();
+            let (columnas, filas) = vision::rejilla(ancho, alto, t);
+            n.estado.memoria.rejilla = Some((columnas, filas, t));
+        }
+        n.rehacer_ojos();
         n
     }
 
@@ -504,6 +518,8 @@ impl Nucleo {
         if self.tr.tocados.esta_vacio() && self.tr.eventos.is_empty() && !forzar {
             return false;
         }
+        // Lo que vieron los ojos que la transición tocó queda en la memoria de su Facción.
+        self.explorar(t);
         self.estado.version += 1;
         let v = self.estado.version;
         let mut tocados = std::mem::take(&mut self.tr.tocados);
@@ -838,6 +854,11 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::ComprometerRecinto { .. } | Comando::MejorarRecinto { .. } | Comando::AbandonarRecinto { .. } => match self.ejecutar_murallas(t, p) {
+                Ok(Some(creada)) => creadas.push(creada),
+                Ok(None) => {}
+                Err(r) => return r,
+            },
+            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => match self.ejecutar_taberna(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,
