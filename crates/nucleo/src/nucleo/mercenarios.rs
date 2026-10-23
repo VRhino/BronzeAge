@@ -103,6 +103,11 @@ impl Nucleo {
         self.geografia.as_ref()?.mapa.campamentos.get(campamento as usize).copied()
     }
 
+    /// La puerta de cada campamento del artefacto, con su índice (sin contar quién reside en él, que es lo caro de [`Nucleo::campamentos_para_elegir`]).
+    pub fn puertas_de_campamentos(&self) -> impl Iterator<Item = (u32, Punto)> + '_ {
+        self.geografia.iter().flat_map(|g| (0u32..).zip(g.mapa.campamentos.iter().copied()))
+    }
+
     /// Los campamentos donde un jugador sin héroe puede nacer (`Bienvenida.campamentos_para_elegir`): de cada uno del artefacto, su índice, su puerta, su origen y cuántos héroes residen
     /// en él. DUDA: `eligieronComoInicial` no se guarda todavía (fila de paridad «Militar y combate (4B-1)»); la sesión lo manda a 0.
     pub fn campamentos_para_elegir(&self) -> Vec<(u32, Punto, u32, usize)> {

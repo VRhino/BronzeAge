@@ -15,7 +15,7 @@ use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 use mundo::{Mundo, OpcionesValidacion};
 use nucleo::proyeccion::ids;
-use nucleo::proyeccion::vista::{Mirada, Perspectiva};
+use nucleo::proyeccion::vista::{self, Mirada, Perspectiva};
 use nucleo::{AccionReloj, Ajustes, Arranque, Comando, Nucleo, Peticion, Reglas, Resultado};
 use prost_types::{value::Kind, Struct, Value};
 use rutas::Rutas;
@@ -204,8 +204,8 @@ impl Cliente {
                             self.entidades.insert(clave, c.datos.clone().and_then(|e| e.cuerpo).expect("ACTUALIZA con datos"));
                         }
                     }
-                    if d.niebla.is_some() {
-                        self.niebla = d.niebla.clone();
+                    if let Some(x) = &d.niebla {
+                        vista::aplicar_niebla(&mut self.niebla, x);
                     }
                     self.version = d.hasta;
                     deltas.push(d);

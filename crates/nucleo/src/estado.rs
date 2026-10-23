@@ -112,7 +112,8 @@ const MAGIA: &[u8; 5] = b"BAN23";
 pub struct Reglas {
     /// Aviso de víveres bajos al caer por debajo de este porcentaje de la capacidad (0 = sin aviso).
     pub viveres_bajos_pct: u32,
-    /// Peticiones recordadas para la idempotencia (`INFRA.limiteIdempotencia`).
+    /// Peticiones recordadas para la idempotencia (`INFRA.limiteIdempotencia`). DUDA (4H T6): son las últimas de toda la partida, no de cada cuenta: con 500 jugadores a una orden cada 10 s
+    /// alcanzan ≈ 10 s, y un reintento tras reconectar más tarde se aplicaría otra vez.
     pub limite_idempotencia: usize,
     /// El proceso tiene servidores de batalla (`SERVIDORES_BATALLA`, Batalla_Unity_Ciclo §8): `atacar` abre siempre una batalla de Unity, también bot contra bot
     /// (cuarta ronda de Entrar con todo, 2026-10-22). Sin ellos el combate se resuelve con números (Combate.md). Es una regla de la partida y no puede

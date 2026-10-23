@@ -518,6 +518,7 @@ dependencies = [
  "tokio",
  "trazado",
  "vision",
+ "zstd 0.14.2",
 ]
 
 [[package]]

@@ -161,7 +161,7 @@ impl Mascara {
 /// La `NieblaProyectada` (§2.3) con las dos máscaras sobre la misma rejilla: `celdas` (lo explorado alguna vez) y `visibles` (lo que se ve ahora, que puede incluir celdas sin explorar: la
 /// visión prestada no explora).
 pub fn niebla_proyectada(celdas: &Mascara, visibles: &Mascara) -> NieblaProyectada {
-    NieblaProyectada { tamano_celda: celdas.tamano as u32, columnas: celdas.columnas as u32, filas: celdas.filas as u32, celdas: celdas.bits.clone(), visibles: visibles.bits.clone() }
+    NieblaProyectada { tamano_celda: celdas.tamano as u32, columnas: celdas.columnas as u32, filas: celdas.filas as u32, celdas: celdas.bits.clone(), visibles: visibles.bits.clone(), ..Default::default() }
 }
 
 /// Distancia al cuadrado de `p` al segmento `a → b`, exacta (en `i128`; los segmentos de [`recorrido`] no pasan de [`TROZO`] y `p` está cerca).

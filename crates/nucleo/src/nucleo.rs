@@ -185,13 +185,14 @@ pub struct Nucleo {
     version_de_arranque: u64,
     /// La huella de cada entidad en la última comprobación de `Ajustes::auditar_cambios`.
     huellas_auditadas: Option<auditoria::Huellas>,
-    /// A qué ámbitos de jugador pertenece cada entidad que viaja a ellos (`pertenencias.rs`). Solo se lleva si hay sesiones (`seguir_pertenencias`); no se persiste: se rehace del estado.
+    /// A qué ámbitos de jugador pertenece cada entidad que viaja a ellos (`pertenencias.rs`). Solo se lleva si hay sesiones o el núcleo es persistente (`seguir_pertenencias`); no se persiste: se rehace del estado.
     pertenencias: Option<pertenencias::Mapa>,
     /// Dónde está cada héroe y cada caravana respecto de las plazas (`interiores.rs`). Solo se lleva si hay sesiones o se audita; no se persiste.
     interiores: Option<interiores::Interiores>,
     /// Los ojos y los sitios como estaban al cerrar la última versión (`exploracion.rs`): con ellos se graba lo que vieron. No se persiste: entre versiones es lo que dice el estado. Sin rejilla de niebla, nada.
     ojos: Option<exploracion::Ojos>,
-    /// Desde qué versión llevan pertenencias los registros de cambios (la de `seguir_pertenencias`): las anteriores no dicen a qué ámbito iba cada entidad y no se pueden reanudar por deltas.
+    /// Desde qué versión llevan pertenencias los registros de cambios (la de `seguir_pertenencias`; en el núcleo persistente, la de su foto): las anteriores no dicen a qué ámbito iba cada entidad y no
+    /// se pueden reanudar por deltas.
     pertenencias_desde: u64,
     /// Lo último que el núcleo estaba aplicando (una orden o un evento), para decir en la auditoría qué cambió algo sin marcarlo.
     causa_auditada: String,
@@ -238,6 +239,9 @@ impl Nucleo {
         }
         n.rebasar_auditoria();
         n.avisos = rec.avisos;
+        // El registro que se repite lleva las pertenencias, como lo llevaba el proceso vivo (son una función pura del estado): un cliente que conserva una versión desde la foto reanuda por
+        // deltas tras el reinicio (4H T6). El mundo persistente es el del servidor, que siempre tiene sesiones.
+        n.seguir_pertenencias();
         let (mut repetidas, mut ultimo) = (0u64, foto_instante.unwrap_or(n.estado.ahora));
         for e in rec.entradas_posteriores {
             match e.tipo {

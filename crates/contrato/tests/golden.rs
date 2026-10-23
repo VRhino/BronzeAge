@@ -166,6 +166,11 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     assert_eq!((d.ambito.as_ref().unwrap().id.as_str(), d.desde, d.hasta, d.niebla.is_some()), ("heroe-3", 81, 81, true));
     assert_eq!((d.cambios[0].tipo, d.cambios[1].entidad), (TipoCambio::CambioQuita as i32, TipoEntidad::FichaConocida as i32));
     assert!(matches!(d.cambios[1].datos.as_ref().and_then(|e| e.cuerpo.as_ref()), Some(entidad::Cuerpo::FichaConocida(a)) if a.tipo == TipoEntidad::Avanzada as i32 && a.nivel == 2));
+    // La niebla parcial (T6): sin las máscaras, con los tramos de bytes que cambiaron de cada una.
+    let ms::Cuerpo::Delta(d) = de_servidor("delta_vista_niebla_parcial") else { panic!() };
+    let niebla = d.niebla.expect("la niebla");
+    assert!(niebla.parcial && niebla.celdas.is_empty() && niebla.visibles.is_empty() && d.cambios.is_empty());
+    assert_eq!((niebla.tramos_celdas[0].desde, niebla.tramos_celdas[0].datos.as_slice(), niebla.tramos_visibles[0].desde, niebla.tramos_visibles[0].datos.as_slice()), (1, &[0x0F][..], 0, &[0x02][..]));
 
     // `ADMIN` (T3e): la batalla entera con la asignación que ganó, sin tokens ni el token propio de nadie.
     let ms::Cuerpo::Foto(f) = de_servidor("foto_admin_batalla") else { panic!() };

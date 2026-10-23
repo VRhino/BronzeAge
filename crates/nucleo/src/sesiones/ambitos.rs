@@ -45,7 +45,7 @@ use crate::nucleo::Nucleo;
 use crate::proyeccion::ambito::Ambito;
 use crate::proyeccion::audiencia::{heroe_de_sesion, principal};
 use crate::proyeccion::propios::Espectador;
-use crate::proyeccion::vista::{Clave, Mirada, Perspectiva, Sello};
+use crate::proyeccion::vista::{cambio_de_niebla, Clave, Mirada, Perspectiva, Sello};
 use crate::proyeccion::eventos::{batalla_de, evento_dominio};
 use crate::proyeccion::{cambio_quita, interior, propios};
 use base::Punto;
@@ -53,6 +53,7 @@ use contrato::v1 as pb;
 use militar::presencia::Ubicacion;
 use servidor::{Difusion, SesionId};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use vision::Rect;
 
@@ -73,10 +74,10 @@ pub(super) struct Sesion {
     pub(super) mapa: Option<Mapa>,
 }
 
-/// Lo que el cliente tiene de su `VISTA`: cada entidad con el sello con que se le mandó y la última niebla.
+/// Lo que el cliente tiene de su `VISTA`: cada entidad con el sello con que se le mandó y la última niebla (la de su perspectiva, compartida: `Mesa::nieblas`).
 pub(super) struct Mapa {
     tiene: BTreeMap<Clave, Sello>,
-    niebla: Option<pb::NieblaProyectada>,
+    niebla: Option<Arc<pb::NieblaProyectada>>,
 }
 
 impl Sesion {
@@ -202,7 +203,7 @@ fn foto_de_vista(n: &Nucleo, s: &Sesion, p: Perspectiva, version: u64) -> (pb::F
         }
     }
     let niebla = m.niebla().cloned();
-    (pb::Foto { ambito: Some(Ambito::Vista(p).a_contrato(&|b| n.uuid_de_batalla(b))), version, entidades, niebla: niebla.clone() }, Mapa { tiene, niebla })
+    (pb::Foto { ambito: Some(Ambito::Vista(p).a_contrato(&|b| n.uuid_de_batalla(b))), version, entidades, niebla: niebla.clone() }, Mapa { tiene, niebla: niebla.map(Arc::new) })
 }
 
 /// Por qué se revoca un ámbito.
@@ -261,6 +262,18 @@ pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, c
     Entrega { delta, plazas }
 }
 
+/// La sesión que reanuda y hasta qué versión oyó ya los hechos: la mayor que declara en `Hola.versiones_conocidas`. Un cliente que tuvo un ámbito al día hasta la versión `k` estaba conectado cuando se
+/// repartió `k` (o reanudó entonces), así que recibió los hechos que le tocaban hasta `k` por el ámbito que los oía, aunque ese ámbito ya no lo tenga (la plaza que dejó) y otro que también los oye vaya
+/// por detrás (su `FACCION`, que no cambió desde entonces). Sin estado nuevo: lo dice el `Hola` (duda 8 de T5, 4H T6).
+///
+/// DUDA: un cliente que el servidor descarta por lento a mitad de un reparto pudo aplicar la `Delta` de un ámbito y no la de otro con un hecho de esa misma versión: al reanudar declara la mayor y ese
+/// hecho no le vuelve (el estado sí: lo que le faltó del otro ámbito llega en su `Delta` de reanudación).
+#[derive(Clone, Copy)]
+pub(super) struct Reanuda {
+    pub(super) sesion: SesionId,
+    pub(super) oido: u64,
+}
+
 /// ¿Cambia algo de lo que decide los derechos de una sesión (el héroe, su Facción, su plaza, su campamento)?
 pub(super) fn cambia_derechos(cv: &CambioVersion) -> bool {
     [Clase::Heroe, Clase::Faccion, Clase::Asentamiento, Clase::Campamento, Clase::Batalla].into_iter().any(|c| !cv.tocados.de(c).is_empty())
@@ -272,6 +285,8 @@ pub(super) struct Mesa {
     sesiones: HashMap<SesionId, Sesion>,
     por_cliente: HashMap<String, SesionId>,
     suscriptores: BTreeMap<Ambito, BTreeSet<SesionId>>,
+    /// La última niebla de cada perspectiva con alguna `VISTA` abierta, la que tienen sus sesiones al día (4H T6).
+    nieblas: BTreeMap<Perspectiva, Arc<pb::NieblaProyectada>>,
 }
 
 impl Mesa {
@@ -404,51 +419,53 @@ impl Mesa {
         }
     }
 
-    /// ¿Debe `(sesión, ámbito)` enterarse de lo que cambió en la versión `v`? Si el cliente ya tiene esa versión del ámbito, no.
-    fn recibe(&self, solo: Option<SesionId>, id: SesionId, a: Ambito, v: u64) -> bool {
-        solo.is_none_or(|s| s == id) && self.sesiones.get(&id).and_then(|s| s.abiertos.get(&a)).is_some_and(|&k| v > k)
+    /// ¿Debe `(sesión, ámbito)` enterarse de lo que cambió en la versión `v`? Si el cliente ya tiene esa versión del ámbito (o es otra la sesión que reanuda), no.
+    fn recibe(&self, solo: Option<Reanuda>, id: SesionId, a: Ambito, v: u64) -> bool {
+        solo.is_none_or(|r| r.sesion == id) && self.sesiones.get(&id).and_then(|s| s.abiertos.get(&a)).is_some_and(|&k| v > k)
     }
 
     fn suscritos(&self, a: Ambito) -> impl Iterator<Item = (SesionId, Ambito)> + '_ {
         self.suscriptores.get(&a).into_iter().flatten().map(move |&s| (s, a))
     }
 
-    /// A quién se cuenta un hecho (contrato 05 §8, 4H T5) y por qué ámbito: a cada sesión **una sola vez**, por el primero de sus ámbitos abiertos que lo oye, en este orden: la plaza a la que se
-    /// atribuye (`ASENTAMIENTO`, quien está dentro), la batalla del hecho (`BATALLA`, quien combate), los héroes nombrados (`HEROE`), las Facciones que lo oyen (`FACCION`) y, para un hecho de batalla,
-    /// la `VISTA` de quien tiene esa batalla en su mapa (la ve bajo la niebla: el hecho no le dice nada que no vea). Un hecho público llega a todo jugador con héroe, por su `HEROE`. Nada más: un hecho
-    /// sin plaza que nombra a alguien no es de todos (no puede revelar lo que oculta la niebla). La administración, que lo oye todo, no pasa por aquí.
-    fn oyentes(&self, n: &Nucleo, ev: &EventoNucleo) -> BTreeMap<SesionId, Ambito> {
+    /// A quién se cuenta un hecho de la versión `v` (contrato 05 §8, 4H T5) y por qué ámbito: a cada sesión **una sola vez**, por el primero de sus ámbitos abiertos que lo oye y aún no tiene la versión
+    /// `v`, en este orden: la plaza a la que se atribuye (`ASENTAMIENTO`, quien está dentro), la batalla del hecho (`BATALLA`, quien combate), los héroes nombrados (`HEROE`), las Facciones que lo oyen
+    /// (`FACCION`) y, para un hecho de batalla, la `VISTA` de quien tiene esa batalla en su mapa (la ve bajo la niebla: el hecho no le dice nada que no vea). Un ámbito que se acaba de abrir en este mismo
+    /// reparto ya tiene la versión (su `Foto`) pero no el hecho (una `Foto` no lleva hechos): el hecho va por el siguiente que lo oye (4H T6; antes se perdía: el de entrar en la plaza no llegaba a quien
+    /// entraba). Un hecho público llega a todo jugador con héroe, por su `HEROE`. Nada más: un hecho sin plaza que nombra a alguien no es de todos (no puede revelar lo que oculta la niebla). La
+    /// administración, que lo oye todo, no pasa por aquí.
+    fn oyentes(&self, n: &Nucleo, ev: &EventoNucleo, v: u64, solo: Option<Reanuda>) -> BTreeMap<SesionId, Ambito> {
         let e = n.estado();
         let mut oyen = BTreeMap::new();
+        let mut oir = |(s, a): (SesionId, Ambito)| {
+            if self.recibe(solo, s, a, v) {
+                oyen.entry(s).or_insert(a);
+            }
+        };
         let batalla = batalla_de(ev);
         let heroes = ev.heroes.iter().filter_map(|h| e.militar.heroes.get(h)).filter_map(|h| principal(e, h)).map(Ambito::Heroe);
         let ambitos = ev.asentamientos.iter().map(|&p| Ambito::Asentamiento(p)).chain(batalla.map(Ambito::Batalla)).chain(heroes).chain(ev.facciones.iter().map(|&f| Ambito::Faccion(f)));
         for a in ambitos {
-            for (s, a) in self.suscritos(a) {
-                oyen.entry(s).or_insert(a);
-            }
+            self.suscritos(a).for_each(&mut oir);
         }
         if let Some(b) = batalla {
             let clave = (pb::TipoEntidad::Batalla as i32, n.uuid_de_batalla(b));
             let vistas = self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Vista(_))).flat_map(|(&a, ss)| ss.iter().map(move |&s| (s, a)));
-            for (s, a) in vistas {
-                if self.sesiones.get(&s).and_then(|x| x.mapa.as_ref()).is_some_and(|m| m.tiene.contains_key(&clave)) {
-                    oyen.entry(s).or_insert(a);
-                }
-            }
+            vistas.filter(|(s, _)| self.sesiones.get(s).and_then(|x| x.mapa.as_ref()).is_some_and(|m| m.tiene.contains_key(&clave))).for_each(&mut oir);
         }
         if ev.publico {
-            let todos = self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Heroe(_))).flat_map(|(&a, ss)| ss.iter().map(move |&s| (s, a)));
-            for (s, a) in todos {
-                oyen.entry(s).or_insert(a);
-            }
+            self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Heroe(_))).flat_map(|(&a, ss)| ss.iter().map(move |&s| (s, a))).for_each(&mut oir);
         }
         oyen
     }
 
-    /// Agrupa por `(sesión, ámbito)` lo que cambió en los registros y le toca al cliente (`solo` = una sola sesión). Una pasada por los registros, no una por sesión.
-    pub(super) fn repartir<'r>(&self, n: &Nucleo, registros: impl Iterator<Item = &'r CambioVersion>, solo: Option<SesionId>) -> BTreeMap<(SesionId, Ambito), Cubo<'r>> {
+    /// Agrupa por `(sesión, ámbito)` lo que cambió en los registros y le toca al cliente (`solo`: la sesión que reanuda, y nadie más). Una pasada por los registros, no una por sesión.
+    pub(super) fn repartir<'r>(&self, n: &Nucleo, registros: impl Iterator<Item = &'r CambioVersion>, solo: Option<Reanuda>) -> BTreeMap<(SesionId, Ambito), Cubo<'r>> {
         let mut cubos: BTreeMap<(SesionId, Ambito), Cubo<'r>> = BTreeMap::new();
+        // Sin ningún ámbito abierto no hay a quién contar nada (ni siquiera hace falta buscar los oyentes de los hechos).
+        if self.suscriptores.is_empty() {
+            return cubos;
+        }
         for cv in registros {
             let v = cv.version;
             // Los ámbitos de jugador reciben lo que el registro dice que les pertenece (`ahora`) y la baja de lo que dejó de pertenecerles (`quitan`).
@@ -483,11 +500,13 @@ impl Mesa {
                     cubo.eventos.extend(cv.eventos.iter().map(|ev| (v, ev)));
                 }
             }
+            // Los hechos que el cliente que reanuda ya oyó no vuelven (`Reanuda::oido`).
+            if solo.is_some_and(|r| v <= r.oido) {
+                continue;
+            }
             for ev in &cv.eventos {
-                for (s, a) in self.oyentes(n, ev) {
-                    if self.recibe(solo, s, a, v) {
-                        cubos.entry((s, a)).or_default().eventos.push((v, ev));
-                    }
+                for (s, a) in self.oyentes(n, ev, v, solo) {
+                    cubos.entry((s, a)).or_default().eventos.push((v, ev));
                 }
             }
         }
@@ -507,15 +526,23 @@ impl Mesa {
     }
 
     /// Pone al día la `VISTA` de cada sesión que la tiene abierta con lo que se ve ahora: `ACTUALIZA` de lo que entra o cambió (su sello), `QUITA` de lo que ya no se ve o salió del rectángulo y la niebla
-    /// si cambió, en una sola `Delta` de la versión que tiene el cliente a la de ahora. Lo que se ve se calcula una vez por perspectiva (`Mirada`) para todas sus sesiones.
-    // ponytail: cada perspectiva recorre todas las entidades del mundo y cada ojo en cada muestreo (O(entidades × ojos)); una rejilla espacial si T6 lo pide con 500 sesiones.
+    /// si cambió, en una sola `Delta` de la versión que tiene el cliente a la de ahora. Lo que se ve se calcula una vez por perspectiva (`Mirada`) para todas sus sesiones, y la niebla también: todas
+    /// comparten la última de su perspectiva (`Mesa::nieblas`), así que compararla es comparar punteros, y a quien tiene la anterior le llega solo lo que cambió (`vista::cambio_de_niebla`, calculado una
+    /// vez por perspectiva).
+    // ponytail: cada perspectiva recorre todas las entidades del mundo y cada sesión las de su rectángulo en cada muestreo (O(entidades) por sesión); una rejilla espacial si el mundo crece mucho más.
     pub(super) fn reconciliar_vistas(&mut self, n: &Nucleo, envios: &mut Vec<(SesionId, Difusion)>) {
         let abiertas: Vec<(SesionId, Perspectiva)> =
             self.suscriptores.iter().filter_map(|(a, ss)| if let Ambito::Vista(p) = a { Some(ss.iter().map(|&s| (s, *p)).collect::<Vec<_>>()) } else { None }).flatten().collect();
-        let mut miradas: BTreeMap<Perspectiva, Mirada<'_>> = BTreeMap::new();
+        let mut miradas: BTreeMap<Perspectiva, (Mirada<'_>, Option<Arc<pb::NieblaProyectada>>)> = BTreeMap::new();
+        // El cambio de la niebla de cada perspectiva para las sesiones que tienen la anterior de la perspectiva (casi todas): se calcula una vez.
+        let mut cambios_de_niebla: BTreeMap<Perspectiva, pb::NieblaProyectada> = BTreeMap::new();
         let v = n.version();
         for (id, p) in abiertas {
-            let m = miradas.entry(p).or_insert_with(|| Mirada::de(n, p));
+            let (m, niebla) = miradas.entry(p).or_insert_with(|| {
+                let m = Mirada::de(n, p);
+                let niebla = m.niebla().map(|nueva| self.nieblas.get(&p).filter(|vieja| ***vieja == *nueva).cloned().unwrap_or_else(|| Arc::new(nueva.clone())));
+                (m, niebla)
+            });
             let Some(s) = self.sesiones.get_mut(&id) else { continue };
             let (Some(rect), Some(mapa)) = (s.rect(), s.mapa.as_ref()) else { continue };
             let a = Ambito::Vista(p);
@@ -528,17 +555,26 @@ impl Mesa {
                 tiene.insert(x.clave, x.sello);
             }
             cambios.extend(mapa.tiene.keys().filter(|c| !tiene.contains_key(*c)).map(|(tipo, eid)| cambio_quita(pb::TipoEntidad::try_from(*tipo).unwrap_or_default(), eid.clone())));
-            let niebla = m.niebla();
-            let nueva_niebla = niebla != mapa.niebla.as_ref();
+            let nueva_niebla = match (niebla.as_ref(), mapa.niebla.as_ref()) {
+                (Some(ahora), Some(antes)) => !Arc::ptr_eq(ahora, antes) && **ahora != **antes,
+                (ahora, _) => ahora.is_some(),
+            };
             if cambios.is_empty() && !nueva_niebla {
+                // Lo mismo con otro puntero (tras una `Foto`): en adelante, el de la perspectiva.
+                s.mapa = Some(Mapa { tiene, niebla: niebla.clone() });
                 continue;
             }
+            let envio = niebla.as_ref().filter(|_| nueva_niebla).map(|ahora| match &mapa.niebla {
+                Some(antes) if self.nieblas.get(&p).is_some_and(|x| Arc::ptr_eq(x, antes)) => cambios_de_niebla.entry(p).or_insert_with(|| cambio_de_niebla(antes, ahora)).clone(),
+                Some(antes) => cambio_de_niebla(antes, ahora),
+                None => (**ahora).clone(),
+            });
             let desde = s.abiertos[&a];
-            let delta = pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta: v, cambios, eventos: Vec::new(), niebla: niebla.filter(|_| nueva_niebla).cloned() };
-            envios.push((id, Difusion::Delta(delta)));
+            envios.push((id, Difusion::Delta(pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta: v, cambios, eventos: Vec::new(), niebla: envio })));
             s.abiertos.insert(a, v);
-            s.mapa = Some(Mapa { tiene, niebla: niebla.cloned() });
+            s.mapa = Some(Mapa { tiene, niebla: niebla.clone() });
         }
+        self.nieblas = miradas.into_iter().filter_map(|(p, (_, niebla))| Some((p, niebla?))).collect();
     }
 
     /// ¿Tiene alguna sesión su `VISTA` abierta? (Si no, no hay nada que muestrear.)

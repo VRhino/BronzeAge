@@ -33,7 +33,7 @@ use crate::proyeccion::ambito::Ambito;
 use crate::proyeccion::batalla::{incorporacion, ticket, SCHEMA_VERSION};
 use crate::proyeccion::ids::{self, parse_escuadra, parse_heroe};
 use crate::proyeccion::{detalle_de_rechazo, referencia_creada};
-use ambitos::{cambia_derechos, delta, derechos, es_jugador, foto, plazas_de, reanudable, Entrega, Mesa, Sesion};
+use ambitos::{cambia_derechos, delta, derechos, es_jugador, foto, plazas_de, reanudable, Entrega, Mesa, Reanuda, Sesion};
 use base::Punto;
 use combate::ciclo::{Asignacion, Batalla, EscuadraDeSalida, EstadoBatalla, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
@@ -189,9 +189,10 @@ impl Actor {
         let (heroe_id, faccion_id) = (heroe.map(|h| ids::heroe(h.heroe.id)), heroe.and_then(|h| h.faccion).map(ids::faccion));
         let campamentos = if heroe.is_none() && es_jugador(rol) { self.campamentos_para_elegir() } else { Vec::new() };
         self.mesa.insertar(sesion, s);
-        // El tramo que le falta a lo que reanuda, de la versión más vieja que conserva.
+        // El tramo que le falta a lo que reanuda, de la versión más vieja que conserva; de los hechos, solo los posteriores a la mayor que declara (los anteriores ya los oyó).
+        let oido = hola.versiones_conocidas.values().copied().max().unwrap_or(0);
         let mut cubos = match reanudan.values().min() {
-            Some(&k) => self.mesa.repartir(&self.nucleo, self.nucleo.cambios_desde(k).into_iter().flatten(), Some(sesion)),
+            Some(&k) => self.mesa.repartir(&self.nucleo, self.nucleo.cambios_desde(k).into_iter().flatten(), Some(Reanuda { sesion, oido })),
             None => BTreeMap::new(),
         };
         // La plaza cuyo interior avanzó desde la secuencia que trae el cliente (el paso de minuto no está en el registro del mundo) se le manda entera; en `ADMIN`, cada plaza con la secuencia que el
@@ -338,6 +339,8 @@ impl Actor {
             }
         }
         // Lo que se ve: tras cualquier cambio del mundo y en cada muestreo (lo que anda entra y sale de la vista, a lo ajeno se le acaba el tramo).
+        // DUDA (4H T6): con 450 sesiones con vista esto cuesta ≈ 15 ms por orden (un techo de ≈ 65 órdenes/s); tras una orden bastaría la vista de quien la dio (la causalidad es suya) y las demás en
+        // el muestreo siguiente, pero cambia cuándo ven los demás (05 §3): lo decide el autor.
         let ahora = self.nucleo.ahora();
         if hasta != self.entregada || ahora >= self.proxima_vista {
             self.mesa.reconciliar_vistas(&self.nucleo, &mut envios);
@@ -415,10 +418,12 @@ impl Actor {
 
     /// Publica a los servidores de batalla conectados lo que cambió en las batallas activas (decisión 7 del autor: el ticket va a todos y gana la primera asignación). El ticket sale cuando la
     /// batalla queda pendiente de asignar con una revisión que aún no se mandó (al abrirse, al acabar la convocatoria de un asedio y al reabrirse tras una salida previa al inicio); las
-    /// incorporaciones, a todos mientras nadie la tiene y solo al servidor de la asignación después. Lo que se publica con ningún servidor conectado lo recoge el que llegue (`batallas_de`).
+    /// incorporaciones, a todos mientras nadie la tiene y solo al servidor de la asignación después. Sin ningún servidor que deba oírlo no se proyecta nada (4H T6): se anota como publicado y el que
+    /// llegue lo recoge entero (`batallas_de`).
     fn publicar_batallas(&mut self) {
         let t = self.nucleo.ahora();
         self.publicadas.retain(|id, _| self.nucleo.batalla(*id).is_some_and(|b| b.activa(t)));
+        let servidores: Vec<(SesionId, String)> = self.mesa.servidores().map(|(id, s)| (id, s.cliente.clone())).collect();
         let mut envios: Vec<(SesionId, Difusion)> = Vec::new();
         for b in self.nucleo.batallas_activas() {
             let publicada = self.publicadas.get(&b.id);
@@ -427,12 +432,15 @@ impl Actor {
                 continue;
             }
             let desde = if ticket_nuevo { 0 } else { publicada.map_or(0, |p| p.incorporacion) };
-            let mensajes = self.mensajes_de(b, ticket_nuevo, desde);
             let hasta = self.nucleo.incorporaciones_vigentes(b.id).iter().map(|i| i.secuencia).max().unwrap_or(0).max(desde);
             // Con la batalla asignada, solo el servidor que la tiene oye sus incorporaciones.
             let dueno = b.asignacion.as_ref().filter(|_| b.estado != EstadoBatalla::Convocando).map(|a| a.servidor.as_str());
-            for (sesion, _) in self.mesa.servidores().filter(|(_, s)| dueno.is_none_or(|d| s.cliente == d)) {
-                envios.extend(mensajes.iter().map(|m| (sesion, Difusion::Batalla(m.clone()))));
+            let destinos: Vec<SesionId> = servidores.iter().filter(|(_, c)| dueno.is_none_or(|d| c == d)).map(|&(id, _)| id).collect();
+            if !destinos.is_empty() {
+                let mensajes = self.mensajes_de(b, ticket_nuevo, desde);
+                for sesion in destinos {
+                    envios.extend(mensajes.iter().map(|m| (sesion, Difusion::Batalla(m.clone()))));
+                }
             }
             self.publicadas.insert(b.id, Publicada { revision: b.ticket.revision, incorporacion: hasta });
         }

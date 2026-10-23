@@ -487,6 +487,8 @@ Cada grupo guarda **una** foto (ya filtrada para su audiencia) y una `version` (
 - **Tope** de `maxSuscripcionesPorSocket` canales por socket (`formato`).
 - **Borrar la partida** cierra todos los sockets con **4404** y descarta sus grupos.
 
+> **Implementado en Rust (2026-10-23, 4H T6).** Sin grupos ni diff de fotos: cada ámbito de cada sesión lleva su versión y el servidor reparte lo que dice el registro de cambios (contrato 05 §5-§7). Lo que aquí se garantiza con `aplicarDiferencia` («foto + N deltas ≡ foto final») lo prueba `crates/nucleo/tests/reanudacion.rs` en los siete ámbitos a la vez con mundos y órdenes aleatorios de semilla fija, y también que reanudar (todos los ámbitos a la vez, al día o con un hueco) deja lo mismo que una foto nueva. **Sin suscriptores no se proyecta nada**: sin ningún ámbito abierto el reparto no busca ni los oyentes de los hechos, y el ticket de una batalla solo se proyecta si hay un servidor de batalla que deba oírlo. La **coalescencia** es la del actor (un reparto por despertar, la vista también en cada muestreo de 250 ms) y la **contrapresión**, la de `servidor` (un cliente lento se descarta y reanuda). La niebla de la vista viaja como cambio parcial (los bytes que cambiaron de cada máscara) a quien tiene la anterior, y se calcula y se compara una vez por perspectiva. Con 500 sesiones (450 en el mapa con vista, 45 en su plaza, 5 de administración) repartir 5 minutos de mundo ocupa al actor 22 s (el 7 % de un núcleo en tiempo real; antes, 105-108 s) y cada orden 15 ms (antes, 54 ms), casi todo en la vista.
+
 ## 8. Parámetros
 
 <!-- parametros:DIFUSION -->

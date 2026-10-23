@@ -15,7 +15,7 @@
 //! una columna); la columna se retira en el muestreo siguiente a que deje de verse.
 
 use super::propios::{self, Proyectada};
-use super::{audiencia, ficha_de_asentamiento, ids, interior, plan, punto};
+use super::{ficha_de_asentamiento, ids, interior, plan, punto};
 use crate::estado::{Clase, Ejercito};
 use crate::estado_militar::Relacion;
 use crate::memoria::{DatosSitio, Ficha, InformeDePlaza, Mirada as MiradaIntel, OrigenIntel, Sitio};
@@ -68,6 +68,8 @@ pub struct Mirada<'n> {
     pub perspectiva: Perspectiva,
     faccion: Option<u32>,
     t: Instante,
+    /// Todas las columnas con su posición en `t`: se calcula una vez por perspectiva y no una por sesión (4H T6).
+    columnas: Vec<(&'n Ejercito, Punto)>,
     /// Los ojos propios y los de los aliados en `t`: centro y alcance.
     ojos: Vec<(Punto, Mil)>,
     /// Las columnas propias: las de la Facción o, sin bandera, en las que va el héroe.
@@ -87,10 +89,16 @@ fn aliados(n: &Nucleo, f: u32) -> Vec<u32> {
     n.estado().militar.relaciones.iter().filter(|(_, r)| matches!(r, Relacion::Alianza | Relacion::Vasallaje)).filter_map(|(&(a, b), _)| if a == f { Some(b) } else if b == f { Some(a) } else { None }).collect()
 }
 
-/// ¿Va algún héroe de la cuenta de `viewer` en la columna?
-fn va_en(n: &Nucleo, e: &Ejercito, viewer: u64) -> bool {
+/// La cuenta de `viewer`, el héroe de la sesión de su cuenta (`audiencia::heroe_de_sesion`).
+fn cuenta_de(n: &Nucleo, viewer: u64) -> Option<&str> {
+    n.estado().militar.heroes.get(&viewer).map(|h| h.cuenta.as_str())
+}
+
+/// ¿Va algún héroe de la `cuenta` en la columna? Para el héroe de la sesión de esa cuenta es lo mismo que preguntar si él es el héroe de la sesión de algún participante (`audiencia::principal`),
+/// sin buscarlo: el de un héroe de campo se busca entre todos los héroes, y esto se pregunta por cada columna ajena del rectángulo en cada muestreo de cada sesión (4H T6).
+fn va_en(n: &Nucleo, e: &Ejercito, cuenta: &str) -> bool {
     let est = n.estado();
-    e.columna.participantes.iter().filter_map(|p| est.militar.heroes.get(&p.heroe)).any(|h| audiencia::principal(est, h) == Some(viewer))
+    e.columna.participantes.iter().filter_map(|p| est.militar.heroes.get(&p.heroe)).any(|h| h.cuenta == cuenta)
 }
 
 /// Anota una ficha si no hay una más reciente (en un mismo instante gana la última), como `Memoria::anotar`.
@@ -113,12 +121,13 @@ impl<'n> Mirada<'n> {
             .values()
             .filter(|x| match perspectiva {
                 Perspectiva::Faccion(f) => x.columna.faccion == Some(f),
-                Perspectiva::Heroe(h) => va_en(n, x, h),
+                Perspectiva::Heroe(h) => cuenta_de(n, h).is_some_and(|c| va_en(n, x, c)),
             })
             .map(|x| x.id)
             .collect();
         let grupo: Vec<u32> = faccion.into_iter().chain(faccion.map(|f| aliados(n, f)).unwrap_or_default()).collect();
-        let mut ojos: Vec<(Punto, Mil)> = e.ejercitos.values().filter(|x| propias.contains(&x.id) || x.columna.faccion.is_some_and(|f| grupo.contains(&f))).map(|x| (x.posicion_en(t), n.radio_de_vista(x))).collect();
+        let columnas: Vec<(&Ejercito, Punto)> = e.ejercitos.values().map(|x| (x, x.posicion_en(t))).collect();
+        let mut ojos: Vec<(Punto, Mil)> = columnas.iter().filter(|(x, _)| propias.contains(&x.id) || x.columna.faccion.is_some_and(|f| grupo.contains(&f))).map(|&(x, p)| (p, n.radio_de_vista(x))).collect();
         for a in e.asentamientos.values().filter(|a| grupo.contains(&a.faccion)) {
             ojos.push((a.posicion, a.radio));
             ojos.extend(a.economia.avanzadas.iter().filter(|v| v.operativa()).map(|v| (v.posicion, radios::AVANZADA)));
@@ -168,7 +177,7 @@ impl<'n> Mirada<'n> {
             informes.retain(|&id, i| n.existe_sitio(Sitio::Plaza(id)) || !a_la_vista(i.posicion));
         }
         let niebla = celdas.as_ref().zip(visibles.as_ref()).map(|(c, v)| vision::niebla_proyectada(c, v));
-        Mirada { n, perspectiva, faccion, t, ojos, propias, celdas, niebla, fichas, informes }
+        Mirada { n, perspectiva, faccion, t, columnas, ojos, propias, celdas, niebla, fichas, informes }
     }
 
     /// ¿Se ve ahora el punto? (alguno de los ojos a `≤` su alcance, no estricto).
@@ -187,12 +196,12 @@ impl<'n> Mirada<'n> {
         let (n, t) = (self.n, self.t);
         let e = n.estado();
         let mut v: Vec<Visible<'_>> = Vec::new();
-        let propia = |x: &Ejercito| self.propias.contains(&x.id) || viewer.is_some_and(|h| va_en(n, x, h));
+        let cuenta = viewer.and_then(|h| cuenta_de(n, h));
+        let propia = |x: &Ejercito| self.propias.contains(&x.id) || cuenta.is_some_and(|c| va_en(n, x, c));
 
         // Columnas: las propias, enteras; las ajenas que se ven, con su tramo (sin las que una batalla aparta: la batalla las sustituye).
         let mut heroes: BTreeSet<u64> = BTreeSet::new();
-        for x in e.ejercitos.values() {
-            let p = x.posicion_en(t);
+        for &(x, p) in &self.columnas {
             if !rect.contiene(p) {
                 continue;
             }
@@ -292,7 +301,7 @@ impl<'n> Mirada<'n> {
 
         // Campamentos de mercenarios explorados, o donde el héroe reside o está.
         let suyo = |c: u32| viewer.and_then(|h| n.heroe(h)).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Mercenarios(c) || h.heroe.residencia == Some(militar::heroe::Residencia::Campamento(c)));
-        for (c, puerta, _, _) in n.campamentos_para_elegir() {
+        for (c, puerta) in n.puertas_de_campamentos() {
             if rect.contiene(puerta) && (suyo(c) || self.celdas.as_ref().is_some_and(|m| m.explorado_en(puerta))) {
                 v.push(visible(pb::TipoEntidad::CampamentoMercenarios, ids::campamento(c), Sello(n.version_de(Clase::Campamento, u64::from(c)), 0), move || interior::campamento(n, c).map(Cuerpo::CampamentoMercenarios)));
             }
@@ -601,4 +610,92 @@ fn id_de_arista(a: &comercio::red_caminos::Arista) -> String {
 /// Las entidades de una vista ya proyectadas (la `Foto`), en el orden de `contenido`.
 pub fn proyectar_todo(visibles: &[Visible<'_>]) -> Vec<Proyectada> {
     visibles.iter().filter_map(|x| Some((pb::TipoEntidad::try_from(x.clave.0).ok()?, x.clave.1.clone(), x.cuerpo()?))).collect()
+}
+
+/// Bytes iguales que se mandan dentro de un tramo antes que abrir otro (un tramo cuesta unos 5 bytes de cabecera).
+const HUECO_EN_UN_TRAMO: usize = 8;
+
+/// Los tramos de bytes de `ahora` que difieren de `antes` (de la misma longitud), juntando los separados por menos de [`HUECO_EN_UN_TRAMO`] bytes iguales.
+fn tramos(antes: &[u8], ahora: &[u8]) -> Vec<pb::TramoDeNiebla> {
+    let mut v: Vec<pb::TramoDeNiebla> = Vec::new();
+    let mut i = 0;
+    while i < ahora.len() {
+        if antes[i] == ahora[i] {
+            i += 1;
+            continue;
+        }
+        let mut fin = i + 1;
+        while fin < ahora.len() && ahora[fin..].iter().zip(&antes[fin..]).take(HUECO_EN_UN_TRAMO).any(|(a, b)| a != b) {
+            fin += 1;
+        }
+        v.push(pb::TramoDeNiebla { desde: i as u32, datos: ahora[i..fin].to_vec() });
+        i = fin;
+    }
+    v
+}
+
+/// La niebla que se manda a quien tiene `antes` y le toca `ahora` (4H T6): un cambio parcial con los tramos de bytes que cambiaron de cada máscara, o la niebla entera si cambiaron las dimensiones
+/// o los tramos no ahorran nada. La máscara de lo visible cambia en casi cada muestreo de 250 ms (los ojos andan), pero solo en el borde de sus discos: unos cientos de bytes de los 26,7 KB de cada
+/// máscara del mapa real.
+pub fn cambio_de_niebla(antes: &pb::NieblaProyectada, ahora: &pb::NieblaProyectada) -> pb::NieblaProyectada {
+    let dimensiones = |x: &pb::NieblaProyectada| (x.tamano_celda, x.columnas, x.filas, x.celdas.len(), x.visibles.len());
+    if dimensiones(antes) != dimensiones(ahora) || antes.parcial || ahora.parcial {
+        return ahora.clone();
+    }
+    let (tramos_celdas, tramos_visibles) = (tramos(&antes.celdas, &ahora.celdas), tramos(&antes.visibles, &ahora.visibles));
+    let bytes: usize = tramos_celdas.iter().chain(&tramos_visibles).map(|t| t.datos.len() + 5).sum();
+    if bytes >= ahora.celdas.len() + ahora.visibles.len() {
+        return ahora.clone();
+    }
+    pb::NieblaProyectada { tamano_celda: ahora.tamano_celda, columnas: ahora.columnas, filas: ahora.filas, parcial: true, tramos_celdas, tramos_visibles, ..Default::default() }
+}
+
+/// Lo que hace el cliente con la niebla de una `Delta` o de una `Foto`: la entera sustituye a la que tiene; la parcial sobrescribe los bytes de sus tramos en la que tiene.
+pub fn aplicar_niebla(destino: &mut Option<pb::NieblaProyectada>, llega: &pb::NieblaProyectada) {
+    if !llega.parcial {
+        *destino = Some(llega.clone());
+        return;
+    }
+    let d = destino.as_mut().expect("una niebla parcial llega sobre la que el cliente ya tiene");
+    for (mascara, tramos) in [(&mut d.celdas, &llega.tramos_celdas), (&mut d.visibles, &llega.tramos_visibles)] {
+        for t in tramos {
+            mascara[t.desde as usize..t.desde as usize + t.datos.len()].copy_from_slice(&t.datos);
+        }
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    fn niebla(celdas: &[u8], visibles: &[u8]) -> pb::NieblaProyectada {
+        pb::NieblaProyectada { tamano_celda: 5_000, columnas: 8 * celdas.len() as u32, filas: 1, celdas: celdas.to_vec(), visibles: visibles.to_vec(), ..Default::default() }
+    }
+
+    #[test]
+    fn la_niebla_parcial_lleva_solo_los_tramos_que_cambiaron_y_aplicada_da_la_nueva() {
+        let mut antes = vec![0u8; 400];
+        antes[10] = 0xFF;
+        let (mut celdas, mut visibles) = (antes.clone(), antes.clone());
+        celdas[11] = 1;
+        visibles[100] = 3;
+        visibles[104] = 3; // a menos de 8 bytes del anterior: el mismo tramo
+        visibles[300] = 7;
+        let (a, b) = (niebla(&antes, &antes), niebla(&celdas, &visibles));
+        let c = cambio_de_niebla(&a, &b);
+        assert!(c.parcial && c.celdas.is_empty() && c.visibles.is_empty());
+        assert_eq!(c.tramos_celdas.iter().map(|t| (t.desde, t.datos.len())).collect::<Vec<_>>(), [(11, 1)]);
+        assert_eq!(c.tramos_visibles.iter().map(|t| (t.desde, t.datos.len())).collect::<Vec<_>>(), [(100, 5), (300, 1)]);
+        let mut cliente = Some(a.clone());
+        aplicar_niebla(&mut cliente, &c);
+        assert_eq!(cliente.as_ref(), Some(&b));
+        // Sin cambios: ningún tramo. Todo cambiado, o con otras dimensiones: la niebla entera.
+        assert!(cambio_de_niebla(&b, &b).tramos_celdas.is_empty() && cambio_de_niebla(&b, &b).tramos_visibles.is_empty());
+        let todo = niebla(&[0xAA; 400], &[0x55; 400]);
+        assert_eq!(cambio_de_niebla(&a, &todo), todo);
+        assert_eq!(cambio_de_niebla(&a, &niebla(&[1; 10], &[1; 10])), niebla(&[1; 10], &[1; 10]));
+        let mut cliente = Some(a);
+        aplicar_niebla(&mut cliente, &todo);
+        assert_eq!(cliente, Some(todo));
+    }
 }

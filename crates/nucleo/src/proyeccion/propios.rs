@@ -683,7 +683,7 @@ pub fn todo_menos_plazas(n: &Nucleo) -> Vec<(Clase, u64)> {
     let mut v: Vec<(Clase, u64)> = audiencia::CLASES.into_iter().filter(|c| !matches!(c, Clase::Asentamiento | Clase::Escuadra)).flat_map(|c| audiencia::todas(e, c).into_iter().map(move |id| (c, id))).collect();
     v.extend(e.militar.heroes.values().flat_map(|h| &h.heroe.escuadras).map(|s| (Clase::Escuadra, s.id)));
     v.extend(n.avanzadas_huerfanas().map(|x| (Clase::Avanzada, x.id)));
-    v.extend(n.campamentos_para_elegir().into_iter().map(|(c, ..)| (Clase::Campamento, u64::from(c))));
+    v.extend(n.puertas_de_campamentos().map(|(c, _)| (Clase::Campamento, u64::from(c))));
     v.extend(e.combate.bandidos.keys().map(|&b| (Clase::Bandidos, b)));
     v
 }

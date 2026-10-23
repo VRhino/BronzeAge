@@ -46,14 +46,19 @@ fn de_todo(e: &Estado) -> Mapa {
 }
 
 impl Nucleo {
-    /// Empieza a llevar la pertenencia de las entidades a los ámbitos de jugador y a dejarla en el registro de cambios (lo hace el actor de sesiones al arrancar).
+    /// Empieza a llevar la pertenencia de las entidades a los ámbitos de jugador y a dejarla en el registro de cambios (lo hace el actor de sesiones al arrancar y el núcleo persistente antes de repetir
+    /// su registro). Si ya la llevaba, no hace nada: el registro sigue sabiendo desde cuándo la lleva.
     pub fn seguir_pertenencias(&mut self) {
+        if self.pertenencias.is_some() {
+            return;
+        }
         self.pertenencias = Some(de_todo(&self.estado));
         self.pertenencias_desde = self.estado.version;
         self.seguir_interiores();
     }
 
-    /// La primera versión cuyo registro de cambios lleva pertenencias: un cliente que conserve una anterior (de antes de arrancar las sesiones, o de la repetición del registro al recuperar) no puede reanudar por deltas.
+    /// La primera versión cuyo registro de cambios lleva pertenencias: un cliente que conserve una anterior (de antes de arrancar las sesiones o, en el núcleo persistente, de antes de su última foto) no
+    /// puede reanudar por deltas.
     pub fn pertenencias_desde(&self) -> u64 {
         self.pertenencias_desde
     }

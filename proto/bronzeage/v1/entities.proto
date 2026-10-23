@@ -979,6 +979,17 @@ message NieblaProyectada {
   uint32 filas = 3;
   bytes celdas = 4;                      // explorado alguna vez
   bytes visibles = 5;                    // visible ahora (incluye visión prestada)
+  // 4H T6: cambio parcial, solo en una `Delta` (una `Foto` la trae siempre entera). Con `parcial`, `celdas` y `visibles` vienen vacíos y el cliente sobrescribe,
+  // en las dos máscaras que ya tiene de este ámbito (con las mismas dimensiones), los bytes de cada tramo; lo que no está en un tramo no cambió.
+  bool parcial = 6;
+  repeated TramoDeNiebla tramos_celdas = 7;
+  repeated TramoDeNiebla tramos_visibles = 8;
+}
+
+// Los bytes de una máscara de niebla que cambiaron: a partir del byte `desde`, `datos` sustituye a los que había.
+message TramoDeNiebla {
+  uint32 desde = 1;
+  bytes datos = 2;
 }
 
 message ZonaFaccion {

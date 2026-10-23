@@ -140,6 +140,10 @@ indica si está parado.
 - **`Entidad.version`**: cada entidad lleva la versión de mundo en que cambió por última vez; el almacén normalizado del cliente
   descarta cualquier actualización con `version` menor que la que ya tiene.
 - Cada `Delta` y cada `Foto` pueden llevar `NieblaProyectada` (dos máscaras: explorado y visible ahora).
+- **Niebla parcial (4H T6)**: en una `Delta`, a quien ya tiene la niebla anterior de ese ámbito, la niebla viaja como cambio parcial: `parcial = true`, `celdas` y `visibles` vacíos y, en
+  `tramos_celdas` y `tramos_visibles`, los tramos de bytes que cambiaron de cada máscara (`TramoDeNiebla{desde, datos}`: a partir del byte `desde`, `datos` sustituye a los que había). El cliente
+  sobrescribe esos bytes en las dos máscaras que tiene. La `Foto` la trae siempre entera, y también la `Delta` si cambian las dimensiones o los tramos no ahorran nada. Lo visible cambia en casi cada
+  muestreo de 250 ms (los ojos andan) pero solo en el borde de sus discos: con 450 jugadores en el mapa la vista pasó de 12 MB por minuto y sesión en crudo (113 KB con zstd) a 26 KB (23 KB).
 - **Qué viaja de un movimiento**: lo propio, el `Plan` completo una sola vez (un cambio de plan llega como plan nuevo que empieza
   donde está la columna: ni parada ni salto); lo ajeno, solo el **tramo** del plan dentro de la vista y con horizonte corto (~30 s),
   renovado. Una columna que anda no cuesta ningún mensaje mientras anda.
@@ -162,7 +166,8 @@ creadas[] = ReferenciaCreada { entidad: TipoEntidad, id }   (una clase de entida
 - **Resultados**: `ORDEN_ACEPTADA`, `ORDEN_RECHAZADA` (con `RechazoOrden{codigo, mensaje, detalle}`), `ORDEN_SIN_CAMBIOS`
   (válida pero no cambió nada; no sube la versión) y `ORDEN_DUPLICADA` (misma `peticion_id`).
 - **Idempotencia**: el servidor recuerda las últimas `peticion_id` de la sesión (y las de la partida para reconexiones). Reenviar una
-  orden tras reconectar no la ejecuta dos veces.
+  orden tras reconectar no la ejecuta dos veces. En el servidor Rust las recuerda el estado del mundo (va en la foto): las últimas 500 órdenes aceptadas de toda la partida, por cuenta y
+  `peticion_id` (`Reglas::limite_idempotencia`); con 500 jugadores a una orden cada 10 s eso son ≈ 10 s (DUDA, 4H T6).
 - **`version_esperada`**: si viene y el mundo ya cambió más allá, la orden se rechaza con `version.obsoleta`; útil para acciones que
   dependen de lo que el jugador estaba viendo.
 - **Orden sin sesión de héroe** (p. ej. administración): el rol lo decide el `token`.
@@ -183,7 +188,13 @@ creadas[] = ReferenciaCreada { entidad: TipoEntidad, id }   (una clase de entida
 3. Por cada ámbito al que **tiene derecho ahora** (lo que el cliente diga conocer de otro no le abre nada) el servidor decide y lo anuncia en `Bienvenida.ambitos`: `REANUDA_SIN_NOVEDAD`, `REANUDA_CON_DELTAS` (manda
    el tramo consolidado `k → hoy`) o `REANUDA_CON_FOTO` (versión que el registro de cambios no alcanza o del futuro, o ámbito nuevo). `HEROE`, `FACCION`, `BATALLA`, `ASENTAMIENTO`, `CAMPAMENTO` y `ADMIN` se reanudan **siempre por deltas** si el registro alcanza la versión: el registro dice qué cambió en cada uno desde entonces, aunque el héroe haya salido y vuelto (desde T3c ya no se pide foto por eso; un cliente que descartó el ámbito con un `Revocado` no vuelve a declarar su versión). En `ASENTAMIENTO` el servidor no sabe qué campos de la plaza tiene el cliente, así que la delta de reanudación lleva la plaza **entera** (`reemplaza = true`); `REANUDA_SIN_NOVEDAD` si la plaza no cambió **y** el cliente trae la secuencia interior de hoy (abajo). Tras la `Bienvenida` llega un mensaje (`Foto` o `Delta`) por cada ámbito que no reanuda sin novedad, en el orden de la lista. `VISTA` no se reanuda: se abre con `CambiarVista`.
 4. Para poder mandar deltas, el servidor conserva en memoria las deltas de cada ámbito durante un tiempo de retención y, más allá,
-   las reconstruye del registro de eventos; si no puede, foto.
+   las reconstruye del registro de eventos; si no puede, foto. **El servidor Rust (4H T6)** conserva las últimas **65.536 versiones** del registro de cambios del mundo
+   (`Ajustes::retencion_cambios`): quien conserva una versión que el registro aún alcanza —la más vieja retenida incluida— reanuda por deltas; una anterior, foto. No las reconstruye del
+   registro de eventos, pero tras un reinicio el núcleo persistente repite su registro desde la última foto llevando a qué ámbito pertenece cada entidad (como el proceso vivo), así que una
+   versión posterior a esa foto también reanuda por deltas. Medido: 65.536 versiones son ≈ 7 h de mundo sin órdenes (450 columnas que marchan y 30 plazas: ≈ 160 versiones por minuto) y
+   ≈ 22 min con 500 jugadores que dan una orden cada 10 s (cada orden aceptada es una versión).
+   **Un hecho no se cuenta dos veces**: al reanudar solo llegan los hechos de versiones posteriores a la **mayor** que el cliente declara en `versiones_conocidas` (un ámbito al día hasta `k`
+   significa que estaba conectado cuando se repartió `k`, y entonces recibió sus hechos por el ámbito que los oía, aunque ya no lo tenga).
 5. Un cliente que detecta un hueco de `secuencia` **cierra la conexión y reconecta** con el mismo procedimiento (nuevo `Hola` con `versiones_conocidas`). No hay reanudación a mitad de sesión: `Hola` solo puede ser el primer mensaje, y un segundo `Hola` es `ErrorSesion{hola_repetido}` (no fatal; se ignora).
 6. **El reloj de mundo se congela mientras el servidor está apagado** ([`Mechanics/Reloj_Y_Eventos.md`](../Mechanics/Reloj_Y_Eventos.md)): una
    reapertura tras una caída no trae «tiempo perdido» que simular.
@@ -227,7 +238,8 @@ aunque no vean la plaza), `facciones_ids` (las Facciones que lo oyen enteras, 4H
   héroes, y la versión, el hash y los hechos (con sus oyentes) son los mismos con sesiones y sin ellas: los hechos no se guardan en la foto.
 - **Por qué ámbito**: a cada sesión **una sola vez**, por el primero de sus ámbitos abiertos que lo oye, en este orden: `ASENTAMIENTO` de la plaza (quien está dentro, que es ciudadano de su
   Facción), `BATALLA` del hecho de batalla (quien combate), `HEROE` del héroe nombrado, `FACCION` de una Facción que lo oye y, para un hecho de batalla, la `VISTA` de quien tiene esa batalla en su
-  mapa (la ve bajo la niebla). `ADMIN` los lleva todos.
+  mapa (la ve bajo la niebla). `ADMIN` los lleva todos. Un ámbito que se abre con su `Foto` en el mismo reparto que el hecho no lo lleva (una `Foto` no trae hechos): va por el siguiente que lo oye
+  (4H T6; antes se perdía, p. ej. `jugador.entra_en_asentamiento` para quien entraba). Al reanudar, solo los de versiones posteriores a la mayor que el cliente declara (§7).
 - **La niebla**: un hecho sin plaza que nombra a alguien llega **solo** a los nombrados (en el TypeScript era global: «el ejército X llega a su destino» lo oía todo el mundo); solo son de todos los
   hechos **públicos** (`publico`: la crónica y la reposición de los mercados de mercenarios), que no nombran a nadie ni dicen dónde. Un hecho sin nadie a quien contárselo solo lo oye la administración.
   `vision.contacto` lo oye la Facción que ve, no la vista; `jugador.marcha_fijada` (con el destino), solo quien marcha.
