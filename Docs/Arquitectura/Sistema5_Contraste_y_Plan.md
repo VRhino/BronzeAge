@@ -430,25 +430,25 @@ Primera mitad de la tanda 5G, en la rama `tanda-5g-a` (worktree aparte), en para
 **Órdenes (5)**, en `crates/nucleo/src/nucleo/a_mano.rs`. Los códigos empiezan en el **138**: del 128 al 137 quedan para 5B.
 | Código | Comando | Orden del contrato | Quién | Regla |
 |---|---|---|---|---|
-| 138 | `GuardarEnAlmacenPersonal { heroe, recurso, cantidad }` | `guardar_en_almacen_personal` | la cuenta del héroe | el Líder, con su columna a la puerta de su residencia; `min(pedido, carro, hueco del almacén)` |
+| 138 | `GuardarEnAlmacenPersonal { heroe, recurso, cantidad }` | `guardar_en_almacen_personal` | la cuenta del héroe | dentro de su residencia, o el Líder con su columna a su puerta; `min(pedido, carro, hueco del almacén)` |
 | 139 | `SacarDelAlmacenPersonal { heroe, recurso, cantidad }` | `sacar_del_almacen_personal` | la cuenta del héroe | igual; `min(pedido, lo guardado, hueco del carro)` |
-| 140 | `CargarCaravana { ejercito, caravana, asentamiento, recurso, cantidad }` | `cargar_caravana` | un participante de la columna | adjunta, a la puerta de una plaza de su Facción; `min(pedido, hueco de la caravana, existencias)`, sin reserva |
+| 140 | `CargarCaravana { ejercito, caravana, asentamiento, recurso, cantidad }` | `cargar_caravana` | un participante de la columna | adjunta, a la puerta de una plaza de su Facción; `min(pedido, hueco de la caravana y de la columna, existencias)`, sin reserva |
 | 141 | `ReclamarCaravana { heroe, caravana, politica }` | `reclamar_caravana` | la cuenta del héroe | solo la Caravana de Fundación que vuelve sola: hasta 5G-b, `caravana.no_reclamable` |
-| 142 | `SoltarCaravana { ejercito, caravana, heroe }` | `soltar_caravana` | un participante de la columna | aparca la adjunta en la plaza de su Facción donde está la columna (hecho propio) |
+| 142 | `SoltarCaravana { ejercito, caravana, heroe }` | `soltar_caravana` | un participante de la columna | solo dentro de la plaza en la que entró la columna: la deja aparcada (hecho propio) |
 
-Todo en unidades enteras (C3b: lo que se mueve se redondea hacia abajo). Rechazos nuevos: `almacen_personal.fuera_de_tu_residencia`, `carro.no_lleva`, `caravana.no_reclamable` (los demás ya existían). Hechos que pasan a emitirse: `heroe.almacen_personal`
+Todo en unidades enteras (C3b: lo que se mueve se redondea hacia abajo). Rechazos nuevos: `almacen_personal.fuera_de_tu_residencia`, `carro.no_lleva`, `caravana.no_reclamable`, `caravana.soltar_solo_dentro` (los demás ya existían). Hechos que pasan a emitirse: `heroe.almacen_personal`
 (con `sentido` como texto), `ejercito.caravana_cargada`, `ejercito.caravana_soltada`. `AparcarCaravana` recibe el código de su hecho para que `soltarCaravana` lo reutilice. M6: el oro de bandidos que llega al carro ya
 se guarda en el almacén personal y se gasta en el mercado y la taberna del campamento; el fondo de refundación es de 5G-b.
 
 **Foto:** sin cambio (no hay estado nuevo: el almacén personal y el contenido de las caravanas ya se guardaban). **Esquema:** aditivo, `Heroe.capacidad_almacen_personal = 36` (milésimas, en `HEROE` y `ADMIN`), sin dorado nuevo.
 **Contrato:** las 5 órdenes dejan de dar `orden.no_disponible` (quedan 38: 28 de política, 5 del sistema 6 y 5 de refundación); matriz de Proy §5.1 y `Comandos_Parametros.md` al día.
 
-**Pruebas:** `crates/nucleo/tests/a_mano.rs`, 7 (cada orden y cada rechazo, la conservación de lo movido, residencia en campamento y en plaza, solo el Líder, y dos por el WebSocket real, repetidas 20 veces sin un fallo);
+**Pruebas:** `crates/nucleo/tests/a_mano.rs`, 8 (cada orden y cada rechazo, la conservación de lo movido, residencia en campamento y en plaza, dentro y a la puerta, solo el Líder, una adjunta llena que no da espacio, y dos por el WebSocket real);
 portadas de `residenciaMercenaria.test.ts` («almacén personal»), `comandosMercenarios.test.ts` y `avanzarEjercitos.test.ts` (`cargarCaravanaAdjunta`, `soltarCaravana`). Ida y vuelta por el registro de los 5 comandos en `comando.rs`.
 
-**Dudas** (filas de paridad «Almacén personal y caravanas a mano (5G-a)»):
-1. Guardar y sacar solo con la columna a la puerta de la residencia (como el TypeScript y Movimiento §3.3); dentro valen `vaciarCarro` y la carga de la salida.
-2. `cargarCaravana` solo de una plaza de la propia Facción hasta 5D (`permiteReabastecerAliados`); se reutiliza `caravana.plaza_ajena`.
-3. La capacidad de carga de la columna suma la capacidad entera de cada adjunta aunque lleve contenido propio (ya era así); `cargarCaravana` mira solo el hueco de la caravana.
-4. `soltarCaravana` busca la plaza de la Facción de la caravana más cercana dentro de `radioPuerta` (la orden del contrato no la nombra).
-5. `reclamarCaravana` no tiene caso de éxito hasta que la Caravana de Fundación sea una caravana (5G-b).
+**Decisiones del autor sobre las dudas de 5G-a (2026-10-24), aplicadas:**
+1. **5G-a-1:** `reclamarCaravana` se queda sin caso de éxito hasta 5G-b.
+2. **5G-a-2, cambio:** guardar y sacar valen también **dentro** de la residencia, con el carro que el héroe trajo (el de la columna que conserva para sus caravanas, si la conserva).
+3. `cargarCaravana` solo de una plaza de la propia Facción hasta 5D (`permiteReabastecerAliados`), con `caravana.plaza_ajena`.
+4. **5G-a-4, cambio:** cada carro tiene un espacio fijo y nunca se llena por encima de su límite: `Nucleo::capacidad_de_carga` suma solo el **hueco libre** de cada adjunta (capacidad menos lo que lleva); `cargarCaravana` no pasa del hueco de la columna; el botín, `DarSuministro`, las compras y aparcar ya leen esa capacidad. Canon 5.13.2 y Movimiento §9.
+5. **5G-a-5, corrección:** `soltarCaravana` solo vale **dentro** de la plaza en la que entró la columna (`caravana.soltar_solo_dentro`); si era la última adjunta de la columna que un residente conserva en su residencia, la columna se deshace. `aparcarCaravana` (40) no cambia.

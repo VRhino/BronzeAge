@@ -404,7 +404,7 @@ impl Nucleo {
     /// El residente entra en su residencia con su columna: la tropa vuelve al campamento, el carro se queda con él y, si no lleva caravanas, la columna se
     /// disuelve (los víveres vuelven al héroe). Con caravanas adjuntas la columna sigue —quieta, sin tropa— para llevarlas, y el carro se queda en ella (su capacidad
     /// es la de la columna con sus caravanas). Devuelve lo que carga el carro y si la columna sigue.
-    fn recoger_en_residencia(&mut self, t: Instante, heroe: u64, columna: u64, ubicacion: Ubicacion) -> (Mil, bool) {
+    pub(super) fn recoger_en_residencia(&mut self, t: Instante, heroe: u64, columna: u64, ubicacion: Ubicacion) -> (Mil, bool) {
         let sigue = !self.estado.ejercitos[&columna].caravanas_adjuntas.is_empty();
         if sigue && self.estado.ejercitos[&columna].marchando() {
             self.detener(columna, t);

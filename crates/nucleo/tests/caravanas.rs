@@ -950,7 +950,7 @@ fn una_caravana_adjunta_viaja_con_la_columna_a_su_paso_y_entrega_a_la_puerta_del
     assert!(e.n.estado().ejercitos[&col].caravanas_adjuntas.is_empty());
     e.ok("ana", Comando::MoverCargaAparcada { caravana: c, recurso: Cobre, cantidad: 60_000, cargar: true });
     e.ok("ana", adjuntar(col));
-    assert_eq!(e.n.capacidad_de_carga(col), Some(500_000 + 500_000), "el carro de un jugador más la capacidad de la caravana adjunta");
+    assert_eq!(e.n.capacidad_de_carga(col), Some(500_000 + 500_000 - 60_000), "el carro de un jugador más el hueco libre de la caravana adjunta, que lleva 60 de cobre (5G-a-4)");
     let tr = e.trueque(&[(Cobre, 60_000)], &[(Estano, 1_000)]);
 
     // La columna marcha a la puerta de B a la velocidad del más lento (el buey, 24; la columna sola va a 30).

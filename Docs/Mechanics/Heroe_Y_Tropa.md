@@ -169,7 +169,7 @@ Sin plaza (globales del héroe):
 | `heroe.almacen_personal` | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `{ heroeId, recurso, cantidad (lo movido), sentido: guarda \| saca }` |
 | `heroe.viveres` | `pasarAViveres` | `{ heroeId, cantidad (lo movido) }` |
 
-> **Implementado en Rust (2026-10-24, 5G-a).** `guardarEnAlmacenPersonal` (138) y `sacarDelAlmacenPersonal` (139) existen: el Líder, con su columna a la puerta de su residencia, mueve unidades enteras entre el carro y el almacén personal (hasta `ALMACEN_PERSONAL.capacidad` en total, o hasta lo que cabe en el carro). El hecho lleva `{ heroe, recurso, cantidad, sentido }` (`sentido` es un texto: `guarda` o `saca`). La proyección del héroe propio (`HEROE` y `ADMIN`) lleva `capacidad_almacen_personal` (milésimas). Reglas, rechazos y pruebas en [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9. `DarAlmacenPersonal` (44) sigue como administración para montar escenarios.
+> **Implementado en Rust (2026-10-24, 5G-a).** `guardarEnAlmacenPersonal` (138) y `sacarDelAlmacenPersonal` (139) existen: dentro de su residencia (con el carro que trajo) o, como Líder, con su columna a su puerta, el héroe mueve unidades enteras entre el carro y el almacén personal (hasta `ALMACEN_PERSONAL.capacidad` en total, o hasta lo que cabe en el carro). El hecho lleva `{ heroe, recurso, cantidad, sentido }` (`sentido` es un texto: `guarda` o `saca`). La proyección del héroe propio (`HEROE` y `ADMIN`) lleva `capacidad_almacen_personal` (milésimas). Reglas, rechazos y pruebas en [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9. `DarAlmacenPersonal` (44) sigue como administración para montar escenarios.
 
 ## 5. Liderazgo
 

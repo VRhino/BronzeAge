@@ -241,7 +241,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `estacionar_ejercito` | `Estacionar` | el Líder de la columna | como `marchar_a` |
 | `fundar` | `Fundar` | el Líder de la columna | con la Caravana de Fundación (`fundacion.sin_caravana`) y Facción |
 | `marchar_a` | `MarcharA` | el Líder de la columna | a bordo, no desde dentro de un lugar (`heroe.dentro_de_un_lugar`), no una formación (`columna.en_formacion`) |
-| `soltar_caravana` | `SoltarCaravana` | un participante de la columna | el héroe va en ella; la caravana adjunta, a la puerta de (o dentro de) una plaza de su Facción (`caravana.fuera_de_la_puerta`): queda aparcada |
+| `soltar_caravana` | `SoltarCaravana` | un participante de la columna | el héroe va en ella; la caravana adjunta, con la columna dentro de una plaza de su Facción (`caravana.soltar_solo_dentro`): queda aparcada |
 
 **La cuenta del héroe**
 
@@ -273,7 +273,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `entrar_en_campamento` | `EntrarEnCampamento` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`) |
 | `entrar_en_pueblo` | `EntrarEnPueblo` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`); el acceso heredado |
 | `guardar_loadout` | `GuardarLoadout` | la cuenta del héroe | — |
-| `guardar_en_almacen_personal` | `GuardarEnAlmacenPersonal` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta de su residencia (`almacen_personal.fuera_de_tu_residencia`) |
+| `guardar_en_almacen_personal` | `GuardarEnAlmacenPersonal` | la cuenta del héroe | dentro de su residencia; o el Líder de su columna (`columna.solo_el_lider`) con ella a la puerta de su residencia (`almacen_personal.fuera_de_tu_residencia`) |
 | `guarnecer` | `Guarnecer` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) |
 | `guarnecer_avanzada` | `GuarnecerAvanzada` | la cuenta del héroe, ciudadano de la madre | su columna a la puerta (`radioPuerta`) de la avanzada |
 | `inspeccionar` | `Inspeccionar` | la cuenta del héroe | el objetivo en el mapa (`inspeccion.a_cubierto`) y a su alcance |

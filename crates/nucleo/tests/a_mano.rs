@@ -129,15 +129,26 @@ fn fundar(e: &mut Esc, dueno: &str, faccion: u32, p: Punto) -> u64 {
 // ───────────────────────────── 1. El almacén personal, en un campamento ─────────────────────────────
 
 #[test]
-fn el_almacen_personal_se_llena_y_se_vacia_con_el_carro_a_la_puerta_de_la_residencia_sin_crear_ni_perder_nada() {
+fn el_almacen_personal_se_llena_y_se_vacia_con_el_carro_dentro_o_a_la_puerta_de_la_residencia_sin_crear_ni_perder_nada() {
     let m = con_mundo!();
     let mut e = Esc::nuevo(m);
     let ana = e.heroe("ana", 0);
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
     e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 300_000 });
-    // Dentro del campamento no lleva columna: el almacén se toca con el carro (dentro está `vaciarCarro`).
-    assert_eq!(e.no("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 10_000 }), rechazos::HEROE_SIN_COLUMNA);
-    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![(Madera, 200_000)], politica: Politica::Aceptar }).creadas[0];
+    // Dentro de su residencia también (decisión del autor 5G-a-2): el carro es el que lleva consigo, de 500 u.
+    let con_el = |e: &Esc, r| e.n.heroe(ana).unwrap().carro.get(&r).copied().unwrap_or(0);
+    assert_eq!(e.no("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 10_000 }), rechazos::CARRO_NO_LLEVA, "aún no lleva nada");
+    e.ok("ana", Comando::SacarDelAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 20_000 });
+    e.ok("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 5_000 });
+    assert_eq!((e.personal(ana, Madera), con_el(&e, Madera)), (285_000, 15_000));
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Piedra, cantidad: 600_000 });
+    e.ok("ana", Comando::SacarDelAlmacenPersonal { heroe: ana, recurso: Piedra, cantidad: 999_000_000 });
+    assert_eq!((con_el(&e, Piedra), e.personal(ana, Piedra)), (485_000, 115_000), "hasta las 500 u. del carro");
+    e.ok("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Piedra, cantidad: 485_000 });
+    assert_eq!((e.personal(ana, Piedra), con_el(&e, Piedra)), (600_000, 0));
+    assert_eq!(hechos(&e.n, "heroe.almacen_personal").len(), 4);
+    // Sale con el carro que trajo (15 de madera) más lo que carga del almacén.
+    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![(Madera, 185_000)], politica: Politica::Aceptar }).creadas[0];
     let madera = |e: &Esc| e.personal(ana, Madera) + e.carro(col, Madera);
     assert_eq!((e.personal(ana, Madera), e.carro(col, Madera), madera(&e)), (100_000, 200_000, 300_000));
 
@@ -148,7 +159,7 @@ fn el_almacen_personal_se_llena_y_se_vacia_con_el_carro_a_la_puerta_de_la_reside
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Piedra, cantidad: cap - 150_000 - 40_000 });
     e.ok("ana", Comando::SacarDelAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 999_999_000 });
     assert_eq!((e.personal(ana, Madera), e.carro(col, Madera), madera(&e)), (110_000, 190_000, 300_000), "solo cabían 40 en el carro");
-    let h = hechos(&e.n, "heroe.almacen_personal");
+    let h = hechos(&e.n, "heroe.almacen_personal").split_off(4);
     assert_eq!(h.iter().map(|(d, s)| (dato(d, "heroe") as u64, dato(d, "cantidad"), s.clone().unwrap())).collect::<Vec<_>>(), vec![(ana, 50_000, "guarda".into()), (ana, 40_000, "saca".into())]);
     assert_eq!(dato(&h[0].0, "recurso"), dato(&h[1].0, "recurso"));
     // Con el carro lleno no se saca; sin nada guardado de un recurso, tampoco.
@@ -156,12 +167,12 @@ fn el_almacen_personal_se_llena_y_se_vacia_con_el_carro_a_la_puerta_de_la_reside
     assert_eq!(e.no("ana", Comando::SacarDelAlmacenPersonal { heroe: ana, recurso: Oro, cantidad: 1_000 }), rechazos::ALMACEN_SIN_EXISTENCIAS);
 
     // El tope del almacén es en total, de cualquier recurso: con 10 de hueco entran 10 de piedra y luego nada.
-    let hueco = 1_000_000 - 110_000 - 10_000;
+    let hueco = 1_000_000 - 110_000 - 600_000 - 10_000;
     e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Oro, cantidad: hueco });
     let piedra = |e: &Esc| e.personal(ana, Piedra) + e.carro(col, Piedra);
     let antes = piedra(&e);
     e.ok("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Piedra, cantidad: 100_000 });
-    assert_eq!((e.personal(ana, Piedra), piedra(&e)), (10_000, antes));
+    assert_eq!((e.personal(ana, Piedra), piedra(&e)), (610_000, antes));
     assert_eq!(e.n.heroe(ana).unwrap().almacen_personal.values().sum::<i64>(), 1_000_000);
     assert_eq!(e.no("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Piedra, cantidad: 1_000 }), rechazos::ALMACEN_PERSONAL_LLENO);
     assert_eq!(e.no("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Estano, cantidad: 1_000 }), rechazos::CARRO_NO_LLEVA);
@@ -254,7 +265,9 @@ fn cargar_una_caravana_adjunta_saca_del_almacen_de_la_plaza_a_cuya_puerta_esta_l
     e.dar(a, Piedra, 50_000);
     let piedra = |e: &Esc| e.almacen(a, Piedra) + e.contenido(k, Piedra);
     let antes = (e.almacen(a, Piedra), piedra(&e));
+    let cap0 = e.n.capacidad_de_carga(ej).unwrap();
     e.ok("ana", cargar(Piedra, 20_400, a));
+    assert_eq!(e.n.capacidad_de_carga(ej), Some(cap0 - 20_000), "la columna cuenta solo el hueco libre de su adjunta (5G-a-4)");
     assert_eq!((e.almacen(a, Piedra), e.contenido(k, Piedra), piedra(&e)), (antes.0 - 20_000, 20_000, antes.1), "en unidades enteras, nada se crea ni se pierde");
     let h = hechos(&e.n, "ejercito.caravana_cargada");
     assert_eq!((dato(&h[0].0, "caravana") as u64, dato(&h[0].0, "plaza") as u64, dato(&h[0].0, "cargado")), (k, a, 20_000));
@@ -272,11 +285,31 @@ fn cargar_una_caravana_adjunta_saca_del_almacen_de_la_plaza_a_cuya_puerta_esta_l
     assert_eq!(e.no("ana", Comando::CargarCaravana { ejercito: 999, caravana: k, asentamiento: a, recurso: Piedra, cantidad: 5_000 }), rechazos::EJERCITO_DESCONOCIDO);
     assert_eq!(e.no("ana", Comando::CargarCaravana { ejercito: ej, caravana: 999, asentamiento: a, recurso: Piedra, cantidad: 5_000 }), rechazos::CARAVANA_DESCONOCIDA);
 
+    // El carro común ya puede ocupar parte del hueco de la adjunta: con la columna a 5 u. de su límite solo entran 5, aunque la caravana tenga más sitio.
+    let libre = e.n.capacidad_de_carga(ej).unwrap() - e.n.ejercito(ej).unwrap().columna.carga.values().sum::<i64>();
+    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: libre - 5_000 });
+    e.dar(a, Piedra, 50_000);
+    e.ok("ana", cargar(Piedra, 20_000, a));
+    assert_eq!(e.contenido(k, Piedra), 25_000);
+    assert_eq!(e.no("ana", cargar(Piedra, 1_000, a)), rechazos::CARAVANA_SIN_CAPACIDAD);
+    let carga: i64 = e.n.ejercito(ej).unwrap().columna.carga.values().sum();
+    assert_eq!(e.n.capacidad_de_carga(ej), Some(carga), "llena hasta su límite, ni una unidad más");
+}
+
+#[test]
+fn una_adjunta_llena_no_da_espacio_a_la_columna() {
+    // Decisión del autor 5G-a-4: cada carro tiene un espacio fijo y nunca se llena por encima de su límite.
+    let m = con_mundo!();
+    let ConCaravana { mut e, a, ej, k, .. } = con_caravana(m);
+    let cargar = |cantidad| Comando::CargarCaravana { ejercito: ej, caravana: k, asentamiento: a, recurso: Piedra, cantidad };
+    let un_carro = militar::Reglas::cargar().logistica.capacidad_carro;
+    e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    assert!(e.n.capacidad_de_carga(ej).unwrap() > un_carro, "vacía, la adjunta suma su capacidad");
     // Se llena hasta su capacidad y entonces se rechaza; lo cargado sigue siendo lo que salió del almacén.
     let mut llena = false;
     for _ in 0..40 {
         e.dar(a, Piedra, 500_000);
-        let r = e.ord("ana", cargar(Piedra, 999_000_000, a));
+        let r = e.ord("ana", cargar(999_000_000));
         if !r.aceptada() {
             assert_eq!(codigo(&r), rechazos::CARAVANA_SIN_CAPACIDAD);
             llena = true;
@@ -286,10 +319,14 @@ fn cargar_una_caravana_adjunta_saca_del_almacen_de_la_plaza_a_cuya_puerta_esta_l
     assert!(llena, "la caravana tiene un tope");
     let cargado: i64 = hechos(&e.n, "ejercito.caravana_cargada").iter().map(|(d, _)| dato(d, "cargado")).sum();
     assert_eq!(e.contenido(k, Piedra), cargado);
+    assert_eq!(e.n.capacidad_de_carga(ej), Some(un_carro), "llena, no da espacio: queda el carro del héroe");
+    // El botín o lo que se le dé solo entra en el carro del héroe.
+    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: 10 * un_carro });
+    assert_eq!(e.n.ejercito(ej).unwrap().columna.carga.values().sum::<i64>(), un_carro);
 }
 
 #[test]
-fn soltar_una_caravana_la_aparca_en_la_plaza_de_su_faccion_donde_esta_la_columna_y_en_mundo_abierto_no() {
+fn soltar_una_caravana_solo_vale_dentro_de_la_plaza_donde_entro_la_columna_y_alli_queda_aparcada() {
     let m = con_mundo!();
     let ConCaravana { mut e, a, ana, ej, k, .. } = con_caravana(m);
     let soltar = |heroe| Comando::SoltarCaravana { ejercito: ej, caravana: k, heroe };
@@ -301,21 +338,26 @@ fn soltar_una_caravana_la_aparca_en_la_plaza_de_su_faccion_donde_esta_la_columna
     assert_eq!(e.no("ana", soltar(beto)), rechazos::NO_AUTORIZADO, "el héroe de otro");
     assert_eq!(e.no("beto", soltar(beto)), rechazos::NO_AUTORIZADO, "quien no va en la columna");
 
-    // Lejos de toda plaza de su Facción, no se suelta.
+    // Solo dentro de una plaza (decisión del autor 5G-a-5): a su puerta, que es fuera, no; en mundo abierto, tampoco.
+    assert_eq!(e.no("ana", soltar(ana)), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "a la puerta");
     let pos = e.n.estado().asentamientos[&a].posicion;
-    let lejos = en_tierra(&m.0, pos, 30_000, 0);
-    e.llevar("ana", ej, lejos);
-    assert_eq!(e.no("ana", soltar(ana)), rechazos::CARAVANA_FUERA_DE_LA_PUERTA);
-    // A la puerta de la plaza, sí: queda aparcada allí con lo que llevaba, y la columna sigue sin ella.
+    e.llevar("ana", ej, en_tierra(&m.0, pos, 30_000, 0));
+    assert_eq!(e.no("ana", soltar(ana)), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "en mundo abierto");
+    // Entra con todo en su residencia (la columna sigue, quieta y sin tropa, para llevar la caravana) y la suelta dentro: queda aparcada con lo que llevaba y, sin caravanas, la columna se deshace.
     e.llevar("ana", ej, pos);
+    e.dar(a, Trigo, 10_000);
+    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Madera, cantidad: 12_000 });
+    e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
+    assert!(!e.n.en_el_mapa(ej) && e.n.ejercito(ej).unwrap().caravanas_adjuntas == vec![k], "dentro, con la caravana");
     e.ok("ana", soltar(ana));
     let kk = e.n.caravana(k).unwrap();
     assert_eq!((kk.estado, kk.anfitriona.map(u64::from), e.contenido(k, Piedra)), (EstadoCaravana::Aparcada, Some(a), 30_000));
-    assert!(e.n.ejercito(ej).unwrap().caravanas_adjuntas.is_empty());
+    assert!(e.n.ejercito(ej).is_none(), "la columna que conservaba para llevarla se deshace");
+    let h = e.n.heroe(ana).unwrap();
+    assert_eq!((h.columna, h.heroe.presencia.ubicacion, h.carro.get(&Madera).copied()), (None, Ubicacion::Asentamiento(a as u32), Some(12_000)), "el carro, con el héroe");
     let h = hechos(&e.n, "ejercito.caravana_soltada");
     assert_eq!((h.len(), dato(&h[0].0, "caravana") as u64, dato(&h[0].0, "plaza") as u64, dato(&h[0].0, "heroe") as u64), (1, k, a, ana));
     assert!(hechos(&e.n, "ejercito.caravana_aparcada").is_empty(), "soltar tiene su propio hecho");
-    assert_eq!(e.no("ana", soltar(ana)), rechazos::CARAVANA_NO_ESTA_ADJUNTA);
 }
 
 #[test]
@@ -396,7 +438,12 @@ async fn por_la_sesion_se_carga_y_se_suelta_una_caravana_adjunta() {
     assert!(!caravanas.is_empty(), "la caravana cargada llega a quien la lleva");
     assert!(deltas.iter().flat_map(|d| &d.eventos).any(|x| x.codigo == "ejercito.caravana_cargada"));
     let soltar = orden::Cuerpo::SoltarCaravana(pb::OrdenSoltarCaravana { ejercito_id: ejs, caravana_id: ks, heroe_id: format!("heroe-{ana}") });
-    let (deltas, r) = dar(&mut c, "c2", soltar).await;
+    let (_, r) = dar(&mut c, "c2", soltar.clone()).await;
+    assert_eq!(rechazo(&r), "caravana.soltar_solo_dentro", "a la puerta se está fuera");
+    let guarnecer = orden::Cuerpo::Guarnecer(pb::OrdenGuarnecer { asentamiento_id: format!("as-{a}"), heroe_id: format!("heroe-{ana}") });
+    let (_, r) = dar(&mut c, "c3", guarnecer).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32, "{r:?}");
+    let (deltas, r) = dar(&mut c, "c4", soltar).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32, "{r:?}");
     assert!(deltas.iter().flat_map(|d| &d.eventos).any(|x| x.codigo == "ejercito.caravana_soltada"));
     let n = w.parar().await;

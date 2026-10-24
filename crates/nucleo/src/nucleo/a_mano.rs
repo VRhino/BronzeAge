@@ -2,9 +2,11 @@
 //! `cargarCaravana`, `reclamarCaravana` y `soltarCaravana`. Todo en unidades enteras (C3b): lo que se mueve se redondea hacia abajo, y nada se crea ni se pierde (lo que sale de un sitio
 //! entra en el otro).
 //!
-//! - **El almacén personal vive donde se reside**: se llena y se vacía con el carro de la columna, con la columna a la puerta de la propia residencia, y solo el Líder (el carro es común).
-//! - **`cargarCaravana`** carga en una caravana adjunta del almacén de una plaza de su Facción a cuya puerta está la columna, sin reserva (como el reparto automático).
-//! - **`soltarCaravana`** es aparcar en la plaza de su Facción donde está la columna (a su puerta o dentro): no hay caravanas sueltas por el mapa (2026-10-19).
+//! - **El almacén personal vive donde se reside**: se llena y se vacía con el carro, dentro de la residencia (el carro que trajo, decisión del autor 5G-a-2) o con la columna a su
+//!   puerta, y entonces solo el Líder (el carro es común).
+//! - **`cargarCaravana`** carga en una caravana adjunta del almacén de una plaza de su Facción a cuya puerta está la columna, sin reserva (como el reparto automático), hasta el hueco
+//!   que le queda de verdad: ni la caravana ni la columna pasan de su límite (5G-a-4).
+//! - **`soltarCaravana`** es aparcar en la plaza dentro de la cual está la columna (entró con todo); fuera, a la puerta o en mundo abierto, se rechaza (5G-a-5).
 //! - **`reclamarCaravana`** vale solo para la Caravana de Fundación que vuelve sola; mientras la Caravana de Fundación sea una marca de la columna (hasta 5G-b), no hay ninguna que
 //!   reclamar y la orden se rechaza con `caravana.no_reclamable`.
 
@@ -16,6 +18,8 @@ use base::{entero, UNIDAD};
 use comercio::{de, sumar, total, Carga as Mercancia};
 use militar::convocatoria::Lugar;
 use militar::heroe::Residencia;
+use militar::presencia::Ubicacion;
+use crate::nucleo::mercado::CAPACIDAD_CARRO;
 
 /// Quita `n` de `r` de la carga, borrando la línea que queda a cero.
 fn quitar(carga: &mut Mercancia, r: Recurso, n: Mil) {
@@ -39,31 +43,40 @@ impl Nucleo {
         }
     }
 
-    /// `guardarEnAlmacenPersonal` (`guarda`) y `sacarDelAlmacenPersonal`: del carro de la columna al almacén personal hasta su capacidad, o del almacén al carro hasta lo que cabe en él
-    /// (`capacidad_de_carga`, con las caravanas adjuntas). El Líder, con la columna a la puerta de su residencia (la administración salta la puerta).
+    /// `guardarEnAlmacenPersonal` (`guarda`) y `sacarDelAlmacenPersonal`: del carro al almacén personal hasta su capacidad, o del almacén al carro hasta lo que cabe en él. **Dentro de su
+    /// residencia** el carro es el que trajo (en la columna que conserva para sus caravanas, si la conserva; decisión del autor 5G-a-2); **fuera**, el de su columna, con la columna a la
+    /// puerta de su residencia y siendo su Líder (la administración salta la puerta).
     fn mover_almacen_personal(&mut self, t: Instante, p: &Peticion, heroe: u64, recurso: Recurso, cantidad: Mil, guarda: bool) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         self.autorizar_heroe(p, heroe, false)?;
-        let (columna, e) = self.columna_a_bordo(heroe)?;
-        if e.columna.lider != heroe {
-            return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder de la columna mueve lo de su carro".into()));
-        }
-        let aqui = e.posicion_en(t);
         let hn = self.heroe(heroe).expect("existe");
-        let lugar = match hn.heroe.residencia {
-            Some(Residencia::Asentamiento(a)) => Lugar::Asentamiento(a),
-            Some(Residencia::Campamento(c)) => Lugar::Campamento(c),
-            None => return Err(rechazo(rechazos::HEROE_SIN_RESIDENCIA, "sin residencia no hay almacén personal".into())),
+        let (lugar, dentro) = match (hn.heroe.residencia, hn.heroe.presencia.ubicacion) {
+            (Some(Residencia::Asentamiento(a)), u) => (Lugar::Asentamiento(a), u == Ubicacion::Asentamiento(a)),
+            (Some(Residencia::Campamento(c)), u) => (Lugar::Campamento(c), u == Ubicacion::Mercenarios(c)),
+            (None, _) => return Err(rechazo(rechazos::HEROE_SIN_RESIDENCIA, "sin residencia no hay almacén personal".into())),
         };
-        if !p.admin && self.puerta_de(lugar).is_none_or(|puerta| aqui.dist(puerta) > self.radio_puerta()) {
-            return Err(rechazo(rechazos::ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA, "el almacén personal está en tu residencia: solo se toca con tu columna a su puerta".into()));
-        }
+        // `columna`: dónde va el carro (`None` = con el héroe, dentro); `capacidad`: lo que admite.
+        let (columna, capacidad) = if dentro {
+            match hn.columna.filter(|c| self.estado.ejercitos.contains_key(c)) {
+                Some(c) => (Some(c), self.capacidad_de_carga(c).unwrap_or(0)),
+                None => (None, CAPACIDAD_CARRO),
+            }
+        } else {
+            let (c, e) = self.columna_a_bordo(heroe)?;
+            if e.columna.lider != heroe {
+                return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder de la columna mueve lo de su carro".into()));
+            }
+            if !p.admin && self.puerta_de(lugar).is_none_or(|puerta| e.posicion_en(t).dist(puerta) > self.radio_puerta()) {
+                return Err(rechazo(rechazos::ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA, "el almacén personal está en tu residencia: dentro, o con tu columna a su puerta".into()));
+            }
+            (Some(c), self.capacidad_de_carga(c).unwrap_or(0))
+        };
         let pedido = entero(cantidad);
         if pedido <= 0 {
             return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "hay que mover al menos una unidad".into()));
         }
-        let carga = &self.estado.ejercitos[&columna].columna.carga;
+        let carga = columna.map_or(&hn.carro, |c| &self.estado.ejercitos[&c].columna.carga);
         let movido = if guarda {
             let lleva = de(carga, recurso);
             let sitio = self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal - total(&hn.almacen_personal);
@@ -78,8 +91,7 @@ impl Nucleo {
             movido
         } else {
             let guardado = de(&hn.almacen_personal, recurso);
-            let hueco = self.capacidad_de_carga(columna).unwrap_or(0) - total(carga);
-            let movido = entero(pedido.min(guardado).min(hueco));
+            let movido = entero(pedido.min(guardado).min(capacidad - total(carga)));
             if movido <= 0 {
                 return Err(if guardado < UNIDAD {
                     rechazo(rechazos::ALMACEN_SIN_EXISTENCIAS, format!("no hay {} en tu almacén personal", recurso.nombre()))
@@ -89,21 +101,26 @@ impl Nucleo {
             }
             movido
         };
-        let carro = &mut self.estado.ejercitos.get_mut(&columna).expect("existe").columna.carga;
-        let personal = &mut self.estado.militar.heroes.get_mut(&heroe).expect("existe").almacen_personal;
-        let (de_aqui, a_alli) = if guarda { (carro, personal) } else { (personal, carro) };
+        let hn = self.estado.militar.heroes.get_mut(&heroe).expect("existe");
+        let carro = match columna {
+            Some(c) => &mut self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga,
+            None => &mut hn.carro,
+        };
+        let (de_aqui, a_alli) = if guarda { (carro, &mut hn.almacen_personal) } else { (&mut hn.almacen_personal, carro) };
         quitar(de_aqui, recurso, movido);
         sumar(a_alli, recurso, movido);
         self.tr.tocar(Clase::Heroe, heroe);
-        self.tr.tocar(Clase::Ejercito, columna);
+        if let Some(c) = columna {
+            self.tr.tocar(Clase::Ejercito, c);
+        }
         let datos = vec![("heroe", heroe as i64), ("recurso", recurso_a_u8(recurso) as i64), ("cantidad", movido)];
         let sentido = Dato::Texto(if guarda { "guarda" } else { "saca" }.into());
         self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("sentido", sentido)], ..EventoNucleo::nuevo("heroe.almacen_personal", t, datos) });
         Ok(vec![])
     }
 
-    /// `cargarCaravana` (Movimiento_Ejercitos §9): `min(pedido, espacio de la caravana, existencias de la plaza)`, sin reserva de trigo (es mercancía, como la del reparto automático).
-    /// El espacio es su capacidad efectiva (con «Carga Ampliada» de su origen) menos lo que ya lleva.
+    /// `cargarCaravana` (Movimiento_Ejercitos §9): `min(pedido, espacio, existencias de la plaza)`, sin reserva de trigo (es mercancía, como la del reparto automático). El espacio es
+    /// su capacidad efectiva (con «Carga Ampliada» de su origen) menos lo que ya lleva, sin pasar del hueco que le queda a la columna (5G-a-4).
     #[allow(clippy::too_many_arguments)]
     fn cargar_caravana(&mut self, t: Instante, p: &Peticion, ejercito: u64, caravana: u64, plaza: u64, recurso: Recurso, cantidad: Mil) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
@@ -130,8 +147,10 @@ impl Nucleo {
             return Err(rechazo(rechazos::CARAVANA_PLAZA_AJENA, "esa plaza no abre su almacén a esta columna".into()));
         }
         let existencias = a.economia.almacen.cantidad(recurso);
+        // El hueco de verdad (5G-a-4): el de la caravana, sin pasar del que le queda a la columna, cuyo carro común puede estar usando ya parte del de sus adjuntas.
+        let libre_columna = self.capacidad_de_carga(ejercito).unwrap_or(0) - total(&self.estado.ejercitos[&ejercito].columna.carga);
         let c = &self.estado.comercio.flota[i];
-        let espacio = self.capacidad_de_caravana(c) - c.carga_total();
+        let espacio = (self.capacidad_de_caravana(c) - c.carga_total()).min(libre_columna);
         if espacio < UNIDAD {
             return Err(rechazo(rechazos::CARAVANA_SIN_CAPACIDAD, "la caravana ya va llena".into()));
         }
@@ -161,8 +180,10 @@ impl Nucleo {
         Err(Respuesta::rechazo(rechazos::CARAVANA_NO_RECLAMABLE, "solo se reclama la Caravana de Fundación que vuelve sola a su origen", v))
     }
 
-    /// `soltarCaravana` (Movimiento_Ejercitos §9): la adjunta queda aparcada en la plaza de la Facción de la caravana a cuya puerta (o dentro de la cual) está la columna; la más cercana y,
-    /// si empatan, la de menor id. En mundo abierto se rechaza: no hay caravanas sueltas por el mapa.
+    /// `soltarCaravana` (Movimiento_Ejercitos §9, canon 3.13.7): solo **dentro** de una plaza, la plaza dentro de la cual está la columna (entró con todo y el héroe que la orden nombra está
+    /// dentro con ella). Fuera, a la puerta o en mundo abierto, se rechaza (decisión del autor 5G-a-5). La caravana queda aparcada allí como con `aparcarCaravana` (en una plaza de su
+    /// Facción; la carga sigue a los carros) y, si era la última y la columna es la que un residente conserva en su residencia para llevarla, la columna se deshace como al entrar sin
+    /// caravanas.
     fn soltar_caravana(&mut self, t: Instante, p: &Peticion, ejercito: u64, caravana: u64, heroe: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -174,15 +195,23 @@ impl Nucleo {
         if !e.columna.participantes.iter().any(|x| x.heroe == heroe) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "el héroe no va en esa columna".into()));
         }
-        let i = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana)))?;
+        if self.estado.comercio.posicion_caravana(caravana).is_none() {
+            return Err(rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana)));
+        }
         if !e.caravanas_adjuntas.contains(&caravana) {
             return Err(rechazo(rechazos::CARAVANA_NO_ESTA_ADJUNTA, "la caravana no va con esta columna".into()));
         }
-        let (aqui, radio) = (e.posicion_en(t), self.radio_puerta());
-        let faccion = self.estado.asentamientos.get(&(self.estado.comercio.flota[i].origen as u64)).map(|o| o.faccion);
-        let plaza = self.estado.asentamientos.values().filter(|a| Some(a.faccion) == faccion).map(|a| (aqui.dist(a.posicion), a.id)).filter(|&(d, _)| d <= radio).min().map(|(_, id)| id);
-        let plaza = plaza.ok_or_else(|| rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "una caravana solo se suelta dentro de una plaza de su Facción, o a su puerta".into()))?;
+        let hn = self.heroe(heroe).expect("existe");
+        let plaza = match hn.heroe.presencia.ubicacion {
+            Ubicacion::Asentamiento(a) if hn.columna == Some(ejercito) => u64::from(a),
+            _ => return Err(rechazo(rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "una caravana solo se suelta dentro de una plaza: hay que entrar antes".into())),
+        };
         self.aparcar_caravana(t, p, caravana, plaza, "ejercito.caravana_soltada", &[("heroe", heroe as i64)])?;
+        let e = &self.estado.ejercitos[&ejercito];
+        let reside = self.heroe(heroe).expect("existe").heroe.residencia == Some(Residencia::Asentamiento(plaza as u32));
+        if e.caravanas_adjuntas.is_empty() && reside && e.columna.participantes.len() == 1 {
+            self.recoger_en_residencia(t, heroe, ejercito, Ubicacion::Asentamiento(plaza as u32));
+        }
         Ok(vec![])
     }
 }

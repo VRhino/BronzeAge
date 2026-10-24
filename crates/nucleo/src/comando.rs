@@ -2167,6 +2167,8 @@ pub mod rechazos {
     pub const CARRO_NO_LLEVA: &str = "carro.no_lleva";
     /// Reclamar una caravana que no es la Caravana de Fundación que vuelve sola a su origen (5G-a): solo esa se reclama en mundo abierto.
     pub const CARAVANA_NO_RECLAMABLE: &str = "caravana.no_reclamable";
+    /// Soltar una caravana con la columna fuera de una plaza (a la puerta o en mundo abierto): solo se suelta dentro, donde la columna entró con todo (5G-a, decisión 5G-a-5).
+    pub const CARAVANA_SOLTAR_SOLO_DENTRO: &str = "caravana.soltar_solo_dentro";
     pub const REPOSTAR_PLAZA_CERRADA: &str = "repostar.plaza_cerrada";
     pub const REPOSTAR_SIN_EXISTENCIAS: &str = "repostar.sin_existencias";
     // Persecución (`ErrorPersecucion`), inspección (`ErrorInspeccion`) y batalla.
