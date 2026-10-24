@@ -985,6 +985,9 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_devuelve_las_caravanas_y_destru
     let m = con_mundo!();
     let mut e = escenario(m, 7, true);
     let (a, b) = (e.a, e.b);
+    // A nace protegida un día (Doc 1.2): el guion empieza cuando ya se la puede asediar.
+    let fin = e.n.protegida_hasta(a).unwrap().max(e.n.ahora());
+    e.n.avanzar_hasta(fin);
     let c = tercera_plaza(&mut e, m);
     let col_a = e.columna_en("ana", 1, a);
     // Una de A (se queda con la plaza), una de B en preparación hacia A, y dos de C aparcadas en A (una vacía y otra con carga).
@@ -1013,6 +1016,7 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_devuelve_las_caravanas_y_destru
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe: heroe_gus, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
     e.ok("gus", Comando::Atacar { heroe: heroe_gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: true });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&a].faccion, 2, "la plaza cambió de dueño");
     // La plaza sigue (con su flota y su mercado); el trueque se anula sin penalizar y avisa a la socia.
     assert!(e.n.economia(a).is_some());
@@ -1230,7 +1234,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN25");
+    assert_eq!(&bytes[..5], b"BAN26");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
@@ -1398,3 +1402,10 @@ fn los_pasos_de_las_plazas_no_tocan_el_estado_de_comercio_ni_programan_eventos()
     assert!(e.n.estado().cola.volcar().iter().all(|ev| !matches!(ev.carga, nucleo::Carga::Comercio { .. } | nucleo::Carga::Reputacion(_))));
 }
 
+/// Un asedio con números se resuelve al acabar su convocatoria de 30 s (calibración del sistema 4, M8): deja pasar las que haya abiertas.
+fn tras_la_convocatoria(n: &mut Nucleo) {
+    let fin = n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
+    if let Some(h) = fin {
+        n.avanzar_hasta(h);
+    }
+}

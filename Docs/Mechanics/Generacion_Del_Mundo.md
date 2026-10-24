@@ -1189,12 +1189,14 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
     "reaparicionMinutos": 10
   },
   "radioAtaqueCaravana": 7,
-  "respawnMinutos": 60
+  "respawnMinutos": 360
 }
 ```
 <!-- /parametros -->
 
 > **2026-10-19 (fase 4A-2):** este bloque lleva ya los valores **calibrados** de `Calibracion_Distancias_Definicion` §4.3 (anillo de los campamentos de mercenarios 30-50 en vez de 150-250; `radioAtaqueCaravana` 7 en vez de 40), que el motor TypeScript no tenía; el crate `combate` lo lee tal cual.
+>
+> **2026-10-24 (calibración del sistema 4, M4):** `respawnMinutos` pasa de 60 a **360** (6 h): el campamento de bandidos de una plaza reaparece seis horas después de destruirse (decisión del autor tras el batch militar: con 60 min, 2.247 campamentos destruidos en 30 días). El anillo (`anillo.reaparicionMinutos`) no cambia.
 
 ## 15. Invariantes
 

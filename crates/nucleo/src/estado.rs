@@ -59,6 +59,12 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN26: BAN25 con la red que cada recinto conserva en sus puertas (`Recinto::red_de_puertas` y `tras_pieza`, `codec_economia`) y tres estados que ya no significan lo
+/// mismo (calibración del sistema 4, decisiones del autor del 2026-10-24): la ciudad de cada plaza es de la geometría `LAYOUT_VERSION` 5 (una puerta por cruce que no parte
+/// la red y la red de las puertas sembrada conectada, Murallas M1), la `repone_en` de la guarnición de serie de una avanzada es la vuelta del siguiente soldado (M2) y un
+/// asedio con números es una batalla con convocatoria que se resuelve al acabar (M8). BAN25 se rechaza: su ciudad es de otra geometría, sus recintos no traen la red de
+/// las puertas y su avanzada volvería entera de golpe.
+///
 /// BAN25: BAN24 con la foto del interior de cada plaza de la que un héroe salió al mundo (4H T7, `HeroeNucleo::plazas_recordadas`, Niebla_De_Guerra §4.5: almacén, cola y guarnición tal como
 /// los dejó). BAN24 se rechaza: sus héroes no traen lo que recuerdan, que no se puede deducir del estado.
 ///
@@ -113,7 +119,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN25";
+const MAGIA: &[u8; 5] = b"BAN26";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1010,11 +1016,12 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN25`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 25, y solo el 25 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN26`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 26, y solo el 26 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'5' => {}
+                b'6' => {}
+                b'5' => return Err(ErrorFormato("foto del formato BAN25 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 4, sus recintos no traen la red que conservan en sus puertas y la guarnición de serie de una avanzada se reponía entera a las 6 h): ya no se admite")),
                 b'4' => return Err(ErrorFormato("foto del formato BAN24 (los héroes no traen la foto del interior de las plazas de las que salieron al mundo, que no se puede deducir del estado): ya no se admite")),
                 b'3' => return Err(ErrorFormato("foto del formato BAN23 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 3, la guarnición de un pueblo se reponía entera a las 6 h, la idempotencia no iba por cuenta y las fichas de la niebla no traían el estado del sitio): ya no se admite")),
                 b'2' => return Err(ErrorFormato("foto del formato BAN22 (sin la memoria de la niebla: lo explorado por cada Facción y las fichas de lo ajeno que vio, que no se pueden deducir del estado): ya no se admite")),

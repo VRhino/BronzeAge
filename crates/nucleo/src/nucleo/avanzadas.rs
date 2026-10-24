@@ -13,8 +13,8 @@
 //! 3. **Mejorar / reparar / cancelar**: otra obra de mapa; la avanzada sigue funcionando (mejora) o en ruinas (reparación) hasta que acaba. `CancelarObraDeAvanzada` la
 //!    abandona sin reembolso (lo entregado se pierde) y descarta su cita; un ataque que derriba la avanzada también pierde la obra.
 //! 4. **Guarnición**: la de serie (IA, fuera de cupo) nace completa la primera vez que se la necesita, con la milicia de lanceros del canon en los tres escalones o la tropa que
-//!    eligió el dueño para cada uno entre las que la madre puede reclutar (tecnología y edificio), y se repone gratis a las 6 horas (`reposicionMinutos`) de quedar incompleta
-//!    (un evento, `SucesoCombate::ReponeAvanzada`); la de jugadores son escuadras de héroes residentes de la madre dejadas a la puerta (`Contenedor::Avanzada`), que comen el
+//!    eligió el dueño para cada uno entre las que la madre puede reclutar (tecnología y edificio), y se repone gratis de soldado en soldado, entera en 6 horas
+//!    (`reposicionMinutos`) desde 0 (una cita por soldado, `SucesoCombate::ReponeAvanzada`); la de jugadores son escuadras de héroes residentes de la madre dejadas a la puerta (`Contenedor::Avanzada`), que comen el
 //!    trigo de la madre.
 //! 5. **Ataque** (`Atacar` con `ObjetivoAtaque::Avanzada`): solo un ejército. Con números se resuelve como un asedio; con servidores de batalla abre siempre
 //!    una batalla de Unity (capacidad de asedio, sin convocatoria). Defienden **solo los que están dentro**: las guarniciones y los héroes que han entrado en la
@@ -191,18 +191,24 @@ impl Nucleo {
         g.escuadras = regla::guarnicion_de_serie(&reglas.economia.combate, etapa, &g.elegidas, || { *siguiente_id += 1; *siguiente_id - 1 }, t);
     }
 
-    /// Guarda la guarnición de serie tras un combate y, si quedó incompleta y no tenía ya fecha, programa su reposición gratuita.
+    /// Guarda la guarnición de serie tras un combate y, si quedó incompleta y no se estaba reponiendo, cita la vuelta del primer soldado (de uno en uno,
+    /// como los mineros de un pueblo; un combate durante la reposición no la reinicia).
     pub(super) fn guardar_guarnicion_de_avanzada(&mut self, id: u64, escuadras: Vec<Escuadra>, t: Instante) {
         let cr = self.estado.reglas.economia.combate.clone();
         let Some(g) = self.estado.combate.avanzadas.get_mut(&id) else { return };
         self.tr.tocar(Clase::Avanzada, id);
         g.escuadras = escuadras;
         if g.repone_en.is_none() && regla::incompleta(&cr, &g.escuadras) {
-            let en = regla::reposicion_en(&cr, t);
-            g.repone_en = Some(en);
-            let clave = self.estado.generaciones.clave(entidad_avanzada(id));
-            self.estado.cola.programar(en, PRIO_UMBRAL, clave, Carga::Combate(SucesoCombate::ReponeAvanzada));
+            let en = regla::reposicion_en(&cr, &g.escuadras, t);
+            self.programar_soldado_de_avanzada(id, en);
         }
+    }
+
+    /// La cita de la vuelta del siguiente soldado de la guarnición de serie de una avanzada.
+    fn programar_soldado_de_avanzada(&mut self, id: u64, en: Instante) {
+        self.estado.combate.avanzadas.get_mut(&id).expect("existe").repone_en = Some(en);
+        let clave = self.estado.generaciones.clave(entidad_avanzada(id));
+        self.estado.cola.programar(en, PRIO_UMBRAL, clave, Carga::Combate(SucesoCombate::ReponeAvanzada));
     }
 
     /// La guarnición de serie ya nacida se rehace con lo que toca ahora (otra etapa, otra elección) **si está completa**; si está esperando su reposición, lo que
@@ -220,20 +226,22 @@ impl Nucleo {
         }
     }
 
-    /// Vence la reposición gratuita de la guarnición de serie: de nuevo completa, con las tropas que toquen (las elegidas desde entonces) y, si son las mismas, con su
-    /// experiencia.
+    /// Vuelve un soldado a la guarnición de serie, con su nivel y su experiencia; si aún falta alguno, se cita el siguiente. Completa, se rehace con las tropas que
+    /// toquen si desde entonces cambiaron (otra elección, otra etapa) y lo dice.
     pub(super) fn repone_avanzada(&mut self, entidad: u64, t: Instante) {
         let id = id_de_entidad(entidad);
+        let cr = self.estado.reglas.economia.combate.clone();
         let Some(g) = self.estado.combate.avanzadas.get_mut(&id).filter(|g| g.repone_en == Some(t)) else { return };
         g.repone_en = None;
         self.tr.tocar(Clase::Avanzada, id);
+        if !regla::reponer(&cr, &mut g.escuadras) {
+            let en = regla::reposicion_en(&cr, &g.escuadras, t);
+            return self.programar_soldado_de_avanzada(id, en);
+        }
         let Some((madre, v)) = self.avanzada(id) else { return };
         let (etapa, punto) = (v.etapa, v.posicion);
-        let cr = self.estado.reglas.economia.combate.clone();
         let g = &self.estado.combate.avanzadas[&id];
-        if regla::composicion(&cr, etapa, &g.elegidas) == g.escuadras.iter().map(|e| e.tropa).collect::<Vec<_>>() {
-            regla::reponer(&cr, &mut self.estado.combate.avanzadas.get_mut(&id).expect("existe").escuadras);
-        } else {
+        if regla::composicion(&cr, etapa, &g.elegidas) != g.escuadras.iter().map(|e| e.tropa).collect::<Vec<_>>() {
             self.estado.combate.avanzadas.get_mut(&id).expect("existe").escuadras.clear();
             self.asegurar_guarnicion(id, etapa, t);
         }

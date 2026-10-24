@@ -526,7 +526,7 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     // Un recinto de cuatro celdas, a medio levantar y con una mejora en curso; cada variante cambia un solo campo.
     fn anillo(f: fn(&mut Recinto)) -> Recinto {
         let celdas = [(ClaseCelda::Puerta, 0), (ClaseCelda::Muro, 1), (ClaseCelda::Torre, 2), (ClaseCelda::Muro, 3)].map(|(clase, col)| CeldaMuro { celda: Celda::new(col, -7), clase });
-        let mut r = Recinto { id: 1, nivel: 1, celdas: celdas.to_vec(), avance: 3, mejora: Some(MejoraDeRecinto { nivel: 2, avance: 0 }), siguiente_celda_en: Some(31), comprometido_en: 5, completado_en: Some(9) };
+        let mut r = Recinto { id: 1, nivel: 1, celdas: celdas.to_vec(), red_de_puertas: vec![trazado::CeldaDeRed { celda: Celda::new(3, -2), camino: true }], tras_pieza: 11, avance: 3, mejora: Some(MejoraDeRecinto { nivel: 2, avance: 0 }), siguiente_celda_en: Some(31), comprometido_en: 5, completado_en: Some(9) };
         f(&mut r);
         r
     }
@@ -980,7 +980,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN25");
+    assert_eq!(&bytes[..5], b"BAN26");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

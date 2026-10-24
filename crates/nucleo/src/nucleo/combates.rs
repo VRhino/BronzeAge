@@ -8,7 +8,8 @@
 //! - **Una caravana** (`atacar_caravana`): la que viaja suelta (no la adjunta a un ejército: se ataca al ejército). El servidor decide el tipo por la zona en
 //!   que está **en el instante del ataque** ([`Nucleo::en_zona`]): aguante (B) en la zona del dueño o de un aliado, disputa de carros (A) en el resto. Una tirada.
 //! - **Un campamento de bandidos** (`atacar_campamento`): PvE, sin guerra. Una tirada contra el poder de su nivel.
-//! - **Una plaza** (`atacar_plaza`): solo un ejército. Se asedia con la guarnición y los defensores en persona —los que están **dentro**: una columna amiga a la puerta, en el
+//! - **Una plaza** (`atacar_plaza`): solo un ejército. Abre la batalla del asedio con su convocatoria de 30 s, también sin servidores de batalla (M8): al acabar,
+//!   [`Nucleo::resolver_asedio_con_numeros`] lo resuelve con todas las columnas que se unieron. Se asedia con la guarnición y los defensores en persona —los que están **dentro**: una columna amiga a la puerta, en el
 //!   mapa, no defiende (2026-10-22)—; el defensor lleva el multiplicador de su muralla ([`Nucleo::multiplicador_de_plaza`]: el recinto de referencia, `1` sin recinto; la columna,
 //!   el pueblo, la caravana y la avanzada no lo tienen); si cae, [`conquistas`](super::conquistas).
 //! - **Un pueblo extractor** (`atacar_pueblo`): un saqueo, nunca una conquista. Defienden los 30 mineros de serie y los héroes que han entrado en él.
@@ -125,21 +126,24 @@ impl Nucleo {
     /// Los héroes sanos de la columna que entran en la batalla (como mucho `tope`, los de más nivel y escuadras más fuertes) con sus escuadras, en el orden en
     /// que la columna las lleva. Las de un herido no combaten y las de los apartados vuelven intactas (no están en la copia).
     pub(super) fn tropa_de_columna(&self, id: u64, t: Instante, tope: usize) -> Tropa {
-        let e = &self.estado.ejercitos[&id];
+        self.tropa_de_columnas(&[id], t, tope)
+    }
+
+    /// Lo mismo con varias columnas que combaten juntas (las de un asedio con convocatoria): el tope es del bando entero.
+    pub(super) fn tropa_de_columnas(&self, columnas: &[u64], t: Instante, tope: usize) -> Tropa {
         let cr = &self.estado.reglas.economia.combate;
-        let candidatos: Vec<Candidato> = e
-            .columna
-            .participantes
+        let candidatos: Vec<Candidato> = columnas
             .iter()
-            .filter_map(|p| self.heroe(p.heroe))
-            .filter(|h| !h.heroe.esta_herido(t))
-            .map(|h| {
+            .flat_map(|&id| self.estado.ejercitos[&id].columna.participantes.iter().map(move |p| (id, p.heroe)))
+            .filter_map(|(id, h)| self.heroe(h).map(|h| (id, h)))
+            .filter(|(_, h)| !h.heroe.esta_herido(t))
+            .map(|(id, h)| {
                 let suyas: Vec<&Escuadra> = h.heroe.escuadras.iter().filter(|s| s.contenedor == Contenedor::Ejercito(id)).collect();
                 Candidato::de(cr, &h.heroe, &suyas)
             })
             .collect();
         let entran = seleccionar(&candidatos, tope).entran;
-        let escuadras = e.columna.escuadras.iter().filter_map(|&s| self.escuadra(s).map(|(_, esc)| esc)).filter(|s| entran.contains(&s.heroe)).cloned().collect();
+        let escuadras = columnas.iter().flat_map(|id| &self.estado.ejercitos[id].columna.escuadras).filter_map(|&s| self.escuadra(s).map(|(_, esc)| esc)).filter(|s| entran.contains(&s.heroe)).cloned().collect();
         Tropa { escuadras, heroes: entran }
     }
 
@@ -512,15 +516,21 @@ impl Nucleo {
         let i = self.estado.comercio.posicion_caravana(x).expect("existe");
         let c = &mut self.estado.comercio.flota[i];
         let (origen, antes) = (c.origen as u64, c.velocidad(&flota));
-        let p = asalto::aplicar_al_dueno(&cr, &flota, c, modalidad, carros).expect("los carros que se pierden existen");
+        let mut p = asalto::aplicar_al_dueno(&cr, &flota, c, modalidad, carros).expect("los carros que se pierden existen");
         let cedidas = c.liberar_escolta();
         self.devolver_escolta(&cedidas);
-        if p.destruida {
-            self.perder_caravana(t, x);
+        // La carga sigue a los carros (M10): lo que la columna de una adjunta ya no puede llevar sin los carros perdidos iba en ellos y se pierde con ellos.
+        let de_la_columna = if p.destruida {
+            self.perder_caravana(t, x)
         } else {
             self.reajustar_plan_en_pausa(x, antes);
             self.tr.tocar(Clase::Caravana, x);
             self.tr.tocar(Clase::Asentamiento, origen);
+            let columna = self.estado.ejercitos.iter().find(|(_, e)| e.caravanas_adjuntas.contains(&x)).map(|(&id, _)| id);
+            columna.map(|c| self.sacar_lo_que_no_cabe(c)).unwrap_or_default()
+        };
+        for (r, n) in de_la_columna {
+            sumar(&mut p.carga_perdida, r, n);
         }
         p
     }
@@ -630,9 +640,9 @@ impl Nucleo {
         DefensoresDeDentro { tropa: Tropa { escuadras, heroes }, lucharon }
     }
 
-    /// Combate §6. Solo un ejército; la plaza, de otra Facción, a ≤ `radioEncuentro` y no protegida por una conquista reciente. Sin defensores con soldados
-    /// cae sin combate y sin tirada. Si cae: heridos sus defensores en persona, chatarra al carro, [`Nucleo::conquistar_plaza`]. Si resiste: heridos todos los
-    /// participantes del ejército y la chatarra al almacén de la plaza.
+    /// Combate §6. Solo un ejército; la plaza, de otra Facción, a ≤ `radioEncuentro` y no protegida (recién fundada o conquistada). Abre siempre la batalla del asedio, con su
+    /// convocatoria de 30 s (Batalla_Unity_Ciclo §4): con servidores de batalla la juega Unity; sin ellos, al acabar la convocatoria se resuelve con números con todas las columnas
+    /// que se unieron ([`Nucleo::resolver_asedio_con_numeros`]; calibración del sistema 4, M8).
     fn atacar_plaza(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
@@ -650,29 +660,35 @@ impl Nucleo {
         let (faccion_vieja, posicion) = (plaza.faccion, plaza.posicion);
         let guerra = self.comprobar_agresion(e, t, posicion, Some(faccion_vieja), declara_guerra)?;
         if esta_protegida(plaza.protegida_hasta, t) {
-            return Err(rechazo(rechazos::COMBATE_PLAZA_PROTEGIDA, "esa plaza está protegida tras su conquista: todavía no se la puede asediar"));
+            return Err(rechazo(rechazos::COMBATE_PLAZA_PROTEGIDA, "esa plaza está protegida (recién fundada o conquistada): todavía no se la puede asediar"));
         }
         if self.bloqueos().asentamientos.contains(&(x as u32)) {
             return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "esa plaza ya está en una batalla"));
         }
         let cr = self.estado.reglas.economia.combate.clone();
-        let mut atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_asedio);
+        let atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_asedio);
         if !atac.escuadras.iter().any(Escuadra::con_soldados) {
             return Err(rechazo(rechazos::COMBATE_SIN_ATACANTES, "sin soldados no hay con quién combatir: un héroe solo no abre un asedio"));
         }
-        if self.estado.reglas.batallas_en_unity {
-            let ap = self.apertura_de_asedio(t, heroe, id, x);
-            self.abrir_batalla_de_ataque(t, ap, guerra);
-            return Ok(());
-        }
+        let ap = self.apertura_de_asedio(t, heroe, id, x);
+        self.abrir_batalla_de_ataque(t, ap, guerra);
+        Ok(())
+    }
 
+    /// El asedio con números (sin servidores de batalla), al acabar su convocatoria: atacan juntas las columnas que se unieron (`atacantes`, la primera la que lo abrió), hasta
+    /// `BATALLA.capacidad.asedio` héroes por nivel y poder, y defienden la guarnición y los amigos de dentro (Combate §3.2). Sin defensores con soldados cae sin combate y sin
+    /// tirada. Si cae: heridos sus defensores en persona, la chatarra a los carros atacantes, [`Nucleo::conquistar_plaza`]. Si resiste: heridos todos los participantes de las
+    /// columnas atacantes y la chatarra al almacén de la plaza. Devuelve si cayó.
+    pub(super) fn resolver_asedio_con_numeros(&mut self, t: Instante, x: u64, atacantes: &[u64]) -> bool {
+        let (Some(&id), Some(plaza)) = (atacantes.first(), self.estado.asentamientos.get(&x)) else { return false };
+        let Some(yo) = self.estado.ejercitos[&id].columna.faccion.filter(|&f| f != plaza.faccion) else { return false };
+        let faccion_vieja = plaza.faccion;
+        let cr = self.estado.reglas.economia.combate.clone();
+        let mut atac = self.tropa_de_columnas(atacantes, t, cr.batalla.capacidad_asedio);
         let mut defensa = self.defensa_de_plaza(x, t);
         let columnas = [self.columnas_de(&atac.escuadras), self.columnas_de(&defensa.tropa.escuadras)].concat();
-        let participantes = Self::participantes_de(&self.estado.ejercitos[&id]);
+        let participantes: Vec<u64> = atacantes.iter().flat_map(|c| Self::participantes_de(&self.estado.ejercitos[c])).collect();
         let punto = self.estado.ejercitos[&id].posicion_en(t);
-        if let Some((a, b)) = guerra {
-            self.declarar_guerra(t, a, b);
-        }
         // Solo el asedio a una plaza multiplica al defensor con su recinto de referencia (Murallas §9.1); el equipo de asedio no lo reduce (Q7). No consume tirada.
         let multiplicador = self.multiplicador_de_plaza(x);
         let muralla_completa = recintos::muralla_completa(&self.estado.asentamientos[&x].economia.recintos);
@@ -689,7 +705,7 @@ impl Nucleo {
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }
         let llevada = if conquistada {
-            self.cargar_botin_en(id, &chatarra)
+            self.repartir_en_columnas(atacantes, &chatarra)
         } else {
             let a = &mut self.estado.asentamientos.get_mut(&x).expect("existe").economia.almacen;
             chatarra.iter().for_each(|(&r, &n)| {
@@ -700,13 +716,14 @@ impl Nucleo {
         };
         self.recomponer_tras_bajas(&columnas, t);
         datos.extend([("heridos", heridos as i64), ("chatarra", total(&chatarra)), ("botin", total(&llevada))]);
-        self.hecho_de_combate(if conquistada { "combate.asedio_conquista" } else { "combate.asedio_resistido" }, t, vec![id], if conquistada { vec![] } else { vec![x] }, punto, datos);
+        datos.push(("columnas", atacantes.len() as i64));
+        self.hecho_de_combate(if conquistada { "combate.asedio_conquista" } else { "combate.asedio_resistido" }, t, atacantes.to_vec(), if conquistada { vec![] } else { vec![x] }, punto, datos);
         if conquistada {
-            // Los residentes que defendieron pierden la mitad del carro: es del vencedor, hasta donde le quepa.
+            // Los residentes que defendieron pierden la mitad del carro: es del vencedor, repartida entre sus columnas hasta donde quepa.
             let robado = self.conquistar_plaza(t, x, yo, id, &defensa.lucharon);
-            self.entregar_lo_robado(id, &robado);
+            self.repartir_en_columnas(atacantes, &robado);
         }
-        Ok(())
+        conquistada
     }
 
     // ───────────────────────────── Un pueblo extractor ─────────────────────────────

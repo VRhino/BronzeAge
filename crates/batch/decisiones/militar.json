@@ -1,5 +1,5 @@
 {
-  "resumen": "Se simularon 30 días de mundo con 60 plazas (20 Facciones de tres plazas, por parejas aliadas, 12 belicosas) y 240 héroes bots (Guardián, Capitán, Cazador e Intendente por plaza) sobre el núcleo real, sin servidores de batalla: todo combate se resuelve con números. Los bots solo dan órdenes; el andamiaje de administración es el nivel de Facción, la Era I, las alianzas y la ciudadanía y residencia de cada héroe. Todos los invariantes se cumplen (0 violaciones en 22 comprobaciones: bajas por bando, experiencia, heridos, hambre y deserción, conservación, carros y carga de las caravanas, botín, héroe solo, cascadas de la conquista, ruinas, reposición de las guarniciones de serie, nada en batalla, foto BAN25 ida y vuelta a mitad de corrida y los del comercio y la economía); la misma semilla da la misma huella (108a3ca9… en las dos corridas de la semilla 42) y la semilla 7 otra (7c45e04d…). Por el camino el batch encontró y se arreglaron tres fallos del núcleo con su prueba: el reparto del carro al desarmar un ejército (el Líder se quedaba con más de un carro por el redondeo), `UnirseAEjercito` con la columna que se conserva para las caravanas (pánico del núcleo al fundirla) y `AparcarCaravana` con el carro lleno (la columna seguía por encima de su capacidad). Semilla 42: 7.889 combates (columna 2.341, gana el atacante el 34 %; campamento de bandidos 3.020, 74 %; pueblo 2.144, 100 %; avanzada 189, 98 %; asedio 9, 7 conquistas; caravana 16; acoso de bandidos 170, 63 % para los bandidos), 149.284 soldados perdidos en combate y 138.226 reclutados, 3.316 heridas, 60 columnas sin víveres y 11 desertores, 4.245 persecuciones (3.211 alcanzadas), 11.935 convocatorias y 4.555 uniones, 2.247 campamentos de bandidos destruidos (4,3 de oro por héroe en la mediana, 36 como mucho), 1 plaza en ruinas y 1 muralla dañada por una conquista. Semilla 7: 8.605 combates y 57 conquistas (casi todas de plazas recién conquistadas y sin residentes que cambian de manos una y otra vez). Rendimiento: ≈ 5 min por corrida, 9,3-9,7 s de CPU por día de mundo, 1,46 millones de eventos y 377.000 órdenes. Las preguntas de abajo son de calibración y de diseño; ninguna cifra se ha tocado.",
+  "resumen": "Re-medido el 2026-10-24 tras la calibración del sistema 4 (decisiones M2, M4, M5, M8 y M10 aplicadas; foto `BAN26`, `LAYOUT_VERSION` 5), la misma corrida: 60 plazas, 30 días, semilla 42, tres veces con la misma huella (7954a5ca…; la versión anterior, corrida hoy desde `HEAD`, daba 775db487…). Antes → después: combates 7.889 → 7.352; **bandidos** (reaparición de 60 min a 6 h): campamentos destruidos 2.247 → 1.683 (aparecieron 2.294 → 1.723), acosos a caravanas 170 → 27 (caravanas perdidas por los bandidos 107 → 20; perdidas por cualquier causa 113 → 24), oro de bandidos por héroe 4,3 → 0 de mediana (41.685 → 28.241 en total; hipótesis sin verificar: con el campamento de casa seis horas fuera, los bots repiten los del anillo, que reaparecen cada 10 min, y los rendimientos decrecientes los dejan a 0); **atalayas** (reposición de soldado en soldado): colocadas 189 → 441 y atacadas 189 → 438, el atacante gana el 100 % (antes el 98 %); ninguna resiste, y una atalaya vencida se destruye, así que la reposición gradual no llega a verse (0 reposiciones enteras antes y después; la hora de cada reposición la vigila `inv_reposicion`); **asedios** (con convocatoria de 30 s): 9 → 39 abiertos, conquistas 7 → 37 (pero de **2 plazas** distintas, que cambian de manos casi a diario al acabar su día de protección), 4 columnas se unieron a una convocatoria y hubo 4 conquistas con más de una columna; asedios descartados tras inspeccionar 17.783 → 16.715; **protección al fundar**: 0 plazas caídas en su primer día antes y después (los bots no atacan una plaza protegida: 0 rebotes); pueblos saqueados 2.144 → 1.949; columnas: 2.341 choques → 2.589 (gana el atacante el 34 % → 40 %). 0 violaciones en todos los invariantes (también «nada apartado fuera de la convocatoria de un asedio», nuevo). CPU 10,7 → 11,0 s por día de mundo. Las decisiones están cerradas (ver abajo). Lo que sigue es el informe anterior: Se simularon 30 días de mundo con 60 plazas (20 Facciones de tres plazas, por parejas aliadas, 12 belicosas) y 240 héroes bots (Guardián, Capitán, Cazador e Intendente por plaza) sobre el núcleo real, sin servidores de batalla: todo combate se resuelve con números. Los bots solo dan órdenes; el andamiaje de administración es el nivel de Facción, la Era I, las alianzas y la ciudadanía y residencia de cada héroe. Todos los invariantes se cumplen (0 violaciones en 22 comprobaciones: bajas por bando, experiencia, heridos, hambre y deserción, conservación, carros y carga de las caravanas, botín, héroe solo, cascadas de la conquista, ruinas, reposición de las guarniciones de serie, nada en batalla, foto BAN25 ida y vuelta a mitad de corrida y los del comercio y la economía); la misma semilla da la misma huella (108a3ca9… en las dos corridas de la semilla 42) y la semilla 7 otra (7c45e04d…). Por el camino el batch encontró y se arreglaron tres fallos del núcleo con su prueba: el reparto del carro al desarmar un ejército (el Líder se quedaba con más de un carro por el redondeo), `UnirseAEjercito` con la columna que se conserva para las caravanas (pánico del núcleo al fundirla) y `AparcarCaravana` con el carro lleno (la columna seguía por encima de su capacidad). Semilla 42: 7.889 combates (columna 2.341, gana el atacante el 34 %; campamento de bandidos 3.020, 74 %; pueblo 2.144, 100 %; avanzada 189, 98 %; asedio 9, 7 conquistas; caravana 16; acoso de bandidos 170, 63 % para los bandidos), 149.284 soldados perdidos en combate y 138.226 reclutados, 3.316 heridas, 60 columnas sin víveres y 11 desertores, 4.245 persecuciones (3.211 alcanzadas), 11.935 convocatorias y 4.555 uniones, 2.247 campamentos de bandidos destruidos (4,3 de oro por héroe en la mediana, 36 como mucho), 1 plaza en ruinas y 1 muralla dañada por una conquista. Semilla 7: 8.605 combates y 57 conquistas (casi todas de plazas recién conquistadas y sin residentes que cambian de manos una y otra vez). Rendimiento: ≈ 5 min por corrida, 9,3-9,7 s de CPU por día de mundo, 1,46 millones de eventos y 377.000 órdenes. Las preguntas de abajo son de calibración y de diseño; ninguna cifra se ha tocado.",
   "anomalias": [
     {
       "titulo": "La guarnición de serie de un pueblo no detiene a ningún ejército",
@@ -8,12 +8,12 @@
     },
     {
       "titulo": "Las atalayas caen casi todas",
-      "detalle": "Se colocaron 189 atalayas y 186 cayeron (destruidas: una atalaya vencida desaparece); quedan 2 en pie al final. Su guarnición de serie (una escuadra de milicia) pierde el 98 % de los ataques y ninguna llega a reponerse a las 6 h porque cae antes. Véase M2.",
+      "detalle": "Re-medido el 2026-10-24: 441 atalayas colocadas y 438 atacadas, el atacante gana el 100 %; su guarnición se repone ya de soldado en soldado (M2), pero ninguna resiste y una vencida se destruye. Decisión del autor: defenderla es trabajo de los héroes. Se colocaron 189 atalayas y 186 cayeron (destruidas: una atalaya vencida desaparece); quedan 2 en pie al final. Su guarnición de serie (una escuadra de milicia) pierde el 98 % de los ataques y ninguna llega a reponerse a las 6 h porque cae antes. Véase M2.",
       "causa": "diseno"
     },
     {
       "titulo": "Una plaza con su Guardián dentro casi no se conquista; una recién conquistada, una y otra vez",
-      "detalle": "Los Capitanes inspeccionan antes de asediar y solo atacan si su poder supera en un 10 % la defensa que suponen (la guarnición y el loadout de quien está dentro, con la cohesión, la ventaja del defensor y la muralla): 17.783 asedios descartados y solo 9 intentados con la semilla 42 (7 conquistas). Con la semilla 7, 58 asedios y 57 conquistas: las plazas que conquista un Capitán cuya casa tiene dos residentes o menos quedan sin nadie dentro (quien conquista solo se queda si no vacía su casa) y caen sin combate ante el siguiente. Sin protección al fundar (fila de paridad «Territorio»), una plaza recién fundada se conquista a las pocas horas. Véanse M5 y M8.",
+      "detalle": "Re-medido el 2026-10-24: con la convocatoria de 30 s (M8) y el día de protección al fundar (M5), 39 asedios y 37 conquistas, pero de solo 2 plazas, que cambian de manos casi a diario al acabar su protección; 4 conquistas con más de una columna. Los bots solo suman las columnas que ya están a la puerta al abrir el asedio (no se citan): medir la convocatoria de verdad pide bots que se coordinen (fase 7). Los Capitanes inspeccionan antes de asediar y solo atacan si su poder supera en un 10 % la defensa que suponen (la guarnición y el loadout de quien está dentro, con la cohesión, la ventaja del defensor y la muralla): 17.783 asedios descartados y solo 9 intentados con la semilla 42 (7 conquistas). Con la semilla 7, 58 asedios y 57 conquistas: las plazas que conquista un Capitán cuya casa tiene dos residentes o menos quedan sin nadie dentro (quien conquista solo se queda si no vacía su casa) y caen sin combate ante el siguiente. Sin protección al fundar (fila de paridad «Territorio»), una plaza recién fundada se conquista a las pocas horas. Véanse M5 y M8.",
       "causa": "medicion"
     },
     {
@@ -25,99 +25,207 @@
       "titulo": "El oro de los bandidos y el botín se quedan con los héroes",
       "detalle": "41.685 de oro de bandidos en 30 días van al carro de los héroes; al volver a casa lo vacían en su almacén personal (`VaciarCarro`), que se llena, y ya no hay orden para llevarlo al almacén de la plaza ni para gastarlo (sistema 5). Un carro que no se vacía resta capacidad a la siguiente salida (los bots sacan menos trigo y menos materiales). Véase M6.",
       "causa": "diseno"
+    },
+    {
+      "titulo": "Con los bandidos 6 h fuera, el oro de los bandidos cae a 0 de mediana",
+      "detalle": "Hipótesis sin verificar: el campamento de casa tarda 6 h en volver (M4) y los héroes van a por los del anillo de los campamentos de mercenarios, que reaparecen cada 10 min (`anillo.reaparicionMinutos`): repiten tanto que los rendimientos decrecientes (24 h, 8 completas, −15 % por cada una, solo experiencia desde la 14) los dejan sin oro. 28.241 de oro en 30 días (antes 41.685), mediana por héroe 0 (antes 4,3). Los acosos a caravanas bajan de 170 a 27.",
+      "causa": "diseno"
     }
   ],
   "decisiones": [
     {
       "id": "M1",
-      "pregunta": "¿Se refuerza la guarnición de serie de los pueblos extractores o se limita cuántas veces se saquea un pueblo?",
-      "contexto": "Medido: 2.144 saqueos en 30 días, el atacante gana siempre (poder 4,75 veces el de los 30 mineros en la mediana); cada pueblo se saquea unas 39 veces al mes, aunque solo se lleva lo que hay por encima de la mitad del almacén. Combate §7.3, `PUEBLOS_EXTRACTORES.mineros`.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Se refuerza la guarnición de serie de los pueblos extractores o se limita cuántas veces se saquea un pueblo?",
+      "contexto": "Medido: 2.144 saqueos en 30 días, el atacante gana siempre (poder 4,75 veces el de los 30 mineros en la mediana); cada pueblo se saquea unas 39 veces al mes, aunque solo se lleva lo que hay por encima de la mitad del almacén. Combate §7.3, `PUEBLOS_EXTRACTORES.mineros`. Decisión del autor (2026-10-24): se deja tal cual: defender los pueblos es parte del juego; cambiará cuando haya bots (Combate §14, Mecanicas a balancear §47).",
       "opciones": [
-        { "texto": "Dejarlo: el 50 % protegido ya limita lo que se pierde y la guarnición solo frena a columnas débiles.", "recomendada": false, "efecto": "Los pueblos son botín fácil para cualquier ejército; el saqueo no cuesta casi nada al atacante." },
-        { "texto": "Proteger el pueblo saqueado un tiempo (p. ej. 6 h, como la reposición) frente a otro saqueo.", "recomendada": true, "efecto": "Estado nuevo por pueblo (un plazo con su evento) y hecho; el número de saqueos baja a lo que da la producción del pueblo." },
-        { "texto": "Subir la guarnición de serie (p. ej. 60 mineros o una escuadra de escalón 2) o su ventaja.", "recomendada": false, "efecto": "Solo cambia la cifra; los ejércitos de varias escuadras seguirían ganando." }
+        {
+          "texto": "Dejarlo: el 50 % protegido ya limita lo que se pierde y la guarnición solo frena a columnas débiles.",
+          "recomendada": true,
+          "efecto": "Los pueblos son botín fácil para cualquier ejército; el saqueo no cuesta casi nada al atacante."
+        },
+        {
+          "texto": "Proteger el pueblo saqueado un tiempo (p. ej. 6 h, como la reposición) frente a otro saqueo.",
+          "recomendada": false,
+          "efecto": "Estado nuevo por pueblo (un plazo con su evento) y hecho; el número de saqueos baja a lo que da la producción del pueblo."
+        },
+        {
+          "texto": "Subir la guarnición de serie (p. ej. 60 mineros o una escuadra de escalón 2) o su ventaja.",
+          "recomendada": false,
+          "efecto": "Solo cambia la cifra; los ejércitos de varias escuadras seguirían ganando."
+        }
       ]
     },
     {
       "id": "M2",
-      "pregunta": "¿Es intencionado que una atalaya caiga ante casi cualquier ejército?",
-      "contexto": "Medido: 189 atalayas colocadas, 186 caídas (98 %); su guarnición de serie es una escuadra de milicia (poder atacante 3 veces el del defensor en la mediana) y una atalaya vencida se destruye. Ninguna llega a reponer su guarnición (6 h). Combate §7.4, bloque `AVANZADA`.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Es intencionado que una atalaya caiga ante casi cualquier ejército?",
+      "contexto": "Medido: 189 atalayas colocadas, 186 caídas (98 %); su guarnición de serie es una escuadra de milicia (poder atacante 3 veces el del defensor en la mediana) y una atalaya vencida se destruye. Ninguna llega a reponer su guarnición (6 h). Combate §7.4, bloque `AVANZADA`. Decisión del autor (2026-10-24): la guarnición de serie de toda avanzada se repone de soldado en soldado, entera en 6 h desde 0, como los mineros de un pueblo; defenderla es trabajo de los héroes (Combate §7.4).",
       "opciones": [
-        { "texto": "Dejarlo: la atalaya es un puesto de visión barato y desechable; el fuerte es el que defiende.", "recomendada": true, "efecto": "Sin cambios. El batch no mejora atalayas a fuerte; habría que medirlo." },
-        { "texto": "Guarnición de serie de la atalaya mayor (dos escuadras) o invulnerabilidad corta al terminar la obra.", "recomendada": false, "efecto": "Cambia las cifras de `AVANZADA.guarnicionDeSerie` o añade un plazo." }
+        {
+          "texto": "Dejarlo: la atalaya es un puesto de visión barato y desechable; el fuerte es el que defiende.",
+          "recomendada": false,
+          "efecto": "Sin cambios. El batch no mejora atalayas a fuerte; habría que medirlo."
+        },
+        {
+          "texto": "Guarnición de serie de la atalaya mayor (dos escuadras) o invulnerabilidad corta al terminar la obra.",
+          "recomendada": false,
+          "efecto": "Cambia las cifras de `AVANZADA.guarnicionDeSerie` o añade un plazo."
+        },
+        {
+          "texto": "Reposición gradual: un soldado cada reposicionMinutos / soldados de la guarnición completa (una cita por soldado), entera en 6 h.",
+          "recomendada": true,
+          "efecto": null
+        }
       ]
     },
     {
       "id": "M3",
-      "pregunta": "¿Se mantiene que en un choque de columnas en campo abierto el defensor lleve la cohesión y la ventaja de 1,05?",
-      "contexto": "Medido: 2.341 choques con la semilla 42 y el atacante gana el 34 % (poder atacante entre defensor mediano 0,88: los bots atacan lo que ven); con la semilla 7, 3.373 y el 63 % (2,36). Combate §14 lo anota como «decisión que parece rara»: el motor no distingue campo abierto de asedio.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Se mantiene que en un choque de columnas en campo abierto el defensor lleve la cohesión y la ventaja de 1,05?",
+      "contexto": "Medido: 2.341 choques con la semilla 42 y el atacante gana el 34 % (poder atacante entre defensor mediano 0,88: los bots atacan lo que ven); con la semilla 7, 3.373 y el 63 % (2,36). Combate §14 lo anota como «decisión que parece rara»: el motor no distingue campo abierto de asedio. Decisión del autor (2026-10-24): se mantienen la cohesión y el ×1,05 del defensor (Combate §14).",
       "opciones": [
-        { "texto": "Dejarlo: quien ataca sin superioridad pierde, y eso es lo que se quiere.", "recomendada": true, "efecto": "Sin cambios." },
-        { "texto": "Sin cohesión ni 1,05 para el defensor en un choque de columnas (solo en asedios, pueblos y avanzadas).", "recomendada": false, "efecto": "Choques más parejos y más agresión en campo; cambia `resolver_combate` para las columnas." }
+        {
+          "texto": "Dejarlo: quien ataca sin superioridad pierde, y eso es lo que se quiere.",
+          "recomendada": true,
+          "efecto": "Sin cambios."
+        },
+        {
+          "texto": "Sin cohesión ni 1,05 para el defensor en un choque de columnas (solo en asedios, pueblos y avanzadas).",
+          "recomendada": false,
+          "efecto": "Choques más parejos y más agresión en campo; cambia `resolver_combate` para las columnas."
+        }
       ]
     },
     {
       "id": "M4",
-      "pregunta": "¿Se alarga la reaparición de los campamentos de bandidos?",
-      "contexto": "Medido: 3.020 ataques a campamentos y 2.247 destruidos en 30 días con los bots yendo a por el de su casa cada 12 h; 2.294 campamentos aparecieron. El oro cae con los rendimientos decrecientes (mediana 4,3 por héroe, máximo 36). Los bandidos se llevan el 63 % de las 170 caravanas que acosan (107 perdidas). `CAMPAMENTOS_BANDIDOS` (60 min de reaparición).",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Se alarga la reaparición de los campamentos de bandidos?",
+      "contexto": "Medido: 3.020 ataques a campamentos y 2.247 destruidos en 30 días con los bots yendo a por el de su casa cada 12 h; 2.294 campamentos aparecieron. El oro cae con los rendimientos decrecientes (mediana 4,3 por héroe, máximo 36). Los bandidos se llevan el 63 % de las 170 caravanas que acosan (107 perdidas). `CAMPAMENTOS_BANDIDOS` (60 min de reaparición). Decisión del autor (2026-10-24): la reaparición pasa a 6 h (CAMPAMENTOS_BANDIDOS.respawnMinutos = 360).",
       "opciones": [
-        { "texto": "Dejar los 60 min: los rendimientos decrecientes ya quitan el incentivo de repetir.", "recomendada": true, "efecto": "Sin cambios; los campamentos siguen siendo una amenaza constante para las caravanas." },
-        { "texto": "Reaparición más lenta (p. ej. 6 h).", "recomendada": false, "efecto": "Menos acoso tras limpiar la zona; la escolta pierde sentido." }
+        {
+          "texto": "Dejar los 60 min: los rendimientos decrecientes ya quitan el incentivo de repetir.",
+          "recomendada": false,
+          "efecto": "Sin cambios; los campamentos siguen siendo una amenaza constante para las caravanas."
+        },
+        {
+          "texto": "Reaparición más lenta (p. ej. 6 h).",
+          "recomendada": true,
+          "efecto": "Menos acoso tras limpiar la zona; la escolta pierde sentido."
+        }
       ]
     },
     {
       "id": "M5",
-      "pregunta": "¿Se hace ya la protección de un día al fundar (fila de paridad «Territorio»)?",
-      "contexto": "Medido en las corridas de prueba: plazas conquistadas a las dos horas de fundarse. El TypeScript daba un día de protección; en Rust falta.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Se hace ya la protección de un día al fundar (fila de paridad «Territorio»)?",
+      "contexto": "Medido en las corridas de prueba: plazas conquistadas a las dos horas de fundarse. El TypeScript daba un día de protección; en Rust falta. Decisión del autor (2026-10-24): aplicada: protegida_hasta = fundado_en + proteccionMinutos al fundar, con el mismo evento FinProteccion (Fundacion_Y_Refundacion §5).",
       "opciones": [
-        { "texto": "Sí: `protegida_hasta = fundado_en + proteccionMinutos` al fundar, con su evento (como tras una conquista).", "recomendada": true, "efecto": "Reutiliza el plazo de la conquista; sin cambio de foto (el campo ya existe); cambia el comienzo de la partida." },
-        { "texto": "Esperar al sistema de fundación.", "recomendada": false, "efecto": "Las plazas nuevas siguen expuestas." }
+        {
+          "texto": "Sí: `protegida_hasta = fundado_en + proteccionMinutos` al fundar, con su evento (como tras una conquista).",
+          "recomendada": true,
+          "efecto": "Reutiliza el plazo de la conquista; sin cambio de foto (el campo ya existe); cambia el comienzo de la partida."
+        },
+        {
+          "texto": "Esperar al sistema de fundación.",
+          "recomendada": false,
+          "efecto": "Las plazas nuevas siguen expuestas."
+        }
       ]
     },
     {
       "id": "M6",
-      "pregunta": "¿Adónde va el oro de los bandidos y el botín que trae un héroe a su residencia?",
-      "contexto": "Medido: 41.685 de oro de bandidos en 30 días acaban en el carro y el almacén personal de los héroes, que se llena; no hay orden para pasarlo al almacén de la plaza ni para gastarlo. Un carro que no se vacía resta capacidad a la siguiente salida.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Adónde va el oro de los bandidos y el botín que trae un héroe a su residencia?",
+      "contexto": "Medido: 41.685 de oro de bandidos en 30 días acaban en el carro y el almacén personal de los héroes, que se llena; no hay orden para pasarlo al almacén de la plaza ni para gastarlo. Un carro que no se vacía resta capacidad a la siguiente salida. Decisión del autor (2026-10-24): el uso del oro de bandidos vuelve con la paridad del TypeScript en el sistema 5 (tanda 5G): refundación, Caravana de Fundación, almacén personal (guardar y sacar) y caravanas a mano; sin orden nueva de «depositar».",
       "opciones": [
-        { "texto": "Una orden para depositar el carro (o el almacén personal) en el almacén de la plaza de residencia, con el sistema 5.", "recomendada": true, "efecto": "El botín llega a la economía de la plaza." },
-        { "texto": "Que entrar en la residencia vuelque el carro en la plaza como antes del 2026-10-22.", "recomendada": false, "efecto": "Deshace parte de «Entrar con todo»." },
-        { "texto": "Dejarlo hasta tener en qué gastar el oro personal.", "recomendada": false, "efecto": "El oro se acumula sin uso." }
+        {
+          "texto": "Una orden para depositar el carro (o el almacén personal) en el almacén de la plaza de residencia, con el sistema 5.",
+          "recomendada": false,
+          "efecto": "El botín llega a la economía de la plaza."
+        },
+        {
+          "texto": "Que entrar en la residencia vuelque el carro en la plaza como antes del 2026-10-22.",
+          "recomendada": false,
+          "efecto": "Deshace parte de «Entrar con todo»."
+        },
+        {
+          "texto": "Dejarlo hasta tener en qué gastar el oro personal.",
+          "recomendada": false,
+          "efecto": "El oro se acumula sin uso."
+        },
+        {
+          "texto": "La paridad del TypeScript en el sistema 5 (tanda 5G): refundación, Caravana de Fundación, almacén personal y caravanas a mano.",
+          "recomendada": true,
+          "efecto": null
+        }
       ]
     },
     {
       "id": "M7",
-      "pregunta": "¿Cómo consigue una plaza el equipo de las tropas de Barracón y Galería de tiro?",
-      "contexto": "Medido: 55 plazas con Barracón y Galería de tiro y la Era I, y ni una escuadra de esas tropas en 30 días: piden armas y armaduras que las plazas no producen a tiempo (243 rechazos por recursos). Sin ellas no hay chatarra ni oro de reclutamiento y los ejércitos son solo leva. Heroe_Y_Tropa §10-§11 y la Armería de Economia_Construccion.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Cómo consigue una plaza el equipo de las tropas de Barracón y Galería de tiro?",
+      "contexto": "Medido: 55 plazas con Barracón y Galería de tiro y la Era I, y ni una escuadra de esas tropas en 30 días: piden armas y armaduras que las plazas no producen a tiempo (243 rechazos por recursos). Sin ellas no hay chatarra ni oro de reclutamiento y los ejércitos son solo leva. Heroe_Y_Tropa §10-§11 y la Armería de Economia_Construccion. Decisión del autor (2026-10-24): se deja para la fase 7 (bots reales).",
       "opciones": [
-        { "texto": "Medirlo con un batch que encargue las armas a la Armería (el bot de hoy no lo hace) antes de tocar nada.", "recomendada": true, "efecto": "Sin cambios de reglas; dice si el cuello es el bot o la cadena de producción." },
-        { "texto": "Que la construcción automática produzca equipo cuando hay Barracón.", "recomendada": false, "efecto": "Cambia la economía de la plaza." }
+        {
+          "texto": "Medirlo con un batch que encargue las armas a la Armería (el bot de hoy no lo hace) antes de tocar nada.",
+          "recomendada": false,
+          "efecto": "Sin cambios de reglas; dice si el cuello es el bot o la cadena de producción."
+        },
+        {
+          "texto": "Que la construcción automática produzca equipo cuando hay Barracón.",
+          "recomendada": false,
+          "efecto": "Cambia la economía de la plaza."
+        },
+        {
+          "texto": "Dejarlo para los bots de la fase 7.",
+          "recomendada": true,
+          "efecto": null
+        }
       ]
     },
     {
       "id": "M8",
-      "pregunta": "¿Se permite el asedio con números con varias columnas (convocatoria de 30 s como en Unity)?",
-      "contexto": "Medido: con el Guardián y los suyos dentro, el loadout en persona y la empalizada (58 de 60 completas), un ejército de una plaza casi nunca basta: 17.783 asedios descartados tras inspeccionar y 9 intentados con la semilla 42. Fila de paridad «Asedio con números sin convocatoria multi-columna».",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Se permite el asedio con números con varias columnas (convocatoria de 30 s como en Unity)?",
+      "contexto": "Medido: con el Guardián y los suyos dentro, el loadout en persona y la empalizada (58 de 60 completas), un ejército de una plaza casi nunca basta: 17.783 asedios descartados tras inspeccionar y 9 intentados con la semilla 42. Fila de paridad «Asedio con números sin convocatoria multi-columna». Decisión del autor (2026-10-24): aplicada: el asedio con números abre la misma batalla que con Unity, con su convocatoria de 30 s, y al acabar se resuelve con todas las columnas que se unieron (Combate §6, Batalla_Unity_Ciclo §4).",
       "opciones": [
-        { "texto": "Sí: el asedio con números abre una ventana de 30 s para que se unan otras columnas a ≤ radioEncuentro.", "recomendada": true, "efecto": "Estado y evento nuevos; las Facciones grandes pueden conquistar sin Unity." },
-        { "texto": "Dejarlo: sin servidores de batalla las conquistas son raras a propósito.", "recomendada": false, "efecto": "Sin cambios." }
+        {
+          "texto": "Sí: el asedio con números abre una ventana de 30 s para que se unan otras columnas a ≤ radioEncuentro.",
+          "recomendada": true,
+          "efecto": "Estado y evento nuevos; las Facciones grandes pueden conquistar sin Unity."
+        },
+        {
+          "texto": "Dejarlo: sin servidores de batalla las conquistas son raras a propósito.",
+          "recomendada": false,
+          "efecto": "Sin cambios."
+        }
       ]
     },
     {
       "id": "M9",
-      "pregunta": "¿Se mantiene que reclutar saque del pool la población que necesita el ascenso al nivel 2?",
-      "contexto": "Medido en las corridas de prueba: con los bots reclutando todo lo que el núcleo les deja, ninguna plaza llega al nivel 2 en 5 días (200 pesants); con los bots frenando el reclutamiento mientras la plaza está en nivel 1 (hipótesis de esta corrida), 59 de 60 llegan. Se reclutan 138.226 soldados y se pierden 149.284 en 30 días.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Se mantiene que reclutar saque del pool la población que necesita el ascenso al nivel 2?",
+      "contexto": "Medido en las corridas de prueba: con los bots reclutando todo lo que el núcleo les deja, ninguna plaza llega al nivel 2 en 5 días (200 pesants); con los bots frenando el reclutamiento mientras la plaza está en nivel 1 (hipótesis de esta corrida), 59 de 60 llegan. Se reclutan 138.226 soldados y se pierden 149.284 en 30 días. Decisión del autor (2026-10-24): decisión del jugador, como hoy (Heroe_Y_Tropa §14).",
       "opciones": [
-        { "texto": "Dejarlo: es la decisión del jugador entre crecer y armarse.", "recomendada": true, "efecto": "Sin cambios; los bots de la fase 7 deben tenerlo en cuenta." },
-        { "texto": "Que el pool no baje de lo que pide el siguiente nivel.", "recomendada": false, "efecto": "Regla nueva en `disponibles_para_reclutar`." }
+        {
+          "texto": "Dejarlo: es la decisión del jugador entre crecer y armarse.",
+          "recomendada": true,
+          "efecto": "Sin cambios; los bots de la fase 7 deben tenerlo en cuenta."
+        },
+        {
+          "texto": "Que el pool no baje de lo que pide el siguiente nivel.",
+          "recomendada": false,
+          "efecto": "Regla nueva en `disponibles_para_reclutar`."
+        }
       ]
     },
     {
       "id": "M10",
-      "pregunta": "¿Qué pasa con la carga de una columna que va en los carros de una caravana adjunta cuando esta se aparca o se pierde?",
-      "contexto": "Arreglado en el núcleo con lo más conservador: `AparcarCaravana` se rechaza (`carro.no_cabe`) si lo que lleva la columna no cabe sin los carros de la caravana. Queda la pérdida involuntaria (acoso de bandidos, carros perdidos por Unity): la columna puede quedar por encima de su capacidad; el batch no lo vio ocurrir.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Qué pasa con la carga de una columna que va en los carros de una caravana adjunta cuando esta se aparca o se pierde?",
+      "contexto": "Arreglado en el núcleo con lo más conservador: `AparcarCaravana` se rechaza (`carro.no_cabe`) si lo que lleva la columna no cabe sin los carros de la caravana. Queda la pérdida involuntaria (acoso de bandidos, carros perdidos por Unity): la columna puede quedar por encima de su capacidad; el batch no lo vio ocurrir. Decisión del autor (2026-10-24): aplicada: aparcar deja en la caravana lo que la columna ya no puede llevar; perderla pierde lo que iba en sus carros (Movimiento_Ejercitos §9).",
       "opciones": [
-        { "texto": "Aparcar deja en la caravana aparcada lo que ya no cabe; perderla pierde lo que iba en sus carros.", "recomendada": true, "efecto": "La carga sigue a los carros en los dos casos; sustituye al rechazo de hoy." },
-        { "texto": "Mantener el rechazo al aparcar y, al perderla, perder lo que no quepa.", "recomendada": false, "efecto": "Una columna con la caravana llena no puede aparcarla hasta descargar." }
+        {
+          "texto": "Aparcar deja en la caravana aparcada lo que ya no cabe; perderla pierde lo que iba en sus carros.",
+          "recomendada": true,
+          "efecto": "La carga sigue a los carros en los dos casos; sustituye al rechazo de hoy."
+        },
+        {
+          "texto": "Mantener el rechazo al aparcar y, al perderla, perder lo que no quepa.",
+          "recomendada": false,
+          "efecto": "Una columna con la caravana llena no puede aparcarla hasta descargar."
+        }
       ]
     }
   ]
