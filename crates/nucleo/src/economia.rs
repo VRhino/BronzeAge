@@ -21,7 +21,7 @@ use mundo::Mundo;
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use territorio::{Disco, Parcela};
+use territorio::{Disco, Parcela, SinParcela};
 
 use crate::estado::Asentamiento;
 use crate::urbanismo::{Urbanismo, Urbe};
@@ -153,8 +153,10 @@ impl Mapa {
         self.rej_minerales.en_disco(centro, radio, |i| self.nodos[i as usize].pos)
     }
 
-    fn parcela(&self, centro: Punto, radio: Mil, propias: &BTreeSet<u32>, cuota_pct: u32, libre: &dyn Fn(u32) -> bool, en_zona: &dyn Fn(Punto) -> bool) -> Option<u32> {
-        // Solo las parcelas del disco (y las propias, por si acaso): el resto no cambia la respuesta de `elegir`.
+    /// La parcela para una Leñera nueva de la plaza en `centro` con zona de `radio` (`territorio::elegir_parcela` sobre todo el mapa, con el
+    /// mismo resultado y el mismo error). `en_zona` recorta el disco por las fronteras con otras Facciones.
+    pub(crate) fn parcela(&self, centro: Punto, radio: Mil, propias: &BTreeSet<u32>, cuota_pct: u32, libre: &dyn Fn(u32) -> bool, en_zona: &dyn Fn(Punto) -> bool) -> Result<u32, SinParcela> {
+        // Solo las parcelas del disco (y las propias, que cuentan para el cupo de su masa): el resto no cambia la respuesta de `elegir`.
         let mut locales = self.parcelas_en(centro, radio);
         locales.extend(propias.iter().copied());
         locales.sort_unstable();
@@ -163,7 +165,6 @@ impl Mapa {
         let propias_locales: BTreeSet<u32> = locales.iter().enumerate().filter(|(_, g)| propias.contains(g)).map(|(i, _)| i as u32).collect();
         let r2 = (radio as i128).pow(2);
         territorio::elegir_parcela(&ps, &self.total_por_masa, cuota_pct, centro, &propias_locales, |i| libre(locales[i as usize]), |c| c.dist2(centro) <= r2 && en_zona(c))
-            .ok()
             .map(|i| locales[i as usize])
     }
 
@@ -189,7 +190,7 @@ impl Mapa {
         en_zona: &dyn Fn(Punto) -> bool,
     ) -> Option<Option<Fuente>> {
         match tipo {
-            Tipo::Lenera => self.parcela(centro, radio, propias, cuota_pct, parcela_libre, en_zona).map(|p| Some(Fuente::Parcela(p))),
+            Tipo::Lenera => self.parcela(centro, radio, propias, cuota_pct, parcela_libre, en_zona).ok().map(|p| Some(Fuente::Parcela(p))),
             Tipo::Cantera => self.mas_cercano(self.piedra_en(centro, radio), centro, nodo_libre, en_zona).map(|n| Some(Fuente::Nodo(n))),
             Tipo::Corral => self.mas_cercano(self.ganado_en(centro, radio), centro, nodo_libre, en_zona).map(|n| Some(Fuente::Nodo(n))),
             // Van por pueblo extractor (Doc 4.2.2), no por la ciudad.
