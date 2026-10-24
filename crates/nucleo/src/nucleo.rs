@@ -42,6 +42,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
+mod a_mano;
 mod auditoria;
 mod avanzadas;
 mod bandidos;
@@ -870,6 +871,12 @@ impl Nucleo {
                 Ok(None) => {}
                 Err(r) => return r,
             },
+            Comando::GuardarEnAlmacenPersonal { .. } | Comando::SacarDelAlmacenPersonal { .. } | Comando::CargarCaravana { .. } | Comando::ReclamarCaravana { .. } | Comando::SoltarCaravana { .. } => {
+                match self.ejecutar_a_mano(t, p) {
+                    Ok(ids) => creadas.extend(ids),
+                    Err(r) => return r,
+                }
+            }
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => match self.ejecutar_taberna(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}

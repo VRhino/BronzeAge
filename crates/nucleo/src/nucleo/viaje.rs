@@ -131,7 +131,7 @@ impl Nucleo {
     }
 
     /// Lo que una caravana adjunta añade a la capacidad de carga de su columna: su capacidad efectiva, con la «Carga Ampliada» de su origen.
-    fn capacidad_de_caravana(&self, c: &Caravana) -> Mil {
+    pub(super) fn capacidad_de_caravana(&self, c: &Caravana) -> Mil {
         c.capacidad_efectiva(&self.estado.reglas.economia.comercio.flota, self.estado.asentamientos.get(&(c.origen as u64)).map_or(UNO, |a| self.factores_de(a).capacidad))
     }
 
@@ -728,8 +728,9 @@ impl Nucleo {
         Ok(None)
     }
 
-    /// La columna entra en una plaza de la Facción de la caravana y la deja aparcada allí (Movimiento_Ejercitos §11).
-    pub(super) fn aparcar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, plaza: u64) -> Result<Option<u64>, Respuesta> {
+    /// La columna entra en una plaza de la Facción de la caravana y la deja aparcada allí (Movimiento_Ejercitos §11). `codigo` es el hecho (`ejercito.caravana_aparcada`, o
+    /// `ejercito.caravana_soltada` si llega por `soltarCaravana`) y `extra`, lo que este añade a su payload.
+    pub(super) fn aparcar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, plaza: u64, codigo: &'static str, extra: &[(&'static str, i64)]) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let i = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana)))?;
@@ -772,7 +773,9 @@ impl Nucleo {
         let despues = self.velocidad_de_columna(&self.estado.ejercitos[&ejercito]);
         self.reescalar_marcha(ejercito, t, antes, despues);
         self.tr.tocar(Clase::Ejercito, ejercito);
-        self.evento("ejercito.caravana_aparcada", t, ejercito, None, vec![("caravana", caravana as i64), ("plaza", plaza as i64), ("dejado", total(&dejado))]);
+        let mut datos = vec![("caravana", caravana as i64), ("plaza", plaza as i64), ("dejado", total(&dejado))];
+        datos.extend_from_slice(extra);
+        self.evento(codigo, t, ejercito, None, datos);
         Ok(None)
     }
 

@@ -87,7 +87,7 @@ fn nombre(d: &impl std::fmt::Debug) -> String {
     format!("{d:?}").split(|c: char| !c.is_alphanumeric()).next().unwrap_or_default().to_owned()
 }
 
-use asentamiento::Recurso::{Madera, Oro, Trigo};
+use asentamiento::Recurso::{Madera, Oro, Piedra, Trigo};
 
 /// Una fila por orden del jugador que el núcleo tiene (y una más por cada orden que da dos comandos según la obra o el lugar): la orden del contrato y el comando que debe salir.
 fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
@@ -272,7 +272,15 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(ReponerCarroDeAcarreo, OrdenReponerCarroDeAcarreo, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::ReponerCarro { pueblo: 4 }),
         (orden!(EntrarEnPueblo, OrdenEntrarEnPueblo, pueblo_id: pueblo(), heroe_id: h.clone()), Comando::EntrarEnPueblo { pueblo: 4, heroe: 7 }),
         (orden!(SalirDePueblo, OrdenSalirDePueblo, pueblo_id: pueblo(), heroe_id: h.clone()), Comando::SalirDePueblo { pueblo: 4, heroe: 7 }),
-        (orden!(VaciarCarro, OrdenVaciarCarro, heroe_id: h), Comando::VaciarCarro { heroe: 7 }),
+        (orden!(VaciarCarro, OrdenVaciarCarro, heroe_id: h.clone()), Comando::VaciarCarro { heroe: 7 }),
+        (orden!(GuardarEnAlmacenPersonal, OrdenGuardarEnAlmacenPersonal, recurso: s("oro"), cantidad: 30_000), Comando::GuardarEnAlmacenPersonal { heroe: 7, recurso: Oro, cantidad: 30_000 }),
+        (orden!(SacarDelAlmacenPersonal, OrdenSacarDelAlmacenPersonal, recurso: s("madera"), cantidad: 5_000), Comando::SacarDelAlmacenPersonal { heroe: 7, recurso: Madera, cantidad: 5_000 }),
+        (
+            orden!(CargarCaravana, OrdenCargarCaravana, ejercito_id: s("ej-3"), caravana_id: s("car-2"), asentamiento_id: s("as-4"), recurso: s("piedra"), cantidad: 9_000),
+            Comando::CargarCaravana { ejercito: 3, caravana: 2, asentamiento: 4, recurso: Piedra, cantidad: 9_000 },
+        ),
+        (orden!(ReclamarCaravana, OrdenReclamarCaravana, heroe_id: h.clone(), caravana_id: s("car-2")), Comando::ReclamarCaravana { heroe: 7, caravana: 2, politica: Politica::Rechazar }),
+        (orden!(SoltarCaravana, OrdenSoltarCaravana, ejercito_id: s("ej-3"), caravana_id: s("car-2"), heroe_id: h), Comando::SoltarCaravana { ejercito: 3, caravana: 2, heroe: 7 }),
     ]
 }
 
@@ -290,8 +298,6 @@ fn ordenes_no_disponibles() -> Vec<Cuerpo> {
         AdoptarTecnologia, EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda, AbrirAlijo,
         // refundación
         AportarARefundacion, RetirarDeRefundacion, ComprarCaravanaDeRefundacion, LanzarCaravanaFundacion, DesarmarCaravanaFundacion,
-        // caravanas a mano y almacén personal
-        CargarCaravana, ReclamarCaravana, SoltarCaravana, GuardarEnAlmacenPersonal, SacarDelAlmacenPersonal,
     ]
 }
 
@@ -354,7 +360,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 43);
+    assert_eq!(sin_comando.len(), 38);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -500,7 +506,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (127, 103, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (132, 108, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -573,5 +579,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 103 + 19 + 5 + 43, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 108 + 19 + 5 + 38, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

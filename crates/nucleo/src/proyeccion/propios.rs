@@ -146,6 +146,7 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         liderazgo_base: h.heroe.liderazgo_base.max(0) as u32,
         ubicacion: Some(pb::UbicacionHeroe { donde: Some(ubicacion) }),
         almacen_personal: Some(carga(&h.almacen_personal)),
+        capacidad_almacen_personal: n.estado().reglas.economia.comercio.mercenarios.capacidad_almacen_personal,
         cupo_campamento: (!h.cupo.comprado.is_empty()).then(|| pb::CupoCampamento {
             dia: u32::try_from(h.cupo.dia).unwrap_or(0),
             comprado: h.cupo.comprado.iter().map(|(r, &n)| (r.nombre().to_owned(), u32::try_from(n).unwrap_or(u32::MAX))).collect(),

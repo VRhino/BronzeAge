@@ -221,7 +221,7 @@ impl Nucleo {
             }
             Comando::EntregarDeCaravana { ejercito, caravana, acuerdo } => self.entregar_de_caravana(t, p, *ejercito, *caravana, *acuerdo),
             Comando::AdjuntarCaravana { caravana, ejercito } => self.adjuntar_caravana(t, p, *caravana, *ejercito),
-            Comando::AparcarCaravana { caravana, asentamiento } => self.aparcar_caravana(t, p, *caravana, *asentamiento),
+            Comando::AparcarCaravana { caravana, asentamiento } => self.aparcar_caravana(t, p, *caravana, *asentamiento, "ejercito.caravana_aparcada", &[]),
             _ => unreachable!("solo se llama con órdenes de la flota"),
         }
     }

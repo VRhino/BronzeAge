@@ -373,6 +373,18 @@ pub enum Comando {
     ComprarMirada { heroe: u64, origen: OrigenIntel, centro: Punto },
     /// Compra el Informe de la plaza ajena `asentamiento`, que la Facción tiene que conocer: la foto, fechada, de sus edificios, sus recintos y su defensa, que se guarda en la memoria de la Facción.
     ComprarInformePlaza { heroe: u64, origen: OrigenIntel, asentamiento: u64 },
+    // ── Almacén personal y caravanas a mano (5G-a, 2026-10-24; Movimiento_Ejercitos §3.3 y §9, Heroe_Y_Tropa §4.4). Los códigos empiezan en el 138: del 128 al 137 quedan para 5B. Todo en
+    //    unidades enteras: lo que se mueve se redondea hacia abajo (C3b). ──
+    /// Del carro de la columna al almacén personal del héroe, hasta su capacidad: el Líder, con la columna a la puerta de su residencia.
+    GuardarEnAlmacenPersonal { heroe: u64, recurso: Recurso, cantidad: Mil },
+    /// Del almacén personal al carro de la columna, hasta lo que cabe en el carro: el Líder, con la columna a la puerta de su residencia.
+    SacarDelAlmacenPersonal { heroe: u64, recurso: Recurso, cantidad: Mil },
+    /// Carga en una caravana adjunta, del almacén de una plaza de su Facción a cuya puerta está la columna, hasta lo que le cabe (sin reserva). Cualquier participante.
+    CargarCaravana { ejercito: u64, caravana: u64, asentamiento: u64, recurso: Recurso, cantidad: Mil },
+    /// En mundo abierto, el héroe reclama para su columna la Caravana de Fundación que vuelve sola a su origen (y su columna personal pasa a ser un ejército con `politica`).
+    ReclamarCaravana { heroe: u64, caravana: u64, politica: Politica },
+    /// Suelta la caravana adjunta en la plaza de su Facción a cuya puerta (o dentro de la cual) está la columna: queda aparcada allí, como con `AparcarCaravana`.
+    SoltarCaravana { ejercito: u64, caravana: u64, heroe: u64 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -495,7 +507,10 @@ impl Comando {
             | Comando::UnirseABatalla { .. }
             | Comando::CancelarBatalla { .. }
             | Comando::ComprarMirada { .. }
-            | Comando::ComprarInformePlaza { .. } => CuentaDelHeroe,
+            | Comando::ComprarInformePlaza { .. }
+            | Comando::GuardarEnAlmacenPersonal { .. }
+            | Comando::SacarDelAlmacenPersonal { .. }
+            | Comando::ReclamarCaravana { .. } => CuentaDelHeroe,
             Comando::ColocarAvanzada { .. }
             | Comando::MejorarAvanzada { .. }
             | Comando::RepararAvanzada { .. }
@@ -540,7 +555,9 @@ impl Comando {
             | Comando::AparcarCaravana { .. }
             | Comando::EntregarMateriales { .. }
             | Comando::EntregarMaterialesAAvanzada { .. }
-            | Comando::DepositarEnAvanzada { .. } => ParticipanteDeLaColumna,
+            | Comando::DepositarEnAvanzada { .. }
+            | Comando::CargarCaravana { .. }
+            | Comando::SoltarCaravana { .. } => ParticipanteDeLaColumna,
         }
     }
 
@@ -661,6 +678,20 @@ impl Comando {
                 i.caravanas.push(*caravana);
                 i.asentamientos.push(*asentamiento);
             }
+            Comando::CargarCaravana { ejercito, caravana, asentamiento, .. } => {
+                i.ejercitos.push(*ejercito);
+                i.caravanas.push(*caravana);
+                i.asentamientos.push(*asentamiento);
+            }
+            Comando::ReclamarCaravana { heroe, caravana, .. } => {
+                i.heroes.push(*heroe);
+                i.caravanas.push(*caravana);
+            }
+            Comando::SoltarCaravana { ejercito, caravana, heroe } => {
+                i.heroes.push(*heroe);
+                i.ejercitos.push(*ejercito);
+                i.caravanas.push(*caravana);
+            }
             Comando::ComprarMirada { heroe, origen, .. } | Comando::ComprarInformePlaza { heroe, origen, .. } => {
                 i.heroes.push(*heroe);
                 if let OrigenIntel::Plaza(a) = origen {
@@ -740,6 +771,8 @@ impl Comando {
             | Comando::Desconectarse { heroe }
             | Comando::Conectarse { heroe }
             | Comando::VaciarCarro { heroe }
+            | Comando::GuardarEnAlmacenPersonal { heroe, .. }
+            | Comando::SacarDelAlmacenPersonal { heroe, .. }
             | Comando::FijarFaccionDeHeroe { heroe, .. }
             | Comando::ColocarHeroe { heroe, .. }
             | Comando::HerirHeroe { heroe }
@@ -1595,6 +1628,32 @@ impl Peticion {
                 origen_escribir(&mut w, *origen);
                 w.u64(*asentamiento);
             }
+            Comando::GuardarEnAlmacenPersonal { heroe, recurso, cantidad } | Comando::SacarDelAlmacenPersonal { heroe, recurso, cantidad } => {
+                w.u8(if matches!(self.comando, Comando::GuardarEnAlmacenPersonal { .. }) { 138 } else { 139 });
+                w.u64(*heroe);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
+            Comando::CargarCaravana { ejercito, caravana, asentamiento, recurso, cantidad } => {
+                w.u8(140);
+                w.u64(*ejercito);
+                w.u64(*caravana);
+                w.u64(*asentamiento);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
+            Comando::ReclamarCaravana { heroe, caravana, politica } => {
+                w.u8(141);
+                w.u64(*heroe);
+                w.u64(*caravana);
+                w.u8(politica_a_u8(*politica));
+            }
+            Comando::SoltarCaravana { ejercito, caravana, heroe } => {
+                w.u8(142);
+                w.u64(*ejercito);
+                w.u64(*caravana);
+                w.u64(*heroe);
+            }
         }
         w.0
     }
@@ -1775,6 +1834,11 @@ impl Peticion {
             125 => Comando::AbandonarRecinto { asentamiento: r.u64()?, recinto: r.u32()? },
             126 => Comando::ComprarMirada { heroe: r.u64()?, origen: origen_leer(&mut r)?, centro: r.punto()? },
             127 => Comando::ComprarInformePlaza { heroe: r.u64()?, origen: origen_leer(&mut r)?, asentamiento: r.u64()? },
+            138 => Comando::GuardarEnAlmacenPersonal { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            139 => Comando::SacarDelAlmacenPersonal { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            140 => Comando::CargarCaravana { ejercito: r.u64()?, caravana: r.u64()?, asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            141 => Comando::ReclamarCaravana { heroe: r.u64()?, caravana: r.u64()?, politica: politica_de_u8(r.u8()?)? },
+            142 => Comando::SoltarCaravana { ejercito: r.u64()?, caravana: r.u64()?, heroe: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1791,7 +1855,7 @@ pub mod rechazos {
     pub const RUTA_IMPOSIBLE: &str = "ruta.imposible";
     /// Una orden vacía (sin cuerpo).
     pub const ORDEN_NO_SOPORTADA: &str = "orden.no_soportada";
-    /// Una orden del contrato que el núcleo aún no tiene (política, tecnología, Aedas, intel, refundación, caravanas a mano y almacén personal): se rechaza con este código estable en vez de descartarse.
+    /// Una orden del contrato que el núcleo aún no tiene (política, tecnología, Aedas y refundación): se rechaza con este código estable en vez de descartarse.
     pub const ORDEN_NO_DISPONIBLE: &str = "orden.no_disponible";
     /// Un valor de la orden fuera de su catálogo cerrado, o un id que no tiene la forma de ninguna entidad (`orden.forma_invalida`).
     pub const ORDEN_FORMA_INVALIDA: &str = "orden.forma_invalida";
@@ -2097,6 +2161,12 @@ pub mod rechazos {
     pub const HEROE_NO_ESTA_EN_LA_AVANZADA: &str = "heroe.no_esta_en_la_avanzada";
     pub const VACIAR_SOLO_EN_TU_RESIDENCIA: &str = "carro.vaciar_solo_en_tu_residencia";
     pub const ALMACEN_PERSONAL_LLENO: &str = "almacen_personal.lleno";
+    /// Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a).
+    pub const ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA: &str = "almacen_personal.fuera_de_tu_residencia";
+    /// Guardar en el almacén personal un recurso que el carro de la columna no lleva (5G-a).
+    pub const CARRO_NO_LLEVA: &str = "carro.no_lleva";
+    /// Reclamar una caravana que no es la Caravana de Fundación que vuelve sola a su origen (5G-a): solo esa se reclama en mundo abierto.
+    pub const CARAVANA_NO_RECLAMABLE: &str = "caravana.no_reclamable";
     pub const REPOSTAR_PLAZA_CERRADA: &str = "repostar.plaza_cerrada";
     pub const REPOSTAR_SIN_EXISTENCIAS: &str = "repostar.sin_existencias";
     // Persecución (`ErrorPersecucion`), inspección (`ErrorInspeccion`) y batalla.
@@ -2498,6 +2568,11 @@ mod pruebas {
             Comando::ComprarMirada { heroe: 2, origen: OrigenIntel::Campamento(1), centro: Punto::new(0, 9) },
             Comando::ComprarInformePlaza { heroe: 2, origen: OrigenIntel::Campamento(4), asentamiento: 5 },
             Comando::ComprarInformePlaza { heroe: 2, origen: OrigenIntel::Plaza(3), asentamiento: 6 },
+            Comando::GuardarEnAlmacenPersonal { heroe: 2, recurso: Recurso::Oro, cantidad: 30_000 },
+            Comando::SacarDelAlmacenPersonal { heroe: 2, recurso: Recurso::Madera, cantidad: 7_000 },
+            Comando::CargarCaravana { ejercito: 9, caravana: 4, asentamiento: 3, recurso: Recurso::Piedra, cantidad: 12_000 },
+            Comando::ReclamarCaravana { heroe: 2, caravana: 4, politica: Politica::Preguntar },
+            Comando::SoltarCaravana { ejercito: 9, caravana: 4, heroe: 2 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

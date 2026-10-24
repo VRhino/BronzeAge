@@ -18,7 +18,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `heroe.desconocido` | `HEROE_DESCONOCIDO` | — |
 | `ruta.imposible` | `RUTA_IMPOSIBLE` | — |
 | `orden.no_soportada` | `ORDEN_NO_SOPORTADA` | Una orden vacía (sin cuerpo). |
-| `orden.no_disponible` | `ORDEN_NO_DISPONIBLE` | Una orden del contrato que el núcleo aún no tiene (política, tecnología, Aedas, intel, refundación, caravanas a mano y almacén personal): se rechaza con este código estable en vez de descartarse. |
+| `orden.no_disponible` | `ORDEN_NO_DISPONIBLE` | Una orden del contrato que el núcleo aún no tiene (política, tecnología, Aedas y refundación): se rechaza con este código estable en vez de descartarse. |
 | `orden.forma_invalida` | `ORDEN_FORMA_INVALIDA` | Un valor de la orden fuera de su catálogo cerrado, o un id que no tiene la forma de ninguna entidad (`orden.forma_invalida`). |
 | `obra_de_mapa.desconocida` | `OBRA_DE_MAPA_DESCONOCIDA` | `obra-N` no es ningún pueblo ni ninguna avanzada. |
 | `repostar.sin_lugar` | `REPOSTAR_SIN_LUGAR` | `repostar` sin `lugar_id` y sin ninguna plaza ni avanzada operativa a la puerta de la columna. |
@@ -375,6 +375,9 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `heroe.no_esta_en_la_avanzada` | `HEROE_NO_ESTA_EN_LA_AVANZADA` | — |
 | `carro.vaciar_solo_en_tu_residencia` | `VACIAR_SOLO_EN_TU_RESIDENCIA` | — |
 | `almacen_personal.lleno` | `ALMACEN_PERSONAL_LLENO` | — |
+| `almacen_personal.fuera_de_tu_residencia` | `ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA` | Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a). |
+| `carro.no_lleva` | `CARRO_NO_LLEVA` | Guardar en el almacén personal un recurso que el carro de la columna no lleva (5G-a). |
+| `caravana.no_reclamable` | `CARAVANA_NO_RECLAMABLE` | Reclamar una caravana que no es la Caravana de Fundación que vuelve sola a su origen (5G-a): solo esa se reclama en mundo abierto. |
 | `repostar.plaza_cerrada` | `REPOSTAR_PLAZA_CERRADA` | — |
 | `repostar.sin_existencias` | `REPOSTAR_SIN_EXISTENCIAS` | — |
 
