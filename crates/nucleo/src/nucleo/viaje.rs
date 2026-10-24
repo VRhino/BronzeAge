@@ -125,14 +125,13 @@ impl Nucleo {
     /// Ampliada» del origen) de las caravanas adjuntas.
     pub fn capacidad_de_carga(&self, ejercito: u64) -> Option<Mil> {
         let e = self.estado.ejercitos.get(&ejercito)?;
-        let r = &self.estado.reglas.economia.comercio.flota;
-        let adjuntas: Mil = e
-            .caravanas_adjuntas
-            .iter()
-            .filter_map(|&c| self.estado.comercio.caravana(c))
-            .map(|c| c.capacidad_efectiva(r, self.estado.asentamientos.get(&(c.origen as u64)).map_or(UNO, |a| self.factores_de(a).capacidad)))
-            .sum();
+        let adjuntas: Mil = e.caravanas_adjuntas.iter().filter_map(|&c| self.estado.comercio.caravana(c)).map(|c| self.capacidad_de_caravana(c)).sum();
         Some(e.columna.capacidad_de_carga(&self.estado.reglas.economia.militar, adjuntas))
+    }
+
+    /// Lo que una caravana adjunta añade a la capacidad de carga de su columna: su capacidad efectiva, con la «Carga Ampliada» de su origen.
+    fn capacidad_de_caravana(&self, c: &Caravana) -> Mil {
+        c.capacidad_efectiva(&self.estado.reglas.economia.comercio.flota, self.estado.asentamientos.get(&(c.origen as u64)).map_or(UNO, |a| self.factores_de(a).capacidad))
     }
 
     // ───────────────────────────── Red de caminos y rutas ─────────────────────────────
@@ -751,6 +750,15 @@ impl Nucleo {
         }
         if !p.admin && e.posicion_en(t).dist(anfitriona.posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "la columna no está en la puerta de la plaza".into()));
+        }
+        // Lo que la columna lleva en los carros de la caravana se queda sin sitio al soltarla: sin ellos, el carro ha de caber en lo que queda (Movimiento_Ejercitos §6.2: el
+        // carro nunca pasa de su capacidad). Lo encontró `batch militar` (2026-10-24): una columna que cobró botín con la capacidad de su caravana la aparcaba y seguía con más
+        // carga de la que le cabía.
+        // DUDA (decidido al implementar, a revisar por el autor): se rechaza; otra lectura sería dejar en la caravana aparcada lo que ya no cabe en la columna.
+        let sin_ella = self.capacidad_de_carga(ejercito).unwrap_or(0) - self.capacidad_de_caravana(&self.estado.comercio.flota[i]);
+        let lleva = total(&e.columna.carga);
+        if lleva > sin_ella {
+            return Err(rechazo(rechazos::CARRO_LLENO, format!("sin los carros de la caravana el carro admite {sin_ella} y lleva {lleva}: descarga antes lo que no cabe")));
         }
         let (antes, posicion) = (self.velocidad_de_columna(e), anfitriona.posicion);
         self.estado.comercio.flota[i].aparcar(id32(plaza), posicion).map_err(|er| {

@@ -137,6 +137,7 @@ impl Nucleo {
                     return Err(de_columna(ErrorColumna::NoAdmite));
                 }
                 let plan = self.validar_salida(t, *heroe, Lugar::Asentamiento(*asentamiento as u32), escuadras, carga, true, &mut Default::default())?;
+                self.comprobar_fusion(&plan, faccion)?;
                 self.aplicar_salida(t, &plan, Destino::Unirse(*ejercito));
                 self.evento_de_columna("ejercito.refuerzo", t, *ejercito, vec![*asentamiento], vec![("heroe", *heroe as i64), ("escuadras", plan.escuadras.len() as i64), ("cargaTotal", comercio::total(&plan.carga))]);
                 Ok(vec![])

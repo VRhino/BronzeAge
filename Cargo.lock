@@ -36,11 +36,13 @@ version = "0.1.0"
 dependencies = [
  "asentamiento",
  "base",
+ "combate",
  "comercio",
  "informe",
  "militar",
  "mundo",
  "nucleo",
+ "persistencia",
  "rutas",
  "serde_json",
  "territorio",

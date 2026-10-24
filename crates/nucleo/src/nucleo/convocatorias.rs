@@ -197,18 +197,8 @@ impl Nucleo {
         let resultado = c.partir(heroe, &|h| dentro.contains(&h), &mut |i| {
             let plan = self.validar_salida(t, i.heroe, c.lugar, &i.seleccion.escuadras, &Self::lineas_de(&i.seleccion.carga), false, &mut reservas)?;
             // Quien parte con su columna —de visita, o la que conserva en su residencia para llevar sus caravanas— la suma al ejército: ha de poder fundirse con la del Líder.
-            if let Some(retomada) = plan.retoma.and_then(|r| self.estado.ejercitos.get(&r)).filter(|_| i.heroe != c.lider) {
-                let cc = &retomada.columna;
-                let error = if cc.tipo != TipoColumna::Personal || cc.es_formacion() {
-                    Some(rechazos::COLUMNA_SOLO_UNA_PERSONAL)
-                } else if cc.faccion != Some(c.faccion) {
-                    Some(rechazos::COLUMNA_OTRA_FACCION)
-                } else {
-                    None
-                };
-                if let Some(codigo) = error {
-                    return Err(Respuesta::rechazo(codigo, "su columna no se puede fundir con el ejército", v));
-                }
+            if i.heroe != c.lider {
+                self.comprobar_fusion(&plan, c.faccion)?;
             }
             planes.push(plan);
             Ok(())

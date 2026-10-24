@@ -920,6 +920,59 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
 }
 
 #[test]
+fn una_columna_no_aparca_su_caravana_si_lo_que_lleva_en_sus_carros_no_cabe_sin_ellos() {
+    // Hallado por `batch militar` (2026-10-24): la columna que cargaba con la capacidad de su caravana adjunta la aparcaba y seguía por encima de su capacidad.
+    let m = con_mundo!();
+    let (mut e, c) = dos_plazas(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    let (ana, milicia) = e.con_milicia("ana");
+    e.dar(c, Madera, 350_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: c, tipo: Tipo::Mercado });
+    e.avanzar(9 * HORA);
+    let k = e.caravana(c);
+    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    let un_carro = mr().logistica.capacidad_carro;
+    assert!(e.n.capacidad_de_carga(ej).unwrap() > un_carro, "la caravana suma sus carros a la capacidad de la columna");
+    // Con lo justo para un carro, se aparca; la vuelve a enganchar y carga una milésima más: ya no.
+    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: un_carro });
+    e.ok("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a });
+    e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: 1 });
+    let antes = (e.n.version(), e.n.hash_estado());
+    assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a }), rechazos::CARRO_LLENO);
+    assert_eq!((e.n.version(), e.n.hash_estado()), antes, "el rechazo no deja rastro");
+    assert_eq!(e.ejercito(ej).caravanas_adjuntas, vec![k]);
+}
+
+#[test]
+fn quien_conserva_su_columna_de_caravanas_no_se_suma_desde_la_plaza_a_otro_ejercito_porque_no_se_puede_fundir() {
+    // Hallado por `batch militar` (2026-10-24): `unirseAEjercito` no comprobaba que la columna que el residente conserva para llevar sus caravanas (un ejército) se pudiera
+    // fundir con el que pasa por la puerta, y la fusión fallaba con la salida ya aplicada (pánico del núcleo). Ahora se rechaza antes, sin rastro, como en una convocatoria.
+    let m = con_mundo!();
+    let (mut e, c) = dos_plazas(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    let (ana, milicia) = e.con_milicia("ana");
+    let (bea, otra) = e.con_milicia("bea");
+    e.dar(c, Madera, 350_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: c, tipo: Tipo::Mercado });
+    e.avanzar(9 * HORA);
+    let k = e.caravana(c);
+    let suya = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: suya });
+    e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
+    assert_eq!(e.ejercito(suya).columna.tipo, TipoColumna::Ejercito, "la columna que conserva para la caravana sigue siendo un ejército");
+    let de_bea = e.ok("bea", Comando::MovilizarEjercito { asentamiento: a, heroe: bea, escuadras: vec![otra], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let antes = (e.n.version(), e.n.hash_estado());
+    let unirse = Comando::UnirseAEjercito { asentamiento: a, heroe: ana, ejercito: de_bea, escuadras: vec![milicia], carga: vec![] };
+    assert_eq!(e.rechazada("ana", unirse), rechazos::COLUMNA_SOLO_UNA_PERSONAL);
+    assert_eq!((e.n.version(), e.n.hash_estado()), antes, "el rechazo no deja rastro");
+    assert_eq!((e.n.heroe(ana).unwrap().heroe.presencia.ubicacion, e.ejercito(de_bea).columna.participantes.len()), (Ubicacion::Asentamiento(a as u32), 1));
+}
+
+#[test]
 fn un_residente_que_conservaba_su_columna_para_las_caravanas_y_defiende_sale_con_ella_y_con_las_escuadras_que_uso() {
     let m = con_mundo!();
     let (mut e, c) = dos_plazas(m, 7);

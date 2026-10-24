@@ -6,12 +6,16 @@
 //!   su ciudad real del trazado urbano).
 //! - [`comercio`] corre el de «economía y comercio» (Facciones de varias plazas que comercian sobre el núcleo: trueques, caravanas que viajan por
 //!   el mapa, peajes, red de caminos, mercenarios y pueblos extractores con acarreo).
+//! - [`militar`] corre el de «militar y combate» (héroes bots que reclutan, salen, comen, persiguen, convocan y combaten con números contra columnas, caravanas,
+//!   bandidos, pueblos, avanzadas y plazas, con los invariantes del combate comprobados orden a orden).
 //! - [`escribir`] deja `informe.json` e `informe.html` en una carpeta.
 //! - [`fundir_decisiones`] añade a mano el resumen, las anomalías y las decisiones tras leer los resultados.
 
 mod armar;
 mod armarcom;
+mod armarmil;
 mod armarpob;
+mod auditmil;
 mod auditoria;
 mod economia;
 mod fondo;
@@ -19,6 +23,7 @@ mod geo;
 mod medidas;
 mod sim;
 mod simcom;
+mod simmil;
 mod simpob;
 mod svgciudad;
 mod vigia;
@@ -120,6 +125,36 @@ pub fn comercio(c: &Cargado, e: &EscenarioComercio) -> Informe {
         (a == b, a == normal)
     });
     armarcom::armar(&armarcom::Entrada { c, geo: &geo, e, corrida: &corrida, control: control.as_ref(), determinismo, pared_total: t0.elapsed() })
+}
+
+/// Parámetros del escenario militar: plazas fundadas a la vez (en Facciones de tres) con cuatro héroes bots cada una.
+#[derive(Clone, Debug)]
+pub struct EscenarioMilitar {
+    pub plazas: u32,
+    pub dias: u32,
+    pub semilla: u64,
+    /// Repite un escenario reducido (9 plazas y 2 días, o menos si el escenario es menor) dos veces (mismo hash) y una más con la foto ida y vuelta a mitad (mismo
+    /// hash que sin ella).
+    pub verificar_determinismo: bool,
+}
+
+impl Default for EscenarioMilitar {
+    fn default() -> Self {
+        Self { plazas: 60, dias: 30, semilla: 42, verificar_determinismo: true }
+    }
+}
+
+/// Corre el escenario militar sobre el mundo y monta el informe. La corrida principal hace también la foto ida y vuelta a mitad de camino.
+pub fn militar(c: &Cargado, e: &EscenarioMilitar) -> Informe {
+    let t0 = Instant::now();
+    let geo = geo::Geo::de(&c.mundo);
+    let corrida = simmil::simular(c, &geo, e.plazas, e.dias, e.semilla, true);
+    let determinismo = e.verificar_determinismo.then(|| {
+        let reducida = |foto| simmil::huella(&simmil::simular(c, &geo, e.plazas.min(9), e.dias.min(2), e.semilla, foto));
+        let (a, b, foto) = (reducida(false), reducida(false), reducida(true));
+        (a == b, a == foto)
+    });
+    armarmil::armar(&armarmil::Entrada { c, geo: &geo, e, corrida: &corrida, determinismo, pared_total: t0.elapsed() })
 }
 
 /// 25 Facciones y 2 días, dos veces: ¿mismo `hash_estado()`?

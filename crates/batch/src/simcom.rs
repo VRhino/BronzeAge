@@ -227,6 +227,30 @@ fn jugador(f: u32) -> String {
     format!("f{f}")
 }
 
+fn punto_en_anillo(rng: &mut Rng, c: Punto, (rmin, rmax): (i64, i64)) -> Punto {
+    let r = (rmin + rng.por_debajo((rmax - rmin) as u64) as i64) as f64;
+    let a = (rng.por_debajo(360_000) as f64 / 1000.0).to_radians();
+    Punto::new(c.x + (r * a.cos()) as i64, c.y + (r * a.sin()) as i64)
+}
+
+/// Un sitio fundable para la Facción `f` en el anillo: el primer Verde, o el mejor Ámbar; nunca uno condenado a ruinas por falta de madera. Lo usan
+/// `batch comercio` y `batch militar`.
+pub(crate) fn sitio(n: &Nucleo, rng: &mut Rng, f: u32, centro: Punto, anillo: (i64, i64)) -> Option<Punto> {
+    let mut ambar: Vec<((u8, usize), Punto)> = Vec::new();
+    for _ in 0..CANDIDATOS {
+        let p = punto_en_anillo(rng, centro, anillo);
+        let v = n.viabilidad(p, f).expect("el núcleo tiene mundo");
+        if v.motivo.is_some() || v.condenada {
+            continue;
+        }
+        if v.color == Viabilidad::Verde {
+            return Some(p);
+        }
+        ambar.push((((v.parcelas_libres > 0) as u8 + (v.piedra > 0) as u8, v.parcelas_libres + v.piedra), p));
+    }
+    ambar.into_iter().max_by_key(|&(k, _)| k).map(|(_, p)| p)
+}
+
 /// Corre `plazas` plazas (en Facciones de `PLAZAS_POR_FACCION`) durante `dias` días de mundo. Con `control` solo funda y asciende: no comercia
 /// (sirve para medir lo que cuesta el comercio).
 pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, control: bool, paso_normal: bool) -> Corrida {
@@ -322,29 +346,6 @@ impl Sim<'_> {
 
     // ───────────────────────────── Fundación ─────────────────────────────
 
-    fn punto_en_anillo(&mut self, c: Punto, (rmin, rmax): (i64, i64)) -> Punto {
-        let r = (rmin + self.rng.por_debajo((rmax - rmin) as u64) as i64) as f64;
-        let a = (self.rng.por_debajo(360_000) as f64 / 1000.0).to_radians();
-        Punto::new(c.x + (r * a.cos()) as i64, c.y + (r * a.sin()) as i64)
-    }
-
-    /// Un sitio fundable en el anillo: el primer Verde, o el mejor Ámbar; nunca uno condenado a ruinas por falta de madera.
-    fn sitio(&mut self, f: u32, centro: Punto, anillo: (i64, i64)) -> Option<Punto> {
-        let mut ambar: Vec<((u8, usize), Punto)> = Vec::new();
-        for _ in 0..CANDIDATOS {
-            let p = self.punto_en_anillo(centro, anillo);
-            let v = self.n.viabilidad(p, f).expect("el núcleo tiene mundo");
-            if v.motivo.is_some() || v.condenada {
-                continue;
-            }
-            if v.color == Viabilidad::Verde {
-                return Some(p);
-            }
-            ambar.push((((v.parcelas_libres > 0) as u8 + (v.piedra > 0) as u8, v.parcelas_libres + v.piedra), p));
-        }
-        ambar.into_iter().max_by_key(|&(k, _)| k).map(|(_, p)| p)
-    }
-
     fn campamento_mas_cercano(&self, p: Punto) -> u32 {
         self.geo.campamentos.iter().enumerate().min_by_key(|(_, c)| p.dist(**c)).map_or(0, |(i, _)| i as u32)
     }
@@ -363,11 +364,11 @@ impl Sim<'_> {
             let propias = self.facciones[f as usize - 1].clone();
             let sitio = if propias.is_empty() {
                 let centro = self.geo.campamentos[f as usize % self.geo.campamentos.len()];
-                self.sitio(f, centro, ANILLO_CAMPAMENTO)
+                sitio(&self.n, &mut self.rng, f, centro, ANILLO_CAMPAMENTO)
             } else {
                 let madre = propias[self.rng.por_debajo(propias.len() as u64) as usize];
                 let centro = self.n.estado().asentamientos[&madre].posicion;
-                self.sitio(f, centro, ANILLO_PLAZA)
+                sitio(&self.n, &mut self.rng, f, centro, ANILLO_PLAZA)
             };
             let Some(p) = sitio else { continue };
             minuto += 1;

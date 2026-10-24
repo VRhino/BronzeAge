@@ -202,6 +202,23 @@ impl Nucleo {
         }
     }
 
+    /// Quien sale para sumarse a un ejército de la Facción `faccion` llevando su columna —la que trajo de visita o la que conserva en su residencia para llevar sus
+    /// caravanas, que es un ejército— ha de poder fundirla con él: una columna personal, sin formación y de esa Facción. Lo comprueban las dos salidas que terminan en
+    /// `Destino::Unirse` (partir con una convocatoria y `unirseAEjercito`) antes de tocar nada; sin esto, la fusión fallaba ya aplicada la salida (`batch militar`,
+    /// 2026-10-24: un residente con su columna de caravanas que se sumaba desde la plaza tumbaba el núcleo).
+    pub(super) fn comprobar_fusion(&self, plan: &PlanDeSalida, faccion: u32) -> Result<(), Respuesta> {
+        let Some(retomada) = plan.retoma.and_then(|r| self.estado.ejercitos.get(&r)) else { return Ok(()) };
+        let cc = &retomada.columna;
+        let codigo = if cc.tipo != TipoColumna::Personal || cc.es_formacion() {
+            rechazos::COLUMNA_SOLO_UNA_PERSONAL
+        } else if cc.faccion != Some(faccion) {
+            rechazos::COLUMNA_OTRA_FACCION
+        } else {
+            return Ok(());
+        };
+        Err(Respuesta::rechazo(codigo, "su columna no se puede fundir con el ejército", self.estado.version))
+    }
+
     /// Ejecuta una salida ya comprobada y devuelve la columna en la que va el héroe. Con `Destino::Unirse` el héroe se suma al ejército dado
     /// (los integrantes de una convocatoria que parte) con lo que saca; si no, nace una columna (o se sale con la que trajo).
     pub(super) fn aplicar_salida(&mut self, t: Instante, plan: &PlanDeSalida, destino: Destino) -> u64 {

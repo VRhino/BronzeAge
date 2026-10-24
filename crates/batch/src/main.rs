@@ -1,8 +1,9 @@
 //! `batch territorio [--mundo <.bin>] [--facciones 400] [--dias 30] [--semilla 42] [--salida batch/salida/territorio] [--decisiones <.json>]`
 //! `batch comercio   [--mundo <.bin>] [--plazas 160]    [--dias 30] [--semilla 42] [--salida batch/salida/comercio]   [--decisiones <.json>]`
 //! `batch poblacion  [--mundo <.bin>] [--plazas 300]    [--dias 30] [--semilla 42] [--salida batch/salida/poblacion]  [--decisiones <.json>]`
+//! `batch militar    [--mundo <.bin>] [--plazas 60]     [--dias 30] [--semilla 42] [--salida batch/salida/militar]    [--decisiones <.json>]`
 
-use batch::{artefacto_en, cargar, carpeta_por_defecto, comercio, escribir, fundir_decisiones, poblacion_y_ciudad, resumen_en_texto, territorio, Escenario, EscenarioComercio, EscenarioPoblacion, Informe};
+use batch::{artefacto_en, cargar, carpeta_por_defecto, comercio, escribir, fundir_decisiones, militar, poblacion_y_ciudad, resumen_en_texto, territorio, Escenario, EscenarioComercio, EscenarioMilitar, EscenarioPoblacion, Informe};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -12,6 +13,7 @@ enum Sistema {
     Territorio,
     Poblacion,
     Comercio,
+    Militar,
 }
 
 struct Opciones {
@@ -29,6 +31,7 @@ fn opciones(sistema: Sistema, args: &[String]) -> Result<Opciones, String> {
         Sistema::Territorio => (Escenario::default().facciones, "batch/salida/territorio"),
         Sistema::Poblacion => (EscenarioPoblacion::default().plazas, "batch/salida/poblacion"),
         Sistema::Comercio => (EscenarioComercio::default().plazas, "batch/salida/comercio"),
+        Sistema::Militar => (EscenarioMilitar::default().plazas, "batch/salida/militar"),
     };
     let nombre_cantidad = if sistema == Sistema::Territorio { "--facciones" } else { "--plazas" };
     let mut o = Opciones { mundo: None, cantidad, dias: 30, semilla: 42, salida: PathBuf::from(salida), decisiones: None };
@@ -74,6 +77,10 @@ fn ejecutar(sistema: Sistema, args: &[String]) -> Result<(), String> {
             println!("Cargado en {:.1} s; simulando {} plazas comerciando durante {} días...", t0.elapsed().as_secs_f64(), o.cantidad, o.dias);
             comercio(&mundo, &EscenarioComercio { plazas: o.cantidad, dias: o.dias, semilla: o.semilla, ..EscenarioComercio::default() })
         }
+        Sistema::Militar => {
+            println!("Cargado en {:.1} s; simulando {} plazas con sus héroes durante {} días...", t0.elapsed().as_secs_f64(), o.cantidad, o.dias);
+            militar(&mundo, &EscenarioMilitar { plazas: o.cantidad, dias: o.dias, semilla: o.semilla, ..EscenarioMilitar::default() })
+        }
     };
     let mut informe = informe;
     if let Some(d) = o.decisiones {
@@ -98,7 +105,8 @@ fn main() -> ExitCode {
         Some((cmd, resto)) if cmd == "territorio" => ejecutar(Sistema::Territorio, resto),
         Some((cmd, resto)) if cmd == "poblacion" => ejecutar(Sistema::Poblacion, resto),
         Some((cmd, resto)) if cmd == "comercio" => ejecutar(Sistema::Comercio, resto),
-        _ => Err("uso: batch territorio|poblacion|comercio [--mundo <.bin>] [--facciones|--plazas N] [--dias 30] [--semilla 42] [--salida <dir>] [--decisiones <.json>]".into()),
+        Some((cmd, resto)) if cmd == "militar" => ejecutar(Sistema::Militar, resto),
+        _ => Err("uso: batch territorio|poblacion|comercio|militar [--mundo <.bin>] [--facciones|--plazas N] [--dias 30] [--semilla 42] [--salida <dir>] [--decisiones <.json>]".into()),
     };
     match resultado {
         Ok(()) => ExitCode::SUCCESS,
