@@ -480,7 +480,7 @@ fn el_ciclo_completo_con_los_cinco_mensajes_sus_rechazos_y_su_idempotencia() {
 /// Juega la batalla entera: cada escuadra pierde `muertos`, gana ana, y `ajusta` toca el resultado antes de mandarlo. Beto lleva un carro con trigo y madera.
 fn jugada(muertos: i64, ajusta: &dyn Fn(&Choque, &mut ResultadoDeBatalla)) -> (Choque, u64) {
     let mut x = choque();
-    for (id, r, q) in [("s1", asentamiento::Recurso::Trigo, 100_000), ("s2", asentamiento::Recurso::Madera, 41_001)] {
+    for (id, r, q) in [("s1", asentamiento::Recurso::Trigo, 100_000), ("s2", asentamiento::Recurso::Madera, 41_000)] {
         assert!(x.n.aplicar_en(0, admin(id, Comando::DarSuministro { ejercito: x.beto.0, recurso: r, cantidad: q })).aceptada());
     }
     let (ana, beto) = (x.ana, x.beto);
@@ -513,9 +513,9 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     assert_eq!(x.n.heroe(beto.1).unwrap().heroe.herido_hasta, Some(20 * MIN + 2 * MIN));
     // El que pierde entrega la mitad (hacia abajo) de su carro y el ganador cobra además la chatarra de los caídos de los dos bandos.
     let carga = |col: u64| x.n.ejercito(col).unwrap().columna.carga.clone();
-    assert_eq!((carga(beto.0)[&asentamiento::Recurso::Trigo], carga(beto.0)[&asentamiento::Recurso::Madera]), (50_000, 20_501));
+    assert_eq!((carga(beto.0)[&asentamiento::Recurso::Trigo], carga(beto.0)[&asentamiento::Recurso::Madera]), (50_000, 21_000));
     let ganada = carga(ana.0);
-    assert_eq!((ganada[&asentamiento::Recurso::Trigo], ganada[&asentamiento::Recurso::Madera]), (50_000, 20_500));
+    assert_eq!((ganada[&asentamiento::Recurso::Trigo], ganada[&asentamiento::Recurso::Madera]), (50_000, 20_000));
     let chatarra: i64 = ganada.iter().filter(|(r, _)| matches!(r, asentamiento::Recurso::ChatarraCobre | asentamiento::Recurso::ChatarraBronce | asentamiento::Recurso::ChatarraHierro)).map(|(_, n)| n).sum();
     assert!(chatarra > 0, "los caídos dejan chatarra");
     // Lo apartado vuelve: al espacio, quieto (no había plan), comiendo otra vez.
@@ -545,7 +545,7 @@ fn quien_queda_herido_sale_de_derrotado_y_no_del_bando() {
 fn si_pierde_el_atacante_es_el_quien_entrega_la_mitad_de_su_carro_al_defensor() {
     let mut x = choque();
     let (ana, beto) = (x.ana, x.beto);
-    assert!(x.n.aplicar_en(0, admin("s1", Comando::DarSuministro { ejercito: ana.0, recurso: asentamiento::Recurso::Piedra, cantidad: 30_001 })).aceptada());
+    assert!(x.n.aplicar_en(0, admin("s1", Comando::DarSuministro { ejercito: ana.0, recurso: asentamiento::Recurso::Piedra, cantidad: 31_000 })).aceptada());
     assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
     let id = x.n.batallas().next().unwrap().id;
     en_curso(&mut x.n, id, 11 * MIN, &[ana.1]);
@@ -554,7 +554,7 @@ fn si_pierde_el_atacante_es_el_quien_entrega_la_mitad_de_su_carro_al_defensor() 
     assert!(aplicar(&mut x.n, 12 * MIN, "res", id, r).aceptada());
     assert!(x.n.heroe_herido(ana.1) && !x.n.heroe_herido(beto.1), "si se agota el tiempo gana el defensor");
     let carga = |c: u64, r| x.n.ejercito(c).unwrap().columna.carga.get(&r).copied().unwrap_or(0);
-    assert_eq!((carga(ana.0, asentamiento::Recurso::Piedra), carga(beto.0, asentamiento::Recurso::Piedra)), (15_001, 15_000));
+    assert_eq!((carga(ana.0, asentamiento::Recurso::Piedra), carga(beto.0, asentamiento::Recurso::Piedra)), (16_000, 15_000));
 }
 
 // ───────────────────────────── 5. Los plazos ─────────────────────────────
@@ -892,7 +892,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN25");
+    assert_eq!(&bytes[..5], b"BAN26");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1505,11 +1505,11 @@ fn el_visitante_amigo_que_se_une_a_defender_y_pierde_deja_la_mitad_del_carro_y_q
     let m = con_mundo!();
     let Asedio { mut e, beto, ana } = asedio(m, 7);
     let b = e.b;
-    // «carla» y «dora», de la Facción del dueño (F2), entran de visita con 30 001 de madera y de piedra en el carro; «beto» reside dentro y tampoco se une.
+    // «carla» y «dora», de la Facción del dueño (F2), entran de visita con 31 000 de madera y de piedra en el carro; «beto» reside dentro y tampoco se une.
     let carla = e.ejercito("carla", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
     let dora = e.ejercito("dora", 2, e.pos(b), &[Tropa::MiliciaLanceros]);
-    e.ok("admin", Comando::DarSuministro { ejercito: carla.0, recurso: Madera, cantidad: 30_001 });
-    e.ok("admin", Comando::DarSuministro { ejercito: dora.0, recurso: Piedra, cantidad: 30_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: carla.0, recurso: Madera, cantidad: 31_000 });
+    e.ok("admin", Comando::DarSuministro { ejercito: dora.0, recurso: Piedra, cantidad: 31_000 });
     for (cuenta, h) in [("carla", carla.1), ("dora", dora.1)] {
         e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: h });
     }
@@ -1531,10 +1531,10 @@ fn el_visitante_amigo_que_se_une_a_defender_y_pierde_deja_la_mitad_del_carro_y_q
     assert!(r.aceptada(), "{r:?}");
     assert_eq!(e.n.estado().asentamientos[&b].faccion, 1);
     let Ubicacion::Columna(sale) = e.n.heroe(carla.1).unwrap().heroe.presencia.ubicacion else { panic!("«carla» sale a la calle") };
-    assert_eq!(e.carga(sale, Madera), 30_001 - 15_000);
+    assert_eq!(e.carga(sale, Madera), 31_000 - 15_000);
     assert_eq!(dato(&hechos(&e.n, "asentamiento.conquistada")[0], "carroPerdido"), 15_000);
     assert!(e.carga(ana.0, Madera) > 0, "lo robado es del vencedor");
-    assert_eq!((e.carga(dora.0, Piedra), e.n.heroe_herido(dora.1), e.n.heroe_herido(beto)), (30_001, false, false), "quien no se unió no pierde nada");
+    assert_eq!((e.carga(dora.0, Piedra), e.n.heroe_herido(dora.1), e.n.heroe_herido(beto)), (31_000, false, false), "quien no se unió no pierde nada");
 }
 
 /// Durante un asedio quien está dentro y no se ha unido a la defensa solo puede salir (cuarta ronda): cualquier otra orden sigue bloqueada, la salida es al mapa con todo lo suyo y,
@@ -1845,7 +1845,7 @@ fn tramo_sin_bandidos(e: &Esc) -> (Punto, Punto) {
     panic!("sin un tramo libre de bandidos cerca de A");
 }
 
-/// Una columna de ana con esas tropas y su héroe humano, con esas caravanas (ya creadas, de A) enganchadas y 40 001 de madera en el carro, que marcha 60 u por un tramo libre de bandidos, y
+/// Una columna de ana con esas tropas y su héroe humano, con esas caravanas (ya creadas, de A) enganchadas y 41 000 de madera en el carro, que marcha 60 u por un tramo libre de bandidos, y
 /// un campamento de bandidos de ese nivel al 40 % del camino. Devuelve la columna, el campamento y el instante exacto en que el plan entra a ≤ 7 u de él.
 fn columna_hacia_bandidos(e: &mut Esc, caravanas: &[u64], tropas: &[Tropa], nivel: u8) -> ((u64, u64), u64, Instante) {
     let (inicio, fin_del_tramo) = tramo_sin_bandidos(e);
@@ -1854,7 +1854,7 @@ fn columna_hacia_bandidos(e: &mut Esc, caravanas: &[u64], tropas: &[Tropa], nive
         e.ok("admin", Comando::DarEscuadra { heroe: col.1, tropa: t, cantidad: completa(t) });
     }
     humano(&mut e.n, col.1);
-    e.ok("admin", Comando::DarSuministro { ejercito: col.0, recurso: Madera, cantidad: 40_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: col.0, recurso: Madera, cantidad: 41_000 });
     for &caravana in caravanas {
         e.ok("admin", Comando::AdjuntarCaravana { caravana, ejercito: col.0 });
     }
@@ -1914,7 +1914,7 @@ fn los_bandidos_que_acosan_una_caravana_adjunta_a_una_columna_con_heroes_la_jueg
         assert!(aplicar(&mut e.n, t + MIN, "res", id, res).aceptada());
         let ej = e.n.ejercito(col.0).unwrap();
         assert!(!ej.en_batalla && ej.marchando(), "la columna retoma su camino");
-        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 20_001 } else { 40_001 }, "el bando que pierde entrega la mitad de su carro; los bandidos no tienen columna que lo cargue");
+        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 21_000 } else { 41_000 }, "el bando que pierde entrega la mitad de su carro; los bandidos no tienen columna que lo cargue");
         if gana_el_bandido {
             assert!(e.n.caravana(ca).is_none() && !ej.caravanas_adjuntas.contains(&ca), "Unity dio por perdido su único carro: la caravana desaparece");
             assert!(hechos(&e.n, "comercio.caravana_perdida").iter().any(|h| dato(h, "caravana") == ca as i64));
@@ -2011,7 +2011,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN25");
+        assert_eq!(&bytes[..5], b"BAN26");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();
@@ -2025,7 +2025,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
         assert!(aplicar(&mut e.n, t + MIN, "res", id, res).aceptada());
         let ej = e.n.ejercito(col.0).unwrap();
         assert!(!ej.en_batalla && ej.marchando(), "la columna retoma su camino");
-        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 20_001 } else { 40_001 }, "el bando que pierde entrega la mitad de su carro");
+        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 21_000 } else { 41_000 }, "el bando que pierde entrega la mitad de su carro");
         let escuadra = |(h, s): (u64, u64)| e.n.heroe(h).unwrap().heroe.escuadra(s).map(|s| (s.cantidad, s.contenedor, s.reserva_batalla)).unwrap();
         if gana_el_bandido {
             assert!(e.n.caravana(ca1).is_none() && !ej.caravanas_adjuntas.contains(&ca1), "perdió su único carro: desaparece");
@@ -2162,11 +2162,11 @@ fn al_ataque_solo_se_une_quien_esta_fuera_y_el_residente_que_defiende_y_pierde_e
     let m = con_mundo!();
     let Asedio { mut e, beto, ana } = asedio(m, 7);
     let b = e.b;
-    // «beto», residente, trae a su plaza 40 001 de madera en el carro (entrar en la residencia no lo vacía).
+    // «beto», residente, trae a su plaza 41 000 de madera en el carro (entrar en la residencia no lo vacía).
     e.dar(b, Madera, 100_000);
-    let salida = e.ok("beto", Comando::SalirAlMundo { asentamiento: b, heroe: beto, escuadras: vec![], carga: vec![(Madera, 40_001)] }).creadas[0];
+    let salida = e.ok("beto", Comando::SalirAlMundo { asentamiento: b, heroe: beto, escuadras: vec![], carga: vec![(Madera, 41_000)] }).creadas[0];
     e.ok("beto", Comando::EntrarEnAsentamiento { asentamiento: b, heroe: beto });
-    assert!(e.n.ejercito(salida).is_none() && e.n.heroe(beto).unwrap().carro.get(&Madera) == Some(&40_001));
+    assert!(e.n.ejercito(salida).is_none() && e.n.heroe(beto).unwrap().carro.get(&Madera) == Some(&41_000));
     // «olga», de la Facción atacante (F1), entra en la plaza como neutral (la puerta se cierra solo a los enemigos): está dentro. «pablo», también de F1, se queda en el mapa a la puerta.
     let intruso = e.ejercito("olga", 1, e.pos(b), &[Tropa::MiliciaLanceros]);
     e.ok("olga", Comando::Guarnecer { asentamiento: b, heroe: intruso.1 });
@@ -2215,7 +2215,7 @@ fn al_ataque_solo_se_une_quien_esta_fuera_y_el_residente_que_defiende_y_pierde_e
     assert!(r.aceptada(), "{r:?}");
     assert_eq!(e.n.estado().asentamientos[&b].faccion, 1);
     let Ubicacion::Columna(sale) = e.n.heroe(beto).unwrap().heroe.presencia.ubicacion else { panic!("«beto» sale a la calle") };
-    assert_eq!(e.carga(sale, Madera), 40_001 - 20_000, "la mitad, hacia abajo");
+    assert_eq!(e.carga(sale, Madera), 41_000 - 20_000, "la mitad, hacia abajo");
     let conquista = &hechos(&e.n, "asentamiento.conquistada")[0];
     assert_eq!(dato(conquista, "carroPerdido"), 20_000);
     assert!([ana.0, refuerzo.0, neutral.0, enemigo.0].iter().map(|&c| e.carga(c, Madera)).sum::<i64>() >= 20_000, "lo robado, repartido entre las columnas del vencedor (también las de los neutrales y enemigos que se unieron al ataque)");
@@ -2227,12 +2227,12 @@ fn en_el_saqueo_de_un_pueblo_por_unity_de_oficio_solo_defienden_los_mineros_y_se
     let m = con_mundo!();
     let (mut e, madre, pueblo, sitio) = con_pueblo(m);
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
-    // Dentro del pueblo: un residente de la madre con 30 001 de madera en el carro y un aliado visitante con 30 001 de piedra, los dos con tropa floja.
+    // Dentro del pueblo: un residente de la madre con 31 000 de madera en el carro y un aliado visitante con 31 000 de piedra, los dos con tropa floja.
     let res = e.ejercito("res", 1, sitio, &[Tropa::Lenadores]);
     e.ok("admin", Comando::FijarResidencia { heroe: res.1, residencia: Some(Residencia::Asentamiento(madre as u32)) });
-    e.ok("admin", Comando::DarSuministro { ejercito: res.0, recurso: Madera, cantidad: 30_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: res.0, recurso: Madera, cantidad: 31_000 });
     let alia = e.ejercito("alia", 3, sitio, &[Tropa::Lenadores]);
-    e.ok("admin", Comando::DarSuministro { ejercito: alia.0, recurso: Piedra, cantidad: 30_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: alia.0, recurso: Piedra, cantidad: 31_000 });
     for (cuenta, h) in [("res", res.1), ("alia", alia.1)] {
         e.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe: h });
     }
@@ -2255,8 +2255,8 @@ fn en_el_saqueo_de_un_pueblo_por_unity_de_oficio_solo_defienden_los_mineros_y_se
     let res_final = resultado(&e.n, id, Lado::Atacante, 10);
     assert!(aplicar(&mut e.n, t + 2 * MIN, "res", id, res_final).aceptada());
     assert_eq!((e.n.heroe(res.1).unwrap().heroe.presencia.ubicacion, e.n.heroe(alia.1).unwrap().heroe.presencia.ubicacion), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
-    assert_eq!(e.carga(res.0, Madera), 30_001 - 15_000, "el residente pierde la mitad, hacia abajo");
-    assert_eq!(e.carga(alia.0, Piedra), 30_001 - 15_000, "el visitante amigo que defendió también: misma regla para todos");
+    assert_eq!(e.carga(res.0, Madera), 31_000 - 15_000, "el residente pierde la mitad, hacia abajo");
+    assert_eq!(e.carga(alia.0, Piedra), 31_000 - 15_000, "el visitante amigo que defendió también: misma regla para todos");
     assert!(e.carga(saqueador.0, Madera) + e.carga(saqueador.0, Piedra) >= 15_000, "lo robado, de los dos, es del vencedor (lo que le quepa en el carro)");
     assert_eq!(e.n.estado().asentamientos[&madre].faccion, 1);
 }

@@ -112,7 +112,7 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     let mut x = choque();
     let (ana, beto) = (x.ana, x.beto);
     // Beto lleva un carro con trigo y madera; ana, uno vacío.
-    for (id, r, q) in [("s1", Trigo, 100_000), ("s2", Madera, 41_001)] {
+    for (id, r, q) in [("s1", Trigo, 100_000), ("s2", Madera, 41_000)] {
         assert!(x.n.aplicar_en(x.n.ahora(), admin(id, Comando::DarSuministro { ejercito: beto.0, recurso: r, cantidad: q })).aceptada());
     }
     let (antes_a, antes_d) = (soldados(&x.n, ana.1, x.fuerte[0]), soldados(&x.n, beto.1, x.debil));
@@ -142,12 +142,12 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert_eq!(x.n.heroe(beto.1).unwrap().heroe.herido_hasta, Some(10 * MIN + 2 * MIN), "heridoMinutos = 2");
     // El carro del derrotado pierde la mitad (hacia abajo) de cada recurso y el ganador se la queda con la chatarra de las bajas, hasta donde le cabe.
     let carga = |col: u64| x.n.ejercito(col).unwrap().columna.carga.clone();
-    assert_eq!((carga(beto.0)[&Trigo], carga(beto.0)[&Madera]), (50_000, 20_501));
+    assert_eq!((carga(beto.0)[&Trigo], carga(beto.0)[&Madera]), (50_000, 21_000));
     let ganada = carga(ana.0);
-    assert_eq!((ganada[&Trigo], ganada[&Madera]), (50_000, 20_500));
+    assert_eq!((ganada[&Trigo], ganada[&Madera]), (50_000, 20_000));
     let chatarra: i64 = ganada.iter().filter(|(r, _)| matches!(r, ChatarraCobre | ChatarraBronce | ChatarraHierro)).map(|(_, n)| n).sum();
     assert_eq!(chatarra, dato(h, "chatarra"), "la chatarra de las bajas de los dos bandos va al carro del ganador");
-    assert!(chatarra > 0 && dato(h, "botin") == 70_500 + chatarra);
+    assert!(chatarra > 0 && dato(h, "botin") == 70_000 + chatarra);
     // Intocable: sin ningún héroe sano ni se le ataca ni ataca.
     let rastro0 = rastro(&x.n);
     assert_eq!(codigo(&atacar(&mut x.n, 11 * MIN, "ana", "a2", ana.1, ObjetivoAtaque::Ejercito(beto.0), false)), rechazos::COMBATE_SIN_HEROE_SANO);
@@ -292,7 +292,7 @@ fn atacar_un_campamento_de_bandidos_no_exige_guerra_gasta_una_tirada_y_su_oro_va
 fn un_heroe_solo_ataca_a_los_bandidos_pero_no_basta_para_un_campamento_de_nivel_uno_y_la_derrota_cuesta_heridas_y_la_mitad_del_carro() {
     let mut n = nucleo(40, 5);
     let ana = columna(&mut n, "ana", 1, c(10, 2));
-    assert!(n.aplicar_en(0, admin("s", Comando::DarSuministro { ejercito: ana.0, recurso: Piedra, cantidad: 30_001 })).aceptada());
+    assert!(n.aplicar_en(0, admin("s", Comando::DarSuministro { ejercito: ana.0, recurso: Piedra, cantidad: 31_000 })).aceptada());
     // 15 de poder con tirada de ±15 %: como mucho 17,25 contra los 20 del nivel 1.
     let b = colocar(&mut n, "b1", Punto::new(c(10, 2).x, c(10, 2).y + 1_000), 1);
     let r = atacar(&mut n, MIN, "ana", "a1", ana.1, ObjetivoAtaque::Campamento(b), false);
@@ -301,7 +301,7 @@ fn un_heroe_solo_ataca_a_los_bandidos_pero_no_basta_para_un_campamento_de_nivel_
     assert_eq!((dato(h, "heridos"), dato(h, "carroPerdido"), dato(h, "oro")), (1, 15_000, 0));
     assert!(n.campamento_de_bandidos(b).is_some(), "el campamento aguanta");
     assert!(n.heroe_herido(ana.1));
-    assert_eq!(n.estado().ejercitos[&ana.0].columna.carga[&Piedra], 15_001, "pierde la mitad del carro, hacia abajo, y nadie se la queda");
+    assert_eq!(n.estado().ejercitos[&ana.0].columna.carga[&Piedra], 16_000, "pierde la mitad del carro, hacia abajo, y nadie se la queda");
 }
 
 #[test]
@@ -318,7 +318,7 @@ fn el_oro_de_los_bandidos_cae_con_los_rendimientos_decrecientes_de_cada_heroe() 
         oros.push(n.estado().ejercitos[&ana.0].columna.carga.get(&Oro).copied().unwrap_or(0) - antes);
     }
     // Completo las 8 primeras veces en 24 h, luego 15 % menos por cada una más y, desde la 14.ª, solo experiencia.
-    assert_eq!(oros, [30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 25_500, 21_000, 16_500, 12_000, 7_500, 0, 0]);
+    assert_eq!(oros, [30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 25_000, 21_000, 16_000, 12_000, 7_000, 0, 0], "en unidades enteras de oro, hacia abajo");
     // Pasadas 24 h desde las primeras, vuelve a pagar casi completo.
     let b = colocar(&mut n, "bz", Punto::new(c(10, 2).x + 1_000, c(10, 2).y), 1);
     let antes = n.estado().ejercitos[&ana.0].columna.carga[&Oro];
@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN25");
+    assert_eq!(&bytes[..5], b"BAN26");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1532,13 +1532,13 @@ fn el_residente_y_el_visitante_amigo_que_defienden_un_pueblo_y_pierden_quedan_he
     let madre = e.a;
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
-    // Dentro del pueblo: un residente de la madre con tropa floja y 30 001 de madera en el carro, y un aliado visitante con tropa floja y 30 001 de piedra.
+    // Dentro del pueblo: un residente de la madre con tropa floja y 31 000 de madera en el carro, y un aliado visitante con tropa floja y 31 000 de piedra.
     let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
     let res = e.ejercito("res", 1, sitio, &[Tropa::Lenadores]);
     e.ok("admin", Comando::FijarResidencia { heroe: res.1, residencia: Some(Residencia::Asentamiento(madre as u32)) });
-    e.ok("admin", Comando::DarSuministro { ejercito: res.0, recurso: Madera, cantidad: 30_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: res.0, recurso: Madera, cantidad: 31_000 });
     let vis = e.ejercito("vis", 3, sitio, &[Tropa::Lenadores]);
-    e.ok("admin", Comando::DarSuministro { ejercito: vis.0, recurso: Piedra, cantidad: 30_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: vis.0, recurso: Piedra, cantidad: 31_000 });
     for (cuenta, h) in [("res", res.1), ("vis", vis.1)] {
         e.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe: h });
     }
@@ -1549,8 +1549,8 @@ fn el_residente_y_el_visitante_amigo_que_defienden_un_pueblo_y_pierden_quedan_he
     assert_eq!((h.0, dato(h, "pueblo"), dato(h, "heridos")), (t, pueblo as i64, 2), "gana el atacante y los dos defensores en persona quedan heridos");
     // El pueblo no cae: siguen dentro, con su columna. Los dos pierden la mitad (hacia abajo) de lo que llevaban: el residente la madera y el visitante amigo la piedra, misma regla para todos.
     assert_eq!((e.n.heroe(res.1).unwrap().heroe.presencia.ubicacion, e.n.heroe(vis.1).unwrap().heroe.presencia.ubicacion), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
-    assert_eq!(e.carga_de_columna(res.0, Madera), 30_001 - 15_000);
-    assert_eq!(e.carga_de_columna(vis.0, Piedra), 30_001 - 15_000, "el visitante amigo que defendió también pierde la mitad");
+    assert_eq!(e.carga_de_columna(res.0, Madera), 31_000 - 15_000);
+    assert_eq!(e.carga_de_columna(vis.0, Piedra), 31_000 - 15_000, "el visitante amigo que defendió también pierde la mitad");
     assert!(e.n.heroe_herido(res.1) && e.n.heroe_herido(vis.1) && !e.n.heroe_herido(beto.1));
     // Lo robado es del vencedor, hasta donde le quepa: el saqueo del almacén y la chatarra ya llenan parte de su carro.
     assert_eq!(dato(h, "carroPerdido"), 30_000, "15 000 de madera y 15 000 de piedra");

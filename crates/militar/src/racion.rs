@@ -74,8 +74,7 @@ pub fn hay_viveres(v: &Ritmo, t: Instante) -> bool {
     v.valor_en(t) > 0
 }
 
-/// Llena los víveres desde `t` con lo que ofrece la fuente (`ofrecido`, ya descontada su reserva): `min(hueco, ofrecido)`. Devuelve lo que
-/// se tomó de la fuente (al salir, al repostar, con la ración de un campamento).
+/// Llena los víveres desde `t` con lo que ofrece una fuente gratuita (`ofrecido`; la ración de un campamento): `min(hueco, ofrecido)`, exacto. Devuelve lo que se tomó.
 pub fn llenar(v: &mut Ritmo, t: Instante, ofrecido: Mil) -> Mil {
     let cap = v.maximo.unwrap_or(0);
     let toma = (cap - v.valor_en(t)).max(0).min(ofrecido.max(0));
@@ -83,10 +82,17 @@ pub fn llenar(v: &mut Ritmo, t: Instante, ofrecido: Mil) -> Mil {
     toma
 }
 
+/// Lo mismo desde un almacén o un carro (`ofrecido`, ya descontada su reserva): lo que sale de ellos va en **unidades enteras** (C3b), así que se toma
+/// `min(hueco, ofrecido)` hacia abajo a unidades y los víveres pueden quedar a menos de una unidad del tope (para quien repuesta en una plaza o una avanzada, ya están llenos).
+pub fn llenar_en_unidades(v: &mut Ritmo, t: Instante, ofrecido: Mil) -> Mil {
+    let hueco = (v.maximo.unwrap_or(0) - v.valor_en(t)).max(0);
+    llenar(v, t, base::entero(hueco.min(ofrecido.max(0))))
+}
+
 /// `pasarAViveres`: del carro a los víveres, nunca al revés: `min(pedido, trigo del carro, hueco)`. Devuelve lo movido.
 pub fn pasar_a_viveres(carga: &mut Carga, v: &mut Ritmo, t: Instante, pedido: Mil) -> Mil {
     let en_el_carro = carga.get(&Recurso::Trigo).copied().unwrap_or(0);
-    let movido = llenar(v, t, pedido.min(en_el_carro));
+    let movido = llenar_en_unidades(v, t, pedido.min(en_el_carro));
     if movido > 0 {
         let resto = en_el_carro - movido;
         if resto > 0 {

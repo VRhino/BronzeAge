@@ -73,6 +73,7 @@ impl OrdenMercado {
         if !tiene_mercado {
             return Err(ErrorOrden::SinMercado);
         }
+        let cantidad = base::entero(cantidad); // solo unidades enteras (C3b)
         if cantidad <= 0 {
             return Err(ErrorOrden::CantidadNoPositiva);
         }
@@ -198,22 +199,24 @@ mod pruebas {
     fn colocar_valida_actor_mercado_cantidad_y_stock_de_la_venta() {
         let r = r();
         let c = |tipo, cant, stock, aut, mer| OrdenMercado::colocar(&r, 1, 5, tipo, Recurso::Madera, cant, None, 1_000_000, 0, aut, mer, stock);
-        assert_eq!(c(TipoOrden::Compra, 10, 0, false, true).unwrap_err(), ErrorOrden::NoAutorizado);
-        assert_eq!(c(TipoOrden::Compra, 10, 0, true, false).unwrap_err(), ErrorOrden::SinMercado);
+        assert_eq!(c(TipoOrden::Compra, 10_000, 0, false, true).unwrap_err(), ErrorOrden::NoAutorizado);
+        assert_eq!(c(TipoOrden::Compra, 10_000, 0, true, false).unwrap_err(), ErrorOrden::SinMercado);
         assert_eq!(c(TipoOrden::Compra, 0, 0, true, true).unwrap_err(), ErrorOrden::CantidadNoPositiva);
-        assert_eq!(c(TipoOrden::Venta, 10, 9, true, true).unwrap_err(), ErrorOrden::SinStock);
-        assert!(c(TipoOrden::Venta, 10, 10, true, true).is_ok());
-        assert!(c(TipoOrden::Compra, 10, 0, true, true).is_ok(), "una compra no exige oro ni reserva nada");
+        assert_eq!(c(TipoOrden::Compra, 999, 0, true, true).unwrap_err(), ErrorOrden::CantidadNoPositiva, "menos de una unidad entera es nada (C3b)");
+        assert_eq!(c(TipoOrden::Venta, 10_000, 9_000, true, true).unwrap_err(), ErrorOrden::SinStock);
+        assert!(c(TipoOrden::Venta, 10_000, 10_000, true, true).is_ok());
+        assert_eq!(c(TipoOrden::Compra, 10_500, 0, true, true).unwrap().cantidad, 10_000, "la fracción se redondea hacia abajo");
+        assert!(c(TipoOrden::Compra, 10_000, 0, true, true).is_ok(), "una compra no exige oro ni reserva nada");
     }
 
     #[test]
     fn el_precio_por_defecto_es_el_de_referencia_y_no_se_valida_el_dado() {
         let r = r();
-        let o = OrdenMercado::colocar(&r, 1, 5, TipoOrden::Compra, Recurso::Piedra, 10, None, 1_200_000, 0, true, true, 0).unwrap();
+        let o = OrdenMercado::colocar(&r, 1, 5, TipoOrden::Compra, Recurso::Piedra, 10_000, None, 1_200_000, 0, true, true, 0).unwrap();
         assert_eq!(o.precio_unitario, 1_200_000);
-        let o = OrdenMercado::colocar(&r, 1, 5, TipoOrden::Compra, Recurso::Piedra, 10, Some(-3), 1_200_000, 0, true, true, 0).unwrap();
+        let o = OrdenMercado::colocar(&r, 1, 5, TipoOrden::Compra, Recurso::Piedra, 10_000, Some(-3), 1_200_000, 0, true, true, 0).unwrap();
         assert_eq!(o.precio_unitario, -3, "un precio negativo se acepta y luego no se liquida");
-        let o = OrdenMercado::colocar(&r, 1, 5, TipoOrden::Compra, Recurso::Oro, 10, None, 0, 0, true, true, 0).unwrap();
+        let o = OrdenMercado::colocar(&r, 1, 5, TipoOrden::Compra, Recurso::Oro, 10_000, None, 0, 0, true, true, 0).unwrap();
         assert_eq!(o.precio_unitario, 0, "el oro no tiene precio de referencia: se coloca igual");
     }
 

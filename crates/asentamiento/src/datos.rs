@@ -248,6 +248,27 @@ mod pruebas {
     use super::*;
 
     #[test]
+    fn los_costes_de_los_datos_son_unidades_enteras() {
+        // C3b: un coste se cobra en unidades enteras (hacia arriba si saliera fracción); los de los bloques ya lo son, así que nada se redondea al pagarlos.
+        let r = Reglas::cargar();
+        let mut costes: Vec<(String, &crate::recurso::Costo)> = vec![("coste adicional de pueblo".into(), &r.pueblos.coste_adicional)];
+        for &t in crate::catalogo::TIPOS {
+            let def = r.catalogo.tipo(t);
+            costes.push((format!("{t:?}"), &def.costo));
+            costes.extend(def.niveles.iter().enumerate().map(|(i, n)| (format!("{t:?} mejora {i}"), &n.costo_mejora)));
+        }
+        costes.extend(r.nivel.ascenso.iter().map(|(n, a)| (format!("ascenso {n}"), &a.costo)));
+        costes.extend(r.muralla.tarifa_por_celda.iter().enumerate().map(|(i, c)| (format!("celda de muralla {i}"), c)));
+        for e in [crate::avanzadas::Etapa::Atalaya, crate::avanzadas::Etapa::Fuerte, crate::avanzadas::Etapa::Ciudadela] {
+            costes.push((format!("{e:?}"), r.avanzadas.costo(e)));
+        }
+        costes.push(("materiales iniciales".into(), &r.materiales_iniciales));
+        for (nombre, c) in costes {
+            assert!(c.iter().all(|&(_, n)| n % 1_000 == 0), "{nombre}: {c:?}");
+        }
+    }
+
+    #[test]
     fn los_bloques_se_leen_del_documento() {
         let doc = "x\n<!-- parametros:A -->\n```json\n{\"n\": 2.5}\n```\n<!-- /parametros -->\ny";
         assert_eq!(bloque_de(doc, "A").unwrap()["n"], 2.5);

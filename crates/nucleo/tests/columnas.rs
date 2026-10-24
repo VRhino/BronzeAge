@@ -225,8 +225,8 @@ fn salir_al_mundo_valida_en_orden_carga_el_carro_llena_los_viveres_y_un_rechazo_
     assert_eq!(e.rechazada("ana", salir(h, &[99_999], &[])), rechazos::ESCUADRA_AJENA);
     assert_eq!(e.rechazada("ana", salir(h, &[milicia, milicia], &[])), rechazos::ESCUADRA_REPETIDA);
     assert_eq!(e.rechazada("ana", salir(h, &[], &[(Madera, -1)])), rechazos::CARGA_NEGATIVA);
-    assert_eq!(e.rechazada("ana", salir(h, &[], &[(Madera, 400_000), (Piedra, 100_001)])), rechazos::CARRO_LLENO, "el tope es del total del carro: 500");
-    assert_eq!(e.rechazada("ana", salir(h, &[], &[(Hierro, 1)])), rechazos::ALMACEN_SIN_EXISTENCIAS);
+    assert_eq!(e.rechazada("ana", salir(h, &[], &[(Madera, 400_000), (Piedra, 101_000)])), rechazos::CARRO_LLENO, "el tope es del total del carro: 500");
+    assert_eq!(e.rechazada("ana", salir(h, &[], &[(Hierro, 1_000)])), rechazos::ALMACEN_SIN_EXISTENCIAS);
     assert_eq!((e.n.version(), e.n.hash_estado(), e.n.estado().siguiente_id), (v, hash, ids), "los rechazos no dejan rastro");
 
     // La salida: columna personal quieta en la plaza, con la milicia, el carro y los víveres llenos de la plaza.
@@ -487,7 +487,7 @@ fn salir_del_campamento_da_la_racion_gratis_cada_media_hora_y_entrar_en_el_deja_
     let (v, hash) = (e.n.version(), e.n.hash_estado());
     assert_eq!(e.rechazada("beto", salir(&[], &[], Politica::Rechazar)), rechazos::NO_AUTORIZADO);
     assert_eq!(e.rechazada("ana", Comando::SalirDelCampamento { campamento: 9_999, heroe: h, escuadras: vec![], carga: vec![], politica: Politica::Rechazar }), rechazos::CAMPAMENTO_DESCONOCIDO);
-    assert_eq!(e.rechazada("ana", salir(&[], &[(Oro, 50_001)], Politica::Rechazar)), rechazos::ALMACEN_SIN_EXISTENCIAS, "solo se carga lo que hay en el almacén personal");
+    assert_eq!(e.rechazada("ana", salir(&[], &[(Oro, 51_000)], Politica::Rechazar)), rechazos::ALMACEN_SIN_EXISTENCIAS, "solo se carga lo que hay en el almacén personal");
     assert_eq!(e.rechazada("ana", salir(&[], &[(Oro, 600_000)], Politica::Rechazar)), rechazos::CARRO_LLENO);
     assert_eq!(e.rechazada("ana", salir(&[ids[0], ids[0]], &[], Politica::Rechazar)), rechazos::ESCUADRA_REPETIDA);
     assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash));
@@ -864,8 +864,10 @@ fn repostar_llena_los_viveres_en_una_plaza_propia_sin_bajar_de_su_reserva_y_solo
     assert_eq!(e.rechazada("ana", Comando::Repostar { heroe: a, asentamiento: 9_999 }), rechazos::ASENTAMIENTO_DESCONOCIDO);
     let trigo0 = e.almacen(Trigo);
     e.ok("ana", repostar.clone());
-    assert_eq!(e.viveres(col), 350_000);
-    assert_eq!(trigo0 - e.almacen(Trigo), 350_000 - llevaba, "sale del almacén de la plaza");
+    // Del almacén sale trigo en unidades enteras (C3b): los víveres quedan a menos de una unidad del tope, y eso ya es estar llenos.
+    assert!(e.viveres(col) > 349_000 && e.viveres(col) <= 350_000, "{}", e.viveres(col));
+    assert_eq!(trigo0 - e.almacen(Trigo), e.viveres(col) - llevaba, "sale del almacén de la plaza");
+    assert_eq!((trigo0 - e.almacen(Trigo)) % 1_000, 0, "en unidades enteras");
     assert!(hechos(&e.n, "ejercito.reabastecido").is_empty(), "el goteo no es noticia");
     assert_eq!(e.rechazada("ana", repostar), rechazos::COLUMNA_VIVERES_LLENOS);
     // Con casi nada, sí: una columna de administración con 50 de víveres.

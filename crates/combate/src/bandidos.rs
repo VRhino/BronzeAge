@@ -155,7 +155,8 @@ pub fn botin_de_bandidos(r: &Reglas, recientes: &mut Vec<Instante>, nivel: u8, a
         (UNO - b.caida_por_cada * (n - b.completas)).max(0)
     };
     recientes.push(ahora);
-    (nivel_de(r, nivel).oro_por_heroe as i128 * factor as i128 + UNO as i128 / 2).div_euclid(UNO as i128) as Mil
+    // En unidades enteras de oro, hacia abajo (C3b): nunca se crea de más.
+    base::entero((nivel_de(r, nivel).oro_por_heroe as i128 * factor as i128 / UNO as i128) as Mil)
 }
 
 #[cfg(test)]
@@ -345,7 +346,7 @@ mod pruebas {
         let mut hist = vec![];
         let oro: Vec<Mil> = (0..15).map(|i| botin_de_bandidos(r, &mut hist, 3, i * 1000)).collect();
         assert_eq!(oro[..8], [36_000; 8]);
-        assert_eq!(oro[8..14], [30_600, 25_200, 19_800, 14_400, 9_000, 0], "n = 9‥14: 1 − 0,15 × (n − 8), y desde la 14.ª, solo experiencia");
+        assert_eq!(oro[8..14], [30_000, 25_000, 19_000, 14_000, 9_000, 0], "n = 9‥14: 1 − 0,15 × (n − 8) en unidades enteras hacia abajo, y desde la 14.ª, solo experiencia");
         assert_eq!(oro[14], 0);
         assert_eq!(hist.len(), 15);
     }

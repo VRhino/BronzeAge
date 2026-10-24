@@ -551,8 +551,7 @@ impl Nucleo {
         let Estado { militar, asentamientos, .. } = &mut self.estado;
         let Some(a) = asentamientos.get_mut(&plaza) else { return };
         let almacen = &mut a.economia.almacen;
-        let consumido = racion.min(almacen.cantidad(Recurso::Trigo));
-        almacen.quitar(Recurso::Trigo, consumido);
+        let consumido = almacen.consumir(Recurso::Trigo, racion); // flujo por minuto: la fracción va al resto oculto
         // Lo que come la guarnición es parte del paso de minuto: cuenta en la tendencia «+N/min» del trigo.
         a.economia.tendencia.almacen[Recurso::Trigo.indice()] -= consumido;
         // La parte de la ración que se pudo dar (ppm): con ella entera la moral sube y con menos baja en proporción a lo que faltó.

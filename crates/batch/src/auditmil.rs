@@ -45,13 +45,13 @@ pub fn recursos(n: &Nucleo) -> [i64; 29] {
     let mut sumar = |r: Recurso, q: i64| v[r.indice()] += q;
     for a in e.asentamientos.values() {
         for &r in TODOS.iter() {
-            sumar(r, a.economia.almacen.cantidad(r));
-            a.economia.pueblos.iter().for_each(|p| sumar(r, p.almacen.cantidad(r)));
-            a.economia.avanzadas.iter().for_each(|x| sumar(r, x.almacen.cantidad(r)));
+            sumar(r, a.economia.almacen.disponible(r));
+            a.economia.pueblos.iter().for_each(|p| sumar(r, p.almacen.disponible(r)));
+            a.economia.avanzadas.iter().for_each(|x| sumar(r, x.almacen.disponible(r)));
         }
     }
     for x in e.combate.huerfanas.values() {
-        TODOS.iter().for_each(|&r| sumar(r, x.almacen.cantidad(r)));
+        TODOS.iter().for_each(|&r| sumar(r, x.almacen.disponible(r)));
     }
     e.ejercitos.values().flat_map(|c| c.columna.carga.iter()).for_each(|(&r, &q)| sumar(r, q));
     e.comercio.flota.iter().flat_map(|c| c.contenido.iter()).for_each(|(&r, &q)| sumar(r, q));

@@ -527,7 +527,7 @@ impl Sim<'_> {
 
     /// Cantidades y capacidades de un almacén.
     fn almacen_de(&self, id: u64) -> ([i64; 29], [i64; 29]) {
-        let (c, k) = self.n.estado().asentamientos[&id].economia.almacen.partes();
+        let (c, k, _) = self.n.estado().asentamientos[&id].economia.almacen.partes();
         (*c, *k)
     }
 
@@ -801,7 +801,7 @@ impl Sim<'_> {
     /// sin columna (el de su residencia, Entrar con todo).
     fn en_el_mundo(&self, r: Recurso) -> i64 {
         let e = self.n.estado();
-        e.asentamientos.values().map(|a| a.economia.almacen.cantidad(r)).sum::<i64>()
+        e.asentamientos.values().map(|a| a.economia.almacen.disponible(r)).sum::<i64>()
             + e.ejercitos.values().map(|c| c.columna.carga.get(&r).copied().unwrap_or(0)).sum::<i64>()
             + e.comercio.flota.iter().map(|c| c.contenido.get(&r).copied().unwrap_or(0)).sum::<i64>()
             + self.n.heroes().map(|h| h.almacen_personal.get(&r).copied().unwrap_or(0) + h.carro.get(&r).copied().unwrap_or(0)).sum::<i64>()

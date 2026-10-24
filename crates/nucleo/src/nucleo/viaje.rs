@@ -396,9 +396,8 @@ impl Nucleo {
         let tasa = self.estado.reglas.economia.comercio.peaje;
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let cobros = self.estado.comercio.flota[i].cobrar_peajes(t, tasa);
-        if !cobros.is_empty() {
-            self.tr.tocar(Clase::Caravana, id);
-        }
+        // Los peajes alcanzados se descartan se cobre o no: la caravana cambia aunque no pague nada (con unidades enteras, C3b, una carga pequeña no paga).
+        self.tr.tocar(Clase::Caravana, id);
         for CobroPeaje { ciudad, cobrado } in cobros {
             let ciudad_id = ciudad as u64;
             let Some(plaza) = self.estado.asentamientos.get_mut(&ciudad_id) else {

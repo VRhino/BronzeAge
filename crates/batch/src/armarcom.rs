@@ -337,6 +337,7 @@ fn invariantes(x: &Entrada) -> Vec<Metrica> {
     vec![
         uno("inv_almacen", "Almacenes de plazas y pueblos fuera de [0, capacidad]", v.almacen, "Economia_Construccion §15", "Comprobado cada 6 horas de mundo en todas las plazas y pueblos."),
         uno("inv_carga", "Carros y caravanas por encima de su capacidad o con cantidades negativas", v.carga, "Comercio_Caravanas §5", "Carro de cada columna y contenido de cada caravana de la flota."),
+        uno("inv_fracciones", "Cantidades almacenadas que no son unidades enteras", v.fraccion, "Economia_Construccion §4 y Comercio_Caravanas §1 (economía entera, C3b)", "Almacenes de plaza, pueblo y avanzada (con su resto oculto en [0, 1000)), carros, caravanas, almacenes personales, existencias de los campamentos, trueques y órdenes del mercado: cada 6 horas de mundo."),
         uno("inv_trueque", "Trueques incoherentes", v.trueque, "Comercio_Caravanas §4", "Más entregado que pactado, o un trueque activo con una de sus plazas ya inexistente."),
         uno("inv_sin_plan", "Caravanas en camino sin plan o sin su evento de llegada", v.sin_plan, "Comercio_Caravanas §6 y Reloj_Y_Eventos", "Toda caravana en tránsito o retornando debe tener un plan de al menos dos vértices y su llegada vigente en la cola."),
         uno("inv_cola", "Eventos de comercio vigentes que no corresponden al estado", v.cola, "Reloj_Y_Eventos §2 (invalidación por generación)", "Llegadas, peajes, fin de preparación, caducidades y pulsos cuya entidad ya no está en el estado que los justifica."),

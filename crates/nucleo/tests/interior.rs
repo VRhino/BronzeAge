@@ -470,12 +470,14 @@ async fn el_paso_de_minuto_manda_solo_lo_que_cambia_con_su_mascara_y_la_tendenci
     };
     assert!(datos.edificios.is_empty() && datos.trazado.is_none() && datos.zona.is_empty() && datos.recintos.is_empty(), "lo que no cambia no viaja");
 
-    // La tendencia es el neto real del paso: lo que cambió cada recurso y cada clase de la población (con el escalón del servidor, sin interpolar).
+    // La tendencia es el neto real del paso: lo que cambió cada recurso (lo exacto, con su resto oculto) y cada clase de la población (con el escalón del servidor, sin
+    // interpolar). El valor va en unidades enteras (C3b), así que su salto y la tendencia difieren en menos de una unidad.
     let mut algo_cambio = false;
     for (r, e) in &ana.plaza.almacen {
         let (antes_r, ahora_r) = (antes.almacen[r].cantidad.as_ref().unwrap(), e.cantidad.as_ref().unwrap());
         assert!(ahora_r.en_escalones);
-        assert_eq!(ahora_r.valor_en_t0 - antes_r.valor_en_t0, ahora_r.por_minuto, "tendencia de {r}");
+        assert_eq!(ahora_r.valor_en_t0 % 1_000, 0, "el almacén se ve en unidades enteras: {r}");
+        assert!((ahora_r.valor_en_t0 - antes_r.valor_en_t0 - ahora_r.por_minuto).abs() < 1_000, "tendencia de {r}: {} contra {}", ahora_r.por_minuto, ahora_r.valor_en_t0 - antes_r.valor_en_t0);
         algo_cambio |= ahora_r.por_minuto != 0;
     }
     assert!(algo_cambio, "la granja produce y la población come");
@@ -492,7 +494,7 @@ async fn el_paso_de_minuto_manda_solo_lo_que_cambia_con_su_mascara_y_la_tendenci
     assert_eq!(ana.al_dia().await.len(), 1);
     for (r, e) in &ana.plaza.almacen {
         let (a, n) = (antes.almacen[r].cantidad.as_ref().unwrap(), e.cantidad.as_ref().unwrap());
-        assert_eq!(n.valor_en_t0 - a.valor_en_t0, n.por_minuto, "tendencia de {r} en el segundo paso");
+        assert!((n.valor_en_t0 - a.valor_en_t0 - n.por_minuto).abs() < 1_000, "tendencia de {r} en el segundo paso: lo exacto contra el salto de las unidades enteras");
     }
     assert_eq!(ana.plaza.version_interior, antes.version_interior + 1);
     let n = w.parar().await;

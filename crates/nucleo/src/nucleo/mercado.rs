@@ -464,7 +464,7 @@ impl Nucleo {
                 }
                 let capacidad = self.capacidad_de_carga(*ejercito).unwrap_or(CAPACIDAD_CARRO);
                 let carro = &mut self.estado.ejercitos.get_mut(ejercito).expect("existe").columna.carga;
-                let n = (*cantidad).min((capacidad - total(carro)).max(0));
+                let n = base::entero((*cantidad).min((capacidad - total(carro)).max(0))); // unidades enteras (C3b)
                 if n == 0 {
                     return Err(sin_cambios());
                 }

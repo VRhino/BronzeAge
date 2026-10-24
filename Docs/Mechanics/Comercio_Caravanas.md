@@ -7,6 +7,16 @@ reconfigura y vuelve), el **mercado de una plaza** (órdenes y mostrador), el **
 peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ruinas.
 
 - **Verificado contra:** `e83cb9b` (2026-10-11) más las decisiones de esa jornada (comisión, recargo por reputación, reparto, capacidad, reputación entre Facciones).
+- **Corregido el 2026-10-24: economía entera** (decisión C3b del autor; Rust, foto `BAN26`). Todo lo que se guarda o se mueve va en **unidades enteras** (múltiplos de 1.000 milésimas) y **cualquier fracción se redondea hacia abajo**: nunca se crea de más. En este documento:
+  - **Trueque** (§4.1): cada línea pactada se redondea hacia abajo al proponer; una línea de menos de una unidad es `cantidad_no_positiva`. Como lo pactado y lo entregado son enteros, la regla «un resto de menos de una unidad salda la línea» (§4.4) ya no se dispara en el núcleo (se conserva como regla pura).
+  - **Reparto** (§4.3): cada línea carga `min(stock, faltante, capacidad libre)` redondeado hacia abajo a unidades (la capacidad de una caravana puede no ser entera).
+  - **Comisión y recargo** (§3.3): se calculan como siempre y se **acuñan en unidades enteras hacia abajo** (11,25 de comisión acuñan 11); el recargo que sale del origen es el mismo entero que entra en el destino (el oro se conserva).
+  - **Peaje** (§7.3): `tasa × contenido` por recurso, hacia abajo **a unidades**: el 2 % de 40 (0,8) no cobra nada; el de 196 cobra 3.
+  - **Lanzar a mano, cargar y descargar una aparcada** (§5.6, §5.7): cada línea, en unidades enteras hacia abajo.
+  - **Mostrador** (§8.3): se sirven unidades enteras (`q` baja de unidad en unidad hasta cumplir los topes) y el oro de cada lote, `⌈q × precio neto⌉`, se cobra en **unidades enteras hacia arriba** (como en el campamento, §9.2): 50 unidades a 1,03 cuestan 52. Una orden (§8.1) se coloca con su cantidad hacia abajo.
+  - **Campamento** (§9): las compras ya eran enteras; la reposición (§9.3) deja las existencias en unidades enteras hacia abajo.
+  - **Pérdida de carros, Aguante y reparto de la carga entre carros** (§15, Combate §7.1): proporcional y hacia abajo **a unidades**, recurso a recurso; lo que deja el redondeo no va en ningún carro.
+  - El acarreo (§12) mueve la capacidad del carro (500, entera) y su almacén local va en enteros con resto oculto en la extracción.
 - **Fuentes:** `engine/trade.ts`, `engine/trueque.ts`, `engine/caravanas.ts`, `engine/market.ts`, `engine/mercadoMercenario.ts`, `engine/redCaminos.ts`, `engine/ruina.ts`, `engine/reputacion.ts`,
   `engine/politicas.ts`, `engine/asentamientoQuery.ts` (cupos), `world/rutas.ts`, `world/grafoNavegacion.ts`, `session/comandos/comercio.ts`, `session/comandos/mercenarios.ts` (`comprarEnCampamento`),
   `session/comandos/ejercitos.ts` (`entregarDeCaravana`), `session/comandos/autorizacion.ts`, `session/proyecciones/jugador.ts` (lo que se ve).
@@ -852,6 +862,7 @@ Los bloques de las secciones anteriores son los de este sistema. Además, de otr
 | Invariante | Test que lo vigila |
 |---|---|
 | Un trueque tiene ≥ 1 línea por lado, cantidades > 0 y sin recurso repetido en un lado | `truequeCompuesto.test.ts` («rechaza un lado vacío…») |
+| Lo pactado, lo entregado, lo que lleva una caravana o un carro y las existencias de un campamento son unidades enteras (C3b, 2026-10-24) | Rust: `Nucleo::fracciones_almacenadas` (auditoría de cambios y batch `inv_fracciones`) |
 | Cada recurso entregado se abona a su línea; el acuerdo se cierra solo con todas saldadas | `truequeCompuesto.test.ts` («abonos y cierre») |
 | Un cargamento por lado: líneas en orden hasta llenar la caravana; sin stock de una línea sale lo de las demás | `truequeCompuesto.test.ts` («un cargamento por lado») |
 | Vencer sin cumplir penaliza en proporción a lo no entregado | `truequeCompuesto.test.ts` («vencer sin cumplir») |

@@ -13,7 +13,7 @@ use crate::tipos::{total, AcuerdoId, AsentamientoId, CaravanaId, Carga, Escuadra
 use crate::viaje::{instante_de_progreso, invertir_plan, invertir_ruta, progreso_en, CobroPeaje, Peaje};
 use asentamiento::datos::{por, UNO};
 use asentamiento::{Almacen, Recurso};
-use base::{Instante, Mil, Plan, Punto};
+use base::{entero, Instante, Mil, Plan, Punto};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TipoCaravana {
@@ -509,9 +509,10 @@ impl Caravana {
         let prep = r.k_preparacion_por_carro * (self.carros.len() as i64 - 1).max(0);
         let sale_en = (ahora + prep).max(p.salir_en.unwrap_or(0));
         let estado = if sale_en > ahora { EstadoCaravana::Preparando } else { EstadoCaravana::EnTransito };
+        // Solo unidades enteras (C3b): una línea con fracción carga su parte entera.
         for (&rec, &n) in &p.carga {
+            let n = almacen.quitar(rec, n);
             if n > 0 {
-                almacen.quitar(rec, n);
                 self.contenido.insert(rec, n);
             }
         }
@@ -638,7 +639,7 @@ impl Caravana {
         for pj in alcanzados {
             let mut cobrado = Carga::new();
             for (&rec, n) in self.contenido.iter_mut() {
-                let c = (*n as i128 * tasa as i128 / UNO as i128) as Mil;
+                let c = entero((*n as i128 * tasa as i128 / UNO as i128) as Mil);
                 if c > 0 {
                     cobrado.insert(rec, c);
                     *n -= c;
@@ -742,7 +743,7 @@ impl Caravana {
         if self.estado != EstadoCaravana::Aparcada {
             return Err(ErrorCaravana::NoAparcada);
         }
-        let n = pedido.min(self.capacidad_efectiva(r, factor_capacidad) - self.carga_total()).min(almacen.cantidad(recurso));
+        let n = entero(pedido.min(self.capacidad_efectiva(r, factor_capacidad) - self.carga_total()).min(almacen.cantidad(recurso)));
         if n <= 0 {
             return Err(ErrorCaravana::NadaQueMover);
         }
@@ -757,7 +758,7 @@ impl Caravana {
             return Err(ErrorCaravana::NoAparcada);
         }
         let lleva = self.contenido.get(&recurso).copied().unwrap_or(0);
-        let n = pedido.min(lleva).min(almacen.espacio(recurso));
+        let n = entero(pedido.min(lleva).min(almacen.espacio(recurso)));
         if n <= 0 {
             return Err(ErrorCaravana::NadaQueMover);
         }
@@ -831,7 +832,7 @@ impl Caravana {
             perdido = std::mem::take(&mut self.contenido);
         } else if cap_total > 0 {
             for (&rec, n) in self.contenido.iter_mut() {
-                let l = (*n as i128 * cap_perdida as i128 / cap_total as i128) as Mil;
+                let l = entero((*n as i128 * cap_perdida as i128 / cap_total as i128) as Mil);
                 if l > 0 {
                     perdido.insert(rec, l);
                     *n -= l;
@@ -843,7 +844,7 @@ impl Caravana {
     }
 
     /// Lo que lleva cada carro, en el orden de la lista: la carga repartida proporcionalmente a su capacidad (floor, como en la pérdida de carros), que es como Unity recibe los carros de una batalla.
-    /// La carga no está asignada a carros concretos: lo que deja el redondeo (menos de una milésima por recurso y carro) no va en ninguno, y un carro sin animal no lleva nada.
+    /// La carga no está asignada a carros concretos: lo que deja el redondeo a unidades enteras (menos de una unidad por recurso y carro) no va en ninguno, y un carro sin animal no lleva nada.
     pub fn carga_por_carro(&self, r: &ReglasFlota) -> Vec<Carga> {
         let capacidad_de = |c: &Carro| c.animal.map_or(0, |a| por(r.carro(c.tipo).capacidad_base, r.animal(a).factor_carga));
         let cap_total: Mil = self.carros.iter().map(capacidad_de).sum();
@@ -851,7 +852,7 @@ impl Caravana {
             .iter()
             .map(|c| {
                 let cap = capacidad_de(c);
-                self.contenido.iter().filter(|_| cap_total > 0).map(|(&rec, &n)| (rec, (n as i128 * cap as i128 / cap_total as i128) as Mil)).filter(|&(_, l)| l > 0).collect()
+                self.contenido.iter().filter(|_| cap_total > 0).map(|(&rec, &n)| (rec, entero((n as i128 * cap as i128 / cap_total as i128) as Mil))).filter(|&(_, l)| l > 0).collect()
             })
             .collect()
     }
@@ -861,7 +862,7 @@ impl Caravana {
     pub fn perder_fraccion_de_carga(&mut self, fraccion: i64) -> Carga {
         let mut perdido = Carga::new();
         for (&rec, n) in self.contenido.iter_mut() {
-            let l = (*n as i128 * fraccion.clamp(0, UNO) as i128 / UNO as i128) as Mil;
+            let l = entero((*n as i128 * fraccion.clamp(0, UNO) as i128 / UNO as i128) as Mil);
             if l > 0 {
                 perdido.insert(rec, l);
                 *n -= l;
@@ -1047,9 +1048,9 @@ mod pruebas {
         assert_eq!(alm.cantidad(Recurso::Madera), 40_000);
         let lleno = ContextoCarro { carros_en_uso: 3, ..con_carp };
         assert_eq!(c.agregar_carro(&r, TipoCarro::Basico, &lleno, &mut alm), Err(ErrorCaravana::CupoDeCarros));
-        let mut pobre = almacen(&[(Recurso::Madera, 19_999)]);
+        let mut pobre = almacen(&[(Recurso::Madera, 19_000)]);
         assert_eq!(c.agregar_carro(&r, TipoCarro::Basico, &ctx, &mut pobre), Err(ErrorCaravana::SinRecursos));
-        assert_eq!(pobre.cantidad(Recurso::Madera), 19_999, "no cobra si falla");
+        assert_eq!(pobre.cantidad(Recurso::Madera), 19_000, "no cobra si falla");
         c.estado = EnTransito;
         assert_eq!(c.agregar_carro(&r, TipoCarro::Basico, &ctx, &mut alm), Err(ErrorCaravana::NoDisponible));
         let mut militar = Caravana::nueva(2, 10, Punto::default());
@@ -1397,8 +1398,8 @@ mod pruebas {
         assert_eq!(c.peajes.len(), 1);
         let t2 = c.proximo_peaje().unwrap();
         let cobros = c.cobrar_peajes(t2, tasa);
-        assert_eq!(cobros[0].cobrado[&Recurso::Madera], 3_920, "el segundo peaje es el 2 % de lo que queda, no de lo original");
-        assert_eq!(c.contenido[&Recurso::Madera], 192_080);
+        assert_eq!(cobros[0].cobrado[&Recurso::Madera], 3_000, "el segundo peaje es el 2 % de lo que queda (3,92), en unidades enteras hacia abajo");
+        assert_eq!(c.contenido[&Recurso::Madera], 193_000);
         assert!(c.peajes.is_empty() && c.proximo_peaje().is_none());
         // Al retornar no hay peajes ni nada que cobrar.
         c.llegar(c.llegada_en().unwrap()).unwrap();
@@ -1409,16 +1410,16 @@ mod pruebas {
     fn dos_peajes_alcanzados_a_la_vez_se_cobran_en_orden_y_la_carga_pequena_no_paga() {
         let r = r();
         let tasa = Reglas::cargar().peaje;
-        let mut c = en_marcha(&r, &[(Recurso::Madera, 40)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
-        // 2 % de 0,040 = 0,0008 → 0 milésimas: nada que cobrar, pero el peaje se descarta igualmente.
+        let mut c = en_marcha(&r, &[(Recurso::Madera, 40_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
+        // 2 % de 40 = 0,8 → 0 unidades: nada que cobrar, pero el peaje se descarta igualmente.
         let t = c.proximo_peaje().unwrap();
         assert!(c.cobrar_peajes(t, tasa).is_empty());
         assert!(c.peajes.is_empty(), "se descartan los alcanzados, se haya cobrado o no");
-        assert_eq!(c.contenido[&Recurso::Madera], 40);
+        assert_eq!(c.contenido[&Recurso::Madera], 40_000);
         let mut d = en_marcha(&r, &[(Recurso::Madera, 200_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
         let cobros = d.cobrar_peajes(t, tasa);
         assert_eq!(cobros.iter().map(|c| c.ciudad).collect::<Vec<_>>(), vec![1, 2]);
-        assert_eq!(d.contenido[&Recurso::Madera], 200_000 - 4_000 - 3_920);
+        assert_eq!(d.contenido[&Recurso::Madera], 200_000 - 4_000 - 3_000);
     }
 
     #[test]
@@ -1524,10 +1525,10 @@ mod pruebas {
     fn perder_una_fraccion_de_la_carga_recurso_a_recurso() {
         let mut c = buey();
         c.contenido.insert(Recurso::Madera, 1_000_000);
-        c.contenido.insert(Recurso::Piedra, 3);
+        c.contenido.insert(Recurso::Piedra, 3_000);
         let perdido = c.perder_fraccion_de_carga(700_000);
         assert_eq!((perdido[&Recurso::Madera], c.contenido[&Recurso::Madera]), (700_000, 300_000), "pierde el 70 %, se salva el 30 %");
-        assert_eq!((perdido[&Recurso::Piedra], c.contenido[&Recurso::Piedra]), (2, 1), "hacia abajo: de 2,1 milésimas se pierden 2");
+        assert_eq!((perdido[&Recurso::Piedra], c.contenido[&Recurso::Piedra]), (2_000, 1_000), "hacia abajo y en unidades enteras: de 2,1 se pierden 2");
     }
 
     // ---- la máquina de estados ----

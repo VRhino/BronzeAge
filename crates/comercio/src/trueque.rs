@@ -120,7 +120,7 @@ fn validar(lineas: &[(Recurso, Mil)]) -> Result<Vec<Linea>, ErrorTrueque> {
     }
     let mut vistos = Vec::new();
     for &(r, n) in lineas {
-        if n <= 0 {
+        if base::entero(n) <= 0 {
             return Err(ErrorTrueque::CantidadNoPositiva);
         }
         if vistos.contains(&r) {
@@ -128,7 +128,7 @@ fn validar(lineas: &[(Recurso, Mil)]) -> Result<Vec<Linea>, ErrorTrueque> {
         }
         vistos.push(r);
     }
-    Ok(lineas.iter().map(|&(r, n)| Linea::nueva(r, n)).collect())
+    Ok(lineas.iter().map(|&(r, n)| Linea::nueva(r, base::entero(n))).collect())
 }
 
 impl AcuerdoTrueque {
@@ -357,14 +357,16 @@ mod pruebas {
     fn proponer_valida_lados_cantidades_y_autorizacion() {
         let r = reglas();
         let p = |a, b, la: &[(Recurso, Mil)], lb: &[(Recurso, Mil)], aut| AcuerdoTrueque::proponer(&r.trueque, 1, a, b, la, lb, 0, aut);
-        assert_eq!(p(1, 1, &[(Madera, 1)], &[(Piedra, 1)], true).unwrap_err(), ErrorTrueque::MismoAsentamiento);
-        assert_eq!(p(1, 2, &[], &[(Piedra, 1)], true).unwrap_err(), ErrorTrueque::LadoVacio);
-        assert_eq!(p(1, 2, &[(Madera, 1)], &[], true).unwrap_err(), ErrorTrueque::LadoVacio);
-        assert_eq!(p(1, 2, &[(Madera, 0)], &[(Piedra, 1)], true).unwrap_err(), ErrorTrueque::CantidadNoPositiva);
-        assert_eq!(p(1, 2, &[(Madera, 5), (Madera, 5)], &[(Piedra, 1)], true).unwrap_err(), ErrorTrueque::RecursoRepetido);
-        assert_eq!(p(1, 2, &[(Madera, 5)], &[(Piedra, 1)], false).unwrap_err(), ErrorTrueque::NoAutorizado);
-        assert!(p(1, 2, &[(Madera, 5)], &[(Madera, 5)], true).is_ok(), "el mismo recurso en lados distintos vale; el oro también");
-        assert!(p(1, 2, &[(Oro, 5)], &[(Madera, 5)], true).is_ok());
+        assert_eq!(p(1, 1, &[(Madera, 1_000)], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::MismoAsentamiento);
+        assert_eq!(p(1, 2, &[], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::LadoVacio);
+        assert_eq!(p(1, 2, &[(Madera, 1_000)], &[], true).unwrap_err(), ErrorTrueque::LadoVacio);
+        assert_eq!(p(1, 2, &[(Madera, 0)], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::CantidadNoPositiva);
+        assert_eq!(p(1, 2, &[(Madera, 999)], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::CantidadNoPositiva, "menos de una unidad entera es nada (C3b)");
+        assert_eq!(p(1, 2, &[(Madera, 5_000), (Madera, 5_000)], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::RecursoRepetido);
+        assert_eq!(p(1, 2, &[(Madera, 5_000)], &[(Piedra, 1_000)], false).unwrap_err(), ErrorTrueque::NoAutorizado);
+        assert!(p(1, 2, &[(Madera, 5_000)], &[(Madera, 5_000)], true).is_ok(), "el mismo recurso en lados distintos vale; el oro también");
+        assert_eq!(p(1, 2, &[(Madera, 5_700)], &[(Piedra, 1_000)], true).unwrap().lineas_a[0].cantidad_total, 5_000, "lo pactado va en unidades enteras, hacia abajo");
+        assert!(p(1, 2, &[(Oro, 5_000)], &[(Madera, 5_000)], true).is_ok());
     }
 
     #[test]
@@ -616,7 +618,7 @@ mod pruebas {
         let mut b = activo(10_000);
         b.abonar(Lado::A, &[(Madera, 9_000)].into_iter().collect(), (1, 2));
         assert_eq!(b.pendiente(Lado::A), vec![(Madera, 1_000)]);
-        assert_eq!(activo(500).pendiente(Lado::A), vec![(Madera, 500)]);
+        assert_eq!(activo(1_000).pendiente(Lado::A), vec![(Madera, 1_000)]);
     }
 
     #[test]

@@ -348,7 +348,7 @@ impl Nucleo {
                 if h.heroe.residencia.is_none() {
                     return Err(rechazo(rechazos::HEROE_SIN_RESIDENCIA, "el almacén personal vive donde se reside".into()));
                 }
-                let n = (*cantidad).min((cr.mercenarios.capacidad_almacen_personal - total(&h.almacen_personal)).max(0));
+                let n = base::entero((*cantidad).min((cr.mercenarios.capacidad_almacen_personal - total(&h.almacen_personal)).max(0))); // unidades enteras (C3b)
                 if n == 0 {
                     return Err(sin_cambios());
                 }

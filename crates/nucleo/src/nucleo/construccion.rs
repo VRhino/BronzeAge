@@ -58,7 +58,8 @@ const ORDEN_ERA: u32 = 1;
 // placeholder: lo darán la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
 const FACTOR_EXTRA: i64 = UNO;
 
-/// Lo que del interior de una plaza cambia con el paso de minuto y es la base de la tendencia «+N/min»: el almacén y la población entera (los restos ocultos no viajan).
+/// Lo que del interior de una plaza cambia con el paso de minuto y es la base de la tendencia «+N/min»: el almacén **exacto** (con su resto oculto: el neto real del
+/// flujo, aunque lo visible vaya en unidades enteras) y la población entera (sus restos no viajan).
 struct Contadores {
     almacen: [Mil; 29],
     poblacion: [i64; 3],
@@ -67,7 +68,7 @@ struct Contadores {
 impl Contadores {
     fn de(e: &asentamiento::asentamiento::Asentamiento) -> Self {
         let (pesants, artesanos, nobleza) = e.poblacion.enteros();
-        Contadores { almacen: *e.almacen.partes().0, poblacion: [pesants, artesanos, nobleza] }
+        Contadores { almacen: asentamiento::recurso::TODOS.map(|r| e.almacen.disponible(r)), poblacion: [pesants, artesanos, nobleza] }
     }
 
     /// Lo que cambió desde `antes`: el neto de un paso de minuto.

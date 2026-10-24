@@ -93,6 +93,7 @@ impl Nucleo {
 
     /// Cobra `precio` (milésimas de oro) de la bolsa de la compra, o rechaza sin tocar nada si no llega.
     fn cobrar(&mut self, bolsa: &Bolsa, precio: Mil) -> Result<(), Respuesta> {
+        let precio = base::entero_arriba(precio); // el oro se cobra en unidades enteras, hacia arriba (C3b)
         let v = self.estado.version;
         let falta = |hay: Mil| Respuesta::rechazo(rechazos::INTEL_SIN_ORO, format!("cuesta {} de oro y hay {}", precio / 1_000, hay / 1_000), v);
         match *bolsa {

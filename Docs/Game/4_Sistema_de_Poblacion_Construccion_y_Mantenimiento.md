@@ -231,6 +231,8 @@ Van por AUTO-CONSTRUCCIÓN (igual que Granja/Cantera), disparadas en cuanto se c
 ## 4.3 Almacenamiento
 Límites de almacenaje por recurso, ampliables construyendo más capacidad. El superávit que excede el límite dispara construcción automática de más almacenamiento.
 
+**Todo lo almacenado va en unidades enteras** (decidido el 2026-10-24, C3b): ningún almacén —de plaza, de pueblo o de avanzada—, carro, caravana, almacén personal ni existencia de un campamento guarda decimales. Lo que corre minuto a minuto (producción, extracción, recetas, comida, mantenimiento y recaudación) lleva por dentro un **resto oculto**, como la población: entra una unidad cuando ese resto la completa y sale en cuanto el consumo empieza a comérsela, así que lo que se ve nunca es más de lo que de verdad hay. Lo que se mueve de una vez (comercio, entregas, comisiones, botín, saqueo, el reparto de la carga entre carros) va en unidades enteras **redondeando hacia abajo**: nunca se crea de más. Lo que se cobra (un coste, un precio) se redondea hacia arriba.
+
 **Con el almacén lleno, la producción se pausa** (decidido el 2026-10-11): un extractor solo saca lo que cabe y no gasta el yacimiento por lo que sobraría; un taller solo fabrica lo que cabe y solo consume los insumos de eso. La Granja y la Leñera, que no gastan ningún yacimiento, simplemente no suman lo que no cabe. El edificio queda marcado «pausado por almacén lleno».
 
 Un asentamiento **nace con 400 de capacidad por recurso**. Con menos, la ciudad quedaría encerrada: la reserva de construcción que protege el mantenimiento le impediría gastar los 50 de madera del Almacén, que es justo el edificio que sube ese techo.

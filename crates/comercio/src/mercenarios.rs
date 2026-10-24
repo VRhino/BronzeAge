@@ -83,7 +83,7 @@ impl MercadoMercenario {
                 c.stock.insert(b, tope);
             }
             for (&b, &cont) in self.contadores.iter().filter(|(b, &n)| n > 0 && !r.pilas.contains_key(b)) {
-                let nuevo = (c.de(b) + por(cont, r.proporcion_repone)).min(r.tope_por_bien);
+                let nuevo = base::entero((c.de(b) + por(cont, r.proporcion_repone)).min(r.tope_por_bien)); // existencias en unidades enteras (C3b)
                 c.stock.insert(b, nuevo);
             }
         }

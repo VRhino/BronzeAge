@@ -13,7 +13,7 @@ use crate::precio::tasa;
 use crate::tipos::AsentamientoId;
 use asentamiento::datos::{por, UNO};
 use asentamiento::{Almacen, Recurso};
-use base::{Instante, Mil};
+use base::{entero, entero_arriba, Instante, Mil, UNIDAD};
 
 /// El carro de la columna, en lo que importa a esta orden.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,7 +131,8 @@ pub fn comerciar(
     if precio_neto <= 0 {
         return Err(ErrorMostrador::PrecioNoPositivo);
     }
-    let oro_de = |q: Mil| por_arriba(q, precio_neto);
+    // Unidades enteras (C3b): la mercancía se sirve en unidades y el oro de cada lote se cobra en unidades enteras, hacia arriba (como en el campamento).
+    let oro_de = |q: Mil| entero_arriba(por_arriba(q, precio_neto));
     // Cuánto crece el carro con `q` unidades: vende → entra mercancía y sale oro; compra → sale mercancía y entra oro.
     let crece = |q: Mil| if vende { q - oro_de(q) } else { oro_de(q) - q };
 
@@ -143,13 +144,15 @@ pub fn comerciar(
     } else {
         q = q.min(carro.recurso).min(plaza.espacio(orden.recurso)).min(max_por_oro(plaza.cantidad(Recurso::Oro), precio_neto));
     }
-    // Tope del carro: cuánto puede crecer. Aproximación cerrada y ajuste fino (el redondeo del coste mueve el borde en 1).
+    // Tope del carro: cuánto puede crecer. Aproximación cerrada y ajuste fino en unidades enteras (el redondeo del oro mueve el borde).
     let por_unidad = if vende { UNO - precio_neto } else { precio_neto - UNO };
     if por_unidad > 0 {
         q = q.min((carro.espacio.max(0) as i128 * UNO as i128 / por_unidad as i128) as Mil);
-        while q > 0 && crece(q) > carro.espacio.max(0) {
-            q -= 1;
-        }
+    }
+    let paga = |q: Mil| if vende { oro_de(q) <= carro.oro.min(plaza.espacio(Recurso::Oro)) } else { oro_de(q) <= plaza.cantidad(Recurso::Oro) };
+    q = entero(q);
+    while q > 0 && (!paga(q) || (por_unidad > 0 && crece(q) > carro.espacio.max(0))) {
+        q -= UNIDAD;
     }
     if q <= 0 {
         return Err(ErrorMostrador::NadaQueServir);
@@ -214,10 +217,10 @@ mod pruebas {
         let mut o = orden(TipoOrden::Venta, 100_000, 1_000_000);
         let mut plaza = almacen(100_000, 0);
         let s = comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(500_000, 0, 1_000_000), 50_000, &ctx()).unwrap();
-        // Misma Facción: 3 % → 1,03 por unidad; 50 unidades = 51,5 de oro.
-        assert_eq!((s.cantidad, s.oro_movido, s.comision, s.valor), (50_000, 51_500, 1_500, 50_000));
-        assert_eq!((s.delta_carro_recurso, s.delta_carro_oro), (50_000, -51_500));
-        assert_eq!((plaza.cantidad(Recurso::Madera), plaza.cantidad(Recurso::Oro)), (50_000, 51_500), "la comisión se queda en la plaza");
+        // Misma Facción: 3 % → 1,03 por unidad; 50 unidades = 51,5 de oro, que se cobran como 52 (oro en unidades enteras, hacia arriba).
+        assert_eq!((s.cantidad, s.oro_movido, s.comision, s.valor), (50_000, 52_000, 1_500, 50_000));
+        assert_eq!((s.delta_carro_recurso, s.delta_carro_oro), (50_000, -52_000));
+        assert_eq!((plaza.cantidad(Recurso::Madera), plaza.cantidad(Recurso::Oro)), (50_000, 52_000), "la comisión se queda en la plaza");
         assert_eq!((o.cantidad_cumplida, o.estado), (50_000, EstadoOrden::Activa));
     }
 
@@ -228,10 +231,10 @@ mod pruebas {
         let mut plaza = almacen(0, 1_000_000);
         let c = ContextoMostrador { misma_faccion: false, ..ctx() };
         let s = comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(0, 40_000, 1_000_000), 40_000, &c).unwrap();
-        // Externa: 8 % → 2 × 0,92 = 1,84 por unidad; 40 unidades = 73,6 de oro.
-        assert_eq!((s.cantidad, s.oro_movido, s.comision), (40_000, 73_600, 6_400));
-        assert_eq!((s.delta_carro_recurso, s.delta_carro_oro), (-40_000, 73_600));
-        assert_eq!((plaza.cantidad(Recurso::Madera), plaza.cantidad(Recurso::Oro)), (40_000, 1_000_000 - 73_600));
+        // Externa: 8 % → 2 × 0,92 = 1,84 por unidad; 40 unidades = 73,6 de oro, que la plaza paga como 74.
+        assert_eq!((s.cantidad, s.oro_movido, s.comision), (40_000, 74_000, 6_400));
+        assert_eq!((s.delta_carro_recurso, s.delta_carro_oro), (-40_000, 74_000));
+        assert_eq!((plaza.cantidad(Recurso::Madera), plaza.cantidad(Recurso::Oro)), (40_000, 1_000_000 - 74_000));
     }
 
     #[test]
@@ -241,18 +244,18 @@ mod pruebas {
         let mut plaza = almacen(100_000, 0);
         let c = ContextoMostrador { misma_faccion: false, factor_comision_externa: 600_000, ..ctx() }; // Comercio Abierto
         let s = comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(500_000, 0, 1_000_000), 10_000, &c).unwrap();
-        assert_eq!(s.oro_movido, 10_480, "8 % × 0,6 = 4,8 %");
+        assert_eq!(s.oro_movido, 11_000, "8 % × 0,6 = 4,8 %: 10,48 de oro, cobrados como 11");
     }
 
     #[test]
     fn sirve_lo_que_puede_cada_tope_y_el_oro_se_conserva() {
         let r = reglas();
-        // Tope por el oro del carro: 10 de oro a 1,03 → 9,708 unidades.
+        // Tope por el oro del carro: 10 de oro a 1,03 → 9,708 unidades, que en enteras son 9 (cuestan 9,27 → 10 de oro).
         let mut o = orden(TipoOrden::Venta, 100_000, 1_000_000);
         let mut plaza = almacen(100_000, 0);
         let (c0, antes) = (carro(10_000, 0, 1_000_000), oro_total(&plaza, 10_000, None));
         let s = comerciar(&r, &mut o, PLAZA, &mut plaza, &c0, 100_000, &ctx()).unwrap();
-        assert_eq!(s.cantidad, 9_708);
+        assert_eq!(s.cantidad, 9_000);
         assert!(s.oro_movido <= 10_000);
         assert_eq!(oro_total(&plaza, 10_000, Some(&s)), antes, "el oro se conserva");
         // Tope por el stock de la plaza.
@@ -268,7 +271,7 @@ mod pruebas {
         // Tope por el oro de la plaza al comprar, por lo que lleva el carro y por el hueco del almacén.
         let mut o = orden(TipoOrden::Compra, 100_000, 1_000_000);
         let mut plaza = almacen(0, 10_000);
-        assert_eq!(comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(0, 100_000, 1_000_000), 100_000, &ctx()).unwrap().cantidad, 10_309);
+        assert_eq!(comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(0, 100_000, 1_000_000), 100_000, &ctx()).unwrap().cantidad, 10_000, "10 de oro a 0,97: 10 unidades (9,7 → 10 de oro); 11 ya costarían 11");
         let mut o = orden(TipoOrden::Compra, 100_000, 1_000_000);
         let mut plaza = almacen(0, 1_000_000);
         assert_eq!(comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(0, 3_000, 1_000_000), 100_000, &ctx()).unwrap().cantidad, 3_000);
@@ -279,13 +282,13 @@ mod pruebas {
     #[test]
     fn el_oro_ocupa_carro_el_techo_fisico() {
         let r = reglas();
-        // La plaza compra a 3 (neto 2,91 > 1): el carro crece 1,91 por unidad vendida; con 10 de espacio, 5,235 unidades.
+        // La plaza compra a 3 (neto 2,91 > 1): el carro crece 1,91 por unidad vendida; con 10 de espacio, 5 unidades enteras (15 de oro: crece 10).
         let mut o = orden(TipoOrden::Compra, 100_000, 3_000_000);
         let mut plaza = almacen(0, 10_000_000);
         let s = comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(0, 100_000, 10_000), 100_000, &ctx()).unwrap();
         assert!(s.delta_carro_oro + s.delta_carro_recurso <= 10_000, "no se pasa del espacio");
         assert!(s.delta_carro_oro + s.delta_carro_recurso > 10_000 - 2, "y casi lo llena: {s:?}");
-        assert_eq!(s.cantidad, 5_235);
+        assert_eq!(s.cantidad, 5_000);
         // Con el carro lleno no se sirve nada.
         let mut o = orden(TipoOrden::Compra, 100_000, 3_000_000);
         assert_eq!(comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(0, 100_000, 0), 100_000, &ctx()), Err(ErrorMostrador::NadaQueServir));
@@ -338,10 +341,10 @@ mod pruebas {
             assert_eq!(comerciar(&r, &mut o, PLAZA, &mut plaza, &ca, 1_000, &ctx()), Err(ErrorMostrador::PrecioNoPositivo));
         }
         // Una orden sobre el oro sin precio de referencia se coloca con precio 0 y tampoco se liquida.
-        let mut oro = OrdenMercado::colocar(&r.mercado, 2, PLAZA, TipoOrden::Compra, Recurso::Oro, 10, None, 0, 0, true, true, 0).unwrap();
-        assert_eq!(comerciar(&r, &mut oro, PLAZA, &mut plaza, &ca, 1, &ctx()), Err(ErrorMostrador::PrecioNoPositivo));
+        let mut oro = OrdenMercado::colocar(&r.mercado, 2, PLAZA, TipoOrden::Compra, Recurso::Oro, 10_000, None, 0, 0, true, true, 0).unwrap();
+        assert_eq!(comerciar(&r, &mut oro, PLAZA, &mut plaza, &ca, 1_000, &ctx()), Err(ErrorMostrador::PrecioNoPositivo));
         oro.precio_unitario = 1_000_000;
-        assert_eq!(comerciar(&r, &mut oro, PLAZA, &mut plaza, &ca, 1, &ctx()), Err(ErrorMostrador::RecursoOro));
+        assert_eq!(comerciar(&r, &mut oro, PLAZA, &mut plaza, &ca, 1_000, &ctx()), Err(ErrorMostrador::RecursoOro));
     }
 
     #[test]

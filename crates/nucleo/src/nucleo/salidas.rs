@@ -154,8 +154,9 @@ impl Nucleo {
         }
         let liderazgo = liderazgo::comprometido(&mr, hn.heroe.escuadras.iter().filter(|e| vistas.contains(&e.id)));
 
-        // La carga: no negativa, que quepa en el carro y que haya de sobra en el almacén (el trigo, sin bajar de la reserva).
-        let pedido: Mercancia = carga.iter().filter(|(_, n)| *n != 0).fold(Mercancia::new(), |mut m, &(r, n)| {
+        // La carga: no negativa, que quepa en el carro y que haya de sobra en el almacén (el trigo, sin bajar de la reserva). Solo unidades enteras (C3b): la
+        // fracción de una línea se redondea hacia abajo.
+        let pedido: Mercancia = carga.iter().map(|&(r, n)| (r, base::entero(n))).filter(|(_, n)| *n != 0).fold(Mercancia::new(), |mut m, (r, n)| {
             *m.entry(r).or_insert(0) += n;
             m
         });
@@ -185,7 +186,7 @@ impl Nucleo {
                     almacen.quitar(r, n);
                 });
                 // Los víveres se llenan después de la carga y con la tropa ya fuera; si la plaza iba justa se sale con menos, no se bloquea.
-                let trigo = (mr.logistica.capacidad_viveres - propios).max(0).min((almacen.cantidad(Recurso::Trigo) - reserva).max(0));
+                let trigo = base::entero((mr.logistica.capacidad_viveres - propios).max(0).min((almacen.cantidad(Recurso::Trigo) - reserva).max(0)));
                 almacen.quitar(Recurso::Trigo, trigo);
                 reservas.soldados += soldados;
                 Ok(PlanDeSalida { heroe, lugar, escuadras: elegidas.to_vec(), carga: pedido, trigo, racion_gratis: false, retoma: columna, liderazgo })

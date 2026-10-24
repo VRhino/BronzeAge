@@ -1545,7 +1545,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN25");
+    assert_eq!(&bytes[..5], b"BAN26");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1555,7 +1555,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
         ("posición de las ruinas", Box::new(|c| c.huerfanas.get_mut(&5).unwrap().posicion = Punto::new(1_001, 2_000))),
         ("invulnerabilidad de las ruinas", Box::new(|c| c.huerfanas.get_mut(&5).unwrap().estado = EstadoAvanzada::EnRuinas { invulnerable_hasta: Some(7) })),
         ("almacén de las ruinas", Box::new(|c| {
-            c.huerfanas.get_mut(&5).unwrap().almacen.agregar(Trigo, 1);
+            c.huerfanas.get_mut(&5).unwrap().almacen.agregar(Trigo, 1_000);
         })),
         ("unas ruinas menos", Box::new(|c| drop(c.huerfanas.remove(&5)))),
         ("tropa elegida", Box::new(|c| {
@@ -1786,17 +1786,17 @@ fn el_residente_y_el_visitante_amigo_que_defienden_una_avanzada_y_la_pierden_que
     let (plaza, pos) = (e.plaza, e.sitio());
     let (av, col, ana) = e.avanzada_de(Etapa::Fuerte);
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
-    // Dentro: la residente «ana» (tropa floja y 30 001 de madera) y un aliado visitante (tropa floja y 30 001 de piedra).
+    // Dentro: la residente «ana» (tropa floja y 31 000 de madera) y un aliado visitante (tropa floja y 31 000 de piedra).
     e.residir(ana);
     e.dar_escuadra(ana, Tropa::Lenadores);
     let antes = e.carga_en(col, Madera);
-    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 30_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 31_000 });
     let vis = e.visita("alia", 3, &[Tropa::Lenadores]);
-    e.ok("admin", Comando::DarSuministro { ejercito: vis.0, recurso: Piedra, cantidad: 30_001 });
+    e.ok("admin", Comando::DarSuministro { ejercito: vis.0, recurso: Piedra, cantidad: 31_000 });
     e.ok("ana", Comando::EntrarEnAvanzada { avanzada: av, heroe: ana });
     e.ok("alia", Comando::EntrarEnAvanzada { avanzada: av, heroe: vis.1 });
     let con_madera = e.carga_en(col, Madera);
-    assert_eq!(con_madera, antes + 30_001);
+    assert_eq!(con_madera, antes + 31_000);
     let (cb, beto) = e.ejercito_fuerte(pos);
     e.guerra();
     let t = e.n.ahora();
@@ -1808,8 +1808,8 @@ fn el_residente_y_el_visitante_amigo_que_defienden_una_avanzada_y_la_pierden_que
     assert!(e.n.heroe_herido(ana) && e.n.heroe_herido(vis.1) && !e.n.heroe_herido(beto));
     assert_eq!((e.ubicacion(ana), e.ubicacion(vis.1)), (Ubicacion::Columna(col), Ubicacion::Columna(vis.0)));
     assert!(e.n.en_el_mapa(col) && e.n.en_el_mapa(vis.0));
-    assert_eq!(e.carga_en(col, Madera), con_madera - con_madera / 2, "la residente pierde la mitad de lo que llevaba su carro, hacia abajo, recurso a recurso");
-    assert_eq!(e.carga_en(vis.0, Piedra), 30_001 - 30_001 / 2, "el visitante amigo que defendió también pierde la mitad: misma regla para todos");
+    assert_eq!(e.carga_en(col, Madera), con_madera - con_madera / 2 / 1_000 * 1_000, "la residente pierde la mitad de lo que llevaba su carro, hacia abajo y en unidades enteras, recurso a recurso");
+    assert_eq!(e.carga_en(vis.0, Piedra), 31_000 - 15_000, "el visitante amigo que defendió también pierde la mitad: misma regla para todos");
     // La mitad perdida es del vencedor, hasta donde le quepa (el almacén de la avanzada y la chatarra ya llenan parte de su carro).
     assert!(dato(h, "carroPerdido") > 0 && e.carga_en(cb, Madera) > 0);
     assert_eq!(hechos(&e.n, "heroe.expulsado").iter().map(|x| (dato(x, "heroe"), dato(x, "lugar"), dato(x, "motivo"), x.2.clone())).collect::<Vec<_>>(), vec![(ana as i64, 2, 1, vec![plaza]), (vis.1 as i64, 2, 1, vec![plaza])]);
@@ -2005,7 +2005,7 @@ fn guion_con_gente(e: &mut Esc, avanzar: &dyn Fn(&mut Esc, Instante)) {
         e.ok_en(20 * MIN, "admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: n });
     }
     e.ok_en(20 * MIN + 17_345, "ana", Comando::EntregarMaterialesAAvanzada { ejercito: col, avanzada: av });
-    e.ok_en(20 * MIN + 17_345, "admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 30_001 });
+    e.ok_en(20 * MIN + 17_345, "admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 31_000 });
     avanzar(e, 4 * HORA);
     let (_, aliado) = e.columna_en(4 * HORA, "alia", 3, pos, &ELITE);
     let (_, neutral) = e.columna_en(4 * HORA, "neu", 4, pos, &[Tropa::MiliciaLanceros]);
@@ -2084,7 +2084,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN25");
+        assert_eq!(&bytes[..5], b"BAN26");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));

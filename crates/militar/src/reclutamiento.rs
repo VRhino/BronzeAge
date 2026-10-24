@@ -455,8 +455,8 @@ mod pruebas {
         assert_eq!(reserva_de_trigo(&r, 2_000, 125), 166_000);
         let mut m = mundo();
         m.soldados = 100;
-        m.almacen.poner(Recurso::Trigo, 165_999);
-        assert_eq!(reclutar_de(&mut m, Tropa::MiliciaLanceros), Err(ErrorReclutamiento::SinReservaDeTrigo { hacen_falta: 166_000, hay: 165_999 }));
+        m.almacen.poner(Recurso::Trigo, 165_000);
+        assert_eq!(reclutar_de(&mut m, Tropa::MiliciaLanceros), Err(ErrorReclutamiento::SinReservaDeTrigo { hacen_falta: 166_000, hay: 165_000 }));
         m.almacen.poner(Recurso::Trigo, 166_000);
         assert!(reclutar_de(&mut m, Tropa::MiliciaLanceros).is_ok(), "justo en la reserva sí");
     }

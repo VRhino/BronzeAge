@@ -97,11 +97,11 @@ mod pruebas {
         let r = Reglas::cargar();
         let p = precios_a_uno(&r);
         let mut dest = alm(&[]);
-        // 100 de madera (valor 100) + 50 de cobre (valor 150) = 250 de oro; misma Facción, distancia máxima: 4,5 % = 11,25.
+        // 100 de madera (valor 100) + 50 de cobre (valor 150) = 250 de oro; misma Facción, distancia máxima: 4,5 % = 11,25, que acuñan 11 (hacia abajo).
         let e = entregar(&r, &carga(&[(Recurso::Madera, 100_000), (Recurso::Cobre, 50_000)]), &mut dest, &datos(&p, true, false, 0, 0));
         assert_eq!(e.valor, 250_000);
-        assert_eq!(e.comision, 11_250);
-        assert_eq!(dest.cantidad(Recurso::Oro), 11_250, "la comisión se acuña en el destino");
+        assert_eq!(e.comision, 11_000);
+        assert_eq!(dest.cantidad(Recurso::Oro), 11_000, "la comisión se acuña en el destino, en unidades enteras");
         assert_eq!((dest.cantidad(Recurso::Madera), dest.cantidad(Recurso::Cobre)), (100_000, 50_000));
         assert!(e.perdido.is_empty() && e.recargo == 0);
     }
@@ -111,13 +111,13 @@ mod pruebas {
         let r = Reglas::cargar();
         let p = precios_a_uno(&r);
         // Antes las armas de madera no cotizaban y su mitad del trueque valía 0. 10 armas de madera (2 de oro cada una: 2 de madera de la
-        // receta) = 20; externa a distancia máxima: 12 % = 2,4. Y 10 de ganado (2 cada uno) = 20 → otros 2,4.
+        // receta) = 20; externa a distancia máxima: 12 % = 2,4 → 2. Y 10 de ganado (2 cada uno) = 20 → otros 2.
         let mut dest = alm(&[]);
         let armas = entregar(&r, &carga(&[(Recurso::ArmaMadera, 10_000)]), &mut dest, &datos(&p, false, false, 0, 0));
-        assert_eq!((armas.valor, armas.comision), (20_000, 2_400));
+        assert_eq!((armas.valor, armas.comision), (20_000, 2_000));
         let ganado = entregar(&r, &carga(&[(Recurso::Livestock, 10_000)]), &mut dest, &datos(&p, false, false, 0, 0));
-        assert_eq!((ganado.valor, ganado.comision), (20_000, 2_400));
-        assert_eq!(dest.cantidad(Recurso::Oro), 4_800);
+        assert_eq!((ganado.valor, ganado.comision), (20_000, 2_000));
+        assert_eq!(dest.cantidad(Recurso::Oro), 4_000);
     }
 
     #[test]

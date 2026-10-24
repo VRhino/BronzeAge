@@ -333,7 +333,9 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     if a.poblacion.pesants >= 200 {
         reg.pesants_200.get_or_insert(minuto);
     }
-    viol.almacen += TODOS.iter().filter(|&&r| a.almacen.cantidad(r) < 0 || a.almacen.cantidad(r) > a.almacen.capacidad(r)).count() as u64;
+    // Fuera de [0, capacidad], o con una fracción (C3b: el almacén guarda unidades enteras y un resto oculto en [0, 1000)).
+    let (cantidad, _, resto) = a.almacen.partes();
+    viol.almacen += TODOS.iter().filter(|&&r| a.almacen.cantidad(r) < 0 || a.almacen.disponible(r) > a.almacen.capacidad(r) || cantidad[r.indice()] % 1000 != 0 || !(0..1000).contains(&resto[r.indice()])).count() as u64;
     viol.poblacion += (a.poblacion.pesants < 0 || a.poblacion.artesanos < 0 || a.poblacion.nobleza < 0 || a.poblacion.nutricion < 0 || a.poblacion.nutricion > 100_000) as u64;
     viol.medidor += !(0..=100_000).contains(&a.medidor.valor) as u64;
     viol.nivel += (a.nivel < nivel_antes || a.medidor.nivel_actual > a.nivel) as u64;
@@ -489,7 +491,7 @@ pub fn hash_estado(c: &Corrida) -> u64 {
         (v.pos.x, v.pos.y, v.radio, a.nivel, a.medidor.valor, a.medidor.nivel_actual, p.pesants, p.artesanos, p.nobleza, p.nutricion, a.destruido, a.ascenso.map(|s| s.completa_en)).hash(&mut h);
         (p.restos, p.recuperando).hash(&mut h);
         a.recintos.iter().for_each(|r| (r.id, r.nivel, r.avance, r.siguiente_celda_en, r.completado_en, r.celdas.len()).hash(&mut h));
-        TODOS.iter().for_each(|&r| a.almacen.cantidad(r).hash(&mut h));
+        a.almacen.partes().hash(&mut h);
         a.edificios.iter().for_each(|e| (e.id, e.tipo, e.estado as u8, e.nivel_interno, e.completa_en, e.fuente.map(|f| format!("{f:?}"))).hash(&mut h));
         v.parcelas.iter().for_each(|p| p.hash(&mut h));
         v.urbe.ciudad().piezas().iter().for_each(|p| (p.id, p.tipo, p.rect.col, p.rect.row, p.rect.ancho, p.rect.alto, p.rotado).hash(&mut h));

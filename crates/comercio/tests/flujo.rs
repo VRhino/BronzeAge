@@ -157,11 +157,11 @@ fn un_trueque_entero_entre_facciones_se_cumple_y_conserva_los_recursos() {
     let r = trueque_completo();
     assert_eq!(r.acuerdo.estado, EstadoTrueque::Cumplido);
     assert_eq!(r.cierres, 1, "el cierre y su recompensa salen una sola vez");
-    // Ida 1: A→B 100 (peaje 2) y B→A 30; ida 2: A→B 2 (peaje 0,04) y el resto de 0,04 u (< 1 u) salda el lado: dos viajes de A y uno de B.
+    // Ida 1: A→B 100 (peaje 2) y B→A 30; ida 2: A→B 2 (el 2 % de 2 son 0,04, que en unidades enteras no paga nada) y llega entero: dos viajes de A y uno de B.
     assert_eq!(r.viajes, 3);
     assert_eq!(r.acuerdo.pendiente(Lado::A), vec![]);
     assert_eq!(r.a.cantidad(Cobre), 30_000, "el cobre de B llegó entero");
-    assert_eq!(r.ciudad.cantidad(Madera), 2_000 + 40, "el peaje del primer viaje (2 %) y el del segundo (2 % de 2)");
+    assert_eq!(r.ciudad.cantidad(Madera), 2_000, "solo el peaje del primer viaje (2 %): el del segundo no llega a una unidad");
     // Los recursos del mundo no cambian: lo que no está en A o en B está en la ciudad del peaje.
     assert_eq!(r.a.cantidad(Madera) + r.b.cantidad(Madera) + r.ciudad.cantidad(Madera), 300_000);
     assert_eq!(r.a.cantidad(Cobre) + r.b.cantidad(Cobre), 100_000);
