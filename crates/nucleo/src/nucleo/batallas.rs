@@ -1148,6 +1148,9 @@ impl Nucleo {
                 sumar(&mut chatarra, r, n);
             }
         }
+        // La chatarra se suma exacta y queda en unidades enteras, hacia abajo (C3b): la fracción no la coge nadie.
+        chatarra.values_mut().for_each(|n| *n = base::entero(*n));
+        chatarra.retain(|_, n| *n > 0);
         if chatarra.is_empty() {
             return;
         }

@@ -384,7 +384,7 @@ fn el_residente_no_vacia_el_carro_al_entrar_el_carro_ocupa_su_capacidad_y_vaciar
     assert_eq!(dato(&hechos(&e.n, "jugador.entra_en_asentamiento")[0], "carro"), 40_000);
 
     // El carro nunca lleva más de su capacidad (500 000): lo que ya trae cuenta al volver a salir.
-    assert_eq!(e.rechazada("ana", sacar(vec![(Madera, 460_001)])), rechazos::CARRO_LLENO);
+    assert_eq!(e.rechazada("ana", sacar(vec![(Madera, 461_000)])), rechazos::CARRO_LLENO);
     // Lo que no cabe en el almacén personal (1 000 000 de capacidad) se queda en el carro: aquí solo caben 20 000.
     e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 980_000 });
     e.ok("ana", Comando::VaciarCarro { heroe: h });
@@ -533,7 +533,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN27");
+    assert_eq!(&bytes[..5], b"BAN28");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].acceso, Acceso { aliados: false, neutrales: true, enemigos: true });
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -847,7 +847,7 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
     e.avanzar(24 * HORA);
     let a = e.a;
     e.con_barracon();
-    // «ana», residente: una milicia que defiende (en su loadout), unos peltastas que se quedan en el campamento, unos leñadores en la guarnición y 40 001 de madera y 10 000 de piedra en el carro.
+    // «ana», residente: una milicia que defiende (en su loadout), unos peltastas que se quedan en el campamento, unos leñadores en la guarnición y 41 000 de madera y 10 000 de piedra en el carro.
     let (ana, milicia) = e.con_milicia("ana");
     let peltastas = e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::Peltastas, cantidad: 10 }).creadas[0];
     let lenadores = e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::Lenadores, cantidad: 30 }).creadas[0];
@@ -855,7 +855,7 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
     e.loadout(ana, vec![milicia]);
     e.dar(a, Madera, 100_000);
     e.dar(a, Piedra, 100_000);
-    e.con_carro("ana", ana, &[(Madera, 40_001), (Piedra, 10_000)]);
+    e.con_carro("ana", ana, &[(Madera, 41_000), (Piedra, 10_000)]);
     // «bea», residente que está fuera (en el mapa, con su milicia en la columna): solo cambia de casa. «cai», residente dentro pero herida: no defiende y sale con su carro entero.
     let bea = e.residente("bea");
     let mb = e.ok("admin", Comando::DarEscuadra { heroe: bea, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
@@ -872,7 +872,7 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
     e.ok("admin", Comando::HerirHeroe { heroe: cai });
     let personal = e.n.heroe(ana).unwrap().almacen_personal.clone();
     let (carro_ana, carro_cai, carga_vis) = (e.n.heroe(ana).unwrap().carro.clone(), e.n.heroe(cai).unwrap().carro.clone(), e.ejercito(cv).columna.carga.clone());
-    assert_eq!(carro_ana.get(&Madera), Some(&40_001));
+    assert_eq!(carro_ana.get(&Madera), Some(&41_000));
 
     // Un ejército de F2 asedia la plaza y gana.
     let (cg, gus) = e.atacante(&[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
@@ -899,7 +899,7 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
     assert_eq!(ha.almacen_personal, personal, "su almacén personal viaja con ella");
     // 3. El carro del residente que defendió: pierde la mitad (hacia abajo, recurso a recurso) y es del vencedor; la regla del derrotado, que el canon no desmiente.
     let carga_sale = e.ejercito(sale).columna.carga.clone();
-    assert_eq!((carga_sale.get(&Madera).copied(), carga_sale.get(&Piedra).copied()), (Some(40_001 - 20_000), Some(5_000)), "40 001 de madera → 20 001; 10 000 de piedra → 5 000");
+    assert_eq!((carga_sale.get(&Madera).copied(), carga_sale.get(&Piedra).copied()), (Some(41_000 - 20_000), Some(5_000)), "41 000 de madera → 21 000; 10 000 de piedra → 5 000");
     assert!(e.n.heroe(ana).unwrap().carro.is_empty(), "el carro de su residencia pasó a la columna con la que sale");
     let robado = 20_000 + 5_000;
     assert_eq!(dato(conquista, "carroPerdido"), robado);

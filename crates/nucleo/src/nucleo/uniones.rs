@@ -276,7 +276,7 @@ impl Nucleo {
             return Err(rechazo(rechazos::REPOSTAR_PLAZA_CERRADA, "esa plaza no abre su almacén a esta columna".into()));
         }
         let (llevaba, cap) = (e.columna.viveres.valor_en(t), e.columna.viveres.maximo.unwrap_or(0));
-        if cap - llevaba <= 0 {
+        if cap - llevaba < base::UNIDAD {
             return Err(rechazo(rechazos::COLUMNA_VIVERES_LLENOS, "los víveres ya están llenos".into()));
         }
         let consumo = self.con_exterior(asentamiento, t, |eco, x| eco.resumen_de_reclutamiento(x.reglas, x).consumo_poblacion).ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
@@ -286,7 +286,7 @@ impl Nucleo {
             return Err(rechazo(rechazos::REPOSTAR_SIN_EXISTENCIAS, "la plaza no tiene trigo de sobra: solo queda la reserva".into()));
         }
         let e = self.estado.ejercitos.get_mut(&id).expect("existe");
-        let tomado = racion::llenar(&mut e.columna.viveres, t, de_sobra);
+        let tomado = racion::llenar_en_unidades(&mut e.columna.viveres, t, de_sobra);
         self.estado.asentamientos.get_mut(&asentamiento).expect("existe").economia.almacen.quitar(Recurso::Trigo, tomado);
         self.tr.tocar(Clase::Asentamiento, asentamiento);
         self.reprogramar_columna(id, t);

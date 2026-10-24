@@ -5,6 +5,7 @@ sistema que corre **dentro de cada asentamiento, con un paso de un minuto por pl
 
 - **Reescrito el 2026-10-13** para el mundo reactivo: §1 pasa de «orden dentro del tick» a ritmos y eventos, el crecimiento de población es continuo (sin redondeo estocástico) y se añaden los pueblos extractores y la calibración (§14). Las fórmulas «por tick» de las demás secciones son **ritmos por minuto**, idénticos; donde el texto diga «cada tick» léase «continuamente, con eventos en los umbrales». El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Economia_Construccion.md`.
 - **Corregido el 2026-10-22** ([`Economia_Por_Minuto_Definicion.md`](../../Consideraciones/Economia_Por_Minuto_Definicion.md)): la economía **no** es continua. Sustituye al plan de «economía continua», descartado ese día. Se queda **un paso de un minuto por plaza** (producción, consumo, recaudación, mantenimiento, población y evaluación de la auto-construcción) y solo lo que el jugador nota va en su instante exacto: el inicio de una obra encargada a mano (al clic), el fin de obra, de mejora y de ascenso, y la caducidad de política. La población es **siempre entera**, con un resto oculto, y el hambre sigue D7 y D8 (§9.2). Donde el texto de abajo diga «ritmo» o «continuo» (reescritura del 2026-10-13) léase «por minuto»; §1 y §9 están al día.
+- **Corregido el 2026-10-24** (decisión C3b, [`Calibracion_Sistema4_Decisiones.md`](../../Consideraciones/Calibracion_Sistema4_Decisiones.md)): **todo lo almacenado va en enteros**. Los almacenes guardan unidades enteras y los flujos por minuto llevan un resto oculto por recurso (§4); lo discreto se redondea hacia abajo y los costes hacia arriba.
 - **Verificado contra:** `d406eed` (2026-10-10) y revisado el 2026-10-11 con las decisiones del usuario sobre las divergencias (piezas gratuitas, almacén lleno, Gran Fundición, reembolso de dañados, sin líneas de producción).
 - **Módulos:** `src/engine/construction.ts` (≈1.870 líneas: cola de obras, auto-construcción, producción, recetas, mejoras, comandos manuales),
   `settlement.ts` (fundación y viabilidad), `almacen.ts` (primitivas de almacén), `asentamientoQuery.ts` (cupos, mano de obra, progreso de nivel),
@@ -124,6 +125,10 @@ algún asentamiento**, gana `NIVEL_FACCION.xp.fundacion` de experiencia (el prim
 Leñera en la zona real con que nacería ∧ hay ≥ 1 nodo de piedra sin explotar en esa zona`. «Zona real» = círculo del radio inicial recortado contra los asentamientos de **otras** Facciones
 (`zonaInicialDeFundacion`). Hay bosque libre si algún bosque cuyo borde toca la zona tiene menos Leñeras que su capacidad (`capacidadLeneras`, §5.2).
 
+**Madera a 10 u (plaza condenada, Rust).** El aviso cuenta además las parcelas libres en la **zona del techo del nivel 1** (10 u) y su madera potencial; sin ninguna o con menos de `MADERA_MINIMA_POTENCIAL`, la plaza «caerá en ruinas». Esa zona es el disco de 10 u recortado contra **las plazas de otras Facciones que tocan ese disco**, aunque no toquen el de 6 u (decidido por el autor el 2026-10-24; antes solo recortaban las que tocaban el disco inicial). Cada zona del aviso la recortan las plazas que tocan su propio disco.
+
+> **Rendimiento en Rust (2026-10-24):** `Nucleo::viabilidad` cuenta parcelas y piedra con la rejilla de 10 u del mapa (`economia::Mapa::parcelas_en` y `piedra_en`, la misma que usa la construcción) en lugar de recorrer el mundo entero: solo mira lo que cae en el disco, que es lo único que `en_zona` puede aceptar, así que el resultado es idéntico (prueba `la_rejilla_cuenta_lo_mismo_que_el_recorrido_lineal` y misma huella del `batch territorio`). No cambia ninguna regla. Medido en el `batch territorio` (400 Facciones × 30 días, tres corridas alternas): la llamada baja de ~800 µs a ~5 µs, el tiempo en `viabilidad` de 136-155 s a 0,7-1,0 s y la pared del escenario de 250-271 s a 92-121 s; lo que queda es la economía de las plazas (16,8 millones de eventos).
+
 ### 3.1 Zona de influencia
 
 > **Implementado en Rust (2026-10-13)**: `crates/territorio/src/zona.rs` (reglas puras) y `crates/nucleo/src/nucleo/zonas.rs` (estado, órdenes y eventos).
@@ -139,6 +144,14 @@ La zona es un **disco** (centro = la plaza). Nace con `radioInicial` (6) y **sol
 - `agregarRecurso(a, r, n)`: `cantidad = min(capacidad, cantidad + n)`. `agregarRecursoConSobrante` además devuelve lo que no cupo.
 - `descontarRecursos`: resta sin comprobar; un resultado entre −1e-9 y 0 se redondea a 0 (ruido de coma flotante); uno más negativo se deja negativo (lo vigila el test de invariantes).
 - `tieneRecursos`: todos los recursos del coste con `cantidad ≥ coste`.
+
+> **Economía entera (decisión C3b del autor y dudas EE-1/EE-2, 2026-10-24; implementado en Rust ese día, foto `BAN27`).** El almacén guarda **solo unidades enteras** (múltiplos de 1.000 milésimas). **Regla (EE-1): lo que se mueve se redondea hacia abajo; lo que se cobra, hacia arriba.** Hay dos formas de mover (`asentamiento::Almacen`):
+> - **Discreta** (`agregar`, `quitar`, `poner`, `devolver`): entran o salen unidades enteras, **redondeando hacia abajo** lo que llega con fracción (lo que no cabe o la fracción se pierde). Un **coste** (`tiene`, `pagar`) se cobra por línea **redondeado hacia arriba**: un coste fraccionario (la reparación al 50 %, una política) nunca sale más barato. El reembolso de una obra quitada de la cola va hacia abajo.
+> - **Flujo por minuto** (`producir`, `consumir`): producción de granjas, Leñeras y extractores, extracción de los pueblos, recetas (producto e insumos; los insumos de una receta se redondean hacia arriba a la milésima), comida de la población y de la guarnición, mantenimiento y recaudación. Cada recurso lleva un **resto oculto** en `(−1000, 1000)` milésimas, como la población entera (§9.1): positivo, una unidad a medio entrar; negativo, una unidad a medio consumir. Lo exacto es lo guardado más el resto. Una unidad **entra cuando el resto la completa y sale cuando se completa su consumo** (EE-2), no al empezar a consumirse: con 10 y un consumo de 0,5 por minuto sale una unidad cada dos minutos. El resto no se descarta al cambiar de signo (producción y consumo del mismo recurso se compensan en él); en N minutos entra o sale exactamente la suma entera. El flujo se para en la capacidad (`hueco = capacidad − exacto`), así que «almacén lleno» (§5.5) es `hueco = 0`.
+> - **Lo que se ve y lo que se mueve.** Lo que se ve (`Almacen::visible`, la proyección del interior y lo que un héroe recuerda de la plaza) es lo guardado, con la unidad que se está consumiendo. Lo que se mueve, se comercia, se carga o se paga (`Almacen::cantidad`) es lo que hay entero de verdad: lo guardado sin esa unidad empezada (puede ser una menos que lo que se ve). Lo que **lee** la economía para decidir (cobertura del mantenimiento, suministro de comida, insumos de una receta) usa lo exacto. La reserva (§6.3) se compara con lo que se mueve.
+> - La **tendencia** «+N/min» del interior (4H T3c) es el neto **exacto** del paso (con el resto), no el salto de las unidades, para que el contador no oscile entre +0 y +1.
+> - La foto guarda, por recurso, cantidad, capacidad y resto (`codec_economia`). La auditoría de cambios (`BRONZEAGE_AUDITAR_CAMBIOS=1`) y el batch comprueban en cada versión que **ninguna cantidad almacenada** (almacenes, carros, caravanas, almacén personal, existencias, lo pactado y entregado de un trueque, las órdenes del mercado) tenga fracción (`Nucleo::fracciones_almacenadas`).
+> - Diseño y reparto por operación: [`Docs/Arquitectura/Economia_Entera_Plan.md`](../Arquitectura/Economia_Entera_Plan.md).
 - `ampliarCapacidad(a, r, extra)`: `capacidad = max(0, capacidad + extra)` y `cantidad = min(cantidad, capacidad)` (lo que no cabe se pierde).
 - **Capacidad por edificio** (`aplicarCapacidadDeEdificio`, `signo` ±1): el Almacén suma `signo × capacidadPorRecursoAdicional` (300) a **cada recurso que exista**; el Granero suma `signo × capacidadTrigo[nivel]` al trigo.
   Se suma al **entrar en servicio** (obra o reconstrucción terminada) y se resta al dejar de estarlo (daño de un saqueo). Una mejora de Granero suma el **delta** entre niveles.
@@ -403,7 +416,7 @@ Pesants:   espacio = capacidadPesants ≤ 0 ? 0 : clamp(1 − pesants/capacidadP
            tasa = pesants.tasaCrecimientoBase × comida × espacio × felicidad
 Artesanos: solo si hay ALGÚN edificio de transformación activo (fundicion, curtiduria, armeria, carpinteria) y espacio > 0 (capacidad = Viviendas activas × 10):
            si artesanos = 0 → +1 sin tirar el dado (evento poblacion.primeros_artesanos);  si no, tasa = artesanos.tasaCrecimientoBase × comida × espacio × felicidad
-Nobleza:   solo si casasCompradas.length ≥ nobleza.minCiudadanos ∧ hay Palacio activo ∧ espacio > 0 (capacidad = capacidadNobles del nivel del Palacio, 80/240/400);
+Nobleza:   solo si residentes ≥ nobleza.minCiudadanos ∧ hay Palacio activo ∧ espacio > 0 (capacidad = capacidadNobles del nivel del Palacio, 80/240/400);
            si nobleza = 0 → +1 sin dado (evento poblacion.primeros_nobles);  si no, tasa = nobleza.tasaCrecimientoBase × comida × espacio × felicidad × factorCrecimientoNobleza × (1 + AEDAS.residentes.bonoNobleza × aedasResidentes)
 Techo:     techo = techoPoblacion[nivel ALCANZADO];  espacioBajoTecho = max(0, techo − población total)
            crecimientoBruto = suma de las tres;  factorTecho = (bruto > espacioBajoTecho ∧ bruto > 0) ? espacioBajoTecho/bruto : 1
@@ -2065,6 +2078,7 @@ Todas las cifras de este documento son **placeholder sin calibrar** salvo que el
 | Invariante | Dónde se vigila |
 |---|---|
 | El almacén nunca es negativo, ni NaN, ni supera su capacidad | `invariantes_simulacion_larga.test.ts` |
+| Todo lo almacenado va en unidades enteras y el resto oculto de cada recurso está en `(−1000, 1000)` (C3b, 2026-10-24) | Rust: `Nucleo::fracciones_almacenadas` en la auditoría de cambios y en el batch (`inv_fracciones`); `asentamiento::almacen` (pruebas) |
 | La población nunca es negativa ni NaN | ídem |
 | `medidorMantenimiento` siempre en [0, 100] | ídem |
 | `nivel` nunca baja; `nivelActual ≤ nivel` | ídem |

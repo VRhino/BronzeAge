@@ -74,8 +74,7 @@ pub fn hay_viveres(v: &Ritmo, t: Instante) -> bool {
     v.valor_en(t) > 0
 }
 
-/// Llena los víveres desde `t` con lo que ofrece la fuente (`ofrecido`, ya descontada su reserva): `min(hueco, ofrecido)`. Devuelve lo que
-/// se tomó de la fuente (al salir, al repostar, con la ración de un campamento).
+/// Llena los víveres desde `t` con lo que ofrece una fuente gratuita (`ofrecido`; la ración de un campamento): `min(hueco, ofrecido)`, exacto. Devuelve lo que se tomó.
 pub fn llenar(v: &mut Ritmo, t: Instante, ofrecido: Mil) -> Mil {
     let cap = v.maximo.unwrap_or(0);
     let toma = (cap - v.valor_en(t)).max(0).min(ofrecido.max(0));
@@ -83,10 +82,17 @@ pub fn llenar(v: &mut Ritmo, t: Instante, ofrecido: Mil) -> Mil {
     toma
 }
 
+/// Lo mismo desde un almacén o un carro (`ofrecido`, ya descontada su reserva): lo que sale de ellos va en **unidades enteras** (C3b), así que se toma
+/// `min(hueco, ofrecido)` hacia abajo a unidades y los víveres pueden quedar a menos de una unidad del tope (para quien repuesta en una plaza o una avanzada, ya están llenos).
+pub fn llenar_en_unidades(v: &mut Ritmo, t: Instante, ofrecido: Mil) -> Mil {
+    let hueco = (v.maximo.unwrap_or(0) - v.valor_en(t)).max(0);
+    llenar(v, t, base::entero(hueco.min(ofrecido.max(0))))
+}
+
 /// `pasarAViveres`: del carro a los víveres, nunca al revés: `min(pedido, trigo del carro, hueco)`. Devuelve lo movido.
 pub fn pasar_a_viveres(carga: &mut Carga, v: &mut Ritmo, t: Instante, pedido: Mil) -> Mil {
     let en_el_carro = carga.get(&Recurso::Trigo).copied().unwrap_or(0);
-    let movido = llenar(v, t, pedido.min(en_el_carro));
+    let movido = llenar_en_unidades(v, t, pedido.min(en_el_carro));
     if movido > 0 {
         let resto = en_el_carro - movido;
         if resto > 0 {
@@ -140,6 +146,21 @@ mod pruebas {
         // Dos escuadrones de élite (24 hombres) aguantan unas nueve horas con un carro.
         let elite = racion_guarnicion(&r, 24) / 4;
         assert_eq!(500_000 / elite / 60, 9);
+    }
+
+    #[test]
+    fn los_viveres_entran_en_unidades_enteras_y_se_acaban_cuando_lo_exacto_llega_a_cero() {
+        // EE-3: lo comido va al resto (el valor exacto del ritmo); lo que entra de un almacén va en unidades enteras.
+        let r = r();
+        let mut v = viveres(&r, 1, 350_000, 0);
+        anotar_consumo(&mut v, 0, 1_813);
+        assert_eq!(v.valor_en(10 * MIN), 350_000 - 18_130);
+        assert_eq!(base::entero_arriba(v.valor_en(10 * MIN)), 332_000, "se ven 332: la unidad que se está comiendo sigue hasta acabarse");
+        assert_eq!(llenar_en_unidades(&mut v, 10 * MIN, 100_000), 18_000, "de los 18,13 que faltan entran 18 enteros");
+        assert!(v.maximo.unwrap() - v.valor_en(10 * MIN) < base::UNIDAD, "y faltando menos de una unidad ya están llenos");
+        // Se acaban en el mismo instante que el ritmo exacto: el hambre no se adelanta ni se retrasa.
+        let fin = se_acaban_en(&v, 10 * MIN).unwrap();
+        assert!(v.valor_en(fin) == 0 && v.valor_en(fin - 1) > 0);
     }
 
     #[test]

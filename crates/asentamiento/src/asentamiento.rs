@@ -409,10 +409,10 @@ impl Asentamiento {
         // 2. Comida y hambre, crecimiento y recaudación.
         let entorno = self.entorno_poblacion(r, x);
         let mut sucesos = vec![];
-        let comido = self.poblacion.nutrir(&r.poblacion, &entorno, self.almacen.cantidad(Recurso::Trigo), &mut sucesos);
-        self.almacen.quitar(Recurso::Trigo, comido);
+        let comido = self.poblacion.nutrir(&r.poblacion, &entorno, self.almacen.disponible(Recurso::Trigo), &mut sucesos);
+        self.almacen.consumir(Recurso::Trigo, comido);
         self.poblacion.crecer(&r.poblacion, &entorno, &mut sucesos);
-        self.almacen.agregar(Recurso::Oro, self.poblacion.recaudacion_por_minuto(&r.poblacion, &entorno));
+        self.almacen.producir(Recurso::Oro, self.poblacion.recaudacion_por_minuto(&r.poblacion, &entorno));
         for s in sucesos {
             ev.push(match s {
                 poblacion::Suceso::PrimerosArtesanos => Evento::PrimerosArtesanos,

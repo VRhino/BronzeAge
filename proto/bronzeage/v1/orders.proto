@@ -5,6 +5,8 @@
 // `atacar` gana `declara_guerra` y los objetivos `pueblo` y `avanzada`, y se añaden las órdenes de la reconstrucción
 // (repostar, reclamar caravana, obras de mapa, pueblos, avanzadas, control del reloj de administración).
 // Las cantidades (recursos, oro, víveres) viajan en MILÉSIMAS (sint64); las coordenadas, en milésimas de unidad de mapa.
+// Economía entera (C3b, 2026-10-24): lo almacenado va en unidades enteras, así que una cantidad que pide mover, cargar, pactar u ordenar
+// recursos se redondea HACIA ABAJO a unidades (múltiplos de 1.000); menos de una unidad es nada (`cantidad_no_positiva` donde aplique).
 // Los campos que eran cadenas de un catálogo cerrado se mantienen como string; los valores admitidos van en el comentario.
 //
 // 4H (2026-10-22): se añaden, al final de `Orden.cuerpo` y sin tocar nada de lo anterior, las órdenes del jugador que el núcleo ya tiene y faltaban

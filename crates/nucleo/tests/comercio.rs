@@ -272,15 +272,15 @@ fn comision_esperada(n: &Nucleo, origen: u64, destino: u64, carga: &[(Recurso, i
 }
 
 /// Lo que debe acuñar y cobrar de más una entrega: `(comisión, recargo)` efectivos, con el tope de oro del almacén de destino (la comisión
-/// se topa por su capacidad y el recargo por lo que deja la comisión: §15) y el oro del origen.
+/// se topa por su capacidad y el recargo por lo que deja la comisión: §15) y el oro del origen. Las dos se acuñan en unidades enteras, hacia abajo (C3b).
 fn entrega_esperada(n: &Nucleo, origen: u64, destino: u64, carga: &[(Recurso, i64)]) -> (i64, i64) {
     let r = comercio::Reglas::cargar();
     let calculada = comision_esperada(n, origen, destino, carga);
     let (po, pd) = (&n.estado().asentamientos[&origen], &n.estado().asentamientos[&destino]);
     let espacio = pd.economia.almacen.espacio(Oro);
-    let comision = calculada.min(espacio);
+    let comision = base::entero(calculada).min(espacio);
     let debido = recargo_por_reputacion(&r.reputacion, calculada, po.faccion == pd.faccion, n.reputacion(po.faccion), po.economia.almacen.cantidad(Oro));
-    (comision, debido.min(espacio - comision))
+    (comision, base::entero(debido).min(espacio - comision))
 }
 
 // ───────────────────────────── 1. Un trueque entero con entrega manual ─────────────────────────────
@@ -373,15 +373,17 @@ fn un_trueque_entre_plazas_de_la_misma_faccion_cobra_el_3_por_ciento_y_no_toca_l
     let c = tercera_plaza(&mut e, m);
     let (col_en_c, col_en_a) = (e.columna_en("ana", 1, c), e.columna_en("ana", 1, a));
     e.dar(c, Piedra, 100_000);
-    let tr = e.ok("ana", Comando::ProponerTrueque { a, b: c, lineas_a: vec![(Madera, 40_000)], lineas_b: vec![(Piedra, 20_000)] }).creadas[0];
+    // 300 de madera: con 40, el 3 % de su valor no llegaba a una unidad de oro y no se acuñaba nada (C3b: la comisión va en unidades enteras, hacia abajo).
+    e.dar(a, Madera, 300_000);
+    let tr = e.ok("ana", Comando::ProponerTrueque { a, b: c, lineas_a: vec![(Madera, 300_000)], lineas_b: vec![(Piedra, 20_000)] }).creadas[0];
     e.ok("ana", Comando::AceptarTrueque { acuerdo: tr });
     // Lo de A llega a la puerta de C con la columna que está allí; lo de C, a la puerta de A: la Facción debe los dos lados y manda el primero
     // con algo pendiente (A antes que B).
     let ca = e.caravana_aparcada("ana", a, col_en_c, 1);
-    e.cargar("ana", ca, Madera, 40_000);
+    e.cargar("ana", ca, Madera, 300_000);
     let cc = e.caravana_aparcada("ana", c, col_en_a, 1);
     e.cargar("ana", cc, Piedra, 20_000);
-    let (comision_1, _) = entrega_esperada(&e.n, a, c, &[(Madera, 40_000)]);
+    let (comision_1, _) = entrega_esperada(&e.n, a, c, &[(Madera, 300_000)]);
     assert!(comision_1 > 0);
     let oro0 = oro(&e.n);
     e.ok("admin", Comando::AdjuntarCaravana { caravana: ca, ejercito: col_en_c });
@@ -392,7 +394,7 @@ fn un_trueque_entre_plazas_de_la_misma_faccion_cobra_el_3_por_ciento_y_no_toca_l
     let valor = {
         let e_ = e.n.estado();
         let t = TablaPrecios::de(&r.precio, e_.asentamientos.values().map(|p| &p.economia.almacen));
-        t.valor(&[(Madera, 40_000)].into_iter().collect())
+        t.valor(&[(Madera, 300_000)].into_iter().collect())
     };
     assert!(comision_1 < valor * 5 / 100 + 2, "{comision_1} {valor}");
     e.ok("admin", Comando::AdjuntarCaravana { caravana: cc, ejercito: col_en_a });
@@ -540,14 +542,14 @@ fn las_ordenes_y_el_mostrador_mueven_el_almacen_real_y_conservan_el_oro() {
     let (oro0, madera_mundo0, madera_a0, oro_a0, carro0) = (oro(&e.n), mundo_de(&e.n, Madera), cantidad(&e.n, a, Madera), cantidad(&e.n, a, Oro), e.n.suministro(col));
     e.ok("beto", comerciar(v, 20_000));
     assert_eq!(cantidad(&e.n, a, Madera), madera_a0 - 20_000);
-    assert_eq!(cantidad(&e.n, a, Oro), oro_a0 + 43_200, "20 × 2,16 = 43,2: la comisión se queda en la plaza");
+    assert_eq!(cantidad(&e.n, a, Oro), oro_a0 + 44_000, "20 × 2,16 = 43,2, que se cobran como 44 (oro en unidades enteras, hacia arriba): la comisión se queda en la plaza");
     let carro = e.n.suministro(col);
-    assert_eq!((carro[&Oro], carro[&Madera]), (carro0[&Oro] - 43_200, 20_000));
+    assert_eq!((carro[&Oro], carro[&Madera]), (carro0[&Oro] - 44_000, 20_000));
     assert_eq!((oro(&e.n), mundo_de(&e.n, Madera)), (oro0, madera_mundo0), "el oro y la madera del mundo no cambian");
     let o = e.n.libro_ordenes().orden(v).unwrap();
     assert_eq!((o.cantidad_cumplida, o.estado), (20_000, EstadoOrden::Activa));
     let cp = hechos(&e.n, "mercado.comercio_en_plaza");
-    assert_eq!((cp.len(), dato(&cp[0], "cantidad"), dato(&cp[0], "entreFacciones"), dato(&cp[0], "oroMovido"), dato(&cp[0], "comision")), (1, 20_000, 1, 43_200, 3_200));
+    assert_eq!((cp.len(), dato(&cp[0], "cantidad"), dato(&cp[0], "entreFacciones"), dato(&cp[0], "oroMovido"), dato(&cp[0], "comision")), (1, 20_000, 1, 44_000, 3_200));
 
     // Lo que queda de la orden: se sirve lo pendiente (30) aunque se pida más, y la orden sale al historial sin evento.
     e.ok("beto", comerciar(v, 400_000));
@@ -611,11 +613,11 @@ fn el_mostrador_topa_por_el_oro_de_quien_compra_y_el_espacio_del_carro() {
     let col = e.columna_en("ana", 1, a);
     e.dar(a, Madera, 100_000);
     let v = e.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 200_000, precio: Some(PUNTO) }).creadas[0];
-    // Misma Facción: 3 %. El carro solo tiene 10 de oro: se sirven 9,708 unidades (10 / 1,03) y nada más.
+    // Misma Facción: 3 %. El carro solo tiene 10 de oro: 10 / 1,03 = 9,708 unidades, que en enteras son 9 (cuestan 9,27, que se cobran como 10).
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 10_000 });
     let oro0 = oro(&e.n);
     e.ok("ana", Comando::ComerciarEnPlaza { ejercito: col, orden: v, cantidad: 200_000 });
-    assert_eq!(e.n.suministro(col)[&Madera], 9_708);
+    assert_eq!(e.n.suministro(col)[&Madera], 9_000);
     assert_eq!(e.n.suministro(col).get(&Oro), None, "se gastó todo el oro del carro");
     assert_eq!(oro(&e.n), oro0);
     // El carro lleno (500) no admite nada más: DarSuministro lo recorta y repetirlo no cambia nada.
@@ -1172,11 +1174,11 @@ fn estado_con_comercio() -> Estado {
     use comercio::viaje::{plan_uniforme, Peaje};
     let mut s = Estado::nuevo(Reglas::default(), "h".into(), 1, 0);
     let cr = s.reglas.economia.comercio.clone();
-    let mut ac = AcuerdoTrueque::proponer(&cr.trueque, 4, 1, 2, &[(Madera, 100_000), (Oro, 5)], &[(Cobre, 30_000)], 10, true).unwrap();
+    let mut ac = AcuerdoTrueque::proponer(&cr.trueque, 4, 1, 2, &[(Madera, 100_000), (Oro, 5_000)], &[(Cobre, 30_000)], 10, true).unwrap();
     ac.aceptar(&cr.trueque, 99, true).unwrap();
     ac.lineas_a[0].cantidad_entregada = 7;
     s.comercio.acuerdos.push(ac);
-    s.comercio.acuerdos.push(AcuerdoTrueque::proponer(&cr.trueque, 5, 2, 1, &[(Piedra, 1)], &[(Trigo, 2)], 11, true).unwrap());
+    s.comercio.acuerdos.push(AcuerdoTrueque::proponer(&cr.trueque, 5, 2, 1, &[(Piedra, 1_000)], &[(Trigo, 2_000)], 11, true).unwrap());
     let mut o = OrdenMercado::colocar(&cr.mercado, 3, 1, TipoOrden::Venta, Madera, 9_000, Some(-4), 0, 20, true, true, 9_000).unwrap();
     o.cantidad_cumplida = 100;
     s.comercio.libro.colocar(o.clone());
@@ -1234,7 +1236,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN27");
+    assert_eq!(&bytes[..5], b"BAN28");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);

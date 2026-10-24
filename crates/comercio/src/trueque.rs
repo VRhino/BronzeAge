@@ -17,28 +17,20 @@ pub struct Linea {
     pub cantidad_entregada: Mil,
 }
 
-/// Una unidad entera, en milésimas: si tras entregar algo de una línea falta menos que esto, la línea se da por saldada (§4.4, decidido el
-/// 2026-10-19): el peaje deja cada entrega un 2 % corta y repescar unas décimas de unidad solo cuesta viajes.
-pub const UNIDAD: Mil = 1_000;
-
 impl Linea {
     pub fn nueva(recurso: Recurso, cantidad_total: Mil) -> Self {
         Self { recurso, cantidad_total, cantidad_entregada: 0 }
     }
 
-    /// ¿Saldada? Entregada entera, o con algo entregado y menos de una unidad por entregar. Una línea sin tocar nunca se da por saldada, por
-    /// pequeña que sea.
+    /// ¿Saldada? Entregada entera. (La regla del 2026-10-19 que daba por saldada una línea a la que faltaba menos de una unidad se retiró el
+    /// 2026-10-24, EE-6: con la economía entera lo pactado y lo entregado son unidades enteras.)
     pub fn saldada(&self) -> bool {
-        self.cantidad_entregada >= self.cantidad_total || (self.cantidad_entregada > 0 && self.cantidad_total - self.cantidad_entregada < UNIDAD)
+        self.cantidad_entregada >= self.cantidad_total
     }
 
-    /// Lo que falta por entregar (nunca negativo; 0 si está saldada, aunque quede un resto de menos de una unidad).
+    /// Lo que falta por entregar (nunca negativo).
     pub fn faltante(&self) -> Mil {
-        if self.saldada() {
-            0
-        } else {
-            self.cantidad_total - self.cantidad_entregada
-        }
+        (self.cantidad_total - self.cantidad_entregada).max(0)
     }
 }
 
@@ -120,7 +112,7 @@ fn validar(lineas: &[(Recurso, Mil)]) -> Result<Vec<Linea>, ErrorTrueque> {
     }
     let mut vistos = Vec::new();
     for &(r, n) in lineas {
-        if n <= 0 {
+        if base::entero(n) <= 0 {
             return Err(ErrorTrueque::CantidadNoPositiva);
         }
         if vistos.contains(&r) {
@@ -128,7 +120,7 @@ fn validar(lineas: &[(Recurso, Mil)]) -> Result<Vec<Linea>, ErrorTrueque> {
         }
         vistos.push(r);
     }
-    Ok(lineas.iter().map(|&(r, n)| Linea::nueva(r, n)).collect())
+    Ok(lineas.iter().map(|&(r, n)| Linea::nueva(r, base::entero(n))).collect())
 }
 
 impl AcuerdoTrueque {
@@ -221,8 +213,7 @@ impl AcuerdoTrueque {
         self.lineas_a.iter().chain(&self.lineas_b).all(Linea::saldada)
     }
 
-    /// Fracción (ppm) de lo pactado en `lado` que no se entregó: `1 − Σ (total − faltante) / Σ total` (una línea saldada con un resto de menos
-    /// de una unidad cuenta como cumplida), sumando cantidades de recursos
+    /// Fracción (ppm) de lo pactado en `lado` que no se entregó: `1 − Σ (total − faltante) / Σ total`, sumando cantidades de recursos
     /// distintos sin ponderar por precio. Línea a línea: lo que sobra en una no tapa lo que falta en otra (Comercio_Caravanas §4.3).
     pub fn fraccion_incumplida(&self, lado: Lado) -> i64 {
         let (total, cumplido) = self.lineas(lado).iter().fold((0, 0), |(t, c), l| (t + l.cantidad_total, c + l.cantidad_total - l.faltante()));
@@ -357,14 +348,16 @@ mod pruebas {
     fn proponer_valida_lados_cantidades_y_autorizacion() {
         let r = reglas();
         let p = |a, b, la: &[(Recurso, Mil)], lb: &[(Recurso, Mil)], aut| AcuerdoTrueque::proponer(&r.trueque, 1, a, b, la, lb, 0, aut);
-        assert_eq!(p(1, 1, &[(Madera, 1)], &[(Piedra, 1)], true).unwrap_err(), ErrorTrueque::MismoAsentamiento);
-        assert_eq!(p(1, 2, &[], &[(Piedra, 1)], true).unwrap_err(), ErrorTrueque::LadoVacio);
-        assert_eq!(p(1, 2, &[(Madera, 1)], &[], true).unwrap_err(), ErrorTrueque::LadoVacio);
-        assert_eq!(p(1, 2, &[(Madera, 0)], &[(Piedra, 1)], true).unwrap_err(), ErrorTrueque::CantidadNoPositiva);
-        assert_eq!(p(1, 2, &[(Madera, 5), (Madera, 5)], &[(Piedra, 1)], true).unwrap_err(), ErrorTrueque::RecursoRepetido);
-        assert_eq!(p(1, 2, &[(Madera, 5)], &[(Piedra, 1)], false).unwrap_err(), ErrorTrueque::NoAutorizado);
-        assert!(p(1, 2, &[(Madera, 5)], &[(Madera, 5)], true).is_ok(), "el mismo recurso en lados distintos vale; el oro también");
-        assert!(p(1, 2, &[(Oro, 5)], &[(Madera, 5)], true).is_ok());
+        assert_eq!(p(1, 1, &[(Madera, 1_000)], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::MismoAsentamiento);
+        assert_eq!(p(1, 2, &[], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::LadoVacio);
+        assert_eq!(p(1, 2, &[(Madera, 1_000)], &[], true).unwrap_err(), ErrorTrueque::LadoVacio);
+        assert_eq!(p(1, 2, &[(Madera, 0)], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::CantidadNoPositiva);
+        assert_eq!(p(1, 2, &[(Madera, 999)], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::CantidadNoPositiva, "menos de una unidad entera es nada (C3b)");
+        assert_eq!(p(1, 2, &[(Madera, 5_000), (Madera, 5_000)], &[(Piedra, 1_000)], true).unwrap_err(), ErrorTrueque::RecursoRepetido);
+        assert_eq!(p(1, 2, &[(Madera, 5_000)], &[(Piedra, 1_000)], false).unwrap_err(), ErrorTrueque::NoAutorizado);
+        assert!(p(1, 2, &[(Madera, 5_000)], &[(Madera, 5_000)], true).is_ok(), "el mismo recurso en lados distintos vale; el oro también");
+        assert_eq!(p(1, 2, &[(Madera, 5_700)], &[(Piedra, 1_000)], true).unwrap().lineas_a[0].cantidad_total, 5_000, "lo pactado va en unidades enteras, hacia abajo");
+        assert!(p(1, 2, &[(Oro, 5_000)], &[(Madera, 5_000)], true).is_ok());
     }
 
     #[test]
@@ -591,42 +584,24 @@ mod pruebas {
     }
 
     #[test]
-    fn un_resto_de_menos_de_una_unidad_salda_el_lado_y_no_pide_repesca() {
-        // 32 u con un peaje del 2 %: llegan 31,36 y faltan 0,64 < 1 u → saldado a la primera, sin una segunda salida.
-        let mut a = activo(32_000);
-        let llega: Carga = [(Madera, 31_360)].into_iter().collect();
-        assert!(a.abonar(Lado::A, &llega, (1, 2)).is_none(), "falta el lado B");
-        assert!(a.pendiente(Lado::A).is_empty(), "el resto de 0,64 u no se repesca");
-        assert_eq!(a.lado_que_debe(1, 1, 2), None);
-        assert_eq!(a.fraccion_incumplida(Lado::A), 0, "y no cuenta como incumplido");
-        let cierre = a.abonar(Lado::B, &[(Cobre, 1_000)].into_iter().collect(), (1, 2)).expect("los dos lados saldados");
-        assert_eq!(a.estado, EstadoTrueque::Cumplido);
-        assert_eq!(cierre.intercambiado[&Madera], 32_000, "lo intercambiado es lo pactado");
-    }
-
-    #[test]
-    fn una_entrega_grande_si_necesita_repesca_y_la_linea_sin_tocar_nunca_se_da_por_saldada() {
-        // 1000 u: el 2 % de peaje deja 980 y faltan 20 u (≥ 1): se repesca; la repesca de 20 u llega con 19,6 y el resto de 0,4 u salda.
+    fn una_linea_solo_se_salda_entregada_entera_y_lo_que_falta_se_repesca() {
+        // EE-6 (2026-10-24): se retira la regla de «menos de una unidad salda la línea». 1000 u con un 2 % de peaje: llegan 980 y faltan 20, que se repescan.
         let mut a = activo(1_000_000);
         a.abonar(Lado::A, &[(Madera, 980_000)].into_iter().collect(), (1, 2));
         assert_eq!(a.pendiente(Lado::A), vec![(Madera, 20_000)]);
-        a.abonar(Lado::A, &[(Madera, 19_600)].into_iter().collect(), (1, 2));
+        assert!(a.fraccion_incumplida(Lado::A) > 0);
+        a.abonar(Lado::A, &[(Madera, 20_000)].into_iter().collect(), (1, 2));
         assert!(a.pendiente(Lado::A).is_empty());
-        // Justo una unidad de resto aún pide repesca; una línea que nada ha tocado, por pequeña que sea, también.
+        assert_eq!(a.fraccion_incumplida(Lado::A), 0);
+        // Una sola unidad que falte aún pide repesca, y una línea sin tocar también.
         let mut b = activo(10_000);
         b.abonar(Lado::A, &[(Madera, 9_000)].into_iter().collect(), (1, 2));
         assert_eq!(b.pendiente(Lado::A), vec![(Madera, 1_000)]);
-        assert_eq!(activo(500).pendiente(Lado::A), vec![(Madera, 500)]);
-    }
-
-    #[test]
-    fn la_serie_de_peajes_de_la_corrida_cierra_en_una_sola_salida() {
-        // Dos ciudades ajenas cruzadas (2 % cada una) sobre 32 u: llegan 30,7328 u y falta 1,27 > 1 → una repesca de
-        // 1,27 u que llega con 1,24 y deja un resto de 0,03 u saldado.
-        let mut a = activo(32_000);
-        a.abonar(Lado::A, &[(Madera, 30_733)].into_iter().collect(), (1, 2));
-        assert_eq!(a.pendiente(Lado::A), vec![(Madera, 1_267)]);
-        a.abonar(Lado::A, &[(Madera, 1_242)].into_iter().collect(), (1, 2));
-        assert!(a.pendiente(Lado::A).is_empty());
+        assert_eq!(activo(1_000).pendiente(Lado::A), vec![(Madera, 1_000)]);
+        let cierre = {
+            b.abonar(Lado::A, &[(Madera, 1_000)].into_iter().collect(), (1, 2));
+            b.abonar(Lado::B, &[(Cobre, 1_000)].into_iter().collect(), (1, 2)).expect("los dos lados saldados")
+        };
+        assert_eq!((b.estado, cierre.intercambiado[&Madera]), (EstadoTrueque::Cumplido, 10_000));
     }
 }

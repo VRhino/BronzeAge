@@ -47,33 +47,39 @@ impl StockCampamento {
 /// Lo comerciado en el mundo desde la última reposición, y cuándo toca la siguiente. **Global**, no de un campamento.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MercadoMercenario {
+    /// Lo comerciado entre Facciones desde la última reposición, por bien (lo que se enseña).
     pub contadores: BTreeMap<Recurso, Mil>,
+    /// Lo que repondrá cada bien: por cada comercio, `proporcionRepone` de lo comerciado en unidades enteras hacia abajo y **como mínimo una**
+    /// (EE-5, 2026-10-24).
+    pub repone: BTreeMap<Recurso, Mil>,
     pub repone_en: Instante,
 }
 
 impl MercadoMercenario {
     /// El primer `reponeEn` es `creación + cadaHoras` horas.
     pub fn nuevo(r: &ReglasMercenarios, creacion: Instante) -> Self {
-        Self { contadores: BTreeMap::new(), repone_en: creacion + r.cada }
+        Self { contadores: BTreeMap::new(), repone: BTreeMap::new(), repone_en: creacion + r.cada }
     }
 
     /// Suma lo intercambiado a los contadores. Solo cuenta el comercio **entre Facciones**: el `intercambiado` de cada
     /// `comercio.trueque_cumplido` con `entreFacciones` y la `cantidad` de cada `mercado.comercio_en_plaza` con `entreFacciones`; lo que
-    /// una Facción comercia consigo misma no cuenta.
-    pub fn registrar_comercio(&mut self, entre_facciones: bool, carga: &Carga) {
+    /// una Facción comercia consigo misma no cuenta. Cada comercio anota además lo que repondrá ese bien: `proporcionRepone` de lo comerciado, en
+    /// unidades enteras hacia abajo y como mínimo una (EE-5).
+    pub fn registrar_comercio(&mut self, r: &ReglasMercenarios, entre_facciones: bool, carga: &Carga) {
         if !entre_facciones {
             return;
         }
-        for (&r, &n) in carga {
+        for (&b, &n) in carga {
             if n > 0 {
-                *self.contadores.entry(r).or_insert(0) += n;
+                *self.contadores.entry(b).or_insert(0) += n;
+                *self.repone.entry(b).or_insert(0) += base::entero(por(n, r.proporcion_repone)).max(U);
             }
         }
     }
 
-    /// `reponerMercados` (evento agendado a `repone_en`): para cada campamento, las pilas vuelven a su tope y cada bien con contador
-    /// `> 0` que no sea una pila gana `contador × proporcionRepone`, topado por `topePorBien`. Después los contadores vuelven a `{}` y
-    /// `repone_en = ahora + cadaHoras`. Devuelve `false` si aún no toca.
+    /// `reponerMercados` (evento agendado a `repone_en`): para cada campamento, las pilas vuelven a su tope y cada bien comerciado que no sea
+    /// una pila gana lo anotado en `repone` (por cada comercio, `proporcionRepone` de lo comerciado, como mínimo una unidad), topado por
+    /// `topePorBien`. Después los contadores vuelven a `{}` y `repone_en = ahora + cadaHoras`. Devuelve `false` si aún no toca.
     pub fn reponer(&mut self, r: &ReglasMercenarios, ahora: Instante, campamentos: &mut [StockCampamento]) -> bool {
         if ahora < self.repone_en {
             return false;
@@ -82,12 +88,13 @@ impl MercadoMercenario {
             for (&b, &tope) in &r.pilas {
                 c.stock.insert(b, tope);
             }
-            for (&b, &cont) in self.contadores.iter().filter(|(b, &n)| n > 0 && !r.pilas.contains_key(b)) {
-                let nuevo = (c.de(b) + por(cont, r.proporcion_repone)).min(r.tope_por_bien);
+            for (&b, &sube) in self.repone.iter().filter(|(b, &n)| n > 0 && !r.pilas.contains_key(b)) {
+                let nuevo = base::entero((c.de(b) + sube).min(r.tope_por_bien)); // existencias en unidades enteras (C3b)
                 c.stock.insert(b, nuevo);
             }
         }
         self.contadores.clear();
+        self.repone.clear();
         self.repone_en = ahora + r.cada;
         true
     }
@@ -274,11 +281,14 @@ mod pruebas {
         let mut m = MercadoMercenario::nuevo(&r, 1_000);
         assert_eq!(m.repone_en, 1_000 + 3 * 3_600_000);
         let c: Carga = [(Cobre, 50_000)].into_iter().collect();
-        m.registrar_comercio(false, &c);
-        assert!(m.contadores.is_empty(), "una Facción comerciando consigo misma no cuenta");
-        m.registrar_comercio(true, &c);
-        m.registrar_comercio(true, &c);
+        m.registrar_comercio(&r, false, &c);
+        assert!(m.contadores.is_empty() && m.repone.is_empty(), "una Facción comerciando consigo misma no cuenta");
+        m.registrar_comercio(&r, true, &c);
+        m.registrar_comercio(&r, true, &c);
         assert_eq!(m.contadores[&Cobre], 100_000);
+        assert_eq!(m.repone[&Cobre], 2_000, "el 3 % de 50 es 1,5: una unidad por comercio, hacia abajo y como mínimo una (EE-5)");
+        m.registrar_comercio(&r, true, &[(Estano, 10_000)].into_iter().collect());
+        assert_eq!(m.repone[&Estano], 1_000, "el 3 % de 10 no llega a una unidad: repone el mínimo, una");
     }
 
     #[test]
@@ -288,9 +298,8 @@ mod pruebas {
         let mut camps = vec![StockCampamento::nuevo(&r), StockCampamento::nuevo(&r)];
         camps[0].stock.insert(Madera, 10_000); // la pila se había gastado
         camps[1].stock.insert(Cobre, 0);
-        m.contadores.insert(Cobre, 1_000_000); // se comerciaron 1000 de cobre
-        m.contadores.insert(Madera, 500_000); // la madera es pila: su contador no suma
-        m.contadores.insert(Hierro, 20_000_000); // enorme: topa en 300
+        m.registrar_comercio(&r.mercenarios, true, &[(Cobre, 1_000_000), (Madera, 500_000), (Hierro, 20_000_000)].into_iter().collect());
+        // se comerciaron 1000 de cobre; la madera es pila: su contador no suma; el hierro, enorme: topa en 300
         let t = 3 * 3_600_000;
         assert!(!m.reponer(&r.mercenarios, t - 1, &mut camps), "aún no toca");
         assert!(m.reponer(&r.mercenarios, t + 5, &mut camps));
@@ -299,7 +308,7 @@ mod pruebas {
         assert_eq!(camps[1].de(Cobre), 30_000);
         assert_eq!(camps[0].de(Hierro), 300_000, "topado por topePorBien");
         assert_eq!(camps[0].de(Estano), 100_000, "un bien que nadie comercia no se repone");
-        assert!(m.contadores.is_empty());
+        assert!(m.contadores.is_empty() && m.repone.is_empty());
         assert_eq!(m.repone_en, t + 5 + 3 * 3_600_000);
     }
 

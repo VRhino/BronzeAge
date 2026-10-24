@@ -137,11 +137,11 @@ pub fn avanzar_minuto(
     let cubierta = if coste.is_empty() {
         UNO
     } else {
-        coste.iter().map(|&(rec, n)| if n <= 0 { UNO } else { razon(almacen.cantidad(rec), n).min(UNO) }).sum::<i64>() / coste.len() as i64
+        coste.iter().map(|&(rec, n)| if n <= 0 { UNO } else { razon(almacen.disponible(rec), n).min(UNO) }).sum::<i64>() / coste.len() as i64
     };
     if cubierta >= UNO {
         coste.iter().for_each(|&(rec, n)| {
-            almacen.quitar(rec, n);
+            almacen.consumir(rec, n);
         });
         m.racha += 1;
         m.valor = (m.valor + r.regeneracion_si_pago_completo).min(100_000);
@@ -155,10 +155,10 @@ pub fn avanzar_minuto(
     // Se paga todo lo que hay.
     let mut faltantes = vec![];
     for &(rec, n) in coste {
-        if almacen.cantidad(rec) < n {
+        if almacen.disponible(rec) < n {
             faltantes.push(rec);
         }
-        almacen.quitar(rec, n);
+        almacen.consumir(rec, n);
     }
     m.racha = 0;
     m.valor = (m.valor - por(r.degradacion_por_deficit_total, UNO - cubierta)).max(0);
@@ -238,7 +238,7 @@ mod pruebas {
         assert_eq!(a.cantidad(Recurso::Madera), 100_000);
         assert_eq!(avanzar_minuto(&r, &mut m, 1, &c, &mut a, 1440, true), Resultado::Nada, "ocupado: tampoco");
         assert_eq!(avanzar_minuto(&r, &mut m, 1, &c, &mut a, 1440, false), Resultado::Sano);
-        assert_eq!(a.cantidad(Recurso::Madera), 98_350);
+        assert_eq!((a.visible(Recurso::Madera), a.cantidad(Recurso::Madera), a.disponible(Recurso::Madera)), (99_000, 98_000, 98_350), "la unidad empezada se ve hasta acabarse (EE-2), pero no se mueve; el resto oculto guarda el consumo a medias");
     }
 
     #[test]

@@ -99,6 +99,8 @@ impl Nucleo {
         if !self.ajustes.auditar_cambios {
             return;
         }
+        let fracciones = self.fracciones_almacenadas();
+        assert!(fracciones.is_empty(), "una cantidad almacenada no es entera (C3b): {:?} [{}]", fracciones, self.causa_auditada);
         let ahora = self.huellas();
         if let Some(antes) = &self.huellas_auditadas {
             for clave in antes.keys().chain(ahora.keys()).collect::<BTreeSet<_>>() {
@@ -115,6 +117,54 @@ impl Nucleo {
             }
         }
         self.huellas_auditadas = Some(ahora);
+    }
+
+    /// Toda cantidad **almacenada** que no es un número entero de unidades (decisión C3b del autor, 2026-10-24: no existen decimales en los almacenes), con dónde
+    /// está: almacenes de plaza, pueblo y avanzada (y su resto oculto fuera de `(−1000, 1000)`), carros de columna y de héroe, caravanas, almacén personal, lo que un
+    /// héroe recuerda de una plaza, existencias de los campamentos, lo pactado y entregado de los trueques y las órdenes del mercado. Debe estar vacío: lo exige
+    /// la auditoría de cambios en cada versión y lo cuenta el batch.
+    pub fn fracciones_almacenadas(&self) -> Vec<String> {
+        let e = &self.estado;
+        let u = base::UNIDAD;
+        let mut v = Vec::new();
+        let mut carga = |donde: String, c: &comercio::Carga| {
+            if let Some((r, n)) = c.iter().find(|(_, n)| **n % u != 0) {
+                v.push(format!("{donde} lleva {n} de {}", r.nombre()));
+            }
+        };
+        for c in e.ejercitos.values() {
+            carga(format!("el carro de la columna {}", c.id), &c.columna.carga);
+        }
+        for h in e.militar.heroes.values() {
+            carga(format!("el carro del héroe {}", h.heroe.id), &h.carro);
+            carga(format!("el almacén personal del héroe {}", h.heroe.id), &h.almacen_personal);
+            for (p, r) in &h.plazas_recordadas {
+                carga(format!("lo que el héroe {} recuerda de la plaza {p}", h.heroe.id), &r.almacen);
+            }
+        }
+        for c in &e.comercio.flota {
+            carga(format!("la caravana {}", c.id), &c.contenido);
+        }
+        for (id, s) in &e.comercio.mercenarios.stock {
+            carga(format!("las existencias del campamento {id}"), &s.stock);
+        }
+        let lineas = e.comercio.acuerdos.iter().flat_map(|a| a.lineas_a.iter().chain(&a.lineas_b).map(move |l| (a.id, l.cantidad_total, l.cantidad_entregada)));
+        v.extend(lineas.filter(|&(_, t, d)| t % u != 0 || d % u != 0).map(|(id, t, d)| format!("el trueque {id} pacta {t} y lleva entregado {d}")));
+        let ordenes = e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial);
+        v.extend(ordenes.filter(|o| o.cantidad % u != 0 || o.cantidad_cumplida % u != 0).map(|o| format!("la orden {} pide {} y lleva {}", o.id, o.cantidad, o.cantidad_cumplida)));
+        let mut almacen = |donde: String, a: &asentamiento::Almacen| {
+            let (cantidad, _, resto) = a.partes();
+            if let Some(i) = (0..29).find(|&i| cantidad[i] % u != 0 || !(-u + 1..u).contains(&resto[i]) || cantidad[i] + resto[i] < 0) {
+                v.push(format!("{donde} guarda {} de {} con un resto de {}", cantidad[i], asentamiento::recurso::TODOS[i].nombre(), resto[i]));
+            }
+        };
+        for a in e.asentamientos.values() {
+            almacen(format!("la plaza {}", a.id), &a.economia.almacen);
+            a.economia.pueblos.iter().for_each(|p| almacen(format!("el pueblo {}", p.id), &p.almacen));
+            a.economia.avanzadas.iter().for_each(|x| almacen(format!("la avanzada {}", x.id), &x.almacen));
+        }
+        e.combate.huerfanas.iter().for_each(|(id, x)| almacen(format!("la avanzada huérfana {id}"), &x.almacen));
+        v
     }
 
     /// Toma de nuevo la referencia, ya con las versiones puestas en las entidades que las llevan.

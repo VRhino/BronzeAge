@@ -345,37 +345,41 @@ impl Columna {
     /// volver**: la tropa que va con su héroe se queda con su héroe.
     ///
     /// - **Escuadras**: las `suyas`.
-    /// - **Carro**: `min(un carro, ⌈total / participantes⌉)`, a prorrata por recurso y sin perder ni sumar milésimas: lo que el redondeo hacia abajo de cada recurso
-    ///   deja sin repartir se toma de milésima en milésima de los recursos en su orden, así que se lleva justo esa parte (el resto se queda en el ejército). La parte va
-    ///   hacia arriba para que quien se queda —el Líder, al desarmar— no pase de un carro por el redondeo (`batch militar`, 2026-10-24: se quedaba con 500,001).
-    /// - **Víveres**: su parte igual: `víveres × su capacidad / la capacidad total`.
+    /// - **Carro**: `min(un carro, ⌈total / participantes⌉)`, en **unidades enteras** (C3b), a prorrata por recurso y sin perder ni sumar nada: lo que el redondeo hacia
+    ///   abajo de cada recurso deja sin repartir se toma de unidad en unidad de los recursos en su orden, así que se lleva justo esa parte (el resto se queda en el ejército).
+    ///   La parte va hacia arriba para que quien se queda —el Líder, al desarmar— no pase de un carro por el redondeo (`batch militar`, 2026-10-24: se quedaba con 500,001).
+    /// - **Víveres**: su parte igual: `víveres × su capacidad / la capacidad total`, en unidades enteras hacia abajo (EE-3).
     pub fn desgajar(&mut self, r: &Reglas, heroe: HeroeId, suyas: &[EscuadraId], id: ColumnaId, ahora: Instante, soldados_de: Soldados) -> Result<Columna, ErrorColumna> {
         let dentro = *self.participantes.iter().find(|p| p.heroe == heroe).ok_or(ErrorColumna::NoVaDentro)?;
         let n = self.participantes.len() as i64;
         let (en_total, mut carga) = (total(&self.carga), Carga::new());
+        let u = base::UNIDAD;
+        let en_total = en_total / u;
         if en_total > 0 {
-            let se_lleva = r.logistica.capacidad_carro.min((en_total + n - 1) / n);
+            let se_lleva = (r.logistica.capacidad_carro / u).min((en_total + n - 1) / n);
             let mut sin_repartir = se_lleva;
             for (recurso, cantidad) in self.carga.iter_mut() {
-                let parte = (*cantidad as i128 * se_lleva as i128 / en_total as i128) as Mil;
+                let parte = (*cantidad / u) as i128 * se_lleva as i128 / en_total as i128;
+                let parte = parte as Mil * u;
                 *cantidad -= parte;
-                sin_repartir -= parte;
+                sin_repartir -= parte / u;
                 if parte > 0 {
                     carga.insert(*recurso, parte);
                 }
             }
-            for (recurso, cantidad) in self.carga.iter_mut().filter(|(_, c)| **c > 0) {
+            for (recurso, cantidad) in self.carga.iter_mut().filter(|(_, c)| **c >= u) {
                 if sin_repartir == 0 {
                     break;
                 }
-                *cantidad -= 1;
-                *carga.entry(*recurso).or_insert(0) += 1;
+                *cantidad -= u;
+                *carga.entry(*recurso).or_insert(0) += u;
                 sin_repartir -= 1;
             }
             self.carga.retain(|_, c| *c > 0);
         }
         let viveres = self.viveres.valor_en(ahora);
-        let parte = (viveres as i128 * racion::capacidad_viveres(r, 1) as i128 / racion::capacidad_viveres(r, n as usize) as i128) as Mil;
+        // Su parte, en unidades enteras hacia abajo (EE-3): el resto oculto se queda con los víveres de la columna.
+        let parte = base::entero((viveres as i128 * racion::capacidad_viveres(r, 1) as i128 / racion::capacidad_viveres(r, n as usize) as i128) as Mil);
         self.participantes.retain(|p| p.heroe != heroe);
         self.escuadras.retain(|e| !suyas.contains(e));
         self.peticiones.retain(|p| p.heroe != heroe);
@@ -714,8 +718,8 @@ mod pruebas {
         assert_eq!((nueva.carga[&Recurso::Trigo], nueva.carga[&Recurso::Madera]), (30_000, 10_000));
         assert_eq!((e.carga[&Recurso::Trigo], e.carga[&Recurso::Madera]), (60_000, 20_000));
         // Víveres: un tercio, con la capacidad de un héroe; el resto se queda con la capacidad de los dos que quedan.
-        assert_eq!(nueva.viveres.valor_en(10 * MIN), antes / 3);
-        assert_eq!(e.viveres.valor_en(10 * MIN), antes - antes / 3);
+        assert_eq!(nueva.viveres.valor_en(10 * MIN), base::entero(antes / 3), "en unidades enteras (EE-3)");
+        assert_eq!(e.viveres.valor_en(10 * MIN), antes - base::entero(antes / 3), "el resto oculto se queda");
         assert_eq!((nueva.viveres.maximo, e.viveres.maximo), (Some(350_000), Some(700_000)));
         // Los consumos reflejan la nueva composición.
         assert_eq!(nueva.viveres.por_minuto, -racion::racion_columna(&r, 30, 1, Estado::Estacionada));
@@ -736,13 +740,13 @@ mod pruebas {
     fn al_desarmar_el_redondeo_del_reparto_no_deja_a_nadie_con_mas_de_un_carro_ni_pierde_milesimas() {
         // Dos héroes con el carro lleno (dos carros) en dos recursos que no se parten justos: hacia abajo, el Líder se quedaba con 500,001.
         let r = r();
-        let mut e = Columna::salir(&r, 1, Some(1), 7, TipoColumna::Ejercito, Politica::Aceptar, vec![], carga(333_333, 0), 0, 0, &soldados(TROPA));
-        sumar(&mut e.carga, Recurso::Oro, 666_667);
+        let mut e = Columna::salir(&r, 1, Some(1), 7, TipoColumna::Ejercito, Politica::Aceptar, vec![], carga(333_000, 0), 0, 0, &soldados(TROPA));
+        sumar(&mut e.carga, Recurso::Oro, 667_000);
         e.unirse_en_plaza(&r, 8, &[], Carga::new(), 0, 0, &soldados(TROPA)).unwrap();
         let nuevas = e.desarmar(&r, 0, &mut || 2, &|_| vec![], &soldados(TROPA));
         assert_eq!((total(&nuevas[0].carga), total(&e.carga)), (500_000, 500_000), "cada uno, un carro justo");
         // Con tres y casi tres carros, el reparto sucesivo deja a cada uno con un carro como mucho y conserva cada recurso.
-        let mut e = Columna::salir(&r, 1, Some(1), 7, TipoColumna::Ejercito, Politica::Aceptar, vec![], carga(499_999, 0), 0, 0, &soldados(TROPA));
+        let mut e = Columna::salir(&r, 1, Some(1), 7, TipoColumna::Ejercito, Politica::Aceptar, vec![], carga(499_000, 0), 0, 0, &soldados(TROPA));
         sumar(&mut e.carga, Recurso::Oro, 500_000);
         sumar(&mut e.carga, Recurso::Madera, 500_000);
         for h in [8, 9] {
@@ -751,9 +755,10 @@ mod pruebas {
         let nuevas = e.desarmar(&r, 0, &mut || 2, &|_| vec![], &soldados(TROPA));
         let todas: Vec<&Carga> = nuevas.iter().map(|c| &c.carga).chain([&e.carga]).collect();
         assert!(todas.iter().all(|c| total(c) <= r.logistica.capacidad_carro), "{todas:?}");
-        for (recurso, antes) in [(Recurso::Trigo, 499_999), (Recurso::Oro, 500_000), (Recurso::Madera, 500_000)] {
+        for (recurso, antes) in [(Recurso::Trigo, 499_000), (Recurso::Oro, 500_000), (Recurso::Madera, 500_000)] {
             assert_eq!(todas.iter().map(|c| c.get(&recurso).copied().unwrap_or(0)).sum::<i64>(), antes, "{recurso:?}");
         }
+        assert!(todas.iter().all(|c| c.values().all(|n| n % 1_000 == 0)), "solo unidades enteras: {todas:?}");
     }
 
     #[test]
@@ -874,7 +879,7 @@ mod pruebas {
         assert_eq!(total(&e.carga), 40_000);
         // Víveres: una parte igual cada uno (a los tres, un tercio del montón; al segundo, la mitad de lo que quedaba).
         let (a, b, l) = (nuevas[0].viveres.valor_en(10 * MIN), nuevas[1].viveres.valor_en(10 * MIN), e.viveres.valor_en(10 * MIN));
-        assert!((a - b).abs() <= 1 && (a - l).abs() <= 1, "{a} {b} {l}");
+        assert!((a - b).abs() < 1_000 && (a - l).abs() < 2_000 && a % 1_000 == 0 && b % 1_000 == 0, "{a} {b} {l}: las partes van en unidades enteras (EE-3) y el resto se queda con el Líder");
     }
 
     #[test]

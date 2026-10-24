@@ -407,14 +407,14 @@ impl Nucleo {
                     return Err(rechazo(rechazos::AVANZADA_SIN_ALMACEN, "una atalaya no tiene almacén".into()));
                 }
                 let (llevaba, cap) = (e.columna.viveres.valor_en(t), e.columna.viveres.maximo.unwrap_or(0));
-                if cap - llevaba <= 0 {
+                if cap - llevaba < base::UNIDAD {
                     return Err(rechazo(rechazos::COLUMNA_VIVERES_LLENOS, "los víveres ya están llenos".into()));
                 }
                 if av.almacen.cantidad(Recurso::Trigo) == 0 {
                     return Err(rechazo(rechazos::REPOSTAR_SIN_EXISTENCIAS, "el almacén de la avanzada no tiene trigo".into()));
                 }
                 let de_sobra = av.almacen.cantidad(Recurso::Trigo);
-                let tomado = racion::llenar(&mut self.estado.ejercitos.get_mut(&cid).expect("existe").columna.viveres, t, de_sobra);
+                let tomado = racion::llenar_en_unidades(&mut self.estado.ejercitos.get_mut(&cid).expect("existe").columna.viveres, t, de_sobra);
                 self.estado.asentamientos.get_mut(&madre).and_then(|a| a.economia.avanzadas.iter_mut().find(|v| v.id == *avanzada)).expect("existe").almacen.quitar(Recurso::Trigo, tomado);
                 self.reprogramar_columna(cid, t);
                 self.hecho_de_avanzada(t, "avanzada.reabastecimiento", Some(madre), posicion, vec![("avanzada", *avanzada as i64), ("heroe", *heroe as i64), ("repuesto", tomado)]);

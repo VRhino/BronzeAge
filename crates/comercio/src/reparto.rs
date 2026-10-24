@@ -124,7 +124,7 @@ pub fn asignar_origen<T>(
         let mut libre = c.capacidad;
         let mut carga = Carga::new();
         for &(r, faltante) in &p.lineas {
-            let n = almacen.cantidad(r).min(faltante).min(libre);
+            let n = base::entero(almacen.cantidad(r).min(faltante).min(libre)); // unidades enteras (C3b): la capacidad libre puede no serlo
             if n > 0 {
                 carga.insert(r, n);
                 libre -= n;

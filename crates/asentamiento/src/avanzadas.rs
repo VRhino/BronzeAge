@@ -185,7 +185,7 @@ impl ReglasAvanzadas {
 
     /// Lo que cuesta reparar unas ruinas de esa etapa: la fracción del coste de construirla.
     pub fn costo_de_reparar(&self, etapa: Etapa) -> Costo {
-        self.costo(etapa).iter().map(|&(rec, n)| (rec, por(n, self.fraccion_reparacion))).collect()
+        self.costo(etapa).iter().map(|&(rec, n)| (rec, base::entero_arriba(por(n, self.fraccion_reparacion)))).collect()
     }
 }
 

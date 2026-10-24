@@ -11,6 +11,20 @@ pub type Mil = i64;
 
 pub const MS_POR_MINUTO: i64 = 60_000;
 
+/// Una unidad entera de recurso, en milésimas. **Todo lo almacenado va en unidades enteras** (decisión C3b del autor, 2026-10-24): almacenes,
+/// carros, caravanas, almacén personal y existencias guardan múltiplos de `UNIDAD`; lo continuo acumula un resto oculto aparte.
+pub const UNIDAD: Mil = 1000;
+
+/// `x` redondeado hacia abajo a unidades enteras (nunca se crea de más).
+pub const fn entero(x: Mil) -> Mil {
+    x.div_euclid(UNIDAD) * UNIDAD
+}
+
+/// `x` redondeado hacia arriba a unidades enteras (lo que se cobra: un coste fraccionario nunca sale más barato).
+pub const fn entero_arriba(x: Mil) -> Mil {
+    -entero(-x)
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Punto {
     pub x: Mil,
@@ -333,6 +347,12 @@ mod tests {
         assert_ne!(Rng::derivado(42, "x").siguiente(), Rng::derivado(42, "y").siguiente());
         let mut r = Rng::nuevo(7);
         assert!((0..1000).all(|_| r.por_debajo(10) < 10));
+    }
+
+    #[test]
+    fn redondeo_a_unidades() {
+        assert_eq!((entero(2_999), entero(3_000), entero(0), entero(-1)), (2_000, 3_000, 0, -1_000));
+        assert_eq!((entero_arriba(2_001), entero_arriba(3_000), entero_arriba(0)), (3_000, 3_000, 0));
     }
 
     #[test]

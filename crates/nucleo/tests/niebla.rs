@@ -1,5 +1,5 @@
 //! La niebla en el núcleo (4H T3d, Niebla_De_Guerra §2-§5): lo que graba cada ojo en la memoria de su Facción al cerrar las versiones (lo explorado por una columna, las fichas de lo ajeno con
-//! el último instante en que se vio, lo de un héroe sin bandera), la foto (`BAN27`) y que todo es lo mismo con sesiones y sin ellas; y lo que proyecta la vista de una Facción
+//! el último instante en que se vio, lo de un héroe sin bandera), la foto (`BAN28`) y que todo es lo mismo con sesiones y sin ellas; y lo que proyecta la vista de una Facción
 //! (`proyeccion::vista::Mirada`): lo propio entero, lo ajeno redactado, lo recordado como ficha, lo que ven los aliados y el tramo ajeno que se renueva. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
@@ -428,7 +428,7 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     assert!(mem.exploracion.contains_key(&1) && mem.fichas.contains_key(&1) && !mem.personal.is_empty() && !mem.vigias.is_empty(), "la partida graba de todo");
 
     let bytes = a.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN27");
+    assert_eq!(&bytes[..5], b"BAN28");
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);
@@ -441,9 +441,9 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     let vieja = [b"BAN25".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN25 no debe admitirse") };
     assert!(e.to_string().contains("BAN25") && e.to_string().contains("LAYOUT_VERSION 4"), "{e}");
-    let vieja = [b"BAN26".as_slice(), &bytes[5..]].concat();
-    let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN26 no debe admitirse") };
-    assert!(e.to_string().contains("BAN26") && e.to_string().contains("LAYOUT_VERSION 5"), "{e}");
+    let vieja = [b"BAN27".as_slice(), &bytes[5..]].concat();
+    let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN27 no debe admitirse") };
+    assert!(e.to_string().contains("BAN27") && e.to_string().contains("LAYOUT_VERSION 5"), "{e}");
 }
 
 #[test]

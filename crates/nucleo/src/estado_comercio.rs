@@ -70,7 +70,7 @@ pub struct EstadoMercenarios {
 
 impl Default for EstadoMercenarios {
     fn default() -> Self {
-        Self { mercado: MercadoMercenario { contadores: BTreeMap::new(), repone_en: 0 }, stock: BTreeMap::new(), pulso: None }
+        Self { mercado: MercadoMercenario { contadores: BTreeMap::new(), repone: BTreeMap::new(), repone_en: 0 }, stock: BTreeMap::new(), pulso: None }
     }
 }
 

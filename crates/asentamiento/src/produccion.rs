@@ -80,7 +80,7 @@ pub fn extraer_y_cultivar(cat: &Catalogo, edificios: &mut [Edificio], almacen: &
             Tipo::Granja => {
                 let base = def.nivel(e.nivel_interno).map_or(0, |n| n.produccion_base_trigo);
                 let deseado = por(por(por(base, ctx.fertilidad), mano.pesants), ctx.factor_trigo);
-                let entra = almacen.agregar(Recurso::Trigo, deseado);
+                let entra = almacen.producir(Recurso::Trigo, deseado);
                 e.pausado_por_almacen = entra < deseado;
                 sumar(Recurso::Trigo, entra);
             }
@@ -91,17 +91,17 @@ pub fn extraer_y_cultivar(cat: &Catalogo, edificios: &mut [Edificio], almacen: &
                     _ => 0,
                 };
                 let deseado = por(por(base, densidad), mano.pesants);
-                let entra = almacen.agregar(Recurso::Madera, deseado);
+                let entra = almacen.producir(Recurso::Madera, deseado);
                 e.pausado_por_almacen = entra < deseado;
                 sumar(Recurso::Madera, entra);
             }
             _ => {
                 let (Some((recurso, base)), Some(Fuente::Nodo(nodo))) = (def.produccion, e.fuente) else { continue };
                 let deseado = por(por(base, mano.pesants), (ctx.factor_tecnologia)(recurso));
-                let pedido = deseado.min(almacen.espacio(recurso));
+                let pedido = deseado.min(almacen.hueco(recurso));
                 e.pausado_por_almacen = pedido < deseado;
                 let salido = if pedido > 0 { fuentes.extraer(nodo, pedido) } else { 0 };
-                sumar(recurso, almacen.agregar(recurso, salido));
+                sumar(recurso, almacen.producir(recurso, salido));
             }
         }
     }
@@ -126,10 +126,10 @@ pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen
             }
             let mut cantidad = por(por(rc.produccion_base, mano.artesanos), ctx.factor_talleres);
             for &(insumo, por_unidad) in &rc.consume_por_unidad {
-                let disponible = (almacen.cantidad(insumo) - reserva[insumo.indice()]).max(0);
+                let disponible = (almacen.disponible(insumo) - reserva[insumo.indice()]).max(0);
                 cantidad = cantidad.min(disponible * 1000 / por_unidad.max(1));
             }
-            let espacio = almacen.espacio(rc.produce);
+            let espacio = almacen.hueco(rc.produce);
             if cantidad > espacio {
                 cantidad = espacio;
                 limitado = true;
@@ -138,9 +138,9 @@ pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen
                 continue;
             }
             for &(insumo, por_unidad) in &rc.consume_por_unidad {
-                almacen.quitar(insumo, por_unidad * cantidad / 1000);
+                almacen.consumir(insumo, (por_unidad * cantidad + 999) / 1000); // hacia arriba: una receta nunca sale más barata
             }
-            almacen.agregar(rc.produce, cantidad);
+            almacen.producir(rc.produce, cantidad);
             match hecho.iter_mut().find(|(x, _)| *x == rc.produce) {
                 Some(p) => p.1 += cantidad,
                 None => hecho.push((rc.produce, cantidad)),
@@ -321,7 +321,7 @@ mod pruebas {
         let mut e = vec![activo(1, Tipo::Fundicion)];
         let m = mano_de_obra(&cat, &e, 0, 2, 0);
         recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; 29]);
-        assert_eq!(a.cantidad(Recurso::LingoteCobre), 2_500, "ratio 0,5 de los 5 del techo");
+        assert_eq!((a.cantidad(Recurso::LingoteCobre), a.disponible(Recurso::LingoteCobre)), (2_000, 2_500), "ratio 0,5 de los 5 del techo: 2 enteros y medio en el resto");
         let antes = a.cantidad(Recurso::Cobre);
         recetas(&cat, &mut e, &mut a, &m, &ctx(&[Recurso::LingoteCobre], &[]), &[0; 29]);
         assert_eq!(a.cantidad(Recurso::Cobre), antes, "pausada por el Gobernador");

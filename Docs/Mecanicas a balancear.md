@@ -31,6 +31,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | 45 | COMERCIO | Comisión acuñada contra el oro lleno — C4 implementado 2026-10-19, re-medido 2026-10-24: se acuña el 0,44 % del valor (tasas 3-12 %) | decisión C7 (`comercio.json`); bots con sumideros de oro (fase 7) |
 | 46 | COMERCIO | Sumideros de bienes escasos: el comercio se apaga a los 13 días; cupos de la flota (M) | `batch comercio` con bots de la fase 7 (decisión C5) |
 | 47 | MILITAR | Lo que la calibración del sistema 4 deja para los bots de la fase 7: saqueo de pueblos (M1), equipo de Barracón y Galería (M7), nivel 3 (C1), reputación concentrada (C1b), cifras de la empalizada (Murallas M2) | `batch militar`, `batch poblacion` y `batch comercio` con los bots de la fase 7 |
+| 48 | COMERCIO | Economía entera: la reputación mediana final salta de 5,45 a 34,1 (EE-7) | fase 7, con C1b (`batch comercio` con bots) |
 
 ## 20. Tecnología por Eras: calibrar los logros
 
@@ -76,6 +77,10 @@ prestada sale **completa** (25-30 por escuadra, antes 15): el anillo de bandidos
 ## 43. Peaje y trueque: repescas
 
 El peaje (2 % de lo que lleva la caravana a cada ciudad ajena que cruza) deja la entrega por debajo de lo pactado y el trueque solo abona lo que llega: en `batch comercio` (2026-10-19) había 3,35 salidas de caravana por trueque cumplido (esperado 2) y el 24,3 % de los viajes de ida llevaban menos de una unidad (repescas de 0,6 u y 0,012 u). **Decidido por el autor el 2026-10-19 (C3) e implementado ese día:** una línea con algo entregado y menos de una unidad por entregar se da por saldada (el peaje del 2 % se conserva; una entrega grande sigue necesitando repesca). Regla en `Docs/Mechanics/Comercio_Caravanas.md` §4.4. Las otras opciones (peaje del almacén de origen al salir, abonar lo que sale) quedan descartadas. **Re-medido el 2026-10-24** (`batch comercio`, 30 días, semilla 42 dos veces con la misma huella y semilla 7; informe en `batch/salida/comercio/`, decisiones en `crates/batch/decisiones/comercio.json`; las cifras del 2026-10-19 de este apartado quedan **sustituidas**): salidas por trueque de 3,35 a **2,48** (2,45 con la semilla 7), viajes de ida de menos de una unidad del 24,3 % al **0 %**, trueque en el percentil 90 de 17,5 a **8,9 min**. Lo que queda por encima de 2 son repescas de más de una unidad (el 2 % de entregas de hasta 80 u). **C3b decidida por el autor el 2026-10-24:** regla nueva de fondo, **todo lo almacenado va en enteros** (resto oculto en los flujos por minuto, redondeo hacia abajo en todo lo demás); es una tanda propia («economía entera», fila en `Mecanicas a desarrollar.md`) y, con ella, las repescas de menos de una unidad desaparecen por construcción. Volver a medir tras esa tanda.
+
+## 48. Economía entera: reputación mediana y repesca por peaje (EE-7)
+
+Con la economía entera (C3b, 2026-10-24) `batch comercio` (160 plazas, 30 días, semilla 42) pasa de 139 a 136 trueques cumplidos y la **reputación mediana final de las Facciones salta de 5,45 a 34,1** (la máxima, 99,7 → 98,6; con reputación positiva, 17,5 % → 15 %), con otro reparto de los peajes (cobros 187 → 81 antes del mínimo de EE-4). **Decidido por el autor el 2026-10-24 (EE-7):** se investiga en la fase 7, junto a C1b (reputación concentrada), con bots reales. La repesca de la última unidad por una ruta con peaje, que con el peaje mínimo (EE-4) y sin la línea saldada por resto (EE-6) no llegaba nunca (10.421 caravanas y un 70 % de cumplimiento en el batch), quedó resuelta el mismo día: el peaje nunca deja la carga en cero.
 
 ## 44. Ventana del acarreo en la solvencia del ascenso
 

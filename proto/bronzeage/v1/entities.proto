@@ -599,7 +599,10 @@ message Ejercito {
   repeated PeticionUnion peticiones_de_union = 8;
   repeated string escuadron_ids = 9;
   Cantidades suministro = 10;            // el carro (carga)
-  Ritmo viveres = 11;                    // trigo que se come; capacidad = suma de la de sus héroes
+  // Trigo que se come; capacidad = suma de la de sus héroes. Va en unidades enteras con resto oculto (EE-3, 2026-10-24): el ritmo es el valor
+  // exacto y el cliente lo enseña redondeado HACIA ARRIBA a unidades (la unidad que se está comiendo sigue hasta acabarse); se acaban cuando el
+  // valor exacto llega a 0.
+  Ritmo viveres = 11;
   sint64 capacidad_viveres = 12;
   optional int64 formacion_expira_en_ms = 13;
   optional Persecucion persiguiendo = 14;

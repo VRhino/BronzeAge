@@ -61,12 +61,21 @@ message Ritmo {
 }
 
 // Un recurso almacenado: cantidad (como ritmo) y capacidad.
+//
+// ENTERO (economía entera, decisión C3b del autor del 2026-10-24): todo lo almacenado —almacenes de plaza, pueblo y avanzada, carros,
+// caravanas, almacén personal y existencias de los campamentos— guarda unidades enteras, así que `cantidad.valor_en_t0` es siempre
+// múltiplo de 1.000. La fracción que llevan los flujos por minuto (producción, comida, mantenimiento, recaudación) es un «resto oculto»
+// del servidor y NO viaja; `cantidad.por_minuto` (la tendencia) sí es el neto exacto del último paso y puede no ser múltiplo de 1.000.
+// Una unidad que se está consumiendo sigue en `valor_en_t0` hasta que su consumo se completa (EE-2), así que lo que se puede mover o vender puede
+// ser una unidad menos que lo que se ve.
+// La capacidad puede no ser entera (sale de factores): lo que cabe es su parte entera.
 message Existencia {
   Ritmo cantidad = 1;
   sint64 capacidad = 2;
 }
 
-// Cantidades por id de catálogo (carros, cargas, aportes). En milésimas.
+// Cantidades por id de catálogo (carros, cargas, aportes). En milésimas; lo almacenado (cargas de carro y de caravana, almacén personal,
+// lo pactado de un trueque) es siempre múltiplo de 1.000 (C3b, 2026-10-24).
 message Cantidades {
   map<string, sint64> por_id = 1;
 }

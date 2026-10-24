@@ -57,7 +57,7 @@ pub(super) fn constante(valor: Mil) -> pb::Ritmo {
 
 /// Lo que hay de un recurso, en escalones (la economía va por minuto): `tendencia` es el neto del último paso de minuto, «+N/min»; un almacén sin tendencia (el de un pueblo) la lleva a 0.
 pub(super) fn existencia(a: &Almacen, r: Recurso, tendencia: Mil) -> pb::Existencia {
-    pb::Existencia { cantidad: Some(pb::Ritmo { en_escalones: true, maximo: Some(a.capacidad(r)), por_minuto: tendencia, ..constante(a.cantidad(r)) }), capacidad: a.capacidad(r) }
+    pb::Existencia { cantidad: Some(pb::Ritmo { en_escalones: true, maximo: Some(a.capacidad(r)), por_minuto: tendencia, ..constante(a.visible(r)) }), capacidad: a.capacidad(r) }
 }
 
 /// Las celdas de un anillo de muralla en el contrato (columna, fila y clase).
@@ -151,7 +151,7 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
             comprado: h.cupo.comprado.iter().map(|(r, &n)| (r.nombre().to_owned(), u32::try_from(n).unwrap_or(u32::MAX))).collect(),
         }),
         racion_en_ms: h.heroe.racion_en,
-        viveres: Some(constante(h.heroe.viveres)),
+        viveres: Some(constante(base::entero_arriba(h.heroe.viveres))), // en unidades enteras: la que se está comiendo sigue hasta acabarse (EE-3)
         bandidos_destruidos_en_ms: e.combate.destruidos.get(&h.heroe.id).cloned().unwrap_or_default(),
         herido_hasta_ms: h.heroe.herido_hasta,
         desconecta_en_ms: h.heroe.presencia.desconecta_en,

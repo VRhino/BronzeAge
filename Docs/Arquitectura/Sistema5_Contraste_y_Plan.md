@@ -352,3 +352,73 @@ Decisión 9 de la §7 (el andamiaje de administración se queda como herramienta
 - **5A** (reglas puras, crate `politica`) en paralelo, en un worktree aparte.
 - Antes de **5B**, en el árbol principal y por este orden: la **calibración del sistema 4** (`Consideraciones/Calibracion_Sistema4_Decisiones.md`: atalayas, bandidos 6 h, protección al fundar, asedio con convocatoria de 30 s, carga de las adjuntas, empalizada con `LAYOUT_VERSION` 5) y la **economía entera** (todo lo almacenado en enteros con resto oculto y redondeo hacia abajo), porque 5B-5G añaden flujos (tributo, refundación) que deben nacer enteros.
 - Después, 5B → 5C → 5D → 5E → 5F → 5G → 5H → 5I.
+
+## Avance de 5A (2026-10-24): reglas puras en `crates/politica`
+
+Hecha en la rama `politica-5a` (worktree aparte, sobre `4377b86`). Crate nuevo `crates/politica` (≈ 3.700 líneas con pruebas), sin dependencia del núcleo: depende de `base`, `asentamiento`
+(los helpers de bloques, `Recurso` y `Cargo`, que se reutiliza en vez de duplicarlo) y `comercio` (`Suceso` y `ReglasReputacion`). Solo se tocó el `Cargo.toml` del workspace; el núcleo no.
+
+**Datos** (`datos.rs`, del documento `Diplomacia_Facciones.md`): `CIUDADANIA`, `CAPITAL`, `PUERTA`, `RELACION_PROPUESTA`, `ANEXION`, `FUSION`, `CATALOGO_SIGILO`, `CAP_FUNDACION_POR_NIVEL`,
+`CUPO_NIVEL_ASENTAMIENTO` y el bloque nuevo **`NIVEL_FACCION`** (C9, en Dip §3.5, con las cifras de `constants.ts:1494-1534`; experiencia en milésimas, ratio en ppm). Se quitó el bloque vacío de
+`Combate.md`. `texto_de_parametros()` queda listo para entrar en la huella del núcleo en 5B.
+
+**Módulos y tipos públicos**
+| Módulo | Tipos y funciones | Reglas |
+|---|---|---|
+| `tipos` | `FaccionId`, `HeroeId`, `AsentamientoId`, `RelacionId`, `PropuestaId`; `Cargo` (el de `asentamiento`), `CARGOS`, `Cargos` (titular, ocupado, es_titular, vaciar_de); `Grupo`, `Grupos` | |
+| `faccion` | `Faccion`, `Derrota`, `Facciones` (índice héroe → Facción), `Salida`, `ErrorFaccion` | crear (nombre sin mayúsculas, sigilo, 1 héroe 1 Facción, cooldown), solicitar, responder, otorgar, quitar con **sucesión** por orden de ingreso, dejar (**Q7**), Rey, Embajador, admitir otras, experiencia monótona, derrota |
+| `nivel` | `Hecho`, `xp_de`, `combate_digno`, `nivel`, `experiencia_minima`, `cap_fundacion`, `cupo_nivel` | §3.5 y Doc 2.2.1 |
+| `cargos` | `asignar_cargo_local`, `ErrorCargo` | §3.4 con **Q4** (hay que residir) |
+| `residencia` | `sin_cooldown`, `puede_mudarse`, `ciudadanos_para_nobleza`, `ErrorResidencia` | §4.1-§4.2; **Q8** |
+| `capital` | `PlazaDeCapital`, `designada`, `efectiva`, `designar`, `ErrorCapital` | §3.7 |
+| `sigilo` | `Sigilo`, `Catalogo` (es_del_catalogo, motivo_rechazo, sigilo_libre), `mismo_sigilo`, `hash32` | §3.8 (FNV-1a sobre UTF-16, como el TS; semilla `f-{id}`) |
+| `puerta` | `Puerta`, `Visitante`, `GrupoDePuerta`, `grupo_de_puerta`, `ErrorPuerta` | §4.3 con **Q1** (grupos con `aedas`, vetos, cerrada a neutrales y enemigos, `expulsados`) |
+| `relaciones` | `RelacionPolitica`, `TipoRelacion`, `EstadoRelacion`, `Tributo`, `Relaciones` (índice de la activa por par), `Guerra`, `Declaracion`, `Rebelion`, `VasallaConquistada`, `ErrorDiplomacia` | validar par, crear, terminar, `declarar_guerra` con **arrastre**, `declarar_al_atacar` (**Q2**: la traición), paz, romper, rebelión, guerra tras romper, desarme del señor, vasalla conquistada, defensa del vasallo |
+| `propuestas` | `Propuesta`, `Clase` (relación, anexión, fusión en un solo almacén), `Pacto`, `Union`, `Propuestas`, `ErrorPropuesta`; `exigir_{relacion,anexion,fusion}_posible`; en `Politica`: proponer, responder y retirar | §5.3, §6.1-§6.2 con revalidación y batalla abierta |
+| `tributo` | `pago`, `Pago`, `UNIDAD` | §5.6 con **Q3** en enteros con resto oculto (C3b) |
+| `liga` | `Liga`, `ligas` | §5.7 |
+| `titulos` | `TituloId`, `Titulo`, `Medida`, `calcular`, `Cambio`, `narrar` | §7 |
+| `traslado` | `Plan`, `Cambio`, `planificar`, `aplicar`, `anexionar`, `fusionar`, `marca_tras_fusion` | §6.3 como lista de cambios puros |
+| `autorizacion` | `Vista` (la da el núcleo), `Actor` con los predicados de Proy §4.3 y §5.2 | fail-open salvo `responde_solicitudes` |
+| `lib` | `Politica { facciones, relaciones, propuestas }` | el estado que guardará el núcleo |
+
+**Pruebas:** 93 en el crate, todas en verde. Portadas del TypeScript (con el fichero de origen en el módulo de pruebas): `sigilo.test.ts` (6 de 6, más el vector de FNV-1a y el sigilo de
+«faccion-1» calculados aparte con el algoritmo del TS), `capital.test.ts` (7 de 7), `puerta.test.ts` (6 de 7: `puedeReclutarEn` es de `militar`), `cargos.test.ts` (8 de 8), `faccion.test.ts`
+(solicitudes 2 de 2 y la regla de `cambiarResidencia`; mover al héroe es de 5B), `eventosDominioFaccion.test.ts` (3 de 4: la de fundar es de 5C), `experienciaFaccion.test.ts` (las cifras de los 8;
+lo que miran del combate, el trueque y el ascenso es de `combate`, `comercio` y 5C), `diplomaciaDecisiones.test.ts` (5 de 5: tributo en enteros, nombre de la fusión, marca de capital),
+`eventosDominioDiplomacia.test.ts` (2 de 2, en el tributo), `vasallaConquistada.test.ts` (2 de 2), `eventosDominioTitulos.test.ts` (3 de 3) y de `autorizacionComandos.test.ts` los 9 casos que miran
+estos predicados (la exhaustividad de la matriz y los roles son de 5E). Además, reglas de los comandos de `comandosMembresiaFaccion`, `comandosDiplomacia`, `comandosAnexion` y `comandosFusion`
+(la orden entera es del núcleo) y las decisiones Q1-Q4, Q7 y Q8.
+
+**Lo que 5A no cubre (y dónde va):** guardar el estado, la foto y los códigos de rechazo (5B); reubicar al campamento más cercano, fundir la memoria y la columna que toma la Facción (5B);
+consumir la experiencia, `faccion.nivel_subio`, la capital en el `Exterior` y el nombre de ciudad (5C); aplicar los `Suceso`s, expirar los trueques de la rebelión y llamar al desarme y a la vasalla
+conquistada en la caída (5D); la matriz en `Comando::autoriza` y retirar `manda_en` (5E); el traslado de lo no político, la reputación y la tecnología de la fusión y la cadencia de los títulos (5F).
+`cap_fundacion` y `cupo_nivel` existen aquí, pero sus llamadores siguen leyendo `ReglasTerritorio` y `asentamiento::nivel` hasta 5C (una prueba iguala los dos bloques de cupo).
+
+**Documentos tocados:** `Diplomacia_Facciones.md` (nota de 5A, bloque `NIVEL_FACCION`, C4/Q3, C6/Q4, C7, C8, Q2, C10, C13/Q7, Q1), `Combate.md` (sin el bloque vacío; Q2), `Comercio_Caravanas.md`
+(dónde está `NIVEL_FACCION`), `Economia_Construccion.md` (Q8: residentes para la nobleza), `Presencia_Y_Convocatoria.md` §8 (Q1), `Proyecciones_Y_Autorizacion.md` §5.2 (nota de 5A; C16 en §5.2.8),
+`Heroe_Y_Tropa.md` (residencia en 5A), canon `Docs/Game/2_*` (Q2, Q3, Q4, Q7, C7, C11, C12) y `Docs/Game/1_*` (Q1, la puerta por defecto y el veto que expulsa), y las filas de paridad de
+`NIVEL_FACCION` en `Docs/Mecanicas a desarrollar.md` (l.96, 103, 108 y 134). C5 queda resuelta por Q8; C9-C14 y C16 corregidas; C15 (cadencia de los títulos) es de 5F.
+
+**Dudas que deja 5A** (marcadas `// DUDA:` en el código):
+1. Q2: la traición no cobra además `penalizacionGuerraTrasRomperAlianza` (−15) por la alianza que rompe en ese instante; sí anota `rotaPor`/`rotaEn`.
+2. Q3: lo que no cabe en la capital no sale de la vasalla (el TS lo descontaba y lo perdía).
+3. Vasalla conquistada: se acaba cualquier relación activa entre vasalla y conquistadora, no solo las guerras, para no dejar dos activas en el par.
+4. Q7: ¿un ejército de un solo héroe (que conserva su identidad de ejército) también impide dejar la Facción? Hoy la regla recibe «con otros» y solo rechaza entonces.
+5. Fusión: la marca de capital se copia tal cual sin mirar si sigue vigente (`capital::designada` ya la ignora si no vale).
+6. `romperRelacion` y `rebelionVasallo` sobre una relación ya rota se rechazan (`NoActiva`); el TS no lo miraba y volvía a cobrar la reputación.
+
+### Decisiones del autor sobre las dudas de 5A (2026-10-24)
+
+1. **5A-1, traición:** solo −25; no suma los −15 de la guerra tras romper. Sin cambio de código; escrito como regla (`relaciones::declarar_al_atacar`, Dip §5.4, G2 2.7).
+2. **5A-2, tributo que no cabe: CAMBIO.** Se paga entero y la capital pierde el exceso, como el TypeScript. `tributo::pago` devuelve ahora `pagadas` (lo que sale de la vasalla) y
+   `recibidas` (lo que entra en la capital, topado por su hueco). Dip §5.6 y G2 2.4.
+3. **5A-3, vasalla conquistada:** se acaba cualquier relación activa entre vasalla y conquistadora. Aceptada; Dip §5.5 y G2 2.4.
+4. **5A-4, Q7: CAMBIO.** Dejar la Facción yendo en un ejército se rechaza siempre, también en uno de un solo héroe. `Facciones::dejar(h, ahora, en_ejercito)`: el núcleo pasa `true` por ir
+   en cualquier ejército (o en una convocatoria con otros héroes). Dip §3.3 y G2 2.5.
+5. **5A-5, marca de capital en la fusión:** pasa tal cual, sin mirar si sigue vigente. Aceptada; Dip §6.2.
+6. **5A-6, romper o rebelarse sobre una relación rota:** se rechaza (`NoActiva`). Aceptada; Dip §5.5.
+7. **5A-7, `Propuesta.propuesta_por`, héroe o Facción:** se decide en 5H. Hoy el crate guarda el héroe (Dip §2.4) y el contrato dice «facción que propone».
+8. **5A-8, ciudadanía en una Facción vacía:** quien la recibe pasa a ser su Rey. Sin cambio de código; escrito en Dip §3.2 y G2 2.5.
+
+Ya no queda ninguna `// DUDA:` en `crates/politica`.

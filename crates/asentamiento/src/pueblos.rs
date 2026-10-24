@@ -254,10 +254,10 @@ impl Asentamiento {
         for p in self.pueblos.iter_mut().filter(|p| p.activo()) {
             let Some((recurso, base)) = r.catalogo.tipo(p.tipo).produccion else { continue };
             let deseado = por(por(base, mano.pesants), (ctx.factor_tecnologia)(recurso));
-            let pedido = deseado.min(p.almacen.espacio(recurso));
+            let pedido = deseado.min(p.almacen.hueco(recurso));
             let salido = if pedido > 0 { fuentes.extraer(p.nodo, pedido) } else { 0 };
-            p.almacen.agregar(recurso, salido);
-            let lleno = p.almacen.espacio(recurso) == 0;
+            p.almacen.producir(recurso, salido);
+            let lleno = p.almacen.hueco(recurso) == 0;
             if lleno && !p.lleno {
                 ev.push(Evento::PuebloLleno { id: p.id });
             }
@@ -440,7 +440,7 @@ mod pruebas {
         let mano = mano_de_obra(&r.catalogo, &a.edificios, 6, 0, a.trabajadores_de_pueblos(&r));
         assert_eq!(mano.pesants, 500_000, "6 pesants para 12 que piden la Granja y el pueblo");
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut vec![]);
-        assert_eq!(a.pueblos[0].almacen.cantidad(Recurso::Cobre), 2_500);
+        assert_eq!((a.pueblos[0].almacen.cantidad(Recurso::Cobre), a.pueblos[0].almacen.disponible(Recurso::Cobre)), (2_000, 2_500));
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut vec![]);
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut vec![]);
         assert_eq!((a.pueblos[0].almacen.cantidad(Recurso::Cobre), a.pueblos[0].nodo), (3_000, 1), "agotado: espera, no cambia de nodo");

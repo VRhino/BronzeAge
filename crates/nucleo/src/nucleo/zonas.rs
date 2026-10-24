@@ -74,13 +74,30 @@ pub struct InformeViabilidad {
     pub parcelas_libres: usize,
     /// Nodos de piedra en esa zona.
     pub piedra: usize,
-    /// Parcelas de bosque libres a menos del techo de la zona del nivel 1 (10 u) del punto. Con 0 la plaza **caerá en ruinas**: sin
+    /// Parcelas de bosque libres en la zona del techo del nivel 1 (10 u) del punto, recortada por las plazas de otras Facciones que tocan ese
+    /// disco aunque no toquen el inicial (decidido el 2026-10-24). Con 0 la plaza **caerá en ruinas**: sin
     /// Leñera no hay madera para el mantenimiento y no llega a crecer lo bastante para alcanzar otro bosque (decidido el 2026-10-18).
     pub parcelas_en_techo: usize,
     /// Madera por minuto (milésimas) que daría ese bosque si se explotase entero: base de la Leñera × Σ densidades de las parcelas libres.
     pub madera_potencial: Mil,
     /// La plaza caerá en ruinas: sin parcela a 10 u o con menos madera potencial que `economia::MADERA_MINIMA_POTENCIAL`.
     pub condenada: bool,
+}
+
+/// Lo que cuenta el aviso de viabilidad: parcelas libres en la zona `nuevo`, piedra en esa zona y las parcelas libres en la zona
+/// `techo`. Cada zona la recortan las plazas de otras Facciones que tocan **su** disco: el techo, también las que no tocan el disco
+/// inicial (decidido el 2026-10-24). Solo mira lo que la rejilla del mapa da dentro de los discos (`en_zona` exige estar en el
+/// disco), así que cuenta lo mismo que recorrer el mapa entero.
+fn contar_sitio<'m>(mapa: &'m Mapa, nuevo: &Disco, techo: &Disco, plazas: impl IntoIterator<Item = Disco>, libre: impl Fn(u32) -> bool) -> (usize, usize, Vec<&'m territorio::Parcela>) {
+    // Las que tocan el disco mayor; `en_zona` descarta para cada disco las que no lo tocan.
+    let mayor = if techo.radio >= nuevo.radio { techo } else { nuevo };
+    let tocan: Vec<Disco> = plazas.into_iter().filter(|d| territorio::se_tocan(mayor, d)).collect();
+    let tocan = &tocan[..];
+    let libres: Vec<&territorio::Parcela> = mapa.parcelas_en(nuevo.centro, nuevo.radio.max(techo.radio)).into_iter().filter(|&i| libre(i)).map(|i| &mapa.parcelas[i as usize]).collect();
+    let parcelas_libres = libres.iter().filter(|pa| territorio::en_zona(pa.centro, nuevo, tocan)).count();
+    let piedra = mapa.piedra_en(nuevo.centro, nuevo.radio).into_iter().filter(|&n| territorio::en_zona(mapa.nodos[n as usize].pos, nuevo, tocan)).count();
+    let en_techo = libres.into_iter().filter(|pa| territorio::en_zona(pa.centro, techo, tocan)).collect();
+    (parcelas_libres, piedra, en_techo)
 }
 
 impl Nucleo {
@@ -147,16 +164,11 @@ impl Nucleo {
         let geo = self.geografia.as_ref()?;
         let motivo = self.validar_fundacion(geo, p).err();
         let nuevo = Disco { centro: p, radio: self.estado.reglas.territorio.radio_inicial, faccion };
-        // La zona con la que nacería: el círculo inicial recortado contra las plazas de otras Facciones.
-        let vecinos: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
-        let tocan: Vec<Disco> = vecinos.into_iter().filter(|d| territorio::se_tocan(&nuevo, d)).collect();
-        let en_zona = |c: Punto| territorio::en_zona(c, &nuevo, &tocan);
-        let parcelas_libres = geo.mapa.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_zona(pa.centro)).count();
-        let piedra = geo.mapa.nodos.iter().filter(|n| n.tipo == asentamiento::Tipo::Cantera && en_zona(n.pos)).count();
         // El mismo cálculo con el disco que alcanzará la zona en el nivel 1.
         let techo = Disco { radio: self.estado.reglas.territorio.techo(1), ..nuevo };
-        let en_techo = |c: Punto| territorio::en_zona(c, &techo, &tocan);
-        let libres_en_techo: Vec<&territorio::Parcela> = geo.mapa.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_techo(pa.centro)).map(|(_, pa)| pa).collect();
+        // La zona con la que nacería y la del techo, cada una recortada contra las plazas de otras Facciones que la tocan.
+        let plazas = self.estado.asentamientos.values().map(|a| self.disco_de(a));
+        let (parcelas_libres, piedra, libres_en_techo) = contar_sitio(&geo.mapa, &nuevo, &techo, plazas, |i| !self.estado.parcelas_ocupadas.contains_key(&i));
         let parcelas_en_techo = libres_en_techo.len();
         let base_lenera = self.estado.reglas.economia.datos.catalogo.tipo(asentamiento::Tipo::Lenera).produccion.map_or(0, |(_, b)| b);
         let madera_potencial = base_lenera * libres_en_techo.iter().map(|pa| pa.densidad as Mil).sum::<Mil>() / 1000;
@@ -287,14 +299,13 @@ impl Nucleo {
                 let yo = self.disco_de(a);
                 // Solo importan las vecinas que recortan esta zona; el resto no cambia la respuesta.
                 let tocan: Vec<Disco> = self.discos().into_iter().filter(|&(o, d)| o != *asentamiento && territorio::se_tocan(&yo, &d)).map(|(_, d)| d).collect();
-                let elegida = territorio::elegir_parcela(
-                    &geo.mapa.parcelas,
-                    &geo.mapa.total_por_masa,
-                    self.estado.reglas.territorio.cuota_parcelas_pct,
+                let elegida = geo.mapa.parcela(
                     a.posicion,
+                    yo.radio,
                     &a.parcelas,
-                    |i| !self.estado.parcelas_ocupadas.contains_key(&i),
-                    |c| c.dist2(yo.centro) <= (yo.radio as i128).pow(2) && territorio::en_zona(c, &yo, &tocan),
+                    self.estado.reglas.territorio.cuota_parcelas_pct,
+                    &|i| !self.estado.parcelas_ocupadas.contains_key(&i),
+                    &|c| territorio::en_zona(c, &yo, &tocan),
                 );
                 let parcela = match elegida {
                     Ok(i) => i,
@@ -372,5 +383,90 @@ impl Nucleo {
         });
         self.contactos_nuevos(id, t);
         Ok(Some(id))
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+    use crate::economia::NodoMapa;
+    use asentamiento::Tipo;
+    use base::Rng;
+    use territorio::Parcela;
+
+    /// La rejilla cuenta lo mismo que recorrer el mapa entero (como hacía `viabilidad` hasta el 2026-10-24), en mundos al azar.
+    #[test]
+    fn la_rejilla_cuenta_lo_mismo_que_el_recorrido_lineal() {
+        let mut rng = Rng::nuevo(2026_10_24);
+        for _ in 0..15 {
+            let (ancho, alto) = (100_000 + rng.por_debajo(400_000) as i64, 100_000 + rng.por_debajo(400_000) as i64);
+            let punto = |rng: &mut Rng| Punto::new(rng.por_debajo(ancho as u64 + 40_000) as i64 - 20_000, rng.por_debajo(alto as u64 + 40_000) as i64 - 20_000);
+            let parcelas: Vec<Parcela> = (0..2000).map(|_| Parcela { bosque: rng.por_debajo(3) as u32, centro: punto(&mut rng), densidad: rng.por_debajo(1001) as u32 }).collect();
+            let tipos = [Tipo::Cantera, Tipo::Corral, Tipo::Mina];
+            let nodos: Vec<NodoMapa> = (0..600).map(|_| NodoMapa { pos: punto(&mut rng), tipo: tipos[rng.por_debajo(3) as usize], inicial: 1000 }).collect();
+            let mapa = Mapa::nuevo(nodos, parcelas, vec![0; 3], vec![], ancho, alto);
+            let ocupadas: BTreeSet<u32> = (0..500).map(|_| rng.por_debajo(2000) as u32).collect();
+            let plazas: Vec<Disco> = (0..60).map(|_| Disco { centro: punto(&mut rng), radio: 6_000 + rng.por_debajo(24_001) as i64, faccion: 1 + rng.por_debajo(4) as u32 }).collect();
+            for _ in 0..300 {
+                let nuevo = Disco { centro: punto(&mut rng), radio: 6_000, faccion: 1 + rng.por_debajo(4) as u32 };
+                let techo = Disco { radio: 10_000, ..nuevo };
+                let libre = |i: u32| !ocupadas.contains(&i);
+                let lineal_libres = mapa.parcelas.iter().enumerate().filter(|(i, pa)| libre(*i as u32) && territorio::en_zona(pa.centro, &nuevo, &plazas)).count();
+                let lineal_piedra = mapa.nodos.iter().filter(|n| n.tipo == Tipo::Cantera && territorio::en_zona(n.pos, &nuevo, &plazas)).count();
+                let lineal_techo: Vec<&Parcela> = mapa.parcelas.iter().enumerate().filter(|(i, pa)| libre(*i as u32) && territorio::en_zona(pa.centro, &techo, &plazas)).map(|(_, pa)| pa).collect();
+                let (libres, piedra, en_techo) = contar_sitio(&mapa, &nuevo, &techo, plazas.iter().copied(), libre);
+                assert_eq!((libres, piedra), (lineal_libres, lineal_piedra));
+                assert_eq!(en_techo, lineal_techo, "mismas parcelas y en el mismo orden");
+            }
+        }
+    }
+
+    /// El techo del nivel 1 lo recortan también las plazas de otras Facciones que lo tocan sin tocar el disco inicial (2026-10-24).
+    #[test]
+    fn el_techo_lo_recortan_las_plazas_que_solo_tocan_el_techo() {
+        // Rival de r 6 a 14 u: no toca el disco inicial (6 + 6 < 14) pero sí el techo (10 + 6 ≥ 14). La frontera del techo queda a
+        // 14 · 10 / 16 = 8,75 u, así que la parcela a 9 u en su dirección no es de la zona; la de 9 u al otro lado, sí.
+        let parcela = |x: i64| Parcela { bosque: 0, centro: Punto::new(x, 100_000), densidad: 500 };
+        let mapa = Mapa::nuevo(vec![], vec![parcela(109_000), parcela(91_000)], vec![2], vec![], 200_000, 200_000);
+        let nuevo = Disco { centro: Punto::new(100_000, 100_000), radio: 6_000, faccion: 1 };
+        let techo = Disco { radio: 10_000, ..nuevo };
+        let rival = Disco { centro: Punto::new(114_000, 100_000), radio: 6_000, faccion: 2 };
+        assert!(!territorio::se_tocan(&nuevo, &rival) && territorio::se_tocan(&techo, &rival));
+        let (_, _, en_techo) = contar_sitio(&mapa, &nuevo, &techo, [rival], |_| true);
+        assert_eq!(en_techo, vec![&mapa.parcelas[1]]);
+        // De la misma Facción no recorta.
+        let (_, _, en_techo) = contar_sitio(&mapa, &nuevo, &techo, [Disco { faccion: 1, ..rival }], |_| true);
+        assert_eq!(en_techo.len(), 2);
+    }
+
+    /// `ReclamarParcela` con la rejilla elige lo mismo, y falla con el mismo motivo, que `elegir_parcela` sobre el mapa entero.
+    #[test]
+    fn reclamar_parcela_con_la_rejilla_es_lo_mismo_que_el_recorrido_lineal() {
+        let mut rng = Rng::nuevo(2026_10_24_2);
+        let mut vistos = [0usize; 3];
+        for _ in 0..15 {
+            let (ancho, alto) = (100_000 + rng.por_debajo(300_000) as i64, 100_000 + rng.por_debajo(300_000) as i64);
+            let punto = |rng: &mut Rng| Punto::new(rng.por_debajo(ancho as u64 + 40_000) as i64 - 20_000, rng.por_debajo(alto as u64 + 40_000) as i64 - 20_000);
+            let parcelas: Vec<Parcela> = (0..2000).map(|_| Parcela { bosque: rng.por_debajo(3) as u32, centro: punto(&mut rng), densidad: rng.por_debajo(4) as u32 * 250 }).collect();
+            let mut total = vec![0; 3];
+            parcelas.iter().for_each(|p| total[p.bosque as usize] += 1);
+            let mapa = Mapa::nuevo(vec![], parcelas, total, vec![], ancho, alto);
+            let ocupadas: BTreeSet<u32> = (0..800).map(|_| rng.por_debajo(2000) as u32).collect();
+            let plazas: Vec<Disco> = (0..60).map(|_| Disco { centro: punto(&mut rng), radio: 6_000 + rng.por_debajo(24_001) as i64, faccion: 1 + rng.por_debajo(4) as u32 }).collect();
+            for _ in 0..300 {
+                let yo = Disco { centro: punto(&mut rng), radio: 6_000 + rng.por_debajo(24_001) as i64, faccion: 1 + rng.por_debajo(4) as u32 };
+                let tocan: Vec<Disco> = plazas.iter().copied().filter(|d| territorio::se_tocan(&yo, d)).collect();
+                // Propias: ocupadas por esta plaza; con cuota 0 el cupo es 1 por masa y se agota en cuanto tiene una.
+                let propias: BTreeSet<u32> = ocupadas.iter().copied().filter(|_| rng.por_debajo(400) == 0).collect();
+                let cuota = [0, 1, 50][rng.por_debajo(3) as usize];
+                let libre = |i: u32| !ocupadas.contains(&i);
+                let r2 = (yo.radio as i128).pow(2);
+                let lineal = territorio::elegir_parcela(&mapa.parcelas, &mapa.total_por_masa, cuota, yo.centro, &propias, libre, |c| c.dist2(yo.centro) <= r2 && territorio::en_zona(c, &yo, &tocan));
+                let rejilla = mapa.parcela(yo.centro, yo.radio, &propias, cuota, &libre, &|c| territorio::en_zona(c, &yo, &tocan));
+                assert_eq!(rejilla, lineal);
+                vistos[match lineal { Ok(_) => 0, Err(SinParcela::NoHayLibres) => 1, Err(SinParcela::CupoAgotado) => 2 }] += 1;
+            }
+        }
+        assert!(vistos.iter().all(|&k| k > 0), "se prueban los tres desenlaces: {vistos:?}");
     }
 }

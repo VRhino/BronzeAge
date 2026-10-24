@@ -198,6 +198,9 @@ pub fn resolver_combate(r: &Reglas, atacante: Bando, defensor: Bando, multiplica
     let mut chatarra = Carga::new();
     let bajas_a = aplicar_bajas(r, atacante.escuadras, fraccion(Lado::Atacante), ganador == Lado::Atacante, &mut chatarra);
     let bajas_d = aplicar_bajas(r, defensor.escuadras, fraccion(Lado::Defensor), ganador == Lado::Defensor, &mut chatarra);
+    // La chatarra de los dos bandos se suma exacta y queda en unidades enteras, hacia abajo (C3b): la fracción no la coge nadie.
+    chatarra.values_mut().for_each(|n| *n = base::entero(*n));
+    chatarra.retain(|_, n| *n > 0);
     Ok(Informe {
         ganador,
         atacante: InformeBando { poder: poder_a, heroes: atacante.heroes.to_vec(), bajas: bajas_a },

@@ -581,7 +581,10 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         ("poblacion.resto_nobleza", eco(|e| e.poblacion.restos[2] += 1)),
         ("poblacion.recuperando", eco(|e| e.poblacion.recuperando = true)),
         ("poblacion.nutricion", eco(|e| e.poblacion.nutricion -= 1)),
-        ("almacen.cantidad", eco(|e| e.almacen.poner(Recurso::Hierro, 1))),
+        ("almacen.cantidad", eco(|e| e.almacen.poner(Recurso::Hierro, 1_000))),
+        ("almacen.resto", eco(|e| {
+            e.almacen.producir(Recurso::Hierro, 1);
+        })),
         ("almacen.capacidad", eco(|e| e.almacen.ampliar(Recurso::Hierro, 1))),
         ("politicas", eco(|e| e.politicas = asentamiento::Politicas::desde_activas(vec![Activa { id: "x".into(), cargo: Cargo::General, expira_en: 1 }]))),
         ("edificio.estado", eco(|e| e.edificios[1].estado = EstadoEdificio::EnCola)),
@@ -980,7 +983,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN27");
+    assert_eq!(&bytes[..5], b"BAN28");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");
@@ -1015,10 +1018,10 @@ fn el_paso_de_minuto_guarda_su_tendencia_y_no_sube_la_version_con_o_sin_sesiones
     let estado = |n: &Nucleo| {
         let e = n.economia(id).unwrap();
         let (a, b, c) = e.poblacion.enteros();
-        (*e.almacen.partes().0, [a, b, c])
+        (asentamiento::recurso::TODOS.map(|r| e.almacen.disponible(r)), [a, b, c])
     };
 
-    // Sin sesiones: el paso guarda lo que cambió cada recurso y cada clase de la población, y no sube la versión.
+    // Sin sesiones: el paso guarda lo que cambió cada recurso (lo exacto, con su resto oculto: C3b) y cada clase de la población, y no sube la versión.
     let ((almacen, poblacion), v0) = (estado(&n), n.version());
     n.avanzar_hasta(6 * MIN);
     let ((almacen2, poblacion2), t) = (estado(&n), n.estado().asentamientos[&id].economia.tendencia);
@@ -1050,4 +1053,46 @@ fn el_paso_de_minuto_guarda_su_tendencia_y_no_sube_la_version_con_o_sin_sesiones
     let (almacen3, tendencia3) = (estado(&n).0, n.estado().asentamientos[&id].economia.tendencia);
     assert_ne!(almacen3, almacen2);
     assert!(tendencia3.almacen.iter().any(|&x| x != 0), "la tendencia es la del último paso");
+}
+
+// ───────────────────── Economía entera (C3b, 2026-10-24) ─────────────────────
+
+#[test]
+fn el_almacen_va_en_unidades_enteras_y_la_foto_conserva_el_resto_oculto() {
+    let m = con_mundo!();
+    let dir = tempfile::tempdir().unwrap();
+    let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
+    let con = |ajustes: Ajustes| Arranque { ajustes, ..arranque(m, 11) };
+    let almacen = |n: &Nucleo, id: u64| {
+        let (c, k, r) = n.economia(id).unwrap().almacen.partes();
+        (*c, *k, *r)
+    };
+    let (id, a_mitad, partes) = {
+        let mut n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
+        let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
+        let id = fundar_en(&mut n, 0, "a", 1, p);
+        n.avanzar_hasta(3 * HORA + 17 * MIN);
+        let (cantidad, _, resto) = almacen(&n, id);
+        assert!(cantidad.iter().all(|c| c % 1_000 == 0), "lo visible va en unidades enteras: {cantidad:?}");
+        assert!(resto.iter().all(|r| (-999..1_000).contains(r)), "el resto oculto está en (−1000, 1000): {resto:?}");
+        assert!(resto.iter().any(|&r| r != 0), "con la comida, la recaudación y el mantenimiento algún resto queda a medias: {resto:?}");
+        assert!(n.fracciones_almacenadas().is_empty());
+        n.foto_ahora();
+        n.apagar().unwrap();
+        (id, n.hash_estado(), almacen(&n, id))
+    };
+    let mut n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
+    assert!(n.recuperado());
+    assert_eq!((n.hash_estado(), almacen(&n, id)), (a_mitad, partes), "la foto trae cantidades, capacidades y restos");
+    // Seguir desde la foto o sin haber parado da lo mismo: el resto oculto entra en el hash y en la foto.
+    n.avanzar_hasta(9 * HORA);
+    let sin_parar = {
+        let mut s = Nucleo::nuevo(con(ajustes));
+        let p = sitio(&s, &m.0, 0, 50_000, 0, 1, true);
+        fundar_en(&mut s, 0, "a", 1, p);
+        s.avanzar_hasta(9 * HORA);
+        s.hash_estado()
+    };
+    assert_eq!(n.hash_estado(), sin_parar);
+    n.apagar().unwrap();
 }

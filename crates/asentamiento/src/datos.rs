@@ -36,13 +36,14 @@ pub fn texto_de_parametros() -> String {
     texto_de_parametros_de(ECONOMIA) + &format!("<!-- parametros:MURALLA -->\n{muralla}\n<!-- /parametros -->\n")
 }
 
-/// Lo mismo para cualquier documento de Mechanics (el núcleo suma así los bloques del Trazado urbano a la identidad de las reglas).
+/// Lo mismo para cualquier documento de Mechanics (el núcleo suma así los bloques del Trazado urbano a la identidad de las reglas). Los finales de
+/// línea se normalizan a `\n`: un checkout con CRLF y otro con LF dan la misma huella (decisión técnica, 2026-10-24).
 pub fn texto_de_parametros_de(doc: &str) -> String {
     let (mut fuera, mut resto) = (String::new(), doc);
     while let Some(i) = resto.find("<!-- parametros:") {
         let desde = &resto[i..];
         let fin = desde.find("<!-- /parametros -->").map_or(desde.len(), |f| f + "<!-- /parametros -->".len());
-        fuera.push_str(&desde[..fin]);
+        fuera.push_str(&desde[..fin].replace('\r', ""));
         fuera.push('\n');
         resto = &desde[fin..];
     }
@@ -248,6 +249,27 @@ mod pruebas {
     use super::*;
 
     #[test]
+    fn los_costes_de_los_datos_son_unidades_enteras() {
+        // C3b: un coste se cobra en unidades enteras (hacia arriba si saliera fracción); los de los bloques ya lo son, así que nada se redondea al pagarlos.
+        let r = Reglas::cargar();
+        let mut costes: Vec<(String, &crate::recurso::Costo)> = vec![("coste adicional de pueblo".into(), &r.pueblos.coste_adicional)];
+        for &t in crate::catalogo::TIPOS {
+            let def = r.catalogo.tipo(t);
+            costes.push((format!("{t:?}"), &def.costo));
+            costes.extend(def.niveles.iter().enumerate().map(|(i, n)| (format!("{t:?} mejora {i}"), &n.costo_mejora)));
+        }
+        costes.extend(r.nivel.ascenso.iter().map(|(n, a)| (format!("ascenso {n}"), &a.costo)));
+        costes.extend(r.muralla.tarifa_por_celda.iter().enumerate().map(|(i, c)| (format!("celda de muralla {i}"), c)));
+        for e in [crate::avanzadas::Etapa::Atalaya, crate::avanzadas::Etapa::Fuerte, crate::avanzadas::Etapa::Ciudadela] {
+            costes.push((format!("{e:?}"), r.avanzadas.costo(e)));
+        }
+        costes.push(("materiales iniciales".into(), &r.materiales_iniciales));
+        for (nombre, c) in costes {
+            assert!(c.iter().all(|&(_, n)| n % 1_000 == 0), "{nombre}: {c:?}");
+        }
+    }
+
+    #[test]
     fn los_bloques_se_leen_del_documento() {
         let doc = "x\n<!-- parametros:A -->\n```json\n{\"n\": 2.5}\n```\n<!-- /parametros -->\ny";
         assert_eq!(bloque_de(doc, "A").unwrap()["n"], 2.5);
@@ -261,6 +283,13 @@ mod pruebas {
         assert!(t.starts_with("<!-- parametros:") && t.contains("\"materialesIniciales\""));
         assert!(!t.contains("Implementado en Rust") && !t.contains("## 1. Cómo corre"), "la prosa del documento no entra");
         assert_eq!(t.matches("<!-- parametros:").count(), t.matches("<!-- /parametros -->").count());
+    }
+
+    #[test]
+    fn la_identidad_de_las_reglas_no_depende_de_los_finales_de_linea() {
+        let lf = "prosa\n<!-- parametros:A -->\n```json\n{\"n\": 2.5}\n```\n<!-- /parametros -->\nmás prosa\n";
+        assert_eq!(texto_de_parametros_de(&lf.replace('\n', "\r\n")), texto_de_parametros_de(lf));
+        assert!(!texto_de_parametros().contains('\r'));
     }
 
     #[test]

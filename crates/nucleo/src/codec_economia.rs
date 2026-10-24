@@ -1,17 +1,17 @@
 //! Serialización canónica de la economía de una plaza (`asentamiento::Asentamiento`) para el hash y las fotos. Cada estructura se
 //! desestructura **entera** (sin `..`): si el crate añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
-//! Formato (BAN20: BAN15 más los recintos de muralla de cada plaza, que ya no se guardan con su ciudad; BAN15 era BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
-//! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64)} · políticas{n u64 ·
+//! Formato (BAN27: los almacenes guardan unidades enteras —cantidad múltiplo de 1000— y el resto oculto de sus flujos, en `(−1000, 1000)`; BAN20: BAN15 más los recintos de muralla de cada plaza, que ya no se guardan con su ciudad; BAN15 era BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
+//! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64, resto i64)} · políticas{n u64 ·
 //! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · recintos{n u64 · n × recinto} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
 //! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén 29 × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
 //! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool`.
 //! Un pueblo: `id u64 · tipo u8 · nodo u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno n u64 · n × (recurso u8, i64);
-//! 1 en obra → completa_en i64; 2 activo} · almacén{29 × (cantidad i64, capacidad i64)} · carro opt_u64 · lleno bool`.
+//! 1 en obra → completa_en i64; 2 activo} · almacén{29 × (cantidad i64, capacidad i64, resto i64)} · carro opt_u64 · lleno bool`.
 //! Una avanzada: `id u64 · posición punto · etapa u8 (0 atalaya, 1 fuerte, 2 ciudadela) · estado{u8: 0 en construcción, 1 operativa, 2 en ruinas → invulnerable_hasta opt_i64} ·
-//! obra{opt: tipo u8 (0 construir, 1 mejorar, 2 reparar) · requerido y entregado, cada uno n u64 · n × (recurso u8, i64) · completa_en opt_i64} · almacén{29 × (cantidad i64, capacidad i64)}`.
+//! obra{opt: tipo u8 (0 construir, 1 mejorar, 2 reparar) · requerido y entregado, cada uno n u64 · n × (recurso u8, i64) · completa_en opt_i64} · almacén{29 × (cantidad i64, capacidad i64, resto i64)}`.
 //! Un recinto: `id u32 · nivel u8 · celdas{n u64 · n × (col i32, row i32, clase u8: 0 muro, 1 puerta, 2 torre)} · avance i32 · mejora{opt: nivel u8, avance i32} ·
 //! siguiente_celda_en opt_i64 · comprometido_en i64 · completado_en opt_i64`. La ciudad de la plaza (`codec_ciudad`) no guarda recintos: se derivan de estos al leer.
 //! Los tipos y recursos van por su índice en el enum (`Tipo as u8`, `Recurso::indice`).
@@ -75,20 +75,22 @@ fn estado_a_u8(e: Estado) -> u8 {
 }
 
 fn escribir_almacen(w: &mut Escritor, a: &Almacen) {
-    let (cantidad, capacidad) = a.partes();
-    cantidad.iter().zip(capacidad).for_each(|(&c, &k)| {
-        w.i64(c);
-        w.i64(k);
-    });
+    let (cantidad, capacidad, resto) = a.partes();
+    for i in 0..29 {
+        w.i64(cantidad[i]);
+        w.i64(capacidad[i]);
+        w.i64(resto[i]);
+    }
 }
 
 fn leer_almacen(r: &mut Lector) -> Result<Almacen, ErrorFormato> {
-    let (mut cantidad, mut capacidad) = ([0; 29], [0; 29]);
+    let (mut cantidad, mut capacidad, mut resto) = ([0; 29], [0; 29], [0; 29]);
     for i in 0..29 {
         cantidad[i] = r.i64()?;
         capacidad[i] = r.i64()?;
+        resto[i] = r.i64()?;
     }
-    Ok(Almacen::desde_partes(cantidad, capacidad))
+    Ok(Almacen::desde_partes(cantidad, capacidad, resto))
 }
 
 pub(crate) fn escribir_avanzada(w: &mut Escritor, a: &Avanzada) {

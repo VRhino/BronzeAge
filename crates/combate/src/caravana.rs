@@ -282,60 +282,61 @@ mod pruebas {
         let r = r();
         let f = flota();
         for (n, quedan) in [(1usize, 0usize), (2, 1), (3, 1), (4, 2), (5, 2)] {
-            let mut c = caravana(n, &[(Madera, 1_200), (Trigo, 7)]);
+            let mut c = caravana(n, &[(Madera, 1_200_000), (Trigo, 7_000)]);
             let p = aplicar_al_dueno(r, &f, &mut c, Modalidad::Disputa, None).unwrap();
             assert_eq!(c.carros.len(), quedan, "{n} carros");
             assert_eq!(p.carros_perdidos, n - quedan);
             assert_eq!(p.destruida, quedan == 0);
             // La carga perdida es la de los carros perdidos (proporcional a su capacidad, y la restante se conserva).
             let restante: Mil = c.contenido.values().sum();
-            assert_eq!(restante + p.carga_perdida.values().sum::<Mil>(), 1_207);
+            assert_eq!(restante + p.carga_perdida.values().sum::<Mil>(), 1_207_000);
+            assert!(c.contenido.values().chain(p.carga_perdida.values()).all(|n| n % 1_000 == 0), "en unidades enteras");
             if quedan == 0 {
                 assert!(c.contenido.is_empty());
             }
         }
-        let mut c = caravana(4, &[(Madera, 1_000)]);
+        let mut c = caravana(4, &[(Madera, 1_000_000)]);
         let p = aplicar_al_dueno(r, &f, &mut c, Modalidad::Disputa, None).unwrap();
-        assert_eq!(p.carga_perdida.get(&Madera), Some(&500), "la mitad de los carros iguales lleva la mitad de la carga");
+        assert_eq!(p.carga_perdida.get(&Madera), Some(&500_000), "la mitad de los carros iguales lleva la mitad de la carga");
     }
 
     #[test]
     fn el_aguante_quita_el_70_por_ciento_de_la_carga_y_el_30_se_salva_siempre() {
         let r = r();
         let f = flota();
-        let mut c = caravana(4, &[(Madera, 1_000), (Piedra, 99)]);
+        let mut c = caravana(4, &[(Madera, 1_000_000), (Piedra, 99_000)]);
         let p = aplicar_al_dueno(r, &f, &mut c, Modalidad::Aguante, None).unwrap();
-        assert_eq!(p.carga_perdida.get(&Madera), Some(&700));
-        assert_eq!(p.carga_perdida.get(&Piedra), Some(&69), "70 % hacia abajo, recurso a recurso");
+        assert_eq!(p.carga_perdida.get(&Madera), Some(&700_000));
+        assert_eq!(p.carga_perdida.get(&Piedra), Some(&69_000), "70 % hacia abajo y en unidades enteras, recurso a recurso (69,3 → 69)");
         assert_eq!(c.carros.len(), 2, "también la mitad de los carros");
-        assert_eq!(c.contenido.get(&Madera), Some(&300), "el 30 % no se lo llevan los carros que se pierden");
-        assert_eq!(c.contenido.get(&Piedra), Some(&30));
+        assert_eq!(c.contenido.get(&Madera), Some(&300_000), "el 30 % no se lo llevan los carros que se pierden");
+        assert_eq!(c.contenido.get(&Piedra), Some(&30_000));
         assert!(!p.destruida);
     }
 
     #[test]
     fn en_un_aguante_nunca_se_pierde_el_ultimo_carro_y_el_30_por_ciento_sigue_en_el() {
         let r = r();
-        let mut c = caravana(1, &[(Madera, 1_000)]);
+        let mut c = caravana(1, &[(Madera, 1_000_000)]);
         let p = aplicar_al_dueno(r, &flota(), &mut c, Modalidad::Aguante, None).unwrap();
         assert!(!p.destruida && p.carros_perdidos == 0, "con un carro, la mitad hacia arriba sería el único");
-        assert_eq!((p.carga_perdida.get(&Madera), c.carros.len(), c.contenido.get(&Madera)), (Some(&700), 1, Some(&300)));
+        assert_eq!((p.carga_perdida.get(&Madera), c.carros.len(), c.contenido.get(&Madera)), (Some(&700_000), 1, Some(&300_000)));
         // Unity tampoco puede quitarlos todos: se queda el primero de la lista.
-        let mut c = caravana(3, &[(Madera, 1_000)]);
+        let mut c = caravana(3, &[(Madera, 1_000_000)]);
         c.carros[0].tipo = TipoCarro::Reforzado;
         let p = aplicar_al_dueno(r, &flota(), &mut c, Modalidad::Aguante, Some(&[2, 0, 1])).unwrap();
         assert_eq!((p.carros_perdidos, p.destruida), (2, false));
-        assert_eq!((c.carros[0].tipo, c.contenido.get(&Madera)), (TipoCarro::Reforzado, Some(&300)));
+        assert_eq!((c.carros[0].tipo, c.contenido.get(&Madera)), (TipoCarro::Reforzado, Some(&300_000)));
     }
 
     #[test]
     fn con_unity_los_carros_perdidos_los_dice_unity_y_uno_inexistente_se_rechaza() {
         let r = r();
         let f = flota();
-        let mut c = caravana(4, &[(Madera, 1_000)]);
+        let mut c = caravana(4, &[(Madera, 1_000_000)]);
         let p = aplicar_al_dueno(r, &f, &mut c, Modalidad::Disputa, Some(&[0])).unwrap();
         assert_eq!((p.carros_perdidos, c.carros.len()), (1, 3));
-        assert_eq!(p.carga_perdida.get(&Madera), Some(&250));
+        assert_eq!(p.carga_perdida.get(&Madera), Some(&250_000));
         let antes = c.clone();
         assert_eq!(aplicar_al_dueno(r, &f, &mut c, Modalidad::Disputa, Some(&[9])).unwrap_err(), ErrorCaravana::CarroInexistente);
         assert_eq!(aplicar_al_dueno(r, &f, &mut c, Modalidad::Aguante, Some(&[9])).unwrap_err(), ErrorCaravana::CarroInexistente);

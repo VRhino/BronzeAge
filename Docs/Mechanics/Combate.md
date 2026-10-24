@@ -6,6 +6,7 @@ Cubre cómo se **resuelve** un choque cuando el servidor lo calcula con números
 
 - **Módulos:** `src/engine/combate.ts` (resolución), `src/engine/ejercitos.ts` (`atacarColumna`, `interceptar`, `atacarCampamento`, `asediarPlaza`, `trasDerrota`, `cargarBotin`, validaciones, `enBatalla`), `src/engine/tropa.ts` (`poderEscuadron`, `defensaDe`, `alTopeDeBatalla`), `src/engine/chatarra.ts`, `src/engine/heroe.ts` (heridos), `src/session/comandos/interaccion.ts` (comando `atacar`).
 - **Reescrito el 2026-10-13** para el mundo reactivo (los choques nacen de **encuentros exactos**, no de un barrido por tick) y con la guerra logística (caravanas A/B sin inmunidad, saqueo de pueblos, avanzadas) y la calibración. El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Combate.md`.
+- **Corregido el 2026-10-24: economía entera** (decisión C3b del autor; Rust, foto `BAN27`). Todo lo que se lleva, se pierde o se reparte va en **unidades enteras hacia abajo**, recurso a recurso: la mitad del carro del derrotado (§5, `trasDerrota`), el botín que carga cada columna y su reparto por rondas (las unidades que sobran de la división, de una en una a las primeras), lo saqueable de un pueblo (lo que pasa de la mitad de su capacidad), el saqueo de una avanzada, la chatarra (se suma exacta y se reparte o se deposita en unidades enteras: la fracción no la coge nadie) y la carga que se pierde con los carros o en un aguante (§7.1). Lo cogido más lo perdido es siempre el botín: nada se crea.
 - **Canon:** Doc 5.2 (combate y modalidades), 5.12.3–5.12.4 (encuentros y asedio), 5.12.9 (conquista), 5.15 (batalla, guarnición), 5.16 (héroe, bajas, heridos), 3.10 (combate de caravanas), 4.2.2 (saqueo de pueblos), 5.17 (avanzadas), 2.4.1 (guerra).
 - **No es el combate de Unity.** Con servidores de batalla, `atacar` no resuelve nada aquí (también bot contra bot, desde la cuarta ronda de Entrar con todo): abre una batalla de Unity (`session/batallas.ts`, ciclo de batalla del contrato) y el resultado se aplica cuando llega. Este documento es lo que corre **sin** ellos (partidas sin servidor de batalla, y los bandidos que acosan a una caravana sin héroes, que se resuelven con números aunque haya servidores). Las consecuencias de ganar o perder (heridos, botín, conquista, desalojo) son las mismas por los dos caminos y están aquí.
 
@@ -130,7 +131,7 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 
 ## 5. Encuentro entre columnas (`atacarColumna` / `encuentroEntreEjercitos`)
 
-Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Unity): no la propia columna; **no a los tuyos ni a un aliado**; **misma clase** (personal contra personal, ejército contra ejército); atacante a ≤ `LOGISTICA.radioEncuentro` (**3** calibrado; 15 en el bloque TypeScript) con héroe sano; el defensor con algún héroe sano.
+Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Unity): no la propia columna; **no a los tuyos ni a un aliado** (Q2, 2026-10-24: con `declaraGuerra`, atacar a un aliado es la traición de Diplomacia §5.4; hoy Rust rechaza con `combate.aliada` hasta 5D); **misma clase** (personal contra personal, ejército contra ejército); atacante a ≤ `LOGISTICA.radioEncuentro` (**3** calibrado; 15 en el bloque TypeScript) con héroe sano; el defensor con algún héroe sano.
 
 1. Cada bando pasa por `enBatalla`. El atacante es el «atacante» del motor y el otro el «defensor»; **sin muralla** (multiplicador 1) y, por tanto, el defensor en campo abierto conserva la cohesión y la ventaja de 1,05 (el motor no distingue).
 2. **Gana quien dice la resolución por poder** (§4), igual que en un asedio (decisión del autor, 2026-10-10; antes el atacante solo ganaba si dejaba al defensor sin un soldado en pie y casi siempre perdía). Las bajas del 30–70 % al bando que pierde ya vienen aplicadas por `resolverCombate`. `encuentroEntreEjercitos` devuelve `ganador: 'a' | 'b'` (a = atacante).
@@ -152,7 +153,7 @@ Orden (`asediarConEjercito`):
 2. **Sin defensores** (ninguna escuadra con soldados en `defensaDe`) → **cae sin combate**, sin RNG: `combate.asedio_conquista` y XP de conquista para el atacante. (Sin atacantes con soldados → «sin nadie con quien combatir», no cae.)
 3. En otro caso, `resolverCombate(atacantes, defensores, rng, multiplicadorMuralla)` con
    `multiplicadorMuralla = 1 + (bonoDefensaPorNivel[nivel] − 1) × integridad / nº puertas`, usando solo el **recinto de referencia** de la plaza: el más exterior de los que han llegado a cerrarse (mientras se levanta una ampliación o se mejora un recinto sigue defendiendo el anillo en pie, con su nivel de antes) — ver [`Murallas.md`](Murallas.md) §9.1. `integridad` ∈ [0,1]: un anillo a medio cerrar o dañado por una conquista casi no defiende. Solo se aplica aquí, en el asedio resuelto **con números** (sin servidores de Unity); la columna, el pueblo, la caravana y la avanzada llevan multiplicador 1, y el equipo de asedio no lo reduce. **Las murallas fueron una fase propia posterior al sistema militar** (decidido el 2026-10-19; hecha el 2026-10-22): el multiplicador sale de los recintos reales de la plaza y es una constante de ese instante, así que **no consume tirada** y un asedio a una plaza sin recintos es bit a bit el de antes.
-4. **Reputación**: si atacante y defensor están **aliados** (se atacó sin romper la alianza), la Facción atacante recibe `REPUTACION.penalizacionAtacarAliado` (la más severa).
+4. **Reputación**: si atacante y defensor están **aliados** (se atacó sin romper la alianza), la Facción atacante recibe `REPUTACION.penalizacionAtacarAliado` (la más severa). Desde la decisión **Q2** del autor (2026-10-24) atacar a un aliado con `declaraGuerra` es una **traición**: rompe la alianza en el acto, cobra esta penalización en vez de la de romperla y declara la guerra con su arrastre ([`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §5.4; regla en `politica::relaciones::declarar_al_atacar`, núcleo en 5D).
 5. **XP de Facción**: combate (a ambos, si digno) y, si conquista, `NIVEL_FACCION.xp.conquista` al atacante.
 6. Resultado: `conquistado = (ganador == atacante)`. El ejército **sigue fuera y acampa**; conquistar no lo convierte en guarnición (Doc 5.15.5).
 
@@ -335,10 +336,7 @@ Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (3
 ```
 <!-- /parametros -->
 
-<!-- parametros:NIVEL_FACCION -->
-```json
-```
-<!-- /parametros -->
+Las cifras de la experiencia de Facción (`NIVEL_FACCION`: `xp.combate`, `xp.conquista`, `xp.bandidos`, `nivelSinXpBandidos`, `ratioCombateDigno`) están en el bloque de [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §3.5 (escrito en 5A, 2026-10-24).
 
 ## 13. Invariantes
 

@@ -35,6 +35,8 @@ pub struct Violaciones {
     pub registro: u64,
     /// Un mineral cuyo total en el mundo no es lo comprado a los mercenarios.
     pub conservacion: u64,
+    /// Una cantidad almacenada que no es un número entero de unidades, o un resto oculto fuera de `(−1000, 1000)` (C3b, `Nucleo::fracciones_almacenadas`).
+    pub fraccion: u64,
 }
 
 impl Violaciones {
@@ -49,12 +51,14 @@ impl Violaciones {
         self.fines += o.fines;
         self.registro += o.registro;
         self.conservacion += o.conservacion;
+        self.fraccion += o.fraccion;
     }
 }
 
 /// Almacenes, carros, flota y trueques.
 pub fn auditar_contenedores(n: &Nucleo) -> Violaciones {
     let (e, mut v) = (n.estado(), Violaciones::default());
+    v.fraccion = n.fracciones_almacenadas().len() as u64;
     for a in e.asentamientos.values() {
         v.almacen += TODOS.iter().filter(|&&r| a.economia.almacen.cantidad(r) < 0 || a.economia.almacen.cantidad(r) > a.economia.almacen.capacidad(r)).count() as u64;
         for p in &a.economia.pueblos {
@@ -137,7 +141,7 @@ mod pruebas {
     #[test]
     fn sumar_suma_campo_a_campo() {
         let mut a = Violaciones { almacen: 1, cola: 2, ..Violaciones::default() };
-        a.sumar(&Violaciones { carga: 3, conservacion: 4, ..Violaciones::default() });
-        assert_eq!((a.almacen, a.carga, a.cola, a.conservacion), (1, 3, 2, 4));
+        a.sumar(&Violaciones { carga: 3, conservacion: 4, fraccion: 5, ..Violaciones::default() });
+        assert_eq!((a.almacen, a.carga, a.cola, a.conservacion, a.fraccion), (1, 3, 2, 4, 5));
     }
 }

@@ -59,9 +59,14 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
-/// BAN27: BAN26 con la ciudad de cada plaza de la geometría `LAYOUT_VERSION` 6 (calibración 2, Cal-6, decisión del autor del 2026-10-24): ningún anillo tiene más
-/// de 4 puertas, contadas por aberturas, y la red de fuera de un cruce cortado rodea el muro hasta la puerta más cercana. El formato no cambia; BAN26 se rechaza
+/// BAN28: BAN27 con la ciudad de cada plaza de la geometría `LAYOUT_VERSION` 6 (calibración 2, Cal-6, decisión del autor del 2026-10-24): ningún anillo tiene más
+/// de 4 puertas, contadas por aberturas, y la red de fuera de un cruce cortado rodea el muro hasta la puerta más cercana. El formato no cambia; BAN27 se rechaza
 /// porque sus recintos se trazaron con otra regla y sus ciudades son de otra geometría.
+///
+/// BAN27: BAN26 con la economía entera (decisión C3b del autor y dudas EE-1 a EE-7, 2026-10-24): todo almacén (plaza, pueblo, avanzada) guarda unidades enteras —múltiplo
+/// de 1000— y, por recurso, el **resto oculto** de sus flujos por minuto en `(−1000, 1000)` (`codec_economia`); carros, caravanas, almacén personal y existencias de los
+/// campamentos guardan también unidades enteras, y el mercado de mercenarios anota lo que repondrá cada bien (`MercadoMercenario::repone`, `codec_comercio`). BAN26 se
+/// rechaza: sus almacenes guardaban milésimas sueltas y no traen el resto.
 ///
 /// BAN26: BAN25 con la red que cada recinto conserva en sus puertas (`Recinto::red_de_puertas` y `tras_pieza`, `codec_economia`) y tres estados que ya no significan lo
 /// mismo (calibración del sistema 4, decisiones del autor del 2026-10-24): la ciudad de cada plaza es de la geometría `LAYOUT_VERSION` 5 (una puerta por cruce que no parte
@@ -123,7 +128,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN27";
+const MAGIA: &[u8; 5] = b"BAN28";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1020,12 +1025,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN27`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 27, y solo el 27 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN28`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 29, y solo el 28 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'7' => {}
-                b'6' => return Err(ErrorFormato("foto del formato BAN26 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 5, con anillos de muralla de más de cuatro puertas): ya no se admite")),
+                b'8' => {}
+                b'7' => return Err(ErrorFormato("foto del formato BAN27 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 5, con anillos de muralla de más de cuatro puertas): ya no se admite")),
+                b'6' => return Err(ErrorFormato("foto del formato BAN26 (los almacenes guardan milésimas sueltas, no unidades enteras, y no traen el resto oculto de sus flujos): ya no se admite")),
                 b'5' => return Err(ErrorFormato("foto del formato BAN25 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 4, sus recintos no traen la red que conservan en sus puertas y la guarnición de serie de una avanzada se reponía entera a las 6 h): ya no se admite")),
                 b'4' => return Err(ErrorFormato("foto del formato BAN24 (los héroes no traen la foto del interior de las plazas de las que salieron al mundo, que no se puede deducir del estado): ya no se admite")),
                 b'3' => return Err(ErrorFormato("foto del formato BAN23 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 3, la guarnición de un pueblo se reponía entera a las 6 h, la idempotencia no iba por cuenta y las fichas de la niebla no traían el estado del sitio): ya no se admite")),

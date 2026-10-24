@@ -41,7 +41,7 @@ pub fn saqueable(r: &Reglas, almacen: &Almacen) -> Carga {
     let mut c = Carga::new();
     for &rec in TODOS.iter() {
         let protegido = (almacen.capacidad(rec) as i128 * r.numericas.protegida_pueblo as i128 / UNO as i128) as Mil;
-        let libre = almacen.cantidad(rec) - protegido;
+        let libre = base::entero(almacen.cantidad(rec) - protegido); // lo saqueable va en unidades enteras
         if libre > 0 {
             c.insert(rec, libre);
         }

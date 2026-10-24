@@ -31,7 +31,8 @@ pub fn sumar(carga: &mut Carga, r: Recurso, n: Mil) {
 
 /// Saca de la carga lo que pasa de `capacidad` (del último recurso al primero, en el orden de la carga) y lo devuelve: lo que ya no cabe cuando el carro pierde capacidad.
 pub fn sacar_lo_que_sobra(carga: &mut Carga, capacidad: Mil) -> Carga {
-    let mut sobra = total(carga) - capacidad.max(0);
+    // En unidades enteras (C3b): sale lo que sobra hacia arriba, para que lo que se queda quepa aunque la capacidad no sea entera.
+    let mut sobra = base::entero_arriba(total(carga) - capacidad.max(0));
     let mut fuera = Carga::new();
     for (&r, n) in carga.iter_mut().rev() {
         if sobra <= 0 {
