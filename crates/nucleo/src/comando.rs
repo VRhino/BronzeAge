@@ -405,8 +405,13 @@ pub enum Comando {
     CambiarResidencia { heroe: u64, asentamiento: u64 },
     /// Pasa a residir en un campamento de mercenarios (cualquier héroe, de cualquier Facción). Con cooldown.
     ResidirEnCampamento { heroe: u64, campamento: u32 },
-    /// Deja la plaza donde reside y pasa al campamento de mercenarios más cercano a donde está. Con cooldown.
+    /// Deja la plaza donde reside y pasa al campamento de mercenarios más cercano a ella (5B-4). Con cooldown.
     DejarResidencia { heroe: u64 },
+    // ── Política: la capital y el nombre de la plaza (sistema 5, tanda 5C; Diplomacia_Facciones §3.7, Fundacion_Y_Refundacion §8). ──
+    /// El Rey (`heroe`) designa capital de su Facción una plaza propia con Palacio activo (§3.7): con cooldown mientras la designada siga en pie. La marca pasa a esa plaza.
+    DesignarCapital { heroe: u64, faccion: u32, asentamiento: u64 },
+    /// Quien reside en la plaza le cambia el nombre (`renombrarAsentamiento`): se recorta; vacío, la plaza se queda sin nombre (se muestra su id).
+    RenombrarAsentamiento { heroe: u64, asentamiento: u64, nombre: String },
     // ── Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9). Las da la cuenta del héroe. Los códigos empiezan en el 153: del 143 al 152
     //    quedan para 5C. Todo en unidades enteras (C3b). ──
     /// Aporta al fondo de refundación de su Facción (sin plazas) en el campamento donde está: de su almacén personal (residiendo allí) o del carro de su columna a la puerta (siendo su Líder).
@@ -459,6 +464,8 @@ pub enum Autoriza {
     ReyDeLaFaccion,
     /// La cuenta del héroe, que además es ciudadano de la Facción que nombra la orden y, si tiene Rey, su Rey (`asignarRey`).
     CiudadanoDeLaFaccion,
+    /// La cuenta del héroe, que además reside en la plaza que nombra la orden (`renombrarAsentamiento`: basta residir).
+    ResidenteDeLaPlaza,
     /// Quien manda en la plaza (`Nucleo::manda_en`): una cuenta con un héroe ciudadano de su Facción o una columna de su Facción. De una caravana, la plaza de su origen; de un trueque,
     /// la plaza A al proponerlo y la B al aceptarlo o rechazarlo; de una orden de mercado, su plaza.
     MandaEnLaPlaza,
@@ -561,7 +568,8 @@ impl Comando {
             | Comando::ComprarCaravanaDeRefundacion { .. }
             | Comando::LanzarCaravanaFundacion { .. }
             | Comando::DesarmarCaravanaFundacion { .. } => CuentaDelHeroe,
-            Comando::ResponderSolicitud { .. } | Comando::AsignarEmbajador { .. } => ReyDeLaFaccion,
+            Comando::ResponderSolicitud { .. } | Comando::AsignarEmbajador { .. } | Comando::DesignarCapital { .. } => ReyDeLaFaccion,
+            Comando::RenombrarAsentamiento { .. } => ResidenteDeLaPlaza,
             Comando::AsignarRey { .. } => CiudadanoDeLaFaccion,
             Comando::ColocarAvanzada { .. }
             | Comando::MejorarAvanzada { .. }
@@ -753,7 +761,10 @@ impl Comando {
             }
             // Aceptar cambia la Facción del solicitante, y con ella la de su columna: no mientras combate.
             Comando::ResponderSolicitud { heroe, solicitante, .. } => i.heroes.extend([*heroe, *solicitante]),
-            Comando::CambiarResidencia { heroe, asentamiento } | Comando::LanzarCaravanaFundacion { heroe, asentamiento } => {
+            Comando::CambiarResidencia { heroe, asentamiento }
+            | Comando::LanzarCaravanaFundacion { heroe, asentamiento }
+            | Comando::DesignarCapital { heroe, asentamiento, .. }
+            | Comando::RenombrarAsentamiento { heroe, asentamiento, .. } => {
                 i.heroes.push(*heroe);
                 i.asentamientos.push(*asentamiento);
             }
@@ -911,7 +922,8 @@ impl Comando {
             | Comando::SolicitarIngreso { faccion, .. }
             | Comando::ResponderSolicitud { faccion, .. }
             | Comando::AsignarRey { faccion, .. }
-            | Comando::AsignarEmbajador { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
+            | Comando::AsignarEmbajador { faccion, .. }
+            | Comando::DesignarCapital { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
             Comando::ResidirEnCampamento { campamento, .. } => v.push((Clase::Campamento, u64::from(*campamento))),
             _ => {}
         }
@@ -1805,6 +1817,18 @@ impl Peticion {
                 w.u8(136);
                 w.u64(*heroe);
             }
+            Comando::DesignarCapital { heroe, faccion, asentamiento } => {
+                w.u8(137);
+                w.u64(*heroe);
+                w.u32(*faccion);
+                w.u64(*asentamiento);
+            }
+            Comando::RenombrarAsentamiento { heroe, asentamiento, nombre } => {
+                w.u8(143);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.texto(nombre);
+            }
             Comando::AportarARefundacion { heroe, recurso, cantidad, lado } | Comando::RetirarDeRefundacion { heroe, recurso, cantidad, lado } => {
                 w.u8(if matches!(self.comando, Comando::AportarARefundacion { .. }) { 153 } else { 154 });
                 w.u64(*heroe);
@@ -2023,6 +2047,8 @@ impl Peticion {
             134 => Comando::CambiarResidencia { heroe: r.u64()?, asentamiento: r.u64()? },
             135 => Comando::ResidirEnCampamento { heroe: r.u64()?, campamento: r.u32()? },
             136 => Comando::DejarResidencia { heroe: r.u64()? },
+            137 => Comando::DesignarCapital { heroe: r.u64()?, faccion: r.u32()?, asentamiento: r.u64()? },
+            143 => Comando::RenombrarAsentamiento { heroe: r.u64()?, asentamiento: r.u64()?, nombre: r.texto()? },
             153 => Comando::AportarARefundacion { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, lado: lado_de_u8(r.u8()?)? },
             154 => Comando::RetirarDeRefundacion { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, lado: lado_de_u8(r.u8()?)? },
             155 => Comando::ComprarCaravanaDeRefundacion { heroe: r.u64()? },
@@ -2503,6 +2529,15 @@ pub mod rechazos {
     pub const RESIDENCIA_VETADO: &str = "residencia.vetado";
     /// Dejar la residencia sin residir en ninguna plaza (en un campamento de mercenarios se cambia de campamento o se muda a una plaza).
     pub const RESIDENCIA_SIN_PLAZA: &str = "residencia.sin_plaza";
+    // La capital de la Facción (sistema 5, tanda 5C; `ErrorCapital` del crate `politica`).
+    /// Designar capital una plaza que no es de la Facción.
+    pub const CAPITAL_PLAZA_AJENA: &str = "capital.plaza_ajena";
+    /// La plaza no tiene un Palacio activo.
+    pub const CAPITAL_SIN_PALACIO: &str = "capital.sin_palacio";
+    /// La plaza ya es la capital (efectiva) de la Facción.
+    pub const CAPITAL_YA_ES_LA_CAPITAL: &str = "capital.ya_es_la_capital";
+    /// La capital designada sigue en pie y no han pasado `CAPITAL.cooldownDias` desde que se designó.
+    pub const CAPITAL_COOLDOWN: &str = "capital.cooldown";
     // Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9).
     /// Lanzar una Caravana de Fundación sin residir en la plaza o sin estar dentro de ella (Proyecciones §5.2.4).
     pub const FUNDACION_NO_RESIDES: &str = "fundacion.no_resides";

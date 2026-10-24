@@ -184,7 +184,7 @@ fn la_economia_el_comercio_y_las_convocatorias_dejan_sus_entidades_en_el_registr
     let pa = sitio_rico(&x.n, &m.0, 0, 1);
     let a = x.fundar("ana", 1, pa);
     x.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
-    let pb = sitio_rico(&x.n, &m.0, 2, 1);
+    let pb = sitio_rico(&x.n, &m.0, 0, 1);
     let b = x.fundar("ana", 1, pb);
     x.n.avanzar_hasta(24 * HORA);
     for plaza in [a, b] {

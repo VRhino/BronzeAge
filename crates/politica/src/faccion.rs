@@ -66,7 +66,7 @@ pub enum ErrorFaccion {
     NoHaPedido,
     /// No es ciudadano de ninguna Facción (o no de esa).
     NoPertenece,
-    /// Q7: va en un ejército (aunque sea solo) o en una convocatoria con otros héroes; primero se separa o lo deshace (y si es el Líder, cede antes el mando).
+    /// Q7 y 5B-6: va en un ejército (aunque sea solo) o en una convocatoria con otros héroes; primero se separa o lo deshace (y si es el Líder, cede antes el mando). Vale para dejarla, pedir el ingreso y que lo acepten.
     EnEjercito,
     /// El designado no es ciudadano de la Facción.
     NoCiudadano,
@@ -209,12 +209,16 @@ impl Facciones {
         self.por_id.entry(id).or_insert(f)
     }
 
-    /// `solicitarIngreso` (§3.2): entra en la lista de esa Facción; pedir dos veces es pedir lo mismo (`Ok(false)`). Se puede pedir a varias a la vez.
-    pub fn solicitar(&mut self, faccion: FaccionId, h: HeroeId) -> Result<bool, ErrorFaccion> {
+    /// `solicitarIngreso` (§3.2): entra en la lista de esa Facción; pedir dos veces es pedir lo mismo (`Ok(false)`). Se puede pedir a varias a la vez. 5B-6 (2026-10-24): se
+    /// rechaza yendo en un ejército (`en_ejercito`, como al dejarla): un ejército es siempre de una sola Facción.
+    pub fn solicitar(&mut self, faccion: FaccionId, h: HeroeId, en_ejercito: bool) -> Result<bool, ErrorFaccion> {
         if self.de_heroe.contains_key(&h) {
             return Err(ErrorFaccion::YaPertenece);
         }
         let f = self.por_id.get_mut(&faccion).ok_or(ErrorFaccion::NoExiste)?;
+        if en_ejercito {
+            return Err(ErrorFaccion::EnEjercito);
+        }
         if f.solicitudes.contains(&h) {
             return Ok(false);
         }
@@ -223,11 +227,15 @@ impl Facciones {
     }
 
     /// `responderSolicitud` (§3.2): aceptar lo hace ciudadano (al final de la lista) y lo quita de **todas** las listas; denegar solo lo quita de esta.
-    /// Aceptar no da residencia (el núcleo funde su memoria y su columna toma la Facción).
-    pub fn responder(&mut self, faccion: FaccionId, h: HeroeId, aceptar: bool) -> Result<(), ErrorFaccion> {
+    /// Aceptar no da residencia (el núcleo funde su memoria y su columna toma la Facción). 5B-6 (2026-10-24): aceptar a quien va en un ejército (`en_ejercito`) se rechaza;
+    /// denegarlo, no.
+    pub fn responder(&mut self, faccion: FaccionId, h: HeroeId, aceptar: bool, en_ejercito: bool) -> Result<(), ErrorFaccion> {
         let f = self.por_id.get_mut(&faccion).ok_or(ErrorFaccion::NoExiste)?;
         if !f.solicitudes.contains(&h) {
             return Err(ErrorFaccion::NoHaPedido);
+        }
+        if aceptar && en_ejercito {
+            return Err(ErrorFaccion::EnEjercito);
         }
         if !aceptar {
             f.solicitudes.retain(|&x| x != h);
@@ -332,6 +340,11 @@ impl Facciones {
         (despues > antes).then_some(despues)
     }
 
+    /// La administración fija la experiencia (`FijarNivelFaccion`, decisión 9 del plan del sistema 5: al umbral del nivel que pide). No es monótona: es andamiaje. Devuelve si cambió.
+    pub fn fijar_experiencia(&mut self, faccion: FaccionId, experiencia: Mil) -> bool {
+        self.por_id.get_mut(&faccion).is_some_and(|f| std::mem::replace(&mut f.experiencia, experiencia) != experiencia)
+    }
+
     /// `registrarDerrota` (§8): se llama al caer la **última** plaza de `perdedora` (el núcleo sabe si le queda alguna). `ganadora = None`: colapsó sola.
     pub fn registrar_derrota(&mut self, perdedora: FaccionId, ganadora: Option<FaccionId>) {
         if let Some(f) = self.por_id.get_mut(&perdedora) {
@@ -425,7 +438,7 @@ pub(crate) mod pruebas {
         fs.crear(&r, 2, 11, "Troya", None, 0).unwrap();
         fs.dejar(10, 5 * DIA, false).unwrap();
         assert_eq!(fs.crear(&r, 3, 10, "Tebas", None, 6 * DIA).unwrap_err(), ErrorFaccion::CooldownCreacion { libre_en: 12 * DIA });
-        assert_eq!(fs.solicitar(2, 10), Ok(true));
+        assert_eq!(fs.solicitar(2, 10, false), Ok(true));
         assert!(fs.crear(&r, 3, 10, "Tebas", None, 12 * DIA).is_ok());
         assert_eq!(fs.get(2).unwrap().solicitudes, Vec::<HeroeId>::new(), "crear borra sus solicitudes en otras");
     }
@@ -434,11 +447,15 @@ pub(crate) mod pruebas {
     fn pedir_entra_en_la_lista_una_vez_y_un_ciudadano_no_pide() {
         let mut fs = Facciones::default();
         con_faccion(&mut fs, 1, "Micenas", 10, &[11]);
-        assert_eq!(fs.solicitar(1, 20), Ok(true));
-        assert_eq!(fs.solicitar(1, 20), Ok(false), "pedir dos veces es pedir lo mismo");
+        assert_eq!(fs.solicitar(1, 20, false), Ok(true));
+        assert_eq!(fs.solicitar(1, 20, false), Ok(false), "pedir dos veces es pedir lo mismo");
         assert_eq!(fs.get(1).unwrap().solicitudes, vec![20]);
-        assert_eq!(fs.solicitar(1, 11), Err(ErrorFaccion::YaPertenece));
-        assert_eq!(fs.solicitar(9, 21), Err(ErrorFaccion::NoExiste));
+        assert_eq!(fs.solicitar(1, 11, false), Err(ErrorFaccion::YaPertenece));
+        assert_eq!(fs.solicitar(9, 21, false), Err(ErrorFaccion::NoExiste));
+        // 5B-6: en un ejército ni se pide ni se acepta; denegar sí.
+        assert_eq!(fs.solicitar(1, 22, true), Err(ErrorFaccion::EnEjercito));
+        assert_eq!(fs.responder(1, 20, true, true), Err(ErrorFaccion::EnEjercito));
+        assert_eq!(fs.responder(1, 20, false, true), Ok(()));
     }
 
     #[test]
@@ -446,16 +463,16 @@ pub(crate) mod pruebas {
         let mut fs = Facciones::default();
         con_faccion(&mut fs, 1, "Micenas", 10, &[]);
         con_faccion(&mut fs, 2, "Troya", 30, &[]);
-        fs.solicitar(1, 20).unwrap();
-        fs.solicitar(2, 20).unwrap();
-        fs.solicitar(1, 21).unwrap();
-        fs.responder(1, 21, false).unwrap();
+        fs.solicitar(1, 20, false).unwrap();
+        fs.solicitar(2, 20, false).unwrap();
+        fs.solicitar(1, 21, false).unwrap();
+        fs.responder(1, 21, false, false).unwrap();
         assert_eq!(fs.get(1).unwrap().solicitudes, vec![20]);
         assert_eq!(fs.faccion_de(21), None);
-        fs.responder(1, 20, true).unwrap();
+        fs.responder(1, 20, true, false).unwrap();
         assert_eq!(fs.get(1).unwrap().ciudadanos, vec![10, 20]);
         assert!(fs.get(1).unwrap().solicitudes.is_empty() && fs.get(2).unwrap().solicitudes.is_empty());
-        assert_eq!(fs.responder(2, 20, true), Err(ErrorFaccion::NoHaPedido));
+        assert_eq!(fs.responder(2, 20, true, false), Err(ErrorFaccion::NoHaPedido));
     }
 
     #[test]

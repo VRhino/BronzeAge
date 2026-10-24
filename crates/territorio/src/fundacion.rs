@@ -71,12 +71,6 @@ pub fn validar(p: Punto, terreno: Terreno, plazas: &[Disco], campamentos: impl I
     Ok(())
 }
 
-/// Cap de fundación de una Facción de ese nivel (`CAP_FUNDACION_POR_NIVEL`; niveles fuera de la tabla usan el último).
-pub fn cap_de_fundacion(nivel_faccion: u32, tabla: &[u32]) -> u32 {
-    let i = (nivel_faccion.max(1) as usize).min(tabla.len().max(1)) - 1;
-    tabla.get(i).copied().unwrap_or(0)
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Viabilidad {
     /// Fundable, con bosque libre y piedra en la zona con la que nacería.
@@ -137,12 +131,6 @@ mod pruebas {
         let c = [Punto::new(0, 0)];
         assert_eq!(validar(Punto::new(19_999, 0), Terreno::Firme, &[], c, &D), Err(Motivo::CercaDeCampamento));
         assert_eq!(validar(Punto::new(20_000, 0), Terreno::Firme, &[], c, &D), Ok(()));
-    }
-
-    #[test]
-    fn cap_por_nivel() {
-        let t = [1, 2, 3, 3, 4, 5, 5, 6, 6, 7];
-        assert_eq!([0, 1, 2, 4, 10, 99].map(|n| cap_de_fundacion(n, &t)), [1, 1, 2, 3, 7, 7]);
     }
 
     #[test]

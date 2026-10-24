@@ -245,7 +245,7 @@ impl Reglas {
             catalogo: crate::catalogo::Catalogo::de(&b("EDIFICIO_CATALOGO")),
             construccion: crate::catalogo::ReglasConstruccion::de(b),
             mantenimiento: crate::mantenimiento::ReglasMantenimiento::de(&b("MANTENIMIENTO")),
-            nivel: crate::nivel::ReglasNivel::de(&b("NIVEL_ASENTAMIENTO"), &b("ASCENSO_ASENTAMIENTO"), &b("CUPO_NIVEL_ASENTAMIENTO")),
+            nivel: crate::nivel::ReglasNivel::de(&b("NIVEL_ASENTAMIENTO"), &b("ASCENSO_ASENTAMIENTO")),
             pueblos: crate::pueblos::ReglasPueblos::de(&b("PUEBLOS_EXTRACTORES")),
             avanzadas: crate::avanzadas::ReglasAvanzadas::de(&b("AVANZADAS")),
             muralla: crate::recintos::ReglasMuralla::de(&b("MURALLA")),

@@ -186,6 +186,8 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 > **Implementado en Rust (2026-10-24, 5B):** las nueve órdenes de la Facción, la ciudadanía y la residencia (128-136) y dos clases nuevas de `Autoriza`: `ReyDeLaFaccion` (`responder_solicitud`, sin excepción, como `responderSolicitudes` de §5.2; `asignar_embajador`) y `CiudadanoDeLaFaccion` (`asignar_rey`: un ciudadano si no hay Rey; con Rey, solo él). Las comprueba el predicado del crate `politica` (`autorizacion::Actor`) sobre el núcleo (`Vista`, sin cargos hasta 5E). El resto de la matriz no cambia hasta 5E.
 
+> **Implementado en Rust (2026-10-24, 5C):** `designar_capital` (137, `ReyDeLaFaccion`) y `renombrar_asentamiento` (143, clase nueva `ResidenteDeLaPlaza`: la cuenta del héroe, que reside en la plaza; basta residir, como el TypeScript). Con 5G-a, quedan 27 órdenes no disponibles.
+
 - **Quién la da** es `Comando::autoriza` (`crates/nucleo/src/comando.rs`, un `match` sin comodín sobre los 136 comandos: un comando nuevo no compila hasta decidirlo). Cada orden comprueba la suya en su sitio y rechaza con `no_autorizado`; la de administración la comprueba una sola vez `Nucleo::ejecutar`. La administración (`Peticion.admin`) puede con todas salvo las del servidor de batalla, que exigen su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`).
 - **La sesión** añade dos filtros antes del núcleo (`sesiones::ordenes::traducir`, `sesiones.rs`): la orden genérica de administración y `controlar_reloj` solo los da una sesión `CLIENTE_ADMIN_WEB` (`no_autorizado` en cualquier otra), y los mensajes del canal de batalla solo llegan de una sesión `CLIENTE_SERVIDOR_BATALLA`. El actor de la petición es siempre la cuenta de la sesión, nunca un dato del cuerpo: las órdenes que no nombran héroe usan el de la cuenta.
 - **«Además»** es lo que la orden exige después de autorizarla, con su rechazo de dominio (el catálogo de códigos está en `Docs/Coordinacion/07_Catalogo_de_Rechazos.md`). Un héroe fuera del mundo solo puede `conectarse` (`heroe.fuera_del_mundo`), salvo `cancelar_convocatoria`. Una entidad que no existe se rechaza con su código de «desconocida», antes de mirar quién la manda (como el fail-open de §4.2).
@@ -326,13 +328,20 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 |---|---|---|---|
 | `asignar_embajador` | `AsignarEmbajador` | la cuenta del héroe, Rey de la Facción | el designado es ciudadano (`faccion.no_ciudadano`); la Facción existe (`faccion.no_existe`) |
 | `asignar_rey` | `AsignarRey` | la cuenta del héroe, ciudadano de la Facción (con Rey, solo él) | el designado es ciudadano (`faccion.no_ciudadano`) |
-| `cambiar_residencia` | `CambiarResidencia` | la cuenta del héroe | una plaza de su Facción (`residencia.plaza_ajena`) donde aún no reside (`residencia.ya_reside`); sin cooldown (`residencia.cooldown`) ni ejército en preparación (`heroe.en_convocatoria`) |
+| `cambiar_residencia` | `CambiarResidencia` | la cuenta del héroe | una plaza de su Facción (`residencia.plaza_ajena`) donde aún no reside (`residencia.ya_reside`); sin cooldown (`residencia.cooldown`) ni ejército en preparación (`heroe.en_convocatoria`); ni la plaza de destino ni la suya están en batalla (`batalla.bloqueado`, 5B-10) |
 | `crear_faccion` | `CrearFaccion` | la cuenta del héroe | nombre (`faccion.nombre_vacio`, `faccion.nombre_duplicado`), sigilo (`faccion.sigilo_invalido`, `faccion.sigilo_duplicado`), sin Facción (`faccion.ya_pertenece`) ni cooldown de creación (`faccion.cooldown_creacion`) |
-| `dejar_faccion` | `DejarFaccion` | la cuenta del héroe | es ciudadano (`faccion.no_pertenece`); no va en un ejército ni en uno en preparación (`faccion.en_ejercito`, Q7) |
-| `dejar_residencia` | `DejarResidencia` | la cuenta del héroe | reside en una plaza (`residencia.sin_plaza`); sin cooldown ni ejército en preparación |
-| `residir_en_campamento` | `ResidirEnCampamento` | la cuenta del héroe | el campamento existe y aún no reside en él (`residencia.ya_reside`); sin cooldown ni ejército en preparación |
-| `responder_solicitud` | `ResponderSolicitud` | la cuenta del héroe, Rey de la Facción | sin excepción: si la Facción no existe, `faccion.no_existe`; el héroe lo pidió (`faccion.no_ha_pedido`) y no es ciudadano de otra |
-| `solicitar_ingreso` | `SolicitarIngreso` | la cuenta del héroe | la Facción existe y no es ciudadano de ninguna (`faccion.ya_pertenece`); pedir dos veces no cambia nada |
+| `dejar_faccion` | `DejarFaccion` | la cuenta del héroe | es ciudadano (`faccion.no_pertenece`); no va en un ejército ni en uno en preparación (`faccion.en_ejercito`, Q7); su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
+| `dejar_residencia` | `DejarResidencia` | la cuenta del héroe | reside en una plaza (`residencia.sin_plaza`); sin cooldown ni ejército en preparación; su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
+| `residir_en_campamento` | `ResidirEnCampamento` | la cuenta del héroe | el campamento existe y aún no reside en él (`residencia.ya_reside`); sin cooldown ni ejército en preparación; su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
+| `responder_solicitud` | `ResponderSolicitud` | la cuenta del héroe, Rey de la Facción | sin excepción: si la Facción no existe, `faccion.no_existe`; el héroe lo pidió (`faccion.no_ha_pedido`) y no es ciudadano de otra; aceptar a quien va en un ejército, `faccion.en_ejercito` (5B-6) |
+| `solicitar_ingreso` | `SolicitarIngreso` | la cuenta del héroe | la Facción existe y no es ciudadano de ninguna (`faccion.ya_pertenece`); no va en un ejército (`faccion.en_ejercito`, 5B-6); pedir dos veces no cambia nada |
+
+**La capital y el nombre de la plaza (sistema 5, 5C)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `designar_capital` | `DesignarCapital` | la cuenta del héroe, Rey de la Facción | la Facción existe (`faccion.no_existe`); una plaza suya (`capital.plaza_ajena`) con Palacio activo (`capital.sin_palacio`) que no es ya la capital (`capital.ya_es_la_capital`); con la designada en pie, `CAPITAL.cooldownDias` (`capital.cooldown`) |
+| `renombrar_asentamiento` | `RenombrarAsentamiento` | la cuenta del héroe, residente de la plaza | basta residir (§5.2.4); el nombre se recorta y vacío deja la plaza sin nombre |
 
 **Administración y servidor de batalla**
 
@@ -376,14 +385,12 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `asignar_cargo_local` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `declarar_guerra` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `designar_capital` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `proponer_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_paz` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `rebelion_vasallo` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `renombrar_asentamiento` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |

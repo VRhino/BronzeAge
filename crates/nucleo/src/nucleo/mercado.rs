@@ -262,12 +262,6 @@ impl Nucleo {
         self.programar_reputacion(faccion, t);
     }
 
-    /// Anuncia que una Facción gana experiencia (`NIVEL_FACCION.xp`). Aún no hay consumidor y la cifra no está en ningún bloque de Mechanics:
-    /// el hecho lleva solo el motivo (1 = trueque cumplido).
-    pub(super) fn emitir_experiencia(&mut self, t: Instante, faccion: u32, motivo: i64) {
-        self.emitir_propio(t, "faccion.experiencia", vec![], vec![("faccion", faccion as i64), ("motivo", motivo)]);
-    }
-
     /// Recalcula la cita de la reputación de una Facción desde `t`: la anterior se invalida y se programa la próxima, si hay. Solo hay umbral bajo (−40): se
     /// anuncian el cruce del 0 y la entrada y salida del −40 (Comercio_Caravanas §15).
     fn programar_reputacion(&mut self, faccion: u32, t: Instante) {
@@ -590,7 +584,7 @@ impl Nucleo {
             self.aplicar_reputacion(t, faccion, suceso);
         }
         for faccion in cierre.experiencia {
-            self.emitir_experiencia(t, faccion, 1);
+            self.dar_experiencia_por(t, faccion, politica::nivel::Hecho::TruequeCumplido, super::experiencia::motivo::TRUEQUE);
         }
         self.podar_trueques(t);
         true

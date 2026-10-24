@@ -85,10 +85,10 @@ impl Nucleo {
         let n = self.geografia.as_ref().map_or(0, |g| g.mapa.campamentos.len() as u32);
         let inicial = comercio::mercenarios::StockCampamento::nuevo(&e.reglas.economia.comercio);
         m.extend((0..n).map(|c| ((Clase::Campamento, c as u64), self.huella_de_campamento(c, &inicial))));
-        // Una Facción es la entidad (sus ciudadanos, solicitudes, cargos...), su nivel, su reputación, sus tecnologías y sus relaciones.
+        // Una Facción es la entidad (sus ciudadanos, solicitudes, cargos, su experiencia...), su reputación, sus tecnologías y sus relaciones.
         m.extend(crate::proyeccion::audiencia::facciones(e).into_iter().map(|f| {
             let relaciones: Vec<_> = e.militar.relaciones.iter().filter(|((a, b), _)| *a == f || *b == f).collect();
-            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.niveles_faccion.get(&f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones)))
+            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones)))
         }));
         m.extend(e.militar.relaciones.iter().map(|(&(a, b), r)| ((Clase::Relacion, Clase::par(a, b)), huella(r))));
         m
@@ -105,6 +105,12 @@ impl Nucleo {
         let fs = &self.estado.politica.facciones;
         let descuadre: Vec<u64> = self.estado.militar.heroes.values().filter(|h| h.faccion != fs.faccion_de(h.heroe.id)).map(|h| h.heroe.id).collect();
         assert!(descuadre.is_empty(), "la Facción de los héroes {descuadre:?} no es la de su ciudadanía [{}]", self.causa_auditada);
+        // El índice de las plazas de cada Facción (5C) es el de las plazas.
+        let mut indice: BTreeMap<u32, std::collections::BTreeSet<u64>> = BTreeMap::new();
+        self.estado.asentamientos.values().for_each(|a| {
+            indice.entry(a.faccion).or_default().insert(a.id);
+        });
+        assert_eq!(indice, self.espacio.plazas_por_faccion, "el índice de plazas por Facción no es el de las plazas [{}]", self.causa_auditada);
         let ahora = self.huellas();
         if let Some(antes) = &self.huellas_auditadas {
             for clave in antes.keys().chain(ahora.keys()).collect::<BTreeSet<_>>() {

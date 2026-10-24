@@ -1085,7 +1085,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN30");
+    assert_eq!(&bytes[..5], b"BAN31");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

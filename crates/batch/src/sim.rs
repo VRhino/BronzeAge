@@ -340,8 +340,7 @@ impl Sim<'_> {
         // Nivel real de la plaza viva más antigua (la economía de cada plaza lo sube sola; una en ruinas ya no cuenta).
         let vivas: Vec<_> = fa.plazas.iter().filter_map(|id| self.n.estado().asentamientos.get(id)).collect();
         let nivel_plaza = vivas.first().map_or(0, |a| a.nivel());
-        let nivel_faccion = self.n.estado().niveles_faccion.get(&f).copied().unwrap_or(1);
-        let cap = territorio::cap_de_fundacion(nivel_faccion, &self.n.estado().reglas.territorio.cap_por_nivel) as usize;
+        let cap = politica::nivel::cap_fundacion(&self.n.estado().reglas.economia.politica.nivel, self.n.nivel_de_faccion(f)) as usize;
         if nivel_plaza < 2 || vivas.len() >= cap {
             return;
         }

@@ -47,10 +47,6 @@ use territorio::Disco;
 const FERTILIDAD: i64 = UNO;
 // Las tecnologías de la Facción las da la administración (`FijarTecnologias`) hasta el sistema de tecnología; sin ellas, sin bonus.
 const SIN_BONUS: fn(Recurso) -> i64 = |_| UNO;
-// placeholder: lo dará la geografía de la Facción (distancia a su capital) y el sistema de capitales (`es_capital`, Gran Fundición).
-const DISTANCIA_CAPITAL: Mil = 0;
-const ES_CAPITAL: bool = true;
-const FACCION_TIENE_GRAN_FUNDICION: bool = false;
 // placeholder: lo dará el sistema de Eras del servidor.
 const ORDEN_ERA: u32 = 1;
 // placeholder: lo darán la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
@@ -209,9 +205,15 @@ impl Nucleo {
     pub(super) fn con_exterior<R>(&mut self, id: u64, t: Instante, f: impl FnOnce(&mut asentamiento::asentamiento::Asentamiento, &mut Exterior) -> R) -> Option<R> {
         let geo = self.geografia.as_ref()?;
         let (racion_guarnicion, ciudadanos) = self.residentes_en_el_paso(id);
+        // La capital de su Facción y el nivel de esta (5C), mirados antes de sacar la plaza del mapa.
+        if !self.estado.asentamientos.contains_key(&id) {
+            return None;
+        }
+        let nivel_faccion = self.nivel_de_faccion(self.estado.asentamientos[&id].faccion);
+        let (es_capital, distancia_capital, faccion_tiene_gran_fundicion) = self.exterior_de_capital(id, nivel_faccion);
         let mut a = self.estado.asentamientos.remove(&id)?;
         let r = {
-            let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, niveles_faccion, militar, .. } = &mut self.estado;
+            let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, militar, .. } = &mut self.estado;
             let faccion = a.faccion;
             let tiene_tecnologia = |t: &str| militar.tiene_tecnologia(&reglas.economia.militar, faccion, t);
             let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t };
@@ -236,12 +238,12 @@ impl Nucleo {
                 fertilidad: FERTILIDAD,
                 tiene_tecnologia: &tiene_tecnologia,
                 factor_tecnologia: &SIN_BONUS,
-                nivel_faccion: niveles_faccion.get(&a.faccion).copied().unwrap_or(1),
+                nivel_faccion,
                 orden_era: ORDEN_ERA,
-                es_capital: ES_CAPITAL,
-                faccion_tiene_gran_fundicion: FACCION_TIENE_GRAN_FUNDICION,
+                es_capital,
+                faccion_tiene_gran_fundicion,
                 ciudadanos,
-                distancia_capital: DISTANCIA_CAPITAL,
+                distancia_capital,
                 racion_guarnicion,
                 // Una plaza ocupada tras una conquista crece y recauda a la fracción de la ocupación (Combate §8): su mantenimiento ya lo congela `ocupado`.
                 felicidad_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_crecimiento } else { FACTOR_EXTRA },
@@ -340,11 +342,20 @@ impl Nucleo {
             self.sincronizar_recintos(id);
         }
         let Some(a) = self.estado.asentamientos.get(&id) else { return };
-        let (punto, reglas) = (a.posicion, &self.estado.reglas.economia.datos);
+        let (punto, reglas, faccion) = (a.posicion, &self.estado.reglas.economia.datos, a.faccion);
         for e in sucesos {
             self.tr.emitir(&self.estado, evento_nucleo(id, t, punto, e, reglas));
         }
         self.tr.tocar(Clase::Asentamiento, id);
+        // La experiencia de Facción por construir y por ascender (§3.5), en el instante en que acaba la obra.
+        for s in sucesos {
+            let hecho = match s {
+                EventoEco::EdificioCompletado { .. } => (politica::nivel::Hecho::EdificioCompletado, super::experiencia::motivo::EDIFICIO),
+                &EventoEco::NivelSubio { nivel } => (politica::nivel::Hecho::Ascenso { nivel }, super::experiencia::motivo::ASCENSO),
+                _ => continue,
+            };
+            self.dar_experiencia_por(t, faccion, hecho.0, hecho.1);
+        }
     }
 
     /// Una plaza cayó en ruinas: desaparece del estado y libera sus parcelas y nodos. Sube su generación (descarta el paso de minuto ya
@@ -374,7 +385,7 @@ impl Nucleo {
         self.vaciar_pueblos_y_avanzadas(t, id, &pueblos, &avanzadas);
         self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas, t);
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
-        self.quitar_plaza(id);
+        self.quitar_plaza(id, a.faccion);
         self.estado.generaciones.subir(id);
         // La cascada de la ruina, en su orden: los residentes se reubican; después, el comercio (trueques anulados sin penalizar, caravanas perdidas
         // o devueltas y órdenes de mercado borradas); su campamento de bandidos desaparece y, si era la última plaza de su Facción, esta queda derrotada
@@ -382,7 +393,10 @@ impl Nucleo {
         self.reubicar_residentes(id, a.posicion, t);
         self.cerrar_comercio(id, comercio::ruina::Motivo::Ruina, t);
         self.bandidos_de_plaza_arruinada(id, t);
+        // La capital de su Facción puede cambiar (la Facción cambia); sin plazas, queda derrotada por colapso (`derrotadaPor` = nadie, §8).
+        self.tr.tocar(Clase::Faccion, u64::from(a.faccion));
         if combate::conquista::faccion_derrotada(self.plazas_de(a.faccion).count()) {
+            self.registrar_derrota(a.faccion, None);
             self.emitir_propio(t, "faccion.derrotada", vec![], vec![("faccion", a.faccion as i64), ("por", 0)]);
             self.reprogramar_anillos(t);
         }
@@ -512,11 +526,13 @@ impl Nucleo {
             }
             Comando::SolicitarAscenso { .. } => {
                 let objetivo = self.estado.asentamientos[&id].nivel() + 1;
-                let cupo = self.cupo_ocupado(id, faccion, objetivo);
+                // El cupo de la Facción en el nivel objetivo (`CUPO_NIVEL_ASENTAMIENTO`, por el nivel de Facción: `politica`, 5C).
+                let cupo = politica::nivel::cupo_nivel(&self.estado.reglas.economia.politica.nivel, self.nivel_de_faccion(faccion), objetivo);
+                let sin_cupo = cupo.is_some_and(|c| self.cupo_ocupado(id, faccion, objetivo) >= c);
                 let (r, ev) = self
                     .con_exterior(id, t, |eco, x| {
                         let mut ev = vec![];
-                        (eco.solicitar_ascenso(t, x.reglas, x, cupo, &mut ev), ev)
+                        (eco.solicitar_ascenso(t, x.reglas, x, sin_cupo, &mut ev), ev)
                     })
                     .expect("la plaza existe y hay mundo");
                 if let Err(bloqueos) = r {
@@ -527,7 +543,7 @@ impl Nucleo {
                 sucesos.extend(ev);
             }
             Comando::ActivarPolitica { politica, cargo, .. } => {
-                let nivel_faccion = self.estado.niveles_faccion.get(&faccion).copied().unwrap_or(1);
+                let nivel_faccion = self.nivel_de_faccion(faccion);
                 let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
                 // DUDA: sin sistema de cargos, se da por ocupado el cargo que invoca la orden (ya se comprobó que el actor manda en la plaza).
                 let activador = Activador { cargo: *cargo, cargo_ocupado: true, nivel_faccion, sala_consejo: eco.edificios.activos(Tipo::SalaConsejo) > 0 };

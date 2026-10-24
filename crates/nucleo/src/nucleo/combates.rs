@@ -374,6 +374,7 @@ impl Nucleo {
         }
         let informe = resolver_combate(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut def.escuadras, heroes: &def.heroes }, asedio::SIN_RECINTO, &mut self.estado.rng)
             .expect("los dos bandos llevan al menos un héroe sano");
+        self.experiencia_de_combate(t, &informe);
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&def.escuadras);
 
@@ -567,6 +568,8 @@ impl Nucleo {
             let cogido = self.cargar_botin_en(id, &oro);
             oro = cogido;
             self.destruir_bandidos(x, t);
+            let faccion = self.estado.ejercitos[&id].columna.faccion;
+            self.experiencia_de_bandidos(t, faccion);
         } else {
             heridos = self.herir_heroes(&participantes, t);
             perdido = self.perder_la_mitad_del_carro(id);
@@ -698,6 +701,7 @@ impl Nucleo {
         let mut datos = vec![("faccionAtacante", yo as i64), ("faccionDefensora", faccion_vieja as i64), ("multiplicadorMuralla", multiplicador), ("murallaCompleta", muralla_completa as i64)];
         let mut chatarra = Mercancia::new();
         if let Asedio::Combate(i) = &resultado {
+            self.experiencia_de_combate(t, i);
             chatarra = i.chatarra.clone();
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }

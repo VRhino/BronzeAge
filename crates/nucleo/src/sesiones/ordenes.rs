@@ -636,10 +636,12 @@ impl Ctx<'_> {
             Cuerpo::CambiarResidencia(o) => Comando::CambiarResidencia { heroe: self.heroe(&o.heroe_id)?, asentamiento: self.plaza(&o.destino_id)? },
             Cuerpo::ResidirEnCampamento(o) => Comando::ResidirEnCampamento { heroe: self.heroe(&o.heroe_id)?, campamento: self.campamento(&o.campamento_id)? },
             Cuerpo::DejarResidencia(o) => Comando::DejarResidencia { heroe: self.heroe(&o.heroe_id)? },
+            // ── La capital y el nombre de la plaza (5C) ──
+            Cuerpo::DesignarCapital(o) => Comando::DesignarCapital { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, asentamiento: self.plaza(&o.asentamiento_id)? },
+            Cuerpo::RenombrarAsentamiento(o) => Comando::RenombrarAsentamiento { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, nombre: o.nombre.clone() },
 
             // ── Lo que el núcleo aún no tiene ──
             Cuerpo::AsignarCargoLocal(_)
-            | Cuerpo::DesignarCapital(_)
             | Cuerpo::AdmitirOtrasFacciones(_)
             | Cuerpo::ProponerRelacion(_)
             | Cuerpo::ResponderRelacion(_)
@@ -655,7 +657,6 @@ impl Ctx<'_> {
             | Cuerpo::RebelionVasallo(_)
             | Cuerpo::DeclararGuerra(_)
             | Cuerpo::VetarJugador(_)
-            | Cuerpo::RenombrarAsentamiento(_)
             | Cuerpo::AlternarReabastecerAliados(_) => return self.no_disponible("política y Facciones (sistema 5)"),
             Cuerpo::AdoptarTecnologia(_)
             | Cuerpo::EmpezarEpica(_)

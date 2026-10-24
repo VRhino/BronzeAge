@@ -233,7 +233,7 @@ fn con_caravana(m: &M) -> ConCaravana {
     let pa = sitio_rico(&e.n, &m.0, 0, 1);
     let a = fundar(&mut e, "ana", 1, pa);
     e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
-    let pc = sitio_rico(&e.n, &m.0, 2, 1);
+    let pc = sitio_rico(&e.n, &m.0, 0, 1);
     let c = fundar(&mut e, "ana", 1, pc);
     e.avanzar(24 * HORA);
     e.dar(a, Madera, 350_000);

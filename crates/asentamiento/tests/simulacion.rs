@@ -111,7 +111,7 @@ fn correr(dias: i64, semilla_hambre: bool) -> (Asentamiento, Vec<(i64, Evento)>)
         let mut ev = a.avanzar_hasta(t, &mut x);
         // Un bot pide la subida en cuanto puede.
         if a.ascenso.is_none() && minuto % 60 == 0 {
-            let _ = a.solicitar_ascenso(t, &reglas, &x, 0, &mut ev);
+            let _ = a.solicitar_ascenso(t, &reglas, &x, false, &mut ev);
         }
         for e in ev {
             eventos.push((minuto, e));

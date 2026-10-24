@@ -248,7 +248,7 @@ fn escenario(m: &M, semilla: u64, con_mercado: bool) -> Escenario {
 /// Una tercera plaza de F1 (con Mercado construido) cerca del campamento 1.
 fn tercera_plaza(e: &mut Escenario, m: &M) -> u64 {
     e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
-    let pc = sitio_rico(&e.n, &m.0, 1, 1);
+    let pc = sitio_rico(&e.n, &m.0, 0, 1);
     let t = e.n.ahora();
     let c = fundar(&mut e.n, t, "c", "ana", 1, pc);
     e.dar(c, Madera, 350_000);
@@ -354,7 +354,7 @@ fn un_trueque_entero_entre_facciones_con_entrega_manual_se_cumple_con_comision_y
     assert_eq!((dato(&cumplidos[0], "entreFacciones"), dato(&cumplidos[0], "cobre"), dato(&cumplidos[0], "estano"), dato(&cumplidos[0], "trasVencer")), (1, 100_000, 30_000, 0));
     // Entre Facciones: +5 de reputación y la experiencia para las dos.
     assert_eq!((e.n.reputacion(1), e.n.reputacion(2)), (5 * PUNTO, 5 * PUNTO));
-    let xp: Vec<i64> = hechos(&e.n, "faccion.experiencia").iter().map(|h| dato(h, "faccion")).collect();
+    let xp: Vec<i64> = hechos(&e.n, "faccion.experiencia").iter().filter(|h| dato(h, "motivo") == 1).map(|h| dato(h, "faccion")).collect();
     assert_eq!(xp, vec![1, 2]);
     // La reputación decae despacio: 0,002 por minuto.
     e.avanzar(1_000 * MIN);
@@ -402,7 +402,7 @@ fn un_trueque_entre_plazas_de_la_misma_faccion_cobra_el_3_por_ciento_y_no_toca_l
     assert_eq!(e.n.acuerdo(tr).unwrap().estado, EstadoTrueque::Cumplido);
     let cumplidos = hechos(&e.n, "comercio.trueque_cumplido");
     assert_eq!((cumplidos.len(), dato(&cumplidos[0], "entreFacciones")), (1, 0), "el hecho sale igual, con entreFacciones falso");
-    assert_eq!((e.n.reputacion(1), hechos(&e.n, "faccion.experiencia").len()), (0, 0), "la reputación y la experiencia son entre Facciones");
+    assert_eq!((e.n.reputacion(1), hechos(&e.n, "faccion.experiencia").iter().filter(|h| dato(h, "motivo") == 1).count()), (0, 0), "la reputación y la experiencia del trueque son entre Facciones");
 }
 
 // ───────────────────────────── 2. Caducidad por evento ─────────────────────────────
@@ -1236,7 +1236,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN30");
+    assert_eq!(&bytes[..5], b"BAN31");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);

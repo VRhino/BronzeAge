@@ -154,9 +154,9 @@ impl Nucleo {
         Some(a.urbe.vista(a.urbe.radio_ul(&u), &a.economia.recintos))
     }
 
-    /// Plazas vigentes de una Facción.
-    pub fn plazas_de(&self, faccion: u32) -> impl Iterator<Item = &Asentamiento> {
-        self.estado.asentamientos.values().filter(move |a| a.faccion == faccion)
+    /// Plazas vigentes de una Facción, por id (del índice de `Espacio`: no recorre todas las plazas).
+    pub fn plazas_de(&self, faccion: u32) -> impl Iterator<Item = &Asentamiento> + Clone {
+        self.espacio.plazas_por_faccion.get(&faccion).into_iter().flatten().filter_map(|id| self.estado.asentamientos.get(id))
     }
 
     /// El aviso de viabilidad de fundar en `p` para esa Facción. `None` si el núcleo no tiene mundo cargado.
@@ -243,14 +243,18 @@ impl Nucleo {
         let sin_cambios = || Respuesta::sin_cambios(v);
         let existe = |s: &Self, id: u64| s.estado.asentamientos.contains_key(&id).then_some(()).ok_or_else(|| rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id)));
         match &p.comando {
+            // Andamiaje sobre la regla real (decisión 9 del plan del sistema 5): fija la experiencia al umbral del nivel. La Facción que no existe nace vacía.
             Comando::FijarNivelFaccion { faccion, nivel } => {
                 if *nivel == 0 {
                     return Err(rechazo(rechazos::NIVEL_INVALIDO, "el nivel de Facción empieza en 1".into()));
                 }
-                if self.estado.niveles_faccion.get(faccion).copied().unwrap_or(1) == *nivel {
+                if self.nivel_de_faccion(*faccion) == *nivel {
                     return Err(sin_cambios());
                 }
-                self.estado.niveles_faccion.insert(*faccion, *nivel);
+                let r = self.estado.reglas.economia.politica.clone();
+                self.estado.politica.facciones.crear_vacia(&r, *faccion);
+                self.estado.politica.facciones.fijar_experiencia(*faccion, politica::nivel::experiencia_minima(&r.nivel, *nivel));
+                self.tr.tocar(Clase::Faccion, u64::from(*faccion));
                 self.tr.emitir(&self.estado, EventoNucleo { codigo: "faccion.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![], punto: None, datos: vec![("faccion", *faccion as i64), ("nivel", *nivel as i64)], ..Default::default() });
                 Ok(None)
             }
@@ -356,9 +360,8 @@ impl Nucleo {
         if fundadores.is_empty() {
             return Err(Respuesta::rechazo(rechazos::FUNDACION_SIN_FUNDADORES, "ningún héroe de la columna es ciudadano de su Facción", v));
         }
+        let cap = politica::nivel::cap_fundacion(&self.estado.reglas.economia.politica.nivel, self.nivel_de_faccion(faccion)) as usize;
         let r = &self.estado.reglas.territorio;
-        let nivel = self.estado.niveles_faccion.get(&faccion).copied().unwrap_or(1);
-        let cap = territorio::cap_de_fundacion(nivel, &r.cap_por_nivel) as usize;
         let tiene = self.plazas_de(faccion).count();
         if tiene >= cap {
             return Err(Respuesta::rechazo(rechazos::CAP_ALCANZADO, format!("la Facción tiene {tiene} plazas y su cap es {cap}"), v));
@@ -373,8 +376,9 @@ impl Nucleo {
         let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, t, &eco.materiales_iniciales, eco.viviendas_iniciales);
         // Su ciudad nace con los mismos edificios iniciales que la economía (ids 0..=viviendas+1).
         let urbe = crate::urbanismo::Urbe::fundar(&self.estado.reglas.economia, self.semilla, id);
-        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default() });
-        self.situar_plaza(id, punto);
+        let nombre = self.nombre_de_ciudad_libre(id);
+        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default(), nombre: nombre.clone(), capital_de: None });
+        self.situar_plaza(id, punto, faccion);
         self.proteger_al_fundar(id, t);
         self.programar_minuto(id, t + base::MS_POR_MINUTO);
         self.programar_bandidos_de_plaza(id, t);
@@ -394,8 +398,13 @@ impl Nucleo {
             asentamientos: vec![id],
             punto: Some(punto),
             datos: vec![("faccion", faccion as i64), ("caravana", caravana as i64)],
+            valores: if nombre.is_empty() { vec![] } else { vec![("nombre", crate::estado::Dato::Texto(nombre))] },
             ..Default::default()
         });
+        // La derrota se borra al fundar (§8) y la fundación da experiencia salvo la primera plaza de la Facción (§3.5). La capital puede cambiar: la Facción cambia.
+        self.estado.politica.facciones.anular_derrota(faccion);
+        self.tr.tocar(Clase::Faccion, u64::from(faccion));
+        self.dar_experiencia_por(t, faccion, politica::nivel::Hecho::Fundacion { primera: tiene == 0 }, super::experiencia::motivo::FUNDACION);
         self.contactos_nuevos(id, t);
         Ok(Some(id))
     }

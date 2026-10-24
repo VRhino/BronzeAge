@@ -55,6 +55,7 @@ mod convocatorias;
 mod cronica;
 mod dentro;
 mod espacio;
+mod experiencia;
 mod exploracion;
 mod fundacion;
 mod flota;
@@ -992,6 +993,10 @@ impl Nucleo {
             | Comando::ResidirEnCampamento { .. }
             | Comando::DejarResidencia { .. }
             | Comando::FijarFaccionDeHeroe { .. } => match self.ejecutar_politica(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::DesignarCapital { .. } | Comando::RenombrarAsentamiento { .. } => match self.ejecutar_capital_y_nombre(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

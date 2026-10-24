@@ -65,11 +65,9 @@ impl Nucleo {
             .collect()
     }
 
-    /// El cap de fundación de la Facción (`CAP_FUNDACION_POR_NIVEL` del nivel que tenga).
-    // DUDA: el nivel sale de `niveles_faccion`, como en `fundar`; 5C lo pasa a la experiencia (`politica::nivel::cap_fundacion`): al integrar, este y el de `fundar` tienen que leer lo mismo.
+    /// El cap de fundación de la Facción: el de su nivel por experiencia (`politica::nivel::cap_fundacion`, 5C), el mismo que mira `fundar`.
     fn cap_de_fundacion_de(&self, faccion: u32) -> usize {
-        let nivel = self.estado.niveles_faccion.get(&faccion).copied().unwrap_or(1);
-        territorio::cap_de_fundacion(nivel, &self.estado.reglas.territorio.cap_por_nivel) as usize
+        politica::nivel::cap_fundacion(&self.estado.reglas.economia.politica.nivel, self.nivel_de_faccion(faccion)) as usize
     }
 
     /// Las Caravanas de Fundación vivas de la Facción (el cupo del cap se reserva al lanzar, §4.6).

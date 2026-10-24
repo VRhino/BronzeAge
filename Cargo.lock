@@ -43,6 +43,7 @@ dependencies = [
  "mundo",
  "nucleo",
  "persistencia",
+ "politica",
  "rutas",
  "serde_json",
  "territorio",

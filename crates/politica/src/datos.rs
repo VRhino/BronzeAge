@@ -153,17 +153,6 @@ mod pruebas {
     }
 
     #[test]
-    fn el_cupo_es_el_mismo_que_lee_la_economia() {
-        // El bloque está repetido en Economia_Construccion: los dos tienen que decir lo mismo.
-        let r = Reglas::cargar();
-        let e = asentamiento::Reglas::cargar();
-        for nivel in 1..=10 {
-            assert_eq!(Some(r.nivel.cupo_nivel2[nivel - 1]), e.nivel.cupo_faccion(2, nivel as u32));
-            assert_eq!(Some(r.nivel.cupo_nivel3[nivel - 1]), e.nivel.cupo_faccion(3, nivel as u32));
-        }
-    }
-
-    #[test]
     fn la_identidad_son_los_bloques_del_documento() {
         let t = texto_de_parametros();
         for nombre in ["CIUDADANIA", "CAPITAL", "PUERTA", "RELACION_PROPUESTA", "ANEXION", "FUSION", "CATALOGO_SIGILO", "NIVEL_FACCION"] {

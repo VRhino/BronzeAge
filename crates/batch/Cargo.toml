@@ -11,6 +11,7 @@ rutas = { path = "../rutas" }
 nucleo = { path = "../nucleo" }
 territorio = { path = "../territorio" }
 asentamiento = { path = "../asentamiento" }
+politica = { path = "../politica" }
 comercio = { path = "../comercio" }
 militar = { path = "../militar" }
 combate = { path = "../combate" }

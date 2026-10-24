@@ -121,14 +121,13 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
     v
 }
 
-/// Las Facciones que existen: las de la entidad (5B: aunque no les quede nadie ni nada) y las que la administración nombra sin crearlas, por su nivel, reputación, tecnologías, relaciones,
+/// Las Facciones que existen: las de la entidad (5B: aunque no les quede nadie ni nada) y las que la administración nombra sin crearlas, por su reputación, tecnologías, relaciones,
 /// ciudadanos o plazas.
 pub fn facciones(e: &Estado) -> BTreeSet<u32> {
     e.politica
         .facciones
         .iter()
         .map(|f| &f.id)
-        .chain(e.niveles_faccion.keys())
         .chain(e.comercio.reputacion.keys())
         .chain(e.militar.tecnologias.keys())
         .chain(e.militar.relaciones.keys().flat_map(|(a, b)| [a, b]))

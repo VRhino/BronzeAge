@@ -315,7 +315,7 @@ fn un_trueque_se_cumple_por_reparto_automatico_con_comision_reputacion_y_regreso
     // Cumplido: reputación y experiencia entre Facciones, y lo comerciado alimenta la reposición de los mercenarios.
     assert_eq!(e.n.acuerdo(tr).unwrap().estado, EstadoTrueque::Cumplido);
     assert_eq!((e.n.reputacion(1), e.n.reputacion(2)), (5 * PUNTO, 5 * PUNTO));
-    assert_eq!(hechos(&e.n, "faccion.experiencia").len(), 2);
+    assert_eq!(hechos(&e.n, "faccion.experiencia").iter().filter(|h| dato(h, "motivo") == 1).count(), 2, "la del trueque (las demás son de edificios)");
     let cont = &e.n.mercenarios().mercado.contadores;
     assert_eq!((cont[&Cobre], cont[&Estano]), (60_000, 30_000));
     assert_eq!(mundo_de(&e.n, Cobre), cobre_mundo);
@@ -646,7 +646,11 @@ fn tercera_plaza(e: &mut Escenario, m: &M) -> u64 {
 #[test]
 fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada() {
     let m = con_mundo!();
-    let mut e = escenario(m, 7);
+    // Sin mantenimiento por distancia (5C): al conquistarla, A (la más antigua, por id) pasa a ser la capital de F2 y B, a 1.500 u de ella, se arruinaría en hora y media; aquí se mide la
+    // flota, no la distancia.
+    let mut reglas = sin_bandidos();
+    std::sync::Arc::make_mut(&mut reglas.economia.datos).mantenimiento.escala_distancia = i64::MAX / 4;
+    let mut e = montar(Nucleo::nuevo(Arranque { reglas, ..arranque(m, 7) }), m, true, 350_000, false);
     let (a, b) = (e.a, e.b);
     // A nace protegida un día (Doc 1.2): el guion empieza cuando ya se la puede asediar.
     e.avanzar_hasta(e.n.protegida_hasta(a).unwrap());

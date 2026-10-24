@@ -10,7 +10,7 @@
 //! crear, entrar, salir con la sucesión, Rey y Embajador; Q7), `nivel` (§3.5: experiencia, nivel, cap y cupo), `cargos` (§3.4: cargos locales, Q4),
 //! `residencia` (§4.1-§4.2: cooldown y cambio de residencia; Q8), `capital` (§3.7), `puerta` (§4.3, Q1), `relaciones` (§5: par, guerra con arrastre,
 //! paz, ruptura, rebelión, desarme, vasalla conquistada, traición al aliado Q2, defensa del vasallo), `propuestas` (§2.4, §5.3, §6.1-§6.2),
-//! `tributo` (§5.6, Q3), `liga` (§5.7), `titulos` (§7), `traslado` (§6.3: el plan de cambios) y `autorizacion` (Proyecciones §4.3 y §5.2: los predicados de la
+//! `tributo` (§5.6, Q3), `liga` (§5.7), `titulos` (§7), `traslado` (§6.3: el plan de cambios), `nombres` (el nombre de las ciudades nuevas, `Fundacion_Y_Refundacion.md` §8; 5C) y `autorizacion` (Proyecciones §4.3 y §5.2: los predicados de la
 //! matriz).
 
 pub mod autorizacion;
@@ -20,6 +20,7 @@ pub mod datos;
 pub mod faccion;
 pub mod liga;
 pub mod nivel;
+pub mod nombres;
 pub mod propuestas;
 pub mod puerta;
 pub mod relaciones;

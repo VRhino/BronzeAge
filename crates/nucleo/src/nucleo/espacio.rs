@@ -45,11 +45,13 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) struct Espacio {
     pub rejilla: Rejilla,
     pub perseguidores: BTreeMap<u64, BTreeSet<u64>>,
+    /// Las plazas de cada Facción (derivado, no va en la foto): lo leen el paso de minuto (la capital de la plaza, 5C), el cap de fundación y el cupo de nivel sin recorrer todas las plazas.
+    pub plazas_por_faccion: BTreeMap<u32, BTreeSet<u64>>,
 }
 
 impl Espacio {
     pub fn nuevo() -> Self {
-        Self { rejilla: Rejilla::para_mundo_real(), perseguidores: BTreeMap::new() }
+        Self { rejilla: Rejilla::para_mundo_real(), perseguidores: BTreeMap::new(), plazas_por_faccion: BTreeMap::new() }
     }
 }
 
@@ -149,6 +151,10 @@ impl Nucleo {
             let g = if self.estado.asentamientos.contains_key(&entidad) { 0 } else { self.estado.generaciones.actual(entidad) };
             self.espacio.rejilla.apuntar(entidad, g, &plan);
         }
+        self.espacio.plazas_por_faccion.clear();
+        for a in self.estado.asentamientos.values() {
+            self.espacio.plazas_por_faccion.entry(a.faccion).or_default().insert(a.id);
+        }
         for e in self.estado.ejercitos.values() {
             if let Some(presa) = e.persiguiendo {
                 self.espacio.perseguidores.entry(presa).or_default().insert(e.id);
@@ -165,14 +171,30 @@ impl Nucleo {
         }
     }
 
-    /// Una plaza recién fundada es una cosa fija del espacio.
-    pub(super) fn situar_plaza(&mut self, id: u64, posicion: Punto) {
+    /// Una plaza recién fundada es una cosa fija del espacio, y una plaza más de su Facción.
+    pub(super) fn situar_plaza(&mut self, id: u64, posicion: Punto, faccion: u32) {
         self.espacio.rejilla.apuntar(id, 0, &plan_quieto(posicion, self.estado.ahora, 0));
+        self.espacio.plazas_por_faccion.entry(faccion).or_default().insert(id);
     }
 
-    /// Una plaza cayó en ruinas: ya no está en el espacio.
-    pub(super) fn quitar_plaza(&mut self, id: u64) {
+    /// Una plaza cayó en ruinas: ya no está en el espacio ni es de su Facción.
+    pub(super) fn quitar_plaza(&mut self, id: u64, faccion: u32) {
         self.espacio.rejilla.quitar(id);
+        self.cambiar_plaza_de_faccion(id, faccion, None);
+    }
+
+    /// La plaza pasa de la Facción `de` a `a` (conquista) o desaparece (`None`).
+    pub(super) fn cambiar_plaza_de_faccion(&mut self, id: u64, de: u32, a: Option<u32>) {
+        let indice = &mut self.espacio.plazas_por_faccion;
+        if let Some(s) = indice.get_mut(&de) {
+            s.remove(&id);
+            if s.is_empty() {
+                indice.remove(&de);
+            }
+        }
+        if let Some(a) = a {
+            indice.entry(a).or_default().insert(id);
+        }
     }
 
     // ───────────────────────────── Anunciar ─────────────────────────────

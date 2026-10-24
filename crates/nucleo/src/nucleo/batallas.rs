@@ -1013,6 +1013,15 @@ impl Nucleo {
         self.herir_heroes(&efectos.heridos, t);
         // 4-5. Consecuencias según el contexto y chatarra de los caídos.
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
+        // La experiencia de Facción: por cada héroe que participó, a la Facción con la que entró (la del ticket), sin filtro de dignidad (5C).
+        let participo = |h: u64| res.por_heroe.iter().any(|x| x.heroe == h && x.participo);
+        let mut por_faccion = std::collections::BTreeMap::new();
+        for p in [Lado::Atacante, Lado::Defensor].into_iter().flat_map(|l| self.participantes_del_lado(&b, l)) {
+            if let Some(f) = p.faccion.filter(|_| participo(p.heroe)) {
+                *por_faccion.entry(f).or_insert(0u32) += 1;
+            }
+        }
+        self.experiencia_de_batalla(t, por_faccion);
         // Vuelve al mundo lo que estaba apartado (las columnas retoman su plan con la velocidad que les dejan las bajas) y se programa la retirada.
         self.devolver_al_mundo(t, id);
         self.programar_batalla(id);
@@ -1020,8 +1029,8 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// Lo que decide BronzeAge según dónde se combatió (§9, pasos 4 y 5). **Sin** la experiencia de Facción, la reputación por defender a un vasallo ni los
-    /// contadores de logros: son del sistema político y del tecnológico.
+    /// Lo que decide BronzeAge según dónde se combatió (§9, pasos 4 y 5). **Sin** la reputación por defender a un vasallo ni los contadores de logros (sistema político, 5D, y
+    /// tecnológico); la experiencia de Facción la da `aplicar_resultado` (5C), y la de bandidos, la captura del campamento.
     fn consecuencias_de_batalla(&mut self, t: Instante, b: &Batalla, res: &ResultadoDeBatalla, efectos: &Efectos) {
         let (ganador, perdedor) = (res.ganador, res.ganador.otro());
         match &b.ticket.contexto {
@@ -1126,6 +1135,7 @@ impl Nucleo {
                 }
                 self.repartir_en_columnas(&atacantes, &oro);
                 self.destruir_bandidos(campamento, t);
+                self.experiencia_de_bandidos(t, b.ticket.atacante.faccion);
             }
             _ => {}
         }
