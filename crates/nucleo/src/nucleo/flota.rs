@@ -404,7 +404,7 @@ impl Nucleo {
         }
         for AccionCaravana { caravana, accion, .. } in cierre.caravanas {
             match accion {
-                Accion::Pierde | Accion::Destruye => self.perder_caravana(t, caravana),
+                Accion::Pierde | Accion::Destruye => drop(self.perder_caravana(t, caravana)),
                 Accion::Regresa => self.regresar_caravana(t, caravana, pid),
                 Accion::Vuelve => self.hacer_volver_caravana(t, caravana),
             }
@@ -434,13 +434,14 @@ impl Nucleo {
         }
     }
 
-    /// Quita la caravana del mundo (se pierde con su carga) y avisa a la plaza de su origen, si existe.
-    pub(super) fn perder_caravana(&mut self, t: Instante, id: u64) {
-        let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
+    /// Quita la caravana del mundo (se pierde con su carga) y avisa a la plaza de su origen, si existe. Si iba adjunta, devuelve lo que su columna ya no puede llevar sin
+    /// ella, que se pierde con sus carros (M10).
+    pub(super) fn perder_caravana(&mut self, t: Instante, id: u64) -> Mercancia {
+        let Some(i) = self.estado.comercio.posicion_caravana(id) else { return Mercancia::new() };
         let c = self.estado.comercio.flota.remove(i);
         self.tr.tocar(Clase::Caravana, id);
         self.devolver_escolta(&c.escolta);
-        self.soltar_de_columnas(id);
+        let de_la_columna = self.soltar_de_columnas(id);
         self.retirar_plan(id);
         let origen = c.origen as u64;
         if c.tipo == TipoCaravana::Acarreo {
@@ -448,6 +449,7 @@ impl Nucleo {
         }
         let plazas = if self.estado.asentamientos.contains_key(&origen) { vec![origen] } else { vec![] };
         self.emitir_comercio(t, EventoComercio::CaravanaPerdida { caravana: id }, plazas, &[("carga", total(&c.contenido))]);
+        de_la_columna
     }
 
     /// Una `preparando` hacia la plaza que cae: la carga vuelve al almacén del origen (topada por su capacidad) y queda `disponible`.
@@ -455,7 +457,8 @@ impl Nucleo {
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let origen = self.estado.comercio.flota[i].origen as u64;
         if !self.estado.asentamientos.contains_key(&origen) {
-            return self.perder_caravana(t, id);
+            self.perder_caravana(t, id);
+            return;
         }
         let Ok((devuelto, perdido)) = self.cancelar_preparacion(i, origen) else { return };
         self.tr.tocar(Clase::Caravana, id);
@@ -470,7 +473,7 @@ impl Nucleo {
     fn regresar_caravana(&mut self, t: Instante, id: u64, ruina: u32) {
         let Some(c) = self.estado.comercio.caravana(id) else { return };
         let (aqui, origen) = (c.posicion_en(t), c.origen as u64);
-        let Some((plan, camino)) = self.plan_de_regreso(id, aqui, t) else { return self.perder_caravana(t, id) };
+        let Some((plan, camino)) = self.plan_de_regreso(id, aqui, t) else { return drop(self.perder_caravana(t, id)) };
         let i = self.estado.comercio.posicion_caravana(id).expect("existe");
         let c = &mut self.estado.comercio.flota[i];
         if c.regresar_a_origen(ruina, plan.clone()).is_err() {

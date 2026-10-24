@@ -39,6 +39,7 @@ use comercio::red_caminos::{Arista, RedCaminos};
 use comercio::reparto::{asignar_origen, lados_pendientes, EntornoReparto, LadoPendiente};
 use comercio::viaje::{longitud_ruta, peajes_de_paradas, CobroPeaje};
 use comercio::{total, Lado};
+use militar::{sumar, Carga as Mercancia};
 use rutas::{a_plan_por_minuto, clave_arista, Atraccion, Camino};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use territorio::Disco;
@@ -751,15 +752,6 @@ impl Nucleo {
         if !p.admin && e.posicion_en(t).dist(anfitriona.posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "la columna no está en la puerta de la plaza".into()));
         }
-        // Lo que la columna lleva en los carros de la caravana se queda sin sitio al soltarla: sin ellos, el carro ha de caber en lo que queda (Movimiento_Ejercitos §6.2: el
-        // carro nunca pasa de su capacidad). Lo encontró `batch militar` (2026-10-24): una columna que cobró botín con la capacidad de su caravana la aparcaba y seguía con más
-        // carga de la que le cabía.
-        // DUDA (decidido al implementar, a revisar por el autor): se rechaza; otra lectura sería dejar en la caravana aparcada lo que ya no cabe en la columna.
-        let sin_ella = self.capacidad_de_carga(ejercito).unwrap_or(0) - self.capacidad_de_caravana(&self.estado.comercio.flota[i]);
-        let lleva = total(&e.columna.carga);
-        if lleva > sin_ella {
-            return Err(rechazo(rechazos::CARRO_LLENO, format!("sin los carros de la caravana el carro admite {sin_ella} y lleva {lleva}: descarga antes lo que no cabe")));
-        }
         let (antes, posicion) = (self.velocidad_de_columna(e), anfitriona.posicion);
         self.estado.comercio.flota[i].aparcar(id32(plaza), posicion).map_err(|er| {
             let (c, m) = rechazo_de_caravana(er);
@@ -768,24 +760,52 @@ impl Nucleo {
         let e = self.estado.ejercitos.get_mut(&ejercito).expect("existe");
         e.caravanas_adjuntas.retain(|&c| c != caravana);
         e.version = v;
+        // La carga sigue a los carros (calibración del sistema 4, M10; Movimiento_Ejercitos §6.2: el carro nunca pasa de su capacidad): lo que la columna ya no puede llevar sin
+        // ellos se queda en la caravana aparcada, hasta lo que le quepa; lo que tampoco quepa en ella se pierde.
+        let libre = self.capacidad_de_caravana(&self.estado.comercio.flota[i]) - self.estado.comercio.flota[i].carga_total();
+        let mut dejado = self.sacar_lo_que_no_cabe(ejercito);
+        militar::sacar_lo_que_sobra(&mut dejado, libre);
+        let c = &mut self.estado.comercio.flota[i];
+        for (&r, &n) in &dejado {
+            *c.contenido.entry(r).or_insert(0) += n;
+        }
+        self.tr.tocar(Clase::Caravana, caravana);
         let despues = self.velocidad_de_columna(&self.estado.ejercitos[&ejercito]);
         self.reescalar_marcha(ejercito, t, antes, despues);
         self.tr.tocar(Clase::Ejercito, ejercito);
-        self.evento("ejercito.caravana_aparcada", t, ejercito, None, vec![("caravana", caravana as i64), ("plaza", plaza as i64)]);
+        self.evento("ejercito.caravana_aparcada", t, ejercito, None, vec![("caravana", caravana as i64), ("plaza", plaza as i64), ("dejado", total(&dejado))]);
         Ok(None)
     }
 
-    /// Saca la caravana de la lista de caravanas adjuntas de cualquier columna (cuando desaparece estando enganchada).
-    pub(super) fn soltar_de_columnas(&mut self, caravana: u64) {
+    /// Saca la caravana de la lista de caravanas adjuntas de cualquier columna (cuando desaparece estando enganchada). La carga sigue a los carros (M10): lo que la columna ya no
+    /// puede llevar sin ellos se pierde con la caravana; se devuelve.
+    pub(super) fn soltar_de_columnas(&mut self, caravana: u64) -> Mercancia {
         let afectadas: Vec<u64> = self.estado.ejercitos.iter().filter(|(_, e)| e.caravanas_adjuntas.contains(&caravana)).map(|(&id, _)| id).collect();
+        let mut perdido = Mercancia::new();
         for id in afectadas {
             let ahora = self.estado.ahora;
             let antes = self.velocidad_de_columna(&self.estado.ejercitos[&id]);
             self.estado.ejercitos.get_mut(&id).expect("existe").caravanas_adjuntas.retain(|&c| c != caravana);
+            for (r, n) in self.sacar_lo_que_no_cabe(id) {
+                sumar(&mut perdido, r, n);
+            }
             let despues = self.velocidad_de_columna(&self.estado.ejercitos[&id]);
             self.reescalar_marcha(id, ahora, antes, despues);
             self.tr.tocar(Clase::Ejercito, id);
         }
+        perdido
+    }
+
+    /// La columna perdió capacidad de carga (una caravana adjunta que se aparca, desaparece o pierde carros): lo que ya no le cabe iba en esos carros y sale con ellos
+    /// (`militar::sacar_lo_que_sobra`). Devuelve lo que sale.
+    pub(super) fn sacar_lo_que_no_cabe(&mut self, ejercito: u64) -> Mercancia {
+        let Some(capacidad) = self.capacidad_de_carga(ejercito) else { return Mercancia::new() };
+        let e = self.estado.ejercitos.get_mut(&ejercito).expect("existe");
+        let fuera = militar::sacar_lo_que_sobra(&mut e.columna.carga, capacidad);
+        if !fuera.is_empty() {
+            self.tr.tocar(Clase::Ejercito, ejercito);
+        }
+        fuera
     }
 
 }

@@ -27,7 +27,7 @@ use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo, Pueblo};
 use asentamiento::recintos::{Mejora as MejoraDeRecinto, Recinto};
 use asentamiento::recurso::TODOS;
 use asentamiento::{Almacen, Cargo, Costo, Politicas, Poblacion, Recurso};
-use trazado::{Celda, CeldaMuro, ClaseCelda};
+use trazado::{Celda, CeldaDeRed, CeldaMuro, ClaseCelda};
 
 pub(crate) fn tipo_a_u8(t: Tipo) -> u8 {
     t as u8
@@ -189,10 +189,17 @@ pub(crate) fn leer_celdas(r: &mut Lector) -> Result<Vec<CeldaMuro>, ErrorFormato
 }
 
 fn escribir_recinto(w: &mut Escritor, r: &Recinto) {
-    let Recinto { id, nivel, celdas, avance, mejora, siguiente_celda_en, comprometido_en, completado_en } = r;
+    let Recinto { id, nivel, celdas, red_de_puertas, tras_pieza, avance, mejora, siguiente_celda_en, comprometido_en, completado_en } = r;
     w.u32(*id);
     w.u8(*nivel);
     escribir_celdas(w, celdas);
+    w.u64(red_de_puertas.len() as u64);
+    for CeldaDeRed { celda: Celda { col, row }, camino } in red_de_puertas {
+        w.i32(*col);
+        w.i32(*row);
+        w.bool(*camino);
+    }
+    w.u32(*tras_pieza);
     w.i32(*avance);
     match mejora {
         Some(MejoraDeRecinto { nivel, avance }) => {
@@ -216,13 +223,15 @@ fn leer_recinto(r: &mut Lector) -> Result<Recinto, ErrorFormato> {
     if celdas.is_empty() {
         return Err(ErrorFormato("recinto sin celdas"));
     }
+    let red_de_puertas = (0..r.cuenta()?).map(|_| Ok(CeldaDeRed { celda: Celda::new(r.i32()?, r.i32()?), camino: r.bool()? })).collect::<Result<Vec<_>, ErrorFormato>>()?;
+    let tras_pieza = r.u32()?;
     let ultima = celdas.len() as i32 - 1;
     let avance = r.i32()?;
     let mejora = if r.bool()? { Some(MejoraDeRecinto { nivel: r.u8()?, avance: r.i32()? }) } else { None };
     if !(-1..=ultima).contains(&avance) || mejora.is_some_and(|m| m.nivel != nivel + 1 || m.nivel > 3 || !(-1..ultima).contains(&m.avance)) {
         return Err(ErrorFormato("avance de recinto fuera del anillo"));
     }
-    Ok(Recinto { id, nivel, celdas, avance, mejora, siguiente_celda_en: r.opt_i64()?, comprometido_en: r.i64()?, completado_en: r.opt_i64()? })
+    Ok(Recinto { id, nivel, celdas, red_de_puertas, tras_pieza, avance, mejora, siguiente_celda_en: r.opt_i64()?, comprometido_en: r.i64()?, completado_en: r.opt_i64()? })
 }
 
 pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {

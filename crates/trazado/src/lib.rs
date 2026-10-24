@@ -9,7 +9,7 @@
 //! 1. [`Ciudad::fundar`] al fundar el asentamiento.
 //! 2. Para un edificio con barrio: [`Ciudad::asegurar_ancla_para`] y luego [`Ciudad::siguiente_sitio`] /
 //!    [`Ciudad::colocar_siguiente`] con un [`Pedido`] (tipo, categoría y huella los pone el catálogo).
-//! 3. Con recintos de muralla: [`Ciudad::set_recintos`] (muros bloquean, puertas son transitables).
+//! 3. Con recintos de muralla: [`Ciudad::set_recintos`] (muros bloquean, puertas son transitables y conservan su tramo de red).
 //! 4. Para dibujar: [`Ciudad::piezas`], [`Ciudad::calles_rectangulos`], [`Ciudad::caminos_rectangulos`].
 //! 5. Para trazar la muralla: [`trazar_recinto`] (el anillo, sus puertas y torres), y con el anillo congelado [`interior_de`],
 //!    [`contiene_a`], [`edificios_extramuros`] y [`marcar_torres`] (módulo `muralla`; Murallas.md).

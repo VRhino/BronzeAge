@@ -203,7 +203,16 @@ impl Nucleo {
 
     // ───────────────────────────── Los plazos ─────────────────────────────
 
-    /// Acaba la protección de una plaza conquistada: se la puede asediar otra vez. (Si una conquista nueva se llevó la plaza antes, este evento ya no existe.)
+    /// Una plaza recién fundada nace protegida un día, como una recién conquistada (Doc 1.2, 5.12.9): el mismo plazo (`OCUPACION.proteccionMinutos`) y el
+    /// mismo evento de fin, sin ventana de ocupación.
+    pub(super) fn proteger_al_fundar(&mut self, plaza: u64, t: Instante) {
+        let hasta = t + self.estado.reglas.economia.combate.ocupacion.proteccion;
+        self.estado.asentamientos.get_mut(&plaza).expect("existe").protegida_hasta = Some(hasta);
+        let clave = self.estado.generaciones.clave(entidad_conquista(plaza));
+        self.estado.cola.programar(hasta, PRIO_ASENTAMIENTO, clave, Carga::Combate(SucesoCombate::FinProteccion));
+    }
+
+    /// Acaba la protección de una plaza conquistada o recién fundada: se la puede asediar otra vez. (Si una conquista nueva se llevó la plaza antes, este evento ya no existe.)
     pub(super) fn fin_de_proteccion(&mut self, plaza: u64, t: Instante) {
         let Some(a) = self.estado.asentamientos.get_mut(&plaza) else { return };
         a.protegida_hasta = None;

@@ -421,8 +421,8 @@ async fn quien_esta_dentro_de_una_plaza_asediada_se_une_a_la_batalla_de_unity_po
     let mut p = Prep::nuevo(m, true);
     let (sa, sb) = (sitio_rico(&p.n, &m.0, 0, 1), sitio_rico(&p.n, &m.0, 3, 2));
     let (_, b) = (p.plaza("ana", 1, sa), p.plaza("beto", 2, sb));
-    p.avanzar(HORA);
-    // Beto (humano, F2) defiende en persona dentro de su plaza con una escuadra; ana (humana, F1) la asedia con un ejército a su puerta.
+    p.avanzar(24 * HORA);
+    // Pasado el día de protección con que nace la plaza (Doc 1.2), beto (humano, F2) defiende en persona dentro de su plaza con una escuadra; ana (humana, F1) la asedia con un ejército a su puerta.
     let campamento = (0..m.0.campamentos().len()).min_by_key(|&i| campamento(&m.0, i).dist2(sb)).unwrap() as u32;
     let beto = p.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano }).creadas[0];
     p.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(2) });
