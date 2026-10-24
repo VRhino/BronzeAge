@@ -407,7 +407,14 @@ impl Ciudad {
                     celdas.extend(corredor.into_iter().map(|c| (c, clase)));
                 }
             }
-            self.anadir_conectadas_de(celdas);
+            self.anadir_conectadas_de(celdas.clone());
+            // El tramo de un cruce cortado (Cal-6, `LAYOUT_VERSION` 6) queda suelto: rodea el muro hasta la red, la de la puerta más cercana, por el corredor más corto.
+            while let Some(&(c, clase)) = celdas.iter().find(|(c, _)| self.suelo.libre(*c)) {
+                match self.suelo.corredor(&Rect::new(c.col, c.row, 1, 1), u16::MAX) {
+                    Some(corredor) => self.anadir_conectadas_de(corredor.into_iter().map(|x| (x, clase)).chain(celdas.iter().copied()).collect()),
+                    None => celdas.retain(|&(x, _)| x != c),
+                }
+            }
         }
     }
 

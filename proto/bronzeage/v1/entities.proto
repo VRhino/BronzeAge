@@ -497,6 +497,8 @@ message Heroe {
   // El héroe ajeno visto en la `VISTA` (4H T3d, `HeroePublico`, Doc 5.16.7): solo `id`, `version`, `display_name`, `class_definition_id`, `avatar`, `nivel`,
   // `herido_hasta_ms` y las escuadras que lleva consigo en su columna (tropa, cantidad y nivel). Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
   repeated EscuadraQueLleva escuadras_que_lleva = 35;
+  // Cuánto cabe en total en su almacén personal (5G-a, derivado de `ALMACEN_PERSONAL.capacidad`; milésimas): lo que pueden llenar `guardar_en_almacen_personal` y las compras del residente.
+  sint64 capacidad_almacen_personal = 36;
 }
 
 // Una escuadra que un héroe ajeno lleva en su columna, tal como se ve (`HeroePublico.escuadrasQueLleva`).

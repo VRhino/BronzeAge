@@ -663,9 +663,21 @@ impl Ctx<'_> {
             | Cuerpo::ComprarCaravanaDeRefundacion(_)
             | Cuerpo::LanzarCaravanaFundacion(_)
             | Cuerpo::DesarmarCaravanaFundacion(_) => return self.no_disponible("refundación y Caravana de Fundación"),
-            Cuerpo::CargarCaravana(_) | Cuerpo::ReclamarCaravana(_) | Cuerpo::SoltarCaravana(_) | Cuerpo::GuardarEnAlmacenPersonal(_) | Cuerpo::SacarDelAlmacenPersonal(_) => {
-                return self.no_disponible("caravanas a mano y almacén personal (deuda de columnas)")
+
+            // ── Almacén personal y caravanas a mano (5G-a) ──
+            Cuerpo::GuardarEnAlmacenPersonal(o) => Comando::GuardarEnAlmacenPersonal { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::SacarDelAlmacenPersonal(o) => Comando::SacarDelAlmacenPersonal { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::CargarCaravana(o) => Comando::CargarCaravana {
+                ejercito: self.ejercito(&o.ejercito_id)?,
+                caravana: self.caravana(&o.caravana_id)?,
+                asentamiento: self.plaza(&o.asentamiento_id)?,
+                recurso: self.recurso(&o.recurso)?,
+                cantidad: o.cantidad,
+            },
+            Cuerpo::ReclamarCaravana(o) => {
+                Comando::ReclamarCaravana { heroe: self.heroe(&o.heroe_id)?, caravana: self.caravana(&o.caravana_id)?, politica: self.politica_o_rechazar(o.politica_de_union.as_deref())? }
             }
+            Cuerpo::SoltarCaravana(o) => Comando::SoltarCaravana { ejercito: self.ejercito(&o.ejercito_id)?, caravana: self.caravana(&o.caravana_id)?, heroe: self.heroe(&o.heroe_id)? },
         })
     }
 

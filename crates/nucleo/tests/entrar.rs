@@ -533,7 +533,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN29");
+    assert_eq!(&bytes[..5], b"BAN30");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].acceso, Acceso { aliados: false, neutrales: true, enemigos: true });
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -941,11 +941,11 @@ fn al_aparcar_la_caravana_lo_que_la_columna_ya_no_puede_llevar_se_queda_en_ella(
     assert!(e.n.capacidad_de_carga(ej).unwrap() > un_carro, "la caravana suma sus carros a la capacidad de la columna");
     // Con lo justo para un carro, se aparca sin dejar nada; la vuelve a enganchar y carga 7 más: esas 7 se quedan en la caravana.
     e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: un_carro });
-    e.ok("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a });
+    e.ok("admin", Comando::AparcarCaravana { caravana: k, asentamiento: a }); // la regla de «solo dentro» (5G-a-5) está en `a_mano.rs`
     assert!(e.n.caravana(k).unwrap().contenido.is_empty());
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: 7_000 });
-    e.ok("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a });
+    e.ok("admin", Comando::AparcarCaravana { caravana: k, asentamiento: a }); // la regla de «solo dentro» (5G-a-5) está en `a_mano.rs`
     assert!(e.ejercito(ej).caravanas_adjuntas.is_empty());
     assert_eq!(e.ejercito(ej).columna.carga.get(&Trigo), Some(&un_carro), "la columna se queda con lo que le cabe");
     assert_eq!(e.n.caravana(k).unwrap().contenido.get(&Trigo), Some(&7_000), "lo demás, en la caravana aparcada");

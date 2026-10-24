@@ -22,7 +22,7 @@ pub struct Entrada<'a> {
     pub geo: &'a Geo,
     pub e: &'a EscenarioMilitar,
     pub corrida: &'a Corrida,
-    /// (misma semilla ⇒ mismo hash, foto `BAN27` a mitad ⇒ mismo hash que sin ella) en el escenario reducido.
+    /// (misma semilla ⇒ mismo hash, foto `BAN30` a mitad ⇒ mismo hash que sin ella) en el escenario reducido.
     pub determinismo: Option<(bool, bool)>,
     pub pared_total: Duration,
 }
@@ -199,6 +199,7 @@ fn caravanas(x: &Entrada) -> Vec<Metrica> {
     let carros: i64 = m.asaltos.iter().map(|a| a.2).sum();
     let acosos: Vec<&sm::Combate> = de_tipo(x, "acoso").collect();
     vec![
+        metrica("caravanas_aparcadas", "Caravanas adjuntas aparcadas en la plaza hermana", "caravanas", INFO, Some(aceptadas(x, "AparcarCaravana")), "Movimiento_Ejercitos §9 (solo dentro de la plaza)", &format!("El Intendente entra con su ejército en la plaza hermana (`Guarnecer` {}), aparca dentro, la manda a su origen (`EnviarCaravanaAlOrigen` {}) y sale. Rechazos de aparcar: {}.", aceptadas(x, "GuarnecerHermana"), aceptadas(x, "EnviarCaravanaAlOrigen"), rechazos_de(x, "AparcarCaravana"))),
         metrica("caravanas_lanzadas", "Caravanas que salieron de su plaza", "salidas", INFO, Some(n_hecho(x, "comercio.caravana_sale")), "Comercio_Caravanas §6", &format!("Escoltadas por una escuadra cedida (`AsignarEscolta` {}) o adjuntas a un ejército (`AdjuntarCaravana` {}).", aceptadas(x, "AsignarEscolta"), aceptadas(x, "AdjuntarCaravana"))),
         metrica("asaltos_disputa", "Caravanas asaltadas con éxito: disputa (A)", "asaltos", INFO, Some(por(false) as f64), "Combate §7.1", &format!("Perdidas enteras {}; resistieron {}.", perdidas(false), m.asaltos_resistidos[0])),
         metrica("asaltos_aguante", "Caravanas asaltadas con éxito: aguante (B)", "asaltos", INFO, Some(por(true) as f64), "Combate §7.1", &format!("Perdidas enteras {} (debe ser 0: un aguante nunca deja la caravana sin carros); resistieron {}.", perdidas(true), m.asaltos_resistidos[1])),
@@ -293,11 +294,12 @@ fn invariantes(x: &Entrada) -> Vec<Metrica> {
         uno("inv_ruina", "Plazas en ruinas que dejan algo atrás", mv.ruina, "Comercio_Caravanas §10 y Combate §9", "Sin flota, sin residentes y sin nadie dentro."),
         uno("inv_reposicion", "Guarniciones de serie repuestas a deshora", mv.reposicion, "Combate §7.3 y §7.4", "El pueblo se completa a un minero cada 12 min desde la primera baja (con todas las bajas del episodio); la avanzada, a un soldado cada 6 h / soldados de su guarnición completa, también desde la primera baja."),
         uno("inv_batalla", "Batallas o cosas apartadas fuera de la convocatoria de un asedio", mv.batalla, "Batalla_Unity_Ciclo §2 y §4", "Sin servidores de batalla todo se resuelve con números; solo un asedio abre una batalla, que dura su convocatoria de 30 s (M8): ninguna otra, ninguna activa pasada la convocatoria y nada apartado fuera de ellas."),
-        uno("inv_foto", "Foto ida y vuelta a mitad de la corrida con otro hash", mv.foto, "Reloj_Y_Eventos (foto `BAN27`)", "A mitad de la corrida se serializa el núcleo, se reconstruye por la persistencia y se sigue con el reconstruido."),
+        uno("inv_foto", "Foto ida y vuelta a mitad de la corrida con otro hash", mv.foto, "Reloj_Y_Eventos (foto `BAN30`)", "A mitad de la corrida se serializa el núcleo, se reconstruye por la persistencia y se sigue con el reconstruido."),
         uno("inv_almacen", "Almacenes fuera de [0, capacidad]", v.almacen, "Economia_Construccion §15", "Cada 6 horas de mundo."),
         uno("inv_carga", "Carros y caravanas por encima de su capacidad", v.carga, "Comercio_Caravanas §5", "Cada 6 horas de mundo."),
         uno("inv_fracciones", "Cantidades almacenadas que no son unidades enteras", v.fraccion, "Economia_Construccion §4 (economía entera, C3b)", "Almacenes, carros, caravanas, almacenes personales, existencias, trueques y órdenes: cada 6 horas de mundo."),
         uno("inv_cola", "Eventos de comercio vigentes que no corresponden al estado", v.cola + v.sin_plan + v.ociosa, "Reloj_Y_Eventos §2", "Llegadas, peajes y preparaciones de caravanas, y caravanas en camino sin su llegada."),
+        uno("inv_rechazos", "Órdenes de los bots rechazadas que tenían que aceptarse", c.inesperadas.values().sum(), "Proyecciones_Y_Autorizacion §5", &format!("Las que el bot da tras comprobar lo que exigen (entrar en la plaza hermana de su Facción con la caravana, aparcarla dentro, mandarla a su origen y salir): un rechazo es un fallo del bot o del núcleo, no del juego. {}.", if c.inesperadas.is_empty() { "Ninguna".into() } else { c.inesperadas.iter().map(|((o, k), n)| format!("`{o}` {k}: {n}")).collect::<Vec<_>>().join(", ") })),
         uno("inv_minuto", "Plazas sin su minuto o con uno de más", v.minuto + v.fines, "Economia_Construccion §3", "Y obras en curso sin su cita de fin."),
         uno("inv_registro", "Versiones del registro perdidas antes de leerlas", v.registro, "Reloj_Y_Eventos", "El batch lee el registro cada media hora de mundo."),
     ]
@@ -319,7 +321,7 @@ fn rendimiento(x: &Entrada) -> Vec<Metrica> {
 fn determinismo(x: &Entrada) -> Vec<Metrica> {
     vec![
         metrica("determinismo", "Reproducción del azar (mismo escenario reducido, dos veces)", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.0 as u8 as f64), "Arquitectura/13 §4 (núcleo determinista)", "El escenario reducido con la misma semilla dos veces: mismo `hash_estado()` final."),
-        metrica("determinismo_foto", "Foto ida y vuelta (BAN27) a mitad del escenario reducido", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.1 as u8 as f64), "Reloj_Y_Eventos (foto)", "El escenario reducido reconstruido desde su foto a mitad de camino acaba con el mismo hash que sin interrumpir."),
+        metrica("determinismo_foto", "Foto ida y vuelta (BAN30) a mitad del escenario reducido", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.1 as u8 as f64), "Reloj_Y_Eventos (foto)", "El escenario reducido reconstruido desde su foto a mitad de camino acaba con el mismo hash que sin interrumpir."),
     ]
 }
 

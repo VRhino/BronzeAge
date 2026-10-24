@@ -560,7 +560,7 @@ Los factores se **multiplican** entre las políticas activas del asentamiento (`
 | `alternarAutoConstruccion { asentamientoId, pausada }` | gobernador o maestroObras | Idempotente. `construccion.auto_alternada` |
 | `alternarReceta { asentamientoId, recurso, pausada }` | gobernador o maestroObras | Idempotente. `construccion.receta_alternada` |
 | `calibrarReservaManual { asentamientoId, recurso, valor }` | `tesorero` (y debe haber uno) | `reservaManual[recurso] = clamp(round(valor), 0, NECESIDADES.reservaManualMaxima)`. Sin evento |
-| `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre vacío = volver a mostrar el id. `asentamiento.renombrado` (en Rust desde 5C: `RenombrarAsentamiento`, 138) |
+| `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre vacío = volver a mostrar el id. `asentamiento.renombrado` (en Rust desde 5C: `RenombrarAsentamiento`, 143) |
 | `solicitarAscenso { asentamientoId }` | `gobernador` | §11.2. Error `ascenso.invalido` con todos los bloqueos |
 
 > **Implementado en Rust (2026-10-23, 4H T5).** `AlternarAutoConstruccion` emite `construccion.auto_alternada { pausada }`, `AlternarReceta` `construccion.receta_alternada { recurso, pausada }` (el recurso por su índice) y `MejorarEdificio` (`mejorarEdificioAhora`) `construccion.mejora_forzada { edificio }` antes de su `construccion.mejora_iniciada`; los oyen la Facción de la plaza y quien está dentro. Sigue sin emitirse `construccion.yacimiento_agotado` (los yacimientos no se agotan en Rust) ni `asentamiento.renombrado` (sistema 5).

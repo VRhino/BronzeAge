@@ -186,7 +186,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 > **Implementado en Rust (2026-10-24, 5B):** las nueve órdenes de la Facción, la ciudadanía y la residencia (128-136) y dos clases nuevas de `Autoriza`: `ReyDeLaFaccion` (`responder_solicitud`, sin excepción, como `responderSolicitudes` de §5.2; `asignar_embajador`) y `CiudadanoDeLaFaccion` (`asignar_rey`: un ciudadano si no hay Rey; con Rey, solo él). Las comprueba el predicado del crate `politica` (`autorizacion::Actor`) sobre el núcleo (`Vista`, sin cargos hasta 5E). El resto de la matriz no cambia hasta 5E.
 
-> **Implementado en Rust (2026-10-24, 5C):** `designar_capital` (137, `ReyDeLaFaccion`) y `renombrar_asentamiento` (138, clase nueva `ResidenteDeLaPlaza`: la cuenta del héroe, que reside en la plaza; basta residir, como el TypeScript). Quedan 32 órdenes no disponibles.
+> **Implementado en Rust (2026-10-24, 5C):** `designar_capital` (137, `ReyDeLaFaccion`) y `renombrar_asentamiento` (143, clase nueva `ResidenteDeLaPlaza`: la cuenta del héroe, que reside en la plaza; basta residir, como el TypeScript). Con 5G-a, quedan 27 órdenes no disponibles.
 
 - **Quién la da** es `Comando::autoriza` (`crates/nucleo/src/comando.rs`, un `match` sin comodín sobre los 136 comandos: un comando nuevo no compila hasta decidirlo). Cada orden comprueba la suya en su sitio y rechaza con `no_autorizado`; la de administración la comprueba una sola vez `Nucleo::ejecutar`. La administración (`Peticion.admin`) puede con todas salvo las del servidor de batalla, que exigen su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`).
 - **La sesión** añade dos filtros antes del núcleo (`sesiones::ordenes::traducir`, `sesiones.rs`): la orden genérica de administración y `controlar_reloj` solo los da una sesión `CLIENTE_ADMIN_WEB` (`no_autorizado` en cualquier otra), y los mensajes del canal de batalla solo llegan de una sesión `CLIENTE_SERVIDOR_BATALLA`. El actor de la petición es siempre la cuenta de la sesión, nunca un dato del cuerpo: las órdenes que no nombran héroe usan el de la cuenta.
@@ -235,7 +235,8 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
 | `adjuntar_caravana` | `AdjuntarCaravana` | un participante de la columna | a la puerta de la caravana |
-| `aparcar_caravana` | `AparcarCaravana` | un participante de la columna | la caravana adjunta, a la puerta de la plaza |
+| `aparcar_caravana` | `AparcarCaravana` | un participante de la columna | la caravana adjunta, con la columna dentro de la plaza (`caravana.soltar_solo_dentro`, como `soltar_caravana`) |
+| `cargar_caravana` | `CargarCaravana` | un participante de la columna | la caravana adjunta (`caravana.no_esta_adjunta`), a la puerta (`radioPuerta`) de una plaza de su Facción (`caravana.plaza_ajena`); hasta lo que le cabe (`caravana.sin_capacidad`) |
 | `comerciar_en_plaza` | `ComerciarEnPlaza` | el Líder de la columna | a la puerta de la plaza de la orden |
 | `depositar_en_avanzada` | `DepositarEnAvanzada` | un participante de la columna | a la puerta de la avanzada operativa |
 | `entregar_de_caravana` | `EntregarDeCaravana` | un participante de la columna | la caravana adjunta, a la puerta de la plaza B |
@@ -244,6 +245,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `estacionar_ejercito` | `Estacionar` | el Líder de la columna | como `marchar_a` |
 | `fundar` | `Fundar` | el Líder de la columna | con la Caravana de Fundación (`fundacion.sin_caravana`) y Facción |
 | `marchar_a` | `MarcharA` | el Líder de la columna | a bordo, no desde dentro de un lugar (`heroe.dentro_de_un_lugar`), no una formación (`columna.en_formacion`) |
+| `soltar_caravana` | `SoltarCaravana` | un participante de la columna | el héroe va en ella; la caravana adjunta, con la columna dentro de una plaza de su Facción (`caravana.soltar_solo_dentro`): queda aparcada |
 
 **La cuenta del héroe**
 
@@ -275,6 +277,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `entrar_en_campamento` | `EntrarEnCampamento` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`) |
 | `entrar_en_pueblo` | `EntrarEnPueblo` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`); el acceso heredado |
 | `guardar_loadout` | `GuardarLoadout` | la cuenta del héroe | — |
+| `guardar_en_almacen_personal` | `GuardarEnAlmacenPersonal` | la cuenta del héroe | dentro de su residencia; o el Líder de su columna (`columna.solo_el_lider`) con ella a la puerta de su residencia (`almacen_personal.fuera_de_tu_residencia`) |
 | `guarnecer` | `Guarnecer` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) |
 | `guarnecer_avanzada` | `GuarnecerAvanzada` | la cuenta del héroe, ciudadano de la madre | su columna a la puerta (`radioPuerta`) de la avanzada |
 | `inspeccionar` | `Inspeccionar` | la cuenta del héroe | el objetivo en el mapa (`inspeccion.a_cubierto`) y a su alcance |
@@ -287,6 +290,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `pedir_prestamo` | `PedirPrestamo` | la cuenta del héroe | dentro del campamento |
 | `perseguir` | `Perseguir` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
 | `quitar_escolta` | `QuitarEscolta` | la cuenta del héroe | las escuadras que él cedió |
+| `reclamar_caravana` | `ReclamarCaravana` | la cuenta del héroe | en mundo abierto, la Caravana de Fundación que vuelve sola (`caravana.no_reclamable`: hasta 5G-b no hay ninguna) |
 | `reclutar_en_campamento` | `ReclutarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta |
 | `reclutar_tropa` | `ReclutarTropa` | la cuenta del héroe | dentro de la plaza; residente (todo) o de la Facción dueña (solo reponer) |
 | `reparar_avanzada` | `RepararAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
@@ -299,6 +303,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `responder_peticion_de_union` | `ResponderPeticionDeUnion` | la cuenta del héroe | el Líder de la columna |
 | `retirar_de_avanzada` | `RetirarDeAvanzada` | la cuenta del héroe, ciudadano de la madre | su columna a la puerta (`radioPuerta`) de la avanzada |
 | `retirar_guarnicion` | `RetirarGuarnicion` | la cuenta del héroe | — |
+| `sacar_del_almacen_personal` | `SacarDelAlmacenPersonal` | la cuenta del héroe | como `guardar_en_almacen_personal`; hasta lo que cabe en el carro (`carro.no_cabe`) |
 | `salir_al_mundo` | `SalirAlMundo` | la cuenta del héroe | desde su residencia (`salida.solo_de_tu_residencia`); escuadras suyas |
 | `salir_de_asentamiento` | `SalirDeAsentamiento` | la cuenta del héroe | estar dentro |
 | `salir_de_avanzada` | `SalirDeAvanzada` | la cuenta del héroe | estar dentro |
@@ -374,20 +379,17 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `alternar_reabastecer_aliados` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `aportar_a_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `asignar_cargo_local` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `cargar_caravana` | — | no disponible | caravanas a mano y almacén personal |
 | `comprar_caravana_de_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `declarar_guerra` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `desarmar_caravana_fundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `guardar_en_almacen_personal` | — | no disponible | caravanas a mano y almacén personal |
 | `lanzar_caravana_fundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `proponer_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_paz` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `rebelion_vasallo` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `reclamar_caravana` | — | no disponible | caravanas a mano y almacén personal |
 | `responder_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
@@ -396,8 +398,6 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `retirar_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `romper_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `sacar_del_almacen_personal` | — | no disponible | caravanas a mano y almacén personal |
-| `soltar_caravana` | — | no disponible | caravanas a mano y almacén personal |
 | `vetar_jugador` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 
 <!-- /autorizacion -->
@@ -585,7 +585,7 @@ La regla fina de cada cosa del mundo (qué se ve, redactado a qué, con memoria 
 | `nombresDeCompaneros` | mapa | `heroeId → nombre` de cada ciudadano de la Facción propia (se le vea o no) **y de quienes piden entrar** | mapa |
 | `zonas`, `zonasFusionadas` | mapa | **solo las de la Facción propia**: calcularlas exige las posiciones de todos los vecinos (entrada privilegiada) | colección |
 | `faccionId`, `miConvocatoriaId`, `plazaPisadaId` | héroe | escalares propios | escalar |
-| `heroe` | héroe | el héroe propio completo, **sin** `plazasRecordadas` ni `exploracionPersonal`, más lo derivado: `costeLiderazgo` por escuadra, `liderazgoTotal` por loadout, `cupoGuarnicion` y `guarnicionOcupada`, `capacidadAlmacenPersonal`, `residenciaId` | única |
+| `heroe` | héroe | el héroe propio completo, **sin** `plazasRecordadas` ni `exploracionPersonal`, más lo derivado: `costeLiderazgo` por escuadra, `liderazgoTotal` por loadout, `cupoGuarnicion` y `guarnicionOcupada`, `capacidadAlmacenPersonal` (en Rust `capacidad_almacen_personal`, desde 5G-a), `residenciaId` | única |
 | `ejercitos` | héroe | las columnas propias **completas** (+ `capacidadCarga` derivado) | colección (móviles) |
 | `caravanas` | héroe | las propias **completas**: las de plazas propias, las de la Facción, y **las que tienen una plaza propia como destino** aunque sean ajenas; las comerciales de una plaza propia llevan `escoltaLiderazgo { usado, cupo }` | colección (móviles) |
 | `acuerdos` | héroe | los trueques con alguna de las dos plazas propia | colección |

@@ -1127,13 +1127,10 @@ impl Nucleo {
             }
             &Contexto::CampamentoBandidos { campamento, .. } => {
                 let campamento = u64::from(campamento);
-                let Some(nivel) = self.estado.combate.bandidos.get(&campamento).map(|c| c.nivel) else { return };
-                let cr = self.estado.reglas.economia.combate.clone();
+                let Some((nivel, origen)) = self.estado.combate.bandidos.get(&campamento).map(|c| (c.nivel, c.origen)) else { return };
                 let mut oro = Mercancia::new();
-                for p in self.participantes_del_lado(b, Lado::Atacante) {
-                    let mut recientes = self.estado.combate.destruidos.get(&p.heroe).cloned().unwrap_or_default();
-                    let ganado = combate::bandidos::botin_de_bandidos(&cr, &mut recientes, nivel, t);
-                    self.estado.combate.destruidos.insert(p.heroe, recientes);
+                for heroe in self.participantes_del_lado(b, Lado::Atacante).iter().map(|p| p.heroe) {
+                    let ganado = self.oro_de_bandidos_para(heroe, origen, nivel, t);
                     sumar(&mut oro, asentamiento::Recurso::Oro, ganado);
                 }
                 self.repartir_en_columnas(&atacantes, &oro);

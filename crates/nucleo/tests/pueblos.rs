@@ -398,7 +398,7 @@ fn una_caravana_adjunta_tambien_lleva_materiales() {
     let pos = e.n.estado().asentamientos[&plaza].posicion;
     let col = e.columna("ana", 1, Punto::new(pos.x + 1_000, pos.y));
     e.ok("ana", Comando::AdjuntarCaravana { caravana: car, ejercito: col });
-    e.ok("ana", Comando::AparcarCaravana { caravana: car, asentamiento: plaza });
+    e.ok("admin", Comando::AparcarCaravana { caravana: car, asentamiento: plaza }); // la administración la deja dentro (5G-a-5: solo se aparca dentro)
     e.ok("ana", Comando::MoverCargaAparcada { caravana: car, recurso: Madera, cantidad: 100_000, cargar: true });
     e.ok("ana", Comando::MoverCargaAparcada { caravana: car, recurso: Oro, cantidad: 12_000, cargar: true });
     e.ok("ana", Comando::AdjuntarCaravana { caravana: car, ejercito: col });
@@ -1084,7 +1084,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN29");
+    assert_eq!(&bytes[..5], b"BAN30");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

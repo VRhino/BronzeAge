@@ -1,7 +1,7 @@
 //! La Facción como entidad, la ciudadanía y la residencia en el núcleo (sistema 5, tanda 5B; Diplomacia_Facciones §3-§4): crear una Facción, pedir el ingreso y responderlo, el Rey y el
 //! Embajador, dejarla con la sucesión del trono (y Q7), las tres órdenes de residencia con su cooldown, los fundadores que pasan a residir, los ciudadanos de la nobleza (Q8), la proyección de
-//! la Facción y la foto `BAN29`. De 5C: la experiencia y el nivel derivado, la capital (`designar_capital`, la más antigua, la distancia en el mantenimiento y la Gran Fundición única),
-//! el nombre de las plazas (`nombreDeCiudadLibre`, `renombrar_asentamiento`) y la foto que rechaza `BAN28`. Casos portados de `typescript-final:src/session/__tests__/{comandosMembresiaFaccion,comandosResidencia,faccionDeLaColumna}.test.ts` y
+//! la Facción y la foto `BAN28` (hoy `BAN30`). De 5C: la experiencia y el nivel derivado, la capital (`designar_capital`, la más antigua, la distancia en el mantenimiento y la Gran Fundición única),
+//! el nombre de las plazas (`nombreDeCiudadLibre`, `renombrar_asentamiento`) y la foto que rechaza `BAN29`. Casos portados de `typescript-final:src/session/__tests__/{comandosMembresiaFaccion,comandosResidencia,faccionDeLaColumna}.test.ts` y
 //! `engine/__tests__/residenciaMercenaria.test.ts`. Sobre el artefacto de mundo real; las pruebas se omiten si no está.
 
 mod comun;
@@ -434,21 +434,21 @@ fn mismas_ordenes_dan_el_mismo_mundo_normal_y_a_trozos_y_nada_espera_en_la_cola(
 }
 
 #[test]
-fn la_politica_viaja_en_la_foto_ban29_y_las_ban28_y_ban27_se_rechazan_con_su_motivo() {
+fn la_politica_viaja_en_la_foto_ban30_y_las_ban29_y_ban27_se_rechazan_con_su_motivo() {
     let m = con_mundo!();
     let e = guion(m, &|e, ms| e.avanzar(ms));
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN29");
+    assert_eq!(&bytes[..5], b"BAN30");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (e.n.estado().politica.clone(), e.n.hash_estado()));
     assert!(s.politica.facciones.iter().count() == 2 && s.militar.heroes.values().any(|h| h.residencia_cambiada_en.is_some()));
     let vieja = [b"BAN27".as_slice(), &bytes[5..]].concat();
     let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN27 se rechaza");
     assert!(error.0.contains("BAN27") && error.0.contains("Facciones no existen como entidad"), "{}", error.0);
-    let vieja = [b"BAN28".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN28 se rechaza");
-    assert!(error.0.contains("BAN28") && error.0.contains("nombre ni marca de capital"), "{}", error.0);
+    let vieja = [b"BAN29".as_slice(), &bytes[5..]].concat();
+    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN29 se rechaza");
+    assert!(error.0.contains("BAN29") && error.0.contains("nombre ni marca de capital"), "{}", error.0);
     // El nombre de la plaza y su marca de capital viajan en la foto y mueven el hash (5C).
     let plaza = *s.asentamientos.keys().next().unwrap();
     assert_eq!(s.asentamientos[&plaza].nombre, "Nueva Micenas");

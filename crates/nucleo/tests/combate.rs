@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN29");
+    assert_eq!(&bytes[..5], b"BAN30");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1218,6 +1218,38 @@ fn la_cita_del_anillo_se_rehace_cuando_llega_o_se_va_un_residente() {
     }
     n.avanzar_hasta(t + HORA);
     assert_eq!(del_anillo(&n), 2, "el residente que llega adelanta la cita");
+}
+
+/// Cal-5 (decisión del autor del 2026-10-24): el oro de los bandidos del anillo de un campamento de mercenarios solo lo cobra un héroe **sin plaza** (reside en un
+/// campamento y su Facción no tiene plazas); uno con plaza destruye el campamento igual, pero sin oro, y esa destrucción no cuenta en su ventana. El de una plaza
+/// paga a todos.
+#[test]
+fn el_oro_de_los_bandidos_del_anillo_solo_lo_cobra_un_heroe_sin_plaza() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, false);
+    let del_anillo: Vec<(u32, nucleo::CampamentoBandidos)> = e.n.campamentos_de_bandidos().filter_map(|b| if let nucleo::OrigenBandidos::Anillo(c) = b.origen { Some((c, b.clone())) } else { None }).collect();
+    let ((_, b1), (c2, b2)) = (del_anillo[0].clone(), del_anillo[1].clone());
+    let tropas = [Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto];
+    let oro = |e: &Esc, camp: u64| hechos(&e.n, "combate.campamento_destruido").iter().find(|h| dato(h, "campamento") == camp as i64).map(|h| dato(h, "oro"));
+    let reglas = combate::Reglas::cargar();
+    // Con plaza: de la Facción 1, que tiene la plaza A, y residente en ella.
+    let con = e.ejercito("ana", 1, b1.posicion, &tropas);
+    let plaza = e.a as u32;
+    e.ok("admin", Comando::FijarResidencia { heroe: con.1, residencia: Some(Residencia::Asentamiento(plaza)) });
+    assert!(e.atacar("ana", con.1, ObjetivoAtaque::Campamento(b1.id), false).aceptada());
+    assert_eq!(oro(&e, b1.id), Some(0), "con plaza, el anillo no paga oro");
+    assert!(!e.n.estado().combate.destruidos.contains_key(&con.1), "y no cuenta en su ventana");
+    // Sin plaza: de una Facción sin plazas y residente en un campamento de mercenarios.
+    let sin = e.ejercito("gus", 3, b2.posicion, &tropas);
+    e.ok("admin", Comando::FijarResidencia { heroe: sin.1, residencia: Some(Residencia::Campamento(c2)) });
+    assert!(e.atacar("gus", sin.1, ObjetivoAtaque::Campamento(b2.id), false).aceptada());
+    assert_eq!(oro(&e, b2.id), Some(reglas.bandidos.niveles[b2.nivel as usize - 1].oro_por_heroe), "sin plaza, el oro de su nivel");
+    // El de una plaza paga también al que tiene plaza.
+    let suyo = e.n.campamentos_de_bandidos().find(|b| b.origen == nucleo::OrigenBandidos::Plaza(e.b)).cloned().expect("la plaza B tiene su campamento");
+    let otra = e.ejercito("ana", 1, suyo.posicion, &tropas);
+    e.ok("admin", Comando::FijarResidencia { heroe: otra.1, residencia: Some(Residencia::Asentamiento(plaza)) });
+    assert!(e.atacar("ana", otra.1, ObjetivoAtaque::Campamento(suyo.id), false).aceptada());
+    assert_eq!(oro(&e, suyo.id), Some(reglas.bandidos.niveles[suyo.nivel as usize - 1].oro_por_heroe));
 }
 
 #[test]
