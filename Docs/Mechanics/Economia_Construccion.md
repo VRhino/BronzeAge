@@ -403,7 +403,7 @@ Pesants:   espacio = capacidadPesants ≤ 0 ? 0 : clamp(1 − pesants/capacidadP
            tasa = pesants.tasaCrecimientoBase × comida × espacio × felicidad
 Artesanos: solo si hay ALGÚN edificio de transformación activo (fundicion, curtiduria, armeria, carpinteria) y espacio > 0 (capacidad = Viviendas activas × 10):
            si artesanos = 0 → +1 sin tirar el dado (evento poblacion.primeros_artesanos);  si no, tasa = artesanos.tasaCrecimientoBase × comida × espacio × felicidad
-Nobleza:   solo si casasCompradas.length ≥ nobleza.minCiudadanos ∧ hay Palacio activo ∧ espacio > 0 (capacidad = capacidadNobles del nivel del Palacio, 80/240/400);
+Nobleza:   solo si residentes ≥ nobleza.minCiudadanos ∧ hay Palacio activo ∧ espacio > 0 (capacidad = capacidadNobles del nivel del Palacio, 80/240/400);
            si nobleza = 0 → +1 sin dado (evento poblacion.primeros_nobles);  si no, tasa = nobleza.tasaCrecimientoBase × comida × espacio × felicidad × factorCrecimientoNobleza × (1 + AEDAS.residentes.bonoNobleza × aedasResidentes)
 Techo:     techo = techoPoblacion[nivel ALCANZADO];  espacioBajoTecho = max(0, techo − población total)
            crecimientoBruto = suma de las tres;  factorTecho = (bruto > espacioBajoTecho ∧ bruto > 0) ? espacioBajoTecho/bruto : 1

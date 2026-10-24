@@ -801,7 +801,7 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 
 **Reputación (decidido el 2026-10-18):** el decaimiento baja de 0,2 a **0,002 por minuto** (placeholder a calibrar): con 0,2 un +5 o un −8 se borraban en 25-40 min y el umbral de −40 casi no se alcanzaba, contra el «decae lentamente» del canon (Doc 2.7). El bonus por minuto de alianza se reduce en la misma proporción (0,05 → 0,0005) para conservar la regla «por sí solo no sube la reputación por encima de ~0,05»: el bonus sigue por debajo del decaimiento (0,0005 < 0,002).
 
-Los bloques de las secciones anteriores son los de este sistema. Además, de otros documentos: `REPUTACION` (también en §4.6) y `NIVEL_FACCION.xp.truequeCumplido` (`Economia_Construccion.md`), `LOGISTICA`
+Los bloques de las secciones anteriores son los de este sistema. Además, de otros documentos: `REPUTACION` (también en §4.6) y `NIVEL_FACCION.xp.truequeCumplido` (`Diplomacia_Facciones.md` §3.5), `LOGISTICA`
 (`Movimiento_Ejercitos.md`), `MERCENARIOS` (`Tecnologia_Aedas.md`), `POLITICA_CATALOGO` y `EDIFICIO_CATALOGO` (`Economia_Construccion.md`).
 
 <!-- parametros:REPUTACION -->

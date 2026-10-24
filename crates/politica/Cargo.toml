@@ -1,0 +1,11 @@
+[package]
+name = "politica"
+version = "0.1.0"
+edition = "2021"
+description = "Política y Facciones (Doc 2, Mechanics/Diplomacia_Facciones): Facción, ciudadanía y sucesión, cargos, nivel por experiencia, capital, sigilo, puerta, diplomacia, tributo, Liga, títulos, traslado y predicados de la autorización. Reglas puras en enteros, sin reloj propio"
+
+[dependencies]
+base = { path = "../base" }
+asentamiento = { path = "../asentamiento" }
+comercio = { path = "../comercio" }
+serde_json = "1"

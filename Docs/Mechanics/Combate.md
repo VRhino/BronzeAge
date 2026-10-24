@@ -128,7 +128,7 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 
 ## 5. Encuentro entre columnas (`atacarColumna` / `encuentroEntreEjercitos`)
 
-Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Unity): no la propia columna; **no a los tuyos ni a un aliado**; **misma clase** (personal contra personal, ejército contra ejército); atacante a ≤ `LOGISTICA.radioEncuentro` (**3** calibrado; 15 en el bloque TypeScript) con héroe sano; el defensor con algún héroe sano.
+Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Unity): no la propia columna; **no a los tuyos ni a un aliado** (Q2, 2026-10-24: con `declaraGuerra`, atacar a un aliado es la traición de Diplomacia §5.4; hoy Rust rechaza con `combate.aliada` hasta 5D); **misma clase** (personal contra personal, ejército contra ejército); atacante a ≤ `LOGISTICA.radioEncuentro` (**3** calibrado; 15 en el bloque TypeScript) con héroe sano; el defensor con algún héroe sano.
 
 1. Cada bando pasa por `enBatalla`. El atacante es el «atacante» del motor y el otro el «defensor»; **sin muralla** (multiplicador 1) y, por tanto, el defensor en campo abierto conserva la cohesión y la ventaja de 1,05 (el motor no distingue).
 2. **Gana quien dice la resolución por poder** (§4), igual que en un asedio (decisión del autor, 2026-10-10; antes el atacante solo ganaba si dejaba al defensor sin un soldado en pie y casi siempre perdía). Las bajas del 30–70 % al bando que pierde ya vienen aplicadas por `resolverCombate`. `encuentroEntreEjercitos` devuelve `ganador: 'a' | 'b'` (a = atacante).
@@ -148,7 +148,7 @@ Orden (`asediarConEjercito`):
 2. **Sin defensores** (ninguna escuadra con soldados en `defensaDe`) → **cae sin combate**, sin RNG: `combate.asedio_conquista` y XP de conquista para el atacante. (Sin atacantes con soldados → «sin nadie con quien combatir», no cae.)
 3. En otro caso, `resolverCombate(atacantes, defensores, rng, multiplicadorMuralla)` con
    `multiplicadorMuralla = 1 + (bonoDefensaPorNivel[nivel] − 1) × integridad / nº puertas`, usando solo el **recinto de referencia** de la plaza: el más exterior de los que han llegado a cerrarse (mientras se levanta una ampliación o se mejora un recinto sigue defendiendo el anillo en pie, con su nivel de antes) — ver [`Murallas.md`](Murallas.md) §9.1. `integridad` ∈ [0,1]: un anillo a medio cerrar o dañado por una conquista casi no defiende. Solo se aplica aquí, en el asedio resuelto **con números** (sin servidores de Unity); la columna, el pueblo, la caravana y la avanzada llevan multiplicador 1, y el equipo de asedio no lo reduce. **Las murallas fueron una fase propia posterior al sistema militar** (decidido el 2026-10-19; hecha el 2026-10-22): el multiplicador sale de los recintos reales de la plaza y es una constante de ese instante, así que **no consume tirada** y un asedio a una plaza sin recintos es bit a bit el de antes.
-4. **Reputación**: si atacante y defensor están **aliados** (se atacó sin romper la alianza), la Facción atacante recibe `REPUTACION.penalizacionAtacarAliado` (la más severa).
+4. **Reputación**: si atacante y defensor están **aliados** (se atacó sin romper la alianza), la Facción atacante recibe `REPUTACION.penalizacionAtacarAliado` (la más severa). Desde la decisión **Q2** del autor (2026-10-24) atacar a un aliado con `declaraGuerra` es una **traición**: rompe la alianza en el acto, cobra esta penalización en vez de la de romperla y declara la guerra con su arrastre ([`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §5.4; regla en `politica::relaciones::declarar_al_atacar`, núcleo en 5D).
 5. **XP de Facción**: combate (a ambos, si digno) y, si conquista, `NIVEL_FACCION.xp.conquista` al atacante.
 6. Resultado: `conquistado = (ganador == atacante)`. El ejército **sigue fuera y acampa**; conquistar no lo convierte en guarnición (Doc 5.15.5).
 
@@ -330,10 +330,7 @@ Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (3
 ```
 <!-- /parametros -->
 
-<!-- parametros:NIVEL_FACCION -->
-```json
-```
-<!-- /parametros -->
+Las cifras de la experiencia de Facción (`NIVEL_FACCION`: `xp.combate`, `xp.conquista`, `xp.bandidos`, `nivelSinXpBandidos`, `ratioCombateDigno`) están en el bloque de [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §3.5 (escrito en 5A, 2026-10-24).
 
 ## 13. Invariantes
 
