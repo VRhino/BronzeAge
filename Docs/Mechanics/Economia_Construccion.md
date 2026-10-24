@@ -124,7 +124,7 @@ algún asentamiento**, gana `NIVEL_FACCION.xp.fundacion` de experiencia (el prim
 Leñera en la zona real con que nacería ∧ hay ≥ 1 nodo de piedra sin explotar en esa zona`. «Zona real» = círculo del radio inicial recortado contra los asentamientos de **otras** Facciones
 (`zonaInicialDeFundacion`). Hay bosque libre si algún bosque cuyo borde toca la zona tiene menos Leñeras que su capacidad (`capacidadLeneras`, §5.2).
 
-> **Rendimiento en Rust (2026-10-24):** `Nucleo::viabilidad` cuenta parcelas y piedra con la rejilla de 10 u del mapa (`economia::Mapa::parcelas_en` y `piedra_en`, la misma que usa la construcción) en lugar de recorrer el mundo entero: solo mira lo que cae en el disco, que es lo único que `en_zona` puede aceptar, así que el resultado es idéntico (prueba `la_rejilla_cuenta_lo_mismo_que_el_recorrido_lineal` y misma huella del `batch territorio`). No cambia ninguna regla.
+> **Rendimiento en Rust (2026-10-24):** `Nucleo::viabilidad` cuenta parcelas y piedra con la rejilla de 10 u del mapa (`economia::Mapa::parcelas_en` y `piedra_en`, la misma que usa la construcción) en lugar de recorrer el mundo entero: solo mira lo que cae en el disco, que es lo único que `en_zona` puede aceptar, así que el resultado es idéntico (prueba `la_rejilla_cuenta_lo_mismo_que_el_recorrido_lineal` y misma huella del `batch territorio`). No cambia ninguna regla. Medido en el `batch territorio` (400 Facciones × 30 días, tres corridas alternas): la llamada baja de ~800 µs a ~5 µs, el tiempo en `viabilidad` de 136-155 s a 0,7-1,0 s y la pared del escenario de 250-271 s a 92-121 s; lo que queda es la economía de las plazas (16,8 millones de eventos).
 
 ### 3.1 Zona de influencia
 
