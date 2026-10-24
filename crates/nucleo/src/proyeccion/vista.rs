@@ -256,6 +256,28 @@ impl<'n> Mirada<'n> {
             }
         }
 
+        // Las Caravanas de Fundación (decisión del autor 5G-b-5): la propia que va enganchada o vuelve sola, entera; la ajena que vuelve sola, si se ve, como cualquier caravana avistada.
+        for k in e.fundacion.caravanas.values() {
+            let (vuelve, propia) = (matches!(k.situacion, crate::estado_fundacion::Situacion::Retornando(_)), k.faccion.is_some() && k.faccion == self.faccion);
+            let p = match k.situacion {
+                crate::estado_fundacion::Situacion::Adjunta(x) if propia => e.ejercitos.get(&x).map_or(k.posicion, |x| x.posicion_en(t)),
+                crate::estado_fundacion::Situacion::Retornando(_) => k.posicion_en(t),
+                _ => continue,
+            };
+            if !rect.contiene(p) {
+                continue;
+            }
+            let (id, version) = (ids::caravana(k.id), n.version_de(Clase::Caravana, k.id));
+            if propia {
+                v.push(visible(pb::TipoEntidad::Caravana, id, Sello(version, 0), move || Some(Cuerpo::Caravana(propios::caravana_de_fundacion(n, k)))));
+            } else if vuelve && self.ve(p) {
+                let crate::estado_fundacion::Situacion::Retornando(plan) = &k.situacion else { continue };
+                let tramo = self.tramo(plan, version, tiene.get(&(pb::TipoEntidad::Caravana as i32, id.clone())), &self.ojos);
+                let sello = Sello(version, tramo.as_ref().map_or_else(|v| *v, |t| t.last().map_or(0, |v| v.en)));
+                v.push(visible(pb::TipoEntidad::Caravana, id, sello, move || Some(Cuerpo::Caravana(self.fundacion_avistada(k, p, plan)))));
+            }
+        }
+
         // Los sitios: lo propio como en `FACCION`; lo ajeno que se ve, redactado; lo ajeno que no se ve y se recuerda, como ficha.
         let mut vistos: BTreeSet<Sitio> = BTreeSet::new();
         for a in e.asentamientos.values() {
@@ -441,6 +463,23 @@ impl<'n> Mirada<'n> {
             posicion: Some(punto(p)),
             plan: (!tramo.is_empty()).then(|| plan(&Plan::nuevo(plan_.generacion, tramo))),
             escoltada: c.estado == EstadoCaravana::Adjunta || !c.escolta.is_empty(),
+            recursos_avistados: recursos,
+            ..Default::default()
+        }
+    }
+
+    /// La Caravana de Fundación ajena que vuelve sola, como `caravana_avistada`: su tipo, su Facción, dónde está, el tramo visible de su plan y qué lleva, sin cantidades.
+    fn fundacion_avistada(&self, k: &crate::estado_fundacion::CaravanaFundacion, p: Punto, plan_: &Plan) -> pb::Caravana {
+        let tramo = tramo_visible(plan_, self.t, radios::HORIZONTE_MS, &self.ojos);
+        let mut recursos: Vec<String> = k.contenido.iter().filter(|(_, &q)| q > 0).map(|(r, _)| r.nombre().to_owned()).collect();
+        recursos.sort();
+        pb::Caravana {
+            id: ids::caravana(k.id),
+            version: self.n.version_de(Clase::Caravana, k.id),
+            tipo: pb::TipoCaravana::CaravanaDeFundacion as i32,
+            faccion_id: k.faccion.map(ids::faccion),
+            posicion: Some(punto(p)),
+            plan: (!tramo.is_empty()).then(|| plan(&Plan::nuevo(plan_.generacion, tramo))),
             recursos_avistados: recursos,
             ..Default::default()
         }

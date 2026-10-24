@@ -67,6 +67,8 @@ pub(super) enum Motivo {
 pub(super) enum Cosa<'a> {
     Columna(&'a Ejercito),
     Caravana(&'a Caravana),
+    /// La Caravana de Fundación que vuelve sola (decisión del autor 5G-b-5): en el mapa como cualquier caravana que viaja.
+    Fundacion(&'a crate::estado_fundacion::CaravanaFundacion),
     Plaza(&'a Asentamiento),
     /// Una avanzada con su plaza madre.
     Avanzada(&'a Avanzada, &'a Asentamiento),
@@ -103,6 +105,9 @@ impl Nucleo {
         if es_entidad_caravana(entidad) {
             return self.estado.comercio.caravana(id_de_entidad(entidad)).map(Cosa::Caravana);
         }
+        if crate::estado_fundacion::es_entidad_fundacion(entidad) {
+            return self.estado.fundacion.caravanas.get(&id_de_entidad(entidad)).map(Cosa::Fundacion);
+        }
         if es_entidad_avanzada(entidad) {
             let id = id_de_entidad(entidad);
             return self.estado.asentamientos.values().find_map(|a| a.economia.avanzada(id).map(|v| Cosa::Avanzada(v, a)));
@@ -116,6 +121,7 @@ impl Nucleo {
             Cosa::Columna(e) => e.columna.faccion,
             Cosa::Plaza(a) | Cosa::Avanzada(_, a) => Some(a.faccion),
             Cosa::Caravana(k) => self.estado.asentamientos.get(&(k.origen as u64)).map(|a| a.faccion),
+            Cosa::Fundacion(k) => k.faccion,
         }
     }
 
@@ -126,6 +132,7 @@ impl Nucleo {
             Cosa::Plaza(a) => a.posicion,
             Cosa::Avanzada(v, _) => v.posicion,
             Cosa::Caravana(k) => self.posicion_de_caravana(k.id, t).unwrap_or(k.posicion),
+            Cosa::Fundacion(k) => k.posicion_en(t),
         }
     }
 
@@ -143,6 +150,8 @@ impl Nucleo {
         let mut puestos: Vec<(u64, Plan)> = Vec::new();
         puestos.extend(self.estado.ejercitos.values().filter(|e| self.columna_en_el_mapa(e)).map(|e| (e.id, self.plan_de_columna(e, t))));
         puestos.extend(self.estado.comercio.flota.iter().filter(|k| matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando)).filter_map(|k| Some((entidad_caravana(k.id), k.plan.clone()?))));
+        let vuelven = self.estado.fundacion.caravanas.values().filter_map(|k| if let crate::estado_fundacion::Situacion::Retornando(plan) = &k.situacion { Some((crate::estado_fundacion::entidad_fundacion(k.id), plan.clone())) } else { None });
+        puestos.extend(vuelven);
         puestos.extend(self.estado.asentamientos.values().map(|a| (a.id, plan_quieto(a.posicion, t, 0))));
         let puestos_de_mapa = self.estado.asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).filter(|v| v.estado != EstadoAvanzada::EnConstruccion);
         puestos.extend(puestos_de_mapa.map(|v| (entidad_avanzada(v.id), plan_quieto(v.posicion, t, 0))));
@@ -248,7 +257,7 @@ impl Nucleo {
     /// noticia: lo de la misma Facción y una caravana junto a una plaza. El resto se decide al vencer, con el estado de ese instante.
     fn interesa(&self, entidad: u64, otra: u64) -> bool {
         let (Some(a), Some(b)) = (self.cosa(entidad), self.cosa(otra)) else { return false };
-        if matches!((&a, &b), (Cosa::Caravana(_), Cosa::Plaza(_) | Cosa::Avanzada(..))) {
+        if matches!((&a, &b), (Cosa::Caravana(_) | Cosa::Fundacion(_), Cosa::Plaza(_) | Cosa::Avanzada(..))) {
             return false;
         }
         let (fa, fb) = (self.faccion_de(&a), self.faccion_de(&b));
@@ -287,6 +296,10 @@ impl Nucleo {
                 let (fc, fk) = if matches!(a, Cosa::Columna(_)) { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
                 EventoNucleo { codigo: "caravana.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fk), ("caravana", k.id as i64)], ..Default::default() }
             }
+            (Cosa::Columna(c), Cosa::Fundacion(k)) | (Cosa::Fundacion(k), Cosa::Columna(c)) => {
+                let (fc, fk) = if matches!(a, Cosa::Columna(_)) { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
+                EventoNucleo { codigo: "caravana.encuentro".into(), en: t, ejercitos: vec![c.id], asentamientos: vec![], punto: Some(punto), datos: vec![("faccionA", fc), ("faccionB", fk), ("caravana", k.id as i64)], ..Default::default() }
+            }
             (Cosa::Caravana(x), Cosa::Caravana(y)) => {
                 let (x, y) = if entidad < otra { (x, y) } else { (y, x) };
                 let (fx, fy) = if entidad < otra { (bandera(&a), bandera(&b)) } else { (bandera(&b), bandera(&a)) };
@@ -316,6 +329,7 @@ impl Nucleo {
         match c {
             Cosa::Columna(e) => self.columna_en_el_mapa(e) && self.tiene_heroe_sano(e, t),
             Cosa::Caravana(k) => matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando),
+            Cosa::Fundacion(k) => matches!(k.situacion, crate::estado_fundacion::Situacion::Retornando(_)),
             Cosa::Plaza(_) => true,
             Cosa::Avanzada(v, _) => atacable(v.estado, t),
         }

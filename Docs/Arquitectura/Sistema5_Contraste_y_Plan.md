@@ -598,3 +598,16 @@ Rechazos nuevos (10): `fundacion.no_resides`, `fundacion.no_ciudadano`, `fundaci
 9. Resuelta al integrar 5C: el cap de lanzar y comprar es el de `fundar`, `politica::nivel::cap_fundacion` con el nivel por experiencia (`Nucleo::nivel_de_faccion`).
 10. `Fundar` sigue sin deshacer la columna dentro de la plaza nueva (Fundacion §5.5-6): cambiaría cientos de pruebas que siguen usando la columna tras fundar; queda en la fila de paridad.
 11. Las caravanas comerciales y las de Fundación comparten contador: la de la administración consume un id de caravana, así que los ids de la flota se corren uno por cada fundación de escenario (una prueba de pueblos nombraba la caravana 1).
+
+### Decisiones del autor sobre las dudas de 5G-b (2026-10-24)
+
+Aplicadas en la rama `tanda-5g-b2` (sobre `c34920d`). Sin estado nuevo: la foto sigue en `BAN31`.
+
+1. **5G-b-1, 5G-b-2, 5G-b-3, 5G-b-6, 5G-b-8 y 5G-b-10:** aceptadas tal como estaban (enganchar con el titular en el ejército; la de la administración va con su columna; funda el Líder; desarmar sin estar en el origen; reclamar a `radioEncuentro`; contador de ids compartido).
+2. **5G-b-4, cambio: se suelta a mano, solo dentro de su origen.** `SoltarCaravana` (142) con la Caravana de Fundación vale si el héroe está dentro de la plaza o del campamento de origen con la columna que la lleva; queda suelta y vuelve a caducar a las 48 h. En cualquier otro sitio, `caravana.soltar_solo_dentro`. El residente que entra en su residencia con ella conserva la columna dentro (como con una comercial) y al soltarla la columna se deshace. Canon 1.8 y 5.13.2, Movimiento §9, Fundacion §7.
+3. **5G-b-5, cambio: la que vuelve sola está en el mapa.** En la rejilla de encuentros (`Cosa::Fundacion`), en la `VISTA` ajena como caravana avistada y se intercepta con `atacar` (Combate §7.1: defensa de los carreteros, tipo A o B por la zona). Combate §7.1 no dice qué pierde una caravana sin carros: `// DUDA:` en `nucleo/fundacion.rs::atacar_fundacion` — en disputa el que gana se la lleva entera (se pierde) y en aguante pierde el 70 % y sigue volviendo; con Unity se resuelve también con números. **Pregunta al autor:** ¿es ese el reparto, y la de Fundación abre una batalla de Unity como las comerciales?
+4. **5G-b-7, cambio: en `CAMPAMENTO` cada sesión ve solo el fondo de su Facción;** `ADMIN`, todos. Fundacion §9.1.
+5. **5G-b-9:** sigue en la fila de paridad (`Fundar` no deshace la columna dentro).
+6. **5G-b-11, cambio: suelta en una plaza que cae (conquista o ruina), se destruye con ella** y lo que costó se pierde, como las aparcadas (canon 3.13.7). Canon 1.8, Fundacion §7.
+
+**Pruebas nuevas** en `crates/nucleo/tests/fundacion.rs` (6, `decision_5gb*`): soltar en una plaza de origen y en un campamento de origen (con sus rechazos a la puerta y en mundo abierto); el encuentro con una columna enemiga, la `VISTA` ajena y la propia, y la intercepción en disputa (fuera de su zona: se la lleva entera) y en aguante (dentro: 70 % perdido, sigue volviendo y devuelve el resto); el fondo por Facción en `CAMPAMENTO` para cada espectador; y la caravana suelta en una plaza conquistada.

@@ -376,6 +376,8 @@ impl Nucleo {
     ///
     /// La caravana aparcada en la plaza que cae se destruye, sea por ruina o por conquista (Doc 3.13.7, decidido el 2026-10-19).
     pub(super) fn cerrar_comercio(&mut self, plaza: u64, motivo: Motivo, t: Instante) {
+        // La Caravana de Fundación suelta en la plaza cae con ella (5G-b-11).
+        self.destruir_fundaciones_en(plaza, t);
         let pid = id32(plaza);
         // Los caminos de regreso se calculan antes (el A* necesita `&mut self`): una caravana en camino hacia la plaza solo regresa si lo hay.
         let en_camino: Vec<(u64, Punto, Punto)> = self

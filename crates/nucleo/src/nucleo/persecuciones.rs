@@ -147,6 +147,7 @@ impl Nucleo {
         Some(match cosa {
             Cosa::Columna(e) => Presa::Columna { tipo: e.columna.tipo, hay_heroe_sano: self.tiene_heroe_sano(e, t), propia_o_aliada },
             Cosa::Caravana(k) => Presa::Caravana { adjunta: k.estado == EstadoCaravana::Adjunta, propia_o_aliada },
+            Cosa::Fundacion(_) => Presa::Caravana { adjunta: false, propia_o_aliada },
             Cosa::Plaza(_) | Cosa::Avanzada(..) => return None,
         })
     }
@@ -189,6 +190,10 @@ impl Nucleo {
             Cosa::Columna(e) => self.columna_en_el_mapa(e).then(|| (self.plan_de_columna(e, t), e.posicion_en(t))),
             Cosa::Caravana(k) if matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) => Some((k.plan.clone()?, k.posicion_en(t))),
             Cosa::Caravana(_) => None,
+            Cosa::Fundacion(k) => match &k.situacion {
+                crate::estado_fundacion::Situacion::Retornando(plan) => Some((plan.clone(), k.posicion_en(t))),
+                _ => None,
+            },
             Cosa::Plaza(_) | Cosa::Avanzada(..) => None,
         }
     }

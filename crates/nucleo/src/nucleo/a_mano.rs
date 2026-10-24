@@ -197,6 +197,9 @@ impl Nucleo {
         if !e.columna.participantes.iter().any(|x| x.heroe == heroe) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "el héroe no va en esa columna".into()));
         }
+        if self.estado.fundacion.caravanas.contains_key(&caravana) {
+            return self.soltar_fundacion(t, ejercito, caravana, heroe);
+        }
         if self.estado.comercio.posicion_caravana(caravana).is_none() {
             return Err(rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana)));
         }

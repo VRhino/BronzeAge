@@ -130,6 +130,7 @@ impl Nucleo {
     fn quitar_fundacion(&mut self, id: u64) -> Option<CaravanaFundacion> {
         let c = self.estado.fundacion.caravanas.remove(&id)?;
         self.estado.generaciones.subir(entidad_fundacion(id));
+        self.apartar(entidad_fundacion(id));
         self.tr.tocar(Clase::Caravana, id);
         Some(c)
     }
@@ -191,13 +192,15 @@ impl Nucleo {
             Some(None) => self.devolver_fundacion(id, t, "fundacion.caravana_devuelta"),
             Some(Some(camino)) => {
                 let velocidad = self.estado.reglas.economia.comercio.flota.construccion.velocidad;
-                let g = self.estado.generaciones.subir(entidad_fundacion(id));
-                let plan = rutas::a_plan_por_minuto(&camino.puntos, &self.costes_efectivos(&camino.puntos, &camino.costes), self.rutas.espaciado(), t, velocidad, g);
+                let mut plan = rutas::a_plan_por_minuto(&camino.puntos, &self.costes_efectivos(&camino.puntos, &camino.costes), self.rutas.espaciado(), t, velocidad, 0);
                 let fin = plan.fin().unwrap_or(t);
-                let c = self.estado.fundacion.caravanas.get_mut(&id).expect("existe");
-                (c.situacion, c.posicion, c.caduca_en) = (Situacion::Retornando(plan), desde, None);
-                let c = c.clone();
                 self.programar_fundacion(id, fin, SucesoFundacion::Llega);
+                plan.generacion = self.estado.generaciones.actual(entidad_fundacion(id));
+                let c = self.estado.fundacion.caravanas.get_mut(&id).expect("existe");
+                (c.situacion, c.posicion, c.caduca_en) = (Situacion::Retornando(plan.clone()), desde, None);
+                let c = c.clone();
+                // En el mapa (decisión del autor 5G-b-5): en la rejilla de encuentros, como cualquier caravana que viaja.
+                self.anunciar_caravana(entidad_fundacion(id), Some(plan));
                 self.tr.tocar(Clase::Caravana, id);
                 self.hecho_de_fundacion(t, "fundacion.caravana_vuelve", &c, vec![], vec![("llegaEn", fin)]);
             }
@@ -325,6 +328,7 @@ impl Nucleo {
         }
         let personal = e.columna.tipo == TipoColumna::Personal;
         self.estado.generaciones.subir(entidad_fundacion(caravana));
+        self.apartar(entidad_fundacion(caravana));
         let c = self.estado.fundacion.caravanas.get_mut(&caravana).expect("existe");
         (c.titular, c.situacion, c.posicion) = (heroe, Situacion::Adjunta(columna), alli);
         if personal {
@@ -335,6 +339,143 @@ impl Nucleo {
         self.tr.tocar(Clase::Ejercito, columna);
         self.evento("ejercito.caravana_adjuntada", t, columna, Some(alli), vec![("caravana", caravana as i64), ("heroe", heroe as i64), ("reclamada", 1)]);
         Ok(vec![])
+    }
+
+    /// `soltarCaravana` con la Caravana de Fundación (decisión del autor 5G-b-4): solo **dentro de su origen**, la plaza o el campamento donde se enganchó, con la columna dentro (entró con
+    /// ella). Queda suelta allí y vuelve a caducar a las 48 h. En cualquier otro sitio, `caravana.soltar_solo_dentro`. Si era lo último que llevaba la columna de un residente en su residencia, la
+    /// columna se deshace como al entrar sin caravanas.
+    pub(super) fn soltar_fundacion(&mut self, t: Instante, ejercito: u64, caravana: u64, heroe: u64) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        let c = &self.estado.fundacion.caravanas[&caravana];
+        if c.situacion != Situacion::Adjunta(ejercito) {
+            return Err(Respuesta::rechazo(rechazos::CARAVANA_NO_ESTA_ADJUNTA, "la caravana no va con esta columna", v));
+        }
+        let hn = self.heroe(heroe).expect("existe");
+        let lugar = match (c.origen, hn.heroe.presencia.ubicacion) {
+            (Origen::Plaza(a), u @ Ubicacion::Asentamiento(x)) if u64::from(x) == a => Some(u),
+            (Origen::Campamento(k), u @ Ubicacion::Mercenarios(x)) if x == k => Some(u),
+            _ => None,
+        };
+        let (Some(lugar), true) = (lugar, hn.columna == Some(ejercito)) else {
+            return Err(Respuesta::rechazo(rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "la Caravana de Fundación solo se suelta dentro de su origen, la plaza o el campamento donde se enganchó", v));
+        };
+        let puerta = self.puerta_de_origen(c.origen).expect("está dentro de su origen");
+        let caduca_en = t + self.estado.reglas.economia.datos.caducidad_caravana;
+        let c = self.estado.fundacion.caravanas.get_mut(&caravana).expect("existe");
+        (c.situacion, c.posicion, c.caduca_en) = (Situacion::Disponible, puerta, Some(caduca_en));
+        self.estado.generaciones.subir(entidad_fundacion(caravana));
+        self.programar_fundacion(caravana, caduca_en, SucesoFundacion::Caduca);
+        self.tr.tocar(Clase::Caravana, caravana);
+        self.tr.tocar(Clase::Ejercito, ejercito);
+        self.evento("ejercito.caravana_soltada", t, ejercito, None, vec![("caravana", caravana as i64), ("heroe", heroe as i64)]);
+        let e = &self.estado.ejercitos[&ejercito];
+        let reside = self.heroe(heroe).and_then(|h| h.heroe.residencia).is_some_and(|r| match (r, lugar) {
+            (Residencia::Asentamiento(a), Ubicacion::Asentamiento(x)) => a == x,
+            (Residencia::Campamento(a), Ubicacion::Mercenarios(x)) => a == x,
+            _ => false,
+        });
+        if reside && e.caravanas_adjuntas.is_empty() && e.columna.participantes.len() == 1 && self.estado.fundacion.de_columna(ejercito).is_none() {
+            self.recoger_en_residencia(t, heroe, ejercito, lugar);
+        }
+        Ok(vec![])
+    }
+
+    /// Una plaza cae (conquista o ruina): la Caravana de Fundación suelta en ella se destruye con la plaza y lo que costó se pierde (decisión del autor 5G-b-11, como las aparcadas, canon 3.13.7).
+    pub(super) fn destruir_fundaciones_en(&mut self, plaza: u64, t: Instante) {
+        let sueltas: Vec<u64> = self.estado.fundacion.caravanas.values().filter(|c| c.situacion == Situacion::Disponible && c.origen == Origen::Plaza(plaza)).map(|c| c.id).collect();
+        for id in sueltas {
+            let c = self.quitar_fundacion(id).expect("existe");
+            self.hecho_de_fundacion(t, "fundacion.caravana_perdida", &c, vec![], vec![("plaza", plaza as i64)]);
+        }
+    }
+
+    /// `atacar` contra la Caravana de Fundación que vuelve sola (decisión del autor 5G-b-5; Combate §7.1, canon 1.8: «interceptable igual que las demás, tipo A o B según la zona»). Exige guerra con
+    /// su Facción o la declara; se defienden los carreteros (`defensaBaseCaravana`: no lleva escolta) con la ventaja del aguante en la zona de su dueño o de un aliado.
+    /// DUDA: Combate §7.1 habla de carros y la de Fundación no tiene. Aquí: en **disputa** (A) el atacante que gana se la lleva entera —la caravana es un solo carro: se destruye y él carga lo
+    /// que costó hasta donde le quepa—; en **aguante** (B) pierde el 70 % de lo que costó (redondeado hacia abajo) y sigue volviendo con el 30 %. Con batallas de Unity se resuelve también con
+    /// números (el ticket de una batalla de caravana pide sus carros).
+    pub(super) fn atacar_fundacion(&mut self, t: Instante, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
+        use combate::caravana::{self as asalto, Defensa, Modalidad};
+        use combate::resolucion::Bando;
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
+        let k = &self.estado.fundacion.caravanas[&x];
+        match k.situacion {
+            Situacion::Adjunta(_) => return Err(rechazo(rechazos::COMBATE_CARAVANA_ADJUNTA, "esa caravana va adjunta a un ejército: se ataca al ejército")),
+            Situacion::Disponible => return Err(rechazo(rechazos::COMBATE_A_CUBIERTO, "esa caravana no está en el mapa")),
+            Situacion::Retornando(_) => {}
+        }
+        let (dueno, donde) = (k.faccion, k.posicion_en(t));
+        let guerra = self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, dueno, declara_guerra)?;
+        let modalidad = asalto::modalidad_de(self.zona_en(donde, dueno));
+        let cr = self.estado.reglas.economia.combate.clone();
+        let mut atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_resto);
+        let columnas = self.columnas_de(&atac.escuadras);
+        let participantes = Self::participantes_de(&self.estado.ejercitos[&id]);
+        let punto = self.estado.ejercitos[&id].posicion_en(t);
+        if let Some((a, b)) = guerra {
+            self.declarar_guerra(t, a, b);
+        }
+        let r = asalto::resolver_asalto(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Defensa::Base, modalidad, &mut self.estado.rng).expect("la columna lleva al menos un héroe sano");
+        self.volcar_escuadras(&atac.escuadras);
+        let (cogido, destruida) = if r.gana_atacante {
+            let c = self.estado.fundacion.caravanas.get_mut(&x).expect("existe");
+            let perdido: Mercancia = match modalidad {
+                Modalidad::Disputa => std::mem::take(&mut c.contenido),
+                Modalidad::Aguante => {
+                    let fraccion = cr.numericas.carga_perdida_aguante as i128;
+                    let mut perdido = Mercancia::new();
+                    for (&rec, n) in c.contenido.iter_mut() {
+                        let l = entero((*n as i128 * fraccion / UNO as i128) as Mil);
+                        if l > 0 {
+                            *n -= l;
+                            perdido.insert(rec, l);
+                        }
+                    }
+                    c.contenido.retain(|_, n| *n > 0);
+                    // Lo perdido sale de los aportes (por héroe, en orden de id) para que lo que vuelva a nombre de cada uno sume lo que queda.
+                    for (&rec, &l) in &perdido {
+                        let mut falta = l;
+                        for suyo in c.aportes.values_mut() {
+                            let toma = suyo.get(&rec).copied().unwrap_or(0).min(falta);
+                            if toma > 0 {
+                                quitar(suyo, rec, toma);
+                                falta -= toma;
+                            }
+                        }
+                    }
+                    c.aportes.retain(|_, m| !m.is_empty());
+                    perdido
+                }
+            };
+            self.tr.tocar(Clase::Caravana, x);
+            let destruida = modalidad == Modalidad::Disputa;
+            if destruida {
+                let c = self.quitar_fundacion(x).expect("existe");
+                self.hecho_de_fundacion(t, "fundacion.caravana_perdida", &c, vec![], vec![("interceptada", 1)]);
+            }
+            (self.cargar_botin_en(id, &perdido), destruida)
+        } else {
+            (Mercancia::new(), false)
+        };
+        let heridos = if r.gana_atacante { 0 } else { self.herir_heroes(&participantes, t) };
+        self.recomponer_tras_bajas(&columnas, t);
+        let datos = vec![
+            ("caravana", x as i64),
+            ("aguante", (modalidad == Modalidad::Aguante) as i64),
+            ("poderAtacante", r.poder_atacante),
+            ("defensa", r.defensa),
+            ("bajasAtacante", super::combates::caidos(&r.bajas_atacante)),
+            ("bajasEscolta", 0),
+            ("carros", destruida as i64),
+            ("botin", total(&cogido)),
+            ("destruida", destruida as i64),
+            ("heridos", heridos as i64),
+        ];
+        let mut datos = datos;
+        datos.extend(dueno.map(|f| ("faccionDefensora", i64::from(f))));
+        self.hecho_de_combate(if r.gana_atacante { "combate.caravana_interceptada" } else { "combate.caravana_resiste" }, t, vec![id], vec![], punto, datos);
+        Ok(())
     }
 
     // ───────────────────────────── Las órdenes ─────────────────────────────

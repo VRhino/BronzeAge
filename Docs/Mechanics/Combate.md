@@ -179,6 +179,7 @@ Consecuencias que aplica `asediarPlaza`:
 - **Con Unity**: el servidor manda el tipo (`modalidad: 'disputa' | 'aguante'`, con los carros identificados) y Unity responde quién ganó y los `carrosPerdidos`. Los carros **no cambian de manos en el mundo: solo la carga**.
 - Desaparece el «captura exactamente el 50 %» (`umbralCapturaCaravana` se retiró del bloque `MILITAR` el 2026-10-19).
 - Interceptar no da experiencia de Facción. Sí da la defensa de una caravana: **experiencia de Facción por héroe participante** del bando que defiende (Doc 2.2).
+- **La Caravana de Fundación que vuelve sola** (decisión del autor 5G-b-5, 2026-10-24) se intercepta igual, con la defensa de los carreteros y el tipo de su zona. No lleva carros: en Rust, en **disputa** quien gana se la lleva entera (se pierde y él carga lo que costó hasta donde le quepa) y en **aguante** pierde el 70 % de lo que lleva y sigue volviendo con el 30 % (`// DUDA:` en `nucleo/fundacion.rs::atacar_fundacion`; con Unity se resuelve también con números). Ver [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §7.
 
 ### 7.2 Atacar un campamento de bandidos (`atacarCampamento` → `atacarCampamentoConColumna`)
 - **Los bandidos no actúan dentro de ninguna zona de influencia** y solo atacan caravanas que pasan junto a su campamento (un **encuentro exacto** con el radio de ataque, 7). Es PvE y no exige guerra.
