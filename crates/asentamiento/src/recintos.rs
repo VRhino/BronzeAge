@@ -34,6 +34,8 @@ pub struct ReglasMuralla {
     pub paso_torres: [i32; NIVELES],
     /// Tope de puertas de un anillo (Cal-6): si la red lo cruza por más sitios, se cortan los que menos red de fuera sirven.
     pub puertas_maximas: usize,
+    /// Celdas de ancho que mide como mucho una puerta (Cal2-1): de un paso más ancho quedan las centradas en el cruce.
+    pub ancho_maximo_puerta: usize,
     /// Lo normal: entre cuántas puertas suele quedar un anillo (mínimo y máximo); es la referencia del batch, no una regla del trazo.
     pub puertas_normales: [usize; 2],
     /// Edificios extramuros que exige ampliar.
@@ -79,6 +81,7 @@ impl ReglasMuralla {
             franja_de_ronda: entero(b, "franjaDeRonda") as i32,
             paso_torres: por_nivel(&b["pasoTorres"], |v| numero(v) as i32),
             puertas_maximas: entero(b, "puertasMaximas") as usize,
+            ancho_maximo_puerta: entero(b, "anchoMaximoPuerta") as usize,
             puertas_normales: [0, 1].map(|i| b["puertasNormales"][i].as_u64().expect("puertasNormales: [mínimo, máximo]") as usize),
             arrabal_minimo: entero(b, "arrabalMinimo") as usize,
             minutos_por_celda: por_nivel(&b["minutosPorCelda"], numero),
@@ -92,7 +95,7 @@ impl ReglasMuralla {
 
     /// Lo que el trazo lee del bloque (franja de ronda y separación de las torres).
     pub fn parametros_de_trazo(&self) -> ParametrosMuralla {
-        ParametrosMuralla { franja_de_ronda: self.franja_de_ronda, paso_torres: self.paso_torres, puertas_maximas: self.puertas_maximas }
+        ParametrosMuralla { franja_de_ronda: self.franja_de_ronda, paso_torres: self.paso_torres, puertas_maximas: self.puertas_maximas, ancho_maximo_puerta: self.ancho_maximo_puerta }
     }
 
     /// ¿Es un nivel de recinto que existe?
@@ -542,7 +545,7 @@ mod pruebas {
     fn el_bloque_se_lee_del_documento() {
         let m = reglas().muralla;
         assert_eq!((m.nivel_maximo, m.franja_de_ronda, m.arrabal_minimo, m.factor_puerta, m.factor_torre), (3, 1, 6, 4, 3));
-        assert_eq!((m.puertas_maximas, m.puertas_normales), (4, [2, 3]));
+        assert_eq!((m.puertas_maximas, m.puertas_normales, m.ancho_maximo_puerta), (4, [2, 3], 2));
         assert_eq!((m.nivel_de_plaza, m.paso_torres, m.minutos_por_celda, m.bono_defensa), ([2, 3, 4], [0, 8, 5], [15, 30, 60], [1_300_000, 1_800_000, 2_500_000]));
         assert_eq!(m.tarifa_por_celda[0], vec![(Recurso::Madera, 20_000), (Recurso::Piedra, 2_000)]);
         assert_eq!(m.upkeep_por_celda[2], vec![(Recurso::Piedra, 40)]);

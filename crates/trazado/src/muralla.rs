@@ -32,7 +32,7 @@ pub struct CeldaMuro {
     pub clase: ClaseCelda,
 }
 
-/// Lo que el trazo lee del bloque `MURALLA` de Murallas.md §11 (`franjaDeRonda`, `pasoTorres`, `puertasMaximas`); lo construye quien parsea el bloque.
+/// Lo que el trazo lee del bloque `MURALLA` de Murallas.md §11 (`franjaDeRonda`, `pasoTorres`, `puertasMaximas`, `anchoMaximoPuerta`); lo construye quien parsea el bloque.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParametrosMuralla {
     /// Pasos de dilatación del casco urbano para el anillo (vecindad 4).
@@ -41,11 +41,13 @@ pub struct ParametrosMuralla {
     pub paso_torres: [i32; 3],
     /// Tope de puertas de un anillo (`puertasMaximas`, Cal-6).
     pub puertas_maximas: usize,
+    /// Celdas de ancho que mide como mucho una puerta (`anchoMaximoPuerta`, Cal2-1).
+    pub ancho_maximo_puerta: usize,
 }
 
 impl Default for ParametrosMuralla {
     fn default() -> Self {
-        Self { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4 }
+        Self { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4, ancho_maximo_puerta: 2 }
     }
 }
 
@@ -270,7 +272,11 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
     reabrir_cortes(&mut celdas, &en_red, base);
     let piezas_hasta = piezas.iter().map(|q| q.id).max().unwrap_or(0);
     let valida = |celdas: &[CeldaMuro], cortados: &[usize]| sigue_conectada(base, celdas, &red_de_puertas(base, celdas, cortados, &region, &muro), piezas_hasta);
-    let cortados = limitar_puertas(&mut celdas, &base.suelo.red, &region, &muro, p.puertas_maximas, valida).ok_or(ErrorMuralla::NoSePuedeCerrar)?;
+    let estrechadas = estrechar_puertas(&mut celdas, &region, &muro, &en_red, p.ancho_maximo_puerta);
+    if !estrechadas.is_empty() && !valida(&celdas, &estrechadas) {
+        return Err(ErrorMuralla::NoSePuedeCerrar);
+    }
+    let cortados = limitar_puertas(&mut celdas, &base.suelo.red, &region, &muro, p.puertas_maximas, estrechadas, valida).ok_or(ErrorMuralla::NoSePuedeCerrar)?;
     let red_de_puertas = red_de_puertas(base, &celdas, &cortados, &region, &muro);
     let interior = Interior(region);
     marcar_torres(&mut celdas, &interior, p, nivel);
@@ -350,14 +356,7 @@ fn ordenar_anillo(celdas: Vec<CeldaMuro>) -> Vec<CeldaMuro> {
 /// ser muro. El nº de puertas es el divisor del bono defensivo: un camino que rozara el muro cinco celdas dividiría la defensa por cinco.
 fn colapsar_puertas(anillo: &mut [CeldaMuro], region: &[bool], muro: &[bool], en_red: &[bool]) {
     let n = anillo.len();
-    let atraviesa = |c: &CeldaMuro| {
-        let (mut dentro, mut fuera) = (false, false);
-        for v in vecinos_i(idx(c.celda).expect("el anillo está en la ventana")).into_iter().flatten().filter(|&v| en_red[v]) {
-            dentro |= region[v];
-            fuera |= !region[v] && !muro[v];
-        }
-        dentro && fuera
-    };
+    let atraviesa = |c: &CeldaMuro| atraviesa(c.celda, region, muro, en_red);
     let mut visto = vec![false; n];
     for i in 0..n {
         if anillo[i].clase != ClaseCelda::Puerta || visto[i] {
@@ -388,6 +387,35 @@ fn colapsar_puertas(anillo: &mut [CeldaMuro], region: &[bool], muro: &[bool], en
             anillo[k].clase = ClaseCelda::Muro;
         }
     }
+}
+
+/// ¿«Atraviesa» la celda del anillo? Tiene red dentro de la región a un lado y red fuera del muro al otro.
+fn atraviesa(c: Celda, region: &[bool], muro: &[bool], en_red: &[bool]) -> bool {
+    let (mut dentro, mut fuera) = (false, false);
+    for v in vecinos_i(idx(c).expect("el anillo está en la ventana")).into_iter().flatten().filter(|&v| en_red[v]) {
+        dentro |= region[v];
+        fuera |= !region[v] && !muro[v];
+    }
+    dentro && fuera
+}
+
+/// Una puerta mide como mucho `ancho` celdas (Cal2-1, decisión del autor del 2026-10-24; `anchoMaximoPuerta`, 2): más ancha deja de ser un cuello de botella. De
+/// una abertura más ancha —el paso que reabre [`reabrir_cortes`] por una calle pegada al muro— quedan como puerta las `ancho` celdas centradas en el cruce (la
+/// primera que atraviesa o, si ninguna, la del medio, y sus vecinas de la abertura más cercanas al medio) y el resto vuelve a ser muro. Devuelve las celdas cerradas
+/// (índices de la rejilla): su red a cada lado se conserva y rodea el muro hasta la puerta, como la de un cruce cortado ([`red_de_puertas`]).
+fn estrechar_puertas(anillo: &mut [CeldaMuro], region: &[bool], muro: &[bool], en_red: &[bool], ancho: usize) -> Vec<usize> {
+    let mut cerradas = Vec::new();
+    for grupo in aberturas(anillo).into_iter().filter(|g| g.len() > ancho) {
+        let medio = grupo.len() / 2;
+        let cruce = grupo.iter().position(|&k| atraviesa(anillo[k].celda, region, muro, en_red)).unwrap_or(medio);
+        // `ancho` celdas seguidas de la abertura (en el orden del anillo) que contienen al cruce, las más cercanas al medio.
+        let desde = medio.saturating_sub(ancho / 2).clamp((cruce + 1).saturating_sub(ancho), cruce).min(grupo.len() - ancho);
+        for &k in grupo.iter().enumerate().filter(|&(j, _)| j < desde || j >= desde + ancho).map(|(_, k)| k) {
+            anillo[k].clase = ClaseCelda::Muro;
+            cerradas.push(idx(anillo[k].celda).expect("el anillo está en la ventana"));
+        }
+    }
+    cerradas
 }
 
 /// Una puerta por cruce no puede partir la red (`LAYOUT_VERSION` 5, Murallas M1): cuando una calle o un camino corre pegado al anillo, las celdas de la tirada que se
@@ -479,11 +507,11 @@ pub fn aberturas(celdas: &[CeldaMuro]) -> Vec<Vec<usize>> {
 /// abertura sin cruzarlo): primero las que sirven algún camino —la salida de las Granjas—, después las de más celdas de red y, a igualdad, la primera del anillo.
 /// Se cortan, enteras y de la que menos sirve a la que más, mientras sobren: cada corte vuelve muro sus celdas y su red de fuera rodea el muro hasta la puerta más
 /// cercana ([`red_de_puertas`]); un corte que partiría la red o dejaría sin salida a una pieza que la tenía (`sigue_conectada`) no se hace. Devuelve las celdas
-/// cortadas, o `None` si ni así se baja del tope (ese anillo no se puede cerrar con la regla).
-fn limitar_puertas(anillo: &mut [CeldaMuro], red: &[u8], region: &[bool], muro: &[bool], maximas: usize, valida: impl Fn(&[CeldaMuro], &[usize]) -> bool) -> Option<Vec<usize>> {
+/// cerradas (las `ya_cerradas` al estrechar las puertas más las cortadas), o `None` si ni así se baja del tope (ese anillo no se puede cerrar con la regla).
+fn limitar_puertas(anillo: &mut [CeldaMuro], red: &[u8], region: &[bool], muro: &[bool], maximas: usize, ya_cerradas: Vec<usize>, valida: impl Fn(&[CeldaMuro], &[usize]) -> bool) -> Option<Vec<usize>> {
     let puertas = aberturas(anillo);
     if puertas.len() <= maximas {
-        return Some(Vec::new());
+        return Some(ya_cerradas);
     }
     let indices: Vec<usize> = anillo.iter().map(|c| idx(c.celda).expect("el anillo está en la ventana")).collect();
     let en = |k: usize| indices[k];
@@ -506,7 +534,7 @@ fn limitar_puertas(anillo: &mut [CeldaMuro], red: &[u8], region: &[bool], muro: 
         libres.retain(|&j| j != mejor);
         orden.push(mejor);
     }
-    let (mut cortadas, mut quedan) = (Vec::new(), puertas.len());
+    let (mut cortadas, mut quedan) = (ya_cerradas, puertas.len());
     for &j in orden.iter().rev() {
         if quedan <= maximas {
             break;
