@@ -287,8 +287,8 @@ impl Relaciones {
     /// **traición** de la decisión **Q2** (2026-10-24): rompe la alianza en el acto (`rota_por` = el atacante), cuesta `penalizacionAtacarAliado` (−25) en vez de
     /// la de romper (−12) y declara la guerra con su arrastre. Sin alianza, la guerra normal, con la penalización de la guerra tras romper si toca. Con un
     /// vasallaje entre las dos, se rechaza como siempre (`YaHayRelacion`: la vasalla se rebela, la señora libera).
-    // DUDA: la traición no suma además `penalizacionGuerraTrasRomperAlianza` (−15) por la alianza que ella misma rompe en ese instante: «−25 en vez de −12»
-    // se lee como el coste total. Sí deja `rota_por`/`rota_en`, así que volver a declararle la guerra dentro de la ventana (tras una paz) la cobraría.
+    /// La traición cuesta **solo** −25 (5A-1, 2026-10-24): no suma además `penalizacionGuerraTrasRomperAlianza` (−15) por la alianza que rompe en ese instante.
+    /// Sí deja `rota_por`/`rota_en`, así que volver a declararle la guerra dentro de la ventana (tras una paz) la cobraría.
     pub fn declarar_al_atacar(&mut self, rr: &ReglasReputacion, facciones: &Facciones, atacante: FaccionId, objetivo: FaccionId, ahora: Instante, ids: &mut impl FnMut() -> RelacionId) -> Result<Declaracion, ErrorDiplomacia> {
         let alianza = self.activa_entre(atacante, objetivo).filter(|r| r.tipo == TipoRelacion::Alianza).map(|r| r.id);
         let Some(alianza) = alianza else {
@@ -341,7 +341,7 @@ impl Relaciones {
 
     /// `romperRelacion` (§5.5): una guerra no; una alianza la rompe cualquiera de las dos (`penalizacionRomperAlianza` a quien rompe, y queda `rota_por`/`rota_en`);
     /// un vasallaje, solo la señora (`bonusLiberarVasalloVoluntario` para ella).
-    // DUDA: el TypeScript no miraba que la relación siguiera activa (romper dos veces cobraba dos veces); aquí una rota se rechaza con `NoActiva`, también en la rebelión.
+    /// Romper o rebelarse sobre una relación ya rota se rechaza con `NoActiva` (5A-6, 2026-10-24; el TypeScript no lo miraba y volvía a cobrar la reputación).
     pub fn romper(&mut self, id: RelacionId, iniciador: FaccionId, ahora: Instante) -> Result<Vec<(FaccionId, Suceso)>, ErrorDiplomacia> {
         let r = self.activa_mut(id)?;
         if r.tipo == TipoRelacion::Guerra {
@@ -391,8 +391,7 @@ impl Relaciones {
     /// Facción que existe y no es su señora, su vasallaje pasa a `rota` y nace uno de la conquistadora con el **mismo tributo** (id `nueva`); las relaciones
     /// activas entre la vasalla y la conquistadora se acaban. Sin reputación. Va justo después del desarme del señor, en el instante de la caída (C7); el
     /// núcleo lo llama también cuando una vasalla sin plazas acepta otra señora (Diplomacia §12: `derrotadaPor` no caduca mientras no tenga plaza).
-    // DUDA: el TypeScript solo acaba las **guerras** entre las dos; aquí se acaba cualquier relación activa del par (una alianza, o que la vasalla fuera su
-    // señora) para no dejar dos activas en el mismo par.
+    /// Se acaba **cualquier** relación activa del par, no solo las guerras como en el TypeScript (5A-3, 2026-10-24): nunca quedan dos activas en el mismo par.
     pub fn pasar_vasalla_conquistada(&mut self, facciones: &Facciones, vasalla: FaccionId, ahora: Instante, nueva: RelacionId) -> Option<VasallaConquistada> {
         let Some(Derrota::Por(conquistadora)) = facciones.get(vasalla)?.derrota else { return None };
         let v = self.activas().find(|r| r.tipo == TipoRelacion::Vasallaje && r.b == vasalla && r.a != conquistadora)?.clone();

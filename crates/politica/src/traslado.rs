@@ -122,8 +122,7 @@ pub fn fusionar(p: &mut Politica, r: &Reglas, id: FaccionId, union: &Union) -> O
 
 /// La marca de capital de una plaza tras la fusión de `a` y `b` en `c`, siendo `de_rey_electo` la Facción cuyo Rey reina en C: solo la designada por el Rey
 /// electo pasa a C; la de la otra se borra; las demás no cambian.
-// DUDA: el TypeScript no comprueba aquí que la marca siga siendo vigente (Palacio activo, plaza de esa Facción); se copia tal cual y `capital::designada`
-// ya la ignora si no vale.
+/// La marca pasa tal cual, sin mirar si sigue vigente (5A-5, 2026-10-24): `capital::designada` ya ignora una marca sin Palacio activo o de una plaza ajena.
 pub fn marca_tras_fusion(marca: Option<FaccionId>, a: FaccionId, b: FaccionId, de_rey_electo: FaccionId, c: FaccionId) -> Option<FaccionId> {
     match marca {
         Some(m) if m == a || m == b => (m == de_rey_electo).then_some(c),

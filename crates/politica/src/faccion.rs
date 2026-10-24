@@ -66,7 +66,7 @@ pub enum ErrorFaccion {
     NoHaPedido,
     /// No es ciudadano de ninguna Facción (o no de esa).
     NoPertenece,
-    /// Q7: va en un ejército o una convocatoria con otros héroes; primero se separa (y si es el Líder, cede antes el mando).
+    /// Q7: va en un ejército (aunque sea solo) o en una convocatoria con otros héroes; primero se separa o lo deshace (y si es el Líder, cede antes el mando).
     EnEjercito,
     /// El designado no es ciudadano de la Facción.
     NoCiudadano,
@@ -227,7 +227,7 @@ impl Facciones {
         self.sin_solicitudes_de(h);
         let f = self.por_id.get_mut(&faccion).expect("existe");
         f.ciudadanos.push(h);
-        // Una Facción que se quedó sin nadie vuelve a tener Rey con su primer ciudadano.
+        // 5A-8 (2026-10-24): quien recibe la ciudadanía de una Facción que se quedó sin nadie pasa a ser su Rey.
         f.rey.get_or_insert(h);
         self.de_heroe.insert(h, faccion);
         Ok(())
@@ -254,15 +254,14 @@ impl Facciones {
         Some(Salida { faccion: id, sucesion, embajador_vaciado })
     }
 
-    /// `dejarFaccion` (§3.3): solo la propia; Q7: se rechaza si va en un ejército o una convocatoria con otros héroes. Estampa `salidasFaccionPorHeroe`
-    /// (el cooldown de creación). Dejar la residencia, los cargos locales y la guarnición, y pasar al campamento más cercano (decisión 10), es del núcleo.
-    // DUDA: Q7 dice «dentro de un ejército»; un ejército de un solo héroe (que sigue siéndolo) no mezclaría Facciones, así que solo se rechaza con otros
-    // héroes en el ejército o la convocatoria. Si el autor quiere rechazarlo siempre, el núcleo pasa `true` por estar en cualquier ejército.
-    pub fn dejar(&mut self, h: HeroeId, ahora: Instante, con_otros_en_ejercito: bool) -> Result<Salida, ErrorFaccion> {
+    /// `dejarFaccion` (§3.3): solo la propia. Q7 (y 5A-4, 2026-10-24): se rechaza **siempre** que vaya en un ejército, aunque sea de un solo héroe, y en una
+    /// convocatoria con otros héroes (`en_ejercito`: lo sabe el núcleo). Estampa `salidasFaccionPorHeroe` (el cooldown de creación). Dejar la residencia, los
+    /// cargos locales y la guarnición, y pasar al campamento más cercano (decisión 10), es del núcleo.
+    pub fn dejar(&mut self, h: HeroeId, ahora: Instante, en_ejercito: bool) -> Result<Salida, ErrorFaccion> {
         if !self.de_heroe.contains_key(&h) {
             return Err(ErrorFaccion::NoPertenece);
         }
-        if con_otros_en_ejercito {
+        if en_ejercito {
             return Err(ErrorFaccion::EnEjercito);
         }
         let salida = self.quitar(h).expect("es ciudadano");
@@ -464,10 +463,12 @@ pub(crate) mod pruebas {
     }
 
     #[test]
-    fn q7_no_se_deja_la_faccion_dentro_de_un_ejercito_con_otros() {
+    fn q7_no_se_deja_la_faccion_dentro_de_un_ejercito_ni_siquiera_solo() {
         let mut fs = Facciones::default();
         con_faccion(&mut fs, 1, "Micenas", 10, &[11]);
+        // 5A-4: el núcleo pasa `true` por ir en cualquier ejército, también uno en el que solo va él.
         assert_eq!(fs.dejar(11, 0, true), Err(ErrorFaccion::EnEjercito));
+        assert_eq!(fs.dejar(10, 0, true), Err(ErrorFaccion::EnEjercito), "el Rey, solo en su ejército, tampoco");
         assert_eq!(fs.faccion_de(11), Some(1), "sigue dentro");
         assert!(fs.salidas().is_empty());
     }

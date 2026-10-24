@@ -407,3 +407,18 @@ conquistada en la caída (5D); la matriz en `Comando::autoriza` y retirar `manda
 4. Q7: ¿un ejército de un solo héroe (que conserva su identidad de ejército) también impide dejar la Facción? Hoy la regla recibe «con otros» y solo rechaza entonces.
 5. Fusión: la marca de capital se copia tal cual sin mirar si sigue vigente (`capital::designada` ya la ignora si no vale).
 6. `romperRelacion` y `rebelionVasallo` sobre una relación ya rota se rechazan (`NoActiva`); el TS no lo miraba y volvía a cobrar la reputación.
+
+### Decisiones del autor sobre las dudas de 5A (2026-10-24)
+
+1. **5A-1, traición:** solo −25; no suma los −15 de la guerra tras romper. Sin cambio de código; escrito como regla (`relaciones::declarar_al_atacar`, Dip §5.4, G2 2.7).
+2. **5A-2, tributo que no cabe: CAMBIO.** Se paga entero y la capital pierde el exceso, como el TypeScript. `tributo::pago` devuelve ahora `pagadas` (lo que sale de la vasalla) y
+   `recibidas` (lo que entra en la capital, topado por su hueco). Dip §5.6 y G2 2.4.
+3. **5A-3, vasalla conquistada:** se acaba cualquier relación activa entre vasalla y conquistadora. Aceptada; Dip §5.5 y G2 2.4.
+4. **5A-4, Q7: CAMBIO.** Dejar la Facción yendo en un ejército se rechaza siempre, también en uno de un solo héroe. `Facciones::dejar(h, ahora, en_ejercito)`: el núcleo pasa `true` por ir
+   en cualquier ejército (o en una convocatoria con otros héroes). Dip §3.3 y G2 2.5.
+5. **5A-5, marca de capital en la fusión:** pasa tal cual, sin mirar si sigue vigente. Aceptada; Dip §6.2.
+6. **5A-6, romper o rebelarse sobre una relación rota:** se rechaza (`NoActiva`). Aceptada; Dip §5.5.
+7. **5A-7, `Propuesta.propuesta_por`, héroe o Facción:** se decide en 5H. Hoy el crate guarda el héroe (Dip §2.4) y el contrato dice «facción que propone».
+8. **5A-8, ciudadanía en una Facción vacía:** quien la recibe pasa a ser su Rey. Sin cambio de código; escrito en Dip §3.2 y G2 2.5.
+
+Ya no queda ninguna `// DUDA:` en `crates/politica`.
