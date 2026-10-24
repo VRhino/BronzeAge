@@ -22,7 +22,7 @@ pub struct Entrada<'a> {
     pub geo: &'a Geo,
     pub e: &'a EscenarioMilitar,
     pub corrida: &'a Corrida,
-    /// (misma semilla ⇒ mismo hash, foto `BAN26` a mitad ⇒ mismo hash que sin ella) en el escenario reducido.
+    /// (misma semilla ⇒ mismo hash, foto `BAN27` a mitad ⇒ mismo hash que sin ella) en el escenario reducido.
     pub determinismo: Option<(bool, bool)>,
     pub pared_total: Duration,
 }
@@ -219,7 +219,7 @@ fn pueblos_y_avanzadas(x: &Entrada) -> Vec<Metrica> {
         metrica("pueblos_saqueados", "Pueblos saqueados", "saqueos", INFO, Some(n_hecho(x, "combate.pueblo_saqueado")), "Combate §7.3", &format!("Resistieron {}. Saqueado: {} u (lo que había por encima de la mitad de su almacén).", n_hecho(x, "combate.pueblo_resiste"), r3(m.saqueado_de_pueblos as f64 / U))),
         metrica("guarnicion_repuesta", "Guarniciones de pueblo repuestas enteras", "reposiciones", INFO, Some(m.reposiciones_pueblo.len() as f64), "Combate §7.3 (un minero cada 12 min)", &format!("Tiempo mediano de la primera baja a la guarnición completa: {} min.", mediana(&repone).map_or("—".into(), |v| format!("{v:.0}")))),
         metrica("avanzadas_operativas", "Avanzadas operativas al final", "avanzadas", INFO, Some(operativas as f64), "Economia_Construccion §14.1", &format!("Colocadas {} (rechazos: {}).", aceptadas(x, "ColocarAvanzada"), rechazos_de(x, "ColocarAvanzada"))),
-        metrica("avanzadas_atacadas", "Ataques a avanzadas que ganó el atacante", "ataques", INFO, Some(n_hecho(x, "combate.avanzada_destruida") + n_hecho(x, "combate.avanzada_en_ruinas") + n_hecho(x, "combate.avanzada_saqueada")), "Combate §7.4", &format!("Resistieron {}; guarniciones de serie repuestas a las 6 h: {}.", n_hecho(x, "combate.avanzada_resiste"), m.reposiciones_avanzada.len())),
+        metrica("avanzadas_atacadas", "Ataques a avanzadas que ganó el atacante", "ataques", INFO, Some(n_hecho(x, "combate.avanzada_destruida") + n_hecho(x, "combate.avanzada_en_ruinas") + n_hecho(x, "combate.avanzada_saqueada")), "Combate §7.4", &format!("Resistieron {}; guarniciones de serie repuestas enteras (soldado a soldado, 6 h desde 0): {}.", n_hecho(x, "combate.avanzada_resiste"), m.reposiciones_avanzada.len())),
     ]
 }
 
@@ -240,8 +240,12 @@ fn conquistas(x: &Entrada) -> Vec<Metrica> {
     let completas = e.asentamientos.values().filter(|a| asentamiento::recintos::muralla_completa(&a.economia.recintos)).count();
     let reparadas = m.murallas_danadas.values().filter(|(_, r)| r.is_some()).count();
     let tiempos: Vec<f64> = m.murallas_danadas.values().filter_map(|(d, r)| Some((r.as_ref()? - d) as f64 / MIN)).collect();
+    let primer_dia = m.conquistas.iter().filter(|&&(t, p, ..)| e.asentamientos.get(&p).is_some_and(|a| t < a.fundado_en + 24 * 60 * base::MS_POR_MINUTO)).count();
+    let rebotan = x.corrida.ordenes.get("Atacar").and_then(|c| c.rechazos.get("combate.plaza_protegida")).copied().unwrap_or(0);
     vec![
-        metrica("conquistas", "Plazas conquistadas", "conquistas", INFO, Some(m.conquistas.len() as f64), "Combate §6 y §8", &format!("Asedios resistidos {}; asedios descartados tras inspeccionar {}; Facciones derrotadas {}.", n_hecho(x, "combate.asedio_resistido"), m.asedios_descartados, n_hecho(x, "faccion.derrotada"))),
+        metrica("asedios_abiertos", "Asedios abiertos (con su convocatoria de 30 s)", "asedios", INFO, Some(m.asedios_abiertos as f64), "Combate §6, Batalla_Unity_Ciclo §4 (M8)", &format!("Columnas que se unieron a la convocatoria {}; conquistas con más de una columna {}.", m.uniones_a_asedios, m.conquistas_con_convocatoria)),
+        metrica("conquistas_primer_dia", "Plazas conquistadas en su primer día", "conquistas", INFO, Some(primer_dia as f64), "Doc 1.2, Fundacion_Y_Refundacion §5 (M5)", &format!("Ataques a plazas que rebotaron por la protección (al fundar o tras una conquista): {rebotan}.")),
+        metrica("conquistas", "Plazas conquistadas", "conquistas", INFO, Some(m.conquistas.len() as f64), "Combate §6 y §8", &format!("Plazas distintas {}; asedios resistidos {}; asedios descartados tras inspeccionar {}; Facciones derrotadas {}.", m.conquistas.iter().map(|c| c.1).collect::<std::collections::BTreeSet<_>>().len(), n_hecho(x, "combate.asedio_resistido"), m.asedios_descartados, n_hecho(x, "faccion.derrotada"))),
         metrica("ruinas", "Plazas en ruinas", "plazas", INFO, Some(m.ruinas.len() as f64), "Economia_Construccion §5", "Por falta de mantenimiento; arrastran su comercio, sus pueblos y sus avanzadas."),
         metrica("murallas_comprometidas", "Empalizadas comprometidas", "recintos", INFO, Some(aceptadas(x, "ComprometerRecinto")), "Murallas §4", &format!("Completas al final en {completas} plazas. Rechazos: {}.", rechazos_de(x, "ComprometerRecinto"))),
         metrica("murallas_danadas", "Murallas dañadas por una conquista", "plazas", INFO, Some(m.murallas_danadas.len() as f64), "Murallas §9.6", &format!("Reparadas {reparadas}; tiempo mediano de reparación {} min.", mediana(&tiempos).map_or("—".into(), |v| format!("{v:.0}")))),
@@ -287,9 +291,9 @@ fn invariantes(x: &Entrada) -> Vec<Metrica> {
         uno("inv_heroe_solo", "Campamentos destruidos por un héroe solo", k.heroe_solo, "Combate §7.2", "Decisión del autor (2026-10-23): un héroe sin soldados no destruye ningún campamento."),
         uno("inv_cascada", "Conquistas que no siguen las cascadas", k.cascada, "Combate §8-§9, Comercio_Caravanas §10, Murallas §9.6", "La plaza pasa al vencedor, protegida y ocupada, sin nadie dentro ni residiendo, sin caravanas aparcadas ni trueques vivos, y la muralla completa pierde su fracción de celdas."),
         uno("inv_ruina", "Plazas en ruinas que dejan algo atrás", mv.ruina, "Comercio_Caravanas §10 y Combate §9", "Sin flota, sin residentes y sin nadie dentro."),
-        uno("inv_reposicion", "Guarniciones de serie repuestas a deshora", mv.reposicion, "Combate §7.3 y §7.4", "El pueblo se completa a un minero cada 12 min desde la primera baja (con todas las bajas del episodio); la avanzada, a las 6 h del primer combate que la mermó."),
-        uno("inv_batalla", "Batallas o cosas apartadas por una batalla", mv.batalla, "Batalla_Unity_Ciclo §2", "Sin servidores de batalla todo se resuelve con números: nada queda en batalla, y lo que está en batalla no se mueve."),
-        uno("inv_foto", "Foto ida y vuelta a mitad de la corrida con otro hash", mv.foto, "Reloj_Y_Eventos (foto `BAN26`)", "A mitad de la corrida se serializa el núcleo, se reconstruye por la persistencia y se sigue con el reconstruido."),
+        uno("inv_reposicion", "Guarniciones de serie repuestas a deshora", mv.reposicion, "Combate §7.3 y §7.4", "El pueblo se completa a un minero cada 12 min desde la primera baja (con todas las bajas del episodio); la avanzada, a un soldado cada 6 h / soldados de su guarnición completa, también desde la primera baja."),
+        uno("inv_batalla", "Batallas o cosas apartadas fuera de la convocatoria de un asedio", mv.batalla, "Batalla_Unity_Ciclo §2 y §4", "Sin servidores de batalla todo se resuelve con números; solo un asedio abre una batalla, que dura su convocatoria de 30 s (M8): ninguna otra, ninguna activa pasada la convocatoria y nada apartado fuera de ellas."),
+        uno("inv_foto", "Foto ida y vuelta a mitad de la corrida con otro hash", mv.foto, "Reloj_Y_Eventos (foto `BAN27`)", "A mitad de la corrida se serializa el núcleo, se reconstruye por la persistencia y se sigue con el reconstruido."),
         uno("inv_almacen", "Almacenes fuera de [0, capacidad]", v.almacen, "Economia_Construccion §15", "Cada 6 horas de mundo."),
         uno("inv_carga", "Carros y caravanas por encima de su capacidad", v.carga, "Comercio_Caravanas §5", "Cada 6 horas de mundo."),
         uno("inv_fracciones", "Cantidades almacenadas que no son unidades enteras", v.fraccion, "Economia_Construccion §4 (economía entera, C3b)", "Almacenes, carros, caravanas, almacenes personales, existencias, trueques y órdenes: cada 6 horas de mundo."),
@@ -315,7 +319,7 @@ fn rendimiento(x: &Entrada) -> Vec<Metrica> {
 fn determinismo(x: &Entrada) -> Vec<Metrica> {
     vec![
         metrica("determinismo", "Reproducción del azar (mismo escenario reducido, dos veces)", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.0 as u8 as f64), "Arquitectura/13 §4 (núcleo determinista)", "El escenario reducido con la misma semilla dos veces: mismo `hash_estado()` final."),
-        metrica("determinismo_foto", "Foto ida y vuelta (BAN26) a mitad del escenario reducido", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.1 as u8 as f64), "Reloj_Y_Eventos (foto)", "El escenario reducido reconstruido desde su foto a mitad de camino acaba con el mismo hash que sin interrumpir."),
+        metrica("determinismo_foto", "Foto ida y vuelta (BAN27) a mitad del escenario reducido", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.1 as u8 as f64), "Reloj_Y_Eventos (foto)", "El escenario reducido reconstruido desde su foto a mitad de camino acaba con el mismo hash que sin interrumpir."),
     ]
 }
 

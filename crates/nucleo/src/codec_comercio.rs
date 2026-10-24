@@ -5,7 +5,7 @@
 //! acuerdos{n u64 · n × acuerdo} · libro{órdenes{n u64 · n × orden} · historial{ídem}} · flota{n u64 · n × caravana} ·
 //! reputación{n u64 · n × (facción u32, valor i64, t0 i64, alianzas u32)} · última caravana{n u64 · n × (plaza u64, instante i64)} ·
 //! red{aristas{n u64 · n × (x0,y0,x1,y1 i64)} · rutas{n u64 · n × (origen u32, destino u32, facción u32, aristas{n u64 · n × arista}, último
-//! lanzamiento i64)}} · reparto{n u64 · n × (plaza u64, instante i64)} · mercenarios{contadores{carga} · repone{carga} (BAN26) · repone_en i64 · stock{n u64 · n ×
+//! lanzamiento i64)}} · reparto{n u64 · n × (plaza u64, instante i64)} · mercenarios{contadores{carga} · repone{carga} (BAN27) · repone_en i64 · stock{n u64 · n ×
 //! (campamento u32, carga)} · pulso opt_i64}`. El carro (`suministro`) y las caravanas adjuntas de cada columna viajan con la columna
 //! (`estado`); la residencia, el almacén personal y el cupo diario de cada comprador, con su héroe (`codec_militar`).
 //! Un acuerdo: `id u64 · a u32 · b u32 · líneas_a{n u64 · n × (recurso u8, total i64, entregada i64)} · líneas_b · creado_en i64 ·

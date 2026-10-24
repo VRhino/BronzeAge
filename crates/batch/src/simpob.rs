@@ -356,7 +356,7 @@ fn comprometer_muralla(v: &mut Villa, t: Instante, minuto: i64, re: &ReglasEcono
             reg.recinto_celdas = trazo.celdas.len();
             reg.recinto_puertas = trazo.celdas.iter().filter(|c| c.clase == trazado::ClaseCelda::Puerta).count();
             reg.recinto_comprometido = Some(minuto);
-            a.comprometer_recinto(t, NIVEL_RECINTO, trazo.celdas, &mut vec![]);
+            a.comprometer_recinto(t, NIVEL_RECINTO, trazo.celdas, trazo.red_de_puertas, trazo.tras_pieza, &mut vec![]);
             sincronizar_recintos(a, &mut v.urbe);
         }
         Err(e) => reg.recinto_error = Some(e),

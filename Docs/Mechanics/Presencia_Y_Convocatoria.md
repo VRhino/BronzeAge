@@ -163,6 +163,7 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
 - **`fijarPuerta { asentamientoId, heroeId, cerradaA[] }`**: quien puede es el **Gobernador residente** de la plaza o el **Rey** de su Facción (no hace falta que esté presente); es **un único estado** (el último manda). Guarda `puertaCerradaA = grupos únicos`. No expira. Evento `asentamiento.puerta_fijada`.
 - **`vetarJugador { asentamientoId, heroeId, vetadoId, vetar }`**: solo el **Gobernador residente**. Añade o quita a `vetadosIds` (ordenado). **A un residente no se le veta** (`PuertaInvalidaError`): eso es el exilio. Evento `asentamiento.veto`.
 - La regla que decide quién entra (residente > veto > grupo > propia Facción) está en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md).
+- **Decisión Q1 del autor (2026-10-24):** esta es la puerta del sistema político (por grupos con `aedas`, vetos, por defecto cerrada a neutrales y enemigos) y **cerrar o vetar expulsa** a quien ya no puede entrar, como `FijarAcceso` hoy. *Implementado en Rust (5A, reglas puras):* `politica::puerta`; las órdenes `FijarPuerta` y `VetarJugador` sustituyen a `FijarAcceso` en 5E.
 
 ## 9. La convocatoria (ejército en preparación)
 

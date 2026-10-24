@@ -33,7 +33,7 @@
 //! # Lo que comprueba
 //! Cada `Atacar` aceptado pasa por [`auditmil`] (bajas, experiencia, heridos, conservación, carros, botín, héroe solo, cascadas de la conquista); cada media hora,
 //! los invariantes militares de [`ViolacionesMilitares`] (experiencia, hambre, heridos, batallas, reposiciones, ruinas) y cada 6 horas los del comercio y la
-//! economía (`auditoria`). Con `foto`, a mitad de la corrida el núcleo se reconstruye desde su foto `BAN26` y se sigue con el reconstruido.
+//! economía (`auditoria`). Con `foto`, a mitad de la corrida el núcleo se reconstruye desde su foto `BAN27` y se sigue con el reconstruido.
 
 use crate::auditmil::{self, Antes, ViolacionesCombate};
 use crate::auditoria::{auditar_cola, auditar_contenedores, Violaciones};
@@ -167,6 +167,18 @@ enum Accion {
     Turno { bot: usize, cita: Option<u32> },
     Observar,
     Foto,
+    /// Un milisegundo antes de que acabe la convocatoria de un asedio: la foto de antes del combate.
+    AntesDelAsedio { batalla: u64 },
+    /// Acabó la convocatoria y el asedio se resolvió con números: se audita como una orden de ataque.
+    FinDelAsedio { batalla: u64 },
+}
+
+/// Un asedio abierto que espera el fin de su convocatoria: quién lo abrió, con qué columna y contra qué plaza, y la foto de antes del combate.
+struct AsedioAbierto {
+    bot: usize,
+    columna: u64,
+    plaza: u64,
+    antes: Option<Antes>,
 }
 
 /// Un combate resuelto por una orden (o un acoso de bandidos): su tipo, quién ganó y los dos poderes (milésimas).
@@ -196,7 +208,7 @@ pub struct ViolacionesMilitares {
     pub reposicion: u64,
     /// Una plaza en ruinas de la que queda flota, residentes o quien esté dentro.
     pub ruina: u64,
-    /// El hash tras la foto (`BAN26`) ida y vuelta no es el de antes.
+    /// El hash tras la foto (`BAN27`) ida y vuelta no es el de antes.
     pub foto: u64,
 }
 
@@ -226,8 +238,8 @@ pub struct Medidas {
     /// esperan a que se lea su hecho), y cuánto tardó cada reposición completa.
     reponiendo: BTreeMap<u64, VecDeque<(Instante, i64)>>,
     pub reposiciones_pueblo: Vec<i64>,
-    /// Avanzada → el instante del primer combate que dejó incompleta su guarnición de serie, de cada reposición, en orden.
-    reponiendo_avanzada: BTreeMap<u64, VecDeque<Instante>>,
+    /// Avanzada → lo mismo que `reponiendo`, con los soldados de su guarnición de serie (también vuelven de uno en uno).
+    reponiendo_avanzada: BTreeMap<u64, VecDeque<(Instante, i64)>>,
     pub reposiciones_avanzada: Vec<i64>,
     /// Lo que cada clase de orden sacó de los almacenes de las plazas, por recurso (milésimas).
     pub gasto: BTreeMap<(&'static str, Recurso), i64>,
@@ -235,6 +247,10 @@ pub struct Medidas {
     pub trigo_a_viveres: i64,
     pub chatarra_generada: i64,
     pub asedios_descartados: u64,
+    /// Asedios abiertos (la orden aceptada), columnas que se unieron a su convocatoria y conquistas con más de una columna.
+    pub asedios_abiertos: u64,
+    pub uniones_a_asedios: u64,
+    pub conquistas_con_convocatoria: u64,
     /// Ataques de un héroe sin soldados a un campamento de bandidos.
     pub ataques_solos: u64,
     pub persecuciones_sin_alcance: u64,
@@ -301,6 +317,8 @@ struct Sim<'a> {
     experiencia_heroe: BTreeMap<u64, i64>,
     foto: Option<([u8; 32], [u8; 32])>,
     dir_foto: Option<PathBuf>,
+    /// Batalla → el asedio con números que espera el fin de su convocatoria.
+    asedios: BTreeMap<u64, AsedioAbierto>,
 }
 
 /// El arranque del núcleo del batch militar: las reglas de siempre (con los bandidos), sin fotos automáticas.
@@ -345,6 +363,7 @@ pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, fot
         experiencia_heroe: BTreeMap::new(),
         foto: None,
         dir_foto: None,
+        asedios: BTreeMap::new(),
     };
     s.fundar_todas(plazas);
     s.arrancar(foto);
@@ -540,6 +559,12 @@ impl Sim<'_> {
                 }
                 Accion::Observar => self.observar(t),
                 Accion::Foto => self.ida_y_vuelta(),
+                Accion::AntesDelAsedio { batalla } => {
+                    if let Some(a) = self.asedios.get_mut(&batalla) {
+                        a.antes = Some(Antes::de(&self.n, a.columna, ObjetivoAtaque::Asentamiento(a.plaza)));
+                    }
+                }
+                Accion::FinDelAsedio { batalla } => self.fin_del_asedio(t, batalla),
             }
         }
         self.n.avanzar_hasta(self.fin);
@@ -548,7 +573,7 @@ impl Sim<'_> {
         self.comprobar(self.fin);
     }
 
-    /// La foto `BAN26` ida y vuelta: se serializa el núcleo, se escribe como foto en un directorio de persistencia, se reconstruye desde él y se sigue con el
+    /// La foto `BAN27` ida y vuelta: se serializa el núcleo, se escribe como foto en un directorio de persistencia, se reconstruye desde él y se sigue con el
     /// reconstruido (que escribe su registro en ese directorio hasta el final). El hash ha de ser el mismo.
     fn ida_y_vuelta(&mut self) {
         self.leer();
@@ -1230,7 +1255,25 @@ impl Sim<'_> {
         }
         let Some(Contenido::Plaza { heroes, .. }) = self.n.informes_de_inspeccion(heroe).iter().find(|x| x.objetivo == Objetivo::Asentamiento(p)).map(|x| x.contenido.clone()) else { return true };
         let defensa = self.defensa_supuesta(t, p, &heroes);
-        100 * self.poder_de_columna(c) >= MARGEN_ASEDIO_PCT * defensa
+        let poder: i64 = std::iter::once(c).chain(self.refuerzos(t, i, p).into_iter().map(|(_, col)| col)).map(|col| self.poder_de_columna(col)).sum();
+        100 * poder >= MARGEN_ASEDIO_PCT * defensa
+    }
+
+    /// Las columnas que se unirían a la convocatoria de un asedio de `i` contra la plaza `p` (M8): las que mandan otros bots de su Facción o de una aliada, en el mapa, libres,
+    /// con soldados y con su héroe sano, a `radioEncuentro` de la plaza. (Bot, columna), en el orden de los bots.
+    fn refuerzos(&self, t: Instante, i: usize, p: u64) -> Vec<(usize, u64)> {
+        let Some(puerta) = self.n.estado().asentamientos.get(&p).map(|a| a.posicion) else { return vec![] };
+        let radio = self.n.estado().reglas.economia.militar.logistica.radio_encuentro;
+        let yo = self.bots[i].faccion;
+        (0..self.bots.len())
+            .filter(|&j| j != i && (self.bots[j].faccion == yo || self.n.relacion(yo, self.bots[j].faccion) == Some(Relacion::Alianza)))
+            .filter_map(|j| {
+                let col = self.n.estado().ejercito_de_heroe(self.bots[j].heroe)?;
+                let e = self.n.ejercito(col)?;
+                let libre = e.columna.lider == self.bots[j].heroe && !e.en_batalla && self.n.en_el_mapa(col) && e.posicion_en(t).dist(puerta) <= radio;
+                (libre && self.n.soldados_de_columna(col).unwrap_or(0) > 0 && !self.n.heroe_herido(self.bots[j].heroe)).then_some((j, col))
+            })
+            .collect()
     }
 
     /// La defensa que el bot supone a la plaza: la inspección le dice quién está dentro y él sabe con qué defiende cada uno (la guarnición de los residentes y el loadout
@@ -1265,7 +1308,43 @@ impl Sim<'_> {
             return;
         }
         self.medidas.ataques_solos += (solo && matches!(obj, ObjetivoAtaque::Campamento(_))) as u64;
-        let ef = auditmil::comparar(&self.n, &antes, t, c, obj);
+        if let ObjetivoAtaque::Asentamiento(p) = obj {
+            return self.abrir_asedio(t, i, c, p);
+        }
+        let ef = auditmil::comparar(&self.n, &antes, t, &[c], obj);
+        self.apuntar_combate(t, i, c, obj, &ef);
+    }
+
+    /// El asedio con números se abre con su convocatoria de 30 s (M8): se unen los refuerzos que están a tiro y se audita al acabar, como una orden de ataque.
+    fn abrir_asedio(&mut self, t: Instante, i: usize, c: u64, p: u64) {
+        self.medidas.asedios_abiertos += 1;
+        let Some((batalla, fin)) = self.n.batalla_sobre(Ubicacion::Asentamiento(p as u32)).and_then(|b| Some((b.id, b.convocatoria_hasta?))) else { return };
+        for (j, _) in self.refuerzos(t, i, p) {
+            let heroe = self.bots[j].heroe;
+            if self.suya(t, j, "UnirseABatalla", Comando::UnirseABatalla { heroe, batalla, lado: None }).aceptada() {
+                self.medidas.uniones_a_asedios += 1;
+            }
+        }
+        self.asedios.insert(batalla, AsedioAbierto { bot: i, columna: c, plaza: p, antes: None });
+        self.programar(fin - 1, Accion::AntesDelAsedio { batalla });
+        self.programar(fin, Accion::FinDelAsedio { batalla });
+    }
+
+    fn fin_del_asedio(&mut self, t: Instante, batalla: u64) {
+        let Some(AsedioAbierto { bot, columna, plaza, antes: Some(antes) }) = self.asedios.remove(&batalla) else { return };
+        let Some(b) = self.n.batalla(batalla) else { return };
+        let columnas: Vec<u64> = std::iter::once(columna).chain(b.bloqueo.ejercitos.iter().copied().filter(|&x| x != columna && self.n.ejercito(x).is_some_and(|e| b.lado_de(e.columna.lider) == Some(combate::resolucion::Lado::Atacante)))).collect();
+        let obj = ObjetivoAtaque::Asentamiento(plaza);
+        let ef = auditmil::comparar(&self.n, &antes, t, &columnas, obj);
+        if ef.combate().is_some_and(|h| h.codigo == "combate.asedio_conquista" && h.dato("columnas") > 1) {
+            self.medidas.conquistas_con_convocatoria += 1;
+        }
+        self.apuntar_combate(t, bot, columna, obj, &ef);
+    }
+
+    /// Lo que se mide de un ataque ya resuelto (por la orden o, en un asedio, al acabar la convocatoria).
+    fn apuntar_combate(&mut self, t: Instante, i: usize, c: u64, obj: ObjetivoAtaque, ef: &auditmil::Efecto) {
+        let yo = self.bots[i].faccion;
         self.combate.sumar(&ef.v);
         let m = &mut self.medidas;
         ef.bajas_por_tropa.iter().for_each(|(&tr, &q)| *m.bajas_por_tropa.entry(tr).or_insert(0) += q);
@@ -1305,20 +1384,15 @@ impl Sim<'_> {
         }
         m.carros_perdidos_adjuntas += ef.hechos.iter().filter(|x| x.codigo == "ejercito.caravanas_perdidas").map(|x| x.dato("carros")).sum::<i64>();
         // La guarnición de serie que queda mermada empieza su reposición si estaba completa (o acaba de nacer) y, si ya se reponía, la sigue sin reiniciarla.
-        let mineros = self.n.estado().reglas.economia.combate.pueblos.mineros;
+        let llena = match obj {
+            ObjetivoAtaque::Pueblo(_) => self.n.estado().reglas.economia.combate.pueblos.mineros,
+            ObjetivoAtaque::Avanzada(x) => soldados_de_serie_completa(&self.n, x).0,
+            _ => 0,
+        };
         match (obj, ef.serie) {
-            (ObjetivoAtaque::Pueblo(x), (antes, Some((d, _)))) => {
-                let (a, completa) = antes.unwrap_or((mineros, true));
-                if d < a {
-                    let q = m.reponiendo.entry(x).or_default();
-                    match q.back_mut() {
-                        Some(abierta) if !completa => abierta.1 += a - d,
-                        _ => q.push_back((t, a - d)),
-                    }
-                }
-            }
             (ObjetivoAtaque::Avanzada(x), (_, None)) => drop(m.reponiendo_avanzada.remove(&x)),
-            (ObjetivoAtaque::Avanzada(x), (antes, Some((d, _)))) if antes.is_none_or(|(a, completa)| d < a && completa) => m.reponiendo_avanzada.entry(x).or_default().push_back(t),
+            (ObjetivoAtaque::Pueblo(x), (antes, Some((d, _)))) => apuntar_reposicion(m.reponiendo.entry(x).or_default(), antes, d, llena, t),
+            (ObjetivoAtaque::Avanzada(x), (antes, Some((d, _)))) => apuntar_reposicion(m.reponiendo_avanzada.entry(x).or_default(), antes, d, llena, t),
             _ => {}
         }
         if let (ObjetivoAtaque::Asentamiento(p), true) = (obj, ef.combate().is_some_and(|h| h.codigo == "combate.asedio_conquista")) {
@@ -1415,8 +1489,10 @@ impl Sim<'_> {
                 }
             }
             "avanzada.guarnicion_repuesta" => {
-                if let Some(desde) = m.reponiendo_avanzada.get_mut(&(dato("avanzada") as u64)).and_then(|q| q.pop_front()) {
-                    self.militares.reposicion += (t != desde + self.n.estado().reglas.economia.combate.avanzada.reposicion) as u64;
+                let avanzada = dato("avanzada") as u64;
+                if let Some((desde, perdidos)) = m.reponiendo_avanzada.get_mut(&avanzada).and_then(|q| q.pop_front()) {
+                    let cada = soldados_de_serie_completa(&self.n, avanzada).1;
+                    self.militares.reposicion += (t != desde + perdidos * cada) as u64;
                     m.reposiciones_avanzada.push(t - desde);
                 }
             }
@@ -1450,8 +1526,12 @@ impl Sim<'_> {
         // Un herido lo está `heridoMinutos` como mucho.
         let herido = e.reglas.economia.militar.heroe.herido;
         v.herido += n.heroes().filter(|h| h.heroe.herido_hasta.is_some_and(|x| x > t + herido)).count() as u64;
-        // Sin servidores de batalla no hay batallas ni nada apartado por una.
-        v.batalla += n.batallas().count() as u64 + e.ejercitos.values().filter(|x| x.en_batalla).count() as u64;
+        // Sin servidores de batalla solo hay asedios con números en su convocatoria (M8): ninguna otra batalla, ninguna activa pasada su convocatoria y nada apartado
+        // que no esté en una de ellas.
+        let activas: Vec<&combate::ciclo::Batalla> = n.batallas_activas().collect();
+        v.batalla += n.batallas().filter(|b| !matches!(b.ticket.contexto, combate::ciclo::Contexto::Asedio { .. })).count() as u64;
+        v.batalla += activas.iter().filter(|b| !b.en_convocatoria(t)).count() as u64;
+        v.batalla += e.ejercitos.values().filter(|x| x.en_batalla && !activas.iter().any(|b| b.bloqueo.ejercitos.contains(&x.id))).count() as u64;
         // El hambre: una columna sin víveres y con soldados tiene su cita de deserción, y una con víveres no.
         let citas: BTreeSet<u64> = e.cola.volcar().iter().filter(|ev| e.generaciones.es_vigente(ev.clave) && matches!(ev.carga, Carga::Militar(SucesoMilitar::Desercion))).map(|ev| ev.clave.entidad).collect();
         for x in e.ejercitos.values().filter(|x| !x.en_batalla) {
@@ -1497,6 +1577,26 @@ impl Sim<'_> {
             heroes_exiliados: exiliados,
             bandidos: n.campamentos_de_bandidos().count(),
         });
+    }
+}
+
+/// Los soldados de la guarnición de serie completa de una avanzada y cada cuánto vuelve uno (Combate §7.4).
+fn soldados_de_serie_completa(n: &Nucleo, avanzada: u64) -> (i64, Instante) {
+    let e = n.estado();
+    let cr = &e.reglas.economia.combate;
+    let escuadras = e.combate.avanzadas.get(&avanzada).map_or(&[][..], |g| &g.escuadras);
+    (escuadras.iter().map(|s| cr.militar.tropas.tropa(s.tropa).unidades).sum(), combate::avanzada::reposicion_en(cr, escuadras, 0))
+}
+
+/// Apunta las bajas de un combate en las reposiciones de una guarnición de serie: si estaba completa (o acaba de nacer, `antes` vacío), abre una con el instante
+/// de la primera baja; si ya se reponía, la sigue sin reiniciarla (suma los soldados perdidos).
+fn apuntar_reposicion(q: &mut VecDeque<(Instante, i64)>, antes: Option<(i64, bool)>, despues: i64, llena: i64, t: Instante) {
+    let (a, completa) = antes.unwrap_or((llena, true));
+    if despues < a {
+        match q.back_mut() {
+            Some(abierta) if !completa => abierta.1 += a - despues,
+            _ => q.push_back((t, a - despues)),
+        }
     }
 }
 

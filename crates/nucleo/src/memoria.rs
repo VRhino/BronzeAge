@@ -1,6 +1,6 @@
 //! La memoria de la niebla (Niebla_De_Guerra §2, §4 y §6, 4H T3d): lo que cada Facción ha explorado, la última ficha de cada sitio ajeno que vio, lo que explora un héroe sin bandera, hasta
 //! dónde tiene grabado cada columna lo que ve, y la intel de las tabernas (las Miradas compradas y el último Informe de cada plaza). Es estado de juego (lo explorado decide qué se proyecta;
-//! las fichas y las Miradas, qué se conoce y qué se puede comprar): entra en el hash y en la foto (`BAN26`).
+//! las fichas y las Miradas, qué se conoce y qué se puede comprar): entra en el hash y en la foto (`BAN27`).
 //!
 //! Lo graba el núcleo al cerrar cada versión (`nucleo/exploracion.rs`), nunca un muestreo: una columna barre su recorrido exacto desde su último [`Vigia`] cuando algo la toca, y lo que
 //! lleva andado desde entonces se deriva de su plan (la proyección lo suma). Así la memoria es la misma con sesiones y sin ellas y no depende de cada cuánto se mire.

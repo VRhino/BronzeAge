@@ -892,7 +892,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN26");
+    assert_eq!(&bytes[..5], b"BAN27");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1208,6 +1208,14 @@ impl Esc {
         let t = self.n.ahora() + ms;
         self.n.avanzar_hasta(t);
     }
+    /// Deja pasar el día de protección con que nacen las plazas (Doc 1.2).
+    fn sin_proteccion(&mut self) {
+        for plaza in [self.a, self.b] {
+            if let Some(h) = self.n.protegida_hasta(plaza) {
+                self.n.avanzar_hasta(h.max(self.n.ahora()));
+            }
+        }
+    }
     fn pos(&self, plaza: u64) -> Punto {
         self.n.estado().asentamientos[&plaza].posicion
     }
@@ -1260,6 +1268,7 @@ fn montar(m: &M, semilla: u64) -> Esc {
         e.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
     }
     e.avanzar(9 * HORA);
+    e.sin_proteccion();
     e
 }
 
@@ -1474,6 +1483,7 @@ fn por_unity_la_conquista_daña_la_muralla_un_30_por_ciento_igual_que_con_numero
     }
     let antes = e.n.economia(b).unwrap().recintos[0].clone();
     let (celdas, perdidas) = (antes.celdas.len(), antes.celdas.len() * 300_000 / 1_000_000);
+    e.sin_proteccion();
 
     let beto = e.heroe_en(&m.0, "beto", 2, b);
     e.defensor(beto, &[Tropa::MiliciaLanceros]);
@@ -2011,7 +2021,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN26");
+        assert_eq!(&bytes[..5], b"BAN27");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();

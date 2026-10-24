@@ -7,7 +7,7 @@ reconfigura y vuelve), el **mercado de una plaza** (órdenes y mostrador), el **
 peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ruinas.
 
 - **Verificado contra:** `e83cb9b` (2026-10-11) más las decisiones de esa jornada (comisión, recargo por reputación, reparto, capacidad, reputación entre Facciones).
-- **Corregido el 2026-10-24: economía entera** (decisión C3b del autor y dudas EE-1 a EE-6 del mismo día; Rust, foto `BAN26`). Todo lo que se guarda o se mueve va en **unidades enteras** (múltiplos de 1.000 milésimas). **Regla (EE-1): lo que se mueve se redondea hacia abajo; lo que se cobra, hacia arriba**. Nunca se crea de más. En este documento:
+- **Corregido el 2026-10-24: economía entera** (decisión C3b del autor y dudas EE-1 a EE-6 del mismo día; Rust, foto `BAN27`). Todo lo que se guarda o se mueve va en **unidades enteras** (múltiplos de 1.000 milésimas). **Regla (EE-1): lo que se mueve se redondea hacia abajo; lo que se cobra, hacia arriba**. Nunca se crea de más. En este documento:
   - **Trueque** (§4.1): cada línea pactada se redondea hacia abajo al proponer; una línea de menos de una unidad es `cantidad_no_positiva`. Una línea solo se salda **entregada entera**: la regla del 2026-10-19 «faltar menos de una unidad salda la línea» **se retira** (EE-6, §4.4).
   - **Reparto** (§4.3): cada línea carga `min(stock, faltante, capacidad libre)` redondeado hacia abajo a unidades (la capacidad de una caravana puede no ser entera).
   - **Comisión y recargo** (§3.3): se calculan como siempre y se **acuñan en unidades enteras hacia abajo** (11,25 de comisión acuñan 11); el recargo que sale del origen es el mismo entero que entra en el destino (el oro se conserva).
@@ -145,7 +145,7 @@ bonus      = 1 + min(1, distancia / distanciaParaBonusMax) × (bonusPorDistancia
 comisión   = origen.id == destino.id ? 0 : valorTotal × tasa × bonus
 ```
 
-La comisión se **acuña**: se suma como oro al almacén del **destino** (topada por su capacidad de oro) y no se resta de nadie. Es una de las fuentes de oro del juego (Doc 3.1). **Solo entre dos asentamientos
+La comisión se **acuña**: se suma como oro al almacén del **destino** (topada por su capacidad de oro; **lo que no cabe se pierde**, decisión del autor del 2026-10-24, C7) y no se resta de nadie. Es una de las fuentes de oro del juego (Doc 3.1). **Solo entre dos asentamientos
 distintos**: llevarse la carga a uno mismo no es comerciar (decidido el 2026-10-11).
 
 **Recargo por mala reputación** (`recargoPorReputacion`, decidido el 2026-10-11): si las Facciones de origen y destino son **distintas** y la reputación de la del **origen** es
@@ -814,7 +814,7 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 
 **Reputación (decidido el 2026-10-18):** el decaimiento baja de 0,2 a **0,002 por minuto** (placeholder a calibrar): con 0,2 un +5 o un −8 se borraban en 25-40 min y el umbral de −40 casi no se alcanzaba, contra el «decae lentamente» del canon (Doc 2.7). El bonus por minuto de alianza se reduce en la misma proporción (0,05 → 0,0005) para conservar la regla «por sí solo no sube la reputación por encima de ~0,05»: el bonus sigue por debajo del decaimiento (0,0005 < 0,002).
 
-Los bloques de las secciones anteriores son los de este sistema. Además, de otros documentos: `REPUTACION` (también en §4.6) y `NIVEL_FACCION.xp.truequeCumplido` (`Economia_Construccion.md`), `LOGISTICA`
+Los bloques de las secciones anteriores son los de este sistema. Además, de otros documentos: `REPUTACION` (también en §4.6) y `NIVEL_FACCION.xp.truequeCumplido` (`Diplomacia_Facciones.md` §3.5), `LOGISTICA`
 (`Movimiento_Ejercitos.md`), `MERCENARIOS` (`Tecnologia_Aedas.md`), `POLITICA_CATALOGO` y `EDIFICIO_CATALOGO` (`Economia_Construccion.md`).
 
 <!-- parametros:REPUTACION -->

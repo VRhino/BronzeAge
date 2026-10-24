@@ -5,5 +5,13 @@ members = [
   "crates/cola", "crates/rutas", "crates/persistencia", "crates/servidor",
   "crates/encuentros", "crates/vision", "crates/nucleo",
   "crates/territorio", "crates/informe", "crates/batch",
-  "crates/trazado", "crates/asentamiento", "crates/comercio", "crates/militar", "crates/combate",
+  "crates/trazado", "crates/asentamiento", "crates/comercio", "crates/militar", "crates/combate", "crates/politica",
 ]
+
+# Símbolos de depuración reducidos: los .pdb completos de cada binario de prueba llenaban decenas de GB.
+# Las trazas de un pánico siguen dando fichero y línea.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

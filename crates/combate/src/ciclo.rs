@@ -521,6 +521,18 @@ impl Batalla {
         Some(liberar)
     }
 
+    /// Sin servidores de batalla, un asedio se resuelve **con números** al acabar su convocatoria (calibración del sistema 4, M8): la batalla queda `aplicada` sin
+    /// resultado de Unity y suelta todos sus candados (los devuelve). `None` si no es un asedio activo o la convocatoria aún no acabó.
+    pub fn resolver_con_numeros(&mut self, ahora: Instante) -> Option<Vec<EscuadraId>> {
+        if !self.activa(ahora) || self.convocatoria_hasta.is_none_or(|h| ahora < h) {
+            return None;
+        }
+        let liberar = self.escuadras_con_candado();
+        self.aplicada_en = Some(ahora);
+        self.cerrar(EstadoBatalla::Aplicada, ahora);
+        Some(liberar)
+    }
+
     fn cerrar(&mut self, estado: EstadoBatalla, ahora: Instante) {
         self.estado = estado;
         self.cerrada_en = Some(ahora);

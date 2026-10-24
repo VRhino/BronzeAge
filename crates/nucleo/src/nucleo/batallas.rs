@@ -5,7 +5,8 @@
 //!
 //! # Cuándo se abre
 //! La abre `atacar` (no hay otra orden) siempre que el proceso tiene servidores de batalla ([`Reglas::batallas_en_unity`](crate::estado::Reglas)): **toda** batalla va a Unity, también
-//! bot contra bot (decisión del autor, cuarta ronda, 2026-10-22), y Unity la resuelve como pueda; sin servidores se resuelve con números. Se abre después de las mismas validaciones del
+//! bot contra bot (decisión del autor, cuarta ronda, 2026-10-22), y Unity la resuelve como pueda; sin servidores se resuelve con números, salvo el asedio, que abre la misma
+//! batalla con su convocatoria de 30 s y, al acabar, se resuelve con números con todas las columnas que se unieron (M8, 2026-10-24). Se abre después de las mismas validaciones del
 //! combate con números y, si procede, de declarar la guerra. Una plaza o un pueblo que ya están en una batalla no se atacan otra vez.
 //!
 //! # Quién defiende y quién ataca (2026-10-22, tercera ronda)
@@ -666,7 +667,7 @@ impl Nucleo {
     }
 
     /// El reparto por rondas del botín entre las columnas, hasta donde quepa en cada carro. Devuelve lo que se cargó (lo que no cabe en ninguna se pierde).
-    fn repartir_en_columnas(&mut self, columnas: &[u64], botin: &Mercancia) -> Mercancia {
+    pub(super) fn repartir_en_columnas(&mut self, columnas: &[u64], botin: &Mercancia) -> Mercancia {
         if columnas.is_empty() || botin.is_empty() {
             return Mercancia::new();
         }
@@ -719,6 +720,7 @@ impl Nucleo {
     /// Vence un plazo de una batalla (la clave de la cola ya garantiza que no cambió de estado desde que se programó).
     pub(super) fn suceso_de_batalla(&mut self, id: u64, suceso: SucesoBatalla, t: Instante) {
         match suceso {
+            SucesoBatalla::FinConvocatoria if !self.estado.reglas.batallas_en_unity => self.asedio_con_numeros(t, id),
             SucesoBatalla::FinConvocatoria => {
                 if self.estado.batallas.batallas.get(&id).is_some_and(|b| b.activa(t)) {
                     self.hecho_de_batalla(t, id, Hecho::ConvocatoriaCerrada, None);
@@ -741,6 +743,21 @@ impl Nucleo {
                 }
             }
         }
+    }
+
+    /// Sin servidores de batalla, el asedio acaba su convocatoria y se resuelve con números con todas las columnas que se unieron al ataque (calibración del sistema 4, M8): la
+    /// batalla queda `aplicada` sin resultado de Unity, suelta sus candados y devuelve al mundo lo apartado, y el combate es el de siempre ([`Nucleo::resolver_asedio_con_numeros`]).
+    fn asedio_con_numeros(&mut self, t: Instante, id: u64) {
+        let Some(liberar) = self.estado.batallas.batallas.get_mut(&id).and_then(|b| b.resolver_con_numeros(t)) else { return };
+        self.tr.tocar(Clase::Batalla, id);
+        let b = self.estado.batallas.batallas[&id].clone();
+        let Contexto::Asedio { asentamiento } = b.ticket.contexto else { unreachable!("solo un asedio tiene convocatoria") };
+        let atacantes = self.columnas_del_bando(&b, Lado::Atacante);
+        self.reservar(&liberar, None);
+        self.devolver_al_mundo(t, id);
+        self.programar_batalla(id);
+        let cae = self.resolver_asedio_con_numeros(t, u64::from(asentamiento), &atacantes);
+        self.hecho_de_batalla(t, id, Hecho::Aplicada, Some(if cae { Lado::Atacante } else { Lado::Defensor }));
     }
 
     // ───────────────────────────── Las órdenes ─────────────────────────────

@@ -637,10 +637,24 @@ fn la_ruina_de_la_madre_se_lleva_sus_pueblos_y_sus_carros_y_libera_los_nodos() {
 #[test]
 fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_sigue() {
     let m = con_mundo!();
-    let mut e = montar(m, 7, 2);
+    // Sin el día de protección con que nace la plaza (Doc 1.2): lo que se mide es la conquista con el carro aún en camino.
+    let montar_sin_proteccion = || {
+        let mut reglas = sin_bandidos();
+        std::sync::Arc::make_mut(&mut reglas.economia.combate).ocupacion.proteccion = 0;
+        let mut e = montar_con(Nucleo::nuevo(Arranque { reglas, ..arranque(m, 7) }), m, 2);
+        let id = e.pueblo_levantado();
+        (e, id)
+    };
+    // El asedio cae al acabar su convocatoria de 30 s y el viaje del carro es más corto: una primera pasada dice cuándo sale, y en la segunda (el mismo mundo) el asedio se
+    // abre 20 s antes.
+    let sale = {
+        let (mut e, id) = montar_sin_proteccion();
+        hasta_que_el_carro_vaya_cargado(&mut e, id);
+        e.n.ahora()
+    };
+    let (mut e, id) = montar_sin_proteccion();
     let plaza = e.plaza;
-    let id = e.pueblo_levantado();
-    let carro = hasta_que_el_carro_vaya_cargado(&mut e, id);
+    e.n.avanzar_hasta(sale - 20_000);
     // La conquista de verdad: el ejército de Beto (F2) asedia la madre, que no tiene quien la defienda, y cae sin combate.
     let p = e.n.estado().asentamientos[&plaza].posicion;
     let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
@@ -648,7 +662,9 @@ fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_s
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
     e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
+    let carro = e.pueblo(id).carro.unwrap();
     // Los pueblos son de la plaza: pasan con ella (y su zona) al conquistador, y la flota traspasada, también el carro de acarreo.
     assert!(e.n.pueblo(id).is_some_and(|(madre, p)| madre == plaza && p.carro == Some(carro)));
     assert_eq!(e.n.caravana(carro).unwrap().estado, EstadoCaravana::EnTransito);
@@ -935,7 +951,9 @@ fn si_la_madre_cae_en_ruinas_salen_todos_de_su_pueblo_y_si_es_conquistada_solo_l
     let heroe = e.n.ejercito(beto).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    sin_proteccion(&mut e.n, plaza);
     e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     assert!(e.n.pueblo(pueblo).is_some_and(|(madre, _)| madre == plaza));
     let [(col_neu, neu), (col_alia, alia), (col_ene, ene)] = visitas[..] else { unreachable!() };
@@ -966,7 +984,9 @@ fn al_conquistar_la_madre_su_acceso_vuelve_al_de_por_defecto_y_el_pueblo_lo_here
     let heroe = e.n.ejercito(beto).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    sin_proteccion(&mut e.n, plaza);
     e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     assert_eq!(e.n.acceso_de_plaza(plaza), Some(nucleo::Acceso { aliados: true, neutrales: true, enemigos: false }), "el acceso vuelve al de por defecto");
     assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo), "con el acceso reiniciado el neutral (respecto al dueño nuevo) puede entrar: se queda dentro");
@@ -992,7 +1012,9 @@ fn al_conquistar_la_madre_con_el_acceso_por_defecto_salen_del_pueblo_los_enemigo
     let heroe = e.n.ejercito(beto).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    sin_proteccion(&mut e.n, plaza);
     e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true), "el acceso por defecto no deja entrar a los enemigos del dueño nuevo: sale con lo suyo");
 }
@@ -1062,7 +1084,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN26");
+    assert_eq!(&bytes[..5], b"BAN27");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1148,4 +1170,20 @@ fn el_pueblo_ajeno_se_recuerda_como_una_ciudad_y_se_olvida_cuando_se_vuelve_a_mi
     e.n.avanzar_hasta(fin + MIN);
     assert!(e.n.estado().memoria.fichas.get(&2).is_none_or(|f| !f.contains_key(&Sitio::Pueblo(pueblo))), "olvidado");
     assert!(recordado(&e.n).is_none());
+}
+
+/// Un asedio con números se resuelve al acabar su convocatoria de 30 s (calibración del sistema 4, M8): deja pasar las que haya abiertas.
+fn tras_la_convocatoria(n: &mut Nucleo) {
+    let fin = n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
+    if let Some(h) = fin {
+        n.avanzar_hasta(h);
+    }
+}
+
+/// Deja pasar el día de protección con que nace la plaza (Doc 1.2): después se la puede asediar.
+fn sin_proteccion(n: &mut Nucleo, plaza: u64) {
+    if let Some(h) = n.protegida_hasta(plaza) {
+        let t = h.max(n.ahora());
+        n.avanzar_hasta(t);
+    }
 }

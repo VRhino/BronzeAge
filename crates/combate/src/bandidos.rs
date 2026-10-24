@@ -194,7 +194,7 @@ mod pruebas {
         assert!(!aparece_junto_a_plaza(true, None, 0));
         assert!(!aparece_junto_a_plaza(false, Some(100), 99));
         assert!(aparece_junto_a_plaza(false, Some(100), 100), "justo al cumplirse el plazo");
-        assert_eq!(reaparece_en(r(), 5 * MS_POR_MINUTO), 65 * MS_POR_MINUTO);
+        assert_eq!(reaparece_en(r(), 5 * MS_POR_MINUTO), 365 * MS_POR_MINUTO, "6 h después");
     }
 
     #[test]

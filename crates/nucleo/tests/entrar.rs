@@ -533,7 +533,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN26");
+    assert_eq!(&bytes[..5], b"BAN27");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].acceso, Acceso { aliados: false, neutrales: true, enemigos: true });
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -879,8 +879,9 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
     let t = e.n.ahora();
     e.ok("gus", Comando::Atacar { heroe: gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: false });
+    tras_la_convocatoria(&mut e.n);
     let conquista = &hechos(&e.n, "asentamiento.conquistada")[0];
-    assert_eq!((conquista.0, dato(conquista, "faccion")), (t, 2), "la plaza cae");
+    assert_eq!((conquista.0, dato(conquista, "faccion")), (t + 30_000, 2), "la plaza cae al acabar la convocatoria");
 
     // 1. Cada héroe defensor queda fuera, en el mundo, con las escuadras que usó en la batalla (las que sobrevivieron), en su propia columna y con su carro.
     let ha = e.n.heroe(ana).unwrap();
@@ -920,8 +921,9 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
 }
 
 #[test]
-fn una_columna_no_aparca_su_caravana_si_lo_que_lleva_en_sus_carros_no_cabe_sin_ellos() {
-    // Hallado por `batch militar` (2026-10-24): la columna que cargaba con la capacidad de su caravana adjunta la aparcaba y seguía por encima de su capacidad.
+fn al_aparcar_la_caravana_lo_que_la_columna_ya_no_puede_llevar_se_queda_en_ella() {
+    // Hallado por `batch militar` (2026-10-24): la columna que cargaba con la capacidad de su caravana adjunta la aparcaba y seguía por encima de su capacidad. La carga sigue a
+    // los carros (calibración del sistema 4, M10): lo que no cabe sin ellos se queda en la caravana aparcada.
     let m = con_mundo!();
     let (mut e, c) = dos_plazas(m, 7);
     e.avanzar(24 * HORA);
@@ -935,15 +937,18 @@ fn una_columna_no_aparca_su_caravana_si_lo_que_lleva_en_sus_carros_no_cabe_sin_e
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     let un_carro = mr().logistica.capacidad_carro;
     assert!(e.n.capacidad_de_carga(ej).unwrap() > un_carro, "la caravana suma sus carros a la capacidad de la columna");
-    // Con lo justo para un carro, se aparca; la vuelve a enganchar y carga una unidad más: ya no.
+    // Con lo justo para un carro, se aparca sin dejar nada; la vuelve a enganchar y carga 7 más: esas 7 se quedan en la caravana.
     e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: un_carro });
     e.ok("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a });
+    assert!(e.n.caravana(k).unwrap().contenido.is_empty());
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
-    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: 1_000 });
-    let antes = (e.n.version(), e.n.hash_estado());
-    assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a }), rechazos::CARRO_LLENO);
-    assert_eq!((e.n.version(), e.n.hash_estado()), antes, "el rechazo no deja rastro");
-    assert_eq!(e.ejercito(ej).caravanas_adjuntas, vec![k]);
+    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: 7_000 });
+    e.ok("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a });
+    assert!(e.ejercito(ej).caravanas_adjuntas.is_empty());
+    assert_eq!(e.ejercito(ej).columna.carga.get(&Trigo), Some(&un_carro), "la columna se queda con lo que le cabe");
+    assert_eq!(e.n.caravana(k).unwrap().contenido.get(&Trigo), Some(&7_000), "lo demás, en la caravana aparcada");
+    let h = hechos(&e.n, "ejercito.caravana_aparcada");
+    assert_eq!(h.iter().map(|x| dato(x, "dejado")).collect::<Vec<_>>(), vec![0, 7_000]);
 }
 
 #[test]
@@ -994,6 +999,7 @@ fn un_residente_que_conservaba_su_columna_para_las_caravanas_y_defiende_sale_con
     let (_, gus) = e.atacante(&[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
     e.ok("gus", Comando::Atacar { heroe: gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: false });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&a].faccion, 2, "la plaza cae");
     // Sale con la columna que conservaba —la caravana sigue enganchada— y con la milicia que defendió y sobrevivió; la mitad del carro, para el vencedor.
     let ha = e.n.heroe(ana).unwrap();
@@ -1005,4 +1011,12 @@ fn un_residente_que_conservaba_su_columna_para_las_caravanas_y_defiende_sale_con
     assert_eq!(e.ejercito(ej).columna.escuadras, vec![milicia]);
     assert_eq!(e.ejercito(ej).columna.carga.get(&Madera).copied(), Some(15_000), "la mitad de los 30 000 del carro");
     assert!(e.n.heroe(ana).unwrap().carro.is_empty());
+}
+
+/// Un asedio con números se resuelve al acabar su convocatoria de 30 s (calibración del sistema 4, M8): deja pasar las que haya abiertas.
+fn tras_la_convocatoria(n: &mut Nucleo) {
+    let fin = n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
+    if let Some(h) = fin {
+        n.avanzar_hasta(h);
+    }
 }

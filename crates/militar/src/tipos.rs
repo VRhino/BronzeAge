@@ -29,9 +29,35 @@ pub fn sumar(carga: &mut Carga, r: Recurso, n: Mil) {
     }
 }
 
+/// Saca de la carga lo que pasa de `capacidad` (del último recurso al primero, en el orden de la carga) y lo devuelve: lo que ya no cabe cuando el carro pierde capacidad.
+pub fn sacar_lo_que_sobra(carga: &mut Carga, capacidad: Mil) -> Carga {
+    // En unidades enteras (C3b): sale lo que sobra hacia arriba, para que lo que se queda quepa aunque la capacidad no sea entera.
+    let mut sobra = base::entero_arriba(total(carga) - capacidad.max(0));
+    let mut fuera = Carga::new();
+    for (&r, n) in carga.iter_mut().rev() {
+        if sobra <= 0 {
+            break;
+        }
+        let x = (*n).min(sobra);
+        (*n, sobra) = (*n - x, sobra - x);
+        sumar(&mut fuera, r, x);
+    }
+    carga.retain(|_, n| *n > 0);
+    fuera
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
+
+    #[test]
+    fn lo_que_sobra_sale_del_ultimo_recurso_al_primero() {
+        let mut c = Carga::from([(Recurso::Madera, 5_000), (Recurso::Piedra, 3_000)]);
+        assert!(sacar_lo_que_sobra(&mut c, 9_000).is_empty(), "si cabe, nada");
+        let fuera = sacar_lo_que_sobra(&mut c, 4_000);
+        assert_eq!((total(&fuera), total(&c)), (4_000, 4_000));
+        assert_eq!(c, Carga::from([(Recurso::Madera, 4_000)]), "la piedra sale entera y luego la madera");
+    }
 
     #[test]
     fn la_carga_suma_y_totaliza() {

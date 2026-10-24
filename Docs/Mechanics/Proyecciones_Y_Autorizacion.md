@@ -392,6 +392,8 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 La autorización del motor TypeScript (`session/comandos/autorizacion.ts`, verificada contra `3d19d31`): con cargos, residencia y presencia. En Rust aún no existe (§5.1); queda aquí como la regla que el sistema 5 tiene que traer. Las secciones siguientes son sus filas.
 
+> **Implementado en Rust (2026-10-24, 5A, solo los predicados):** `crates/politica::autorizacion` (`Actor` sobre una `Vista` de las plazas que dará el núcleo): `ciudadano`, `rey`, `rey_o_embajador`, `residente`, `presente`, `reside`, `cargo`, `algun_cargo`, `autoridad_diplomatica`, `rey_de_faccion`, `rey_de_la_plaza`, `responde_solicitudes` (fail-closed), `asigna_rey`, `asigna_cargo_local`, `fija_puerta`, `veta`, `mueve_tropa_de`, `opera_aparcada`, `dirige_aedas`, `compra_intel_en`, `compra_tecnologia_aeda`, `se_muda_a` y `ciudadano_o_sin_faccion`, con el fail-open de §4.2. La matriz de §5.1 no cambia hasta 5E, que retira `manda_en` y pasa cada orden a su fila de esta sección.
+
 Todas las filas admiten únicamente el rol `jugador` (más `cancelarBatalla`, §5.2.9). La columna «Condición» es lo que se evalúa **además** de «héroe existente y dentro del mundo».
 
 #### 5.2.1 Sin condición adicional (23)
@@ -503,6 +505,8 @@ Documento: [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (y [`Fundacion_Y
 Condición: `enEjercito(params.ejercitoId)`. **No exige ser el Líder**: cualquier participante puede estacionar (la cesión de mando de una coalición no existe en esta fase); que el comando exija además ser el Líder (cancelar la marcha, Doc 5.14.3) lo comprueba el motor.
 
 `adjuntarCaravana`, `soltarCaravana`, `cargarCaravana`, `entregarDeCaravana`, `estacionarEjercito` — [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md).
+
+**No se adopta en Rust** (contraste del sistema 5, C16): que cualquier participante estacione choca con la decisión de la 4B-2 (lo da el Líder, [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md)); queda lo de §5.1.
 
 #### 5.2.9 Administración (1)
 

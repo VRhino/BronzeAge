@@ -86,7 +86,7 @@ impl Perfil {
 /// senos entera para las ranuras. **4** (2026-10-23, como el TypeScript): sin disco urbano para anclas ni satélites, el círculo de
 /// barrido del núcleo de un ancla, el ancla llena en cuanto no cabe la huella pedida, la Granja que crece busca sitio conservando
 /// su camino y el ancla que nace al proponer.
-pub const LAYOUT_VERSION: u32 = 4;
+pub const LAYOUT_VERSION: u32 = 5;
 
 /// Constantes de T §2.1 y §12 más las dos locales (`FONDO_MANZANA`, `NIVEL_GATE_ANCLAS`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -172,10 +172,22 @@ impl Pieza {
 pub struct Recinto {
     /// Celdas de muro y torre: ocupan suelo siempre.
     pub muros: Vec<Celda>,
-    /// Celdas de puerta: transitables, no ocupan ni se siembran como calle.
+    /// Celdas de puerta: transitables, no ocupan suelo.
     pub puertas: Vec<Celda>,
+    /// La red que el recinto conserva en sus puertas (`LAYOUT_VERSION` 5): cada puerta y su tramo de calle o camino a cada lado, tal como era al
+    /// trazarlo. Se siembra conectada a la red al rehacerla, en el punto en que se trazó (T §5.1, Murallas.md §3).
+    pub red_de_puertas: Vec<CeldaDeRed>,
+    /// La pieza de mayor id que había al trazarlo: la red de las puertas entra tras ella al rehacer la red.
+    pub tras_pieza: u32,
     /// `integridad ≥ 1`: solo un recinto completo activa la preferencia intramuros (T §6.6).
     pub completo: bool,
+}
+
+/// Una celda de la red de calles: calle (urbana) o camino (rural).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CeldaDeRed {
+    pub celda: Celda,
+    pub camino: bool,
 }
 
 /// Qué se quiere colocar. `radio_ul` es el `radioCiudad` en unidades locales (T §2.1).

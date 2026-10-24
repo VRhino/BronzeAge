@@ -8,13 +8,14 @@ desaparece), la **derrota** y los **títulos** de prestigio.
 
 - **Reescrito el 2026-10-13** para el mundo reactivo: lo que corría «cada tick» (reputación, tributo, títulos, liberación de vasallos) pasa a ritmos y a reevaluaciones por dependencia ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)), y la guerra incorpora la regla nueva de que **toda agresión entre Facciones exige guerra o la declara** (§5.4). El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Diplomacia_Facciones.md`.
 - **Verificado contra:** `71d5758` (2026-10-11).
+- **Implementado en Rust (2026-10-24, 5A): las reglas puras** en `crates/politica` (sin núcleo todavía: las órdenes siguen dando `orden.no_disponible` hasta 5B-5F). Módulos: `faccion` (§3.1-§3.4), `nivel` (§3.5), `cargos` y `residencia` (§3.4, §4.1-§4.2), `capital` (§3.7), `sigilo` (§3.8), `puerta` (§4.3), `relaciones` (§5.2-§5.9), `propuestas` (§2.4, §5.3, §6.1-§6.2), `tributo` (§5.6), `liga` (§5.7), `titulos` (§7), `traslado` (§6.3) y `autorizacion` (los predicados de `Proyecciones_Y_Autorizacion.md` §4.3 y §5.2). Aplican las decisiones del autor del 2026-10-24 (Q1-Q8, `Docs/Arquitectura/Sistema5_Contraste_y_Plan.md`) y la economía entera (C3b): el tributo paga unidades enteras con resto oculto. La reputación sigue en `comercio::reputacion`: `politica` devuelve sus `Suceso`s.
 - **Fuentes:** `engine/faccion.ts`, `engine/cargos.ts`, `engine/pertenencia.ts`, `engine/capital.ts`, `engine/sigilo.ts`, `engine/reputacion.ts`, `engine/diplomacia.ts`, `engine/liga.ts`, `engine/anexion.ts`,
   `engine/fusion.ts`, `engine/trasladoDeFaccion.ts`, `engine/titulos.ts`, `engine/mercenarios.ts` (residir en un campamento), `engine/ubicacion.ts` (cruzar la puerta), `session/comandos/{crearFaccion,
   ingresoEnFaccion,dejarFaccion,cargos,diplomacia,anexion,fusion,presencia}.ts`, `session/comandos/autorizacion.ts`.
 - **Canon:** [`Docs/Game/2_Sistema_Politico_Facciones_y_Cargos.md`](../Game/2_Sistema_Politico_Facciones_y_Cargos.md) (y Doc 0 para el glosario, Doc 1.10.5 para la puerta).
 - **No está aquí:** las consecuencias militares de una guerra o de una alianza (aliados no se atacan, repostar, refugio: → [`Combate.md`](Combate.md) y [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md)); la visión
-  compartida de aliados y vasallos (→ [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md)); la experiencia que sube el nivel de Facción (los eventos que la dan están en cada sistema; la curva, en
-  `Economia_Construccion.md`); el desalojo de residentes al conquistar una plaza (→ `Combate.md`); el Rey y la Aeda/épica (→ [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md)); el generador aleatorio (**nada de esto lo consume**).
+  compartida de aliados y vasallos (→ [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md)); la experiencia que sube el nivel de Facción (los eventos que la dan están en cada sistema; la curva y las cifras, en
+  el bloque `NIVEL_FACCION` de §3.5); el desalojo de residentes al conquistar una plaza (→ `Combate.md`); el Rey y la Aeda/épica (→ [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md)); el generador aleatorio (**nada de esto lo consume**).
 
 ## 2. Modelo de datos
 
@@ -68,23 +69,23 @@ su columna (si va solo) toma la Facción. Sin sigilo dado se le asigna `sigiloLi
 ### 3.2 Entrar (`solicitarIngreso`, `responderSolicitud`)
 
 - **Pedir:** el actor no es ciudadano de ninguna; entra en `solicitudesIds` de esa Facción (pedir dos veces es pedir lo mismo). Puede pedir a **varias** a la vez.
-- **Responder:** solo el **Rey** de esa Facción. **Aceptar** (el héroe no es ya ciudadano de otra): lo añade al final de `ciudadanosIds` y lo quita de **todas** las listas de solicitantes; su exploración personal
+- **Responder:** solo el **Rey** de esa Facción. **Aceptar** (el héroe no es ya ciudadano de otra): lo añade al final de `ciudadanosIds` y lo quita de **todas** las listas de solicitantes (si la Facción se había quedado sin nadie, **pasa a ser su Rey**: 5A-8, 2026-10-24; vale para cualquier vía de dar la ciudadanía, también la de la administración); su exploración personal
   se funde en la memoria de la Facción y su columna la toma. **Denegar:** solo lo quita de esa lista. Aceptar no da residencia: para vivir en una plaza se muda (§4.2).
-- La caducidad de las solicitudes es un **evento**; `sinSolicitudesCaducadas` quita de las listas a cualquier ciudadano cuando cambia la ciudadanía (red de seguridad).
+- **Las solicitudes no caducan**; al ganar la ciudadanía en una Facción (crearla o ser aceptado) se borran de todas las listas (`sinSolicitudesDe`; `sinSolicitudesCaducadas` era la red de seguridad del tick).
 
 ### 3.3 Salir (`dejarFaccion`)
 
 Sin parámetros: solo la propia. `quitarCiudadania`: lo quita de `ciudadanosIds`; si era el **Rey**, el trono pasa al **primero de `ciudadanosIds`** (`null` si no queda nadie); el Embajador se vacía si era el que
 se iba **o** si es el nuevo Rey. Además, si reside en una plaza, **deja la residencia** y sus cargos locales y la guarnición (§4.2); si reside en un campamento, sigue allí. Estampa `salidasFaccionPorHeroe`. Su columna
-(si va solo) queda sin Facción. No cuenta para el cooldown de residencia.
+(si va solo) queda sin Facción. No cuenta para el cooldown de residencia. Quien deja la residencia al irse pasa al **campamento de mercenarios más cercano** (§4.2, Doc 0), con sus escuadras (el TypeScript lo dejaba sin residencia: divergencia, decisión 10 del plan del sistema 5). **Q7 (decisión del autor, 2026-10-24):** dejar la Facción yendo en un ejército **se rechaza siempre**, también si el ejército es de un solo héroe (5A-4, 2026-10-24), y en una convocatoria con otros héroes: primero se separa o lo deshace entrando en una plaza o campamento, y si es el Líder, cede antes el mando (un ejército es siempre de una sola Facción).
 
 ### 3.4 Cargos
 
 - **Rey** (`asignarRey`): el designado ha de ser ciudadano. La primera asignación (sin Rey) la puede hacer cualquier ciudadano; con Rey, solo él traspasa el cargo. No hay votación.
 - **Embajador** (`asignarEmbajador`): lo designa el Rey, que debe existir; el designado es ciudadano (puede ser el propio Rey).
 - **Cargos locales** (`asignarCargoLocal`): el designado es ciudadano de la Facción dueña. El **Gobernador** lo designa **el Rey** (no exige que esté presente). Los otros cuatro (`tesorero`, `general`,
-  `maestroObras`, `sacerdote`) los designa el **Gobernador vigente**, residente y **presente** en la plaza, y solo si ya hay Gobernador. Un héroe puede ocupar varios cargos. El designado **no tiene que residir** ahí
-  (el motor no lo mira).
+  `maestroObras`, `sacerdote`) los designa el **Gobernador vigente**, residente y **presente** en la plaza, y solo si ya hay Gobernador. Un héroe puede ocupar varios cargos. **El designado ha de residir en la plaza** (decisión **Q4** del autor, 2026-10-24: un cargo que no puede ejercerse ni se vacía
+  nunca sería un hueco; el TypeScript no lo miraba). El cargo se vacía al dejar de residir.
 - **`admitirOtrasFacciones`:** el Rey fija `admiteOtrasEnAtaques`.
 - Un cargo local se vacía al dejar el héroe su residencia en esa plaza (§4.2); un cargo de Facción, al irse el héroe de la Facción.
 
@@ -95,9 +96,36 @@ calcularNivelFaccion = 1 + (cuántos umbrales de NIVEL_FACCION.xpParaNivel han a
 ```
 
 `experiencia` solo sube (`aplicarAjustesExperiencia` ignora lo ≤ 0). Quien da la experiencia (`aplicarExperiencia`) sube el nivel **en el mismo momento** (evento `faccion.nivel_subio`); el resto se recalcula al ocurrir el hecho
-(construcción, ascensos). El nivel de una Facción que nace de una fusión se calcula al nacer. Los eventos que dan experiencia y su cuantía (`NIVEL_FACCION.xp`) están en cada sistema.
+(construcción, ascensos). El nivel de una Facción que nace de una fusión se calcula al nacer. Qué hecho da experiencia lo cuenta cada sistema; la cuantía es el bloque `NIVEL_FACCION` de abajo (cifras de
+`typescript-final:src/constants.ts`, `NIVEL_FACCION`, las del canon Doc 2.2.1): `combate` por héroe participante y solo si el combate es digno (`ratioCombateDigno`; en Unity sin filtro),
+`edificioCompletado` por edificio, `conquista` por plaza conquistada, `ascensoPorNivel` × el nivel alcanzado, `fundacion` por plaza fundada que no sea la primera de la Facción, `truequeCumplido` a cada
+lado de un trueque entre Facciones distintas, y `bandidos` por campamento destruido (no por héroe) dividido por el nivel de la Facción y 0 desde `nivelSinXpBandidos`.
 - **Cap de fundación** (`calcularCapFundacion(nivel)`) = `CAP_FUNDACION_POR_NIVEL[min(10, nivel) − 1]`.
 - **Cupo de asentamientos en nivel 2 o 3** (`calcularCupoNivel(nivel, objetivo)`) = `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3[min(10, nivel) − 1]`.
+
+> **Implementado en Rust (2026-10-24, 5A, reglas puras):** `crates/politica::nivel`. La experiencia se guarda en **milésimas** (2,5 no cabe en un entero): `xp_de(Hecho)` da la de cada
+> hecho (bandidos: `1000 / nivel`, redondeado hacia abajo), `nivel(experiencia)` cuenta los umbrales alcanzados con tope `nivelMaximo` y `Facciones::aplicar_experiencia` ignora lo ≤ 0 y devuelve el
+> nivel nuevo si sube (el núcleo emite `faccion.nivel_subio`). `cap_fundacion` y `cupo_nivel` leen los bloques de este documento.
+
+<!-- parametros:NIVEL_FACCION -->
+```json
+{
+  "nivelMaximo": 10,
+  "xpParaNivel": [100, 180, 300, 480, 760, 1200, 1900, 3000, 4800],
+  "xp": {
+    "combate": 2.5,
+    "edificioCompletado": 1,
+    "conquista": 10,
+    "ascensoPorNivel": 30,
+    "fundacion": 20,
+    "truequeCumplido": 2,
+    "bandidos": 1
+  },
+  "nivelSinXpBandidos": 5,
+  "ratioCombateDigno": 0.5
+}
+```
+<!-- /parametros -->
 
 ### 3.6 Reputación
 
@@ -351,6 +379,10 @@ veta**. El grupo `aedas` lo usa `Tecnologia_Aedas.md`.
 
 > **Implementado en Rust (2026-10-22, entrar con todo): la puerta provisional.** Hasta el sistema político (5) no existen `fijarPuerta`, los vetos ni los grupos `aedas`. En su lugar `FijarAcceso { asentamiento, aliados, neutrales, enemigos }` (117) deja que quien manda en la plaza (`manda_en`: la administración o un ciudadano de su Facción) decida por **relación** (las de `FijarRelacion`: alianza o vasallaje → `aliados`; guerra → `enemigos`; el resto, y quien no tiene Facción, → `neutrales`) quién puede entrar; la misma Facción y los residentes pasan siempre. **Por defecto entran todos menos los enemigos** (la decisión del autor del 2026-10-22; el `PUERTA.cerradaAPorDefecto` del bloque, neutrales y enemigos, es del sistema político y no se aplica todavía). Los pueblos extractores y las avanzadas heredan el acceso de su plaza madre (`puede_entrar_en_pueblo`, `puede_entrar_en_avanzada`; se entra en ellos con `EntrarEnPueblo` y `EntrarEnAvanzada`, 2026-10-22). **Cerrar la puerta echa al mapa, al instante y con todo lo suyo, a quien ya está dentro y ya no puede entrar** (de la plaza y de sus pueblos y avanzadas; la misma Facción y los residentes no se expulsan nunca). Ver [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md).
 
+> **Decisión Q1 del autor (2026-10-24) e implementado en Rust (5A, reglas puras):** la puerta es la de esta sección: por grupos con `aedas`, vetos del Gobernador, **por defecto cerrada a neutrales y
+> enemigos** (`PUERTA.cerradaAPorDefecto`) y **cerrar o vetar expulsa** a quien ya no puede entrar. `crates/politica::puerta` (`Puerta::puede_entrar` por capas, `fijar`, `vetar`, `expulsados`,
+> `admite_aedas`). El núcleo sigue con `FijarAcceso` hasta 5E, que lo sustituye por `FijarPuerta` y `VetarJugador`.
+
 <!-- parametros:CIUDADANIA -->
 ```json
 {
@@ -461,6 +493,7 @@ Distintas, las dos existen y **no hay entre ellas ninguna relación activa de ni
 
 ### 5.4 Guerra y paz (`declararGuerra`, `proponerPaz`)
 **Toda agresión entre Facciones exige guerra o la declara** (decidido el 2026-10-11, Doc 2.4.1): atacar una caravana, saquear un pueblo, atacar una avanzada, atacar una columna o asediar una plaza. Si no hay guerra con el dueño del objetivo, `atacar` sin la confirmación `declaraGuerra: true` se rechaza con un `detalleError` que enumera las consecuencias; con ella, **declara la guerra** (cualquier héroe puede, no solo el Rey o el Embajador) y la guerra se arrastra por vasallaje como siempre. Excepción: unirse como atacante a un asedio que abrió otro, siendo neutral y admitido por el Rey de la Facción atacante, no la declara. El comando `declararGuerra` (Rey o Embajador) sigue existiendo.
+**Atacar a un aliado es una traición** (decisión **Q2** del autor, 2026-10-24): `atacar` con `declaraGuerra: true` contra una Facción con la que hay una **alianza** activa rompe la alianza en el acto (`rotaPor` = el atacante), le cuesta `penalizacionAtacarAliado` (−25, en lugar de los −12 de romperla, y **solo eso**: no suma los −15 de la guerra tras romper por la alianza que rompe en ese instante, 5A-1) y declara la guerra con su arrastre. Deja `rotaPor`/`rotaEn`, así que volver a declararle la guerra dentro de la ventana, tras una paz, sí cobra los −15. Con un vasallaje entre las dos se sigue rechazando (la vasalla se rebela, la señora libera). `declararGuerra` contra una aliada sigue exigiendo romper antes.
 Al declarar, si `atacante` rompió una alianza con `objetivo` (`rotaPor`) hace menos de `ventanaGuerraTrasRomperAlianzaDias` días (`rotaEn`), pierde `penalizacionGuerraTrasRomperAlianza` de reputación
 (`ajustesPorGuerraTrasRomper`, que aplica el comando). `romperRelacion` anota `rotaPor`/`rotaEn` solo en las alianzas; las que acaban por anexión o fusión no.
 
@@ -471,25 +504,25 @@ declarar(atacante, objetivo):  validarPar(atacante, objetivo)
     para cada id de bando, distinto del atacante :  nace una guerra atacante→id  salvo que ya haya una relación activa
                                                       del atacante con id  (el objetivo directo se incluye siempre: si la tiene, falló validarPar)
 ```
-Queda **una `RelacionPolitica` por Facción alcanzada**, todas con el mismo contador. No hay condición previa (ni frontera, ni casus belli, ni batalla). Solo **marca el estado** (la puerta, `enemigos`); atacar no exige guerra.
+Queda **una `RelacionPolitica` por Facción alcanzada**, todas con el mismo contador. No hay condición previa (ni frontera, ni casus belli, ni batalla). 
 **Paz:** por cada relación-guerra; la primera Facción en ofrecerla deja `pazPropuestaPor`; cuando la ofrece la **otra**, la guerra pasa a `rota` (`firmada`). La misma Facción no puede ofrecerla dos veces. Una guerra
 **no** se rompe con `romperRelacion`.
 
 ### 5.5 Romper
 - **`romperRelacion(relacionId, iniciador)`:** una guerra, no. **Alianza:** la rompe cualquiera de las dos; `penalizacionRomperAlianza` a quien rompe. **Vasallaje:** solo la señora (`bonusLiberarVasalloVoluntario` a ella);
-  la vasalla solo puede rebelarse. La relación pasa a `rota`.
+  la vasalla solo puede rebelarse. La relación pasa a `rota`. Romper o rebelarse sobre una relación **ya rota** se rechaza (5A-6, 2026-10-24; el TypeScript no lo miraba y volvía a cobrar la reputación).
 - **`rebelionVasallo(relacionId)`:** la vasalla; el vasallaje pasa a `rota`; los trueques `activo` **entre plazas de las dos Facciones** pasan a `expirado` (sin penalización); `penalizacionRebelionParaSenora` a la señora;
   y la vasalla **declara guerra a la señora** (con el arrastre de §5.4: a sus demás vasallos también). Evento `diplomacia.rebelion_vasallo`.
 - **Señor desarmado** (`liberarVasallosDeSenoresDesarmados`, **al perder la señora su última plaza**, antes del tributo): todo vasallaje activo cuya señora **no tiene ningún asentamiento** pasa a `rota`, sin reputación ni guerra; evento
   `diplomacia.vasallo_liberado`. Ocurre en el instante de la caída de la última plaza.
 - **Vasalla conquistada por un tercero** (`pasarVasallasConquistadas`, **al quedarse la vasalla sin plazas**, justo después del desarme del señor y antes del tributo; decidido el 2026-10-12): para todo vasallaje activo
   cuya vasalla **no tiene ninguna plaza** y cuyo `derrotadaPor` es otra Facción existente que **no es la señora**: el vasallaje pasa a `rota`, nace `vasallaje-{conquistador}-{vasalla}-c{instante}`
-  con el **mismo tributo**, y las guerras activas entre vasalla y conquistador pasan a `rota`. Sin reputación. Evento `diplomacia.vasallo_conquistado`. Llega al tick siguiente a la caída de la
-  última plaza. Con alguna plaza, por ruina (`derrotadaPor = null`) o si la conquistó la propia señora, no cambia nada.
+  con el **mismo tributo**, y **cualquier relación activa** entre vasalla y conquistador (la guerra, o la que hubiera) pasa a `rota`, para que nunca queden dos activas en el par (5A-3, 2026-10-24; el TypeScript solo acababa las guerras). Sin reputación. Evento `diplomacia.vasallo_conquistado`. Ocurre en el instante en que cae su
+  última plaza, justo después del desarme del señor. Con alguna plaza, por ruina (`derrotadaPor = null`) o si la conquistó la propia señora, no cambia nada.
 
 ### 5.6 Tributo (`avanzarTributos`, como flujo continuo)
-**Es un ritmo de flujo**: el `cantidadPorMinuto` pactado se mueve de la vasalla a la capital de la señora de forma continua; el servidor programa un evento si el stock de una plaza de la vasalla llega a 0 o el almacén de la capital se llena (cambian los ritmos). Lo que sigue describe la regla de reparto y de tope.
-Por cada vasallaje activo con tributo (decidido el 2026-10-11): el pactado `cantidadPorMinuto` se **reparte a partes iguales entre todos los asentamientos de la vasalla**; cada uno paga `min(su stock del recurso, su parte)` (si es > 0) y todo se suma al almacén de la **capital de la señora** (`encontrarCapital`, §3.7; topado por capacidad). Un evento `diplomacia.tributo_pagado` por plaza que paga (`señoraId` = la capital). Sin capital o sin plazas de la vasalla, no hay pago.
+**Se paga en el paso de minuto de cada plaza vasalla** (decisión **Q3** del autor, 2026-10-24): sin eventos nuevos en la cola, y en **enteros con resto oculto** (C3b): cada plaza acumula su parte en un resto oculto y paga las unidades enteras, sin pasar de su stock; lo que no paga en ese minuto se pierde (no es deuda). **Lo que no cabe en el almacén de la capital se paga igual y se pierde** (5A-2, 2026-10-24, como el TypeScript). `cantidadPorMinuto` va en milésimas (contrato `Tributo`). Lo que sigue describe la regla de reparto y de tope.
+Por cada vasallaje activo con tributo (decidido el 2026-10-11): el pactado `cantidadPorMinuto` se **reparte a partes iguales entre todos los asentamientos de la vasalla**; cada uno paga `min(su stock del recurso, su parte)` (si es > 0) y todo se suma al almacén de la **capital de la señora** (`encontrarCapital`, §3.7; topado por capacidad: el exceso se pierde). Un evento `diplomacia.tributo_pagado` por plaza que paga (`señoraId` = la capital). Sin capital o sin plazas de la vasalla, no hay pago.
 
 ### 5.7 Liga y Gran Rey (`computeLigas`)
 No se guarda. Componentes conexas del grafo de relaciones **activas** (cualquier tipo, la guerra incluida) con ≥ 2 Facciones. `tieneVasallaje`: hay un vasallaje activo dentro. **Gran Rey:** la Facción señora de la
@@ -530,7 +563,7 @@ Vale para cualquier batalla cuyo defensor sea de la vasalla (plaza, caravana, y 
 - **Responder** (Rey de B): aceptar vuelve a mirar todo lo anterior, que `a.reyId` siga siendo `propuestaPor` y que no haya batalla abierta.
 - **Nace C:** `id = faccion-fusion-{instante}-{A}-{B}`, `nombre`, `sigilo` de A, `reyId = nuevoReyId`, `embajadorId = null`, `experiencia = max`, `reputacion = max` de las dos, `nivel = calcularNivelFaccion`,
   `ciudadanosIds` vacío (luego se llenan), tecnología = **unión** (aparecidas y adoptadas; reveladas menos las ya aparecidas). **Capitales:** la marca de capital de cada plaza sale; solo la que tenía designada el Rey
-  electo pasa a `C` (`capitalDeFaccionId = C`); `capitalDesignadaEn` de C queda sin definir. Después `trasladarFaccion(A → C)` y `trasladarFaccion(B → C)`. El Rey que no lo es de C queda como ciudadano.
+  electo pasa a `C` (`capitalDeFaccionId = C`), tal cual, sin mirar si sigue vigente (5A-5: `capitalDesignada` ya ignora una marca sin Palacio activo); `capitalDesignadaEn` de C queda sin definir. Después `trasladarFaccion(A → C)` y `trasladarFaccion(B → C)`. El Rey que no lo es de C queda como ciudadano.
 
 ### 6.3 `trasladarFaccion(origen → destino)` (ruta única)
 Todo lo que lleva el id de `origen` pasa a `destino`, en este orden de efectos:

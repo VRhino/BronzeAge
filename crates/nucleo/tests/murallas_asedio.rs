@@ -271,6 +271,7 @@ fn el_asedio_con_numeros_multiplica_al_defensor_con_su_recinto_y_sin_recinto_es_
         let rng0 = e.n.estado().rng.estado();
         let r = e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b));
         assert!(r.aceptada(), "{r:?}");
+        tras_la_convocatoria(&mut e.n);
         let h = e.hecho_de_asedio();
         assert_eq!((dato(&h, "multiplicadorMuralla"), dato(&h, "murallaCompleta")), (esperado, i64::from(esperado > UNO)));
         let mut espejo = base::Rng::nuevo(rng0);
@@ -302,6 +303,7 @@ fn durante_una_mejora_defiende_el_anillo_en_pie_con_su_nivel_de_antes() {
     e.beto_dentro(&m.0, &[Tropa::MiliciaLanceros]);
     let ana = e.ejercito("ana", 1, e.pos(b), &ATAQUE);
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b)).aceptada());
+    tras_la_convocatoria(&mut e.n);
     let h = e.hecho_de_asedio();
     assert_eq!((dato(&h, "multiplicadorMuralla"), dato(&h, "murallaCompleta")), (antes, 1), "en pleno asedio defiende la empalizada y la plaza sigue teniendo muralla completa");
 }
@@ -344,6 +346,7 @@ fn la_conquista_daña_un_30_por_ciento_el_anillo_completo_y_se_repara_sola_a_cos
     let ana = e.ejercito("ana", 1, e.pos(b), &ATAQUE);
     let t = e.n.ahora();
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b)).aceptada());
+    tras_la_convocatoria(&mut e.n);
     // Sin defensores con soldados cae sin combate (como por Unity: el daño es de la conquista, no de cómo se resolvió).
     let a = &e.n.estado().asentamientos[&b];
     assert_eq!((a.faccion, a.economia.ocupado), (1, true));
@@ -353,7 +356,7 @@ fn la_conquista_daña_un_30_por_ciento_el_anillo_completo_y_se_repara_sola_a_cos
     let rec = &e.recintos_de_b()[0];
     assert_eq!(rec.levantadas(), n - perdidas + 1, "se dañaron {perdidas} de {n} y se repara una celda en el instante de la conquista");
     assert!(!rec.completo() && rec.danado() && rec.completado_en == completado_en, "dañado: no vuelve a estar «sin cerrar nunca»");
-    assert_eq!(rec.siguiente_celda_en, Some(t + 15 * MIN));
+    assert_eq!(rec.siguiente_celda_en, Some(t + 30_000 + 15 * MIN), "desde la conquista, al acabar la convocatoria");
     e.las_citas_cuadran(); // la reparación deja su cita y no sobra ninguna
     // Dañado, ya no vale: ni muralla completa, ni requisito del nivel 4, ni preferencia intramuros; el multiplicador es el de su integridad.
     assert!(!recintos::muralla_completa(e.recintos_de_b()) && recintos::nivel_del_mejor_completo(e.recintos_de_b()) == 0);
@@ -368,7 +371,7 @@ fn la_conquista_daña_un_30_por_ciento_el_anillo_completo_y_se_repara_sola_a_cos
     assert_eq!(codigo_de(&e.ord("ana", Comando::MejorarRecinto { asentamiento: b, cargo: Cargo::MaestroObras, recinto: 1 })), rechazos::MURALLAS_INCOMPLETO);
     // Se repara solo, una celda por cita, a costa de la plaza (el nuevo dueño), sin volver a anunciar el cierre.
     let madera = e.n.economia(b).unwrap().almacen.cantidad(Recurso::Madera);
-    e.hasta(t + 15 * MIN);
+    e.hasta(t + 30_000 + 15 * MIN);
     assert_eq!(e.recintos_de_b()[0].levantadas(), n - perdidas + 2, "la siguiente celda sale en su cita");
     assert!(e.n.economia(b).unwrap().almacen.cantidad(Recurso::Madera) < madera, "la reparación cuesta materiales de la plaza");
     e.terminar(0);
@@ -400,6 +403,7 @@ fn una_mejora_en_curso_no_recibe_dano_y_la_sigue_el_nuevo_dueno() {
     e.beto_dentro(&m.0, &[]);
     let ana = e.ejercito("ana", 1, e.pos(b), &ATAQUE);
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b)).aceptada());
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&b].faccion, 1);
     let c = &hechos(&e.n, "asentamiento.conquistada")[0];
     assert_eq!((dato(c, "murallaCompleta"), dato(c, "murallaDanada")), (1, 0), "tenía muralla completa y la mejora la protege del daño");
@@ -424,6 +428,7 @@ fn un_recinto_que_nunca_se_cerro_no_recibe_dano_ni_cuenta_como_muralla_completa(
     e.beto_dentro(&m.0, &[]);
     let ana = e.ejercito("ana", 1, e.pos(b), &ATAQUE);
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b)).aceptada());
+    tras_la_convocatoria(&mut e.n);
     let c = &hechos(&e.n, "asentamiento.conquistada")[0];
     assert_eq!((dato(c, "murallaCompleta"), dato(c, "murallaDanada")), (0, 0));
     assert_eq!(e.recintos_de_b()[0], antes, "en obra no se daña ni se toca");
@@ -439,6 +444,7 @@ fn una_plaza_sin_recintos_se_conquista_como_siempre() {
     e.beto_dentro(&m.0, &[]);
     let ana = e.ejercito("ana", 1, e.pos(b), &ATAQUE);
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b)).aceptada());
+    tras_la_convocatoria(&mut e.n);
     let c = &hechos(&e.n, "asentamiento.conquistada")[0];
     assert_eq!((dato(c, "murallaCompleta"), dato(c, "murallaDanada")), (0, 0));
     assert!(hechos(&e.n, "construccion.recinto_celda").is_empty() && e.recintos_de_b().is_empty());
@@ -632,4 +638,12 @@ fn la_conquista_y_la_reparacion_dan_el_mismo_mundo_normal_acelerado_y_a_trozos()
     let bytes = normal.estado().serializar();
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(), &m.0.hash().to_string()).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
+}
+
+/// Un asedio con números se resuelve al acabar su convocatoria de 30 s (calibración del sistema 4, M8): deja pasar las que haya abiertas.
+fn tras_la_convocatoria(n: &mut Nucleo) {
+    let fin = n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
+    if let Some(h) = fin {
+        n.avanzar_hasta(h);
+    }
 }

@@ -79,7 +79,7 @@ La **tendencia** «+N/min» del interior de una plaza (4H T3c) es la diferencia 
 
 ## 5. La foto y el contrato
 
-- **Foto `BAN26`** (`BAN25` se rechaza: sus almacenes guardaban milésimas sueltas y no traen el resto). `codec_economia` escribe, por recurso de cada almacén (plaza, pueblo, avanzada, huérfana), `cantidad · capacidad · resto`. Nada más cambia de formato: carros, caravanas, almacén personal y existencias ya se guardaban en milésimas y ahora son múltiplos de 1.000. La huella de reglas no cambia (no cambia ninguna cifra).
+- **Foto `BAN27`** (sobre la `BAN26` de la calibración del sistema 4; `BAN26` se rechaza: sus almacenes guardaban milésimas sueltas y no traen el resto). `codec_economia` escribe, por recurso de cada almacén (plaza, pueblo, avanzada, huérfana), `cantidad · capacidad · resto`. Nada más cambia de formato: carros, caravanas, almacén personal y existencias ya se guardaban en milésimas y ahora son múltiplos de 1.000. La huella de reglas no cambia (no cambia ninguna cifra).
 - **Contrato**: ningún campo cambia de tipo ni de unidad. Se documenta en `common.proto` (`Existencia`, `Cantidades`) y en `orders.proto` que lo almacenado es múltiplo de 1.000, que el resto oculto no viaja, que la tendencia es exacta y que una cantidad pedida se redondea hacia abajo. Solo comentarios: `buf breaking` limpio.
 
 ## 6. Cómo se vigila
@@ -99,7 +99,7 @@ La **tendencia** «+N/min» del interior de una plaza (4H T3c) es la diferencia 
 - **EE-2** La unidad sale del almacén al completarse su consumo (§3).
 - **EE-3** Los víveres, en unidades enteras con resto oculto (§2).
 - **EE-4** El peaje cobra como mínimo una unidad a toda caravana con carga: si la tasa no llega a una unidad en ningún recurso, una del recurso que más lleva (a igualdad, el primero del catálogo). Nunca deja la carga en cero (decisión del autor del mismo día): una caravana de una sola unidad pasa sin pagar.
-- **EE-5** La reposición de los campamentos es como mínimo una unidad por comercio: se anota al registrar cada comercio en `MercadoMercenario::repone` (nuevo en la foto `BAN26`), sin tocar los contadores de lo comerciado.
+- **EE-5** La reposición de los campamentos es como mínimo una unidad por comercio: se anota al registrar cada comercio en `MercadoMercenario::repone` (nuevo en la foto `BAN27`), sin tocar los contadores de lo comerciado.
 - **EE-6** Se retira la regla de la línea saldada por resto.
 - **EE-7** El salto de la reputación mediana se investiga en la fase 7, con C1b (`Mecanicas a balancear.md` §48).
 - Decisión técnica: la huella de las reglas no depende de los finales de línea (`texto_de_parametros_de` quita los `\r`).

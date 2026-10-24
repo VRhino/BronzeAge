@@ -117,15 +117,27 @@ fn las_puertas_son_una_por_cruce_y_conectan_con_la_red() {
         let t = trazar(&s.c, 1);
         assert!(t.puertas() >= 1, "ciudad {k}: sin puertas");
         let red = red_de(&s.c);
-        let n = t.celdas.len();
-        for i in 0..n {
-            let c = t.celdas[i];
-            // puerta ⇔ la celda ya era calle o camino de la ciudad
-            if c.clase == ClaseCelda::Puerta {
-                assert!(red.contains(&c.celda), "ciudad {k}: la puerta {:?} no está en la red", c.celda);
-                assert_ne!(t.celdas[(i + 1) % n].clase, ClaseCelda::Puerta, "ciudad {k}: dos puertas seguidas");
+        // puerta ⇒ la celda ya era calle o camino de la ciudad
+        for c in t.celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta) {
+            assert!(red.contains(&c.celda), "ciudad {k}: la puerta {:?} no está en la red", c.celda);
+        }
+        // y una puerta por cruce no parte la red (LAYOUT_VERSION 5): la de antes, sin las celdas cerradas del anillo, sigue siendo una pieza
+        let cerradas: HashSet<Celda> = t.celdas.iter().filter(|c| c.clase != ClaseCelda::Puerta).map(|c| c.celda).collect();
+        let abierta: HashSet<Celda> = red.iter().copied().filter(|c| !cerradas.contains(c)).collect();
+        let centro = s.c.piezas().iter().find(|p| p.rol == Rol::Centro).unwrap().rect;
+        let desde: Vec<Celda> = centro.anillo(s.c.params().ancho_calle).into_iter().filter(|c| abierta.contains(c)).collect();
+        let mut vistas: HashSet<Celda> = desde.iter().copied().collect();
+        let mut cola: VecDeque<Celda> = desde.into_iter().collect();
+        while let Some(Celda { col, row }) = cola.pop_front() {
+            for (dc, dr) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                let n = Celda::new(col + dc, row + dr);
+                if abierta.contains(&n) && vistas.insert(n) {
+                    cola.push_back(n);
+                }
             }
         }
+        let sueltas = abierta.iter().filter(|c| !vistas.contains(c)).count();
+        assert_eq!(sueltas, 0, "ciudad {k}: el muro deja {sueltas} celdas de red sin salida");
         // cada cruce con la red deja al menos una puerta: toda tirada de celdas de red del anillo tiene una puerta
         let con_red = t.celdas.iter().filter(|c| red.contains(&c.celda)).count();
         assert!(t.puertas() <= con_red, "ciudad {k}");
@@ -137,7 +149,7 @@ fn con_el_anillo_puesto_la_red_sigue_siendo_un_solo_componente() {
     for (k, s) in ciudades().iter().enumerate().step_by(3) {
         let t = trazar(&s.c, 2);
         let mut c = s.c.clone();
-        c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, false)]);
+        c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, &t.red_de_puertas, t.tras_pieza, false)]);
         // el muro ocupa y las puertas no
         for cm in &t.celdas {
             assert_eq!(
@@ -261,4 +273,33 @@ fn el_trazo_es_rapido() {
     eprintln!("anillo de {} celdas en {dt:?}", t.celdas.len());
     let tope = if cfg!(debug_assertions) { 5.0 } else { 0.5 };
     assert!(dt.as_secs_f64() < tope, "demasiado lento: {dt:?}");
+}
+
+/// La empalizada temprana (Murallas M1, decisión del autor del 2026-10-24, `LAYOUT_VERSION` 5): en esta ciudad de 45 piezas el camino de las granjas corre pegado al
+/// anillo y la puerta que dejaba «una por cruce» daba a una bolsa; con el muro, las cuatro granjas se quedaban sin camino y fuera no quedaba red. Ahora la puerta es la
+/// que cruza de verdad y la red que conserva a cada lado se siembra conectada: las granjas siguen con su camino, hay calle fuera y la ciudad crece por fuera.
+#[test]
+fn con_la_empalizada_temprana_la_granja_conserva_su_camino_y_la_ciudad_crece_por_fuera() {
+    let mut s = ciudad_de(501, Perfil::TODOS[1], 45);
+    let t = trazar(&s.c, 1);
+    assert!(!t.red_de_puertas.is_empty() && t.tras_pieza == s.c.piezas().iter().map(|p| p.id).max().unwrap());
+    s.c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, &t.red_de_puertas, t.tras_pieza, true)]);
+    let interior = interior_de(&s.c, &t.celdas).unwrap();
+    let anillo = celdas_de(&t);
+    let con_frente = |c: &Ciudad, p: &Pieza| p.rect.adyacentes().into_iter().any(|x| c.es_calle(x) || c.es_camino(x));
+    let granjas: Vec<&Pieza> = s.c.piezas().iter().filter(|p| p.categoria == Categoria::Afueras).collect();
+    assert!(granjas.len() >= 4 && granjas.iter().all(|p| con_frente(&s.c, p)), "las granjas conservan su camino");
+    let fuera = red_de(&s.c).into_iter().filter(|x| !interior.contiene(*x) && !anillo.contains(x)).count();
+    assert!(fuera > 0, "queda red fuera del anillo");
+    verificar(&s.c, s.radio());
+    // Lo que se coloca después da la misma red que reconstruir la ciudad entera (la red de las puertas entra tras la pieza `tras_pieza`).
+    let antes = s.c.piezas().len();
+    for i in 0..30 {
+        s.construir([T_VIVIENDA, T_ALMACEN, T_GRANJA][i % 3]);
+    }
+    let crece_fuera = s.c.piezas()[antes..].iter().filter(|p| p.categoria != Categoria::Afueras && !p.rect.celdas().all(|x| interior.contiene(x))).count();
+    assert!(crece_fuera > 0, "la ciudad crece por fuera del muro");
+    verificar(&s.c, s.radio());
+    let rehecha = Ciudad::desde_partes(s.c.semilla(), *s.c.params(), LAYOUT_VERSION, s.c.piezas().to_vec(), s.c.recintos().to_vec()).unwrap();
+    assert_eq!(red_de(&rehecha), red_de(&s.c), "colocar y reconstruir dan la misma red");
 }

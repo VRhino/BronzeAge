@@ -648,6 +648,8 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     let (a, b) = (e.a, e.b);
+    // A nace protegida un día (Doc 1.2): el guion empieza cuando ya se la puede asediar.
+    e.avanzar_hasta(e.n.protegida_hasta(a).unwrap());
     let c = tercera_plaza(&mut e, m);
     e.dar(a, Cobre, 200_000);
     e.dar(b, Cobre, 200_000);
@@ -670,7 +672,8 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 50_000)], salir_en: None });
     e.avanzar(20 * MIN);
     let ahora = e.n.ahora();
-    let donde = e.n.posicion_de_caravana(cb, ahora).unwrap();
+    // El asedio se resuelve al acabar su convocatoria de 30 s: ahí es donde la pilla la conquista.
+    let donde = e.n.posicion_de_caravana(cb, ahora + 30_000).unwrap();
     // La conquista de verdad: el ejército de Gus (F2) asedia la plaza A, que no tiene a nadie que la defienda, y cae sin combate.
     let p = pos(&e.n, a);
     let gus = e.n.crear_ejercito(ahora, "gus", 2, Punto::new(p.x + 2_000, p.y), 500, 100_000).unwrap();
@@ -678,6 +681,7 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe: heroe_gus, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
     e.ok("gus", Comando::Atacar { heroe: heroe_gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: true });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&a].faccion, 2, "la plaza cambió de dueño");
 
     // El trueque con la plaza se anula sin penalizar; la plaza sigue y su flota pasa con ella: la suya sigue su camino.
@@ -1436,4 +1440,12 @@ fn muchas_caravanas_viajando_a_la_vez_pequeno() {
 #[ignore = "mide 100 plazas con 200 caravanas viajando a la vez; en release"]
 fn rendimiento_de_200_caravanas() {
     medir_caravanas(100);
+}
+
+/// Un asedio con números se resuelve al acabar su convocatoria de 30 s (calibración del sistema 4, M8): deja pasar las que haya abiertas.
+fn tras_la_convocatoria(n: &mut Nucleo) {
+    let fin = n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
+    if let Some(h) = fin {
+        n.avanzar_hasta(h);
+    }
 }

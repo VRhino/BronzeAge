@@ -265,7 +265,7 @@ fn un_puesto_sin_sitio_se_salta_en_silencio() {
             }
         }
     }
-    urbe.set_recintos(vec![Recinto { muros, puertas: vec![], completo: false }]);
+    urbe.set_recintos(vec![Recinto { muros, puertas: vec![], completo: false, ..Default::default() }]);
     let antes = a.siguiente_edificio;
     let ev = avanzar(&re, &mut a, &mut urbe, 0, 481);
     assert!(ev.contains(&Evento::EdificioCompletado { id: mercado, tipo: Tipo::Mercado, nivel: 1 }));
@@ -317,7 +317,7 @@ fn la_mejora_de_la_granja_espera_su_hueco_y_la_manual_lo_exige() {
     let granja = 4;
 
     // Manual sin hueco: se rechaza antes de cobrar nada.
-    urbe.set_recintos(vec![Recinto { muros: muros_menos(urbe.ciudad(), granja), puertas: vec![], completo: false }]);
+    urbe.set_recintos(vec![Recinto { muros: muros_menos(urbe.ciudad(), granja), puertas: vec![], completo: false, ..Default::default() }]);
     let madera = a.almacen.cantidad(asentamiento::Recurso::Madera);
     assert_eq!(con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(0, &re.datos, x, granja, &mut vec![])), Err(ErrorObra::SinSitio));
     assert_eq!((a.almacen.cantidad(asentamiento::Recurso::Madera), a.edificio(granja).unwrap().mejora), (madera, None), "ni cobra ni arranca");
@@ -327,7 +327,7 @@ fn la_mejora_de_la_granja_espera_su_hueco_y_la_manual_lo_exige() {
     con_ciudad(&re, &mut urbe, |x| a.mejorar_ahora(0, &re.datos, x, granja, &mut vec![])).expect("ahora sí hay hueco");
     let completa_en = a.edificio(granja).unwrap().mejora.unwrap().completa_en;
     let termina = completa_en / MIN;
-    urbe.set_recintos(vec![Recinto { muros: muros_menos(urbe.ciudad(), granja), puertas: vec![], completo: false }]);
+    urbe.set_recintos(vec![Recinto { muros: muros_menos(urbe.ciudad(), granja), puertas: vec![], completo: false, ..Default::default() }]);
     let rect = urbe.ciudad().pieza(granja).unwrap().rect;
     let ev = avanzar(&re, &mut a, &mut urbe, 0, termina + 30);
     assert!(!ev.iter().any(|e| matches!(e, Evento::MejoraCompletada { .. })), "sin hueco no se completa");
@@ -394,12 +394,12 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     }
     // Los recintos viven en la economía de la plaza; la ciudad guarda solo su proyección y la foto no la persiste.
     let anillo = vec![CeldaMuro { celda: Celda::new(40, 40), clase: ClaseCelda::Muro }, CeldaMuro { celda: Celda::new(41, 40), clase: ClaseCelda::Muro }, CeldaMuro { celda: Celda::new(42, 40), clase: ClaseCelda::Puerta }];
-    economia.recintos.push(asentamiento::recintos::Recinto { id: 1, nivel: 1, celdas: anillo, avance: 2, mejora: Some(asentamiento::recintos::Mejora { nivel: 2, avance: 0 }), siguiente_celda_en: Some(77), comprometido_en: 5, completado_en: Some(9) });
+    economia.recintos.push(asentamiento::recintos::Recinto { id: 1, nivel: 1, celdas: anillo, red_de_puertas: vec![trazado::CeldaDeRed { celda: Celda::new(42, 40), camino: false }], tras_pieza: 3, avance: 2, mejora: Some(asentamiento::recintos::Mejora { nivel: 2, avance: 0 }), siguiente_celda_en: Some(77), comprometido_en: 5, completado_en: Some(9) });
     urbe.set_recintos(asentamiento::recintos::proyeccion(&economia.recintos));
-    assert_eq!(urbe.ciudad().recintos(), &[Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
+    assert_eq!(urbe.ciudad().recintos(), &[Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], red_de_puertas: vec![trazado::CeldaDeRed { celda: Celda::new(42, 40), camino: false }], tras_pieza: 3, completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default() });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN26", "el formato de foto es BAN26 (BAN25 guardaba milésimas sueltas en los almacenes y no traía su resto oculto; BAN24 no traía el interior que recuerda cada héroe de las plazas de las que salió; BAN23 era de la geometría 3 y reponía la guarnición de un pueblo de golpe; BAN22 no traía la memoria de la niebla; BAN21 no traía la tendencia «+N/min» de las plazas; BAN20 no congelaba la plaza de un asedio en el ticket de la batalla; BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
+    assert_eq!(&bytes[..5], b"BAN27", "el formato de foto es BAN27 (BAN26 guardaba milésimas sueltas en los almacenes y no traía su resto oculto; BAN25 era de la geometría 4, sin la red de las puertas de los recintos, y reponía la avanzada de golpe; BAN24 no traía el interior que recuerda cada héroe de las plazas de las que salió; BAN23 era de la geometría 3 y reponía la guarnición de un pueblo de golpe; BAN22 no traía la memoria de la niebla; BAN21 no traía la tendencia «+N/min» de las plazas; BAN20 no congelaba la plaza de un asedio en el ticket de la batalla; BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);

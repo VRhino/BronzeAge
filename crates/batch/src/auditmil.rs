@@ -209,8 +209,10 @@ fn perdida(antes: &BTreeMap<u64, Esc>, despues: &BTreeMap<u64, Esc>, ids: &[u64]
     ids.iter().map(|id| antes[id].cantidad - despues.get(id).map_or(0, |e| e.cantidad)).sum()
 }
 
-/// Compara la foto de antes con el estado de después de la orden de ataque de la columna `columna` contra `objetivo`, en `t`.
-pub fn comparar(n: &Nucleo, a: &Antes, t: Instante, columna: u64, objetivo: ObjetivoAtaque) -> Efecto {
+/// Compara la foto de antes con el estado de después de la orden de ataque de la columna `columnas[0]` contra `objetivo`, en `t`. En un asedio con convocatoria atacan
+/// juntas todas las `columnas` (la primera, la que lo abrió).
+pub fn comparar(n: &Nucleo, a: &Antes, t: Instante, columnas: &[u64], objetivo: ObjetivoAtaque) -> Efecto {
+    let columna = columnas[0];
     let hechos: Vec<Hecho> = n.cambios_desde(a.version).map(|c| c.flat_map(|c| c.eventos.iter()).map(|e| Hecho { codigo: e.codigo.to_string(), datos: e.datos.clone() }).collect()).unwrap_or_default();
     let despues = escuadras(n);
     let e = n.estado();
@@ -221,7 +223,7 @@ pub fn comparar(n: &Nucleo, a: &Antes, t: Instante, columna: u64, objetivo: Obje
     // Las bajas, bando a bando. El atacante son las escuadras de su columna (las apartadas no pierden nada); el resto del mundo, el defensor y lo que las reglas dejan a 0:
     // la escolta de una caravana que cae, el campamento de los residentes de una plaza conquistada, la guarnición de jugadores de una avanzada perdida y la escolta de las
     // adjuntas de una columna derrotada.
-    let atacantes: Vec<u64> = a.escuadras.iter().filter(|(_, x)| x.contenedor == Contenedor::Ejercito(columna)).map(|(&id, _)| id).collect();
+    let atacantes: Vec<u64> = a.escuadras.iter().filter(|(_, x)| columnas.iter().any(|&c| x.contenedor == Contenedor::Ejercito(c))).map(|(&id, _)| id).collect();
     let resto: Vec<u64> = a.escuadras.keys().copied().filter(|id| !atacantes.contains(id)).collect();
     // La guarnición de serie que nace en la orden cuenta con los soldados con que nació.
     let nacidas: i64 = despues.iter().filter(|(id, _)| !a.escuadras.contains_key(id)).map(|(_, x)| x.cantidad).sum();

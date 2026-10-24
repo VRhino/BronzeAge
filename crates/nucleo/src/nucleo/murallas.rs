@@ -180,7 +180,7 @@ impl Nucleo {
                     return Err(rechazo(MURALLAS_NO_ENVUELVE, "el recinto nuevo tiene que envolver por completo al anterior".into()));
                 }
                 let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
-                creada = Some(eco.comprometer_recinto(t, *nivel, trazo.celdas, &mut sucesos) as u64);
+                creada = Some(eco.comprometer_recinto(t, *nivel, trazo.celdas, trazo.red_de_puertas, trazo.tras_pieza, &mut sucesos) as u64);
                 true
             }
             Comando::MejorarRecinto { cargo, recinto, .. } => {

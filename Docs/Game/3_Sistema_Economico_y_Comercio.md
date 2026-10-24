@@ -251,7 +251,8 @@ siempre. Su escolta sin héroe queda a 0 unidades y vuelve al campamento de su h
 
 Un ejército con caravanas adjuntas que **entra en una plaza** (Doc 5.12.4) no las pierde: entran con él y salen con él, sean del origen que sean
 (2026-10-22; antes quedaban aparcadas solas). Para dejarlas en la plaza de su Facción, el jugador **aparca** la caravana a mano; así queda
-**aparcada** en esa plaza. Una caravana aparcada:
+**aparcada** en esa plaza. **La carga sigue a los carros** (decisión del autor, 2026-10-24): lo que el ejército llevaba gracias a los carros de la
+caravana y ya no le cabe sin ellos se queda en ella al aparcarla; si la caravana se pierde por el camino, se pierde con ella. Una caravana aparcada:
 
 - **Sigue siendo de su origen.** No la reparte el comercio automático de la plaza anfitriona, no cuenta contra
   su cupo de Mercado, y los bandidos no la tocan (está en una plaza amiga).
