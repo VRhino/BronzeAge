@@ -218,7 +218,7 @@ fn dos_plazas(m: &M, semilla: u64) -> (Escenario, u64) {
     let pa = sitio_rico(&n, &m.0, 0, 1);
     let a = fundar(&mut n, 0, "ana", 1, pa);
     assert!(n.aplicar_en(0, Peticion::nueva("admin", "nivel", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 }).de_admin()).aceptada());
-    let pc = sitio_rico(&n, &m.0, 2, 1);
+    let pc = sitio_rico(&n, &m.0, 0, 1);
     let c = fundar(&mut n, 0, "ana", 1, pc);
     (Escenario { n, a, cuenta: 0 }, c)
 }
@@ -533,7 +533,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].acceso, Acceso { aliados: false, neutrales: true, enemigos: true });
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

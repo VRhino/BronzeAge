@@ -499,4 +499,13 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `residencia.ya_reside` | `RESIDENCIA_YA_RESIDE` | — |
 | `residencia.vetado` | `RESIDENCIA_VETADO` | La plaza lo ha vetado (los vetos llegan en 5E). |
 | `residencia.sin_plaza` | `RESIDENCIA_SIN_PLAZA` | Dejar la residencia sin residir en ninguna plaza (en un campamento de mercenarios se cambia de campamento o se muda a una plaza). |
+
+### La capital de la Facción (sistema 5, tanda 5C; `ErrorCapital` del crate `politica`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `capital.plaza_ajena` | `CAPITAL_PLAZA_AJENA` | Designar capital una plaza que no es de la Facción. |
+| `capital.sin_palacio` | `CAPITAL_SIN_PALACIO` | La plaza no tiene un Palacio activo. |
+| `capital.ya_es_la_capital` | `CAPITAL_YA_ES_LA_CAPITAL` | La plaza ya es la capital (efectiva) de la Facción. |
+| `capital.cooldown` | `CAPITAL_COOLDOWN` | La capital designada sigue en pie y no han pasado `CAPITAL.cooldownDias` desde que se designó. |
 <!-- /rechazos -->

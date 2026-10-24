@@ -91,6 +91,7 @@ impl Nucleo {
             let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");
             a.faccion = conquistador;
             a.acceso = Acceso::default();
+            // La marca de capital sobrevive al cambio de dueño y deja de valer (Diplomacia_Facciones §3.7).
             let c = aplicar_conquista(&cr, &datos, &mut a.economia, t);
             (a.protegida_hasta, a.ocupada_hasta) = (Some(c.protegida_hasta), Some(c.ocupacion_hasta));
             c
@@ -104,6 +105,10 @@ impl Nucleo {
         self.estado.cola.programar(c.protegida_hasta, PRIO_ASENTAMIENTO, clave, Carga::Combate(SucesoCombate::FinProteccion));
         self.estado.cola.programar(c.ocupacion_hasta, PRIO_ASENTAMIENTO, clave, Carga::Combate(SucesoCombate::FinOcupacion));
         self.tr.tocar(Clase::Asentamiento, plaza);
+        self.cambiar_plaza_de_faccion(plaza, vieja, Some(conquistador));
+        // Las dos Facciones cambian (sus plazas, su capital); el conquistador gana la experiencia de la conquista (§3.5).
+        self.tr.tocar_todos(Clase::Faccion, [u64::from(vieja), u64::from(conquistador)]);
+        self.dar_experiencia_por(t, conquistador, politica::nivel::Hecho::Conquista, super::experiencia::motivo::CONQUISTA);
         // Sus avanzadas pasan con ella: la guarnición de jugadores de los antiguos residentes se va (derrota) y la de serie se reinicia.
         self.avanzadas_de_la_madre_conquistada(plaza, t);
         // La plaza cambió de bandera: sus fronteras con otras Facciones se miran de nuevo.
@@ -145,6 +150,7 @@ impl Nucleo {
         // 5. La Facción que se queda sin plazas queda derrotada.
         let quedan = self.plazas_de(vieja).count();
         if faccion_derrotada(quedan) {
+            self.registrar_derrota(vieja, Some(conquistador));
             self.emitir_propio(t, "faccion.derrotada", vec![plaza], vec![("faccion", vieja as i64), ("por", conquistador as i64)]);
             self.reprogramar_anillos(t);
         }

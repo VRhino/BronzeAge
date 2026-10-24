@@ -82,6 +82,8 @@ pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id:
         pueblos_ids: a.economia.pueblos.iter().map(|p| ids::pueblo(p.id)).collect(),
         avanzadas_ids: a.economia.avanzadas.iter().map(|v| ids::avanzada(v.id)).collect(),
         batalla_id,
+        nombre: (!a.nombre.is_empty()).then(|| a.nombre.clone()),
+        capital_de_faccion_id: a.capital_de.map(ids::faccion),
         ..Default::default()
     }
 }

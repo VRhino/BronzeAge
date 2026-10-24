@@ -473,6 +473,8 @@ si nivel ≥ nivelParaOro:    coste.oro    = oroBase × escala
 El **trigo no forma parte** del coste (se descuenta una sola vez, donde se consume). La **capital** (`encontrarCapital`) es la designada (`capitalDeFaccionId == faccionId` y con un Palacio activo, `capitalDesignada`) y, si no hay,
 el asentamiento vivo más antiguo (`fundadoEn` menor) de la Facción.
 
+> **Implementado en Rust (2026-10-24, 5C):** el paso de minuto de cada plaza busca la capital de su Facción (`Nucleo::exterior_de_capital`, entre las plazas de la Facción) y pasa al `Exterior` `es_capital`, `distancia_capital` (la distancia entre las dos plazas en milésimas, 0 en la capital) y, en la capital, si la Facción tiene ya Gran Fundición en alguna plaza y en cualquier estado. Con `escalaDistancia` = 80 u, una plaza a 80 u paga el doble y una a 1.000 u, ×13,5: una plaza tan lejana cae en ruinas en un día (prueba `politica.rs::la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana`). Empate de antigüedad: el id menor.
+
 ### 10.2 Pago y medidor (`avanzarMantenimiento`)
 
 ```
@@ -558,7 +560,7 @@ Los factores se **multiplican** entre las políticas activas del asentamiento (`
 | `alternarAutoConstruccion { asentamientoId, pausada }` | gobernador o maestroObras | Idempotente. `construccion.auto_alternada` |
 | `alternarReceta { asentamientoId, recurso, pausada }` | gobernador o maestroObras | Idempotente. `construccion.receta_alternada` |
 | `calibrarReservaManual { asentamientoId, recurso, valor }` | `tesorero` (y debe haber uno) | `reservaManual[recurso] = clamp(round(valor), 0, NECESIDADES.reservaManualMaxima)`. Sin evento |
-| `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre vacío = volver a mostrar el id. `asentamiento.renombrado` |
+| `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre vacío = volver a mostrar el id. `asentamiento.renombrado` (en Rust desde 5C: `RenombrarAsentamiento`, 138) |
 | `solicitarAscenso { asentamientoId }` | `gobernador` | §11.2. Error `ascenso.invalido` con todos los bloqueos |
 
 > **Implementado en Rust (2026-10-23, 4H T5).** `AlternarAutoConstruccion` emite `construccion.auto_alternada { pausada }`, `AlternarReceta` `construccion.receta_alternada { recurso, pausada }` (el recurso por su índice) y `MejorarEdificio` (`mejorarEdificioAhora`) `construccion.mejora_forzada { edificio }` antes de su `construccion.mejora_iniciada`; los oyen la Facción de la plaza y quien está dentro. Sigue sin emitirse `construccion.yacimiento_agotado` (los yacimientos no se agotan en Rust) ni `asentamiento.renombrado` (sistema 5).
@@ -1900,36 +1902,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
 ```
 <!-- /parametros -->
 
-<!-- parametros:CUPO_NIVEL_ASENTAMIENTO -->
-```json
-{
-  "maxNivel2": [
-    1,
-    1,
-    1,
-    1,
-    2,
-    2,
-    2,
-    3,
-    3,
-    3
-  ],
-  "maxNivel3": [
-    0,
-    0,
-    1,
-    1,
-    1,
-    2,
-    2,
-    2,
-    2,
-    3
-  ]
-}
-```
-<!-- /parametros -->
+El bloque `CUPO_NIVEL_ASENTAMIENTO` vive en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §3.5 (desde 5C, 2026-10-24, un solo bloque: el cupo lo calcula `politica::nivel::cupo_nivel` con el nivel de Facción y la economía recibe si queda sitio).
 
 ### 14.6 Políticas
 
@@ -2248,7 +2221,7 @@ Los bloques de parámetros de este documento son los del motor TypeScript. Valor
 
 ## Catálogo de eventos
 
-Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 2 (`asentamiento.renombrado`, `construccion.yacimiento_agotado`).
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emite 1 (`construccion.yacimiento_agotado`); `asentamiento.renombrado` se emite desde 5C (2026-10-24).
 
 <!-- eventos -->
 ```json

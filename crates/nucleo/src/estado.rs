@@ -60,6 +60,11 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN29: BAN28 con la experiencia, la capital y el nombre de las plazas (sistema 5, tanda 5C): cada plaza guarda su nombre (`nombreDeCiudadLibre` al fundar, `RenombrarAsentamiento`) y
+/// la marca de capital que deja `DesignarCapital` (`capital_de`); el nivel de Facción ya no se guarda suelto (`niveles_faccion` desaparece: se deriva de la experiencia de la Facción) y
+/// las reglas del territorio pierden el cap de fundación por nivel (lo da `politica::nivel::cap_fundacion`). BAN28 se rechaza: sus plazas no traen nombre ni marca de capital y su
+/// nivel de Facción fijado no se puede convertir en experiencia sin inventarla.
+///
 /// BAN28: BAN27 con la Facción como entidad (sistema 5, tanda 5B; `codec_politica`): cada Facción con su nombre, sigilo, Rey, Embajador, ciudadanos en orden de ingreso,
 /// solicitudes, experiencia, capital designada, derrota y ajuste de admisión, cuándo dejó cada héroe su última Facción, y las relaciones y propuestas del crate `politica`
 /// (vacías hasta 5D y 5F); y en cada héroe el instante de su último cambio de residencia (`HeroeNucleo::residencia_cambiada_en`, `codec_militar`). BAN27 se rechaza: sus
@@ -130,7 +135,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN28";
+const MAGIA: &[u8; 5] = b"BAN29";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -223,8 +228,6 @@ pub struct ReglasTerritorio {
     pub separacion_plazas: Mil,
     /// Distancia mínima a un campamento de mercenarios para fundar (`radioExclusionFundar`: 20).
     pub exclusion_campamento: Mil,
-    /// Plazas que puede fundar una Facción por nivel (`CAP_FUNDACION_POR_NIVEL`).
-    pub cap_por_nivel: Vec<u32>,
     /// Parte de las parcelas de una masa de bosque que puede ocupar un asentamiento (`cuotaParcelasPorAsentamiento`: 50).
     pub cuota_parcelas_pct: u32,
 }
@@ -237,7 +240,6 @@ impl Default for ReglasTerritorio {
             crecimiento_por_edificio: 1_000,
             separacion_plazas: 30_000,
             exclusion_campamento: 20_000,
-            cap_por_nivel: vec![1, 2, 3, 3, 4, 5, 5, 6, 6, 7],
             cuota_parcelas_pct: 50,
         }
     }
@@ -336,6 +338,10 @@ pub struct Asentamiento {
     /// Quién puede entrar en la plaza, por relación con su Facción (Entrar con todo, 2026-10-22). Lo fija quien manda en ella (`FijarAcceso`) y lo heredan sus pueblos
     /// extractores y sus avanzadas.
     pub acceso: Acceso,
+    /// Su nombre (`nombreDeCiudadLibre` al fundar, `RenombrarAsentamiento`); vacío = sin nombre (se muestra su id). Es presentación (5C).
+    pub nombre: String,
+    /// `capitalDeFaccionId`: la marca que deja `DesignarCapital` (5C). Sobrevive a un cambio de dueño, y entonces no vale (Diplomacia_Facciones §3.7).
+    pub capital_de: Option<u32>,
 }
 
 impl Asentamiento {
@@ -806,8 +812,6 @@ pub struct Estado {
     pub yacimientos: BTreeMap<u32, StockNodo>,
     /// Pares de plazas `(menor id, mayor id)` de Facciones distintas cuyas zonas ya se han tocado (nunca se separan).
     pub contactos: BTreeSet<(u64, u64)>,
-    /// Nivel de cada Facción (1 si no consta): fija su cap de fundación. Lo gobernará la experiencia de Facción.
-    pub niveles_faccion: BTreeMap<u32, u32>,
     /// Trueques, órdenes de mercado, flota de caravanas y reputación entre Facciones (Comercio_Caravanas §2).
     pub comercio: EstadoComercio,
     /// Héroes con sus escuadras, reclutas de los campamentos y tecnologías de las Facciones (Heroe_Y_Tropa, Campamentos_Mercenarios).
@@ -845,7 +849,6 @@ impl Estado {
             nodos_reclamados: BTreeMap::new(),
             yacimientos: BTreeMap::new(),
             contactos: BTreeSet::new(),
-            niveles_faccion: BTreeMap::new(),
             comercio,
             militar: EstadoMilitar::default(),
             combate: EstadoCombate::default(),
@@ -896,8 +899,6 @@ impl Estado {
         w.i64(t.crecimiento_por_edificio);
         w.i64(t.separacion_plazas);
         w.i64(t.exclusion_campamento);
-        w.u32(t.cap_por_nivel.len() as u32);
-        t.cap_por_nivel.iter().for_each(|&x| w.u32(x));
         w.u32(t.cuota_parcelas_pct);
         w.texto(r.economia.huella());
         w.u64(self.version);
@@ -929,6 +930,8 @@ impl Estado {
             w.bool(a.acceso.aliados);
             w.bool(a.acceso.neutrales);
             w.bool(a.acceso.enemigos);
+            w.texto(&a.nombre);
+            w.opt_u64(a.capital_de.map(u64::from));
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -940,11 +943,6 @@ impl Estado {
         for &(a, b) in &self.contactos {
             w.u64(a);
             w.u64(b);
-        }
-        w.u64(self.niveles_faccion.len() as u64);
-        for (&f, &n) in &self.niveles_faccion {
-            w.u32(f);
-            w.u32(n);
         }
         codec_comercio::escribir(&mut w, &self.comercio);
         codec_militar::escribir(&mut w, &self.militar);
@@ -1034,11 +1032,12 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN28`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 29, y solo el 28 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN29`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 29, y solo el 29 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'8' => {}
+                b'9' => {}
+                b'8' => return Err(ErrorFormato("foto del formato BAN28 (las plazas no traen nombre ni marca de capital, y el nivel de Facción fijado a mano no es experiencia): ya no se admite")),
                 b'7' => return Err(ErrorFormato("foto del formato BAN27 (las Facciones no existen como entidad: sin nombre, sigilo, Rey, Embajador ni orden de ingreso de sus ciudadanos, y los héroes no traen su último cambio de residencia): ya no se admite")),
                 b'6' => return Err(ErrorFormato("foto del formato BAN26 (los almacenes guardan milésimas sueltas, no unidades enteras, y no traen el resto oculto de sus flujos): ya no se admite")),
                 b'5' => return Err(ErrorFormato("foto del formato BAN25 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 4, sus recintos no traen la red que conservan en sus puertas y la guarnición de serie de una avanzada se reponía entera a las 6 h): ya no se admite")),
@@ -1078,11 +1077,7 @@ impl Estado {
                     techos.push(r.i64()?);
                 }
                 let (crecimiento_por_edificio, separacion_plazas, exclusion_campamento) = (r.i64()?, r.i64()?, r.i64()?);
-                let mut cap_por_nivel = Vec::new();
-                for _ in 0..r.u32()? {
-                    cap_por_nivel.push(r.u32()?);
-                }
-                ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento, cap_por_nivel, cuota_parcelas_pct: r.u32()? }
+                ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento, cuota_parcelas_pct: r.u32()? }
             },
             economia: {
                 let huella = r.texto()?;
@@ -1122,6 +1117,7 @@ impl Estado {
             let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r, asentamiento::recintos::proyeccion(&economia.recintos))?);
             let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
             let acceso = Acceso { aliados: r.bool()?, neutrales: r.bool()?, enemigos: r.bool()? };
+            let (nombre, capital_de) = (r.texto()?, r.opt_u64()?.map(|f| f as u32));
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -1130,7 +1126,7 @@ impl Estado {
             for p in &economia.pueblos {
                 s.nodos_reclamados.insert(p.nodo, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, acceso });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, acceso, nombre, capital_de });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;
@@ -1138,9 +1134,6 @@ impl Estado {
         }
         for _ in 0..r.cuenta()? {
             s.contactos.insert((r.u64()?, r.u64()?));
-        }
-        for _ in 0..r.cuenta()? {
-            s.niveles_faccion.insert(r.u32()?, r.u32()?);
         }
         s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio)?;
         s.militar = codec_militar::leer(&mut r)?;

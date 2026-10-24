@@ -277,9 +277,10 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     let mut ev = a.avanzar_hasta(t, &mut x);
     reg.pasos += 1;
 
-    // La política del jugador: cada hora, si nada lo bloquea, pide la subida. Cada plaza es de una Facción distinta (cupo ocupado 0).
+    // La política del jugador: cada hora, si nada lo bloquea, pide la subida. Cada plaza es de una Facción distinta de nivel 1 (cupo ocupado 0: sin cupo solo si el cupo es 0).
     if minuto % CADA_MIN_ASCENSO == 0 && a.ascenso.is_none() {
-        let bloqueos = a.bloqueos_de_ascenso(t, reglas, &x, 0);
+        let sin_cupo = politica::nivel::cupo_nivel(&reglas_politica().nivel, 1, a.nivel + 1) == Some(0);
+        let bloqueos = a.bloqueos_de_ascenso(t, reglas, &x, sin_cupo);
         if a.nivel == 1 {
             let clases: Vec<usize> = bloqueos.iter().map(clase).collect();
             reg.comprobaciones_n1 += 1;
@@ -292,7 +293,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
             }
             reg.ultimos_bloqueos = clases;
         }
-        if bloqueos.is_empty() && a.solicitar_ascenso(t, reglas, &x, 0, &mut ev).is_ok() {
+        if bloqueos.is_empty() && a.solicitar_ascenso(t, reglas, &x, sin_cupo, &mut ev).is_ok() {
             reg.ascenso_pedido.get_or_insert(minuto);
         }
     }
@@ -557,4 +558,10 @@ mod pruebas {
         v.urbe.set_recintos(vec![]);
         assert_eq!(comprobar(&v, &re).muro, 1);
     }
+}
+
+/// Las reglas de la política (el cupo de nivel de Facción), leídas una vez.
+fn reglas_politica() -> &'static politica::Reglas {
+    static R: std::sync::OnceLock<politica::Reglas> = std::sync::OnceLock::new();
+    R.get_or_init(politica::Reglas::cargar)
 }

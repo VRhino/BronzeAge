@@ -28,13 +28,17 @@ pub enum ErrorCapital {
 }
 
 /// `capitalDesignada`.
-pub fn designada(f: FaccionId, plazas: &[PlazaDeCapital]) -> Option<AsentamientoId> {
-    plazas.iter().find(|p| p.faccion == f && p.marca == Some(f) && p.palacio_activo).map(|p| p.id)
+pub fn designada(f: FaccionId, plazas: impl IntoIterator<Item = PlazaDeCapital>) -> Option<AsentamientoId> {
+    plazas.into_iter().find(|p| p.faccion == f && p.marca == Some(f) && p.palacio_activo).map(|p| p.id)
 }
 
 /// `encontrarCapital`: la designada vigente o la plaza más antigua de la Facción (a igual fundación, el id menor).
-pub fn efectiva(f: FaccionId, plazas: &[PlazaDeCapital]) -> Option<AsentamientoId> {
-    designada(f, plazas).or_else(|| plazas.iter().filter(|p| p.faccion == f).min_by_key(|p| (p.fundada_en, p.id)).map(|p| p.id))
+/// Las plazas llegan por un iterador (el paso de minuto las saca del núcleo sin reservar memoria).
+pub fn efectiva<I>(f: FaccionId, plazas: I) -> Option<AsentamientoId>
+where
+    I: IntoIterator<Item = PlazaDeCapital> + Clone,
+{
+    designada(f, plazas.clone()).or_else(|| plazas.into_iter().filter(|p| p.faccion == f).min_by_key(|p| (p.fundada_en, p.id)).map(|p| p.id))
 }
 
 /// `designarCapital`: una plaza propia con Palacio activo que no sea ya la capital, y el cooldown si la designada sigue vigente. Anota `capital_designada_en`
@@ -44,16 +48,23 @@ pub fn designar(r: &Reglas, faccion: &mut Faccion, plazas: &[PlazaDeCapital], de
     if !p.palacio_activo {
         return Err(ErrorCapital::SinPalacio);
     }
-    if efectiva(faccion.id, plazas) == Some(destino) {
+    if efectiva(faccion.id, plazas.iter().copied()) == Some(destino) {
         return Err(ErrorCapital::YaEsLaCapital);
     }
-    if let (Some(en), Some(_)) = (faccion.capital_designada_en, designada(faccion.id, plazas)) {
+    if let (Some(en), Some(_)) = (faccion.capital_designada_en, designada(faccion.id, plazas.iter().copied())) {
         if ahora < en + r.cooldown_capital {
             return Err(ErrorCapital::Cooldown { libre_en: en + r.cooldown_capital });
         }
     }
     faccion.capital_designada_en = Some(ahora);
     Ok(plazas.iter().filter(|q| q.id != destino && q.marca == Some(faccion.id)).map(|q| q.id).collect())
+}
+
+impl crate::faccion::Facciones {
+    /// [`designar`] sobre la Facción `faccion` del almacén (el núcleo pone la marca en `destino` y la quita de las que devuelve). `None` si la Facción no existe.
+    pub fn designar_capital(&mut self, r: &Reglas, faccion: FaccionId, plazas: &[PlazaDeCapital], destino: AsentamientoId, ahora: Instante) -> Option<Result<Vec<AsentamientoId>, ErrorCapital>> {
+        self.get_mut(faccion).map(|f| designar(r, f, plazas, destino, ahora))
+    }
 }
 
 #[cfg(test)]
@@ -93,18 +104,18 @@ mod pruebas {
 
     #[test]
     fn sin_designar_la_plaza_viva_mas_antigua() {
-        assert_eq!(efectiva(1, &[nueva(), vieja()]), Some(VIEJA));
-        assert_eq!(efectiva(9, &[nueva(), vieja()]), None);
+        assert_eq!(efectiva(1, [nueva(), vieja()]), Some(VIEJA));
+        assert_eq!(efectiva(9, [nueva(), vieja()]), None);
     }
 
     #[test]
     fn la_designada_gana_mientras_conserve_el_palacio_y_sea_de_la_faccion() {
         let marcada = PlazaDeCapital { marca: Some(1), ..nueva() };
-        assert_eq!(efectiva(1, &[vieja(), marcada]), Some(NUEVA));
-        assert_eq!(efectiva(1, &[vieja(), PlazaDeCapital { palacio_activo: false, ..marcada }]), Some(VIEJA), "perdió el Palacio");
+        assert_eq!(efectiva(1, [vieja(), marcada]), Some(NUEVA));
+        assert_eq!(efectiva(1, [vieja(), PlazaDeCapital { palacio_activo: false, ..marcada }]), Some(VIEJA), "perdió el Palacio");
         // Cambió de manos: la marca era de la otra Facción.
         let ajena = PlazaDeCapital { faccion: 2, ..marcada };
-        assert_eq!(efectiva(2, &[ajena, PlazaDeCapital { id: 7, faccion: 2, ..vieja() }]), Some(7));
+        assert_eq!(efectiva(2, [ajena, PlazaDeCapital { id: 7, faccion: 2, ..vieja() }]), Some(7));
     }
 
     #[test]
@@ -124,7 +135,7 @@ mod pruebas {
         let quitar = designar(&r, &mut f, &plazas, NUEVA, 5).unwrap();
         aplicar(&mut plazas, NUEVA, &quitar);
         assert_eq!(f.capital_designada_en, Some(5));
-        assert_eq!(efectiva(1, &plazas), Some(NUEVA));
+        assert_eq!(efectiva(1, plazas.iter().copied()), Some(NUEVA));
     }
 
     #[test]

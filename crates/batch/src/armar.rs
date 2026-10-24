@@ -132,7 +132,7 @@ fn parametros(x: &Entrada) -> Vec<Parametro> {
         parametro("Crecimiento de la zona por edificio completado (lo aplica la economía real)", format!("{} u", r.crecimiento_por_edificio as f64 / 1000.0)),
         parametro("Separación mínima entre plazas", u(r.separacion_plazas)),
         parametro("Exclusión junto a campamentos de mercenarios", u(r.exclusion_campamento)),
-        parametro("Cap de fundación por nivel de Facción", format!("{:?}", r.cap_por_nivel)),
+        parametro("Cap de fundación por nivel de Facción", format!("{:?}", politica::Reglas::cargar().nivel.cap_fundacion)),
         parametro("Cuota de parcelas por masa y asentamiento", format!("{} %", r.cuota_parcelas_pct)),
         parametro("Supuesto del batch: nacimientos", format!("repartidos al azar en las primeras {} h, en el campamento i mod n", sim::NACEN_EN_HORAS)),
         parametro("Supuesto del batch: columna", format!("velocidad {} u/min, víveres {}", sim::VELOCIDAD as f64 * 0.06, sim::VIVERES / 1000)),

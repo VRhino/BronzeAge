@@ -757,7 +757,7 @@ fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_
     let pa = sitio_rico(&n, &m.0, 0, 1);
     let a = fundar(&mut n, 0, "a", "ana", 1, pa);
     assert!(n.aplicar_en(0, Peticion::nueva("admin", "nivel", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 }).de_admin()).aceptada());
-    let pc = sitio_rico(&n, &m.0, 2, 1);
+    let pc = sitio_rico(&n, &m.0, 0, 1);
     let c = fundar(&mut n, 0, "c", "ana", 1, pc);
     // Cada plaza tiene ya a su fundador de residente (5B): el héroe de campo de la columna que la fundó.
     let fundador = |n: &Nucleo, p: u64| -> u64 {
@@ -930,7 +930,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

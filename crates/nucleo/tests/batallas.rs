@@ -527,6 +527,8 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     assert!(!x.n.heroe_en_batalla(ana.1) && x.n.bloqueos().ejercitos.is_empty());
     assert_eq!(x.n.batalla(id).unwrap().estado, EstadoBatalla::Aplicada);
     assert_eq!(x.n.estado().rng.estado(), base::Rng::derivado(42, "nucleo").estado(), "Unity decide: ni abrir ni aplicar el resultado gastan una tirada");
+    // La experiencia de Facción de una batalla de Unity (5C): 2,5 por héroe que participó, a la Facción con la que entró, sin filtro de dignidad.
+    assert_eq!((x.n.faccion(1).unwrap().experiencia, x.n.faccion(2).unwrap().experiencia), (2_500, 2_500));
 }
 
 #[test]
@@ -892,7 +894,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -2037,7 +2039,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN28");
+        assert_eq!(&bytes[..5], b"BAN29");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();

@@ -72,6 +72,7 @@ Comando sin parámetros; lo ejecuta el **titular**, con la caravana enganchada a
 3. `fundarConCaravana` añade a lo de `fundarAsentamiento` ([`Economia_Construccion.md`](Economia_Construccion.md) §3: dentro del mapa, fuera de toda zona ya recortada, a 30 o más de toda plaza, no cima ni agua ni celda no transitable, tope de fundación) la exigencia de estar **a `MERCENARIOS.radioExclusionFundar` (20) o más de cualquier campamento** de mercenarios (estricto: a 20 exactos se funda).
    > **Implementado en Rust (2026-10-13)**: `Comando::Fundar` (`crates/nucleo/src/nucleo/zonas.rs`). Orden de las comprobaciones y códigos de rechazo: `fundacion.sin_caravana`, `fundacion.cap_alcanzado` (plazas de la Facción ≥ cap de su nivel), `fundacion.fuera_del_mapa`, `fundacion.sobre_agua`, `fundacion.sobre_cima`, `fundacion.no_transitable`, `fundacion.dentro_de_zona`, `fundacion.cerca_de_plaza`, `fundacion.cerca_de_campamento`. Un rechazo no deja rastro. Hasta que existan la economía y los héroes, la caravana la da la administración (`DarCaravanaFundacion`) y el nivel de Facción se fija a mano (`FijarNivelFaccion`); la columna del titular **no** se disuelve en la plaza (llega con las plazas habitadas).
 4. Nombre: `nombreDeCiudadLibre(nombres de las plazas existentes, id de la nueva)` (§8). Si no queda ninguno, la plaza se queda sin nombre.
+   > **Implementado en Rust (2026-10-24, 5C)**: `politica::nombres::ciudad_libre` con la semilla `as-N` (el id del contrato de la plaza nueva); el nombre viaja en `fundacion.asentamiento_fundado` (`valores.nombre`) y en la ficha de la plaza. Fundar borra además la derrota de la Facción y da `NIVEL_FACCION.xp.fundacion` si ya tenía alguna plaza (Diplomacia_Facciones §3.5, §8).
 5. **La columna entra en la plaza que acaba de levantar y se deshace dentro** (`absorberColumna` con devolver suministro): la tropa vuelve al campamento y el carro al almacén de la plaza nueva. Sus ids de caravana adjunta restantes quedan `aparcada` en ella. **La caravana de fundación se gasta.**
 6. Todos los de la columna quedan `ubicacion: asentamiento` (dentro); los fundadores salen de cualquier campamento de mercenarios donde residieran; la exploración personal de cada fundador se funde con la de la Facción; historial `Funda {id}.`.
 7. **Nace protegida un día** (`protegidaHasta = fundadoEn + OCUPACION.proteccionMinutos`, como una plaza recién conquistada; Doc 1.2, 5.12.9; decisión del usuario del 2026-09-27 en el TypeScript, `settlement.ts`): mientras dure, un asedio rebota sin combate ni tirada (`combate.plaza_protegida`). No abre ventana de ocupación.
@@ -104,6 +105,8 @@ Sin ninguna caravana con titular, no hace nada. Para cada caravana con `titularI
 
 Lista fija `NOMBRES_DE_CIUDADES` (159 hoy) de ciudades de la Edad del Bronce. Se normalizan (sin tildes, minúsculas) para comparar con los nombres ya usados; entre los libres se elige el índice `hash(semilla) mod libres.length`, con `semilla` = el id de la plaza nueva y `hash` = **FNV-1a de 32 bits** sobre los códigos de carácter (`h = 0x811c9dc5`; por carácter `h ^= c; h = imul(h, 0x01000193)`; resultado `h >>> 0`).
 No gasta el azar de la partida. Sin libres → `undefined`. Es presentación: el nombre no cambia lo que hace la plaza.
+
+> **Implementado en Rust (2026-10-24, 5C):** `crates/politica/src/nombres.rs` (la lista de 159, la normalización sin tildes ni mayúsculas y FNV-1a de 32 bits sobre UTF-16, el `sigilo::hash32` de la Facción), con las pruebas de `nombresDeCiudades.test.ts`. `renombrarAsentamiento` (Economia_Construccion §12): `RenombrarAsentamiento` (138), lo da quien reside en la plaza.
 
 ## 9. Refundar desde un campamento
 
@@ -146,22 +149,7 @@ A partir de ahí es la misma entidad: se engancha, se funda con `fundar` (§5), 
 ```
 <!-- /parametros -->
 
-<!-- parametros:CAP_FUNDACION_POR_NIVEL -->
-```json
-[
-  1,
-  2,
-  3,
-  3,
-  4,
-  5,
-  5,
-  6,
-  6,
-  7
-]
-```
-<!-- /parametros -->
+El bloque `CAP_FUNDACION_POR_NIVEL` vive en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §3.5 (desde 5C, 2026-10-24, un solo bloque: `politica::nivel::cap_fundacion`).
 
 <!-- parametros:CARAVANA_COOLDOWN -->
 ```json

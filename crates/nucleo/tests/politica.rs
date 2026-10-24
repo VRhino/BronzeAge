@@ -1,6 +1,7 @@
 //! La Facción como entidad, la ciudadanía y la residencia en el núcleo (sistema 5, tanda 5B; Diplomacia_Facciones §3-§4): crear una Facción, pedir el ingreso y responderlo, el Rey y el
 //! Embajador, dejarla con la sucesión del trono (y Q7), las tres órdenes de residencia con su cooldown, los fundadores que pasan a residir, los ciudadanos de la nobleza (Q8), la proyección de
-//! la Facción y la foto `BAN28`. Casos portados de `typescript-final:src/session/__tests__/{comandosMembresiaFaccion,comandosResidencia,faccionDeLaColumna}.test.ts` y
+//! la Facción y la foto `BAN29`. De 5C: la experiencia y el nivel derivado, la capital (`designar_capital`, la más antigua, la distancia en el mantenimiento y la Gran Fundición única),
+//! el nombre de las plazas (`nombreDeCiudadLibre`, `renombrar_asentamiento`) y la foto que rechaza `BAN28`. Casos portados de `typescript-final:src/session/__tests__/{comandosMembresiaFaccion,comandosResidencia,faccionDeLaColumna}.test.ts` y
 //! `engine/__tests__/residenciaMercenaria.test.ts`. Sobre el artefacto de mundo real; las pruebas se omiten si no está.
 
 mod comun;
@@ -214,7 +215,7 @@ fn las_tres_ordenes_de_residencia_con_su_cooldown_y_quien_deja_su_casa_dentro_si
     let mut e = E::nuevo(m);
     let plaza = e.plaza(m, 0, "fundador");
     e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
-    let otra = e.plaza(m, 2, "fundadora");
+    let otra = e.plaza(m, 0, "fundadora");
     let ana = e.heroe("ana");
     assert_eq!(e.n.heroe(ana).unwrap().heroe.presencia.ubicacion, Ubicacion::Mercenarios(0));
 
@@ -410,6 +411,7 @@ fn guion(m: &M, paso: &dyn Fn(&mut E, Instante)) -> E {
     let rey = e.faccion(1).rey.unwrap();
     e.ok("fundador", Comando::ResponderSolicitud { heroe: rey, faccion: 1, solicitante: bea, aceptar: true });
     e.ok("bea", Comando::CambiarResidencia { heroe: bea, asentamiento: plaza });
+    e.ok("bea", Comando::RenombrarAsentamiento { heroe: bea, asentamiento: plaza, nombre: "Nueva Micenas".into() });
     paso(&mut e, 4 * DIA);
     e.ok("bea", Comando::DejarResidencia { heroe: bea });
     e.ok("ana", Comando::DejarFaccion { heroe: ana });
@@ -432,20 +434,161 @@ fn mismas_ordenes_dan_el_mismo_mundo_normal_y_a_trozos_y_nada_espera_en_la_cola(
 }
 
 #[test]
-fn la_politica_viaja_en_la_foto_ban28_y_la_ban27_se_rechaza_con_su_motivo() {
+fn la_politica_viaja_en_la_foto_ban29_y_las_ban28_y_ban27_se_rechazan_con_su_motivo() {
     let m = con_mundo!();
     let e = guion(m, &|e, ms| e.avanzar(ms));
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (e.n.estado().politica.clone(), e.n.hash_estado()));
     assert!(s.politica.facciones.iter().count() == 2 && s.militar.heroes.values().any(|h| h.residencia_cambiada_en.is_some()));
     let vieja = [b"BAN27".as_slice(), &bytes[5..]].concat();
     let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN27 se rechaza");
     assert!(error.0.contains("BAN27") && error.0.contains("Facciones no existen como entidad"), "{}", error.0);
+    let vieja = [b"BAN28".as_slice(), &bytes[5..]].concat();
+    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN28 se rechaza");
+    assert!(error.0.contains("BAN28") && error.0.contains("nombre ni marca de capital"), "{}", error.0);
+    // El nombre de la plaza y su marca de capital viajan en la foto y mueven el hash (5C).
+    let plaza = *s.asentamientos.keys().next().unwrap();
+    assert_eq!(s.asentamientos[&plaza].nombre, "Nueva Micenas");
+    let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
+    otro.asentamientos.get_mut(&plaza).unwrap().capital_de = Some(1);
+    assert_ne!(otro.hash(), s.hash());
     // Cada pieza de la Facción mueve el hash.
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     otro.politica.facciones.otorgar(1, 999_999).unwrap();
     assert_ne!(otro.hash(), s.hash());
+}
+
+// ───────────────────────────── 5. La experiencia, la capital y el nombre (5C) ─────────────────────────────
+
+/// Una Facción con dos plazas vecinas (la A, la más antigua, y la B junto a ella, las dos cerca del campamento 0): la experiencia de fundar la segunda, la capital efectiva y la designada.
+#[test]
+fn la_capital_es_la_mas_antigua_hasta_que_el_rey_designa_otra_con_palacio_y_solo_ella_levanta_la_gran_fundicion() {
+    let m = con_mundo!();
+    // Sin mantenimiento (gracia infinita): las plazas suben de nivel a mano y esperan días a sus obras; aquí se mide la capital, no la economía.
+    let mut e = E::nuevo(m);
+    let mut reglas = arranque(m, 5).reglas;
+    std::sync::Arc::make_mut(&mut reglas.economia.datos).mantenimiento.gracia_minutos = i64::MAX / 4;
+    e.n = Nucleo::nuevo(Arranque { reglas, ..arranque(m, 5) });
+    let a = e.plaza(m, 0, "fundador");
+    assert_eq!((e.faccion(1).experiencia, e.n.nivel_de_faccion(1)), (0, 1), "la primera plaza no da experiencia");
+    // El cap de fundación sale del nivel de Facción: con el 1, una sola plaza.
+    let p = sitio_rico(&e.n, &m.0, 0, 1);
+    let col = e.n.crear_ejercito(e.n.ahora(), "fundadora", 1, p, 500, 100_000).unwrap();
+    e.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
+    assert_eq!(e.no("fundadora", Comando::Fundar { ejercito: col }), rechazos::CAP_ALCANZADO);
+    // La administración fija el nivel poniendo la experiencia en el umbral (decisión 9).
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
+    assert_eq!((e.faccion(1).experiencia, e.n.nivel_de_faccion(1)), (100_000, 2));
+    let b = e.ok("fundadora", Comando::Fundar { ejercito: col }).creadas[0];
+    assert_eq!(e.faccion(1).experiencia, 120_000, "la segunda plaza da 20");
+    let fundacion = e.hechos("faccion.experiencia").into_iter().find(|h| dato(h, "motivo") == 7).expect("experiencia de fundación");
+    assert_eq!((dato(&fundacion, "cantidad"), dato(&fundacion, "experiencia")), (20_000, 120_000));
+
+    // La capital efectiva: la más antigua; la proyección la lleva.
+    assert_eq!(e.n.capital_de(1), Some(a));
+    assert_eq!(propios::faccion(&e.n, 1).capital_id, Some(ids::asentamiento(a)));
+    let rey = e.faccion(1).rey.unwrap();
+    let cuenta_rey = e.n.heroe(rey).unwrap().cuenta.clone();
+    let otro = e.n.ejercito(col).unwrap().columna.lider;
+    // Solo el Rey; una plaza propia con Palacio activo que no sea ya la capital.
+    assert_eq!(e.no("fundadora", Comando::DesignarCapital { heroe: otro, faccion: 1, asentamiento: b }), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.no(&cuenta_rey, Comando::DesignarCapital { heroe: rey, faccion: 1, asentamiento: b }), rechazos::CAPITAL_SIN_PALACIO);
+    assert_eq!(e.no(&cuenta_rey, Comando::DesignarCapital { heroe: rey, faccion: 9, asentamiento: b }), rechazos::FACCION_NO_EXISTE);
+    // Recursos para obras grandes: un almacén lleno de lo que piden, con la auto-construcción parada.
+    use asentamiento::Recurso::{Madera, Oro, Piedra, Trigo};
+    let llenar = |e: &mut E, plaza: u64| {
+        for r in [Madera, Piedra, Oro, Trigo] {
+            e.ord("admin", Comando::DarRecursos { asentamiento: plaza, recurso: r, cantidad: 2_000_000 });
+        }
+    };
+    let gf = asentamiento::Tipo::GranFundicion;
+    // El Palacio de B (nivel 2, y un Almacén para que quepan sus 600 de madera).
+    e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: b, pausada: true });
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: b, nivel: 2 });
+    llenar(&mut e, b);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: b, tipo: asentamiento::Tipo::Almacen });
+    e.avanzar(7 * 60 * MS_POR_MINUTO);
+    llenar(&mut e, b);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: b, tipo: asentamiento::Tipo::Palacio });
+    e.avanzar(3 * DIA + 60 * MS_POR_MINUTO);
+    assert!(e.n.economia(b).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::Tipo::Palacio && x.activo()), "el Palacio de B está en pie");
+    // La Gran Fundición: nivel de Facción 6, la capital (todavía A) y ninguna otra en la Facción.
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 6 });
+    for plaza in [a, b] {
+        e.ord("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
+        e.ord("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 4 });
+        llenar(&mut e, plaza);
+    }
+    assert_eq!(e.no("admin", Comando::AnadirEdificio { asentamiento: b, tipo: gf }), rechazos::OBRA_GRAN_FUNDICION, "B no es la capital");
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: gf });
+    // El Rey designa B; la marca pasa a ella y la Facción estampa el instante.
+    let t = e.n.ahora();
+    e.ok(&cuenta_rey, Comando::DesignarCapital { heroe: rey, faccion: 1, asentamiento: b });
+    assert_eq!((e.n.capital_de(1), e.faccion(1).capital_designada_en), (Some(b), Some(t)));
+    assert_eq!((e.n.estado().asentamientos[&b].capital_de, e.n.estado().asentamientos[&a].capital_de), (Some(1), None));
+    let designada = &e.hechos("faccion.capital_designada")[0];
+    assert_eq!((dato(designada, "faccion"), dato(designada, "asentamiento"), designada.asentamientos.clone()), (1, b as i64, vec![b]));
+    assert_eq!(e.no(&cuenta_rey, Comando::DesignarCapital { heroe: rey, faccion: 1, asentamiento: b }), rechazos::CAPITAL_YA_ES_LA_CAPITAL);
+    assert_eq!(e.no(&cuenta_rey, Comando::DesignarCapital { heroe: rey, faccion: 1, asentamiento: a }), rechazos::CAPITAL_SIN_PALACIO);
+    let ficha = propios::faccion(&e.n, 1);
+    assert_eq!((ficha.capital_id, ficha.capital_designada_en_ms, ficha.nivel), (Some(ids::asentamiento(b)), Some(t), e.n.nivel_de_faccion(1)));
+    // B es ya la capital, pero la Facción tiene su Gran Fundición (en A): no se levanta otra.
+    assert_eq!(e.no("admin", Comando::AnadirEdificio { asentamiento: b, tipo: gf }), rechazos::OBRA_GRAN_FUNDICION, "una sola por Facción");
+}
+
+/// La distancia a la capital sube el mantenimiento (Economia_Construccion §10.1, 5C): una segunda plaza de la Facción a más de 1.000 u de la capital cae en ruinas en un día; sin ese factor
+/// (escala infinita), la misma plaza sigue en pie.
+#[test]
+fn la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana() {
+    let m = con_mundo!();
+    let lejana = |escala: Option<i64>| {
+        let mut e = E::nuevo(m);
+        if let Some(x) = escala {
+            let mut reglas = arranque(m, 5).reglas;
+            std::sync::Arc::make_mut(&mut reglas.economia.datos).mantenimiento.escala_distancia = x;
+            e.n = Nucleo::nuevo(Arranque { reglas, ..arranque(m, 5) });
+        }
+        let a = e.plaza(m, 0, "fundador");
+        e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
+        let b = e.plaza(m, 2, "fundadora");
+        let d = e.n.estado().asentamientos[&a].posicion.dist(e.n.estado().asentamientos[&b].posicion);
+        assert!(d > 1_000_000, "a {d} milésimas");
+        e.avanzar(2 * DIA);
+        e.n.estado().asentamientos.contains_key(&b)
+    };
+    assert!(!lejana(None), "la plaza lejana paga ×(1 + d/80) y cae en ruinas");
+    assert!(lejana(Some(i64::MAX / 4)), "sin el factor de distancia, sigue en pie");
+}
+
+/// El nombre: cada plaza nace con uno libre de la lista (`nombreDeCiudadLibre`); quien reside en ella lo cambia (recortado; vacío, sin nombre) y la ficha lo lleva.
+#[test]
+fn cada_plaza_nace_con_un_nombre_libre_y_quien_reside_en_ella_lo_cambia() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let a = e.plaza(m, 0, "fundador");
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
+    let b = e.plaza(m, 0, "fundadora");
+    let nombre = |e: &E, p: u64| e.n.estado().asentamientos[&p].nombre.clone();
+    let (na, nb) = (nombre(&e, a), nombre(&e, b));
+    assert!(politica::nombres::NOMBRES_DE_CIUDADES.contains(&na.as_str()) && politica::nombres::NOMBRES_DE_CIUDADES.contains(&nb.as_str()) && na != nb, "{na} y {nb}");
+    assert_eq!(na, politica::nombres::ciudad_libre([], &ids::asentamiento(a)).unwrap(), "el de su id, sobre una partida sin nombres");
+    let fundada = &e.hechos("fundacion.asentamiento_fundado")[0];
+    assert_eq!(fundada.valores, vec![("nombre", nucleo::Dato::Texto(na.clone()))]);
+    // Solo quien reside en ella (el fundador de A); el nombre se recorta.
+    let fundador = e.n.estado().militar.residentes_de(a).next().unwrap().heroe.id;
+    let ana = e.heroe("ana");
+    assert_eq!(e.no("ana", Comando::RenombrarAsentamiento { heroe: ana, asentamiento: a, nombre: "Mía".into() }), rechazos::NO_AUTORIZADO);
+    e.ok("fundador", Comando::RenombrarAsentamiento { heroe: fundador, asentamiento: a, nombre: "  Micenas Alta  ".into() });
+    assert_eq!(nombre(&e, a), "Micenas Alta");
+    assert_eq!(e.ord("fundador", Comando::RenombrarAsentamiento { heroe: fundador, asentamiento: a, nombre: "Micenas Alta".into() }).resultado, Resultado::SinCambios);
+    let renombrado = &e.hechos("asentamiento.renombrado")[0];
+    assert_eq!((renombrado.asentamientos.clone(), renombrado.valores.clone()), (vec![a], vec![("nombre", nucleo::Dato::Texto("Micenas Alta".into()))]));
+    let ficha = nucleo::proyeccion::ficha_de_asentamiento(&e.n.estado().asentamientos[&a], &[], None);
+    assert_eq!(ficha.nombre.as_deref(), Some("Micenas Alta"));
+    // Vacío: la plaza se queda sin nombre.
+    e.ok("fundador", Comando::RenombrarAsentamiento { heroe: fundador, asentamiento: a, nombre: "   ".into() });
+    assert_eq!(nucleo::proyeccion::ficha_de_asentamiento(&e.n.estado().asentamientos[&a], &[], None).nombre, None);
 }

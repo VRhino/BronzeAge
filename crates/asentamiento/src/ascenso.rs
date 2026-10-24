@@ -57,9 +57,9 @@ impl Asentamiento {
         mantenimiento::coste(&r.mantenimiento, &self.edificios, self.elementos_de_mapa_activos(), objetivo, x.distancia_capital, &recintos::upkeep(&r.muralla, &self.recintos))
     }
 
-    /// Todos los bloqueos para pedir la subida al nivel siguiente (vacío = se puede). `cupo_ocupado` es cuántos asentamientos de la
-    /// Facción ocupan ya plaza en el nivel objetivo (con ese nivel o con una obra hacia él).
-    pub fn bloqueos_de_ascenso(&self, t: Instante, r: &Reglas, x: &Exterior, cupo_ocupado: u32) -> Vec<Bloqueo> {
+    /// Todos los bloqueos para pedir la subida al nivel siguiente (vacío = se puede). `sin_cupo_de_faccion`: la Facción ya ocupa todo su cupo del nivel objetivo
+    /// (`CUPO_NIVEL_ASENTAMIENTO`, que da el nivel de Facción: lo calcula quien conoce la Facción, `politica::nivel::cupo_nivel`, desde 5C).
+    pub fn bloqueos_de_ascenso(&self, t: Instante, r: &Reglas, x: &Exterior, sin_cupo_de_faccion: bool) -> Vec<Bloqueo> {
         let objetivo = self.nivel + 1;
         let mut b = vec![];
         if self.nivel >= r.nivel.nivel_maximo || objetivo > r.nivel.nivel_techo_provisional {
@@ -75,7 +75,7 @@ impl Asentamiento {
                 Falta::Edificios => Bloqueo::FaltanEdificios,
             });
         }
-        if r.nivel.cupo_faccion(objetivo, x.nivel_faccion).is_some_and(|cupo| cupo_ocupado >= cupo) {
+        if sin_cupo_de_faccion {
             b.push(Bloqueo::SinCupoDeFaccion);
         }
         if let Some(a) = r.nivel.ascenso.get(&objetivo) {
@@ -96,8 +96,8 @@ impl Asentamiento {
     }
 
     /// `iniciarAscenso`: si no hay bloqueos, cobra el coste entero del almacén y fija la obra.
-    pub fn solicitar_ascenso(&mut self, t: Instante, r: &Reglas, x: &Exterior, cupo_ocupado: u32, ev: &mut Vec<Evento>) -> Result<(), Vec<Bloqueo>> {
-        let bloqueos = self.bloqueos_de_ascenso(t, r, x, cupo_ocupado);
+    pub fn solicitar_ascenso(&mut self, t: Instante, r: &Reglas, x: &Exterior, sin_cupo_de_faccion: bool, ev: &mut Vec<Evento>) -> Result<(), Vec<Bloqueo>> {
+        let bloqueos = self.bloqueos_de_ascenso(t, r, x, sin_cupo_de_faccion);
         if !bloqueos.is_empty() {
             return Err(bloqueos);
         }

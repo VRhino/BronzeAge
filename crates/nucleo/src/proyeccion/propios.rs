@@ -425,7 +425,7 @@ pub fn batalla(n: &Nucleo, b: &Batalla, quien: Espectador) -> pb::Batalla {
 
 /// La Facción (5B): nombre, sigilo, Rey, Embajador, ciudadanos en orden de ingreso, solicitudes, experiencia, capital designada, derrota y admisión en los ataques, más su nivel y su reputación
 /// (en milésimas de punto: el núcleo la guarda en ppm). Una Facción que solo nombra la administración (una plaza o una relación de una Facción que nadie creó) va sin nada de lo de la entidad.
-/// DUDA: el nivel sigue siendo el que fija la administración (`niveles_faccion`) hasta 5C, que lo deriva de la experiencia.
+/// Desde 5C, el nivel se deriva de la experiencia y `capital_id` es la capital efectiva (la designada vigente o la plaza viva más antigua).
 pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
     let e = n.estado();
     let rep = e.comercio.reputacion.get(&f).map_or_else(|| base::Ritmo::constante(0, 0), |r| r.ritmo());
@@ -433,7 +433,8 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
     let base = pb::Faccion {
         id: ids::faccion(f),
         version: n.version_de(Clase::Faccion, u64::from(f)),
-        nivel: e.niveles_faccion.get(&f).copied().unwrap_or(1),
+        nivel: n.nivel_de_faccion(f),
+        capital_id: n.capital_de(f).map(ids::asentamiento),
         reputacion: Some(ritmo(base::Ritmo { valor_en_t0: milesimas(rep.valor_en_t0), por_minuto: milesimas(rep.por_minuto), maximo: rep.maximo.map(milesimas), minimo: rep.minimo.map(milesimas), ..rep })),
         ..Default::default()
     };

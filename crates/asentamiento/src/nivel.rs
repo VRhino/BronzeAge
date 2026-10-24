@@ -39,8 +39,6 @@ pub struct ReglasNivel {
     pub techo_poblacion: BTreeMap<u32, Mil>,
     pub ascenso: BTreeMap<u32, CostoAscenso>,
     pub nivel_techo_provisional: u32,
-    pub cupo_nivel2: Vec<u32>,
-    pub cupo_nivel3: Vec<u32>,
 }
 
 /// Qué falta para cumplir los requisitos de un nivel.
@@ -51,7 +49,7 @@ pub enum Falta {
 }
 
 impl ReglasNivel {
-    pub fn de(nivel: &Value, ascenso: &Value, cupo: &Value) -> Self {
+    pub fn de(nivel: &Value, ascenso: &Value) -> Self {
         let por_nivel = |v: &Value| -> Vec<(u32, Value)> { v.as_object().expect("objeto por nivel").iter().map(|(k, x)| (k.parse().expect("nivel"), x.clone())).collect() };
         let tipos = |v: &Value| -> Vec<Tipo> { v.as_array().map(|a| a.iter().filter_map(|x| Tipo::desde_nombre(x.as_str()?)).collect()).unwrap_or_default() };
         let requisitos = por_nivel(&nivel["requisitos"])
@@ -72,7 +70,6 @@ impl ReglasNivel {
             })
             .collect();
         let costo = |v: &Value| -> Costo { v.as_object().expect("costo").iter().map(|(k, x)| (Recurso::desde_nombre(k).expect("recurso"), mil(x.as_f64().expect("cantidad")))).collect() };
-        let lista = |v: &Value| -> Vec<u32> { v.as_array().expect("curva").iter().map(|x| x.as_u64().expect("cupo") as u32).collect() };
         ReglasNivel {
             nivel_maximo: nivel["nivelMaximo"].as_f64().expect("nivelMaximo") as u32,
             requisitos,
@@ -82,8 +79,6 @@ impl ReglasNivel {
                 .map(|(n, v)| (n, CostoAscenso { costo: costo(&v["costo"]), obra_minutos: v["obraMinutos"].as_f64().expect("obraMinutos") as i64 }))
                 .collect(),
             nivel_techo_provisional: ascenso["nivelTechoProvisional"].as_f64().expect("nivelTechoProvisional") as u32,
-            cupo_nivel2: lista(&cupo["maxNivel2"]),
-            cupo_nivel3: lista(&cupo["maxNivel3"]),
         }
     }
 
@@ -106,16 +101,6 @@ impl ReglasNivel {
             faltas.push(Falta::Edificios);
         }
         Some(faltas)
-    }
-
-    /// Cupo de la Facción para ocupar un nivel (2 y 3); los demás no tienen cupo. `nivel_faccion` se recorta a 1..=10.
-    pub fn cupo_faccion(&self, objetivo: u32, nivel_faccion: u32) -> Option<u32> {
-        let curva = match objetivo {
-            2 => &self.cupo_nivel2,
-            3 => &self.cupo_nivel3,
-            _ => return None,
-        };
-        curva.get((nivel_faccion.clamp(1, 10) - 1) as usize).copied()
     }
 
     /// `maximoViviendasPorNivel(n)` (cupos por Vivienda en habitantes enteros): las que da el nivel siguiente (mayor de los cupos de pesants y artesanos que exige)
@@ -179,14 +164,6 @@ mod pruebas {
         let p = activos(&[(Tipo::Palacio, 2)]);
         assert_eq!(r.gates(5, &p, 2000, 1600, 0), Some(vec![Falta::Edificios]));
         assert_eq!(r.gates(5, &activos(&[(Tipo::Palacio, 3)]), 2000, 1600, 0), Some(vec![]));
-    }
-
-    #[test]
-    fn el_cupo_de_faccion_solo_existe_para_los_niveles_2_y_3() {
-        let r = Reglas::cargar().nivel;
-        assert_eq!((r.cupo_faccion(2, 1), r.cupo_faccion(2, 10), r.cupo_faccion(3, 1), r.cupo_faccion(3, 3)), (Some(1), Some(3), Some(0), Some(1)));
-        assert_eq!(r.cupo_faccion(4, 5), None);
-        assert_eq!(r.cupo_faccion(2, 99), Some(3), "el nivel de Facción se recorta a 10");
     }
 
     #[test]

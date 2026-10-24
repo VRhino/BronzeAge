@@ -173,6 +173,17 @@ fn una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2() {
     let r = &n.estado().reglas.territorio;
     let esperado = (r.radio_inicial + completados.len() as i64 * r.crecimiento_por_edificio).min(r.techo(2));
     assert_eq!(n.radio_zona(id), Some(esperado));
+    // La experiencia de Facción (5C): 1 por edificio completado y 30 × 2 por el ascenso, en el instante de cada uno; la primera plaza no da nada. El nivel sale de ella.
+    let xp = eventos(&n, "faccion.experiencia");
+    let por = |motivo: i64| xp.iter().filter(|(_, _, d)| dato(d, "motivo") == Some(motivo)).map(|(_, _, d)| dato(d, "cantidad").unwrap()).collect::<Vec<_>>();
+    assert_eq!(por(4), vec![1_000; completados.len()], "un punto por edificio completado");
+    assert_eq!(por(6), vec![60_000], "30 × el nivel alcanzado");
+    assert!(por(7).is_empty(), "fundar la primera plaza no da experiencia");
+    let experiencia = n.faccion(1).unwrap().experiencia;
+    assert_eq!(experiencia, 1_000 * completados.len() as i64 + 60_000);
+    let nivel = politica::nivel::nivel(&n.estado().reglas.economia.politica.nivel, experiencia);
+    assert_eq!(n.nivel_de_faccion(1), nivel);
+    assert_eq!(eventos(&n, "faccion.nivel_subio").len() as u32, nivel - 1, "un aviso por umbral cruzado");
     // Cada edificio ligado a un yacimiento tiene tomado su sitio: parcelas y nodos reclamados cuadran con las fuentes.
     use asentamiento::edificio::Fuente;
     let a = &n.estado().asentamientos[&id];
@@ -484,6 +495,7 @@ fn una_plaza_que_se_arruina_libera_sus_parcelas_y_nodos_y_su_evento_de_minuto_se
     assert!(disperso.len() == 1 && disperso[0].facciones == vec![1] && disperso[0].dato("asentamientoArruinado") == Some(id as i64), "su campamento de bandidos se dispersa: {disperso:?}");
     let derrota = de("faccion.derrotada");
     assert!(derrota.len() == 1 && derrota[0].facciones == vec![1], "{derrota:?}");
+    assert_eq!(n.faccion(1).unwrap().derrota, Some(politica::faccion::Derrota::Colapso), "derrotada sin que nadie la derrotara (5C)");
     let canto = de("cronica.entrada").into_iter().find(|e| e.valores.iter().any(|(_, d)| d == &nucleo::Dato::Texto("asentamiento.ruinas".into()))).expect("la crónica canta las ruinas");
     assert!(canto.publico && canto.facciones.is_empty());
 
@@ -512,7 +524,7 @@ fn estado_con_una_plaza() -> Estado {
     let eco = &s.reglas.economia.datos;
     let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
     let urbe = nucleo::urbanismo::Urbe::fundar(&s.reglas.economia, 7, 1);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default() });
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default(), nombre: String::new(), capital_de: None });
     s
 }
 
@@ -983,7 +995,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

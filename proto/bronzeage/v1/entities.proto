@@ -33,6 +33,7 @@ message Faccion {
   Ritmo reputacion = 12;                 // -100..100 (milésimas); decae como ritmo
   optional string derrotada_por = 13;    // "" = colapsó sin ganador; ausente = no derrotada
   bool admite_otras_en_ataques = 14;
+  optional string capital_id = 15;       // capital efectiva: la designada con Palacio activo o, si no, la plaza viva más antigua (ausente sin plazas)
 }
 
 enum TipoRelacion {

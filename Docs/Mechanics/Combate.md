@@ -129,6 +129,8 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 ### 4.1 Experiencia de Facción por combatir
 `xpDeCombate = NIVEL_FACCION.xp.combate × (héroes DISTINTOS de las escuadras que participaron en ese bando)`, solo si el combate fue digno; se aplica a la Facción de cada bando. (Una caravana sin escolta no suma por su lado: su defensa es una cifra fija.)
 
+> **Implementado en Rust (2026-10-24, 5C):** `Nucleo::experiencia_de_combate` (`nucleo/experiencia.rs`), en el combate de columna contra columna (§5) y en el asedio con números (§6), los dos que premiaba el TypeScript: si `Informe::digno(ratioCombateDigno)`, 2,5 por cada héroe que combatió, a **su** Facción (con números un bando es de una sola, salvo los aliados que defienden una plaza desde dentro). El saqueo de un pueblo, el ataque a una avanzada y el asalto a una caravana con números no dan experiencia de combate (DUDA del plan del sistema 5, «Avance de 5C»); la defensa de una caravana con héroes es la de su ejército, un combate entre columnas.
+
 ## 5. Encuentro entre columnas (`atacarColumna` / `encuentroEntreEjercitos`)
 
 Validaciones (`validarAtaqueAColumna`, compartidas con la apertura de batalla Unity): no la propia columna; **no a los tuyos ni a un aliado** (Q2, 2026-10-24: con `declaraGuerra`, atacar a un aliado es la traición de Diplomacia §5.4; hoy Rust rechaza con `combate.aliada` hasta 5D); **misma clase** (personal contra personal, ejército contra ejército); atacante a ≤ `LOGISTICA.radioEncuentro` (**3** calibrado; 15 en el bloque TypeScript) con héroe sano; el defensor con algún héroe sano.
@@ -181,7 +183,7 @@ Consecuencias que aplica `asediarPlaza`:
 ### 7.2 Atacar un campamento de bandidos (`atacarCampamento` → `atacarCampamentoConColumna`)
 - **Los bandidos no actúan dentro de ninguna zona de influencia** y solo atacan caravanas que pasan junto a su campamento (un **encuentro exacto** con el radio de ataque, 7). Es PvE y no exige guerra.
 - *En el TypeScript* la columna debía llevar soldados; **en Rust basta un bando que combata** (el héroe suma 15, §3.3): **un héroe solo puede atacar un campamento, pero no destruye ninguno** (15 × 1,15 = 17,25 < 20, el poder del nivel 1; decisión del autor, 2026-10-23; prueba `un_heroe_solo_no_destruye_ni_el_campamento_mas_flojo`). Compara `poder × jitter` con el `poder` fijo del campamento (**una** tirada). Gana → bajas 5 %, el campamento cae (su botín de oro por héroe, `botinDeBandidos`, lo carga el comando en el carro de la columna: lo que no cabe se pierde); pierde → bajas 25 %, héroes heridos y se pierde la mitad del carro (nadie se la queda). Eventos: `combate.campamento_destruido` si gana y `combate.ataque_campamento_fallido` si pierde; el comando les añade al payload el oro de cada héroe (si cae) o el carro perdido (si aguanta).
-- XP de Facción: `NIVEL_FACCION.xp.bandidos / nivel de Facción` por campamento destruido (0 desde `nivelSinXpBandidos`), **sin exigir combate digno**.
+- XP de Facción: `NIVEL_FACCION.xp.bandidos / nivel de Facción` por campamento destruido (0 desde `nivelSinXpBandidos`), **sin exigir combate digno**. **En Rust desde 5C (2026-10-24)**, a la Facción de la columna (con números) o del bando atacante (Unity, además de la de la batalla).
 
 ### 7.3 Saqueo de un pueblo extractor (`saquearPueblo`)
 - Atacante **ejército** de otra Facción (exige guerra o la declara, §2), a ≤ 3 del pueblo. Es una **batalla propia** de saqueo, **nunca de conquista**: el pueblo no cambia de dueño ni se destruye.
@@ -227,7 +229,7 @@ Nadie se queda dentro de una plaza enemiga:
 
 > **Implementado en Rust (2026-10-22, entrar con todo, cuarta ronda).** Foto `BAN18` (sin estado nuevo). `conquistar_plaza` (`conquistas.rs`) **reinicia el acceso de la plaza al de por defecto** (`Acceso::default()`: aliados y neutrales sí, enemigos no, respecto al dueño nuevo) antes de evaluar la salida de sus pueblos y avanzadas, que lo heredan: salen al mapa quienes ya no podrían entrar con ese acceso (los enemigos del conquistador; lo que el dueño viejo había cerrado a los neutrales ya no cuenta). El nuevo dueño lo cambia luego con `FijarAcceso` (cerrar la puerta expulsa). Cierra la `// DUDA` de la tercera ronda («el acceso de la plaza no se reinicia al conquistarla»). Con servidores de batalla la conquista llega siempre por el resultado de Unity (también bot contra bot, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §2); sin ellos, por números.
 ## 10. Derrota de Facción (`registrarDerrota`)
-Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**, queda anotada `derrotadaPor = ganadora` (o `null` si la última colapsó sin que nadie la derrotara). Qué hace después con sus héroes lo decide quien los gobierna.
+Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**, queda anotada `derrotadaPor = ganadora` (o `null` si la última colapsó sin que nadie la derrotara). **En Rust desde 5C (2026-10-24):** `politica::faccion::Derrota::{Por, Colapso}` en la conquista (por números o por Unity: `conquistar_plaza`) y en la ruina; se borra al fundar; la conquista da además `NIVEL_FACCION.xp.conquista` al conquistador. Qué hace después con sus héroes lo decide quien los gobierna.
 
 ## 11. Heridos
 

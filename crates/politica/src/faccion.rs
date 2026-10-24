@@ -340,6 +340,11 @@ impl Facciones {
         (despues > antes).then_some(despues)
     }
 
+    /// La administración fija la experiencia (`FijarNivelFaccion`, decisión 9 del plan del sistema 5: al umbral del nivel que pide). No es monótona: es andamiaje. Devuelve si cambió.
+    pub fn fijar_experiencia(&mut self, faccion: FaccionId, experiencia: Mil) -> bool {
+        self.por_id.get_mut(&faccion).is_some_and(|f| std::mem::replace(&mut f.experiencia, experiencia) != experiencia)
+    }
+
     /// `registrarDerrota` (§8): se llama al caer la **última** plaza de `perdedora` (el núcleo sabe si le queda alguna). `ganadora = None`: colapsó sola.
     pub fn registrar_derrota(&mut self, perdedora: FaccionId, ganadora: Option<FaccionId>) {
         if let Some(f) = self.por_id.get_mut(&perdedora) {

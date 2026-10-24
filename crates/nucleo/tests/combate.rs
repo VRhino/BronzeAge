@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -566,9 +566,22 @@ fn montar(m: &M, semilla: u64, con_mercado: bool) -> Esc {
     montar_sobre(Nucleo::nuevo(arranque(m, semilla)), m, con_mercado)
 }
 
-fn montar_sobre(mut n: Nucleo, m: &M, con_mercado: bool) -> Esc {
-    let (pa, pb) = (sitio_rico(&n, &m.0, 0, 1), sitio_rico(&n, &m.0, 3, 2));
-    let (a, b) = (fundar(&mut n, 0, "a", "ana", 1, pa), fundar(&mut n, 0, "b", "beto", 2, pb));
+/// Como [`montar`], con la plaza B junto al campamento 3, lejos de la A: un camino largo entre las dos, fuera de toda zona a mitad.
+fn montar_lejos(m: &M, semilla: u64, con_mercado: bool) -> Esc {
+    montar_en(Nucleo::nuevo(arranque(m, semilla)), m, con_mercado, 3)
+}
+
+fn montar_sobre(n: Nucleo, m: &M, con_mercado: bool) -> Esc {
+    montar_en(n, m, con_mercado, 0)
+}
+
+/// Las dos plazas: la A junto al campamento 0 y la B junto al campamento `campamento_b`. Por defecto vecinas (el 0): la que se conquista queda cerca de la capital del conquistador
+/// (desde 5C su mantenimiento crece con la distancia a ella, y a más de 1.000 u cae en ruinas en horas).
+fn montar_en(mut n: Nucleo, m: &M, con_mercado: bool, campamento_b: usize) -> Esc {
+    let pa = sitio_rico(&n, &m.0, 0, 1);
+    let a = fundar(&mut n, 0, "a", "ana", 1, pa);
+    let pb = sitio_rico(&n, &m.0, campamento_b, 2);
+    let b = fundar(&mut n, 0, "b", "beto", 2, pb);
     let mut e = Esc { n, a, b, cuenta: 0, fijo: None };
     if con_mercado {
         for plaza in [a, b] {
@@ -653,6 +666,15 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     let c = &hechos(&s.e.n, "asentamiento.conquistada")[0];
     assert_eq!((c.2.clone(), dato(c, "faccion"), dato(c, "faccionAnterior"), dato(c, "ocupadaHasta")), (vec![b], 1, 2, t + 90 * MIN));
     assert_eq!(hechos(&s.e.n, "faccion.derrotada").iter().map(|f| dato(f, "faccion")).collect::<Vec<_>>(), vec![2], "era la única plaza de la Facción 2");
+    // `derrotadaPor` (5C) y la experiencia de la conquista para el conquistador (10).
+    assert_eq!(s.e.n.faccion(2).unwrap().derrota, Some(politica::faccion::Derrota::Por(1)));
+    let conquista: Vec<(i64, i64)> = hechos(&s.e.n, "faccion.experiencia").iter().filter(|h| dato(h, "motivo") == 5).map(|h| (dato(h, "faccion"), dato(h, "cantidad"))).collect();
+    assert_eq!(conquista, vec![(1, 10_000)]);
+    // Y la del combate, si fue digno (el más débil con la mitad del poder del más fuerte o más): 2,5 por héroe que combatió, a su Facción.
+    let (pa, pd) = (dato(h, "poderAtacante"), dato(h, "poderDefensor"));
+    let digno = pa.min(pd) as i128 * 2 >= pa.max(pd) as i128;
+    let combate: Vec<(i64, i64)> = hechos(&s.e.n, "faccion.experiencia").iter().filter(|h| dato(h, "motivo") == 2).map(|h| (dato(h, "faccion"), dato(h, "cantidad"))).collect();
+    assert_eq!(combate, if digno { vec![(1, 2_500), (2, 2_500)] } else { vec![] }, "poderes {pa} y {pd}");
     // El defensor herido (defendió en persona y la plaza cayó), desalojado: reside en el campamento más cercano, nace una columna personal con lo que le
     // sobrevivió y la Facción de la plaza, a la puerta, y su campamento queda a 0.
     let h = s.e.n.heroe(beto).unwrap();
@@ -864,7 +886,7 @@ fn una_caravana_atacada_dentro_de_su_zona_es_un_aguante_pierde_el_70_por_ciento_
 #[test]
 fn una_caravana_atacada_fuera_de_toda_zona_es_una_disputa_de_carros_y_sin_carros_que_quedar_se_destruye() {
     let m = con_mundo!();
-    let mut e = montar(m, 7, true);
+    let mut e = montar_lejos(m, 7, true);
     let (a, b) = (e.a, e.b);
     let ca = e.caravana("ana", a, 2);
     let t0 = e.lanzar(ca);
