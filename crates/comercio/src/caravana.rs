@@ -646,8 +646,9 @@ impl Caravana {
                 }
             }
             // Como mínimo una unidad a toda caravana con carga (EE-4, 2026-10-24): si la tasa no llega a una unidad en ningún recurso, se cobra una del
-            // que más lleva (a igualdad, el primero del catálogo).
-            if cobrado.is_empty() && tasa > 0 {
+            // que más lleva (a igualdad, el primero del catálogo). Pero el peaje nunca deja la carga en cero (decisión del autor, 2026-10-24): una
+            // caravana de una sola unidad pasa sin pagar.
+            if cobrado.is_empty() && tasa > 0 && self.contenido.values().sum::<Mil>() >= 2 * base::UNIDAD {
                 let mayor = self.contenido.iter().filter(|(_, &n)| n >= base::UNIDAD).max_by_key(|(&r, &n)| (n, std::cmp::Reverse(r))).map(|(&r, _)| r);
                 if let Some(rec) = mayor {
                     *self.contenido.get_mut(&rec).expect("está") -= base::UNIDAD;
@@ -1420,6 +1421,10 @@ mod pruebas {
         let r = r();
         let tasa = Reglas::cargar().peaje;
         let mut c = en_marcha(&r, &[(Recurso::Madera, 40_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
+        // Una caravana de una sola unidad pasa sin pagar: el peaje nunca deja la carga en cero.
+        let mut u = en_marcha(&r, &[(Recurso::Madera, 1_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }]);
+        assert!(u.cobrar_peajes(u.proximo_peaje().unwrap(), tasa).is_empty());
+        assert_eq!(u.contenido[&Recurso::Madera], 1_000);
         // 2 % de 40 = 0,8, menos de una unidad: cada peaje cobra el mínimo de una unidad (EE-4); los alcanzados se descartan.
         let t = c.proximo_peaje().unwrap();
         let cobros = c.cobrar_peajes(t, tasa);

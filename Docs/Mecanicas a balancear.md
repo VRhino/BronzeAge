@@ -30,7 +30,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | 44 | COMERCIO | Ventana del acarreo en la solvencia del ascenso — implementado 2026-10-19 (C2), re-medido 2026-10-24: cuenta el 2,2 % del nominal; sin ascenso al nivel 3 que lo note | decisión C2b (`comercio.json`) |
 | 45 | COMERCIO | Comisión acuñada contra el oro lleno — C4 implementado 2026-10-19, re-medido 2026-10-24: se acuña el 0,44 % del valor (tasas 3-12 %) | decisión C7 (`comercio.json`); bots con sumideros de oro (fase 7) |
 | 46 | COMERCIO | Sumideros de bienes escasos: el comercio se apaga a los 13 días; cupos de la flota (M) | `batch comercio` con bots de la fase 7 (decisión C5) |
-| 48 | COMERCIO | Economía entera: la reputación mediana final salta de 5,45 a 34,1 y la última unidad de una línea no cruza un peaje (EE-4, EE-6, EE-7) | fase 7, con C1b (`batch comercio` con bots) |
+| 48 | COMERCIO | Economía entera: la reputación mediana final salta de 5,45 a 34,1 (EE-7) | fase 7, con C1b (`batch comercio` con bots) |
 
 ## 20. Tecnología por Eras: calibrar los logros
 
@@ -79,7 +79,7 @@ El peaje (2 % de lo que lleva la caravana a cada ciudad ajena que cruza) deja la
 
 ## 48. Economía entera: reputación mediana y repesca por peaje (EE-7)
 
-Con la economía entera (C3b, 2026-10-24) `batch comercio` (160 plazas, 30 días, semilla 42) pasa de 139 a 136 trueques cumplidos y la **reputación mediana final de las Facciones salta de 5,45 a 34,1** (la máxima, 99,7 → 98,6; con reputación positiva, 17,5 % → 15 %), con otro reparto de los peajes (cobros 187 → 81 antes del mínimo de EE-4). **Decidido por el autor el 2026-10-24 (EE-7):** se investiga en la fase 7, junto a C1b (reputación concentrada), con bots reales. A vigilar a la vez: con el peaje mínimo de una unidad (EE-4) y sin la regla de «menos de una unidad salda la línea» (EE-6), la repesca de la **última unidad** de una línea por una ruta con peaje se la queda entera la ciudad y la línea no se salda nunca (prueba `con_un_peaje_en_el_camino_la_ultima_unidad_no_llega_nunca`); el trueque vence con esa unidad pendiente y el reparto la reintenta en cada pulso.
+Con la economía entera (C3b, 2026-10-24) `batch comercio` (160 plazas, 30 días, semilla 42) pasa de 139 a 136 trueques cumplidos y la **reputación mediana final de las Facciones salta de 5,45 a 34,1** (la máxima, 99,7 → 98,6; con reputación positiva, 17,5 % → 15 %), con otro reparto de los peajes (cobros 187 → 81 antes del mínimo de EE-4). **Decidido por el autor el 2026-10-24 (EE-7):** se investiga en la fase 7, junto a C1b (reputación concentrada), con bots reales. La repesca de la última unidad por una ruta con peaje, que con el peaje mínimo (EE-4) y sin la línea saldada por resto (EE-6) no llegaba nunca (10.421 caravanas y un 70 % de cumplimiento en el batch), quedó resuelta el mismo día: el peaje nunca deja la carga en cero.
 
 ## 44. Ventana del acarreo en la solvencia del ascenso
 

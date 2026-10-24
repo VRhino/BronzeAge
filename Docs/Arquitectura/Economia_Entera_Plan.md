@@ -60,7 +60,7 @@ En N minutos de un flujo de `p` milésimas por minuto entra exactamente `entero(
 | Colocar una orden de mercado | `OrdenMercado::colocar` | milésimas | hacia abajo; menos de una unidad, `CantidadNoPositiva` |
 | Reparto automático | `reparto::asignar_origen` | `min(stock, faltante, libre)` | lo mismo, hacia abajo a unidades |
 | Lanzar, cargar y descargar una caravana | `Caravana::{preparar, cargar_aparcada, descargar_aparcada}` | milésimas | cada línea hacia abajo |
-| Peaje | `Caravana::cobrar_peajes` | `tasa × n` hacia abajo a la milésima | hacia abajo **a unidades**, y como mínimo una unidad por peaje a toda caravana con carga (EE-4) |
+| Peaje | `Caravana::cobrar_peajes` | `tasa × n` hacia abajo a la milésima | hacia abajo **a unidades**, y como mínimo una unidad por peaje a toda caravana con carga (EE-4), sin dejarla nunca en cero |
 | Entrega, comisión y recargo | `entrega::entregar` | `agregar` en milésimas | `agregar` acuña unidades enteras hacia abajo; el recargo que sale del origen es el mismo entero |
 | Mostrador | `mostrador::comerciar` | `q` en milésimas, oro `⌈q × precio⌉` a la milésima | `q` en unidades (baja de unidad en unidad hasta cumplir los topes), oro del lote **hacia arriba a unidades** |
 | Reposición de un campamento | `MercadoMercenario::{registrar_comercio, reponer}` | `stock + contador × proporción` | por comercio, `proporción × lo comerciado` hacia abajo y como mínimo una (EE-5) |
@@ -98,7 +98,7 @@ La **tendencia** «+N/min» del interior de una plaza (4H T3c) es la diferencia 
 - **EE-1** Lo que se cobra va hacia arriba; lo que se mueve, hacia abajo (regla).
 - **EE-2** La unidad sale del almacén al completarse su consumo (§3).
 - **EE-3** Los víveres, en unidades enteras con resto oculto (§2).
-- **EE-4** El peaje cobra como mínimo una unidad a toda caravana con carga: si la tasa no llega a una unidad en ningún recurso, una del recurso que más lleva (a igualdad, el primero del catálogo).
+- **EE-4** El peaje cobra como mínimo una unidad a toda caravana con carga: si la tasa no llega a una unidad en ningún recurso, una del recurso que más lleva (a igualdad, el primero del catálogo). Nunca deja la carga en cero (decisión del autor del mismo día): una caravana de una sola unidad pasa sin pagar.
 - **EE-5** La reposición de los campamentos es como mínimo una unidad por comercio: se anota al registrar cada comercio en `MercadoMercenario::repone` (nuevo en la foto `BAN26`), sin tocar los contadores de lo comerciado.
 - **EE-6** Se retira la regla de la línea saldada por resto.
 - **EE-7** El salto de la reputación mediana se investiga en la fase 7, con C1b (`Mecanicas a balancear.md` §48).
