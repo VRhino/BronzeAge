@@ -85,8 +85,9 @@ impl Perfil {
 /// rechazarse al cargar. **3**: `pseudoAleatorio` con `sin` sustituido por hash entero (FNV-1a + SplitMix64) y tabla de
 /// senos entera para las ranuras. **4** (2026-10-23, como el TypeScript): sin disco urbano para anclas ni satélites, el círculo de
 /// barrido del núcleo de un ancla, el ancla llena en cuanto no cabe la huella pedida, la Granja que crece busca sitio conservando
-/// su camino y el ancla que nace al proponer.
-pub const LAYOUT_VERSION: u32 = 5;
+/// su camino y el ancla que nace al proponer. **5** (2026-10-24, Murallas M1): una puerta por cruce no parte la red y la red de las puertas se siembra
+/// conectada. **6** (2026-10-24, Cal-6): ningún anillo tiene más de 4 puertas; los cruces cortados rodean el muro hasta la puerta más cercana.
+pub const LAYOUT_VERSION: u32 = 6;
 
 /// Constantes de T §2.1 y §12 más las dos locales (`FONDO_MANZANA`, `NIVEL_GATE_ANCLAS`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

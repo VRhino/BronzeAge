@@ -41,6 +41,10 @@ pub(crate) fn mediana(v: &[f64]) -> Option<f64> {
     percentil(&mut v.to_vec(), 0.5)
 }
 
+fn media(v: &[f64]) -> Option<f64> {
+    (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
+}
+
 /// Mediana de un instante por plaza (en minutos), en la unidad `div`; las que no llegan cuentan como `tope` (censura a la derecha).
 fn mediana_censurada(v: &[Option<i64>], div: f64, tope: f64) -> Option<f64> {
     mediana(&v.iter().map(|m| m.map_or(tope, |m| m as f64 / div)).collect::<Vec<_>>())
@@ -491,6 +495,8 @@ fn murallas(x: &Entrada) -> Vec<Metrica> {
         metrica("muralla_coste_madera_mediana", "Madera que cuesta levantar la empalizada entera (mediana)", "madera", INFO, med(&comp, &|p| coste(p, asentamiento::Recurso::Madera)), "Murallas §5 y bloque MURALLA (tarifa por celda; puertas ×4)", &format!("Piedra (mediana): {}. Se paga celda a celda y nunca por debajo de la reserva.", fmt1(med(&comp, &|p| coste(p, asentamiento::Recurso::Piedra))))),
         metrica("muralla_ciudad_bloqueada_pct", "Plazas amuralladas a las que la ciudad niega sitio para Viviendas", "%", max(0.0), pct(bloq.len(), bloq.len() + libres.len()), "Trazado_Urbano §6.5-§6.6 y Murallas §3 (el anillo abraza la ciudad del momento)", &format!("Plazas en pie con recinto. En ellas, Viviendas al final (mediana) {} y pesants {}, frente a {} y {} en las demás amuralladas; también se les niegan Armería y Carpintería (ver «sin sitio» de la ciudad). Sin murallas ninguna plaza recibe esta negativa. Dibujo de una en `ciudad_bloqueada.svg`.", fmt0(med(&bloq, &viviendas)), fmt0(med(&bloq, &|p| p.a.poblacion.pesants as f64)), fmt0(med(&libres, &viviendas)), fmt0(med(&libres, &|p| p.a.poblacion.pesants as f64)))),
         metrica("muralla_piezas_sin_salida", "Piezas sin salida a la red en plazas amuralladas", "piezas", max(0.0), Some(x.corrida.ciudades.sin_salida_muralla as f64), "Trazado_Urbano §5.1 y §13 (salida a la red dentro del cap)", "Al levantar el muro la red se recalcula con muros y torres ocupados y una sola puerta por cruce (Murallas §3): una pieza anterior cuyo corredor cruzaba el anillo, o salía de una calle que el muro quitó, puede no hallar otro dentro del cap (Granjas de las afueras, sobre todo). Fuera de `invariantes_ciudad`: la red sigue conexa y el código hace lo que dicen las reglas (también el TypeScript), pero la pieza queda sin calle."),
+        metrica("muralla_puertas_max", "Puertas del anillo que más tiene", "puertas", max(x.reglas.muralla.puertas_maximas as f64), comp.iter().map(|p| p.reg.recinto_puertas as f64).reduce(f64::max), "Murallas §3 y bloque MURALLA (`puertasMaximas`, `puertasNormales`; Cal-6)", &format!("Anillos por número de puertas: {}.", reparto_de_puertas(&comp))),
+        metrica("muralla_bono_medio", "Multiplicador defensivo de la muralla al final (media)", "×", INFO, media(&comp.iter().filter(|p| !p.a.destruido).map(|p| asentamiento::recintos::multiplicador_defensivo(&x.reglas.muralla, &p.a.recintos) as f64 / 1e6).collect::<Vec<_>>()), "Combate §3 y Murallas §6 (`1 + (bono − 1) × integridad / nº de puertas`)", &format!("En las plazas en pie con recinto, con la integridad del momento. Con el anillo entero (media): ×{}.", fmt1(media(&comp.iter().filter(|p| p.reg.recinto_puertas > 0).map(|p| 1.0 + (x.reglas.muralla.bono_defensa[sp::NIVEL_RECINTO as usize - 1] as f64 / 1e6 - 1.0) / p.reg.recinto_puertas as f64).collect::<Vec<_>>())))),
         metrica("muralla_upkeep_pct", "Peso de la muralla en el mantenimiento al final (mediana)", "%", INFO, mediana(&pesos), "Murallas §8 (upkeep por celda levantada) y Economia_Construccion §10", "Upkeep de los recintos sobre el coste total del mantenimiento por minuto (todos los recursos sumados), en las plazas en pie con recinto."),
     ];
     // Sin ninguna plaza amurallada (escenarios cortos o `--murallas 0`) todas valen 0, como las demás métricas «entre las que…».
@@ -555,6 +561,12 @@ fn grafico_edificios(x: &Entrada) -> Grafico {
     tipos.sort_by(|a, b| b.2.total_cmp(&a.2).then(b.1.total_cmp(&a.1)));
     let series = tipos.iter().take(12).map(|&(t, a, b)| serie(t.nombre(), vec![(c.dia_foto as f64, a), (x.e.dias as f64, b)])).collect();
     Grafico { id: "edificios_por_tipo".into(), titulo: "Edificios activos por tipo (mediana por plaza)".into(), tipo: TipoGrafico::Barras, eje_x: "día de mundo".into(), eje_y: "edificios".into(), series }
+}
+
+/// Cuántos anillos tienen 1, 2, 3, 4 y más de 4 puertas (Cal-6).
+fn reparto_de_puertas(comp: &[&Villa]) -> String {
+    let n = |f: &dyn Fn(usize) -> bool| comp.iter().filter(|p| f(p.reg.recinto_puertas)).count();
+    format!("0: {}, 1: {}, 2: {}, 3: {}, 4: {}, más de 4: {}", n(&|k| k == 0), n(&|k| k == 1), n(&|k| k == 2), n(&|k| k == 3), n(&|k| k == 4), n(&|k| k > 4))
 }
 
 fn grafico_sin_sitio(x: &Entrada) -> Grafico {

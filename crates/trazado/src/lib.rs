@@ -39,7 +39,7 @@ pub use ciudad::{Ciudad, MITAD};
 pub use fundacion::{fusionar_celdas, EntradaFundacion, RectLocal, TipoPieza};
 pub use geom::{Celda, Huella, Rect, CELDA_UL, HUELLA_POR_DEFECTO};
 pub use muralla::{
-    contiene_a, edificios_extramuros, interior_de, marcar_torres, trazar_recinto, CeldaMuro, ClaseCelda, ErrorMuralla, Interior,
+    aberturas, contiene_a, edificios_extramuros, interior_de, marcar_torres, trazar_recinto, CeldaMuro, ClaseCelda, ErrorMuralla, Interior,
     ParametrosMuralla, Trazo,
 };
 pub use tipos::*;

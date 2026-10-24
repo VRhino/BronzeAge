@@ -7,7 +7,7 @@ use comun::*;
 use std::collections::{HashSet, VecDeque};
 use trazado::*;
 
-const P: ParametrosMuralla = ParametrosMuralla { franja_de_ronda: 1, paso_torres: [0, 8, 5] };
+const P: ParametrosMuralla = ParametrosMuralla { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4 };
 
 /// 20 ciudades: semilla, perfil y tamaño distintos (de 35 a 140 piezas).
 fn ciudades() -> Vec<Sim> {
@@ -121,23 +121,12 @@ fn las_puertas_son_una_por_cruce_y_conectan_con_la_red() {
         for c in t.celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta) {
             assert!(red.contains(&c.celda), "ciudad {k}: la puerta {:?} no está en la red", c.celda);
         }
-        // y una puerta por cruce no parte la red (LAYOUT_VERSION 5): la de antes, sin las celdas cerradas del anillo, sigue siendo una pieza
-        let cerradas: HashSet<Celda> = t.celdas.iter().filter(|c| c.clase != ClaseCelda::Puerta).map(|c| c.celda).collect();
-        let abierta: HashSet<Celda> = red.iter().copied().filter(|c| !cerradas.contains(c)).collect();
-        let centro = s.c.piezas().iter().find(|p| p.rol == Rol::Centro).unwrap().rect;
-        let desde: Vec<Celda> = centro.anillo(s.c.params().ancho_calle).into_iter().filter(|c| abierta.contains(c)).collect();
-        let mut vistas: HashSet<Celda> = desde.iter().copied().collect();
-        let mut cola: VecDeque<Celda> = desde.into_iter().collect();
-        while let Some(Celda { col, row }) = cola.pop_front() {
-            for (dc, dr) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
-                let n = Celda::new(col + dc, row + dr);
-                if abierta.contains(&n) && vistas.insert(n) {
-                    cola.push_back(n);
-                }
-            }
-        }
-        let sueltas = abierta.iter().filter(|c| !vistas.contains(c)).count();
-        assert_eq!(sueltas, 0, "ciudad {k}: el muro deja {sueltas} celdas de red sin salida");
+        // y una puerta por cruce no parte la red (LAYOUT_VERSION 5), tampoco con el tope de cuatro (6): rehecha con el muro, sigue siendo una pieza y toda pieza tiene salida
+        let mut c = s.c.clone();
+        c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, &t.red_de_puertas, t.tras_pieza, false)]);
+        assert!(conexa(&c), "ciudad {k}: el muro parte la red");
+        let sin_salida: Vec<u32> = c.piezas().iter().filter(|p| p.rol != Rol::Centro && !p.rect.adyacentes().into_iter().any(|x| c.es_calle(x) || c.es_camino(x))).map(|p| p.id).collect();
+        assert!(sin_salida.is_empty(), "ciudad {k}: piezas sin salida {sin_salida:?}");
         // cada cruce con la red deja al menos una puerta: toda tirada de celdas de red del anillo tiene una puerta
         let con_red = t.celdas.iter().filter(|c| red.contains(&c.celda)).count();
         assert!(t.puertas() <= con_red, "ciudad {k}");
@@ -302,4 +291,30 @@ fn con_la_empalizada_temprana_la_granja_conserva_su_camino_y_la_ciudad_crece_por
     verificar(&s.c, s.radio());
     let rehecha = Ciudad::desde_partes(s.c.semilla(), *s.c.params(), LAYOUT_VERSION, s.c.piezas().to_vec(), s.c.recintos().to_vec()).unwrap();
     assert_eq!(red_de(&rehecha), red_de(&s.c), "colocar y reconstruir dan la misma red");
+}
+
+/// Cal-6 (decisión del autor del 2026-10-24, `LAYOUT_VERSION` 6): en 200 ciudades (semillas, perfiles y tamaños de 35 a 140 piezas) ningún anillo pasa de
+/// `puertas_maximas` (4) puertas y, con el muro puesto, la red sigue siendo una pieza y toda pieza, Granjas incluidas, tiene salida. Imprime el reparto de
+/// puertas por anillo (`cargo test -p trazado --test muralla -- --nocapture`).
+#[test]
+fn ningun_anillo_pasa_de_cuatro_puertas_y_la_red_sigue_conectada_en_200_ciudades() {
+    // Una ciudad cuyo anillo no se puede cerrar no tiene recinto (Murallas §3) y no cuenta.
+    let con_trazo: Vec<(Sim, Trazo)> = (0..200u64).map(|k| ciudad_de(1000 + k, Perfil::TODOS[k as usize % 4], 35 + 5 * (k as usize % 22))).filter_map(|s| trazar_recinto(&s.c, &P, 1).ok().map(|t| (s, t))).collect();
+    let mut reparto = [0usize; 6];
+    con_trazo.iter().for_each(|(_, t)| reparto[t.puertas().min(5)] += 1);
+    eprintln!("puertas por anillo en {} de 200 ciudades: 0 → {}, 1 → {}, 2 → {}, 3 → {}, 4 → {}, más de 4 → {}", con_trazo.len(), reparto[0], reparto[1], reparto[2], reparto[3], reparto[4], reparto[5]);
+    assert!(con_trazo.len() >= 190, "solo {} de 200 ciudades se pueden amurallar", con_trazo.len());
+    let mut fallos = Vec::new();
+    for (k, (s, t)) in con_trazo.iter().enumerate() {
+        assert!((1..=P.puertas_maximas).contains(&t.puertas()), "ciudad {k}: {} puertas", t.puertas());
+        let mut c = s.c.clone();
+        c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, &t.red_de_puertas, t.tras_pieza, true)]);
+        let sin_salida: Vec<u32> = c.piezas().iter().filter(|p| p.rol != Rol::Centro && !p.rect.adyacentes().into_iter().any(|x| c.es_calle(x) || c.es_camino(x))).map(|p| p.id).collect();
+        if !conexa(&c) || !sin_salida.is_empty() {
+            fallos.push((k, s.c.semilla(), t.puertas(), conexa(&c), sin_salida));
+        } else {
+            verificar(&c, s.radio());
+        }
+    }
+    assert!(fallos.is_empty(), "ciudades con la red partida o piezas sin salida (ciudad, semilla, puertas, red conexa, piezas sin salida): {fallos:?}");
 }

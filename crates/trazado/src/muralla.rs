@@ -9,7 +9,7 @@
 //! ventana el trazo se **rechaza** ([`ErrorMuralla::FueraDeVentana`]); nunca se recorta.
 //!
 //! El TypeScript (`typescript-final`) usa otro hash y otra red de calles, así que no hay paridad celda a celda: se vigilan las
-//! mismas invariantes (cierra, no pisa, una puerta por cruce, torres separadas, determinismo).
+//! mismas invariantes (cierra, no pisa, una puerta por cruce, como mucho cuatro puertas, torres separadas, determinismo).
 
 use crate::ciudad::{celda_de, idx, inundar, vecinos_i, Ciudad, CALLE, CAMINO, CELDAS, LADO};
 use crate::geom::Celda;
@@ -32,18 +32,20 @@ pub struct CeldaMuro {
     pub clase: ClaseCelda,
 }
 
-/// Lo que el trazo lee del bloque `MURALLA` de Murallas.md §11 (`franjaDeRonda`, `pasoTorres`); lo construye quien parsea el bloque.
+/// Lo que el trazo lee del bloque `MURALLA` de Murallas.md §11 (`franjaDeRonda`, `pasoTorres`, `puertasMaximas`); lo construye quien parsea el bloque.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParametrosMuralla {
     /// Pasos de dilatación del casco urbano para el anillo (vecindad 4).
     pub franja_de_ronda: i32,
     /// Celdas de separación entre torres según el nivel del recinto (índice `nivel - 1`); 0 = ese nivel no tiene torres.
     pub paso_torres: [i32; 3],
+    /// Tope de puertas de un anillo (`puertasMaximas`, Cal-6).
+    pub puertas_maximas: usize,
 }
 
 impl Default for ParametrosMuralla {
     fn default() -> Self {
-        Self { franja_de_ronda: 1, paso_torres: [0, 8, 5] }
+        Self { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4 }
     }
 }
 
@@ -86,8 +88,9 @@ impl Trazo {
     fn contar(&self, clase: ClaseCelda) -> usize {
         self.celdas.iter().filter(|c| c.clase == clase).count()
     }
+    /// Las puertas del anillo: sus [`aberturas`] (Cal-6).
     pub fn puertas(&self) -> usize {
-        self.contar(ClaseCelda::Puerta)
+        aberturas(&self.celdas).len()
     }
     pub fn torres(&self) -> usize {
         self.contar(ClaseCelda::Torre)
@@ -265,7 +268,10 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
     let mut celdas = ordenar_anillo(por_celda.collect());
     colapsar_puertas(&mut celdas, &region, &muro, &en_red);
     reabrir_cortes(&mut celdas, &en_red, base);
-    let red_de_puertas = red_de_puertas(base, &celdas, &region, &muro);
+    let piezas_hasta = piezas.iter().map(|q| q.id).max().unwrap_or(0);
+    let valida = |celdas: &[CeldaMuro], cortados: &[usize]| sigue_conectada(base, celdas, &red_de_puertas(base, celdas, cortados, &region, &muro), piezas_hasta);
+    let cortados = limitar_puertas(&mut celdas, &base.suelo.red, &region, &muro, p.puertas_maximas, valida).ok_or(ErrorMuralla::NoSePuedeCerrar)?;
+    let red_de_puertas = red_de_puertas(base, &celdas, &cortados, &region, &muro);
     let interior = Interior(region);
     marcar_torres(&mut celdas, &interior, p, nivel);
 
@@ -279,7 +285,7 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
             (true, false) => {}
         }
     }
-    let tras_pieza = piezas.iter().map(|q| q.id).max().unwrap_or(0);
+    let tras_pieza = piezas_hasta;
     Ok(Trazo { area_encerrada: interior.area(), celdas, red_de_puertas, tras_pieza, dentro, fuera, afueras_dentro })
 }
 
@@ -288,11 +294,14 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
 /// siembra **conectada** ([`Ciudad`] la une a la red con un corredor si hace falta): nunca queda una isla (lo que vio el TypeScript al sembrar solo las puertas). Sin
 /// esto, el corredor de una pieza de fuera que pasaba por donde ahora está el muro podía no hallar otro dentro del cap, y fuera del anillo no quedaba red a la que
 /// pegarse.
-fn red_de_puertas(base: &Ciudad, celdas: &[CeldaMuro], region: &[bool], muro: &[bool]) -> Vec<CeldaDeRed> {
+/// Un cruce **cortado** (Cal-6, [`limitar_puertas`]) conserva igual su tramo a cada lado, pero no la celda, que es muro: al sembrarlo, la red de fuera rodea el muro
+/// hasta la red más cercana (`Ciudad::sembrar_antes_de`), que es la de la puerta más cercana.
+fn red_de_puertas(base: &Ciudad, celdas: &[CeldaMuro], cortados: &[usize], region: &[bool], muro: &[bool]) -> Vec<CeldaDeRed> {
     let red = &base.suelo.red;
     let mut conserva = vacio();
-    for d in celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta).filter_map(|c| idx(c.celda)) {
-        conserva[d] = true;
+    let puertas = celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta).filter_map(|c| idx(c.celda));
+    for (d, abierta) in puertas.map(|d| (d, true)).chain(cortados.iter().map(|&d| (d, false))) {
+        conserva[d] = abierta;
         // A cada lado, la red de antes que toca la puerta sin cruzar el anillo: fuera, el camino o la calle que sale; dentro, la que llega.
         for lado in [false, true] {
             let tramo = inundar(vecinos_i(d).into_iter().flatten(), |i| red[i] != 0 && region[i] == lado && !muro[i]);
@@ -415,7 +424,7 @@ fn reabrir_cortes(anillo: &mut [CeldaMuro], en_red: &[bool], base: &Ciudad) {
                 }
             }
         }
-        let Some(mut i) = paso else { return };
+        let Some(mut i) = paso else { break };
         loop {
             anillo[pos[i]].clase = ClaseCelda::Puerta;
             if previa[i] == i {
@@ -424,6 +433,104 @@ fn reabrir_cortes(anillo: &mut [CeldaMuro], en_red: &[bool], base: &Ciudad) {
             i = previa[i];
         }
     }
+    // Ni a una pieza (`LAYOUT_VERSION` 6): la que tenía salida y solo la tenía por celdas de red que el anillo cerró —encajada en un entrante del muro— recupera la
+    // primera de ellas como puerta (suele ser vecina de la puerta del cruce, y entonces es la misma abertura).
+    for q in base.piezas().iter().filter(|q| q.rol != crate::tipos::Rol::Centro) {
+        let frente: Vec<usize> = q.rect.adyacentes().into_iter().filter_map(idx).filter(|&i| en_red[i]).collect();
+        let cerrada = |i: usize| pos[i] != usize::MAX && anillo[pos[i]].clase != ClaseCelda::Puerta;
+        if !frente.is_empty() && frente.iter().all(|&i| cerrada(i)) {
+            anillo[pos[frente[0]]].clase = ClaseCelda::Puerta;
+        }
+    }
+}
+
+/// Las **puertas** de un anillo (Cal-6): cada abertura es una tirada 4-conexa de celdas de puerta, porque el paso que reabre [`reabrir_cortes`] por una calle pegada
+/// al anillo es una sola puerta de varias celdas. Índices en `celdas`, cada abertura en orden de recorrido y las aberturas por su primera celda. Es lo que cuentan el
+/// tope (`puertasMaximas`) y el divisor del bono defensivo; el coste se sigue pagando por celda.
+pub fn aberturas(celdas: &[CeldaMuro]) -> Vec<Vec<usize>> {
+    let mut pos = std::collections::HashMap::new();
+    for (k, c) in celdas.iter().enumerate().filter(|(_, c)| c.clase == ClaseCelda::Puerta) {
+        pos.insert(c.celda, k);
+    }
+    let mut vista = vec![false; celdas.len()];
+    let mut grupos = Vec::new();
+    for k in (0..celdas.len()).filter(|&k| celdas[k].clase == ClaseCelda::Puerta) {
+        if std::mem::replace(&mut vista[k], true) {
+            continue;
+        }
+        let (mut grupo, mut pila) = (vec![], vec![k]);
+        while let Some(j) = pila.pop() {
+            grupo.push(j);
+            let Celda { col, row } = celdas[j].celda;
+            for v in [(0, -1), (1, 0), (0, 1), (-1, 0)].into_iter().filter_map(|(dc, dr)| pos.get(&Celda::new(col + dc, row + dr)).copied()) {
+                if !std::mem::replace(&mut vista[v], true) {
+                    pila.push(v);
+                }
+            }
+        }
+        grupo.sort_unstable();
+        grupos.push(grupo);
+    }
+    grupos
+}
+
+/// Ningún anillo tiene más de `maximas` puertas (Cal-6, decisión del autor del 2026-10-24; `LAYOUT_VERSION` 6). Si la red lo cruza por más sitios, las
+/// [`aberturas`] se ordenan por la red de fuera que **más sirven**, contando solo la que no sirve ya otra mejor (la red de antes, fuera del anillo, que toca la
+/// abertura sin cruzarlo): primero las que sirven algún camino —la salida de las Granjas—, después las de más celdas de red y, a igualdad, la primera del anillo.
+/// Se cortan, enteras y de la que menos sirve a la que más, mientras sobren: cada corte vuelve muro sus celdas y su red de fuera rodea el muro hasta la puerta más
+/// cercana ([`red_de_puertas`]); un corte que partiría la red o dejaría sin salida a una pieza que la tenía (`sigue_conectada`) no se hace. Devuelve las celdas
+/// cortadas, o `None` si ni así se baja del tope (ese anillo no se puede cerrar con la regla).
+fn limitar_puertas(anillo: &mut [CeldaMuro], red: &[u8], region: &[bool], muro: &[bool], maximas: usize, valida: impl Fn(&[CeldaMuro], &[usize]) -> bool) -> Option<Vec<usize>> {
+    let puertas = aberturas(anillo);
+    if puertas.len() <= maximas {
+        return Some(Vec::new());
+    }
+    let indices: Vec<usize> = anillo.iter().map(|c| idx(c.celda).expect("el anillo está en la ventana")).collect();
+    let en = |k: usize| indices[k];
+    let servida: Vec<Vec<usize>> = puertas
+        .iter()
+        .map(|grupo| {
+            let fuera = inundar(grupo.iter().flat_map(|&k| vecinos_i(en(k))).flatten(), |i| red[i] != 0 && !region[i] && !muro[i]);
+            (0..CELDAS).filter(|&i| fuera[i]).collect()
+        })
+        .collect();
+    // El orden de las aberturas, de la que más red nueva sirve a la que menos.
+    let (mut cubierta, mut libres, mut orden) = (vacio(), (0..puertas.len()).collect::<Vec<_>>(), Vec::new());
+    while !libres.is_empty() {
+        let valor = |j: usize| {
+            let nuevas = || servida[j].iter().filter(|&&i| !cubierta[i]);
+            (nuevas().any(|&i| red[i] == CAMINO), nuevas().count(), std::cmp::Reverse(j))
+        };
+        let mejor = libres.iter().copied().max_by_key(|&j| valor(j)).expect("quedan");
+        servida[mejor].iter().for_each(|&i| cubierta[i] = true);
+        libres.retain(|&j| j != mejor);
+        orden.push(mejor);
+    }
+    let (mut cortadas, mut quedan) = (Vec::new(), puertas.len());
+    for &j in orden.iter().rev() {
+        if quedan <= maximas {
+            break;
+        }
+        puertas[j].iter().for_each(|&k| anillo[k].clase = ClaseCelda::Muro);
+        let con: Vec<usize> = cortadas.iter().copied().chain(puertas[j].iter().map(|&k| en(k))).collect();
+        if valida(anillo, &con) {
+            cortadas = con;
+            quedan -= 1;
+        } else {
+            puertas[j].iter().for_each(|&k| anillo[k].clase = ClaseCelda::Puerta);
+        }
+    }
+    (quedan <= maximas).then_some(cortadas)
+}
+
+/// ¿Sigue la red de la ciudad, con este anillo, siendo una pieza, y toda pieza que tenía salida la conserva? Se rehace la red con el recinto, como al comprometerlo.
+fn sigue_conectada(base: &Ciudad, celdas: &[CeldaMuro], red_de_puertas: &[CeldaDeRed], tras_pieza: u32) -> bool {
+    let mut c = base.clone();
+    c.set_recintos(vec![Recinto::desde_celdas(celdas, red_de_puertas, tras_pieza, false)]);
+    let red = &c.suelo.red;
+    let total = red.iter().filter(|&&r| r != 0).count();
+    let una_pieza = red.iter().position(|&r| r != 0).is_none_or(|i| cuenta(&inundar([i], |n| red[n] != 0)) == total);
+    una_pieza && base.piezas().iter().all(|q| q.rol == crate::tipos::Rol::Centro || !base.suelo.tiene_frente(&q.rect) || c.suelo.tiene_frente(&q.rect))
 }
 
 /// Marca las torres de un anillo ya ordenado (solo niveles con `paso_torres`; la empalizada no tiene). **Borra antes las que
