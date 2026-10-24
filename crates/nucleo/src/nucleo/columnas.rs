@@ -300,7 +300,7 @@ impl Nucleo {
                     self.instalar_plan(c, plan);
                     self.emitir_comercio(t, comercio::evento::Evento::CaravanaVuelve { caravana: c }, vec![origen], &[("sinNadie", 1)]);
                 }
-                None => self.perder_caravana(t, c),
+                None => drop(self.perder_caravana(t, c)),
             }
         }
         self.evento("ejercito.disuelto", t, id, Some(posicion), vec![]);

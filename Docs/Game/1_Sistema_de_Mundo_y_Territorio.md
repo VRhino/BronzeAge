@@ -166,7 +166,7 @@ Cifras, todas PLACEHOLDER (`CAMPAMENTOS_BANDIDOS`):
 
 - Radio de ataque a caravanas: 7 unidades del mapa.
 - Cada plaza tiene su campamento de bandidos en el bosque más cercano **a 10 o más del borde de su zona** (más separados que antes).
-- Reaparición del de un asentamiento: 60 minutos tras destruirse.
+- Reaparición del de un asentamiento: **6 horas** tras destruirse (antes 60 minutos; decisión del autor, 2026-10-24).
 - **Atacan caravanas**: los campamentos no se mueven; solo atacan las caravanas que pasan cerca de donde están apostados, con resolución numérica. Es un evento PvE que no figura entre los tipos de batalla instanciada (5.15.1b). **Siguen sin actuar dentro de ninguna zona de influencia**: quitar la inmunidad de las caravanas (3.10) es una regla entre Facciones, no contra el PvE.
 
 El campamento no bloquea la explotación del bosque que ocupa: solo amenaza a las caravanas de paso.

@@ -366,7 +366,7 @@ mod pruebas {
         assert_eq!((b.radio_ataque_caravana, b.anillo_min, b.anillo_max), (7_000, 30_000, 50_000));
         assert_eq!(b.niveles.clone().map(|n| (n.poder, n.unidades, n.oro_por_heroe, n.peso)), [(20_000, 10, 30_000, 500_000), (60_000, 30, 33_000, 300_000), (120_000, 60, 36_000, 200_000)]);
         assert_eq!((b.ventana, b.completas, b.caida_por_cada, b.solo_experiencia_desde), (24 * 60 * MS_POR_MINUTO, 8, 150_000, 14));
-        assert_eq!((b.residentes_por_bandido, b.anillo_minimo, b.anillo_maximo, b.reaparicion_anillo, b.respawn), (2, 1, 6, 10 * MS_POR_MINUTO, 60 * MS_POR_MINUTO));
+        assert_eq!((b.residentes_por_bandido, b.anillo_minimo, b.anillo_maximo, b.reaparicion_anillo, b.respawn), (2, 1, 6, 10 * MS_POR_MINUTO, 360 * MS_POR_MINUTO), "la reaparición de la plaza, 6 h (2026-10-24)");
         assert_eq!(b.niveles.iter().map(|n| n.peso).sum::<i64>(), UNO, "los pesos suman 1");
     }
 

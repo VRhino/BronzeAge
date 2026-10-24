@@ -95,7 +95,7 @@ pub struct GuarnicionDePueblo {
 }
 
 /// Lo que la IA y el Gobernador ponen en una avanzada (Doc 5.17): las tropas que eligió para cada escalón y la guarnición de serie, que nace completa la
-/// primera vez que se la necesita y se repone gratis a las `reposicionMinutos` de quedar incompleta. Solo existe para una avanzada a la que se ha elegido
+/// primera vez que se la necesita y se repone gratis de soldado en soldado (entera en `reposicionMinutos` desde 0). Solo existe para una avanzada a la que se ha elegido
 /// tropa o que ha tenido que defenderse: una avanzada sin tocar no ocupa nada.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GuarnicionDeAvanzada {

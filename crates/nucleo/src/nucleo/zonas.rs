@@ -366,6 +366,7 @@ impl Nucleo {
         let urbe = crate::urbanismo::Urbe::fundar(&self.estado.reglas.economia, self.semilla, id);
         self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default() });
         self.situar_plaza(id, punto);
+        self.proteger_al_fundar(id, t);
         self.programar_minuto(id, t + base::MS_POR_MINUTO);
         self.programar_bandidos_de_plaza(id, t);
         self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;

@@ -305,7 +305,7 @@ impl Nucleo {
 
     /// El carro llegó a la madre: vuelca lo que trae en su almacén (topado: lo que no cabe se pierde, ni cuenta para el ascenso) y vuelve vacío (su plan ya es el de la vuelta).
     pub(super) fn acarreo_llega(&mut self, t: Instante, carro: u64, madre: u64, contenido: &Mercancia) {
-        let Some(plaza) = self.estado.asentamientos.get_mut(&madre) else { return self.perder_caravana(t, carro) };
+        let Some(plaza) = self.estado.asentamientos.get_mut(&madre) else { return drop(self.perder_caravana(t, carro)) };
         let mut ingresado: Mil = 0;
         for (&r, &n) in contenido {
             let entra = plaza.economia.almacen.agregar(r, n);

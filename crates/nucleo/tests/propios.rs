@@ -845,7 +845,11 @@ async fn la_plaza_conquistada_y_lo_que_depende_de_ella_pasan_de_una_faccion_a_la
     let atacante = x.n.ejercito(columna).unwrap().columna.lider;
     let completa = militar::Reglas::cargar().tropas.tropa(Tropa::EspadachinesBronce).unidades;
     x.ok("admin", Comando::DarEscuadra { heroe: atacante, tropa: Tropa::EspadachinesBronce, cantidad: completa });
+    // A nace protegida un día (Doc 1.2): el asedio llega cuando ya se la puede asediar.
+    let fin_proteccion = x.n.protegida_hasta(a).unwrap().max(x.n.ahora());
+    x.n.avanzar_hasta(fin_proteccion);
     let w = arrancar_con(x.n).await;
+    let (mut admin_c, _, _) = w.conectar(hola_con("admin", TipoCliente::ClienteAdminWeb, &[])).await;
     let (mut ana, _, de_ana) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
     let (mut gus, _, de_gus) = w.conectar(hola_con("gus", TipoCliente::ClienteUnity, &[])).await;
     let mut f1 = Cliente::desde(foto_de(&de_ana, "FACCION:f-1"));
@@ -858,8 +862,12 @@ async fn la_plaza_conquistada_y_lo_que_depende_de_ella_pasan_de_una_faccion_a_la
 
     // gus ataca A (las dos Facciones no están en guerra: la declara) y A cae sin combate.
     let atacar = orden::Cuerpo::Atacar(pb::OrdenAtacar { heroe_id: ids::heroe(atacante), objetivo: Some(pb::orden_atacar::Objetivo { tipo: Some(pb::orden_atacar::objetivo::Tipo::AsentamientoId(as_a.clone())) }), declara_guerra: Some(true) });
-    let (previos, r) = dar_todo(&mut gus, "q1", atacar).await;
+    let (mut previos, r) = dar_todo(&mut gus, "q1", atacar).await;
     aceptada(&r);
+    // El asedio se resuelve con números al acabar su convocatoria de 30 s (M8): la administración adelanta el reloj más allá.
+    let reloj = orden::Cuerpo::ControlarReloj(pb::OrdenControlarReloj { accion: "avanzar_hasta".into(), factor_milesimas: None, hasta_ms: Some(fin_proteccion + 60_000) });
+    aceptada(&dar_todo(&mut admin_c, "reloj", reloj).await.1);
+    previos.extend(pendiente(&mut gus).await);
     assert_eq!(faccion_de_la_plaza(&previos, "FACCION:f-2", &as_a), Some("f-2".to_owned()), "A llega a F2, que ahora la tiene en su Facción: {:?}", etiquetas(&previos));
     let mut todo_f2 = previos;
     todo_f2.extend(pendiente(&mut gus).await);

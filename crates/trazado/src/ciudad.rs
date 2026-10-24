@@ -375,14 +375,39 @@ impl Ciudad {
         }
         let Some(cu) = self.centro().map(|p| p.rect) else { return };
         self.anadir_conectadas(cu.anillo(self.params.ancho_calle), CALLE);
-        let pendientes: Vec<(Rect, bool, bool)> = self
+        let pendientes: Vec<(u32, Rect, bool, bool)> = self
             .piezas
             .iter()
             .filter(|p| p.rol != Rol::Centro)
-            .map(|p| (p.rect, p.categoria == Categoria::Afueras, p.rol.es_ancla()))
+            .map(|p| (p.id, p.rect, p.categoria == Categoria::Afueras, p.rol.es_ancla()))
             .collect();
-        for (rect, afueras, ancla) in pendientes {
+        // La red que cada recinto conserva en sus puertas entra en el punto de la historia en que se trazó: tras las piezas que ya había (las de id hasta
+        // `tras_pieza`) y antes de la primera que vino después (LAYOUT_VERSION 5; Murallas M1). Así una pieza nueva da la misma red colocada que reconstruida.
+        let mut siembras: Vec<(u32, Vec<(Celda, u8)>)> = self
+            .recintos
+            .iter()
+            .map(|r| (r.tras_pieza, r.red_de_puertas.iter().map(|c| (c.celda, if c.camino { CAMINO } else { CALLE })).collect()))
+            .collect();
+        for (id, rect, afueras, ancla) in pendientes {
+            self.sembrar_antes_de(&mut siembras, id);
             self.procesar(rect, afueras, ancla);
+        }
+        self.sembrar_antes_de(&mut siembras, u32::MAX);
+    }
+
+    /// Siembra, conectada a la red, la de las puertas de los recintos trazados antes de la pieza `id`: si ningún tramo toca ya la red (el muro cortó la calle que
+    /// los unía), cada puerta se une a ella con el corredor más corto por suelo libre, como una pieza sin frente (sin cap: dentro de la ventana).
+    fn sembrar_antes_de(&mut self, siembras: &mut [(u32, Vec<(Celda, u8)>)], id: u32) {
+        for (tras, celdas) in siembras.iter_mut().filter(|(tras, _)| id > *tras) {
+            *tras = u32::MAX;
+            let mut celdas = std::mem::take(celdas);
+            let puertas: Vec<Celda> = self.recintos.iter().flat_map(|r| r.puertas.iter().copied()).collect();
+            for &(p, clase) in celdas.clone().iter().filter(|(c, _)| puertas.contains(c)) {
+                if let Some(corredor) = self.suelo.corredor(&Rect::new(p.col, p.row, 1, 1), u16::MAX) {
+                    celdas.extend(corredor.into_iter().map(|c| (c, clase)));
+                }
+            }
+            self.anadir_conectadas_de(celdas);
         }
     }
 
@@ -429,11 +454,17 @@ impl Ciudad {
     /// `añadirConectadas` (T §5.1): de las candidatas, las libres que se conectan a la red (directamente o por flood fill 4-conexo
     /// dentro del grupo). Con la red vacía todas son semilla. Un tramo huérfano no se añade: no hay islas.
     fn anadir_conectadas(&mut self, candidatas: Vec<Celda>, clase: u8) {
-        let mut libres = Conj::default();
+        self.anadir_conectadas_de(candidatas.into_iter().map(|c| (c, clase)).collect());
+    }
+
+    /// Lo mismo con la clase (calle o camino) de cada candidata.
+    fn anadir_conectadas_de(&mut self, candidatas: Vec<(Celda, u8)>) {
+        let mut libres: std::collections::HashMap<usize, u8, BuildHasherDefault<Fx>> = Default::default();
         let mut orden = Vec::new();
-        for c in candidatas {
+        for (c, clase) in candidatas {
             if let Some(i) = idx(c) {
-                if self.suelo.libre_i(i) && libres.insert(i) {
+                if self.suelo.libre_i(i) && !libres.contains_key(&i) {
+                    libres.insert(i, clase);
                     orden.push(i);
                 }
             }
@@ -450,13 +481,13 @@ impl Ciudad {
         while let Some(i) = pila.pop() {
             aceptadas.push(i);
             for n in vecinos_i(i).into_iter().flatten() {
-                if libres.contains(&n) && vistas.insert(n) {
+                if libres.contains_key(&n) && vistas.insert(n) {
                     pila.push(n);
                 }
             }
         }
         for i in aceptadas {
-            self.suelo.poner(i, clase);
+            self.suelo.poner(i, libres[&i]);
         }
     }
 

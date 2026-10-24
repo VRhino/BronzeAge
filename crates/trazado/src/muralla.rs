@@ -11,9 +11,9 @@
 //! El TypeScript (`typescript-final`) usa otro hash y otra red de calles, así que no hay paridad celda a celda: se vigilan las
 //! mismas invariantes (cierra, no pisa, una puerta por cruce, torres separadas, determinismo).
 
-use crate::ciudad::{celda_de, idx, inundar, vecinos_i, Ciudad, CALLE, CELDAS, LADO};
+use crate::ciudad::{celda_de, idx, inundar, vecinos_i, Ciudad, CALLE, CAMINO, CELDAS, LADO};
 use crate::geom::Celda;
-use crate::tipos::{Categoria, Recinto};
+use crate::tipos::{Categoria, CeldaDeRed, Recinto};
 
 /// Vueltas máximas del bucle que retira de la semilla lo que el muro pisaría (cada vuelta solo quita celdas).
 const MAX_ITERACIONES_CONFLICTO: u32 = 24;
@@ -68,6 +68,10 @@ pub enum ErrorMuralla {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trazo {
     pub celdas: Vec<CeldaMuro>,
+    /// La red que el recinto conserva en sus puertas ([`Recinto::red_de_puertas`]), en orden de celda: se congela con el anillo.
+    pub red_de_puertas: Vec<CeldaDeRed>,
+    /// La pieza de mayor id de la ciudad al trazarlo ([`Recinto::tras_pieza`]).
+    pub tras_pieza: u32,
     /// Celdas de suelo que el recinto encierra (incluye la franja de ronda).
     pub area_encerrada: usize,
     /// Ids de las piezas que quedarían dentro, en el orden de la ciudad.
@@ -105,13 +109,13 @@ impl Interior {
 }
 
 impl Recinto {
-    /// La proyección que el trazado necesita de un recinto (`muros` = muro y torre; `puertas` aparte), en orden de celda.
-    pub fn desde_celdas(celdas: &[CeldaMuro], completo: bool) -> Recinto {
+    /// La proyección que el trazado necesita de un recinto (`muros` = muro y torre; `puertas` aparte), en orden de celda, con la red que conserva en sus puertas.
+    pub fn desde_celdas(celdas: &[CeldaMuro], red_de_puertas: &[CeldaDeRed], tras_pieza: u32, completo: bool) -> Recinto {
         let de = |clase: fn(ClaseCelda) -> bool| celdas.iter().filter(|c| clase(c.clase)).map(|c| c.celda).collect::<Vec<_>>();
         let (mut muros, mut puertas) = (de(|k| k != ClaseCelda::Puerta), de(|k| k == ClaseCelda::Puerta));
         muros.sort();
         puertas.sort();
-        Recinto { muros, puertas, completo }
+        Recinto { muros, puertas, red_de_puertas: red_de_puertas.to_vec(), tras_pieza, completo }
     }
 }
 
@@ -260,6 +264,8 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
         .map(|i| CeldaMuro { celda: celda_de(i), clase: if en_red[i] { ClaseCelda::Puerta } else { ClaseCelda::Muro } });
     let mut celdas = ordenar_anillo(por_celda.collect());
     colapsar_puertas(&mut celdas, &region, &muro, &en_red);
+    reabrir_cortes(&mut celdas, &en_red, base);
+    let red_de_puertas = red_de_puertas(base, &celdas, &region, &muro);
     let interior = Interior(region);
     marcar_torres(&mut celdas, &interior, p, nivel);
 
@@ -273,7 +279,27 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
             (true, false) => {}
         }
     }
-    Ok(Trazo { area_encerrada: interior.area(), celdas, dentro, fuera, afueras_dentro })
+    let tras_pieza = piezas.iter().map(|q| q.id).max().unwrap_or(0);
+    Ok(Trazo { area_encerrada: interior.area(), celdas, red_de_puertas, tras_pieza, dentro, fuera, afueras_dentro })
+}
+
+/// La red que el recinto conserva en cada puerta (decisión del autor del 2026-10-24, calibración del sistema 4, Murallas M1): la puerta y, a cada lado, el tramo de la
+/// red de antes del muro que la toca sin cruzar el anillo (fuera, el camino de la Granja o el arrabal; dentro, la calle que llega). Al rehacer la red con el muro se
+/// siembra **conectada** ([`Ciudad`] la une a la red con un corredor si hace falta): nunca queda una isla (lo que vio el TypeScript al sembrar solo las puertas). Sin
+/// esto, el corredor de una pieza de fuera que pasaba por donde ahora está el muro podía no hallar otro dentro del cap, y fuera del anillo no quedaba red a la que
+/// pegarse.
+fn red_de_puertas(base: &Ciudad, celdas: &[CeldaMuro], region: &[bool], muro: &[bool]) -> Vec<CeldaDeRed> {
+    let red = &base.suelo.red;
+    let mut conserva = vacio();
+    for d in celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta).filter_map(|c| idx(c.celda)) {
+        conserva[d] = true;
+        // A cada lado, la red de antes que toca la puerta sin cruzar el anillo: fuera, el camino o la calle que sale; dentro, la que llega.
+        for lado in [false, true] {
+            let tramo = inundar(vecinos_i(d).into_iter().flatten(), |i| red[i] != 0 && region[i] == lado && !muro[i]);
+            (0..CELDAS).filter(|&i| tramo[i]).for_each(|i| conserva[i] = true);
+        }
+    }
+    (0..CELDAS).filter(|&i| conserva[i]).map(|i| CeldaDeRed { celda: celda_de(i), camino: red[i] == CAMINO }).collect()
 }
 
 /// El anillo en orden de recorrido desde la puerta de menor `(fila, columna)` (la «principal»; sin puertas, la celda de menor
@@ -351,6 +377,51 @@ fn colapsar_puertas(anillo: &mut [CeldaMuro], region: &[bool], muro: &[bool], en
         let elegida = tirada.iter().copied().find(|&k| atraviesa(&anillo[k])).unwrap_or(tirada[tirada.len() / 2]);
         for k in tirada.into_iter().filter(|&k| k != elegida) {
             anillo[k].clase = ClaseCelda::Muro;
+        }
+    }
+}
+
+/// Una puerta por cruce no puede partir la red (`LAYOUT_VERSION` 5, Murallas M1): cuando una calle o un camino corre pegado al anillo, las celdas de la tirada que se
+/// cerraron pueden ser el único paso entre la red que llega al Centro Urbano y otra parte de ella (un barrio de dentro, el camino de la Granja): sin ellas la ciudad
+/// se queda sin salida. Se reabre como puerta el paso más corto por esas celdas (búsqueda en anchura desde las que tocan la red que llega, en el orden del anillo)
+/// hasta la red que no llega, de uno en uno, hasta que la red de antes, con el muro, vuelva a ser una pieza desde el anillo de calle del Centro Urbano.
+fn reabrir_cortes(anillo: &mut [CeldaMuro], en_red: &[bool], base: &Ciudad) {
+    let Some(cu) = base.centro() else { return };
+    let desde: Vec<usize> = cu.rect.anillo(base.params().ancho_calle).into_iter().filter_map(idx).filter(|&i| en_red[i]).collect();
+    let mut pos = vec![usize::MAX; CELDAS];
+    for (k, c) in anillo.iter().enumerate() {
+        pos[idx(c.celda).expect("el anillo está en la ventana")] = k;
+    }
+    loop {
+        let cerrada = |i: usize| pos[i] != usize::MAX && anillo[pos[i]].clase != ClaseCelda::Puerta && en_red[i];
+        let llega = inundar(desde.iter().copied(), |i| en_red[i] && !cerrada(i));
+        let mut previa = vec![usize::MAX; CELDAS];
+        let mut cola: std::collections::VecDeque<usize> = anillo
+            .iter()
+            .filter_map(|c| idx(c.celda))
+            .filter(|&i| cerrada(i) && vecinos_i(i).into_iter().flatten().any(|v| llega[v]))
+            .inspect(|&i| previa[i] = i)
+            .collect();
+        let mut paso = None;
+        while let Some(i) = cola.pop_front() {
+            if vecinos_i(i).into_iter().flatten().any(|v| en_red[v] && !cerrada(v) && !llega[v]) {
+                paso = Some(i);
+                break;
+            }
+            for n in vecinos_i(i).into_iter().flatten() {
+                if cerrada(n) && previa[n] == usize::MAX {
+                    previa[n] = i;
+                    cola.push_back(n);
+                }
+            }
+        }
+        let Some(mut i) = paso else { return };
+        loop {
+            anillo[pos[i]].clase = ClaseCelda::Puerta;
+            if previa[i] == i {
+                break;
+            }
+            i = previa[i];
         }
     }
 }

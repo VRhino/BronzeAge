@@ -16,7 +16,7 @@ use crate::datos::{mil, por, ppm, UNO};
 use crate::recurso::{Costo, Recurso};
 use base::{Instante, Mil, MS_POR_MINUTO};
 use serde_json::Value;
-use trazado::{CeldaMuro, ClaseCelda, ParametrosMuralla};
+use trazado::{CeldaDeRed, CeldaMuro, ClaseCelda, ParametrosMuralla};
 
 /// Niveles de recinto: empalizada, muro de piedra, muralla con adarve.
 const NIVELES: usize = 3;
@@ -166,6 +166,10 @@ pub struct Recinto {
     /// El anillo completo en orden de recorrido desde la puerta principal (el orden en que se levanta). Congelado al comprometer: solo cambia la
     /// clase de las celdas de muro a torre y viceversa al terminar una mejora.
     pub celdas: Vec<CeldaMuro>,
+    /// La red que el recinto conserva en sus puertas y la pieza tras la que entra al rehacer la red (`trazado::Recinto`, `LAYOUT_VERSION` 5, Murallas §3). Congeladas
+    /// con el trazo.
+    pub red_de_puertas: Vec<CeldaDeRed>,
+    pub tras_pieza: u32,
     /// Índice de la última celda levantada; −1 = ninguna. Completo ⇔ `avance = celdas.len() − 1`.
     pub avance: i32,
     pub mejora: Option<Mejora>,
@@ -222,7 +226,7 @@ impl Recinto {
 /// La proyección que la ciudad necesita de los recintos (`trazado::Ciudad::set_recintos`): los muros ocupan suelo desde el compromiso y solo un
 /// recinto completo activa la preferencia intramuros. La ciudad de una plaza se deriva siempre de esto: no se guarda por separado.
 pub fn proyeccion(recintos: &[Recinto]) -> Vec<trazado::Recinto> {
-    recintos.iter().map(|r| trazado::Recinto::desde_celdas(&r.celdas, r.completo())).collect()
+    recintos.iter().map(|r| trazado::Recinto::desde_celdas(&r.celdas, &r.red_de_puertas, r.tras_pieza, r.completo())).collect()
 }
 
 // ───────────────────────────── Lo que vale un recinto ─────────────────────────────
@@ -330,11 +334,11 @@ impl Asentamiento {
     }
 
     /// Compromete un recinto: congela el trazo en la plaza, sin avance. **Comprometer es gratis**; lo que cuesta es levantarlo, celda a celda. `celdas` es
-    /// el trazo en orden de recorrido, que el llamador ya comprobó. Devuelve el id del recinto.
-    pub fn comprometer_recinto(&mut self, t: Instante, nivel: u8, celdas: Vec<CeldaMuro>, ev: &mut Vec<Evento>) -> u32 {
+    /// el trazo en orden de recorrido, que el llamador ya comprobó, con la red que conserva en sus puertas. Devuelve el id del recinto.
+    pub fn comprometer_recinto(&mut self, t: Instante, nivel: u8, celdas: Vec<CeldaMuro>, red_de_puertas: Vec<CeldaDeRed>, tras_pieza: u32, ev: &mut Vec<Evento>) -> u32 {
         let id = self.recintos.len() as u32 + 1;
         let (n, puertas) = (celdas.len(), celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta).count());
-        self.recintos.push(Recinto { id, nivel, celdas, avance: -1, mejora: None, siguiente_celda_en: None, comprometido_en: t, completado_en: None });
+        self.recintos.push(Recinto { id, nivel, celdas, red_de_puertas, tras_pieza, avance: -1, mejora: None, siguiente_celda_en: None, comprometido_en: t, completado_en: None });
         ev.push(Evento::RecintoComprometido { recinto: id, nivel, celdas: n, puertas });
         id
     }
@@ -470,7 +474,7 @@ mod pruebas {
     }
 
     fn recinto(id: u32, nivel: u8, celdas: Vec<CeldaMuro>, avance: i32, cerrado: bool) -> Recinto {
-        Recinto { id, nivel, celdas, avance, mejora: None, siguiente_celda_en: None, comprometido_en: 0, completado_en: cerrado.then_some(1) }
+        Recinto { id, nivel, celdas, red_de_puertas: vec![], tras_pieza: 0, avance, mejora: None, siguiente_celda_en: None, comprometido_en: 0, completado_en: cerrado.then_some(1) }
     }
 
     /// Una plaza rica con el nivel operativo pedido, sin reserva (el mantenimiento de una plaza nueva está en gracia).
@@ -576,7 +580,7 @@ mod pruebas {
         assert_eq!(a.comprobar_comprometer(&r, 2), Err(ErrorRecinto::NivelDePlaza { necesario: 3, actual: 2 }));
         assert_eq!(a.comprobar_comprometer(&r, 1), Ok(None));
         let mut ev = vec![];
-        assert_eq!(a.comprometer_recinto(7, 1, anillo(20, &[3], 0), &mut ev), 1);
+        assert_eq!(a.comprometer_recinto(7, 1, anillo(20, &[3], 0), vec![], 0, &mut ev), 1);
         assert_eq!(ev, vec![Evento::RecintoComprometido { recinto: 1, nivel: 1, celdas: 20, puertas: 1 }]);
         assert_eq!(a.almacen, plaza(&r, 2).almacen, "comprometer no cobra nada");
         // Con uno en obra no cabe otro; el recinto exterior es el que devuelve la comprobación una vez cerrado.
@@ -597,7 +601,7 @@ mod pruebas {
         let r = reglas();
         let mut a = plaza(&r, 2);
         let celdas = anillo(4, &[0], 0);
-        a.comprometer_recinto(0, 1, celdas, &mut vec![]);
+        a.comprometer_recinto(0, 1, celdas, vec![], 0, &mut vec![]);
         let reserva = [0; 29];
         let madera = a.almacen.cantidad(Recurso::Madera);
         // La primera celda es la puerta (×4): 80 de madera y 8 de piedra.
@@ -629,7 +633,7 @@ mod pruebas {
     fn sin_materiales_o_bajo_la_reserva_no_avanza_ni_se_cancela() {
         let r = reglas();
         let mut a = plaza(&r, 2);
-        a.comprometer_recinto(0, 1, anillo(3, &[], 0), &mut vec![]);
+        a.comprometer_recinto(0, 1, anillo(3, &[], 0), vec![], 0, &mut vec![]);
         // Falta piedra: ni avanza ni cobra madera.
         a.almacen.poner(Recurso::Piedra, 1_000);
         let madera = a.almacen.cantidad(Recurso::Madera);
@@ -656,7 +660,7 @@ mod pruebas {
         let mut a = plaza(&r, 2);
         a.politicas = Politicas::desde_activas(vec![Activa { id: "postura_defensiva".into(), cargo: crate::politicas::Cargo::MaestroObras, expira_en: i64::MAX }]);
         assert_eq!(a.politicas.factor(&r.politicas, "factorTiempoMuralla"), 750_000, "la política existe en el catálogo");
-        a.comprometer_recinto(0, 1, anillo(3, &[], 0), &mut vec![]);
+        a.comprometer_recinto(0, 1, anillo(3, &[], 0), vec![], 0, &mut vec![]);
         let ev = pasada(&r, &mut a, 0, &[0; 29]);
         assert_eq!(ev, vec![Evento::RecintoCelda { recinto: 1, levantadas: 1, siguiente_en: Some(675_000) }], "15 min × 0,75 = 11,25 min exactos");
     }
@@ -665,7 +669,7 @@ mod pruebas {
     fn mejorar_lleva_su_progreso_aparte_y_cobra_la_diferencia() {
         let r = reglas();
         let mut a = plaza(&r, 3);
-        a.comprometer_recinto(0, 1, anillo(3, &[0], 0), &mut vec![]);
+        a.comprometer_recinto(0, 1, anillo(3, &[0], 0), vec![], 0, &mut vec![]);
         assert_eq!(a.comprobar_mejora(&r, 9), Err(ErrorRecinto::NoExiste));
         assert_eq!(a.comprobar_mejora(&r, 1), Err(ErrorRecinto::Incompleto));
         for k in 0..3 {
@@ -823,14 +827,14 @@ mod pruebas {
         let r = reglas();
         let mut a = plaza(&r, 2);
         let mut ev = vec![];
-        a.comprometer_recinto(0, 1, anillo(5, &[], 0), &mut ev);
+        a.comprometer_recinto(0, 1, anillo(5, &[], 0), vec![], 0, &mut ev);
         assert_eq!(a.abandonar_recinto(9, &mut ev), Err(ErrorRecinto::NoExiste));
         // A medio levantar se puede: se borra entero y el id queda libre.
         a.recintos[0].avance = 2;
         ev.clear();
         assert_eq!(a.abandonar_recinto(1, &mut ev), Ok(()));
         assert_eq!((a.recintos.len(), ev), (0, vec![Evento::RecintoAbandonado { recinto: 1 }]));
-        assert_eq!(a.comprometer_recinto(0, 1, anillo(5, &[], 0), &mut vec![]), 1);
+        assert_eq!(a.comprometer_recinto(0, 1, anillo(5, &[], 0), vec![], 0, &mut vec![]), 1);
         // Uno que alguna vez estuvo completo no, ni siquiera dañado por una conquista.
         a.recintos[0].avance = 4;
         a.recintos[0].completado_en = Some(9);
@@ -844,7 +848,7 @@ mod pruebas {
     fn la_reparacion_de_un_recinto_danado_es_la_obra_normal_y_no_vuelve_a_anunciar_el_cierre() {
         let r = reglas();
         let mut a = plaza(&r, 2);
-        a.comprometer_recinto(0, 1, anillo(4, &[], 0), &mut vec![]);
+        a.comprometer_recinto(0, 1, anillo(4, &[], 0), vec![], 0, &mut vec![]);
         a.recintos[0].avance = 3;
         a.recintos[0].completado_en = Some(5);
         danar_por_conquista(&mut a.recintos, 500_000);
@@ -882,7 +886,7 @@ mod pruebas {
     fn sin_cola_de_eventos_avanzar_hasta_levanta_cada_celda_en_su_instante_y_cierra_el_anillo() {
         let r = reglas();
         let mut a = plaza(&r, 2);
-        a.comprometer_recinto(0, 1, anillo(5, &[], 0), &mut vec![]);
+        a.comprometer_recinto(0, 1, anillo(5, &[], 0), vec![], 0, &mut vec![]);
         let (mut f, mut s) = (SinMundo, SitiosLibres);
         let mut x = exterior(&r, &mut f, &mut s);
         let mut ev = vec![];

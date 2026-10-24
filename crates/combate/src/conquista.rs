@@ -284,7 +284,7 @@ mod pruebas {
         use asentamiento::recintos::Recinto;
         use trazado::{Celda, CeldaMuro, ClaseCelda};
         let anillo = |n: i32| (0..n).map(|k| CeldaMuro { celda: Celda::new(k, 0), clase: ClaseCelda::Muro }).collect::<Vec<_>>();
-        let recinto = |id: u32, nivel: u8, n: i32, avance: i32, cerrado: bool| Recinto { id, nivel, celdas: anillo(n), avance, mejora: None, siguiente_celda_en: Some(99), comprometido_en: 0, completado_en: cerrado.then_some(1) };
+        let recinto = |id: u32, nivel: u8, n: i32, avance: i32, cerrado: bool| Recinto { id, nivel, celdas: anillo(n), red_de_puertas: vec![], tras_pieza: 0, avance, mejora: None, siguiente_celda_en: Some(99), comprometido_en: 0, completado_en: cerrado.then_some(1) };
         let r = r();
         let mut a = plaza(&[Tipo::CentroUrbano]);
         a.recintos = vec![recinto(1, 2, 40, 39, true), recinto(2, 3, 40, 39, true), recinto(3, 3, 40, 10, false)];

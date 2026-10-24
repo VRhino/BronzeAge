@@ -185,7 +185,7 @@ fn los_muros_bloquean_y_las_puertas_se_cruzan() {
     }
     muros.sort();
     muros.dedup();
-    s.c.set_recintos(vec![Recinto { muros: muros.clone(), puertas: vec![puerta_n, puerta_s], completo: true }]);
+    s.c.set_recintos(vec![Recinto { muros: muros.clone(), puertas: vec![puerta_n, puerta_s], completo: true, ..Default::default() }]);
     assert!(muros.iter().all(|&m| s.c.esta_ocupada(m)), "los muros ocupan suelo");
     for pu in [puerta_n, puerta_s] {
         // una puerta no ocupa suelo: o está libre o ya es red (nunca la bloquea el recinto)
@@ -219,7 +219,7 @@ fn con_un_recinto_completo_lo_urbano_se_prefiere_dentro() {
     }
     muros.sort();
     muros.dedup();
-    s.c.set_recintos(vec![Recinto { muros, puertas: vec![], completo: true }]);
+    s.c.set_recintos(vec![Recinto { muros, puertas: vec![], completo: true, ..Default::default() }]);
     for _ in 0..40 {
         s.construir(T_ALMACEN);
     }
