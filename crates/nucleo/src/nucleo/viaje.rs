@@ -453,7 +453,7 @@ impl Nucleo {
                     self.abonar_a_trueque(t, acuerdo, lado, &contenido);
                 }
                 let ev = EventoComercio::CaravanaLlega { caravana: id, destino: id32(destino), comision: entrega.comision, recargo: entrega.recargo };
-                self.emitir_comercio(t, ev, vec![origen, destino], &[("carga", total(&contenido)), ("perdido", total(&entrega.perdido))]);
+                self.emitir_comercio(t, ev, vec![origen, destino], &[("carga", total(&contenido)), ("perdido", total(&entrega.perdido)), ("valor", entrega.valor)]);
                 // El trueque pudo quedar a medias: otra caravana libre puede llevar lo que falta.
                 self.reparto_de_plaza(origen, t);
             }

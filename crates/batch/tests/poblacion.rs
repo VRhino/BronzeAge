@@ -21,7 +21,7 @@ macro_rules! con_mundo {
 }
 
 fn pequeno() -> EscenarioPoblacion {
-    EscenarioPoblacion { plazas: 20, dias: 4, semilla: 42, verificar_determinismo: true }
+    EscenarioPoblacion { plazas: 20, dias: 4, semilla: 42, verificar_determinismo: true, murallas: true }
 }
 
 fn medida(i: &Informe, id: &str) -> f64 {
@@ -62,6 +62,10 @@ fn el_escenario_pequeno_produce_todas_las_metricas() {
     let html = informe::renderizar(&i);
     assert!(html.contains("Población, construcción y mantenimiento") && html.contains("Plazas que llegan al nivel 2"));
     assert!(medida(&i, "pasos") > 0.0);
+    // El gráfico de pesants va en habitantes enteros, como la métrica (no en milésimas, como antes de la población entera).
+    let pesants = i.series.iter().find(|g| g.id == "pesants_por_dia").unwrap();
+    let mediana = &pesants.series.iter().find(|s| s.nombre == "Mediana").unwrap().puntos;
+    assert_eq!(mediana.last().unwrap().1, medida(&i, "pesants_fin"));
     // Cada plaza lleva su ciudad: al menos el Centro Urbano, las 3 Viviendas y la Granja iniciales.
     assert!(medida(&i, "piezas_a") >= 5.0 && medida(&i, "radio_ciudad_medio") >= 30.0);
 }
@@ -80,8 +84,8 @@ fn los_invariantes_y_el_determinismo_se_cumplen() {
 #[test]
 fn la_ciudad_de_ejemplo_sale_como_svg() {
     let c = con_mundo!();
-    let (_, svg) = poblacion_y_ciudad(c, &EscenarioPoblacion { verificar_determinismo: false, dias: 2, ..pequeno() });
-    let svg = svg.expect("queda alguna plaza en pie");
+    let (_, svgs) = poblacion_y_ciudad(c, &EscenarioPoblacion { verificar_determinismo: false, dias: 2, ..pequeno() });
+    let svg = &svgs.iter().find(|(n, _)| *n == "ciudad_ejemplo.svg").expect("queda alguna plaza en pie").1;
     assert!(svg.starts_with("<svg") && svg.trim_end().ends_with("</svg>") && svg.contains("<title>centroUrbano #0</title>"));
 }
 

@@ -57,6 +57,7 @@ pub fn armar(x: &Entrada) -> Informe {
     metricas.extend(trigo_y_mantenimiento(x));
     metricas.extend(cuellos(x));
     metricas.extend(ciudad(x));
+    metricas.extend(murallas(x));
     metricas.extend(rendimiento(x));
     metricas.push(metrica(
         "determinismo",
@@ -89,8 +90,8 @@ pub fn armar(x: &Entrada) -> Informe {
         Some(ciudades.total() as f64),
         "Trazado_Urbano §13 (Invariantes)",
         &format!(
-            "Se comprueban al final en las {} plazas que siguen en pie: piezas que se pisan ({}), piezas sobre una celda de calle o camino ({}), genéricos fuera del disco urbano de su `radioCiudad` o, en las afueras, fuera de su banda de 60 u.l. a max(radio, 96) ({}), sin ninguna calle o camino pegado, es decir, sin salida a la red ({}), y desacuerdos entre la ciudad y la economía (pieza sin su edificio con el mismo id y tipo, o edificio con huella en la rejilla sin pieza) ({}). Entre paréntesis, las violaciones de cada una.",
-            ciudades.plazas, ciudades.solape, ciudades.suelo, ciudades.disco, ciudades.sin_salida, ciudades.economia
+            "Se comprueban al final en las {} plazas que siguen en pie: piezas que se pisan ({}), piezas sobre una celda de calle o camino ({}), genéricos fuera del disco urbano de su `radioCiudad` o, en las afueras, fuera de su banda de 60 u.l. a max(radio, 96) ({}; anclas y satélites no miran el disco desde `LAYOUT_VERSION` 4), sin ninguna calle o camino pegado, es decir, sin salida a la red ({}), desacuerdos entre la ciudad y la economía (pieza sin su edificio con el mismo id y tipo, o edificio con huella en la rejilla sin pieza) ({}), y piezas sobre un muro o torre de un recinto o recintos de la ciudad que no son la proyección de los de la economía ({}). Entre paréntesis, las violaciones de cada una.",
+            ciudades.plazas, ciudades.solape, ciudades.suelo, ciudades.disco, ciudades.sin_salida, ciudades.economia, ciudades.muro
         ),
     ));
     let anomalias = anomalias(&metricas);
@@ -125,6 +126,7 @@ fn parametros(x: &Entrada) -> Vec<informe::Parametro> {
     vec![
         parametro("Plazas pedidas / colocadas", format!("{} / {}", x.e.plazas, x.corrida.villas.len())),
         parametro("Días de mundo", x.e.dias),
+        parametro("Huella del estado final (hash_estado del batch)", format!("{:016x}", sp::hash_estado(x.corrida))),
         parametro("Semilla", x.e.semilla),
         parametro("Hash del mundo", x.c.mundo.hash()),
         parametro("Escenario", "todas las plazas fundadas a la vez (t = 0), cada una de una Facción distinta; un bucle global por minuto avanza todas (competencia por nodos y parcelas)"),
@@ -133,12 +135,12 @@ fn parametros(x: &Entrada) -> Vec<informe::Parametro> {
         parametro("Zona de cada plaza", format!("disco de {} al fundar, +{} por edificio completado, techos por nivel alcanzado {} u; SIN recorte por vecinas", u(t.radio_inicial), u(t.crecimiento_por_edificio), techos)),
         parametro("Cuota de parcelas por masa", format!("{} % por asentamiento", t.cuota_parcelas_pct)),
         parametro("Regeneración de nodos", format!("minerales a los {} min, ganado a los {} min (REGENERACION_NODOS)", crate::economia::REGENERA_MINERAL_MIN, crate::economia::REGENERA_GANADO_MIN)),
-        parametro("Exterior", "fertilidad 1,0; sin tecnologías; nivel de Facción 1; 1 ciudadano; capital sin distancia; sin recinto ni guarnición; factores extra 1,0; Era I"),
-        parametro("Política del jugador", format!("cada {} min pide la subida de nivel si nada la bloquea; no activa políticas ni da órdenes manuales", sp::CADA_MIN_ASCENSO)),
+        parametro("Exterior", "fertilidad 1,0; sin tecnologías; nivel de Facción 1; 1 ciudadano; capital sin distancia; sin guarnición; factores extra 1,0; Era I (los recintos de muralla son de la economía de la plaza)"),
+        parametro("Política del jugador", format!("cada {} min pide la subida de nivel si nada la bloquea{}; no activa políticas ni da otras órdenes manuales", sp::CADA_MIN_ASCENSO, if x.e.murallas { " y, sin recintos y con el nivel operativo que pide la empalizada (2), la compromete (la primera celda se levanta en el paso de ese mismo minuto)" } else { "; sin murallas (`--murallas 0`)" })),
         parametro("Cupo de Facción", format!("nivel 2: {:?} plazas con Facción de nivel 1 (cupo ocupado siempre 0: una plaza por Facción)", r.nivel.cupo_faccion(2, 1))),
         parametro("Obra de ascenso al nivel 2", asc(2)),
         parametro("Ciudad de cada plaza", format!("la `Ciudad` del crate `trazado` con el mismo adaptador que el núcleo (`nucleo::urbanismo::Urbe`): fundada al nacer la plaza con semilla derivada de la del escenario ({}) y del índice de la plaza, con los edificios iniciales de la economía como piezas; los edificios se colocan de verdad (anclas gratuitas con el gate de nivel 2, puestos del Mercado, Granja que se muda al mejorar o la mejora espera hueco)", x.e.semilla)),
-        parametro("Límites del batch", "sin pueblos extractores (minas: ninguna), sin tecnologías, sin recorte de zonas por vecinas, sin recintos de muralla, sin guarnición ni saqueos, sin órdenes manuales (no se construyen Mercados, Palacio ni edificios militares)"),
+        parametro("Límites del batch", "sin pueblos extractores (minas: ninguna), sin tecnologías, sin recorte de zonas por vecinas, sin mejora del recinto a piedra (pide el nivel 3) ni ampliaciones, sin guarnición, saqueos ni conquistas (la muralla no se daña), sin otras órdenes manuales (no se construyen Mercados, Palacio ni edificios militares)"),
     ]
 }
 
@@ -411,7 +413,7 @@ fn ciudad(x: &Entrada) -> Vec<Metrica> {
     let retenidas = esperas.iter().filter(|e| e.iter().any(|&m| m > 24 * 60)).count();
     let mejoradas = v.iter().filter(|p| p.a.edificios.iter().any(|e| e.tipo == Tipo::Granja && e.nivel_interno >= 2)).count();
     metricas.push(metrica("granja_mejorada_pct", "Plazas cuya Granja llegó al nivel interno 2 o más", "%", INFO, pct(mejoradas, v.len()), "Trazado_Urbano §6.7 (reubicación de un edificio que crece)", "La Granja es el único edificio que cambia de huella al mejorar (2×2, 2×3, 4×3, 6×6): al terminar la mejora se muda a un hueco de su tamaño nuevo."));
-    metricas.push(metrica("mejora_espera_pct", "Plazas en que una mejora esperó hueco para mudarse", "%", INFO, pct(peor.len(), v.len()), "Trazado_Urbano §6.7", "Mejoras terminadas cuya Granja no halló hueco de la huella nueva: la mejora se queda esperando y conserva su cuadrilla. Cuenta las resueltas y las que siguen esperando al final."));
+    metricas.push(metrica("mejora_espera_pct", "Plazas en que una mejora esperó hueco para mudarse", "%", INFO, pct(peor.len(), v.len()), "Trazado_Urbano §6.7", "Mejoras terminadas cuya Granja no halló hueco de la huella nueva: la mejora se queda esperando y conserva su cuadrilla. Cuenta las resueltas y las que siguen esperando al final. Desde el 2026-10-23 la mejora automática comprueba el hueco al arrancar, como la manual (decisión 2 de las DUDA), así que solo puede esperar si la ciudad cambió durante la obra."));
     metricas.push(metrica("mejora_espera_mediana_h", "Espera mediana de la peor mejora sin hueco (plazas que esperaron)", "h", INFO, mediana(&peor).or(Some(0.0)), "Trazado_Urbano §6.7", if peor.is_empty() { "Ninguna mejora esperó." } else { "Por plaza se toma su espera más larga; 0 si ninguna esperó." }));
     metricas.push(metrica("mejora_espera_max_h", "Espera máxima de una mejora sin hueco", "h", INFO, peor.iter().copied().max_by(f64::total_cmp).or(Some(0.0)), "Trazado_Urbano §6.7", "La mayor espera de cualquier plaza (la que siga esperando al final cuenta hasta el final de la simulación)."));
     metricas.push(metrica(
@@ -421,7 +423,7 @@ fn ciudad(x: &Entrada) -> Vec<Metrica> {
         max(0.0),
         Some(retenidas as f64),
         "Economia_Construccion §6.4 (cuadrillas) y Trazado_Urbano §6.7",
-        "Riesgo de bloqueo: la mejora automática arranca sin comprobar el hueco (como en TypeScript) y retiene su cuadrilla mientras no haya donde mudar la Granja. Un valor mayor que 0 es un bloqueo real.",
+        "Riesgo de bloqueo: una mejora terminada sin hueco retiene su cuadrilla mientras no haya donde mudar la Granja. Desde el 2026-10-23 la mejora automática solo arranca si hay hueco (decisión 2 de las DUDA): un valor mayor que 0 es un bloqueo real.",
     ));
 
     // Tamaño de la ciudad.
@@ -450,6 +452,52 @@ fn ciudad(x: &Entrada) -> Vec<Metrica> {
     metricas
 }
 
+/// 12: la muralla (paso 7 del plan de Murallas): la empalizada que compromete el jugador en el nivel 2.
+fn murallas(x: &Entrada) -> Vec<Metrica> {
+    let v = &x.corrida.villas;
+    let dias = x.e.dias as f64;
+    let pueden: Vec<&Villa> = v.iter().filter(|p| p.reg.nivel2.is_some()).collect();
+    let comp: Vec<&Villa> = v.iter().filter(|p| p.reg.recinto_comprometido.is_some()).collect();
+    let cerradas = comp.iter().filter(|p| p.reg.recinto_completado.is_some()).count();
+    let med = |l: &[&Villa], f: &dyn Fn(&Villa) -> f64| mediana(&l.iter().map(|p| f(p)).collect::<Vec<_>>());
+    let coste = |p: &Villa, r: asentamiento::Recurso| p.reg.recinto_coste.iter().filter(|(k, _)| *k == r).map(|&(_, n)| n).sum::<i64>() as f64 / 1000.0;
+    // El peso de la muralla en el mantenimiento al final: su upkeep sobre el total (todos los recursos), en las plazas en pie con algún recinto.
+    let suma = |c: &asentamiento::Costo| c.iter().map(|&(_, n)| n).sum::<i64>() as f64;
+    let pesos: Vec<f64> = comp
+        .iter()
+        .filter(|p| !p.a.destruido)
+        .filter_map(|p| {
+            let (muro, total) = (suma(&asentamiento::recintos::upkeep(&x.reglas.muralla, &p.a.recintos)), suma(&p.a.coste_mantenimiento(x.reglas, 0)));
+            (total > 0.0).then(|| 100.0 * muro / total)
+        })
+        .collect();
+    let mut errores: BTreeMap<String, usize> = BTreeMap::new();
+    pueden.iter().filter(|p| p.reg.recinto_comprometido.is_none()).for_each(|p| *errores.entry(p.reg.recinto_error.map_or("sin intento".into(), |e| format!("{e:?}"))).or_insert(0) += 1);
+    let n2_con: Vec<Option<i64>> = comp.iter().map(|p| p.reg.nivel2).collect();
+    let fin = x.e.dias as i64 * 1440;
+    let obra: Vec<Option<i64>> = comp.iter().map(|p| Some(p.reg.recinto_completado.unwrap_or(fin) - p.reg.recinto_comprometido.unwrap_or(0))).collect();
+    let fmt1 = |v: Option<f64>| v.map_or("—".to_string(), |d| format!("{d:.2}"));
+    // La ciudad que deja de crecer tras amurallarse: sin las anclas, la ciudad no niega sitio a una Vivienda en este batch (0 sin murallas), así que una
+    // negativa en una plaza con recinto es la muralla.
+    let viviendas = |p: &Villa| p.a.edificios.iter().filter(|e| e.activo() && e.tipo == Tipo::Vivienda).count() as f64;
+    let (bloq, libres): (Vec<&Villa>, Vec<&Villa>) = comp.iter().copied().filter(|p| !p.a.destruido).partition(|p| p.reg.ciudad.denegadas.contains_key(&Tipo::Vivienda));
+    let fmt0 = |v: Option<f64>| v.map_or("—".to_string(), |d| format!("{d:.0}"));
+    let mut metricas = vec![
+        metrica("muralla_comprometida_pct", "Plazas de nivel 2 que comprometen la empalizada", "%", INFO, pct(comp.len(), pueden.len()), "Murallas §4 (empalizada con el nivel operativo 2)", &format!("Entre las que llegan al nivel 2. Las que no la comprometen, por motivo: {}.", if errores.is_empty() { "ninguna".to_string() } else { errores.iter().map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(", ") })),
+        metrica("muralla_cerrada_pct", "Plazas con la empalizada cerrada al final", "%", INFO, pct(cerradas, comp.len()), "Murallas §5 (una celda tras otra, pagada al levantarla)", "Entre las que la comprometieron."),
+        metrica("muralla_compromiso_dia", "Día mediano en que se compromete la empalizada", "días", INFO, med(&comp, &|p| p.reg.recinto_comprometido.unwrap_or(0) as f64 / MIN_POR_DIA), "Murallas §4", &format!("Entre las que la comprometen; su nivel 2 llegó el día {} de mediana.", fmt1(mediana_censurada(&n2_con, MIN_POR_DIA, dias)))),
+        metrica("muralla_obra_dias", "Días medianos de obra de la empalizada (del compromiso al cierre)", "días", INFO, mediana_censurada(&obra, MIN_POR_DIA, dias), "Murallas §5 y bloque MURALLA (minutos por celda)", "Las que no la cierran cuentan hasta el final de la simulación."),
+        metrica("muralla_celdas_mediana", "Celdas del anillo (mediana)", "celdas", INFO, med(&comp, &|p| p.reg.recinto_celdas as f64), "Murallas §3 (trazo)", &format!("Puertas (mediana): {}.", fmt1(med(&comp, &|p| p.reg.recinto_puertas as f64)))),
+        metrica("muralla_coste_madera_mediana", "Madera que cuesta levantar la empalizada entera (mediana)", "madera", INFO, med(&comp, &|p| coste(p, asentamiento::Recurso::Madera)), "Murallas §5 y bloque MURALLA (tarifa por celda; puertas ×4)", &format!("Piedra (mediana): {}. Se paga celda a celda y nunca por debajo de la reserva.", fmt1(med(&comp, &|p| coste(p, asentamiento::Recurso::Piedra))))),
+        metrica("muralla_ciudad_bloqueada_pct", "Plazas amuralladas a las que la ciudad niega sitio para Viviendas", "%", max(0.0), pct(bloq.len(), bloq.len() + libres.len()), "Trazado_Urbano §6.5-§6.6 y Murallas §3 (el anillo abraza la ciudad del momento)", &format!("Plazas en pie con recinto. En ellas, Viviendas al final (mediana) {} y pesants {}, frente a {} y {} en las demás amuralladas; también se les niegan Armería y Carpintería (ver «sin sitio» de la ciudad). Sin murallas ninguna plaza recibe esta negativa. Dibujo de una en `ciudad_bloqueada.svg`.", fmt0(med(&bloq, &viviendas)), fmt0(med(&bloq, &|p| p.a.poblacion.pesants as f64)), fmt0(med(&libres, &viviendas)), fmt0(med(&libres, &|p| p.a.poblacion.pesants as f64)))),
+        metrica("muralla_piezas_sin_salida", "Piezas sin salida a la red en plazas amuralladas", "piezas", max(0.0), Some(x.corrida.ciudades.sin_salida_muralla as f64), "Trazado_Urbano §5.1 y §13 (salida a la red dentro del cap)", "Al levantar el muro la red se recalcula con muros y torres ocupados y una sola puerta por cruce (Murallas §3): una pieza anterior cuyo corredor cruzaba el anillo, o salía de una calle que el muro quitó, puede no hallar otro dentro del cap (Granjas de las afueras, sobre todo). Fuera de `invariantes_ciudad`: la red sigue conexa y el código hace lo que dicen las reglas (también el TypeScript), pero la pieza queda sin calle."),
+        metrica("muralla_upkeep_pct", "Peso de la muralla en el mantenimiento al final (mediana)", "%", INFO, mediana(&pesos), "Murallas §8 (upkeep por celda levantada) y Economia_Construccion §10", "Upkeep de los recintos sobre el coste total del mantenimiento por minuto (todos los recursos sumados), en las plazas en pie con recinto."),
+    ];
+    // Sin ninguna plaza amurallada (escenarios cortos o `--murallas 0`) todas valen 0, como las demás métricas «entre las que…».
+    metricas.iter_mut().filter(|m| m.medido.is_none()).for_each(|m| m.medido = Some(0.0));
+    metricas
+}
+
 /// 10: rendimiento.
 fn rendimiento(x: &Entrada) -> Vec<Metrica> {
     let c = x.corrida;
@@ -468,7 +516,7 @@ fn rendimiento(x: &Entrada) -> Vec<Metrica> {
 fn grafico_pesants(x: &Entrada) -> Grafico {
     let v = &x.corrida.villas;
     let por_dia = |p: f64| -> Vec<(f64, f64)> {
-        (0..=x.e.dias as usize).filter_map(|d| percentil(&mut v.iter().map(|q| q.reg.pesants_dia.get(d).copied().unwrap_or(0) as f64 / 1000.0).collect::<Vec<_>>(), p).map(|m| (d as f64, crate::armar::r3(m)))).collect()
+        (0..=x.e.dias as usize).filter_map(|d| percentil(&mut v.iter().map(|q| q.reg.pesants_dia.get(d).copied().unwrap_or(0) as f64).collect::<Vec<_>>(), p).map(|m| (d as f64, crate::armar::r3(m)))).collect()
     };
     Grafico {
         id: "pesants_por_dia".into(),

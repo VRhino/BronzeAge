@@ -221,6 +221,11 @@ impl Sitios for SitiosVilla<'_> {
         }
         cabe
     }
+
+    /// Al terminar la mejora de un recinto (Murallas §3), como el núcleo.
+    fn reclasificar_torres(&mut self, celdas: &mut [trazado::CeldaMuro], nivel: u8, p: &trazado::ParametrosMuralla) {
+        self.urbe.reclasificar_torres(celdas, nivel, p);
+    }
 }
 
 #[cfg(test)]

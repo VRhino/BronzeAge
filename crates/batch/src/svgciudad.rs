@@ -27,7 +27,17 @@ fn ejemplo(c: &Corrida) -> Option<&Villa> {
 
 /// El SVG de la ciudad de la plaza de ejemplo; `None` si no queda ninguna plaza en pie.
 pub fn ciudad_ejemplo(c: &Corrida, reglas: &asentamiento::Reglas) -> Option<String> {
-    let v = ejemplo(c)?;
+    Some(dibujar(ejemplo(c)?, reglas, "Plaza de ejemplo"))
+}
+
+/// La plaza amurallada en pie a la que la ciudad más veces negó sitio para una Vivienda (la muralla la ahoga); `None` si no hay ninguna.
+pub fn ciudad_bloqueada(c: &Corrida, reglas: &asentamiento::Reglas) -> Option<String> {
+    let negadas = |v: &&Villa| v.reg.ciudad.denegadas.get(&Tipo::Vivienda).copied().unwrap_or(0);
+    let v = c.villas.iter().filter(|v| !v.a.destruido && !v.a.recintos.is_empty() && negadas(v) > 0).max_by_key(negadas)?;
+    Some(dibujar(v, reglas, "Plaza amurallada que ya no halla sitio para Viviendas"))
+}
+
+fn dibujar(v: &Villa, reglas: &asentamiento::Reglas, titulo: &str) -> String {
     let radio = v.urbe.radio_ul(&v.a.urbano(reglas));
     let vista = v.urbe.vista(radio, &v.a.recintos);
     // Encuadre: todas las piezas y el disco urbano, con margen.
@@ -39,11 +49,18 @@ pub fn ciudad_ejemplo(c: &Corrida, reglas: &asentamiento::Reglas) -> Option<Stri
     let m = 12;
     let (x0, y0, w, h) = (x0 - m, y0 - m - 14, x1 - x0 + 2 * m, y1 - y0 + 2 * m + 14);
     let mut s = format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"{x0} {y0} {w} {h}\" width=\"900\" font-family=\"sans-serif\">\n<rect x=\"{x0}\" y=\"{y0}\" width=\"{w}\" height=\"{h}\" fill=\"#fafaf7\"/>\n");
-    let _ = writeln!(s, "<text x=\"{}\" y=\"{}\" font-size=\"5\">Plaza de ejemplo: nivel {}, {} piezas, radio de ciudad {} u.l., perfil {:?}. Contorno grueso = ancla. Gris = calles, beis = caminos.</text>", x0 + 4, y0 + 8, v.a.nivel, vista.piezas.len(), radio, v.urbe.ciudad().perfil_por_tradicion());
+    let _ = writeln!(s, "<text x=\"{}\" y=\"{}\" font-size=\"5\">{titulo}: nivel {}, {} piezas, radio de ciudad {} u.l., perfil {:?}. Contorno grueso = ancla. Gris = calles, beis = caminos, marrón = muro, blanco = puerta.</text>", x0 + 4, y0 + 8, v.a.nivel, vista.piezas.len(), radio, v.urbe.ciudad().perfil_por_tradicion());
     let _ = writeln!(s, "<circle cx=\"0\" cy=\"0\" r=\"{radio}\" fill=\"none\" stroke=\"#999\" stroke-width=\"0.4\" stroke-dasharray=\"2 2\"/>");
     for (rs, relleno) in [(&vista.calles, "#cfcfcf"), (&vista.caminos, "#e3d5b0")] {
         for r in rs {
             let _ = writeln!(s, "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{relleno}\"/>", r.x, r.y, r.ancho, r.alto);
+        }
+    }
+    for m in &vista.murallas {
+        for (rs, relleno) in [(&m.muros, "#6b4f2a"), (&m.torres, "#3d2b14"), (&m.puertas, "#ffffff")] {
+            for r in rs {
+                let _ = writeln!(s, "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{relleno}\" stroke=\"#3d2b14\" stroke-width=\"0.3\"/>", r.x, r.y, r.ancho, r.alto);
+            }
         }
     }
     for PiezaVista { id, tipo, categoria, rol, rect, .. } in &vista.piezas {
@@ -52,5 +69,5 @@ pub fn ciudad_ejemplo(c: &Corrida, reglas: &asentamiento::Reglas) -> Option<Stri
         let _ = writeln!(s, "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{relleno}\" stroke=\"{trazo}\" stroke-width=\"{grosor}\"><title>{} #{id}</title></rect>", rect.x, rect.y, rect.ancho, rect.alto, tipo.nombre());
     }
     s.push_str("</svg>\n");
-    Some(s)
+    s
 }

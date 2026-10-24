@@ -68,11 +68,13 @@ pub struct EscenarioPoblacion {
     pub semilla: u64,
     /// Repite un escenario reducido dos veces y compara los hashes del estado.
     pub verificar_determinismo: bool,
+    /// El jugador compromete la empalizada en cuanto el nivel de la plaza lo permite (paso 7 del plan de Murallas).
+    pub murallas: bool,
 }
 
 impl Default for EscenarioPoblacion {
     fn default() -> Self {
-        Self { plazas: 300, dias: 30, semilla: 42, verificar_determinismo: true }
+        Self { plazas: 300, dias: 30, semilla: 42, verificar_determinismo: true, murallas: true }
     }
 }
 
@@ -81,17 +83,18 @@ pub fn poblacion(c: &Cargado, e: &EscenarioPoblacion) -> Informe {
     poblacion_y_ciudad(c, e).0
 }
 
-/// Lo mismo que [`poblacion`] y, además, el SVG de la ciudad de una plaza de ejemplo (`ciudad_ejemplo.svg`), si queda alguna en pie.
-pub fn poblacion_y_ciudad(c: &Cargado, e: &EscenarioPoblacion) -> (Informe, Option<String>) {
+/// Lo mismo que [`poblacion`] y, además, los SVG de la ciudad (nombre del fichero y contenido): el de una plaza de ejemplo (`ciudad_ejemplo.svg`), si queda alguna en
+/// pie, y el de una plaza amurallada que ya no halla sitio para Viviendas (`ciudad_bloqueada.svg`), si la hay.
+pub fn poblacion_y_ciudad(c: &Cargado, e: &EscenarioPoblacion) -> (Informe, Vec<(&'static str, String)>) {
     let t0 = Instant::now();
     let mapa = economia::Mapa::de(&c.mundo);
-    let corrida = simpob::simular(&c.mundo, &mapa, e.plazas, e.dias, e.semilla);
+    let corrida = simpob::simular(&c.mundo, &mapa, e.plazas, e.dias, e.semilla, e.murallas);
     let determinismo = e.verificar_determinismo.then(|| {
-        let (a, b) = (simpob::simular(&c.mundo, &mapa, 20, 3, e.semilla), simpob::simular(&c.mundo, &mapa, 20, 3, e.semilla));
+        let (a, b) = (simpob::simular(&c.mundo, &mapa, 20, 3, e.semilla, e.murallas), simpob::simular(&c.mundo, &mapa, 20, 3, e.semilla, e.murallas));
         simpob::hash_estado(&a) == simpob::hash_estado(&b)
     });
     let re = nucleo::ReglasEconomia::default();
-    let svg = svgciudad::ciudad_ejemplo(&corrida, &re.datos);
+    let svg: Vec<(&'static str, String)> = [("ciudad_ejemplo.svg", svgciudad::ciudad_ejemplo(&corrida, &re.datos)), ("ciudad_bloqueada.svg", svgciudad::ciudad_bloqueada(&corrida, &re.datos))].into_iter().filter_map(|(n, s)| Some((n, s?))).collect();
     (armarpob::armar(&armarpob::Entrada { c, mapa: &mapa, e, corrida: &corrida, reglas: &re.datos, urb: &re.urbanismo, determinismo, pared_total: t0.elapsed() }), svg)
 }
 

@@ -77,6 +77,7 @@ fn parametros(x: &Entrada) -> Vec<informe::Parametro> {
     vec![
         parametro("Plazas pedidas / colocadas / Facciones", format!("{} / {} / {}", x.e.plazas, c.plazas.len(), c.facciones)),
         parametro("Días de mundo", x.e.dias),
+        parametro("Huella del estado final (hash_estado)", sc::huella(c).iter().map(|b| format!("{b:02x}")).collect::<String>()),
         parametro("Semilla", x.e.semilla),
         parametro("Hash del mundo", x.c.mundo.hash()),
         parametro("Escenario", format!("{} plazas por Facción fundadas en los primeros minutos (cada una con su columna parada en la puerta, que funda con una Caravana de Fundación): la primera junto a un campamento, las demás junto a las que ya tiene; Facciones de nivel {} por administración (cap de fundación 6, cupo de 3 plazas de nivel 2)", sc::PLAZAS_POR_FACCION, sc::NIVEL_FACCION)),
@@ -183,8 +184,10 @@ fn caravanas(x: &Entrada) -> Vec<Metrica> {
         metrica("viaje_max_min", "Viaje de ida más largo", "min", INFO, viajes.iter().copied().reduce(f64::max), "Comercio_Caravanas §6.1", "Vecinas a menos de 300 u."),
         metrica("carga_entregada", "Carga entregada por las caravanas", "unidades", INFO, Some(carga), "Comercio_Caravanas §4.4", "Suma de lo que llega a destino (ya sin peajes)."),
         metrica("carga_perdida_pct", "Carga que no cabe en el almacén de destino", "%", max(1.0), Some(100.0 * v.perdido_en_entrega as f64 / (v.carga_entregada.max(1)) as f64), "Comercio_Caravanas §4.4 (topado por la capacidad)", "El jugador solo ofrece lo que cabe al otro lado; lo que sobre se pierde."),
-        metrica("viajes_de_repesca_pct", "Viajes de ida con menos de una unidad", "%", INFO, pct(cola, v.viajes.len()), "Comercio_Caravanas §4.3 (sale con cualquier carga positiva)", "El resto que deja el peaje: la repesca del 2 % del 2 % viaja casi vacía."),
-        metrica("comision_oro", "Comisión acuñada en las entregas", "oro", INFO, Some(v.comision as f64 / U), "Comercio_Caravanas §3.3 (se acuña en el destino)", "Una de las fuentes de oro del juego; solo entre plazas distintas."),
+        metrica("viajes_de_repesca_pct", "Viajes de ida con menos de una unidad", "%", INFO, pct(cola, v.viajes.len()), "Comercio_Caravanas §4.3 (sale con cualquier carga positiva)", "El resto que deja el peaje. Desde C3 (2026-10-19) una línea con algo entregado y menos de una unidad pendiente se da por saldada (`trueque::UNIDAD`), así que estas repescas deben desaparecer; las que quedan son las de más de una unidad."),
+        metrica("comision_oro", "Comisión acuñada en las entregas", "oro", INFO, Some(v.comision as f64 / U), "Comercio_Caravanas §3.3 (se acuña en el destino)", "Una de las fuentes de oro del juego; solo entre plazas distintas. Es la que entra de verdad: se topa por el oro que cabe en el almacén del destino."),
+        metrica("valor_entregado", "Valor de lo entregado por las caravanas", "oro", INFO, Some(v.valor_entregado as f64 / U), "Comercio_Caravanas §3.1 (precio base, también el derivado de la receta de los manufacturados, C4)", "Suma del `valor` de cada `comercio.caravana_llega`: lo que llevaba a precio vigente, sobre lo que se calcula la comisión (entre plazas de la misma Facción, 3 %; entre Facciones, 8 %; las dos por hasta ×1,5 por distancia)."),
+        metrica("comision_sobre_valor_pct", "Comisión acuñada sobre el valor entregado", "%", INFO, (v.valor_entregado > 0).then(|| 100.0 * v.comision as f64 / v.valor_entregado as f64), "Comercio_Caravanas §3.3 (tasas 3 % y 8 %, bonus por distancia ×1-1,5)", "Si las tasas se cobrasen enteras saldría entre el 3 % y el 12 %; por debajo, lo que falta es la comisión que no cupo en el oro del destino (o entregas dentro de la misma plaza, que no pagan)."),
         metrica("recargo_oro", "Recargo por mala reputación pagado", "oro", INFO, Some(v.recargo as f64 / U), "Comercio_Caravanas §3.3", "0 mientras ninguna Facción baje del umbral de reputación."),
         metrica("animales_oro", "Oro destruido en animales", "oro", INFO, Some(v.animales_comprados as f64 * 12.0), "Comercio_Caravanas §5.3 (sumidero)", "Un buey cuesta 12 de oro: los animales comprados por las plazas."),
     ]
@@ -295,6 +298,17 @@ fn pueblos(x: &Entrada) -> Vec<Metrica> {
     };
     let sacado = v.acarreo_sacado as f64;
     let insolvente = rechazo(x, "SolicitarAscenso", "ascenso.insolvente");
+    // Lo que el acarreo cuenta hoy en la solvencia del ascenso (C2): la media por minuto de lo que ingresó en las madres en las últimas 24 h, frente a la
+    // producción nominal de los pueblos activos (lo que contaba antes de C2).
+    let hora_fin = c.nucleo.ahora().div_euclid(60 * MIN as i64);
+    let en_ventana: f64 = e.asentamientos.values().flat_map(|a| a.economia.ingresos_acarreo.iter()).filter(|i| i.hora > hora_fin - asentamiento::pueblos::HORAS_VENTANA).map(|i| i.cantidad as f64).sum::<f64>() / (asentamiento::pueblos::HORAS_VENTANA as f64 * 60.0);
+    let nominal_hoy: f64 = {
+        let base = e.reglas.economia.datos.catalogo.tipo(Tipo::Cantera).produccion.map_or(0, |p| p.1) as f64;
+        base * e.asentamientos.values().map(|a| c.nucleo.pueblos_de(a.id).iter().filter(|p| p.activo()).count()).sum::<usize>() as f64
+    };
+    let marcar = x.corrida.ordenes.get("MarcarPueblo");
+    let rechazos_marcar = marcar.map_or("ninguno".to_string(), |c| if c.rechazos.is_empty() { "ninguno".into() } else { c.rechazos.iter().map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(", ") });
+    let por_nivel = |n: u32| e.asentamientos.values().filter(|a| a.nivel() == n).count() as f64;
     vec![
         metrica("pueblos_marcados", "Pueblos marcados", "pueblos", INFO, Some(marcados as f64), "Economia_Construccion §14", "Obras de mapa pendientes de materiales (ocupan cupo desde que se marcan)."),
         metrica("pueblos_completados", "Pueblos levantados", "pueblos", INFO, Some(completados as f64), "Economia_Construccion §14", "Con todos los materiales entregados y la obra de 4 h terminada."),
@@ -305,9 +319,13 @@ fn pueblos(x: &Entrada) -> Vec<Metrica> {
         metrica("acarreo_viajes", "Viajes del carro de acarreo hasta la madre", "viajes", INFO, Some(n_hecho(x, "acarreo.llega")), "Comercio_Caravanas §12 (carro de acarreo)", "Cada vez que el almacén local de un pueblo se llena (500) sale el carro."),
         metrica("acarreo_ingresado", "Piedra que el acarreo ingresa en las madres", "unidades", INFO, Some(v.acarreo_carga as f64 / U), "Comercio_Caravanas §12", "Lo que cabe en el almacén de la madre al llegar."),
         metrica("acarreo_perdido_pct", "Acarreo que no cabe en el almacén de la madre", "%", max(5.0), (sacado > 0.0).then(|| 100.0 * v.acarreo_perdido as f64 / sacado), "Comercio_Caravanas §12 (topado por su capacidad: lo que no cabe se pierde)", "Con el almacén de piedra de la madre lleno, todo lo que acarrea el pueblo se pierde."),
-        metrica("acarreo_nominal_pct", "Lo que sale por acarreo respecto a la producción nominal de los pueblos", "%", (Some(90.0), Some(100.0)), (nominal > 0.0).then(|| 100.0 * sacado / nominal), "Economia_Construccion §14 y §11 (solvencia)", "Producción de la Cantera sin mano de obra limitada (10 por minuto) desde que se levanta frente a lo que el carro saca: el ascenso cuenta la primera como ingreso."),
+        metrica("acarreo_nominal_pct", "Lo que sale por acarreo respecto a la producción nominal de los pueblos", "%", (Some(90.0), Some(100.0)), (nominal > 0.0).then(|| 100.0 * sacado / nominal), "Economia_Construccion §14 y §11 (solvencia)", "Producción de la Cantera sin mano de obra limitada (10 por minuto) desde que se levanta frente a lo que el carro saca. Antes de C2 el ascenso contaba la primera como ingreso; desde C2 (2026-10-19) cuenta lo que ingresa (ver `acarreo_en_solvencia_pct`)."),
+        metrica("acarreo_en_solvencia_pct", "Acarreo que cuenta en la solvencia del ascenso al final, sobre la producción nominal de los pueblos activos", "%", INFO, (nominal_hoy > 0.0).then(|| 100.0 * en_ventana / nominal_hoy), "Economia_Construccion §11.2 y §14 (ventana de 24 h, C2)", &format!("Suma en todas las madres de la media por minuto de lo que el acarreo ingresó en las últimas {} h ({:.1} por minuto) frente a la Cantera nominal de los pueblos activos ({:.1} por minuto): con el almacén de la madre lleno, el pueblo apenas cuenta.", asentamiento::pueblos::HORAS_VENTANA, en_ventana / U, nominal_hoy / U)),
+        metrica("pueblo_marcar_rechazos", "Órdenes `MarcarPueblo` rechazadas", "órdenes", INFO, Some(marcar.map_or(0, |c| c.rechazos.values().sum::<u64>()) as f64), "Economia_Construccion §14 (requisitos; sin ruta por tierra a la madre no se funda, decisión 5 de 2026-10-23)", &format!("Por código: {rechazos_marcar}. El jugador marca el primer nodo de Cantera de `candidatos_de_pueblo`, que no mira la ruta.")),
+        metrica("plazas_nivel2_fin", "Plazas de nivel 2 al final", "plazas", INFO, Some(por_nivel(2)), "Doc 4.5", "Nivel alcanzado."),
+        metrica("plazas_nivel3_fin", "Plazas de nivel 3 o más al final", "plazas", INFO, Some((3..=5).map(por_nivel).sum()), "Doc 4.5", "La Facción de nivel 8 da cupo de 3 plazas de nivel 2; el nivel 3 pide además edificios que el jugador no construye (Barracón, Galería de tiro)."),
         metrica("misiones_terminadas_pct", "Viajes de columna que terminan de vuelta en la plaza", "%", min(90.0), pct(c.misiones.values().map(|m| m.1 as usize).sum(), c.misiones.values().map(|m| m.0 as usize).sum()), "Movimiento_Ejercitos (marchas) y Comercio_Caravanas §9", &format!("Viajes de la columna al campamento (y a la obra o al mostrador) lanzados y terminados: {}.", c.misiones.iter().map(|(k, m)| format!("{k} {}/{}", m.1, m.0)).collect::<Vec<_>>().join(", "))),
-        metrica("ascenso_insolvente", "Peticiones de ascenso rechazadas por insolvencia", "peticiones", INFO, Some(insolvente), "Economia_Construccion §11.2 (solvencia)", "Con acarreo a un almacén lleno, el ingreso por acarreo cuenta como producción aunque se pierda."),
+        metrica("ascenso_insolvente", "Peticiones de ascenso rechazadas por insolvencia", "peticiones", INFO, Some(insolvente), "Economia_Construccion §11.2 (solvencia)", "Desde C2 el acarreo cuenta por lo que ingresa en la madre en las últimas 24 h: un pueblo cuyo acarreo se pierde contra un almacén lleno ya no hace solvente a nadie."),
     ]
 }
 

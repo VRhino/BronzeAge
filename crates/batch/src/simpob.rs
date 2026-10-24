@@ -28,6 +28,9 @@ pub const CANDIDATOS: usize = 25;
 pub const MAX_RONDAS: usize = 40;
 /// Anillo de búsqueda alrededor del campamento (milésimas): 30-120 u.
 pub const ANILLO_CAMPAMENTO: (i64, i64) = (30_000, 120_000);
+/// El recinto que compromete el jugador: la empalizada (nivel 1), en cuanto el nivel operativo de la plaza lo permite (Murallas §4, gate de nivel 2), como el bot
+/// del TypeScript (`bots/cerebro/gobierno.ts:197`). La mejora a piedra pide el nivel 3, al que este batch no llega.
+pub const NIVEL_RECINTO: u8 = 1;
 
 fn clase(b: &Bloqueo) -> usize {
     match b {
@@ -85,6 +88,14 @@ pub struct Registro {
     /// Minuto en que por primera vez dejó de pesar cada bloqueo.
     pub libre_de: [Option<i64>; 7],
     pub ultimos_bloqueos: Vec<usize>,
+    /// La muralla (paso 7 del plan de Murallas): minuto en que se comprometió la empalizada y en que se cerró, celdas y puertas del anillo, lo que cuesta
+    /// levantarlo entero y, si nunca se pudo trazar, el último motivo.
+    pub recinto_comprometido: Option<i64>,
+    pub recinto_completado: Option<i64>,
+    pub recinto_celdas: usize,
+    pub recinto_puertas: usize,
+    pub recinto_coste: asentamiento::Costo,
+    pub recinto_error: Option<trazado::ErrorMuralla>,
 }
 
 /// Una plaza viva.
@@ -135,15 +146,20 @@ pub struct ViolacionesCiudad {
     pub suelo: u64,
     /// Genéricos fuera del disco urbano o, en las afueras, piezas fuera de su banda (anclas y satélites no miran el disco: Trazado_Urbano §6.5, §7.2).
     pub disco: u64,
-    /// Piezas sin ninguna celda de calle o camino pegada.
+    /// Piezas sin ninguna celda de calle o camino pegada, en plazas sin recintos.
     pub sin_salida: u64,
+    /// Lo mismo en las plazas con algún recinto: la red se recalcula con el muro puesto y una pieza anterior puede quedarse sin corredor dentro del
+    /// cap (Trazado_Urbano §5.1). Se cuenta aparte, fuera de [`Self::total`]: no es un fallo del código sino un hueco de las reglas (ver el informe).
+    pub sin_salida_muralla: u64,
     /// Piezas sin su edificio (mismo id y tipo) o edificios con huella en la rejilla sin pieza.
     pub economia: u64,
+    /// Piezas sobre una celda de muro o torre de un recinto, o ciudades cuyos recintos no son la proyección de los de la economía (Murallas §3).
+    pub muro: u64,
 }
 
 impl ViolacionesCiudad {
     pub fn total(&self) -> u64 {
-        self.solape + self.suelo + self.disco + self.sin_salida + self.economia
+        self.solape + self.suelo + self.disco + self.sin_salida + self.economia + self.muro
     }
 }
 
@@ -229,8 +245,11 @@ fn contar(a: &Asentamiento) -> BTreeMap<Tipo, u32> {
 
 /// Un minuto de una plaza: el paso del asentamiento, la política del jugador, la zona y los invariantes.
 #[allow(clippy::too_many_arguments)]
-fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Mapa, recursos: &mut Recursos, reclamos: &mut Reclamos, viol: &mut Violaciones) {
+fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Mapa, recursos: &mut Recursos, reclamos: &mut Reclamos, viol: &mut Violaciones, murallas: bool) {
     let t: Instante = minuto * MS_POR_MINUTO;
+    if murallas && minuto % CADA_MIN_ASCENSO == 0 {
+        comprometer_muralla(v, t, minuto, re);
+    }
     let Villa { pos, a, radio, parcelas, reg, urbe, .. } = v;
     let (reglas, urb) = (&*re.datos, &*re.urbanismo);
     let sin_tecnologia = |_: &str| false;
@@ -285,6 +304,10 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
             Evento::EdificioCompletado { tipo: Tipo::Cantera, .. } => drop(reg.primera_cantera.get_or_insert(minuto)),
             Evento::EdificioCompletado { tipo: Tipo::Corral, .. } => drop(reg.primera_corral.get_or_insert(minuto)),
             Evento::EdificioGratuito { tipo, .. } if urb.clase(tipo).is_some_and(|c| c.rol == Rol::AnclaSaturacion) => drop(reg.primera_ancla.get_or_insert(minuto)),
+            Evento::RecintoCompletado { .. } => {
+                reg.recinto_completado.get_or_insert(minuto);
+                sincronizar_recintos(a, urbe);
+            }
             Evento::NivelSubio { nivel: 2 } => drop(reg.nivel2.get_or_insert(minuto)),
             Evento::NivelSubio { nivel: 3 } => drop(reg.nivel3.get_or_insert(minuto)),
             Evento::Hambruna { pesants, artesanos, nobleza } => reg.muertes += pesants + artesanos + nobleza,
@@ -314,6 +337,36 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     viol.poblacion += (a.poblacion.pesants < 0 || a.poblacion.artesanos < 0 || a.poblacion.nobleza < 0 || a.poblacion.nutricion < 0 || a.poblacion.nutricion > 100_000) as u64;
     viol.medidor += !(0..=100_000).contains(&a.medidor.valor) as u64;
     viol.nivel += (a.nivel < nivel_antes || a.medidor.nivel_actual > a.nivel) as u64;
+}
+
+/// La política de murallas del jugador, en su turno horario y **antes** del paso del minuto (la primera celda se levanta en ese mismo paso, como en el núcleo, que la
+/// levanta en el instante de la orden): sin recintos y con el nivel operativo que pide la empalizada, la traza con la ciudad de la plaza y la compromete. Comprometer
+/// es gratis; cada celda se paga al levantarla y respeta la reserva (Murallas §5).
+fn comprometer_muralla(v: &mut Villa, t: Instante, minuto: i64, re: &ReglasEconomia) {
+    let (a, reg) = (&mut v.a, &mut v.reg);
+    let m = &re.datos.muralla;
+    if !a.recintos.is_empty() || a.destruido || a.comprobar_comprometer(&re.datos, NIVEL_RECINTO).is_err() {
+        return;
+    }
+    match trazado::trazar_recinto(v.urbe.ciudad(), &m.parametros_de_trazo(), NIVEL_RECINTO) {
+        Ok(trazo) => {
+            reg.recinto_coste = m.coste_de_trazo(&trazo.celdas, NIVEL_RECINTO);
+            reg.recinto_celdas = trazo.celdas.len();
+            reg.recinto_puertas = trazo.celdas.iter().filter(|c| c.clase == trazado::ClaseCelda::Puerta).count();
+            reg.recinto_comprometido = Some(minuto);
+            a.comprometer_recinto(t, NIVEL_RECINTO, trazo.celdas, &mut vec![]);
+            sincronizar_recintos(a, &mut v.urbe);
+        }
+        Err(e) => reg.recinto_error = Some(e),
+    }
+}
+
+/// La ciudad deriva sus recintos de los de la economía (`asentamiento::recintos::proyeccion`), como `Nucleo::sincronizar_recintos`: al comprometer y al cerrarse el anillo.
+fn sincronizar_recintos(a: &Asentamiento, urbe: &mut Urbe) {
+    let proyeccion = asentamiento::recintos::proyeccion(&a.recintos);
+    if urbe.ciudad().recintos() != proyeccion.as_slice() {
+        urbe.set_recintos(proyeccion);
+    }
 }
 
 /// Edificios con fuente de todas las plazas: ¿alguna parcela o nodo aparece dos veces? ¿Cuadran con los reclamos?
@@ -350,7 +403,10 @@ fn comprobar_ciudades(villas: &[Villa], re: &ReglasEconomia, out: &mut Violacion
         let radio = v.urbe.radio_ul(&v.a.urbano(&re.datos)) as i64;
         let (afueras_min, banda) = (prm.radio_afueras_min_ul as i64, prm.ancho_banda_afueras_ul as i64);
         let ps = c.piezas();
+        let muros: HashSet<trazado::Celda> = c.recintos().iter().flat_map(|r| r.muros.iter().copied()).collect();
+        out.muro += (c.recintos() != asentamiento::recintos::proyeccion(&v.a.recintos).as_slice()) as u64;
         for (k, p) in ps.iter().enumerate() {
+            out.muro += p.rect.celdas().any(|cl| muros.contains(&cl)) as u64;
             out.solape += ps[..k].iter().filter(|q| q.rect.solapa(&p.rect)).count() as u64;
             out.suelo += p.rect.celdas().any(|cl| c.es_calle(cl) || c.es_camino(cl)) as u64;
             let centro2 = p.rect.dist2_centro_al_origen();
@@ -364,7 +420,12 @@ fn comprobar_ciudades(villas: &[Villa], re: &ReglasEconomia, out: &mut Violacion
                 _ => true,
             };
             out.disco += !dentro as u64;
-            out.sin_salida += !p.rect.adyacentes().into_iter().any(|cl| c.es_calle(cl) || c.es_camino(cl)) as u64;
+            let sin_salida = !p.rect.adyacentes().into_iter().any(|cl| c.es_calle(cl) || c.es_camino(cl)) as u64;
+            if c.recintos().is_empty() {
+                out.sin_salida += sin_salida;
+            } else {
+                out.sin_salida_muralla += sin_salida;
+            }
             out.economia += !v.a.edificio(p.id).is_some_and(|e| e.tipo == TIPOS[p.tipo as usize]) as u64;
         }
         out.economia += v.a.edificios.iter().filter(|e| re.urbanismo.clase(e.tipo).is_some() && c.pieza(e.id).is_none()).count() as u64;
@@ -372,7 +433,8 @@ fn comprobar_ciudades(villas: &[Villa], re: &ReglasEconomia, out: &mut Violacion
 }
 
 /// Corre `plazas` plazas durante `dias` días de mundo.
-pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla: u64) -> Corrida {
+/// Con `murallas`, el jugador compromete la empalizada en cuanto puede ([`NIVEL_RECINTO`]).
+pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla: u64, murallas: bool) -> Corrida {
     let re = ReglasEconomia::default();
     let reglas = &*re.datos;
     let (puntos, sin_colocar) = colocar(mundo, mapa, plazas, semilla);
@@ -393,7 +455,7 @@ pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla:
     for minuto in 1..=dias as i64 * MIN_POR_DIA {
         recursos.ahora = minuto * MS_POR_MINUTO;
         for (i, v) in villas.iter_mut().enumerate().filter(|(_, v)| !v.a.destruido) {
-            paso(v, i as u32, minuto, &re, mapa, &mut recursos, &mut reclamos, &mut viol);
+            paso(v, i as u32, minuto, &re, mapa, &mut recursos, &mut reclamos, &mut viol, murallas);
         }
         if minuto % MIN_POR_DIA == 0 {
             let dia = (minuto / MIN_POR_DIA) as u32;
@@ -426,6 +488,7 @@ pub fn hash_estado(c: &Corrida) -> u64 {
         let (a, p) = (&v.a, &v.a.poblacion);
         (v.pos.x, v.pos.y, v.radio, a.nivel, a.medidor.valor, a.medidor.nivel_actual, p.pesants, p.artesanos, p.nobleza, p.nutricion, a.destruido, a.ascenso.map(|s| s.completa_en)).hash(&mut h);
         (p.restos, p.recuperando).hash(&mut h);
+        a.recintos.iter().for_each(|r| (r.id, r.nivel, r.avance, r.siguiente_celda_en, r.completado_en, r.celdas.len()).hash(&mut h));
         TODOS.iter().for_each(|&r| a.almacen.cantidad(r).hash(&mut h));
         a.edificios.iter().for_each(|e| (e.id, e.tipo, e.estado as u8, e.nivel_interno, e.completa_en, e.fuente.map(|f| format!("{f:?}"))).hash(&mut h));
         v.parcelas.iter().for_each(|p| p.hash(&mut h));
@@ -472,5 +535,24 @@ mod pruebas {
         // Sin su edificio, la pieza desacuerda con la economía.
         v.a.edificios.pop();
         assert_eq!(comprobar(&v, &re).economia, 1);
+    }
+
+    #[test]
+    fn el_jugador_compromete_la_empalizada_en_el_nivel_2_y_la_ciudad_la_proyecta() {
+        let re = ReglasEconomia::default();
+        let mut v = villa(&re);
+        comprometer_muralla(&mut v, 60_000, 1, &re);
+        assert!(v.a.recintos.is_empty() && v.reg.recinto_comprometido.is_none(), "en el nivel 1 no se puede");
+        (v.a.nivel, v.a.medidor.nivel_actual) = (2, 2);
+        comprometer_muralla(&mut v, 60_000, 1, &re);
+        assert_eq!((v.a.recintos.len(), v.reg.recinto_comprometido), (1, Some(1)));
+        assert!(v.reg.recinto_celdas > 0 && v.reg.recinto_puertas > 0 && !v.reg.recinto_coste.is_empty());
+        assert_eq!(v.urbe.ciudad().recintos(), asentamiento::recintos::proyeccion(&v.a.recintos).as_slice());
+        assert_eq!(comprobar(&v, &re).total(), 0);
+        comprometer_muralla(&mut v, 120_000, 2, &re);
+        assert_eq!(v.a.recintos.len(), 1, "con un recinto en obra no se compromete otro");
+        // Una ciudad que no lleva los recintos de la economía se detecta.
+        v.urbe.set_recintos(vec![]);
+        assert_eq!(comprobar(&v, &re).muro, 1);
     }
 }

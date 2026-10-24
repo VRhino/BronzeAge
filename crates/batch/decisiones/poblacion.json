@@ -1,162 +1,118 @@
 {
-  "resumen": "Se simularon 30 días de mundo con 300 plazas pedidas (230 colocadas: 70 no encuentran sitio fundable en el anillo de 30-120 u de su campamento, que ya está ocupado por las demás y exige madera suficiente a 10 u), minuto a minuto, en competencia por los nodos y las parcelas del mundo real y, desde esta corrida, con la ciudad real de cada plaza (el trazado urbano del núcleo, con el mismo adaptador `Urbe`). La ciudad no cambia el resultado de la economía: el 92,2 % de las plazas llega al nivel 2 (el 98,1 % de las que nacen con bosque y piedra a 10 u), con la misma mediana de 5,25 días (2,25 hasta pedir la subida, con los 200 pesants a los 2,2 días, más los 3 de la obra); las ruinas siguen en el 2,6 % (6 plazas, todas por perder sus parcelas contra otras al fundarse a la vez); no hay hambre, ni violaciones de invariantes (ni los de la economía ni los de la ciudad: sin solapes, dentro del disco, con salida a la red y con una pieza por edificio) y la corrida es determinista. A ninguna de las 230 plazas se le negó sitio en la ciudad para ningún edificio (Viviendas, Almacenes, Graneros y Leñeras: 0 %, esperado ≤ 5 %): la pieza urbana más lejana está a 35,6 u.l. del centro (mediana) frente a un radio de ciudad de 90, así que en 30 días el espacio no presiona nada. Cada plaza tiene 71 piezas a los 30 días (48 a los 7); el trazado crea anclas en el 92,2 % de las plazas (una plaza de armas y un patio de gremios por plaza, en mediana) justo al subir al nivel 2 (día 5,25); la Granja sube de nivel en el 97,4 % de las plazas y siempre halla hueco al mudarse: ninguna mejora esperó y ninguna cuadrilla se retuvo más de 24 h (0 plazas; esperado 0). No se construye ningún Mercado (no se auto-construye), así que no hay puestos. Cambios respecto al informe anterior: la mediana de edificios activos sube de 69 a 72 (anclas gratuitas), el escenario tarda 45 s de pared (antes 38 s; objetivo 120 s) y los agotamientos de nodos suben de 67.413 a 68.168; todo lo demás es idéntico, incluidos el nivel 2 (92,2 %), las ruinas (2,6 %), la mediana de 5,25 días y las 70 plazas sin colocar. Una corrida adicional de 150 plazas durante 90 días da lo mismo (sin denegaciones, sin esperas, sin violaciones).",
+  "resumen": "Corrida del 2026-10-24 (re-medición, último paso de la fase 6): 30 días de mundo con 300 plazas pedidas (230 colocadas; 70 sin sitio fundable, como antes), minuto a minuto, con la ciudad real de cada plaza y, por primera vez, con murallas: el jugador compromete la empalizada en cuanto el nivel operativo 2 lo permite (paso 7 del plan de Murallas, como el bot del TypeScript). Semilla 42 dos veces con la misma huella (6aa27c30a3b1ab37) y semilla 7 una vez; una cuarta corrida con `--murallas 0` aísla el efecto de la muralla y sale idéntica, métrica a métrica, a la corrida con el código anterior sin murallas. Desde el informe del 2026-10-18/19 han cambiado la economía por minuto (fines exactos, cuadrilla libre al instante, población entera con resto oculto, hambre D7/D8), las decisiones de las DUDA (mejora automática que comprueba el hueco, trazado como el TypeScript con `LAYOUT_VERSION` 4: anclas y satélites sin disco, ancla llena por huella, círculo del núcleo, ancla nacida al proponer) y las murallas. Sin murallas casi nada se mueve: el nivel 2 sigue en el 92,2 % (98,1 % con bosque y piedra a 10 u) y llega una hora antes (mediana 5,21 días frente a 5,25: los 200 pesants enteros llegan a los 2,19 días frente a 2,23 y la petición horaria sale una hora antes); ruinas 2,6 % (las mismas 6 plazas, por competencia por el bosque); 0 hambre (D7/D8 no se ejercitan: nadie llega a nutrición 0); 0 cuadrillas retenidas y 0 mejoras esperando hueco; 0 negativas de sitio y 0 violaciones de la ciudad (el contador de disco ya solo mira los genéricos); los pesants finales, 629 (antes 630 en milésimas). Lo único que cambia de ritmo es la población entre los días 6 y 10: a los 7 días hay 314 pesants de mediana frente a 345, porque el ancla nace al proponer y la Armería entra antes en la cola (a los 7 días: Armería 1 frente a 0, Viviendas 21 frente a 23); a los 12 días ya son iguales. La muralla: el 100 % de las plazas de nivel 2 compromete la empalizada (día 5,25, el primer turno tras subir) y la cierra en 0,55 días (54 celdas a 15 min, nunca le faltan materiales: los almacenes están llenos), con un coste de 1.160 de madera y 116 de piedra y un upkeep que es el 10,8 % del mantenimiento; la mediana de las plazas no lo nota (73 edificios, 629 pesants, sin hambre ni caída del medidor). Pero en el 7,1 % de las plazas amuralladas (5,7 % con la semilla 7) la ciudad deja de crecer: no cabe ninguna Vivienda, Armería ni Carpintería más y se quedan en 21 Viviendas y 314 pesants de mediana frente a 42 y 629; y 39 piezas (45 con la semilla 7), Granjas de las afueras sobre todo, se quedan sin salida a la red. No es un fallo del código (la red sigue conexa y se hace lo que dicen las reglas, que son las del TypeScript), sino una interacción de reglas que nadie había medido: ver la decisión M1 y `ciudad_bloqueada.svg`. Rendimiento: 47 s de pared (antes 45; objetivo 120). Fallo del batch arreglado: el gráfico «Pesants por plaza» dividía por mil unos pesants que desde la población entera ya son enteros.",
   "anomalias": [
     {
-      "titulo": "La ciudad real no presiona el espacio en 30 días: por eso no se niega ningún sitio",
-      "detalle": "Ninguna de las 230 plazas recibió una sola negativa de sitio en la ciudad (ni de Vivienda, Almacén, Granero, Leñera, Granja, Corral o talleres) y no hubo ningún `tomar` negado. La plaza de ejemplo (`ciudad_ejemplo.svg`: nivel 2, 76 piezas) ocupa unos 1.850 u.l.² de edificios (el 7 % de un disco de 25.400) y 1.500 de calles y caminos; la pieza urbana más lejana está a 35,6 u.l. (mediana) y el radio de la ciudad ya está en el tope de su nivel (100 % de las plazas, 88,4 u.l. de media; 90 en el nivel 2). Con el tope de Viviendas del nivel 2 (42) y 72 edificios, el radio de 90 es muy superior a lo que hace falta. Por tanto este batch todavía no mide el riesgo de «no cabe»: aparecerá con los niveles 3-5 (más edificios, huellas mayores), con Mercados y puestos, con recintos de muralla o con tamaños de Granja de 6×6 en ciudades llenas. No se ha cambiado ninguna cifra.",
+      "titulo": "La empalizada ahoga la ciudad en el 6-7 % de las plazas que la levantan",
+      "detalle": "Con la empalizada comprometida en cuanto la plaza sube al nivel 2 (día 5,25, unas 45 piezas), el anillo abraza la ciudad del momento con una celda de holgura (`franjaDeRonda` 1) y una sola puerta (mediana), la que deja el camino de la Granja al cruzar. Al levantar el muro la red se recalcula con muros y torres ocupados: el corredor de la Granja ya no halla paso por la puerta hasta una calle de dentro, así que ese camino desaparece y fuera del anillo no queda red. Desde entonces, en 15 de 212 plazas amuralladas (semilla 42; 12 de 211 con la 7), la ciudad niega cada minuto Viviendas, Armería y Carpintería (492.489 consultas denegadas): sus núcleos de ancla están llenos dentro y fuera no hay calle a la que pegarse ni sitio para un ancla nueva. Se quedan en 21 Viviendas y 314 pesants de mediana (las demás amuralladas, 42 y 629) y no pueden ampliar el recinto, porque ampliar exige 6 edificios extramuros que no pueden construir. Sin murallas, 0 plazas reciben esa negativa. Ver `ciudad_bloqueada.svg` (la plaza más afectada) frente a `ciudad_ejemplo.svg` (una que siguió creciendo por fuera del muro).",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "Piezas que se quedan sin salida a la red al levantar el muro",
+      "detalle": "39 piezas en 224 plazas en pie (45 con la semilla 7): sobre todo la Granja de las afueras, cuyo camino cruzaba el anillo, y algunas piezas de dentro cuya calle salía del corredor que el muro cortó. Trazado_Urbano §13 pide salida a la red dentro del cap para todo sitio válido; la red sigue siendo un único componente (lo que vigila el TypeScript), pero esas piezas quedan sin calle. Se cuentan aparte (`muralla_piezas_sin_salida`) y fuera de `invariantes_ciudad`, que sigue en 0. Una Granja sin camino produce igual (la economía no mira la red), así que hoy es un defecto de la ciudad dibujada y del crecimiento, no de la producción.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "La empalizada nunca espera materiales: se levanta a la velocidad máxima",
+      "detalle": "54 celdas a 15 min cada una son 13,5 h, y la mediana de obra es de 0,55 días: los almacenes de madera y piedra están llenos desde el día 3, así que ninguna celda espera por falta de recursos ni por la reserva. 1.160 de madera y 116 de piedra (puertas ×4) frente a una capacidad de almacén de miles; el upkeep (0,02 de madera por celda y minuto, 1,08 por minuto) es el 10,8 % del mantenimiento total de la plaza. No se ha medido ni la mejora a piedra (pide el nivel 3, al que nadie llega) ni la reparación tras una conquista (no hay guerra en este batch: lo cubre `batch militar`).",
       "causa": "medicion"
     },
     {
-      "titulo": "El riesgo de bloqueo por una Granja sin hueco no se ha ejercitado (0 esperas)",
-      "detalle": "La Granja sube de nivel (97,4 % de las plazas) y se muda a un hueco de su huella nueva (2×2, 2×3, 4×3, 6×6) sin esperar nunca: 0 plazas con una mejora esperando hueco, 0 h de espera máxima, 0 plazas con una cuadrilla retenida más de 24 h. La mejora automática arranca sin comprobar el hueco (DUDA anotada en `asentamiento::obras::avanzar_mejoras`), así que el riesgo sigue siendo teórico: la métrica `cuadrilla_retenida_24h` está lista para vigilarlo, pero con una ciudad vacía como esta no tiene ocasión de saltar. El camino de espera (registro de la mejora que no cabe y de su duración) no lo ha recorrido ninguna plaza real, solo está cubierto por la lectura del código.",
+      "titulo": "El ancla nace al proponer y adelanta los talleres: la población del día 7 baja un 9 %",
+      "detalle": "A los 7 días hay 314 pesants de mediana (antes 345) y 21 Viviendas (antes 23), con una Armería ya en pie (antes 0). La primera ancla nace el mismo minuto en que la plaza sube al nivel 2 (5,208 días; antes un minuto después) porque nace al proponer (decisión C del laboratorio), y el taller que la pidió entra en la cola antes que las Viviendas. A los 12 días las curvas coinciden (629 pesants, 42 Viviendas). No cambia el nivel 2.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "El hambre D7/D8 y la mejora con hueco no se ejercitan",
+      "detalle": "Ninguna plaza pasa hambre (nutrición mínima 100, 0 muertes), así que la regla D7/D8 (sin crecimiento con nutrición 0, recuperación hasta 100) no se ve en este batch; la cubren las pruebas del crate `asentamiento`. La mejora automática de la Granja comprueba el hueco desde el 2026-10-23: 0 esperas y 0 cuadrillas retenidas, como antes, pero ahora por regla y no por una ciudad vacía.",
       "causa": "medicion"
     },
     {
-      "titulo": "El gate de nivel 2 para crear anclas no frena nada: los talleres piden nivel 2 de todos modos",
-      "detalle": "Sin ancla de su barrio, un taller (Fundición, Armería, Curtiduría, Carpintería) o un edificio militar solo cabe si el nivel operativo abre el gate de las anclas (nivel 2). Todos ellos piden nivel 2 para construirse (`requisitoNivelAsentamientoConstruccion` = 2), así que la auto-construcción solo los propone desde el nivel 2, así que la primera ancla se crea el día 5,251 (mediana), un minuto después de subir al nivel 2 (5,25). Resultado: el 92,2 % de las plazas tiene ancla (las que llegan al nivel 2) y ningún taller se queda sin sitio por no tener ancla (0 % de plazas con negativa de taller). El gate solo se notaría con edificios de nivel 1 que tengan barrio propio, que hoy no existen.",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "Las anclas son edificios gratuitos con mantenimiento: la mediana de edificios sube de 69 a 72",
-      "detalle": "El trazado crea por su cuenta una plaza de armas (barrio militar, por la Carpintería) y un patio de gremios (barrio industrial, por la Armería) en la mediana de plazas, más, en el barrio residencial, una plaza (37 % de las plazas), un pozo (27 %) o un parque (29 %) cuando el núcleo del Centro Urbano se llena de Viviendas: son edificios activos desde que nacen, no pasan por la cola, no agrandan la ciudad ni la zona y cuentan a la mitad en el mantenimiento. No cambian el nivel 2 (92,2 %, 5,25 días), el medidor ni el hambre; lo medido es +3 edificios activos en mediana y +755 agotamientos de nodos (68.168 frente a 67.413), sin causa aislada. Se anota para que, al calibrar el mantenimiento con bots, se cuente con ellas.",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "Quedan 6 plazas en ruinas (2,6 %), todas por competencia por el bosque",
-      "detalle": "Con P1 (sin parcela de bosque a 10 u no se funda) y P2 (madera potencial a 10 u de al menos 3 por minuto), el 2,6 % de las 230 plazas (6) cae en Ruinas el día 1 por no pagar la madera del mantenimiento: ninguna llegó a terminar una Leñera porque otras plazas se quedaron antes con sus parcelas (en el batch se fundan todas a la vez; en el juego real las fundaciones llegan escalonadas). Antes: 29,7 % fundando a ciegas, 17,9 % solo con P1. La ciudad no cambia este número.",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "El bosque ralo ya no arruina plazas (P2)",
-      "detalle": "Con el umbral de 3 madera por minuto de bosque potencial a 10 u, ninguna de las plazas con Leñera cae en ruinas. La madera potencial mediana a 10 u de las 6 que caen es 5,2 y la de las que sobreviven 15,3 (medida al fundar, antes de la competencia). El umbral de 3 es un placeholder a calibrar (el mantenimiento pide ~1,65 al día 1 y ~2,5 con 40 edificios).",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "Las plazas sin piedra cercana se quedan en el nivel 1 para siempre",
-      "detalle": "Sin ningún nodo de piedra a 10 u o menos (6,1 % de las plazas) no hay Cantera, no hay piedra para el coste de ascenso (400) ni para el mantenimiento del nivel 2, y solo tienen 2 de los 3 tipos de extracción que pide el nivel 2 (Granja y Leñera; las minas van por pueblo extractor, que este batch no tiene). Sobreviven (tienen madera) pero no suben: a la última comprobación pesaban «faltan edificios», «recursos insuficientes» e «insolvente». Con la zona del nivel 2 (15 u) alguna alcanzaría piedra, pero el nivel 2 es justo lo que no pueden pagar.",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "El nivel 3 sigue sin alcanzarse, aunque el requisito de artesanos ya se cumple",
-      "detalle": "Decidido el 2026-10-18: el tope de Viviendas lleva un margen de 2 (cupo de 420 artesanos para un requisito de 400) y los requisitos de nivel se leen redondeando al entero más cercano. Con eso las plazas del nivel 2 llegan a 419,997 artesanos y el requisito se cumple. 0 % llega al nivel 3 por otros motivos: el cupo de la Facción para el nivel 3 con una Facción de nivel 1 es 0; el Barracón y la Galería de tiro solo se añaden a mano y el batch no da órdenes manuales; y la Curtiduría y la Fundición no se auto-proponen porque piden materia prima de arranque (ganado y cobre) y sin Corral, sin minas (pueblos extractores sin implementar) y sin comercio no hay ninguna.",
-      "causa": "codigo"
-    },
-    {
-      "titulo": "El Corral: solo el 13,0 % de las plazas lo consigue",
-      "detalle": "Antes de reordenar el generador ninguna plaza (0 de 286) tenía un nodo de ganado a 30 u o menos: los 400 nodos estaban en la tierra lejana (250-863 u de un campamento) porque la piedra ×10 llenaba la rejilla de candidatos del foco antes de que le tocara al ganado. Con la ganadería colocada antes que la piedra, el 40,0 % de las plazas tiene algún nodo a 30 u o menos (mediana 0) y el 13,9 % a 15 u o menos (el techo de la zona en el nivel 2); el 13,0 % termina un Corral y al 98,3 % se le negó sitio en el mapa al pedir el primero (la zona empieza en 6 u y crece con los edificios). La ciudad no es el cuello: no se negó sitio de Corral en ninguna plaza (0 %). Consecuencia: la mayoría de las plazas no produce livestock, así que no hay cuero ni Curtiduría automática.",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "El techo de población del nivel 2 (1.500) no se alcanza: lo limita el cupo de Viviendas",
-      "detalle": "La mediana de pesants se queda en 630 desde el día 11 (42 Viviendas × 15) y los artesanos en 420 (42 × 10); el techo de población del nivel 2 en los datos es 1.500. No es un fallo: `maximo_viviendas` solo deja las Viviendas que exige el nivel siguiente. Se anota porque el techo del nivel 2 queda entonces como decorativo.",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "Todas las plazas con buen sitio se comportan igual (sin varianza)",
-      "detalle": "Las 212 plazas que llegan al nivel 2 lo hacen todas en el día 5: el histograma tiene una sola barra. El mismo estado inicial, la fertilidad fijada en 1,0 y un jugador que solo mira cada hora dan una economía determinista sin ruido; lo que varía entre plazas es solo el sitio (parcelas, piedra, competencia) y, ahora, la semilla de su ciudad, que no cambia nada medible. La dispersión real vendrá del jugador (bots de la fase 7), de la fertilidad del terreno y de las tecnologías.",
+      "titulo": "Lo que sigue igual que en el informe anterior",
+      "detalle": "Ruinas 2,6 % (6 plazas el día 1, sin Leñera por la competencia por el bosque al fundar a la vez), plazas sin piedra a 10 u que se quedan en el nivel 1 (6,1 %), el Corral en el 12-13 % de las plazas, el techo de población del nivel 2 que no se alcanza (630 pesants por el tope de Viviendas), el nivel 3 inalcanzable (cupo de Facción 0, Barracón y Galería solo a mano, Curtiduría y Fundición sin materia prima) y ningún Mercado (no se auto-construye). Las decisiones P1, P2 y P5 siguen como estaban; C2 (hueco de la mejora automática) la cerró el autor el 2026-10-23.",
       "causa": "medicion"
     },
     {
       "titulo": "Simplificaciones y límites de este batch",
-      "detalle": "Sin recorte de las zonas por las vecinas (discos que crecen 1 u por edificio hasta el techo del nivel), sin pueblos extractores (Mina, MinaCobre, MinaEstano y MinaHierro devuelven siempre sin sitio, así que no hay metales), sin tecnologías, sin recintos de muralla (ninguna celda de la ciudad es muro), nivel de Facción 1 con una plaza por Facción, 1 ciudadano, sin guarnición, saqueos ni órdenes manuales (no se construyen Mercados, Palacio, Barracón, Galería de tiro ni Caballerizas: sus anclas y sus puestos no entran en la medida), fertilidad 1,0 en todas partes, perfil de trazado el de la tradición de cada plaza (sin ordenanzas). La ciudad de cada plaza sí es la real: la `Ciudad` del crate `trazado` con el adaptador `Urbe` del núcleo, fundada con semilla derivada de la del escenario y del índice de la plaza; los invariantes de la ciudad se comprueban al final en las 224 plazas en pie (la de una plaza ya arruinada no). Las plazas se fundaron todas a la vez (t = 0) en anillos de 30-120 u de 9 campamentos: 70 de las 300 no hallaron sitio válido tras 40 rondas de 25 candidatos (foco saturado: 33 plazas pedidas por campamento frente a las ~45 que estima el canon, y desde P1/P2 sin bosque suficiente a 10 u no se funda).",
+      "detalle": "Sin recorte de las zonas por las vecinas, sin pueblos extractores, sin tecnologías, nivel de Facción 1 con una plaza por Facción, 1 ciudadano, sin guarnición, saqueos, conquistas ni órdenes manuales salvo la empalizada (no se construyen Mercados, Palacio, Barracón, Galería ni Caballerizas), sin mejora del recinto ni ampliaciones, fertilidad 1,0, perfil de trazado el de la tradición. El jugador compromete la empalizada en su turno horario y la primera celda se levanta en el paso de ese mismo minuto (en el núcleo, en el instante de la orden). Plazas fundadas todas a la vez en anillos de 30-120 u de 9 campamentos.",
       "causa": "medicion"
     }
   ],
   "decisiones": [
     {
-      "id": "P1",
-      "pregunta": "P1 aplicada (2026-10-18): el aviso de viabilidad dice que sin madera suficiente a 10 u la plaza caerá en ruinas, y el batch y los bots no fundan ahí.",
-      "contexto": "Hecho: `InformeViabilidad` lleva `parcelas_en_techo`, `madera_potencial` y `condenada`; el Doc 1.2 lo recoge.",
+      "id": "M1",
+      "pregunta": "¿Qué hacemos para que una empalizada temprana no ahogue la ciudad (6-7 % de las plazas amuralladas) ni deje Granjas sin camino?",
+      "contexto": "Medido: con la empalizada en el nivel 2 (como el bot del TypeScript), el anillo se ciñe a la ciudad con 1 celda de holgura y 1 puerta; al recalcular la red, el camino de la Granja ya no pasa y fuera no queda calle. 15 de 212 plazas (semilla 42) dejan de crecer (21 Viviendas frente a 42) y 39 piezas quedan sin salida; ampliar el recinto no las salva (pide 6 edificios fuera). Sin murallas no pasa nunca. Es una regla del trazado y del bloque `MURALLA`: no se ha tocado nada.",
       "opciones": [
         {
-          "texto": "Dar P1 por cerrada y decidir P2 (bosque ralo).",
+          "texto": "Que la red recalculada con el muro conserve los cruces que dieron puerta: la celda de la puerta y su tramo de calle o camino a cada lado se siembran como red conectada (no como islas, el fallo que vio el TypeScript), y medir otra vez.",
           "recomendada": true,
-          "efecto": "No hay más cambios en P1."
+          "efecto": "La Granja conserva su camino y la ciudad puede seguir creciendo por fuera de la puerta; cambia el trazado (`LAYOUT_VERSION` 5) y la red de las ciudades amuralladas."
+        },
+        {
+          "texto": "Más holgura al trazar (`franjaDeRonda` 2 o 3) y medir otra vez.",
+          "recomendada": false,
+          "efecto": "Medido con `franjaDeRonda` 2 (experimento, bloque sin cambiar): 57 celdas, 1.200 de madera, bloqueadas 3,8 % (de 7,1 %) y 14 piezas sin salida (de 39). Lo reduce a la mitad pero no lo quita."
+        },
+        {
+          "texto": "Que el presupuesto del recinto avise (o rechace) si el anillo dejaría piezas sin salida, y que los bots esperen a una ciudad mayor.",
+          "recomendada": false,
+          "efecto": "No cambia el trazado; traslada el problema al jugador, que no sabría por qué su ciudad deja de crecer."
+        },
+        {
+          "texto": "Dejarlo así: amurallar pronto tiene ese riesgo.",
+          "recomendada": false,
+          "efecto": "Sin cambios; una de cada quince plazas que amurallen en el nivel 2 queda congelada sin salida posible (no puede ampliar)."
         }
       ]
     },
     {
-      "id": "P2",
-      "pregunta": "P2 aplicada (2026-10-18): la condena exige además 3 de madera por minuto de bosque potencial a 10 u. Resultado: ruinas del 17,9 % al 2,6 %.",
-      "contexto": "El 3 es un placeholder a calibrar con bots y economía real (`MADERA_MINIMA_POTENCIAL`). Quedan 6 plazas por competencia por parcelas al fundar a la vez. La ciudad real no cambia este resultado.",
+      "id": "M2",
+      "pregunta": "¿Se mantienen las cifras de la empalizada (20 de madera y 2 de piedra por celda, puertas ×4, 15 min por celda, upkeep 0,02 de madera por celda y minuto)?",
+      "contexto": "Medido: 54 celdas y 1 puerta de mediana; 1.160 de madera y 116 de piedra; 0,55 días de obra sin esperar nunca materiales (almacenes llenos); upkeep = 10,8 % del mantenimiento de la plaza. No se ha medido la piedra (nivel 3) ni la reparación tras una conquista. Canon: «difícil de obtener y de mantener» (Murallas_Definicion §16).",
       "opciones": [
         {
-          "texto": "Dar P2 por cerrada y calibrar el 3 con los bots (fase 7).",
+          "texto": "Mantenerlas hasta medir con bots que compitan por la madera (fase 7) y con asedios (`batch militar` con murallas).",
           "recomendada": true,
-          "efecto": "Sin más cambios."
+          "efecto": "Sin cambios; con almacenes siempre llenos este batch no puede decir si la empalizada es cara."
+        },
+        {
+          "texto": "Subir el tiempo por celda (p. ej. 30 min: un día de obra).",
+          "recomendada": false,
+          "efecto": "La empalizada deja de ser cosa de medio día; más ventana de vulnerabilidad a mitad de obra."
         }
       ]
     },
     {
       "id": "C1",
-      "pregunta": "¿Cómo hacemos que el batch de población presione de verdad la ciudad, ahora que en 30 días no se le niega sitio a nadie?",
-      "contexto": "Con la ciudad real el espacio sobra: la pieza urbana más lejana está a 35,6 u.l. (mediana) de un radio de 90 y el 7 % del disco está ocupado; por eso las métricas de «sin sitio» valen 0 y las esperas de la Granja también. Para medir el riesgo hacen falta más edificios y huellas mayores (niveles 3-5), Mercados con puestos y recintos de muralla, que este jugador sintético no construye. No se ha cambiado ninguna regla.",
+      "pregunta": "¿Cómo hacemos que el batch de población presione la ciudad y mida el nivel 3?",
+      "contexto": "Sigue abierta (era C1 y P4): sin órdenes manuales ni Facción de nivel 3 no hay Mercados, puestos, Barracón ni Galería, y nadie llega al nivel 3. La muralla ya presiona la ciudad (ver M1), pero el resto del espacio sobra: la pieza urbana más lejana está a 42 u.l. de un radio de 90.",
       "opciones": [
         {
-          "texto": "Ampliar el jugador sintético con órdenes manuales (Mercado, Palacio, Barracón, Galería de tiro, Caballerizas) y Facción de nivel 3, junto con P4, y repetir la corrida.",
+          "texto": "Ampliar el jugador sintético (Mercado, Barracón, Galería, Facción de nivel 3) tras resolver M1, y repetir la corrida.",
           "recomendada": true,
-          "efecto": "Da por primera vez piezas de Mercado y anclas militares y puestos, y ciudades de nivel 3+; el coste es una política sintética más compleja y ajustar la métrica de esperas a esos niveles."
+          "efecto": "Primeras medidas del nivel 3, de los puestos y de la mejora a piedra; política sintética más compleja."
         },
         {
-          "texto": "Dejar la presión de la ciudad para los bots de la fase 7.",
+          "texto": "Dejarlo para los bots de la fase 7.",
           "recomendada": false,
-          "efecto": "No añade trabajo ahora, pero el riesgo de «no cabe» y el de la cuadrilla retenida quedan sin medir hasta el final."
-        }
-      ]
-    },
-    {
-      "id": "C2",
-      "pregunta": "¿Comprobamos el hueco de la Granja también al arrancar la mejora automática, o la dejamos como en TypeScript y vigilamos la métrica?",
-      "contexto": "Hoy la mejora automática de la Granja arranca sin comprobar que cabrá su huella nueva y, si no cabe al terminar, espera conservando su cuadrilla (DUDA en `asentamiento::obras`). En esta corrida y en otra de 150 plazas × 90 días no esperó ninguna (`cuadrilla_retenida_24h` = 0), pero la ciudad está casi vacía (ver C1), así que no es una prueba. Es una regla de juego: no se ha tocado.",
-      "opciones": [
-        {
-          "texto": "Dejarlo como está y vigilar `cuadrilla_retenida_24h` cuando el jugador sintético llene la ciudad (C1).",
-          "recomendada": true,
-          "efecto": "Sin cambios de reglas; si la métrica salta, se decide con datos."
-        },
-        {
-          "texto": "Comprobar el hueco al arrancar también la mejora automática (como pide el documento para la manual).",
-          "recomendada": false,
-          "efecto": "Elimina la retención de cuadrilla, pero la Granja podría no mejorar nunca en una ciudad llena y se desvía del TypeScript."
-        }
-      ]
-    },
-    {
-      "id": "P4",
-      "pregunta": "¿Cuándo medimos el nivel 3?",
-      "contexto": "El ritmo de los niveles 2-3 está aprobado en el canon, pero este batch no puede medir el 3: faltan el cupo de Facción (0 con Facción de nivel 1), el Barracón y la Galería de tiro (solo a mano) y la materia prima de la Curtiduría (ganado) y de la Fundición (cobre), que sin Corral, minas ni comercio no existe. El requisito de artesanos ya está arreglado.",
-      "opciones": [
-        {
-          "texto": "Ampliar el jugador sintético: Facción de nivel 3 y órdenes manuales de Barracón y Galería de tiro, y repetir la corrida de 30 días (junto con C1).",
-          "recomendada": true,
-          "efecto": "Da por primera vez el tiempo hasta el nivel 3 y los edificios que le faltan (Curtiduría, Fundición); el coste es una política sintética más compleja."
-        },
-        {
-          "texto": "Dejar el nivel 3 para los bots de la fase 7.",
-          "recomendada": false,
-          "efecto": "No añade trabajo ahora, pero el ritmo aprobado queda sin comprobar hasta el final y los fallos del nivel 3 saldrán tarde."
+          "efecto": "Sin trabajo ahora; el nivel 3 y la piedra quedan sin medir hasta el final."
         }
       ]
     },
     {
       "id": "P5",
-      "pregunta": "¿Qué hacemos con el ganado, que ya aparece cerca de la mitad de las plazas pero solo el 13,0 % construye un Corral?",
-      "contexto": "Con el reparto corregido del generador hay ganado a 30 u o menos en el 40,0 % de las plazas y a 15 u o menos en el 13,9 %. Sin Corral no hay livestock ni cuero, y la Curtiduría (requisito del nivel 3) no se auto-propone. Es un recurso escaso a propósito, que empuja a expandirse o a comerciar; la pregunta es si la escasez actual es la que queremos. La ciudad no limita al Corral.",
+      "pregunta": "¿Qué hacemos con el ganado (Corral en el 12-13 % de las plazas)?",
+      "contexto": "Sin cambios desde la corrida anterior: ganado a 30 u o menos en el 40 % de las plazas y a 15 u en el 13,9 %; con murallas, 2 plazas más pierden el Corral porque la ciudad ya no le da sitio en las afueras.",
       "opciones": [
         {
-          "texto": "Dejarlo así y medirlo con comercio y bots: el ganado escaso empuja a expandirse y a comerciar, y la Curtiduría se puede añadir a mano.",
+          "texto": "Dejarlo así y medirlo con comercio y bots.",
           "recomendada": true,
-          "efecto": "No toca el mundo. El nivel 3 depende entonces del comercio, que se mide en el sistema de economía."
+          "efecto": "No toca el mundo."
         },
         {
-          "texto": "Subir el ganado ×3 en el generador (de 400 a unos 1.200 nodos) y regenerar el mundo (~12 min).",
+          "texto": "Subir el ganado ×3 en el generador y regenerar el mundo.",
           "recomendada": false,
-          "efecto": "Más plazas con Corral en el nivel 2; cambia el hash del mundo y obliga a repetir los batches."
-        },
-        {
-          "texto": "Sacar el ganado de la ciudad con un pueblo extractor, como los minerales.",
-          "recomendada": false,
-          "efecto": "El Corral deja de depender del disco de la zona, pero es una regla nueva (Doc 4.2.2) que hay que diseñar."
+          "efecto": "Más Corrales; cambia el hash del mundo y obliga a repetir los batches."
         }
       ]
     }

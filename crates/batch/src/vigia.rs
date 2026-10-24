@@ -56,6 +56,8 @@ pub struct Vigia {
     pub peajes_pagados: BTreeMap<u32, (u64, i64)>,
     pub peajes_cobrados: BTreeMap<u32, (u64, i64)>,
     pub comision: i64,
+    /// Valor (a precio vigente) de lo que llevaban las caravanas al llegar: la base de la comisión.
+    pub valor_entregado: i64,
     pub recargo: i64,
     pub carga_entregada: i64,
     pub perdido_en_entrega: i64,
@@ -134,6 +136,7 @@ impl Vigia {
             }
             "comercio.caravana_llega" => {
                 self.comision += dato(datos, "comision");
+                self.valor_entregado += dato(datos, "valor");
                 self.recargo += dato(datos, "recargo");
                 self.carga_entregada += dato(datos, "carga");
                 self.perdido_en_entrega += dato(datos, "perdido");

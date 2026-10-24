@@ -1,177 +1,108 @@
 {
-  "resumen": "Se simularon 30 días de mundo con 160 plazas pedidas (146 colocadas, en 40 Facciones de hasta cuatro plazas, con el mismo mundo y la misma semilla 42 que `batch poblacion`) sobre el núcleo real: economía de cada plaza, trueques, flota que viaja por el mapa, peajes, red de caminos, mercado de mercenarios y pueblos extractores con su carro de acarreo, y un «jugador» mínimo y determinista (Mercado y caravana en cuanto hay madera, trueques por doble coincidencia con las vecinas, pueblos de Cantera con los materiales que compra la columna). Los invariantes del comercio se cumplen todos (0 violaciones: almacenes, cargas, trueques, ninguna caravana en camino sin plan ni sin su llegada en la cola, ningún evento vigente fuera de su estado, ningún reparto en una plaza ociosa, un minuto por plaza, ninguna versión del registro perdida, estaño y hierro exactos), la corrida es determinista (misma semilla, misma huella; reloj a pasos igual que acelerado) y no hay ningún error del núcleo que arreglar. Las 146 plazas tienen Mercado y flota desde el día 2; se proponen 160 trueques, se aceptan 155 (96,9 %) y todos se cumplen (0 vencidos), con una duración mediana de 3 min y de 17,5 min en el percentil 90, y reparto inmediato (mediana 0 min). 519 caravanas salen y las 519 entregan (0 perdidas, 0 de carga perdida); el peaje (269 cobros, 172 u, el 0,85 % de la carga) lo pagan 20 Facciones y lo cobran 16, y una sola cobra el 28,7 %. La red llega a 575 aristas (531 de camino, 50 de calzada, peso máximo 12) y el viaje más rápido de un par de plazas sin peaje dura justo la mitad que el más lento (0,50, el `factorCamino`); con peaje sube a 0,72 porque los tramos hasta el centro de la ciudad ajena no se acortan igual. Lo que sale mal es de diseño y de medición, no de código: (1) el peaje del 2 % deja cada entrega por debajo de lo pactado y obliga a repescas (3,35 salidas por trueque en vez de 2; el 24 % de los viajes llevan menos de una unidad, hasta 0,012 u); (2) con la piedra de las madres al 96-100 % el acarreo pierde el 97,6 % de lo que transporta (134.281 viajes, 1,64 millones de u ingresadas de 67 millones) y la solvencia del ascenso sigue contando la producción nominal; (3) el comercio solo vive de los bienes que unas plazas tienen y otras no (ganado y armas de madera) y se apaga el día 13 (ningún trueque desde entonces) porque nada los gasta, así que la red no vuelve a crecer; (4) la comisión acuñada es de solo 77,8 de oro en 519 entregas, porque las armas de madera no tienen precio de referencia y el oro de las plazas está al 100 % desde el día 3; (5) la reputación se borra en 1,74 días (máxima alcanzada 78 puntos, mediana final 15,8, nadie baja de 0), así que ni el tope ni el umbral de −40 se ejercitan; (6) el 21,7 % de las compras a los mercenarios se rechaza por falta de existencias (218 obras de 90 de madera sobre 9 campamentos). Rendimiento: 96 s de pared el escenario completo (la corrida con comercio, 51 s; objetivo 300 s), 6,57 millones de eventos de los que unos 271.000 son del comercio, a unos 17-28 µs por evento de comercio (incluye las órdenes del jugador); 1.500 eventos por plaza y día. Las decisiones del final plantean la reputación, la ventana del acarreo, el peaje en el trueque, el precio de las manufacturas, el número de caravanas del Mercado y las cifras de los mercenarios.",
+  "resumen": "Corrida del 2026-10-24 (re-medición tras C2-C4, la economía por minuto y las decisiones de las DUDA): 30 días de mundo con 160 plazas pedidas (146 colocadas, en 40 Facciones de hasta cuatro plazas) sobre el núcleo real, con el mismo «jugador» mínimo y determinista que el 2026-10-19. Semilla 42 dos veces con la misma huella (7de818d8…268ad00) y semilla 7 una vez (140 plazas). Los invariantes del comercio se cumplen todos (0 violaciones, también `inv_fines`, nueva desde los fines exactos), la conservación de estaño y hierro cuadra al milésimo y el reloj a pasos da la misma huella que el acelerado. Lo que cambió respecto a la corrida anterior (antes → ahora, semilla 42): C3 funciona: las repescas de menos de una unidad desaparecen (24,3 % → 0 % de los viajes de ida), las salidas por trueque bajan de 3,35 a 2,48 (2,45 con la semilla 7; las que quedan son repescas de más de una unidad) y el trueque se cumple antes (percentil 90 de 17,5 a 8,9 min). C4 no se nota: la comisión acuñada baja de 77,8 a 69,2 de oro (81,2 con la semilla 7) aunque las armas ya cotizan, porque el oro de las plazas está al 100 % desde el día 3 y se pierde lo que no cabe: la comisión acuñada es el 0,44 % del valor entregado (15.924 de oro) cuando las tasas darían entre el 3 % y el 12 %. C2 funciona como se decidió: el acarreo sigue perdiendo el 97,5 % contra almacenes de piedra llenos, y ahora en la solvencia del ascenso cuenta solo el 2,2 % de la producción nominal de los pueblos; no bloquea ningún ascenso (0 rechazos por insolvencia) porque nadie se acerca al nivel 3 (114 plazas de nivel 2, 0 de nivel 3). Hay menos comercio: 140 trueques propuestos y 139 cumplidos (antes 160 y 155), 344 salidas (519), 390 aristas de red (575), y se apaga antes, el día 9 (antes el 12): el jugador valora ahora los manufacturados a su precio derivado y salen menos parejas con doble coincidencia, concentradas en los días 7-9 (80 trueques el día 7). Con el comercio tan concentrado, una Facción roza el tope de reputación (99,7 puntos; antes 78), mientras la mediana final cae a 5,5 (15,8). Los pueblos siguen igual (219 levantados en 4,2 h de mediana, ninguno rechazado por falta de ruta por tierra) y los mercenarios rechazan el 18,1 % de las compras por existencias (21,7 %). Rendimiento: 73 s de pared el escenario completo (antes 95), 39,6 s la corrida con comercio (50,3) y 27,7 µs por evento de comercio. Las preguntas del final son la comisión contra el oro lleno, las repescas que quedan, la reputación que satura y el acarreo en la solvencia.",
   "anomalias": [
     {
-      "titulo": "El peaje deja cada entrega corta y obliga a repescas de hasta 0,012 unidades",
-      "detalle": "Una entrega paga el 2 % de lo que lleva a cada ciudad ajena que cruza, y el trueque solo abona lo que llega. Un lado de 32 u que cruza una ciudad llega con 31,36 u: la caravana vuelve a casa y sale otra vez con las 0,64 u que faltan (llegan 0,628, pagando otra vez peaje) y una tercera vez con 0,012. Resultado medido: 519 salidas para 155 trueques (3,35 por trueque; esperado 2, una por lado) y el 24,3 % de los viajes de ida llevan menos de una unidad. No es un fallo del núcleo (el documento dice que el peaje sale del contenido y que el trueque cuenta lo entregado), pero cuesta tiempo (mediana de 3 min, percentil 90 de 17,5), ocupa la única caravana de la plaza y emite eventos que no sirven a nadie. Véase la decisión C3.",
+      "titulo": "El oro lleno se come entre el 85 % y el 96 % de la comisión: C4 no cambia nada medible",
+      "detalle": "Desde C4 cada manufacturado cotiza (precio derivado de su receta) y la comisión de las 344 entregas se calcula sobre 15.924 de oro de valor; con tasas del 3 % (misma Facción) y 8 % (entre Facciones), por hasta ×1,5 de distancia, debería acuñarse entre 480 y 1.900 de oro, y se acuñan 69,2 (0,44 %; 0,62 % con la semilla 7). La causa es la misma que el 2026-10-19: el oro de las plazas está al 100 % desde el día 3 y la comisión se topa por lo que cabe en el destino. Sin sumideros de oro (tropas, taberna, obras con oro) este batch no puede medir la comisión. Medido con el `valor` que ahora lleva `comercio.caravana_llega`.",
       "causa": "diseno"
     },
     {
-      "titulo": "El acarreo llega a un almacén lleno y pierde el 97,6 % de lo que transporta, pero cuenta como ingreso para subir de nivel",
-      "detalle": "Los 218 pueblos de Cantera se levantan entre los días 5 y 6 (mediana de 4,2 h desde la marca, 1 viaje de compra por obra) y su carro hace 134.281 viajes de 500 u. La piedra de las madres está al 96 % (la Cantera de la ciudad ya la llena) y lo que no cabe se pierde: de 67,1 millones de u sacadas ingresan 1,64 millones (2,4 %). La solvencia del ascenso (`ingreso_bruto`) cuenta la producción nominal de los pueblos con carro, así que un pueblo cuyo acarreo se pierde entero hace solvente a la plaza igual que uno que entrega todo. En este batch no bloquea nada (ninguna petición de ascenso se rechaza por insolvencia y nadie llega al nivel 3 en 30 días), pero es el hueco que cubre la decisión C2. Además, lo que sale por acarreo es el 89,8 % de la producción nominal: el resto lo limita la mano de obra de la madre.",
+      "titulo": "Las repescas de menos de una unidad desaparecen; quedan 2,5 salidas por trueque",
+      "detalle": "Con la línea saldada por resto (C3, `trueque::UNIDAD`), 0 viajes de ida llevan menos de una unidad (antes 24,3 %) y las salidas por trueque bajan de 3,35 a 2,48. Lo que queda por encima de 2 son repescas de más de una unidad: el 2 % de peaje por ciudad cruzada de una entrega de hasta 80 u deja más de una unidad pendiente, y la caravana vuelve a salir. Es lo que se decidió (el umbral es una unidad, no un porcentaje).",
       "causa": "diseno"
     },
     {
-      "titulo": "El comercio se apaga el día 13: no hay sumideros que vacíen los bienes escasos",
-      "detalle": "Los almacenes de madera, piedra, trigo y oro están al 96-100 % de su capacidad desde el día 3 (lo único escaso es el ganado, al 4-10 % de media), así que no hay doble coincidencia de deseos entre ellos y el jugador los excluye del trueque. Los trueques posibles son de ganado, armas de madera (las fabrica la Armería de las plazas de nivel 2) y los minerales que compran 12 columnas: empiezan el día 2 con ocho, llegan a 57 y 60 propuestos los días 7 y 8, y desde el día 13 no hay ninguno; la red de caminos se queda en 575 aristas y sus rutas caducan a los 3 días. El batch no tiene tropas, tecnologías ni obras que gasten esos bienes, así que mide el arranque del comercio, no su régimen estable. Hasta que la fase 7 meta bots con demanda real (reclutamiento, equipo, obras), las cifras de intensidad (0,035 trueques por plaza y día) no valen para calibrar.",
+      "titulo": "El acarreo apenas cuenta en la solvencia (C2), pero no hay ascenso al nivel 3 que lo note",
+      "detalle": "La piedra de las madres sigue al 96 % y el acarreo pierde el 97,5 % de lo que trae (1,68 de 67 millones de u ingresan). Con C2 lo que cuenta para la solvencia es la media de lo ingresado en 24 h: al final, el 2,2 % de la producción nominal de los pueblos activos (2,1 % con la semilla 7). Ninguna petición de ascenso se rechaza por insolvencia (0), porque el ascenso al nivel 3 no llega a pedirse (faltan edificios y cupo): la pregunta «¿cambia el ascenso a nivel 3?» de §44 sigue sin respuesta en este batch.",
       "causa": "medicion"
     },
     {
-      "titulo": "La comisión del comercio casi no se acuña: bienes sin precio y oro lleno",
-      "detalle": "519 entregas acuñaron 77,8 de oro. Dos causas medidas: las armas de madera (una de las dos mitades de casi todos los trueques) no tienen precio base en `PRECIO_BASE` y valen 0 al calcular la comisión, y el oro de las plazas está al 100 % desde el día 3, así que la comisión que se acuña en el destino se topa por su capacidad (`entregar` la suma con `agregar`). Ambas son consecuencia de las reglas escritas: la primera es un hueco de diseño (¿qué cotizan los bienes manufacturados?) y la segunda hace que la comisión, que debe ser una fuente de oro, no lo sea mientras las plazas no gasten oro. Véase la decisión C4.",
-      "causa": "diseno"
-    },
-    {
-      "titulo": "La reputación se borra en menos de dos días: ni el tope ni el umbral bajo se ejercitan",
-      "detalle": "Un trueque cumplido entre Facciones da +5 y el decaimiento de 0,002 puntos por minuto lo borra en 1,74 días. Con 155 trueques entre 35 Facciones la máxima alcanzada es de 78 puntos (no se satura en 100), la mediana final entre las que tienen dato es 15,8, solo el 17,5 % de las Facciones queda en positivo al final y nadie baja de 0 porque ningún trueque se incumple (0 vencidos). El umbral de −40 (recargo de la comisión) no se ha podido medir. Con este decaimiento, solo una Facción que cumpla varios trueques al día mantiene reputación alta. Véase la decisión C1.",
+      "titulo": "Menos trueques y más concentrados: una Facción roza el tope de reputación",
+      "detalle": "140 trueques propuestos (122 con la semilla 7) frente a 160, casi todos los días 7-9 (80 el día 7), y ninguno desde el día 10 (antes, el 13). Con el precio derivado, la cantidad que el jugador pide a cambio de un arma es menor y caben menos parejas con doble coincidencia. Una Facción hace en un día los trueques suficientes para llegar a 99,7 puntos (antes 78) y luego decae a 2,88 por día (42 al final); la mediana final baja a 5,5 (18,9 con la semilla 7). Ningún trueque se incumple, así que el umbral de −40 sigue sin ejercitarse.",
       "causa": "medicion"
     },
     {
-      "titulo": "Los campamentos de mercenarios se quedan sin existencias para las obras de pueblo",
-      "detalle": "El 21,7 % de los intentos de compra se rechaza por falta de existencias: 9 campamentos sirven los 90 de madera de 218 obras, y la pila de madera de cada uno es de 300 con reposición cada 3 h. Las obras esperan la siguiente reposición y acaban todas entre los días 5 y 6 con 1 viaje de compra por obra en la mediana, así que no hay un bloqueo, solo un cuello de botella breve. Las cifras de `MERCENARIOS` siguen siendo placeholder (§40 de balancear). El cupo diario de los residentes se respeta (60 de madera y 10 de piedra como máximo; 12 compras rechazadas por cupo) y la reposición se disparó 50 veces. Véase la decisión C6.",
+      "titulo": "El comercio se apaga el día 9: no hay sumideros que vacíen los bienes escasos",
+      "detalle": "Como el 2026-10-19 (§46): madera, piedra, trigo y oro llenos desde el día 3 y solo se comercian ganado, armas de madera y minerales; la red se queda en 390 aristas y sus rutas caducan. Las cifras de intensidad (0,032 trueques por plaza y día) no valen para calibrar hasta que haya demanda real (fase 7).",
       "causa": "medicion"
     },
     {
-      "titulo": "El cobre no cuadra al milésimo: la Fundición lo funde sin tecnología y las mejoras gastan los lingotes",
-      "detalle": "El invariante de conservación se comprueba exacto con el estaño y el hierro (que ninguna economía de plaza gasta sin tecnología). El cobre no: la Fundición de nivel 1 convierte 2 de cobre en 1 de lingote sin pedir tecnología (`metalurgia_cobre` solo se pide para el arma) y la mejora automática de la Armería gasta lingotes; de 180 u compradas, 64,9 u ya no están (ni como cobre ni como lingotes, a 2 por 1). No es un fallo de conservación del comercio sino consumo de la economía de la plaza. Queda anotado en `cobre_gastado` y fuera de `inv_conservacion`.",
+      "titulo": "Mercenarios: un 18 % de compras sin existencias, sin bloqueo",
+      "detalle": "219 obras de pueblo con 90 de madera sobre 9 campamentos: el 18,1 % de las compras (23,9 % con la semilla 7) se rechaza por existencias y todas las obras acaban con 1 viaje de compra en la mediana. El cupo diario de residentes (60/10) se respeta. Cifras C6 sin cambio.",
+      "causa": "medicion"
+    },
+    {
+      "titulo": "El cobre no cuadra al milésimo (la Fundición lo funde y las mejoras gastan lingotes)",
+      "detalle": "Igual que antes: de 180 u compradas, 65 ya no están ni como cobre ni como lingotes (`cobre_gastado`); el estaño y el hierro cuadran exactos (`inv_conservacion` = 0).",
       "causa": "medicion"
     }
   ],
   "decisiones": [
     {
-      "id": "C1",
-      "pregunta": "¿Se deja la reputación entre Facciones como está (+5 por trueque cumplido, decaimiento 0,002 por minuto, umbral bajo −40) o se recalibra?",
-      "contexto": "Medido: el bonus de un trueque dura 1,74 días; con 155 trueques la máxima es 78 puntos, la mediana final 15,8 y nadie baja de 0 (ningún trueque se incumple). El tope de 100 y el umbral de −40 no se ejercitan, así que el batch no puede decir si muerden. Canon: Doc 2.7 pide que decaiga «lentamente».",
+      "id": "C7",
+      "pregunta": "¿Qué pasa con la comisión que no cabe en el oro del destino (hoy se pierde: se acuña el 0,44 % del valor en vez del 3-12 %)?",
+      "contexto": "Medido: 15.924 de oro de valor entregado y 69,2 acuñados; el oro de las plazas está al 100 % desde el día 3. Regla de hoy (decisión 28-29 de las DUDA, «como hoy»): la comisión se topa por lo que cabe. C4 (precio de los manufacturados) no cambia el resultado mientras el oro esté lleno.",
       "opciones": [
         {
-          "texto": "Dejar las cifras y recalibrar con bots que incumplan (fase 7).",
+          "texto": "Dejarlo y medirlo con bots que gasten oro (taberna §18, tropas, obras: fase 7).",
           "recomendada": true,
-          "efecto": "No cambia nada ahora. Hace falta un escenario con incumplimientos para ver el umbral y el recargo."
+          "efecto": "Sin cambios; el oro lleno es un síntoma de que este batch no tiene sumideros, no de la regla."
         },
         {
-          "texto": "Bajar el decaimiento a 0,0005 por minuto (el bonus dura unos 7 días).",
+          "texto": "Que la comisión que no cabe en el destino vaya al almacén de la plaza de origen (o se quede en el carro).",
           "recomendada": false,
-          "efecto": "La reputación acumula y puede acercarse al tope; el recargo por mala reputación tardaría mucho en desaparecer. Habría que tocar también el bonus por minuto de alianza."
-        },
-        {
-          "texto": "Subir el umbral bajo a −20 sin tocar el decaimiento.",
-          "recomendada": false,
-          "efecto": "Más Facciones bajo el umbral con menos incumplimientos, pero con el decaimiento actual cualquier bajada se recupera en días."
+          "efecto": "La comisión deja de perderse; el oro sigue sin sumidero y solo se mueve de sitio."
         }
       ]
     },
     {
-      "id": "C2",
-      "pregunta": "¿Cómo cuenta el acarreo en la solvencia del ascenso (ventana de acarreo)?",
-      "contexto": "Hoy cuenta la producción nominal de los pueblos con carro. Medido: la piedra de las madres está al 96 % y el acarreo pierde el 97,6 % de lo que lleva (ingresa el 2,4 %); lo que sale es el 89,8 % del nominal. Canon: Economia_Construccion §11 admite la producción o la media de las llegadas en una ventana de 24 h (la segunda no se guarda).",
+      "id": "C3b",
+      "pregunta": "¿Se deja el umbral de la línea saldada en una unidad (quedan 2,5 salidas por trueque)?",
+      "contexto": "Medido: 0 % de viajes de menos de una unidad (antes 24,3 %) y 2,48 salidas por trueque (2,45 con la semilla 7; objetivo cercano a 2). Las repescas que quedan son de más de una unidad (el 2 % de peaje de entregas de hasta 80 u).",
       "opciones": [
         {
-          "texto": "Media de lo que ingresa en las últimas 24 h.",
+          "texto": "Dejar una unidad (C3 cerrada).",
           "recomendada": true,
-          "efecto": "La solvencia refleja lo que de verdad entra en el almacén de la madre; con el almacén lleno un pueblo no hace solvente a nadie. Hay que guardar la ventana (estado nuevo en la plaza y formato de foto)."
+          "efecto": "Sin cambios; la repesca de una entrega grande es el coste real del peaje."
         },
         {
-          "texto": "Producción nominal topada al hueco libre del almacén de la madre.",
+          "texto": "Dar la línea por saldada si falta menos del peaje de una ciudad (2 % de la línea).",
           "recomendada": false,
-          "efecto": "Sin estado nuevo: se calcula con el almacén de ahora. Más tosco: un almacén lleno un instante cuenta cero."
-        },
-        {
-          "texto": "Dejar la producción nominal como hoy.",
-          "recomendada": false,
-          "efecto": "Sin cambios; un pueblo sin sitio en la madre sigue haciéndola solvente."
+          "efecto": "Una salida por lado casi siempre; el peaje deja de pesar en el trueque y el umbral pasa a ser un parámetro."
         }
       ]
     },
     {
-      "id": "C3",
-      "pregunta": "¿Cómo se evita que el peaje obligue a repescas del trueque (de 2 a 3,35 salidas por trueque)?",
-      "contexto": "Medido: 519 salidas para 155 trueques; el 24,3 % de los viajes de ida llevan menos de una unidad. El documento dice que el peaje se cobra del contenido (2 % a cada ciudad ajena cruzada) y que el trueque abona lo que llega.",
+      "id": "C1b",
+      "pregunta": "Con el comercio concentrado, una Facción llega a 99,7 de reputación: ¿se revisa ya la reputación o se espera a la fase 7 (C1)?",
+      "contexto": "Medido: máxima 99,7 (antes 78) tras ~20 trueques en un día; mediana final 5,5; nadie bajo 0 (ningún incumplimiento). C1 decidió esperar a bots que incumplan.",
       "opciones": [
         {
-          "texto": "Dar el lado por saldado cuando lo que falta es menos de una unidad.",
+          "texto": "Esperar a la fase 7, como decidió C1.",
           "recomendada": true,
-          "efecto": "Conserva la regla del peaje y quita las repescas inútiles (la segunda de 0,6 u y la tercera de 0,01 u); sigue haciendo falta una repesca si falta más de una unidad (entregas grandes). Cambia el abono del trueque."
+          "efecto": "Sin cambios; el pico viene de un comercio sintético que se agolpa en tres días."
         },
         {
-          "texto": "Cobrar el peaje del almacén del origen al salir y no de la carga.",
+          "texto": "Limitar el bonus por trueque cumplido a N por día entre el mismo par de Facciones.",
           "recomendada": false,
-          "efecto": "El trueque se cumple en un solo viaje por lado, pero cambia el modelo del peaje (hoy es un porcentaje de la carga) y el origen paga aunque la caravana se pierda."
-        },
-        {
-          "texto": "Que el trueque abone lo que sale y no lo que llega.",
-          "recomendada": false,
-          "efecto": "Una salida por lado, pero el destino recibe menos de lo pactado y el peaje deja de pesar en el trueque."
-        },
-        {
-          "texto": "Dejarlo como está.",
-          "recomendada": false,
-          "efecto": "Más eventos y viajes por trueque cuantas más ciudades se crucen; sin pérdida de recursos."
+          "efecto": "Evita que unos pocos trueques en ráfaga saturen la reputación; regla nueva."
         }
       ]
     },
     {
-      "id": "C4",
-      "pregunta": "¿Qué precio de referencia tienen los bienes manufacturados (armas, cuero, lingotes, armaduras) a efectos de la comisión?",
-      "contexto": "Medido: la comisión acuñada es de 77,8 de oro en 519 entregas porque `PRECIO_BASE` solo tiene madera, piedra, trigo, cobre, estaño, hierro y ganado: las armas de madera valen 0. Además el oro de las plazas está al 100 % y topa lo que se acuña.",
+      "id": "C2b",
+      "pregunta": "¿Se da por cerrada la ventana de acarreo (C2) sin haber visto un ascenso al nivel 3?",
+      "contexto": "Medido: el acarreo cuenta el 2,2 % de la producción nominal en la solvencia (con almacenes llenos casi nada entra); 0 ascensos rechazados por insolvencia, pero ninguna plaza se acerca al nivel 3 (faltan edificios y cupo en este batch).",
       "opciones": [
         {
-          "texto": "Añadir un precio base a cada bien comerciable (suma de lo que consume su receta).",
+          "texto": "Darla por implementada y medir su efecto en el nivel 3 cuando el batch de población llegue a él (decisión C1 de población) o con bots.",
           "recomendada": true,
-          "efecto": "La comisión pasa a cubrir todo el comercio; el trueque de armas por ganado dejará de ser gratis entre Facciones."
+          "efecto": "Sin cambios; queda la pregunta de §44 abierta hasta tener un ascenso al nivel 3 que medir."
         },
         {
-          "texto": "Dejar los bienes sin precio fuera de la comisión.",
+          "texto": "Dar al jugador de `batch comercio` los edificios del nivel 3 por administración para medirlo ya.",
           "recomendada": false,
-          "efecto": "Sin cambios; las Facciones que comercian manufacturas no pagan comisión."
-        },
-        {
-          "texto": "Decidirlo con bots que fabriquen y consuman esos bienes (fase 7).",
-          "recomendada": false,
-          "efecto": "Evita fijar precios sin demanda; hoy las cifras salen de un batch sin consumo."
-        }
-      ]
-    },
-    {
-      "id": "C5",
-      "pregunta": "¿Cuántas caravanas deja el Mercado de nivel 1 (M, hoy 2 con 3 carros)?",
-      "contexto": "Medido: el jugador usa una caravana de 2 carros por plaza y el reparto es inmediato (mediana 0 min; el percentil 90 de 13,4 min son las repescas del peaje). Ninguna plaza necesitó un segundo cupo y el cooldown de 10 min entre caravanas no estorbó.",
-      "opciones": [
-        {
-          "texto": "Dejar 2 caravanas y 3 carros en el nivel 1.",
-          "recomendada": true,
-          "efecto": "Sin evidencia para cambiar: una sola caravana sirve todo el comercio de este batch. Volver a medir con demanda real."
-        },
-        {
-          "texto": "Subir a 3 caravanas.",
-          "recomendada": false,
-          "efecto": "Más trueques simultáneos por plaza y más eventos de comercio; no se vio la necesidad."
-        },
-        {
-          "texto": "Bajar a 1 caravana.",
-          "recomendada": false,
-          "efecto": "La repesca del peaje compite con el siguiente trueque por la única caravana."
-        }
-      ]
-    },
-    {
-      "id": "C6",
-      "pregunta": "¿Se mantienen las cifras de los mercenarios (pila de 300 de madera, reposición cada 3 h, cupo de 60 y 10)?",
-      "contexto": "Medido: el 21,7 % de las compras se rechaza por falta de existencias (218 obras de 90 de madera sobre 9 campamentos); todas las obras acaban entre los días 5 y 6 con 1 viaje de compra por obra en la mediana; el cupo diario se respeta.",
-      "opciones": [
-        {
-          "texto": "Mantenerlas hasta medir con bots (siguen siendo placeholder).",
-          "recomendada": true,
-          "efecto": "No hubo bloqueo, solo una espera breve; la demanda de este batch es sintética."
-        },
-        {
-          "texto": "Subir la pila de madera a 600.",
-          "recomendada": false,
-          "efecto": "Menos esperas; una pila mayor vacía antes el stock global de madera de los mercenarios."
-        },
-        {
-          "texto": "Reponer cada hora en lugar de cada 3 h.",
-          "recomendada": false,
-          "efecto": "Las obras esperan menos, pero reponer más a menudo cambia el sumidero de oro de los mercenarios."
+          "efecto": "Mide la solvencia del nivel 3 con pueblos, a costa de más andamiaje en el batch."
         }
       ]
     }

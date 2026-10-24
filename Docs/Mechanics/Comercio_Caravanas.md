@@ -790,7 +790,7 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 | `comercio.trueque_cancelado` | ruina (§10) | narración |
 | `comercio.caravana_construida`, `_carro_agregado`, `_carro_movido`, `_reserva`, `_preparando`, `_cancelada`, `_escolta_cedida`, `_escolta_retirada`, `carga_caravana_aparcada`, `caravana_enviada_al_origen` | comandos | narración |
 | `comercio.caravana_animal_comprado` | `comprarAnimalCaravana` | contador de logros `animales.comprados` (`Tecnologia_Aedas.md`) |
-| `comercio.caravana_sale`, `peaje_paso`, `caravana_llega` (esta lleva `comision` y `recargo`) | tick | `caravana_llega`: hecho `caravana` de las épicas (origen = plaza que cuenta; `comercial` con ≥ `AEDAS.epica.cargaMinimaCaravana` de carga) |
+| `comercio.caravana_sale`, `peaje_paso`, `caravana_llega` (esta lleva `comision` —la acuñada, topada por el oro que cabe en el destino—, `recargo`, `carga`, `perdido` y `valor`, el de lo que llevaba a precio vigente, sobre el que se calcula la comisión) | tick | `caravana_llega`: hecho `caravana` de las épicas (origen = plaza que cuenta; `comercial` con ≥ `AEDAS.epica.cargaMinimaCaravana` de carga) |
 | `comercio.entrega_escoltada` | `entregarDeCaravana` | narración |
 | `comercio.caravana_perdida`, `comercio.caravana_vuelve` | ruina (§10) y presencia (`Movimiento_Ejercitos.md`) | narración |
 | `mercado.orden_colocada`, `mercado.orden_expirada` | comando / tick | narración |
