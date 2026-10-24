@@ -27,18 +27,18 @@ Las cantidades siguen siendo `base::Mil` (milésimas, `i64`) en todo el código,
 | Líneas de un trueque (pactado y entregado), órdenes del mercado | `Mil` | ninguno | no |
 | Lo que un héroe recuerda de una plaza | `Carga` (copia de unidades) | — | no |
 | Stock de un nodo del mapa (yacimiento) | `StockNodo` | se gasta con la extracción | **no es un almacén**: sigue en milésimas; el resto lo lleva el almacén que recibe |
-| Víveres de una columna o de un héroe | `Ritmo` | consumo continuo (`racion`) | **es** su propio resto: el valor del ritmo es exacto; lo que **entra** en ellos sale en unidades enteras |
+| Víveres de una columna o de un héroe | `Ritmo` | consumo continuo (`racion`), en marcha, acampada o apartada | **sí** (EE-3): el valor exacto del ritmo es unidades más resto |
 
-Los víveres no están en la lista del autor y son un ritmo sin paso de minuto (Movimiento §6): convertirlos en un entero con resto obligaría a darles un evento por unidad comida. Lo que se garantiza es que **lo que sale de un almacén o de un carro hacia ellos es entero** (`racion::llenar`), así que nunca nace una fracción en un contenedor.
+**Víveres (EE-3, 2026-10-24).** Van en unidades enteras con resto oculto, sin paso de minuto: el ritmo guarda lo exacto y hace de resto. Con la regla de EE-2 (una unidad sale cuando se completa su consumo) lo que se ve es lo exacto hacia arriba y los víveres **se acaban cuando lo exacto llega a 0**, el mismo instante que antes: el evento «víveres a 0», el hambre y la deserción no cambian, ni ningún cálculo de duración. Lo que entra desde un almacén o un carro va en unidades enteras hacia abajo (`racion::llenar_en_unidades`: salir con trigo, repostar en una plaza o una avanzada, pasar del carro; faltando menos de una unidad ya están llenos); lo gratuito (ración del campamento, `repostarEnCampamento`) llena hasta el tope, que es entero (`racion::llenar`). La parte de cada héroe al separarse va hacia abajo (`Columna::desgajar`) y el resto se queda; al unirse se suman tal cual. La proyección de un héroe los da hacia arriba; la de una columna lleva el ritmo exacto y el cliente lo enseña hacia arriba (comentario en `entities.proto`).
 
 ## 3. El almacén: dos formas de mover
 
 `asentamiento::Almacen` guarda `cantidad`, `capacidad` y **`resto`** por recurso.
 
-- **Lo exacto** es `cantidad + resto` (`Almacen::disponible`). `resto` está siempre en `[0, 1000)` y nunca deja lo exacto por encima de la capacidad.
-- **Lo visible** es `cantidad` (`Almacen::cantidad`), la parte entera de lo exacto: lo que se ve, se comercia, se carga y se paga.
+- **Lo exacto** es lo guardado más el resto (`Almacen::disponible`). `resto` está en `(−1000, 1000)`: positivo, una unidad a medio entrar; negativo, una a medio consumir. Lo exacto nunca es negativo ni pasa de la capacidad.
+- **Lo que se ve** (`Almacen::visible`) es lo guardado, con la unidad que se está consumiendo. **Lo que se mueve** (`Almacen::cantidad`: se comercia, se carga y se paga) es lo guardado sin esa unidad empezada; puede ser una menos.
 - **Discreto** — `agregar` y `quitar` mueven `entero(n)` (lo que llega con fracción la pierde), `poner` fija `entero(n)`, `devolver` reembolsa hacia abajo, y `tiene`/`pagar` cobran cada línea de un coste con `entero_arriba(n)`: un coste fraccionario (la reparación de una avanzada al 50 %, un coste escalado) nunca sale más barato.
-- **Flujo por minuto** — `producir(r, n)` suma `n` (hasta el `hueco = capacidad − exacto`) al resto y pasa a `cantidad` las unidades que se completan; `consumir(r, n)` resta `n` (hasta lo exacto) del resto y, si no basta, saca las unidades que hagan falta y deja en el resto lo que sobra de la última. Es el patrón de la población entera, con dos diferencias deliberadas: el resto **no se descarta** al cambiar de signo (producción y consumo del mismo recurso se compensan en él; descartarlo crearía o destruiría fracciones) y la unidad que se empieza a consumir **sale ya** (lo visible nunca pasa de lo exacto; en la población la persona muere al completarse la muerte).
+- **Flujo por minuto** — `producir(r, n)` suma `n` (hasta el `hueco = capacidad − exacto`) al resto y pasa a lo guardado las unidades que se completan; `consumir(r, n)` resta `n` (hasta lo exacto) del resto y saca de lo guardado las unidades **cuyo consumo se completa** (EE-2, como la población). Una diferencia deliberada con la población: el resto **no se descarta** al cambiar de signo (producción y consumo del mismo recurso se compensan en él; descartarlo crearía o destruiría fracciones).
 
 En N minutos de un flujo de `p` milésimas por minuto entra exactamente `entero(N × p)` en `cantidad` (prueba `un_flujo_da_en_n_minutos_exactamente_la_suma_entera`).
 
@@ -60,10 +60,10 @@ En N minutos de un flujo de `p` milésimas por minuto entra exactamente `entero(
 | Colocar una orden de mercado | `OrdenMercado::colocar` | milésimas | hacia abajo; menos de una unidad, `CantidadNoPositiva` |
 | Reparto automático | `reparto::asignar_origen` | `min(stock, faltante, libre)` | lo mismo, hacia abajo a unidades |
 | Lanzar, cargar y descargar una caravana | `Caravana::{preparar, cargar_aparcada, descargar_aparcada}` | milésimas | cada línea hacia abajo |
-| Peaje | `Caravana::cobrar_peajes` | `tasa × n` hacia abajo a la milésima | hacia abajo **a unidades** (el 2 % de 40 no cobra nada) |
+| Peaje | `Caravana::cobrar_peajes` | `tasa × n` hacia abajo a la milésima | hacia abajo **a unidades**, y como mínimo una unidad por peaje a toda caravana con carga (EE-4) |
 | Entrega, comisión y recargo | `entrega::entregar` | `agregar` en milésimas | `agregar` acuña unidades enteras hacia abajo; el recargo que sale del origen es el mismo entero |
 | Mostrador | `mostrador::comerciar` | `q` en milésimas, oro `⌈q × precio⌉` a la milésima | `q` en unidades (baja de unidad en unidad hasta cumplir los topes), oro del lote **hacia arriba a unidades** |
-| Reposición de un campamento | `MercadoMercenario::reponer` | `stock + contador × proporción` | hacia abajo |
+| Reposición de un campamento | `MercadoMercenario::{registrar_comercio, reponer}` | `stock + contador × proporción` | por comercio, `proporción × lo comerciado` hacia abajo y como mínimo una (EE-5) |
 | Compras en el campamento | `mercenarios::comprar_*` | ya eran enteras | sin cambios |
 | Pérdida de carros, Aguante, carga por carro (Unity) | `Caravana::{aplicar_perdida_de_carros, perder_fraccion_de_carga, carga_por_carro}` | proporcional hacia abajo a la milésima | hacia abajo a unidades |
 | Mitad del carro del derrotado | `combate::botin::tras_derrota` | milésimas | hacia abajo a unidades |
@@ -73,7 +73,7 @@ En N minutos de un flujo de `p` milésimas por minuto entra exactamente `entero(
 | Chatarra al almacén de quien resiste | `agregar` | milésimas | hacia abajo |
 | Separarse o desarmar una columna (parte del carro) | `Columna::desgajar` | a prorrata en milésimas, el resto de milésima en milésima | lo mismo **en unidades** |
 | Salir de un lugar con carga | `Nucleo::validar_salida` | milésimas | cada línea hacia abajo; el trigo a los víveres, entero |
-| Llenar víveres (repostar, salir, pasar del carro, reabastecer en avanzada) | `racion::llenar` | `min(hueco, ofrecido)` | lo mismo, hacia abajo a unidades |
+| Llenar víveres (repostar, salir, pasar del carro, reabastecer en avanzada) | `racion::llenar_en_unidades` (y `llenar` para lo gratuito) | `min(hueco, ofrecido)` | desde un almacén o un carro, hacia abajo a unidades; lo gratuito, hasta el tope entero |
 
 La **tendencia** «+N/min» del interior de una plaza (4H T3c) es la diferencia de lo **exacto** antes y después del paso: con lo visible, un flujo de 0,37 por minuto se rotularía +0 dos minutos y +1 el tercero.
 
@@ -91,5 +91,15 @@ La **tendencia** «+N/min» del interior de una plaza (4H T3c) es la diferencia 
 ## 7. Lo que no cambia
 
 - El stock de los nodos del mapa sigue en milésimas (no es un almacén).
-- Los víveres siguen siendo un ritmo continuo (ver §2).
-- La regla «un resto de menos de una unidad salda la línea» del trueque (Comercio §4.4, 2026-10-19) se conserva, pero en el núcleo ya no se dispara: lo pactado y lo entregado son enteros.
+- La regla «un resto de menos de una unidad salda la línea» del trueque (Comercio §4.4, 2026-10-19) **se retira** (EE-6): una línea solo se salda entregada entera.
+
+## 8. Dudas del autor (decididas el 2026-10-24)
+
+- **EE-1** Lo que se cobra va hacia arriba; lo que se mueve, hacia abajo (regla).
+- **EE-2** La unidad sale del almacén al completarse su consumo (§3).
+- **EE-3** Los víveres, en unidades enteras con resto oculto (§2).
+- **EE-4** El peaje cobra como mínimo una unidad a toda caravana con carga: si la tasa no llega a una unidad en ningún recurso, una del recurso que más lleva (a igualdad, el primero del catálogo).
+- **EE-5** La reposición de los campamentos es como mínimo una unidad por comercio: se anota al registrar cada comercio en `MercadoMercenario::repone` (nuevo en la foto `BAN26`), sin tocar los contadores de lo comerciado.
+- **EE-6** Se retira la regla de la línea saldada por resto.
+- **EE-7** El salto de la reputación mediana se investiga en la fase 7, con C1b (`Mecanicas a balancear.md` §48).
+- Decisión técnica: la huella de las reglas no depende de los finales de línea (`texto_de_parametros_de` quita los `\r`).

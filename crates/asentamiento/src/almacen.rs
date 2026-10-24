@@ -1,23 +1,29 @@
 //! Almacén de un asentamiento, de un pueblo o de una avanzada (Economia_Construccion §4): cantidad y capacidad por recurso. Sin reloj: el que
 //! lo usa decide cuándo se agrega o se quita; aquí solo están las reglas de cabida.
 //!
-//! **Solo unidades enteras** (decisión C3b del autor, 2026-10-24): `cantidad` es siempre un múltiplo de [`base::UNIDAD`]. Hay dos formas de mover:
+//! **Solo unidades enteras** (decisión C3b del autor, 2026-10-24): lo guardado es siempre un múltiplo de [`base::UNIDAD`]. Hay dos formas de mover:
 //!
 //! - **Discreta** ([`Almacen::agregar`], [`Almacen::quitar`], [`Almacen::pagar`], [`Almacen::devolver`], [`Almacen::poner`]): entra o sale un
-//!   número entero de unidades. Lo que entra o sale se **redondea hacia abajo**; un coste se cobra **redondeado hacia arriba**. Nunca se crea de más.
+//!   número entero de unidades. **Lo que se mueve se redondea hacia abajo; lo que se cobra, hacia arriba** (EE-1). Nunca se crea de más.
 //! - **Flujo por minuto** ([`Almacen::producir`] y [`Almacen::consumir`]: producción, extracción, recetas, comida, mantenimiento, recaudación):
-//!   la fracción va a un **resto oculto** por recurso, siempre en `[0, 1000)`, como la población entera. Lo exacto es `cantidad + resto`; lo que
-//!   se ve es la parte entera. Una unidad entra cuando el resto la completa y sale en cuanto el flujo empieza a comérsela, así que lo visible nunca
-//!   pasa de lo exacto. En N minutos entra exactamente la suma entera de lo producido.
+//!   la fracción va a un **resto oculto** por recurso, en `(−1000, 1000)`, como la población entera: positivo es una unidad a medio entrar,
+//!   negativo una unidad a medio consumir. Lo exacto es lo guardado más el resto. Una unidad **entra** cuando el resto la completa y **sale cuando
+//!   se completa su consumo** (EE-2), no al empezar a consumirse. Producción y consumo del mismo recurso se compensan en el resto (no se descarta al
+//!   cambiar de signo: eso crearía o destruiría fracciones). En N minutos entra o sale exactamente la suma entera.
+//!
+//! Lo que se **ve** ([`Almacen::visible`]) es lo guardado: la unidad que se está consumiendo sigue ahí hasta acabarse. Lo que se **mueve, comercia
+//! y paga** ([`Almacen::cantidad`]) es lo que hay entero de verdad: lo guardado sin esa unidad empezada.
 
 use crate::recurso::{Recurso, TODOS};
-use base::{entero, entero_arriba, Mil};
+use base::{entero, entero_arriba, Mil, UNIDAD};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Almacen {
+    /// Unidades guardadas (múltiplo de 1000), con la que se está consumiendo.
     cantidad: [Mil; 29],
     capacidad: [Mil; 29],
-    /// Resto oculto de los flujos, en `[0, 1000)` y nunca por encima del hueco que queda. Nadie fuera de aquí lo lee salvo la foto.
+    /// Resto oculto de los flujos, en `(−1000, 1000)`; lo exacto (`cantidad + resto`) nunca es negativo ni pasa de la capacidad. Nadie fuera de
+    /// aquí lo lee salvo la foto.
     resto: [Mil; 29],
 }
 
@@ -27,7 +33,7 @@ impl Almacen {
         Self { cantidad: [0; 29], capacidad: [capacidad; 29], resto: [0; 29] }
     }
 
-    /// Las cantidades, capacidades y restos de los 29 recursos, en orden de [`TODOS`] (para serializar).
+    /// Las unidades guardadas, capacidades y restos de los 29 recursos, en orden de [`TODOS`] (para serializar).
     pub fn partes(&self) -> (&[Mil; 29], &[Mil; 29], &[Mil; 29]) {
         (&self.cantidad, &self.capacidad, &self.resto)
     }
@@ -37,8 +43,15 @@ impl Almacen {
         Self { cantidad, capacidad, resto }
     }
 
-    /// Unidades enteras que hay (múltiplo de 1000): lo que se ve, se comercia, se carga y se paga.
+    /// Unidades enteras que hay de verdad (múltiplo de 1000): lo que se mueve, se comercia, se carga y se paga. Es lo guardado sin la unidad
+    /// que se está consumiendo, si la hay.
     pub fn cantidad(&self, r: Recurso) -> Mil {
+        let i = r.indice();
+        self.cantidad[i] - if self.resto[i] < 0 { UNIDAD } else { 0 }
+    }
+
+    /// Lo que se ve (múltiplo de 1000): lo guardado, con la unidad que se está consumiendo hasta que se acabe (EE-2).
+    pub fn visible(&self, r: Recurso) -> Mil {
         self.cantidad[r.indice()]
     }
 
@@ -53,23 +66,27 @@ impl Almacen {
 
     /// Unidades enteras que todavía caben.
     pub fn espacio(&self, r: Recurso) -> Mil {
-        entero((self.capacidad(r) - self.cantidad(r)).max(0))
+        entero((self.capacidad(r) - self.cantidad[r.indice()]).max(0))
     }
 
-    /// Lo que todavía puede entrar por un flujo (milésimas): el hueco hasta la capacidad sin el resto ya acumulado.
+    /// Lo que todavía puede entrar por un flujo (milésimas): el hueco hasta la capacidad desde lo exacto.
     pub fn hueco(&self, r: Recurso) -> Mil {
         (self.capacidad(r) - self.disponible(r)).max(0)
     }
 
-    /// El resto nunca deja lo exacto por encima de la capacidad (lo que no cabe se pierde, como siempre).
+    /// Lo exacto nunca pasa de la capacidad (lo que no cabe se pierde, como siempre) ni queda negativo.
     fn ajustar(&mut self, i: usize) {
         self.resto[i] = self.resto[i].min((self.capacidad[i] - self.cantidad[i]).max(0));
+        if self.cantidad[i] == 0 {
+            self.resto[i] = self.resto[i].max(0);
+        }
     }
 
-    /// Fija la cantidad en unidades enteras (entregas iniciales, restaurar un estado); nunca por encima de la capacidad.
+    /// Fija lo guardado en unidades enteras (entregas iniciales, restaurar un estado); nunca por encima de la capacidad. Olvida un consumo a medias.
     pub fn poner(&mut self, r: Recurso, n: Mil) {
         let i = r.indice();
         self.cantidad[i] = entero(n).clamp(0, entero(self.capacidad[i].max(0)));
+        self.resto[i] = self.resto[i].max(0);
         self.ajustar(i);
     }
 
@@ -82,7 +99,7 @@ impl Almacen {
         entra
     }
 
-    /// Quita las unidades enteras de `n`, hasta las que haya, y devuelve lo quitado (nunca deja la cantidad negativa).
+    /// Quita las unidades enteras de `n`, hasta las que hay de verdad ([`Almacen::cantidad`]), y devuelve lo quitado.
     pub fn quitar(&mut self, r: Recurso, n: Mil) -> Mil {
         let sale = entero(n.max(0)).min(self.cantidad(r));
         self.cantidad[r.indice()] -= sale;
@@ -95,7 +112,7 @@ impl Almacen {
         let entra = n.max(0).min(self.hueco(r));
         let i = r.indice();
         self.resto[i] += entra;
-        if self.resto[i] >= base::UNIDAD {
+        if self.resto[i] >= UNIDAD {
             let unidades = entero(self.resto[i]);
             self.cantidad[i] += unidades;
             self.resto[i] -= unidades;
@@ -103,29 +120,27 @@ impl Almacen {
         entra
     }
 
-    /// Flujo de salida de un minuto (comida, mantenimiento, insumos de una receta): `n` milésimas, hasta lo exacto que haya. Sale primero el
-    /// resto y, si no basta, las unidades enteras que hagan falta; lo que sobra de la última vuelve al resto. Devuelve lo consumido (milésimas).
+    /// Flujo de salida de un minuto (comida, mantenimiento, insumos de una receta): `n` milésimas, hasta lo exacto que haya, salen del resto y
+    /// salen del almacén las unidades cuyo consumo se completa (EE-2). Devuelve lo consumido (milésimas).
     pub fn consumir(&mut self, r: Recurso, n: Mil) -> Mil {
         let sale = n.max(0).min(self.disponible(r));
         let i = r.indice();
-        if sale <= self.resto[i] {
-            self.resto[i] -= sale;
-        } else {
-            let falta = sale - self.resto[i];
-            let unidades = entero_arriba(falta);
+        self.resto[i] -= sale;
+        if self.resto[i] <= -UNIDAD {
+            let unidades = entero(-self.resto[i]);
             self.cantidad[i] -= unidades;
-            self.resto[i] = unidades - falta;
+            self.resto[i] += unidades;
         }
         sale
     }
 
-    /// ¿Hay para pagar el coste? Cada línea se cobra en unidades enteras, redondeada hacia arriba: como la cantidad ya es un múltiplo de 1000, tenerla
+    /// ¿Hay para pagar el coste? Cada línea se cobra en unidades enteras, redondeada hacia arriba: como lo que hay ya es un múltiplo de 1000, tenerla
     /// redondeada hacia arriba es lo mismo que tener la línea tal cual (y así no se divide en cada pregunta de la auto-construcción).
     pub fn tiene(&self, costo: &[(Recurso, Mil)]) -> bool {
         costo.iter().all(|&(r, n)| self.cantidad(r) >= n)
     }
 
-    /// Paga el costo entero (cada línea redondeada hacia arriba a unidades) o no toca nada.
+    /// Paga el costo entero (cada línea redondeada hacia arriba a unidades, EE-1) o no toca nada.
     pub fn pagar(&mut self, costo: &[(Recurso, Mil)]) -> bool {
         if !self.tiene(costo) {
             return false;
@@ -154,6 +169,7 @@ impl Almacen {
         TODOS.iter().for_each(|&r| self.ampliar(r, extra));
     }
 }
+
 
 #[cfg(test)]
 mod pruebas {
@@ -198,10 +214,24 @@ mod pruebas {
         b.poner(Madera, 2_000_000);
         for _ in 0..1000 {
             assert_eq!(b.consumir(Madera, 1_650), 1_650);
-            assert_eq!(b.cantidad(Madera) % 1000, 0);
-            assert!(b.cantidad(Madera) <= b.disponible(Madera), "lo visible nunca pasa de lo exacto");
+            assert_eq!(b.visible(Madera) % 1000, 0);
+            assert!(b.cantidad(Madera) <= b.disponible(Madera) && b.disponible(Madera) <= b.visible(Madera), "lo que se mueve nunca pasa de lo exacto; lo que se ve, la unidad empezada");
+            assert!(b.visible(Madera) - b.disponible(Madera) < 1_000);
         }
-        assert_eq!((b.cantidad(Madera), b.disponible(Madera)), (350_000, 350_000));
+        assert_eq!((b.cantidad(Madera), b.visible(Madera), b.disponible(Madera)), (350_000, 350_000, 350_000));
+    }
+
+    #[test]
+    fn la_unidad_sale_al_completarse_su_consumo_como_en_la_poblacion() {
+        let mut a = Almacen::nuevo(400_000);
+        a.poner(Trigo, 10_000);
+        let mut visto = vec![];
+        for _ in 0..4 {
+            a.consumir(Trigo, 500);
+            visto.push((a.visible(Trigo) / 1000, a.cantidad(Trigo) / 1000));
+        }
+        assert_eq!(visto, vec![(10, 9), (9, 9), (9, 8), (8, 8)], "0,5 por minuto sobre 10: la unidad sale cada dos minutos, al acabarse; mientras tanto se ve pero no se mueve");
+        assert_eq!(a.quitar(Trigo, 10_000), 8_000);
     }
 
     #[test]
@@ -211,9 +241,10 @@ mod pruebas {
         a.producir(Trigo, 600);
         assert_eq!((a.cantidad(Trigo), a.disponible(Trigo)), (1_000, 1_600));
         assert_eq!(a.consumir(Trigo, 900), 900);
-        assert_eq!((a.cantidad(Trigo), a.disponible(Trigo)), (0, 700), "sale la unidad empezada; el resto guarda los 0,7");
+        assert_eq!((a.visible(Trigo), a.cantidad(Trigo), a.disponible(Trigo)), (1_000, 0, 700), "la unidad empezada sigue (se ve, no se mueve) hasta acabarse");
+        assert_eq!(a.quitar(Trigo, 1_000), 0, "no se vende lo que ya se está comiendo");
         assert_eq!(a.consumir(Trigo, 5_000), 700, "no se come lo que no hay");
-        assert_eq!(a.disponible(Trigo), 0);
+        assert_eq!((a.visible(Trigo), a.disponible(Trigo)), (0, 0));
     }
 
     #[test]
@@ -254,8 +285,8 @@ mod pruebas {
             };
             assert!(delta <= n, "nunca entra más de lo pedido");
             assert!(a.disponible(Trigo) <= antes + delta, "nada se crea: {antes} {delta} {}", a.disponible(Trigo));
-            let (c, k, r) = (a.cantidad(Trigo), a.capacidad(Trigo), a.partes().2[Trigo.indice()]);
-            assert!(c % 1_000 == 0 && (0..1_000).contains(&r) && c + r <= k && c >= 0, "{c} {r} {k}");
+            let (c, k, r) = (a.visible(Trigo), a.capacidad(Trigo), a.partes().2[Trigo.indice()]);
+            assert!(c % 1_000 == 0 && (-999..1_000).contains(&r) && c + r <= k && c + r >= 0 && a.cantidad(Trigo) <= c + r, "{c} {r} {k}");
         }
     }
 

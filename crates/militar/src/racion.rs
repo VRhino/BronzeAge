@@ -149,6 +149,21 @@ mod pruebas {
     }
 
     #[test]
+    fn los_viveres_entran_en_unidades_enteras_y_se_acaban_cuando_lo_exacto_llega_a_cero() {
+        // EE-3: lo comido va al resto (el valor exacto del ritmo); lo que entra de un almacén va en unidades enteras.
+        let r = r();
+        let mut v = viveres(&r, 1, 350_000, 0);
+        anotar_consumo(&mut v, 0, 1_813);
+        assert_eq!(v.valor_en(10 * MIN), 350_000 - 18_130);
+        assert_eq!(base::entero_arriba(v.valor_en(10 * MIN)), 332_000, "se ven 332: la unidad que se está comiendo sigue hasta acabarse");
+        assert_eq!(llenar_en_unidades(&mut v, 10 * MIN, 100_000), 18_000, "de los 18,13 que faltan entran 18 enteros");
+        assert!(v.maximo.unwrap() - v.valor_en(10 * MIN) < base::UNIDAD, "y faltando menos de una unidad ya están llenos");
+        // Se acaban en el mismo instante que el ritmo exacto: el hambre no se adelanta ni se retrasa.
+        let fin = se_acaban_en(&v, 10 * MIN).unwrap();
+        assert!(v.valor_en(fin) == 0 && v.valor_en(fin - 1) > 0);
+    }
+
+    #[test]
     fn la_capacidad_de_los_viveres_es_la_suma_de_la_de_sus_heroes() {
         let r = r();
         assert_eq!(capacidad_viveres(&r, 1), 350_000);

@@ -60,7 +60,7 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
 /// BAN26: BAN25 con la economía entera (decisión C3b del autor, 2026-10-24): todo almacén (plaza, pueblo, avanzada) guarda unidades enteras —cantidad múltiplo de 1000— y,
-/// por recurso, el **resto oculto** de sus flujos por minuto en `[0, 1000)` (`codec_economia`); carros, caravanas, almacén personal y existencias de los campamentos
+/// por recurso, el **resto oculto** de sus flujos por minuto en `(−1000, 1000)` (`codec_economia`); carros, caravanas, almacén personal y existencias de los campamentos
 /// guardan también unidades enteras. BAN25 se rechaza: sus almacenes guardaban milésimas sueltas y no traen el resto.
 ///
 /// BAN25: BAN24 con la foto del interior de cada plaza de la que un héroe salió al mundo (4H T7, `HeroeNucleo::plazas_recordadas`, Niebla_De_Guerra §4.5: almacén, cola y guarnición tal como

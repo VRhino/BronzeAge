@@ -645,6 +645,15 @@ impl Caravana {
                     *n -= c;
                 }
             }
+            // Como mínimo una unidad a toda caravana con carga (EE-4, 2026-10-24): si la tasa no llega a una unidad en ningún recurso, se cobra una del
+            // que más lleva (a igualdad, el primero del catálogo).
+            if cobrado.is_empty() && tasa > 0 {
+                let mayor = self.contenido.iter().filter(|(_, &n)| n >= base::UNIDAD).max_by_key(|(&r, &n)| (n, std::cmp::Reverse(r))).map(|(&r, _)| r);
+                if let Some(rec) = mayor {
+                    *self.contenido.get_mut(&rec).expect("está") -= base::UNIDAD;
+                    cobrado.insert(rec, base::UNIDAD);
+                }
+            }
             if !cobrado.is_empty() {
                 cobros.push(CobroPeaje { ciudad: pj.ciudad, cobrado });
             }
@@ -1411,11 +1420,16 @@ mod pruebas {
         let r = r();
         let tasa = Reglas::cargar().peaje;
         let mut c = en_marcha(&r, &[(Recurso::Madera, 40_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
-        // 2 % de 40 = 0,8 → 0 unidades: nada que cobrar, pero el peaje se descarta igualmente.
+        // 2 % de 40 = 0,8, menos de una unidad: cada peaje cobra el mínimo de una unidad (EE-4); los alcanzados se descartan.
         let t = c.proximo_peaje().unwrap();
-        assert!(c.cobrar_peajes(t, tasa).is_empty());
-        assert!(c.peajes.is_empty(), "se descartan los alcanzados, se haya cobrado o no");
-        assert_eq!(c.contenido[&Recurso::Madera], 40_000);
+        let cobros = c.cobrar_peajes(t, tasa);
+        assert_eq!(cobros.iter().map(|x| x.cobrado[&Recurso::Madera]).collect::<Vec<_>>(), vec![1_000, 1_000]);
+        assert!(c.peajes.is_empty(), "se descartan los alcanzados");
+        assert_eq!(c.contenido[&Recurso::Madera], 38_000);
+        // El mínimo sale del recurso que más lleva (a igualdad, el primero del catálogo).
+        let mut d = en_marcha(&r, &[(Recurso::Piedra, 3_000), (Recurso::Madera, 3_000), (Recurso::Oro, 2_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }]);
+        let cobros = d.cobrar_peajes(d.proximo_peaje().unwrap(), tasa);
+        assert_eq!(cobros[0].cobrado, [(Recurso::Madera, 1_000)].into_iter().collect());
         let mut d = en_marcha(&r, &[(Recurso::Madera, 200_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
         let cobros = d.cobrar_peajes(t, tasa);
         assert_eq!(cobros.iter().map(|c| c.ciudad).collect::<Vec<_>>(), vec![1, 2]);

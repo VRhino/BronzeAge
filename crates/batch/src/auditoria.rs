@@ -35,7 +35,7 @@ pub struct Violaciones {
     pub registro: u64,
     /// Un mineral cuyo total en el mundo no es lo comprado a los mercenarios.
     pub conservacion: u64,
-    /// Una cantidad almacenada que no es un número entero de unidades, o un resto oculto fuera de `[0, 1000)` (C3b, `Nucleo::fracciones_almacenadas`).
+    /// Una cantidad almacenada que no es un número entero de unidades, o un resto oculto fuera de `(−1000, 1000)` (C3b, `Nucleo::fracciones_almacenadas`).
     pub fraccion: u64,
 }
 

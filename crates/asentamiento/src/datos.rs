@@ -36,13 +36,14 @@ pub fn texto_de_parametros() -> String {
     texto_de_parametros_de(ECONOMIA) + &format!("<!-- parametros:MURALLA -->\n{muralla}\n<!-- /parametros -->\n")
 }
 
-/// Lo mismo para cualquier documento de Mechanics (el núcleo suma así los bloques del Trazado urbano a la identidad de las reglas).
+/// Lo mismo para cualquier documento de Mechanics (el núcleo suma así los bloques del Trazado urbano a la identidad de las reglas). Los finales de
+/// línea se normalizan a `\n`: un checkout con CRLF y otro con LF dan la misma huella (decisión técnica, 2026-10-24).
 pub fn texto_de_parametros_de(doc: &str) -> String {
     let (mut fuera, mut resto) = (String::new(), doc);
     while let Some(i) = resto.find("<!-- parametros:") {
         let desde = &resto[i..];
         let fin = desde.find("<!-- /parametros -->").map_or(desde.len(), |f| f + "<!-- /parametros -->".len());
-        fuera.push_str(&desde[..fin]);
+        fuera.push_str(&desde[..fin].replace('\r', ""));
         fuera.push('\n');
         resto = &desde[fin..];
     }
@@ -282,6 +283,13 @@ mod pruebas {
         assert!(t.starts_with("<!-- parametros:") && t.contains("\"materialesIniciales\""));
         assert!(!t.contains("Implementado en Rust") && !t.contains("## 1. Cómo corre"), "la prosa del documento no entra");
         assert_eq!(t.matches("<!-- parametros:").count(), t.matches("<!-- /parametros -->").count());
+    }
+
+    #[test]
+    fn la_identidad_de_las_reglas_no_depende_de_los_finales_de_linea() {
+        let lf = "prosa\n<!-- parametros:A -->\n```json\n{\"n\": 2.5}\n```\n<!-- /parametros -->\nmás prosa\n";
+        assert_eq!(texto_de_parametros_de(&lf.replace('\n', "\r\n")), texto_de_parametros_de(lf));
+        assert!(!texto_de_parametros().contains('\r'));
     }
 
     #[test]

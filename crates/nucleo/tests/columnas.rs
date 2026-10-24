@@ -272,12 +272,15 @@ fn salir_al_mundo_deja_al_heroe_la_foto_del_interior_de_su_plaza() {
     let (t, madera) = (e.n.ahora(), e.almacen(Madera));
     e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![(Madera, 40_000)] });
     let recuerdo = e.n.heroe(h).unwrap().plazas_recordadas[&(a as u32)].clone();
-    assert_eq!((recuerdo.visto_en, recuerdo.almacen[&Madera], recuerdo.guarnicion.clone()), (t, madera - 40_000, vec![lenadores]), "lo que deja atrás, sin la carga que se lleva");
+    assert_eq!((recuerdo.visto_en, recuerdo.guarnicion.clone()), (t, vec![lenadores]));
+    // Lo que deja atrás, sin la carga que se lleva, tal como se ve (con la unidad que se está consumiendo, EE-2).
+    assert_eq!(e.almacen(Madera), madera - 40_000);
+    assert_eq!(recuerdo.almacen[&Madera], e.n.economia(a).unwrap().almacen.visible(Madera));
     assert!(recuerdo.cola.iter().any(|b| b.id == vivienda && b.completa_en.is_none()), "la vivienda en cola");
     assert!(e.n.economia(a).unwrap().edificios.iter().filter(|b| b.activo()).all(|b| recuerdo.cola.iter().all(|x| x.id != b.id)), "lo activo no se recuerda: viaja vivo en la ficha");
     let p = nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(h).unwrap());
     let pr = &p.plazas_recordadas[&format!("as-{a}")];
-    assert_eq!((pr.visto_en_ms, pr.almacen["madera"].cantidad.as_ref().unwrap().valor_en_t0, pr.guarnicion_escuadrones_ids.clone()), (t, madera - 40_000, vec![format!("esc-{lenadores}")]));
+    assert_eq!((pr.visto_en_ms, pr.almacen["madera"].cantidad.as_ref().unwrap().valor_en_t0, pr.guarnicion_escuadrones_ids.clone()), (t, recuerdo.almacen[&Madera], vec![format!("esc-{lenadores}")]));
     assert!(pr.cola.iter().any(|b| b.id == format!("ed-{a}-{vivienda}") && b.estado == contrato::v1::EstadoEdificio::EdificioEnCola as i32));
     // Fuera, la plaza sigue viviendo y la foto no cambia; la foto del estado la conserva.
     e.dar(a, Madera, 7_000);
@@ -288,7 +291,7 @@ fn salir_al_mundo_deja_al_heroe_la_foto_del_interior_de_su_plaza() {
     // La siguiente salida la sustituye.
     e.ok("ana", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
     e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![], carga: vec![] });
-    assert_eq!(e.n.heroe(h).unwrap().plazas_recordadas[&(a as u32)].almacen[&Madera], e.almacen(Madera));
+    assert_eq!(e.n.heroe(h).unwrap().plazas_recordadas[&(a as u32)].almacen[&Madera], e.n.economia(a).unwrap().almacen.visible(Madera));
 }
 
 #[test]
@@ -623,9 +626,9 @@ fn separarse_te_lleva_lo_tuyo_el_lider_cede_antes_y_el_mando_pasa_al_mas_antiguo
     assert_eq!((n.columna.tipo, n.columna.lider, n.columna.politica, n.posicion), (TipoColumna::Personal, b, Politica::Rechazar, e.ejercito(ej).posicion));
     assert_eq!(n.columna.escuadras, ib, "se lleva sus escuadras");
     assert_eq!(n.columna.viveres.maximo, Some(350_000));
-    // Su parte igual de los víveres: víveres × su capacidad / la capacidad total.
-    assert_eq!(e.viveres(nueva), antes_viveres / 2);
-    assert_eq!(e.viveres(ej), antes_viveres - antes_viveres / 2);
+    // Su parte igual de los víveres: víveres × su capacidad / la capacidad total, en unidades enteras hacia abajo (EE-3); el resto oculto se queda.
+    assert_eq!(e.viveres(nueva), base::entero(antes_viveres / 2));
+    assert_eq!(e.viveres(ej), antes_viveres - base::entero(antes_viveres / 2));
     assert_eq!(e.ejercito(ej).columna.viveres.maximo, Some(350_000));
     assert_eq!(e.n.consumo_de_columna(ej), Some(racion::racion_columna(&mr(), 60, 1, Marcha::Estacionada)));
     assert_eq!(e.ejercito(ej).columna.tipo, TipoColumna::Ejercito, "un ejército reducido a uno sigue siéndolo");

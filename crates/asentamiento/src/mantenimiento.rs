@@ -238,7 +238,7 @@ mod pruebas {
         assert_eq!(a.cantidad(Recurso::Madera), 100_000);
         assert_eq!(avanzar_minuto(&r, &mut m, 1, &c, &mut a, 1440, true), Resultado::Nada, "ocupado: tampoco");
         assert_eq!(avanzar_minuto(&r, &mut m, 1, &c, &mut a, 1440, false), Resultado::Sano);
-        assert_eq!((a.cantidad(Recurso::Madera), a.disponible(Recurso::Madera)), (98_000, 98_350), "sale la unidad empezada; el resto oculto guarda los 0,35");
+        assert_eq!((a.visible(Recurso::Madera), a.cantidad(Recurso::Madera), a.disponible(Recurso::Madera)), (99_000, 98_000, 98_350), "la unidad empezada se ve hasta acabarse (EE-2), pero no se mueve; el resto oculto guarda el consumo a medias");
     }
 
     #[test]

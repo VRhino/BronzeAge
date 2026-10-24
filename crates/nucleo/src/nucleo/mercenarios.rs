@@ -499,7 +499,8 @@ impl Nucleo {
 
     /// Anota lo comerciado entre Facciones en los contadores de reposición (§9.3) y, si cuenta, arma la reposición.
     pub(super) fn registrar_comercio_de_mercenarios(&mut self, entre_facciones: bool, carga: &Mercancia) {
-        self.estado.comercio.mercenarios.mercado.registrar_comercio(entre_facciones, carga);
+        let rm = self.estado.reglas.economia.comercio.mercenarios.clone();
+        self.estado.comercio.mercenarios.mercado.registrar_comercio(&rm, entre_facciones, carga);
         self.tocar_todos_los_campamentos();
         if entre_facciones && !carga.is_empty() {
             let t = self.estado.ahora;

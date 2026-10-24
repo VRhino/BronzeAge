@@ -65,6 +65,11 @@ struct Resultado {
 /// lleva el 2 % de lo que va de A a B, la línea de A queda corta y hace falta otro viaje (§4.4): se reparte, se viaja y se abona hasta que
 /// se salda, con las mismas dos caravanas (se reutilizan, no se reconstruyen).
 fn trueque_completo() -> Resultado {
+    trueque(true)
+}
+
+/// El mismo trueque; `con_peaje` dice si el viaje de A hacia B cruza la ciudad ajena.
+fn trueque(con_peaje: bool) -> Resultado {
     let r = Reglas::cargar();
     let mut alm_a = almacen(&[(Madera, 300_000)]);
     let mut alm_b = almacen(&[(Cobre, 100_000)]);
@@ -89,7 +94,7 @@ fn trueque_completo() -> Resultado {
             let cands = candidatas_de_reparto(&caravanas, &r.flota, origen, UNO);
             let mut trazar = |o: u32, _d: u32| {
                 let ruta = if o == A { vec![pos(A), pos(CIUDAD), pos(B)] } else { vec![pos(B), pos(A)] };
-                let peajes = if o == A { peajes_de_paradas(&[(CIUDAD, longitud_ruta(&ruta[..2]))], longitud_ruta(&ruta)) } else { vec![] };
+                let peajes = if o == A && con_peaje { peajes_de_paradas(&[(CIUDAD, longitud_ruta(&ruta[..2]))], longitud_ruta(&ruta)) } else { vec![] };
                 Some((ruta, peajes))
             };
             salidas.extend(asignar_origen(origen, &pendientes, &cands, alm, &mut trazar));
@@ -154,20 +159,30 @@ fn trueque_completo() -> Resultado {
 
 #[test]
 fn un_trueque_entero_entre_facciones_se_cumple_y_conserva_los_recursos() {
-    let r = trueque_completo();
+    let r = trueque(false);
     assert_eq!(r.acuerdo.estado, EstadoTrueque::Cumplido);
     assert_eq!(r.cierres, 1, "el cierre y su recompensa salen una sola vez");
-    // Ida 1: A→B 100 (peaje 2) y B→A 30; ida 2: A→B 2 (el 2 % de 2 son 0,04, que en unidades enteras no paga nada) y llega entero: dos viajes de A y uno de B.
-    assert_eq!(r.viajes, 3);
+    assert_eq!(r.viajes, 2, "sin peaje, un viaje por lado");
     assert_eq!(r.acuerdo.pendiente(Lado::A), vec![]);
-    assert_eq!(r.a.cantidad(Cobre), 30_000, "el cobre de B llegó entero");
-    assert_eq!(r.ciudad.cantidad(Madera), 2_000, "solo el peaje del primer viaje (2 %): el del segundo no llega a una unidad");
-    // Los recursos del mundo no cambian: lo que no está en A o en B está en la ciudad del peaje.
+    assert_eq!((r.a.cantidad(Cobre), r.b.cantidad(Madera)), (30_000, 100_000), "todo llegó entero");
     assert_eq!(r.a.cantidad(Madera) + r.b.cantidad(Madera) + r.ciudad.cantidad(Madera), 300_000);
     assert_eq!(r.a.cantidad(Cobre) + r.b.cantidad(Cobre), 100_000);
     // El oro del mundo es exactamente lo acuñado en comisiones.
     assert_eq!(r.a.cantidad(Oro) + r.b.cantidad(Oro) + r.ciudad.cantidad(Oro), r.comisiones);
     assert!(r.comisiones > 0);
+}
+
+#[test]
+fn con_un_peaje_en_el_camino_la_ultima_unidad_no_llega_nunca() {
+    // EE-4 + EE-6 (2026-10-24): el peaje cobra como mínimo una unidad y ya no se salda una línea a la que falta menos de una. Ida 1: A→B 100 (peaje 2)
+    // y B→A 30; ida 2: A→B 2 (peaje 1, llega 1); desde la 3.ª, A→B 1, que se queda entera en el peaje. Con el tope de 10 viajes del bucle, el lado
+    // de A acaba con una unidad pendiente y la ciudad con 2 + 1 × 8 de peaje. Nada se pierde: lo que no está en A ni en B está en la ciudad.
+    let r = trueque_completo();
+    assert_eq!((r.acuerdo.estado, r.viajes, r.cierres), (EstadoTrueque::Activo, 10, 0));
+    assert_eq!(r.acuerdo.pendiente(Lado::A), vec![(Madera, 1_000)]);
+    assert_eq!(r.ciudad.cantidad(Madera), 10_000);
+    assert_eq!(r.a.cantidad(Madera) + r.b.cantidad(Madera) + r.ciudad.cantidad(Madera), 300_000);
+    assert_eq!(r.a.cantidad(Oro) + r.b.cantidad(Oro) + r.ciudad.cantidad(Oro), r.comisiones);
 }
 
 #[test]

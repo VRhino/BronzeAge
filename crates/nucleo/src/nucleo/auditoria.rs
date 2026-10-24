@@ -120,7 +120,7 @@ impl Nucleo {
     }
 
     /// Toda cantidad **almacenada** que no es un número entero de unidades (decisión C3b del autor, 2026-10-24: no existen decimales en los almacenes), con dónde
-    /// está: almacenes de plaza, pueblo y avanzada (y su resto oculto fuera de `[0, 1000)`), carros de columna y de héroe, caravanas, almacén personal, lo que un
+    /// está: almacenes de plaza, pueblo y avanzada (y su resto oculto fuera de `(−1000, 1000)`), carros de columna y de héroe, caravanas, almacén personal, lo que un
     /// héroe recuerda de una plaza, existencias de los campamentos, lo pactado y entregado de los trueques y las órdenes del mercado. Debe estar vacío: lo exige
     /// la auditoría de cambios en cada versión y lo cuenta el batch.
     pub fn fracciones_almacenadas(&self) -> Vec<String> {
@@ -154,7 +154,7 @@ impl Nucleo {
         v.extend(ordenes.filter(|o| o.cantidad % u != 0 || o.cantidad_cumplida % u != 0).map(|o| format!("la orden {} pide {} y lleva {}", o.id, o.cantidad, o.cantidad_cumplida)));
         let mut almacen = |donde: String, a: &asentamiento::Almacen| {
             let (cantidad, _, resto) = a.partes();
-            if let Some(i) = (0..29).find(|&i| cantidad[i] % u != 0 || !(0..u).contains(&resto[i])) {
+            if let Some(i) = (0..29).find(|&i| cantidad[i] % u != 0 || !(-u + 1..u).contains(&resto[i]) || cantidad[i] + resto[i] < 0) {
                 v.push(format!("{donde} guarda {} de {} con un resto de {}", cantidad[i], asentamiento::recurso::TODOS[i].nombre(), resto[i]));
             }
         };

@@ -348,7 +348,7 @@ impl Columna {
     /// - **Carro**: `min(un carro, ⌈total / participantes⌉)`, en **unidades enteras** (C3b), a prorrata por recurso y sin perder ni sumar nada: lo que el redondeo hacia
     ///   abajo de cada recurso deja sin repartir se toma de unidad en unidad de los recursos en su orden, así que se lleva justo esa parte (el resto se queda en el ejército).
     ///   La parte va hacia arriba para que quien se queda —el Líder, al desarmar— no pase de un carro por el redondeo (`batch militar`, 2026-10-24: se quedaba con 500,001).
-    /// - **Víveres**: su parte igual: `víveres × su capacidad / la capacidad total`.
+    /// - **Víveres**: su parte igual: `víveres × su capacidad / la capacidad total`, en unidades enteras hacia abajo (EE-3).
     pub fn desgajar(&mut self, r: &Reglas, heroe: HeroeId, suyas: &[EscuadraId], id: ColumnaId, ahora: Instante, soldados_de: Soldados) -> Result<Columna, ErrorColumna> {
         let dentro = *self.participantes.iter().find(|p| p.heroe == heroe).ok_or(ErrorColumna::NoVaDentro)?;
         let n = self.participantes.len() as i64;
@@ -378,7 +378,8 @@ impl Columna {
             self.carga.retain(|_, c| *c > 0);
         }
         let viveres = self.viveres.valor_en(ahora);
-        let parte = (viveres as i128 * racion::capacidad_viveres(r, 1) as i128 / racion::capacidad_viveres(r, n as usize) as i128) as Mil;
+        // Su parte, en unidades enteras hacia abajo (EE-3): el resto oculto se queda con los víveres de la columna.
+        let parte = base::entero((viveres as i128 * racion::capacidad_viveres(r, 1) as i128 / racion::capacidad_viveres(r, n as usize) as i128) as Mil);
         self.participantes.retain(|p| p.heroe != heroe);
         self.escuadras.retain(|e| !suyas.contains(e));
         self.peticiones.retain(|p| p.heroe != heroe);
@@ -717,8 +718,8 @@ mod pruebas {
         assert_eq!((nueva.carga[&Recurso::Trigo], nueva.carga[&Recurso::Madera]), (30_000, 10_000));
         assert_eq!((e.carga[&Recurso::Trigo], e.carga[&Recurso::Madera]), (60_000, 20_000));
         // Víveres: un tercio, con la capacidad de un héroe; el resto se queda con la capacidad de los dos que quedan.
-        assert_eq!(nueva.viveres.valor_en(10 * MIN), antes / 3);
-        assert_eq!(e.viveres.valor_en(10 * MIN), antes - antes / 3);
+        assert_eq!(nueva.viveres.valor_en(10 * MIN), base::entero(antes / 3), "en unidades enteras (EE-3)");
+        assert_eq!(e.viveres.valor_en(10 * MIN), antes - base::entero(antes / 3), "el resto oculto se queda");
         assert_eq!((nueva.viveres.maximo, e.viveres.maximo), (Some(350_000), Some(700_000)));
         // Los consumos reflejan la nueva composición.
         assert_eq!(nueva.viveres.por_minuto, -racion::racion_columna(&r, 30, 1, Estado::Estacionada));
@@ -878,7 +879,7 @@ mod pruebas {
         assert_eq!(total(&e.carga), 40_000);
         // Víveres: una parte igual cada uno (a los tres, un tercio del montón; al segundo, la mitad de lo que quedaba).
         let (a, b, l) = (nuevas[0].viveres.valor_en(10 * MIN), nuevas[1].viveres.valor_en(10 * MIN), e.viveres.valor_en(10 * MIN));
-        assert!((a - b).abs() <= 1 && (a - l).abs() <= 1, "{a} {b} {l}");
+        assert!((a - b).abs() < 1_000 && (a - l).abs() < 2_000 && a % 1_000 == 0 && b % 1_000 == 0, "{a} {b} {l}: las partes van en unidades enteras (EE-3) y el resto se queda con el Líder");
     }
 
     #[test]

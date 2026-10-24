@@ -333,9 +333,9 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     if a.poblacion.pesants >= 200 {
         reg.pesants_200.get_or_insert(minuto);
     }
-    // Fuera de [0, capacidad], o con una fracción (C3b: el almacén guarda unidades enteras y un resto oculto en [0, 1000)).
+    // Fuera de [0, capacidad], o con una fracción (C3b: el almacén guarda unidades enteras y un resto oculto en (−1000, 1000)).
     let (cantidad, _, resto) = a.almacen.partes();
-    viol.almacen += TODOS.iter().filter(|&&r| a.almacen.cantidad(r) < 0 || a.almacen.disponible(r) > a.almacen.capacidad(r) || cantidad[r.indice()] % 1000 != 0 || !(0..1000).contains(&resto[r.indice()])).count() as u64;
+    viol.almacen += TODOS.iter().filter(|&&r| a.almacen.cantidad(r) < 0 || a.almacen.disponible(r) > a.almacen.capacidad(r) || cantidad[r.indice()] % 1000 != 0 || !(-999..1000).contains(&resto[r.indice()]) || a.almacen.disponible(r) < 0).count() as u64;
     viol.poblacion += (a.poblacion.pesants < 0 || a.poblacion.artesanos < 0 || a.poblacion.nobleza < 0 || a.poblacion.nutricion < 0 || a.poblacion.nutricion > 100_000) as u64;
     viol.medidor += !(0..=100_000).contains(&a.medidor.valor) as u64;
     viol.nivel += (a.nivel < nivel_antes || a.medidor.nivel_actual > a.nivel) as u64;

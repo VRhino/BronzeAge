@@ -7,14 +7,14 @@ reconfigura y vuelve), el **mercado de una plaza** (órdenes y mostrador), el **
 peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ruinas.
 
 - **Verificado contra:** `e83cb9b` (2026-10-11) más las decisiones de esa jornada (comisión, recargo por reputación, reparto, capacidad, reputación entre Facciones).
-- **Corregido el 2026-10-24: economía entera** (decisión C3b del autor; Rust, foto `BAN26`). Todo lo que se guarda o se mueve va en **unidades enteras** (múltiplos de 1.000 milésimas) y **cualquier fracción se redondea hacia abajo**: nunca se crea de más. En este documento:
-  - **Trueque** (§4.1): cada línea pactada se redondea hacia abajo al proponer; una línea de menos de una unidad es `cantidad_no_positiva`. Como lo pactado y lo entregado son enteros, la regla «un resto de menos de una unidad salda la línea» (§4.4) ya no se dispara en el núcleo (se conserva como regla pura).
+- **Corregido el 2026-10-24: economía entera** (decisión C3b del autor y dudas EE-1 a EE-6 del mismo día; Rust, foto `BAN26`). Todo lo que se guarda o se mueve va en **unidades enteras** (múltiplos de 1.000 milésimas). **Regla (EE-1): lo que se mueve se redondea hacia abajo; lo que se cobra, hacia arriba**. Nunca se crea de más. En este documento:
+  - **Trueque** (§4.1): cada línea pactada se redondea hacia abajo al proponer; una línea de menos de una unidad es `cantidad_no_positiva`. Una línea solo se salda **entregada entera**: la regla del 2026-10-19 «faltar menos de una unidad salda la línea» **se retira** (EE-6, §4.4).
   - **Reparto** (§4.3): cada línea carga `min(stock, faltante, capacidad libre)` redondeado hacia abajo a unidades (la capacidad de una caravana puede no ser entera).
   - **Comisión y recargo** (§3.3): se calculan como siempre y se **acuñan en unidades enteras hacia abajo** (11,25 de comisión acuñan 11); el recargo que sale del origen es el mismo entero que entra en el destino (el oro se conserva).
-  - **Peaje** (§7.3): `tasa × contenido` por recurso, hacia abajo **a unidades**: el 2 % de 40 (0,8) no cobra nada; el de 196 cobra 3.
+  - **Peaje** (§7.3): `tasa × contenido` por recurso, hacia abajo **a unidades**, y **como mínimo una unidad** a toda caravana con carga (EE-4): si la tasa no llega a una unidad en ningún recurso, se cobra una del recurso que más lleva (a igualdad, el primero del catálogo). El 2 % de 40 cobra 1; el de 196, 3. Consecuencia: la repesca de la última unidad de una línea por una ruta con peaje se la queda entera la ciudad, y esa línea no se salda nunca (el trueque vence con esa unidad pendiente).
   - **Lanzar a mano, cargar y descargar una aparcada** (§5.6, §5.7): cada línea, en unidades enteras hacia abajo.
   - **Mostrador** (§8.3): se sirven unidades enteras (`q` baja de unidad en unidad hasta cumplir los topes) y el oro de cada lote, `⌈q × precio neto⌉`, se cobra en **unidades enteras hacia arriba** (como en el campamento, §9.2): 50 unidades a 1,03 cuestan 52. Una orden (§8.1) se coloca con su cantidad hacia abajo.
-  - **Campamento** (§9): las compras ya eran enteras; la reposición (§9.3) deja las existencias en unidades enteras hacia abajo.
+  - **Campamento** (§9): las compras ya eran enteras. La reposición (§9.3) se anota **por comercio**: `proporcionRepone` (3 %) de lo comerciado, en unidades enteras hacia abajo y **como mínimo una** por comercio (EE-5; `MercadoMercenario::repone`, que viaja en la foto); los contadores de lo comerciado siguen igual.
   - **Pérdida de carros, Aguante y reparto de la carga entre carros** (§15, Combate §7.1): proporcional y hacia abajo **a unidades**, recurso a recurso; lo que deja el redondeo no va en ningún carro.
   - El acarreo (§12) mueve la capacidad del carro (500, entera) y su almacén local va en enteros con resto oculto en la extracción.
 - **Fuentes:** `engine/trade.ts`, `engine/trueque.ts`, `engine/caravanas.ts`, `engine/market.ts`, `engine/mercadoMercenario.ts`, `engine/redCaminos.ts`, `engine/ruina.ts`, `engine/reputacion.ts`,
@@ -290,7 +290,7 @@ si acuerdoSaldado (todas las líneas de los dos lados: cantidadEntregada ≥ can
 
 El abono usa lo que la caravana **lleva al llegar**, es decir, tras los peajes (§7.3): si un peaje se llevó un 2 %, la línea queda corta y hace falta otro viaje.
 
-> **Línea saldada por resto (2026-10-19, decidido por el autor; `batch comercio` medía 3,35 salidas por trueque).** Una línea con algo entregado y **menos de una unidad por entregar** se da por **saldada**: no se repesca y el resto queda en el almacén de origen. Con `Linea.faltante() = 0` el trueque se salda (`acuerdoSaldado`), no cuenta como incumplimiento (`fraccionIncumplida`) y deja de verse como pendiente para el reparto (`pendiente`, `entregable`, `ladoQueDebe`, urgencia por volumen). La regla es por línea y solo tras un abono (una línea sin tocar nunca se da por saldada, por pequeña que sea). Ejemplo: 32 u con un peaje del 2 % llegan 31,36 y falta 0,64 u: saldado en una sola salida (antes, una segunda de 0,64 u y una tercera de 0,01 u). Una entrega grande sigue necesitando repesca (1.000 u dejan 980 y faltan 20 u). El peaje no cambia (sigue siendo el 2 % de la carga). Implementado en `crates/comercio/src/trueque.rs` (`Linea::saldada`, `UNIDAD`); `abonar_a_trueque` del núcleo no cambia. Sin bloque de parámetros ni cambio de formato de foto.
+> **Retirada el 2026-10-24 (EE-6, economía entera): una línea solo se salda entregada entera** (`Linea::saldada` = entregado ≥ pactado, `faltante` = pactado − entregado). Lo que sigue es la regla anterior, por historia. **Línea saldada por resto (2026-10-19, decidido por el autor; `batch comercio` medía 3,35 salidas por trueque).** Una línea con algo entregado y **menos de una unidad por entregar** se daba por **saldada**: no se repesca y el resto queda en el almacén de origen. Con `Linea.faltante() = 0` el trueque se salda (`acuerdoSaldado`), no cuenta como incumplimiento (`fraccionIncumplida`) y deja de verse como pendiente para el reparto (`pendiente`, `entregable`, `ladoQueDebe`, urgencia por volumen). La regla es por línea y solo tras un abono (una línea sin tocar nunca se da por saldada, por pequeña que sea). Ejemplo: 32 u con un peaje del 2 % llegan 31,36 y falta 0,64 u: saldado en una sola salida (antes, una segunda de 0,64 u y una tercera de 0,01 u). Una entrega grande sigue necesitando repesca (1.000 u dejan 980 y faltan 20 u). El peaje no cambia (sigue siendo el 2 % de la carga). Implementado en `crates/comercio/src/trueque.rs` (`Linea::saldada`, `UNIDAD`); `abonar_a_trueque` del núcleo no cambia. Sin bloque de parámetros ni cambio de formato de foto.
 
 ### 4.5 Entrega manual con una caravana adjunta (`entregarDeCaravana`)
 
@@ -600,6 +600,8 @@ Tras mover, para cada `peajes[i]` con `progreso_i ≤ progreso` actual (en orden
 `> 0`. Si no hay nada que cobrar se salta. Se suma al almacén de esa ciudad (`agregarRecurso`, topado) y se resta del contenido; evento `comercio.peaje_paso` (con `asentamientoId` = la ciudad). Después se
 descartan de `peajes` todos los ya alcanzados, se haya cobrado o no. **La ciudad no se detiene a nadie**: la caravana sigue de largo. El regreso va sin peajes (`peajes` solo se aplica a la ida) y vacío.
 
+> **Rust, economía entera (2026-10-24).** `cobrado[r]` va en unidades enteras hacia abajo y **cada peaje cobra como mínimo una unidad** a toda caravana con carga (EE-4): si la tasa no llega a una unidad en ningún recurso, se cobra una del recurso que más lleva (a igualdad, el primero del catálogo). Una caravana con carga siempre paga, y la que va con una sola unidad la deja entera en la ciudad.
+
 <!-- parametros:PEAJE_PASO -->
 ```json
 {
@@ -752,6 +754,7 @@ Emite `mercenarios.repostado { campamentoId, heroeId, cantidad }` (la cantidad c
 - **Reposición** (`reponerMercados`, evento agendado): si `instante ≥ reponeEn`: para cada campamento, el stock arranca como el suyo **con las pilas devueltas a su tope**, y a cada bien con contador
   `> 0` y que **no sea una pila** se le suma `contador × proporcionRepone`, topado por `topePorBien`. Después los contadores vuelven a `{}` y `reponeEn = instante + cadaHoras × 60` min. Es una cita
   agendada: los demás ticks solo comparan un instante. El primer `reponeEn` es `creación + cadaHoras` horas.
+- **Rust, economía entera (2026-10-24, EE-5).** Lo que sube cada bien se anota **por comercio** al registrarlo: `proporcionRepone` de lo comerciado, en unidades enteras hacia abajo y **como mínimo una** (`MercadoMercenario::repone`, vuelve a `{}` con los contadores). Un trueque de 30 de estaño repone 1 (el 3 % sería 0,9) y uno de 60 de cobre, 1 (1,8).
 
 Las cifras de `MERCENARIOS.mercado` (`cadaHoras`, `proporcionRepone`, `topePorBien`, `stockInicial`, `pilas`, `cupoDiario`, `margen`) están en el bloque `MERCENARIOS` de `Tecnologia_Aedas.md`.
 

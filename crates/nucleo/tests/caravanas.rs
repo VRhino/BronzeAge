@@ -899,11 +899,11 @@ fn el_mercado_de_mercenarios_vende_reposta_y_se_repone_solo_si_algo_cambio() {
     assert_eq!((cont[&Cobre], cont[&Estano]), (60_000, 30_000), "el trueque ya se cumplió");
     assert!(hechos(&e.n, "mercenarios.repuesto").is_empty());
     e.avanzar_hasta(proxima);
-    // Las pilas vuelven a su tope; cada bien con contador sube el 3 % de lo comerciado (en todos los campamentos), en unidades enteras hacia abajo (C3b: 1,8 de cobre
-    // suben 1 y 0,9 de estaño no suben nada); los contadores vuelven a cero.
+    // Las pilas vuelven a su tope; cada bien comerciado sube el 3 % de cada comercio (en todos los campamentos), en unidades enteras hacia abajo y como mínimo una (EE-5: 1,8 de cobre
+    // suben 1, y 0,9 de estaño, el mínimo de 1); los contadores vuelven a cero.
     assert_eq!(e.n.stock_de_campamento(0).unwrap().de(Madera), 300_000);
     assert_eq!((e.n.stock_de_campamento(0).unwrap().de(Cobre), e.n.stock_de_campamento(1).unwrap().de(Cobre)), (91_000, 101_000));
-    assert_eq!(e.n.stock_de_campamento(1).unwrap().de(Estano), 100_000);
+    assert_eq!(e.n.stock_de_campamento(1).unwrap().de(Estano), 101_000);
     assert!(e.n.mercenarios().mercado.contadores.is_empty());
     assert_eq!((hechos(&e.n, "mercenarios.repuesto").len(), e.n.mercenarios().mercado.repone_en), (1, proxima + cada));
     // Con todo repuesto no hay más citas: el evento no recurre mientras nada cambie.

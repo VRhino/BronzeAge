@@ -1074,7 +1074,7 @@ fn el_almacen_va_en_unidades_enteras_y_la_foto_conserva_el_resto_oculto() {
         n.avanzar_hasta(3 * HORA + 17 * MIN);
         let (cantidad, _, resto) = almacen(&n, id);
         assert!(cantidad.iter().all(|c| c % 1_000 == 0), "lo visible va en unidades enteras: {cantidad:?}");
-        assert!(resto.iter().all(|r| (0..1_000).contains(r)), "el resto oculto está en [0, 1000): {resto:?}");
+        assert!(resto.iter().all(|r| (-999..1_000).contains(r)), "el resto oculto está en (−1000, 1000): {resto:?}");
         assert!(resto.iter().any(|&r| r != 0), "con la comida, la recaudación y el mantenimiento algún resto queda a medias: {resto:?}");
         assert!(n.fracciones_almacenadas().is_empty());
         n.foto_ahora();

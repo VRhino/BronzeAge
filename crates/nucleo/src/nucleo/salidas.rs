@@ -563,7 +563,7 @@ impl Nucleo {
     /// guarnición. DUDA: solo `salirAlMundo`, como en el TypeScript; `movilizarEjercito`, que también sale de la residencia, no la toma.
     fn recordar_interior(&mut self, t: Instante, heroe: u64, plaza: u64) {
         let eco = &self.estado.asentamientos[&plaza].economia;
-        let almacen = asentamiento::recurso::TODOS.iter().map(|&r| (r, eco.almacen.cantidad(r))).filter(|&(_, n)| n != 0).collect();
+        let almacen = asentamiento::recurso::TODOS.iter().map(|&r| (r, eco.almacen.visible(r))).filter(|&(_, n)| n != 0).collect();
         let cola = eco
             .edificios
             .iter()
