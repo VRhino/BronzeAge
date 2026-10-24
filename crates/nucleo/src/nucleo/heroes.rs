@@ -124,12 +124,14 @@ impl Nucleo {
         self.estado.militar.residentes_de(plaza).flat_map(|h| h.heroe.escuadras.iter()).filter(|e| come_de_la_plaza(e)).map(|e| e.cantidad.max(0)).sum()
     }
 
-    /// Trigo por minuto que come la guarnición de la plaza (ración entera, sin participantes).
-    pub(super) fn racion_de_guarnicion(&self, plaza: u64) -> Mil {
-        if !self.estado.militar.tiene_residentes(plaza) {
-            return 0;
-        }
-        racion::racion_guarnicion(&self.estado.reglas.economia.militar, self.soldados_del_campamento(plaza))
+    /// Lo que el paso de minuto de la plaza toma de sus residentes, con una sola consulta al índice (el paso es caliente): el trigo por minuto que come su guarnición (ración entera, sin
+    /// participantes) y sus ciudadanos para la nobleza (Q8: todos los residentes). Una plaza sin residentes cuesta una consulta.
+    pub(super) fn residentes_en_el_paso(&self, plaza: u64) -> (Mil, u32) {
+        let m = &self.estado.militar;
+        let Some(ids) = m.residentes.get(&plaza) else { return (0, 0) };
+        let soldados: i64 = ids.iter().filter_map(|h| m.heroes.get(h)).flat_map(|h| &h.heroe.escuadras).filter(|e| come_de_la_plaza(e)).map(|e| e.cantidad.max(0)).sum();
+        let racion = if soldados == 0 { 0 } else { racion::racion_guarnicion(&self.estado.reglas.economia.militar, soldados) };
+        (racion, politica::residencia::ciudadanos_para_nobleza(ids.len()))
     }
 
     // ───────────────────────────── Ayudas ─────────────────────────────
@@ -320,16 +322,6 @@ impl Nucleo {
                 // Lo que un campamento ofrece depende de las tecnologías de las Facciones vivas.
                 self.tocar_todos_los_campamentos();
                 self.emitir_propio(t, "faccion.tecnologias", vec![], vec![("faccion", *faccion as i64), ("tecnologias", tecnologias.len() as i64)]);
-                Ok(vec![])
-            }
-            Comando::FijarFaccionDeHeroe { heroe, faccion } => {
-                self.autorizar_heroe(p, *heroe, true)?;
-                let h = self.heroe_mut(*heroe);
-                if h.faccion == *faccion {
-                    return Err(sin_cambios());
-                }
-                let anterior = std::mem::replace(&mut h.faccion, *faccion);
-                self.tr.tocar_todos(Clase::Faccion, anterior.map(u64::from));
                 Ok(vec![])
             }
             Comando::ColocarHeroe { heroe, ubicacion } => {
@@ -538,12 +530,8 @@ impl Nucleo {
 
     /// La guarnición de la plaza come en el paso de su minuto, justo después de la población (Reloj_Y_Eventos §2: la población come antes que las
     /// tropas): toma del almacén `min(trigo, ración)`; con la ración entera la moral de cada escuadra sube y, sin ella, baja; con la moral a 0
-    /// desertan `ceil(5 %)` de los soldados. Una plaza sin residentes con tropa no hace nada. No programa ningún evento.
-    pub(super) fn alimentar_guarnicion(&mut self, plaza: u64, t: Instante) {
-        if !self.estado.militar.tiene_residentes(plaza) {
-            return;
-        }
-        let racion = self.racion_de_guarnicion(plaza);
+    /// desertan `ceil(5 %)` de los soldados. `racion` es la del `Exterior` del mismo paso (`residentes_en_el_paso`): una plaza sin residentes con tropa no hace nada. No programa ningún evento.
+    pub(super) fn alimentar_guarnicion(&mut self, plaza: u64, t: Instante, racion: Mil) {
         if racion == 0 {
             return;
         }

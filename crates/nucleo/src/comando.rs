@@ -7,6 +7,7 @@ use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8
 use crate::codec_comercio::{animal_a_u8, animal_de_u8, tipo_carro_a_u8, tipo_carro_de_u8};
 use crate::codec_batallas::{asignacion_escribir, asignacion_leer, resultado_escribir, resultado_leer, salida_escribir, salida_leer, tokens_escribir, tokens_leer};
 use crate::codec_columna::{politica_a_u8, politica_de_u8};
+use crate::codec_politica::{sigilo_escribir, sigilo_leer};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use crate::estado_militar::Relacion;
 pub use crate::memoria::OrigenIntel;
@@ -21,6 +22,7 @@ use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
+use politica::sigilo::Sigilo;
 
 /// Lo que se puede atacar (`OrdenAtacar.Objetivo`, Combate §2): una columna, una caravana, un campamento de bandidos, una plaza, un pueblo extractor o
 /// una avanzada.
@@ -373,6 +375,26 @@ pub enum Comando {
     ComprarMirada { heroe: u64, origen: OrigenIntel, centro: Punto },
     /// Compra el Informe de la plaza ajena `asentamiento`, que la Facción tiene que conocer: la foto, fechada, de sus edificios, sus recintos y su defensa, que se guarda en la memoria de la Facción.
     ComprarInformePlaza { heroe: u64, origen: OrigenIntel, asentamiento: u64 },
+    // ── Política: la Facción, la ciudadanía y la residencia (sistema 5, tanda 5B; Diplomacia_Facciones §3-§4). Las da la cuenta del héroe que las nombra (el de la cuenta, si la orden
+    //    del contrato no lo nombra); responder solicitudes y nombrar Embajador, además, el Rey de la Facción; nombrar Rey, uno de sus ciudadanos (con Rey, solo él). ──
+    /// Crea una Facción con el héroe como primer ciudadano y Rey (§3.1); sin sigilo recibe uno libre. Su columna, si va solo, toma la Facción. `creadas` lleva su id.
+    CrearFaccion { heroe: u64, nombre: String, sigilo: Option<Sigilo> },
+    /// Pide el ingreso en una Facción (§3.2): entra en su lista de solicitantes. Se puede pedir a varias a la vez.
+    SolicitarIngreso { heroe: u64, faccion: u32 },
+    /// El Rey (`heroe`) acepta o deniega la solicitud de `solicitante` (§3.2). Aceptada, es ciudadano y sus solicitudes en las demás caen.
+    ResponderSolicitud { heroe: u64, faccion: u32, solicitante: u64, aceptar: bool },
+    /// Deja su Facción, con la sucesión del trono (§3.3). No se deja yendo en un ejército (Q7). Si reside en una plaza, pasa al campamento de mercenarios más cercano.
+    DejarFaccion { heroe: u64 },
+    /// Nombra Rey a `designado`, ciudadano de la Facción (§3.4): sin Rey, cualquier ciudadano; con Rey, es un traspaso que solo hace él.
+    AsignarRey { heroe: u64, faccion: u32, designado: u64 },
+    /// El Rey nombra Embajador a `designado`, ciudadano de la Facción (puede ser él mismo).
+    AsignarEmbajador { heroe: u64, faccion: u32, designado: u64 },
+    /// Se muda a una plaza de su Facción (§4.2): deja la casa anterior y suelta la guarnición; su campamento se traslada con él. Con cooldown.
+    CambiarResidencia { heroe: u64, asentamiento: u64 },
+    /// Pasa a residir en un campamento de mercenarios (cualquier héroe, de cualquier Facción). Con cooldown.
+    ResidirEnCampamento { heroe: u64, campamento: u32 },
+    /// Deja la plaza donde reside y pasa al campamento de mercenarios más cercano a donde está. Con cooldown.
+    DejarResidencia { heroe: u64 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -408,6 +430,10 @@ pub enum Autoriza {
     CuentaDelHeroeAunqueFuera,
     /// La cuenta del héroe, que además es ciudadano de la Facción de la plaza madre de la avanzada.
     CiudadanoDeLaMadre,
+    /// La cuenta del héroe, que además es el Rey de la Facción que nombra la orden (`responderSolicitud` sin excepción: tampoco si la Facción no existe).
+    ReyDeLaFaccion,
+    /// La cuenta del héroe, que además es ciudadano de la Facción que nombra la orden y, si tiene Rey, su Rey (`asignarRey`).
+    CiudadanoDeLaFaccion,
     /// Quien manda en la plaza (`Nucleo::manda_en`): una cuenta con un héroe ciudadano de su Facción o una columna de su Facción. De una caravana, la plaza de su origen; de un trueque,
     /// la plaza A al proponerlo y la B al aceptarlo o rechazarlo; de una orden de mercado, su plaza.
     MandaEnLaPlaza,
@@ -495,7 +521,15 @@ impl Comando {
             | Comando::UnirseABatalla { .. }
             | Comando::CancelarBatalla { .. }
             | Comando::ComprarMirada { .. }
-            | Comando::ComprarInformePlaza { .. } => CuentaDelHeroe,
+            | Comando::ComprarInformePlaza { .. }
+            | Comando::CrearFaccion { .. }
+            | Comando::SolicitarIngreso { .. }
+            | Comando::DejarFaccion { .. }
+            | Comando::CambiarResidencia { .. }
+            | Comando::ResidirEnCampamento { .. }
+            | Comando::DejarResidencia { .. } => CuentaDelHeroe,
+            Comando::ResponderSolicitud { .. } | Comando::AsignarEmbajador { .. } => ReyDeLaFaccion,
+            Comando::AsignarRey { .. } => CiudadanoDeLaFaccion,
             Comando::ColocarAvanzada { .. }
             | Comando::MejorarAvanzada { .. }
             | Comando::RepararAvanzada { .. }
@@ -565,6 +599,7 @@ impl Comando {
             Comando::ConvocarEjercito { .. } => Convocatoria,
             Comando::ColocarBandidos { .. } => CampamentoBandidos,
             Comando::ComprarMirada { .. } => Mirada,
+            Comando::CrearFaccion { .. } => Faccion,
             _ => return None,
         })
     }
@@ -667,6 +702,12 @@ impl Comando {
                     i.asentamientos.push(*a);
                 }
             }
+            // Aceptar cambia la Facción del solicitante, y con ella la de su columna: no mientras combate.
+            Comando::ResponderSolicitud { heroe, solicitante, .. } => i.heroes.extend([*heroe, *solicitante]),
+            Comando::CambiarResidencia { heroe, asentamiento } => {
+                i.heroes.push(*heroe);
+                i.asentamientos.push(*asentamiento);
+            }
             Comando::AnadirCarro { caravana, .. }
             | Comando::AnadirAnimal { caravana, .. }
             | Comando::ReservarCaravana { caravana, .. }
@@ -760,7 +801,14 @@ impl Comando {
             | Comando::DarEscuadra { heroe, .. }
             | Comando::FijarControlador { heroe, .. }
             | Comando::UnirseABatalla { heroe, .. }
-            | Comando::CancelarBatalla { heroe, .. } => i.heroes.push(*heroe),
+            | Comando::CancelarBatalla { heroe, .. }
+            | Comando::CrearFaccion { heroe, .. }
+            | Comando::SolicitarIngreso { heroe, .. }
+            | Comando::DejarFaccion { heroe }
+            | Comando::AsignarRey { heroe, .. }
+            | Comando::AsignarEmbajador { heroe, .. }
+            | Comando::ResidirEnCampamento { heroe, .. }
+            | Comando::DejarResidencia { heroe } => i.heroes.push(*heroe),
             Comando::CrearEjercito { .. }
             | Comando::Reloj(_)
             | Comando::FijarNivelFaccion { .. }
@@ -801,7 +849,12 @@ impl Comando {
             | Comando::FijarResidencia { residencia: Some(Residencia::Campamento(campamento)), .. } => v.push((Clase::Campamento, u64::from(*campamento))),
             Comando::FijarNivelFaccion { faccion, .. } | Comando::FijarTecnologias { faccion, .. } | Comando::CrearEjercito { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
             Comando::FijarRelacion { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b)), (Clase::Relacion, Clase::par(*a, *b))]),
-            Comando::FijarFaccionDeHeroe { faccion: Some(faccion), .. } => v.push((Clase::Faccion, u64::from(*faccion))),
+            Comando::FijarFaccionDeHeroe { faccion: Some(faccion), .. }
+            | Comando::SolicitarIngreso { faccion, .. }
+            | Comando::ResponderSolicitud { faccion, .. }
+            | Comando::AsignarRey { faccion, .. }
+            | Comando::AsignarEmbajador { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
+            Comando::ResidirEnCampamento { campamento, .. } => v.push((Clase::Campamento, u64::from(*campamento))),
             _ => {}
         }
         v
@@ -1595,6 +1648,57 @@ impl Peticion {
                 origen_escribir(&mut w, *origen);
                 w.u64(*asentamiento);
             }
+            Comando::CrearFaccion { heroe, nombre, sigilo } => {
+                w.u8(128);
+                w.u64(*heroe);
+                w.texto(nombre);
+                w.bool(sigilo.is_some());
+                if let Some(s) = sigilo {
+                    sigilo_escribir(&mut w, s);
+                }
+            }
+            Comando::SolicitarIngreso { heroe, faccion } => {
+                w.u8(129);
+                w.u64(*heroe);
+                w.u32(*faccion);
+            }
+            Comando::ResponderSolicitud { heroe, faccion, solicitante, aceptar } => {
+                w.u8(130);
+                w.u64(*heroe);
+                w.u32(*faccion);
+                w.u64(*solicitante);
+                w.bool(*aceptar);
+            }
+            Comando::DejarFaccion { heroe } => {
+                w.u8(131);
+                w.u64(*heroe);
+            }
+            Comando::AsignarRey { heroe, faccion, designado } => {
+                w.u8(132);
+                w.u64(*heroe);
+                w.u32(*faccion);
+                w.u64(*designado);
+            }
+            Comando::AsignarEmbajador { heroe, faccion, designado } => {
+                w.u8(133);
+                w.u64(*heroe);
+                w.u32(*faccion);
+                w.u64(*designado);
+            }
+            Comando::CambiarResidencia { heroe, asentamiento } => {
+                w.u8(134);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+            }
+            Comando::ResidirEnCampamento { heroe, campamento } => {
+                w.u8(135);
+                w.u64(*heroe);
+                w.u32(*campamento);
+            }
+            Comando::DejarResidencia { heroe } => {
+                w.u8(136);
+                w.u64(*heroe);
+            }
         }
         w.0
     }
@@ -1775,6 +1879,18 @@ impl Peticion {
             125 => Comando::AbandonarRecinto { asentamiento: r.u64()?, recinto: r.u32()? },
             126 => Comando::ComprarMirada { heroe: r.u64()?, origen: origen_leer(&mut r)?, centro: r.punto()? },
             127 => Comando::ComprarInformePlaza { heroe: r.u64()?, origen: origen_leer(&mut r)?, asentamiento: r.u64()? },
+            128 => {
+                let (heroe, nombre) = (r.u64()?, r.texto()?);
+                Comando::CrearFaccion { heroe, nombre, sigilo: if r.bool()? { Some(sigilo_leer(&mut r)?) } else { None } }
+            }
+            129 => Comando::SolicitarIngreso { heroe: r.u64()?, faccion: r.u32()? },
+            130 => Comando::ResponderSolicitud { heroe: r.u64()?, faccion: r.u32()?, solicitante: r.u64()?, aceptar: r.bool()? },
+            131 => Comando::DejarFaccion { heroe: r.u64()? },
+            132 => Comando::AsignarRey { heroe: r.u64()?, faccion: r.u32()?, designado: r.u64()? },
+            133 => Comando::AsignarEmbajador { heroe: r.u64()?, faccion: r.u32()?, designado: r.u64()? },
+            134 => Comando::CambiarResidencia { heroe: r.u64()?, asentamiento: r.u64()? },
+            135 => Comando::ResidirEnCampamento { heroe: r.u64()?, campamento: r.u32()? },
+            136 => Comando::DejarResidencia { heroe: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -1805,6 +1921,9 @@ pub mod rechazos {
     pub const ASENTAMIENTO_DESCONOCIDO: &str = "asentamiento.desconocido";
     pub const SIN_CARAVANA: &str = "fundacion.sin_caravana";
     pub const FUNDACION_SIN_FACCION: &str = "fundacion.sin_faccion";
+    /// Ningún héroe de la columna es ciudadano de la Facción de la caravana: no hay fundadores (`minFundadoresParaFaccionNueva`, 1).
+    pub const FUNDACION_SIN_FUNDADORES: &str = "fundacion.sin_fundadores";
+
     pub const CAP_ALCANZADO: &str = "fundacion.cap_alcanzado";
     pub const NIVEL_INVALIDO: &str = "nivel.invalido";
     pub const PARCELA_SIN_LIBRES: &str = "parcela.sin_libres";
@@ -2206,6 +2325,39 @@ pub mod rechazos {
     pub const BATALLA_RESULTADO_INVALIDO: &str = "batalla.resultado_invalido";
     /// «Ya se aplicó con otro resultado» (409).
     pub const BATALLA_OTRO_RESULTADO: &str = "batalla.otro_resultado";
+    // La Facción, la ciudadanía y la residencia (sistema 5, tanda 5B; `ErrorFaccion` y `ErrorResidencia` del crate `politica`).
+    pub const FACCION_NO_EXISTE: &str = "faccion.no_existe";
+    /// El nombre queda vacío tras recortarlo.
+    pub const FACCION_NOMBRE_VACIO: &str = "faccion.nombre_vacio";
+    /// Otra Facción ya se llama así (sin mirar mayúsculas).
+    pub const FACCION_NOMBRE_DUPLICADO: &str = "faccion.nombre_duplicado";
+    /// Alguna pieza del sigilo no es del catálogo, o los dos colores del fondo son el mismo.
+    pub const FACCION_SIGILO_INVALIDO: &str = "faccion.sigilo_invalido";
+    /// Otra Facción lleva un sigilo idéntico.
+    pub const FACCION_SIGILO_DUPLICADO: &str = "faccion.sigilo_duplicado";
+    /// Ya es ciudadano de una Facción: 1 héroe, 1 Facción.
+    pub const FACCION_YA_PERTENECE: &str = "faccion.ya_pertenece";
+    /// Dejó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`.
+    pub const FACCION_COOLDOWN_CREACION: &str = "faccion.cooldown_creacion";
+    /// Responder a quien no ha pedido entrar.
+    pub const FACCION_NO_HA_PEDIDO: &str = "faccion.no_ha_pedido";
+    /// No es ciudadano de ninguna Facción.
+    pub const FACCION_NO_PERTENECE: &str = "faccion.no_pertenece";
+    /// Dejar la Facción yendo en un ejército (aunque sea solo) o en uno en preparación (Q7): primero se separa.
+    pub const FACCION_EN_EJERCITO: &str = "faccion.en_ejercito";
+    /// El designado para Rey o Embajador no es ciudadano de la Facción.
+    pub const FACCION_NO_CIUDADANO: &str = "faccion.no_ciudadano";
+    /// Nombrar Embajador en una Facción sin Rey.
+    pub const FACCION_SIN_REY: &str = "faccion.sin_rey";
+    /// Cambió de residencia hace menos de `CIUDADANIA.cooldownCambioResidenciaDias`.
+    pub const RESIDENCIA_COOLDOWN: &str = "residencia.cooldown";
+    /// Solo se reside en una plaza de la propia Facción.
+    pub const RESIDENCIA_PLAZA_AJENA: &str = "residencia.plaza_ajena";
+    pub const RESIDENCIA_YA_RESIDE: &str = "residencia.ya_reside";
+    /// La plaza lo ha vetado (los vetos llegan en 5E).
+    pub const RESIDENCIA_VETADO: &str = "residencia.vetado";
+    /// Dejar la residencia sin residir en ninguna plaza (en un campamento de mercenarios se cambia de campamento o se muda a una plaza).
+    pub const RESIDENCIA_SIN_PLAZA: &str = "residencia.sin_plaza";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -2252,6 +2404,8 @@ pub enum TipoCreado {
     Incorporacion { batalla: u64 },
     /// Una Mirada de la taberna: vive en la memoria de la Facción (la `VISTA` la enseña; no es una entidad del registro de cambios).
     Mirada,
+    /// Una Facción nueva (`crearFaccion`).
+    Faccion,
 }
 
 impl TipoCreado {
@@ -2270,6 +2424,8 @@ impl TipoCreado {
             TipoCreado::OrdenMercado => de(Clase::OrdenMercado),
             TipoCreado::Pueblo => de(Clase::Pueblo),
             TipoCreado::Avanzada => de(Clase::Avanzada),
+            TipoCreado::Faccion => de(Clase::Faccion),
+
             TipoCreado::Incorporacion { batalla } => vec![(Clase::Batalla, batalla)],
             TipoCreado::Edificio { plaza } | TipoCreado::Recinto { plaza } => vec![(Clase::Asentamiento, plaza)],
             // El loadout vive en el héroe que la orden nombra y la parcela, en la plaza que la orden nombra: ya van en `Comando::implicados`. La Mirada es de la memoria de la Facción.
@@ -2380,6 +2536,31 @@ mod pruebas {
         let mut b = Peticion::nueva("a", "i", Comando::AnadirCarro { caravana: 1, tipo: TipoCarro::Basico }).codificar();
         *b.last_mut().unwrap() = 9;
         assert!(Peticion::decodificar(&b).is_err());
+    }
+
+    #[test]
+    fn las_ordenes_de_la_faccion_y_la_residencia_dan_la_vuelta_por_el_registro() {
+        let sigilo = politica::Reglas::default().sigilo.sigilo_libre("f-1", [].iter());
+        let comandos = vec![
+            Comando::CrearFaccion { heroe: 2, nombre: "Micenas".into(), sigilo: None },
+            Comando::CrearFaccion { heroe: 2, nombre: "Troya".into(), sigilo: Some(sigilo) },
+            Comando::SolicitarIngreso { heroe: 2, faccion: 3 },
+            Comando::ResponderSolicitud { heroe: 2, faccion: 3, solicitante: 9, aceptar: true },
+            Comando::ResponderSolicitud { heroe: 2, faccion: 3, solicitante: 9, aceptar: false },
+            Comando::DejarFaccion { heroe: 2 },
+            Comando::AsignarRey { heroe: 2, faccion: 3, designado: 9 },
+            Comando::AsignarEmbajador { heroe: 2, faccion: 3, designado: 9 },
+            Comando::CambiarResidencia { heroe: 2, asentamiento: 5 },
+            Comando::ResidirEnCampamento { heroe: 2, campamento: 4 },
+            Comando::DejarResidencia { heroe: 2 },
+        ];
+        for c in comandos {
+            let p = Peticion { actor: "ana".into(), admin: false, peticion_id: "pol".into(), version_esperada: None, comando: c };
+            assert_eq!(Peticion::decodificar(&p.codificar()).unwrap(), p);
+        }
+        // Aceptar una solicitud no se da mientras el solicitante combate: el candado lo nombra.
+        assert_eq!(Comando::ResponderSolicitud { heroe: 2, faccion: 3, solicitante: 9, aceptar: true }.implicados().heroes, vec![2, 9]);
+        assert_eq!(Comando::CrearFaccion { heroe: 2, nombre: "x".into(), sigilo: None }.tipo_creado(), Some(TipoCreado::Faccion));
     }
 
     #[test]

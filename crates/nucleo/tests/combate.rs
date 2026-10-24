@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -663,7 +663,7 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     assert_eq!((col.columna.faccion, col.columna.participantes.len(), col.posicion), (Some(2), 1, s.e.pos(b)));
     assert_eq!(col.columna.escuadras.len(), 1);
     assert!(s.e.n.soldados_de_columna(salida).unwrap() > 0 && col.columna.carga.is_empty());
-    assert_eq!(hechos(&s.e.n, "heroe.desalojado").len(), 1);
+    assert_eq!(hechos(&s.e.n, "heroe.desalojado").len(), 2, "beto y el fundador, que reside en ella desde la fundación (5B)");
     // Los plazos son eventos: la ocupación acaba a la hora y media y la protección a las 24 h.
     assert!(s.e.n.plaza_protegida(b));
     s.e.n.avanzar_hasta(t + 90 * MIN - 1);

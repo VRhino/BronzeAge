@@ -759,6 +759,13 @@ fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_
     assert!(n.aplicar_en(0, Peticion::nueva("admin", "nivel", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 }).de_admin()).aceptada());
     let pc = sitio_rico(&n, &m.0, 2, 1);
     let c = fundar(&mut n, 0, "c", "ana", 1, pc);
+    // Cada plaza tiene ya a su fundador de residente (5B): el héroe de campo de la columna que la fundó.
+    let fundador = |n: &Nucleo, p: u64| -> u64 {
+        let v: Vec<u64> = n.estado().militar.residentes_de(p).map(|h| h.heroe.id).collect();
+        assert_eq!(v.len(), 1, "un fundador por plaza");
+        v[0]
+    };
+    let (fa, fc) = (fundador(&n, a), fundador(&n, c));
     let mut e = Escenario { n, a, cuenta: 0 };
     // La plaza A no construye nada: sin madera para su mantenimiento acabará en ruinas.
     e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
@@ -766,7 +773,7 @@ fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_
     e.ok("admin", Comando::FijarResidencia { heroe: carla, residencia: Some(Residencia::Asentamiento(a as u32)) });
     e.ok("admin", Comando::ColocarHeroe { heroe: carla, ubicacion: Ubicacion::Asentamiento(a as u32) });
     e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(a as u32) });
-    assert_eq!(e.n.estado().militar.residentes_de(a).map(|h| h.heroe.id).collect::<Vec<_>>(), vec![ana, carla]);
+    assert_eq!(e.n.estado().militar.residentes_de(a).map(|h| h.heroe.id).collect::<Vec<_>>(), vec![fa, ana, carla]);
 
     let mut ruina = None;
     for dia in 1..=150 {
@@ -794,10 +801,10 @@ fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_
     assert_eq!(e.n.ejercito(e.n.heroe(ana).unwrap().columna.unwrap()).unwrap().columna.faccion, Some(1), "el residente sale con la bandera de su Facción");
     assert_eq!(e.n.ejercito(e.n.heroe(beto).unwrap().columna.unwrap()).unwrap().columna.faccion, None, "el de visita sale sin bandera");
     assert!(e.n.estado().militar.residentes_de(a).next().is_none());
-    assert_eq!(e.n.estado().militar.residentes_de(c).map(|x| x.heroe.id).collect::<Vec<_>>(), vec![ana]);
+    assert_eq!(e.n.estado().militar.residentes_de(c).map(|x| x.heroe.id).collect::<Vec<_>>(), vec![fa, fc, ana], "el fundador de A, que estaba en su columna, también se muda a C");
     let reubicados = hechos(&e.n, "heroe.reubicado");
-    assert_eq!(reubicados.len(), 3);
-    assert!(reubicados.iter().all(|r| r.0 == ruina && dato(r, "ruina") == a as i64 && dato(r, "alMapa") == 1));
+    assert_eq!(reubicados.len(), 4);
+    assert!(reubicados.iter().all(|r| r.0 == ruina && dato(r, "ruina") == a as i64 && dato(r, "alMapa") == i64::from(dato(r, "heroe") != fa as i64)));
 }
 
 // ───────────────────────────── 10. Las tecnologías de la administración y quién manda en la plaza ─────────────────────────────
@@ -923,7 +930,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

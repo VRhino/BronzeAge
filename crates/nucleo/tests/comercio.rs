@@ -1236,7 +1236,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
@@ -1367,14 +1367,16 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
 }
 
 #[test]
-fn la_huella_de_las_reglas_incluye_los_bloques_de_comercio_militares_y_combate() {
+fn la_huella_de_las_reglas_incluye_los_bloques_de_comercio_militares_combate_y_politica() {
     use sha2::{Digest, Sha256};
     let r = Reglas::default();
     let sin_comercio = asentamiento::datos::texto_de_parametros() + &asentamiento::datos::texto_de_parametros_de(nucleo::urbanismo::DOC_TRAZADO);
     let con_comercio = sin_comercio.clone() + &comercio::datos::texto_de_parametros();
     let con_militar = con_comercio.clone() + &militar::datos::texto_de_parametros();
     let con_combate = con_militar.clone() + &combate::datos::texto_de_parametros();
-    assert_eq!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_combate).into()));
+    let con_politica = con_combate.clone() + &politica::datos::texto_de_parametros();
+    assert_eq!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_politica).into()));
+    assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_combate).into()), "los bloques de la política entran en la huella");
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_militar).into()), "los bloques del combate entran en la huella");
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_comercio).into()), "los bloques militares entran en la huella");
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(sin_comercio).into()));

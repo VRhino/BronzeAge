@@ -533,7 +533,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].acceso, Acceso { aliados: false, neutrales: true, enemigos: true });
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -586,8 +586,10 @@ fn al_arruinarse_la_plaza_el_visitante_sale_al_mapa_con_su_columna_y_su_carga_si
     let ha = e.n.heroe(ana).unwrap();
     let Ubicacion::Columna(nueva) = ha.heroe.presencia.ubicacion else { panic!("«ana» sale al mapa") };
     assert_eq!((ha.heroe.residencia, e.ejercito(nueva).columna.carga.get(&Madera).copied(), e.ejercito(nueva).posicion, ha.carro.is_empty()), (Some(Residencia::Asentamiento(c as u32)), Some(40_000), pa, true));
+    // Los dos salen al mapa; el fundador de la plaza, que reside en ella desde la fundación (5B) y está fuera en su columna, solo se muda.
     let reubicados = hechos(&e.n, "heroe.reubicado");
-    assert!(reubicados.len() >= 2 && reubicados.iter().all(|r| r.0 == ruina && dato(r, "alMapa") == 1));
+    assert!(reubicados.iter().all(|r| r.0 == ruina));
+    assert!([ana, b].iter().all(|&h| reubicados.iter().any(|r| dato(r, "heroe") == h as i64 && dato(r, "alMapa") == 1)));
 }
 
 // ───────────────────────────── 6. Foto y determinismo ─────────────────────────────
@@ -917,7 +919,7 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
     assert_eq!(e.n.heroe(vis).unwrap().heroe.residencia, Some(Residencia::Campamento(0)));
     // Nadie queda dentro de la plaza conquistada y se cuenta a cada uno.
     assert!(e.n.heroes().all(|h| h.heroe.presencia.ubicacion != Ubicacion::Asentamiento(a as u32)));
-    assert_eq!(hechos(&e.n, "heroe.desalojado").len(), 4, "ana, bea, cai y vis");
+    assert_eq!(hechos(&e.n, "heroe.desalojado").len(), 5, "ana, bea, cai, vis y el fundador, que reside en ella desde la fundación (5B)");
 }
 
 #[test]

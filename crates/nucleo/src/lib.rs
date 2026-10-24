@@ -28,10 +28,10 @@
 //!   pueblo y avanzada— y sus consecuencias (heridos, mitad del carro, botín, chatarra, experiencia de escuadra); la conquista
 //!   con su protección y su ocupación como eventos, el desalojo y la cascada del comercio; los bandidos como entidades fijas del espacio, con su aparición, su
 //!   reaparición y su acoso a las caravanas (`PRIO_BANDIDOS`, `Carga::Combate`); y la guarnición de serie de los pueblos. El estado nuevo es [`EstadoCombate`]
-//!   (foto `BAN12`, hoy `BAN28`); las reglas puras son el crate `combate`.
+//!   (foto `BAN12`, hoy `BAN29`); las reglas puras son el crate `combate`.
 //! - Ciclo de la batalla de Unity (fase 4E): `atacar` abre una batalla en lugar de resolver con números cuando el proceso tiene servidores de batalla
 //!   (`Reglas::batallas_en_unity`), también bot contra bot. [`EstadoBatallas`] guarda el ticket congelado, las incorporaciones, la asignación y
-//!   el resultado de cada batalla (foto `BAN13`, hoy `BAN28`); mientras dura, sus columnas y caravanas quedan apartadas (no se mueven, no comen, no se las toca), sus
+//!   el resultado de cada batalla (foto `BAN13`, hoy `BAN29`); mientras dura, sus columnas y caravanas quedan apartadas (no se mueven, no comen, no se las toca), sus
 //!   escuadras llevan el candado `reserva_batalla` y ninguna orden puede tocar lo que combate (`rechazos::BATALLA_BLOQUEADO`). Sus plazos son eventos de
 //!   prioridad 1 (`Carga::Batalla`) y los cinco mensajes del servidor de batalla, órdenes con el actor `batalla-servidor:<id>` (códigos 101-105; unirse, cancelar y
 //!   el andamiaje `FijarControlador`, 98-100). Las reglas puras son `combate::{ciclo, resultado, union}`.
@@ -63,6 +63,7 @@ mod codec_columna;
 mod codec_comercio;
 mod codec_economia;
 mod codec_militar;
+mod codec_politica;
 mod comando;
 mod estado;
 mod estado_batallas;

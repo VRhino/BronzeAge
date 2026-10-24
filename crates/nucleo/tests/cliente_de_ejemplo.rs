@@ -109,8 +109,9 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     let Some(Cuerpo::Heroe(h)) = entidad(&ana.almacen, &format!("HEROE:{heroe}"), TipoEntidad::Heroe, &heroe) else { panic!("su héroe") };
     assert!(h.almacen_personal.as_ref().unwrap().por_id.get("madera").is_some_and(|&x| x > 0), "la madera comprada, en su almacén personal: {:?}", h.almacen_personal);
 
-    // 3. Con Facción (andamiaje: el sistema 5 traerá cómo se entra en una), mira el mapa bajo la niebla y sale del campamento con su columna.
-    adm.aceptada(admin("fijar_faccion_de_heroe", vec![("heroe_id", texto(&heroe)), ("faccion_id", texto("f-1"))])).await;
+    // 3. Crea su Facción (es su primer ciudadano y su Rey), mira el mapa bajo la niebla y sale del campamento con su columna.
+    let r = ana.aceptada(O::CrearFaccion(pb::OrdenCrearFaccion { nombre: "Micenas".into(), sigilo: None })).await;
+    assert_eq!(creada(&r, TipoEntidad::Faccion), "f-1");
     ana.al_dia().await;
     assert!(ana.almacen.ambitos.contains_key("FACCION:f-1"));
     ana.mirar(min, max).await;
@@ -126,10 +127,9 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     llegar(&mut adm, &mut ana, &heroe, &col).await;
     assert!(explorado(&ana.almacen, "VISTA:f-1") > antes, "lo andado se explora");
 
-    // 5. Funda, reside (andamiaje) y entra: se abre el interior de su plaza.
+    // 5. Funda (el fundador pasa a residir en la plaza) y entra: se abre el interior de su plaza.
     let r = ana.aceptada(O::Fundar(pb::OrdenFundar {})).await;
     let plaza = creada(&r, TipoEntidad::Asentamiento);
-    adm.aceptada(admin("fijar_residencia", vec![("heroe_id", texto(&heroe)), ("residencia", texto(&plaza))])).await;
     for (recurso, cantidad) in [("madera", 300_000), ("piedra", 100_000), ("oro", 100_000), ("trigo", 200_000)] {
         adm.aceptada(admin("dar_recursos", vec![("asentamiento_id", texto(&plaza)), ("recurso", texto(recurso)), ("cantidad", numero(cantidad))])).await;
     }

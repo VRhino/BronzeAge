@@ -158,6 +158,8 @@ pub struct Reglas {
     pub materiales_iniciales: Vec<(Recurso, Mil)>,
     /// `FUNDACION.viviendasIniciales`.
     pub viviendas_iniciales: u32,
+    /// `FUNDACION.maxJugadoresFundacionGrupal`: cuántos héroes de la columna pasan a residir en la plaza que fundan (Fundacion_Y_Refundacion §5).
+    pub max_fundadores: usize,
 }
 
 impl Reglas {
@@ -230,6 +232,7 @@ impl Reglas {
         Reglas {
             materiales_iniciales,
             viviendas_iniciales: fundacion["viviendasIniciales"].as_u64().expect("viviendasIniciales") as u32,
+            max_fundadores: fundacion["maxJugadoresFundacionGrupal"].as_u64().expect("maxJugadoresFundacionGrupal") as usize,
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),
