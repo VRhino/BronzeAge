@@ -838,6 +838,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 - **Se repone solo donde está la escuadra**: en su campamento si reside aquí, o en su columna si está a la puerta. Una escuadra en una escolta o fuera del mundo no se repone.
 - **Reponer no cura moral ni cambia nivel**: solo añade soldados; la experiencia de la escuadra se «diluye» sin que el motor la corrija.
 - **El pool de reclutamiento no es la población total** sino lo que no hace falta para producir: un reclutamiento puede fallar con población de sobra si toda ella trabaja.
+- **Reclutar gasta la población que pide el siguiente ascenso**: el pool no se reserva para el nivel 2 (el batch militar lo vio: con los bots reclutando todo lo que pueden, ninguna plaza llega al nivel 2 en 5 días). **Es la regla** (decisión del autor del 2026-10-24, calibración del sistema 4, M9): crecer o armarse lo decide el jugador; los bots de la fase 7 lo han de tener en cuenta.
 - **La tropa del Centro Urbano es gratis en oro**: solo cuesta su equipo; el resto de edificios añaden oro por escalón y por caballo.
 - **Sin loadout activo no defiende en persona**: borrar el activo no activa otro. La guarnición sigue defendiendo.
 - **El candado `reservaBatalla`** (decidido el 2026-10-12) impide abrir otra batalla con esa escuadra, **reponerla** y **entrar o salir de la guarnición** mientras dura la batalla. **No** afecta a los loadouts: son selecciones, no mueven nada, y la misma escuadra puede estar en varios.

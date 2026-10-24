@@ -1,27 +1,64 @@
 # Calibración del sistema 4 y de los batches: decisiones del autor (2026-10-24)
 
-Respuestas a las preguntas de `crates/batch/decisiones/{militar,poblacion,comercio}.json`. Pendiente de aplicar en código, canon y Mechanics.
+Respuestas a las preguntas de `crates/batch/decisiones/{militar,poblacion,comercio}.json`. **Aplicadas el 2026-10-24** (todas salvo C3b, que es su propia tanda), con la foto `BAN26` (rechaza `BAN25`) y `LAYOUT_VERSION` 5; cada punto dice dónde quedó escrito y qué prueba lo cubre.
 
 ## Batch militar
-- **M1 Saqueo de pueblos:** se deja tal cual. Defender los pueblos es parte de la jugabilidad; cambiará cuando haya bots.
-- **M2 Atalayas:** su guarnición interna se repone de forma gradual en 6 h, como los mineros del pueblo (hoy se repone entera a las 6 h). Defenderla es trabajo de los héroes. CAMBIO.
-- **M3 Choque en campo abierto:** se mantiene la cohesión y el ×1,05 del defensor.
-- **M4 Bandidos:** la reaparición pasa de 60 min a **6 h**. CAMBIO de cifra (`CAMPAMENTOS_BANDIDOS`).
-- **M5 Protección al fundar:** un día de protección al fundar (`protegida_hasta = fundado_en + proteccionMinutos`), reutilizando el plazo de la conquista. CAMBIO.
-- **M6 Botín personal:** el uso del oro de bandidos vuelve con la paridad del TypeScript: refundación (fondo, aportar, retirar, comprar la Caravana de Refundación), Caravana de Fundación, almacén personal (guardar y sacar) y caravanas a mano entran en el **sistema 5** (tanda 5G). Sin orden nueva de «depositar».
-- **M8 Asedio con números:** ventana de convocatoria de 30 s para que se unan otras columnas cercanas, como con Unity. CAMBIO.
-- **M7 Equipo de Barracón y Galería:** se deja para la fase 7 (bots reales).
-- **M9 Reclutar gasta población:** decisión del jugador (como hoy).
-- **M10 Carga en los carros de una caravana adjunta:** la carga sigue a los carros: aparcar deja en la caravana lo que ya no cabe en la columna; perderla pierde lo que iba en sus carros. Sustituye al rechazo `carro.no_cabe` de `AparcarCaravana`. CAMBIO.
+- **M1 Saqueo de pueblos:** se deja tal cual. Defender los pueblos es parte de la jugabilidad; cambiará cuando haya bots. → Escrito: `Combate.md` §14, `Mecanicas a balancear.md` §47, `militar.json` (cerrada).
+- **M2 Atalayas:** su guarnición interna se repone de forma gradual en 6 h, como los mineros del pueblo (hoy se repone entera a las 6 h). Defenderla es trabajo de los héroes. CAMBIO. → **Aplicado**: una cita por soldado (`SucesoCombate::ReponeAvanzada`), uno cada `reposicionMinutos` / soldados de la guarnición completa (atalaya: 14,4 min; fuerte: 2,88 min; paso redondeado hacia abajo al ms), a la primera escuadra mermada; completa, rehace la composición si cambió (`combate::avanzada::{reposicion_en, reponer}`, `nucleo/avanzadas.rs`). Escrito en `Combate.md` §7.4 y §12, `Reloj_Y_Eventos.md`, canon 5 (avanzadas). Pruebas: `combate::avanzada::pruebas::la_atalaya_vacia_vuelve_entera_en_seis_horas_soldado_a_soldado`, `nucleo/tests/avanzadas.rs::si_resiste_la_guarnicion_de_serie_queda_mermada_y_se_repone_gratis_soldado_a_soldado`; el batch audita la hora de cada reposición (`inv_reposicion`).
+- **M3 Choque en campo abierto:** se mantiene la cohesión y el ×1,05 del defensor. → Escrito como regla: `Combate.md` §14; `militar.json` (cerrada).
+- **M4 Bandidos:** la reaparición pasa de 60 min a **6 h**. CAMBIO de cifra (`CAMPAMENTOS_BANDIDOS`). → **Aplicado**: `respawnMinutos` 360 en el bloque de `Generacion_Del_Mundo.md` (el código ya lo leía de ahí), canon 1 y `Reloj_Y_Eventos.md`. Pruebas: `combate::datos::pruebas` (lee 360), `combate::bandidos::pruebas::una_plaza_recibe_su_campamento_cuando_no_tiene_y_vencio_el_plazo`, `nucleo/tests/combate.rs::toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_reaparece_a_las_6_horas`.
+- **M5 Protección al fundar:** un día de protección al fundar (`protegida_hasta = fundado_en + proteccionMinutos`), reutilizando el plazo de la conquista. CAMBIO. → **Aplicado**: `zonas::fundar` → `proteger_al_fundar` (`nucleo/conquistas.rs`): el mismo plazo y el mismo evento `FinProteccion` (`asentamiento.proteccion_terminada`), sin ventana de ocupación; el canon ya lo decía (Doc 1.2, 5.12.9) y el TypeScript también (`settlement.ts`). Escrito en `Fundacion_Y_Refundacion.md` §5, `Combate.md` §6, §8 y §13, `Reloj_Y_Eventos.md`; quitadas las filas de `Mecanicas a desarrollar.md`. Prueba: `nucleo/tests/combate.rs::una_plaza_recien_fundada_nace_protegida_un_dia_y_luego_se_la_puede_asediar`.
+- **M6 Botín personal:** el uso del oro de bandidos vuelve con la paridad del TypeScript: refundación (fondo, aportar, retirar, comprar la Caravana de Refundación), Caravana de Fundación, almacén personal (guardar y sacar) y caravanas a mano entran en el **sistema 5** (tanda 5G). Sin orden nueva de «depositar». → Escrito: fila en `Mecanicas a desarrollar.md` (sistema 5, tanda 5G); `militar.json` (cerrada).
+- **M8 Asedio con números:** ventana de convocatoria de 30 s para que se unan otras columnas cercanas, como con Unity. CAMBIO. → **Aplicado**: `atacar` contra una plaza abre siempre la batalla del asedio (`apertura_de_asedio`, la misma que con Unity: convocatoria `BATALLA.convocatoriaSegundos`, capacidad 15, `UnirseABatalla` con `lado_para_unirse`, bloqueos y candados); sin servidores, al vencer `FinConvocatoria` la batalla queda `aplicada` sin resultado (`combate::ciclo::Batalla::resolver_con_numeros`) y `Nucleo::resolver_asedio_con_numeros` resuelve con todas las columnas del bando atacante (`tropa_de_columnas`, tope 15 héroes; chatarra y carro de los defensores repartidos entre ellas; el hecho nombra a todas y lleva `columnas`). Cierra la fila de paridad «Asedio con números sin convocatoria multi-columna» de `Mecanicas a desarrollar.md`. Escrito en `Combate.md` §1 y §6, `Batalla_Unity_Ciclo.md` §2 y §4, `Reloj_Y_Eventos.md`, `Comandos_Parametros.md`, canon 5 (convocatoria del asedio). Pruebas: `nucleo/tests/combate.rs::un_asedio_con_numeros_abre_30_s_de_convocatoria_y_cae_con_todas_las_columnas_que_se_unen`, `combate::ciclo::pruebas::sin_servidores_el_asedio_se_resuelve_con_numeros_al_acabar_la_convocatoria`; las pruebas de asedio con números esperan ahora al fin de la convocatoria. El batch militar audita el asedio al acabar la convocatoria con todas las columnas atacantes y suma a la convocatoria las columnas de su Facción o aliadas que están a la puerta al abrirse (`refuerzos`, que también cuenta al decidir si asediar).
+- **M7 Equipo de Barracón y Galería:** se deja para la fase 7 (bots reales). → Escrito: `Mecanicas a balancear.md` §47; `militar.json` (cerrada).
+- **M9 Reclutar gasta población:** decisión del jugador (como hoy). → Escrito como regla: `Heroe_Y_Tropa.md` §14; `militar.json` (cerrada).
+- **M10 Carga en los carros de una caravana adjunta:** la carga sigue a los carros: aparcar deja en la caravana lo que ya no cabe en la columna; perderla pierde lo que iba en sus carros. Sustituye al rechazo `carro.no_cabe` de `AparcarCaravana`. CAMBIO. → **Aplicado**: `aparcar_caravana` ya no rechaza; lo que la columna no puede llevar sin la caravana pasa a su `contenido` (hasta lo que le quepa; el hecho lleva `dejado`) y se quita la `// DUDA`. Cuando la adjunta desaparece (`soltar_de_columnas`) o pierde carros (`caer_caravana`), lo que la columna ya no puede llevar sale con ellos (`Nucleo::sacar_lo_que_no_cabe`, `militar::sacar_lo_que_sobra`: del último recurso al primero) y, si hay vencedor, es botín con la carga de la caravana. Escrito en `Movimiento_Ejercitos.md` §9, `Comandos_Parametros.md`, canon 3.13.7. Pruebas: `nucleo/tests/entrar.rs::al_aparcar_la_caravana_lo_que_la_columna_ya_no_puede_llevar_se_queda_en_ella`, `nucleo/tests/combate.rs::una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que_no_sufre_bajas` (acoso que la destruye), `militar::tipos::pruebas::lo_que_sobra_sale_del_ultimo_recurso_al_primero`.
 
 ## Batch de población
-- **Murallas M1 Empalizada temprana:** la red recalculada con el muro conserva la puerta y su tramo de calle o camino a cada lado, sembrados como red conectada (no islas). `LAYOUT_VERSION` 5 y volver a medir. CAMBIO.
-- **Murallas M2 Cifras de la empalizada:** se mantienen.
-- **C1 Nivel 3 en el batch:** se deja para la fase 7.
-- **P5 Ganado:** se deja.
+- **Murallas M1 Empalizada temprana:** la red recalculada con el muro conserva la puerta y su tramo de calle o camino a cada lado, sembrados como red conectada (no islas). `LAYOUT_VERSION` 5 y volver a medir. CAMBIO. → **Aplicado** (`LAYOUT_VERSION` 5, foto `BAN26`): (1) **una puerta por cruce no parte la red** (`trazado::muralla::reabrir_cortes`): el fallo de fondo era que, con un camino pegado al anillo, el colapso dejaba la puerta en una bolsa y cerraba la celda por la que la red salía de verdad; ahora se reabre como puerta el paso más corto por las celdas cerradas que eran red hasta que la red de antes vuelve a ser una pieza; (2) **la red de las puertas** (`Recinto.red_de_puertas` + `tras_pieza`, congeladas al comprometer y guardadas en la foto): la puerta y el tramo de la red de antes que la toca a cada lado sin cruzar el anillo, sembrados **conectados** al rehacer la red, en el punto en que se trazó el recinto (colocar y reconstruir dan la misma red) y, si no tocan la red, unidos a ella por el corredor más corto. Escrito en `Trazado_Urbano.md` §5.2 y su bloque `LAYOUT_VERSION`, `Murallas.md` §2 y §3, canon 4. Pruebas: `crates/trazado/tests/muralla.rs::con_la_empalizada_temprana_la_granja_conserva_su_camino_y_la_ciudad_crece_por_fuera` (una ciudad de 45 piezas cuyas cuatro granjas perdían el camino y que se quedaba sin red fuera) y `las_puertas_son_una_por_cruce_y_conectan_con_la_red` (ahora exige que la red de antes, con el muro, siga siendo una pieza). Re-medido (`batch poblacion`, semilla 42): plazas amuralladas que dejan de crecer 7,1 % → **0 %**, piezas sin salida 39 → **0**, la mediana igual (42 Viviendas, 629 pesants, 54 celdas), madera de la empalizada 1.160 → 1.180.
+
+## Medición (2026-10-24, release, semilla 42)
+
+`batch militar` (60 plazas × 30 días; la versión de `HEAD` corrida hoy en las mismas condiciones; la nueva tres veces con la misma huella `7954a5ca…`):
+
+| | antes (`HEAD`, huella `775db487…`) | después |
+|---|---|---|
+| Atalayas colocadas / atacadas (gana el atacante) | 189 / 189 (98 %) | 441 / 438 (100 %) |
+| Guarniciones de avanzada repuestas enteras | 0 (ninguna resiste) | 0 (ninguna resiste) |
+| Pueblos saqueados / guarniciones de pueblo repuestas | 2.144 / 1.308 | 1.949 / 1.200 |
+| Campamentos de bandidos destruidos / aparecidos | 2.247 / 2.294 | 1.683 / 1.723 |
+| Acosos a caravanas (perdidas) | 170 (107) | 27 (20) |
+| Oro de bandidos por héroe, mediana (total) | 4,3 (41.685) | 0 (28.241) |
+| Plazas conquistadas en su primer día (rebotes por protección) | 0 (0) | 0 (0) |
+| Asedios abiertos / conquistas (plazas distintas) | 9 / 7 | 39 / 37 (2) |
+| Columnas unidas a una convocatoria / conquistas con más de una columna | — | 4 / 4 |
+| Asedios descartados tras inspeccionar | 17.783 | 16.715 |
+| CPU por día de mundo | 10,7 s | 11,0 s |
+
+`batch poblacion` (300 plazas pedidas, 230 colocadas, 30 días): plazas amuralladas sin sitio para Viviendas 7,1 % → 0 %; piezas sin salida 39 → 0; huella `6aa27c30a3b1ab37` → `5215fe00f11f29a1`; 74,2 s de pared con la máquina cargada (la versión de `HEAD`, corrida justo antes, 73,4 s).
+- **Murallas M2 Cifras de la empalizada:** se mantienen. → Escrito: `Mecanicas a balancear.md` §47; `poblacion.json` (cerrada).
+- **C1 Nivel 3 en el batch:** se deja para la fase 7. → `Mecanicas a balancear.md` §47; `poblacion.json` (cerrada).
+- **P5 Ganado:** se deja. → `Mecanicas a balancear.md` §47; `poblacion.json` (cerrada).
 
 ## Batch de comercio
-- **C7 Comisión que no cabe:** se deja (se pierde).
-- **C3b → regla nueva de fondo: TODO lo almacenado va en ENTEROS.** Almacenes de plaza, pueblo y avanzada, carros, caravanas, almacén personal y existencias de los campamentos guardan solo unidades enteras: no existen decimales en los almacenes. La producción, la extracción, las recetas, el consumo, el mantenimiento y la recaudación por minuto acumulan un **resto oculto** determinista (como la población entera) y entran o salen unidades enteras. El comercio, las entregas, las comisiones, la acuñación, el botín, el saqueo, el reparto de carga entre carros y cualquier fracción **se redondean hacia abajo** (nunca se crea de más). Cambia la foto. CAMBIO GRANDE: tanda propia («economía entera») antes de las tandas de núcleo del sistema 5.
-- **C1b Reputación concentrada:** esperar a la fase 7.
-- **C2b Acarreo en la solvencia:** se da por implementada; se medirá con un ascenso al nivel 3.
+- **C7 Comisión que no cabe:** se deja (se pierde). → Escrito como regla: `Comercio_Caravanas.md` §3.3, `Mecanicas a balancear.md` §45; `comercio.json` (cerrada).
+- **C3b → regla nueva de fondo: TODO lo almacenado va en ENTEROS.** Almacenes de plaza, pueblo y avanzada, carros, caravanas, almacén personal y existencias de los campamentos guardan solo unidades enteras: no existen decimales en los almacenes. La producción, la extracción, las recetas, el consumo, el mantenimiento y la recaudación por minuto acumulan un **resto oculto** determinista (como la población entera) y entran o salen unidades enteras. El comercio, las entregas, las comisiones, la acuñación, el botín, el saqueo, el reparto de carga entre carros y cualquier fracción **se redondean hacia abajo** (nunca se crea de más). Cambia la foto. CAMBIO GRANDE: tanda propia («economía entera») antes de las tandas de núcleo del sistema 5. → **No aplicado aquí** (es su tanda): fila «Economía entera» en `Mecanicas a desarrollar.md`, `Mecanicas a balancear.md` §43, `comercio.json` (cerrada con la opción nueva).
+- **C1b Reputación concentrada:** esperar a la fase 7. → `Mecanicas a balancear.md` §47; `comercio.json` (cerrada).
+- **C2b Acarreo en la solvencia:** se da por implementada; se medirá con un ascenso al nivel 3. → `Mecanicas a balancear.md` §44; `comercio.json` (cerrada).
+
+## Dudas de la economía entera (decididas por el autor el 2026-10-24)
+- **EE-1** Lo que se cobra (costes fraccionarios, oro del mostrador, precio de la taberna) se redondea **hacia arriba**; lo que se mueve, hacia abajo (como está).
+- **EE-2** Consumo continuo: la unidad sale del almacén **al completarse** su consumo, como la población (no al empezar). CAMBIO.
+- **EE-3** Los víveres de las columnas también van en **enteros con resto oculto**. CAMBIO.
+- **EE-4** Peaje: **mínimo 1 unidad** a toda caravana con carga. CAMBIO.
+- **EE-5** Reposición de los campamentos (3 % de lo comerciado): **mínimo 1** por trueque. CAMBIO.
+- **EE-6** La regla «faltar menos de una unidad salda la línea» (2026-10-19) se **retira**. CAMBIO.
+- **EE-7** El salto de la reputación mediana (5,45 → 34,1) se investiga en la fase 7, con C1b.
+- Decisión técnica del orquestador: los finales de línea de los documentos no deben cambiar la huella de las reglas (hoy un checkout con LF da otra huella que uno con CRLF); se normalizan en `texto_de_parametros_de`.
+
+## Dudas de la calibración (decididas por el autor el 2026-10-24)
+- **Cal-1** Quién se une a la convocatoria de 30 s del asedio con números: como en Unity (la Facción atacante y cualquiera que no sea amiga del dueño, desde fuera). Como está.
+- **Cal-2** Durante la convocatoria los de dentro pueden salir: se deja (salir antes del golpe es una decisión táctica). Como está.
+- **Cal-5 → regla nueva:** los bandidos del **anillo de los campamentos de mercenarios** siguen reapareciendo cada 10 min, pero **su oro solo lo cobran los héroes sin plaza** (residentes de un campamento); los demás héroes ganan solo experiencia. Protege la economía del jugador nuevo, para quien existe el anillo. PENDIENTE (tanda «calibración 2»).
+- **Cal-6 → regla nueva:** **ningún anillo de muralla tiene más de 4 puertas** (lo normal, 2-3). Si la red cruza el anillo por más sitios, quedan como puertas los cruces que **más red de fuera sirven** (la salida de la Granja y los caminos primero) y los demás se cortan; la calle exterior rodea el muro hasta la puerta más cercana. `LAYOUT_VERSION` 6. PENDIENTE (tanda «calibración 2»).
+- Cal-3, Cal-4, Cal-7, Cal-9 y Cal-10: técnicas o hipótesis de medición; anotadas en el informe de la calibración. Cal-8 (qué recurso sale cuando la carga no cabe) queda abierta para la fase 7.

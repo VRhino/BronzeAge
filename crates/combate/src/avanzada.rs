@@ -59,9 +59,11 @@ pub fn guarnicion_de_serie(r: &Reglas, etapa: Etapa, elegidas: &BTreeMap<u8, Tro
     composicion(r, etapa, elegidas).into_iter().map(|t| Escuadra::nueva(&r.militar, nuevo_id(), SIN_DUENO, t, r.militar.tropas.tropa(t).unidades, None, ahora)).collect()
 }
 
-/// Cuándo se repone gratis la guarnición de serie que cayó.
-pub fn reposicion_en(r: &Reglas, cayo_en: Instante) -> Instante {
-    cayo_en + r.avanzada.reposicion
+/// Cuándo vuelve el siguiente soldado de una guarnición de serie mermada (desde la baja o desde el soldado anterior): de uno en uno, de modo que la
+/// guarnición entera vuelve en `reposicionMinutos` (6 h) desde 0, como los mineros de un pueblo. El paso se redondea hacia abajo al milisegundo.
+pub fn reposicion_en(r: &Reglas, guarnicion: &[Escuadra], desde: Instante) -> Instante {
+    let soldados: i64 = guarnicion.iter().map(|e| r.militar.tropas.tropa(e.tropa).unidades).sum();
+    desde + r.avanzada.reposicion / soldados.max(1)
 }
 
 /// ¿Le falta gente a la guarnición de serie respecto de su número de serie?
@@ -69,9 +71,13 @@ pub fn incompleta(r: &Reglas, guarnicion: &[Escuadra]) -> bool {
     guarnicion.iter().any(|e| e.cantidad < r.militar.tropas.tropa(e.tropa).unidades)
 }
 
-/// Repone la guarnición de serie: cada escuadra de nuevo completa, con su identidad. La experiencia y el nivel que ganó se conservan.
-pub fn reponer(r: &Reglas, guarnicion: &mut [Escuadra]) {
-    guarnicion.iter_mut().for_each(|e| e.cantidad = r.militar.tropas.tropa(e.tropa).unidades);
+/// Vuelve un soldado a la primera escuadra mermada de la guarnición de serie, con su identidad (la experiencia y el nivel que ganó se conservan).
+/// `true` si ya está completa.
+pub fn reponer(r: &Reglas, guarnicion: &mut [Escuadra]) -> bool {
+    if let Some(e) = guarnicion.iter_mut().find(|e| e.cantidad < r.militar.tropas.tropa(e.tropa).unidades) {
+        e.cantidad += 1;
+    }
+    !incompleta(r, guarnicion)
 }
 
 /// El tope de la guarnición de jugadores de un héroe en la etapa, en puntos de Liderazgo.
@@ -215,9 +221,32 @@ mod pruebas {
         g[2].cantidad = 0;
         g[2].experiencia = 4_000;
         assert!(incompleta(r, &g));
-        assert_eq!(reposicion_en(r, 10), 10 + 360 * base::MS_POR_MINUTO);
-        reponer(r, &mut g);
+        let paso = 360 * base::MS_POR_MINUTO / 125;
+        assert_eq!(reposicion_en(r, &g, 10), 10 + paso, "cinco escuadras de 25: un soldado cada 2,88 min");
+        let (mut t, mut citas) = (0, 0);
+        loop {
+            t = reposicion_en(r, &g, t);
+            citas += 1;
+            if reponer(r, &mut g) {
+                break;
+            }
+        }
+        let faltaban = (25 - 3) + 25;
+        assert_eq!((citas, t), (faltaban, faltaban * paso), "una cita por soldado");
         assert!(!incompleta(r, &g) && g[2].experiencia == 4_000, "de nuevo completa, con su experiencia");
+    }
+
+    #[test]
+    fn la_atalaya_vacia_vuelve_entera_en_seis_horas_soldado_a_soldado() {
+        let r = r();
+        let mut g = guarnicion_de_serie(r, Etapa::Atalaya, &BTreeMap::new(), || 1, 0);
+        g[0].cantidad = 0;
+        let mut t = 0;
+        for n in 1..=25 {
+            t = reposicion_en(r, &g, t);
+            assert_eq!((reponer(r, &mut g), g[0].cantidad), (n == 25, n));
+        }
+        assert_eq!(t, 6 * 60 * base::MS_POR_MINUTO, "25 lanceros, uno cada 14,4 min");
     }
 
     #[test]

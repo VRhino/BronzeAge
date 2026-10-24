@@ -133,7 +133,8 @@ fn escenario(m: &'static M, semilla: u64, ajustes: Ajustes, dir: Option<&std::pa
     x.ok("admin", Comando::DarAlmacenPersonal { heroe: x.dora, recurso: asentamiento::Recurso::Oro, cantidad: 1_000_000 });
     x.nora = x.columna_junto_a_b(m, "nora", 3, 0);
     x.fede = x.columna_junto_a_b(m, "fede", 1, 2 * U);
-    let t = x.n.ahora();
+    // Pasado el día de protección con que nacen las plazas (Doc 1.2): nora puede asediar B desde la primera orden.
+    let t = x.n.protegida_hasta(x.b).unwrap_or(0).max(x.n.ahora());
     x.n.avanzar_hasta((t / MS_POR_MINUTO + 1) * MS_POR_MINUTO + 1_000);
     x.ok("admin", Comando::Reloj(AccionReloj::Pausar));
     x

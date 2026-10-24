@@ -40,8 +40,8 @@
   "decisiones": [
     {
       "id": "C7",
-      "pregunta": "¿Qué pasa con la comisión que no cabe en el oro del destino (hoy se pierde: se acuña el 0,44 % del valor en vez del 3-12 %)?",
-      "contexto": "Medido: 15.924 de oro de valor entregado y 69,2 acuñados; el oro de las plazas está al 100 % desde el día 3. Regla de hoy (decisión 28-29 de las DUDA, «como hoy»): la comisión se topa por lo que cabe. C4 (precio de los manufacturados) no cambia el resultado mientras el oro esté lleno.",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Qué pasa con la comisión que no cabe en el oro del destino (hoy se pierde: se acuña el 0,44 % del valor en vez del 3-12 %)?",
+      "contexto": "Medido: 15.924 de oro de valor entregado y 69,2 acuñados; el oro de las plazas está al 100 % desde el día 3. Regla de hoy (decisión 28-29 de las DUDA, «como hoy»): la comisión se topa por lo que cabe. C4 (precio de los manufacturados) no cambia el resultado mientras el oro esté lleno. Decisión del autor (2026-10-24): se deja: la comisión que no cabe en el oro del destino se pierde (regla, Comercio_Caravanas §3.3); se vuelve a mirar con bots que gasten oro (fase 7).",
       "opciones": [
         {
           "texto": "Dejarlo y medirlo con bots que gasten oro (taberna §18, tropas, obras: fase 7).",
@@ -57,25 +57,30 @@
     },
     {
       "id": "C3b",
-      "pregunta": "¿Se deja el umbral de la línea saldada en una unidad (quedan 2,5 salidas por trueque)?",
-      "contexto": "Medido: 0 % de viajes de menos de una unidad (antes 24,3 %) y 2,48 salidas por trueque (2,45 con la semilla 7; objetivo cercano a 2). Las repescas que quedan son de más de una unidad (el 2 % de peaje de entregas de hasta 80 u).",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Se deja el umbral de la línea saldada en una unidad (quedan 2,5 salidas por trueque)?",
+      "contexto": "Medido: 0 % de viajes de menos de una unidad (antes 24,3 %) y 2,48 salidas por trueque (2,45 con la semilla 7; objetivo cercano a 2). Las repescas que quedan son de más de una unidad (el 2 % de peaje de entregas de hasta 80 u). Decisión del autor (2026-10-24): regla nueva de fondo, «economía entera»: todo lo almacenado va en enteros, con resto oculto en los flujos por minuto y redondeo hacia abajo en todo lo demás. Tanda propia antes de las de núcleo del sistema 5 (fila en Mecanicas a desarrollar).",
       "opciones": [
         {
           "texto": "Dejar una unidad (C3 cerrada).",
-          "recomendada": true,
+          "recomendada": false,
           "efecto": "Sin cambios; la repesca de una entrega grande es el coste real del peaje."
         },
         {
           "texto": "Dar la línea por saldada si falta menos del peaje de una ciudad (2 % de la línea).",
           "recomendada": false,
           "efecto": "Una salida por lado casi siempre; el peaje deja de pesar en el trueque y el umbral pasa a ser un parámetro."
+        },
+        {
+          "texto": "Todo lo almacenado en enteros (economía entera): las repescas de menos de una unidad desaparecen por construcción.",
+          "recomendada": true,
+          "efecto": null
         }
       ]
     },
     {
       "id": "C1b",
-      "pregunta": "Con el comercio concentrado, una Facción llega a 99,7 de reputación: ¿se revisa ya la reputación o se espera a la fase 7 (C1)?",
-      "contexto": "Medido: máxima 99,7 (antes 78) tras ~20 trueques en un día; mediana final 5,5; nadie bajo 0 (ningún incumplimiento). C1 decidió esperar a bots que incumplan.",
+      "pregunta": "[Cerrada el 2026-10-24] Con el comercio concentrado, una Facción llega a 99,7 de reputación: ¿se revisa ya la reputación o se espera a la fase 7 (C1)?",
+      "contexto": "Medido: máxima 99,7 (antes 78) tras ~20 trueques en un día; mediana final 5,5; nadie bajo 0 (ningún incumplimiento). C1 decidió esperar a bots que incumplan. Decisión del autor (2026-10-24): esperar a la fase 7.",
       "opciones": [
         {
           "texto": "Esperar a la fase 7, como decidió C1.",
@@ -91,8 +96,8 @@
     },
     {
       "id": "C2b",
-      "pregunta": "¿Se da por cerrada la ventana de acarreo (C2) sin haber visto un ascenso al nivel 3?",
-      "contexto": "Medido: el acarreo cuenta el 2,2 % de la producción nominal en la solvencia (con almacenes llenos casi nada entra); 0 ascensos rechazados por insolvencia, pero ninguna plaza se acerca al nivel 3 (faltan edificios y cupo en este batch).",
+      "pregunta": "[Cerrada el 2026-10-24] ¿Se da por cerrada la ventana de acarreo (C2) sin haber visto un ascenso al nivel 3?",
+      "contexto": "Medido: el acarreo cuenta el 2,2 % de la producción nominal en la solvencia (con almacenes llenos casi nada entra); 0 ascensos rechazados por insolvencia, pero ninguna plaza se acerca al nivel 3 (faltan edificios y cupo en este batch). Decisión del autor (2026-10-24): se da por implementada; se medirá con un ascenso al nivel 3.",
       "opciones": [
         {
           "texto": "Darla por implementada y medir su efecto en el nivel 3 cuando el batch de población llegue a él (decisión C1 de población) o con bots.",

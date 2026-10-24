@@ -199,6 +199,17 @@ fn unirse_en_la_convocatoria_entra_en_el_ticket_sin_subir_la_revision() {
 }
 
 #[test]
+fn sin_servidores_el_asedio_se_resuelve_con_numeros_al_acabar_la_convocatoria() {
+    let mut b = batalla(ASEDIO);
+    assert_eq!(b.resolver_con_numeros(1_000 + 30_000 - 1), None, "en la convocatoria, todavía no");
+    let liberar = b.resolver_con_numeros(1_000 + 30_000).unwrap();
+    assert_eq!(liberar, b.escuadras_con_candado(), "suelta todos los candados");
+    assert_eq!((b.estado, b.cerrada_en, b.aplicada_en, b.resultado.is_none()), (EstadoBatalla::Aplicada, Some(31_000), Some(31_000), true));
+    assert_eq!(b.resolver_con_numeros(31_001), None, "una vez");
+    assert_eq!(batalla(CAMPAL).resolver_con_numeros(99_000), None, "solo lo que tiene convocatoria");
+}
+
+#[test]
 fn quien_se_une_desde_dentro_sin_columna_no_aparta_ninguna() {
     let mut b = batalla(ASEDIO);
     let columnas = b.bloqueo.ejercitos.clone();

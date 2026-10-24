@@ -902,7 +902,7 @@ fn la_atalaya_cae_destruida_y_su_cupo_se_libera() {
 }
 
 #[test]
-fn si_resiste_la_guarnicion_de_serie_queda_mermada_y_se_repone_gratis_en_seis_horas() {
+fn si_resiste_la_guarnicion_de_serie_queda_mermada_y_se_repone_gratis_soldado_a_soldado() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let (plaza, pos) = (e.plaza, e.sitio());
@@ -920,14 +920,22 @@ fn si_resiste_la_guarnicion_de_serie_queda_mermada_y_se_repone_gratis_en_seis_ho
     assert_eq!(e.n.guarnicion_de_serie_de_avanzada(av).len(), 5);
     assert!(!completa_serie(&e), "los lenadores mataron a alguien");
     let g = &e.n.estado().combate.avanzadas[&av];
-    assert_eq!(g.repone_en, Some(t + 6 * HORA));
+    // Cinco escuadras de 25: un soldado cada 6 h / 125, desde la baja (Combate §7.4, como los mineros de un pueblo).
+    let paso = 6 * HORA / 125;
+    let faltan: i64 = g.escuadras.iter().map(|s| completa(s.tropa) - s.cantidad).sum();
+    let soldados = |e: &Esc| e.n.guarnicion_de_serie_de_avanzada(av).iter().map(|s| s.cantidad).sum::<i64>();
+    assert_eq!(g.repone_en, Some(t + paso));
     assert!(g.escuadras.iter().any(|s| s.experiencia > 0), "la guarnición también gana experiencia");
-    // La reposición llega en su instante exacto, ni un milisegundo antes.
-    e.hasta(t + 6 * HORA - 1);
-    assert!(!completa_serie(&e));
-    e.hasta(t + 6 * HORA);
+    let antes = soldados(&e);
+    e.hasta(t + paso - 1);
+    assert_eq!(soldados(&e), antes, "ni un milisegundo antes");
+    e.hasta(t + paso);
+    assert_eq!((soldados(&e), e.n.estado().combate.avanzadas[&av].repone_en), (antes + 1, Some(t + 2 * paso)), "vuelve uno y se cita el siguiente");
+    e.hasta(t + faltan * paso - 1);
+    assert!(!completa_serie(&e) && hechos(&e.n, "avanzada.guarnicion_repuesta").is_empty());
+    e.hasta(t + faltan * paso);
     assert!(completa_serie(&e) && e.n.estado().combate.avanzadas[&av].repone_en.is_none());
-    assert_eq!(hechos(&e.n, "avanzada.guarnicion_repuesta")[0].0, t + 6 * HORA);
+    assert_eq!(hechos(&e.n, "avanzada.guarnicion_repuesta")[0].0, t + faltan * paso);
 }
 
 #[test]
@@ -1155,7 +1163,7 @@ fn si_el_defensor_gana_por_unity_la_avanzada_sigue_y_su_guarnicion_cobra_experie
     assert_eq!(e.avanzada(av).almacen, almacen, "el almacén no se toca");
     let serie = e.n.guarnicion_de_serie_de_avanzada(av);
     assert!(serie.iter().all(|s| s.cantidad == completa(s.tropa) - 3 && s.experiencia > 0), "mueren 3 de cada una y ganan experiencia");
-    assert_eq!(e.n.estado().combate.avanzadas[&av].repone_en, Some(fin + 6 * HORA), "empieza su reposición gratuita");
+    assert_eq!(e.n.estado().combate.avanzadas[&av].repone_en, Some(fin + 6 * HORA / 125), "empieza su reposición gratuita, soldado a soldado");
     let s = e.n.heroe(heroe).unwrap().heroe.escuadra(escuadra).unwrap();
     assert_eq!((s.contenedor, s.cantidad, s.reserva_batalla), (Contenedor::Avanzada(av), completa(Tropa::MiliciaLanceros) - 3, None), "la de jugadores sigue en su puesto");
     assert!(e.n.heroe_herido(beto) || e.n.estado().militar.heroes[&beto].heroe.herido_hasta.is_some());
@@ -1289,6 +1297,7 @@ fn si_la_madre_es_conquistada_sus_avanzadas_pasan_con_ella_y_su_guarnicion_y_ele
     let (_, beto) = e.atacante(Punto::new(centro.x + 1_000, centro.y), &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
     let cosas = e.n.cosas_en_el_espacio();
     e.ok("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     // La avanzada es de la plaza: pasa con ella, con su obra, su almacén y su sitio en el espacio.
     let (madre, a) = e.n.avanzada(av).unwrap();
@@ -1545,7 +1554,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN25");
+    assert_eq!(&bytes[..5], b"BAN26");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1848,7 +1857,11 @@ fn si_la_madre_es_conquistada_solo_sale_de_su_avanzada_quien_el_acceso_heredado_
     }
     let [(cn_neu, neutral), (cn_alia, aliado), (cn_ene, enemigo)] = visitas[..] else { unreachable!() };
     let (_, beto) = e.atacante(Punto::new(centro.x + 1_000, centro.y), &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
+    if let Some(fin) = e.n.protegida_hasta(plaza) {
+        e.hasta(fin.max(e.n.ahora()));
+    }
     e.ok("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
+    tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     assert_eq!((e.ubicacion(neutral), e.ubicacion(aliado)), (Ubicacion::Avanzada(av), Ubicacion::Avanzada(av)), "el neutral y el aliado del conquistador se quedan dentro");
     assert!(!e.n.en_el_mapa(cn_neu) && !e.n.en_el_mapa(cn_alia));
@@ -2084,7 +2097,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN25");
+        assert_eq!(&bytes[..5], b"BAN26");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));
@@ -2129,4 +2142,12 @@ fn la_avanzada_operativa_ve_12_explora_su_disco_y_deja_de_ver_al_destruirla() {
     assert_eq!(ve(&e), (true, false), "a 11,5 de la avanzada se ve; a 13, no");
     e.ok("ana", Comando::DestruirAvanzada { heroe, avanzada: av });
     assert_eq!(ve(&e), (false, false), "destruida, no ve");
+}
+
+/// Un asedio con números se resuelve al acabar su convocatoria de 30 s (calibración del sistema 4, M8): deja pasar las que haya abiertas.
+fn tras_la_convocatoria(n: &mut Nucleo) {
+    let fin = n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
+    if let Some(h) = fin {
+        n.avanzar_hasta(h);
+    }
 }

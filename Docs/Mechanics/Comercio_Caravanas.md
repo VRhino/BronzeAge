@@ -135,7 +135,7 @@ bonus      = 1 + min(1, distancia / distanciaParaBonusMax) × (bonusPorDistancia
 comisión   = origen.id == destino.id ? 0 : valorTotal × tasa × bonus
 ```
 
-La comisión se **acuña**: se suma como oro al almacén del **destino** (topada por su capacidad de oro) y no se resta de nadie. Es una de las fuentes de oro del juego (Doc 3.1). **Solo entre dos asentamientos
+La comisión se **acuña**: se suma como oro al almacén del **destino** (topada por su capacidad de oro; **lo que no cabe se pierde**, decisión del autor del 2026-10-24, C7) y no se resta de nadie. Es una de las fuentes de oro del juego (Doc 3.1). **Solo entre dos asentamientos
 distintos**: llevarse la carga a uno mismo no es comerciar (decidido el 2026-10-11).
 
 **Recargo por mala reputación** (`recargoPorReputacion`, decidido el 2026-10-11): si las Facciones de origen y destino son **distintas** y la reputación de la del **origen** es

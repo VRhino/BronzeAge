@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN25");
+    assert_eq!(&bytes[..5], b"BAN26");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -405,6 +405,7 @@ use rutas::Rutas;
 use std::sync::{Arc, OnceLock};
 
 const HORA: Instante = 60 * MIN;
+const DIA: Instante = 24 * HORA;
 
 type M = (Arc<Mundo>, Arc<Rutas>);
 
@@ -514,6 +515,14 @@ impl Esc {
         let t = self.n.ahora() + ms;
         self.n.avanzar_hasta(t);
     }
+    /// Deja pasar el día de protección con que nacen las plazas (Doc 1.2): fundadas en el instante 0, se pueden asediar desde `DIA`.
+    fn sin_proteccion(&mut self) {
+        for plaza in [self.a, self.b] {
+            if let Some(h) = self.n.protegida_hasta(plaza) {
+                self.n.avanzar_hasta(h.max(self.n.ahora()));
+            }
+        }
+    }
     fn pos(&self, plaza: u64) -> Punto {
         self.n.estado().asentamientos[&plaza].posicion
     }
@@ -591,6 +600,7 @@ struct Asedio {
 
 fn asedio(m: &'static M, semilla: u64, defensa: &[Tropa], ataque: &[Tropa]) -> Asedio {
     let mut e = montar(m, semilla, false);
+    e.sin_proteccion();
     let b = e.b;
     let beto = e.heroe_en(&m.0, "beto", 2, b);
     if !defensa.is_empty() {
@@ -618,6 +628,10 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     let r = s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true);
     assert!(r.aceptada(), "{r:?}");
     assert_eq!(s.e.n.version(), v0 + 1);
+    // Abrir el asedio no tira nada: se resuelve con números al acabar su convocatoria de 30 s (M8).
+    assert_eq!((s.e.n.estado().rng.estado(), s.e.n.estado().asentamientos[&b].faccion), (rng_antes, 2));
+    tras_la_convocatoria(&mut s.e.n);
+    let t = t + 30_000;
     let mut espejo = Rng::nuevo(rng_antes);
     (0..2).for_each(|_| {
         espejo.siguiente();
@@ -668,9 +682,31 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     assert!(s.e.n.plaza_protegida(b));
     s.e.n.avanzar_hasta(t + 24 * HORA);
     assert!(!s.e.n.plaza_protegida(b) && s.e.n.estado().asentamientos[&b].protegida_hasta.is_none());
-    assert_eq!(hechos(&s.e.n, "asentamiento.proteccion_terminada")[0].0, t + 24 * HORA);
+    assert_eq!(hechos(&s.e.n, "asentamiento.proteccion_terminada").iter().filter(|h| h.2 == vec![b]).map(|h| h.0).collect::<Vec<_>>(), vec![DIA, t + 24 * HORA], "la de la fundación y la de la conquista");
     // Pasadas las 24 h, sí: y la propia plaza de ana no se asedia.
     assert_eq!(codigo(&s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), false)), rechazos::COMBATE_PLAZA_PROPIA);
+}
+
+/// Una plaza recién fundada nace protegida un día, como una recién conquistada (Doc 1.2, 5.12.9; decisión del autor, 2026-10-24): el mismo plazo y el mismo evento.
+#[test]
+fn una_plaza_recien_fundada_nace_protegida_un_dia_y_luego_se_la_puede_asediar() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, false);
+    let b = e.b;
+    assert_eq!((e.n.estado().asentamientos[&b].fundado_en, e.n.protegida_hasta(b)), (0, Some(DIA)));
+    assert!(e.n.plaza_protegida(b) && e.n.ocupada_hasta(b).is_none(), "protegida, sin ventana de ocupación");
+    let ana = e.ejercito("ana", 1, e.pos(b), &[Tropa::EspadachinesBronce]);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
+    let rastro0 = rastro(&e.n);
+    assert_eq!(codigo(&e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), false)), rechazos::COMBATE_PLAZA_PROTEGIDA);
+    assert_eq!(rastro(&e.n), rastro0, "rebota sin rastro ni tirada");
+    e.n.avanzar_hasta(DIA - 1);
+    assert!(e.n.plaza_protegida(b));
+    e.n.avanzar_hasta(DIA);
+    assert!(!e.n.plaza_protegida(b) && e.n.protegida_hasta(b).is_none());
+    assert_eq!(hechos(&e.n, "asentamiento.proteccion_terminada").iter().filter(|h| h.2 == vec![b]).map(|h| h.0).collect::<Vec<_>>(), vec![DIA]);
+    assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), false).aceptada(), "pasado el día, sí");
+    tras_la_convocatoria(&mut e.n);
 }
 
 #[test]
@@ -689,6 +725,7 @@ fn un_asedio_que_pierde_hiere_a_todo_el_ejercito_y_la_chatarra_se_queda_en_la_pl
     let metal0: i64 = [ChatarraCobre, ChatarraBronce, ChatarraHierro].iter().map(|&r| almacen(&s.e.n, b, r)).sum();
     let r = s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true);
     assert!(r.aceptada(), "{r:?}");
+    tras_la_convocatoria(&mut s.e.n);
     let h = &hechos(&s.e.n, "combate.asedio_resistido")[0];
     assert!(dato(h, "poderDefensor") > dato(h, "poderAtacante"), "{h:?}");
     assert_eq!(h.2, vec![b], "se cuenta a la plaza si resiste");
@@ -704,6 +741,37 @@ fn un_asedio_que_pierde_hiere_a_todo_el_ejercito_y_la_chatarra_se_queda_en_la_pl
     assert_eq!(s.e.n.estado().ejercitos[&ana.0].columna.carga.len(), 0);
 }
 
+/// Sin servidores de batalla, el asedio abre la misma convocatoria de 30 s que con Unity (Batalla_Unity_Ciclo §4 y §7; calibración del sistema 4, M8): otra columna de la Facción a
+/// `radioEncuentro` se une con `UnirseABatalla` y, al vencer la convocatoria, se resuelve con números con todas. La de ana sola no basta (el asedio de arriba lo resiste beto).
+#[test]
+fn un_asedio_con_numeros_abre_30_s_de_convocatoria_y_cae_con_todas_las_columnas_que_se_unen() {
+    let m = con_mundo!();
+    let mut s = asedio(m, 7, &[Tropa::ArquerosCompuesto], &[Tropa::EspadachinesBronce]);
+    let (b, ana) = (s.e.b, s.ana);
+    let carla = s.e.ejercito("carla", 1, s.e.pos(b), &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
+    let t = s.e.n.ahora();
+    assert!(s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    let id = s.e.n.batallas_activas().next().expect("el asedio abre su batalla").id;
+    assert_eq!(s.e.n.batalla(id).unwrap().convocatoria_hasta, Some(t + 30_000));
+    assert!(s.e.n.estado().ejercitos[&ana.0].en_batalla, "la columna queda apartada mientras dura la convocatoria");
+    assert_eq!(s.e.n.estado().asentamientos[&b].faccion, 2, "abrir no resuelve");
+    s.e.n.avanzar_hasta(t + 10_000);
+    s.e.ok("carla", Comando::UnirseABatalla { heroe: carla.1, batalla: id, lado: None });
+    s.e.n.avanzar_hasta(t + 30_000 - 1);
+    assert!(hechos(&s.e.n, "combate.asedio_conquista").is_empty() && hechos(&s.e.n, "combate.asedio_resistido").is_empty());
+    s.e.n.avanzar_hasta(t + 30_000);
+    let h = &hechos(&s.e.n, "combate.asedio_conquista")[0];
+    assert_eq!((h.0, dato(h, "columnas"), h.1.clone()), (t + 30_000, 2, vec![ana.0, carla.0]), "cae con las dos columnas");
+    assert_eq!(s.e.n.estado().asentamientos[&b].faccion, 1);
+    let batalla = s.e.n.batalla(id).unwrap();
+    assert_eq!((batalla.estado, batalla.resultado.is_none()), (combate::ciclo::EstadoBatalla::Aplicada, true), "aplicada sin resultado de Unity");
+    assert_eq!(hechos(&s.e.n, "batalla.aplicada").len(), 1);
+    assert!(!s.e.n.estado().ejercitos[&ana.0].en_batalla && !s.e.n.estado().ejercitos[&carla.0].en_batalla, "vuelven al mundo");
+    // Pasada la convocatoria ya no se entra: la batalla está cerrada.
+    let tarde = s.e.ejercito("dario", 1, s.e.pos(b), &[Tropa::EspadachinesBronce]);
+    assert_eq!(codigo(&s.e.ord("dario", Comando::UnirseABatalla { heroe: tarde.1, batalla: id, lado: None })), rechazos::BATALLA_NO_EXISTE);
+}
+
 #[test]
 fn una_plaza_sin_defensores_con_soldados_cae_sin_combate_ni_tirada_y_sin_heridos() {
     let m = con_mundo!();
@@ -714,6 +782,7 @@ fn una_plaza_sin_defensores_con_soldados_cae_sin_combate_ni_tirada_y_sin_heridos
     assert_eq!(codigo(&s.e.atacar("ivan", sin_soldados.1, ObjetivoAtaque::Asentamiento(b), true)), rechazos::COMBATE_SIN_ATACANTES);
     let rng0 = s.e.n.estado().rng.estado();
     assert!(s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    tras_la_convocatoria(&mut s.e.n);
     assert_eq!(s.e.n.estado().rng.estado(), rng0, "sin defensores no hay tirada");
     assert_eq!(s.e.n.estado().asentamientos[&b].faccion, 1);
     assert!(!s.e.n.heroe_herido(beto), "sin combate no hiere a nadie");
@@ -1057,9 +1126,10 @@ fn la_partida_nace_con_los_campamentos_de_las_vetas_y_uno_en_el_anillo_de_cada_c
 }
 
 #[test]
-fn toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_reaparece_a_los_60_minutos() {
+fn toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_reaparece_a_las_6_horas() {
     let m = con_mundo!();
     let mut e = montar(m, 7, false);
+    e.sin_proteccion();
     let (a, b) = (e.a, e.b);
     let suyo = |e: &Esc, plaza: u64| e.n.campamentos_de_bandidos().find(|c| c.origen == nucleo::OrigenBandidos::Plaza(plaza)).cloned();
     let (ca, cb) = (suyo(&e, a).expect("la plaza A tiene su campamento"), suyo(&e, b).expect("la plaza B tiene el suyo"));
@@ -1081,19 +1151,19 @@ fn toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_rea
     assert!(e.n.eventos_en_cola() <= cola0 + 2, "los campamentos quietos no programan nada ({cola0} → {})", e.n.eventos_en_cola());
     let _ = ahora0;
 
-    // Destruido (por quien sea), le reaparece uno al cabo de 60 minutos, exactos, y no antes.
+    // Destruido (por quien sea), le reaparece uno al cabo de 6 horas, exactos, y no antes.
     let atacante = e.ejercito("gus", 3, ca.posicion, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
     let t = e.n.ahora();
     assert!(e.atacar("gus", atacante.1, ObjetivoAtaque::Campamento(ca.id), false).aceptada());
     assert!(suyo(&e, a).is_none());
-    assert_eq!(e.n.estado().combate.reaparecen[&a], t + 60 * MIN);
-    assert_eq!(de_combate_pendientes(&e.n), vec![(t + 60 * MIN, nucleo::SucesoCombate::BandidosDeLaPlaza)]);
-    e.n.avanzar_hasta(t + 60 * MIN - 1);
+    assert_eq!(e.n.estado().combate.reaparecen[&a], t + 6 * HORA);
+    assert_eq!(de_combate_pendientes(&e.n), vec![(t + 6 * HORA, nucleo::SucesoCombate::BandidosDeLaPlaza)]);
+    e.n.avanzar_hasta(t + 6 * HORA - 1);
     assert!(suyo(&e, a).is_none());
-    e.n.avanzar_hasta(t + 60 * MIN);
+    e.n.avanzar_hasta(t + 6 * HORA);
     let nuevo = suyo(&e, a).expect("reaparece junto a su plaza");
     assert!(nuevo.id != ca.id && e.n.estado().combate.reaparecen.get(&a).is_none());
-    assert_eq!(hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![a]).map(|h| h.0).collect::<Vec<_>>(), vec![0, t + 60 * MIN]);
+    assert_eq!(hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![a]).map(|h| h.0).collect::<Vec<_>>(), vec![0, t + 6 * HORA]);
     assert!(de_combate_pendientes(&e.n).is_empty());
 }
 
@@ -1244,6 +1314,7 @@ fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_es
 }
 
 #[test]
+/// Y si la pierde, la carga sigue a los carros (calibración del sistema 4, M10): lo que la columna llevaba con la capacidad de la caravana se pierde con ella.
 fn una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que_no_sufre_bajas() {
     let m = con_mundo!();
     for (tropas, cae) in [(&[Tropa::MiliciaLanceros][..], true), (&[Tropa::ArquerosCompuesto][..], false)] {
@@ -1252,6 +1323,8 @@ fn una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que
         let ca = e.caravana("ana", a, 1);
         let col = e.ejercito("ana", 1, e.pos(a), tropas);
         e.ok("admin", Comando::AdjuntarCaravana { caravana: ca, ejercito: col.0 });
+        let lleno = e.n.capacidad_de_carga(col.0).unwrap();
+        e.ok("admin", Comando::DarSuministro { ejercito: col.0, recurso: Madera, cantidad: lleno });
         let soldados0 = e.n.soldados_de_columna(col.0).unwrap();
         e.ok("ana", Comando::MarcharA { ejercito: col.0, destino: e.pos(b) });
         let (t0, fin) = {
@@ -1267,6 +1340,9 @@ fn una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que
         assert_eq!(e.n.caravana(ca).is_none(), cae);
         assert_eq!(e.n.soldados_de_columna(col.0).unwrap(), soldados0, "la columna no sufre bajas por el acoso");
         assert!(!e.n.ejercito(col.0).unwrap().caravanas_adjuntas.contains(&ca) || !cae);
+        let lleva: i64 = e.n.ejercito(col.0).unwrap().columna.carga.values().sum();
+        let cabe = e.n.capacidad_de_carga(col.0).unwrap();
+        assert_eq!((lleva, cabe < lleno), (cabe, cae), "{tropas:?}: sin la caravana lleva lo que le cabe; con ella, todo");
     }
 }
 
@@ -1290,6 +1366,7 @@ fn solo_defiende_quien_esta_dentro_el_visitante_con_su_columna_si_y_la_de_la_mis
     let antes_fuera = s.e.n.heroe(a_la_puerta.1).unwrap().heroe.escuadra(hf).unwrap().cantidad;
 
     assert!(s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    tras_la_convocatoria(&mut s.e.n);
     let h = &hechos(&s.e.n, "combate.asedio_conquista");
     assert_eq!(h.len(), 1, "la plaza cae pese a la ayuda");
     let tras = s.e.n.heroe(visita.1).unwrap();
@@ -1330,6 +1407,7 @@ fn dentro_defienden_la_misma_faccion_los_aliados_y_los_vasallos_y_los_neutrales_
     let hf = s.e.n.heroe(a_la_puerta.1).unwrap().heroe.escuadras[0].id;
 
     assert!(s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    tras_la_convocatoria(&mut s.e.n);
     assert_eq!(hechos(&s.e.n, "combate.asedio_conquista").len(), 1, "la plaza cae pese a la ayuda de los suyos");
     for (cuenta, faccion, col, escuadra, antes) in dentro {
         let h = s.e.n.heroe(col.1).unwrap();
@@ -1353,6 +1431,7 @@ fn nucleo_ubicacion_columna(c: u64) -> militar::presencia::Ubicacion {
 /// El mismo guion de dos asedios con bandidos y un anillo a su alrededor, con las órdenes en instantes fijos: `avanzar` solo decide cómo se mueve el reloj entre
 /// ellas.
 fn primera_mitad(e: &mut Esc, m: &'static M) -> (u64, (u64, u64)) {
+    e.sin_proteccion();
     let (a, b) = (e.a, e.b);
     let base = e.n.ahora();
     e.en(base + MIN);
@@ -1361,6 +1440,7 @@ fn primera_mitad(e: &mut Esc, m: &'static M) -> (u64, (u64, u64)) {
     let ana = e.ejercito("ana", 1, e.pos(b), &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
     e.en(base + 10 * MIN);
     assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    tras_la_convocatoria(&mut e.n);
     e.fijo = None;
     let _ = a;
     (beto, ana)
@@ -1369,7 +1449,7 @@ fn primera_mitad(e: &mut Esc, m: &'static M) -> (u64, (u64, u64)) {
 fn segunda_mitad(e: &mut Esc, m: &'static M, beto: u64, avanzar: &dyn Fn(&mut Esc, Instante)) {
     let a = e.a;
     let _ = (m, beto);
-    let base = 2 * HORA;
+    let base = DIA;
     avanzar(e, base + 2 * HORA);
     let suyo = e.n.campamentos_de_bandidos().find(|c| c.origen == nucleo::OrigenBandidos::Plaza(a)).cloned().expect("la plaza A tiene su campamento");
     e.en(base + 2 * HORA);
@@ -1568,9 +1648,18 @@ fn quien_esta_dentro_de_la_plaza_asediada_no_se_une_al_ataque_aunque_sea_de_la_f
     assert!(!s.e.n.en_el_mapa(dentro.0));
     let soldados0 = s.e.n.soldados_de_columna(dentro.0).unwrap();
     assert!(s.e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    tras_la_convocatoria(&mut s.e.n);
     // La plaza cae con los atacantes de siempre: la élite de dentro no combatió en ningún bando, y sale al mapa con su columna intacta.
     assert_eq!(hechos(&s.e.n, "combate.asedio_conquista").len(), 1);
     assert_eq!((s.e.n.soldados_de_columna(dentro.0).unwrap(), s.e.n.heroe_herido(dentro.1), s.e.n.en_el_mapa(dentro.0)), (soldados0, false, true));
     let h = &hechos(&s.e.n, "combate.asedio_conquista")[0];
     assert_eq!((dato(h, "faccionAtacante"), dato(h, "faccionDefensora")), (1, 2));
+}
+
+/// Un asedio con números se resuelve al acabar su convocatoria de 30 s (calibración del sistema 4, M8): deja pasar las que haya abiertas.
+fn tras_la_convocatoria(n: &mut Nucleo) {
+    let fin = n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
+    if let Some(h) = fin {
+        n.avanzar_hasta(h);
+    }
 }
