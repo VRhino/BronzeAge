@@ -43,7 +43,8 @@ pub struct HeroeNucleo {
     pub heroe: Heroe,
     /// La cuenta (el cliente) que lo maneja: solo ella, o la administración, le da órdenes.
     pub cuenta: String,
-    /// La Facción de la que es ciudadano. Hasta el sistema político la fija la administración (`FijarFaccionDeHeroe`).
+    /// La Facción de la que es ciudadano: copia del índice de ciudadanía de `Estado::politica` (la fuente es la Facción, con sus ciudadanos en orden de ingreso), para que quien la lee en
+    /// caliente no tenga que buscarla. Solo la escribe `Nucleo::tras_cambiar_de_faccion` (`nucleo/ciudadania.rs`).
     pub faccion: Option<u32>,
     /// El almacén personal (`ALMACEN_PERSONAL`): vive donde se reside y viaja con el héroe al cambiar de base.
     pub almacen_personal: Mercancia,
@@ -65,6 +66,9 @@ pub struct HeroeNucleo {
     pub informes: Vec<Informe>,
     /// La foto del interior de cada plaza de la que salió al mundo (Niebla_De_Guerra §4.5, BAN25), por plaza: la última de cada una.
     pub plazas_recordadas: BTreeMap<u32, PlazaRecordada>,
+    /// Cuándo cambió de residencia por última vez por una orden suya (`cambiarResidencia`, `residirEnCampamento`, `dejarResidencia`; Diplomacia_Facciones §4.1): el cooldown cuenta desde aquí.
+    /// La reubicación forzosa (ruina, conquista), fundar y la administración no lo estampan.
+    pub residencia_cambiada_en: Option<Instante>,
 }
 
 /// Lo que un héroe recuerda del interior de una plaza al salir al mundo desde ella (Niebla_De_Guerra §4.5): el almacén, la cola (lo que no está activo: lo activo es público y viaja vivo en la
@@ -103,6 +107,7 @@ impl HeroeNucleo {
             sintetico: false,
             informes: Vec::new(),
             plazas_recordadas: BTreeMap::new(),
+            residencia_cambiada_en: None,
         }
     }
 }
@@ -207,11 +212,6 @@ impl EstadoMilitar {
     /// Los héroes que residen en la plaza, por id.
     pub fn residentes_de(&self, plaza: u64) -> impl Iterator<Item = &HeroeNucleo> + '_ {
         self.residentes.get(&plaza).into_iter().flatten().filter_map(|id| self.heroes.get(id))
-    }
-
-    /// ¿Tiene algún residente la plaza? (el paso de minuto de una plaza solo trabaja si lo tiene).
-    pub(crate) fn tiene_residentes(&self, plaza: u64) -> bool {
-        self.residentes.contains_key(&plaza)
     }
 
     /// El héroe de una cuenta, si lo hay (uno por cuenta y partida).

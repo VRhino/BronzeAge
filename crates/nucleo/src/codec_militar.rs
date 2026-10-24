@@ -11,7 +11,7 @@
 //! n × (id u64, nombre texto, escuadras{n u64 · n × u64}, perks{n u64 · n × u32}, activo bool)} · monedas{bronce, plata, oro: 3 × i64} ·
 //! herido_hasta opt_i64 · víveres i64 · ración_en opt_i64 · almacén personal{carga} · cupo{día i64 · carga} · columna opt_u64 · carro{carga} · sintético bool ·
 //! informes{n u64 · n × informe} · plazas recordadas{n u64 · n × (plaza u32 · visto_en i64 · almacén{carga} · cola{n u64 · n × (id u32 · tipo u8 · nivel u8 · completa_en opt_i64)} ·
-//! guarnición{n u64 · n × u64})} (BAN25) ·
+//! guarnición{n u64 · n × u64})} (BAN25) · residencia_cambiada_en opt_i64 (BAN28) ·
 //! escuadras{n u64 · n × escuadra}`.
 //! Una convocatoria: `id u64 · facción u32 · lugar{u8: 0 plaza, 1 campamento · u32} · líder u64 · política u8 · integrantes{n u64 · n × (héroe u64,
 //! unido_en i64, selección)} · peticiones{n u64 · n × (héroe u64, pedido_en i64, expira_en i64, selección)} · creada_en i64`, con una selección
@@ -217,7 +217,7 @@ fn lista_u32_leer(r: &mut Lector) -> Result<Vec<u32>, ErrorFormato> {
 }
 
 fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
-    let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas } = h;
+    let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas, residencia_cambiada_en } = h;
     let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras } = heroe;
     w.u64(*id);
     w.texto(cuenta);
@@ -272,6 +272,7 @@ fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
         }
         lista_u64_escribir(w, guarnicion);
     }
+    w.opt_i64(*residencia_cambiada_en);
     w.u64(escuadras.len() as u64);
     escuadras.iter().for_each(|e| escuadra_escribir(w, e));
 }
@@ -298,12 +299,13 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
         let cola = (0..r.cuenta()?).map(|_| Ok(EdificioRecordado { id: r.u32()?, tipo: tipo_de_u8(r.u8()?)?, nivel: r.u8()?, completa_en: r.opt_i64()? })).collect::<Result<_, ErrorFormato>>()?;
         plazas_recordadas.insert(plaza, PlazaRecordada { visto_en, almacen, cola, guarnicion: lista_u64_leer(r)? });
     }
+    let residencia_cambiada_en = r.opt_i64()?;
     let mut escuadras = Vec::new();
     for _ in 0..r.cuenta()? {
         escuadras.push(escuadra_leer(r)?);
     }
     let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras };
-    Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas })
+    Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas, residencia_cambiada_en })
 }
 
 pub(crate) fn relacion_a_u8(r: Relacion) -> u8 {

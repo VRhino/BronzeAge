@@ -272,7 +272,48 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(ReponerCarroDeAcarreo, OrdenReponerCarroDeAcarreo, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::ReponerCarro { pueblo: 4 }),
         (orden!(EntrarEnPueblo, OrdenEntrarEnPueblo, pueblo_id: pueblo(), heroe_id: h.clone()), Comando::EntrarEnPueblo { pueblo: 4, heroe: 7 }),
         (orden!(SalirDePueblo, OrdenSalirDePueblo, pueblo_id: pueblo(), heroe_id: h.clone()), Comando::SalirDePueblo { pueblo: 4, heroe: 7 }),
-        (orden!(VaciarCarro, OrdenVaciarCarro, heroe_id: h), Comando::VaciarCarro { heroe: 7 }),
+        (orden!(VaciarCarro, OrdenVaciarCarro, heroe_id: h.clone()), Comando::VaciarCarro { heroe: 7 }),
+        // ── La Facción, la ciudadanía y la residencia (5B) ──
+        (orden!(CrearFaccion, OrdenCrearFaccion, nombre: s("Micenas")), Comando::CrearFaccion { heroe: 7, nombre: "Micenas".into(), sigilo: None }),
+        (
+            orden!(
+                CrearFaccion,
+                OrdenCrearFaccion,
+                nombre: s("Troya"),
+                sigilo: Some(pb::orden_crear_faccion::Sigilo {
+                    forma_id: s("a"),
+                    campo_id: s("b"),
+                    emblema_id: s("c"),
+                    color_primario_id: s("d"),
+                    color_secundario_id: s("e"),
+                    color_emblema_id: s("f"),
+                    orla_id: s("g"),
+                    color_orla_id: s("h"),
+                })
+            ),
+            Comando::CrearFaccion {
+                heroe: 7,
+                nombre: "Troya".into(),
+                sigilo: Some(politica::sigilo::Sigilo {
+                    forma: s("a"),
+                    campo: s("b"),
+                    emblema: s("c"),
+                    color_primario: s("d"),
+                    color_secundario: s("e"),
+                    color_emblema: s("f"),
+                    orla: s("g"),
+                    color_orla: s("h"),
+                }),
+            },
+        ),
+        (orden!(SolicitarIngreso, OrdenSolicitarIngreso, faccion_id: s("f-2")), Comando::SolicitarIngreso { heroe: 7, faccion: 2 }),
+        (orden!(ResponderSolicitud, OrdenResponderSolicitud, faccion_id: s("f-2"), heroe_id: s("heroe-9"), aceptar: true), Comando::ResponderSolicitud { heroe: 7, faccion: 2, solicitante: 9, aceptar: true }),
+        (orden!(DejarFaccion, OrdenDejarFaccion), Comando::DejarFaccion { heroe: 7 }),
+        (orden!(AsignarRey, OrdenAsignarRey, faccion_id: s("f-2"), heroe_id: s("heroe-9")), Comando::AsignarRey { heroe: 7, faccion: 2, designado: 9 }),
+        (orden!(AsignarEmbajador, OrdenAsignarEmbajador, faccion_id: s("f-2"), heroe_id: s("heroe-9")), Comando::AsignarEmbajador { heroe: 7, faccion: 2, designado: 9 }),
+        (orden!(CambiarResidencia, OrdenCambiarResidencia, destino_id: s("as-3"), heroe_id: h.clone()), Comando::CambiarResidencia { heroe: 7, asentamiento: 3 }),
+        (orden!(ResidirEnCampamento, OrdenResidirEnCampamento, heroe_id: h.clone(), campamento_id: s("camp-4")), Comando::ResidirEnCampamento { heroe: 7, campamento: 4 }),
+        (orden!(DejarResidencia, OrdenDejarResidencia, heroe_id: h), Comando::DejarResidencia { heroe: 7 }),
     ]
 }
 
@@ -282,10 +323,9 @@ fn ordenes_no_disponibles() -> Vec<Cuerpo> {
         ($($v:ident),* $(,)?) => { vec![$(Cuerpo::$v(Default::default())),*] };
     }
     vacias![
-        // política y Facciones (sistema 5)
-        CrearFaccion, SolicitarIngreso, DejarFaccion, ResponderSolicitud, AsignarRey, AsignarEmbajador, AsignarCargoLocal, DesignarCapital, AdmitirOtrasFacciones, ProponerRelacion,
-        ResponderRelacion, RetirarRelacion, ProponerAnexion, ResponderAnexion, RetirarAnexion, ProponerFusion, ResponderFusion, RetirarFusion, ProponerPaz, RomperRelacion, RebelionVasallo,
-        DeclararGuerra, VetarJugador, RenombrarAsentamiento, AlternarReabastecerAliados, CambiarResidencia, ResidirEnCampamento, DejarResidencia,
+        // política y Facciones (sistema 5, desde 5C)
+        AsignarCargoLocal, DesignarCapital, AdmitirOtrasFacciones, ProponerRelacion, ResponderRelacion, RetirarRelacion, ProponerAnexion, ResponderAnexion, RetirarAnexion, ProponerFusion,
+        ResponderFusion, RetirarFusion, ProponerPaz, RomperRelacion, RebelionVasallo, DeclararGuerra, VetarJugador, RenombrarAsentamiento, AlternarReabastecerAliados,
         // tecnología, Aedas e intel (sistema 6)
         AdoptarTecnologia, EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda, AbrirAlijo,
         // refundación
@@ -354,7 +394,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 43);
+    assert_eq!(sin_comando.len(), 34);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -500,7 +540,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (127, 103, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (136, 112, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -537,6 +577,8 @@ fn quien(a: crate::comando::Autoriza) -> &'static str {
         CuentaDelHeroe => "la cuenta del héroe",
         CuentaDelHeroeAunqueFuera => "la cuenta del héroe, aunque esté fuera",
         CiudadanoDeLaMadre => "la cuenta del héroe, ciudadano de la madre",
+        ReyDeLaFaccion => "la cuenta del héroe, Rey de la Facción",
+        CiudadanoDeLaFaccion => "la cuenta del héroe, ciudadano de la Facción (con Rey, solo él)",
         MandaEnLaPlaza => "quien manda en la plaza",
         LiderDeLaColumna => "el Líder de la columna",
         ParticipanteDeLaColumna => "un participante de la columna",
@@ -573,5 +615,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 103 + 19 + 5 + 43, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 112 + 19 + 5 + 34, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

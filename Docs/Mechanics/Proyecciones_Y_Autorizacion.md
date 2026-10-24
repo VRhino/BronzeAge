@@ -184,7 +184,9 @@ Todos son funciones del estado y del héroe del actor (`yo`). Los de pertenencia
 
 Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de administración y los cinco mensajes del canal del servidor de batalla, con el comando del núcleo que da cada una y quién puede darla. Es la autorización **provisional** hasta el sistema político (5), que traerá los cargos, la residencia como condición, los vetos y los roles de la membresía; las filas de §5.2 son lo que pedirá entonces.
 
-- **Quién la da** es `Comando::autoriza` (`crates/nucleo/src/comando.rs`, un `match` sin comodín sobre los 127 comandos: un comando nuevo no compila hasta decidirlo). Cada orden comprueba la suya en su sitio y rechaza con `no_autorizado`; la de administración la comprueba una sola vez `Nucleo::ejecutar`. La administración (`Peticion.admin`) puede con todas salvo las del servidor de batalla, que exigen su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`).
+> **Implementado en Rust (2026-10-24, 5B):** las nueve órdenes de la Facción, la ciudadanía y la residencia (128-136) y dos clases nuevas de `Autoriza`: `ReyDeLaFaccion` (`responder_solicitud`, sin excepción, como `responderSolicitudes` de §5.2; `asignar_embajador`) y `CiudadanoDeLaFaccion` (`asignar_rey`: un ciudadano si no hay Rey; con Rey, solo él). Las comprueba el predicado del crate `politica` (`autorizacion::Actor`) sobre el núcleo (`Vista`, sin cargos hasta 5E). El resto de la matriz no cambia hasta 5E.
+
+- **Quién la da** es `Comando::autoriza` (`crates/nucleo/src/comando.rs`, un `match` sin comodín sobre los 136 comandos: un comando nuevo no compila hasta decidirlo). Cada orden comprueba la suya en su sitio y rechaza con `no_autorizado`; la de administración la comprueba una sola vez `Nucleo::ejecutar`. La administración (`Peticion.admin`) puede con todas salvo las del servidor de batalla, que exigen su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`).
 - **La sesión** añade dos filtros antes del núcleo (`sesiones::ordenes::traducir`, `sesiones.rs`): la orden genérica de administración y `controlar_reloj` solo los da una sesión `CLIENTE_ADMIN_WEB` (`no_autorizado` en cualquier otra), y los mensajes del canal de batalla solo llegan de una sesión `CLIENTE_SERVIDOR_BATALLA`. El actor de la petición es siempre la cuenta de la sesión, nunca un dato del cuerpo: las órdenes que no nombran héroe usan el de la cuenta.
 - **«Además»** es lo que la orden exige después de autorizarla, con su rechazo de dominio (el catálogo de códigos está en `Docs/Coordinacion/07_Catalogo_de_Rechazos.md`). Un héroe fuera del mundo solo puede `conectarse` (`heroe.fuera_del_mundo`), salvo `cancelar_convocatoria`. Una entidad que no existe se rechaza con su código de «desconocida», antes de mirar quién la manda (como el fail-open de §4.2).
 - **La prueba** `la_matriz_de_autorizacion_del_documento_es_la_del_codigo` (`crates/nucleo/src/sesiones/ordenes/pruebas.rs`) lee este bloque y lo compara con el código: falla si falta una orden, sobra una o no coincide su comando o quién la da. La columna «Además» no se compara.
@@ -308,6 +310,20 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `unirse_en_campo` | `UnirseEnCampo` | la cuenta del héroe | a la vista de la columna; la política de unión |
 | `vaciar_carro` | `VaciarCarro` | la cuenta del héroe | dentro de su residencia |
 
+**La Facción, la ciudadanía y la residencia (sistema 5, 5B)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `asignar_embajador` | `AsignarEmbajador` | la cuenta del héroe, Rey de la Facción | el designado es ciudadano (`faccion.no_ciudadano`); la Facción existe (`faccion.no_existe`) |
+| `asignar_rey` | `AsignarRey` | la cuenta del héroe, ciudadano de la Facción (con Rey, solo él) | el designado es ciudadano (`faccion.no_ciudadano`) |
+| `cambiar_residencia` | `CambiarResidencia` | la cuenta del héroe | una plaza de su Facción (`residencia.plaza_ajena`) donde aún no reside (`residencia.ya_reside`); sin cooldown (`residencia.cooldown`) ni ejército en preparación (`heroe.en_convocatoria`) |
+| `crear_faccion` | `CrearFaccion` | la cuenta del héroe | nombre (`faccion.nombre_vacio`, `faccion.nombre_duplicado`), sigilo (`faccion.sigilo_invalido`, `faccion.sigilo_duplicado`), sin Facción (`faccion.ya_pertenece`) ni cooldown de creación (`faccion.cooldown_creacion`) |
+| `dejar_faccion` | `DejarFaccion` | la cuenta del héroe | es ciudadano (`faccion.no_pertenece`); no va en un ejército ni en uno en preparación (`faccion.en_ejercito`, Q7) |
+| `dejar_residencia` | `DejarResidencia` | la cuenta del héroe | reside en una plaza (`residencia.sin_plaza`); sin cooldown ni ejército en preparación |
+| `residir_en_campamento` | `ResidirEnCampamento` | la cuenta del héroe | el campamento existe y aún no reside en él (`residencia.ya_reside`); sin cooldown ni ejército en preparación |
+| `responder_solicitud` | `ResponderSolicitud` | la cuenta del héroe, Rey de la Facción | sin excepción: si la Facción no existe, `faccion.no_existe`; el héroe lo pidió (`faccion.no_ha_pedido`) y no es ciudadano de otra |
+| `solicitar_ingreso` | `SolicitarIngreso` | la cuenta del héroe | la Facción existe y no es ciudadano de ninguna (`faccion.ya_pertenece`); pedir dos veces no cambia nada |
+
 **Administración y servidor de batalla**
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
@@ -349,16 +365,10 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `alternar_reabastecer_aliados` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `aportar_a_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `asignar_cargo_local` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `asignar_embajador` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `asignar_rey` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `cambiar_residencia` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `cargar_caravana` | — | no disponible | caravanas a mano y almacén personal |
 | `comprar_caravana_de_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `crear_faccion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `declarar_guerra` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `dejar_faccion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `dejar_residencia` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `desarmar_caravana_fundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `designar_capital` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
@@ -371,18 +381,15 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `rebelion_vasallo` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `reclamar_caravana` | — | no disponible | caravanas a mano y almacén personal |
 | `renombrar_asentamiento` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `residir_en_campamento` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `responder_solicitud` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_de_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `retirar_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `romper_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `sacar_del_almacen_personal` | — | no disponible | caravanas a mano y almacén personal |
-| `solicitar_ingreso` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `soltar_caravana` | — | no disponible | caravanas a mano y almacén personal |
 | `vetar_jugador` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 

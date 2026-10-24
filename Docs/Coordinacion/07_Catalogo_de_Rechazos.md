@@ -28,6 +28,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `asentamiento.desconocido` | `ASENTAMIENTO_DESCONOCIDO` | — |
 | `fundacion.sin_caravana` | `SIN_CARAVANA` | — |
 | `fundacion.sin_faccion` | `FUNDACION_SIN_FACCION` | — |
+| `fundacion.sin_fundadores` | `FUNDACION_SIN_FUNDADORES` | Ningún héroe de la columna es ciudadano de la Facción de la caravana: no hay fundadores (`minFundadoresParaFaccionNueva`, 1). |
 | `fundacion.cap_alcanzado` | `CAP_ALCANZADO` | — |
 | `nivel.invalido` | `NIVEL_INVALIDO` | — |
 | `parcela.sin_libres` | `PARCELA_SIN_LIBRES` | — |
@@ -476,4 +477,26 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `batalla.salida_incompleta` | `BATALLA_SALIDA_INCOMPLETA` | La salida de una partida en curso omite alguna de las escuadras autorizadas del héroe (Batalla_Unity_Ciclo §8.4). |
 | `batalla.resultado_invalido` | `BATALLA_RESULTADO_INVALIDO` | El checklist de §8.5 rechaza el resultado entero (el mensaje dice cuál de sus puntos). |
 | `batalla.otro_resultado` | `BATALLA_OTRO_RESULTADO` | «Ya se aplicó con otro resultado» (409). |
+
+### La Facción, la ciudadanía y la residencia (sistema 5, tanda 5B; `ErrorFaccion` y `ErrorResidencia` del crate `politica`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `faccion.no_existe` | `FACCION_NO_EXISTE` | — |
+| `faccion.nombre_vacio` | `FACCION_NOMBRE_VACIO` | El nombre queda vacío tras recortarlo. |
+| `faccion.nombre_duplicado` | `FACCION_NOMBRE_DUPLICADO` | Otra Facción ya se llama así (sin mirar mayúsculas). |
+| `faccion.sigilo_invalido` | `FACCION_SIGILO_INVALIDO` | Alguna pieza del sigilo no es del catálogo, o los dos colores del fondo son el mismo. |
+| `faccion.sigilo_duplicado` | `FACCION_SIGILO_DUPLICADO` | Otra Facción lleva un sigilo idéntico. |
+| `faccion.ya_pertenece` | `FACCION_YA_PERTENECE` | Ya es ciudadano de una Facción: 1 héroe, 1 Facción. |
+| `faccion.cooldown_creacion` | `FACCION_COOLDOWN_CREACION` | Dejó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`. |
+| `faccion.no_ha_pedido` | `FACCION_NO_HA_PEDIDO` | Responder a quien no ha pedido entrar. |
+| `faccion.no_pertenece` | `FACCION_NO_PERTENECE` | No es ciudadano de ninguna Facción. |
+| `faccion.en_ejercito` | `FACCION_EN_EJERCITO` | Dejar la Facción yendo en un ejército (aunque sea solo) o en uno en preparación (Q7): primero se separa. |
+| `faccion.no_ciudadano` | `FACCION_NO_CIUDADANO` | El designado para Rey o Embajador no es ciudadano de la Facción. |
+| `faccion.sin_rey` | `FACCION_SIN_REY` | Nombrar Embajador en una Facción sin Rey. |
+| `residencia.cooldown` | `RESIDENCIA_COOLDOWN` | Cambió de residencia hace menos de `CIUDADANIA.cooldownCambioResidenciaDias`. |
+| `residencia.plaza_ajena` | `RESIDENCIA_PLAZA_AJENA` | Solo se reside en una plaza de la propia Facción. |
+| `residencia.ya_reside` | `RESIDENCIA_YA_RESIDE` | — |
+| `residencia.vetado` | `RESIDENCIA_VETADO` | La plaza lo ha vetado (los vetos llegan en 5E). |
+| `residencia.sin_plaza` | `RESIDENCIA_SIN_PLAZA` | Dejar la residencia sin residir en ninguna plaza (en un campamento de mercenarios se cambia de campamento o se muda a una plaza). |
 <!-- /rechazos -->

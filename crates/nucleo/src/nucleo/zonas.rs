@@ -347,6 +347,15 @@ impl Nucleo {
         }
         let punto = e.posicion_en(t);
         let faccion = e.columna.faccion.ok_or_else(|| Respuesta::rechazo(rechazos::FUNDACION_SIN_FACCION, "una columna sin Facción no funda", v))?;
+        // Los fundadores (Fundacion_Y_Refundacion §5.2): el titular y los demás de la columna que son ciudadanos de su Facción, en su orden y hasta `maxJugadoresFundacionGrupal`.
+        let fundadores: Vec<u64> = Self::participantes_de(e)
+            .into_iter()
+            .filter(|h| self.estado.militar.heroes.get(h).is_some_and(|x| x.faccion == Some(faccion)))
+            .take(self.estado.reglas.economia.datos.max_fundadores)
+            .collect();
+        if fundadores.is_empty() {
+            return Err(Respuesta::rechazo(rechazos::FUNDACION_SIN_FUNDADORES, "ningún héroe de la columna es ciudadano de su Facción", v));
+        }
         let r = &self.estado.reglas.territorio;
         let nivel = self.estado.niveles_faccion.get(&faccion).copied().unwrap_or(1);
         let cap = territorio::cap_de_fundacion(nivel, &r.cap_por_nivel) as usize;
@@ -371,6 +380,12 @@ impl Nucleo {
         self.programar_bandidos_de_plaza(id, t);
         self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;
         self.tr.tocar(Clase::Ejercito, ejercito);
+        // Pasan a residir en ella (dejan la plaza o el campamento donde vivieran; su campamento se traslada con ellos). No es una orden suya: no cuenta para el cooldown de residencia.
+        // La columna sigue en el mapa, a la puerta: que se deshaga dentro (§5.5) es deuda de la Caravana de Fundación (5G).
+        for &h in &fundadores {
+            self.mudar_de_residencia(h, Some(militar::heroe::Residencia::Asentamiento(id as u32)));
+        }
+
         self.tr.tocar(Clase::Asentamiento, id);
         self.tr.emitir(&self.estado, EventoNucleo {
             codigo: "fundacion.asentamiento_fundado".into(),
