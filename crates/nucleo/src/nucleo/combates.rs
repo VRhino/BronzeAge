@@ -112,7 +112,7 @@ impl Nucleo {
             if !self.en_zona(a.id, p) {
                 continue;
             }
-            let amiga = dueno.is_some_and(|d| d == a.faccion || matches!(self.estado.militar.relacion(d, a.faccion), Some(Relacion::Alianza | Relacion::Vasallaje)));
+            let amiga = dueno.is_some_and(|d| d == a.faccion || matches!(self.estado.relacion(d, a.faccion), Some(Relacion::Alianza | Relacion::Vasallaje)));
             if amiga {
                 return Zona::DelDuenoOAliado;
             }
@@ -315,26 +315,22 @@ impl Nucleo {
         if yo == otra {
             return Err(rechazo(rechazos::COMBATE_PROPIA, "no se ataca a los tuyos".into()));
         }
-        match self.estado.militar.relacion(yo, otra) {
-            Some(Relacion::Alianza) => Err(rechazo(rechazos::COMBATE_ALIADA, "no se ataca a un aliado".into())),
+        // 5D: contra la señora o la vasalla propias, nunca (la vasalla se rebela, la señora la libera); contra una aliada, `declara_guerra` es la traición de Q2 (rompe la alianza y declara la
+        // guerra); sin relación, la guerra con su arrastre por vasallaje. Sin `declara_guerra`, `guerra.confirmar` dice contra quién y a quién arrastraría.
+        match self.estado.relacion(yo, otra) {
             Some(Relacion::Guerra) => Ok(None),
+            Some(Relacion::Vasallaje) => Err(rechazo(rechazos::COMBATE_VASALLAJE, "no se ataca a la propia señora ni a la propia vasalla: la vasalla se rebela y la señora la libera".into())),
             _ if declara_guerra => Ok(Some((yo, otra))),
-            _ => Err(Respuesta::rechazo_con(
-                rechazos::GUERRA_CONFIRMAR,
-                format!("la Facción {yo} no está en guerra con la {otra}: atacar con `declara_guerra` la declara (y la deja en guerra con ella, sin arrastre de aliados ni vasallos)"),
-                v,
-                Some(Detalle::Guerra { objetivo: otra, arrastre: vec![] }),
-            )),
+            rel => {
+                let traicion = if rel == Some(Relacion::Alianza) { " Es una aliada: atacarla es una traición que rompe la alianza y cuesta reputación." } else { "" };
+                Err(Respuesta::rechazo_con(
+                    rechazos::GUERRA_CONFIRMAR,
+                    format!("la Facción {yo} no está en guerra con la {otra}: atacar con `declara_guerra` la declara, con el arrastre por vasallaje.{traicion}"),
+                    v,
+                    Some(Detalle::Guerra { objetivo: otra, arrastre: self.arrastre_de(yo, otra) }),
+                ))
+            }
         }
-    }
-
-    /// Declara la guerra entre dos Facciones (`declara_guerra` de `atacar`): la relación pasa a ser de guerra y se cuenta.
-    pub(super) fn declarar_guerra(&mut self, t: Instante, atacante: u32, contra: u32) {
-        self.estado.militar.relaciones.insert((atacante.min(contra), atacante.max(contra)), Relacion::Guerra);
-        self.tr.tocar_todos(Clase::Faccion, [u64::from(atacante), u64::from(contra)]);
-        self.tr.tocar(Clase::Relacion, Clase::par(atacante, contra));
-        let datos = vec![("atacante", atacante as i64), ("contra", contra as i64)];
-        self.tr.emitir(&self.estado, EventoNucleo { facciones: vec![atacante, contra], ..EventoNucleo::nuevo("faccion.guerra_declarada", t, datos) });
     }
 
     // ───────────────────────────── Columna contra columna ─────────────────────────────
@@ -375,6 +371,8 @@ impl Nucleo {
         let informe = resolver_combate(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut def.escuadras, heroes: &def.heroes }, asedio::SIN_RECINTO, &mut self.estado.rng)
             .expect("los dos bandos llevan al menos un héroe sano");
         self.experiencia_de_combate(t, &informe);
+        let defendida = self.estado.ejercitos[&x].columna.faccion;
+        self.defensa_de_vasallo(t, defendida, &def.heroes, informe.ganador == Lado::Defensor);
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&def.escuadras);
 
@@ -477,6 +475,8 @@ impl Nucleo {
         let defensa = if con_escolta { Defensa::Escolta(&mut escolta) } else { Defensa::Base };
         let r = asalto::resolver_asalto(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, defensa, modalidad, &mut self.estado.rng).expect("la columna lleva al menos un héroe sano");
         self.experiencia_de_asalto(t, &atac.heroes, r.poder_atacante, r.defensa);
+        // Una caravana suelta no lleva héroes: la señora de su dueño nunca está presente (como el TypeScript).
+        self.defensa_de_vasallo(t, dueno, &[], !r.gana_atacante);
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&escolta);
 
@@ -629,7 +629,7 @@ impl Nucleo {
         } else {
             let propio = |h: &HeroeNucleo| residentes_de.is_some_and(|p| h.heroe.residencia == Some(militar::heroe::Residencia::Asentamiento(p)));
             let sano_y_conectado = |h: &HeroeNucleo| !h.heroe.esta_herido(t) && !h.heroe.presencia.fuera;
-            self.heroes().filter(|h| !propio(h) && h.heroe.presencia.ubicacion == dentro && sano_y_conectado(h) && self.estado.militar.defiende_a(faccion, h.faccion)).map(|h| Candidato::de(cr, &h.heroe, &de_su_columna(h))).collect()
+            self.heroes().filter(|h| !propio(h) && h.heroe.presencia.ubicacion == dentro && sano_y_conectado(h) && self.estado.defiende_a(faccion, h.faccion)).map(|h| Candidato::de(cr, &h.heroe, &de_su_columna(h))).collect()
         };
         let (mut escuadras, mut lucharon) = (vec![], vec![]);
         let heroes = seleccionar(&candidatos, cupo).entran;
@@ -697,6 +697,7 @@ impl Nucleo {
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&defensa.tropa.escuadras);
         let conquistada = resultado.conquistada();
+        self.defensa_de_vasallo(t, Some(faccion_vieja), &defensa.tropa.heroes, !conquistada);
         let heridos = self.herir_heroes(&asedio::heridos_del_asedio(&resultado, &participantes), t);
 
         let mut datos = vec![("faccionAtacante", yo as i64), ("faccionDefensora", faccion_vieja as i64), ("multiplicadorMuralla", multiplicador), ("murallaCompleta", muralla_completa as i64)];
@@ -789,6 +790,7 @@ impl Nucleo {
         } else {
             (true, None)
         };
+        self.defensa_de_vasallo(t, Some(faccion_madre), &dentro.tropa.heroes, !gana);
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&defensa);
         self.guardar_guarnicion(x, defensa.remove(0), t);

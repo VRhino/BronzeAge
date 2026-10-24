@@ -115,16 +115,19 @@ fn solo_la_alianza_es_de_los_tuyos_y_la_relacion_la_fija_la_administracion() {
     assert_eq!(n.relacion(1, 2), None);
     assert!(n.aplicar_en(0, admin("r1", Comando::FijarRelacion { a: 2, b: 1, relacion: Some(Relacion::Vasallaje) })).aceptada());
     assert_eq!((n.relacion(1, 2), n.relacion(2, 1)), (Some(Relacion::Vasallaje), Some(Relacion::Vasallaje)));
-    assert!(!n.estado().militar.aliadas(Some(1), Some(2)), "el vasallaje no es una alianza");
+    assert!(!n.estado().aliadas(Some(1), Some(2)), "el vasallaje no es una alianza");
     assert!(n.aplicar_en(1, admin("r2", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Alianza) })).aceptada());
-    assert!(n.estado().militar.aliadas(Some(1), Some(2)) && !n.estado().militar.aliadas(None, Some(2)));
+    assert!(n.estado().aliadas(Some(1), Some(2)) && !n.estado().aliadas(None, Some(2)));
     // Mismo valor: sin cambios; se quita; consigo misma o sin ser administración, no.
     assert_eq!(n.aplicar_en(2, admin("r3", Comando::FijarRelacion { a: 2, b: 1, relacion: Some(Relacion::Alianza) })).resultado, Resultado::SinCambios);
     assert!(n.aplicar_en(3, admin("r4", Comando::FijarRelacion { a: 1, b: 2, relacion: None })).aceptada());
     assert_eq!(n.relacion(1, 2), None);
     assert_eq!(codigo(&n.aplicar_en(4, admin("r5", Comando::FijarRelacion { a: 1, b: 1, relacion: Some(Relacion::Guerra) }))), rechazos::RELACION_CONSIGO_MISMA);
     assert_eq!(codigo(&n.aplicar_en(4, Peticion::nueva("ana", "r6", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) }))), rechazos::NO_AUTORIZADO);
-    assert_eq!(hechos(&n, "faccion.relacion").len(), 3);
+    // Desde 5D la administración crea o rompe relaciones reales (decisión 9): la de r1 tiene a F2 de señora; r2 rompe el vasallaje y crea la alianza; r4 la rompe.
+    assert_eq!((hechos(&n, "diplomacia.relacion_aceptada").len(), hechos(&n, "diplomacia.relacion_rota").len()), (2, 2));
+    let r1 = n.relacion_politica(n.estado().politica.relaciones.iter().next().unwrap().id).unwrap();
+    assert_eq!((r1.a, r1.b, r1.activa()), (2, 1, false), "a es la señora; la rota se conserva");
 }
 
 #[test]
@@ -461,7 +464,7 @@ fn la_foto_con_una_persecucion_viva_conserva_la_presa_los_informes_las_relacione
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.ejercitos[&p].persiguiendo, Some(q));
     assert_eq!(vuelta.militar.heroes[&heroe(&n, p)].informes.len(), 1);
-    assert_eq!(vuelta.militar.relacion(7, 2), Some(Relacion::Guerra));
+    assert_eq!(vuelta.relacion(7, 2), Some(Relacion::Guerra));
 
     // Seguir desde una caída da lo mismo que no parar: se rehace el espacio y la persecución acaba igual, una sola vez.
     let alcanzadas = |n: &Nucleo, desde: u64| n.cambios_desde(desde).unwrap().flat_map(|c| c.eventos.iter()).filter(|e| e.codigo == "columna.presa_alcanzada").count();

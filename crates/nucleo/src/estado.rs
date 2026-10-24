@@ -15,7 +15,8 @@ use crate::memoria::{self, Memoria};
 use crate::estado_batallas::EstadoBatallas;
 use crate::estado_combate::EstadoCombate;
 use crate::estado_comercio::EstadoComercio;
-use crate::estado_militar::{Acceso, EstadoMilitar};
+use crate::estado_militar::{Acceso, EstadoMilitar, Relacion, Trato};
+use politica::relaciones::TipoRelacion;
 use crate::proyeccion::ambito::Ambito;
 use crate::urbanismo::{Urbanismo, Urbe};
 use base::{Instante, Mil, Plan, Punto, Rng};
@@ -354,6 +355,10 @@ pub struct Asentamiento {
     /// Desde cuándo es de su Facción (5C-1, decisión del autor del 2026-10-24): al fundarla, su fundación; al conquistarla, el instante de la conquista. La capital efectiva sin
     /// designar es la plaza que lleva más tiempo en la Facción, así que conquistar una plaza más antigua no cambia la capital.
     pub de_la_faccion_desde: Instante,
+    /// El resto oculto de su tributo de vasalla (millonésimas de unidad, `politica::tributo`, Q3): lo pagado por minuto en unidades enteras y la fracción que se acumula aquí.
+    pub resto_tributo: i64,
+    /// `permiteReabastecerAliados` (5D, Movimiento_Ejercitos §8): abre su almacén a las columnas aliadas (alianza o vasallaje) para repostar y cargar caravanas.
+    pub permite_reabastecer_aliados: bool,
 }
 
 impl Asentamiento {
@@ -719,21 +724,11 @@ pub enum Clase {
     Bandidos,
     Convocatoria,
     Batalla,
-    /// Una relación entre dos Facciones (el stub de administración `FijarRelacion`): su id es el par `(menor, mayor)` empaquetado por [`Clase::par`].
+    /// Una relación entre dos Facciones (`Estado::politica.relaciones`, 5D): su id es el de la relación (`rel-N`), que sale del contador común; un mismo par tiene varias a lo largo del tiempo.
     Relacion,
 }
 
 impl Clase {
-    /// El id de una relación entre dos Facciones: `(menor << 32) | mayor`.
-    pub fn par(a: u32, b: u32) -> u64 {
-        (u64::from(a.min(b)) << 32) | u64::from(a.max(b))
-    }
-
-    /// Las dos Facciones de una relación (la inversa de [`Clase::par`]).
-    pub fn facciones_del_par(par: u64) -> (u32, u32) {
-        ((par >> 32) as u32, par as u32)
-    }
-
     pub const TODAS: [Clase; 16] = [
         Clase::Ejercito,
         Clase::Asentamiento,
@@ -878,6 +873,40 @@ impl Estado {
         self.militar.heroes.get(&heroe)?.columna
     }
 
+    /// La clase de la relación **activa** entre dos Facciones, en cualquier sentido (5D: la de `politica`, con su índice por par: O(log n)).
+    pub fn relacion(&self, a: u32, b: u32) -> Option<Relacion> {
+        self.politica.relaciones.activa_entre(a, b).map(|r| match r.tipo {
+            TipoRelacion::Alianza => Relacion::Alianza,
+            TipoRelacion::Vasallaje => Relacion::Vasallaje,
+            TipoRelacion::Guerra => Relacion::Guerra,
+        })
+    }
+
+    /// Cómo trata una plaza de la Facción `plaza` a alguien de la Facción `visitante` (sin Facción: neutral): alianza y vasallaje, en cualquier sentido, cuentan igual; la
+    /// guerra es «enemiga».
+    pub fn trato(&self, plaza: u32, visitante: Option<u32>) -> Trato {
+        match visitante {
+            Some(f) if f == plaza => Trato::Propia,
+            Some(f) => match self.relacion(f, plaza) {
+                Some(Relacion::Alianza | Relacion::Vasallaje) => Trato::Aliada,
+                Some(Relacion::Guerra) => Trato::Enemiga,
+                None => Trato::Neutral,
+            },
+            None => Trato::Neutral,
+        }
+    }
+
+    /// ¿Defendería a una plaza de la Facción `plaza` quien es de la Facción `visitante` estando dentro? Solo la misma Facción, los aliados y los vasallos (y la señora)
+    /// (neutrales y enemigos nunca, aunque estén dentro).
+    pub fn defiende_a(&self, plaza: u32, visitante: Option<u32>) -> bool {
+        matches!(self.trato(plaza, visitante), Trato::Propia | Trato::Aliada)
+    }
+
+    /// ¿Son aliadas? Solo la alianza: el vasallaje comparte visión pero no es lo que impide perseguir ni atacar (Movimiento_Ejercitos §7). Una columna sin Facción no tiene aliados.
+    pub fn aliadas(&self, a: Option<u32>, b: Option<u32>) -> bool {
+        a.zip(b).is_some_and(|(a, b)| self.relacion(a, b) == Some(Relacion::Alianza))
+    }
+
     /// Versión que produjo una petición ya aceptada.
     pub fn visto(&self, actor: &str, peticion_id: &str) -> Option<u64> {
         self.vistos.get(actor)?.iter().find(|(p, _)| p == peticion_id).map(|&(_, v)| v)
@@ -945,6 +974,8 @@ impl Estado {
             w.texto(&a.nombre);
             w.opt_u64(a.capital_de.map(u64::from));
             w.i64(a.de_la_faccion_desde);
+            w.i64(a.resto_tributo);
+            w.bool(a.permite_reabastecer_aliados);
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -1138,6 +1169,7 @@ impl Estado {
             let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
             let acceso = Acceso { aliados: r.bool()?, neutrales: r.bool()?, enemigos: r.bool()? };
             let (nombre, capital_de, de_la_faccion_desde) = (r.texto()?, r.opt_u64()?.map(|f| f as u32), r.i64()?);
+            let (resto_tributo, permite_reabastecer_aliados) = (r.i64()?, r.bool()?);
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -1146,7 +1178,7 @@ impl Estado {
             for p in &economia.pueblos {
                 s.nodos_reclamados.insert(p.nodo, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, acceso, nombre, capital_de, de_la_faccion_desde });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, acceso, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;

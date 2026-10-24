@@ -93,6 +93,8 @@ pub enum ErrorDiplomacia {
     NoEsParte,
     /// Esa Facción ya ofreció la paz; falta la otra.
     YaOfrecioPaz,
+    /// Un vasallaje con una vasalla que ya lo es de otra (una Facción tiene como mucho una señora).
+    YaEsVasalla,
     /// Una guerra no se rompe: se acaba con la paz.
     GuerraNoSeRompe,
     /// Un vasallaje lo libera la señora; la vasalla solo puede rebelarse.
@@ -147,6 +149,8 @@ fn par(a: FaccionId, b: FaccionId) -> (FaccionId, FaccionId) {
 pub struct Relaciones {
     por_id: BTreeMap<RelacionId, RelacionPolitica>,
     activa: BTreeMap<(FaccionId, FaccionId), RelacionId>,
+    /// Vasalla → su vasallaje activo: `senora_de` en O(log n) (lo pregunta el paso de minuto de cada plaza por el tributo, 5D).
+    senora: BTreeMap<FaccionId, RelacionId>,
 }
 
 impl Relaciones {
@@ -160,6 +164,9 @@ impl Relaciones {
     fn insertar(&mut self, r: RelacionPolitica) {
         if r.activa() {
             self.activa.insert(par(r.a, r.b), r.id);
+            if r.tipo == TipoRelacion::Vasallaje {
+                self.senora.insert(r.b, r.id);
+            }
         }
         self.por_id.insert(r.id, r);
     }
@@ -203,7 +210,12 @@ impl Relaciones {
 
     /// La señora de `v`, si es vasalla de alguien.
     pub fn senora_de(&self, v: FaccionId) -> Option<FaccionId> {
-        self.activas().find(|r| r.tipo == TipoRelacion::Vasallaje && r.b == v).map(|r| r.a)
+        self.vasallaje_de(v).map(|r| r.a)
+    }
+
+    /// El vasallaje activo de la vasalla `v` (con su tributo).
+    pub fn vasallaje_de(&self, v: FaccionId) -> Option<&RelacionPolitica> {
+        self.senora.get(&v).map(|id| &self.por_id[id])
     }
 
     /// Las vasallas de `s`, por id.
@@ -242,6 +254,9 @@ impl Relaciones {
     #[allow(clippy::too_many_arguments)]
     pub fn crear(&mut self, facciones: &Facciones, id: RelacionId, tipo: TipoRelacion, a: FaccionId, b: FaccionId, tributo: Option<Tributo>, ahora: Instante) -> Result<RelacionId, ErrorDiplomacia> {
         self.validar_par(facciones, a, b)?;
+        if tipo == TipoRelacion::Vasallaje && self.senora.contains_key(&b) {
+            return Err(ErrorDiplomacia::YaEsVasalla);
+        }
         let tributo = (tipo == TipoRelacion::Vasallaje).then(|| tributo.unwrap_or(Tributo::POR_DEFECTO));
         self.insertar(RelacionPolitica { id, tipo, a, b, tributo, creada_en: ahora, estado: EstadoRelacion::Activa, rota_por: None, rota_en: None, paz_propuesta_por: None });
         Ok(id)
@@ -252,7 +267,21 @@ impl Relaciones {
         let Some(r) = self.por_id.get_mut(&id).filter(|r| r.activa()) else { return false };
         r.estado = EstadoRelacion::Rota;
         self.activa.remove(&par(r.a, r.b));
+        if r.tipo == TipoRelacion::Vasallaje {
+            self.senora.remove(&r.b);
+        }
         true
+    }
+
+    /// Las Facciones del bando del objetivo que una guerra de `atacante` arrastraría por vasallaje (§5.4), sin el objetivo y sin mirar si se puede declarar: la señora del objetivo
+    /// (o el objetivo, si no es vasalla) y sus demás vasallas, salvo el propio atacante y las que ya tienen una relación activa con él. Es lo que `guerra.confirmar` enseña.
+    pub fn arrastre(&self, atacante: FaccionId, objetivo: FaccionId) -> Vec<FaccionId> {
+        let senora = self.senora_de(objetivo).unwrap_or(objetivo);
+        let mut bando = vec![senora];
+        bando.extend(self.vasallas_de(senora));
+        let mut vistos = BTreeSet::new();
+        bando.retain(|&f| vistos.insert(f) && f != atacante && f != objetivo && self.activa_entre(atacante, f).is_none());
+        bando
     }
 
     /// `declararGuerra` con el **arrastre por vasallaje** (§5.4): `validarPar(atacante, objetivo)`; el bando es la señora del objetivo (o el objetivo si no es
@@ -260,13 +289,11 @@ impl Relaciones {
     /// relación activa con él (el objetivo, si la tuviera, ya hizo fallar `validarPar`). Ids de `ids`, en el orden del bando.
     pub fn declarar_guerra(&mut self, facciones: &Facciones, atacante: FaccionId, objetivo: FaccionId, ahora: Instante, ids: &mut impl FnMut() -> RelacionId) -> Result<Guerra, ErrorDiplomacia> {
         self.validar_par(facciones, atacante, objetivo)?;
-        let senora = self.senora_de(objetivo).unwrap_or(objetivo);
-        let mut bando = vec![senora, objetivo];
-        bando.extend(self.vasallas_de(senora));
-        let mut vistos = BTreeSet::new();
-        bando.retain(|&f| vistos.insert(f) && f != atacante && (f == objetivo || self.activa_entre(atacante, f).is_none()));
+        // El orden de siempre: la señora (si el objetivo es vasalla y se arrastra), el objetivo y las demás vasallas.
+        let arrastradas = self.arrastre(atacante, objetivo);
+        let senora = self.senora_de(objetivo).filter(|s| arrastradas.contains(s));
+        let bando: Vec<FaccionId> = senora.into_iter().chain([objetivo]).chain(arrastradas.iter().copied().filter(|&f| Some(f) != senora)).collect();
         let relaciones = bando.iter().map(|&f| self.crear(facciones, ids(), TipoRelacion::Guerra, atacante, f, None, ahora).expect("par validado")).collect();
-        let arrastradas = bando.into_iter().filter(|&f| f != objetivo).collect();
         Ok(Guerra { atacante, objetivo, relaciones, arrastradas })
     }
 
@@ -649,6 +676,23 @@ pub(crate) mod pruebas {
         assert!(rs.defensa_de_vasallo(2, &presente, false).is_empty(), "estuvo y perdió: nada");
         assert!(rs.defensa_de_vasallo(2, &nadie, true).is_empty(), "no estuvo y ganó: nada");
         assert!(rs.defensa_de_vasallo(3, &nadie, false).is_empty(), "sin señora");
+    }
+
+    #[test]
+    fn una_vasalla_tiene_una_sola_senora_y_el_arrastre_se_ve_sin_declarar() {
+        // 1 señora de 2 y 3; 4 aliada de 3.
+        let fs = facciones(5);
+        let mut rs = Relaciones::default();
+        rs.crear(&fs, 1, TipoRelacion::Vasallaje, 1, 2, None, 0).unwrap();
+        rs.crear(&fs, 2, TipoRelacion::Vasallaje, 1, 3, None, 0).unwrap();
+        assert_eq!(rs.crear(&fs, 3, TipoRelacion::Vasallaje, 5, 2, None, 0), Err(ErrorDiplomacia::YaEsVasalla));
+        rs.crear(&fs, 4, TipoRelacion::Alianza, 4, 3, None, 0).unwrap();
+        assert_eq!((rs.vasallaje_de(2).map(|r| r.id), rs.senora_de(3)), (Some(1), Some(1)));
+        assert_eq!(rs.arrastre(4, 2), vec![1], "la señora entra; 3 no, porque ya es aliada de 4");
+        assert_eq!(rs.arrastre(5, 1), vec![2, 3], "contra la señora, todas sus vasallas");
+        assert!(rs.terminar(1));
+        assert_eq!(rs.senora_de(2), None, "el índice olvida el vasallaje roto");
+        assert_eq!(Relaciones::desde(rs.iter().cloned().collect::<Vec<_>>()), rs);
     }
 
     #[test]

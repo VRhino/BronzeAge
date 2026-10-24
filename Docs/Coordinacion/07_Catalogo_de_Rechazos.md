@@ -428,7 +428,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `combate.proteccion_de_campamento` | `COMBATE_PROTECCION_DE_CAMPAMENTO` | — |
 | `combate.lejos` | `COMBATE_LEJOS` | — |
 | `combate.propia` | `COMBATE_PROPIA` | — |
-| `combate.aliada` | `COMBATE_ALIADA` | — |
+| `combate.aliada` | `COMBATE_ALIADA` | Retirado en 5D (decisión Q2 del autor, 2026-10-24): atacar a un aliado con `declara_guerra` es una traición que rompe la alianza y declara la guerra; sin ella, `guerra.confirmar`. |
+| `combate.vasallaje` | `COMBATE_VASALLAJE` | Atacar a la propia señora o a la propia vasalla (5D): un vasallaje no se convierte en guerra; la vasalla se rebela (`rebelion_vasallo`) y la señora la libera (`romper_relacion`). |
 | `guerra.confirmar` | `GUERRA_CONFIRMAR` | `atacar` contra una Facción con la que no se está en guerra y sin `declara_guerra`: el cliente tiene que confirmarla (`Detalle::Guerra` dice contra quién). |
 | `combate.a_cubierto` | `COMBATE_A_CUBIERTO` | — |
 | `combate.clase_distinta` | `COMBATE_CLASE_DISTINTA` | — |
@@ -519,4 +520,26 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 |---|---|---|
 | `asentamiento.nombre_largo` | `ASENTAMIENTO_NOMBRE_LARGO` | El nombre recortado pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres. |
 | `asentamiento.nombre_duplicado` | `ASENTAMIENTO_NOMBRE_DUPLICADO` | Otra plaza viva ya se llama así (sin mirar tildes ni mayúsculas). |
+
+### Las relaciones entre Facciones (sistema 5, tanda 5D; `ErrorDiplomacia` y `ErrorPropuesta` del crate `politica`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `diplomacia.ya_hay_relacion` | `DIPLOMACIA_YA_HAY_RELACION` | Ya hay una relación activa entre las dos (de cualquier clase, la guerra incluida): para cambiarla hay que romperla antes (o firmar la paz). |
+| `diplomacia.relacion_desconocida` | `DIPLOMACIA_RELACION_DESCONOCIDA` | `rel-N` no es ninguna relación. |
+| `diplomacia.relacion_rota` | `DIPLOMACIA_RELACION_ROTA` | La relación ya está rota (o la paz ya se firmó). |
+| `diplomacia.no_es_guerra` | `DIPLOMACIA_NO_ES_GUERRA` | La paz es de una guerra. |
+| `diplomacia.no_es_vasallaje` | `DIPLOMACIA_NO_ES_VASALLAJE` | La rebelión es de un vasallaje. |
+| `diplomacia.no_es_parte` | `DIPLOMACIA_NO_ES_PARTE` | Esa Facción no es parte de esa relación. |
+| `diplomacia.ya_ofrecio_paz` | `DIPLOMACIA_YA_OFRECIO_PAZ` | Esa Facción ya ofreció la paz: falta la otra. |
+| `diplomacia.guerra_no_se_rompe` | `DIPLOMACIA_GUERRA_NO_SE_ROMPE` | Una guerra no se rompe: se acaba con la paz. |
+| `diplomacia.solo_la_senora` | `DIPLOMACIA_SOLO_LA_SENORA` | Un vasallaje solo lo libera la señora; la vasalla se rebela. |
+| `diplomacia.sin_rey` | `DIPLOMACIA_SIN_REY` | Una de las dos Facciones no tiene Rey que pacte o conteste. |
+| `diplomacia.vasalla_de_tercera` | `DIPLOMACIA_VASALLA_DE_TERCERA` | Una de las dos ya es vasalla de una tercera (una Facción tiene como mucho una señora). |
+| `diplomacia.reputacion_baja` | `DIPLOMACIA_REPUTACION_BAJA` | Proponer una alianza con la reputación por debajo de `REPUTACION.umbralBajoParaEmbajador`. |
+| `diplomacia.ya_pendiente` | `DIPLOMACIA_YA_PENDIENTE` | Ya hay una propuesta de relación vigente entre las dos, en cualquier sentido. |
+| `diplomacia.propuesta_desconocida` | `DIPLOMACIA_PROPUESTA_DESCONOCIDA` | `prop-N` no es ninguna propuesta de relación pendiente (o ya se contestó o se retiró). |
+| `diplomacia.propuesta_caducada` | `DIPLOMACIA_PROPUESTA_CADUCADA` | La propuesta caducó (`RELACION_PROPUESTA.caducidadDias`). |
+| `diplomacia.batalla_abierta` | `DIPLOMACIA_BATALLA_ABIERTA` | Aceptar una relación con una batalla abierta en la que combate alguna de las dos: se contesta cuando termine. |
+| `diplomacia.tributo_invalido` | `DIPLOMACIA_TRIBUTO_INVALIDO` | El tributo de un vasallaje es una cantidad por minuto de un recurso, no negativa. |
 <!-- /rechazos -->

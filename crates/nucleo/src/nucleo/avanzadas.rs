@@ -725,6 +725,7 @@ impl Nucleo {
             self.guardar_guarnicion_de_avanzada(x, defensa[..n].to_vec(), t);
         }
         let gana = resultado.conquistada();
+        self.defensa_de_vasallo(t, Some(faccion_madre), &dentro.tropa.heroes, !gana);
         let heridos = self.herir_heroes(&heridos_del_asedio(&resultado, &participantes), t);
 
         let mut datos = vec![("avanzada", x as i64), ("etapa", etapa.indice() as i64), ("faccionAtacante", yo as i64), ("faccionDefensora", faccion_madre as i64)];

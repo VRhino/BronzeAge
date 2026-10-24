@@ -32,7 +32,6 @@ use crate::estado::{Asentamiento, SIN_BANDERA};
 use crate::estado_combate::{entidad_avanzada, entidad_bandidos, es_entidad_avanzada, es_entidad_bandidos};
 use crate::estado_comercio::{entidad_caravana, es_entidad_caravana, id_de_entidad};
 use super::persecuciones::Fin;
-use crate::estado_militar::Relacion;
 use ::encuentros::{plan_quieto, Entradas, Rejilla, PRIORIDAD_ENCUENTROS};
 use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada};
 use cola::Clave;
@@ -85,11 +84,6 @@ impl Nucleo {
         self.espacio.rejilla.len()
     }
 
-    /// La relación que la administración fijó entre dos Facciones, si la hay.
-    pub fn relacion(&self, a: u32, b: u32) -> Option<Relacion> {
-        self.estado.militar.relacion(a, b)
-    }
-
     pub(super) fn columna_en_el_mapa(&self, e: &Ejercito) -> bool {
         !e.en_batalla && e.columna.participantes.iter().any(|p| self.heroe(p.heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Columna(e.id)))
     }
@@ -131,7 +125,7 @@ impl Nucleo {
 
     /// ¿Son enemigas dos Facciones? Distintas y no aliadas; sin Facción nadie es de los tuyos.
     pub(super) fn hostiles(&self, a: Option<u32>, b: Option<u32>) -> bool {
-        !(a.is_some() && a == b) && !self.estado.militar.aliadas(a, b)
+        !(a.is_some() && a == b) && !self.estado.aliadas(a, b)
     }
 
     // ───────────────────────────── Altas y bajas ─────────────────────────────
@@ -319,27 +313,5 @@ impl Nucleo {
             Cosa::Plaza(_) => true,
             Cosa::Avanzada(v, _) => atacable(v.estado, t),
         }
-    }
-
-    // ───────────────────────────── Relaciones ─────────────────────────────
-
-    /// `fijarRelacion` (andamiaje de administración, Q6 del sistema 4): fija, cambia o quita la relación entre dos Facciones. Lo sustituirá el sistema
-    /// político.
-    pub(super) fn fijar_relacion(&mut self, t: Instante, a: u32, b: u32, relacion: Option<Relacion>) -> Result<Vec<u64>, Respuesta> {
-        let v = self.estado.version;
-        if a == b {
-            return Err(Respuesta::rechazo(rechazos::RELACION_CONSIGO_MISMA, "una Facción no tiene relación consigo misma", v));
-        }
-        if self.estado.militar.relacion(a, b) == relacion {
-            return Err(Respuesta::sin_cambios(v));
-        }
-        let clave = (a.min(b), a.max(b));
-        match relacion {
-            Some(r) => self.estado.militar.relaciones.insert(clave, r),
-            None => self.estado.militar.relaciones.remove(&clave),
-        };
-        let codigo = relacion.map_or(-1, |r| r as i64);
-        self.emitir_propio(t, "faccion.relacion", vec![], vec![("faccionA", clave.0 as i64), ("faccionB", clave.1 as i64), ("relacion", codigo)]);
-        Ok(vec![])
     }
 }

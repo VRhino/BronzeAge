@@ -384,7 +384,7 @@ impl Nucleo {
     /// si seguiría abriéndose la puerta a alguien que deja de residir en ella (la conquista de la madre).
     pub(super) fn acceso_deja_pasar(&self, heroe: u64, plaza: u64) -> bool {
         let (Some(hn), Some(a)) = (self.heroe(heroe), self.estado.asentamientos.get(&plaza)) else { return false };
-        a.acceso.permite(self.estado.militar.trato(a.faccion, hn.faccion))
+        a.acceso.permite(self.estado.trato(a.faccion, hn.faccion))
     }
 
     /// ¿Le abriría su puerta un pueblo extractor? Hereda el acceso de su plaza madre (`None` si el pueblo no existe). Se entra con `EntrarEnPueblo` (`dentro`).

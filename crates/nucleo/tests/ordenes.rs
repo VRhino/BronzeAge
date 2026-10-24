@@ -83,6 +83,9 @@ async fn la_administracion_monta_un_mundo_por_el_contrato_y_los_jugadores_lo_jue
     }
     let (_, r) = dar(&mut admin_c, "m5", admin("fijar_relacion", vec![("faccion_a_id", texto("f-1")), ("faccion_b_id", texto("f-2")), ("relacion", texto("guerra"))])).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    // Desde 5D la guerra que fija la administración es una relación real: la crónica la canta y llega a todos (un hecho público), aparte de las órdenes que siguen.
+    esperar_hecho(&mut ana, "cronica.entrada").await;
+    esperar_hecho(&mut beto, "cronica.entrada").await;
 
     // Columnas: ana marcha; su plan llega en la Delta que precede al resultado. Beto no puede mandar su columna.
     let (deltas, r) = dar(&mut ana, "p1", marchar_a_punto("heroe-2", Punto::new(c(10, 10).x, c(10, 10).y + 4_000))).await;

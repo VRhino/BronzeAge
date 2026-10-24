@@ -142,8 +142,8 @@ impl Nucleo {
         if !p.admin && aqui.dist(a.posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
         }
-        // DUDA: «donde pueda repostar»; hasta el sistema político solo abre su almacén la plaza propia (`permiteReabastecerAliados` es de 5D), como `repostar`.
-        if faccion != Some(a.faccion) {
+        // «Donde pueda repostar» (duda 3 de 5G-a, cerrada en 5D): la plaza propia, o la de una aliada o vasalla que abre su almacén a los aliados (`permiteReabastecerAliados`), como `repostar`.
+        if faccion != Some(a.faccion) && !self.abre_su_almacen_a(plaza, faccion) {
             return Err(rechazo(rechazos::CARAVANA_PLAZA_AJENA, "esa plaza no abre su almacén a esta columna".into()));
         }
         let existencias = a.economia.almacen.cantidad(recurso);

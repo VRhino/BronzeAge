@@ -473,9 +473,6 @@ impl Sim<'_> {
         for f in 1..=self.facciones {
             self.admin(0, "FijarNivelFaccion", Comando::FijarNivelFaccion { faccion: f, nivel: NIVEL_FACCION });
             self.admin(0, "FijarTecnologias", Comando::FijarTecnologias { faccion: f, tecnologias: tecnologias.clone() });
-            if f % 2 == 0 {
-                self.admin(0, "FijarRelacion", Comando::FijarRelacion { a: f - 1, b: f, relacion: Some(Relacion::Alianza) });
-            }
             if self.rng.por_debajo(100) < BELICOSA_PCT {
                 self.belicosas.insert(f);
             }
@@ -505,6 +502,20 @@ impl Sim<'_> {
             self.orden(t, &jugador(f), "Guarnecer", Comando::Guarnecer { asentamiento: id, heroe: lider });
             propias[f as usize - 1].push(id);
             self.nacen_heroes(t, f, k, id, p);
+        }
+        self.aliar_parejas(minuto * MIN);
+    }
+
+    /// Las parejas aliadas (5D): ya no las fija la administración, sino las reglas reales. El Rey de la impar le propone la alianza al de la par, que la acepta. El Rey de cada Facción es el
+    /// héroe de campo de su primera fundación (el primer ciudadano). Una Facción sin plazas (sin Rey) se queda sin aliada.
+    fn aliar_parejas(&mut self, t: Instante) {
+        let rey = |n: &Nucleo, f: u32| n.faccion(f).and_then(|x| x.rey).and_then(|h| n.heroe(h).map(|x| (h, x.cuenta.clone())));
+        for f in (2..=self.facciones).step_by(2) {
+            let (Some((ra, ca)), Some((rb, cb))) = (rey(&self.n, f - 1), rey(&self.n, f)) else { continue };
+            let r = self.orden(t, &ca, "ProponerRelacion", Comando::ProponerRelacion { heroe: ra, a: f - 1, b: f, vasallaje: false, tributo: None });
+            if let Some(&propuesta) = r.creadas.first().filter(|_| r.aceptada()) {
+                self.orden(t, &cb, "ResponderRelacion", Comando::ResponderRelacion { heroe: rb, propuesta, aceptar: true });
+            }
         }
     }
 

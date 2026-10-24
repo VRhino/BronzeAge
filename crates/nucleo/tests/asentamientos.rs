@@ -524,7 +524,7 @@ fn estado_con_una_plaza() -> Estado {
     let eco = &s.reglas.economia.datos;
     let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
     let urbe = nucleo::urbanismo::Urbe::fundar(&s.reglas.economia, 7, 1);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0 });
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false });
     s
 }
 

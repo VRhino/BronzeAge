@@ -286,6 +286,8 @@ impl Nucleo {
         }
         // La guarnición come después de la población (Reloj_Y_Eventos §2), la ración de este mismo paso.
         self.alimentar_guarnicion(id, t, racion);
+        // El tributo de la vasalla, al final de su paso (Q3; DUDA: tras comer su guarnición, para que la plaza atienda antes lo suyo).
+        self.pagar_tributo(id, t);
     }
 
     /// Acaba una obra, una mejora o un ascenso de la plaza `id` en `t` (el evento `Carga::FinDeObras`): el edificio pasa a activo, la zona crece
@@ -397,6 +399,7 @@ impl Nucleo {
         self.tr.tocar(Clase::Faccion, u64::from(a.faccion));
         if combate::conquista::faccion_derrotada(self.plazas_de(a.faccion).count()) {
             self.registrar_derrota(a.faccion, None);
+            self.diplomacia_tras_derrota(t, a.faccion);
             self.emitir_propio(t, "faccion.derrotada", vec![], vec![("faccion", a.faccion as i64), ("por", 0)]);
             self.reprogramar_anillos(t);
         }

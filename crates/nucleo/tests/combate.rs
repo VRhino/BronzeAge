@@ -182,8 +182,9 @@ fn las_ordenes_que_no_valen_se_rechazan_sin_rastro_y_en_su_orden() {
     assert_eq!(con(&mut x, "ana", "r5", ataque(ObjetivoAtaque::Ejercito(lejana.0), ana.1)), rechazos::COMBATE_LEJOS);
     // Los míos y los aliados.
     assert_eq!(con(&mut x, "ana", "r6", ataque(ObjetivoAtaque::Ejercito(otra.0), ana.1)), rechazos::GUERRA_CONFIRMAR, "sin guerra no se ataca a otra Facción");
-    assert!(x.n.aplicar_en(20 * MIN, admin("alianza", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) })).aceptada());
-    assert_eq!(con(&mut x, "ana", "r7", Comando::Atacar { heroe: ana.1, objetivo: ObjetivoAtaque::Ejercito(otra.0), declara_guerra: true }), rechazos::COMBATE_ALIADA, "ni con declaración se ataca a un aliado");
+    // A la propia vasalla (o a la señora), ni con declaración (5D: la vasalla se rebela, la señora la libera). A un aliado, `declara_guerra` es una traición (`tests/diplomacia.rs`).
+    assert!(x.n.aplicar_en(20 * MIN, admin("vasallaje", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Vasallaje) })).aceptada());
+    assert_eq!(con(&mut x, "ana", "r7", Comando::Atacar { heroe: ana.1, objetivo: ObjetivoAtaque::Ejercito(otra.0), declara_guerra: true }), rechazos::COMBATE_VASALLAJE, "ni con declaración se ataca a la propia vasalla");
     // La clase: un ejército y una columna personal no combaten entre sí (las de administración nacen ejército).
     x.n.aplicar_en(20 * MIN, admin("sale", Comando::Estacionar { ejercito: personal_f2.0 }));
     // Avanzada: todavía no existe ninguna.
@@ -220,11 +221,11 @@ fn declarar_la_guerra_al_atacar_la_deja_en_guerra_pero_solo_si_la_orden_vale() {
     let r = atacar(&mut n, MIN, "ana", "a2", ana.1, ObjetivoAtaque::Ejercito(beto.0), true);
     assert!(r.aceptada(), "{r:?}");
     assert_eq!((n.relacion(1, 2), n.relacion(2, 1)), (Some(Relacion::Guerra), Some(Relacion::Guerra)));
-    let g = hechos(&n, "faccion.guerra_declarada");
+    let g = hechos(&n, "diplomacia.guerra_declarada");
     assert_eq!((g.len(), dato(&g[0], "atacante"), dato(&g[0], "contra")), (1, 1, 2));
     // La guerra ya existe: los siguientes ataques no la vuelven a declarar.
     assert!(atacar(&mut n, 20 * MIN, "ana", "a3", ana.1, ObjetivoAtaque::Ejercito(beto.0), true).resultado != Resultado::Duplicada);
-    assert_eq!(hechos(&n, "faccion.guerra_declarada").len(), 1);
+    assert_eq!(hechos(&n, "diplomacia.guerra_declarada").len(), 1);
 }
 
 #[test]

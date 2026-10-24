@@ -112,8 +112,9 @@ impl HeroeNucleo {
     }
 }
 
-/// Lo que la administración dice que une a dos Facciones, hasta que el sistema político (5) lo decida con alianzas, vasallajes y declaraciones de
-/// guerra. Sin relación, son neutrales. Es de la pareja: no distingue al señor del vasallo (DUDA: el sistema 5 lo pedirá).
+/// La clase de la relación **activa** entre dos Facciones (la del crate `politica`, `Estado::politica.relaciones`, vista sin dirección): lo que miran los encuentros, la defensa,
+/// la puerta, unirse a batallas y la visión compartida. Sin relación, son neutrales. Desde 5D la relación tiene dirección (en un vasallaje `a` es la señora; en una guerra, quien
+/// declaró), estado e historia; esto es solo su clase. `FijarRelacion` (administración) la crea o la rompe con `a` como señora o declarante.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Relacion {
     /// Los aliados no se cruzan: ni se persiguen ni se ofrecen atacarse (Combate §5).
@@ -176,8 +177,6 @@ pub struct EstadoMilitar {
     pub reclutas: BTreeMap<u32, Reclutas>,
     /// Tecnologías que la administración ha dado a cada Facción (`FijarTecnologias`), además de las de arranque, que tiene toda Facción.
     pub tecnologias: BTreeMap<u32, BTreeSet<String>>,
-    /// Las relaciones entre Facciones que da la administración (`FijarRelacion`), por pareja `(menor, mayor)`.
-    pub relaciones: BTreeMap<(u32, u32), Relacion>,
     /// Plaza → héroes que residen en ella. Es un índice de `Heroe::residencia`: se reconstruye al recuperar y solo lo toca [`EstadoMilitar::mudar`].
     /// Con él, el paso de un minuto de una plaza sin residentes cuesta una consulta.
     pub(crate) residentes: BTreeMap<u64, BTreeSet<u64>>,
@@ -222,37 +221,6 @@ impl EstadoMilitar {
     /// ¿Tiene la Facción adoptada esa tecnología? Las de arranque las tiene toda Facción desde que nace.
     pub fn tiene_tecnologia(&self, reglas: &militar::Reglas, faccion: u32, tecnologia: &str) -> bool {
         reglas.tecnologias.de_arranque.iter().any(|t| t == tecnologia) || self.tecnologias.get(&faccion).is_some_and(|s| s.contains(tecnologia))
-    }
-
-    /// La relación entre dos Facciones, si la administración fijó una.
-    pub fn relacion(&self, a: u32, b: u32) -> Option<Relacion> {
-        self.relaciones.get(&(a.min(b), a.max(b))).copied()
-    }
-
-    /// Cómo trata una plaza de la Facción `plaza` a alguien de la Facción `visitante` (sin Facción: neutral). Es la relación del stub de administración
-    /// (`FijarRelacion`): alianza y vasallaje cuentan igual; la guerra es «enemiga».
-    pub fn trato(&self, plaza: u32, visitante: Option<u32>) -> Trato {
-        match visitante {
-            Some(f) if f == plaza => Trato::Propia,
-            Some(f) => match self.relacion(f, plaza) {
-                Some(Relacion::Alianza | Relacion::Vasallaje) => Trato::Aliada,
-                Some(Relacion::Guerra) => Trato::Enemiga,
-                None => Trato::Neutral,
-            },
-            None => Trato::Neutral,
-        }
-    }
-
-    /// ¿Defendería a una plaza de la Facción `plaza` quien es de la Facción `visitante` estando dentro? Solo la misma Facción, los aliados y los vasallos
-    /// (neutrales y enemigos nunca, aunque estén dentro).
-    pub fn defiende_a(&self, plaza: u32, visitante: Option<u32>) -> bool {
-        matches!(self.trato(plaza, visitante), Trato::Propia | Trato::Aliada)
-    }
-
-    /// ¿Son aliadas? Solo la alianza: el vasallaje comparte visión pero no es lo que impide perseguir ni atacar (Movimiento_Ejercitos §7). Una
-    /// columna sin Facción no tiene aliados.
-    pub fn aliadas(&self, a: Option<u32>, b: Option<u32>) -> bool {
-        a.zip(b).is_some_and(|(a, b)| self.relacion(a, b) == Some(Relacion::Alianza))
     }
 
     /// Soldados en pie de las escuadras `ids` que llevan los participantes `participantes` (lo que come una columna y lo que la hace ver más lejos).

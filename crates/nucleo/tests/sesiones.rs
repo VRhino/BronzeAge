@@ -187,7 +187,7 @@ async fn lo_que_el_contrato_no_puede_traducir_se_rechaza_con_un_codigo_estable()
     let w = arrancar().await;
     let (mut ana, _) = w.entrar("ana", TipoCliente::ClienteUnity).await;
     // Una orden del contrato que el núcleo aún no tiene no se descarta: se rechaza con su código.
-    let (deltas, r) = dar(&mut ana, "x", orden::Cuerpo::DeclararGuerra(pb::OrdenDeclararGuerra::default())).await;
+    let (deltas, r) = dar(&mut ana, "x", orden::Cuerpo::VetarJugador(pb::OrdenVetarJugador::default())).await;
     assert_eq!((deltas.len(), rechazo(&r)), (0, "orden.no_disponible"));
     // Una orden vacía, tampoco.
     ana.enviar(mc::Cuerpo::Orden(Orden { peticion_id: "v".into(), ..Default::default() })).await;

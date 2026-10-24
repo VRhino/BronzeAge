@@ -264,6 +264,15 @@ impl Almacen {
     fn de(&self, tipo: TipoEntidad) -> usize {
         self.entidades.keys().filter(|(t, _)| *t == tipo as i32).count()
     }
+
+    /// El id de la relación activa entre `f-a` y `f-b`, en cualquier sentido (desde 5D, `rel-N`).
+    fn relacion_entre(&self, a: u32, b: u32) -> Option<String> {
+        let (fa, fb) = (ids::faccion(a), ids::faccion(b));
+        self.entidades.iter().find_map(|((_, id), c)| match c {
+            Cuerpo::Relacion(r) if (r.faccion_a_id == fa && r.faccion_b_id == fb) || (r.faccion_a_id == fb && r.faccion_b_id == fa) => Some(id.clone()),
+            _ => None,
+        })
+    }
 }
 
 /// La foto de `ADMIN` que recibe una sesión de administración nueva.
@@ -316,7 +325,7 @@ async fn la_administracion_ve_todo_el_mundo_sin_niebla_ni_redaccion_y_todo_lo_qu
     for f in ["f-1", "f-2", "f-3"] {
         assert!(de_admin.get(TipoEntidad::Faccion, f).is_some() && de_admin.get(TipoEntidad::TecnologiaFaccion, f).is_some(), "{f}");
     }
-    let Some(Cuerpo::Relacion(rel)) = de_admin.get(TipoEntidad::RelacionPolitica, &ids::relacion(2, 3)) else { panic!("la relación de F2 y F3") };
+    let Some(Cuerpo::Relacion(rel)) = de_admin.relacion_entre(2, 3).and_then(|id| de_admin.get(TipoEntidad::RelacionPolitica, &id)) else { panic!("la relación de F2 y F3") };
     assert_eq!(rel.tipo, pb::TipoRelacion::RelacionGuerra as i32);
     assert_eq!(de_admin.de(TipoEntidad::CampamentoMercenarios), campamentos);
     assert_eq!(de_admin.get(TipoEntidad::CampamentoBandidos, &bandidos.id), Some(&Cuerpo::CampamentoBandidos(bandidos)));
@@ -337,11 +346,11 @@ async fn la_administracion_ve_todo_el_mundo_sin_niebla_ni_redaccion_y_todo_lo_qu
     let (previos, r) = dar_todo(&mut admin_c, "a1", admin("fijar_relacion", &[("faccion_a_id", "f-1"), ("faccion_b_id", "f-3"), ("relacion", "alianza")])).await;
     aceptada(&r);
     de_admin.aplicar(&previos);
-    assert!(de_admin.get(TipoEntidad::RelacionPolitica, &ids::relacion(1, 3)).is_some());
+    let r13 = de_admin.relacion_entre(1, 3).expect("la alianza de F1 y F3");
     let (previos, r) = dar_todo(&mut admin_c, "a2", admin("fijar_relacion", &[("faccion_a_id", "f-1"), ("faccion_b_id", "f-3")])).await;
     aceptada(&r);
     let deltas = de_admin.aplicar(&previos);
-    assert!(deltas.iter().flat_map(|d| &d.cambios).any(|c| c.id == ids::relacion(1, 3) && c.tipo == TipoCambio::CambioQuita as i32));
+    assert!(deltas.iter().flat_map(|d| &d.cambios).any(|c| c.id == r13 && c.tipo == TipoCambio::CambioQuita as i32));
 
     // Dora entra en la plaza: cambia quién está dentro (el interior, no la ficha) y la administración lo ve.
     let (previos, r) = dar_todo(&mut admin_c, "a3", admin("colocar_heroe", &[("heroe_id", &ids::heroe(dora)), ("ubicacion", &as_)])).await;
@@ -458,7 +467,7 @@ async fn admin_se_reanuda_sin_novedad_o_por_deltas_con_la_secuencia_interior_de_
     assert_eq!((d.desde, d.hasta, mensajes.len()), (v0, b.ambitos[0].version_actual, 1), "una sola delta de v0 a hoy");
     let cambio = d.cambios.iter().find(|c| c.id == as_).expect("la plaza");
     assert!(cambio.reemplaza, "la plaza entera: no se sabe qué tiene el cliente de ella");
-    assert!(d.cambios.iter().any(|c| c.id == ids::relacion(1, 2)));
+    assert!(d.cambios.iter().any(|c| matches!(c.datos.as_ref().and_then(|e| e.cuerpo.as_ref()), Some(Cuerpo::Relacion(r)) if r.faccion_a_id == "f-1" && r.faccion_b_id == "f-2")));
     tenia.aplicar(&mensajes);
     pendiente(&mut c).await;
     assert_eq!(tenia.entidades, foto_nueva(&w, "tercero").await.entidades, "foto + deltas = foto nueva");

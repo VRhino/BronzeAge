@@ -65,7 +65,7 @@ fn al_declarar_la_guerra_atacando_la_oyen_los_dos_bandos_y_la_cronica_todos() {
     let r = n.aplicar_en(MIN, Peticion::nueva("ana", "a1", Comando::Atacar { heroe: ana.1, objetivo: ObjetivoAtaque::Ejercito(beto.0), declara_guerra: true }));
     assert!(r.aceptada(), "{r:?}");
 
-    let guerra = hechos(&n, "faccion.guerra_declarada");
+    let guerra = hechos(&n, "diplomacia.guerra_declarada");
     assert_eq!((guerra.len(), guerra[0].facciones.clone(), guerra[0].heroes.is_empty(), guerra[0].publico), (1, vec![1, 2], true, false));
     let resuelto = hechos(&n, "combate.resuelto")[0];
     assert_eq!((resuelto.heroes.clone(), resuelto.facciones.clone()), (vec![ana.1, beto.1], vec![]), "el combate lo oyen las dos columnas");
@@ -83,7 +83,7 @@ fn al_declarar_la_guerra_atacando_la_oyen_los_dos_bandos_y_la_cronica_todos() {
     assert!(ce.publico && ce.heroes.is_empty() && ce.facciones.is_empty() && ce.asentamientos.is_empty() && ce.ejercitos.is_empty() && ce.punto.is_none());
     let d = evento_dominio(&n, ce, 1);
     let campos = &d.payload.as_ref().unwrap().fields;
-    assert_eq!((&campos["tipo"].kind, textos(&campos["faccionIds"])), (&Some(Kind::StringValue("faccion.guerra_declarada".into())), vec!["f-1".to_owned(), "f-2".to_owned()]));
+    assert_eq!((&campos["tipo"].kind, textos(&campos["faccionIds"])), (&Some(Kind::StringValue("diplomacia.guerra_declarada".into())), vec!["f-1".to_owned(), "f-2".to_owned()]));
     assert!(d.asentamiento_id.is_none() && d.heroes_ids.is_empty() && d.facciones_ids.is_empty() && d.tipado.is_none());
 
     // La guerra, tipada, dice lo mismo que su payload.
@@ -139,7 +139,7 @@ fn el_payload_generico_lleva_los_ids_del_contrato() {
     let expulsado = hecho("heroe.expulsado", Some(3), None, vec![("lugar", 2), ("sitio", 6)]);
     assert_eq!((campo(&expulsado, "sitioId"), campo(&expulsado, "lugar")), (texto("av-6"), Some(Kind::NumberValue(2.0))));
     assert_eq!(campo(&hecho("parcela.reclamada", Some(3), None, vec![("parcela", 12)]), "parcelaId"), texto("parcela-12"));
-    assert_eq!(campo(&hecho("faccion.guerra_declarada", None, None, vec![("atacante", 1), ("contra", 2)]), "atacanteId"), texto("f-1"));
+    assert_eq!(campo(&hecho("diplomacia.guerra_declarada", None, None, vec![("atacante", 1), ("contra", 2)]), "atacanteId"), texto("f-1"));
     assert_eq!(campo(&hecho("batalla.abierta", None, None, vec![("faccionAtacante", nucleo::SIN_BANDERA as i64)]), "faccionAtacanteId"), texto(""), "sin bandera, ninguna Facción");
 }
 
@@ -209,7 +209,7 @@ fn los_quince_mensajes_tipados_dicen_lo_que_su_payload_y_van_y_vuelven_en_bytes(
             }),
         ),
         (hecho("heroe.herido", None, None, vec![("heroe", 9), ("hasta", 9_000)]), Tipado::HeroeHerido(pb::HeroeHerido { heroe_id: "heroe-9".into(), hasta_ms: 9_000 })),
-        (hecho("faccion.guerra_declarada", None, None, vec![("atacante", 1), ("contra", 2)]), Tipado::GuerraDeclarada(pb::GuerraDeclarada { atacante_faccion_id: "f-1".into(), contra_faccion_id: "f-2".into(), arrastradas_ids: vec![] })),
+        (hecho("diplomacia.guerra_declarada", None, None, vec![("atacante", 1), ("contra", 2)]), Tipado::GuerraDeclarada(pb::GuerraDeclarada { atacante_faccion_id: "f-1".into(), contra_faccion_id: "f-2".into(), arrastradas_ids: vec![] })),
     ];
     let mut mensajes = std::collections::HashSet::new();
     for (ev, esperado) in casos {
@@ -426,7 +426,7 @@ async fn cada_hecho_llega_una_sola_vez_a_quien_lo_oye_y_por_su_ambito() {
     assert!(de("p2", "ana", codigo).is_empty() && de("p2", "gus", codigo).is_empty() && de("p2", "hugo", codigo).is_empty());
     assert_eq!(de("p2", "admin", codigo), ["ADMIN:"]);
     // El de dos Facciones: las dos enteras, por `FACCION`, aunque ana esté dentro de su plaza; F3, nada.
-    let codigo = "faccion.relacion";
+    let codigo = "diplomacia.relacion_aceptada";
     assert_eq!((de("p3", "ana", codigo), de("p3", "beto", codigo), de("p3", "gus", codigo)), (vec!["FACCION:f-1".to_owned()], vec!["FACCION:f-1".to_owned()], vec!["FACCION:f-2".to_owned()]));
     assert!(de("p3", "hugo", codigo).is_empty());
     // Una convocatoria en un campamento: su Facción entera (el Líder, por su `HEROE`), con el mensaje tipado.
@@ -452,7 +452,7 @@ async fn cada_hecho_llega_una_sola_vez_a_quien_lo_oye_y_por_su_ambito() {
     }
     let codigos = |quien: &str| suyos(quien).into_iter().map(|(_, c)| c).collect::<std::collections::BTreeSet<_>>();
     assert!(["ana", "beto", "gus", "hugo"].iter().all(|q| codigos(q).is_subset(&codigos("admin"))), "la administración lo oye todo");
-    assert_eq!(codigos("gus"), ["cronica.entrada".to_owned(), "faccion.relacion".to_owned()].into_iter().collect());
+    assert_eq!(codigos("gus"), ["cronica.entrada".to_owned(), "diplomacia.relacion_aceptada".to_owned()].into_iter().collect());
     w.parar().await;
 }
 

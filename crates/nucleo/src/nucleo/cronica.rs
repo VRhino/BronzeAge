@@ -6,13 +6,13 @@
 //! | `asentamiento.conquistada` | la caída de la plaza: la conquistadora y la que la tenía |
 //! | `asentamiento.ruinas` | las ruinas de la plaza: la que la tenía |
 //! | `fundacion.asentamiento_fundado` | la fundación: la fundadora |
-//! | `faccion.guerra_declarada` | la guerra: las dos |
+//! | `diplomacia.guerra_declarada` | la guerra: la que declara y la declarada (5D: también la de la orden `declararGuerra` y la de una rebelión) |
+//! | `diplomacia.rebelion_vasallo`, `.vasallo_liberado`, `.vasallo_conquistado` | la rebelión, la liberación y el traspaso de una vasalla: la señora (o la conquistadora) y la vasalla (5D) |
 //! | `asentamiento.nivel_subio` con nivel ≥ 3 | solo si es la primera plaza del mundo que llega a ese nivel (ninguna otra, fuera de las que suben en la misma versión, lo tenía ya); si suben dos a la vez, la primera |
 //!
 //! DUDA: el canon canta la caída por `combate.asedio_conquista`, que en Rust solo da el asedio con números; la conquista por Unity no lo emite, así que la entrada sale de
-//! `asentamiento.conquistada`, que dan las dos vías. La guerra se canta por `faccion.guerra_declarada` (la que declara `atacar`), el equivalente de `diplomacia.guerra_declarada` mientras no haya
-//! sistema político. La frase la compone el cliente (el contrato no lleva texto): la entrada no trae la variante de §8. Faltan los hechos de la diplomacia (sistema 5) y los públicos de la
-//! tecnología y los Aedas (sistema 6): filas de paridad.
+//! `asentamiento.conquistada`, que dan las dos vías. La frase la compone el cliente (el contrato no lleva texto): la entrada no trae la variante de §8. Faltan la anexión y la fusión (5F) y los
+//! públicos de la tecnología y los Aedas (sistema 6): filas de paridad.
 
 use super::*;
 use crate::estado::Dato;
@@ -33,7 +33,8 @@ impl Nucleo {
             let facciones = match h.codigo.as_ref() {
                 "asentamiento.conquistada" => datos(h, &["faccion", "faccionAnterior"]),
                 "fundacion.asentamiento_fundado" => datos(h, &["faccion"]),
-                "faccion.guerra_declarada" => datos(h, &["atacante", "contra"]),
+                "diplomacia.guerra_declarada" => datos(h, &["atacante", "contra"]),
+                "diplomacia.rebelion_vasallo" | "diplomacia.vasallo_liberado" | "diplomacia.vasallo_conquistado" => datos(h, &["faccionA", "faccionB"]),
                 "asentamiento.ruinas" => h.facciones.clone(),
                 "asentamiento.nivel_subio" => match h.dato("nivel") {
                     Some(n) if n >= NIVEL_MINIMO_CANTADO && self.primera_en_llegar(hechos, plaza(h), n) && cantados.insert(n) => h.facciones.clone(),

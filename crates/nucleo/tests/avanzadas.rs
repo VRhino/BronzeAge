@@ -955,8 +955,8 @@ fn atacar_una_avanzada_se_rechaza_sin_rastro_y_en_su_orden() {
     assert_eq!(e.rechazada("beto", atacar(beto, pendiente, false)), rechazos::GUERRA_CONFIRMAR, "sin guerra se rechaza y no la declara");
     assert_eq!(e.rechazada("beto", atacar(lejos_h, pendiente, true)), rechazos::COMBATE_LEJOS);
     assert_eq!(e.rechazada("beto", atacar(sin_tropa, pendiente, true)), rechazos::COMBATE_SIN_ATACANTES, "un héroe solo no ataca una avanzada");
-    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Alianza) });
-    assert_eq!(e.rechazada("beto", atacar(beto, pendiente, true)), rechazos::COMBATE_ALIADA, "ni con declaración se ataca a un aliado");
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Vasallaje) });
+    assert_eq!(e.rechazada("beto", atacar(beto, pendiente, true)), rechazos::COMBATE_VASALLAJE, "ni con declaración se ataca a la propia señora (5D)");
 }
 
 #[test]
@@ -966,10 +966,10 @@ fn declarar_la_guerra_al_atacar_una_avanzada_solo_ocurre_si_todo_lo_demas_vale()
     let pos = e.sitio();
     let (av, _, _) = e.atalaya();
     let (_, beto) = e.ejercito_fuerte(pos);
-    assert!(e.n.estado().militar.relacion(1, 2).is_none());
+    assert!(e.n.estado().relacion(1, 2).is_none());
     e.ok("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Avanzada(av), declara_guerra: true });
-    assert_eq!(e.n.estado().militar.relacion(1, 2), Some(Relacion::Guerra));
-    assert_eq!(hechos(&e.n, "faccion.guerra_declarada").len(), 1);
+    assert_eq!(e.n.estado().relacion(1, 2), Some(Relacion::Guerra));
+    assert_eq!(hechos(&e.n, "diplomacia.guerra_declarada").len(), 1);
 }
 
 #[test]

@@ -412,6 +412,26 @@ pub enum Comando {
     DesignarCapital { heroe: u64, faccion: u32, asentamiento: u64 },
     /// Quien reside en la plaza le cambia el nombre (`renombrarAsentamiento`): se recorta; vacío, la plaza se queda sin nombre (se muestra su id).
     RenombrarAsentamiento { heroe: u64, asentamiento: u64, nombre: String },
+    // ── Política: las relaciones entre Facciones (sistema 5, tanda 5D; Diplomacia_Facciones §5). Códigos desde el 154: del 144 al 153, para 5G-b. ──
+    /// La autoridad diplomática de `a` (Rey o Embajador) le propone a `b` una alianza o un vasallaje (`vasallaje`: `a` es la señora), con su tributo (recurso y milésimas por minuto;
+    /// sin él, trigo a 0). Caduca a `RELACION_PROPUESTA.caducidadDias`. `creadas` lleva la propuesta.
+    ProponerRelacion { heroe: u64, a: u32, b: u32, vasallaje: bool, tributo: Option<(Recurso, Mil)> },
+    /// El Rey de la Facción `b` de la propuesta la acepta (revalida todo: nace la relación) o la rechaza.
+    ResponderRelacion { heroe: u64, propuesta: u64, aceptar: bool },
+    /// La autoridad diplomática de la Facción que propuso la retira mientras siga vigente.
+    RetirarRelacion { heroe: u64, propuesta: u64 },
+    /// La autoridad diplomática de `a` le declara la guerra a `b`, con el arrastre por vasallaje (§5.4). Sin relación activa entre las dos: a una aliada hay que romperle antes la alianza.
+    DeclararGuerra { heroe: u64, a: u32, b: u32 },
+    /// La autoridad diplomática de `faccion` ofrece la paz en la guerra `relacion`; cuando la ofrece la otra, se firma.
+    ProponerPaz { heroe: u64, relacion: u64, faccion: u32 },
+    /// La autoridad diplomática de `iniciador` rompe una alianza (cualquiera de las dos) o libera a su vasalla (solo la señora). Una guerra no se rompe.
+    RomperRelacion { heroe: u64, relacion: u64, iniciador: u32 },
+    /// La autoridad diplomática de la vasalla se rebela: el vasallaje se rompe y le declara la guerra a la señora, con el arrastre.
+    RebelionVasallo { heroe: u64, relacion: u64 },
+    /// El Rey admite (o no) a otras Facciones en los ataques de la suya (`admiteOtrasEnAtaques`).
+    AdmitirOtrasFacciones { heroe: u64, faccion: u32, admitir: bool },
+    /// Quien manda en la plaza abre (o cierra) su almacén a las columnas aliadas para repostar y cargar caravanas (`permiteReabastecerAliados`). Cerrar no es retroactivo.
+    AlternarReabastecerAliados { asentamiento: u64, permitido: bool },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -453,6 +473,9 @@ pub enum Autoriza {
     CiudadanoDeLaFaccion,
     /// La cuenta del héroe, que además reside en la plaza que nombra la orden (`renombrarAsentamiento`: basta residir).
     ResidenteDeLaPlaza,
+    /// La cuenta del héroe, que además es ciudadano y Rey o Embajador de la Facción que actúa (`autoridadDiplomatica`, Diplomacia_Facciones §5.1): la que propone, declara, ofrece la paz,
+    /// rompe o retira, y la vasalla que se rebela.
+    AutoridadDiplomatica,
     /// Quien manda en la plaza (`Nucleo::manda_en`): una cuenta con un héroe ciudadano de su Facción o una columna de su Facción. De una caravana, la plaza de su origen; de un trueque,
     /// la plaza A al proponerlo y la B al aceptarlo o rechazarlo; de una orden de mercado, su plaza.
     MandaEnLaPlaza,
@@ -550,7 +573,10 @@ impl Comando {
             | Comando::CambiarResidencia { .. }
             | Comando::ResidirEnCampamento { .. }
             | Comando::DejarResidencia { .. } => CuentaDelHeroe,
-            Comando::ResponderSolicitud { .. } | Comando::AsignarEmbajador { .. } | Comando::DesignarCapital { .. } => ReyDeLaFaccion,
+            Comando::ResponderSolicitud { .. } | Comando::AsignarEmbajador { .. } | Comando::DesignarCapital { .. } | Comando::ResponderRelacion { .. } | Comando::AdmitirOtrasFacciones { .. } => ReyDeLaFaccion,
+            Comando::ProponerRelacion { .. } | Comando::RetirarRelacion { .. } | Comando::DeclararGuerra { .. } | Comando::ProponerPaz { .. } | Comando::RomperRelacion { .. } | Comando::RebelionVasallo { .. } => {
+                AutoridadDiplomatica
+            }
             Comando::RenombrarAsentamiento { .. } => ResidenteDeLaPlaza,
             Comando::AsignarRey { .. } => CiudadanoDeLaFaccion,
             Comando::ColocarAvanzada { .. }
@@ -590,7 +616,8 @@ impl Comando {
             | Comando::FijarAcceso { .. }
             | Comando::ComprometerRecinto { .. }
             | Comando::MejorarRecinto { .. }
-            | Comando::AbandonarRecinto { .. } => MandaEnLaPlaza,
+            | Comando::AbandonarRecinto { .. }
+            | Comando::AlternarReabastecerAliados { .. } => MandaEnLaPlaza,
             Comando::MarcharA { .. } | Comando::Estacionar { .. } | Comando::Fundar { .. } | Comando::ComerciarEnPlaza { .. } => LiderDeLaColumna,
             Comando::EntregarDeCaravana { .. }
             | Comando::AdjuntarCaravana { .. }
@@ -625,6 +652,7 @@ impl Comando {
             Comando::ColocarBandidos { .. } => CampamentoBandidos,
             Comando::ComprarMirada { .. } => Mirada,
             Comando::CrearFaccion { .. } => Faccion,
+            Comando::ProponerRelacion { .. } => Propuesta,
             _ => return None,
         })
     }
@@ -849,7 +877,16 @@ impl Comando {
             | Comando::AsignarRey { heroe, .. }
             | Comando::AsignarEmbajador { heroe, .. }
             | Comando::ResidirEnCampamento { heroe, .. }
-            | Comando::DejarResidencia { heroe } => i.heroes.push(*heroe),
+            | Comando::DejarResidencia { heroe }
+            | Comando::ProponerRelacion { heroe, .. }
+            | Comando::ResponderRelacion { heroe, .. }
+            | Comando::RetirarRelacion { heroe, .. }
+            | Comando::DeclararGuerra { heroe, .. }
+            | Comando::ProponerPaz { heroe, .. }
+            | Comando::RomperRelacion { heroe, .. }
+            | Comando::RebelionVasallo { heroe, .. }
+            | Comando::AdmitirOtrasFacciones { heroe, .. } => i.heroes.push(*heroe),
+            Comando::AlternarReabastecerAliados { asentamiento, .. } => i.asentamientos.push(*asentamiento),
             Comando::CrearEjercito { .. }
             | Comando::Reloj(_)
             | Comando::FijarNivelFaccion { .. }
@@ -889,7 +926,8 @@ impl Comando {
             | Comando::CrearHeroe { campamento, .. }
             | Comando::FijarResidencia { residencia: Some(Residencia::Campamento(campamento)), .. } => v.push((Clase::Campamento, u64::from(*campamento))),
             Comando::FijarNivelFaccion { faccion, .. } | Comando::FijarTecnologias { faccion, .. } | Comando::CrearEjercito { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
-            Comando::FijarRelacion { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b)), (Clase::Relacion, Clase::par(*a, *b))]),
+            Comando::FijarRelacion { a, b, .. } | Comando::ProponerRelacion { a, b, .. } | Comando::DeclararGuerra { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b))]),
+            Comando::AdmitirOtrasFacciones { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
             Comando::FijarFaccionDeHeroe { faccion: Some(faccion), .. }
             | Comando::SolicitarIngreso { faccion, .. }
             | Comando::ResponderSolicitud { faccion, .. }
@@ -1779,6 +1817,63 @@ impl Peticion {
                 w.u64(*asentamiento);
                 w.texto(nombre);
             }
+            Comando::ProponerRelacion { heroe, a, b, vasallaje, tributo } => {
+                w.u8(154);
+                w.u64(*heroe);
+                w.u32(*a);
+                w.u32(*b);
+                w.bool(*vasallaje);
+                w.bool(tributo.is_some());
+                if let Some((r, n)) = tributo {
+                    w.u8(recurso_a_u8(*r));
+                    w.i64(*n);
+                }
+            }
+            Comando::ResponderRelacion { heroe, propuesta, aceptar } => {
+                w.u8(155);
+                w.u64(*heroe);
+                w.u64(*propuesta);
+                w.bool(*aceptar);
+            }
+            Comando::RetirarRelacion { heroe, propuesta } => {
+                w.u8(156);
+                w.u64(*heroe);
+                w.u64(*propuesta);
+            }
+            Comando::DeclararGuerra { heroe, a, b } => {
+                w.u8(157);
+                w.u64(*heroe);
+                w.u32(*a);
+                w.u32(*b);
+            }
+            Comando::ProponerPaz { heroe, relacion, faccion } => {
+                w.u8(158);
+                w.u64(*heroe);
+                w.u64(*relacion);
+                w.u32(*faccion);
+            }
+            Comando::RomperRelacion { heroe, relacion, iniciador } => {
+                w.u8(159);
+                w.u64(*heroe);
+                w.u64(*relacion);
+                w.u32(*iniciador);
+            }
+            Comando::RebelionVasallo { heroe, relacion } => {
+                w.u8(160);
+                w.u64(*heroe);
+                w.u64(*relacion);
+            }
+            Comando::AdmitirOtrasFacciones { heroe, faccion, admitir } => {
+                w.u8(161);
+                w.u64(*heroe);
+                w.u32(*faccion);
+                w.bool(*admitir);
+            }
+            Comando::AlternarReabastecerAliados { asentamiento, permitido } => {
+                w.u8(162);
+                w.u64(*asentamiento);
+                w.bool(*permitido);
+            }
         }
         w.0
     }
@@ -1978,6 +2073,19 @@ impl Peticion {
             136 => Comando::DejarResidencia { heroe: r.u64()? },
             137 => Comando::DesignarCapital { heroe: r.u64()?, faccion: r.u32()?, asentamiento: r.u64()? },
             143 => Comando::RenombrarAsentamiento { heroe: r.u64()?, asentamiento: r.u64()?, nombre: r.texto()? },
+            154 => {
+                let (heroe, a, b, vasallaje) = (r.u64()?, r.u32()?, r.u32()?, r.bool()?);
+                let tributo = if r.bool()? { Some((recurso_de_u8(r.u8()?)?, r.i64()?)) } else { None };
+                Comando::ProponerRelacion { heroe, a, b, vasallaje, tributo }
+            }
+            155 => Comando::ResponderRelacion { heroe: r.u64()?, propuesta: r.u64()?, aceptar: r.bool()? },
+            156 => Comando::RetirarRelacion { heroe: r.u64()?, propuesta: r.u64()? },
+            157 => Comando::DeclararGuerra { heroe: r.u64()?, a: r.u32()?, b: r.u32()? },
+            158 => Comando::ProponerPaz { heroe: r.u64()?, relacion: r.u64()?, faccion: r.u32()? },
+            159 => Comando::RomperRelacion { heroe: r.u64()?, relacion: r.u64()?, iniciador: r.u32()? },
+            160 => Comando::RebelionVasallo { heroe: r.u64()?, relacion: r.u64()? },
+            161 => Comando::AdmitirOtrasFacciones { heroe: r.u64()?, faccion: r.u32()?, admitir: r.bool()? },
+            162 => Comando::AlternarReabastecerAliados { asentamiento: r.u64()?, permitido: r.bool()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2358,7 +2466,10 @@ pub mod rechazos {
     pub const COMBATE_PROTECCION_DE_CAMPAMENTO: &str = "combate.proteccion_de_campamento";
     pub const COMBATE_LEJOS: &str = "combate.lejos";
     pub const COMBATE_PROPIA: &str = "combate.propia";
+    /// Retirado en 5D (decisión Q2 del autor, 2026-10-24): atacar a un aliado con `declara_guerra` es una traición que rompe la alianza y declara la guerra; sin ella, `guerra.confirmar`.
     pub const COMBATE_ALIADA: &str = "combate.aliada";
+    /// Atacar a la propia señora o a la propia vasalla (5D): un vasallaje no se convierte en guerra; la vasalla se rebela (`rebelion_vasallo`) y la señora la libera (`romper_relacion`).
+    pub const COMBATE_VASALLAJE: &str = "combate.vasallaje";
     /// `atacar` contra una Facción con la que no se está en guerra y sin `declara_guerra`: el cliente tiene que confirmarla (`Detalle::Guerra` dice contra quién).
     pub const GUERRA_CONFIRMAR: &str = "guerra.confirmar";
     pub const COMBATE_A_CUBIERTO: &str = "combate.a_cubierto";
@@ -2467,6 +2578,41 @@ pub mod rechazos {
     pub const ASENTAMIENTO_NOMBRE_LARGO: &str = "asentamiento.nombre_largo";
     /// Otra plaza viva ya se llama así (sin mirar tildes ni mayúsculas).
     pub const ASENTAMIENTO_NOMBRE_DUPLICADO: &str = "asentamiento.nombre_duplicado";
+    // Las relaciones entre Facciones (sistema 5, tanda 5D; `ErrorDiplomacia` y `ErrorPropuesta` del crate `politica`).
+    /// Ya hay una relación activa entre las dos (de cualquier clase, la guerra incluida): para cambiarla hay que romperla antes (o firmar la paz).
+    pub const DIPLOMACIA_YA_HAY_RELACION: &str = "diplomacia.ya_hay_relacion";
+    /// `rel-N` no es ninguna relación.
+    pub const DIPLOMACIA_RELACION_DESCONOCIDA: &str = "diplomacia.relacion_desconocida";
+    /// La relación ya está rota (o la paz ya se firmó).
+    pub const DIPLOMACIA_RELACION_ROTA: &str = "diplomacia.relacion_rota";
+    /// La paz es de una guerra.
+    pub const DIPLOMACIA_NO_ES_GUERRA: &str = "diplomacia.no_es_guerra";
+    /// La rebelión es de un vasallaje.
+    pub const DIPLOMACIA_NO_ES_VASALLAJE: &str = "diplomacia.no_es_vasallaje";
+    /// Esa Facción no es parte de esa relación.
+    pub const DIPLOMACIA_NO_ES_PARTE: &str = "diplomacia.no_es_parte";
+    /// Esa Facción ya ofreció la paz: falta la otra.
+    pub const DIPLOMACIA_YA_OFRECIO_PAZ: &str = "diplomacia.ya_ofrecio_paz";
+    /// Una guerra no se rompe: se acaba con la paz.
+    pub const DIPLOMACIA_GUERRA_NO_SE_ROMPE: &str = "diplomacia.guerra_no_se_rompe";
+    /// Un vasallaje solo lo libera la señora; la vasalla se rebela.
+    pub const DIPLOMACIA_SOLO_LA_SENORA: &str = "diplomacia.solo_la_senora";
+    /// Una de las dos Facciones no tiene Rey que pacte o conteste.
+    pub const DIPLOMACIA_SIN_REY: &str = "diplomacia.sin_rey";
+    /// Una de las dos ya es vasalla de una tercera (una Facción tiene como mucho una señora).
+    pub const DIPLOMACIA_VASALLA_DE_TERCERA: &str = "diplomacia.vasalla_de_tercera";
+    /// Proponer una alianza con la reputación por debajo de `REPUTACION.umbralBajoParaEmbajador`.
+    pub const DIPLOMACIA_REPUTACION_BAJA: &str = "diplomacia.reputacion_baja";
+    /// Ya hay una propuesta de relación vigente entre las dos, en cualquier sentido.
+    pub const DIPLOMACIA_YA_PENDIENTE: &str = "diplomacia.ya_pendiente";
+    /// `prop-N` no es ninguna propuesta de relación pendiente (o ya se contestó o se retiró).
+    pub const DIPLOMACIA_PROPUESTA_DESCONOCIDA: &str = "diplomacia.propuesta_desconocida";
+    /// La propuesta caducó (`RELACION_PROPUESTA.caducidadDias`).
+    pub const DIPLOMACIA_PROPUESTA_CADUCADA: &str = "diplomacia.propuesta_caducada";
+    /// Aceptar una relación con una batalla abierta en la que combate alguna de las dos: se contesta cuando termine.
+    pub const DIPLOMACIA_BATALLA_ABIERTA: &str = "diplomacia.batalla_abierta";
+    /// El tributo de un vasallaje es una cantidad por minuto de un recurso, no negativa.
+    pub const DIPLOMACIA_TRIBUTO_INVALIDO: &str = "diplomacia.tributo_invalido";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -2515,6 +2661,8 @@ pub enum TipoCreado {
     Mirada,
     /// Una Facción nueva (`crearFaccion`).
     Faccion,
+    /// Una propuesta de relación (`proponerRelacion`, 5D). Todavía no es una clase del registro de cambios (la proyección de las propuestas es de 5H): viaja en `creadas` y en sus hechos.
+    Propuesta,
 }
 
 impl TipoCreado {
@@ -2538,7 +2686,7 @@ impl TipoCreado {
             TipoCreado::Incorporacion { batalla } => vec![(Clase::Batalla, batalla)],
             TipoCreado::Edificio { plaza } | TipoCreado::Recinto { plaza } => vec![(Clase::Asentamiento, plaza)],
             // El loadout vive en el héroe que la orden nombra y la parcela, en la plaza que la orden nombra: ya van en `Comando::implicados`. La Mirada es de la memoria de la Facción.
-            TipoCreado::Loadout | TipoCreado::Parcela | TipoCreado::Mirada => vec![],
+            TipoCreado::Loadout | TipoCreado::Parcela | TipoCreado::Mirada | TipoCreado::Propuesta => vec![],
         }
     }
 }
@@ -2793,6 +2941,16 @@ mod pruebas {
             Comando::CargarCaravana { ejercito: 9, caravana: 4, asentamiento: 3, recurso: Recurso::Piedra, cantidad: 12_000 },
             Comando::ReclamarCaravana { heroe: 2, caravana: 4, politica: Politica::Preguntar },
             Comando::SoltarCaravana { ejercito: 9, caravana: 4, heroe: 2 },
+            Comando::ProponerRelacion { heroe: 2, a: 1, b: 3, vasallaje: false, tributo: None },
+            Comando::ProponerRelacion { heroe: 2, a: 1, b: 3, vasallaje: true, tributo: Some((Recurso::Madera, 4_000)) },
+            Comando::ResponderRelacion { heroe: 2, propuesta: 40, aceptar: true },
+            Comando::RetirarRelacion { heroe: 2, propuesta: 40 },
+            Comando::DeclararGuerra { heroe: 2, a: 1, b: 3 },
+            Comando::ProponerPaz { heroe: 2, relacion: 41, faccion: 3 },
+            Comando::RomperRelacion { heroe: 2, relacion: 41, iniciador: 1 },
+            Comando::RebelionVasallo { heroe: 2, relacion: 41 },
+            Comando::AdmitirOtrasFacciones { heroe: 2, faccion: 1, admitir: true },
+            Comando::AlternarReabastecerAliados { asentamiento: 3, permitido: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

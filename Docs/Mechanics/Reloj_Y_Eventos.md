@@ -130,7 +130,7 @@ Tres clases. **Ritmo**: el estado guarda `(valor en t₀, ritmo)` y el valor se 
 | Ataques de bandidos a caravanas | **Encuentro exacto** (el plan de la caravana cruza el radio del campamento) |
 | Ejércitos: moverse, hambre, repostar, perseguir, combate, asedio | **Plan** por columna; hambre = ritmo de víveres con evento de fin; combate y asedio = eventos de encuentro |
 | Formaciones vencidas | **Evento** a `expiraEn` |
-| Vasallos liberados de un señor desarmado; tributos | Se reevalúan cuando cambia el estado del señor; el tributo mantiene su periodicidad como evento recurrente |
+| Vasallos liberados de un señor desarmado; tributos | El desarme del señor y la vasalla conquistada ocurren en el instante en que una Facción pierde su última plaza; el tributo se paga en el **paso de minuto de cada plaza vasalla** (Q3, en Rust desde 5D, 2026-10-24), al final de su paso, sin eventos propios en la cola |
 | Experiencia de Facción, reputación | Se aplican **al ocurrir** el hecho que las produce; el decaimiento de la reputación es un ritmo |
 | Reposición de mercados de mercenarios | **Evento** agendado (ya era una cita) |
 | Títulos | **Muestreo** o reevaluación cuando cambia lo que mira (Facciones, plazas, relaciones) |

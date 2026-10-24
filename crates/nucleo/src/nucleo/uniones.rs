@@ -257,7 +257,7 @@ impl Nucleo {
     /// `repostar` (Movimiento_Ejercitos §8): el Líder, con la columna a la puerta de una plaza que le abre su almacén, rellena los víveres de la columna
     /// hasta donde quepan y sin bajar de la reserva de trigo de la plaza. Es la misma operación que llenarlos al salir.
     // DUDA: una columna personal reposta sola dentro de la zona de la plaza (evento de entrada en la zona más un ritmo); mientras no exista, la orden vale
-    // también para ella (fila de paridad). `puedeRepostarEn` solo conoce la plaza propia: las aliadas (`permiteReabastecerAliados`) son del sistema político.
+    // también para ella (fila de paridad). `puedeRepostarEn` (5D): la plaza propia, y la de una aliada o vasalla que lo permite (`permiteReabastecerAliados`).
     fn repostar(&mut self, t: Instante, p: &Peticion, heroe: u64, asentamiento: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -272,7 +272,7 @@ impl Nucleo {
         if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
         }
-        if e.columna.faccion != Some(faccion) {
+        if e.columna.faccion != Some(faccion) && !self.abre_su_almacen_a(asentamiento, e.columna.faccion) {
             return Err(rechazo(rechazos::REPOSTAR_PLAZA_CERRADA, "esa plaza no abre su almacén a esta columna".into()));
         }
         let (llevaba, cap) = (e.columna.viveres.valor_en(t), e.columna.viveres.maximo.unwrap_or(0));

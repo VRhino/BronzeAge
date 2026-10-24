@@ -126,6 +126,8 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 - **Chatarra** (Doc 4.2.1): por cada soldado muerto, de cada bando, el metal de su equipo × `CHATARRA.fraccion`; se suma y la recoge quien gana.
 - Evento `combate.resuelto` con poderes, tropas e informe de bajas por escuadra de cada bando.
 
+> **Implementado en Rust (2026-10-24, 5D): la guerra al atacar.** `comprobar_agresion` mira la relación activa del par: en guerra, adelante; con un **vasallaje** (la propia señora o la propia vasalla), `combate.vasallaje` (la vasalla se rebela, la señora la libera); sin relación o con una **alianza**, `declara_guerra` la declara con el arrastre por vasallaje y, contra la aliada, es la **traición** de Q2 (rompe la alianza, −25 a quien ataca y nada más, 5A-1). Sin `declara_guerra`, `guerra.confirmar` con el arrastre en `Detalle::Guerra` (y el mensaje avisa de la traición). `combate.aliada` queda retirado. La guerra se declara en el instante en que todo lo demás ya vale, por números y por Unity. Tras el combate, la **defensa del vasallo** (Diplomacia_Facciones §5.9) en columna contra columna, caravana (la señora nunca está: la caravana suelta no lleva héroes), asedio, pueblo y avanzada.
+
 ### 4.1 Experiencia de Facción por combatir
 `xpDeCombate = NIVEL_FACCION.xp.combate × (héroes DISTINTOS de las escuadras que participaron en ese bando)`, solo si el combate fue digno; se aplica a la Facción de cada bando. (Una caravana sin escolta no suma por su lado: su defensa es una cifra fija.)
 
@@ -377,7 +379,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
   "avanzada.guarnicion_repuesta", "avanzada.invulnerabilidad_terminada", "combate.asedio_conquista", "combate.asedio_resistido", "combate.ataque_campamento_fallido",
   "combate.avanzada_destruida", "combate.avanzada_en_ruinas", "combate.avanzada_resiste", "combate.avanzada_saqueada", "combate.campamento_destruido",
   "combate.caravana_interceptada", "combate.caravana_resiste", "combate.encuentro", "combate.pueblo_resiste", "combate.pueblo_saqueado", "combate.resuelto",
-  "faccion.derrotada", "faccion.guerra_declarada", "pueblo.guarnicion_repuesta"
+  "faccion.derrotada", "pueblo.guarnicion_repuesta"
 ]
 ```
 <!-- /eventos -->

@@ -893,10 +893,11 @@ impl Nucleo {
         if columna.is_some_and(|c| bloqueos.ejercitos.contains(&c)) {
             return Err(invalida("tu columna ya está en una batalla"));
         }
-        let aliadas = |a: u32, b: u32| matches!(self.estado.militar.relacion(a, b), Some(Relacion::Alianza | Relacion::Vasallaje));
+        let aliadas = |a: u32, b: u32| matches!(self.estado.relacion(a, b), Some(Relacion::Alianza | Relacion::Vasallaje));
         let personal = columna.is_some_and(|c| self.estado.ejercitos[&c].columna.tipo == TipoColumna::Personal);
-        // DUDA: «el Rey admite otras Facciones en sus ataques» es política (sistema 5) y solo cuenta ya para las caravanas: hasta entonces nadie lo admite.
-        let reparto = Reparto { contexto: b.ticket.contexto.clone(), atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras: false, donde };
+        // «El Rey admite otras Facciones en sus ataques» (`admiteOtrasEnAtaques`, 5D): solo cuenta ya para las caravanas (asedios, pueblos y avanzadas admiten a los no amigos del dueño).
+        let rey_admite_otras = b.ticket.atacante.faccion.and_then(|f| self.estado.politica.facciones.get(f)).is_some_and(|f| f.admite_otras_en_ataques);
+        let reparto = Reparto { contexto: b.ticket.contexto.clone(), atacante: b.ticket.atacante.faccion, defensor: b.ticket.defensor.faccion, aliadas_en_batalla: &aliadas, rey_admite_otras, donde };
         let lado = lado_para_unirse(&reparto, hn.faccion, personal, pedido).map_err(|e| rechazo_de_union(e, v))?;
         Ok((lado, donde, columna))
     }
@@ -1012,6 +1013,9 @@ impl Nucleo {
         // 1. Heridos.
         self.herir_heroes(&efectos.heridos, t);
         // 4-5. Consecuencias según el contexto y chatarra de los caídos.
+        // Defender al vasallo (§5.9), antes de las consecuencias (una conquista cambiaría la señora de la vasalla): los héroes del bando defensor que participaron.
+        let defendieron: Vec<u64> = self.participantes_del_lado(&b, Lado::Defensor).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();
+        self.defensa_de_vasallo(t, b.ticket.defensor.faccion, &defendieron, res.ganador == Lado::Defensor);
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
         // La experiencia de Facción: por cada héroe que participó, a la Facción con la que entró (la del ticket), sin filtro de dignidad (5C). Contra un campamento de bandidos, solo la
         // de bandidos al destruirlo (5C-4, decisión del autor del 2026-10-24): el mismo premio con Unity que con números.

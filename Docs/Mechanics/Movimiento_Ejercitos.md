@@ -156,6 +156,8 @@ ritmo de consumo (por minuto) = Σ(cantidad de soldados) × MILITAR.racionPorSol
 - **Dónde se puede (`puedeRepostarEn`):** plaza **propia**, siempre; **aliada** —alianza o vasallaje, en cualquier dirección— solo si tiene `permiteReabastecerAliados`; neutral u hostil, nunca; **campamento de mercenarios**, cualquiera y gratis.
 - Con las mismas reglas que llenarlos al salir: hasta donde quepa y sin bajar de la reserva de trigo de la plaza. Solo se **narra** (`ejercito.reabastecido`) si llevaba menos de `umbralNarrarReposte` (50 %).
 - **`alternarReabastecerAliados { asentamientoId, permitido }`**: abre o cierra el almacén de la plaza a los ejércitos aliados (Gobernador o Tesorero). Sin cambio → `sinCambios`; con cambio → `logistica.reabastecer_aliados`. Cerrar no es retroactivo.
+
+> **Implementado en Rust (2026-10-24, 5D):** `AlternarReabastecerAliados` (162; hasta 5E la da quien manda en la plaza) guarda `Asentamiento::permite_reabastecer_aliados` (en la foto; la conquista lo cierra, como el acceso); `Nucleo::abre_su_almacen_a` es `puedeRepostarEn`: la plaza propia, siempre; la de una aliada o vasalla (o la señora), si lo permite. Lo miran `Repostar` y `CargarCaravana` (la duda 3 de 5G-a). Repostar en una avanzada sigue siendo solo de la propia Facción.
 - **`radioReabastecimiento` desaparece** (Doc 5.13): recoger tropas, adjuntar y cargar caravanas y entregar un trueque se hacen en la **puerta**.
 
 ## 9. Caravanas adjuntas
@@ -261,7 +263,6 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 | `columna.persecucion_abandonada` | `dejarDePerseguir` | — | `{ heroe }` |
 | `ejercito.encuentro` / `caravana.encuentro` / `asentamiento.encuentro` | un cruce exacto a ≤ `radioEncuentro` (§13) | la plaza, en la última | `{ faccionA, faccionB }` más `caravana` (y `caravanaB`) si la hay |
 | `ejercito.en_batalla` / `ejercito.sale_de_batalla` | el hook de la 4E | — | `{}` |
-| `faccion.relacion` | `fijarRelacion` (administración) | — | `{ faccionA, faccionB, relacion }` (−1 la quita; 0 alianza, 1 vasallaje, 2 guerra) |
 | `asentamiento.observado` / `columna.observada` / `caravana.observada` | `inspeccionar` (§12) | la **observada** | `{ observador }` (el héroe que mira) |
 
 `ejercito.repliegue` y `replegarEjercito` **se retiran** (no hay vuelta a casa).
@@ -381,7 +382,7 @@ Con el motor TypeScript (a rehacer en Rust): `regresando`, `origenAsentamientoId
 
 ## Catálogo de eventos
 
-Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emite 1 (`logistica.reabastecer_aliados`).
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos (`logistica.reabastecer_aliados` desde 5D, 2026-10-24; `faccion.relacion`, el del andamiaje `fijarRelacion`, se retiró en 5D: la administración emite los `diplomacia.*`).
 
 <!-- eventos -->
 ```json
@@ -391,7 +392,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
   "columna.persecucion_iniciada", "columna.peticion_caducada", "columna.presa_a_cubierto", "columna.presa_alcanzada", "columna.presa_perdida", "columna.separacion",
   "columna.union_en_campo", "columna.union_pedida", "columna.union_rechazada", "ejercito.caravana_adjuntada", "ejercito.caravana_aparcada", "ejercito.caravana_cargada",
   "ejercito.caravana_soltada", "ejercito.caravanas_perdidas", "ejercito.disuelto", "ejercito.en_batalla", "ejercito.encuentro", "ejercito.estacionado", "ejercito.llega",
-  "ejercito.movilizado", "ejercito.reabastecido", "ejercito.refuerzo", "ejercito.sale_de_batalla", "ejercito.sin_viveres", "ejercito.viveres_bajos", "faccion.relacion",
+  "ejercito.movilizado", "ejercito.reabastecido", "ejercito.refuerzo", "ejercito.sale_de_batalla", "ejercito.sin_viveres", "ejercito.viveres_bajos",
   "logistica.reabastecer_aliados"
 ]
 ```

@@ -18,7 +18,7 @@
 //! | `HeroeExpulsado` | `heroe.expulsado`, `heroe.desalojado` |
 //! | `ColumnaConHambre` | `ejercito.viveres_bajos`, `ejercito.sin_viveres` |
 //! | `DesercionPorHambre` | `tropas.desercion` |
-//! | `GuerraDeclarada` | `faccion.guerra_declarada` |
+//! | `GuerraDeclarada` | `diplomacia.guerra_declarada` (con las arrastradas, 5D) |
 //! | `ObraTerminada` | `construccion.edificio_completado`, `construccion.mejora_completada`, `construccion.recinto_completado`, `pueblo.completado`, `avanzada.completada` |
 //! | `HeroeHerido` | `heroe.herido` |
 //!
@@ -88,6 +88,9 @@ fn id_del_contrato(n: &Nucleo, ev: &EventoNucleo, clave: &str, v: i64) -> Option
         "caravana" | "caravanaB" => ids::caravana(u),
         "plaza" | "ciudad" | "destino" | "socia" | "asentamientoArruinado" => ids::asentamiento(u),
         "faccion" | "faccionA" | "faccionB" | "faccionAtacante" | "faccionDefensora" | "faccionAnterior" | "faccionVista" | "faccionQueVe" | "atacante" | "contra" | "por" => faccion(),
+        "relacion" => ids::relacion(u),
+        "propuesta" => ids::propuesta(u),
+        "capital" => ids::asentamiento(u),
         "pueblo" => ids::pueblo(u),
         "avanzada" => ids::avanzada(u),
         "convocatoria" => ids::convocatoria(u),
@@ -228,7 +231,14 @@ fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
         ("heroe.desalojado", _) => Tipado::HeroeExpulsado(pb::HeroeExpulsado { heroe_id: heroe("heroe"), lugar_id: plaza_id(), motivo: "desalojo".into(), ejercito_id: None }),
         ("ejercito.viveres_bajos" | "ejercito.sin_viveres", _) => Tipado::ColumnaConHambre(pb::ColumnaConHambre { ejercito_id: columna(), sin_viveres: codigo == "ejercito.sin_viveres" }),
         ("tropas.desercion", _) => Tipado::DesercionPorHambre(pb::DesercionPorHambre { heroe_id: heroe("heroe"), escuadra_id: ids::escuadra(id("escuadra")?), desertores: u32::try_from(dato("desertores")?).ok()? }),
-        ("faccion.guerra_declarada", _) => Tipado::GuerraDeclarada(pb::GuerraDeclarada { atacante_faccion_id: faccion("atacante")?, contra_faccion_id: faccion("contra")?, arrastradas_ids: Vec::new() }),
+        ("diplomacia.guerra_declarada", _) => {
+            // Las arrastradas por vasallaje viajan en `valores` como ids del contrato (5D).
+            let arrastradas_ids = match ev.valores.iter().find(|(k, _)| *k == "arrastradas").map(|(_, d)| d) {
+                Some(Dato::Lista(l)) => l.iter().filter_map(|d| if let Dato::Texto(s) = d { Some(s.clone()) } else { None }).collect(),
+                _ => Vec::new(),
+            };
+            Tipado::GuerraDeclarada(pb::GuerraDeclarada { atacante_faccion_id: faccion("atacante")?, contra_faccion_id: faccion("contra")?, arrastradas_ids })
+        }
         ("construccion.edificio_completado", _) => obra("edificio", ids::edificio(plaza?, u32::try_from(dato("edificio")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),
         ("construccion.mejora_completada", _) => obra("mejora", ids::edificio(plaza?, u32::try_from(dato("edificio")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),
         ("construccion.recinto_completado", _) => obra("recinto", ids::recinto(plaza?, u32::try_from(dato("recinto")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),

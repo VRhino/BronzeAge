@@ -54,6 +54,7 @@ mod construccion;
 mod convocatorias;
 mod cronica;
 mod dentro;
+mod diplomacia;
 mod espacio;
 mod experiencia;
 mod exploracion;
@@ -1005,6 +1006,18 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::FijarRelacion { a, b, relacion } => match self.fijar_relacion(t, *a, *b, *relacion) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::ProponerRelacion { .. }
+            | Comando::ResponderRelacion { .. }
+            | Comando::RetirarRelacion { .. }
+            | Comando::DeclararGuerra { .. }
+            | Comando::ProponerPaz { .. }
+            | Comando::RomperRelacion { .. }
+            | Comando::RebelionVasallo { .. }
+            | Comando::AdmitirOtrasFacciones { .. }
+            | Comando::AlternarReabastecerAliados { .. } => match self.ejecutar_diplomacia(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

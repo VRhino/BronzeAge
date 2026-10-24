@@ -188,6 +188,8 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 > **Implementado en Rust (2026-10-24, 5C):** `designar_capital` (137, `ReyDeLaFaccion`) y `renombrar_asentamiento` (143, clase nueva `ResidenteDeLaPlaza`: la cuenta del héroe, que reside en la plaza; basta residir, como el TypeScript). Con 5G-a, quedan 27 órdenes no disponibles.
 
+> **Implementado en Rust (2026-10-24, 5D):** las nueve órdenes de las relaciones entre Facciones (154-162; del 144 al 153 quedan para 5G-b) y una clase nueva de `Autoriza`, `AutoridadDiplomatica` (la cuenta del héroe, ciudadano y Rey o Embajador de la Facción que actúa: `politica::autorizacion::Actor::autoridad_diplomatica`). `responder_relacion` y `admitir_otras_facciones` son del Rey (`ReyDeLaFaccion`); `alternar_reabastecer_aliados`, de quien manda en la plaza hasta 5E. Quedan 18 órdenes no disponibles.
+
 - **Quién la da** es `Comando::autoriza` (`crates/nucleo/src/comando.rs`, un `match` sin comodín sobre los 136 comandos: un comando nuevo no compila hasta decidirlo). Cada orden comprueba la suya en su sitio y rechaza con `no_autorizado`; la de administración la comprueba una sola vez `Nucleo::ejecutar`. La administración (`Peticion.admin`) puede con todas salvo las del servidor de batalla, que exigen su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`).
 - **La sesión** añade dos filtros antes del núcleo (`sesiones::ordenes::traducir`, `sesiones.rs`): la orden genérica de administración y `controlar_reloj` solo los da una sesión `CLIENTE_ADMIN_WEB` (`no_autorizado` en cualquier otra), y los mensajes del canal de batalla solo llegan de una sesión `CLIENTE_SERVIDOR_BATALLA`. El actor de la petición es siempre la cuenta de la sesión, nunca un dato del cuerpo: las órdenes que no nombran héroe usan el de la cuenta.
 - **«Además»** es lo que la orden exige después de autorizarla, con su rechazo de dominio (el catálogo de códigos está en `Docs/Coordinacion/07_Catalogo_de_Rechazos.md`). Un héroe fuera del mundo solo puede `conectarse` (`heroe.fuera_del_mundo`), salvo `cancelar_convocatoria`. Una entidad que no existe se rechaza con su código de «desconocida», antes de mirar quién la manda (como el fail-open de §4.2).
@@ -204,6 +206,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `activar_politica` | `ActivarPolitica` | quien manda en la plaza | de la plaza; el cargo se da por ocupado |
 | `agregar_carro_caravana` | `AnadirCarro` | quien manda en la plaza | del origen de la caravana |
 | `alternar_auto_construccion` | `AlternarAutoConstruccion` | quien manda en la plaza | de la plaza |
+| `alternar_reabastecer_aliados` | `AlternarReabastecerAliados` | quien manda en la plaza | de la plaza; sin cambio, `sin_cambios` (5D: hasta 5E, quien manda; luego el Gobernador o el Tesorero) |
 | `alternar_receta` | `AlternarReceta` | quien manda en la plaza | de la plaza |
 | `anadir_edificio_manualmente` | `AnadirEdificio` | quien manda en la plaza | de la plaza; el cargo que se invoca se da por ocupado (sistema 5) |
 | `calibrar_reserva_manual` | `CalibrarReserva` | quien manda en la plaza | de la plaza |
@@ -338,6 +341,19 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `designar_capital` | `DesignarCapital` | la cuenta del héroe, Rey de la Facción | la Facción existe (`faccion.no_existe`); una plaza suya (`capital.plaza_ajena`) con Palacio activo (`capital.sin_palacio`) que no es ya la capital (`capital.ya_es_la_capital`); con la designada en pie, `CAPITAL.cooldownDias` (`capital.cooldown`) |
 | `renombrar_asentamiento` | `RenombrarAsentamiento` | la cuenta del héroe, residente de la plaza | basta residir (§5.2.4); el nombre se recorta y vacío deja la plaza sin nombre; como mucho 32 caracteres (`asentamiento.nombre_largo`) y único entre las plazas vivas (`asentamiento.nombre_duplicado`, 5C-6) |
 
+**Las relaciones entre Facciones (sistema 5, 5D)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `admitir_otras_facciones` | `AdmitirOtrasFacciones` | la cuenta del héroe, Rey de la Facción | la Facción existe (`faccion.no_existe`); sin cambio, `sin_cambios` |
+| `declarar_guerra` | `DeclararGuerra` | la cuenta del héroe, Rey o Embajador de la Facción | de `faccion_a_id`; sin relación activa entre las dos (`diplomacia.ya_hay_relacion`: a una aliada hay que romperle antes la alianza), las dos existen; arrastre por vasallaje; `guerraTrasRomperAlianza` si toca |
+| `proponer_paz` | `ProponerPaz` | la cuenta del héroe, Rey o Embajador de la Facción | de `faccion_id`; una guerra activa (`diplomacia.relacion_desconocida`, `diplomacia.relacion_rota`, `diplomacia.no_es_guerra`) de la que es parte (`diplomacia.no_es_parte`) y en la que aún no la ofreció (`diplomacia.ya_ofrecio_paz`) |
+| `proponer_relacion` | `ProponerRelacion` | la cuenta del héroe, Rey o Embajador de la Facción | de `faccion_a_id`; par válido (`diplomacia.ya_hay_relacion`), las dos con Rey (`diplomacia.sin_rey`), en un vasallaje ninguna vasalla de nadie (`diplomacia.vasalla_de_tercera`), en una alianza la reputación de A ≥ `umbralBajoParaEmbajador` (`diplomacia.reputacion_baja`); una sola pendiente por par (`diplomacia.ya_pendiente`); el tributo, solo en un vasallaje y no negativo (`diplomacia.tributo_invalido`) |
+| `rebelion_vasallo` | `RebelionVasallo` | la cuenta del héroe, Rey o Embajador de la Facción | de la vasalla de la relación; un vasallaje activo (`diplomacia.no_es_vasallaje`, `diplomacia.relacion_rota`) |
+| `responder_relacion` | `ResponderRelacion` | la cuenta del héroe, Rey de la Facción | de la Facción B de la propuesta; vigente (`diplomacia.propuesta_desconocida`, `diplomacia.propuesta_caducada`); aceptar revalida todo y exige que ninguna de las dos combata en una batalla abierta (`diplomacia.batalla_abierta`) |
+| `retirar_relacion` | `RetirarRelacion` | la cuenta del héroe, Rey o Embajador de la Facción | de la Facción que propuso; vigente |
+| `romper_relacion` | `RomperRelacion` | la cuenta del héroe, Rey o Embajador de la Facción | de `iniciador_faccion_id`; una alianza (cualquiera de las dos) o un vasallaje (solo la señora: `diplomacia.solo_la_senora`); una guerra no (`diplomacia.guerra_no_se_rompe`) |
+
 **Administración y servidor de batalla**
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
@@ -374,30 +390,27 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 |---|---|---|---|
 | `abandonar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `abrir_alijo` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `admitir_otras_facciones` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
+
 | `adoptar_tecnologia` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `alternar_reabastecer_aliados` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
+
 | `aportar_a_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `asignar_cargo_local` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `comprar_caravana_de_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `declarar_guerra` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
+
 | `desarmar_caravana_fundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `lanzar_caravana_fundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `proponer_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `proponer_paz` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `proponer_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `rebelion_vasallo` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
+
 | `responder_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `responder_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
+
 | `retirar_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_de_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `retirar_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `retirar_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `romper_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
+
 | `vetar_jugador` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 
 <!-- /autorizacion -->

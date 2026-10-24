@@ -11,7 +11,8 @@
 
 use super::{audiencia, batalla, ids, plan, punto, ritmo};
 use crate::estado::{Clase, Ejercito};
-use crate::estado_militar::{HeroeNucleo, PlazaRecordada, Relacion};
+use crate::estado_militar::{HeroeNucleo, PlazaRecordada};
+use politica::relaciones::{RelacionPolitica, TipoRelacion};
 use crate::nucleo::{Nucleo, TokenDeJugador};
 use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada, TipoObra};
 use asentamiento::pueblos::{EstadoPueblo, Pueblo};
@@ -478,21 +479,25 @@ pub fn tecnologias(n: &Nucleo, f: u32) -> pb::TecnologiasFaccion {
     pb::TecnologiasFaccion { faccion_id: ids::faccion(f), version: n.version_de(Clase::Faccion, u64::from(f)), adoptadas, ..Default::default() }
 }
 
-/// La relación que fijó la administración entre dos Facciones. DUDA: el stub no distingue al señor del vasallo (`a` es la menor) y no guarda cuándo se fijó.
-pub fn relacion(n: &Nucleo, par: u64, r: Relacion) -> pb::RelacionPolitica {
-    let (a, b) = Clase::facciones_del_par(par);
+/// Una relación entre dos Facciones (5D): con su dirección (en un vasallaje `a` es la señora; en una guerra, quien la declaró), su tributo, cuándo nació, quién la rompió y quién ofreció la paz.
+/// Viaja mientras está activa: al romperse, sale del almacén del cliente (`QUITA`) y el hecho dice cómo acabó. Es pública: la ven también las demás Facciones (`VISTA`).
+pub fn relacion(n: &Nucleo, r: &RelacionPolitica) -> pb::RelacionPolitica {
     pb::RelacionPolitica {
-        id: ids::relacion(a, b),
-        version: n.version_de(Clase::Relacion, par),
-        tipo: match r {
-            Relacion::Alianza => pb::TipoRelacion::RelacionAlianza,
-            Relacion::Vasallaje => pb::TipoRelacion::RelacionVasallaje,
-            Relacion::Guerra => pb::TipoRelacion::RelacionGuerra,
+        id: ids::relacion(r.id),
+        version: n.version_de(Clase::Relacion, r.id),
+        tipo: match r.tipo {
+            TipoRelacion::Alianza => pb::TipoRelacion::RelacionAlianza,
+            TipoRelacion::Vasallaje => pb::TipoRelacion::RelacionVasallaje,
+            TipoRelacion::Guerra => pb::TipoRelacion::RelacionGuerra,
         } as i32,
-        faccion_a_id: ids::faccion(a),
-        faccion_b_id: ids::faccion(b),
-        estado: pb::EstadoRelacion::RelacionActiva as i32,
-        ..Default::default()
+        faccion_a_id: ids::faccion(r.a),
+        faccion_b_id: ids::faccion(r.b),
+        tributo: r.tributo.map(|t| pb::Tributo { recurso: t.recurso.nombre().to_owned(), cantidad_por_minuto: t.cantidad_por_minuto }),
+        creado_en_ms: r.creada_en,
+        estado: if r.activa() { pb::EstadoRelacion::RelacionActiva } else { pb::EstadoRelacion::RelacionRota } as i32,
+        rota_por: r.rota_por.map(ids::faccion),
+        rota_en_ms: r.rota_en,
+        paz_propuesta_por: r.paz_propuesta_por.map(ids::faccion),
     }
 }
 
@@ -696,10 +701,7 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
             e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).find(|o| o.id == id).map(|o| Cuerpo::OrdenMercado(orden_de_mercado(n, o))),
         ),
         Clase::Batalla => un(T::Batalla, n.uuid_de_batalla(id), n.batalla(id).map(|b| Cuerpo::Batalla(batalla(n, b, quien)))),
-        Clase::Relacion => {
-            let (a, b) = Clase::facciones_del_par(id);
-            un(T::RelacionPolitica, ids::relacion(a, b), e.militar.relacion(a, b).map(|r| Cuerpo::Relacion(relacion(n, id, r))))
-        }
+        Clase::Relacion => un(T::RelacionPolitica, ids::relacion(id), e.politica.relaciones.get(id).filter(|r| r.activa()).map(|r| Cuerpo::Relacion(relacion(n, r)))),
         Clase::Faccion => {
             let f = id as u32;
             Proyeccion {

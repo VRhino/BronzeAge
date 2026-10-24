@@ -91,8 +91,10 @@ impl Nucleo {
             let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");
             a.faccion = conquistador;
             a.acceso = Acceso::default();
-            // Es del conquistador desde ahora: para la capital efectiva cuenta este instante, no su fundación (5C-1).
+            // Es del conquistador desde ahora: para la capital efectiva cuenta este instante, no su fundación (5C-1). Lo que decidía su dueño de antes se olvida: el resto de su tributo
+            // y la apertura de su almacén a los aliados (5D), como el acceso.
             a.de_la_faccion_desde = t;
+            (a.resto_tributo, a.permite_reabastecer_aliados) = (0, false);
             // La marca de capital sobrevive al cambio de dueño y deja de valer (Diplomacia_Facciones §3.7).
             let c = aplicar_conquista(&cr, &datos, &mut a.economia, t);
             (a.protegida_hasta, a.ocupada_hasta) = (Some(c.protegida_hasta), Some(c.ocupacion_hasta));
@@ -153,6 +155,8 @@ impl Nucleo {
         let quedan = self.plazas_de(vieja).count();
         if faccion_derrotada(quedan) {
             self.registrar_derrota(vieja, Some(conquistador));
+            // El desarme del señor y la vasalla conquistada, en el instante de la caída (§5.5, C7).
+            self.diplomacia_tras_derrota(t, vieja);
             self.emitir_propio(t, "faccion.derrotada", vec![plaza], vec![("faccion", vieja as i64), ("por", conquistador as i64)]);
             self.reprogramar_anillos(t);
         }

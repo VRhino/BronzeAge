@@ -17,7 +17,7 @@
 use super::propios::{self, Proyectada};
 use super::{ficha_de_asentamiento, ids, interior, plan, punto};
 use crate::estado::{Clase, Ejercito};
-use crate::estado_militar::Relacion;
+
 use crate::memoria::{DatosSitio, EstadoSitio, Ficha, InformeDePlaza, Mirada as MiradaIntel, OrigenIntel, Sitio};
 use crate::nucleo::Nucleo;
 use asentamiento::edificio::Estado as EstadoEdificio;
@@ -93,7 +93,7 @@ pub struct Mirada<'n> {
 
 /// Las Facciones que comparten visión con `f` (alianza o vasallaje, en cualquier dirección: §5.2).
 fn aliados(n: &Nucleo, f: u32) -> Vec<u32> {
-    n.estado().militar.relaciones.iter().filter(|(_, r)| matches!(r, Relacion::Alianza | Relacion::Vasallaje)).filter_map(|(&(a, b), _)| if a == f { Some(b) } else if b == f { Some(a) } else { None }).collect()
+    n.estado().politica.relaciones.activas().filter(|r| r.incluye(f) && r.tipo != politica::relaciones::TipoRelacion::Guerra).map(|r| r.otra(f)).collect()
 }
 
 /// La cuenta de `viewer`, el héroe de la sesión de su cuenta (`audiencia::heroe_de_sesion`).
@@ -368,6 +368,11 @@ impl<'n> Mirada<'n> {
                     Some(Cuerpo::RedCaminos(pb::RedCaminos { version: 0, aristas: aristas.iter().map(|a| id_de_arista(a)).collect(), rutas, escalones }))
                 }));
             }
+        }
+
+        // Las relaciones activas entre Facciones son públicas (5D): las ve cualquiera, sin niebla ni rectángulo, como en `FACCION`. Una que se rompe sale de la vista.
+        for r in e.politica.relaciones.activas() {
+            v.push(visible(pb::TipoEntidad::RelacionPolitica, ids::relacion(r.id), Sello(n.version_de(Clase::Relacion, r.id), 0), move || Some(Cuerpo::Relacion(propios::relacion(n, r)))));
         }
         v
     }

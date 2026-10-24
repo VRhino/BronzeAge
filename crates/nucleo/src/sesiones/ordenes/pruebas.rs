@@ -324,6 +324,19 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(DejarResidencia, OrdenDejarResidencia, heroe_id: h), Comando::DejarResidencia { heroe: 7 }),
         (orden!(DesignarCapital, OrdenDesignarCapital, faccion_id: s("f-2"), asentamiento_id: s("as-3")), Comando::DesignarCapital { heroe: 7, faccion: 2, asentamiento: 3 }),
         (orden!(RenombrarAsentamiento, OrdenRenombrarAsentamiento, asentamiento_id: s("as-3"), nombre: s(" Tirinto ")), Comando::RenombrarAsentamiento { heroe: 7, asentamiento: 3, nombre: " Tirinto ".into() }),
+        // ── Las relaciones (5D) ──
+        (
+            orden!(ProponerRelacion, OrdenProponerRelacion, tipo: s("vasallaje"), faccion_a_id: s("f-1"), faccion_b_id: s("f-2"), tributo_recurso: Some(s("madera")), tributo_cantidad: Some(4_000)),
+            Comando::ProponerRelacion { heroe: 7, a: 1, b: 2, vasallaje: true, tributo: Some((Recurso::Madera, 4_000)) },
+        ),
+        (orden!(ResponderRelacion, OrdenResponderRelacion, propuesta_id: s("prop-40"), aceptar: true), Comando::ResponderRelacion { heroe: 7, propuesta: 40, aceptar: true }),
+        (orden!(RetirarRelacion, OrdenRetirarRelacion, propuesta_id: s("prop-40")), Comando::RetirarRelacion { heroe: 7, propuesta: 40 }),
+        (orden!(DeclararGuerra, OrdenDeclararGuerra, faccion_a_id: s("f-1"), faccion_b_id: s("f-2")), Comando::DeclararGuerra { heroe: 7, a: 1, b: 2 }),
+        (orden!(ProponerPaz, OrdenProponerPaz, relacion_id: s("rel-41"), faccion_id: s("f-2")), Comando::ProponerPaz { heroe: 7, relacion: 41, faccion: 2 }),
+        (orden!(RomperRelacion, OrdenRomperRelacion, relacion_id: s("rel-41"), iniciador_faccion_id: s("f-1")), Comando::RomperRelacion { heroe: 7, relacion: 41, iniciador: 1 }),
+        (orden!(RebelionVasallo, OrdenRebelionVasallo, relacion_id: s("rel-41")), Comando::RebelionVasallo { heroe: 7, relacion: 41 }),
+        (orden!(AdmitirOtrasFacciones, OrdenAdmitirOtrasFacciones, faccion_id: s("f-1"), admitir: true), Comando::AdmitirOtrasFacciones { heroe: 7, faccion: 1, admitir: true }),
+        (orden!(AlternarReabastecerAliados, OrdenAlternarReabastecerAliados, asentamiento_id: s("as-3"), permitido: true), Comando::AlternarReabastecerAliados { asentamiento: 3, permitido: true }),
     ]
 }
 
@@ -334,8 +347,7 @@ fn ordenes_no_disponibles() -> Vec<Cuerpo> {
     }
     vacias![
         // política y Facciones (sistema 5, desde 5D)
-        AsignarCargoLocal, AdmitirOtrasFacciones, ProponerRelacion, ResponderRelacion, RetirarRelacion, ProponerAnexion, ResponderAnexion, RetirarAnexion, ProponerFusion,
-        ResponderFusion, RetirarFusion, ProponerPaz, RomperRelacion, RebelionVasallo, DeclararGuerra, VetarJugador, AlternarReabastecerAliados,
+        AsignarCargoLocal, ProponerAnexion, ResponderAnexion, RetirarAnexion, ProponerFusion, ResponderFusion, RetirarFusion, VetarJugador,
         // tecnología, Aedas e intel (sistema 6)
         AdoptarTecnologia, EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda, AbrirAlijo,
         // refundación
@@ -402,7 +414,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 27);
+    assert_eq!(sin_comando.len(), 18);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -548,7 +560,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (143, 119, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (152, 128, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -588,6 +600,7 @@ fn quien(a: crate::comando::Autoriza) -> &'static str {
         ReyDeLaFaccion => "la cuenta del héroe, Rey de la Facción",
         CiudadanoDeLaFaccion => "la cuenta del héroe, ciudadano de la Facción (con Rey, solo él)",
         ResidenteDeLaPlaza => "la cuenta del héroe, residente de la plaza",
+        AutoridadDiplomatica => "la cuenta del héroe, Rey o Embajador de la Facción",
         MandaEnLaPlaza => "quien manda en la plaza",
         LiderDeLaColumna => "el Líder de la columna",
         ParticipanteDeLaColumna => "un participante de la columna",
@@ -624,5 +637,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 119 + 19 + 5 + 27, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 128 + 19 + 5 + 18, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

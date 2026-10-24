@@ -32,11 +32,9 @@ ids! {
     u32, "nodo", nodo, parse_nodo;
     u64, "mirada", mirada, parse_mirada;
     u32, "parcela", parcela, parse_parcela;
-}
-
-/// Una relación entre dos Facciones (`rel-<menor>-<mayor>`).
-pub fn relacion(a: u32, b: u32) -> String {
-    format!("rel-{}-{}", a.min(b), a.max(b))
+    // Una relación entre dos Facciones (5D: con su id propio, porque un mismo par tiene varias a lo largo del tiempo) y una propuesta de relación.
+    u64, "rel", relacion, parse_relacion;
+    u64, "prop", propuesta, parse_propuesta;
 }
 
 /// Un informe de inspección (`insp-<héroe>-<objetivo>`, con el id del contrato del objetivo: `ej-N`, `car-N` o `as-N`): uno por héroe y objetivo.

@@ -86,10 +86,10 @@ impl Nucleo {
         m.extend((0..n).map(|c| ((Clase::Campamento, c as u64), self.huella_de_campamento(c, &inicial))));
         // Una Facción es la entidad (sus ciudadanos, solicitudes, cargos, su experiencia...), su reputación, sus tecnologías y sus relaciones.
         m.extend(crate::proyeccion::audiencia::facciones(e).into_iter().map(|f| {
-            let relaciones: Vec<_> = e.militar.relaciones.iter().filter(|((a, b), _)| *a == f || *b == f).collect();
+            let relaciones: Vec<_> = e.politica.relaciones.iter().filter(|r| r.incluye(f)).collect();
             ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones)))
         }));
-        m.extend(e.militar.relaciones.iter().map(|(&(a, b), r)| ((Clase::Relacion, Clase::par(a, b)), huella(r))));
+        m.extend(e.politica.relaciones.iter().map(|r| ((Clase::Relacion, r.id), huella(r))));
         m
     }
 

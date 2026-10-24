@@ -100,12 +100,7 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
         Clase::Convocatoria => v.extend(e.militar.convocatorias.get(&id).map(|c| Ambito::Faccion(c.faccion))),
         Clase::Acuerdo => v.extend(e.comercio.acuerdo(id).into_iter().flat_map(|a| [a.a, a.b]).filter_map(|p| faccion_de_plaza(e, u64::from(p)))),
         Clase::Faccion => v.push(Ambito::Faccion(id as u32)),
-        Clase::Relacion => {
-            let (a, b) = Clase::facciones_del_par(id);
-            if e.militar.relacion(a, b).is_some() {
-                v.extend([Ambito::Faccion(a), Ambito::Faccion(b)]);
-            }
-        }
+        Clase::Relacion => v.extend(e.politica.relaciones.get(id).into_iter().flat_map(|r| [Ambito::Faccion(r.a), Ambito::Faccion(r.b)])),
         Clase::Campamento | Clase::Bandidos | Clase::Interior => {}
     }
     v.sort_unstable();
@@ -122,8 +117,8 @@ pub fn facciones(e: &Estado) -> BTreeSet<u32> {
         .map(|f| &f.id)
         .chain(e.comercio.reputacion.keys())
         .chain(e.militar.tecnologias.keys())
-        .chain(e.militar.relaciones.keys().flat_map(|(a, b)| [a, b]))
         .copied()
+        .chain(e.politica.relaciones.iter().flat_map(|r| [r.a, r.b]))
         .chain(e.militar.heroes.values().filter_map(|h| h.faccion))
         .chain(e.asentamientos.values().map(|a| a.faccion))
         .collect()
@@ -144,7 +139,7 @@ pub fn todas(e: &Estado, clase: Clase) -> Vec<u64> {
         Clase::Avanzada => e.asentamientos.values().flat_map(|a| a.economia.avanzadas.iter().map(|v| v.id)).collect(),
         Clase::Convocatoria => e.militar.convocatorias.keys().copied().collect(),
         Clase::Batalla => e.batallas.batallas.keys().copied().collect(),
-        Clase::Relacion => e.militar.relaciones.keys().map(|&(a, b)| Clase::par(a, b)).collect(),
+        Clase::Relacion => e.politica.relaciones.activas().map(|r| r.id).collect(),
         Clase::Campamento | Clase::Bandidos | Clase::Interior => Vec::new(),
     }
 }

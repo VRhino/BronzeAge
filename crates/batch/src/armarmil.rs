@@ -152,7 +152,7 @@ fn ejercitos(x: &Entrada) -> Vec<Metrica> {
         metrica("guarniciones", "Escuadras puestas en la guarnición", "órdenes", INFO, Some(aceptadas(x, "AsignarGuarnicion")), "Heroe_Y_Tropa §7", &format!("La leva del Guardián, mientras quepa en el cupo. Rechazos: {}.", rechazos_de(x, "AsignarGuarnicion"))),
         metrica("convocatorias", "Convocatorias abiertas", "convocatorias", INFO, Some(n_hecho(x, "convocatoria.convocada")), "Presencia_Y_Convocatoria §9", &format!("Partieron {}, canceladas {}; héroes unidos {}.", n_hecho(x, "convocatoria.partio"), n_hecho(x, "convocatoria.cancelada"), n_hecho(x, "convocatoria.unido"))),
         metrica("uniones", "Uniones a un ejército en marcha", "uniones", INFO, Some(n_hecho(x, "ejercito.refuerzo") + n_hecho(x, "columna.union_en_campo")), "Movimiento_Ejercitos §10", &format!("Desde la plaza (`UnirseAEjercito`) {} y en campo (`UnirseEnCampo`) {}.", n_hecho(x, "ejercito.refuerzo"), n_hecho(x, "columna.union_en_campo"))),
-        metrica("guerras_declaradas", "Guerras declaradas al atacar", "guerras", INFO, Some(n_hecho(x, "faccion.guerra_declarada")), "Combate §2", &format!("Pares de Facciones en guerra al final: {}.", ultima.guerras)),
+        metrica("guerras_declaradas", "Guerras declaradas al atacar", "guerras", INFO, Some(n_hecho(x, "diplomacia.guerra_declarada")), "Combate §2", &format!("Pares de Facciones en guerra al final: {}.", ultima.guerras)),
     ]
 }
 

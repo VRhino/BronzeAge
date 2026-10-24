@@ -404,7 +404,9 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     assert!(t.len() == 1 && t[0].adoptadas.contains(&"arco_compuesto".to_owned()) && t[0].adoptadas.len() > 1, "las de arranque y las que dio la administración");
     let r = relaciones(&f1.entidades);
     assert_eq!(r.len(), 1);
-    assert_eq!((r[0].id.as_str(), r[0].tipo, r[0].faccion_a_id.as_str(), r[0].faccion_b_id.as_str()), ("rel-1-2", pb::TipoRelacion::RelacionAlianza as i32, "f-1", "f-2"));
+    // Desde 5D la relación tiene su id propio (`rel-N`) y su dirección (`a` es quien la fijó).
+    let rel12 = r[0].id.clone();
+    assert_eq!((rel12.starts_with("rel-"), r[0].tipo, r[0].faccion_a_id.as_str(), r[0].faccion_b_id.as_str()), (true, pb::TipoRelacion::RelacionAlianza as i32, "f-1", "f-2"));
     let k = caravanas(&f1.entidades);
     assert_eq!(k.len(), 1);
     assert_eq!((k[0].id.as_str(), k[0].origen_asentamiento_id.as_str(), k[0].estado, k[0].carros.len(), k[0].reservada_manual), (ids::caravana(caravana).as_str(), as_a.as_str(), pb::EstadoCaravana::CaravanaDisponible as i32, 1, true));
@@ -425,7 +427,7 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     let f2 = foto_de(&mensajes, "FACCION:f-2");
     assert_eq!(asentamientos(&f2.entidades).iter().map(|p| p.id.clone()).collect::<Vec<_>>(), [as_b]);
     assert_eq!(ids_de(&trueques(&f2.entidades), |t| &t.id).len(), 1, "un trueque con una plaza propia es de las dos Facciones");
-    assert_eq!(ids_de(&relaciones(&f2.entidades), |r| &r.id), ["rel-1-2"]);
+    assert_eq!(ids_de(&relaciones(&f2.entidades), |r| &r.id), [rel12.as_str()]);
     assert!(caravanas(&f2.entidades).is_empty() && ordenes(&f2.entidades).is_empty(), "la flota y las órdenes de F1 no son de F2");
     assert_eq!(facciones(&f2.entidades)[0].ciudadanos_ids, [ids::heroe(x.fundadores[1]), ids::heroe(x.gus)], "ni un ciudadano de F1");
     assert!(foto_de(&mensajes, &format!("HEROE:{}", ids::heroe(x.gus))).entidades.iter().all(|e| !matches!(e.cuerpo, Some(Cuerpo::Escuadron(_)))), "las escuadras de ana no son de gus");
@@ -705,22 +707,27 @@ async fn las_ordenes_de_mercado_los_trueques_y_las_relaciones_llegan_a_la_faccio
     };
     let (_, r) = dar_todo(&mut admin_c, "m5", fijar(Some("alianza"))).await;
     aceptada(&r);
+    let mut alianza = None;
     for (c, ambito_f) in [(&mut ana, f1), (&mut gus, f2)] {
         let recibido = pendiente(c).await;
         let d = deltas_de(&recibido, ambito_f)[0];
         let rel = relaciones(nuevas(d));
-        assert_eq!((rel.len(), rel[0].id.as_str(), rel[0].tipo), (1, "rel-1-2", pb::TipoRelacion::RelacionAlianza as i32), "{ambito_f}");
+        let id = alianza.get_or_insert_with(|| rel[0].id.clone()).clone();
+        assert_eq!((rel.len(), rel[0].id.as_str(), rel[0].tipo), (1, id.as_str(), pb::TipoRelacion::RelacionAlianza as i32), "{ambito_f}: el mismo id para las dos");
         assert_eq!(facciones(nuevas(d)).len(), 1, "su Facción cambió también: ya tiene una alianza");
     }
     let (_, r) = dar_todo(&mut admin_c, "m6", fijar(Some("guerra"))).await;
     aceptada(&r);
-    assert_eq!(relaciones(nuevas(deltas_de(&pendiente(&mut ana).await, f1)[0]))[0].tipo, pb::TipoRelacion::RelacionGuerra as i32);
+    // La alianza se rompe y nace la guerra, otra relación con su id.
+    let d = pendiente(&mut ana).await;
+    let guerra = relaciones(nuevas(deltas_de(&d, f1)[0]))[0].clone();
+    assert_eq!((guerra.tipo, quitas(deltas_de(&d, f1)[0])), (pb::TipoRelacion::RelacionGuerra as i32, vec![(TipoEntidad::RelacionPolitica, alianza.clone().unwrap())]));
     pendiente(&mut gus).await;
     let (_, r) = dar_todo(&mut admin_c, "m7", fijar(None)).await;
     aceptada(&r);
     for (c, ambito_f) in [(&mut ana, f1), (&mut gus, f2)] {
         let recibido = pendiente(c).await;
-        assert_eq!(quitas(deltas_de(&recibido, ambito_f)[0]), [(TipoEntidad::RelacionPolitica, "rel-1-2".to_owned())], "{ambito_f}");
+        assert_eq!(quitas(deltas_de(&recibido, ambito_f)[0]), [(TipoEntidad::RelacionPolitica, guerra.id.clone())], "{ambito_f}");
     }
     w.parar().await;
 }
@@ -922,13 +929,14 @@ async fn el_heroe_y_la_faccion_se_reanudan_por_deltas_aunque_el_heroe_cambiara_y
     let mut x = escenario(m);
     let (as_a, h_ana, ana_id) = (ids::asentamiento(x.a), ids::heroe(x.ana), x.ana);
     x.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(nucleo::Relacion::Alianza) });
+    let rel12 = ids::relacion(x.n.relacion_activa(1, 2).unwrap().id);
     let w = arrancar_con(x.n).await;
     let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
     let (ana, b, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
     let (k_heroe, k_faccion, k_plaza) = (format!("HEROE:{h_ana}"), "FACCION:f-1".to_owned(), format!("ASENTAMIENTO:{as_a}"));
     let v = b.ambitos[0].version_actual;
     let (mut heroe, mut faccion) = (Cliente::desde(foto_de(&mensajes, &k_heroe)), Cliente::desde(foto_de(&mensajes, &k_faccion)));
-    assert!(faccion.tiene(TipoEntidad::RelacionPolitica, "rel-1-2"));
+    assert!(faccion.tiene(TipoEntidad::RelacionPolitica, &rel12));
     ana.cerrar().await;
 
     // Mientras ana no está: le dan una escuadra, la relación desaparece, y su héroe sale de la plaza y vuelve (se toca dos veces).
@@ -950,7 +958,7 @@ async fn el_heroe_y_la_faccion_se_reanudan_por_deltas_aunque_el_heroe_cambiara_y
     let (d_heroe, d_faccion) = (deltas_de(&mensajes, &k_heroe)[0], deltas_de(&mensajes, &k_faccion)[0]);
     assert_eq!((d_heroe.desde, d_faccion.desde), (v, v));
     assert_eq!(escuadrones(nuevas(d_heroe)).len(), 1, "la escuadra que le dieron");
-    assert_eq!(quitas(d_faccion), [(TipoEntidad::RelacionPolitica, "rel-1-2".to_owned())], "la relación que desapareció mientras estaba fuera");
+    assert_eq!(quitas(d_faccion), [(TipoEntidad::RelacionPolitica, rel12.clone())], "la relación que desapareció mientras estaba fuera");
     heroe.aplicar(d_heroe);
     faccion.aplicar(d_faccion);
 

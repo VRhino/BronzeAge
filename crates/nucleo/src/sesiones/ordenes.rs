@@ -7,7 +7,7 @@
 //!   batalla de un UUID.
 //! - Un id que no tiene la forma de su entidad se rechaza con el código de «desconocida» de esa entidad (`heroe.desconocido`…); un valor fuera de un catálogo cerrado (recurso, tropa,
 //!   cargo, política, tipo de carro…), con `orden.forma_invalida`. Lo demás (que la entidad exista, las cantidades) lo valida el núcleo.
-//! - Las órdenes del contrato que el núcleo aún no tiene (la política salvo la Facción, la ciudadanía y la residencia de 5B, tecnología, Aedas, refundación, caravanas a mano y almacén personal) se rechazan con
+//! - Las órdenes del contrato que el núcleo aún no tiene (la política salvo la Facción, la ciudadanía, la residencia, la capital, el nombre y las relaciones de 5B-5D, tecnología, Aedas y refundación) se rechazan con
 //!   `orden.no_disponible`; ninguna se descarta en silencio. El `match` sobre `Cuerpo` no tiene comodín: una orden nueva del contrato no compila hasta clasificarla.
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
@@ -175,6 +175,12 @@ impl Ctx<'_> {
     }
     fn faccion(&self, s: &str) -> R<u32> {
         self.id(ids::parse_faccion, rechazos::ORDEN_FORMA_INVALIDA, s)
+    }
+    fn relacion(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_relacion, rechazos::DIPLOMACIA_RELACION_DESCONOCIDA, s)
+    }
+    fn propuesta(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_propuesta, rechazos::DIPLOMACIA_PROPUESTA_DESCONOCIDA, s)
     }
     fn nodo(&self, s: &str) -> R<u32> {
         self.id(ids::parse_nodo, rechazos::PUEBLO_NODO_DESCONOCIDO, s)
@@ -631,24 +637,38 @@ impl Ctx<'_> {
             Cuerpo::DesignarCapital(o) => Comando::DesignarCapital { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, asentamiento: self.plaza(&o.asentamiento_id)? },
             Cuerpo::RenombrarAsentamiento(o) => Comando::RenombrarAsentamiento { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, nombre: o.nombre.clone() },
 
+            // ── Las relaciones entre Facciones (5D) ──
+            Cuerpo::ProponerRelacion(o) => {
+                let vasallaje = match o.tipo.as_str() {
+                    "alianza" => false,
+                    "vasallaje" => true,
+                    otro => return self.forma(format!("una propuesta es de alianza o de vasallaje, no «{otro}»")),
+                };
+                // Sin tributo, trigo a 0 (`proponerRelacion` sin `tributo`); con uno de los dos campos, el otro toma su valor por defecto.
+                let tributo = match (o.tributo_recurso.as_deref(), o.tributo_cantidad) {
+                    (None, None) => None,
+                    (r, n) => Some((r.map_or(Ok(Recurso::Trigo), |r| self.recurso(r))?, n.unwrap_or(0))),
+                };
+                Comando::ProponerRelacion { heroe: self.mi_heroe()?, a: self.faccion(&o.faccion_a_id)?, b: self.faccion(&o.faccion_b_id)?, vasallaje, tributo }
+            }
+            Cuerpo::ResponderRelacion(o) => Comando::ResponderRelacion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)?, aceptar: o.aceptar },
+            Cuerpo::RetirarRelacion(o) => Comando::RetirarRelacion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
+            Cuerpo::DeclararGuerra(o) => Comando::DeclararGuerra { heroe: self.mi_heroe()?, a: self.faccion(&o.faccion_a_id)?, b: self.faccion(&o.faccion_b_id)? },
+            Cuerpo::ProponerPaz(o) => Comando::ProponerPaz { heroe: self.mi_heroe()?, relacion: self.relacion(&o.relacion_id)?, faccion: self.faccion(&o.faccion_id)? },
+            Cuerpo::RomperRelacion(o) => Comando::RomperRelacion { heroe: self.mi_heroe()?, relacion: self.relacion(&o.relacion_id)?, iniciador: self.faccion(&o.iniciador_faccion_id)? },
+            Cuerpo::RebelionVasallo(o) => Comando::RebelionVasallo { heroe: self.mi_heroe()?, relacion: self.relacion(&o.relacion_id)? },
+            Cuerpo::AdmitirOtrasFacciones(o) => Comando::AdmitirOtrasFacciones { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, admitir: o.admitir },
+            Cuerpo::AlternarReabastecerAliados(o) => Comando::AlternarReabastecerAliados { asentamiento: self.plaza(&o.asentamiento_id)?, permitido: o.permitido },
+
             // ── Lo que el núcleo aún no tiene ──
             Cuerpo::AsignarCargoLocal(_)
-            | Cuerpo::AdmitirOtrasFacciones(_)
-            | Cuerpo::ProponerRelacion(_)
-            | Cuerpo::ResponderRelacion(_)
-            | Cuerpo::RetirarRelacion(_)
             | Cuerpo::ProponerAnexion(_)
             | Cuerpo::ResponderAnexion(_)
             | Cuerpo::RetirarAnexion(_)
             | Cuerpo::ProponerFusion(_)
             | Cuerpo::ResponderFusion(_)
             | Cuerpo::RetirarFusion(_)
-            | Cuerpo::ProponerPaz(_)
-            | Cuerpo::RomperRelacion(_)
-            | Cuerpo::RebelionVasallo(_)
-            | Cuerpo::DeclararGuerra(_)
-            | Cuerpo::VetarJugador(_)
-            | Cuerpo::AlternarReabastecerAliados(_) => return self.no_disponible("política y Facciones (sistema 5)"),
+            | Cuerpo::VetarJugador(_) => return self.no_disponible("política y Facciones (sistema 5)"),
             Cuerpo::AdoptarTecnologia(_)
             | Cuerpo::EmpezarEpica(_)
             | Cuerpo::AbandonarEpica(_)

@@ -2,8 +2,7 @@
 //! **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · convocatorias{n u64 · n × convocatoria} · reclutas{n u64 · n ×
-//! (campamento u32, población i64, en i64)} · tecnologías{n u64 · n × (facción u32, k u64, k × texto)} · relaciones{n u64 · n × (menor u32, mayor u32,
-//! u8: 0 alianza, 1 vasallaje, 2 guerra)}`.
+//! (campamento u32, población i64, en i64)} · tecnologías{n u64 · n × (facción u32, k u64, k × texto)}`. Las relaciones viven en `Estado::politica` desde BAN31 (5D, `codec_politica`).
 //!
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
 //! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 · puntos de
@@ -476,7 +475,7 @@ fn convocatoria_leer(r: &mut Lector) -> Result<Convocatoria, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
-    let EstadoMilitar { heroes, convocatorias, reclutas, tecnologias, relaciones, residentes: _ } = m;
+    let EstadoMilitar { heroes, convocatorias, reclutas, tecnologias, residentes: _ } = m;
     w.u64(heroes.len() as u64);
     heroes.values().for_each(|h| heroe_escribir(w, h));
     w.u64(convocatorias.len() as u64);
@@ -492,12 +491,6 @@ pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
         w.u32(faccion);
         w.u64(set.len() as u64);
         set.iter().for_each(|t| w.texto(t));
-    }
-    w.u64(relaciones.len() as u64);
-    for (&(a, b), relacion) in relaciones {
-        w.u32(a);
-        w.u32(b);
-        w.u8(relacion_a_u8(*relacion));
     }
 }
 
@@ -521,11 +514,6 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
             set.insert(r.texto()?);
         }
         m.tecnologias.insert(faccion, set);
-    }
-    for _ in 0..r.cuenta()? {
-        let (a, b) = (r.u32()?, r.u32()?);
-        let relacion = relacion_de_u8(r.u8()?)?;
-        m.relaciones.insert((a, b), relacion);
     }
     Ok(m)
 }
