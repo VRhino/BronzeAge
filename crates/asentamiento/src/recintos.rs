@@ -32,6 +32,12 @@ pub struct ReglasMuralla {
     pub franja_de_ronda: i32,
     /// Celdas entre torres (índice `nivel − 1`); 0 = ese nivel no tiene torres.
     pub paso_torres: [i32; NIVELES],
+    /// Tope de puertas de un anillo (Cal-6): si la red lo cruza por más sitios, se cortan los que menos red de fuera sirven.
+    pub puertas_maximas: usize,
+    /// Celdas de ancho que mide como mucho una puerta (Cal2-1): de un paso más ancho quedan las centradas en el cruce.
+    pub ancho_maximo_puerta: usize,
+    /// Lo normal: entre cuántas puertas suele quedar un anillo (mínimo y máximo); es la referencia del batch, no una regla del trazo.
+    pub puertas_normales: [usize; 2],
     /// Edificios extramuros que exige ampliar.
     pub arrabal_minimo: usize,
     pub minutos_por_celda: [i64; NIVELES],
@@ -74,6 +80,9 @@ impl ReglasMuralla {
             nivel_maximo: entero(b, "nivelMaximo") as u8,
             franja_de_ronda: entero(b, "franjaDeRonda") as i32,
             paso_torres: por_nivel(&b["pasoTorres"], |v| numero(v) as i32),
+            puertas_maximas: entero(b, "puertasMaximas") as usize,
+            ancho_maximo_puerta: entero(b, "anchoMaximoPuerta") as usize,
+            puertas_normales: [0, 1].map(|i| b["puertasNormales"][i].as_u64().expect("puertasNormales: [mínimo, máximo]") as usize),
             arrabal_minimo: entero(b, "arrabalMinimo") as usize,
             minutos_por_celda: por_nivel(&b["minutosPorCelda"], numero),
             factor_puerta: entero(b, "factorPuerta"),
@@ -86,7 +95,7 @@ impl ReglasMuralla {
 
     /// Lo que el trazo lee del bloque (franja de ronda y separación de las torres).
     pub fn parametros_de_trazo(&self) -> ParametrosMuralla {
-        ParametrosMuralla { franja_de_ronda: self.franja_de_ronda, paso_torres: self.paso_torres }
+        ParametrosMuralla { franja_de_ronda: self.franja_de_ronda, paso_torres: self.paso_torres, puertas_maximas: self.puertas_maximas, ancho_maximo_puerta: self.ancho_maximo_puerta }
     }
 
     /// ¿Es un nivel de recinto que existe?
@@ -181,8 +190,9 @@ pub struct Recinto {
 }
 
 impl Recinto {
+    /// Sus puertas: las aberturas del anillo, tiradas contiguas de celdas de puerta (Cal-6, `trazado::aberturas`).
     pub fn puertas(&self) -> usize {
-        self.celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta).count()
+        trazado::aberturas(&self.celdas).len()
     }
 
     /// Celdas del anillo en pie levantadas.
@@ -337,7 +347,7 @@ impl Asentamiento {
     /// el trazo en orden de recorrido, que el llamador ya comprobó, con la red que conserva en sus puertas. Devuelve el id del recinto.
     pub fn comprometer_recinto(&mut self, t: Instante, nivel: u8, celdas: Vec<CeldaMuro>, red_de_puertas: Vec<CeldaDeRed>, tras_pieza: u32, ev: &mut Vec<Evento>) -> u32 {
         let id = self.recintos.len() as u32 + 1;
-        let (n, puertas) = (celdas.len(), celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta).count());
+        let (n, puertas) = (celdas.len(), trazado::aberturas(&celdas).len());
         self.recintos.push(Recinto { id, nivel, celdas, red_de_puertas, tras_pieza, avance: -1, mejora: None, siguiente_celda_en: None, comprometido_en: t, completado_en: None });
         ev.push(Evento::RecintoComprometido { recinto: id, nivel, celdas: n, puertas });
         id
@@ -535,6 +545,7 @@ mod pruebas {
     fn el_bloque_se_lee_del_documento() {
         let m = reglas().muralla;
         assert_eq!((m.nivel_maximo, m.franja_de_ronda, m.arrabal_minimo, m.factor_puerta, m.factor_torre), (3, 1, 6, 4, 3));
+        assert_eq!((m.puertas_maximas, m.puertas_normales, m.ancho_maximo_puerta), (4, [2, 3], 2));
         assert_eq!((m.nivel_de_plaza, m.paso_torres, m.minutos_por_celda, m.bono_defensa), ([2, 3, 4], [0, 8, 5], [15, 30, 60], [1_300_000, 1_800_000, 2_500_000]));
         assert_eq!(m.tarifa_por_celda[0], vec![(Recurso::Madera, 20_000), (Recurso::Piedra, 2_000)]);
         assert_eq!(m.upkeep_por_celda[2], vec![(Recurso::Piedra, 40)]);

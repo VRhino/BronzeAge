@@ -160,7 +160,26 @@ impl Nucleo {
 
     /// Cuentan los residentes cuya Facción no tiene plazas o que no tienen Facción: son los que necesitan bandidos que los acosen.
     fn residentes_sin_plaza(&self, c: u32) -> i64 {
-        self.heroes().filter(|h| h.heroe.residencia == Some(militar::heroe::Residencia::Campamento(c)) && h.faccion.is_none_or(|f| self.plazas_de(f).next().is_none())).count() as i64
+        self.heroes().filter(|h| h.heroe.residencia == Some(militar::heroe::Residencia::Campamento(c)) && self.sin_plaza(h)).count() as i64
+    }
+
+    /// ¿Es un héroe **sin plaza**? Reside en un campamento de mercenarios y su Facción no tiene plazas, o no tiene Facción: el mismo criterio que la demanda
+    /// del anillo (Cal-5, 2026-10-24).
+    fn sin_plaza(&self, h: &crate::estado_militar::HeroeNucleo) -> bool {
+        matches!(h.heroe.residencia, Some(militar::heroe::Residencia::Campamento(_))) && h.faccion.is_none_or(|f| self.plazas_de(f).next().is_none())
+    }
+
+    /// El oro que gana el héroe `heroe` al destruir un campamento de ese `origen` y ese `nivel`, con los rendimientos decrecientes de su ventana. **El oro de
+    /// los bandidos del anillo de un campamento de mercenarios solo lo cobran los héroes sin plaza** (Cal-5, 2026-10-24: el anillo existe para el jugador
+    /// nuevo); los demás ganan solo experiencia, y esa destrucción no cuenta en su ventana. Los de plaza, vetas y administración pagan a todos.
+    pub(super) fn oro_de_bandidos_para(&mut self, heroe: u64, origen: OrigenBandidos, nivel: u8, t: Instante) -> Mil {
+        if matches!(origen, OrigenBandidos::Anillo(_)) && !self.heroe(heroe).is_some_and(|h| self.sin_plaza(h)) {
+            return 0;
+        }
+        let mut recientes = self.estado.combate.destruidos.get(&heroe).cloned().unwrap_or_default();
+        let ganado = combate::bandidos::botin_de_bandidos(&self.estado.reglas.economia.combate, &mut recientes, nivel, t);
+        self.estado.combate.destruidos.insert(heroe, recientes);
+        ganado
     }
 
     /// ¿Le faltan campamentos al anillo de `c` con la demanda de ahora?

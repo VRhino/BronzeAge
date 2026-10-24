@@ -1,6 +1,6 @@
 //! La Facción como entidad, la ciudadanía y la residencia en el núcleo (sistema 5, tanda 5B; Diplomacia_Facciones §3-§4): crear una Facción, pedir el ingreso y responderlo, el Rey y el
 //! Embajador, dejarla con la sucesión del trono (y Q7), las tres órdenes de residencia con su cooldown, los fundadores que pasan a residir, los ciudadanos de la nobleza (Q8), la proyección de
-//! la Facción y la foto `BAN28`. Casos portados de `typescript-final:src/session/__tests__/{comandosMembresiaFaccion,comandosResidencia,faccionDeLaColumna}.test.ts` y
+//! la Facción y la foto `BAN28` (hoy `BAN29`). Casos portados de `typescript-final:src/session/__tests__/{comandosMembresiaFaccion,comandosResidencia,faccionDeLaColumna}.test.ts` y
 //! `engine/__tests__/residenciaMercenaria.test.ts`. Sobre el artefacto de mundo real; las pruebas se omiten si no está.
 
 mod comun;
@@ -370,7 +370,7 @@ fn la_politica_viaja_en_la_foto_ban28_y_la_ban27_se_rechaza_con_su_motivo() {
     let e = guion(m, &|e, ms| e.avanzar(ms));
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN28");
+    assert_eq!(&bytes[..5], b"BAN29");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (e.n.estado().politica.clone(), e.n.hash_estado()));
     assert!(s.politica.facciones.iter().count() == 2 && s.militar.heroes.values().any(|h| h.residencia_cambiada_en.is_some()));

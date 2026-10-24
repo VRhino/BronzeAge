@@ -542,7 +542,7 @@ impl Nucleo {
     fn atacar_campamento(&mut self, t: Instante, heroe: u64, id: u64, x: u64) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let b = self.estado.combate.bandidos.get(&x).ok_or_else(|| Respuesta::rechazo(rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO, format!("bandidos-{x}"), v))?;
-        let (nivel, donde) = (b.nivel, b.posicion);
+        let (nivel, donde, origen) = (b.nivel, b.posicion, b.origen);
         self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, None, false)?;
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_campamento(t, heroe, id, x);
@@ -560,11 +560,8 @@ impl Nucleo {
 
         let (mut oro, mut heridos, mut perdido) = (Mercancia::new(), 0, Mercancia::new());
         if r.destruido {
-            let ventana = self.estado.combate.destruidos.clone();
             for &h in &atac.heroes {
-                let mut recientes = ventana.get(&h).cloned().unwrap_or_default();
-                let ganado = combate::bandidos::botin_de_bandidos(&cr, &mut recientes, nivel, t);
-                self.estado.combate.destruidos.insert(h, recientes);
+                let ganado = self.oro_de_bandidos_para(h, origen, nivel, t);
                 sumar(&mut oro, Recurso::Oro, ganado);
             }
             let cogido = self.cargar_botin_en(id, &oro);

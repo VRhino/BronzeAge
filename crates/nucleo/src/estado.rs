@@ -60,6 +60,10 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN29: BAN28 con la ciudad de cada plaza de la geometría `LAYOUT_VERSION` 6 (calibración 2, Cal-6 y Cal2-1, decisiones del autor del 2026-10-24): ningún anillo
+/// tiene más de 4 puertas, contadas por aberturas, ninguna puerta mide más de 2 celdas y la red de fuera de un cruce cortado o estrechado rodea el muro hasta la puerta.
+/// El formato no cambia; BAN28 se rechaza porque sus recintos se trazaron con otra regla y sus ciudades son de otra geometría.
+///
 /// BAN28: BAN27 con la Facción como entidad (sistema 5, tanda 5B; `codec_politica`): cada Facción con su nombre, sigilo, Rey, Embajador, ciudadanos en orden de ingreso,
 /// solicitudes, experiencia, capital designada, derrota y ajuste de admisión, cuándo dejó cada héroe su última Facción, y las relaciones y propuestas del crate `politica`
 /// (vacías hasta 5D y 5F); y en cada héroe el instante de su último cambio de residencia (`HeroeNucleo::residencia_cambiada_en`, `codec_militar`). BAN27 se rechaza: sus
@@ -130,7 +134,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN28";
+const MAGIA: &[u8; 5] = b"BAN29";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1034,11 +1038,12 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN28`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 29, y solo el 28 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN29`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 29, y solo el 29 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'8' => {}
+                b'9' => {}
+                b'8' => return Err(ErrorFormato("foto del formato BAN28 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 5, con anillos de muralla de más de cuatro puertas o puertas de más de dos celdas): ya no se admite")),
                 b'7' => return Err(ErrorFormato("foto del formato BAN27 (las Facciones no existen como entidad: sin nombre, sigilo, Rey, Embajador ni orden de ingreso de sus ciudadanos, y los héroes no traen su último cambio de residencia): ya no se admite")),
                 b'6' => return Err(ErrorFormato("foto del formato BAN26 (los almacenes guardan milésimas sueltas, no unidades enteras, y no traen el resto oculto de sus flujos): ya no se admite")),
                 b'5' => return Err(ErrorFormato("foto del formato BAN25 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 4, sus recintos no traen la red que conservan en sus puertas y la guarnición de serie de una avanzada se reponía entera a las 6 h): ya no se admite")),
