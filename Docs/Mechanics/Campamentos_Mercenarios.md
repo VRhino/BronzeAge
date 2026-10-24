@@ -36,7 +36,7 @@ ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **p
 | `eligieronComoInicial` | Cuántos héroes lo eligieron al nacer (solo crece). |
 | `poblacion`, `poblacionEn` | Reclutas disponibles en ese instante (§4). |
 | `mercado` | Stock en venta ([`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9). |
-| `fondos` | Fondo de refundación por héroe ([`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §9). |
+| `fondos` | Fondo de refundación por héroe ([`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §9). En Rust (5G-b), `Estado::fundacion.fondos`; el contrato lo da por Facción. |
 | `bandidosEn?` | Cuándo puede aparecer el siguiente campamento de bandidos de su anillo ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §13). |
 | `creadoEn` | Instante de mundo en que se colocó (al crear el mundo). |
 
@@ -146,7 +146,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 | Reclutar, tropa prestada, comprar con el almacén personal | **solo el residente** | dentro o con la columna a la puerta |
 | Comprar de visita | cualquiera, con el oro del carro (sin trigo) | `Comercio_Caravanas.md` §9.2 |
 | Repostar víveres | cualquiera, gratis | `Comercio_Caravanas.md` §9.2b |
-| Aportar al fondo de refundación | ciudadano de una Facción **sin plazas** | `Fundacion_Y_Refundacion.md` §9 |
+| Aportar al fondo de refundación | ciudadano de una Facción **sin plazas**, dentro o con la columna a la puerta: del almacén personal residiendo allí, o del carro siendo su Líder (**implementado en Rust, 2026-10-24, 5G-b**: `aportarARefundacion` 153, `retirarDeRefundacion` 154, `comprarCaravanaDeRefundacion` 155; el fondo va por Facción en `CAMPAMENTO`) | `Fundacion_Y_Refundacion.md` §9 |
 | Intel de la taberna | cualquier héroe **de una Facción** | `Niebla_De_Guerra.md` |
 | Iniciar un combate a `radioProteccion` (10) | **nadie** (ni jugadores ni bandidos) | `Combate.md` §2 |
 | Abrir un alijo | héroe de una Facción **sin asentamientos** o sin Facción | `Generacion_Del_Mundo.md` §12 |

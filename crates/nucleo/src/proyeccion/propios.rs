@@ -284,6 +284,40 @@ pub fn ejercito(n: &Nucleo, e: &Ejercito) -> pb::Ejercito {
     x
 }
 
+/// La Caravana de Fundación (5G-b, Fundacion_Y_Refundacion §2): suelta en su origen, enganchada a una columna (donde está la columna) o volviendo sola con su plan; con su titular, su caducidad,
+/// lo que costó y, la de un campamento, lo que puso cada aportante. Su origen es la plaza (`as-N`) o el campamento (`camp-N`, también en `origen_campamento_id`); la de la administración no tiene.
+pub fn caravana_de_fundacion(n: &Nucleo, c: &crate::estado_fundacion::CaravanaFundacion) -> pb::Caravana {
+    use crate::estado_fundacion::{Origen, Situacion};
+    let (e, t) = (n.estado(), n.ahora());
+    let (estado, posicion, en_plan) = match &c.situacion {
+        Situacion::Disponible => (pb::EstadoCaravana::CaravanaDisponible, c.posicion, None),
+        Situacion::Adjunta(x) => (pb::EstadoCaravana::CaravanaAdjunta, e.ejercitos.get(x).map_or(c.posicion, |x| x.posicion_en(t)), None),
+        Situacion::Retornando(p) => (pb::EstadoCaravana::CaravanaRetornando, c.posicion_en(t), Some(plan(p))),
+    };
+    let (origen, campamento) = match c.origen {
+        Origen::Plaza(a) => (ids::asentamiento(a), None),
+        Origen::Campamento(k) => (ids::campamento(k), Some(ids::campamento(k))),
+        Origen::Ninguno => (String::new(), None),
+    };
+    pb::Caravana {
+        id: ids::caravana(c.id),
+        version: n.version_de(Clase::Caravana, c.id),
+        tipo: pb::TipoCaravana::CaravanaDeFundacion as i32,
+        origen_asentamiento_id: origen,
+        origen_campamento_id: campamento,
+        faccion_id: c.faccion.map(ids::faccion),
+        contenido: Some(carga(&c.contenido)),
+        posicion: Some(punto(posicion)),
+        plan: en_plan,
+        titular_id: Some(ids::heroe(c.titular)),
+        caduca_en_ms: c.caduca_en,
+        aportes: c.aportes.iter().map(|(&h, m)| (ids::heroe(h), carga(m))).collect(),
+        estado: estado as i32,
+        escoltada: matches!(c.situacion, Situacion::Adjunta(_)),
+        ..Default::default()
+    }
+}
+
 /// La caravana, con su estado en el contrato (una en batalla muestra el que tenía) y su carga entera: es de la Facción o la lleva una columna propia.
 pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
     let (e, t) = (n.estado(), n.ahora());
@@ -686,7 +720,10 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
             p
         }
         Clase::Escuadra => un(T::Escuadron, ids::escuadra(id), n.escuadra(id).map(|(_, s)| Cuerpo::Escuadron(escuadron(n, s)))),
-        Clase::Caravana => un(T::Caravana, ids::caravana(id), e.comercio.caravana(id).map(|c| Cuerpo::Caravana(caravana(n, c)))),
+        Clase::Caravana => {
+            let cuerpo = e.comercio.caravana(id).map(|c| caravana(n, c)).or_else(|| e.fundacion.caravanas.get(&id).map(|c| caravana_de_fundacion(n, c)));
+            un(T::Caravana, ids::caravana(id), cuerpo.map(Cuerpo::Caravana))
+        }
         Clase::Convocatoria => un(T::Convocatoria, ids::convocatoria(id), e.militar.convocatorias.get(&id).map(|c| Cuerpo::Convocatoria(convocatoria(c, quien, n.version_de(Clase::Convocatoria, id))))),
         Clase::Acuerdo => un(T::AcuerdoTrueque, ids::acuerdo(id), e.comercio.acuerdo(id).map(|a| Cuerpo::AcuerdoTrueque(trueque(n, a)))),
         Clase::OrdenMercado => un(
@@ -723,7 +760,7 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
             }
             Proyeccion { posibles: vec![(T::Avanzada, av_id), (T::ObraDeMapa, obra_id)], existen }
         }
-        Clase::Campamento => un(T::CampamentoMercenarios, ids::campamento(id as u32), super::interior::campamento(n, id as u32).map(Cuerpo::CampamentoMercenarios)),
+        Clase::Campamento => un(T::CampamentoMercenarios, ids::campamento(id as u32), super::interior::campamento_por_dentro(n, id as u32).map(Cuerpo::CampamentoMercenarios)),
         Clase::Bandidos => un(T::CampamentoBandidos, ids::bandidos(id), e.combate.bandidos.get(&id).map(|b| Cuerpo::CampamentoBandidos(campamento_bandidos(n, b)))),
         Clase::Interior => Proyeccion { existen: Vec::new(), posibles: Vec::new() },
     }

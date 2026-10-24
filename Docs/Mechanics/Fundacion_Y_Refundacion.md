@@ -36,6 +36,8 @@ La caravana de fundación es una `Caravana` de `tipo: 'construccion'`. Campos pr
 
 **Fondo de refundación:** `CampamentoMercenarios.fondos`: `heroeId → recurso → cantidad`. Lo aportado por cada héroe en ese campamento.
 
+> **Implementado en Rust (2026-10-24, 5G-b).** La Caravana de Fundación deja de ser la marca `caravana_fundacion` de la columna y es una entidad, `nucleo::CaravanaFundacion` en `Estado::fundacion` (`crates/nucleo/src/estado_fundacion.rs`, reglas en `nucleo/fundacion.rs`; foto **`BAN30`**, `BAN29` se rechaza): `{ id, faccion, titular, origen, posicion, contenido, aportes, situacion, caduca_en }`. El `id` sale del contador de las caravanas comerciales (en el contrato es `car-N`, una `Caravana` de tipo `CARAVANA_DE_FUNDACION`). `origen` es `Plaza(as)`, `Campamento(camp)` o `Ninguno` (la que da la administración con `DarCaravanaFundacion`, sin coste). `situacion` es `Disponible` (suelta y parada en su origen: es el único sitio donde está suelta), `Adjunta(ej)` o `Retornando(plan)`; el `aparcada` del TypeScript no existe (desde el 2026-10-22 entrar no aparca). El fondo es `EstadoFundacion::fondos: campamento → héroe → recurso → cantidad`, en unidades enteras. Sus dos plazos son eventos de la cola de prioridad 6 con la clave `entidad_fundacion(id)` (`Carga::Fundacion`: `Caduca` y `Llega`); cada cambio de situación sube su generación, así que a una caravana solo le queda en la cola el de la situación en que está y a la enganchada, ninguno.
+
 ## 3. El coste (`costoCaravanaFundacion`)
 
 ```
@@ -47,6 +49,8 @@ costo = FUNDACION.materialesIniciales                                     { made
 
 El Centro Urbano no cuesta nada. Con las cifras de hoy: `madera 160, piedra 20, trigo 100, oro 100`.
 **Coste de refundación** (`costoRefundacion`): cada recurso del coste normal × `MERCENARIOS.refundacion.porcentajeCoste` (0,4), **redondeado hacia arriba**, quitando los que quedan en 0. Hoy: `madera 64, piedra 8, trigo 40, oro 40`.
+
+> **Implementado en Rust (2026-10-24, 5G-b):** `Nucleo::costo_caravana_fundacion` y `Nucleo::costo_refundacion` (este, redondeado hacia arriba **a unidades enteras**, C3b). `FUNDACION.costoMaderaExtraCaravana` y `caducidadCaravanaHoras` los lee `asentamiento::Reglas`; `porcentajeCoste`, `comercio::ReglasMercenarios::porcentaje_refundacion`. La huella de las reglas no cambia (los bloques ya eran estos).
 
 ## 4. Lanzarla desde una plaza (`lanzarCaravanaFundacion`)
 
@@ -62,6 +66,8 @@ Comando `lanzarCaravanaFundacion { origenAsentamientoId }`; el **actor es el tit
 
 Efecto: el almacén se descuenta, `origen.ultimaCaravanaCreadaEn = ahora`, y nace la caravana `disponible`, **sin destino**, parada en la plaza (`posicionActual = origen.posicion`), con `titularId`, `faccionId` y `caducaEn = ahora + 60 min × caducidadCaravanaHoras` (48 h). Evento `expansion.caravana_lanzada` a la plaza.
 
+> **Implementado en Rust (2026-10-24, 5G-b):** `LanzarCaravanaFundacion { heroe, asentamiento }` (**156**; orden `lanzar_caravana_fundacion`, el héroe es el de la cuenta). Rechazos, en este orden: `asentamiento.desconocido`; `fundacion.no_ciudadano` (el titular no es ciudadano de la Facción de la plaza); `fundacion.no_resides` (reside en la plaza **y está dentro**: Proyecciones §5.2.4, `reside(A)`); `fundacion.nivel_insuficiente` (nivel operativo < 2); `caravana.en_cooldown` (`comercio.ultima_caravana` de la plaza, compartido con las comerciales: lanzar lo estampa); `fundacion.cap_alcanzado` (plazas + Caravanas de Fundación vivas de la Facción ≥ el cap de su nivel: el cupo se reserva al lanzar); `caravana.sin_recursos`. `creadas` lleva la caravana. Hecho `expansion.caravana_lanzada { caravana, heroe, faccion }`, de la plaza.
+
 ## 5. Fundar (`fundar`)
 
 Comando sin parámetros; lo ejecuta el **titular**, con la caravana enganchada a su columna. Se funda **donde está la columna** (`columna.posicionActual`).
@@ -70,6 +76,7 @@ Comando sin parámetros; lo ejecuta el **titular**, con la caravana enganchada a
 2. **Fundadores** = el titular y los demás participantes de la columna, **solo los ciudadanos de la Facción de la caravana**, recortado a `FUNDACION.maxJugadoresFundacionGrupal` (5): unirse a la columna es el consentimiento (D12). Hace falta `exigirPuertaDeFundacion`: al menos `minFundadoresParaFaccionNueva` (1 hoy) fundadores; `exigeCiudadaniaPrevia` está desactivado, y el comando pasa `yaFueCiudadano = true`.
    > **Implementado en Rust (2026-10-24, 5B)**: los fundadores son los participantes de la columna (el Líder primero) que son ciudadanos de su Facción, hasta `maxJugadoresFundacionGrupal`, y **pasan a residir en la plaza** al fundarla (dejan la plaza o el campamento donde vivieran; su campamento se traslada con ellos; no estampa el cooldown de residencia). Sin ninguno, `fundacion.sin_fundadores`, después de `fundacion.sin_faccion` y antes de `fundacion.cap_alcanzado`. La columna sigue en el mapa, a la puerta: que se deshaga dentro (paso 5) es de 5G.
 3. `fundarConCaravana` añade a lo de `fundarAsentamiento` ([`Economia_Construccion.md`](Economia_Construccion.md) §3: dentro del mapa, fuera de toda zona ya recortada, a 30 o más de toda plaza, no cima ni agua ni celda no transitable, tope de fundación) la exigencia de estar **a `MERCENARIOS.radioExclusionFundar` (20) o más de cualquier campamento** de mercenarios (estricto: a 20 exactos se funda).
+   > **Implementado en Rust (2026-10-24, 5G-b)**: `fundar` gasta la Caravana de Fundación enganchada a la columna (la primera, si lleva varias; `fundacion.sin_caravana` si no lleva ninguna) y su hecho lleva `caravana`. Lo da el Líder de la columna (como antes): el titular va en ella mientras la lleva, por la regla de §7. El cap que mira es el de las plazas (la caravana ya ocupó el suyo al lanzarse).
    > **Implementado en Rust (2026-10-13)**: `Comando::Fundar` (`crates/nucleo/src/nucleo/zonas.rs`). Orden de las comprobaciones y códigos de rechazo: `fundacion.sin_caravana`, `fundacion.cap_alcanzado` (plazas de la Facción ≥ cap de su nivel), `fundacion.fuera_del_mapa`, `fundacion.sobre_agua`, `fundacion.sobre_cima`, `fundacion.no_transitable`, `fundacion.dentro_de_zona`, `fundacion.cerca_de_plaza`, `fundacion.cerca_de_campamento`. Un rechazo no deja rastro. Hasta que existan la economía y los héroes, la caravana la da la administración (`DarCaravanaFundacion`) y el nivel de Facción se fija a mano (`FijarNivelFaccion`); la columna del titular **no** se disuelve en la plaza (llega con las plazas habitadas).
 4. Nombre: `nombreDeCiudadLibre(nombres de las plazas existentes, id de la nueva)` (§8). Si no queda ninguno, la plaza se queda sin nombre.
 5. **La columna entra en la plaza que acaba de levantar y se deshace dentro** (`absorberColumna` con devolver suministro): la tropa vuelve al campamento y el carro al almacén de la plaza nueva. Sus ids de caravana adjunta restantes quedan `aparcada` en ella. **La caravana de fundación se gasta.**
@@ -83,6 +90,8 @@ Comando sin parámetros; lo ejecuta el **titular**, con la caravana enganchada a
 Solo su **titular** (el actor), y solo si es `construccion`, está **`disponible`** (suelta: no enganchada ni volviendo) y a `≤ MOVIMIENTO.radioPuerta` de la posición de su origen (plaza o campamento); si no, `ExpansionInvalidaError`. Devuelve el coste (§7.2) y elimina la caravana. Evento `expansion.caravana_desarmada`.
 La restricción de la puerta existe para que desarmar no sea mover el coste de un sitio a otro sin recorrer el camino: lo que anda sola o caduca ya lo devuelve donde toca.
 
+> **Implementado en Rust (2026-10-24, 5G-b):** `DesarmarCaravanaFundacion { heroe, caravana }` (**157**): `caravana.desconocida`, `fundacion.no_titular`, `caravana.no_disponible` (enganchada o volviendo). La suelta está siempre parada en su origen, así que la puerta no se mira aparte; como en el TypeScript, el titular no tiene que estar allí. Devuelve como §7.1 y emite `expansion.caravana_desarmada { caravana, heroe, faccion, devuelto }` (con `campamento` si es de uno).
+
 ## 7. El tiempo (`avanzarCaravanasDeFundacion`)
 
 Sin ninguna caravana con titular, no hace nada. Para cada caravana con `titularId` (las demás pasan igual):
@@ -94,11 +103,15 @@ Sin ninguna caravana con titular, no hace nada. Para cada caravana con `titularI
 - **`disponible` con `caducaEn` vencido** (`ahora ≥ caducaEn`): **caduca y devuelve**.
 - Cualquier otra: sigue.
 
+> **Implementado en Rust (2026-10-24, 5G-b), sin tick.** Lo que el TypeScript miraba en cada tick lo mira `Nucleo::vigilar_fundaciones` **al cerrar cada versión**, y solo para las caravanas enganchadas cuya columna o cuyo titular tocó la transición (lo único que puede cambiar la respuesta): si la columna ya no existe, el titular no va en ella o ya no es ciudadano de su Facción, se suelta y vuelve sola desde donde estaba la columna (`fundacion.caravana_vuelve { caravana, heroe, faccion, llegaEn }`), con un plan por el A\* sin red a `CARAVANA_CATALOGO.construccion.velocidad` (10 u/min) y la cita `Llega` a su fin. Ya a la puerta de su origen, llega en el acto. Sin camino por tierra o sin origen, se pierde (`fundacion.caravana_perdida`). La suelta caduca con la cita `Caduca` a las 48 h. Al fundirse dos columnas, la caravana sigue con su titular en la que queda; un ejército que entra en un lugar con ella sigue siendo ejército (como con las comerciales). **La de la administración** (`origen = Ninguno`) es andamiaje: va con su columna sea quien sea su titular y solo se pierde si la columna desaparece (así `fundacion.sin_fundadores` sigue pudiendo probarse). Enganchar es `adjuntarCaravana` con su id (`AdjuntarCaravana`, 39): un ejército (`columna.personal_sin_caravanas`) de su Facción (`caravana.faccion_ajena`) en el que va su titular (`fundacion.no_titular`), a la puerta de donde está (`caravana.fuera_de_la_puerta`), suelta (`caravana.estado_invalido`); deja de caducar. Reclamarla es `reclamarCaravana` (Movimiento_Ejercitos §9).
+
 ### 7.1 Devolver (`devolverCaravana`)
 
 - Si **no tiene origen en pie** (la plaza ya no existe; no aplica a un campamento) → se pierde, con evento `fundacion.caravana_perdida`.
 - **La de una plaza**: el `contenido` íntegro al almacén del origen, recurso a recurso con `agregarRecurso` (**hasta donde quepa**: lo que excede la capacidad se pierde).
 - **La de un campamento** (`origenCampamentoId`): `devolverAportes`: **al fondo de ese campamento, a nombre de cada aportante** según `aportes`. Lo de quien ya no es ciudadano de esa Facción **se pierde**. Nada llega a nadie por arte de magia: cada uno lo retira en persona (§9).
+
+> **Implementado en Rust (2026-10-24, 5G-b):** `fundacion.caravana_devuelta { caravana, heroe, faccion, devuelto }` (con `campamento` si es de uno): `devuelto` es lo que entró de verdad (en una plaza, hasta el hueco de cada recurso; en un campamento, lo de los aportantes que siguen siendo ciudadanos).
 
 ## 8. Nombre de la ciudad (`nombreDeCiudadLibre`)
 
@@ -117,11 +130,15 @@ El héroe debe estar **en el campamento**: dentro, o con su columna a la puerta 
 - **Retirar** lo propio: cantidad > 0; mismo requisito de lado; se mueve `min(cantidad, aportado, sitio)` (sitio = `ALMACEN_PERSONAL.capacidad − total` del almacén personal, o `capacidadCargaDe(columna) − lo que ya lleva` en el carro). `sentido: retira`. **El oro es un recurso más**. Se puede retirar mientras no se gaste.
 - **Fondo de la Facción** (`fondoDeFaccion`): suma de `fondos` de los héroes que **son ciudadanos de esa Facción**, por recurso.
 
+> **Implementado en Rust (2026-10-24, 5G-b):** `AportarARefundacion { heroe, recurso, cantidad, lado }` (**153**) y `RetirarDeRefundacion` (**154**), con `lado` `almacen | carro` (`LadoDelFondo`; otro valor, `orden.forma_invalida`). Rechazos: `campamento.fuera_de_la_puerta` (ni dentro ni con la columna a su puerta), `faccion.no_pertenece`, `refundacion.con_plazas` (solo al aportar), `cantidad.no_positiva` (menos de una unidad), `refundacion.no_resides` (el almacén con otra residencia), `heroe.sin_columna` y `columna.solo_el_lider` (el carro); aportar, `almacen.sin_existencias` o `carro.no_lleva`; retirar, `refundacion.sin_aporte`, `almacen_personal.lleno` o `carro.no_cabe`. Se mueve en unidades enteras, redondeando hacia abajo. Hecho `mercenarios.fondo_refundacion { campamento, heroe, faccion, recurso, cantidad }` con `sentido` (`aporta | retira`) como texto. `Nucleo::fondo_de_faccion(campamento, faccion)`. El contrato lleva el fondo **por Facción** (`CampamentoMercenarios.fondos`, `f-N`) en `CAMPAMENTO` y `ADMIN`; la `VISTA` no.
+
 ### 9.2 Comprar la caravana (`comprarCaravanaDeRefundacion`)
 
 El actor es ciudadano; la Facción no tiene plazas; **no tiene ya una caravana de fundación**; `calcularCapFundacion(nivel) ≥ 1`; y el fondo cubre `costoRefundacion()` (si no: «el fondo no cubre el coste: faltan …»). Se gasta recurso a recurso **sobre el mismo conjunto que cuenta el fondo**, recorriendo `faccion.ciudadanosIds` **en orden de ciudadanía** y tomando de cada uno lo que tenga hasta cubrir; lo que sobra de cada uno **se queda en el fondo**, y lo gastado a cada uno se anota en `aportes`.
 Nace parada en el campamento (`origenCampamentoId = origenAsentamientoId = campamento.id`, `posicionActual = campamento.posicion`), **sin destino**, con el actor de titular, `contenido = costoRefundacion()` y `caducaEn = ahora + 48 h`. Evento `mercenarios.caravana_refundacion`. **No aplica el cooldown** de caravanas (no es de una plaza).
 A partir de ahí es la misma entidad: se engancha, se funda con `fundar` (§5), se desarma (§6) o caduca (§7).
+
+> **Implementado en Rust (2026-10-24, 5G-b):** `ComprarCaravanaDeRefundacion { heroe }` (**155**): `campamento.fuera_de_la_puerta`, `faccion.no_pertenece`, `refundacion.con_plazas`, `refundacion.ya_tiene_caravana`, `fundacion.cap_alcanzado` (cap < 1), `refundacion.fondo_corto` (dice cuánto falta). Se gasta de los ciudadanos **en orden de ingreso** (`Faccion::ciudadanos`); nace parada a la puerta del campamento, con titular, `aportes` y caducidad. No toca el cooldown. Hecho `mercenarios.caravana_refundacion { caravana, heroe, faccion, campamento }`. El ciclo entero (oro de los bandidos del anillo, que solo cobran los héroes sin plaza, Cal-5; aportar; comprar; engancharla; fundar) lo prueba `nucleo/tests/fundacion.rs::una_faccion_sin_plazas_refunda_con_el_oro_de_los_bandidos_del_anillo`.
 
 ## 10. Parámetros
 
@@ -207,7 +224,7 @@ Ninguna abierta.
 
 ## Catálogo de eventos
 
-Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 7 (`expansion.caravana_desarmada`, `expansion.caravana_lanzada`, `fundacion.caravana_devuelta`, `fundacion.caravana_perdida`, `fundacion.caravana_vuelve`, `mercenarios.caravana_refundacion`, `mercenarios.fondo_refundacion`).
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. Desde 5G-b (2026-10-24) el núcleo los emite todos.
 
 <!-- eventos -->
 ```json

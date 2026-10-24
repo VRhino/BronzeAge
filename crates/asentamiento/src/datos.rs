@@ -160,6 +160,10 @@ pub struct Reglas {
     pub viviendas_iniciales: u32,
     /// `FUNDACION.maxJugadoresFundacionGrupal`: cuántos héroes de la columna pasan a residir en la plaza que fundan (Fundacion_Y_Refundacion §5).
     pub max_fundadores: usize,
+    /// `FUNDACION.costoMaderaExtraCaravana`: la madera de fabricar la Caravana de Fundación en sí (Fundacion_Y_Refundacion §3).
+    pub madera_extra_caravana: Mil,
+    /// `FUNDACION.caducidadCaravanaHoras`, en ms: lo que dura suelta una Caravana de Fundación antes de caducar.
+    pub caducidad_caravana: i64,
 }
 
 impl Reglas {
@@ -233,6 +237,8 @@ impl Reglas {
             materiales_iniciales,
             viviendas_iniciales: fundacion["viviendasIniciales"].as_u64().expect("viviendasIniciales") as u32,
             max_fundadores: fundacion["maxJugadoresFundacionGrupal"].as_u64().expect("maxJugadoresFundacionGrupal") as usize,
+            madera_extra_caravana: mil(num(&fundacion, "costoMaderaExtraCaravana")),
+            caducidad_caravana: num(&fundacion, "caducidadCaravanaHoras") as i64 * 3_600_000,
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),

@@ -37,9 +37,10 @@ impl Nucleo {
         let completa = b.columna.unir_en_campo(&mr, columna_otra, distancia, t, &|ids| militar.soldados_de(&heroes, ids))?;
         let oe = ejercitos.remove(&otra).expect("existe");
         let b = ejercitos.get_mut(&base).expect("existe");
-        b.caravana_fundacion |= oe.caravana_fundacion;
         b.caravanas_adjuntas.extend(oe.caravanas_adjuntas);
         b.caravanas_adjuntas.sort_unstable();
+        // Sus Caravanas de Fundación siguen con su titular, que va ahora en `base`.
+        self.reenganchar_fundaciones(otra, base);
         for h in &heroes_otra {
             self.ubicar_en_columna(*h, base);
             self.estado.generaciones.subir(entidad_peticion_de_union(*h));
@@ -64,6 +65,7 @@ impl Nucleo {
         }
         let antes = self.velocidad_de_ejercito(id).unwrap_or(0);
         let posicion = self.estado.ejercitos[&id].posicion_en(t);
+        let con_fundacion = self.estado.fundacion.de_columna(id).is_some();
         let Estado { ejercitos, militar, siguiente_id, .. } = &mut self.estado;
         let e = ejercitos.get_mut(&id).expect("existe");
         // Un ejército que entra en un lugar con caravanas adjuntas las conserva con su Líder, y una personal no las lleva: sigue siendo un ejército mientras las lleve.
@@ -80,7 +82,7 @@ impl Nucleo {
             &suyas_de,
             &|ids| militar.soldados_de(&heroes, ids),
         );
-        if !e.caravanas_adjuntas.is_empty() {
+        if !e.caravanas_adjuntas.is_empty() || con_fundacion {
             (e.columna.tipo, e.columna.politica) = (tipo, politica);
         }
         let ids: Vec<u64> = nuevas.iter().map(|c| c.id).collect();

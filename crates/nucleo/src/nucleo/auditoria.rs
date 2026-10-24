@@ -56,7 +56,7 @@ impl Nucleo {
         let residentes: Vec<u64> = e.militar.heroes.values().filter(|h| h.heroe.residencia == Some(Residencia::Campamento(c))).map(|h| h.heroe.id).collect();
         let presentes: Vec<u64> = e.militar.heroes.values().filter(|h| h.heroe.presencia.ubicacion == militar::presencia::Ubicacion::Mercenarios(c)).map(|h| h.heroe.id).collect();
         let prestamos: Vec<u64> = e.militar.heroes.values().flat_map(|h| &h.heroe.escuadras).filter(|s| s.prestada == Some(c)).map(|s| s.id).collect();
-        huella(&(e.comercio.mercenarios.stock.get(&c).unwrap_or(inicial), &e.comercio.mercenarios.mercado, residentes, presentes, prestamos, e.militar.reclutas.get(&c), &e.militar.tecnologias))
+        huella(&(e.comercio.mercenarios.stock.get(&c).unwrap_or(inicial), &e.comercio.mercenarios.mercado, residentes, presentes, prestamos, e.militar.reclutas.get(&c), &e.militar.tecnologias, e.fundacion.fondos.get(&c)))
     }
 
     fn huellas(&self) -> Huellas {
@@ -68,6 +68,7 @@ impl Nucleo {
             m.extend(h.heroe.escuadras.iter().map(|x| ((Clase::Escuadra, x.id), huella(x))));
         }
         m.extend(e.comercio.flota.iter().map(|c| ((Clase::Caravana, c.id), huella(c))));
+        m.extend(e.fundacion.caravanas.values().map(|c| ((Clase::Caravana, c.id), huella(c))));
         m.extend(e.comercio.acuerdos.iter().map(|a| ((Clase::Acuerdo, a.id), huella(a))));
         m.extend(e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).map(|o| ((Clase::OrdenMercado, o.id), huella(o))));
         for a in e.asentamientos.values() {

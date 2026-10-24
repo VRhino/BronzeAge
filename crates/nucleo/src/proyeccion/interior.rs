@@ -193,6 +193,15 @@ pub fn campamento(n: &Nucleo, c: u32) -> Option<pb::CampamentoMercenarios> {
     })
 }
 
+/// El campamento como lo ve quien está dentro (`CAMPAMENTO`) y la administración: el de [`campamento`] con el fondo de refundación **de cada Facción** (lo de sus ciudadanos, §9.1; el contrato lo
+/// lleva por Facción, `f-N`). La `VISTA` no lo lleva: es lo que hay dentro.
+pub fn campamento_por_dentro(n: &Nucleo, c: u32) -> Option<pb::CampamentoMercenarios> {
+    let mut p = campamento(n, c)?;
+    let facciones: std::collections::BTreeSet<u32> = n.estado().fundacion.fondos.get(&c).into_iter().flatten().filter_map(|(h, _)| n.heroe(*h).and_then(|h| h.faccion)).collect();
+    p.fondos = facciones.into_iter().map(|f| (ids::faccion(f), n.fondo_de_faccion(c, f))).filter(|(_, m)| !m.is_empty()).map(|(f, m)| (f, cantidades(m))).collect();
+    Some(p)
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;

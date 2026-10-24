@@ -1206,7 +1206,7 @@ fn estado_con_comercio() -> Estado {
     s.comercio.ultima_caravana.insert(1, 42);
     let mr = militar::Reglas::cargar();
     let columna = militar::columna::Columna::salir(&mr, 3, Some(1), 40, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Aceptar, vec![], [(Oro, 5), (Piedra, 6)].into_iter().collect(), 10, 0, &|_| 0);
-    let mut col = nucleo::Ejercito { id: 3, columna, posicion: Punto::new(1, 2), plan: Default::default(), velocidad_fija: Some(500), caravana_fundacion: false, caravanas_adjuntas: vec![6], persiguiendo: Some(9), en_batalla: true, plan_en_pausa: Some(nucleo::PlanEnPausa { desde: 5, velocidad: 400, plan: Default::default() }), version: 0 };
+    let mut col = nucleo::Ejercito { id: 3, columna, posicion: Punto::new(1, 2), plan: Default::default(), velocidad_fija: Some(500), caravanas_adjuntas: vec![6], persiguiendo: Some(9), en_batalla: true, plan_en_pausa: Some(nucleo::PlanEnPausa { desde: 5, velocidad: 400, plan: Default::default() }), version: 0 };
     col.caravanas_adjuntas.sort();
     col.columna.participantes.push(militar::columna::Participante { heroe: 41, unido_en: 7 });
     col.columna.peticiones.push(militar::columna::Peticion { heroe: 42, pedido_en: 5, expira_en: 10_005 });
@@ -1236,7 +1236,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN29");
+    assert_eq!(&bytes[..5], b"BAN30");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
@@ -1357,7 +1357,6 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         ("viveres.maximo", Box::new(|e| e.columna.viveres.maximo = Some(1))),
         ("posicion", Box::new(|e| e.posicion = Punto::new(3, 2))),
         ("velocidad_fija", Box::new(|e| e.velocidad_fija = None)),
-        ("caravana_fundacion", Box::new(|e| e.caravana_fundacion = true)),
     ];
     for (nombre, f) in columna {
         let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();

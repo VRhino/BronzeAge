@@ -254,7 +254,7 @@ impl Nucleo {
     }
 
     /// Los costes de un trazado con el camino más rápido: sobre una arista de la red el coste se multiplica por `factorCamino`.
-    fn costes_efectivos(&self, puntos: &[Punto], costes: &[i64]) -> Vec<i64> {
+    pub(super) fn costes_efectivos(&self, puntos: &[Punto], costes: &[i64]) -> Vec<i64> {
         let factor = self.estado.reglas.economia.comercio.navegacion.factor_camino;
         let red = &self.estado.comercio.red;
         puntos.windows(2).zip(costes).map(|(w, &c)| if red.contiene(&clave_arista(w[0], w[1])) { c * factor / UNO } else { c }).collect()
@@ -690,6 +690,9 @@ impl Nucleo {
     pub(super) fn adjuntar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, ejercito: u64) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        if self.estado.fundacion.caravanas.contains_key(&caravana) {
+            return self.adjuntar_fundacion(t, p, caravana, ejercito);
+        }
         let e = self.estado.ejercitos.get(&ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(ejercito)))?;
         let i = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana)))?;
         if !self.manda_columna(p, e, false) {

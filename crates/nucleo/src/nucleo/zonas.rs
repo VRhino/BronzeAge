@@ -255,12 +255,12 @@ impl Nucleo {
                 Ok(None)
             }
             Comando::DarCaravanaFundacion { ejercito } => {
-                let Some(e) = self.estado.ejercitos.get_mut(ejercito) else { return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito))) };
-                if e.caravana_fundacion {
+                if !self.estado.ejercitos.contains_key(ejercito) {
+                    return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)));
+                }
+                if !self.dar_fundacion(t, *ejercito) {
                     return Err(sin_cambios());
                 }
-                e.caravana_fundacion = true;
-                self.tr.tocar(Clase::Ejercito, *ejercito);
                 Ok(None)
             }
             Comando::Fundar { ejercito } => self.fundar(t, p, *ejercito),
@@ -342,9 +342,9 @@ impl Nucleo {
         if !self.manda_columna(p, e, true) {
             return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya", v));
         }
-        if !e.caravana_fundacion {
+        let Some(caravana) = self.estado.fundacion.de_columna(ejercito) else {
             return Err(Respuesta::rechazo(rechazos::SIN_CARAVANA, "la columna no lleva una Caravana de Fundación", v));
-        }
+        };
         let punto = e.posicion_en(t);
         let faccion = e.columna.faccion.ok_or_else(|| Respuesta::rechazo(rechazos::FUNDACION_SIN_FACCION, "una columna sin Facción no funda", v))?;
         // Los fundadores (Fundacion_Y_Refundacion §5.2): el titular y los demás de la columna que son ciudadanos de su Facción, en su orden y hasta `maxJugadoresFundacionGrupal`.
@@ -378,7 +378,7 @@ impl Nucleo {
         self.proteger_al_fundar(id, t);
         self.programar_minuto(id, t + base::MS_POR_MINUTO);
         self.programar_bandidos_de_plaza(id, t);
-        self.estado.ejercitos.get_mut(&ejercito).expect("existe").caravana_fundacion = false;
+        self.gastar_fundacion(caravana);
         self.tr.tocar(Clase::Ejercito, ejercito);
         // Pasan a residir en ella (dejan la plaza o el campamento donde vivieran; su campamento se traslada con ellos). No es una orden suya: no cuenta para el cooldown de residencia.
         // La columna sigue en el mapa, a la puerta: que se deshaga dentro (§5.5) es deuda de la Caravana de Fundación (5G).
@@ -393,7 +393,7 @@ impl Nucleo {
             ejercitos: vec![ejercito],
             asentamientos: vec![id],
             punto: Some(punto),
-            datos: vec![("faccion", faccion as i64)],
+            datos: vec![("faccion", faccion as i64), ("caravana", caravana as i64)],
             ..Default::default()
         });
         self.contactos_nuevos(id, t);

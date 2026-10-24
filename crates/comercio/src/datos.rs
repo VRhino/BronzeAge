@@ -207,6 +207,8 @@ pub struct ReglasMercenarios {
     pub capacidad_almacen_personal: Mil,
     /// `LOGISTICA.capacidadViveresPorHeroe`.
     pub capacidad_viveres_por_heroe: Mil,
+    /// `MERCENARIOS.refundacion.porcentajeCoste` (ppm): lo que cuesta la Caravana de Fundación en un campamento, sobre el coste de la de una plaza (Fundacion_Y_Refundacion §3).
+    pub porcentaje_refundacion: i64,
 }
 
 /// Lo que el comercio lee de `NAVEGACION` (el grafo lo construye `crates/rutas`); con los valores vigentes.
@@ -342,6 +344,7 @@ impl Reglas {
             margen: ppm(num(&mer, "mercado.margen")),
             capacidad_almacen_personal: mil(num(&b("ALMACEN_PERSONAL"), "capacidad")),
             capacidad_viveres_por_heroe: mil(num(&bloque(MOVIMIENTO, "LOGISTICA"), "capacidadViveresPorHeroe")),
+            porcentaje_refundacion: ppm(num(&mer, "refundacion.porcentajeCoste")),
         };
         let nv = b("NAVEGACION");
         let navegacion = Navegacion {

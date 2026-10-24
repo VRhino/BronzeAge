@@ -503,4 +503,19 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `residencia.ya_reside` | `RESIDENCIA_YA_RESIDE` | — |
 | `residencia.vetado` | `RESIDENCIA_VETADO` | La plaza lo ha vetado (los vetos llegan en 5E). |
 | `residencia.sin_plaza` | `RESIDENCIA_SIN_PLAZA` | Dejar la residencia sin residir en ninguna plaza (en un campamento de mercenarios se cambia de campamento o se muda a una plaza). |
+
+### Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `fundacion.no_resides` | `FUNDACION_NO_RESIDES` | Lanzar una Caravana de Fundación sin residir en la plaza o sin estar dentro de ella (Proyecciones §5.2.4). |
+| `fundacion.no_ciudadano` | `FUNDACION_NO_CIUDADANO` | El titular no es ciudadano de la Facción de la plaza de origen. |
+| `fundacion.nivel_insuficiente` | `FUNDACION_NIVEL_INSUFICIENTE` | La plaza de origen no está a nivel 2 (el operativo, no el alcanzado). |
+| `fundacion.no_titular` | `FUNDACION_NO_TITULAR` | Solo su titular desarma o engancha la Caravana de Fundación (y tiene que ir en la columna que la engancha). |
+| `refundacion.con_plazas` | `REFUNDACION_CON_PLAZAS` | Refundar desde un campamento es de una Facción sin ninguna plaza. |
+| `refundacion.ya_tiene_caravana` | `REFUNDACION_YA_TIENE_CARAVANA` | La Facción ya tiene una Caravana de Fundación. |
+| `refundacion.fondo_corto` | `REFUNDACION_FONDO_CORTO` | El fondo de la Facción en el campamento no cubre el coste de la caravana (el mensaje dice cuánto falta). |
+| `refundacion.no_resides` | `REFUNDACION_NO_RESIDES` | Aportar o retirar con el almacén personal sin residir en ese campamento: el almacén vive donde se reside (aquí, con el carro). |
+| `refundacion.sin_aporte` | `REFUNDACION_SIN_APORTE` | Retirar un recurso que el héroe no aportó al fondo de ese campamento. |
+| `caravana.lejos` | `CARAVANA_LEJOS` | Reclamar la Caravana de Fundación lejos de ella (a más de `radioEncuentro`). |
 <!-- /rechazos -->

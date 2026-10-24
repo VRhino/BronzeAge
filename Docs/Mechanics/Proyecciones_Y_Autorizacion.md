@@ -249,6 +249,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
+| `aportar_a_refundacion` | `AportarARefundacion` | la cuenta del héroe | en un campamento (dentro o con su columna a la puerta, `campamento.fuera_de_la_puerta`), ciudadano (`faccion.no_pertenece`) de una Facción sin plazas (`refundacion.con_plazas`); del almacén personal residiendo allí (`refundacion.no_resides`) o del carro siendo el Líder de su columna (`columna.solo_el_lider`) (5G-b) |
 | `asignar_escolta` | `AsignarEscolta` | la cuenta del héroe | escuadras suyas en el campamento del origen de la caravana; cupo de escolta |
 | `asignar_guarnicion` | `AsignarGuarnicion` | la cuenta del héroe | residente de la plaza y cupo de guarnición |
 | `atacar` | `Atacar` | la cuenta del héroe | en guerra o con `declara_guerra` (`guerra.confirmar`); a la puerta del objetivo |
@@ -260,6 +261,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `cancelar_obra` | `CancelarObraDeAvanzada` | la cuenta del héroe, ciudadano de la madre | una mejora o reparación en curso |
 | `ceder_liderazgo` | `CederLiderazgo` | la cuenta del héroe | el Líder |
 | `colocar_avanzada` | `ColocarAvanzada` | la cuenta del héroe, ciudadano de la madre | la columna del héroe a la puerta (`radioPuerta`) del sitio |
+| `comprar_caravana_de_refundacion` | `ComprarCaravanaDeRefundacion` | la cuenta del héroe | en un campamento, ciudadano de una Facción sin plazas (`refundacion.con_plazas`) ni otra Caravana de Fundación (`refundacion.ya_tiene_caravana`); el fondo de su Facción cubre el coste (`refundacion.fondo_corto`) (5G-b) |
 | `comprar_en_campamento` | `ComprarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta; cupo diario |
 | `comprar_informe_plaza` | `ComprarInformePlaza` | la cuenta del héroe | como `comprar_mirada`; conocer la plaza |
 | `comprar_mirada` | `ComprarMirada` | la cuenta del héroe | ciudadano, dentro de una plaza de su Facción con Taberna o en un campamento (DUDA: el cargo es del sistema 5) |
@@ -267,6 +269,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `convocar_ejercito` | `ConvocarEjercito` | la cuenta del héroe | dentro de la plaza o del campamento |
 | `crear_heroe` | `CrearHeroe` | su cuenta | una por cuenta (`heroe.ya_existe`); la administración crea los de otra cuenta y los bots |
 | `dejar_de_perseguir` | `DejarDePerseguir` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
+| `desarmar_caravana_fundacion` | `DesarmarCaravanaFundacion` | la cuenta del héroe | su titular (`fundacion.no_titular`), con la caravana suelta en su origen (`caravana.no_disponible`) (5G-b) |
 | `desconectarse` | `Desconectarse` | la cuenta del héroe | — |
 | `destruir_avanzada` | `DestruirAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
 | `elegir_tropa_de_avanzada` | `ElegirTropaDeAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
@@ -279,6 +282,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `guarnecer` | `Guarnecer` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) |
 | `guarnecer_avanzada` | `GuarnecerAvanzada` | la cuenta del héroe, ciudadano de la madre | su columna a la puerta (`radioPuerta`) de la avanzada |
 | `inspeccionar` | `Inspeccionar` | la cuenta del héroe | el objetivo en el mapa (`inspeccion.a_cubierto`) y a su alcance |
+| `lanzar_caravana_fundacion` | `LanzarCaravanaFundacion` | la cuenta del héroe | ciudadano de la Facción de la plaza (`fundacion.no_ciudadano`) que reside y está en ella (`fundacion.no_resides`, Proy §5.2.4); nivel operativo 2 (`fundacion.nivel_insuficiente`), cooldown de caravanas (`caravana.en_cooldown`), cap con las caravanas vivas (`fundacion.cap_alcanzado`) y el coste (`caravana.sin_recursos`) (5G-b) |
 | `mejorar_avanzada` | `MejorarAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
 | `movilizar_ejercito` | `MovilizarEjercito` | la cuenta del héroe | como `salir_al_mundo` |
 | `ordenar_escuadras` | `OrdenarEscuadras` | la cuenta del héroe | — |
@@ -288,7 +292,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `pedir_prestamo` | `PedirPrestamo` | la cuenta del héroe | dentro del campamento |
 | `perseguir` | `Perseguir` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
 | `quitar_escolta` | `QuitarEscolta` | la cuenta del héroe | las escuadras que él cedió |
-| `reclamar_caravana` | `ReclamarCaravana` | la cuenta del héroe | en mundo abierto, la Caravana de Fundación que vuelve sola (`caravana.no_reclamable`: hasta 5G-b no hay ninguna) |
+| `reclamar_caravana` | `ReclamarCaravana` | la cuenta del héroe | a bordo de su columna, en mundo abierto, a `radioEncuentro` (`caravana.lejos`) de la Caravana de Fundación de su Facción (`caravana.faccion_ajena`) que vuelve sola (`caravana.no_reclamable`); su columna personal pasa a ser un ejército (5G-b) |
 | `reclutar_en_campamento` | `ReclutarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta |
 | `reclutar_tropa` | `ReclutarTropa` | la cuenta del héroe | dentro de la plaza; residente (todo) o de la Facción dueña (solo reponer) |
 | `reparar_avanzada` | `RepararAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
@@ -299,6 +303,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `repostar_en_campamento` | `RepostarEnCampamento` | la cuenta del héroe | a la puerta del campamento |
 | `responder_peticion_de_convocatoria` | `ResponderPeticionDeConvocatoria` | la cuenta del héroe | el Líder de la convocatoria |
 | `responder_peticion_de_union` | `ResponderPeticionDeUnion` | la cuenta del héroe | el Líder de la columna |
+| `retirar_de_refundacion` | `RetirarDeRefundacion` | la cuenta del héroe | como `aportar_a_refundacion`, sin mirar las plazas; lo que aportó (`refundacion.sin_aporte`), hasta el hueco (5G-b) |
 | `retirar_de_avanzada` | `RetirarDeAvanzada` | la cuenta del héroe, ciudadano de la madre | su columna a la puerta (`radioPuerta`) de la avanzada |
 | `retirar_guarnicion` | `RetirarGuarnicion` | la cuenta del héroe | — |
 | `sacar_del_almacen_personal` | `SacarDelAlmacenPersonal` | la cuenta del héroe | como `guardar_en_almacen_personal`; hasta lo que cabe en el carro (`carro.no_cabe`) |
@@ -368,15 +373,11 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `admitir_otras_facciones` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `adoptar_tecnologia` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `alternar_reabastecer_aliados` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `aportar_a_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `asignar_cargo_local` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `comprar_caravana_de_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `declarar_guerra` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `desarmar_caravana_fundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `designar_capital` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `lanzar_caravana_fundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `proponer_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `proponer_paz` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
@@ -387,7 +388,6 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `responder_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `responder_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `retirar_de_refundacion` | — | no disponible | refundación (Fundacion_Y_Refundacion) |
 | `retirar_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `romper_relacion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |

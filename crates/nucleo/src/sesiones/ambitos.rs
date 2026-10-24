@@ -497,7 +497,13 @@ impl Mesa {
             // los hechos.
             let admins: Vec<SesionId> = self.suscritos(Ambito::Admin).map(|(s, _)| s).filter(|&s| self.recibe(solo, s, Ambito::Admin, v)).collect();
             if !admins.is_empty() {
-                let adjuntas = cv.tocados.de(Clase::Ejercito).iter().filter_map(|id| n.estado().ejercitos.get(id)).flat_map(|x| x.caravanas_adjuntas.iter().map(|&c| (Clase::Caravana, c)));
+                let fundacion = &n.estado().fundacion;
+                let adjuntas = cv
+                    .tocados
+                    .de(Clase::Ejercito)
+                    .iter()
+                    .filter_map(|id| n.estado().ejercitos.get(id))
+                    .flat_map(|x| x.caravanas_adjuntas.iter().copied().chain(fundacion.de_columna(x.id)).map(|c| (Clase::Caravana, c)));
                 let tocadas: Vec<(Clase, u64)> = Clase::TODAS.into_iter().flat_map(|c| cv.tocados.de(c).iter().map(move |&id| (if c == Clase::Interior { Clase::Asentamiento } else { c }, id))).chain(adjuntas).collect();
                 for s in admins {
                     let cubo = cubos.entry((s, Ambito::Admin)).or_default();
