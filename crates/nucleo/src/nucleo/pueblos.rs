@@ -24,7 +24,7 @@ use crate::nucleo::mercado::id32;
 use asentamiento::catalogo::Tipo;
 use asentamiento::pueblos::{ErrorPueblo, Pueblo};
 use asentamiento::Costo;
-use super::dentro::MOTIVO_DESAPARECE;
+use super::dentro::MOTIVO_DESTRUIDO;
 use comercio::acarreo;
 use comercio::viaje::{longitud_ruta, peajes_de_paradas};
 use comercio::{total, Carga as Mercancia};
@@ -158,7 +158,7 @@ impl Nucleo {
                 let mut ev = vec![];
                 // Quien estaba dentro sale al mapa con lo suyo, a la puerta del pueblo que desaparece.
                 if let Some(puerta) = self.posicion_de_pueblo(*pueblo) {
-                    self.vaciar_lugar(t, Ubicacion::Pueblo(*pueblo), puerta, plaza, MOTIVO_DESAPARECE);
+                    self.vaciar_lugar(t, Ubicacion::Pueblo(*pueblo), puerta, plaza, MOTIVO_DESTRUIDO);
                 }
                 let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(*pueblo, &mut ev).expect("existe");
                 self.estado.nodos_reclamados.remove(&destruido.nodo);

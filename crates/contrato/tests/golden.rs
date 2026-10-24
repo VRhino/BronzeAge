@@ -177,8 +177,37 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     assert_eq!(f.ambito.as_ref().map(|a| (a.tipo, a.id.as_str())), Some((AmbitoTipo::AmbitoAdmin as i32, "")));
     let Some(entidad::Cuerpo::Batalla(b)) = f.entidades[0].cuerpo.clone() else { panic!() };
     let a = b.asignacion.expect("la asignación");
-    assert_eq!((a.intento_asignacion_id.as_str(), a.instancia.unwrap().host.as_str(), a.tokens_participante.len()), ("intento-a", "unity-1.example", 0));
+    assert_eq!((a.intento_asignacion_id.as_str(), a.instancia.unwrap().host.as_str(), a.tokens_participante.len(), a.servidor_id.as_str()), ("intento-a", "unity-1.example", 0, "unity-1"));
     assert!(b.ticket.is_some() && b.asignacion_propia.is_none() && b.lado_propio.is_none());
+
+    // T7: lo que el núcleo ya sabía y el contrato no llevaba. En `VISTA`, de quién es el suelo bajo una columna propia, el almacén de la plaza propia a cuya puerta está, la zona de la
+    // Facción fundida (el exterior antihorario y el hueco horario) y la red con el escalón de cada arista y las rutas propias; en `HEROE`, el interior que recuerda de su plaza.
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_vista_suelo_caminos_y_zona_fundida") else { panic!() };
+    assert_eq!(f.ambito.as_ref().map(|a| a.id.as_str()), Some("f-1"), "la `VISTA` de una Facción es `VISTA:f-N`");
+    let cuerpos: Vec<entidad::Cuerpo> = f.entidades.into_iter().filter_map(|e| e.cuerpo).collect();
+    let [entidad::Cuerpo::Ejercito(e), entidad::Cuerpo::Asentamiento(plaza), entidad::Cuerpo::ZonaFaccion(z), entidad::Cuerpo::RedCaminos(red)] = cuerpos.as_slice() else { panic!("{cuerpos:?}") };
+    assert_eq!(e.territorio_faccion_id.as_deref(), Some("f-2"));
+    assert_eq!(plaza.almacen["madera"].cantidad.as_ref().unwrap().valor_en_t0, 5_000);
+    let area = |c: &ContornoZona| (0..c.puntos.len()).map(|i| { let (p, q) = (&c.puntos[i], &c.puntos[(i + 1) % c.puntos.len()]); p.x * q.y - p.y * q.x }).sum::<i64>();
+    assert!(area(&z.contornos[0]) > 0 && area(&z.contornos[1]) < 0, "el exterior y el hueco van en sentidos opuestos");
+    assert_eq!((red.aristas.len(), red.escalones.as_slice(), red.rutas[0].id.as_str()), (1, &[1][..], "ruta-3-4"));
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe_con_plazas_recordadas") else { panic!() };
+    let Some(entidad::Cuerpo::Heroe(h)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    let r = &h.plazas_recordadas["as-3"];
+    assert_eq!((r.visto_en_ms, r.cola[0].id.as_str(), r.cola[0].completa_en_ms, r.guarnicion_escuadrones_ids.as_slice()), (60_000, "ed-3-7", Some(90_000), &["esc-5".to_owned()][..]));
+
+    // Los ids de los dorados son los reales: los ámbitos `TIPO:id` de `proyeccion::ambito` (la `VISTA` de una Facción, `f-N`), las batallas como UUID y la partida como `<mundo>:<semilla>`.
+    for nombre in ["foto_ejercito", "foto_ejercito_dentro", "foto_vista_con_niebla", "delta_parcial", "delta_cambio_completo"] {
+        let ambito = match de_servidor(nombre) {
+            ms::Cuerpo::Foto(f) => f.ambito,
+            ms::Cuerpo::Delta(d) => d.ambito,
+            otro => panic!("{nombre}: {otro:?}"),
+        };
+        assert_eq!(ambito.map(|a| (a.tipo, a.id)), Some((AmbitoTipo::AmbitoVista as i32, "f-1".to_owned())), "{nombre}");
+    }
+    let ms::Cuerpo::Batalla(m) = de_servidor("batalla_ticket_asedio") else { panic!() };
+    let Some(mensaje_para_servidor_de_batalla::Cuerpo::Ticket(t)) = m.cuerpo else { panic!() };
+    assert!(t.battle_id.len() == 36 && t.battle_id.matches('-').count() == 4 && t.game_id.contains(':'), "{} {}", t.battle_id, t.game_id);
 
     // Las órdenes nuevas.
     let orden_de = |nombre: &str| match de_cliente(nombre) {

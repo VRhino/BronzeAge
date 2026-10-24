@@ -37,7 +37,7 @@
 use super::combates::{de_su_columna, loadout_en_el_campamento};
 use super::*;
 use crate::comando::Implicados;
-use crate::estado::{SucesoBatalla, PRIO_BATALLA, PRIO_SALIDA, SIN_BANDERA};
+use crate::estado::{Dato, SucesoBatalla, PRIO_BATALLA, PRIO_SALIDA, SIN_BANDERA};
 use crate::estado_batallas::entidad_batalla;
 use crate::estado_militar::Relacion;
 use combate::botin::{repartir_botin, CarroDeColumna};
@@ -110,6 +110,19 @@ fn numero_de_contexto(c: &Contexto) -> i64 {
         Contexto::CampamentoBandidos { .. } => 3,
         Contexto::SaqueoPueblo { .. } => 4,
         Contexto::Avanzada { .. } => 5,
+    }
+}
+
+/// Contra qué se juega, como datos del hecho de apertura (con las claves que el payload traduce a ids del contrato): la plaza del asedio, el pueblo, la avanzada (y su etapa), el
+/// campamento de bandidos, si son solitarios en campo abierto y la modalidad de una batalla de caravana (0 disputa, 1 aguante; las caravanas van en `caravanasIds`).
+fn objetivo_de_contexto(c: &Contexto) -> Vec<(&'static str, i64)> {
+    match c {
+        Contexto::Asedio { asentamiento } => vec![("plaza", i64::from(*asentamiento))],
+        Contexto::CampoAbierto { solitarios, .. } => vec![("solitarios", i64::from(*solitarios))],
+        Contexto::Caravana { modalidad, .. } => vec![("modalidad", i64::from(*modalidad == Modalidad::Aguante))],
+        Contexto::CampamentoBandidos { campamento, .. } => vec![("campamento", i64::from(*campamento))],
+        Contexto::SaqueoPueblo { pueblo, .. } => vec![("pueblo", *pueblo as i64)],
+        Contexto::Avanzada { avanzada, etapa, .. } => vec![("avanzada", *avanzada as i64), ("etapa", etapa.indice() as i64)],
     }
 }
 
@@ -630,9 +643,21 @@ impl Nucleo {
         if let Some(l) = ganador {
             datos.push(("ganaElAtacante", (l == Lado::Atacante) as i64));
         }
+        let mut valores = Vec::new();
+        if let Hecho::Abierta = hecho {
+            // Lo que el tipado `BatallaAbierta` dice, en el propio hecho: así se tipa igual aunque la batalla ya no esté en el estado cuando se proyecte (una reanudación tardía).
+            datos.extend(objetivo_de_contexto(&b.ticket.contexto));
+            if b.iniciada_por != SIN_HEROE {
+                datos.push(("iniciador", b.iniciada_por as i64));
+            }
+            datos.extend(b.convocatoria_hasta.map(|h| ("convocatoriaHasta", h)));
+            if let Contexto::Caravana { caravanas, .. } = &b.ticket.contexto {
+                valores.push(("caravanasIds", Dato::Lista(caravanas.iter().map(|k| Dato::Texto(ids::caravana(k.id))).collect())));
+            }
+        }
         let ejercitos = b.bloqueo.ejercitos.iter().copied().filter(|e| self.estado.ejercitos.contains_key(e)).collect();
         let codigo = hecho.codigo(pve);
-        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos, asentamientos: plazas, punto: Some(b.punto), datos, ..Default::default() });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos, asentamientos: plazas, punto: Some(b.punto), datos, valores, ..Default::default() });
     }
 
     /// Las columnas de un bando que siguen en la batalla, en el orden del bloqueo: la primera es la que abrió o recibió el combate.
@@ -724,7 +749,7 @@ impl Nucleo {
     pub(super) fn ejecutar_batallas(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         match &p.comando {
-            Comando::FijarControlador { heroe, controlador } => self.fijar_controlador(p, *heroe, *controlador),
+            Comando::FijarControlador { heroe, controlador } => self.fijar_controlador(*heroe, *controlador),
             Comando::UnirseABatalla { heroe, batalla, lado } => self.unirse_a_batalla(t, p, *heroe, *batalla, *lado),
             Comando::CancelarBatalla { heroe, batalla } => self.cancelar_batalla(t, p, *heroe, *batalla),
             Comando::RegistrarAsignacion { batalla, asignacion } => {
@@ -791,11 +816,8 @@ impl Nucleo {
         self.estado.batallas.batallas.get_mut(&id).filter(|b| b.activa(t)).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, format!("batalla-{id}"), v))
     }
 
-    fn fijar_controlador(&mut self, p: &Peticion, heroe: u64, controlador: Controlador) -> Result<Vec<u64>, Respuesta> {
+    fn fijar_controlador(&mut self, heroe: u64, controlador: Controlador) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
-        if !p.admin {
-            return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración fija quién controla a un héroe", v));
-        }
         let h = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(heroe), v))?;
         if h.heroe.controlador == controlador {
             return Err(sin_cambios(v));

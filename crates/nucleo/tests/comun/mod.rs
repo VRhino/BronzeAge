@@ -7,7 +7,6 @@ use nucleo::{Ajustes, Arranque, Comando, Nucleo, Peticion, Reglas};
 use rutas::Rutas;
 use std::sync::Arc;
 
-pub mod almacen;
 pub mod real;
 pub mod sesion;
 

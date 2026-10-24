@@ -533,7 +533,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN24");
+    assert_eq!(&bytes[..5], b"BAN25");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].acceso, Acceso { aliados: false, neutrales: true, enemigos: true });
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -782,7 +782,7 @@ fn cerrar_la_puerta_saca_al_mapa_al_instante_y_con_todo_lo_suyo_a_quien_ya_no_pu
     assert_eq!((hs.columna, e.ejercito(nueva).columna.faccion, e.ejercito(nueva).columna.tipo, e.ejercito(nueva).posicion), (Some(nueva), Some(4), TipoColumna::Personal, e.plaza()));
     let echados = hechos(&e.n, "heroe.expulsado");
     assert_eq!(echados.iter().map(|h| dato(h, "heroe")).collect::<Vec<_>>(), vec![ne as i64, en as i64, sf as i64], "por id, en el mismo instante");
-    assert!(echados.iter().all(|h| (h.0, h.1.clone(), dato(h, "lugar"), dato(h, "id"), dato(h, "motivo")) == (t, vec![a], 0, a as i64, 0)));
+    assert!(echados.iter().all(|h| (h.0, h.1.clone(), dato(h, "lugar"), dato(h, "sitio"), dato(h, "motivo")) == (t, vec![a], 0, a as i64, 0)));
     // Quien salió no vuelve a entrar.
     assert_eq!(e.rechazada("ne", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: ne }), rechazos::PUERTA_CERRADA);
 

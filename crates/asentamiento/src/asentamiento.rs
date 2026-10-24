@@ -126,7 +126,7 @@ pub struct ResumenReclutamiento {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Evento {
-    EdificioCompletado { id: u32, tipo: Tipo },
+    EdificioCompletado { id: u32, tipo: Tipo, nivel: u8 },
     /// Nació un edificio gratuito y activo (ancla de saturación, puesto del Mercado). `nivel` es su forma si es un puesto.
     EdificioGratuito { id: u32, tipo: Tipo, nivel: u8 },
     ObraIniciada { id: u32, tipo: Tipo, completa_en: Instante },

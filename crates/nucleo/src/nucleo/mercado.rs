@@ -358,7 +358,6 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let sin_cambios = || Respuesta::sin_cambios(v);
-        let solo_admin = || (!p.admin).then(|| rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
         let cr = self.estado.reglas.economia.comercio.clone();
         let de_trueque = |e: ErrorTrueque| {
             let (c, m) = rechazo_de_trueque(e);
@@ -445,9 +444,6 @@ impl Nucleo {
             }
             Comando::ComerciarEnPlaza { ejercito, orden, cantidad } => self.comerciar_en_plaza(t, p, *ejercito, *orden, *cantidad),
             Comando::DarRecursos { asentamiento, recurso, cantidad } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 self.plaza_o_rechazo(*asentamiento)?;
                 if *cantidad <= 0 {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
@@ -460,9 +456,6 @@ impl Nucleo {
                 Ok(None)
             }
             Comando::DarSuministro { ejercito, recurso, cantidad } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 if !self.estado.ejercitos.contains_key(ejercito) {
                     return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)));
                 }

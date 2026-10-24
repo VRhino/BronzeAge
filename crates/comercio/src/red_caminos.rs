@@ -88,11 +88,10 @@ impl RedCaminos {
         CambioRed { nuevas, pesos_cambiados }
     }
 
-    /// `podarRutas`: quita las rutas con `ahora − ultimoLanzamiento >= caducidad` o con un extremo que ya no existe. Devuelve `true` si
-    /// cambió algo (si no, la red queda idéntica). Las aristas no se retiran nunca.
+    /// `podarRutas`: quita las rutas que ya no son vigentes ([`RutaComercial::vigente`]). Devuelve `true` si cambió algo (si no, la red queda idéntica). Las aristas no se retiran nunca.
     pub fn podar(&mut self, r: &ReglasRed, ahora: Instante, existe: &dyn Fn(AsentamientoId) -> bool) -> bool {
         let antes = self.rutas.len();
-        self.rutas.retain(|_, x| ahora - x.ultimo_lanzamiento < r.caducidad && existe(x.origen) && existe(x.destino));
+        self.rutas.retain(|_, x| x.vigente(r, ahora, existe));
         self.rutas.len() != antes
     }
 
@@ -120,13 +119,7 @@ impl RedCaminos {
 
     /// `pesosDeRed`: para cada arista, cuántas rutas vigentes la contienen (las de peso 0 no aparecen).
     pub fn pesos(&self) -> BTreeMap<Arista, u32> {
-        let mut p: BTreeMap<Arista, u32> = BTreeMap::new();
-        for x in self.rutas.values() {
-            for a in &x.aristas {
-                *p.entry(*a).or_insert(0) += 1;
-            }
-        }
-        p
+        pesos(self.rutas.values())
     }
 
     /// `caminoCompartidoAbierto(red, zonas)`: ¿hay una arista, con su **punto medio fuera de toda zona**, que pisen `≥ logroRutas` rutas
@@ -140,6 +133,22 @@ impl RedCaminos {
             facciones.len() as u32 >= r.logro_facciones
         })
     }
+}
+
+impl RutaComercial {
+    /// ¿Sigue vigente? Caduca a `caducidad` de su último lanzamiento o cuando uno de sus extremos deja de existir.
+    pub fn vigente(&self, r: &ReglasRed, ahora: Instante, existe: &dyn Fn(AsentamientoId) -> bool) -> bool {
+        ahora - self.ultimo_lanzamiento < r.caducidad && existe(self.origen) && existe(self.destino)
+    }
+}
+
+/// Cuántas de `rutas` pisan cada arista (las de peso 0 no aparecen).
+pub fn pesos<'a>(rutas: impl IntoIterator<Item = &'a RutaComercial>) -> BTreeMap<Arista, u32> {
+    let mut p: BTreeMap<Arista, u32> = BTreeMap::new();
+    for a in rutas.into_iter().flat_map(|x| &x.aristas) {
+        *p.entry(*a).or_insert(0) += 1;
+    }
+    p
 }
 
 /// `escalonDePeso(p)`: `p ≥ escalonCalzada → 2` (calzada); `p ≥ escalonCamino → 1` (camino); si no `0` (sendero).

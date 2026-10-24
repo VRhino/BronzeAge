@@ -135,6 +135,12 @@ fn el_payload_generico_lleva_los_ids_del_contrato() {
     assert_eq!(campo(&hecho("heroe.creado", None, None, vec![("campamento", 4)]), "campamentoId"), texto("camp-4"));
     assert_eq!(campo(&hecho("construccion.edificio_completado", Some(3), None, vec![("edificio", 8)]), "edificioId"), texto("ed-3-8"));
     assert_eq!(campo(&hecho("batalla.asignada", None, None, vec![("batalla", 4)]), "battleId"), Some(Kind::StringValue(n.uuid_de_batalla(4))));
+    // El lugar de quien sale expulsado, por su clase; la parcela de bosque; las dos Facciones de una guerra; los bandidos no son una Facción.
+    let expulsado = hecho("heroe.expulsado", Some(3), None, vec![("lugar", 2), ("sitio", 6)]);
+    assert_eq!((campo(&expulsado, "sitioId"), campo(&expulsado, "lugar")), (texto("av-6"), Some(Kind::NumberValue(2.0))));
+    assert_eq!(campo(&hecho("parcela.reclamada", Some(3), None, vec![("parcela", 12)]), "parcelaId"), texto("parcela-12"));
+    assert_eq!(campo(&hecho("faccion.guerra_declarada", None, None, vec![("atacante", 1), ("contra", 2)]), "atacanteId"), texto("f-1"));
+    assert_eq!(campo(&hecho("batalla.abierta", None, None, vec![("faccionAtacante", nucleo::SIN_BANDERA as i64)]), "faccionAtacanteId"), texto(""), "sin bandera, ninguna Facción");
 }
 
 /// Cada uno de los quince mensajes tipados sale de su código (los de batalla también con el prefijo `evento_pve.`) con lo que dicen sus datos traducido a ids del contrato, y el
@@ -170,18 +176,38 @@ fn los_quince_mensajes_tipados_dicen_lo_que_su_payload_y_van_y_vuelven_en_bytes(
         ),
         (hecho("convocatoria.partio", Some(3), Some(7), vec![("convocatoria", 8)]), Tipado::ConvocatoriaPartio(pb::ConvocatoriaPartio { convocatoria_id: "conv-8".into(), ejercito_id: "ej-7".into() })),
         (
-            hecho("heroe.expulsado", Some(3), None, vec![("heroe", 9), ("lugar", 1), ("id", 5), ("ejercito", 7), ("motivo", 0)]),
+            hecho("heroe.expulsado", Some(3), None, vec![("heroe", 9), ("lugar", 1), ("sitio", 5), ("ejercito", 7), ("motivo", 0)]),
             Tipado::HeroeExpulsado(pb::HeroeExpulsado { heroe_id: "heroe-9".into(), lugar_id: "pueblo-5".into(), motivo: "puerta_cerrada".into(), ejercito_id: Some("ej-7".into()) }),
+        ),
+        (
+            hecho("heroe.expulsado", Some(3), None, vec![("heroe", 9), ("lugar", 2), ("sitio", 6), ("motivo", 3)]),
+            Tipado::HeroeExpulsado(pb::HeroeExpulsado { heroe_id: "heroe-9".into(), lugar_id: "av-6".into(), motivo: "destruido".into(), ejercito_id: None }),
         ),
         (hecho("heroe.desalojado", Some(3), None, vec![("heroe", 9)]), Tipado::HeroeExpulsado(pb::HeroeExpulsado { heroe_id: "heroe-9".into(), lugar_id: "as-3".into(), motivo: "desalojo".into(), ejercito_id: None })),
         (hecho("ejercito.sin_viveres", None, Some(7), vec![]), Tipado::ColumnaConHambre(pb::ColumnaConHambre { ejercito_id: "ej-7".into(), sin_viveres: true })),
         (hecho("ejercito.viveres_bajos", None, Some(7), vec![("viveres", 10)]), Tipado::ColumnaConHambre(pb::ColumnaConHambre { ejercito_id: "ej-7".into(), sin_viveres: false })),
         (hecho("tropas.desercion", Some(3), Some(7), vec![("heroe", 9), ("escuadra", 11), ("desertores", 2)]), Tipado::DesercionPorHambre(pb::DesercionPorHambre { heroe_id: "heroe-9".into(), escuadra_id: "esc-11".into(), desertores: 2 })),
-        (hecho("construccion.edificio_completado", Some(3), None, vec![("edificio", 4), ("tipo", 1)]), Tipado::ObraTerminada(O { asentamiento_id: "as-3".into(), clase: "edificio".into(), objeto_id: "ed-3-4".into(), nivel: None })),
+        (hecho("construccion.edificio_completado", Some(3), None, vec![("edificio", 4), ("tipo", 1), ("nivel", 1)]), Tipado::ObraTerminada(O { asentamiento_id: "as-3".into(), clase: "edificio".into(), objeto_id: "ed-3-4".into(), nivel: Some(1) })),
         (hecho("construccion.mejora_completada", Some(3), None, vec![("edificio", 4), ("nivel", 2)]), Tipado::ObraTerminada(O { asentamiento_id: "as-3".into(), clase: "mejora".into(), objeto_id: "ed-3-4".into(), nivel: Some(2) })),
         (hecho("construccion.recinto_completado", Some(3), None, vec![("recinto", 1), ("nivel", 3)]), Tipado::ObraTerminada(O { asentamiento_id: "as-3".into(), clase: "recinto".into(), objeto_id: "recinto-3-1".into(), nivel: Some(3) })),
         (hecho("pueblo.completado", Some(3), None, vec![("pueblo", 5)]), Tipado::ObraTerminada(O { asentamiento_id: "as-3".into(), clase: "pueblo".into(), objeto_id: "pueblo-5".into(), nivel: None })),
-        (hecho("avanzada.completada", Some(3), None, vec![("avanzada", 6), ("etapa", 0)]), Tipado::ObraTerminada(O { asentamiento_id: "as-3".into(), clase: "avanzada".into(), objeto_id: "av-6".into(), nivel: None })),
+        (hecho("avanzada.completada", Some(3), None, vec![("avanzada", 6), ("etapa", 0)]), Tipado::ObraTerminada(O { asentamiento_id: "as-3".into(), clase: "avanzada".into(), objeto_id: "av-6".into(), nivel: Some(1) })),
+        // La batalla abierta se tipa con lo que dice su hecho, aunque la batalla (la 99) no esté en el estado: un asedio de la plaza 3.
+        (
+            EventoNucleo {
+                punto: Some(Punto::new(30_000, 40_000)),
+                ..hecho("batalla.abierta", Some(3), None, vec![("batalla", 99), ("contexto", 0), ("plaza", 3), ("faccionAtacante", 2), ("faccionDefensora", 1), ("iniciador", 9), ("convocatoriaHasta", 7_000)])
+            },
+            Tipado::BatallaAbierta(pb::BatallaAbierta {
+                battle_id: n.uuid_de_batalla(99),
+                contexto: Some(pb::ContextoEstrategico { tipo: Some(pb::contexto_estrategico::Tipo::Asedio(pb::ContextoAsedio { asentamiento_id: "as-3".into() })) }),
+                punto: Some(pb::Punto { x: 30_000, y: 40_000 }),
+                iniciada_por: Some("heroe-9".into()),
+                atacante_faccion_id: Some("f-2".into()),
+                defensor_faccion_id: Some("f-1".into()),
+                convocatoria_hasta_ms: Some(7_000),
+            }),
+        ),
         (hecho("heroe.herido", None, None, vec![("heroe", 9), ("hasta", 9_000)]), Tipado::HeroeHerido(pb::HeroeHerido { heroe_id: "heroe-9".into(), hasta_ms: 9_000 })),
         (hecho("faccion.guerra_declarada", None, None, vec![("atacante", 1), ("contra", 2)]), Tipado::GuerraDeclarada(pb::GuerraDeclarada { atacante_faccion_id: "f-1".into(), contra_faccion_id: "f-2".into(), arrastradas_ids: vec![] })),
     ];
@@ -192,10 +218,9 @@ fn los_quince_mensajes_tipados_dicen_lo_que_su_payload_y_van_y_vuelven_en_bytes(
         mensajes.insert(std::mem::discriminant(&esperado));
         assert_eq!(pb::EventoDominio::decode(d.encode_to_vec().as_slice()).unwrap(), d, "{} va y vuelve en bytes", ev.codigo);
     }
-    // `BatallaAbierta` se prueba con una batalla de verdad (arriba): son los quince.
-    assert_eq!(mensajes.len(), 14);
+    assert_eq!(mensajes.len(), 15);
     assert!(evento_dominio(&n, &hecho("ejercito.llega", None, Some(7), vec![]), 3).tipado.is_none());
-    assert!(evento_dominio(&n, &hecho("batalla.abierta", None, None, vec![("batalla", 99)]), 3).tipado.is_none(), "sin la batalla en el estado no hay contexto que tipar");
+    assert!(evento_dominio(&n, &hecho("batalla.abierta", None, None, vec![("batalla", 99)]), 3).tipado.is_none(), "un hecho de apertura sin su contexto no se tipa");
     // Los valores que no son un entero viajan como texto y lista.
     let ev = EventoNucleo { valores: vec![("x", Dato::Lista(vec![Dato::Numero(2), Dato::Texto("f-1".into())]))], ..hecho("cronica.entrada", None, None, vec![]) };
     let Some(Kind::ListValue(l)) = &evento_dominio(&n, &ev, 3).payload.unwrap().fields["x"].kind else { panic!() };

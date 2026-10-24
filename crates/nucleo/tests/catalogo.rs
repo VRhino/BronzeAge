@@ -93,3 +93,48 @@ fn lo_que_el_catalogo_tiene_y_el_nucleo_no_emite_es_paridad_pendiente() {
     assert!(sin_fila.is_empty(), "códigos del catálogo que el núcleo no emite sin su fila de paridad en «Mecanicas a desarrollar»: {sin_fila:?}");
     eprintln!("{} códigos en el catálogo, {} emitidos, {} pendientes", cat.len(), emitidos.len(), pendientes.len());
 }
+
+// ───────────────────────────── El catálogo de rechazos ─────────────────────────────
+
+/// El catálogo estable de los rechazos del núcleo (decisión 7 de 4H, `Docs/Coordinacion/07_Catalogo_de_Rechazos.md`): la tabla de su bloque `<!-- rechazos -->`, escrita a partir del módulo
+/// `rechazos` de `comando.rs` con su agrupación (los comentarios `// …`) y lo que dice cada constante (`/// …`).
+fn tabla_de_rechazos() -> String {
+    let fuente = std::fs::read_to_string(raiz().join("src/comando.rs")).unwrap().replace("\r\n", "\n");
+    let modulo = fuente.split("pub mod rechazos {").nth(1).and_then(|m| m.split("\n}").next()).expect("el módulo de rechazos");
+    let cabecera = "| Código | Constante | Qué dice |\n|---|---|---|\n";
+    let mut salida = format!("### Generales\n\n{cabecera}");
+    let mut doc: Vec<String> = Vec::new();
+    for l in modulo.lines().map(str::trim) {
+        if let Some(d) = l.strip_prefix("///") {
+            doc.push(d.trim().to_owned());
+        } else if let Some(grupo) = l.strip_prefix("//") {
+            salida.push_str(&format!("\n### {}\n\n{cabecera}", grupo.trim().trim_end_matches('.')));
+        } else if let Some(c) = l.strip_prefix("pub const ") {
+            let (nombre, resto) = c.split_once(':').expect("una constante");
+            let codigo = resto.split('"').nth(1).expect("su código");
+            let que = if doc.is_empty() { "—".to_owned() } else { doc.join(" ").replace('|', r"\|") };
+            salida.push_str(&format!("| `{codigo}` | `{nombre}` | {que} |\n"));
+            doc.clear();
+        }
+    }
+    salida
+}
+
+/// Cada rechazo del núcleo está en el catálogo, con su código, su constante y lo que dice, y el catálogo no tiene ninguno que el núcleo no tenga: el bloque del documento es el que sale del código.
+/// `BRONZEAGE_REGENERAR=1` lo reescribe.
+#[test]
+fn cada_rechazo_del_nucleo_esta_en_el_catalogo_de_rechazos() {
+    let ruta = raiz().join("../../Docs/Coordinacion/07_Catalogo_de_Rechazos.md");
+    let doc = std::fs::read_to_string(&ruta).unwrap().replace("\r\n", "\n");
+    let (antes, resto) = doc.split_once("<!-- rechazos -->\n").expect("el documento tiene el bloque de rechazos");
+    let (bloque, despues) = resto.split_once("<!-- /rechazos -->").expect("el bloque se cierra");
+    let tabla = tabla_de_rechazos();
+    if std::env::var_os("BRONZEAGE_REGENERAR").is_some() {
+        std::fs::write(&ruta, format!("{antes}<!-- rechazos -->\n{tabla}<!-- /rechazos -->{despues}").replace('\n', "\r\n")).unwrap();
+        return;
+    }
+    assert_eq!(bloque, tabla, "el catálogo de rechazos no es el del código (BRONZEAGE_REGENERAR=1 cargo test -p nucleo --test catalogo lo reescribe)");
+    let codigos: BTreeSet<&str> = tabla.lines().filter(|l| l.starts_with("| `")).map(|l| l.split('`').nth(1).unwrap()).collect();
+    assert!(codigos.len() > 300 && codigos.contains("no_autorizado") && codigos.contains("guerra.confirmar"), "{} rechazos", codigos.len());
+    assert_eq!(codigos.len(), tabla.lines().filter(|l| l.starts_with("| `")).count(), "un código en dos constantes");
+}

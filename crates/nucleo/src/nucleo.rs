@@ -21,7 +21,7 @@
 //! reconstruye idéntica, por eso no se escribe). [`Nucleo::marchas_en_lote`] calcula varias en paralelo con `rayon` y las
 //! aplica después en orden: mismo resultado, menos tiempo.
 
-use crate::comando::{rechazos, AccionReloj, Comando, Peticion, Resultado, Respuesta};
+use crate::comando::{rechazos, AccionReloj, Autoriza, Comando, Peticion, Resultado, Respuesta};
 use crate::estado::{Carga, CambioVersion, Clase, Ejercito, Tocados, Estado, EventoNucleo, Reglas, PRIO_LLEGADA, PRIO_UMBRAL};
 use combate::ciclo::Batalla;
 use crate::estado_militar::HeroeNucleo;
@@ -773,14 +773,14 @@ impl Nucleo {
         let v = self.estado.version;
         let sin_cambios = || Respuesta::sin_cambios(v);
         let mut creadas = Vec::new();
+        if !p.admin && p.comando.autoriza() == Autoriza::Administracion {
+            return Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración", v);
+        }
         if let Some(r) = self.rechazo_por_batalla(t, p) {
             return r;
         }
         match &p.comando {
             Comando::CrearEjercito { cuenta, faccion, posicion, velocidad, viveres } => {
-                if !p.admin {
-                    return Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración da de alta columnas", v);
-                }
                 // Andamiaje de administración: una columna con un héroe «de campo» (sin residencia ni loadout) de la cuenta dada, a la que obedece.
                 let (id, heroe) = (self.nuevo_id(), self.nuevo_id());
                 let mr = self.estado.reglas.economia.militar.clone();
@@ -978,7 +978,7 @@ impl Nucleo {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
-            Comando::FijarRelacion { a, b, relacion } => match self.fijar_relacion(t, p, *a, *b, *relacion) {
+            Comando::FijarRelacion { a, b, relacion } => match self.fijar_relacion(t, *a, *b, *relacion) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
@@ -997,11 +997,11 @@ impl Nucleo {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
-            Comando::ColocarBandidos { posicion, nivel } => match self.colocar_bandidos(t, p, *posicion, *nivel) {
+            Comando::ColocarBandidos { posicion, nivel } => match self.colocar_bandidos(t, *posicion, *nivel) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
-            Comando::DarEscuadra { heroe, tropa, cantidad } => match self.dar_escuadra(t, p, *heroe, *tropa, *cantidad) {
+            Comando::DarEscuadra { heroe, tropa, cantidad } => match self.dar_escuadra(t, *heroe, *tropa, *cantidad) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
@@ -1025,9 +1025,6 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::Reloj(accion) => {
-                if !p.admin {
-                    return Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración controla el reloj", v);
-                }
                 if let Err(r) = self.controlar_reloj(*accion) {
                     return r.unwrap_or_else(sin_cambios);
                 }

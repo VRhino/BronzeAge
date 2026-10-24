@@ -1,1 +1,1 @@
-{"secuencia":"19","delta":{"ambito":{"tipo":"AMBITO_VISTA","id":"vista-1"},"desde":"72","hasta":"73","cambios":[{"tipo":"CAMBIO_ACTUALIZA","entidad":"EJERCITO","id":"ej-1","reemplaza":true,"datos":{"ejercito":{"id":"ej-1","version":"73","faccionId":"f-1","estado":"COLUMNA_ESTACIONADA"}}}]}}
+{"secuencia":"19","delta":{"ambito":{"tipo":"AMBITO_VISTA","id":"f-1"},"desde":"72","hasta":"73","cambios":[{"tipo":"CAMBIO_ACTUALIZA","entidad":"EJERCITO","id":"ej-1","reemplaza":true,"datos":{"ejercito":{"id":"ej-1","version":"73","faccionId":"f-1","estado":"COLUMNA_ESTACIONADA"}}}]}}

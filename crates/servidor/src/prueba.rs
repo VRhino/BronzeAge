@@ -1,4 +1,4 @@
-//! Piezas para probar el servidor sin el núcleo real: autenticador, núcleo falso, cliente WebSocket y medición de rendimiento.
+//! Piezas para probar el servidor: autenticador, núcleo falso, cliente WebSocket, el cliente de ejemplo que juega solo por el contrato ([`ClienteDeEjemplo`]) y medición de rendimiento.
 //! Se queda en la librería (no solo en `tests/`) para que el ejemplo `rendimiento` y los bots puedan reutilizarlo.
 
 use std::{
@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use contrato::almacen::Almacen;
 use contrato::v1::{
     entidad, mensaje_de_cliente as mc, mensaje_de_servidor as ms, AmbitoTipo, AmbitoSuscrito, Ambito, Bienvenida,
     Cambio, DecisionReanudacion, Delta, Entidad, ErrorSesion, Foto, Heroe, Hola, InfoMundo, MensajeDeCliente,
@@ -305,6 +306,93 @@ impl ClientePrueba {
 
     pub async fn cerrar(mut self) {
         let _ = self.ws.close(None).await;
+    }
+}
+
+// ───────────────────────────── Cliente de ejemplo ─────────────────────────────
+
+/// Un cliente que habla **solo el contrato** (Protobuf sobre el WebSocket real): la guía para quien escriba el cliente web o el de Unity (`contratos/README.md`, «Cómo se escribe un
+/// cliente»). Guarda lo que tiene de cada ámbito en un [`Almacen`] y le aplica cada mensaje en el orden en que llega: la `Foto` sustituye el ámbito, la `Delta` se aplica sobre él (y tiene
+/// que empezar donde acabó la anterior), el `Revocado` lo borra. Una orden se da con [`ClienteDeEjemplo::ordenar`], que aplica todo lo que llega antes de su `ResultadoOrden` (la respuesta
+/// causal: cuando llega el resultado, el almacén ya tiene lo que la orden cambió).
+pub struct ClienteDeEjemplo {
+    pub sesion: ClientePrueba,
+    pub bienvenida: Bienvenida,
+    pub almacen: Almacen,
+    /// Los avisos que llegaron (`reloj.cambiado`, `vista.*`...).
+    pub avisos: Vec<contrato::v1::Aviso>,
+    /// Lo que llegó del canal de batalla (solo un servidor de batalla).
+    pub batalla: Vec<contrato::v1::MensajeParaServidorDeBatalla>,
+    peticiones: u64,
+}
+
+impl ClienteDeEjemplo {
+    /// Conecta con su `Hola` y aplica lo que el servidor manda tras la `Bienvenida`: un mensaje por cada ámbito que no reanuda sin novedad.
+    pub async fn entrar(dir: SocketAddr, hola: Hola, almacen: Almacen) -> Self {
+        let (sesion, bienvenida) = ClientePrueba::entrar(dir, hola).await;
+        let pendientes = bienvenida.ambitos.iter().filter(|a| a.decision != DecisionReanudacion::ReanudaSinNovedad as i32).count();
+        let mut c = Self { sesion, bienvenida, almacen, avisos: Vec::new(), batalla: Vec::new(), peticiones: 0 };
+        for _ in 0..pendientes {
+            c.recibir().await;
+        }
+        c
+    }
+
+    /// Recibe un mensaje y lo aplica; devuelve el resultado si era el de una orden.
+    async fn recibir(&mut self) -> Option<ResultadoOrden> {
+        match self.sesion.esperar().await.cuerpo.expect("un mensaje con cuerpo") {
+            ms::Cuerpo::Resultado(r) => return Some(r),
+            ms::Cuerpo::Aviso(a) => self.avisos.push(a),
+            ms::Cuerpo::Batalla(b) => self.batalla.push(b),
+            ms::Cuerpo::Error(e) => panic!("error de sesión: {e:?}"),
+            m => self.almacen.aplicar(&m),
+        }
+        None
+    }
+
+    /// Da una orden y aplica lo que llega hasta su resultado.
+    pub async fn ordenar(&mut self, cuerpo: contrato::v1::orden::Cuerpo) -> ResultadoOrden {
+        self.peticiones += 1;
+        let peticion_id = format!("{}-{}", self.bienvenida.sesion_id, self.peticiones);
+        self.sesion.enviar(mc::Cuerpo::Orden(Orden { peticion_id: peticion_id.clone(), cuerpo: Some(cuerpo), ..Default::default() })).await;
+        loop {
+            if let Some(r) = self.recibir().await {
+                assert_eq!(r.peticion_id, peticion_id, "los resultados llegan en el orden de las órdenes");
+                return r;
+            }
+        }
+    }
+
+    /// Como [`ClienteDeEjemplo::ordenar`], y falla si la orden no se aceptó.
+    pub async fn aceptada(&mut self, cuerpo: contrato::v1::orden::Cuerpo) -> ResultadoOrden {
+        let r = self.ordenar(cuerpo).await;
+        assert_eq!(r.resultado, Resultado::OrdenAceptada as i32, "{r:?}");
+        r
+    }
+
+    /// Se pone al día con lo que el servidor ya le tiene preparado (lo que causaron las órdenes de otras sesiones): una orden vacía se rechaza (`orden.no_soportada`) y sale detrás de todo lo
+    /// anterior.
+    pub async fn al_dia(&mut self) {
+        self.peticiones += 1;
+        let peticion_id = format!("{}-{}", self.bienvenida.sesion_id, self.peticiones);
+        self.sesion.enviar(mc::Cuerpo::Orden(Orden { peticion_id, ..Default::default() })).await;
+        while self.recibir().await.is_none() {}
+    }
+
+    /// Mira una zona del mapa (`CambiarVista`, en milésimas de unidad) y aplica la `Foto` de su `VISTA`.
+    pub async fn mirar(&mut self, min: contrato::v1::Punto, max: contrato::v1::Punto) {
+        self.sesion.enviar(mc::Cuerpo::Vista(contrato::v1::CambiarVista { rectangulo: Some(contrato::v1::Rectangulo { min: Some(min), max: Some(max) }) })).await;
+        loop {
+            let m = self.sesion.esperar().await.cuerpo.expect("un mensaje con cuerpo");
+            let es_la_vista = matches!(&m, ms::Cuerpo::Foto(f) if f.ambito.as_ref().is_some_and(|a| a.tipo == AmbitoTipo::AmbitoVista as i32));
+            match m {
+                ms::Cuerpo::Aviso(a) => panic!("la vista no se abre: {a:?}"),
+                m => self.almacen.aplicar(&m),
+            }
+            if es_la_vista {
+                return;
+            }
+        }
     }
 }
 

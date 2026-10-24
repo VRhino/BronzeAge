@@ -34,7 +34,7 @@
 //! el edificio, la elección sigue.
 
 use super::combates::{caidos, DefensoresDeDentro};
-use super::dentro::MOTIVO_DESAPARECE;
+use super::dentro::{MOTIVO_DESTRUIDO, MOTIVO_RUINA};
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO, PRIO_UMBRAL};
 use crate::estado_combate::{entidad_avanzada, entidad_obra_de_avanzada};
@@ -337,7 +337,7 @@ impl Nucleo {
                 self.autorizar_ciudadano(p, *heroe, self.estado.asentamientos[&madre].faccion)?;
                 let mut ev = vec![];
                 self.estado.asentamientos.get_mut(&madre).expect("existe").economia.destruir_avanzada(*avanzada, &mut ev).map_err(de_avanzada)?;
-                self.vaciar_lugar(t, Ubicacion::Avanzada(*avanzada), posicion, madre, MOTIVO_DESAPARECE);
+                self.vaciar_lugar(t, Ubicacion::Avanzada(*avanzada), posicion, madre, MOTIVO_DESTRUIDO);
                 self.quitar_avanzada(*avanzada);
                 self.liberar_guarnicion_de_jugadores(*avanzada, false);
                 self.anotar_sucesos(madre, t, &ev);
@@ -772,7 +772,7 @@ impl Nucleo {
         let nuevo = regla::tras_ataque(&cr, etapa, antes, t, true);
         if nuevo != antes {
             // Un puesto destruido o en ruinas no funciona: quien estaba dentro sale al mapa con lo suyo.
-            self.vaciar_lugar(t, Ubicacion::Avanzada(x), posicion, madre, MOTIVO_DESAPARECE);
+            self.vaciar_lugar(t, Ubicacion::Avanzada(x), posicion, madre, if nuevo == EstadoAvanzada::Destruida { MOTIVO_DESTRUIDO } else { MOTIVO_RUINA });
             self.liberar_guarnicion_de_jugadores(x, true);
             match nuevo {
                 EstadoAvanzada::Destruida => {

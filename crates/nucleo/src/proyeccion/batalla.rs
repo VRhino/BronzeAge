@@ -188,6 +188,7 @@ pub fn asignacion_sin_tokens(n: &Nucleo, b: &Batalla, a: &Asignacion) -> pb::Bat
         intento_asignacion_id: a.intento.clone(),
         instancia: Some(pb::InstanciaDeBatalla { host: i.host.clone(), puerto: u32::from(i.puerto), protocolo: i.protocolo.clone() }),
         tokens_participante: Vec::new(),
+        servidor_id: a.servidor.clone(),
     }
 }
 

@@ -31,6 +31,7 @@ ids! {
     u64, "loadout", loadout, parse_loadout;
     u32, "nodo", nodo, parse_nodo;
     u64, "mirada", mirada, parse_mirada;
+    u32, "parcela", parcela, parse_parcela;
 }
 
 /// Una relación entre dos Facciones (`rel-<menor>-<mayor>`).

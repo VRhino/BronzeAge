@@ -391,10 +391,159 @@ pub(crate) struct Implicados {
     pub campamentos: Vec<u64>,
 }
 
+/// Quién puede dar cada orden hoy (Proyecciones_Y_Autorizacion §5): la autorización provisional hasta el sistema político, que traerá los cargos, la residencia y los vetos. La
+/// administración (`Peticion.admin`) puede con todas salvo las del canal del servidor de batalla. Cada orden comprueba la suya en su sitio, con el código `no_autorizado`
+/// (la de administración, una sola vez en `Nucleo::ejecutar`); lo demás que exige (estar a la puerta, ser el Líder, el dinero...) son rechazos de dominio con su propio código.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Autoriza {
+    /// Solo la administración: el andamiaje que sustituirán los sistemas 5 y 6, y el reloj.
+    Administracion,
+    /// Solo un servidor de batalla, por su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`): el canal de Unity.
+    ServidorDeBatalla,
+    /// La propia cuenta: crea su héroe, no el de otra ni un bot.
+    SuCuenta,
+    /// La cuenta del héroe que la nombra (o el de la cuenta, si la orden del contrato no lo nombra), con el héroe en el mundo (`heroe.fuera_del_mundo`).
+    CuentaDelHeroe,
+    /// La cuenta del héroe, aunque esté fuera del mundo.
+    CuentaDelHeroeAunqueFuera,
+    /// La cuenta del héroe, que además es ciudadano de la Facción de la plaza madre de la avanzada.
+    CiudadanoDeLaMadre,
+    /// Quien manda en la plaza (`Nucleo::manda_en`): una cuenta con un héroe ciudadano de su Facción o una columna de su Facción. De una caravana, la plaza de su origen; de un trueque,
+    /// la plaza A al proponerlo y la B al aceptarlo o rechazarlo; de una orden de mercado, su plaza.
+    MandaEnLaPlaza,
+    /// La cuenta del Líder de la columna.
+    LiderDeLaColumna,
+    /// La cuenta de cualquier participante de la columna.
+    ParticipanteDeLaColumna,
+}
+
 impl Comando {
-    /// ¿Lleva el candado de batalla? Todos los comandos salvo los que actúan sobre la propia batalla y conectarse y desconectarse (cerrar el cliente en plena
-    /// batalla tiene que anotarse, y volver a conectarse anular esa petición, §5.1), y los mensajes del servidor de batalla, que no pasan por el registro de
-    /// comandos de jugador.
+    /// Quién puede dar la orden ([`Autoriza`]). Cada variante se nombra a propósito (sin `_`): una orden nueva no compila hasta decidirlo.
+    pub fn autoriza(&self) -> Autoriza {
+        use Autoriza::*;
+        match self {
+            Comando::CrearEjercito { .. }
+            | Comando::Reloj(_)
+            | Comando::FijarNivelFaccion { .. }
+            | Comando::DarCaravanaFundacion { .. }
+            | Comando::FijarNivelAsentamiento { .. }
+            | Comando::AgrandarZona { .. }
+            | Comando::ReclamarParcela { .. }
+            | Comando::SoltarParcela { .. }
+            | Comando::DarRecursos { .. }
+            | Comando::DarSuministro { .. }
+            | Comando::FijarResidencia { .. }
+            | Comando::DarAlmacenPersonal { .. }
+            | Comando::FijarTecnologias { .. }
+            | Comando::FijarFaccionDeHeroe { .. }
+            | Comando::ColocarHeroe { .. }
+            | Comando::HerirHeroe { .. }
+            | Comando::FijarRelacion { .. }
+            | Comando::ColocarBandidos { .. }
+            | Comando::DarEscuadra { .. }
+            | Comando::FijarControlador { .. } => Administracion,
+            Comando::RegistrarAsignacion { .. } | Comando::ConfirmarInicio { .. } | Comando::RegistrarTokens { .. } | Comando::RegistrarSalida { .. } | Comando::AplicarResultado { .. } => ServidorDeBatalla,
+            Comando::CrearHeroe { .. } => SuCuenta,
+            Comando::Conectarse { .. } | Comando::CancelarConvocatoria { .. } => CuentaDelHeroeAunqueFuera,
+            Comando::ReclutarTropa { .. }
+            | Comando::ReclutarEnCampamento { .. }
+            | Comando::PedirPrestamo { .. }
+            | Comando::ReponerPrestamo { .. }
+            | Comando::GuardarLoadout { .. }
+            | Comando::BorrarLoadout { .. }
+            | Comando::RepartirPuntos { .. }
+            | Comando::OrdenarEscuadras { .. }
+            | Comando::AsignarGuarnicion { .. }
+            | Comando::RetirarGuarnicion { .. }
+            | Comando::PasarAViveres { .. }
+            | Comando::AsignarEscolta { .. }
+            | Comando::QuitarEscolta { .. }
+            | Comando::Desconectarse { .. }
+            | Comando::ComprarEnCampamento { .. }
+            | Comando::RepostarEnCampamento { .. }
+            | Comando::SalirAlMundo { .. }
+            | Comando::MovilizarEjercito { .. }
+            | Comando::SalirDelCampamento { .. }
+            | Comando::EntrarEnAsentamiento { .. }
+            | Comando::SalirDeAsentamiento { .. }
+            | Comando::Guarnecer { .. }
+            | Comando::EntrarEnCampamento { .. }
+            | Comando::VaciarCarro { .. }
+            | Comando::EntrarEnPueblo { .. }
+            | Comando::SalirDePueblo { .. }
+            | Comando::EntrarEnAvanzada { .. }
+            | Comando::SalirDeAvanzada { .. }
+            | Comando::UnirseAEjercito { .. }
+            | Comando::UnirseEnCampo { .. }
+            | Comando::ResponderPeticionDeUnion { .. }
+            | Comando::SepararseDelEjercito { .. }
+            | Comando::CederLiderazgo { .. }
+            | Comando::OrganizarEjercito { .. }
+            | Comando::CancelarFormacion { .. }
+            | Comando::Repostar { .. }
+            | Comando::RepostarEnAvanzada { .. }
+            | Comando::ConvocarEjercito { .. }
+            | Comando::UnirseAConvocatoria { .. }
+            | Comando::ResponderPeticionDeConvocatoria { .. }
+            | Comando::CambiarSeleccionDeConvocatoria { .. }
+            | Comando::SepararseDeConvocatoria { .. }
+            | Comando::PartirConvocatoria { .. }
+            | Comando::Perseguir { .. }
+            | Comando::DejarDePerseguir { .. }
+            | Comando::Inspeccionar { .. }
+            | Comando::Atacar { .. }
+            | Comando::UnirseABatalla { .. }
+            | Comando::CancelarBatalla { .. }
+            | Comando::ComprarMirada { .. }
+            | Comando::ComprarInformePlaza { .. } => CuentaDelHeroe,
+            Comando::ColocarAvanzada { .. }
+            | Comando::MejorarAvanzada { .. }
+            | Comando::RepararAvanzada { .. }
+            | Comando::DestruirAvanzada { .. }
+            | Comando::CancelarObraDeAvanzada { .. }
+            | Comando::ElegirTropaDeAvanzada { .. }
+            | Comando::GuarnecerAvanzada { .. }
+            | Comando::RetirarDeAvanzada { .. } => CiudadanoDeLaMadre,
+            Comando::AnadirEdificio { .. }
+            | Comando::QuitarDeCola { .. }
+            | Comando::MoverEnCola { .. }
+            | Comando::MejorarEdificio { .. }
+            | Comando::AlternarAutoConstruccion { .. }
+            | Comando::AlternarReceta { .. }
+            | Comando::CalibrarReserva { .. }
+            | Comando::SolicitarAscenso { .. }
+            | Comando::ActivarPolitica { .. }
+            | Comando::ProponerTrueque { .. }
+            | Comando::AceptarTrueque { .. }
+            | Comando::RechazarTrueque { .. }
+            | Comando::ColocarOrdenMercado { .. }
+            | Comando::CancelarOrdenMercado { .. }
+            | Comando::CrearCaravana { .. }
+            | Comando::AnadirCarro { .. }
+            | Comando::AnadirAnimal { .. }
+            | Comando::MoverCarro { .. }
+            | Comando::ReservarCaravana { .. }
+            | Comando::PrepararCaravana { .. }
+            | Comando::CancelarCaravana { .. }
+            | Comando::MoverCargaAparcada { .. }
+            | Comando::EnviarCaravanaAlOrigen { .. }
+            | Comando::MarcarPueblo { .. }
+            | Comando::DestruirPueblo { .. }
+            | Comando::ReponerCarro { .. }
+            | Comando::FijarAcceso { .. }
+            | Comando::ComprometerRecinto { .. }
+            | Comando::MejorarRecinto { .. }
+            | Comando::AbandonarRecinto { .. } => MandaEnLaPlaza,
+            Comando::MarcharA { .. } | Comando::Estacionar { .. } | Comando::Fundar { .. } | Comando::ComerciarEnPlaza { .. } => LiderDeLaColumna,
+            Comando::EntregarDeCaravana { .. }
+            | Comando::AdjuntarCaravana { .. }
+            | Comando::AparcarCaravana { .. }
+            | Comando::EntregarMateriales { .. }
+            | Comando::EntregarMaterialesAAvanzada { .. }
+            | Comando::DepositarEnAvanzada { .. } => ParticipanteDeLaColumna,
+        }
+    }
+
     /// Qué entidad crea la orden, si crea alguna: es la clase de los ids de `Respuesta::creadas`.
     pub(crate) fn tipo_creado(&self) -> Option<TipoCreado> {
         use TipoCreado::*;
@@ -420,6 +569,9 @@ impl Comando {
         })
     }
 
+    /// ¿Lleva el candado de batalla? Todos los comandos salvo los que actúan sobre la propia batalla y conectarse y desconectarse (cerrar el cliente en plena
+    /// batalla tiene que anotarse, y volver a conectarse anular esa petición, §5.1), y los mensajes del servidor de batalla, que no pasan por el registro de
+    /// comandos de jugador.
     pub(crate) fn lleva_candado(&self) -> bool {
         !matches!(
             self,

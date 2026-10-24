@@ -875,7 +875,7 @@ fn cerrar_la_puerta_de_la_plaza_saca_tambien_de_su_pueblo_a_quien_ya_no_puede_en
         assert_eq!(e.ubicacion(dentro[cuenta].1), Ubicacion::Pueblo(pueblo), "{cuenta} sigue dentro");
     }
     let echados = hechos(&e.n, "heroe.expulsado");
-    assert_eq!(echados.iter().map(|h| (dato(h, "heroe"), dato(h, "lugar"), dato(h, "id"), dato(h, "motivo"), h.0, h.1.clone())).collect::<Vec<_>>(), vec![(nep as i64, 0, plaza as i64, 0, t, vec![plaza]), (neu as i64, 1, pueblo as i64, 0, t, vec![plaza])]);
+    assert_eq!(echados.iter().map(|h| (dato(h, "heroe"), dato(h, "lugar"), dato(h, "sitio"), dato(h, "motivo"), h.0, h.1.clone())).collect::<Vec<_>>(), vec![(nep as i64, 0, plaza as i64, 0, t, vec![plaza]), (neu as i64, 1, pueblo as i64, 0, t, vec![plaza])]);
 
     // Se cierra también a los aliados: sale «alia»; la misma Facción y el residente se quedan.
     e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: false, enemigos: false });
@@ -889,8 +889,8 @@ fn cerrar_la_puerta_de_la_plaza_saca_tambien_de_su_pueblo_a_quien_ya_no_puede_en
         let (col, h) = dentro[cuenta];
         assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col), e.n.ejercito(col).unwrap().posicion, e.carga(col).get(&Madera).copied()), (Ubicacion::Columna(col), true, sitio, Some(10_000)), "{cuenta}");
     }
-    let ultimos: Vec<_> = hechos(&e.n, "heroe.expulsado").into_iter().filter(|h| dato(h, "motivo") == 1).collect();
-    assert_eq!(ultimos.iter().map(|h| (dato(h, "lugar"), dato(h, "id"))).collect::<Vec<_>>(), vec![(1, pueblo as i64); 2], "el lugar desaparece");
+    let ultimos: Vec<_> = hechos(&e.n, "heroe.expulsado").into_iter().filter(|h| dato(h, "motivo") == 3).collect();
+    assert_eq!(ultimos.iter().map(|h| (dato(h, "lugar"), dato(h, "sitio"))).collect::<Vec<_>>(), vec![(1, pueblo as i64); 2], "el lugar se destruye");
 }
 
 #[test]
@@ -915,7 +915,7 @@ fn si_la_madre_cae_en_ruinas_salen_todos_de_su_pueblo_y_si_es_conquistada_solo_l
     assert!(!e.n.estado().nodos_reclamados.contains_key(&cobre));
     assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col), e.n.ejercito(col).unwrap().posicion, e.carga(col).get(&Madera).copied()), (Ubicacion::Columna(col), true, sitio, Some(10_000)));
     let echado = &hechos(&e.n, "heroe.expulsado")[0];
-    assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), dato(echado, "id"), echado.1.clone()), (1, 1, pueblo as i64, vec![]), "el hecho no nombra a la plaza que ya no está");
+    assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), dato(echado, "sitio"), echado.1.clone()), (1, 1, pueblo as i64, vec![]), "el hecho no nombra a la plaza que ya no está");
 
     // Conquista: el pueblo pasa al conquistador (F2) con el acceso heredado. Dentro hay un neutral (F3, que el acceso por defecto deja entrar), un aliado del conquistador (F5) y un enemigo
     // suyo (F4, en guerra con F2, que el acceso por defecto cierra): salen solo los que ya no podrían entrar, es decir, el enemigo.
@@ -1062,7 +1062,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN24");
+    assert_eq!(&bytes[..5], b"BAN25");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

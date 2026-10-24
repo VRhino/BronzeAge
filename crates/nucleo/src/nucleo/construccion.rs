@@ -130,7 +130,7 @@ fn rechazo_de_politica(e: ErrorPolitica) -> (&'static str, &'static str) {
 /// recursos faltantes por máscara de bits de su índice y la política por su posición en el catálogo.
 fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &asentamiento::Reglas) -> EventoNucleo {
     let (codigo, datos): (&'static str, Vec<(&'static str, i64)>) = match e {
-        EventoEco::EdificioCompletado { id, tipo } => ("construccion.edificio_completado", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64)]),
+        EventoEco::EdificioCompletado { id, tipo, nivel } => ("construccion.edificio_completado", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("nivel", i64::from(*nivel))]),
         EventoEco::EdificioGratuito { id, tipo, nivel } => ("construccion.edificio_gratuito", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("nivel", *nivel as i64)]),
         EventoEco::ObraIniciada { id, tipo, completa_en } => ("construccion.obra_iniciada", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("completaEn", *completa_en)]),
         EventoEco::MejoraIniciada { id, nivel, completa_en } => ("construccion.mejora_iniciada", vec![("edificio", *id as i64), ("nivel", *nivel as i64), ("completaEn", *completa_en)]),

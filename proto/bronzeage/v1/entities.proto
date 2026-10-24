@@ -613,6 +613,10 @@ message Ejercito {
   optional string dentro_de = 20;
   bool en_batalla = 21;                  // apartada por una batalla de Unity: no se mueve ni recibe órdenes
   optional string batalla_id = 22;
+  // De quién es el suelo que pisa ahora (4H T7, `territorioPorEjercito` de Niebla_De_Guerra §5.4): la Facción dueña de la zona de influencia que contiene a la
+  // columna, de cualquier Facción y aunque su plaza no se vea, o vacío en tierra de nadie; nunca qué plaza. Solo en `VISTA` y solo de las columnas propias; ausente en los demás
+  // ámbitos y en lo ajeno. Se renueva en el muestreo de la vista cuando la columna cruza una frontera.
+  optional string territorio_faccion_id = 23;
 }
 
 enum EstadoCaravana {
@@ -808,6 +812,9 @@ message RedCaminos {
   uint64 version = 1;
   repeated string aristas = 2;
   repeated RutaComercial rutas = 3;
+  // El escalón de cada arista (4H T7), en el mismo orden que `aristas`: 0 sendero, 1 camino, 2 calzada (`escalonDePeso`, Comercio_Caravanas). En `VISTA`, `rutas` lleva
+  // solo las de la propia Facción.
+  repeated uint32 escalones = 4;
 }
 
 // ───────────────────────────── Tecnología, Aedas, intel ─────────────────────────────

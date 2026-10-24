@@ -11,7 +11,7 @@
 
 use super::{audiencia, batalla, ids, plan, punto, ritmo};
 use crate::estado::{Clase, Ejercito};
-use crate::estado_militar::{HeroeNucleo, Relacion};
+use crate::estado_militar::{HeroeNucleo, PlazaRecordada, Relacion};
 use crate::nucleo::{Nucleo, TokenDeJugador};
 use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada, TipoObra};
 use asentamiento::pueblos::{EstadoPueblo, Pueblo};
@@ -161,7 +161,31 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         monedas_heroe: Some(pb::Monedas { bronce: h.heroe.monedas.bronce.max(0) as u64, plata: h.heroe.monedas.plata.max(0) as u64, oro: h.heroe.monedas.oro.max(0) as u64 }),
         cupo_guarnicion: u32::try_from(cupo_guarnicion).unwrap_or(0),
         residencia_id: residencia,
+        plazas_recordadas: h.plazas_recordadas.iter().map(|(&plaza, x)| (ids::asentamiento(u64::from(plaza)), interior_recordado(u64::from(plaza), x))).collect(),
         ..Default::default()
+    }
+}
+
+/// La foto del interior de una plaza que el héroe dejó al salir al mundo (Niebla_De_Guerra §4.5): el almacén como cifras fijas (sin capacidad ni tendencia: es lo que había), la cola con su
+/// estado, su nivel y el fin de cada obra (sin sitio en la ciudad, que es de lo vivo) y la guarnición.
+fn interior_recordado(plaza: u64, x: &PlazaRecordada) -> pb::InteriorRecordado {
+    pb::InteriorRecordado {
+        visto_en_ms: x.visto_en,
+        almacen: x.almacen.iter().map(|(r, &n)| (r.nombre().to_owned(), pb::Existencia { cantidad: Some(constante(n)), capacidad: 0 })).collect(),
+        cola: x
+            .cola
+            .iter()
+            .map(|b| pb::Edificio {
+                id: ids::edificio(plaza, b.id),
+                tipo: b.tipo.nombre().to_owned(),
+                estado: if b.completa_en.is_some() { pb::EstadoEdificio::EdificioEnConstruccion } else { pb::EstadoEdificio::EdificioEnCola } as i32,
+                completa_en_ms: b.completa_en,
+                ambito: pb::AmbitoEdificio::Asentamiento as i32,
+                nivel_interno: Some(u32::from(b.nivel)),
+                ..Default::default()
+            })
+            .collect(),
+        guarnicion_escuadrones_ids: x.guarnicion.iter().map(|&s| ids::escuadra(s)).collect(),
     }
 }
 

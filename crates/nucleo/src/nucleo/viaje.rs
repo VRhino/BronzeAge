@@ -104,7 +104,13 @@ impl Nucleo {
 
     /// Los pesos vigentes de la red (cuántas rutas pisan cada arista), sin las rutas caducadas.
     pub fn pesos_de_red(&self) -> std::collections::BTreeMap<Arista, u32> {
-        self.red_vigente().pesos()
+        comercio::red_caminos::pesos(self.rutas_vigentes())
+    }
+
+    /// Las rutas comerciales vigentes (sin las caducadas ni las de una plaza que ya no existe), sin tocar el estado.
+    pub fn rutas_vigentes(&self) -> impl Iterator<Item = &comercio::red_caminos::RutaComercial> {
+        let (r, ahora, plazas) = (&self.estado.reglas.economia.comercio.red, self.estado.ahora, &self.estado.asentamientos);
+        self.estado.comercio.red.rutas().filter(move |x| x.vigente(r, ahora, &|id| plazas.contains_key(&u64::from(id))))
     }
 
     /// `caminoCompartidoAbierto` (§7.4): ¿hay una arista fuera de toda zona que pisen ≥ 10 rutas de ≥ 3 Facciones? (la consulta del logro

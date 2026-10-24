@@ -20,7 +20,6 @@ use crate::nucleo::Nucleo;
 use asentamiento::edificio::{Estado as EstadoEdificio, Fuente};
 use asentamiento::recurso::TODOS;
 use contrato::v1 as pb;
-use militar::escuadra::Contenedor;
 use militar::presencia::Ubicacion;
 
 fn ritmo_en_escalones(valor: base::Mil, tendencia: base::Mil, maximo: Option<base::Mil>) -> pb::Ritmo {
@@ -31,10 +30,6 @@ fn rect(r: &trazado::RectLocal) -> pb::RectLocal {
     pb::RectLocal { x: r.x, y: r.y, ancho: r.ancho.max(0) as u32, alto: r.alto.max(0) as u32 }
 }
 
-/// Las escuadras (`esc-N`) de la guarnición de la plaza: las de sus residentes que se quedan dentro con soldados (las mismas que defienden de oficio en un asedio).
-fn guarnicion(n: &Nucleo, plaza: u64) -> Vec<String> {
-    n.estado().militar.residentes_de(plaza).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados()).map(|s| ids::escuadra(s.id)).collect()
-}
 
 /// La plaza completa para quien está dentro, o `None` si ya no existe.
 pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
@@ -77,7 +72,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
                 ambito: pb::AmbitoEdificio::Asentamiento as i32,
                 fuente_id: b.fuente.map(|f| match f {
                     Fuente::Nodo(x) => ids::nodo(x),
-                    Fuente::Parcela(x) => format!("parcela-{x}"),
+                    Fuente::Parcela(x) => ids::parcela(x),
                 }),
                 nivel_interno: Some(u32::from(b.nivel_interno)),
                 mejora: b.mejora.map(|m| pb::MejoraEnCurso { nivel_objetivo: u32::from(m.nivel_objetivo), completa_en_ms: m.completa_en }),
@@ -115,7 +110,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
 
     p.casas_compradas = e.militar.residentes_de(id).map(|h| ids::heroe(h.heroe.id)).collect();
     p.presentes_ids = n.heroes().filter(|h| matches!(h.heroe.presencia.ubicacion, Ubicacion::Asentamiento(x) if u64::from(x) == id)).map(|h| ids::heroe(h.heroe.id)).collect();
-    p.guarnicion_ids = guarnicion(n, id);
+    p.guarnicion_ids = n.guarnicion_de_plaza(id).into_iter().map(ids::escuadra).collect();
     p.cupo_guarnicion = u32::try_from(n.cupo_de_guarnicion(id).unwrap_or(0)).unwrap_or(0);
     p.puerta_cerrada_a = [(a.acceso.neutrales, pb::GrupoPuerta::GrupoNeutrales), (a.acceso.aliados, pb::GrupoPuerta::GrupoAliados), (a.acceso.enemigos, pb::GrupoPuerta::GrupoEnemigos)].into_iter().filter(|(abierta, _)| !abierta).map(|(_, g)| g as i32).collect();
     p.caravanas_aparcadas_ids = e.comercio.flota.iter().filter(|c| c.estado == comercio::caravana::EstadoCaravana::Aparcada && c.anfitriona.is_some_and(|x| u64::from(x) == id)).map(|c| ids::caravana(c.id)).collect();
@@ -137,86 +132,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     Some(p)
 }
 
-/// Define a la vez [`mascara`], [`aplicar`] y [`todos_los_campos`] sobre la lista de campos de `Asentamiento` (sin `id`, `version` ni `version_interior`, que siempre viajan). El literal de `mascara` nombra todos los
-/// campos sin `..`: un campo nuevo del contrato no compila hasta entrar en la lista.
-macro_rules! campos_de_la_plaza {
-    ($($c:ident),* $(,)?) => {
-        /// Del cambio de la plaza de `antes` a `ahora`, los campos que cambiaron (con `version` y `version_interior` delante) y la plaza con solo esos campos; `None` si nada cambió (las dos versiones solas no son un cambio).
-        pub fn mascara(antes: &pb::Asentamiento, ahora: &pb::Asentamiento) -> Option<(Vec<String>, pb::Asentamiento)> {
-            let mut campos = Vec::new();
-            let datos = pb::Asentamiento {
-                id: ahora.id.clone(),
-                version: ahora.version,
-                version_interior: ahora.version_interior,
-                $($c: if antes.$c != ahora.$c { campos.push(stringify!($c).to_owned()); ahora.$c.clone() } else { Default::default() },)*
-            };
-            (!campos.is_empty()).then(|| {
-                campos.splice(0..0, ["version".to_owned(), "version_interior".to_owned()]);
-                (campos, datos)
-            })
-        }
-
-        /// Lo que hace el cliente con un cambio parcial: copia de `datos` los campos de la máscara (un campo con su valor por defecto se pone a él, un `optional` ausente se borra).
-        pub fn aplicar(destino: &mut pb::Asentamiento, datos: &pb::Asentamiento, campos: &[String]) {
-            for c in campos {
-                match c.as_str() {
-                    "version" => destino.version = datos.version,
-                    "version_interior" => destino.version_interior = datos.version_interior,
-                    $(stringify!($c) => destino.$c = datos.$c.clone(),)*
-                    _ => {}
-                }
-            }
-        }
-
-        /// La máscara que lo cambia todo: la de quien no sabe qué tiene el cliente (la reanudación por deltas).
-        pub fn todos_los_campos() -> Vec<String> {
-            vec!["version".to_owned(), "version_interior".to_owned(), $(stringify!($c).to_owned()),*]
-        }
-    };
-}
-
-campos_de_la_plaza!(
-    nombre,
-    faccion_id,
-    fundadores_ids,
-    posicion,
-    nivel,
-    nivel_actual,
-    racha_mantenimiento_sano,
-    fundado_en_ms,
-    radio_potencial,
-    zona,
-    poblacion,
-    almacen,
-    edificios,
-    recintos,
-    cargos,
-    casas_compradas,
-    puerta_cerrada_a,
-    capital_de_faccion_id,
-    vetados_ids,
-    politicas_activas,
-    ocupacion_hasta_ms,
-    bandidos_reaparecen_en_ms,
-    protegida_hasta_ms,
-    ascenso,
-    medidor_mantenimiento,
-    nutricion,
-    auto_construccion_pausada,
-    recetas_pausadas,
-    permite_reabastecer_aliados,
-    reserva_manual,
-    ultima_caravana_creada_en_ms,
-    pueblos_ids,
-    avanzadas_ids,
-    trazado,
-    batalla_id,
-    guarnicion_ids,
-    cupo_guarnicion,
-    presentes_ids,
-    caravanas_aparcadas_ids,
-    flota_ids,
-);
+pub use contrato::plaza::{aplicar, mascara, todos_los_campos};
 
 /// El cambio de la plaza `id` para un cliente que tiene `antes` (la plaza que se le mandó por última vez), y la plaza que tendrá después. Con `antes`, un cambio **parcial con máscara** de lo que
 /// cambió (ninguno si nada cambió); sin `antes` (el cliente reanuda y no se sabe qué tiene), la plaza entera, que sustituye a la suya. Una plaza que ya no existe se quita.

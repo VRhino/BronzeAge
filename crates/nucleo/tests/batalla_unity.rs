@@ -350,6 +350,7 @@ fn asignacion(uuid: &str, intento: &str, revision: u32, humanos: &[&str]) -> de_
         intento_asignacion_id: intento.into(),
         instancia: Some(pb::InstanciaDeBatalla { host: format!("unity-{intento}.test"), puerto: 7777, protocolo: "udp".into() }),
         tokens_participante: humanos.iter().map(|h| pb::TokenParticipante { heroe_id: (*h).into(), token: format!("tok-{h}"), expira_en_ms: 4_000_000_000_000 }).collect(),
+        ..Default::default()
     })
 }
 
@@ -534,6 +535,7 @@ fn tokens(uuid: &str, intento: &str, humanos: &[&str]) -> de_srv::Cuerpo {
         battle_id: uuid.into(),
         intento_asignacion_id: intento.into(),
         tokens_participante: humanos.iter().map(|h| pb::TokenParticipante { heroe_id: (*h).into(), token: format!("tok-{h}"), expira_en_ms: 4_000_000_000_000 }).collect(),
+        ..Default::default()
     })
 }
 
@@ -872,7 +874,7 @@ async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_
 /// La foto de un núcleo con un ticket de asedio congelado (plaza, edificios, recintos) y con un informe de inspección de una plaza vuelve igual; la de antes del cambio, no.
 fn la_foto_vuelve_igual(n: &Nucleo, m: &M) {
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN24");
+    assert_eq!(&bytes[..5], b"BAN25");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(false), &m.0.hash().to_string()).expect("la foto vuelve");
     assert_eq!(vuelta.serializar(), bytes);
     let viejo = [b"BAN20".as_slice(), &bytes[5..]].concat();

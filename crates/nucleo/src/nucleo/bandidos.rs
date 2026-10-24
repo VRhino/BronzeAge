@@ -341,11 +341,8 @@ impl Nucleo {
 
     /// `colocarBandidos` (escenarios y pruebas): un campamento de ese nivel, fuera de toda zona y de la protección de un campamento de mercenarios, donde no
     /// aparecen bandidos de verdad.
-    pub(super) fn colocar_bandidos(&mut self, t: Instante, p: &Peticion, posicion: Punto, nivel: u8) -> Result<Vec<u64>, Respuesta> {
+    pub(super) fn colocar_bandidos(&mut self, t: Instante, posicion: Punto, nivel: u8) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
-        if !p.admin {
-            return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración coloca campamentos de bandidos", v));
-        }
         if !(1..=3).contains(&nivel) {
             return Err(Respuesta::rechazo(rechazos::BANDIDOS_NIVEL_INVALIDO, "el nivel de un campamento de bandidos va de 1 a 3", v));
         }

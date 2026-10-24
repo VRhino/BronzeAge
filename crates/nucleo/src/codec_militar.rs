@@ -10,7 +10,8 @@
 //! atributo i64 · puntos de perk i64 · atributos{fuerza, destreza, armadura, vitalidad: 4 × i64} · perks{n u64 · n × u32} · loadouts{n u64 ·
 //! n × (id u64, nombre texto, escuadras{n u64 · n × u64}, perks{n u64 · n × u32}, activo bool)} · monedas{bronce, plata, oro: 3 × i64} ·
 //! herido_hasta opt_i64 · víveres i64 · ración_en opt_i64 · almacén personal{carga} · cupo{día i64 · carga} · columna opt_u64 · carro{carga} · sintético bool ·
-//! informes{n u64 · n × informe} ·
+//! informes{n u64 · n × informe} · plazas recordadas{n u64 · n × (plaza u32 · visto_en i64 · almacén{carga} · cola{n u64 · n × (id u32 · tipo u8 · nivel u8 · completa_en opt_i64)} ·
+//! guarnición{n u64 · n × u64})} (BAN25) ·
 //! escuadras{n u64 · n × escuadra}`.
 //! Una convocatoria: `id u64 · facción u32 · lugar{u8: 0 plaza, 1 campamento · u32} · líder u64 · política u8 · integrantes{n u64 · n × (héroe u64,
 //! unido_en i64, selección)} · peticiones{n u64 · n × (héroe u64, pedido_en i64, expira_en i64, selección)} · creada_en i64`, con una selección
@@ -27,8 +28,8 @@
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_columna::{politica_a_u8, politica_de_u8, ritmo_escribir, ritmo_leer};
 use crate::codec_comercio::{carga_escribir, carga_leer};
-use crate::codec_economia::{escribir_celdas, leer_celdas, recurso_a_u8, recurso_de_u8};
-use crate::estado_militar::{EstadoMilitar, HeroeNucleo, Relacion};
+use crate::codec_economia::{escribir_celdas, leer_celdas, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
+use crate::estado_militar::{EdificioRecordado, EstadoMilitar, HeroeNucleo, PlazaRecordada, Relacion};
 use comercio::mercenarios::CupoDiario;
 use militar::catalogo::{Origen, Tropa, TROPAS};
 use militar::convocatoria::{Convocatoria, Integrante, Lugar, Peticion, Seleccion};
@@ -216,7 +217,7 @@ fn lista_u32_leer(r: &mut Lector) -> Result<Vec<u32>, ErrorFormato> {
 }
 
 fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
-    let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes } = h;
+    let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas } = h;
     let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras } = heroe;
     w.u64(*id);
     w.texto(cuenta);
@@ -257,6 +258,20 @@ fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
     w.bool(*sintetico);
     w.u64(informes.len() as u64);
     informes.iter().for_each(|i| informe_escribir(w, i));
+    w.u64(plazas_recordadas.len() as u64);
+    for (plaza, PlazaRecordada { visto_en, almacen, cola, guarnicion }) in plazas_recordadas {
+        w.u32(*plaza);
+        w.i64(*visto_en);
+        carga_escribir(w, almacen);
+        w.u64(cola.len() as u64);
+        for EdificioRecordado { id, tipo, nivel, completa_en } in cola {
+            w.u32(*id);
+            w.u8(tipo_a_u8(*tipo));
+            w.u8(*nivel);
+            w.opt_i64(*completa_en);
+        }
+        lista_u64_escribir(w, guarnicion);
+    }
     w.u64(escuadras.len() as u64);
     escuadras.iter().for_each(|e| escuadra_escribir(w, e));
 }
@@ -277,12 +292,18 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
     let cupo = CupoDiario { dia: r.i64()?, comprado: carga_leer(r)? };
     let (columna, carro, sintetico) = (r.opt_u64()?, carga_leer(r)?, r.bool()?);
     let informes = (0..r.cuenta()?).map(|_| informe_leer(r)).collect::<Result<_, _>>()?;
+    let mut plazas_recordadas = std::collections::BTreeMap::new();
+    for _ in 0..r.cuenta()? {
+        let (plaza, visto_en, almacen) = (r.u32()?, r.i64()?, carga_leer(r)?);
+        let cola = (0..r.cuenta()?).map(|_| Ok(EdificioRecordado { id: r.u32()?, tipo: tipo_de_u8(r.u8()?)?, nivel: r.u8()?, completa_en: r.opt_i64()? })).collect::<Result<_, ErrorFormato>>()?;
+        plazas_recordadas.insert(plaza, PlazaRecordada { visto_en, almacen, cola, guarnicion: lista_u64_leer(r)? });
+    }
     let mut escuadras = Vec::new();
     for _ in 0..r.cuenta()? {
         escuadras.push(escuadra_leer(r)?);
     }
     let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras };
-    Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes })
+    Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas })
 }
 
 pub(crate) fn relacion_a_u8(r: Relacion) -> u8 {

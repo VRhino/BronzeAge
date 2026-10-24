@@ -1,4 +1,8 @@
-//! Contrato 05 (`bronzeage.v1`): tipos generados desde `proto/`.
+//! Contrato 05 (`bronzeage.v1`): tipos generados desde `proto/`, y lo que hace un cliente con lo que le llega (la máscara de la plaza, la niebla parcial y el almacén de referencia).
+pub mod almacen;
+pub mod niebla;
+pub mod plaza;
+
 pub mod v1 {
     include!(concat!(env!("OUT_DIR"), "/bronzeage.v1.rs"));
 }

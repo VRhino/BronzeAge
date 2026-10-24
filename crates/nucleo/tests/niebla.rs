@@ -1,5 +1,5 @@
 //! La niebla en el núcleo (4H T3d, Niebla_De_Guerra §2-§5): lo que graba cada ojo en la memoria de su Facción al cerrar las versiones (lo explorado por una columna, las fichas de lo ajeno con
-//! el último instante en que se vio, lo de un héroe sin bandera), la foto (`BAN24`) y que todo es lo mismo con sesiones y sin ellas; y lo que proyecta la vista de una Facción
+//! el último instante en que se vio, lo de un héroe sin bandera), la foto (`BAN25`) y que todo es lo mismo con sesiones y sin ellas; y lo que proyecta la vista de una Facción
 //! (`proyeccion::vista::Mirada`): lo propio entero, lo ajeno redactado, lo recordado como ficha, lo que ven los aliados y el tramo ajeno que se renueva. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
@@ -428,7 +428,7 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     assert!(mem.exploracion.contains_key(&1) && mem.fichas.contains_key(&1) && !mem.personal.is_empty() && !mem.vigias.is_empty(), "la partida graba de todo");
 
     let bytes = a.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN24");
+    assert_eq!(&bytes[..5], b"BAN25");
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);
@@ -478,4 +478,74 @@ fn partida_hasta_estacionar(m: &M, sitio: Punto, col: u64) -> Nucleo {
     let t = e.n.ahora();
     assert!(e.n.aplicar_en(t, Peticion::nueva("ana", "parar", Comando::Estacionar { ejercito: col })).aceptada());
     e.n
+}
+
+// ───────────────────────────── 6. Lo que el núcleo ya sabía (4H T7) ─────────────────────────────
+
+/// El área (con signo, en milésimas al cuadrado) de un lazo.
+fn area(puntos: &[pb::Punto]) -> i128 {
+    (0..puntos.len()).map(|i| (puntos[i].x as i128) * (puntos[(i + 1) % puntos.len()].y as i128) - (puntos[i].y as i128) * (puntos[(i + 1) % puntos.len()].x as i128)).sum::<i128>() / 2
+}
+
+/// La vista de una Facción (4H T7) lleva su zona **fundida** (dos plazas suyas que se solapan dan un solo lazo, más pequeño que la suma de sus zonas), de quién es el suelo bajo cada columna
+/// propia (`territorio_faccion_id`: la Facción de la zona que la contiene aunque no se vea su plaza, o vacío en tierra de nadie) y, al héroe cuya columna está a la puerta de una plaza propia, el
+/// almacén de esa plaza (lo demás de su interior, no).
+#[test]
+fn la_vista_lleva_la_zona_fundida_el_suelo_bajo_cada_columna_propia_y_el_almacen_de_la_plaza_a_cuya_puerta_se_esta() {
+    let m = con_mundo!();
+    let mut e = Esc { n: nucleo(m), peticiones: 0 };
+    let sa = sitio_rico(&e.n, &m.0, 0, 1);
+    let a = e.plaza("ana", 1, sa);
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 5 });
+    // La segunda plaza de F1, en el sitio fundable más cercano; las dos zonas crecen hasta solaparse.
+    let sb = (1..60).flat_map(|r| (0..36).map(move |g| (r, g))).map(|(r, g)| {
+        let ang = ((g * 10) as f64).to_radians();
+        Punto::new(sa.x + (r as f64 * 1_000.0 * ang.cos()) as i64, sa.y + (r as f64 * 1_000.0 * ang.sin()) as i64)
+    }).find(|&p| e.n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none())).expect("hay un sitio fundable cerca");
+    let b = e.plaza("beto", 1, sb);
+    for x in [a, b] {
+        e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: x, nivel: 4 });
+    }
+    let solapan = |n: &Nucleo| n.estado().asentamientos[&a].radio + n.estado().asentamientos[&b].radio > sa.dist(sb) + 2 * U;
+    for _ in 0..60 {
+        if solapan(&e.n) {
+            break;
+        }
+        e.ok("admin", Comando::AgrandarZona { asentamiento: a });
+        e.ok("admin", Comando::AgrandarZona { asentamiento: b });
+    }
+    let (ra, rb) = (e.n.estado().asentamientos[&a].radio, e.n.estado().asentamientos[&b].radio);
+    assert!(solapan(&e.n), "las dos zonas de F1 se solapan: {ra} + {rb} frente a {}", sa.dist(sb));
+    let c = e.plaza("gus", 2, sitio_rico(&e.n, &m.0, 3, 2));
+    let sc = e.n.estado().asentamientos[&c].posicion;
+    // Tres columnas de F1: a la puerta de A, dentro de la zona de C (de F2) y en tierra de nadie.
+    let puerta = e.columna("ana", 1, en_tierra(&m.0, sa, U, 0));
+    let en_f2 = e.columna("ana", 1, en_tierra(&m.0, sc, 3 * U, 0));
+    let lejos = (0..m.0.campamentos().len()).map(|i| sitio_rico(&e.n, &m.0, i, 1)).find(|&p| e.n.faccion_del_suelo(&[p])[0].is_none()).expect("un sitio de nadie");
+    let nadie = e.columna("ana", 1, lejos);
+    let heroe_de = |n: &Nucleo, col: u64| n.ejercito(col).unwrap().columna.lider;
+
+    let v = vista(&e.n, Perspectiva::Faccion(1), Some(heroe_de(&e.n, puerta)), todo());
+    let Some(Cuerpo::ZonaFaccion(z)) = de_vista(&v, TipoEntidad::ZonaFaccion, "f-1") else { panic!("la zona de F1") };
+    let (za, zb) = (e.n.poligono_zona(a), e.n.poligono_zona(b));
+    let pb_ = |v: Vec<Punto>| v.into_iter().map(|p| pb::Punto { x: p.x, y: p.y }).collect::<Vec<_>>();
+    let (area_a, area_b) = (area(&pb_(za)).abs(), area(&pb_(zb)).abs());
+    assert_eq!(z.contornos.len(), 1, "un solo lazo");
+    let union = area(&z.contornos[0].puntos);
+    assert!(union > area_a.max(area_b) && union < area_a + area_b, "la unión ({union}) es más que cada zona ({area_a}, {area_b}) y menos que su suma");
+    let suelo = |col: u64| match de_vista(&v, TipoEntidad::Ejercito, &nucleo::proyeccion::ids::ejercito(col)) {
+        Some(Cuerpo::Ejercito(x)) => x.territorio_faccion_id,
+        otro => panic!("{otro:?}"),
+    };
+    assert_eq!((suelo(puerta), suelo(en_f2), suelo(nadie)), (Some("f-1".into()), Some("f-2".into()), Some(String::new())));
+    let as_a = nucleo::proyeccion::ids::asentamiento(a);
+    let Some(Cuerpo::Asentamiento(ficha)) = de_vista(&v, TipoEntidad::Asentamiento, &as_a) else { panic!("la plaza A") };
+    assert_eq!(ficha.almacen.len(), asentamiento::recurso::TODOS.len(), "a la puerta, su almacén");
+    assert!(ficha.edificios.iter().all(|x| x.estado == pb::EstadoEdificio::EdificioActivo as i32) && ficha.trazado.is_none(), "y nada más del interior");
+    let otro = vista(&e.n, Perspectiva::Faccion(1), Some(heroe_de(&e.n, en_f2)), todo());
+    let Some(Cuerpo::Asentamiento(ficha)) = de_vista(&otro, TipoEntidad::Asentamiento, &as_a) else { panic!() };
+    assert!(ficha.almacen.is_empty(), "lejos de la puerta, solo la ficha");
+    // Columnas ajenas: sin suelo.
+    let de_f2 = vista(&e.n, Perspectiva::Faccion(2), None, todo());
+    assert!(de_f2.iter().all(|(t, _, c)| *t != TipoEntidad::Ejercito || !matches!(c, Cuerpo::Ejercito(x) if x.faccion_id == "f-1" && x.territorio_faccion_id.is_some())));
 }

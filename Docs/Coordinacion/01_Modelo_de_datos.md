@@ -5,6 +5,12 @@
 > documento es el mapa: qué entidad es cada mensaje, de qué documento del canon sale y qué invariantes la gobiernan. El modelo anterior
 > (`typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md`, JSON del servidor TypeScript) está en `typescript-final:Docs/Coordinacion/`.
 > Sale del canon (`Docs/Game`) y de `Docs/Mechanics`, **no** del código viejo.
+>
+> **Qué proyecta hoy el servidor Rust (4H, cerrada el 2026-10-24).** Todas las entidades del dominio que el núcleo tiene salen por la sesión (contrato 05 §3), con sus ids reales. Las que aún no
+> tienen dominio en el núcleo (`Propuesta`, `Titulo`, `Sigilo` de la Facción, `EstadoTecnologia`, `AedaResidente`, `AedaItinerante`, `EpicaEnCurso`, `Alijo`, el inventario y el equipo del héroe)
+> son de los sistemas 5 y 6 o de Conquest y están en las filas de paridad «Contrato (4H)» de `Docs/Mecanicas a desarrollar.md`. Desde T7: `Heroe.plazas_recordadas` (`InteriorRecordado`, la foto
+> del interior de cada plaza de la que el héroe salió al mundo; estado en la foto `BAN25`), `Ejercito.territorio_faccion_id` (solo en `VISTA`), `ZonaFaccion` fundida, `RedCaminos.escalones` y
+> `BattleServerAssignment.servidor_id` (solo en `ADMIN`).
 
 ## 1. Reglas del modelo
 
@@ -41,6 +47,7 @@
 - Un pueblo extractor o una avanzada **cuenta como edificio activo de su plaza madre**; los pueblos pasan al conquistador con la madre y desaparecen con su ruina.
 - Los `Plan` son monótonos en el tiempo (`en_ms` no decrece) y su primera posición es la de la entidad en el instante en que se emite.
 - Un identificador nunca se reutiliza dentro de una partida. Todos son `<prefijo>-<n>` (la Facción, `f-3`; ver `common.proto`).
+- Las zonas de una misma Facción se solapan (no se recortan entre sí) y las de Facciones distintas no: `ZonaFaccion` es su unión y cada punto del mapa es como mucho de una Facción (`Ejercito.territorio_faccion_id`).
 - Un héroe puede estar además **dentro de un pueblo extractor o de una avanzada** (`UbicacionHeroe.pueblo_id`/`avanzada_id`); la columna que entró en un lugar queda fuera del mapa (`Ejercito.dentro_de`).
 
 ## 4. Cierre de las propuestas BA

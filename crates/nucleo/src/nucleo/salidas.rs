@@ -29,6 +29,7 @@
 //! una avanzada también vive en `dentro`. `Fundar` todavía no deshace la columna dentro de la plaza nueva.
 
 use super::*;
+use crate::estado_militar::{EdificioRecordado, PlazaRecordada};
 use crate::estado_militar::Acceso;
 use crate::nucleo::mercado::CAPACIDAD_CARRO;
 use asentamiento::almacen::Almacen;
@@ -459,7 +460,11 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         match &p.comando {
-            Comando::SalirAlMundo { asentamiento, heroe, escuadras, carga } => self.salir_de_residencia(t, p, *heroe, Lugar::Asentamiento(*asentamiento as u32), escuadras, carga, false, Politica::Rechazar),
+            Comando::SalirAlMundo { asentamiento, heroe, escuadras, carga } => {
+                let creadas = self.salir_de_residencia(t, p, *heroe, Lugar::Asentamiento(*asentamiento as u32), escuadras, carga, false, Politica::Rechazar)?;
+                self.recordar_interior(t, *heroe, *asentamiento);
+                Ok(creadas)
+            }
             Comando::MovilizarEjercito { asentamiento, heroe, escuadras, carga, politica } => {
                 self.salir_de_residencia(t, p, *heroe, Lugar::Asentamiento(*asentamiento as u32), escuadras, carga, true, *politica)
             }
@@ -531,6 +536,26 @@ impl Nucleo {
     /// hasta donde quepa. Lo que no cabe se queda en el carro (en la columna que conserva para llevar sus caravanas, si el carro estaba en ella). Entrar en la
     /// residencia no lo hace solo.
     // DUDA: el almacén personal de quien reside en una plaza tiene la capacidad del de un campamento de mercenarios (hasta que la residencia completa del sistema 5 diga otra).
+    /// Las escuadras de la guarnición de la plaza: las de sus residentes que se quedan dentro con soldados (las que defienden de oficio en un asedio).
+    pub(crate) fn guarnicion_de_plaza(&self, plaza: u64) -> Vec<u64> {
+        self.estado.militar.residentes_de(plaza).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados()).map(|s| s.id).collect()
+    }
+
+    /// Al salir al mundo desde su plaza el héroe se queda con la foto de lo que veía dentro, ya sin la tropa ni la carga que se lleva (Niebla_De_Guerra §4.5): el almacén, la cola y la
+    /// guarnición. DUDA: solo `salirAlMundo`, como en el TypeScript; `movilizarEjercito`, que también sale de la residencia, no la toma.
+    fn recordar_interior(&mut self, t: Instante, heroe: u64, plaza: u64) {
+        let eco = &self.estado.asentamientos[&plaza].economia;
+        let almacen = asentamiento::recurso::TODOS.iter().map(|&r| (r, eco.almacen.cantidad(r))).filter(|&(_, n)| n != 0).collect();
+        let cola = eco
+            .edificios
+            .iter()
+            .filter(|b| b.estado != asentamiento::edificio::Estado::Activo)
+            .map(|b| EdificioRecordado { id: b.id, tipo: b.tipo, nivel: b.nivel_interno, completa_en: b.completa_en.filter(|_| b.estado == asentamiento::edificio::Estado::EnConstruccion) })
+            .collect();
+        let recuerdo = PlazaRecordada { visto_en: t, almacen, cola, guarnicion: self.guarnicion_de_plaza(plaza) };
+        self.heroe_mut(heroe).plazas_recordadas.insert(plaza as u32, recuerdo);
+    }
+
     fn vaciar_carro(&mut self, t: Instante, p: &Peticion, heroe: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);

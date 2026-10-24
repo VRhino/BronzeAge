@@ -9,6 +9,8 @@
 //! tabla de generaciones con la columna o el héroe de los que salen.
 
 use crate::estado_comercio::ETIQUETA;
+use asentamiento::catalogo::Tipo;
+use base::Instante;
 use comercio::mercenarios::CupoDiario;
 use comercio::Carga as Mercancia;
 use militar::convocatoria::Convocatoria;
@@ -61,12 +63,47 @@ pub struct HeroeNucleo {
     /// Lo que ha inspeccionado de cerca (Movimiento_Ejercitos §12): uno por objetivo, hasta `INSPECCION.informeMinutos`. Los vencidos siguen aquí
     /// hasta que otra inspección los barre; quien lee los filtra por `Informe::vigente`.
     pub informes: Vec<Informe>,
+    /// La foto del interior de cada plaza de la que salió al mundo (Niebla_De_Guerra §4.5, BAN25), por plaza: la última de cada una.
+    pub plazas_recordadas: BTreeMap<u32, PlazaRecordada>,
+}
+
+/// Lo que un héroe recuerda del interior de una plaza al salir al mundo desde ella (Niebla_De_Guerra §4.5): el almacén, la cola (lo que no está activo: lo activo es público y viaja vivo en la
+/// ficha) y la guarnición, ya sin la tropa ni la carga que se lleva. No se refresca mientras está dentro, donde ve lo vivo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlazaRecordada {
+    pub visto_en: Instante,
+    /// Lo que había de cada recurso (sin los que estaban a 0).
+    pub almacen: Mercancia,
+    pub cola: Vec<EdificioRecordado>,
+    /// Las escuadras de su guarnición.
+    pub guarnicion: Vec<u64>,
+}
+
+/// Un edificio de la cola tal como se vio: en cola o en obra (`completa_en`), con su nivel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EdificioRecordado {
+    pub id: u32,
+    pub tipo: Tipo,
+    pub nivel: u8,
+    /// Cuándo acababa la obra; `None` si estaba en cola.
+    pub completa_en: Option<Instante>,
 }
 
 impl HeroeNucleo {
     /// Un héroe sin columna, sin almacén personal, sin cupo gastado y sin informes.
     pub fn nuevo(heroe: Heroe, cuenta: &str, faccion: Option<u32>) -> Self {
-        Self { heroe, cuenta: cuenta.to_owned(), faccion, almacen_personal: Mercancia::new(), cupo: CupoDiario::default(), columna: None, carro: Mercancia::new(), sintetico: false, informes: Vec::new() }
+        Self {
+            heroe,
+            cuenta: cuenta.to_owned(),
+            faccion,
+            almacen_personal: Mercancia::new(),
+            cupo: CupoDiario::default(),
+            columna: None,
+            carro: Mercancia::new(),
+            sintetico: false,
+            informes: Vec::new(),
+            plazas_recordadas: BTreeMap::new(),
+        }
     }
 }
 

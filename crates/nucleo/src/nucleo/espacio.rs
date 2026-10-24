@@ -303,11 +303,8 @@ impl Nucleo {
 
     /// `fijarRelacion` (andamiaje de administración, Q6 del sistema 4): fija, cambia o quita la relación entre dos Facciones. Lo sustituirá el sistema
     /// político.
-    pub(super) fn fijar_relacion(&mut self, t: Instante, p: &Peticion, a: u32, b: u32, relacion: Option<Relacion>) -> Result<Vec<u64>, Respuesta> {
+    pub(super) fn fijar_relacion(&mut self, t: Instante, a: u32, b: u32, relacion: Option<Relacion>) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
-        if !p.admin {
-            return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración fija relaciones entre Facciones", v));
-        }
         if a == b {
             return Err(Respuesta::rechazo(rechazos::RELACION_CONSIGO_MISMA, "una Facción no tiene relación consigo misma", v));
         }

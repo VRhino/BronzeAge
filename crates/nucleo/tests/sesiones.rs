@@ -262,6 +262,7 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
         intento_asignacion_id: "a1".into(),
         instancia: Some(pb::InstanciaDeBatalla { host: "10.0.0.1".into(), puerto: 7777, protocolo: "udp".into() }),
         tokens_participante: vec![pb::TokenParticipante { heroe_id: format!("heroe-{h_ana}"), token: "t".into(), expira_en_ms: 99 }],
+        ..Default::default()
     }));
     // Lo rechazado vuelve como un aviso con el código estable: inicio sin asignación, batalla que no es de esta partida, esquema de otra versión.
     svc.enviar(inicio(0)).await;

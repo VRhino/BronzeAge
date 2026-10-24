@@ -223,6 +223,9 @@ message BattleServerAssignment {
   string intento_asignacion_id = 4;
   InstanciaDeBatalla instancia = 5;
   repeated TokenParticipante tokens_participante = 6;
+  // Qué servidor de batalla la tiene (4H T7): solo en `Batalla.asignacion` de `ADMIN`, que lo rellena el núcleo con el id de la credencial del servidor
+  // (`batalla-servidor:<id>`). El servidor de batalla lo deja vacío al asignarse: el núcleo lo sabe por su sesión.
+  string servidor_id = 7;
 }
 
 message TokensBatalla {

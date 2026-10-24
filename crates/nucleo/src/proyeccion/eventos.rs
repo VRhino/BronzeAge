@@ -22,15 +22,17 @@
 //! | `ObraTerminada` | `construccion.edificio_completado`, `construccion.mejora_completada`, `construccion.recinto_completado`, `pueblo.completado`, `avanzada.completada` |
 //! | `HeroeHerido` | `heroe.herido` |
 //!
-//! DUDA: `BatallaAbierta` lleva el contexto del ticket de la batalla: si la batalla ya se retiró del estado cuando se proyecta el hecho (una reanudación más de una hora después) el hecho viaja sin
-//! tipado; `ObraTerminada` no lleva `nivel` para un edificio recién terminado, un pueblo ni una avanzada (el hecho no lo dice); `HeroeExpulsado.motivo` de un lugar que desaparece (destruido, en
-//! ruinas o con la plaza madre en ruinas) es `ruina`.
+//! `BatallaAbierta` sale de los datos del propio hecho (contra qué se juega, quién la inició, los dos bandos, el plazo de la convocatoria), así que se tipa igual aunque la batalla ya se haya
+//! retirado del estado al proyectarlo (una reanudación tardía); de su contexto, lo que el ticket no congela (los carros de una caravana, lo protegido de un pueblo) se lee del estado de ahora, como
+//! en el ticket. `ObraTerminada.nivel`: el de la mejora o del recinto, el nivel interno de un edificio recién terminado y la etapa de una avanzada (1 Atalaya, 2 Fuerte, 3 Ciudadela); un pueblo no
+//! tiene nivel. `HeroeExpulsado.motivo`: `puerta_cerrada`, `conquista`, `destruido` (lo destruye su dueño o un ataque), `ruina` (queda en ruinas o cae su plaza madre) o `desalojo`.
 
 use super::{batalla, ids, punto};
-use crate::estado::{Dato, EventoNucleo};
+use crate::estado::{Dato, EventoNucleo, SIN_BANDERA};
 use crate::nucleo::Nucleo;
 use asentamiento::recurso::TODOS as RECURSOS;
-use combate::ciclo::EstadoBatalla;
+use combate::caravana::Modalidad;
+use combate::ciclo::{CaravanaEnBatalla, Contexto, EstadoBatalla};
 use contrato::v1 as pb;
 use pb::evento_dominio::Tipado;
 use prost_types::{value::Kind, ListValue, Struct, Value};
@@ -79,13 +81,13 @@ fn valor(d: &Dato) -> Value {
 /// campamento es de bandidos en sus hechos ([`de_bandidos`]) y de mercenarios en los demás; un edificio y un recinto, de la plaza del hecho.
 fn id_del_contrato(n: &Nucleo, ev: &EventoNucleo, clave: &str, v: i64) -> Option<String> {
     let (u, plaza) = (v as u64, ev.asentamientos.first().copied());
-    let faccion = || u32::try_from(v).ok().filter(|&f| f > 0).map(ids::faccion).unwrap_or_default();
+    let faccion = || id_de_faccion(v).unwrap_or_default();
     Some(match clave {
-        "heroe" | "lider" | "sucesor" | "solicitante" | "observador" => ids::heroe(u),
+        "heroe" | "lider" | "sucesor" | "solicitante" | "observador" | "iniciador" => ids::heroe(u),
         "ejercito" | "ejercitoA" | "ejercitoB" | "columna" | "presa" => ids::ejercito(u),
         "caravana" | "caravanaB" => ids::caravana(u),
         "plaza" | "ciudad" | "destino" | "socia" | "asentamientoArruinado" => ids::asentamiento(u),
-        "faccion" | "faccionA" | "faccionB" | "faccionAtacante" | "faccionDefensora" | "faccionAnterior" | "faccionVista" | "faccionQueVe" | "contra" | "por" => faccion(),
+        "faccion" | "faccionA" | "faccionB" | "faccionAtacante" | "faccionDefensora" | "faccionAnterior" | "faccionVista" | "faccionQueVe" | "atacante" | "contra" | "por" => faccion(),
         "pueblo" => ids::pueblo(u),
         "avanzada" => ids::avanzada(u),
         "convocatoria" => ids::convocatoria(u),
@@ -97,8 +99,42 @@ fn id_del_contrato(n: &Nucleo, ev: &EventoNucleo, clave: &str, v: i64) -> Option
         "campamento" => ids::campamento(v as u32),
         "edificio" => ids::edificio(plaza?, v as u32),
         "recinto" => ids::recinto(plaza?, v as u32),
+        "parcela" => ids::parcela(v as u32),
+        // El lugar del que sale un héroe expulsado: su clase va en `lugar` (0 plaza, 1 pueblo, 2 avanzada).
+        "sitio" if ev.codigo == "heroe.expulsado" => lugar_expulsado(ev, u)?,
         "batalla" => return Some(n.uuid_de_batalla(u)),
         _ => return None,
+    })
+}
+
+/// El id del contrato de una Facción en un dato: ni 0 ni `SIN_BANDERA` (los bandidos) nombran una.
+fn id_de_faccion(v: i64) -> Option<String> {
+    u32::try_from(v).ok().filter(|&f| f > 0 && f != SIN_BANDERA).map(ids::faccion)
+}
+
+/// El lugar de un `heroe.expulsado` (`sitio`, con su clase en `lugar`).
+fn lugar_expulsado(ev: &EventoNucleo, id: u64) -> Option<String> {
+    Some(match ev.dato("lugar")? {
+        0 => ids::asentamiento(id),
+        1 => ids::pueblo(id),
+        _ => ids::avanzada(id),
+    })
+}
+
+/// El contexto de una batalla tal como lo cuenta su hecho de apertura (`contexto` y lo que añade `objetivo_de_contexto` en el núcleo).
+fn contexto_del_hecho(ev: &EventoNucleo) -> Option<Contexto> {
+    let (punto, dato) = (ev.punto?, |k: &str| ev.dato(k));
+    Some(match dato("contexto")? {
+        0 => Contexto::Asedio { asentamiento: u32::try_from(dato("plaza")?).ok()? },
+        1 => Contexto::CampoAbierto { punto, solitarios: dato("solitarios")? == 1 },
+        2 => {
+            let Some(Dato::Lista(lista)) = ev.valores.iter().find(|(k, _)| *k == "caravanasIds").map(|(_, d)| d) else { return None };
+            let caravanas = lista.iter().filter_map(|d| if let Dato::Texto(s) = d { ids::parse_caravana(s) } else { None }).map(|id| CaravanaEnBatalla { id, carros: 0 }).collect();
+            Contexto::Caravana { caravanas, punto, modalidad: if dato("modalidad")? == 1 { Modalidad::Aguante } else { Modalidad::Disputa } }
+        }
+        3 => Contexto::CampamentoBandidos { campamento: dato("campamento")?.try_into().ok()?, punto },
+        4 => Contexto::SaqueoPueblo { pueblo: dato("pueblo")? as u64, punto },
+        _ => Contexto::Avanzada { avanzada: dato("avanzada")? as u64, etapa: *asentamiento::avanzadas::Etapa::TODAS.get(usize::try_from(dato("etapa")?).ok()?)?, punto },
     })
 }
 
@@ -131,7 +167,7 @@ fn payload(n: &Nucleo, ev: &EventoNucleo) -> Struct {
 fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
     let dato = |k: &str| ev.dato(k);
     let id = |k: &str| dato(k).map(|v| v as u64);
-    let faccion = |k: &str| dato(k).and_then(|v| u32::try_from(v).ok()).map(ids::faccion);
+    let faccion = |k: &str| dato(k).and_then(id_de_faccion);
     let heroe = |k: &str| id(k).map(ids::heroe).unwrap_or_default();
     let plaza = ev.asentamientos.first().copied();
     let plaza_id = || plaza.map(ids::asentamiento).unwrap_or_default();
@@ -142,18 +178,15 @@ fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
     let de_batalla = es_de_batalla(codigo).then(|| codigo.split_once('.').map_or(codigo, |(_, nombre)| nombre));
     let obra = |clase: &str, objeto: String, nivel: Option<u32>| Tipado::ObraTerminada(pb::ObraTerminada { asentamiento_id: plaza_id(), clase: clase.into(), objeto_id: objeto, nivel });
     Some(match (codigo, de_batalla) {
-        (_, Some("abierta")) => {
-            let b = n.batalla(batalla_de(ev)?)?;
-            Tipado::BatallaAbierta(pb::BatallaAbierta {
-                battle_id: battle_id(),
-                contexto: Some(batalla::contexto(n, &b.ticket.contexto)),
-                punto: Some(punto(b.punto)),
-                iniciada_por: n.heroe(b.iniciada_por).map(|_| ids::heroe(b.iniciada_por)),
-                atacante_faccion_id: b.ticket.atacante.faccion.map(ids::faccion),
-                defensor_faccion_id: b.ticket.defensor.faccion.map(ids::faccion),
-                convocatoria_hasta_ms: b.convocatoria_hasta,
-            })
-        }
+        (_, Some("abierta")) => Tipado::BatallaAbierta(pb::BatallaAbierta {
+            battle_id: battle_id(),
+            contexto: Some(batalla::contexto(n, &contexto_del_hecho(ev)?)),
+            punto: ev.punto.map(punto),
+            iniciada_por: id("iniciador").map(ids::heroe),
+            atacante_faccion_id: faccion("faccionAtacante"),
+            defensor_faccion_id: faccion("faccionDefensora"),
+            convocatoria_hasta_ms: dato("convocatoriaHasta"),
+        }),
         (_, Some("asignada")) => Tipado::BatallaAsignada(pb::BatallaAsignada { battle_id: battle_id() }),
         (_, Some(nombre @ ("aplicada" | "cancelada" | "fallida"))) => {
             let estado = match nombre {
@@ -183,29 +216,25 @@ fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
         }
         ("convocatoria.partio", _) => Tipado::ConvocatoriaPartio(pb::ConvocatoriaPartio { convocatoria_id: ids::convocatoria(id("convocatoria")?), ejercito_id: columna() }),
         ("heroe.expulsado", _) => {
-            let lugar = id("id")?;
-            let lugar_id = match dato("lugar")? {
-                0 => ids::asentamiento(lugar),
-                1 => ids::pueblo(lugar),
-                _ => ids::avanzada(lugar),
-            };
-            // Los motivos de `nucleo::dentro`: 0 la puerta se cierra, 1 el lugar desaparece, 2 su plaza madre cambia de dueño.
+            // Los motivos de `nucleo::dentro`: 0 la puerta se cierra, 1 queda en ruinas o cae su plaza madre, 2 su plaza madre cambia de dueño, 3 se destruye.
             let motivo = match dato("motivo")? {
                 0 => "puerta_cerrada",
                 1 => "ruina",
-                _ => "conquista",
+                2 => "conquista",
+                _ => "destruido",
             };
-            Tipado::HeroeExpulsado(pb::HeroeExpulsado { heroe_id: heroe("heroe"), lugar_id, motivo: motivo.into(), ejercito_id: id("ejercito").map(ids::ejercito) })
+            Tipado::HeroeExpulsado(pb::HeroeExpulsado { heroe_id: heroe("heroe"), lugar_id: lugar_expulsado(ev, id("sitio")?)?, motivo: motivo.into(), ejercito_id: id("ejercito").map(ids::ejercito) })
         }
         ("heroe.desalojado", _) => Tipado::HeroeExpulsado(pb::HeroeExpulsado { heroe_id: heroe("heroe"), lugar_id: plaza_id(), motivo: "desalojo".into(), ejercito_id: None }),
         ("ejercito.viveres_bajos" | "ejercito.sin_viveres", _) => Tipado::ColumnaConHambre(pb::ColumnaConHambre { ejercito_id: columna(), sin_viveres: codigo == "ejercito.sin_viveres" }),
         ("tropas.desercion", _) => Tipado::DesercionPorHambre(pb::DesercionPorHambre { heroe_id: heroe("heroe"), escuadra_id: ids::escuadra(id("escuadra")?), desertores: u32::try_from(dato("desertores")?).ok()? }),
         ("faccion.guerra_declarada", _) => Tipado::GuerraDeclarada(pb::GuerraDeclarada { atacante_faccion_id: faccion("atacante")?, contra_faccion_id: faccion("contra")?, arrastradas_ids: Vec::new() }),
-        ("construccion.edificio_completado", _) => obra("edificio", ids::edificio(plaza?, u32::try_from(dato("edificio")?).ok()?), None),
+        ("construccion.edificio_completado", _) => obra("edificio", ids::edificio(plaza?, u32::try_from(dato("edificio")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),
         ("construccion.mejora_completada", _) => obra("mejora", ids::edificio(plaza?, u32::try_from(dato("edificio")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),
         ("construccion.recinto_completado", _) => obra("recinto", ids::recinto(plaza?, u32::try_from(dato("recinto")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),
+        // DUDA: un pueblo no tiene nivel (Economia_Construccion §14): su `ObraTerminada.nivel` va ausente.
         ("pueblo.completado", _) => obra("pueblo", ids::pueblo(id("pueblo")?), None),
-        ("avanzada.completada", _) => obra("avanzada", ids::avanzada(id("avanzada")?), None),
+        ("avanzada.completada", _) => obra("avanzada", ids::avanzada(id("avanzada")?), dato("etapa").and_then(|v| u32::try_from(v + 1).ok())),
         ("heroe.herido", _) => Tipado::HeroeHerido(pb::HeroeHerido { heroe_id: heroe("heroe"), hasta_ms: dato("hasta")? }),
         _ => return None,
     })

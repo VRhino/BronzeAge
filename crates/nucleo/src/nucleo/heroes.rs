@@ -181,7 +181,6 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let sin_cambios = || Respuesta::sin_cambios(v);
-        let solo_admin = || (!p.admin).then(|| rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
         let mr = self.estado.reglas.economia.militar.clone();
         let de_heroe = |e: ErrorHeroe| {
             let (c, m) = rechazo_de_heroe(e);
@@ -305,9 +304,6 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::FijarTecnologias { faccion, tecnologias } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 if let Some(t) = tecnologias.iter().find(|t| !mr.tecnologias.todas.contains(t)) {
                     return Err(rechazo(rechazos::TECNOLOGIA_DESCONOCIDA, format!("«{t}» no es una tecnología")));
                 }
@@ -327,9 +323,6 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::FijarFaccionDeHeroe { heroe, faccion } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 self.autorizar_heroe(p, *heroe, true)?;
                 let h = self.heroe_mut(*heroe);
                 if h.faccion == *faccion {
@@ -340,9 +333,6 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::ColocarHeroe { heroe, ubicacion } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 self.autorizar_heroe(p, *heroe, false)?;
                 match ubicacion {
                     Ubicacion::Asentamiento(a) => {
@@ -393,9 +383,6 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::HerirHeroe { heroe } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 self.autorizar_heroe(p, *heroe, true)?;
                 if !self.heroe_mut(*heroe).heroe.herir(&mr, t) {
                     return Err(sin_cambios());

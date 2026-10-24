@@ -514,3 +514,64 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
     assert_eq!((tabla.len(), en_el_contrato), (145, 145), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
+
+/// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
+fn en_el_contrato(variante: &str) -> String {
+    let mut s = String::new();
+    for (i, c) in variante.chars().enumerate() {
+        if c.is_ascii_uppercase() && i > 0 {
+            s.push('_');
+        }
+        s.push(c.to_ascii_lowercase());
+    }
+    s
+}
+
+/// Cómo dice el documento quién da una orden.
+fn quien(a: crate::comando::Autoriza) -> &'static str {
+    use crate::comando::Autoriza::*;
+    match a {
+        Administracion => "administración",
+        ServidorDeBatalla => "servidor de batalla",
+        SuCuenta => "su cuenta",
+        CuentaDelHeroe => "la cuenta del héroe",
+        CuentaDelHeroeAunqueFuera => "la cuenta del héroe, aunque esté fuera",
+        CiudadanoDeLaMadre => "la cuenta del héroe, ciudadano de la madre",
+        MandaEnLaPlaza => "quien manda en la plaza",
+        LiderDeLaColumna => "el Líder de la columna",
+        ParticipanteDeLaColumna => "un participante de la columna",
+    }
+}
+
+/// La matriz de autorización de `Docs/Mechanics/Proyecciones_Y_Autorizacion.md` (§5, el bloque `<!-- autorizacion -->`) es la del código: cada orden del contrato con su comando y quién la da
+/// (`Comando::autoriza`), las de administración (`administracion:<codigo>`), los mensajes del canal del servidor de batalla (`servidor:<mensaje>`) y las que aún no existen (`no disponible`).
+/// Falla si falta una fila, sobra una o no coincide.
+#[test]
+fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
+    let doc = include_str!("../../../../../Docs/Mechanics/Proyecciones_Y_Autorizacion.md");
+    let bloque = doc.split("<!-- autorizacion -->").nth(1).and_then(|b| b.split("<!-- /autorizacion -->").next()).expect("el documento tiene el bloque de la matriz");
+    let sin = |s: &str| s.trim().trim_matches('`').to_owned();
+    let documento: BTreeSet<(String, String, String)> = bloque
+        .lines()
+        .filter(|l| l.starts_with("| `"))
+        .map(|l| {
+            let c: Vec<&str> = l.split('|').collect();
+            (sin(c[1]), sin(c[2]), c[3].trim().to_owned())
+        })
+        .collect();
+    let mut codigo: BTreeSet<(String, String, String)> = ordenes_traducidas().iter().map(|(o, c)| (en_el_contrato(&nombre(o)), nombre(c), quien(c.autoriza()).to_owned())).collect();
+    for (o, c) in ordenes_de_administracion() {
+        let Cuerpo::Administracion(a) = o else { unreachable!() };
+        codigo.insert((format!("administracion:{}", a.codigo), nombre(&c), quien(c.autoriza()).to_owned()));
+    }
+    // El canal del servidor de batalla (`MensajeDeServidorDeBatalla`): sus cinco comandos son `Autoriza::ServidorDeBatalla` en `Comando::autoriza`.
+    for (m, c) in [("asignacion", "RegistrarAsignacion"), ("inicio", "ConfirmarInicio"), ("tokens", "RegistrarTokens"), ("salida", "RegistrarSalida"), ("resultado", "AplicarResultado")] {
+        codigo.insert((format!("servidor:{m}"), c.to_owned(), "servidor de batalla".to_owned()));
+    }
+    codigo.extend(ordenes_no_disponibles().iter().map(|o| (en_el_contrato(&nombre(o)), "—".to_owned(), "no disponible".to_owned())));
+    let fila = |(o, c, q): &(String, String, String)| format!("| `{o}` | {} | {q} |", if c == "—" { c.clone() } else { format!("`{c}`") });
+    let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
+    let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
+    assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
+    assert_eq!(codigo.len(), 103 + 19 + 5 + 43, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+}

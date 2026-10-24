@@ -1545,7 +1545,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN24");
+    assert_eq!(&bytes[..5], b"BAN25");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1722,7 +1722,7 @@ fn se_entra_en_una_avanzada_operativa_con_el_acceso_de_la_madre_y_se_sale_con_to
     e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
     assert_eq!((e.ubicacion(neutral), e.n.en_el_mapa(colneu), e.ubicacion(aliado)), (Ubicacion::Columna(colneu), true, Ubicacion::Avanzada(av)));
     let echado = &hechos(&e.n, "heroe.expulsado")[0];
-    assert_eq!((dato(echado, "heroe"), dato(echado, "lugar"), dato(echado, "id"), dato(echado, "motivo"), echado.2.clone()), (neutral as i64, 2, av as i64, 0, vec![plaza]));
+    assert_eq!((dato(echado, "heroe"), dato(echado, "lugar"), dato(echado, "sitio"), dato(echado, "motivo"), echado.2.clone()), (neutral as i64, 2, av as i64, 0, vec![plaza]));
 }
 
 #[test]
@@ -1827,7 +1827,7 @@ fn destruir_a_mano_una_avanzada_saca_al_mapa_a_quien_esta_dentro_con_lo_suyo() {
     e.ok("ana", Comando::DestruirAvanzada { heroe: ana, avanzada: av });
     assert!(e.n.avanzada(av).is_none());
     assert_eq!((e.ubicacion(neutral), e.n.en_el_mapa(cn), e.n.ejercito(cn).unwrap().posicion), (Ubicacion::Columna(cn), true, pos));
-    assert_eq!(dato(&hechos(&e.n, "heroe.expulsado")[0], "motivo"), 1);
+    assert_eq!(dato(&hechos(&e.n, "heroe.expulsado")[0], "motivo"), 3, "destruida a mano");
 }
 
 #[test]
@@ -2052,7 +2052,7 @@ fn entrar_defender_y_ser_echado_de_una_avanzada_da_el_mismo_hash_normal_acelerad
     assert_eq!(hechos(&normal, "jugador.sale_de_avanzada").len(), 1);
     assert_eq!(hechos(&normal, "combate.avanzada_resiste").len(), 1, "el aliado defiende desde dentro");
     assert_eq!(hechos(&normal, "combate.avanzada_destruida").len(), 1);
-    assert_eq!(hechos(&normal, "heroe.expulsado").iter().map(|h| (dato(h, "lugar"), dato(h, "motivo"))).collect::<Vec<_>>(), vec![(2, 0), (2, 1)], "el neutral al cerrar la puerta y la residente al caer");
+    assert_eq!(hechos(&normal, "heroe.expulsado").iter().map(|h| (dato(h, "lugar"), dato(h, "motivo"))).collect::<Vec<_>>(), vec![(2, 0), (2, 3)], "el neutral al cerrar la puerta y la residente al destruirse");
     // Nada recurre por una entidad ociosa: como mucho un evento de deserción vigente por columna, esté dentro de una avanzada o en el mapa.
     let vigentes = normal.estado().cola.volcar().iter().filter(|ev| normal.estado().generaciones.es_vigente(ev.clave) && matches!(ev.carga, Carga::Militar(SucesoMilitar::Desercion))).count();
     assert!(vigentes <= normal.estado().ejercitos.len(), "{vigentes} deserciones vigentes");
@@ -2084,7 +2084,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN24");
+        assert_eq!(&bytes[..5], b"BAN25");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));

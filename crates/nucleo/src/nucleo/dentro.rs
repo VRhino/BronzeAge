@@ -22,10 +22,12 @@ use militar::presencia::Ubicacion;
 
 /// Por qué sale alguien a la fuerza, como número del hecho `heroe.expulsado` (`motivo`).
 pub(super) const MOTIVO_PUERTA_CERRADA: i64 = 0;
-/// El lugar desaparece: destruido, en ruinas o su plaza madre en ruinas.
-pub(super) const MOTIVO_DESAPARECE: i64 = 1;
+/// El lugar queda en ruinas (una avanzada) o cae en ruinas su plaza madre.
+pub(super) const MOTIVO_RUINA: i64 = 1;
 /// El lugar cambia de dueño: su plaza madre fue conquistada.
 pub(super) const MOTIVO_CAMBIA_DE_DUENO: i64 = 2;
+/// El lugar se destruye: lo destruye su dueño o un ataque.
+pub(super) const MOTIVO_DESTRUIDO: i64 = 3;
 
 /// Un pueblo o una avanzada, visto como un sitio en el que se entra.
 struct Sitio {
@@ -198,7 +200,7 @@ impl Nucleo {
         let plazas = if self.estado.asentamientos.contains_key(&plaza) { vec![plaza] } else { vec![] };
         for h in heroes {
             let columna = self.salir_al_mapa(t, h, puerta);
-            self.emitir_propio(t, "heroe.expulsado", plazas.clone(), vec![("heroe", h as i64), ("lugar", clase), ("id", id as i64), ("ejercito", columna as i64), ("motivo", motivo)]);
+            self.emitir_propio(t, "heroe.expulsado", plazas.clone(), vec![("heroe", h as i64), ("lugar", clase), ("sitio", id as i64), ("ejercito", columna as i64), ("motivo", motivo)]);
         }
     }
 
@@ -211,10 +213,10 @@ impl Nucleo {
     /// La plaza madre desaparece (cae en ruinas): se vacían sus pueblos y sus avanzadas (`(id, puerta)` de cada uno) y todos los de dentro salen al mapa con lo suyo.
     pub(super) fn vaciar_pueblos_y_avanzadas(&mut self, t: Instante, plaza: u64, pueblos: &[(u64, Punto)], avanzadas: &[(u64, Punto)]) {
         for &(x, puerta) in pueblos {
-            self.vaciar_lugar(t, Ubicacion::Pueblo(x), puerta, plaza, MOTIVO_DESAPARECE);
+            self.vaciar_lugar(t, Ubicacion::Pueblo(x), puerta, plaza, MOTIVO_RUINA);
         }
         for &(x, puerta) in avanzadas {
-            self.vaciar_lugar(t, Ubicacion::Avanzada(x), puerta, plaza, MOTIVO_DESAPARECE);
+            self.vaciar_lugar(t, Ubicacion::Avanzada(x), puerta, plaza, MOTIVO_RUINA);
         }
     }
 

@@ -217,7 +217,7 @@ fn los_puestos_del_mercado_nacen_gratis_y_activos_al_completarse_y_al_mejorar() 
     assert!(puestos(&a).is_empty(), "todavía en obras: sin puestos");
     // Al completarse (480 min de obra) nacen los del nivel 1, con la forma de cada uno en `nivel_interno`.
     let ev = avanzar(&re, &mut a, &mut urbe, 0, 481);
-    assert!(ev.contains(&Evento::EdificioCompletado { id: mercado, tipo: Tipo::Mercado }), "se completó");
+    assert!(ev.contains(&Evento::EdificioCompletado { id: mercado, tipo: Tipo::Mercado, nivel: 1 }), "se completó");
     let nuevos: Vec<_> = ev.iter().filter(|e| matches!(e, Evento::EdificioGratuito { tipo: Tipo::PuestoMercado, .. })).collect();
     assert_eq!(nuevos.len(), 5, "cinco puestos de nivel 1 (1·1·2·2·3): {ev:?}");
     let formas: Vec<u8> = puestos(&a).into_iter().map(|(forma, estado)| {
@@ -268,7 +268,7 @@ fn un_puesto_sin_sitio_se_salta_en_silencio() {
     urbe.set_recintos(vec![Recinto { muros, puertas: vec![], completo: false }]);
     let antes = a.siguiente_edificio;
     let ev = avanzar(&re, &mut a, &mut urbe, 0, 481);
-    assert!(ev.contains(&Evento::EdificioCompletado { id: mercado, tipo: Tipo::Mercado }));
+    assert!(ev.contains(&Evento::EdificioCompletado { id: mercado, tipo: Tipo::Mercado, nivel: 1 }));
     assert_eq!(a.edificios.iter().filter(|e| e.tipo == Tipo::PuestoMercado).count(), 0);
     assert_eq!(a.siguiente_edificio, antes, "un puesto sin sitio no gasta ids");
 }
@@ -399,7 +399,7 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     assert_eq!(urbe.ciudad().recintos(), &[Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default() });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN24", "el formato de foto es BAN24 (BAN23 era de la geometría 3 y reponía la guarnición de un pueblo de golpe; BAN22 no traía la memoria de la niebla; BAN21 no traía la tendencia «+N/min» de las plazas; BAN20 no congelaba la plaza de un asedio en el ticket de la batalla; BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
+    assert_eq!(&bytes[..5], b"BAN25", "el formato de foto es BAN25 (BAN24 no traía el interior que recuerda cada héroe de las plazas de las que salió; BAN23 era de la geometría 3 y reponía la guarnición de un pueblo de golpe; BAN22 no traía la memoria de la niebla; BAN21 no traía la tendencia «+N/min» de las plazas; BAN20 no congelaba la plaza de un asedio en el ticket de la batalla; BAN19 guardaba los recintos con la ciudad, sin nivel, avance ni mejora; BAN18 nombraba una sola caravana en el contexto de una batalla de caravana; BAN17 no traía los héroes dentro de pueblos ni avanzadas; BAN16 no traía el acceso de las plazas; BAN14 no traía las avanzadas; BAN13 tenía la población continua y no traía las citas de fin de obra)");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);

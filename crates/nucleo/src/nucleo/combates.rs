@@ -850,11 +850,8 @@ impl Nucleo {
     // ───────────────────────────── La orden de administración ─────────────────────────────
 
     /// `darEscuadra` (escenarios y pruebas): una escuadra nueva para el héroe, en su columna si va a bordo y, si no, en su campamento. Sin coste ni Liderazgo.
-    pub(super) fn dar_escuadra(&mut self, t: Instante, p: &Peticion, heroe: u64, tropa: militar::catalogo::Tropa, cantidad: i64) -> Result<Vec<u64>, Respuesta> {
+    pub(super) fn dar_escuadra(&mut self, t: Instante, heroe: u64, tropa: militar::catalogo::Tropa, cantidad: i64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
-        if !p.admin {
-            return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "solo administración da escuadras", v));
-        }
         let hn = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(heroe), v))?;
         let mr = self.estado.reglas.economia.militar.clone();
         if cantidad < 1 || cantidad > mr.tropas.tropa(tropa).unidades {

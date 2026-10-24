@@ -1,1 +1,1 @@
-{"secuencia":"31","batalla":{"acuse":{"mensaje":"asignacion","battleId":"b-2","resultado":"ORDEN_RECHAZADA","rechazo":{"codigo":"batalla.ya_asignada","mensaje":"otro servidor la tiene"}}}}
+{"secuencia":"31","batalla":{"acuse":{"mensaje":"asignacion","battleId":"7c1b0b3e-0000-4000-8000-000000000002","resultado":"ORDEN_RECHAZADA","rechazo":{"codigo":"batalla.ya_asignada","mensaje":"otro servidor la tiene"}}}}

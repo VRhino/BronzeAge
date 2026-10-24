@@ -323,9 +323,6 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::FijarResidencia { heroe, residencia } => {
-                if !p.admin {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
-                }
                 self.autorizar_heroe(p, *heroe, true)?;
                 match residencia {
                     Some(Residencia::Asentamiento(a)) => {
@@ -343,9 +340,6 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::DarAlmacenPersonal { heroe, recurso, cantidad } => {
-                if !p.admin {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
-                }
                 self.autorizar_heroe(p, *heroe, true)?;
                 if *cantidad <= 0 {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));

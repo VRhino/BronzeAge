@@ -395,6 +395,6 @@ fn avanzar_hasta_cumple_los_fines_en_su_instante_y_deja_el_paso_en_el_minuto() {
         assert!(!a.avanzar_hasta(m * MS_POR_MINUTO, &mut x).iter().any(|e| matches!(e, Evento::EdificioCompletado { .. })), "minuto {m}");
     }
     let ev = a.avanzar_hasta(minuto_del_fin, &mut x);
-    assert!(ev.contains(&Evento::EdificioCompletado { id, tipo: Tipo::Vivienda }) && a.edificio(id).unwrap().activo());
+    assert!(ev.contains(&Evento::EdificioCompletado { id, tipo: Tipo::Vivienda, nivel: 1 }) && a.edificio(id).unwrap().activo());
     assert_eq!(a.ultimo_minuto, minuto_del_fin);
 }

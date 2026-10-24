@@ -495,6 +495,30 @@ fn una_ciudad_de_la_propia_faccion_en_el_camino_no_cobra_peaje() {
     assert_eq!(e.caravana_de(car).ruta, directa.puntos, "sin paso forzado: la ruta es la del A* sin más, y {c} es solo una plaza que queda en el camino");
 }
 
+/// En la `VISTA` de la Facción la red llega con el escalón de cada arista, en el orden de `aristas`, y con sus rutas vigentes (4H T7): la que acaba de entrar, con sus aristas y su lanzamiento.
+#[test]
+fn la_vista_lleva_la_red_con_el_escalon_de_cada_arista_y_las_rutas_propias() {
+    use contrato::v1::entidad::Cuerpo;
+    use nucleo::proyeccion::vista::{Mirada, Perspectiva};
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    e.dar(a, Cobre, 100_000);
+    let car = e.caravana("ana", a, 2, true);
+    let t = e.n.ahora();
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 50_000)], salir_en: Some(t + HORA) });
+    let faccion = e.n.estado().asentamientos[&a].faccion;
+    let rect = vision::Rect { min: Punto::new(0, 0), max: Punto::new(3_000_000, 3_000_000) };
+    let mirada = Mirada::de(&e.n, Perspectiva::Faccion(faccion));
+    let red = mirada.contenido(None, rect, &Default::default()).into_iter().find_map(|v| if let Some(Cuerpo::RedCaminos(r)) = v.cuerpo() { Some(r) } else { None }).expect("la red se ve");
+    let sendero = u32::from(comercio::red_caminos::escalon_de_peso(&e.n.estado().reglas.economia.comercio.red, 1));
+    assert!(!red.aristas.is_empty() && red.escalones.len() == red.aristas.len() && red.escalones.iter().all(|&s| s == sendero), "una ruta: peso 1 en cada arista");
+    assert_eq!(red.rutas.len(), 1);
+    let r = &red.rutas[0];
+    assert_eq!((r.id.clone(), r.origen_id.clone(), r.destino_id.clone(), r.ultimo_lanzamiento_ms), (format!("ruta-{a}-{b}"), format!("as-{a}"), format!("as-{b}"), t));
+    assert!(red.aristas.iter().all(|x| r.aristas.contains(x)), "las aristas que se ven son de la ruta");
+}
+
 // ───────────────────────────── 3. Preparar, cancelar e invalidar ─────────────────────────────
 
 #[test]

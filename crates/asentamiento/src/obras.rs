@@ -72,7 +72,7 @@ impl Asentamiento {
             let (id, tipo, nivel) = (e.id, e.tipo, e.nivel_interno);
             self.aplicar_capacidad(r, tipo, nivel, 1);
             self.completados_pendientes += 1;
-            ev.push(Evento::EdificioCompletado { id, tipo });
+            ev.push(Evento::EdificioCompletado { id, tipo, nivel });
             if tipo == Tipo::Mercado {
                 self.levantar_puestos(r, x, nivel, ev);
             }

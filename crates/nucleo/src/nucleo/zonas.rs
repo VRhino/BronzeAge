@@ -108,6 +108,15 @@ impl Nucleo {
         territorio::en_zona(p, &yo, &vecinos)
     }
 
+    /// De quién es el suelo en cada punto: la Facción de la zona real que lo contiene (las de Facciones distintas no se solapan) o `None` en tierra de nadie (`territorioPorEjercito`,
+    /// Niebla_De_Guerra §5.4). Las zonas se leen una vez para todos los puntos.
+    pub fn faccion_del_suelo(&self, puntos: &[Punto]) -> Vec<Option<u32>> {
+        let discos = self.discos();
+        // `en_zona` mira primero el disco (enteros, sin raíz) y solo a los vecinos si el punto cae dentro.
+        let suelo = |p: Punto| discos.iter().find(|(id, d)| territorio::en_zona(p, d, discos.iter().filter(|(o, _)| o != id).map(|(_, x)| x))).map(|(_, d)| d.faccion);
+        puntos.iter().map(|&p| suelo(p)).collect()
+    }
+
     /// Polígono de la zona real (presentación: `Asentamiento.zona`). 48 lados, como `ZONA_INFLUENCIA.segmentosPoligono`.
     pub fn poligono_zona(&self, id: u64) -> Vec<Punto> {
         let Some(a) = self.estado.asentamientos.get(&id) else { return vec![] };
@@ -220,13 +229,9 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let sin_cambios = || Respuesta::sin_cambios(v);
-        let solo_admin = || (!p.admin).then(|| rechazo(rechazos::NO_AUTORIZADO, "solo administración".into()));
         let existe = |s: &Self, id: u64| s.estado.asentamientos.contains_key(&id).then_some(()).ok_or_else(|| rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id)));
         match &p.comando {
             Comando::FijarNivelFaccion { faccion, nivel } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 if *nivel == 0 {
                     return Err(rechazo(rechazos::NIVEL_INVALIDO, "el nivel de Facción empieza en 1".into()));
                 }
@@ -238,9 +243,6 @@ impl Nucleo {
                 Ok(None)
             }
             Comando::DarCaravanaFundacion { ejercito } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 let Some(e) = self.estado.ejercitos.get_mut(ejercito) else { return Err(rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito))) };
                 if e.caravana_fundacion {
                     return Err(sin_cambios());
@@ -251,9 +253,6 @@ impl Nucleo {
             }
             Comando::Fundar { ejercito } => self.fundar(t, p, *ejercito),
             Comando::FijarNivelAsentamiento { asentamiento, nivel } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 existe(self, *asentamiento)?;
                 let (actual, max_nivel) = (self.estado.asentamientos[asentamiento].nivel(), self.estado.reglas.territorio.techos.len() as u32);
                 if *nivel < actual || *nivel > max_nivel {
@@ -275,9 +274,6 @@ impl Nucleo {
                 Ok(None)
             }
             Comando::AgrandarZona { asentamiento } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 existe(self, *asentamiento)?;
                 if !self.agrandar_zona(*asentamiento, 1, t) {
                     return Err(sin_cambios());
@@ -285,9 +281,6 @@ impl Nucleo {
                 Ok(None)
             }
             Comando::ReclamarParcela { asentamiento } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 let Some(geo) = &self.geografia else { return Err(rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into())) };
                 existe(self, *asentamiento)?;
                 let a = &self.estado.asentamientos[asentamiento];
@@ -316,9 +309,6 @@ impl Nucleo {
                 Ok(Some(parcela as u64))
             }
             Comando::SoltarParcela { asentamiento, parcela } => {
-                if let Some(r) = solo_admin() {
-                    return Err(r);
-                }
                 existe(self, *asentamiento)?;
                 if !self.estado.asentamientos[asentamiento].parcelas.contains(parcela) {
                     return Err(rechazo(rechazos::PARCELA_AJENA, format!("la parcela {parcela} no la explota as-{asentamiento}")));

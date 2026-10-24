@@ -255,6 +255,42 @@ fn salir_al_mundo_valida_en_orden_carga_el_carro_llena_los_viveres_y_un_rechazo_
     assert_eq!(e.rechazada("ana", salir(h, &[], &[])), rechazos::HEROE_YA_EN_COLUMNA, "no se sale dos veces");
 }
 
+/// Al salir al mundo desde su plaza el héroe se queda con la foto de su interior (Niebla_De_Guerra §4.5), ya sin la tropa ni la carga que se lleva: el almacén, la cola (lo que no está activo) y
+/// la guarnición. Viaja en su `Heroe.plazas_recordadas`, no cambia mientras está fuera aunque la plaza siga viviendo, la siguiente salida la sustituye y vuelve de la foto (`BAN25`).
+#[test]
+fn salir_al_mundo_deja_al_heroe_la_foto_del_interior_de_su_plaza() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    e.avanzar(24 * HORA);
+    let (h, milicia) = e.con_milicia("ana");
+    let a = e.a;
+    let lenadores = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores }).creadas[0];
+    e.con_barracon();
+    e.ok("ana", Comando::AsignarGuarnicion { heroe: h, escuadra: lenadores });
+    e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
+    let vivienda = e.ok("ana", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Vivienda }).creadas[0] as u32;
+    let (t, madera) = (e.n.ahora(), e.almacen(Madera));
+    e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![(Madera, 40_000)] });
+    let recuerdo = e.n.heroe(h).unwrap().plazas_recordadas[&(a as u32)].clone();
+    assert_eq!((recuerdo.visto_en, recuerdo.almacen[&Madera], recuerdo.guarnicion.clone()), (t, madera - 40_000, vec![lenadores]), "lo que deja atrás, sin la carga que se lleva");
+    assert!(recuerdo.cola.iter().any(|b| b.id == vivienda && b.completa_en.is_none()), "la vivienda en cola");
+    assert!(e.n.economia(a).unwrap().edificios.iter().filter(|b| b.activo()).all(|b| recuerdo.cola.iter().all(|x| x.id != b.id)), "lo activo no se recuerda: viaja vivo en la ficha");
+    let p = nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(h).unwrap());
+    let pr = &p.plazas_recordadas[&format!("as-{a}")];
+    assert_eq!((pr.visto_en_ms, pr.almacen["madera"].cantidad.as_ref().unwrap().valor_en_t0, pr.guarnicion_escuadrones_ids.clone()), (t, madera - 40_000, vec![format!("esc-{lenadores}")]));
+    assert!(pr.cola.iter().any(|b| b.id == format!("ed-{a}-{vivienda}") && b.estado == contrato::v1::EstadoEdificio::EdificioEnCola as i32));
+    // Fuera, la plaza sigue viviendo y la foto no cambia; la foto del estado la conserva.
+    e.dar(a, Madera, 7_000);
+    assert_eq!(e.n.heroe(h).unwrap().plazas_recordadas[&(a as u32)], recuerdo);
+    let bytes = e.n.estado().serializar();
+    let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert_eq!(vuelta.militar.heroes[&h].plazas_recordadas[&(a as u32)], recuerdo);
+    // La siguiente salida la sustituye.
+    e.ok("ana", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+    e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![], carga: vec![] });
+    assert_eq!(e.n.heroe(h).unwrap().plazas_recordadas[&(a as u32)].almacen[&Madera], e.almacen(Madera));
+}
+
 #[test]
 fn salir_sin_tropa_es_legitimo_y_la_escuadra_en_la_guarnicion_no_sale() {
     let m = con_mundo!();

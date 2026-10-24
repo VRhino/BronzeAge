@@ -12,7 +12,7 @@
 mod comun;
 
 use base::{Instante, Mil, Punto, Rng, MS_POR_MINUTO};
-use comun::almacen::{clave_de_ambito, Almacen};
+use contrato::almacen::{clave_de_ambito, Almacen};
 use comun::real::{self, en_tierra, fundar, sitio_rico, M};
 use comun::sesion::*;
 use contrato::v1::{
@@ -320,6 +320,7 @@ impl Svc {
                     intento_asignacion_id: format!("i{}", self.intentos),
                     instancia: Some(pb::InstanciaDeBatalla { host: "unity.test".into(), puerto: 7777, protocolo: "udp".into() }),
                     tokens_participante: vec![],
+                    ..Default::default()
                 })
             }
             1 => de_srv::Cuerpo::Inicio(pb::InicioBatalla { schema_version: 1, battle_id: b.clone(), ticket_revision: t.ticket_revision, intento_asignacion_id: intento }),

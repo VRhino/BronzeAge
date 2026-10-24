@@ -1,9 +1,12 @@
-//! Lo que un cliente guarda de sus ámbitos, como lo haría Unity con su almacén normalizado (contrato 05 §5 y §7): cada `Foto` sustituye al ámbito, cada `Delta` se aplica sobre él (la plaza
-//! parcial con su máscara) y tiene que empezar donde acabó la anterior, cada `Revocado` lo descarta; y los hechos que le llegaron. Con él las pruebas comparan «foto + deltas» con una foto
-//! nueva y reanudan con lo que el cliente conserva (`Hola.versiones_conocidas` y `versiones_interiores_conocidas`).
+//! Lo que un cliente guarda de sus ámbitos, como lo haría Unity con su almacén normalizado (contrato 05 §5 y §7): la implementación de referencia de cómo se aplica lo que llega por la sesión.
+//! Cada `Foto` sustituye al ámbito, cada `Delta` se aplica sobre él (la plaza parcial con su máscara, [`crate::plaza::aplicar`]; la niebla parcial, [`crate::niebla::aplicar_niebla`]) y tiene que empezar
+//! donde acabó la anterior, cada `Revocado` lo descarta; y se guardan los hechos que llegaron. Con él un cliente compara «foto + deltas» con una foto nueva y reanuda con lo que conserva
+//! (`Hola.versiones_conocidas` y `versiones_interiores_conocidas`).
+//!
+//! Es el almacén del cliente de prueba y del cliente de ejemplo (`servidor::prueba`): **falla en voz alta** (`panic!`) ante lo que el contrato no permite —una `Delta` que no empieza donde acabó la
+//! anterior, de un ámbito que no tiene, o un `Revocado` de un ámbito que no tenía—, que es justo lo que tiene que detectar.
 
-use contrato::v1::{self as pb, entidad::Cuerpo, mensaje_de_servidor as ms, TipoCambio, TipoCliente, TipoEntidad};
-use nucleo::proyeccion::{interior, vista};
+use crate::v1::{self as pb, entidad::Cuerpo, mensaje_de_servidor as ms, TipoCambio, TipoCliente, TipoEntidad};
 use std::collections::BTreeMap;
 
 /// La identidad de una entidad en el almacén: su clase del contrato y su id.
@@ -84,11 +87,11 @@ impl Almacen {
                         a.entidades.insert(e, datos.expect("ACTUALIZA con datos"));
                     } else {
                         let (Some(Cuerpo::Asentamiento(destino)), Some(Cuerpo::Asentamiento(parcial))) = (a.entidades.get_mut(&e), datos) else { panic!("en {k} solo la plaza viaja parcial, y sobre una que el cliente tiene: {e:?}") };
-                        interior::aplicar(destino, &parcial, &c.campos);
+                        crate::plaza::aplicar(destino, &parcial, &c.campos);
                     }
                 }
                 if let Some(x) = &d.niebla {
-                    vista::aplicar_niebla(&mut a.niebla, x);
+                    crate::niebla::aplicar_niebla(&mut a.niebla, x);
                 }
                 a.version = d.hasta;
                 self.hechos.extend(d.eventos.iter().map(|ev| (k.clone(), ev.clone())));
@@ -110,7 +113,7 @@ impl Almacen {
     /// El `Hola` de quien reanuda con lo que conserva: la versión de cada ámbito (salvo `VISTA`, que no se reanuda) y la secuencia interior de cada plaza que tiene con su interior (la de su
     /// `ASENTAMIENTO` o, en `ADMIN`, todas), con la clave `ASENTAMIENTO:as-N`.
     pub fn hola(&self, token: &str, tipo: TipoCliente) -> pb::Hola {
-        let mut h = servidor::prueba::hola(token, tipo);
+        let mut h = pb::Hola { version_protocolo: 1, cliente: tipo as i32, version_cliente: "prueba".into(), token: token.into(), partida_id: "p1".into(), ..Default::default() };
         for (k, a) in self.ambitos.iter().filter(|(k, _)| !k.starts_with("VISTA:")) {
             h.versiones_conocidas.insert(k.clone(), a.version);
             if k.starts_with("ASENTAMIENTO:") || k == "ADMIN:" {
