@@ -646,8 +646,8 @@ fn tercera_plaza(e: &mut Escenario, m: &M) -> u64 {
 #[test]
 fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada() {
     let m = con_mundo!();
-    // Sin mantenimiento por distancia (5C): al conquistarla, A (la más antigua, por id) pasa a ser la capital de F2 y B, a 1.500 u de ella, se arruinaría en hora y media; aquí se mide la
-    // flota, no la distancia.
+    // A es más antigua que B (o igual y de id menor), pero es de F2 solo desde la conquista: la capital de F2 sigue siendo B (5C-1). Sin mantenimiento por distancia, porque A, a 1.500 u de
+    // esa capital, se arruinaría en horas y se llevaría su flota; aquí se mide la flota, no la distancia (su escala se calibra en 5I, 5C-2).
     let mut reglas = sin_bandidos();
     std::sync::Arc::make_mut(&mut reglas.economia.datos).mantenimiento.escala_distancia = i64::MAX / 4;
     let mut e = montar(Nucleo::nuevo(Arranque { reglas, ..arranque(m, 7) }), m, true, 350_000, false);
@@ -687,6 +687,9 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     e.ok("gus", Comando::Atacar { heroe: heroe_gus, objetivo: nucleo::ObjetivoAtaque::Asentamiento(a), declara_guerra: true });
     tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&a].faccion, 2, "la plaza cambió de dueño");
+    let conquista = hechos(&e.n, "asentamiento.conquistada")[0].0;
+    assert!(a < b && e.n.estado().asentamientos[&a].fundado_en <= e.n.estado().asentamientos[&b].fundado_en, "por su fundación, A ganaría (la misma, y menor id)");
+    assert_eq!((e.n.estado().asentamientos[&a].de_la_faccion_desde, e.n.capital_de(2)), (conquista, Some(b)), "conquistar no cambia la capital (5C-1)");
 
     // El trueque con la plaza se anula sin penalizar; la plaza sigue y su flota pasa con ella: la suya sigue su camino.
     assert_eq!(e.n.acuerdo(tr).unwrap().estado, EstadoTrueque::Expirado);

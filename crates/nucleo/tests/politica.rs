@@ -1,6 +1,6 @@
 //! La Facción como entidad, la ciudadanía y la residencia en el núcleo (sistema 5, tanda 5B; Diplomacia_Facciones §3-§4): crear una Facción, pedir el ingreso y responderlo, el Rey y el
 //! Embajador, dejarla con la sucesión del trono (y Q7), las tres órdenes de residencia con su cooldown, los fundadores que pasan a residir, los ciudadanos de la nobleza (Q8), la proyección de
-//! la Facción y la foto `BAN28` (hoy `BAN30`). De 5C: la experiencia y el nivel derivado, la capital (`designar_capital`, la más antigua, la distancia en el mantenimiento y la Gran Fundición única),
+//! la Facción y la foto `BAN28` (hoy `BAN31`). De 5C: la experiencia y el nivel derivado, la capital (`designar_capital`, la más antigua, la distancia en el mantenimiento y la Gran Fundición única),
 //! el nombre de las plazas (`nombreDeCiudadLibre`, `renombrar_asentamiento`) y la foto que rechaza `BAN29`. Casos portados de `typescript-final:src/session/__tests__/{comandosMembresiaFaccion,comandosResidencia,faccionDeLaColumna}.test.ts` y
 //! `engine/__tests__/residenciaMercenaria.test.ts`. Sobre el artefacto de mundo real; las pruebas se omiten si no está.
 
@@ -434,18 +434,21 @@ fn mismas_ordenes_dan_el_mismo_mundo_normal_y_a_trozos_y_nada_espera_en_la_cola(
 }
 
 #[test]
-fn la_politica_viaja_en_la_foto_ban30_y_las_ban29_y_ban27_se_rechazan_con_su_motivo() {
+fn la_politica_viaja_en_la_foto_ban31_y_las_ban30_ban29_y_ban27_se_rechazan_con_su_motivo() {
     let m = con_mundo!();
     let e = guion(m, &|e, ms| e.avanzar(ms));
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN30");
+    assert_eq!(&bytes[..5], b"BAN31");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (e.n.estado().politica.clone(), e.n.hash_estado()));
     assert!(s.politica.facciones.iter().count() == 2 && s.militar.heroes.values().any(|h| h.residencia_cambiada_en.is_some()));
     let vieja = [b"BAN27".as_slice(), &bytes[5..]].concat();
     let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN27 se rechaza");
     assert!(error.0.contains("BAN27") && error.0.contains("Facciones no existen como entidad"), "{}", error.0);
+    let vieja = [b"BAN30".as_slice(), &bytes[5..]].concat();
+    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN30 se rechaza");
+    assert!(error.0.contains("BAN30") && error.0.contains("desde cuándo son de su Facción"), "{}", error.0);
     let vieja = [b"BAN29".as_slice(), &bytes[5..]].concat();
     let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN29 se rechaza");
     assert!(error.0.contains("BAN29") && error.0.contains("nombre ni marca de capital"), "{}", error.0);
@@ -588,7 +591,13 @@ fn cada_plaza_nace_con_un_nombre_libre_y_quien_reside_en_ella_lo_cambia() {
     assert_eq!((renombrado.asentamientos.clone(), renombrado.valores.clone()), (vec![a], vec![("nombre", nucleo::Dato::Texto("Micenas Alta".into()))]));
     let ficha = nucleo::proyeccion::ficha_de_asentamiento(&e.n.estado().asentamientos[&a], &[], None);
     assert_eq!(ficha.nombre.as_deref(), Some("Micenas Alta"));
-    // Vacío: la plaza se queda sin nombre.
+    // Como mucho 32 caracteres (no bytes) y único entre las plazas vivas, sin mirar tildes ni mayúsculas (5C-6).
+    let renombrar = |e: &mut E, nombre: &str| e.ord("fundador", Comando::RenombrarAsentamiento { heroe: fundador, asentamiento: a, nombre: nombre.into() });
+    assert_eq!(codigo(&renombrar(&mut e, &"x".repeat(33))), rechazos::ASENTAMIENTO_NOMBRE_LARGO);
+    assert!(renombrar(&mut e, &"á".repeat(32)).aceptada(), "32 caracteres de dos bytes caben");
+    let otra = nb.to_uppercase();
+    assert_eq!(codigo(&renombrar(&mut e, &otra)), rechazos::ASENTAMIENTO_NOMBRE_DUPLICADO, "{otra}: el de B, en mayúsculas");
+    // Vacío: la plaza se queda sin nombre (y dos plazas sin nombre no chocan).
     e.ok("fundador", Comando::RenombrarAsentamiento { heroe: fundador, asentamiento: a, nombre: "   ".into() });
     assert_eq!(nucleo::proyeccion::ficha_de_asentamiento(&e.n.estado().asentamientos[&a], &[], None).nombre, None);
 }

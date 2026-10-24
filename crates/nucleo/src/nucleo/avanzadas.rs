@@ -730,6 +730,7 @@ impl Nucleo {
         let mut datos = vec![("avanzada", x as i64), ("etapa", etapa.indice() as i64), ("faccionAtacante", yo as i64), ("faccionDefensora", faccion_madre as i64)];
         let mut chatarra = Mercancia::new();
         if let Asedio::Combate(i) = &resultado {
+            self.experiencia_de_combate(t, i);
             chatarra = i.chatarra.clone();
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }

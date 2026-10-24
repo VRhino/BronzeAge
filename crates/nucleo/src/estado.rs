@@ -60,6 +60,11 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN31: BAN30 con las correcciones del autor a 5C y la diplomacia de 5D (sistema 5): cada plaza guarda desde cuándo es de su Facción (`de_la_faccion_desde`, 5C-1: la capital
+/// efectiva es la que lleva más tiempo en la Facción), el resto oculto de su tributo (`resto_tributo`, Q3) y si abre su almacén a los aliados (`permite_reabastecer_aliados`); las
+/// relaciones dejan el mapa de pares del andamiaje (`EstadoMilitar::relaciones`) y viven solo en `Estado::politica` (con dirección, estado, fechas, tributo y su historia), y las propuestas
+/// de relación, con ellas. BAN30 se rechaza: sus plazas no dicen desde cuándo son de su Facción y sus relaciones no tienen dirección (no se sabe quién es la señora ni quién declaró).
+///
 /// BAN30: BAN29 con la experiencia, la capital y el nombre de las plazas (sistema 5, tanda 5C): cada plaza guarda su nombre (`nombreDeCiudadLibre` al fundar, `RenombrarAsentamiento`) y
 /// la marca de capital que deja `DesignarCapital` (`capital_de`); el nivel de Facción ya no se guarda suelto (`niveles_faccion` desaparece: se deriva de la experiencia de la Facción) y
 /// las reglas del territorio pierden el cap de fundación por nivel (lo da `politica::nivel::cap_fundacion`). BAN29 se rechaza: sus plazas no traen nombre ni marca de capital y su
@@ -139,7 +144,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN30";
+const MAGIA: &[u8; 5] = b"BAN31";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -346,6 +351,9 @@ pub struct Asentamiento {
     pub nombre: String,
     /// `capitalDeFaccionId`: la marca que deja `DesignarCapital` (5C). Sobrevive a un cambio de dueño, y entonces no vale (Diplomacia_Facciones §3.7).
     pub capital_de: Option<u32>,
+    /// Desde cuándo es de su Facción (5C-1, decisión del autor del 2026-10-24): al fundarla, su fundación; al conquistarla, el instante de la conquista. La capital efectiva sin
+    /// designar es la plaza que lleva más tiempo en la Facción, así que conquistar una plaza más antigua no cambia la capital.
+    pub de_la_faccion_desde: Instante,
 }
 
 impl Asentamiento {
@@ -936,6 +944,7 @@ impl Estado {
             w.bool(a.acceso.enemigos);
             w.texto(&a.nombre);
             w.opt_u64(a.capital_de.map(u64::from));
+            w.i64(a.de_la_faccion_desde);
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -1036,12 +1045,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN30`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 30 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN31`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 31 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'0' => {}
+                b'1' => {}
+                b'0' => return Err(ErrorFormato("foto del formato BAN30 (las plazas no dicen desde cuándo son de su Facción ni traen el resto de su tributo, y las relaciones son pares sin dirección del andamiaje de administración): ya no se admite")),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN2" {
@@ -1127,7 +1137,7 @@ impl Estado {
             let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r, asentamiento::recintos::proyeccion(&economia.recintos))?);
             let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
             let acceso = Acceso { aliados: r.bool()?, neutrales: r.bool()?, enemigos: r.bool()? };
-            let (nombre, capital_de) = (r.texto()?, r.opt_u64()?.map(|f| f as u32));
+            let (nombre, capital_de, de_la_faccion_desde) = (r.texto()?, r.opt_u64()?.map(|f| f as u32), r.i64()?);
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -1136,7 +1146,7 @@ impl Estado {
             for p in &economia.pueblos {
                 s.nodos_reclamados.insert(p.nodo, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, acceso, nombre, capital_de });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, acceso, nombre, capital_de, de_la_faccion_desde });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;

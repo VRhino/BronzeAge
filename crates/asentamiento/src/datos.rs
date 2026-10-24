@@ -160,6 +160,8 @@ pub struct Reglas {
     pub viviendas_iniciales: u32,
     /// `FUNDACION.maxJugadoresFundacionGrupal`: cuántos héroes de la columna pasan a residir en la plaza que fundan (Fundacion_Y_Refundacion §5).
     pub max_fundadores: usize,
+    /// `NOMBRE_ASENTAMIENTO.largoMaximo`: el nombre de una plaza, como mucho tantos caracteres (5C-6, decisión del autor del 2026-10-24).
+    pub largo_maximo_nombre: usize,
 }
 
 impl Reglas {
@@ -233,6 +235,7 @@ impl Reglas {
             materiales_iniciales,
             viviendas_iniciales: fundacion["viviendasIniciales"].as_u64().expect("viviendasIniciales") as u32,
             max_fundadores: fundacion["maxJugadoresFundacionGrupal"].as_u64().expect("maxJugadoresFundacionGrupal") as usize,
+            largo_maximo_nombre: b("NOMBRE_ASENTAMIENTO")["largoMaximo"].as_u64().expect("largoMaximo") as usize,
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),

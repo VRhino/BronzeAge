@@ -476,6 +476,7 @@ impl Nucleo {
         }
         let defensa = if con_escolta { Defensa::Escolta(&mut escolta) } else { Defensa::Base };
         let r = asalto::resolver_asalto(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, defensa, modalidad, &mut self.estado.rng).expect("la columna lleva al menos un héroe sano");
+        self.experiencia_de_asalto(t, &atac.heroes, r.poder_atacante, r.defensa);
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&escolta);
 
@@ -783,6 +784,7 @@ impl Nucleo {
         let (gana, informe): (bool, Option<Informe>) = if defensa.iter().any(Escuadra::con_soldados) {
             let i = reglas_pueblo::resolver_saqueo(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa, heroes: &dentro.tropa.heroes }, &mut self.estado.rng)
                 .expect("los dos bandos tienen quién combata");
+            self.experiencia_de_combate(t, &i);
             (i.ganador == Lado::Atacante, Some(i))
         } else {
             (true, None)

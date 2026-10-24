@@ -512,4 +512,11 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `capital.sin_palacio` | `CAPITAL_SIN_PALACIO` | La plaza no tiene un Palacio activo. |
 | `capital.ya_es_la_capital` | `CAPITAL_YA_ES_LA_CAPITAL` | La plaza ya es la capital (efectiva) de la Facción. |
 | `capital.cooldown` | `CAPITAL_COOLDOWN` | La capital designada sigue en pie y no han pasado `CAPITAL.cooldownDias` desde que se designó. |
+
+### El nombre de la plaza (correcciones del autor a 5C, 5C-6)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `asentamiento.nombre_largo` | `ASENTAMIENTO_NOMBRE_LARGO` | El nombre recortado pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres. |
+| `asentamiento.nombre_duplicado` | `ASENTAMIENTO_NOMBRE_DUPLICADO` | Otra plaza viva ya se llama así (sin mirar tildes ni mayúsculas). |
 <!-- /rechazos -->

@@ -1013,12 +1013,15 @@ impl Nucleo {
         self.herir_heroes(&efectos.heridos, t);
         // 4-5. Consecuencias según el contexto y chatarra de los caídos.
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
-        // La experiencia de Facción: por cada héroe que participó, a la Facción con la que entró (la del ticket), sin filtro de dignidad (5C).
+        // La experiencia de Facción: por cada héroe que participó, a la Facción con la que entró (la del ticket), sin filtro de dignidad (5C). Contra un campamento de bandidos, solo la
+        // de bandidos al destruirlo (5C-4, decisión del autor del 2026-10-24): el mismo premio con Unity que con números.
         let participo = |h: u64| res.por_heroe.iter().any(|x| x.heroe == h && x.participo);
         let mut por_faccion = std::collections::BTreeMap::new();
-        for p in [Lado::Atacante, Lado::Defensor].into_iter().flat_map(|l| self.participantes_del_lado(&b, l)) {
-            if let Some(f) = p.faccion.filter(|_| participo(p.heroe)) {
-                *por_faccion.entry(f).or_insert(0u32) += 1;
+        if !matches!(b.ticket.contexto, Contexto::CampamentoBandidos { .. }) {
+            for p in [Lado::Atacante, Lado::Defensor].into_iter().flat_map(|l| self.participantes_del_lado(&b, l)) {
+                if let Some(f) = p.faccion.filter(|_| participo(p.heroe)) {
+                    *por_faccion.entry(f).or_insert(0u32) += 1;
+                }
             }
         }
         self.experiencia_de_batalla(t, por_faccion);

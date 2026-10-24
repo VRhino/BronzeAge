@@ -91,6 +91,8 @@ impl Nucleo {
             let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");
             a.faccion = conquistador;
             a.acceso = Acceso::default();
+            // Es del conquistador desde ahora: para la capital efectiva cuenta este instante, no su fundación (5C-1).
+            a.de_la_faccion_desde = t;
             // La marca de capital sobrevive al cambio de dueño y deja de valer (Diplomacia_Facciones §3.7).
             let c = aplicar_conquista(&cr, &datos, &mut a.economia, t);
             (a.protegida_hasta, a.ocupada_hasta) = (Some(c.protegida_hasta), Some(c.ocupacion_hasta));

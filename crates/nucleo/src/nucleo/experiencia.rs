@@ -76,15 +76,25 @@ impl Nucleo {
         self.dar_experiencia(t, faccion, delta, motivo);
     }
 
-    /// Un combate con números (columna contra columna o asedio): si fue digno, a la Facción de cada héroe que combatió, `combate` por héroe (§3.5; el TypeScript daba a la del bando,
-    /// que con números es la misma).
+    /// Un combate con números, **sea cual sea el objetivo** (5C-3, decisión del autor del 2026-10-24: columna contra columna, asedio, saqueo de un pueblo y ataque a una avanzada, que
+    /// resuelven con un `Informe`): si fue digno, a la Facción de cada héroe que combatió, `combate` por héroe (§3.5; el TypeScript daba a la del bando, que con números es la misma).
     pub(super) fn experiencia_de_combate(&mut self, t: Instante, informe: &combate::resolucion::Informe) {
         let ratio = self.estado.reglas.economia.politica.nivel.ratio_combate_digno;
-        if !informe.digno(ratio) {
-            return;
+        let heroes = informe.atacante.heroes.iter().chain(&informe.defensor.heroes).copied().collect();
+        self.experiencia_si_digno(t, informe.digno(ratio), heroes);
+    }
+
+    /// El asalto a una caravana con números (5C-3): digno si el poder del más débil llega a `ratioCombateDigno` del del más fuerte (`politica::nivel::combate_digno`, el poder del atacante contra
+    /// la defensa de la caravana). La caravana no lleva héroes: solo ganan los del atacante.
+    pub(super) fn experiencia_de_asalto(&mut self, t: Instante, heroes: &[u64], poder_atacante: Mil, defensa: Mil) {
+        let digno = reglas_nivel::combate_digno(&self.estado.reglas.economia.politica.nivel, poder_atacante, defensa);
+        self.experiencia_si_digno(t, digno, heroes.to_vec());
+    }
+
+    fn experiencia_si_digno(&mut self, t: Instante, digno: bool, heroes: Vec<u64>) {
+        if digno {
+            self.experiencia_por_heroes(t, heroes, |heroes| Hecho::Combate { heroes, digno: true }, motivo::COMBATE);
         }
-        let heroes = informe.atacante.heroes.iter().chain(&informe.defensor.heroes).copied();
-        self.experiencia_por_heroes(t, heroes.collect(), |heroes| Hecho::Combate { heroes, digno: true }, motivo::COMBATE);
     }
 
     /// Una batalla de Unity: a la Facción de cada héroe que participó (la del ticket), `combate` por héroe, sin filtro de dignidad (§3.5, `resultadoBatalla.ts`).
@@ -127,7 +137,7 @@ impl Nucleo {
         self.plazas_de(faccion).map(move |a| PlazaDeCapital {
             id: a.id as u32,
             faccion,
-            fundada_en: a.fundado_en,
+            desde: a.de_la_faccion_desde,
             palacio_activo: (todas || a.capital_de == Some(faccion)) && a.economia.edificios.activos(Tipo::Palacio) > 0,
             marca: a.capital_de,
         })
@@ -199,12 +209,20 @@ impl Nucleo {
                 if !(Actor { yo: *heroe, politica: &self.estado.politica, vista: self }).residente(*asentamiento as u32) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "solo quien reside en la plaza le cambia el nombre".into()));
                 }
-                // DUDA: sin largo máximo ni caracteres prohibidos, como el TypeScript (solo se recorta); dos plazas pueden llamarse igual si se renombran.
+                // 5C-6 (decisión del autor del 2026-10-24): recortado, como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres y único entre las plazas vivas (sin tildes ni mayúsculas).
                 let limpio = nombre.trim().to_owned();
-                let a = self.estado.asentamientos.get_mut(asentamiento).expect("existe");
-                if a.nombre == limpio {
+                if self.estado.asentamientos[asentamiento].nombre == limpio {
                     return Err(Respuesta::sin_cambios(v));
                 }
+                let largo = self.estado.reglas.economia.datos.largo_maximo_nombre;
+                if limpio.chars().count() > largo {
+                    return Err(rechazo(rechazos::ASENTAMIENTO_NOMBRE_LARGO, format!("el nombre de una plaza tiene como mucho {largo} caracteres")));
+                }
+                let normal = politica::nombres::normalizar(&limpio);
+                if !limpio.is_empty() && self.estado.asentamientos.values().any(|o| o.id != *asentamiento && politica::nombres::normalizar(&o.nombre) == normal) {
+                    return Err(rechazo(rechazos::ASENTAMIENTO_NOMBRE_DUPLICADO, "otra plaza ya se llama así".into()));
+                }
+                let a = self.estado.asentamientos.get_mut(asentamiento).expect("existe");
                 a.nombre = limpio.clone();
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 let punto = Some(a.posicion);

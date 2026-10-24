@@ -353,7 +353,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN30");
+    assert_eq!(&bytes[..5], b"BAN31");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -870,6 +870,10 @@ fn una_caravana_atacada_dentro_de_su_zona_es_un_aguante_pierde_el_70_por_ciento_
     assert_eq!((dato(h, "caravana"), dato(h, "aguante"), dato(h, "carros"), dato(h, "destruida")), (ca as i64, 1, 1, 0));
     assert!(dato(h, "poderAtacante") > dato(h, "defensa"), "la escolta de milicia, con la ventaja del aguante, no basta");
     assert_eq!(h.2, vec![a]);
+    // Asaltar una caravana también da experiencia de Facción si fue digno (5C-3): 2,5 al héroe atacante; la caravana no lleva héroes.
+    let (pa, pd) = (dato(h, "poderAtacante"), dato(h, "defensa"));
+    let combate: Vec<(i64, i64)> = hechos(&e.n, "faccion.experiencia").iter().filter(|x| dato(x, "motivo") == 2).map(|x| (dato(x, "faccion"), dato(x, "cantidad"))).collect();
+    assert_eq!(combate, if pa.min(pd) as i128 * 2 >= pa.max(pd) as i128 { vec![(2, 2_500)] } else { vec![] }, "poderes {pa} y {pd}");
     // El dueño pierde la mitad de los carros y el 70 % de la carga; el 30 % se salva; el atacante se lleva el 70 %.
     let k = e.n.caravana(ca).unwrap();
     assert_eq!((k.carros.len(), k.contenido[&Cobre]), (1, 30_000));
@@ -1049,6 +1053,10 @@ fn saquear_un_pueblo_se_lleva_lo_que_hay_por_encima_de_la_mitad_y_la_guarnicion_
     // El atacante se lleva solo lo que está por encima de la mitad; el pueblo conserva la mitad protegida; no cambia de dueño.
     let h = &hechos(&e.n, "combate.pueblo_saqueado")[0];
     assert_eq!((dato(h, "pueblo"), h.2.clone()), (pueblo as i64, vec![madre]));
+    // Saquear un pueblo también da experiencia de Facción si fue digno (5C-3): los mineros no son de nadie, así que solo gana la del saqueador.
+    let (pa, pd) = (dato(h, "poderAtacante"), dato(h, "poderDefensor"));
+    let combate: Vec<(i64, i64)> = hechos(&e.n, "faccion.experiencia").iter().filter(|x| dato(x, "motivo") == 2).map(|x| (dato(x, "faccion"), dato(x, "cantidad"))).collect();
+    assert_eq!(combate, if pa.min(pd) as i128 * 2 >= pa.max(pd) as i128 { vec![(2, 2_500)] } else { vec![] }, "poderes {pa} y {pd}");
     assert_eq!(dato(h, "saqueado"), guardado - 250_000);
     assert_eq!(e.n.pueblo(pueblo).unwrap().1.almacen.cantidad(Cobre), 250_000);
     assert_eq!(e.carga_de_columna(saqueador.0, Cobre), guardado - 250_000);

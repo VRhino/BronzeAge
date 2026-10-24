@@ -336,7 +336,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
 | `designar_capital` | `DesignarCapital` | la cuenta del héroe, Rey de la Facción | la Facción existe (`faccion.no_existe`); una plaza suya (`capital.plaza_ajena`) con Palacio activo (`capital.sin_palacio`) que no es ya la capital (`capital.ya_es_la_capital`); con la designada en pie, `CAPITAL.cooldownDias` (`capital.cooldown`) |
-| `renombrar_asentamiento` | `RenombrarAsentamiento` | la cuenta del héroe, residente de la plaza | basta residir (§5.2.4); el nombre se recorta y vacío deja la plaza sin nombre |
+| `renombrar_asentamiento` | `RenombrarAsentamiento` | la cuenta del héroe, residente de la plaza | basta residir (§5.2.4); el nombre se recorta y vacío deja la plaza sin nombre; como mucho 32 caracteres (`asentamiento.nombre_largo`) y único entre las plazas vivas (`asentamiento.nombre_duplicado`, 5C-6) |
 
 **Administración y servidor de batalla**
 

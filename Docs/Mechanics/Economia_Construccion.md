@@ -560,12 +560,22 @@ Los factores se **multiplican** entre las políticas activas del asentamiento (`
 | `alternarAutoConstruccion { asentamientoId, pausada }` | gobernador o maestroObras | Idempotente. `construccion.auto_alternada` |
 | `alternarReceta { asentamientoId, recurso, pausada }` | gobernador o maestroObras | Idempotente. `construccion.receta_alternada` |
 | `calibrarReservaManual { asentamientoId, recurso, valor }` | `tesorero` (y debe haber uno) | `reservaManual[recurso] = clamp(round(valor), 0, NECESIDADES.reservaManualMaxima)`. Sin evento |
-| `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre vacío = volver a mostrar el id. `asentamiento.renombrado` (en Rust desde 5C: `RenombrarAsentamiento`, 143) |
+| `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre recortado; vacío = volver a mostrar el id. Como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (`asentamiento.nombre_largo`) y **único** entre las plazas vivas del mundo, sin mirar tildes ni mayúsculas (`asentamiento.nombre_duplicado`) (5C-6, decisión del autor del 2026-10-24). `asentamiento.renombrado` (en Rust desde 5C: `RenombrarAsentamiento`, 143) |
 | `solicitarAscenso { asentamientoId }` | `gobernador` | §11.2. Error `ascenso.invalido` con todos los bloqueos |
 
 > **Implementado en Rust (2026-10-23, 4H T5).** `AlternarAutoConstruccion` emite `construccion.auto_alternada { pausada }`, `AlternarReceta` `construccion.receta_alternada { recurso, pausada }` (el recurso por su índice) y `MejorarEdificio` (`mejorarEdificioAhora`) `construccion.mejora_forzada { edificio }` antes de su `construccion.mejora_iniciada`; los oyen la Facción de la plaza y quien está dentro. Sigue sin emitirse `construccion.yacimiento_agotado` (los yacimientos no se agotan en Rust) ni `asentamiento.renombrado` (sistema 5).
 
 La pausa de la auto-construcción detiene solo la **detección de necesidades nuevas** (§6.2); lo ya pagado, las mejoras automáticas, las recetas y la obra de recintos siguen.
+
+> **Implementado en Rust (2026-10-24, correcciones de 5C):** `RenombrarAsentamiento` rechaza un nombre de más de `largoMaximo` caracteres (contados como caracteres, no bytes, tras recortar) con `asentamiento.nombre_largo` y uno que ya lleve otra plaza viva (comparado con `politica::nombres::normalizar`, sin tildes ni mayúsculas, como los nombres de la lista) con `asentamiento.nombre_duplicado`. La plaza que se llama así ya no cuenta contra sí misma.
+
+<!-- parametros:NOMBRE_ASENTAMIENTO -->
+```json
+{
+  "largoMaximo": 32
+}
+```
+<!-- /parametros -->
 
 ## 14. Parámetros
 

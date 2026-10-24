@@ -160,6 +160,10 @@ Decisiones del autor sobre `crates/batch/decisiones/{militar,poblacion,comercio}
 
 Cerradas como regla y sin medida pendiente: el choque en campo abierto conserva la cohesión y el ×1,05 del defensor (M3, `Combate.md` §14), reclutar gasta la población que pide el ascenso (M9, `Heroe_Y_Tropa.md` §14) y el ganado se deja como está (P5).
 
+## 48. Distancia a la capital: la escala del mantenimiento (5C-2, 2026-10-24)
+
+Desde 5C el mantenimiento de una plaza sube con su distancia a la capital de su Facción: `× (1 + distancia / escalaDistancia)`, con `escalaDistancia` = 80 u (`Economia_Construccion.md` §10.1). A 80 u paga el doble; a 300 u, ×4,75; a 1.000 u, ×13,5 y cae en ruinas en un día. **Decisión del autor del 2026-10-24 (5C-2): sin cambio ahora; se calibra en 5I, con el batch político.** Lo que dio `batch comercio` (160 plazas pedidas, 146 colocadas, 30 días, semilla 42; Facciones de seis plazas a 30-70 u unas de otras, nivel 8, cap 6): plazas vivas al final 146 → 140, comprobaciones de ascenso insolventes 0 → 3.319, plazas en nivel 2 al final 114 → 108, trueques cumplidos 136 → 125, caravanas 390 → 338 (8 perdidas por plazas arruinadas), el acarreo pasa del 2,0 % al 9,8 % de la solvencia. Desde las correcciones de 5C (5C-1), conquistar una plaza no cambia la capital del conquistador: la conquistada, si queda lejos de ella, paga la distancia (en la prueba de la flota, a 1.500 u, cae en horas). Medir en 5I, con Facciones de bots que funden y conquisten de verdad, cuánto se puede alejar una plaza de su capital antes de no poder pagarse.
+
 ## 30. El batch no ejercita la guerra
 
 Con 30 bots, semilla 7, 120 960 ticks (y 60 480 con trigo ×3) el batch sale idéntico antes y después del trabajo de batallas del 2026-10-06, con cero campañas: los bots no hacen la guerra con este equilibrio, así que persecución, botín repartido, salidas y formación de ejércitos solo los cubren los tests. Para medirlos haría falta un checkpoint de Era II en adelante (los guardados hoy son del formato 1) o bots más belicosos. Ficha: `typescript-final:Consideraciones/Batalla_Este_Lado_Definicion.md`.

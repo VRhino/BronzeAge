@@ -100,7 +100,7 @@ calcularNivelFaccion = 1 + (cuántos umbrales de NIVEL_FACCION.xpParaNivel han a
 
 `experiencia` solo sube (`aplicarAjustesExperiencia` ignora lo ≤ 0). Quien da la experiencia (`aplicarExperiencia`) sube el nivel **en el mismo momento** (evento `faccion.nivel_subio`); el resto se recalcula al ocurrir el hecho
 (construcción, ascensos). El nivel de una Facción que nace de una fusión se calcula al nacer. Qué hecho da experiencia lo cuenta cada sistema; la cuantía es el bloque `NIVEL_FACCION` de abajo (cifras de
-`typescript-final:src/constants.ts`, `NIVEL_FACCION`, las del canon Doc 2.2.1): `combate` por héroe participante y solo si el combate es digno (`ratioCombateDigno`; en Unity sin filtro),
+`typescript-final:src/constants.ts`, `NIVEL_FACCION`, las del canon Doc 2.2.1): `combate` por héroe participante y solo si el combate es digno (`ratioCombateDigno`; en Unity sin filtro), **sea cual sea el objetivo** con números (5C-3: también saquear un pueblo, atacar una avanzada y asaltar una caravana; una batalla de Unity contra bandidos no da la de combate, solo la de bandidos, 5C-4),
 `edificioCompletado` por edificio, `conquista` por plaza conquistada, `ascensoPorNivel` × el nivel alcanzado, `fundacion` por plaza fundada que no sea la primera de la Facción, `truequeCumplido` a cada
 lado de un trueque entre Facciones distintas, y `bandidos` por campamento destruido (no por héroe) dividido por el nivel de la Facción y 0 desde `nivelSinXpBandidos`.
 - **Cap de fundación** (`calcularCapFundacion(nivel)`) = `CAP_FUNDACION_POR_NIVEL[min(10, nivel) − 1]`.
@@ -145,7 +145,9 @@ señora) · rebelión de un vasallo (− a la señora) · atacar a un aliado (�
 
 El Rey designa una plaza **propia con Palacio activo** que no sea ya la capital. Si había una capital **designada vigente** (es de la Facción y conserva un Palacio activo), hay que esperar `CAPITAL.cooldownDias` días
 desde `capitalDesignadaEn`; si se perdió, no hay cooldown. Efecto: `capitalDesignadaEn = ahora`; solo esa plaza lleva `capitalDeFaccionId = faccionId` (se quita de las demás). **La capital efectiva**
-(`encontrarCapital`): la designada vigente, o si no, el asentamiento vivo **más antiguo** (`fundadoEn` menor) de la Facción.
+(`encontrarCapital`): la designada vigente, o si no, el asentamiento vivo que lleva **más tiempo en la Facción** (5C-1, decisión del autor del 2026-10-24: desde que es suyo, no desde su fundación; a igual instante, el id menor). Conquistar una plaza más antigua que las propias **no cambia la capital**: es del conquistador desde la conquista.
+
+> **Correcciones del autor a 5C (2026-10-24, en Rust):** cada plaza guarda `de_la_faccion_desde` (al fundarla, su fundación; al conquistarla, el instante de la conquista; foto `BAN31`), y es lo que mira `politica::capital::efectiva` (`PlazaDeCapital::desde`). La escala de la distancia a la capital (`escalaDistancia` = 80 u) se calibra en 5I (5C-2, `Docs/Mecanicas a balancear.md`). Prueba: `tests/caravanas.rs::la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada` (la capital de quien conquista sigue siendo la suya).
 
 ### 3.8 Sigilo
 

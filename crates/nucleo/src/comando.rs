@@ -2462,6 +2462,11 @@ pub mod rechazos {
     pub const CAPITAL_YA_ES_LA_CAPITAL: &str = "capital.ya_es_la_capital";
     /// La capital designada sigue en pie y no han pasado `CAPITAL.cooldownDias` desde que se designó.
     pub const CAPITAL_COOLDOWN: &str = "capital.cooldown";
+    // El nombre de la plaza (correcciones del autor a 5C, 5C-6).
+    /// El nombre recortado pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres.
+    pub const ASENTAMIENTO_NOMBRE_LARGO: &str = "asentamiento.nombre_largo";
+    /// Otra plaza viva ya se llama así (sin mirar tildes ni mayúsculas).
+    pub const ASENTAMIENTO_NOMBRE_DUPLICADO: &str = "asentamiento.nombre_duplicado";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).

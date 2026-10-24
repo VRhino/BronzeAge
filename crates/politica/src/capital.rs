@@ -11,7 +11,8 @@ use base::Instante;
 pub struct PlazaDeCapital {
     pub id: AsentamientoId,
     pub faccion: FaccionId,
-    pub fundada_en: Instante,
+    /// Desde cuándo es de la Facción (5C-1, 2026-10-24): la fundación o, si la conquistó, la conquista. La más antigua en la Facción es la capital sin designar.
+    pub desde: Instante,
     pub palacio_activo: bool,
     /// `capitalDeFaccionId`: la marca que deja `designarCapital`. Sobrevive a un cambio de dueño (y entonces no vale).
     pub marca: Option<FaccionId>,
@@ -32,13 +33,13 @@ pub fn designada(f: FaccionId, plazas: impl IntoIterator<Item = PlazaDeCapital>)
     plazas.into_iter().find(|p| p.faccion == f && p.marca == Some(f) && p.palacio_activo).map(|p| p.id)
 }
 
-/// `encontrarCapital`: la designada vigente o la plaza más antigua de la Facción (a igual fundación, el id menor).
+/// `encontrarCapital`: la designada vigente o la plaza que lleva más tiempo en la Facción (a igual instante, el id menor; 5C-1).
 /// Las plazas llegan por un iterador (el paso de minuto las saca del núcleo sin reservar memoria).
 pub fn efectiva<I>(f: FaccionId, plazas: I) -> Option<AsentamientoId>
 where
     I: IntoIterator<Item = PlazaDeCapital> + Clone,
 {
-    designada(f, plazas.clone()).or_else(|| plazas.into_iter().filter(|p| p.faccion == f).min_by_key(|p| (p.fundada_en, p.id)).map(|p| p.id))
+    designada(f, plazas.clone()).or_else(|| plazas.into_iter().filter(|p| p.faccion == f).min_by_key(|p| (p.desde, p.id)).map(|p| p.id))
 }
 
 /// `designarCapital`: una plaza propia con Palacio activo que no sea ya la capital, y el cooldown si la designada sigue vigente. Anota `capital_designada_en`
@@ -75,8 +76,8 @@ mod pruebas {
     use crate::faccion::pruebas::con_faccion;
     use crate::faccion::Facciones;
 
-    fn plaza(id: AsentamientoId, fundada_en: Instante, palacio: bool) -> PlazaDeCapital {
-        PlazaDeCapital { id, faccion: 1, fundada_en, palacio_activo: palacio, marca: None }
+    fn plaza(id: AsentamientoId, desde: Instante, palacio: bool) -> PlazaDeCapital {
+        PlazaDeCapital { id, faccion: 1, desde, palacio_activo: palacio, marca: None }
     }
     const VIEJA: AsentamientoId = 1;
     const NUEVA: AsentamientoId = 2;
