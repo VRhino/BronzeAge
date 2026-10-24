@@ -83,6 +83,17 @@ pub struct InformeViabilidad {
     pub condenada: bool,
 }
 
+/// Lo que cuenta el aviso de viabilidad: parcelas libres en la zona `nuevo`, piedra en esa zona y las parcelas libres en la zona
+/// `techo`, ambas recortadas por `tocan`. Solo mira lo que la rejilla del mapa da dentro de los discos (`en_zona` exige estar en el
+/// disco), así que cuenta lo mismo que recorrer el mapa entero.
+fn contar_sitio<'m>(mapa: &'m Mapa, nuevo: &Disco, techo: &Disco, tocan: &[Disco], libre: impl Fn(u32) -> bool) -> (usize, usize, Vec<&'m territorio::Parcela>) {
+    let libres: Vec<&territorio::Parcela> = mapa.parcelas_en(nuevo.centro, nuevo.radio.max(techo.radio)).into_iter().filter(|&i| libre(i)).map(|i| &mapa.parcelas[i as usize]).collect();
+    let parcelas_libres = libres.iter().filter(|pa| territorio::en_zona(pa.centro, nuevo, tocan)).count();
+    let piedra = mapa.piedra_en(nuevo.centro, nuevo.radio).into_iter().filter(|&n| territorio::en_zona(mapa.nodos[n as usize].pos, nuevo, tocan)).count();
+    let en_techo = libres.into_iter().filter(|pa| territorio::en_zona(pa.centro, techo, tocan)).collect();
+    (parcelas_libres, piedra, en_techo)
+}
+
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
 
@@ -147,16 +158,11 @@ impl Nucleo {
         let geo = self.geografia.as_ref()?;
         let motivo = self.validar_fundacion(geo, p).err();
         let nuevo = Disco { centro: p, radio: self.estado.reglas.territorio.radio_inicial, faccion };
-        // La zona con la que nacería: el círculo inicial recortado contra las plazas de otras Facciones.
-        let vecinos: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
-        let tocan: Vec<Disco> = vecinos.into_iter().filter(|d| territorio::se_tocan(&nuevo, d)).collect();
-        let en_zona = |c: Punto| territorio::en_zona(c, &nuevo, &tocan);
-        let parcelas_libres = geo.mapa.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_zona(pa.centro)).count();
-        let piedra = geo.mapa.nodos.iter().filter(|n| n.tipo == asentamiento::Tipo::Cantera && en_zona(n.pos)).count();
         // El mismo cálculo con el disco que alcanzará la zona en el nivel 1.
         let techo = Disco { radio: self.estado.reglas.territorio.techo(1), ..nuevo };
-        let en_techo = |c: Punto| territorio::en_zona(c, &techo, &tocan);
-        let libres_en_techo: Vec<&territorio::Parcela> = geo.mapa.parcelas.iter().enumerate().filter(|(i, pa)| !self.estado.parcelas_ocupadas.contains_key(&(*i as u32)) && en_techo(pa.centro)).map(|(_, pa)| pa).collect();
+        // La zona con la que nacería: el círculo inicial recortado contra las plazas de otras Facciones.
+        let tocan: Vec<Disco> = self.estado.asentamientos.values().map(|a| self.disco_de(a)).filter(|d| territorio::se_tocan(&nuevo, d)).collect();
+        let (parcelas_libres, piedra, libres_en_techo) = contar_sitio(&geo.mapa, &nuevo, &techo, &tocan, |i| !self.estado.parcelas_ocupadas.contains_key(&i));
         let parcelas_en_techo = libres_en_techo.len();
         let base_lenera = self.estado.reglas.economia.datos.catalogo.tipo(asentamiento::Tipo::Lenera).produccion.map_or(0, |(_, b)| b);
         let madera_potencial = base_lenera * libres_en_techo.iter().map(|pa| pa.densidad as Mil).sum::<Mil>() / 1000;
@@ -371,5 +377,42 @@ impl Nucleo {
         });
         self.contactos_nuevos(id, t);
         Ok(Some(id))
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+    use crate::economia::NodoMapa;
+    use asentamiento::Tipo;
+    use base::Rng;
+    use territorio::Parcela;
+
+    /// La rejilla cuenta lo mismo que recorrer el mapa entero (como hacía `viabilidad` hasta el 2026-10-24), en mundos al azar.
+    #[test]
+    fn la_rejilla_cuenta_lo_mismo_que_el_recorrido_lineal() {
+        let mut rng = Rng::nuevo(2026_10_24);
+        for _ in 0..15 {
+            let (ancho, alto) = (100_000 + rng.por_debajo(400_000) as i64, 100_000 + rng.por_debajo(400_000) as i64);
+            let punto = |rng: &mut Rng| Punto::new(rng.por_debajo(ancho as u64 + 40_000) as i64 - 20_000, rng.por_debajo(alto as u64 + 40_000) as i64 - 20_000);
+            let parcelas: Vec<Parcela> = (0..2000).map(|_| Parcela { bosque: rng.por_debajo(3) as u32, centro: punto(&mut rng), densidad: rng.por_debajo(1001) as u32 }).collect();
+            let tipos = [Tipo::Cantera, Tipo::Corral, Tipo::Mina];
+            let nodos: Vec<NodoMapa> = (0..600).map(|_| NodoMapa { pos: punto(&mut rng), tipo: tipos[rng.por_debajo(3) as usize], inicial: 1000 }).collect();
+            let mapa = Mapa::nuevo(nodos, parcelas, vec![0; 3], vec![], ancho, alto);
+            let ocupadas: BTreeSet<u32> = (0..500).map(|_| rng.por_debajo(2000) as u32).collect();
+            let plazas: Vec<Disco> = (0..60).map(|_| Disco { centro: punto(&mut rng), radio: 6_000 + rng.por_debajo(24_001) as i64, faccion: 1 + rng.por_debajo(4) as u32 }).collect();
+            for _ in 0..300 {
+                let nuevo = Disco { centro: punto(&mut rng), radio: 6_000, faccion: 1 + rng.por_debajo(4) as u32 };
+                let techo = Disco { radio: 10_000, ..nuevo };
+                let tocan: Vec<Disco> = plazas.iter().copied().filter(|d| territorio::se_tocan(&nuevo, d)).collect();
+                let libre = |i: u32| !ocupadas.contains(&i);
+                let lineal_libres = mapa.parcelas.iter().enumerate().filter(|(i, pa)| libre(*i as u32) && territorio::en_zona(pa.centro, &nuevo, &tocan)).count();
+                let lineal_piedra = mapa.nodos.iter().filter(|n| n.tipo == Tipo::Cantera && territorio::en_zona(n.pos, &nuevo, &tocan)).count();
+                let lineal_techo: Vec<&Parcela> = mapa.parcelas.iter().enumerate().filter(|(i, pa)| libre(*i as u32) && territorio::en_zona(pa.centro, &techo, &tocan)).map(|(_, pa)| pa).collect();
+                let (libres, piedra, en_techo) = contar_sitio(&mapa, &nuevo, &techo, &tocan, libre);
+                assert_eq!((libres, piedra), (lineal_libres, lineal_piedra));
+                assert_eq!(en_techo, lineal_techo, "mismas parcelas y en el mismo orden");
+            }
+        }
     }
 }

@@ -52,8 +52,11 @@ impl Rejilla {
 
     /// Ids cuyo punto está a `radio` o menos de `centro`, en orden ascendente de id.
     fn en_disco(&self, centro: Punto, radio: Mil, posicion: impl Fn(u32) -> Punto) -> Vec<u32> {
-        let (c0, c1) = (((centro.x - radio) / CELDA).max(0), ((centro.x + radio) / CELDA).min(self.columnas - 1));
-        let (f0, f1) = (((centro.y - radio) / CELDA).max(0), ((centro.y + radio) / CELDA).min(self.filas - 1));
+        // Los dos extremos se acotan a la rejilla: un punto fuera del mapa vive en la celda del borde, y un disco que empieza más allá
+        // del borde aún puede alcanzarlo.
+        let celda = |v: i64, n: i64| v.div_euclid(CELDA).clamp(0, n - 1);
+        let (c0, c1) = (celda(centro.x - radio, self.columnas), celda(centro.x + radio, self.columnas));
+        let (f0, f1) = (celda(centro.y - radio, self.filas), celda(centro.y + radio, self.filas));
         let mut v = Vec::new();
         for f in f0..=f1 {
             for c in c0..=c1 {

@@ -126,6 +126,7 @@ fn parametros(x: &Entrada) -> Vec<Parametro> {
         parametro("Días de mundo", x.e.dias),
         parametro("Semilla", x.e.semilla),
         parametro("Hash del mundo", x.c.mundo.hash()),
+        parametro("Huella del estado final (hash_estado)", x.corrida.nucleo.hash_estado().iter().map(|b| format!("{b:02x}")).collect::<String>()),
         parametro("Radio inicial de la zona", u(r.radio_inicial)),
         parametro("Techos de zona por nivel", format!("{} u", lista(&r.techos))),
         parametro("Crecimiento de la zona por edificio completado (lo aplica la economía real)", format!("{} u", r.crecimiento_por_edificio as f64 / 1000.0)),

@@ -124,6 +124,8 @@ algún asentamiento**, gana `NIVEL_FACCION.xp.fundacion` de experiencia (el prim
 Leñera en la zona real con que nacería ∧ hay ≥ 1 nodo de piedra sin explotar en esa zona`. «Zona real» = círculo del radio inicial recortado contra los asentamientos de **otras** Facciones
 (`zonaInicialDeFundacion`). Hay bosque libre si algún bosque cuyo borde toca la zona tiene menos Leñeras que su capacidad (`capacidadLeneras`, §5.2).
 
+> **Rendimiento en Rust (2026-10-24):** `Nucleo::viabilidad` cuenta parcelas y piedra con la rejilla de 10 u del mapa (`economia::Mapa::parcelas_en` y `piedra_en`, la misma que usa la construcción) en lugar de recorrer el mundo entero: solo mira lo que cae en el disco, que es lo único que `en_zona` puede aceptar, así que el resultado es idéntico (prueba `la_rejilla_cuenta_lo_mismo_que_el_recorrido_lineal` y misma huella del `batch territorio`). No cambia ninguna regla.
+
 ### 3.1 Zona de influencia
 
 > **Implementado en Rust (2026-10-13)**: `crates/territorio/src/zona.rs` (reglas puras) y `crates/nucleo/src/nucleo/zonas.rs` (estado, órdenes y eventos).
