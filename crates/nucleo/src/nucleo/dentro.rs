@@ -204,6 +204,24 @@ impl Nucleo {
         }
     }
 
+    /// Quien acaba de dejar su Facción y está dentro de una plaza, un pueblo o una avanzada cuya puerta ya no le admite sale expulsado al mapa con lo suyo: sin columna, solo y con su carro
+    /// (5B-1, 2026-10-24). Devuelve la columna con la que salió. DUDA: la regla habla de la plaza que deja; se aplica igual a cualquier lugar donde esté (la regla de la puerta es «sale
+    /// quien ya no puede entrar»).
+    pub(super) fn echar_si_ya_no_entra(&mut self, t: Instante, heroe: u64) -> Option<u64> {
+        let lugar = self.heroe(heroe)?.heroe.presencia.ubicacion;
+        let (plaza, puerta) = match lugar {
+            Ubicacion::Asentamiento(a) => (u64::from(a), self.estado.asentamientos.get(&u64::from(a))?.posicion),
+            Ubicacion::Pueblo(x) => (self.pueblo(x)?.0, self.posicion_de_pueblo(x)?),
+            Ubicacion::Avanzada(x) => (self.avanzada(x)?.0?, self.posicion_de_avanzada(x)?),
+            Ubicacion::Columna(_) | Ubicacion::Mercenarios(_) | Ubicacion::Desconectado(_) => return None,
+        };
+        if self.puede_entrar_en_plaza(heroe, plaza) {
+            return None;
+        }
+        self.expulsar(t, vec![heroe], lugar, puerta, plaza, MOTIVO_PUERTA_CERRADA);
+        self.heroe(heroe)?.columna
+    }
+
     /// El lugar desaparece o cambia de dueño: todos los que están dentro salen al mapa con lo suyo.
     pub(super) fn vaciar_lugar(&mut self, t: Instante, lugar: Ubicacion, puerta: Punto, plaza: u64, motivo: i64) {
         let dentro = self.dentro_de(lugar);

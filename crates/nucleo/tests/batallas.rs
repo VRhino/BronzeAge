@@ -1590,6 +1590,22 @@ fn durante_un_asedio_quien_esta_dentro_y_no_se_unio_solo_puede_salir_y_el_defens
     assert!(matches!(e.n.heroe(beto).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(_)));
 }
 
+/// 5B-10 (decisión del autor del 2026-10-24): nadie se muda de una plaza en batalla, tampoco quien ya salió de ella (su campamento se iría con él): las tres órdenes de residencia y dejar la
+/// Facción se rechazan sin dejar rastro.
+#[test]
+fn nadie_se_muda_de_una_plaza_en_batalla_aunque_ya_este_fuera() {
+    let m = con_mundo!();
+    let Asedio { mut e, beto, ana } = asedio(m, 7);
+    let b = e.b;
+    assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    e.ok("beto", Comando::SalirAlMundo { asentamiento: b, heroe: beto, escuadras: vec![], carga: vec![] });
+    for c in [Comando::ResidirEnCampamento { heroe: beto, campamento: 0 }, Comando::DejarResidencia { heroe: beto }, Comando::DejarFaccion { heroe: beto }] {
+        let antes = rastro(&e.n);
+        let r = e.ord("beto", c.clone());
+        assert_eq!((codigo(&r), rastro(&e.n)), (rechazos::BATALLA_BLOQUEADO, antes), "{c:?}");
+    }
+}
+
 /// Lo mismo en el saqueo de un pueblo: quien está dentro y no se unió puede salir (`SalirDePueblo`); quien se unió a la defensa, no.
 #[test]
 fn durante_el_saqueo_de_un_pueblo_quien_esta_dentro_y_no_se_unio_solo_puede_salir_y_el_defensor_unido_no_sale() {

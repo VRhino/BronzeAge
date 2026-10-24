@@ -209,7 +209,7 @@ fn la_columna_de_quien_va_solo_toma_la_faccion_y_en_un_ejercito_no_se_deja() {
 // ───────────────────────────── 2. La residencia ─────────────────────────────
 
 #[test]
-fn las_tres_ordenes_de_residencia_con_su_cooldown_y_quien_deja_su_casa_dentro_sale_al_mapa() {
+fn las_tres_ordenes_de_residencia_con_su_cooldown_y_quien_deja_su_casa_dentro_sigue_dentro() {
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let plaza = e.plaza(m, 0, "fundador");
@@ -226,13 +226,12 @@ fn las_tres_ordenes_de_residencia_con_su_cooldown_y_quien_deja_su_casa_dentro_sa
     let rey = e.faccion(1).rey.unwrap();
     e.ok("fundador", Comando::ResponderSolicitud { heroe: rey, faccion: 1, solicitante: ana, aceptar: true });
 
-    // Se muda: estaba dentro del campamento donde residía, así que sale al mapa por su puerta con lo suyo; su casa es la plaza.
+    // Se muda: estaba dentro del campamento donde residía y sigue dentro, de visita (un campamento admite a todos: 5B-1); su casa es la plaza.
     e.ok("ana", Comando::CambiarResidencia { heroe: ana, asentamiento: plaza });
     let h = e.n.heroe(ana).unwrap();
-    let Ubicacion::Columna(c) = h.heroe.presencia.ubicacion else { panic!("sale al mapa: {:?}", h.heroe.presencia.ubicacion) };
-    assert_eq!((h.heroe.residencia, e.n.ejercito(c).unwrap().posicion, e.n.ejercito(c).unwrap().columna.faccion), (Some(Residencia::Asentamiento(plaza as u32)), campamento(&m.0, 0), Some(1)));
+    assert_eq!((h.heroe.residencia, h.heroe.presencia.ubicacion, h.columna), (Some(Residencia::Asentamiento(plaza as u32)), Ubicacion::Mercenarios(0), None));
     let cambiada = &e.hechos("ciudadania.residencia_cambiada")[0];
-    assert_eq!((dato(cambiada, "asentamiento"), dato(cambiada, "ejercito"), cambiada.asentamientos.clone()), (plaza as i64, c as i64, vec![plaza]));
+    assert_eq!((dato(cambiada, "asentamiento"), cambiada.dato("ejercito"), cambiada.asentamientos.clone()), (plaza as i64, None, vec![plaza]));
     assert_eq!(e.n.ciudadanos_de(plaza), 2, "Q8: el fundador y ella");
 
     // El cooldown: tres días entre cambios hechos por orden suya.
@@ -244,10 +243,10 @@ fn las_tres_ordenes_de_residencia_con_su_cooldown_y_quien_deja_su_casa_dentro_sa
     e.ok("ana", Comando::CambiarResidencia { heroe: ana, asentamiento: otra });
     assert_eq!((e.n.ciudadanos_de(plaza), e.n.ciudadanos_de(otra)), (1, 2));
 
-    // Dejar la residencia: al campamento de mercenarios más cercano a donde está (su columna, a la puerta del campamento 0).
+    // Dejar la residencia: al campamento de mercenarios más cercano a la plaza que deja (5B-4), no a donde está (dentro del campamento 0).
     e.avanzar(3 * DIA);
     e.ok("ana", Comando::DejarResidencia { heroe: ana });
-    let donde = e.n.ejercito(c).unwrap().posicion_en(e.n.ahora());
+    let donde = e.n.estado().asentamientos[&otra].posicion;
     let cercano = (0..m.0.campamentos().len()).min_by_key(|&i| (campamento(&m.0, i).dist2(donde), i)).unwrap() as u32;
     assert_eq!(e.residencia(ana), Some(Residencia::Campamento(cercano)));
     let dejada = &e.hechos("ciudadania.residencia_dejada")[0];
@@ -281,6 +280,74 @@ fn quien_deja_la_faccion_deja_su_plaza_por_el_campamento_mas_cercano_a_ella() {
     assert_eq!((dato(h, "asentamiento"), dato(h, "campamento")), (plaza as i64, i64::from(cercano)));
     // No cuenta para el cooldown de residencia: el último cambio sigue siendo el de la mudanza.
     assert_eq!(e.n.heroe(ana).unwrap().residencia_cambiada_en, Some(mudanza));
+}
+
+/// 5B-1 (decisión del autor del 2026-10-24): quien deja su casa estando dentro de ella sigue dentro de visita si la puerta le admite; su tropa y su almacén personal pasan sin viaje a la
+/// casa nueva (el campamento más cercano a la plaza que deja, 5B-4). Si deja la Facción y la puerta ya no le admite, sale expulsado al mapa solo, con su carro.
+#[test]
+fn quien_deja_su_casa_dentro_sigue_de_visita_si_la_puerta_le_admite_y_si_no_sale_solo_al_mapa() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let plaza = e.plaza(m, 0, "fundador");
+    let p = e.n.estado().asentamientos[&plaza].posicion;
+    let cercano = (0..m.0.campamentos().len()).min_by_key(|&i| (campamento(&m.0, i).dist2(p), i)).unwrap() as u32;
+    let dentro = Ubicacion::Asentamiento(plaza as u32);
+    let (ana, bea) = (e.heroe("ana"), e.heroe("bea"));
+    let mut escuadras = Vec::new();
+    for h in [ana, bea] {
+        e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
+        e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
+        e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: dentro });
+        escuadras.push(e.ok("admin", Comando::DarEscuadra { heroe: h, tropa: militar::catalogo::Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0]);
+        e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: asentamiento::Recurso::Madera, cantidad: 30_000 });
+    }
+    let suya = |e: &E, h: u64, s: u64| e.n.heroe(h).unwrap().heroe.escuadras.iter().find(|x| x.id == s).map(|x| x.contenedor);
+    let personal = e.n.heroe(ana).unwrap().almacen_personal.clone();
+
+    // Deja la residencia y sigue dentro (es de la Facción): su tropa y su almacén van con la casa nueva sin moverse.
+    e.ok("ana", Comando::DejarResidencia { heroe: ana });
+    let h = e.n.heroe(ana).unwrap();
+    assert_eq!((h.heroe.residencia, h.heroe.presencia.ubicacion, h.columna), (Some(Residencia::Campamento(cercano)), dentro, None));
+    assert_eq!((suya(&e, ana, escuadras[0]), &h.almacen_personal), (Some(militar::escuadra::Contenedor::Campamento), &personal));
+    assert!(e.hechos("heroe.expulsado").is_empty());
+
+    // Con la puerta abierta a los neutrales, quien deja la Facción también sigue dentro.
+    e.avanzar(DIA);
+    e.ok("ana", Comando::DejarFaccion { heroe: ana });
+    assert_eq!((e.n.heroe(ana).unwrap().heroe.presencia.ubicacion, e.faccion_de(ana)), (dentro, None));
+
+    // Con la puerta cerrada a los neutrales, sale expulsada al mapa sola: su tropa se queda en su casa nueva; se lleva su carro y sus víveres.
+    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    let fuera = e.hechos("heroe.expulsado");
+    assert_eq!(fuera.iter().map(|x| dato(x, "heroe")).collect::<Vec<_>>(), vec![ana as i64], "cerrar la puerta echa a la que ya no es de la Facción");
+    e.ok("bea", Comando::DejarFaccion { heroe: bea });
+    let h = e.n.heroe(bea).unwrap();
+    let Ubicacion::Columna(c) = h.heroe.presencia.ubicacion else { panic!("sale al mapa: {:?}", h.heroe.presencia.ubicacion) };
+    assert_eq!((h.heroe.residencia, suya(&e, bea, escuadras[1])), (Some(Residencia::Campamento(cercano)), Some(militar::escuadra::Contenedor::Campamento)));
+    let col = &e.n.ejercito(c).unwrap().columna;
+    assert_eq!((col.escuadras.len(), col.faccion, e.n.ejercito(c).unwrap().posicion), (0, None, p));
+    let echada = e.hechos("heroe.expulsado").into_iter().find(|x| dato(x, "heroe") == bea as i64).expect("bea sale expulsada");
+    assert_eq!((dato(&echada, "ejercito"), dato(&echada, "motivo")), (c as i64, 0));
+    let abandonada = e.hechos("faccion.abandonada").into_iter().find(|x| dato(x, "heroe") == bea as i64).unwrap();
+    assert_eq!((dato(&abandonada, "ejercito"), dato(&abandonada, "campamento")), (c as i64, i64::from(cercano)));
+}
+
+/// 5B-6 (2026-10-24): yendo en un ejército no se pide el ingreso ni se acepta (un ejército es de una sola Facción); denegarlo, sí.
+#[test]
+fn en_un_ejercito_no_se_pide_el_ingreso_ni_se_acepta() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (ana, bea) = (e.heroe("ana"), e.heroe("bea"));
+    let f = e.crear("ana", ana, "Micenas");
+    // Pide el ingreso y después va en un ejército (de otra Facción, por la administración).
+    e.ok("bea", Comando::SolicitarIngreso { heroe: bea, faccion: f });
+    let col = e.n.crear_ejercito(e.n.ahora(), "gus", 7, campamento(&m.0, 1), 500, 100_000).unwrap();
+    e.ok("admin", Comando::ColocarHeroe { heroe: bea, ubicacion: Ubicacion::Columna(col) });
+    assert_eq!(e.no("bea", Comando::SolicitarIngreso { heroe: bea, faccion: f }), rechazos::FACCION_EN_EJERCITO);
+    assert_eq!(e.no("ana", Comando::ResponderSolicitud { heroe: ana, faccion: f, solicitante: bea, aceptar: true }), rechazos::FACCION_EN_EJERCITO);
+    assert_eq!(e.faccion_de(bea), None);
+    e.ok("ana", Comando::ResponderSolicitud { heroe: ana, faccion: f, solicitante: bea, aceptar: false });
+    assert!(e.faccion(f).solicitudes.is_empty());
 }
 
 // ───────────────────────────── 3. Fundar y la nobleza ─────────────────────────────

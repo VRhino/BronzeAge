@@ -240,7 +240,7 @@ mod pruebas {
         fs.otorgar(1, 11).unwrap();
         fs.asignar_embajador(1, 11).unwrap();
         fs.crear(&reglas, 2, 20, "Troya", None, 5).unwrap();
-        fs.solicitar(2, 30).unwrap();
+        fs.solicitar(2, 30, false).unwrap();
         fs.registrar_derrota(2, Some(1));
         fs.crear_vacia(&reglas, 3);
         fs.registrar_derrota(3, None);

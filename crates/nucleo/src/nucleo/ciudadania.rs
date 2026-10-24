@@ -11,9 +11,13 @@
 //! `FijarFaccionDeHeroe` quita o da la ciudadanía con la sucesión del trono, sin cooldown, sin Q7 y sin tocar la residencia; si la Facción que nombra no existe, nace vacía («Facción N», con su
 //! sigilo libre) y quien entra es su Rey (5A-8). `CrearEjercito` hace ciudadano a su héroe de campo por la misma vía. `FijarResidencia` es la reubicación forzosa (`mercenarios`): sin cooldown.
 //!
-//! # Quien deja su casa estando dentro
-//! Quien deja de residir en la plaza o el campamento donde está dentro (y no tiene columna allí, que es como está un residente) sale al mapa por su puerta con todo lo suyo, como al caer la plaza:
-//! un residente sin casa no puede quedarse dentro como visitante sin la columna con la que se entra de visita (Entrar con todo).
+//! # Quien deja su casa estando dentro (5B-1, decisión del autor del 2026-10-24)
+//! Su campamento (las escuadras) y su almacén personal van con la residencia, así que pasan sin viaje a la nueva (Doc 2.5 y 5.15.5): no hay nada que mover. El héroe **sigue dentro como
+//! visitante** si la puerta le admite (un campamento de mercenarios admite a todos), con su carro y sus víveres; si dejó la Facción y la puerta ya no le admite, sale expulsado al mapa
+//! **solo** (sin tropa: la tropa es de la residencia nueva), con su carro (`heroe.expulsado`, motivo `puerta_cerrada`).
+//!
+//! # No se muda nadie de una plaza en batalla (5B-10)
+//! Las tres órdenes de residencia y dejar la Facción se rechazan (`batalla.bloqueado`) si la plaza donde reside está en una batalla activa, como ya se rechazaba mudarse a una.
 
 use super::*;
 use crate::estado::Dato;
@@ -134,46 +138,24 @@ impl Nucleo {
         self.puertas_de_campamentos().min_by_key(|&(i, c)| (c.dist2(p), i)).map(|(i, _)| i)
     }
 
-    /// Dónde está el héroe: su columna, o el lugar donde está dentro.
-    fn posicion_del_heroe(&self, heroe: u64) -> Option<Punto> {
-        let t = self.estado.ahora;
-        match self.heroe(heroe)?.heroe.presencia.ubicacion {
-            Ubicacion::Columna(c) => self.estado.ejercitos.get(&c).map(|e| e.posicion_en(t)),
-            Ubicacion::Asentamiento(a) => self.puerta_de(Lugar::Asentamiento(a)),
-            Ubicacion::Mercenarios(c) => self.puerta_de_campamento(c),
-            Ubicacion::Pueblo(p) => self.posicion_de_pueblo(p),
-            Ubicacion::Avanzada(a) => self.posicion_de_avanzada(a),
-            Ubicacion::Desconectado(p) => Some(p),
+    /// 5B-10 (2026-10-24): nadie se muda de una plaza en batalla (su campamento se iría con él), como nadie se muda a una.
+    fn sin_batalla_en_su_plaza(&self, heroe: u64) -> Result<(), Respuesta> {
+        match self.heroe(heroe).and_then(|h| h.heroe.residencia) {
+            Some(Residencia::Asentamiento(a)) if self.batallas_activas().next().is_some() && self.bloqueos().asentamientos.contains(&a) => {
+                Err(Respuesta::rechazo(rechazos::BATALLA_BLOQUEADO, "tu plaza está en una batalla: nadie se muda de ella hasta que acabe", self.estado.version))
+            }
+            _ => Ok(()),
         }
     }
 
-    /// El héroe deja su residencia por `nueva` (`None`: ninguna). Si estaba dentro de la que deja, sale antes al mapa por su puerta con todo lo suyo (ver el módulo). Devuelve la columna
-    /// con la que salió, si salió.
-    fn mudarse(&mut self, t: Instante, heroe: u64, nueva: Option<Residencia>) -> Option<u64> {
-        let h = self.heroe(heroe).expect("existe");
-        let lugar = match (h.heroe.residencia, h.heroe.presencia.ubicacion) {
-            (Some(Residencia::Asentamiento(a)), Ubicacion::Asentamiento(b)) if a == b => Some(Lugar::Asentamiento(a)),
-            (Some(Residencia::Campamento(c)), Ubicacion::Mercenarios(d)) if c == d => Some(Lugar::Campamento(c)),
-            _ => None,
-        };
-        let salio = lugar.and_then(|l| Some((l, self.puerta_de(l)?))).map(|(l, puerta)| {
-            match l {
-                Lugar::Asentamiento(a) => self.tr.tocar(Clase::Asentamiento, u64::from(a)),
-                Lugar::Campamento(c) => self.tr.tocar(Clase::Campamento, u64::from(c)),
-            }
-            self.salir_al_mapa(t, heroe, puerta)
-        });
-        self.mudar_de_residencia(heroe, nueva);
-        salio
-    }
-
-    /// El héroe pasa a residir en `nueva` por una orden suya: comprueba el cooldown y que no esté en un ejército en preparación, se muda y lo estampa.
+    /// El héroe pasa a residir en `nueva` por una orden suya: comprueba el cooldown, que no esté en un ejército en preparación y que su plaza no esté en batalla, se muda y lo estampa.
     // DUDA: el cooldown y el ejército en preparación son de la regla; que no se cambie de residencia en una convocatoria no lo dice nadie, pero su tropa se iría con él a otra casa.
-    fn mudarse_por_orden(&mut self, t: Instante, heroe: u64, nueva: Option<Residencia>) -> Result<Option<u64>, Respuesta> {
+    fn mudarse_por_orden(&mut self, t: Instante, heroe: u64, nueva: Option<Residencia>) -> Result<(), Respuesta> {
         self.sin_convocatoria(heroe)?;
-        let salio = self.mudarse(t, heroe, nueva);
+        self.sin_batalla_en_su_plaza(heroe)?;
+        self.mudar_de_residencia(heroe, nueva);
         self.heroe_mut(heroe).residencia_cambiada_en = Some(t);
-        Ok(salio)
+        Ok(())
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -207,7 +189,8 @@ impl Nucleo {
             }
             Comando::SolicitarIngreso { heroe, faccion } => {
                 self.autorizar_heroe(p, *heroe, false)?;
-                if !self.estado.politica.facciones.solicitar(*faccion, *heroe).map_err(de_faccion)? {
+                let en_ejercito = self.en_ejercito(*heroe);
+                if !self.estado.politica.facciones.solicitar(*faccion, *heroe, en_ejercito).map_err(de_faccion)? {
                     return Err(sin_cambios());
                 }
                 self.tr.tocar(Clase::Faccion, u64::from(*faccion));
@@ -220,8 +203,8 @@ impl Nucleo {
                 if !(Actor { yo: *heroe, politica: &self.estado.politica, vista: self }).responde_solicitudes(*faccion) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "solo el Rey de la Facción responde a las solicitudes".into()));
                 }
-                let pidio = self.pedidas_por(*solicitante);
-                self.estado.politica.facciones.responder(*faccion, *solicitante, *aceptar).map_err(de_faccion)?;
+                let (pidio, en_ejercito) = (self.pedidas_por(*solicitante), self.en_ejercito(*solicitante));
+                self.estado.politica.facciones.responder(*faccion, *solicitante, *aceptar, en_ejercito).map_err(de_faccion)?;
                 self.tr.tocar_todos(Clase::Faccion, pidio);
                 let codigo = if *aceptar {
                     self.tras_cambiar_de_faccion(t, *solicitante, None);
@@ -235,19 +218,23 @@ impl Nucleo {
             Comando::DejarFaccion { heroe } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 let en_ejercito = self.en_ejercito(*heroe);
+                // DUDA: 5B-10 habla de mudarse; dejar la Facción también muda a quien reside en una plaza, así que se bloquea igual (después de los rechazos de la regla).
+                if self.estado.politica.facciones.faccion_de(*heroe).is_some() && !en_ejercito {
+                    self.sin_batalla_en_su_plaza(*heroe)?;
+                }
                 let salida = self.estado.politica.facciones.dejar(*heroe, t, en_ejercito).map_err(de_faccion)?;
                 self.tras_cambiar_de_faccion(t, *heroe, Some(salida.faccion));
-                // Sin ciudadanía no se reside en una plaza: al campamento de mercenarios más cercano a la que deja (§3.3, decisión 10; en uno de mercenarios, sigue allí). No cuenta para el
-                // cooldown de residencia.
+                // Sin ciudadanía no se reside en una plaza: al campamento de mercenarios más cercano a la que deja (§3.3, decisión 10 y 5B-4; en uno de mercenarios, sigue allí). No cuenta
+                // para el cooldown de residencia. Si estaba dentro, sigue de visita si la puerta le admite (5B-1).
                 let mut datos = vec![("faccion", i64::from(salida.faccion)), ("heroe", *heroe as i64)];
                 if let Some(Residencia::Asentamiento(a)) = self.heroe(*heroe).expect("existe").heroe.residencia {
                     let campamento = self.puerta_de(Lugar::Asentamiento(a)).and_then(|p| self.campamento_mas_cercano(p));
-                    if let Some(c) = self.mudarse(t, *heroe, campamento.map(Residencia::Campamento)) {
-                        datos.push(("ejercito", c as i64));
-                    }
+                    self.mudar_de_residencia(*heroe, campamento.map(Residencia::Campamento));
                     datos.push(("asentamiento", i64::from(a)));
                     datos.extend(campamento.map(|c| ("campamento", i64::from(c))));
                 }
+                // Quien está dentro de un lugar cuya puerta ya no le admite sin la Facción sale expulsado al mapa, solo y con su carro (5B-1).
+                datos.extend(self.echar_si_ya_no_entra(t, *heroe).map(|c| ("ejercito", c as i64)));
                 self.emitir_propio(t, "faccion.abandonada", vec![], datos);
                 Ok(vec![])
             }
@@ -286,9 +273,8 @@ impl Nucleo {
                 let (origen, destino) = (h.heroe.residencia, Residencia::Asentamiento(*asentamiento as u32));
                 // DUDA: los vetos llegan en 5E; hasta entonces ninguna plaza veta.
                 residencia::puede_mudarse(&r, h.residencia_cambiada_en, t, h.faccion, duena, origen == Some(destino), false).map_err(de_residencia)?;
-                let salio = self.mudarse_por_orden(t, *heroe, Some(destino))?;
+                self.mudarse_por_orden(t, *heroe, Some(destino))?;
                 let mut datos = vec![("heroe", *heroe as i64), ("asentamiento", *asentamiento as i64)];
-                datos.extend(salio.map(|c| ("ejercito", c as i64)));
                 if let Some(Residencia::Asentamiento(o)) = origen {
                     datos.push(("origen", i64::from(o)));
                 }
@@ -303,9 +289,8 @@ impl Nucleo {
                 if h.heroe.residencia == Some(Residencia::Campamento(*campamento)) {
                     return Err(de_residencia(ErrorResidencia::YaReside));
                 }
-                let salio = self.mudarse_por_orden(t, *heroe, Some(Residencia::Campamento(*campamento)))?;
-                let mut datos = vec![("heroe", *heroe as i64), ("campamento", i64::from(*campamento))];
-                datos.extend(salio.map(|c| ("ejercito", c as i64)));
+                self.mudarse_por_orden(t, *heroe, Some(Residencia::Campamento(*campamento)))?;
+                let datos = vec![("heroe", *heroe as i64), ("campamento", i64::from(*campamento))];
                 self.emitir_propio(t, "ciudadania.residencia_en_campamento", vec![], datos);
                 Ok(vec![])
             }
@@ -316,13 +301,11 @@ impl Nucleo {
                     return Err(rechazo(rechazos::RESIDENCIA_SIN_PLAZA, "no reside en ninguna plaza".into()));
                 };
                 residencia::sin_cooldown(&r, h.residencia_cambiada_en, t).map_err(de_residencia)?;
-                // Al campamento de mercenarios más cercano a donde está (§4.2; sin saberlo, a la plaza que deja).
-                let desde = self.posicion_del_heroe(*heroe).or_else(|| self.puerta_de(Lugar::Asentamiento(a)));
-                let campamento = desde.and_then(|p| self.campamento_mas_cercano(p));
-                let salio = self.mudarse_por_orden(t, *heroe, campamento.map(Residencia::Campamento))?;
+                // Al campamento de mercenarios más cercano a la plaza que deja (§4.2, 5B-4, 2026-10-24).
+                let campamento = self.puerta_de(Lugar::Asentamiento(a)).and_then(|p| self.campamento_mas_cercano(p));
+                self.mudarse_por_orden(t, *heroe, campamento.map(Residencia::Campamento))?;
                 let mut datos = vec![("heroe", *heroe as i64), ("asentamiento", i64::from(a))];
                 datos.extend(campamento.map(|c| ("campamento", i64::from(c))));
-                datos.extend(salio.map(|c| ("ejercito", c as i64)));
                 self.emitir_propio(t, "ciudadania.residencia_dejada", vec![u64::from(a)], datos);
                 Ok(vec![])
             }

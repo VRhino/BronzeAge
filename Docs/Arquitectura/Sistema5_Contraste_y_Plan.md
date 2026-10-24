@@ -468,3 +468,22 @@ El riesgo R1 no se ve todavía: los batches fundan con el héroe de campo de la 
 11. `HEROE` no lleva nada nuevo de la Facción (el `Heroe` del contrato no tiene `faccion_id`; las solicitudes propias son de 5H). ¿Un `Heroe.faccion_id` aditivo en 5H?
 12. El paso de minuto cuesta un 2,9 % más en la medida de 1.000 plazas porque cada plaza tiene ya a su fundador de residente. ¿Se acepta?
 13. `FijarFaccionDeHeroe` (administración) ahora también cambia la Facción de la columna de quien va solo y rehace la demanda de bandidos de su campamento; antes no tocaba nada más.
+
+### Decisiones del autor sobre las dudas de 5B (2026-10-24)
+
+1. **5B-1, dejar la casa estando dentro: CAMBIO.** Al dejar la residencia (cualquiera de las tres órdenes) o la Facción estando dentro de la plaza que deja, las escuadras (su campamento) y el almacén personal
+   pasan **sin viaje** a la residencia nueva, y el héroe **sigue dentro como visitante** si la puerta le admite, con su carro y sus víveres. Si abandonó la Facción y la puerta ya no le admite, sale expulsado
+   al mapa **solo**, con su carro (`heroe.expulsado`, motivo `puerta_cerrada`). En un campamento de mercenarios siempre se sigue dentro (admite a todos). Código: `ciudadania.rs` (la mudanza ya no saca a nadie)
+   y `dentro.rs::echar_si_ya_no_entra` (plaza, pueblo o avanzada donde esté, tras dejar la Facción). Dip §3.3 y §4.2, G2 2.5.
+2. **5B-2, 5B-3, 5B-5, 5B-7, 5B-8, 5B-9, 5B-11, 5B-12 y 5B-13:** decisiones técnicas del agente, aceptadas por el orquestador (el +2,9 % del paso de minuto, aceptado). 5B-9 (`fundadores_ids`) y
+   5B-11 (`Heroe.faccion_id`) van a 5H.
+3. **5B-4, el campamento de destino: CAMBIO.** Al dejar la residencia y al dejar la Facción, el campamento de mercenarios más cercano **a la plaza que deja** (se corrige el canon 2.5 y Dip §4.2, que decían
+   «a donde está» para `dejarResidencia`).
+4. **5B-6, ingreso yendo en un ejército: CAMBIO.** Pedir el ingreso, o que lo acepten, yendo en un ejército (aunque sea de un solo héroe, o en uno en preparación) se rechaza como dejarla
+   (`faccion.en_ejercito`); denegar la solicitud sí se puede. `politica::Facciones::{solicitar, responder}` reciben `en_ejercito`. Dip §3.2, G2 2.5.
+5. **5B-10, mudarse desde una plaza en batalla: CAMBIO.** También se bloquea (`batalla.bloqueado`), además de mudarse hacia una: las tres órdenes de residencia y dejar la Facción (`Nucleo::sin_batalla_en_su_plaza`),
+   aunque el héroe ya haya salido de la plaza. Dip §4.2, G2 2.5.
+
+Pruebas: `politica.rs::quien_deja_su_casa_dentro_sigue_de_visita_si_la_puerta_le_admite_y_si_no_sale_solo_al_mapa`, `::en_un_ejercito_no_se_pide_el_ingreso_ni_se_acepta`, la de las tres órdenes de residencia
+(se queda dentro del campamento; el campamento de destino es el de la plaza que deja) y `batallas.rs::nadie_se_muda_de_una_plaza_en_batalla_aunque_ya_este_fuera`; en el crate, `faccion::pruebas` (5B-6).
+Dudas que dejan (marcadas `// DUDA:`): dejar la Facción se bloquea también desde una plaza en batalla (5B-10 habla de mudarse) y la expulsión al dejarla mira el lugar donde está, no solo la plaza que deja.
