@@ -398,7 +398,7 @@ fn una_caravana_adjunta_tambien_lleva_materiales() {
     let pos = e.n.estado().asentamientos[&plaza].posicion;
     let col = e.columna("ana", 1, Punto::new(pos.x + 1_000, pos.y));
     e.ok("ana", Comando::AdjuntarCaravana { caravana: car, ejercito: col });
-    e.ok("ana", Comando::AparcarCaravana { caravana: car, asentamiento: plaza });
+    e.ok("admin", Comando::AparcarCaravana { caravana: car, asentamiento: plaza }); // la administración la deja dentro (5G-a-5: solo se aparca dentro)
     e.ok("ana", Comando::MoverCargaAparcada { caravana: car, recurso: Madera, cantidad: 100_000, cargar: true });
     e.ok("ana", Comando::MoverCargaAparcada { caravana: car, recurso: Oro, cantidad: 12_000, cargar: true });
     e.ok("ana", Comando::AdjuntarCaravana { caravana: car, ejercito: col });

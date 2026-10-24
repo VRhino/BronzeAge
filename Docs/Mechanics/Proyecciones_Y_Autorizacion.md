@@ -233,7 +233,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
 | `adjuntar_caravana` | `AdjuntarCaravana` | un participante de la columna | a la puerta de la caravana |
-| `aparcar_caravana` | `AparcarCaravana` | un participante de la columna | la caravana adjunta, a la puerta de la plaza |
+| `aparcar_caravana` | `AparcarCaravana` | un participante de la columna | la caravana adjunta, con la columna dentro de la plaza (`caravana.soltar_solo_dentro`, como `soltar_caravana`) |
 | `cargar_caravana` | `CargarCaravana` | un participante de la columna | la caravana adjunta (`caravana.no_esta_adjunta`), a la puerta (`radioPuerta`) de una plaza de su Facción (`caravana.plaza_ajena`); hasta lo que le cabe (`caravana.sin_capacidad`) |
 | `comerciar_en_plaza` | `ComerciarEnPlaza` | el Líder de la columna | a la puerta de la plaza de la orden |
 | `depositar_en_avanzada` | `DepositarEnAvanzada` | un participante de la columna | a la puerta de la avanzada operativa |

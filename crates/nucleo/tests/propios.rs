@@ -622,12 +622,21 @@ async fn una_caravana_es_del_heroe_mientras_la_escolta_o_va_en_su_columna_y_de_l
     let de_beto = pendiente(&mut beto).await;
     assert_eq!(caravanas(nuevas(deltas_de(&de_beto, faccion)[0]))[0].estado, pb::EstadoCaravana::CaravanaAdjunta as i32);
 
+    // Se aparca solo dentro de la plaza (decisión del autor 5G-a-5): entra con todo y la columna sigue, dentro, para llevar la caravana.
+    let guarnecer = orden::Cuerpo::Guarnecer(pb::OrdenGuarnecer { asentamiento_id: as_a.clone(), heroe_id: h_ana.clone() });
+    let (previos, r) = dar_todo(&mut ana, "k4b", guarnecer).await;
+    aceptada(&r);
+    for d in deltas_de(&previos, &ambito_h) {
+        vista.aplicar(d);
+    }
+    pendiente(&mut beto).await;
     let aparcar = orden::Cuerpo::AparcarCaravana(pb::OrdenAparcarCaravana { caravana_id: caravana.clone(), asentamiento_id: as_a });
     let (previos, r) = dar_todo(&mut ana, "k5", aparcar).await;
     aceptada(&r);
     let d = deltas_de(&previos, &ambito_h)[0];
-    assert_eq!(quitas(d), [(TipoEntidad::Caravana, caravana.clone())], "aparcada, la caravana deja su ámbito");
-    assert!(ejercitos(nuevas(d))[0].caravanas_adjuntas_ids.is_empty());
+    let q = quitas(d);
+    assert!(q.contains(&(TipoEntidad::Caravana, caravana.clone())), "aparcada, la caravana deja su ámbito: {q:?}");
+    assert!(q.contains(&(TipoEntidad::Ejercito, columna.clone())), "y la columna que la residente conservaba para llevarla se deshace: {q:?}");
     vista.aplicar(d);
     let de_beto = pendiente(&mut beto).await;
     assert_eq!(caravanas(nuevas(deltas_de(&de_beto, faccion)[0]))[0].estado, pb::EstadoCaravana::CaravanaAparcada as i32, "y es de la Facción, aparcada");

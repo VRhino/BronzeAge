@@ -663,7 +663,7 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     let cb = e.caravana("beto", b, 1, true);
     let cc = e.caravana("ana", c, 1, true);
     e.ok("admin", Comando::AdjuntarCaravana { caravana: cc, ejercito: col_a });
-    e.ok("ana", Comando::AparcarCaravana { caravana: cc, asentamiento: a });
+    e.ok("admin", Comando::AparcarCaravana { caravana: cc, asentamiento: a }); // la administración la deja dentro (5G-a-5: solo se aparca dentro)
     e.dar(a, Madera, 10_000);
     e.ok("ana", Comando::MoverCargaAparcada { caravana: cc, recurso: Madera, cantidad: 5_000, cargar: true });
     let tr = e.trueque(&[(Cobre, 1_000)], &[(Estano, 1_000)]);
@@ -945,7 +945,8 @@ fn una_caravana_adjunta_viaja_con_la_columna_a_su_paso_y_entrega_a_la_puerta_del
     assert_eq!(e.n.estado().ejercitos[&col].caravanas_adjuntas, vec![c]);
     assert_eq!(e.rechazada("ana", adjuntar(sola)), rechazos::CARAVANA_ESTADO_INVALIDO, "ya va enganchada");
     // Aparcarla en la plaza, cargarla contra su almacén y volver a engancharla.
-    e.ok("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a });
+    assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a }), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "a la puerta se está fuera (5G-a-5)");
+    e.ok("admin", Comando::AparcarCaravana { caravana: c, asentamiento: a });
     assert_eq!((e.caravana_de(c).estado, e.caravana_de(c).anfitriona), (EstadoCaravana::Aparcada, Some(a as u32)));
     assert!(e.n.estado().ejercitos[&col].caravanas_adjuntas.is_empty());
     e.ok("ana", Comando::MoverCargaAparcada { caravana: c, recurso: Cobre, cantidad: 60_000, cargar: true });
@@ -963,7 +964,7 @@ fn una_caravana_adjunta_viaja_con_la_columna_a_su_paso_y_entrega_a_la_puerta_del
     e.avanzar(d_con / 2);
     let medio = e.n.estado().ejercitos[&col].posicion_en(e.n.ahora());
     assert_eq!(e.n.posicion_de_caravana(c, e.n.ahora()), Some(medio), "la adjunta va donde va la columna");
-    assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a }), rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "solo a la puerta de una plaza");
+    assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a }), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "solo dentro de una plaza");
     e.avanzar_hasta(t0 + d_con);
     // Entrega manual a la puerta del que recibe: la comisión de siempre y el trueque se abona.
     let cobre_b0 = cantidad(&e.n, b, Cobre);
@@ -1011,8 +1012,9 @@ fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_entra_con_ellas_y_sa
     assert!(r.creadas.is_empty(), "sale con la columna con la que entró");
     assert_eq!((e.n.estado().ejercitos[&ej].caravanas_adjuntas.clone(), e.n.ejercito(ej).unwrap().columna.escuadras.clone()), (vec![c], vec![milicia]));
     assert!(e.n.en_el_mapa(ej));
-    // Aparcar la caravana en su plaza sigue siendo una orden explícita (Doc 3.13.7), y se puede volver a enganchar.
-    e.ok("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a });
+    // Aparcar la caravana en su plaza sigue siendo una orden explícita (Doc 3.13.7), solo dentro (5G-a-5), y se puede volver a enganchar.
+    assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a }), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "fuera, a la puerta");
+    e.ok("admin", Comando::AparcarCaravana { caravana: c, asentamiento: a });
     assert_eq!((e.caravana_de(c).estado, e.caravana_de(c).anfitriona), (EstadoCaravana::Aparcada, Some(a as u32)));
     e.ok("ana", adjuntar(ej));
     // Un ejército cuyo último héroe sale del mundo se disuelve y sus caravanas vuelven a su origen por su cuenta.
@@ -1039,7 +1041,7 @@ fn una_arista_que_acaba_de_ser_camino_acelera_a_la_caravana_que_ya_iba_por_ella(
     // Una de C, aparcada en A con madera, vuelve a su origen: su camino no es de nadie (el regreso no registra ruta).
     let cc = e.caravana("ana", c, 1, true);
     e.ok("admin", Comando::AdjuntarCaravana { caravana: cc, ejercito: col_a });
-    e.ok("ana", Comando::AparcarCaravana { caravana: cc, asentamiento: a });
+    e.ok("admin", Comando::AparcarCaravana { caravana: cc, asentamiento: a }); // la administración la deja dentro (5G-a-5: solo se aparca dentro)
     e.ok("ana", Comando::MoverCargaAparcada { caravana: cc, recurso: Madera, cantidad: 5_000, cargar: true });
     let madera_c0 = cantidad(&e.n, c, Madera);
     e.ok("ana", Comando::EnviarCaravanaAlOrigen { caravana: cc });

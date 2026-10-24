@@ -207,11 +207,6 @@ impl Nucleo {
             _ => return Err(rechazo(rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "una caravana solo se suelta dentro de una plaza: hay que entrar antes".into())),
         };
         self.aparcar_caravana(t, p, caravana, plaza, "ejercito.caravana_soltada", &[("heroe", heroe as i64)])?;
-        let e = &self.estado.ejercitos[&ejercito];
-        let reside = self.heroe(heroe).expect("existe").heroe.residencia == Some(Residencia::Asentamiento(plaza as u32));
-        if e.caravanas_adjuntas.is_empty() && reside && e.columna.participantes.len() == 1 {
-            self.recoger_en_residencia(t, heroe, ejercito, Ubicacion::Asentamiento(plaza as u32));
-        }
         Ok(vec![])
     }
 }

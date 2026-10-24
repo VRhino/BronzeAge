@@ -164,8 +164,8 @@ pub enum Comando {
     /// Engancha una caravana `disponible` o `aparcada` a una columna de su Facción que está a la puerta de la plaza donde la caravana está
     /// (Movimiento_Ejercitos §9). La columna pasa a viajar a la velocidad de su elemento más lento y la caravana va con ella.
     AdjuntarCaravana { caravana: u64, ejercito: u64 },
-    /// Deja la caravana adjunta aparcada en una plaza de su Facción, con la columna a su puerta o dentro de ella (Doc 3.13.7; Movimiento_Ejercitos §11). Es una orden
-    /// explícita: entrar en un lugar no aparca las caravanas, entran con la columna.
+    /// Deja la caravana adjunta aparcada en una plaza de su Facción, con la columna dentro de ella (Doc 3.13.7; Movimiento_Ejercitos §9 y §11; a la puerta no, decisión del autor
+    /// 5G-a-5). Es una orden explícita: entrar en un lugar no aparca las caravanas, entran con la columna.
     AparcarCaravana { caravana: u64, asentamiento: u64 },
     // ── Mercado de los campamentos de mercenarios (Comercio_Caravanas §9). `campamento` es el índice del artefacto de mundo; el héroe debe estar
     //    dentro del campamento o con su columna a la puerta. ──
@@ -2286,7 +2286,7 @@ pub mod rechazos {
     pub const CARRO_NO_LLEVA: &str = "carro.no_lleva";
     /// Reclamar una caravana que no es la Caravana de Fundación que vuelve sola a su origen (5G-a): solo esa se reclama en mundo abierto.
     pub const CARAVANA_NO_RECLAMABLE: &str = "caravana.no_reclamable";
-    /// Soltar una caravana con la columna fuera de una plaza (a la puerta o en mundo abierto): solo se suelta dentro, donde la columna entró con todo (5G-a, decisión 5G-a-5).
+    /// Soltar o aparcar una caravana con la columna fuera de una plaza (a la puerta o en mundo abierto): solo se deja dentro, donde la columna entró con todo (5G-a, decisión 5G-a-5).
     pub const CARAVANA_SOLTAR_SOLO_DENTRO: &str = "caravana.soltar_solo_dentro";
     pub const REPOSTAR_PLAZA_CERRADA: &str = "repostar.plaza_cerrada";
     pub const REPOSTAR_SIN_EXISTENCIAS: &str = "repostar.sin_existencias";

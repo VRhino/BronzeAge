@@ -379,7 +379,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `almacen_personal.fuera_de_tu_residencia` | `ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA` | Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a). |
 | `carro.no_lleva` | `CARRO_NO_LLEVA` | Guardar en el almacén personal un recurso que el carro de la columna no lleva (5G-a). |
 | `caravana.no_reclamable` | `CARAVANA_NO_RECLAMABLE` | Reclamar una caravana que no es la Caravana de Fundación que vuelve sola a su origen (5G-a): solo esa se reclama en mundo abierto. |
-| `caravana.soltar_solo_dentro` | `CARAVANA_SOLTAR_SOLO_DENTRO` | Soltar una caravana con la columna fuera de una plaza (a la puerta o en mundo abierto): solo se suelta dentro, donde la columna entró con todo (5G-a, decisión 5G-a-5). |
+| `caravana.soltar_solo_dentro` | `CARAVANA_SOLTAR_SOLO_DENTRO` | Soltar o aparcar una caravana con la columna fuera de una plaza (a la puerta o en mundo abierto): solo se deja dentro, donde la columna entró con todo (5G-a, decisión 5G-a-5). |
 | `repostar.plaza_cerrada` | `REPOSTAR_PLAZA_CERRADA` | — |
 | `repostar.sin_existencias` | `REPOSTAR_SIN_EXISTENCIAS` | — |
 

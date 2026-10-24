@@ -361,6 +361,21 @@ fn soltar_una_caravana_solo_vale_dentro_de_la_plaza_donde_entro_la_columna_y_all
 }
 
 #[test]
+fn aparcar_es_soltar_y_solo_vale_dentro_de_la_plaza() {
+    // Decisión del autor (2026-10-24): `aparcarCaravana` (40) y `soltarCaravana` (142) son la misma acción, solo dentro de la plaza en la que entró la columna.
+    let m = con_mundo!();
+    let ConCaravana { mut e, a, ana, ej, k, .. } = con_caravana(m);
+    let aparcar = Comando::AparcarCaravana { caravana: k, asentamiento: a };
+    e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    assert_eq!(e.no("ana", aparcar.clone()), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "a la puerta");
+    e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
+    e.ok("ana", aparcar);
+    assert_eq!((e.n.caravana(k).unwrap().estado, e.n.caravana(k).unwrap().anfitriona.map(u64::from)), (EstadoCaravana::Aparcada, Some(a)));
+    assert!(e.n.ejercito(ej).is_none(), "la residente deshace la columna que conservaba para llevarla");
+    assert_eq!((hechos(&e.n, "ejercito.caravana_aparcada").len(), hechos(&e.n, "ejercito.caravana_soltada").len()), (1, 0));
+}
+
+#[test]
 fn reclamar_solo_vale_para_la_caravana_de_fundacion_que_vuelve_sola() {
     let m = con_mundo!();
     let ConCaravana { mut e, ana, k, .. } = con_caravana(m);

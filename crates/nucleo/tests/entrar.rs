@@ -941,11 +941,11 @@ fn al_aparcar_la_caravana_lo_que_la_columna_ya_no_puede_llevar_se_queda_en_ella(
     assert!(e.n.capacidad_de_carga(ej).unwrap() > un_carro, "la caravana suma sus carros a la capacidad de la columna");
     // Con lo justo para un carro, se aparca sin dejar nada; la vuelve a enganchar y carga 7 más: esas 7 se quedan en la caravana.
     e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: un_carro });
-    e.ok("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a });
+    e.ok("admin", Comando::AparcarCaravana { caravana: k, asentamiento: a }); // la regla de «solo dentro» (5G-a-5) está en `a_mano.rs`
     assert!(e.n.caravana(k).unwrap().contenido.is_empty());
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Trigo, cantidad: 7_000 });
-    e.ok("ana", Comando::AparcarCaravana { caravana: k, asentamiento: a });
+    e.ok("admin", Comando::AparcarCaravana { caravana: k, asentamiento: a }); // la regla de «solo dentro» (5G-a-5) está en `a_mano.rs`
     assert!(e.ejercito(ej).caravanas_adjuntas.is_empty());
     assert_eq!(e.ejercito(ej).columna.carga.get(&Trigo), Some(&un_carro), "la columna se queda con lo que le cabe");
     assert_eq!(e.n.caravana(k).unwrap().contenido.get(&Trigo), Some(&7_000), "lo demás, en la caravana aparcada");

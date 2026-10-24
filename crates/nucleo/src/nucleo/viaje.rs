@@ -39,6 +39,7 @@ use comercio::red_caminos::{Arista, RedCaminos};
 use comercio::reparto::{asignar_origen, lados_pendientes, EntornoReparto, LadoPendiente};
 use comercio::viaje::{longitud_ruta, peajes_de_paradas, CobroPeaje};
 use comercio::{total, Lado};
+use militar::presencia::Ubicacion;
 use militar::{sumar, Carga as Mercancia};
 use rutas::{a_plan_por_minuto, clave_arista, Atraccion, Camino};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -729,8 +730,10 @@ impl Nucleo {
         Ok(None)
     }
 
-    /// La columna entra en una plaza de la Facción de la caravana y la deja aparcada allí (Movimiento_Ejercitos §11). `codigo` es el hecho (`ejercito.caravana_aparcada`, o
-    /// `ejercito.caravana_soltada` si llega por `soltarCaravana`) y `extra`, lo que este añade a su payload.
+    /// La columna, **dentro** de una plaza de la Facción de la caravana (entró con todo), la deja aparcada allí (Movimiento_Ejercitos §9 y §11, canon 3.13.7; decisión del autor 5G-a-5:
+    /// aparcar y soltar son la misma acción y a la puerta se está fuera). La administración salta la comprobación. Si era la última adjunta de la columna que un residente conserva en su
+    /// residencia, la columna se deshace como al entrar sin caravanas (el carro, con el héroe). `codigo` es el hecho (`ejercito.caravana_aparcada`, o `ejercito.caravana_soltada` si llega
+    /// por `soltarCaravana`) y `extra`, lo que este añade a su payload.
     pub(super) fn aparcar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, plaza: u64, codigo: &'static str, extra: &[(&'static str, i64)]) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -750,8 +753,16 @@ impl Nucleo {
         if self.estado.asentamientos.get(&origen).map(|o| o.faccion) != Some(anfitriona.faccion) {
             return Err(rechazo(rechazos::CARAVANA_PLAZA_AJENA, "una caravana solo se aparca en una plaza de su Facción".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(anfitriona.posicion) > self.radio_puerta() {
-            return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "la columna no está en la puerta de la plaza".into()));
+        // Quién de la columna está dentro de la plaza con ella (la columna entra con su gente y ya no está en el mapa).
+        let dentro: Vec<u64> = e
+            .columna
+            .participantes
+            .iter()
+            .map(|x| x.heroe)
+            .filter(|&h| self.heroe(h).is_some_and(|hn| hn.columna == Some(ejercito) && hn.heroe.presencia.ubicacion == Ubicacion::Asentamiento(plaza as u32)))
+            .collect();
+        if !p.admin && dentro.is_empty() {
+            return Err(rechazo(rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "una caravana solo se aparca dentro de una plaza: hay que entrar antes".into()));
         }
         let (antes, posicion) = (self.velocidad_de_columna(e), anfitriona.posicion);
         self.estado.comercio.flota[i].aparcar(id32(plaza), posicion).map_err(|er| {
@@ -777,6 +788,12 @@ impl Nucleo {
         let mut datos = vec![("caravana", caravana as i64), ("plaza", plaza as i64), ("dejado", total(&dejado))];
         datos.extend_from_slice(extra);
         self.evento(codigo, t, ejercito, None, datos);
+        let e = &self.estado.ejercitos[&ejercito];
+        if let ([h], true) = (dentro.as_slice(), e.caravanas_adjuntas.is_empty() && e.columna.participantes.len() == 1) {
+            if self.heroe(*h).is_some_and(|hn| hn.heroe.residencia == Some(militar::heroe::Residencia::Asentamiento(plaza as u32))) {
+                self.recoger_en_residencia(t, *h, ejercito, Ubicacion::Asentamiento(plaza as u32));
+            }
+        }
         Ok(None)
     }
 
