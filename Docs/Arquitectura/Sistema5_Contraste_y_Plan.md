@@ -611,3 +611,10 @@ Aplicadas en la rama `tanda-5g-b2` (sobre `c34920d`). Sin estado nuevo: la foto 
 6. **5G-b-11, cambio: suelta en una plaza que cae (conquista o ruina), se destruye con ella** y lo que costó se pierde, como las aparcadas (canon 3.13.7). Canon 1.8, Fundacion §7.
 
 **Pruebas nuevas** en `crates/nucleo/tests/fundacion.rs` (6, `decision_5gb*`): soltar en una plaza de origen y en un campamento de origen (con sus rechazos a la puerta y en mundo abierto); el encuentro con una columna enemiga, la `VISTA` ajena y la propia, y la intercepción en disputa (fuera de su zona: se la lleva entera) y en aguante (dentro: 70 % perdido, sigue volviendo y devuelve el resto); el fondo por Facción en `CAMPAMENTO` para cada espectador; y la caravana suelta en una plaza conquistada.
+
+### Decisión del autor sobre la intercepción de la Caravana de Fundación (2026-10-24)
+
+Responde a la pregunta del punto 3. Aplicada en `tanda-5g-b2`, sin estado nuevo (foto `BAN31`).
+
+1. **El reparto provisional queda como regla:** en disputa quien gana se la lleva entera (se pierde; él carga lo que costó, hasta lo que le quepa); en aguante pierde el 70 %, redondeado hacia abajo, y sigue su vuelta con el 30 %. Sin `// DUDA:`; Combate §7.1, canon 1.8, Fundacion §7.
+2. **Con servidores de batalla abre una batalla de caravana en Unity**, por el mismo camino que las comerciales (`abrir_batalla_de_ataque`, `Contexto::Caravana`): un solo carro `car-N:0` con lo que costó y los carreteros de defensa (`apertura_de_fundacion` en `nucleo/batallas.rs`). `apartar_caravana`/`reponer_caravana` la dejan quieta durante la batalla y retoman su vuelta; `captura_de_batalla` aplica `caer_fundacion` según el tipo. Sin servidores, con números, como hasta ahora. Prueba nueva en `tests/batalla_unity.rs` por el servidor de batalla real (disputa: el ticket, el resultado, la caravana perdida, la carga del vencedor y la foto).

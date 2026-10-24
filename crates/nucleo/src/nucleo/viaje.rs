@@ -584,6 +584,9 @@ impl Nucleo {
 
     /// `caravana_entra_en_batalla` dentro de una transición ya abierta (no procesa eventos ni cierra la versión).
     pub(super) fn apartar_caravana(&mut self, t: Instante, id: u64) -> bool {
+        if self.estado.fundacion.caravanas.contains_key(&id) {
+            return self.apartar_fundacion(t, id);
+        }
         let Some(posicion) = self.posicion_de_caravana(id, t) else { return false };
         let i = self.estado.comercio.posicion_caravana(id).expect("existe");
         let c = &mut self.estado.comercio.flota[i];
@@ -601,6 +604,9 @@ impl Nucleo {
 
     /// `caravana_sale_de_batalla` dentro de una transición ya abierta.
     pub(super) fn reponer_caravana(&mut self, t: Instante, id: u64) -> bool {
+        if self.estado.fundacion.caravanas.contains_key(&id) {
+            return self.reponer_fundacion(t, id);
+        }
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return false };
         let c = &mut self.estado.comercio.flota[i];
         let Some(desde) = c.pausada_desde else { return false };

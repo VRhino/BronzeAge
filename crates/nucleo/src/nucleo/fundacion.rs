@@ -389,12 +389,75 @@ impl Nucleo {
         }
     }
 
+    /// La Caravana de Fundación cae en manos de quien la intercepta (Combate §7.1, decisión del autor del 2026-10-24): no lleva carros, así que en una **disputa** se la llevan entera
+    /// —se pierde y su carga entera es el botín— y en un **aguante** pierde el 70 % de lo que lleva, redondeado hacia abajo (también de los aportes, por héroe en orden de id, para
+    /// que lo que vuelva a nombre de cada uno sume lo que queda), y sigue su vuelta con el 30 %. Devuelve lo perdido (lo carga quien llama) y si se perdió la caravana.
+    pub(super) fn caer_fundacion(&mut self, t: Instante, x: u64, modalidad: combate::caravana::Modalidad) -> (Mercancia, bool) {
+        use combate::caravana::Modalidad;
+        let fraccion = self.estado.reglas.economia.combate.numericas.carga_perdida_aguante as i128;
+        let Some(c) = self.estado.fundacion.caravanas.get_mut(&x) else { return (Mercancia::new(), false) };
+        let perdido = match modalidad {
+            Modalidad::Disputa => std::mem::take(&mut c.contenido),
+            Modalidad::Aguante => {
+                let mut perdido = Mercancia::new();
+                for (&rec, n) in c.contenido.iter_mut() {
+                    let l = entero((*n as i128 * fraccion / UNO as i128) as Mil);
+                    if l > 0 {
+                        *n -= l;
+                        perdido.insert(rec, l);
+                    }
+                }
+                c.contenido.retain(|_, n| *n > 0);
+                for (&rec, &l) in &perdido {
+                    let mut falta = l;
+                    for suyo in c.aportes.values_mut() {
+                        let toma = suyo.get(&rec).copied().unwrap_or(0).min(falta);
+                        if toma > 0 {
+                            quitar(suyo, rec, toma);
+                            falta -= toma;
+                        }
+                    }
+                }
+                c.aportes.retain(|_, m| !m.is_empty());
+                perdido
+            }
+        };
+        self.tr.tocar(Clase::Caravana, x);
+        let destruida = modalidad == Modalidad::Disputa;
+        if destruida {
+            let c = self.quitar_fundacion(x).expect("existe");
+            self.hecho_de_fundacion(t, "fundacion.caravana_perdida", &c, vec![], vec![("interceptada", 1)]);
+        }
+        (perdido, destruida)
+    }
+
+    /// Una batalla de Unity aparta a la Caravana de Fundación que vuelve sola: se queda quieta donde está (un plan de un solo punto, sin llegada) y sale del espacio.
+    pub(super) fn apartar_fundacion(&mut self, t: Instante, x: u64) -> bool {
+        let Some(c) = self.estado.fundacion.caravanas.get(&x) else { return false };
+        let Situacion::Retornando(plan) = &c.situacion else { return false };
+        let p = c.posicion_en(t);
+        let quieta = Plan::nuevo(plan.generacion, vec![base::Vertice { p, en: t }]);
+        self.estado.generaciones.subir(entidad_fundacion(x));
+        self.apartar(entidad_fundacion(x));
+        let c = self.estado.fundacion.caravanas.get_mut(&x).expect("existe");
+        (c.situacion, c.posicion) = (Situacion::Retornando(quieta), p);
+        self.tr.tocar(Clase::Caravana, x);
+        true
+    }
+
+    /// La batalla acaba y la Caravana de Fundación, si sigue, retoma su vuelta desde donde se quedó.
+    pub(super) fn reponer_fundacion(&mut self, t: Instante, x: u64) -> bool {
+        if !self.estado.fundacion.caravanas.get(&x).is_some_and(|c| matches!(c.situacion, Situacion::Retornando(_))) {
+            return false;
+        }
+        self.volver_sola(x, t);
+        true
+    }
+
     /// `atacar` contra la Caravana de Fundación que vuelve sola (decisión del autor 5G-b-5; Combate §7.1, canon 1.8: «interceptable igual que las demás, tipo A o B según la zona»). Exige guerra con
-    /// su Facción o la declara; se defienden los carreteros (`defensaBaseCaravana`: no lleva escolta) con la ventaja del aguante en la zona de su dueño o de un aliado.
-    /// DUDA: Combate §7.1 habla de carros y la de Fundación no tiene. Aquí: en **disputa** (A) el atacante que gana se la lleva entera —la caravana es un solo carro: se destruye y él carga lo
-    /// que costó hasta donde le quepa—; en **aguante** (B) pierde el 70 % de lo que costó (redondeado hacia abajo) y sigue volviendo con el 30 %. Con batallas de Unity se resuelve también con
-    /// números (el ticket de una batalla de caravana pide sus carros).
-    pub(super) fn atacar_fundacion(&mut self, t: Instante, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
+    /// su Facción o la declara; se defienden los carreteros (`defensaBaseCaravana`: no lleva escolta) con la ventaja del aguante en la zona de su dueño o de un aliado. Con servidores de
+    /// batalla abre una batalla de caravana en Unity, como las comerciales (decisión del autor del 2026-10-24); sin ellos se resuelve con números. Lo que pierde: [`Nucleo::caer_fundacion`].
+    pub(super) fn atacar_fundacion(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         use combate::caravana::{self as asalto, Defensa, Modalidad};
         use combate::resolucion::Bando;
         let v = self.estado.version;
@@ -408,6 +471,11 @@ impl Nucleo {
         let (dueno, donde) = (k.faccion, k.posicion_en(t));
         let guerra = self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, dueno, declara_guerra)?;
         let modalidad = asalto::modalidad_de(self.zona_en(donde, dueno));
+        if self.estado.reglas.batallas_en_unity {
+            let ap = self.apertura_de_fundacion(t, heroe, id, x, donde, modalidad);
+            self.abrir_batalla_de_ataque(t, ap, guerra);
+            return Ok(());
+        }
         let cr = self.estado.reglas.economia.combate.clone();
         let mut atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_resto);
         let columnas = self.columnas_de(&atac.escuadras);
@@ -419,48 +487,14 @@ impl Nucleo {
         let r = asalto::resolver_asalto(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Defensa::Base, modalidad, &mut self.estado.rng).expect("la columna lleva al menos un héroe sano");
         self.volcar_escuadras(&atac.escuadras);
         let (cogido, destruida) = if r.gana_atacante {
-            let c = self.estado.fundacion.caravanas.get_mut(&x).expect("existe");
-            let perdido: Mercancia = match modalidad {
-                Modalidad::Disputa => std::mem::take(&mut c.contenido),
-                Modalidad::Aguante => {
-                    let fraccion = cr.numericas.carga_perdida_aguante as i128;
-                    let mut perdido = Mercancia::new();
-                    for (&rec, n) in c.contenido.iter_mut() {
-                        let l = entero((*n as i128 * fraccion / UNO as i128) as Mil);
-                        if l > 0 {
-                            *n -= l;
-                            perdido.insert(rec, l);
-                        }
-                    }
-                    c.contenido.retain(|_, n| *n > 0);
-                    // Lo perdido sale de los aportes (por héroe, en orden de id) para que lo que vuelva a nombre de cada uno sume lo que queda.
-                    for (&rec, &l) in &perdido {
-                        let mut falta = l;
-                        for suyo in c.aportes.values_mut() {
-                            let toma = suyo.get(&rec).copied().unwrap_or(0).min(falta);
-                            if toma > 0 {
-                                quitar(suyo, rec, toma);
-                                falta -= toma;
-                            }
-                        }
-                    }
-                    c.aportes.retain(|_, m| !m.is_empty());
-                    perdido
-                }
-            };
-            self.tr.tocar(Clase::Caravana, x);
-            let destruida = modalidad == Modalidad::Disputa;
-            if destruida {
-                let c = self.quitar_fundacion(x).expect("existe");
-                self.hecho_de_fundacion(t, "fundacion.caravana_perdida", &c, vec![], vec![("interceptada", 1)]);
-            }
+            let (perdido, destruida) = self.caer_fundacion(t, x, modalidad);
             (self.cargar_botin_en(id, &perdido), destruida)
         } else {
             (Mercancia::new(), false)
         };
         let heridos = if r.gana_atacante { 0 } else { self.herir_heroes(&participantes, t) };
         self.recomponer_tras_bajas(&columnas, t);
-        let datos = vec![
+        let mut datos = vec![
             ("caravana", x as i64),
             ("aguante", (modalidad == Modalidad::Aguante) as i64),
             ("poderAtacante", r.poder_atacante),
@@ -472,7 +506,6 @@ impl Nucleo {
             ("destruida", destruida as i64),
             ("heridos", heridos as i64),
         ];
-        let mut datos = datos;
         datos.extend(dueno.map(|f| ("faccionDefensora", i64::from(f))));
         self.hecho_de_combate(if r.gana_atacante { "combate.caravana_interceptada" } else { "combate.caravana_resiste" }, t, vec![id], vec![], punto, datos);
         Ok(())

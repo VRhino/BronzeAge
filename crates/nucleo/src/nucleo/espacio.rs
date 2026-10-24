@@ -150,7 +150,11 @@ impl Nucleo {
         let mut puestos: Vec<(u64, Plan)> = Vec::new();
         puestos.extend(self.estado.ejercitos.values().filter(|e| self.columna_en_el_mapa(e)).map(|e| (e.id, self.plan_de_columna(e, t))));
         puestos.extend(self.estado.comercio.flota.iter().filter(|k| matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando)).filter_map(|k| Some((entidad_caravana(k.id), k.plan.clone()?))));
-        let vuelven = self.estado.fundacion.caravanas.values().filter_map(|k| if let crate::estado_fundacion::Situacion::Retornando(plan) = &k.situacion { Some((crate::estado_fundacion::entidad_fundacion(k.id), plan.clone())) } else { None });
+        // La que una batalla aparta se queda quieta (un plan de un punto) y no está en el espacio.
+        let vuelven = self.estado.fundacion.caravanas.values().filter_map(|k| match &k.situacion {
+            crate::estado_fundacion::Situacion::Retornando(plan) if plan.vertices.len() > 1 => Some((crate::estado_fundacion::entidad_fundacion(k.id), plan.clone())),
+            _ => None,
+        });
         puestos.extend(vuelven);
         puestos.extend(self.estado.asentamientos.values().map(|a| (a.id, plan_quieto(a.posicion, t, 0))));
         let puestos_de_mapa = self.estado.asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).filter(|v| v.estado != EstadoAvanzada::EnConstruccion);

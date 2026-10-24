@@ -766,6 +766,87 @@ async fn los_bandidos_que_acosan_a_una_columna_de_bots_juegan_una_batalla_sin_hu
     assert!(n.campamento_de_bandidos(campamento).is_some(), "y el campamento, donde estaba");
 }
 
+// ───────────────────────────── La Caravana de Fundación que vuelve sola ─────────────────────────────
+
+/// Un héroe de la cuenta, ciudadano de F1, residente y dentro de la plaza A, con una escuadra de milicia en su campamento.
+fn residente_de_a(e: &mut Esc, m: &Mundo, cuenta: &str) -> (u64, u64) {
+    let a = e.a;
+    let campamento = campamento_mas_cercano(m, e.pos(a));
+    let h = e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0];
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    let escuadra = e.ok("admin", Comando::DarEscuadra { heroe: h, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
+    (h, escuadra)
+}
+
+/// Decisión del autor del 2026-10-24: con servidores de batalla, interceptar la Caravana de Fundación que vuelve sola abre una batalla de caravana en Unity, como con una comercial: un solo carro
+/// (`car-N:0`, con lo que costó) y los carreteros de defensa. Si gana el atacante fuera de la zona de su dueño (disputa), se la lleva entera.
+#[tokio::test]
+async fn la_caravana_de_fundacion_que_vuelve_sola_se_intercepta_en_una_batalla_de_unity_y_en_disputa_se_la_llevan_entera() {
+    let m = con_mundo!();
+    let mut e = montar(m, false);
+    let a = e.a;
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
+    let (ana, esc_ana) = residente_de_a(&mut e, &m.0, "ana");
+    let (luis, esc_luis) = residente_de_a(&mut e, &m.0, "luis");
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    let costo = e.n.costo_caravana_fundacion();
+    // Ana va con su caravana en el ejército de luis, lejos de la plaza, y se separa: la caravana vuelve sola.
+    let ej = e.ok("luis", Comando::MovilizarEjercito { asentamiento: a, heroe: luis, escuadras: vec![esc_luis], carga: vec![], politica: militar::columna::Politica::Aceptar }).creadas[0];
+    e.ok("ana", Comando::UnirseAEjercito { asentamiento: a, heroe: ana, ejercito: ej, escuadras: vec![esc_ana], carga: vec![] });
+    e.ok("luis", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    let pos = e.pos(a);
+    let lejos = (0..60i64).map(|i| Punto::new(pos.x + 40_000 + i * 2_000, pos.y)).find(|q| m.0.transitable_en(q.x, q.y)).expect("tierra al este");
+    e.ok("luis", Comando::MarcharA { ejercito: ej, destino: lejos });
+    let fin = e.n.ejercito(ej).unwrap().plan.fin().unwrap();
+    e.hasta(fin);
+    e.ok("ana", Comando::SepararseDelEjercito { heroe: ana });
+    let t = e.n.ahora();
+    let caravana = e.n.estado().fundacion.caravanas[&k].clone();
+    assert!(matches!(caravana.situacion, nucleo::SituacionFundacion::Retornando(_)), "vuelve sola");
+    let donde = caravana.posicion_en(t);
+    let col = e.n.crear_ejercito(t, "zed", 2, donde, 500, 350_000).unwrap();
+    let zed = e.n.ejercito(col).unwrap().columna.lider;
+    for tropa in [Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto] {
+        e.ok("admin", Comando::DarEscuadra { heroe: zed, tropa, cantidad: completa(tropa) });
+    }
+
+    let w = arrancar_con(e.n).await;
+    let mut svc = Svc::entrar(&w, "srv").await;
+    let (mut zed_c, ..) = w.conectar(hola("ok:zed", TipoCliente::ClienteUnity)).await;
+    let atacar = orden::Cuerpo::Atacar(pb::OrdenAtacar {
+        heroe_id: ids::heroe(zed),
+        objetivo: Some(pb::orden_atacar::Objetivo { tipo: Some(pb::orden_atacar::objetivo::Tipo::CaravanaId(ids::caravana(k))) }),
+        declara_guerra: Some(true),
+    });
+    aceptada(&dar_todo(&mut zed_c, "intercepta", atacar).await.1);
+
+    // El servidor recibe una batalla de caravana: la de Fundación, en disputa, con un solo carro que lleva lo que costó; defienden los carreteros, de la Facción 1.
+    let ticket = svc.ticket().await;
+    let Some(pb::contexto_estrategico::Tipo::Caravana(c)) = ticket.contexto_estrategico.as_ref().and_then(|c| c.tipo.clone()) else { panic!("una batalla de caravana") };
+    let id_caravana = ids::caravana(k);
+    assert_eq!((c.caravana_id.as_str(), c.modalidad), (id_caravana.as_str(), pb::ModalidadCaravana::ModalidadDisputa as i32), "fuera de la zona de su dueño");
+    assert_eq!(c.carros.iter().map(|x| x.carro_id.clone()).collect::<Vec<_>>(), vec![format!("{id_caravana}:0")]);
+    let carga: i64 = c.carros[0].carga.as_ref().unwrap().por_id.values().sum();
+    assert_eq!(carga, costo.values().sum::<i64>(), "el carro lleva lo que costó");
+    let defensor = ticket.defensor.as_ref().unwrap();
+    assert_eq!((defensor.faccion_id.as_deref(), defensor.participantes.len(), defensor.escuadras_sin_heroe.len()), (Some("f-1"), 0, 1), "los carreteros");
+
+    // Gana el atacante: se la lleva entera.
+    let uuid = ticket.battle_id.clone();
+    aceptado(&svc.mandar(asignacion(&uuid, "intento", 0, &[])).await, "asignacion");
+    aceptado(&svc.mandar(inicio(&uuid, "intento")).await, "inicio");
+    aceptado(&svc.mandar(resultado_de(&ticket, &[], "intento", pb::LadoId::Atacante)).await, "resultado");
+    let n = w.parar().await;
+    assert!(!n.estado().fundacion.caravanas.contains_key(&k), "interceptada en disputa, se pierde");
+    // Le cabe entera: carga lo que costó (más la chatarra de los carreteros caídos, como en toda batalla).
+    let carga = &n.ejercito(col).unwrap().columna.carga;
+    assert!(costo.iter().all(|(r, &c)| carga.get(r) == Some(&c)), "zed carga lo que costó: {carga:?} frente a {costo:?}");
+    la_foto_vuelve_igual(&n, m);
+}
+
 // ───────────────────────────── Informe de inspección ─────────────────────────────
 
 #[tokio::test]

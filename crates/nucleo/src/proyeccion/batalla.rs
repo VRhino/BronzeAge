@@ -79,6 +79,11 @@ fn bando(n: &Nucleo, b: &BandoDeTicket) -> pb::BattleSide {
 
 /// Los carros de una caravana con su id (`"<caravana>:<posición>"`) y su carga. Una caravana que ya no existe no trae carros.
 fn carros(n: &Nucleo, caravana: u64) -> Vec<pb::CarroEnBatalla> {
+    // La Caravana de Fundación es un solo carro con lo que costó (2026-10-24).
+    if let Some(k) = n.estado().fundacion.caravanas.get(&caravana) {
+        let carga = pb::Cantidades { por_id: k.contenido.iter().map(|(r, &n)| (r.nombre().to_owned(), n)).collect() };
+        return vec![pb::CarroEnBatalla { carro_id: format!("{}:0", ids::caravana(caravana)), carga: Some(carga) }];
+    }
     let Some(c) = n.estado().comercio.caravana(caravana) else { return Vec::new() };
     let flota = &n.estado().reglas.economia.comercio.flota;
     c.carga_por_carro(flota)
