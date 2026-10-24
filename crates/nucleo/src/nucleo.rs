@@ -58,6 +58,7 @@ mod diplomacia;
 mod espacio;
 mod experiencia;
 mod exploracion;
+mod fundacion;
 mod flota;
 mod heroes;
 mod inspecciones;
@@ -492,6 +493,7 @@ impl Nucleo {
             Carga::Militar(suceso) => self.suceso_militar(id, suceso, t),
             Carga::Combate(suceso) => self.suceso_de_combate(id, suceso, t),
             Carga::Batalla(suceso) => self.suceso_de_batalla(crate::estado_comercio::id_de_entidad(id), suceso, t),
+            Carga::Fundacion(suceso) => self.suceso_de_fundacion(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
@@ -518,6 +520,8 @@ impl Nucleo {
 
     /// La ÚNICA función que sube la versión: si la transición cambió algo (o se fuerza), cierra un registro de cambios.
     fn cerrar_version(&mut self, t: Instante, forzar: bool) -> bool {
+        // La Caravana de Fundación que se ha quedado sin su titular (Fundacion_Y_Refundacion §7) vuelve sola a su origen: lo mira lo que la transición tocó.
+        self.vigilar_fundaciones(t);
         // Quien entra, sale, se muda o aparca marca el interior de su plaza (solo con sesiones).
         self.marcar_interiores();
         // Las escuadras de un héroe tocado viajan con él.
@@ -994,6 +998,14 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::DesignarCapital { .. } | Comando::RenombrarAsentamiento { .. } => match self.ejecutar_capital_y_nombre(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::AportarARefundacion { .. }
+            | Comando::RetirarDeRefundacion { .. }
+            | Comando::ComprarCaravanaDeRefundacion { .. }
+            | Comando::LanzarCaravanaFundacion { .. }
+            | Comando::DesarmarCaravanaFundacion { .. } => match self.ejecutar_fundacion(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

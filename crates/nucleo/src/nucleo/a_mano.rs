@@ -7,8 +7,8 @@
 //! - **`cargarCaravana`** carga en una caravana adjunta del almacén de una plaza de su Facción a cuya puerta está la columna, sin reserva (como el reparto automático), hasta el hueco
 //!   que le queda de verdad: ni la caravana ni la columna pasan de su límite (5G-a-4).
 //! - **`soltarCaravana`** es aparcar en la plaza dentro de la cual está la columna (entró con todo); fuera, a la puerta o en mundo abierto, se rechaza (5G-a-5).
-//! - **`reclamarCaravana`** vale solo para la Caravana de Fundación que vuelve sola; mientras la Caravana de Fundación sea una marca de la columna (hasta 5G-b), no hay ninguna que
-//!   reclamar y la orden se rechaza con `caravana.no_reclamable`.
+//! - **`reclamarCaravana`** vale solo para la Caravana de Fundación que vuelve sola (su caso de éxito está en `nucleo/fundacion.rs`, 5G-b); una comercial se rechaza con
+//!   `caravana.no_reclamable`.
 
 use super::*;
 use crate::estado::Dato;
@@ -37,7 +37,7 @@ impl Nucleo {
             Comando::GuardarEnAlmacenPersonal { heroe, recurso, cantidad } => self.mover_almacen_personal(t, p, *heroe, *recurso, *cantidad, true),
             Comando::SacarDelAlmacenPersonal { heroe, recurso, cantidad } => self.mover_almacen_personal(t, p, *heroe, *recurso, *cantidad, false),
             Comando::CargarCaravana { ejercito, caravana, asentamiento, recurso, cantidad } => self.cargar_caravana(t, p, *ejercito, *caravana, *asentamiento, *recurso, *cantidad),
-            Comando::ReclamarCaravana { heroe, caravana, politica: _ } => self.reclamar_caravana(p, *heroe, *caravana),
+            Comando::ReclamarCaravana { heroe, caravana, politica } => self.reclamar_caravana(t, p, *heroe, *caravana, *politica),
             Comando::SoltarCaravana { ejercito, caravana, heroe } => self.soltar_caravana(t, p, *ejercito, *caravana, *heroe),
             _ => unreachable!("solo se llama con las órdenes del almacén personal y de las caravanas a mano"),
         }
@@ -167,12 +167,14 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// `reclamarCaravana` (Movimiento_Ejercitos §9): solo la Caravana de Fundación que vuelve sola a su origen, en mundo abierto. Hoy la Caravana de Fundación es una marca de la columna, no una
-    /// caravana, así que ninguna se puede reclamar: se comprueba lo que la orden exige del héroe y de la caravana y se rechaza con `caravana.no_reclamable` (la Caravana de Fundación de verdad
-    /// es de 5G-b).
-    fn reclamar_caravana(&mut self, p: &Peticion, heroe: u64, caravana: u64) -> Result<Vec<u64>, Respuesta> {
+    /// `reclamarCaravana` (Movimiento_Ejercitos §9): solo la Caravana de Fundación que vuelve sola a su origen, en mundo abierto (`Nucleo::reclamar_fundacion`, 5G-b). Una caravana comercial nunca
+    /// se reclama (`caravana.no_reclamable`).
+    fn reclamar_caravana(&mut self, t: Instante, p: &Peticion, heroe: u64, caravana: u64, politica: militar::columna::Politica) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         self.autorizar_heroe(p, heroe, false)?;
+        if self.estado.fundacion.caravanas.contains_key(&caravana) {
+            return self.reclamar_fundacion(t, heroe, caravana, politica);
+        }
         if self.estado.comercio.posicion_caravana(caravana).is_none() {
             return Err(Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana), v));
         }

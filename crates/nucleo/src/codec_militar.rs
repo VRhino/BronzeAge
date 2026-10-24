@@ -2,7 +2,7 @@
 //! **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · convocatorias{n u64 · n × convocatoria} · reclutas{n u64 · n ×
-//! (campamento u32, población i64, en i64)} · tecnologías{n u64 · n × (facción u32, k u64, k × texto)}`. Las relaciones viven en `Estado::politica` desde BAN31 (5D, `codec_politica`).
+//! (campamento u32, población i64, en i64)} · tecnologías{n u64 · n × (facción u32, k u64, k × texto)}`. Las relaciones viven en `Estado::politica` desde BAN32 (5D, `codec_politica`).
 //!
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
 //! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 · puntos de

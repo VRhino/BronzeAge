@@ -15,6 +15,7 @@ use crate::memoria::{self, Memoria};
 use crate::estado_batallas::EstadoBatallas;
 use crate::estado_combate::EstadoCombate;
 use crate::estado_comercio::EstadoComercio;
+use crate::estado_fundacion::{self, EstadoFundacion};
 use crate::estado_militar::{Acceso, EstadoMilitar, Relacion, Trato};
 use politica::relaciones::TipoRelacion;
 use crate::proyeccion::ambito::Ambito;
@@ -61,10 +62,15 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
-/// BAN31: BAN30 con las correcciones del autor a 5C y la diplomacia de 5D (sistema 5): cada plaza guarda desde cuándo es de su Facción (`de_la_faccion_desde`, 5C-1: la capital
+/// BAN32: BAN31 con las correcciones del autor a 5C y la diplomacia de 5D (sistema 5): cada plaza guarda desde cuándo es de su Facción (`de_la_faccion_desde`, 5C-1: la capital
 /// efectiva es la que lleva más tiempo en la Facción), el resto oculto de su tributo (`resto_tributo`, Q3) y si abre su almacén a los aliados (`permite_reabastecer_aliados`); las
 /// relaciones dejan el mapa de pares del andamiaje (`EstadoMilitar::relaciones`) y viven solo en `Estado::politica` (con dirección, estado, fechas, tributo y su historia), y las propuestas
-/// de relación, con ellas. BAN30 se rechaza: sus plazas no dicen desde cuándo son de su Facción y sus relaciones no tienen dirección (no se sabe quién es la señora ni quién declaró).
+/// de relación, con ellas. BAN31 se rechaza: sus plazas no dicen desde cuándo son de su Facción y sus relaciones no tienen dirección (no se sabe quién es la señora ni quién declaró).
+///
+/// BAN31: BAN30 con la Caravana de Fundación como entidad y el fondo de refundación de los campamentos (sistema 5, tanda 5G-b; `estado_fundacion`): cada caravana con su Facción,
+/// titular, origen (plaza, campamento o ninguno), posición, lo que costó, los aportes, si está suelta, enganchada o volviendo sola (con su plan) y su caducidad; y por campamento lo que aportó
+/// cada héroe al fondo. La columna deja de llevar la marca `caravana_fundacion` y la cola gana dos plazos (`Carga::Fundacion`: caducar, llegar). BAN30 se rechaza: su Caravana de Fundación era
+/// una marca de la columna sin titular, origen ni coste que devolver.
 ///
 /// BAN30: BAN29 con la experiencia, la capital y el nombre de las plazas (sistema 5, tanda 5C): cada plaza guarda su nombre (`nombreDeCiudadLibre` al fundar, `RenombrarAsentamiento`) y
 /// la marca de capital que deja `DesignarCapital` (`capital_de`); el nivel de Facción ya no se guarda suelto (`niveles_faccion` desaparece: se deriva de la experiencia de la Facción) y
@@ -145,7 +151,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN31";
+const MAGIA: &[u8; 5] = b"BAN32";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -281,9 +287,6 @@ pub struct Ejercito {
     /// marcha esta columna sea cual sea su composición. Sin ella (`None`, lo normal) la velocidad es el mínimo de sus escuadras con soldados y de
     /// sus caravanas adjuntas (`Nucleo::velocidad_de_columna`).
     pub velocidad_fija: Option<Mil>,
-    /// Lleva enganchada una Caravana de Fundación (Doc 1.8): puede fundar donde está. La compra y el lanzamiento son de
-    /// la economía; hasta entonces la da la administración.
-    pub caravana_fundacion: bool,
     /// Caravanas enganchadas a la columna (ids ascendentes, §9): viajan con ella y el reparto automático no las ve.
     pub caravanas_adjuntas: Vec<u64>,
     /// A quién persigue (Movimiento_Ejercitos §7): la **entidad** de la presa, que es el id de una columna o, con etiqueta, el de una caravana
@@ -407,6 +410,18 @@ pub enum Carga {
     Combate(SucesoCombate),
     /// Un plazo de una batalla de Unity (la entidad es `entidad_batalla`; prioridad 1).
     Batalla(SucesoBatalla),
+    /// Un plazo de una Caravana de Fundación (la entidad es `entidad_fundacion`; prioridad 6, la de las caravanas).
+    Fundacion(SucesoFundacion),
+}
+
+/// Qué plazo de una Caravana de Fundación vence (Fundacion_Y_Refundacion §7). Cada cambio de situación sube su generación: a una caravana solo le queda en la cola el plazo de la situación en
+/// que está, y a la que va enganchada, ninguno.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SucesoFundacion {
+    /// La suelta caduca (`caduca_en`): se desarma y devuelve lo que costó.
+    Caduca,
+    /// La que vuelve sola llega a su origen: se desarma y devuelve lo que costó.
+    Llega,
 }
 
 /// Qué plazo de una batalla de Unity vence (Batalla_Unity_Ciclo §6 y §3.3). Los tres comparten la entidad de la batalla: cada cambio de estado sube su
@@ -831,6 +846,8 @@ pub struct Estado {
     pub memoria: Memoria,
     /// Las Facciones como entidad, con su índice de ciudadanía, y (desde 5D y 5F) sus relaciones y propuestas (Diplomacia_Facciones; crate `politica`).
     pub politica: politica::Politica,
+    /// Las Caravanas de Fundación y el fondo de refundación de los campamentos (Fundacion_Y_Refundacion; 5G-b).
+    pub fundacion: EstadoFundacion,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
@@ -862,6 +879,7 @@ impl Estado {
             batallas: EstadoBatallas::default(),
             memoria: Memoria::default(),
             politica: politica::Politica::default(),
+            fundacion: EstadoFundacion::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
@@ -994,6 +1012,7 @@ impl Estado {
         codec_batallas::escribir(&mut w, &self.batallas);
         memoria::escribir(&mut w, &self.memoria);
         codec_politica::escribir(&mut w, &self.politica);
+        estado_fundacion::escribir(&mut w, &self.fundacion);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1047,6 +1066,10 @@ impl Estado {
                     w.u8(10);
                     s.escribir(&mut w);
                 }
+                Carga::Fundacion(s) => w.u8(match s {
+                    SucesoFundacion::Caduca => 13,
+                    SucesoFundacion::Llega => 14,
+                }),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -1076,13 +1099,14 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN31`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 31 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN32`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 32 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'1' => {}
-                b'0' => return Err(ErrorFormato("foto del formato BAN30 (las plazas no dicen desde cuándo son de su Facción ni traen el resto de su tributo, y las relaciones son pares sin dirección del andamiaje de administración): ya no se admite")),
+                b'2' => {}
+                b'1' => return Err(ErrorFormato("foto del formato BAN31 (las plazas no dicen desde cuándo son de su Facción ni traen el resto de su tributo, y las relaciones son pares sin dirección del andamiaje de administración): ya no se admite")),
+                b'0' => return Err(ErrorFormato("foto del formato BAN30 (la Caravana de Fundación es una marca de la columna, sin titular, origen, coste que devolver ni caducidad, los campamentos no traen el fondo de refundación, las plazas no dicen desde cuándo son de su Facción y las relaciones son pares sin dirección): ya no se admite")),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN2" {
@@ -1193,6 +1217,7 @@ impl Estado {
         s.batallas = codec_batallas::leer(&mut r)?;
         s.memoria = memoria::leer(&mut r)?;
         s.politica = codec_politica::leer(&mut r)?;
+        s.fundacion = estado_fundacion::leer(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -1218,6 +1243,8 @@ impl Estado {
                 8 => Carga::Encuentro { otra: r.u64()?, otra_generacion: r.u32()? },
                 9 => Carga::Combate(SucesoCombate::leer(&mut r)?),
                 10 => Carga::Batalla(SucesoBatalla::leer(&mut r)?),
+                13 => Carga::Fundacion(SucesoFundacion::Caduca),
+                14 => Carga::Fundacion(SucesoFundacion::Llega),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

@@ -108,7 +108,7 @@ fn fundar_y_sus_rechazos() {
     let a = &n.estado().asentamientos[&id];
     assert_eq!((a.faccion, a.nivel(), a.posicion, a.fundado_en), (1, 1, p, MIN));
     assert_eq!(n.radio_zona(id), Some(6_000));
-    assert!(!n.estado().ejercitos[&e].caravana_fundacion);
+    assert_eq!(n.estado().fundacion.de_columna(e), None, "la caravana se gasta");
     assert_eq!(eventos(&n, "fundacion.asentamiento_fundado"), vec![(MIN, vec![id])]);
     assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f3", Comando::Fundar { ejercito: e }))), rechazos::SIN_CARAVANA);
 

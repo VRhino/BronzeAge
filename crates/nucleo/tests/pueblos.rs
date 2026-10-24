@@ -675,7 +675,7 @@ fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_s
 
 // ───────────────────────────── 5. Determinismo y recuperación ─────────────────────────────
 
-/// Un guion con pueblos: marca, entrega, se levanta, pierde el carro (el primero de la partida), lo repone y marca otro pueblo. Las órdenes
+/// Un guion con pueblos: marca, entrega, se levanta, pierde el carro (el primero de la flota), lo repone y marca otro pueblo. Las órdenes
 /// llevan su instante: `avanzar` solo decide cómo se mueve el reloj entre ellas.
 fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let plaza = e.plaza;
@@ -685,7 +685,8 @@ fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     avanzar(e, 20 * MIN);
     e.ok_en(20 * MIN, "ana", Comando::EntregarMateriales { ejercito: col, pueblo: id });
     avanzar(e, 8 * HORA);
-    e.n.aplicar_perdida_de_carros(8 * HORA, 1, &[0]).expect("el carro del pueblo");
+    // `car-2`: el 1 es la Caravana de Fundación con que la administración fundó la plaza (5G-b: toma su id del contador de las caravanas).
+    e.n.aplicar_perdida_de_carros(8 * HORA, 2, &[0]).expect("el carro del pueblo");
     avanzar(e, 12 * HORA);
     e.ok_en(12 * HORA, "ana", Comando::ReponerCarro { pueblo: id });
     e.ok_en(12 * HORA, "ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: otro });
@@ -1084,7 +1085,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN31");
+    assert_eq!(&bytes[..5], b"BAN32");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

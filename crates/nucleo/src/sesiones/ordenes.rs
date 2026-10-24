@@ -12,7 +12,7 @@
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
 
-use crate::comando::{rechazos, AccionReloj, Comando, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta};
+use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta};
 use crate::estado_militar::Relacion;
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ids;
@@ -246,6 +246,15 @@ impl Ctx<'_> {
     /// La política opcional de una salida: sin ella, nadie se une.
     fn politica_o_rechazar(&self, s: Option<&str>) -> R<Politica> {
         s.map_or(Ok(Politica::Rechazar), |s| self.politica(s))
+    }
+
+    /// `lado` de `aportar_a_refundacion` y `retirar_de_refundacion`: `almacen | carro`.
+    fn lado_del_fondo(&self, s: &str) -> R<LadoDelFondo> {
+        match s {
+            "almacen" => Ok(LadoDelFondo::Almacen),
+            "carro" => Ok(LadoDelFondo::Carro),
+            _ => self.forma(format!("lado del fondo desconocido: {s}")),
+        }
     }
 
     fn lado(&self, s: &str) -> R<Lado> {
@@ -678,11 +687,13 @@ impl Ctx<'_> {
             Cuerpo::ComprarInformePlaza(o) => {
                 Comando::ComprarInformePlaza { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, asentamiento: self.plaza(&o.asentamiento_id)? }
             }
-            Cuerpo::AportarARefundacion(_)
-            | Cuerpo::RetirarDeRefundacion(_)
-            | Cuerpo::ComprarCaravanaDeRefundacion(_)
-            | Cuerpo::LanzarCaravanaFundacion(_)
-            | Cuerpo::DesarmarCaravanaFundacion(_) => return self.no_disponible("refundación y Caravana de Fundación"),
+
+            // ── Refundación y Caravana de Fundación (5G-b) ──
+            Cuerpo::AportarARefundacion(o) => Comando::AportarARefundacion { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, lado: self.lado_del_fondo(&o.lado)? },
+            Cuerpo::RetirarDeRefundacion(o) => Comando::RetirarDeRefundacion { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, lado: self.lado_del_fondo(&o.lado)? },
+            Cuerpo::ComprarCaravanaDeRefundacion(_) => Comando::ComprarCaravanaDeRefundacion { heroe: self.mi_heroe()? },
+            Cuerpo::LanzarCaravanaFundacion(o) => Comando::LanzarCaravanaFundacion { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.origen_asentamiento_id)? },
+            Cuerpo::DesarmarCaravanaFundacion(o) => Comando::DesarmarCaravanaFundacion { heroe: self.mi_heroe()?, caravana: self.caravana(&o.caravana_id)? },
 
             // ── Almacén personal y caravanas a mano (5G-a) ──
             Cuerpo::GuardarEnAlmacenPersonal(o) => Comando::GuardarEnAlmacenPersonal { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },

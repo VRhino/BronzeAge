@@ -255,6 +255,7 @@ impl Nucleo {
     /// Quita la columna del mundo: sus eventos se descartan, el espacio la olvida y quien la perseguía la da por puesta a cubierto. Los participantes,
     /// sus escuadras y las caravanas son de quien llama.
     pub(super) fn baja_de_columna(&mut self, id: u64) {
+        self.fijar_fundaciones_de(id);
         self.fijar_persecucion(id, None);
         self.estado.ejercitos.remove(&id);
         self.estado.generaciones.subir(id);
@@ -277,7 +278,7 @@ impl Nucleo {
 
     /// Una columna nueva nacida de repartir otra (separarse, desarmar, salir del mundo): quieta donde está su origen, sin caravanas.
     pub(super) fn columna_suelta(&self, columna: Columna, posicion: Punto) -> Ejercito {
-        Ejercito { id: columna.id, columna, posicion, plan: Plan::default(), velocidad_fija: None, caravana_fundacion: false, caravanas_adjuntas: vec![], persiguiendo: None, en_batalla: false, plan_en_pausa: None, version: 0 }
+        Ejercito { id: columna.id, columna, posicion, plan: Plan::default(), velocidad_fija: None, caravanas_adjuntas: vec![], persiguiendo: None, en_batalla: false, plan_en_pausa: None, version: 0 }
     }
 
     /// Una columna sin nadie dentro se disuelve (Movimiento_Ejercitos §11): sus caravanas adjuntas, que sí viajan solas, vuelven a su origen

@@ -412,7 +412,7 @@ pub enum Comando {
     DesignarCapital { heroe: u64, faccion: u32, asentamiento: u64 },
     /// Quien reside en la plaza le cambia el nombre (`renombrarAsentamiento`): se recorta; vacío, la plaza se queda sin nombre (se muestra su id).
     RenombrarAsentamiento { heroe: u64, asentamiento: u64, nombre: String },
-    // ── Política: las relaciones entre Facciones (sistema 5, tanda 5D; Diplomacia_Facciones §5). Códigos desde el 154: del 144 al 153, para 5G-b. ──
+    // ── Política: las relaciones entre Facciones (sistema 5, tanda 5D; Diplomacia_Facciones §5). Códigos del 144 al 152 (del 153 al 157 son de 5G-b). ──
     /// La autoridad diplomática de `a` (Rey o Embajador) le propone a `b` una alianza o un vasallaje (`vasallaje`: `a` es la señora), con su tributo (recurso y milésimas por minuto;
     /// sin él, trigo a 0). Caduca a `RELACION_PROPUESTA.caducidadDias`. `creadas` lleva la propuesta.
     ProponerRelacion { heroe: u64, a: u32, b: u32, vasallaje: bool, tributo: Option<(Recurso, Mil)> },
@@ -432,6 +432,19 @@ pub enum Comando {
     AdmitirOtrasFacciones { heroe: u64, faccion: u32, admitir: bool },
     /// Quien manda en la plaza abre (o cierra) su almacén a las columnas aliadas para repostar y cargar caravanas (`permiteReabastecerAliados`). Cerrar no es retroactivo.
     AlternarReabastecerAliados { asentamiento: u64, permitido: bool },
+    // ── Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9). Las da la cuenta del héroe. Los códigos empiezan en el 153: del 143 al 152
+    //    quedan para 5C. Todo en unidades enteras (C3b). ──
+    /// Aporta al fondo de refundación de su Facción (sin plazas) en el campamento donde está: de su almacén personal (residiendo allí) o del carro de su columna a la puerta (siendo su Líder).
+    AportarARefundacion { heroe: u64, recurso: Recurso, cantidad: Mil, lado: LadoDelFondo },
+    /// Retira lo que aportó al fondo del campamento donde está, a su almacén personal (residiendo allí) o al carro de su columna, hasta donde quepa.
+    RetirarDeRefundacion { heroe: u64, recurso: Recurso, cantidad: Mil, lado: LadoDelFondo },
+    /// Compra la Caravana de Fundación con el fondo de su Facción (sin plazas ni otra caravana) en el campamento donde está: nace parada en él, con el héroe de titular. `creadas` lleva su id.
+    ComprarCaravanaDeRefundacion { heroe: u64 },
+    /// Lanza una Caravana de Fundación desde la plaza donde reside y está (nivel 2, cooldown de caravanas, cupo del cap y su coste): nace parada en ella, con el héroe de titular. `creadas`
+    /// lleva su id.
+    LanzarCaravanaFundacion { heroe: u64, asentamiento: u64 },
+    /// El titular desarma su Caravana de Fundación suelta, parada en su origen, y devuelve lo que costó (a la plaza, o al fondo a nombre de cada aportante).
+    DesarmarCaravanaFundacion { heroe: u64, caravana: u64 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -572,7 +585,12 @@ impl Comando {
             | Comando::DejarFaccion { .. }
             | Comando::CambiarResidencia { .. }
             | Comando::ResidirEnCampamento { .. }
-            | Comando::DejarResidencia { .. } => CuentaDelHeroe,
+            | Comando::DejarResidencia { .. }
+            | Comando::AportarARefundacion { .. }
+            | Comando::RetirarDeRefundacion { .. }
+            | Comando::ComprarCaravanaDeRefundacion { .. }
+            | Comando::LanzarCaravanaFundacion { .. }
+            | Comando::DesarmarCaravanaFundacion { .. } => CuentaDelHeroe,
             Comando::ResponderSolicitud { .. } | Comando::AsignarEmbajador { .. } | Comando::DesignarCapital { .. } | Comando::ResponderRelacion { .. } | Comando::AdmitirOtrasFacciones { .. } => ReyDeLaFaccion,
             Comando::ProponerRelacion { .. } | Comando::RetirarRelacion { .. } | Comando::DeclararGuerra { .. } | Comando::ProponerPaz { .. } | Comando::RomperRelacion { .. } | Comando::RebelionVasallo { .. } => {
                 AutoridadDiplomatica
@@ -641,7 +659,7 @@ impl Comando {
             Comando::ComprometerRecinto { asentamiento, .. } => Recinto { plaza: *asentamiento },
             Comando::ProponerTrueque { .. } => Acuerdo,
             Comando::ColocarOrdenMercado { .. } => OrdenMercado,
-            Comando::CrearCaravana { .. } => Caravana,
+            Comando::CrearCaravana { .. } | Comando::ComprarCaravanaDeRefundacion { .. } | Comando::LanzarCaravanaFundacion { .. } => Caravana,
             Comando::MarcarPueblo { .. } => Pueblo,
             Comando::ColocarAvanzada { .. } => Avanzada,
             Comando::CrearHeroe { .. } => Heroe,
@@ -771,9 +789,16 @@ impl Comando {
             }
             // Aceptar cambia la Facción del solicitante, y con ella la de su columna: no mientras combate.
             Comando::ResponderSolicitud { heroe, solicitante, .. } => i.heroes.extend([*heroe, *solicitante]),
-            Comando::CambiarResidencia { heroe, asentamiento } | Comando::DesignarCapital { heroe, asentamiento, .. } | Comando::RenombrarAsentamiento { heroe, asentamiento, .. } => {
+            Comando::CambiarResidencia { heroe, asentamiento }
+            | Comando::LanzarCaravanaFundacion { heroe, asentamiento }
+            | Comando::DesignarCapital { heroe, asentamiento, .. }
+            | Comando::RenombrarAsentamiento { heroe, asentamiento, .. } => {
                 i.heroes.push(*heroe);
                 i.asentamientos.push(*asentamiento);
+            }
+            Comando::DesarmarCaravanaFundacion { heroe, caravana } => {
+                i.heroes.push(*heroe);
+                i.caravanas.push(*caravana);
             }
             Comando::AnadirCarro { caravana, .. }
             | Comando::AnadirAnimal { caravana, .. }
@@ -885,7 +910,10 @@ impl Comando {
             | Comando::ProponerPaz { heroe, .. }
             | Comando::RomperRelacion { heroe, .. }
             | Comando::RebelionVasallo { heroe, .. }
-            | Comando::AdmitirOtrasFacciones { heroe, .. } => i.heroes.push(*heroe),
+            | Comando::AdmitirOtrasFacciones { heroe, .. }
+            | Comando::AportarARefundacion { heroe, .. }
+            | Comando::RetirarDeRefundacion { heroe, .. }
+            | Comando::ComprarCaravanaDeRefundacion { heroe } => i.heroes.push(*heroe),
             Comando::AlternarReabastecerAliados { asentamiento, .. } => i.asentamientos.push(*asentamiento),
             Comando::CrearEjercito { .. }
             | Comando::Reloj(_)
@@ -947,6 +975,28 @@ pub enum PagarCon {
     AlmacenPersonal,
     /// Del carro de la columna del héroe, a la puerta del campamento.
     Carro,
+}
+
+/// De dónde sale o adónde va lo del fondo de refundación (Fundacion_Y_Refundacion §9.1, D39): el almacén personal (en el campamento donde se reside) o el carro de la columna.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LadoDelFondo {
+    Almacen,
+    Carro,
+}
+
+fn lado_a_u8(l: LadoDelFondo) -> u8 {
+    match l {
+        LadoDelFondo::Almacen => 0,
+        LadoDelFondo::Carro => 1,
+    }
+}
+
+fn lado_de_u8(i: u8) -> Result<LadoDelFondo, ErrorFormato> {
+    match i {
+        0 => Ok(LadoDelFondo::Almacen),
+        1 => Ok(LadoDelFondo::Carro),
+        _ => Err(ErrorFormato("lado del fondo desconocido")),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1818,7 +1868,7 @@ impl Peticion {
                 w.texto(nombre);
             }
             Comando::ProponerRelacion { heroe, a, b, vasallaje, tributo } => {
-                w.u8(154);
+                w.u8(144);
                 w.u64(*heroe);
                 w.u32(*a);
                 w.u32(*b);
@@ -1830,49 +1880,70 @@ impl Peticion {
                 }
             }
             Comando::ResponderRelacion { heroe, propuesta, aceptar } => {
-                w.u8(155);
+                w.u8(145);
                 w.u64(*heroe);
                 w.u64(*propuesta);
                 w.bool(*aceptar);
             }
             Comando::RetirarRelacion { heroe, propuesta } => {
-                w.u8(156);
+                w.u8(146);
                 w.u64(*heroe);
                 w.u64(*propuesta);
             }
             Comando::DeclararGuerra { heroe, a, b } => {
-                w.u8(157);
+                w.u8(147);
                 w.u64(*heroe);
                 w.u32(*a);
                 w.u32(*b);
             }
             Comando::ProponerPaz { heroe, relacion, faccion } => {
-                w.u8(158);
+                w.u8(148);
                 w.u64(*heroe);
                 w.u64(*relacion);
                 w.u32(*faccion);
             }
             Comando::RomperRelacion { heroe, relacion, iniciador } => {
-                w.u8(159);
+                w.u8(149);
                 w.u64(*heroe);
                 w.u64(*relacion);
                 w.u32(*iniciador);
             }
             Comando::RebelionVasallo { heroe, relacion } => {
-                w.u8(160);
+                w.u8(150);
                 w.u64(*heroe);
                 w.u64(*relacion);
             }
             Comando::AdmitirOtrasFacciones { heroe, faccion, admitir } => {
-                w.u8(161);
+                w.u8(151);
                 w.u64(*heroe);
                 w.u32(*faccion);
                 w.bool(*admitir);
             }
             Comando::AlternarReabastecerAliados { asentamiento, permitido } => {
-                w.u8(162);
+                w.u8(152);
                 w.u64(*asentamiento);
                 w.bool(*permitido);
+            }
+            Comando::AportarARefundacion { heroe, recurso, cantidad, lado } | Comando::RetirarDeRefundacion { heroe, recurso, cantidad, lado } => {
+                w.u8(if matches!(self.comando, Comando::AportarARefundacion { .. }) { 153 } else { 154 });
+                w.u64(*heroe);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+                w.u8(lado_a_u8(*lado));
+            }
+            Comando::ComprarCaravanaDeRefundacion { heroe } => {
+                w.u8(155);
+                w.u64(*heroe);
+            }
+            Comando::LanzarCaravanaFundacion { heroe, asentamiento } => {
+                w.u8(156);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+            }
+            Comando::DesarmarCaravanaFundacion { heroe, caravana } => {
+                w.u8(157);
+                w.u64(*heroe);
+                w.u64(*caravana);
             }
         }
         w.0
@@ -2073,19 +2144,24 @@ impl Peticion {
             136 => Comando::DejarResidencia { heroe: r.u64()? },
             137 => Comando::DesignarCapital { heroe: r.u64()?, faccion: r.u32()?, asentamiento: r.u64()? },
             143 => Comando::RenombrarAsentamiento { heroe: r.u64()?, asentamiento: r.u64()?, nombre: r.texto()? },
-            154 => {
+            144 => {
                 let (heroe, a, b, vasallaje) = (r.u64()?, r.u32()?, r.u32()?, r.bool()?);
                 let tributo = if r.bool()? { Some((recurso_de_u8(r.u8()?)?, r.i64()?)) } else { None };
                 Comando::ProponerRelacion { heroe, a, b, vasallaje, tributo }
             }
-            155 => Comando::ResponderRelacion { heroe: r.u64()?, propuesta: r.u64()?, aceptar: r.bool()? },
-            156 => Comando::RetirarRelacion { heroe: r.u64()?, propuesta: r.u64()? },
-            157 => Comando::DeclararGuerra { heroe: r.u64()?, a: r.u32()?, b: r.u32()? },
-            158 => Comando::ProponerPaz { heroe: r.u64()?, relacion: r.u64()?, faccion: r.u32()? },
-            159 => Comando::RomperRelacion { heroe: r.u64()?, relacion: r.u64()?, iniciador: r.u32()? },
-            160 => Comando::RebelionVasallo { heroe: r.u64()?, relacion: r.u64()? },
-            161 => Comando::AdmitirOtrasFacciones { heroe: r.u64()?, faccion: r.u32()?, admitir: r.bool()? },
-            162 => Comando::AlternarReabastecerAliados { asentamiento: r.u64()?, permitido: r.bool()? },
+            145 => Comando::ResponderRelacion { heroe: r.u64()?, propuesta: r.u64()?, aceptar: r.bool()? },
+            146 => Comando::RetirarRelacion { heroe: r.u64()?, propuesta: r.u64()? },
+            147 => Comando::DeclararGuerra { heroe: r.u64()?, a: r.u32()?, b: r.u32()? },
+            148 => Comando::ProponerPaz { heroe: r.u64()?, relacion: r.u64()?, faccion: r.u32()? },
+            149 => Comando::RomperRelacion { heroe: r.u64()?, relacion: r.u64()?, iniciador: r.u32()? },
+            150 => Comando::RebelionVasallo { heroe: r.u64()?, relacion: r.u64()? },
+            151 => Comando::AdmitirOtrasFacciones { heroe: r.u64()?, faccion: r.u32()?, admitir: r.bool()? },
+            152 => Comando::AlternarReabastecerAliados { asentamiento: r.u64()?, permitido: r.bool()? },
+            153 => Comando::AportarARefundacion { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, lado: lado_de_u8(r.u8()?)? },
+            154 => Comando::RetirarDeRefundacion { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, lado: lado_de_u8(r.u8()?)? },
+            155 => Comando::ComprarCaravanaDeRefundacion { heroe: r.u64()? },
+            156 => Comando::LanzarCaravanaFundacion { heroe: r.u64()?, asentamiento: r.u64()? },
+            157 => Comando::DesarmarCaravanaFundacion { heroe: r.u64()?, caravana: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2613,6 +2689,27 @@ pub mod rechazos {
     pub const DIPLOMACIA_BATALLA_ABIERTA: &str = "diplomacia.batalla_abierta";
     /// El tributo de un vasallaje es una cantidad por minuto de un recurso, no negativa.
     pub const DIPLOMACIA_TRIBUTO_INVALIDO: &str = "diplomacia.tributo_invalido";
+    // Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9).
+    /// Lanzar una Caravana de Fundación sin residir en la plaza o sin estar dentro de ella (Proyecciones §5.2.4).
+    pub const FUNDACION_NO_RESIDES: &str = "fundacion.no_resides";
+    /// El titular no es ciudadano de la Facción de la plaza de origen.
+    pub const FUNDACION_NO_CIUDADANO: &str = "fundacion.no_ciudadano";
+    /// La plaza de origen no está a nivel 2 (el operativo, no el alcanzado).
+    pub const FUNDACION_NIVEL_INSUFICIENTE: &str = "fundacion.nivel_insuficiente";
+    /// Solo su titular desarma o engancha la Caravana de Fundación (y tiene que ir en la columna que la engancha).
+    pub const FUNDACION_NO_TITULAR: &str = "fundacion.no_titular";
+    /// Refundar desde un campamento es de una Facción sin ninguna plaza.
+    pub const REFUNDACION_CON_PLAZAS: &str = "refundacion.con_plazas";
+    /// La Facción ya tiene una Caravana de Fundación.
+    pub const REFUNDACION_YA_TIENE_CARAVANA: &str = "refundacion.ya_tiene_caravana";
+    /// El fondo de la Facción en el campamento no cubre el coste de la caravana (el mensaje dice cuánto falta).
+    pub const REFUNDACION_FONDO_CORTO: &str = "refundacion.fondo_corto";
+    /// Aportar o retirar con el almacén personal sin residir en ese campamento: el almacén vive donde se reside (aquí, con el carro).
+    pub const REFUNDACION_NO_RESIDES: &str = "refundacion.no_resides";
+    /// Retirar un recurso que el héroe no aportó al fondo de ese campamento.
+    pub const REFUNDACION_SIN_APORTE: &str = "refundacion.sin_aporte";
+    /// Reclamar la Caravana de Fundación lejos de ella (a más de `radioEncuentro`).
+    pub const CARAVANA_LEJOS: &str = "caravana.lejos";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -2951,6 +3048,11 @@ mod pruebas {
             Comando::RebelionVasallo { heroe: 2, relacion: 41 },
             Comando::AdmitirOtrasFacciones { heroe: 2, faccion: 1, admitir: true },
             Comando::AlternarReabastecerAliados { asentamiento: 3, permitido: true },
+            Comando::AportarARefundacion { heroe: 2, recurso: Recurso::Oro, cantidad: 40_000, lado: LadoDelFondo::Carro },
+            Comando::RetirarDeRefundacion { heroe: 2, recurso: Recurso::Madera, cantidad: 3_000, lado: LadoDelFondo::Almacen },
+            Comando::ComprarCaravanaDeRefundacion { heroe: 2 },
+            Comando::LanzarCaravanaFundacion { heroe: 2, asentamiento: 5 },
+            Comando::DesarmarCaravanaFundacion { heroe: 2, caravana: 4 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

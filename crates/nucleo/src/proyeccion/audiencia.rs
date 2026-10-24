@@ -5,7 +5,7 @@
 //! |---|---|
 //! | `Heroe`, `Escuadra` | `HEROE` del héroe (si es el de su cuenta) |
 //! | `Ejercito` | `HEROE` de cada participante (la `VISTA` no sale de aquí: la decide la niebla en cada muestreo, `proyeccion::vista`) |
-//! | `Caravana` | `FACCION` de su plaza de origen; `HEROE` de los participantes de la columna a la que va adjunta y de quienes ceden escolta |
+//! | `Caravana` | `FACCION` de su plaza de origen; `HEROE` de los participantes de la columna a la que va adjunta y de quienes ceden escolta. La de Fundación: `FACCION` de su Facción y `HEROE` de su titular y de quienes van en su columna |
 //! | `Batalla` | su propio ámbito `BATALLA` (al que tienen derecho los que combaten en ella, `sesiones/ambitos.rs`) y `FACCION` de las Facciones de los dos bandos y de quienes combaten (el asedio visible) |
 //! | `Asentamiento`, `Avanzada`, `OrdenMercado`, `Convocatoria` | `FACCION` del dueño (de la plaza madre, de la plaza o de la Facción de la convocatoria) |
 //! | `Pueblo` | `FACCION` del dueño y `ASENTAMIENTO` de su plaza madre (con su almacén local, que el paso de minuto refresca por la secuencia interior de la plaza, `Mesa::repartir_interior`, no por este registro) |
@@ -80,6 +80,14 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
                 let en_columna = e.ejercitos.values().find(|x| x.caravanas_adjuntas.contains(&id)).into_iter().flat_map(|x| x.columna.participantes.iter().map(|p| p.heroe));
                 v = heroes_de(e, en_columna.chain(c.escolta.iter().map(|s| s.heroe)));
                 v.extend(faccion_de_plaza(e, u64::from(c.origen)));
+            } else if let Some(c) = e.fundacion.caravanas.get(&id) {
+                // La Caravana de Fundación (5G-b): su Facción, su titular y quienes van en la columna que la lleva.
+                let en_columna = match c.situacion {
+                    crate::estado_fundacion::Situacion::Adjunta(x) => e.ejercitos.get(&x).map(|x| x.columna.participantes.iter().map(|p| p.heroe).collect()).unwrap_or_default(),
+                    _ => Vec::new(),
+                };
+                v = heroes_de(e, en_columna.into_iter().chain([c.titular]));
+                v.extend(c.faccion.map(Ambito::Faccion));
             }
         }
         Clase::Batalla => {
@@ -132,7 +140,7 @@ pub fn todas(e: &Estado, clase: Clase) -> Vec<u64> {
         Clase::Faccion => facciones(e).into_iter().map(u64::from).collect(),
         Clase::Heroe => e.militar.heroes.keys().copied().collect(),
         Clase::Escuadra => unreachable!("las escuadras se recorren desde sus héroes"),
-        Clase::Caravana => e.comercio.flota.iter().map(|c| c.id).collect(),
+        Clase::Caravana => e.comercio.flota.iter().map(|c| c.id).chain(e.fundacion.caravanas.keys().copied()).collect(),
         Clase::Acuerdo => e.comercio.acuerdos.iter().map(|a| a.id).collect(),
         Clase::OrdenMercado => e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).map(|o| o.id).collect(),
         Clase::Pueblo => e.asentamientos.values().flat_map(|a| a.economia.pueblos.iter().map(|p| p.id)).collect(),

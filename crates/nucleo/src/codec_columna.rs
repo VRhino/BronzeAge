@@ -47,7 +47,7 @@ pub(crate) fn ritmo_leer(r: &mut Lector) -> Result<Ritmo, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, e: &Ejercito) {
-    let Ejercito { id, columna, posicion, plan, velocidad_fija, caravana_fundacion, caravanas_adjuntas, persiguiendo, en_batalla, plan_en_pausa, version } = e;
+    let Ejercito { id, columna, posicion, plan, velocidad_fija, caravanas_adjuntas, persiguiendo, en_batalla, plan_en_pausa, version } = e;
     let Columna { id: _, faccion, tipo, lider, politica, estado, participantes, peticiones, formacion_expira_en, escuadras, carga, viveres } = columna;
     w.u64(*id);
     w.opt_u64(faccion.map(u64::from));
@@ -81,7 +81,6 @@ pub(crate) fn escribir(w: &mut Escritor, e: &Ejercito) {
     w.punto(*posicion);
     plan_escribir(w, plan);
     w.opt_i64(*velocidad_fija);
-    w.bool(*caravana_fundacion);
     w.u32(caravanas_adjuntas.len() as u32);
     caravanas_adjuntas.iter().for_each(|&c| w.u64(c));
     w.opt_u64(*persiguiendo);
@@ -95,7 +94,7 @@ pub(crate) fn escribir(w: &mut Escritor, e: &Ejercito) {
     w.u64(*version);
 }
 
-fn plan_escribir(w: &mut Escritor, plan: &Plan) {
+pub(crate) fn plan_escribir(w: &mut Escritor, plan: &Plan) {
     w.u32(plan.generacion);
     w.u32(plan.vertices.len() as u32);
     for v in &plan.vertices {
@@ -104,7 +103,7 @@ fn plan_escribir(w: &mut Escritor, plan: &Plan) {
     }
 }
 
-fn plan_leer(r: &mut Lector) -> Result<Plan, ErrorFormato> {
+pub(crate) fn plan_leer(r: &mut Lector) -> Result<Plan, ErrorFormato> {
     let generacion = r.u32()?;
     let mut vertices = Vec::new();
     for _ in 0..r.u32()? {
@@ -140,7 +139,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Ejercito, ErrorFormato> {
     let escuadras = (0..r.cuenta()?).map(|_| r.u64()).collect::<Result<_, _>>()?;
     let (carga, viveres, posicion) = (carga_leer(r)?, ritmo_leer(r)?, r.punto()?);
     let plan = plan_leer(r)?;
-    let (velocidad_fija, caravana_fundacion) = (r.opt_i64()?, r.bool()?);
+    let velocidad_fija = r.opt_i64()?;
     let mut caravanas_adjuntas = Vec::new();
     for _ in 0..r.u32()? {
         caravanas_adjuntas.push(r.u64()?);
@@ -148,5 +147,5 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Ejercito, ErrorFormato> {
     let columna = Columna { id, faccion, tipo, lider, politica, estado, participantes, peticiones, formacion_expira_en, escuadras, carga, viveres };
     let (persiguiendo, en_batalla) = (r.opt_u64()?, r.bool()?);
     let plan_en_pausa = if r.bool()? { Some(PlanEnPausa { desde: r.i64()?, velocidad: r.i64()?, plan: plan_leer(r)? }) } else { None };
-    Ok(Ejercito { id, columna, posicion, plan, velocidad_fija, caravana_fundacion, caravanas_adjuntas, persiguiendo, en_batalla, plan_en_pausa, version: r.u64()? })
+    Ok(Ejercito { id, columna, posicion, plan, velocidad_fija, caravanas_adjuntas, persiguiendo, en_batalla, plan_en_pausa, version: r.u64()? })
 }

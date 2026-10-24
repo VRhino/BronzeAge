@@ -355,7 +355,7 @@ impl Nucleo {
 
     // ───────────────────────────── Órdenes ─────────────────────────────
 
-    /// Las órdenes de diplomacia (154-162). Los rechazos y «sin cambios» salen como `Err` sin haber tocado el estado.
+    /// Las órdenes de diplomacia (144-152). Los rechazos y «sin cambios» salen como `Err` sin haber tocado el estado.
     pub(super) fn ejecutar_diplomacia(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |(c, m): (&'static str, &'static str)| Respuesta::rechazo(c, m, v);

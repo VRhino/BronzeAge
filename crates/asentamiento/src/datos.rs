@@ -162,6 +162,10 @@ pub struct Reglas {
     pub max_fundadores: usize,
     /// `NOMBRE_ASENTAMIENTO.largoMaximo`: el nombre de una plaza, como mucho tantos caracteres (5C-6, decisión del autor del 2026-10-24).
     pub largo_maximo_nombre: usize,
+    /// `FUNDACION.costoMaderaExtraCaravana`: la madera de fabricar la Caravana de Fundación en sí (Fundacion_Y_Refundacion §3).
+    pub madera_extra_caravana: Mil,
+    /// `FUNDACION.caducidadCaravanaHoras`, en ms: lo que dura suelta una Caravana de Fundación antes de caducar.
+    pub caducidad_caravana: i64,
 }
 
 impl Reglas {
@@ -236,6 +240,8 @@ impl Reglas {
             viviendas_iniciales: fundacion["viviendasIniciales"].as_u64().expect("viviendasIniciales") as u32,
             max_fundadores: fundacion["maxJugadoresFundacionGrupal"].as_u64().expect("maxJugadoresFundacionGrupal") as usize,
             largo_maximo_nombre: b("NOMBRE_ASENTAMIENTO")["largoMaximo"].as_u64().expect("largoMaximo") as usize,
+            madera_extra_caravana: mil(num(&fundacion, "costoMaderaExtraCaravana")),
+            caducidad_caravana: num(&fundacion, "caducidadCaravanaHoras") as i64 * 3_600_000,
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),

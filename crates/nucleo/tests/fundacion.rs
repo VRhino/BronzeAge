@@ -1,0 +1,607 @@
+//! La refundación y la Caravana de Fundación de verdad (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §3-§9, Movimiento_Ejercitos §9): `lanzarCaravanaFundacion`, `desarmarCaravanaFundacion`,
+//! `aportarARefundacion`, `retirarDeRefundacion`, `comprarCaravanaDeRefundacion`, engancharla (`adjuntarCaravana`), fundar con ella, que caduque suelta, que vuelva sola sin su titular y que otro
+//! la reclame (`reclamarCaravana`). Cada orden con sus rechazos y la conservación de lo que cuesta. Portadas de `engine/__tests__/{caravanaFundacion,refundacion,fundacionCampamento}.test.ts` y
+//! `session/__tests__/comandosExpansion.test.ts` del TypeScript. Sobre el artefacto de mundo real; se omiten si no está. La prueba por el WebSocket real está al final.
+
+mod comun;
+
+use asentamiento::Recurso::{self, *};
+use base::{Punto, MS_POR_MINUTO};
+use comun::real::{campamento, en_tierra, mundo, sitio_rico, M};
+use comun::sesion::*;
+use contrato::v1::{self as pb, orden, TipoCliente};
+use militar::catalogo::Tropa;
+use militar::columna::{Politica, TipoColumna};
+use militar::heroe::{Controlador, Residencia};
+use militar::presencia::Ubicacion;
+use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Estado, LadoDelFondo, Nucleo, ObjetivoAtaque, OrigenFundacion, Peticion, Reglas, Respuesta, Resultado, SituacionFundacion};
+use std::collections::BTreeMap;
+
+const HORA: i64 = 60 * MS_POR_MINUTO;
+
+macro_rules! con_mundo {
+    () => {
+        match mundo() {
+            Some(m) => m,
+            None => {
+                eprintln!("sin artefacto de mundo real: se omite");
+                return;
+            }
+        }
+    };
+}
+
+fn arranque(m: &M) -> Arranque {
+    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+}
+
+fn codigo(r: &Respuesta) -> &'static str {
+    match &r.resultado {
+        Resultado::Rechazada { codigo, .. } => codigo,
+        otro => panic!("se esperaba un rechazo: {otro:?}"),
+    }
+}
+
+/// Los datos enteros de cada hecho `codigo`.
+fn hechos(n: &Nucleo, codigo: &str) -> Vec<Vec<(&'static str, i64)>> {
+    n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).filter(|e| e.codigo == codigo).map(|e| e.datos.clone()).collect()
+}
+
+fn dato(datos: &[(&'static str, i64)], clave: &str) -> i64 {
+    datos.iter().find(|(k, _)| *k == clave).unwrap_or_else(|| panic!("falta «{clave}» en {datos:?}")).1
+}
+
+fn unidades(v: &[(Recurso, i64)]) -> BTreeMap<Recurso, i64> {
+    v.iter().map(|&(r, n)| (r, n * 1_000)).collect()
+}
+
+struct Esc {
+    n: Nucleo,
+    cuenta: u64,
+}
+
+impl Esc {
+    fn nuevo(m: &M) -> Self {
+        Esc { n: Nucleo::nuevo(arranque(m)), cuenta: 0 }
+    }
+    fn ord(&mut self, actor: &str, c: Comando) -> Respuesta {
+        self.cuenta += 1;
+        let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
+        let p = if actor == "admin" { p.de_admin() } else { p };
+        let t = self.n.ahora();
+        self.n.aplicar_en(t, p)
+    }
+    fn ok(&mut self, actor: &str, c: Comando) -> Respuesta {
+        let r = self.ord(actor, c);
+        assert!(r.aceptada(), "{r:?}");
+        r
+    }
+    fn no(&mut self, actor: &str, c: Comando) -> &'static str {
+        // Lo que vence en este mismo instante se procesa antes: la versión de después solo puede cambiar por la orden.
+        let t = self.n.ahora();
+        self.n.avanzar_hasta(t);
+        let antes = self.n.estado().version;
+        let r = self.ord(actor, c);
+        assert_eq!(self.n.estado().version, antes, "un rechazo no versiona");
+        codigo(&r)
+    }
+    fn avanzar(&mut self, ms: i64) {
+        let t = self.n.ahora() + ms;
+        self.n.avanzar_hasta(t);
+    }
+    fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0]
+    }
+    fn almacen(&self, plaza: u64, r: Recurso) -> i64 {
+        self.n.economia(plaza).unwrap().almacen.cantidad(r)
+    }
+    fn dar(&mut self, plaza: u64, recurso: Recurso, cantidad: i64) {
+        let r = self.ord("admin", Comando::DarRecursos { asentamiento: plaza, recurso, cantidad });
+        assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
+    }
+    fn llevar(&mut self, cuenta: &str, col: u64, destino: Punto) {
+        self.ok(cuenta, Comando::MarcharA { ejercito: col, destino });
+        let fin = self.n.ejercito(col).unwrap().plan.fin().unwrap();
+        self.n.avanzar_hasta(fin);
+    }
+    fn caravana(&self, id: u64) -> Option<&nucleo::CaravanaFundacion> {
+        self.n.estado().fundacion.caravanas.get(&id)
+    }
+    fn personal(&self, h: u64, r: Recurso) -> i64 {
+        self.n.heroe(h).unwrap().almacen_personal.get(&r).copied().unwrap_or(0)
+    }
+    fn fondo(&self, campamento: u32, h: u64, r: Recurso) -> i64 {
+        self.n.estado().fundacion.fondos.get(&campamento).and_then(|f| f.get(&h)).and_then(|m| m.get(&r)).copied().unwrap_or(0)
+    }
+    /// Los plazos de las Caravanas de Fundación que siguen vigentes en la cola.
+    fn plazos(&self) -> usize {
+        let e = self.n.estado();
+        e.cola.volcar().into_iter().filter(|x| matches!(x.carga, Carga::Fundacion(_)) && e.generaciones.es_vigente(x.clave)).count()
+    }
+}
+
+/// Funda con la administración una plaza de `faccion` en `p`.
+fn fundar(e: &mut Esc, dueno: &str, faccion: u32, p: Punto) -> u64 {
+    let t = e.n.ahora();
+    let col = e.n.crear_ejercito(t, dueno, faccion, p, 500, 100_000).unwrap();
+    e.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
+    e.ok(dueno, Comando::Fundar { ejercito: col }).creadas[0]
+}
+
+/// Un héroe de la cuenta, ciudadano de `faccion`, residente y dentro de la plaza `a`.
+fn residente(e: &mut Esc, cuenta: &str, faccion: u32, a: u64) -> u64 {
+    let h = e.heroe(cuenta, 0);
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    h
+}
+
+/// La plaza `a` de la Facción 1, a nivel 2, con la Facción a nivel 2 (cap 2) y de todo en el almacén; «ana» reside y está dentro.
+struct ConPlaza {
+    e: Esc,
+    a: u64,
+    ana: u64,
+}
+
+fn con_plaza(m: &M) -> ConPlaza {
+    let mut e = Esc::nuevo(m);
+    let p = sitio_rico(&e.n, &m.0, 0, 1);
+    let a = fundar(&mut e, "dueno", 1, p);
+    let ana = residente(&mut e, "ana", 1, a);
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
+    for r in [Madera, Piedra, Trigo, Oro] {
+        e.dar(a, r, 300_000);
+    }
+    ConPlaza { e, a, ana }
+}
+
+/// Un ejército de `h` (residente y dentro de `a`), movilizado con una milicia: queda a la puerta.
+fn movilizar(e: &mut Esc, cuenta: &str, h: u64, a: u64) -> u64 {
+    let esc = e.ok("admin", Comando::DarEscuadra { heroe: h, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
+    e.ok(cuenta, Comando::MovilizarEjercito { asentamiento: a, heroe: h, escuadras: vec![esc], carga: vec![], politica: Politica::Aceptar }).creadas[0]
+}
+
+// ───────────────────────────── 1. El coste ─────────────────────────────
+
+#[test]
+fn la_caravana_de_fundacion_cuesta_lo_de_una_plaza_nueva_y_la_de_refundacion_el_cuarenta_por_ciento_redondeado_hacia_arriba() {
+    let m = con_mundo!();
+    let e = Esc::nuevo(m);
+    assert_eq!(e.n.costo_caravana_fundacion(), unidades(&[(Madera, 160), (Piedra, 20), (Trigo, 100), (Oro, 100)]));
+    assert_eq!(e.n.costo_refundacion(), unidades(&[(Madera, 64), (Piedra, 8), (Trigo, 40), (Oro, 40)]));
+}
+
+// ───────────────────────────── 2. Lanzarla desde una plaza y desarmarla ─────────────────────────────
+
+#[test]
+fn lanzar_desde_la_plaza_cobra_el_coste_reserva_el_cap_y_desarmarla_lo_devuelve_entero() {
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let lanzar = |heroe| Comando::LanzarCaravanaFundacion { heroe, asentamiento: a };
+    // Rechazos, en su orden: plaza, ciudadanía, residencia y presencia, nivel, cooldown, cap y coste.
+    assert_eq!(e.no("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: 999 }), rechazos::ASENTAMIENTO_DESCONOCIDO);
+    let zed = e.heroe("zed", 0);
+    assert_eq!(e.no("zed", lanzar(zed)), rechazos::FUNDACION_NO_CIUDADANO);
+    assert_eq!(e.no("zed", lanzar(ana)), rechazos::NO_AUTORIZADO, "el héroe de otra cuenta");
+    let beto = e.heroe("beto", 0);
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(1) });
+    assert_eq!(e.no("beto", lanzar(beto)), rechazos::FUNDACION_NO_RESIDES, "ciudadano pero no reside en la plaza");
+    e.ok("admin", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Asentamiento(a as u32)) });
+    assert_eq!(e.no("beto", lanzar(beto)), rechazos::FUNDACION_NO_RESIDES, "reside pero no está dentro");
+    e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 1 });
+    assert_eq!(e.no("ana", lanzar(ana)), rechazos::CAP_ALCANZADO, "con cap 1 y una plaza, no cabe otra");
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
+
+    // Lanzarla: el almacén paga el coste entero, nace parada en la plaza con su titular, y caduca en 48 h.
+    let costo = e.n.costo_caravana_fundacion();
+    let antes: BTreeMap<Recurso, i64> = costo.keys().map(|&r| (r, e.almacen(a, r))).collect();
+    let t0 = e.n.ahora();
+    let r = e.ok("ana", lanzar(ana));
+    let k = r.creadas[0];
+    for (&rec, &n) in &costo {
+        assert_eq!(e.almacen(a, rec), antes[&rec] - n, "{rec:?}");
+    }
+    let c = e.caravana(k).unwrap().clone();
+    let pos = e.n.estado().asentamientos[&a].posicion;
+    assert_eq!((c.faccion, c.titular, c.origen, c.situacion.clone(), c.posicion, c.caduca_en), (Some(1), ana, OrigenFundacion::Plaza(a), SituacionFundacion::Disponible, pos, Some(t0 + 48 * HORA)));
+    assert_eq!(c.contenido, costo);
+    assert_eq!(e.plazos(), 1, "solo su caducidad");
+    let h = hechos(&e.n, "expansion.caravana_lanzada");
+    assert_eq!((h.len(), dato(&h[0], "caravana") as u64, dato(&h[0], "heroe") as u64, dato(&h[0], "faccion")), (1, k, ana, 1));
+    // El cooldown de caravanas de la plaza (compartido con las comerciales) y, pasado, el cap: la caravana viva ya cuenta.
+    assert_eq!(e.no("beto", lanzar(beto)), rechazos::CARAVANA_EN_COOLDOWN);
+    e.avanzar(11 * MS_POR_MINUTO);
+    assert_eq!(e.no("beto", lanzar(beto)), rechazos::CAP_ALCANZADO, "una plaza y una caravana ya son el cap 2");
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 3 });
+    // Sin el coste no sale: una plaza recién fundada solo tiene sus materiales iniciales (50 de madera).
+    let pb = sitio_rico(&e.n, &m.0, 2, 1);
+    let b = fundar(&mut e, "dueno", 1, pb);
+    let carlos = residente(&mut e, "carlos", 1, b);
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: b, nivel: 2 });
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 5 });
+    assert_eq!(e.no("carlos", Comando::LanzarCaravanaFundacion { heroe: carlos, asentamiento: b }), rechazos::CARAVANA_SIN_RECURSOS);
+
+    // Desarmar: solo su titular y solo suelta; devuelve lo que costó a la plaza.
+    assert_eq!(e.no("beto", Comando::DesarmarCaravanaFundacion { heroe: beto, caravana: k }), rechazos::FUNDACION_NO_TITULAR);
+    assert_eq!(e.no("ana", Comando::DesarmarCaravanaFundacion { heroe: ana, caravana: 999 }), rechazos::CARAVANA_DESCONOCIDA);
+    let antes: BTreeMap<Recurso, i64> = costo.keys().map(|&r| (r, e.almacen(a, r))).collect();
+    let entra: BTreeMap<Recurso, i64> = costo.iter().map(|(&r, &n)| (r, n.min(e.n.economia(a).unwrap().almacen.espacio(r)))).collect();
+    e.ok("ana", Comando::DesarmarCaravanaFundacion { heroe: ana, caravana: k });
+    for &rec in costo.keys() {
+        assert_eq!(e.almacen(a, rec), antes[&rec] + entra[&rec], "{rec:?}: vuelve hasta donde cabe");
+    }
+    let esperado: i64 = entra.values().sum();
+    assert!(e.caravana(k).is_none());
+    assert_eq!(e.plazos(), 0, "ninguna caravana, ningún plazo");
+    let h = hechos(&e.n, "expansion.caravana_desarmada");
+    assert_eq!((h.len(), dato(&h[0], "devuelto")), (1, esperado));
+}
+
+#[test]
+fn una_plaza_de_nivel_1_no_lanza_y_la_caravana_suelta_caduca_a_las_48_horas_y_devuelve_el_coste() {
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let p = sitio_rico(&e.n, &m.0, 2, 1);
+    let b = fundar(&mut e, "dueno", 1, p);
+    let bea = residente(&mut e, "bea", 1, b);
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 5 });
+    assert_eq!(e.no("bea", Comando::LanzarCaravanaFundacion { heroe: bea, asentamiento: b }), rechazos::FUNDACION_NIVEL_INSUFICIENTE);
+
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    e.avanzar(48 * HORA - 1);
+    assert!(e.caravana(k).is_some(), "aún no");
+    e.avanzar(1);
+    assert!(e.caravana(k).is_none(), "caduca");
+    // Vuelve al almacén hasta donde quepa (en 48 h la plaza ha ido llenándolo): lo demás se pierde.
+    let h = hechos(&e.n, "fundacion.caravana_devuelta");
+    let devuelto = dato(&h[0], "devuelto");
+    assert_eq!((h.len(), dato(&h[0], "caravana") as u64), (1, k));
+    assert!(devuelto > 0 && devuelto <= e.n.costo_caravana_fundacion().values().sum::<i64>(), "{devuelto}");
+    assert_eq!(e.plazos(), 0);
+}
+
+// ───────────────────────────── 3. Engancharla, fundar, volver sola y reclamarla ─────────────────────────────
+
+#[test]
+fn su_titular_la_engancha_a_un_ejercito_a_la_puerta_y_funda_con_ella_donde_llega() {
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    // Una columna personal no lleva caravanas; un ejército sin su titular, tampoco.
+    let beto = residente(&mut e, "beto", 1, a);
+    let suyo = movilizar(&mut e, "beto", beto, a);
+    assert_eq!(e.no("beto", Comando::AdjuntarCaravana { caravana: k, ejercito: suyo }), rechazos::FUNDACION_NO_TITULAR);
+    let col = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: ana, escuadras: vec![], carga: vec![] }).creadas[0];
+    assert_eq!(e.no("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: col }), rechazos::COLUMNA_PERSONAL_SIN_CARAVANAS);
+    e.ok("ana", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: ana });
+    let ej = movilizar(&mut e, "ana", ana, a);
+    assert_eq!(e.no("ana", Comando::Fundar { ejercito: ej }), rechazos::SIN_CARAVANA, "aún no la lleva");
+    e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    assert_eq!((e.caravana(k).unwrap().situacion.clone(), e.caravana(k).unwrap().caduca_en), (SituacionFundacion::Adjunta(ej), None), "enganchada no caduca");
+    assert_eq!(e.plazos(), 0);
+    assert_eq!(e.no("ana", Comando::DesarmarCaravanaFundacion { heroe: ana, caravana: k }), rechazos::CARAVANA_NO_DISPONIBLE, "enganchada no se desarma");
+    // Se la lleva a otro sitio y funda: la caravana se gasta y ana pasa a residir en la plaza nueva.
+    let sitio = sitio_rico(&e.n, &m.0, 2, 1);
+    e.llevar("ana", ej, sitio);
+    let nueva = e.ok("ana", Comando::Fundar { ejercito: ej }).creadas[0];
+    assert!(e.caravana(k).is_none(), "se gasta");
+    assert_eq!(e.n.heroe(ana).unwrap().heroe.residencia, Some(Residencia::Asentamiento(nueva as u32)));
+    let h = hechos(&e.n, "fundacion.asentamiento_fundado");
+    assert_eq!(dato(h.last().unwrap(), "caravana") as u64, k);
+    assert_eq!(e.no("ana", Comando::Fundar { ejercito: ej }), rechazos::SIN_CARAVANA);
+}
+
+#[test]
+fn sin_su_titular_vuelve_sola_otro_de_su_faccion_la_reclama_y_al_llegar_se_desarma() {
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    let beto = residente(&mut e, "beto", 1, a);
+    let ej = movilizar(&mut e, "beto", beto, a);
+    let suya = e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
+    e.ok("ana", Comando::UnirseAEjercito { asentamiento: a, heroe: ana, ejercito: ej, escuadras: vec![suya], carga: vec![] });
+    e.ok("beto", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    let pos = e.n.estado().asentamientos[&a].posicion;
+    let lejos = en_tierra(&m.0, pos, 40_000, 0);
+    e.llevar("beto", ej, lejos);
+    assert_eq!(e.caravana(k).unwrap().situacion, SituacionFundacion::Adjunta(ej), "va con su titular");
+
+    // Su titular se separa: la caravana se suelta y vuelve sola a la plaza.
+    let suya = e.ok("ana", Comando::SepararseDelEjercito { heroe: ana }).creadas[0];
+    let t = e.n.ahora();
+    let c = e.caravana(k).unwrap().clone();
+    let SituacionFundacion::Retornando(plan) = &c.situacion else { panic!("vuelve sola: {c:?}") };
+    let llega = plan.fin().unwrap();
+    assert!(llega > t);
+    assert_eq!(e.plazos(), 1, "solo su llegada");
+    assert_eq!(hechos(&e.n, "fundacion.caravana_vuelve").len(), 1);
+
+    // Reclamarla: de otra Facción no; lejos no; una caravana comercial nunca. Ana, en el sitio, sí: su columna personal pasa a ser un ejército.
+    let zcol = e.n.crear_ejercito(t, "zed", 2, e.n.ejercito(suya).unwrap().posicion_en(t), 500, 100_000).unwrap();
+    let zed = e.n.ejercito(zcol).unwrap().columna.lider;
+    assert_eq!(e.no("zed", Comando::ReclamarCaravana { heroe: zed, caravana: k, politica: Politica::Aceptar }), rechazos::CARAVANA_FACCION_AJENA);
+    let lcol = e.n.crear_ejercito(t, "luis", 1, en_tierra(&m.0, lejos, 0, 30_000), 500, 100_000).unwrap();
+    let luis = e.n.ejercito(lcol).unwrap().columna.lider;
+    assert_eq!(e.no("luis", Comando::ReclamarCaravana { heroe: luis, caravana: k, politica: Politica::Aceptar }), rechazos::CARAVANA_LEJOS);
+    assert_eq!(e.n.ejercito(suya).unwrap().columna.tipo, TipoColumna::Personal);
+    e.ok("ana", Comando::ReclamarCaravana { heroe: ana, caravana: k, politica: Politica::Preguntar });
+    let col = &e.n.ejercito(suya).unwrap().columna;
+    assert_eq!((col.tipo, col.politica, col.lider), (TipoColumna::Ejercito, Politica::Preguntar, ana), "ejército con ella de Líder");
+    assert_eq!((e.caravana(k).unwrap().situacion.clone(), e.caravana(k).unwrap().titular), (SituacionFundacion::Adjunta(suya), ana));
+    assert_eq!(e.plazos(), 0, "la llegada se descarta");
+    assert_eq!(e.no("ana", Comando::ReclamarCaravana { heroe: ana, caravana: k, politica: Politica::Aceptar }), rechazos::CARAVANA_NO_RECLAMABLE, "ya no vuelve sola");
+
+    // Deja de ser ciudadana: vuelve sola otra vez y, al llegar, se desarma y devuelve el coste a la plaza.
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: None });
+    let SituacionFundacion::Retornando(plan) = &e.caravana(k).unwrap().situacion else { panic!("vuelve sola") };
+    let llega = plan.fin().unwrap();
+    // A mitad de camino, la foto la guarda tal cual.
+    let reglas = Reglas::default();
+    let bytes = e.n.estado().serializar();
+    assert_eq!(&bytes[..5], b"BAN32");
+    let s = Estado::deserializar(&bytes, &reglas, m.0.hash()).unwrap();
+    assert_eq!((s.fundacion.clone(), s.hash()), (e.n.estado().fundacion.clone(), e.n.hash_estado()));
+    let vieja = [b"BAN30".as_slice(), &bytes[5..]].concat();
+    let Err(err) = Estado::deserializar(&vieja, &reglas, m.0.hash()) else { panic!("BAN30 no debe admitirse") };
+    assert!(err.to_string().contains("BAN30") && err.to_string().contains("Caravana de Fundación"), "{err}");
+
+    let costo = e.n.costo_caravana_fundacion();
+    e.n.avanzar_hasta(llega - 1);
+    assert!(e.caravana(k).is_some());
+    e.n.avanzar_hasta(llega);
+    assert!(e.caravana(k).is_none(), "llega y se desarma");
+    let h = hechos(&e.n, "fundacion.caravana_devuelta");
+    let devuelto = dato(&h[0], "devuelto");
+    assert_eq!((h.len(), dato(&h[0], "caravana") as u64), (1, k));
+    assert!(devuelto > 0 && devuelto <= costo.values().sum::<i64>(), "hasta donde quepa en el almacén: {devuelto}");
+    assert_eq!(e.plazos(), 0);
+}
+
+#[test]
+fn la_de_la_administracion_va_con_su_columna_sea_quien_sea_su_titular() {
+    let m = con_mundo!();
+    let mut e = Esc::nuevo(m);
+    let p = sitio_rico(&e.n, &m.0, 0, 1);
+    let col = e.n.crear_ejercito(0, "ana", 1, p, 500, 100_000).unwrap();
+    e.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
+    assert_eq!(e.ord("admin", Comando::DarCaravanaFundacion { ejercito: col }).resultado, Resultado::SinCambios, "ya lleva una");
+    let k = e.n.estado().fundacion.de_columna(col).unwrap();
+    let c = e.caravana(k).unwrap().clone();
+    let ana = e.n.ejercito(col).unwrap().columna.lider;
+    assert_eq!((c.origen, c.titular, c.faccion, c.contenido.is_empty()), (OrigenFundacion::Ninguno, ana, Some(1), true));
+    // Andamiaje: su titular puede dejar de ser ciudadano y la caravana sigue con la columna.
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(2) });
+    assert_eq!(e.caravana(k).unwrap().situacion, SituacionFundacion::Adjunta(col));
+    assert!(hechos(&e.n, "fundacion.caravana_vuelve").is_empty() && hechos(&e.n, "fundacion.caravana_perdida").is_empty());
+}
+
+// ───────────────────────────── 4. La refundación ─────────────────────────────
+
+/// Una Facción nueva sin plazas («Troya») con «ana» de Rey, residente en el campamento 0 y dentro de él.
+fn faccion_sin_plazas(e: &mut Esc) -> (u32, u64) {
+    let ana = e.heroe("ana", 0);
+    let f = e.ok("ana", Comando::CrearFaccion { heroe: ana, nombre: "Troya".into(), sigilo: None }).creadas[0] as u32;
+    (f, ana)
+}
+
+fn ingresar(e: &mut Esc, cuenta: &str, f: u32, rey: u64, campamento: u32) -> u64 {
+    let h = e.heroe(cuenta, campamento);
+    e.ok(cuenta, Comando::SolicitarIngreso { heroe: h, faccion: f });
+    let rey_cuenta = e.n.heroe(rey).unwrap().cuenta.clone();
+    e.ok(&rey_cuenta, Comando::ResponderSolicitud { heroe: rey, faccion: f, solicitante: h, aceptar: true });
+    h
+}
+
+#[test]
+fn el_fondo_se_aporta_y_se_retira_con_el_almacen_o_el_carro_y_la_caravana_de_refundacion_se_paga_por_orden_de_ciudadania() {
+    let m = con_mundo!();
+    let mut e = Esc::nuevo(m);
+    let (f, ana) = faccion_sin_plazas(&mut e);
+    let beto = ingresar(&mut e, "beto", f, ana, 0);
+    let aportar = |heroe, recurso, cantidad, lado| Comando::AportarARefundacion { heroe, recurso, cantidad, lado };
+    let retirar = |heroe, recurso, cantidad, lado| Comando::RetirarDeRefundacion { heroe, recurso, cantidad, lado };
+    use LadoDelFondo::{Almacen as Alm, Carro};
+
+    // Rechazos: sin nada en el almacén, sin columna para el carro, menos de una unidad, sin Facción, y residiendo en otro campamento.
+    assert_eq!(e.no("ana", aportar(ana, Oro, 10_000, Alm)), rechazos::ALMACEN_SIN_EXISTENCIAS);
+    assert_eq!(e.no("ana", aportar(ana, Oro, 10_000, Carro)), rechazos::HEROE_SIN_COLUMNA);
+    assert_eq!(e.no("ana", aportar(ana, Oro, 999, Alm)), rechazos::CANTIDAD_NO_POSITIVA);
+    let zed = e.heroe("zed", 0);
+    assert_eq!(e.no("zed", aportar(zed, Oro, 10_000, Alm)), rechazos::FACCION_NO_PERTENECE);
+    let carla = ingresar(&mut e, "carla", f, ana, 1);
+    e.ok("admin", Comando::ColocarHeroe { heroe: carla, ubicacion: Ubicacion::Mercenarios(0) });
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: carla, recurso: Oro, cantidad: 10_000 });
+    assert_eq!(e.no("carla", aportar(carla, Oro, 10_000, Alm)), rechazos::REFUNDACION_NO_RESIDES, "su almacén está en el campamento 1");
+
+    // Aportar mueve min(pedido, lo que hay), en unidades enteras; nada se crea ni se pierde.
+    for (h, recurso, n) in [(ana, Oro, 30_000), (ana, Madera, 100_000), (beto, Oro, 50_000), (beto, Piedra, 8_000), (beto, Trigo, 40_000)] {
+        e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso, cantidad: n });
+    }
+    let oro = |e: &Esc| e.personal(ana, Oro) + e.personal(beto, Oro) + e.fondo(0, ana, Oro) + e.fondo(0, beto, Oro);
+    let total0 = oro(&e);
+    e.ok("ana", aportar(ana, Oro, 999_999_000, Alm));
+    e.ok("beto", aportar(beto, Oro, 20_700, Alm));
+    assert_eq!((e.fondo(0, ana, Oro), e.fondo(0, beto, Oro), e.personal(beto, Oro), oro(&e)), (30_000, 20_000, 30_000, total0));
+    assert_eq!(e.n.fondo_de_faccion(0, f).get(&Oro), Some(&50_000));
+    // Retirar lo suyo, hasta lo aportado; lo que no aportó, no.
+    assert_eq!(e.no("beto", retirar(beto, Madera, 1_000, Alm)), rechazos::REFUNDACION_SIN_APORTE);
+    e.ok("beto", retirar(beto, Oro, 999_000_000, Alm));
+    assert_eq!((e.fondo(0, beto, Oro), e.personal(beto, Oro), oro(&e)), (0, 50_000, total0));
+    let h = hechos(&e.n, "mercenarios.fondo_refundacion");
+    assert_eq!(h.len(), 3);
+    assert_eq!((dato(&h[2], "heroe") as u64, dato(&h[2], "cantidad"), dato(&h[2], "faccion"), dato(&h[2], "campamento")), (beto, 20_000, f as i64, 0));
+
+    // Comprar: el fondo tiene que cubrir el coste.
+    assert_eq!(e.no("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana }), rechazos::REFUNDACION_FONDO_CORTO);
+    e.ok("ana", aportar(ana, Madera, 100_000, Alm));
+    for (recurso, n) in [(Oro, 50_000), (Piedra, 8_000), (Trigo, 40_000)] {
+        e.ok("beto", aportar(beto, recurso, n, Alm));
+    }
+    let costo = e.n.costo_refundacion();
+    let fondo_antes = e.n.fondo_de_faccion(0, f);
+    let k = e.ok("beto", Comando::ComprarCaravanaDeRefundacion { heroe: beto }).creadas[0];
+    let c = e.caravana(k).unwrap().clone();
+    assert_eq!((c.titular, c.origen, c.situacion.clone(), c.faccion), (beto, OrigenFundacion::Campamento(0), SituacionFundacion::Disponible, Some(f)));
+    assert_eq!(c.contenido, costo);
+    // Por orden de ciudadanía: primero lo de ana (30 de oro), luego lo de beto (10); el resto se queda en el fondo.
+    assert_eq!(c.aportes[&ana], unidades(&[(Madera, 64), (Oro, 30)]));
+    assert_eq!(c.aportes[&beto], unidades(&[(Oro, 10), (Piedra, 8), (Trigo, 40)]));
+    let fondo_despues = e.n.fondo_de_faccion(0, f);
+    for (&r, &n) in &fondo_antes {
+        assert_eq!(fondo_despues.get(&r).copied().unwrap_or(0) + costo.get(&r).copied().unwrap_or(0), n, "{r:?}: lo gastado está en la caravana");
+    }
+    assert_eq!((e.fondo(0, ana, Madera), e.fondo(0, beto, Oro)), (36_000, 40_000));
+    assert_eq!(e.no("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana }), rechazos::REFUNDACION_YA_TIENE_CARAVANA);
+    assert_eq!(hechos(&e.n, "mercenarios.caravana_refundacion").len(), 1);
+
+    // Quien deja la Facción pierde lo suyo: desarmada, lo de ana vuelve al fondo a su nombre y lo de beto, que se fue, se pierde.
+    e.ok("beto", Comando::DejarFaccion { heroe: beto });
+    assert_eq!(e.n.fondo_de_faccion(0, f).get(&Oro), None, "lo de beto ya no cuenta para la Facción");
+    assert_eq!(e.no("ana", Comando::DesarmarCaravanaFundacion { heroe: ana, caravana: k }), rechazos::FUNDACION_NO_TITULAR);
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(f) });
+    // (beto vuelve: es el titular y la desarma; lo que puso él vuelve también, porque vuelve a ser ciudadano)
+    let (m0, o0) = (e.fondo(0, ana, Madera), e.fondo(0, beto, Oro));
+    e.ok("beto", Comando::DesarmarCaravanaFundacion { heroe: beto, caravana: k });
+    assert_eq!((e.fondo(0, ana, Madera), e.fondo(0, ana, Oro), e.fondo(0, beto, Oro), e.fondo(0, beto, Trigo)), (m0 + 64_000, 30_000, o0 + 10_000, 40_000));
+    assert!(e.caravana(k).is_none() && e.plazos() == 0);
+
+    // Con plazas no se refunda.
+    let p = sitio_rico(&e.n, &m.0, 1, f);
+    fundar(&mut e, "ana", f, p);
+    assert_eq!(e.no("ana", aportar(ana, Madera, 1_000, Alm)), rechazos::REFUNDACION_CON_PLAZAS);
+    assert_eq!(e.no("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana }), rechazos::REFUNDACION_CON_PLAZAS);
+    // Retirar lo suyo sí, siempre.
+    e.ok("ana", retirar(ana, Madera, 10_000, Alm));
+}
+
+#[test]
+fn dejar_la_faccion_pierde_lo_aportado_al_devolver_la_caravana_y_lejos_del_campamento_no_se_aporta() {
+    let m = con_mundo!();
+    let mut e = Esc::nuevo(m);
+    let (f, ana) = faccion_sin_plazas(&mut e);
+    let beto = ingresar(&mut e, "beto", f, ana, 0);
+    for (h, recurso, n) in [(ana, Madera, 64_000), (ana, Piedra, 8_000), (ana, Trigo, 40_000), (beto, Oro, 40_000)] {
+        e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso, cantidad: n });
+        let cuenta = e.n.heroe(h).unwrap().cuenta.clone();
+        e.ok(&cuenta, Comando::AportarARefundacion { heroe: h, recurso, cantidad: n, lado: LadoDelFondo::Almacen });
+    }
+    let k = e.ok("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana }).creadas[0];
+    e.ok("beto", Comando::DejarFaccion { heroe: beto });
+    e.ok("ana", Comando::DesarmarCaravanaFundacion { heroe: ana, caravana: k });
+    assert_eq!((e.fondo(0, ana, Madera), e.fondo(0, ana, Trigo), e.fondo(0, beto, Oro)), (64_000, 40_000, 0), "lo de beto se pierde");
+    let h = hechos(&e.n, "expansion.caravana_desarmada");
+    assert_eq!(dato(&h[0], "devuelto"), 112_000);
+    // Lejos del campamento no se aporta.
+    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Rechazar }).creadas[0];
+    e.llevar("ana", col, en_tierra(&m.0, campamento(&m.0, 0), 30_000, 0));
+    assert_eq!(e.no("ana", Comando::RetirarDeRefundacion { heroe: ana, recurso: Madera, cantidad: 1_000, lado: LadoDelFondo::Carro }), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
+}
+
+/// El ciclo entero de una Facción sin plazas (Doc 1.9b): sus héroes, en el campamento, ganan oro destruyendo bandidos del anillo (solo lo cobran los sin plaza, Cal-5), lo aportan desde el carro,
+/// los demás recursos desde el almacén, compran la Caravana de Refundación, la enganchan, la llevan y fundan. El oro se conserva en cada paso.
+#[test]
+fn una_faccion_sin_plazas_refunda_con_el_oro_de_los_bandidos_del_anillo() {
+    let m = con_mundo!();
+    let mut e = Esc::nuevo(m);
+    let (f, ana) = faccion_sin_plazas(&mut e);
+    let beto = ingresar(&mut e, "beto", f, ana, 0);
+    e.avanzar(HORA);
+    let bandidos = e.n.campamentos_de_bandidos().find(|b| b.origen == nucleo::OrigenBandidos::Anillo(0)).cloned().expect("el anillo del campamento 0 tiene bandidos");
+
+    // Ana sale como ejército, recibe tropa a bordo y destruye el campamento de bandidos: el oro va a su carro.
+    let ej = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    for t in [Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto] {
+        let n = militar::Reglas::cargar().tropas.tropa(t).unidades;
+        e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: t, cantidad: n });
+    }
+    e.llevar("ana", ej, en_tierra(&m.0, bandidos.posicion, 2_000, 0));
+    let oro_carro = |e: &Esc| e.n.ejercito(ej).unwrap().columna.carga.get(&Oro).copied().unwrap_or(0);
+    let antes = oro_carro(&e);
+    assert!(e.ok("ana", Comando::Atacar { heroe: ana, objetivo: ObjetivoAtaque::Campamento(bandidos.id), declara_guerra: false }).aceptada());
+    let ganado = oro_carro(&e) - antes;
+    let destruido = hechos(&e.n, "combate.campamento_destruido");
+    assert_eq!(dato(destruido.last().unwrap(), "oro"), ganado);
+    assert!(ganado > 0, "sin plaza, el anillo paga oro (Cal-5)");
+
+    // Vuelve a la puerta del campamento y lo aporta desde el carro (es la Líder); beto pone el resto desde su almacén.
+    e.llevar("ana", ej, campamento(&m.0, 0));
+    let total0 = oro_carro(&e);
+    e.ok("ana", Comando::AportarARefundacion { heroe: ana, recurso: Oro, cantidad: total0, lado: LadoDelFondo::Carro });
+    assert_eq!((oro_carro(&e), e.fondo(0, ana, Oro)), (0, total0), "del carro al fondo, entero");
+    let costo = e.n.costo_refundacion();
+    for (&r, &n) in &costo {
+        let falta = n - e.n.fondo_de_faccion(0, f).get(&r).copied().unwrap_or(0);
+        if falta > 0 {
+            e.ok("admin", Comando::DarAlmacenPersonal { heroe: beto, recurso: r, cantidad: falta });
+            e.ok("beto", Comando::AportarARefundacion { heroe: beto, recurso: r, cantidad: falta, lado: LadoDelFondo::Almacen });
+        }
+    }
+    // Compra, la engancha a su ejército a la puerta y funda lejos del campamento.
+    let k = e.ok("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana }).creadas[0];
+    assert_eq!(e.caravana(k).unwrap().aportes[&ana].get(&Oro).copied(), Some(total0.min(costo[&Oro])), "su oro de bandidos, primero");
+    e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    let sitio = sitio_rico(&e.n, &m.0, 0, f);
+    e.llevar("ana", ej, sitio);
+    let plaza = e.ok("ana", Comando::Fundar { ejercito: ej }).creadas[0];
+    assert_eq!(e.n.estado().asentamientos[&plaza].faccion, f);
+    assert!(e.caravana(k).is_none() && e.plazos() == 0);
+    assert_eq!(e.n.heroe(ana).unwrap().heroe.residencia, Some(Residencia::Asentamiento(plaza as u32)), "funda y reside en ella");
+    // Ya con plaza, la Facción no refunda.
+    assert_eq!(e.no("beto", Comando::ComprarCaravanaDeRefundacion { heroe: beto }), rechazos::REFUNDACION_CON_PLAZAS);
+}
+
+// ───────────────────────────── 5. Por el WebSocket real ─────────────────────────────
+
+fn entidades(deltas: &[pb::Delta]) -> Vec<pb::entidad::Cuerpo> {
+    deltas.iter().flat_map(|d| &d.cambios).filter_map(|x| x.datos.as_ref()).filter_map(|e| e.cuerpo.clone()).collect()
+}
+
+#[tokio::test]
+async fn por_la_sesion_se_aporta_se_compra_la_caravana_de_refundacion_y_se_desarma() {
+    let Some(m) = mundo() else {
+        eprintln!("sin artefacto de mundo real: se omite");
+        return;
+    };
+    let mut e = Esc::nuevo(m);
+    let (f, ana) = faccion_sin_plazas(&mut e);
+    for (&r, &n) in &e.n.costo_refundacion() {
+        e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: r, cantidad: n });
+    }
+    let w = arrancar_con(e.n).await;
+    let (mut c, _) = w.entrar("ana", TipoCliente::ClienteUnity).await;
+    for (i, r) in ["madera", "piedra", "trigo", "oro"].into_iter().enumerate() {
+        let aportar = orden::Cuerpo::AportarARefundacion(pb::OrdenAportarARefundacion { recurso: r.into(), cantidad: 100_000, lado: "almacen".into() });
+        let (deltas, res) = dar(&mut c, &format!("a{i}"), aportar).await;
+        assert_eq!(res.resultado, pb::Resultado::OrdenAceptada as i32, "{res:?}");
+        if r == "oro" {
+            let fondos: Vec<pb::CampamentoMercenarios> = entidades(&deltas).into_iter().filter_map(|x| if let pb::entidad::Cuerpo::CampamentoMercenarios(k) = x { Some(k) } else { None }).collect();
+            let suyo = fondos.last().and_then(|k| k.fondos.get(&format!("f-{f}"))).expect("el campamento lleva el fondo de la Facción");
+            assert_eq!(suyo.por_id.get("oro"), Some(&40_000));
+            assert!(deltas.iter().flat_map(|d| &d.eventos).any(|x| x.codigo == "mercenarios.fondo_refundacion"));
+        }
+    }
+    let mal = orden::Cuerpo::AportarARefundacion(pb::OrdenAportarARefundacion { recurso: "oro".into(), cantidad: 1_000, lado: "bolsa".into() });
+    assert_eq!(rechazo(&dar(&mut c, "m1", mal).await.1), "orden.forma_invalida");
+
+    let (deltas, res) = dar(&mut c, "c1", orden::Cuerpo::ComprarCaravanaDeRefundacion(pb::OrdenComprarCaravanaDeRefundacion {})).await;
+    assert_eq!(res.resultado, pb::Resultado::OrdenAceptada as i32, "{res:?}");
+    let caravanas: Vec<pb::Caravana> = entidades(&deltas).into_iter().filter_map(|x| if let pb::entidad::Cuerpo::Caravana(k) = x { Some(k) } else { None }).collect();
+    let k = caravanas.last().expect("la caravana llega a su titular");
+    assert_eq!((k.tipo, k.titular_id.clone(), k.origen_campamento_id.clone(), k.faccion_id.clone(), k.estado), (pb::TipoCaravana::CaravanaDeFundacion as i32, Some(format!("heroe-{ana}")), Some("camp-0".into()), Some(format!("f-{f}")), pb::EstadoCaravana::CaravanaDisponible as i32));
+    assert_eq!(k.aportes.get(&format!("heroe-{ana}")).and_then(|x| x.por_id.get("madera")), Some(&64_000));
+    assert!(k.caduca_en_ms.is_some());
+    assert!(deltas.iter().flat_map(|d| &d.eventos).any(|x| x.codigo == "mercenarios.caravana_refundacion"));
+
+    let desarmar = orden::Cuerpo::DesarmarCaravanaFundacion(pb::OrdenDesarmarCaravanaFundacion { caravana_id: k.id.clone() });
+    let (deltas, res) = dar(&mut c, "d1", desarmar).await;
+    assert_eq!(res.resultado, pb::Resultado::OrdenAceptada as i32, "{res:?}");
+    assert!(deltas.iter().flat_map(|d| &d.eventos).any(|x| x.codigo == "expansion.caravana_desarmada"));
+    let lanzar = orden::Cuerpo::LanzarCaravanaFundacion(pb::OrdenLanzarCaravanaFundacion { origen_asentamiento_id: "as-999".into() });
+    assert_eq!(rechazo(&dar(&mut c, "l1", lanzar).await.1), "asentamiento.desconocido", "ya no es `orden.no_disponible`");
+    let n = w.parar().await;
+    assert!(n.estado().fundacion.caravanas.is_empty());
+    assert_eq!(n.fondo_de_faccion(0, f), n.costo_refundacion(), "el fondo vuelve a ser lo aportado");
+}
