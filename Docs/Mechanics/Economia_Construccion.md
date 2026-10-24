@@ -424,6 +424,8 @@ Techo:     techo = techoPoblacion[nivel ALCANZADO];  espacioBajoTecho = max(0, t
 ```
 Crecen las tres clases **solo** si la plaza puede crecer (§9.2: nutrición mayor que 0 y fuera de la recuperación del hambre). Los «+1 sin dado» de artesanos y nobleza son una persona entera.
 
+> **Implementado en Rust (2026-10-24, 5B), los residentes de la nobleza (Q8).** `Exterior.ciudadanos` ya no es un 1 fijo: son todos los residentes de la plaza, fundadores y quienes se mudaron (`Nucleo::ciudadanos_de`, una consulta al índice de residentes; `politica::residencia::ciudadanos_para_nobleza`). Desde 5B los fundadores pasan a residir en la plaza que fundan (Fundacion_Y_Refundacion §5).
+
 **El crecimiento no consume el generador aleatorio.** Los eventos «primeros artesanos» y «primeros nobles» (+1 sin dado) se disparan al cumplirse la condición.
 
 ### 9.2 Comida y hambruna (`avanzarNutricionPoblacion`)

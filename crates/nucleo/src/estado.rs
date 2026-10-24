@@ -9,6 +9,7 @@ use crate::codec_combate;
 use crate::codec_comercio;
 use crate::codec_economia;
 use crate::codec_militar;
+use crate::codec_politica;
 use crate::economia::StockNodo;
 use crate::memoria::{self, Memoria};
 use crate::estado_batallas::EstadoBatallas;
@@ -59,6 +60,11 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN28: BAN27 con la Facción como entidad (sistema 5, tanda 5B; `codec_politica`): cada Facción con su nombre, sigilo, Rey, Embajador, ciudadanos en orden de ingreso,
+/// solicitudes, experiencia, capital designada, derrota y ajuste de admisión, cuándo dejó cada héroe su última Facción, y las relaciones y propuestas del crate `politica`
+/// (vacías hasta 5D y 5F); y en cada héroe el instante de su último cambio de residencia (`HeroeNucleo::residencia_cambiada_en`, `codec_militar`). BAN27 se rechaza: sus
+/// Facciones no existen como entidad (no se puede deducir quién es el Rey ni el orden de ingreso) y sus héroes no traen el cooldown de residencia.
+///
 /// BAN27: BAN26 con la economía entera (decisión C3b del autor y dudas EE-1 a EE-7, 2026-10-24): todo almacén (plaza, pueblo, avanzada) guarda unidades enteras —múltiplo
 /// de 1000— y, por recurso, el **resto oculto** de sus flujos por minuto en `(−1000, 1000)` (`codec_economia`); carros, caravanas, almacén personal y existencias de los
 /// campamentos guardan también unidades enteras, y el mercado de mercenarios anota lo que repondrá cada bien (`MercadoMercenario::repone`, `codec_comercio`). BAN26 se
@@ -124,7 +130,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN27";
+const MAGIA: &[u8; 5] = b"BAN28";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -151,7 +157,7 @@ impl Default for Reglas {
 }
 
 /// Las reglas del crate `asentamiento` (datos del documento de Mechanics, ya convertidos a enteros), las huellas del trazado urbano
-/// (bloques del documento `Trazado_Urbano.md`), las del comercio (crate `comercio`), las militares (crate `militar`) y las del combate (crate `combate`). No se serializan: en las fotos va su **huella**, el
+/// (bloques del documento `Trazado_Urbano.md`), las del comercio (crate `comercio`), las militares (crate `militar`), las del combate (crate `combate`) y las de la política (crate `politica`). No se serializan: en las fotos va su **huella**, el
 /// sha256 de los bloques de parámetros de los documentos incrustados (no de su prosa); recuperar con otras reglas falla igual que con
 /// `ReglasTerritorio`.
 #[derive(Clone, Debug)]
@@ -165,6 +171,8 @@ pub struct ReglasEconomia {
     pub militar: Arc<militar::Reglas>,
     /// Las cifras del combate (poder, bajas, botín, ocupación, bandidos, pueblos, capacidad de las batallas).
     pub combate: Arc<combate::Reglas>,
+    /// Las cifras de la política (ciudadanía, capital, puerta, propuestas, nivel de Facción y sigilo; Diplomacia_Facciones).
+    pub politica: Arc<politica::Reglas>,
     huella: String,
 }
 
@@ -175,11 +183,12 @@ impl ReglasEconomia {
             + &asentamiento::datos::texto_de_parametros_de(crate::urbanismo::DOC_TRAZADO)
             + &comercio::datos::texto_de_parametros()
             + &militar::datos::texto_de_parametros()
-            + &combate::datos::texto_de_parametros();
+            + &combate::datos::texto_de_parametros()
+            + &politica::datos::texto_de_parametros();
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), huella }
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -677,7 +686,7 @@ pub enum Clase {
     /// caravana tocados). **No lo marca el paso de minuto**: lo que este cambia en la plaza (almacén, población, medidor, nutrición, tendencia, almacén local de sus pueblos) lleva su propia secuencia por plaza,
     /// `Nucleo::version_interior`, y no sube la versión del mundo.
     Interior,
-    /// Su nivel, reputación, tecnologías, relaciones y ciudadanos.
+    /// La Facción (5B: la entidad, con sus ciudadanos, solicitudes, Rey y Embajador), su nivel, reputación, tecnologías y relaciones.
     Faccion,
     Heroe,
     /// Las escuadras de un héroe tocado se dan por tocadas (viajan con él).
@@ -809,6 +818,8 @@ pub struct Estado {
     pub batallas: EstadoBatallas,
     /// Lo que cada Facción ha explorado y recuerda de lo ajeno (Niebla_De_Guerra §2, §4).
     pub memoria: Memoria,
+    /// Las Facciones como entidad, con su índice de ciudadanía, y (desde 5D y 5F) sus relaciones y propuestas (Diplomacia_Facciones; crate `politica`).
+    pub politica: politica::Politica,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
@@ -840,6 +851,7 @@ impl Estado {
             combate: EstadoCombate::default(),
             batallas: EstadoBatallas::default(),
             memoria: Memoria::default(),
+            politica: politica::Politica::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
@@ -939,6 +951,7 @@ impl Estado {
         codec_combate::escribir(&mut w, &self.combate);
         codec_batallas::escribir(&mut w, &self.batallas);
         memoria::escribir(&mut w, &self.memoria);
+        codec_politica::escribir(&mut w, &self.politica);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1021,11 +1034,12 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN27`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 29, y solo el 27 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN28`): los cuatro primeros dicen la familia («BAN2» son los formatos 20 a 29, y solo el 28 se admite; «BAN1» son los formatos 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'7' => {}
+                b'8' => {}
+                b'7' => return Err(ErrorFormato("foto del formato BAN27 (las Facciones no existen como entidad: sin nombre, sigilo, Rey, Embajador ni orden de ingreso de sus ciudadanos, y los héroes no traen su último cambio de residencia): ya no se admite")),
                 b'6' => return Err(ErrorFormato("foto del formato BAN26 (los almacenes guardan milésimas sueltas, no unidades enteras, y no traen el resto oculto de sus flujos): ya no se admite")),
                 b'5' => return Err(ErrorFormato("foto del formato BAN25 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 4, sus recintos no traen la red que conservan en sus puertas y la guarnición de serie de una avanzada se reponía entera a las 6 h): ya no se admite")),
                 b'4' => return Err(ErrorFormato("foto del formato BAN24 (los héroes no traen la foto del interior de las plazas de las que salieron al mundo, que no se puede deducir del estado): ya no se admite")),
@@ -1133,6 +1147,7 @@ impl Estado {
         s.combate = codec_combate::leer(&mut r)?;
         s.batallas = codec_batallas::leer(&mut r)?;
         s.memoria = memoria::leer(&mut r)?;
+        s.politica = codec_politica::leer(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {

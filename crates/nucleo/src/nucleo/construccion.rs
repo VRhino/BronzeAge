@@ -47,8 +47,6 @@ use territorio::Disco;
 const FERTILIDAD: i64 = UNO;
 // Las tecnologías de la Facción las da la administración (`FijarTecnologias`) hasta el sistema de tecnología; sin ellas, sin bonus.
 const SIN_BONUS: fn(Recurso) -> i64 = |_| UNO;
-// placeholder: lo darán las casas compradas del sistema político (la nobleza las pide; los héroes residentes de la fase 4B-1 no cuentan).
-const CIUDADANOS: u32 = 1;
 // placeholder: lo dará la geografía de la Facción (distancia a su capital) y el sistema de capitales (`es_capital`, Gran Fundición).
 const DISTANCIA_CAPITAL: Mil = 0;
 const ES_CAPITAL: bool = true;
@@ -200,11 +198,17 @@ impl Nucleo {
         self.estado.cola.programar(en, PRIO_FIN_DE_OBRAS, clave, Carga::FinDeObras);
     }
 
+    /// Los «ciudadanos en el asentamiento» que pide la nobleza (`nobleza.minCiudadanos`): **Q8** (2026-10-24), todos los residentes de la plaza, fundadores y quienes se mudaron. Una consulta
+    /// al índice de residentes.
+    pub fn ciudadanos_de(&self, plaza: u64) -> u32 {
+        self.residentes_en_el_paso(plaza).1
+    }
+
     /// Saca la plaza del mapa mientras se trabaja con ella (así el resto de plazas se puede leer: las vecinas que recortan su zona),
     /// le monta el `Exterior` y ejecuta `f`. La vuelve a insertar siempre. `None` si no hay plaza o no hay mundo.
     pub(super) fn con_exterior<R>(&mut self, id: u64, t: Instante, f: impl FnOnce(&mut asentamiento::asentamiento::Asentamiento, &mut Exterior) -> R) -> Option<R> {
         let geo = self.geografia.as_ref()?;
-        let racion_guarnicion = self.racion_de_guarnicion(id);
+        let (racion_guarnicion, ciudadanos) = self.residentes_en_el_paso(id);
         let mut a = self.estado.asentamientos.remove(&id)?;
         let r = {
             let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, niveles_faccion, militar, .. } = &mut self.estado;
@@ -236,7 +240,7 @@ impl Nucleo {
                 orden_era: ORDEN_ERA,
                 es_capital: ES_CAPITAL,
                 faccion_tiene_gran_fundicion: FACCION_TIENE_GRAN_FUNDICION,
-                ciudadanos: CIUDADANOS,
+                ciudadanos,
                 distancia_capital: DISTANCIA_CAPITAL,
                 racion_guarnicion,
                 // Una plaza ocupada tras una conquista crece y recauda a la fracción de la ocupación (Combate §8): su mantenimiento ya lo congela `ocupado`.
@@ -257,11 +261,11 @@ impl Nucleo {
         }
         self.programar_minuto(id, t + MS_POR_MINUTO);
         // La tendencia «+N/min» es lo que cambió el almacén y la población en el paso entero (el de la guarnición, que come después, se le suma en `alimentar_guarnicion`).
-        let Some(sucesos) = self.con_exterior(id, t, |eco, x| {
+        let Some((sucesos, racion)) = self.con_exterior(id, t, |eco, x| {
             let antes = Contadores::de(eco);
             let sucesos = eco.avanzar_minuto(t, x);
             eco.tendencia = Contadores::de(eco).tendencia(&antes);
-            sucesos
+            (sucesos, x.racion_guarnicion)
         }) else {
             return;
         };
@@ -278,8 +282,8 @@ impl Nucleo {
                 _ => {}
             }
         }
-        // La guarnición come después de la población (Reloj_Y_Eventos §2).
-        self.alimentar_guarnicion(id, t);
+        // La guarnición come después de la población (Reloj_Y_Eventos §2), la ración de este mismo paso.
+        self.alimentar_guarnicion(id, t, racion);
     }
 
     /// Acaba una obra, una mejora o un ascenso de la plaza `id` en `t` (el evento `Carga::FinDeObras`): el edificio pasa a activo, la zona crece

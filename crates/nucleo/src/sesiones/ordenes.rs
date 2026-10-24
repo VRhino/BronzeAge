@@ -7,7 +7,7 @@
 //!   batalla de un UUID.
 //! - Un id que no tiene la forma de su entidad se rechaza con el código de «desconocida» de esa entidad (`heroe.desconocido`…); un valor fuera de un catálogo cerrado (recurso, tropa,
 //!   cargo, política, tipo de carro…), con `orden.forma_invalida`. Lo demás (que la entidad exista, las cantidades) lo valida el núcleo.
-//! - Las órdenes del contrato que el núcleo aún no tiene (política, tecnología, Aedas, intel, refundación, caravanas a mano y almacén personal) se rechazan con
+//! - Las órdenes del contrato que el núcleo aún no tiene (la política salvo la Facción, la ciudadanía y la residencia de 5B, tecnología, Aedas, refundación, caravanas a mano y almacén personal) se rechazan con
 //!   `orden.no_disponible`; ninguna se descarta en silencio. El `match` sobre `Cuerpo` no tiene comodín: una orden nueva del contrato no compila hasta clasificarla.
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
@@ -80,6 +80,20 @@ impl Consulta for Nucleo {
     }
     fn batalla(&self, uuid: &str) -> Option<u64> {
         self.id_de_batalla(uuid)
+    }
+}
+
+/// El sigilo de `crear_faccion`, pieza a pieza: que cada una sea del catálogo lo mira el núcleo (`faccion.sigilo_invalido`).
+fn sigilo(s: &pb::orden_crear_faccion::Sigilo) -> politica::sigilo::Sigilo {
+    politica::sigilo::Sigilo {
+        forma: s.forma_id.clone(),
+        campo: s.campo_id.clone(),
+        emblema: s.emblema_id.clone(),
+        color_primario: s.color_primario_id.clone(),
+        color_secundario: s.color_secundario_id.clone(),
+        color_emblema: s.color_emblema_id.clone(),
+        orla: s.orla_id.clone(),
+        color_orla: s.color_orla_id.clone(),
     }
 }
 
@@ -603,14 +617,19 @@ impl Ctx<'_> {
                 self.administracion(&o.codigo, o.parametros.as_ref().unwrap_or(&Struct::default()))?
             }
 
+            // ── La Facción, la ciudadanía y la residencia (sistema 5, 5B) ──
+            Cuerpo::CrearFaccion(o) => Comando::CrearFaccion { heroe: self.mi_heroe()?, nombre: o.nombre.clone(), sigilo: o.sigilo.as_ref().map(sigilo) },
+            Cuerpo::SolicitarIngreso(o) => Comando::SolicitarIngreso { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)? },
+            Cuerpo::DejarFaccion(_) => Comando::DejarFaccion { heroe: self.mi_heroe()? },
+            Cuerpo::ResponderSolicitud(o) => Comando::ResponderSolicitud { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, solicitante: self.heroe(&o.heroe_id)?, aceptar: o.aceptar },
+            Cuerpo::AsignarRey(o) => Comando::AsignarRey { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, designado: self.heroe(&o.heroe_id)? },
+            Cuerpo::AsignarEmbajador(o) => Comando::AsignarEmbajador { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, designado: self.heroe(&o.heroe_id)? },
+            Cuerpo::CambiarResidencia(o) => Comando::CambiarResidencia { heroe: self.heroe(&o.heroe_id)?, asentamiento: self.plaza(&o.destino_id)? },
+            Cuerpo::ResidirEnCampamento(o) => Comando::ResidirEnCampamento { heroe: self.heroe(&o.heroe_id)?, campamento: self.campamento(&o.campamento_id)? },
+            Cuerpo::DejarResidencia(o) => Comando::DejarResidencia { heroe: self.heroe(&o.heroe_id)? },
+
             // ── Lo que el núcleo aún no tiene ──
-            Cuerpo::CrearFaccion(_)
-            | Cuerpo::SolicitarIngreso(_)
-            | Cuerpo::DejarFaccion(_)
-            | Cuerpo::ResponderSolicitud(_)
-            | Cuerpo::AsignarRey(_)
-            | Cuerpo::AsignarEmbajador(_)
-            | Cuerpo::AsignarCargoLocal(_)
+            Cuerpo::AsignarCargoLocal(_)
             | Cuerpo::DesignarCapital(_)
             | Cuerpo::AdmitirOtrasFacciones(_)
             | Cuerpo::ProponerRelacion(_)
@@ -628,10 +647,7 @@ impl Ctx<'_> {
             | Cuerpo::DeclararGuerra(_)
             | Cuerpo::VetarJugador(_)
             | Cuerpo::RenombrarAsentamiento(_)
-            | Cuerpo::AlternarReabastecerAliados(_)
-            | Cuerpo::CambiarResidencia(_)
-            | Cuerpo::ResidirEnCampamento(_)
-            | Cuerpo::DejarResidencia(_) => return self.no_disponible("política y Facciones (sistema 5)"),
+            | Cuerpo::AlternarReabastecerAliados(_) => return self.no_disponible("política y Facciones (sistema 5)"),
             Cuerpo::AdoptarTecnologia(_)
             | Cuerpo::EmpezarEpica(_)
             | Cuerpo::AbandonarEpica(_)

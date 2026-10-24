@@ -509,6 +509,7 @@ dependencies = [
  "militar",
  "mundo",
  "persistencia",
+ "politica",
  "prost",
  "prost-types",
  "rutas",

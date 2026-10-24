@@ -65,6 +65,7 @@ mod mercenarios;
 mod murallas;
 mod persecuciones;
 mod pertenencias;
+mod ciudadania;
 mod pueblos;
 mod salidas;
 mod taberna;
@@ -790,6 +791,7 @@ impl Nucleo {
                 h.loadouts.clear();
                 h.presencia = militar::presencia::Presencia::nueva(militar::presencia::Ubicacion::Columna(id));
                 self.estado.militar.insertar(HeroeNucleo { sintetico: true, ..HeroeNucleo::nuevo(h, cuenta, Some(*faccion)) });
+                self.otorgar_de_administracion(heroe, *faccion);
                 self.tr.tocar(Clase::Heroe, heroe);
                 let columna = militar::columna::Columna::salir(&mr, id, Some(*faccion), heroe, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Rechazar, vec![], Default::default(), *viveres, t, &|_| 0);
                 let mut e = self.columna_suelta(columna, *posicion);
@@ -934,7 +936,6 @@ impl Nucleo {
             | Comando::Desconectarse { .. }
             | Comando::Conectarse { .. }
             | Comando::FijarTecnologias { .. }
-            | Comando::FijarFaccionDeHeroe { .. }
             | Comando::ColocarHeroe { .. }
             | Comando::HerirHeroe { .. } => match self.ejecutar_heroes(t, p) {
                 Ok(ids) => creadas.extend(ids),
@@ -974,6 +975,19 @@ impl Nucleo {
             | Comando::SepararseDeConvocatoria { .. }
             | Comando::CancelarConvocatoria { .. }
             | Comando::PartirConvocatoria { .. } => match self.ejecutar_convocatorias(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::CrearFaccion { .. }
+            | Comando::SolicitarIngreso { .. }
+            | Comando::ResponderSolicitud { .. }
+            | Comando::DejarFaccion { .. }
+            | Comando::AsignarRey { .. }
+            | Comando::AsignarEmbajador { .. }
+            | Comando::CambiarResidencia { .. }
+            | Comando::ResidirEnCampamento { .. }
+            | Comando::DejarResidencia { .. }
+            | Comando::FijarFaccionDeHeroe { .. } => match self.ejecutar_politica(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

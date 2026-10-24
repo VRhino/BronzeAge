@@ -397,6 +397,8 @@ async fn la_foto_de_la_plaza_trae_su_interior_entero_y_es_la_proyeccion_del_nucl
     let x = aldea(m);
     let (plaza, as_) = (x.plaza, ids::asentamiento(x.plaza));
     let (h_ana, h_dora) = (ids::heroe(x.ana), ids::heroe(x.dora));
+    // El héroe de campo que la fundó reside en ella desde la fundación (5B): es el primer residente.
+    let h_fundador = ids::heroe(x.n.estado().militar.residentes_de(plaza).next().expect("el fundador reside").heroe.id);
     let w = arrancar_con(x.n).await;
     let (ana, b) = Dentro::entrar(&w, "ana", None).await;
     assert_eq!(ana.plaza.id, as_);
@@ -425,7 +427,7 @@ async fn la_foto_de_la_plaza_trae_su_interior_entero_y_es_la_proyeccion_del_nucl
     assert!(p.recintos.is_empty() && p.ascenso.is_none() && p.politicas_activas.is_empty());
 
     // Quién vive y quién está dentro, el acceso por defecto (cerrado a los enemigos), la guarnición y la cuenta de la flota.
-    assert_eq!(p.casas_compradas, [h_ana.clone(), h_dora.clone()]);
+    assert_eq!(p.casas_compradas, [h_fundador, h_ana.clone(), h_dora.clone()]);
     assert_eq!(p.presentes_ids, [h_ana, h_dora]);
     assert_eq!(p.puerta_cerrada_a, [pb::GrupoPuerta::GrupoEnemigos as i32]);
     assert!(p.guarnicion_ids.is_empty() && p.caravanas_aparcadas_ids.is_empty() && p.flota_ids.is_empty() && p.batalla_id.is_none());

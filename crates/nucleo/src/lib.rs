@@ -63,6 +63,7 @@ mod codec_columna;
 mod codec_comercio;
 mod codec_economia;
 mod codec_militar;
+mod codec_politica;
 mod comando;
 mod estado;
 mod estado_batallas;

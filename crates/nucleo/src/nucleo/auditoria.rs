@@ -84,11 +84,10 @@ impl Nucleo {
         let n = self.geografia.as_ref().map_or(0, |g| g.mapa.campamentos.len() as u32);
         let inicial = comercio::mercenarios::StockCampamento::nuevo(&e.reglas.economia.comercio);
         m.extend((0..n).map(|c| ((Clase::Campamento, c as u64), self.huella_de_campamento(c, &inicial))));
-        // Una Facción es su nivel, su reputación, sus tecnologías, sus relaciones y sus ciudadanos.
+        // Una Facción es la entidad (sus ciudadanos, solicitudes, cargos...), su nivel, su reputación, sus tecnologías y sus relaciones.
         m.extend(crate::proyeccion::audiencia::facciones(e).into_iter().map(|f| {
             let relaciones: Vec<_> = e.militar.relaciones.iter().filter(|((a, b), _)| *a == f || *b == f).collect();
-            let ciudadanos: Vec<u64> = e.militar.heroes.values().filter(|h| h.faccion == Some(f)).map(|h| h.heroe.id).collect();
-            ((Clase::Faccion, f as u64), huella(&(e.niveles_faccion.get(&f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones, ciudadanos)))
+            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.niveles_faccion.get(&f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones)))
         }));
         m.extend(e.militar.relaciones.iter().map(|(&(a, b), r)| ((Clase::Relacion, Clase::par(a, b)), huella(r))));
         m
@@ -101,6 +100,10 @@ impl Nucleo {
         }
         let fracciones = self.fracciones_almacenadas();
         assert!(fracciones.is_empty(), "una cantidad almacenada no es entera (C3b): {:?} [{}]", fracciones, self.causa_auditada);
+        // La Facción de cada héroe es la copia del índice de ciudadanía de la política (5B).
+        let fs = &self.estado.politica.facciones;
+        let descuadre: Vec<u64> = self.estado.militar.heroes.values().filter(|h| h.faccion != fs.faccion_de(h.heroe.id)).map(|h| h.heroe.id).collect();
+        assert!(descuadre.is_empty(), "la Facción de los héroes {descuadre:?} no es la de su ciudadanía [{}]", self.causa_auditada);
         let ahora = self.huellas();
         if let Some(antes) = &self.huellas_auditadas {
             for clave in antes.keys().chain(ahora.keys()).collect::<BTreeSet<_>>() {

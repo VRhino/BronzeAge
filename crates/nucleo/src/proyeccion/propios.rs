@@ -6,7 +6,7 @@
 //! Qué ámbito recibe qué lo decide [`super::audiencia`]; aquí solo se dice **qué es** cada cosa en el contrato. Las entidades viajan completas (`reemplaza = true`, decisión 2).
 //!
 //! DUDA: el contrato trae más de lo que el núcleo guarda; hasta que existan sus sistemas, esos campos van a su valor por defecto: nombre, clase, género y avatar del héroe
-//! (decisión 4: «Héroe N», clase `default`), nombre y sigilo de la Facción (sistema 5), inventario y equipo (Conquest, CQ-004), peajes y titular de una caravana, y el almacén de una avanzada
+//! (decisión 4: «Héroe N», clase `default`), inventario y equipo (Conquest, CQ-004), peajes y titular de una caravana, y el almacén de una avanzada
 //! (el contrato trae una sola `Existencia` y el núcleo un almacén de 29 recursos).
 
 use super::{audiencia, batalla, ids, plan, punto, ritmo};
@@ -424,18 +424,48 @@ pub fn batalla(n: &Nucleo, b: &Batalla, quien: Espectador) -> pb::Batalla {
 
 // ───────────────────────────── Facción ─────────────────────────────
 
-/// La Facción: nivel, reputación y ciudadanos. DUDA: sin nombre, sigilo, Rey, Embajador ni experiencia hasta el sistema 5 (política); la reputación va en milésimas de punto (el núcleo la guarda en ppm).
+/// La Facción (5B): nombre, sigilo, Rey, Embajador, ciudadanos en orden de ingreso, solicitudes, experiencia, capital designada, derrota y admisión en los ataques, más su nivel y su reputación
+/// (en milésimas de punto: el núcleo la guarda en ppm). Una Facción que solo nombra la administración (una plaza o una relación de una Facción que nadie creó) va sin nada de lo de la entidad.
+/// DUDA: el nivel sigue siendo el que fija la administración (`niveles_faccion`) hasta 5C, que lo deriva de la experiencia.
 pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
     let e = n.estado();
     let rep = e.comercio.reputacion.get(&f).map_or_else(|| base::Ritmo::constante(0, 0), |r| r.ritmo());
     let milesimas = |v: Mil| v / 1_000;
-    pb::Faccion {
+    let base = pb::Faccion {
         id: ids::faccion(f),
         version: n.version_de(Clase::Faccion, u64::from(f)),
         nivel: e.niveles_faccion.get(&f).copied().unwrap_or(1),
-        ciudadanos_ids: e.militar.heroes.values().filter(|h| h.faccion == Some(f)).map(|h| ids::heroe(h.heroe.id)).collect(),
         reputacion: Some(ritmo(base::Ritmo { valor_en_t0: milesimas(rep.valor_en_t0), por_minuto: milesimas(rep.por_minuto), maximo: rep.maximo.map(milesimas), minimo: rep.minimo.map(milesimas), ..rep })),
         ..Default::default()
+    };
+    let Some(x) = e.politica.facciones.get(f) else { return base };
+    let heroes = |v: &[u64]| v.iter().map(|&h| ids::heroe(h)).collect();
+    let s = &x.sigilo;
+    pb::Faccion {
+        nombre: x.nombre.clone(),
+        sigilo: Some(pb::Sigilo {
+            forma_id: s.forma.clone(),
+            campo_id: s.campo.clone(),
+            emblema_id: s.emblema.clone(),
+            color_primario_id: s.color_primario.clone(),
+            color_secundario_id: s.color_secundario.clone(),
+            color_emblema_id: s.color_emblema.clone(),
+            orla_id: s.orla.clone(),
+            color_orla_id: s.color_orla.clone(),
+        }),
+        rey_id: x.rey.map(ids::heroe),
+        embajador_id: x.embajador.map(ids::heroe),
+        capital_designada_en_ms: x.capital_designada_en,
+        experiencia: x.experiencia,
+        ciudadanos_ids: heroes(&x.ciudadanos),
+        solicitudes_ids: heroes(&x.solicitudes),
+        // Ausente: no está derrotada; "": su última plaza colapsó sola.
+        derrotada_por: x.derrota.map(|d| match d {
+            politica::faccion::Derrota::Por(g) => ids::faccion(g),
+            politica::faccion::Derrota::Colapso => String::new(),
+        }),
+        admite_otras_en_ataques: x.admite_otras_en_ataques,
+        ..base
     }
 }
 

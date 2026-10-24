@@ -186,6 +186,29 @@ impl Facciones {
         Ok(&self.por_id[&id])
     }
 
+    /// Una Facción sin ciudadanos que nace porque la administración la nombra (`FijarFaccionDeHeroe`, `CrearEjercito`; decisión 9 del plan del sistema 5): «Facción N», con el
+    /// sigilo libre de su id, nivel 1 y sin Rey. Quien reciba después la ciudadanía (`otorgar`) será su Rey (5A-8). No mira el nombre: la administración no compite por él.
+    pub fn crear_vacia(&mut self, r: &Reglas, id: FaccionId) -> &Faccion {
+        if self.por_id.contains_key(&id) {
+            return &self.por_id[&id];
+        }
+        let sigilo = r.sigilo.sigilo_libre(&format!("f-{id}"), self.por_id.values().map(|f| &f.sigilo));
+        let f = Faccion {
+            id,
+            nombre: format!("Facción {id}"),
+            sigilo,
+            rey: None,
+            embajador: None,
+            capital_designada_en: None,
+            experiencia: 0,
+            ciudadanos: vec![],
+            solicitudes: vec![],
+            derrota: None,
+            admite_otras_en_ataques: false,
+        };
+        self.por_id.entry(id).or_insert(f)
+    }
+
     /// `solicitarIngreso` (§3.2): entra en la lista de esa Facción; pedir dos veces es pedir lo mismo (`Ok(false)`). Se puede pedir a varias a la vez.
     pub fn solicitar(&mut self, faccion: FaccionId, h: HeroeId) -> Result<bool, ErrorFaccion> {
         if self.de_heroe.contains_key(&h) {
@@ -526,5 +549,16 @@ pub(crate) mod pruebas {
         assert_eq!(copia, fs);
         assert_eq!(fs.admitir_otras(1, true), Ok(true));
         assert_eq!(fs.admitir_otras(1, true), Ok(false));
+    }
+
+    #[test]
+    fn la_que_nombra_la_administracion_nace_vacia_y_su_primer_ciudadano_es_rey() {
+        let mut fs = Facciones::default();
+        let f = fs.crear_vacia(&r(), 7);
+        assert_eq!((f.nombre.as_str(), f.rey, f.ciudadanos.len()), ("Facción 7", None, 0));
+        fs.otorgar(7, 30).unwrap();
+        fs.otorgar(7, 31).unwrap();
+        assert_eq!((fs.get(7).unwrap().rey, fs.faccion_de(31)), (Some(30), Some(7)));
+        assert_eq!(fs.crear_vacia(&r(), 7).ciudadanos, vec![30, 31], "si ya existe, no la toca");
     }
 }
