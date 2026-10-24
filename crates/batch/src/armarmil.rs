@@ -199,6 +199,7 @@ fn caravanas(x: &Entrada) -> Vec<Metrica> {
     let carros: i64 = m.asaltos.iter().map(|a| a.2).sum();
     let acosos: Vec<&sm::Combate> = de_tipo(x, "acoso").collect();
     vec![
+        metrica("caravanas_aparcadas", "Caravanas adjuntas aparcadas en la plaza hermana", "caravanas", INFO, Some(aceptadas(x, "AparcarCaravana")), "Movimiento_Ejercitos §9 (solo dentro de la plaza)", &format!("El Intendente entra con su ejército en la plaza hermana (`Guarnecer` {}), aparca dentro, la manda a su origen (`EnviarCaravanaAlOrigen` {}) y sale. Rechazos de aparcar: {}.", aceptadas(x, "GuarnecerHermana"), aceptadas(x, "EnviarCaravanaAlOrigen"), rechazos_de(x, "AparcarCaravana"))),
         metrica("caravanas_lanzadas", "Caravanas que salieron de su plaza", "salidas", INFO, Some(n_hecho(x, "comercio.caravana_sale")), "Comercio_Caravanas §6", &format!("Escoltadas por una escuadra cedida (`AsignarEscolta` {}) o adjuntas a un ejército (`AdjuntarCaravana` {}).", aceptadas(x, "AsignarEscolta"), aceptadas(x, "AdjuntarCaravana"))),
         metrica("asaltos_disputa", "Caravanas asaltadas con éxito: disputa (A)", "asaltos", INFO, Some(por(false) as f64), "Combate §7.1", &format!("Perdidas enteras {}; resistieron {}.", perdidas(false), m.asaltos_resistidos[0])),
         metrica("asaltos_aguante", "Caravanas asaltadas con éxito: aguante (B)", "asaltos", INFO, Some(por(true) as f64), "Combate §7.1", &format!("Perdidas enteras {} (debe ser 0: un aguante nunca deja la caravana sin carros); resistieron {}.", perdidas(true), m.asaltos_resistidos[1])),
@@ -298,6 +299,7 @@ fn invariantes(x: &Entrada) -> Vec<Metrica> {
         uno("inv_carga", "Carros y caravanas por encima de su capacidad", v.carga, "Comercio_Caravanas §5", "Cada 6 horas de mundo."),
         uno("inv_fracciones", "Cantidades almacenadas que no son unidades enteras", v.fraccion, "Economia_Construccion §4 (economía entera, C3b)", "Almacenes, carros, caravanas, almacenes personales, existencias, trueques y órdenes: cada 6 horas de mundo."),
         uno("inv_cola", "Eventos de comercio vigentes que no corresponden al estado", v.cola + v.sin_plan + v.ociosa, "Reloj_Y_Eventos §2", "Llegadas, peajes y preparaciones de caravanas, y caravanas en camino sin su llegada."),
+        uno("inv_rechazos", "Órdenes de los bots rechazadas que tenían que aceptarse", c.inesperadas.values().sum(), "Proyecciones_Y_Autorizacion §5", &format!("Las que el bot da tras comprobar lo que exigen (entrar en la plaza hermana de su Facción con la caravana, aparcarla dentro, mandarla a su origen y salir): un rechazo es un fallo del bot o del núcleo, no del juego. {}.", if c.inesperadas.is_empty() { "Ninguna".into() } else { c.inesperadas.iter().map(|((o, k), n)| format!("`{o}` {k}: {n}")).collect::<Vec<_>>().join(", ") })),
         uno("inv_minuto", "Plazas sin su minuto o con uno de más", v.minuto + v.fines, "Economia_Construccion §3", "Y obras en curso sin su cita de fin."),
         uno("inv_registro", "Versiones del registro perdidas antes de leerlas", v.registro, "Reloj_Y_Eventos", "El batch lee el registro cada media hora de mundo."),
     ]

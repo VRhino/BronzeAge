@@ -285,6 +285,8 @@ pub struct Corrida {
     pub violaciones: Violaciones,
     pub combate: ViolacionesCombate,
     pub militares: ViolacionesMilitares,
+    /// Órdenes de los bots que tenían que aceptarse y se rechazaron, por (orden, código): una anomalía del bot o del núcleo, no una regla del juego (`inv_rechazos`).
+    pub inesperadas: BTreeMap<(&'static str, &'static str), u64>,
     /// Hash del núcleo antes y después de la foto ida y vuelta, si se hizo.
     pub foto: Option<([u8; 32], [u8; 32])>,
     pub pared: Duration,
@@ -312,6 +314,7 @@ struct Sim<'a> {
     violaciones: Violaciones,
     combate: ViolacionesCombate,
     militares: ViolacionesMilitares,
+    inesperadas: BTreeMap<(&'static str, &'static str), u64>,
     /// Experiencia y nivel de cada escuadra y experiencia de cada héroe en la observación anterior.
     experiencia: BTreeMap<u64, (i64, u8)>,
     experiencia_heroe: BTreeMap<u64, i64>,
@@ -359,6 +362,7 @@ pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, fot
         violaciones: Violaciones::default(),
         combate: ViolacionesCombate::default(),
         militares: ViolacionesMilitares::default(),
+        inesperadas: BTreeMap::new(),
         experiencia: BTreeMap::new(),
         experiencia_heroe: BTreeMap::new(),
         foto: None,
@@ -384,6 +388,7 @@ pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, fot
         violaciones: s.violaciones,
         combate: s.combate,
         militares: s.militares,
+        inesperadas: s.inesperadas,
         foto: s.foto,
         pared: t0.elapsed(),
     }
@@ -427,6 +432,15 @@ impl Sim<'_> {
     fn suya(&mut self, t: Instante, i: usize, etiqueta: &'static str, c: Comando) -> nucleo::Respuesta {
         let cuenta = self.bots[i].cuenta.clone();
         self.orden(t, &cuenta, etiqueta, c)
+    }
+
+    /// Una orden del héroe del bot `i` que tiene que aceptarse (el bot ya comprobó lo que exige): si se rechaza se anota en `inesperadas`, que el informe cuenta como invariante incumplido.
+    fn esperada(&mut self, t: Instante, i: usize, etiqueta: &'static str, c: Comando) -> nucleo::Respuesta {
+        let r = self.suya(t, i, etiqueta, c);
+        if let Resultado::Rechazada { codigo, .. } = &r.resultado {
+            *self.inesperadas.entry((etiqueta, *codigo)).or_insert(0) += 1;
+        }
+        r
     }
 
     /// Una orden que saca del almacén de la plaza: lo que sacó se anota como gasto de su clase.
@@ -1212,8 +1226,15 @@ impl Sim<'_> {
                 self.volver(t, i, c)
             }
             Meta::Aparcar { caravana, plaza } => {
-                if self.suya(t, i, "AparcarCaravana", Comando::AparcarCaravana { caravana, asentamiento: plaza }).aceptada() {
-                    self.suya(t, i, "EnviarCaravanaAlOrigen", Comando::EnviarCaravanaAlOrigen { caravana });
+                // Solo se aparca dentro de la plaza (decisión del autor, 2026-10-24): el ejército entra con todo en la plaza hermana, la aparca, la manda a su origen y sale con lo suyo.
+                // Si la plaza ya no es de su Facción o la caravana ya no va con él (la perdió por el camino), no hay nada que aparcar.
+                let de_los_suyos = self.n.estado().asentamientos.get(&plaza).is_some_and(|a| a.faccion == self.bots[i].faccion);
+                let la_lleva = self.n.ejercito(c).is_some_and(|e| e.caravanas_adjuntas.contains(&caravana));
+                if de_los_suyos && la_lleva && self.esperada(t, i, "GuarnecerHermana", Comando::Guarnecer { asentamiento: plaza, heroe }).aceptada() {
+                    if self.esperada(t, i, "AparcarCaravana", Comando::AparcarCaravana { caravana, asentamiento: plaza }).aceptada() {
+                        self.esperada(t, i, "EnviarCaravanaAlOrigen", Comando::EnviarCaravanaAlOrigen { caravana });
+                    }
+                    self.esperada(t, i, "SalirDeAsentamiento", Comando::SalirDeAsentamiento { asentamiento: plaza, heroe });
                 }
                 self.volver(t, i, c)
             }
