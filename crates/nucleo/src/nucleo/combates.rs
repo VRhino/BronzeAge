@@ -444,6 +444,9 @@ impl Nucleo {
     fn atacar_caravana(&mut self, t: Instante, heroe: u64, id: u64, x: u64, declara_guerra: bool) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
+        if self.estado.fundacion.caravanas.contains_key(&x) {
+            return self.atacar_fundacion(t, heroe, id, x, declara_guerra);
+        }
         let e = &self.estado.ejercitos[&id];
         let k = self.estado.comercio.caravana(x).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(x), v))?;
         match k.estado {

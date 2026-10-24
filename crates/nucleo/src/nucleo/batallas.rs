@@ -402,6 +402,21 @@ impl Nucleo {
         }
     }
 
+    /// La Caravana de Fundación que vuelve sola (decisión del autor del 2026-10-24): una batalla de caravana como la de una comercial, con un solo carro —la caravana entera,
+    /// `car-N:0`, con lo que costó— y los carreteros de defensa (no lleva escolta). Lo que pierde si gana el atacante lo decide `Nucleo::caer_fundacion`.
+    pub(super) fn apertura_de_fundacion(&self, t: Instante, heroe: u64, id: u64, x: u64, punto: Punto, modalidad: Modalidad) -> Apertura {
+        let (tropa, efectivos) = self.estado.reglas.economia.combate.batalla.carreteros;
+        Apertura {
+            contexto: Contexto::Caravana { caravanas: vec![CaravanaEnBatalla { id: x, carros: 1 }], punto, modalidad },
+            punto,
+            iniciada_por: heroe,
+            atacante: self.bando_de_columna(id, t),
+            defensor: BandoDeTicket::nuevo(self.estado.fundacion.caravanas[&x].faccion, vec![], vec![EscuadraEnBatalla::sin_dueno(SIN_ID, tropa, efectivos)]),
+            bloqueo: Bloqueo { ejercitos: vec![id], caravanas: vec![x], ..Default::default() },
+            plaza: None,
+        }
+    }
+
     /// La escuadra de milicia con las unidades del nivel de un campamento de bandidos, sin dueño ni Facción.
     fn bandidos_en_batalla(&self, campamento: u64) -> EscuadraEnBatalla {
         let nivel = self.estado.combate.bandidos[&campamento].nivel;
@@ -625,6 +640,7 @@ impl Nucleo {
         let pve = matches!(b.ticket.contexto, Contexto::CampamentoBandidos { .. });
         let mut plazas: Vec<u64> = b.bloqueo.asentamiento.map(u64::from).into_iter().collect();
         plazas.extend(b.bloqueo.caravanas.iter().filter_map(|&k| self.estado.comercio.caravana(k)).map(|k| k.origen as u64));
+        plazas.extend(b.bloqueo.caravanas.iter().filter_map(|k| self.estado.fundacion.caravanas.get(k)).filter_map(|k| if let crate::estado_fundacion::Origen::Plaza(a) = k.origen { Some(a) } else { None }));
         plazas.extend(b.bloqueo.pueblo.and_then(|p| self.pueblo(p)).map(|(madre, _)| madre));
         plazas.extend(b.bloqueo.avanzada.and_then(|a| self.avanzada(a)).and_then(|(madre, _)| madre));
         plazas.retain(|p| self.estado.asentamientos.contains_key(p));
@@ -1117,6 +1133,12 @@ impl Nucleo {
                 // Cada caravana en juego cae por su cuenta: pierde los carros que dice Unity (y desaparece si se queda sin ninguno) y su escolta cedida queda a 0.
                 let mut perdida = Mercancia::new();
                 for caravana in caravanas.iter().map(|k| k.id) {
+                    if self.estado.fundacion.caravanas.contains_key(&caravana) {
+                        // La Caravana de Fundación (2026-10-24): sin carros, cae según el tipo (Combate §7.1).
+                        let (perdido, _) = self.caer_fundacion(t, caravana, *modalidad);
+                        perdido.into_iter().for_each(|(r, n)| sumar(&mut perdida, r, n));
+                        continue;
+                    }
                     let Some(k) = self.estado.comercio.caravana(caravana) else { continue };
                     // La escolta cae con ella: queda a 0 (Doc 5.15.5) y `caer_caravana` la devuelve al campamento de su héroe.
                     let escolta: Vec<u64> = k.escolta.iter().map(|c| c.id).collect();

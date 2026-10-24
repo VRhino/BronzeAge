@@ -405,7 +405,7 @@ impl Nucleo {
     /// disuelve (los víveres vuelven al héroe). Con caravanas adjuntas la columna sigue —quieta, sin tropa— para llevarlas, y el carro se queda en ella (su capacidad
     /// es la de la columna con sus caravanas). Devuelve lo que carga el carro y si la columna sigue.
     pub(super) fn recoger_en_residencia(&mut self, t: Instante, heroe: u64, columna: u64, ubicacion: Ubicacion) -> (Mil, bool) {
-        let sigue = !self.estado.ejercitos[&columna].caravanas_adjuntas.is_empty();
+        let sigue = !self.estado.ejercitos[&columna].caravanas_adjuntas.is_empty() || self.estado.fundacion.de_columna(columna).is_some();
         if sigue && self.estado.ejercitos[&columna].marchando() {
             self.detener(columna, t);
         }

@@ -763,7 +763,7 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
             }
             Proyeccion { posibles: vec![(T::Avanzada, av_id), (T::ObraDeMapa, obra_id)], existen }
         }
-        Clase::Campamento => un(T::CampamentoMercenarios, ids::campamento(id as u32), super::interior::campamento_por_dentro(n, id as u32).map(Cuerpo::CampamentoMercenarios)),
+        Clase::Campamento => un(T::CampamentoMercenarios, ids::campamento(id as u32), super::interior::campamento_por_dentro(n, id as u32, quien).map(Cuerpo::CampamentoMercenarios)),
         Clase::Bandidos => un(T::CampamentoBandidos, ids::bandidos(id), e.combate.bandidos.get(&id).map(|b| Cuerpo::CampamentoBandidos(campamento_bandidos(n, b)))),
         Clase::Interior => Proyeccion { existen: Vec::new(), posibles: Vec::new() },
     }

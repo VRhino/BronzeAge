@@ -553,6 +553,198 @@ fn una_faccion_sin_plazas_refunda_con_el_oro_de_los_bandidos_del_anillo() {
     assert_eq!(e.no("beto", Comando::ComprarCaravanaDeRefundacion { heroe: beto }), rechazos::REFUNDACION_CON_PLAZAS);
 }
 
+// ───────────────────────────── 4b. Las decisiones del autor sobre las dudas de 5G-b (2026-10-24) ─────────────────────────────
+
+/// Una columna de la Facción 2 («zed») en `p`, con tropa de sobra para ganar un asalto; devuelve la columna y su héroe.
+fn enemigo(e: &mut Esc, p: Punto) -> (u64, u64) {
+    let t = e.n.ahora();
+    let col = e.n.crear_ejercito(t, "zed", 2, p, 500, 350_000).unwrap();
+    let zed = e.n.ejercito(col).unwrap().columna.lider;
+    for tropa in [Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto] {
+        let n = militar::Reglas::cargar().tropas.tropa(tropa).unidades;
+        e.ok("admin", Comando::DarEscuadra { heroe: zed, tropa, cantidad: n });
+    }
+    (col, zed)
+}
+
+/// Lanza la caravana de ana, la engancha a un ejército de beto en el que va ana, lo lleva a `dx` de la plaza y ana se separa: la caravana vuelve sola desde ahí.
+fn volviendo_desde(m: &M, dx: i64) -> (Esc, u64, u64, u64) {
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    let beto = residente(&mut e, "beto", 1, a);
+    let ej = movilizar(&mut e, "beto", beto, a);
+    let suya = e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
+    e.ok("ana", Comando::UnirseAEjercito { asentamiento: a, heroe: ana, ejercito: ej, escuadras: vec![suya], carga: vec![] });
+    e.ok("beto", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    let pos = e.n.estado().asentamientos[&a].posicion;
+    e.llevar("beto", ej, en_tierra(&m.0, pos, dx, 0));
+    e.ok("ana", Comando::SepararseDelEjercito { heroe: ana });
+    assert!(matches!(e.caravana(k).unwrap().situacion, SituacionFundacion::Retornando(_)));
+    (e, a, ana, k)
+}
+
+#[test]
+fn decision_5gb4_se_suelta_a_mano_solo_dentro_de_su_origen_y_vuelve_a_caducar() {
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    let ej = movilizar(&mut e, "ana", ana, a);
+    e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    let soltar = || Comando::SoltarCaravana { ejercito: ej, caravana: k, heroe: ana };
+    assert_eq!(e.no("ana", soltar()), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "a la puerta se está fuera");
+    let pos = e.n.estado().asentamientos[&a].posicion;
+    e.llevar("ana", ej, en_tierra(&m.0, pos, 30_000, 0));
+    assert_eq!(e.no("ana", soltar()), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "en mundo abierto");
+    // Entra con ella en su origen, que es su residencia: la columna sigue dentro para llevarla (como con una comercial).
+    e.llevar("ana", ej, pos);
+    e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
+    assert!(e.n.ejercito(ej).is_some() && !e.n.en_el_mapa(ej), "dentro, con la caravana");
+    assert_eq!(e.caravana(k).unwrap().situacion, SituacionFundacion::Adjunta(ej), "entrar no la suelta");
+    let t = e.n.ahora();
+    e.ok("ana", soltar());
+    let c = e.caravana(k).unwrap();
+    assert_eq!((c.situacion.clone(), c.posicion, c.caduca_en), (SituacionFundacion::Disponible, pos, Some(t + 48 * HORA)), "suelta en su origen, vuelve a caducar");
+    assert_eq!(e.plazos(), 1);
+    assert!(e.n.ejercito(ej).is_none() && e.n.heroe(ana).unwrap().columna.is_none(), "la columna que conservaba para llevarla se deshace");
+    assert_eq!(hechos(&e.n, "ejercito.caravana_soltada").len(), 1);
+}
+
+#[test]
+fn decision_5gb4_la_de_un_campamento_se_suelta_dentro_del_campamento() {
+    let m = con_mundo!();
+    let mut e = Esc::nuevo(m);
+    let (f, ana) = faccion_sin_plazas(&mut e);
+    for (&r, &n) in &e.n.costo_refundacion() {
+        e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: r, cantidad: n });
+        e.ok("ana", Comando::AportarARefundacion { heroe: ana, recurso: r, cantidad: n, lado: LadoDelFondo::Almacen });
+    }
+    let k = e.ok("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana }).creadas[0];
+    let ej = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    assert_eq!(e.no("ana", Comando::SoltarCaravana { ejercito: ej, caravana: k, heroe: ana }), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO);
+    e.ok("ana", Comando::EntrarEnCampamento { campamento: 0, heroe: ana });
+    assert_eq!(e.caravana(k).unwrap().situacion, SituacionFundacion::Adjunta(ej));
+    e.ok("ana", Comando::SoltarCaravana { ejercito: ej, caravana: k, heroe: ana });
+    assert_eq!((e.caravana(k).unwrap().situacion.clone(), e.caravana(k).unwrap().faccion), (SituacionFundacion::Disponible, Some(f)));
+    assert!(e.n.heroe(ana).unwrap().columna.is_none());
+}
+
+#[test]
+fn decision_5gb5_la_que_vuelve_sola_esta_en_el_mapa_se_ve_y_fuera_de_su_zona_se_intercepta_entera() {
+    let m = con_mundo!();
+    let (mut e, _a, _ana, k) = volviendo_desde(m, 40_000);
+    let t = e.n.ahora();
+    let donde = e.caravana(k).unwrap().posicion_en(t);
+    // En la rejilla de encuentros: una columna enemiga que aparece a su lado se la encuentra.
+    let (col, zed) = enemigo(&mut e, donde);
+    e.avanzar(1);
+    let encuentros = hechos(&e.n, "caravana.encuentro");
+    assert!(encuentros.iter().any(|d| dato(d, "caravana") as u64 == k), "{encuentros:?}");
+    // La ve la Facción enemiga (con su columna al lado), avistada y sin cantidades; la suya, entera.
+    let todo = vision::Rect { min: Punto::new(0, 0), max: Punto::new(2_667_000, 2_000_000) };
+    let ver = |n: &Nucleo, p| {
+        let mirada = nucleo::proyeccion::vista::Mirada::de(n, p);
+        let encontrada = mirada
+            .contenido(None, todo, &BTreeMap::new())
+            .into_iter()
+            .filter_map(|v| v.cuerpo())
+            .find_map(|c| if let pb::entidad::Cuerpo::Caravana(x) = c { (x.id == format!("car-{k}")).then_some(x) } else { None });
+        encontrada
+    };
+    let ajena = ver(&e.n, nucleo::proyeccion::vista::Perspectiva::Faccion(2)).expect("la ve la Facción enemiga");
+    assert_eq!((ajena.tipo, ajena.faccion_id.clone(), ajena.contenido.is_none(), ajena.titular_id.is_none()), (pb::TipoCaravana::CaravanaDeFundacion as i32, Some("f-1".into()), true, true));
+    assert!(!ajena.recursos_avistados.is_empty());
+    let propia = ver(&e.n, nucleo::proyeccion::vista::Perspectiva::Faccion(1)).expect("la ve la suya");
+    assert!(propia.contenido.is_some() && propia.titular_id.is_some());
+
+    // Fuera de la zona de su dueño es una disputa (Combate §7.1): quien la gana se la lleva entera y la caravana se pierde.
+    let costo: i64 = e.n.costo_caravana_fundacion().values().sum();
+    let antes: i64 = e.n.ejercito(col).unwrap().columna.carga.values().sum();
+    e.ok("zed", Comando::Atacar { heroe: zed, objetivo: ObjetivoAtaque::Caravana(k), declara_guerra: true });
+    assert!(e.caravana(k).is_none(), "interceptada, se pierde");
+    let h = hechos(&e.n, "combate.caravana_interceptada");
+    assert_eq!((dato(&h[0], "caravana") as u64, dato(&h[0], "aguante"), dato(&h[0], "destruida")), (k, 0, 1));
+    let cogido: i64 = e.n.ejercito(col).unwrap().columna.carga.values().sum::<i64>() - antes;
+    assert_eq!(cogido, dato(&h[0], "botin"));
+    assert!(cogido > 0 && cogido <= costo, "carga lo que le cabe de lo que costó: {cogido}");
+    assert_eq!(hechos(&e.n, "fundacion.caravana_perdida").len(), 1);
+    assert_eq!(e.plazos(), 0);
+    assert_eq!(e.no("zed", Comando::Atacar { heroe: zed, objetivo: ObjetivoAtaque::Caravana(k), declara_guerra: false }), rechazos::CARAVANA_DESCONOCIDA);
+}
+
+#[test]
+fn decision_5gb5_en_la_zona_de_su_duenio_aguanta_y_sigue_volviendo_con_el_treinta_por_ciento() {
+    let m = con_mundo!();
+    let (mut e, a, _ana, k) = volviendo_desde(m, 4_000);
+    let t = e.n.ahora();
+    let donde = e.caravana(k).unwrap().posicion_en(t);
+    assert!(e.n.en_zona(a, donde), "a 4 de su plaza, dentro de su zona");
+    let (_, zed) = enemigo(&mut e, donde);
+    let costo = e.n.costo_caravana_fundacion();
+    e.ok("zed", Comando::Atacar { heroe: zed, objetivo: ObjetivoAtaque::Caravana(k), declara_guerra: true });
+    let h = hechos(&e.n, "combate.caravana_interceptada");
+    assert_eq!((dato(&h[0], "aguante"), dato(&h[0], "destruida")), (1, 0));
+    let c = e.caravana(k).expect("un aguante no la destruye").clone();
+    for (&r, &n) in &costo {
+        let perdido = n * 7 / 10 / 1_000 * 1_000;
+        assert_eq!(c.contenido.get(&r).copied().unwrap_or(0), n - perdido, "{r:?}: el 70 % redondeado hacia abajo se pierde");
+    }
+    assert!(matches!(c.situacion, SituacionFundacion::Retornando(_)), "sigue volviendo");
+    // Llega con lo que le queda y lo devuelve a su plaza.
+    let SituacionFundacion::Retornando(plan) = &c.situacion else { unreachable!() };
+    e.n.avanzar_hasta(plan.fin().unwrap());
+    assert!(e.caravana(k).is_none());
+    let d = hechos(&e.n, "fundacion.caravana_devuelta");
+    assert!(dato(&d[0], "devuelto") <= c.contenido.values().sum::<i64>());
+}
+
+#[test]
+fn decision_5gb7_en_el_campamento_cada_sesion_ve_solo_el_fondo_de_su_faccion() {
+    let m = con_mundo!();
+    let mut e = Esc::nuevo(m);
+    let (f, ana) = faccion_sin_plazas(&mut e);
+    let zoe = e.heroe("zoe", 0);
+    let g = e.ok("zoe", Comando::CrearFaccion { heroe: zoe, nombre: "Micenas".into(), sigilo: None }).creadas[0] as u32;
+    for (h, cuenta, n) in [(ana, "ana", 10_000), (zoe, "zoe", 20_000)] {
+        e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: n });
+        e.ok(cuenta, Comando::AportarARefundacion { heroe: h, recurso: Oro, cantidad: n, lado: LadoDelFondo::Almacen });
+    }
+    use nucleo::proyeccion::propios::{proyectar, Espectador};
+    let fondos = |quien| -> BTreeMap<String, i64> {
+        let p = proyectar(&e.n, quien, nucleo::Clase::Campamento, 0);
+        let Some((_, _, pb::entidad::Cuerpo::CampamentoMercenarios(c))) = p.existen.into_iter().next() else { panic!("el campamento") };
+        c.fondos.into_iter().map(|(k, v)| (k, v.por_id.get("oro").copied().unwrap_or(0))).collect()
+    };
+    assert_eq!(fondos(Espectador::Heroe(Some(ana))), BTreeMap::from([(format!("f-{f}"), 10_000)]), "ana, solo el de Troya");
+    assert_eq!(fondos(Espectador::Heroe(Some(zoe))), BTreeMap::from([(format!("f-{g}"), 20_000)]), "zoe, solo el de Micenas");
+    assert_eq!(fondos(Espectador::Admin), BTreeMap::from([(format!("f-{f}"), 10_000), (format!("f-{g}"), 20_000)]), "la administración, todos");
+    assert!(fondos(Espectador::Heroe(None)).is_empty());
+}
+
+#[test]
+fn decision_5gb11_la_caravana_suelta_en_una_plaza_conquistada_se_destruye_con_ella() {
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    // Ana sale (nadie defiende la plaza) y pasa el día de protección con que nació.
+    e.ok("admin", Comando::ColocarHeroe { heroe: ana, ubicacion: Ubicacion::Mercenarios(0) });
+    e.avanzar(25 * HORA);
+    assert!(e.caravana(k).is_some());
+    let pos = e.n.estado().asentamientos[&a].posicion;
+    let (_, zed) = enemigo(&mut e, Punto::new(pos.x + 2_000, pos.y));
+    e.ok("zed", Comando::Atacar { heroe: zed, objetivo: ObjetivoAtaque::Asentamiento(a), declara_guerra: true });
+    let fin = e.n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
+    if let Some(h) = fin {
+        e.n.avanzar_hasta(h);
+    }
+    assert_eq!(e.n.estado().asentamientos[&a].faccion, 2, "conquistada");
+    assert!(e.caravana(k).is_none(), "la suelta se destruye con la plaza");
+    let h = hechos(&e.n, "fundacion.caravana_perdida");
+    assert_eq!((h.len(), dato(&h[0], "plaza") as u64), (1, a));
+    assert!(hechos(&e.n, "fundacion.caravana_devuelta").is_empty(), "lo que costó se pierde");
+    assert_eq!(e.plazos(), 0);
+}
+
 // ───────────────────────────── 5. Por el WebSocket real ─────────────────────────────
 
 fn entidades(deltas: &[pb::Delta]) -> Vec<pb::entidad::Cuerpo> {

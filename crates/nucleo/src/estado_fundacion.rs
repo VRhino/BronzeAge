@@ -14,9 +14,14 @@ use std::collections::BTreeMap;
 
 const ETIQUETA_FUNDACION: u64 = 16 * ETIQUETA;
 
-/// Clave de entidad (de generación y de cola) de una Caravana de Fundación.
+/// Clave de entidad (de generación, de cola y de la rejilla de encuentros) de una Caravana de Fundación.
 pub fn entidad_fundacion(id: u64) -> u64 {
     ETIQUETA_FUNDACION | id
+}
+
+/// ¿Es esta clave de entidad la de una Caravana de Fundación? (la rejilla de encuentros la mezcla con columnas, caravanas y plazas).
+pub fn es_entidad_fundacion(entidad: u64) -> bool {
+    entidad & !(ETIQUETA - 1) == ETIQUETA_FUNDACION
 }
 
 /// De dónde salió: lo que costó vuelve allí.
