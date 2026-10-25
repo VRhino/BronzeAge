@@ -7,6 +7,7 @@
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use tecnologia::estado::Primero;
+use tecnologia::itinerantes::AedaItinerante;
 use tecnologia::{Conjunto, EstadoTecnologia, TecnologiasFaccion};
 
 pub(crate) fn escribir(w: &mut Escritor, e: &EstadoTecnologia) {
@@ -50,4 +51,35 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoTecnologia, ErrorFormato> {
         por_faccion.insert(f, TecnologiasFaccion { aparecidas: Conjunto(r.u64()?), adoptadas: Conjunto(r.u64()?), reveladas: Conjunto(r.u64()?) });
     }
     Ok(EstadoTecnologia { era, era_desde, contadores, restos, logros, primeros, cantadas, por_faccion })
+}
+
+/// Los Aedas itinerantes (desde BAN39, tanda 6D), en el orden de su número, desestructurados enteros: `n u64 · n × (id u32, posición, en opt u64, hasta opt i64, destino opt u64,
+/// plan (opt: el de `codec_columna`), recientes{n u64 · n × u32})`.
+pub(crate) fn escribir_aedas(w: &mut Escritor, aedas: &[AedaItinerante]) {
+    w.u64(aedas.len() as u64);
+    for AedaItinerante { id, posicion, en, hasta, destino, plan, recientes } in aedas {
+        w.u32(*id);
+        w.punto(*posicion);
+        w.opt_u64(en.map(u64::from));
+        w.opt_i64(*hasta);
+        w.opt_u64(destino.map(u64::from));
+        w.bool(plan.is_some());
+        if let Some(p) = plan {
+            crate::codec_columna::plan_escribir(w, p);
+        }
+        w.u64(recientes.len() as u64);
+        recientes.iter().for_each(|&p| w.u32(p));
+    }
+}
+
+pub(crate) fn leer_aedas(r: &mut Lector) -> Result<Vec<AedaItinerante>, ErrorFormato> {
+    let mut aedas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        let (id, posicion) = (r.u32()?, r.punto()?);
+        let (en, hasta, destino) = (r.opt_u64()?.map(|p| p as u32), r.opt_i64()?, r.opt_u64()?.map(|p| p as u32));
+        let plan = if r.bool()? { Some(crate::codec_columna::plan_leer(r)?) } else { None };
+        let recientes = (0..r.cuenta()?).map(|_| r.u32()).collect::<Result<Vec<_>, _>>()?;
+        aedas.push(AedaItinerante { id, posicion, en, hasta, destino, plan, recientes });
+    }
+    Ok(aedas)
 }

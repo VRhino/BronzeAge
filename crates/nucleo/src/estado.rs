@@ -96,6 +96,20 @@ pub fn entidad_tecnologia(t: tecnologia::TecId) -> u64 {
     19 * crate::estado_comercio::ETIQUETA | u64::from(t)
 }
 
+/// Prioridad del único evento de un Aeda itinerante (`Carga::Aeda`: su llegada o el fin de su estancia; decisión técnica 2 del plan del sistema 6: con las citas de la tecnología, después de todo lo
+/// demás del mismo instante).
+pub const PRIO_AEDAS: u8 = 10;
+
+/// La entidad de un Aeda itinerante `aeda-N` (etiqueta 20 de `estado_comercio::ETIQUETA`): sube de generación cuando su evento pendiente deja de valer (le cierran la puerta, su plaza o su destino
+/// desaparecen).
+pub fn entidad_aeda(n: u32) -> u64 {
+    20 * crate::estado_comercio::ETIQUETA | u64::from(n)
+}
+
+/// BAN39: BAN38 con los Aedas itinerantes (sistema 6, tanda 6D; `Estado::aedas`): dónde está cada uno, en qué plaza se detuvo y hasta cuándo, adónde va y por qué plan, y las plazas que visitó hace
+/// poco, más su único evento en la cola (`Carga::Aeda`). BAN38 se rechaza: no trae los Aedas, y los que ya habían nacido, con lo que han recorrido, no se pueden deducir del estado.
+///
+
 /// BAN38: BAN37 con las dos citas de cada tecnología descubierta (sistema 6, tanda 6C; `Carga::Tecnologia`): la de conocimiento (`primeros.en + retrasoConocimiento`: la cantan los Aedas) y la
 /// del campamento (`primeros.en + horasTrasLaPrimera`: la desbloquean los campamentos de mercenarios); lo ya cantado (`cantadas`) iba ya en BAN37. BAN37 se rechaza: sus tecnologías ya
 /// descubiertas no traen esas citas en la cola, y sin ellas nunca se cantarían ni llegarían a los campamentos por plazo.
@@ -207,7 +221,7 @@ pub fn entidad_tecnologia(t: tecnologia::TecId) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN38";
+const MAGIA: &[u8; 5] = b"BAN39";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -482,6 +496,8 @@ pub enum Carga {
     Era,
     /// Una cita de una tecnología descubierta (6C; la entidad es `entidad_tecnologia`; prioridad [`PRIO_TECNOLOGIA`]).
     Tecnologia(SucesoTecnologia),
+    /// El único evento pendiente de un Aeda itinerante (6D; la entidad es `entidad_aeda`; prioridad [`PRIO_AEDAS`]): llega a su destino si va de camino, y si no, acaba su estancia y parte.
+    Aeda,
 }
 
 /// Qué cita de una tecnología descubierta vence (Tecnologia_Aedas §5 y §6.1). Se programan las dos al registrarse su descubridora (`primeros`), por cualquier vía, y cada una vence una vez.
@@ -927,6 +943,8 @@ pub struct Estado {
     pub tecnologia: tecnologia::EstadoTecnologia,
     /// Cuándo vence la cita de la Era que está en la cola (`Carga::Era`), si hay una: se arma como el plazo de los títulos, al pasar algo en el mundo con alguna Facción.
     pub era_en: Option<Instante>,
+    /// Los Aedas itinerantes (6D, Tecnologia_Aedas §6.2), por su número: el de `aeda-N` es su posición más uno. Nunca se eliminan.
+    pub aedas: Vec<tecnologia::itinerantes::AedaItinerante>,
     /// Campamentos de bandidos, guarnición de serie de los pueblos y rendimientos de lo que se destruye (Combate, Generacion_Del_Mundo §13).
     pub combate: EstadoCombate,
     /// Las batallas de Unity abiertas y las cerradas recientes (Batalla_Unity_Ciclo §3).
@@ -969,6 +987,7 @@ impl Estado {
             militar: EstadoMilitar::default(),
             tecnologia,
             era_en: None,
+            aedas: Vec::new(),
             combate: EstadoCombate::default(),
             batallas: EstadoBatallas::default(),
             memoria: Memoria::default(),
@@ -1120,6 +1139,7 @@ impl Estado {
         w.opt_i64(self.titulos_en);
         codec_tecnologia::escribir(&mut w, &self.tecnologia);
         w.opt_i64(self.era_en);
+        codec_tecnologia::escribir_aedas(&mut w, &self.aedas);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1181,6 +1201,7 @@ impl Estado {
                 Carga::Era => w.u8(16),
                 Carga::Tecnologia(SucesoTecnologia::Conocimiento) => w.u8(17),
                 Carga::Tecnologia(SucesoTecnologia::Campamento) => w.u8(18),
+                Carga::Aeda => w.u8(19),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -1210,12 +1231,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN38`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 38 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN39`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 39 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'8' => {}
+                b'9' => {}
+                b'8' => return Err(ErrorFormato("foto del formato BAN38 (sin los Aedas itinerantes: los que ya habían nacido, dónde están y lo que han recorrido no se pueden deducir del estado): ya no se admite")),
                 b'7' => return Err(ErrorFormato("foto del formato BAN37 (sus tecnologías ya descubiertas no traen en la cola las citas de conocimiento ni del campamento, así que nunca se cantarían ni llegarían a los campamentos por plazo): ya no se admite")),
                 b'6' => return Err(ErrorFormato("foto del formato BAN36 (sin el estado de tecnología del mundo: ni la Era, ni los contadores de los logros, ni los logros cumplidos, ni las descubridoras, que no se pueden deducir del estado; las tecnologías de las Facciones eran las de la administración): ya no se admite")),
                 b'5' => return Err(ErrorFormato("foto del formato BAN35 (los héroes no dicen qué alijos abrieron): ya no se admite")),
@@ -1348,6 +1370,7 @@ impl Estado {
         s.titulos_en = r.opt_i64()?;
         s.tecnologia = codec_tecnologia::leer(&mut r)?;
         s.era_en = r.opt_i64()?;
+        s.aedas = codec_tecnologia::leer_aedas(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -1379,6 +1402,7 @@ impl Estado {
                 16 => Carga::Era,
                 17 => Carga::Tecnologia(SucesoTecnologia::Conocimiento),
                 18 => Carga::Tecnologia(SucesoTecnologia::Campamento),
+                19 => Carga::Aeda,
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

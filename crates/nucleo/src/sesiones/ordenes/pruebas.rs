@@ -379,6 +379,11 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(AbrirAlijo, OrdenAbrirAlijo, alijo_id: s("alijo-veta-2")), Comando::AbrirAlijo { heroe: 7, alijo: 12 }),
         // ── La adopción (6C) ──
         (orden!(AdoptarTecnologia, OrdenAdoptarTecnologia, faccion_id: s("f-1"), tecnologia_id: s("metalurgia_cobre")), Comando::AdoptarTecnologia { heroe: 7, faccion: 1, tecnologia: 2 }),
+        // ── Los Aedas itinerantes (6D) ──
+        (
+            orden!(ComprarTecnologiaAeda, OrdenComprarTecnologiaAeda, asentamiento_id: s("as-3"), tecnologia_id: s("metalurgia_cobre")),
+            Comando::ComprarTecnologiaAeda { heroe: 7, asentamiento: 3, tecnologia: 2 },
+        ),
     ]
 }
 
@@ -389,7 +394,7 @@ fn ordenes_no_disponibles() -> Vec<Cuerpo> {
     }
     vacias![
         // Aedas (sistema 6)
-        EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda,
+        EmpezarEpica, AbandonarEpica,
     ]
 }
 
@@ -452,7 +457,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 3);
+    assert_eq!(sin_comando.len(), 2);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -548,6 +553,7 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(AbandonarRecinto, OrdenAbandonarRecinto, asentamiento_id: s("as-3"), recinto_id: s("recinto-4-1")), rechazos::MURALLAS_RECINTO_DESCONOCIDO),
         (orden!(AbrirAlijo, OrdenAbrirAlijo, alijo_id: s("alijo-99")), rechazos::ALIJO_DESCONOCIDO),
         (orden!(AdoptarTecnologia, OrdenAdoptarTecnologia, faccion_id: s("f-1"), tecnologia_id: s("no_existe")), rechazos::TECNOLOGIA_DESCONOCIDA),
+        (orden!(ComprarTecnologiaAeda, OrdenComprarTecnologiaAeda, asentamiento_id: s("as-3"), tecnologia_id: s("no_existe")), rechazos::TECNOLOGIA_DESCONOCIDA),
         (orden!(Atacar, OrdenAtacar, heroe_id: h(), objetivo: Some(pb::orden_atacar::Objetivo { tipo: Some(Ataca::CampamentoId(s("camp-1"))) })), rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO),
         (orden!(Atacar, OrdenAtacar, heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(OrdenarEscuadras, OrdenOrdenarEscuadras, escuadron_ids: v(&["esc-1", "ej-2"])), rechazos::ORDEN_FORMA_INVALIDA),
@@ -602,7 +608,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (167, 143, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (168, 144, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -655,6 +661,7 @@ fn quien(a: crate::comando::Autoriza) -> &'static str {
         AsignaCargoLocal => "el Rey (Gobernador) o el Gobernador, residente y dentro (los demás)",
         FijaPuerta => "el Gobernador, residente y dentro, o el Rey de la Facción",
         CompraIntel => "la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador",
+        CompraTecnologiaAeda => "la cuenta del héroe, dentro de la plaza y Rey o Gobernador",
         LiderDeLaColumna => "el Líder de la columna",
         ParticipanteDeLaColumna => "un participante de la columna",
     }

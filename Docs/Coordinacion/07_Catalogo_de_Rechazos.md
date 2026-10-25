@@ -592,4 +592,14 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `tecnologia.sin_capital` | `TECNOLOGIA_SIN_CAPITAL` | La Facción no tiene capital: no le queda ninguna plaza. |
 | `tecnologia.rey_fuera_de_la_capital` | `TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL` | El Rey tiene que estar dentro de la capital efectiva de su Facción. |
 | `tecnologia.sin_tarifa` | `TECNOLOGIA_SIN_TARIFA` | El almacén de la capital no tiene la tarifa de adopción de la Era de la tecnología. |
+
+### La compra a un Aeda itinerante (sistema 6, tanda 6D; Tecnologia_Aedas §6.4)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `aedas.no_hay_aeda` | `AEDAS_NO_HAY_AEDA` | No hay ningún Aeda itinerante parado en la plaza. |
+| `aedas.era_no_vendible` | `AEDAS_ERA_NO_VENDIBLE` | Los Aedas solo venden las tecnologías de las Eras hasta `AEDAS.venta.ordenEraMaximo`. |
+| `aedas.no_la_conoce` | `AEDAS_NO_LA_CONOCE` | El Aeda aún no la conoce: sin logro cumplido, sin descubridora, antes del retraso de conocimiento o de una Era que no ha empezado. |
+| `aedas.ya_aparecida` | `AEDAS_YA_APARECIDA` | A la Facción ya le ha aparecido. |
+| `aedas.sin_oro` | `AEDAS_SIN_ORO` | El almacén de la plaza no tiene el oro del precio. |
 <!-- /rechazos -->

@@ -80,16 +80,21 @@ impl EstadoTecnologia {
     /// `revelarTecnologias` (TA §6.3), con un Aeda parado en una plaza de la Facción `f`: cada tecnología que el Aeda conoce y la Facción no tiene
     /// aparecida ni revelada pasa a revelada. La revelación es a la dueña de la plaza, sea amiga o enemiga.
     pub fn revelar(&mut self, r: &Reglas, f: FaccionId, v: &impl VistaFaccion, ahora: Instante) -> Vec<Revelacion> {
-        let propias = self.de(r, f);
-        let nuevas: Vec<Revelacion> = (0..r.catalogo.len() as TecId)
-            .filter(|&t| !propias.aparecidas.contiene(t) && !propias.reveladas.contiene(t) && self.conocida_por_aedas(r, t, ahora))
-            .map(|t| Revelacion { tec: t, descubridora: self.primeros[t as usize].expect("conocida").faccion, faltan: faltan(r, t, &propias, v) })
-            .collect();
+        let nuevas = self.por_revelar(r, f, v, ahora);
         if !nuevas.is_empty() {
             let e = self.de_mut(r, f);
             nuevas.iter().for_each(|x| e.reveladas.poner(x.tec));
         }
         nuevas
+    }
+
+    /// Lo que [`EstadoTecnologia::revelar`] revelaría, sin marcarlo (el núcleo mira el hito con una vista que lee este mismo estado: primero lista, después marca).
+    pub fn por_revelar(&self, r: &Reglas, f: FaccionId, v: &impl VistaFaccion, ahora: Instante) -> Vec<Revelacion> {
+        let propias = self.de(r, f);
+        (0..r.catalogo.len() as TecId)
+            .filter(|&t| !propias.aparecidas.contiene(t) && !propias.reveladas.contiene(t) && self.conocida_por_aedas(r, t, ahora))
+            .map(|t| Revelacion { tec: t, descubridora: self.primeros[t as usize].expect("conocida").faccion, faltan: faltan(r, t, &propias, v) })
+            .collect()
     }
 }
 

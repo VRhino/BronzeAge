@@ -46,6 +46,7 @@ impl Nucleo {
             },
             Autoriza::FijaPuerta => x.fija_puerta(a),
             Autoriza::CompraIntel => x.compra_intel_en(a),
+            Autoriza::CompraTecnologiaAeda => x.compra_tecnologia_aeda(a),
             otra => unreachable!("{otra:?} no es una autorización de plaza"),
         }
     }
@@ -181,6 +182,8 @@ impl Nucleo {
         self.estado.asentamientos.get_mut(&plaza).expect("existe").puerta.fijar(cerrada_a);
         self.tr.tocar(Clase::Asentamiento, plaza);
         self.cerrar_la_puerta(t, plaza);
+        // Los Aedas (6D, Q5 del autor): el que está dentro y ya no puede entrar sale al instante; si la puerta se les abre, pueden nacer los que esperaban una plaza que los aceptase.
+        self.puerta_de_los_aedas(plaza);
         let grupos = Dato::Lista(cerrada_a.iter().map(|g| Dato::Texto(g.nombre().to_owned())).collect());
         let punto = self.estado.asentamientos.get(&plaza).map(|a| a.posicion);
         self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("cerrada_a", grupos)], asentamientos: vec![plaza], punto, ..EventoNucleo::nuevo("asentamiento.puerta_fijada", t, vec![("asentamiento", plaza as i64)]) });
@@ -197,6 +200,7 @@ fn quien_la_da(a: Autoriza) -> &'static str {
         Autoriza::AsignaCargoLocal => "al Gobernador lo nombra el Rey; a los demás, el Gobernador, dentro de la plaza",
         Autoriza::FijaPuerta => "ser su Gobernador, dentro de la plaza, o el Rey de su Facción",
         Autoriza::CompraIntel => "estar dentro y ser el Rey, el Embajador o el Gobernador",
+        Autoriza::CompraTecnologiaAeda => "estar dentro y ser el Rey o el Gobernador",
         _ => "otra cosa",
     }
 }

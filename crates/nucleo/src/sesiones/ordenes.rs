@@ -700,7 +700,8 @@ impl Ctx<'_> {
             Cuerpo::RetirarFusion(o) => Comando::RetirarFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
 
             // ── Lo que el núcleo aún no tiene ──
-            Cuerpo::EmpezarEpica(_) | Cuerpo::AbandonarEpica(_) | Cuerpo::ComprarTecnologiaAeda(_) => return self.no_disponible("Aedas (sistema 6)"),
+            Cuerpo::EmpezarEpica(_) | Cuerpo::AbandonarEpica(_) => return self.no_disponible("Aedas (sistema 6)"),
+            Cuerpo::ComprarTecnologiaAeda(o) => Comando::ComprarTecnologiaAeda { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
             Cuerpo::AdoptarTecnologia(o) => Comando::AdoptarTecnologia { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
             Cuerpo::AbrirAlijo(o) => Comando::AbrirAlijo { heroe: self.mi_heroe()?, alijo: self.alijo(&o.alijo_id)? },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
