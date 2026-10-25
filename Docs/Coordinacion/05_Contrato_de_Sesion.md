@@ -261,6 +261,17 @@ aunque no vean la plaza), `facciones_ids` (las Facciones que lo oyen enteras, 4H
 - **Lo que T7 cerró de los tipados**: `BatallaAbierta` sale de los datos del propio hecho de apertura (contra qué se juega, quién la inició, los bandos y el plazo de la convocatoria), así que se tipa también si la batalla ya se retiró del estado cuando se proyecta (una reanudación tardía); `ObraTerminada.nivel` lleva el nivel interno de un edificio recién terminado y la etapa de una avanzada (1-3), además del de la mejora y el recinto (un pueblo no tiene nivel); `HeroeExpulsado.motivo` distingue `destruido` (lo destruye su dueño o un ataque) de `ruina` (queda en ruinas o cae su plaza madre).
 - **La crónica** (Tecnologia_Aedas §8): no es estado; al cerrar cada versión se deriva de sus hechos un `cronica.entrada { tipo, faccionIds, asentamientoId?, nivel? }` público (la conquista, las ruinas,
   la fundación, la guerra declarada y la primera plaza del mundo en llegar a cada nivel desde el 3). La frase la compone el cliente.
+- **La crónica entera para quien llega tarde** (sistema 6, tanda 6C, 2026-10-25; decisión Q2 del autor). En las `Delta` solo llega lo que pasa mientras se está conectado; el historial se pide
+  con `MensajeDeCliente.pedir_cronica` (`PedirCronica { peticion_id, desde_version?, hasta_version?, limite }`) y llega `MensajeDeServidor.cronica` (`Cronica { peticion_id, entradas[], mas_antiguas,
+  mas_recientes, version }`):
+  - **Hacia atrás** (sin `desde_version`): las últimas entradas con versión ≤ `hasta_version` (sin ella, las últimas de todas). Para seguir: `hasta_version` = versión de la primera − 1.
+  - **Hacia delante** (con `desde_version`): las primeras con versión ≥ `desde_version` (y ≤ `hasta_version`, si viene). Para seguir: `desde_version` = versión de la última + 1.
+  - `limite`: 0 = 200; como mucho 1.000 (más se recorta). **Una página nunca parte las entradas de una misma versión**: si la primera versión no cabe, va entera; así encadenar páginas no repite ni salta.
+  - `entradas` son los mismos `EventoDominio` `cronica.entrada` que viajaron en las `Delta`, byte a byte. `version` es la del mundo al contestar: lo guardado llega hasta ella; lo posterior llega
+    en las `Delta`, y una entrada que esté en las dos se reconoce por su versión.
+  - La misma para todos y para cualquier sesión (jugador, bot, administración, servidor de batalla). Cuenta como pendiente, igual que una orden (`Bienvenida.maximo_ordenes_pendientes`); de más,
+    `ErrorSesion{demasiadas_ordenes}`. No toca el estado ni bloquea el actor: la lee el hilo de la persistencia, detrás de lo que el núcleo ya le dio. Un servidor sin persistencia contesta páginas vacías.
+  - Dorados: `MensajeDeCliente__pedir_cronica`, `MensajeDeServidor__cronica`.
 
 ## 9. Sesión de servidor de batalla
 

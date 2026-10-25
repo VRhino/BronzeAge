@@ -1,0 +1,1 @@
+{"secuencia":"12","cronica":{"peticionId":"cronica-2","entradas":[{"codigo":"cronica.entrada","version":"402","enMs":"3600000","payload":{"tipo":"fundacion.asentamiento_fundado"}},{"codigo":"cronica.entrada","version":"639","enMs":"5400000","payload":{"faccionIds":["f-1","f-2"]}}],"masAntiguas":true,"version":"812"}}

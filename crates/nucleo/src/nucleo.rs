@@ -16,6 +16,10 @@
 //! repetir las entradas posteriores: `hash_estado` sale igual. Un fallo al escribir el registro **aborta** (panic): seguir
 //! con un estado que no se puede reproducir sería peor que parar.
 //!
+//! La **crónica pública** (`nucleo/cronica.rs`) se guarda entera en un diario aparte (`<dir>/cronica/`, `persistencia::Diario`), fuera de la foto y del
+//! hash: el hilo de la persistencia la escribe por lotes y la lee por páginas (`PedirCronica`), y al recuperar se trunca a la versión de la foto y la
+//! repetición del registro la vuelve a escribir.
+//!
 //! # Rutas
 //! `marchar_a` calcula la ruta en línea (función pura del grafo, el origen y el destino: la repetición del registro la
 //! reconstruye idéntica, por eso no se escribe). [`Nucleo::marchas_en_lote`] calcula varias en paralelo con `rayon` y las
@@ -31,7 +35,7 @@ use crate::proyeccion::ids;
 use base::{Instante, Mil, Plan, Punto};
 use cola::Evento;
 use comercio::caravana::EstadoCaravana;
-use persistencia::{Almacen, Foto, Fotos};
+use persistencia::{Almacen, Diario, Foto, Fotos};
 use rutas::{Camino, Escritorio, Opciones, Peticion as PeticionRuta, Rutas};
 use servidor::RelojCompartido;
 use std::borrow::Cow;
@@ -142,6 +146,9 @@ pub struct Metricas {
 enum MsgFoto {
     Foto { secuencia: u64, instante: Instante, datos: Vec<u8> },
     Esperar(mpsc::Sender<()>),
+    /// Entradas de la crónica por escribir: (versión, instante, `EventoDominio` codificado).
+    Cronica(Vec<cronica::Apunte>),
+    PedirCronica { pedir: contrato::v1::PedirCronica, version: u64, responder: cronica::Responder },
 }
 
 struct Persistencia {
@@ -153,18 +160,42 @@ struct Persistencia {
     ultimo_instante_log: Instante,
 }
 
-fn hilo_de_fotos(fotos: Fotos, rx: mpsc::Receiver<MsgFoto>) {
-    for m in rx {
-        match m {
-            MsgFoto::Foto { secuencia, instante, datos } => {
-                if let Err(e) = fotos.guardar(&Foto::nueva(secuencia, instante, datos)) {
-                    eprintln!("nucleo: no se pudo escribir la foto {secuencia}: {e}");
+/// El hilo de la persistencia: escribe las fotos y la crónica y lee sus páginas, en el orden en que llegan (así toda entrada de la crónica con versión ≤ la de una foto está en
+/// disco antes que la foto). Si la crónica no se puede escribir, deja de escribir fotos: al arrancar se volverá a una anterior y la repetición rehará lo que falte, sin huecos.
+fn hilo_de_persistencia(fotos: Fotos, mut diario: Option<Diario>, rx: mpsc::Receiver<MsgFoto>) {
+    /// `op` sobre el diario; si falla, avisa y lo da por perdido. ¿Sigue sano?
+    fn con(diario: &mut Option<Diario>, op: impl FnOnce(&mut Diario) -> io::Result<()>) -> bool {
+        let Some(d) = diario else { return false };
+        let Err(e) = op(d) else { return true };
+        eprintln!("nucleo: la crónica no se puede escribir ({e}); no habrá más fotos hasta reiniciar");
+        *diario = None;
+        false
+    }
+    while let Ok(m) = rx.recv() {
+        // Lo que ya espera se atiende de una vez: las entradas seguidas van al disco con un solo volcado.
+        for m in std::iter::once(m).chain(rx.try_iter()) {
+            match m {
+                MsgFoto::Cronica(lote) => {
+                    con(&mut diario, |d| lote.iter().try_for_each(|(v, t, b)| d.anadir(*v, *t, b)));
+                }
+                MsgFoto::Foto { secuencia, instante, datos } => {
+                    if con(&mut diario, Diario::sincronizar) {
+                        if let Err(e) = fotos.guardar(&Foto::nueva(secuencia, instante, datos)) {
+                            eprintln!("nucleo: no se pudo escribir la foto {secuencia}: {e}");
+                        }
+                    }
+                }
+                MsgFoto::Esperar(r) => {
+                    con(&mut diario, Diario::sincronizar);
+                    let _ = r.send(());
+                }
+                MsgFoto::PedirCronica { pedir, version, responder } => {
+                    con(&mut diario, Diario::confirmar);
+                    responder(cronica::pagina(diario.as_ref(), &pedir, version));
                 }
             }
-            MsgFoto::Esperar(r) => {
-                let _ = r.send(());
-            }
         }
+        con(&mut diario, Diario::confirmar);
     }
 }
 
@@ -221,6 +252,8 @@ pub struct Nucleo {
     /// Los traslados de Facción de la transición en curso (`origen`, `destino`), cuya memoria de la niebla se funde al cerrar la versión, después de grabar lo que vieron sus ojos
     /// (`traslado::fundir_memorias`). Vacío entre transiciones: no se persiste.
     uniones_de_memoria: Vec<(u32, u32)>,
+    /// Las entradas de la crónica cerradas y aún no mandadas al hilo de la persistencia. `None` sin persistencia (no se guarda la crónica). No entra en el hash ni en las fotos.
+    cronica: Option<Vec<cronica::Apunte>>,
 }
 
 impl Nucleo {
@@ -244,12 +277,16 @@ impl Nucleo {
             None => Estado::nuevo(a.reglas.clone(), a.mundo_hash.clone(), a.semilla, a.inicio),
         };
         let recuperado = rec.foto.is_some();
+        // La crónica guardada llega hasta la versión de la foto; lo posterior lo vuelve a escribir la repetición del registro (Sistema 6 §5.3).
+        let (diario, avisos_cronica) = Diario::abrir(&dir.join(cronica::DIRECTORIO), config.max_segmento, estado.version)?;
         let mut n = Self::construir(a, estado);
+        n.cronica = Some(Vec::new());
         if !recuperado {
             n.sembrar_el_mundo();
         }
         n.rebasar_auditoria();
         n.avisos = rec.avisos;
+        n.avisos.extend(avisos_cronica);
         // El registro que se repite lleva las pertenencias, como lo llevaba el proceso vivo (son una función pura del estado): un cliente que conserva una versión desde la foto reanuda por
         // deltas tras el reinicio (4H T6). El mundo persistente es el del servidor, que siempre tiene sesiones.
         n.seguir_pertenencias();
@@ -278,12 +315,12 @@ impl Nucleo {
         let nuevo = !n.recuperado;
         let (fotos, rx) = mpsc::channel();
         let escritor = almacen.fotos();
-        let hilo = std::thread::Builder::new().name("nucleo-fotos".into()).spawn(move || hilo_de_fotos(escritor, rx))?;
+        let hilo = std::thread::Builder::new().name("nucleo-persistencia".into()).spawn(move || hilo_de_persistencia(escritor, Some(diario), rx))?;
         n.persist = Some(Persistencia { almacen, fotos, hilo: Some(hilo), pendiente: Vec::new(), desde_foto: repetidas, ultimo_instante_log: ultimo });
         if nuevo {
             n.registrar(n.estado.ahora, ENTRADA_INICIO, n.datos_de_inicio(n.estado.ahora));
-            n.volcar_log();
         }
+        n.volcar_log();
         Ok(n)
     }
 
@@ -330,6 +367,7 @@ impl Nucleo {
             siguiendo: Vec::new(),
             retiradas: Vec::new(),
             uniones_de_memoria: Vec::new(),
+            cronica: None,
         };
         n.reconstruir_espacio();
         n.reiniciar_muestreo();
@@ -570,6 +608,7 @@ impl Nucleo {
         self.tr.arruinadas.clear();
         // La crónica es una vista de los hechos de la versión (Tecnologia_Aedas §8): sus entradas públicas van con ellos.
         let cronica = self.cronica(&eventos);
+        self.apuntar_cronica(v, &cronica);
         eventos.extend(cronica);
         self.registro.push_back(CambioVersion { version: v, en: t, tocados, pertenencias, eventos });
         if self.registro.len() > self.ajustes.retencion_cambios {
@@ -1169,6 +1208,7 @@ impl Nucleo {
 
     /// Escribe las entradas pendientes con un solo volcado y, si toca, pide una foto.
     fn volcar_log(&mut self) {
+        self.volcar_cronica();
         let Some(p) = &mut self.persist else { return };
         if p.pendiente.is_empty() {
             return;

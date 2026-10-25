@@ -20,7 +20,7 @@
 //!    El núcleo ve `Desconecta(vieja)` antes que `Conecta(nueva)`.
 //! 4. **Límite de órdenes pendientes** por sesión ([`Config::max_ordenes_pendientes`], anunciado en la `Bienvenida`): una orden
 //!    de más no llega al núcleo y se contesta `ErrorSesion{demasiadas_ordenes, fatal: false}`. Una orden deja de estar pendiente
-//!    cuando su `ResultadoOrden` sale hacia el cliente.
+//!    cuando su `ResultadoOrden` sale hacia el cliente. Un `PedirCronica` cuenta igual, hasta que sale su `Cronica`.
 //!
 //! # Obligaciones del núcleo
 //! - Escribir en el canal de sesión con `try_send` y tratar `Full` como cliente lento: descartar la sesión (soltar su `Sender`

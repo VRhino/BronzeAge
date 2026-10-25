@@ -74,6 +74,18 @@ message MensajeDeServidorDeBatalla {
   }
 }
 
+// La crónica pública entera (Tecnologia_Aedas §8; sistema 6, decisión Q2 del autor): cualquier sesión la lee por páginas, también quien llegó tarde. La
+// contesta `Cronica` con el mismo `peticion_id`; las entradas nuevas siguen llegando en las `Delta` como `cronica.entrada`. Una página nunca parte las
+// entradas de una misma versión. Cuenta como pendiente, como una orden (`Bienvenida.maximo_ordenes_pendientes`).
+message PedirCronica {
+  string peticion_id = 1;                // eco en la respuesta
+  // Con `desde_version`, hacia delante: las primeras entradas con versión >= desde_version (y <= hasta_version, si viene).
+  // Sin ella, hacia atrás: las últimas con versión <= hasta_version (sin ninguna de las dos, las últimas de todas).
+  optional uint64 desde_version = 2;
+  optional uint64 hasta_version = 3;
+  uint32 limite = 4;                     // 0 = 200; como mucho 1.000 (más se recorta a 1.000)
+}
+
 message MensajeDeCliente {
   oneof cuerpo {
     Hola hola = 1;
@@ -81,6 +93,7 @@ message MensajeDeCliente {
     Ping ping = 3;
     CambiarVista vista = 4;
     MensajeDeServidorDeBatalla batalla = 5;
+    PedirCronica pedir_cronica = 6;
   }
 }
 
@@ -296,6 +309,17 @@ message AcuseBatalla {
   optional RechazoOrden rechazo = 4;     // «batalla.ya_asignada», «batalla.revision_vieja»...
 }
 
+// Una página de la crónica (respuesta a `PedirCronica`). Para seguir hacia atrás: `hasta_version` = la versión de la primera entrada − 1; hacia
+// delante: `desde_version` = la de la última + 1.
+message Cronica {
+  string peticion_id = 1;
+  repeated EventoDominio entradas = 2;   // `cronica.entrada`, en orden; las mismas que llegaron (o habrían llegado) en las `Delta`
+  bool mas_antiguas = 3;                 // hay entradas guardadas anteriores a la primera
+  bool mas_recientes = 4;                // hay posteriores a la última
+  // Versión del mundo al contestar: lo guardado llega hasta ella. Lo posterior llega en las `Delta`; una entrada que esté en las dos se reconoce por su versión.
+  uint64 version = 5;
+}
+
 message MensajeDeServidor {
   uint64 secuencia = 1;                  // creciente, sin huecos, por sesión
   oneof cuerpo {
@@ -308,5 +332,6 @@ message MensajeDeServidor {
     Aviso aviso = 8;
     ErrorSesion error = 9;
     MensajeParaServidorDeBatalla batalla = 10;
+    Cronica cronica = 11;
   }
 }

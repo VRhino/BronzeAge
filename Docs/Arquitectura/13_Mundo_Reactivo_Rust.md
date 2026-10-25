@@ -117,6 +117,10 @@ clientes ─┤ WS/HTTP · auth · parseo y validación sin estado       │
 - **Event sourcing:** log de solo añadir (órdenes + resultados de workers) y una **foto periódica** del estado, hecha
   sin parar el núcleo (estructuras persistentes o clon rápido serializado por otro hilo).
 - **Arranque:** última foto + repetición del log. Como el estado es analítico, arrancar es cargar y repetir; **el reloj de mundo se congela mientras el servidor está apagado** (decisión del 2026-10-13, regla del autor del 2026-09-05): no hay eventos "vencidos" que procesar al volver.
+- **La crónica, aparte** (2026-10-25, sistema 6, 6C): las entradas públicas de la crónica son una salida determinista del mundo y se guardan enteras en un diario propio
+  (`<partida>/cronica/`, `persistencia::Diario`), fuera de la foto y del hash. Las escribe por lotes el hilo de la persistencia (el de las fotos), siempre antes que la foto que las cubre; al arrancar
+  se trunca a la versión de la foto y la repetición del log las vuelve a escribir. Si el diario falta habiendo foto (`Aviso::DiarioPerdido`) lo anterior no se recompone sin repetir desde el
+  principio; si no se puede escribir, el hilo deja de hacer fotos (al reiniciar se vuelve a una anterior y la repetición rehace lo que falte). Detalle en `Docs/Mechanics/Tecnologia_Aedas.md` §8.
 
 ## 7. Escala orientativa (1.000 jugadores)
 

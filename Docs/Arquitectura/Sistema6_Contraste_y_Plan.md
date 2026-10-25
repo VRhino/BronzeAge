@@ -356,3 +356,60 @@ Recomendada: **A** (con B el umbral pendiente de cada contador dice qué logro f
 6. **Q6 Qué ve todo el mundo del avance:** los logros cumplidos y la Era, como el TypeScript; los contadores en curso, solo la administración. → 6G.
 
 Las 17 decisiones de §7 quedan como decisiones técnicas del agente, sin objeción del autor por ahora.
+
+## Avance de la crónica (6C, infraestructura)
+
+Hecho el 2026-10-25 en la rama `tanda-6-cronica`, adelantado del resto de 6C porque no depende de las reglas de tecnología. **Sin cambio de foto** (sigue `BAN35`): la crónica no entra en la
+foto ni en el hash, y la versión y el hash son los mismos con ella y sin ella (lo comprueban las pruebas contra el mismo guion en memoria). Esquema aditivo y dos dorados nuevos (82 pares).
+
+**Almacén** (`crates/persistencia/src/diario.rs`, `persistencia::Diario`). Un `Registro` propio (los mismos segmentos con longitud + CRC32) en `<partida>/cronica/`. Cada entrada lleva en sus datos
+la versión que la produjo (8 bytes) y el `EventoDominio` `cronica.entrada` codificado, el mismo que viaja en las `Delta`; la secuencia del registro es su contador propio, sin huecos. Índice en
+memoria: una marca (versión, secuencia, segmento, desplazamiento) cada 256 entradas, que se rehace leyendo el diario una vez al abrirlo. `Registro` gana `anadir_ubicado` (dice dónde quedará cada
+entrada) y `confirmar` (el volcado de `anadir_lote`); nada cambia para el registro de órdenes.
+
+**Escritura** (`crates/nucleo/src/nucleo.rs`, `nucleo/cronica.rs`). Solo en el núcleo persistente: al cerrar cada versión, sus entradas se proyectan y codifican (`apuntar_cronica`, ≈ 0,7 µs cada
+una; las versiones sin entradas no hacen nada) y quedan en una cola que `volcar_log` manda al hilo de las fotos, ahora **hilo de la persistencia**, por el mismo canal que las fotos: así toda entrada
+con versión ≤ la de una foto está escrita antes que la foto (R4), y el hilo sincroniza el diario antes de escribirla. El hilo agrupa en un solo volcado lo que encuentra esperando. Si el diario no se
+puede escribir, el hilo deja de hacer fotos (aviso por `stderr`): al reiniciar se vuelve a una foto anterior y la repetición rehace lo que falte, sin huecos.
+
+**Recuperación.** `Nucleo::con_persistencia` abre el diario con la versión de la foto que carga (0 sin foto): repara la cola dañada como el registro (avisa), **trunca lo posterior** y la repetición del
+registro de órdenes lo vuelve a escribir igual. Si el diario no estaba y había foto, avisa (`Aviso::DiarioPerdido`) y sigue.
+
+**Lectura** (contrato 05 §8). `PedirCronica { peticion_id, desde_version?, hasta_version?, limite }` → `Cronica { peticion_id, entradas, mas_antiguas, mas_recientes, version }`: hacia atrás hasta
+una versión (o desde la última) o hacia delante desde ella; 200 por defecto, 1.000 como mucho; **una página nunca parte las entradas de una versión**. El actor la pasa al hilo de la persistencia
+(`Nucleo::pedir_cronica`), que la contesta detrás de lo ya escrito: no toca el estado ni bloquea el actor, y la página llega hasta la versión del mundo de ese momento. La respuesta va directa al canal
+de la sesión; en el servidor cuenta como pendiente, como una orden. Sin persistencia, página vacía.
+
+**Pruebas.** `persistencia` (3 nuevas y 1 medición): páginas contra el recorte hecho a mano con 7 límites y 10 combinaciones de desde/hasta, cruzando segmentos, y encadenadas hacia atrás y hacia
+delante sin repetir ni saltar; truncar al abrir y volver a escribir; cola cortada reparada con aviso; diario perdido. `nucleo/tests/cronica.rs` (4 nuevas y 1 medición): guardar, apagar, recuperar y
+leer igual que la referencia en memoria, con la misma versión y el mismo hash; **tres cortes tras una foto** (sin apagar, con la crónica por delante de la foto; con el lote siguiente perdido; con el
+lote a medias), y en los tres la crónica de la referencia, también al seguir jugando; las páginas de 200 por defecto, el tope de 1.000 y el encadenado; **por el WebSocket real**, quien llega tarde
+lee todo, una entrada nueva está en la página en cuanto su orden tiene resultado (la misma que llega en la `Delta`) y tras parar y recuperar la misma. `servidor/tests/sesion.rs` (1): `PedirCronica`
+llega y cuenta como pendiente. `contrato` (1): el significado de los dos dorados. TS y C#: 83 dorados cada uno. `cargo test --workspace --no-fail-fast`: 1.461 pruebas en verde (97 resultados, 16 ignoradas); las 105 pruebas de sesión (`admin`, `ambitos`, `batalla_unity`, `cliente_de_ejemplo`, `cronica`, `eventos`, `interior`, `ordenes`, `ordenes_mundo`, `politica`, `propios`, `reanudacion`, `sesiones`, `vista` y `servidor/tests/sesion.rs`) 20 veces seguidas: 2.100 ejecuciones, 0 fallos; `buf lint` y `buf breaking` limpios.
+
+**Mediciones** (release, con otras compilaciones en la máquina a la vez: ruido de ±20 %):
+
+| Qué | Cifra |
+|---|---|
+| Diario solo: 100.000 entradas de 120 bytes (15,4 MB) | escribir 88 ms; abrir e indexar 105 ms; página de las 200 últimas 0,38 ms, de 1.000 hasta la mitad 0,87 ms |
+| Por el núcleo: 200.000 órdenes que dejan 100.003 entradas | 13,3 MB (132 bytes por entrada); página de las 200 últimas 0,66 ms y de 1.000 hasta la mitad 1,6-2,1 ms (con la decodificación y el canal); recuperar 0,22 s (antes 0,11-0,14 s: abrir e indexar el diario) |
+| Coste por orden (las mismas 200.000 órdenes persistentes, una de cada dos canta) | base 2,14-2,68 s, nueva 2,50-2,79 s (media +0,26 s: ≈ 2,6 µs por entrada; nada en las órdenes sin entrada) |
+| Paso de minuto (`asentamientos rendimiento`, 1.000 plazas × 3 días, sin persistencia) | base 28,7 y 27,1 s, nueva 27,1 y 25,9 s; los mismos 3.061.541 pasos y la versión 50.408 |
+
+**Dudas para el autor** (también en la fila de paridad «Crónica (6C, infraestructura)»):
+
+1. **El directorio** va dentro del de la partida (`<partida>/cronica/`), no al lado como decía §5.3: una partida es un solo directorio y dos partidas en la misma carpeta no se pisan.
+2. **La forma guardada** es el `EventoDominio` codificado (≈ 132 bytes por entrada; 100.000 entradas, 13 MB), no el binario fijo de ≈ 40 bytes de §5.3: un solo formato, el mismo que en vivo, y
+   sin códec propio. Si una season da muchas más entradas de las previstas, se puede compactar el formato sin tocar el contrato.
+3. **Quién escribe**: el hilo de las fotos (ahora de la persistencia), no el núcleo, que es quien sincroniza el registro de órdenes y lo hace en el camino de la orden. Así la orden no espera al
+   disco de la crónica y el orden respecto de las fotos sale del canal.
+4. **Un fallo al escribir la crónica deja de hacer fotos** en vez de abortar como el registro de órdenes: el mundo sigue y al reiniciar se rehace lo que falte; el precio es una repetición más
+   larga. ¿O prefieres que pare el servidor?
+5. **La historia perdida antes de la foto** (el diario borrado o dañado antes de ella) solo se avisa: no hay herramienta para recomponerla, y no siempre se podría, porque `compactar` borra los
+   segmentos del registro de órdenes anteriores a la foto más antigua. ¿Hace falta conservar el registro entero para eso?
+6. **Una página puede pasar del límite** si su primera versión tiene más entradas que el límite (va entera para no partirla); en la práctica una versión trae pocas.
+7. **Sin persistencia no se guarda** (pruebas y batch): las páginas van vacías. El batch político y el militar, que comprueban la foto de ida y vuelta abriendo un núcleo persistente sobre una
+   foto suelta, reciben el aviso `DiarioPerdido` (no lo miran).
+8. **La página y las `Delta` se solapan**: la página llega hasta la versión al pedirla y las `Delta` siguen llegando; el cliente reconoce las repetidas por la versión.
+9. **Lo que falta de la crónica en 6C**: los cuatro públicos del sistema 6 (`tecnologia.logro`, `era.comienza`, `aedas.canta_descubrimiento`, `aedas.epica_cumplida`), que entran tal cual cuando
+   existan sus reglas (6B-6E); y `primera_en_llegar` sigue recorriendo las plazas (D16, 6B).

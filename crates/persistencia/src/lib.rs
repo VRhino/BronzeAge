@@ -3,6 +3,8 @@
 //!
 //! - **Registro** ([`Registro`]): entradas con secuencia 1, 2, 3… sin huecos, en segmentos con longitud + CRC32.
 //! - **Foto** ([`Foto`]): estado serializado hasta una secuencia, zstd + sha256, escritura atómica.
+//! - **Diario** ([`Diario`]): un registro aparte de salidas deterministas (la crónica) con índice por clave para leerlo por páginas; se trunca a la foto al
+//!   arrancar y lo vuelve a escribir quien repite el registro.
 //! - **Arranque** ([`Almacen::recuperar`]): última foto válida + entradas posteriores, en orden. El reloj de mundo se
 //!   congela con el servidor apagado, así que no hay nada «vencido» que procesar al volver: repetir las entradas con
 //!   sus instantes basta.
@@ -11,11 +13,13 @@
 //! reporta en [`Aviso`]; nunca se entrega un registro que no pase el CRC. Lo posterior al daño no se puede
 //! reproducir (rompería la contigüidad) y [`Almacen::abrir`] lo retira antes de volver a escribir.
 
+mod diario;
 mod foto;
 mod registro;
 
+pub use diario::{Apunte, Diario, Pagina, CADA};
 pub use foto::Foto;
-pub use registro::{crc32, Entrada, Registro, Sincronia, MAX_DATOS};
+pub use registro::{crc32, Entrada, Registro, Sincronia, Ubicacion, MAX_DATOS};
 
 use std::fs;
 use std::io;
@@ -34,6 +38,8 @@ pub enum Aviso {
     FotoCorrupta { archivo: String, motivo: String },
     /// Segmento posterior a un daño, apartado como `.descartado` al abrir.
     SegmentoDescartado { archivo: String },
+    /// El diario no estaba y se esperaba historia (hay foto): lo anterior a ella no se puede recomponer sin repetir desde el principio.
+    DiarioPerdido { directorio: String },
 }
 
 #[derive(Clone, Copy, Debug)]

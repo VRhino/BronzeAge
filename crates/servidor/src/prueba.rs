@@ -191,6 +191,12 @@ impl NucleoFalso {
                         }
                     }
                     ComandoSesion::Batalla { .. } => {}
+                    ComandoSesion::Cronica { sesion, pedir } => {
+                        if let Some(s) = e.sesiones.get(&sesion) {
+                            let c = contrato::v1::Cronica { peticion_id: pedir.peticion_id, version: e.version, ..Default::default() };
+                            let _ = s.difusion.try_send(Difusion::Cronica(c));
+                        }
+                    }
                     ComandoSesion::Desconecta { sesion } => {
                         e.sesiones.remove(&sesion);
                     }

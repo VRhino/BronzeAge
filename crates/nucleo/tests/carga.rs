@@ -132,6 +132,7 @@ fn cuerpo(d: Difusion) -> Option<ms::Cuerpo> {
         Difusion::Revocado(r) => ms::Cuerpo::Revocado(r),
         Difusion::Aviso(a) => ms::Cuerpo::Aviso(a),
         Difusion::Batalla(b) => ms::Cuerpo::Batalla(b),
+        Difusion::Cronica(c) => ms::Cuerpo::Cronica(c),
         Difusion::Cerrar(_) => return None,
     })
 }
