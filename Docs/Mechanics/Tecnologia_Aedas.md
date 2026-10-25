@@ -220,6 +220,8 @@ A lo sumo **llega uno por plaza y evaluación**; si sigue habiendo cupo, la espe
 su Era ha empezado; **no ha aparecido** a la Facción; y ningún otro Aeda de la Facción canta ya su épica. Crea `epica = { tecnologiaId, capitulo: 0, hechos: 0, claves: [] }` (evento `aedas.epica_empieza`). No cuesta oro. Una épica puede empezar aunque la tecnología solo esté revelada, o ni eso.
 `abandonarEpica` borra la épica en curso y todo lo avanzado (`aedas.epica_abandonada`).
 
+**Épicas repetidas tras una anexión o fusión** (decisión del autor, 2026-10-25): si la Facción que recoge queda con dos Aedas que cantan la misma tecnología, se unifican. Sigue la más avanzada (más capítulos cerrados y, dentro del capítulo, más hechos; si empatan, la del Aeda que llegó antes); el otro Aeda la pierde (`aedas.epica_abandonada { motivo: unificada }`) y queda libre para cantar otra.
+
 **Hechos inspiradores** (`hechosDeEventos`), sacados de los eventos de cada tick o comando (se evalúan en `exito`, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §7):
 
 | Hecho | Evento | De quién | Clave irrepetible |

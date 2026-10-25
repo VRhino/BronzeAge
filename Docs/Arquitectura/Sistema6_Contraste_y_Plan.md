@@ -645,3 +645,5 @@ Hecha sobre `a5da8bb` (6A, 6B, 6C, 6F y la crónica ya integradas), en paralelo 
 6. **Un `aeda_id` sin la forma `aeda-rN` sale `epica.no_vive_aqui`** en la traducción, sin un código nuevo de «desconocido». Recomendado: así.
 7. **Las épicas se procesan antes que la aparición por hito** al cerrar la versión: si en la misma versión las dos la cumplen, cuenta la épica (y suma a Mecenas). Recomendado: así (el TS avanzaba las épicas con los hechos de la orden y el hito en el tick).
 8. **Empezar o abandonar una épica no lleva el candado de la plaza en batalla**, solo el del héroe (el TS no lo bloqueaba). Recomendado: así.
+
+**Decidido por el autor (2026-10-25), dudas de 6E:** 1, 2, 3, 5, 6, 7 y 8, como están. La 4 cambia: **dos épicas de la misma tecnología se unifican** al trasladar (sigue la más avanzada: capítulos, luego hechos, luego la del Aeda que llegó antes; la otra se pierde con `motivo: unificada`). Regla pura `Residentes::unificar` en `crates/tecnologia`, llamada desde `trasladar_residentes`.

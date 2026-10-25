@@ -172,6 +172,28 @@ impl Residentes {
         sobran
     }
 
+    /// Tras una anexión o una fusión, dos Aedas de la Facción pueden cantar la misma tecnología: se unifican (decisión del autor, 2026-10-25). Sigue la épica
+    /// más avanzada (más capítulos cerrados y, dentro del capítulo, más hechos; si empatan, la del Aeda que llegó antes) y los demás la pierden
+    /// (`motivo: unificada`) y quedan libres. Devuelve los que la pierden.
+    pub fn unificar(&mut self, f: FaccionId) -> Vec<(u32, TecId)> {
+        let mut sigue: BTreeMap<TecId, (u8, u32, std::cmp::Reverse<(Instante, u32)>)> = BTreeMap::new();
+        for a in self.aedas.iter().filter(|a| a.faccion == f) {
+            if let Some(e) = &a.epica {
+                let k = (e.capitulo, e.hechos, std::cmp::Reverse((a.llegada_en, a.id)));
+                sigue.entry(e.tec).and_modify(|m| *m = (*m).max(k)).or_insert(k);
+            }
+        }
+        let mut pierden = Vec::new();
+        for a in self.aedas.iter_mut().filter(|a| a.faccion == f) {
+            let Some(e) = &a.epica else { continue };
+            if sigue[&e.tec].2 .0 != (a.llegada_en, a.id) {
+                pierden.push((a.id, e.tec));
+                a.epica = None;
+            }
+        }
+        pierden
+    }
+
     /// La plaza ya no existe (ruina): se lleva a sus Aedas y su espera. Devuelve los que desaparecen.
     pub fn quitar_plaza(&mut self, plaza: AsentamientoId) -> Vec<u32> {
         let fuera: Vec<u32> = self.aedas.iter().filter(|a| a.plaza == plaza).map(|a| a.id).collect();
@@ -273,6 +295,23 @@ pub(crate) mod pruebas {
         assert!(s.al_aparecer(1, 3).is_empty());
         assert_eq!(s.al_aparecer(1, 2), vec![1]);
         assert!(s.aedas[0].epica.is_none());
+    }
+
+    #[test]
+    fn dos_epicas_de_la_misma_tecnologia_se_unifican_y_sigue_la_mas_avanzada() {
+        let aeda = |id, plaza, llegada_en, epica| AedaResidente { id, plaza, faccion: 1, llegada_en, epica };
+        let en = |capitulo, hechos| Some(Epica { capitulo, hechos, ..Epica::nueva(2) });
+        // Más capítulos gana aunque haya llegado después; las de otra tecnología no se tocan.
+        let mut s = Residentes { aedas: vec![aeda(1, 10, 0, en(0, 3)), aeda(2, 11, 5, en(1, 0)), aeda(3, 12, 0, Some(Epica::nueva(4)))], ..Residentes::default() };
+        assert_eq!(s.unificar(1), vec![(1, 2)]);
+        assert_eq!(s.aedas.iter().map(|a| a.epica.as_ref().map(|e| e.tec)).collect::<Vec<_>>(), vec![None, Some(2), Some(4)]);
+        // Mismo capítulo: más hechos; empate entero: el que llegó antes.
+        let mut s = Residentes { aedas: vec![aeda(1, 10, 0, en(1, 1)), aeda(2, 11, 0, en(1, 2))], ..Residentes::default() };
+        assert_eq!(s.unificar(1), vec![(1, 2)]);
+        let mut s = Residentes { aedas: vec![aeda(1, 10, 9, en(1, 1)), aeda(2, 11, 3, en(1, 1))], ..Residentes::default() };
+        assert_eq!(s.unificar(1), vec![(1, 2)]);
+        assert!(s.unificar(1).is_empty(), "ya unificadas no cambian");
+        assert!(s.unificar(2).is_empty(), "otra Facción, nada");
     }
 
     #[test]
