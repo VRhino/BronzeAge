@@ -45,8 +45,16 @@ use territorio::Disco;
 // ── Lo que el Exterior de la economía todavía no tiene (cada uno lo dará su sistema) ──
 // placeholder: lo dará la fertilidad de la zona del mundo (`fertilidadZona`).
 const FERTILIDAD: i64 = UNO;
-// placeholder: lo darán la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
+// Sin ocupación, la recaudación va entera (la ocupación la recorta). La ración de la guarnición es la de los residentes (`heroes`).
 const FACTOR_EXTRA: i64 = UNO;
+
+/// Los factores extra de la felicidad y de la nobleza de una plaza (Economia_Construccion §9.1, D11 del plan del sistema 6): la felicidad es el **producto** de la ocupación (si la plaza está ocupada
+/// tras una conquista) y `1 + bono × residentes`; la nobleza, `1 + bono × residentes`. En ppm.
+pub(super) fn factores_extra(r: &tecnologia::Reglas, ocupacion: Option<i64>, residentes: u32) -> (i64, i64) {
+    use tecnologia::residentes::{factor_felicidad, factor_nobleza};
+    let n = residentes as usize;
+    (asentamiento::datos::por(ocupacion.unwrap_or(UNO), factor_felicidad(r, n)), factor_nobleza(r, n))
+}
 
 /// Lo que del interior de una plaza cambia con el paso de minuto y es la base de la tendencia «+N/min»: el almacén **exacto** (con su resto oculto: el neto real del
 /// flujo, aunque lo visible vaya en unidades enteras) y la población entera (sus restos no viajan).
@@ -208,8 +216,9 @@ impl Nucleo {
         let nivel_faccion = self.nivel_de_faccion(self.estado.asentamientos[&id].faccion);
         let (es_capital, distancia_capital, faccion_tiene_gran_fundicion) = self.exterior_de_capital(id, nivel_faccion);
         let orden_era = self.orden_era();
+        let residentes = self.residentes_en(id);
         let mut a = self.estado.asentamientos.remove(&id)?;
-        let nivel_antes = a.nivel_actual();
+        let (nivel_antes, nobleza_antes) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0);
         let (r, contado) = {
             let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, tecnologia, .. } = &mut self.estado;
             let rt = &reglas.economia.tecnologia;
@@ -217,6 +226,7 @@ impl Nucleo {
             let tiene_tecnologia = |t: &str| crate::estado::adopta(rt, adoptadas, t);
             // El `bonusProduccion` de las adoptadas (6C: `canteria` ×1,5 la piedra), en plazas y pueblos, aplicado al ritmo antes del resto oculto.
             let factor_tecnologia = |rec: Recurso| tecnologia::adopcion::factor_produccion(rt, adoptadas, rec);
+            let extra = factores_extra(rt, a.ocupada_hasta.map(|_| reglas.economia.combate.ocupacion.factor_crecimiento), residentes);
             let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; 24] };
             let mut sitios = SitiosPlaza {
                 mapa: &geo.mapa,
@@ -246,16 +256,21 @@ impl Nucleo {
                 ciudadanos,
                 distancia_capital,
                 racion_guarnicion,
-                // Una plaza ocupada tras una conquista crece y recauda a la fracción de la ocupación (Combate §8): su mantenimiento ya lo congela `ocupado`.
-                felicidad_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_crecimiento } else { FACTOR_EXTRA },
-                nobleza_extra: FACTOR_EXTRA,
+                // Una plaza ocupada tras una conquista crece y recauda a la fracción de la ocupación (Combate §8): su mantenimiento ya lo congela `ocupado`. Sus Aedas residentes suben la
+                // felicidad y la nobleza (6E), multiplicando lo de la ocupación (D11).
+                felicidad_extra: extra.0,
+                nobleza_extra: extra.1,
                 recaudacion_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_recaudacion } else { FACTOR_EXTRA },
             };
             let r = f(&mut a.economia, &mut x);
             (r, fuentes.contado)
         };
-        let (nivel_ahora, faccion) = (a.nivel_actual(), a.faccion);
+        let (nivel_ahora, nobleza_ahora, faccion) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.faccion);
         self.estado.asentamientos.insert(id, a);
+        // El cupo de Aedas residentes solo cambia en el paso si la nobleza pasa de 0 a más (o al revés) o cambia el nivel actual (6E; el Palacio, en `anotar_sucesos` y la conquista).
+        if nobleza_antes != nobleza_ahora || nivel_antes != nivel_ahora {
+            self.revisar_residentes(id, t);
+        }
         // Lo extraído y lo fabricado cuentan para los logros en origen (6B), y un nivel actual nuevo, para el récord de plazas por nivel.
         self.contar_flujos(t, &contado);
         self.contar_nivel(t, faccion, Some(nivel_antes), Some(nivel_ahora));
@@ -363,6 +378,26 @@ impl Nucleo {
         if sucesos.iter().any(|s| matches!(s, EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. })) {
             self.mirar_aparicion(faccion);
         }
+        // Los hechos de épica de la plaza (6E, TA §7.2): la obra (con el tipo del edificio) y el ascenso. Un Palacio completado puede abrir el cupo de residentes.
+        let mut palacio = false;
+        for s in sucesos {
+            let hecho = match *s {
+                EventoEco::EdificioCompletado { id: e, tipo, .. } => {
+                    palacio |= tipo == Tipo::Palacio;
+                    Some(tecnologia::epicas::Hecho::obra(id as u32, faccion, e, tipo, None))
+                }
+                EventoEco::MejoraCompletada { id: e, nivel } => {
+                    let tipo = self.estado.asentamientos.get(&id).and_then(|a| a.economia.edificios.iter().find(|x| x.id == e)).map(|x| x.tipo);
+                    tipo.map(|tipo| tecnologia::epicas::Hecho::obra(id as u32, faccion, e, tipo, Some(nivel)))
+                }
+                EventoEco::NivelSubio { nivel } => Some(tecnologia::epicas::Hecho::ascenso(id as u32, faccion, nivel.min(u8::MAX as u32) as u8)),
+                _ => None,
+            };
+            self.hecho_epico(hecho);
+        }
+        if palacio {
+            self.revisar_residentes(id, t);
+        }
         // La experiencia de Facción por construir y por ascender (§3.5), en el instante en que acaba la obra.
         for s in sucesos {
             let hecho = match s {
@@ -403,6 +438,7 @@ impl Nucleo {
         self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas, t);
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.quitar_plaza(id, a.faccion);
+        self.residentes_tras_la_ruina(id);
         self.contar_nivel(t, a.faccion, Some(nivel_actual), None);
         self.estado.generaciones.subir(id);
         // La cascada de la ruina, en su orden: los residentes se reubican; después, el comercio (trueques anulados sin penalizar, caravanas perdidas

@@ -7,7 +7,7 @@
 //!   batalla de un UUID.
 //! - Un id que no tiene la forma de su entidad se rechaza con el código de «desconocida» de esa entidad (`heroe.desconocido`…); un valor fuera de un catálogo cerrado (recurso, tropa,
 //!   cargo, política, tipo de carro…), con `orden.forma_invalida`. Lo demás (que la entidad exista, las cantidades) lo valida el núcleo.
-//! - Las órdenes del contrato que el núcleo aún no tiene (los Aedas del sistema 6; los alijos llegaron en 6F y la adopción en 6C) se rechazan con
+//! - Las órdenes del contrato que el núcleo aún no tiene (los Aedas itinerantes del sistema 6; los alijos llegaron en 6F, la adopción en 6C y las épicas en 6E) se rechazan con
 //!   `orden.no_disponible`; ninguna se descarta en silencio. El `match` sobre `Cuerpo` no tiene comodín: una orden nueva del contrato no compila hasta clasificarla.
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
@@ -203,6 +203,10 @@ impl Ctx<'_> {
     }
     fn tecnologia(&self, id: &str) -> R<u8> {
         self.mundo.tecnologia(id).ok_or_else(|| self.no(rechazos::TECNOLOGIA_DESCONOCIDA, id))
+    }
+    /// `aeda-rN`: un Aeda residente (6E). Lo que no tiene esa forma no vive en ninguna plaza.
+    fn aeda_residente(&self, s: &str) -> R<u32> {
+        self.id(ids::parse_aeda_residente, rechazos::EPICA_NO_VIVE_AQUI, s)
     }
 
     /// `ed-<plaza>-<n>`: el edificio `n` de esa plaza.
@@ -700,7 +704,9 @@ impl Ctx<'_> {
             Cuerpo::RetirarFusion(o) => Comando::RetirarFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
 
             // ── Lo que el núcleo aún no tiene ──
-            Cuerpo::EmpezarEpica(_) | Cuerpo::AbandonarEpica(_) | Cuerpo::ComprarTecnologiaAeda(_) => return self.no_disponible("Aedas (sistema 6)"),
+            Cuerpo::ComprarTecnologiaAeda(_) => return self.no_disponible("Aedas itinerantes (sistema 6)"),
+            Cuerpo::EmpezarEpica(o) => Comando::EmpezarEpica { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, aeda: self.aeda_residente(&o.aeda_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
+            Cuerpo::AbandonarEpica(o) => Comando::AbandonarEpica { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, aeda: self.aeda_residente(&o.aeda_id)? },
             Cuerpo::AdoptarTecnologia(o) => Comando::AdoptarTecnologia { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
             Cuerpo::AbrirAlijo(o) => Comando::AbrirAlijo { heroe: self.mi_heroe()?, alijo: self.alijo(&o.alijo_id)? },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },

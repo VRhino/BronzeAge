@@ -46,6 +46,7 @@ impl Nucleo {
             },
             Autoriza::FijaPuerta => x.fija_puerta(a),
             Autoriza::CompraIntel => x.compra_intel_en(a),
+            Autoriza::DirigeAedas => x.dirige_aedas(a),
             otra => unreachable!("{otra:?} no es una autorización de plaza"),
         }
     }
@@ -197,6 +198,7 @@ fn quien_la_da(a: Autoriza) -> &'static str {
         Autoriza::AsignaCargoLocal => "al Gobernador lo nombra el Rey; a los demás, el Gobernador, dentro de la plaza",
         Autoriza::FijaPuerta => "ser su Gobernador, dentro de la plaza, o el Rey de su Facción",
         Autoriza::CompraIntel => "estar dentro y ser el Rey, el Embajador o el Gobernador",
+        Autoriza::DirigeAedas => "estar dentro y ser el Rey de su Facción, su Gobernador o su Sacerdote",
         _ => "otra cosa",
     }
 }

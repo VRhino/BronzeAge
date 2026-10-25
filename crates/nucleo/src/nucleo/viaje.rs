@@ -433,7 +433,7 @@ impl Nucleo {
         if c.llegada_en().is_none_or(|f| f > t) {
             return;
         }
-        let acarreo = c.tipo == TipoCaravana::Acarreo;
+        let (acarreo, comercial) = (c.tipo == TipoCaravana::Acarreo, c.tipo == TipoCaravana::Comercial);
         self.cobrar_peajes(id, t);
         let i = self.estado.comercio.posicion_caravana(id).expect("existe");
         let origen = self.estado.comercio.flota[i].origen as u64;
@@ -455,6 +455,7 @@ impl Nucleo {
                     self.abonar_a_trueque(t, acuerdo, lado, &contenido);
                 }
                 let ev = EventoComercio::CaravanaLlega { caravana: id, destino: id32(destino), comision: entrega.comision, recargo: entrega.recargo };
+                self.hecho_de_caravana(id, comercial, origen, total(&contenido));
                 self.emitir_comercio(t, ev, vec![origen, destino], &[("carga", total(&contenido)), ("perdido", total(&entrega.perdido)), ("valor", entrega.valor)]);
                 // El trueque pudo quedar a medias: otra caravana libre puede llevar lo que falta.
                 self.reparto_de_plaza(origen, t);

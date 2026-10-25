@@ -364,6 +364,8 @@ impl Nucleo {
         if let Some((acuerdo, lado)) = vinculo {
             self.abonar_a_trueque(t, acuerdo, lado, &contenido);
         }
+        let comercial = self.estado.comercio.flota[i].tipo == TipoCaravana::Comercial;
+        self.hecho_de_caravana(caravana, comercial, origen, total(&contenido));
         self.emitir_comercio(t, EventoComercio::CaravanaLlega { caravana, destino: id32(destino), comision: entrega.comision, recargo: entrega.recargo }, vec![origen, destino], &[]);
         self.cerrar_version(t, true);
         Some(entrega)

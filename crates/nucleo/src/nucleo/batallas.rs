@@ -1034,6 +1034,13 @@ impl Nucleo {
         self.defensa_de_vasallo(t, b.ticket.defensor.faccion, &defendieron, res.ganador == Lado::Defensor);
         // Los logros de la batalla (D10), con la plaza de un asedio tal como estaba antes de su conquista (que daña la muralla); nunca desde `batalla.aplicada` (D18).
         let logros = self.contadores_de_batalla(&b, res.ganador);
+        // El hecho de épica de la batalla (6E), con las Facciones del ticket y por su id: se canta una vez aunque toque varias plazas.
+        let contexto = match b.ticket.contexto {
+            Contexto::CampoAbierto { .. } => tecnologia::epicas::ContextoUnity::CampoAbierto,
+            Contexto::Asedio { asentamiento } => tecnologia::epicas::ContextoUnity::Asedio(asentamiento),
+            _ => tecnologia::epicas::ContextoUnity::Otro,
+        };
+        self.hecho_epico(tecnologia::epicas::Hecho::de_unity(id, contexto, b.ticket.atacante.faccion, b.ticket.defensor.faccion, Some(res.ganador == Lado::Atacante)));
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
         self.contar(t, logros);
         // La experiencia de Facción: por cada héroe que participó, a la Facción con la que entró (la del ticket), sin filtro de dignidad (5C). Contra un campamento de bandidos, solo la

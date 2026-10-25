@@ -427,6 +427,8 @@ Crecen las tres clases **solo** si la plaza puede crecer (§9.2: nutrición mayo
 
 > **Implementado en Rust (2026-10-24, 5B), los residentes de la nobleza (Q8).** `Exterior.ciudadanos` ya no es un 1 fijo: son todos los residentes de la plaza, fundadores y quienes se mudaron (`Nucleo::ciudadanos_de`, una consulta al índice de residentes; `politica::residencia::ciudadanos_para_nobleza`). Desde 5B los fundadores pasan a residir en la plaza que fundan (Fundacion_Y_Refundacion §5).
 
+> **Implementado en Rust (2026-10-25, 6E), los Aedas residentes.** `Exterior.felicidad_extra` es el **producto** de la ocupación (`OCUPACION.factorCrecimiento` mientras la plaza está ocupada, si no 1) y `1 + bonoFelicidad × aedasResidentes` (D11 del plan del sistema 6: antes iba uno **o** el otro), y `Exterior.nobleza_extra` es `1 + bonoNobleza × aedasResidentes`, en ppm (`nucleo/construccion.rs::factores_extra`). El número de residentes de la plaza sale de un índice derivado (`Espacio::residentes_por_plaza`): el paso de minuto no recorre los residentes. `factorCrecimientoPoblacion(políticas)` lo pone la plaza, como antes.
+
 **El crecimiento no consume el generador aleatorio.** Los eventos «primeros artesanos» y «primeros nobles» (+1 sin dado) se disparan al cumplirse la condición.
 
 ### 9.2 Comida y hambruna (`avanzarNutricionPoblacion`)

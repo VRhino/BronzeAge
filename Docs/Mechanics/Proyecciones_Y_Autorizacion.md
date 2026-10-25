@@ -214,6 +214,8 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 > **Implementado en Rust (2026-10-25, 6C):** `adoptar_tecnologia` (175, `ReyDeLaFaccion`: la cuenta del héroe, Rey de la Facción que nombra la orden), con los rechazos finos de `Tecnologia_Aedas.md` §4 en el orden del TypeScript; la tecnología va por su id del catálogo (una desconocida se rechaza en la traducción, `tecnologia.desconocida`). Quedan 3 órdenes no disponibles, las de los Aedas.
 
+> **Implementado en Rust (2026-10-25, 6E):** `empezar_epica` (177) y `abandonar_epica` (178), con una clase nueva de `Autoriza`, `DirigeAedas` (`dirigeAedas` de §4.3: el héroe de la cuenta dentro de la plaza y Rey de su Facción dueña, su Gobernador o su Sacerdote; no exige residir), y los nueve rechazos finos `epica.*` de `Tecnologia_Aedas.md` §7.2 en el orden del TypeScript. El Aeda va por su id `aeda-rN`; uno sin esa forma no vive en ninguna plaza (`epica.no_vive_aqui`, en la traducción). Queda 1 orden no disponible, `comprar_tecnologia_aeda` (6D).
+
 > **Implementado en Rust (2026-10-25, 6F):** `abrir_alijo` (174, `CuentaDelHeroe`: el héroe de la cuenta, que el contrato no nombra) con su condición de `Generacion_Del_Mundo.md` §12, en su propia fila (C7 del plan del sistema 6: antes iba agrupada con las órdenes de campamento). Quedan 4 órdenes no disponibles, las de tecnología y Aedas.
 
 > **Implementado en Rust (2026-10-25, 5E):** la matriz de las órdenes de plaza es la de §5.2. Se retiran `manda_en` y «ciudadano de la madre» (`colocar_avanzada` lo dejó el 2026-10-25, 5E-1: lo da el Gobernador o el Maestro de Obras de la madre con su columna en el sitio, `Autoriza::CargoEnElSitio`), y `Autoriza` gana
@@ -236,6 +238,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
+| `abandonar_epica` | `AbandonarEpica` | el Rey de la dueña, el Gobernador o el Sacerdote de la plaza, dentro | `dirigeAedas` (no exige residir); el Aeda vive en la plaza (`epica.no_vive_aqui`) y canta una épica (`epica.no_canta`) (6E) |
 | `abandonar_recinto` | `AbandonarRecinto` | el Gobernador de la plaza, residente y dentro | de la plaza |
 | `abrir_alijo` | `AbrirAlijo` | la cuenta del héroe | sin Facción o de una sin plazas, sin haberlo abierto, con su columna en el mapa a `radioPuerta` del alijo (6F) |
 | `aceptar_trueque` | `AceptarTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza B del acuerdo |
@@ -254,6 +257,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `destruir_avanzada` | `DestruirAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
 | `destruir_pueblo` | `DestruirPueblo` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
 | `elegir_tropa_de_avanzada` | `ElegirTropaDeAvanzada` | el Gobernador de la plaza, residente y dentro | de la plaza madre |
+| `empezar_epica` | `EmpezarEpica` | el Rey de la dueña, el Gobernador o el Sacerdote de la plaza, dentro | `dirigeAedas` (no exige residir); la tecnología del catálogo (`tecnologia.desconocida`) y los ocho de `Tecnologia_Aedas.md` §7.2 en el orden del TypeScript: el Aeda vive en la plaza (`epica.no_vive_aqui`), la tecnología tiene épica (`epica.sin_epica`), el Aeda es de la dueña (`epica.aeda_ajeno`), no canta otra (`epica.ya_canta`), el logro cumplido (`epica.sin_logro`), la Era abierta (`epica.era_cerrada`), sin aparecer a la Facción (`epica.ya_aparecida`) y ningún otro Aeda suyo la canta (`epica.otro_la_canta`) (6E) |
 | `fijar_puerta` | `FijarPuerta` | el Gobernador, residente y dentro, o el Rey de la Facción | de la plaza; los grupos `neutrales`, `aliados`, `enemigos` y `aedas` (`orden.forma_invalida` si no); sin cambio, `sin_cambios`; no con un pueblo o una avanzada de la plaza en batalla (`batalla.bloqueado`); quien ya no puede entrar sale al mapa (5E). `FijarAcceso` (117) es su alias en el núcleo |
 | `marcar_pueblo` | `MarcarPueblo` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (el panel de la madre, Doc 4.2.2) |
 | `mejorar_avanzada` | `MejorarAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
@@ -448,9 +452,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
-| `abandonar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 
 <!-- /autorizacion -->
 

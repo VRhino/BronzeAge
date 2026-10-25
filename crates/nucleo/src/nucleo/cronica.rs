@@ -13,6 +13,7 @@
 //! | `titulo.nace`, `titulo.cambia_manos` | el título: su poseedor (y el anterior); la entrada lleva además la clave del título (5F) |
 //! | `tecnologia.logro`, `era.comienza` | el logro (su contador y su umbral, sin la tecnología que abre) y la Era nueva (su id, su orden y si llegó por plazo), sin Facciones (6C) |
 //! | `aedas.canta_descubrimiento` | el descubrimiento: la descubridora y la tecnología (6C) |
+//! | `aedas.epica_cumplida` | la épica cumplida: la Facción, sin la tecnología que la épica hizo aparecer (6E) |
 //! | `asentamiento.nivel_subio` con nivel ≥ 3 | solo si es la primera plaza del mundo que llega a ese nivel (ninguna otra, fuera de las que suben en la misma versión, lo tenía ya); si suben dos a la vez, la primera |
 //!
 //! **Guardada entera** (sistema 6, decisión Q2; §5.3 del plan): en el núcleo persistente cada entrada se guarda, ya como el `EventoDominio` que viaja en las `Delta`, en un diario aparte
@@ -22,7 +23,7 @@
 //!
 //! C4 (cerrada en 6C: queda la regla de Rust): el canon canta la caída por `combate.asedio_conquista`, que en Rust solo da el asedio con números; la conquista por Unity no lo emite, así que la entrada sale de
 //! `asentamiento.conquistada`, que dan las dos vías (C4 del plan del sistema 6: así queda). La frase la compone el cliente (el contrato no lleva texto): la entrada no trae la variante de §8. Los
-//! públicos del sistema 6 (6C) son hechos públicos que además dejan su entrada, como los títulos; `aedas.epica_cumplida` llegará con 6E.
+//! públicos del sistema 6 (6C y 6E) son hechos públicos que además dejan su entrada, como los títulos.
 
 use super::*;
 use crate::estado::Dato;
@@ -61,7 +62,7 @@ impl Nucleo {
                 "diplomacia.fusion" => datos(h, &["faccionA", "faccionB", "faccion"]),
                 "titulo.nace" | "titulo.cambia_manos" => datos(h, &["faccion", "faccionAnterior"]),
                 "tecnologia.logro" | "era.comienza" => Vec::new(),
-                "aedas.canta_descubrimiento" => datos(h, &["faccion"]),
+                "aedas.canta_descubrimiento" | "aedas.epica_cumplida" => datos(h, &["faccion"]),
                 "asentamiento.ruinas" => h.facciones.clone(),
                 "asentamiento.nivel_subio" => match h.dato("nivel") {
                     Some(n) if n >= NIVEL_MINIMO_CANTADO && self.primera_en_llegar(hechos, plaza(h), n) && cantados.insert(n) => h.facciones.clone(),

@@ -295,6 +295,8 @@ impl Nucleo {
                 self.tr.emitir(&self.estado, EventoNucleo { codigo: "asentamiento.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("nivel", *nivel as i64)], ..Default::default() });
                 let faccion = self.estado.asentamientos[asentamiento].faccion;
                 self.contar_nivel(t, faccion, Some(nivel_antes), Some(*nivel));
+                // El nivel actual decide el cupo de Aedas residentes (6E).
+                self.revisar_residentes(*asentamiento, t);
                 Ok(None)
             }
             Comando::AgrandarZona { asentamiento } => {

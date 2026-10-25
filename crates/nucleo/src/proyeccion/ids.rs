@@ -37,6 +37,15 @@ ids! {
     u64, "prop", propuesta, parse_propuesta;
 }
 
+/// Un Aeda residente, `aeda-rN` (6E, decisión técnica 7 del plan del sistema 6; los itinerantes son `aeda-N`).
+pub fn aeda_residente(n: u32) -> String {
+    format!("aeda-r{n}")
+}
+
+pub fn parse_aeda_residente(s: &str) -> Option<u32> {
+    s.strip_prefix("aeda-r")?.parse().ok()
+}
+
 /// Un informe de inspección (`insp-<héroe>-<objetivo>`, con el id del contrato del objetivo: `ej-N`, `car-N` o `as-N`): uno por héroe y objetivo.
 pub fn informe(heroe: u64, objetivo: &str) -> String {
     format!("insp-{heroe}-{objetivo}")
@@ -78,6 +87,7 @@ mod pruebas {
         assert_eq!(parse_pueblo(&pueblo(9)), Some(9));
         assert_eq!(parse_avanzada(&avanzada(9)), Some(9));
         assert_eq!(parse_caravana(&caravana(2)), Some(2));
+        assert_eq!((aeda_residente(4).as_str(), parse_aeda_residente("aeda-r4"), parse_aeda_residente("aeda-4")), ("aeda-r4", Some(4), None));
         assert_eq!(parse_campamento(&campamento(4)), Some(4));
         assert_eq!(parse_nodo(&nodo(12)), Some(12));
         assert_eq!(parse_edificio(&edificio(5, 11)), Some((5, 11)));

@@ -243,6 +243,8 @@ impl Nucleo {
             x.capital_de = None;
             self.tr.tocar(Clase::Asentamiento, x.id);
         }
+        // Sus Aedas residentes pasan con ellas, con su épica, y sus épicas cumplidas se suman (6E, decisión técnica 13 del plan del sistema 6).
+        self.trasladar_residentes(t, origen, destino, &plazas);
         // Una Facción derrotada que recibe plazas deja de estarlo (§2.1: `derrotadaPor` solo mientras no tiene ningún asentamiento).
         if !plazas.is_empty() && self.estado.politica.facciones.get(destino).is_some_and(|f| f.derrota.is_some()) {
             self.estado.politica.facciones.anular_derrota(destino);

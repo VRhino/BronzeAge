@@ -474,6 +474,12 @@ pub enum Comando {
     /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
     /// al instante.
     AdoptarTecnologia { heroe: u64, faccion: u32, tecnologia: u8 },
+    // ── Las épicas de los Aedas residentes (sistema 6, tanda 6E; Tecnologia_Aedas §7.2). Códigos 177 y 178 (el 176 es de 6D). ──
+    /// El Aeda residente `aeda-r<aeda>` de la plaza empieza la épica de la tecnología `tecnologia` (índice del catálogo). La dirige el Rey de la dueña, el Gobernador o el Sacerdote de la plaza,
+    /// presentes (`dirigeAedas`).
+    EmpezarEpica { heroe: u64, asentamiento: u64, aeda: u32, tecnologia: u8 },
+    /// El Aeda residente `aeda-r<aeda>` de la plaza abandona la épica que canta y pierde lo avanzado.
+    AbandonarEpica { heroe: u64, asentamiento: u64, aeda: u32 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -535,6 +541,8 @@ pub enum Autoriza {
     FijaPuerta,
     /// `compraIntel`: la cuenta del héroe; en una plaza, dentro de ella y Rey o Embajador de su Facción o su Gobernador (en un campamento lo mira la orden).
     CompraIntel,
+    /// `dirigeAedas`: la cuenta del héroe, dentro de la plaza y Rey de su Facción dueña, su Gobernador o su Sacerdote (no exige residir; Proyecciones §4.3).
+    DirigeAedas,
     /// La cuenta del Líder de la columna.
     LiderDeLaColumna,
     /// La cuenta de cualquier participante de la columna.
@@ -545,7 +553,7 @@ impl Autoriza {
     /// ¿Es una de las clases de la matriz que miran una plaza (un cargo, residir y estar dentro, fijar la puerta, designar cargos)? Los escenarios de las pruebas y del batch que no miran
     /// quién da una orden la dan entonces como administración (decisión 9 del plan del sistema 5: el andamiaje de administración se queda para montar escenarios).
     pub fn es_de_plaza(self) -> bool {
-        matches!(self, Autoriza::Cargo(_) | Autoriza::CargoDeLaOrden | Autoriza::ResidenteDentro | Autoriza::OperaAparcada | Autoriza::FijaPuerta | Autoriza::AsignaCargoLocal)
+        matches!(self, Autoriza::Cargo(_) | Autoriza::CargoDeLaOrden | Autoriza::ResidenteDentro | Autoriza::OperaAparcada | Autoriza::FijaPuerta | Autoriza::AsignaCargoLocal | Autoriza::DirigeAedas)
     }
 }
 
@@ -703,6 +711,7 @@ impl Comando {
             Comando::AsignarCargoLocal { .. } => AsignaCargoLocal,
             Comando::FijarPuerta { .. } => FijaPuerta,
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,
+            Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => DirigeAedas,
             Comando::MarcharA { .. } | Comando::Estacionar { .. } | Comando::Fundar { .. } | Comando::ComerciarEnPlaza { .. } => LiderDeLaColumna,
             Comando::EntregarDeCaravana { .. }
             | Comando::AdjuntarCaravana { .. }
@@ -988,7 +997,10 @@ impl Comando {
             | Comando::ProponerFusion { heroe, .. }
             | Comando::ResponderFusion { heroe, .. }
             | Comando::RetirarFusion { heroe, .. }
-            | Comando::AdoptarTecnologia { heroe, .. } => i.heroes.push(*heroe),
+            | Comando::AdoptarTecnologia { heroe, .. }
+            // Una épica no es una orden sobre la batalla: solo el héroe que la dirige lleva el candado.
+            | Comando::EmpezarEpica { heroe, .. }
+            | Comando::AbandonarEpica { heroe, .. } => i.heroes.push(*heroe),
             Comando::AlternarReabastecerAliados { asentamiento, .. } => i.asentamientos.push(*asentamiento),
             // La puerta y los cargos de una plaza en batalla no se tocan: echar a quien combate dentro, o cambiar quién la gobierna, sería una orden sobre la batalla.
             Comando::AsignarCargoLocal { heroe, asentamiento, designado, .. } => {
@@ -1839,6 +1851,19 @@ impl Peticion {
                 w.u32(*faccion);
                 w.u8(*tecnologia);
             }
+            Comando::EmpezarEpica { heroe, asentamiento, aeda, tecnologia } => {
+                w.u8(177);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.u32(*aeda);
+                w.u8(*tecnologia);
+            }
+            Comando::AbandonarEpica { heroe, asentamiento, aeda } => {
+                w.u8(178);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.u32(*aeda);
+            }
             Comando::ComprometerRecinto { asentamiento, cargo, nivel } => {
                 w.u8(123);
                 w.u64(*asentamiento);
@@ -2308,6 +2333,8 @@ impl Peticion {
             173 => Comando::RetirarFusion { heroe: r.u64()?, propuesta: r.u64()? },
             174 => Comando::AbrirAlijo { heroe: r.u64()?, alijo: r.u32()? },
             175 => Comando::AdoptarTecnologia { heroe: r.u64()?, faccion: r.u32()?, tecnologia: r.u8()? },
+            177 => Comando::EmpezarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()?, tecnologia: r.u8()? },
+            178 => Comando::AbandonarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2890,6 +2917,25 @@ pub mod rechazos {
     pub const TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL: &str = "tecnologia.rey_fuera_de_la_capital";
     /// El almacén de la capital no tiene la tarifa de adopción de la Era de la tecnología.
     pub const TECNOLOGIA_SIN_TARIFA: &str = "tecnologia.sin_tarifa";
+    // Las épicas de los Aedas residentes (sistema 6, tanda 6E; Tecnologia_Aedas §7.2, en el orden del TypeScript).
+    /// Ese Aeda no vive en esta plaza (o el id no es el de un residente, `aeda-rN`).
+    pub const EPICA_NO_VIVE_AQUI: &str = "epica.no_vive_aqui";
+    /// La tecnología no tiene épica (las de arranque).
+    pub const EPICA_SIN_EPICA: &str = "epica.sin_epica";
+    /// El Aeda aún no se ha asentado con el dueño actual de la plaza.
+    pub const EPICA_AEDA_AJENO: &str = "epica.aeda_ajeno";
+    /// El Aeda ya canta otra épica: hay que abandonarla antes.
+    pub const EPICA_YA_CANTA: &str = "epica.ya_canta";
+    /// El logro del servidor de esa tecnología aún no se ha cumplido.
+    pub const EPICA_SIN_LOGRO: &str = "epica.sin_logro";
+    /// La Era de esa tecnología aún no ha empezado.
+    pub const EPICA_ERA_CERRADA: &str = "epica.era_cerrada";
+    /// La tecnología ya le ha aparecido a la Facción.
+    pub const EPICA_YA_APARECIDA: &str = "epica.ya_aparecida";
+    /// Otro Aeda de la Facción ya canta la épica de esa tecnología.
+    pub const EPICA_OTRO_LA_CANTA: &str = "epica.otro_la_canta";
+    /// Abandonar: el Aeda no canta ninguna épica.
+    pub const EPICA_NO_CANTA: &str = "epica.no_canta";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -3255,6 +3301,8 @@ mod pruebas {
             Comando::RetirarFusion { heroe: 2, propuesta: 41 },
             Comando::AbrirAlijo { heroe: 2, alijo: 7 },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
+            Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },
+            Comando::AbandonarEpica { heroe: 2, asentamiento: 3, aeda: 4 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

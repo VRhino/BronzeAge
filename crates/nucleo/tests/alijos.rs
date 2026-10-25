@@ -189,7 +189,7 @@ fn los_alijos_abiertos_viajan_en_la_foto_ban36_y_ban35_se_rechaza() {
     e.ok("ana", Comando::AbrirAlijo { heroe: ana, alijo });
     let (reglas, hash) = (e.n.estado().reglas.clone(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN38");
+    assert_eq!(&bytes[..5], b"BAN40");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.militar.heroes[&ana].alijos_abiertos.iter().copied().collect::<Vec<_>>(), s.hash()), (vec![alijo], e.n.hash_estado()));
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();

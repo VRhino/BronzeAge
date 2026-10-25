@@ -265,6 +265,8 @@ impl Nucleo {
     /// Recalcula la cita de la reputación de una Facción desde `t`: la anterior se invalida y se programa la próxima, si hay. Solo hay umbral bajo (−40): se
     /// anuncian el cruce del 0 y la entrada y salida del −40 (Comercio_Caravanas §15).
     pub(super) fn programar_reputacion(&mut self, faccion: u32, t: Instante) {
+        // La llegada lenta de los Aedas residentes depende de la reputación (6E): las plazas de la Facción que esperan miran otra vez su cita.
+        self.reputacion_de_residentes(faccion, t);
         let entidad = entidad_reputacion(faccion);
         self.estado.generaciones.subir(entidad);
         let umbral = self.estado.reglas.economia.comercio.reputacion.umbral_bajo_para_comision;

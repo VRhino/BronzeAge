@@ -98,6 +98,7 @@ fn id_del_contrato(n: &Nucleo, ev: &EventoNucleo, clave: &str, v: i64) -> Option
         "plaza" | "ciudad" | "destino" | "socia" | "asentamientoArruinado" => ids::asentamiento(u),
         "faccion" | "faccionA" | "faccionB" | "faccionAtacante" | "faccionDefensora" | "faccionAnterior" | "faccionVista" | "faccionQueVe" | "atacante" | "contra" | "por" => faccion(),
         "relacion" => ids::relacion(u),
+        "aedaResidente" => ids::aeda_residente(v as u32),
         "propuesta" => ids::propuesta(u),
         "capital" => ids::asentamiento(u),
         "pueblo" => ids::pueblo(u),

@@ -7,7 +7,7 @@
 //!
 //! # Lo que se mide
 //! De cada Facción como entidad, en el orden de sus ids (desempata el primero, como el orden de la lista del TypeScript): sus plazas y la población total de ellas, el oro de sus almacenes en
-//! unidades, los soldados de todas las escuadras de todos sus ciudadanos (estén donde estén) y, hasta el sistema 6, ningún mecenazgo (el título «Mecenas de los Aedas» no nace). La Liga y el Gran
+//! unidades, los soldados de todas las escuadras de todos sus ciudadanos (estén donde estén) y, desde 6E, el mecenazgo: sus épicas cumplidas × 10 más los Aedas residentes de sus plazas («Mecenas de los Aedas»). La Liga y el Gran
 //! Rey salen de las relaciones activas (`politica::liga`), bajo demanda: no se guardan. Se guardan los títulos de la última evaluación (`Politica::titulos`, foto), con los que se calcula
 //! (la aspirante solo le quita un título a la poseedora si la supera en `TITULOS.margenAspirante`, P2) y se narra la siguiente
 //! (`titulo.nace`, `titulo.cambia_manos`, hechos públicos que la crónica canta; nada cuando un título desaparece). Un título que cambia de poseedor o de valor, nace o desaparece se toca en el
@@ -45,8 +45,8 @@ impl Nucleo {
                     poblacion: plazas.iter().map(|a| a.economia.poblacion.total()).sum(),
                     oro: plazas.iter().map(|a| a.economia.almacen.cantidad(asentamiento::Recurso::Oro) / base::UNIDAD).sum(),
                     soldados,
-                    // DUDA: épicas cumplidas × 10 + Aedas residentes, cuando existan (sistema 6).
-                    mecenas: 0,
+                    // Épicas cumplidas × 10 + Aedas residentes (6E, Doc 2.9).
+                    mecenas: self.mecenazgo(f.id),
                 }
             })
             .collect()

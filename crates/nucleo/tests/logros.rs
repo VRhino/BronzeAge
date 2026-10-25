@@ -1,4 +1,4 @@
-//! La tecnología del mundo en el núcleo (sistema 6, tanda 6B; Tecnologia_Aedas §1-§3): el estado en la foto `BAN37` (hoy `BAN38`, con las citas de 6C), la cita global de la Era, los récords de plazas por nivel y
+//! La tecnología del mundo en el núcleo (sistema 6, tanda 6B; Tecnologia_Aedas §1-§3): el estado en la foto `BAN37` (hoy `BAN40`, con las citas de 6C), la cita global de la Era, los récords de plazas por nivel y
 //! `FijarTecnologias` sobre las reglas reales. Cada vía de los contadores la prueba el binario de su sistema, con su hecho (D18: un hecho cuenta una vez y nada más):
 //!
 //! | Vía | Prueba |
@@ -102,7 +102,7 @@ fn la_foto_ban37_lleva_el_estado_de_tecnologia_cada_campo_cambia_el_hash_y_ban36
     let reglas = n.estado().reglas.clone();
     let mundo_hash = n.estado().mundo_hash.clone();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN38");
+    assert_eq!(&bytes[..5], b"BAN40");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!((vuelta.tecnologia.clone(), vuelta.era_en), (n.estado().tecnologia.clone(), n.estado().era_en));

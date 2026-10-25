@@ -76,6 +76,7 @@ mod persecuciones;
 mod pertenencias;
 mod ciudadania;
 mod pueblos;
+mod residentes;
 mod salidas;
 mod taberna;
 mod logros;
@@ -259,7 +260,7 @@ pub struct Nucleo {
     /// Las Facciones a las que la transición en curso les cambió algo que mira el hito de una tecnología (6C, `tecnologias`): su aparición se evalúa al cerrar la versión. Vacío entre
     /// transiciones: no se persiste.
     aparicion_pendiente: std::collections::BTreeSet<u32>,
-    /// Los hechos de épica de la transición en curso (6C deja la adopción; los procesarán los Aedas residentes de 6E al cerrar la versión). Vacío entre transiciones: no se persiste.
+    /// Los hechos de épica de la transición en curso (`residentes`, 6E: se anotan donde ocurren y se procesan al cerrar la versión). Vacío entre transiciones: no se persiste.
     hechos_epicos: Vec<tecnologia::epicas::Hecho>,
     /// Las entradas de la crónica cerradas y aún no mandadas al hilo de la persistencia. `None` sin persistencia (no se guarda la crónica). No entra en el hash ni en las fotos.
     cronica: Option<Vec<cronica::Apunte>>,
@@ -560,6 +561,7 @@ impl Nucleo {
             Carga::Titulos => self.recalcular_titulos(t),
             Carga::Era => self.cita_de_era(t),
             Carga::Tecnologia(suceso) => self.cita_de_tecnologia(suceso, t),
+            Carga::Residentes => self.cita_de_residentes(id, t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
@@ -586,10 +588,10 @@ impl Nucleo {
 
     /// La ÚNICA función que sube la versión: si la transición cambió algo (o se fuerza), cierra un registro de cambios.
     fn cerrar_version(&mut self, t: Instante, forzar: bool) -> bool {
+        // Las épicas de los Aedas residentes avanzan con los hechos de la transición (6E, `residentes`): lo que cumplen aparece en esta misma versión y su canto llega a la crónica.
+        self.avanzar_epicas(t);
         // Las tecnologías cuyo hito se cumple tras lo que cambió la transición aparecen en esta misma versión (6C, `tecnologias`).
         self.apariciones(t);
-        // 6E: aquí avanzarán las épicas de los Aedas residentes con los hechos de la transición.
-        self.hechos_epicos.clear();
         // La Caravana de Fundación que se ha quedado sin su titular (Fundacion_Y_Refundacion §7) vuelve sola a su origen: lo mira lo que la transición tocó.
         self.vigilar_fundaciones(t);
         // Quien entra, sale, se muda o aparca marca el interior de su plaza (solo con sesiones).
@@ -968,6 +970,10 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::AdoptarTecnologia { .. } => match self.ejecutar_adopcion(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => match self.ejecutar_epica(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

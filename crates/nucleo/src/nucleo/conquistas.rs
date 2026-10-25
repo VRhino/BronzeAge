@@ -112,6 +112,8 @@ impl Nucleo {
         self.estado.cola.programar(c.ocupacion_hasta, PRIO_ASENTAMIENTO, clave, Carga::Combate(SucesoCombate::FinOcupacion));
         self.tr.tocar(Clase::Asentamiento, plaza);
         self.cambiar_plaza_de_faccion(plaza, vieja, Some(conquistador));
+        // Sus Aedas residentes pasan a la conquistadora y pierden la épica; el saqueo (el Palacio dañado, la nobleza perdida) puede bajar su cupo (6E).
+        self.residentes_tras_la_conquista(t, plaza, vieja, conquistador);
         // Las dos Facciones cambian (sus plazas, su capital); el conquistador gana la experiencia de la conquista (§3.5).
         self.tr.tocar_todos(Clase::Faccion, [u64::from(vieja), u64::from(conquistador)]);
         self.dar_experiencia_por(t, conquistador, politica::nivel::Hecho::Conquista, super::experiencia::motivo::CONQUISTA);

@@ -49,11 +49,13 @@ pub(super) struct Espacio {
     /// Cuántas plazas hay con cada nivel actual (derivado, no va en la foto; las de nivel ≥ `NIVELES_INDICE − 1`, en la última casilla): de aquí salen los récords `plazasEnNivel.N` (6B) sin
     /// recorrer las plazas.
     pub plazas_por_nivel: [u32; super::logros::NIVELES_INDICE],
+    /// Cuántos Aedas residentes viven en cada plaza (derivado, no va en la foto; 6E): lo lee el paso de minuto (la felicidad y la nobleza) sin recorrer los residentes.
+    pub residentes_por_plaza: BTreeMap<u64, u32>,
 }
 
 impl Espacio {
     pub fn nuevo() -> Self {
-        Self { rejilla: Rejilla::para_mundo_real(), perseguidores: BTreeMap::new(), plazas_por_faccion: BTreeMap::new(), plazas_por_nivel: Default::default() }
+        Self { rejilla: Rejilla::para_mundo_real(), perseguidores: BTreeMap::new(), plazas_por_faccion: BTreeMap::new(), plazas_por_nivel: Default::default(), residentes_por_plaza: BTreeMap::new() }
     }
 }
 
@@ -167,6 +169,7 @@ impl Nucleo {
             self.espacio.plazas_por_faccion.entry(a.faccion).or_default().insert(a.id);
             self.espacio.plazas_por_nivel[(a.nivel_actual() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1;
         }
+        self.espacio.residentes_por_plaza = super::residentes::por_plaza(&self.estado.residentes);
         for e in self.estado.ejercitos.values() {
             if let Some(presa) = e.persiguiendo {
                 self.espacio.perseguidores.entry(presa).or_default().insert(e.id);

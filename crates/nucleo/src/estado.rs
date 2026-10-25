@@ -96,6 +96,19 @@ pub fn entidad_tecnologia(t: tecnologia::TecId) -> u64 {
     19 * crate::estado_comercio::ETIQUETA | u64::from(t)
 }
 
+/// Prioridad de la cita de llegada de un Aeda residente (`Carga::Residentes`, Reloj_Y_Eventos §2: con las demás citas de la tecnología, después de todo lo demás del mismo instante).
+pub const PRIO_RESIDENTES: u8 = 10;
+
+/// La entidad de la cita de llegada de un Aeda residente a una plaza que espera con cupo libre (etiqueta 21 de `estado_comercio::ETIQUETA`; la 20 queda para los itinerantes de 6D): una por
+/// plaza. Sube de generación cada vez que cambia el instante de la cita o la plaza deja de esperar.
+pub fn entidad_residentes(plaza: u64) -> u64 {
+    21 * crate::estado_comercio::ETIQUETA | plaza
+}
+
+/// BAN40: BAN39 (6D, los Aedas itinerantes) con los Aedas residentes y sus épicas (sistema 6, tanda 6E; `codec_tecnologia::escribir_residentes`): cada residente (su N, su plaza,
+/// su Facción, cuándo llegó y su épica con el capítulo, los hechos, el último y sus claves), el contador de ids, desde cuándo espera cada plaza con cupo libre, las épicas cumplidas por Facción
+/// y la cita de llegada de cada plaza que espera (`Estado::residentes_citas` y `Carga::Residentes`). BAN39 y BAN38 se rechazan: no traen los residentes ni las épicas, que no se pueden deducir.
+///
 /// BAN38: BAN37 con las dos citas de cada tecnología descubierta (sistema 6, tanda 6C; `Carga::Tecnologia`): la de conocimiento (`primeros.en + retrasoConocimiento`: la cantan los Aedas) y la
 /// del campamento (`primeros.en + horasTrasLaPrimera`: la desbloquean los campamentos de mercenarios); lo ya cantado (`cantadas`) iba ya en BAN37. BAN37 se rechaza: sus tecnologías ya
 /// descubiertas no traen esas citas en la cola, y sin ellas nunca se cantarían ni llegarían a los campamentos por plazo.
@@ -207,7 +220,7 @@ pub fn entidad_tecnologia(t: tecnologia::TecId) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN38";
+const MAGIA: &[u8; 5] = b"BAN40";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -482,6 +495,8 @@ pub enum Carga {
     Era,
     /// Una cita de una tecnología descubierta (6C; la entidad es `entidad_tecnologia`; prioridad [`PRIO_TECNOLOGIA`]).
     Tecnologia(SucesoTecnologia),
+    /// Se mira si llega un Aeda residente a una plaza que espera con cupo libre (6E; la entidad es `entidad_residentes`; prioridad [`PRIO_RESIDENTES`]).
+    Residentes,
 }
 
 /// Qué cita de una tecnología descubierta vence (Tecnologia_Aedas §5 y §6.1). Se programan las dos al registrarse su descubridora (`primeros`), por cualquier vía, y cada una vence una vez.
@@ -927,6 +942,10 @@ pub struct Estado {
     pub tecnologia: tecnologia::EstadoTecnologia,
     /// Cuándo vence la cita de la Era que está en la cola (`Carga::Era`), si hay una: se arma como el plazo de los títulos, al pasar algo en el mundo con alguna Facción.
     pub era_en: Option<Instante>,
+    /// Los Aedas residentes y sus épicas (6E, Tecnologia_Aedas §7): quiénes viven en cada plaza, desde cuándo espera cada una con cupo libre y las épicas cumplidas por Facción.
+    pub residentes: tecnologia::Residentes,
+    /// El instante de la cita de llegada que está en la cola para cada plaza que espera (`Carga::Residentes`, generación de `entidad_residentes`).
+    pub residentes_citas: BTreeMap<u64, Instante>,
     /// Campamentos de bandidos, guarnición de serie de los pueblos y rendimientos de lo que se destruye (Combate, Generacion_Del_Mundo §13).
     pub combate: EstadoCombate,
     /// Las batallas de Unity abiertas y las cerradas recientes (Batalla_Unity_Ciclo §3).
@@ -969,6 +988,8 @@ impl Estado {
             militar: EstadoMilitar::default(),
             tecnologia,
             era_en: None,
+            residentes: tecnologia::Residentes::default(),
+            residentes_citas: BTreeMap::new(),
             combate: EstadoCombate::default(),
             batallas: EstadoBatallas::default(),
             memoria: Memoria::default(),
@@ -1120,6 +1141,7 @@ impl Estado {
         w.opt_i64(self.titulos_en);
         codec_tecnologia::escribir(&mut w, &self.tecnologia);
         w.opt_i64(self.era_en);
+        codec_tecnologia::escribir_residentes(&mut w, &self.residentes, &self.residentes_citas);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1181,6 +1203,7 @@ impl Estado {
                 Carga::Era => w.u8(16),
                 Carga::Tecnologia(SucesoTecnologia::Conocimiento) => w.u8(17),
                 Carga::Tecnologia(SucesoTecnologia::Campamento) => w.u8(18),
+                Carga::Residentes => w.u8(22),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -1210,12 +1233,18 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN38`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 38 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
-        // 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN40`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y solo el 40 se admite; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'8' => {}
+                b'0' => {}
+                _ => return Err(ErrorFormato("no es un estado del núcleo")),
+            }
+        } else if magia == *b"BAN3" {
+            match r.u8()? {
+                b'9' => return Err(ErrorFormato("foto del formato BAN39 (sin los Aedas residentes ni sus épicas): ya no se admite")),
+                b'8' => return Err(ErrorFormato("foto del formato BAN38 (sin los Aedas residentes ni sus épicas: quién vive en cada plaza, la espera de las plazas con cupo libre, sus citas de llegada y las épicas cumplidas de cada Facción, que no se pueden deducir del estado): ya no se admite")),
                 b'7' => return Err(ErrorFormato("foto del formato BAN37 (sus tecnologías ya descubiertas no traen en la cola las citas de conocimiento ni del campamento, así que nunca se cantarían ni llegarían a los campamentos por plazo): ya no se admite")),
                 b'6' => return Err(ErrorFormato("foto del formato BAN36 (sin el estado de tecnología del mundo: ni la Era, ni los contadores de los logros, ni los logros cumplidos, ni las descubridoras, que no se pueden deducir del estado; las tecnologías de las Facciones eran las de la administración): ya no se admite")),
                 b'5' => return Err(ErrorFormato("foto del formato BAN35 (los héroes no dicen qué alijos abrieron): ya no se admite")),
@@ -1348,6 +1377,7 @@ impl Estado {
         s.titulos_en = r.opt_i64()?;
         s.tecnologia = codec_tecnologia::leer(&mut r)?;
         s.era_en = r.opt_i64()?;
+        (s.residentes, s.residentes_citas) = codec_tecnologia::leer_residentes(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -1379,6 +1409,7 @@ impl Estado {
                 16 => Carga::Era,
                 17 => Carga::Tecnologia(SucesoTecnologia::Conocimiento),
                 18 => Carga::Tecnologia(SucesoTecnologia::Campamento),
+                22 => Carga::Residentes,
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

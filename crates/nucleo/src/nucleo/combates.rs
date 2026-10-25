@@ -414,6 +414,8 @@ impl Nucleo {
         let banderas = (self.estado.ejercitos[&id].bandera() as i64, self.estado.ejercitos[&x].bandera() as i64);
         let datos = vec![("ejercitoA", id as i64), ("ejercitoB", x as i64), ("faccionA", banderas.0), ("faccionB", banderas.1), ("ganador", ganador as i64)];
         self.hecho_de_combate("combate.encuentro", t, vec![id, x], vec![], punto, datos);
+        // El hecho de épica `batalla` entre Facciones distintas, de la ganadora (6E).
+        self.hecho_epico(tecnologia::epicas::Hecho::batalla((id, banderas.0 as u32), (x, banderas.1 as u32), ganador == id, t));
         // Los logros (6B): una batalla librada (con hoplitas, si los había) y en campo abierto (el encuentro).
         self.contar(t, tecnologia::contador::combate_resuelto(hoplitas).con(tecnologia::Contador::BatallasCampoAbierto, 1));
         Ok(())
@@ -738,6 +740,8 @@ impl Nucleo {
         // Los logros del asedio (6B), aquí y no en la `batalla.aplicada` que deja su convocatoria (D18): `enCombate` es que hubo tirada (no cayó sin defensores).
         let en_combate = matches!(resultado, Asedio::Combate(_));
         self.contar(t, tecnologia::contador::asedio(conquistada, en_combate, en_combate && defensores_en_persona, muralla_completa));
+        // El hecho de épica (6E), también aquí y no en `batalla.aplicada` (D18): la defensa de la plaza o la conquista de la atacante, solo con combate.
+        self.hecho_epico(if conquistada { tecnologia::epicas::Hecho::conquista(en_combate, x as u32, yo, t) } else { tecnologia::epicas::Hecho::defensa(en_combate, x as u32, faccion_vieja, t) });
         if conquistada {
             // Los residentes que defendieron pierden la mitad del carro: es del vencedor, repartida entre sus columnas hasta donde quepa.
             let robado = self.conquistar_plaza(t, x, yo, id, &defensa.lucharon);

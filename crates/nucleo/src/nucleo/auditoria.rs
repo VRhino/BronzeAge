@@ -93,7 +93,9 @@ impl Nucleo {
         // Una Facción es la entidad (sus ciudadanos, solicitudes, cargos, su experiencia...), su reputación, sus tecnologías y sus relaciones.
         m.extend(crate::proyeccion::audiencia::facciones(e).into_iter().map(|f| {
             let relaciones: Vec<_> = e.politica.relaciones.iter().filter(|r| r.incluye(f)).collect();
-            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.tecnologia.por_faccion.get(&f), relaciones, self.liga_de(f))))
+            // Con sus Aedas residentes, sus épicas y las cumplidas (6E).
+            let aedas: Vec<_> = e.residentes.aedas.iter().filter(|a| a.faccion == f).collect();
+            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.tecnologia.por_faccion.get(&f), relaciones, self.liga_de(f), aedas, e.residentes.cumplidas.get(&f))))
         }));
         m.extend(e.politica.relaciones.iter().map(|r| ((Clase::Relacion, r.id), huella(r))));
         m.extend(e.politica.titulos.iter().map(|x| ((Clase::Titulo, x.id.indice()), huella(x))));
@@ -122,6 +124,12 @@ impl Nucleo {
         let mut por_nivel = [0u32; super::logros::NIVELES_INDICE];
         self.estado.asentamientos.values().for_each(|a| por_nivel[(a.nivel_actual() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1);
         assert_eq!(por_nivel, self.espacio.plazas_por_nivel, "el índice de plazas por nivel actual no es el de las plazas [{}]", self.causa_auditada);
+        // El índice de residentes por plaza (6E) es el de los residentes, que viven en plazas que existen y son de su dueña; cada cita de llegada es de una plaza que espera.
+        assert_eq!(super::residentes::por_plaza(&self.estado.residentes), self.espacio.residentes_por_plaza, "el índice de residentes por plaza no es el de los residentes [{}]", self.causa_auditada);
+        let ajenos: Vec<u32> = self.estado.residentes.aedas.iter().filter(|a| self.estado.asentamientos.get(&u64::from(a.plaza)).is_none_or(|p| p.faccion != a.faccion)).map(|a| a.id).collect();
+        assert!(ajenos.is_empty(), "los residentes {ajenos:?} no viven en una plaza de su Facción [{}]", self.causa_auditada);
+        let sin_espera: Vec<u64> = self.estado.residentes_citas.keys().copied().filter(|p| !self.estado.residentes.espera_desde.contains_key(&(*p as u32))).collect();
+        assert!(sin_espera.is_empty(), "las plazas {sin_espera:?} tienen cita de llegada sin esperar [{}]", self.causa_auditada);
         let ahora = self.huellas();
         if let Some(antes) = &self.huellas_auditadas {
             for clave in antes.keys().chain(ahora.keys()).collect::<BTreeSet<_>>() {

@@ -592,4 +592,18 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `tecnologia.sin_capital` | `TECNOLOGIA_SIN_CAPITAL` | La Facción no tiene capital: no le queda ninguna plaza. |
 | `tecnologia.rey_fuera_de_la_capital` | `TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL` | El Rey tiene que estar dentro de la capital efectiva de su Facción. |
 | `tecnologia.sin_tarifa` | `TECNOLOGIA_SIN_TARIFA` | El almacén de la capital no tiene la tarifa de adopción de la Era de la tecnología. |
+
+### Las épicas de los Aedas residentes (sistema 6, tanda 6E; Tecnologia_Aedas §7.2, en el orden del TypeScript)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `epica.no_vive_aqui` | `EPICA_NO_VIVE_AQUI` | Ese Aeda no vive en esta plaza (o el id no es el de un residente, `aeda-rN`). |
+| `epica.sin_epica` | `EPICA_SIN_EPICA` | La tecnología no tiene épica (las de arranque). |
+| `epica.aeda_ajeno` | `EPICA_AEDA_AJENO` | El Aeda aún no se ha asentado con el dueño actual de la plaza. |
+| `epica.ya_canta` | `EPICA_YA_CANTA` | El Aeda ya canta otra épica: hay que abandonarla antes. |
+| `epica.sin_logro` | `EPICA_SIN_LOGRO` | El logro del servidor de esa tecnología aún no se ha cumplido. |
+| `epica.era_cerrada` | `EPICA_ERA_CERRADA` | La Era de esa tecnología aún no ha empezado. |
+| `epica.ya_aparecida` | `EPICA_YA_APARECIDA` | La tecnología ya le ha aparecido a la Facción. |
+| `epica.otro_la_canta` | `EPICA_OTRO_LA_CANTA` | Otro Aeda de la Facción ya canta la épica de esa tecnología. |
+| `epica.no_canta` | `EPICA_NO_CANTA` | Abandonar: el Aeda no canta ninguna épica. |
 <!-- /rechazos -->

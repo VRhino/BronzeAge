@@ -17,7 +17,7 @@
 //! Perder algo no se mira: aparecer es para siempre. La marca no se persiste: se vacía en cada cierre de versión, y una orden que no se acepta la descarta.
 //!
 //! # Las citas de cada descubrimiento
-//! Al registrarse la descubridora de una tecnología (`primeros`, por cualquier vía: hito, administración y, con 6D y 6E, compra y épica) se programan sus dos citas (`Carga::Tecnologia`,
+//! Al registrarse la descubridora de una tecnología (`primeros`, por cualquier vía: hito, administración, épica (6E) y, con 6D, compra) se programan sus dos citas (`Carga::Tecnologia`,
 //! prioridad 10, una entidad por tecnología, `entidad_tecnologia`): la de **conocimiento** a `primeros.en + retrasoConocimiento`, en la que los Aedas la cantan (`aedas.canta_descubrimiento`, público)
 //! y, con 6D, la revelan a las plazas con un Aeda parado; y la del **campamento** a `primeros.en + horasTrasLaPrimera`, en la que los campamentos de mercenarios la desbloquean. Como mucho dos por
 //! tecnología en toda la partida; nada más programa eventos. Los Aedas también cantan al fijarse un logro o empezar una Era (una tecnología puede tener descubridora antes que logro, por
@@ -136,16 +136,25 @@ impl Nucleo {
         }
     }
 
-    /// `hacerAparecer` por cualquier vía: si la Facción es la descubridora, programa las dos citas de la tecnología. `None` si ya le había aparecido; si no, si es la primera del mundo.
+    /// `hacerAparecer` por cualquier vía: si la Facción es la descubridora, programa las dos citas de la tecnología; las épicas de la Facción por ella sobran (6E). `None` si ya le había aparecido;
+    /// si no, si es la primera del mundo. (La épica cumplida la hace aparecer el crate y llama a lo mismo por partes, `residentes::avanzar_epicas`.)
     pub(super) fn registrar_aparicion(&mut self, faccion: u32, x: TecId, t: Instante) -> Option<bool> {
         let r = self.estado.reglas.economia.tecnologia.clone();
         let primera = self.estado.tecnologia.hacer_aparecer(&r, faccion, x, t)?;
         if primera {
-            let clave = self.estado.generaciones.clave(entidad_tecnologia(x));
-            self.estado.cola.programar(t + r.aedas.retraso_conocimiento, PRIO_TECNOLOGIA, clave, Carga::Tecnologia(SucesoTecnologia::Conocimiento));
-            self.estado.cola.programar(t + r.campamento.tras_la_primera, PRIO_TECNOLOGIA, clave, Carga::Tecnologia(SucesoTecnologia::Campamento));
+            self.citas_del_descubrimiento(x, t);
         }
+        self.epicas_sobrantes(t, faccion, x);
         Some(primera)
+    }
+
+    /// Las dos citas de una tecnología recién descubierta (la primera del mundo): conocimiento y campamento.
+    pub(super) fn citas_del_descubrimiento(&mut self, x: TecId, t: Instante) {
+        let r = &self.estado.reglas.economia.tecnologia;
+        let (conocimiento, campamento) = (t + r.aedas.retraso_conocimiento, t + r.campamento.tras_la_primera);
+        let clave = self.estado.generaciones.clave(entidad_tecnologia(x));
+        self.estado.cola.programar(conocimiento, PRIO_TECNOLOGIA, clave, Carga::Tecnologia(SucesoTecnologia::Conocimiento));
+        self.estado.cola.programar(campamento, PRIO_TECNOLOGIA, clave, Carga::Tecnologia(SucesoTecnologia::Campamento));
     }
 
     // ───────────────────────────── Las citas ─────────────────────────────
@@ -207,8 +216,8 @@ impl Nucleo {
         // Una adopción puede dejar a la mitad de las vivas con ella (los campamentos) y cumplir una condición `tecnologia` de otro hito.
         self.tocar_todos_los_campamentos();
         self.mirar_aparicion(faccion);
-        // El hecho de épica `adopcion` (TA §7.2): lo recogerán los Aedas residentes de 6E al cerrar la versión.
-        self.hechos_epicos.push(tecnologia::epicas::Hecho::adopcion(faccion, x));
+        // El hecho de épica `adopcion` (TA §7.2): lo recogen los Aedas residentes al cerrar la versión (6E).
+        self.hecho_epico(Some(tecnologia::epicas::Hecho::adopcion(faccion, x)));
         Ok(vec![])
     }
 
