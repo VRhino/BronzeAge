@@ -118,9 +118,9 @@ impl Nucleo {
                 let id = self.estado.siguiente_id;
                 let mut ev = vec![];
                 let faccion = self.estado.asentamientos[asentamiento].faccion;
-                let (militar, reglas) = (&self.estado.militar, &self.estado.reglas.economia.militar);
+                let (rt, adoptadas) = (self.estado.reglas.economia.tecnologia.clone(), self.estado.tecnologia.de(&self.estado.reglas.economia.tecnologia, faccion).adoptadas);
                 let eco = &mut self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia;
-                eco.iniciar_pueblo(&datos, &|t: &str| militar.tiene_tecnologia(reglas, faccion, t), id, tipo, *nodo, &carro, &mut ev).map_err(de_pueblo)?;
+                eco.iniciar_pueblo(&datos, &|t: &str| crate::estado::adopta(&rt, adoptadas, t), id, tipo, *nodo, &carro, &mut ev).map_err(de_pueblo)?;
                 self.estado.siguiente_id += 1;
                 self.estado.nodos_reclamados.insert(*nodo, *asentamiento);
                 self.anotar_sucesos(*asentamiento, t, &ev);

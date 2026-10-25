@@ -174,10 +174,14 @@ impl Nucleo {
             self.estado.comercio.reputacion.insert(c, comercio::reputacion::Reputacion::desde(&rr, rep, t, 0));
             self.programar_reputacion(c, t);
         }
-        // Las tecnologías del andamiaje (`FijarTecnologias`): la unión. DUDA: sin `aparecidas` ni `reveladas` hasta el sistema 6, que hará la unión entera (§6.2).
-        let tecnologias: BTreeSet<String> = [a, b].iter().filter_map(|f| self.estado.militar.tecnologias.get(f)).flatten().cloned().collect();
-        if !tecnologias.is_empty() {
-            self.estado.militar.tecnologias.insert(c, tecnologias);
+        // Las tecnologías: la unión de los tres conjuntos (decisión técnica 13 del plan del sistema 6; TS `fusion.ts`). Lo revelado que ya apareció deja de estar revelado.
+        let tec = &mut self.estado.tecnologia;
+        if tec.por_faccion.contains_key(&a) || tec.por_faccion.contains_key(&b) {
+            let rt = &self.estado.reglas.economia.tecnologia;
+            let (x, y) = (tec.de(rt, a), tec.de(rt, b));
+            let aparecidas = x.aparecidas.union(y.aparecidas);
+            let reveladas = tecnologia::Conjunto(x.reveladas.union(y.reveladas).0 & !aparecidas.0);
+            tec.por_faccion.insert(c, tecnologia::TecnologiasFaccion { aparecidas, adoptadas: x.adoptadas.union(y.adoptadas), reveladas });
         }
         // La marca de capital: solo la del Rey electo pasa a C, tal cual (5A-5).
         for x in self.estado.asentamientos.values_mut() {
@@ -272,7 +276,11 @@ impl Nucleo {
         if self.estado.comercio.reputacion.remove(&origen).is_some() {
             self.estado.generaciones.subir(crate::estado_comercio::entidad_reputacion(origen));
         }
-        self.estado.militar.tecnologias.remove(&origen);
+        // Las tecnologías del origen se pierden (en la fusión, C ya tiene la unión); las que descubrió pasan a la que lo recoge (decisión técnica 13 del plan del sistema 6).
+        self.estado.tecnologia.por_faccion.remove(&origen);
+        for p in self.estado.tecnologia.primeros.iter_mut().flatten().filter(|p| p.faccion == origen) {
+            p.faccion = destino;
+        }
 
         // 6. La memoria de la niebla se funde al cerrar la versión, cuando ya se ha grabado lo que vieron los ojos del origen.
         self.uniones_de_memoria.push((origen, destino));

@@ -45,10 +45,8 @@ use territorio::Disco;
 // ── Lo que el Exterior de la economía todavía no tiene (cada uno lo dará su sistema) ──
 // placeholder: lo dará la fertilidad de la zona del mundo (`fertilidadZona`).
 const FERTILIDAD: i64 = UNO;
-// Las tecnologías de la Facción las da la administración (`FijarTecnologias`) hasta el sistema de tecnología; sin ellas, sin bonus.
+// placeholder: el `bonusProduccion` de las tecnologías adoptadas (`canteria` ×1,5 la piedra) es de la tanda 6C.
 const SIN_BONUS: fn(Recurso) -> i64 = |_| UNO;
-// placeholder: lo dará el sistema de Eras del servidor.
-const ORDEN_ERA: u32 = 1;
 // placeholder: lo darán la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
 const FACTOR_EXTRA: i64 = UNO;
 
@@ -211,12 +209,15 @@ impl Nucleo {
         }
         let nivel_faccion = self.nivel_de_faccion(self.estado.asentamientos[&id].faccion);
         let (es_capital, distancia_capital, faccion_tiene_gran_fundicion) = self.exterior_de_capital(id, nivel_faccion);
+        let orden_era = self.orden_era();
         let mut a = self.estado.asentamientos.remove(&id)?;
-        let r = {
-            let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, militar, .. } = &mut self.estado;
-            let faccion = a.faccion;
-            let tiene_tecnologia = |t: &str| militar.tiene_tecnologia(&reglas.economia.militar, faccion, t);
-            let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t };
+        let nivel_antes = a.nivel_actual();
+        let (r, contado) = {
+            let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, tecnologia, .. } = &mut self.estado;
+            let rt = &reglas.economia.tecnologia;
+            let adoptadas = tecnologia.de(rt, a.faccion).adoptadas;
+            let tiene_tecnologia = |t: &str| crate::estado::adopta(rt, adoptadas, t);
+            let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; 24] };
             let mut sitios = SitiosPlaza {
                 mapa: &geo.mapa,
                 cuota_pct: reglas.territorio.cuota_parcelas_pct,
@@ -239,7 +240,7 @@ impl Nucleo {
                 tiene_tecnologia: &tiene_tecnologia,
                 factor_tecnologia: &SIN_BONUS,
                 nivel_faccion,
-                orden_era: ORDEN_ERA,
+                orden_era,
                 es_capital,
                 faccion_tiene_gran_fundicion,
                 ciudadanos,
@@ -250,9 +251,14 @@ impl Nucleo {
                 nobleza_extra: FACTOR_EXTRA,
                 recaudacion_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_recaudacion } else { FACTOR_EXTRA },
             };
-            f(&mut a.economia, &mut x)
+            let r = f(&mut a.economia, &mut x);
+            (r, fuentes.contado)
         };
+        let nivel_ahora = a.nivel_actual();
         self.estado.asentamientos.insert(id, a);
+        // Lo extraído y lo fabricado cuentan para los logros en origen (6B), y un nivel actual nuevo, para el récord de plazas por nivel.
+        self.contar_flujos(t, &contado);
+        self.contar_nivel(t, Some(nivel_antes), Some(nivel_ahora));
         Some(r)
     }
 
@@ -364,6 +370,7 @@ impl Nucleo {
     /// programado) y el evento `asentamiento.ruinas` ya se anotó.
     fn arruinar(&mut self, id: u64, t: Instante) {
         let Some(a) = self.estado.asentamientos.remove(&id) else { return };
+        let nivel_actual = a.nivel_actual();
         // Los hechos de la cascada que se atribuyen a la plaza (sus caravanas perdidas, su campamento de bandidos...) siguen llegando a su Facción.
         self.tr.arruinadas.push((id, a.faccion));
         for p in &a.parcelas {
@@ -388,6 +395,7 @@ impl Nucleo {
         self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas, t);
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.quitar_plaza(id, a.faccion);
+        self.contar_nivel(t, Some(nivel_actual), None);
         self.estado.generaciones.subir(id);
         // La cascada de la ruina, en su orden: los residentes se reubican; después, el comercio (trueques anulados sin penalizar, caravanas perdidas
         // o devueltas y órdenes de mercado borradas); su campamento de bandidos desaparece y, si era la última plaza de su Facción, esta queda derrotada

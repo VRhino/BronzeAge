@@ -18,7 +18,7 @@ pub struct Entrada<'a> {
     pub geo: &'a Geo,
     pub e: &'a EscenarioPolitica,
     pub corrida: &'a Corrida,
-    /// (misma semilla ⇒ mismo hash, foto `BAN35` a mitad ⇒ mismo hash que sin ella) en el escenario reducido.
+    /// (misma semilla ⇒ mismo hash, foto `BAN36` a mitad ⇒ mismo hash que sin ella) en el escenario reducido.
     pub determinismo: Option<(bool, bool)>,
     pub pared_total: Duration,
 }

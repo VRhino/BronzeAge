@@ -364,6 +364,7 @@ impl Nucleo {
         let cr = self.estado.reglas.economia.combate.clone();
         let (mut atac, mut def) = (self.tropa_de_columna(id, t, cr.batalla.capacidad_resto), self.tropa_de_columna(x, t, cr.batalla.capacidad_resto));
         let (columnas, punto) = ([self.columnas_de(&atac.escuadras), self.columnas_de(&def.escuadras)].concat(), self.estado.ejercitos[&id].posicion_en(t));
+        let hoplitas = super::logros::con_hoplitas(atac.escuadras.iter().chain(&def.escuadras).map(|s| s.tropa));
         let (participantes_a, participantes_d) = (Self::participantes_de(&self.estado.ejercitos[&id]), Self::participantes_de(&self.estado.ejercitos[&x]));
         if let Some((a, b)) = guerra {
             self.declarar_guerra(t, a, b);
@@ -413,6 +414,8 @@ impl Nucleo {
         let banderas = (self.estado.ejercitos[&id].bandera() as i64, self.estado.ejercitos[&x].bandera() as i64);
         let datos = vec![("ejercitoA", id as i64), ("ejercitoB", x as i64), ("faccionA", banderas.0), ("faccionB", banderas.1), ("ganador", ganador as i64)];
         self.hecho_de_combate("combate.encuentro", t, vec![id, x], vec![], punto, datos);
+        // Los logros (6B): una batalla librada (con hoplitas, si los había) y en campo abierto (el encuentro).
+        self.contar(t, tecnologia::contador::combate_resuelto(hoplitas).con(tecnologia::Contador::BatallasCampoAbierto, 1));
         Ok(())
     }
 
@@ -509,6 +512,9 @@ impl Nucleo {
                 ("heridos", heridos as i64),
             ],
         );
+        if r.gana_atacante {
+            self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
+        }
         Ok(())
     }
 
@@ -587,6 +593,9 @@ impl Nucleo {
             punto,
             vec![("campamento", x as i64), ("nivel", nivel as i64), ("poderAtacante", r.poder_atacante), ("poderCampamento", r.poder_campamento), ("bajasAtacante", caidos(&r.bajas)), ("oro", total(&oro)), ("heridos", heridos as i64), ("carroPerdido", total(&perdido))],
         );
+        if r.destruido {
+            self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::BandidosCampamentosDestruidos));
+        }
         Ok(())
     }
 
@@ -696,6 +705,8 @@ impl Nucleo {
         // Solo el asedio a una plaza multiplica al defensor con su recinto de referencia (Murallas §9.1); el equipo de asedio no lo reduce (Q7). No consume tirada.
         let multiplicador = self.multiplicador_de_plaza(x);
         let muralla_completa = recintos::muralla_completa(&self.estado.asentamientos[&x].economia.recintos);
+        // `conResidentes` (TS `datosDeAsedio`): algún defensor combatió en persona, con escuadras que no son de la guarnición.
+        let defensores_en_persona = defensa.tropa.escuadras.iter().any(|s| !s.en_guarnicion);
         let resultado = asedio::resolver_asedio(&cr, false, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa.tropa.escuadras, heroes: &defensa.tropa.heroes }, multiplicador, &mut self.estado.rng);
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&defensa.tropa.escuadras);
@@ -724,6 +735,9 @@ impl Nucleo {
         datos.extend([("heridos", heridos as i64), ("chatarra", total(&chatarra)), ("botin", total(&llevada))]);
         datos.push(("columnas", atacantes.len() as i64));
         self.hecho_de_combate(if conquistada { "combate.asedio_conquista" } else { "combate.asedio_resistido" }, t, atacantes.to_vec(), if conquistada { vec![] } else { vec![x] }, punto, datos);
+        // Los logros del asedio (6B), aquí y no en la `batalla.aplicada` que deja su convocatoria (D18): `enCombate` es que hubo tirada (no cayó sin defensores).
+        let en_combate = matches!(resultado, Asedio::Combate(_));
+        self.contar(t, tecnologia::contador::asedio(conquistada, en_combate, en_combate && defensores_en_persona, muralla_completa));
         if conquistada {
             // Los residentes que defendieron pierden la mitad del carro: es del vencedor, repartida entre sus columnas hasta donde quepa.
             let robado = self.conquistar_plaza(t, x, yo, id, &defensa.lucharon);

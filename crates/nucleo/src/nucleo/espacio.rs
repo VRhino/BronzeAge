@@ -46,11 +46,14 @@ pub(super) struct Espacio {
     pub perseguidores: BTreeMap<u64, BTreeSet<u64>>,
     /// Las plazas de cada Facción (derivado, no va en la foto): lo leen el paso de minuto (la capital de la plaza, 5C), el cap de fundación y el cupo de nivel sin recorrer todas las plazas.
     pub plazas_por_faccion: BTreeMap<u32, BTreeSet<u64>>,
+    /// Cuántas plazas hay con cada nivel actual (derivado, no va en la foto; las de nivel ≥ `NIVELES_INDICE − 1`, en la última casilla): de aquí salen los récords `plazasEnNivel.N` (6B) sin
+    /// recorrer las plazas.
+    pub plazas_por_nivel: [u32; super::logros::NIVELES_INDICE],
 }
 
 impl Espacio {
     pub fn nuevo() -> Self {
-        Self { rejilla: Rejilla::para_mundo_real(), perseguidores: BTreeMap::new(), plazas_por_faccion: BTreeMap::new() }
+        Self { rejilla: Rejilla::para_mundo_real(), perseguidores: BTreeMap::new(), plazas_por_faccion: BTreeMap::new(), plazas_por_nivel: Default::default() }
     }
 }
 
@@ -159,8 +162,10 @@ impl Nucleo {
             self.espacio.rejilla.apuntar(entidad, g, &plan);
         }
         self.espacio.plazas_por_faccion.clear();
+        self.espacio.plazas_por_nivel = Default::default();
         for a in self.estado.asentamientos.values() {
             self.espacio.plazas_por_faccion.entry(a.faccion).or_default().insert(a.id);
+            self.espacio.plazas_por_nivel[(a.nivel_actual() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1;
         }
         for e in self.estado.ejercitos.values() {
             if let Some(presa) = e.persiguiendo {
@@ -182,6 +187,8 @@ impl Nucleo {
     pub(super) fn situar_plaza(&mut self, id: u64, posicion: Punto, faccion: u32) {
         self.espacio.rejilla.apuntar(id, 0, &plan_quieto(posicion, self.estado.ahora, 0));
         self.espacio.plazas_por_faccion.entry(faccion).or_default().insert(id);
+        let nivel = self.estado.asentamientos.get(&id).map(|a| a.nivel_actual());
+        self.contar_nivel(self.estado.ahora, None, nivel);
     }
 
     /// Una plaza cayó en ruinas: ya no está en el espacio ni es de su Facción.

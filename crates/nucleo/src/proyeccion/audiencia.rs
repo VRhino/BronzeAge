@@ -132,7 +132,7 @@ pub fn facciones(e: &Estado) -> BTreeSet<u32> {
         .iter()
         .map(|f| &f.id)
         .chain(e.comercio.reputacion.keys())
-        .chain(e.militar.tecnologias.keys())
+        .chain(e.tecnologia.por_faccion.keys())
         .copied()
         .chain(e.politica.relaciones.iter().flat_map(|r| [r.a, r.b]))
         .chain(e.militar.heroes.values().filter_map(|h| h.faccion))
@@ -145,7 +145,7 @@ pub fn facciones(e: &Estado) -> BTreeSet<u32> {
 pub fn existe_faccion(e: &Estado, f: u32) -> bool {
     e.politica.facciones.existe(f)
         || e.comercio.reputacion.contains_key(&f)
-        || e.militar.tecnologias.contains_key(&f)
+        || e.tecnologia.por_faccion.contains_key(&f)
         || e.politica.relaciones.activas().any(|r| r.incluye(f))
         || e.militar.heroes.values().any(|h| h.faccion == Some(f))
         || e.asentamientos.values().any(|a| a.faccion == f)

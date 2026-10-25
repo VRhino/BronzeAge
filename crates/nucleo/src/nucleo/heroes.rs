@@ -106,11 +106,6 @@ impl Nucleo {
         self.heroes().find_map(|h| h.heroe.escuadra(id).map(|e| (h, e)))
     }
 
-    /// ¿Tiene la Facción adoptada esa tecnología? (las de arranque y las que dio la administración).
-    pub fn tiene_tecnologia(&self, faccion: u32, tecnologia: &str) -> bool {
-        self.estado.militar.tiene_tecnologia(&self.estado.reglas.economia.militar, faccion, tecnologia)
-    }
-
     /// Cupo de guarnición **por héroe residente** de la plaza, en puntos de Liderazgo (Heroe_Y_Tropa §7). `None` si la plaza no existe.
     pub fn cupo_de_guarnicion(&self, plaza: u64) -> Option<i64> {
         let eco = &self.estado.asentamientos.get(&plaza)?.economia;
@@ -306,18 +301,11 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::FijarTecnologias { faccion, tecnologias } => {
-                if let Some(t) = tecnologias.iter().find(|t| !mr.tecnologias.todas.contains(t)) {
-                    return Err(rechazo(rechazos::TECNOLOGIA_DESCONOCIDA, format!("«{t}» no es una tecnología")));
-                }
-                let nuevas: std::collections::BTreeSet<String> = tecnologias.iter().cloned().collect();
-                let actuales = self.estado.militar.tecnologias.get(faccion).cloned().unwrap_or_default();
-                if nuevas == actuales {
-                    return Err(sin_cambios());
-                }
-                if nuevas.is_empty() {
-                    self.estado.militar.tecnologias.remove(faccion);
-                } else {
-                    self.estado.militar.tecnologias.insert(*faccion, nuevas);
+                // Sobre las reglas reales (6B): las dadas aparecen (con su descubridora si nadie la tenía) y quedan adoptadas, sin tarifa.
+                match self.fijar_tecnologias(t, *faccion, tecnologias) {
+                    Err(x) => return Err(rechazo(rechazos::TECNOLOGIA_DESCONOCIDA, format!("«{x}» no es una tecnología"))),
+                    Ok(false) => return Err(sin_cambios()),
+                    Ok(true) => {}
                 }
                 // Lo que un campamento ofrece depende de las tecnologías de las Facciones vivas.
                 self.tocar_todos_los_campamentos();
@@ -441,6 +429,8 @@ impl Nucleo {
             Respuesta::rechazo(c, m, v)
         })?;
         self.tr.tocar(Clase::Asentamiento, asentamiento);
+        // Los logros `reclutados.*` (6B), reponer incluido.
+        self.contar(t, tecnologia::contador::reclutamiento(tropa.nombre(), mr.tropas.tropa(tropa).edificio, hecho.cantidad.max(0) as u64, hecho.nueva));
         self.emitir_propio(
             t,
             "tropas.reclutadas",

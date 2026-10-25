@@ -134,6 +134,7 @@ impl Nucleo {
                 comercio.flota[i].comprar_animal(&cr.flota, *carro as usize, *animal, almacen).map_err(de_caravana)?;
                 self.tr.tocar(Clase::Asentamiento, origen);
                 self.emitir_comercio(t, EventoComercio::CaravanaAnimalComprado { caravana: *caravana }, vec![origen], &[]);
+                self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::AnimalesComprados));
                 self.reparto_de_plaza(origen, t);
                 Ok(None)
             }

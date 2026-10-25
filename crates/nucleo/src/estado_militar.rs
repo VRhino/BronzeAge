@@ -147,8 +147,6 @@ pub struct EstadoMilitar {
     /// Los reclutas de los campamentos de mercenarios (índice del artefacto) que alguien ha tocado: el que falta está lleno. Se guardan como
     /// valor e instante (`militar::mercenarios::Reclutas`); la cantidad de ahora se calcula al mirar y nada la escribe por minuto.
     pub reclutas: BTreeMap<u32, Reclutas>,
-    /// Tecnologías que la administración ha dado a cada Facción (`FijarTecnologias`), además de las de arranque, que tiene toda Facción.
-    pub tecnologias: BTreeMap<u32, BTreeSet<String>>,
     /// Plaza → héroes que residen en ella. Es un índice de `Heroe::residencia`: se reconstruye al recuperar y solo lo toca [`EstadoMilitar::mudar`].
     /// Con él, el paso de un minuto de una plaza sin residentes cuesta una consulta.
     pub(crate) residentes: BTreeMap<u64, BTreeSet<u64>>,
@@ -200,11 +198,6 @@ impl EstadoMilitar {
     /// El héroe de una cuenta, si lo hay (uno por cuenta y partida).
     pub fn heroe_de_cuenta(&self, cuenta: &str) -> Option<&HeroeNucleo> {
         self.heroes_de_cuenta(cuenta).iter().filter_map(|id| self.heroes.get(id)).find(|h| !h.sintetico)
-    }
-
-    /// ¿Tiene la Facción adoptada esa tecnología? Las de arranque las tiene toda Facción desde que nace.
-    pub fn tiene_tecnologia(&self, reglas: &militar::Reglas, faccion: u32, tecnologia: &str) -> bool {
-        reglas.tecnologias.de_arranque.iter().any(|t| t == tecnologia) || self.tecnologias.get(&faccion).is_some_and(|s| s.contains(tecnologia))
     }
 
     /// Soldados en pie de las escuadras `ids` que llevan los participantes `participantes` (lo que come una columna y lo que la hace ver más lejos).

@@ -351,6 +351,7 @@ impl Nucleo {
         let datos = vec![("campamento", idc as i64), ("caravana", idk as i64), ("poderBandido", acoso.poder_bandido), ("defensa", acoso.defensa), ("bajasEscolta", acoso.bajas_escolta.iter().map(|b| b.antes - b.despues).sum())];
         self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(if acoso.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" }), en: t, ejercitos: ejercito.into_iter().collect(), asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
         if acoso.gana_el_bandido {
+            self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
             // La caravana desaparece con su carga; su escolta (a 0) vuelve al campamento de su héroe al perderse.
             self.perder_caravana(t, idk);
         }

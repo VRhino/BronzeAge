@@ -1032,7 +1032,10 @@ impl Nucleo {
         // Defender al vasallo (§5.9), antes de las consecuencias (una conquista cambiaría la señora de la vasalla): los héroes del bando defensor que participaron.
         let defendieron: Vec<u64> = self.participantes_del_lado(&b, Lado::Defensor).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();
         self.defensa_de_vasallo(t, b.ticket.defensor.faccion, &defendieron, res.ganador == Lado::Defensor);
+        // Los logros de la batalla (D10), con la plaza de un asedio tal como estaba antes de su conquista (que daña la muralla); nunca desde `batalla.aplicada` (D18).
+        let logros = self.contadores_de_batalla(&b, res.ganador);
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
+        self.contar(t, logros);
         // La experiencia de Facción: por cada héroe que participó, a la Facción con la que entró (la del ticket), sin filtro de dignidad (5C). Contra un campamento de bandidos, solo la
         // de bandidos al destruirlo (5C-4, decisión del autor del 2026-10-24): el mismo premio con Unity que con números.
         let participo = |h: u64| res.por_heroe.iter().any(|x| x.heroe == h && x.participo);
@@ -1052,8 +1055,28 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// Lo que decide BronzeAge según dónde se combatió (§9, pasos 4 y 5). **Sin** la reputación por defender a un vasallo ni los contadores de logros (sistema político, 5D, y
-    /// tecnológico); la experiencia de Facción la da `aplicar_resultado` (5C), y la de bandidos, la captura del campamento.
+    /// Lo que una batalla de Unity suma a los logros del servidor (`contadoresDeBatalla` del TypeScript; Tecnologia_Aedas §2.1): lo mismo que un combate con números. La de una avanzada o
+    /// un saqueo de pueblo (contextos que el TypeScript no tenía) cuenta como batalla librada y nada más.
+    fn contadores_de_batalla(&self, b: &Batalla, ganador: Lado) -> tecnologia::contador::Delta {
+        use tecnologia::contador::{batalla_unity, combate_resuelto, ContextoBatalla};
+        let lados = [Lado::Atacante, Lado::Defensor];
+        let escuadras = lados.iter().flat_map(|&l| self.participantes_del_lado(b, l).into_iter().flat_map(|p| p.escuadras.iter()).chain(&b.ticket.bando(l).sin_heroe).map(|e| e.tropa).collect::<Vec<_>>());
+        let hoplitas = super::logros::con_hoplitas(escuadras);
+        let contexto = match b.ticket.contexto {
+            Contexto::CampoAbierto { .. } => ContextoBatalla::CampoAbierto,
+            Contexto::Caravana { .. } => ContextoBatalla::Caravana,
+            Contexto::CampamentoBandidos { .. } => ContextoBatalla::CampamentoBandidos,
+            Contexto::Asedio { asentamiento } => ContextoBatalla::Asedio {
+                muralla_completa: self.estado.asentamientos.get(&u64::from(asentamiento)).is_some_and(|a| asentamiento::recintos::muralla_completa(&a.economia.recintos)),
+                con_heroe_defensor: !self.participantes_del_lado(b, Lado::Defensor).is_empty(),
+            },
+            Contexto::Avanzada { .. } | Contexto::SaqueoPueblo { .. } => return combate_resuelto(hoplitas),
+        };
+        batalla_unity(contexto, ganador == Lado::Atacante, hoplitas)
+    }
+
+    /// Lo que decide BronzeAge según dónde se combatió (§9, pasos 4 y 5). **Sin** la reputación por defender a un vasallo (5D) ni los contadores de logros (6B, `contadores_de_batalla`); la
+    /// experiencia de Facción la da `aplicar_resultado` (5C), y la de bandidos, la captura del campamento.
     fn consecuencias_de_batalla(&mut self, t: Instante, b: &Batalla, res: &ResultadoDeBatalla, efectos: &Efectos) {
         let (ganador, perdedor) = (res.ganador, res.ganador.otro());
         match &b.ticket.contexto {

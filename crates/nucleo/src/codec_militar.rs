@@ -2,7 +2,8 @@
 //! **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · convocatorias{n u64 · n × convocatoria} · reclutas{n u64 · n ×
-//! (campamento u32, población i64, en i64)} · tecnologías{n u64 · n × (facción u32, k u64, k × texto)}`. Las relaciones viven en `Estado::politica` desde BAN32 (5D, `codec_politica`).
+//! (campamento u32, población i64, en i64)}`. Las relaciones viven en `Estado::politica` desde BAN32 (5D, `codec_politica`) y las tecnologías de las Facciones, en `Estado::tecnologia` desde BAN36
+//! (6B, `codec_tecnologia`).
 //!
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
 //! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 · puntos de
@@ -475,7 +476,7 @@ fn convocatoria_leer(r: &mut Lector) -> Result<Convocatoria, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
-    let EstadoMilitar { heroes, convocatorias, reclutas, tecnologias, residentes: _, por_cuenta: _ } = m;
+    let EstadoMilitar { heroes, convocatorias, reclutas, residentes: _, por_cuenta: _ } = m;
     w.u64(heroes.len() as u64);
     heroes.values().for_each(|h| heroe_escribir(w, h));
     w.u64(convocatorias.len() as u64);
@@ -485,12 +486,6 @@ pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
         w.u32(campamento);
         w.i64(*poblacion);
         w.i64(*en);
-    }
-    w.u64(tecnologias.len() as u64);
-    for (&faccion, set) in tecnologias {
-        w.u32(faccion);
-        w.u64(set.len() as u64);
-        set.iter().for_each(|t| w.texto(t));
     }
 }
 
@@ -506,14 +501,6 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         let campamento = r.u32()?;
         m.reclutas.insert(campamento, Reclutas { poblacion: r.i64()?, en: r.i64()? });
-    }
-    for _ in 0..r.cuenta()? {
-        let faccion = r.u32()?;
-        let mut set = std::collections::BTreeSet::new();
-        for _ in 0..r.cuenta()? {
-            set.insert(r.texto()?);
-        }
-        m.tecnologias.insert(faccion, set);
     }
     Ok(m)
 }

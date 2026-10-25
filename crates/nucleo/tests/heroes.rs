@@ -255,6 +255,8 @@ fn reclutar_en_una_plaza_valida_en_orden_paga_del_almacen_y_resta_poblacion() {
     let madera1 = e.almacen(Madera);
     e.ok("ana", reclutar(h, Tropa::Lenadores));
     assert_eq!(madera1 - e.almacen(Madera), 21_000, "30 soldados × 1 de madera × 0,7");
+    // Los logros (6B): dos escuadras nuevas reclutadas en la plaza (ni la milicia ni los leñadores tienen contador de soldados propio).
+    assert_eq!(comun::logros_de_hechos(&e.n), vec![(tecnologia::Contador::ReclutadosEscuadrones, 2)]);
 }
 
 // ───────────────────────────── 3. Reclutar en un campamento de mercenarios ─────────────────────────────
@@ -285,6 +287,12 @@ fn el_edificio_militar_de_un_campamento_sale_de_su_posicion_y_con_el_la_tropa_qu
     assert_eq!(e.rechazada("ana", Comando::FijarTecnologias { faccion: 1, tecnologias: vec![] }), rechazos::NO_AUTORIZADO);
     assert_eq!(e.rechazada("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["no_existe".into()] }), rechazos::TECNOLOGIA_DESCONOCIDA);
     assert_eq!(e.ord("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] }).resultado, Resultado::SinCambios);
+    // Sobre las reglas reales (6B): aparecida y adoptada, sin logro, y F1 queda como su descubridora.
+    let rt = &e.n.estado().reglas.economia.tecnologia;
+    let escudos = rt.buscar("escudos_ligeros").unwrap();
+    let f1 = e.n.tecnologia().de(rt, 1);
+    assert!(f1.aparecidas.contiene(escudos) && f1.adoptadas.contiene(escudos) && !e.n.tecnologia().logro_cumplido(escudos));
+    assert_eq!(e.n.tecnologia().primeros[escudos as usize].map(|p| (p.faccion, p.en)), Some((1, e.n.ahora())));
     assert!(e.n.tiene_tecnologia(1, "escudos_ligeros") && e.n.tiene_tecnologia(2, "leva_comunal") && !e.n.tiene_tecnologia(2, "escudos_ligeros"));
 }
 
@@ -340,6 +348,8 @@ fn reclutar_en_un_campamento_cobra_oro_del_almacen_personal_o_del_carro_y_gasta_
     assert_eq!(e.rechazada("ana", Comando::ReclutarEnCampamento { heroe: h, tropa: Tropa::Honderos, pagar_con: personal }), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: None });
     assert_eq!(e.rechazada("ana", honderos(h, personal)), rechazos::MERCENARIOS_NO_RESIDES);
+    // Los logros (6B, Q4 del autor): los reclutas de un campamento también cuentan, aquí dos escuadras nuevas de honderos (sin contador de soldados propio).
+    assert_eq!(comun::logros_de_hechos(&e.n), vec![(tecnologia::Contador::ReclutadosEscuadrones, 2)]);
 }
 
 // ───────────────────────────── 4. La tropa prestada ─────────────────────────────
@@ -911,7 +921,6 @@ fn estado_con_heroes() -> nucleo::Estado {
             creada_en: 3,
         },
     );
-    s.militar.tecnologias.insert(1, ["arco_compuesto".to_owned(), "leva_comunal".to_owned()].into_iter().collect());
     let clave = s.generaciones.clave(5);
     s.cola.programar(150_000, nucleo::PRIO_SALIDA, clave, nucleo::Carga::SalidaDelMundo);
     // Los cinco plazos militares viajan en la cola.
@@ -933,7 +942,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN35");
+    assert_eq!(&bytes[..5], b"BAN36");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");
@@ -1006,12 +1015,6 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("reclutas.en", Box::new(|m| m.reclutas.get_mut(&2).unwrap().en += 1)),
         ("reclutas.otro", Box::new(|m| {
             m.reclutas.insert(3, militar::mercenarios::Reclutas { poblacion: 1, en: 0 });
-        })),
-        ("tecnologias.una_menos", Box::new(|m| {
-            m.tecnologias.get_mut(&1).unwrap().remove("arco_compuesto");
-        })),
-        ("tecnologias.faccion", Box::new(|m| {
-            m.tecnologias.insert(2, ["arco_compuesto".to_owned()].into_iter().collect());
         })),
     ];
     let mut vistos = std::collections::HashSet::from([base.hash()]);

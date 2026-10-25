@@ -518,6 +518,7 @@ dependencies = [
  "serde_json",
  "servidor",
  "sha2",
+ "tecnologia",
  "tempfile",
  "territorio",
  "tokio",

@@ -16,6 +16,9 @@ pub trait Fuentes {
     fn densidad_parcela(&self, parcela: u32) -> i64;
     /// Saca hasta `pedido` del nodo y devuelve lo que salió (`min(pedido, stock)`); solo se gasta lo que sale.
     fn extraer(&mut self, nodo: u32, pedido: Mil) -> Mil;
+    /// Lo que fabricaron las recetas de los talleres este minuto, por recurso (milésimas): el mundo lo cuenta para los logros `fabricado.*` (Tecnologia_Aedas §2.1, sistema 6). Por
+    /// defecto no se cuenta.
+    fn fabricado(&mut self, _recurso: Recurso, _cantidad: Mil) {}
 }
 
 /// Lo que condiciona la producción y viene de fuera (zona, políticas, tecnologías).

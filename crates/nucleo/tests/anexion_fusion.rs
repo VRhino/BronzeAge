@@ -1,7 +1,7 @@
 //! La anexión, la fusión, el traslado de una Facción y los títulos de prestigio en el núcleo (sistema 5, tanda 5F; Diplomacia_Facciones §5.7, §6 y §7): proponer, contestar y retirar con sus
 //! rechazos y su revalidación (quién puede, una sola pendiente, la caducidad, el Rey que ya no es el que propuso, la batalla abierta); el traslado de ciudadanos, columnas, plazas,
 //! relaciones, propuestas, memoria, reputación y tecnologías sin perder ni duplicar nada; los trueques que siguen y ya no mueven la reputación (Q5); quien ya no puede estar dentro y sale; los
-//! títulos con su cadencia, su Gran Rey y su crónica; la foto `BAN33` (hoy `BAN35`) y el determinismo. Casos de `typescript-final:src/session/__tests__/{comandosAnexion,comandosFusion}.test.ts` y
+//! títulos con su cadencia, su Gran Rey y su crónica; la foto `BAN33` (hoy `BAN36`) y el determinismo. Casos de `typescript-final:src/session/__tests__/{comandosAnexion,comandosFusion}.test.ts` y
 //! `engine/__tests__/eventosDominioTitulos.test.ts`. Las pruebas con plazas usan el artefacto de mundo real y se omiten si no está.
 
 mod comun;
@@ -184,7 +184,11 @@ fn la_anexion_pasa_ciudadanos_columnas_vasallas_y_propuestas_y_rompe_lo_demas_si
     assert_eq!(e.n.reputacion(3), rep3, "romper por traslado no cuesta reputación");
     assert_eq!(e.n.estado().comercio.reputacion[&3].alianzas(), 0, "el ritmo de F3 ya no cuenta la alianza");
     assert!(e.n.propuesta(a_f2).is_none() && e.n.propuesta(a_f1).is_some());
-    assert!(!e.n.estado().comercio.reputacion.contains_key(&2) && !e.n.estado().militar.tecnologias.contains_key(&2), "la reputación y las tecnologías de F2 se pierden");
+    assert!(!e.n.estado().comercio.reputacion.contains_key(&2) && !e.n.estado().tecnologia.por_faccion.contains_key(&2), "la reputación y las tecnologías de F2 se pierden");
+    // F2 descubrió los escudos ligeros (por la administración): la descubridora pasa a F1, que la recoge (decisión técnica 13 del sistema 6).
+    let escudos = e.n.estado().reglas.economia.tecnologia.buscar("escudos_ligeros").unwrap();
+    assert_eq!(e.n.tecnologia().primeros[escudos as usize].map(|p| p.faccion), Some(1));
+    assert!(!e.n.tiene_tecnologia(1, "escudos_ligeros"), "en la anexión, las de la absorbida se pierden");
     // El hecho y la crónica.
     let h = &e.hechos("diplomacia.anexion")[0];
     assert_eq!((dato(h, "faccionA"), dato(h, "faccionB"), h.en), (1, 2, t));
@@ -233,7 +237,8 @@ fn la_fusion_hace_nacer_una_faccion_con_su_nombre_su_rey_el_sigilo_de_a_y_lo_may
     assert_eq!((f.nombre.as_str(), f.rey, f.embajador, f.sigilo.clone(), f.experiencia), ("Argos", Some(r2), None, sigilo_a, xp2));
     assert_eq!(f.ciudadanos, vec![r1, ana2, r2], "primero los de A, luego los de B; el otro Rey queda de ciudadano");
     assert_eq!(e.n.reputacion(c), rep1, "la reputación mayor de las dos");
-    assert_eq!(e.n.estado().militar.tecnologias[&c].iter().cloned().collect::<Vec<_>>(), vec!["escudos_ligeros".to_string(), "metalurgia_cobre".to_string()]);
+    assert!(["escudos_ligeros", "metalurgia_cobre", "leva_comunal"].iter().all(|x| e.n.tiene_tecnologia(c, x)), "la unión de las de las dos");
+    assert!(!e.n.estado().tecnologia.por_faccion.contains_key(&1) && !e.n.estado().tecnologia.por_faccion.contains_key(&2));
     assert!(e.n.faccion(1).is_none() && e.n.faccion(2).is_none());
     assert!(e.n.estado().ejercitos.values().all(|x| x.columna.faccion != Some(1) && x.columna.faccion != Some(2)));
     let h = &e.hechos("diplomacia.fusion")[0];
@@ -478,7 +483,7 @@ fn la_anexion_y_la_fusion_son_deterministas_y_los_titulos_viajan_en_la_foto_ban3
     assert!(normal.n.faccion(5).is_some_and(|f| f.nombre == "Tebas") && normal.n.titulos().len() == 3);
     let (reglas, hash) = (normal.n.estado().reglas.clone(), normal.n.mundo_hash().to_string());
     let bytes = normal.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN35");
+    assert_eq!(&bytes[..5], b"BAN36");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!((s.politica.clone(), s.titulos_en, s.hash()), (normal.n.estado().politica.clone(), normal.n.estado().titulos_en, normal.n.hash_estado()));
     let vieja = [b"BAN32".as_slice(), &bytes[5..]].concat();

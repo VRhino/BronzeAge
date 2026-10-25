@@ -134,7 +134,7 @@ Tres clases. **Ritmo**: el estado guarda `(valor en t₀, ritmo)` y el valor se 
 | Experiencia de Facción, reputación | Se aplican **al ocurrir** el hecho que las produce; el decaimiento de la reputación es un ritmo |
 | Reposición de mercados de mercenarios | **Evento** agendado (ya era una cita) |
 | Títulos | **Muestreo** o reevaluación cuando cambia lo que mira (Facciones, plazas, relaciones). **Implementado en Rust (2026-10-25, 5F):** un solo plazo **global** (`Carga::Titulos`, prioridad 10) a `TITULOS.cadenciaMinutos` de lo primero que pasa (orden aceptada o evento de la cola que no sea él mismo) sin otro pendiente; al vencer recalcula todo y no se rearma solo (Diplomacia_Facciones §7) |
-| Tecnología, logros, Aedas, residentes | Los contadores suben al ocurrir el hecho; la aparición se evalúa al ocurrir lo que mira su hito (Sistema 6, plan §5.1) y la Era al fijar un logro o en la cita de su plazo; los Aedas itinerantes, eventos programados |
+| Tecnología, logros, Aedas, residentes | Los contadores suben al ocurrir el hecho; la aparición se evalúa al ocurrir lo que mira su hito (Sistema 6, plan §5.1) y la Era al fijar un logro o en la cita de su plazo; los Aedas itinerantes, eventos programados. **Implementado en Rust (2026-10-25, 6B):** los contadores, en origen (sin reparsear los hechos); la Era, una sola cita **global** (`Carga::Era`, prioridad 10) al fin del plazo de la vigente, armada como la de los títulos, y ninguna en la última Era (Tecnologia_Aedas §14) |
 | Caravanas de fundación (vuelve sola, se desarma, caduca) | **Planes** y eventos de caducidad |
 | Memoria de la niebla y exploración | **Muestreo** (§4) |
 

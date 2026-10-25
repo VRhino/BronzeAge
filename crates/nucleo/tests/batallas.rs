@@ -14,6 +14,7 @@ use comun::c;
 use militar::catalogo::Tropa;
 use militar::heroe::{Controlador, Monedas};
 use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Nucleo, ObjetivoAtaque, Peticion, Relacion, Reglas, Resultado, Respuesta, SucesoBatalla};
+use tecnologia::Contador;
 use std::collections::BTreeSet;
 
 const MIN: Instante = MS_POR_MINUTO;
@@ -531,6 +532,8 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     assert_eq!(x.n.estado().rng.estado(), base::Rng::derivado(42, "nucleo").estado(), "Unity decide: ni abrir ni aplicar el resultado gastan una tirada");
     // La experiencia de Facción de una batalla de Unity (5C): 2,5 por héroe que participó, a la Facción con la que entró, sin filtro de dignidad.
     assert_eq!((x.n.faccion(1).unwrap().experiencia, x.n.faccion(2).unwrap().experiencia), (2_500, 2_500));
+    // Los logros (6B, D10): los suma el resultado aplicado, no `batalla.aplicada` (D18): una librada en campo abierto, sin hoplitas.
+    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1)]);
 }
 
 #[test]
@@ -830,6 +833,7 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     let total_oro: i64 = [ana.0, otra.0].into_iter().chain(mas.iter().take(3).map(|m| m.0)).map(oro).sum();
     assert_eq!(total_oro, 5 * 33_000, "33 de oro por héroe del nivel 2, repartido por rondas entre las cinco columnas");
     assert_eq!(hechos(&x.n, "evento_pve.aplicada").len(), 1);
+    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BandidosCampamentosDestruidos, 1), (Contador::BatallasLibradas, 1)], "el campamento destruido por Unity cuenta (6B)");
     // Solo la experiencia de bandidos (1 ÷ nivel 1) para la Facción atacante, no la de la batalla: el mismo premio que con números (5C-4).
     assert_eq!((x.n.faccion(1).map(|f| f.experiencia), x.n.faccion(3).map_or(0, |f| f.experiencia)), (Some(1_000), 0));
     assert!(!heridos0 && !x.n.heroe_herido(ana.1), "gana el atacante");
@@ -898,7 +902,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN35");
+    assert_eq!(&bytes[..5], b"BAN36");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1465,6 +1469,10 @@ fn un_asedio_que_gana_el_defensor_no_conquista_hiere_al_atacante_y_la_chatarra_s
     let metal: i64 = [ChatarraCobre, ChatarraBronce, ChatarraHierro].iter().map(|&r| e.n.economia(b).unwrap().almacen.cantidad(r)).sum();
     assert!(metal > metal0, "la chatarra de los caídos, al almacén de la plaza que resiste");
     assert!(hechos(&e.n, "asentamiento.conquistada").is_empty());
+    // Los logros (6B): resiste en combate y con un héroe defensor; nada de conquista.
+    let tec = e.n.tecnologia();
+    let cuenta = [Contador::BatallasLibradas, Contador::AsediosResistidosEnCombate, Contador::AsediosResistidosConResidentes, Contador::ConquistasConMurallaCompleta].map(|c| tec.contador(c));
+    assert_eq!(cuenta, [1, 1, 1, 0]);
 }
 
 /// Un asedio de Unity ganado por el atacante contra una plaza con su empalizada completa: la conquista daña el anillo igual que con números (Murallas §9.6) y la
@@ -1519,6 +1527,8 @@ fn por_unity_la_conquista_daña_la_muralla_un_30_por_ciento_igual_que_con_numero
     assert!(rec.danado() && rec.completado_en == antes.completado_en);
     assert_eq!(rec.siguiente_celda_en, Some(ahora + 15 * MIN));
     assert!(!e.n.ciudad(b).unwrap().recintos()[0].completo, "la ciudad ya no ve el anillo completo");
+    // Los logros (6B): la muralla se mira antes de que la dañe la conquista; contra una muralla completa y conquistada con ella.
+    assert_eq!(comun::logros_de_hechos(&e.n), vec![(Contador::BatallasLibradas, 1), (Contador::AsediosContraMurallaCompleta, 1), (Contador::ConquistasConMurallaCompleta, 1)]);
 }
 
 #[test]
@@ -1795,6 +1805,8 @@ fn una_caravana_atacada_por_un_humano_se_juega_en_unity_y_unity_dice_que_carros_
     assert_eq!((s.cantidad, s.contenedor, s.reserva_batalla), (0, militar::escuadra::Contenedor::Campamento, None), "la escolta cae: a 0 y de vuelta al campamento de su héroe");
     assert!(k.escolta.is_empty() && !e.n.ejercito(atacante.0).unwrap().en_batalla);
     assert!(!hechos(&e.n, "comercio.caravana_sale_de_batalla").is_empty());
+    // Los logros (6B): la caravana capturada en Unity, la batalla librada y los dos bueyes de la caravana.
+    assert_eq!(comun::logros_de_hechos(&e.n), vec![(Contador::CaravanasDestruidasOCapturadas, 1), (Contador::AnimalesComprados, 2), (Contador::BatallasLibradas, 1)]);
     let _ = b;
 }
 
@@ -2049,7 +2061,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN35");
+        assert_eq!(&bytes[..5], b"BAN36");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();

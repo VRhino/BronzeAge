@@ -56,7 +56,7 @@ impl Nucleo {
         let residentes: Vec<u64> = e.militar.heroes.values().filter(|h| h.heroe.residencia == Some(Residencia::Campamento(c))).map(|h| h.heroe.id).collect();
         let presentes: Vec<u64> = e.militar.heroes.values().filter(|h| h.heroe.presencia.ubicacion == militar::presencia::Ubicacion::Mercenarios(c)).map(|h| h.heroe.id).collect();
         let prestamos: Vec<u64> = e.militar.heroes.values().flat_map(|h| &h.heroe.escuadras).filter(|s| s.prestada == Some(c)).map(|s| s.id).collect();
-        huella(&(e.comercio.mercenarios.stock.get(&c).unwrap_or(inicial), &e.comercio.mercenarios.mercado, residentes, presentes, prestamos, e.militar.reclutas.get(&c), &e.militar.tecnologias, e.fundacion.fondos.get(&c)))
+        huella(&(e.comercio.mercenarios.stock.get(&c).unwrap_or(inicial), &e.comercio.mercenarios.mercado, residentes, presentes, prestamos, e.militar.reclutas.get(&c), &e.tecnologia.por_faccion, e.fundacion.fondos.get(&c)))
     }
 
     fn huellas(&self) -> Huellas {
@@ -90,7 +90,7 @@ impl Nucleo {
         // Una Facción es la entidad (sus ciudadanos, solicitudes, cargos, su experiencia...), su reputación, sus tecnologías y sus relaciones.
         m.extend(crate::proyeccion::audiencia::facciones(e).into_iter().map(|f| {
             let relaciones: Vec<_> = e.politica.relaciones.iter().filter(|r| r.incluye(f)).collect();
-            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones, self.liga_de(f))))
+            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.tecnologia.por_faccion.get(&f), relaciones, self.liga_de(f))))
         }));
         m.extend(e.politica.relaciones.iter().map(|r| ((Clase::Relacion, r.id), huella(r))));
         m.extend(e.politica.titulos.iter().map(|x| ((Clase::Titulo, x.id.indice()), huella(x))));
@@ -115,6 +115,10 @@ impl Nucleo {
             indice.entry(a.faccion).or_default().insert(a.id);
         });
         assert_eq!(indice, self.espacio.plazas_por_faccion, "el índice de plazas por Facción no es el de las plazas [{}]", self.causa_auditada);
+        // El índice de plazas por nivel actual (6B) es el de las plazas.
+        let mut por_nivel = [0u32; super::logros::NIVELES_INDICE];
+        self.estado.asentamientos.values().for_each(|a| por_nivel[(a.nivel_actual() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1);
+        assert_eq!(por_nivel, self.espacio.plazas_por_nivel, "el índice de plazas por nivel actual no es el de las plazas [{}]", self.causa_auditada);
         let ahora = self.huellas();
         if let Some(antes) = &self.huellas_auditadas {
             for clave in antes.keys().chain(ahora.keys()).collect::<BTreeSet<_>>() {

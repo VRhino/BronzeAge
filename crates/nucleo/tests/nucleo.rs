@@ -119,7 +119,9 @@ fn los_viveres_son_un_ritmo_con_eventos_de_umbral() {
     assert_eq!(del_reloj(&n).iter().map(|e| e.0.as_str()).collect::<Vec<_>>(), ["ejercito.viveres_bajos", "ejercito.sin_viveres", "ejercito.llega"]);
     // Los umbrales que el alta programó con el ritmo de acampada quedaron invalidados; salen de la cola (descartados) cuando les toca.
     n.avanzar_hasta(30_000_000);
-    assert_eq!(n.eventos_en_cola(), 0);
+    // Solo queda la cita global del fin del plazo de la Era (6B), que no es de ninguna entidad ociosa.
+    let cola: Vec<nucleo::Carga> = n.estado().cola.volcar().into_iter().map(|e| e.carga).collect();
+    assert_eq!(cola, vec![nucleo::Carga::Era]);
 }
 
 #[test]

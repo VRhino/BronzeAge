@@ -108,6 +108,14 @@ pub fn sin_andamiaje() -> bool {
     std::env::var_os("BRONZEAGE_SIN_ANDAMIAJE").is_some()
 }
 
+/// Los contadores de los logros (6B) que salen de hechos —combate, caravanas, bandidos, animales y reclutas: ni los flujos de la economía (lo extraído y lo fabricado) ni los récords de
+/// plazas por nivel—, los que no son cero, en el orden del enum. Con él cada prueba de una vía comprueba que su hecho cuenta lo suyo **una vez** y nada más (D18).
+pub fn logros_de_hechos(n: &Nucleo) -> Vec<(tecnologia::Contador, u64)> {
+    use tecnologia::Contador::*;
+    let flujo = |c: &tecnologia::Contador| matches!(c, ExtraidoCobre | ExtraidoHierro | ExtraidoPiedra | ExtraidoEstano | FabricadoEquipoBronce | FabricadoArmaduraBronce);
+    tecnologia::Contador::TODOS.into_iter().filter(|c| !c.es_record() && !flujo(c)).map(|c| (c, n.tecnologia().contador(c))).filter(|&(_, x)| x > 0).collect()
+}
+
 /// Las reglas de `arranque`.
 pub fn reglas() -> Reglas {
     Reglas { viveres_bajos_pct: 1, ..Reglas::default() }

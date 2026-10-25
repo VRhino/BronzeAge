@@ -73,6 +73,7 @@ mod ciudadania;
 mod pueblos;
 mod salidas;
 mod taberna;
+mod logros;
 mod titulos;
 mod traslado;
 mod uniones;
@@ -489,6 +490,9 @@ impl Nucleo {
         if !matches!(ev.carga, Carga::Titulos) {
             self.armar_titulos(t);
         }
+        if !matches!(ev.carga, Carga::Era) {
+            self.armar_era(t);
+        }
         if self.ajustes.auditar_cambios {
             self.causa_auditada = format!("el evento {:?} de la entidad {id}", ev.carga);
         }
@@ -506,6 +510,7 @@ impl Nucleo {
             Carga::Batalla(suceso) => self.suceso_de_batalla(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Fundacion(suceso) => self.suceso_de_fundacion(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Titulos => self.recalcular_titulos(t),
+            Carga::Era => self.cita_de_era(t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
@@ -781,6 +786,7 @@ impl Nucleo {
         match &r.resultado {
             Resultado::Aceptada => {
                 self.armar_titulos(t);
+                self.armar_era(t);
                 self.metricas.ordenes_aceptadas += 1;
                 self.estado.recordar(&p.actor, &p.peticion_id, r.version_tras);
                 self.registrar(t, ENTRADA_PETICION, p.codificar());

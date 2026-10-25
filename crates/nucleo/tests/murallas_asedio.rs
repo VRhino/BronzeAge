@@ -276,6 +276,11 @@ fn el_asedio_con_numeros_multiplica_al_defensor_con_su_recinto_y_sin_recinto_es_
         tras_la_convocatoria(&mut e.n);
         let h = e.hecho_de_asedio();
         assert_eq!((dato(&h, "multiplicadorMuralla"), dato(&h, "murallaCompleta")), (esperado, i64::from(esperado > UNO)));
+        // Los logros del asedio (6B): con combate, beto defendió en persona, con muralla o sin ella; contados una vez aunque la convocatoria deje también `batalla.aplicada` (D18).
+        let cae = !hechos(&e.n, "combate.asedio_conquista").is_empty();
+        let delta = tecnologia::contador::asedio(cae, true, true, esperado > UNO);
+        assert!(!hechos(&e.n, "batalla.aplicada").is_empty(), "el asedio con convocatoria deja su batalla aplicada");
+        assert_eq!(comun::logros_de_hechos(&e.n), delta.iter().collect::<Vec<_>>());
         let mut espejo = base::Rng::nuevo(rng0);
         (0..2).for_each(|_| {
             espejo.siguiente();
@@ -354,6 +359,13 @@ fn la_conquista_daña_un_30_por_ciento_el_anillo_completo_y_se_repara_sola_a_cos
     assert_eq!((a.faccion, a.economia.ocupado), (1, true));
     let c = &hechos(&e.n, "asentamiento.conquistada")[0];
     assert_eq!((dato(c, "murallaCompleta"), dato(c, "murallaDanada")), (1, 1), "tenía muralla completa justo antes del daño y la perdió en parte");
+    // Sin combate no hay asedio resistido ni contra la muralla, pero sí la conquista con muralla completa (6B), y con ella el logro de umbral 1: público, sin decir qué tecnología abre.
+    assert_eq!(comun::logros_de_hechos(&e.n), vec![(tecnologia::Contador::ConquistasConMurallaCompleta, 1)]);
+    let logro: Vec<&nucleo::EventoNucleo> = e.n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).filter(|x| x.codigo == "tecnologia.logro").collect();
+    assert_eq!(logro.len(), 1);
+    assert!(logro[0].publico && logro[0].dato("umbral") == Some(1) && logro[0].valores == vec![("contador", nucleo::Dato::Texto("conquistas.conMurallaCompleta".into()))]);
+    let carpinteria = e.n.estado().reglas.economia.tecnologia.buscar("carpinteria_militar").unwrap();
+    assert_eq!(e.n.tecnologia().logros[carpinteria as usize], Some(logro[0].en), "el logro queda fijo en su instante");
     // El anillo pierde floor(0,3 × celdas) y el nuevo dueño levanta ya la primera celda de la reparación: queda un 70 % más una celda, con su cita.
     let rec = &e.recintos_de_b()[0];
     assert_eq!(rec.levantadas(), n - perdidas + 1, "se dañaron {perdidas} de {n} y se repara una celda en el instante de la conquista");

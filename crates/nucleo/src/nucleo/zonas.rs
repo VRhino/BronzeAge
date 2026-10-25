@@ -279,6 +279,7 @@ impl Nucleo {
                 }
                 // Solo sube el techo: el radio no salta (Doc 1.2). Fija el nivel alcanzado y el operativo de la economía.
                 let eco = &mut self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia;
+                let nivel_antes = eco.nivel_actual();
                 eco.nivel = *nivel;
                 eco.medidor.nivel_actual = *nivel;
                 // Una obra de ascenso hacia un nivel que el atajo ya concede se descarta: al acabar bajaría el nivel (Economia_Construccion §11).
@@ -287,6 +288,7 @@ impl Nucleo {
                 }
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 self.tr.emitir(&self.estado, EventoNucleo { codigo: "asentamiento.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("nivel", *nivel as i64)], ..Default::default() });
+                self.contar_nivel(t, Some(nivel_antes), Some(*nivel));
                 Ok(None)
             }
             Comando::AgrandarZona { asentamiento } => {

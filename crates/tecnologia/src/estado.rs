@@ -48,6 +48,9 @@ pub struct EstadoTecnologia {
     pub era_desde: Instante,
     /// Por [`Contador::indice`]. Nunca bajan.
     pub contadores: [u64; 24],
+    /// Lo que va de la unidad siguiente de cada contador que crece por un flujo en milésimas (lo extraído y lo fabricado, [`EstadoTecnologia::sumar_milesimas`]), en `[0, 1000)`. Los
+    /// demás contadores lo tienen a 0.
+    pub restos: [u64; 24],
     /// Por [`TecId`]: cuándo se cumplió el logro. Fijo para siempre.
     pub logros: Vec<Option<Instante>>,
     /// Por [`TecId`].
@@ -62,7 +65,7 @@ impl EstadoTecnologia {
     /// `estadoTecnologiaInicial`: el servidor arranca en la Era I, sin logros.
     pub fn nuevo(r: &Reglas, desde: Instante) -> Self {
         let n = r.catalogo.len();
-        EstadoTecnologia { era: 0, era_desde: desde, contadores: [0; 24], logros: vec![None; n], primeros: vec![None; n], cantadas: Conjunto::VACIO, por_faccion: BTreeMap::new() }
+        EstadoTecnologia { era: 0, era_desde: desde, contadores: [0; 24], restos: [0; 24], logros: vec![None; n], primeros: vec![None; n], cantadas: Conjunto::VACIO, por_faccion: BTreeMap::new() }
     }
 
     /// `tecnologiasDe`.
@@ -108,6 +111,15 @@ impl EstadoTecnologia {
         }
         self.contadores[c.indice()] += n;
         self.fijar_logros(r, c, ahora)
+    }
+
+    /// Suma un flujo de `mil` milésimas (lo extraído de un nodo, lo fabricado por una receta: la economía entera los mueve en milésimas con un resto oculto, C3b). El contador sube
+    /// una unidad cada vez que el resto la completa, así que contar a trozos o de una vez da lo mismo.
+    pub fn sumar_milesimas(&mut self, r: &Reglas, c: Contador, mil: u64, ahora: Instante) -> Vec<TecId> {
+        let i = c.indice();
+        let total = self.restos[i] + mil;
+        self.restos[i] = total % 1000;
+        self.sumar(r, c, total / 1000, ahora)
     }
 
     /// Suma un [`Delta`] entero.
@@ -248,6 +260,18 @@ pub(crate) mod pruebas {
         assert!(e.sumar(&r, Contador::ExtraidoCobre, 1_000_000, 9).is_empty(), "fijo: no se vuelve a fijar");
         assert_eq!(e.logros[cobre as usize], Some(7));
         assert_eq!(e.contador(Contador::ExtraidoCobre), 1_041_000, "ningún contador baja ni se recorta");
+    }
+
+    #[test]
+    fn un_flujo_en_milesimas_cuenta_las_unidades_que_completa_a_trozos_o_de_una_vez() {
+        let r = r();
+        let (mut a, mut b) = (EstadoTecnologia::nuevo(&r, 0), EstadoTecnologia::nuevo(&r, 0));
+        for _ in 0..7 {
+            a.sumar_milesimas(&r, Contador::ExtraidoCobre, 1_500, 0);
+        }
+        b.sumar_milesimas(&r, Contador::ExtraidoCobre, 10_500, 0);
+        assert_eq!((a.contador(Contador::ExtraidoCobre), a.restos), (10, b.restos));
+        assert_eq!((b.contador(Contador::ExtraidoCobre), b.restos[Contador::ExtraidoCobre.indice()]), (10, 500));
     }
 
     #[test]

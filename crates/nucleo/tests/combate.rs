@@ -10,6 +10,7 @@ use base::{Instante, Punto, Rng, MS_POR_MINUTO};
 use comun::{c, nucleo};
 use militar::catalogo::Tropa;
 use nucleo::{rechazos, Comando, Nucleo, ObjetivoAtaque, Peticion, Relacion, Resultado, Respuesta};
+use tecnologia::Contador;
 
 const MIN: Instante = MS_POR_MINUTO;
 
@@ -130,6 +131,8 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert_eq!(h.len(), 1);
     let h = &h[0];
     assert_eq!((h.0, h.1.clone(), dato(h, "ganaElAtacante")), (10 * MIN, vec![ana.0, beto.0], 1));
+    // Los logros (6B), contados en origen: una batalla librada y en campo abierto (el `combate.encuentro`), sin hoplitas.
+    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1)]);
     // Las bajas del perdedor van de 30 % a 70 % y el ganador pierde entre el 5 % y el 20 %.
     let (despues_a, despues_d) = (soldados(&x.n, ana.1, x.fuerte[0]), soldados(&x.n, beto.1, x.debil));
     let perdidos_d = antes_d - despues_d;
@@ -286,6 +289,7 @@ fn atacar_un_campamento_de_bandidos_no_exige_guerra_gasta_una_tirada_y_su_oro_va
     assert!(n.campamento_de_bandidos(b).is_none(), "el campamento cae");
     assert_eq!(n.estado().ejercitos[&ana.0].columna.carga[&Oro], 33_000, "el oro por héroe del nivel 2");
     assert_eq!(dato(h, "oro"), 33_000);
+    assert_eq!(comun::logros_de_hechos(&n), vec![(Contador::BandidosCampamentosDestruidos, 1)], "el logro cuenta el campamento destruido (6B)");
     assert_eq!(n.cosas_en_el_espacio(), 1, "ya no está en el espacio");
     // Ya no existe.
     assert_eq!(codigo(&atacar(&mut n, 6 * MIN, "ana", "a2", ana.1, ObjetivoAtaque::Campamento(b), false)), rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO);
@@ -356,7 +360,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN35");
+    assert_eq!(&bytes[..5], b"BAN36");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -878,6 +882,8 @@ fn una_caravana_atacada_dentro_de_su_zona_es_un_aguante_pierde_el_70_por_ciento_
     assert_eq!((dato(h, "caravana"), dato(h, "aguante"), dato(h, "carros"), dato(h, "destruida")), (ca as i64, 1, 1, 0));
     assert!(dato(h, "poderAtacante") > dato(h, "defensa"), "la escolta de milicia, con la ventaja del aguante, no basta");
     assert_eq!(h.2, vec![a]);
+    // Los logros (6B): la caravana capturada y los dos bueyes comprados al armarla.
+    assert_eq!(comun::logros_de_hechos(&e.n), vec![(Contador::CaravanasDestruidasOCapturadas, 1), (Contador::AnimalesComprados, 2)]);
     // Asaltar una caravana también da experiencia de Facción si fue digno (5C-3): 2,5 al héroe atacante; la caravana no lleva héroes.
     let (pa, pd) = (dato(h, "poderAtacante"), dato(h, "defensa"));
     let combate: Vec<(i64, i64)> = hechos(&e.n, "faccion.experiencia").iter().filter(|x| dato(x, "motivo") == 2).map(|x| (dato(x, "faccion"), dato(x, "cantidad"))).collect();
@@ -958,6 +964,7 @@ fn si_la_caravana_resiste_el_atacante_pierde_el_25_por_ciento_y_sus_heroes_queda
     assert_eq!((dato(h, "carros"), dato(h, "heridos"), dato(h, "botin")), (0, 1, 0));
     assert!(dato(h, "defensa") >= 26_000 * 125 / 100 || dato(h, "aguante") == 0 || dato(h, "defensa") == 32_500, "la defensa base es 26 y con aguante 32,5: {h:?}");
     assert!(e.n.heroe_herido(solo.1));
+    assert_eq!(e.n.tecnologia().contador(Contador::CaravanasDestruidasOCapturadas), 0, "la caravana que resiste no cuenta");
     let k = e.n.caravana(ca).unwrap();
     assert_eq!((k.carros.len(), k.contenido[&Cobre]), (2, 100_000), "no se pierde nada");
     // Una adjunta a un ejército se ataca al ejército.
@@ -1371,6 +1378,7 @@ fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_es
     assert!(h[0].0 > llegada - 1_000 && h[0].0 <= llegada, "el acoso es el cruce exacto del plan con el radio: {} frente a {llegada}", h[0].0);
     assert_eq!((dato(&h[0], "campamento"), dato(&h[0], "caravana")), (b3 as i64, ca as i64));
     assert!(e.n.caravana(ca).is_none(), "la caravana desaparece");
+    assert_eq!(e.n.tecnologia().contador(Contador::CaravanasDestruidasOCapturadas), 1, "el acoso que ganan los bandidos cuenta (6B)");
     assert_eq!(hechos(&e.n, "comercio.caravana_perdida").len(), 1);
     assert!(e.n.campamento_de_bandidos(b3).is_some(), "el campamento sigue donde estaba");
 
@@ -1382,6 +1390,7 @@ fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_es
     e.n.avanzar_hasta(llegada + 1_000);
     let h = suyos(&e, "bandidos.caravana_escapa", b1);
     assert_eq!(h.len(), 1);
+    assert_eq!(e.n.tecnologia().contador(Contador::CaravanasDestruidasOCapturadas), 0, "la que escapa no cuenta");
     assert!(e.n.caravana(ca).is_some_and(|k| k.estado == EstadoCaravana::EnTransito && k.carros.len() == 2));
     // Y no vuelve a ser acosada por ese campamento durante ese mismo paso.
     let fin = e.n.caravana(ca).unwrap().plan.as_ref().unwrap().fin().unwrap();

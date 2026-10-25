@@ -226,3 +226,67 @@ fn tras_tocar_cero_de_nutricion_la_plaza_no_crece_hasta_recuperar_cien() {
     }
     assert!(a.poblacion.pesants > quietos, "crece de nuevo: {} frente a {quietos}", a.poblacion.pesants);
 }
+
+/// Un mundo que anota lo que le dicen que se fabricó (`Fuentes::fabricado`, los logros `fabricado.*` del sistema 6).
+#[derive(Default)]
+struct Taller {
+    fabricado: Vec<(Recurso, Mil)>,
+}
+
+impl Fuentes for Taller {
+    fn densidad_parcela(&self, _: u32) -> i64 {
+        0
+    }
+    fn extraer(&mut self, _: u32, _: Mil) -> Mil {
+        0
+    }
+    fn fabricado(&mut self, recurso: Recurso, cantidad: Mil) {
+        self.fabricado.push((recurso, cantidad));
+    }
+}
+
+#[test]
+fn el_paso_de_minuto_le_dice_al_mundo_lo_que_fabrican_las_recetas_de_bronce() {
+    let reglas = Reglas::cargar();
+    // El primer taller del catálogo con una receta de armas de bronce, con lo que esa receta consume y artesanos de sobra.
+    let (tipo, nivel, receta) = asentamiento::catalogo::TIPOS
+        .iter()
+        .flat_map(|&t| reglas.catalogo.tipo(t).niveles.iter().enumerate().map(move |(i, n)| (t, i as u8 + 1, n)))
+        .find_map(|(t, i, n)| n.recetas.iter().find(|r| r.produce == Recurso::ArmaBronce).map(|r| (t, i, r.clone())))
+        .expect("hay una receta de armas de bronce");
+    let mut a = Asentamiento::fundar(&reglas, 0, &[(Recurso::Trigo, 100_000)], 3);
+    a.auto_pausada = true;
+    let mut taller_de_bronce = asentamiento::edificio::Edificio::nuevo(90, tipo, asentamiento::edificio::Estado::Activo);
+    taller_de_bronce.nivel_interno = nivel;
+    a.edificios.push(taller_de_bronce);
+    a.poblacion.artesanos = 50;
+    for &(insumo, _) in &receta.consume_por_unidad {
+        a.almacen.poner(insumo, 300_000);
+    }
+    let mut taller = Taller::default();
+    let mut terreno = Terreno { parcelas_libres: vec![], cantera_libre: false, corral_libre: false };
+    let (con_todo, sin_bonus) = (|_: &str| true, |_: Recurso| UNO);
+    let mut x = Exterior {
+        reglas: &reglas,
+        fuentes: &mut taller,
+        sitios: &mut terreno,
+        fertilidad: UNO,
+        tiene_tecnologia: &con_todo,
+        factor_tecnologia: &sin_bonus,
+        nivel_faccion: 1,
+        orden_era: 1,
+        es_capital: true,
+        faccion_tiene_gran_fundicion: false,
+        ciudadanos: 1,
+        distancia_capital: 0,
+        racion_guarnicion: 0,
+        felicidad_extra: UNO,
+        nobleza_extra: UNO,
+        recaudacion_extra: UNO,
+    };
+    let antes = a.almacen.disponible(Recurso::ArmaBronce);
+    a.avanzar_minuto(MS_POR_MINUTO, &mut x);
+    let hecho: Mil = taller.fabricado.iter().filter(|(r, _)| *r == Recurso::ArmaBronce).map(|&(_, n)| n).sum();
+    assert!(hecho > 0, "la receta fabricó: {:?}", taller.fabricado);
+    assert_eq!(a.almacen.disponible(Recurso::ArmaBronce) - antes, hecho, "el mundo oye exactamente lo que entró en el almacén");
+}

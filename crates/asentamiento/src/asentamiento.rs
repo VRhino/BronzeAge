@@ -396,7 +396,9 @@ impl Asentamiento {
         let ctx = produccion::Contexto { fertilidad: x.fertilidad, factor_trigo: self.politicas.factor(&r.politicas, "factorProduccionTrigo"), factor_talleres: self.politicas.factor(&r.politicas, "factorProduccionTalleres"), factor_tecnologia: x.factor_tecnologia, tiene_tecnologia: x.tiene_tecnologia, recetas_pausadas: &pausadas };
         produccion::extraer_y_cultivar(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, x.fuentes);
         self.extraer_pueblos(r, &mano, &ctx, x.fuentes, &mut ev);
-        produccion::recetas(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, &reserva_auto);
+        for (recurso, n) in produccion::recetas(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, &reserva_auto) {
+            x.fuentes.fabricado(recurso, n);
+        }
         self.iniciar_mejoras_automaticas(t, r, x, &reserva_auto, &mut ev);
         if !self.auto_pausada {
             self.evaluar_necesidades(t, x, &mano, &reserva_auto, &mut ev);

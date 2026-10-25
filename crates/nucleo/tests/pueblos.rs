@@ -431,6 +431,9 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     e.n.avanzar_hasta(activo_desde + 10 * MIN);
     assert_eq!(e.pueblo(id).almacen.cantidad(Cobre), 55_000);
     assert_eq!(e.almacen(Cobre), 0, "no entra en el almacén de la madre hasta que lo traiga el carro");
+    // El logro `extraido.cobre` (6B) cuenta en origen lo que sale del nodo (D17): lo del pueblo, al extraerlo.
+    let extraido = |e: &Escenario| e.n.tecnologia().contador(tecnologia::Contador::ExtraidoCobre);
+    assert_eq!(extraido(&e), 55);
     // Hasta llenarse: el nodo se agota y espera a regenerarse sin que el pueblo se mude.
     let mut t = activo_desde + 10 * MIN;
     while hechos(&e.n, "acarreo.vuelve").is_empty() {
@@ -453,6 +456,9 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     assert!((llega_en - sale_en - esperado).abs() <= MIN, "tarda lo que su ruta a 24 u/min: {} frente a {}", llega_en - sale_en, esperado);
     // El almacén de la madre admite 400 de cada recurso: lo que no cabe se pierde.
     assert_eq!((ingresado, perdido), (400_000, 100_000));
+    // Lo que el carro vuelca en la madre no se cuenta otra vez: el contador es lo que salió del nodo, en los carros y en el almacén del pueblo.
+    let salido: i64 = hechos(&e.n, "acarreo.sale").iter().map(|h| dato(h, "carga")).sum::<i64>() + e.pueblo(id).almacen.cantidad(Cobre);
+    assert_eq!(extraido(&e) as i64 * 1_000, salido);
     // La ventana de la solvencia guarda lo que cupo, no lo que traía el carro, en la hora de la llegada.
     let eco = e.n.economia(plaza).unwrap();
     assert_eq!(eco.ingresos_acarreo, vec![IngresoAcarreo { recurso: Cobre, hora: llega_en / HORA, cantidad: 400_000 }]);
@@ -1093,7 +1099,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN35");
+    assert_eq!(&bytes[..5], b"BAN36");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

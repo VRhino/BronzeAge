@@ -511,6 +511,10 @@ impl Nucleo {
         ];
         datos.extend(dueno.map(|f| ("faccionDefensora", i64::from(f))));
         self.hecho_de_combate(if r.gana_atacante { "combate.caravana_interceptada" } else { "combate.caravana_resiste" }, t, vec![id], vec![], punto, datos);
+        // DUDA: la Caravana de Fundación capturada cuenta para `caravanas.destruidasOCapturadas` como cualquier caravana (el hecho es el mismo; el TypeScript no la distinguía).
+        if r.gana_atacante {
+            self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
+        }
         Ok(())
     }
 

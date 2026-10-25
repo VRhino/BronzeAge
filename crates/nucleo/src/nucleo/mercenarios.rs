@@ -140,7 +140,7 @@ impl Nucleo {
         let vivas: std::collections::BTreeSet<u32> = self.estado.asentamientos.values().map(|a| a.faccion).collect();
         move |tecnologia| {
             let mr = &self.estado.reglas.economia.militar;
-            let adoptan = vivas.iter().filter(|&&f| self.estado.militar.tiene_tecnologia(mr, f, tecnologia)).count() as i64;
+            let adoptan = vivas.iter().filter(|&&f| self.estado.tiene_tecnologia(f, tecnologia)).count() as i64;
             mr.tecnologias.de_arranque.iter().any(|t| t == tecnologia) || (!vivas.is_empty() && adoptan * UNO >= mr.mercenarios.porcentaje_facciones * vivas.len() as i64)
         }
     }
@@ -407,6 +407,8 @@ impl Nucleo {
                 )
                 .map_err(de_leva)?;
                 let nueva = h.escuadras.len() > antes;
+                // Los logros `reclutados.*` también cuentan el recluta de un campamento (Q4 del autor).
+                let reclutado = tecnologia::contador::reclutamiento(tropa.nombre(), mr.tropas.tropa(*tropa).edificio, hecho.cantidad.max(0) as u64, nueva);
                 let contenedor = h.escuadra(hecho.escuadra).map(|e| e.contenedor);
                 if let (Some(c), Some(Contenedor::Ejercito(_))) = (hecho.se_une, contenedor) {
                     ejercitos.get_mut(&c).expect("existe").columna.escuadras.push(hecho.escuadra);
@@ -432,6 +434,7 @@ impl Nucleo {
                     vec![],
                     vec![("campamento", campamento as i64), ("heroe", *heroe as i64), ("tropa", crate::codec_militar::tropa_a_u8(*tropa) as i64), ("cantidad", hecho.cantidad), ("oro", hecho.oro), ("escuadra", hecho.escuadra as i64), ("nueva", nueva as i64)],
                 );
+                self.contar(t, reclutado);
                 Ok(if nueva { vec![hecho.escuadra] } else { vec![] })
             }
             Comando::PedirPrestamo { heroe, tropas } => {

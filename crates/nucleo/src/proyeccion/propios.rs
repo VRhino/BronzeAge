@@ -514,11 +514,18 @@ pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
     pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, ..faccion(n, f) }
 }
 
-/// Las tecnologías de la Facción: las de arranque y las que dio la administración. DUDA: sin `aparecidas` ni `reveladas` hasta el sistema 6.
+/// Las tecnologías adoptadas de la Facción (6B, `Estado::tecnologia`): las de arranque y después las demás, cada grupo por su id. DUDA: sin `aparecidas` ni `reveladas` hasta 6G.
 pub fn tecnologias(n: &Nucleo, f: u32) -> pb::TecnologiasFaccion {
     let e = n.estado();
-    let mut adoptadas: Vec<String> = e.reglas.economia.militar.tecnologias.de_arranque.clone();
-    adoptadas.extend(e.militar.tecnologias.get(&f).into_iter().flatten().filter(|t| !adoptadas.contains(t)).cloned().collect::<Vec<_>>());
+    let r = &e.reglas.economia.tecnologia;
+    let nombres = |c: tecnologia::Conjunto| {
+        let mut v: Vec<String> = c.iter().map(|t| r.def(t).id.clone()).collect();
+        v.sort();
+        v
+    };
+    let propias = e.tecnologia.de(r, f).adoptadas;
+    let mut adoptadas = nombres(r.de_arranque);
+    adoptadas.extend(nombres(tecnologia::Conjunto(propias.0 & !r.de_arranque.0)));
     pb::TecnologiasFaccion { faccion_id: ids::faccion(f), version: n.version_de(Clase::Faccion, u64::from(f)), adoptadas, ..Default::default() }
 }
 

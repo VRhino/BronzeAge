@@ -245,6 +245,11 @@ pub(crate) struct FuentesMundo<'a> {
     pub mapa: &'a Mapa,
     pub nodos: &'a mut BTreeMap<u32, StockNodo>,
     pub ahora: Instante,
+    /// El catálogo de edificios: qué recurso saca el extractor de cada nodo.
+    pub catalogo: &'a asentamiento::catalogo::Catalogo,
+    /// Lo que salió de los nodos y lo que fabricaron las recetas, en milésimas, por contador de los logros (`tecnologia::Contador::indice`, 6B): se cuenta **en origen**, en plazas y
+    /// pueblos (D17), y quien avanza la plaza lo suma al estado de tecnología.
+    pub contado: [Mil; 24],
 }
 
 impl Fuentes for FuentesMundo<'_> {
@@ -254,7 +259,17 @@ impl Fuentes for FuentesMundo<'_> {
 
     fn extraer(&mut self, nodo: u32, pedido: Mil) -> Mil {
         let Some(n) = self.mapa.nodos.get(nodo as usize) else { return 0 };
-        self.nodos.entry(nodo).or_insert_with(|| StockNodo::nuevo(n.inicial)).extraer(n.inicial, regeneracion_ms(n.tipo), self.ahora, pedido).0
+        let salido = self.nodos.entry(nodo).or_insert_with(|| StockNodo::nuevo(n.inicial)).extraer(n.inicial, regeneracion_ms(n.tipo), self.ahora, pedido).0;
+        if let Some(c) = self.catalogo.tipo(n.tipo).produccion.and_then(|(r, _)| tecnologia::contador::de_extraccion(r)) {
+            self.contado[c.indice()] += salido;
+        }
+        salido
+    }
+
+    fn fabricado(&mut self, recurso: asentamiento::Recurso, cantidad: Mil) {
+        for c in tecnologia::contador::de_fabricacion(recurso) {
+            self.contado[c.indice()] += cantidad;
+        }
     }
 }
 

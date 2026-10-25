@@ -70,9 +70,16 @@ impl Conjunto {
         self.0 == 0
     }
 
-    /// Los índices, de menor a mayor (el orden del catálogo).
+    /// Los índices, de menor a mayor (el orden del catálogo): solo los bits puestos.
     pub fn iter(self) -> impl Iterator<Item = TecId> {
-        (0..64u8).filter(move |&t| self.contiene(t))
+        let mut resto = self.0;
+        std::iter::from_fn(move || {
+            (resto != 0).then(|| {
+                let t = resto.trailing_zeros() as TecId;
+                resto &= resto - 1;
+                t
+            })
+        })
     }
 }
 

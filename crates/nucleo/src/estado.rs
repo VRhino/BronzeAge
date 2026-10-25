@@ -10,6 +10,7 @@ use crate::codec_comercio;
 use crate::codec_economia;
 use crate::codec_militar;
 use crate::codec_politica;
+use crate::codec_tecnologia;
 use crate::economia::StockNodo;
 use crate::memoria::{self, Memoria};
 use crate::estado_batallas::EstadoBatallas;
@@ -72,6 +73,25 @@ pub fn entidad_titulos() -> u64 {
     17 * crate::estado_comercio::ETIQUETA
 }
 
+/// ¿Está la tecnología `id` (su id de cadena) entre las `adoptadas`? Se mira en el paso de minuto de cada plaza (recetas, auto-construcción): compara solo con las adoptadas, que son pocas (las dos de
+/// arranque en una Facción que no ha adoptado nada), en lugar de buscar el id en el catálogo entero.
+pub(crate) fn adopta(r: &tecnologia::Reglas, adoptadas: tecnologia::Conjunto, id: &str) -> bool {
+    adoptadas.iter().any(|t| r.def(t).id == id)
+}
+
+/// Prioridad de la cita del fin del plazo de la Era (`Carga::Era`, Reloj_Y_Eventos §2: con los títulos, después de todo lo demás del mismo instante).
+pub const PRIO_ERA: u8 = 10;
+
+/// La entidad de la cita de la Era: una sola para todo el mundo (etiqueta 18 de `estado_comercio::ETIQUETA`).
+pub fn entidad_era() -> u64 {
+    18 * crate::estado_comercio::ETIQUETA
+}
+
+/// BAN36: BAN35 con el estado de tecnología del mundo (sistema 6, tanda 6B; `codec_tecnologia`): la Era vigente y desde cuándo, los 24 contadores de los logros con el resto oculto de los que
+/// crecen por un flujo, cuándo se cumplió cada logro, la descubridora de cada tecnología, lo que los Aedas ya cantaron y las tecnologías de cada Facción (aparecidas, adoptadas y reveladas, por
+/// índice del catálogo), más la cita del fin del plazo de la Era (`Estado::era_en` y `Carga::Era`). Sustituye a las tecnologías que daba la administración (`EstadoMilitar::tecnologias`, que
+/// desaparece). BAN35 se rechaza: no trae los contadores ni los logros, que no se pueden deducir del estado.
+///
 /// BAN35: BAN34 con los fundadores de cada plaza (sistema 5, tanda 5H, 5B-9: `Asentamiento::fundadores`, quienes la fundaron y siguen residiendo en ella). BAN34 se rechaza: sus plazas no dicen
 /// quién las fundó.
 ///
@@ -171,7 +191,7 @@ pub fn entidad_titulos() -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN35";
+const MAGIA: &[u8; 5] = b"BAN36";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -214,6 +234,8 @@ pub struct ReglasEconomia {
     pub combate: Arc<combate::Reglas>,
     /// Las cifras de la política (ciudadanía, capital, puerta, propuestas, nivel de Facción y sigilo; Diplomacia_Facciones).
     pub politica: Arc<politica::Reglas>,
+    /// El catálogo de tecnologías, las Eras, los Aedas y los logros (Tecnologia_Aedas; crate `tecnologia`). Sus bloques ya entran en la huella con los militares.
+    pub tecnologia: Arc<tecnologia::Reglas>,
     huella: String,
 }
 
@@ -229,7 +251,7 @@ impl ReglasEconomia {
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), huella }
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -439,6 +461,9 @@ pub enum Carga {
     Fundacion(SucesoFundacion),
     /// Se recalculan los títulos de prestigio (5F; la entidad es `entidad_titulos`, una sola para todo el mundo; prioridad [`PRIO_TITULOS`]).
     Titulos,
+    /// Se mira si empieza la Era siguiente (6B; la entidad es `entidad_era`, una sola para todo el mundo; prioridad [`PRIO_ERA`]): al fin del plazo de la vigente, o en el instante en que empezó
+    /// una Era cuyos logros ya estaban todos cumplidos.
+    Era,
 }
 
 /// Qué plazo de una Caravana de Fundación vence (Fundacion_Y_Refundacion §7). Cada cambio de situación sube su generación: a una caravana solo le queda en la cola el plazo de la situación en
@@ -869,8 +894,12 @@ pub struct Estado {
     pub contactos: BTreeSet<(u64, u64)>,
     /// Trueques, órdenes de mercado, flota de caravanas y reputación entre Facciones (Comercio_Caravanas §2).
     pub comercio: EstadoComercio,
-    /// Héroes con sus escuadras, reclutas de los campamentos y tecnologías de las Facciones (Heroe_Y_Tropa, Campamentos_Mercenarios).
+    /// Héroes con sus escuadras y reclutas de los campamentos (Heroe_Y_Tropa, Campamentos_Mercenarios).
     pub militar: EstadoMilitar,
+    /// La tecnología del mundo (6B, Tecnologia_Aedas §1): la Era, los contadores y los logros, las descubridoras y las tecnologías de cada Facción.
+    pub tecnologia: tecnologia::EstadoTecnologia,
+    /// Cuándo vence la cita de la Era que está en la cola (`Carga::Era`), si hay una: se arma como el plazo de los títulos, al pasar algo en el mundo con alguna Facción.
+    pub era_en: Option<Instante>,
     /// Campamentos de bandidos, guarnición de serie de los pueblos y rendimientos de lo que se destruye (Combate, Generacion_Del_Mundo §13).
     pub combate: EstadoCombate,
     /// Las batallas de Unity abiertas y las cerradas recientes (Batalla_Unity_Ciclo §3).
@@ -893,6 +922,7 @@ impl Estado {
     pub fn nuevo(reglas: Reglas, mundo_hash: String, semilla: u64, ahora: Instante) -> Self {
         let mut comercio = EstadoComercio::default();
         comercio.mercenarios.mercado = comercio::mercenarios::MercadoMercenario::nuevo(&reglas.economia.comercio.mercenarios, ahora);
+        let tecnologia = tecnologia::EstadoTecnologia::nuevo(&reglas.economia.tecnologia, ahora);
         Self {
             reglas,
             mundo_hash,
@@ -910,6 +940,8 @@ impl Estado {
             contactos: BTreeSet::new(),
             comercio,
             militar: EstadoMilitar::default(),
+            tecnologia,
+            era_en: None,
             combate: EstadoCombate::default(),
             batallas: EstadoBatallas::default(),
             memoria: Memoria::default(),
@@ -920,6 +952,12 @@ impl Estado {
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
         }
+    }
+
+    /// ¿Tiene la Facción **adoptada** esa tecnología (por su id de cadena)? Las de arranque las tiene toda Facción desde que nace (Tecnologia_Aedas §4.1: es lo que miran las cuatro puertas).
+    pub fn tiene_tecnologia(&self, faccion: u32, tecnologia: &str) -> bool {
+        let r = &self.reglas.economia.tecnologia;
+        adopta(r, self.tecnologia.de(r, faccion).adoptadas, tecnologia)
     }
 
     /// La columna de un héroe: aquella en la que va o con la que entró de visita en un lugar ajeno (dentro, fuera del mapa).
@@ -1053,6 +1091,8 @@ impl Estado {
         codec_politica::escribir(&mut w, &self.politica);
         estado_fundacion::escribir(&mut w, &self.fundacion);
         w.opt_i64(self.titulos_en);
+        codec_tecnologia::escribir(&mut w, &self.tecnologia);
+        w.opt_i64(self.era_en);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1111,6 +1151,7 @@ impl Estado {
                     SucesoFundacion::Llega => 14,
                 }),
                 Carga::Titulos => w.u8(15),
+                Carga::Era => w.u8(16),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -1140,12 +1181,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN35`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 35 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN36`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 36 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'5' => {}
+                b'6' => {}
+                b'5' => return Err(ErrorFormato("foto del formato BAN35 (sin el estado de tecnología del mundo: ni la Era, ni los contadores de los logros, ni los logros cumplidos, ni las descubridoras, que no se pueden deducir del estado; las tecnologías de las Facciones eran las de la administración): ya no se admite")),
                 b'4' => return Err(ErrorFormato("foto del formato BAN34 (las plazas no dicen quién las fundó): ya no se admite")),
                 b'3' => return Err(ErrorFormato("foto del formato BAN33 (las plazas no traen sus cargos locales y su puerta es el acceso provisional por relación, sin el grupo de los Aedas ni vetos): ya no se admite")),
                 b'2' => return Err(ErrorFormato("foto del formato BAN32 (no trae los títulos de prestigio de la última evaluación ni su plazo, y las plazas no traen sus cargos locales ni su puerta por grupos): ya no se admite")),
@@ -1273,6 +1315,8 @@ impl Estado {
         s.politica = codec_politica::leer(&mut r)?;
         s.fundacion = estado_fundacion::leer(&mut r)?;
         s.titulos_en = r.opt_i64()?;
+        s.tecnologia = codec_tecnologia::leer(&mut r)?;
+        s.era_en = r.opt_i64()?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -1301,6 +1345,7 @@ impl Estado {
                 13 => Carga::Fundacion(SucesoFundacion::Caduca),
                 14 => Carga::Fundacion(SucesoFundacion::Llega),
                 15 => Carga::Titulos,
+                16 => Carga::Era,
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };
