@@ -473,7 +473,9 @@ si nivel ≥ nivelParaOro:    coste.oro    = oroBase × escala
 El **trigo no forma parte** del coste (se descuenta una sola vez, donde se consume). La **capital** (`encontrarCapital`) es la designada (`capitalDeFaccionId == faccionId` y con un Palacio activo, `capitalDesignada`) y, si no hay,
 el asentamiento vivo más antiguo (`fundadoEn` menor) de la Facción.
 
-> **Implementado en Rust (2026-10-24, 5C):** el paso de minuto de cada plaza busca la capital de su Facción (`Nucleo::exterior_de_capital`, entre las plazas de la Facción) y pasa al `Exterior` `es_capital`, `distancia_capital` (la distancia entre las dos plazas en milésimas, 0 en la capital) y, en la capital, si la Facción tiene ya Gran Fundición en alguna plaza y en cualquier estado. Con `escalaDistancia` = 80 u, una plaza a 80 u paga el doble y una a 1.000 u, ×13,5: una plaza tan lejana cae en ruinas en un día (prueba `politica.rs::la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana`). Empate de antigüedad: el id menor.
+> **Implementado en Rust (2026-10-24, 5C):** el paso de minuto de cada plaza busca la capital de su Facción (`Nucleo::exterior_de_capital`, entre las plazas de la Facción) y pasa al `Exterior` `es_capital`, `distancia_capital` (la distancia entre las dos plazas en milésimas, 0 en la capital) y, en la capital, si la Facción tiene ya Gran Fundición en alguna plaza y en cualquier estado. Con `escalaDistancia` = 80 u, una plaza a 80 u pagaba el doble y una a 1.000 u, ×13,5. Empate de antigüedad: el id menor.
+
+> **Calibración del batch político (decisión del autor del 2026-10-25, P1):** `escalaDistancia` pasa de 80 u a **300 u** (la fórmula lineal no cambia: `1 + d/300`). Un reino sostiene **media región** (~300 u) alrededor de su capital —×2 a 300 u— y sigue limitado más allá: ×3 a 600 u, ×4,3 a 1.000 u. Prueba: `asentamiento::mantenimiento::pruebas::la_escala_de_distancia_vigente_es_300_media_region` (y `politica.rs::la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana`, con la plaza lejana a más de 1.000 u). Cifras en `Docs/Mecanicas a balancear.md` §48.
 
 ### 10.2 Pago y medidor (`avanzarMantenimiento`)
 
@@ -2222,7 +2224,7 @@ Los bloques de parámetros de este documento son los del motor TypeScript. Valor
 | `ZONA_INFLUENCIA.separacionPlazas` | — | **30** (Doc 1.0a) |
 | `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
 | `ESCALA` / `radioUrbanoDe` | existían | **se borran**: el espacio local y el del mapa son independientes (Doc 1.0a). La ciudad usa su propio `radioCiudad` (30, +5 por edificio, máximos 60-180; `Trazado_Urbano.md`) |
-| `MANTENIMIENTO.escalaDistancia` | 400 | **80** |
+| `MANTENIMIENTO.escalaDistancia` | 400 | **300** (80 hasta el 2026-10-25; P1 del batch político) |
 | `LINEAS_PRODUCCION` | 25 / 150 / 90 | **se elimina** (decisión previa del autor) |
 | `RECURSO_RAREZA.espacioMinimo` | 20 / 40 / 120 | **4 / 7 / 20** |
 | `LIVESTOCK.espacioMinimo` | 30 | **5** |

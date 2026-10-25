@@ -1,5 +1,5 @@
 {
-  "resumen": "Batch político (5I, 2026-10-25, foto `BAN35`, 60 plazas, 30 días). La población del batch militar (cuatro héroes bots por plaza) con la política en manos de bots de diplomacia deterministas que solo dan órdenes del contrato: 20 Facciones creadas por sus Reyes con `CrearFaccion` (nivel de partida 3, `FijarNivelFaccion` como único andamiaje político), sus héroes piden el ingreso, el Rey los acepta y se mudan; el Rey nombra al Gobernador y este los demás cargos; puerta, vetos, alianzas, vasallajes con tributo, guerras con arrastre, traiciones, paces, rupturas, rebeliones, capital, anexiones, fusiones, secesiones, refundación con el fondo y la Caravana de Refundación, y títulos. Semilla 42 dos veces con la misma huella (404e0eac…) y la semilla 7 (0c37d781…), las tres con 0 violaciones en los 33 invariantes (los 10 políticos y los 23 del militar), `inv_rechazos` 0 y la foto `BAN35` de ida y vuelta igual. Semilla 42: 25 Facciones creadas (5 de disidentes), 11 al final; 285 ingresos, 310 mudanzas (9,1 residentes por plaza), 383 cargos; 104 alianzas, 22 vasallajes, 27 guerras (3 Facciones arrastradas), 1 traición, 13 paces, 76 alianzas rotas, 7 vasallas liberadas, 10 rebeliones; 32.833 u de tributo pagadas y ninguna perdida; 7 anexiones y 7 fusiones (45 plazas en Facciones nuevas); 1 refundación (semilla 7: 1 Facción derrotada y 3 refundaciones); 215 cambios de manos de títulos; nivel de Facción mediano 3 → 5; 9 capitales designadas, 18 plazas con Palacio y 1.422 nobles. **La distancia a la capital pesa mucho**: 21 de las 60 plazas caen en ruinas, todas lejos de su capital (mediana 1.048 u), porque las fusiones y las anexiones juntan plazas muy separadas (multiplicador mediano ×8,3 al final, percentil 90 ×17). Las tres curvas probadas como experimento local (P1) lo bajan a 3-6 ruinas; la recomendada es la raíz. Por el camino se arreglaron dos fallos del batch (el invariante de ruina de `batch militar` contaba las caravanas adjuntas, que siguen su camino según Comercio §10, y el Intendente aparcaba con un origen o una casa que ya no valían); el núcleo no tuvo ningún fallo. CPU 8,0-8,3 s por día de mundo.",
+  "resumen": "Re-medido el 2026-10-25 tras la calibración del batch político (P1 escala de distancia 80 → 300 u, P2 margen del 5 % en los títulos, P4 `maxNivel2` [1,1,2,2,3,3,3,4,4,5], P7 la adjunta se pierde con su plaza arruinada; foto `BAN35` sin cambios), la misma corrida (60 plazas, 30 días, semilla 42): plazas vivas 40 → 54, ruinas 21 → 6 (todas lejos de su capital, distancia mediana 1.048 → 1.653 u), multiplicador por distancia mediano ×8,3 → ×1,47 (p90 ×17,1 → ×7,1), plazas de nivel 2 20 → 48, ascensos sin cupo de Facción 5.134 → 1.631 (insolventes 3 → 1), títulos que cambian de manos 215 → 42 (Ejército más grande 131 → 11), caravanas perdidas 119 → 92; 0 violaciones e `inv_rechazos` 0. `batch comercio`: 141 → 146 plazas vivas, 3.319 → 0 ascensos insolventes, multiplicador ×1,78 → ×1,21, pero peajes del 0,7 % al 22,1 % de la carga (más plazas de nivel 2, zonas mayores). Las decisiones P1-P10 están cerradas (ver abajo). Lo que sigue es el informe anterior: Batch político (5I, 2026-10-25, foto `BAN35`, 60 plazas, 30 días). La población del batch militar (cuatro héroes bots por plaza) con la política en manos de bots de diplomacia deterministas que solo dan órdenes del contrato: 20 Facciones creadas por sus Reyes con `CrearFaccion` (nivel de partida 3, `FijarNivelFaccion` como único andamiaje político), sus héroes piden el ingreso, el Rey los acepta y se mudan; el Rey nombra al Gobernador y este los demás cargos; puerta, vetos, alianzas, vasallajes con tributo, guerras con arrastre, traiciones, paces, rupturas, rebeliones, capital, anexiones, fusiones, secesiones, refundación con el fondo y la Caravana de Refundación, y títulos. Semilla 42 dos veces con la misma huella (404e0eac…) y la semilla 7 (0c37d781…), las tres con 0 violaciones en los 33 invariantes (los 10 políticos y los 23 del militar), `inv_rechazos` 0 y la foto `BAN35` de ida y vuelta igual. Semilla 42: 25 Facciones creadas (5 de disidentes), 11 al final; 285 ingresos, 310 mudanzas (9,1 residentes por plaza), 383 cargos; 104 alianzas, 22 vasallajes, 27 guerras (3 Facciones arrastradas), 1 traición, 13 paces, 76 alianzas rotas, 7 vasallas liberadas, 10 rebeliones; 32.833 u de tributo pagadas y ninguna perdida; 7 anexiones y 7 fusiones (45 plazas en Facciones nuevas); 1 refundación (semilla 7: 1 Facción derrotada y 3 refundaciones); 215 cambios de manos de títulos; nivel de Facción mediano 3 → 5; 9 capitales designadas, 18 plazas con Palacio y 1.422 nobles. **La distancia a la capital pesa mucho**: 21 de las 60 plazas caen en ruinas, todas lejos de su capital (mediana 1.048 u), porque las fusiones y las anexiones juntan plazas muy separadas (multiplicador mediano ×8,3 al final, percentil 90 ×17). Las tres curvas probadas como experimento local (P1) lo bajan a 3-6 ruinas; la recomendada es la raíz. Por el camino se arreglaron dos fallos del batch (el invariante de ruina de `batch militar` contaba las caravanas adjuntas, que siguen su camino según Comercio §10, y el Intendente aparcaba con un origen o una casa que ya no valían); el núcleo no tuvo ningún fallo. CPU 8,0-8,3 s por día de mundo.",
   "anomalias": [
     {
       "titulo": "La distancia a la capital arruina las plazas de las Facciones que se unen",
@@ -15,12 +15,12 @@
   "decisiones": [
     {
       "id": "P1",
-      "pregunta": "La escala de la distancia a la capital (5C-2): ¿se cambia la curva del mantenimiento por distancia?",
-      "contexto": "Hoy `× (1 + d / 80 u)`: a 80 u ×2, a 300 u ×4,75, a 1.000 u ×13,5. Medido (semilla 42, 30 días): batch político 40 plazas vivas de 60, 21 ruinas (todas lejos de su capital), multiplicador efectivo mediano ×8,3 (p90 ×17,1), 20 plazas de nivel 2; batch comercio 141 vivas de 146, 3.319 ascensos insolventes, multiplicador mediano ×1,78 (p90 ×2,30). Experimento local, sin tocar el bloque (`asentamiento::mantenimiento::coste` parcheado en un binario aparte y revertido): **tope ×3** (`min(1 + d/80, 3)`): político 55 vivas, 6 ruinas, multiplicador efectivo mediano ×3,0 (p90 ×3,0), 24 de nivel 2; comercio 141 vivas, 3.319 insolventes, ×1,78 (p90 ×2,30). **Raíz** (`1 + √(d/80)`, igual a 80 u, ×3 a 320 u, ×4,5 a 1.000 u): político 57 vivas, 4 ruinas, ×1,95 (p90 ×4,5), 24 de nivel 2; comercio 141 vivas, 664 insolventes, ×1,88 (p90 ×2,15). **Escala 200 u** (`1 + d/200`): político 57 vivas, 3 ruinas, ×1,34 (p90 ×5,7), 26 de nivel 2; comercio 145 vivas, 0 insolventes, ×1,31 (p90 ×1,56). Las tres con 0 violaciones.",
+      "pregunta": "[Cerrada el 2026-10-25] La escala de la distancia a la capital (5C-2): ¿se cambia la curva del mantenimiento por distancia?",
+      "contexto": "Hoy `× (1 + d / 80 u)`: a 80 u ×2, a 300 u ×4,75, a 1.000 u ×13,5. Medido (semilla 42, 30 días): batch político 40 plazas vivas de 60, 21 ruinas (todas lejos de su capital), multiplicador efectivo mediano ×8,3 (p90 ×17,1), 20 plazas de nivel 2; batch comercio 141 vivas de 146, 3.319 ascensos insolventes, multiplicador mediano ×1,78 (p90 ×2,30). Experimento local, sin tocar el bloque (`asentamiento::mantenimiento::coste` parcheado en un binario aparte y revertido): **tope ×3** (`min(1 + d/80, 3)`): político 55 vivas, 6 ruinas, multiplicador efectivo mediano ×3,0 (p90 ×3,0), 24 de nivel 2; comercio 141 vivas, 3.319 insolventes, ×1,78 (p90 ×2,30). **Raíz** (`1 + √(d/80)`, igual a 80 u, ×3 a 320 u, ×4,5 a 1.000 u): político 57 vivas, 4 ruinas, ×1,95 (p90 ×4,5), 24 de nivel 2; comercio 141 vivas, 664 insolventes, ×1,88 (p90 ×2,15). **Escala 200 u** (`1 + d/200`): político 57 vivas, 3 ruinas, ×1,34 (p90 ×5,7), 26 de nivel 2; comercio 145 vivas, 0 insolventes, ×1,31 (p90 ×1,56). Las tres con 0 violaciones. Decisión del autor (2026-10-25): **escala lineal de 300 u** (`1 + d/300`: ×2 a 300 u, ×3 a 600 u, ×4,3 a 1.000 u): un reino sostiene media región alrededor de su capital y sigue limitado más allá. Aplicada (Economia_Construccion §10.1 y §15, Doc 1.0a y 4.5; `Mecanicas a balancear.md` §48).",
       "opciones": [
         {
           "texto": "Raíz: `× (1 + √(distancia / 80 u))`.",
-          "recomendada": true,
+          "recomendada": false,
           "efecto": "Igual que hoy hasta 80 u (la expansión cercana cuesta lo mismo: ×2 a 80 u) y mucho menos lejos (×4,5 a 1.000 u en vez de ×13,5): las uniones y las conquistas lejanas siguen pagando, pero no caen solas. Político 21 → 4 ruinas; comercio 3.319 → 664 insolventes, mismas plazas vivas."
         },
         {
@@ -29,8 +29,8 @@
           "efecto": "No cambia nada cerca (comercio idéntico) y corta las ruinas lejanas (21 → 6), pero da igual estar a 160 u que a 2.000 u."
         },
         {
-          "texto": "Lineal con escala mayor (200 u).",
-          "recomendada": false,
+          "texto": "Lineal con escala mayor (200 u medidos; el autor eligió 300 u).",
+          "recomendada": true,
           "efecto": "Lo abarata todo, también la expansión cercana (×1,4 a 80 u): desaparecen los ascensos insolventes del comercio (3.319 → 0) y la distancia apenas frena; político 3 ruinas."
         },
         {
@@ -42,8 +42,8 @@
     },
     {
       "id": "P2",
-      "pregunta": "¿Se frena el cambio de manos de los títulos?",
-      "contexto": "215 cambios de manos en 30 días con la semilla 42 (Ejército más grande 131) y 202 con la 7, con el recálculo cada 10 min de `TITULOS.cadenciaMinutos` (placeholder) y desempate por el orden de la lista. Cada cambio es un hecho público cantado en la crónica.",
+      "pregunta": "[Cerrada el 2026-10-25] ¿Se frena el cambio de manos de los títulos?",
+      "contexto": "215 cambios de manos en 30 días con la semilla 42 (Ejército más grande 131) y 202 con la 7, con el recálculo cada 10 min de `TITULOS.cadenciaMinutos` (placeholder) y desempate por el orden de la lista. Cada cambio es un hecho público cantado en la crónica. Decisión del autor (2026-10-25): margen del 5 % (`TITULOS.margenAspirante` 0,05). Aplicada (Diplomacia_Facciones §7, Doc 2.9).",
       "opciones": [
         {
           "texto": "Un margen: el título solo cambia de manos si la aspirante supera a la poseedora en un porcentaje (p. ej. 5 %).",
@@ -64,8 +64,8 @@
     },
     {
       "id": "P3",
-      "pregunta": "La Gran Fundición no se alcanza en 30 días: ¿se deja?",
-      "contexto": "Pide Facción de nivel 6 y una capital de nivel 4. En 30 días el nivel de Facción mediano llega a 5 (máximo 6) y ninguna plaza pasa del nivel 2 (20 de 60): los Gobernadores la piden 47 veces y siempre `obra.nivel_insuficiente`. El Palacio sí (18 plazas con Palacio, 9 capitales designadas).",
+      "pregunta": "[Cerrada el 2026-10-25] La Gran Fundición no se alcanza en 30 días: ¿se deja?",
+      "contexto": "Pide Facción de nivel 6 y una capital de nivel 4. En 30 días el nivel de Facción mediano llega a 5 (máximo 6) y ninguna plaza pasa del nivel 2 (20 de 60): los Gobernadores la piden 47 veces y siempre `obra.nivel_insuficiente`. El Palacio sí (18 plazas con Palacio, 9 capitales designadas). Decisión del autor (2026-10-25): se deja; se medirá con batches de más semanas (fase 7).",
       "opciones": [
         {
           "texto": "Dejarlo: es un edificio de partida larga.",
@@ -81,25 +81,25 @@
     },
     {
       "id": "P4",
-      "pregunta": "El cupo de plazas de nivel 2 por nivel de Facción frena casi todos los ascensos: ¿se deja?",
-      "contexto": "Con la Facción en el nivel 3 de partida solo una plaza puede ser de nivel 2 (`CUPO_NIVEL_ASENTAMIENTO.maxNivel2` = 1 hasta el nivel 4): 5.134 comprobaciones de ascenso rechazadas por cupo en 30 días (semilla 42; 7.820 con la 7) frente a 3 por insolvencia. El nivel de Facción sube de 3 a 5 en la mediana (30 subidas), así que el cupo se abre poco a poco.",
+      "pregunta": "[Cerrada el 2026-10-25] El cupo de plazas de nivel 2 por nivel de Facción frena casi todos los ascensos: ¿se deja?",
+      "contexto": "Con la Facción en el nivel 3 de partida solo una plaza puede ser de nivel 2 (`CUPO_NIVEL_ASENTAMIENTO.maxNivel2` = 1 hasta el nivel 4): 5.134 comprobaciones de ascenso rechazadas por cupo en 30 días (semilla 42; 7.820 con la 7) frente a 3 por insolvencia. El nivel de Facción sube de 3 a 5 en la mediana (30 subidas), así que el cupo se abre poco a poco. Decisión del autor (2026-10-25): `maxNivel2` = [1,1,2,2,3,3,3,4,4,5], dos tercios de las plazas que la Facción puede fundar; `maxNivel3` igual. Aplicada (Diplomacia_Facciones §3.5, Doc 2.2.1).",
       "opciones": [
         {
           "texto": "Dejarlo: es lo que hace valer el nivel de Facción.",
-          "recomendada": true,
+          "recomendada": false,
           "efecto": "Una Facción joven crece en una plaza y las demás esperan."
         },
         {
           "texto": "Subir el cupo de los niveles bajos (p. ej. 2 plazas de nivel 2 desde el nivel 2 de Facción).",
-          "recomendada": false,
+          "recomendada": true,
           "efecto": "Más plazas de nivel 2 pronto; el nivel de Facción pesa menos."
         }
       ]
     },
     {
       "id": "P5",
-      "pregunta": "La nobleza (riesgo R1) aparece con los residentes: ¿se acepta su efecto?",
-      "contexto": "Con los héroes mudándose a las plazas (9,1 residentes por plaza al final) la nobleza aparece en toda plaza con Palacio activo: 18 plazas, 1.422 nobles (primeros nobles 24). Frente al experimento sin nobleza (misma semilla, `nobleza.minCiudadanos` inalcanzable, el bloque intacto): población final 26.732 frente a 25.075 (+6,6 %; sin contar los nobles, +0,9 %), plazas vivas 40 frente a 39, ruinas 21 en los dos, nivel 2 en 20 plazas en los dos, reclutados 44.811 frente a 45.320. El oro de los nobles (`tasaNobleza` 0,06 por minuto) da ≈ 85 de oro por minuto entre todas las plazas al final.",
+      "pregunta": "[Cerrada el 2026-10-25] La nobleza (riesgo R1) aparece con los residentes: ¿se acepta su efecto?",
+      "contexto": "Con los héroes mudándose a las plazas (9,1 residentes por plaza al final) la nobleza aparece en toda plaza con Palacio activo: 18 plazas, 1.422 nobles (primeros nobles 24). Frente al experimento sin nobleza (misma semilla, `nobleza.minCiudadanos` inalcanzable, el bloque intacto): población final 26.732 frente a 25.075 (+6,6 %; sin contar los nobles, +0,9 %), plazas vivas 40 frente a 39, ruinas 21 en los dos, nivel 2 en 20 plazas en los dos, reclutados 44.811 frente a 45.320. El oro de los nobles (`tasaNobleza` 0,06 por minuto) da ≈ 85 de oro por minuto entre todas las plazas al final. Decisión del autor (2026-10-25): se acepta la nobleza con residentes reales; sin cambios.",
       "opciones": [
         {
           "texto": "Aceptarlo: la nobleza suma población y oro sin desequilibrar la economía.",
@@ -115,8 +115,8 @@
     },
     {
       "id": "P6",
-      "pregunta": "La reputación no sube nunca: ¿se recalibra el bono por alianza activa?",
-      "contexto": "Reputación mediana final 0, mínima −46,5, máxima 0 (semilla 42; −45 / 0 con la 7): las rupturas (−12), las rebeliones (−10 a la señora) y la traición (−25) la bajan, y el bono por alianza activa (0,0005 por minuto) no supera el decaimiento hacia 0. `diplomacia.reputacion_baja` rechazó 38 propuestas de alianza (73 con la semilla 7). Es la EE-7 de `Mecanicas a balancear.md` §48 vista desde la política.",
+      "pregunta": "[Cerrada el 2026-10-25] La reputación no sube nunca: ¿se recalibra el bono por alianza activa?",
+      "contexto": "Reputación mediana final 0, mínima −46,5, máxima 0 (semilla 42; −45 / 0 con la 7): las rupturas (−12), las rebeliones (−10 a la señora) y la traición (−25) la bajan, y el bono por alianza activa (0,0005 por minuto) no supera el decaimiento hacia 0. `diplomacia.reputacion_baja` rechazó 38 propuestas de alianza (73 con la semilla 7). Es la EE-7 de `Mecanicas a balancear.md` §48 vista desde la política. Decisión del autor (2026-10-25): fase 7, con EE-7 y C1b (bots de verdad).",
       "opciones": [
         {
           "texto": "Esperar a los bots de la fase 7 (como decidió el autor en EE-7).",
@@ -132,11 +132,11 @@
     },
     {
       "id": "P7",
-      "pregunta": "La caravana adjunta a una columna cuya plaza de origen cae en ruinas: ¿qué le pasa?",
-      "contexto": "Comercio §10: las adjuntas «siguen su propio camino» al caer su origen. En el batch político el Intendente llevaba una adjunta cuando su plaza se arruinó: la caravana sigue enganchada para siempre, no se puede aparcar (`caravana.plaza_ajena`) ni mandar a ningún origen. El invariante de ruina del batch militar la contaba como «flota que queda» y se corrigió para seguir la regla. El núcleo hace lo que dice Mechanics.",
+      "pregunta": "[Cerrada el 2026-10-25] La caravana adjunta a una columna cuya plaza de origen cae en ruinas: ¿qué le pasa?",
+      "contexto": "Comercio §10: las adjuntas «siguen su propio camino» al caer su origen. En el batch político el Intendente llevaba una adjunta cuando su plaza se arruinó: la caravana sigue enganchada para siempre, no se puede aparcar (`caravana.plaza_ajena`) ni mandar a ningún origen. El invariante de ruina del batch militar la contaba como «flota que queda» y se corrigió para seguir la regla. El núcleo hace lo que dice Mechanics. Decisión del autor (2026-10-25): **se pierde con su plaza** en el instante de la ruina, con su carga; la carga de la columna que iba en sus carros sigue a los carros (M10) y se pierde con ellos. Aplicada (Comercio_Caravanas §10, Movimiento_Ejercitos §9, Doc 3.13), con `ejercito.caravanas_perdidas` (`ruina`).",
       "opciones": [
         {
-          "texto": "Se pierde al soltarla o al entrar en una plaza (no tiene origen al que volver).",
+          "texto": "Se pierde con su plaza (no tiene origen al que volver).",
           "recomendada": true,
           "efecto": "Regla nueva pequeña en Comercio §10."
         },
@@ -154,8 +154,8 @@
     },
     {
       "id": "P8",
-      "pregunta": "La refundación de una Facción pequeña tarda: ¿se deja?",
-      "contexto": "Un disidente solo en un campamento tarda más de un día en juntar el fondo (64 madera, 8 piedra, 40 trigo, 40 oro): su almacén personal (1.000 en total) suele estar lleno de trigo, el oro sale de los bandidos del anillo (21 salidas a cazar con la semilla 42, 432 u de oro), y la madera la frena el cupo diario del campamento (`mercenarios.cupo_agotado`). Con la semilla 42 se refunda 1 Facción y con la 7, 3 (tiempo mediano sin plazas 1 día); otras las absorbe antes una ambiciosa (7 anexiones).",
+      "pregunta": "[Cerrada el 2026-10-25] La refundación de una Facción pequeña tarda: ¿se deja?",
+      "contexto": "Un disidente solo en un campamento tarda más de un día en juntar el fondo (64 madera, 8 piedra, 40 trigo, 40 oro): su almacén personal (1.000 en total) suele estar lleno de trigo, el oro sale de los bandidos del anillo (21 salidas a cazar con la semilla 42, 432 u de oro), y la madera la frena el cupo diario del campamento (`mercenarios.cupo_agotado`). Con la semilla 42 se refunda 1 Facción y con la 7, 3 (tiempo mediano sin plazas 1 día); otras las absorbe antes una ambiciosa (7 anexiones). Decisión del autor (2026-10-25): es cosa de bots, fase 7; sin cambios.",
       "opciones": [
         {
           "texto": "Dejarlo: refundar debe costar.",
@@ -171,8 +171,8 @@
     },
     {
       "id": "P9",
-      "pregunta": "¿Pasan los batches militar y de comercio a las órdenes de jugador para la ciudadanía y la residencia (decisión 9 del plan)?",
-      "contexto": "El batch político ya lo hace (`CrearFaccion`, `SolicitarIngreso`, `ResponderSolicitud`, `CambiarResidencia`). `batch militar` sigue con `FijarFaccionDeHeroe`/`FijarResidencia` al nacer (y las alianzas por parejas con las órdenes reales desde 5D) para que sus cifras sigan comparables: hoy da la misma huella que antes de 5I (6605fff2…).",
+      "pregunta": "[Cerrada el 2026-10-25] ¿Pasan los batches militar y de comercio a las órdenes de jugador para la ciudadanía y la residencia (decisión 9 del plan)?",
+      "contexto": "El batch político ya lo hace (`CrearFaccion`, `SolicitarIngreso`, `ResponderSolicitud`, `CambiarResidencia`). `batch militar` sigue con `FijarFaccionDeHeroe`/`FijarResidencia` al nacer (y las alianzas por parejas con las órdenes reales desde 5D) para que sus cifras sigan comparables: hoy da la misma huella que antes de 5I (6605fff2…). Decisión del autor (2026-10-25): siguen con el andamiaje; sin cambios.",
       "opciones": [
         {
           "texto": "Dejar el militar y el de comercio como están: el político ya mide la política con órdenes reales.",
@@ -183,6 +183,23 @@
           "texto": "Pasarlos a las órdenes reales.",
           "recomendada": false,
           "efecto": "Cambian sus huellas; las cifras de juego, poco (la residencia nace con cooldown)."
+        }
+      ]
+    },
+    {
+      "id": "P10",
+      "pregunta": "[Cerrada el 2026-10-25] La reputación se desvía una millonésima de punto al reanclar su ritmo fuera de un minuto entero: ¿se deja?",
+      "contexto": "La cita del umbral bajo reancla el ritmo en un instante que no es un minuto entero y el valor se desvía una millonésima de punto; el invariante `inv_reputacion` tolera 10 millonésimas. Sin efecto de juego. Decisión del autor (2026-10-25): se deja.",
+      "opciones": [
+        {
+          "texto": "Dejarlo y tolerarlo en el invariante.",
+          "recomendada": true,
+          "efecto": "Sin cambios."
+        },
+        {
+          "texto": "Reanclar solo en minutos enteros.",
+          "recomendada": false,
+          "efecto": "Cambia la hora de la cita del umbral."
         }
       ]
     }

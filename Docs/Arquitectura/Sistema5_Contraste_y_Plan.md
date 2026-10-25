@@ -903,6 +903,42 @@ Hecha sobre `12b1f21` (5H, foto `BAN35`), rama `tanda-5i`. Sin cambio de foto, d
 2. **La caravana adjunta de una plaza arruinada** queda enganchada para siempre (P7).
 3. **Los batches militar y de comercio** siguen con `FijarFaccionDeHeroe`/`FijarResidencia` al nacer, para no romper su comparación (P9).
 
+## Calibración del batch político (2026-10-25)
+
+Decisiones del autor sobre P1-P10 de `crates/batch/decisiones/politica.json` (todas cerradas). Sin cambio de foto (`BAN35`): ninguna toca el estado ni el contrato.
+
+- **P1, la distancia a la capital (cambio de cifra).** `escalaDistancia` 80 u → **300 u** (`asentamiento::mantenimiento`, valor vigente sobre el bloque de TypeScript, que sigue diciendo 400); la fórmula lineal no cambia: ×2 a 300 u, ×3 a 600 u, ×4,3 a 1.000 u. Un reino sostiene media región alrededor de su capital y sigue limitado más allá. Mechanics (`Economia_Construccion.md` §10.1 y §15), canon (Doc 1.0a y 4.5) y `Mecanicas a balancear.md` §48. Pruebas: `mantenimiento::pruebas::la_escala_de_distancia_vigente_es_300_media_region` y `el_coste_escala_con_edificios_y_distancia...` (×2 a 300 u, ×1,2667 a 80 u); `tests/politica.rs::la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana` reescrita: la plaza a 1.345 u paga más madera que sin el factor y sigue en pie (con 80 u caía en ruinas en un día).
+- **P2, los títulos (cambio).** `TITULOS.margenAspirante` = 0,05 (bloque de `Diplomacia_Facciones.md` §7; canon 2.9): `politica::titulos::calcular` recibe los títulos guardados y el margen; la poseedora conserva un título si la mejor no la supera en un 5 % (en la medida principal; en la Facción más grande, a igual número de plazas, en la población). El Gran Rey no lleva margen. Sin estado nuevo. Prueba: `titulos::pruebas::la_aspirante_tiene_que_superar_a_la_poseedora_en_un_cinco_por_ciento` y la cifra en `datos::pruebas`.
+- **P3** (Gran Fundición inalcanzable en 30 días): se deja; fase 7, batches de más semanas.
+- **P4, el cupo de nivel 2 (cambio de cifra).** `CUPO_NIVEL_ASENTAMIENTO.maxNivel2` = [1,1,2,2,3,3,3,4,4,5] (dos tercios de `CAP_FUNDACION_POR_NIVEL`); `maxNivel3` igual. Mechanics (Dip §3.5) y canon (Doc 2.2.1). Prueba: `politica::datos::pruebas::las_cifras_son_las_del_documento`.
+- **P5** (nobleza con residentes reales): se acepta.
+- **P6** (reputación que no sube): fase 7, con EE-7 y C1b.
+- **P7, la adjunta de una plaza arruinada (cambio).** `comercio::ruina::cerrar_dependientes` da `Pierde` a la adjunta cuyo origen cae en ruinas (en la conquista sigue con su columna); el núcleo (`Nucleo::perder_caravana_de_ruina`) la saca de la columna con `perder_caravana` —la carga sigue a los carros, M10: lo que la columna ya no puede llevar sin ellos se pierde— y la columna lo oye con `ejercito.caravanas_perdidas` `{ caravanas: 1, carros, carga, ruina }` (código que ya existía; `ruina` es dato nuevo). El invariante de ruina de `batch militar`/`politica` vuelve a contar las adjuntas. Comercio §10, Movimiento §9, Doc 3.13. Pruebas: `ruina::pruebas::las_de_fundacion_siguen_su_propio_camino_y_la_adjunta_solo_cae_con_la_ruina_de_su_origen` y `tests/caravanas.rs::la_caravana_adjunta_cuya_plaza_de_origen_cae_en_ruinas_se_pierde_con_ella_y_con_lo_que_la_columna_llevaba_en_sus_carros` (falla sin el cambio).
+- **P8** (refundación en solitario lenta): bots, fase 7. **P9** (batches militar y comercio): siguen con el andamiaje. **P10** (millonésima de la reputación): se deja. Las de fase 7, en la fila «Batch (5I, calibración)» de `Mecanicas a desarrollar.md`.
+
+**Medición** (release, semilla 42, 30 días; antes = `e06d4e7`, después = las cuatro a la vez):
+
+| Medida (semilla 42, 30 días) | Antes (80 u, sin margen, cupo viejo) | Después |
+|---|---|---|
+| Político: plazas vivas / ruinas (lejos de su capital) | 40 / 21 (21) | **54 / 6 (6)**, distancia mediana de las lejanas 1.048 → 1.653 u |
+| Político: multiplicador por distancia mediano (p90, máximo) | ×8,3 (×17,1, ×24,2) | **×1,47** (×7,1, ×7,9) |
+| Político: ascensos insolventes / sin cupo de Facción | 3 / 5.134 | 1 / **1.631** |
+| Político: plazas de nivel 2 | 20 | **48** |
+| Político: títulos que cambian de manos (Ejército / Facción más grande / Poder económico / Gran Rey) | 215 (131 / 48 / 22 / 14) | **42** (11 / 24 / 6 / 1) |
+| Político: caravanas perdidas | 119 | 92 |
+| Comercio: plazas vivas / ascensos insolventes | 141 / 3.319 | **146 / 0** |
+| Comercio: multiplicador mediano (p90) | ×1,78 (×2,30) | ×1,21 (×1,37) |
+| Comercio: plazas de nivel 2 al final | 109 | 142 |
+| Comercio: caravanas perdidas | 5 | 0 |
+| Población | — | sin cambios (mismas métricas; solo el tiempo) |
+| Violaciones e `inv_rechazos` (los tres batches) | 0 | 0 |
+
+**Pruebas.** `cargo test --workspace --no-fail-fast`: **96 resultados, 1.452 pruebas en verde, 14 ignoradas** (+2: el margen de los títulos y la adjunta de la plaza arruinada). Auditoría (`BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`): **45 resultados, 540 pruebas, 0 fallos**. Una pasada: la tanda no toca sesión ni contrato.
+
+**Dudas de la calibración:**
+1. Con el cupo nuevo, `batch comercio` sube a 142 plazas de nivel 2 y sus zonas crecen: los **peajes** pasan del 0,7 % al **22,1 %** de la carga que sale (rojo), las salidas por trueque de 2,70 a 3,23 (rojo) y el trueque en el percentil 90 de 12,8 a 18,0 min. ¿Se mira el peaje con zonas de nivel 2 (Comercio §6) o se deja para la fase 7?
+2. `escalaDistancia` sigue siendo un valor vigente en el código sobre el bloque de TypeScript (400), como antes con 80: ¿se pasa al bloque?
+
 ## Estado de cierre del sistema 5 (2026-10-25)
 
-Hecho: las reglas puras (5A), la Facción, la ciudadanía y la residencia (5B), la experiencia, el nivel, la capital, la derrota y el nombre (5C), las relaciones (5D), los cargos, la matriz de autorización y la puerta (5E), la anexión, la fusión, el traslado, la Liga y los títulos (5F), la refundación, el almacén personal y las caravanas a mano (5G), el contrato y las proyecciones (5H, foto `BAN35`) y el batch político (5I). Las 28 órdenes de política y las 10 de 5G están en el contrato; solo quedan `orden.no_disponible` las cinco del sistema 6. **Pendiente del autor:** las decisiones de calibración P1-P9 del batch político (la distancia a la capital la primera), las dudas abiertas de 5H (forma pública de la Facción ajena, coste por orden con 500 vistas) y de 5I. **Pendiente de otros sistemas:** los Aedas residentes, las épicas y la tecnología de la fusión y el título «Mecenas de los Aedas» (sistema 6); que la columna se deshaga dentro al fundar (fila de 5G-b); el andamiaje de las pruebas antiguas (arriba). Siguiente: el sistema 6.
+Hecho: las reglas puras (5A), la Facción, la ciudadanía y la residencia (5B), la experiencia, el nivel, la capital, la derrota y el nombre (5C), las relaciones (5D), los cargos, la matriz de autorización y la puerta (5E), la anexión, la fusión, el traslado, la Liga y los títulos (5F), la refundación, el almacén personal y las caravanas a mano (5G), el contrato y las proyecciones (5H, foto `BAN35`) y el batch político (5I). Las 28 órdenes de política y las 10 de 5G están en el contrato; solo quedan `orden.no_disponible` las cinco del sistema 6. **Decididas y aplicadas** las de calibración P1-P10 del batch político (sección anterior). **Pendiente del autor:** las dudas de esa calibración, las abiertas de 5H (forma pública de la Facción ajena, coste por orden con 500 vistas) y de 5I. **Pendiente de otros sistemas:** los Aedas residentes, las épicas y la tecnología de la fusión y el título «Mecenas de los Aedas» (sistema 6); que la columna se deshaga dentro al fundar (fila de 5G-b); el andamiaje de las pruebas antiguas (arriba). Siguiente: el sistema 6.

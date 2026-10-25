@@ -547,8 +547,8 @@ fn la_capital_es_la_mas_antigua_hasta_que_el_rey_designa_otra_con_palacio_y_solo
     assert_eq!(e.no("admin", Comando::AnadirEdificio { asentamiento: b, tipo: gf }), rechazos::OBRA_GRAN_FUNDICION, "una sola por Facción");
 }
 
-/// La distancia a la capital sube el mantenimiento (Economia_Construccion §10.1, 5C): una segunda plaza de la Facción a más de 1.000 u de la capital cae en ruinas en un día; sin ese factor
-/// (escala infinita), la misma plaza sigue en pie.
+/// La distancia a la capital sube el mantenimiento (Economia_Construccion §10.1, 5C): una segunda plaza de la Facción a más de 1.000 u de la capital paga más madera que sin ese factor
+/// (escala infinita). Con la escala de 300 u (P1, 2026-10-25) la plaza a 1.345 u (×5,5) sigue en pie; con la de 80 u de antes (×17,8) caía en ruinas en un día.
 #[test]
 fn la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana() {
     let m = con_mundo!();
@@ -565,10 +565,12 @@ fn la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana() {
         let d = e.n.estado().asentamientos[&a].posicion.dist(e.n.estado().asentamientos[&b].posicion);
         assert!(d > 1_000_000, "a {d} milésimas");
         e.avanzar(2 * DIA);
-        e.n.estado().asentamientos.contains_key(&b)
+        e.n.economia(b).map(|x| x.almacen.cantidad(asentamiento::Recurso::Madera))
     };
-    assert!(!lejana(None), "la plaza lejana paga ×(1 + d/80) y cae en ruinas");
-    assert!(lejana(Some(i64::MAX / 4)), "sin el factor de distancia, sigue en pie");
+    let (vigente, sin_factor) = (lejana(None), lejana(Some(i64::MAX / 4)));
+    assert!(vigente.is_some() && sin_factor.is_some(), "con 300 u la plaza lejana sigue en pie (P1)");
+    assert!(vigente < sin_factor, "la plaza lejana paga ×(1 + d/300): {vigente:?} de madera frente a {sin_factor:?}");
+    assert!(lejana(Some(80_000)).is_none(), "con la escala de 80 u de antes caía en ruinas");
 }
 
 /// El nombre: cada plaza nace con uno libre de la lista (`nombreDeCiudadLibre`); quien reside en ella lo cambia (recortado; vacío, sin nombre) y la ficha lo lleva.

@@ -12,7 +12,7 @@
 //!
 //! # Andamiaje de administración (provisional hasta el sistema de héroes)
 //! El oro que lleva el carro de una columna (`DarSuministro`), la residencia y el almacén personal de los sondeos de cupo (`FijarResidencia`,
-//! `DarAlmacenPersonal`, del héroe que va en la columna) y la Facción de nivel 8 (`FijarNivelFaccion`, nivel 8: cap de fundación 6 y cupo de 3 plazas de nivel 2) salen de la administración. Todo el oro
+//! `DarAlmacenPersonal`, del héroe que va en la columna) y la Facción de nivel 8 (`FijarNivelFaccion`, nivel 8: cap de fundación 6 y cupo de 4 plazas de nivel 2) salen de la administración. Todo el oro
 //! inyectado se suma en `oro_inyectado` y se declara en el informe.
 
 use crate::auditoria::{auditar_cola, Violaciones};

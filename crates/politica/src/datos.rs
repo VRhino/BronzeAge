@@ -79,6 +79,8 @@ pub struct Reglas {
     pub caducidad_fusion: Instante,
     /// `TITULOS.cadenciaMinutos` (ms): cada cuánto se recalculan los títulos mientras pasa algo en el mundo (§7, 5F).
     pub cadencia_titulos: Instante,
+    /// `TITULOS.margenAspirante` (ppm): cuánto tiene que superar la aspirante a la poseedora para quitarle un título (§7, P2 del 2026-10-25).
+    pub margen_titulos: i64,
     pub nivel: ReglasNivel,
     pub sigilo: Catalogo,
 }
@@ -104,6 +106,7 @@ impl Reglas {
             caducidad_anexion: dias(&bloque("ANEXION"), "caducidadDias"),
             caducidad_fusion: dias(&bloque("FUSION"), "caducidadDias"),
             cadencia_titulos: (num(&bloque("TITULOS"), "cadenciaMinutos") * MS_POR_MINUTO as f64).round() as Instante,
+            margen_titulos: ppm(num(&bloque("TITULOS"), "margenAspirante")),
             nivel: ReglasNivel {
                 nivel_maximo: num(&nivel, "nivelMaximo") as u32,
                 umbrales: nivel["xpParaNivel"].as_array().expect("xpParaNivel").iter().map(|x| mil(x.as_f64().expect("umbral"))).collect(),
@@ -143,7 +146,7 @@ mod pruebas {
         let r = Reglas::cargar();
         assert_eq!((r.cooldown_creacion, r.cooldown_residencia, r.cooldown_capital), (7 * DIA, 3 * DIA, 14 * DIA));
         assert_eq!((r.caducidad_relacion, r.caducidad_anexion, r.caducidad_fusion), (3 * DIA, 3 * DIA, 3 * DIA));
-        assert_eq!(r.cadencia_titulos, 10 * MS_POR_MINUTO);
+        assert_eq!((r.cadencia_titulos, r.margen_titulos), (10 * MS_POR_MINUTO, 50_000), "P2: la aspirante supera a la poseedora en un 5 %");
         assert_eq!(r.puerta_por_defecto, Grupos::de([Grupo::Neutrales, Grupo::Enemigos]), "Q1: cerrada a neutrales y enemigos");
         let n = &r.nivel;
         assert_eq!(n.nivel_maximo, 10);
@@ -154,6 +157,8 @@ mod pruebas {
         );
         assert_eq!((n.nivel_sin_xp_bandidos, n.ratio_combate_digno), (5, 500_000));
         assert_eq!(n.cap_fundacion, vec![1, 2, 3, 3, 4, 5, 5, 6, 6, 7]);
+        assert_eq!(n.cupo_nivel2, vec![1, 1, 2, 2, 3, 3, 3, 4, 4, 5], "P4: dos tercios de las plazas");
+        assert_eq!(n.cupo_nivel3, vec![0, 0, 1, 1, 1, 2, 2, 2, 2, 3]);
     }
 
     #[test]

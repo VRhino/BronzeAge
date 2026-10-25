@@ -21,8 +21,8 @@ pub struct ReglasMantenimiento {
     pub peso_vivienda: i64,
     pub peso_pieza_gratuita: i64,
     pub piezas_gratuitas: Vec<Tipo>,
-    /// Distancia a la capital (en milésimas de unidad de mapa) que duplica el coste. **80 unidades**, no las 400 del bloque de
-    /// TypeScript (Economia_Construccion §15, calibración de distancias).
+    /// Distancia a la capital (en milésimas de unidad de mapa) que duplica el coste. **300 unidades** (media región), no las 400 del bloque de
+    /// TypeScript ni las 80 de la calibración de distancias (Economia_Construccion §15; calibración del batch político P1, 2026-10-25).
     pub escala_distancia: Mil,
     pub degradacion_por_deficit_total: Mil,
     pub regeneracion_si_pago_completo: Mil,
@@ -44,8 +44,8 @@ impl ReglasMantenimiento {
             peso_vivienda: ppm(g("pesoVivienda")),
             peso_pieza_gratuita: ppm(g("pesoPiezaGratuita")),
             piezas_gratuitas: b["piezasGratuitas"].as_array().expect("piezasGratuitas").iter().filter_map(|x| Tipo::desde_nombre(x.as_str()?)).collect(),
-            // Vigente (Economia_Construccion §15): el bloque dice 400, la calibración de distancias dice 80.
-            escala_distancia: 80_000,
+            // Vigente (Economia_Construccion §15): el bloque dice 400; la calibración del batch político (P1, 2026-10-25), 300.
+            escala_distancia: 300_000,
             degradacion_por_deficit_total: mil(g("degradacionPorDeficitTotal")),
             regeneracion_si_pago_completo: mil(g("regeneracionSiPagoCompleto")),
             gracia_minutos: g("graciaMinutos") as i64,
@@ -194,8 +194,9 @@ mod pruebas {
         // 4 normales + 2 viviendas (=1) = 5 edificios; 5/50 = 0,1 → ×1,1. Nivel 1: solo madera 1,5 × 1,1 = 1,65.
         let e = activos(&[Tipo::CentroUrbano, Tipo::Granja, Tipo::Lenera, Tipo::Cantera, Tipo::Vivienda, Tipo::Vivienda]);
         assert_eq!(coste(&r, &e, 0, 1, 0, &vec![]), vec![(Recurso::Madera, 1_650)]);
-        // A 80 unidades de la capital el coste se duplica.
-        assert_eq!(coste(&r, &e, 0, 1, 80_000, &vec![]), vec![(Recurso::Madera, 3_300)]);
+        // A 300 unidades de la capital el coste se duplica; a 80, ×1,2667 (P1).
+        assert_eq!(coste(&r, &e, 0, 1, 300_000, &vec![]), vec![(Recurso::Madera, 3_300)]);
+        assert_eq!(coste(&r, &e, 0, 1, 80_000, &vec![]), vec![(Recurso::Madera, 2_090)]);
         // Piedra desde el nivel 2 (3 base) y oro desde el 3 (2 base).
         let c3 = coste(&r, &e, 0, 3, 0, &vec![]);
         assert_eq!(c3, vec![(Recurso::Madera, 1_650), (Recurso::Piedra, 3_300), (Recurso::Oro, 2_200)]);
@@ -204,7 +205,7 @@ mod pruebas {
         e2.push(Edificio::nuevo(9, Tipo::Granja, Estado::EnCola));
         assert_eq!(coste(&r, &e2, 0, 1, 0, &vec![]), vec![(Recurso::Madera, 1_650)]);
         // El upkeep de recintos se suma sin escala.
-        assert_eq!(coste(&r, &e, 0, 1, 80_000, &vec![(Recurso::Madera, 500)])[0], (Recurso::Madera, 3_800));
+        assert_eq!(coste(&r, &e, 0, 1, 300_000, &vec![(Recurso::Madera, 500)])[0], (Recurso::Madera, 3_800));
     }
 
     #[test]
@@ -224,8 +225,8 @@ mod pruebas {
     }
 
     #[test]
-    fn la_escala_de_distancia_vigente_es_80_no_400() {
-        assert_eq!(reglas().escala_distancia, 80_000);
+    fn la_escala_de_distancia_vigente_es_300_media_region() {
+        assert_eq!(reglas().escala_distancia, 300_000);
     }
 
     #[test]

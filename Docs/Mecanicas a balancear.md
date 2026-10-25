@@ -173,11 +173,32 @@ Desde 5C el mantenimiento de una plaza sube con su distancia a la capital de su 
 | **Raíz `1 + √(d/80)`** (recomendada) | 57 / 4 | ×1,95 (×4,5) | 24 | 141 / 664 | ×1,88 (×2,15) |
 | Lineal 200 u | 57 / 3 | ×1,34 (×5,7) | 26 | 145 / 0 | ×1,31 (×1,56) |
 
-La raíz deja igual la expansión cercana (×2 a 80 u) y quita la ruina automática de las uniones y conquistas lejanas (×4,5 a 1.000 u). **Decide el autor.**
+La raíz deja igual la expansión cercana (×2 a 80 u) y quita la ruina automática de las uniones y conquistas lejanas (×4,5 a 1.000 u).
+
+**Decidido por el autor el 2026-10-25 (P1) e implementado ese día:** la fórmula lineal se queda y la escala pasa de 80 u a **300 u** (`1 + d/300`: ×2 a 300 u, ×3 a 600 u, ×4,3 a 1.000 u): un reino debe poder sostener **media región** alrededor de su capital y seguir limitado más allá. Regla en `Economia_Construccion.md` §10.1 y §15, Doc 1.0a y 4.5. **Re-medido el 2026-10-25** (semilla 42, 30 días, con P2, P4 y P7 aplicadas a la vez; las cifras de arriba quedan **sustituidas**):
+
+| Medida (semilla 42, 30 días) | Antes (80 u, sin margen, cupo viejo) | Después |
+|---|---|---|
+| Político: plazas vivas / ruinas (lejos de su capital) | 40 / 21 (21) | **54 / 6 (6)**, distancia mediana de las lejanas 1.048 → 1.653 u |
+| Político: multiplicador por distancia mediano (p90, máximo) | ×8,3 (×17,1, ×24,2) | **×1,47** (×7,1, ×7,9) |
+| Político: ascensos insolventes / sin cupo de Facción | 3 / 5.134 | 1 / **1.631** |
+| Político: plazas de nivel 2 | 20 | **48** |
+| Político: títulos que cambian de manos (Ejército / Facción más grande / Poder económico / Gran Rey) | 215 (131 / 48 / 22 / 14) | **42** (11 / 24 / 6 / 1) |
+| Político: caravanas perdidas | 119 | 92 |
+| Comercio: plazas vivas / ascensos insolventes | 141 / 3.319 | **146 / 0** |
+| Comercio: multiplicador mediano (p90) | ×1,78 (×2,30) | ×1,21 (×1,37) |
+| Comercio: plazas de nivel 2 al final | 109 | 142 |
+| Comercio: caravanas perdidas | 5 | 0 |
+| Población | — | sin cambios (mismas métricas; solo el tiempo) |
+| Violaciones e `inv_rechazos` (los tres batches) | 0 | 0 |
+
+El cupo nuevo (P4) también abre plazas de nivel 2 en `batch comercio` (Facción de nivel 8: 3 → 4); con zonas más grandes los peajes suben del 0,7 % al 22,1 % de la carga que sale y las salidas por trueque de 2,70 a 3,23 (los dos en rojo): ver la duda de la calibración en `Docs/Arquitectura/Sistema5_Contraste_y_Plan.md`.
 
 ## 49. Política: lo que mide el batch político (5I, 2026-10-25)
 
 `batch politica` (60 plazas, 30 días, semilla 42 dos veces con la misma huella y semilla 7; informe en `batch/salida/politica/`, preguntas en `crates/batch/decisiones/politica.json`). Para el autor, además de la distancia (§48, P1): **P2** los títulos cambian de manos 215 veces en 30 días (Ejército más grande 131): ¿un margen para cambiar de manos?; **P3** la Gran Fundición no se alcanza en 30 días (capital de nivel 4); **P4** el cupo de plazas de nivel 2 de una Facción de nivel 3 rechaza 5.134 ascensos; **P5** la nobleza (riesgo R1) aparece en las 18 plazas con Palacio (1.422 nobles, +6,6 % de población, ningún cambio en ruinas ni niveles frente al experimento sin nobleza); **P6** la reputación no sube nunca (mediana 0, mínima −46,5; 38 propuestas de alianza rechazadas por reputación baja: la EE-7 vista desde la política); **P7** la caravana adjunta de una plaza arruinada queda enganchada para siempre; **P8** refundar solo cuesta más de un día (almacén personal lleno, cupo diario de madera del campamento); **P9** si `batch militar` y `batch comercio` pasan a las órdenes reales de ciudadanía y residencia.
+
+**Decidido por el autor el 2026-10-25** (cerradas en `politica.json`): **P1** escala de 300 u (§48); **P2** margen del 5 % para quitar un título (`TITULOS.margenAspirante`, Diplomacia §7): los cambios de manos bajan de 215 a 42; **P3** la Gran Fundición se deja (se medirá con batches de más semanas, fase 7); **P4** `maxNivel2` = [1,1,2,2,3,3,3,4,4,5] (dos tercios de las plazas; Doc 2.2.1): las plazas de nivel 2 del batch político pasan de 20 a 48 y los rechazos por cupo de 5.134 a 1.631; **P5** la nobleza con residentes reales se acepta; **P6** la reputación que no sube va a la fase 7 con EE-7 y C1b; **P7** la caravana adjunta cuya plaza de origen cae en ruinas se pierde con ella y con su carga, y la carga de la columna que iba en sus carros sigue a los carros (M10; Comercio §10); **P8** la refundación en solitario es cosa de los bots de la fase 7; **P9** los batches militar y de comercio siguen con el andamiaje; **P10** el redondeo de una millonésima de la reputación al reanclar se deja. Las de fase 7 tienen su fila en `Mecanicas a desarrollar.md` («Batch (5I, calibración)»).
 
 ## 30. El batch no ejercita la guerra
 

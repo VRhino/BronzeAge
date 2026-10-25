@@ -408,7 +408,7 @@ impl Nucleo {
         }
         for AccionCaravana { caravana, accion, .. } in cierre.caravanas {
             match accion {
-                Accion::Pierde | Accion::Destruye => drop(self.perder_caravana(t, caravana)),
+                Accion::Pierde | Accion::Destruye => self.perder_caravana_de_ruina(t, caravana, plaza),
                 Accion::Regresa => self.regresar_caravana(t, caravana, pid),
                 Accion::Vuelve => self.hacer_volver_caravana(t, caravana),
             }
@@ -454,6 +454,21 @@ impl Nucleo {
         let plazas = if self.estado.asentamientos.contains_key(&origen) { vec![origen] } else { vec![] };
         self.emitir_comercio(t, EventoComercio::CaravanaPerdida { caravana: id }, plazas, &[("carga", total(&c.contenido))]);
         de_la_columna
+    }
+
+    /// Pierde una caravana en la cascada de una plaza. Si iba adjunta a una columna (su origen cayó en ruinas, P7 del 2026-10-25), se pierde con su carga y con lo que
+    /// la columna ya no puede llevar sin sus carros (M10), y la columna lo oye con `ejercito.caravanas_perdidas` (con `ruina`, la plaza arruinada).
+    fn perder_caravana_de_ruina(&mut self, t: Instante, caravana: u64, plaza: u64) {
+        let columna = self.estado.ejercitos.iter().find(|(_, e)| e.caravanas_adjuntas.contains(&caravana)).map(|(&id, _)| id);
+        let Some(c) = self.estado.comercio.caravana(caravana) else { return };
+        let (carros, mut carga) = (c.carros.len() as i64, c.contenido.clone());
+        for (r, n) in self.perder_caravana(t, caravana) {
+            comercio::sumar(&mut carga, r, n);
+        }
+        if let Some(columna) = columna {
+            let datos = vec![("caravanas", 1), ("carros", carros), ("carga", total(&carga)), ("ruina", plaza as i64)];
+            self.evento_de_columna("ejercito.caravanas_perdidas", t, columna, vec![], datos);
+        }
     }
 
     /// Una `preparando` hacia la plaza que cae: la carga vuelve al almacén del origen (topada por su capacidad) y queda `disponible`.

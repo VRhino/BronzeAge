@@ -1709,8 +1709,8 @@ impl Sim<'_> {
         // Una plaza en ruinas no deja nada atrás: ni flota, ni residentes, ni quien esté dentro.
         for &(_, p) in &self.medidas.ruinas {
             let (dentro, reside) = (Ubicacion::Asentamiento(p as u32), Some(Residencia::Asentamiento(p as u32)));
-            // Las adjuntas a una columna (y las de construcción) siguen su camino: Comercio_Caravanas §10.
-            let flota = e.comercio.flota.iter().any(|k| k.origen as u64 == p && !matches!(k.estado, EstadoCaravana::Adjunta) && k.tipo != TipoCaravana::Construccion);
+            // Las de construcción siguen su camino; las adjuntas a una columna se pierden con su plaza (Comercio_Caravanas §10, P7).
+            let flota = e.comercio.flota.iter().any(|k| k.origen as u64 == p && k.tipo != TipoCaravana::Construccion);
             v.ruina += (e.asentamientos.contains_key(&p) || flota || n.heroes().any(|h| h.heroe.presencia.ubicacion == dentro || h.heroe.residencia == reside)) as u64;
         }
         // Las murallas dañadas por una conquista que ya se repararon.

@@ -633,6 +633,35 @@ fn la_ruina_del_destino_hace_dar_la_vuelta_a_la_caravana_y_la_del_origen_la_pier
     assert_eq!(hechos(&e.n, "comercio.caravana_sale").len(), 2);
 }
 
+#[test]
+fn la_caravana_adjunta_cuya_plaza_de_origen_cae_en_ruinas_se_pierde_con_ella_y_con_lo_que_la_columna_llevaba_en_sus_carros() {
+    // P7 (calibración del batch político, 2026-10-25): antes la adjunta seguía enganchada para siempre, sin origen al que volver ni plaza donde soltarse.
+    let m = con_mundo!();
+    let ruina = hora_de_la_ruina(m);
+    let (mut e, ca, _) = escenario_ruina(m);
+    let a = e.a;
+    e.avanzar_hasta(ruina - 40 * MIN);
+    let col = {
+        let p = pos(&e.n, a);
+        let t = e.n.ahora();
+        e.n.crear_ejercito(t, "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 100_000).unwrap()
+    };
+    let sola = e.n.capacidad_de_carga(col).unwrap();
+    e.ok("admin", Comando::AdjuntarCaravana { caravana: ca, ejercito: col });
+    // La columna carga 7 de trigo más de lo que cabe en sus propios carros: van en los de la caravana (M10).
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Trigo, cantidad: sola + 7_000 });
+    e.avanzar_hasta(ruina);
+    assert!(e.n.economia(a).is_none(), "la plaza cayó en ruinas");
+    assert!(e.n.caravana(ca).is_none(), "la adjunta se pierde con su plaza");
+    let ej = e.n.ejercito(col).unwrap();
+    assert!(ej.caravanas_adjuntas.is_empty());
+    assert_eq!(ej.columna.carga.get(&Trigo), Some(&sola), "la carga sigue a los carros: la columna se queda con lo que le cabe");
+    assert_eq!(hechos(&e.n, "comercio.caravana_perdida").iter().map(|h| dato(h, "caravana")).collect::<Vec<_>>(), vec![ca as i64]);
+    let h = hechos(&e.n, "ejercito.caravanas_perdidas");
+    assert_eq!(h.len(), 1);
+    assert_eq!((h[0].0, dato(&h[0], "caravanas"), dato(&h[0], "carros"), dato(&h[0], "carga"), dato(&h[0], "ruina")), (ruina, 1, 2, 7_000, a as i64));
+}
+
 /// Una tercera plaza de F1 (con Mercado construido) cerca del campamento 1.
 fn tercera_plaza(e: &mut Escenario, m: &M) -> u64 {
     e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });

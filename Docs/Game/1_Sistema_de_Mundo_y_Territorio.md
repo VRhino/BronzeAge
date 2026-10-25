@@ -16,7 +16,7 @@ La jerarquía territorial de la ficción, en unidades de mapa:
 
 **Cuántas provincias caben.** El mundo mide 2.667×2.000 y es mayoritariamente tierra firme en el mundo regional (en torno a dos tercios, el resto agua). El número de plazas no es una meta de diseño: lo fija la separación mínima, no una cuota.
 
-**Un reino cómodo mide ~5 provincias**: sale de `MANTENIMIENTO.escalaDistancia` = 80, la distancia a la capital a la que el coste de mantenimiento se duplica (×2; sigue creciendo, sin tope, Doc 4.5).
+**Un reino cómodo mide media región** (unas 300 u alrededor de su capital): sale de `MANTENIMIENTO.escalaDistancia` = 300, la distancia a la capital a la que el coste de mantenimiento se duplica (×2; sigue creciendo, sin tope, Doc 4.5: ×3 a 600 u, ×4,3 a 1.000 u). Decidido por el autor el 2026-10-25 con el batch político (antes 80: las Facciones que se unían o se anexionaban perdían en días las plazas lejanas).
 
 **La sensación de distancia.** La calibración es de densidad, no de escala: el mundo mantiene su tamaño y las plazas se juntan. Con la tropa ligera a 30 unidades por minuto (0,5 por segundo en tiempo real), la plaza vecina está a 1 minuto, el radio de una zona de nivel 2 a 30 s y cruzar el mapa de lado lleva 89 minutos (111 en diagonal). Con el zoom de juego (15 de ancho) una pantalla se cruza en unos 30 s.
 

@@ -71,14 +71,23 @@ pub struct Medida {
     pub mecenas: i64,
 }
 
-/// `calcularTitulos`. `medidas` en el orden de las Facciones; `ligas` de `liga::ligas`.
-pub fn calcular(medidas: &[Medida], ligas: &[Liga]) -> Vec<Titulo> {
+/// `calcularTitulos`. `medidas` en el orden de las Facciones; `ligas` de `liga::ligas`; `anteriores`, los títulos guardados de la evaluación anterior;
+/// `margen` (ppm), `TITULOS.margenAspirante`: la mejor solo le quita un título a su poseedora si la supera en ese margen (P2, 2026-10-25).
+pub fn calcular(medidas: &[Medida], ligas: &[Liga], anteriores: &[Titulo], margen: i64) -> Vec<Titulo> {
     // El primero con el máximo: `max_by_key` se queda con el último a igualdad, así que se recorre al revés.
     let mejor = |clave: &dyn Fn(&Medida) -> (i64, i64)| medidas.iter().rev().max_by_key(|m| clave(m)).copied();
-    let Some(grande) = mejor(&|m| (m.plazas as i64, m.poblacion)) else { return vec![] };
-    let rica = mejor(&|m| (m.oro, 0)).expect("hay Facciones");
-    let ejercito = mejor(&|m| (m.soldados, 0)).expect("hay Facciones");
-    let mecenas = mejor(&|m| (m.mecenas, 0)).expect("hay Facciones");
+    // La poseedora conserva el título si la mejor no la supera en el margen (en la medida principal; a igualdad de ella, en la segunda).
+    let supera = |a: i64, p: i64| a as i128 * 1_000_000 > p as i128 * (1_000_000 + margen as i128);
+    let con_margen = |id: TituloId, clave: &dyn Fn(&Medida) -> (i64, i64)| -> Option<Medida> {
+        let m = mejor(clave)?;
+        let Some(p) = anteriores.iter().find(|t| t.id == id).and_then(|t| medidas.iter().find(|x| x.faccion == t.poseedor)) else { return Some(m) };
+        let ((a1, a2), (p1, p2)) = (clave(&m), clave(p));
+        Some(if p.faccion == m.faccion || supera(a1, p1) || (a1 == p1 && supera(a2, p2)) { m } else { *p })
+    };
+    let Some(grande) = con_margen(TituloId::FaccionMasGrande, &|m| (m.plazas as i64, m.poblacion)) else { return vec![] };
+    let rica = con_margen(TituloId::MayorPoderEconomico, &|m| (m.oro, 0)).expect("hay Facciones");
+    let ejercito = con_margen(TituloId::MayorEjercito, &|m| (m.soldados, 0)).expect("hay Facciones");
+    let mecenas = con_margen(TituloId::MecenasAedas, &|m| (m.mecenas, 0)).expect("hay Facciones");
     let mut t = vec![
         Titulo { id: TituloId::FaccionMasGrande, poseedor: grande.faccion, valor: grande.plazas as i64 },
         Titulo { id: TituloId::MayorPoderEconomico, poseedor: rica.faccion, valor: rica.oro },
@@ -143,7 +152,7 @@ mod pruebas {
             Medida { faccion: 2, plazas: 2, poblacion: 30, oro: 5, soldados: 9, mecenas: 0 },
         ];
         let liga = Liga { miembros: vec![1, 2], tiene_vasallaje: true, gran_rey: Some(2) };
-        let t = calcular(&m, &[liga]);
+        let t = calcular(&m, &[liga], &[], 50_000);
         assert_eq!(
             t,
             vec![
@@ -154,7 +163,29 @@ mod pruebas {
             ],
             "a igual oro, la primera; sin épicas no hay Mecenas"
         );
-        assert!(calcular(&[], &[]).is_empty());
-        assert_eq!(calcular(&[Medida { faccion: 3, mecenas: 12, ..Default::default() }], &[]).last().unwrap().id, TituloId::MecenasAedas);
+        assert!(calcular(&[], &[], &[], 50_000).is_empty());
+        assert_eq!(calcular(&[Medida { faccion: 3, mecenas: 12, ..Default::default() }], &[], &[], 50_000).last().unwrap().id, TituloId::MecenasAedas);
+    }
+    #[test]
+    fn la_aspirante_tiene_que_superar_a_la_poseedora_en_un_cinco_por_ciento() {
+        // P2 (2026-10-25): la poseedora de la evaluación anterior conserva el título mientras la mejor no la supere en un 5 %.
+        let medida = |faccion, plazas, poblacion, soldados| Medida { faccion, plazas, poblacion, soldados, ..Default::default() };
+        let antes = calcular(&[medida(1, 20, 100, 100), medida(2, 10, 50, 50)], &[], &[], 50_000);
+        let poseedor = |t: &[Titulo], id| t.iter().find(|x| x.id == id).map(|x| (x.poseedor, x.valor));
+        assert_eq!(poseedor(&antes, TituloId::MayorEjercito), Some((1, 100)));
+        // 105 soldados no superan a 100 en un 5 %: se queda la poseedora, con su valor; con 106, cambia de manos.
+        let ahora = calcular(&[medida(1, 20, 100, 100), medida(2, 21, 50, 105)], &[], &antes, 50_000);
+        assert_eq!(poseedor(&ahora, TituloId::MayorEjercito), Some((1, 100)));
+        assert_eq!(poseedor(&ahora, TituloId::FaccionMasGrande), Some((1, 20)), "21 asentamientos no superan a 20 en un 5 %");
+        let ahora = calcular(&[medida(1, 20, 100, 100), medida(2, 22, 50, 106)], &[], &antes, 50_000);
+        assert_eq!(poseedor(&ahora, TituloId::MayorEjercito), Some((2, 106)));
+        assert_eq!(poseedor(&ahora, TituloId::FaccionMasGrande), Some((2, 22)), "22 sí");
+        // A igual número de asentamientos se mira la población con el mismo margen.
+        let igual = |poblacion| calcular(&[medida(1, 20, 100, 0), medida(2, 20, poblacion, 0)], &[], &antes, 50_000);
+        assert_eq!(poseedor(&igual(105), TituloId::FaccionMasGrande), Some((1, 20)));
+        assert_eq!(poseedor(&igual(106), TituloId::FaccionMasGrande), Some((2, 20)));
+        // Sin margen gana la mejor, como antes; si la poseedora ya no existe, también.
+        assert_eq!(poseedor(&calcular(&[medida(1, 20, 100, 100), medida(2, 21, 50, 101)], &[], &antes, 0), TituloId::MayorEjercito), Some((2, 101)));
+        assert_eq!(poseedor(&calcular(&[medida(2, 10, 50, 50), medida(3, 10, 50, 51)], &[], &antes, 50_000), TituloId::MayorEjercito), Some((3, 51)));
     }
 }

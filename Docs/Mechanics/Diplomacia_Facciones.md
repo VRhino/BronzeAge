@@ -116,7 +116,7 @@ calcularNivelFaccion = 1 + (cuántos umbrales de NIVEL_FACCION.xpParaNivel han a
 `edificioCompletado` por edificio, `conquista` por plaza conquistada, `ascensoPorNivel` × el nivel alcanzado, `fundacion` por plaza fundada que no sea la primera de la Facción, `truequeCumplido` a cada
 lado de un trueque entre Facciones distintas, y `bandidos` por campamento destruido (no por héroe) dividido por el nivel de la Facción y 0 desde `nivelSinXpBandidos`.
 - **Cap de fundación** (`calcularCapFundacion(nivel)`) = `CAP_FUNDACION_POR_NIVEL[min(10, nivel) − 1]`.
-- **Cupo de asentamientos en nivel 2 o 3** (`calcularCupoNivel(nivel, objetivo)`) = `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3[min(10, nivel) − 1]`.
+- **Cupo de asentamientos en nivel 2 o 3** (`calcularCupoNivel(nivel, objetivo)`) = `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3[min(10, nivel) − 1]`. **`maxNivel2` = `[1,1,2,2,3,3,3,4,4,5]`** (decisión del autor del 2026-10-25, calibración del batch político P4: unos dos tercios de las plazas que la Facción puede fundar, `CAP_FUNDACION_POR_NIVEL`; antes `[1,1,1,1,2,2,2,3,3,3]`); `maxNivel3` no cambia.
 
 > **Implementado en Rust (2026-10-24, 5A, reglas puras):** `crates/politica::nivel`. La experiencia se guarda en **milésimas** (2,5 no cabe en un entero): `xp_de(Hecho)` da la de cada
 > hecho (bandidos: `1000 / nivel`, redondeado hacia abajo), `nivel(experiencia)` cuenta los umbrales alcanzados con tope `nivelMaximo` y `Facciones::aplicar_experiencia` ignora lo ≤ 0 y devuelve el
@@ -159,7 +159,7 @@ El Rey designa una plaza **propia con Palacio activo** que no sea ya la capital.
 desde `capitalDesignadaEn`; si se perdió, no hay cooldown. Efecto: `capitalDesignadaEn = ahora`; solo esa plaza lleva `capitalDeFaccionId = faccionId` (se quita de las demás). **La capital efectiva**
 (`encontrarCapital`): la designada vigente, o si no, el asentamiento vivo que lleva **más tiempo en la Facción** (5C-1, decisión del autor del 2026-10-24: desde que es suyo, no desde su fundación; a igual instante, el id menor). Conquistar una plaza más antigua que las propias **no cambia la capital**: es del conquistador desde la conquista.
 
-> **Correcciones del autor a 5C (2026-10-24, en Rust):** cada plaza guarda `de_la_faccion_desde` (al fundarla, su fundación; al conquistarla, el instante de la conquista; foto `BAN32`), y es lo que mira `politica::capital::efectiva` (`PlazaDeCapital::desde`). La escala de la distancia a la capital (`escalaDistancia` = 80 u) se calibra en 5I (5C-2, `Docs/Mecanicas a balancear.md`). Prueba: `tests/caravanas.rs::la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada` (la capital de quien conquista sigue siendo la suya).
+> **Correcciones del autor a 5C (2026-10-24, en Rust):** cada plaza guarda `de_la_faccion_desde` (al fundarla, su fundación; al conquistarla, el instante de la conquista; foto `BAN32`), y es lo que mira `politica::capital::efectiva` (`PlazaDeCapital::desde`). La escala de la distancia a la capital (`escalaDistancia`, entonces 80 u) se calibra en 5I (5C-2, `Docs/Mecanicas a balancear.md`): **300 u** desde el 2026-10-25 (P1, `Economia_Construccion.md` §10.1). Prueba: `tests/caravanas.rs::la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada` (la capital de quien conquista sigue siendo la suya).
 
 ### 3.8 Sigilo
 
@@ -449,14 +449,14 @@ veta**. El grupo `aedas` lo usa `Tecnologia_Aedas.md`.
   "maxNivel2": [
     1,
     1,
-    1,
-    1,
-    2,
     2,
     2,
     3,
     3,
-    3
+    3,
+    4,
+    4,
+    5
   ],
   "maxNivel3": [
     0,
@@ -640,10 +640,17 @@ En cada caso desempata el **orden de la lista de Facciones** (el sort es estable
 cuando pasa algo en el mundo (una orden aceptada o un evento de la cola que no sea el propio plazo) y no hay otro pendiente: un mundo sin nada que se mueva no deja nada en la cola. Al vencer se
 recalculan todos con lo que hay en ese instante y se narran los cambios contra los guardados (estado de la foto). La cifra es un placeholder.
 
+**Margen del aspirante (decisión del autor del 2026-10-25, calibración del batch político P2):** un título con poseedor solo cambia de manos si la aspirante (la mejor de la medida) **supera a la
+poseedora en un `TITULOS.margenAspirante` (5 %)**: `aspirante > poseedora × (1 + margen)` en la medida principal (asentamientos, oro, soldados, valor de mecenazgo); en la Facción más grande, a
+igual número de asentamientos se compara la población con el mismo margen. Si no la supera, la poseedora lo conserva con su propio valor. La poseedora es la de la evaluación anterior (los títulos
+guardados); si ya no existe, o el título nace, gana la mejor sin margen. El Gran Rey no lleva margen (lo da la Liga). Sin estado nuevo: se compara con lo guardado. Prueba:
+`politica::titulos::pruebas::la_aspirante_tiene_que_superar_a_la_poseedora_en_un_cinco_por_ciento`.
+
 <!-- parametros:TITULOS -->
 ```json
 {
-  "cadenciaMinutos": 10
+  "cadenciaMinutos": 10,
+  "margenAspirante": 0.05
 }
 ```
 <!-- /parametros -->

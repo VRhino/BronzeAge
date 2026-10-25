@@ -4,8 +4,8 @@
 //!
 //! - **Ruina de `R`**: sus trueques `activo` o `propuesto` pasan a `expirado` **sin penalizar a nadie**; las caravanas que **salían de `R`**
 //!   se pierden; las que **iban hacia `R`** vuelven (la `preparando` a `disponible` con su carga; la `en_transito` regresa por un plan nuevo
-//!   o se pierde si no hay camino por tierra ni origen); la **aparcada en `R`** se destruye con todo, sin captura. Las `construccion` y las
-//!   `adjunta` siguen su propio camino.
+//!   o se pierde si no hay camino por tierra ni origen); la **aparcada en `R`** se destruye con todo, sin captura. Las `construccion` siguen su
+//!   propio camino; las `adjunta` también, salvo las que **salían de `R`**, que se pierden con su plaza y su carga (P7, 2026-10-25).
 //! - **Conquista de `R`** (decidida el 2026-10-18): la **flota** pasa al conquistador con su zona (no se pierde ninguna), los trueques con la
 //!   plaza se anulan igual que en la ruina y las caravanas que iban hacia ella **regresan con su carga**. La **aparcada en `R`** se destruye
 //!   igual que en la ruina (decidido el 2026-10-19: el tren de suministros es objetivo, Doc 3.13.7 y 5.13.2).
@@ -85,8 +85,15 @@ pub fn cerrar_dependientes(
     hay_camino_a_origen: &dyn Fn(&Caravana) -> bool,
 ) -> CierrePlaza {
     let mut cierre = CierrePlaza { trueques: cancelar_trueques(plaza, acuerdos), ..Default::default() };
-    for c in caravanas.iter().filter(|c| c.tipo != TipoCaravana::Construccion && c.estado != EstadoCaravana::Adjunta) {
+    for c in caravanas.iter().filter(|c| c.tipo != TipoCaravana::Construccion) {
         let mut accion = |accion| cierre.caravanas.push(AccionCaravana { caravana: c.id, accion, escolta: c.escolta.clone() });
+        // La adjunta solo cae con la ruina de su origen: se pierde con su plaza (P7, decisión del autor del 2026-10-25); lo demás no la toca.
+        if c.estado == EstadoCaravana::Adjunta {
+            if c.origen == plaza && motivo == Motivo::Ruina {
+                accion(Accion::Pierde);
+            }
+            continue;
+        }
         if c.origen == plaza {
             match motivo {
                 Motivo::Ruina => accion(Accion::Pierde),
@@ -202,12 +209,15 @@ mod pruebas {
     }
 
     #[test]
-    fn las_de_fundacion_y_las_adjuntas_siguen_su_propio_camino() {
+    fn las_de_fundacion_siguen_su_propio_camino_y_la_adjunta_solo_cae_con_la_ruina_de_su_origen() {
         let mut fundacion = car(1, 5, EstadoCaravana::EnTransito, Some(5));
         fundacion.tipo = TipoCaravana::Construccion;
         let adjunta = car(2, 5, EstadoCaravana::Adjunta, None);
-        let c = cerrar(Motivo::Ruina, 5, &mut [], &[fundacion, adjunta]);
-        assert!(c.caravanas.is_empty());
+        let ajena = car(3, 6, EstadoCaravana::Adjunta, None);
+        let c = cerrar(Motivo::Ruina, 5, &mut [], &[fundacion.clone(), adjunta.clone(), ajena.clone()]);
+        assert_eq!(c.caravanas.iter().map(|a| (a.caravana, a.accion)).collect::<Vec<_>>(), vec![(2, Accion::Pierde)], "P7: la adjunta de la plaza arruinada se pierde con ella");
+        let c = cerrar(Motivo::Conquista, 5, &mut [], &[fundacion, adjunta, ajena]);
+        assert!(c.caravanas.is_empty() && c.flota_traspasada.is_empty(), "en la conquista la adjunta sigue con su columna");
     }
 
     #[test]

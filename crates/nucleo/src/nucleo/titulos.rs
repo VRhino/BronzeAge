@@ -8,7 +8,8 @@
 //! # Lo que se mide
 //! De cada Facción como entidad, en el orden de sus ids (desempata el primero, como el orden de la lista del TypeScript): sus plazas y la población total de ellas, el oro de sus almacenes en
 //! unidades, los soldados de todas las escuadras de todos sus ciudadanos (estén donde estén) y, hasta el sistema 6, ningún mecenazgo (el título «Mecenas de los Aedas» no nace). La Liga y el Gran
-//! Rey salen de las relaciones activas (`politica::liga`), bajo demanda: no se guardan. Se guardan los títulos de la última evaluación (`Politica::titulos`, foto), con los que se narra la siguiente
+//! Rey salen de las relaciones activas (`politica::liga`), bajo demanda: no se guardan. Se guardan los títulos de la última evaluación (`Politica::titulos`, foto), con los que se calcula
+//! (la aspirante solo le quita un título a la poseedora si la supera en `TITULOS.margenAspirante`, P2) y se narra la siguiente
 //! (`titulo.nace`, `titulo.cambia_manos`, hechos públicos que la crónica canta; nada cuando un título desaparece). Un título que cambia de poseedor o de valor, nace o desaparece se toca en el
 //! registro (`Clase::Titulo`, id = su posición en `TituloId::TODOS`): viaja a la `VISTA` de todos y a `ADMIN`.
 
@@ -67,7 +68,8 @@ impl Nucleo {
     /// Vence el plazo: se recalculan los títulos con lo de ahora y se narran los cambios.
     pub(super) fn recalcular_titulos(&mut self, t: Instante) {
         self.estado.titulos_en = None;
-        let nuevos = politica::titulos::calcular(&self.medidas_de_titulos(), &self.ligas());
+        let margen = self.estado.reglas.economia.politica.margen_titulos;
+        let nuevos = politica::titulos::calcular(&self.medidas_de_titulos(), &self.ligas(), &self.estado.politica.titulos, margen);
         let anteriores = std::mem::replace(&mut self.estado.politica.titulos, nuevos);
         let nuevos = &self.estado.politica.titulos;
         for id in TituloId::TODOS {
