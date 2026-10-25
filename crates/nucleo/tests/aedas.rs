@@ -594,6 +594,7 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     let cobre = e.tec("metalurgia_cobre");
     assert!(e.propias(2).reveladas.contiene(cobre), "revelada a la Facción 2");
     let hito = e.n.estado().reglas.economia.tecnologia.def(cobre).hito.len();
+    let e_reglas = e.n.estado().reglas.economia.tecnologia.clone();
     let w = arrancar_con(e.n).await;
     let tec_de = |x: &Cuerpo| if let Cuerpo::Tecnologias(t) = x { Some(t.clone()) } else { None };
 
@@ -609,6 +610,8 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     assert!(t.contadores.is_empty() && t.logros.is_empty(), "ni contadores en curso ni qué tecnología abre cada logro (Q6)");
     assert_eq!(t.logros_cumplidos.iter().map(|l| (l.contador.as_str(), l.umbral)).collect::<Vec<_>>(), [("plazasEnNivel.2", 1)]);
     assert_eq!(t.cantadas, ["metalurgia_cobre"]);
+    let era = &e_reglas.eras[0];
+    assert_eq!((t.era_minimo_hasta_ms, t.era_plazo_hasta_ms), (Some(era.minimo), Some(era.plazo)), "los dos bordes de la Era I (desde 0): públicos");
     assert_eq!(t.primeros.iter().map(|(k, p)| (k.as_str(), p.faccion_id.as_str())).collect::<Vec<_>>(), [("metalurgia_cobre", "f-1")], "solo las descubridoras ya cantadas");
     let propias: Vec<pb::TecnologiasFaccion> = todo.iter().filter_map(|(_, x)| tec_de(x)).collect();
     assert!(!propias.is_empty() && propias.iter().all(|t| t.faccion_id == "f-2"), "las tecnologías de otra Facción no viajan nunca");

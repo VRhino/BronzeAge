@@ -75,10 +75,12 @@ impl Nucleo {
         entradas
     }
 
-    /// ¿Ninguna plaza del mundo, salvo las que suben a `nivel` en esta misma versión, tenía ya ese nivel?
+    /// ¿Ninguna plaza del mundo, salvo las que suben a `nivel` en esta misma versión, tenía ya ese nivel? Sin recorrer las plazas: las que lo tienen salen del índice por nivel alcanzado, y
+    /// de ellas se descuentan las que suben ahora (las pocas de esta versión).
     fn primera_en_llegar(&self, hechos: &[EventoNucleo], plaza: Option<u64>, nivel: i64) -> bool {
         let suben: BTreeSet<u64> = hechos.iter().filter(|h| h.codigo == "asentamiento.nivel_subio" && h.dato("nivel") == Some(nivel)).filter_map(|h| h.asentamientos.first().copied()).collect();
-        plaza.is_some() && !self.estado.asentamientos.values().any(|a| !suben.contains(&a.id) && i64::from(a.nivel()) >= nivel)
+        let suben_con_el_nivel = suben.iter().filter(|p| self.estado.asentamientos.get(p).is_some_and(|a| i64::from(a.nivel()) >= nivel)).count() as u32;
+        plaza.is_some() && self.plazas_con_alcanzado(nivel as u32) == suben_con_el_nivel
     }
 }
 

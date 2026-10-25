@@ -876,6 +876,10 @@ message EstadoTecnologia {
   // (`HEROE`) solo lleva `era`, `era_desde_ms`, `logros_cumplidos`, `cantadas` y, de `primeros`, las ya cantadas; `contadores` y `logros` (por id de tecnología)
   // solo viajan a `ADMIN` (decisión Q6 del autor).
   repeated LogroCumplido logros_cumplidos = 7;
+  // 6G, con la decisión del autor sobre 6B (cada Era dura un mínimo): desde cuándo puede empezar la siguiente si la vigente cumple todos sus logros
+  // (`era_desde_ms` + el mínimo) y cuándo empieza por plazo aunque no los cumpla. Ausentes en la última Era. Públicos: no dicen si los logros están cumplidos.
+  optional int64 era_minimo_hasta_ms = 8;
+  optional int64 era_plazo_hasta_ms = 9;
 }
 
 message LogroCumplido {

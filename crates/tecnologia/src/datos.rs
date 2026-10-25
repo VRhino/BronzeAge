@@ -147,6 +147,8 @@ pub struct Era {
     pub orden: u32,
     /// `plazoSemanas` en ms: el techo de la Era (TA §3.2).
     pub plazo: Instante,
+    /// `minimoSemanas` en ms: el suelo (decisión del autor, 2026-10-25): con todos sus logros, la Era no pasa antes.
+    pub minimo: Instante,
     /// `TARIFA_ADOPCION[era]`: lo que paga la capital por adoptar una tecnología de esta Era.
     pub tarifa: Costo,
 }
@@ -226,6 +228,7 @@ impl Reglas {
                 nombre: texto(&e, "nombre"),
                 orden: num(&e, "orden") as u32,
                 plazo: (num(&e, "plazoSemanas") * SEMANA as f64).round() as Instante,
+                minimo: (num(&e, "minimoSemanas") * SEMANA as f64).round() as Instante,
                 id,
             })
             .collect();
@@ -388,6 +391,7 @@ mod pruebas {
         assert_eq!(r.catalogo.len(), 26);
         assert_eq!((r.catalogo[0].id.as_str(), r.catalogo[1].id.as_str(), r.catalogo[2].id.as_str()), ("leva_comunal", "hostigamiento_tribal", "metalurgia_cobre"), "orden del documento");
         assert_eq!(r.eras.iter().map(|e| (e.id.as_str(), e.orden, e.plazo)).collect::<Vec<_>>(), vec![("reinos_palaciales", 1, 5 * SEMANA), ("crisis_adaptacion", 2, 6 * SEMANA), ("polis_imperios", 3, 7 * SEMANA)]);
+        assert!(r.eras.iter().all(|e| e.minimo == SEMANA), "cada Era dura al menos una semana");
         assert_eq!(r.eras[0].tarifa, vec![(Recurso::Madera, 200_000), (Recurso::Oro, 100_000)]);
         assert_eq!(r.eras[2].tarifa, vec![(Recurso::LingoteHierro, 30_000), (Recurso::Oro, 600_000)]);
         let a = &r.aedas;

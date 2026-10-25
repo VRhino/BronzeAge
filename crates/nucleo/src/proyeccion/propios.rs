@@ -581,6 +581,9 @@ pub fn estado_tecnologia(n: &Nucleo, quien: Espectador) -> pb::EstadoTecnologia 
         primeros,
         cantadas,
         logros_cumplidos,
+        // Los dos bordes de la Era vigente (decisión del autor sobre 6B): no dicen si sus logros están cumplidos, así que son públicos.
+        era_minimo_hasta_ms: t.fin_del_plazo(r).map(|_| t.era_desde + r.eras[t.era as usize].minimo),
+        era_plazo_hasta_ms: t.fin_del_plazo(r),
     }
 }
 

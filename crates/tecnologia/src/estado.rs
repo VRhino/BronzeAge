@@ -163,14 +163,19 @@ impl EstadoTecnologia {
         (self.era as usize + 1 < r.eras.len()).then(|| self.era_desde + r.eras[self.era as usize].plazo)
     }
 
-    /// TA §3 paso 2: la siguiente Era empieza si se cumplen todos los logros de la vigente o se agota su plazo. **Una sola Era por llamada**, aunque se
-    /// cumplieran las de dos. Si llega por plazo, los logros pendientes de la anterior siguen abiertos.
-    pub fn avanzar_era(&mut self, r: &Reglas, ahora: Instante) -> Option<CambioEra> {
+    /// Cuándo puede pasar la Era vigente: con todos sus logros, al cumplirse su mínimo; si no, al fin del plazo. `None` en la última.
+    pub fn proxima_era_en(&self, r: &Reglas) -> Option<Instante> {
         let fin = self.fin_del_plazo(r)?;
-        let todos = self.todos_los_logros_de_la_era(r);
-        if !todos && ahora < fin {
+        Some(if self.todos_los_logros_de_la_era(r) { self.era_desde + r.eras[self.era as usize].minimo } else { fin })
+    }
+
+    /// TA §3 paso 2: la siguiente Era empieza si se cumplen todos los logros de la vigente y ya pasó su mínimo, o se agota su plazo. **Una sola Era por
+    /// llamada**, aunque se cumplieran las de dos. Si llega por plazo, los logros pendientes de la anterior siguen abiertos.
+    pub fn avanzar_era(&mut self, r: &Reglas, ahora: Instante) -> Option<CambioEra> {
+        if ahora < self.proxima_era_en(r)? {
             return None;
         }
+        let todos = self.todos_los_logros_de_la_era(r);
         self.era += 1;
         self.era_desde = ahora;
         Some(CambioEra { era: self.era, por_plazo: !todos })
@@ -312,8 +317,11 @@ pub(crate) mod pruebas {
         }
         e.aplicar(&r, &todos, 10);
         assert!(e.todos_los_logros_de_la_era(&r));
-        assert_eq!(e.avanzar_era(&r, 10), Some(CambioEra { era: 1, por_plazo: false }));
-        assert_eq!(e.avanzar_era(&r, 10), None, "una sola Era por evaluación");
+        // Con todos los logros, la Era espera a su mínimo (1 semana).
+        assert_eq!(e.proxima_era_en(&r), Some(SEMANA));
+        assert_eq!(e.avanzar_era(&r, SEMANA - 1), None, "antes del mínimo no pasa");
+        assert_eq!(e.avanzar_era(&r, SEMANA), Some(CambioEra { era: 1, por_plazo: false }));
+        assert_eq!(e.avanzar_era(&r, SEMANA), None, "una sola Era por evaluación");
     }
 
     #[test]

@@ -218,7 +218,7 @@ impl Nucleo {
         let orden_era = self.orden_era();
         let residentes = self.residentes_en(id);
         let mut a = self.estado.asentamientos.remove(&id)?;
-        let (nivel_antes, nobleza_antes) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0);
+        let (nivel_antes, nobleza_antes, alcanzado_antes) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.nivel());
         let (r, contado) = {
             let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, tecnologia, .. } = &mut self.estado;
             let rt = &reglas.economia.tecnologia;
@@ -265,8 +265,9 @@ impl Nucleo {
             let r = f(&mut a.economia, &mut x);
             (r, fuentes.contado)
         };
-        let (nivel_ahora, nobleza_ahora, faccion) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.faccion);
+        let (nivel_ahora, nobleza_ahora, faccion, alcanzado_ahora) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.faccion, a.nivel());
         self.estado.asentamientos.insert(id, a);
+        self.contar_alcanzado(Some(alcanzado_antes), Some(alcanzado_ahora));
         // El cupo de Aedas residentes solo cambia en el paso si la nobleza pasa de 0 a más (o al revés) o cambia el nivel actual (6E; el Palacio, en `anotar_sucesos` y la conquista).
         if nobleza_antes != nobleza_ahora || nivel_antes != nivel_ahora {
             self.revisar_residentes(id, t);
@@ -414,6 +415,7 @@ impl Nucleo {
     fn arruinar(&mut self, id: u64, t: Instante) {
         let Some(a) = self.estado.asentamientos.remove(&id) else { return };
         let nivel_actual = a.nivel_actual();
+        self.contar_alcanzado(Some(a.nivel()), None);
         // Los hechos de la cascada que se atribuyen a la plaza (sus caravanas perdidas, su campamento de bandidos...) siguen llegando a su Facción.
         self.tr.arruinadas.push((id, a.faccion));
         for p in &a.parcelas {

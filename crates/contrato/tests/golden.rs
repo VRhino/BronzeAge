@@ -314,6 +314,7 @@ fn los_dorados_de_6g_dicen_lo_que_deben() {
     let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe_con_tecnologia_publica_y_alijo") else { panic!() };
     let [C::EstadoTecnologia(t), C::Alijo(a)] = &cuerpos(&f)[..] else { panic!("{f:?}") };
     assert!(t.contadores.is_empty() && t.logros.is_empty());
+    assert_eq!((t.era_minimo_hasta_ms, t.era_plazo_hasta_ms), (Some(604_800_000), Some(2_419_200_000)), "los dos bordes de la Era vigente");
     assert_eq!((t.logros_cumplidos[0].contador.as_str(), t.logros_cumplidos[0].umbral, t.cantadas.clone(), a.id.as_str(), a.oro), ("plazasEnNivel.2", 1, vec!["metalurgia_cobre".to_owned()], "alijo-veta-3", 5_500));
     // VISTA: el Aeda parado con su plaza y el que anda con su tramo; ni estancia, ni destino, ni dónde estuvo.
     let ms::Cuerpo::Foto(f) = de_servidor("foto_vista_con_aedas") else { panic!() };

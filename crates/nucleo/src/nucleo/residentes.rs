@@ -15,11 +15,13 @@
 //! adopción y la caravana comercial que llega con carga ≥ `cargaMinimaCaravana`) y se procesan al cerrar la versión (`avanzar_epicas`), antes de la aparición por hito: a lo sumo uno por Aeda y
 //! versión, con el enfriamiento y las claves del crate. Al cerrar el último capítulo la tecnología aparece sin hito (con las citas de su descubrimiento si es la primera del mundo), la Facción suma
 //! una épica cumplida y salen `aedas.epica_tecnologia` (privado) y `aedas.epica_cumplida` (público, a la crónica). La épica perdida avisa (`aedas.epica_abandonada { motivo }`, decisión técnica
-//! 11): `conquista` (la plaza cambió de dueño), `aparecida` (la tecnología le apareció a la Facción por otra vía) u `orden`.
+//! 11): `conquista` (la plaza cambió de dueño), `aparecida` (la tecnología le apareció a la Facción por otra vía), `unificada` (tras una anexión o fusión otro Aeda de la Facción la cantaba
+//! más avanzada) u `orden`.
 //!
 //! # La ruina y el traslado
 //! La ruina se lleva a los residentes de la plaza con su espera y su cita, sin hecho (como el TypeScript). La anexión y la fusión (decisión técnica 13) pasan los residentes de la que desaparece a la
-//! que recoge, con su épica, y le suman sus épicas cumplidas; la épica de una tecnología que la que recoge ya tiene se pierde (`aparecida`).
+//! que recoge, con su épica, y le suman sus épicas cumplidas; la épica de una tecnología que la que recoge ya tiene se pierde (`aparecida`), y dos de la misma tecnología se unifican (sigue la más
+//! avanzada; la otra, `unificada`).
 
 use super::*;
 use crate::estado::{entidad_residentes, Dato, PRIO_RESIDENTES};
@@ -202,7 +204,7 @@ impl Nucleo {
     }
 
     /// Anexión y fusión (decisión técnica 13): los residentes de `origen` pasan a `destino` con su épica, y sus épicas cumplidas se suman. La épica de una tecnología que `destino` ya tiene se pierde
-    /// (`aparecida`). Las plazas movidas se revisan (la reputación de la dueña cambió).
+    /// (`aparecida`); dos de la misma tecnología se unifican y sigue la más avanzada (`unificada`, decisión del autor). Las plazas movidas se revisan (la reputación de la dueña cambió).
     pub(super) fn trasladar_residentes(&mut self, t: Instante, origen: u32, destino: u32, plazas: &[u64]) {
         let res = &mut self.estado.residentes;
         let pasan: Vec<u64> = res.aedas.iter().filter(|a| a.faccion == origen).map(|a| u64::from(a.id)).collect();
@@ -217,6 +219,10 @@ impl Nucleo {
         let sobran: Vec<TecId> = self.estado.residentes.aedas.iter().filter(|a| a.faccion == destino).filter_map(|a| a.epica.as_ref().map(|e| e.tec)).filter(|&x| aparecidas.contiene(x)).collect();
         for x in sobran {
             self.epicas_sobrantes(t, destino, x);
+        }
+        for (aeda, x) in self.estado.residentes.unificar(destino) {
+            let plaza = self.estado.residentes.get(aeda).map(|a| u64::from(a.plaza));
+            self.epica_perdida(t, aeda, destino, x, plaza, "unificada");
         }
         for &p in plazas {
             self.revisar_residentes(p, t);
