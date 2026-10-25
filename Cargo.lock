@@ -465,6 +465,7 @@ dependencies = [
  "asentamiento",
  "base",
  "serde_json",
+ "tecnologia",
  "trazado",
 ]
 
@@ -932,6 +933,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tecnologia"
+version = "0.1.0"
+dependencies = [
+ "asentamiento",
+ "base",
+ "comercio",
+ "serde_json",
 ]
 
 [[package]]
