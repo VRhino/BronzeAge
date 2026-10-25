@@ -43,6 +43,9 @@ impl Consulta for Mundo {
     fn alijo(&self, id: &str) -> Option<u32> {
         (id == "alijo-veta-2").then_some(12)
     }
+    fn tecnologia(&self, id: &str) -> Option<u8> {
+        (id == "metalurgia_cobre").then_some(2)
+    }
 }
 
 fn s(x: &str) -> String {
@@ -374,6 +377,8 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(RetirarFusion, OrdenRetirarFusion, propuesta_id: s("prop-41")), Comando::RetirarFusion { heroe: 7, propuesta: 41 }),
         // ── Los alijos (6F) ──
         (orden!(AbrirAlijo, OrdenAbrirAlijo, alijo_id: s("alijo-veta-2")), Comando::AbrirAlijo { heroe: 7, alijo: 12 }),
+        // ── La adopción (6C) ──
+        (orden!(AdoptarTecnologia, OrdenAdoptarTecnologia, faccion_id: s("f-1"), tecnologia_id: s("metalurgia_cobre")), Comando::AdoptarTecnologia { heroe: 7, faccion: 1, tecnologia: 2 }),
     ]
 }
 
@@ -383,8 +388,8 @@ fn ordenes_no_disponibles() -> Vec<Cuerpo> {
         ($($v:ident),* $(,)?) => { vec![$(Cuerpo::$v(Default::default())),*] };
     }
     vacias![
-        // tecnología y Aedas (sistema 6)
-        AdoptarTecnologia, EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda,
+        // Aedas (sistema 6)
+        EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda,
     ]
 }
 
@@ -447,7 +452,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 4);
+    assert_eq!(sin_comando.len(), 3);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -542,6 +547,7 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(QuitarDeCola, OrdenQuitarDeCola, asentamiento_id: s("as-3"), edificio_id: s("ed-4-7")), rechazos::EDIFICIO_DESCONOCIDO),
         (orden!(AbandonarRecinto, OrdenAbandonarRecinto, asentamiento_id: s("as-3"), recinto_id: s("recinto-4-1")), rechazos::MURALLAS_RECINTO_DESCONOCIDO),
         (orden!(AbrirAlijo, OrdenAbrirAlijo, alijo_id: s("alijo-99")), rechazos::ALIJO_DESCONOCIDO),
+        (orden!(AdoptarTecnologia, OrdenAdoptarTecnologia, faccion_id: s("f-1"), tecnologia_id: s("no_existe")), rechazos::TECNOLOGIA_DESCONOCIDA),
         (orden!(Atacar, OrdenAtacar, heroe_id: h(), objetivo: Some(pb::orden_atacar::Objetivo { tipo: Some(Ataca::CampamentoId(s("camp-1"))) })), rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO),
         (orden!(Atacar, OrdenAtacar, heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(OrdenarEscuadras, OrdenOrdenarEscuadras, escuadron_ids: v(&["esc-1", "ej-2"])), rechazos::ORDEN_FORMA_INVALIDA),
@@ -596,7 +602,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (166, 142, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (167, 143, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -684,5 +690,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 142 + 19 + 5 + 4, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 143 + 19 + 5 + 3, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

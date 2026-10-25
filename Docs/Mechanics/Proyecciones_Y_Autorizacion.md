@@ -212,6 +212,8 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 > **Implementado en Rust (2026-10-24, 5D):** las nueve órdenes de las relaciones entre Facciones (144-152; las 153-157 son de 5G-b) y una clase nueva de `Autoriza`, `AutoridadDiplomatica` (la cuenta del héroe, ciudadano y Rey o Embajador de la Facción que actúa: `politica::autorizacion::Actor::autoridad_diplomatica`). `responder_relacion` y `admitir_otras_facciones` son del Rey (`ReyDeLaFaccion`); `alternar_reabastecer_aliados`, de quien manda en la plaza hasta 5E. Con 5G-b, quedan 13 órdenes no disponibles.
 
+> **Implementado en Rust (2026-10-25, 6C):** `adoptar_tecnologia` (175, `ReyDeLaFaccion`: la cuenta del héroe, Rey de la Facción que nombra la orden), con los rechazos finos de `Tecnologia_Aedas.md` §4 en el orden del TypeScript; la tecnología va por su id del catálogo (una desconocida se rechaza en la traducción, `tecnologia.desconocida`). Quedan 3 órdenes no disponibles, las de los Aedas.
+
 > **Implementado en Rust (2026-10-25, 6F):** `abrir_alijo` (174, `CuentaDelHeroe`: el héroe de la cuenta, que el contrato no nombra) con su condición de `Generacion_Del_Mundo.md` §12, en su propia fila (C7 del plan del sistema 6: antes iba agrupada con las órdenes de campamento). Quedan 4 órdenes no disponibles, las de tecnología y Aedas.
 
 > **Implementado en Rust (2026-10-25, 5E):** la matriz de las órdenes de plaza es la de §5.2. Se retiran `manda_en` y «ciudadano de la madre» (`colocar_avanzada` lo dejó el 2026-10-25, 5E-1: lo da el Gobernador o el Maestro de Obras de la madre con su columna en el sitio, `Autoriza::CargoEnElSitio`), y `Autoriza` gana
@@ -238,6 +240,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `abrir_alijo` | `AbrirAlijo` | la cuenta del héroe | sin Facción o de una sin plazas, sin haberlo abierto, con su columna en el mapa a `radioPuerta` del alijo (6F) |
 | `aceptar_trueque` | `AceptarTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza B del acuerdo |
 | `activar_politica` | `ActivarPolitica` | el titular del cargo de la orden, residente y dentro | de la plaza; el cargo que nombra la orden (5E) |
+| `adoptar_tecnologia` | `AdoptarTecnologia` | la cuenta del héroe, Rey de la Facción | la Facción existe (`faccion.no_existe`); la tecnología del catálogo (`tecnologia.desconocida`); con capital (`tecnologia.sin_capital`), el Rey dentro de ella (`tecnologia.rey_fuera_de_la_capital`), no adoptada (`tecnologia.ya_adoptada`), aparecida (`tecnologia.no_aparecida`) y la tarifa de su Era en el almacén de la capital (`tecnologia.sin_tarifa`) (6C) |
 | `alternar_auto_construccion` | `AlternarAutoConstruccion` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
 | `alternar_reabastecer_aliados` | `AlternarReabastecerAliados` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza; sin cambio, `sin_cambios` |
 | `alternar_receta` | `AlternarReceta` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
@@ -446,7 +449,6 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
 | `abandonar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `adoptar_tecnologia` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 

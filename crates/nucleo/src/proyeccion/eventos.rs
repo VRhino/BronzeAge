@@ -104,7 +104,8 @@ fn id_del_contrato(n: &Nucleo, ev: &EventoNucleo, clave: &str, v: i64) -> Option
         "avanzada" => ids::avanzada(u),
         "convocatoria" => ids::convocatoria(u),
         "acuerdo" => ids::acuerdo(u),
-        "orden" => ids::orden_de_mercado(u),
+        // El `orden` de una Era (`era.comienza` y su entrada de crónica) es un número, no una orden de mercado.
+        "orden" if !matches!(ev.codigo.as_ref(), "era.comienza" | "cronica.entrada") => ids::orden_de_mercado(u),
         "escuadra" => ids::escuadra(u),
         "nodo" => ids::nodo(v as u32),
         "campamento" if de_bandidos(&ev.codigo) => ids::bandidos(u),

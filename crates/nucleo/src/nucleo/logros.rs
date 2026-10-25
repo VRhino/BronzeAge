@@ -84,8 +84,9 @@ impl Nucleo {
         self.tras_logros(t, &fijados);
     }
 
-    /// Una plaza pasa del nivel actual `antes` a `ahora` (`None`: no existía o ya no existe). Mantiene el índice y, si sube, los récords `plazasEnNivel.N`.
-    pub(super) fn contar_nivel(&mut self, t: Instante, antes: Option<u32>, ahora: Option<u32>) {
+    /// Una plaza de `faccion` pasa del nivel actual `antes` a `ahora` (`None`: no existía o ya no existe). Mantiene el índice y, si sube, los récords `plazasEnNivel.N` y la aparición de la
+    /// Facción (`capitalEnNivel`, 6C).
+    pub(super) fn contar_nivel(&mut self, t: Instante, faccion: u32, antes: Option<u32>, ahora: Option<u32>) {
         if antes == ahora {
             return;
         }
@@ -99,6 +100,7 @@ impl Nucleo {
         if ahora.unwrap_or(0) <= antes.unwrap_or(0) {
             return;
         }
+        self.mirar_aparicion(faccion);
         let r = self.estado.reglas.economia.tecnologia.clone();
         let mut fijados = Vec::new();
         for nivel in 2..=3 {
@@ -119,6 +121,9 @@ impl Nucleo {
             let valores = vec![("contador", Dato::Texto(l.contador.nombre().to_owned()))];
             self.tr.emitir(&self.estado, EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("tecnologia.logro", t, vec![("umbral", l.umbral as i64)]) });
         }
+        // 6C: con el logro, sus tecnologías pueden aparecer a cualquier Facción viva, y la que ya tenía descubridora, cantarse.
+        self.mirar_aparicion_de_todas();
+        self.cantar(t);
         self.mirar_era(t);
     }
 
@@ -131,6 +136,9 @@ impl Nucleo {
         let era = &r.eras[cambio.era as usize];
         let datos = vec![("orden", i64::from(era.orden)), ("porPlazo", cambio.por_plazo as i64)];
         self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("era", Dato::Texto(era.id.clone()))], publico: true, ..EventoNucleo::nuevo("era.comienza", t, datos) });
+        // 6C: las tecnologías de la Era nueva pueden aparecer y cantarse.
+        self.mirar_aparicion_de_todas();
+        self.cantar(t);
         // La cita de la Era que acaba ya no vale.
         self.estado.generaciones.subir(entidad_era());
         self.estado.era_en = None;
@@ -174,9 +182,11 @@ impl Nucleo {
             return Ok(false);
         }
         for x in dadas.iter() {
-            self.estado.tecnologia.hacer_aparecer(&r, faccion, x, t);
+            self.registrar_aparicion(faccion, x, t);
         }
         self.estado.tecnologia.de_mut(&r, faccion).adoptadas = adoptadas;
+        // Lo adoptado es una condición `tecnologia` de otros hitos (6C).
+        self.mirar_aparicion(faccion);
         Ok(true)
     }
 }

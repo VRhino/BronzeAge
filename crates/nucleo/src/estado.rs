@@ -87,6 +87,19 @@ pub fn entidad_era() -> u64 {
     18 * crate::estado_comercio::ETIQUETA
 }
 
+/// Prioridad de las citas de cada tecnología descubierta (`Carga::Tecnologia`, Reloj_Y_Eventos §2: la de la Era y los títulos, después de todo lo demás del mismo instante).
+pub const PRIO_TECNOLOGIA: u8 = 10;
+
+/// La entidad de las citas de una tecnología descubierta (la de conocimiento y la del campamento): una por tecnología, por su índice del catálogo (etiqueta 19 de
+/// `estado_comercio::ETIQUETA`). Nunca sube de generación: cada cita vence una sola vez.
+pub fn entidad_tecnologia(t: tecnologia::TecId) -> u64 {
+    19 * crate::estado_comercio::ETIQUETA | u64::from(t)
+}
+
+/// BAN38: BAN37 con las dos citas de cada tecnología descubierta (sistema 6, tanda 6C; `Carga::Tecnologia`): la de conocimiento (`primeros.en + retrasoConocimiento`: la cantan los Aedas) y la
+/// del campamento (`primeros.en + horasTrasLaPrimera`: la desbloquean los campamentos de mercenarios); lo ya cantado (`cantadas`) iba ya en BAN37. BAN37 se rechaza: sus tecnologías ya
+/// descubiertas no traen esas citas en la cola, y sin ellas nunca se cantarían ni llegarían a los campamentos por plazo.
+///
 /// BAN37: BAN36 con el estado de tecnología del mundo (sistema 6, tanda 6B; `codec_tecnologia`): la Era vigente y desde cuándo, los 24 contadores de los logros con el resto oculto de los que
 /// crecen por un flujo, cuándo se cumplió cada logro, la descubridora de cada tecnología, lo que los Aedas ya cantaron y las tecnologías de cada Facción (aparecidas, adoptadas y reveladas, por
 /// índice del catálogo), más la cita del fin del plazo de la Era (`Estado::era_en` y `Carga::Era`). Sustituye a las tecnologías que daba la administración (`EstadoMilitar::tecnologias`, que
@@ -194,7 +207,7 @@ pub fn entidad_era() -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN37";
+const MAGIA: &[u8; 5] = b"BAN38";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -467,6 +480,17 @@ pub enum Carga {
     /// Se mira si empieza la Era siguiente (6B; la entidad es `entidad_era`, una sola para todo el mundo; prioridad [`PRIO_ERA`]): al fin del plazo de la vigente, o en el instante en que empezó
     /// una Era cuyos logros ya estaban todos cumplidos.
     Era,
+    /// Una cita de una tecnología descubierta (6C; la entidad es `entidad_tecnologia`; prioridad [`PRIO_TECNOLOGIA`]).
+    Tecnologia(SucesoTecnologia),
+}
+
+/// Qué cita de una tecnología descubierta vence (Tecnologia_Aedas §5 y §6.1). Se programan las dos al registrarse su descubridora (`primeros`), por cualquier vía, y cada una vence una vez.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SucesoTecnologia {
+    /// `primeros.en + retrasoConocimiento`: los Aedas ya la conocen y la cantan (`aedas.canta_descubrimiento`).
+    Conocimiento,
+    /// `primeros.en + horasTrasLaPrimera`: los campamentos de mercenarios la desbloquean.
+    Campamento,
 }
 
 /// Qué plazo de una Caravana de Fundación vence (Fundacion_Y_Refundacion §7). Cada cambio de situación sube su generación: a una caravana solo le queda en la cola el plazo de la situación en
@@ -1155,6 +1179,8 @@ impl Estado {
                 }),
                 Carga::Titulos => w.u8(15),
                 Carga::Era => w.u8(16),
+                Carga::Tecnologia(SucesoTecnologia::Conocimiento) => w.u8(17),
+                Carga::Tecnologia(SucesoTecnologia::Campamento) => w.u8(18),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -1184,12 +1210,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN37`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 37 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN38`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 38 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'7' => {}
+                b'8' => {}
+                b'7' => return Err(ErrorFormato("foto del formato BAN37 (sus tecnologías ya descubiertas no traen en la cola las citas de conocimiento ni del campamento, así que nunca se cantarían ni llegarían a los campamentos por plazo): ya no se admite")),
                 b'6' => return Err(ErrorFormato("foto del formato BAN36 (sin el estado de tecnología del mundo: ni la Era, ni los contadores de los logros, ni los logros cumplidos, ni las descubridoras, que no se pueden deducir del estado; las tecnologías de las Facciones eran las de la administración): ya no se admite")),
                 b'5' => return Err(ErrorFormato("foto del formato BAN35 (los héroes no dicen qué alijos abrieron): ya no se admite")),
                 b'4' => return Err(ErrorFormato("foto del formato BAN34 (las plazas no dicen quién las fundó): ya no se admite")),
@@ -1350,6 +1377,8 @@ impl Estado {
                 14 => Carga::Fundacion(SucesoFundacion::Llega),
                 15 => Carga::Titulos,
                 16 => Carga::Era,
+                17 => Carga::Tecnologia(SucesoTecnologia::Conocimiento),
+                18 => Carga::Tecnologia(SucesoTecnologia::Campamento),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

@@ -79,6 +79,7 @@ mod pueblos;
 mod salidas;
 mod taberna;
 mod logros;
+mod tecnologias;
 mod titulos;
 mod traslado;
 mod uniones;
@@ -255,6 +256,11 @@ pub struct Nucleo {
     /// Los traslados de Facción de la transición en curso (`origen`, `destino`), cuya memoria de la niebla se funde al cerrar la versión, después de grabar lo que vieron sus ojos
     /// (`traslado::fundir_memorias`). Vacío entre transiciones: no se persiste.
     uniones_de_memoria: Vec<(u32, u32)>,
+    /// Las Facciones a las que la transición en curso les cambió algo que mira el hito de una tecnología (6C, `tecnologias`): su aparición se evalúa al cerrar la versión. Vacío entre
+    /// transiciones: no se persiste.
+    aparicion_pendiente: std::collections::BTreeSet<u32>,
+    /// Los hechos de épica de la transición en curso (6C deja la adopción; los procesarán los Aedas residentes de 6E al cerrar la versión). Vacío entre transiciones: no se persiste.
+    hechos_epicos: Vec<tecnologia::epicas::Hecho>,
     /// Las entradas de la crónica cerradas y aún no mandadas al hilo de la persistencia. `None` sin persistencia (no se guarda la crónica). No entra en el hash ni en las fotos.
     cronica: Option<Vec<cronica::Apunte>>,
 }
@@ -370,6 +376,8 @@ impl Nucleo {
             siguiendo: Vec::new(),
             retiradas: Vec::new(),
             uniones_de_memoria: Vec::new(),
+            aparicion_pendiente: Default::default(),
+            hechos_epicos: Vec::new(),
             cronica: None,
         };
         n.reconstruir_espacio();
@@ -551,6 +559,7 @@ impl Nucleo {
             Carga::Fundacion(suceso) => self.suceso_de_fundacion(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Titulos => self.recalcular_titulos(t),
             Carga::Era => self.cita_de_era(t),
+            Carga::Tecnologia(suceso) => self.cita_de_tecnologia(suceso, t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
@@ -577,6 +586,10 @@ impl Nucleo {
 
     /// La ÚNICA función que sube la versión: si la transición cambió algo (o se fuerza), cierra un registro de cambios.
     fn cerrar_version(&mut self, t: Instante, forzar: bool) -> bool {
+        // Las tecnologías cuyo hito se cumple tras lo que cambió la transición aparecen en esta misma versión (6C, `tecnologias`).
+        self.apariciones(t);
+        // 6E: aquí avanzarán las épicas de los Aedas residentes con los hechos de la transición.
+        self.hechos_epicos.clear();
         // La Caravana de Fundación que se ha quedado sin su titular (Fundacion_Y_Refundacion §7) vuelve sola a su origen: lo mira lo que la transición tocó.
         self.vigilar_fundaciones(t);
         // Quien entra, sale, se muda o aparca marca el interior de su plaza (solo con sesiones).
@@ -823,6 +836,8 @@ impl Nucleo {
         // Una orden que no se acepta no deja rastro: lo que marcó antes de rechazarse no cuenta como cambio.
         if r.resultado != Resultado::Aceptada {
             self.tr.tocados = Tocados::default();
+            self.aparicion_pendiente.clear();
+            self.hechos_epicos.clear();
         }
         match &r.resultado {
             Resultado::Aceptada => {
@@ -949,6 +964,10 @@ impl Nucleo {
                 }
             }
             Comando::AbrirAlijo { .. } => match self.ejecutar_alijo(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::AdoptarTecnologia { .. } => match self.ejecutar_adopcion(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

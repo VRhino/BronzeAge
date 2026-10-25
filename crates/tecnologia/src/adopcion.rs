@@ -112,7 +112,7 @@ impl EstadoTecnologia {
 /// `factorProduccionTecnologica` (ppm): el producto de los `bonusProduccion` de las adoptadas sobre ese recurso (hoy solo `canteria`, ×1,5 la piedra).
 /// Es el `factor_tecnologia` del `Exterior` de la economía (6C), que se aplica al ritmo antes del resto oculto.
 pub fn factor_produccion(r: &Reglas, adoptadas: Conjunto, recurso: Recurso) -> i64 {
-    adoptadas.iter().filter_map(|t| r.def(t).bonus).filter(|b| b.recurso == recurso).fold(UNO, |f, b| f * b.factor / UNO)
+    Conjunto(adoptadas.0 & r.con_bonus.0).iter().filter_map(|t| r.def(t).bonus).filter(|b| b.recurso == recurso).fold(UNO, |f, b| f * b.factor / UNO)
 }
 
 #[cfg(test)]
@@ -219,6 +219,8 @@ mod pruebas {
         assert_eq!(factor_produccion(&r, con, Recurso::Piedra), 1_500_000);
         assert_eq!(factor_produccion(&r, con, Recurso::Oro), UNO);
         assert_eq!(factor_produccion(&r, Conjunto::VACIO, Recurso::Piedra), UNO);
+        assert_eq!(factor_produccion(&r, r.de_arranque, Recurso::Piedra), UNO, "las de arranque no dan bonus");
+        assert_eq!(r.con_bonus, con, "hoy solo la cantería da bonus");
     }
 
     fn campamento(primera: bool, adoptan: &[FaccionId]) -> EstadoTecnologia {

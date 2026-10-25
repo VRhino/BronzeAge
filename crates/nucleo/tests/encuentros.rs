@@ -459,7 +459,7 @@ fn la_foto_con_una_persecucion_viva_conserva_la_presa_los_informes_las_relacione
     let mut n = nucleo(40, 5);
     let (p, q) = persecucion_viva(&mut n);
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN37");
+    assert_eq!(&bytes[..5], b"BAN38");
     let vuelta = nucleo::Estado::deserializar(&bytes, &comun::reglas(), "hash-de-prueba").expect("deserializa");
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.ejercitos[&p].persiguiendo, Some(q));

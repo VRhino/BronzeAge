@@ -15,9 +15,9 @@
 //! edificio militar de un campamento sale de su posición (`edificiosMilitares[huella mod 3]`, Generacion_Del_Mundo §11) y sus viviendas,
 //! de `edificiosFijos`: ninguno se guarda.
 //!
-//! # Lo provisional
-//! Las tecnologías del campamento (Tecnologia_Aedas §5) son las de arranque más las que tienen adoptadas al menos la mitad de las Facciones
-//! vivas (las que la administración ha dado, `FijarTecnologias`); el plazo de 72 h tras la primera no existe hasta el sistema de tecnología.
+//! # Las tecnologías del campamento
+//! Las de Tecnologia_Aedas §5 (6C): las de arranque; las demás, desde que alguien la desbloqueó (`primeros`) y pasaron 72 h (su cita de campamento) o en cuanto la tiene adoptada
+//! al menos la mitad de las Facciones vivas. No se guardan: se miran al reclutar y al proyectar.
 
 use super::*;
 use crate::estado::SucesoComercio;
@@ -134,15 +134,11 @@ impl Nucleo {
         self.estado.militar.reclutas.get(&campamento).copied().unwrap_or_else(|| Reclutas::llenos(mr, mr.mercenarios.viviendas, 0))
     }
 
-    /// ¿Desbloquea el campamento esa tecnología? Las de arranque siempre; las demás, si las tienen adoptadas al menos `porcentajeFacciones` de las
-    /// Facciones vivas (las que conservan alguna plaza). Con ninguna viva, solo las de arranque.
+    /// ¿Desbloquea el campamento esa tecnología (Tecnologia_Aedas §5, 6C)? Las de arranque siempre; las demás, si alguien la desbloqueó y pasaron `horasTrasLaPrimera` o si la tienen
+    /// adoptada al menos `porcentajeFacciones` de las Facciones vivas (las que conservan alguna plaza).
     fn tecnologia_del_campamento(&self) -> impl Fn(&str) -> bool + '_ {
-        let vivas: std::collections::BTreeSet<u32> = self.estado.asentamientos.values().map(|a| a.faccion).collect();
-        move |tecnologia| {
-            let mr = &self.estado.reglas.economia.militar;
-            let adoptan = vivas.iter().filter(|&&f| self.estado.tiene_tecnologia(f, tecnologia)).count() as i64;
-            mr.tecnologias.de_arranque.iter().any(|t| t == tecnologia) || (!vivas.is_empty() && adoptan * UNO >= mr.mercenarios.porcentaje_facciones * vivas.len() as i64)
-        }
+        let libres = self.tecnologias_de_los_campamentos();
+        move |tecnologia| crate::estado::adopta(&self.estado.reglas.economia.tecnologia, libres, tecnologia)
     }
 
     /// ¿Está el héroe en el campamento? Dentro, o con su columna a la puerta.

@@ -59,14 +59,22 @@ pub struct Revelacion {
 impl EstadoTecnologia {
     /// TA §3 paso 3, para una Facción viva: cada candidata (logro cumplido, Era abierta, no aparecida) cuyo hito se cumple entero aparece.
     pub fn aparecer_por_hito(&mut self, r: &Reglas, f: FaccionId, v: &impl VistaFaccion, ahora: Instante) -> Vec<Aparicion> {
-        let propias = self.de(r, f);
-        let listas: Vec<TecId> = self.candidatas(r, f).filter(|&t| r.def(t).hito.iter().all(|c| cumple(c, &propias, v))).collect();
+        let listas = self.listas_por_hito(r, f, v, r.todas());
         listas.into_iter().filter_map(|t| self.hacer_aparecer(r, f, t, ahora).map(|primera| Aparicion { tec: t, primera })).collect()
     }
 
-    /// ¿Alguna candidata de la Facción pide `recursoEnCapital`? Solo entonces el paso de minuto de la capital evalúa la aparición (plan §5.1).
+    /// Las candidatas de la Facción de entre `entre` cuyo hito se cumple entero, en el orden del catálogo, sin hacerlas aparecer: el núcleo, cuya vista lee el mismo estado, las hace
+    /// aparecer después. Con `entre = Reglas::piden_capital` es lo que mira el paso de minuto de una capital (plan §5.1): O(candidatas), hoy una.
+    pub fn listas_por_hito(&self, r: &Reglas, f: FaccionId, v: &impl VistaFaccion, entre: crate::Conjunto) -> Vec<TecId> {
+        let propias = self.de(r, f);
+        entre.iter().filter(|&t| self.es_candidata(r, &propias, t) && r.def(t).hito.iter().all(|c| cumple(c, &propias, v))).collect()
+    }
+
+    /// ¿Alguna candidata de la Facción pide `recursoEnCapital`? Solo entonces el paso de minuto de la capital evalúa la aparición (plan §5.1). Mira solo las que lo
+    /// piden (`Reglas::piden_capital`, hoy una).
     pub fn pide_recurso_en_capital(&self, r: &Reglas, f: FaccionId) -> bool {
-        self.candidatas(r, f).any(|t| r.def(t).hito.iter().any(|c| matches!(c, Condicion::RecursoEnCapital(_))))
+        let propias = self.de(r, f);
+        r.piden_capital.iter().any(|t| self.es_candidata(r, &propias, t))
     }
 
     /// `revelarTecnologias` (TA §6.3), con un Aeda parado en una plaza de la Facción `f`: cada tecnología que el Aeda conoce y la Facción no tiene
@@ -184,6 +192,12 @@ pub(crate) mod pruebas {
         e.sumar(&r, Contador::ExtraidoEstano, 245_000, 0);
         assert!(e.pide_recurso_en_capital(&r, 1));
         let v = Vista { edificios: vec![(Tipo::Fundicion, 2)], capital: vec![Recurso::Estano], ..Vista::default() };
+        // El paso de minuto de la capital mira solo las que piden la capital (hoy la aleación del bronce), y solo si su hito ya se cumple.
+        let bronce = t(&r, "aleacion_bronce");
+        assert_eq!(r.piden_capital.iter().collect::<Vec<_>>(), vec![bronce]);
+        assert!(e.listas_por_hito(&r, 1, &Vista { edificios: vec![(Tipo::Fundicion, 2)], ..Vista::default() }, r.piden_capital).is_empty());
+        assert_eq!(e.listas_por_hito(&r, 1, &v, r.piden_capital), vec![bronce]);
+        assert_eq!(r.todas().len(), r.catalogo.len());
         assert_eq!(e.aparecer_por_hito(&r, 1, &v, 1).len(), 1);
         assert!(!e.pide_recurso_en_capital(&r, 1));
     }

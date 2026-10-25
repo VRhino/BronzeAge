@@ -205,6 +205,10 @@ pub struct Reglas {
     pub de_arranque: Conjunto,
     /// Los logros de cada contador ordenados por umbral (a igual umbral, por índice): el siguiente pendiente se mira en O(1).
     pub por_contador: Vec<Vec<(u64, TecId)>>,
+    /// Las que piden `recursoEnCapital` en su hito: lo único que el paso de minuto de una capital mira (plan §5.1), sin recorrer el catálogo.
+    pub piden_capital: Conjunto,
+    /// Las que dan un `bonusProduccion`: el `factor_tecnologia` de una Facción que no ha adoptado ninguna es 1 sin mirar nada más.
+    pub con_bonus: Conjunto,
 }
 
 impl Reglas {
@@ -257,20 +261,16 @@ impl Reglas {
                 id: id.clone(),
             })
             .collect();
-        let mut por_contador = vec![Vec::new(); Contador::TODOS.len()];
-        for (i, d) in catalogo.iter().enumerate() {
-            if let Some(l) = d.logro {
-                por_contador[l.contador.indice()].push((l.umbral, i as TecId));
-            }
-        }
-        por_contador.iter_mut().for_each(|v| v.sort());
         let a = bloque("AEDAS");
         let cupo = &a["residentes"]["cupoPorNivel"];
         let nivel_maximo = cupo.as_object().expect("cupoPorNivel").keys().map(|k| k.parse::<usize>().expect("nivel")).max().unwrap_or(0);
         let titulos = bloque("TITULO_CAPITULO");
         let me = bloque("MERCENARIOS");
-        Reglas {
-            de_arranque: catalogo.iter().enumerate().filter(|(_, d)| d.de_arranque).map(|(i, _)| i as TecId).collect(),
+        let mut r = Reglas {
+            de_arranque: Conjunto::VACIO,
+            piden_capital: Conjunto::VACIO,
+            con_bonus: Conjunto::VACIO,
+            por_contador: Vec::new(),
             catalogo,
             eras,
             aedas: ReglasAedas {
@@ -297,8 +297,29 @@ impl Reglas {
                 tras_la_primera: (num(&me, "tecnologia.horasTrasLaPrimera") * HORA as f64).round() as Instante,
             },
             titulos_capitulo: HechoEpico::TODOS.iter().map(|h| texto(&titulos, h.nombre())).collect(),
-            por_contador,
+        };
+        r.indexar();
+        r
+    }
+
+    /// Rehace lo que se deriva del catálogo (las de arranque, las que piden la capital, las que dan bonus y los logros de cada contador): tras leerlo y en las pruebas que lo cambian.
+    pub fn indexar(&mut self) {
+        let de = |f: &dyn Fn(&Definicion) -> bool| self.catalogo.iter().enumerate().filter(|(_, d)| f(d)).map(|(i, _)| i as TecId).collect::<Conjunto>();
+        (self.de_arranque, self.piden_capital, self.con_bonus) =
+            (de(&|d| d.de_arranque), de(&|d| d.hito.iter().any(|c| matches!(c, Condicion::RecursoEnCapital(_)))), de(&|d| d.bonus.is_some()));
+        let mut por_contador = vec![Vec::new(); Contador::TODOS.len()];
+        for (i, d) in self.catalogo.iter().enumerate() {
+            if let Some(l) = d.logro {
+                por_contador[l.contador.indice()].push((l.umbral, i as TecId));
+            }
         }
+        por_contador.iter_mut().for_each(|v| v.sort());
+        self.por_contador = por_contador;
+    }
+
+    /// Todo el catálogo como conjunto.
+    pub fn todas(&self) -> Conjunto {
+        Conjunto(u64::MAX >> (64 - self.catalogo.len()))
     }
 
     /// El índice de una tecnología por su id de cadena (el del contrato).

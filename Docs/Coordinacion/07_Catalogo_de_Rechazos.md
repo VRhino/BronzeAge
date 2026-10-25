@@ -582,4 +582,14 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `alijo.no_puedes_buscar` | `ALIJO_NO_PUEDES_BUSCAR` | Los alijos solo los abre un héroe sin Facción o de una Facción sin plazas. |
 | `alijo.ya_abierto` | `ALIJO_YA_ABIERTO` | Cada héroe abre cada alijo una sola vez. |
 | `alijo.lejos` | `ALIJO_LEJOS` | Hay que estar en el sitio: la columna del héroe, en el mapa, a `radioPuerta` del alijo. |
+
+### La adopción de una tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `tecnologia.no_aparecida` | `TECNOLOGIA_NO_APARECIDA` | La tecnología aún no le ha aparecido a la Facción (ni por su hito ni por un Aeda). |
+| `tecnologia.ya_adoptada` | `TECNOLOGIA_YA_ADOPTADA` | La Facción ya la tiene adoptada (también las de arranque). |
+| `tecnologia.sin_capital` | `TECNOLOGIA_SIN_CAPITAL` | La Facción no tiene capital: no le queda ninguna plaza. |
+| `tecnologia.rey_fuera_de_la_capital` | `TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL` | El Rey tiene que estar dentro de la capital efectiva de su Facción. |
+| `tecnologia.sin_tarifa` | `TECNOLOGIA_SIN_TARIFA` | El almacén de la capital no tiene la tarifa de adopción de la Era de la tecnología. |
 <!-- /rechazos -->

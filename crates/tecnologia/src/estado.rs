@@ -179,7 +179,12 @@ impl EstadoTecnologia {
     /// Las candidatas a aparecer a la Facción, en el orden del catálogo: no de arranque, no aparecidas, con el logro cumplido y su Era abierta.
     pub fn candidatas<'a>(&'a self, r: &'a Reglas, f: FaccionId) -> impl Iterator<Item = TecId> + 'a {
         let propias = self.de(r, f);
-        (0..r.catalogo.len() as TecId).filter(move |&t| !r.def(t).de_arranque && !propias.aparecidas.contiene(t) && self.logro_cumplido(t) && self.era_abierta(r, t))
+        (0..r.catalogo.len() as TecId).filter(move |&t| self.es_candidata(r, &propias, t))
+    }
+
+    /// ¿Es `t` candidata a aparecer a una Facción con estas tecnologías?
+    pub fn es_candidata(&self, r: &Reglas, propias: &TecnologiasFaccion, t: TecId) -> bool {
+        !r.def(t).de_arranque && !propias.aparecidas.contiene(t) && self.logro_cumplido(t) && self.era_abierta(r, t)
     }
 
     /// `hacerAparecer`: la tecnología pasa a aparecida (y sale de las reveladas) sin pasar por el hito, por cualquier vía (hito, compra, épica).

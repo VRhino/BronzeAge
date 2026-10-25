@@ -186,9 +186,11 @@ impl Nucleo {
     /// Una plaza recién fundada es una cosa fija del espacio, y una plaza más de su Facción.
     pub(super) fn situar_plaza(&mut self, id: u64, posicion: Punto, faccion: u32) {
         self.espacio.rejilla.apuntar(id, 0, &plan_quieto(posicion, self.estado.ahora, 0));
+        let nace = !self.espacio.plazas_por_faccion.contains_key(&faccion);
         self.espacio.plazas_por_faccion.entry(faccion).or_default().insert(id);
         let nivel = self.estado.asentamientos.get(&id).map(|a| a.nivel_actual());
-        self.contar_nivel(self.estado.ahora, None, nivel);
+        self.contar_nivel(self.estado.ahora, faccion, None, nivel);
+        self.tras_ganar_o_perder_plaza(&[faccion], nace);
     }
 
     /// Una plaza cayó en ruinas: ya no está en el espacio ni es de su Facción.
@@ -200,14 +202,27 @@ impl Nucleo {
     /// La plaza pasa de la Facción `de` a `a` (conquista) o desaparece (`None`).
     pub(super) fn cambiar_plaza_de_faccion(&mut self, id: u64, de: u32, a: Option<u32>) {
         let indice = &mut self.espacio.plazas_por_faccion;
+        let mut vivas_cambian = false;
         if let Some(s) = indice.get_mut(&de) {
             s.remove(&id);
             if s.is_empty() {
                 indice.remove(&de);
+                vivas_cambian = true;
             }
         }
         if let Some(a) = a {
+            vivas_cambian |= !indice.contains_key(&a);
             indice.entry(a).or_default().insert(id);
+        }
+        self.tras_ganar_o_perder_plaza(&[Some(de), a].into_iter().flatten().collect::<Vec<_>>(), vivas_cambian);
+    }
+
+    /// Una plaza cambió de dueño, nació o desapareció (6C): las Facciones de antes y de ahora miran su aparición (su capital puede ser otra) y, si cambian las Facciones vivas, los
+    /// campamentos de mercenarios se marcan (lo que desbloquean depende de la mitad de las vivas).
+    fn tras_ganar_o_perder_plaza(&mut self, facciones: &[u32], vivas_cambian: bool) {
+        facciones.iter().for_each(|&f| self.mirar_aparicion(f));
+        if vivas_cambian {
+            self.tocar_todos_los_campamentos();
         }
     }
 

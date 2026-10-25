@@ -198,6 +198,7 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
 <!-- /parametros -->
 
 - **`factorTecnologia`** = producto de `bonusProduccion.factor` de las tecnologías adoptadas cuyo `bonusProduccion.recurso` coincide con el recurso del extractor (p. ej. `canteria` ×1,5 la piedra).
+  **Implementado en Rust (2026-10-25, 6C):** es el `factor_tecnologia` del `Exterior` de cada plaza (`tecnologia::adopcion::factor_produccion` sobre las adoptadas de su Facción), en ppm, que multiplica el ritmo de sus extractores y de los de sus pueblos antes del resto oculto (lo mismo mira el ingreso bruto del ascenso); sin ninguna adoptada con bonus vale 1 sin mirar más.
 - **Extracción**: el extractor pide `min(produccionBase × …, espacio libre del almacén para ese recurso)` y `mapa.extraer` devuelve `min(pedido, stock)`: **solo se gasta del yacimiento lo que cabe**. El stock es `cantidadInicial − extraído`. Si tras extraer el stock llega a 0, se emite
   `construccion.yacimiento_agotado`.
 - **Regeneración** (`mapa.avanzarRegeneracion`, global del tick): un nodo con stock 0 que aún no tiene calendario agenda `instante + cooldown` (`REGENERACION_NODOS`: `livestock` 3 min; **todo lo demás** 10 min); cuando

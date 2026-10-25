@@ -199,6 +199,8 @@ impl Nucleo {
                 }
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").capital_de = Some(*faccion);
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
+                // Otra capital: `recursoEnCapital` y `capitalEnNivel` miran otra plaza (6C).
+                self.mirar_aparicion(*faccion);
                 self.tr.tocar(Clase::Faccion, u64::from(*faccion));
                 self.emitir_propio(t, "faccion.capital_designada", vec![*asentamiento], vec![("faccion", i64::from(*faccion)), ("asentamiento", *asentamiento as i64), ("heroe", *heroe as i64)]);
                 Ok(vec![])

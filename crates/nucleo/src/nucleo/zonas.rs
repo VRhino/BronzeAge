@@ -227,7 +227,10 @@ impl Nucleo {
             return false;
         }
         a.radio = nuevo;
+        let faccion = a.faccion;
         self.tr.tocar(Clase::Asentamiento, id);
+        // Una zona mayor puede contener un yacimiento (`yacimientoEnTerritorio`, 6C).
+        self.mirar_aparicion(faccion);
         // Las plazas con las que se toca recortan su zona contra esta: su polígono cambia con el radio.
         let vecinas: Vec<u64> = self.estado.contactos.iter().filter_map(|&(x, y)| if x == id { Some(y) } else { (y == id).then_some(x) }).collect();
         self.tr.tocar_todos(Clase::Asentamiento, vecinas);
@@ -290,7 +293,8 @@ impl Nucleo {
                 }
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 self.tr.emitir(&self.estado, EventoNucleo { codigo: "asentamiento.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![*asentamiento], punto: None, datos: vec![("nivel", *nivel as i64)], ..Default::default() });
-                self.contar_nivel(t, Some(nivel_antes), Some(*nivel));
+                let faccion = self.estado.asentamientos[asentamiento].faccion;
+                self.contar_nivel(t, faccion, Some(nivel_antes), Some(*nivel));
                 Ok(None)
             }
             Comando::AgrandarZona { asentamiento } => {

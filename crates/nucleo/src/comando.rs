@@ -470,6 +470,10 @@ pub enum Comando {
     /// El héroe (sin Facción o de una sin plazas) abre el alijo `alijo` (índice del artefacto) con su columna a `radioPuerta`: su oro, en unidades enteras, al carro de la columna (lo que no
     /// cabe se pierde), y queda abierto para él.
     AbrirAlijo { heroe: u64, alijo: u32 },
+    // ── La tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4). Código 175. ──
+    /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
+    /// al instante.
+    AdoptarTecnologia { heroe: u64, faccion: u32, tecnologia: u8 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -653,7 +657,8 @@ impl Comando {
             | Comando::ResponderAnexion { .. }
             | Comando::ProponerFusion { .. }
             | Comando::ResponderFusion { .. }
-            | Comando::RetirarFusion { .. } => ReyDeLaFaccion,
+            | Comando::RetirarFusion { .. }
+            | Comando::AdoptarTecnologia { .. } => ReyDeLaFaccion,
             Comando::ProponerRelacion { .. }
             | Comando::RetirarRelacion { .. }
             | Comando::DeclararGuerra { .. }
@@ -982,7 +987,8 @@ impl Comando {
             | Comando::RetirarAnexion { heroe, .. }
             | Comando::ProponerFusion { heroe, .. }
             | Comando::ResponderFusion { heroe, .. }
-            | Comando::RetirarFusion { heroe, .. } => i.heroes.push(*heroe),
+            | Comando::RetirarFusion { heroe, .. }
+            | Comando::AdoptarTecnologia { heroe, .. } => i.heroes.push(*heroe),
             Comando::AlternarReabastecerAliados { asentamiento, .. } => i.asentamientos.push(*asentamiento),
             // La puerta y los cargos de una plaza en batalla no se tocan: echar a quien combate dentro, o cambiar quién la gobierna, sería una orden sobre la batalla.
             Comando::AsignarCargoLocal { heroe, asentamiento, designado, .. } => {
@@ -1040,7 +1046,8 @@ impl Comando {
             | Comando::ResponderSolicitud { faccion, .. }
             | Comando::AsignarRey { faccion, .. }
             | Comando::AsignarEmbajador { faccion, .. }
-            | Comando::DesignarCapital { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
+            | Comando::DesignarCapital { faccion, .. }
+            | Comando::AdoptarTecnologia { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
             Comando::ResidirEnCampamento { campamento, .. } => v.push((Clase::Campamento, u64::from(*campamento))),
             _ => {}
         }
@@ -1826,6 +1833,12 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*alijo);
             }
+            Comando::AdoptarTecnologia { heroe, faccion, tecnologia } => {
+                w.u8(175);
+                w.u64(*heroe);
+                w.u32(*faccion);
+                w.u8(*tecnologia);
+            }
             Comando::ComprometerRecinto { asentamiento, cargo, nivel } => {
                 w.u8(123);
                 w.u64(*asentamiento);
@@ -2294,6 +2307,7 @@ impl Peticion {
             172 => Comando::ResponderFusion { heroe: r.u64()?, propuesta: r.u64()?, aceptar: r.bool()? },
             173 => Comando::RetirarFusion { heroe: r.u64()?, propuesta: r.u64()? },
             174 => Comando::AbrirAlijo { heroe: r.u64()?, alijo: r.u32()? },
+            175 => Comando::AdoptarTecnologia { heroe: r.u64()?, faccion: r.u32()?, tecnologia: r.u8()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2865,6 +2879,17 @@ pub mod rechazos {
     pub const ALIJO_YA_ABIERTO: &str = "alijo.ya_abierto";
     /// Hay que estar en el sitio: la columna del héroe, en el mapa, a `radioPuerta` del alijo.
     pub const ALIJO_LEJOS: &str = "alijo.lejos";
+    // La adopción de una tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4).
+    /// La tecnología aún no le ha aparecido a la Facción (ni por su hito ni por un Aeda).
+    pub const TECNOLOGIA_NO_APARECIDA: &str = "tecnologia.no_aparecida";
+    /// La Facción ya la tiene adoptada (también las de arranque).
+    pub const TECNOLOGIA_YA_ADOPTADA: &str = "tecnologia.ya_adoptada";
+    /// La Facción no tiene capital: no le queda ninguna plaza.
+    pub const TECNOLOGIA_SIN_CAPITAL: &str = "tecnologia.sin_capital";
+    /// El Rey tiene que estar dentro de la capital efectiva de su Facción.
+    pub const TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL: &str = "tecnologia.rey_fuera_de_la_capital";
+    /// El almacén de la capital no tiene la tarifa de adopción de la Era de la tecnología.
+    pub const TECNOLOGIA_SIN_TARIFA: &str = "tecnologia.sin_tarifa";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -3229,6 +3254,7 @@ mod pruebas {
             Comando::ResponderFusion { heroe: 2, propuesta: 41, aceptar: false },
             Comando::RetirarFusion { heroe: 2, propuesta: 41 },
             Comando::AbrirAlijo { heroe: 2, alijo: 7 },
+            Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

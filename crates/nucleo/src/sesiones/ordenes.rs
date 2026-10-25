@@ -7,7 +7,7 @@
 //!   batalla de un UUID.
 //! - Un id que no tiene la forma de su entidad se rechaza con el código de «desconocida» de esa entidad (`heroe.desconocido`…); un valor fuera de un catálogo cerrado (recurso, tropa,
 //!   cargo, política, tipo de carro…), con `orden.forma_invalida`. Lo demás (que la entidad exista, las cantidades) lo valida el núcleo.
-//! - Las órdenes del contrato que el núcleo aún no tiene (la tecnología y los Aedas del sistema 6; los alijos llegaron en 6F) se rechazan con
+//! - Las órdenes del contrato que el núcleo aún no tiene (los Aedas del sistema 6; los alijos llegaron en 6F y la adopción en 6C) se rechazan con
 //!   `orden.no_disponible`; ninguna se descarta en silencio. El `match` sobre `Cuerpo` no tiene comodín: una orden nueva del contrato no compila hasta clasificarla.
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
@@ -56,6 +56,8 @@ pub trait Consulta {
     fn batalla(&self, uuid: &str) -> Option<u64>;
     /// El índice de un alijo del artefacto por su id (el del contrato).
     fn alijo(&self, id: &str) -> Option<u32>;
+    /// El índice de una tecnología del catálogo por su id (el del contrato).
+    fn tecnologia(&self, id: &str) -> Option<u8>;
 }
 
 impl Consulta for Nucleo {
@@ -85,6 +87,9 @@ impl Consulta for Nucleo {
     }
     fn alijo(&self, id: &str) -> Option<u32> {
         self.alijo_por_id(id)
+    }
+    fn tecnologia(&self, id: &str) -> Option<u8> {
+        self.estado().reglas.economia.tecnologia.buscar(id)
     }
 }
 
@@ -195,6 +200,9 @@ impl Ctx<'_> {
     }
     fn alijo(&self, id: &str) -> R<u32> {
         self.mundo.alijo(id).ok_or_else(|| self.no(rechazos::ALIJO_DESCONOCIDO, id))
+    }
+    fn tecnologia(&self, id: &str) -> R<u8> {
+        self.mundo.tecnologia(id).ok_or_else(|| self.no(rechazos::TECNOLOGIA_DESCONOCIDA, id))
     }
 
     /// `ed-<plaza>-<n>`: el edificio `n` de esa plaza.
@@ -692,10 +700,8 @@ impl Ctx<'_> {
             Cuerpo::RetirarFusion(o) => Comando::RetirarFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
 
             // ── Lo que el núcleo aún no tiene ──
-            Cuerpo::AdoptarTecnologia(_)
-            | Cuerpo::EmpezarEpica(_)
-            | Cuerpo::AbandonarEpica(_)
-            | Cuerpo::ComprarTecnologiaAeda(_) => return self.no_disponible("tecnología y Aedas (sistema 6)"),
+            Cuerpo::EmpezarEpica(_) | Cuerpo::AbandonarEpica(_) | Cuerpo::ComprarTecnologiaAeda(_) => return self.no_disponible("Aedas (sistema 6)"),
+            Cuerpo::AdoptarTecnologia(o) => Comando::AdoptarTecnologia { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
             Cuerpo::AbrirAlijo(o) => Comando::AbrirAlijo { heroe: self.mi_heroe()?, alijo: self.alijo(&o.alijo_id)? },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
             Cuerpo::ComprarInformePlaza(o) => {

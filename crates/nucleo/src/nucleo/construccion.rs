@@ -45,8 +45,6 @@ use territorio::Disco;
 // ── Lo que el Exterior de la economía todavía no tiene (cada uno lo dará su sistema) ──
 // placeholder: lo dará la fertilidad de la zona del mundo (`fertilidadZona`).
 const FERTILIDAD: i64 = UNO;
-// placeholder: el `bonusProduccion` de las tecnologías adoptadas (`canteria` ×1,5 la piedra) es de la tanda 6C.
-const SIN_BONUS: fn(Recurso) -> i64 = |_| UNO;
 // placeholder: lo darán la ocupación/Aedas (factores extra). La ración de la guarnición es la de los residentes (`heroes`).
 const FACTOR_EXTRA: i64 = UNO;
 
@@ -217,6 +215,8 @@ impl Nucleo {
             let rt = &reglas.economia.tecnologia;
             let adoptadas = tecnologia.de(rt, a.faccion).adoptadas;
             let tiene_tecnologia = |t: &str| crate::estado::adopta(rt, adoptadas, t);
+            // El `bonusProduccion` de las adoptadas (6C: `canteria` ×1,5 la piedra), en plazas y pueblos, aplicado al ritmo antes del resto oculto.
+            let factor_tecnologia = |rec: Recurso| tecnologia::adopcion::factor_produccion(rt, adoptadas, rec);
             let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; 24] };
             let mut sitios = SitiosPlaza {
                 mapa: &geo.mapa,
@@ -238,7 +238,7 @@ impl Nucleo {
                 sitios: &mut sitios,
                 fertilidad: FERTILIDAD,
                 tiene_tecnologia: &tiene_tecnologia,
-                factor_tecnologia: &SIN_BONUS,
+                factor_tecnologia: &factor_tecnologia,
                 nivel_faccion,
                 orden_era,
                 es_capital,
@@ -254,11 +254,15 @@ impl Nucleo {
             let r = f(&mut a.economia, &mut x);
             (r, fuentes.contado)
         };
-        let nivel_ahora = a.nivel_actual();
+        let (nivel_ahora, faccion) = (a.nivel_actual(), a.faccion);
         self.estado.asentamientos.insert(id, a);
         // Lo extraído y lo fabricado cuentan para los logros en origen (6B), y un nivel actual nuevo, para el récord de plazas por nivel.
         self.contar_flujos(t, &contado);
-        self.contar_nivel(t, Some(nivel_antes), Some(nivel_ahora));
+        self.contar_nivel(t, faccion, Some(nivel_antes), Some(nivel_ahora));
+        // El paso de la capital mira `recursoEnCapital` si alguna candidata lo pide (6C, plan §5.1).
+        if es_capital {
+            self.mirar_recurso_en_capital(faccion);
+        }
         Some(r)
     }
 
@@ -355,6 +359,10 @@ impl Nucleo {
             self.tr.emitir(&self.estado, evento_nucleo(id, t, punto, e, reglas));
         }
         self.tr.tocar(Clase::Asentamiento, id);
+        // Un edificio que se completa o se mejora y un ascenso son disparadores de la aparición de su Facción (6C, `edificio` y `capitalEnNivel`).
+        if sucesos.iter().any(|s| matches!(s, EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. })) {
+            self.mirar_aparicion(faccion);
+        }
         // La experiencia de Facción por construir y por ascender (§3.5), en el instante en que acaba la obra.
         for s in sucesos {
             let hecho = match s {
@@ -395,7 +403,7 @@ impl Nucleo {
         self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas, t);
         self.estado.contactos.retain(|&(x, y)| x != id && y != id);
         self.quitar_plaza(id, a.faccion);
-        self.contar_nivel(t, Some(nivel_actual), None);
+        self.contar_nivel(t, a.faccion, Some(nivel_actual), None);
         self.estado.generaciones.subir(id);
         // La cascada de la ruina, en su orden: los residentes se reubican; después, el comercio (trueques anulados sin penalizar, caravanas perdidas
         // o devueltas y órdenes de mercado borradas); su campamento de bandidos desaparece y, si era la última plaza de su Facción, esta queda derrotada

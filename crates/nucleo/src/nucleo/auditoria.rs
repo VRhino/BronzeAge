@@ -50,13 +50,16 @@ impl Nucleo {
     }
 
     /// El campamento `c` como lo ve quien está dentro, sin proyectarlo: su stock (el inicial mientras no se toca), el mercado global, los reclutas, quienes residen y están en él, sus préstamos y las
-    /// tecnologías de las que depende lo que ofrece.
+    /// tecnologías que desbloquea sin contar el plazo tras la primera (6C): ese cambia solo con el tiempo, en la cita de campamento de cada tecnología, que toca todos los campamentos (si se mirara
+    /// aquí, un suceso del mismo instante anterior a la cita lo vería ya cambiado).
     fn huella_de_campamento(&self, c: u32, inicial: &comercio::mercenarios::StockCampamento) -> String {
         let e = &self.estado;
         let residentes: Vec<u64> = e.militar.heroes.values().filter(|h| h.heroe.residencia == Some(Residencia::Campamento(c))).map(|h| h.heroe.id).collect();
         let presentes: Vec<u64> = e.militar.heroes.values().filter(|h| h.heroe.presencia.ubicacion == militar::presencia::Ubicacion::Mercenarios(c)).map(|h| h.heroe.id).collect();
         let prestamos: Vec<u64> = e.militar.heroes.values().flat_map(|h| &h.heroe.escuadras).filter(|s| s.prestada == Some(c)).map(|s| s.id).collect();
-        huella(&(e.comercio.mercenarios.stock.get(&c).unwrap_or(inicial), &e.comercio.mercenarios.mercado, residentes, presentes, prestamos, e.militar.reclutas.get(&c), &e.tecnologia.por_faccion, e.fundacion.fondos.get(&c)))
+        let vivas: Vec<u32> = self.espacio.plazas_por_faccion.keys().copied().collect();
+        let tecnologias = e.tecnologia.tecnologias_del_campamento(&e.reglas.economia.tecnologia, &vivas, Instante::MIN);
+        huella(&(e.comercio.mercenarios.stock.get(&c).unwrap_or(inicial), &e.comercio.mercenarios.mercado, residentes, presentes, prestamos, e.militar.reclutas.get(&c), tecnologias, e.fundacion.fondos.get(&c)))
     }
 
     fn huellas(&self) -> Huellas {

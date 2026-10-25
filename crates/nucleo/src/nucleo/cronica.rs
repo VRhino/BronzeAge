@@ -11,6 +11,8 @@
 //! | `diplomacia.anexion` | la anexión: la absorbente y la absorbida (5F) |
 //! | `diplomacia.fusion` | la fusión: las dos que se disuelven y la que nace (5F) |
 //! | `titulo.nace`, `titulo.cambia_manos` | el título: su poseedor (y el anterior); la entrada lleva además la clave del título (5F) |
+//! | `tecnologia.logro`, `era.comienza` | el logro (su contador y su umbral, sin la tecnología que abre) y la Era nueva (su id, su orden y si llegó por plazo), sin Facciones (6C) |
+//! | `aedas.canta_descubrimiento` | el descubrimiento: la descubridora y la tecnología (6C) |
 //! | `asentamiento.nivel_subio` con nivel ≥ 3 | solo si es la primera plaza del mundo que llega a ese nivel (ninguna otra, fuera de las que suben en la misma versión, lo tenía ya); si suben dos a la vez, la primera |
 //!
 //! **Guardada entera** (sistema 6, decisión Q2; §5.3 del plan): en el núcleo persistente cada entrada se guarda, ya como el `EventoDominio` que viaja en las `Delta`, en un diario aparte
@@ -18,9 +20,9 @@
 //! orden), que antes de escribir una foto escribe lo anterior; al recuperar se trunca a la versión de la foto y la repetición del registro la vuelve a escribir igual. `PedirCronica` lee una
 //! página en ese mismo hilo, detrás de lo que ya se le mandó: llega hasta la versión del mundo al pedirla, sin tocar el estado ni bloquear el actor.
 //!
-//! DUDA: el canon canta la caída por `combate.asedio_conquista`, que en Rust solo da el asedio con números; la conquista por Unity no lo emite, así que la entrada sale de
-//! `asentamiento.conquistada`, que dan las dos vías. La frase la compone el cliente (el contrato no lleva texto): la entrada no trae la variante de §8. Faltan los públicos de la tecnología y los
-//! Aedas (sistema 6): filas de paridad.
+//! C4 (cerrada en 6C: queda la regla de Rust): el canon canta la caída por `combate.asedio_conquista`, que en Rust solo da el asedio con números; la conquista por Unity no lo emite, así que la entrada sale de
+//! `asentamiento.conquistada`, que dan las dos vías (C4 del plan del sistema 6: así queda). La frase la compone el cliente (el contrato no lleva texto): la entrada no trae la variante de §8. Los
+//! públicos del sistema 6 (6C) son hechos públicos que además dejan su entrada, como los títulos; `aedas.epica_cumplida` llegará con 6E.
 
 use super::*;
 use crate::estado::Dato;
@@ -58,6 +60,8 @@ impl Nucleo {
                 "diplomacia.rebelion_vasallo" | "diplomacia.vasallo_liberado" | "diplomacia.vasallo_conquistado" | "diplomacia.anexion" => datos(h, &["faccionA", "faccionB"]),
                 "diplomacia.fusion" => datos(h, &["faccionA", "faccionB", "faccion"]),
                 "titulo.nace" | "titulo.cambia_manos" => datos(h, &["faccion", "faccionAnterior"]),
+                "tecnologia.logro" | "era.comienza" => Vec::new(),
+                "aedas.canta_descubrimiento" => datos(h, &["faccion"]),
                 "asentamiento.ruinas" => h.facciones.clone(),
                 "asentamiento.nivel_subio" => match h.dato("nivel") {
                     Some(n) if n >= NIVEL_MINIMO_CANTADO && self.primera_en_llegar(hechos, plaza(h), n) && cantados.insert(n) => h.facciones.clone(),
@@ -132,8 +136,12 @@ pub(super) fn pagina(diario: Option<&Diario>, pedir: &pb::PedirCronica, version:
 fn entrada(h: &EventoNucleo, facciones: Vec<u32>, plaza: Option<u64>) -> EventoNucleo {
     let mut valores = vec![("tipo", Dato::Texto(h.codigo.to_string())), ("faccionIds", Dato::Lista(facciones.iter().map(|&f| Dato::Texto(ids::faccion(f))).collect()))];
     valores.extend(plaza.map(|p| ("asentamientoId", Dato::Texto(ids::asentamiento(p)))));
-    // El título cantado (5F): su clave estable.
-    valores.extend(h.valores.iter().filter(|(k, _)| *k == "titulo").cloned());
-    let datos = h.dato("nivel").filter(|_| h.codigo == "asentamiento.nivel_subio").map(|n| ("nivel", n)).into_iter().collect();
+    // El título cantado (5F): su clave estable. De los públicos del sistema 6 (6C), lo que ya dicen a todos: el contador, la Era o la tecnología cantada.
+    valores.extend(h.valores.iter().filter(|(k, _)| matches!(*k, "titulo" | "contador" | "era" | "tecnologia")).cloned());
+    let datos = match h.codigo.as_ref() {
+        "asentamiento.nivel_subio" => h.datos.iter().filter(|(k, _)| *k == "nivel").copied().collect(),
+        "tecnologia.logro" | "era.comienza" => h.datos.clone(),
+        _ => Vec::new(),
+    };
     EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("cronica.entrada", h.en, datos) }
 }
