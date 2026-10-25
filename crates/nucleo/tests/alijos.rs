@@ -121,6 +121,9 @@ fn se_abre_en_el_sitio_una_vez_por_heroe_y_su_oro_sube_al_carro() {
     assert_eq!(hechos.len(), 1);
     assert_eq!(hechos[0].0, vec![("heroe", ana as i64), ("oro", base::entero(oro)), ("cargado", base::entero(oro))]);
     assert_eq!(hechos[0].1, m.0.alijos()[alijo as usize].id);
+    // Solo lo oye quien lo abre, no los demás de su columna (decisión del autor).
+    let hecho = e.n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).find(|x| x.codigo == "alijo.abierto").unwrap().clone();
+    assert_eq!((hecho.heroes, hecho.ejercitos), (vec![ana], vec![]));
     // Una vez por héroe; otro héroe en el mismo sitio abre el suyo (el alijo no desaparece).
     assert_eq!(e.no("ana", Comando::AbrirAlijo { heroe: ana, alijo }), rechazos::ALIJO_YA_ABIERTO);
     let (col_b, beto) = e.columna("beto", 2, sitio);

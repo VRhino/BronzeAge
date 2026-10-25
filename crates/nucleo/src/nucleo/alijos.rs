@@ -100,7 +100,8 @@ impl Nucleo {
         let cargado = self.cargar_botin_en(columna, &[(Recurso::Oro, apertura.cargado)].into_iter().collect()).get(&Recurso::Oro).copied().unwrap_or(0);
         debug_assert_eq!(cargado, apertura.cargado, "la regla y el carro dicen lo mismo de lo que cabe");
         let datos = vec![("heroe", heroe as i64), ("oro", apertura.oro), ("cargado", cargado)];
-        self.tr.emitir(&self.estado, EventoNucleo { ejercitos: vec![columna], valores: vec![("alijo", Dato::Texto(id))], ..EventoNucleo::nuevo("alijo.abierto", t, datos) });
+        // Solo lo oye quien lo abre (decisión del autor), no los demás de la columna aunque el oro vaya al carro común.
+        self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![heroe], valores: vec![("alijo", Dato::Texto(id))], ..EventoNucleo::nuevo("alijo.abierto", t, datos) });
         Ok(vec![])
     }
 }
