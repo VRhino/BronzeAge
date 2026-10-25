@@ -382,17 +382,20 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         // ── Las épicas de los Aedas residentes (6E) ──
         (orden!(EmpezarEpica, OrdenEmpezarEpica, asentamiento_id: s("as-3"), aeda_id: s("aeda-r4"), tecnologia_id: s("metalurgia_cobre")), Comando::EmpezarEpica { heroe: 7, asentamiento: 3, aeda: 4, tecnologia: 2 }),
         (orden!(AbandonarEpica, OrdenAbandonarEpica, asentamiento_id: s("as-3"), aeda_id: s("aeda-r4")), Comando::AbandonarEpica { heroe: 7, asentamiento: 3, aeda: 4 }),
+        // ── Los Aedas itinerantes (6D) ──
+        (
+            orden!(ComprarTecnologiaAeda, OrdenComprarTecnologiaAeda, asentamiento_id: s("as-3"), tecnologia_id: s("metalurgia_cobre")),
+            Comando::ComprarTecnologiaAeda { heroe: 7, asentamiento: 3, tecnologia: 2 },
+        ),
     ]
 }
 
-/// Las órdenes del contrato sin comando en el núcleo, por grupo, con la variante de `Cuerpo` vacía de cada una.
+/// Las órdenes del contrato sin comando en el núcleo, por grupo, con la variante de `Cuerpo` vacía de cada una (ninguna desde 6D y 6E).
 fn ordenes_no_disponibles() -> Vec<Cuerpo> {
     macro_rules! vacias {
         ($($v:ident),* $(,)?) => { vec![$(Cuerpo::$v(Default::default())),*] };
     }
     vacias![
-        // Aedas itinerantes (sistema 6)
-        ComprarTecnologiaAeda,
     ]
 }
 
@@ -455,7 +458,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 1);
+    assert_eq!(sin_comando.len(), 0);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -554,6 +557,7 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(EmpezarEpica, OrdenEmpezarEpica, asentamiento_id: s("as-3"), aeda_id: s("aeda-4"), tecnologia_id: s("metalurgia_cobre")), rechazos::EPICA_NO_VIVE_AQUI),
         (orden!(EmpezarEpica, OrdenEmpezarEpica, asentamiento_id: s("as-3"), aeda_id: s("aeda-r4"), tecnologia_id: s("no_existe")), rechazos::TECNOLOGIA_DESCONOCIDA),
         (orden!(AbandonarEpica, OrdenAbandonarEpica, asentamiento_id: s("as-3"), aeda_id: s("r4")), rechazos::EPICA_NO_VIVE_AQUI),
+        (orden!(ComprarTecnologiaAeda, OrdenComprarTecnologiaAeda, asentamiento_id: s("as-3"), tecnologia_id: s("no_existe")), rechazos::TECNOLOGIA_DESCONOCIDA),
         (orden!(Atacar, OrdenAtacar, heroe_id: h(), objetivo: Some(pb::orden_atacar::Objetivo { tipo: Some(Ataca::CampamentoId(s("camp-1"))) })), rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO),
         (orden!(Atacar, OrdenAtacar, heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(OrdenarEscuadras, OrdenOrdenarEscuadras, escuadron_ids: v(&["esc-1", "ej-2"])), rechazos::ORDEN_FORMA_INVALIDA),
@@ -608,7 +612,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (169, 145, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (170, 146, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -662,6 +666,7 @@ fn quien(a: crate::comando::Autoriza) -> &'static str {
         FijaPuerta => "el Gobernador, residente y dentro, o el Rey de la Facción",
         CompraIntel => "la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador",
         DirigeAedas => "el Rey de la dueña, el Gobernador o el Sacerdote de la plaza, dentro",
+        CompraTecnologiaAeda => "la cuenta del héroe, dentro de la plaza y Rey o Gobernador",
         LiderDeLaColumna => "el Líder de la columna",
         ParticipanteDeLaColumna => "un participante de la columna",
     }
@@ -697,5 +702,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 145 + 19 + 5 + 1, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 146 + 19 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

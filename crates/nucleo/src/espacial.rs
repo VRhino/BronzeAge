@@ -9,6 +9,9 @@ use crate::generadores::{Cx, GeneradorDeEventos};
 use comercio::caravana::EstadoCaravana;
 use vision::{Donde, Movil, Muestra, Observador, Vision};
 
+/// La bandera de los Aedas itinerantes en la visión: no son de ninguna Facción ni coinciden con la de las columnas sin Facción (`SIN_BANDERA`).
+pub const BANDERA_AEDAS: u32 = u32::MAX - 1;
+
 /// Visión muestreada (cada `Ajustes::muestreo_ms`, p. ej. 250 ms): quién ve a quién. Emite solo el **primer contacto**
 /// entre dos facciones; el detalle por columna es lo que alimentará los `Delta` del ámbito de vista.
 pub struct GeneradorVision {
@@ -66,6 +69,11 @@ impl GeneradorDeEventos for GeneradorVision {
                 m.atencion = Some(vision::radios::CARAVANA_GRANDE);
             }
             moviles.push(m);
+        }
+        // Los Aedas itinerantes (6D): móviles de nadie, que se ven como una columna ajena (Niebla_De_Guerra §5.4); no tienen ojos.
+        for a in &estado.aedas {
+            let donde = a.plan.as_ref().map_or(Donde::Fijo(a.posicion), Donde::Plan);
+            moviles.push(Movil::new(crate::estado::entidad_aeda(a.id), BANDERA_AEDAS, donde));
         }
         let muestra = self.vision.muestrear(t, &ojos, &moviles);
         let cambios = vision::diff(&self.previa, &muestra);

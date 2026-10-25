@@ -96,10 +96,20 @@ pub fn entidad_tecnologia(t: tecnologia::TecId) -> u64 {
     19 * crate::estado_comercio::ETIQUETA | u64::from(t)
 }
 
+/// Prioridad del único evento de un Aeda itinerante (`Carga::Aeda`: su llegada o el fin de su estancia; decisión técnica 2 del plan del sistema 6: con las citas de la tecnología, después de todo lo
+/// demás del mismo instante).
+pub const PRIO_AEDAS: u8 = 10;
+
+/// La entidad de un Aeda itinerante `aeda-N` (etiqueta 20 de `estado_comercio::ETIQUETA`): sube de generación cuando su evento pendiente deja de valer (le cierran la puerta, su plaza o su destino
+/// desaparecen).
+pub fn entidad_aeda(n: u32) -> u64 {
+    20 * crate::estado_comercio::ETIQUETA | u64::from(n)
+}
+
 /// Prioridad de la cita de llegada de un Aeda residente (`Carga::Residentes`, Reloj_Y_Eventos §2: con las demás citas de la tecnología, después de todo lo demás del mismo instante).
 pub const PRIO_RESIDENTES: u8 = 10;
 
-/// La entidad de la cita de llegada de un Aeda residente a una plaza que espera con cupo libre (etiqueta 21 de `estado_comercio::ETIQUETA`; la 20 queda para los itinerantes de 6D): una por
+/// La entidad de la cita de llegada de un Aeda residente a una plaza que espera con cupo libre (etiqueta 21 de `estado_comercio::ETIQUETA`; la 20 es la de los itinerantes): una por
 /// plaza. Sube de generación cada vez que cambia el instante de la cita o la plaza deja de esperar.
 pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
@@ -108,6 +118,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 /// BAN40: BAN39 (6D, los Aedas itinerantes) con los Aedas residentes y sus épicas (sistema 6, tanda 6E; `codec_tecnologia::escribir_residentes`): cada residente (su N, su plaza,
 /// su Facción, cuándo llegó y su épica con el capítulo, los hechos, el último y sus claves), el contador de ids, desde cuándo espera cada plaza con cupo libre, las épicas cumplidas por Facción
 /// y la cita de llegada de cada plaza que espera (`Estado::residentes_citas` y `Carga::Residentes`). BAN39 y BAN38 se rechazan: no traen los residentes ni las épicas, que no se pueden deducir.
+///
+/// BAN39: BAN38 con los Aedas itinerantes (sistema 6, tanda 6D; `Estado::aedas`): dónde está cada uno, en qué plaza se detuvo y hasta cuándo, adónde va y por qué plan, y las plazas que visitó hace
+/// poco, más su único evento en la cola (`Carga::Aeda`). BAN38 se rechaza: no trae los Aedas, y los que ya habían nacido, con lo que han recorrido, no se pueden deducir del estado.
 ///
 /// BAN38: BAN37 con las dos citas de cada tecnología descubierta (sistema 6, tanda 6C; `Carga::Tecnologia`): la de conocimiento (`primeros.en + retrasoConocimiento`: la cantan los Aedas) y la
 /// del campamento (`primeros.en + horasTrasLaPrimera`: la desbloquean los campamentos de mercenarios); lo ya cantado (`cantadas`) iba ya en BAN37. BAN37 se rechaza: sus tecnologías ya
@@ -495,6 +508,8 @@ pub enum Carga {
     Era,
     /// Una cita de una tecnología descubierta (6C; la entidad es `entidad_tecnologia`; prioridad [`PRIO_TECNOLOGIA`]).
     Tecnologia(SucesoTecnologia),
+    /// El único evento pendiente de un Aeda itinerante (6D; la entidad es `entidad_aeda`; prioridad [`PRIO_AEDAS`]): llega a su destino si va de camino, y si no, acaba su estancia y parte.
+    Aeda,
     /// Se mira si llega un Aeda residente a una plaza que espera con cupo libre (6E; la entidad es `entidad_residentes`; prioridad [`PRIO_RESIDENTES`]).
     Residentes,
 }
@@ -942,6 +957,8 @@ pub struct Estado {
     pub tecnologia: tecnologia::EstadoTecnologia,
     /// Cuándo vence la cita de la Era que está en la cola (`Carga::Era`), si hay una: se arma como el plazo de los títulos, al pasar algo en el mundo con alguna Facción.
     pub era_en: Option<Instante>,
+    /// Los Aedas itinerantes (6D, Tecnologia_Aedas §6.2), por su número: el de `aeda-N` es su posición más uno. Nunca se eliminan.
+    pub aedas: Vec<tecnologia::itinerantes::AedaItinerante>,
     /// Los Aedas residentes y sus épicas (6E, Tecnologia_Aedas §7): quiénes viven en cada plaza, desde cuándo espera cada una con cupo libre y las épicas cumplidas por Facción.
     pub residentes: tecnologia::Residentes,
     /// El instante de la cita de llegada que está en la cola para cada plaza que espera (`Carga::Residentes`, generación de `entidad_residentes`).
@@ -988,6 +1005,7 @@ impl Estado {
             militar: EstadoMilitar::default(),
             tecnologia,
             era_en: None,
+            aedas: Vec::new(),
             residentes: tecnologia::Residentes::default(),
             residentes_citas: BTreeMap::new(),
             combate: EstadoCombate::default(),
@@ -1141,6 +1159,7 @@ impl Estado {
         w.opt_i64(self.titulos_en);
         codec_tecnologia::escribir(&mut w, &self.tecnologia);
         w.opt_i64(self.era_en);
+        codec_tecnologia::escribir_aedas(&mut w, &self.aedas);
         codec_tecnologia::escribir_residentes(&mut w, &self.residentes, &self.residentes_citas);
 
         let gens = self.generaciones.volcar();
@@ -1203,6 +1222,7 @@ impl Estado {
                 Carga::Era => w.u8(16),
                 Carga::Tecnologia(SucesoTecnologia::Conocimiento) => w.u8(17),
                 Carga::Tecnologia(SucesoTecnologia::Campamento) => w.u8(18),
+                Carga::Aeda => w.u8(19),
                 Carga::Residentes => w.u8(22),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
@@ -1243,8 +1263,8 @@ impl Estado {
             }
         } else if magia == *b"BAN3" {
             match r.u8()? {
-                b'9' => return Err(ErrorFormato("foto del formato BAN39 (sin los Aedas residentes ni sus épicas): ya no se admite")),
-                b'8' => return Err(ErrorFormato("foto del formato BAN38 (sin los Aedas residentes ni sus épicas: quién vive en cada plaza, la espera de las plazas con cupo libre, sus citas de llegada y las épicas cumplidas de cada Facción, que no se pueden deducir del estado): ya no se admite")),
+                b'9' => return Err(ErrorFormato("foto del formato BAN39 (sin los Aedas residentes ni sus épicas: quién vive en cada plaza, la espera de las plazas con cupo libre, sus citas de llegada y las épicas cumplidas de cada Facción, que no se pueden deducir del estado): ya no se admite")),
+                b'8' => return Err(ErrorFormato("foto del formato BAN38 (sin los Aedas itinerantes ni los Aedas residentes: los itinerantes que ya habían nacido con lo que han recorrido, quién vive en cada plaza, la espera de las plazas con cupo libre, sus citas de llegada y las épicas cumplidas de cada Facción, que no se pueden deducir del estado): ya no se admite")),
                 b'7' => return Err(ErrorFormato("foto del formato BAN37 (sus tecnologías ya descubiertas no traen en la cola las citas de conocimiento ni del campamento, así que nunca se cantarían ni llegarían a los campamentos por plazo): ya no se admite")),
                 b'6' => return Err(ErrorFormato("foto del formato BAN36 (sin el estado de tecnología del mundo: ni la Era, ni los contadores de los logros, ni los logros cumplidos, ni las descubridoras, que no se pueden deducir del estado; las tecnologías de las Facciones eran las de la administración): ya no se admite")),
                 b'5' => return Err(ErrorFormato("foto del formato BAN35 (los héroes no dicen qué alijos abrieron): ya no se admite")),
@@ -1377,6 +1397,7 @@ impl Estado {
         s.titulos_en = r.opt_i64()?;
         s.tecnologia = codec_tecnologia::leer(&mut r)?;
         s.era_en = r.opt_i64()?;
+        s.aedas = codec_tecnologia::leer_aedas(&mut r)?;
         (s.residentes, s.residentes_citas) = codec_tecnologia::leer_residentes(&mut r)?;
 
         let mut gens = Vec::new();
@@ -1409,6 +1430,7 @@ impl Estado {
                 16 => Carga::Era,
                 17 => Carga::Tecnologia(SucesoTecnologia::Conocimiento),
                 18 => Carga::Tecnologia(SucesoTecnologia::Campamento),
+                19 => Carga::Aeda,
                 22 => Carga::Residentes,
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),

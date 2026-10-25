@@ -47,6 +47,7 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 mod a_mano;
+mod aedas;
 mod alijos;
 mod auditoria;
 mod avanzadas;
@@ -262,6 +263,9 @@ pub struct Nucleo {
     aparicion_pendiente: std::collections::BTreeSet<u32>,
     /// Los hechos de épica de la transición en curso (`residentes`, 6E: se anotan donde ocurren y se procesan al cerrar la versión). Vacío entre transiciones: no se persiste.
     hechos_epicos: Vec<tecnologia::epicas::Hecho>,
+    /// Las plazas con un Aeda itinerante parado en las que la transición en curso pudo dejar algo por revelar (6D, `aedas`: llegó, la plaza cambió de dueño o los Aedas conocieron algo nuevo):
+    /// se revela al cerrar la versión. Vacío entre transiciones: no se persiste.
+    revelar_pendiente: std::collections::BTreeSet<u64>,
     /// Las entradas de la crónica cerradas y aún no mandadas al hilo de la persistencia. `None` sin persistencia (no se guarda la crónica). No entra en el hash ni en las fotos.
     cronica: Option<Vec<cronica::Apunte>>,
 }
@@ -379,6 +383,7 @@ impl Nucleo {
             uniones_de_memoria: Vec::new(),
             aparicion_pendiente: Default::default(),
             hechos_epicos: Vec::new(),
+            revelar_pendiente: Default::default(),
             cronica: None,
         };
         n.reconstruir_espacio();
@@ -536,10 +541,11 @@ impl Nucleo {
         self.metricas.eventos += 1;
         let id = ev.clave.entidad;
         // Lo que pasa en el mundo arma el plazo de los títulos (`titulos`); el propio plazo no lo rearma.
-        if !matches!(ev.carga, Carga::Titulos) {
+        // El evento de un Aeda itinerante (6D) no arma nada: su viaje no cambia lo que miran los títulos ni la Era (lo que revela o vende sí, y eso va en una orden u otro evento).
+        if !matches!(ev.carga, Carga::Titulos | Carga::Aeda) {
             self.armar_titulos(t);
         }
-        if !matches!(ev.carga, Carga::Era) {
+        if !matches!(ev.carga, Carga::Era | Carga::Aeda) {
             self.armar_era(t);
         }
         if self.ajustes.auditar_cambios {
@@ -561,6 +567,7 @@ impl Nucleo {
             Carga::Titulos => self.recalcular_titulos(t),
             Carga::Era => self.cita_de_era(t),
             Carga::Tecnologia(suceso) => self.cita_de_tecnologia(suceso, t),
+            Carga::Aeda => self.aeda_vence(id, t),
             Carga::Residentes => self.cita_de_residentes(id, t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
@@ -592,6 +599,8 @@ impl Nucleo {
         self.avanzar_epicas(t);
         // Las tecnologías cuyo hito se cumple tras lo que cambió la transición aparecen en esta misma versión (6C, `tecnologias`).
         self.apariciones(t);
+        // Lo que los Aedas parados revelan a las plazas que la transición marcó (6D, `aedas`), ya con lo que acaba de aparecer.
+        self.revelaciones(t);
         // La Caravana de Fundación que se ha quedado sin su titular (Fundacion_Y_Refundacion §7) vuelve sola a su origen: lo mira lo que la transición tocó.
         self.vigilar_fundaciones(t);
         // Quien entra, sale, se muda o aparca marca el interior de su plaza (solo con sesiones).
@@ -840,6 +849,7 @@ impl Nucleo {
             self.tr.tocados = Tocados::default();
             self.aparicion_pendiente.clear();
             self.hechos_epicos.clear();
+            self.revelar_pendiente.clear();
         }
         match &r.resultado {
             Resultado::Aceptada => {
@@ -970,6 +980,10 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::AdoptarTecnologia { .. } => match self.ejecutar_adopcion(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::ComprarTecnologiaAeda { .. } => match self.ejecutar_compra_a_aeda(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

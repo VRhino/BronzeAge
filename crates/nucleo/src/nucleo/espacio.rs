@@ -217,6 +217,11 @@ impl Nucleo {
             vivas_cambian |= !indice.contains_key(&a);
             indice.entry(a).or_default().insert(id);
         }
+        // Los Aedas de la plaza (6D): con dueño nuevo, el que está parado le revela lo suyo; si desaparece, el que estaba se va y el que venía elige otro destino.
+        match a {
+            Some(_) => self.revelar_en(id),
+            None => self.plaza_perdida_para_los_aedas(id),
+        }
         self.tras_ganar_o_perder_plaza(&[Some(de), a].into_iter().flatten().collect::<Vec<_>>(), vivas_cambian);
     }
 
@@ -227,6 +232,8 @@ impl Nucleo {
         if vivas_cambian {
             self.tocar_todos_los_campamentos();
         }
+        // El objetivo de los Aedas itinerantes depende de las vivas, y nacen en las plazas que los aceptan (una conquistada vuelve a la puerta de por defecto); nunca bajan (6D).
+        self.nacer_aedas();
     }
 
     // ───────────────────────────── Anunciar ─────────────────────────────

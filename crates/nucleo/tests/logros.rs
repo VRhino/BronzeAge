@@ -1,4 +1,4 @@
-//! La tecnología del mundo en el núcleo (sistema 6, tanda 6B; Tecnologia_Aedas §1-§3): el estado en la foto `BAN37` (hoy `BAN40`, con las citas de 6C), la cita global de la Era, los récords de plazas por nivel y
+//! La tecnología del mundo en el núcleo (sistema 6, tanda 6B; Tecnologia_Aedas §1-§3): el estado en la foto `BAN37` (hoy `BAN40`, con las citas de 6C, los Aedas itinerantes de 6D y los residentes de 6E), la cita global de la Era, los récords de plazas por nivel y
 //! `FijarTecnologias` sobre las reglas reales. Cada vía de los contadores la prueba el binario de su sistema, con su hecho (D18: un hecho cuenta una vez y nada más):
 //!
 //! | Vía | Prueba |

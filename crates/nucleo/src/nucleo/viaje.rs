@@ -193,6 +193,12 @@ impl Nucleo {
         c
     }
 
+    /// Un A\* con la atracción de la red vigente en `t` (el viaje de un Aeda itinerante, 6D: va por la red de caminos, como `pesosDeRed` en el TypeScript).
+    pub(super) fn camino_por_la_red(&mut self, origen: Punto, destino: Punto, t: Instante) -> Option<Camino> {
+        let atraccion = self.atraccion_de_red(t);
+        self.camino(origen, destino, atraccion.as_ref())
+    }
+
     /// Un A\* sin atracción de la red (el regreso de una aparcada con carga y el de una caravana cuya plaza cae).
     pub(super) fn camino_sin_red(&mut self, origen: Punto, destino: Punto) -> Option<Camino> {
         self.camino(origen, destino, None)

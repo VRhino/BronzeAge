@@ -214,7 +214,9 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 > **Implementado en Rust (2026-10-25, 6C):** `adoptar_tecnologia` (175, `ReyDeLaFaccion`: la cuenta del héroe, Rey de la Facción que nombra la orden), con los rechazos finos de `Tecnologia_Aedas.md` §4 en el orden del TypeScript; la tecnología va por su id del catálogo (una desconocida se rechaza en la traducción, `tecnologia.desconocida`). Quedan 3 órdenes no disponibles, las de los Aedas.
 
-> **Implementado en Rust (2026-10-25, 6E):** `empezar_epica` (177) y `abandonar_epica` (178), con una clase nueva de `Autoriza`, `DirigeAedas` (`dirigeAedas` de §4.3: el héroe de la cuenta dentro de la plaza y Rey de su Facción dueña, su Gobernador o su Sacerdote; no exige residir), y los nueve rechazos finos `epica.*` de `Tecnologia_Aedas.md` §7.2 en el orden del TypeScript. El Aeda va por su id `aeda-rN`; uno sin esa forma no vive en ninguna plaza (`epica.no_vive_aqui`, en la traducción). Queda 1 orden no disponible, `comprar_tecnologia_aeda` (6D).
+> **Implementado en Rust (2026-10-25, 6D):** `comprar_tecnologia_aeda` (176, clase nueva de `Autoriza`, `CompraTecnologiaAeda`: la cuenta del héroe, dentro de la plaza y Rey de la Facción dueña o su Gobernador titular, `politica::autorizacion::Actor::compra_tecnologia_aeda`), con los rechazos finos de `Tecnologia_Aedas.md` §6.4 en el orden del TypeScript; paga el almacén de la plaza y se vende a su Facción dueña (decisión 16 del plan del sistema 6). Quedan 2 órdenes no disponibles, las épicas.
+
+> **Implementado en Rust (2026-10-25, 6E):** `empezar_epica` (177) y `abandonar_epica` (178), con una clase nueva de `Autoriza`, `DirigeAedas` (`dirigeAedas` de §4.3: el héroe de la cuenta dentro de la plaza y Rey de su Facción dueña, su Gobernador o su Sacerdote; no exige residir), y los nueve rechazos finos `epica.*` de `Tecnologia_Aedas.md` §7.2 en el orden del TypeScript. El Aeda va por su id `aeda-rN`; uno sin esa forma no vive en ninguna plaza (`epica.no_vive_aqui`, en la traducción). Con 6D (`comprar_tecnologia_aeda`) no queda ninguna orden no disponible.
 
 > **Implementado en Rust (2026-10-25, 6F):** `abrir_alijo` (174, `CuentaDelHeroe`: el héroe de la cuenta, que el contrato no nombra) con su condición de `Generacion_Del_Mundo.md` §12, en su propia fila (C7 del plan del sistema 6: antes iba agrupada con las órdenes de campamento). Quedan 4 órdenes no disponibles, las de tecnología y Aedas.
 
@@ -322,6 +324,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `comprar_en_campamento` | `ComprarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta; cupo diario |
 | `comprar_informe_plaza` | `ComprarInformePlaza` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | como `comprar_mirada`; conocer la plaza |
 | `comprar_mirada` | `ComprarMirada` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | ciudadano, dentro de una plaza de su Facción con Taberna (el Rey, el Embajador o el Gobernador, `compraIntel`, 5E) o en un campamento |
+| `comprar_tecnologia_aeda` | `ComprarTecnologiaAeda` | la cuenta del héroe, dentro de la plaza y Rey o Gobernador | la plaza existe (`asentamiento.desconocido`); un Aeda itinerante parado en ella (`aedas.no_hay_aeda`); la tecnología del catálogo (`tecnologia.desconocida`), de una Era vendible (`aedas.era_no_vendible`), que el Aeda conoce (`aedas.no_la_conoce`), no aparecida a la Facción dueña (`aedas.ya_aparecida`) y el oro del precio en el almacén de la plaza (`aedas.sin_oro`) (6D) |
 | `conectarse` | `Conectarse` | la cuenta del héroe, aunque esté fuera | el único permitido fuera del mundo |
 | `convocar_ejercito` | `ConvocarEjercito` | la cuenta del héroe | dentro de la plaza o del campamento |
 | `crear_heroe` | `CrearHeroe` | su cuenta | una por cuenta (`heroe.ya_existe`); la administración crea los de otra cuenta y los bots |
@@ -452,7 +455,6 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
-| `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 
 <!-- /autorizacion -->
 

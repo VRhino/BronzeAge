@@ -179,6 +179,8 @@ partir:  candidatos = plazas distintas de la actual que los aceptan;  frescos = 
 
 No son atacables ni capturables y se ven como una columna ajena solo dentro del radio de visión ([`Niebla_De_Guerra.md`](Niebla_De_Guerra.md)).
 
+**La puerta que se cierra con un Aeda dentro** (Q5 del autor, 2026-10-24): cerrarle la puerta (el grupo `aedas`) a un Aeda parado en la plaza lo hace **salir al instante** hacia su siguiente destino (`partir` desde la plaza), como sale cualquiera que ya no puede entrar; lo que ya reveló queda revelado. El que llega a una plaza que le cerró la puerta mientras iba de camino no entra: sigue hacia la siguiente (en el TypeScript solo se miraba al elegir destino). Si la plaza en la que está desaparece, parte desde ella; si desaparece su destino, elige otro desde donde está.
+
 ### 6.3 Revelar (`revelarTecnologias`)
 
 En cada evaluación, por cada Aeda **detenido en una plaza** cuya Facción existe, en el orden del array: para cada tecnología que el Aeda **conoce** (§6.1) y la Facción no tiene **aparecida ni revelada**, se añade a `reveladas` y se emite `aedas.revela { faccionId, tecnologiaId, descubridorFaccionId, faltan[] }`
@@ -1445,7 +1447,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
 - **Un Aeda itinerante nunca muere** y su número solo crece (si bajan las Facciones, sobran).
 - **Un hecho de plaza solo inspira al Aeda de esa plaza**; uno de Facción, a los de todas sus plazas.
 - **A lo sumo un hecho por Aeda por evaluación**, y evaluar ocurre en cada orden y en cada evento (no solo en un muestreo).
-- **Una tecnología aparecida por épica o compra sí cuenta para el campamento de mercenarios**: `primeros` se registra por cualquier vía (corregido el 2026-10-17; no registrarlo era un error).
+- **Una tecnología aparecida por épica o compra sí cuenta para el campamento de mercenarios**: `primeros` se registra por cualquier vía (corregido el 2026-10-17; no registrarlo era un error). La compra a un Aeda **nunca** es la primera: un Aeda solo vende lo que conoce, y conocer exige descubridora (§6.1); así que solo la épica puede registrar `primeros` (precisado en 6D, duda 1 de 6A).
 
 ## 14. Divergencias
 
@@ -1461,9 +1463,11 @@ Divergencia aprobada del TS (Q4 del autor, 2026-10-24): los reclutas de un campa
 
 > **Implementado en Rust (2026-10-25, 6C): la aparición, la adopción, los campamentos y las citas de cada descubrimiento** (`crates/nucleo/src/nucleo/tecnologias.rs`, foto `BAN38`). La aparición se evalúa por disparadores al cerrar la versión (§3), la adopción es la orden `AdoptarTecnologia` (175, §4), el `factor_tecnologia` del paso de minuto aplica el `bonusProduccion` de las adoptadas (§4.1), el campamento desbloquea por `primeros` + 72 h o por la mitad de las vivas con ella adoptada (§5), y cada tecnología descubierta deja dos citas de prioridad 10 (conocimiento y campamento) que vencen una vez. Los tres públicos de esta tanda entran en la crónica (§8). Sin tick ni muestreo: nada más programa eventos por la tecnología.
 
+> **Implementado en Rust (2026-10-25, 6D): los Aedas itinerantes** (`crates/nucleo/src/nucleo/aedas.rs`, foto `BAN39`). `Estado::aedas` guarda cada `aeda-N` (posición, plaza en la que está parado y hasta cuándo, destino con su plan, `recientes`); cada uno tiene **un solo evento** en la cola (`Carga::Aeda`, prioridad 10): su llegada o el fin de su estancia, que solo se invalida cuando le cierran la puerta o desaparece su plaza o su destino. El viaje es un plan por la red de caminos (el A* de las caravanas con la atracción de la red, y los tramos de camino más rápidos) a `itinerantes.velocidad`; sin camino a ninguna candidata, otra estancia. El objetivo (§6.2) se mira al cambiar las Facciones vivas o al abrirse una puerta; nunca bajan. La puerta con el grupo `aedas` es la de 5E, con la regla de Q5 (§6.2). Revelan (§6.3) al llegar o nacer, al cambiar de dueño la plaza y cuando los Aedas conocen algo nuevo (en el mismo instante en que lo cantan: la cita de conocimiento, un logro que se fija, una Era que empieza); la revelación se hace al cerrar la versión, con lo que acaba de aparecer ya aparecido, y `faltan` son los índices del hito. La compra es la orden `ComprarTecnologiaAeda` (176, §6.4): el Rey o el Gobernador dentro de la plaza, con los rechazos finos `aedas.no_hay_aeda`, `aedas.era_no_vendible`, `aedas.no_la_conoce`, `aedas.ya_aparecida` y `aedas.sin_oro`; paga el almacén de la plaza en unidades enteras y vende a su Facción dueña. En la visión se muestrean como móviles de nadie; no entran en la rejilla de encuentros. Su proyección (`AedaItinerante` en `VISTA`) es de 6G.
+
 ## Catálogo de eventos
 
-Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 2 (`aedas.revela`, `aedas.venta`, de 6D); `tecnologia.logro` y `era.comienza` desde 6B; `tecnologia.aparece`, `tecnologia.adoptada` y `aedas.canta_descubrimiento` desde 6C; `aedas.residente_llega`, `aedas.residente_se_va`, `aedas.epica_empieza`, `aedas.epica_capitulo`, `aedas.epica_tecnologia`, `aedas.epica_cumplida` y `aedas.epica_abandonada` desde 6E.
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. Desde 6E se emiten todos: `tecnologia.logro` y `era.comienza` desde 6B; `tecnologia.aparece`, `tecnologia.adoptada` y `aedas.canta_descubrimiento` desde 6C; `aedas.revela` y `aedas.venta` desde 6D; `aedas.residente_llega`, `aedas.residente_se_va`, `aedas.epica_empieza`, `aedas.epica_capitulo`, `aedas.epica_tecnologia`, `aedas.epica_cumplida` y `aedas.epica_abandonada` desde 6E.
 
 <!-- eventos -->
 ```json

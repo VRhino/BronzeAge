@@ -164,7 +164,8 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
   camino van más rápido. Eligen el asentamiento más cercano que no han pisado hace poco y se detienen unas horas en
   cada uno (`AEDAS.itinerantes.estanciaMinutos`) antes de seguir. Una plaza que **les ha cerrado la puerta con el
   grupo `aedas`** (el exilio, Doc 2.8, que ahora distingue ese cuarto grupo) los deja fuera; el cierre por defecto, a
-  neutrales y enemigos, no los incluye.
+  neutrales y enemigos, no los incluye. Si se la cierra con un Aeda dentro, el Aeda **sale al instante** hacia su
+  siguiente destino, y lo que ya reveló queda revelado (decisión del autor, 2026-10-24).
 - **Se ven** como cualquier columna ajena, solo dentro del radio de visión de la Facción (Doc 5.12.7); no son
   atacables ni retenibles.
 - **Difunden** (6.4): mientras están detenidos en un asentamiento le revelan a su Facción lo que conocen y aún no tiene

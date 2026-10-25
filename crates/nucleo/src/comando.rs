@@ -474,6 +474,10 @@ pub enum Comando {
     /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
     /// al instante.
     AdoptarTecnologia { heroe: u64, faccion: u32, tecnologia: u8 },
+    // ── Los Aedas itinerantes (sistema 6, tanda 6D; Tecnologia_Aedas §6.4). Código 176. ──
+    /// El Rey de la Facción dueña de `asentamiento` o su Gobernador, presente en ella, compra al Aeda parado en la plaza la tecnología `tecnologia` (índice del catálogo): la paga el almacén de
+    /// la plaza (el doble del oro de la tarifa de su Era) y le aparece a la Facción dueña sin pasar por su hito, nunca sin su logro.
+    ComprarTecnologiaAeda { heroe: u64, asentamiento: u64, tecnologia: u8 },
     // ── Las épicas de los Aedas residentes (sistema 6, tanda 6E; Tecnologia_Aedas §7.2). Códigos 177 y 178 (el 176 es de 6D). ──
     /// El Aeda residente `aeda-r<aeda>` de la plaza empieza la épica de la tecnología `tecnologia` (índice del catálogo). La dirige el Rey de la dueña, el Gobernador o el Sacerdote de la plaza,
     /// presentes (`dirigeAedas`).
@@ -541,6 +545,8 @@ pub enum Autoriza {
     FijaPuerta,
     /// `compraIntel`: la cuenta del héroe; en una plaza, dentro de ella y Rey o Embajador de su Facción o su Gobernador (en un campamento lo mira la orden).
     CompraIntel,
+    /// `comprarTecnologiaAeda`: la cuenta del héroe, dentro de la plaza y Rey de su Facción o su Gobernador.
+    CompraTecnologiaAeda,
     /// `dirigeAedas`: la cuenta del héroe, dentro de la plaza y Rey de su Facción dueña, su Gobernador o su Sacerdote (no exige residir; Proyecciones §4.3).
     DirigeAedas,
     /// La cuenta del Líder de la columna.
@@ -711,6 +717,7 @@ impl Comando {
             Comando::AsignarCargoLocal { .. } => AsignaCargoLocal,
             Comando::FijarPuerta { .. } => FijaPuerta,
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,
+            Comando::ComprarTecnologiaAeda { .. } => CompraTecnologiaAeda,
             Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => DirigeAedas,
             Comando::MarcharA { .. } | Comando::Estacionar { .. } | Comando::Fundar { .. } | Comando::ComerciarEnPlaza { .. } => LiderDeLaColumna,
             Comando::EntregarDeCaravana { .. }
@@ -998,6 +1005,7 @@ impl Comando {
             | Comando::ResponderFusion { heroe, .. }
             | Comando::RetirarFusion { heroe, .. }
             | Comando::AdoptarTecnologia { heroe, .. }
+            | Comando::ComprarTecnologiaAeda { heroe, .. }
             // Una épica no es una orden sobre la batalla: solo el héroe que la dirige lleva el candado.
             | Comando::EmpezarEpica { heroe, .. }
             | Comando::AbandonarEpica { heroe, .. } => i.heroes.push(*heroe),
@@ -1851,6 +1859,12 @@ impl Peticion {
                 w.u32(*faccion);
                 w.u8(*tecnologia);
             }
+            Comando::ComprarTecnologiaAeda { heroe, asentamiento, tecnologia } => {
+                w.u8(176);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.u8(*tecnologia);
+            }
             Comando::EmpezarEpica { heroe, asentamiento, aeda, tecnologia } => {
                 w.u8(177);
                 w.u64(*heroe);
@@ -2333,6 +2347,7 @@ impl Peticion {
             173 => Comando::RetirarFusion { heroe: r.u64()?, propuesta: r.u64()? },
             174 => Comando::AbrirAlijo { heroe: r.u64()?, alijo: r.u32()? },
             175 => Comando::AdoptarTecnologia { heroe: r.u64()?, faccion: r.u32()?, tecnologia: r.u8()? },
+            176 => Comando::ComprarTecnologiaAeda { heroe: r.u64()?, asentamiento: r.u64()?, tecnologia: r.u8()? },
             177 => Comando::EmpezarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()?, tecnologia: r.u8()? },
             178 => Comando::AbandonarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
@@ -2917,6 +2932,17 @@ pub mod rechazos {
     pub const TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL: &str = "tecnologia.rey_fuera_de_la_capital";
     /// El almacén de la capital no tiene la tarifa de adopción de la Era de la tecnología.
     pub const TECNOLOGIA_SIN_TARIFA: &str = "tecnologia.sin_tarifa";
+    // La compra a un Aeda itinerante (sistema 6, tanda 6D; Tecnologia_Aedas §6.4).
+    /// No hay ningún Aeda itinerante parado en la plaza.
+    pub const AEDAS_NO_HAY_AEDA: &str = "aedas.no_hay_aeda";
+    /// Los Aedas solo venden las tecnologías de las Eras hasta `AEDAS.venta.ordenEraMaximo`.
+    pub const AEDAS_ERA_NO_VENDIBLE: &str = "aedas.era_no_vendible";
+    /// El Aeda aún no la conoce: sin logro cumplido, sin descubridora, antes del retraso de conocimiento o de una Era que no ha empezado.
+    pub const AEDAS_NO_LA_CONOCE: &str = "aedas.no_la_conoce";
+    /// A la Facción ya le ha aparecido.
+    pub const AEDAS_YA_APARECIDA: &str = "aedas.ya_aparecida";
+    /// El almacén de la plaza no tiene el oro del precio.
+    pub const AEDAS_SIN_ORO: &str = "aedas.sin_oro";
     // Las épicas de los Aedas residentes (sistema 6, tanda 6E; Tecnologia_Aedas §7.2, en el orden del TypeScript).
     /// Ese Aeda no vive en esta plaza (o el id no es el de un residente, `aeda-rN`).
     pub const EPICA_NO_VIVE_AQUI: &str = "epica.no_vive_aqui";
@@ -3301,6 +3327,7 @@ mod pruebas {
             Comando::RetirarFusion { heroe: 2, propuesta: 41 },
             Comando::AbrirAlijo { heroe: 2, alijo: 7 },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
+            Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },
             Comando::AbandonarEpica { heroe: 2, asentamiento: 3, aeda: 4 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },

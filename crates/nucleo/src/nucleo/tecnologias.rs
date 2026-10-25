@@ -35,14 +35,14 @@ use tecnologia::hito::VistaFaccion;
 use tecnologia::{Conjunto, TecId};
 
 /// Lo que el hito mira de una Facción, sobre sus plazas (el índice de `Espacio`) y su capital efectiva (buscada una vez, si alguna condición la pide).
-struct VistaDeFaccion<'a> {
+pub(super) struct VistaDeFaccion<'a> {
     n: &'a Nucleo,
     faccion: u32,
     capital: OnceCell<Option<&'a Asentamiento>>,
 }
 
 impl<'a> VistaDeFaccion<'a> {
-    fn de(n: &'a Nucleo, faccion: u32) -> Self {
+    pub(super) fn de(n: &'a Nucleo, faccion: u32) -> Self {
         VistaDeFaccion { n, faccion, capital: OnceCell::new() }
     }
 
@@ -162,7 +162,7 @@ impl Nucleo {
     /// Vence una cita de una tecnología descubierta.
     pub(super) fn cita_de_tecnologia(&mut self, suceso: SucesoTecnologia, t: Instante) {
         match suceso {
-            // 6D: aquí, además, la revelación a las plazas con un Aeda itinerante parado (Tecnologia_Aedas §6.3).
+            // Con lo cantado, la revelación a las plazas con un Aeda itinerante parado (6D, Tecnologia_Aedas §6.3; la marca `cantar`).
             SucesoTecnologia::Conocimiento => self.cantar(t),
             // Lo que ofrecen los campamentos depende de sus tecnologías: no se guarda, se marca para quien lo mira.
             SucesoTecnologia::Campamento => self.tocar_todos_los_campamentos(),
@@ -173,9 +173,14 @@ impl Nucleo {
     // DUDA: además de en la cita de conocimiento, al fijarse un logro o empezar una Era (una descubridora sin logro, por administración, o de una Era cerrada); el TS lo hacía en el tick siguiente.
     pub(super) fn cantar(&mut self, t: Instante) {
         let r = self.estado.reglas.economia.tecnologia.clone();
-        for (x, f) in self.estado.tecnologia.cantar(&r, t) {
+        let cantadas = self.estado.tecnologia.cantar(&r, t);
+        for &(x, f) in &cantadas {
             let valores = vec![("tecnologia", Dato::Texto(r.def(x).id.clone()))];
             self.tr.emitir(&self.estado, EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("aedas.canta_descubrimiento", t, vec![("faccion", i64::from(f))]) });
+        }
+        // Una tecnología pasa a ser conocida por los Aedas justo cuando se canta: es lo único nuevo que pueden revelar los que ya están parados (6D).
+        if !cantadas.is_empty() {
+            self.revelar_donde_hay_aedas();
         }
     }
 

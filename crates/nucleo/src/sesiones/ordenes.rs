@@ -7,8 +7,8 @@
 //!   batalla de un UUID.
 //! - Un id que no tiene la forma de su entidad se rechaza con el código de «desconocida» de esa entidad (`heroe.desconocido`…); un valor fuera de un catálogo cerrado (recurso, tropa,
 //!   cargo, política, tipo de carro…), con `orden.forma_invalida`. Lo demás (que la entidad exista, las cantidades) lo valida el núcleo.
-//! - Las órdenes del contrato que el núcleo aún no tiene (los Aedas itinerantes del sistema 6; los alijos llegaron en 6F, la adopción en 6C y las épicas en 6E) se rechazan con
-//!   `orden.no_disponible`; ninguna se descarta en silencio. El `match` sobre `Cuerpo` no tiene comodín: una orden nueva del contrato no compila hasta clasificarla.
+//! - Desde 6D y 6E (2026-10-25) toda orden del contrato tiene su comando en el núcleo: ya ninguna sale `orden.no_disponible` (el código sigue en el catálogo para una orden nueva del
+//!   contrato que aún no tenga sistema). El `match` sobre `Cuerpo` no tiene comodín: una orden nueva del contrato no compila hasta clasificarla.
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
 
@@ -129,10 +129,6 @@ impl Ctx<'_> {
 
     fn forma<T>(&self, texto: impl Into<String>) -> R<T> {
         Err(self.no(rechazos::ORDEN_FORMA_INVALIDA, texto))
-    }
-
-    fn no_disponible<T>(&self, que: &str) -> R<T> {
-        Err(self.no(rechazos::ORDEN_NO_DISPONIBLE, format!("esta orden aún no existe en el servidor: {que}")))
     }
 
     fn id<T>(&self, parse: fn(&str) -> Option<T>, codigo: &'static str, texto: &str) -> R<T> {
@@ -703,8 +699,8 @@ impl Ctx<'_> {
             Cuerpo::ResponderFusion(o) => Comando::ResponderFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)?, aceptar: o.aceptar },
             Cuerpo::RetirarFusion(o) => Comando::RetirarFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
 
-            // ── Lo que el núcleo aún no tiene ──
-            Cuerpo::ComprarTecnologiaAeda(_) => return self.no_disponible("Aedas itinerantes (sistema 6)"),
+            // ── La tecnología, los Aedas y los alijos (sistema 6) ──
+            Cuerpo::ComprarTecnologiaAeda(o) => Comando::ComprarTecnologiaAeda { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
             Cuerpo::EmpezarEpica(o) => Comando::EmpezarEpica { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, aeda: self.aeda_residente(&o.aeda_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
             Cuerpo::AbandonarEpica(o) => Comando::AbandonarEpica { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, aeda: self.aeda_residente(&o.aeda_id)? },
             Cuerpo::AdoptarTecnologia(o) => Comando::AdoptarTecnologia { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
